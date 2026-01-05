@@ -1,0 +1,12 @@
+{
+    "includeCoAuthoredBy": false,
+    "attribution": {
+      "commit": "",
+      "pr": ""
+    },
+    "permissions": {
+      "allow": [],
+      "deny": [],
+      "ask": []
+    }
+}

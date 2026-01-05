@@ -1,0 +1,4 @@
+# reports/ is typically not tracked by git
+# Uncomment the following line to ignore all files in this directory
+# *
+# !.gitignore

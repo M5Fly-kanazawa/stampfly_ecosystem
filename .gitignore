@@ -1,0 +1,69 @@
+# ====================
+# OS
+# ====================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# ====================
+# IDE / Editor
+# ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ====================
+# ESP-IDF
+# ====================
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+
+# ====================
+# Python
+# ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.env
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# ====================
+# Analysis outputs
+# ====================
+analysis/reports/*
+!analysis/reports/.gitignore
+
+# ====================
+# Logs
+# ====================
+*.log
+logs/
+
+# ====================
+# Compiled
+# ====================
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.hex
+*.map
