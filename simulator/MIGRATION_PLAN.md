@@ -160,9 +160,9 @@ firmware/vehicle/
 2. [x] 既存ファイルをコピー・配置
 3. [x] import パス修正
 4. [x] requirements.txt 作成
-5. [ ] 動作確認（既存機能）
+5. [x] 動作確認（既存機能）
 
-**成果物**: Acro Mode で飛行可能なシミュレータ
+**成果物**: Acro Mode で飛行可能なシミュレータ ✓
 
 ### Phase 2: センサ拡張
 
