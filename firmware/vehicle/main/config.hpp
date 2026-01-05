@@ -250,7 +250,7 @@ inline constexpr int STABLE_COUNT_REQUIRED = 5;          // 連続安定回数
 inline constexpr int MIN_ACCEL_SAMPLES = 50;
 inline constexpr int MIN_GYRO_SAMPLES = 50;
 inline constexpr int MIN_MAG_SAMPLES = 50;
-inline constexpr int MIN_BARO_SAMPLES = 10;
+inline constexpr int MIN_BARO_SAMPLES = 20;      // 50Hz × 20 = 400ms
 inline constexpr int MIN_TOF_SAMPLES = 20;       // 30Hz × 20 = 667ms
 inline constexpr int MIN_OPTFLOW_SAMPLES = 50;   // 100Hz × 50 = 500ms
 
