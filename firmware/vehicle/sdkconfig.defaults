@@ -19,8 +19,8 @@ CONFIG_FREERTOS_UNICORE=n
 # CPU frequency
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
-# USB Serial/JTAG Console (more reliable for debugging)
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# USB CDC Console (required for esp_vfs_dev_cdcacm_* functions in CLI)
+CONFIG_ESP_CONSOLE_USB_CDC=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
 # Log level
