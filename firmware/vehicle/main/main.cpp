@@ -601,13 +601,26 @@ extern "C" void app_main(void)
         elapsed_ms += CHECK_INTERVAL_MS;
 
         // 全センサーのバッファが最小サンプル数を満たしているかチェック
+        // 注: OptFlowは高度が低いとsqualが低くバッファが埋まらないため除外
         bool buffers_ready =
             g_accel_buffer_count >= MIN_ACCEL_SAMPLES &&
             g_gyro_buffer_count >= MIN_GYRO_SAMPLES &&
             g_mag_buffer_count >= MIN_MAG_SAMPLES &&
             g_baro_buffer_count >= MIN_BARO_SAMPLES &&
-            g_tof_bottom_buffer_count >= MIN_TOF_SAMPLES &&
-            g_optflow_buffer_count >= MIN_OPTFLOW_SAMPLES;
+            g_tof_bottom_buffer_count >= MIN_TOF_SAMPLES;
+            // g_optflow_buffer_count >= MIN_OPTFLOW_SAMPLES は除外
+
+        // 1秒ごとにバッファ状態をログ出力（buffers_ready関係なく）
+        int current_sec = elapsed_ms / 1000;
+        if (current_sec > last_log_sec) {
+            last_log_sec = current_sec;
+            ESP_LOGI(TAG, "----------------------------------------");
+            ESP_LOGI(TAG, "Stabilization t=%ds: accel=%d gyro=%d mag=%d baro=%d tof=%d flow=%d ready=%d",
+                     current_sec,
+                     g_accel_buffer_count, g_gyro_buffer_count, g_mag_buffer_count,
+                     g_baro_buffer_count, g_tof_bottom_buffer_count, g_optflow_buffer_count,
+                     buffers_ready ? 1 : 0);
+        }
 
         // バッファからstd normを計算
         if (buffers_ready) {
@@ -707,21 +720,24 @@ extern "C" void app_main(void)
             float dx_sum = 0.0f, dy_sum = 0.0f, squal_sum = 0.0f;
             float dx_sum_sq = 0.0f, dy_sum_sq = 0.0f;
             int flow_n = std::min(g_optflow_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < flow_n; i++) {
-                dx_sum += g_optflow_buffer[i].dx;
-                dy_sum += g_optflow_buffer[i].dy;
-                squal_sum += g_optflow_buffer[i].squal;
-                dx_sum_sq += g_optflow_buffer[i].dx * g_optflow_buffer[i].dx;
-                dy_sum_sq += g_optflow_buffer[i].dy * g_optflow_buffer[i].dy;
+            float optflow_std = 0.0f;  // デフォルト値
+            if (flow_n > 0) {
+                for (int i = 0; i < flow_n; i++) {
+                    dx_sum += g_optflow_buffer[i].dx;
+                    dy_sum += g_optflow_buffer[i].dy;
+                    squal_sum += g_optflow_buffer[i].squal;
+                    dx_sum_sq += g_optflow_buffer[i].dx * g_optflow_buffer[i].dx;
+                    dy_sum_sq += g_optflow_buffer[i].dy * g_optflow_buffer[i].dy;
+                }
+                float dx_avg = dx_sum / flow_n;
+                float dy_avg = dy_sum / flow_n;
+                (void)squal_sum;  // 将来のsqual安定判定用に保持
+                float dx_var = dx_sum_sq / flow_n - dx_avg * dx_avg;
+                float dy_var = dy_sum_sq / flow_n - dy_avg * dy_avg;
+                float dx_std = std::sqrt(std::max(0.0f, dx_var));
+                float dy_std = std::sqrt(std::max(0.0f, dy_var));
+                optflow_std = dx_std + dy_std;  // dx_std + dy_std で判定
             }
-            float dx_avg = dx_sum / flow_n;
-            float dy_avg = dy_sum / flow_n;
-            (void)squal_sum;  // 将来のsqual安定判定用に保持
-            float dx_var = dx_sum_sq / flow_n - dx_avg * dx_avg;
-            float dy_var = dy_sum_sq / flow_n - dy_avg * dy_avg;
-            float dx_std = std::sqrt(std::max(0.0f, dx_var));
-            float dy_std = std::sqrt(std::max(0.0f, dy_var));
-            float optflow_std = dx_std + dy_std;  // dx_std + dy_std で判定
 
             // 最終値を保存
             last_accel_std_norm = accel_std_norm;
@@ -731,47 +747,36 @@ extern "C" void app_main(void)
             last_tof_std = tof_std;
             last_optflow_std = optflow_std;
 
-            // 1秒ごとにデバッグログ出力
-            int current_sec = elapsed_ms / 1000;
-            if (current_sec > last_log_sec) {
-                last_log_sec = current_sec;
-                ESP_LOGI(TAG, "=== SENSOR STATS t=%ds ===", current_sec);
-                ESP_LOGI(TAG, "  Accel std: %.4f (th=%.3f) avg=(%.3f,%.3f,%.3f) n=%d %s",
+            // 詳細デバッグログ出力（1秒ごと、外側のログと同じタイミング）
+            // current_sec と last_log_sec は外側で更新済み
+            if (current_sec == last_log_sec && current_sec > 0) {
+                ESP_LOGI(TAG, "  Accel: %.4f (th=%.3f) %s | Gyro: %.5f (th=%.3f) %s",
                          accel_std_norm, ACCEL_STD_THRESHOLD,
-                         accel_avg.x, accel_avg.y, accel_avg.z, accel_n,
-                         accel_std_norm < ACCEL_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  Gyro std:  %.5f (th=%.3f) avg=(%.4f,%.4f,%.4f) n=%d %s",
+                         accel_std_norm < ACCEL_STD_THRESHOLD ? "OK" : "NG",
                          gyro_std_norm, GYRO_STD_THRESHOLD,
-                         gyro_avg.x, gyro_avg.y, gyro_avg.z, gyro_n,
                          gyro_std_norm < GYRO_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  Mag std:   %.3f (th=%.1f) avg=(%.1f,%.1f,%.1f) n=%d %s",
+                ESP_LOGI(TAG, "  Mag: %.3f (th=%.1f) %s | Baro: %.4f (th=%.2f) %s",
                          mag_std_norm, MAG_STD_THRESHOLD,
-                         mag_avg.x, mag_avg.y, mag_avg.z, mag_n,
-                         mag_std_norm < MAG_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  Baro std:  %.4f m (th=%.2f) avg=%.2f m n=%d idx=%d %s",
-                         baro_std, BARO_STD_THRESHOLD, baro_avg,
-                         baro_n, g_baro_buffer_index,
+                         mag_std_norm < MAG_STD_THRESHOLD ? "OK" : "NG",
+                         baro_std, BARO_STD_THRESHOLD,
                          baro_std < BARO_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  ToF std:   %.4f (th=%.3f) avg=%.1f mm n=%d %s",
-                         tof_std, TOF_STD_THRESHOLD, tof_avg, tof_n,
-                         tof_std < TOF_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  Flow std:  %.1f (th=%.1f) avg=(%.1f,%.1f) n=%d %s",
-                         optflow_std, OPTFLOW_STD_THRESHOLD,
-                         dx_avg, dy_avg, flow_n,
-                         optflow_std < OPTFLOW_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  ----------------------------------------");
+                ESP_LOGI(TAG, "  ToF: %.4f (th=%.3f) %s | stable_count=%d/%d",
+                         tof_std, TOF_STD_THRESHOLD,
+                         tof_std < TOF_STD_THRESHOLD ? "OK" : "NG",
+                         stable_count, STABLE_COUNT_REQUIRED);
             }
 
             // 全センサーの安定判定（最小待機時間経過後）
+            // 注: OptFlowは起動時にsqualが低いためチェック対象外
             bool accel_stable = accel_std_norm < ACCEL_STD_THRESHOLD;
             bool gyro_stable = gyro_std_norm < GYRO_STD_THRESHOLD;
             bool mag_stable = mag_std_norm < MAG_STD_THRESHOLD;
             bool baro_stable = baro_std < BARO_STD_THRESHOLD;
             bool tof_stable = tof_std < TOF_STD_THRESHOLD;
-            bool optflow_stable = optflow_std < OPTFLOW_STD_THRESHOLD;
+            // bool optflow_stable = optflow_std < OPTFLOW_STD_THRESHOLD;  // 除外
 
             bool all_stable = accel_stable && gyro_stable && mag_stable &&
-                              baro_stable && tof_stable && optflow_stable;
+                              baro_stable && tof_stable;
 
             if (elapsed_ms >= MIN_WAIT_MS && all_stable) {
                 stable_count++;
@@ -789,7 +794,6 @@ extern "C" void app_main(void)
                     if (!mag_stable) ESP_LOGW(TAG, "  Mag: %.3f > %.1f", mag_std_norm, MAG_STD_THRESHOLD);
                     if (!baro_stable) ESP_LOGW(TAG, "  Baro: %.4f > %.2f", baro_std, BARO_STD_THRESHOLD);
                     if (!tof_stable) ESP_LOGW(TAG, "  ToF: %.4f > %.3f", tof_std, TOF_STD_THRESHOLD);
-                    if (!optflow_stable) ESP_LOGW(TAG, "  Flow: %.1f > %.1f", optflow_std, OPTFLOW_STD_THRESHOLD);
                 }
                 stable_count = 0;  // 条件を満たさなければリセット
             }
