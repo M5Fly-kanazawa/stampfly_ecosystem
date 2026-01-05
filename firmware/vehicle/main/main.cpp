@@ -560,8 +560,8 @@ extern "C" void app_main(void)
     int last_log_sec = 0;
 
     while (elapsed_ms < MAX_WAIT_MS) {
-        // LED更新（LEDタスクが動いていても念のため）
-        led_mgr.update();
+        // LEDTaskが既に動作中なので、ここでのLED更新は不要
+        // （同時アクセスでRMT "channel not in init state" エラーが発生するため削除）
         vTaskDelay(pdMS_TO_TICKS(CHECK_INTERVAL_MS));
         elapsed_ms += CHECK_INTERVAL_MS;
 
