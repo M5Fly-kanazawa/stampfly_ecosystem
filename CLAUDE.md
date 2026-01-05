@@ -18,39 +18,126 @@ motor_init();
 ```
 
 ### Documentation
-ドキュメントは以下の構成で記述する：
-1. 全ての章・節を日本語で記述
-2. 区切り線の後、同じ内容を英語で記述
+
+ドキュメントは以下のルールに従う：
+
+#### 1. バイリンガル構成（Bilingual Structure）
+
+- 日本語を先に、英語を後に記述
+- 冒頭に英語版の存在を示す注記を入れる
+- 英語セクションは `---` で区切る
 
 ```markdown
-# 第1章 概要
-## 1.1 目的
-...
-## 1.2 背景
+# Document Title
+
+> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+
+## 1. 概要
+
+### このドキュメントについて
 ...
 
-# 第2章 設計
-## 2.1 アーキテクチャ
+### 対象読者
+...
+
+## 2. 詳細
+
+### 仕様
 ...
 
 ---
 
-# Chapter 1: Overview
-## 1.1 Purpose
-...
-## 1.2 Background
+## 1. Overview
+
+### About This Document
 ...
 
-# Chapter 2: Design
-## 2.1 Architecture
+### Target Audience
 ...
+
+## 2. Details
+
+### Specifications
+...
+```
+
+#### 2. 見出しフォーマット（Heading Format）
+
+| レベル | 形式 | 例 |
+|--------|------|-----|
+| ドキュメントタイトル | `# Title` | `# StampFly Vehicle Firmware` |
+| 章 | `## N. 章タイトル` | `## 1. 概要` / `## 1. Overview` |
+| 節 | `### 節タイトル` | `### このプロジェクトについて` |
+| 項 | `#### 項タイトル` | `#### パラメータ一覧` |
+
+**注意:**
+- 章には番号を付ける（`## 1.`, `## 2.`, ...）
+- 節・項には番号を付けない（`## 1.1` ではなく `###`）
+- 日本語と英語で同じ番号体系を使う
+
+#### 3. 構造化情報（Structured Information）
+
+リスト形式よりもテーブルを優先する：
+
+```markdown
+| 機能 | 説明 |
+|------|------|
+| IMU | BMI270（加速度・ジャイロ）400Hz |
+| 気圧センサー | BMP280 50Hz |
+```
+
+#### 4. コードブロック（Code Blocks）
+
+言語を明示する：
+
+````markdown
+```cpp
+// Initialize motor
+motor_init();
+```
+
+```bash
+idf.py build flash monitor
+```
+````
+
+#### 5. 図表（Diagrams）
+
+ASCII アートを活用する：
+
+```markdown
+```
+               Front
+          FL (M4)   FR (M1)
+             ╲   ▲   ╱
+              ╲  │  ╱
+               ╲ │ ╱
+                ╲│╱
+                 ╳         ← Center
+                ╱│╲
+               ╱ │ ╲
+              ╱  │  ╲
+             ╱   │   ╲
+          RL (M3)    RR (M2)
+                Rear
+```
+```
+
+#### 6. 参考資料（References）
+
+外部リンクはテーブル形式で整理：
+
+```markdown
+| リポジトリ | 説明 |
+|-----------|------|
+| [StampFly技術仕様](https://github.com/...) | ハードウェア仕様書 |
 ```
 
 ## Project Overview
 
 StampFly Ecosystem is an educational/research platform for drone control engineering. It covers the complete workflow: **design → implementation → experimentation → analysis → education**.
 
-**Current Status:** Pre-implementation planning phase. Only `PROJECT_PLAN.md` exists; no functional code has been implemented yet.
+**Current Status:** Vehicle firmware (ACRO mode skeleton) and controller firmware are implemented and buildable.
 
 ## Architecture
 

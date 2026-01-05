@@ -24,8 +24,7 @@ stampfly-ecosystem/
 ## はじめに
 
 1. [docs/getting-started.md](docs/getting-started.md) を読む
-2. [examples/](examples/) から始める
-3. 詳細は [PROJECT_PLAN.md](PROJECT_PLAN.md) を参照
+2. 詳細は [PROJECT_PLAN.md](PROJECT_PLAN.md) を参照
 
 ---
 
@@ -55,5 +54,4 @@ stampfly-ecosystem/
 ## Getting Started
 
 1. Read [docs/getting-started.md](docs/getting-started.md)
-2. Start with [examples/](examples/)
-3. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details
+2. See [PROJECT_PLAN.md](PROJECT_PLAN.md) for details

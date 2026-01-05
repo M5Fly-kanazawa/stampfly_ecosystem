@@ -1,8 +1,10 @@
 # StampFly Vehicle Firmware
 
-# 第1章 概要
+> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
 
-## 1.1 このプロジェクトについて
+## 1. 概要
+
+### このプロジェクトについて
 
 StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコントローラファームウェアです。
 このファームウェアは**スケルトン（骨格）**として設計されており、飛行制御を実装したいエンジニアや学生のために、
@@ -17,13 +19,13 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
 
 これらが実装済みで、ユーザーは `control_task.cpp` の制御ループに自分の制御則を実装するだけで飛行させることができます。
 
-## 1.2 対象ハードウェア
+### 対象ハードウェア
 
 - **MCU**: M5Stamp S3（ESP32-S3）
 - **フレームワーク**: ESP-IDF v5.4.1 + FreeRTOS
 - **機体**: StampFly
 
-## 1.3 主な機能
+### 主な機能
 
 | 機能 | 説明 |
 |------|------|
@@ -41,9 +43,9 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
 
 ---
 
-# 第2章 開発環境のセットアップ
+## 2. 開発環境のセットアップ
 
-## 2.1 必要なソフトウェア
+### 必要なソフトウェア
 
 1. **ESP-IDF v5.4.1**
    - [公式インストールガイド](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/index.html)
@@ -55,7 +57,7 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
    - macOS/Linux では通常不要
    - Windows では CP210x ドライバが必要な場合あり
 
-## 2.2 ESP-IDF のセットアップ（macOS/Linux）
+### ESP-IDF のセットアップ（macOS/Linux）
 
 ```bash
 # ESP-IDF をクローン
@@ -71,7 +73,7 @@ cd esp-idf
 . ~/esp/esp-idf/export.sh
 ```
 
-## 2.3 プロジェクトのビルド
+### プロジェクトのビルド
 
 ```bash
 # プロジェクトディレクトリに移動
@@ -90,7 +92,7 @@ idf.py monitor
 idf.py build flash monitor
 ```
 
-## 2.4 シリアルポートの指定
+### シリアルポートの指定
 
 デバイスが自動検出されない場合：
 
@@ -104,9 +106,9 @@ idf.py -p COM3 flash monitor
 
 ---
 
-# 第3章 ソフトウェアアーキテクチャ
+## 3. ソフトウェアアーキテクチャ
 
-## 3.1 ディレクトリ構造
+### ディレクトリ構造
 
 ```
 firmware/vehicle/
@@ -143,9 +145,9 @@ firmware/vehicle/
 └── partitions.csv             # パーティションテーブル
 ```
 
-## 3.2 コンポーネント一覧
+### コンポーネント一覧
 
-### HAL（Hardware Abstraction Layer）
+#### HAL（Hardware Abstraction Layer）
 
 | コンポーネント | 説明 |
 |---------------|------|
@@ -160,7 +162,7 @@ firmware/vehicle/
 | `sf_hal_button` | ボタン入力ドライバ |
 | `sf_hal_power` | 電源監視（INA3221） |
 
-### Algorithm
+#### Algorithm
 
 | コンポーネント | 説明 |
 |---------------|------|
@@ -170,7 +172,7 @@ firmware/vehicle/
 | `sf_algo_filter` | LPFなどのフィルタ |
 | `sf_algo_math` | 数学ユーティリティ（ベクトル、クォータニオン） |
 
-### Service
+#### Service
 
 | コンポーネント | 説明 |
 |---------------|------|
@@ -182,11 +184,11 @@ firmware/vehicle/
 | `sf_svc_telemetry` | WebSocketテレメトリ |
 | `sf_svc_health` | センサーヘルス監視 |
 
-## 3.3 タスク構成
+### タスク構成
 
 FreeRTOS のデュアルコア構成を活用しています。
 
-### Core 1（高速リアルタイムタスク）
+#### Core 1（高速リアルタイムタスク）
 
 | タスク | 周期 | 優先度 | 説明 |
 |--------|------|--------|------|
@@ -194,7 +196,7 @@ FreeRTOS のデュアルコア構成を活用しています。
 | ControlTask | 400Hz | 23 | 角速度制御、モーター出力 |
 | OptFlowTask | 100Hz | 20 | オプティカルフロー読み取り |
 
-### Core 0（周辺・通信タスク）
+#### Core 0（周辺・通信タスク）
 
 | タスク | 周期 | 優先度 | 説明 |
 |--------|------|--------|------|
@@ -208,7 +210,7 @@ FreeRTOS のデュアルコア構成を活用しています。
 | LEDTask | 50Hz | 8 | LED更新 |
 | CLITask | - | 5 | コマンド処理 |
 
-## 3.4 起動シーケンス
+### 起動シーケンス
 
 ```
 app_main()
@@ -236,9 +238,9 @@ app_main()
 
 ---
 
-# 第4章 状態管理
+## 4. 状態管理
 
-## 4.1 フライト状態
+### フライト状態
 
 StampFlyState クラスが機体の状態を一元管理します。
 
@@ -268,7 +270,7 @@ IDLE ◄────── ARMED
 | FLYING | 飛行中 | 橙点滅 |
 | ERROR | エラー | 赤点滅 |
 
-## 4.2 ARM/DISARM 操作
+### ARM/DISARM 操作
 
 **ボタンによる操作：**
 - IDLE状態でクリック → ARM
@@ -280,7 +282,7 @@ IDLE ◄────── ARMED
 **自動DISARM：**
 - 衝撃検出時（加速度 > 3G または 角速度 > 800°/s）
 
-## 4.3 ペアリングモード
+### ペアリングモード
 
 ボタン長押し（3秒）でペアリングモードに入ります。
 - 青色高速点滅
@@ -288,9 +290,9 @@ IDLE ◄────── ARMED
 
 ---
 
-# 第5章 センサーフュージョン（ESKF）
+## 5. センサーフュージョン（ESKF）
 
-## 5.1 ESKF の概要
+### ESKF の概要
 
 Error-State Kalman Filter を使用して、複数のセンサー情報を統合し、
 機体の位置・速度・姿勢を高精度に推定します。
@@ -302,7 +304,7 @@ Error-State Kalman Filter を使用して、複数のセンサー情報を統合
 - ジャイロバイアス (bx, by, bz) - 3次元
 - 加速度バイアス (ax, ay, az) - 3次元
 
-## 5.2 センサー入力
+### センサー入力
 
 | センサー | 用途 | 更新レート |
 |----------|------|------------|
@@ -312,7 +314,7 @@ Error-State Kalman Filter を使用して、複数のセンサー情報を統合
 | ToF | 高度補正（低高度） | 30Hz |
 | オプティカルフロー | 水平速度補正 | 100Hz |
 
-## 5.3 パラメータ調整
+### パラメータ調整
 
 すべてのパラメータは `config.hpp` の `namespace config::eskf` に集約されています。
 
@@ -332,9 +334,9 @@ namespace eskf {
 
 ---
 
-# 第6章 制御系の実装
+## 6. 制御系の実装
 
-## 6.1 制御タスクの構造
+### 制御タスクの構造
 
 制御は `control_task.cpp` で実装されています。
 現在は角速度制御（Rate Control）のみが実装されています。
@@ -355,7 +357,7 @@ namespace eskf {
    モーター出力
 ```
 
-## 6.2 モーター配置
+### モーター配置
 
 ```
                Front
@@ -379,7 +381,7 @@ namespace eskf {
   M4 (FL): CW（時計回り）
 ```
 
-## 6.3 PIDゲインの調整
+### PIDゲインの調整
 
 `config.hpp` の `namespace config::rate_control` で設定します。
 
@@ -402,7 +404,7 @@ namespace rate_control {
 }
 ```
 
-## 6.4 独自の制御を実装する場合
+### 独自の制御を実装する場合
 
 `control_task.cpp` を編集して、独自の制御則を実装できます。
 
@@ -426,11 +428,11 @@ float roll_out = g_rate_controller.roll_pid.update(roll_rate_target, roll_rate_c
 
 ---
 
-# 第7章 CLI コマンド
+## 7. CLI コマンド
 
 USBシリアル経由でCLIコマンドが使用できます。
 
-## 7.1 基本コマンド
+### 基本コマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -438,7 +440,7 @@ USBシリアル経由でCLIコマンドが使用できます。
 | `status` | システム状態を表示 |
 | `reboot` | システムを再起動 |
 
-## 7.2 センサーコマンド
+### センサーコマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -449,7 +451,7 @@ USBシリアル経由でCLIコマンドが使用できます。
 | `flow` | オプティカルフローの現在値を表示 |
 | `power` | 電源状態を表示 |
 
-## 7.3 制御コマンド
+### 制御コマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -457,7 +459,7 @@ USBシリアル経由でCLIコマンドが使用できます。
 | `disarm` | モーターをディスアーム |
 | `motor <n> <duty>` | モーター n (1-4) を duty% で回転 |
 
-## 7.4 ログコマンド
+### ログコマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -466,7 +468,7 @@ USBシリアル経由でCLIコマンドが使用できます。
 | `log status` | ログ状態を表示 |
 | `loglevel <level>` | ログレベルを設定（none/error/warn/info/debug） |
 
-## 7.5 キャリブレーションコマンド
+### キャリブレーションコマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -476,9 +478,9 @@ USBシリアル経由でCLIコマンドが使用できます。
 
 ---
 
-# 第8章 テレメトリとログ
+## 8. テレメトリとログ
 
-## 8.1 WebSocket テレメトリ
+### WebSocket テレメトリ
 
 ESP-NOWと同時にWiFiアクセスポイントを起動し、WebSocketでテレメトリデータを配信します。
 
@@ -486,7 +488,7 @@ ESP-NOWと同時にWiFiアクセスポイントを起動し、WebSocketでテレ
 - ポート: 80
 - レート: 50Hz
 
-## 8.2 バイナリログ
+### バイナリログ
 
 400Hz でセンサーデータとESKF状態をバイナリ形式で記録します。
 
@@ -500,9 +502,9 @@ python tools/scripts/viz_all.py logs/flight_001.bin
 
 ---
 
-# 第9章 GPIO 割り当て
+## 9. GPIO 割り当て
 
-## 9.1 SPI バス
+### SPI バス
 
 | GPIO | 機能 |
 |------|------|
@@ -512,14 +514,14 @@ python tools/scripts/viz_all.py logs/flight_001.bin
 | 46 | IMU CS |
 | 12 | OptFlow CS |
 
-## 9.2 I2C バス
+### I2C バス
 
 | GPIO | 機能 |
 |------|------|
 | 3 | SDA |
 | 4 | SCL |
 
-## 9.3 モーター（PWM）
+### モーター（PWM）
 
 | GPIO | モーター | 位置 | 回転 |
 |------|---------|------|------|
@@ -528,7 +530,7 @@ python tools/scripts/viz_all.py logs/flight_001.bin
 | 10 | M3 | RL (左後) | CCW |
 | 5 | M4 | FL (左前) | CW |
 
-## 9.4 その他
+### その他
 
 | GPIO | 機能 |
 |------|------|
@@ -541,9 +543,9 @@ python tools/scripts/viz_all.py logs/flight_001.bin
 
 ---
 
-# 第10章 トラブルシューティング
+## 10. トラブルシューティング
 
-## 10.1 ビルドエラー
+### ビルドエラー
 
 **ESP-IDF が見つからない：**
 ```bash
@@ -558,7 +560,7 @@ rm -rf managed_components
 idf.py build
 ```
 
-## 10.2 書き込みエラー
+### 書き込みエラー
 
 **ポートが見つからない：**
 ```bash
@@ -571,7 +573,7 @@ ls /dev/ttyUSB*   # Linux
 1. ボタンを押しながらUSBを接続
 2. `idf.py flash` を実行
 
-## 10.3 センサーが初期化されない
+### センサーが初期化されない
 
 - I2C接続を確認（SDA/SCL）
 - センサーの電源を確認
@@ -579,9 +581,9 @@ ls /dev/ttyUSB*   # Linux
 
 ---
 
-# 第11章 参考資料
+## 11. 参考資料
 
-## 11.1 関連リポジトリ
+### 関連リポジトリ
 
 | リポジトリ | 説明 |
 |-----------|------|
@@ -592,15 +594,15 @@ ls /dev/ttyUSB*   # Linux
 | [ESKF推定器](https://github.com/kouhei1970/stampfly-eskf-estimator) | 位置姿勢推定ライブラリ |
 | [コントローラ](https://github.com/M5Fly-kanazawa/Simple_StampFly_Joy) | 送信機ファームウェア（for_tdmaブランチ） |
 
-## 11.2 設計ドキュメント
+### 設計ドキュメント
 
 - `PLAN.md` - 本プロジェクトの設計方針
 
 ---
 
-# Chapter 1: Overview
+## 1. Overview
 
-## 1.1 About This Project
+### About This Project
 
 StampFly Vehicle Firmware is a flight controller firmware for the StampFly drone.
 This firmware is designed as a **skeleton**, providing all the foundation features
@@ -616,13 +618,13 @@ who want to implement their own flight control.
 
 With these already implemented, users only need to implement their control logic in `control_task.cpp` to fly.
 
-## 1.2 Target Hardware
+### Target Hardware
 
 - **MCU**: M5Stamp S3 (ESP32-S3)
 - **Framework**: ESP-IDF v5.4.1 + FreeRTOS
 - **Airframe**: StampFly
 
-## 1.3 Main Features
+### Main Features
 
 | Feature | Description |
 |---------|-------------|
@@ -640,9 +642,9 @@ With these already implemented, users only need to implement their control logic
 
 ---
 
-# Chapter 2: Development Environment Setup
+## 2. Development Environment Setup
 
-## 2.1 Required Software
+### Required Software
 
 1. **ESP-IDF v5.4.1**
    - [Official Installation Guide](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/index.html)
@@ -654,7 +656,7 @@ With these already implemented, users only need to implement their control logic
    - Usually not required on macOS/Linux
    - CP210x driver may be needed on Windows
 
-## 2.2 ESP-IDF Setup (macOS/Linux)
+### ESP-IDF Setup (macOS/Linux)
 
 ```bash
 # Clone ESP-IDF
@@ -670,7 +672,7 @@ cd esp-idf
 . ~/esp/esp-idf/export.sh
 ```
 
-## 2.3 Building the Project
+### Building the Project
 
 ```bash
 # Navigate to project directory
@@ -689,7 +691,7 @@ idf.py monitor
 idf.py build flash monitor
 ```
 
-## 2.4 Specifying Serial Port
+### Specifying Serial Port
 
 If device is not auto-detected:
 
@@ -703,9 +705,9 @@ idf.py -p COM3 flash monitor
 
 ---
 
-# Chapter 3: Software Architecture
+## 3. Software Architecture
 
-## 3.1 Directory Structure
+### Directory Structure
 
 ```
 firmware/vehicle/
@@ -742,7 +744,7 @@ firmware/vehicle/
 └── partitions.csv             # Partition table
 ```
 
-## 3.2 Task Configuration
+### Task Configuration
 
 Utilizes FreeRTOS dual-core configuration.
 
@@ -770,9 +772,9 @@ Utilizes FreeRTOS dual-core configuration.
 
 ---
 
-# Chapter 4: Control System Implementation
+## 4. Control System Implementation
 
-## 4.1 Control Task Structure
+### Control Task Structure
 
 Control is implemented in `control_task.cpp`.
 Currently, only rate control (angular velocity control) is implemented.
@@ -793,7 +795,7 @@ Controller Input (sticks)
    Motor Output
 ```
 
-## 4.2 Motor Layout
+### Motor Layout
 
 ```
                Front
@@ -817,7 +819,7 @@ Motor Rotation:
   M4 (FL): CW (Clockwise)
 ```
 
-## 4.3 Implementing Custom Control
+### Implementing Custom Control
 
 Edit `control_task.cpp` to implement your own control logic.
 
@@ -841,9 +843,9 @@ float roll_out = g_rate_controller.roll_pid.update(roll_rate_target, roll_rate_c
 
 ---
 
-# Chapter 5: References
+## 5. References
 
-## 5.1 Related Repositories
+### Related Repositories
 
 | Repository | Description |
 |-----------|-------------|
@@ -854,6 +856,6 @@ float roll_out = g_rate_controller.roll_pid.update(roll_rate_target, roll_rate_c
 | [ESKF Estimator](https://github.com/kouhei1970/stampfly-eskf-estimator) | Pose estimation library |
 | [Controller](https://github.com/M5Fly-kanazawa/Simple_StampFly_Joy) | Transmitter firmware (for_tdma branch) |
 
-## 5.2 Design Documents
+### Design Documents
 
 - `PLAN.md` - Design policy for this project
