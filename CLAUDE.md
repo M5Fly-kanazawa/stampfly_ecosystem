@@ -149,8 +149,8 @@ The project uses a **responsibility-based directory structure**:
 stampfly-ecosystem/
 ├── docs/              # Human-readable documentation
 ├── firmware/
-│   ├── vehicle/       # Drone body firmware (the "plant" - 制御対象)
-│   ├── controller/    # Remote control firmware (HMI)
+│   ├── vehicle/       # Vehicle firmware
+│   ├── controller/    # Transmitter firmware
 │   └── common/        # Shared embedded code (protocol impl, math, utils)
 ├── protocol/          # Communication spec - Single Source of Truth (SSOT)
 │   ├── spec/          # Machine-readable protocol definition (YAML/proto)

@@ -32,8 +32,8 @@
 stampfly-ecosystem/
 ├── docs/           # ドキュメント
 ├── firmware/       # 組込みファームウェア
-│   ├── vehicle/    # 機体ファームウェア（制御対象）
-│   ├── controller/ # 送信機ファームウェア（HMI）
+│   ├── vehicle/    # 機体ファームウェア
+│   ├── controller/ # 送信機ファームウェア
 │   └── common/     # 共有コード（構築中）
 ├── protocol/       # 通信プロトコル仕様（構築中）
 ├── control/        # 制御設計資産（構築中）
@@ -109,8 +109,8 @@ This ecosystem exists for you.
 stampfly-ecosystem/
 ├── docs/           # Documentation
 ├── firmware/       # Embedded firmware
-│   ├── vehicle/    # Vehicle firmware (plant)
-│   ├── controller/ # Transmitter firmware (HMI)
+│   ├── vehicle/    # Vehicle firmware
+│   ├── controller/ # Transmitter firmware
 │   └── common/     # Shared code (WIP)
 ├── protocol/       # Communication protocol spec (WIP)
 ├── control/        # Control design assets (WIP)
