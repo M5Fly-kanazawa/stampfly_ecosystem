@@ -251,8 +251,8 @@ inline constexpr int MIN_ACCEL_SAMPLES = 50;
 inline constexpr int MIN_GYRO_SAMPLES = 50;
 inline constexpr int MIN_MAG_SAMPLES = 50;
 inline constexpr int MIN_BARO_SAMPLES = 10;
-inline constexpr int MIN_TOF_SAMPLES = 5;
-inline constexpr int MIN_OPTFLOW_SAMPLES = 10;
+inline constexpr int MIN_TOF_SAMPLES = 20;       // 30Hz × 20 = 667ms
+inline constexpr int MIN_OPTFLOW_SAMPLES = 50;   // 100Hz × 50 = 500ms
 
 } // namespace stability
 
