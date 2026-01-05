@@ -1,0 +1,19 @@
+# StampFly Simulator Dependencies
+# シミュレータ依存パッケージ
+
+# Core / コア
+numpy>=1.20.0
+matplotlib>=3.5.0
+
+# 3D Visualization / 3D可視化
+vpython>=7.6.0
+numpy-stl>=2.16.0
+
+# Image processing / 画像処理
+Pillow>=9.0.0
+opencv-python>=4.5.0
+
+# Optional: HID joystick support / オプション：HIDジョイスティック対応
+# Note: May require system-level HID libraries
+# 注意：システムレベルのHIDライブラリが必要な場合があります
+hid>=1.0.0
