@@ -1,0 +1,458 @@
+# StampFly Protocol - Message Definitions
+# Version: 1.0.0
+# Last Updated: 2026-01-05
+
+version: "1.0.0"
+
+# =============================================================================
+# Common Types
+# =============================================================================
+types:
+  mac_address:
+    description: "MAC address (lower 3 bytes used for addressing)"
+    base: bytes
+    size: 3
+
+  normalized_value:
+    description: "Normalized control value"
+    base: uint16
+    range: [0, 1000]
+    center: 500
+
+  checksum_sum:
+    description: "Simple sum checksum (sum of preceding bytes)"
+    base: uint8
+
+  checksum_xor:
+    description: "XOR checksum (XOR of preceding bytes)"
+    base: uint8
+
+# =============================================================================
+# Control Packet (Controller -> Vehicle)
+# =============================================================================
+messages:
+  ControlPacket:
+    description: "Control commands from controller to vehicle"
+    size: 14
+    transport: espnow
+    rate_hz: 50
+    fields:
+      - name: drone_mac
+        type: mac_address
+        offset: 0
+        description: "Destination drone MAC (lower 3 bytes)"
+
+      - name: throttle
+        type: normalized_value
+        offset: 3
+        description: "Throttle (0=min, 1000=max)"
+
+      - name: roll
+        type: normalized_value
+        offset: 5
+        description: "Roll (500=center, <500=left, >500=right)"
+
+      - name: pitch
+        type: normalized_value
+        offset: 7
+        description: "Pitch (500=center, <500=forward, >500=backward)"
+
+      - name: yaw
+        type: normalized_value
+        offset: 9
+        description: "Yaw (500=center, <500=CCW, >500=CW)"
+
+      - name: flags
+        type: uint8
+        offset: 11
+        description: "Control flags bitfield"
+        bits:
+          - name: ARM
+            bit: 0
+            description: "Arm/disarm motors"
+          - name: FLIP
+            bit: 1
+            description: "Trigger flip maneuver"
+          - name: MODE
+            bit: 2
+            description: "Flight mode toggle"
+          - name: ALT_MODE
+            bit: 3
+            description: "Altitude hold mode"
+
+      - name: reserved
+        type: uint8
+        offset: 12
+        description: "Reserved for future use"
+
+      - name: checksum
+        type: checksum_sum
+        offset: 13
+        description: "Sum of bytes 0-12"
+
+# =============================================================================
+# Telemetry Packet (Vehicle -> Controller via ESP-NOW)
+# =============================================================================
+  TelemetryPacket:
+    description: "Basic telemetry via ESP-NOW"
+    size: 22
+    transport: espnow
+    rate_hz: 50
+    fields:
+      - name: header
+        type: uint8
+        offset: 0
+        value: 0xAA
+        description: "Packet header marker"
+
+      - name: packet_type
+        type: uint8
+        offset: 1
+        value: 0x01
+        description: "Packet type (0x01 = basic telemetry)"
+
+      - name: sequence
+        type: uint8
+        offset: 2
+        description: "Sequence number (wraps at 255)"
+
+      - name: battery_mv
+        type: uint16
+        offset: 3
+        unit: mV
+        description: "Battery voltage in millivolts"
+
+      - name: altitude_cm
+        type: int16
+        offset: 5
+        unit: cm
+        description: "Altitude in centimeters"
+
+      - name: velocity_x
+        type: int16
+        offset: 7
+        unit: mm/s
+        description: "X velocity (body frame)"
+
+      - name: velocity_y
+        type: int16
+        offset: 9
+        unit: mm/s
+        description: "Y velocity (body frame)"
+
+      - name: velocity_z
+        type: int16
+        offset: 11
+        unit: mm/s
+        description: "Z velocity (body frame, positive down)"
+
+      - name: roll_deg10
+        type: int16
+        offset: 13
+        unit: 0.1deg
+        description: "Roll angle (1/10 degree resolution)"
+
+      - name: pitch_deg10
+        type: int16
+        offset: 15
+        unit: 0.1deg
+        description: "Pitch angle (1/10 degree resolution)"
+
+      - name: yaw_deg10
+        type: int16
+        offset: 17
+        unit: 0.1deg
+        description: "Yaw angle (1/10 degree resolution)"
+
+      - name: state
+        type: uint8
+        offset: 19
+        description: "Flight state enum"
+        enum:
+          - name: INIT
+            value: 0
+          - name: IDLE
+            value: 1
+          - name: ARMED
+            value: 2
+          - name: FLYING
+            value: 3
+          - name: LANDING
+            value: 4
+          - name: ERROR
+            value: 5
+
+      - name: flags
+        type: uint8
+        offset: 20
+        description: "Warning flags"
+        bits:
+          - name: LOW_BATTERY
+            bit: 0
+          - name: SENSOR_ERROR
+            bit: 1
+          - name: COMM_LOST
+            bit: 2
+          - name: CALIBRATING
+            bit: 3
+
+      - name: checksum
+        type: checksum_sum
+        offset: 21
+        description: "Sum of bytes 0-20"
+
+# =============================================================================
+# Extended Telemetry Packet (Vehicle -> GCS via WebSocket)
+# =============================================================================
+  TelemetryWSPacket:
+    description: "Extended telemetry via WebSocket (binary)"
+    size: 108
+    transport: websocket
+    rate_hz: 50
+    fields:
+      # Header (2 bytes)
+      - name: header
+        type: uint8
+        offset: 0
+        value: 0xAA
+
+      - name: packet_type
+        type: uint8
+        offset: 1
+        value: 0x20
+        description: "Extended packet v2"
+
+      - name: timestamp_ms
+        type: uint32
+        offset: 2
+        unit: ms
+        description: "Milliseconds since boot"
+
+      # Attitude - ESKF estimated (12 bytes)
+      - name: roll
+        type: float32
+        offset: 6
+        unit: rad
+        description: "Roll angle (ESKF estimated)"
+
+      - name: pitch
+        type: float32
+        offset: 10
+        unit: rad
+        description: "Pitch angle (ESKF estimated)"
+
+      - name: yaw
+        type: float32
+        offset: 14
+        unit: rad
+        description: "Yaw angle (ESKF estimated)"
+
+      # Position - ESKF estimated (12 bytes)
+      - name: pos_x
+        type: float32
+        offset: 18
+        unit: m
+        frame: NED
+        description: "X position (North)"
+
+      - name: pos_y
+        type: float32
+        offset: 22
+        unit: m
+        frame: NED
+        description: "Y position (East)"
+
+      - name: pos_z
+        type: float32
+        offset: 26
+        unit: m
+        frame: NED
+        description: "Z position (Down)"
+
+      # Velocity - ESKF estimated (12 bytes)
+      - name: vel_x
+        type: float32
+        offset: 30
+        unit: m/s
+        description: "X velocity"
+
+      - name: vel_y
+        type: float32
+        offset: 34
+        unit: m/s
+        description: "Y velocity"
+
+      - name: vel_z
+        type: float32
+        offset: 38
+        unit: m/s
+        description: "Z velocity"
+
+      # Gyro - bias corrected (12 bytes)
+      - name: gyro_x
+        type: float32
+        offset: 42
+        unit: rad/s
+        description: "Gyro X (bias corrected)"
+
+      - name: gyro_y
+        type: float32
+        offset: 46
+        unit: rad/s
+        description: "Gyro Y (bias corrected)"
+
+      - name: gyro_z
+        type: float32
+        offset: 50
+        unit: rad/s
+        description: "Gyro Z (bias corrected)"
+
+      # Accel - bias corrected (12 bytes)
+      - name: accel_x
+        type: float32
+        offset: 54
+        unit: m/s2
+        description: "Accel X (bias corrected)"
+
+      - name: accel_y
+        type: float32
+        offset: 58
+        unit: m/s2
+        description: "Accel Y (bias corrected)"
+
+      - name: accel_z
+        type: float32
+        offset: 62
+        unit: m/s2
+        description: "Accel Z (bias corrected)"
+
+      # Control inputs - normalized (16 bytes)
+      - name: ctrl_throttle
+        type: float32
+        offset: 66
+        range: [0.0, 1.0]
+        description: "Throttle command"
+
+      - name: ctrl_roll
+        type: float32
+        offset: 70
+        range: [-1.0, 1.0]
+        description: "Roll command"
+
+      - name: ctrl_pitch
+        type: float32
+        offset: 74
+        range: [-1.0, 1.0]
+        description: "Pitch command"
+
+      - name: ctrl_yaw
+        type: float32
+        offset: 78
+        range: [-1.0, 1.0]
+        description: "Yaw command"
+
+      # Magnetometer (12 bytes)
+      - name: mag_x
+        type: float32
+        offset: 82
+        unit: uT
+        description: "Magnetometer X"
+
+      - name: mag_y
+        type: float32
+        offset: 86
+        unit: uT
+        description: "Magnetometer Y"
+
+      - name: mag_z
+        type: float32
+        offset: 90
+        unit: uT
+        description: "Magnetometer Z"
+
+      # Battery (4 bytes)
+      - name: voltage
+        type: float32
+        offset: 94
+        unit: V
+        description: "Battery voltage"
+
+      # Status (2 bytes)
+      - name: flight_state
+        type: uint8
+        offset: 98
+        description: "FlightState enum"
+
+      - name: sensor_status
+        type: uint8
+        offset: 99
+        description: "Sensor health flags"
+        bits:
+          - name: IMU_OK
+            bit: 0
+          - name: MAG_OK
+            bit: 1
+          - name: BARO_OK
+            bit: 2
+          - name: TOF_OK
+            bit: 3
+          - name: FLOW_OK
+            bit: 4
+
+      # Heartbeat (4 bytes)
+      - name: heartbeat
+        type: uint32
+        offset: 100
+        description: "Packet counter"
+
+      - name: checksum
+        type: checksum_xor
+        offset: 104
+        description: "XOR of bytes 0-103"
+
+      - name: padding
+        type: bytes
+        size: 3
+        offset: 105
+        description: "4-byte alignment padding"
+
+# =============================================================================
+# Pairing Packet
+# =============================================================================
+  PairingPacket:
+    description: "Pairing request/response"
+    size: 11
+    transport: espnow
+    fields:
+      - name: channel
+        type: uint8
+        offset: 0
+        description: "WiFi channel (1-13)"
+
+      - name: drone_mac
+        type: bytes
+        size: 6
+        offset: 1
+        description: "Drone MAC address"
+
+      - name: signature
+        type: bytes
+        size: 4
+        offset: 7
+        value: [0xAA, 0x55, 0x16, 0x88]
+        description: "Pairing signature"
+
+# =============================================================================
+# TDMA Beacon
+# =============================================================================
+  TDMABeacon:
+    description: "TDMA synchronization beacon"
+    size: 2
+    transport: espnow
+    fields:
+      - name: marker
+        type: bytes
+        size: 2
+        offset: 0
+        value: [0xBE, 0xAC]
+        description: "Beacon marker"

@@ -1,0 +1,187 @@
+# StampFly Protocol - WebSocket Telemetry Specification
+# Version: 1.0.0
+# Last Updated: 2026-01-05
+
+version: "1.0.0"
+
+# =============================================================================
+# WebSocket Server Configuration
+# =============================================================================
+server:
+  description: "Vehicle-hosted WebSocket server for telemetry streaming"
+
+  network:
+    port: 80
+    protocol: "ws://"  # Not encrypted
+    path: "/"
+
+  limits:
+    max_clients: 4
+    description: "Maximum concurrent WebSocket connections"
+
+  wifi:
+    mode: "AP"  # Access Point mode
+    ssid_pattern: "StampFly_XXXX"  # XXXX = MAC suffix
+    security: "Open"  # No password
+
+# =============================================================================
+# Data Format
+# =============================================================================
+data_format:
+  frame_type: "binary"
+  description: "Binary frames for efficiency"
+
+  endianness: "little"
+  description: "ESP32 native byte order"
+
+  alignment: 4
+  description: "4-byte alignment for performance"
+
+# =============================================================================
+# Message Types
+# =============================================================================
+message_types:
+  extended_telemetry:
+    packet_type: 0x20
+    description: "Full telemetry with ESKF state"
+    size: 108
+    rate_hz: 50
+
+  # Future message types
+  # config_response:
+  #   packet_type: 0x30
+  #   description: "Configuration read response"
+  #
+  # command_ack:
+  #   packet_type: 0x40
+  #   description: "Command acknowledgment"
+
+# =============================================================================
+# Timing
+# =============================================================================
+timing:
+  broadcast_rate_hz: 50
+  broadcast_period_ms: 20
+
+  description: "Telemetry broadcast rate"
+
+# =============================================================================
+# Connection Lifecycle
+# =============================================================================
+lifecycle:
+  connection:
+    1: "Client connects to ws://<vehicle_ip>/"
+    2: "Server accepts connection (up to max_clients)"
+    3: "Server immediately begins telemetry broadcast"
+
+  disconnection:
+    1: "Client closes WebSocket"
+    2: "Server removes client from broadcast list"
+    3: "No reconnection handling (stateless)"
+
+# =============================================================================
+# Data Units and Frames
+# =============================================================================
+units:
+  attitude:
+    unit: "radians"
+    range:
+      roll: [-pi, pi]
+      pitch: [-pi/2, pi/2]
+      yaw: [-pi, pi]
+
+  position:
+    unit: "meters"
+    frame: "NED"
+    description: "North-East-Down coordinate frame"
+
+  velocity:
+    unit: "m/s"
+    frame: "body"
+
+  angular_rate:
+    unit: "rad/s"
+    frame: "body"
+
+  acceleration:
+    unit: "m/s^2"
+    frame: "body"
+
+  magnetic_field:
+    unit: "uT"
+    frame: "body"
+
+  voltage:
+    unit: "V"
+    description: "Battery voltage"
+
+# =============================================================================
+# Error Handling
+# =============================================================================
+error_handling:
+  client_disconnect:
+    action: "Remove from broadcast list"
+    retry: false
+
+  send_failure:
+    action: "Log and continue"
+    drop_client: false
+    description: "Best-effort delivery"
+
+# =============================================================================
+# Checksum
+# =============================================================================
+checksum:
+  algorithm: "xor"
+  position: "byte 104"
+  coverage: "bytes 0-103"
+
+  code: |
+    uint8_t checksum = 0;
+    for (size_t i = 0; i < 104; i++) {
+        checksum ^= data[i];
+    }
+    return checksum;
+
+# =============================================================================
+# Client Implementation Notes
+# =============================================================================
+client_notes:
+  javascript: |
+    const ws = new WebSocket('ws://192.168.4.1/');
+    ws.binaryType = 'arraybuffer';
+
+    ws.onmessage = (event) => {
+      const data = new DataView(event.data);
+
+      // Verify header
+      if (data.getUint8(0) !== 0xAA) return;
+      if (data.getUint8(1) !== 0x20) return;
+
+      // Parse fields (little-endian)
+      const timestamp = data.getUint32(2, true);
+      const roll = data.getFloat32(6, true);
+      const pitch = data.getFloat32(10, true);
+      const yaw = data.getFloat32(14, true);
+      // ... etc
+    };
+
+  python: |
+    import websocket
+    import struct
+
+    def on_message(ws, message):
+        if len(message) != 108:
+            return
+
+        header, ptype = struct.unpack_from('<BB', message, 0)
+        if header != 0xAA or ptype != 0x20:
+            return
+
+        timestamp, = struct.unpack_from('<I', message, 2)
+        roll, pitch, yaw = struct.unpack_from('<fff', message, 6)
+        # ... etc
+
+    ws = websocket.WebSocketApp("ws://192.168.4.1/",
+                                 on_message=on_message)
+    ws.run_forever()

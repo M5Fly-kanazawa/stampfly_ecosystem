@@ -1,0 +1,217 @@
+# StampFly Protocol - ESP-NOW & TDMA Specification
+# Version: 1.0.0
+# Last Updated: 2026-01-05
+
+version: "1.0.0"
+
+# =============================================================================
+# ESP-NOW Configuration
+# =============================================================================
+espnow:
+  description: "Low-latency wireless protocol based on ESP-NOW"
+
+  physical:
+    wifi_channel:
+      default: 1
+      range: [1, 13]
+      description: "WiFi channel for ESP-NOW"
+
+    max_payload: 250  # bytes
+
+    broadcast_mac: "FF:FF:FF:FF:FF:FF"
+
+  timing:
+    # ESP-NOW typical latency
+    one_way_latency_us: 500  # typical
+    max_latency_us: 2000
+
+  addressing:
+    description: "3-byte addressing using lower MAC bytes"
+    method: "Lower 3 bytes of 6-byte MAC address"
+
+# =============================================================================
+# TDMA Frame Structure
+# =============================================================================
+tdma:
+  description: "Time Division Multiple Access for multi-device support"
+
+  frame:
+    period_us: 20000      # 20ms = 50Hz
+    period_hz: 50
+
+  slot:
+    duration_us: 2000     # 2ms per slot
+    count: 10             # 10 slots per frame
+
+  beacon:
+    advance_us: 500       # Beacon sent 500us before frame start
+    size: 2               # bytes
+    marker: [0xBE, 0xAC]  # Beacon identifier
+
+  device_id:
+    description: "Device ID determines slot assignment"
+    master: 0             # Controller is always master
+    range: [0, 9]         # 10 devices max
+
+  # Frame timing diagram
+  # |<------------------- 20ms Frame ------------------->|
+  # |Beacon|Slot0|Slot1|Slot2|Slot3|Slot4|...|Slot8|Slot9|
+  # |500us |2ms  |2ms  |2ms  |2ms  |2ms  |...|2ms  |2ms  |
+
+# =============================================================================
+# State Machine
+# =============================================================================
+state_machine:
+  controller:
+    states:
+      - UNPAIRED
+      - PAIRING
+      - PAIRED
+      - CONNECTED
+
+    transitions:
+      - from: UNPAIRED
+        to: PAIRING
+        trigger: "Pairing button pressed"
+
+      - from: PAIRING
+        to: PAIRED
+        trigger: "Valid pairing response received"
+
+      - from: PAIRED
+        to: CONNECTED
+        trigger: "First beacon received"
+
+      - from: CONNECTED
+        to: PAIRED
+        trigger: "Beacon timeout (50ms)"
+
+  vehicle:
+    states:
+      - UNPAIRED
+      - PAIRING
+      - PAIRED
+      - CONNECTED
+
+    transitions:
+      - from: UNPAIRED
+        to: PAIRING
+        trigger: "Pairing button pressed"
+
+      - from: PAIRING
+        to: PAIRED
+        trigger: "Valid control packet received"
+
+      - from: PAIRED
+        to: CONNECTED
+        trigger: "Regular communication established"
+
+      - from: CONNECTED
+        to: PAIRED
+        trigger: "Communication timeout (500ms)"
+
+# =============================================================================
+# Timeout Parameters
+# =============================================================================
+timeouts:
+  beacon_loss_ms: 50
+  description: "Beacon loss detection (5 frames)"
+
+  comm_timeout_ms: 500
+  description: "Communication loss detection"
+
+  drone_offline_threshold: 10
+  description: "Consecutive send failures before drone marked offline"
+
+  drone_retry_ms: 5000
+  description: "Retry interval when drone is offline"
+
+# =============================================================================
+# Synchronization
+# =============================================================================
+synchronization:
+  description: "Master-slave TDMA synchronization"
+
+  master:
+    role: "controller"
+    responsibilities:
+      - "Send beacon at frame boundary"
+      - "Transmit in slot 0"
+      - "Maintain frame timing"
+
+  slave:
+    role: "vehicle"
+    responsibilities:
+      - "Listen for beacon"
+      - "Synchronize local clock to beacon"
+      - "Transmit in assigned slot"
+
+  clock_drift:
+    max_drift_ppm: 40  # ESP32 crystal tolerance
+    resync_interval_frames: 50  # Resync every 50 frames (1 second)
+
+# =============================================================================
+# Checksum Algorithm
+# =============================================================================
+checksum:
+  control_packet:
+    algorithm: "sum"
+    description: "Simple sum of all preceding bytes"
+    code: |
+      uint8_t sum = 0;
+      for (size_t i = 0; i < packet_size - 1; i++) {
+          sum += data[i];
+      }
+      return sum;
+
+  telemetry_packet:
+    algorithm: "xor"
+    description: "XOR of all preceding bytes"
+    code: |
+      uint8_t checksum = 0;
+      for (size_t i = 0; i < checksum_offset; i++) {
+          checksum ^= data[i];
+      }
+      return checksum;
+
+# =============================================================================
+# Pairing Protocol
+# =============================================================================
+pairing:
+  description: "Device pairing procedure"
+
+  sequence:
+    1: "Controller enters pairing mode (button press)"
+    2: "Controller broadcasts pairing request on all channels"
+    3: "Vehicle in pairing mode responds with MAC address"
+    4: "Controller receives response with drone MAC"
+    5: "Controller saves drone MAC to NVS"
+    6: "Controller switches to PAIRED state"
+    7: "TDMA communication begins"
+
+  persistence:
+    controller:
+      storage: "NVS"
+      namespace: "stampfly"
+      key: "ctrl_mac"
+      size: 6  # bytes
+
+    vehicle:
+      storage: "NVS"
+      namespace: "stampfly"
+      key: "ctrl_mac"
+      size: 6  # bytes
+
+# =============================================================================
+# Multi-Vehicle Support
+# =============================================================================
+multi_vehicle:
+  max_devices: 10
+
+  slot_assignment:
+    method: "Device ID based"
+    description: "Each device transmits in slot matching its ID"
+
+  addressing:
+    description: "3-byte MAC suffix uniquely identifies each drone"
+    collision_handling: "Not currently implemented"
