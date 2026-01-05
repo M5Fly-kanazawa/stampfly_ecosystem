@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Rules
 
-- **セッション開始時に `PROJECT_PLAN.md` を読むこと**
+- **セッション開始時またはコンテキスト圧縮後に以下を読むこと:**
+  - `PROJECT_PLAN.md`
+  - `.claude/settings.local.json`
 - **応答は日本語で行うこと**
 
 ## Writing Conventions
