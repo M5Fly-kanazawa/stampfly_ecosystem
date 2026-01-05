@@ -1,6 +1,6 @@
 # StampFly Ecosystem
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 自分の手で、ドローンを飛ばす制御を作りたいあなたへ
 
@@ -74,6 +74,8 @@ MIT License
 ---
 
 ---
+
+<a id="english"></a>
 
 # StampFly Ecosystem
 

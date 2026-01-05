@@ -1,6 +1,6 @@
 # StampFly コントローラ ファームウェア
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -339,6 +339,8 @@ MIT License - 詳細は [LICENSE](LICENSE) を参照
 Kouhei Ito - kouhei.ito@itolab-ktc.com
 
 ---
+
+<a id="english"></a>
 
 # StampFly Controller Firmware
 

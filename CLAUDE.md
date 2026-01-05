@@ -30,7 +30,7 @@ motor_init();
 ```markdown
 # Document Title
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -46,6 +46,8 @@ motor_init();
 ...
 
 ---
+
+<a id="english"></a>
 
 ## 1. Overview
 

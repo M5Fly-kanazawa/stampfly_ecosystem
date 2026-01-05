@@ -1,6 +1,6 @@
 # はじめに
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 このドキュメントでは、StampFly エコシステムの環境構築から初飛行までの手順を解説します。
 
@@ -363,6 +363,8 @@ Power: 3.85 [V], 120.5 [mA]
 - [PROJECT_PLAN.md](../PROJECT_PLAN.md) - プロジェクト全体計画
 
 ---
+
+<a id="english"></a>
 
 # Getting Started
 

@@ -1,6 +1,6 @@
 # Documentation Style Guide
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -33,7 +33,7 @@
 ```markdown
 # ドキュメントタイトル
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -44,6 +44,8 @@
 （日本語の内容）
 
 ---
+
+<a id="english"></a>
 
 ## 1. Overview
 
@@ -227,6 +229,8 @@ pwm_set_frequency(20000);
 
 ---
 
+<a id="english"></a>
+
 ## 1. Overview
 
 This document is the style guide for documentation in the StampFly Ecosystem project.
@@ -258,7 +262,7 @@ All major documents must be written in **both Japanese and English**.
 ```markdown
 # Document Title
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -269,6 +273,8 @@ All major documents must be written in **both Japanese and English**.
 (Japanese content)
 
 ---
+
+<a id="english"></a>
 
 ## 1. Overview
 

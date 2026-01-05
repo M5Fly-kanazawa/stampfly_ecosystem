@@ -1,6 +1,6 @@
 # StampFly Vehicle Firmware
 
-> **Note:** English version follows after the Japanese section. / 日本語の後に英語版があります。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
@@ -599,6 +599,8 @@ ls /dev/ttyUSB*   # Linux
 - `PLAN.md` - 本プロジェクトの設計方針
 
 ---
+
+<a id="english"></a>
 
 ## 1. Overview
 
