@@ -533,6 +533,41 @@ extern "C" void app_main(void)
     startTasks();
 
     // =========================================================================
+    // センサータスク初期読み取り待ち
+    // =========================================================================
+    // センサータスクは vTaskDelayUntil() で最初の読み取り前に10-33ms待機する
+    // Phase 3でバッファが空または0初期化値で埋まるのを防ぐため、
+    // 全センサーバッファに最低1サンプル入るまで待機
+    ESP_LOGI(TAG, "Waiting for sensor tasks to start filling buffers...");
+    {
+        int wait_ms = 0;
+        constexpr int MAX_SENSOR_INIT_WAIT_MS = 2000;  // 最大2秒待機
+        while (wait_ms < MAX_SENSOR_INIT_WAIT_MS) {
+            bool all_started =
+                g_accel_buffer_count > 0 &&
+                g_gyro_buffer_count > 0 &&
+                g_mag_buffer_count > 0 &&
+                g_baro_buffer_count > 0 &&
+                g_tof_bottom_buffer_count > 0 &&
+                g_optflow_buffer_count > 0;
+
+            if (all_started) {
+                ESP_LOGI(TAG, "All sensor buffers started filling after %d ms", wait_ms);
+                break;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(10));
+            wait_ms += 10;
+        }
+
+        if (wait_ms >= MAX_SENSOR_INIT_WAIT_MS) {
+            ESP_LOGW(TAG, "Sensor init timeout: accel=%d gyro=%d mag=%d baro=%d tof=%d flow=%d",
+                     g_accel_buffer_count, g_gyro_buffer_count, g_mag_buffer_count,
+                     g_baro_buffer_count, g_tof_bottom_buffer_count, g_optflow_buffer_count);
+        }
+    }
+
+    // =========================================================================
     // Phase 3: Sensor stabilization (Magenta blinking)
     // =========================================================================
     // g_eskf_ready = false なので IMUTask は sensor fusion 処理をスキップしている
