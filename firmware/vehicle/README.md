@@ -20,7 +20,7 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
 ## 1.2 対象ハードウェア
 
 - **MCU**: M5Stamp S3（ESP32-S3）
-- **フレームワーク**: ESP-IDF v5.x + FreeRTOS
+- **フレームワーク**: ESP-IDF v5.4.1 + FreeRTOS
 - **機体**: StampFly
 
 ## 1.3 主な機能
@@ -45,8 +45,8 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
 
 ## 2.1 必要なソフトウェア
 
-1. **ESP-IDF v5.x**
-   - [公式インストールガイド](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/index.html)
+1. **ESP-IDF v5.4.1**
+   - [公式インストールガイド](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/index.html)
    - Windows の場合は ESP-IDF Tools Installer を推奨
    - macOS/Linux の場合は `install.sh` を使用
 
@@ -61,7 +61,7 @@ StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコ
 # ESP-IDF をクローン
 mkdir -p ~/esp
 cd ~/esp
-git clone -b v5.2 --recursive https://github.com/espressif/esp-idf.git
+git clone -b v5.4.1 --recursive https://github.com/espressif/esp-idf.git
 
 # インストールスクリプトを実行
 cd esp-idf
@@ -619,7 +619,7 @@ With these already implemented, users only need to implement their control logic
 ## 1.2 Target Hardware
 
 - **MCU**: M5Stamp S3 (ESP32-S3)
-- **Framework**: ESP-IDF v5.x + FreeRTOS
+- **Framework**: ESP-IDF v5.4.1 + FreeRTOS
 - **Airframe**: StampFly
 
 ## 1.3 Main Features
@@ -644,8 +644,8 @@ With these already implemented, users only need to implement their control logic
 
 ## 2.1 Required Software
 
-1. **ESP-IDF v5.x**
-   - [Official Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/index.html)
+1. **ESP-IDF v5.4.1**
+   - [Official Installation Guide](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/index.html)
    - ESP-IDF Tools Installer recommended for Windows
    - Use `install.sh` for macOS/Linux
 
@@ -660,7 +660,7 @@ With these already implemented, users only need to implement their control logic
 # Clone ESP-IDF
 mkdir -p ~/esp
 cd ~/esp
-git clone -b v5.2 --recursive https://github.com/espressif/esp-idf.git
+git clone -b v5.4.1 --recursive https://github.com/espressif/esp-idf.git
 
 # Run install script
 cd esp-idf
