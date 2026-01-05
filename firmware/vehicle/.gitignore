@@ -1,0 +1,53 @@
+# Build output
+build/
+managed_components/
+
+# SDK config (generated)
+sdkconfig
+sdkconfig.old
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Compilation Database
+compile_commands.json
+
+# ESP-IDF managed components
+dependencies.lock
+
+# Python cache
+__pycache__/
+*.pyc
+
+# ESKF debug test data and results
+tools/scripts/archive/
+tools/scripts/*.bin
+tools/scripts/*.csv
+tools/scripts/*.png
+tools/eskf_debug/*.bin
+tools/eskf_debug/*.csv
+tools/eskf_debug/*.png
+tools/eskf_debug/*.mp4
+tools/eskf_debug/*.gif
+tools/scripts/*.mp4
+tools/scripts/*.gif
+
+# Temporary visualization scripts (experimental)
+tools/scripts/visualize_accel_attitude*.py
+tools/scripts/visualize_attitude_3d.py
+tools/scripts/visualize_gyro*.py
+tools/scripts/visualize_mag_attitude.py
+
+# Claude Code memory files
+CLAUDE.md
+
+# Personal notes
+knote/

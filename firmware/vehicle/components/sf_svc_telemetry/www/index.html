@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StampFly Telemetry</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 8px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        h1 {
+            font-size: 18px;
+            color: #00ff88;
+        }
+        #status {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .connected { background: #00ff88; color: #000; }
+        .disconnected { background: #ff4444; color: #fff; }
+        .connecting { background: #ffaa00; color: #000; }
+        .btn {
+            background: rgba(0,255,136,0.2);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn:hover { background: rgba(0,255,136,0.4); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-red {
+            border-color: #ff4444;
+            color: #ff4444;
+            background: rgba(255,68,68,0.2);
+        }
+        .btn-red:hover { background: rgba(255,68,68,0.4); }
+
+        /* Three-column layout for views (equal size) */
+        .views-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        @media (max-width: 700px) {
+            .views-row { grid-template-columns: 1fr; }
+        }
+        .view-card {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .view-title {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        .view-canvas {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #0a0a15;
+            border-radius: 4px;
+        }
+
+        /* Data cards row */
+        .data-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .card {
+            background: #16213e;
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 3px solid #00ff88;
+        }
+        .card-title {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            font-size: 12px;
+        }
+        .row:last-child { margin-bottom: 0; }
+        .label { color: #aaa; }
+        .value {
+            font-weight: bold;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+        }
+        .unit { color: #666; font-size: 10px; margin-left: 2px; }
+
+        /* Graphs section - vertical stack */
+        .graphs-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .graph-card {
+            background: #16213e;
+            border-radius: 6px;
+            padding: 8px;
+        }
+        .graph-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .graph-title {
+            font-size: 11px;
+            color: #888;
+        }
+        .graph-canvas {
+            width: 100%;
+            height: 100px;
+            background: #0a0a15;
+            border-radius: 4px;
+        }
+        .legend {
+            display: flex;
+            gap: 12px;
+            font-size: 10px;
+            margin-top: 4px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 3px;
+            border-radius: 1px;
+        }
+
+        /* Footer */
+        .footer {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: #666;
+            padding: 8px 0;
+            flex-wrap: wrap;
+        }
+
+        /* Log panel */
+        .log-panel {
+            margin-top: 12px;
+            padding: 8px;
+            background: #16213e;
+            border-radius: 8px;
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .log-status {
+            font-size: 12px;
+            color: #aaa;
+        }
+        .log-status.recording {
+            color: #ff4444;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>StampFly Telemetry</h1>
+        <div id="status" class="disconnected">Disconnected</div>
+        <button class="btn" onclick="clearHistory()">Clear</button>
+    </div>
+
+    <!-- Attitude Indicator, Top and Side Views -->
+    <div class="views-row">
+        <div class="view-card">
+            <div class="view-title">Attitude Indicator</div>
+            <canvas class="view-canvas" id="attitudeIndicator"></canvas>
+        </div>
+        <div class="view-card">
+            <div class="view-title">Top View (looking down)</div>
+            <canvas class="view-canvas" id="topView"></canvas>
+        </div>
+        <div class="view-card">
+            <div class="view-title">Side View (looking from East)</div>
+            <canvas class="view-canvas" id="sideView"></canvas>
+        </div>
+    </div>
+
+    <!-- Data Cards -->
+    <div class="data-row">
+        <div class="card">
+            <div class="card-title">Attitude</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">Roll</span>
+                <span><span id="roll" class="value">---</span><span class="unit">deg</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Pitch</span>
+                <span><span id="pitch" class="value">---</span><span class="unit">deg</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Yaw</span>
+                <span><span id="yaw" class="value">---</span><span class="unit">deg</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Position</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">X (N)</span>
+                <span><span id="pos_x" class="value">---</span><span class="unit">m</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Y (E)</span>
+                <span><span id="pos_y" class="value">---</span><span class="unit">m</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Z (D)</span>
+                <span><span id="pos_z" class="value">---</span><span class="unit">m</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Velocity</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">Vx</span>
+                <span><span id="vel_x" class="value">---</span><span class="unit">m/s</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Vy</span>
+                <span><span id="vel_y" class="value">---</span><span class="unit">m/s</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Vz</span>
+                <span><span id="vel_z" class="value">---</span><span class="unit">m/s</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Gyro (bias corr)</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">X</span>
+                <span><span id="gyro_x" class="value">---</span><span class="unit">deg/s</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Y</span>
+                <span><span id="gyro_y" class="value">---</span><span class="unit">deg/s</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Z</span>
+                <span><span id="gyro_z" class="value">---</span><span class="unit">deg/s</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Accel (bias corr)</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">X</span>
+                <span><span id="accel_x" class="value">---</span><span class="unit">m/s2</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Y</span>
+                <span><span id="accel_y" class="value">---</span><span class="unit">m/s2</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Z</span>
+                <span><span id="accel_z" class="value">---</span><span class="unit">m/s2</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Magnetometer</div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">X</span>
+                <span><span id="mag_x" class="value">---</span><span class="unit">uT</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Y</span>
+                <span><span id="mag_y" class="value">---</span><span class="unit">uT</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Z</span>
+                <span><span id="mag_z" class="value">---</span><span class="unit">uT</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Control Input</div>
+            <div class="row">
+                <span class="label">Thr</span>
+                <span><span id="ctrl_throttle" class="value">---</span><span class="unit">%</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#ff6b6b">Roll</span>
+                <span><span id="ctrl_roll" class="value">---</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#4edc4e">Pitch</span>
+                <span><span id="ctrl_pitch" class="value">---</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#6b9fff">Yaw</span>
+                <span><span id="ctrl_yaw" class="value">---</span></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">System</div>
+            <div class="row">
+                <span class="label">Battery</span>
+                <span><span id="voltage" class="value">---</span><span class="unit">V</span></span>
+            </div>
+            <div class="row">
+                <span class="label">State</span>
+                <span id="state" class="value">---</span>
+            </div>
+            <div class="row">
+                <span class="label">Sensors</span>
+                <span id="sensors" class="value" style="font-size:10px;">-----</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphs Section -->
+    <div class="graphs-section">
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Attitude [deg]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphAttitude"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>Roll(X)</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Pitch(Y)</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Yaw(Z)</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Position [m]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphPosition"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>X(N)</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Y(E)</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Z(D)</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Velocity [m/s]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphVelocity"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>Vx</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Vy</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Vz</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Gyro [deg/s]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphGyro"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>X</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Y</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Z</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Accel [m/s2]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphAccel"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>X</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Y</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Z</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Magnetometer [uT]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphMag"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>X</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Y</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Z</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">Control Input</div>
+            </div>
+            <canvas class="graph-canvas" id="graphControl"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div>Thr</div>
+                <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>Roll</div>
+                <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Pitch</div>
+                <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Yaw</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-panel">
+        <div class="log-header">
+            <span class="log-status" id="logStatus">Log: Ready</span>
+            <div>
+                <button class="btn" id="btnStartLog" onclick="startLog()">Start Log</button>
+                <button class="btn btn-red" id="btnStopLog" onclick="stopLog()" disabled>Stop</button>
+                <button class="btn" id="btnDownload" onclick="downloadLog()" disabled>Download CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Packets: <span id="packets">0</span></span>
+        <span>Rate: <span id="rate">0</span> Hz</span>
+        <span>Heartbeat: <span id="heartbeat" style="color: #ffaa00;">0</span></span>
+        <span>Errors: <span id="errors" style="color: #ff4444;">0</span></span>
+    </div>
+
+<script>
+// ============================================================================
+// Constants
+// ============================================================================
+const STATES = ['INIT', 'CALIBRATING', 'IDLE', 'ARMED', 'FLYING', 'LANDING', 'ERROR'];
+const RAD_TO_DEG = 180 / Math.PI;
+
+// Color scheme: X=Red, Y=Green, Z=Blue
+const COLORS = {
+    X: '#ff6b6b',  // Red - X axis, Roll
+    Y: '#4edc4e',  // Green - Y axis, Pitch
+    Z: '#6b9fff',  // Blue - Z axis, Yaw
+    THR: '#ffaa00' // Orange - Throttle
+};
+
+// V2.1 Packet offsets (108 bytes)
+const PKT = {
+    SIZE: 108,
+    HEADER: 0,
+    TYPE: 1,
+    TIMESTAMP: 2,
+    ROLL: 6,
+    PITCH: 10,
+    YAW: 14,
+    POS_X: 18,
+    POS_Y: 22,
+    POS_Z: 26,
+    VEL_X: 30,
+    VEL_Y: 34,
+    VEL_Z: 38,
+    GYRO_X: 42,
+    GYRO_Y: 46,
+    GYRO_Z: 50,
+    ACCEL_X: 54,
+    ACCEL_Y: 58,
+    ACCEL_Z: 62,
+    CTRL_THROTTLE: 66,
+    CTRL_ROLL: 70,
+    CTRL_PITCH: 74,
+    CTRL_YAW: 78,
+    MAG_X: 82,         // [NEW]
+    MAG_Y: 86,         // [NEW]
+    MAG_Z: 90,         // [NEW]
+    VOLTAGE: 94,
+    FLIGHT_STATE: 98,
+    SENSOR_STATUS: 99,
+    HEARTBEAT: 100,
+    CHECKSUM: 104,
+};
+const HISTORY_SIZE = 500;
+
+// ============================================================================
+// Data History (Ring Buffer)
+// ============================================================================
+class RingBuffer {
+    constructor(size) {
+        this.size = size;
+        this.data = [];
+    }
+    push(item) {
+        this.data.push(item);
+        if (this.data.length > this.size) this.data.shift();
+    }
+    clear() { this.data = []; }
+    get length() { return this.data.length; }
+    get(i) { return this.data[i]; }
+    last() { return this.data[this.data.length - 1]; }
+}
+
+const history = {
+    time: new RingBuffer(HISTORY_SIZE),
+    roll: new RingBuffer(HISTORY_SIZE),
+    pitch: new RingBuffer(HISTORY_SIZE),
+    yaw: new RingBuffer(HISTORY_SIZE),
+    pos_x: new RingBuffer(HISTORY_SIZE),
+    pos_y: new RingBuffer(HISTORY_SIZE),
+    pos_z: new RingBuffer(HISTORY_SIZE),
+    vel_x: new RingBuffer(HISTORY_SIZE),
+    vel_y: new RingBuffer(HISTORY_SIZE),
+    vel_z: new RingBuffer(HISTORY_SIZE),
+    mag_x: new RingBuffer(HISTORY_SIZE),
+    mag_y: new RingBuffer(HISTORY_SIZE),
+    mag_z: new RingBuffer(HISTORY_SIZE),
+    gyro_x: new RingBuffer(HISTORY_SIZE),
+    gyro_y: new RingBuffer(HISTORY_SIZE),
+    gyro_z: new RingBuffer(HISTORY_SIZE),
+    accel_x: new RingBuffer(HISTORY_SIZE),
+    accel_y: new RingBuffer(HISTORY_SIZE),
+    accel_z: new RingBuffer(HISTORY_SIZE),
+    ctrl_throttle: new RingBuffer(HISTORY_SIZE),
+    ctrl_roll: new RingBuffer(HISTORY_SIZE),
+    ctrl_pitch: new RingBuffer(HISTORY_SIZE),
+    ctrl_yaw: new RingBuffer(HISTORY_SIZE),
+};
+
+// Current state for views
+let currentState = {
+    roll: 0, pitch: 0, yaw: 0,
+    pos_x: 0, pos_y: 0, pos_z: 0
+};
+
+// ============================================================================
+// Attitude Indicator (Artificial Horizon)
+// ============================================================================
+function drawAttitudeIndicator() {
+    const canvas = document.getElementById('attitudeIndicator');
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    const w = rect.width;
+    const h = rect.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(w, h) / 2 - 10;
+
+    // Get roll and pitch (in radians)
+    const roll = currentState.roll;
+    const pitch = currentState.pitch;
+    const pitchPixels = pitch * RAD_TO_DEG * 2;  // 2 pixels per degree
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Rotate canvas for roll
+    ctx.translate(cx, cy);
+    ctx.rotate(-roll);  // Negative because we rotate the horizon, not the aircraft
+
+    // Sky and ground with pitch offset
+    const skyColor = '#4a90d9';
+    const groundColor = '#8B6914';
+    const horizonY = pitchPixels;
+
+    // Sky (upper half)
+    ctx.fillStyle = skyColor;
+    ctx.fillRect(-radius * 2, -radius * 2 + horizonY, radius * 4, radius * 2);
+
+    // Ground (lower half)
+    ctx.fillStyle = groundColor;
+    ctx.fillRect(-radius * 2, horizonY, radius * 4, radius * 2);
+
+    // Horizon line
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-radius, horizonY);
+    ctx.lineTo(radius, horizonY);
+    ctx.stroke();
+
+    // Pitch ladder lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1;
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    for (let deg = -30; deg <= 30; deg += 10) {
+        if (deg === 0) continue;
+        const y = horizonY - deg * 2;
+        const lineW = deg % 20 === 0 ? 40 : 20;
+        ctx.beginPath();
+        ctx.moveTo(-lineW, y);
+        ctx.lineTo(lineW, y);
+        ctx.stroke();
+        if (deg % 20 === 0) {
+            ctx.fillText(Math.abs(deg).toString(), lineW + 12, y + 3);
+            ctx.fillText(Math.abs(deg).toString(), -lineW - 12, y + 3);
+        }
+    }
+
+    ctx.restore();
+
+    // Fixed aircraft symbol (center reference)
+    ctx.strokeStyle = '#ffaa00';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    // Left wing
+    ctx.moveTo(cx - 50, cy);
+    ctx.lineTo(cx - 20, cy);
+    // Center dot
+    ctx.moveTo(cx - 5, cy);
+    ctx.lineTo(cx + 5, cy);
+    // Right wing
+    ctx.moveTo(cx + 20, cy);
+    ctx.lineTo(cx + 50, cy);
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = '#ffaa00';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Roll indicator arc at top
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius - 5, -Math.PI * 5/6, -Math.PI / 6);
+    ctx.stroke();
+
+    // Roll tick marks
+    const rollTicks = [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60];
+    rollTicks.forEach(deg => {
+        const angle = -Math.PI/2 + deg * Math.PI / 180;
+        const r1 = radius - 5;
+        const r2 = deg % 30 === 0 ? radius - 15 : radius - 10;
+        ctx.beginPath();
+        ctx.moveTo(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle));
+        ctx.lineTo(cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
+        ctx.stroke();
+    });
+
+    // Roll pointer (moves with roll)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-roll);
+    ctx.fillStyle = '#ffaa00';
+    ctx.beginPath();
+    ctx.moveTo(0, -radius + 5);
+    ctx.lineTo(-6, -radius + 15);
+    ctx.lineTo(6, -radius + 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Outer ring
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Display values
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`R: ${(roll * RAD_TO_DEG).toFixed(1)}°`, 8, h - 20);
+    ctx.fillText(`P: ${(pitch * RAD_TO_DEG).toFixed(1)}°`, 8, h - 6);
+}
+
+// ============================================================================
+// Draw Arrow helper
+// ============================================================================
+function drawArrow(ctx, fromX, fromY, toX, toY, color, label) {
+    const headLen = 8;
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+
+    // Arrowhead
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI/6), toY - headLen * Math.sin(angle - Math.PI/6));
+    ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI/6), toY - headLen * Math.sin(angle + Math.PI/6));
+    ctx.closePath();
+    ctx.fill();
+
+    // Label
+    if (label) {
+        ctx.font = '11px sans-serif';
+        ctx.fillText(label, toX + 4, toY + 4);
+    }
+}
+
+// ============================================================================
+// Top View (looking down -Z axis, NED)
+// ============================================================================
+function drawTopView() {
+    const canvas = document.getElementById('topView');
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    const w = rect.width;
+    const h = rect.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = 500;  // pixels per meter (10x zoom)
+    const gridPx = 50;  // grid spacing in pixels (= 0.1m at this scale)
+
+    // Background
+    ctx.fillStyle = '#0a0a15';
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid (0.1m spacing, ±0.5m range)
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    for (let i = -5; i <= 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * gridPx, 0);
+        ctx.lineTo(cx + i * gridPx, h);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, cy - i * gridPx);
+        ctx.lineTo(w, cy - i * gridPx);
+        ctx.stroke();
+    }
+
+    // Trajectory
+    if (history.pos_x.length > 1) {
+        ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < history.pos_x.length; i++) {
+            const x = cx + history.pos_y.get(i) * scale;
+            const y = cy - history.pos_x.get(i) * scale;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // Drone position and heading
+    const dx = cx + currentState.pos_y * scale;
+    const dy = cy - currentState.pos_x * scale;
+
+    ctx.save();
+    ctx.translate(dx, dy);
+    // NED: positive yaw = clockwise when viewed from above
+    // Canvas: positive rotation = clockwise
+    ctx.rotate(currentState.yaw);
+
+    // Coordinate axes arrows (attached to drone)
+    const axisLen = 30;
+    drawArrow(ctx, 0, 0, 0, -axisLen, COLORS.X, 'X');  // X/North = up
+    drawArrow(ctx, 0, 0, axisLen, 0, COLORS.Y, 'Y');   // Y/East = right
+
+    // Drone triangle
+    const size = 10;
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(-size * 0.6, size * 0.6);
+    ctx.lineTo(size * 0.6, size * 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // Position text
+    ctx.fillStyle = '#888';
+    ctx.font = '10px monospace';
+    ctx.fillText(`X:${currentState.pos_x.toFixed(2)} Y:${currentState.pos_y.toFixed(2)}`, 4, h - 4);
+}
+
+// ============================================================================
+// Side View (looking from East, +Y axis)
+// ============================================================================
+function drawSideView() {
+    const canvas = document.getElementById('sideView');
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    const w = rect.width;
+    const h = rect.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = 500;  // pixels per meter (10x zoom)
+    const gridPx = 50;  // grid spacing in pixels (= 0.1m at this scale)
+
+    // Background
+    ctx.fillStyle = '#0a0a15';
+    ctx.fillRect(0, 0, w, h);
+
+    // Ground line
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    ctx.lineTo(w, cy);
+    ctx.stroke();
+
+    // Grid (0.1m spacing, ±0.5m range)
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    for (let i = -5; i <= 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * gridPx, 0);
+        ctx.lineTo(cx + i * gridPx, h);
+        ctx.stroke();
+    }
+    for (let i = -3; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, cy + i * gridPx);
+        ctx.lineTo(w, cy + i * gridPx);
+        ctx.stroke();
+    }
+
+    // Trajectory
+    if (history.pos_x.length > 1) {
+        ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < history.pos_x.length; i++) {
+            const x = cx + history.pos_x.get(i) * scale;
+            const y = cy + history.pos_z.get(i) * scale;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // Drone position and pitch
+    const droneX = cx + currentState.pos_x * scale;
+    const droneY = cy + currentState.pos_z * scale;
+
+    ctx.save();
+    ctx.translate(droneX, droneY);
+    ctx.rotate(-currentState.pitch);
+
+    // Coordinate axes arrows (attached to drone)
+    const axisLen = 30;
+    drawArrow(ctx, 0, 0, axisLen, 0, COLORS.X, 'X');   // X/North = right
+    drawArrow(ctx, 0, 0, 0, axisLen, COLORS.Z, 'Z');   // Z/Down = down
+
+    // Drone bar
+    const len = 12;
+    const thick = 4;
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(-len / 2, -thick / 2, len, thick);
+
+    ctx.restore();
+
+    // Altitude text
+    const altitude = -currentState.pos_z;
+    ctx.fillStyle = '#888';
+    ctx.font = '10px monospace';
+    ctx.fillText(`Alt:${altitude.toFixed(2)}m`, 4, h - 4);
+}
+
+// ============================================================================
+// Canvas Graphs with Auto-fit (zero centered, with minimum range)
+// ============================================================================
+function drawGraph(canvasId, data1, data2, data3, data4, colors, minRange) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    const w = rect.width;
+    const h = rect.height;
+
+    // Clear
+    ctx.fillStyle = '#0a0a15';
+    ctx.fillRect(0, 0, w, h);
+
+    // Auto-range calculation
+    let dataMax = 0;
+    [data1, data2, data3, data4].forEach(d => {
+        if (d && d.length > 0) {
+            d.data.forEach(v => {
+                const absV = Math.abs(v);
+                if (absV > dataMax) dataMax = absV;
+            });
+        }
+    });
+
+    // Use minimum range if data is smaller, ensure zero is centered
+    const absMax = Math.max(dataMax, minRange || 1);
+    const padding = absMax * 0.1;
+    const range = [-(absMax + padding), absMax + padding];
+
+    // Grid - center line at zero
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h/2);
+    ctx.lineTo(w, h/2);
+    ctx.stroke();
+
+    // Draw each series
+    [data1, data2, data3, data4].forEach((data, idx) => {
+        if (!data || data.length < 2) return;
+
+        ctx.strokeStyle = colors[idx];
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+
+        for (let i = 0; i < data.length; i++) {
+            const x = (i / (data.length - 1)) * w;
+            const y = h - ((data.get(i) - range[0]) / (range[1] - range[0])) * h;
+
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    });
+
+    // Range labels
+    ctx.fillStyle = '#666';
+    ctx.font = '9px sans-serif';
+    ctx.fillText(range[1].toFixed(1), 2, 10);
+    ctx.fillText(range[0].toFixed(1), 2, h - 2);
+}
+
+function updateGraphs() {
+    // minRange: default range when data is small
+    drawGraph('graphAttitude', history.roll, history.pitch, history.yaw, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 30);      // ±30 deg default
+    drawGraph('graphPosition', history.pos_x, history.pos_y, history.pos_z, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 1);       // ±1 m default
+    drawGraph('graphVelocity', history.vel_x, history.vel_y, history.vel_z, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 0.5);     // ±0.5 m/s default
+    drawGraph('graphGyro', history.gyro_x, history.gyro_y, history.gyro_z, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 50);      // ±50 deg/s default
+    drawGraph('graphAccel', history.accel_x, history.accel_y, history.accel_z, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 12);      // ±12 m/s² default (> 1G)
+    drawGraph('graphMag', history.mag_x, history.mag_y, history.mag_z, null,
+              [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 50);      // ±50 uT default
+    drawGraph('graphControl', history.ctrl_throttle, history.ctrl_roll, history.ctrl_pitch, history.ctrl_yaw,
+              [COLORS.THR, COLORS.X, COLORS.Y, COLORS.Z], 1);   // ±1 default
+}
+
+function updateViews() {
+    drawAttitudeIndicator();
+    drawTopView();
+    drawSideView();
+}
+
+// ============================================================================
+// Logging
+// ============================================================================
+let logData = [];
+let isLogging = false;
+
+function startLog() {
+    logData = [];
+    isLogging = true;
+    document.getElementById('logStatus').textContent = 'Recording...';
+    document.getElementById('logStatus').classList.add('recording');
+    document.getElementById('btnStartLog').disabled = true;
+    document.getElementById('btnStopLog').disabled = false;
+    document.getElementById('btnDownload').disabled = true;
+}
+
+function stopLog() {
+    isLogging = false;
+    document.getElementById('logStatus').textContent = `Log: ${logData.length} samples`;
+    document.getElementById('logStatus').classList.remove('recording');
+    document.getElementById('btnStartLog').disabled = false;
+    document.getElementById('btnStopLog').disabled = true;
+    document.getElementById('btnDownload').disabled = logData.length === 0;
+}
+
+function downloadLog() {
+    if (logData.length === 0) return;
+
+    const header = 'timestamp_ms,roll_deg,pitch_deg,yaw_deg,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,mag_x,mag_y,mag_z,throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,voltage,state\n';
+    const csv = header + logData.map(d => d.join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stampfly_log_${new Date().toISOString().slice(0,19).replace(/[:-]/g,'')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function clearHistory() {
+    Object.values(history).forEach(h => h.clear());
+    updateGraphs();
+    updateViews();
+}
+
+// ============================================================================
+// WebSocket Connection
+// ============================================================================
+let ws = null;
+let packetCount = 0;
+let errorCount = 0;
+let lastRateTime = Date.now();
+let lastRateCount = 0;
+
+function updateStatus(status, text) {
+    const el = document.getElementById('status');
+    el.className = status;
+    el.textContent = text;
+}
+
+function parseSensorStatus(status) {
+    const flags = [];
+    if (status & 0x01) flags.push('IMU');
+    if (status & 0x02) flags.push('MAG');
+    if (status & 0x04) flags.push('BAR');
+    if (status & 0x08) flags.push('TOF');
+    if (status & 0x10) flags.push('FLO');
+    return flags.length > 0 ? flags.join(' ') : 'NONE';
+}
+
+function connect() {
+    updateStatus('connecting', 'Connecting...');
+
+    const host = window.location.host || '192.168.4.1';
+    ws = new WebSocket('ws://' + host + '/ws');
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+        updateStatus('connected', 'Connected');
+    };
+
+    ws.onclose = () => {
+        updateStatus('disconnected', 'Disconnected');
+        setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => {
+        ws.close();
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            if (event.data.byteLength < PKT.SIZE) return;
+
+            const data = new DataView(event.data);
+            if (data.getUint8(PKT.HEADER) !== 0xAA) return;
+
+            const packetType = data.getUint8(PKT.TYPE);
+
+            // Parse packet
+            const timestamp = data.getUint32(PKT.TIMESTAMP, true);
+            const roll = data.getFloat32(PKT.ROLL, true);
+            const pitch = data.getFloat32(PKT.PITCH, true);
+            const yaw = data.getFloat32(PKT.YAW, true);
+
+            const pos_x = data.getFloat32(PKT.POS_X, true);
+            const pos_y = data.getFloat32(PKT.POS_Y, true);
+            const pos_z = data.getFloat32(PKT.POS_Z, true);
+
+            const vel_x = data.getFloat32(PKT.VEL_X, true);
+            const vel_y = data.getFloat32(PKT.VEL_Y, true);
+            const vel_z = data.getFloat32(PKT.VEL_Z, true);
+
+            let gyro_x = 0, gyro_y = 0, gyro_z = 0;
+            let accel_x = 0, accel_y = 0, accel_z = 0;
+            let ctrl_throttle = 0, ctrl_roll = 0, ctrl_pitch = 0, ctrl_yaw = 0;
+            let mag_x = 0, mag_y = 0, mag_z = 0;
+            let sensor_status = 0x1F;
+
+            if (packetType === 0x20) {
+                gyro_x = data.getFloat32(PKT.GYRO_X, true);
+                gyro_y = data.getFloat32(PKT.GYRO_Y, true);
+                gyro_z = data.getFloat32(PKT.GYRO_Z, true);
+
+                accel_x = data.getFloat32(PKT.ACCEL_X, true);
+                accel_y = data.getFloat32(PKT.ACCEL_Y, true);
+                accel_z = data.getFloat32(PKT.ACCEL_Z, true);
+
+                ctrl_throttle = data.getFloat32(PKT.CTRL_THROTTLE, true);
+                ctrl_roll = data.getFloat32(PKT.CTRL_ROLL, true);
+                ctrl_pitch = data.getFloat32(PKT.CTRL_PITCH, true);
+                ctrl_yaw = data.getFloat32(PKT.CTRL_YAW, true);
+
+                mag_x = data.getFloat32(PKT.MAG_X, true);
+                mag_y = data.getFloat32(PKT.MAG_Y, true);
+                mag_z = data.getFloat32(PKT.MAG_Z, true);
+
+                sensor_status = data.getUint8(PKT.SENSOR_STATUS);
+            }
+
+            const voltage = data.getFloat32(PKT.VOLTAGE, true);
+            const state = data.getUint8(PKT.FLIGHT_STATE);
+            const heartbeat = data.getUint32(PKT.HEARTBEAT, true);
+
+            // Convert units
+            const rollDeg = roll * RAD_TO_DEG;
+            const pitchDeg = pitch * RAD_TO_DEG;
+            const yawDeg = yaw * RAD_TO_DEG;
+            const gyro_x_deg = gyro_x * RAD_TO_DEG;
+            const gyro_y_deg = gyro_y * RAD_TO_DEG;
+            const gyro_z_deg = gyro_z * RAD_TO_DEG;
+
+            // Update current state
+            currentState = { roll, pitch, yaw, pos_x, pos_y, pos_z };
+
+            // Update history
+            history.time.push(timestamp);
+            history.roll.push(rollDeg);
+            history.pitch.push(pitchDeg);
+            history.yaw.push(yawDeg);
+            history.pos_x.push(pos_x);
+            history.pos_y.push(pos_y);
+            history.pos_z.push(pos_z);
+            history.vel_x.push(vel_x);
+            history.vel_y.push(vel_y);
+            history.vel_z.push(vel_z);
+            history.gyro_x.push(gyro_x_deg);
+            history.gyro_y.push(gyro_y_deg);
+            history.gyro_z.push(gyro_z_deg);
+            history.accel_x.push(accel_x);
+            history.accel_y.push(accel_y);
+            history.accel_z.push(accel_z);
+            history.ctrl_throttle.push(ctrl_throttle);
+            history.ctrl_roll.push(ctrl_roll);
+            history.ctrl_pitch.push(ctrl_pitch);
+            history.ctrl_yaw.push(ctrl_yaw);
+            history.mag_x.push(mag_x);
+            history.mag_y.push(mag_y);
+            history.mag_z.push(mag_z);
+
+            // Log if recording
+            if (isLogging) {
+                logData.push([
+                    timestamp, rollDeg.toFixed(2), pitchDeg.toFixed(2), yawDeg.toFixed(2),
+                    pos_x.toFixed(4), pos_y.toFixed(4), pos_z.toFixed(4),
+                    vel_x.toFixed(4), vel_y.toFixed(4), vel_z.toFixed(4),
+                    gyro_x_deg.toFixed(2), gyro_y_deg.toFixed(2), gyro_z_deg.toFixed(2),
+                    accel_x.toFixed(3), accel_y.toFixed(3), accel_z.toFixed(3),
+                    mag_x.toFixed(1), mag_y.toFixed(1), mag_z.toFixed(1),
+                    ctrl_throttle.toFixed(3), ctrl_roll.toFixed(3), ctrl_pitch.toFixed(3), ctrl_yaw.toFixed(3),
+                    voltage.toFixed(2), state
+                ]);
+            }
+
+            // Update UI
+            packetCount++;
+            document.getElementById('packets').textContent = packetCount;
+            document.getElementById('roll').textContent = rollDeg.toFixed(1);
+            document.getElementById('pitch').textContent = pitchDeg.toFixed(1);
+            document.getElementById('yaw').textContent = yawDeg.toFixed(1);
+            document.getElementById('pos_x').textContent = pos_x.toFixed(2);
+            document.getElementById('pos_y').textContent = pos_y.toFixed(2);
+            document.getElementById('pos_z').textContent = pos_z.toFixed(2);
+            document.getElementById('vel_x').textContent = vel_x.toFixed(2);
+            document.getElementById('vel_y').textContent = vel_y.toFixed(2);
+            document.getElementById('vel_z').textContent = vel_z.toFixed(2);
+            document.getElementById('gyro_x').textContent = gyro_x_deg.toFixed(1);
+            document.getElementById('gyro_y').textContent = gyro_y_deg.toFixed(1);
+            document.getElementById('gyro_z').textContent = gyro_z_deg.toFixed(1);
+            document.getElementById('accel_x').textContent = accel_x.toFixed(2);
+            document.getElementById('accel_y').textContent = accel_y.toFixed(2);
+            document.getElementById('accel_z').textContent = accel_z.toFixed(2);
+            document.getElementById('mag_x').textContent = mag_x.toFixed(1);
+            document.getElementById('mag_y').textContent = mag_y.toFixed(1);
+            document.getElementById('mag_z').textContent = mag_z.toFixed(1);
+            document.getElementById('ctrl_throttle').textContent = (ctrl_throttle * 100).toFixed(0);
+            document.getElementById('ctrl_roll').textContent = ctrl_roll.toFixed(2);
+            document.getElementById('ctrl_pitch').textContent = ctrl_pitch.toFixed(2);
+            document.getElementById('ctrl_yaw').textContent = ctrl_yaw.toFixed(2);
+            document.getElementById('voltage').textContent = voltage.toFixed(2);
+            document.getElementById('state').textContent = STATES[state] || 'UNKNOWN';
+            document.getElementById('sensors').textContent = parseSensorStatus(sensor_status);
+            document.getElementById('heartbeat').textContent = heartbeat;
+
+        } catch (e) {
+            errorCount++;
+            document.getElementById('errors').textContent = errorCount;
+        }
+
+        // Calculate rate
+        const now = Date.now();
+        if (now - lastRateTime >= 1000) {
+            const rate = (packetCount - lastRateCount) / ((now - lastRateTime) / 1000);
+            document.getElementById('rate').textContent = rate.toFixed(0);
+            lastRateTime = now;
+            lastRateCount = packetCount;
+        }
+    };
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+window.onload = () => {
+    connect();
+    setInterval(() => {
+        updateViews();
+        updateGraphs();
+    }, 100);
+};
+
+window.addEventListener('resize', () => {
+    updateViews();
+    updateGraphs();
+});
+</script>
+</body>
+</html>

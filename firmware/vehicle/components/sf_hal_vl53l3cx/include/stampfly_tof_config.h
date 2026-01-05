@@ -1,0 +1,34 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2024 StampFly ToF Driver Contributors
+ */
+
+/**
+ * @file stampfly_tof_config.h
+ * @brief StampFly ToF Sensor Configuration
+ */
+
+#ifndef STAMPFLY_TOF_CONFIG_H
+#define STAMPFLY_TOF_CONFIG_H
+
+#include "sdkconfig.h"
+
+// I2C Configuration
+#define STAMPFLY_I2C_SDA_GPIO       CONFIG_STAMPFLY_TOF_I2C_SDA_GPIO
+#define STAMPFLY_I2C_SCL_GPIO       CONFIG_STAMPFLY_TOF_I2C_SCL_GPIO
+#define STAMPFLY_I2C_FREQ_HZ        CONFIG_STAMPFLY_TOF_I2C_FREQ_HZ
+#define STAMPFLY_I2C_PORT           I2C_NUM_0
+
+// ToF Sensor GPIO Configuration
+#define STAMPFLY_TOF_FRONT_XSHUT    CONFIG_STAMPFLY_TOF_FRONT_XSHUT_GPIO
+#define STAMPFLY_TOF_FRONT_INT      CONFIG_STAMPFLY_TOF_FRONT_INT_GPIO
+#define STAMPFLY_TOF_BOTTOM_XSHUT   CONFIG_STAMPFLY_TOF_BOTTOM_XSHUT_GPIO
+#define STAMPFLY_TOF_BOTTOM_INT     CONFIG_STAMPFLY_TOF_BOTTOM_INT_GPIO
+
+// VL53L3CX Default I2C Address (7-bit)
+#define VL53L3CX_DEFAULT_I2C_ADDR   0x29
+
+// Timing Configuration
+#define STAMPFLY_TOF_TIMING_BUDGET_MS   CONFIG_STAMPFLY_TOF_TIMING_BUDGET_MS
+
+#endif // STAMPFLY_TOF_CONFIG_H

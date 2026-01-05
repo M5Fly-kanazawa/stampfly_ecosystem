@@ -1,0 +1,24 @@
+# ESP32-S3 specific configuration for StampFly
+CONFIG_IDF_TARGET="esp32s3"
+
+# Flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Partition table
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+
+# FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+
+# Log level - set to INFO to suppress verbose/debug output
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_INFO=y
+
+# Component log levels - suppress verbose output
+CONFIG_LOG_COLORS=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+
+# C++ support (required for C++ wrapper)
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
+CONFIG_COMPILER_CXX_RTTI=y
+CONFIG_COMPILER_CXX_STD_17=y
