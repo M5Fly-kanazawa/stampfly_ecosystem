@@ -277,6 +277,7 @@ tools/
 ├── flashing/
 ├── calibration/
 ├── log_capture/
+├── log_analyzer/
 └── ci/
 ```
 
@@ -288,6 +289,9 @@ tools/
 
 - log_capture/
   - 実験ログ取得（PC 側）
+
+- log_analyzer/
+  - ログ解析
 
 - ci/
   - CI 用補助スクリプト
@@ -317,15 +321,11 @@ protocol を介した I/O により、実機との一貫性を保つ。
 ```
 examples/
 ├── protocol_roundtrip/
-├── log_to_plot/
 └── pid_tuning/
 ```
 
 - protocol_roundtrip/
   - 仕様→エンコード/デコードの最小例
-
-- log_to_plot/
-  - ログ取得→解析→プロット
 
 - pid_tuning/
   - 設計→パラメータ→実機反映
