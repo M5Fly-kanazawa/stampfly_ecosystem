@@ -1,8 +1,10 @@
 # StampFly Protocol Specification
 
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
+
 通信プロトコルの仕様定義（Single Source of Truth）。
 
-## 概要
+## 1. 概要
 
 StampFlyエコシステムは以下の通信プロトコルを使用：
 
@@ -11,7 +13,7 @@ StampFlyエコシステムは以下の通信プロトコルを使用：
 | ESP-NOW + TDMA | 制御・基本テレメトリ | Controller ↔ Vehicle | 50Hz |
 | WebSocket | 拡張テレメトリ | Vehicle → GCS | 50Hz |
 
-## ディレクトリ構成
+## 2. ディレクトリ構成
 
 ```
 protocol/
@@ -24,7 +26,7 @@ protocol/
 └── tools/                 # 仕様検証、コード生成ツール
 ```
 
-## メッセージ一覧
+## 3. メッセージ一覧
 
 ### ControlPacket (14 bytes)
 コントローラから機体への制御コマンド。
@@ -90,7 +92,7 @@ protocol/
 | 104 | 1 | checksum | - | チェックサム（XOR） |
 | 105 | 3 | padding | - | アラインメント |
 
-## TDMA フレーム構造
+## 4. TDMAフレーム構造
 
 ```
 |<------------------- 20ms Frame ------------------->|
@@ -103,7 +105,7 @@ protocol/
 - **スロット幅**: 2ms
 - **ビーコン**: フレーム開始500μs前に送信
 
-## チェックサム
+## 5. チェックサム
 
 ### Sum (ControlPacket, TelemetryPacket)
 ```c
@@ -121,7 +123,7 @@ for (size_t i = 0; i < checksum_offset; i++) {
 }
 ```
 
-## タイムアウト
+## 6. タイムアウト
 
 | パラメータ | 値 | 説明 |
 |-----------|-----|------|
@@ -129,7 +131,7 @@ for (size_t i = 0; i < checksum_offset; i++) {
 | COMM_TIMEOUT | 500ms | 通信途絶検出 |
 | DRONE_RETRY | 5000ms | 再接続間隔 |
 
-## ペアリング
+## 7. ペアリング
 
 1. コントローラがペアリングモードに入る（ボタン押下）
 2. コントローラがブロードキャストでペアリング要求を送信
@@ -142,7 +144,7 @@ for (size_t i = 0; i < checksum_offset; i++) {
 - Byte 1-6: ドローンMACアドレス
 - Byte 7-10: シグネチャ (0xAA 0x55 0x16 0x88)
 
-## 実装ファイル
+## 8. 実装ファイル
 
 ### Vehicle
 - `firmware/vehicle/components/sf_svc_comm/` - ESP-NOW通信
@@ -151,7 +153,7 @@ for (size_t i = 0; i < checksum_offset; i++) {
 ### Controller
 - `firmware/controller/components/espnow_tdma/` - TDMA実装
 
-## 設計原則
+## 9. 設計原則
 
 エコシステム内の全ての通信実装はこの仕様から派生する。
 
@@ -162,11 +164,13 @@ for (size_t i = 0; i < checksum_offset; i++) {
 
 ---
 
+<a id="english"></a>
+
 # Protocol Specification (English)
 
 Communication protocol specification (Single Source of Truth).
 
-## Overview
+## 1. Overview
 
 StampFly ecosystem uses the following protocols:
 
