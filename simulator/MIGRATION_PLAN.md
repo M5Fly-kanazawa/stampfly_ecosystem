@@ -40,6 +40,7 @@ simulator/
 ├── README.md
 ├── MIGRATION_PLAN.md        # 本ドキュメント
 ├── requirements.txt
+├── .gitignore               # output/ 等を除外
 │
 ├── core/                    # 物理エンジン
 │   ├── __init__.py
@@ -50,14 +51,15 @@ simulator/
 │   ├── battery.py           # battery.py から移植
 │   └── environment.py       # 新規：風、地面、重力
 │
-├── sensors/                 # センサモデル
+├── sensors/                 # センサモデル（firmware/vehicle/components/sf_hal_* 対応）
 │   ├── __init__.py
-│   ├── imu.py               # imu_mag.py から分離
-│   ├── magnetometer.py      # imu_mag.py から分離
-│   ├── barometer.py         # 新規：気圧計
-│   ├── tof.py               # tof.py から移植
-│   ├── opticalflow.py       # 新規：オプティカルフロー
-│   └── noise_models.py      # 新規：Allan分散等
+│   ├── imu.py               # BMI270 6軸IMU (sf_hal_bmi270)
+│   ├── magnetometer.py      # BMM150 地磁気センサ (sf_hal_bmm150)
+│   ├── barometer.py         # BMP280 気圧センサ (sf_hal_bmp280)
+│   ├── tof.py               # VL53L3CX ToFセンサ (sf_hal_vl53l3cx)
+│   ├── opticalflow.py       # PMW3901 光学フローセンサ (sf_hal_pmw3901)
+│   ├── power_monitor.py     # INA3221 電源モニタ (sf_hal_power)
+│   └── noise_models.py      # Allan分散ベースノイズモデル
 │
 ├── control/                 # 制御系
 │   ├── __init__.py
@@ -65,11 +67,12 @@ simulator/
 │   ├── rate_controller.py   # 新規：firmware互換
 │   └── attitude_controller.py # 新規：firmware互換
 │
-├── interfaces/              # 外部接続
+├── interfaces/              # 外部接続（protocol/spec/ 準拠）
 │   ├── __init__.py
 │   ├── joystick.py          # joystick.py から移植
-│   ├── protocol_bridge.py   # 新規：protocol/準拠I/O
-│   ├── sil_interface.py     # 新規：PC版ESKFとの接続
+│   ├── messages.py          # ✓ protocol/spec/messages.yaml の Python 実装
+│   ├── protocol_bridge.py   # ✓ SimulatorState ↔ Protocol 変換
+│   ├── sil_interface.py     # ✓ SILインターフェース・SimpleRateController
 │   └── hil_interface.py     # 新規：実機との接続
 │
 ├── visualization/           # 可視化（複数バックエンド対応）
@@ -104,10 +107,16 @@ simulator/
 │   └── loaders/
 │       └── stl_loader.py
 │
-└── scripts/                 # 実行スクリプト
-    ├── run_sim.py           # メインシミュレータ
-    ├── run_sil.py           # SILモード
-    └── sandbox.py           # 開発用
+├── scripts/                 # 実行スクリプト
+│   ├── run_sim.py           # メインシミュレータ
+│   ├── run_sil.py           # SILモード
+│   ├── sandbox.py           # 開発用
+│   ├── test_sensors.py      # ✓ センサモデル単体テスト
+│   ├── test_protocol.py     # ✓ プロトコルメッセージテスト
+│   └── visualize_sensors.py # ✓ センサ特性可視化
+│
+└── output/                  # 出力ファイル（.gitignore で除外）
+    └── *.png                # 可視化結果など
 ```
 
 ---
@@ -168,23 +177,48 @@ firmware/vehicle/
 
 **目標**: 実機センサ構成と一致させる
 
+実機ファームウェア（`firmware/vehicle/components/sf_hal_*`）で使用されているセンサ：
+
+| コンポーネント | センサ | シミュレータファイル |
+|---------------|--------|---------------------|
+| sf_hal_bmi270 | BMI270 (6軸IMU) | sensors/imu.py |
+| sf_hal_bmp280 | BMP280 (気圧計) | sensors/barometer.py |
+| sf_hal_bmm150 | BMM150 (地磁気) | sensors/magnetometer.py |
+| sf_hal_pmw3901 | PMW3901 (光学フロー) | sensors/opticalflow.py |
+| sf_hal_vl53l3cx | VL53L3CX (ToF) | sensors/tof.py |
+| sf_hal_power | INA3221 (電源モニタ) | sensors/power_monitor.py |
+
 1. [x] 気圧計（BMP280）モデル追加
 2. [x] オプティカルフロー（PMW3901）モデル追加
-3. [x] センサノイズモデルを実機特性に合わせる
+3. [x] センサノイズモデルを実機特性に合わせる（noise_models.py）
 4. [x] Allan分散パラメータ導入
+5. [x] IMU（BMI270）モデル拡張 - Allan分散ベースノイズ統合
+6. [x] 地磁気センサ（BMM150）モデル新規作成
+7. [x] ToFセンサ（VL53L3CX）モデル新規作成
+8. [x] 電源モニタ（INA3221）モデル新規作成
 
-**成果物**: 6センサ（IMU, Mag, Baro, ToF, OptFlow）シミュレーション ✓
+**成果物**: 7センサ（IMU, Mag, Baro, ToF, OptFlow, Power）シミュレーション ✓
 
 ### Phase 3: Protocol 統合
 
 **目標**: protocol/ 定義に準拠したI/O
 
-1. [ ] `protocol/messages/` の構造体を Python で実装
-2. [ ] バイナリログ形式（V2）との互換性
-3. [ ] `tools/log_analyzer/` でシミュレータ出力を解析可能に
-4. [ ] SIL インターフェース実装
+1. [x] `protocol/spec/messages.yaml` の構造体を Python で実装 (`interfaces/messages.py`)
+   - ControlPacket (14 bytes): Controller → Vehicle
+   - TelemetryPacket (22 bytes): Vehicle → Controller (ESP-NOW)
+   - TelemetryWSPacket (108 bytes): Vehicle → GCS (WebSocket)
+   - PairingPacket (11 bytes), TDMABeacon (2 bytes)
+   - チェックサム関数 (SUM/XOR)
+2. [x] バイナリログ形式（V2）との互換性 (`interfaces/protocol_bridge.py`)
+   - BinaryLogger / BinaryLogReader
+   - log_to_numpy / numpy_to_log 変換関数
+3. [x] ProtocolBridge: SimulatorState ↔ Protocol 変換
+4. [x] SIL インターフェース実装 (`interfaces/sil_interface.py`)
+   - SensorData / ActuatorCommand データ構造
+   - SILInterface クラス
+   - SimpleRateController (テスト用)
 
-**成果物**: 実機ログと同形式のシミュレータ出力
+**成果物**: 実機ログと同形式のシミュレータ出力 ✓
 
 ### Phase 4: 制御系統合
 
