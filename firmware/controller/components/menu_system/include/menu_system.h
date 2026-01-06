@@ -120,6 +120,19 @@ uint8_t menu_get_item_count(void);
  */
 const char* menu_get_item_label(uint8_t index);
 
+/**
+ * USB mode action callback type
+ * USBモードアクションコールバック型
+ */
+typedef void (*usb_mode_callback_t)(void);
+
+/**
+ * Register USB mode callback
+ * USBモードコールバックを登録
+ * @param callback Function to call when USB mode is selected
+ */
+void menu_register_usb_mode_callback(usb_mode_callback_t callback);
+
 #ifdef __cplusplus
 }
 #endif

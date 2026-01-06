@@ -34,13 +34,20 @@ static uint8_t scroll_offset = 0;
 static menu_item_t menu_items[MAX_MENU_ITEMS];
 static uint8_t menu_item_count = 0;
 
+// USB mode callback
+// USBモードコールバック
+static usb_mode_callback_t g_usb_mode_callback = NULL;
+
 // ============================================================================
 // Menu action callbacks
 // メニューアクションコールバック
 // ============================================================================
 static void action_usb_mode(void) {
-    // TODO: Phase 2 - Switch to USB HID mode
-    // USB HIDモードへ切り替え
+    // Call registered callback to switch to USB HID mode
+    // 登録されたコールバックを呼び出してUSB HIDモードに切り替え
+    if (g_usb_mode_callback != NULL) {
+        g_usb_mode_callback();
+    }
 }
 
 static void action_stick_calibration(void) {
@@ -190,4 +197,12 @@ const char* menu_get_item_label(uint8_t index) {
         return menu_items[index].label;
     }
     return "";
+}
+
+// ============================================================================
+// Register USB mode callback
+// USBモードコールバック登録
+// ============================================================================
+void menu_register_usb_mode_callback(usb_mode_callback_t callback) {
+    g_usb_mode_callback = callback;
 }

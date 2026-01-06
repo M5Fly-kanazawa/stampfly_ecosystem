@@ -18,6 +18,8 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <nvs_flash.h>
+#include <nvs.h>
+#include <esp_system.h>
 #include <string.h>
 #include <buzzer.h>
 #include <atoms3joy.h>
@@ -91,6 +93,67 @@ typedef enum {
 } CommMode;
 
 static CommMode g_comm_mode = COMM_MODE_ESPNOW;
+
+// NVS設定
+// NVS settings
+#define NVS_NAMESPACE "controller"
+#define NVS_KEY_COMM_MODE "comm_mode"
+
+// 通信モードをNVSから読み込み
+// Load communication mode from NVS
+static CommMode load_comm_mode_from_nvs(void) {
+    nvs_handle_t handle;
+    uint8_t mode = COMM_MODE_ESPNOW;  // デフォルト
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        nvs_get_u8(handle, NVS_KEY_COMM_MODE, &mode);
+        nvs_close(handle);
+    }
+
+    return (CommMode)mode;
+}
+
+// 通信モードをNVSに保存
+// Save communication mode to NVS
+static esp_err_t save_comm_mode_to_nvs(CommMode mode) {
+    nvs_handle_t handle;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u8(handle, NVS_KEY_COMM_MODE, (uint8_t)mode);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS set failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return err;
+}
+
+// USBモード切替コールバック（メニューから呼ばれる）
+// USB mode switch callback (called from menu)
+static void on_usb_mode_selected(void) {
+    ESP_LOGI(TAG, "USB HIDモード選択 - NVS保存後に再起動");
+
+    // 現在ESP-NOWモードならUSB HIDに切り替え
+    // 現在USB HIDモードならESP-NOWに切り替え（トグル動作）
+    CommMode new_mode = (g_comm_mode == COMM_MODE_ESPNOW) ? COMM_MODE_USB_HID : COMM_MODE_ESPNOW;
+
+    if (save_comm_mode_to_nvs(new_mode) == ESP_OK) {
+        ESP_LOGI(TAG, "モード保存完了、再起動します");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_restart();
+    } else {
+        ESP_LOGE(TAG, "モード保存失敗");
+    }
+}
 
 // millis()相当
 static inline uint32_t millis_now(void) {
@@ -684,16 +747,10 @@ extern "C" void app_main(void)
     // LCD初期化
     init_display();
 
-    // 起動時モード選択: M5.BtnA押下でUSB HIDモード
-    // Boot mode selection: Press M5.BtnA for USB HID mode
-    M5.update();
-    if (M5.BtnA.isPressed()) {
-        g_comm_mode = COMM_MODE_USB_HID;
-        ESP_LOGI(TAG, "USB HIDモード選択");
-    } else {
-        g_comm_mode = COMM_MODE_ESPNOW;
-        ESP_LOGI(TAG, "ESP-NOWモード選択");
-    }
+    // NVSから通信モード読み込み
+    // Load communication mode from NVS
+    g_comm_mode = load_comm_mode_from_nvs();
+    ESP_LOGI(TAG, "通信モード: %s", g_comm_mode == COMM_MODE_USB_HID ? "USB HID" : "ESP-NOW");
 
     M5.Display.setCursor(4, 2);
     M5.Display.setTextColor(SF_WHITE, SF_BLACK);
@@ -705,6 +762,7 @@ extern "C" void app_main(void)
 
     // メニューシステム初期化
     menu_init();
+    menu_register_usb_mode_callback(on_usb_mode_selected);
     ESP_LOGI(TAG, "メニューシステム初期化完了");
 
     // ジョイスティック初期化 (レガシーI2Cドライバで共有)
