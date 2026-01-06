@@ -252,28 +252,32 @@ static void update_display(void)
     // Flight screen rendering with StickMode-based color
     // StickMode 2: 緑 (GREEN), StickMode 3: 黄 (YELLOW)
     const uint8_t* drone_mac = get_drone_peer_addr();
-    uint32_t text_color = (StickMode == 2) ? SF_GREEN : SF_YELLOW;
-    M5.Display.setTextColor(text_color, SF_BLACK);
+    uint32_t base_color = (StickMode == 2) ? SF_GREEN : SF_YELLOW;
 
     // 行0: MACアドレス
     M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     M5.Display.printf("MAC ADR %02X:%02X    ", drone_mac[4], drone_mac[5]);
 
     // 行1: バッテリー電圧
     M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     M5.Display.printf("BAT 1:%4.1f 2:%4.1f",
         joy_get_battery_voltage1(), joy_get_battery_voltage2());
 
     // 行2: スティックモード
     M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     M5.Display.printf("MODE: %d        ", StickMode);
 
     // 行3: チャンネル/ID
     M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     M5.Display.printf("CH: %02d ID: %d  ", ESPNOW_CHANNEL, TDMA_DEVICE_ID);
 
     // 行4: 高度モード
     M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     if (AltMode == ALT_CONTROL_MODE)
         M5.Display.printf("-Auto ALT-  ");
     else
@@ -281,6 +285,7 @@ static void update_display(void)
 
     // 行5: 制御モード
     M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.setTextColor(base_color, SF_BLACK);
     if (Mode == ANGLECONTROL)
         M5.Display.printf("-STABILIZE-");
     else
@@ -289,15 +294,19 @@ static void update_display(void)
     // 行6: 周波数/同期状態
     M5.Display.setCursor(4, 2 + 6 * line_height);
     #if TDMA_DEVICE_ID == 0
+        M5.Display.setTextColor(base_color, SF_BLACK);
         M5.Display.printf("Freq:%4d M    ", (int)actual_send_freq_hz);
     #else
         if (first_beacon_received) {
             if (is_beacon_lost()) {
+                M5.Display.setTextColor(SF_RED, SF_BLACK);
                 M5.Display.printf("F:%4d LOST!  ", (int)actual_send_freq_hz);
             } else {
+                M5.Display.setTextColor(SF_GREEN, SF_BLACK);
                 M5.Display.printf("F:%4d SYNC   ", (int)actual_send_freq_hz);
             }
         } else {
+            M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
             M5.Display.printf("F:%4d WAIT   ", (int)actual_send_freq_hz);
         }
     #endif
