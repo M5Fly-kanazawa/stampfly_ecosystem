@@ -224,8 +224,11 @@ static void update_display(void)
     // フライト画面描画
     // Flight screen rendering with StickMode-based color
     // StickMode 2: 緑 (GREEN), StickMode 3: 黄 (YELLOW)
+    // Use color565() for explicit RGB values to avoid color order issues
     const uint8_t* drone_mac = get_drone_peer_addr();
-    uint32_t text_color = (StickMode == 2) ? TFT_GREEN : TFT_YELLOW;
+    uint32_t text_color = (StickMode == 2)
+        ? M5.Display.color565(0, 255, 0)    // Green: R=0, G=255, B=0
+        : M5.Display.color565(255, 255, 0); // Yellow: R=255, G=255, B=0
     M5.Display.setTextColor(text_color, TFT_BLACK);
 
     // 行0: MACアドレス
