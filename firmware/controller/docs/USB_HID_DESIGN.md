@@ -1,58 +1,77 @@
-# USB HID Gamepad 設計書
+# USB HID Joystick 設計書
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
+
+**関連ドキュメント**: [docs/todo/CONTROLLER_MENU_USB_PLAN.md](../../../docs/todo/CONTROLLER_MENU_USB_PLAN.md) - 全体計画（Phase 4）
 
 ## 1. 概要
 
 ### 目標
-AtomS3コントローラをUSB HIDゲームパッドとしてPCに認識させ、シミュレータや他のゲーム/アプリで使用可能にする。
+AtomS3コントローラをUSB HID Joystickとしてデバイスに認識させ、シミュレータや他のゲーム/アプリで使用可能にする。
 
 ### 要件
+
 | 項目 | 内容 |
 |------|------|
-| モード切替 | メニューから「USB Mode」選択でHIDモードに切り替え |
-| 通信排他 | ESP-NOW TDMAを停止してUSB接続に専念 |
-| 入力 | 2軸×2スティック + 4ボタンをHIDレポートで送信 |
-| 復帰 | ボタン長押しでフライトモードに復帰 |
+| モード選択 | 起動時: M5.BtnA押下 → USB HIDモード、それ以外 → ESP-NOWモード |
+| ランタイム切替 | メニューから「USB Mode」選択（要再起動） |
+| 通信排他 | USB HIDモード中はESP-NOW停止 |
+| 入力 | 4軸（Throttle/Roll/Pitch/Yaw）+ 8ボタンをHIDレポートで送信 |
 
 ## 2. アーキテクチャ
 
+### モード選択フロー
+
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  PC / Simulator                                               │
-│    └── USB HID Host (Gamepad/Joystick として認識)             │
-└───────────────────────────────────────────────────────────────┘
-                           │
-                      USB (Full Speed)
-                           │
-┌───────────────────────────────────────────────────────────────┐
-│  AtomS3 Controller (ESP32-S3)                                 │
-│                                                               │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
-│  │ InputTask   │───→│ usb_hid     │───→│ TinyUSB     │       │
-│  │ (100Hz)     │    │ component   │    │ HID Device  │       │
-│  │ atoms3joy   │    │             │    │             │       │
-│  └─────────────┘    └─────────────┘    └─────────────┘       │
-│        │                                                      │
-│        ↓                                                      │
-│  ┌─────────────┐                                             │
-│  │ Menu System │ ← action_usb_mode() でモード切替            │
-│  │             │   tdma_stop() → USB初期化 → HIDレポート開始 │
-│  └─────────────┘                                             │
-└───────────────────────────────────────────────────────────────┘
+                    ┌─────────────────────────────────────────┐
+                    │           起動時選択                    │
+                    │  M5.BtnA押下 → USB HID モード          │
+                    │  それ以外    → ESP-NOW モード          │
+                    └─────────────────────────────────────────┘
+                              │                    │
+              ┌───────────────┘                    └───────────────┐
+              ↓                                                    ↓
+┌─────────────────────────┐                        ┌─────────────────────────┐
+│     USB HID モード      │                        │    ESP-NOW モード       │
+│  ┌─────────────────┐   │                        │  ┌─────────────────┐    │
+│  │   飛行画面      │   │                        │  │   飛行画面      │    │
+│  │  (HID送信中)    │   │                        │  │  (TDMA送信中)   │    │
+│  └─────────────────┘   │                        │  └─────────────────┘    │
+└─────────────────────────┘                        └─────────────────────────┘
+```
+
+### タスク構成
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ app_main                                                        │
+│   ├── 起動モード判定                                            │
+│   │      M5.BtnA → USB HID モード                              │
+│   │      else   → ESP-NOW モード                               │
+│   │                                                             │
+│   ├── 共通タスク                                                │
+│   │      input_task (100Hz) ← ジョイスティック＆ボタン読み取り │
+│   │      display_task (10Hz) ← LCD更新                         │
+│   │                                                             │
+│   ├── ESP-NOWモード専用                                         │
+│   │      tdma_send_task                                         │
+│   │      beacon_task (Master時)                                 │
+│   │                                                             │
+│   └── USB HIDモード専用                                         │
+│          usb_hid_task (100Hz) ← HIDレポート送信                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 3. HIDレポート仕様
 
 ### レポートディスクリプタ
+
 ```
 Usage Page: Generic Desktop (0x01)
-Usage: Gamepad (0x05)
+Usage: Joystick (0x04)
 Collection: Application
-  Collection: Physical
-    - 4 Axes (X, Y, Z, Rz): 8-bit signed (-127 to 127)
-    - 4 Buttons: 1-bit each
-  End Collection
+  - 4 Axes (X, Y, Z, Rx): 8-bit unsigned (0-255)
+  - 8 Buttons: 1-bit each
 End Collection
 ```
 
@@ -60,16 +79,50 @@ End Collection
 
 | Offset | Size | 名前 | 説明 |
 |--------|------|------|------|
-| 0 | 1 | X | 左スティック X軸 (-127〜127) |
-| 1 | 1 | Y | 左スティック Y軸 (-127〜127) |
-| 2 | 1 | Z | 右スティック X軸 (-127〜127) |
-| 3 | 1 | Rz | 右スティック Y軸 (-127〜127) |
-| 4 | 1 | Buttons | bit0-3: ボタン1-4 |
+| 0 | 1 | Throttle | スロットル (0-255) |
+| 1 | 1 | Roll | ロール (0-255) |
+| 2 | 1 | Pitch | ピッチ (0-255) |
+| 3 | 1 | Yaw | ヨー (0-255) |
+| 4 | 1 | Buttons | bit0:Arm, bit1:Flip, bit2:Mode, bit3:AltMode, bit4-7:予約 |
 | 5 | 1 | Reserved | 0x00 |
 
 ### 値マッピング
-- atoms3joy入力: 0-4095 → HID出力: -127〜127
-- 変換式: `(raw - 2048) * 127 / 2048`
+
+- atoms3joy入力: 0-4095（12bit）→ HID出力: 0-255（8bit）
+- 変換式: `raw * 255 / 4095` または `raw >> 4`
+
+### HIDディスクリプタバイト列
+
+```cpp
+static const uint8_t hid_report_descriptor[] = {
+    0x05, 0x01,        // USAGE_PAGE (Generic Desktop)
+    0x09, 0x04,        // USAGE (Joystick)
+    0xa1, 0x01,        // COLLECTION (Application)
+
+    // 4軸アナログ
+    0x09, 0x30,        //   USAGE (X) - Throttle
+    0x09, 0x31,        //   USAGE (Y) - Roll
+    0x09, 0x32,        //   USAGE (Z) - Pitch
+    0x09, 0x33,        //   USAGE (Rx) - Yaw
+    0x15, 0x00,        //   LOGICAL_MINIMUM (0)
+    0x26, 0xff, 0x00,  //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,        //   REPORT_SIZE (8)
+    0x95, 0x04,        //   REPORT_COUNT (4)
+    0x81, 0x02,        //   INPUT (Data,Var,Abs)
+
+    // ボタン (8個)
+    0x05, 0x09,        //   USAGE_PAGE (Button)
+    0x19, 0x01,        //   USAGE_MINIMUM (Button 1)
+    0x29, 0x08,        //   USAGE_MAXIMUM (Button 8)
+    0x15, 0x00,        //   LOGICAL_MINIMUM (0)
+    0x25, 0x01,        //   LOGICAL_MAXIMUM (1)
+    0x75, 0x01,        //   REPORT_SIZE (1)
+    0x95, 0x08,        //   REPORT_COUNT (8)
+    0x81, 0x02,        //   INPUT (Data,Var,Abs)
+
+    0xc0               // END_COLLECTION
+};
+```
 
 ## 4. 実装ファイル
 
@@ -87,40 +140,69 @@ End Collection
 |----------|----------|
 | `idf_component.yml` | esp_tinyusb依存追加 |
 | `sdkconfig.defaults` | TinyUSB HID設定 |
-| `components/espnow_tdma/include/espnow_tdma.hpp` | tdma_stop/restart追加 |
-| `components/espnow_tdma/src/espnow_tdma.cpp` | 停止/再開実装 |
-| `components/menu_system/src/menu_system.cpp` | action_usb_mode実装 |
-| `main/main.cpp` | USBモード画面・レポート送信追加 |
+| `main/main.cpp` | 起動モード分岐、USBタスク追加 |
+| `components/menu_system/src/menu_system.cpp` | USB/ESPモード切替メニュー |
 
 ## 5. 画面設計
 
-### USBモード画面
+### USB HIDモード画面
+
 ```
 ┌─────────────────┐
 │  USB HID MODE   │
 │                 │
-│  L: XXX  R: XXX │
-│  X: XXX  Y: XXX │
+│  T: XXX  R: XXX │
+│  P: XXX  Y: XXX │
 │                 │
-│ [1][2][3][4]    │
+│ [A][F][M][O]    │
 │                 │
-│ Hold BTN: Exit  │
+│  Connected: Yes │
 └─────────────────┘
 ```
 
 | 要素 | 説明 |
 |------|------|
-| L/R/X/Y | 各軸の現在値（-127〜127） |
-| [1][2][3][4] | ボタン状態（押下時に反転表示） |
-| Hold BTN | 長押しでフライトモードに復帰 |
+| T/R/P/Y | Throttle/Roll/Pitch/Yaw の現在値（0-255） |
+| [A][F][M][O] | Arm/Flip/Mode/Option ボタン状態 |
+| Connected | USB接続状態 |
 
-## 6. 注意事項
+## 6. シミュレータ連携
+
+### VID/PID
+
+| 項目 | 値 |
+|------|------|
+| Vendor ID | 0x303A (Espressif) |
+| Product ID | 0x8001 (StampFly Controller) |
+
+### simulator/interfaces/joystick.py 更新
+
+```python
+VENDOR_ID_STAMPFLY = 0x303a
+PRODUCT_ID_STAMPFLY = 0x8001
+
+def read_normalized(self):
+    """正規化されたスティック値を取得 (-1.0 ~ 1.0)"""
+    data = self.read()
+    return {
+        'throttle': (data[0] - 128) / 128.0,
+        'roll': (data[1] - 128) / 128.0,
+        'pitch': (data[2] - 128) / 128.0,
+        'yaw': (data[3] - 128) / 128.0,
+        'arm': bool(data[4] & 0x01),
+        'flip': bool(data[4] & 0x02),
+        'mode': bool(data[4] & 0x04),
+        'alt_mode': bool(data[4] & 0x08),
+    }
+```
+
+## 7. 注意事項
 
 | 項目 | 内容 |
 |------|------|
-| USB/ESP-NOW排他 | USB HIDモード中はESP-NOW停止必須 |
-| 復帰処理 | フライトモードに戻る際はUSB切断→TDMA再起動 |
-| 電源 | USB接続時はPCから給電（バッテリー消費なし） |
+| USB/ESP-NOW排他 | 同時使用不可、起動時またはメニューで選択 |
+| モード変更 | メニューからの変更は要再起動 |
+| 電源 | USB接続時はPCから給電 |
 | 互換性 | Windows/macOS/Linux標準HIDドライバで動作 |
 
 ---
@@ -130,55 +212,71 @@ End Collection
 ## 1. Overview
 
 ### Goal
-Enable AtomS3 controller to be recognized as a USB HID Gamepad by PC for use with simulators and other games/applications.
+Enable AtomS3 controller to be recognized as a USB HID Joystick by devices for use with simulators and other games/applications.
 
 ### Requirements
 
 | Item | Description |
 |------|-------------|
-| Mode Switch | Switch to HID mode via "USB Mode" in menu |
-| Communication Exclusivity | Stop ESP-NOW TDMA and focus on USB connection |
-| Input | Send 2×2 stick axes + 4 buttons via HID report |
-| Return | Return to flight mode via long button press |
+| Mode Selection | Boot: M5.BtnA pressed → USB HID mode, otherwise → ESP-NOW mode |
+| Runtime Switch | Select "USB Mode" from menu (requires reboot) |
+| Communication Exclusivity | ESP-NOW stops during USB HID mode |
+| Input | Send 4 axes (Throttle/Roll/Pitch/Yaw) + 8 buttons via HID report |
 
 ## 2. Architecture
 
+### Mode Selection Flow
+
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  PC / Simulator                                               │
-│    └── USB HID Host (recognized as Gamepad/Joystick)          │
-└───────────────────────────────────────────────────────────────┘
-                           │
-                      USB (Full Speed)
-                           │
-┌───────────────────────────────────────────────────────────────┐
-│  AtomS3 Controller (ESP32-S3)                                 │
-│                                                               │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       │
-│  │ InputTask   │───→│ usb_hid     │───→│ TinyUSB     │       │
-│  │ (100Hz)     │    │ component   │    │ HID Device  │       │
-│  │ atoms3joy   │    │             │    │             │       │
-│  └─────────────┘    └─────────────┘    └─────────────┘       │
-│        │                                                      │
-│        ↓                                                      │
-│  ┌─────────────┐                                             │
-│  │ Menu System │ ← action_usb_mode() switches mode           │
-│  │             │   tdma_stop() → USB init → HID report start │
-│  └─────────────┘                                             │
-└───────────────────────────────────────────────────────────────┘
+                    ┌─────────────────────────────────────────┐
+                    │           Boot Selection                │
+                    │  M5.BtnA pressed → USB HID Mode        │
+                    │  Otherwise       → ESP-NOW Mode        │
+                    └─────────────────────────────────────────┘
+                              │                    │
+              ┌───────────────┘                    └───────────────┐
+              ↓                                                    ↓
+┌─────────────────────────┐                        ┌─────────────────────────┐
+│     USB HID Mode        │                        │    ESP-NOW Mode         │
+│  ┌─────────────────┐   │                        │  ┌─────────────────┐    │
+│  │   Flight Screen │   │                        │  │   Flight Screen │    │
+│  │  (HID sending)  │   │                        │  │  (TDMA sending) │    │
+│  └─────────────────┘   │                        │  └─────────────────┘    │
+└─────────────────────────┘                        └─────────────────────────┘
+```
+
+### Task Structure
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ app_main                                                        │
+│   ├── Boot mode detection                                       │
+│   │      M5.BtnA → USB HID Mode                                │
+│   │      else   → ESP-NOW Mode                                 │
+│   │                                                             │
+│   ├── Common tasks                                              │
+│   │      input_task (100Hz) ← Joystick & button reading        │
+│   │      display_task (10Hz) ← LCD update                      │
+│   │                                                             │
+│   ├── ESP-NOW mode only                                         │
+│   │      tdma_send_task                                         │
+│   │      beacon_task (when Master)                              │
+│   │                                                             │
+│   └── USB HID mode only                                         │
+│          usb_hid_task (100Hz) ← HID report transmission        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 3. HID Report Specification
 
 ### Report Descriptor
+
 ```
 Usage Page: Generic Desktop (0x01)
-Usage: Gamepad (0x05)
+Usage: Joystick (0x04)
 Collection: Application
-  Collection: Physical
-    - 4 Axes (X, Y, Z, Rz): 8-bit signed (-127 to 127)
-    - 4 Buttons: 1-bit each
-  End Collection
+  - 4 Axes (X, Y, Z, Rx): 8-bit unsigned (0-255)
+  - 8 Buttons: 1-bit each
 End Collection
 ```
 
@@ -186,16 +284,50 @@ End Collection
 
 | Offset | Size | Name | Description |
 |--------|------|------|-------------|
-| 0 | 1 | X | Left stick X-axis (-127 to 127) |
-| 1 | 1 | Y | Left stick Y-axis (-127 to 127) |
-| 2 | 1 | Z | Right stick X-axis (-127 to 127) |
-| 3 | 1 | Rz | Right stick Y-axis (-127 to 127) |
-| 4 | 1 | Buttons | bit0-3: buttons 1-4 |
+| 0 | 1 | Throttle | Throttle (0-255) |
+| 1 | 1 | Roll | Roll (0-255) |
+| 2 | 1 | Pitch | Pitch (0-255) |
+| 3 | 1 | Yaw | Yaw (0-255) |
+| 4 | 1 | Buttons | bit0:Arm, bit1:Flip, bit2:Mode, bit3:AltMode, bit4-7:reserved |
 | 5 | 1 | Reserved | 0x00 |
 
 ### Value Mapping
-- atoms3joy input: 0-4095 → HID output: -127 to 127
-- Formula: `(raw - 2048) * 127 / 2048`
+
+- atoms3joy input: 0-4095 (12bit) → HID output: 0-255 (8bit)
+- Formula: `raw * 255 / 4095` or `raw >> 4`
+
+### HID Descriptor Bytes
+
+```cpp
+static const uint8_t hid_report_descriptor[] = {
+    0x05, 0x01,        // USAGE_PAGE (Generic Desktop)
+    0x09, 0x04,        // USAGE (Joystick)
+    0xa1, 0x01,        // COLLECTION (Application)
+
+    // 4 analog axes
+    0x09, 0x30,        //   USAGE (X) - Throttle
+    0x09, 0x31,        //   USAGE (Y) - Roll
+    0x09, 0x32,        //   USAGE (Z) - Pitch
+    0x09, 0x33,        //   USAGE (Rx) - Yaw
+    0x15, 0x00,        //   LOGICAL_MINIMUM (0)
+    0x26, 0xff, 0x00,  //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,        //   REPORT_SIZE (8)
+    0x95, 0x04,        //   REPORT_COUNT (4)
+    0x81, 0x02,        //   INPUT (Data,Var,Abs)
+
+    // Buttons (8)
+    0x05, 0x09,        //   USAGE_PAGE (Button)
+    0x19, 0x01,        //   USAGE_MINIMUM (Button 1)
+    0x29, 0x08,        //   USAGE_MAXIMUM (Button 8)
+    0x15, 0x00,        //   LOGICAL_MINIMUM (0)
+    0x25, 0x01,        //   LOGICAL_MAXIMUM (1)
+    0x75, 0x01,        //   REPORT_SIZE (1)
+    0x95, 0x08,        //   REPORT_COUNT (8)
+    0x81, 0x02,        //   INPUT (Data,Var,Abs)
+
+    0xc0               // END_COLLECTION
+};
+```
 
 ## 4. Implementation Files
 
@@ -213,38 +345,67 @@ End Collection
 |------|---------|
 | `idf_component.yml` | Add esp_tinyusb dependency |
 | `sdkconfig.defaults` | TinyUSB HID settings |
-| `components/espnow_tdma/include/espnow_tdma.hpp` | Add tdma_stop/restart |
-| `components/espnow_tdma/src/espnow_tdma.cpp` | Stop/restart implementation |
-| `components/menu_system/src/menu_system.cpp` | action_usb_mode implementation |
-| `main/main.cpp` | USB mode screen and report transmission |
+| `main/main.cpp` | Boot mode branching, USB task addition |
+| `components/menu_system/src/menu_system.cpp` | USB/ESP mode switch menu |
 
 ## 5. Screen Design
 
-### USB Mode Screen
+### USB HID Mode Screen
+
 ```
 ┌─────────────────┐
 │  USB HID MODE   │
 │                 │
-│  L: XXX  R: XXX │
-│  X: XXX  Y: XXX │
+│  T: XXX  R: XXX │
+│  P: XXX  Y: XXX │
 │                 │
-│ [1][2][3][4]    │
+│ [A][F][M][O]    │
 │                 │
-│ Hold BTN: Exit  │
+│  Connected: Yes │
 └─────────────────┘
 ```
 
 | Element | Description |
 |---------|-------------|
-| L/R/X/Y | Current axis values (-127 to 127) |
-| [1][2][3][4] | Button states (inverted when pressed) |
-| Hold BTN | Long press to return to flight mode |
+| T/R/P/Y | Throttle/Roll/Pitch/Yaw current values (0-255) |
+| [A][F][M][O] | Arm/Flip/Mode/Option button states |
+| Connected | USB connection status |
 
-## 6. Notes
+## 6. Simulator Integration
+
+### VID/PID
+
+| Item | Value |
+|------|-------|
+| Vendor ID | 0x303A (Espressif) |
+| Product ID | 0x8001 (StampFly Controller) |
+
+### simulator/interfaces/joystick.py Update
+
+```python
+VENDOR_ID_STAMPFLY = 0x303a
+PRODUCT_ID_STAMPFLY = 0x8001
+
+def read_normalized(self):
+    """Get normalized stick values (-1.0 ~ 1.0)"""
+    data = self.read()
+    return {
+        'throttle': (data[0] - 128) / 128.0,
+        'roll': (data[1] - 128) / 128.0,
+        'pitch': (data[2] - 128) / 128.0,
+        'yaw': (data[3] - 128) / 128.0,
+        'arm': bool(data[4] & 0x01),
+        'flip': bool(data[4] & 0x02),
+        'mode': bool(data[4] & 0x04),
+        'alt_mode': bool(data[4] & 0x08),
+    }
+```
+
+## 7. Notes
 
 | Item | Description |
 |------|-------------|
-| USB/ESP-NOW Exclusivity | ESP-NOW must be stopped during USB HID mode |
-| Return Processing | Disconnect USB and restart TDMA when returning to flight mode |
-| Power | PC provides power via USB (no battery consumption) |
+| USB/ESP-NOW Exclusivity | Cannot use simultaneously, select at boot or via menu |
+| Mode Change | Menu changes require reboot |
+| Power | PC provides power via USB |
 | Compatibility | Works with standard HID drivers on Windows/macOS/Linux |
