@@ -61,11 +61,12 @@ simulator/
 │   ├── power_monitor.py     # INA3221 電源モニタ (sf_hal_power)
 │   └── noise_models.py      # Allan分散ベースノイズモデル
 │
-├── control/                 # 制御系
+├── control/                 # 制御系（firmware/vehicle/main/ 互換）
 │   ├── __init__.py
-│   ├── pid.py               # pid.py から移植
-│   ├── rate_controller.py   # 新規：firmware互換
-│   └── attitude_controller.py # 新規：firmware互換
+│   ├── pid.py               # ✓ 不完全微分フィルタ付きPID (sf_algo_pid 互換)
+│   ├── rate_controller.py   # ✓ レートコントローラ (rate_controller.hpp 互換)
+│   ├── motor_mixer.py       # ✓ X-quadモーターミキサー (sf_hal_motor 互換)
+│   └── attitude_controller.py # ✓ 姿勢・高度コントローラ
 │
 ├── interfaces/              # 外部接続（protocol/spec/ 準拠）
 │   ├── __init__.py
@@ -113,6 +114,7 @@ simulator/
 │   ├── sandbox.py           # 開発用
 │   ├── test_sensors.py      # ✓ センサモデル単体テスト
 │   ├── test_protocol.py     # ✓ プロトコルメッセージテスト
+│   ├── test_control.py      # ✓ 制御システムテスト
 │   └── visualize_sensors.py # ✓ センサ特性可視化
 │
 └── output/                  # 出力ファイル（.gitignore で除外）
@@ -224,12 +226,26 @@ firmware/vehicle/
 
 **目標**: ファームウェア制御ロジックとの互換
 
-1. [ ] `sf_algo_pid` のパラメータをシミュレータに反映
-2. [ ] `rate_controller.hpp` のロジックを Python で再実装
-3. [ ] Angle モード実装
-4. [ ] Altitude Hold モード実装
+1. [x] `sf_algo_pid` のパラメータをシミュレータに反映 (`control/pid.py`)
+   - 不完全微分フィルタ（eta係数）
+   - Tustin/Bilinear変換による離散化
+   - Back-calculationアンチワインドアップ
+   - Derivative-on-measurement
+2. [x] `rate_controller.hpp` のロジックを Python で再実装 (`control/rate_controller.py`)
+   - ファームウェア一致のPIDゲイン（Roll/Pitch/Yaw）
+   - 400Hz制御ループ対応
+   - スティック入力→レートセットポイント変換
+3. [x] モーターミキサー実装 (`control/motor_mixer.py`)
+   - X字型クアッドコプター対応
+   - ファームウェア一致のミキシング行列
+4. [x] Angle モード実装 (`control/attitude_controller.py`)
+   - カスケード制御（姿勢→レート）
+   - セルフレベリング機能
+5. [x] Altitude Hold モード実装 (`control/attitude_controller.py`)
+   - カスケード制御（位置→速度）
+   - スティックによるセットポイント調整
 
-**成果物**: 実機と同じ制御応答のシミュレータ
+**成果物**: 実機と同じ制御応答のシミュレータ ✓
 
 ### Phase 5: HIL対応（オプション）
 
