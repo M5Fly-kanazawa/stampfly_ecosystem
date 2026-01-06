@@ -76,8 +76,7 @@ typedef struct {
 static InputData shared_inputdata;
 static SemaphoreHandle_t input_mutex = NULL;
 static TaskHandle_t input_task_handle = NULL;
-// display_task_handle removed - using main loop for display updates
-// display_task_handle削除 - メインループから直接描画
+static TaskHandle_t display_task_handle = NULL;
 
 // ループタイミング
 static uint32_t stime = 0, etime = 0, dtime = 0;
@@ -317,6 +316,29 @@ static void update_display(void)
             M5.Display.printf("F:%4d WAIT   ", (int)actual_send_freq_hz);
         }
     #endif
+}
+
+// LCD更新タスク (低優先度, 10Hz)
+// LCD update task (low priority, 10Hz)
+static volatile bool display_task_enabled = false;
+
+static void display_task(void* parameter)
+{
+    ESP_LOGI(TAG, "LCD更新タスク開始");
+
+    // メインループ開始まで待機
+    while (!display_task_enabled) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    const TickType_t xFrequency = pdMS_TO_TICKS(100);  // 10Hz
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    while (1) {
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+        apply_rgb_order();
+        update_display();
+    }
 }
 
 // メインループ処理
@@ -626,9 +648,22 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "入力タスク作成完了");
     }
 
-    // LCD更新はメインループから直接実行
-    // Display updates are done directly from main loop
-    ESP_LOGI(TAG, "LCD更新: メインループから直接描画");
+    // LCD更新タスク作成 (低優先度)
+    // Create LCD update task (low priority)
+    task_ret = xTaskCreatePinnedToCore(
+        display_task,
+        "DisplayTask",
+        4096,
+        NULL,
+        2,  // 低優先度
+        &display_task_handle,
+        1
+    );
+    if (task_ret != pdPASS) {
+        ESP_LOGE(TAG, "LCD更新タスク作成失敗");
+    } else {
+        ESP_LOGI(TAG, "LCD更新タスク作成完了");
+    }
 
     // TDMA初期化
     ret = tdma_init();
@@ -653,21 +688,15 @@ extern "C" void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(500));
     M5.Display.fillScreen(SF_BLACK);
 
+    // LCD更新タスク有効化
+    // Enable LCD update task
+    display_task_enabled = true;
+
     ESP_LOGI(TAG, "メインループ開始");
 
-    // メインループ (display_taskを使わずメインから直接描画)
-    uint32_t last_display_time = 0;
+    // メインループ
     while (true) {
         main_loop();
-
-        // 10Hzで画面更新（メインタスクから直接）
-        uint32_t now = millis_now();
-        if (now - last_display_time >= 100) {
-            last_display_time = now;
-            apply_rgb_order();
-            update_display();
-        }
-
         vTaskDelay(pdMS_TO_TICKS(10));  // 100Hz
     }
 }
