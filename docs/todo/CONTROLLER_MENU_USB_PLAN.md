@@ -24,7 +24,7 @@
 | Phase | 内容 | 状態 |
 |-------|------|------|
 | Phase 1 | メニュー基盤 | **完了** (2025-01-06) |
-| Phase 2 | メニュー操作 | 未着手 |
+| Phase 2 | メニュー操作 | **完了** (2025-01-06) |
 | Phase 3 | メニュー項目実装 | 未着手 |
 | Phase 4 | USB HIDモード | **完了** (2025-01-07) |
 | Phase 5 | シミュレータ連携 | 未着手 |
@@ -380,16 +380,16 @@ firmware/controller/components/
 
 **成果物**: メニュー画面の表示・非表示が動作
 
-### Phase 2: メニュー操作
+### Phase 2: メニュー操作 ✅ 完了
 
 ```
-[ ] スティックの方向検出実装
-    - デッドゾーン設定（中央±500）
-    - 方向判定（上下左右）
-    - リピート機能（長押し連続入力）
-[ ] カーソル移動
-[ ] 項目選択・決定
-[ ] 値の増減
+[x] スティックの方向検出実装
+    - デッドゾーン設定（中央±800）
+    - 方向判定（上下）
+    - デバウンス機能（200ms）
+[x] カーソル移動
+[x] 項目選択・決定（モードボタン）
+[ ] 値の増減（Phase 3で実装予定）
 ```
 
 **成果物**: スティックでメニュー操作可能
@@ -638,7 +638,7 @@ void menu_set_state(screen_state_t state) {
 | Phase | Content | Status |
 |-------|---------|--------|
 | Phase 1 | Menu foundation | **Complete** (2025-01-06) |
-| Phase 2 | Menu operation | Not started |
+| Phase 2 | Menu operation | **Complete** (2025-01-06) |
 | Phase 3 | Menu items | Not started |
 | Phase 4 | USB HID mode | **Complete** (2025-01-07) |
 | Phase 5 | Simulator integration | Not started |
