@@ -28,17 +28,17 @@ static const char* TAG = "MAIN";
 
 // Project-specific color macros for AtomS3/GC9107 panel
 // AtomS3/GC9107パネル用のプロジェクト独自カラーマクロ
-// This panel has R/G swap issue (GitHub m5stack/M5AtomS3#16)
-// rgb_order=true setting swaps R and G channels
+// This panel has R/B swap (TFT_RED→Blue, TFT_BLUE→Red, TFT_GREEN→Green)
+// rgb_order=true, R and B channels are swapped
 #define SF_BLACK   TFT_BLACK
 #define SF_WHITE   TFT_WHITE
-#define SF_RED     TFT_GREEN   // Swapped: GREEN displays as RED
-#define SF_GREEN   TFT_RED     // Swapped: RED displays as GREEN
-#define SF_BLUE    TFT_BLUE
-#define SF_YELLOW  TFT_YELLOW  // R=G, no swap needed
-#define SF_CYAN    TFT_MAGENTA // Swapped: MAGENTA displays as CYAN
-#define SF_MAGENTA TFT_CYAN    // Swapped: CYAN displays as MAGENTA
-#define SF_ORANGE  0xFD20      // Custom: swap R/G in original 0x07E0+R
+#define SF_RED     TFT_BLUE    // Swapped: BLUE displays as RED
+#define SF_GREEN   TFT_GREEN   // No swap: GREEN displays as GREEN
+#define SF_BLUE    TFT_RED     // Swapped: RED displays as BLUE
+#define SF_YELLOW  TFT_CYAN    // R+G→B+G: CYAN displays as YELLOW
+#define SF_CYAN    TFT_YELLOW  // G+B→G+R: YELLOW displays as CYAN
+#define SF_MAGENTA TFT_MAGENTA // R+B→B+R: same (MAGENTA stays MAGENTA)
+#define SF_ORANGE  0x051F      // Custom: swap R/B in original orange
 
 // ログレベル
 #define GLOBAL_LOG_LEVEL ESP_LOG_INFO
@@ -76,7 +76,8 @@ typedef struct {
 static InputData shared_inputdata;
 static SemaphoreHandle_t input_mutex = NULL;
 static TaskHandle_t input_task_handle = NULL;
-static TaskHandle_t display_task_handle = NULL;
+// display_task_handle removed - using main loop for display updates
+// display_task_handle削除 - メインループから直接描画
 
 // ループタイミング
 static uint32_t stime = 0, etime = 0, dtime = 0;
@@ -170,27 +171,33 @@ static void input_task(void* parameter)
     }
 }
 
-// LCD初期化
-static void init_display(void)
+// RGB order設定を適用するヘルパー関数
+// Helper function to apply RGB order setting
+static void apply_rgb_order(void)
 {
-    // Change color order BEFORE setRotation (which writes MADCTL)
-    // setRotationの前にカラーオーダーを変更（MADCTLに書き込まれる）
     auto panel = M5.Display.getPanel();
     if (panel) {
         auto cfg = panel->config();
-        ESP_LOGI(TAG, "Current rgb_order: %d", cfg.rgb_order);
-        cfg.rgb_order = true;  // Use RGB mode with SF_ color macros
+        cfg.rgb_order = true;  // R/B swap for AtomS3/GC9107
         panel->config(cfg);
-        ESP_LOGI(TAG, "Changed rgb_order to: %d", cfg.rgb_order);
     }
+}
 
-    // setRotation() writes MADCTL register including rgb_order setting
+// LCD初期化
+static void init_display(void)
+{
+    M5.Display.init();
+
+    // Apply rgb_order AFTER init() to prevent reset
+    // init()の後にrgb_orderを適用（リセット防止）
+    apply_rgb_order();
+
     M5.Display.setRotation(0);
     M5.Display.setTextSize(1);
     M5.Display.setTextFont(2);
     M5.Display.fillScreen(SF_BLACK);
 
-    ESP_LOGI(TAG, "LCD初期化完了");
+    ESP_LOGI(TAG, "LCD初期化完了 (rgb_order=true)");
 }
 
 // メニュー画面描画
@@ -252,7 +259,7 @@ static void update_display(void)
     // Flight screen rendering with StickMode-based color
     // StickMode 2: 緑 (GREEN), StickMode 3: 黄 (YELLOW)
     const uint8_t* drone_mac = get_drone_peer_addr();
-    uint32_t base_color = (StickMode == 2) ? SF_GREEN : SF_YELLOW;
+    uint16_t base_color = (StickMode == 2) ? SF_GREEN : SF_YELLOW;  // uint16_t に変更
 
     // 行0: MACアドレス
     M5.Display.setCursor(4, 2 + 0 * line_height);
@@ -310,27 +317,6 @@ static void update_display(void)
             M5.Display.printf("F:%4d WAIT   ", (int)actual_send_freq_hz);
         }
     #endif
-}
-
-// LCD更新タスク (低優先度, 10Hz)
-static volatile bool display_task_enabled = false;
-
-static void display_task(void* parameter)
-{
-    ESP_LOGI(TAG, "LCD更新タスク開始");
-
-    // メインループ開始まで待機
-    while (!display_task_enabled) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
-    const TickType_t xFrequency = pdMS_TO_TICKS(100);  // 10Hz
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-
-    while (1) {
-        vTaskDelayUntil(&xLastWakeTime, xFrequency);
-        update_display();
-    }
 }
 
 // メインループ処理
@@ -543,6 +529,7 @@ extern "C" void app_main(void)
 
     // LCD初期化
     init_display();
+
     M5.Display.setCursor(4, 2);
     M5.Display.setTextColor(SF_WHITE, SF_BLACK);
     M5.Display.println("StampFly ESP-IDF");
@@ -639,21 +626,9 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "入力タスク作成完了");
     }
 
-    // LCD更新タスク作成 (低優先度)
-    task_ret = xTaskCreatePinnedToCore(
-        display_task,
-        "DisplayTask",
-        4096,
-        NULL,
-        2,  // 低優先度
-        &display_task_handle,
-        1
-    );
-    if (task_ret != pdPASS) {
-        ESP_LOGE(TAG, "LCD更新タスク作成失敗");
-    } else {
-        ESP_LOGI(TAG, "LCD更新タスク作成完了");
-    }
+    // LCD更新はメインループから直接実行
+    // Display updates are done directly from main loop
+    ESP_LOGI(TAG, "LCD更新: メインループから直接描画");
 
     // TDMA初期化
     ret = tdma_init();
@@ -676,16 +651,23 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "起動完了");
 
     vTaskDelay(pdMS_TO_TICKS(500));
-    init_display();  // 画面クリア
-
-    // LCD更新タスク有効化
-    display_task_enabled = true;
+    M5.Display.fillScreen(SF_BLACK);
 
     ESP_LOGI(TAG, "メインループ開始");
 
-    // メインループ
+    // メインループ (display_taskを使わずメインから直接描画)
+    uint32_t last_display_time = 0;
     while (true) {
         main_loop();
+
+        // 10Hzで画面更新（メインタスクから直接）
+        uint32_t now = millis_now();
+        if (now - last_display_time >= 100) {
+            last_display_time = now;
+            apply_rgb_order();
+            update_display();
+        }
+
         vTaskDelay(pdMS_TO_TICKS(10));  // 100Hz
     }
 }
