@@ -3,6 +3,10 @@ dependencies:
   # M5Unified: M5Stack シリーズ統合ライブラリ (LCD, ボタン, IMU等)
   m5stack/m5unified: "^0.2.11"
 
+  # TinyUSB: USB HID デバイスサポート
+  # TinyUSB: USB HID device support
+  espressif/esp_tinyusb: "^1.0.0"
+
   # ESP-IDF バージョン要件
   idf:
     version: ">=5.0.0"

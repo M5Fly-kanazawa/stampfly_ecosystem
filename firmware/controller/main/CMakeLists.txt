@@ -12,4 +12,5 @@ idf_component_register(
         atoms3joy
         espnow_tdma
         menu_system
+        usb_hid
 )

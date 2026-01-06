@@ -23,6 +23,7 @@
 #include <atoms3joy.h>
 #include <espnow_tdma.h>
 #include <menu_system.h>
+#include <usb_hid.hpp>
 
 static const char* TAG = "MAIN";
 
@@ -81,6 +82,15 @@ static TaskHandle_t display_task_handle = NULL;
 // ループタイミング
 static uint32_t stime = 0, etime = 0, dtime = 0;
 static const float dTime = 0.01f;
+
+// 通信モード (USB HID / ESP-NOW)
+// Communication mode (USB HID / ESP-NOW)
+typedef enum {
+    COMM_MODE_ESPNOW,   // ESP-NOW TDMA mode (default)
+    COMM_MODE_USB_HID,  // USB HID Joystick mode
+} CommMode;
+
+static CommMode g_comm_mode = COMM_MODE_ESPNOW;
 
 // millis()相当
 static inline uint32_t millis_now(void) {
@@ -322,6 +332,10 @@ static void update_display(void)
 // LCD update task (low priority, 10Hz)
 static volatile bool display_task_enabled = false;
 
+// 前方宣言 / Forward declarations
+static void update_usb_hid_display(void);
+static void usb_hid_main_loop(void);
+
 static void display_task(void* parameter)
 {
     ESP_LOGI(TAG, "LCD更新タスク開始");
@@ -337,11 +351,129 @@ static void display_task(void* parameter)
     while (1) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         apply_rgb_order();
-        update_display();
+
+        // モードに応じて画面更新
+        if (g_comm_mode == COMM_MODE_USB_HID) {
+            update_usb_hid_display();
+        } else {
+            update_display();
+        }
     }
 }
 
-// メインループ処理
+// USB HIDモード画面更新
+// USB HID mode display update
+static void update_usb_hid_display(void)
+{
+    const int line_height = 17;
+    InputData local_input;
+
+    // 入力データ取得
+    if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        memcpy(&local_input, &shared_inputdata, sizeof(InputData));
+        xSemaphoreGive(input_mutex);
+    } else {
+        memset(&local_input, 0, sizeof(InputData));
+    }
+
+    // 8bit変換値
+    uint8_t t_val = convert_12bit_to_8bit(4095 - local_input.throttle_raw);
+    uint8_t r_val = convert_12bit_to_8bit(local_input.phi_raw);
+    uint8_t p_val = convert_12bit_to_8bit(local_input.theta_raw);
+    uint8_t y_val = convert_12bit_to_8bit(local_input.psi_raw);
+
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("= USB HID MODE =");
+
+    // 行1: 空行
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.printf("                ");
+
+    // 行2: T/R値
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("T:%3d    R:%3d  ", t_val, r_val);
+
+    // 行3: P/Y値
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.printf("P:%3d    Y:%3d  ", p_val, y_val);
+
+    // 行4: 空行
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.printf("                ");
+
+    // 行5: ボタン状態
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    uint8_t arm = joy_get_arm_button();
+    uint8_t flip = joy_get_flip_button();
+    uint8_t mode = joy_get_mode_button();
+    uint8_t opt = joy_get_option_button();
+
+    // ボタン表示（押下時は反転）
+    if (arm) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[A]");
+
+    if (flip) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[F]");
+
+    if (mode) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[M]");
+
+    if (opt) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[O]  ");
+
+    // 行6: 接続状態
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    if (usb_hid_is_mounted()) {
+        M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+        M5.Display.printf("Connected: Yes ");
+    } else {
+        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+        M5.Display.printf("Connected: No  ");
+    }
+}
+
+// USB HIDモードメインループ
+// USB HID mode main loop
+static void usb_hid_main_loop(void)
+{
+    InputData local_input;
+
+    // 入力データ取得
+    if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        memcpy(&local_input, &shared_inputdata, sizeof(InputData));
+        xSemaphoreGive(input_mutex);
+    } else {
+        memset(&local_input, 0, sizeof(InputData));
+    }
+
+    // HIDレポート作成
+    HIDJoystickReport report;
+    report.throttle = convert_12bit_to_8bit(4095 - local_input.throttle_raw);
+    report.roll = convert_12bit_to_8bit(local_input.phi_raw);
+    report.pitch = convert_12bit_to_8bit(local_input.theta_raw);
+    report.yaw = convert_12bit_to_8bit(local_input.psi_raw);
+
+    // ボタン状態
+    report.buttons = 0;
+    if (joy_get_arm_button()) report.buttons |= 0x01;
+    if (joy_get_flip_button()) report.buttons |= 0x02;
+    if (joy_get_mode_button()) report.buttons |= 0x04;
+    if (joy_get_option_button()) report.buttons |= 0x08;
+
+    report.reserved = 0;
+
+    // レポート送信
+    usb_hid_send_report(&report);
+}
+
+// メインループ処理 (ESP-NOW mode)
 static void main_loop(void)
 {
     int16_t _throttle, _phi, _theta, _psi;
@@ -552,9 +684,24 @@ extern "C" void app_main(void)
     // LCD初期化
     init_display();
 
+    // 起動時モード選択: M5.BtnA押下でUSB HIDモード
+    // Boot mode selection: Press M5.BtnA for USB HID mode
+    M5.update();
+    if (M5.BtnA.isPressed()) {
+        g_comm_mode = COMM_MODE_USB_HID;
+        ESP_LOGI(TAG, "USB HIDモード選択");
+    } else {
+        g_comm_mode = COMM_MODE_ESPNOW;
+        ESP_LOGI(TAG, "ESP-NOWモード選択");
+    }
+
     M5.Display.setCursor(4, 2);
     M5.Display.setTextColor(SF_WHITE, SF_BLACK);
-    M5.Display.println("StampFly ESP-IDF");
+    if (g_comm_mode == COMM_MODE_USB_HID) {
+        M5.Display.println("StampFly USB HID");
+    } else {
+        M5.Display.println("StampFly ESP-IDF");
+    }
 
     // メニューシステム初期化
     menu_init();
@@ -572,59 +719,79 @@ extern "C" void app_main(void)
         M5.Display.println("JOY: FAIL");
     }
 
-    // ピア情報読み込み
-    peer_info_load();
-
-    // ESP-NOW初期化
-    ret = espnow_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "ESP-NOW初期化失敗");
-        M5.Display.setTextColor(SF_RED, SF_BLACK);
-        M5.Display.println("ESP-NOW: FAIL");
-        while (1) vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
-    M5.Display.println("ESP-NOW: OK");
-
-    // ビーコンピア初期化
-    beacon_peer_init();
-
-    // ペアリング処理 (ボタン押下時またはMAC未設定時)
-    M5.update();
-    bool force_pairing = M5.BtnA.isPressed();
-    if (force_pairing) {
-        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
-        M5.Display.println("Pairing mode...");
-        M5.Display.println("Hold StampFly Btn");
-        M5.Display.println("until beep!");
-    }
-    peering_process(force_pairing);
-
-    if (force_pairing) {
-        peer_info_save();
-    }
-
-    // ドローンピア初期化
-    drone_peer_init();
-
-    // スティックモード選択 (左ボタン押しながら起動でMode 3)
-    // 起動時はデバウンスなしの生値を使用
-    joy_update();
-    if (joy_get_button_left_raw()) {
-        joy_set_stick_mode(STICK_MODE_3);
-        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
-        M5.Display.println("Mode 3 selected");
-        // ボタンが離されるまで待機 (生値で判定)
-        while (joy_get_button_left_raw()) {
-            joy_update();
-            vTaskDelay(pdMS_TO_TICKS(10));
+    // モード別初期化
+    // Mode-specific initialization
+    if (g_comm_mode == COMM_MODE_USB_HID) {
+        // USB HIDモード初期化
+        // USB HID mode initialization
+        ret = usb_hid_init();
+        if (ret == ESP_OK) {
+            M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+            M5.Display.println("USB HID: OK");
+            ESP_LOGI(TAG, "USB HID初期化完了");
+        } else {
+            M5.Display.setTextColor(SF_RED, SF_BLACK);
+            M5.Display.println("USB HID: FAIL");
+            ESP_LOGE(TAG, "USB HID初期化失敗");
         }
     } else {
-        joy_set_stick_mode(STICK_MODE_2);
+        // ESP-NOWモード初期化
+        // ESP-NOW mode initialization
+
+        // ピア情報読み込み
+        peer_info_load();
+
+        // ESP-NOW初期化
+        ret = espnow_init();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "ESP-NOW初期化失敗");
+            M5.Display.setTextColor(SF_RED, SF_BLACK);
+            M5.Display.println("ESP-NOW: FAIL");
+            while (1) vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+        M5.Display.println("ESP-NOW: OK");
+
+        // ビーコンピア初期化
+        beacon_peer_init();
+
+        // ペアリング処理 (ボタン押下時またはMAC未設定時)
+        M5.update();
+        bool force_pairing = M5.BtnA.isPressed();
+        if (force_pairing) {
+            M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+            M5.Display.println("Pairing mode...");
+            M5.Display.println("Hold StampFly Btn");
+            M5.Display.println("until beep!");
+        }
+        peering_process(force_pairing);
+
+        if (force_pairing) {
+            peer_info_save();
+        }
+
+        // ドローンピア初期化
+        drone_peer_init();
+
+        // スティックモード選択 (左ボタン押しながら起動でMode 3)
+        // 起動時はデバウンスなしの生値を使用
+        joy_update();
+        if (joy_get_button_left_raw()) {
+            joy_set_stick_mode(STICK_MODE_3);
+            M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+            M5.Display.println("Mode 3 selected");
+            // ボタンが離されるまで待機 (生値で判定)
+            while (joy_get_button_left_raw()) {
+                joy_update();
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+        } else {
+            joy_set_stick_mode(STICK_MODE_2);
+        }
+        StickMode = joy_get_stick_mode();
+        ESP_LOGI(TAG, "スティックモード: %d", StickMode);
+        AltMode = NOT_ALT_CONTROL_MODE;
     }
-    StickMode = joy_get_stick_mode();
-    ESP_LOGI(TAG, "スティックモード: %d", StickMode);
-    AltMode = NOT_ALT_CONTROL_MODE;
 
     // 入力Mutex作成
     input_mutex = xSemaphoreCreateMutex();
@@ -665,20 +832,23 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "LCD更新タスク作成完了");
     }
 
-    // TDMA初期化
-    ret = tdma_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "TDMA初期化失敗");
-    }
+    // TDMA初期化 (ESP-NOWモードのみ)
+    // TDMA initialization (ESP-NOW mode only)
+    if (g_comm_mode == COMM_MODE_ESPNOW) {
+        ret = tdma_init();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "TDMA初期化失敗");
+        }
 
-    // 安定化待機
-    ESP_LOGI(TAG, "システム安定化待機 (200ms)...");
-    vTaskDelay(pdMS_TO_TICKS(200));
+        // 安定化待機
+        ESP_LOGI(TAG, "システム安定化待機 (200ms)...");
+        vTaskDelay(pdMS_TO_TICKS(200));
 
-    // TDMA開始
-    ret = tdma_start();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "TDMA開始失敗");
+        // TDMA開始
+        ret = tdma_start();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "TDMA開始失敗");
+        }
     }
 
     // 起動音
@@ -694,9 +864,14 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "メインループ開始");
 
-    // メインループ
+    // メインループ (モードに応じて分岐)
+    // Main loop (branch by mode)
     while (true) {
-        main_loop();
+        if (g_comm_mode == COMM_MODE_USB_HID) {
+            usb_hid_main_loop();
+        } else {
+            main_loop();
+        }
         vTaskDelay(pdMS_TO_TICKS(10));  // 100Hz
     }
 }
