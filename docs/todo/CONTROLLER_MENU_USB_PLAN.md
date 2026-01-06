@@ -26,9 +26,9 @@
 | Phase 1 | メニュー基盤 | **完了** (2025-01-06) |
 | Phase 2 | メニュー操作 | 未着手 |
 | Phase 3 | メニュー項目実装 | 未着手 |
-| Phase 4 | USB HIDモード | 未着手 |
+| Phase 4 | USB HIDモード | **完了** (2025-01-07) |
 | Phase 5 | シミュレータ連携 | 未着手 |
-| Phase 6 | 設定永続化 | 未着手 |
+| Phase 6 | 設定永続化 | 一部完了（モード保存） |
 
 ## 2. アーキテクチャ
 
@@ -36,9 +36,9 @@
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │           起動時選択                    │
-                    │  M5.BtnA押下 → USB HID モード          │
-                    │  それ以外    → ESP-NOW モード          │
+                    │           起動時モード選択              │
+                    │  NVSから読込 → USB HID or ESP-NOW      │
+                    │  M5.BtnA押下 → ペアリング（ESP-NOW時） │
                     └─────────────────────────────────────────┘
                               │                    │
               ┌───────────────┘                    └───────────────┐
@@ -55,11 +55,11 @@
 │  │   メニュー画面  │   │                        │  │   メニュー画面  │    │
 │  │  スティック操作 │   │                        │  │  スティック操作 │    │
 │  └────────┬────────┘   │                        │  └────────┬────────┘    │
-│           │ 選択       │                        │           │ 選択        │
-│           ↓            │                        │           ↓             │
+│           │ USB Mode   │                        │           │ USB Mode    │
+│           ↓ 選択       │                        │           ↓ 選択        │
 │  ┌─────────────────┐   │                        │  ┌─────────────────┐    │
-│  │   設定画面      │   │                        │  │   設定画面      │    │
-│  │  値の増減       │   │                        │  │  値の増減       │    │
+│  │ NVS保存→再起動 │───┼────────────────────────┼──│ NVS保存→再起動 │    │
+│  │ ESP-NOWモードへ │   │                        │  │ USB HIDモードへ │    │
 │  └─────────────────┘   │                        │  └─────────────────┘    │
 └─────────────────────────┘                        └─────────────────────────┘
 ```
@@ -413,24 +413,25 @@ firmware/controller/components/
 
 **成果物**: 実用的なメニューシステム
 
-### Phase 4: USB HID モード
+### Phase 4: USB HID モード ✅ 完了
 
 ```
-[ ] usb_hid コンポーネント作成
+[x] usb_hid コンポーネント作成
     - CMakeLists.txt
     - usb_hid.hpp / usb_hid.cpp
-[ ] TinyUSB 統合
+[x] TinyUSB 統合
     - idf_component.yml に依存追加
     - sdkconfig.defaults に設定追加
-[ ] HID Joystick ディスクリプタ実装
-[ ] レポート送信タスク (100Hz)
-[ ] 起動時モード選択ロジック
-    - M5.BtnA押下判定
-[ ] USB HIDモード専用画面
-[ ] メニューから USB/ESP 切り替え（要再起動）
+[x] HID Joystick ディスクリプタ実装
+[x] レポート送信 (100Hz メインループ内)
+[x] NVSベースのモード選択ロジック
+    - 起動時にNVSからモード読込
+    - M5.BtnA押下はペアリング専用（ESP-NOW時）
+[x] USB HIDモード専用画面
+[x] メニューから USB/ESP 切り替え（NVS保存→再起動）
 ```
 
-**成果物**: PCにジョイスティックとして認識
+**成果物**: PCにジョイスティックとして認識、メニューでモード切替
 
 ### Phase 5: シミュレータ連携
 
@@ -444,11 +445,13 @@ firmware/controller/components/
 
 **成果物**: シミュレータがコントローラを認識
 
-### Phase 6: 設定永続化
+### Phase 6: 設定永続化（一部完了）
 
 ```
-[ ] NVS (Non-Volatile Storage) 統合
-[ ] 設定保存・読み込み
+[x] NVS (Non-Volatile Storage) 統合
+[x] 通信モード保存・読み込み
+[ ] キャリブレーション値保存
+[ ] TDMA設定保存
 [ ] 工場出荷時リセット機能
 ```
 
@@ -637,9 +640,9 @@ void menu_set_state(screen_state_t state) {
 | Phase 1 | Menu foundation | **Complete** (2025-01-06) |
 | Phase 2 | Menu operation | Not started |
 | Phase 3 | Menu items | Not started |
-| Phase 4 | USB HID mode | Not started |
+| Phase 4 | USB HID mode | **Complete** (2025-01-07) |
 | Phase 5 | Simulator integration | Not started |
-| Phase 6 | Settings persistence | Not started |
+| Phase 6 | Settings persistence | Partial (mode storage) |
 
 ## 4. USB HID Mode Detailed Design
 
