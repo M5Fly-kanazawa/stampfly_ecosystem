@@ -400,16 +400,21 @@ firmware/controller/components/
 [ ] Calibration サブメニュー
     - スティック MIN/MAX キャリブレーション
     - バイアス自動設定
-[ ] TDMA Setup サブメニュー
+[ ] TDMA Setup サブメニュー（ESP-NOWモード専用）
     - Channel 選択 (1-14)
     - Device ID 選択 (0-9)
     - ※変更後は再起動必要
-[ ] Control サブメニュー
-    - Stick Mode (2/3)
-    - Rate/Angle デフォルト
+[ ] Control サブメニュー（両モード共通）
+    - Stick Mode (2/3) ← USB HID/ESP-NOW両対応
+    - Rate/Angle デフォルト（ESP-NOWモード専用）
 [ ] Battery Warning 閾値設定
 [ ] About 画面（バージョン情報）
 ```
+
+**注**: Stick Mode設定はUSB HIDモードでも使用可能にする
+- Mode 2: 左スロットル/ラダー、右エレベータ/エルロン
+- Mode 3: 左エレベータ/ラダー、右スロットル/エルロン
+- NVSに保存し、両モードで共有
 
 **成果物**: 実用的なメニューシステム
 
