@@ -26,6 +26,20 @@
 
 static const char* TAG = "MAIN";
 
+// Project-specific color macros for AtomS3/GC9107 panel
+// AtomS3/GC9107パネル用のプロジェクト独自カラーマクロ
+// This panel has R/G swap issue (GitHub m5stack/M5AtomS3#16)
+// rgb_order=true setting swaps R and G channels
+#define SF_BLACK   TFT_BLACK
+#define SF_WHITE   TFT_WHITE
+#define SF_RED     TFT_GREEN   // Swapped: GREEN displays as RED
+#define SF_GREEN   TFT_RED     // Swapped: RED displays as GREEN
+#define SF_BLUE    TFT_BLUE
+#define SF_YELLOW  TFT_YELLOW  // R=G, no swap needed
+#define SF_CYAN    TFT_MAGENTA // Swapped: MAGENTA displays as CYAN
+#define SF_MAGENTA TFT_CYAN    // Swapped: CYAN displays as MAGENTA
+#define SF_ORANGE  0xFD20      // Custom: swap R/G in original 0x07E0+R
+
 // ログレベル
 #define GLOBAL_LOG_LEVEL ESP_LOG_INFO
 
@@ -159,22 +173,22 @@ static void input_task(void* parameter)
 // LCD初期化
 static void init_display(void)
 {
-    M5.Display.setRotation(0);
-    M5.Display.setTextSize(1);
-    M5.Display.setTextFont(2);
-    M5.Display.fillScreen(TFT_BLACK);
-
-    // Test: Change color order from BGR to RGB
-    // パネルのカラーオーダーをBGRからRGBに変更してテスト
+    // Change color order BEFORE setRotation (which writes MADCTL)
+    // setRotationの前にカラーオーダーを変更（MADCTLに書き込まれる）
     auto panel = M5.Display.getPanel();
     if (panel) {
         auto cfg = panel->config();
         ESP_LOGI(TAG, "Current rgb_order: %d", cfg.rgb_order);
-        cfg.rgb_order = true;  // Change to RGB mode
+        cfg.rgb_order = true;  // Use RGB mode with SF_ color macros
         panel->config(cfg);
-        panel->initDMA();  // Re-initialize panel
         ESP_LOGI(TAG, "Changed rgb_order to: %d", cfg.rgb_order);
     }
+
+    // setRotation() writes MADCTL register including rgb_order setting
+    M5.Display.setRotation(0);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextFont(2);
+    M5.Display.fillScreen(SF_BLACK);
 
     ESP_LOGI(TAG, "LCD初期化完了");
 }
@@ -186,7 +200,7 @@ static void render_menu_screen(void)
 
     // タイトルバー
     M5.Display.setCursor(4, 2);
-    M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
     M5.Display.printf("=== MENU ===    ");
 
     // メニュー項目
@@ -197,16 +211,16 @@ static void render_menu_screen(void)
         M5.Display.setCursor(4, 2 + (i + 1) * line_height);
 
         if (i == selected) {
-            M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+            M5.Display.setTextColor(SF_BLACK, SF_WHITE);
             M5.Display.printf("> %-12s", menu_get_item_label(i));
         } else {
-            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            M5.Display.setTextColor(SF_WHITE, SF_BLACK);
             M5.Display.printf("  %-12s", menu_get_item_label(i));
         }
     }
 
     // 残りの行をクリア
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
     for (uint8_t i = item_count; i < 6; i++) {
         M5.Display.setCursor(4, 2 + (i + 1) * line_height);
         M5.Display.printf("                ");
@@ -224,7 +238,7 @@ static void update_display(void)
     bool current_menu_active = menu_is_active();
 
     if (prev_menu_active != current_menu_active) {
-        M5.Display.fillScreen(TFT_BLACK);
+        M5.Display.fillScreen(SF_BLACK);
         prev_menu_active = current_menu_active;
     }
 
@@ -237,12 +251,9 @@ static void update_display(void)
     // フライト画面描画
     // Flight screen rendering with StickMode-based color
     // StickMode 2: 緑 (GREEN), StickMode 3: 黄 (YELLOW)
-    // Use color565() for explicit RGB values to avoid color order issues
     const uint8_t* drone_mac = get_drone_peer_addr();
-    uint32_t text_color = (StickMode == 2)
-        ? M5.Display.color565(0, 255, 0)    // Green: R=0, G=255, B=0
-        : M5.Display.color565(255, 255, 0); // Yellow: R=255, G=255, B=0
-    M5.Display.setTextColor(text_color, TFT_BLACK);
+    uint32_t text_color = (StickMode == 2) ? SF_GREEN : SF_YELLOW;
+    M5.Display.setTextColor(text_color, SF_BLACK);
 
     // 行0: MACアドレス
     M5.Display.setCursor(4, 2 + 0 * line_height);
@@ -524,7 +535,7 @@ extern "C" void app_main(void)
     // LCD初期化
     init_display();
     M5.Display.setCursor(4, 2);
-    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
     M5.Display.println("StampFly ESP-IDF");
 
     // メニューシステム初期化
@@ -535,11 +546,11 @@ extern "C" void app_main(void)
     ret = joy_init();
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "ジョイスティック初期化完了");
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+        M5.Display.setTextColor(SF_GREEN, SF_BLACK);
         M5.Display.println("JOY: OK");
     } else {
         ESP_LOGE(TAG, "ジョイスティック初期化失敗: %s", esp_err_to_name(ret));
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setTextColor(SF_RED, SF_BLACK);
         M5.Display.println("JOY: FAIL");
     }
 
@@ -550,11 +561,11 @@ extern "C" void app_main(void)
     ret = espnow_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "ESP-NOW初期化失敗");
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.setTextColor(SF_RED, SF_BLACK);
         M5.Display.println("ESP-NOW: FAIL");
         while (1) vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
     M5.Display.println("ESP-NOW: OK");
 
     // ビーコンピア初期化
@@ -564,7 +575,7 @@ extern "C" void app_main(void)
     M5.update();
     bool force_pairing = M5.BtnA.isPressed();
     if (force_pairing) {
-        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
         M5.Display.println("Pairing mode...");
         M5.Display.println("Hold StampFly Btn");
         M5.Display.println("until beep!");
@@ -583,7 +594,7 @@ extern "C" void app_main(void)
     joy_update();
     if (joy_get_button_left_raw()) {
         joy_set_stick_mode(STICK_MODE_3);
-        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
         M5.Display.println("Mode 3 selected");
         // ボタンが離されるまで待機 (生値で判定)
         while (joy_get_button_left_raw()) {
