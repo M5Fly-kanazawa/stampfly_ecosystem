@@ -544,7 +544,7 @@ extern "C" void app_main(void)
     // LCD初期化
     init_display();
     M5.Display.setCursor(4, 2);
-    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
     M5.Display.println("StampFly ESP-IDF");
 
     // メニューシステム初期化
