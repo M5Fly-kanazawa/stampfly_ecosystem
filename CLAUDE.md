@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `PROJECT_PLAN.md`
   - `.claude/settings.local.json`
 - **応答は日本語で行うこと**
+- **コードを変更したら必ずコミットすること** - 変更をローカルに残さず、適切な単位でコミットする
 
 ## Writing Conventions
 
