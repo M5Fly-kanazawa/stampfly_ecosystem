@@ -11,4 +11,5 @@ idf_component_register(
         buzzer
         atoms3joy
         espnow_tdma
+        menu_system
 )

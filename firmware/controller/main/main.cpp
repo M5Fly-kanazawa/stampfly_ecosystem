@@ -22,6 +22,7 @@
 #include <buzzer.h>
 #include <atoms3joy.h>
 #include <espnow_tdma.h>
+#include <menu_system.h>
 
 static const char* TAG = "MAIN";
 
@@ -165,55 +166,121 @@ static void init_display(void)
     ESP_LOGI(TAG, "LCD初期化完了");
 }
 
+// メニュー画面描画
+static void render_menu_screen(void)
+{
+    const int line_height = 17;
+
+    // タイトルバー
+    M5.Display.setCursor(4, 2);
+    M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    M5.Display.printf("=== MENU ===    ");
+
+    // メニュー項目
+    uint8_t item_count = menu_get_item_count();
+    uint8_t selected = menu_get_selected_index();
+
+    for (uint8_t i = 0; i < item_count && i < 6; i++) {
+        M5.Display.setCursor(4, 2 + (i + 1) * line_height);
+
+        if (i == selected) {
+            M5.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+            M5.Display.printf("> %-12s", menu_get_item_label(i));
+        } else {
+            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            M5.Display.printf("  %-12s", menu_get_item_label(i));
+        }
+    }
+
+    // 残りの行をクリア
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    for (uint8_t i = item_count; i < 6; i++) {
+        M5.Display.setCursor(4, 2 + (i + 1) * line_height);
+        M5.Display.printf("                ");
+    }
+}
+
 // 画面更新 (全行一括更新)
 static void update_display(void)
 {
-    const uint8_t* drone_mac = get_drone_peer_addr();
     const int line_height = 17;
+
+    // 画面状態追跡（状態変化時に画面クリア）
+    // Track screen state for clearing on transition
+    static bool prev_menu_active = false;
+    bool current_menu_active = menu_is_active();
+
+    if (prev_menu_active != current_menu_active) {
+        M5.Display.fillScreen(TFT_BLACK);
+        prev_menu_active = current_menu_active;
+    }
+
+    // メニューがアクティブな場合はメニュー画面を描画
+    if (current_menu_active) {
+        render_menu_screen();
+        return;
+    }
+
+    // フライト画面描画（オリジナルの色設定を維持）
+    const uint8_t* drone_mac = get_drone_peer_addr();
 
     // 行0: MACアドレス
     M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.printf("MAC ADR %02X:%02X    ", drone_mac[4], drone_mac[5]);
 
     // 行1: バッテリー電圧
     M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.printf("BAT 1:%4.1f 2:%4.1f",
         joy_get_battery_voltage1(), joy_get_battery_voltage2());
 
     // 行2: スティックモード
     M5.Display.setCursor(4, 2 + 2 * line_height);
-    M5.Display.printf("MODE: %d", StickMode);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.printf("MODE: %d        ", StickMode);
 
     // 行3: チャンネル/ID
     M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.printf("CH: %02d ID: %d  ", ESPNOW_CHANNEL, TDMA_DEVICE_ID);
 
-    // 行4: 高度モード
+    // 行4: 高度モード（色分け表示）
     M5.Display.setCursor(4, 2 + 4 * line_height);
-    if (AltMode == ALT_CONTROL_MODE)
+    if (AltMode == ALT_CONTROL_MODE) {
+        M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
         M5.Display.printf("-Auto ALT-  ");
-    else
+    } else {
+        M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
         M5.Display.printf("-Mnual ALT- ");
+    }
 
-    // 行5: 制御モード
+    // 行5: 制御モード（色分け表示）
     M5.Display.setCursor(4, 2 + 5 * line_height);
-    if (Mode == ANGLECONTROL)
+    if (Mode == ANGLECONTROL) {
+        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
         M5.Display.printf("-STABILIZE-");
-    else
+    } else {
+        M5.Display.setTextColor(TFT_ORANGE, TFT_BLACK);
         M5.Display.printf("-ACRO-     ");
+    }
 
     // 行6: 周波数/同期状態
     M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     #if TDMA_DEVICE_ID == 0
         M5.Display.printf("Freq:%4d M    ", (int)actual_send_freq_hz);
     #else
         if (first_beacon_received) {
             if (is_beacon_lost()) {
+                M5.Display.setTextColor(TFT_RED, TFT_BLACK);
                 M5.Display.printf("F:%4d LOST!  ", (int)actual_send_freq_hz);
             } else {
+                M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
                 M5.Display.printf("F:%4d SYNC   ", (int)actual_send_freq_hz);
             }
         } else {
+            M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
             M5.Display.printf("F:%4d WAIT   ", (int)actual_send_freq_hz);
         }
     #endif
@@ -260,25 +327,63 @@ static void main_loop(void)
     }
 
     // ボタンイベント処理
+    // Button event handling - short press toggles menu
     if (local_input.btn_pressed) {
-        if (Timer_state == 0) Timer_state = 1;
-        else if (Timer_state == 1) Timer_state = 0;
+        menu_toggle();
     }
 
-    if (local_input.btn_long_pressed) {
+    // Long press: Reset timer (only when not in menu)
+    // 長押し: タイマーリセット（メニュー外のみ）
+    if (local_input.btn_long_pressed && !menu_is_active()) {
         Timer_state = 2;
     }
 
-    // タイマー更新
-    if (Timer_state == 1) {
-        Timer += dTime;
-    } else if (Timer_state == 2) {
-        Timer = 0.0f;
-        Timer_state = 0;
+    // タイマー更新 (only when not in menu)
+    if (!menu_is_active()) {
+        if (Timer_state == 1) {
+            Timer += dTime;
+        } else if (Timer_state == 2) {
+            Timer = 0.0f;
+            Timer_state = 0;
+        }
     }
 
-    // モード変更処理
-    if (local_input.mode_changed == 1) {
+    // Menu navigation using stick (when menu is active)
+    // メニューナビゲーション（メニューアクティブ時）
+    if (menu_is_active()) {
+        static uint32_t last_nav_time = 0;
+        const uint32_t NAV_DEBOUNCE_MS = 200;
+        uint32_t now = millis_now();
+
+        // Use right stick (elevator/theta) for up/down navigation
+        // 右スティック（エレベータ/theta）で上下ナビゲーション
+        int16_t stick_y = local_input.theta_raw - 2048;
+
+        if (now - last_nav_time > NAV_DEBOUNCE_MS) {
+            if (stick_y > 800) {
+                menu_move_up();
+                last_nav_time = now;
+            } else if (stick_y < -800) {
+                menu_move_down();
+                last_nav_time = now;
+            }
+
+            // Use mode button as select
+            if (local_input.mode_changed == 1) {
+                menu_select();
+                last_nav_time = now;
+                // Clear the flag
+                if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+                    shared_inputdata.mode_changed = 0;
+                    xSemaphoreGive(input_mutex);
+                }
+            }
+        }
+    }
+
+    // モード変更処理 (only when not in menu)
+    // Mode change processing (メニュー外のみ)
+    if (!menu_is_active() && local_input.mode_changed == 1) {
         Mode = (Mode == ANGLECONTROL) ? RATECONTROL : ANGLECONTROL;
         ESP_LOGI(TAG, "モード変更: %s", Mode == ANGLECONTROL ? "STABILIZE" : "ACRO");
 
@@ -288,7 +393,7 @@ static void main_loop(void)
         }
     }
 
-    if (local_input.alt_mode_changed == 1) {
+    if (!menu_is_active() && local_input.alt_mode_changed == 1) {
         AltMode = (AltMode == ALT_CONTROL_MODE) ? NOT_ALT_CONTROL_MODE : ALT_CONTROL_MODE;
         ESP_LOGI(TAG, "高度モード変更: %s", AltMode == ALT_CONTROL_MODE ? "Auto ALT" : "Manual ALT");
 
@@ -415,6 +520,10 @@ extern "C" void app_main(void)
     M5.Display.setCursor(4, 2);
     M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
     M5.Display.println("StampFly ESP-IDF");
+
+    // メニューシステム初期化
+    menu_init();
+    ESP_LOGI(TAG, "メニューシステム初期化完了");
 
     // ジョイスティック初期化 (レガシーI2Cドライバで共有)
     ret = joy_init();
