@@ -52,6 +52,20 @@ from .sil_interface import (
     SimpleRateController,
 )
 
+# HIL Interface
+from .hil_interface import (
+    HILInterface,
+    HILSimulationRunner,
+    HILMessageType,
+    HILIMUData,
+    HILMagData,
+    HILBaroData,
+    HILToFData,
+    HILFlowData,
+    HILMotorOutput,
+    HILStateUpdate,
+)
+
 __all__ = [
     # Joystick
     'Joystick',
@@ -82,4 +96,15 @@ __all__ = [
     'ActuatorCommand',
     'SILInterface',
     'SimpleRateController',
+    # HIL Interface
+    'HILInterface',
+    'HILSimulationRunner',
+    'HILMessageType',
+    'HILIMUData',
+    'HILMagData',
+    'HILBaroData',
+    'HILToFData',
+    'HILFlowData',
+    'HILMotorOutput',
+    'HILStateUpdate',
 ]

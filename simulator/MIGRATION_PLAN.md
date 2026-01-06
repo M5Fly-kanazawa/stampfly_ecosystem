@@ -74,7 +74,7 @@ simulator/
 │   ├── messages.py          # ✓ protocol/spec/messages.yaml の Python 実装
 │   ├── protocol_bridge.py   # ✓ SimulatorState ↔ Protocol 変換
 │   ├── sil_interface.py     # ✓ SILインターフェース・SimpleRateController
-│   └── hil_interface.py     # 新規：実機との接続
+│   └── hil_interface.py     # ✓ HILインターフェース・シリアル通信
 │
 ├── visualization/           # 可視化（複数バックエンド対応）
 │   ├── __init__.py
@@ -247,15 +247,25 @@ firmware/vehicle/
 
 **成果物**: 実機と同じ制御応答のシミュレータ ✓
 
-### Phase 5: HIL対応（オプション）
+### Phase 5: HIL対応
 
 **目標**: 実機ファームウェアとの接続
 
-1. [ ] シリアル通信インターフェース
-2. [ ] リアルタイム同期機構
-3. [ ] センサ注入・アクチュエータ読み取り
+1. [x] シリアル通信インターフェース (`interfaces/hil_interface.py`)
+   - pyserial ベースの接続管理
+   - 自動ポート検出
+2. [x] リアルタイム同期機構
+   - タイムスタンプ同期 (SYNC_REQUEST/SYNC_RESPONSE)
+   - センサレート管理 (IMU 400Hz, Mag/Flow 100Hz, Baro 50Hz, ToF 30Hz)
+3. [x] センサ注入・アクチュエータ読み取り
+   - HILIMUData, HILMagData, HILBaroData, HILToFData, HILFlowData
+   - HILMotorOutput, HILStateUpdate
+   - チェックサム検証
+4. [x] HILSimulationRunner クラス
+   - リアルタイムループ管理
+   - 物理シミュレーションコールバック
 
-**成果物**: HIL（Hardware-in-the-Loop）テスト環境
+**成果物**: HIL（Hardware-in-the-Loop）テスト環境 ✓
 
 ---
 
