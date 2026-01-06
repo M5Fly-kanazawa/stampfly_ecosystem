@@ -163,6 +163,19 @@ static void init_display(void)
     M5.Display.setTextSize(1);
     M5.Display.setTextFont(2);
     M5.Display.fillScreen(TFT_BLACK);
+
+    // Test: Change color order from BGR to RGB
+    // パネルのカラーオーダーをBGRからRGBに変更してテスト
+    auto panel = M5.Display.getPanel();
+    if (panel) {
+        auto cfg = panel->config();
+        ESP_LOGI(TAG, "Current rgb_order: %d", cfg.rgb_order);
+        cfg.rgb_order = true;  // Change to RGB mode
+        panel->config(cfg);
+        panel->initDMA();  // Re-initialize panel
+        ESP_LOGI(TAG, "Changed rgb_order to: %d", cfg.rgb_order);
+    }
+
     ESP_LOGI(TAG, "LCD初期化完了");
 }
 
