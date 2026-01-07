@@ -240,18 +240,12 @@ def flight_sim(world_type='ringworld', seed=None):
             # 生の値からオフセットを引いてからスケーリング
             # Subtract offset from raw value, then scale
             # 生の値からオフセット補正
+            # デッドバンドはコントローラ側で適用されるため、ここでは適用しない
+            # Deadband is applied on the controller side, so not applied here
             thrust_raw = (joydata[0]-127)/127.0 - thrust_offset
             roll_raw = (joydata[1]-127)/127.0 - roll_offset
             pitch_raw = (joydata[2]-127)/127.0 - pitch_offset
             yaw_raw = (joydata[3]-127)/127.0 - yaw_offset
-
-            # デッドバンド適用（中心付近の微小値を無視）
-            # Apply deadband (ignore small values near center)
-            deadband = 0.05
-            if abs(thrust_raw) < deadband: thrust_raw = 0.0
-            if abs(roll_raw) < deadband: roll_raw = 0.0
-            if abs(pitch_raw) < deadband: pitch_raw = 0.0
-            if abs(yaw_raw) < deadband: yaw_raw = 0.0
 
             delta_voltage = 0.5 * thrust_raw
             roll_ref = 0.25 * roll_raw * np.pi    # 最大±45°

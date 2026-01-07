@@ -60,6 +60,15 @@ static uint8_t g_battery_warn_threshold = 33;  // Default: 3.3V
 // バッテリー警告メニュー項目の動的ラベルバッファ
 static char g_battery_warn_label_buf[16] = "Batt: 3.3V";
 
+// Deadband callback and value
+// デッドバンドコールバックと値
+static menu_action_callback_t g_deadband_callback = NULL;
+static uint8_t g_deadband = 2;  // Default: 2%
+
+// Dynamic label buffer for Deadband menu item
+// デッドバンドメニュー項目の動的ラベルバッファ
+static char g_deadband_label_buf[16] = "Deadband: 2%";
+
 // ============================================================================
 // Menu action callbacks
 // メニューアクションコールバック
@@ -110,6 +119,14 @@ static void action_battery_warn(void) {
     menu_set_state(SCREEN_STATE_BATTERY_WARN);
 }
 
+static void action_deadband(void) {
+    // Toggle deadband value and call registered callback
+    // デッドバンド値を切り替えて登録されたコールバックを呼び出す
+    if (g_deadband_callback != NULL) {
+        g_deadband_callback();
+    }
+}
+
 static void action_about(void) {
     // Show about screen
     // バージョン情報画面を表示
@@ -137,6 +154,7 @@ void menu_init(void) {
     menu_items[menu_item_count++] = {g_stick_mode_label_buf, action_stick_mode, false};
     menu_items[menu_item_count++] = {"USB Mode", action_usb_mode, false};
     menu_items[menu_item_count++] = {g_battery_warn_label_buf, action_battery_warn, false};
+    menu_items[menu_item_count++] = {g_deadband_label_buf, action_deadband, false};
     menu_items[menu_item_count++] = {"Stick Test", action_stick_test, false};
     menu_items[menu_item_count++] = {"Calibration", action_stick_calibration, false};
     menu_items[menu_item_count++] = {"Channel", action_channel_setting, false};
@@ -311,4 +329,24 @@ void menu_set_battery_warn_threshold(uint8_t threshold) {
     // Using snprintf for safety
     snprintf(g_battery_warn_label_buf, sizeof(g_battery_warn_label_buf),
              "Batt: %d.%dV", whole, frac);
+}
+
+// ============================================================================
+// Deadband functions
+// デッドバンド関数
+// ============================================================================
+void menu_register_deadband_callback(menu_action_callback_t callback) {
+    g_deadband_callback = callback;
+}
+
+uint8_t menu_get_deadband(void) {
+    return g_deadband;
+}
+
+void menu_set_deadband(uint8_t deadband) {
+    g_deadband = deadband;
+    // Update dynamic label buffer
+    // 動的ラベルバッファを更新
+    snprintf(g_deadband_label_buf, sizeof(g_deadband_label_buf),
+             "Deadband: %d%%", deadband);
 }

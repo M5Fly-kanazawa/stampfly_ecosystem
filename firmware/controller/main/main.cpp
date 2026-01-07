@@ -118,10 +118,16 @@ static CommMode g_comm_mode = COMM_MODE_ESPNOW;
 #define NVS_KEY_STICK_MODE "stick_mode"
 #define NVS_KEY_BATT_WARN "batt_warn"
 #define NVS_KEY_STICK_CAL "stick_cal"
+#define NVS_KEY_DEADBAND "deadband"
 
 // バッテリー警告閾値 (voltage * 10, e.g., 33 = 3.3V)
 // Battery warning threshold
 static uint8_t g_battery_warn_threshold = 33;  // Default: 3.3V
+
+// デッドバンド設定（0-5%、フルレンジ4096に対する割合）
+// Deadband setting (0-5%, percentage of full range 4096)
+// Default: 2%
+static uint8_t g_deadband = 2;
 
 // 通信モードをNVSから読み込み
 // Load communication mode from NVS
@@ -284,6 +290,61 @@ static void on_battery_warn_change(void) {
     }
 }
 
+// デッドバンドをNVSから読み込み
+// Load deadband from NVS
+static void load_deadband_from_nvs(void) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        nvs_get_u8(handle, NVS_KEY_DEADBAND, &g_deadband);
+        nvs_close(handle);
+    }
+    // 古い値（生値）が保存されていた場合は%値に変換
+    // Convert old raw values to percentage if needed
+    if (g_deadband > 5) {
+        g_deadband = 2;  // Reset to default 2%
+    }
+    ESP_LOGI(TAG, "デッドバンド読込: %d%%", g_deadband);
+}
+
+// デッドバンドをNVSに保存
+// Save deadband to NVS
+static esp_err_t save_deadband_to_nvs(uint8_t deadband) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u8(handle, NVS_KEY_DEADBAND, deadband);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS set failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return err;
+}
+
+// デッドバンド変更コールバック（メニューから呼ばれる）
+// Deadband change callback (called from menu)
+static void on_deadband_change(void) {
+    // サイクル: 0% -> 1% -> 2% -> 3% -> 4% -> 5% -> 0%
+    // Cycle through deadband values (percentage)
+    uint8_t new_deadband = (g_deadband + 1) % 6;
+
+    if (save_deadband_to_nvs(new_deadband) == ESP_OK) {
+        ESP_LOGI(TAG, "デッドバンド変更: %d%% -> %d%%", g_deadband, new_deadband);
+        g_deadband = new_deadband;
+        menu_set_deadband(new_deadband);
+    } else {
+        ESP_LOGE(TAG, "デッドバンド保存失敗");
+    }
+}
+
 // スティックキャリブレーションをNVSから読み込み
 // Load stick calibration from NVS
 static void load_stick_cal_from_nvs(void) {
@@ -385,6 +446,22 @@ static int16_t get_calibrated_value(uint16_t raw, int16_t offset) {
     if (result < 0) result = 0;
     if (result > 4095) result = 4095;
     return (int16_t)result;
+}
+
+// デッドバンド適用（中央値2048付近をデッドゾーンにする）
+// Apply deadband (make values near center 2048 a dead zone)
+static int16_t apply_deadband(int16_t value) {
+    const int16_t center = 2048;
+    int16_t diff = value - center;
+
+    // g_deadbandは%値（0-5）、生値に変換: 4096 * percent / 100
+    // g_deadband is percentage (0-5), convert to raw: 4096 * percent / 100
+    int16_t deadband_raw = (int16_t)(4096 * g_deadband / 100);
+
+    if (diff > -deadband_raw && diff < deadband_raw) {
+        return center;
+    }
+    return value;
 }
 
 // USBモード切替コールバック（メニューから呼ばれる）
@@ -1028,17 +1105,17 @@ static void update_usb_hid_display(void)
     int16_t _throttle, _phi, _theta, _psi;
     if (StickMode == STICK_MODE_2) {
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x));
     } else {
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x));
     }
 
-    // 8bit変換値（補正済み）
+    // 8bit変換値（補正済み + デッドバンド適用済み）
     uint8_t t_val = convert_12bit_to_8bit(4095 - _throttle);
     uint8_t r_val = convert_12bit_to_8bit(_phi);
     uint8_t p_val = convert_12bit_to_8bit(_theta);
@@ -1216,18 +1293,18 @@ static void usb_hid_main_loop(void)
     if (StickMode == STICK_MODE_2) {
         // Mode 2: Throttle=左Y, Aileron=右X, Elevator=右Y, Rudder=左X
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x));
     } else {
         // Mode 3: Throttle=右Y, Aileron=左X, Elevator=左Y, Rudder=右X
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x));
     }
 
-    // HIDレポート作成
+    // HIDレポート作成（デッドバンド適用済み）
     HIDJoystickReport report;
     report.throttle = convert_12bit_to_8bit(4095 - _throttle);
     report.roll = convert_12bit_to_8bit(_phi);
@@ -1394,26 +1471,26 @@ static void main_loop(void)
         }
     }
 
-    // スティック値取得（キャリブレーション適用）
-    // Get stick values (with calibration applied)
+    // スティック値取得（キャリブレーション + デッドバンド適用）
+    // Get stick values (with calibration and deadband applied)
     // Note: StickModeに応じてマッピングされた値を補正
     // Throttle/Elevator: 左Y or 右Y, Aileron/Rudder: 右X or 左X
     // キャリブレーションは物理スティック単位で保存されているので適切にマッピング
     if (StickMode == STICK_MODE_2) {
         // Mode 2: Throttle=左Y, Aileron=右X, Elevator=右Y, Rudder=左X
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x));
     } else {
         // Mode 3: Throttle=右Y, Aileron=左X, Elevator=左Y, Rudder=右X
         _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
-        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
-        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
-        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
+        _phi = apply_deadband(get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x));
+        _theta = apply_deadband(get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y));
+        _psi = apply_deadband(get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x));
     }
 
-    // 制御値計算
+    // 制御値計算（デッドバンド適用済み）
     Throttle = 4095 - _throttle;
     Phi = _phi;
     Theta = _theta;
@@ -1539,6 +1616,13 @@ extern "C" void app_main(void)
     // スティックキャリブレーションをNVSから読み込み
     // Load stick calibration from NVS
     load_stick_cal_from_nvs();
+
+    // デッドバンドをNVSから読み込み
+    // Load deadband from NVS
+    load_deadband_from_nvs();
+    menu_set_deadband(g_deadband);
+    menu_register_deadband_callback(on_deadband_change);
+    ESP_LOGI(TAG, "デッドバンド: %d%% (NVSより)", g_deadband);
 
     // ジョイスティック初期化 (レガシーI2Cドライバで共有)
     ret = joy_init();

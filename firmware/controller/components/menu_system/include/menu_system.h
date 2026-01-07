@@ -187,6 +187,27 @@ uint8_t menu_get_battery_warn_threshold(void);
  */
 void menu_set_battery_warn_threshold(uint8_t threshold);
 
+/**
+ * Register Deadband callback
+ * デッドバンドコールバックを登録
+ * @param callback Function to call when Deadband is selected
+ */
+void menu_register_deadband_callback(menu_action_callback_t callback);
+
+/**
+ * Get current deadband value
+ * 現在のデッドバンド値を取得
+ * @return deadband percentage (0-5%)
+ */
+uint8_t menu_get_deadband(void);
+
+/**
+ * Set deadband value (called from main)
+ * デッドバンド値を設定（mainから呼ばれる）
+ * @param deadband deadband percentage (0-5%)
+ */
+void menu_set_deadband(uint8_t deadband);
+
 #ifdef __cplusplus
 }
 #endif
