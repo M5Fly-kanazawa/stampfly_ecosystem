@@ -142,25 +142,66 @@ simulator/
 
 ## 4. 基本的な使い方
 
-### シミュレータの起動
+### クイックスタート（初めての方へ）
+
+コントローラがあれば、すぐにドローン操縦を体験できます！
+
+#### Step 1: コントローラの準備
+
+1. AtomS3 + Atom JoyStickにファームウェアを書き込む（[controller/README.md](../firmware/controller/README.md)参照）
+2. コントローラの電源を入れる
+3. 画面を押す → 「**USB Mode**」を選択
+4. PCにUSB接続（ゲームパッドとして認識される）
+
+#### Step 2: シミュレータの起動
 
 ```bash
 cd stampfly_ecosystem/simulator/scripts
-
-# ジョイスティック操作でフライト
 python run_sim.py
 ```
 
+ブラウザが開き、3Dビューが表示されます。スティックを操作してドローンを飛ばしましょう！
+
+### コマンドラインオプション
+
+```bash
+# 基本起動（ボクセルワールド、ランダム地形）
+python run_sim.py
+
+# リングワールド（円形コース）で起動
+python run_sim.py --world ringworld
+
+# シード値を指定して同じ地形を再現
+python run_sim.py --seed 12345
+
+# リングワールドをシード値指定で起動
+python run_sim.py --world ringworld --seed 42
+```
+
+| オプション | 短縮形 | 説明 | デフォルト |
+|-----------|--------|------|-----------|
+| `--world` | `-w` | ワールドタイプ（voxel/ringworld） | voxel |
+| `--seed` | `-s` | 地形生成シード値（省略時ランダム） | なし |
+
+### ワールドタイプ
+
+| タイプ | 説明 |
+|-------|------|
+| voxel | ボクセルベースのランダム地形。毎回異なる地形で練習できます |
+| ringworld | 円形のレースコース。周回飛行の練習に最適 |
+
 ### ジョイスティック操作
 
-ATOM Joystickを使用：
+AtomS3 + Atom JoyStickをUSB HIDモードで使用：
 
-| 入力 | 機能 |
-|------|------|
-| 左スティック Y軸 | スロットル |
-| 右スティック X軸 | ロール |
-| 右スティック Y軸 | ピッチ |
-| 左スティック X軸 | ヨー |
+| 入力 | 機能 | Mode 2 | Mode 3 |
+|------|------|--------|--------|
+| スロットル | 上昇/下降 | 左Y | 右Y |
+| ロール | 左右移動 | 右X | 左X |
+| ピッチ | 前後移動 | 右Y | 左Y |
+| ヨー | 旋回 | 左X | 右X |
+
+> **ヒント**: スティックがドリフトする場合は、コントローラのメニューから「Calibration」を実行してください。デッドバンドは「Deadband」から0-5%で調整できます。
 
 ### コード例：基本的な物理シミュレーション
 
@@ -587,25 +628,66 @@ simulator/
 
 ## 4. Basic Usage
 
-### Running the Simulator
+### Quick Start (For Beginners)
+
+If you have a controller, you can experience drone piloting right away!
+
+#### Step 1: Prepare the Controller
+
+1. Flash firmware to AtomS3 + Atom JoyStick (see [controller/README.md](../firmware/controller/README.md))
+2. Power on the controller
+3. Press the screen → Select "**USB Mode**"
+4. Connect to PC via USB (recognized as a gamepad)
+
+#### Step 2: Launch the Simulator
 
 ```bash
 cd stampfly_ecosystem/simulator/scripts
-
-# Flight with joystick control
 python run_sim.py
 ```
 
+A browser opens showing the 3D view. Use the sticks to fly the drone!
+
+### Command Line Options
+
+```bash
+# Basic launch (voxel world, random terrain)
+python run_sim.py
+
+# Launch with ring world (circular course)
+python run_sim.py --world ringworld
+
+# Specify seed for reproducible terrain
+python run_sim.py --seed 12345
+
+# Ring world with specific seed
+python run_sim.py --world ringworld --seed 42
+```
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--world` | `-w` | World type (voxel/ringworld) | voxel |
+| `--seed` | `-s` | Terrain generation seed (random if omitted) | None |
+
+### World Types
+
+| Type | Description |
+|------|-------------|
+| voxel | Voxel-based random terrain. Practice with different terrain each time |
+| ringworld | Circular race course. Great for circuit flying practice |
+
 ### Joystick Controls
 
-Using ATOM Joystick:
+Using AtomS3 + Atom JoyStick in USB HID mode:
 
-| Input | Function |
-|-------|----------|
-| Left Stick Y | Throttle |
-| Right Stick X | Roll |
-| Right Stick Y | Pitch |
-| Left Stick X | Yaw |
+| Input | Function | Mode 2 | Mode 3 |
+|-------|----------|--------|--------|
+| Throttle | Ascend/Descend | Left Y | Right Y |
+| Roll | Move left/right | Right X | Left X |
+| Pitch | Move forward/back | Right Y | Left Y |
+| Yaw | Rotate | Left X | Right X |
+
+> **Tip**: If sticks are drifting, run "Calibration" from the controller menu. Deadband can be adjusted from 0-5% in the "Deadband" menu.
 
 ### Code Example: Basic Physics Simulation
 

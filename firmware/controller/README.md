@@ -12,8 +12,20 @@ StampFly コントローラは、M5Stack AtomS3とAtom JoyStickを使用したSt
 - **ESP-NOW通信**: 低遅延の無線通信プロトコル
 - **TDMA同期**: 最大10台のコントローラが同一チャンネルで動作可能
 - **ペアリング機能**: ボタン操作でドローンと自動ペアリング
+- **USB HIDモード**: PCに接続してゲームパッドとして使用可能（シミュレータ対応）
+- **メニューシステム**: 画面タップで各種設定を変更
+- **NVS設定保存**: 設定値を不揮発メモリに保存
 - **LCD表示**: 通信状態・バッテリー電圧・モード表示
 - **ブザー音**: 状態通知・警告音
+
+### 通信モード
+
+本ファームウェアは2つの通信モードをサポートしています。
+
+| モード | 用途 | 切り替え方法 |
+|-------|------|-------------|
+| ESP-NOW | 実機ドローンの操縦 | メニューで選択（デフォルト） |
+| USB HID | PC接続・シミュレータ | メニューで「USB Mode」を選択 |
 
 ### ハードウェア構成
 
@@ -42,9 +54,15 @@ firmware/controller/
 │   ├── buzzer/                 # ブザー制御
 │   │   ├── include/buzzer.h
 │   │   └── buzzer.c
-│   └── espnow_tdma/            # ESP-NOW TDMA通信
-│       ├── include/espnow_tdma.h
-│       └── espnow_tdma.c
+│   ├── espnow_tdma/            # ESP-NOW TDMA通信
+│   │   ├── include/espnow_tdma.h
+│   │   └── espnow_tdma.c
+│   ├── menu_system/            # メニューシステム
+│   │   ├── include/menu_system.h
+│   │   └── menu_system.cpp
+│   └── usb_hid/                # USB HIDゲームパッド
+│       ├── include/usb_hid.hpp
+│       └── src/usb_hid.cpp
 ├── lib/
 │   ├── ATOMS3Joy/              # AtomS3Joy追加ライブラリ
 │   └── FastLED/                # LED制御ライブラリ
@@ -205,13 +223,82 @@ Atom JoyStick はI2C接続 (アドレス: 0x59) で、以下のデータを提�
 | Mode 2 | 左Y | 右X | 右Y | 左X |
 | Mode 3 | 右Y | 左X | 左Y | 右X |
 
-起動時に左ボタンを押しながら電源を入れるとMode 3、それ以外はMode 2になります。
+メニューから「Stick: Mode X」を選択して切り替え可能です。設定はNVSに保存され、次回起動時に復元されます。
 
 ### バイアスキャリブレーション
 
-起動時に50サンプルの平均を取り、スティック中立位置のバイアスを自動補正します。
+起動時に50サンプルの平均を取り、スティック中立位置のバイアスを自動補正します。手動キャリブレーションはメニューから「Calibration」を選択して実行できます。
 
-## 7. 操作方法
+## 7. メニューシステム
+
+画面を押すとメニューが表示されます。各種設定の変更や画面の切り替えができます。
+
+### メニュー項目
+
+| 項目 | 説明 |
+|-----|------|
+| Stick: Mode X | スティックモード切り替え（Mode 2 / Mode 3） |
+| USB Mode | USB HIDモードに切り替え（再起動） |
+| Batt: X.XV | バッテリー警告閾値の設定（3.0V〜4.0V） |
+| Deadband: X% | スティックデッドバンド設定（0%〜5%） |
+| Stick Test | スティック・ボタンの動作テスト画面 |
+| Calibration | スティックキャリブレーション画面 |
+| Channel | WiFiチャンネル表示 |
+| MAC Address | ペアリングMACアドレス表示 |
+| About | バージョン情報表示 |
+| <- Back | フライト画面に戻る |
+
+### 画面一覧
+
+| 画面 | 説明 |
+|-----|------|
+| FLIGHT | 通常フライト画面（デフォルト） |
+| MENU | メインメニュー |
+| STICK_TEST | スティック・ボタンテスト |
+| CALIBRATION | スティックキャリブレーション |
+| BATTERY_WARN | バッテリー警告設定 |
+| CHANNEL | チャンネル表示 |
+| MAC | MACアドレス表示 |
+| ABOUT | バージョン情報 |
+
+## 8. USB HIDモード
+
+コントローラをPCにUSB接続してゲームパッドとして使用できます。シミュレータでの練習に最適です。
+
+### 切り替え方法
+
+1. 画面を押してメニューを開く
+2. 「USB Mode」を選択
+3. コントローラが再起動し、USB HIDゲームパッドとして認識される
+
+### HIDレポート仕様
+
+| バイト | 内容 | 範囲 |
+|-------|------|------|
+| 0 | X軸（左スティック） | -127〜127 |
+| 1 | Y軸（左スティック） | -127〜127 |
+| 2 | Z軸（右スティック） | -127〜127 |
+| 3 | Rz軸（右スティック） | -127〜127 |
+| 4 | ボタン（bit0-3） | 0/1 |
+| 5 | Reserved | 0 |
+
+### ESP-NOWモードへの復帰
+
+USB HIDモード中にメニューから「ESP-NOW Mode」を選択すると、実機操縦用のESP-NOWモードに戻ります。
+
+## 9. NVS設定
+
+以下の設定はNVS（不揮発メモリ）に保存され、電源オフ後も維持されます。
+
+| 設定項目 | キー | デフォルト値 | 説明 |
+|---------|------|-------------|------|
+| 通信モード | comm_mode | ESP-NOW | ESP-NOW / USB HID |
+| スティックモード | stick_mode | Mode 2 | Mode 2 / Mode 3 |
+| バッテリー警告 | batt_warn | 3.3V | 警告閾値（3.0V〜4.0V） |
+| デッドバンド | deadband | 2% | スティックデッドバンド（0%〜5%） |
+| スティックキャリブレーション | stick_cal | 自動 | 手動キャリブレーション値 |
+
+## 10. 操作方法
 
 ### ペアリング
 
@@ -354,8 +441,20 @@ StampFly Controller is a firmware for controlling StampFly drones using M5Stack 
 - **ESP-NOW Communication**: Low-latency wireless protocol
 - **TDMA Synchronization**: Up to 10 controllers can operate on the same channel
 - **Pairing Function**: Automatic pairing with drone via button operation
+- **USB HID Mode**: Use as a PC gamepad (simulator compatible)
+- **Menu System**: Change settings by tapping the screen
+- **NVS Storage**: Save settings to non-volatile memory
 - **LCD Display**: Shows communication status, battery voltage, mode
 - **Buzzer**: Audio feedback for status and warnings
+
+### Communication Modes
+
+This firmware supports two communication modes.
+
+| Mode | Use Case | How to Switch |
+|------|----------|---------------|
+| ESP-NOW | Control real drone | Select from menu (default) |
+| USB HID | PC connection / Simulator | Select "USB Mode" from menu |
 
 ### Hardware Components
 
@@ -384,9 +483,15 @@ firmware/controller/
 │   ├── buzzer/                 # Buzzer control
 │   │   ├── include/buzzer.h
 │   │   └── buzzer.c
-│   └── espnow_tdma/            # ESP-NOW TDMA communication
-│       ├── include/espnow_tdma.h
-│       └── espnow_tdma.c
+│   ├── espnow_tdma/            # ESP-NOW TDMA communication
+│   │   ├── include/espnow_tdma.h
+│   │   └── espnow_tdma.c
+│   ├── menu_system/            # Menu system
+│   │   ├── include/menu_system.h
+│   │   └── menu_system.cpp
+│   └── usb_hid/                # USB HID gamepad
+│       ├── include/usb_hid.hpp
+│       └── src/usb_hid.cpp
 ├── lib/
 │   ├── ATOMS3Joy/              # AtomS3Joy additional library
 │   └── FastLED/                # LED control library
@@ -547,13 +652,82 @@ Atom JoyStick connects via I2C (address: 0x59) and provides the following data:
 | Mode 2 | Left Y | Right X | Right Y | Left X |
 | Mode 3 | Right Y | Left X | Left Y | Right X |
 
-Hold the left button while powering on for Mode 3, otherwise Mode 2.
+Select "Stick: Mode X" from menu to switch. Settings are saved to NVS and restored on next boot.
 
 ### Bias Calibration
 
-At startup, 50 samples are averaged to automatically calibrate the stick neutral position bias.
+At startup, 50 samples are averaged to automatically calibrate the stick neutral position bias. Manual calibration can be performed by selecting "Calibration" from the menu.
 
-## 7. Operation
+## 7. Menu System
+
+Press the screen to display the menu. You can change various settings and switch screens.
+
+### Menu Items
+
+| Item | Description |
+|------|-------------|
+| Stick: Mode X | Switch stick mode (Mode 2 / Mode 3) |
+| USB Mode | Switch to USB HID mode (restart) |
+| Batt: X.XV | Battery warning threshold (3.0V-4.0V) |
+| Deadband: X% | Stick deadband setting (0%-5%) |
+| Stick Test | Stick and button test screen |
+| Calibration | Stick calibration screen |
+| Channel | WiFi channel display |
+| MAC Address | Pairing MAC address display |
+| About | Version information |
+| <- Back | Return to flight screen |
+
+### Screens
+
+| Screen | Description |
+|--------|-------------|
+| FLIGHT | Normal flight screen (default) |
+| MENU | Main menu |
+| STICK_TEST | Stick and button test |
+| CALIBRATION | Stick calibration |
+| BATTERY_WARN | Battery warning setting |
+| CHANNEL | Channel display |
+| MAC | MAC address display |
+| ABOUT | Version information |
+
+## 8. USB HID Mode
+
+Connect the controller to a PC via USB to use it as a gamepad. Perfect for practicing with the simulator.
+
+### How to Switch
+
+1. Press the screen to open the menu
+2. Select "USB Mode"
+3. The controller restarts and is recognized as a USB HID gamepad
+
+### HID Report Specification
+
+| Byte | Content | Range |
+|------|---------|-------|
+| 0 | X-axis (left stick) | -127 to 127 |
+| 1 | Y-axis (left stick) | -127 to 127 |
+| 2 | Z-axis (right stick) | -127 to 127 |
+| 3 | Rz-axis (right stick) | -127 to 127 |
+| 4 | Buttons (bit0-3) | 0/1 |
+| 5 | Reserved | 0 |
+
+### Returning to ESP-NOW Mode
+
+Select "ESP-NOW Mode" from the menu while in USB HID mode to return to ESP-NOW mode for controlling the real drone.
+
+## 9. NVS Settings
+
+The following settings are saved to NVS (non-volatile memory) and persist after power off.
+
+| Setting | Key | Default | Description |
+|---------|-----|---------|-------------|
+| Communication Mode | comm_mode | ESP-NOW | ESP-NOW / USB HID |
+| Stick Mode | stick_mode | Mode 2 | Mode 2 / Mode 3 |
+| Battery Warning | batt_warn | 3.3V | Warning threshold (3.0V-4.0V) |
+| Deadband | deadband | 2% | Stick deadband (0%-5%) |
+| Stick Calibration | stick_cal | Auto | Manual calibration values |
+
+## 10. Operation
 
 ### Pairing
 

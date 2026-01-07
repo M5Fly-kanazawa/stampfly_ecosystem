@@ -4,6 +4,98 @@
 
 このドキュメントでは、StampFly エコシステムの環境構築から初飛行までの手順を解説します。
 
+---
+
+## 0. まずはシミュレータで遊んでみよう！
+
+実機がなくても、コントローラとPCがあればシミュレータでドローン操縦を体験できます。**実機を飛ばす前の練習にも最適です！**
+
+### 必要なもの
+
+| 項目 | 説明 |
+|-----|------|
+| M5Stack AtomS3 + Atom JoyStick | コントローラ（USB HIDモードで使用） |
+| PC | macOS / Windows / Linux |
+| USB-Cケーブル | コントローラ接続用 |
+
+### クイックスタート（5分で飛行開始！）
+
+#### Step 1: コントローラのファームウェア書き込み
+
+最初にコントローラにファームウェアを書き込みます（初回のみ）。
+
+```bash
+# ESP-IDFのセットアップ（詳細は「2. ESP-IDFのインストール」参照）
+cd stampfly_ecosystem/firmware/controller
+idf.py build
+idf.py -p /dev/cu.usbmodem* flash  # macOS
+# idf.py -p COM3 flash  # Windows
+```
+
+#### Step 2: コントローラをUSB HIDモードに切り替え
+
+1. コントローラの電源を入れる
+2. **画面を押して**メニューを開く
+3. 「**USB Mode**」を選択
+4. コントローラが再起動し、USB HIDゲームパッドとして認識される
+
+> **Tips**: USB HIDモードでは、コントローラがPCに直接ゲームパッドとして認識されます。ESP-NOWモードに戻すには、再度メニューから切り替えてください。
+
+#### Step 3: シミュレータの起動
+
+```bash
+# 依存パッケージのインストール（初回のみ）
+cd stampfly_ecosystem/simulator
+pip install -r requirements.txt
+
+# macOSの場合、HIDライブラリも必要
+brew install hidapi
+
+# シミュレータ起動！
+cd scripts
+python run_sim.py
+```
+
+ブラウザが自動で開き、3Dビューが表示されます。
+
+#### Step 4: 飛ばしてみよう！
+
+| 操作 | Mode 2（デフォルト） | Mode 3 |
+|-----|---------------------|--------|
+| スロットル（上昇/下降） | 左スティック上下 | 右スティック上下 |
+| ロール（左右移動） | 右スティック左右 | 左スティック左右 |
+| ピッチ（前後移動） | 右スティック上下 | 左スティック上下 |
+| ヨー（旋回） | 左スティック左右 | 右スティック左右 |
+
+1. **スロットルをゆっくり上げる** → ドローンが浮上
+2. **スティックで姿勢を調整** → 好きな方向に飛行
+3. **スロットルを下げる** → 着陸
+
+### シミュレータのオプション
+
+```bash
+# ボクセルワールド（デフォルト）- ランダム地形
+python run_sim.py
+
+# リングワールド - 円形コース
+python run_sim.py --world ringworld
+
+# シード値を指定して同じ地形を再現
+python run_sim.py --seed 12345
+```
+
+### トラブルシューティング
+
+| 症状 | 対処 |
+|-----|------|
+| コントローラが認識されない | USB HIDモードに切り替えたか確認。PCを再起動 |
+| スティックがドリフトする | メニューから「Calibration」を実行 |
+| 感度が高すぎる/低すぎる | メニューから「Deadband」を調整（0-5%） |
+
+シミュレータに慣れたら、実機での飛行に挑戦しましょう！
+
+---
+
 ## 1. 必要なもの
 
 ### ハードウェア
@@ -369,6 +461,98 @@ Power: 3.85 [V], 120.5 [mA]
 # Getting Started
 
 This document explains the steps from environment setup to your first flight with the StampFly ecosystem.
+
+---
+
+## 0. Try the Simulator First!
+
+Even without the actual drone, you can experience drone piloting with just the controller and a PC. **This is also perfect for practice before flying the real thing!**
+
+### Requirements
+
+| Item | Description |
+|------|-------------|
+| M5Stack AtomS3 + Atom JoyStick | Controller (used in USB HID mode) |
+| PC | macOS / Windows / Linux |
+| USB-C Cable | For controller connection |
+
+### Quick Start (Flying in 5 minutes!)
+
+#### Step 1: Flash Controller Firmware
+
+First, flash the firmware to the controller (only needed once).
+
+```bash
+# ESP-IDF setup (see "2. Installing ESP-IDF" for details)
+cd stampfly_ecosystem/firmware/controller
+idf.py build
+idf.py -p /dev/cu.usbmodem* flash  # macOS
+# idf.py -p COM3 flash  # Windows
+```
+
+#### Step 2: Switch Controller to USB HID Mode
+
+1. Power on the controller
+2. **Press the screen** to open the menu
+3. Select "**USB Mode**"
+4. The controller restarts and is recognized as a USB HID gamepad
+
+> **Tips**: In USB HID mode, the controller is directly recognized by the PC as a gamepad. To return to ESP-NOW mode, switch again from the menu.
+
+#### Step 3: Launch the Simulator
+
+```bash
+# Install dependencies (only needed once)
+cd stampfly_ecosystem/simulator
+pip install -r requirements.txt
+
+# macOS also requires the HID library
+brew install hidapi
+
+# Launch the simulator!
+cd scripts
+python run_sim.py
+```
+
+A browser will automatically open displaying the 3D view.
+
+#### Step 4: Let's Fly!
+
+| Control | Mode 2 (Default) | Mode 3 |
+|---------|------------------|--------|
+| Throttle (ascend/descend) | Left stick up/down | Right stick up/down |
+| Roll (move left/right) | Right stick left/right | Left stick left/right |
+| Pitch (move forward/back) | Right stick up/down | Left stick up/down |
+| Yaw (rotate) | Left stick left/right | Right stick left/right |
+
+1. **Slowly raise the throttle** → The drone lifts off
+2. **Adjust attitude with the sticks** → Fly in any direction
+3. **Lower the throttle** → Land
+
+### Simulator Options
+
+```bash
+# Voxel world (default) - random terrain
+python run_sim.py
+
+# Ring world - circular course
+python run_sim.py --world ringworld
+
+# Specify seed for reproducible terrain
+python run_sim.py --seed 12345
+```
+
+### Troubleshooting
+
+| Symptom | Solution |
+|---------|----------|
+| Controller not recognized | Check if USB HID mode is enabled. Restart PC |
+| Stick drifting | Run "Calibration" from menu |
+| Sensitivity too high/low | Adjust "Deadband" from menu (0-5%) |
+
+Once you're comfortable with the simulator, challenge yourself with the real drone!
+
+---
 
 ## 1. Requirements
 

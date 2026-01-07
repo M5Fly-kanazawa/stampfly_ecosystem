@@ -15,11 +15,28 @@
 
 ---
 
+## 🎮 まずはシミュレータで飛ばしてみよう！
+
+**実機がなくても大丈夫。** コントローラとPCがあれば、今すぐドローン操縦を体験できます。
+
+```bash
+cd simulator/scripts
+python run_sim.py
+```
+
+コントローラをUSB HIDモードに切り替えてPCに接続すれば、
+3Dビューでドローンを自由に飛ばせます。
+
+**→ [シミュレータで遊ぶ（詳細手順）](docs/getting-started.md#0-まずはシミュレータで遊んでみよう)**
+
+---
+
 ## 何ができるのか？
 
 | できること | 内容 |
 |-----------|------|
-| **すぐに飛ばせる** | ビルド済みファームウェアで、箱から出してすぐ飛行可能 |
+| **シミュレータで練習** | 実機なしでドローン操縦を体験。制御アルゴリズムの検証にも |
+| **すぐに飛ばせる** | ファームウェアをビルドして、実機で飛行 |
 | **制御を自作できる** | 角速度制御のスケルトンコードを提供。姿勢制御、位置制御を自分で実装 |
 | **センサーデータを見れる** | IMU、気圧、ToF、オプティカルフロー等のリアルタイムデータをCLI/WiFiで取得 |
 | **実験データを解析できる** | ログを記録し、Pythonで解析・可視化 |
@@ -39,7 +56,7 @@ stampfly-ecosystem/
 ├── control/        # 制御設計資産（構築中）
 ├── analysis/       # 実験データ解析（構築中）
 ├── tools/          # 補助ツール（構築中）
-├── simulator/      # 仮想実験環境（構築中）
+├── simulator/      # 3Dフライトシミュレータ
 └── third_party/    # 外部依存
 ```
 
@@ -92,11 +109,28 @@ This ecosystem exists for you.
 
 ---
 
+## 🎮 Try the Simulator First!
+
+**No drone needed.** With just a controller and PC, you can experience drone piloting right now.
+
+```bash
+cd simulator/scripts
+python run_sim.py
+```
+
+Switch the controller to USB HID mode and connect to your PC.
+You can fly a drone freely in the 3D view.
+
+**→ [Play with the Simulator (Detailed Steps)](docs/getting-started.md#0-try-the-simulator-first)**
+
+---
+
 ## What can you do?
 
 | Capability | Description |
 |-----------|-------------|
-| **Fly immediately** | Pre-built firmware lets you fly right out of the box |
+| **Practice in simulator** | Experience drone piloting without real hardware. Also for testing control algorithms |
+| **Fly immediately** | Build firmware and fly the real drone |
 | **Build your own control** | Rate control skeleton provided. Implement attitude/position control yourself |
 | **View sensor data** | Real-time IMU, barometer, ToF, optical flow data via CLI/WiFi |
 | **Analyze experiments** | Record flight logs and analyze with Python |
@@ -116,7 +150,7 @@ stampfly-ecosystem/
 ├── control/        # Control design assets (WIP)
 ├── analysis/       # Experiment data analysis (WIP)
 ├── tools/          # Utility tools (WIP)
-├── simulator/      # Virtual testing environment (WIP)
+├── simulator/      # 3D flight simulator
 └── third_party/    # External dependencies
 ```
 
