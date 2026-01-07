@@ -68,3 +68,6 @@ logs/
 *.bin
 *.hex
 *.map
+
+# Personal notes
+knote/
