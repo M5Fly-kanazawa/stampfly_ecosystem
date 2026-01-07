@@ -121,12 +121,29 @@ def test_template():
 
         plt.show()
 
-def flight_sim():
+def flight_sim(world_type='ringworld', seed=None):
+    """
+    フライトシミュレーション実行
+    Run flight simulation
+
+    Parameters:
+        world_type: 'ringworld' or 'voxel'
+        seed: 地形生成シード（None=ランダム）
+    """
     mass = 0.035
     Weight = mass * 9.81
     stampfly = mc.multicopter(mass= mass, inersia=[[9.16e-6, 0.0, 0.0],[0.0, 13.3e-6, 0.0],[0.0, 0.0, 20.4e-6]])
-    stampfly.body.set_position([[0.5],[0.0],[-0.015]])
-    Render=render(60)
+
+    # レンダラー初期化（衝突判定用データも生成）
+    # Initialize renderer (also generates collision detection data)
+    Render=render(60, world_type=world_type, seed=seed)
+
+    # 安全なスポーン位置を取得
+    # Get safe spawn position above terrain
+    spawn_x, spawn_y, spawn_z = Render.get_safe_spawn_position(x=0.0, y=0.0, clearance=1.0)
+    stampfly.body.set_position([[spawn_x],[spawn_y],[spawn_z]])
+    print(f"Spawn position: ({spawn_x:.2f}, {spawn_y:.2f}, {spawn_z:.2f})")
+
     joystick = Joystick()
     joystick.open()
     t =0.0
@@ -178,35 +195,31 @@ def flight_sim():
     yaw_rate_pid =PID(1.0,2.0,0.001)
 
 
-    # Joystick calibration
-    thrust_ave = 0.0
-    roll_ave = 0.0
-    pitch_ave = 0.0
-    yaw_ave = 0.0
+    # Joystick calibration（生の値でオフセット計算）
+    # Joystick calibration (compute offset with raw values)
+    thrust_offset = 0.0
+    roll_offset = 0.0
+    pitch_offset = 0.0
+    yaw_offset = 0.0
 
     i = 0
     num = 100
     while i < num:
         joydata = joystick.read()
         if joydata is not None:
-            thrust = -(joydata[4]-127)/127.0
-            roll = (joydata[1]-127)/127.0*np.pi
-            pitch = (joydata[2]-127)/127.0*np.pi
-            yaw = (joydata[3]-127)/127.0*np.pi
-            thrust_ave += thrust
-            roll_ave += roll
-            pitch_ave += pitch
-            yaw_ave += yaw
+            # 生の正規化値（-1〜1）でオフセットを計算
+            # Compute offset with raw normalized values (-1 to 1)
+            thrust_offset += (joydata[0]-127)/127.0
+            roll_offset += (joydata[1]-127)/127.0
+            pitch_offset += (joydata[2]-127)/127.0
+            yaw_offset += (joydata[3]-127)/127.0
             i += 1
             print(i, )
-    thrust_ave /= num
-    roll_ave /= num
-    pitch_ave /= num
-    yaw_ave /= num
-    print("thrust_ave: ", thrust_ave)
-    print("roll_ave: ", roll_ave)
-    print("pitch_ave: ", pitch_ave)
-    print("yaw_ave: ", yaw_ave)
+    thrust_offset /= num
+    roll_offset /= num
+    pitch_offset /= num
+    yaw_offset /= num
+    print(f"Calibration offsets: thrust={thrust_offset:.4f}, roll={roll_offset:.4f}, pitch={pitch_offset:.4f}, yaw={yaw_offset:.4f}")
 
     while t < 6000.0:
         rate_p = stampfly.body.pqr[0][0]
@@ -221,15 +234,29 @@ def flight_sim():
         
         joydata = joystick.read()
         if joydata is not None:
-            thrust = -(joydata[4]-127)/127.0 - thrust_ave
-            roll = (joydata[1]-127)/127.0*np.pi - roll_ave
-            pitch = (joydata[2]-127)/127.0*np.pi - pitch_ave
-            yaw = (joydata[3]-127)/127.0*np.pi - yaw_ave
-            #print(thrust, roll, pitch, yaw)
-            delta_voltage = 0.5*thrust
-            roll_ref = roll
-            pitch_ref = pitch
-            yaw_ref = 1.0*yaw
+            # HIDレポート形式: [throttle, roll, pitch, yaw, buttons, reserved]
+            # HID report format: [throttle, roll, pitch, yaw, buttons, reserved]
+            # Note: Controller already inverts throttle (4095 - value)
+            # 生の値からオフセットを引いてからスケーリング
+            # Subtract offset from raw value, then scale
+            # 生の値からオフセット補正
+            thrust_raw = (joydata[0]-127)/127.0 - thrust_offset
+            roll_raw = (joydata[1]-127)/127.0 - roll_offset
+            pitch_raw = (joydata[2]-127)/127.0 - pitch_offset
+            yaw_raw = (joydata[3]-127)/127.0 - yaw_offset
+
+            # デッドバンド適用（中心付近の微小値を無視）
+            # Apply deadband (ignore small values near center)
+            deadband = 0.05
+            if abs(thrust_raw) < deadband: thrust_raw = 0.0
+            if abs(roll_raw) < deadband: roll_raw = 0.0
+            if abs(pitch_raw) < deadband: pitch_raw = 0.0
+            if abs(yaw_raw) < deadband: yaw_raw = 0.0
+
+            delta_voltage = 0.5 * thrust_raw
+            roll_ref = 0.25 * roll_raw * np.pi    # 最大±45°
+            pitch_ref = 0.25 * pitch_raw * np.pi  # 最大±45°
+            yaw_ref = 0.3 * yaw_raw * np.pi       # ヨーレート感度
         
         #スタビライズモードは実装ちゅう
         control_on = True
@@ -254,6 +281,19 @@ def flight_sim():
         voltage = [fr, rr, rl, fl]
         #print(voltage)
         stampfly.step(voltage, h)
+
+        # 衝突判定
+        # Collision detection
+        pos = stampfly.body.position
+        if Render.check_collision(pos[0][0], pos[1][0], pos[2][0]):
+            print(f"COLLISION at t={t:.2f}s, pos=({pos[0][0]:.2f}, {pos[1][0]:.2f}, {pos[2][0]:.2f})")
+            # VPython画面に衝突表示
+            # Show collision on VPython screen
+            Render.show_collision(pos[0][0], pos[1][0], pos[2][0])
+            # シミュレーション停止
+            # Stop simulation
+            break
+
         key = Render.rendering(t, stampfly)
 
         t += h
@@ -628,7 +668,15 @@ def test_ringworld():
         plt.show()
 
 if __name__ == "__main__":
-    np.random.seed(1)
-    #test_three_rotor()
-    #test_ringworld()
-    flight_sim()
+    import argparse
+
+    parser = argparse.ArgumentParser(description='StampFly Flight Simulator')
+    parser.add_argument('--world', '-w', type=str, default='voxel',
+                        choices=['ringworld', 'voxel'],
+                        help='ワールドタイプ (ringworld, voxel)')
+    parser.add_argument('--seed', '-s', type=int, default=None,
+                        help='地形生成シード（省略時はランダム）')
+    args = parser.parse_args()
+
+    print(f"Starting simulation with world: {args.world}")
+    flight_sim(world_type=args.world, seed=args.seed)

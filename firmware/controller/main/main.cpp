@@ -55,14 +55,31 @@ static const char* TAG = "MAIN";
 // 制御変数
 static uint16_t Throttle = 0;
 static uint16_t Phi = 0, Theta = 0, Psi = 0;
-static int16_t Phi_bias = 0, Theta_bias = 0, Psi_bias = 0, Throttle_bias = 0;
 static uint8_t Mode = ANGLECONTROL;
 static uint8_t AltMode = NOT_ALT_CONTROL_MODE;
 static uint8_t StickMode = 2;
 static float Timer = 0.0f;
 static uint8_t Timer_state = 0;
-static uint8_t average_counter = 0;
 static volatile uint8_t proactive_flag = 0;
+
+// スティックキャリブレーション（NVS保存）
+// Stick calibration (stored in NVS)
+typedef struct {
+    int16_t left_x;    // 左スティックX軸オフセット
+    int16_t left_y;    // 左スティックY軸オフセット
+    int16_t right_x;   // 右スティックX軸オフセット
+    int16_t right_y;   // 右スティックY軸オフセット
+} StickCalibration;
+
+static StickCalibration g_stick_cal = {0, 0, 0, 0};
+
+// キャリブレーション中の累積データ
+// Calibration accumulation data
+static struct {
+    int32_t sum_lx, sum_ly, sum_rx, sum_ry;
+    uint32_t count;
+    bool active;
+} g_cal_accum = {0, 0, 0, 0, 0, false};
 
 // 入力タスク用共有データ
 typedef struct {
@@ -98,6 +115,13 @@ static CommMode g_comm_mode = COMM_MODE_ESPNOW;
 // NVS settings
 #define NVS_NAMESPACE "controller"
 #define NVS_KEY_COMM_MODE "comm_mode"
+#define NVS_KEY_STICK_MODE "stick_mode"
+#define NVS_KEY_BATT_WARN "batt_warn"
+#define NVS_KEY_STICK_CAL "stick_cal"
+
+// バッテリー警告閾値 (voltage * 10, e.g., 33 = 3.3V)
+// Battery warning threshold
+static uint8_t g_battery_warn_threshold = 33;  // Default: 3.3V
 
 // 通信モードをNVSから読み込み
 // Load communication mode from NVS
@@ -135,6 +159,232 @@ static esp_err_t save_comm_mode_to_nvs(CommMode mode) {
     err = nvs_commit(handle);
     nvs_close(handle);
     return err;
+}
+
+// Stick ModeをNVSから読み込み
+// Load stick mode from NVS
+static uint8_t load_stick_mode_from_nvs(void) {
+    nvs_handle_t handle;
+    uint8_t mode = STICK_MODE_2;  // デフォルト
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        nvs_get_u8(handle, NVS_KEY_STICK_MODE, &mode);
+        nvs_close(handle);
+    }
+
+    // 有効な値のみ受け入れ (2 or 3)
+    if (mode != STICK_MODE_2 && mode != STICK_MODE_3) {
+        mode = STICK_MODE_2;
+    }
+
+    return mode;
+}
+
+// Stick ModeをNVSに保存
+// Save stick mode to NVS
+static esp_err_t save_stick_mode_to_nvs(uint8_t mode) {
+    nvs_handle_t handle;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u8(handle, NVS_KEY_STICK_MODE, mode);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS set failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return err;
+}
+
+// Stick Mode切替コールバック（メニューから呼ばれる）
+// Stick mode switch callback (called from menu)
+static void on_stick_mode_selected(void) {
+    // トグル: Mode 2 <-> Mode 3
+    uint8_t new_mode = (StickMode == STICK_MODE_2) ? STICK_MODE_3 : STICK_MODE_2;
+
+    if (save_stick_mode_to_nvs(new_mode) == ESP_OK) {
+        ESP_LOGI(TAG, "Stick Mode変更: %d -> %d", StickMode, new_mode);
+        StickMode = new_mode;
+        joy_set_stick_mode(new_mode);
+        menu_set_stick_mode_label(new_mode);
+    } else {
+        ESP_LOGE(TAG, "Stick Mode保存失敗");
+    }
+}
+
+// バッテリー警告閾値をNVSから読み込み
+// Load battery warning threshold from NVS
+static uint8_t load_battery_warn_from_nvs(void) {
+    nvs_handle_t handle;
+    uint8_t threshold = 33;  // デフォルト: 3.3V
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        nvs_get_u8(handle, NVS_KEY_BATT_WARN, &threshold);
+        nvs_close(handle);
+    }
+
+    // 有効な範囲: 30-40 (3.0V - 4.0V)
+    if (threshold < 30 || threshold > 40) {
+        threshold = 33;
+    }
+
+    return threshold;
+}
+
+// バッテリー警告閾値をNVSに保存
+// Save battery warning threshold to NVS
+static esp_err_t save_battery_warn_to_nvs(uint8_t threshold) {
+    nvs_handle_t handle;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u8(handle, NVS_KEY_BATT_WARN, threshold);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS set failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+    return err;
+}
+
+// バッテリー警告閾値変更コールバック（メニューから呼ばれる）
+// Battery warning threshold change callback
+static void on_battery_warn_change(void) {
+    // サイクル: 3.0V -> 3.1V -> ... -> 4.0V -> 3.0V
+    // Cycle: 3.0V -> 3.1V -> ... -> 4.0V -> 3.0V
+    uint8_t new_threshold = g_battery_warn_threshold + 1;
+    if (new_threshold > 40) {
+        new_threshold = 30;
+    }
+
+    if (save_battery_warn_to_nvs(new_threshold) == ESP_OK) {
+        ESP_LOGI(TAG, "Battery Warning変更: %d.%dV -> %d.%dV",
+                 g_battery_warn_threshold / 10, g_battery_warn_threshold % 10,
+                 new_threshold / 10, new_threshold % 10);
+        g_battery_warn_threshold = new_threshold;
+        menu_set_battery_warn_threshold(new_threshold);
+    } else {
+        ESP_LOGE(TAG, "Battery Warning保存失敗");
+    }
+}
+
+// スティックキャリブレーションをNVSから読み込み
+// Load stick calibration from NVS
+static void load_stick_cal_from_nvs(void) {
+    nvs_handle_t handle;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_OK) {
+        size_t size = sizeof(StickCalibration);
+        err = nvs_get_blob(handle, NVS_KEY_STICK_CAL, &g_stick_cal, &size);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "キャリブレーション読込: LX=%d LY=%d RX=%d RY=%d",
+                     g_stick_cal.left_x, g_stick_cal.left_y,
+                     g_stick_cal.right_x, g_stick_cal.right_y);
+        } else {
+            // 保存データなし、デフォルト値を使用
+            memset(&g_stick_cal, 0, sizeof(g_stick_cal));
+        }
+        nvs_close(handle);
+    }
+}
+
+// スティックキャリブレーションをNVSに保存
+// Save stick calibration to NVS
+static esp_err_t save_stick_cal_to_nvs(void) {
+    nvs_handle_t handle;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(handle, NVS_KEY_STICK_CAL, &g_stick_cal, sizeof(StickCalibration));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS set failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return err;
+    }
+
+    err = nvs_commit(handle);
+    nvs_close(handle);
+
+    ESP_LOGI(TAG, "キャリブレーション保存: LX=%d LY=%d RX=%d RY=%d",
+             g_stick_cal.left_x, g_stick_cal.left_y,
+             g_stick_cal.right_x, g_stick_cal.right_y);
+    return err;
+}
+
+// キャリブレーション累積開始
+// Start calibration accumulation
+static void calibration_start(void) {
+    g_cal_accum.sum_lx = 0;
+    g_cal_accum.sum_ly = 0;
+    g_cal_accum.sum_rx = 0;
+    g_cal_accum.sum_ry = 0;
+    g_cal_accum.count = 0;
+    g_cal_accum.active = true;
+    ESP_LOGI(TAG, "キャリブレーション開始");
+}
+
+// キャリブレーション累積停止
+// Stop calibration accumulation
+static void calibration_stop(void) {
+    g_cal_accum.active = false;
+}
+
+// キャリブレーション値を確定してNVS保存
+// Confirm calibration values and save to NVS
+static void calibration_confirm(void) {
+    if (g_cal_accum.count > 0) {
+        // 平均値を計算（中央値2048からのオフセット）
+        g_stick_cal.left_x = (int16_t)(g_cal_accum.sum_lx / (int32_t)g_cal_accum.count) - 2048;
+        g_stick_cal.left_y = (int16_t)(g_cal_accum.sum_ly / (int32_t)g_cal_accum.count) - 2048;
+        g_stick_cal.right_x = (int16_t)(g_cal_accum.sum_rx / (int32_t)g_cal_accum.count) - 2048;
+        g_stick_cal.right_y = (int16_t)(g_cal_accum.sum_ry / (int32_t)g_cal_accum.count) - 2048;
+
+        save_stick_cal_to_nvs();
+        ESP_LOGI(TAG, "キャリブレーション確定 (samples=%lu)", g_cal_accum.count);
+    }
+    calibration_stop();
+}
+
+// キャリブレーション累積更新（入力タスクから呼ばれる）
+// Update calibration accumulation
+static void calibration_update(uint16_t lx, uint16_t ly, uint16_t rx, uint16_t ry) {
+    if (g_cal_accum.active) {
+        g_cal_accum.sum_lx += lx;
+        g_cal_accum.sum_ly += ly;
+        g_cal_accum.sum_rx += rx;
+        g_cal_accum.sum_ry += ry;
+        g_cal_accum.count++;
+    }
+}
+
+// 補正済みスティック値を取得（0-4095にクランプ）
+// Get calibrated stick value (clamped to 0-4095)
+static int16_t get_calibrated_value(uint16_t raw, int16_t offset) {
+    int32_t result = (int32_t)raw - offset;
+    if (result < 0) result = 0;
+    if (result > 4095) result = 4095;
+    return (int16_t)result;
 }
 
 // USBモード切替コールバック（メニューから呼ばれる）
@@ -208,6 +458,17 @@ static void input_task(void* parameter)
         M5.update();
         joy_update();
 
+        // キャリブレーション中は物理スティック値を累積
+        // Accumulate physical stick values during calibration
+        if (g_cal_accum.active) {
+            calibration_update(
+                joy_get_stick_left_x(),
+                joy_get_stick_left_y(),
+                joy_get_stick_right_x(),
+                joy_get_stick_right_y()
+            );
+        }
+
         // 生値読み取り
         local_input.throttle_raw = joy_get_throttle();
         local_input.phi_raw = joy_get_aileron();
@@ -276,56 +537,328 @@ static void init_display(void)
 static void render_menu_screen(void)
 {
     const int line_height = 17;
+    const int visible_lines = 6;
 
     // タイトルバー
     M5.Display.setCursor(4, 2);
     M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
     M5.Display.printf("=== MENU ===    ");
 
-    // メニュー項目
+    // メニュー項目（スクロール対応）
     uint8_t item_count = menu_get_item_count();
     uint8_t selected = menu_get_selected_index();
+    uint8_t scroll_offset = menu_get_scroll_offset();
 
-    for (uint8_t i = 0; i < item_count && i < 6; i++) {
+    for (int i = 0; i < visible_lines; i++) {
+        uint8_t item_index = scroll_offset + i;
         M5.Display.setCursor(4, 2 + (i + 1) * line_height);
 
-        if (i == selected) {
-            M5.Display.setTextColor(SF_BLACK, SF_WHITE);
-            M5.Display.printf("> %-12s", menu_get_item_label(i));
+        if (item_index < item_count) {
+            if (item_index == selected) {
+                M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+                M5.Display.printf("> %-12s", menu_get_item_label(item_index));
+            } else {
+                M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+                M5.Display.printf("  %-12s", menu_get_item_label(item_index));
+            }
         } else {
+            // 空行をクリア
             M5.Display.setTextColor(SF_WHITE, SF_BLACK);
-            M5.Display.printf("  %-12s", menu_get_item_label(i));
+            M5.Display.printf("                ");
         }
-    }
-
-    // 残りの行をクリア
-    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
-    for (uint8_t i = item_count; i < 6; i++) {
-        M5.Display.setCursor(4, 2 + (i + 1) * line_height);
-        M5.Display.printf("                ");
     }
 }
 
-// 画面更新 (全行一括更新)
-static void update_display(void)
+// バッテリー警告設定画面描画
+// Battery warning setting screen rendering
+static void render_battery_warn_screen(void)
 {
     const int line_height = 17;
 
-    // 画面状態追跡（状態変化時に画面クリア）
-    // Track screen state for clearing on transition
-    static bool prev_menu_active = false;
-    bool current_menu_active = menu_is_active();
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("= BATT WARN =   ");
 
-    if (prev_menu_active != current_menu_active) {
-        M5.Display.fillScreen(SF_BLACK);
-        prev_menu_active = current_menu_active;
+    // 行1: 空行
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.printf("                ");
+
+    // 行2: 現在の閾値
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("Threshold:      ");
+
+    // 行3: 値（大きく表示）
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("   %d.%dV        ",
+                      g_battery_warn_threshold / 10,
+                      g_battery_warn_threshold % 10);
+
+    // 行4: 範囲
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("(3.0V - 4.0V)   ");
+
+    // 行5: 空行
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.printf("                ");
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+    M5.Display.printf("Mode:+  BTN:Back");
+}
+
+// Calibration画面描画
+// Calibration screen rendering
+static void render_calibration_screen(void)
+{
+    const int line_height = 17;
+
+    // 累積平均のオフセット値を計算（中央値2048からの差）
+    // Calculate average offset from center (2048)
+    int16_t avg_lx = 0, avg_ly = 0, avg_rx = 0, avg_ry = 0;
+    if (g_cal_accum.count > 0) {
+        avg_lx = (int16_t)(g_cal_accum.sum_lx / (int32_t)g_cal_accum.count) - 2048;
+        avg_ly = (int16_t)(g_cal_accum.sum_ly / (int32_t)g_cal_accum.count) - 2048;
+        avg_rx = (int16_t)(g_cal_accum.sum_rx / (int32_t)g_cal_accum.count) - 2048;
+        avg_ry = (int16_t)(g_cal_accum.sum_ry / (int32_t)g_cal_accum.count) - 2048;
     }
 
-    // メニューがアクティブな場合はメニュー画面を描画
-    if (current_menu_active) {
-        render_menu_screen();
-        return;
-    }
+    // 行0: タイトル（サンプル数表示）
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("CAL N=%5lu     ", g_cal_accum.count);
+
+    // 行1: 左スティック平均オフセット
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("L Avg:          ");
+
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf(" X:%+5d Y:%+5d", avg_lx, avg_ly);
+
+    // 行3: 右スティック平均オフセット
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("R Avg:          ");
+
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf(" X:%+5d Y:%+5d", avg_rx, avg_ry);
+
+    // 行5: 保存済みキャリブレーション値
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("Saved:%+4d %+4d",
+                      g_stick_cal.left_x, g_stick_cal.right_x);
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+    M5.Display.printf("Mode:OK BTN:Canc");
+}
+
+// Stick Test画面描画（補正済み値を表示）
+// Stick Test screen rendering (shows calibrated values)
+static void render_stick_test_screen(void)
+{
+    const int line_height = 17;
+
+    // 補正済みスティック値を計算
+    // Calculate calibrated stick values
+    uint16_t lx_raw = joy_get_stick_left_x();
+    uint16_t ly_raw = joy_get_stick_left_y();
+    uint16_t rx_raw = joy_get_stick_right_x();
+    uint16_t ry_raw = joy_get_stick_right_y();
+
+    int16_t lx = get_calibrated_value(lx_raw, g_stick_cal.left_x);
+    int16_t ly = get_calibrated_value(ly_raw, g_stick_cal.left_y);
+    int16_t rx = get_calibrated_value(rx_raw, g_stick_cal.right_x);
+    int16_t ry = get_calibrated_value(ry_raw, g_stick_cal.right_y);
+
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("= STICK TEST =  ");
+
+    // 行1: 左スティック（補正済み）
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("L X:%4d Y:%4d ", lx, ly);
+
+    // 行2: 右スティック（補正済み）
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.printf("R X:%4d Y:%4d ", rx, ry);
+
+    // 行3: ボタン状態タイトル
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("Buttons:        ");
+
+    // 行4: ボタン状態（押下時に反転表示）
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    uint8_t arm = joy_get_arm_button();
+    uint8_t flip = joy_get_flip_button();
+    uint8_t mode = joy_get_mode_button();
+    uint8_t opt = joy_get_option_button();
+
+    if (arm) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[AM]");
+
+    if (flip) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[FP]");
+
+    if (mode) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[AT]");
+
+    if (opt) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("[AL]");
+
+    // 行5: StickMode表示
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("StickMode: %d    ", StickMode);
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+    M5.Display.printf("Press BTN: Back ");
+}
+
+// Channel画面描画
+// Channel screen rendering
+static void render_channel_screen(void)
+{
+    const int line_height = 17;
+
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("== CHANNEL ==   ");
+
+    // 行1: 空行
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.printf("                ");
+
+    // 行2: ESP-NOW Channel
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("ESP-NOW:        ");
+
+    // 行3: チャンネル番号（大きく表示）
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("   CH %02d        ", ESPNOW_CHANNEL);
+
+    // 行4: Device ID
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("Device ID: %d    ", TDMA_DEVICE_ID);
+
+    // 行5: 空行
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.printf("                ");
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+    M5.Display.printf("Press BTN: Back ");
+}
+
+// MAC Address画面描画
+// MAC Address screen rendering
+static void render_mac_screen(void)
+{
+    const int line_height = 17;
+    const uint8_t* drone_mac = get_drone_peer_addr();
+
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("= MAC ADDRESS = ");
+
+    // 行1: 空行
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.printf("                ");
+
+    // 行2: Paired Drone
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("Paired Drone:   ");
+
+    // 行3: MAC上位3バイト
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("%02X:%02X:%02X:       ",
+                      drone_mac[0], drone_mac[1], drone_mac[2]);
+
+    // 行4: MAC下位3バイト
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("   %02X:%02X:%02X    ",
+                      drone_mac[3], drone_mac[4], drone_mac[5]);
+
+    // 行5: 空行
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.printf("                ");
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+    M5.Display.printf("Press BTN: Back ");
+}
+
+// About画面描画
+// About screen rendering
+static void render_about_screen(void)
+{
+    const int line_height = 17;
+
+    // 行0: タイトル
+    M5.Display.setCursor(4, 2 + 0 * line_height);
+    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.printf("=== ABOUT ===   ");
+
+    // 行1: バージョン
+    M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.printf("StampFly v2.0   ");
+
+    // 行2: ファームウェア
+    M5.Display.setCursor(4, 2 + 2 * line_height);
+    M5.Display.printf("Controller      ");
+
+    // 行3: 空行
+    M5.Display.setCursor(4, 2 + 3 * line_height);
+    M5.Display.printf("                ");
+
+    // 行4: 著作権
+    M5.Display.setCursor(4, 2 + 4 * line_height);
+    M5.Display.printf("(c) 2024-2025   ");
+
+    // 行5: 著者
+    M5.Display.setCursor(4, 2 + 5 * line_height);
+    M5.Display.printf("Kouhei Ito     ");
+
+    // 行6: 操作説明
+    M5.Display.setCursor(4, 2 + 6 * line_height);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("Press BTN: Back ");
+}
+
+// ESP-NOWフライト画面更新
+// ESP-NOW flight screen update
+static void update_display(void)
+{
+    const int line_height = 17;
 
     // フライト画面描画
     // Flight screen rendering with StickMode-based color
@@ -411,11 +944,62 @@ static void display_task(void* parameter)
     const TickType_t xFrequency = pdMS_TO_TICKS(100);  // 10Hz
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
+    // 画面状態追跡（状態変化時に画面クリア）
+    // Track screen state for clearing on transition
+    static screen_state_t prev_screen_state = SCREEN_STATE_FLIGHT;
+    static bool first_render = true;
+
     while (1) {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         apply_rgb_order();
 
-        // モードに応じて画面更新
+        screen_state_t current_screen_state = menu_get_state();
+
+        // 画面状態変化時または初回描画時にクリア
+        // USB HIDフライト画面は青背景、それ以外は黒背景
+        if (first_render || prev_screen_state != current_screen_state) {
+            if (current_screen_state == SCREEN_STATE_FLIGHT && g_comm_mode == COMM_MODE_USB_HID) {
+                M5.Display.fillScreen(SF_BLUE);
+            } else {
+                M5.Display.fillScreen(SF_BLACK);
+            }
+            prev_screen_state = current_screen_state;
+            first_render = false;
+        }
+
+        // 画面状態に応じて描画（両モード共通）
+        // Render based on screen state (common to both modes)
+        if (current_screen_state == SCREEN_STATE_BATTERY_WARN) {
+            render_battery_warn_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_CALIBRATION) {
+            render_calibration_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_STICK_TEST) {
+            render_stick_test_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_CHANNEL) {
+            render_channel_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_MAC) {
+            render_mac_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_ABOUT) {
+            render_about_screen();
+            continue;
+        }
+        if (current_screen_state == SCREEN_STATE_MENU) {
+            render_menu_screen();
+            continue;
+        }
+
+        // フライト画面はモードに応じて分岐
+        // Flight screen branches by mode
         if (g_comm_mode == COMM_MODE_USB_HID) {
             update_usb_hid_display();
         } else {
@@ -439,24 +1023,44 @@ static void update_usb_hid_display(void)
         memset(&local_input, 0, sizeof(InputData));
     }
 
-    // 8bit変換値
-    uint8_t t_val = convert_12bit_to_8bit(4095 - local_input.throttle_raw);
-    uint8_t r_val = convert_12bit_to_8bit(local_input.phi_raw);
-    uint8_t p_val = convert_12bit_to_8bit(local_input.theta_raw);
-    uint8_t y_val = convert_12bit_to_8bit(local_input.psi_raw);
+    // キャリブレーション適用（StickModeに応じてマッピング）
+    // Apply calibration based on StickMode
+    int16_t _throttle, _phi, _theta, _psi;
+    if (StickMode == STICK_MODE_2) {
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
+    } else {
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
+    }
+
+    // 8bit変換値（補正済み）
+    uint8_t t_val = convert_12bit_to_8bit(4095 - _throttle);
+    uint8_t r_val = convert_12bit_to_8bit(_phi);
+    uint8_t p_val = convert_12bit_to_8bit(_theta);
+    uint8_t y_val = convert_12bit_to_8bit(_psi);
+
+    // USB HIDモードは青背景
+    // USB HID mode uses blue background
+    const uint16_t bg_color = SF_BLUE;
 
     // 行0: タイトル
     M5.Display.setCursor(4, 2 + 0 * line_height);
-    M5.Display.setTextColor(SF_CYAN, SF_BLACK);
+    M5.Display.setTextColor(SF_YELLOW, bg_color);
     M5.Display.printf("= USB HID MODE =");
 
     // 行1: 空行
     M5.Display.setCursor(4, 2 + 1 * line_height);
+    M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("                ");
 
     // 行2: T/R値
     M5.Display.setCursor(4, 2 + 2 * line_height);
-    M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("T:%3d    R:%3d  ", t_val, r_val);
 
     // 行3: P/Y値
@@ -475,29 +1079,29 @@ static void update_usb_hid_display(void)
     uint8_t opt = joy_get_option_button();
 
     // ボタン表示（押下時は反転）
-    if (arm) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
-    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    if (arm) M5.Display.setTextColor(bg_color, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("[A]");
 
-    if (flip) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
-    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    if (flip) M5.Display.setTextColor(bg_color, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("[F]");
 
-    if (mode) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
-    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    if (mode) M5.Display.setTextColor(bg_color, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("[M]");
 
-    if (opt) M5.Display.setTextColor(SF_BLACK, SF_WHITE);
-    else M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+    if (opt) M5.Display.setTextColor(bg_color, SF_WHITE);
+    else M5.Display.setTextColor(SF_WHITE, bg_color);
     M5.Display.printf("[O]  ");
 
     // 行6: 接続状態
     M5.Display.setCursor(4, 2 + 6 * line_height);
     if (usb_hid_is_mounted()) {
-        M5.Display.setTextColor(SF_GREEN, SF_BLACK);
+        M5.Display.setTextColor(SF_GREEN, bg_color);
         M5.Display.printf("Connected: Yes ");
     } else {
-        M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+        M5.Display.setTextColor(SF_YELLOW, bg_color);
         M5.Display.printf("Connected: No  ");
     }
 }
@@ -516,12 +1120,119 @@ static void usb_hid_main_loop(void)
         memset(&local_input, 0, sizeof(InputData));
     }
 
+    // 画面状態取得
+    screen_state_t current_state = menu_get_state();
+
+    // キャリブレーション画面: 累積開始/停止制御
+    // Calibration screen: control accumulation start/stop
+    static screen_state_t prev_state_usb = SCREEN_STATE_FLIGHT;
+    if (current_state == SCREEN_STATE_CALIBRATION && prev_state_usb != SCREEN_STATE_CALIBRATION) {
+        // キャリブレーション画面に入った
+        calibration_start();
+    } else if (current_state != SCREEN_STATE_CALIBRATION && prev_state_usb == SCREEN_STATE_CALIBRATION) {
+        // キャリブレーション画面から出た（キャンセル）
+        calibration_stop();
+    }
+    prev_state_usb = current_state;
+
+    // キャリブレーション画面: Modeボタンで確定
+    // Calibration screen: Mode button confirms
+    if (current_state == SCREEN_STATE_CALIBRATION && local_input.mode_changed == 1) {
+        calibration_confirm();
+        menu_set_state(SCREEN_STATE_MENU);
+        if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            shared_inputdata.mode_changed = 0;
+            xSemaphoreGive(input_mutex);
+        }
+    }
+
+    // ボタンイベント処理（メニュー）
+    // Button event handling (menu)
+    if (local_input.btn_pressed) {
+        if (current_state == SCREEN_STATE_ABOUT ||
+            current_state == SCREEN_STATE_BATTERY_WARN ||
+            current_state == SCREEN_STATE_CHANNEL ||
+            current_state == SCREEN_STATE_MAC ||
+            current_state == SCREEN_STATE_CALIBRATION ||
+            current_state == SCREEN_STATE_STICK_TEST) {
+            menu_set_state(SCREEN_STATE_MENU);
+        } else {
+            menu_toggle();
+        }
+    }
+
+    // メニューナビゲーション（メニュー状態時のみ）
+    // Menu navigation (when in menu state only)
+    // 常に物理的な右スティックを使用（StickModeに依存しない）
+    // Always use physical right stick (independent of StickMode)
+    if (current_state == SCREEN_STATE_MENU) {
+        static uint32_t last_nav_time = 0;
+        const uint32_t NAV_DEBOUNCE_MS = 200;
+        uint32_t now = millis_now();
+
+        // 物理右スティックY値を使用
+        // Use physical right stick Y value
+        int16_t stick_y = (int16_t)joy_get_stick_right_y() - 2048;
+
+        if (now - last_nav_time > NAV_DEBOUNCE_MS) {
+            if (stick_y > 800) {
+                menu_move_up();
+                last_nav_time = now;
+            } else if (stick_y < -800) {
+                menu_move_down();
+                last_nav_time = now;
+            }
+
+            if (local_input.mode_changed == 1) {
+                menu_select();
+                last_nav_time = now;
+                if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+                    shared_inputdata.mode_changed = 0;
+                    xSemaphoreGive(input_mutex);
+                }
+            }
+        }
+    }
+
+    // Battery warning screen: Mode button changes threshold
+    // バッテリー警告画面: Modeボタンで閾値変更
+    if (menu_get_state() == SCREEN_STATE_BATTERY_WARN && local_input.mode_changed == 1) {
+        on_battery_warn_change();
+        if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            shared_inputdata.mode_changed = 0;
+            xSemaphoreGive(input_mutex);
+        }
+    }
+
+    // メニューアクティブ時はHIDレポートを送信しない
+    // Don't send HID report when menu is active
+    if (menu_is_active()) {
+        return;
+    }
+
+    // キャリブレーション適用（StickModeに応じてマッピング）
+    // Apply calibration based on StickMode
+    int16_t _throttle, _phi, _theta, _psi;
+    if (StickMode == STICK_MODE_2) {
+        // Mode 2: Throttle=左Y, Aileron=右X, Elevator=右Y, Rudder=左X
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
+    } else {
+        // Mode 3: Throttle=右Y, Aileron=左X, Elevator=左Y, Rudder=右X
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
+    }
+
     // HIDレポート作成
     HIDJoystickReport report;
-    report.throttle = convert_12bit_to_8bit(4095 - local_input.throttle_raw);
-    report.roll = convert_12bit_to_8bit(local_input.phi_raw);
-    report.pitch = convert_12bit_to_8bit(local_input.theta_raw);
-    report.yaw = convert_12bit_to_8bit(local_input.psi_raw);
+    report.throttle = convert_12bit_to_8bit(4095 - _throttle);
+    report.roll = convert_12bit_to_8bit(_phi);
+    report.pitch = convert_12bit_to_8bit(_theta);
+    report.yaw = convert_12bit_to_8bit(_psi);
 
     // ボタン状態
     report.buttons = 0;
@@ -555,10 +1266,49 @@ static void main_loop(void)
         memset(&local_input, 0, sizeof(InputData));
     }
 
+    // 画面状態取得
+    screen_state_t current_state = menu_get_state();
+
+    // キャリブレーション画面: 累積開始/停止制御
+    // Calibration screen: control accumulation start/stop
+    static screen_state_t prev_state_espnow = SCREEN_STATE_FLIGHT;
+    if (current_state == SCREEN_STATE_CALIBRATION && prev_state_espnow != SCREEN_STATE_CALIBRATION) {
+        // キャリブレーション画面に入った
+        calibration_start();
+    } else if (current_state != SCREEN_STATE_CALIBRATION && prev_state_espnow == SCREEN_STATE_CALIBRATION) {
+        // キャリブレーション画面から出た（キャンセル）
+        calibration_stop();
+    }
+    prev_state_espnow = current_state;
+
+    // キャリブレーション画面: Modeボタンで確定
+    // Calibration screen: Mode button confirms
+    if (current_state == SCREEN_STATE_CALIBRATION && local_input.mode_changed == 1) {
+        calibration_confirm();
+        menu_set_state(SCREEN_STATE_MENU);
+        if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            shared_inputdata.mode_changed = 0;
+            xSemaphoreGive(input_mutex);
+        }
+    }
+
     // ボタンイベント処理
-    // Button event handling - short press toggles menu
+    // Button event handling
     if (local_input.btn_pressed) {
-        menu_toggle();
+        if (current_state == SCREEN_STATE_ABOUT ||
+            current_state == SCREEN_STATE_BATTERY_WARN ||
+            current_state == SCREEN_STATE_CHANNEL ||
+            current_state == SCREEN_STATE_MAC ||
+            current_state == SCREEN_STATE_CALIBRATION ||
+            current_state == SCREEN_STATE_STICK_TEST) {
+            // サブ画面からメニューに戻る
+            // Return from sub screen to Menu
+            menu_set_state(SCREEN_STATE_MENU);
+        } else {
+            // その他は通常のトグル動作
+            // Otherwise, normal toggle
+            menu_toggle();
+        }
     }
 
     // Long press: Reset timer (only when not in menu)
@@ -577,16 +1327,18 @@ static void main_loop(void)
         }
     }
 
-    // Menu navigation using stick (when menu is active)
-    // メニューナビゲーション（メニューアクティブ時）
-    if (menu_is_active()) {
+    // Menu navigation using stick (when in menu state only)
+    // メニューナビゲーション（メニュー状態時のみ）
+    // 常に物理的な右スティックを使用（StickModeに依存しない）
+    // Always use physical right stick (independent of StickMode)
+    if (menu_get_state() == SCREEN_STATE_MENU) {
         static uint32_t last_nav_time = 0;
         const uint32_t NAV_DEBOUNCE_MS = 200;
         uint32_t now = millis_now();
 
-        // Use right stick (elevator/theta) for up/down navigation
-        // 右スティック（エレベータ/theta）で上下ナビゲーション
-        int16_t stick_y = local_input.theta_raw - 2048;
+        // 物理右スティックY値を使用
+        // Use physical right stick Y value
+        int16_t stick_y = (int16_t)joy_get_stick_right_y() - 2048;
 
         if (now - last_nav_time > NAV_DEBOUNCE_MS) {
             if (stick_y > 800) {
@@ -607,6 +1359,16 @@ static void main_loop(void)
                     xSemaphoreGive(input_mutex);
                 }
             }
+        }
+    }
+
+    // Battery warning screen: Mode button changes threshold
+    // バッテリー警告画面: Modeボタンで閾値変更
+    if (menu_get_state() == SCREEN_STATE_BATTERY_WARN && local_input.mode_changed == 1) {
+        on_battery_warn_change();
+        if (xSemaphoreTake(input_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            shared_inputdata.mode_changed = 0;
+            xSemaphoreGive(input_mutex);
         }
     }
 
@@ -632,30 +1394,23 @@ static void main_loop(void)
         }
     }
 
-    // スティック値取得
-    _throttle = local_input.throttle_raw;
-    _phi = local_input.phi_raw;
-    _theta = local_input.theta_raw;
-    _psi = local_input.psi_raw;
-
-    // バイアス計算 (起動時50サンプル平均)
-    if (average_counter < 50) {
-        average_counter++;
-        Throttle_bias += (_throttle - 2048);
-        Phi_bias += (_phi - 2048);
-        Theta_bias += (_theta - 2048);
-        Psi_bias += (_psi - 2048);
-    } else if (average_counter == 50) {
-        average_counter = 51;
-        Throttle_bias /= 50;
-        Phi_bias /= 50;
-        Theta_bias /= 50;
-        Psi_bias /= 50;
+    // スティック値取得（キャリブレーション適用）
+    // Get stick values (with calibration applied)
+    // Note: StickModeに応じてマッピングされた値を補正
+    // Throttle/Elevator: 左Y or 右Y, Aileron/Rudder: 右X or 左X
+    // キャリブレーションは物理スティック単位で保存されているので適切にマッピング
+    if (StickMode == STICK_MODE_2) {
+        // Mode 2: Throttle=左Y, Aileron=右X, Elevator=右Y, Rudder=左X
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.left_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.right_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.right_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.left_x);
     } else {
-        if (_throttle < Throttle_bias) _throttle = 0; else _throttle -= Throttle_bias;
-        if (_phi < Phi_bias) _phi = 0; else _phi -= Phi_bias;
-        if (_theta < Theta_bias) _theta = 0; else _theta -= Theta_bias;
-        if (_psi < Psi_bias) _psi = 0; else _psi -= Psi_bias;
+        // Mode 3: Throttle=右Y, Aileron=左X, Elevator=左Y, Rudder=右X
+        _throttle = get_calibrated_value(local_input.throttle_raw, g_stick_cal.right_y);
+        _phi = get_calibrated_value(local_input.phi_raw, g_stick_cal.left_x);
+        _theta = get_calibrated_value(local_input.theta_raw, g_stick_cal.left_y);
+        _psi = get_calibrated_value(local_input.psi_raw, g_stick_cal.right_x);
     }
 
     // 制御値計算
@@ -763,7 +1518,27 @@ extern "C" void app_main(void)
     // メニューシステム初期化
     menu_init();
     menu_register_usb_mode_callback(on_usb_mode_selected);
+    menu_register_stick_mode_callback(on_stick_mode_selected);
     ESP_LOGI(TAG, "メニューシステム初期化完了");
+
+    // Stick ModeをNVSから読み込み (両モード共通)
+    // Load stick mode from NVS (common to both modes)
+    StickMode = load_stick_mode_from_nvs();
+    joy_set_stick_mode(StickMode);
+    menu_set_stick_mode_label(StickMode);
+    ESP_LOGI(TAG, "スティックモード: %d (NVSより)", StickMode);
+
+    // バッテリー警告閾値をNVSから読み込み
+    // Load battery warning threshold from NVS
+    g_battery_warn_threshold = load_battery_warn_from_nvs();
+    menu_set_battery_warn_threshold(g_battery_warn_threshold);
+    menu_register_battery_warn_callback(on_battery_warn_change);
+    ESP_LOGI(TAG, "バッテリー警告閾値: %d.%dV (NVSより)",
+             g_battery_warn_threshold / 10, g_battery_warn_threshold % 10);
+
+    // スティックキャリブレーションをNVSから読み込み
+    // Load stick calibration from NVS
+    load_stick_cal_from_nvs();
 
     // ジョイスティック初期化 (レガシーI2Cドライバで共有)
     ret = joy_init();
@@ -831,23 +1606,8 @@ extern "C" void app_main(void)
         // ドローンピア初期化
         drone_peer_init();
 
-        // スティックモード選択 (左ボタン押しながら起動でMode 3)
-        // 起動時はデバウンスなしの生値を使用
-        joy_update();
-        if (joy_get_button_left_raw()) {
-            joy_set_stick_mode(STICK_MODE_3);
-            M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
-            M5.Display.println("Mode 3 selected");
-            // ボタンが離されるまで待機 (生値で判定)
-            while (joy_get_button_left_raw()) {
-                joy_update();
-                vTaskDelay(pdMS_TO_TICKS(10));
-            }
-        } else {
-            joy_set_stick_mode(STICK_MODE_2);
-        }
-        StickMode = joy_get_stick_mode();
-        ESP_LOGI(TAG, "スティックモード: %d", StickMode);
+        // Stick Modeは既にNVSから読み込み済み
+        // Stick mode already loaded from NVS
         AltMode = NOT_ALT_CONTROL_MODE;
     }
 

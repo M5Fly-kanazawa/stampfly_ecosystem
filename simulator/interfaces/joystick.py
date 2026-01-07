@@ -1,8 +1,9 @@
 import hid
 
-# ※以下の VENDOR_ID と PRODUCT_ID はご利用のゲームパッド（ESP32‑S3 で HID ゲームパッドとして動作している場合）の値に合わせて変更してください
-VENDOR_ID = 0x303a   # 例: 0x1209 (実際の値に合わせてください)
-PRODUCT_ID = 0x1001  # 例: 0xABCD (実際の値に合わせてください)
+# StampFly Controller USB HID settings
+# StampFlyコントローラのUSB HID設定
+VENDOR_ID = 0x303a   # Espressif VID
+PRODUCT_ID = 0x8001  # StampFly Controller PID (sdkconfig.defaults)
 
 
 class Joystick:
