@@ -1252,10 +1252,12 @@ static void usb_hid_main_loop(void)
         int16_t stick_y = (int16_t)joy_get_stick_right_y() - 2048;
 
         if (now - last_nav_time > NAV_DEBOUNCE_MS) {
-            if (stick_y > 800) {
+            // スティック上（値が負）→カーソル上、スティック下（値が正）→カーソル下
+            // Stick up (negative value) → cursor up, Stick down (positive value) → cursor down
+            if (stick_y < -800) {
                 menu_move_up();
                 last_nav_time = now;
-            } else if (stick_y < -800) {
+            } else if (stick_y > 800) {
                 menu_move_down();
                 last_nav_time = now;
             }
@@ -1418,10 +1420,12 @@ static void main_loop(void)
         int16_t stick_y = (int16_t)joy_get_stick_right_y() - 2048;
 
         if (now - last_nav_time > NAV_DEBOUNCE_MS) {
-            if (stick_y > 800) {
+            // スティック上（値が負）→カーソル上、スティック下（値が正）→カーソル下
+            // Stick up (negative value) → cursor up, Stick down (positive value) → cursor down
+            if (stick_y < -800) {
                 menu_move_up();
                 last_nav_time = now;
-            } else if (stick_y < -800) {
+            } else if (stick_y > 800) {
                 menu_move_down();
                 last_nav_time = now;
             }
