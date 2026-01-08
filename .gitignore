@@ -71,3 +71,7 @@ logs/
 
 # Personal notes
 knote/
+
+# Work in progress (not ready for git)
+# 開発中（git管理対象外）
+_wip/
