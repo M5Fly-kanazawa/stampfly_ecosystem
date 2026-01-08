@@ -421,7 +421,244 @@ $$
 - 内部計算（シミュレータ・AHRS）：クォータニオン
 - ユーザー表示・ログ出力：オイラー角に変換
 
-## 6. 数値積分
+## 6. DCモータモデル
+
+### 概要
+
+マルチコプターのアクチュエータであるDCモータ（ブラシレスDCモータ含む）の動特性をモデル化する。
+最初に電気系・機械系の完全な微分方程式を導出し、最終的にインダクタンスを無視した近似モデルを示す。
+
+### 等価回路
+
+DCモータの電気系は以下の等価回路で表される：
+
+```
+    R          L
+   ─┴─       ─┴─
+──►│├───────►│├───────►┬────────
+   ─┬─       ─┬─       │
+    V_a                 │  ┌─────┐
+    (印加電圧)           └──┤  e  │  逆起電力
+                           │ =Kω │
+                           └─────┘
+```
+
+### 記号の定義
+
+| 記号 | 説明 | 単位 |
+|------|------|------|
+| $V_a$ | 印加電圧（Armature voltage） | V |
+| $i$ | 電機子電流（Armature current） | A |
+| $R$ | 電機子抵抗（Armature resistance） | Ω |
+| $L$ | 電機子インダクタンス（Armature inductance） | H |
+| $e$ | 逆起電力（Back-EMF） | V |
+| $K_e$ | 逆起電力定数（Back-EMF constant） | V/(rad/s) |
+| $K_t$ | トルク定数（Torque constant） | N·m/A |
+| $\omega$ | 回転角速度（Angular velocity） | rad/s |
+| $\tau_m$ | モータトルク（Motor torque） | N·m |
+| $J_m$ | ロータ慣性モーメント（Rotor inertia） | kg·m² |
+| $b$ | 粘性摩擦係数（Viscous friction） | N·m·s/rad |
+| $\tau_L$ | 負荷トルク（Load torque） | N·m |
+
+**注意：** 理想的なDCモータでは $K_e = K_t$ （SI単位系において）。
+
+### 完全な微分方程式
+
+#### 電気系の方程式
+
+キルヒホッフの電圧則より、電機子回路の電圧方程式：
+
+$$
+V_a = Ri + L\frac{di}{dt} + e
+$$
+
+逆起電力は回転角速度に比例：
+
+$$
+e = K_e \omega
+$$
+
+したがって：
+
+$$
+L\frac{di}{dt} = V_a - Ri - K_e \omega
+$$
+
+整理して電流の微分方程式：
+
+$$
+\frac{di}{dt} = \frac{1}{L}(V_a - Ri - K_e \omega)
+$$
+
+#### 機械系の方程式
+
+ニュートンの回転運動方程式より：
+
+$$
+J_m \frac{d\omega}{dt} = \tau_m - b\omega - \tau_L
+$$
+
+モータトルクは電流に比例：
+
+$$
+\tau_m = K_t i
+$$
+
+したがって：
+
+$$
+\frac{d\omega}{dt} = \frac{1}{J_m}(K_t i - b\omega - \tau_L)
+$$
+
+#### 状態方程式形式
+
+状態変数 $\mathbf{x} = [i, \omega]^\top$、入力 $u = V_a$、外乱 $d = \tau_L$ として：
+
+$$
+\frac{d}{dt}\begin{bmatrix} i \\ \omega \end{bmatrix} =
+\begin{bmatrix}
+-\frac{R}{L} & -\frac{K_e}{L} \\
+\frac{K_t}{J_m} & -\frac{b}{J_m}
+\end{bmatrix}
+\begin{bmatrix} i \\ \omega \end{bmatrix} +
+\begin{bmatrix} \frac{1}{L} \\ 0 \end{bmatrix} V_a +
+\begin{bmatrix} 0 \\ -\frac{1}{J_m} \end{bmatrix} \tau_L
+$$
+
+### 時定数の分析
+
+DCモータには2つの時定数が存在する：
+
+| 時定数 | 式 | 意味 |
+|--------|-----|------|
+| 電気時定数 | $\tau_e = \frac{L}{R}$ | 電流の応答速度 |
+| 機械時定数 | $\tau_m = \frac{J_m R}{K_t K_e}$ | 回転速度の応答速度 |
+
+一般的なDCモータでは：
+
+$$
+\tau_e \ll \tau_m
+$$
+
+（電気時定数は数ms、機械時定数は数十〜数百ms）
+
+### インダクタンスを無視した近似モデル
+
+#### 近似の妥当性
+
+小型DCモータでは $\tau_e \ll \tau_m$ が成り立つため、電気系の過渡応答は機械系に比べて十分速い。
+このとき、電流は瞬時に定常値に達すると仮定できる（準静的近似）：
+
+$$
+L\frac{di}{dt} \approx 0
+$$
+
+#### 簡略化された電気系
+
+インダクタンスを無視すると：
+
+$$
+V_a = Ri + K_e \omega
+$$
+
+電流について解くと：
+
+$$
+i = \frac{V_a - K_e \omega}{R}
+$$
+
+#### 簡略化された機械系
+
+電流の式を機械系に代入：
+
+$$
+J_m \frac{d\omega}{dt} = K_t \cdot \frac{V_a - K_e \omega}{R} - b\omega - \tau_L
+$$
+
+整理すると：
+
+$$
+J_m \frac{d\omega}{dt} = \frac{K_t}{R} V_a - \left(\frac{K_t K_e}{R} + b\right)\omega - \tau_L
+$$
+
+#### 1次遅れ系への帰着
+
+負荷トルク $\tau_L = 0$ のとき、等価時定数と等価ゲインを定義：
+
+$$
+\tau_{eq} = \frac{J_m R}{K_t K_e + bR}
+$$
+
+$$
+K_{eq} = \frac{K_t}{K_t K_e + bR}
+$$
+
+すると角速度の微分方程式は1次遅れ系となる：
+
+$$
+\tau_{eq} \frac{d\omega}{dt} + \omega = K_{eq} V_a
+$$
+
+#### 伝達関数
+
+ラプラス変換すると：
+
+$$
+\frac{\Omega(s)}{V_a(s)} = \frac{K_{eq}}{\tau_{eq} s + 1}
+$$
+
+粘性摩擦が十分小さい場合（$bR \ll K_t K_e$）：
+
+$$
+\tau_{eq} \approx \frac{J_m R}{K_t K_e}, \quad K_{eq} \approx \frac{1}{K_e}
+$$
+
+### プロペラ負荷の考慮
+
+マルチコプターでは、モータはプロペラを駆動する。プロペラの空力負荷トルクは角速度の2乗に比例：
+
+$$
+\tau_L = C_q \omega^2
+$$
+
+このとき微分方程式は：
+
+$$
+J_m \frac{d\omega}{dt} = \frac{K_t}{R}(V_a - K_e \omega) - b\omega - C_q \omega^2
+$$
+
+#### 定常状態
+
+定常状態（$\frac{d\omega}{dt} = 0$）では：
+
+$$
+\frac{K_t}{R}(V_a - K_e \omega_{ss}) = b\omega_{ss} + C_q \omega_{ss}^2
+$$
+
+これは $\omega_{ss}$ についての2次方程式であり、与えられた電圧 $V_a$ に対する定常回転数を求められる。
+
+### StampFlyでのモータパラメータ
+
+| パラメータ | 記号 | 値 | 単位 |
+|-----------|------|-----|------|
+| モータ定数 | $K_t = K_e$ | 0.0042 | N·m/A, V/(rad/s) |
+| 電機子抵抗 | $R$ | 0.5 | Ω |
+| ロータ慣性 | $J_m$ | $1.0 \times 10^{-7}$ | kg·m² |
+| 電気時定数 | $\tau_e$ | ~0.1 | ms (無視可能) |
+
+**注意：** 実際のブラシレスDCモータはESC（電子速度コントローラ）で制御されるため、
+より複雑な動特性を持つが、制御設計では上記の近似モデルで十分な場合が多い。
+
+### まとめ
+
+| モデル | 特徴 | 用途 |
+|--------|------|------|
+| 完全モデル（2次系） | 電気・機械両方の過渡応答を表現 | 高精度シミュレーション |
+| 近似モデル（1次系） | インダクタンス無視、計算が簡単 | 制御設計、リアルタイムシミュレーション |
+
+制御系設計では近似モデルで十分であり、StampFlyのシミュレータでもこの近似を採用している。
+
+## 7. 数値積分
 
 ### Runge-Kutta 4次法（RK4）
 
@@ -456,7 +693,7 @@ RK4で積分する状態変数：
 | $q_0, q_1, q_2, q_3$ | クォータニオン運動学 |
 | $x, y, z$ | 位置運動学 |
 
-## 7. 実装リファレンス
+## 8. 実装リファレンス
 
 ### シミュレータコード
 
@@ -720,7 +957,206 @@ This equation has **no singularity** (no gimbal lock).
 | Constraint | None | $\|\mathbf{q}\| = 1$ |
 | Usage | Display/I/O | Internal/integration |
 
-## 6. Numerical Integration
+## 6. DC Motor Model
+
+### Overview
+
+This section models the dynamics of DC motors (including brushless DC motors) used as actuators in multicopters.
+We first derive the complete differential equations for electrical and mechanical systems, then present the simplified model that ignores inductance.
+
+### Equivalent Circuit
+
+The electrical system of a DC motor is represented by the following equivalent circuit:
+
+```
+    R          L
+   ─┴─       ─┴─
+──►│├───────►│├───────►┬────────
+   ─┬─       ─┬─       │
+    V_a                 │  ┌─────┐
+    (Applied voltage)   └──┤  e  │  Back-EMF
+                           │ =Kω │
+                           └─────┘
+```
+
+### Symbol Definitions
+
+| Symbol | Description | Unit |
+|--------|-------------|------|
+| $V_a$ | Armature voltage | V |
+| $i$ | Armature current | A |
+| $R$ | Armature resistance | Ω |
+| $L$ | Armature inductance | H |
+| $e$ | Back-EMF | V |
+| $K_e$ | Back-EMF constant | V/(rad/s) |
+| $K_t$ | Torque constant | N·m/A |
+| $\omega$ | Angular velocity | rad/s |
+| $\tau_m$ | Motor torque | N·m |
+| $J_m$ | Rotor inertia | kg·m² |
+| $b$ | Viscous friction coefficient | N·m·s/rad |
+| $\tau_L$ | Load torque | N·m |
+
+**Note:** For an ideal DC motor, $K_e = K_t$ (in SI units).
+
+### Complete Differential Equations
+
+#### Electrical Equation
+
+From Kirchhoff's voltage law, the armature circuit equation:
+
+$$
+V_a = Ri + L\frac{di}{dt} + e
+$$
+
+Back-EMF is proportional to angular velocity:
+
+$$
+e = K_e \omega
+$$
+
+Therefore:
+
+$$
+\frac{di}{dt} = \frac{1}{L}(V_a - Ri - K_e \omega)
+$$
+
+#### Mechanical Equation
+
+From Newton's rotational equation:
+
+$$
+J_m \frac{d\omega}{dt} = \tau_m - b\omega - \tau_L
+$$
+
+Motor torque is proportional to current:
+
+$$
+\tau_m = K_t i
+$$
+
+Therefore:
+
+$$
+\frac{d\omega}{dt} = \frac{1}{J_m}(K_t i - b\omega - \tau_L)
+$$
+
+#### State-Space Form
+
+With state $\mathbf{x} = [i, \omega]^\top$, input $u = V_a$, and disturbance $d = \tau_L$:
+
+$$
+\frac{d}{dt}\begin{bmatrix} i \\ \omega \end{bmatrix} =
+\begin{bmatrix}
+-\frac{R}{L} & -\frac{K_e}{L} \\
+\frac{K_t}{J_m} & -\frac{b}{J_m}
+\end{bmatrix}
+\begin{bmatrix} i \\ \omega \end{bmatrix} +
+\begin{bmatrix} \frac{1}{L} \\ 0 \end{bmatrix} V_a +
+\begin{bmatrix} 0 \\ -\frac{1}{J_m} \end{bmatrix} \tau_L
+$$
+
+### Time Constant Analysis
+
+DC motors have two time constants:
+
+| Time Constant | Formula | Meaning |
+|---------------|---------|---------|
+| Electrical | $\tau_e = \frac{L}{R}$ | Current response speed |
+| Mechanical | $\tau_m = \frac{J_m R}{K_t K_e}$ | Velocity response speed |
+
+For typical DC motors:
+
+$$
+\tau_e \ll \tau_m
+$$
+
+(Electrical: ~ms, Mechanical: ~tens to hundreds of ms)
+
+### Simplified Model (Ignoring Inductance)
+
+#### Validity of Approximation
+
+For small DC motors where $\tau_e \ll \tau_m$, the electrical transient is much faster than the mechanical system.
+The current can be assumed to reach steady-state instantaneously (quasi-static approximation):
+
+$$
+L\frac{di}{dt} \approx 0
+$$
+
+#### Simplified Electrical System
+
+Ignoring inductance:
+
+$$
+V_a = Ri + K_e \omega
+$$
+
+Solving for current:
+
+$$
+i = \frac{V_a - K_e \omega}{R}
+$$
+
+#### Simplified Mechanical System
+
+Substituting into the mechanical equation:
+
+$$
+J_m \frac{d\omega}{dt} = \frac{K_t}{R} V_a - \left(\frac{K_t K_e}{R} + b\right)\omega - \tau_L
+$$
+
+#### First-Order System
+
+With $\tau_L = 0$, defining equivalent time constant and gain:
+
+$$
+\tau_{eq} = \frac{J_m R}{K_t K_e + bR}, \quad K_{eq} = \frac{K_t}{K_t K_e + bR}
+$$
+
+The angular velocity follows a first-order system:
+
+$$
+\tau_{eq} \frac{d\omega}{dt} + \omega = K_{eq} V_a
+$$
+
+#### Transfer Function
+
+In Laplace domain:
+
+$$
+\frac{\Omega(s)}{V_a(s)} = \frac{K_{eq}}{\tau_{eq} s + 1}
+$$
+
+When viscous friction is small ($bR \ll K_t K_e$):
+
+$$
+\tau_{eq} \approx \frac{J_m R}{K_t K_e}, \quad K_{eq} \approx \frac{1}{K_e}
+$$
+
+### Propeller Load
+
+For multicopters, the aerodynamic load torque from propellers is proportional to the square of angular velocity:
+
+$$
+\tau_L = C_q \omega^2
+$$
+
+The differential equation becomes:
+
+$$
+J_m \frac{d\omega}{dt} = \frac{K_t}{R}(V_a - K_e \omega) - b\omega - C_q \omega^2
+$$
+
+### Summary
+
+| Model | Characteristics | Application |
+|-------|----------------|-------------|
+| Complete (2nd order) | Captures both electrical and mechanical transients | High-fidelity simulation |
+| Simplified (1st order) | Ignores inductance, simpler computation | Control design, real-time simulation |
+
+The simplified model is sufficient for control design and is used in the StampFly simulator.
+
+## 7. Numerical Integration
 
 ### Runge-Kutta 4th Order (RK4)
 
@@ -744,7 +1180,7 @@ $$
 | Step size $h$ | 0.001 | s (1 kHz) |
 | Accuracy | $O(h^4)$ | - |
 
-## 7. Implementation Reference
+## 8. Implementation Reference
 
 ### Simulator Code
 
