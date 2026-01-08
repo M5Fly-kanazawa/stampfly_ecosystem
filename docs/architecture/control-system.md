@@ -12,28 +12,31 @@
 
 ### 座標系の定義
 
-本ドキュメントでは以下の座標系を使用する：
+本ドキュメントでは **NED（North-East-Down）座標系** を採用する（右手系）：
 
 ```
 慣性座標系 (Inertial Frame, I)        機体座標系 (Body Frame, B)
-      Z_I (上)                              Z_B (上)
-       ↑                                     ↑
-       │                                     │    X_B (前)
-       │                                     │   ╱
-       │                                     │  ╱
-       └──────→ Y_I (東)                     └──────→ Y_B (右)
-      ╱
-     ╱
-    ↙
-   X_I (北)
 
-NED (North-East-Down) ではなく NWU (North-West-Up) 系を採用
+       X_I (北)                             X_B (前)
+        ↑                                    ↑
+        │                                    │
+        │                                    │
+        └──────→ Y_I (東)                    └──────→ Y_B (右)
+         ╲                                    ╲
+          ╲                                    ╲
+           ↘                                    ↘
+            Z_I (下)                             Z_B (下)
 ```
 
 | 座標系 | 原点 | 軸 | 用途 |
 |--------|------|-----|------|
-| 慣性座標系 (I) | 地表の固定点 | X:北, Y:西, Z:上 | 位置・速度の記述 |
-| 機体座標系 (B) | 機体重心 | X:前, Y:左, Z:上 | 力・モーメントの記述 |
+| 慣性座標系 (I) | 地表の固定点 | X:北, Y:東, Z:下 | 位置・速度の記述 |
+| 機体座標系 (B) | 機体重心 | X:前, Y:右, Z:下 | 力・モーメントの記述 |
+
+**NED座標系の特徴：**
+- 右手系（X×Y=Z）
+- 高度が上がると z は負になる
+- 航空・ドローン分野で標準的に使用される
 
 ### 状態変数
 
@@ -134,7 +137,7 @@ q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
 
 #### 推力
 
-4つのモーターからの合計推力（機体Z軸負方向）：
+4つのモーターからの合計推力（機体Z軸負方向＝上向き）：
 
 ```
 F_thrust = [0, 0, -(T₁ + T₂ + T₃ + T₄)]ᵀ
@@ -149,16 +152,20 @@ T_i = C_t · ω_i²
 |------|-----|------|------|
 | C_t | 1.00×10⁻⁸ | N/(rad/s)² | 推力係数 |
 
+**注意（NED座標系）：** Z軸は下向きが正のため、上向きの推力は負の値となる。
+
 #### 重力
 
 慣性系での重力を機体系に変換：
 
 ```
-F_gravity_I = [0, 0, mg]ᵀ  (上向き正のため正)
-F_gravity_B = R_BI · F_gravity_I
+F_gravity_I = [0, 0, mg]ᵀ  (NED: 下向きが正のため正)
+F_gravity_B = Rᵀ · F_gravity_I
 ```
 
-ここで R_BI は慣性系から機体系への回転行列（DCMの転置）。
+ここで Rᵀ は慣性系から機体系への回転行列（DCMの転置）。
+
+**注意（NED座標系）：** 重力は+Z方向（下向き）に作用する。
 
 #### モーメント
 
@@ -475,28 +482,31 @@ providing the rationale for simulator and firmware implementations.
 
 ### Coordinate System Definitions
 
-This document uses the following coordinate systems:
+This document adopts the **NED (North-East-Down) coordinate system** (right-handed):
 
 ```
 Inertial Frame (I)                    Body Frame (B)
-      Z_I (Up)                              Z_B (Up)
-       ↑                                     ↑
-       │                                     │    X_B (Front)
-       │                                     │   ╱
-       │                                     │  ╱
-       └──────→ Y_I (East)                   └──────→ Y_B (Right)
-      ╱
-     ╱
-    ↙
-   X_I (North)
 
-NWU (North-West-Up) system adopted, not NED
+       X_I (North)                          X_B (Front)
+        ↑                                    ↑
+        │                                    │
+        │                                    │
+        └──────→ Y_I (East)                  └──────→ Y_B (Right)
+         ╲                                    ╲
+          ╲                                    ╲
+           ↘                                    ↘
+            Z_I (Down)                           Z_B (Down)
 ```
 
 | Frame | Origin | Axes | Usage |
 |-------|--------|------|-------|
-| Inertial (I) | Fixed point on ground | X:North, Y:West, Z:Up | Position, velocity |
-| Body (B) | Vehicle CG | X:Front, Y:Left, Z:Up | Forces, moments |
+| Inertial (I) | Fixed point on ground | X:North, Y:East, Z:Down | Position, velocity |
+| Body (B) | Vehicle CG | X:Front, Y:Right, Z:Down | Forces, moments |
+
+**NED Coordinate System Characteristics:**
+- Right-handed (X×Y=Z)
+- Altitude increase results in negative z
+- Standard in aviation and drone applications
 
 ### State Variables
 
@@ -557,12 +567,25 @@ q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
 
 #### Thrust
 
-Total thrust from 4 motors (negative Z in body frame):
+Total thrust from 4 motors (negative Z in body frame = upward):
 
 ```
 F_thrust = [0, 0, -(T₁ + T₂ + T₃ + T₄)]ᵀ
 T_i = C_t · ω_i²
 ```
+
+**Note (NED):** Z-axis is positive downward, so upward thrust is negative.
+
+#### Gravity
+
+Gravity in inertial frame transformed to body frame:
+
+```
+F_gravity_I = [0, 0, mg]ᵀ  (NED: positive downward)
+F_gravity_B = Rᵀ · F_gravity_I
+```
+
+**Note (NED):** Gravity acts in +Z direction (downward).
 
 #### Moments
 
