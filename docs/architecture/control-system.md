@@ -34,8 +34,8 @@
 | 機体座標系 (B) | 機体重心 | X:前, Y:右, Z:下 | 力・モーメントの記述 |
 
 **NED座標系の特徴：**
-- 右手系（X×Y=Z）
-- 高度が上がると z は負になる
+- 右手系（$\mathbf{X} \times \mathbf{Y} = \mathbf{Z}$）
+- 高度が上がると $z$ は負になる
 - 航空・ドローン分野で標準的に使用される
 
 ### 状態変数
@@ -43,15 +43,15 @@
 | 記号 | 説明 | 座標系 | 単位 |
 |------|------|--------|------|
 | **位置** | | | |
-| x, y, z | 位置 | 慣性系 | m |
+| $x, y, z$ | 位置 | 慣性系 | m |
 | **速度** | | | |
-| ẋ, ẏ, ż | 慣性系速度 | 慣性系 | m/s |
-| u, v, w | 機体系速度 | 機体系 | m/s |
+| $\dot{x}, \dot{y}, \dot{z}$ | 慣性系速度 | 慣性系 | m/s |
+| $u, v, w$ | 機体系速度 | 機体系 | m/s |
 | **姿勢** | | | |
-| φ, θ, ψ | オイラー角 (Roll, Pitch, Yaw) | - | rad |
-| q₀, q₁, q₂, q₃ | クォータニオン | - | - |
+| $\phi, \theta, \psi$ | オイラー角 (Roll, Pitch, Yaw) | - | rad |
+| $q_0, q_1, q_2, q_3$ | クォータニオン | - | - |
 | **角速度** | | | |
-| p, q, r | 機体角速度 | 機体系 | rad/s |
+| $p, q, r$ | 機体角速度 | 機体系 | rad/s |
 
 ## 2. 6自由度運動方程式
 
@@ -59,79 +59,82 @@
 
 機体座標系における並進運動方程式は、ニュートンの第2法則より：
 
-```
-m(dV_B/dt + ω × V_B) = F_B
-```
+$$
+m\left(\frac{d\mathbf{V}_B}{dt} + \boldsymbol{\omega} \times \mathbf{V}_B\right) = \mathbf{F}_B
+$$
 
 ここで：
-- m : 機体質量 [kg]
-- V_B = [u, v, w]ᵀ : 機体系速度ベクトル [m/s]
-- ω = [p, q, r]ᵀ : 機体角速度ベクトル [rad/s]
-- F_B : 機体系に作用する力 [N]
+- $m$ : 機体質量 [kg]
+- $\mathbf{V}_B = [u, v, w]^\top$ : 機体系速度ベクトル [m/s]
+- $\boldsymbol{\omega} = [p, q, r]^\top$ : 機体角速度ベクトル [rad/s]
+- $\mathbf{F}_B$ : 機体系に作用する力 [N]
 
 成分で展開すると：
 
-```
-m(u̇ + qw - rv) = F_x
-m(v̇ + ru - pw) = F_y
-m(ẇ + pv - qu) = F_z
-```
+$$
+\begin{align}
+m(\dot{u} + qw - rv) &= F_x \\
+m(\dot{v} + ru - pw) &= F_y \\
+m(\dot{w} + pv - qu) &= F_z
+\end{align}
+$$
 
 整理して：
 
-```
-u̇ = F_x/m - qw + rv
-v̇ = F_y/m - ru + pw
-ẇ = F_z/m - pv + qu
-```
+$$
+\begin{align}
+\dot{u} &= \frac{F_x}{m} - qw + rv \\
+\dot{v} &= \frac{F_y}{m} - ru + pw \\
+\dot{w} &= \frac{F_z}{m} - pv + qu
+\end{align}
+$$
 
 行列形式：
 
-```
-┌   ┐   ┌     ┐   ┌        ┐   ┌   ┐
-│ u̇ │   │ F_x │   │  0  r -q│   │ u │
-│ v̇ │ = │ F_y │/m - │ -r  0  p│ × │ v │
-│ ẇ │   │ F_z │   │  q -p  0│   │ w │
-└   ┘   └     ┘   └        ┘   └   ┘
-```
+$$
+\begin{bmatrix} \dot{u} \\ \dot{v} \\ \dot{w} \end{bmatrix} =
+\frac{1}{m}\begin{bmatrix} F_x \\ F_y \\ F_z \end{bmatrix} -
+\begin{bmatrix} 0 & -r & q \\ r & 0 & -p \\ -q & p & 0 \end{bmatrix}
+\begin{bmatrix} u \\ v \\ w \end{bmatrix}
+$$
 
 ### 回転運動方程式
 
 機体座標系における回転運動方程式は、オイラーの運動方程式より：
 
-```
-I(dω/dt) + ω × (Iω) = τ
-```
+$$
+\mathbf{I}\frac{d\boldsymbol{\omega}}{dt} + \boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega}) = \boldsymbol{\tau}
+$$
 
 ここで：
-- I : 慣性テンソル [kg·m²]
-- τ = [L, M, N]ᵀ : 機体系に作用するモーメント [N·m]
+- $\mathbf{I}$ : 慣性テンソル [kg·m²]
+- $\boldsymbol{\tau} = [L, M, N]^\top$ : 機体系に作用するモーメント [N·m]
 
 StampFlyは対称形状のため、慣性テンソルは対角行列：
 
-```
-    ┌           ┐
-I = │ I_xx  0    0  │
-    │  0   I_yy  0  │
-    │  0    0  I_zz │
-    └           ┘
-```
+$$
+\mathbf{I} = \begin{bmatrix} I_{xx} & 0 & 0 \\ 0 & I_{yy} & 0 \\ 0 & 0 & I_{zz} \end{bmatrix}
+$$
 
 成分で展開すると：
 
-```
-I_xx·ṗ + (I_zz - I_yy)·q·r = L
-I_yy·q̇ + (I_xx - I_zz)·p·r = M
-I_zz·ṙ + (I_yy - I_xx)·p·q = N
-```
+$$
+\begin{align}
+I_{xx}\dot{p} + (I_{zz} - I_{yy})qr &= L \\
+I_{yy}\dot{q} + (I_{xx} - I_{zz})pr &= M \\
+I_{zz}\dot{r} + (I_{yy} - I_{xx})pq &= N
+\end{align}
+$$
 
 整理して：
 
-```
-ṗ = [L - (I_zz - I_yy)·q·r] / I_xx
-q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
-ṙ = [N - (I_yy - I_xx)·p·q] / I_zz
-```
+$$
+\begin{align}
+\dot{p} &= \frac{L - (I_{zz} - I_{yy})qr}{I_{xx}} \\
+\dot{q} &= \frac{M - (I_{xx} - I_{zz})pr}{I_{yy}} \\
+\dot{r} &= \frac{N - (I_{yy} - I_{xx})pq}{I_{zz}}
+\end{align}
+$$
 
 ### 作用する力とモーメント
 
@@ -139,18 +142,19 @@ q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
 
 4つのモーターからの合計推力（機体Z軸負方向＝上向き）：
 
-```
-F_thrust = [0, 0, -(T₁ + T₂ + T₃ + T₄)]ᵀ
-```
+$$
+\mathbf{F}_{thrust} = \begin{bmatrix} 0 \\ 0 \\ -(T_1 + T_2 + T_3 + T_4) \end{bmatrix}
+$$
 
 各モーターの推力：
-```
-T_i = C_t · ω_i²
-```
+
+$$
+T_i = C_t \omega_i^2
+$$
 
 | 記号 | 値 | 単位 | 説明 |
 |------|-----|------|------|
-| C_t | 1.00×10⁻⁸ | N/(rad/s)² | 推力係数 |
+| $C_t$ | $1.00 \times 10^{-8}$ | N/(rad/s)² | 推力係数 |
 
 **注意（NED座標系）：** Z軸は下向きが正のため、上向きの推力は負の値となる。
 
@@ -158,12 +162,15 @@ T_i = C_t · ω_i²
 
 慣性系での重力を機体系に変換：
 
-```
-F_gravity_I = [0, 0, mg]ᵀ  (NED: 下向きが正のため正)
-F_gravity_B = Rᵀ · F_gravity_I
-```
+$$
+\mathbf{F}_{gravity}^I = \begin{bmatrix} 0 \\ 0 \\ mg \end{bmatrix} \quad \text{(NED: 下向きが正)}
+$$
 
-ここで Rᵀ は慣性系から機体系への回転行列（DCMの転置）。
+$$
+\mathbf{F}_{gravity}^B = \mathbf{R}^\top \mathbf{F}_{gravity}^I
+$$
+
+ここで $\mathbf{R}^\top$ は慣性系から機体系への回転行列（DCMの転置）。
 
 **注意（NED座標系）：** 重力は+Z方向（下向き）に作用する。
 
@@ -171,22 +178,24 @@ F_gravity_B = Rᵀ · F_gravity_I
 
 各モーターが生成するモーメント：
 
-```
-τ_total = Σ(r_i × F_i) + Σ(τ_reaction_i)
-```
+$$
+\boldsymbol{\tau}_{total} = \sum_i (\mathbf{r}_i \times \mathbf{F}_i) + \sum_i \boldsymbol{\tau}_{reaction,i}
+$$
 
 1. **推力によるモーメント（アーム長 × 推力）**
 
-```
-L = d·(T₃ + T₄ - T₁ - T₂)  (Roll)
-M = d·(T₁ + T₄ - T₂ - T₃)  (Pitch)
-```
+$$
+\begin{align}
+L &= d(T_3 + T_4 - T_1 - T_2) \quad \text{(Roll)} \\
+M &= d(T_1 + T_4 - T_2 - T_3) \quad \text{(Pitch)}
+\end{align}
+$$
 
 2. **反トルク（モーター回転の反作用）**
 
-```
-N = C_q·(ω₂² + ω₄² - ω₁² - ω₃²)  (Yaw)
-```
+$$
+N = C_q(\omega_2^2 + \omega_4^2 - \omega_1^2 - \omega_3^2) \quad \text{(Yaw)}
+$$
 
 | モーター | 位置 | 回転方向 | Roll寄与 | Pitch寄与 | Yaw寄与 |
 |---------|------|---------|---------|----------|---------|
@@ -199,24 +208,28 @@ N = C_q·(ω₂² + ω₄² - ω₁² - ω₃²)  (Yaw)
 
 並進抵抗（速度の2乗に比例）：
 
-```
-F_drag_u = -C_d · sign(u) · u²
-F_drag_v = -C_d · sign(v) · v²
-F_drag_w = -C_d · sign(w) · w²
-```
+$$
+\begin{align}
+F_{drag,u} &= -C_d \cdot \text{sign}(u) \cdot u^2 \\
+F_{drag,v} &= -C_d \cdot \text{sign}(v) \cdot v^2 \\
+F_{drag,w} &= -C_d \cdot \text{sign}(w) \cdot w^2
+\end{align}
+$$
 
 回転抵抗（角速度の2乗に比例）：
 
-```
-τ_drag_p = -C_r · sign(p) · p²
-τ_drag_q = -C_r · sign(q) · q²
-τ_drag_r = -C_r · sign(r) · r²
-```
+$$
+\begin{align}
+\tau_{drag,p} &= -C_r \cdot \text{sign}(p) \cdot p^2 \\
+\tau_{drag,q} &= -C_r \cdot \text{sign}(q) \cdot q^2 \\
+\tau_{drag,r} &= -C_r \cdot \text{sign}(r) \cdot r^2
+\end{align}
+$$
 
 | 記号 | 値 | 単位 | 説明 |
 |------|-----|------|------|
-| C_d | 0.1 | - | 並進抗力係数 |
-| C_r | 1×10⁻⁵ | - | 回転抗力係数 |
+| $C_d$ | 0.1 | - | 並進抗力係数 |
+| $C_r$ | $1 \times 10^{-5}$ | - | 回転抗力係数 |
 
 ## 3. キネマティクス（位置・姿勢の算出）
 
@@ -224,15 +237,12 @@ F_drag_w = -C_d · sign(w) · w²
 
 慣性系位置は、機体系速度を回転行列で変換して積分：
 
-```
-┌   ┐       ┌   ┐
-│ ẋ │       │ u │
-│ ẏ │ = R · │ v │
-│ ż │       │ w │
-└   ┘       └   ┘
-```
+$$
+\begin{bmatrix} \dot{x} \\ \dot{y} \\ \dot{z} \end{bmatrix} =
+\mathbf{R} \begin{bmatrix} u \\ v \\ w \end{bmatrix}
+$$
 
-ここで R は機体系から慣性系への回転行列（DCM: Direction Cosine Matrix）。
+ここで $\mathbf{R}$ は機体系から慣性系への回転行列（DCM: Direction Cosine Matrix）。
 
 ### 姿勢の算出
 
@@ -245,75 +255,67 @@ F_drag_w = -C_d · sign(w) · w²
 オイラー角は3つの連続回転で姿勢を表現する。
 本システムでは **Z-Y-X（Yaw-Pitch-Roll）** 順序を採用：
 
-```
-1. ψ (Yaw)   : Z軸周りに回転
-2. θ (Pitch) : Y軸周りに回転
-3. φ (Roll)  : X軸周りに回転
-```
+1. $\psi$ (Yaw) : Z軸周りに回転
+2. $\theta$ (Pitch) : Y軸周りに回転
+3. $\phi$ (Roll) : X軸周りに回転
 
 ### 回転行列（DCM）
 
 オイラー角から回転行列への変換：
 
-```
-R = R_x(φ) · R_y(θ) · R_z(ψ)
-```
+$$
+\mathbf{R} = \mathbf{R}_x(\phi) \cdot \mathbf{R}_y(\theta) \cdot \mathbf{R}_z(\psi)
+$$
 
 各軸周りの基本回転行列：
 
-```
-         ┌              ┐
-R_x(φ) = │ 1    0      0   │
-         │ 0   cos(φ) -sin(φ)│
-         │ 0   sin(φ)  cos(φ)│
-         └              ┘
+$$
+\mathbf{R}_x(\phi) = \begin{bmatrix} 1 & 0 & 0 \\ 0 & \cos\phi & -\sin\phi \\ 0 & \sin\phi & \cos\phi \end{bmatrix}
+$$
 
-         ┌               ┐
-R_y(θ) = │ cos(θ)  0  sin(θ) │
-         │   0     1    0    │
-         │-sin(θ)  0  cos(θ) │
-         └               ┘
+$$
+\mathbf{R}_y(\theta) = \begin{bmatrix} \cos\theta & 0 & \sin\theta \\ 0 & 1 & 0 \\ -\sin\theta & 0 & \cos\theta \end{bmatrix}
+$$
 
-         ┌              ┐
-R_z(ψ) = │ cos(ψ) -sin(ψ)  0 │
-         │ sin(ψ)  cos(ψ)  0 │
-         │   0      0      1 │
-         └              ┘
-```
+$$
+\mathbf{R}_z(\psi) = \begin{bmatrix} \cos\psi & -\sin\psi & 0 \\ \sin\psi & \cos\psi & 0 \\ 0 & 0 & 1 \end{bmatrix}
+$$
 
 合成した回転行列（機体系→慣性系）：
 
-```
-    ┌                                                    ┐
-R = │ cθcψ           cθsψ            -sθ                │
-    │ sφsθcψ-cφsψ    sφsθsψ+cφcψ     sφcθ               │
-    │ cφsθcψ+sφsψ    cφsθsψ-sφcψ     cφcθ               │
-    └                                                    ┘
-```
+$$
+\mathbf{R} = \begin{bmatrix}
+c_\theta c_\psi & c_\theta s_\psi & -s_\theta \\
+s_\phi s_\theta c_\psi - c_\phi s_\psi & s_\phi s_\theta s_\psi + c_\phi c_\psi & s_\phi c_\theta \\
+c_\phi s_\theta c_\psi + s_\phi s_\psi & c_\phi s_\theta s_\psi - s_\phi c_\psi & c_\phi c_\theta
+\end{bmatrix}
+$$
 
-（cφ = cos(φ), sφ = sin(φ) の略記）
+（$c_\phi = \cos\phi$, $s_\phi = \sin\phi$ の略記）
 
 ### オイラー角の時間微分
 
-角速度 [p, q, r]ᵀ からオイラー角の時間微分への変換：
+角速度 $[p, q, r]^\top$ からオイラー角の時間微分への変換：
 
-```
-┌   ┐   ┌                          ┐   ┌   ┐
-│ φ̇ │   │ 1   sin(φ)tan(θ)   cos(φ)tan(θ) │   │ p │
-│ θ̇ │ = │ 0      cos(φ)        -sin(φ)     │ · │ q │
-│ ψ̇ │   │ 0   sin(φ)/cos(θ)  cos(φ)/cos(θ)│   │ r │
-└   ┘   └                          ┘   └   ┘
-```
+$$
+\begin{bmatrix} \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} \end{bmatrix} =
+\begin{bmatrix}
+1 & \sin\phi\tan\theta & \cos\phi\tan\theta \\
+0 & \cos\phi & -\sin\phi \\
+0 & \sin\phi/\cos\theta & \cos\phi/\cos\theta
+\end{bmatrix}
+\begin{bmatrix} p \\ q \\ r \end{bmatrix}
+$$
 
 **注意：ジンバルロック**
 
-θ = ±90° のとき cos(θ) = 0 となり、変換行列が特異になる。
+$\theta = \pm 90°$ のとき $\cos\theta = 0$ となり、変換行列が特異になる。
 これを **ジンバルロック** と呼び、オイラー角表現の根本的な制限である。
 
 | 条件 | 問題 |
 |------|------|
-| θ → ±90° | tan(θ) → ∞, 1/cos(θ) → ∞ |
-| 結果 | φ̇, ψ̇ が発散、姿勢の一意性喪失 |
+| $\theta \to \pm 90°$ | $\tan\theta \to \infty$, $1/\cos\theta \to \infty$ |
+| 結果 | $\dot{\phi}, \dot{\psi}$ が発散、姿勢の一意性喪失 |
 
 → **解決策：クォータニオンを使用する**
 
@@ -323,67 +325,75 @@ R = │ cθcψ           cθsψ            -sθ                │
 
 クォータニオンは4つの成分で姿勢を表現する：
 
-```
-q = q₀ + q₁i + q₂j + q₃k = [q₀, q₁, q₂, q₃]ᵀ
-```
+$$
+\mathbf{q} = q_0 + q_1 i + q_2 j + q_3 k = [q_0, q_1, q_2, q_3]^\top
+$$
 
 ここで：
-- q₀ : スカラー部（実部）
-- q₁, q₂, q₃ : ベクトル部（虚部）
-- 単位クォータニオン制約：q₀² + q₁² + q₂² + q₃² = 1
+- $q_0$ : スカラー部（実部）
+- $q_1, q_2, q_3$ : ベクトル部（虚部）
+- 単位クォータニオン制約：$q_0^2 + q_1^2 + q_2^2 + q_3^2 = 1$
 
 ### 回転の幾何学的意味
 
-単位クォータニオンは、軸 **n** = [nₓ, nᵧ, n_z]ᵀ 周りの角度 **θ** の回転を表す：
+単位クォータニオンは、軸 $\mathbf{n} = [n_x, n_y, n_z]^\top$ 周りの角度 $\theta$ の回転を表す：
 
-```
-q₀ = cos(θ/2)
-q₁ = nₓ · sin(θ/2)
-q₂ = nᵧ · sin(θ/2)
-q₃ = n_z · sin(θ/2)
-```
+$$
+\begin{align}
+q_0 &= \cos(\theta/2) \\
+q_1 &= n_x \sin(\theta/2) \\
+q_2 &= n_y \sin(\theta/2) \\
+q_3 &= n_z \sin(\theta/2)
+\end{align}
+$$
 
 ### クォータニオンから回転行列への変換
 
-```
-    ┌                                            ┐
-R = │ q₀²+q₁²-q₂²-q₃²   2(q₁q₂-q₀q₃)     2(q₁q₃+q₀q₂)   │
-    │ 2(q₁q₂+q₀q₃)     q₀²-q₁²+q₂²-q₃²   2(q₂q₃-q₀q₁)   │
-    │ 2(q₁q₃-q₀q₂)     2(q₂q₃+q₀q₁)     q₀²-q₁²-q₂²+q₃² │
-    └                                            ┘
-```
+$$
+\mathbf{R} = \begin{bmatrix}
+q_0^2+q_1^2-q_2^2-q_3^2 & 2(q_1 q_2 - q_0 q_3) & 2(q_1 q_3 + q_0 q_2) \\
+2(q_1 q_2 + q_0 q_3) & q_0^2-q_1^2+q_2^2-q_3^2 & 2(q_2 q_3 - q_0 q_1) \\
+2(q_1 q_3 - q_0 q_2) & 2(q_2 q_3 + q_0 q_1) & q_0^2-q_1^2-q_2^2+q_3^2
+\end{bmatrix}
+$$
 
 ### オイラー角からクォータニオンへの変換
 
-```
-q₀ = cos(φ/2)cos(θ/2)cos(ψ/2) + sin(φ/2)sin(θ/2)sin(ψ/2)
-q₁ = sin(φ/2)cos(θ/2)cos(ψ/2) - cos(φ/2)sin(θ/2)sin(ψ/2)
-q₂ = cos(φ/2)sin(θ/2)cos(ψ/2) + sin(φ/2)cos(θ/2)sin(ψ/2)
-q₃ = cos(φ/2)cos(θ/2)sin(ψ/2) - sin(φ/2)sin(θ/2)cos(ψ/2)
-```
+$$
+\begin{align}
+q_0 &= \cos(\phi/2)\cos(\theta/2)\cos(\psi/2) + \sin(\phi/2)\sin(\theta/2)\sin(\psi/2) \\
+q_1 &= \sin(\phi/2)\cos(\theta/2)\cos(\psi/2) - \cos(\phi/2)\sin(\theta/2)\sin(\psi/2) \\
+q_2 &= \cos(\phi/2)\sin(\theta/2)\cos(\psi/2) + \sin(\phi/2)\cos(\theta/2)\sin(\psi/2) \\
+q_3 &= \cos(\phi/2)\cos(\theta/2)\sin(\psi/2) - \sin(\phi/2)\sin(\theta/2)\cos(\psi/2)
+\end{align}
+$$
 
 ### クォータニオンからオイラー角への変換
 
-```
-φ = atan2(2(q₀q₁ + q₂q₃), q₀² - q₁² - q₂² + q₃²)
-θ = asin(2(q₀q₂ - q₁q₃))
-ψ = atan2(2(q₀q₃ + q₁q₂), q₀² + q₁² - q₂² - q₃²)
-```
+$$
+\begin{align}
+\phi &= \text{atan2}(2(q_0 q_1 + q_2 q_3), q_0^2 - q_1^2 - q_2^2 + q_3^2) \\
+\theta &= \arcsin(2(q_0 q_2 - q_1 q_3)) \\
+\psi &= \text{atan2}(2(q_0 q_3 + q_1 q_2), q_0^2 + q_1^2 - q_2^2 - q_3^2)
+\end{align}
+$$
 
-**注意：** asin の引数が ±1 を超える場合はクリッピングが必要。
+**注意：** $\arcsin$ の引数が $\pm 1$ を超える場合はクリッピングが必要。
 
 ### クォータニオンの時間微分
 
-角速度 [p, q, r]ᵀ からクォータニオンの時間微分：
+角速度 $[p, q, r]^\top$ からクォータニオンの時間微分：
 
-```
-┌    ┐       ┌              ┐   ┌    ┐
-│ q̇₀ │       │ 0  -p  -q  -r │   │ q₀ │
-│ q̇₁ │ = 1/2 │ p   0   r  -q │ · │ q₁ │
-│ q̇₂ │       │ q  -r   0   p │   │ q₂ │
-│ q̇₃ │       │ r   q  -p   0 │   │ q₃ │
-└    ┘       └              ┘   └    ┘
-```
+$$
+\begin{bmatrix} \dot{q}_0 \\ \dot{q}_1 \\ \dot{q}_2 \\ \dot{q}_3 \end{bmatrix} =
+\frac{1}{2} \begin{bmatrix}
+0 & -p & -q & -r \\
+p & 0 & r & -q \\
+q & -r & 0 & p \\
+r & q & -p & 0
+\end{bmatrix}
+\begin{bmatrix} q_0 \\ q_1 \\ q_2 \\ q_3 \end{bmatrix}
+$$
 
 この微分方程式は **特異点を持たない**（ジンバルロックが発生しない）。
 
@@ -391,9 +401,9 @@ q₃ = cos(φ/2)cos(θ/2)sin(ψ/2) - sin(φ/2)sin(θ/2)cos(ψ/2)
 
 数値積分の誤差蓄積により単位制約が崩れるため、各ステップで正規化：
 
-```
-q ← q / |q|
-```
+$$
+\mathbf{q} \leftarrow \frac{\mathbf{q}}{|\mathbf{q}|}
+$$
 
 ### オイラー角とクォータニオンの比較
 
@@ -404,7 +414,7 @@ q ← q / |q|
 | 直感性 | 高い（角度で理解しやすい） | 低い |
 | 計算コスト | 三角関数多用 | 乗算主体 |
 | 補間 | 困難 | SLERP可能 |
-| 制約 | なし | |q| = 1 |
+| 制約 | なし | $\|\mathbf{q}\| = 1$ |
 | 用途 | 表示・入出力 | 内部演算・積分 |
 
 **StampFlyでの使い分け：**
@@ -417,19 +427,23 @@ q ← q / |q|
 
 シミュレータでは4次のRunge-Kutta法を使用：
 
-```
-k₁ = f(t, y)
-k₂ = f(t + h/2, y + h·k₁/2)
-k₃ = f(t + h/2, y + h·k₂/2)
-k₄ = f(t + h, y + h·k₃)
+$$
+\begin{align}
+\mathbf{k}_1 &= f(t, \mathbf{y}) \\
+\mathbf{k}_2 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_1/2) \\
+\mathbf{k}_3 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_2/2) \\
+\mathbf{k}_4 &= f(t + h, \mathbf{y} + h\mathbf{k}_3)
+\end{align}
+$$
 
-y(t+h) = y(t) + h·(k₁ + 2k₂ + 2k₃ + k₄)/6
-```
+$$
+\mathbf{y}(t+h) = \mathbf{y}(t) + \frac{h}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)
+$$
 
 | パラメータ | 値 | 単位 |
 |-----------|-----|------|
-| 積分刻み幅 h | 0.001 | s (1 kHz) |
-| 精度 | O(h⁴) | - |
+| 積分刻み幅 $h$ | 0.001 | s (1 kHz) |
+| 精度 | $O(h^4)$ | - |
 
 ### 積分対象
 
@@ -437,10 +451,10 @@ RK4で積分する状態変数：
 
 | 変数 | 微分方程式 |
 |------|-----------|
-| u, v, w | 並進運動方程式 |
-| p, q, r | 回転運動方程式 |
-| q₀, q₁, q₂, q₃ | クォータニオン運動学 |
-| x, y, z | 位置運動学 |
+| $u, v, w$ | 並進運動方程式 |
+| $p, q, r$ | 回転運動方程式 |
+| $q_0, q_1, q_2, q_3$ | クォータニオン運動学 |
+| $x, y, z$ | 位置運動学 |
 
 ## 7. 実装リファレンス
 
@@ -504,8 +518,8 @@ Inertial Frame (I)                    Body Frame (B)
 | Body (B) | Vehicle CG | X:Front, Y:Right, Z:Down | Forces, moments |
 
 **NED Coordinate System Characteristics:**
-- Right-handed (X×Y=Z)
-- Altitude increase results in negative z
+- Right-handed ($\mathbf{X} \times \mathbf{Y} = \mathbf{Z}$)
+- Altitude increase results in negative $z$
 - Standard in aviation and drone applications
 
 ### State Variables
@@ -513,15 +527,15 @@ Inertial Frame (I)                    Body Frame (B)
 | Symbol | Description | Frame | Unit |
 |--------|-------------|-------|------|
 | **Position** | | | |
-| x, y, z | Position | Inertial | m |
+| $x, y, z$ | Position | Inertial | m |
 | **Velocity** | | | |
-| ẋ, ẏ, ż | Inertial velocity | Inertial | m/s |
-| u, v, w | Body velocity | Body | m/s |
+| $\dot{x}, \dot{y}, \dot{z}$ | Inertial velocity | Inertial | m/s |
+| $u, v, w$ | Body velocity | Body | m/s |
 | **Attitude** | | | |
-| φ, θ, ψ | Euler angles (Roll, Pitch, Yaw) | - | rad |
-| q₀, q₁, q₂, q₃ | Quaternion | - | - |
+| $\phi, \theta, \psi$ | Euler angles (Roll, Pitch, Yaw) | - | rad |
+| $q_0, q_1, q_2, q_3$ | Quaternion | - | - |
 | **Angular velocity** | | | |
-| p, q, r | Body angular velocity | Body | rad/s |
+| $p, q, r$ | Body angular velocity | Body | rad/s |
 
 ## 2. 6-DOF Equations of Motion
 
@@ -529,39 +543,43 @@ Inertial Frame (I)                    Body Frame (B)
 
 From Newton's second law in the body frame:
 
-```
-m(dV_B/dt + ω × V_B) = F_B
-```
+$$
+m\left(\frac{d\mathbf{V}_B}{dt} + \boldsymbol{\omega} \times \mathbf{V}_B\right) = \mathbf{F}_B
+$$
 
 Where:
-- m : Vehicle mass [kg]
-- V_B = [u, v, w]ᵀ : Body velocity vector [m/s]
-- ω = [p, q, r]ᵀ : Body angular velocity vector [rad/s]
-- F_B : Forces in body frame [N]
+- $m$ : Vehicle mass [kg]
+- $\mathbf{V}_B = [u, v, w]^\top$ : Body velocity vector [m/s]
+- $\boldsymbol{\omega} = [p, q, r]^\top$ : Body angular velocity vector [rad/s]
+- $\mathbf{F}_B$ : Forces in body frame [N]
 
 Expanded:
 
-```
-u̇ = F_x/m - qw + rv
-v̇ = F_y/m - ru + pw
-ẇ = F_z/m - pv + qu
-```
+$$
+\begin{align}
+\dot{u} &= \frac{F_x}{m} - qw + rv \\
+\dot{v} &= \frac{F_y}{m} - ru + pw \\
+\dot{w} &= \frac{F_z}{m} - pv + qu
+\end{align}
+$$
 
 ### Rotational Equations
 
 From Euler's equation of motion in the body frame:
 
-```
-I(dω/dt) + ω × (Iω) = τ
-```
+$$
+\mathbf{I}\frac{d\boldsymbol{\omega}}{dt} + \boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega}) = \boldsymbol{\tau}
+$$
 
 For diagonal inertia tensor (symmetric vehicle):
 
-```
-ṗ = [L - (I_zz - I_yy)·q·r] / I_xx
-q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
-ṙ = [N - (I_yy - I_xx)·p·q] / I_zz
-```
+$$
+\begin{align}
+\dot{p} &= \frac{L - (I_{zz} - I_{yy})qr}{I_{xx}} \\
+\dot{q} &= \frac{M - (I_{xx} - I_{zz})pr}{I_{yy}} \\
+\dot{r} &= \frac{N - (I_{yy} - I_{xx})pq}{I_{zz}}
+\end{align}
+$$
 
 ### Forces and Moments
 
@@ -569,10 +587,13 @@ q̇ = [M - (I_xx - I_zz)·p·r] / I_yy
 
 Total thrust from 4 motors (negative Z in body frame = upward):
 
-```
-F_thrust = [0, 0, -(T₁ + T₂ + T₃ + T₄)]ᵀ
-T_i = C_t · ω_i²
-```
+$$
+\mathbf{F}_{thrust} = \begin{bmatrix} 0 \\ 0 \\ -(T_1 + T_2 + T_3 + T_4) \end{bmatrix}
+$$
+
+$$
+T_i = C_t \omega_i^2
+$$
 
 **Note (NED):** Z-axis is positive downward, so upward thrust is negative.
 
@@ -580,20 +601,25 @@ T_i = C_t · ω_i²
 
 Gravity in inertial frame transformed to body frame:
 
-```
-F_gravity_I = [0, 0, mg]ᵀ  (NED: positive downward)
-F_gravity_B = Rᵀ · F_gravity_I
-```
+$$
+\mathbf{F}_{gravity}^I = \begin{bmatrix} 0 \\ 0 \\ mg \end{bmatrix} \quad \text{(NED: positive downward)}
+$$
+
+$$
+\mathbf{F}_{gravity}^B = \mathbf{R}^\top \mathbf{F}_{gravity}^I
+$$
 
 **Note (NED):** Gravity acts in +Z direction (downward).
 
 #### Moments
 
-```
-L = d·(T₃ + T₄ - T₁ - T₂)  (Roll)
-M = d·(T₁ + T₄ - T₂ - T₃)  (Pitch)
-N = C_q·(ω₂² + ω₄² - ω₁² - ω₃²)  (Yaw - reaction torque)
-```
+$$
+\begin{align}
+L &= d(T_3 + T_4 - T_1 - T_2) \quad \text{(Roll)} \\
+M &= d(T_1 + T_4 - T_2 - T_3) \quad \text{(Pitch)} \\
+N &= C_q(\omega_2^2 + \omega_4^2 - \omega_1^2 - \omega_3^2) \quad \text{(Yaw)}
+\end{align}
+$$
 
 ## 3. Kinematics
 
@@ -601,11 +627,12 @@ N = C_q·(ω₂² + ω₄² - ω₁² - ω₃²)  (Yaw - reaction torque)
 
 Position in inertial frame from body velocity:
 
-```
-[ẋ, ẏ, ż]ᵀ = R · [u, v, w]ᵀ
-```
+$$
+\begin{bmatrix} \dot{x} \\ \dot{y} \\ \dot{z} \end{bmatrix} =
+\mathbf{R} \begin{bmatrix} u \\ v \\ w \end{bmatrix}
+$$
 
-Where R is the DCM (Direction Cosine Matrix) from body to inertial frame.
+Where $\mathbf{R}$ is the DCM (Direction Cosine Matrix) from body to inertial frame.
 
 ## 4. Attitude Representation: Euler Angles
 
@@ -614,33 +641,35 @@ Where R is the DCM (Direction Cosine Matrix) from body to inertial frame.
 Euler angles represent attitude as three sequential rotations.
 This system uses **Z-Y-X (Yaw-Pitch-Roll)** order:
 
-1. ψ (Yaw): Rotation about Z-axis
-2. θ (Pitch): Rotation about Y-axis
-3. φ (Roll): Rotation about X-axis
+1. $\psi$ (Yaw): Rotation about Z-axis
+2. $\theta$ (Pitch): Rotation about Y-axis
+3. $\phi$ (Roll): Rotation about X-axis
 
 ### Rotation Matrix (DCM)
 
 Combined rotation matrix (body → inertial):
 
-```
-    ┌                                                    ┐
-R = │ cθcψ           cθsψ            -sθ                │
-    │ sφsθcψ-cφsψ    sφsθsψ+cφcψ     sφcθ               │
-    │ cφsθcψ+sφsψ    cφsθsψ-sφcψ     cφcθ               │
-    └                                                    ┘
-```
+$$
+\mathbf{R} = \begin{bmatrix}
+c_\theta c_\psi & c_\theta s_\psi & -s_\theta \\
+s_\phi s_\theta c_\psi - c_\phi s_\psi & s_\phi s_\theta s_\psi + c_\phi c_\psi & s_\phi c_\theta \\
+c_\phi s_\theta c_\psi + s_\phi s_\psi & c_\phi s_\theta s_\psi - s_\phi c_\psi & c_\phi c_\theta
+\end{bmatrix}
+$$
 
 ### Euler Angle Derivatives
 
-```
-┌   ┐   ┌                          ┐   ┌   ┐
-│ φ̇ │   │ 1   sin(φ)tan(θ)   cos(φ)tan(θ) │   │ p │
-│ θ̇ │ = │ 0      cos(φ)        -sin(φ)     │ · │ q │
-│ ψ̇ │   │ 0   sin(φ)/cos(θ)  cos(φ)/cos(θ)│   │ r │
-└   ┘   └                          ┘   └   ┘
-```
+$$
+\begin{bmatrix} \dot{\phi} \\ \dot{\theta} \\ \dot{\psi} \end{bmatrix} =
+\begin{bmatrix}
+1 & \sin\phi\tan\theta & \cos\phi\tan\theta \\
+0 & \cos\phi & -\sin\phi \\
+0 & \sin\phi/\cos\theta & \cos\phi/\cos\theta
+\end{bmatrix}
+\begin{bmatrix} p \\ q \\ r \end{bmatrix}
+$$
 
-**Gimbal Lock:** At θ = ±90°, cos(θ) = 0 causes singularity.
+**Gimbal Lock:** At $\theta = \pm 90°$, $\cos\theta = 0$ causes singularity.
 
 ## 5. Attitude Representation: Quaternion
 
@@ -648,32 +677,34 @@ R = │ cθcψ           cθsψ            -sθ                │
 
 Quaternion represents attitude with 4 components:
 
-```
-q = [q₀, q₁, q₂, q₃]ᵀ
-```
+$$
+\mathbf{q} = [q_0, q_1, q_2, q_3]^\top
+$$
 
-With unit constraint: q₀² + q₁² + q₂² + q₃² = 1
+With unit constraint: $q_0^2 + q_1^2 + q_2^2 + q_3^2 = 1$
 
 ### Quaternion to DCM
 
-```
-    ┌                                            ┐
-R = │ q₀²+q₁²-q₂²-q₃²   2(q₁q₂-q₀q₃)     2(q₁q₃+q₀q₂)   │
-    │ 2(q₁q₂+q₀q₃)     q₀²-q₁²+q₂²-q₃²   2(q₂q₃-q₀q₁)   │
-    │ 2(q₁q₃-q₀q₂)     2(q₂q₃+q₀q₁)     q₀²-q₁²-q₂²+q₃² │
-    └                                            ┘
-```
+$$
+\mathbf{R} = \begin{bmatrix}
+q_0^2+q_1^2-q_2^2-q_3^2 & 2(q_1 q_2 - q_0 q_3) & 2(q_1 q_3 + q_0 q_2) \\
+2(q_1 q_2 + q_0 q_3) & q_0^2-q_1^2+q_2^2-q_3^2 & 2(q_2 q_3 - q_0 q_1) \\
+2(q_1 q_3 - q_0 q_2) & 2(q_2 q_3 + q_0 q_1) & q_0^2-q_1^2-q_2^2+q_3^2
+\end{bmatrix}
+$$
 
 ### Quaternion Derivatives
 
-```
-┌    ┐       ┌              ┐   ┌    ┐
-│ q̇₀ │       │ 0  -p  -q  -r │   │ q₀ │
-│ q̇₁ │ = 1/2 │ p   0   r  -q │ · │ q₁ │
-│ q̇₂ │       │ q  -r   0   p │   │ q₂ │
-│ q̇₃ │       │ r   q  -p   0 │   │ q₃ │
-└    ┘       └              ┘   └    ┘
-```
+$$
+\begin{bmatrix} \dot{q}_0 \\ \dot{q}_1 \\ \dot{q}_2 \\ \dot{q}_3 \end{bmatrix} =
+\frac{1}{2} \begin{bmatrix}
+0 & -p & -q & -r \\
+p & 0 & r & -q \\
+q & -r & 0 & p \\
+r & q & -p & 0
+\end{bmatrix}
+\begin{bmatrix} q_0 \\ q_1 \\ q_2 \\ q_3 \end{bmatrix}
+$$
 
 This equation has **no singularity** (no gimbal lock).
 
@@ -686,7 +717,7 @@ This equation has **no singularity** (no gimbal lock).
 | Intuition | High | Low |
 | Computation | Trigonometric | Multiplication |
 | Interpolation | Difficult | SLERP possible |
-| Constraint | None | \|q\| = 1 |
+| Constraint | None | $\|\mathbf{q}\| = 1$ |
 | Usage | Display/I/O | Internal/integration |
 
 ## 6. Numerical Integration
@@ -695,19 +726,23 @@ This equation has **no singularity** (no gimbal lock).
 
 The simulator uses 4th order Runge-Kutta:
 
-```
-k₁ = f(t, y)
-k₂ = f(t + h/2, y + h·k₁/2)
-k₃ = f(t + h/2, y + h·k₂/2)
-k₄ = f(t + h, y + h·k₃)
+$$
+\begin{align}
+\mathbf{k}_1 &= f(t, \mathbf{y}) \\
+\mathbf{k}_2 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_1/2) \\
+\mathbf{k}_3 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_2/2) \\
+\mathbf{k}_4 &= f(t + h, \mathbf{y} + h\mathbf{k}_3)
+\end{align}
+$$
 
-y(t+h) = y(t) + h·(k₁ + 2k₂ + 2k₃ + k₄)/6
-```
+$$
+\mathbf{y}(t+h) = \mathbf{y}(t) + \frac{h}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)
+$$
 
 | Parameter | Value | Unit |
 |-----------|-------|------|
-| Step size h | 0.001 | s (1 kHz) |
-| Accuracy | O(h⁴) | - |
+| Step size $h$ | 0.001 | s (1 kHz) |
+| Accuracy | $O(h^4)$ | - |
 
 ## 7. Implementation Reference
 
