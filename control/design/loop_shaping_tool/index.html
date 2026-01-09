@@ -216,19 +216,12 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            min-height: 0;
-            overflow: hidden;
         }
         .plot-container {
-            flex: 1 1 0;
             background: #16213e;
             border-radius: 10px;
             padding: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            display: flex;
-            flex-direction: column;
-            min-height: 200px;
-            overflow: hidden;
         }
         .plot-controls {
             display: flex;
@@ -276,8 +269,6 @@
         }
         #bode-plot, #step-plot {
             width: 100%;
-            flex: 1 1 auto;
-            min-height: 150px;
         }
         .transfer-function {
             background: #0f0f23;
@@ -1493,8 +1484,32 @@
             // Optimize button handler
             document.getElementById('optimize-btn').addEventListener('click', runOptimization);
 
-            // Function to resize plots
+            // Function to calculate and set plot heights
             function resizePlots() {
+                // Get viewport height
+                const vh = window.innerHeight;
+
+                // Calculate header heights (title + subtitle + tabs + gaps)
+                const headerHeight = 120;
+                const containerPadding = 30;
+                const plotGap = 15;
+                const plotContainerPadding = 24; // 12px * 2
+                const legendHeight = 35;
+                const controlsHeight = 45;
+
+                // Available height for plots area
+                const availableHeight = vh - headerHeight - containerPadding;
+
+                // Each plot container gets half (minus gap)
+                const containerHeight = (availableHeight - plotGap) / 2;
+
+                // Plot height = container - padding - extra elements
+                const bodeHeight = containerHeight - plotContainerPadding - legendHeight;
+                const stepHeight = containerHeight - plotContainerPadding - controlsHeight;
+
+                document.getElementById('bode-plot').style.height = Math.max(200, bodeHeight) + 'px';
+                document.getElementById('step-plot').style.height = Math.max(200, stepHeight) + 'px';
+
                 Plotly.Plots.resize('bode-plot');
                 Plotly.Plots.resize('step-plot');
             }
@@ -1505,7 +1520,7 @@
             updatePlots();
 
             // Initial resize after layout settles
-            setTimeout(resizePlots, 200);
+            setTimeout(resizePlots, 100);
         });
     </script>
 </body>
