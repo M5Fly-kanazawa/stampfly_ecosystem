@@ -299,6 +299,13 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            cursor: pointer;
+        }
+        .legend-item input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #00d4ff;
+            cursor: pointer;
         }
         .legend-color {
             width: 20px;
@@ -881,26 +888,31 @@
             <div class="plot-container">
                 <div id="bode-plot"></div>
                 <div class="legend-info" id="single-legend">
-                    <div class="legend-item">
+                    <label class="legend-item">
+                        <input type="checkbox" id="show-L" checked>
                         <div class="legend-color" style="background:#3b82f6"></div>
-                        <span>開ループ L(s)</span>
-                    </div>
-                    <div class="legend-item">
+                        <span>L(s)</span>
+                    </label>
+                    <label class="legend-item">
+                        <input type="checkbox" id="show-G" checked>
                         <div class="legend-color" style="background:#22c55e"></div>
-                        <span>プラント G(s)</span>
-                    </div>
-                    <div class="legend-item">
+                        <span>G(s)</span>
+                    </label>
+                    <label class="legend-item">
+                        <input type="checkbox" id="show-C" checked>
                         <div class="legend-color" style="background:#ef4444"></div>
-                        <span>制御器 C(s)</span>
-                    </div>
-                    <div class="legend-item">
+                        <span>C(s)</span>
+                    </label>
+                    <label class="legend-item">
+                        <input type="checkbox" id="show-S">
                         <div class="legend-color" style="background:#f59e0b"></div>
-                        <span>感度 S(s)</span>
-                    </div>
-                    <div class="legend-item">
+                        <span>S(s)</span>
+                    </label>
+                    <label class="legend-item">
+                        <input type="checkbox" id="show-T">
                         <div class="legend-color" style="background:#a855f7"></div>
-                        <span>相補感度 T(s)</span>
-                    </div>
+                        <span>T(s)</span>
+                    </label>
                 </div>
             </div>
             <div class="plot-container">
@@ -1481,18 +1493,35 @@
                 });
             }
 
-            const bodeData = [
-                { x: omegas, y: mag_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: phase_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' }
-            ];
+            // Check which traces to show
+            const showL = document.getElementById('show-L').checked;
+            const showG = document.getElementById('show-G').checked;
+            const showC = document.getElementById('show-C').checked;
+            const showS = document.getElementById('show-S').checked;
+            const showT = document.getElementById('show-T').checked;
+
+            const bodeData = [];
+
+            if (showL) {
+                bodeData.push({ x: omegas, y: mag_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x', yaxis: 'y' });
+                bodeData.push({ x: omegas, y: phase_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x2', yaxis: 'y2' });
+            }
+            if (showG) {
+                bodeData.push({ x: omegas, y: mag_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x', yaxis: 'y' });
+                bodeData.push({ x: omegas, y: phase_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x2', yaxis: 'y2' });
+            }
+            if (showC) {
+                bodeData.push({ x: omegas, y: mag_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x', yaxis: 'y' });
+                bodeData.push({ x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' });
+            }
+            if (showS) {
+                bodeData.push({ x: omegas, y: mag_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x', yaxis: 'y' });
+                bodeData.push({ x: omegas, y: phase_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' });
+            }
+            if (showT) {
+                bodeData.push({ x: omegas, y: mag_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x', yaxis: 'y' });
+                bodeData.push({ x: omegas, y: phase_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' });
+            }
 
             // Add overlay axes (other axes that are checked)
             const overlayAxes = ['roll', 'pitch', 'yaw'].filter(axis =>
@@ -1868,6 +1897,11 @@
             // Overlay checkbox handlers
             ['roll', 'pitch', 'yaw'].forEach(axis => {
                 document.getElementById(`overlay-${axis}`).addEventListener('change', updatePlots);
+            });
+
+            // Bode plot trace visibility checkbox handlers
+            ['show-L', 'show-G', 'show-C', 'show-S', 'show-T'].forEach(id => {
+                document.getElementById(id).addEventListener('change', updatePlots);
             });
 
             // Initialize overlay checkboxes state
