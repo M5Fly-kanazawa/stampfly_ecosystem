@@ -863,9 +863,7 @@ $$
 $k_T$ が相殺され、**所望推力から実推力への伝達関数は単純な1次遅れ**となる：
 
 $$
-\boxed{
 G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
-}
 $$
 
 ここで $\tau_m = 0.02$ s はモータ時定数（推定値）。
@@ -912,9 +910,7 @@ $$
 **全体の伝達関数：**
 
 $$
-\boxed{
-G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### ピッチ軸の伝達関数
@@ -922,9 +918,7 @@ $$
 同様に、ピッチモーメント $u_\theta$ [N·m] から角速度 $q$ [rad/s] への伝達関数：
 
 $$
-\boxed{
-G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### ヨー軸の伝達関数
@@ -932,9 +926,7 @@ $$
 ヨーモーメント $u_\psi$ [N·m] から角速度 $r$ [rad/s] への伝達関数：
 
 $$
-\boxed{
-G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### 伝達関数の構造
@@ -972,9 +964,7 @@ $$
 モーメント入力から姿勢角までの全体伝達関数（ロール軸の例）：
 
 $$
-\boxed{
-G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad \text{[rad / N·m]}
-}
+G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad [\mathrm{rad \cdot (N \cdot m)^{-1}}]
 $$
 
 これは **2次積分器とモータ1次遅れの直列結合** であり、開ループでは不安定である。
@@ -1067,19 +1057,19 @@ $$
 **ロール軸（$u_\phi \to p$）：**
 
 $$
-\boxed{G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 **ピッチ軸（$u_\theta \to q$）：**
 
 $$
-\boxed{G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 **ヨー軸（$u_\psi \to r$）：**
 
 $$
-\boxed{G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### 参考：ミキサーゲインの導出
@@ -1821,9 +1811,7 @@ $$
 Since $k_T$ cancels out, **the transfer function from desired to actual thrust is a simple first-order lag**:
 
 $$
-\boxed{
 G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
-}
 $$
 
 Where $\tau_m = 0.02$ s is the motor time constant (estimated).
@@ -1858,9 +1846,7 @@ $$
 **Overall transfer function:**
 
 $$
-\boxed{
-G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### Pitch Axis Transfer Function
@@ -1868,9 +1854,7 @@ $$
 By symmetry, the pitch axis has the same form:
 
 $$
-\boxed{
-G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### Yaw Axis Transfer Function
@@ -1878,9 +1862,7 @@ $$
 The yaw axis is controlled by reaction torque:
 
 $$
-\boxed{
-G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
-}
+G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### Transfer Function Structure
@@ -1918,9 +1900,7 @@ $$
 Overall transfer function from moment input to attitude angle (roll axis example):
 
 $$
-\boxed{
-G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad \text{[rad / N·m]}
-}
+G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad [\mathrm{rad \cdot (N \cdot m)^{-1}}]
 $$
 
 This is a **series connection of double integrator and motor first-order lag**, which is unstable in open loop.
@@ -2013,19 +1993,19 @@ $$
 **Roll axis ($u_\phi \to p$):**
 
 $$
-\boxed{G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 **Pitch axis ($u_\theta \to q$):**
 
 $$
-\boxed{G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 **Yaw axis ($u_\psi \to r$):**
 
 $$
-\boxed{G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad [\mathrm{rad/s \cdot (N \cdot m)^{-1}}]
 $$
 
 #### Reference: Mixer Gain Derivation
