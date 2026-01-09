@@ -345,6 +345,85 @@
         .overlay-checkbox.disabled {
             opacity: 0.4;
         }
+        .optimize-section {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .optimize-section h3 {
+            color: #00d4ff;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+        }
+        .optimize-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .optimize-row label {
+            font-size: 0.85em;
+            color: #aaa;
+            flex: 0 0 120px;
+        }
+        .optimize-row input[type="number"] {
+            width: 70px;
+            padding: 6px 8px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 0.9em;
+            text-align: right;
+        }
+        .optimize-row .unit {
+            font-size: 0.8em;
+            color: #666;
+        }
+        .optimize-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #000;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+        }
+        .optimize-btn:hover {
+            background: linear-gradient(135deg, #00e5ff, #00aadd);
+            transform: translateY(-1px);
+        }
+        .optimize-btn:active {
+            transform: translateY(0);
+        }
+        .optimize-btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .sensitivity-display {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 0.9em;
+            border-top: 1px solid #333;
+            margin-top: 10px;
+        }
+        .sensitivity-value {
+            color: #4ade80;
+            font-weight: 600;
+        }
+        .sensitivity-value.warning {
+            color: #fbbf24;
+        }
+        .sensitivity-value.danger {
+            color: #f87171;
+        }
         @media (max-width: 1000px) {
             .container {
                 grid-template-columns: 1fr;
@@ -459,6 +538,27 @@
                             <div class="axis-color" style="background:#3b82f6"></div>
                             <label for="overlay-yaw">Yaw (Z)</label>
                         </div>
+                    </div>
+                </div>
+
+                <div class="optimize-section">
+                    <h3>自動最適化 / Auto Optimization</h3>
+                    <div class="optimize-row">
+                        <label>目標位相余裕 PM</label>
+                        <input type="number" id="target-pm" value="60" step="5" min="30" max="80">
+                        <span class="unit">°</span>
+                    </div>
+                    <div class="optimize-row">
+                        <label>目標帯域幅比</label>
+                        <input type="number" id="target-bw-ratio" value="30" step="5" min="10" max="50">
+                        <span class="unit">% of ω_m</span>
+                    </div>
+                    <button class="optimize-btn" id="optimize-btn">
+                        感度関数を最小化 / Minimize Sensitivity
+                    </button>
+                    <div class="sensitivity-display">
+                        <span>感度ピーク Ms</span>
+                        <span class="sensitivity-value" id="result-ms">-- dB</span>
                     </div>
                 </div>
             </div>
@@ -676,6 +776,195 @@
             return { omega_gc, pm, omega_pc, gm_dB };
         }
 
+        // Calculate peak sensitivity Ms = max|S(jω)| where S = 1/(1+L)
+        function calculateSensitivity(K, tau_m, Kp, Ti, Td, eta) {
+            const omegas = [];
+            for (let i = -2; i <= 4; i += 0.02) {
+                omegas.push(Math.pow(10, i));
+            }
+
+            let maxS = 0;
+            for (const omega of omegas) {
+                const L = evalOpenLoop(omega, K, tau_m, Kp, Ti, Td, eta);
+                // S = 1/(1+L)
+                const one = Complex.create(1, 0);
+                const onePlusL = Complex.add(one, L);
+                const S = Complex.div(one, onePlusL);
+                const magS = Complex.abs(S);
+                if (magS > maxS) {
+                    maxS = magS;
+                }
+            }
+            return maxS;
+        }
+
+        // Optimization objective function
+        // Minimizes sensitivity peak while targeting specific PM and bandwidth ratio
+        function objectiveFunction(params, K, tau_m, eta, targetPM, targetBWRatio) {
+            const [Kp, Ti, Td] = params;
+
+            // Constraints: parameters must be positive
+            if (Kp <= 0 || Ti <= 0 || Td <= 0) {
+                return 1e10;
+            }
+
+            const margins = calculateMargins(K, tau_m, Kp, Ti, Td, eta);
+            const Ms = calculateSensitivity(K, tau_m, Kp, Ti, Td, eta);
+
+            // Check stability (must have positive phase margin)
+            if (margins.pm === null || margins.pm <= 0) {
+                return 1e10;
+            }
+
+            const omega_m = 1 / tau_m;
+            const bwRatio = margins.omega_gc ? (margins.omega_gc / omega_m * 100) : 0;
+
+            // Objective: minimize Ms with penalties for constraint violations
+            let cost = Ms;
+
+            // Soft constraint: phase margin should be close to target
+            const pmError = Math.abs(margins.pm - targetPM);
+            cost += 0.1 * pmError;
+
+            // Soft constraint: bandwidth ratio should be close to target
+            const bwError = Math.abs(bwRatio - targetBWRatio);
+            cost += 0.05 * bwError;
+
+            // Penalty for very low phase margin
+            if (margins.pm < 30) {
+                cost += 10 * (30 - margins.pm);
+            }
+
+            // Penalty for very high bandwidth ratio (>50%)
+            if (bwRatio > 50) {
+                cost += 5 * (bwRatio - 50);
+            }
+
+            return cost;
+        }
+
+        // Nelder-Mead simplex optimization
+        function nelderMead(objective, x0, maxIter = 200, tol = 1e-6) {
+            const n = x0.length;
+            const alpha = 1.0;  // reflection
+            const gamma = 2.0;  // expansion
+            const rho = 0.5;    // contraction
+            const sigma = 0.5;  // shrink
+
+            // Initialize simplex
+            const simplex = [x0.slice()];
+            for (let i = 0; i < n; i++) {
+                const point = x0.slice();
+                point[i] *= 1.2;
+                simplex.push(point);
+            }
+
+            // Evaluate all vertices
+            let values = simplex.map(p => objective(p));
+
+            for (let iter = 0; iter < maxIter; iter++) {
+                // Sort vertices by objective value
+                const indices = values.map((v, i) => i).sort((a, b) => values[a] - values[b]);
+                simplex.sort((a, b) => values[indices.indexOf(simplex.indexOf(a))] - values[indices.indexOf(simplex.indexOf(b))]);
+                values.sort((a, b) => a - b);
+
+                // Check convergence
+                const range = values[n] - values[0];
+                if (range < tol) break;
+
+                // Centroid of all but worst
+                const centroid = new Array(n).fill(0);
+                for (let i = 0; i < n; i++) {
+                    for (let j = 0; j < n; j++) {
+                        centroid[j] += simplex[i][j] / n;
+                    }
+                }
+
+                // Reflection
+                const xr = centroid.map((c, j) => c + alpha * (c - simplex[n][j]));
+                const fr = objective(xr);
+
+                if (fr >= values[0] && fr < values[n - 1]) {
+                    simplex[n] = xr;
+                    values[n] = fr;
+                } else if (fr < values[0]) {
+                    // Expansion
+                    const xe = centroid.map((c, j) => c + gamma * (xr[j] - c));
+                    const fe = objective(xe);
+                    if (fe < fr) {
+                        simplex[n] = xe;
+                        values[n] = fe;
+                    } else {
+                        simplex[n] = xr;
+                        values[n] = fr;
+                    }
+                } else {
+                    // Contraction
+                    const xc = centroid.map((c, j) => c + rho * (simplex[n][j] - c));
+                    const fc = objective(xc);
+                    if (fc < values[n]) {
+                        simplex[n] = xc;
+                        values[n] = fc;
+                    } else {
+                        // Shrink
+                        for (let i = 1; i <= n; i++) {
+                            for (let j = 0; j < n; j++) {
+                                simplex[i][j] = simplex[0][j] + sigma * (simplex[i][j] - simplex[0][j]);
+                            }
+                            values[i] = objective(simplex[i]);
+                        }
+                    }
+                }
+            }
+
+            // Return best point
+            const bestIdx = values.indexOf(Math.min(...values));
+            return simplex[bestIdx];
+        }
+
+        // Run optimization
+        function runOptimization() {
+            const btn = document.getElementById('optimize-btn');
+            btn.disabled = true;
+            btn.textContent = '最適化中... / Optimizing...';
+
+            // Use setTimeout to allow UI to update
+            setTimeout(() => {
+                const I = parseFloat(document.getElementById('inertia-input').value) * 1e-6;
+                const tau_m = parseFloat(document.getElementById('tau-input').value) / 1000;
+                const eta = parseFloat(document.getElementById('eta-input').value);
+                const targetPM = parseFloat(document.getElementById('target-pm').value);
+                const targetBWRatio = parseFloat(document.getElementById('target-bw-ratio').value);
+
+                const K = 1 / I;
+
+                // Initial guess from current values
+                const Kp0 = parseFloat(document.getElementById('kp-input').value) * 1e-3;
+                const Ti0 = parseFloat(document.getElementById('ti-input').value) / 1000;
+                const Td0 = parseFloat(document.getElementById('td-input').value) / 1000;
+
+                const objective = (params) => objectiveFunction(params, K, tau_m, eta, targetPM, targetBWRatio);
+
+                // Run optimization
+                const result = nelderMead(objective, [Kp0, Ti0, Td0], 300);
+
+                const [KpOpt, TiOpt, TdOpt] = result;
+
+                // Update UI with optimized values
+                document.getElementById('kp-input').value = (KpOpt * 1e3).toFixed(3);
+                document.getElementById('kp-slider').value = (KpOpt * 1e3).toFixed(3);
+                document.getElementById('ti-input').value = (TiOpt * 1000).toFixed(1);
+                document.getElementById('ti-slider').value = (TiOpt * 1000).toFixed(1);
+                document.getElementById('td-input').value = (TdOpt * 1000).toFixed(1);
+                document.getElementById('td-slider').value = (TdOpt * 1000).toFixed(1);
+
+                btn.disabled = false;
+                btn.textContent = '感度関数を最小化 / Minimize Sensitivity';
+
+                updatePlots();
+            }, 50);
+        }
+
         // Closed-loop step response (numerical simulation)
         function simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, tMax, dt) {
             const t = [];
@@ -861,6 +1150,14 @@
                 ratioEl.textContent = ratio.toFixed(1) + '%';
                 ratioEl.className = 'result-value' + (ratio > 50 ? ' warning' : '');
             }
+
+            // Calculate and display sensitivity peak
+            const Ms = calculateSensitivity(K, tau_m, Kp, Ti, Td, eta);
+            const Ms_dB = 20 * Math.log10(Ms);
+            const msEl = document.getElementById('result-ms');
+            msEl.textContent = Ms_dB.toFixed(1) + ' dB';
+            // Ms > 6dB (2.0) is concerning, Ms > 9dB (2.8) is dangerous
+            msEl.className = 'sensitivity-value' + (Ms_dB > 9 ? ' danger' : Ms_dB > 6 ? ' warning' : '');
 
             document.getElementById('tf-plant').textContent =
                 `G(s) = ${(K/1000).toFixed(2)}×10³ / (s(${(tau_m*1000).toFixed(1)}ms·s + 1))`;
@@ -1149,6 +1446,9 @@
                     switchAxis(tab.dataset.axis);
                 });
             });
+
+            // Optimize button handler
+            document.getElementById('optimize-btn').addEventListener('click', runOptimization);
 
             updatePlots();
         });
