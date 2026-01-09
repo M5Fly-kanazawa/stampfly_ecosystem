@@ -765,7 +765,7 @@
                 </div>
 
                 <div class="calc-input-group">
-                    <h3>モーター電気特性 / Motor Electrical</h3>
+                    <h3>モーター特性 / Motor Characteristics</h3>
                     <div class="param-row">
                         <label>巻線抵抗 Rm</label>
                         <input type="number" id="calc-rm" value="0.34" step="0.01" min="0.01">
@@ -776,24 +776,13 @@
                         <input type="number" id="calc-jmp" value="2.01" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁸ kg·m²</span>
                     </div>
-                </div>
-
-                <div class="calc-input-group">
-                    <h3>電圧-回転数モデル V = Am·ω² + Bm·ω + Cm</h3>
                     <div class="param-row">
-                        <label>2次係数 Am</label>
-                        <input type="number" id="calc-am" value="5.39" step="0.01" min="0.01">
-                        <span class="unit">×10⁻⁸ V/(rad/s)²</span>
-                    </div>
-                    <div class="param-row">
-                        <label>1次係数 Bm</label>
-                        <input type="number" id="calc-bm" value="6.33" step="0.01" min="0.01">
+                        <label>トルク定数 Kt=Ke</label>
+                        <input type="number" id="calc-kt" value="6.12" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁴ V/(rad/s)</span>
                     </div>
-                    <div class="param-row">
-                        <label>定数項 Cm</label>
-                        <input type="number" id="calc-cm" value="1.53" step="0.01" min="0">
-                        <span class="unit">×10⁻² V</span>
+                    <div style="font-size: 0.75em; color: #888; margin-top: 5px; padding-left: 140px;">
+                        理想DCモータでは Kt = Ke（SI単位系）
                     </div>
                 </div>
 
@@ -814,11 +803,7 @@
                 <div class="calc-result-group">
                     <h3>中間計算 / Intermediate Calculations</h3>
                     <div class="calc-result-row">
-                        <span>逆起電力定数 Km = Cq·Rm/Am</span>
-                        <span class="result-value" id="calc-km">-- ×10⁻⁴ V/(rad/s)</span>
-                    </div>
-                    <div class="calc-result-row">
-                        <span>モータ時定数 τm = Jmp·Rm/Km²</span>
+                        <span>モータ時定数 τm = Jmp·Rm/Kt²</span>
                         <span class="result-value" id="calc-tau-calc">-- ms</span>
                     </div>
                     <div class="calc-result-row">
@@ -830,7 +815,7 @@
                         <span class="result-value" id="calc-hover-thrust">-- N</span>
                     </div>
                     <div class="calc-formula" style="margin-top: 10px; font-size: 0.8em;">
-                        τm計算式: τm = Jmp·Rm/Km² (電気時定数無視の近似モデル)
+                        τm = Jmp·Rm/Kt² (電気時定数を無視した近似モデル)
                     </div>
                 </div>
 
@@ -1657,14 +1642,10 @@
             const Izz = parseFloat(document.getElementById('calc-izz').value) * 1e-6;   // kg·m²
             const d = parseFloat(document.getElementById('calc-arm').value);            // m
 
-            // Motor electrical parameters
+            // Motor parameters
             const Rm = parseFloat(document.getElementById('calc-rm').value);            // Ω
             const Jmp = parseFloat(document.getElementById('calc-jmp').value) * 1e-8;   // kg·m²
-
-            // Voltage-speed model parameters
-            const Am = parseFloat(document.getElementById('calc-am').value) * 1e-8;     // V/(rad/s)²
-            const Bm = parseFloat(document.getElementById('calc-bm').value) * 1e-4;     // V/(rad/s)
-            const Cm = parseFloat(document.getElementById('calc-cm').value) * 1e-2;     // V
+            const Kt = parseFloat(document.getElementById('calc-kt').value) * 1e-4;     // V/(rad/s) = N·m/A
 
             // Propeller parameters
             const Ct = parseFloat(document.getElementById('calc-ct').value) * 1e-8;     // N/(rad/s)²
@@ -1675,11 +1656,9 @@
 
             // ============ Intermediate Calculations ============
 
-            // Back-EMF constant: Km = Cq × Rm / Am
-            const Km = Cq * Rm / Am;  // V/(rad/s)
-
-            // Motor time constant (from DC motor model): τm = Jmp × Rm / Km²
-            const tau_m_calc = Jmp * Rm / (Km * Km);  // s
+            // Motor time constant (from DC motor model): τm = Jmp × Rm / Kt²
+            // (Assuming Kt = Ke for ideal DC motor)
+            const tau_m_calc = Jmp * Rm / (Kt * Kt);  // s
 
             // Hover conditions
             const g = 9.80665;  // m/s²
@@ -1687,7 +1666,6 @@
             const omega0 = Math.sqrt(m * g / (4 * Ct));  // Hover angular velocity [rad/s]
 
             // Display intermediate results
-            document.getElementById('calc-km').textContent = (Km * 1e4).toFixed(2) + ' ×10⁻⁴ V/(rad/s)';
             document.getElementById('calc-tau-calc').textContent = (tau_m_calc * 1000).toFixed(2) + ' ms';
             document.getElementById('calc-hover-omega').textContent = omega0.toFixed(0) + ' rad/s';
             document.getElementById('calc-hover-thrust').textContent = (T0 * 1000).toFixed(2) + ' mN';
@@ -1848,8 +1826,7 @@
             // Calc tab input handlers - all physical parameter inputs
             [
                 'calc-mass', 'calc-ixx', 'calc-iyy', 'calc-izz', 'calc-arm',  // Vehicle
-                'calc-rm', 'calc-jmp',                                         // Motor electrical
-                'calc-am', 'calc-bm', 'calc-cm',                              // V-ω model
+                'calc-rm', 'calc-jmp', 'calc-kt',                              // Motor
                 'calc-ct', 'calc-cq',                                          // Propeller
                 'calc-tau-override'                                            // Time constant override
             ].forEach(id => {
