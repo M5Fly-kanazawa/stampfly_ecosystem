@@ -905,48 +905,81 @@ $$
 **注意：** プラントに積分器が含まれるため、I制御の追加は慎重に行う必要がある。
 典型的には PD または P 制御で設計し、外乱補償が必要な場合のみ I を追加する。
 
-### パラメータ例（StampFly）
+### パラメータ（StampFly実機値）
 
-| パラメータ | 記号 | 値 | 単位 |
-|-----------|------|-----|------|
-| アーム長 | $d$ | 0.033 | m |
-| 推力係数 | $C_t$ | $1.0 \times 10^{-8}$ | N/(rad/s)² |
-| トルク係数 | $C_q$ | $1.0 \times 10^{-10}$ | N·m/(rad/s)² |
-| 慣性モーメント | $I_{xx}, I_{yy}$ | $2.0 \times 10^{-5}$ | kg·m² |
-| 慣性モーメント | $I_{zz}$ | $3.5 \times 10^{-5}$ | kg·m² |
-| モータ時定数 | $\tau_m$ | 0.02 | s |
-| ホバリング回転数 | $\omega_{m0}$ | 4000 | rad/s |
+以下のパラメータは `docs/architecture/stampfly-parameters.md` より転載。
+
+#### 機体パラメータ
+
+| パラメータ | 記号 | 値 | 単位 | 備考 |
+|-----------|------|-----|------|------|
+| 機体質量 | $m$ | 0.035 | kg | バッテリー込み |
+| Roll慣性モーメント | $I_{xx}$ | $9.16 \times 10^{-6}$ | kg·m² | |
+| Pitch慣性モーメント | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
+| Yaw慣性モーメント | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
+| アーム長 | $d$ | 0.0325 | m | 中心→モーター |
+
+#### モーター・プロペラパラメータ
+
+| パラメータ | 記号 | 値 | 単位 | 備考 |
+|-----------|------|-----|------|------|
+| 推力係数 | $C_t$ | $1.00 \times 10^{-8}$ | N/(rad/s)² | $T = C_t \omega^2$ |
+| トルク係数 | $C_q$ | $9.71 \times 10^{-11}$ | N·m/(rad/s)² | $Q = C_q \omega^2$ |
+| 電圧-回転数 2次係数 | $A_m$ | $5.39 \times 10^{-8}$ | V/(rad/s)² | 実験同定 |
+| 電圧-回転数 1次係数 | $B_m$ | $6.33 \times 10^{-4}$ | V/(rad/s) | 実験同定 |
+| バッテリー電圧 | $V_{bat}$ | 3.7 | V | 公称値 |
+| モータ時定数 | $\tau_m$ | 0.02 | s | 推定値 |
+
+#### ホバリング条件
+
+| パラメータ | 記号 | 値 | 単位 | 計算式 |
+|-----------|------|-----|------|--------|
+| 1モーターあたり推力 | $T_0$ | 0.0858 | N | $mg/4$ |
+| ホバリング角速度 | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
+| ホバリング電圧 | $V_0$ | 2.1 | V | 実測 |
 
 ### 数値計算例
 
 上記パラメータを用いて、具体的な伝達関数を導出する。
 
-#### モータゲインの仮定
+#### モータゲインの導出
 
-PWMデューティ 0→1 で回転数 0→8000 rad/s と仮定：
+電圧-回転数特性 $V = A_m \omega^2 + B_m \omega + C_m$ をホバリング点で線形化：
 
 $$
-K_m = 8000 \text{ rad/s}
+\frac{dV}{d\omega}\bigg|_{\omega_{m0}} = 2 A_m \omega_{m0} + B_m = 2 \times 5.39 \times 10^{-8} \times 2930 + 6.33 \times 10^{-4} = 9.49 \times 10^{-4} \text{ V/(rad/s)}
+$$
+
+PWMデューティ $\delta$（0〜1）から回転数への定常ゲイン：
+
+$$
+K_m = \frac{V_{bat}}{dV/d\omega} = \frac{3.7}{9.49 \times 10^{-4}} = 3900 \text{ rad/s}
 $$
 
 #### 推力ゲイン
 
 $$
-k_T = 2 C_t \omega_{m0} = 2 \times 1.0 \times 10^{-8} \times 4000 = 8.0 \times 10^{-5} \text{ N/(rad/s)}
+k_T = 2 C_t \omega_{m0} = 2 \times 1.00 \times 10^{-8} \times 2930 = 5.86 \times 10^{-5} \text{ N/(rad/s)}
 $$
 
 #### 各軸のゲイン計算
 
-**ロール/ピッチ軸：**
+**ロール軸：**
 
 $$
-K_p = K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.033 \times 8.0 \times 10^{-5} \times 8000}{2.0 \times 10^{-5}} = 2112 \text{ [1/s]}
+K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{9.16 \times 10^{-6}} = 1621 \text{ [1/s]}
+$$
+
+**ピッチ軸：**
+
+$$
+K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{yy}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{13.3 \times 10^{-6}} = 1117 \text{ [1/s]}
 $$
 
 **ヨー軸：**
 
 $$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 1.0 \times 10^{-10} \times 4000 \times 8000}{3.5 \times 10^{-5}} = 365.7 \text{ [1/s]}
+K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 9.71 \times 10^{-11} \times 2930 \times 3900}{20.4 \times 10^{-6}} = 217 \text{ [1/s]}
 $$
 
 #### 数値入り伝達関数
@@ -954,32 +987,39 @@ $$
 **ロール軸（$\delta_\phi \to p$）：**
 
 $$
-\boxed{G_p(s) = \frac{2112}{s(0.02s + 1)} = \frac{105600}{s(s + 50)}}
+\boxed{G_p(s) = \frac{1621}{s(0.02s + 1)} = \frac{81050}{s(s + 50)}}
 $$
 
 **ピッチ軸（$\delta_\theta \to q$）：**
 
 $$
-\boxed{G_q(s) = \frac{2112}{s(0.02s + 1)} = \frac{105600}{s(s + 50)}}
+\boxed{G_q(s) = \frac{1117}{s(0.02s + 1)} = \frac{55850}{s(s + 50)}}
 $$
 
 **ヨー軸（$\delta_\psi \to r$）：**
 
 $$
-\boxed{G_r(s) = \frac{365.7}{s(0.02s + 1)} = \frac{18285}{s(s + 50)}}
+\boxed{G_r(s) = \frac{217}{s(0.02s + 1)} = \frac{10850}{s(s + 50)}}
 $$
 
 #### 特性まとめ
 
 | 軸 | ゲイン | 極 | 特徴 |
 |----|-------|-----|------|
-| Roll | 2112 | $s=0, -50$ | 積分器 + 時定数20ms |
-| Pitch | 2112 | $s=0, -50$ | Rollと同一 |
-| Yaw | 365.7 | $s=0, -50$ | ゲインがRoll/Pitchの約1/6 |
+| Roll | 1621 | $s=0, -50$ | 積分器 + 時定数20ms |
+| Pitch | 1117 | $s=0, -50$ | Rollの約69%（$I_{yy} > I_{xx}$） |
+| Yaw | 217 | $s=0, -50$ | Rollの約13% |
 
-**考察：** ヨー軸はトルク係数 $C_q$ がロール/ピッチの推力によるモーメントより小さく、
-かつ $I_{zz} > I_{xx}$ のため、ゲインが小さくなる。
-これはヨー軸の応答が他軸より遅いことを意味し、制御器設計時に考慮が必要である。
+**考察：**
+
+1. **Roll vs Pitch の差異**：$I_{yy} > I_{xx}$ のため、ピッチ軸はロール軸より応答が遅い。
+   これは機体形状の非対称性（前後方向が長い）に起因する。
+
+2. **Yaw軸の低ゲイン**：トルク係数 $C_q$ が推力によるモーメントより2桁小さく、
+   かつ $I_{zz}$ が最大のため、ヨー軸は最も応答が遅い。
+
+3. **制御設計への示唆**：各軸で異なるPIDゲインが必要。特にヨー軸は
+   ロール/ピッチ軸より高いゲインを設定して応答を揃える必要がある。
 
 ## 8. 数値積分
 
@@ -1727,48 +1767,81 @@ Block diagram of angular velocity control loop (rate mode):
 **Note:** Since the plant contains an integrator, adding I control requires caution.
 Typically, design with PD or P control, adding I only when disturbance rejection is needed.
 
-### Parameter Example (StampFly)
+### Parameters (StampFly Actual Values)
 
-| Parameter | Symbol | Value | Unit |
-|-----------|--------|-------|------|
-| Arm length | $d$ | 0.033 | m |
-| Thrust coefficient | $C_t$ | $1.0 \times 10^{-8}$ | N/(rad/s)² |
-| Torque coefficient | $C_q$ | $1.0 \times 10^{-10}$ | N·m/(rad/s)² |
-| Moment of inertia | $I_{xx}, I_{yy}$ | $2.0 \times 10^{-5}$ | kg·m² |
-| Moment of inertia | $I_{zz}$ | $3.5 \times 10^{-5}$ | kg·m² |
-| Motor time constant | $\tau_m$ | 0.02 | s |
-| Hovering angular velocity | $\omega_{m0}$ | 4000 | rad/s |
+The following parameters are from `docs/architecture/stampfly-parameters.md`.
+
+#### Vehicle Parameters
+
+| Parameter | Symbol | Value | Unit | Notes |
+|-----------|--------|-------|------|-------|
+| Vehicle mass | $m$ | 0.035 | kg | Including battery |
+| Roll moment of inertia | $I_{xx}$ | $9.16 \times 10^{-6}$ | kg·m² | |
+| Pitch moment of inertia | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
+| Yaw moment of inertia | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
+| Arm length | $d$ | 0.0325 | m | Center to motor |
+
+#### Motor & Propeller Parameters
+
+| Parameter | Symbol | Value | Unit | Notes |
+|-----------|--------|-------|------|-------|
+| Thrust coefficient | $C_t$ | $1.00 \times 10^{-8}$ | N/(rad/s)² | $T = C_t \omega^2$ |
+| Torque coefficient | $C_q$ | $9.71 \times 10^{-11}$ | N·m/(rad/s)² | $Q = C_q \omega^2$ |
+| Voltage-speed quadratic coeff. | $A_m$ | $5.39 \times 10^{-8}$ | V/(rad/s)² | Experimental |
+| Voltage-speed linear coeff. | $B_m$ | $6.33 \times 10^{-4}$ | V/(rad/s) | Experimental |
+| Battery voltage | $V_{bat}$ | 3.7 | V | Nominal |
+| Motor time constant | $\tau_m$ | 0.02 | s | Estimated |
+
+#### Hover Conditions
+
+| Parameter | Symbol | Value | Unit | Formula |
+|-----------|--------|-------|------|---------|
+| Thrust per motor | $T_0$ | 0.0858 | N | $mg/4$ |
+| Hover angular velocity | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
+| Hover voltage | $V_0$ | 2.1 | V | Measured |
 
 ### Numerical Example
 
 Using the above parameters, derive concrete transfer functions.
 
-#### Motor Gain Assumption
+#### Motor Gain Derivation
 
-Assuming PWM duty 0→1 corresponds to angular velocity 0→8000 rad/s:
+Linearize the voltage-speed relationship $V = A_m \omega^2 + B_m \omega + C_m$ at hover:
 
 $$
-K_m = 8000 \text{ rad/s}
+\frac{dV}{d\omega}\bigg|_{\omega_{m0}} = 2 A_m \omega_{m0} + B_m = 2 \times 5.39 \times 10^{-8} \times 2930 + 6.33 \times 10^{-4} = 9.49 \times 10^{-4} \text{ V/(rad/s)}
+$$
+
+Steady-state gain from PWM duty $\delta$ (0 to 1) to angular velocity:
+
+$$
+K_m = \frac{V_{bat}}{dV/d\omega} = \frac{3.7}{9.49 \times 10^{-4}} = 3900 \text{ rad/s}
 $$
 
 #### Thrust Gain
 
 $$
-k_T = 2 C_t \omega_{m0} = 2 \times 1.0 \times 10^{-8} \times 4000 = 8.0 \times 10^{-5} \text{ N/(rad/s)}
+k_T = 2 C_t \omega_{m0} = 2 \times 1.00 \times 10^{-8} \times 2930 = 5.86 \times 10^{-5} \text{ N/(rad/s)}
 $$
 
 #### Gain Calculation for Each Axis
 
-**Roll/Pitch axis:**
+**Roll axis:**
 
 $$
-K_p = K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.033 \times 8.0 \times 10^{-5} \times 8000}{2.0 \times 10^{-5}} = 2112 \text{ [1/s]}
+K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{9.16 \times 10^{-6}} = 1621 \text{ [1/s]}
+$$
+
+**Pitch axis:**
+
+$$
+K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{yy}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{13.3 \times 10^{-6}} = 1117 \text{ [1/s]}
 $$
 
 **Yaw axis:**
 
 $$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 1.0 \times 10^{-10} \times 4000 \times 8000}{3.5 \times 10^{-5}} = 365.7 \text{ [1/s]}
+K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 9.71 \times 10^{-11} \times 2930 \times 3900}{20.4 \times 10^{-6}} = 217 \text{ [1/s]}
 $$
 
 #### Transfer Functions with Numerical Values
@@ -1776,32 +1849,39 @@ $$
 **Roll axis ($\delta_\phi \to p$):**
 
 $$
-\boxed{G_p(s) = \frac{2112}{s(0.02s + 1)} = \frac{105600}{s(s + 50)}}
+\boxed{G_p(s) = \frac{1621}{s(0.02s + 1)} = \frac{81050}{s(s + 50)}}
 $$
 
 **Pitch axis ($\delta_\theta \to q$):**
 
 $$
-\boxed{G_q(s) = \frac{2112}{s(0.02s + 1)} = \frac{105600}{s(s + 50)}}
+\boxed{G_q(s) = \frac{1117}{s(0.02s + 1)} = \frac{55850}{s(s + 50)}}
 $$
 
 **Yaw axis ($\delta_\psi \to r$):**
 
 $$
-\boxed{G_r(s) = \frac{365.7}{s(0.02s + 1)} = \frac{18285}{s(s + 50)}}
+\boxed{G_r(s) = \frac{217}{s(0.02s + 1)} = \frac{10850}{s(s + 50)}}
 $$
 
 #### Characteristics Summary
 
 | Axis | Gain | Poles | Characteristics |
 |------|------|-------|-----------------|
-| Roll | 2112 | $s=0, -50$ | Integrator + 20ms time constant |
-| Pitch | 2112 | $s=0, -50$ | Same as Roll |
-| Yaw | 365.7 | $s=0, -50$ | Gain is ~1/6 of Roll/Pitch |
+| Roll | 1621 | $s=0, -50$ | Integrator + 20ms time constant |
+| Pitch | 1117 | $s=0, -50$ | ~69% of Roll ($I_{yy} > I_{xx}$) |
+| Yaw | 217 | $s=0, -50$ | ~13% of Roll |
 
-**Discussion:** The yaw axis has a smaller gain because the torque coefficient $C_q$ is smaller
-than the moment generated by thrust in roll/pitch, and $I_{zz} > I_{xx}$.
-This means the yaw axis response is slower than the other axes, which must be considered in controller design.
+**Discussion:**
+
+1. **Roll vs Pitch difference**: Since $I_{yy} > I_{xx}$, the pitch axis responds slower than roll.
+   This is due to the vehicle's asymmetric shape (longer in the fore-aft direction).
+
+2. **Low Yaw gain**: The torque coefficient $C_q$ is two orders of magnitude smaller than
+   the thrust-generated moment, and $I_{zz}$ is the largest, making yaw the slowest axis.
+
+3. **Control design implications**: Different PID gains are needed for each axis. The yaw axis
+   particularly requires higher gains to match the response of roll/pitch axes.
 
 ## 8. Numerical Integration
 
