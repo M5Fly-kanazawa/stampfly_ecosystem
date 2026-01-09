@@ -39,6 +39,44 @@
             margin-bottom: 20px;
             font-size: 0.9em;
         }
+        /* Tab styles */
+        .tabs {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 4px;
+            margin-bottom: 10px;
+            background: #16213e;
+            padding: 8px;
+            border-radius: 12px;
+            justify-content: center;
+        }
+        .tab {
+            padding: 12px 32px;
+            border: none;
+            background: transparent;
+            color: #888;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            background: #0f0f23;
+            color: #ccc;
+        }
+        .tab.active {
+            background: #00d4ff;
+            color: #000;
+        }
+        .tab.roll { border-left: 4px solid #ef4444; }
+        .tab.pitch { border-left: 4px solid #22c55e; }
+        .tab.yaw { border-left: 4px solid #f59e0b; }
+        .tab.all { border-left: 4px solid #8b5cf6; }
+        .tab.active.roll { background: #ef4444; }
+        .tab.active.pitch { background: #22c55e; }
+        .tab.active.yaw { background: #f59e0b; }
+        .tab.active.all { background: #8b5cf6; }
         .panel {
             background: #16213e;
             border-radius: 12px;
@@ -52,6 +90,18 @@
             padding-bottom: 10px;
             border-bottom: 1px solid #333;
         }
+        .axis-indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-left: 10px;
+            color: #000;
+            font-weight: bold;
+        }
+        .axis-indicator.roll { background: #ef4444; }
+        .axis-indicator.pitch { background: #22c55e; }
+        .axis-indicator.yaw { background: #f59e0b; }
         .param-group {
             margin-bottom: 20px;
         }
@@ -128,6 +178,28 @@
         .result-value.danger {
             color: #f87171;
         }
+        /* All tab results table */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.85em;
+        }
+        .results-table th, .results-table td {
+            padding: 8px 6px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+        }
+        .results-table th {
+            color: #888;
+            font-weight: normal;
+        }
+        .results-table th:first-child, .results-table td:first-child {
+            text-align: left;
+        }
+        .results-table .axis-roll { color: #ef4444; }
+        .results-table .axis-pitch { color: #22c55e; }
+        .results-table .axis-yaw { color: #f59e0b; }
         .plots {
             display: flex;
             flex-direction: column;
@@ -220,6 +292,18 @@
             height: 3px;
             border-radius: 2px;
         }
+        .all-view-params {
+            display: none;
+        }
+        .all-view-params.visible {
+            display: block;
+        }
+        .single-view-params {
+            display: block;
+        }
+        .single-view-params.hidden {
+            display: none;
+        }
         @media (max-width: 1000px) {
             .container {
                 grid-template-columns: 1fr;
@@ -232,87 +316,172 @@
         <h1>StampFly Loop Shaping Design Tool</h1>
         <p class="subtitle">リアルタイムPID制御器設計 / Real-time PID Controller Design</p>
 
+        <div class="tabs">
+            <button class="tab roll active" data-axis="roll">Roll</button>
+            <button class="tab pitch" data-axis="pitch">Pitch</button>
+            <button class="tab yaw" data-axis="yaw">Yaw</button>
+            <button class="tab all" data-axis="all">All / 統合</button>
+        </div>
+
         <div class="panel">
-            <h2>プラントパラメータ / Plant Parameters</h2>
-            <div class="param-group">
-                <div class="param-row">
-                    <label>慣性モーメント I</label>
-                    <input type="range" id="inertia-slider" min="1" max="50" step="0.1" value="9.16">
-                    <input type="number" id="inertia-input" value="9.16" step="0.1">
-                    <span class="unit">×10⁻⁶ kg·m²</span>
+            <div class="single-view-params">
+                <h2>プラントパラメータ / Plant Parameters <span class="axis-indicator roll" id="axis-label">Roll</span></h2>
+                <div class="param-group">
+                    <div class="param-row">
+                        <label>慣性モーメント I</label>
+                        <input type="range" id="inertia-slider" min="1" max="100" step="0.1" value="9.16">
+                        <input type="number" id="inertia-input" value="9.16" step="0.1">
+                        <span class="unit">×10⁻⁶ kg·m²</span>
+                    </div>
+                    <div class="param-row">
+                        <label>モータ時定数 τₘ</label>
+                        <input type="range" id="tau-slider" min="5" max="100" step="1" value="20">
+                        <input type="number" id="tau-input" value="20" step="1">
+                        <span class="unit">ms</span>
+                    </div>
                 </div>
-                <div class="param-row">
-                    <label>モータ時定数 τₘ</label>
-                    <input type="range" id="tau-slider" min="5" max="100" step="1" value="20">
-                    <input type="number" id="tau-input" value="20" step="1">
-                    <span class="unit">ms</span>
+
+                <h2>PIDパラメータ / PID Parameters</h2>
+                <div class="param-group">
+                    <div class="param-row">
+                        <label>比例ゲイン Kp</label>
+                        <input type="range" id="kp-slider" min="0.001" max="2" step="0.001" value="0.134">
+                        <input type="number" id="kp-input" value="0.134" step="0.001">
+                        <span class="unit">×10⁻³</span>
+                    </div>
+                    <div class="param-row">
+                        <label>積分時間 Ti</label>
+                        <input type="range" id="ti-slider" min="10" max="1000" step="1" value="75.6">
+                        <input type="number" id="ti-input" value="75.6" step="0.1">
+                        <span class="unit">ms</span>
+                    </div>
+                    <div class="param-row">
+                        <label>微分時間 Td</label>
+                        <input type="range" id="td-slider" min="1" max="200" step="0.1" value="42.6">
+                        <input type="number" id="td-input" value="42.6" step="0.1">
+                        <span class="unit">ms</span>
+                    </div>
+                    <div class="param-row">
+                        <label>微分フィルタ η</label>
+                        <input type="range" id="eta-slider" min="0.01" max="0.5" step="0.01" value="0.1">
+                        <input type="number" id="eta-input" value="0.1" step="0.01">
+                        <span class="unit"></span>
+                    </div>
+                </div>
+
+                <div class="results">
+                    <h3>設計結果 / Design Results</h3>
+                    <div class="result-row">
+                        <span>ゲイン交差周波数 ω_gc</span>
+                        <span class="result-value" id="result-wgc">-- rad/s</span>
+                    </div>
+                    <div class="result-row">
+                        <span>位相余裕 PM</span>
+                        <span class="result-value" id="result-pm">-- °</span>
+                    </div>
+                    <div class="result-row">
+                        <span>ゲイン余裕 GM</span>
+                        <span class="result-value" id="result-gm">-- dB</span>
+                    </div>
+                    <div class="result-row">
+                        <span>モータ帯域幅 ω_m</span>
+                        <span class="result-value" id="result-wm">-- rad/s</span>
+                    </div>
+                    <div class="result-row">
+                        <span>帯域幅比 ω_gc/ω_m</span>
+                        <span class="result-value" id="result-ratio">-- %</span>
+                    </div>
+                </div>
+
+                <div class="transfer-function">
+                    <div class="tf-label">プラント G(s):</div>
+                    <div class="tf-equation" id="tf-plant">G(s) = K / (s(τₘs + 1))</div>
+                    <div class="tf-label" style="margin-top:10px">制御器 C(s):</div>
+                    <div class="tf-equation" id="tf-controller">C(s) = Kp(1 + 1/(Ti·s) + Td·s/(ηTd·s+1))</div>
                 </div>
             </div>
 
-            <h2>PIDパラメータ / PID Parameters</h2>
-            <div class="param-group">
-                <div class="param-row">
-                    <label>比例ゲイン Kp</label>
-                    <input type="range" id="kp-slider" min="0.01" max="1" step="0.01" value="0.134">
-                    <input type="number" id="kp-input" value="0.134" step="0.001">
-                    <span class="unit">×10⁻³</span>
+            <div class="all-view-params">
+                <h2>3軸比較 / 3-Axis Comparison</h2>
+                <div class="results">
+                    <h3>設計結果 / Design Results</h3>
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>パラメータ</th>
+                                <th class="axis-roll">Roll</th>
+                                <th class="axis-pitch">Pitch</th>
+                                <th class="axis-yaw">Yaw</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>慣性 I [×10⁻⁶ kg·m²]</td>
+                                <td id="all-inertia-roll">--</td>
+                                <td id="all-inertia-pitch">--</td>
+                                <td id="all-inertia-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>Kp [×10⁻³]</td>
+                                <td id="all-kp-roll">--</td>
+                                <td id="all-kp-pitch">--</td>
+                                <td id="all-kp-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>Ti [ms]</td>
+                                <td id="all-ti-roll">--</td>
+                                <td id="all-ti-pitch">--</td>
+                                <td id="all-ti-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>Td [ms]</td>
+                                <td id="all-td-roll">--</td>
+                                <td id="all-td-pitch">--</td>
+                                <td id="all-td-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>ω_gc [rad/s]</td>
+                                <td id="all-wgc-roll">--</td>
+                                <td id="all-wgc-pitch">--</td>
+                                <td id="all-wgc-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>位相余裕 PM [°]</td>
+                                <td id="all-pm-roll">--</td>
+                                <td id="all-pm-pitch">--</td>
+                                <td id="all-pm-yaw">--</td>
+                            </tr>
+                            <tr>
+                                <td>ゲイン余裕 GM [dB]</td>
+                                <td id="all-gm-roll">--</td>
+                                <td id="all-gm-pitch">--</td>
+                                <td id="all-gm-yaw">--</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <div class="param-row">
-                    <label>積分時間 Ti</label>
-                    <input type="range" id="ti-slider" min="10" max="500" step="1" value="75.6">
-                    <input type="number" id="ti-input" value="75.6" step="0.1">
-                    <span class="unit">ms</span>
-                </div>
-                <div class="param-row">
-                    <label>微分時間 Td</label>
-                    <input type="range" id="td-slider" min="5" max="200" step="1" value="42.6">
-                    <input type="number" id="td-input" value="42.6" step="0.1">
-                    <span class="unit">ms</span>
-                </div>
-                <div class="param-row">
-                    <label>微分フィルタ η</label>
-                    <input type="range" id="eta-slider" min="0.01" max="0.5" step="0.01" value="0.1">
-                    <input type="number" id="eta-input" value="0.1" step="0.01">
-                    <span class="unit"></span>
-                </div>
-            </div>
 
-            <div class="results">
-                <h3>設計結果 / Design Results</h3>
-                <div class="result-row">
-                    <span>ゲイン交差周波数 ω_gc</span>
-                    <span class="result-value" id="result-wgc">-- rad/s</span>
+                <div class="legend-info" style="margin-top: 20px;">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#ef4444"></div>
+                        <span>Roll</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#22c55e"></div>
+                        <span>Pitch</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#f59e0b"></div>
+                        <span>Yaw</span>
+                    </div>
                 </div>
-                <div class="result-row">
-                    <span>位相余裕 PM</span>
-                    <span class="result-value" id="result-pm">-- °</span>
-                </div>
-                <div class="result-row">
-                    <span>ゲイン余裕 GM</span>
-                    <span class="result-value" id="result-gm">-- dB</span>
-                </div>
-                <div class="result-row">
-                    <span>モータ帯域幅 ω_m</span>
-                    <span class="result-value" id="result-wm">-- rad/s</span>
-                </div>
-                <div class="result-row">
-                    <span>帯域幅比 ω_gc/ω_m</span>
-                    <span class="result-value" id="result-ratio">-- %</span>
-                </div>
-            </div>
-
-            <div class="transfer-function">
-                <div class="tf-label">プラント G(s):</div>
-                <div class="tf-equation" id="tf-plant">G(s) = K / (s(τₘs + 1))</div>
-                <div class="tf-label" style="margin-top:10px">制御器 C(s):</div>
-                <div class="tf-equation" id="tf-controller">C(s) = Kp(1 + 1/(Ti·s) + Td·s/(ηTd·s+1))</div>
             </div>
         </div>
 
         <div class="plots">
             <div class="plot-container">
                 <div id="bode-plot"></div>
-                <div class="legend-info">
+                <div class="legend-info" id="single-legend">
                     <div class="legend-item">
                         <div class="legend-color" style="background:#3b82f6"></div>
                         <span>開ループ L(s)</span>
@@ -362,10 +531,23 @@
             scale: (c, k) => ({ re: c.re * k, im: c.im * k })
         };
 
+        // Axis parameters storage
+        const axisParams = {
+            roll: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
+            pitch: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
+            yaw: { inertia: 48.0, tau: 20, kp: 0.5, ti: 150, td: 50, eta: 0.1 }
+        };
+
+        const axisColors = {
+            roll: '#ef4444',
+            pitch: '#22c55e',
+            yaw: '#f59e0b'
+        };
+
+        let currentAxis = 'roll';
+
         // Transfer function evaluation
         function evalPlant(omega, K, tau_m) {
-            // G(s) = K / (s * (tau_m * s + 1))
-            // G(jω) = K / (jω * (jω*tau_m + 1))
             const jw = Complex.create(0, omega);
             const jwTau = Complex.create(0, omega * tau_m);
             const term1 = Complex.add(jwTau, Complex.create(1, 0));
@@ -374,19 +556,12 @@
         }
 
         function evalController(omega, Kp, Ti, Td, eta) {
-            // C(s) = Kp * (1 + 1/(Ti*s) + Td*s/(eta*Td*s + 1))
             const jw = Complex.create(0, omega);
             const one = Complex.create(1, 0);
-
-            // Integral term: 1/(Ti*jω)
             const integral = Complex.div(one, Complex.scale(jw, Ti));
-
-            // Derivative term: Td*jω / (eta*Td*jω + 1)
             const numD = Complex.scale(jw, Td);
             const denomD = Complex.add(Complex.scale(jw, eta * Td), one);
             const derivative = Complex.div(numD, denomD);
-
-            // Total: Kp * (1 + integral + derivative)
             const sum = Complex.add(Complex.add(one, integral), derivative);
             return Complex.scale(sum, Kp);
         }
@@ -407,7 +582,6 @@
             let omega_gc = null, pm = null;
             let omega_pc = null, gm_dB = null;
 
-            // Find gain crossover frequency (|L| = 1)
             for (let i = 1; i < omegas.length; i++) {
                 const L_prev = evalOpenLoop(omegas[i-1], K, tau_m, Kp, Ti, Td, eta);
                 const L_curr = evalOpenLoop(omegas[i], K, tau_m, Kp, Ti, Td, eta);
@@ -415,7 +589,6 @@
                 const mag_curr = Complex.abs(L_curr);
 
                 if ((mag_prev >= 1 && mag_curr < 1) || (mag_prev < 1 && mag_curr >= 1)) {
-                    // Linear interpolation
                     const t = (1 - mag_prev) / (mag_curr - mag_prev);
                     omega_gc = omegas[i-1] + t * (omegas[i] - omegas[i-1]);
                     const L_gc = evalOpenLoop(omega_gc, K, tau_m, Kp, Ti, Td, eta);
@@ -424,7 +597,6 @@
                 }
             }
 
-            // Find phase crossover frequency (phase = -180°)
             let prevPhase = null;
             for (let i = 0; i < omegas.length; i++) {
                 const L = evalOpenLoop(omegas[i], K, tau_m, Kp, Ti, Td, eta);
@@ -443,16 +615,14 @@
         }
 
         // Closed-loop step response (numerical simulation)
-        // Plant: G(s) = K / (s(τ_m·s + 1)) = (1/I) / (s(τ_m·s + 1))
-        // This is decomposed as: motor lag (1st order) -> integrator (inertia)
         function simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, tMax, dt) {
             const t = [];
             const y = [];
 
-            let omega_state = 0;      // Angular velocity output
-            let motor_state = 0;      // Motor output (after first-order lag)
-            let integral = 0;         // PID integral state
-            let deriv_state = 0;      // PID derivative filter state
+            let omega_state = 0;
+            let motor_state = 0;
+            let integral = 0;
+            let deriv_state = 0;
             let prev_error = 0;
 
             const target = 1;
@@ -463,19 +633,15 @@
 
                 const error = target - omega_state;
 
-                // PID output
                 integral += error * dt / Ti;
                 const deriv_raw = (error - prev_error) / dt;
                 deriv_state += (deriv_raw * Td - deriv_state) * dt / (eta * Td);
 
                 const u = Kp * (error + integral + deriv_state);
 
-                // Plant dynamics: G(s) = K / (s(τ_m·s + 1))
-                // Stage 1: Motor first-order lag: d(motor)/dt = (u - motor) / tau_m
                 const d_motor = (u - motor_state) / tau_m;
                 motor_state += d_motor * dt;
 
-                // Stage 2: Integrator with gain K: d(omega)/dt = motor * K
                 omega_state += motor_state * K * dt;
 
                 prev_error = error;
@@ -484,26 +650,87 @@
             return { t, y };
         }
 
-        // Update plots
-        function updatePlots() {
-            // Get parameters
-            const I = parseFloat(document.getElementById('inertia-input').value) * 1e-6;
-            const tau_m = parseFloat(document.getElementById('tau-input').value) / 1000;
-            const Kp = parseFloat(document.getElementById('kp-input').value) * 1e-3;
-            const Ti = parseFloat(document.getElementById('ti-input').value) / 1000;
-            const Td = parseFloat(document.getElementById('td-input').value) / 1000;
-            const eta = parseFloat(document.getElementById('eta-input').value);
-
+        // Get axis parameters from storage
+        function getAxisParams(axis) {
+            const p = axisParams[axis];
+            const I = p.inertia * 1e-6;
+            const tau_m = p.tau / 1000;
+            const Kp = p.kp * 1e-3;
+            const Ti = p.ti / 1000;
+            const Td = p.td / 1000;
+            const eta = p.eta;
             const K = 1 / I;
+            return { I, tau_m, Kp, Ti, Td, eta, K };
+        }
+
+        // Calculate frequency response for an axis
+        function calcFreqResponse(axis, omegas) {
+            const { K, tau_m, Kp, Ti, Td, eta } = getAxisParams(axis);
+
+            const mag_L = [], phase_L = [];
+            let unwrapOffset = 0;
+            let prevPhase_L = null;
+
+            for (const omega of omegas) {
+                const L = evalOpenLoop(omega, K, tau_m, Kp, Ti, Td, eta);
+                mag_L.push(20 * Math.log10(Complex.abs(L)));
+
+                let ph_L = Complex.arg(L) * 180 / Math.PI;
+                if (prevPhase_L !== null && ph_L - prevPhase_L > 180) {
+                    unwrapOffset -= 360;
+                } else if (prevPhase_L !== null && ph_L - prevPhase_L < -180) {
+                    unwrapOffset += 360;
+                }
+                prevPhase_L = ph_L;
+                phase_L.push(ph_L + unwrapOffset);
+            }
+
+            const margins = calculateMargins(K, tau_m, Kp, Ti, Td, eta);
+            return { mag_L, phase_L, margins };
+        }
+
+        // Save current UI values to axis storage
+        function saveCurrentParams() {
+            if (currentAxis === 'all') return;
+            axisParams[currentAxis] = {
+                inertia: parseFloat(document.getElementById('inertia-input').value),
+                tau: parseFloat(document.getElementById('tau-input').value),
+                kp: parseFloat(document.getElementById('kp-input').value),
+                ti: parseFloat(document.getElementById('ti-input').value),
+                td: parseFloat(document.getElementById('td-input').value),
+                eta: parseFloat(document.getElementById('eta-input').value)
+            };
+        }
+
+        // Load axis values to UI
+        function loadAxisParams(axis) {
+            const p = axisParams[axis];
+            document.getElementById('inertia-input').value = p.inertia;
+            document.getElementById('inertia-slider').value = p.inertia;
+            document.getElementById('tau-input').value = p.tau;
+            document.getElementById('tau-slider').value = p.tau;
+            document.getElementById('kp-input').value = p.kp;
+            document.getElementById('kp-slider').value = p.kp;
+            document.getElementById('ti-input').value = p.ti;
+            document.getElementById('ti-slider').value = p.ti;
+            document.getElementById('td-input').value = p.td;
+            document.getElementById('td-slider').value = p.td;
+            document.getElementById('eta-input').value = p.eta;
+            document.getElementById('eta-slider').value = p.eta;
+        }
+
+        // Update single axis plot
+        function updateSingleAxisPlot() {
+            saveCurrentParams();
+
+            const { I, tau_m, Kp, Ti, Td, eta, K } = getAxisParams(currentAxis);
             const omega_m = 1 / tau_m;
 
-            // Generate frequency array
             const omegas = [];
             for (let i = -1; i <= 4; i += 0.02) {
                 omegas.push(Math.pow(10, i));
             }
 
-            // Calculate frequency responses
             const mag_L = [], phase_L = [];
             const mag_G = [], phase_G = [];
             const mag_C = [], phase_C = [];
@@ -533,7 +760,6 @@
                 phase_C.push(Complex.arg(C) * 180 / Math.PI);
             }
 
-            // Calculate margins
             const margins = calculateMargins(K, tau_m, Kp, Ti, Td, eta);
 
             // Update results display
@@ -574,86 +800,45 @@
                 ratioEl.className = 'result-value' + (ratio > 50 ? ' warning' : '');
             }
 
-            // Update transfer function display
             document.getElementById('tf-plant').textContent =
                 `G(s) = ${(K/1000).toFixed(2)}×10³ / (s(${(tau_m*1000).toFixed(1)}ms·s + 1))`;
 
-            // Bode plot layout
+            // Bode plot
             const plotLayout = {
                 paper_bgcolor: '#16213e',
                 plot_bgcolor: '#0f0f23',
                 font: { color: '#eee', size: 11 },
                 margin: { t: 40, r: 30, b: 40, l: 60 },
                 grid: { rows: 2, columns: 1, pattern: 'independent' },
-                xaxis: {
-                    type: 'log',
-                    title: '',
-                    gridcolor: '#333',
-                    showline: true,
-                    linecolor: '#444'
-                },
-                xaxis2: {
-                    type: 'log',
-                    title: 'Frequency [rad/s]',
-                    gridcolor: '#333',
-                    showline: true,
-                    linecolor: '#444'
-                },
-                yaxis: {
-                    title: 'Magnitude [dB]',
-                    gridcolor: '#333',
-                    range: [-80, 120],
-                    showline: true,
-                    linecolor: '#444',
-                    domain: [0.55, 1]
-                },
-                yaxis2: {
-                    title: 'Phase [deg]',
-                    gridcolor: '#333',
-                    range: [-270, 90],
-                    showline: true,
-                    linecolor: '#444',
-                    domain: [0, 0.45]
-                },
+                xaxis: { type: 'log', title: '', gridcolor: '#333', showline: true, linecolor: '#444' },
+                xaxis2: { type: 'log', title: 'Frequency [rad/s]', gridcolor: '#333', showline: true, linecolor: '#444' },
+                yaxis: { title: 'Magnitude [dB]', gridcolor: '#333', range: [-80, 120], showline: true, linecolor: '#444', domain: [0.55, 1] },
+                yaxis2: { title: 'Phase [deg]', gridcolor: '#333', range: [-270, 90], showline: true, linecolor: '#444', domain: [0, 0.45] },
                 showlegend: false,
                 shapes: [
-                    { type: 'line', x0: 0.1, x1: 10000, y0: 0, y1: 0,
-                      xref: 'x', yref: 'y', line: { color: '#666', width: 1, dash: 'dot' } },
-                    { type: 'line', x0: 0.1, x1: 10000, y0: -180, y1: -180,
-                      xref: 'x2', yref: 'y2', line: { color: '#666', width: 1, dash: 'dot' } }
+                    { type: 'line', x0: 0.1, x1: 10000, y0: 0, y1: 0, xref: 'x', yref: 'y', line: { color: '#666', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0.1, x1: 10000, y0: -180, y1: -180, xref: 'x2', yref: 'y2', line: { color: '#666', width: 1, dash: 'dot' } }
                 ]
             };
 
             if (margins.omega_gc) {
                 plotLayout.shapes.push({
-                    type: 'line',
-                    x0: margins.omega_gc, x1: margins.omega_gc,
-                    y0: -80, y1: 120,
-                    xref: 'x', yref: 'y',
-                    line: { color: '#3b82f6', width: 1, dash: 'dash' }
+                    type: 'line', x0: margins.omega_gc, x1: margins.omega_gc, y0: -80, y1: 120,
+                    xref: 'x', yref: 'y', line: { color: '#3b82f6', width: 1, dash: 'dash' }
                 });
                 plotLayout.shapes.push({
-                    type: 'line',
-                    x0: margins.omega_gc, x1: margins.omega_gc,
-                    y0: -270, y1: 90,
-                    xref: 'x2', yref: 'y2',
-                    line: { color: '#3b82f6', width: 1, dash: 'dash' }
+                    type: 'line', x0: margins.omega_gc, x1: margins.omega_gc, y0: -270, y1: 90,
+                    xref: 'x2', yref: 'y2', line: { color: '#3b82f6', width: 1, dash: 'dash' }
                 });
             }
 
             const bodeData = [
-                { x: omegas, y: mag_L, type: 'scatter', mode: 'lines',
-                  line: { color: '#3b82f6', width: 2.5 }, name: 'L(s)', xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_G, type: 'scatter', mode: 'lines',
-                  line: { color: '#22c55e', width: 1.5, dash: 'dash' }, name: 'G(s)', xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: mag_C, type: 'scatter', mode: 'lines',
-                  line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, name: 'C(s)', xaxis: 'x', yaxis: 'y' },
-                { x: omegas, y: phase_L, type: 'scatter', mode: 'lines',
-                  line: { color: '#3b82f6', width: 2.5 }, name: 'L(s)', xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_G, type: 'scatter', mode: 'lines',
-                  line: { color: '#22c55e', width: 1.5, dash: 'dash' }, name: 'G(s)', xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines',
-                  line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, name: 'C(s)', xaxis: 'x2', yaxis: 'y2' }
+                { x: omegas, y: mag_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: phase_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' }
             ];
 
             Plotly.react('bode-plot', bodeData, plotLayout, { responsive: true });
@@ -668,37 +853,152 @@
                 font: { color: '#eee', size: 11 },
                 margin: { t: 40, r: 30, b: 50, l: 60 },
                 title: { text: 'Closed-Loop Step Response', font: { size: 14 } },
-                xaxis: {
-                    title: 'Time [s]',
-                    gridcolor: '#333',
-                    showline: true,
-                    linecolor: '#444',
-                    range: [0, tMax]
-                },
-                yaxis: {
-                    title: 'Response',
-                    gridcolor: '#333',
-                    showline: true,
-                    linecolor: '#444',
-                    range: [0, 1.5]
-                },
+                xaxis: { title: 'Time [s]', gridcolor: '#333', showline: true, linecolor: '#444', range: [0, tMax] },
+                yaxis: { title: 'Response', gridcolor: '#333', showline: true, linecolor: '#444', range: [0, 1.5] },
                 shapes: [
-                    { type: 'line', x0: 0, x1: tMax, y0: 1, y1: 1,
-                      line: { color: '#666', width: 1, dash: 'dash' } },
-                    { type: 'line', x0: 0, x1: tMax, y0: 1.05, y1: 1.05,
-                      line: { color: '#ef4444', width: 1, dash: 'dot' } },
-                    { type: 'line', x0: 0, x1: tMax, y0: 0.95, y1: 0.95,
-                      line: { color: '#ef4444', width: 1, dash: 'dot' } }
+                    { type: 'line', x0: 0, x1: tMax, y0: 1, y1: 1, line: { color: '#666', width: 1, dash: 'dash' } },
+                    { type: 'line', x0: 0, x1: tMax, y0: 1.05, y1: 1.05, line: { color: '#ef4444', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0, x1: tMax, y0: 0.95, y1: 0.95, line: { color: '#ef4444', width: 1, dash: 'dot' } }
                 ],
                 showlegend: false
             };
 
             const stepPlotData = [
-                { x: stepData.t, y: stepData.y, type: 'scatter', mode: 'lines',
-                  line: { color: '#3b82f6', width: 2 } }
+                { x: stepData.t, y: stepData.y, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2 } }
             ];
 
             Plotly.react('step-plot', stepPlotData, stepLayout, { responsive: true });
+        }
+
+        // Update all axes overlay plot
+        function updateAllAxesPlot() {
+            const omegas = [];
+            for (let i = -1; i <= 4; i += 0.02) {
+                omegas.push(Math.pow(10, i));
+            }
+
+            const axes = ['roll', 'pitch', 'yaw'];
+            const bodeData = [];
+
+            for (const axis of axes) {
+                const { mag_L, phase_L, margins } = calcFreqResponse(axis, omegas);
+                const color = axisColors[axis];
+
+                bodeData.push({
+                    x: omegas, y: mag_L, type: 'scatter', mode: 'lines',
+                    line: { color, width: 2 }, name: axis, xaxis: 'x', yaxis: 'y'
+                });
+                bodeData.push({
+                    x: omegas, y: phase_L, type: 'scatter', mode: 'lines',
+                    line: { color, width: 2 }, name: axis, xaxis: 'x2', yaxis: 'y2'
+                });
+
+                // Update table
+                const p = axisParams[axis];
+                document.getElementById(`all-inertia-${axis}`).textContent = p.inertia.toFixed(2);
+                document.getElementById(`all-kp-${axis}`).textContent = p.kp.toFixed(3);
+                document.getElementById(`all-ti-${axis}`).textContent = p.ti.toFixed(1);
+                document.getElementById(`all-td-${axis}`).textContent = p.td.toFixed(1);
+                document.getElementById(`all-wgc-${axis}`).textContent = margins.omega_gc ? margins.omega_gc.toFixed(1) : 'N/A';
+                document.getElementById(`all-pm-${axis}`).textContent = margins.pm !== null ? margins.pm.toFixed(1) : 'N/A';
+                document.getElementById(`all-gm-${axis}`).textContent = margins.gm_dB !== null ? margins.gm_dB.toFixed(1) : '∞';
+            }
+
+            const plotLayout = {
+                paper_bgcolor: '#16213e',
+                plot_bgcolor: '#0f0f23',
+                font: { color: '#eee', size: 11 },
+                margin: { t: 40, r: 30, b: 40, l: 60 },
+                grid: { rows: 2, columns: 1, pattern: 'independent' },
+                xaxis: { type: 'log', title: '', gridcolor: '#333', showline: true, linecolor: '#444' },
+                xaxis2: { type: 'log', title: 'Frequency [rad/s]', gridcolor: '#333', showline: true, linecolor: '#444' },
+                yaxis: { title: 'Magnitude [dB]', gridcolor: '#333', range: [-80, 120], showline: true, linecolor: '#444', domain: [0.55, 1] },
+                yaxis2: { title: 'Phase [deg]', gridcolor: '#333', range: [-270, 90], showline: true, linecolor: '#444', domain: [0, 0.45] },
+                showlegend: false,
+                shapes: [
+                    { type: 'line', x0: 0.1, x1: 10000, y0: 0, y1: 0, xref: 'x', yref: 'y', line: { color: '#666', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0.1, x1: 10000, y0: -180, y1: -180, xref: 'x2', yref: 'y2', line: { color: '#666', width: 1, dash: 'dot' } }
+                ]
+            };
+
+            Plotly.react('bode-plot', bodeData, plotLayout, { responsive: true });
+
+            // Step response for all axes
+            const tMax = parseFloat(document.getElementById('time-range-input').value);
+            const stepPlotData = [];
+
+            for (const axis of axes) {
+                const { K, tau_m, Kp, Ti, Td, eta } = getAxisParams(axis);
+                const stepData = simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, tMax, 0.001);
+                stepPlotData.push({
+                    x: stepData.t, y: stepData.y, type: 'scatter', mode: 'lines',
+                    line: { color: axisColors[axis], width: 2 }, name: axis
+                });
+            }
+
+            const stepLayout = {
+                paper_bgcolor: '#16213e',
+                plot_bgcolor: '#0f0f23',
+                font: { color: '#eee', size: 11 },
+                margin: { t: 40, r: 30, b: 50, l: 60 },
+                title: { text: 'Closed-Loop Step Response (All Axes)', font: { size: 14 } },
+                xaxis: { title: 'Time [s]', gridcolor: '#333', showline: true, linecolor: '#444', range: [0, tMax] },
+                yaxis: { title: 'Response', gridcolor: '#333', showline: true, linecolor: '#444', range: [0, 1.5] },
+                shapes: [
+                    { type: 'line', x0: 0, x1: tMax, y0: 1, y1: 1, line: { color: '#666', width: 1, dash: 'dash' } },
+                    { type: 'line', x0: 0, x1: tMax, y0: 1.05, y1: 1.05, line: { color: '#888', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0, x1: tMax, y0: 0.95, y1: 0.95, line: { color: '#888', width: 1, dash: 'dot' } }
+                ],
+                showlegend: false
+            };
+
+            Plotly.react('step-plot', stepPlotData, stepLayout, { responsive: true });
+        }
+
+        // Main update function
+        function updatePlots() {
+            if (currentAxis === 'all') {
+                updateAllAxesPlot();
+            } else {
+                updateSingleAxisPlot();
+            }
+        }
+
+        // Switch axis
+        function switchAxis(axis) {
+            // Save current params before switching
+            saveCurrentParams();
+
+            currentAxis = axis;
+
+            // Update tab UI
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`.tab[data-axis="${axis}"]`).classList.add('active');
+
+            // Update axis indicator
+            const axisLabel = document.getElementById('axis-label');
+            if (axis !== 'all') {
+                axisLabel.textContent = axis.charAt(0).toUpperCase() + axis.slice(1);
+                axisLabel.className = `axis-indicator ${axis}`;
+            }
+
+            // Toggle panel visibility
+            const singleParams = document.querySelector('.single-view-params');
+            const allParams = document.querySelector('.all-view-params');
+            const singleLegend = document.getElementById('single-legend');
+
+            if (axis === 'all') {
+                singleParams.classList.add('hidden');
+                allParams.classList.add('visible');
+                singleLegend.style.display = 'none';
+            } else {
+                singleParams.classList.remove('hidden');
+                allParams.classList.remove('visible');
+                singleLegend.style.display = 'flex';
+                loadAxisParams(axis);
+            }
+
+            updatePlots();
         }
 
         // Sync slider and input
@@ -726,6 +1026,13 @@
             syncInputs('td-slider', 'td-input');
             syncInputs('eta-slider', 'eta-input');
             syncInputs('time-range-slider', 'time-range-input');
+
+            // Tab click handlers
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    switchAxis(tab.dataset.axis);
+                });
+            });
 
             updatePlots();
         });
