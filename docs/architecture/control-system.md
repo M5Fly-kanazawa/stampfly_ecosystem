@@ -1112,6 +1112,214 @@ $$
 3. **制御設計への示唆**：モーメント入力を基準とした設計では、各軸のプラントゲインは慣性モーメントのみで決まる。
    制御器設計時は各軸の慣性モーメントの違いを考慮してゲイン調整を行う。
 
+### PID制御器の設計
+
+本節では、ループ整形法を用いてPID制御器を設計する。
+位相余裕とゲイン交差周波数を指定し、安定かつ所望の応答特性を持つ制御系を実現する。
+
+#### 不完全微分付きPID制御器
+
+高周波ノイズの増幅を防ぐため、微分項にローパスフィルタを付加した不完全微分付きPID制御器を使用する：
+
+$$
+C(s) = K_p \left( 1 + \frac{1}{T_i s} + \frac{T_d s}{\eta T_d s + 1} \right)
+$$
+
+| パラメータ | 記号 | 説明 |
+|-----------|------|------|
+| 比例ゲイン | $K_p$ | 全体のゲイン調整 |
+| 積分時間 | $T_i$ | 積分動作の時定数（$1/T_i$ に零点） |
+| 微分時間 | $T_d$ | 微分動作の時定数（$1/T_d$ に零点） |
+| 微分フィルタ係数 | $\eta$ | 微分の高周波ロールオフ（典型値: 0.1） |
+
+**微分フィルタの効果：**
+
+- $\eta = 0$：理想微分（実現不可、高周波ゲイン無限大）
+- $\eta > 0$：周波数 $1/(\eta T_d)$ 以上でゲインが飽和
+- 典型値 $\eta = 0.1$ では、微分ゲインは $1/\eta = 10$ 倍で飽和
+
+#### ゲイン交差周波数の選定
+
+ゲイン交差周波数 $\omega_{gc}$ は制御系の応答速度を決定する重要なパラメータである。
+選定にあたり、以下の制約を考慮する：
+
+**1. モータ帯域幅による制約**
+
+モータの時定数 $\tau_m = 0.02$ s より、モータ帯域幅は：
+
+$$
+\omega_m = \frac{1}{\tau_m} = 50 \text{ rad/s}
+$$
+
+制御帯域がモータ帯域を超えると、モータの遅れにより位相余裕が急激に減少する。
+経験則として：
+
+$$
+\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m
+$$
+
+**2. サンプリング周波数による制約**
+
+制御ループが離散時間で実装される場合、ナイキスト周波数の制約を受ける。
+IMUが400 Hzで動作する場合：
+
+$$
+\omega_{Nyquist} = \pi \times 400 \approx 1257 \text{ rad/s}
+$$
+
+これは十分に高く、本設計では制約とならない。
+
+**3. 外乱抑制性能**
+
+外乱抑制には高い $\omega_{gc}$ が有利だが、モデル化誤差や高周波ノイズへのロバスト性が低下する。
+
+**選定結果**
+
+上記を総合し、$\omega_{gc} = 15$ rad/s（モータ帯域の30%）を選定する：
+
+| 項目 | 値 |
+|------|-----|
+| モータ帯域幅 | 50 rad/s |
+| ゲイン交差周波数 | 15 rad/s |
+| 帯域幅比 | 30% |
+
+#### 位相余裕の妥当性
+
+位相余裕 $\phi_m = 60°$ を設計目標とする。この値の妥当性を検討する。
+
+**1. 安定性の観点**
+
+- $\phi_m < 30°$：振動的な応答、外乱に敏感
+- $\phi_m = 45°$：最小限の安定余裕
+- $\phi_m = 60°$：良好な安定余裕、適度な応答速度
+- $\phi_m > 75°$：過度に保守的、応答が遅い
+
+**2. 閉ループ特性との関係**
+
+位相余裕とオーバーシュートの近似関係：
+
+$$
+\zeta \approx \frac{\phi_m}{100} \quad (\phi_m \text{ in degrees})
+$$
+
+$\phi_m = 60°$ では $\zeta \approx 0.6$ となり、オーバーシュート約10%の応答が期待される。
+
+**3. ゲイン変動への耐性**
+
+$\phi_m = 60°$ では、ゲインが約2倍（6 dB）変動しても安定性を維持できる。
+これは機体質量変動やモータ特性のばらつきに対する十分なマージンとなる。
+
+**4. ドローン制御における実績**
+
+多くのフライトコントローラで $\phi_m = 50° \sim 70°$ が採用されており、60°は標準的な選択である。
+
+#### ループ整形による設計
+
+**設計仕様**
+
+| 項目 | 値 |
+|------|-----|
+| ゲイン交差周波数 $\omega_{gc}$ | 15 rad/s |
+| 位相余裕 $\phi_m$ | 60° |
+| 微分フィルタ係数 $\eta$ | 0.1 |
+
+**プラント特性（ロール軸）**
+
+$$
+G(s) = \frac{1/I_{xx}}{s(\tau_m s + 1)} = \frac{1.09 \times 10^5}{s(0.02s + 1)}
+$$
+
+$\omega_{gc} = 15$ rad/s におけるプラント特性：
+
+| 項目 | 値 |
+|------|-----|
+| ゲイン | 76.9 dB |
+| 位相 | −106.7° |
+
+**必要な制御器位相**
+
+位相余裕60°を達成するため、開ループ位相が $-120°$ となる必要がある：
+
+$$
+\angle C(j\omega_{gc}) = -120° - (-106.7°) = -13.3°
+$$
+
+制御器は $\omega_{gc}$ において約13°の位相遅れを持つ必要がある。
+
+**設計結果**
+
+最適化により以下のパラメータを得る：
+
+| パラメータ | 値 | 単位 |
+|-----------|-----|------|
+| $K_p$ | $1.34 \times 10^{-4}$ | - |
+| $T_i$ | 0.0756 | s |
+| $T_d$ | 0.0426 | s |
+| $\eta$ | 0.1 | - |
+
+#### ボード線図
+
+![Bode Plot](images/bode_loop_shaping.png)
+
+**図の説明：**
+
+- **青実線**：開ループ伝達関数 $L(s) = C(s)G(s)$
+- **緑破線**：プラント $G(s)$
+- **赤一点鎖線**：制御器 $C(s)$
+- **縦点線**：ゲイン交差周波数 $\omega_{gc} = 15$ rad/s
+
+**設計検証**
+
+| 項目 | 設計目標 | 達成値 |
+|------|---------|-------|
+| ゲイン交差周波数 | 15 rad/s | 15.0 rad/s |
+| 位相余裕 | 60° | 60.0° |
+
+#### ステップ応答
+
+![Step Response](images/step_response.png)
+
+閉ループ系のステップ応答を示す。位相余裕60°の設計により、適度なオーバーシュートと速い収束を実現している。
+
+#### 各軸のPIDパラメータ
+
+プラントゲインは慣性モーメントの逆数であるため、各軸の $K_p$ は慣性モーメント比で調整する：
+
+$$
+K_{p,pitch} = K_{p,roll} \times \frac{I_{xx}}{I_{yy}}, \quad
+K_{p,yaw} = K_{p,roll} \times \frac{I_{xx}}{I_{zz}}
+$$
+
+| 軸 | $K_p$ | $T_i$ [s] | $T_d$ [s] | $\eta$ |
+|----|-------|-----------|-----------|--------|
+| Roll | $1.34 \times 10^{-4}$ | 0.0756 | 0.0426 | 0.1 |
+| Pitch | $9.2 \times 10^{-5}$ | 0.0756 | 0.0426 | 0.1 |
+| Yaw | $6.0 \times 10^{-5}$ | 0.0756 | 0.0426 | 0.1 |
+
+**注意：** $T_i$, $T_d$, $\eta$ は全軸共通。$K_p$ のみ慣性モーメント比で調整。
+
+#### 離散時間実装
+
+制御周期 $T_s$ での離散時間実装：
+
+**積分項（台形積分）：**
+
+$$
+u_i[k] = u_i[k-1] + \frac{K_p}{T_i} \cdot \frac{T_s}{2}(e[k] + e[k-1])
+$$
+
+**微分項（双一次変換）：**
+
+$$
+u_d[k] = \frac{2\eta T_d - T_s}{2\eta T_d + T_s} u_d[k-1] + \frac{2 K_p T_d}{2\eta T_d + T_s}(e[k] - e[k-1])
+$$
+
+**全体：**
+
+$$
+u[k] = K_p \cdot e[k] + u_i[k] + u_d[k]
+$$
+
 ## 8. 数値積分
 
 ### Runge-Kutta 4次法（RK4）
@@ -2047,6 +2255,214 @@ $$
 
 3. **Control design implications**: With moment-based input design, plant gains are determined only by moments of inertia.
    Consider each axis's moment of inertia differences when tuning controller gains.
+
+### PID Controller Design
+
+This section designs a PID controller using the loop shaping method.
+By specifying phase margin and gain crossover frequency, we achieve a stable control system with desired response characteristics.
+
+#### PID Controller with Derivative Filter
+
+To prevent high-frequency noise amplification, we use a PID controller with a low-pass filter on the derivative term:
+
+$$
+C(s) = K_p \left( 1 + \frac{1}{T_i s} + \frac{T_d s}{\eta T_d s + 1} \right)
+$$
+
+| Parameter | Symbol | Description |
+|-----------|--------|-------------|
+| Proportional gain | $K_p$ | Overall gain adjustment |
+| Integral time | $T_i$ | Integral time constant (zero at $1/T_i$) |
+| Derivative time | $T_d$ | Derivative time constant (zero at $1/T_d$) |
+| Derivative filter coefficient | $\eta$ | High-frequency rolloff (typical: 0.1) |
+
+**Effect of derivative filter:**
+
+- $\eta = 0$: Ideal differentiation (unrealizable, infinite high-frequency gain)
+- $\eta > 0$: Gain saturates above frequency $1/(\eta T_d)$
+- For typical $\eta = 0.1$, derivative gain saturates at $1/\eta = 10$ times
+
+#### Gain Crossover Frequency Selection
+
+The gain crossover frequency $\omega_{gc}$ is a key parameter determining control system response speed.
+The following constraints are considered:
+
+**1. Motor Bandwidth Constraint**
+
+From the motor time constant $\tau_m = 0.02$ s, the motor bandwidth is:
+
+$$
+\omega_m = \frac{1}{\tau_m} = 50 \text{ rad/s}
+$$
+
+If control bandwidth exceeds motor bandwidth, phase margin decreases rapidly due to motor lag.
+Rule of thumb:
+
+$$
+\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m
+$$
+
+**2. Sampling Frequency Constraint**
+
+For discrete-time implementation, Nyquist frequency limits apply.
+With IMU running at 400 Hz:
+
+$$
+\omega_{Nyquist} = \pi \times 400 \approx 1257 \text{ rad/s}
+$$
+
+This is sufficiently high and not a constraint in this design.
+
+**3. Disturbance Rejection**
+
+Higher $\omega_{gc}$ improves disturbance rejection but reduces robustness to modeling errors and high-frequency noise.
+
+**Selection Result**
+
+Considering the above, we select $\omega_{gc} = 15$ rad/s (30% of motor bandwidth):
+
+| Item | Value |
+|------|-------|
+| Motor bandwidth | 50 rad/s |
+| Gain crossover frequency | 15 rad/s |
+| Bandwidth ratio | 30% |
+
+#### Phase Margin Justification
+
+We target phase margin $\phi_m = 60°$. The validity of this choice is discussed below.
+
+**1. Stability Perspective**
+
+- $\phi_m < 30°$: Oscillatory response, sensitive to disturbances
+- $\phi_m = 45°$: Minimum stability margin
+- $\phi_m = 60°$: Good stability margin, moderate response speed
+- $\phi_m > 75°$: Overly conservative, slow response
+
+**2. Relationship to Closed-Loop Characteristics**
+
+Approximate relationship between phase margin and overshoot:
+
+$$
+\zeta \approx \frac{\phi_m}{100} \quad (\phi_m \text{ in degrees})
+$$
+
+With $\phi_m = 60°$, $\zeta \approx 0.6$, expecting about 10% overshoot.
+
+**3. Tolerance to Gain Variations**
+
+With $\phi_m = 60°$, stability is maintained even if gain varies by approximately 2x (6 dB).
+This provides sufficient margin for vehicle mass variations and motor characteristic variations.
+
+**4. Drone Control Track Record**
+
+Many flight controllers use $\phi_m = 50° \sim 70°$, making 60° a standard choice.
+
+#### Loop Shaping Design
+
+**Design Specifications**
+
+| Item | Value |
+|------|-------|
+| Gain crossover frequency $\omega_{gc}$ | 15 rad/s |
+| Phase margin $\phi_m$ | 60° |
+| Derivative filter coefficient $\eta$ | 0.1 |
+
+**Plant Characteristics (Roll Axis)**
+
+$$
+G(s) = \frac{1/I_{xx}}{s(\tau_m s + 1)} = \frac{1.09 \times 10^5}{s(0.02s + 1)}
+$$
+
+Plant characteristics at $\omega_{gc} = 15$ rad/s:
+
+| Item | Value |
+|------|-------|
+| Gain | 76.9 dB |
+| Phase | −106.7° |
+
+**Required Controller Phase**
+
+To achieve 60° phase margin, open-loop phase must be $-120°$:
+
+$$
+\angle C(j\omega_{gc}) = -120° - (-106.7°) = -13.3°
+$$
+
+The controller must have approximately 13° phase lag at $\omega_{gc}$.
+
+**Design Result**
+
+Optimization yields the following parameters:
+
+| Parameter | Value | Unit |
+|-----------|-------|------|
+| $K_p$ | $1.34 \times 10^{-4}$ | - |
+| $T_i$ | 0.0756 | s |
+| $T_d$ | 0.0426 | s |
+| $\eta$ | 0.1 | - |
+
+#### Bode Plot
+
+![Bode Plot](images/bode_loop_shaping.png)
+
+**Figure description:**
+
+- **Blue solid**: Open-loop transfer function $L(s) = C(s)G(s)$
+- **Green dashed**: Plant $G(s)$
+- **Red dash-dot**: Controller $C(s)$
+- **Vertical dotted**: Gain crossover frequency $\omega_{gc} = 15$ rad/s
+
+**Design Verification**
+
+| Item | Target | Achieved |
+|------|--------|----------|
+| Gain crossover frequency | 15 rad/s | 15.0 rad/s |
+| Phase margin | 60° | 60.0° |
+
+#### Step Response
+
+![Step Response](images/step_response.png)
+
+Closed-loop step response is shown. The 60° phase margin design achieves moderate overshoot and fast settling.
+
+#### PID Parameters for Each Axis
+
+Since plant gain is the reciprocal of moment of inertia, $K_p$ for each axis is adjusted by the inertia ratio:
+
+$$
+K_{p,pitch} = K_{p,roll} \times \frac{I_{xx}}{I_{yy}}, \quad
+K_{p,yaw} = K_{p,roll} \times \frac{I_{xx}}{I_{zz}}
+$$
+
+| Axis | $K_p$ | $T_i$ [s] | $T_d$ [s] | $\eta$ |
+|------|-------|-----------|-----------|--------|
+| Roll | $1.34 \times 10^{-4}$ | 0.0756 | 0.0426 | 0.1 |
+| Pitch | $9.2 \times 10^{-5}$ | 0.0756 | 0.0426 | 0.1 |
+| Yaw | $6.0 \times 10^{-5}$ | 0.0756 | 0.0426 | 0.1 |
+
+**Note:** $T_i$, $T_d$, $\eta$ are common across all axes. Only $K_p$ is adjusted by inertia ratio.
+
+#### Discrete-Time Implementation
+
+For control period $T_s$:
+
+**Integral term (trapezoidal integration):**
+
+$$
+u_i[k] = u_i[k-1] + \frac{K_p}{T_i} \cdot \frac{T_s}{2}(e[k] + e[k-1])
+$$
+
+**Derivative term (bilinear transform):**
+
+$$
+u_d[k] = \frac{2\eta T_d - T_s}{2\eta T_d + T_s} u_d[k-1] + \frac{2 K_p T_d}{2\eta T_d + T_s}(e[k] - e[k-1])
+$$
+
+**Overall:**
+
+$$
+u[k] = K_p \cdot e[k] + u_i[k] + u_d[k]
+$$
 
 ## 8. Numerical Integration
 
