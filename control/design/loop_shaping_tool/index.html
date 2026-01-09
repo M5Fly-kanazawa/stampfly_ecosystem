@@ -220,14 +220,14 @@
             overflow: hidden;
         }
         .plot-container {
-            flex: 1;
+            flex: 1 1 0;
             background: #16213e;
             border-radius: 10px;
             padding: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
-            min-height: 0;
+            min-height: 200px;
             overflow: hidden;
         }
         .plot-controls {
@@ -276,8 +276,8 @@
         }
         #bode-plot, #step-plot {
             width: 100%;
-            flex: 1;
-            min-height: 0;
+            flex: 1 1 auto;
+            min-height: 150px;
         }
         .transfer-function {
             background: #0f0f23;
@@ -1493,18 +1493,8 @@
             // Optimize button handler
             document.getElementById('optimize-btn').addEventListener('click', runOptimization);
 
-            // Function to resize plots to fit container
+            // Function to resize plots
             function resizePlots() {
-                const bodeContainer = document.getElementById('bode-plot').parentElement;
-                const stepContainer = document.getElementById('step-plot').parentElement;
-
-                // Get available height in each container
-                const bodeAvailable = bodeContainer.clientHeight - 50; // legend space
-                const stepAvailable = stepContainer.clientHeight - 50; // controls space
-
-                document.getElementById('bode-plot').style.height = Math.max(200, bodeAvailable) + 'px';
-                document.getElementById('step-plot').style.height = Math.max(200, stepAvailable) + 'px';
-
                 Plotly.Plots.resize('bode-plot');
                 Plotly.Plots.resize('step-plot');
             }
@@ -1515,7 +1505,7 @@
             updatePlots();
 
             // Initial resize after layout settles
-            setTimeout(resizePlots, 100);
+            setTimeout(resizePlots, 200);
         });
     </script>
 </body>
