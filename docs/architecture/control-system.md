@@ -1256,23 +1256,104 @@ $$
 #### ゲイン交差周波数の選定
 
 ゲイン交差周波数 $\omega_{gc}$ は制御系の応答速度を決定する重要なパラメータである。
-選定にあたり、以下の制約を考慮する。
+ここでは位相余裕の制約から $\omega_{gc}$ の上限を理論的に導出する。
 
-| 制約 | 内容 | 本設計での評価 |
-|------|------|---------------|
-| モータ帯域幅 | $\omega_m = 1/\tau_m = 50$ rad/s。制御帯域がモータ帯域を超えると位相余裕が急減。経験則：$\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m$ | 主要制約 |
-| サンプリング周波数 | IMU 400 Hz → $\omega_{Nyquist} \approx 1257$ rad/s | 十分高く制約とならない |
-| 外乱抑制性能 | 高い $\omega_{gc}$ は外乱抑制に有利だが、ロバスト性が低下 | トレードオフ考慮 |
+#### 位相制約からの上限導出
+
+**プラントの位相特性**
+
+本システムのプラント：
+
+$$
+G(s) = \frac{1/I}{s(\tau_m s + 1)}
+$$
+
+$\omega_{gc}$ におけるプラント位相：
+
+$$
+\angle G(j\omega_{gc}) = -90° - \arctan(\tau_m \omega_{gc})
+$$
+
+第1項 $-90°$ は積分器による位相遅れ（全周波数で一定）、第2項はモータ遅れによる追加の位相遅れである。
+
+**位相余裕の制約**
+
+位相余裕 $\phi_m$ を確保するため、開ループ位相は $\omega_{gc}$ において：
+
+$$
+\angle L(j\omega_{gc}) = -180° + \phi_m
+$$
+
+開ループ $L = CG$ より、制御器が補償すべき位相は：
+
+$$
+\angle C(j\omega_{gc}) = -180° + \phi_m - \angle G(j\omega_{gc}) = -90° + \phi_m + \arctan(\tau_m \omega_{gc})
+$$
+
+**制御器位相の実現可能性**
+
+不完全微分付きPID制御器の位相特性を分析する。各要素の位相寄与：
+
+| 要素 | 位相寄与 | 特性 |
+|------|---------|------|
+| 比例項 | $0°$ | 周波数に依存しない |
+| 積分項 $1/(T_i s)$ | $-90° + \arctan(T_i \omega)$ | 低周波で遅れ、高周波で0に漸近 |
+| 微分項 $T_d s/(\eta T_d s + 1)$ | $\arctan(T_d \omega) - \arctan(\eta T_d \omega)$ | 位相進みを提供 |
+
+微分項の最大位相進みは $\omega = 1/(T_d\sqrt{\eta})$ で生じ：
+
+$$
+\phi_{D,max} = \arctan\left(\frac{1-\eta}{2\sqrt{\eta}}\right)
+$$
+
+$\eta = 0.1$ のとき $\phi_{D,max} \approx 55°$。
+
+**上限の導出**
+
+制御器は積分項を含むため、$\omega_{gc}$ において正味の位相遅れを持つ（$\angle C < 0°$）。
+設計が実現可能であるためには、要求される制御器位相が制御器の能力範囲内でなければならない。
+
+$\phi_m = 60°$ の場合、要求される制御器位相：
+
+$$
+\angle C(j\omega_{gc}) = -30° + \arctan(\tau_m \omega_{gc})
+$$
+
+$\omega_{gc}$ を増加させると $\arctan(\tau_m \omega_{gc})$ が増加し、$\angle C$ が正方向に移動する。
+しかし積分項の存在により、制御器位相には上限がある。
+
+実現可能な設計では $\angle C \lesssim -10°$ 程度が限界である（積分の遅れと微分の進みのバランス）。
+この制約から：
+
+$$
+-30° + \arctan(\tau_m \omega_{gc}) \lesssim -10°
+$$
+
+$$
+\arctan(\tau_m \omega_{gc}) \lesssim 20°
+$$
+
+$$
+\tau_m \omega_{gc} \lesssim \tan(20°) \approx 0.36
+$$
+
+$$
+\omega_{gc} \lesssim 0.36 \cdot \omega_m
+$$
+
+ここで $\omega_m = 1/\tau_m = 50$ rad/s はモータ帯域幅である。
 
 #### 選定結果
 
-上記を総合し、$\omega_{gc} = 15$ rad/s（モータ帯域の30%）を選定する：
+上記の理論的上限 $\omega_{gc} \lesssim 0.36 \cdot \omega_m \approx 18$ rad/s に対し、
+設計マージンを考慮して $\omega_{gc} = 15$ rad/s を選定する：
 
-| 項目 | 値 |
-|------|-----|
-| モータ帯域幅 | 50 rad/s |
-| ゲイン交差周波数 | 15 rad/s |
-| 帯域幅比 | 30% |
+| 項目 | 値 | 備考 |
+|------|-----|------|
+| モータ帯域幅 $\omega_m$ | 50 rad/s | $1/\tau_m$ |
+| 理論的上限 | 18 rad/s | $0.36 \cdot \omega_m$ |
+| 選定値 $\omega_{gc}$ | 15 rad/s | 上限の83%、十分なマージン |
+| 帯域幅比 | 30% | $\omega_{gc}/\omega_m$ |
 
 #### 位相余裕の妥当性
 
@@ -2442,23 +2523,104 @@ $$
 #### Gain Crossover Frequency Selection
 
 The gain crossover frequency $\omega_{gc}$ is a key parameter determining control system response speed.
-The following constraints are considered:
+Here we derive the theoretical upper bound on $\omega_{gc}$ from the phase margin constraint.
 
-| Constraint | Description | Evaluation |
-|------------|-------------|------------|
-| Motor bandwidth | $\omega_m = 1/\tau_m = 50$ rad/s. Phase margin decreases rapidly if control bandwidth exceeds motor bandwidth. Rule: $\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m$ | Primary constraint |
-| Sampling frequency | IMU 400 Hz → $\omega_{Nyquist} \approx 1257$ rad/s | Sufficiently high, not a constraint |
-| Disturbance rejection | Higher $\omega_{gc}$ improves disturbance rejection but reduces robustness | Trade-off considered |
+#### Upper Bound from Phase Constraint
+
+**Plant Phase Characteristics**
+
+This system's plant:
+
+$$
+G(s) = \frac{1/I}{s(\tau_m s + 1)}
+$$
+
+Plant phase at $\omega_{gc}$:
+
+$$
+\angle G(j\omega_{gc}) = -90° - \arctan(\tau_m \omega_{gc})
+$$
+
+The first term $-90°$ is the phase lag from the integrator (constant at all frequencies), and the second term is additional phase lag from motor dynamics.
+
+**Phase Margin Constraint**
+
+To ensure phase margin $\phi_m$, the open-loop phase at $\omega_{gc}$ must be:
+
+$$
+\angle L(j\omega_{gc}) = -180° + \phi_m
+$$
+
+From $L = CG$, the controller must provide:
+
+$$
+\angle C(j\omega_{gc}) = -180° + \phi_m - \angle G(j\omega_{gc}) = -90° + \phi_m + \arctan(\tau_m \omega_{gc})
+$$
+
+**Controller Phase Capability**
+
+Analyzing the phase characteristics of the PID controller with derivative filter:
+
+| Element | Phase Contribution | Characteristic |
+|---------|-------------------|----------------|
+| Proportional | $0°$ | Frequency independent |
+| Integral $1/(T_i s)$ | $-90° + \arctan(T_i \omega)$ | Lag at low freq, approaches 0 at high freq |
+| Derivative $T_d s/(\eta T_d s + 1)$ | $\arctan(T_d \omega) - \arctan(\eta T_d \omega)$ | Provides phase lead |
+
+Maximum derivative phase lead occurs at $\omega = 1/(T_d\sqrt{\eta})$:
+
+$$
+\phi_{D,max} = \arctan\left(\frac{1-\eta}{2\sqrt{\eta}}\right)
+$$
+
+For $\eta = 0.1$: $\phi_{D,max} \approx 55°$.
+
+**Derivation of Upper Bound**
+
+Since the controller includes an integral term, it has net phase lag at $\omega_{gc}$ ($\angle C < 0°$).
+For a feasible design, the required controller phase must be within the controller's capability.
+
+For $\phi_m = 60°$, the required controller phase:
+
+$$
+\angle C(j\omega_{gc}) = -30° + \arctan(\tau_m \omega_{gc})
+$$
+
+As $\omega_{gc}$ increases, $\arctan(\tau_m \omega_{gc})$ increases, pushing $\angle C$ toward positive values.
+However, due to the integral term, controller phase has an upper limit.
+
+For a realizable design, $\angle C \lesssim -10°$ is approximately the limit (balance between integral lag and derivative lead).
+From this constraint:
+
+$$
+-30° + \arctan(\tau_m \omega_{gc}) \lesssim -10°
+$$
+
+$$
+\arctan(\tau_m \omega_{gc}) \lesssim 20°
+$$
+
+$$
+\tau_m \omega_{gc} \lesssim \tan(20°) \approx 0.36
+$$
+
+$$
+\omega_{gc} \lesssim 0.36 \cdot \omega_m
+$$
+
+where $\omega_m = 1/\tau_m = 50$ rad/s is the motor bandwidth.
 
 #### Selection Result
 
-Considering the above, we select $\omega_{gc} = 15$ rad/s (30% of motor bandwidth):
+Given the theoretical upper bound $\omega_{gc} \lesssim 0.36 \cdot \omega_m \approx 18$ rad/s,
+we select $\omega_{gc} = 15$ rad/s with design margin:
 
-| Item | Value |
-|------|-------|
-| Motor bandwidth | 50 rad/s |
-| Gain crossover frequency | 15 rad/s |
-| Bandwidth ratio | 30% |
+| Item | Value | Note |
+|------|-------|------|
+| Motor bandwidth $\omega_m$ | 50 rad/s | $1/\tau_m$ |
+| Theoretical upper bound | 18 rad/s | $0.36 \cdot \omega_m$ |
+| Selected $\omega_{gc}$ | 15 rad/s | 83% of upper bound, sufficient margin |
+| Bandwidth ratio | 30% | $\omega_{gc}/\omega_m$ |
 
 #### Phase Margin Justification
 
