@@ -276,7 +276,7 @@ def plot_closed_loop_step(Kp, Ti, Td, eta, filename):
 
     # Create transfer function and compute step response
     sys = signal.TransferFunction(t_num, t_den)
-    t = np.linspace(0, 5, 2000)
+    t = np.linspace(0, 2, 1000)
     t_out, y = signal.step(sys, T=t)
 
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -305,7 +305,7 @@ def plot_closed_loop_step(Kp, Ti, Td, eta, filename):
     ax.set_ylabel('Angular Velocity Response', fontsize=12)
     ax.set_title('Closed-Loop Step Response', fontsize=12)
     ax.grid(True, alpha=0.3)
-    ax.set_xlim([0, 5])
+    ax.set_xlim([0, 2])
     ax.legend()
 
     plt.tight_layout()
