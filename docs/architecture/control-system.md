@@ -658,7 +658,269 @@ $$
 
 制御系設計では近似モデルで十分であり、StampFlyのシミュレータでもこの近似を採用している。
 
-## 7. 数値積分
+## 7. 線形化と伝達関数
+
+### 概要
+
+制御系設計では、非線形な運動方程式を平衡点周りで線形化し、伝達関数を用いて解析・設計を行う。
+本セクションでは、ホバリング状態を平衡点として線形化を行い、角速度制御ループの伝達関数を導出する。
+
+### ホバリング平衡点
+
+ホバリング状態における平衡点を定義する：
+
+| 状態変数 | 平衡値 | 説明 |
+|---------|-------|------|
+| $\phi_0, \theta_0, \psi_0$ | $0$ | 水平姿勢 |
+| $p_0, q_0, r_0$ | $0$ | 角速度ゼロ |
+| $u_0, v_0, w_0$ | $0$ | 機体速度ゼロ |
+| $T_0$ | $mg/4$ | 各モータの推力（重力釣り合い） |
+| $\omega_{m0}$ | $\sqrt{mg/(4C_t)}$ | 各モータの回転速度 |
+
+### 回転運動方程式の線形化
+
+#### 非線形方程式
+
+セクション2で導出した回転運動方程式：
+
+$$
+\begin{align}
+\dot{p} &= \frac{L - (I_{zz} - I_{yy})qr}{I_{xx}} \\
+\dot{q} &= \frac{M - (I_{xx} - I_{zz})pr}{I_{yy}} \\
+\dot{r} &= \frac{N - (I_{yy} - I_{xx})pq}{I_{zz}}
+\end{align}
+$$
+
+#### 小摂動の仮定
+
+平衡点周りの小摂動を仮定：
+
+$$
+p = p_0 + \delta p, \quad q = q_0 + \delta q, \quad r = r_0 + \delta r
+$$
+
+平衡点 $(p_0, q_0, r_0) = (0, 0, 0)$ において、2次の微小項 $qr$, $pr$, $pq$ を無視すると：
+
+$$
+\begin{align}
+\delta\dot{p} &= \frac{\delta L}{I_{xx}} \\
+\delta\dot{q} &= \frac{\delta M}{I_{yy}} \\
+\delta\dot{r} &= \frac{\delta N}{I_{zz}}
+\end{align}
+$$
+
+#### 線形化されたモーメント
+
+モーメントの摂動は推力の摂動で表される：
+
+$$
+\begin{align}
+\delta L &= d(\delta T_3 + \delta T_4 - \delta T_1 - \delta T_2) \\
+\delta M &= d(\delta T_1 + \delta T_4 - \delta T_2 - \delta T_3) \\
+\delta N &= C_q(2\omega_{m0})(\delta\omega_2 + \delta\omega_4 - \delta\omega_1 - \delta\omega_3)
+\end{align}
+$$
+
+推力の線形化（$T_i = C_t \omega_i^2$ より）：
+
+$$
+\delta T_i = 2 C_t \omega_{m0} \cdot \delta\omega_i = k_T \cdot \delta\omega_i
+$$
+
+ここで $k_T = 2 C_t \omega_{m0}$ は推力ゲイン。
+
+### モータダイナミクスとの結合
+
+#### モータの伝達関数
+
+セクション6で導出した1次遅れモデル（インダクタンス無視）：
+
+$$
+\frac{\Omega_i(s)}{V_{a,i}(s)} = \frac{K_{eq}}{\tau_{eq} s + 1}
+$$
+
+PWMデューティ $\delta_i$ から回転速度への関係（電源電圧 $V_{bat}$ を考慮）：
+
+$$
+\frac{\Omega_i(s)}{\Delta_i(s)} = \frac{K_m}{\tau_m s + 1}
+$$
+
+ここで：
+- $K_m = K_{eq} \cdot V_{bat}$ : モータゲイン [rad/s]
+- $\tau_m = \tau_{eq}$ : モータ時定数 [s]
+
+#### 制御入力の定義
+
+4つのモータへの入力を、仮想的な制御入力に変換：
+
+$$
+\begin{bmatrix} \delta_T \\ \delta_\phi \\ \delta_\theta \\ \delta_\psi \end{bmatrix} =
+\begin{bmatrix} 1 & 1 & 1 & 1 \\ -1 & -1 & 1 & 1 \\ 1 & -1 & -1 & 1 \\ 1 & -1 & 1 & -1 \end{bmatrix}
+\begin{bmatrix} \delta_1 \\ \delta_2 \\ \delta_3 \\ \delta_4 \end{bmatrix}
+$$
+
+| 入力 | 説明 |
+|------|------|
+| $\delta_T$ | 推力（スロットル） |
+| $\delta_\phi$ | ロールモーメント |
+| $\delta_\theta$ | ピッチモーメント |
+| $\delta_\psi$ | ヨーモーメント |
+
+### 角速度制御ループの伝達関数
+
+#### ロール軸の伝達関数
+
+ロール軸について、制御入力 $\delta_\phi$ から角速度 $p$ への伝達関数を導出する。
+
+**モータダイナミクス：**
+
+$$
+\frac{\Delta\Omega_\phi(s)}{\Delta_\phi(s)} = \frac{K_m}{\tau_m s + 1}
+$$
+
+**推力からモーメントへ：**
+
+$$
+\delta L = 2 d \cdot k_T \cdot \Delta\omega_\phi
+$$
+
+**角速度ダイナミクス（ラプラス変換）：**
+
+$$
+s \cdot P(s) = \frac{\delta L(s)}{I_{xx}}
+$$
+
+**全体の伝達関数：**
+
+$$
+\boxed{
+G_p(s) = \frac{P(s)}{\Delta_\phi(s)} = \frac{K_p}{s(\tau_m s + 1)}
+}
+$$
+
+ここで：
+
+$$
+K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{xx}}
+$$
+
+#### ピッチ軸の伝達関数
+
+対称性より、ピッチ軸も同様の形式：
+
+$$
+\boxed{
+G_q(s) = \frac{Q(s)}{\Delta_\theta(s)} = \frac{K_q}{s(\tau_m s + 1)}
+}
+$$
+
+$$
+K_q = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{yy}}
+$$
+
+$I_{xx} = I_{yy}$ の場合、$K_p = K_q$。
+
+#### ヨー軸の伝達関数
+
+ヨー軸は反トルクによる制御：
+
+$$
+\boxed{
+G_r(s) = \frac{R(s)}{\Delta_\psi(s)} = \frac{K_r}{s(\tau_m s + 1)}
+}
+$$
+
+$$
+K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}}
+$$
+
+#### 伝達関数の構造
+
+各軸の角速度伝達関数は **積分器とモータ1次遅れの直列結合** となる：
+
+```
+                    ┌─────────────┐     ┌─────────┐
+  δ_cmd  ───────────►│  Motor      │────►│ 1/I·s   │────► ω
+                    │  Km/(τm·s+1)│     │(積分器) │
+                    └─────────────┘     └─────────┘
+```
+
+この構造は、角加速度がモーメントに比例し、角速度はその積分であることを反映している。
+
+### 姿勢角への拡張
+
+#### 角速度から姿勢角への関係
+
+小角度の仮定のもと、オイラー角と角速度の関係は単純化される：
+
+$$
+\dot{\phi} \approx p, \quad \dot{\theta} \approx q, \quad \dot{\psi} \approx r
+$$
+
+したがって、角速度から姿勢角への伝達関数は積分器：
+
+$$
+\frac{\Phi(s)}{P(s)} = \frac{1}{s}, \quad \frac{\Theta(s)}{Q(s)} = \frac{1}{s}, \quad \frac{\Psi(s)}{R(s)} = \frac{1}{s}
+$$
+
+#### 姿勢角制御ループの伝達関数
+
+制御入力から姿勢角までの全体伝達関数（ロール軸の例）：
+
+$$
+\boxed{
+G_\phi(s) = \frac{\Phi(s)}{\Delta_\phi(s)} = \frac{K_p}{s^2(\tau_m s + 1)}
+}
+$$
+
+これは **2次積分器とモータ1次遅れの直列結合** であり、開ループでは不安定である。
+安定化にはフィードバック制御（PIDなど）が必要となる。
+
+### 制御設計への応用
+
+#### ブロック線図
+
+角速度制御ループ（レートモード）のブロック線図：
+
+```
+              ┌─────────────────────────────────────────┐
+              │            角速度制御ループ              │
+              │                                         │
+ ω_cmd  ──►(+)───►│Controller│───►│Motor│───►│1/I·s│───┬──► ω
+           -↑     │  C(s)    │    │G_m(s)│   │     │   │
+            │     └──────────┘    └──────┘   └─────┘   │
+            │                                          │
+            └──────────────────────────────────────────┘
+                              （角速度フィードバック）
+```
+
+#### PID制御器設計の指針
+
+| パラメータ | 設計指針 |
+|-----------|---------|
+| $K_p$ (比例ゲイン) | 応答速度を決定。モータ時定数 $\tau_m$ を考慮 |
+| $K_i$ (積分ゲイン) | 定常偏差を除去。ただし積分器が既に存在するため注意 |
+| $K_d$ (微分ゲイン) | ダンピングを追加。モータ遅れを補償 |
+
+**注意：** プラントに積分器が含まれるため、I制御の追加は慎重に行う必要がある。
+典型的には PD または P 制御で設計し、外乱補償が必要な場合のみ I を追加する。
+
+### パラメータ例（StampFly）
+
+| パラメータ | 記号 | 値 | 単位 |
+|-----------|------|-----|------|
+| アーム長 | $d$ | 0.033 | m |
+| 推力係数 | $C_t$ | $1.0 \times 10^{-8}$ | N/(rad/s)² |
+| トルク係数 | $C_q$ | $1.0 \times 10^{-10}$ | N·m/(rad/s)² |
+| 慣性モーメント | $I_{xx}, I_{yy}$ | $2.0 \times 10^{-5}$ | kg·m² |
+| 慣性モーメント | $I_{zz}$ | $3.5 \times 10^{-5}$ | kg·m² |
+| モータ時定数 | $\tau_m$ | 0.02 | s |
+| ホバリング回転数 | $\omega_{m0}$ | 4000 | rad/s |
+
+これらのパラメータを用いて、各軸のゲイン $K_p$, $K_q$, $K_r$ を計算し、
+制御器のチューニングに活用する。
+
+## 8. 数値積分
 
 ### Runge-Kutta 4次法（RK4）
 
@@ -693,7 +955,7 @@ RK4で積分する状態変数：
 | $q_0, q_1, q_2, q_3$ | クォータニオン運動学 |
 | $x, y, z$ | 位置運動学 |
 
-## 8. 実装リファレンス
+## 9. 実装リファレンス
 
 ### シミュレータコード
 
@@ -1156,7 +1418,270 @@ $$
 
 The simplified model is sufficient for control design and is used in the StampFly simulator.
 
-## 7. Numerical Integration
+## 7. Linearization and Transfer Functions
+
+### Overview
+
+In control system design, nonlinear equations of motion are linearized around an equilibrium point,
+and transfer functions are used for analysis and design.
+This section linearizes around the hovering state and derives the transfer functions for the angular velocity control loop.
+
+### Hovering Equilibrium Point
+
+Define the equilibrium point at hovering state:
+
+| State Variable | Equilibrium Value | Description |
+|---------------|-------------------|-------------|
+| $\phi_0, \theta_0, \psi_0$ | $0$ | Level attitude |
+| $p_0, q_0, r_0$ | $0$ | Zero angular velocity |
+| $u_0, v_0, w_0$ | $0$ | Zero body velocity |
+| $T_0$ | $mg/4$ | Thrust per motor (gravity balance) |
+| $\omega_{m0}$ | $\sqrt{mg/(4C_t)}$ | Motor angular velocity |
+
+### Linearization of Rotational Equations
+
+#### Nonlinear Equations
+
+From Section 2, the rotational equations of motion:
+
+$$
+\begin{align}
+\dot{p} &= \frac{L - (I_{zz} - I_{yy})qr}{I_{xx}} \\
+\dot{q} &= \frac{M - (I_{xx} - I_{zz})pr}{I_{yy}} \\
+\dot{r} &= \frac{N - (I_{yy} - I_{xx})pq}{I_{zz}}
+\end{align}
+$$
+
+#### Small Perturbation Assumption
+
+Assume small perturbations around the equilibrium:
+
+$$
+p = p_0 + \delta p, \quad q = q_0 + \delta q, \quad r = r_0 + \delta r
+$$
+
+At equilibrium $(p_0, q_0, r_0) = (0, 0, 0)$, ignoring second-order terms $qr$, $pr$, $pq$:
+
+$$
+\begin{align}
+\delta\dot{p} &= \frac{\delta L}{I_{xx}} \\
+\delta\dot{q} &= \frac{\delta M}{I_{yy}} \\
+\delta\dot{r} &= \frac{\delta N}{I_{zz}}
+\end{align}
+$$
+
+#### Linearized Moments
+
+Moment perturbations expressed in terms of thrust perturbations:
+
+$$
+\begin{align}
+\delta L &= d(\delta T_3 + \delta T_4 - \delta T_1 - \delta T_2) \\
+\delta M &= d(\delta T_1 + \delta T_4 - \delta T_2 - \delta T_3) \\
+\delta N &= C_q(2\omega_{m0})(\delta\omega_2 + \delta\omega_4 - \delta\omega_1 - \delta\omega_3)
+\end{align}
+$$
+
+Thrust linearization (from $T_i = C_t \omega_i^2$):
+
+$$
+\delta T_i = 2 C_t \omega_{m0} \cdot \delta\omega_i = k_T \cdot \delta\omega_i
+$$
+
+Where $k_T = 2 C_t \omega_{m0}$ is the thrust gain.
+
+### Coupling with Motor Dynamics
+
+#### Motor Transfer Function
+
+From the first-order model in Section 6 (ignoring inductance):
+
+$$
+\frac{\Omega_i(s)}{V_{a,i}(s)} = \frac{K_{eq}}{\tau_{eq} s + 1}
+$$
+
+Relationship from PWM duty $\delta_i$ to angular velocity (considering battery voltage $V_{bat}$):
+
+$$
+\frac{\Omega_i(s)}{\Delta_i(s)} = \frac{K_m}{\tau_m s + 1}
+$$
+
+Where:
+- $K_m = K_{eq} \cdot V_{bat}$ : Motor gain [rad/s]
+- $\tau_m = \tau_{eq}$ : Motor time constant [s]
+
+#### Virtual Control Input Definition
+
+Transform individual motor inputs to virtual control inputs:
+
+$$
+\begin{bmatrix} \delta_T \\ \delta_\phi \\ \delta_\theta \\ \delta_\psi \end{bmatrix} =
+\begin{bmatrix} 1 & 1 & 1 & 1 \\ -1 & -1 & 1 & 1 \\ 1 & -1 & -1 & 1 \\ 1 & -1 & 1 & -1 \end{bmatrix}
+\begin{bmatrix} \delta_1 \\ \delta_2 \\ \delta_3 \\ \delta_4 \end{bmatrix}
+$$
+
+| Input | Description |
+|-------|-------------|
+| $\delta_T$ | Thrust (throttle) |
+| $\delta_\phi$ | Roll moment |
+| $\delta_\theta$ | Pitch moment |
+| $\delta_\psi$ | Yaw moment |
+
+### Angular Velocity Control Loop Transfer Functions
+
+#### Roll Axis Transfer Function
+
+Derive the transfer function from control input $\delta_\phi$ to angular velocity $p$ for the roll axis.
+
+**Motor dynamics:**
+
+$$
+\frac{\Delta\Omega_\phi(s)}{\Delta_\phi(s)} = \frac{K_m}{\tau_m s + 1}
+$$
+
+**Thrust to moment:**
+
+$$
+\delta L = 2 d \cdot k_T \cdot \Delta\omega_\phi
+$$
+
+**Angular velocity dynamics (Laplace transform):**
+
+$$
+s \cdot P(s) = \frac{\delta L(s)}{I_{xx}}
+$$
+
+**Overall transfer function:**
+
+$$
+\boxed{
+G_p(s) = \frac{P(s)}{\Delta_\phi(s)} = \frac{K_p}{s(\tau_m s + 1)}
+}
+$$
+
+Where:
+
+$$
+K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{xx}}
+$$
+
+#### Pitch Axis Transfer Function
+
+By symmetry, the pitch axis has the same form:
+
+$$
+\boxed{
+G_q(s) = \frac{Q(s)}{\Delta_\theta(s)} = \frac{K_q}{s(\tau_m s + 1)}
+}
+$$
+
+$$
+K_q = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{yy}}
+$$
+
+When $I_{xx} = I_{yy}$, then $K_p = K_q$.
+
+#### Yaw Axis Transfer Function
+
+The yaw axis is controlled by reaction torque:
+
+$$
+\boxed{
+G_r(s) = \frac{R(s)}{\Delta_\psi(s)} = \frac{K_r}{s(\tau_m s + 1)}
+}
+$$
+
+$$
+K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}}
+$$
+
+#### Transfer Function Structure
+
+Each axis angular velocity transfer function is a **series connection of integrator and motor first-order lag**:
+
+```
+                    ┌─────────────┐     ┌─────────┐
+  δ_cmd  ───────────►│  Motor      │────►│ 1/I·s   │────► ω
+                    │  Km/(τm·s+1)│     │(integr.)│
+                    └─────────────┘     └─────────┘
+```
+
+This structure reflects that angular acceleration is proportional to moment, and angular velocity is its integral.
+
+### Extension to Attitude Angles
+
+#### Angular Velocity to Attitude Angle Relationship
+
+Under small angle assumption, Euler angles and angular velocity are simply related:
+
+$$
+\dot{\phi} \approx p, \quad \dot{\theta} \approx q, \quad \dot{\psi} \approx r
+$$
+
+Therefore, the transfer function from angular velocity to attitude angle is an integrator:
+
+$$
+\frac{\Phi(s)}{P(s)} = \frac{1}{s}, \quad \frac{\Theta(s)}{Q(s)} = \frac{1}{s}, \quad \frac{\Psi(s)}{R(s)} = \frac{1}{s}
+$$
+
+#### Attitude Angle Control Loop Transfer Function
+
+Overall transfer function from control input to attitude angle (roll axis example):
+
+$$
+\boxed{
+G_\phi(s) = \frac{\Phi(s)}{\Delta_\phi(s)} = \frac{K_p}{s^2(\tau_m s + 1)}
+}
+$$
+
+This is a **series connection of double integrator and motor first-order lag**, which is unstable in open loop.
+Feedback control (such as PID) is required for stabilization.
+
+### Application to Control Design
+
+#### Block Diagram
+
+Block diagram of angular velocity control loop (rate mode):
+
+```
+              ┌─────────────────────────────────────────┐
+              │     Angular Velocity Control Loop       │
+              │                                         │
+ ω_cmd  ──►(+)───►│Controller│───►│Motor│───►│1/I·s│───┬──► ω
+           -↑     │  C(s)    │    │G_m(s)│   │     │   │
+            │     └──────────┘    └──────┘   └─────┘   │
+            │                                          │
+            └──────────────────────────────────────────┘
+                         (angular velocity feedback)
+```
+
+#### PID Controller Design Guidelines
+
+| Parameter | Design Guideline |
+|-----------|-----------------|
+| $K_p$ (Proportional gain) | Determines response speed. Consider motor time constant $\tau_m$ |
+| $K_i$ (Integral gain) | Eliminates steady-state error. Note: integrator already exists in plant |
+| $K_d$ (Derivative gain) | Adds damping. Compensates motor delay |
+
+**Note:** Since the plant contains an integrator, adding I control requires caution.
+Typically, design with PD or P control, adding I only when disturbance rejection is needed.
+
+### Parameter Example (StampFly)
+
+| Parameter | Symbol | Value | Unit |
+|-----------|--------|-------|------|
+| Arm length | $d$ | 0.033 | m |
+| Thrust coefficient | $C_t$ | $1.0 \times 10^{-8}$ | N/(rad/s)² |
+| Torque coefficient | $C_q$ | $1.0 \times 10^{-10}$ | N·m/(rad/s)² |
+| Moment of inertia | $I_{xx}, I_{yy}$ | $2.0 \times 10^{-5}$ | kg·m² |
+| Moment of inertia | $I_{zz}$ | $3.5 \times 10^{-5}$ | kg·m² |
+| Motor time constant | $\tau_m$ | 0.02 | s |
+| Hovering angular velocity | $\omega_{m0}$ | 4000 | rad/s |
+
+Use these parameters to calculate the gains $K_p$, $K_q$, $K_r$ for each axis
+and apply them to controller tuning.
+
+## 8. Numerical Integration
 
 ### Runge-Kutta 4th Order (RK4)
 
@@ -1180,7 +1705,7 @@ $$
 | Step size $h$ | 0.001 | s (1 kHz) |
 | Accuracy | $O(h^4)$ | - |
 
-## 8. Implementation Reference
+## 9. Implementation Reference
 
 ### Simulator Code
 
