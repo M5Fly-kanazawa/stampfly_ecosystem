@@ -893,6 +893,14 @@
                         <div class="legend-color" style="background:#ef4444"></div>
                         <span>制御器 C(s)</span>
                     </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#f59e0b"></div>
+                        <span>感度 S(s)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#a855f7"></div>
+                        <span>相補感度 T(s)</span>
+                    </div>
                 </div>
             </div>
             <div class="plot-container">
@@ -1354,18 +1362,29 @@
             const mag_L = [], phase_L = [];
             const mag_G = [], phase_G = [];
             const mag_C = [], phase_C = [];
+            const mag_S = [], phase_S = [];  // Sensitivity function S = 1/(1+L)
+            const mag_T = [], phase_T = [];  // Complementary sensitivity T = L/(1+L)
 
             let unwrapOffset = 0;
             let prevPhase_L = null;
+
+            const one = Complex.create(1, 0);
 
             for (const omega of omegas) {
                 const L = evalOpenLoop(omega, K, tau_m, Kp, Ti, Td, eta);
                 const G = evalPlant(omega, K, tau_m);
                 const C = evalController(omega, Kp, Ti, Td, eta);
 
+                // S = 1/(1+L), T = L/(1+L)
+                const onePlusL = Complex.add(one, L);
+                const S = Complex.div(one, onePlusL);
+                const T = Complex.div(L, onePlusL);
+
                 mag_L.push(20 * Math.log10(Complex.abs(L)));
                 mag_G.push(20 * Math.log10(Complex.abs(G)));
                 mag_C.push(20 * Math.log10(Complex.abs(C)));
+                mag_S.push(20 * Math.log10(Complex.abs(S)));
+                mag_T.push(20 * Math.log10(Complex.abs(T)));
 
                 let ph_L = Complex.arg(L) * 180 / Math.PI;
                 if (prevPhase_L !== null && ph_L - prevPhase_L > 180) {
@@ -1378,6 +1397,8 @@
 
                 phase_G.push(Complex.arg(G) * 180 / Math.PI);
                 phase_C.push(Complex.arg(C) * 180 / Math.PI);
+                phase_S.push(Complex.arg(S) * 180 / Math.PI);
+                phase_T.push(Complex.arg(T) * 180 / Math.PI);
             }
 
             const margins = calculateMargins(K, tau_m, Kp, Ti, Td, eta);
@@ -1464,9 +1485,13 @@
                 { x: omegas, y: mag_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x', yaxis: 'y' },
                 { x: omegas, y: mag_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x', yaxis: 'y' },
                 { x: omegas, y: mag_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x', yaxis: 'y' },
                 { x: omegas, y: phase_L, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2.5 }, xaxis: 'x2', yaxis: 'y2' },
                 { x: omegas, y: phase_G, type: 'scatter', mode: 'lines', line: { color: '#22c55e', width: 1.5, dash: 'dash' }, xaxis: 'x2', yaxis: 'y2' },
-                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' }
+                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_S, type: 'scatter', mode: 'lines', line: { color: '#f59e0b', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_T, type: 'scatter', mode: 'lines', line: { color: '#a855f7', width: 1.5 }, xaxis: 'x2', yaxis: 'y2' }
             ];
 
             // Add overlay axes (other axes that are checked)
