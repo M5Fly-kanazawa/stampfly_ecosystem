@@ -71,11 +71,11 @@
         }
         .tab.roll { border-left: 4px solid #ef4444; }
         .tab.pitch { border-left: 4px solid #22c55e; }
-        .tab.yaw { border-left: 4px solid #f59e0b; }
+        .tab.yaw { border-left: 4px solid #3b82f6; }
         .tab.all { border-left: 4px solid #8b5cf6; }
         .tab.active.roll { background: #ef4444; }
         .tab.active.pitch { background: #22c55e; }
-        .tab.active.yaw { background: #f59e0b; }
+        .tab.active.yaw { background: #3b82f6; }
         .tab.active.all { background: #8b5cf6; }
         .panel {
             background: #16213e;
@@ -101,7 +101,7 @@
         }
         .axis-indicator.roll { background: #ef4444; }
         .axis-indicator.pitch { background: #22c55e; }
-        .axis-indicator.yaw { background: #f59e0b; }
+        .axis-indicator.yaw { background: #3b82f6; }
         .param-group {
             margin-bottom: 20px;
         }
@@ -199,7 +199,7 @@
         }
         .results-table .axis-roll { color: #ef4444; }
         .results-table .axis-pitch { color: #22c55e; }
-        .results-table .axis-yaw { color: #f59e0b; }
+        .results-table .axis-yaw { color: #3b82f6; }
         .plots {
             display: flex;
             flex-direction: column;
@@ -447,17 +447,17 @@
                         <div class="overlay-checkbox" id="overlay-roll-container">
                             <input type="checkbox" id="overlay-roll">
                             <div class="axis-color" style="background:#ef4444"></div>
-                            <label for="overlay-roll">Roll</label>
+                            <label for="overlay-roll">Roll (X)</label>
                         </div>
                         <div class="overlay-checkbox" id="overlay-pitch-container">
                             <input type="checkbox" id="overlay-pitch">
                             <div class="axis-color" style="background:#22c55e"></div>
-                            <label for="overlay-pitch">Pitch</label>
+                            <label for="overlay-pitch">Pitch (Y)</label>
                         </div>
                         <div class="overlay-checkbox" id="overlay-yaw-container">
                             <input type="checkbox" id="overlay-yaw">
-                            <div class="axis-color" style="background:#f59e0b"></div>
-                            <label for="overlay-yaw">Yaw</label>
+                            <div class="axis-color" style="background:#3b82f6"></div>
+                            <label for="overlay-yaw">Yaw (Z)</label>
                         </div>
                     </div>
                 </div>
@@ -526,15 +526,15 @@
                 <div class="legend-info" style="margin-top: 20px;">
                     <div class="legend-item">
                         <div class="legend-color" style="background:#ef4444"></div>
-                        <span>Roll</span>
+                        <span>Roll (X)</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background:#22c55e"></div>
-                        <span>Pitch</span>
+                        <span>Pitch (Y)</span>
                     </div>
                     <div class="legend-item">
-                        <div class="legend-color" style="background:#f59e0b"></div>
-                        <span>Yaw</span>
+                        <div class="legend-color" style="background:#3b82f6"></div>
+                        <span>Yaw (Z)</span>
                     </div>
                 </div>
             </div>
@@ -601,9 +601,9 @@
         };
 
         const axisColors = {
-            roll: '#ef4444',
-            pitch: '#22c55e',
-            yaw: '#f59e0b'
+            roll: '#ef4444',   // Red (X)
+            pitch: '#22c55e',  // Green (Y)
+            yaw: '#3b82f6'     // Blue (Z)
         };
 
         let currentAxis = 'roll';
