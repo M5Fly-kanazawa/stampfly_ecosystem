@@ -304,6 +304,47 @@
         .single-view-params.hidden {
             display: none;
         }
+        .overlay-controls {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-top: 15px;
+        }
+        .overlay-controls h3 {
+            color: #00d4ff;
+            font-size: 0.95em;
+            margin-bottom: 10px;
+        }
+        .overlay-checkboxes {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .overlay-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .overlay-checkbox input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #00d4ff;
+            cursor: pointer;
+        }
+        .overlay-checkbox .axis-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .overlay-checkbox label {
+            font-size: 0.9em;
+            color: #aaa;
+            cursor: pointer;
+        }
+        .overlay-checkbox.disabled {
+            opacity: 0.4;
+        }
         @media (max-width: 1000px) {
             .container {
                 grid-template-columns: 1fr;
@@ -398,6 +439,27 @@
                     <div class="tf-equation" id="tf-plant">G(s) = K / (s(τₘs + 1))</div>
                     <div class="tf-label" style="margin-top:10px">制御器 C(s):</div>
                     <div class="tf-equation" id="tf-controller">C(s) = Kp(1 + 1/(Ti·s) + Td·s/(ηTd·s+1))</div>
+                </div>
+
+                <div class="overlay-controls">
+                    <h3>他軸を重ねて表示 / Overlay Other Axes</h3>
+                    <div class="overlay-checkboxes">
+                        <div class="overlay-checkbox" id="overlay-roll-container">
+                            <input type="checkbox" id="overlay-roll">
+                            <div class="axis-color" style="background:#ef4444"></div>
+                            <label for="overlay-roll">Roll</label>
+                        </div>
+                        <div class="overlay-checkbox" id="overlay-pitch-container">
+                            <input type="checkbox" id="overlay-pitch">
+                            <div class="axis-color" style="background:#22c55e"></div>
+                            <label for="overlay-pitch">Pitch</label>
+                        </div>
+                        <div class="overlay-checkbox" id="overlay-yaw-container">
+                            <input type="checkbox" id="overlay-yaw">
+                            <div class="axis-color" style="background:#f59e0b"></div>
+                            <label for="overlay-yaw">Yaw</label>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -841,6 +903,24 @@
                 { x: omegas, y: phase_C, type: 'scatter', mode: 'lines', line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, xaxis: 'x2', yaxis: 'y2' }
             ];
 
+            // Add overlay axes (other axes that are checked)
+            const overlayAxes = ['roll', 'pitch', 'yaw'].filter(axis =>
+                axis !== currentAxis && document.getElementById(`overlay-${axis}`).checked
+            );
+
+            for (const axis of overlayAxes) {
+                const { mag_L: oMag, phase_L: oPhase } = calcFreqResponse(axis, omegas);
+                const color = axisColors[axis];
+                bodeData.push({
+                    x: omegas, y: oMag, type: 'scatter', mode: 'lines',
+                    line: { color, width: 1.5, dash: 'dot' }, xaxis: 'x', yaxis: 'y'
+                });
+                bodeData.push({
+                    x: omegas, y: oPhase, type: 'scatter', mode: 'lines',
+                    line: { color, width: 1.5, dash: 'dot' }, xaxis: 'x2', yaxis: 'y2'
+                });
+            }
+
             Plotly.react('bode-plot', bodeData, plotLayout, { responsive: true });
 
             // Step response
@@ -866,6 +946,16 @@
             const stepPlotData = [
                 { x: stepData.t, y: stepData.y, type: 'scatter', mode: 'lines', line: { color: '#3b82f6', width: 2 } }
             ];
+
+            // Add overlay step responses
+            for (const axis of overlayAxes) {
+                const params = getAxisParams(axis);
+                const oStepData = simulateStepResponse(params.K, params.tau_m, params.Kp, params.Ti, params.Td, params.eta, tMax, 0.001);
+                stepPlotData.push({
+                    x: oStepData.t, y: oStepData.y, type: 'scatter', mode: 'lines',
+                    line: { color: axisColors[axis], width: 1.5, dash: 'dot' }
+                });
+            }
 
             Plotly.react('step-plot', stepPlotData, stepLayout, { responsive: true });
         }
@@ -964,6 +1054,23 @@
             }
         }
 
+        // Update overlay checkboxes state
+        function updateOverlayCheckboxes() {
+            const axes = ['roll', 'pitch', 'yaw'];
+            for (const axis of axes) {
+                const container = document.getElementById(`overlay-${axis}-container`);
+                const checkbox = document.getElementById(`overlay-${axis}`);
+                if (axis === currentAxis) {
+                    container.classList.add('disabled');
+                    checkbox.disabled = true;
+                    checkbox.checked = false;
+                } else {
+                    container.classList.remove('disabled');
+                    checkbox.disabled = false;
+                }
+            }
+        }
+
         // Switch axis
         function switchAxis(axis) {
             // Save current params before switching
@@ -996,6 +1103,7 @@
                 allParams.classList.remove('visible');
                 singleLegend.style.display = 'flex';
                 loadAxisParams(axis);
+                updateOverlayCheckboxes();
             }
 
             updatePlots();
@@ -1026,6 +1134,14 @@
             syncInputs('td-slider', 'td-input');
             syncInputs('eta-slider', 'eta-input');
             syncInputs('time-range-slider', 'time-range-input');
+
+            // Overlay checkbox handlers
+            ['roll', 'pitch', 'yaw'].forEach(axis => {
+                document.getElementById(`overlay-${axis}`).addEventListener('change', updatePlots);
+            });
+
+            // Initialize overlay checkboxes state
+            updateOverlayCheckboxes();
 
             // Tab click handlers
             document.querySelectorAll('.tab').forEach(tab => {
