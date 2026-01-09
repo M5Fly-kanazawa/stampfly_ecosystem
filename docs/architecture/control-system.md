@@ -809,13 +809,78 @@ $$
 
 ### モータダイナミクス
 
-セクション6で導出した1次遅れモデルにより、所望推力から実推力への伝達関数：
+#### 所望推力の定義
+
+ミキサー出力 $T_{i,cmd}$ は「所望推力」であり、以下の関係で定義される：
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                         所望推力の定義                                 │
+│                                                                       │
+│  Duty δ ──→ 電圧 V = δ·V_bat ──→ 定常回転数 ω_ss ──→ 所望推力 T_d    │
+│              (即時)          (V-ω特性から)       (T_d = C_t·ω_ss²)   │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+- **Duty $\delta$**：PWMデューティ比（0〜1の無次元量）
+- **電圧 $V$**：モータ印加電圧 $V = \delta \cdot V_{bat}$
+- **定常回転数 $\omega_{ss}$**：電圧 $V$ で定常状態に達したときの回転数
+- **所望推力 $T_d$**：定常回転数で得られる推力 $T_d = C_t \omega_{ss}^2$
+
+#### 所望推力から実推力への伝達関数
+
+モータの慣性により、実際の回転数 $\omega$ は定常回転数 $\omega_{ss}$ に1次遅れで追従する。
+この関係から、所望推力から実推力への伝達関数を導出する。
+
+**推力と回転数の関係（定常）：**
 
 $$
-\frac{T_i(s)}{T_{i,cmd}(s)} = \frac{1}{\tau_m s + 1}
+T = C_t \omega^2
+$$
+
+**ホバリング点での線形化：**
+
+$$
+\delta T = 2 C_t \omega_{m0} \cdot \delta\omega = k_T \cdot \delta\omega
+$$
+
+$$
+\delta T_d = k_T \cdot \delta\omega_{ss}
+$$
+
+**回転数のモータ動特性（セクション6より）：**
+
+$$
+\frac{\delta\Omega(s)}{\delta\Omega_{ss}(s)} = \frac{1}{\tau_m s + 1}
+$$
+
+**推力への変換：**
+
+$$
+\frac{\delta T(s)}{\delta T_d(s)} = \frac{k_T \cdot \delta\Omega(s)}{k_T \cdot \delta\Omega_{ss}(s)} = \frac{1}{\tau_m s + 1}
+$$
+
+$k_T$ が相殺され、**所望推力から実推力への伝達関数は単純な1次遅れ**となる：
+
+$$
+\boxed{
+G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
+}
 $$
 
 ここで $\tau_m = 0.02$ s はモータ時定数（推定値）。
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                         実推力への遷移                                 │
+│                                                                       │
+│  所望推力 T_d ────────────────────────────────────────→ 実推力 T      │
+│              │                                          ↑            │
+│              └──→ ω_ss ──→ 1/(τm·s+1) ──→ ω ──→ C_t·ω² ─┘            │
+│                                                                       │
+│              （k_T が相殺されて単純な1次遅れに帰着）                    │
+└───────────────────────────────────────────────────────────────────────┘
+```
 
 ### 角速度制御ループの伝達関数
 
@@ -1700,19 +1765,85 @@ $$
 
 This transforms moment/thrust commands with physical dimensions to individual motor thrust commands.
 
+### Motor Dynamics
+
+#### Definition of Desired Thrust
+
+The mixer output $T_{i,cmd}$ is the "desired thrust", defined by the following relationship:
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                      Definition of Desired Thrust                      │
+│                                                                       │
+│  Duty δ ──→ Voltage V = δ·V_bat ──→ Steady-state ω_ss ──→ Desired T_d │
+│           (instantaneous)        (from V-ω curve)     (T_d = C_t·ω_ss²) │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+- **Duty $\delta$**: PWM duty ratio (dimensionless, 0 to 1)
+- **Voltage $V$**: Motor applied voltage $V = \delta \cdot V_{bat}$
+- **Steady-state angular velocity $\omega_{ss}$**: Angular velocity when reaching steady state at voltage $V$
+- **Desired thrust $T_d$**: Thrust at steady-state angular velocity $T_d = C_t \omega_{ss}^2$
+
+#### Transfer Function from Desired to Actual Thrust
+
+Due to motor inertia, actual angular velocity $\omega$ follows steady-state $\omega_{ss}$ with first-order lag.
+From this relationship, we derive the transfer function from desired to actual thrust.
+
+**Thrust-angular velocity relationship (steady state):**
+
+$$
+T = C_t \omega^2
+$$
+
+**Linearization at hover:**
+
+$$
+\delta T = 2 C_t \omega_{m0} \cdot \delta\omega = k_T \cdot \delta\omega
+$$
+
+$$
+\delta T_d = k_T \cdot \delta\omega_{ss}
+$$
+
+**Motor dynamics for angular velocity (from Section 6):**
+
+$$
+\frac{\delta\Omega(s)}{\delta\Omega_{ss}(s)} = \frac{1}{\tau_m s + 1}
+$$
+
+**Conversion to thrust:**
+
+$$
+\frac{\delta T(s)}{\delta T_d(s)} = \frac{k_T \cdot \delta\Omega(s)}{k_T \cdot \delta\Omega_{ss}(s)} = \frac{1}{\tau_m s + 1}
+$$
+
+Since $k_T$ cancels out, **the transfer function from desired to actual thrust is a simple first-order lag**:
+
+$$
+\boxed{
+G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
+}
+$$
+
+Where $\tau_m = 0.02$ s is the motor time constant (estimated).
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                      Transition to Actual Thrust                       │
+│                                                                       │
+│  Desired T_d ────────────────────────────────────────→ Actual T       │
+│              │                                          ↑            │
+│              └──→ ω_ss ──→ 1/(τm·s+1) ──→ ω ──→ C_t·ω² ─┘            │
+│                                                                       │
+│              (k_T cancels out, reducing to simple first-order lag)    │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
 ### Angular Velocity Control Loop Transfer Functions
 
-Derive transfer functions from moment input to angular velocity output, considering motor dynamics.
-
-#### Motor Dynamics
-
-Motor dynamics are modeled as first-order lag:
-
-$$
-G_m(s) = \frac{1}{\tau_m s + 1}
-$$
-
-Moment generated by motor rotational speed reaches steady state with time constant $\tau_m$.
+Derive transfer functions from moment input to angular velocity output.
+The motor dynamics derived above apply to the thrust, which in turn affects moments.
 
 #### Roll Axis Transfer Function
 
