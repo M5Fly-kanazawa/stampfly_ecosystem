@@ -276,11 +276,11 @@ def plot_closed_loop_step(Kp, Ti, Td, eta, filename):
 
     # Create transfer function and compute step response
     sys = signal.TransferFunction(t_num, t_den)
-    t = np.linspace(0, 0.5, 1000)
+    t = np.linspace(0, 5, 2000)
     t_out, y = signal.step(sys, T=t)
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(t_out * 1000, y, 'b-', linewidth=2)
+    ax.plot(t_out, y, 'b-', linewidth=2)
     ax.axhline(y=1, color='k', linestyle='--', linewidth=0.5)
     ax.axhline(y=1.05, color='r', linestyle=':', linewidth=0.5, label='±5%')
     ax.axhline(y=0.95, color='r', linestyle=':', linewidth=0.5)
@@ -291,21 +291,21 @@ def plot_closed_loop_step(Kp, Ti, Td, eta, filename):
         # Find first time it stays within 5%
         for i in range(len(settled_idx)):
             if np.all(np.abs(y[settled_idx[i]:] - 1) < 0.05):
-                ts = t_out[settled_idx[i]] * 1000
+                ts = t_out[settled_idx[i]]
                 ax.axvline(x=ts, color='g', linestyle=':', linewidth=1)
-                ax.text(ts + 5, 0.5, f'$t_s$ = {ts:.0f} ms', fontsize=10, color='g')
+                ax.text(ts + 0.1, 0.5, f'$t_s$ = {ts*1000:.0f} ms', fontsize=10, color='g')
                 break
 
     # Find overshoot
     overshoot = (np.max(y) - 1) * 100
-    ax.text(t_out[np.argmax(y)] * 1000 + 5, np.max(y),
+    ax.text(t_out[np.argmax(y)] + 0.1, np.max(y),
             f'Overshoot: {overshoot:.1f}%', fontsize=10, color='b')
 
-    ax.set_xlabel('Time [ms]', fontsize=12)
+    ax.set_xlabel('Time [s]', fontsize=12)
     ax.set_ylabel('Angular Velocity Response', fontsize=12)
     ax.set_title('Closed-Loop Step Response', fontsize=12)
     ax.grid(True, alpha=0.3)
-    ax.set_xlim([0, 500])
+    ax.set_xlim([0, 5])
     ax.legend()
 
     plt.tight_layout()
