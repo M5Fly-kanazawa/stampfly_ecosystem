@@ -256,13 +256,8 @@
             font-size: 0.8em;
             color: #666;
         }
-        #bode-plot {
+        #bode-plot, #step-plot {
             width: 100%;
-            height: 450px;
-        }
-        #step-plot {
-            width: 100%;
-            height: 300px;
         }
         .transfer-function {
             background: #0f0f23;
@@ -1478,7 +1473,34 @@
             // Optimize button handler
             document.getElementById('optimize-btn').addEventListener('click', runOptimization);
 
+            // Function to sync plot heights with panel
+            function syncPlotHeights() {
+                const panel = document.querySelector('.panel');
+                const panelHeight = panel.offsetHeight;
+                const plotControls = document.querySelector('.plot-controls');
+                const controlsHeight = plotControls ? plotControls.offsetHeight : 0;
+                const gap = 20; // gap between plots
+                const padding = 30; // padding in plot-container
+                const legendHeight = 40; // legend below bode plot
+
+                // Available height for both plots
+                const availableHeight = panelHeight - gap - padding * 2 - controlsHeight - legendHeight;
+                const plotHeight = Math.max(250, Math.floor(availableHeight / 2));
+
+                document.getElementById('bode-plot').style.height = plotHeight + 'px';
+                document.getElementById('step-plot').style.height = plotHeight + 'px';
+
+                Plotly.Plots.resize('bode-plot');
+                Plotly.Plots.resize('step-plot');
+            }
+
+            // Resize plots when window resizes
+            window.addEventListener('resize', syncPlotHeights);
+
             updatePlots();
+
+            // Initial sync after layout settles
+            setTimeout(syncPlotHeights, 100);
         });
     </script>
 </body>
