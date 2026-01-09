@@ -1144,45 +1144,23 @@ $$
 ループ整形法は、**開ループ伝達関数 $L(s)$ のボード線図を理想的な形に整形する**ことで、
 閉ループ系の安定性と性能を同時に達成する設計法である。
 
-**なぜ開ループで設計するのか：**
+#### なぜ開ループで設計するのか
 
-1. **安定性の判別が容易**：ナイキストの安定判別法により、開ループ特性から閉ループの安定性を直接判断できる
-2. **設計指針が明確**：ゲイン余裕・位相余裕という直感的な指標で設計できる
-3. **制御器の効果が分離可能**：$L(s) = C(s)G(s)$ より、制御器の寄与を独立に評価できる
+| 理由 | 説明 |
+|------|------|
+| 安定性の判別が容易 | ナイキストの安定判別法により、開ループ特性から閉ループの安定性を直接判断できる |
+| 設計指針が明確 | ゲイン余裕・位相余裕という直感的な指標で設計できる |
+| 制御器の効果が分離可能 | $L(s) = C(s)G(s)$ より、制御器の寄与を独立に評価できる |
 
 #### 理想的な開ループ特性
 
 良好な制御性能を実現するため、開ループ伝達関数 $L(j\omega)$ は以下の特性を持つべきである：
 
-**1. 低周波域（$\omega \ll \omega_{gc}$）：高ゲイン**
-
-$$
-|L(j\omega)| \gg 1 \quad (\omega \ll \omega_{gc})
-$$
-
-- 定常偏差を小さくする
-- 低周波外乱を抑制する
-- 積分器（$1/s$）を含めることで達成
-
-**2. ゲイン交差周波数付近（$\omega \approx \omega_{gc}$）：−20 dB/dec の傾き**
-
-$$
-|L(j\omega_{gc})| = 1 \quad (0 \text{ dB})
-$$
-
-- ゲイン交差周波数で滑らかにゲインが1を横切る
-- 傾きが急すぎると位相余裕が確保できない
-- −20 dB/dec（1次系）の傾きが理想的
-
-**3. 高周波域（$\omega \gg \omega_{gc}$）：低ゲイン**
-
-$$
-|L(j\omega)| \ll 1 \quad (\omega \gg \omega_{gc})
-$$
-
-- 高周波ノイズを増幅しない
-- モデル化誤差の影響を受けにくい
-- センサノイズを出力に伝えない
+| 周波数域 | 条件 | 目的 | 実現方法 |
+|----------|------|------|----------|
+| 低周波域（$\omega \ll \omega_{gc}$） | $\|L(j\omega)\| \gg 1$ | 定常偏差を小さくし、低周波外乱を抑制 | 積分器（$1/s$）を含める |
+| ゲイン交差付近（$\omega \approx \omega_{gc}$） | $\|L(j\omega_{gc})\| = 1$（0 dB） | 滑らかにゲインが1を横切り、位相余裕を確保 | −20 dB/dec（1次系）の傾き |
+| 高周波域（$\omega \gg \omega_{gc}$） | $\|L(j\omega)\| \ll 1$ | 高周波ノイズ・モデル化誤差の影響を抑制 | 高周波ロールオフ |
 
 ```
   ゲイン [dB]
@@ -1201,33 +1179,13 @@ $$
 
 #### 安定余裕の定義
 
-開ループ特性から閉ループの安定性を評価する指標：
+開ループ特性から閉ループの安定性を評価する指標を以下に示す。
 
-**ゲイン交差周波数 $\omega_{gc}$**
-
-$$
-|L(j\omega_{gc})| = 1 \quad (= 0 \text{ dB})
-$$
-
-開ループゲインが1となる周波数。制御帯域の目安となる。
-
-**位相余裕 $\phi_m$**
-
-$$
-\phi_m = 180° + \angle L(j\omega_{gc})
-$$
-
-ゲイン交差周波数における位相と $-180°$ との差。
-$\phi_m > 0$ で閉ループ系は安定。値が大きいほど安定余裕が大きい。
-
-**ゲイン余裕 $G_m$**
-
-$$
-G_m = \frac{1}{|L(j\omega_{pc})|} \quad \text{where} \quad \angle L(j\omega_{pc}) = -180°
-$$
-
-位相が $-180°$ となる周波数（位相交差周波数）におけるゲインの逆数。
-$G_m > 1$（> 0 dB）で閉ループ系は安定。
+| 指標 | 定義式 | 安定条件 | 意味 |
+|------|--------|----------|------|
+| ゲイン交差周波数 $\omega_{gc}$ | $\|L(j\omega_{gc})\| = 1$（0 dB） | - | 開ループゲインが1となる周波数。制御帯域の目安 |
+| 位相余裕 $\phi_m$ | $\phi_m = 180° + \angle L(j\omega_{gc})$ | $\phi_m > 0$ | ゲイン交差周波数における位相と−180°との差 |
+| ゲイン余裕 $G_m$ | $G_m = 1/\|L(j\omega_{pc})\|$（$\angle L(j\omega_{pc}) = -180°$） | $G_m > 1$（> 0 dB） | 位相交差周波数におけるゲインの逆数 |
 
 ```
   ゲイン [dB]
@@ -1263,8 +1221,10 @@ $$
 G(s) = \frac{1/I}{s(\tau_m s + 1)}
 $$
 
-- 積分器（$1/s$）：低周波で $-90°$ の位相遅れ
-- モータ遅れ（$1/(\tau_m s + 1)$）：高周波で追加の位相遅れ
+| 要素 | 位相特性 |
+|------|----------|
+| 積分器（$1/s$） | 低周波で−90°の位相遅れ |
+| モータ遅れ（$1/(\tau_m s + 1)$） | 高周波で追加の位相遅れ |
 
 プラント単体では位相余裕が不足するため、PID制御器で位相を補償する。
 
@@ -1296,39 +1256,15 @@ $$
 #### ゲイン交差周波数の選定
 
 ゲイン交差周波数 $\omega_{gc}$ は制御系の応答速度を決定する重要なパラメータである。
-選定にあたり、以下の制約を考慮する：
+選定にあたり、以下の制約を考慮する。
 
-**1. モータ帯域幅による制約**
+| 制約 | 内容 | 本設計での評価 |
+|------|------|---------------|
+| モータ帯域幅 | $\omega_m = 1/\tau_m = 50$ rad/s。制御帯域がモータ帯域を超えると位相余裕が急減。経験則：$\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m$ | 主要制約 |
+| サンプリング周波数 | IMU 400 Hz → $\omega_{Nyquist} \approx 1257$ rad/s | 十分高く制約とならない |
+| 外乱抑制性能 | 高い $\omega_{gc}$ は外乱抑制に有利だが、ロバスト性が低下 | トレードオフ考慮 |
 
-モータの時定数 $\tau_m = 0.02$ s より、モータ帯域幅は：
-
-$$
-\omega_m = \frac{1}{\tau_m} = 50 \text{ rad/s}
-$$
-
-制御帯域がモータ帯域を超えると、モータの遅れにより位相余裕が急激に減少する。
-経験則として：
-
-$$
-\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m
-$$
-
-**2. サンプリング周波数による制約**
-
-制御ループが離散時間で実装される場合、ナイキスト周波数の制約を受ける。
-IMUが400 Hzで動作する場合：
-
-$$
-\omega_{Nyquist} = \pi \times 400 \approx 1257 \text{ rad/s}
-$$
-
-これは十分に高く、本設計では制約とならない。
-
-**3. 外乱抑制性能**
-
-外乱抑制には高い $\omega_{gc}$ が有利だが、モデル化誤差や高周波ノイズへのロバスト性が低下する。
-
-**選定結果**
+#### 選定結果
 
 上記を総合し、$\omega_{gc} = 15$ rad/s（モータ帯域の30%）を選定する：
 
@@ -1340,33 +1276,20 @@ $$
 
 #### 位相余裕の妥当性
 
-位相余裕 $\phi_m = 60°$ を設計目標とする。この値の妥当性を検討する。
+位相余裕 $\phi_m = 60°$ を設計目標とする。この値の妥当性を以下に示す。
 
-**1. 安定性の観点**
+| 位相余裕 $\phi_m$ | 特性 |
+|------------------|------|
+| < 30° | 振動的な応答、外乱に敏感 |
+| 45° | 最小限の安定余裕 |
+| **60°（本設計）** | 良好な安定余裕、適度な応答速度 |
+| > 75° | 過度に保守的、応答が遅い |
 
-- $\phi_m < 30°$：振動的な応答、外乱に敏感
-- $\phi_m = 45°$：最小限の安定余裕
-- $\phi_m = 60°$：良好な安定余裕、適度な応答速度
-- $\phi_m > 75°$：過度に保守的、応答が遅い
-
-**2. 閉ループ特性との関係**
-
-位相余裕とオーバーシュートの近似関係：
-
-$$
-\zeta \approx \frac{\phi_m}{100} \quad (\phi_m \text{ in degrees})
-$$
-
-$\phi_m = 60°$ では $\zeta \approx 0.6$ となり、オーバーシュート約10%の応答が期待される。
-
-**3. ゲイン変動への耐性**
-
-$\phi_m = 60°$ では、ゲインが約2倍（6 dB）変動しても安定性を維持できる。
-これは機体質量変動やモータ特性のばらつきに対する十分なマージンとなる。
-
-**4. ドローン制御における実績**
-
-多くのフライトコントローラで $\phi_m = 50° \sim 70°$ が採用されており、60°は標準的な選択である。
+| 観点 | $\phi_m = 60°$ での評価 |
+|------|------------------------|
+| 閉ループ特性 | $\zeta \approx \phi_m/100 = 0.6$、オーバーシュート約10% |
+| ゲイン変動耐性 | 約2倍（6 dB）のゲイン変動まで安定性維持 |
+| 実績 | フライトコントローラで $\phi_m = 50° \sim 70°$ が標準的 |
 
 #### ループ整形による設計
 
@@ -1416,14 +1339,14 @@ $$
 
 ![Bode Plot](images/bode_loop_shaping.png)
 
-**図の説明：**
+| 線種 | 説明 |
+|------|------|
+| 青実線 | 開ループ伝達関数 $L(s) = C(s)G(s)$ |
+| 緑破線 | プラント $G(s)$ |
+| 赤一点鎖線 | 制御器 $C(s)$ |
+| 縦点線 | ゲイン交差周波数 $\omega_{gc} = 15$ rad/s |
 
-- **青実線**：開ループ伝達関数 $L(s) = C(s)G(s)$
-- **緑破線**：プラント $G(s)$
-- **赤一点鎖線**：制御器 $C(s)$
-- **縦点線**：ゲイン交差周波数 $\omega_{gc} = 15$ rad/s
-
-**設計検証**
+**設計検証：**
 
 | 項目 | 設計目標 | 達成値 |
 |------|---------|-------|
@@ -2407,45 +2330,23 @@ $$
 
 Loop shaping is a design method that achieves both stability and performance of the closed-loop system by **shaping the Bode plot of the open-loop transfer function $L(s)$ into an ideal form**.
 
-**Why design with open-loop:**
+#### Why Design with Open-Loop
 
-1. **Easy stability assessment**: Nyquist stability criterion allows direct stability assessment from open-loop characteristics
-2. **Clear design guidelines**: Intuitive design using gain margin and phase margin
-3. **Controller effects separable**: From $L(s) = C(s)G(s)$, controller contribution can be evaluated independently
+| Reason | Description |
+|--------|-------------|
+| Easy stability assessment | Nyquist stability criterion allows direct stability assessment from open-loop characteristics |
+| Clear design guidelines | Intuitive design using gain margin and phase margin |
+| Controller effects separable | From $L(s) = C(s)G(s)$, controller contribution can be evaluated independently |
 
 #### Ideal Open-Loop Characteristics
 
 For good control performance, the open-loop transfer function $L(j\omega)$ should have the following characteristics:
 
-**1. Low frequency ($\omega \ll \omega_{gc}$): High gain**
-
-$$
-|L(j\omega)| \gg 1 \quad (\omega \ll \omega_{gc})
-$$
-
-- Reduce steady-state error
-- Suppress low-frequency disturbances
-- Achieved by including an integrator ($1/s$)
-
-**2. Near gain crossover frequency ($\omega \approx \omega_{gc}$): −20 dB/dec slope**
-
-$$
-|L(j\omega_{gc})| = 1 \quad (0 \text{ dB})
-$$
-
-- Gain smoothly crosses unity at crossover frequency
-- Too steep a slope prevents adequate phase margin
-- −20 dB/dec (first-order) slope is ideal
-
-**3. High frequency ($\omega \gg \omega_{gc}$): Low gain**
-
-$$
-|L(j\omega)| \ll 1 \quad (\omega \gg \omega_{gc})
-$$
-
-- Don't amplify high-frequency noise
-- Less sensitive to modeling errors
-- Don't transmit sensor noise to output
+| Frequency Range | Condition | Purpose | Implementation |
+|-----------------|-----------|---------|----------------|
+| Low frequency ($\omega \ll \omega_{gc}$) | $\|L(j\omega)\| \gg 1$ | Reduce steady-state error, suppress low-freq disturbances | Include integrator ($1/s$) |
+| Near crossover ($\omega \approx \omega_{gc}$) | $\|L(j\omega_{gc})\| = 1$ (0 dB) | Smoothly cross unity, ensure phase margin | −20 dB/dec (first-order) slope |
+| High frequency ($\omega \gg \omega_{gc}$) | $\|L(j\omega)\| \ll 1$ | Suppress high-freq noise and modeling errors | High-frequency rolloff |
 
 ```
   Gain [dB]
@@ -2466,31 +2367,11 @@ $$
 
 Metrics to evaluate closed-loop stability from open-loop characteristics:
 
-**Gain Crossover Frequency $\omega_{gc}$**
-
-$$
-|L(j\omega_{gc})| = 1 \quad (= 0 \text{ dB})
-$$
-
-Frequency where open-loop gain equals unity. Indicates control bandwidth.
-
-**Phase Margin $\phi_m$**
-
-$$
-\phi_m = 180° + \angle L(j\omega_{gc})
-$$
-
-Difference between phase at gain crossover frequency and $-180°$.
-$\phi_m > 0$ means closed-loop is stable. Larger values mean greater stability margin.
-
-**Gain Margin $G_m$**
-
-$$
-G_m = \frac{1}{|L(j\omega_{pc})|} \quad \text{where} \quad \angle L(j\omega_{pc}) = -180°
-$$
-
-Reciprocal of gain at phase crossover frequency (where phase equals $-180°$).
-$G_m > 1$ (> 0 dB) means closed-loop is stable.
+| Metric | Definition | Stability Condition | Meaning |
+|--------|------------|---------------------|---------|
+| Gain crossover frequency $\omega_{gc}$ | $\|L(j\omega_{gc})\| = 1$ (0 dB) | - | Frequency where open-loop gain equals unity. Indicates control bandwidth |
+| Phase margin $\phi_m$ | $\phi_m = 180° + \angle L(j\omega_{gc})$ | $\phi_m > 0$ | Difference between phase at gain crossover frequency and −180° |
+| Gain margin $G_m$ | $G_m = 1/\|L(j\omega_{pc})\|$ ($\angle L(j\omega_{pc}) = -180°$) | $G_m > 1$ (> 0 dB) | Reciprocal of gain at phase crossover frequency |
 
 ```
   Gain [dB]
@@ -2526,8 +2407,10 @@ $$
 G(s) = \frac{1/I}{s(\tau_m s + 1)}
 $$
 
-- Integrator ($1/s$): −90° phase lag at low frequency
-- Motor lag ($1/(\tau_m s + 1)$): Additional phase lag at high frequency
+| Element | Phase Characteristic |
+|---------|---------------------|
+| Integrator ($1/s$) | −90° phase lag at low frequency |
+| Motor lag ($1/(\tau_m s + 1)$) | Additional phase lag at high frequency |
 
 The plant alone has insufficient phase margin, so a PID controller compensates the phase.
 
@@ -2561,37 +2444,13 @@ $$
 The gain crossover frequency $\omega_{gc}$ is a key parameter determining control system response speed.
 The following constraints are considered:
 
-**1. Motor Bandwidth Constraint**
+| Constraint | Description | Evaluation |
+|------------|-------------|------------|
+| Motor bandwidth | $\omega_m = 1/\tau_m = 50$ rad/s. Phase margin decreases rapidly if control bandwidth exceeds motor bandwidth. Rule: $\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m$ | Primary constraint |
+| Sampling frequency | IMU 400 Hz → $\omega_{Nyquist} \approx 1257$ rad/s | Sufficiently high, not a constraint |
+| Disturbance rejection | Higher $\omega_{gc}$ improves disturbance rejection but reduces robustness | Trade-off considered |
 
-From the motor time constant $\tau_m = 0.02$ s, the motor bandwidth is:
-
-$$
-\omega_m = \frac{1}{\tau_m} = 50 \text{ rad/s}
-$$
-
-If control bandwidth exceeds motor bandwidth, phase margin decreases rapidly due to motor lag.
-Rule of thumb:
-
-$$
-\omega_{gc} \leq 0.3 \sim 0.5 \times \omega_m
-$$
-
-**2. Sampling Frequency Constraint**
-
-For discrete-time implementation, Nyquist frequency limits apply.
-With IMU running at 400 Hz:
-
-$$
-\omega_{Nyquist} = \pi \times 400 \approx 1257 \text{ rad/s}
-$$
-
-This is sufficiently high and not a constraint in this design.
-
-**3. Disturbance Rejection**
-
-Higher $\omega_{gc}$ improves disturbance rejection but reduces robustness to modeling errors and high-frequency noise.
-
-**Selection Result**
+#### Selection Result
 
 Considering the above, we select $\omega_{gc} = 15$ rad/s (30% of motor bandwidth):
 
@@ -2603,33 +2462,20 @@ Considering the above, we select $\omega_{gc} = 15$ rad/s (30% of motor bandwidt
 
 #### Phase Margin Justification
 
-We target phase margin $\phi_m = 60°$. The validity of this choice is discussed below.
+We target phase margin $\phi_m = 60°$. The validity of this choice is shown below.
 
-**1. Stability Perspective**
+| Phase Margin $\phi_m$ | Characteristic |
+|-----------------------|----------------|
+| < 30° | Oscillatory response, sensitive to disturbances |
+| 45° | Minimum stability margin |
+| **60° (this design)** | Good stability margin, moderate response speed |
+| > 75° | Overly conservative, slow response |
 
-- $\phi_m < 30°$: Oscillatory response, sensitive to disturbances
-- $\phi_m = 45°$: Minimum stability margin
-- $\phi_m = 60°$: Good stability margin, moderate response speed
-- $\phi_m > 75°$: Overly conservative, slow response
-
-**2. Relationship to Closed-Loop Characteristics**
-
-Approximate relationship between phase margin and overshoot:
-
-$$
-\zeta \approx \frac{\phi_m}{100} \quad (\phi_m \text{ in degrees})
-$$
-
-With $\phi_m = 60°$, $\zeta \approx 0.6$, expecting about 10% overshoot.
-
-**3. Tolerance to Gain Variations**
-
-With $\phi_m = 60°$, stability is maintained even if gain varies by approximately 2x (6 dB).
-This provides sufficient margin for vehicle mass variations and motor characteristic variations.
-
-**4. Drone Control Track Record**
-
-Many flight controllers use $\phi_m = 50° \sim 70°$, making 60° a standard choice.
+| Aspect | Evaluation at $\phi_m = 60°$ |
+|--------|------------------------------|
+| Closed-loop characteristics | $\zeta \approx \phi_m/100 = 0.6$, about 10% overshoot |
+| Gain variation tolerance | Stability maintained up to 2x (6 dB) gain variation |
+| Track record | Flight controllers typically use $\phi_m = 50° \sim 70°$ |
 
 #### Loop Shaping Design
 
@@ -2679,14 +2525,14 @@ Optimization yields the following parameters:
 
 ![Bode Plot](images/bode_loop_shaping.png)
 
-**Figure description:**
+| Line | Description |
+|------|-------------|
+| Blue solid | Open-loop transfer function $L(s) = C(s)G(s)$ |
+| Green dashed | Plant $G(s)$ |
+| Red dash-dot | Controller $C(s)$ |
+| Vertical dotted | Gain crossover frequency $\omega_{gc} = 15$ rad/s |
 
-- **Blue solid**: Open-loop transfer function $L(s) = C(s)G(s)$
-- **Green dashed**: Plant $G(s)$
-- **Red dash-dot**: Controller $C(s)$
-- **Vertical dotted**: Gain crossover frequency $\omega_{gc} = 15$ rad/s
-
-**Design Verification**
+**Design Verification:**
 
 | Item | Target | Achieved |
 |------|--------|----------|
