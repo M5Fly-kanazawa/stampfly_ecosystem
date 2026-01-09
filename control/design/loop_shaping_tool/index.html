@@ -939,18 +939,39 @@
                 const targetBWRatio = parseFloat(document.getElementById('target-bw-ratio').value);
 
                 const K = 1 / I;
+                const omega_m = 1 / tau_m;
 
-                // Initial guess from current values
-                const Kp0 = parseFloat(document.getElementById('kp-input').value) * 1e-3;
-                const Ti0 = parseFloat(document.getElementById('ti-input').value) / 1000;
-                const Td0 = parseFloat(document.getElementById('td-input').value) / 1000;
+                // Fixed initial guess based on plant parameters (not current values)
+                // This ensures consistent results regardless of current slider positions
+                const targetOmegaGc = omega_m * targetBWRatio / 100;
+                const Kp0 = 0.1e-3;  // Conservative initial Kp
+                const Ti0 = 2 / targetOmegaGc;  // Ti based on target bandwidth
+                const Td0 = 0.5 / targetOmegaGc;  // Td based on target bandwidth
 
                 const objective = (params) => objectiveFunction(params, K, tau_m, eta, targetPM, targetBWRatio);
 
-                // Run optimization
-                const result = nelderMead(objective, [Kp0, Ti0, Td0], 300);
+                // Run optimization with multiple restarts for robustness
+                let bestResult = [Kp0, Ti0, Td0];
+                let bestCost = objective(bestResult);
 
-                const [KpOpt, TiOpt, TdOpt] = result;
+                // Try from multiple starting points
+                const startPoints = [
+                    [Kp0, Ti0, Td0],
+                    [Kp0 * 2, Ti0, Td0],
+                    [Kp0, Ti0 * 0.5, Td0 * 2],
+                    [Kp0 * 0.5, Ti0 * 2, Td0 * 0.5]
+                ];
+
+                for (const start of startPoints) {
+                    const result = nelderMead(objective, start, 500);
+                    const cost = objective(result);
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        bestResult = result;
+                    }
+                }
+
+                const [KpOpt, TiOpt, TdOpt] = bestResult;
 
                 // Update UI with optimized values
                 document.getElementById('kp-input').value = (KpOpt * 1e3).toFixed(3);
