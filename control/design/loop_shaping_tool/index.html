@@ -858,9 +858,14 @@
                     </div>
                 </div>
 
-                <button class="apply-btn" id="apply-calc-btn">
-                    各軸の設計タブに反映 / Apply to Design Tabs
-                </button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="apply-btn" id="apply-calc-btn" style="flex: 2;">
+                        各軸の設計タブに反映 / Apply to Design Tabs
+                    </button>
+                    <button class="apply-btn" id="reset-calc-btn" style="flex: 1; background: linear-gradient(135deg, #6b7280, #4b5563);">
+                        リセット / Reset
+                    </button>
+                </div>
 
                 <div class="transfer-function" style="margin-top: 15px;">
                     <div class="tf-label">参照元 / Reference:</div>
@@ -1729,6 +1734,36 @@
             }, 1500);
         }
 
+        // Reset calculation tab to default values (from stampfly-parameters.md)
+        function resetCalcDefaults() {
+            const defaults = {
+                'calc-mass': 0.035,        // kg
+                'calc-ixx': 9.16,          // ×10⁻⁶ kg·m²
+                'calc-iyy': 13.3,          // ×10⁻⁶ kg·m²
+                'calc-izz': 20.4,          // ×10⁻⁶ kg·m²
+                'calc-arm': 0.0325,        // m
+                'calc-rm': 0.34,           // Ω
+                'calc-jmp': 2.01,          // ×10⁻⁸ kg·m²
+                'calc-kt': 6.12,           // ×10⁻⁴ V/(rad/s)
+                'calc-ct': 1.00,           // ×10⁻⁸ N/(rad/s)²
+                'calc-cq': 9.71,           // ×10⁻¹¹ N·m/(rad/s)²
+                'calc-tau-override': 20    // ms
+            };
+
+            for (const [id, value] of Object.entries(defaults)) {
+                document.getElementById(id).value = value;
+            }
+
+            updateCalcResults();
+
+            // Visual feedback
+            const btn = document.getElementById('reset-calc-btn');
+            btn.textContent = 'リセット完了!';
+            setTimeout(() => {
+                btn.textContent = 'リセット / Reset';
+            }, 1000);
+        }
+
         // Switch axis
         function switchAxis(axis) {
             // Save current params before switching
@@ -1835,6 +1870,9 @@
 
             // Apply calc button handler
             document.getElementById('apply-calc-btn').addEventListener('click', applyCalcToAxes);
+
+            // Reset calc button handler
+            document.getElementById('reset-calc-btn').addEventListener('click', resetCalcDefaults);
 
             // Function to calculate and set plot heights
             function resizePlots() {
