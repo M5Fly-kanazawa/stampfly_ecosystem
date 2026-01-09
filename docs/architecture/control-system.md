@@ -1041,15 +1041,15 @@ $$
 モーメント入力から角速度出力への伝達関数ゲインは慣性モーメントの逆数：
 
 $$
-\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 $$
-\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 $$
-\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 #### 数値入り伝達関数
@@ -1977,15 +1977,15 @@ Using the above parameters, derive concrete transfer functions.
 The transfer function gain from moment input to angular velocity output is the reciprocal of the moment of inertia:
 
 $$
-\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 $$
-\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 $$
-\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \text{ [rad/s / N·m·s]}
+\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \quad \mathrm{[1/(kg \cdot m^2)]}
 $$
 
 #### Transfer Functions with Numerical Values
