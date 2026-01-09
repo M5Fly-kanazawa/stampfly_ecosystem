@@ -736,65 +736,152 @@
                 <h2>物理パラメータから伝達関数を計算 / Calculate TF from Physical Parameters</h2>
 
                 <div class="calc-input-group">
-                    <h3>慣性モーメント / Moments of Inertia</h3>
+                    <h3>機体パラメータ / Vehicle Parameters</h3>
                     <div class="param-row">
-                        <label><span class="calc-axis-label roll">Roll</span>Ixx</label>
+                        <label>機体質量 m</label>
+                        <input type="number" id="calc-mass" value="0.035" step="0.001" min="0.001">
+                        <span class="unit">kg</span>
+                    </div>
+                    <div class="param-row">
+                        <label><span class="calc-axis-label roll">X</span>Ixx</label>
                         <input type="number" id="calc-ixx" value="9.16" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                     <div class="param-row">
-                        <label><span class="calc-axis-label pitch">Pitch</span>Iyy</label>
+                        <label><span class="calc-axis-label pitch">Y</span>Iyy</label>
                         <input type="number" id="calc-iyy" value="13.3" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                     <div class="param-row">
-                        <label><span class="calc-axis-label yaw">Yaw</span>Izz</label>
+                        <label><span class="calc-axis-label yaw">Z</span>Izz</label>
                         <input type="number" id="calc-izz" value="20.4" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
+                    </div>
+                    <div class="param-row">
+                        <label>アーム長 d</label>
+                        <input type="number" id="calc-arm" value="0.0325" step="0.0001" min="0.001">
+                        <span class="unit">m</span>
                     </div>
                 </div>
 
                 <div class="calc-input-group">
-                    <h3>モータパラメータ / Motor Parameters</h3>
+                    <h3>モーター電気特性 / Motor Electrical</h3>
                     <div class="param-row">
-                        <label>モータ時定数 τₘ</label>
-                        <input type="number" id="calc-tau" value="20" step="1" min="1">
-                        <span class="unit">ms</span>
+                        <label>巻線抵抗 Rm</label>
+                        <input type="number" id="calc-rm" value="0.34" step="0.01" min="0.01">
+                        <span class="unit">Ω</span>
+                    </div>
+                    <div class="param-row">
+                        <label>回転子慣性 Jmp</label>
+                        <input type="number" id="calc-jmp" value="2.01" step="0.01" min="0.01">
+                        <span class="unit">×10⁻⁸ kg·m²</span>
+                    </div>
+                </div>
+
+                <div class="calc-input-group">
+                    <h3>電圧-回転数モデル V = Am·ω² + Bm·ω + Cm</h3>
+                    <div class="param-row">
+                        <label>2次係数 Am</label>
+                        <input type="number" id="calc-am" value="5.39" step="0.01" min="0.01">
+                        <span class="unit">×10⁻⁸ V/(rad/s)²</span>
+                    </div>
+                    <div class="param-row">
+                        <label>1次係数 Bm</label>
+                        <input type="number" id="calc-bm" value="6.33" step="0.01" min="0.01">
+                        <span class="unit">×10⁻⁴ V/(rad/s)</span>
+                    </div>
+                    <div class="param-row">
+                        <label>定数項 Cm</label>
+                        <input type="number" id="calc-cm" value="1.53" step="0.01" min="0">
+                        <span class="unit">×10⁻² V</span>
+                    </div>
+                </div>
+
+                <div class="calc-input-group">
+                    <h3>プロペラ特性 / Propeller Characteristics</h3>
+                    <div class="param-row">
+                        <label>推力係数 Ct</label>
+                        <input type="number" id="calc-ct" value="1.00" step="0.01" min="0.01">
+                        <span class="unit">×10⁻⁸ N/(rad/s)²</span>
+                    </div>
+                    <div class="param-row">
+                        <label>トルク係数 Cq</label>
+                        <input type="number" id="calc-cq" value="9.71" step="0.01" min="0.01">
+                        <span class="unit">×10⁻¹¹ N·m/(rad/s)²</span>
                     </div>
                 </div>
 
                 <div class="calc-result-group">
-                    <h3>計算結果 / Calculated Transfer Function Parameters</h3>
+                    <h3>中間計算 / Intermediate Calculations</h3>
                     <div class="calc-result-row">
-                        <span><span class="calc-axis-label roll">Roll</span>プラントゲイン K</span>
-                        <span class="result-value" id="calc-k-roll">-- ×10³</span>
+                        <span>逆起電力定数 Km = Cq·Rm/Am</span>
+                        <span class="result-value" id="calc-km">-- ×10⁻⁴ V/(rad/s)</span>
                     </div>
                     <div class="calc-result-row">
-                        <span><span class="calc-axis-label pitch">Pitch</span>プラントゲイン K</span>
-                        <span class="result-value" id="calc-k-pitch">-- ×10³</span>
+                        <span>モータ時定数 τm = Jmp·Rm/Km²</span>
+                        <span class="result-value" id="calc-tau-calc">-- ms</span>
                     </div>
                     <div class="calc-result-row">
-                        <span><span class="calc-axis-label yaw">Yaw</span>プラントゲイン K</span>
-                        <span class="result-value" id="calc-k-yaw">-- ×10³</span>
+                        <span>ホバリング回転数 ω₀ = √(mg/4Ct)</span>
+                        <span class="result-value" id="calc-hover-omega">-- rad/s</span>
                     </div>
                     <div class="calc-result-row">
-                        <span>モータ帯域幅 ω_m</span>
+                        <span>1モーター推力 T₀ = mg/4</span>
+                        <span class="result-value" id="calc-hover-thrust">-- N</span>
+                    </div>
+                    <div class="calc-formula" style="margin-top: 10px; font-size: 0.8em;">
+                        τm計算式: τm = Jmp·Rm/Km² (電気時定数無視の近似モデル)
+                    </div>
+                </div>
+
+                <div class="calc-input-group" style="background: #1a1a2e; border: 1px solid #f59e0b;">
+                    <h3 style="color: #f59e0b;">モータ時定数オーバーライド / Motor Time Constant Override</h3>
+                    <div class="param-row">
+                        <label>τm 使用値</label>
+                        <input type="number" id="calc-tau-override" value="20" step="1" min="1">
+                        <span class="unit">ms</span>
+                    </div>
+                    <div style="font-size: 0.8em; color: #888; margin-top: 5px;">
+                        計算値を使用せず、実測・推定値を直接指定する場合に使用
+                    </div>
+                </div>
+
+                <div class="calc-result-group" style="border: 2px solid #00d4ff;">
+                    <h3>伝達関数パラメータ / Transfer Function Parameters</h3>
+                    <div class="calc-formula" style="margin-bottom: 15px;">
+                        G(s) = K / (s(τₘs + 1)) &nbsp; where K = 1/I
+                    </div>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label roll">Roll</span>K = 1/Ixx</span>
+                        <span class="result-value" id="calc-k-roll">-- ×10³ rad/(N·m·s)</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label pitch">Pitch</span>K = 1/Iyy</span>
+                        <span class="result-value" id="calc-k-pitch">-- ×10³ rad/(N·m·s)</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label yaw">Yaw</span>K = 1/Izz</span>
+                        <span class="result-value" id="calc-k-yaw">-- ×10³ rad/(N·m·s)</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span>モータ時定数 τm</span>
+                        <span class="result-value" id="calc-tau-final">-- ms</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span>モータ帯域幅 ωm = 1/τm</span>
                         <span class="result-value" id="calc-wm">-- rad/s</span>
-                    </div>
-                    <div class="calc-formula">
-                        G(s) = K / (s(τₘs + 1)) where K = 1/I
                     </div>
                 </div>
 
                 <button class="apply-btn" id="apply-calc-btn">
-                    各軸に反映 / Apply to All Axes
+                    各軸の設計タブに反映 / Apply to Design Tabs
                 </button>
 
                 <div class="transfer-function" style="margin-top: 15px;">
                     <div class="tf-label">参照元 / Reference:</div>
                     <div style="font-size: 0.85em; color: #888; margin-top: 5px;">
-                        • stampfly-parameters.md<br>
-                        • control-system.md
+                        • docs/architecture/stampfly-parameters.md<br>
+                        • docs/architecture/control-system.md (§6 DCモータモデル, §7 線形化と伝達関数)
                     </div>
                 </div>
             </div>
@@ -1562,30 +1649,85 @@
 
         // Calculate transfer function parameters from physical inputs
         function updateCalcResults() {
-            const Ixx = parseFloat(document.getElementById('calc-ixx').value) * 1e-6;
-            const Iyy = parseFloat(document.getElementById('calc-iyy').value) * 1e-6;
-            const Izz = parseFloat(document.getElementById('calc-izz').value) * 1e-6;
-            const tau_m = parseFloat(document.getElementById('calc-tau').value) / 1000;
+            // Read all input parameters
+            // Vehicle parameters
+            const m = parseFloat(document.getElementById('calc-mass').value);           // kg
+            const Ixx = parseFloat(document.getElementById('calc-ixx').value) * 1e-6;   // kg·m²
+            const Iyy = parseFloat(document.getElementById('calc-iyy').value) * 1e-6;   // kg·m²
+            const Izz = parseFloat(document.getElementById('calc-izz').value) * 1e-6;   // kg·m²
+            const d = parseFloat(document.getElementById('calc-arm').value);            // m
 
-            // K = 1/I for each axis
+            // Motor electrical parameters
+            const Rm = parseFloat(document.getElementById('calc-rm').value);            // Ω
+            const Jmp = parseFloat(document.getElementById('calc-jmp').value) * 1e-8;   // kg·m²
+
+            // Voltage-speed model parameters
+            const Am = parseFloat(document.getElementById('calc-am').value) * 1e-8;     // V/(rad/s)²
+            const Bm = parseFloat(document.getElementById('calc-bm').value) * 1e-4;     // V/(rad/s)
+            const Cm = parseFloat(document.getElementById('calc-cm').value) * 1e-2;     // V
+
+            // Propeller parameters
+            const Ct = parseFloat(document.getElementById('calc-ct').value) * 1e-8;     // N/(rad/s)²
+            const Cq = parseFloat(document.getElementById('calc-cq').value) * 1e-11;    // N·m/(rad/s)²
+
+            // Override time constant
+            const tau_override = parseFloat(document.getElementById('calc-tau-override').value) / 1000; // s
+
+            // ============ Intermediate Calculations ============
+
+            // Back-EMF constant: Km = Cq × Rm / Am
+            const Km = Cq * Rm / Am;  // V/(rad/s)
+
+            // Motor time constant (from DC motor model): τm = Jmp × Rm / Km²
+            const tau_m_calc = Jmp * Rm / (Km * Km);  // s
+
+            // Hover conditions
+            const g = 9.80665;  // m/s²
+            const T0 = m * g / 4;  // Thrust per motor [N]
+            const omega0 = Math.sqrt(m * g / (4 * Ct));  // Hover angular velocity [rad/s]
+
+            // Display intermediate results
+            document.getElementById('calc-km').textContent = (Km * 1e4).toFixed(2) + ' ×10⁻⁴ V/(rad/s)';
+            document.getElementById('calc-tau-calc').textContent = (tau_m_calc * 1000).toFixed(2) + ' ms';
+            document.getElementById('calc-hover-omega').textContent = omega0.toFixed(0) + ' rad/s';
+            document.getElementById('calc-hover-thrust').textContent = (T0 * 1000).toFixed(2) + ' mN';
+
+            // ============ Final Transfer Function Parameters ============
+
+            // Use override tau_m value (not calculated)
+            const tau_m = tau_override;
+
+            // Plant gains K = 1/I for each axis
             const K_roll = 1 / Ixx;
             const K_pitch = 1 / Iyy;
             const K_yaw = 1 / Izz;
+
+            // Motor bandwidth
             const omega_m = 1 / tau_m;
 
-            // Display results (K in ×10³ format)
-            document.getElementById('calc-k-roll').textContent = (K_roll / 1000).toFixed(2) + ' ×10³';
-            document.getElementById('calc-k-pitch').textContent = (K_pitch / 1000).toFixed(2) + ' ×10³';
-            document.getElementById('calc-k-yaw').textContent = (K_yaw / 1000).toFixed(2) + ' ×10³';
+            // Display final results
+            document.getElementById('calc-k-roll').textContent = (K_roll / 1000).toFixed(2) + ' ×10³ rad/(N·m·s)';
+            document.getElementById('calc-k-pitch').textContent = (K_pitch / 1000).toFixed(2) + ' ×10³ rad/(N·m·s)';
+            document.getElementById('calc-k-yaw').textContent = (K_yaw / 1000).toFixed(2) + ' ×10³ rad/(N·m·s)';
+            document.getElementById('calc-tau-final').textContent = (tau_m * 1000).toFixed(1) + ' ms';
             document.getElementById('calc-wm').textContent = omega_m.toFixed(1) + ' rad/s';
+
+            // Store calculated values for apply function
+            window.calcResults = {
+                Ixx: parseFloat(document.getElementById('calc-ixx').value),
+                Iyy: parseFloat(document.getElementById('calc-iyy').value),
+                Izz: parseFloat(document.getElementById('calc-izz').value),
+                tau_m: tau_m * 1000  // ms
+            };
         }
 
         // Apply calculated values to all axes
         function applyCalcToAxes() {
-            const Ixx = parseFloat(document.getElementById('calc-ixx').value);
-            const Iyy = parseFloat(document.getElementById('calc-iyy').value);
-            const Izz = parseFloat(document.getElementById('calc-izz').value);
-            const tau_m = parseFloat(document.getElementById('calc-tau').value);
+            if (!window.calcResults) {
+                updateCalcResults();
+            }
+
+            const { Ixx, Iyy, Izz, tau_m } = window.calcResults;
 
             // Update axis params with new inertia and tau values
             axisParams.roll.inertia = Ixx;
@@ -1605,7 +1747,7 @@
             const btn = document.getElementById('apply-calc-btn');
             btn.textContent = '反映完了 / Applied!';
             setTimeout(() => {
-                btn.textContent = '各軸に反映 / Apply to All Axes';
+                btn.textContent = '各軸の設計タブに反映 / Apply to Design Tabs';
             }, 1500);
         }
 
@@ -1703,8 +1845,14 @@
             // Optimize button handler
             document.getElementById('optimize-btn').addEventListener('click', runOptimization);
 
-            // Calc tab input handlers
-            ['calc-ixx', 'calc-iyy', 'calc-izz', 'calc-tau'].forEach(id => {
+            // Calc tab input handlers - all physical parameter inputs
+            [
+                'calc-mass', 'calc-ixx', 'calc-iyy', 'calc-izz', 'calc-arm',  // Vehicle
+                'calc-rm', 'calc-jmp',                                         // Motor electrical
+                'calc-am', 'calc-bm', 'calc-cm',                              // V-ω model
+                'calc-ct', 'calc-cq',                                          // Propeller
+                'calc-tau-override'                                            // Time constant override
+            ].forEach(id => {
                 document.getElementById(id).addEventListener('input', updateCalcResults);
             });
 
