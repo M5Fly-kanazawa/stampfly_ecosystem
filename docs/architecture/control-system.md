@@ -1223,7 +1223,7 @@ $$
 
 | 要素 | 位相特性 |
 |------|----------|
-| 積分器（$1/s$） | 低周波で−90°の位相遅れ |
+| 積分器（$1/s$） | 全周波数で−90°の位相遅れ |
 | モータ遅れ（$1/(\tau_m s + 1)$） | 高周波で追加の位相遅れ |
 
 プラント単体では位相余裕が不足するため、PID制御器で位相を補償する。
@@ -2409,7 +2409,7 @@ $$
 
 | Element | Phase Characteristic |
 |---------|---------------------|
-| Integrator ($1/s$) | −90° phase lag at low frequency |
+| Integrator ($1/s$) | −90° phase lag at all frequencies |
 | Motor lag ($1/(\tau_m s + 1)$) | Additional phase lag at high frequency |
 
 The plant alone has insufficient phase margin, so a PID controller compensates the phase.
