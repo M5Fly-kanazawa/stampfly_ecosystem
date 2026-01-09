@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StampFly Loop Shaping Design Tool</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        h1 {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #00d4ff;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+        }
+        .subtitle {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #888;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        .panel {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .panel h2 {
+            color: #00d4ff;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+        .param-group {
+            margin-bottom: 20px;
+        }
+        .param-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+        .param-row label {
+            flex: 0 0 120px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .param-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .param-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #00d4ff;
+            cursor: pointer;
+        }
+        .param-row input[type="number"] {
+            width: 90px;
+            padding: 6px 8px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #0f0f23;
+            color: #fff;
+            font-size: 0.9em;
+            text-align: right;
+        }
+        .param-row .unit {
+            flex: 0 0 60px;
+            font-size: 0.8em;
+            color: #666;
+        }
+        .results {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .results h3 {
+            color: #00d4ff;
+            font-size: 0.95em;
+            margin-bottom: 10px;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #222;
+            font-size: 0.9em;
+        }
+        .result-row:last-child {
+            border-bottom: none;
+        }
+        .result-value {
+            color: #4ade80;
+            font-weight: 600;
+        }
+        .result-value.warning {
+            color: #fbbf24;
+        }
+        .result-value.danger {
+            color: #f87171;
+        }
+        .plots {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .plot-container {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        #bode-plot, #step-plot {
+            width: 100%;
+            height: 400px;
+        }
+        .transfer-function {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+        .tf-label {
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .tf-equation {
+            color: #4ade80;
+        }
+        .legend-info {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            font-size: 0.85em;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        @media (max-width: 1000px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>StampFly Loop Shaping Design Tool</h1>
+        <p class="subtitle">リアルタイムPID制御器設計 / Real-time PID Controller Design</p>
+
+        <div class="panel">
+            <h2>プラントパラメータ / Plant Parameters</h2>
+            <div class="param-group">
+                <div class="param-row">
+                    <label>慣性モーメント I</label>
+                    <input type="range" id="inertia-slider" min="1" max="50" step="0.1" value="9.16">
+                    <input type="number" id="inertia-input" value="9.16" step="0.1">
+                    <span class="unit">×10⁻⁶ kg·m²</span>
+                </div>
+                <div class="param-row">
+                    <label>モータ時定数 τₘ</label>
+                    <input type="range" id="tau-slider" min="5" max="100" step="1" value="20">
+                    <input type="number" id="tau-input" value="20" step="1">
+                    <span class="unit">ms</span>
+                </div>
+            </div>
+
+            <h2>PIDパラメータ / PID Parameters</h2>
+            <div class="param-group">
+                <div class="param-row">
+                    <label>比例ゲイン Kp</label>
+                    <input type="range" id="kp-slider" min="0.01" max="1" step="0.01" value="0.134">
+                    <input type="number" id="kp-input" value="0.134" step="0.001">
+                    <span class="unit">×10⁻³</span>
+                </div>
+                <div class="param-row">
+                    <label>積分時間 Ti</label>
+                    <input type="range" id="ti-slider" min="10" max="500" step="1" value="75.6">
+                    <input type="number" id="ti-input" value="75.6" step="0.1">
+                    <span class="unit">ms</span>
+                </div>
+                <div class="param-row">
+                    <label>微分時間 Td</label>
+                    <input type="range" id="td-slider" min="5" max="200" step="1" value="42.6">
+                    <input type="number" id="td-input" value="42.6" step="0.1">
+                    <span class="unit">ms</span>
+                </div>
+                <div class="param-row">
+                    <label>微分フィルタ η</label>
+                    <input type="range" id="eta-slider" min="0.01" max="0.5" step="0.01" value="0.1">
+                    <input type="number" id="eta-input" value="0.1" step="0.01">
+                    <span class="unit"></span>
+                </div>
+            </div>
+
+            <div class="results">
+                <h3>設計結果 / Design Results</h3>
+                <div class="result-row">
+                    <span>ゲイン交差周波数 ω_gc</span>
+                    <span class="result-value" id="result-wgc">-- rad/s</span>
+                </div>
+                <div class="result-row">
+                    <span>位相余裕 PM</span>
+                    <span class="result-value" id="result-pm">-- °</span>
+                </div>
+                <div class="result-row">
+                    <span>ゲイン余裕 GM</span>
+                    <span class="result-value" id="result-gm">-- dB</span>
+                </div>
+                <div class="result-row">
+                    <span>モータ帯域幅 ω_m</span>
+                    <span class="result-value" id="result-wm">-- rad/s</span>
+                </div>
+                <div class="result-row">
+                    <span>帯域幅比 ω_gc/ω_m</span>
+                    <span class="result-value" id="result-ratio">-- %</span>
+                </div>
+            </div>
+
+            <div class="transfer-function">
+                <div class="tf-label">プラント G(s):</div>
+                <div class="tf-equation" id="tf-plant">G(s) = K / (s(τₘs + 1))</div>
+                <div class="tf-label" style="margin-top:10px">制御器 C(s):</div>
+                <div class="tf-equation" id="tf-controller">C(s) = Kp(1 + 1/(Ti·s) + Td·s/(ηTd·s+1))</div>
+            </div>
+        </div>
+
+        <div class="plots">
+            <div class="plot-container">
+                <div id="bode-plot"></div>
+                <div class="legend-info">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#3b82f6"></div>
+                        <span>開ループ L(s)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#22c55e"></div>
+                        <span>プラント G(s)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background:#ef4444"></div>
+                        <span>制御器 C(s)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="plot-container">
+                <div id="step-plot"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Complex number operations
+        const Complex = {
+            create: (re, im) => ({ re, im }),
+            fromPolar: (r, theta) => ({ re: r * Math.cos(theta), im: r * Math.sin(theta) }),
+            add: (a, b) => ({ re: a.re + b.re, im: a.im + b.im }),
+            sub: (a, b) => ({ re: a.re - b.re, im: a.im - b.im }),
+            mul: (a, b) => ({
+                re: a.re * b.re - a.im * b.im,
+                im: a.re * b.im + a.im * b.re
+            }),
+            div: (a, b) => {
+                const denom = b.re * b.re + b.im * b.im;
+                return {
+                    re: (a.re * b.re + a.im * b.im) / denom,
+                    im: (a.im * b.re - a.re * b.im) / denom
+                };
+            },
+            abs: (c) => Math.sqrt(c.re * c.re + c.im * c.im),
+            arg: (c) => Math.atan2(c.im, c.re),
+            scale: (c, k) => ({ re: c.re * k, im: c.im * k })
+        };
+
+        // Transfer function evaluation
+        function evalPlant(omega, K, tau_m) {
+            // G(s) = K / (s * (tau_m * s + 1))
+            // G(jω) = K / (jω * (jω*tau_m + 1))
+            const jw = Complex.create(0, omega);
+            const jwTau = Complex.create(0, omega * tau_m);
+            const term1 = Complex.add(jwTau, Complex.create(1, 0));
+            const denom = Complex.mul(jw, term1);
+            return Complex.div(Complex.create(K, 0), denom);
+        }
+
+        function evalController(omega, Kp, Ti, Td, eta) {
+            // C(s) = Kp * (1 + 1/(Ti*s) + Td*s/(eta*Td*s + 1))
+            const jw = Complex.create(0, omega);
+            const one = Complex.create(1, 0);
+
+            // Integral term: 1/(Ti*jω)
+            const integral = Complex.div(one, Complex.scale(jw, Ti));
+
+            // Derivative term: Td*jω / (eta*Td*jω + 1)
+            const numD = Complex.scale(jw, Td);
+            const denomD = Complex.add(Complex.scale(jw, eta * Td), one);
+            const derivative = Complex.div(numD, denomD);
+
+            // Total: Kp * (1 + integral + derivative)
+            const sum = Complex.add(Complex.add(one, integral), derivative);
+            return Complex.scale(sum, Kp);
+        }
+
+        function evalOpenLoop(omega, K, tau_m, Kp, Ti, Td, eta) {
+            const G = evalPlant(omega, K, tau_m);
+            const C = evalController(omega, Kp, Ti, Td, eta);
+            return Complex.mul(C, G);
+        }
+
+        // Calculate margins
+        function calculateMargins(K, tau_m, Kp, Ti, Td, eta) {
+            const omegas = [];
+            for (let i = -2; i <= 4; i += 0.01) {
+                omegas.push(Math.pow(10, i));
+            }
+
+            let omega_gc = null, pm = null;
+            let omega_pc = null, gm_dB = null;
+
+            // Find gain crossover frequency (|L| = 1)
+            for (let i = 1; i < omegas.length; i++) {
+                const L_prev = evalOpenLoop(omegas[i-1], K, tau_m, Kp, Ti, Td, eta);
+                const L_curr = evalOpenLoop(omegas[i], K, tau_m, Kp, Ti, Td, eta);
+                const mag_prev = Complex.abs(L_prev);
+                const mag_curr = Complex.abs(L_curr);
+
+                if ((mag_prev >= 1 && mag_curr < 1) || (mag_prev < 1 && mag_curr >= 1)) {
+                    // Linear interpolation
+                    const t = (1 - mag_prev) / (mag_curr - mag_prev);
+                    omega_gc = omegas[i-1] + t * (omegas[i] - omegas[i-1]);
+                    const L_gc = evalOpenLoop(omega_gc, K, tau_m, Kp, Ti, Td, eta);
+                    pm = 180 + Complex.arg(L_gc) * 180 / Math.PI;
+                    break;
+                }
+            }
+
+            // Find phase crossover frequency (phase = -180°)
+            let prevPhase = null;
+            for (let i = 0; i < omegas.length; i++) {
+                const L = evalOpenLoop(omegas[i], K, tau_m, Kp, Ti, Td, eta);
+                const phase = Complex.arg(L) * 180 / Math.PI;
+
+                if (prevPhase !== null && prevPhase > -180 && phase <= -180) {
+                    omega_pc = omegas[i];
+                    const L_pc = evalOpenLoop(omega_pc, K, tau_m, Kp, Ti, Td, eta);
+                    gm_dB = -20 * Math.log10(Complex.abs(L_pc));
+                    break;
+                }
+                prevPhase = phase;
+            }
+
+            return { omega_gc, pm, omega_pc, gm_dB };
+        }
+
+        // Closed-loop step response (numerical simulation)
+        function simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, tMax, dt) {
+            const t = [];
+            const y = [];
+
+            let omega_state = 0;
+            let integral = 0;
+            let deriv_state = 0;
+            let prev_error = 0;
+
+            const target = 1;
+
+            for (let time = 0; time <= tMax; time += dt) {
+                t.push(time);
+                y.push(omega_state);
+
+                const error = target - omega_state;
+
+                // PID output
+                integral += error * dt / Ti;
+                const deriv_raw = (error - prev_error) / dt;
+                deriv_state += (deriv_raw * Td - deriv_state) * dt / (eta * Td);
+
+                const u = Kp * (error + integral + deriv_state);
+
+                // Plant dynamics
+                const omega_target = u * K;
+                const d_omega = (omega_target - omega_state) / tau_m;
+                omega_state += d_omega * dt;
+
+                prev_error = error;
+            }
+
+            return { t, y };
+        }
+
+        // Update plots
+        function updatePlots() {
+            // Get parameters
+            const I = parseFloat(document.getElementById('inertia-input').value) * 1e-6;
+            const tau_m = parseFloat(document.getElementById('tau-input').value) / 1000;
+            const Kp = parseFloat(document.getElementById('kp-input').value) * 1e-3;
+            const Ti = parseFloat(document.getElementById('ti-input').value) / 1000;
+            const Td = parseFloat(document.getElementById('td-input').value) / 1000;
+            const eta = parseFloat(document.getElementById('eta-input').value);
+
+            const K = 1 / I;
+            const omega_m = 1 / tau_m;
+
+            // Generate frequency array
+            const omegas = [];
+            for (let i = -1; i <= 4; i += 0.02) {
+                omegas.push(Math.pow(10, i));
+            }
+
+            // Calculate frequency responses
+            const mag_L = [], phase_L = [];
+            const mag_G = [], phase_G = [];
+            const mag_C = [], phase_C = [];
+
+            let unwrapOffset = 0;
+            let prevPhase_L = null;
+
+            for (const omega of omegas) {
+                const L = evalOpenLoop(omega, K, tau_m, Kp, Ti, Td, eta);
+                const G = evalPlant(omega, K, tau_m);
+                const C = evalController(omega, Kp, Ti, Td, eta);
+
+                mag_L.push(20 * Math.log10(Complex.abs(L)));
+                mag_G.push(20 * Math.log10(Complex.abs(G)));
+                mag_C.push(20 * Math.log10(Complex.abs(C)));
+
+                let ph_L = Complex.arg(L) * 180 / Math.PI;
+                if (prevPhase_L !== null && ph_L - prevPhase_L > 180) {
+                    unwrapOffset -= 360;
+                } else if (prevPhase_L !== null && ph_L - prevPhase_L < -180) {
+                    unwrapOffset += 360;
+                }
+                prevPhase_L = ph_L;
+                phase_L.push(ph_L + unwrapOffset);
+
+                phase_G.push(Complex.arg(G) * 180 / Math.PI);
+                phase_C.push(Complex.arg(C) * 180 / Math.PI);
+            }
+
+            // Calculate margins
+            const margins = calculateMargins(K, tau_m, Kp, Ti, Td, eta);
+
+            // Update results display
+            const wgcEl = document.getElementById('result-wgc');
+            const pmEl = document.getElementById('result-pm');
+            const gmEl = document.getElementById('result-gm');
+
+            if (margins.omega_gc) {
+                wgcEl.textContent = margins.omega_gc.toFixed(1) + ' rad/s';
+                wgcEl.className = 'result-value';
+            } else {
+                wgcEl.textContent = 'N/A';
+                wgcEl.className = 'result-value warning';
+            }
+
+            if (margins.pm !== null) {
+                pmEl.textContent = margins.pm.toFixed(1) + '°';
+                pmEl.className = 'result-value' + (margins.pm < 30 ? ' danger' : margins.pm < 45 ? ' warning' : '');
+            } else {
+                pmEl.textContent = 'N/A';
+                pmEl.className = 'result-value warning';
+            }
+
+            if (margins.gm_dB !== null) {
+                gmEl.textContent = margins.gm_dB.toFixed(1) + ' dB';
+                gmEl.className = 'result-value' + (margins.gm_dB < 6 ? ' warning' : '');
+            } else {
+                gmEl.textContent = '∞ dB';
+                gmEl.className = 'result-value';
+            }
+
+            document.getElementById('result-wm').textContent = omega_m.toFixed(1) + ' rad/s';
+
+            if (margins.omega_gc) {
+                const ratio = (margins.omega_gc / omega_m * 100);
+                const ratioEl = document.getElementById('result-ratio');
+                ratioEl.textContent = ratio.toFixed(1) + '%';
+                ratioEl.className = 'result-value' + (ratio > 50 ? ' warning' : '');
+            }
+
+            // Update transfer function display
+            document.getElementById('tf-plant').textContent =
+                `G(s) = ${(K/1000).toFixed(2)}×10³ / (s(${(tau_m*1000).toFixed(1)}ms·s + 1))`;
+
+            // Bode plot layout
+            const plotLayout = {
+                paper_bgcolor: '#16213e',
+                plot_bgcolor: '#0f0f23',
+                font: { color: '#eee', size: 11 },
+                margin: { t: 40, r: 30, b: 40, l: 60 },
+                grid: { rows: 2, columns: 1, pattern: 'independent' },
+                xaxis: {
+                    type: 'log',
+                    title: '',
+                    gridcolor: '#333',
+                    showline: true,
+                    linecolor: '#444'
+                },
+                xaxis2: {
+                    type: 'log',
+                    title: 'Frequency [rad/s]',
+                    gridcolor: '#333',
+                    showline: true,
+                    linecolor: '#444'
+                },
+                yaxis: {
+                    title: 'Magnitude [dB]',
+                    gridcolor: '#333',
+                    range: [-80, 120],
+                    showline: true,
+                    linecolor: '#444',
+                    domain: [0.55, 1]
+                },
+                yaxis2: {
+                    title: 'Phase [deg]',
+                    gridcolor: '#333',
+                    range: [-270, 90],
+                    showline: true,
+                    linecolor: '#444',
+                    domain: [0, 0.45]
+                },
+                showlegend: false,
+                shapes: [
+                    { type: 'line', x0: 0.1, x1: 10000, y0: 0, y1: 0,
+                      xref: 'x', yref: 'y', line: { color: '#666', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0.1, x1: 10000, y0: -180, y1: -180,
+                      xref: 'x2', yref: 'y2', line: { color: '#666', width: 1, dash: 'dot' } }
+                ]
+            };
+
+            if (margins.omega_gc) {
+                plotLayout.shapes.push({
+                    type: 'line',
+                    x0: margins.omega_gc, x1: margins.omega_gc,
+                    y0: -80, y1: 120,
+                    xref: 'x', yref: 'y',
+                    line: { color: '#3b82f6', width: 1, dash: 'dash' }
+                });
+                plotLayout.shapes.push({
+                    type: 'line',
+                    x0: margins.omega_gc, x1: margins.omega_gc,
+                    y0: -270, y1: 90,
+                    xref: 'x2', yref: 'y2',
+                    line: { color: '#3b82f6', width: 1, dash: 'dash' }
+                });
+            }
+
+            const bodeData = [
+                { x: omegas, y: mag_L, type: 'scatter', mode: 'lines',
+                  line: { color: '#3b82f6', width: 2.5 }, name: 'L(s)', xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_G, type: 'scatter', mode: 'lines',
+                  line: { color: '#22c55e', width: 1.5, dash: 'dash' }, name: 'G(s)', xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: mag_C, type: 'scatter', mode: 'lines',
+                  line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, name: 'C(s)', xaxis: 'x', yaxis: 'y' },
+                { x: omegas, y: phase_L, type: 'scatter', mode: 'lines',
+                  line: { color: '#3b82f6', width: 2.5 }, name: 'L(s)', xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_G, type: 'scatter', mode: 'lines',
+                  line: { color: '#22c55e', width: 1.5, dash: 'dash' }, name: 'G(s)', xaxis: 'x2', yaxis: 'y2' },
+                { x: omegas, y: phase_C, type: 'scatter', mode: 'lines',
+                  line: { color: '#ef4444', width: 1.5, dash: 'dashdot' }, name: 'C(s)', xaxis: 'x2', yaxis: 'y2' }
+            ];
+
+            Plotly.react('bode-plot', bodeData, plotLayout, { responsive: true });
+
+            // Step response
+            const stepData = simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, 2, 0.001);
+
+            const stepLayout = {
+                paper_bgcolor: '#16213e',
+                plot_bgcolor: '#0f0f23',
+                font: { color: '#eee', size: 11 },
+                margin: { t: 40, r: 30, b: 50, l: 60 },
+                title: { text: 'Closed-Loop Step Response', font: { size: 14 } },
+                xaxis: {
+                    title: 'Time [s]',
+                    gridcolor: '#333',
+                    showline: true,
+                    linecolor: '#444',
+                    range: [0, 2]
+                },
+                yaxis: {
+                    title: 'Response',
+                    gridcolor: '#333',
+                    showline: true,
+                    linecolor: '#444',
+                    range: [0, 1.5]
+                },
+                shapes: [
+                    { type: 'line', x0: 0, x1: 2, y0: 1, y1: 1,
+                      line: { color: '#666', width: 1, dash: 'dash' } },
+                    { type: 'line', x0: 0, x1: 2, y0: 1.05, y1: 1.05,
+                      line: { color: '#ef4444', width: 1, dash: 'dot' } },
+                    { type: 'line', x0: 0, x1: 2, y0: 0.95, y1: 0.95,
+                      line: { color: '#ef4444', width: 1, dash: 'dot' } }
+                ],
+                showlegend: false
+            };
+
+            const stepPlotData = [
+                { x: stepData.t, y: stepData.y, type: 'scatter', mode: 'lines',
+                  line: { color: '#3b82f6', width: 2 } }
+            ];
+
+            Plotly.react('step-plot', stepPlotData, stepLayout, { responsive: true });
+        }
+
+        // Sync slider and input
+        function syncInputs(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+
+            slider.addEventListener('input', () => {
+                input.value = slider.value;
+                updatePlots();
+            });
+
+            input.addEventListener('input', () => {
+                slider.value = input.value;
+                updatePlots();
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            syncInputs('inertia-slider', 'inertia-input');
+            syncInputs('tau-slider', 'tau-input');
+            syncInputs('kp-slider', 'kp-input');
+            syncInputs('ti-slider', 'ti-input');
+            syncInputs('td-slider', 'td-input');
+            syncInputs('eta-slider', 'eta-input');
+
+            updatePlots();
+        });
+    </script>
+</body>
+</html>
