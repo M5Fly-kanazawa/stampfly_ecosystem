@@ -77,10 +77,12 @@
             background: #00d4ff;
             color: #000;
         }
+        .tab.calc { border-left: 4px solid #f59e0b; }
         .tab.roll { border-left: 4px solid #ef4444; }
         .tab.pitch { border-left: 4px solid #22c55e; }
         .tab.yaw { border-left: 4px solid #3b82f6; }
         .tab.all { border-left: 4px solid #8b5cf6; }
+        .tab.active.calc { background: #f59e0b; }
         .tab.active.roll { background: #ef4444; }
         .tab.active.pitch { background: #22c55e; }
         .tab.active.yaw { background: #3b82f6; }
@@ -309,11 +311,90 @@
         .all-view-params.visible {
             display: block;
         }
+        .calc-view-params {
+            display: none;
+        }
+        .calc-view-params.visible {
+            display: block;
+        }
         .single-view-params {
             display: block;
         }
         .single-view-params.hidden {
             display: none;
+        }
+        .calc-input-group {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .calc-input-group h3 {
+            color: #00d4ff;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+        }
+        .calc-result-group {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .calc-result-group h3 {
+            color: #f59e0b;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+        }
+        .calc-result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #222;
+            font-size: 0.9em;
+        }
+        .calc-result-row:last-child {
+            border-bottom: none;
+        }
+        .calc-axis-label {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-right: 8px;
+            color: #000;
+        }
+        .calc-axis-label.roll { background: #ef4444; }
+        .calc-axis-label.pitch { background: #22c55e; }
+        .calc-axis-label.yaw { background: #3b82f6; }
+        .apply-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+        }
+        .apply-btn:hover {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            transform: translateY(-1px);
+        }
+        .apply-btn:active {
+            transform: translateY(0);
+        }
+        .calc-formula {
+            background: #16213e;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            color: #4ade80;
         }
         .overlay-controls {
             background: #0f0f23;
@@ -448,6 +529,7 @@
         <p class="subtitle">リアルタイムPID制御器設計 / Real-time PID Controller Design</p>
 
         <div class="tabs">
+            <button class="tab calc" data-axis="calc">Calc / 計算</button>
             <button class="tab roll active" data-axis="roll">Roll</button>
             <button class="tab pitch" data-axis="pitch">Pitch</button>
             <button class="tab yaw" data-axis="yaw">Yaw</button>
@@ -649,6 +731,73 @@
                     </div>
                 </div>
             </div>
+
+            <div class="calc-view-params">
+                <h2>物理パラメータから伝達関数を計算 / Calculate TF from Physical Parameters</h2>
+
+                <div class="calc-input-group">
+                    <h3>慣性モーメント / Moments of Inertia</h3>
+                    <div class="param-row">
+                        <label><span class="calc-axis-label roll">Roll</span>Ixx</label>
+                        <input type="number" id="calc-ixx" value="9.16" step="0.01" min="0.1">
+                        <span class="unit">×10⁻⁶ kg·m²</span>
+                    </div>
+                    <div class="param-row">
+                        <label><span class="calc-axis-label pitch">Pitch</span>Iyy</label>
+                        <input type="number" id="calc-iyy" value="13.3" step="0.01" min="0.1">
+                        <span class="unit">×10⁻⁶ kg·m²</span>
+                    </div>
+                    <div class="param-row">
+                        <label><span class="calc-axis-label yaw">Yaw</span>Izz</label>
+                        <input type="number" id="calc-izz" value="20.4" step="0.01" min="0.1">
+                        <span class="unit">×10⁻⁶ kg·m²</span>
+                    </div>
+                </div>
+
+                <div class="calc-input-group">
+                    <h3>モータパラメータ / Motor Parameters</h3>
+                    <div class="param-row">
+                        <label>モータ時定数 τₘ</label>
+                        <input type="number" id="calc-tau" value="20" step="1" min="1">
+                        <span class="unit">ms</span>
+                    </div>
+                </div>
+
+                <div class="calc-result-group">
+                    <h3>計算結果 / Calculated Transfer Function Parameters</h3>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label roll">Roll</span>プラントゲイン K</span>
+                        <span class="result-value" id="calc-k-roll">-- ×10³</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label pitch">Pitch</span>プラントゲイン K</span>
+                        <span class="result-value" id="calc-k-pitch">-- ×10³</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span><span class="calc-axis-label yaw">Yaw</span>プラントゲイン K</span>
+                        <span class="result-value" id="calc-k-yaw">-- ×10³</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span>モータ帯域幅 ω_m</span>
+                        <span class="result-value" id="calc-wm">-- rad/s</span>
+                    </div>
+                    <div class="calc-formula">
+                        G(s) = K / (s(τₘs + 1)) where K = 1/I
+                    </div>
+                </div>
+
+                <button class="apply-btn" id="apply-calc-btn">
+                    各軸に反映 / Apply to All Axes
+                </button>
+
+                <div class="transfer-function" style="margin-top: 15px;">
+                    <div class="tf-label">参照元 / Reference:</div>
+                    <div style="font-size: 0.85em; color: #888; margin-top: 5px;">
+                        • stampfly-parameters.md<br>
+                        • control-system.md
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="plots">
@@ -704,11 +853,20 @@
             scale: (c, k) => ({ re: c.re * k, im: c.im * k })
         };
 
-        // Axis parameters storage
+        // Axis parameters storage (inertia values from stampfly-parameters.md)
+        // Ixx = 9.16e-6, Iyy = 13.3e-6, Izz = 20.4e-6 kg·m²
         const axisParams = {
             roll: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
-            pitch: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
-            yaw: { inertia: 48.0, tau: 20, kp: 0.5, ti: 150, td: 50, eta: 0.1 }
+            pitch: { inertia: 13.3, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
+            yaw: { inertia: 20.4, tau: 20, kp: 0.5, ti: 150, td: 50, eta: 0.1 }
+        };
+
+        // Physical parameters (from stampfly-parameters.md)
+        const physicalParams = {
+            Ixx: 9.16,    // Roll moment of inertia [×10⁻⁶ kg·m²]
+            Iyy: 13.3,    // Pitch moment of inertia [×10⁻⁶ kg·m²]
+            Izz: 20.4,    // Yaw moment of inertia [×10⁻⁶ kg·m²]
+            tau_m: 20     // Motor time constant [ms]
         };
 
         const axisColors = {
@@ -1402,6 +1560,55 @@
             }
         }
 
+        // Calculate transfer function parameters from physical inputs
+        function updateCalcResults() {
+            const Ixx = parseFloat(document.getElementById('calc-ixx').value) * 1e-6;
+            const Iyy = parseFloat(document.getElementById('calc-iyy').value) * 1e-6;
+            const Izz = parseFloat(document.getElementById('calc-izz').value) * 1e-6;
+            const tau_m = parseFloat(document.getElementById('calc-tau').value) / 1000;
+
+            // K = 1/I for each axis
+            const K_roll = 1 / Ixx;
+            const K_pitch = 1 / Iyy;
+            const K_yaw = 1 / Izz;
+            const omega_m = 1 / tau_m;
+
+            // Display results (K in ×10³ format)
+            document.getElementById('calc-k-roll').textContent = (K_roll / 1000).toFixed(2) + ' ×10³';
+            document.getElementById('calc-k-pitch').textContent = (K_pitch / 1000).toFixed(2) + ' ×10³';
+            document.getElementById('calc-k-yaw').textContent = (K_yaw / 1000).toFixed(2) + ' ×10³';
+            document.getElementById('calc-wm').textContent = omega_m.toFixed(1) + ' rad/s';
+        }
+
+        // Apply calculated values to all axes
+        function applyCalcToAxes() {
+            const Ixx = parseFloat(document.getElementById('calc-ixx').value);
+            const Iyy = parseFloat(document.getElementById('calc-iyy').value);
+            const Izz = parseFloat(document.getElementById('calc-izz').value);
+            const tau_m = parseFloat(document.getElementById('calc-tau').value);
+
+            // Update axis params with new inertia and tau values
+            axisParams.roll.inertia = Ixx;
+            axisParams.roll.tau = tau_m;
+            axisParams.pitch.inertia = Iyy;
+            axisParams.pitch.tau = tau_m;
+            axisParams.yaw.inertia = Izz;
+            axisParams.yaw.tau = tau_m;
+
+            // Also update physicalParams
+            physicalParams.Ixx = Ixx;
+            physicalParams.Iyy = Iyy;
+            physicalParams.Izz = Izz;
+            physicalParams.tau_m = tau_m;
+
+            // Visual feedback
+            const btn = document.getElementById('apply-calc-btn');
+            btn.textContent = '反映完了 / Applied!';
+            setTimeout(() => {
+                btn.textContent = '各軸に反映 / Apply to All Axes';
+            }, 1500);
+        }
+
         // Switch axis
         function switchAxis(axis) {
             // Save current params before switching
@@ -1415,7 +1622,7 @@
 
             // Update axis indicator
             const axisLabel = document.getElementById('axis-label');
-            if (axis !== 'all') {
+            if (axis !== 'all' && axis !== 'calc') {
                 axisLabel.textContent = axis.charAt(0).toUpperCase() + axis.slice(1);
                 axisLabel.className = `axis-indicator ${axis}`;
             }
@@ -1423,21 +1630,33 @@
             // Toggle panel visibility
             const singleParams = document.querySelector('.single-view-params');
             const allParams = document.querySelector('.all-view-params');
+            const calcParams = document.querySelector('.calc-view-params');
             const singleLegend = document.getElementById('single-legend');
+            const plotsSection = document.querySelector('.plots');
 
-            if (axis === 'all') {
-                singleParams.classList.add('hidden');
+            // Hide all first
+            singleParams.classList.add('hidden');
+            allParams.classList.remove('visible');
+            calcParams.classList.remove('visible');
+
+            if (axis === 'calc') {
+                calcParams.classList.add('visible');
+                singleLegend.style.display = 'none';
+                plotsSection.style.display = 'none';
+                updateCalcResults();
+            } else if (axis === 'all') {
                 allParams.classList.add('visible');
                 singleLegend.style.display = 'none';
+                plotsSection.style.display = 'flex';
+                updatePlots();
             } else {
                 singleParams.classList.remove('hidden');
-                allParams.classList.remove('visible');
                 singleLegend.style.display = 'flex';
+                plotsSection.style.display = 'flex';
                 loadAxisParams(axis);
                 updateOverlayCheckboxes();
+                updatePlots();
             }
-
-            updatePlots();
         }
 
         // Sync slider and input
@@ -1483,6 +1702,14 @@
 
             // Optimize button handler
             document.getElementById('optimize-btn').addEventListener('click', runOptimization);
+
+            // Calc tab input handlers
+            ['calc-ixx', 'calc-iyy', 'calc-izz', 'calc-tau'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateCalcResults);
+            });
+
+            // Apply calc button handler
+            document.getElementById('apply-calc-btn').addEventListener('click', applyCalcToAxes);
 
             // Function to calculate and set plot heights
             function resizePlots() {
