@@ -1112,10 +1112,165 @@ $$
 3. **制御設計への示唆**：モーメント入力を基準とした設計では、各軸のプラントゲインは慣性モーメントのみで決まる。
    制御器設計時は各軸の慣性モーメントの違いを考慮してゲイン調整を行う。
 
+### ループ整形法による制御系設計
+
+#### 開ループ伝達関数
+
+フィードバック制御系において、**開ループ伝達関数** $L(s)$ は制御器 $C(s)$ とプラント $G(s)$ の積として定義される：
+
+$$
+L(s) = C(s) \cdot G(s)
+$$
+
+```
+         ┌───────────────────────────────────────┐
+         │           開ループ L(s)                │
+         │                                       │
+ r ──►(+)───►│ C(s) │───►│ G(s) │───┬──► y
+      -↑     └──────┘    └──────┘   │
+       │         制御器      プラント    │
+       └────────────────────────────┘
+                   フィードバック
+```
+
+閉ループ伝達関数は開ループ伝達関数を用いて表される：
+
+$$
+T(s) = \frac{L(s)}{1 + L(s)} = \frac{C(s)G(s)}{1 + C(s)G(s)}
+$$
+
+#### ループ整形法の基本思想
+
+ループ整形法は、**開ループ伝達関数 $L(s)$ のボード線図を理想的な形に整形する**ことで、
+閉ループ系の安定性と性能を同時に達成する設計法である。
+
+**なぜ開ループで設計するのか：**
+
+1. **安定性の判別が容易**：ナイキストの安定判別法により、開ループ特性から閉ループの安定性を直接判断できる
+2. **設計指針が明確**：ゲイン余裕・位相余裕という直感的な指標で設計できる
+3. **制御器の効果が分離可能**：$L(s) = C(s)G(s)$ より、制御器の寄与を独立に評価できる
+
+#### 理想的な開ループ特性
+
+良好な制御性能を実現するため、開ループ伝達関数 $L(j\omega)$ は以下の特性を持つべきである：
+
+**1. 低周波域（$\omega \ll \omega_{gc}$）：高ゲイン**
+
+$$
+|L(j\omega)| \gg 1 \quad (\omega \ll \omega_{gc})
+$$
+
+- 定常偏差を小さくする
+- 低周波外乱を抑制する
+- 積分器（$1/s$）を含めることで達成
+
+**2. ゲイン交差周波数付近（$\omega \approx \omega_{gc}$）：−20 dB/dec の傾き**
+
+$$
+|L(j\omega_{gc})| = 1 \quad (0 \text{ dB})
+$$
+
+- ゲイン交差周波数で滑らかにゲインが1を横切る
+- 傾きが急すぎると位相余裕が確保できない
+- −20 dB/dec（1次系）の傾きが理想的
+
+**3. 高周波域（$\omega \gg \omega_{gc}$）：低ゲイン**
+
+$$
+|L(j\omega)| \ll 1 \quad (\omega \gg \omega_{gc})
+$$
+
+- 高周波ノイズを増幅しない
+- モデル化誤差の影響を受けにくい
+- センサノイズを出力に伝えない
+
+```
+  ゲイン [dB]
+      │
+   40 ┤         理想的な開ループ特性
+      │    ╲
+   20 ┤     ╲  ← 低周波：高ゲイン（外乱抑制）
+      │      ╲
+    0 ┼───────╳──────────────────→ ω
+      │        ╲  ← ω_gc で 0dB を横切る
+  -20 ┤         ╲    （傾き -20dB/dec が理想）
+      │          ╲
+  -40 ┤           ╲ ← 高周波：低ゲイン（ノイズ抑制）
+      │
+```
+
+#### 安定余裕の定義
+
+開ループ特性から閉ループの安定性を評価する指標：
+
+**ゲイン交差周波数 $\omega_{gc}$**
+
+$$
+|L(j\omega_{gc})| = 1 \quad (= 0 \text{ dB})
+$$
+
+開ループゲインが1となる周波数。制御帯域の目安となる。
+
+**位相余裕 $\phi_m$**
+
+$$
+\phi_m = 180° + \angle L(j\omega_{gc})
+$$
+
+ゲイン交差周波数における位相と $-180°$ との差。
+$\phi_m > 0$ で閉ループ系は安定。値が大きいほど安定余裕が大きい。
+
+**ゲイン余裕 $G_m$**
+
+$$
+G_m = \frac{1}{|L(j\omega_{pc})|} \quad \text{where} \quad \angle L(j\omega_{pc}) = -180°
+$$
+
+位相が $-180°$ となる周波数（位相交差周波数）におけるゲインの逆数。
+$G_m > 1$（> 0 dB）で閉ループ系は安定。
+
+```
+  ゲイン [dB]
+      │
+   20 ┤
+      │    ╲
+    0 ┼─────╳───────────────────→ ω
+      │      ↑╲
+  -20 ┤      │  ╲        ゲイン余裕
+      │   ω_gc  ╲    ┌──────┐
+  -40 ┤          ╲   │      │
+      │           ╲──┴──────╳─→
+      │                     ↑
+  位相 [deg]               ω_pc
+      │
+    0 ┤
+      │
+  -90 ┤        ╲
+      │         ╲
+ -120 ┼──────────╳─────────────→ ω
+      │     ↑     ╲  位相余裕
+ -180 ┤     │ φ_m  ╲────────────
+      │   ω_gc      ╲
+```
+
+#### 制御器の役割
+
+プラント $G(s)$ の特性を補償し、開ループ $L(s)$ を理想的な形に整形するのが制御器 $C(s)$ の役割である。
+
+本システムのプラント：
+
+$$
+G(s) = \frac{1/I}{s(\tau_m s + 1)}
+$$
+
+- 積分器（$1/s$）：低周波で $-90°$ の位相遅れ
+- モータ遅れ（$1/(\tau_m s + 1)$）：高周波で追加の位相遅れ
+
+プラント単体では位相余裕が不足するため、PID制御器で位相を補償する。
+
 ### PID制御器の設計
 
-本節では、ループ整形法を用いてPID制御器を設計する。
-位相余裕とゲイン交差周波数を指定し、安定かつ所望の応答特性を持つ制御系を実現する。
+本節では、上記のループ整形の考え方に基づきPID制御器を設計する。
 
 #### 不完全微分付きPID制御器
 
@@ -1320,42 +1475,7 @@ $$
 u[k] = K_p \cdot e[k] + u_i[k] + u_d[k]
 $$
 
-## 8. 数値積分
-
-### Runge-Kutta 4次法（RK4）
-
-シミュレータでは4次のRunge-Kutta法を使用：
-
-$$
-\begin{align}
-\mathbf{k}_1 &= f(t, \mathbf{y}) \\
-\mathbf{k}_2 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_1/2) \\
-\mathbf{k}_3 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_2/2) \\
-\mathbf{k}_4 &= f(t + h, \mathbf{y} + h\mathbf{k}_3)
-\end{align}
-$$
-
-$$
-\mathbf{y}(t+h) = \mathbf{y}(t) + \frac{h}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)
-$$
-
-| パラメータ | 値 | 単位 |
-|-----------|-----|------|
-| 積分刻み幅 $h$ | 0.001 | s (1 kHz) |
-| 精度 | $O(h^4)$ | - |
-
-### 積分対象
-
-RK4で積分する状態変数：
-
-| 変数 | 微分方程式 |
-|------|-----------|
-| $u, v, w$ | 並進運動方程式 |
-| $p, q, r$ | 回転運動方程式 |
-| $q_0, q_1, q_2, q_3$ | クォータニオン運動学 |
-| $x, y, z$ | 位置運動学 |
-
-## 9. 実装リファレンス
+## 8. 実装リファレンス
 
 ### シミュレータコード
 
@@ -2256,10 +2376,164 @@ $$
 3. **Control design implications**: With moment-based input design, plant gains are determined only by moments of inertia.
    Consider each axis's moment of inertia differences when tuning controller gains.
 
+### Loop Shaping Control Design
+
+#### Open-Loop Transfer Function
+
+In a feedback control system, the **open-loop transfer function** $L(s)$ is defined as the product of controller $C(s)$ and plant $G(s)$:
+
+$$
+L(s) = C(s) \cdot G(s)
+$$
+
+```
+         ┌───────────────────────────────────────┐
+         │           Open Loop L(s)              │
+         │                                       │
+ r ──►(+)───►│ C(s) │───►│ G(s) │───┬──► y
+      -↑     └──────┘    └──────┘   │
+       │       Controller   Plant     │
+       └────────────────────────────┘
+                   Feedback
+```
+
+The closed-loop transfer function is expressed using the open-loop transfer function:
+
+$$
+T(s) = \frac{L(s)}{1 + L(s)} = \frac{C(s)G(s)}{1 + C(s)G(s)}
+$$
+
+#### Fundamental Concept of Loop Shaping
+
+Loop shaping is a design method that achieves both stability and performance of the closed-loop system by **shaping the Bode plot of the open-loop transfer function $L(s)$ into an ideal form**.
+
+**Why design with open-loop:**
+
+1. **Easy stability assessment**: Nyquist stability criterion allows direct stability assessment from open-loop characteristics
+2. **Clear design guidelines**: Intuitive design using gain margin and phase margin
+3. **Controller effects separable**: From $L(s) = C(s)G(s)$, controller contribution can be evaluated independently
+
+#### Ideal Open-Loop Characteristics
+
+For good control performance, the open-loop transfer function $L(j\omega)$ should have the following characteristics:
+
+**1. Low frequency ($\omega \ll \omega_{gc}$): High gain**
+
+$$
+|L(j\omega)| \gg 1 \quad (\omega \ll \omega_{gc})
+$$
+
+- Reduce steady-state error
+- Suppress low-frequency disturbances
+- Achieved by including an integrator ($1/s$)
+
+**2. Near gain crossover frequency ($\omega \approx \omega_{gc}$): −20 dB/dec slope**
+
+$$
+|L(j\omega_{gc})| = 1 \quad (0 \text{ dB})
+$$
+
+- Gain smoothly crosses unity at crossover frequency
+- Too steep a slope prevents adequate phase margin
+- −20 dB/dec (first-order) slope is ideal
+
+**3. High frequency ($\omega \gg \omega_{gc}$): Low gain**
+
+$$
+|L(j\omega)| \ll 1 \quad (\omega \gg \omega_{gc})
+$$
+
+- Don't amplify high-frequency noise
+- Less sensitive to modeling errors
+- Don't transmit sensor noise to output
+
+```
+  Gain [dB]
+      │
+   40 ┤         Ideal Open-Loop Characteristics
+      │    ╲
+   20 ┤     ╲  ← Low freq: High gain (disturbance rejection)
+      │      ╲
+    0 ┼───────╳──────────────────→ ω
+      │        ╲  ← Cross 0dB at ω_gc
+  -20 ┤         ╲    (ideal slope: -20dB/dec)
+      │          ╲
+  -40 ┤           ╲ ← High freq: Low gain (noise rejection)
+      │
+```
+
+#### Stability Margin Definitions
+
+Metrics to evaluate closed-loop stability from open-loop characteristics:
+
+**Gain Crossover Frequency $\omega_{gc}$**
+
+$$
+|L(j\omega_{gc})| = 1 \quad (= 0 \text{ dB})
+$$
+
+Frequency where open-loop gain equals unity. Indicates control bandwidth.
+
+**Phase Margin $\phi_m$**
+
+$$
+\phi_m = 180° + \angle L(j\omega_{gc})
+$$
+
+Difference between phase at gain crossover frequency and $-180°$.
+$\phi_m > 0$ means closed-loop is stable. Larger values mean greater stability margin.
+
+**Gain Margin $G_m$**
+
+$$
+G_m = \frac{1}{|L(j\omega_{pc})|} \quad \text{where} \quad \angle L(j\omega_{pc}) = -180°
+$$
+
+Reciprocal of gain at phase crossover frequency (where phase equals $-180°$).
+$G_m > 1$ (> 0 dB) means closed-loop is stable.
+
+```
+  Gain [dB]
+      │
+   20 ┤
+      │    ╲
+    0 ┼─────╳───────────────────→ ω
+      │      ↑╲
+  -20 ┤      │  ╲        Gain Margin
+      │   ω_gc  ╲    ┌──────┐
+  -40 ┤          ╲   │      │
+      │           ╲──┴──────╳─→
+      │                     ↑
+  Phase [deg]              ω_pc
+      │
+    0 ┤
+      │
+  -90 ┤        ╲
+      │         ╲
+ -120 ┼──────────╳─────────────→ ω
+      │     ↑     ╲  Phase Margin
+ -180 ┤     │ φ_m  ╲────────────
+      │   ω_gc      ╲
+```
+
+#### Role of Controller
+
+The role of controller $C(s)$ is to compensate plant $G(s)$ characteristics and shape the open-loop $L(s)$ into ideal form.
+
+This system's plant:
+
+$$
+G(s) = \frac{1/I}{s(\tau_m s + 1)}
+$$
+
+- Integrator ($1/s$): −90° phase lag at low frequency
+- Motor lag ($1/(\tau_m s + 1)$): Additional phase lag at high frequency
+
+The plant alone has insufficient phase margin, so a PID controller compensates the phase.
+
 ### PID Controller Design
 
-This section designs a PID controller using the loop shaping method.
-By specifying phase margin and gain crossover frequency, we achieve a stable control system with desired response characteristics.
+This section designs a PID controller based on the loop shaping concepts above.
 
 #### PID Controller with Derivative Filter
 
@@ -2464,31 +2738,7 @@ $$
 u[k] = K_p \cdot e[k] + u_i[k] + u_d[k]
 $$
 
-## 8. Numerical Integration
-
-### Runge-Kutta 4th Order (RK4)
-
-The simulator uses 4th order Runge-Kutta:
-
-$$
-\begin{align}
-\mathbf{k}_1 &= f(t, \mathbf{y}) \\
-\mathbf{k}_2 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_1/2) \\
-\mathbf{k}_3 &= f(t + h/2, \mathbf{y} + h\mathbf{k}_2/2) \\
-\mathbf{k}_4 &= f(t + h, \mathbf{y} + h\mathbf{k}_3)
-\end{align}
-$$
-
-$$
-\mathbf{y}(t+h) = \mathbf{y}(t) + \frac{h}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)
-$$
-
-| Parameter | Value | Unit |
-|-----------|-------|------|
-| Step size $h$ | 0.001 | s (1 kHz) |
-| Accuracy | $O(h^4)$ | - |
-
-## 9. Implementation Reference
+## 8. Implementation Reference
 
 ### Simulator Code
 
