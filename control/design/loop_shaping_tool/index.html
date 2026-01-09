@@ -443,13 +443,16 @@
         }
 
         // Closed-loop step response (numerical simulation)
+        // Plant: G(s) = K / (s(τ_m·s + 1)) = (1/I) / (s(τ_m·s + 1))
+        // This is decomposed as: motor lag (1st order) -> integrator (inertia)
         function simulateStepResponse(K, tau_m, Kp, Ti, Td, eta, tMax, dt) {
             const t = [];
             const y = [];
 
-            let omega_state = 0;
-            let integral = 0;
-            let deriv_state = 0;
+            let omega_state = 0;      // Angular velocity output
+            let motor_state = 0;      // Motor output (after first-order lag)
+            let integral = 0;         // PID integral state
+            let deriv_state = 0;      // PID derivative filter state
             let prev_error = 0;
 
             const target = 1;
@@ -467,10 +470,13 @@
 
                 const u = Kp * (error + integral + deriv_state);
 
-                // Plant dynamics
-                const omega_target = u * K;
-                const d_omega = (omega_target - omega_state) / tau_m;
-                omega_state += d_omega * dt;
+                // Plant dynamics: G(s) = K / (s(τ_m·s + 1))
+                // Stage 1: Motor first-order lag: d(motor)/dt = (u - motor) / tau_m
+                const d_motor = (u - motor_state) / tau_m;
+                motor_state += d_motor * dt;
+
+                // Stage 2: Integrator with gain K: d(omega)/dt = motor * K
+                omega_state += motor_state * K * dt;
 
                 prev_error = error;
             }
