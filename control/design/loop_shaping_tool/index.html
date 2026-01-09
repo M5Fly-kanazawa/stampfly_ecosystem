@@ -844,18 +844,18 @@
         }
 
         // Nelder-Mead simplex optimization
-        function nelderMead(objective, x0, maxIter = 200, tol = 1e-6) {
+        function nelderMead(objective, x0, maxIter = 500, tol = 1e-8) {
             const n = x0.length;
             const alpha = 1.0;  // reflection
             const gamma = 2.0;  // expansion
             const rho = 0.5;    // contraction
             const sigma = 0.5;  // shrink
 
-            // Initialize simplex
+            // Initialize simplex with larger spread
             const simplex = [x0.slice()];
             for (let i = 0; i < n; i++) {
                 const point = x0.slice();
-                point[i] *= 1.2;
+                point[i] *= 1.5;  // larger initial spread
                 simplex.push(point);
             }
 
@@ -863,10 +863,13 @@
             let values = simplex.map(p => objective(p));
 
             for (let iter = 0; iter < maxIter; iter++) {
-                // Sort vertices by objective value
-                const indices = values.map((v, i) => i).sort((a, b) => values[a] - values[b]);
-                simplex.sort((a, b) => values[indices.indexOf(simplex.indexOf(a))] - values[indices.indexOf(simplex.indexOf(b))]);
-                values.sort((a, b) => a - b);
+                // Sort vertices by objective value (proper paired sort)
+                const paired = simplex.map((s, i) => ({ simplex: s, value: values[i] }));
+                paired.sort((a, b) => a.value - b.value);
+                for (let i = 0; i <= n; i++) {
+                    simplex[i] = paired[i].simplex;
+                    values[i] = paired[i].value;
+                }
 
                 // Check convergence
                 const range = values[n] - values[0];
@@ -918,8 +921,7 @@
             }
 
             // Return best point
-            const bestIdx = values.indexOf(Math.min(...values));
-            return simplex[bestIdx];
+            return simplex[0];
         }
 
         // Run optimization
