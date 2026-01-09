@@ -729,109 +729,147 @@ $$
 
 ここで $k_T = 2 C_t \omega_{m0}$ は推力ゲイン。
 
-### モータダイナミクスとの結合
+### システム構成
 
-#### モータの伝達関数
+制御系設計では、以下のシステム構成を想定する：
 
-セクション6で導出した1次遅れモデル（インダクタンス無視）：
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        プラント（制御対象）                              │
+│                                                                        │
+│  [u_T]     ┌─────────┐  [T_i]  ┌─────────┐  [ω_mi]  ┌──────────┐      │
+│  [u_φ] ───►│ミキサー │────────►│ モータ  │────────►│  機体    │───►[p]│
+│  [u_θ]    │ M^(-1)  │  [N]   │ 動特性  │ [rad/s] │ダイナミ  │   [q]│
+│  [u_ψ]    └─────────┘        │ 1次遅れ │         │  クス    │   [r]│
+│ [N,N·m]                       └─────────┘         └──────────┘      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- **入力**：全推力 $u_T$ [N] およびモーメント $u_\phi, u_\theta, u_\psi$ [N·m]
+- **出力**：機体角速度 $p, q, r$ [rad/s]
+
+### 制御入力の定義
+
+物理的意味を持つ仮想制御入力を定義する：
+
+| 入力 | 記号 | 次元 | 説明 |
+|------|------|------|------|
+| 全推力 | $u_T$ | N | 4モーターの推力合計 |
+| ロールモーメント | $u_\phi$ | N·m | X軸（前方）周りのモーメント |
+| ピッチモーメント | $u_\theta$ | N·m | Y軸（右方）周りのモーメント |
+| ヨーモーメント | $u_\psi$ | N·m | Z軸（下方）周りのモーメント |
+
+### 制御アロケーション（ミキサー）
+
+#### 推力から制御入力への変換
+
+各モーターの推力 $T_i$ [N] から仮想制御入力への変換：
 
 $$
-\frac{\Omega_i(s)}{V_{a,i}(s)} = \frac{K_{eq}}{\tau_{eq} s + 1}
-$$
-
-PWMデューティ $\delta_i$ から回転速度への関係（電源電圧 $V_{bat}$ を考慮）：
-
-$$
-\frac{\Omega_i(s)}{\Delta_i(s)} = \frac{K_m}{\tau_m s + 1}
+\begin{bmatrix} u_T \\ u_\phi \\ u_\theta \\ u_\psi \end{bmatrix} =
+\underbrace{
+\begin{bmatrix}
+1 & 1 & 1 & 1 \\
+-d & -d & +d & +d \\
++d & -d & -d & +d \\
++\kappa & -\kappa & +\kappa & -\kappa
+\end{bmatrix}
+}_{\mathbf{M}}
+\begin{bmatrix} T_1 \\ T_2 \\ T_3 \\ T_4 \end{bmatrix}
 $$
 
 ここで：
-- $K_m = K_{eq} \cdot V_{bat}$ : モータゲイン [rad/s]
-- $\tau_m = \tau_{eq}$ : モータ時定数 [s]
+- $d = 0.0325$ m：アーム長（中心→モーター）
+- $\kappa = C_q / C_t = 9.71 \times 10^{-3}$ m：トルク/推力比
 
-#### 制御入力の定義
+#### ミキサー行列（逆変換）
 
-4つのモータへの入力を、仮想的な制御入力に変換：
+仮想制御入力から各モーター推力への分配（制御アロケーション）：
 
 $$
-\begin{bmatrix} \delta_T \\ \delta_\phi \\ \delta_\theta \\ \delta_\psi \end{bmatrix} =
-\begin{bmatrix} 1 & 1 & 1 & 1 \\ -1 & -1 & 1 & 1 \\ 1 & -1 & -1 & 1 \\ 1 & -1 & 1 & -1 \end{bmatrix}
-\begin{bmatrix} \delta_1 \\ \delta_2 \\ \delta_3 \\ \delta_4 \end{bmatrix}
+\begin{bmatrix} T_1 \\ T_2 \\ T_3 \\ T_4 \end{bmatrix} =
+\mathbf{M}^{-1}
+\begin{bmatrix} u_T \\ u_\phi \\ u_\theta \\ u_\psi \end{bmatrix}
+= \frac{1}{4}
+\begin{bmatrix}
+1 & -1/d & +1/d & +1/\kappa \\
+1 & -1/d & -1/d & -1/\kappa \\
+1 & +1/d & -1/d & +1/\kappa \\
+1 & +1/d & +1/d & -1/\kappa
+\end{bmatrix}
+\begin{bmatrix} u_T \\ u_\phi \\ u_\theta \\ u_\psi \end{bmatrix}
 $$
 
-| 入力 | 説明 |
-|------|------|
-| $\delta_T$ | 推力（スロットル） |
-| $\delta_\phi$ | ロールモーメント |
-| $\delta_\theta$ | ピッチモーメント |
-| $\delta_\psi$ | ヨーモーメント |
+| モーター | 位置 | 回転方向 | 推力 $T_i$ |
+|---------|------|---------|-----------|
+| M1 | FR (前右) | CCW | $\frac{1}{4}(u_T - \frac{u_\phi}{d} + \frac{u_\theta}{d} + \frac{u_\psi}{\kappa})$ |
+| M2 | RR (後右) | CW | $\frac{1}{4}(u_T - \frac{u_\phi}{d} - \frac{u_\theta}{d} - \frac{u_\psi}{\kappa})$ |
+| M3 | RL (後左) | CCW | $\frac{1}{4}(u_T + \frac{u_\phi}{d} - \frac{u_\theta}{d} + \frac{u_\psi}{\kappa})$ |
+| M4 | FL (前左) | CW | $\frac{1}{4}(u_T + \frac{u_\phi}{d} + \frac{u_\theta}{d} - \frac{u_\psi}{\kappa})$ |
+
+### モータダイナミクス
+
+セクション6で導出した1次遅れモデルにより、所望推力から実推力への伝達関数：
+
+$$
+\frac{T_i(s)}{T_{i,cmd}(s)} = \frac{1}{\tau_m s + 1}
+$$
+
+ここで $\tau_m = 0.02$ s はモータ時定数（推定値）。
 
 ### 角速度制御ループの伝達関数
 
+モーメント入力から角速度出力への伝達関数を導出する。
+ミキサーと機体ダイナミクスを合わせたプラントを考える。
+
 #### ロール軸の伝達関数
 
-ロール軸について、制御入力 $\delta_\phi$ から角速度 $p$ への伝達関数を導出する。
+ロールモーメント $u_\phi$ [N·m] から角速度 $p$ [rad/s] への伝達関数：
 
-**モータダイナミクス：**
-
-$$
-\frac{\Delta\Omega_\phi(s)}{\Delta_\phi(s)} = \frac{K_m}{\tau_m s + 1}
-$$
-
-**推力からモーメントへ：**
+**回転運動方程式（線形化後）：**
 
 $$
-\delta L = 2 d \cdot k_T \cdot \Delta\omega_\phi
+I_{xx} \dot{p} = L
+$$
+
+ミキサーを経由して実際に発生するモーメント $L$ は、所望モーメント $u_\phi$ に対してモータの1次遅れを伴う：
+
+$$
+L(s) = \frac{1}{\tau_m s + 1} U_\phi(s)
 $$
 
 **角速度ダイナミクス（ラプラス変換）：**
 
 $$
-s \cdot P(s) = \frac{\delta L(s)}{I_{xx}}
+s \cdot P(s) = \frac{L(s)}{I_{xx}} = \frac{U_\phi(s)}{I_{xx}(\tau_m s + 1)}
 $$
 
 **全体の伝達関数：**
 
 $$
 \boxed{
-G_p(s) = \frac{P(s)}{\Delta_\phi(s)} = \frac{K_p}{s(\tau_m s + 1)}
+G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
-$$
-
-ここで：
-
-$$
-K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{xx}}
 $$
 
 #### ピッチ軸の伝達関数
 
-対称性より、ピッチ軸も同様の形式：
+同様に、ピッチモーメント $u_\theta$ [N·m] から角速度 $q$ [rad/s] への伝達関数：
 
 $$
 \boxed{
-G_q(s) = \frac{Q(s)}{\Delta_\theta(s)} = \frac{K_q}{s(\tau_m s + 1)}
+G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
 $$
-
-$$
-K_q = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{yy}}
-$$
-
-$I_{xx} = I_{yy}$ の場合、$K_p = K_q$。
 
 #### ヨー軸の伝達関数
 
-ヨー軸は反トルクによる制御：
+ヨーモーメント $u_\psi$ [N·m] から角速度 $r$ [rad/s] への伝達関数：
 
 $$
 \boxed{
-G_r(s) = \frac{R(s)}{\Delta_\psi(s)} = \frac{K_r}{s(\tau_m s + 1)}
+G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
-$$
-
-$$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}}
 $$
 
 #### 伝達関数の構造
@@ -840,12 +878,13 @@ $$
 
 ```
                     ┌─────────────┐     ┌─────────┐
-  δ_cmd  ───────────►│  Motor      │────►│ 1/I·s   │────► ω
-                    │  Km/(τm·s+1)│     │(積分器) │
+  u [N·m] ──────────►│   Motor     │────►│ 1/I·s   │────► ω [rad/s]
+                    │ 1/(τm·s+1)  │     │(積分器) │
                     └─────────────┘     └─────────┘
 ```
 
 この構造は、角加速度がモーメントに比例し、角速度はその積分であることを反映している。
+伝達関数のゲインは $1/I$ [1/(kg·m²)] であり、慣性モーメントのみで決まる。
 
 ### 姿勢角への拡張
 
@@ -865,11 +904,11 @@ $$
 
 #### 姿勢角制御ループの伝達関数
 
-制御入力から姿勢角までの全体伝達関数（ロール軸の例）：
+モーメント入力から姿勢角までの全体伝達関数（ロール軸の例）：
 
 $$
 \boxed{
-G_\phi(s) = \frac{\Phi(s)}{\Delta_\phi(s)} = \frac{K_p}{s^2(\tau_m s + 1)}
+G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad \text{[rad / N·m]}
 }
 $$
 
@@ -942,7 +981,45 @@ $$
 
 上記パラメータを用いて、具体的な伝達関数を導出する。
 
-#### モータゲインの導出
+#### 各軸の伝達関数ゲイン
+
+モーメント入力から角速度出力への伝達関数ゲインは慣性モーメントの逆数：
+
+$$
+\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \text{ [rad/s / N·m·s]}
+$$
+
+$$
+\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \text{ [rad/s / N·m·s]}
+$$
+
+$$
+\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \text{ [rad/s / N·m·s]}
+$$
+
+#### 数値入り伝達関数
+
+**ロール軸（$u_\phi \to p$）：**
+
+$$
+\boxed{G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+**ピッチ軸（$u_\theta \to q$）：**
+
+$$
+\boxed{G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+**ヨー軸（$u_\psi \to r$）：**
+
+$$
+\boxed{G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+#### 参考：ミキサーゲインの導出
+
+制御割り当て（ミキサー）の設計に必要なパラメータを参考として記載する。
 
 電圧-回転数特性 $V = A_m \omega^2 + B_m \omega + C_m$ をホバリング点で線形化：
 
@@ -956,70 +1033,29 @@ $$
 K_m = \frac{V_{bat}}{dV/d\omega} = \frac{3.7}{9.49 \times 10^{-4}} = 3900 \text{ rad/s}
 $$
 
-#### 推力ゲイン
+推力ゲイン（回転数変化に対する推力変化）：
 
 $$
 k_T = 2 C_t \omega_{m0} = 2 \times 1.00 \times 10^{-8} \times 2930 = 5.86 \times 10^{-5} \text{ N/(rad/s)}
 $$
 
-#### 各軸のゲイン計算
-
-**ロール軸：**
-
-$$
-K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{9.16 \times 10^{-6}} = 1621 \text{ [1/s]}
-$$
-
-**ピッチ軸：**
-
-$$
-K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{yy}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{13.3 \times 10^{-6}} = 1117 \text{ [1/s]}
-$$
-
-**ヨー軸：**
-
-$$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 9.71 \times 10^{-11} \times 2930 \times 3900}{20.4 \times 10^{-6}} = 217 \text{ [1/s]}
-$$
-
-#### 数値入り伝達関数
-
-**ロール軸（$\delta_\phi \to p$）：**
-
-$$
-\boxed{G_p(s) = \frac{1621}{s(0.02s + 1)} = \frac{81050}{s(s + 50)}}
-$$
-
-**ピッチ軸（$\delta_\theta \to q$）：**
-
-$$
-\boxed{G_q(s) = \frac{1117}{s(0.02s + 1)} = \frac{55850}{s(s + 50)}}
-$$
-
-**ヨー軸（$\delta_\psi \to r$）：**
-
-$$
-\boxed{G_r(s) = \frac{217}{s(0.02s + 1)} = \frac{10850}{s(s + 50)}}
-$$
-
 #### 特性まとめ
 
-| 軸 | ゲイン | 極 | 特徴 |
-|----|-------|-----|------|
-| Roll | 1621 | $s=0, -50$ | 積分器 + 時定数20ms |
-| Pitch | 1117 | $s=0, -50$ | Rollの約69%（$I_{yy} > I_{xx}$） |
-| Yaw | 217 | $s=0, -50$ | Rollの約13% |
+| 軸 | ゲイン $1/I$ [rad/s / N·m·s] | 極 | 特徴 |
+|----|------------------------------|-----|------|
+| Roll | $1.09 \times 10^{5}$ | $s=0, -50$ | 積分器 + 時定数20ms |
+| Pitch | $7.52 \times 10^{4}$ | $s=0, -50$ | Rollの約69%（$I_{yy} > I_{xx}$） |
+| Yaw | $4.90 \times 10^{4}$ | $s=0, -50$ | Rollの約45% |
 
 **考察：**
 
-1. **Roll vs Pitch の差異**：$I_{yy} > I_{xx}$ のため、ピッチ軸はロール軸より応答が遅い。
+1. **Roll vs Pitch の差異**：$I_{yy} > I_{xx}$ のため、同じモーメントを加えてもピッチ軸はロール軸より角加速度が小さい。
    これは機体形状の非対称性（前後方向が長い）に起因する。
 
-2. **Yaw軸の低ゲイン**：トルク係数 $C_q$ が推力によるモーメントより2桁小さく、
-   かつ $I_{zz}$ が最大のため、ヨー軸は最も応答が遅い。
+2. **Yaw軸のゲイン**：$I_{zz}$ が最大のため、同じモーメントに対する応答が最も遅い。
 
-3. **制御設計への示唆**：各軸で異なるPIDゲインが必要。特にヨー軸は
-   ロール/ピッチ軸より高いゲインを設定して応答を揃える必要がある。
+3. **制御設計への示唆**：モーメント入力を基準とした設計では、各軸のプラントゲインは慣性モーメントのみで決まる。
+   制御器設計時は各軸の慣性モーメントの違いを考慮してゲイン調整を行う。
 
 ## 8. 数値積分
 
@@ -1611,59 +1647,89 @@ Where:
 - $K_m = K_{eq} \cdot V_{bat}$ : Motor gain [rad/s]
 - $\tau_m = \tau_{eq}$ : Motor time constant [s]
 
-#### Virtual Control Input Definition
+#### System Configuration
 
-Transform individual motor inputs to virtual control inputs:
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                           Plant (Controlled System)                     │
+│  [u_T]     ┌─────────┐  [T_i]  ┌─────────┐  [ω_mi]  ┌──────────┐       │
+│  [u_φ] ───►│ Mixer   │────────►│ Motor   │────────►│ Vehicle  │───►[p] │
+│  [u_θ]    │ M^(-1)  │  [N]   │ Dynamics│ [rad/s] │ Dynamics │   [q] │
+│  [u_ψ]    └─────────┘        │ 1st-ord │         │          │   [r] │
+│ [N,N·m]                       └─────────┘         └──────────┘       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Control Input Definition
+
+Control inputs are defined with physical dimensions:
+
+| Symbol | Description | Unit |
+|--------|-------------|------|
+| $u_T$ | Total thrust command | N |
+| $u_\phi$ | Roll moment command | N·m |
+| $u_\theta$ | Pitch moment command | N·m |
+| $u_\psi$ | Yaw moment command | N·m |
 
 $$
-\begin{bmatrix} \delta_T \\ \delta_\phi \\ \delta_\theta \\ \delta_\psi \end{bmatrix} =
-\begin{bmatrix} 1 & 1 & 1 & 1 \\ -1 & -1 & 1 & 1 \\ 1 & -1 & -1 & 1 \\ 1 & -1 & 1 & -1 \end{bmatrix}
-\begin{bmatrix} \delta_1 \\ \delta_2 \\ \delta_3 \\ \delta_4 \end{bmatrix}
+\mathbf{u} = \begin{bmatrix} u_T \\ u_\phi \\ u_\theta \\ u_\psi \end{bmatrix}
 $$
 
-| Input | Description |
-|-------|-------------|
-| $\delta_T$ | Thrust (throttle) |
-| $\delta_\phi$ | Roll moment |
-| $\delta_\theta$ | Pitch moment |
-| $\delta_\psi$ | Yaw moment |
+#### Control Allocation (Mixer)
+
+The mixer matrix $M$ relates individual motor thrusts to control inputs:
+
+$$
+\mathbf{u} = M \mathbf{T} =
+\begin{bmatrix}
+1 & 1 & 1 & 1 \\
+-d & -d & d & d \\
+d & -d & -d & d \\
+-\kappa & \kappa & -\kappa & \kappa
+\end{bmatrix}
+\begin{bmatrix} T_1 \\ T_2 \\ T_3 \\ T_4 \end{bmatrix}
+$$
+
+Where $\kappa = C_q/C_t$ is the torque-to-thrust ratio [m].
+
+Inverse mixer for motor command calculation:
+
+$$
+\mathbf{T} = M^{-1} \mathbf{u}
+$$
+
+This transforms moment/thrust commands with physical dimensions to individual motor thrust commands.
 
 ### Angular Velocity Control Loop Transfer Functions
 
+Derive transfer functions from moment input to angular velocity output, considering motor dynamics.
+
+#### Motor Dynamics
+
+Motor dynamics are modeled as first-order lag:
+
+$$
+G_m(s) = \frac{1}{\tau_m s + 1}
+$$
+
+Moment generated by motor rotational speed reaches steady state with time constant $\tau_m$.
+
 #### Roll Axis Transfer Function
 
-Derive the transfer function from control input $\delta_\phi$ to angular velocity $p$ for the roll axis.
-
-**Motor dynamics:**
-
-$$
-\frac{\Delta\Omega_\phi(s)}{\Delta_\phi(s)} = \frac{K_m}{\tau_m s + 1}
-$$
-
-**Thrust to moment:**
-
-$$
-\delta L = 2 d \cdot k_T \cdot \Delta\omega_\phi
-$$
+From roll moment input $u_\phi$ to roll rate $p$:
 
 **Angular velocity dynamics (Laplace transform):**
 
 $$
-s \cdot P(s) = \frac{\delta L(s)}{I_{xx}}
+s \cdot P(s) = \frac{U_\phi(s)}{I_{xx}} \cdot G_m(s)
 $$
 
 **Overall transfer function:**
 
 $$
 \boxed{
-G_p(s) = \frac{P(s)}{\Delta_\phi(s)} = \frac{K_p}{s(\tau_m s + 1)}
+G_p(s) = \frac{P(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
-$$
-
-Where:
-
-$$
-K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{xx}}
 $$
 
 #### Pitch Axis Transfer Function
@@ -1672,15 +1738,9 @@ By symmetry, the pitch axis has the same form:
 
 $$
 \boxed{
-G_q(s) = \frac{Q(s)}{\Delta_\theta(s)} = \frac{K_q}{s(\tau_m s + 1)}
+G_q(s) = \frac{Q(s)}{U_\theta(s)} = \frac{1/I_{yy}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
 $$
-
-$$
-K_q = \frac{4 d \cdot C_t \cdot \omega_{m0} \cdot K_m}{I_{yy}}
-$$
-
-When $I_{xx} = I_{yy}$, then $K_p = K_q$.
 
 #### Yaw Axis Transfer Function
 
@@ -1688,12 +1748,8 @@ The yaw axis is controlled by reaction torque:
 
 $$
 \boxed{
-G_r(s) = \frac{R(s)}{\Delta_\psi(s)} = \frac{K_r}{s(\tau_m s + 1)}
+G_r(s) = \frac{R(s)}{U_\psi(s)} = \frac{1/I_{zz}}{s(\tau_m s + 1)} \quad \text{[rad/s / N·m]}
 }
-$$
-
-$$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}}
 $$
 
 #### Transfer Function Structure
@@ -1702,12 +1758,13 @@ Each axis angular velocity transfer function is a **series connection of integra
 
 ```
                     ┌─────────────┐     ┌─────────┐
-  δ_cmd  ───────────►│  Motor      │────►│ 1/I·s   │────► ω
-                    │  Km/(τm·s+1)│     │(integr.)│
+  u [N·m] ──────────►│   Motor     │────►│ 1/I·s   │────► ω [rad/s]
+                    │ 1/(τm·s+1)  │     │(integr.)│
                     └─────────────┘     └─────────┘
 ```
 
 This structure reflects that angular acceleration is proportional to moment, and angular velocity is its integral.
+The transfer function gain is $1/I$ [1/(kg·m²)], determined only by the moment of inertia.
 
 ### Extension to Attitude Angles
 
@@ -1727,11 +1784,11 @@ $$
 
 #### Attitude Angle Control Loop Transfer Function
 
-Overall transfer function from control input to attitude angle (roll axis example):
+Overall transfer function from moment input to attitude angle (roll axis example):
 
 $$
 \boxed{
-G_\phi(s) = \frac{\Phi(s)}{\Delta_\phi(s)} = \frac{K_p}{s^2(\tau_m s + 1)}
+G_\phi(s) = \frac{\Phi(s)}{U_\phi(s)} = \frac{1/I_{xx}}{s^2(\tau_m s + 1)} \quad \text{[rad / N·m]}
 }
 $$
 
@@ -1804,7 +1861,45 @@ The following parameters are from `docs/architecture/stampfly-parameters.md`.
 
 Using the above parameters, derive concrete transfer functions.
 
-#### Motor Gain Derivation
+#### Transfer Function Gains for Each Axis
+
+The transfer function gain from moment input to angular velocity output is the reciprocal of the moment of inertia:
+
+$$
+\frac{1}{I_{xx}} = \frac{1}{9.16 \times 10^{-6}} = 1.09 \times 10^{5} \text{ [rad/s / N·m·s]}
+$$
+
+$$
+\frac{1}{I_{yy}} = \frac{1}{13.3 \times 10^{-6}} = 7.52 \times 10^{4} \text{ [rad/s / N·m·s]}
+$$
+
+$$
+\frac{1}{I_{zz}} = \frac{1}{20.4 \times 10^{-6}} = 4.90 \times 10^{4} \text{ [rad/s / N·m·s]}
+$$
+
+#### Transfer Functions with Numerical Values
+
+**Roll axis ($u_\phi \to p$):**
+
+$$
+\boxed{G_p(s) = \frac{1.09 \times 10^{5}}{s(0.02s + 1)} = \frac{5.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+**Pitch axis ($u_\theta \to q$):**
+
+$$
+\boxed{G_q(s) = \frac{7.52 \times 10^{4}}{s(0.02s + 1)} = \frac{3.76 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+**Yaw axis ($u_\psi \to r$):**
+
+$$
+\boxed{G_r(s) = \frac{4.90 \times 10^{4}}{s(0.02s + 1)} = \frac{2.45 \times 10^{6}}{s(s + 50)} \quad \text{[rad/s / N·m]}}
+$$
+
+#### Reference: Mixer Gain Derivation
+
+Parameters needed for control allocation (mixer) design are provided as reference.
 
 Linearize the voltage-speed relationship $V = A_m \omega^2 + B_m \omega + C_m$ at hover:
 
@@ -1818,70 +1913,29 @@ $$
 K_m = \frac{V_{bat}}{dV/d\omega} = \frac{3.7}{9.49 \times 10^{-4}} = 3900 \text{ rad/s}
 $$
 
-#### Thrust Gain
+Thrust gain (thrust change per angular velocity change):
 
 $$
 k_T = 2 C_t \omega_{m0} = 2 \times 1.00 \times 10^{-8} \times 2930 = 5.86 \times 10^{-5} \text{ N/(rad/s)}
 $$
 
-#### Gain Calculation for Each Axis
-
-**Roll axis:**
-
-$$
-K_p = \frac{2 d \cdot k_T \cdot K_m}{I_{xx}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{9.16 \times 10^{-6}} = 1621 \text{ [1/s]}
-$$
-
-**Pitch axis:**
-
-$$
-K_q = \frac{2 d \cdot k_T \cdot K_m}{I_{yy}} = \frac{2 \times 0.0325 \times 5.86 \times 10^{-5} \times 3900}{13.3 \times 10^{-6}} = 1117 \text{ [1/s]}
-$$
-
-**Yaw axis:**
-
-$$
-K_r = \frac{4 C_q \cdot \omega_{m0} \cdot K_m}{I_{zz}} = \frac{4 \times 9.71 \times 10^{-11} \times 2930 \times 3900}{20.4 \times 10^{-6}} = 217 \text{ [1/s]}
-$$
-
-#### Transfer Functions with Numerical Values
-
-**Roll axis ($\delta_\phi \to p$):**
-
-$$
-\boxed{G_p(s) = \frac{1621}{s(0.02s + 1)} = \frac{81050}{s(s + 50)}}
-$$
-
-**Pitch axis ($\delta_\theta \to q$):**
-
-$$
-\boxed{G_q(s) = \frac{1117}{s(0.02s + 1)} = \frac{55850}{s(s + 50)}}
-$$
-
-**Yaw axis ($\delta_\psi \to r$):**
-
-$$
-\boxed{G_r(s) = \frac{217}{s(0.02s + 1)} = \frac{10850}{s(s + 50)}}
-$$
-
 #### Characteristics Summary
 
-| Axis | Gain | Poles | Characteristics |
-|------|------|-------|-----------------|
-| Roll | 1621 | $s=0, -50$ | Integrator + 20ms time constant |
-| Pitch | 1117 | $s=0, -50$ | ~69% of Roll ($I_{yy} > I_{xx}$) |
-| Yaw | 217 | $s=0, -50$ | ~13% of Roll |
+| Axis | Gain $1/I$ [rad/s / N·m·s] | Poles | Characteristics |
+|------|------------------------------|-------|-----------------|
+| Roll | $1.09 \times 10^{5}$ | $s=0, -50$ | Integrator + 20ms time constant |
+| Pitch | $7.52 \times 10^{4}$ | $s=0, -50$ | ~69% of Roll ($I_{yy} > I_{xx}$) |
+| Yaw | $4.90 \times 10^{4}$ | $s=0, -50$ | ~45% of Roll |
 
 **Discussion:**
 
-1. **Roll vs Pitch difference**: Since $I_{yy} > I_{xx}$, the pitch axis responds slower than roll.
+1. **Roll vs Pitch difference**: Since $I_{yy} > I_{xx}$, the same moment produces smaller angular acceleration for pitch.
    This is due to the vehicle's asymmetric shape (longer in the fore-aft direction).
 
-2. **Low Yaw gain**: The torque coefficient $C_q$ is two orders of magnitude smaller than
-   the thrust-generated moment, and $I_{zz}$ is the largest, making yaw the slowest axis.
+2. **Yaw axis gain**: Since $I_{zz}$ is the largest, yaw has the slowest response for the same moment.
 
-3. **Control design implications**: Different PID gains are needed for each axis. The yaw axis
-   particularly requires higher gains to match the response of roll/pitch axes.
+3. **Control design implications**: With moment-based input design, plant gains are determined only by moments of inertia.
+   Consider each axis's moment of inertia differences when tuning controller gains.
 
 ## 8. Numerical Integration
 
