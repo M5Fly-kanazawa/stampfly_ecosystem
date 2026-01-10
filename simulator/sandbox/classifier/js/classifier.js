@@ -714,7 +714,7 @@ function initAutoClassifications() {
 async function loadAndInit() {
     try {
         // Load original STL file
-        const geometry = await loadSTL('../../assets/meshes/stampfly_v1.stl');
+        const geometry = await loadSTL('../assets/meshes/stampfly_v1.stl');
         currentGeometry = geometry;
         triangleData = extractTriangleData(geometry);
         totalTriangles = triangleData.length;
