@@ -2084,7 +2084,12 @@
             const g = 9.80665;
             const omega0 = Math.sqrt(m * g / (4 * Ct * 1e-8)).toFixed(0);
             const T0 = (m * g / 4 * 1000).toFixed(2);
-            const tau_m = (Jmp * 1e-8 * Rm / Math.pow(Kt * 1e-4, 2) * 1000).toFixed(2);
+
+            // τm: use override value if checkbox is checked, otherwise calculate
+            const useOverride = document.getElementById('calc-tau-override-enable').checked;
+            const tau_m_calc = Jmp * 1e-8 * Rm / Math.pow(Kt * 1e-4, 2) * 1000;
+            const tau_override = parseFloat(document.getElementById('calc-tau-override').value);
+            const tau_m = (useOverride ? tau_override : tau_m_calc).toFixed(2);
 
             // Symbolic equations (left column)
             const symbolic = {
@@ -2401,15 +2406,15 @@
             function updateCalcAndMatrices() {
                 updateCalcResults();
                 renderAllocationMatrices();
+                renderMathEquations();
             }
 
             // Override checkbox handler - enable/disable override input and update calculation
             document.getElementById('calc-tau-override-enable').addEventListener('change', function() {
                 const overrideInput = document.getElementById('calc-tau-override');
                 overrideInput.disabled = !this.checked;
-                // Update calculation when checkbox changes
-                updateCalcResults();
-                renderAllocationMatrices();
+                // Update all calculations when checkbox changes
+                updateCalcAndMatrices();
             });
 
             // Apply calc button handler
