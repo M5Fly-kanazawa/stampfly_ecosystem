@@ -1,0 +1,126 @@
+{
+  "method": "index_split",
+  "source": "part_00.stl",
+  "parts": [
+    {
+      "name": "frame",
+      "file": "frame.stl",
+      "triangles": 1643,
+      "color": [
+        0.9,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "m5stamps3",
+      "file": "m5stamps3.stl",
+      "triangles": 628,
+      "color": [
+        0.3,
+        0.8,
+        0.3
+      ]
+    },
+    {
+      "name": "pcb",
+      "file": "pcb.stl",
+      "triangles": 3825,
+      "color": [
+        0.2,
+        0.5,
+        0.8
+      ]
+    },
+    {
+      "name": "motor_fr",
+      "file": "motor_fr.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "propeller_fr",
+      "file": "propeller_fr.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "motor_rr",
+      "file": "motor_rr.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "motor_rl",
+      "file": "motor_rl.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "motor_fl",
+      "file": "motor_fl.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "propeller_rr",
+      "file": "propeller_rr.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "propeller_rl",
+      "file": "propeller_rl.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "propeller_fl",
+      "file": "propeller_fl.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "battery_holder",
+      "file": "battery_holder.stl",
+      "triangles": 52,
+      "color": [
+        0.6,
+        0.3,
+        0.1
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "method": "kmeans",
+  "parts": [
+    {
+      "name": "cluster_00",
+      "file": "cluster_00.stl",
+      "triangles": 2900,
+      "color": [
+        0.9,
+        0.27,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_01",
+      "file": "cluster_01.stl",
+      "triangles": 2746,
+      "color": [
+        0.27,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_02",
+      "file": "cluster_02.stl",
+      "triangles": 450,
+      "color": [
+        0.27,
+        0.27,
+        0.9
+      ]
+    }
+  ]
+}

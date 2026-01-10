@@ -1,0 +1,25 @@
+{
+  "method": "dbscan",
+  "parts": [
+    {
+      "name": "noise",
+      "file": "noise.stl",
+      "triangles": 11,
+      "color": [
+        0.27,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_00",
+      "file": "cluster_00.stl",
+      "triangles": 6085,
+      "color": [
+        0.9,
+        0.27,
+        0.27
+      ]
+    }
+  ]
+}

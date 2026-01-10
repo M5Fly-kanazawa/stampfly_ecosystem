@@ -1,0 +1,725 @@
+{
+  "method": "dbscan",
+  "parts": [
+    {
+      "name": "noise",
+      "file": "noise.stl",
+      "triangles": 326,
+      "color": [
+        0.9,
+        0.27,
+        0.32
+      ]
+    },
+    {
+      "name": "cluster_00",
+      "file": "cluster_00.stl",
+      "triangles": 8,
+      "color": [
+        0.9,
+        0.27,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_01",
+      "file": "cluster_01.stl",
+      "triangles": 8,
+      "color": [
+        0.9,
+        0.32,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_02",
+      "file": "cluster_02.stl",
+      "triangles": 4594,
+      "color": [
+        0.9,
+        0.38,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_03",
+      "file": "cluster_03.stl",
+      "triangles": 8,
+      "color": [
+        0.9,
+        0.43,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_04",
+      "file": "cluster_04.stl",
+      "triangles": 8,
+      "color": [
+        0.9,
+        0.48,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_05",
+      "file": "cluster_05.stl",
+      "triangles": 7,
+      "color": [
+        0.9,
+        0.53,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_06",
+      "file": "cluster_06.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.58,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_07",
+      "file": "cluster_07.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.64,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_08",
+      "file": "cluster_08.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.69,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_09",
+      "file": "cluster_09.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.74,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_10",
+      "file": "cluster_10.stl",
+      "triangles": 5,
+      "color": [
+        0.9,
+        0.8,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_11",
+      "file": "cluster_11.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.85,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_12",
+      "file": "cluster_12.stl",
+      "triangles": 6,
+      "color": [
+        0.9,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_13",
+      "file": "cluster_13.stl",
+      "triangles": 6,
+      "color": [
+        0.85,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_14",
+      "file": "cluster_14.stl",
+      "triangles": 5,
+      "color": [
+        0.79,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_15",
+      "file": "cluster_15.stl",
+      "triangles": 6,
+      "color": [
+        0.74,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_16",
+      "file": "cluster_16.stl",
+      "triangles": 6,
+      "color": [
+        0.69,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_17",
+      "file": "cluster_17.stl",
+      "triangles": 6,
+      "color": [
+        0.64,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_18",
+      "file": "cluster_18.stl",
+      "triangles": 6,
+      "color": [
+        0.58,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_19",
+      "file": "cluster_19.stl",
+      "triangles": 5,
+      "color": [
+        0.53,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_20",
+      "file": "cluster_20.stl",
+      "triangles": 6,
+      "color": [
+        0.48,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_21",
+      "file": "cluster_21.stl",
+      "triangles": 6,
+      "color": [
+        0.43,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_22",
+      "file": "cluster_22.stl",
+      "triangles": 6,
+      "color": [
+        0.37,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_23",
+      "file": "cluster_23.stl",
+      "triangles": 6,
+      "color": [
+        0.32,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_24",
+      "file": "cluster_24.stl",
+      "triangles": 6,
+      "color": [
+        0.27,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "cluster_25",
+      "file": "cluster_25.stl",
+      "triangles": 5,
+      "color": [
+        0.27,
+        0.9,
+        0.32
+      ]
+    },
+    {
+      "name": "cluster_26",
+      "file": "cluster_26.stl",
+      "triangles": 5,
+      "color": [
+        0.27,
+        0.9,
+        0.37
+      ]
+    },
+    {
+      "name": "cluster_27",
+      "file": "cluster_27.stl",
+      "triangles": 39,
+      "color": [
+        0.27,
+        0.9,
+        0.43
+      ]
+    },
+    {
+      "name": "cluster_28",
+      "file": "cluster_28.stl",
+      "triangles": 4,
+      "color": [
+        0.27,
+        0.9,
+        0.48
+      ]
+    },
+    {
+      "name": "cluster_29",
+      "file": "cluster_29.stl",
+      "triangles": 7,
+      "color": [
+        0.27,
+        0.9,
+        0.53
+      ]
+    },
+    {
+      "name": "cluster_30",
+      "file": "cluster_30.stl",
+      "triangles": 7,
+      "color": [
+        0.27,
+        0.9,
+        0.58
+      ]
+    },
+    {
+      "name": "cluster_31",
+      "file": "cluster_31.stl",
+      "triangles": 7,
+      "color": [
+        0.27,
+        0.9,
+        0.64
+      ]
+    },
+    {
+      "name": "cluster_32",
+      "file": "cluster_32.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.9,
+        0.69
+      ]
+    },
+    {
+      "name": "cluster_33",
+      "file": "cluster_33.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.9,
+        0.74
+      ]
+    },
+    {
+      "name": "cluster_34",
+      "file": "cluster_34.stl",
+      "triangles": 56,
+      "color": [
+        0.27,
+        0.9,
+        0.79
+      ]
+    },
+    {
+      "name": "cluster_35",
+      "file": "cluster_35.stl",
+      "triangles": 4,
+      "color": [
+        0.27,
+        0.9,
+        0.85
+      ]
+    },
+    {
+      "name": "cluster_36",
+      "file": "cluster_36.stl",
+      "triangles": 6,
+      "color": [
+        0.27,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_37",
+      "file": "cluster_37.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.85,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_38",
+      "file": "cluster_38.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.79,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_39",
+      "file": "cluster_39.stl",
+      "triangles": 56,
+      "color": [
+        0.27,
+        0.74,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_40",
+      "file": "cluster_40.stl",
+      "triangles": 4,
+      "color": [
+        0.27,
+        0.69,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_41",
+      "file": "cluster_41.stl",
+      "triangles": 6,
+      "color": [
+        0.27,
+        0.64,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_42",
+      "file": "cluster_42.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.58,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_43",
+      "file": "cluster_43.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.53,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_44",
+      "file": "cluster_44.stl",
+      "triangles": 56,
+      "color": [
+        0.27,
+        0.48,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_45",
+      "file": "cluster_45.stl",
+      "triangles": 4,
+      "color": [
+        0.27,
+        0.43,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_46",
+      "file": "cluster_46.stl",
+      "triangles": 6,
+      "color": [
+        0.27,
+        0.38,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_47",
+      "file": "cluster_47.stl",
+      "triangles": 7,
+      "color": [
+        0.27,
+        0.32,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_48",
+      "file": "cluster_48.stl",
+      "triangles": 13,
+      "color": [
+        0.27,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_49",
+      "file": "cluster_49.stl",
+      "triangles": 13,
+      "color": [
+        0.32,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_50",
+      "file": "cluster_50.stl",
+      "triangles": 56,
+      "color": [
+        0.37,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_51",
+      "file": "cluster_51.stl",
+      "triangles": 4,
+      "color": [
+        0.43,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_52",
+      "file": "cluster_52.stl",
+      "triangles": 6,
+      "color": [
+        0.48,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_53",
+      "file": "cluster_53.stl",
+      "triangles": 6,
+      "color": [
+        0.53,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_54",
+      "file": "cluster_54.stl",
+      "triangles": 6,
+      "color": [
+        0.58,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_55",
+      "file": "cluster_55.stl",
+      "triangles": 6,
+      "color": [
+        0.64,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_56",
+      "file": "cluster_56.stl",
+      "triangles": 5,
+      "color": [
+        0.69,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_57",
+      "file": "cluster_57.stl",
+      "triangles": 34,
+      "color": [
+        0.74,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_58",
+      "file": "cluster_58.stl",
+      "triangles": 34,
+      "color": [
+        0.8,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_59",
+      "file": "cluster_59.stl",
+      "triangles": 7,
+      "color": [
+        0.85,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_60",
+      "file": "cluster_60.stl",
+      "triangles": 7,
+      "color": [
+        0.9,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "cluster_61",
+      "file": "cluster_61.stl",
+      "triangles": 59,
+      "color": [
+        0.9,
+        0.27,
+        0.85
+      ]
+    },
+    {
+      "name": "cluster_62",
+      "file": "cluster_62.stl",
+      "triangles": 59,
+      "color": [
+        0.9,
+        0.27,
+        0.79
+      ]
+    },
+    {
+      "name": "cluster_63",
+      "file": "cluster_63.stl",
+      "triangles": 45,
+      "color": [
+        0.9,
+        0.27,
+        0.74
+      ]
+    },
+    {
+      "name": "cluster_64",
+      "file": "cluster_64.stl",
+      "triangles": 59,
+      "color": [
+        0.9,
+        0.27,
+        0.69
+      ]
+    },
+    {
+      "name": "cluster_65",
+      "file": "cluster_65.stl",
+      "triangles": 59,
+      "color": [
+        0.9,
+        0.27,
+        0.64
+      ]
+    },
+    {
+      "name": "cluster_66",
+      "file": "cluster_66.stl",
+      "triangles": 45,
+      "color": [
+        0.9,
+        0.27,
+        0.58
+      ]
+    },
+    {
+      "name": "cluster_67",
+      "file": "cluster_67.stl",
+      "triangles": 59,
+      "color": [
+        0.9,
+        0.27,
+        0.53
+      ]
+    },
+    {
+      "name": "cluster_68",
+      "file": "cluster_68.stl",
+      "triangles": 77,
+      "color": [
+        0.9,
+        0.27,
+        0.48
+      ]
+    },
+    {
+      "name": "cluster_69",
+      "file": "cluster_69.stl",
+      "triangles": 5,
+      "color": [
+        0.9,
+        0.27,
+        0.43
+      ]
+    },
+    {
+      "name": "cluster_70",
+      "file": "cluster_70.stl",
+      "triangles": 5,
+      "color": [
+        0.9,
+        0.27,
+        0.38
+      ]
+    }
+  ]
+}

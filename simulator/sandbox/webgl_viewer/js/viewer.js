@@ -8,16 +8,18 @@
 // Global state
 let scene, camera, renderer, controls;
 let parts = {};
-let currentSource = 'hybrid';
+let currentSource = 'index_split';
 
 // Configuration paths
 const CONFIG_PATHS = {
+    index_split: '../stl_splitter/parts/index_split/parts_config.json',
     hybrid: '../stl_splitter/parts/hybrid/parts_config.json',
     auto: '../stl_splitter/parts/auto/parts_config.json',
     manual: '../stl_splitter/parts/manual/parts_config.json'
 };
 
 const STL_BASE_PATHS = {
+    index_split: '../stl_splitter/parts/index_split/',
     hybrid: '../stl_splitter/parts/hybrid/',
     auto: '../stl_splitter/parts/auto/',
     manual: '../stl_splitter/parts/manual/'
@@ -72,15 +74,72 @@ function initScene() {
     gridHelper.rotation.x = Math.PI / 2;  // Rotate to XY plane
     scene.add(gridHelper);
 
-    // Axes helper
-    const axesHelper = new THREE.AxesHelper(0.05);
-    scene.add(axesHelper);
+    // Create colored axis arrows with labels
+    // 色付き座標軸矢印を作成（X=赤, Y=緑, Z=青）
+    createAxisArrows();
 
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
 
     // Start animation loop
     animate();
+}
+
+/**
+ * Create colored axis arrows (X=red, Y=green, Z=blue)
+ * 色付き座標軸矢印を作成
+ */
+function createAxisArrows() {
+    const axisLength = 0.08;
+    const arrowHeadLength = 0.015;
+    const arrowHeadWidth = 0.008;
+
+    // X axis (red) - Forward
+    const xDir = new THREE.Vector3(1, 0, 0);
+    const xArrow = new THREE.ArrowHelper(xDir, new THREE.Vector3(0, 0, 0), axisLength, 0xff0000, arrowHeadLength, arrowHeadWidth);
+    scene.add(xArrow);
+
+    // Y axis (green) - Right
+    const yDir = new THREE.Vector3(0, 1, 0);
+    const yArrow = new THREE.ArrowHelper(yDir, new THREE.Vector3(0, 0, 0), axisLength, 0x00ff00, arrowHeadLength, arrowHeadWidth);
+    scene.add(yArrow);
+
+    // Z axis (blue) - Down (NED coordinate)
+    const zDir = new THREE.Vector3(0, 0, 1);
+    const zArrow = new THREE.ArrowHelper(zDir, new THREE.Vector3(0, 0, 0), axisLength, 0x0088ff, arrowHeadLength, arrowHeadWidth);
+    scene.add(zArrow);
+
+    // Add axis labels using sprites
+    createAxisLabel('X', new THREE.Vector3(axisLength + 0.01, 0, 0), 0xff0000);
+    createAxisLabel('Y', new THREE.Vector3(0, axisLength + 0.01, 0), 0x00ff00);
+    createAxisLabel('Z', new THREE.Vector3(0, 0, axisLength + 0.01), 0x0088ff);
+}
+
+/**
+ * Create text label for axis
+ * 軸のテキストラベルを作成
+ */
+function createAxisLabel(text, position, color) {
+    const canvas = document.createElement('canvas');
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Draw text
+    ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, size/2, size/2);
+
+    // Create sprite
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(0.02, 0.02, 1);
+    scene.add(sprite);
 }
 
 /**
