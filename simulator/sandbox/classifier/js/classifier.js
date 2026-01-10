@@ -33,7 +33,8 @@ const PART_DEFINITIONS = {
     propeller_rr: { name: 'Propeller RR', color: [0.2, 0.2, 0.2] },
     propeller_rl: { name: 'Propeller RL', color: [0.2, 0.2, 0.2] },
     propeller_fl: { name: 'Propeller FL', color: [0.2, 0.2, 0.2] },
-    battery: { name: 'Battery', color: [0.6, 0.3, 0.1] }
+    battery: { name: 'Battery', color: [0.6, 0.3, 0.1] },
+    battery_adapter: { name: 'Battery Adapter', color: [0.8, 0.5, 0.2] }
 };
 
 // Pre-defined classifications based on connected component analysis
@@ -57,7 +58,11 @@ const AUTO_CLASSIFICATIONS = [
     { partId: 'propeller_fr', start: 7422, end: 8111 },  // Component 8: X=13.1, Z=-22.8 (Front Right)
 
     // Battery (52 triangles) - center position
-    { partId: 'battery', start: 9252, end: 9303 }        // Component 9: X=3.5, Z=0.0 (Center)
+    { partId: 'battery', start: 9252, end: 9303 },       // Component 9: X=3.5, Z=0.0 (Center)
+
+    // Battery Adapter (1576 triangles total) - part of main body but separate component
+    { partId: 'battery_adapter', start: 8112, end: 9251 },  // 1140 triangles
+    { partId: 'battery_adapter', start: 9304, end: 9739 }   // 436 triangles
 ];
 
 /**
