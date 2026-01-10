@@ -1,0 +1,229 @@
+<?xml version="1.0"?>
+<robot name="stampfly">
+
+  <!-- Materials -->
+  <material name="motor_fl_material">
+    <color rgba="0.7765 0.8314 0.8431 1"/>
+  </material>
+  <material name="motor_rl_material">
+    <color rgba="0.7765 0.8314 0.8431 1"/>
+  </material>
+  <material name="motor_fr_material">
+    <color rgba="0.7765 0.8314 0.8431 1"/>
+  </material>
+  <material name="motor_rr_material">
+    <color rgba="0.7765 0.8314 0.8431 1"/>
+  </material>
+  <material name="propeller_fl_material">
+    <color rgba="1.0000 0.0000 0.0000 0.7"/>
+  </material>
+  <material name="propeller_rr_material">
+    <color rgba="1.0000 0.0000 0.0000 0.7"/>
+  </material>
+  <material name="propeller_rl_material">
+    <color rgba="1.0000 0.0000 0.0000 0.7"/>
+  </material>
+  <material name="propeller_fr_material">
+    <color rgba="1.0000 0.0000 0.0000 0.7"/>
+  </material>
+  <material name="battery_material">
+    <color rgba="0.1569 0.0667 0.0039 1"/>
+  </material>
+  <material name="battery_adapter_material">
+    <color rgba="0.2196 0.2118 0.2000 1"/>
+  </material>
+  <material name="frame_material">
+    <color rgba="0.9000 0.9000 0.9000 0.9"/>
+  </material>
+  <material name="pcb_material">
+    <color rgba="0.1020 0.0980 0.0980 1"/>
+  </material>
+  <material name="m5stamps3_material">
+    <color rgba="1.0000 0.4000 0.0000 1"/>
+  </material>
+
+  <!-- Base Link (main body) -->
+  <link name="base_link">
+    <!-- motor_fl -->
+    <visual name="motor_fl_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="motor_fl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_fl_material"/>
+    </visual>
+    <!-- motor_rl -->
+    <visual name="motor_rl_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="motor_rl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_rl_material"/>
+    </visual>
+    <!-- motor_fr -->
+    <visual name="motor_fr_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="motor_fr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_fr_material"/>
+    </visual>
+    <!-- motor_rr -->
+    <visual name="motor_rr_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="motor_rr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_rr_material"/>
+    </visual>
+    <!-- battery -->
+    <visual name="battery_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="battery.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="battery_material"/>
+    </visual>
+    <!-- battery_adapter -->
+    <visual name="battery_adapter_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="battery_adapter.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="battery_adapter_material"/>
+    </visual>
+    <!-- frame -->
+    <visual name="frame_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="frame.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="frame_material"/>
+    </visual>
+    <!-- pcb -->
+    <visual name="pcb_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="pcb.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="pcb_material"/>
+    </visual>
+    <!-- m5stamps3 -->
+    <visual name="m5stamps3_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="m5stamps3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="m5stamps3_material"/>
+    </visual>
+    <collision name="base_collision">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="frame.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.030"/>
+      <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>
+    </inertial>
+  </link>
+
+  <!-- Propeller Links -->
+  <!-- propeller_fl -> prop2_link -->
+  <link name="prop2_link">
+    <visual name="propeller_fl_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="propeller_fl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_fl_material"/>
+    </visual>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+    </inertial>
+  </link>
+
+  <joint name="prop2_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="prop2_link"/>
+    <origin xyz="-0.0325 0.0325 0.01" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.0001"/>
+  </joint>
+
+  <!-- propeller_rr -> prop3_link -->
+  <link name="prop3_link">
+    <visual name="propeller_rr_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="propeller_rr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_rr_material"/>
+    </visual>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+    </inertial>
+  </link>
+
+  <joint name="prop3_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="prop3_link"/>
+    <origin xyz="0.0325 -0.0325 0.01" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.0001"/>
+  </joint>
+
+  <!-- propeller_rl -> prop1_link -->
+  <link name="prop1_link">
+    <visual name="propeller_rl_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="propeller_rl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_rl_material"/>
+    </visual>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+    </inertial>
+  </link>
+
+  <joint name="prop1_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="prop1_link"/>
+    <origin xyz="-0.0325 -0.0325 0.01" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.0001"/>
+  </joint>
+
+  <!-- propeller_fr -> prop0_link -->
+  <link name="prop0_link">
+    <visual name="propeller_fr_visual">
+      <origin xyz="0 0 0" rpy="-1.5707963267948966 0 0"/>
+      <geometry>
+        <mesh filename="propeller_fr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_fr_material"/>
+    </visual>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.001"/>
+      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+    </inertial>
+  </link>
+
+  <joint name="prop0_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="prop0_link"/>
+    <origin xyz="0.0325 0.0325 0.01" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.0001"/>
+  </joint>
+
+</robot>
