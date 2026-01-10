@@ -1944,7 +1944,6 @@
             const Jmp = parseFloat(document.getElementById('calc-jmp').value);
             const Kt = parseFloat(document.getElementById('calc-kt').value);
             const Ct = parseFloat(document.getElementById('calc-ct').value);
-            const tau_m = parseFloat(document.getElementById('calc-tau-override').value);
 
             // Calculate derived values
             const K_roll = (1 / (Ixx * 1e-6) / 1000).toFixed(1);
@@ -1953,7 +1952,7 @@
             const g = 9.80665;
             const omega0 = Math.sqrt(m * g / (4 * Ct * 1e-8)).toFixed(0);
             const T0 = (m * g / 4 * 1000).toFixed(2);
-            const tau_calc = (Jmp * 1e-8 * Rm / Math.pow(Kt * 1e-4, 2) * 1000).toFixed(2);
+            const tau_m = (Jmp * 1e-8 * Rm / Math.pow(Kt * 1e-4, 2) * 1000).toFixed(2);
 
             // Symbolic equations (left column)
             const symbolic = {
@@ -1971,7 +1970,7 @@
             const numeric = {
                 'eq-plant-num': `G(s) = \\frac{${K_roll} \\times 10^3}{s(${tau_m} \\times 10^{-3} s + 1)}`,
                 'eq-plant-gain-num': `K_{roll}=${K_roll}, \\quad K_{pitch}=${K_pitch}, \\quad K_{yaw}=${K_yaw} \\; [\\times 10^3]`,
-                'eq-motor-tau-num': `\\tau_m = \\frac{${Jmp} \\times 10^{-8} \\cdot ${Rm}}{(${Kt} \\times 10^{-4})^2} = ${tau_calc} \\text{ ms}`,
+                'eq-motor-tau-num': `\\tau_m = \\frac{${Jmp} \\times 10^{-8} \\cdot ${Rm}}{(${Kt} \\times 10^{-4})^2} = ${tau_m} \\text{ ms}`,
                 'eq-pid-num': `K_p, T_i, T_d, \\eta \\text{ は各軸タブで設定}`,
                 'eq-sensitivity-desc': '\\text{外乱抑制特性（低周波で小さく）}',
                 'eq-comp-sensitivity-desc': '\\text{目標値追従特性（帯域内で1に近く）}',
