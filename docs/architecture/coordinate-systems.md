@@ -43,6 +43,35 @@ StampFlyエコシステムで使用する座標系の定義と、各コンポー
 - シミュレーション（物理演算）
 - 制御設計（モデル、伝達関数）
 
+### シミュレーション用座標系: Genesis (Z-up)
+
+Genesis物理エンジンで使用する座標系です。ロボットシミュレーションの標準的なZ-up座標系です。
+
+| 軸 | 正方向 | 説明 |
+|----|--------|------|
+| X | 水平 | 右方向（慣例） |
+| Y | 水平 | 前方向（慣例） |
+| Z | 上 | 重力の逆方向 |
+
+```
+        Z (上)
+        ▲
+        │
+        │
+        │
+        ●───────▶ Y (前?)
+       ╱
+      ╱
+     ▼
+    X (右?)
+```
+
+**使用箇所:**
+- Genesis物理シミュレーション
+- 強化学習環境
+
+**重力設定:** `gravity=(0, 0, -9.81)` （Z軸負方向）
+
 ### 表示用座標系: WebGL/Three.js (Y-up, Z-forward)
 
 3D可視化で使用する座標系です。機体後方からのカメラ視点を基準とします。
@@ -124,6 +153,48 @@ function webglToNED(webgl) {
         | 0 -1  0 |
 T_NED→WebGL = | 0  0 -1 |    det(T) = +1 (右手系維持)
         | 1  0  0 |
+```
+
+### NED → Genesis 変換
+
+制御計算結果をGenesisシミュレーションに渡す際の座標変換です。
+
+| Genesis | = | NED | 説明 |
+|---------|---|-----|------|
+| x | = | +y | 東/右 → X |
+| y | = | +x | 北/前 → Y |
+| z | = | -z | 下 → 上（符号反転） |
+
+```python
+# NED座標からGenesis座標への変換
+# Convert from NED to Genesis coordinates
+def ned_to_genesis(ned):
+    return {
+        'x': ned['y'],    # East/Right → X
+        'y': ned['x'],    # North/Forward → Y
+        'z': -ned['z']    # Down → Up (sign inverted)
+    }
+```
+
+### Genesis → NED 変換
+
+Genesisシミュレーション結果を制御計算に渡す際の座標変換です。
+
+| NED | = | Genesis | 説明 |
+|-----|---|---------|------|
+| x | = | +y | Y → 北/前 |
+| y | = | +x | X → 東/右 |
+| z | = | -z | 上 → 下（符号反転） |
+
+```python
+# Genesis座標からNED座標への変換
+# Convert from Genesis to NED coordinates
+def genesis_to_ned(genesis):
+    return {
+        'x': genesis['y'],    # Y → North/Forward
+        'y': genesis['x'],    # X → East/Right
+        'z': -genesis['z']    # Up → Down (sign inverted)
+    }
 ```
 
 ## 4. 回転の座標変換
@@ -245,7 +316,16 @@ R = Rz(ψ) × Ry(θ) × Rx(φ)
 |----------|------|
 | `simulator/sandbox/coord_transformer/` | 座標変換ツール |
 | `simulator/sandbox/webgl_viewer/` | STLビュワー |
+| `simulator/sandbox/genesis_sim/` | Genesis物理シミュレータ |
 | `simulator/assets/meshes/parts/` | STLファイル（WebGL座標） |
+
+## 8. 座標系比較サマリー
+
+| システム | 右 | 上 | 前 | 重力 |
+|----------|-----|-----|-----|------|
+| NED | +Y | -Z | +X | +Z |
+| Genesis | +X | +Z | +Y | -Z |
+| WebGL | -X | +Y | +Z | -Y |
 
 ---
 
@@ -291,6 +371,35 @@ Used for control calculations and simulation.
 - Firmware (attitude control, position control)
 - Simulation (physics computation)
 - Control design (models, transfer functions)
+
+### Simulation Coordinate System: Genesis (Z-up)
+
+Coordinate system used by the Genesis physics engine. Standard Z-up coordinate system for robot simulation.
+
+| Axis | Positive Direction | Description |
+|------|-------------------|-------------|
+| X | Horizontal | Right (convention) |
+| Y | Horizontal | Forward (convention) |
+| Z | Up | Opposite to gravity |
+
+```
+        Z (Up)
+        ▲
+        │
+        │
+        │
+        ●───────▶ Y (Forward?)
+       ╱
+      ╱
+     ▼
+    X (Right?)
+```
+
+**Used in:**
+- Genesis physics simulation
+- Reinforcement learning environments
+
+**Gravity setting:** `gravity=(0, 0, -9.81)` (negative Z direction)
 
 ### Display Coordinate System: WebGL/Three.js (Y-up, Z-forward)
 
@@ -371,6 +480,46 @@ function webglToNED(webgl) {
             | 0 -1  0 |
 T_NED→WebGL = | 0  0 -1 |    det(T) = +1 (preserves handedness)
             | 1  0  0 |
+```
+
+### NED → Genesis Transformation
+
+Coordinate transformation for passing control computation results to Genesis simulation.
+
+| Genesis | = | NED | Description |
+|---------|---|-----|-------------|
+| x | = | +y | East/Right → X |
+| y | = | +x | North/Forward → Y |
+| z | = | -z | Down → Up (sign inverted) |
+
+```python
+# Convert from NED to Genesis coordinates
+def ned_to_genesis(ned):
+    return {
+        'x': ned['y'],    # East/Right → X
+        'y': ned['x'],    # North/Forward → Y
+        'z': -ned['z']    # Down → Up (sign inverted)
+    }
+```
+
+### Genesis → NED Transformation
+
+Coordinate transformation for passing Genesis simulation results to control computation.
+
+| NED | = | Genesis | Description |
+|-----|---|---------|-------------|
+| x | = | +y | Y → North/Forward |
+| y | = | +x | X → East/Right |
+| z | = | -z | Up → Down (sign inverted) |
+
+```python
+# Convert from Genesis to NED coordinates
+def genesis_to_ned(genesis):
+    return {
+        'x': genesis['y'],    # Y → North/Forward
+        'y': genesis['x'],    # X → East/Right
+        'z': -genesis['z']    # Up → Down (sign inverted)
+    }
 ```
 
 ## 4. Rotation Coordinate Transformation
@@ -489,4 +638,13 @@ R = Rz(ψ) × Ry(θ) × Rx(φ)
 |------|-------------|
 | `simulator/sandbox/coord_transformer/` | Coordinate transformation tool |
 | `simulator/sandbox/webgl_viewer/` | STL viewer |
+| `simulator/sandbox/genesis_sim/` | Genesis physics simulator |
 | `simulator/assets/meshes/parts/` | STL files (WebGL coordinates) |
+
+## 8. Coordinate System Comparison Summary
+
+| System | Right | Up | Forward | Gravity |
+|--------|-------|-----|---------|---------|
+| NED | +Y | -Z | +X | +Z |
+| Genesis | +X | +Z | +Y | -Z |
+| WebGL | -X | +Y | +Z | -Y |
