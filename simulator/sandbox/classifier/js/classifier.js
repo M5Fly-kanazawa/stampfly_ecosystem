@@ -531,6 +531,73 @@ function findNextUnclassifiedRange(fromIndex = 0) {
 }
 
 /**
+ * Save classification progress to JSON file
+ */
+function saveProgress() {
+    const progress = {
+        version: 1,
+        timestamp: new Date().toISOString(),
+        classifications: classifications,
+        partDefinitions: PART_DEFINITIONS,
+        classificationIdCounter: classificationIdCounter
+    };
+
+    const blob = new Blob([JSON.stringify(progress, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, 'classification_progress.json', 'application/json');
+}
+
+/**
+ * Load classification progress from JSON file
+ */
+function loadProgress(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const progress = JSON.parse(e.target.result);
+
+            if (progress.version !== 1) {
+                alert('Unsupported progress file version');
+                return;
+            }
+
+            // Restore classifications
+            classifications = progress.classifications || [];
+            classificationIdCounter = progress.classificationIdCounter || 0;
+
+            // Restore part definitions (colors and opacity)
+            if (progress.partDefinitions) {
+                for (const [partId, def] of Object.entries(progress.partDefinitions)) {
+                    if (PART_DEFINITIONS[partId]) {
+                        PART_DEFINITIONS[partId].color = def.color;
+                        PART_DEFINITIONS[partId].opacity = def.opacity;
+
+                        // Update UI controls
+                        const colorPicker = document.querySelector(`.part-color-picker[data-part="${partId}"]`);
+                        if (colorPicker) {
+                            const hex = '#' + def.color.map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+                            colorPicker.value = hex;
+                        }
+                        const opacitySlider = document.querySelector(`.part-opacity[data-part="${partId}"]`);
+                        if (opacitySlider) {
+                            opacitySlider.value = def.opacity;
+                        }
+                    }
+                }
+            }
+
+            updateClassificationList();
+            updateProgress();
+            updateRangeUI();
+
+            alert(`Loaded ${classifications.length} classifications`);
+        } catch (err) {
+            alert('Failed to load progress file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+/**
  * Delay helper for sequential downloads
  */
 function delay(ms) {
@@ -726,6 +793,22 @@ function initEventHandlers() {
             updateClassificationList();
             updateProgress();
             updateRangeUI();
+        }
+    });
+
+    // Save progress button
+    document.getElementById('btn-save-progress').addEventListener('click', saveProgress);
+
+    // Load progress button
+    document.getElementById('btn-load-progress').addEventListener('click', () => {
+        document.getElementById('load-progress-input').click();
+    });
+
+    // Load progress file input
+    document.getElementById('load-progress-input').addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            loadProgress(e.target.files[0]);
+            e.target.value = '';  // Reset input
         }
     });
 
