@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL Coordinate Transformer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #viewer {
+            flex: 1;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 320px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #0f3460;
+        }
+
+        h1 {
+            font-size: 1.1em;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        h2 {
+            font-size: 0.95em;
+            color: #f59e0b;
+            margin: 15px 0 10px 0;
+        }
+
+        .section {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+
+        .transform-row {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            gap: 10px;
+        }
+
+        .transform-row label {
+            width: 80px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .axis-label {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            text-align: center;
+            line-height: 24px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+
+        .axis-x { background: #ff4444; color: white; }
+        .axis-y { background: #44ff44; color: black; }
+        .axis-z { background: #4488ff; color: white; }
+
+        select {
+            flex: 1;
+            padding: 6px 10px;
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1a4a8e;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .origin-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .origin-input input {
+            width: 70px;
+            padding: 6px;
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1a4a8e;
+            border-radius: 4px;
+            font-size: 0.85em;
+            text-align: center;
+        }
+
+        .origin-input label {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .preview-info {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+
+        .preview-info code {
+            color: #00d4ff;
+            font-family: monospace;
+        }
+
+        .matrix-display {
+            font-family: monospace;
+            font-size: 0.75em;
+            background: #0a0a1a;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+            white-space: pre;
+            line-height: 1.4;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #00d4ff;
+            display: none;
+        }
+
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #0f3460;
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .coord-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8em;
+            margin-top: 10px;
+            padding: 8px;
+            background: #0a0a1a;
+            border-radius: 4px;
+        }
+
+        .coord-display div {
+            text-align: center;
+        }
+
+        .coord-display .value {
+            font-family: monospace;
+            color: #00d4ff;
+        }
+
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            background: rgba(22, 33, 62, 0.9);
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .warning {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid #f59e0b;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewer">
+            <canvas id="canvas"></canvas>
+            <div id="loading">
+                <div class="spinner"></div>
+                <div>Processing...</div>
+            </div>
+            <div id="status">Drag to rotate / Scroll to zoom</div>
+        </div>
+
+        <div id="sidebar">
+            <h1>STL Coordinate Transformer</h1>
+
+            <h2>Axis Mapping / 軸マッピング</h2>
+            <div class="section">
+                <p style="font-size: 0.8em; color: #888; margin-bottom: 10px;">
+                    New axis = Source axis direction<br>
+                    新軸 = 元の軸の方向
+                </p>
+                <div class="transform-row">
+                    <label><span class="axis-label axis-x">X'</span> =</label>
+                    <select id="map-x">
+                        <option value="+X" selected>+X</option>
+                        <option value="-X">-X</option>
+                        <option value="+Y">+Y</option>
+                        <option value="-Y">-Y</option>
+                        <option value="+Z">+Z</option>
+                        <option value="-Z">-Z</option>
+                    </select>
+                </div>
+                <div class="transform-row">
+                    <label><span class="axis-label axis-y">Y'</span> =</label>
+                    <select id="map-y">
+                        <option value="+X">+X</option>
+                        <option value="-X">-X</option>
+                        <option value="+Y" selected>+Y</option>
+                        <option value="-Y">-Y</option>
+                        <option value="+Z">+Z</option>
+                        <option value="-Z">-Z</option>
+                    </select>
+                </div>
+                <div class="transform-row">
+                    <label><span class="axis-label axis-z">Z'</span> =</label>
+                    <select id="map-z">
+                        <option value="+X">+X</option>
+                        <option value="-X">-X</option>
+                        <option value="+Y">+Y</option>
+                        <option value="-Y">-Y</option>
+                        <option value="+Z" selected>+Z</option>
+                        <option value="-Z">-Z</option>
+                    </select>
+                </div>
+
+                <div class="matrix-display" id="matrix-display">
+Transform Matrix:
+[ 1  0  0 ]
+[ 0  1  0 ]
+[ 0  0  1 ]
+                </div>
+            </div>
+
+            <h2>Origin Offset / 原点オフセット</h2>
+            <div class="section">
+                <p style="font-size: 0.8em; color: #888; margin-bottom: 10px;">
+                    Offset applied after axis transform (mm)<br>
+                    軸変換後に適用されるオフセット (mm)
+                </p>
+                <div class="origin-input">
+                    <div>
+                        <label>X</label>
+                        <input type="number" id="offset-x" value="0" step="0.1">
+                    </div>
+                    <div>
+                        <label>Y</label>
+                        <input type="number" id="offset-y" value="0" step="0.1">
+                    </div>
+                    <div>
+                        <label>Z</label>
+                        <input type="number" id="offset-z" value="0" step="0.1">
+                    </div>
+                </div>
+                <button class="btn btn-secondary" id="btn-center" style="margin-top: 10px;">
+                    Center to Origin / 原点に中心合わせ
+                </button>
+            </div>
+
+            <h2>Preview / プレビュー</h2>
+            <div class="section">
+                <button class="btn" id="btn-preview">Apply Preview / プレビュー適用</button>
+                <button class="btn btn-secondary" id="btn-reset">Reset / リセット</button>
+
+                <div class="coord-display">
+                    <div>
+                        <div>Min X</div>
+                        <div class="value" id="min-x">-</div>
+                    </div>
+                    <div>
+                        <div>Max X</div>
+                        <div class="value" id="max-x">-</div>
+                    </div>
+                    <div>
+                        <div>Min Y</div>
+                        <div class="value" id="min-y">-</div>
+                    </div>
+                    <div>
+                        <div>Max Y</div>
+                        <div class="value" id="max-y">-</div>
+                    </div>
+                    <div>
+                        <div>Min Z</div>
+                        <div class="value" id="min-z">-</div>
+                    </div>
+                    <div>
+                        <div>Max Z</div>
+                        <div class="value" id="max-z">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Export / エクスポート</h2>
+            <div class="section">
+                <div class="checkbox-row">
+                    <input type="checkbox" id="backup-original" checked>
+                    <label for="backup-original">Backup originals with _BAK suffix<br>
+                    <span style="font-size: 0.85em; color: #888;">元ファイルを_BAK付きで保存</span></label>
+                </div>
+
+                <div class="warning">
+                    This will download transformed STL files.<br>
+                    変換済みSTLファイルがダウンロードされます。
+                </div>
+
+                <button class="btn btn-success" id="btn-export">
+                    Export All Parts / 全パーツをエクスポート
+                </button>
+            </div>
+
+            <h2>Presets / プリセット</h2>
+            <div class="section">
+                <button class="btn btn-secondary" id="preset-identity">Identity (変換なし)</button>
+                <button class="btn btn-secondary" id="preset-ned">Convert to NED</button>
+                <button class="btn btn-secondary" id="preset-enu">Convert to ENU</button>
+                <button class="btn btn-secondary" id="preset-swap-xy">Swap X↔Y</button>
+                <button class="btn btn-secondary" id="preset-swap-xz">Swap X↔Z</button>
+                <button class="btn btn-secondary" id="preset-swap-yz">Swap Y↔Z</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="js/transformer.js"></script>
+</body>
+</html>
