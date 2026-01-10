@@ -253,7 +253,7 @@ function displayMesh() {
                 const partDef = PART_DEFINITIONS[partId];
                 partGroups[partId] = {
                     positions: [],
-                    color: partDef.color,
+                    color: [...partDef.color],  // Copy array to avoid reference issues
                     opacity: partDef.opacity,
                     inSelection: []
                 };
@@ -281,16 +281,19 @@ function displayMesh() {
 
         // Create vertex colors with selection highlight
         const colors = [];
+        const baseColor = group.color;
         for (let i = 0; i < group.positions.length / 3; i++) {
-            let color = group.color;
+            let r, g, b;
             if (group.inSelection[i]) {
-                color = [
-                    Math.min(1, color[0] + 0.3),
-                    Math.min(1, color[1] + 0.3),
-                    Math.min(1, color[2] + 0.1)
-                ];
+                r = Math.min(1, baseColor[0] + 0.3);
+                g = Math.min(1, baseColor[1] + 0.3);
+                b = Math.min(1, baseColor[2] + 0.1);
+            } else {
+                r = baseColor[0];
+                g = baseColor[1];
+                b = baseColor[2];
             }
-            colors.push(color[0], color[1], color[2]);
+            colors.push(r, g, b);
         }
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         geometry.computeVertexNormals();
