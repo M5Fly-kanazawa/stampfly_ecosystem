@@ -160,6 +160,34 @@
             margin-right: 8px;
         }
 
+        .part-color-picker {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 8px;
+            background: none;
+        }
+
+        .part-color-picker::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        .part-color-picker::-webkit-color-swatch {
+            border-radius: 2px;
+            border: none;
+        }
+
+        .part-opacity {
+            width: 50px;
+            height: 18px;
+            margin-right: 8px;
+            cursor: pointer;
+            accent-color: #00d4ff;
+        }
+
         .part-color {
             width: 14px;
             height: 14px;
@@ -395,67 +423,80 @@
             <div class="section" id="part-categories" style="max-height: 250px; overflow-y: auto;">
                 <div class="part-category" data-part="frame">
                     <input type="radio" name="part" value="frame">
-                    <div class="part-color" style="background: rgb(230,230,230)"></div>
+                    <input type="color" class="part-color-picker" data-part="frame" value="#e6e6e6">
+                    <input type="range" class="part-opacity" data-part="frame" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Frame (フレーム)</span>
                 </div>
                 <div class="part-category" data-part="m5stamps3">
                     <input type="radio" name="part" value="m5stamps3">
-                    <div class="part-color" style="background: rgb(77,204,77)"></div>
+                    <input type="color" class="part-color-picker" data-part="m5stamps3" value="#4dcc4d">
+                    <input type="range" class="part-opacity" data-part="m5stamps3" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>M5StampS3 (マイコン)</span>
                 </div>
                 <div class="part-category" data-part="pcb">
                     <input type="radio" name="part" value="pcb">
-                    <div class="part-color" style="background: rgb(51,128,204)"></div>
+                    <input type="color" class="part-color-picker" data-part="pcb" value="#3380cc">
+                    <input type="range" class="part-opacity" data-part="pcb" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>PCB (基板)</span>
                 </div>
                 <div class="part-category" data-part="motor_fr">
                     <input type="radio" name="part" value="motor_fr">
-                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <input type="color" class="part-color-picker" data-part="motor_fr" value="#808080">
+                    <input type="range" class="part-opacity" data-part="motor_fr" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Motor FR (右前)</span>
                 </div>
                 <div class="part-category" data-part="motor_rr">
                     <input type="radio" name="part" value="motor_rr">
-                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <input type="color" class="part-color-picker" data-part="motor_rr" value="#808080">
+                    <input type="range" class="part-opacity" data-part="motor_rr" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Motor RR (右後)</span>
                 </div>
                 <div class="part-category" data-part="motor_rl">
                     <input type="radio" name="part" value="motor_rl">
-                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <input type="color" class="part-color-picker" data-part="motor_rl" value="#808080">
+                    <input type="range" class="part-opacity" data-part="motor_rl" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Motor RL (左後)</span>
                 </div>
                 <div class="part-category" data-part="motor_fl">
                     <input type="radio" name="part" value="motor_fl">
-                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <input type="color" class="part-color-picker" data-part="motor_fl" value="#808080">
+                    <input type="range" class="part-opacity" data-part="motor_fl" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Motor FL (左前)</span>
                 </div>
                 <div class="part-category" data-part="propeller_fr">
                     <input type="radio" name="part" value="propeller_fr">
-                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <input type="color" class="part-color-picker" data-part="propeller_fr" value="#333333">
+                    <input type="range" class="part-opacity" data-part="propeller_fr" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Propeller FR (右前)</span>
                 </div>
                 <div class="part-category" data-part="propeller_rr">
                     <input type="radio" name="part" value="propeller_rr">
-                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <input type="color" class="part-color-picker" data-part="propeller_rr" value="#333333">
+                    <input type="range" class="part-opacity" data-part="propeller_rr" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Propeller RR (右後)</span>
                 </div>
                 <div class="part-category" data-part="propeller_rl">
                     <input type="radio" name="part" value="propeller_rl">
-                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <input type="color" class="part-color-picker" data-part="propeller_rl" value="#333333">
+                    <input type="range" class="part-opacity" data-part="propeller_rl" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Propeller RL (左後)</span>
                 </div>
                 <div class="part-category" data-part="propeller_fl">
                     <input type="radio" name="part" value="propeller_fl">
-                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <input type="color" class="part-color-picker" data-part="propeller_fl" value="#333333">
+                    <input type="range" class="part-opacity" data-part="propeller_fl" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Propeller FL (左前)</span>
                 </div>
                 <div class="part-category" data-part="battery">
                     <input type="radio" name="part" value="battery">
-                    <div class="part-color" style="background: rgb(153,77,26)"></div>
+                    <input type="color" class="part-color-picker" data-part="battery" value="#994d1a">
+                    <input type="range" class="part-opacity" data-part="battery" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Battery (電池)</span>
                 </div>
                 <div class="part-category" data-part="battery_adapter">
                     <input type="radio" name="part" value="battery_adapter">
-                    <div class="part-color" style="background: rgb(204,128,51)"></div>
+                    <input type="color" class="part-color-picker" data-part="battery_adapter" value="#cc8033">
+                    <input type="range" class="part-opacity" data-part="battery_adapter" min="0" max="1" step="0.1" value="1" title="Opacity">
                     <span>Battery Adapter (電池アダプタ)</span>
                 </div>
             </div>

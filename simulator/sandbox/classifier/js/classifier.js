@@ -9,7 +9,6 @@
 // Global state
 let scene, camera, renderer, controls;
 let currentGeometry = null;
-let mainMesh = null;
 let triangleData = [];  // Array of {vertices: [...], normal: [...]}
 let totalTriangles = 0;
 
@@ -20,21 +19,21 @@ let classificationIdCounter = 0;
 // Visibility state for classified parts
 let classificationVisibility = {};  // partId -> boolean
 
-// Part definitions
+// Part definitions (with opacity: 1 = opaque, 0 = transparent)
 const PART_DEFINITIONS = {
-    frame: { name: 'Frame', color: [0.9, 0.9, 0.9] },
-    m5stamps3: { name: 'M5StampS3', color: [0.3, 0.8, 0.3] },
-    pcb: { name: 'PCB', color: [0.2, 0.5, 0.8] },
-    motor_fr: { name: 'Motor FR', color: [0.5, 0.5, 0.5] },
-    motor_rr: { name: 'Motor RR', color: [0.5, 0.5, 0.5] },
-    motor_rl: { name: 'Motor RL', color: [0.5, 0.5, 0.5] },
-    motor_fl: { name: 'Motor FL', color: [0.5, 0.5, 0.5] },
-    propeller_fr: { name: 'Propeller FR', color: [0.2, 0.2, 0.2] },
-    propeller_rr: { name: 'Propeller RR', color: [0.2, 0.2, 0.2] },
-    propeller_rl: { name: 'Propeller RL', color: [0.2, 0.2, 0.2] },
-    propeller_fl: { name: 'Propeller FL', color: [0.2, 0.2, 0.2] },
-    battery: { name: 'Battery', color: [0.6, 0.3, 0.1] },
-    battery_adapter: { name: 'Battery Adapter', color: [0.8, 0.5, 0.2] }
+    frame: { name: 'Frame', color: [0.9, 0.9, 0.9], opacity: 1 },
+    m5stamps3: { name: 'M5StampS3', color: [0.3, 0.8, 0.3], opacity: 1 },
+    pcb: { name: 'PCB', color: [0.2, 0.5, 0.8], opacity: 1 },
+    motor_fr: { name: 'Motor FR', color: [0.5, 0.5, 0.5], opacity: 1 },
+    motor_rr: { name: 'Motor RR', color: [0.5, 0.5, 0.5], opacity: 1 },
+    motor_rl: { name: 'Motor RL', color: [0.5, 0.5, 0.5], opacity: 1 },
+    motor_fl: { name: 'Motor FL', color: [0.5, 0.5, 0.5], opacity: 1 },
+    propeller_fr: { name: 'Propeller FR', color: [0.2, 0.2, 0.2], opacity: 1 },
+    propeller_rr: { name: 'Propeller RR', color: [0.2, 0.2, 0.2], opacity: 1 },
+    propeller_rl: { name: 'Propeller RL', color: [0.2, 0.2, 0.2], opacity: 1 },
+    propeller_fl: { name: 'Propeller FL', color: [0.2, 0.2, 0.2], opacity: 1 },
+    battery: { name: 'Battery', color: [0.6, 0.3, 0.1], opacity: 1 },
+    battery_adapter: { name: 'Battery Adapter', color: [0.8, 0.5, 0.2], opacity: 1 }
 };
 
 // Pre-defined classifications based on connected component analysis
@@ -216,84 +215,124 @@ function extractTriangleData(geometry) {
     return triangles;
 }
 
+// Store all part meshes for cleanup
+let partMeshes = [];
+
 /**
- * Display mesh with classifications
+ * Display mesh with classifications and per-part opacity
  */
 function displayMesh() {
     // Remove existing meshes
-    if (mainMesh) {
-        scene.remove(mainMesh);
-        mainMesh.geometry.dispose();
-        mainMesh.material.dispose();
+    for (const mesh of partMeshes) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        mesh.material.dispose();
     }
+    partMeshes = [];
 
     if (triangleData.length === 0) return;
-
-    // Create geometry with vertex colors
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-    const colors = [];
 
     const start = parseInt(document.getElementById('range-start').value) || 0;
     const end = parseInt(document.getElementById('range-end').value) || 0;
 
+    // Group triangles by part
+    const partGroups = {};  // partId -> { positions: [], color: [], opacity: 1 }
+    const unclassifiedGroup = { positions: [], isSelection: [] };
+
     for (let i = 0; i < triangleData.length; i++) {
         const tri = triangleData[i];
-
-        // Check if classified
         const classification = getClassificationForIndex(i);
-
-        // Skip if classified and hidden
-        if (classification) {
-            const isVisible = classificationVisibility[classification.partId] !== false;
-            if (!isVisible) {
-                continue;
-            }
-        }
-
-        // Determine color based on classification or selection
-        let color = [0.5, 0.5, 0.5];  // Default gray (unclassified)
-
-        if (classification) {
-            const partDef = PART_DEFINITIONS[classification.partId];
-            if (partDef) {
-                color = partDef.color;
-            }
-        }
-
-        // Check if in selection range (highlight)
         const inSelection = i >= start && i <= end;
-        if (inSelection && !classification) {
-            color = [1.0, 0.8, 0.2];  // Yellow highlight for selection
-        } else if (inSelection && classification) {
-            // Brighten the color for selected classified triangles
-            color = [
-                Math.min(1, color[0] + 0.3),
-                Math.min(1, color[1] + 0.3),
-                Math.min(1, color[2] + 0.1)
-            ];
-        }
 
-        // Add triangle vertices
-        for (const v of tri.vertices) {
-            positions.push(v[0] * 0.001, v[1] * 0.001, v[2] * 0.001);
-            colors.push(color[0], color[1], color[2]);
+        if (classification) {
+            const partId = classification.partId;
+            const isVisible = classificationVisibility[partId] !== false;
+            if (!isVisible) continue;
+
+            if (!partGroups[partId]) {
+                const partDef = PART_DEFINITIONS[partId];
+                partGroups[partId] = {
+                    positions: [],
+                    color: partDef.color,
+                    opacity: partDef.opacity,
+                    inSelection: []
+                };
+            }
+
+            for (const v of tri.vertices) {
+                partGroups[partId].positions.push(v[0] * 0.001, v[1] * 0.001, v[2] * 0.001);
+            }
+            partGroups[partId].inSelection.push(inSelection, inSelection, inSelection);
+        } else {
+            // Unclassified
+            for (const v of tri.vertices) {
+                unclassifiedGroup.positions.push(v[0] * 0.001, v[1] * 0.001, v[2] * 0.001);
+            }
+            unclassifiedGroup.isSelection.push(inSelection, inSelection, inSelection);
         }
     }
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
+    // Create mesh for each part group
+    for (const [partId, group] of Object.entries(partGroups)) {
+        if (group.positions.length === 0) continue;
 
-    const material = new THREE.MeshPhongMaterial({
-        vertexColors: true,
-        side: THREE.DoubleSide,
-        flatShading: true
-    });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(group.positions, 3));
 
-    mainMesh = new THREE.Mesh(geometry, material);
-    mainMesh.scale.y = -1;
-    scene.add(mainMesh);
+        // Create vertex colors with selection highlight
+        const colors = [];
+        for (let i = 0; i < group.positions.length / 3; i++) {
+            let color = group.color;
+            if (group.inSelection[i]) {
+                color = [
+                    Math.min(1, color[0] + 0.3),
+                    Math.min(1, color[1] + 0.3),
+                    Math.min(1, color[2] + 0.1)
+                ];
+            }
+            colors.push(color[0], color[1], color[2]);
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            side: THREE.DoubleSide,
+            flatShading: true,
+            transparent: group.opacity < 1,
+            opacity: group.opacity
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.scale.y = -1;
+        scene.add(mesh);
+        partMeshes.push(mesh);
+    }
+
+    // Create mesh for unclassified triangles
+    if (unclassifiedGroup.positions.length > 0) {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(unclassifiedGroup.positions, 3));
+
+        const colors = [];
+        for (let i = 0; i < unclassifiedGroup.positions.length / 3; i++) {
+            const color = unclassifiedGroup.isSelection[i] ? [1.0, 0.8, 0.2] : [0.5, 0.5, 0.5];
+            colors.push(color[0], color[1], color[2]);
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            side: THREE.DoubleSide,
+            flatShading: true
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.scale.y = -1;
+        scene.add(mesh);
+        partMeshes.push(mesh);
+    }
 }
 
 /**
@@ -695,6 +734,39 @@ function initEventHandlers() {
         }
         updateClassificationList();
         displayMesh();
+    });
+
+    // Color picker handlers
+    document.querySelectorAll('.part-color-picker').forEach(picker => {
+        picker.addEventListener('input', (e) => {
+            const partId = e.target.dataset.part;
+            const hexColor = e.target.value;
+            // Convert hex to RGB array [0-1]
+            const r = parseInt(hexColor.slice(1, 3), 16) / 255;
+            const g = parseInt(hexColor.slice(3, 5), 16) / 255;
+            const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+            PART_DEFINITIONS[partId].color = [r, g, b];
+            displayMesh();
+            updateClassificationList();
+        });
+        // Prevent click from selecting the radio button
+        picker.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    });
+
+    // Opacity slider handlers
+    document.querySelectorAll('.part-opacity').forEach(slider => {
+        slider.addEventListener('input', (e) => {
+            const partId = e.target.dataset.part;
+            const opacity = parseFloat(e.target.value);
+            PART_DEFINITIONS[partId].opacity = opacity;
+            displayMesh();
+        });
+        // Prevent click from selecting the radio button
+        slider.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
     });
 }
 
