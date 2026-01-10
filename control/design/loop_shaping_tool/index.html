@@ -1038,10 +1038,7 @@
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button class="apply-btn" id="calc-btn" style="flex: 1; background: linear-gradient(135deg, #10b981, #059669);">
-                        計算 / Calculate
-                    </button>
-                    <button class="apply-btn" id="apply-calc-btn" style="flex: 1;">
+                    <button class="apply-btn" id="apply-calc-btn" style="flex: 2;">
                         各軸に反映 / Apply to Tabs
                     </button>
                     <button class="apply-btn" id="reset-calc-btn" style="flex: 1; background: linear-gradient(135deg, #6b7280, #4b5563);">
@@ -2413,17 +2410,6 @@
                 // Update calculation when checkbox changes
                 updateCalcResults();
                 renderAllocationMatrices();
-            });
-
-            // Calculate button handler
-            document.getElementById('calc-btn').addEventListener('click', function() {
-                updateCalcResults();
-                renderAllocationMatrices();
-                // Visual feedback
-                this.textContent = '計算完了!';
-                setTimeout(() => {
-                    this.textContent = '計算 / Calculate';
-                }, 1000);
             });
 
             // Apply calc button handler
