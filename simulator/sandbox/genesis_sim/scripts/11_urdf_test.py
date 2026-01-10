@@ -138,19 +138,21 @@ def main():
     print("     [  ] 4 propellers at corners")
     print("     [  ] Motors under propellers")
     print("")
+    print("  Controls: Press Q or ESC to exit, or close the viewer window.")
     print("  Note: Gravity is OFF for static viewing.")
-    print("        Press Ctrl+C to exit.")
     print("=" * 60)
 
     # Run simulation (static viewing)
     print("\n[8] Running static visualization...")
-    print("    (No gravity - drone will remain stationary)")
+    print("    Press Q or ESC to exit.")
 
     try:
-        for i in range(600):  # 10 seconds at 60Hz
+        while True:
             scene.step()
-            if i % 60 == 0:
-                print(f"    Time {i/60:.0f}s")
+            # Check if viewer is still open
+            if not scene.viewer.is_alive():
+                print("\n    Viewer closed.")
+                break
     except KeyboardInterrupt:
         print("\n    Interrupted by user")
 
