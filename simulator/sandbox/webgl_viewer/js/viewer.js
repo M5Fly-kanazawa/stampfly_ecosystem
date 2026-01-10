@@ -8,15 +8,17 @@
 // Global state
 let scene, camera, renderer, controls;
 let parts = {};
-let currentSource = 'auto';
+let currentSource = 'hybrid';
 
 // Configuration paths
 const CONFIG_PATHS = {
+    hybrid: '../stl_splitter/parts/hybrid/parts_config.json',
     auto: '../stl_splitter/parts/auto/parts_config.json',
     manual: '../stl_splitter/parts/manual/parts_config.json'
 };
 
 const STL_BASE_PATHS = {
+    hybrid: '../stl_splitter/parts/hybrid/',
     auto: '../stl_splitter/parts/auto/',
     manual: '../stl_splitter/parts/manual/'
 };

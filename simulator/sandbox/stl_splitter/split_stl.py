@@ -227,6 +227,87 @@ def generate_colors(n):
     return colors
 
 
+def split_by_regions(stl_mesh, output_dir):
+    """
+    Split mesh by spatial regions (hybrid approach).
+    空間領域でメッシュを分割（ハイブリッド方式）
+
+    Based on analysis:
+    - m5stamps3: Y > 7.0 mm
+    - other: Y <= 7.0 and specific X/Z ranges
+    - frame: everything else
+    """
+    print("\n=== Hybrid Split (Spatial Regions) ===")
+    print("=== ハイブリッド分割（空間領域） ===\n")
+
+    vectors = stl_mesh.vectors
+    normals = stl_mesh.normals
+    n_triangles = len(vectors)
+
+    # Calculate centroids
+    centroids = np.array([np.mean(tri, axis=0) for tri in vectors])
+
+    # Classification based on spatial analysis
+    # m5stamps3: Y > 7.0 mm (only on +Y side)
+    # other (PCB): Y <= 7.0 and Y > -9.0 and |Z| < 21 (middle height)
+    # frame: everything else
+
+    parts = {
+        'frame': [],
+        'm5stamps3': [],
+        'pcb': []  # renamed from 'other' for clarity
+    }
+
+    for i, (c, v, n) in enumerate(zip(centroids, vectors, normals)):
+        x, y, z = c
+
+        if y > 7.0:
+            # m5stamps3 region
+            parts['m5stamps3'].append(i)
+        elif y > -9.0 and abs(z) < 21.0 and y > 2.0:
+            # PCB region (middle height, center-positive Y)
+            parts['pcb'].append(i)
+        else:
+            # Frame (everything else)
+            parts['frame'].append(i)
+
+    # Colors for each part
+    colors = {
+        'frame': (0.9, 0.9, 0.8),
+        'm5stamps3': (0.9, 0.45, 0.0),
+        'pcb': (0.2, 0.6, 0.2)
+    }
+
+    # Save each part
+    parts_info = []
+    for name, indices in parts.items():
+        if len(indices) == 0:
+            print(f"  {name}: 0 triangles (skipped)")
+            continue
+
+        part_vectors = vectors[indices]
+        part_normals = normals[indices]
+
+        # Create new mesh
+        new_mesh = mesh.Mesh(np.zeros(len(part_vectors), dtype=mesh.Mesh.dtype))
+        for i, (v, n) in enumerate(zip(part_vectors, part_normals)):
+            new_mesh.vectors[i] = v
+            new_mesh.normals[i] = n
+
+        filepath = os.path.join(output_dir, f"{name}.stl")
+        new_mesh.save(filepath)
+        print(f"  Saved: {filepath} ({len(indices)} triangles)")
+
+        parts_info.append({
+            'name': name,
+            'file': f"{name}.stl",
+            'triangles': len(indices),
+            'color': colors[name]
+        })
+
+    return parts_info
+
+
 def save_parts_config(parts_info, output_dir, method):
     """
     Save parts configuration as JSON.
@@ -261,9 +342,9 @@ def main():
     )
     parser.add_argument(
         '--method', '-m',
-        choices=['auto', 'manual', 'both'],
-        default='both',
-        help='Split method: auto (connected components), manual (index-based), or both'
+        choices=['auto', 'manual', 'hybrid', 'all'],
+        default='all',
+        help='Split method: auto (connected components), manual (index-based), hybrid (spatial regions), or all'
     )
     parser.add_argument(
         '--input', '-i',
@@ -287,19 +368,58 @@ def main():
     results = {}
 
     # Run splitting
-    if args.method in ['auto', 'both']:
-        auto_dir = os.path.join(args.output, 'auto') if args.method == 'both' else args.output
+    if args.method in ['auto', 'all']:
+        auto_dir = os.path.join(args.output, 'auto') if args.method == 'all' else args.output
         os.makedirs(auto_dir, exist_ok=True)
         auto_parts = split_automatic(stl_mesh, auto_dir)
         save_parts_config(auto_parts, auto_dir, 'automatic')
         results['auto'] = auto_parts
 
-    if args.method in ['manual', 'both']:
-        manual_dir = os.path.join(args.output, 'manual') if args.method == 'both' else args.output
+    if args.method in ['manual', 'all']:
+        manual_dir = os.path.join(args.output, 'manual') if args.method == 'all' else args.output
         os.makedirs(manual_dir, exist_ok=True)
         manual_parts = split_manual(stl_mesh, manual_dir)
         save_parts_config(manual_parts, manual_dir, 'manual')
         results['manual'] = manual_parts
+
+    if args.method in ['hybrid', 'all']:
+        hybrid_dir = os.path.join(args.output, 'hybrid') if args.method == 'all' else args.output
+        os.makedirs(hybrid_dir, exist_ok=True)
+
+        # For hybrid, first do auto split, then subdivide the largest part (part_00)
+        # ハイブリッドでは、まず自動分割し、最大パーツ(part_00)を細分化
+        if 'auto' not in results:
+            auto_dir_temp = os.path.join(args.output, 'auto')
+            os.makedirs(auto_dir_temp, exist_ok=True)
+            auto_parts = split_automatic(stl_mesh, auto_dir_temp)
+            save_parts_config(auto_parts, auto_dir_temp, 'automatic')
+
+        # Load part_00 from auto split and subdivide it
+        part00_path = os.path.join(args.output, 'auto', 'part_00.stl')
+        if os.path.exists(part00_path):
+            part00_mesh = load_stl(part00_path)
+            frame_parts = split_by_regions(part00_mesh, hybrid_dir)
+
+            # Copy other auto parts (motors, propellers) to hybrid dir
+            # 他の自動分割パーツ（モーター、プロペラ）をhybridにコピー
+            import shutil
+            auto_config_path = os.path.join(args.output, 'auto', 'parts_config.json')
+            if os.path.exists(auto_config_path):
+                import json
+                with open(auto_config_path) as f:
+                    auto_config = json.load(f)
+                for p in auto_config['parts']:
+                    if p['name'] != 'part_00':  # Skip part_00 (already split)
+                        src = os.path.join(args.output, 'auto', p['file'])
+                        dst = os.path.join(hybrid_dir, p['file'])
+                        if os.path.exists(src):
+                            shutil.copy(src, dst)
+                            frame_parts.append(p)
+
+            save_parts_config(frame_parts, hybrid_dir, 'hybrid')
+            results['hybrid'] = frame_parts
+        else:
+            print("Warning: part_00.stl not found for hybrid split")
 
     # Summary
     print("\n" + "="*50)

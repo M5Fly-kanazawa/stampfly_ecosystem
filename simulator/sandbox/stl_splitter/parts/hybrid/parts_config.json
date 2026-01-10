@@ -1,0 +1,125 @@
+{
+  "method": "hybrid",
+  "parts": [
+    {
+      "name": "frame",
+      "file": "frame.stl",
+      "triangles": 3413,
+      "color": [
+        0.9,
+        0.9,
+        0.8
+      ]
+    },
+    {
+      "name": "m5stamps3",
+      "file": "m5stamps3.stl",
+      "triangles": 516,
+      "color": [
+        0.9,
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "name": "pcb",
+      "file": "pcb.stl",
+      "triangles": 2167,
+      "color": [
+        0.2,
+        0.6,
+        0.2
+      ]
+    },
+    {
+      "name": "part_01",
+      "file": "part_01.stl",
+      "triangles": 208,
+      "color": [
+        0.9,
+        0.65,
+        0.27
+      ]
+    },
+    {
+      "name": "part_02",
+      "file": "part_02.stl",
+      "triangles": 690,
+      "color": [
+        0.77,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "part_03",
+      "file": "part_03.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.9,
+        0.27
+      ]
+    },
+    {
+      "name": "part_04",
+      "file": "part_04.stl",
+      "triangles": 208,
+      "color": [
+        0.27,
+        0.9,
+        0.52
+      ]
+    },
+    {
+      "name": "part_05",
+      "file": "part_05.stl",
+      "triangles": 208,
+      "color": [
+        0.27,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "part_06",
+      "file": "part_06.stl",
+      "triangles": 690,
+      "color": [
+        0.27,
+        0.52,
+        0.9
+      ]
+    },
+    {
+      "name": "part_07",
+      "file": "part_07.stl",
+      "triangles": 690,
+      "color": [
+        0.4,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "part_08",
+      "file": "part_08.stl",
+      "triangles": 690,
+      "color": [
+        0.77,
+        0.27,
+        0.9
+      ]
+    },
+    {
+      "name": "part_09",
+      "file": "part_09.stl",
+      "triangles": 52,
+      "color": [
+        0.9,
+        0.27,
+        0.65
+      ]
+    }
+  ]
+}
