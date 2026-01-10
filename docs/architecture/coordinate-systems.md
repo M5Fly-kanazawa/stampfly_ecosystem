@@ -43,26 +43,28 @@ StampFlyエコシステムで使用する座標系の定義と、各コンポー
 - シミュレーション（物理演算）
 - 制御設計（モデル、伝達関数）
 
-### 表示用座標系: WebGL/Three.js (Y-up)
+### 表示用座標系: WebGL/Three.js (Y-up, Z-forward)
 
-3D可視化で使用する座標系です。
+3D可視化で使用する座標系です。機体後方からのカメラ視点を基準とします。
 
 | 軸 | 正方向 | 説明 |
 |----|--------|------|
-| X | 右 | 画面右方向 |
+| X | 左 | 機体の左方向（右手系維持のため） |
 | Y | 上 | 画面上方向 |
-| Z | 手前 | 画面手前方向 |
+| Z | 前 | 機体の前進方向 |
 
 ```
         Y (上)
         ▲
         │
-        │
-        ●───────▶ X (右)
-       ╱
-      ╱
-     ▼
-    Z (手前)
+        │     Z (前)
+        │    ╱
+        │   ╱
+        │  ╱
+  X ◀───●
+ (左)
+
+※ 右手系: Y × Z = X （上 × 前 = 左）
 ```
 
 **使用箇所:**
@@ -70,26 +72,26 @@ StampFlyエコシステムで使用する座標系の定義と、各コンポー
 - WebGLビュワー
 - Three.jsベースの可視化ツール
 
-## 3. 座標変換
+## 3. 位置の座標変換
 
 ### NED → WebGL 変換
 
-シミュレーション結果を可視化する際の座標変換です。
+シミュレーション結果を可視化する際の座標変換です。右手系を維持します。
 
 | WebGL | = | NED | 説明 |
 |-------|---|-----|------|
-| x | = | +y | 東/右 → 右 |
-| y | = | -z | 下 → 上（反転） |
-| z | = | +x | 北/前 → 手前 |
+| x | = | **-y** | 東/右 → 左（符号反転） |
+| y | = | -z | 下 → 上（符号反転） |
+| z | = | +x | 北/前 → 前 |
 
 ```javascript
-// NED座標からWebGL座標への変換
-// Convert from NED to WebGL coordinates
+// NED座標からWebGL座標への変換（右手系維持）
+// Convert from NED to WebGL coordinates (preserves handedness)
 function nedToWebGL(ned) {
     return {
-        x:  ned.y,   // East  → Right
-        y: -ned.z,   // Down  → Up (inverted)
-        z:  ned.x    // North → Forward
+        x: -ned.y,   // East/Right → Left (sign inverted)
+        y: -ned.z,   // Down → Up (sign inverted)
+        z:  ned.x    // North/Forward → Forward
     };
 }
 ```
@@ -100,9 +102,9 @@ function nedToWebGL(ned) {
 
 | NED | = | WebGL | 説明 |
 |-----|---|-------|------|
-| x | = | +z | 手前 → 北/前 |
-| y | = | +x | 右 → 東/右 |
-| z | = | -y | 上 → 下（反転） |
+| x | = | +z | 前 → 北/前 |
+| y | = | **-x** | 左 → 東/右（符号反転） |
+| z | = | -y | 上 → 下（符号反転） |
 
 ```javascript
 // WebGL座標からNED座標への変換
@@ -110,10 +112,18 @@ function nedToWebGL(ned) {
 function webglToNED(webgl) {
     return {
         x:  webgl.z,   // Forward → North
-        y:  webgl.x,   // Right   → East
-        z: -webgl.y    // Up      → Down (inverted)
+        y: -webgl.x,   // Left → East/Right (sign inverted)
+        z: -webgl.y    // Up → Down (sign inverted)
     };
 }
+```
+
+### 変換行列
+
+```
+        | 0 -1  0 |
+T_NED→WebGL = | 0  0 -1 |    det(T) = +1 (右手系維持)
+        | 1  0  0 |
 ```
 
 ## 4. 回転の座標変換
@@ -123,31 +133,35 @@ function webglToNED(webgl) {
 | NED回転軸 | WebGL回転軸 | 備考 |
 |-----------|-------------|------|
 | X (Roll) | Z | 同じ向き |
-| Y (Pitch) | X | 同じ向き |
-| Z (Yaw) | -Y | **向き反転** |
+| Y (Pitch) | **-X** | **向き反転** |
+| Z (Yaw) | **-Y** | **向き反転** |
 
-### なぜYawだけ符号反転？
+### なぜPitchとYawが符号反転？
 
 ```
-NED:   +Yaw = 右旋回（上から見て時計回り）
-       Z軸が下向き、右手法則で時計回り
+位置の軸対応から:
+  NED Y (右) → WebGL -X (左)  → Pitch軸が反転
+  NED Z (下) → WebGL -Y (上方向の負) → Yaw軸が反転
 
-WebGL: +Y回転 = 左旋回（上から見て反時計回り）
-       Y軸が上向き、右手法則で反時計回り
+NED:   +Pitch = 機首上げ（Y軸右向き、右手法則）
+WebGL: +X回転 = 機首下げ（X軸左向き、右手法則）
+→ 同じ「機首上げ」には符号反転が必要
 
-→ 同じ「右旋回」を表すには符号を反転
+NED:   +Yaw = 右旋回（Z軸下向き、右手法則）
+WebGL: +Y回転 = 左旋回（Y軸上向き、右手法則）
+→ 同じ「右旋回」には符号反転が必要
 ```
 
 ### NED回転 → WebGL回転 変換
 
 ```javascript
-// NED姿勢からWebGL回転への変換
-// Convert from NED attitude to WebGL rotation
+// NED姿勢からWebGL回転への変換（右手系維持）
+// Convert from NED attitude to WebGL rotation (preserves handedness)
 function nedRotationToWebGL(roll, pitch, yaw) {
     return {
-        x: pitch,    // Pitch → WebGL X rotation
+        x: -pitch,   // Pitch → WebGL X rotation (sign inverted)
         y: -yaw,     // Yaw → WebGL Y rotation (sign inverted)
-        z: roll      // Roll → WebGL Z rotation
+        z:  roll     // Roll → WebGL Z rotation
     };
 }
 ```
@@ -163,8 +177,8 @@ mesh.rotation.order = 'YXZ';
 // Apply NED attitude to mesh
 function applyNEDAttitude(mesh, roll, pitch, yaw) {
     mesh.rotation.set(
-        pitch,    // X: Pitch
-        -yaw,     // Y: Yaw (inverted)
+        -pitch,   // X: Pitch (sign inverted)
+        -yaw,     // Y: Yaw (sign inverted)
         roll      // Z: Roll
     );
 }
@@ -175,7 +189,7 @@ function applyNEDAttitude(mesh, roll, pitch, yaw) {
 | NED姿勢 | WebGL回転 | 見た目 |
 |---------|-----------|--------|
 | Roll = +30° | rotation.z = +30° | 右翼下げ |
-| Pitch = +30° | rotation.x = +30° | 機首上げ |
+| Pitch = +30° | rotation.x = **-30°** | 機首上げ |
 | Yaw = +30° | rotation.y = -30° | 右旋回 |
 
 ## 5. 回転の表現（NED座標系）
@@ -278,26 +292,28 @@ Used for control calculations and simulation.
 - Simulation (physics computation)
 - Control design (models, transfer functions)
 
-### Display Coordinate System: WebGL/Three.js (Y-up)
+### Display Coordinate System: WebGL/Three.js (Y-up, Z-forward)
 
-Used for 3D visualization.
+Used for 3D visualization. Based on rear-following camera view.
 
 | Axis | Positive Direction | Description |
 |------|-------------------|-------------|
-| X | Right | Screen right |
+| X | Left | Aircraft left (to preserve right-handedness) |
 | Y | Up | Screen up |
-| Z | Toward viewer | Screen forward |
+| Z | Forward | Aircraft forward direction |
 
 ```
         Y (Up)
         ▲
         │
-        │
-        ●───────▶ X (Right)
-       ╱
-      ╱
-     ▼
-    Z (Toward viewer)
+        │     Z (Forward)
+        │    ╱
+        │   ╱
+        │  ╱
+  X ◀───●
+(Left)
+
+※ Right-handed: Y × Z = X (Up × Forward = Left)
 ```
 
 **Used in:**
@@ -305,25 +321,25 @@ Used for 3D visualization.
 - WebGL viewer
 - Three.js-based visualization tools
 
-## 3. Coordinate Transformations
+## 3. Position Coordinate Transformations
 
 ### NED → WebGL Transformation
 
-Coordinate transformation for visualizing simulation results.
+Coordinate transformation for visualizing simulation results. Preserves right-handedness.
 
 | WebGL | = | NED | Description |
 |-------|---|-----|-------------|
-| x | = | +y | East/Right → Right |
-| y | = | -z | Down → Up (inverted) |
+| x | = | **-y** | East/Right → Left (sign inverted) |
+| y | = | -z | Down → Up (sign inverted) |
 | z | = | +x | North/Forward → Forward |
 
 ```javascript
-// Convert from NED to WebGL coordinates
+// Convert from NED to WebGL coordinates (preserves handedness)
 function nedToWebGL(ned) {
     return {
-        x:  ned.y,   // East  → Right
-        y: -ned.z,   // Down  → Up (inverted)
-        z:  ned.x    // North → Forward
+        x: -ned.y,   // East/Right → Left (sign inverted)
+        y: -ned.z,   // Down → Up (sign inverted)
+        z:  ned.x    // North/Forward → Forward
     };
 }
 ```
@@ -335,18 +351,26 @@ Coordinate transformation for importing 3D model positions into simulation.
 | NED | = | WebGL | Description |
 |-----|---|-------|-------------|
 | x | = | +z | Forward → North/Forward |
-| y | = | +x | Right → East/Right |
-| z | = | -y | Up → Down (inverted) |
+| y | = | **-x** | Left → East/Right (sign inverted) |
+| z | = | -y | Up → Down (sign inverted) |
 
 ```javascript
 // Convert from WebGL to NED coordinates
 function webglToNED(webgl) {
     return {
         x:  webgl.z,   // Forward → North
-        y:  webgl.x,   // Right   → East
-        z: -webgl.y    // Up      → Down (inverted)
+        y: -webgl.x,   // Left → East/Right (sign inverted)
+        z: -webgl.y    // Up → Down (sign inverted)
     };
 }
+```
+
+### Transformation Matrix
+
+```
+            | 0 -1  0 |
+T_NED→WebGL = | 0  0 -1 |    det(T) = +1 (preserves handedness)
+            | 1  0  0 |
 ```
 
 ## 4. Rotation Coordinate Transformation
@@ -356,30 +380,34 @@ function webglToNED(webgl) {
 | NED Rotation Axis | WebGL Rotation Axis | Note |
 |-------------------|---------------------|------|
 | X (Roll) | Z | Same direction |
-| Y (Pitch) | X | Same direction |
-| Z (Yaw) | -Y | **Direction inverted** |
+| Y (Pitch) | **-X** | **Direction inverted** |
+| Z (Yaw) | **-Y** | **Direction inverted** |
 
-### Why is Yaw Sign Inverted?
+### Why are Pitch and Yaw Sign Inverted?
 
 ```
-NED:   +Yaw = Turn right (clockwise from above)
-       Z-axis points down, right-hand rule gives clockwise
+From position axis mapping:
+  NED Y (Right) → WebGL -X (Left)  → Pitch axis inverted
+  NED Z (Down) → WebGL -Y (negative Up) → Yaw axis inverted
 
-WebGL: +Y rotation = Turn left (counterclockwise from above)
-       Y-axis points up, right-hand rule gives counterclockwise
+NED:   +Pitch = Nose up (Y-axis points right, right-hand rule)
+WebGL: +X rotation = Nose down (X-axis points left, right-hand rule)
+→ To get "nose up", sign must be inverted
 
-→ To represent the same "turn right", sign must be inverted
+NED:   +Yaw = Turn right (Z-axis points down, right-hand rule)
+WebGL: +Y rotation = Turn left (Y-axis points up, right-hand rule)
+→ To get "turn right", sign must be inverted
 ```
 
 ### NED Rotation → WebGL Rotation Transformation
 
 ```javascript
-// Convert from NED attitude to WebGL rotation
+// Convert from NED attitude to WebGL rotation (preserves handedness)
 function nedRotationToWebGL(roll, pitch, yaw) {
     return {
-        x: pitch,    // Pitch → WebGL X rotation
+        x: -pitch,   // Pitch → WebGL X rotation (sign inverted)
         y: -yaw,     // Yaw → WebGL Y rotation (sign inverted)
-        z: roll      // Roll → WebGL Z rotation
+        z:  roll     // Roll → WebGL Z rotation
     };
 }
 ```
@@ -393,8 +421,8 @@ mesh.rotation.order = 'YXZ';
 // Apply NED attitude to mesh
 function applyNEDAttitude(mesh, roll, pitch, yaw) {
     mesh.rotation.set(
-        pitch,    // X: Pitch
-        -yaw,     // Y: Yaw (inverted)
+        -pitch,   // X: Pitch (sign inverted)
+        -yaw,     // Y: Yaw (sign inverted)
         roll      // Z: Roll
     );
 }
@@ -405,7 +433,7 @@ function applyNEDAttitude(mesh, roll, pitch, yaw) {
 | NED Attitude | WebGL Rotation | Appearance |
 |--------------|----------------|------------|
 | Roll = +30° | rotation.z = +30° | Right wing down |
-| Pitch = +30° | rotation.x = +30° | Nose up |
+| Pitch = +30° | rotation.x = **-30°** | Nose up |
 | Yaw = +30° | rotation.y = -30° | Turn right |
 
 ## 5. Rotation Representation (NED Coordinate System)
