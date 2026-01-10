@@ -8,10 +8,11 @@
 // Global state
 let scene, camera, renderer, controls;
 let parts = {};
-let currentSource = 'index_split';
+let currentSource = 'classified';
 
 // Configuration paths
 const CONFIG_PATHS = {
+    classified: '../assets/meshes/parts/parts_config.json',
     index_split: '../stl_splitter/parts/index_split/parts_config.json',
     hybrid: '../stl_splitter/parts/hybrid/parts_config.json',
     auto: '../stl_splitter/parts/auto/parts_config.json',
@@ -19,6 +20,7 @@ const CONFIG_PATHS = {
 };
 
 const STL_BASE_PATHS = {
+    classified: '../assets/meshes/parts/',
     index_split: '../stl_splitter/parts/index_split/',
     hybrid: '../stl_splitter/parts/hybrid/',
     auto: '../stl_splitter/parts/auto/',
@@ -193,16 +195,25 @@ function loadSTL(url) {
 }
 
 /**
- * Create material with given color
- * 指定色でマテリアルを作成
+ * Create material with given color and opacity
+ * 指定色と透明度でマテリアルを作成
  */
-function createMaterial(color) {
-    return new THREE.MeshPhongMaterial({
+function createMaterial(color, opacity = 1) {
+    const material = new THREE.MeshPhongMaterial({
         color: new THREE.Color(color[0], color[1], color[2]),
         specular: 0x111111,
         shininess: 30,
         side: THREE.DoubleSide
     });
+
+    // Apply opacity if not fully opaque
+    // 不透明でない場合は透明度を適用
+    if (opacity < 1) {
+        material.transparent = true;
+        material.opacity = opacity;
+    }
+
+    return material;
 }
 
 /**
@@ -249,7 +260,7 @@ async function loadParts(source) {
                 // Center geometry
                 geometry.computeBoundingBox();
 
-                const material = createMaterial(partConfig.color);
+                const material = createMaterial(partConfig.color, partConfig.opacity);
                 const mesh = new THREE.Mesh(geometry, material);
 
                 // Apply coordinate transform (Y axis flip for NED)
