@@ -1958,7 +1958,7 @@
             // Symbolic equations (left column)
             const symbolic = {
                 'eq-plant': 'G(s) = \\frac{K}{s(\\tau_m s + 1)}',
-                'eq-plant-gain': 'K = \\frac{1}{I} \\quad \\text{[rad/(N·m·s)]}',
+                'eq-plant-gain': 'K = \\frac{1}{I}',
                 'eq-motor-tau': '\\tau_m = \\frac{J_{mp} \\cdot R_m}{K_t^2}',
                 'eq-pid': 'C(s) = K_p \\left( 1 + \\frac{1}{T_i s} + \\frac{T_d s}{\\eta T_d s + 1} \\right)',
                 'eq-sensitivity': 'S(s) = \\frac{1}{1 + L(s)}',
@@ -1969,7 +1969,7 @@
 
             // Numeric equations (right column) - with actual values
             const numeric = {
-                'eq-plant-num': `G(s) = \\frac{${K_roll} \\times 10^3}{s(${tau_m}\\text{ms} \\cdot s + 1)}`,
+                'eq-plant-num': `G(s) = \\frac{${K_roll} \\times 10^3}{s(${tau_m} \\times 10^{-3} s + 1)}`,
                 'eq-plant-gain-num': `K_{roll}=${K_roll}, \\quad K_{pitch}=${K_pitch}, \\quad K_{yaw}=${K_yaw} \\; [\\times 10^3]`,
                 'eq-motor-tau-num': `\\tau_m = \\frac{${Jmp} \\times 10^{-8} \\cdot ${Rm}}{(${Kt} \\times 10^{-4})^2} = ${tau_calc} \\text{ ms}`,
                 'eq-pid-num': `K_p, T_i, T_d, \\eta \\text{ は各軸タブで設定}`,
