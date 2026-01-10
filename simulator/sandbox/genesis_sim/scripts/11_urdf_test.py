@@ -84,16 +84,26 @@ def main():
     print("\n[6] Loading StampFly URDF...")
     spawn_height = 0.3  # 30cm above ground
 
+    # Coordinate transformation is baked into URDF (rpy in each visual element)
+    # WebGL→Genesis: rpy="-1.5708 3.14159 0" (X:-90°, Y:180°)
+    # No additional transformation needed at load time
+    transform_euler = (0, 0, 0)
+
     try:
         stampfly = scene.add_entity(
             gs.morphs.URDF(
                 file=str(urdf_file),
                 pos=(0, 0, spawn_height),
+                euler=transform_euler,  # Apply coordinate transform here
                 fixed=True,  # Fixed for static viewing
                 prioritize_urdf_material=True,  # Use URDF colors
+                decimate=False,  # Don't simplify mesh - preserve all faces
+                convexify=False,  # Don't convert to convex hull
             ),
         )
         print(f"    -> URDF loaded at height {spawn_height}m")
+        print(f"    -> Transform: euler={transform_euler}")
+        print(f"    -> Mesh processing: decimate=False, convexify=False")
     except Exception as e:
         print(f"    ERROR loading URDF: {e}")
         print("\n    Trying with gs.morphs.Drone instead...")

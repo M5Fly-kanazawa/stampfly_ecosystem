@@ -5,14 +5,15 @@ STL + JSONからURDFを自動生成
 
 Purpose:
 - Generate URDF from STL parts and parts_config.json
-- Apply coordinate transformation (WebGL Y-up → Genesis Z-up)
+- Apply coordinate transformation (WebGL → Genesis)
 - Set colors from JSON configuration
 - Structure for gs.morphs.Drone compatibility
 
 Coordinate Transformation:
 - WebGL (STL): X=left, Y=up, Z=forward
 - Genesis: X=right, Y=forward, Z=up
-- Transform: rotate -90° around X-axis (rpy="-1.5708 0 0")
+- Transform matrix: Genesis = [-WebGL.x, WebGL.z, WebGL.y]
+- URDF rpy: "-1.5708 3.14159 0" (X:-90°, Y:180°, Z:0°)
 """
 
 import json
@@ -30,8 +31,10 @@ def generate_urdf(config_path: Path, output_path: Path):
     parts = config.get('parts', [])
 
     # Coordinate transformation: WebGL → Genesis
-    # Rotate -90° around X-axis
-    transform_rpy = f"{-math.pi/2} 0 0"  # roll=-90°, pitch=0, yaw=0
+    # WebGL (STL): X=left, Y=up, Z=forward
+    # Genesis: X=right, Y=forward, Z=up
+    # Transform: euler=(-90, 180, 0) degrees = rpy(-π/2, π, 0) radians
+    transform_rpy = "-1.5708 3.14159 0"  # X:-90°, Y:180°, Z:0°
 
     # Scale: STL is in mm, URDF expects meters
     scale = "0.001 0.001 0.001"
@@ -121,18 +124,8 @@ def generate_urdf(config_path: Path, output_path: Path):
     urdf_lines.append('')
 
     # Add propeller links and joints
-    # Motor positions in Genesis coordinates (after transformation):
-    # Arm length d = 0.0325m
-    d = 0.0325
-    propeller_positions = {
-        'propeller_fl': (-d, d, 0.01),   # left-front (+Y, -X in Genesis)
-        'propeller_fr': (d, d, 0.01),    # right-front (+Y, +X in Genesis)
-        'propeller_rl': (-d, -d, 0.01),  # left-rear (-Y, -X in Genesis)
-        'propeller_rr': (d, -d, 0.01),   # right-rear (-Y, +X in Genesis)
-    }
-
-    # Propeller spin directions (Genesis convention)
-    # prop0(FR)=CW(-1), prop1(RL)=CCW(+1), prop2(FL)=CW(-1), prop3(RR)=CCW(+1)
+    # Note: STL files already contain propeller positions relative to origin
+    # Joint origin is (0,0,0) - position comes from the mesh geometry
 
     urdf_lines.append('  <!-- Propeller Links -->')
 
@@ -146,8 +139,6 @@ def generate_urdf(config_path: Path, output_path: Path):
             continue
 
         link_name, joint_name = propeller_mapping[name]
-        pos = propeller_positions.get(name, (0, 0, 0.01))
-        pos_str = f"{pos[0]} {pos[1]} {pos[2]}"
 
         urdf_lines.append(f'  <!-- {name} -> {link_name} -->')
         urdf_lines.append(f'  <link name="{link_name}">')
@@ -167,10 +158,11 @@ def generate_urdf(config_path: Path, output_path: Path):
         urdf_lines.append('')
 
         # Continuous joint for propeller rotation
+        # Joint origin is (0,0,0) - STL already contains correct position
         urdf_lines.append(f'  <joint name="{joint_name}" type="continuous">')
         urdf_lines.append(f'    <parent link="base_link"/>')
         urdf_lines.append(f'    <child link="{link_name}"/>')
-        urdf_lines.append(f'    <origin xyz="{pos_str}" rpy="0 0 0"/>')
+        urdf_lines.append(f'    <origin xyz="0 0 0" rpy="0 0 0"/>')
         urdf_lines.append(f'    <axis xyz="0 0 1"/>')  # Rotate around Z-axis
         urdf_lines.append(f'    <dynamics damping="0.0001"/>')
         urdf_lines.append(f'  </joint>')
