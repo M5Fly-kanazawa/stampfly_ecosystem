@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StampFly Loop Shaping Design Tool</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -402,6 +405,53 @@
             font-family: 'Courier New', monospace;
             font-size: 0.85em;
             color: #4ade80;
+        }
+        .math-panel {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            overflow-y: auto;
+        }
+        .math-panel h2 {
+            color: #00d4ff;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+        .math-section {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .math-section h3 {
+            color: #f59e0b;
+            font-size: 0.9em;
+            margin-bottom: 12px;
+        }
+        .math-equation {
+            padding: 10px 0;
+            border-bottom: 1px solid #222;
+            overflow-x: auto;
+        }
+        .math-equation:last-child {
+            border-bottom: none;
+        }
+        .math-equation .katex {
+            font-size: 1.1em;
+        }
+        .math-label {
+            color: #888;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+        }
+        .math-note {
+            color: #666;
+            font-size: 0.75em;
+            margin-top: 5px;
+            font-style: italic;
         }
         .overlay-controls {
             background: #0f0f23;
@@ -880,6 +930,71 @@
                         • docs/architecture/stampfly-parameters.md<br>
                         • docs/architecture/control-system.md (§6 DCモータモデル, §7 線形化と伝達関数)
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="math-panel" id="math-panel" style="display: none; grid-row: 4;">
+            <h2>StampFly 伝達関数モデル / Transfer Function Models</h2>
+
+            <div class="math-section">
+                <h3>プラント伝達関数 / Plant Transfer Function</h3>
+                <div class="math-equation">
+                    <div class="math-label">角速度制御プラント（モーメント→角速度）:</div>
+                    <div id="eq-plant"></div>
+                </div>
+                <div class="math-equation">
+                    <div class="math-label">プラントゲイン（各軸）:</div>
+                    <div id="eq-plant-gain"></div>
+                </div>
+            </div>
+
+            <div class="math-section">
+                <h3>DCモータモデル / DC Motor Model</h3>
+                <div class="math-equation">
+                    <div class="math-label">電圧方程式:</div>
+                    <div id="eq-motor-voltage"></div>
+                </div>
+                <div class="math-equation">
+                    <div class="math-label">モータ時定数:</div>
+                    <div id="eq-motor-tau"></div>
+                    <div class="math-note">※電気時定数を無視した近似モデル (τe ≪ τm)</div>
+                </div>
+            </div>
+
+            <div class="math-section">
+                <h3>PID制御器 / PID Controller</h3>
+                <div class="math-equation">
+                    <div class="math-label">不完全微分付きPID:</div>
+                    <div id="eq-pid"></div>
+                </div>
+            </div>
+
+            <div class="math-section">
+                <h3>閉ループ伝達関数 / Closed-Loop Transfer Functions</h3>
+                <div class="math-equation">
+                    <div class="math-label">開ループ伝達関数:</div>
+                    <div id="eq-open-loop"></div>
+                </div>
+                <div class="math-equation">
+                    <div class="math-label">感度関数:</div>
+                    <div id="eq-sensitivity"></div>
+                </div>
+                <div class="math-equation">
+                    <div class="math-label">相補感度関数:</div>
+                    <div id="eq-comp-sensitivity"></div>
+                </div>
+            </div>
+
+            <div class="math-section">
+                <h3>推力・トルク特性 / Thrust & Torque</h3>
+                <div class="math-equation">
+                    <div class="math-label">プロペラ推力・トルク:</div>
+                    <div id="eq-thrust-torque"></div>
+                </div>
+                <div class="math-equation">
+                    <div class="math-label">ホバリング条件:</div>
+                    <div id="eq-hover"></div>
                 </div>
             </div>
         </div>
@@ -1788,6 +1903,42 @@
             }, 1500);
         }
 
+        // Render math equations using KaTeX
+        function renderMathEquations() {
+            if (typeof katex === 'undefined') {
+                // KaTeX not loaded yet, retry after a short delay
+                setTimeout(renderMathEquations, 100);
+                return;
+            }
+
+            const equations = {
+                'eq-plant': 'G(s) = \\frac{1/I}{s(\\tau_m s + 1)} = \\frac{K}{s(\\tau_m s + 1)}',
+                'eq-plant-gain': 'K_{roll} = \\frac{1}{I_{xx}}, \\quad K_{pitch} = \\frac{1}{I_{yy}}, \\quad K_{yaw} = \\frac{1}{I_{zz}}',
+                'eq-motor-voltage': 'V_a = R_m i + K_e \\omega \\quad \\Rightarrow \\quad i = \\frac{V_a - K_e \\omega}{R_m}',
+                'eq-motor-tau': '\\tau_m = \\frac{J_{mp} \\cdot R_m}{K_t^2} \\quad (K_t = K_e)',
+                'eq-pid': 'C(s) = K_p \\left( 1 + \\frac{1}{T_i s} + \\frac{T_d s}{\\eta T_d s + 1} \\right)',
+                'eq-open-loop': 'L(s) = C(s) \\cdot G(s)',
+                'eq-sensitivity': 'S(s) = \\frac{1}{1 + L(s)} \\quad \\text{(外乱抑制特性)}',
+                'eq-comp-sensitivity': 'T(s) = \\frac{L(s)}{1 + L(s)} \\quad \\text{(目標値追従特性)}',
+                'eq-thrust-torque': 'T = C_t \\omega^2, \\quad Q = C_q \\omega^2',
+                'eq-hover': '\\omega_0 = \\sqrt{\\frac{mg}{4 C_t}}, \\quad T_0 = \\frac{mg}{4}'
+            };
+
+            for (const [id, latex] of Object.entries(equations)) {
+                const element = document.getElementById(id);
+                if (element) {
+                    try {
+                        katex.render(latex, element, {
+                            displayMode: true,
+                            throwOnError: false
+                        });
+                    } catch (e) {
+                        console.error('KaTeX error for', id, e);
+                    }
+                }
+            }
+        }
+
         // Reset calculation tab to default values (from stampfly-parameters.md)
         function resetCalcDefaults() {
             const defaults = {
@@ -1842,17 +1993,21 @@
             const calcParams = document.querySelector('.calc-view-params');
             const singleLegend = document.getElementById('single-legend');
             const plotsSection = document.querySelector('.plots');
+            const mathPanel = document.getElementById('math-panel');
 
             // Hide all first
             singleParams.classList.add('hidden');
             allParams.classList.remove('visible');
             calcParams.classList.remove('visible');
+            mathPanel.style.display = 'none';
 
             if (axis === 'calc') {
                 calcParams.classList.add('visible');
                 singleLegend.style.display = 'none';
                 plotsSection.style.display = 'none';
+                mathPanel.style.display = 'block';
                 updateCalcResults();
+                renderMathEquations();
             } else if (axis === 'all') {
                 allParams.classList.add('visible');
                 singleLegend.style.display = 'none';
