@@ -432,6 +432,9 @@
             margin-bottom: 12px;
         }
         .math-equation {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
             padding: 10px 0;
             border-bottom: 1px solid #222;
             overflow-x: auto;
@@ -440,7 +443,17 @@
             border-bottom: none;
         }
         .math-equation .katex {
-            font-size: 1.1em;
+            font-size: 1.0em;
+        }
+        .math-symbolic {
+            border-right: 1px solid #333;
+            padding-right: 15px;
+        }
+        .math-numeric {
+            color: #4ade80;
+        }
+        .math-numeric .katex {
+            font-size: 0.95em;
         }
         .math-label {
             color: #888;
@@ -452,6 +465,21 @@
             font-size: 0.75em;
             margin-top: 5px;
             font-style: italic;
+            grid-column: 1 / -1;
+        }
+        .math-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #444;
+            font-size: 0.75em;
+            color: #888;
+        }
+        .math-header span:first-child {
+            border-right: 1px solid #333;
+            padding-right: 15px;
         }
         .overlay-controls {
             background: #0f0f23;
@@ -939,62 +967,58 @@
 
             <div class="math-section">
                 <h3>プラント伝達関数 / Plant Transfer Function</h3>
+                <div class="math-header"><span>数式 / Formula</span><span>数値例 / Numerical</span></div>
                 <div class="math-equation">
-                    <div class="math-label">角速度制御プラント（モーメント→角速度）:</div>
-                    <div id="eq-plant"></div>
+                    <div class="math-symbolic" id="eq-plant"></div>
+                    <div class="math-numeric" id="eq-plant-num"></div>
                 </div>
                 <div class="math-equation">
-                    <div class="math-label">プラントゲイン（各軸）:</div>
-                    <div id="eq-plant-gain"></div>
+                    <div class="math-symbolic" id="eq-plant-gain"></div>
+                    <div class="math-numeric" id="eq-plant-gain-num"></div>
                 </div>
             </div>
 
             <div class="math-section">
                 <h3>DCモータモデル / DC Motor Model</h3>
+                <div class="math-header"><span>数式 / Formula</span><span>数値例 / Numerical</span></div>
                 <div class="math-equation">
-                    <div class="math-label">電圧方程式:</div>
-                    <div id="eq-motor-voltage"></div>
-                </div>
-                <div class="math-equation">
-                    <div class="math-label">モータ時定数:</div>
-                    <div id="eq-motor-tau"></div>
-                    <div class="math-note">※電気時定数を無視した近似モデル (τe ≪ τm)</div>
+                    <div class="math-symbolic" id="eq-motor-tau"></div>
+                    <div class="math-numeric" id="eq-motor-tau-num"></div>
                 </div>
             </div>
 
             <div class="math-section">
                 <h3>PID制御器 / PID Controller</h3>
+                <div class="math-header"><span>数式 / Formula</span><span>数値例 / Numerical</span></div>
                 <div class="math-equation">
-                    <div class="math-label">不完全微分付きPID:</div>
-                    <div id="eq-pid"></div>
+                    <div class="math-symbolic" id="eq-pid"></div>
+                    <div class="math-numeric" id="eq-pid-num"></div>
                 </div>
             </div>
 
             <div class="math-section">
-                <h3>閉ループ伝達関数 / Closed-Loop Transfer Functions</h3>
+                <h3>閉ループ特性 / Closed-Loop</h3>
+                <div class="math-header"><span>数式 / Formula</span><span>説明 / Description</span></div>
                 <div class="math-equation">
-                    <div class="math-label">開ループ伝達関数:</div>
-                    <div id="eq-open-loop"></div>
+                    <div class="math-symbolic" id="eq-sensitivity"></div>
+                    <div class="math-numeric" id="eq-sensitivity-desc"></div>
                 </div>
                 <div class="math-equation">
-                    <div class="math-label">感度関数:</div>
-                    <div id="eq-sensitivity"></div>
-                </div>
-                <div class="math-equation">
-                    <div class="math-label">相補感度関数:</div>
-                    <div id="eq-comp-sensitivity"></div>
+                    <div class="math-symbolic" id="eq-comp-sensitivity"></div>
+                    <div class="math-numeric" id="eq-comp-sensitivity-desc"></div>
                 </div>
             </div>
 
             <div class="math-section">
-                <h3>推力・トルク特性 / Thrust & Torque</h3>
+                <h3>ホバリング条件 / Hover Conditions</h3>
+                <div class="math-header"><span>数式 / Formula</span><span>数値例 / Numerical</span></div>
                 <div class="math-equation">
-                    <div class="math-label">プロペラ推力・トルク:</div>
-                    <div id="eq-thrust-torque"></div>
+                    <div class="math-symbolic" id="eq-hover"></div>
+                    <div class="math-numeric" id="eq-hover-num"></div>
                 </div>
                 <div class="math-equation">
-                    <div class="math-label">ホバリング条件:</div>
-                    <div id="eq-hover"></div>
+                    <div class="math-symbolic" id="eq-thrust"></div>
+                    <div class="math-numeric" id="eq-thrust-num"></div>
                 </div>
             </div>
         </div>
@@ -1911,20 +1935,54 @@
                 return;
             }
 
-            const equations = {
-                'eq-plant': 'G(s) = \\frac{1/I}{s(\\tau_m s + 1)} = \\frac{K}{s(\\tau_m s + 1)}',
-                'eq-plant-gain': 'K_{roll} = \\frac{1}{I_{xx}}, \\quad K_{pitch} = \\frac{1}{I_{yy}}, \\quad K_{yaw} = \\frac{1}{I_{zz}}',
-                'eq-motor-voltage': 'V_a = R_m i + K_e \\omega \\quad \\Rightarrow \\quad i = \\frac{V_a - K_e \\omega}{R_m}',
-                'eq-motor-tau': '\\tau_m = \\frac{J_{mp} \\cdot R_m}{K_t^2} \\quad (K_t = K_e)',
+            // Get current values from inputs
+            const m = parseFloat(document.getElementById('calc-mass').value);
+            const Ixx = parseFloat(document.getElementById('calc-ixx').value);
+            const Iyy = parseFloat(document.getElementById('calc-iyy').value);
+            const Izz = parseFloat(document.getElementById('calc-izz').value);
+            const Rm = parseFloat(document.getElementById('calc-rm').value);
+            const Jmp = parseFloat(document.getElementById('calc-jmp').value);
+            const Kt = parseFloat(document.getElementById('calc-kt').value);
+            const Ct = parseFloat(document.getElementById('calc-ct').value);
+            const tau_m = parseFloat(document.getElementById('calc-tau-override').value);
+
+            // Calculate derived values
+            const K_roll = (1 / (Ixx * 1e-6) / 1000).toFixed(1);
+            const K_pitch = (1 / (Iyy * 1e-6) / 1000).toFixed(1);
+            const K_yaw = (1 / (Izz * 1e-6) / 1000).toFixed(1);
+            const g = 9.80665;
+            const omega0 = Math.sqrt(m * g / (4 * Ct * 1e-8)).toFixed(0);
+            const T0 = (m * g / 4 * 1000).toFixed(2);
+            const tau_calc = (Jmp * 1e-8 * Rm / Math.pow(Kt * 1e-4, 2) * 1000).toFixed(2);
+
+            // Symbolic equations (left column)
+            const symbolic = {
+                'eq-plant': 'G(s) = \\frac{K}{s(\\tau_m s + 1)}',
+                'eq-plant-gain': 'K = \\frac{1}{I} \\quad \\text{[rad/(N·m·s)]}',
+                'eq-motor-tau': '\\tau_m = \\frac{J_{mp} \\cdot R_m}{K_t^2}',
                 'eq-pid': 'C(s) = K_p \\left( 1 + \\frac{1}{T_i s} + \\frac{T_d s}{\\eta T_d s + 1} \\right)',
-                'eq-open-loop': 'L(s) = C(s) \\cdot G(s)',
-                'eq-sensitivity': 'S(s) = \\frac{1}{1 + L(s)} \\quad \\text{(外乱抑制特性)}',
-                'eq-comp-sensitivity': 'T(s) = \\frac{L(s)}{1 + L(s)} \\quad \\text{(目標値追従特性)}',
-                'eq-thrust-torque': 'T = C_t \\omega^2, \\quad Q = C_q \\omega^2',
-                'eq-hover': '\\omega_0 = \\sqrt{\\frac{mg}{4 C_t}}, \\quad T_0 = \\frac{mg}{4}'
+                'eq-sensitivity': 'S(s) = \\frac{1}{1 + L(s)}',
+                'eq-comp-sensitivity': 'T(s) = \\frac{L(s)}{1 + L(s)}',
+                'eq-hover': '\\omega_0 = \\sqrt{\\frac{mg}{4 C_t}}',
+                'eq-thrust': 'T_0 = \\frac{mg}{4}'
             };
 
-            for (const [id, latex] of Object.entries(equations)) {
+            // Numeric equations (right column) - with actual values
+            const numeric = {
+                'eq-plant-num': `G(s) = \\frac{${K_roll} \\times 10^3}{s(${tau_m}\\text{ms} \\cdot s + 1)}`,
+                'eq-plant-gain-num': `K_{roll}=${K_roll}, \\quad K_{pitch}=${K_pitch}, \\quad K_{yaw}=${K_yaw} \\; [\\times 10^3]`,
+                'eq-motor-tau-num': `\\tau_m = \\frac{${Jmp} \\times 10^{-8} \\cdot ${Rm}}{(${Kt} \\times 10^{-4})^2} = ${tau_calc} \\text{ ms}`,
+                'eq-pid-num': `K_p, T_i, T_d, \\eta \\text{ は各軸タブで設定}`,
+                'eq-sensitivity-desc': '\\text{外乱抑制特性（低周波で小さく）}',
+                'eq-comp-sensitivity-desc': '\\text{目標値追従特性（帯域内で1に近く）}',
+                'eq-hover-num': `\\omega_0 = \\sqrt{\\frac{${m} \\times ${g.toFixed(2)}}{4 \\times ${Ct} \\times 10^{-8}}} = ${omega0} \\text{ rad/s}`,
+                'eq-thrust-num': `T_0 = \\frac{${m} \\times ${g.toFixed(2)}}{4} = ${T0} \\text{ mN}`
+            };
+
+            // Render all equations
+            const allEquations = { ...symbolic, ...numeric };
+
+            for (const [id, latex] of Object.entries(allEquations)) {
                 const element = document.getElementById(id);
                 if (element) {
                     try {
