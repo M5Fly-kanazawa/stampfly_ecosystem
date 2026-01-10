@@ -893,11 +893,6 @@
                         <input type="number" id="calc-izz" value="20.4" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
-                    <div class="param-row">
-                        <label>アーム長 d</label>
-                        <input type="number" id="calc-arm" value="0.0325" step="0.0001" min="0.001">
-                        <span class="unit">m</span>
-                    </div>
                 </div>
 
                 <div class="calc-input-group">
@@ -976,10 +971,6 @@
                         </div>
                     </div>
                     <div class="calc-result-row" style="margin-top: 10px;">
-                        <span>モーメントアーム d (平均)</span>
-                        <span class="result-value" id="calc-moment-arm">-- mm</span>
-                    </div>
-                    <div class="calc-result-row">
                         <span>トルク/推力比 κ = Cq/Ct</span>
                         <span class="result-value" id="calc-kappa">-- ×10⁻³</span>
                     </div>
@@ -1953,7 +1944,6 @@
             const Ixx = parseFloat(document.getElementById('calc-ixx').value) * 1e-6;   // kg·m²
             const Iyy = parseFloat(document.getElementById('calc-iyy').value) * 1e-6;   // kg·m²
             const Izz = parseFloat(document.getElementById('calc-izz').value) * 1e-6;   // kg·m²
-            const d = parseFloat(document.getElementById('calc-arm').value);            // m
 
             // Motor parameters
             const Rm = parseFloat(document.getElementById('calc-rm').value);            // Ω
@@ -1980,10 +1970,6 @@
                   dir: parseInt(document.getElementById('prop-m4-dir').value) }
             ];
 
-            // Calculate moment arm (average distance from center)
-            const distances = props.map(p => Math.sqrt(p.x * p.x + p.y * p.y));
-            const d_avg = distances.reduce((a, b) => a + b, 0) / 4;
-
             // Torque/thrust ratio
             const kappa = Cq / Ct;
 
@@ -2007,7 +1993,6 @@
             document.getElementById('calc-hover-thrust').textContent = (T0 * 1000).toFixed(2) + ' mN';
 
             // Display propeller layout results
-            document.getElementById('calc-moment-arm').textContent = (d_avg * 1000).toFixed(1) + ' mm';
             document.getElementById('calc-kappa').textContent = (kappa * 1000).toFixed(3) + ' ×10⁻³';
 
             // ============ Final Transfer Function Parameters ============
@@ -2037,8 +2022,7 @@
                 Izz: parseFloat(document.getElementById('calc-izz').value),
                 tau_m: tau_m * 1000,  // ms
                 props: props,
-                kappa: kappa,
-                d_avg: d_avg
+                kappa: kappa
             };
         }
 
@@ -2253,7 +2237,6 @@
                 'calc-ixx': 9.16,          // ×10⁻⁶ kg·m²
                 'calc-iyy': 13.3,          // ×10⁻⁶ kg·m²
                 'calc-izz': 20.4,          // ×10⁻⁶ kg·m²
-                'calc-arm': 0.0325,        // m
                 'calc-rm': 0.34,           // Ω
                 'calc-jmp': 2.01,          // ×10⁻⁸ kg·m²
                 'calc-kt': 6.12,           // ×10⁻⁴ V/(rad/s)
@@ -2393,7 +2376,7 @@
 
             // Calc tab input handlers - all physical parameter inputs
             [
-                'calc-mass', 'calc-ixx', 'calc-iyy', 'calc-izz', 'calc-arm',  // Vehicle
+                'calc-mass', 'calc-ixx', 'calc-iyy', 'calc-izz',              // Vehicle
                 'calc-rm', 'calc-jmp', 'calc-kt',                              // Motor
                 'calc-ct', 'calc-cq',                                          // Propeller
                 'calc-tau-override',                                           // Time constant override

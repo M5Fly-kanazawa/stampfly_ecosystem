@@ -58,8 +58,9 @@
 
 | パラメータ | 値 | 単位 | 備考 |
 |-----------|-----|------|------|
-| モーター間距離（対角） | 0.046 | m | √2 × アーム長 |
-| アーム長（中心→モーター） | 0.0325 | m | 0.023 × √2 |
+| モーター間距離（対角） | 0.065 | m | 2 × アーム長 |
+| アーム長（中心→モーター） | 0.0325 | m | √(x² + y²) = 0.023 × √2 |
+| モーメントアーム | 0.023 | m | X/Y座標オフセット（= アーム長/√2） |
 | モーター高さ（重心から） | 0.005 | m | |
 
 ### 空気抵抗
@@ -286,8 +287,9 @@ These parameters are based on measurements and system identification from the ac
 
 | Parameter | Value | Unit | Notes |
 |-----------|-------|------|-------|
-| Motor-to-motor distance (diagonal) | 0.046 | m | √2 × arm length |
-| Arm length (center to motor) | 0.0325 | m | 0.023 × √2 |
+| Motor-to-motor distance (diagonal) | 0.065 | m | 2 × arm length |
+| Arm length (center to motor) | 0.0325 | m | √(x² + y²) = 0.023 × √2 |
+| Moment arm | 0.023 | m | X/Y coordinate offset (= arm length/√2) |
 | Motor height (from CG) | 0.005 | m | |
 
 ### Aerodynamic Drag

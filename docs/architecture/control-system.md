@@ -763,24 +763,38 @@ $$
 
 #### 推力から制御入力への変換
 
-各モーターの推力 $T_i$ [N] から仮想制御入力への変換：
+各モーターの推力 $T_i$ [N] から仮想制御入力への変換（一般形）：
 
 $$
 \begin{bmatrix} u_T \\ u_\phi \\ u_\theta \\ u_\psi \end{bmatrix} =
 \underbrace{
 \begin{bmatrix}
 1 & 1 & 1 & 1 \\
--d & -d & +d & +d \\
-+d & -d & -d & +d \\
-+\kappa & -\kappa & +\kappa & -\kappa
+y_1 & y_2 & y_3 & y_4 \\
+-x_1 & -x_2 & -x_3 & -x_4 \\
+\sigma_1 \kappa & \sigma_2 \kappa & \sigma_3 \kappa & \sigma_4 \kappa
 \end{bmatrix}
 }_{\mathbf{M}}
 \begin{bmatrix} T_1 \\ T_2 \\ T_3 \\ T_4 \end{bmatrix}
 $$
 
 ここで：
-- $d = 0.0325$ m：アーム長（中心→モーター）
-- $\kappa = C_q / C_t = 9.71 \times 10^{-3}$ m：トルク/推力比
+- $(x_i, y_i)$：各モーターの重心からの座標 [m]
+- $\sigma_i$：回転方向（CCW: +1, CW: -1）
+- $\kappa = C_q / C_t = 9.71 \times 10^{-3}$：トルク/推力比
+
+**対称X配置**（StampFly標準）では $(x_i, y_i) = (\pm d, \pm d)$ となり：
+
+$$
+\mathbf{M} = \begin{bmatrix}
+1 & 1 & 1 & 1 \\
+-d & -d & +d & +d \\
++d & -d & -d & +d \\
++\kappa & -\kappa & +\kappa & -\kappa
+\end{bmatrix}
+$$
+
+- $d = 0.023$ m：モーメントアーム（X/Y座標オフセット）
 
 #### ミキサー行列（逆変換）
 
@@ -1011,7 +1025,8 @@ $$
 | Roll慣性モーメント | $I_{xx}$ | $9.16 \times 10^{-6}$ | kg·m² | |
 | Pitch慣性モーメント | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
 | Yaw慣性モーメント | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
-| アーム長 | $d$ | 0.0325 | m | 中心→モーター |
+| アーム長（半径） | $r$ | 0.0325 | m | 中心→モーター |
+| モーメントアーム | $d$ | 0.023 | m | X/Y座標オフセット（$d = r/\sqrt{2}$） |
 
 #### モーター・プロペラパラメータ
 

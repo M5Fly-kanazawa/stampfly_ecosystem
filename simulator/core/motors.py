@@ -71,12 +71,9 @@ class motor_prop():
         #self.kappa = self.Cq/self.Ct
 
         #パラメータの確認
-        #print('A=',(self.Cq*self.Rm/self.Km))    
+        #print('A=',(self.Cq*self.Rm/self.Km))
         #print('B=',(self.Dm+self.Km**2/self.Rm)/(self.Km/self.Rm))
-        #print('C=',(self.Qf*self.Rm/self.Km))    
-
-        self.armx = 0.025
-        self.army = 0.025
+        #print('C=',(self.Qf*self.Rm/self.Km))
 
     def equilibrium_anguler_velocity(self, T):
         return np.sqrt(T/self.Ct) 

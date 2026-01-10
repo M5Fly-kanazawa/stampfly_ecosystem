@@ -260,45 +260,64 @@ class MotorMixer:
         """
         return max_thrust_n * motor_output ** 2
 
+    # Default motor positions for StampFly X-config (x, y) in meters
+    # StampFly X配置のデフォルトモーター位置（x, y）[m]
+    DEFAULT_MOTOR_POSITIONS = [
+        (0.023, 0.023),    # M1 (FR) - Front Right
+        (-0.023, 0.023),   # M2 (RR) - Rear Right
+        (-0.023, -0.023),  # M3 (RL) - Rear Left
+        (0.023, -0.023),   # M4 (FL) - Front Left
+    ]
+    # Motor rotation directions: CCW = +1, CW = -1
+    # モーター回転方向: CCW = +1, CW = -1
+    DEFAULT_MOTOR_DIRS = [-1, 1, -1, 1]  # M1:CCW, M2:CW, M3:CCW, M4:CW
+
     @staticmethod
     def motor_to_torque(
         motors: np.ndarray,
-        arm_length_m: float = 0.065,
+        motor_positions: list = None,
+        motor_dirs: list = None,
         max_thrust_n: float = 0.15,
-        torque_coeff: float = 0.01,
+        torque_coeff: float = 0.00971,
     ) -> np.ndarray:
         """
-        Calculate torques from motor outputs.
-        モーター出力からトルクを計算
+        Calculate torques from motor outputs using individual motor positions.
+        各モーター位置を使用してトルクを計算（非対称配置対応）
 
         Args:
             motors: Motor outputs [m1, m2, m3, m4]
-            arm_length_m: Distance from center to motor (m)
+            motor_positions: List of (x, y) positions for each motor [m]
+                           各モーターの(x, y)座標 [m]
+            motor_dirs: Rotation directions (CCW=+1, CW=-1) for yaw
+                       回転方向（CCW=+1, CW=-1）
             max_thrust_n: Maximum thrust per motor (N)
-            torque_coeff: Torque to thrust ratio (Nm/N)
+            torque_coeff: Torque to thrust ratio κ = Cq/Ct (Nm/N)
 
         Returns:
             Torques [roll, pitch, yaw] (Nm)
         """
+        if motor_positions is None:
+            motor_positions = MotorMixer.DEFAULT_MOTOR_POSITIONS
+        if motor_dirs is None:
+            motor_dirs = MotorMixer.DEFAULT_MOTOR_DIRS
+
         # Convert to thrust
+        # 推力に変換
         thrust = np.array([
             MotorMixer.motor_to_thrust(m, max_thrust_n) for m in motors
         ])
 
-        # Arm length factor (X-config: sqrt(2)/2 * arm_length)
-        arm = arm_length_m * np.sqrt(2) / 2
+        # Roll torque: τ_roll = Σ yi × Ti
+        # ロールトルク
+        roll_torque = sum(pos[1] * t for pos, t in zip(motor_positions, thrust))
 
-        # Roll torque: right motors down, left motors up
-        # τ_roll = arm * (T3 + T4 - T1 - T2)
-        roll_torque = arm * (thrust[2] + thrust[3] - thrust[0] - thrust[1])
+        # Pitch torque: τ_pitch = -Σ xi × Ti
+        # ピッチトルク
+        pitch_torque = -sum(pos[0] * t for pos, t in zip(motor_positions, thrust))
 
-        # Pitch torque: front motors down, rear motors up
-        # τ_pitch = arm * (T1 + T4 - T2 - T3)
-        pitch_torque = arm * (thrust[0] + thrust[3] - thrust[1] - thrust[2])
-
-        # Yaw torque: CW motors - CCW motors (reaction torque)
-        # M2(CW) + M4(CW) - M1(CCW) - M3(CCW)
-        yaw_torque = torque_coeff * (thrust[1] + thrust[3] - thrust[0] - thrust[2])
+        # Yaw torque: τ_yaw = Σ σi × κ × Ti (reaction torque)
+        # ヨートルク（反トルク）
+        yaw_torque = sum(d * torque_coeff * t for d, t in zip(motor_dirs, thrust))
 
         return np.array([roll_torque, pitch_torque, yaw_torque])
 
