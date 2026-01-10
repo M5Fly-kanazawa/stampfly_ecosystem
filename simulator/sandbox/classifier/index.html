@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL Part Classifier</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #viewer {
+            flex: 1;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 320px;
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            border-left: 1px solid #0f3460;
+        }
+
+        h1 {
+            font-size: 1.1em;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        h2 {
+            font-size: 0.95em;
+            color: #f59e0b;
+            margin: 15px 0 10px 0;
+        }
+
+        .section {
+            background: #1a1a2e;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        select, input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1a1a2e;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 8px 0;
+        }
+
+        .range-inputs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .range-inputs input {
+            flex: 1;
+        }
+
+        .range-display {
+            text-align: center;
+            font-size: 0.9em;
+            color: #00d4ff;
+            margin: 5px 0;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .part-category {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin: 3px 0;
+            background: #0f3460;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .part-category:hover {
+            background: #1a4a7a;
+        }
+
+        .part-category.selected {
+            background: #1a6a9a;
+            border: 1px solid #00d4ff;
+        }
+
+        .part-category input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        .part-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            margin-right: 8px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .classification-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .classification-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin: 3px 0;
+            background: #0f3460;
+            border-radius: 4px;
+            font-size: 0.85em;
+            gap: 6px;
+        }
+
+        .classification-item .visibility-toggle {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .classification-item .name {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .classification-item .range {
+            color: #888;
+            font-size: 0.8em;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .classification-item .delete-btn {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 1em;
+            flex-shrink: 0;
+        }
+
+        .classification-item .delete-btn:hover {
+            color: #ff6b6b;
+        }
+
+        .auto-parts-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .auto-part-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin: 3px 0;
+            background: #0f3460;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .auto-part-item select {
+            flex: 1;
+            margin: 0 0 0 8px;
+            padding: 4px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #00d4ff;
+        }
+
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #0f3460;
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            background: rgba(22, 33, 62, 0.9);
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .triangle-info {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .classification-range {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 8px 4px 24px;
+            margin: 2px 0;
+            background: #0a2540;
+            border-radius: 3px;
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .classification-range span {
+            flex: 1;
+        }
+
+        .classification-range button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 1em;
+            margin-left: 4px;
+        }
+
+        .range-select-btn {
+            color: #00d4ff;
+        }
+
+        .range-select-btn:hover {
+            color: #4de5ff;
+        }
+
+        .range-delete-btn {
+            color: #ef4444;
+        }
+
+        .range-delete-btn:hover {
+            color: #ff6b6b;
+        }
+
+        .edit-btn {
+            background: none;
+            border: none;
+            color: #f59e0b;
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 0.9em;
+        }
+
+        .edit-btn:hover {
+            color: #fbbf24;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: #0f3460;
+            border-radius: 3px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #10b981);
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewer">
+            <canvas id="canvas"></canvas>
+            <div id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <div>Loading STL...</div>
+            </div>
+            <div id="status">Drag: Rotate / Scroll: Zoom / Shift+Drag: Pan</div>
+        </div>
+
+        <div id="sidebar">
+            <h1>STL Part Classifier</h1>
+
+            <!-- Source Info -->
+            <div class="section">
+                <label>Source: stampfly_v1.stl (Original)</label>
+                <div class="triangle-info" id="triangle-count">Triangles: -</div>
+                <div class="triangle-info" id="unclassified-count">Unclassified: -</div>
+            </div>
+
+            <!-- Index Range Selection -->
+            <h2>Index Range Selection</h2>
+            <div class="section">
+                <div class="range-inputs">
+                    <div>
+                        <label>Start:</label>
+                        <input type="number" id="range-start" value="0" min="0">
+                    </div>
+                    <div>
+                        <label>End:</label>
+                        <input type="number" id="range-end" value="100" min="0">
+                    </div>
+                </div>
+                <input type="range" id="range-slider-start" min="0" max="6095" value="0">
+                <input type="range" id="range-slider-end" min="0" max="6095" value="100">
+                <div class="range-display" id="selection-info">Selected: 0 - 100 (101 triangles)</div>
+            </div>
+
+            <!-- Part Category Selection -->
+            <h2>Assign to Part</h2>
+            <div class="section" id="part-categories" style="max-height: 250px; overflow-y: auto;">
+                <div class="part-category" data-part="frame">
+                    <input type="radio" name="part" value="frame">
+                    <div class="part-color" style="background: rgb(230,230,230)"></div>
+                    <span>Frame (フレーム)</span>
+                </div>
+                <div class="part-category" data-part="m5stamps3">
+                    <input type="radio" name="part" value="m5stamps3">
+                    <div class="part-color" style="background: rgb(77,204,77)"></div>
+                    <span>M5StampS3 (マイコン)</span>
+                </div>
+                <div class="part-category" data-part="pcb">
+                    <input type="radio" name="part" value="pcb">
+                    <div class="part-color" style="background: rgb(51,128,204)"></div>
+                    <span>PCB (基板)</span>
+                </div>
+                <div class="part-category" data-part="motor_fr">
+                    <input type="radio" name="part" value="motor_fr">
+                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <span>Motor FR (右前)</span>
+                </div>
+                <div class="part-category" data-part="motor_rr">
+                    <input type="radio" name="part" value="motor_rr">
+                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <span>Motor RR (右後)</span>
+                </div>
+                <div class="part-category" data-part="motor_rl">
+                    <input type="radio" name="part" value="motor_rl">
+                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <span>Motor RL (左後)</span>
+                </div>
+                <div class="part-category" data-part="motor_fl">
+                    <input type="radio" name="part" value="motor_fl">
+                    <div class="part-color" style="background: rgb(102,102,102)"></div>
+                    <span>Motor FL (左前)</span>
+                </div>
+                <div class="part-category" data-part="propeller_fr">
+                    <input type="radio" name="part" value="propeller_fr">
+                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <span>Propeller FR (右前)</span>
+                </div>
+                <div class="part-category" data-part="propeller_rr">
+                    <input type="radio" name="part" value="propeller_rr">
+                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <span>Propeller RR (右後)</span>
+                </div>
+                <div class="part-category" data-part="propeller_rl">
+                    <input type="radio" name="part" value="propeller_rl">
+                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <span>Propeller RL (左後)</span>
+                </div>
+                <div class="part-category" data-part="propeller_fl">
+                    <input type="radio" name="part" value="propeller_fl">
+                    <div class="part-color" style="background: rgb(51,51,51)"></div>
+                    <span>Propeller FL (左前)</span>
+                </div>
+                <div class="part-category" data-part="battery">
+                    <input type="radio" name="part" value="battery">
+                    <div class="part-color" style="background: rgb(153,77,26)"></div>
+                    <span>Battery (電池)</span>
+                </div>
+            </div>
+            <button class="btn" id="btn-assign" disabled>Assign Selection</button>
+
+            <!-- Classifications -->
+            <h2>Classifications</h2>
+            <div class="section">
+                <div class="classification-list" id="classification-list">
+                    <div style="color: #666; font-size: 0.85em;">No classifications yet</div>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="btn btn-secondary" id="btn-show-all" style="flex:1; padding: 6px; font-size: 0.8em;">Show All</button>
+                    <button class="btn btn-secondary" id="btn-hide-all" style="flex:1; padding: 6px; font-size: 0.8em;">Hide All</button>
+                </div>
+                <div class="progress-bar">
+                    <div class="fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="triangle-info" id="classified-count">Classified: 0 / 6096</div>
+            </div>
+
+            <!-- Export -->
+            <h2>Export</h2>
+            <div class="section">
+                <button class="btn btn-success" id="btn-export">Export All STLs</button>
+                <button class="btn btn-secondary" id="btn-reset">Reset Classifications</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <script src="js/classifier.js"></script>
+</body>
+</html>
