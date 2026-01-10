@@ -36,25 +36,27 @@ const PART_DEFINITIONS = {
     battery: { name: 'Battery', color: [0.6, 0.3, 0.1] }
 };
 
-// Pre-defined classifications based on auto-split analysis
-// These are the index ranges for each auto-detected part
+// Pre-defined classifications based on connected component analysis
+// These are the CORRECT index ranges for each auto-detected part
+// Analyzed using scipy connected_components on shared vertices
 const AUTO_CLASSIFICATIONS = [
-    // Part 00 area (6096 triangles) - needs manual classification
-    // { partId: 'frame', start: 0, end: 1523 },
-    // { partId: 'm5stamps3', start: 1524, end: 2151 },
-    // { partId: 'pcb', start: 2152, end: 4631 },
-    // { partId: 'frame', start: 4632, end: 6095 },
+    // Main body (Component 0): 6096 triangles, indices 0-4519 + scattered
+    // NOT contiguous - needs manual classification into frame/m5stamps3/pcb
 
-    // Auto-detected parts (based on connected component analysis)
-    { partId: 'motor_fr', start: 6096, end: 6303 },      // 208 triangles
-    { partId: 'propeller_fr', start: 6304, end: 6993 },  // 690 triangles
-    { partId: 'motor_rr', start: 6994, end: 7201 },      // 208 triangles
-    { partId: 'motor_rl', start: 7202, end: 7409 },      // 208 triangles
-    { partId: 'motor_fl', start: 7410, end: 7617 },      // 208 triangles
-    { partId: 'propeller_rr', start: 7618, end: 8307 },  // 690 triangles
-    { partId: 'propeller_rl', start: 8308, end: 8997 },  // 690 triangles
-    { partId: 'propeller_fl', start: 8998, end: 9687 },  // 690 triangles
-    { partId: 'battery', start: 9688, end: 9739 }        // 52 triangles
+    // Motors (208 triangles each) - positions verified by centroid analysis
+    { partId: 'motor_fr', start: 4520, end: 4727 },      // Component 1: X=13.1, Z=22.8 (Right Front)
+    { partId: 'motor_fl', start: 5418, end: 5625 },      // Component 3: X=-32.5, Z=22.8 (Left Front)
+    { partId: 'motor_rr', start: 5626, end: 5833 },      // Component 4: X=13.1, Z=-22.8 (Right Rear)
+    { partId: 'motor_rl', start: 5834, end: 6041 },      // Component 5: X=-32.5, Z=-22.8 (Left Rear)
+
+    // Propellers (690 triangles each) - positions verified by centroid analysis
+    { partId: 'propeller_fr', start: 4728, end: 5417 },  // Component 2: X=13.1, Z=22.8 (Right Front)
+    { partId: 'propeller_rl', start: 6042, end: 6731 },  // Component 6: X=-32.5, Z=-22.8 (Left Rear)
+    { partId: 'propeller_fl', start: 6732, end: 7421 },  // Component 7: X=-32.5, Z=22.8 (Left Front)
+    { partId: 'propeller_rr', start: 7422, end: 8111 },  // Component 8: X=13.1, Z=-22.8 (Right Rear)
+
+    // Battery (52 triangles) - center position
+    { partId: 'battery', start: 9252, end: 9303 }        // Component 9: X=3.5, Z=0.0 (Center)
 ];
 
 /**
