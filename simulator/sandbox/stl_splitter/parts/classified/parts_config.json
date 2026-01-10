@@ -3,13 +3,173 @@
   "source": "stampfly_v1.stl",
   "parts": [
     {
+      "name": "motor_fl",
+      "file": "motor_fl.stl",
+      "triangles": 208,
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 4520,
+          "end": 4727
+        }
+      ]
+    },
+    {
+      "name": "motor_rl",
+      "file": "motor_rl.stl",
+      "triangles": 208,
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 5418,
+          "end": 5625
+        }
+      ]
+    },
+    {
+      "name": "motor_fr",
+      "file": "motor_fr.stl",
+      "triangles": 208,
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 5626,
+          "end": 5833
+        }
+      ]
+    },
+    {
+      "name": "motor_rr",
+      "file": "motor_rr.stl",
+      "triangles": 208,
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 5834,
+          "end": 6041
+        }
+      ]
+    },
+    {
+      "name": "propeller_fl",
+      "file": "propeller_fl.stl",
+      "triangles": 690,
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7,
+      "ranges": [
+        {
+          "start": 4728,
+          "end": 5417
+        }
+      ]
+    },
+    {
+      "name": "propeller_rr",
+      "file": "propeller_rr.stl",
+      "triangles": 690,
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7,
+      "ranges": [
+        {
+          "start": 6042,
+          "end": 6731
+        }
+      ]
+    },
+    {
+      "name": "propeller_rl",
+      "file": "propeller_rl.stl",
+      "triangles": 690,
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7,
+      "ranges": [
+        {
+          "start": 6732,
+          "end": 7421
+        }
+      ]
+    },
+    {
+      "name": "propeller_fr",
+      "file": "propeller_fr.stl",
+      "triangles": 690,
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7,
+      "ranges": [
+        {
+          "start": 7422,
+          "end": 8111
+        }
+      ]
+    },
+    {
       "name": "battery",
       "file": "battery.stl",
       "triangles": 52,
       "color": [
-        0.6,
-        0.3,
-        0.1
+        0.1568627450980392,
+        0.06666666666666667,
+        0.00392156862745098
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 9252,
+          "end": 9303
+        }
+      ]
+    },
+    {
+      "name": "battery_adapter",
+      "file": "battery_adapter.stl",
+      "triangles": 436,
+      "color": [
+        0.2196078431372549,
+        0.21176470588235294,
+        0.2
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 9304,
+          "end": 9739
+        }
       ]
     },
     {
@@ -20,86 +180,75 @@
         0.9,
         0.9,
         0.9
+      ],
+      "opacity": 0.9,
+      "ranges": [
+        {
+          "start": 0,
+          "end": 4519
+        }
       ]
     },
     {
-      "name": "motor_fl",
-      "file": "motor_fl.stl",
-      "triangles": 208,
+      "name": "pcb",
+      "file": "pcb.stl",
+      "triangles": 1036,
       "color": [
-        0.4,
-        0.4,
-        0.4
+        0.10196078431372549,
+        0.09803921568627451,
+        0.09803921568627451
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 8112,
+          "end": 8290
+        },
+        {
+          "start": 8365,
+          "end": 8372
+        },
+        {
+          "start": 8375,
+          "end": 8376
+        },
+        {
+          "start": 8395,
+          "end": 8400
+        },
+        {
+          "start": 8411,
+          "end": 9251
+        }
       ]
     },
     {
-      "name": "motor_fr",
-      "file": "motor_fr.stl",
-      "triangles": 208,
+      "name": "m5stamps3",
+      "file": "m5stamps3.stl",
+      "triangles": 104,
       "color": [
+        1,
         0.4,
-        0.4,
-        0.4
-      ]
-    },
-    {
-      "name": "motor_rl",
-      "file": "motor_rl.stl",
-      "triangles": 208,
-      "color": [
-        0.4,
-        0.4,
-        0.4
-      ]
-    },
-    {
-      "name": "motor_rr",
-      "file": "motor_rr.stl",
-      "triangles": 208,
-      "color": [
-        0.4,
-        0.4,
-        0.4
-      ]
-    },
-    {
-      "name": "propeller_fl",
-      "file": "propeller_fl.stl",
-      "triangles": 690,
-      "color": [
-        0.2,
-        0.2,
-        0.2
-      ]
-    },
-    {
-      "name": "propeller_fr",
-      "file": "propeller_fr.stl",
-      "triangles": 690,
-      "color": [
-        0.2,
-        0.2,
-        0.2
-      ]
-    },
-    {
-      "name": "propeller_rl",
-      "file": "propeller_rl.stl",
-      "triangles": 690,
-      "color": [
-        0.2,
-        0.2,
-        0.2
-      ]
-    },
-    {
-      "name": "propeller_rr",
-      "file": "propeller_rr.stl",
-      "triangles": 690,
-      "color": [
-        0.2,
-        0.2,
-        0.2
+        0
+      ],
+      "opacity": 1,
+      "ranges": [
+        {
+          "start": 8291,
+          "end": 8364
+        },
+        {
+          "start": 8373,
+          "end": 8374
+        },
+        {
+          "start": 8377,
+          "end": 8394
+        },
+        {
+          "start": 8401,
+          "end": 8410
+        }
       ]
     }
   ]
