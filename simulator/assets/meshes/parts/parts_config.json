@@ -1,0 +1,106 @@
+{
+  "method": "manual_classification",
+  "source": "stampfly_v1.stl",
+  "parts": [
+    {
+      "name": "battery",
+      "file": "battery.stl",
+      "triangles": 52,
+      "color": [
+        0.6,
+        0.3,
+        0.1
+      ]
+    },
+    {
+      "name": "frame",
+      "file": "frame.stl",
+      "triangles": 4520,
+      "color": [
+        0.9,
+        0.9,
+        0.9
+      ]
+    },
+    {
+      "name": "motor_fl",
+      "file": "motor_fl.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "motor_fr",
+      "file": "motor_fr.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "motor_rl",
+      "file": "motor_rl.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "motor_rr",
+      "file": "motor_rr.stl",
+      "triangles": 208,
+      "color": [
+        0.4,
+        0.4,
+        0.4
+      ]
+    },
+    {
+      "name": "propeller_fl",
+      "file": "propeller_fl.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "propeller_fr",
+      "file": "propeller_fr.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "propeller_rl",
+      "file": "propeller_rl.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "propeller_rr",
+      "file": "propeller_rr.stl",
+      "triangles": 690,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ]
+}
