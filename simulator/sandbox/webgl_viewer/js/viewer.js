@@ -263,10 +263,6 @@ async function loadParts(source) {
                 const material = createMaterial(partConfig.color, partConfig.opacity);
                 const mesh = new THREE.Mesh(geometry, material);
 
-                // Apply coordinate transform (Y axis flip for NED)
-                mesh.rotation.x = 0;
-                mesh.scale.y = -1;  // Flip Y axis
-
                 scene.add(mesh);
 
                 parts[partConfig.name] = {
