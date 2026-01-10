@@ -406,6 +406,57 @@
             font-size: 0.85em;
             color: #4ade80;
         }
+        .propeller-layout {
+            display: grid;
+            gap: 8px;
+        }
+        .prop-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85em;
+        }
+        .prop-input-row label {
+            color: #888;
+            width: 15px;
+        }
+        .prop-input-row input {
+            width: 60px;
+            padding: 4px 6px;
+            font-size: 0.85em;
+        }
+        .prop-input-row select {
+            padding: 4px;
+            font-size: 0.8em;
+            background: #1e1e3f;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+        .prop-label {
+            width: 70px;
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+        .prop-label.m1 { color: #ef4444; }
+        .prop-label.m2 { color: #22c55e; }
+        .prop-label.m3 { color: #3b82f6; }
+        .prop-label.m4 { color: #f59e0b; }
+        .matrix-display {
+            background: #0a0a1a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            overflow-x: auto;
+        }
+        .matrix-display h4 {
+            color: #00d4ff;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+        }
+        .matrix-display .katex {
+            font-size: 0.9em;
+        }
         .math-panel {
             background: #16213e;
             border-radius: 10px;
@@ -885,6 +936,55 @@
                     </div>
                 </div>
 
+                <div class="calc-input-group">
+                    <h3>プロペラ配置 / Propeller Layout</h3>
+                    <div style="font-size: 0.75em; color: #888; margin-bottom: 10px;">
+                        重心を原点としたNED座標系 (X:前方, Y:右方) [mm]
+                    </div>
+                    <div class="propeller-layout">
+                        <div class="prop-input-row">
+                            <span class="prop-label m1">M1 (FR)</span>
+                            <label>X</label>
+                            <input type="number" id="prop-m1-x" value="23" step="0.1">
+                            <label>Y</label>
+                            <input type="number" id="prop-m1-y" value="23" step="0.1">
+                            <select id="prop-m1-dir"><option value="-1">CCW</option><option value="1">CW</option></select>
+                        </div>
+                        <div class="prop-input-row">
+                            <span class="prop-label m2">M2 (RR)</span>
+                            <label>X</label>
+                            <input type="number" id="prop-m2-x" value="-23" step="0.1">
+                            <label>Y</label>
+                            <input type="number" id="prop-m2-y" value="23" step="0.1">
+                            <select id="prop-m2-dir"><option value="1" selected>CW</option><option value="-1">CCW</option></select>
+                        </div>
+                        <div class="prop-input-row">
+                            <span class="prop-label m3">M3 (RL)</span>
+                            <label>X</label>
+                            <input type="number" id="prop-m3-x" value="-23" step="0.1">
+                            <label>Y</label>
+                            <input type="number" id="prop-m3-y" value="-23" step="0.1">
+                            <select id="prop-m3-dir"><option value="-1">CCW</option><option value="1">CW</option></select>
+                        </div>
+                        <div class="prop-input-row">
+                            <span class="prop-label m4">M4 (FL)</span>
+                            <label>X</label>
+                            <input type="number" id="prop-m4-x" value="23" step="0.1">
+                            <label>Y</label>
+                            <input type="number" id="prop-m4-y" value="-23" step="0.1">
+                            <select id="prop-m4-dir"><option value="1" selected>CW</option><option value="-1">CCW</option></select>
+                        </div>
+                    </div>
+                    <div class="calc-result-row" style="margin-top: 10px;">
+                        <span>モーメントアーム d (平均)</span>
+                        <span class="result-value" id="calc-moment-arm">-- mm</span>
+                    </div>
+                    <div class="calc-result-row">
+                        <span>トルク/推力比 κ = Cq/Ct</span>
+                        <span class="result-value" id="calc-kappa">-- ×10⁻³</span>
+                    </div>
+                </div>
+
                 <div class="calc-result-group">
                     <h3>中間計算 / Intermediate Calculations</h3>
                     <div class="calc-result-row">
@@ -1019,6 +1119,21 @@
                 <div class="math-equation">
                     <div class="math-symbolic" id="eq-thrust"></div>
                     <div class="math-numeric" id="eq-thrust-num"></div>
+                </div>
+            </div>
+
+            <div class="math-section">
+                <h3>制御アロケーション / Control Allocation</h3>
+                <div style="font-size: 0.8em; color: #888; margin-bottom: 10px;">
+                    [T, τ_φ, τ_θ, τ_ψ]ᵀ = B · [F₁, F₂, F₃, F₄]ᵀ
+                </div>
+                <div class="matrix-display">
+                    <h4>アロケーション行列 B / Allocation Matrix</h4>
+                    <div id="matrix-allocation"></div>
+                </div>
+                <div class="matrix-display">
+                    <h4>ミキシング行列 B⁻¹ / Mixing Matrix</h4>
+                    <div id="matrix-mixing"></div>
                 </div>
             </div>
         </div>
@@ -1849,6 +1964,29 @@
             const Ct = parseFloat(document.getElementById('calc-ct').value) * 1e-8;     // N/(rad/s)²
             const Cq = parseFloat(document.getElementById('calc-cq').value) * 1e-11;    // N·m/(rad/s)²
 
+            // Propeller positions (mm -> m)
+            const props = [
+                { x: parseFloat(document.getElementById('prop-m1-x').value) / 1000,
+                  y: parseFloat(document.getElementById('prop-m1-y').value) / 1000,
+                  dir: parseInt(document.getElementById('prop-m1-dir').value) },
+                { x: parseFloat(document.getElementById('prop-m2-x').value) / 1000,
+                  y: parseFloat(document.getElementById('prop-m2-y').value) / 1000,
+                  dir: parseInt(document.getElementById('prop-m2-dir').value) },
+                { x: parseFloat(document.getElementById('prop-m3-x').value) / 1000,
+                  y: parseFloat(document.getElementById('prop-m3-y').value) / 1000,
+                  dir: parseInt(document.getElementById('prop-m3-dir').value) },
+                { x: parseFloat(document.getElementById('prop-m4-x').value) / 1000,
+                  y: parseFloat(document.getElementById('prop-m4-y').value) / 1000,
+                  dir: parseInt(document.getElementById('prop-m4-dir').value) }
+            ];
+
+            // Calculate moment arm (average distance from center)
+            const distances = props.map(p => Math.sqrt(p.x * p.x + p.y * p.y));
+            const d_avg = distances.reduce((a, b) => a + b, 0) / 4;
+
+            // Torque/thrust ratio
+            const kappa = Cq / Ct;
+
             // Override time constant
             const tau_override = parseFloat(document.getElementById('calc-tau-override').value) / 1000; // s
 
@@ -1867,6 +2005,10 @@
             document.getElementById('calc-tau-calc').textContent = (tau_m_calc * 1000).toFixed(2) + ' ms';
             document.getElementById('calc-hover-omega').textContent = omega0.toFixed(0) + ' rad/s';
             document.getElementById('calc-hover-thrust').textContent = (T0 * 1000).toFixed(2) + ' mN';
+
+            // Display propeller layout results
+            document.getElementById('calc-moment-arm').textContent = (d_avg * 1000).toFixed(1) + ' mm';
+            document.getElementById('calc-kappa').textContent = (kappa * 1000).toFixed(3) + ' ×10⁻³';
 
             // ============ Final Transfer Function Parameters ============
 
@@ -1888,12 +2030,15 @@
             document.getElementById('calc-tau-final').textContent = (tau_m * 1000).toFixed(1) + ' ms';
             document.getElementById('calc-wm').textContent = omega_m.toFixed(1) + ' rad/s';
 
-            // Store calculated values for apply function
+            // Store calculated values for apply function and matrix rendering
             window.calcResults = {
                 Ixx: parseFloat(document.getElementById('calc-ixx').value),
                 Iyy: parseFloat(document.getElementById('calc-iyy').value),
                 Izz: parseFloat(document.getElementById('calc-izz').value),
-                tau_m: tau_m * 1000  // ms
+                tau_m: tau_m * 1000,  // ms
+                props: props,
+                kappa: kappa,
+                d_avg: d_avg
             };
         }
 
@@ -1994,6 +2139,111 @@
                     }
                 }
             }
+
+            // Render allocation and mixing matrices
+            renderAllocationMatrices();
+        }
+
+        // Calculate and render allocation/mixing matrices
+        function renderAllocationMatrices() {
+            if (typeof katex === 'undefined' || !window.calcResults) return;
+
+            const { props, kappa } = window.calcResults;
+            if (!props) return;
+
+            // Build allocation matrix B: [T, τ_φ, τ_θ, τ_ψ]ᵀ = B × [F1, F2, F3, F4]ᵀ
+            // Row 1: Thrust (all positive)
+            // Row 2: Roll moment (τ_φ = Σ yi × Fi)
+            // Row 3: Pitch moment (τ_θ = -Σ xi × Fi)
+            // Row 4: Yaw moment (τ_ψ = Σ σi × κ × Fi, σ=+1 for CCW, -1 for CW)
+            const B = [
+                [1, 1, 1, 1],
+                [props[0].y, props[1].y, props[2].y, props[3].y],
+                [-props[0].x, -props[1].x, -props[2].x, -props[3].x],
+                [-props[0].dir * kappa, -props[1].dir * kappa, -props[2].dir * kappa, -props[3].dir * kappa]
+            ];
+
+            // Calculate inverse (mixing matrix)
+            const Binv = invertMatrix4x4(B);
+
+            // Format matrix for KaTeX (convert to mm for display)
+            function formatVal(v, scale = 1) {
+                const val = v * scale;
+                if (Math.abs(val) < 0.0001) return '0';
+                return val.toFixed(3).replace(/\.?0+$/, '');
+            }
+
+            // Allocation matrix LaTeX (values in m for position, unitless for thrust)
+            const B_latex = `\\begin{bmatrix}
+                1 & 1 & 1 & 1 \\\\
+                ${formatVal(B[1][0]*1000)} & ${formatVal(B[1][1]*1000)} & ${formatVal(B[1][2]*1000)} & ${formatVal(B[1][3]*1000)} \\\\
+                ${formatVal(B[2][0]*1000)} & ${formatVal(B[2][1]*1000)} & ${formatVal(B[2][2]*1000)} & ${formatVal(B[2][3]*1000)} \\\\
+                ${formatVal(B[3][0]*1000)} & ${formatVal(B[3][1]*1000)} & ${formatVal(B[3][2]*1000)} & ${formatVal(B[3][3]*1000)}
+            \\end{bmatrix} \\times 10^{-3}`;
+
+            // Mixing matrix LaTeX
+            const Binv_latex = Binv ? `\\begin{bmatrix}
+                ${formatVal(Binv[0][0])} & ${formatVal(Binv[0][1])} & ${formatVal(Binv[0][2])} & ${formatVal(Binv[0][3])} \\\\
+                ${formatVal(Binv[1][0])} & ${formatVal(Binv[1][1])} & ${formatVal(Binv[1][2])} & ${formatVal(Binv[1][3])} \\\\
+                ${formatVal(Binv[2][0])} & ${formatVal(Binv[2][1])} & ${formatVal(Binv[2][2])} & ${formatVal(Binv[2][3])} \\\\
+                ${formatVal(Binv[3][0])} & ${formatVal(Binv[3][1])} & ${formatVal(Binv[3][2])} & ${formatVal(Binv[3][3])}
+            \\end{bmatrix}` : '\\text{(singular matrix)}';
+
+            try {
+                katex.render(B_latex, document.getElementById('matrix-allocation'), {
+                    displayMode: true, throwOnError: false
+                });
+                katex.render(Binv_latex, document.getElementById('matrix-mixing'), {
+                    displayMode: true, throwOnError: false
+                });
+            } catch (e) {
+                console.error('KaTeX matrix error', e);
+            }
+        }
+
+        // 4x4 matrix inversion
+        function invertMatrix4x4(m) {
+            const inv = [];
+            for (let i = 0; i < 4; i++) inv[i] = [0, 0, 0, 0];
+
+            // Calculate determinant and adjugate
+            const det =
+                m[0][0] * (m[1][1] * (m[2][2] * m[3][3] - m[2][3] * m[3][2]) -
+                           m[1][2] * (m[2][1] * m[3][3] - m[2][3] * m[3][1]) +
+                           m[1][3] * (m[2][1] * m[3][2] - m[2][2] * m[3][1])) -
+                m[0][1] * (m[1][0] * (m[2][2] * m[3][3] - m[2][3] * m[3][2]) -
+                           m[1][2] * (m[2][0] * m[3][3] - m[2][3] * m[3][0]) +
+                           m[1][3] * (m[2][0] * m[3][2] - m[2][2] * m[3][0])) +
+                m[0][2] * (m[1][0] * (m[2][1] * m[3][3] - m[2][3] * m[3][1]) -
+                           m[1][1] * (m[2][0] * m[3][3] - m[2][3] * m[3][0]) +
+                           m[1][3] * (m[2][0] * m[3][1] - m[2][1] * m[3][0])) -
+                m[0][3] * (m[1][0] * (m[2][1] * m[3][2] - m[2][2] * m[3][1]) -
+                           m[1][1] * (m[2][0] * m[3][2] - m[2][2] * m[3][0]) +
+                           m[1][2] * (m[2][0] * m[3][1] - m[2][1] * m[3][0]));
+
+            if (Math.abs(det) < 1e-12) return null;
+
+            // Cofactor matrix (transposed = adjugate)
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    const sub = [];
+                    for (let si = 0; si < 4; si++) {
+                        if (si === i) continue;
+                        const row = [];
+                        for (let sj = 0; sj < 4; sj++) {
+                            if (sj === j) continue;
+                            row.push(m[si][sj]);
+                        }
+                        sub.push(row);
+                    }
+                    const minor = sub[0][0] * (sub[1][1] * sub[2][2] - sub[1][2] * sub[2][1]) -
+                                  sub[0][1] * (sub[1][0] * sub[2][2] - sub[1][2] * sub[2][0]) +
+                                  sub[0][2] * (sub[1][0] * sub[2][1] - sub[1][1] * sub[2][0]);
+                    const sign = ((i + j) % 2 === 0) ? 1 : -1;
+                    inv[j][i] = sign * minor / det;
+                }
+            }
+            return inv;
         }
 
         // Reset calculation tab to default values (from stampfly-parameters.md)
@@ -2009,12 +2259,23 @@
                 'calc-kt': 6.12,           // ×10⁻⁴ V/(rad/s)
                 'calc-ct': 1.00,           // ×10⁻⁸ N/(rad/s)²
                 'calc-cq': 9.71,           // ×10⁻¹¹ N·m/(rad/s)²
-                'calc-tau-override': 20    // ms
+                'calc-tau-override': 20,   // ms
+                // Propeller positions (mm)
+                'prop-m1-x': 23, 'prop-m1-y': 23,
+                'prop-m2-x': -23, 'prop-m2-y': 23,
+                'prop-m3-x': -23, 'prop-m3-y': -23,
+                'prop-m4-x': 23, 'prop-m4-y': -23
             };
 
             for (const [id, value] of Object.entries(defaults)) {
                 document.getElementById(id).value = value;
             }
+
+            // Reset rotation directions
+            document.getElementById('prop-m1-dir').value = '-1';  // CCW
+            document.getElementById('prop-m2-dir').value = '1';   // CW
+            document.getElementById('prop-m3-dir').value = '-1';  // CCW
+            document.getElementById('prop-m4-dir').value = '1';   // CW
 
             updateCalcResults();
 
