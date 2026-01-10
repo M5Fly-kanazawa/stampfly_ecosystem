@@ -1,0 +1,85 @@
+{
+  "method": "manual",
+  "parts": [
+    {
+      "name": "frame",
+      "file": "frame.stl",
+      "triangles": 4520,
+      "color": [
+        0.9,
+        0.9,
+        0.8
+      ]
+    },
+    {
+      "name": "motor1",
+      "file": "motor1.stl",
+      "triangles": 210,
+      "color": [
+        0.8,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "propeller1",
+      "file": "propeller1.stl",
+      "triangles": 720,
+      "color": [
+        1.0,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "motor2",
+      "file": "motor2.stl",
+      "triangles": 210,
+      "color": [
+        0.8,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "motor3_4",
+      "file": "motor3_4.stl",
+      "triangles": 390,
+      "color": [
+        0.8,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "propeller2",
+      "file": "propeller2.stl",
+      "triangles": 2070,
+      "color": [
+        1.0,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "m5stamps3",
+      "file": "m5stamps3.stl",
+      "triangles": 291,
+      "color": [
+        0.9,
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "name": "other",
+      "file": "other.stl",
+      "triangles": 1329,
+      "color": [
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ]
+}

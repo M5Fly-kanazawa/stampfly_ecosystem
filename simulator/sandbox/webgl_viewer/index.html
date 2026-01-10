@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StampFly STL Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #viewer {
+            flex: 1;
+            position: relative;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #0f3460;
+        }
+
+        h1 {
+            font-size: 1.2em;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        h2 {
+            font-size: 1em;
+            color: #f59e0b;
+            margin: 20px 0 10px 0;
+        }
+
+        .part-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin: 4px 0;
+            background: #1a1a2e;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .part-item:hover {
+            background: #0f3460;
+        }
+
+        .part-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .part-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            margin-right: 10px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .part-name {
+            flex: 1;
+            font-size: 0.9em;
+        }
+
+        .part-triangles {
+            font-size: 0.75em;
+            color: #888;
+        }
+
+        .controls {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #0f3460;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+        }
+
+        .source-select {
+            margin-bottom: 15px;
+        }
+
+        .source-select label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .source-select select {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #00d4ff;
+        }
+
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #0f3460;
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        .info p {
+            margin: 5px 0;
+        }
+
+        #status {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            background: rgba(22, 33, 62, 0.9);
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewer">
+            <canvas id="canvas"></canvas>
+            <div id="loading">
+                <div class="spinner"></div>
+                <div>Loading STL files...</div>
+            </div>
+            <div id="status">Drag to rotate / Scroll to zoom</div>
+        </div>
+
+        <div id="sidebar">
+            <h1>StampFly STL Viewer</h1>
+
+            <div class="source-select">
+                <label>Data Source / データソース:</label>
+                <select id="source-selector">
+                    <option value="auto">Automatic Split (自動分割)</option>
+                    <option value="manual">Manual Split (手動分割)</option>
+                </select>
+            </div>
+
+            <h2>Parts / パーツ</h2>
+            <div id="parts-list">
+                <!-- Parts will be added dynamically -->
+            </div>
+
+            <div class="controls">
+                <button class="btn" id="btn-show-all">Show All / すべて表示</button>
+                <button class="btn btn-secondary" id="btn-hide-all">Hide All / すべて非表示</button>
+                <button class="btn btn-secondary" id="btn-reset-view">Reset View / 視点リセット</button>
+            </div>
+
+            <div class="info">
+                <p>Mouse: Rotate (drag), Zoom (scroll)</p>
+                <p>マウス: 回転（ドラッグ）, ズーム（スクロール）</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="js/viewer.js"></script>
+</body>
+</html>
