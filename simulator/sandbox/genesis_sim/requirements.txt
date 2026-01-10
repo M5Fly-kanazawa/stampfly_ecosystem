@@ -1,0 +1,6 @@
+# Genesis Physics Simulator Dependencies
+# Genesis物理シミュレータの依存関係
+
+genesis-world
+torch
+numpy
