@@ -2016,7 +2016,8 @@
             document.getElementById('calc-k-yaw').textContent = (K_yaw / 1000).toFixed(2) + ' ×10³ rad/(N·m·s)';
             const tauSource = useOverride ? '(手動)' : '(計算)';
             document.getElementById('calc-tau-final').textContent = (tau_m * 1000).toFixed(1) + ' ms ' + tauSource;
-            document.getElementById('calc-wm').textContent = omega_m.toFixed(1) + ' rad/s';
+            const fm = omega_m / (2 * Math.PI);
+            document.getElementById('calc-wm').textContent = omega_m.toFixed(1) + ' rad/s (' + fm.toFixed(1) + ' Hz)';
 
             // Store calculated values for apply function and matrix rendering
             window.calcResults = {
