@@ -2278,6 +2278,7 @@
             document.getElementById('prop-m4-dir').value = '1';   // CW
 
             updateCalcResults();
+            renderAllocationMatrices();
 
             // Visual feedback
             const btn = document.getElementById('reset-calc-btn');
@@ -2395,10 +2396,22 @@
                 'calc-mass', 'calc-ixx', 'calc-iyy', 'calc-izz', 'calc-arm',  // Vehicle
                 'calc-rm', 'calc-jmp', 'calc-kt',                              // Motor
                 'calc-ct', 'calc-cq',                                          // Propeller
-                'calc-tau-override'                                            // Time constant override
+                'calc-tau-override',                                           // Time constant override
+                'prop-m1-x', 'prop-m1-y', 'prop-m2-x', 'prop-m2-y',           // Propeller positions
+                'prop-m3-x', 'prop-m3-y', 'prop-m4-x', 'prop-m4-y'
             ].forEach(id => {
-                document.getElementById(id).addEventListener('input', updateCalcResults);
+                document.getElementById(id).addEventListener('input', updateCalcAndMatrices);
             });
+
+            // Propeller direction selects
+            ['prop-m1-dir', 'prop-m2-dir', 'prop-m3-dir', 'prop-m4-dir'].forEach(id => {
+                document.getElementById(id).addEventListener('change', updateCalcAndMatrices);
+            });
+
+            function updateCalcAndMatrices() {
+                updateCalcResults();
+                renderAllocationMatrices();
+            }
 
             // Apply calc button handler
             document.getElementById('apply-calc-btn').addEventListener('click', applyCalcToAxes);
