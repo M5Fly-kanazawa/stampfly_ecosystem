@@ -412,13 +412,25 @@ function applyPreview() {
 function updateMatrixDisplay() {
     const matrix = getTransformMatrix();
     const offset = getOffset();
+    const det = calculateDeterminant(matrix);
 
     const formatNum = (n) => (n >= 0 ? ' ' : '') + n.toString().padStart(1);
 
     let display = 'Transform Matrix:\n';
     display += `[${formatNum(matrix[0][0])} ${formatNum(matrix[0][1])} ${formatNum(matrix[0][2])} | ${offset.x.toFixed(1)}]\n`;
     display += `[${formatNum(matrix[1][0])} ${formatNum(matrix[1][1])} ${formatNum(matrix[1][2])} | ${offset.y.toFixed(1)}]\n`;
-    display += `[${formatNum(matrix[2][0])} ${formatNum(matrix[2][1])} ${formatNum(matrix[2][2])} | ${offset.z.toFixed(1)}]`;
+    display += `[${formatNum(matrix[2][0])} ${formatNum(matrix[2][1])} ${formatNum(matrix[2][2])} | ${offset.z.toFixed(1)}]\n\n`;
+
+    // Show determinant and winding info
+    // 行列式とワインディング情報を表示
+    display += `Determinant: ${det}\n`;
+    if (det < 0) {
+        display += '⚠ Negative det → Winding will be reversed on export\n';
+        display += '⚠ 負の行列式 → エクスポート時にワインディング反転';
+    } else {
+        display += '✓ Positive det → Winding preserved\n';
+        display += '✓ 正の行列式 → ワインディング維持';
+    }
 
     document.getElementById('matrix-display').textContent = display;
 }
@@ -479,10 +491,26 @@ function centerToOrigin() {
 }
 
 /**
+ * Calculate 3x3 matrix determinant
+ * 3x3行列の行列式を計算
+ *
+ * Negative determinant indicates axis flip which changes winding order
+ * 負の行列式は軸反転を示し、ワインディングオーダーが変わる
+ */
+function calculateDeterminant(matrix) {
+    const [[a, b, c], [d, e, f], [g, h, i]] = matrix;
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+}
+
+/**
  * Generate binary STL data from positions and normals
  * 位置と法線からバイナリSTLデータを生成
+ *
+ * @param {Float32Array} positions - Vertex positions (9 floats per triangle)
+ * @param {Float32Array} normals - Vertex normals (9 floats per triangle)
+ * @param {boolean} reverseWinding - If true, reverse vertex order to fix normals
  */
-function generateBinarySTL(positions, normals) {
+function generateBinarySTL(positions, normals, reverseWinding = false) {
     const triangleCount = positions.length / 9;
     const bufferSize = 84 + triangleCount * 50;  // Header(80) + count(4) + triangles(50 each)
     const buffer = new ArrayBuffer(bufferSize);
@@ -534,8 +562,12 @@ function generateBinarySTL(positions, normals) {
         view.setFloat32(offset, ny, true); offset += 4;
         view.setFloat32(offset, nz, true); offset += 4;
 
-        // Write vertices
-        for (let v = 0; v < 3; v++) {
+        // Write vertices (reverse order if reverseWinding is true)
+        // Reversing winding: swap v1 and v2 (v0, v2, v1 instead of v0, v1, v2)
+        // ワインディング反転: v1とv2を入れ替える
+        const vertexOrder = reverseWinding ? [0, 2, 1] : [0, 1, 2];
+        for (let vi = 0; vi < 3; vi++) {
+            const v = vertexOrder[vi];
             const vIdx = baseIdx + v * 3;
             view.setFloat32(offset, positions[vIdx], true); offset += 4;
             view.setFloat32(offset, positions[vIdx + 1], true); offset += 4;
@@ -577,6 +609,16 @@ async function exportAllParts() {
     const matrix = getTransformMatrix();
     const offset = getOffset();
 
+    // Check if matrix has negative determinant (axis flip)
+    // 行列式が負の場合（軸反転）、ワインディングオーダーを反転する必要がある
+    const det = calculateDeterminant(matrix);
+    const reverseWinding = det < 0;
+
+    if (reverseWinding) {
+        console.log(`Matrix determinant is ${det.toFixed(3)} (negative) - reversing vertex winding order`);
+        console.log(`行列式が${det.toFixed(3)}（負）のため、頂点のワインディングオーダーを反転します`);
+    }
+
     try {
         // First, download backup files if requested
         if (backupOriginal) {
@@ -609,8 +651,9 @@ async function exportAllParts() {
             const transformedPositions = transformPositions(original.positions, matrix, offset);
             const transformedNormals = transformNormals(original.normals, matrix);
 
-            // Generate transformed STL
-            const stlData = generateBinarySTL(transformedPositions, transformedNormals);
+            // Generate transformed STL (reverse winding if matrix has negative determinant)
+            // 変換済みSTLを生成（行列式が負の場合はワインディングを反転）
+            const stlData = generateBinarySTL(transformedPositions, transformedNormals, reverseWinding);
             downloadFile(stlData, partConfig.file, 'application/octet-stream');
 
             // Wait between downloads
@@ -621,7 +664,13 @@ async function exportAllParts() {
         const updatedConfig = JSON.stringify(partsConfig, null, 2);
         downloadFile(updatedConfig, 'parts_config.json', 'application/json');
 
-        alert('Export completed! エクスポート完了！\n\nCheck your Downloads folder.\nダウンロードフォルダを確認してください。');
+        let message = 'Export completed! エクスポート完了！\n\n';
+        if (reverseWinding) {
+            message += '⚠ Vertex winding was reversed to preserve correct normals.\n';
+            message += '⚠ 正しい法線を維持するため、頂点ワインディングを反転しました。\n\n';
+        }
+        message += 'Check your Downloads folder.\nダウンロードフォルダを確認してください。';
+        alert(message);
 
     } catch (error) {
         console.error('Export failed:', error);
