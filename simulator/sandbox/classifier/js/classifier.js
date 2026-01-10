@@ -531,6 +531,13 @@ function findNextUnclassifiedRange(fromIndex = 0) {
 }
 
 /**
+ * Delay helper for sequential downloads
+ */
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Export all classified parts as STL files
  */
 async function exportAllParts() {
@@ -548,7 +555,30 @@ async function exportAllParts() {
         partGroups[c.partId].push(c);
     }
 
-    // Export each part
+    // Create parts_config.json FIRST
+    const config = {
+        method: 'manual_classification',
+        source: 'stampfly_v1.stl',
+        parts: Object.entries(partGroups)
+            .map(([partId, ranges]) => {
+                const totalTris = ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0);
+                const partDef = PART_DEFINITIONS[partId];
+                return {
+                    name: partId,
+                    file: `${partId}.stl`,
+                    triangles: totalTris,
+                    color: partDef.color,
+                    opacity: partDef.opacity,
+                    ranges: ranges.map(r => ({ start: r.start, end: r.end }))
+                };
+            })
+    };
+
+    const configBlob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    downloadBlob(configBlob, 'parts_config.json', 'application/json');
+    await delay(300);  // Wait for download to start
+
+    // Export each part with delay
     let exportCount = 0;
     for (const [partId, ranges] of Object.entries(partGroups)) {
         const partDef = PART_DEFINITIONS[partId];
@@ -566,28 +596,9 @@ async function exportAllParts() {
             const stlContent = createSTLBinary(triangles, partDef.name);
             downloadBlob(stlContent, `${partId}.stl`, 'application/octet-stream');
             exportCount++;
+            await delay(200);  // Small delay between downloads
         }
     }
-
-    // Create parts_config.json
-    const config = {
-        method: 'manual_classification',
-        source: 'stampfly_v1.stl',
-        parts: Object.entries(partGroups)
-            .map(([partId, ranges]) => {
-                const totalTris = ranges.reduce((sum, r) => sum + (r.end - r.start + 1), 0);
-                return {
-                    name: partId,
-                    file: `${partId}.stl`,
-                    triangles: totalTris,
-                    color: PART_DEFINITIONS[partId].color,
-                    ranges: ranges.map(r => ({ start: r.start, end: r.end }))
-                };
-            })
-    };
-
-    const configBlob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-    downloadBlob(configBlob, 'parts_config.json', 'application/json');
 
     alert(`Exported ${exportCount} STL files and parts_config.json`);
 }
