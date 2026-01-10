@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-10T14:08:42.296Z",
+  "classifications": [
+    {
+      "id": 0,
+      "partId": "motor_fl",
+      "start": 4520,
+      "end": 4727
+    },
+    {
+      "id": 1,
+      "partId": "motor_rl",
+      "start": 5418,
+      "end": 5625
+    },
+    {
+      "id": 2,
+      "partId": "motor_fr",
+      "start": 5626,
+      "end": 5833
+    },
+    {
+      "id": 3,
+      "partId": "motor_rr",
+      "start": 5834,
+      "end": 6041
+    },
+    {
+      "id": 4,
+      "partId": "propeller_fl",
+      "start": 4728,
+      "end": 5417
+    },
+    {
+      "id": 5,
+      "partId": "propeller_rr",
+      "start": 6042,
+      "end": 6731
+    },
+    {
+      "id": 6,
+      "partId": "propeller_rl",
+      "start": 6732,
+      "end": 7421
+    },
+    {
+      "id": 7,
+      "partId": "propeller_fr",
+      "start": 7422,
+      "end": 8111
+    },
+    {
+      "id": 8,
+      "partId": "battery",
+      "start": 9252,
+      "end": 9303
+    },
+    {
+      "id": 10,
+      "partId": "battery_adapter",
+      "start": 9304,
+      "end": 9739
+    },
+    {
+      "id": 11,
+      "partId": "frame",
+      "start": 0,
+      "end": 4519
+    },
+    {
+      "id": 12,
+      "partId": "pcb",
+      "start": 8112,
+      "end": 8290
+    },
+    {
+      "id": 13,
+      "partId": "m5stamps3",
+      "start": 8291,
+      "end": 8364
+    },
+    {
+      "id": 14,
+      "partId": "pcb",
+      "start": 8365,
+      "end": 8372
+    },
+    {
+      "id": 15,
+      "partId": "m5stamps3",
+      "start": 8373,
+      "end": 8374
+    },
+    {
+      "id": 16,
+      "partId": "pcb",
+      "start": 8375,
+      "end": 8376
+    },
+    {
+      "id": 17,
+      "partId": "m5stamps3",
+      "start": 8377,
+      "end": 8394
+    },
+    {
+      "id": 18,
+      "partId": "pcb",
+      "start": 8395,
+      "end": 8400
+    },
+    {
+      "id": 19,
+      "partId": "m5stamps3",
+      "start": 8401,
+      "end": 8410
+    },
+    {
+      "id": 20,
+      "partId": "pcb",
+      "start": 8411,
+      "end": 9251
+    }
+  ],
+  "partDefinitions": {
+    "frame": {
+      "name": "Frame",
+      "color": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "opacity": 0.9
+    },
+    "m5stamps3": {
+      "name": "M5StampS3",
+      "color": [
+        1,
+        0.4,
+        0
+      ],
+      "opacity": 1
+    },
+    "pcb": {
+      "name": "PCB",
+      "color": [
+        0.10196078431372549,
+        0.09803921568627451,
+        0.09803921568627451
+      ],
+      "opacity": 1
+    },
+    "motor_fr": {
+      "name": "Motor FR",
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1
+    },
+    "motor_rr": {
+      "name": "Motor RR",
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1
+    },
+    "motor_rl": {
+      "name": "Motor RL",
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1
+    },
+    "motor_fl": {
+      "name": "Motor FL",
+      "color": [
+        0.7764705882352941,
+        0.8313725490196079,
+        0.8431372549019608
+      ],
+      "opacity": 1
+    },
+    "propeller_fr": {
+      "name": "Propeller FR",
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7
+    },
+    "propeller_rr": {
+      "name": "Propeller RR",
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7
+    },
+    "propeller_rl": {
+      "name": "Propeller RL",
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7
+    },
+    "propeller_fl": {
+      "name": "Propeller FL",
+      "color": [
+        1,
+        0,
+        0
+      ],
+      "opacity": 0.7
+    },
+    "battery": {
+      "name": "Battery",
+      "color": [
+        0.1568627450980392,
+        0.06666666666666667,
+        0.00392156862745098
+      ],
+      "opacity": 1
+    },
+    "battery_adapter": {
+      "name": "Battery Adapter",
+      "color": [
+        0.2196078431372549,
+        0.21176470588235294,
+        0.2
+      ],
+      "opacity": 1
+    }
+  },
+  "classificationIdCounter": 21
+}
