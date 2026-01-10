@@ -116,7 +116,87 @@ function webglToNED(webgl) {
 }
 ```
 
-## 4. 設計方針
+## 4. 回転の座標変換
+
+### 回転軸の対応
+
+| NED回転軸 | WebGL回転軸 | 備考 |
+|-----------|-------------|------|
+| X (Roll) | Z | 同じ向き |
+| Y (Pitch) | X | 同じ向き |
+| Z (Yaw) | -Y | **向き反転** |
+
+### なぜYawだけ符号反転？
+
+```
+NED:   +Yaw = 右旋回（上から見て時計回り）
+       Z軸が下向き、右手法則で時計回り
+
+WebGL: +Y回転 = 左旋回（上から見て反時計回り）
+       Y軸が上向き、右手法則で反時計回り
+
+→ 同じ「右旋回」を表すには符号を反転
+```
+
+### NED回転 → WebGL回転 変換
+
+```javascript
+// NED姿勢からWebGL回転への変換
+// Convert from NED attitude to WebGL rotation
+function nedRotationToWebGL(roll, pitch, yaw) {
+    return {
+        x: pitch,    // Pitch → WebGL X rotation
+        y: -yaw,     // Yaw → WebGL Y rotation (sign inverted)
+        z: roll      // Roll → WebGL Z rotation
+    };
+}
+```
+
+### Three.jsでの実装
+
+```javascript
+// 回転順序の設定（NED ZYX → WebGL YXZ）
+// Set rotation order (NED ZYX → WebGL YXZ)
+mesh.rotation.order = 'YXZ';
+
+// NED姿勢を適用
+// Apply NED attitude to mesh
+function applyNEDAttitude(mesh, roll, pitch, yaw) {
+    mesh.rotation.set(
+        pitch,    // X: Pitch
+        -yaw,     // Y: Yaw (inverted)
+        roll      // Z: Roll
+    );
+}
+```
+
+### 検証例
+
+| NED姿勢 | WebGL回転 | 見た目 |
+|---------|-----------|--------|
+| Roll = +30° | rotation.z = +30° | 右翼下げ |
+| Pitch = +30° | rotation.x = +30° | 機首上げ |
+| Yaw = +30° | rotation.y = -30° | 右旋回 |
+
+## 5. 回転の表現（NED座標系）
+
+### オイラー角
+
+| 角度 | 軸 | 正方向 | 説明 |
+|------|-----|--------|------|
+| Roll (φ) | X軸 | 右翼下げ | 横揺れ |
+| Pitch (θ) | Y軸 | 機首上げ | 縦揺れ |
+| Yaw (ψ) | Z軸 | 右旋回 | 偏揺れ |
+
+### 回転順序
+
+ZYX順（Yaw → Pitch → Roll）を使用します。
+
+```
+R = Rz(ψ) × Ry(θ) × Rx(φ)
+```
+
+## 6. 設計方針
 
 ### アセットとロジックの分離
 
@@ -145,25 +225,7 @@ function webglToNED(webgl) {
 | 計算はNEDで実行 | 航空工学の標準、制御理論との整合性 |
 | 変換は可視化レイヤで | 単一の変換ポイント、保守性向上 |
 
-## 5. 回転の表現
-
-### オイラー角（NED座標系）
-
-| 角度 | 軸 | 正方向 | 説明 |
-|------|-----|--------|------|
-| Roll (φ) | X軸 | 右翼下げ | 横揺れ |
-| Pitch (θ) | Y軸 | 機首上げ | 縦揺れ |
-| Yaw (ψ) | Z軸 | 右旋回 | 偏揺れ |
-
-### 回転順序
-
-ZYX順（Yaw → Pitch → Roll）を使用します。
-
-```
-R = Rz(ψ) × Ry(θ) × Rx(φ)
-```
-
-## 6. 関連ファイル
+## 7. 関連ファイル
 
 | ファイル | 説明 |
 |----------|------|
@@ -287,7 +349,84 @@ function webglToNED(webgl) {
 }
 ```
 
-## 4. Design Principles
+## 4. Rotation Coordinate Transformation
+
+### Rotation Axis Mapping
+
+| NED Rotation Axis | WebGL Rotation Axis | Note |
+|-------------------|---------------------|------|
+| X (Roll) | Z | Same direction |
+| Y (Pitch) | X | Same direction |
+| Z (Yaw) | -Y | **Direction inverted** |
+
+### Why is Yaw Sign Inverted?
+
+```
+NED:   +Yaw = Turn right (clockwise from above)
+       Z-axis points down, right-hand rule gives clockwise
+
+WebGL: +Y rotation = Turn left (counterclockwise from above)
+       Y-axis points up, right-hand rule gives counterclockwise
+
+→ To represent the same "turn right", sign must be inverted
+```
+
+### NED Rotation → WebGL Rotation Transformation
+
+```javascript
+// Convert from NED attitude to WebGL rotation
+function nedRotationToWebGL(roll, pitch, yaw) {
+    return {
+        x: pitch,    // Pitch → WebGL X rotation
+        y: -yaw,     // Yaw → WebGL Y rotation (sign inverted)
+        z: roll      // Roll → WebGL Z rotation
+    };
+}
+```
+
+### Three.js Implementation
+
+```javascript
+// Set rotation order (NED ZYX → WebGL YXZ)
+mesh.rotation.order = 'YXZ';
+
+// Apply NED attitude to mesh
+function applyNEDAttitude(mesh, roll, pitch, yaw) {
+    mesh.rotation.set(
+        pitch,    // X: Pitch
+        -yaw,     // Y: Yaw (inverted)
+        roll      // Z: Roll
+    );
+}
+```
+
+### Verification Examples
+
+| NED Attitude | WebGL Rotation | Appearance |
+|--------------|----------------|------------|
+| Roll = +30° | rotation.z = +30° | Right wing down |
+| Pitch = +30° | rotation.x = +30° | Nose up |
+| Yaw = +30° | rotation.y = -30° | Turn right |
+
+## 5. Rotation Representation (NED Coordinate System)
+
+### Euler Angles
+
+| Angle | Axis | Positive Direction | Description |
+|-------|------|-------------------|-------------|
+| Roll (φ) | X-axis | Right wing down | Bank angle |
+| Pitch (θ) | Y-axis | Nose up | Elevation angle |
+| Yaw (ψ) | Z-axis | Turn right | Heading angle |
+
+### Rotation Order
+
+ZYX order (Yaw → Pitch → Roll) is used.
+
+```
+R = Rz(ψ) × Ry(θ) × Rx(φ)
+```
+
+## 6. Design Principles
 
 ### Separation of Assets and Logic
 
@@ -316,25 +455,7 @@ function webglToNED(webgl) {
 | Compute in NED | Aerospace standard, consistency with control theory |
 | Transform in visualization layer | Single transformation point, improved maintainability |
 
-## 5. Rotation Representation
-
-### Euler Angles (NED Coordinate System)
-
-| Angle | Axis | Positive Direction | Description |
-|-------|------|-------------------|-------------|
-| Roll (φ) | X-axis | Right wing down | Bank angle |
-| Pitch (θ) | Y-axis | Nose up | Elevation angle |
-| Yaw (ψ) | Z-axis | Turn right | Heading angle |
-
-### Rotation Order
-
-ZYX order (Yaw → Pitch → Roll) is used.
-
-```
-R = Rz(ψ) × Ry(θ) × Rx(φ)
-```
-
-## 6. Related Files
+## 7. Related Files
 
 | File | Description |
 |------|-------------|
