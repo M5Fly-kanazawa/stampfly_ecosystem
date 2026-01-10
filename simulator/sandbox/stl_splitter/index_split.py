@@ -128,17 +128,18 @@ def copy_other_auto_parts(output_dir):
         auto_config = json.load(f)
 
     # Map auto parts to meaningful names
-    # Based on analysis: 690 triangles = propeller, 208 = motor, 52 = unknown small part
+    # Based on centroid analysis: X=Forward, Z>0=Left, Z<0=Right
+    # 690 triangles = propeller, 208 = motor, 52 = battery holder
     part_mapping = {
-        'part_01': {'name': 'motor_fr', 'color': [0.4, 0.4, 0.4]},  # 208 tri
-        'part_02': {'name': 'propeller_fr', 'color': [0.2, 0.2, 0.2]},  # 690 tri
-        'part_03': {'name': 'motor_rr', 'color': [0.4, 0.4, 0.4]},  # 208 tri
-        'part_04': {'name': 'motor_rl', 'color': [0.4, 0.4, 0.4]},  # 208 tri
-        'part_05': {'name': 'motor_fl', 'color': [0.4, 0.4, 0.4]},  # 208 tri
-        'part_06': {'name': 'propeller_rr', 'color': [0.2, 0.2, 0.2]},  # 690 tri
-        'part_07': {'name': 'propeller_rl', 'color': [0.2, 0.2, 0.2]},  # 690 tri
-        'part_08': {'name': 'propeller_fl', 'color': [0.2, 0.2, 0.2]},  # 690 tri
-        'part_09': {'name': 'battery_holder', 'color': [0.6, 0.3, 0.1]},  # 52 tri
+        'part_01': {'name': 'motor_fl', 'color': [0.4, 0.4, 0.4]},      # X=13.1, Z=22.8 (Front Left)
+        'part_02': {'name': 'propeller_fl', 'color': [0.2, 0.2, 0.2]},  # X=13.1, Z=22.8 (Front Left)
+        'part_03': {'name': 'motor_rl', 'color': [0.4, 0.4, 0.4]},      # X=-32.5, Z=22.8 (Rear Left)
+        'part_04': {'name': 'motor_fr', 'color': [0.4, 0.4, 0.4]},      # X=13.1, Z=-22.8 (Front Right)
+        'part_05': {'name': 'motor_rr', 'color': [0.4, 0.4, 0.4]},      # X=-32.5, Z=-22.8 (Rear Right)
+        'part_06': {'name': 'propeller_rr', 'color': [0.2, 0.2, 0.2]},  # X=-32.5, Z=-22.8 (Rear Right)
+        'part_07': {'name': 'propeller_rl', 'color': [0.2, 0.2, 0.2]},  # X=-32.5, Z=22.8 (Rear Left)
+        'part_08': {'name': 'propeller_fr', 'color': [0.2, 0.2, 0.2]},  # X=13.1, Z=-22.8 (Front Right)
+        'part_09': {'name': 'battery_holder', 'color': [0.6, 0.3, 0.1]},  # X=3.5, Z=0.0 (Center)
     }
 
     copied_parts = []

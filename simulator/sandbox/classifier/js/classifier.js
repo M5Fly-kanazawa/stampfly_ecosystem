@@ -39,21 +39,22 @@ const PART_DEFINITIONS = {
 // Pre-defined classifications based on connected component analysis
 // These are the CORRECT index ranges for each auto-detected part
 // Analyzed using scipy connected_components on shared vertices
+// Coordinate system: X=Forward, Z>0=Left, Z<0=Right
 const AUTO_CLASSIFICATIONS = [
     // Main body (Component 0): 6096 triangles, indices 0-4519 + scattered
     // NOT contiguous - needs manual classification into frame/m5stamps3/pcb
 
     // Motors (208 triangles each) - positions verified by centroid analysis
-    { partId: 'motor_fr', start: 4520, end: 4727 },      // Component 1: X=13.1, Z=22.8 (Right Front)
-    { partId: 'motor_fl', start: 5418, end: 5625 },      // Component 3: X=-32.5, Z=22.8 (Left Front)
-    { partId: 'motor_rr', start: 5626, end: 5833 },      // Component 4: X=13.1, Z=-22.8 (Right Rear)
-    { partId: 'motor_rl', start: 5834, end: 6041 },      // Component 5: X=-32.5, Z=-22.8 (Left Rear)
+    { partId: 'motor_fl', start: 4520, end: 4727 },      // Component 1: X=13.1, Z=22.8 (Front Left)
+    { partId: 'motor_rl', start: 5418, end: 5625 },      // Component 3: X=-32.5, Z=22.8 (Rear Left)
+    { partId: 'motor_fr', start: 5626, end: 5833 },      // Component 4: X=13.1, Z=-22.8 (Front Right)
+    { partId: 'motor_rr', start: 5834, end: 6041 },      // Component 5: X=-32.5, Z=-22.8 (Rear Right)
 
     // Propellers (690 triangles each) - positions verified by centroid analysis
-    { partId: 'propeller_fr', start: 4728, end: 5417 },  // Component 2: X=13.1, Z=22.8 (Right Front)
-    { partId: 'propeller_rl', start: 6042, end: 6731 },  // Component 6: X=-32.5, Z=-22.8 (Left Rear)
-    { partId: 'propeller_fl', start: 6732, end: 7421 },  // Component 7: X=-32.5, Z=22.8 (Left Front)
-    { partId: 'propeller_rr', start: 7422, end: 8111 },  // Component 8: X=13.1, Z=-22.8 (Right Rear)
+    { partId: 'propeller_fl', start: 4728, end: 5417 },  // Component 2: X=13.1, Z=22.8 (Front Left)
+    { partId: 'propeller_rr', start: 6042, end: 6731 },  // Component 6: X=-32.5, Z=-22.8 (Rear Right)
+    { partId: 'propeller_rl', start: 6732, end: 7421 },  // Component 7: X=-32.5, Z=22.8 (Rear Left)
+    { partId: 'propeller_fr', start: 7422, end: 8111 },  // Component 8: X=13.1, Z=-22.8 (Front Right)
 
     // Battery (52 triangles) - center position
     { partId: 'battery', start: 9252, end: 9303 }        // Component 9: X=3.5, Z=0.0 (Center)
