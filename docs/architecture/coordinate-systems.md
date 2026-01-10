@@ -197,6 +197,74 @@ def genesis_to_ned(genesis):
     }
 ```
 
+### WebGL（STL） → Genesis 変換
+
+STLファイル（WebGL座標）をGenesisシミュレーションに読み込む際の座標変換です。
+
+| Genesis | = | WebGL | 説明 |
+|---------|---|-------|------|
+| x | = | **-x** | 左 → 右（符号反転） |
+| y | = | +z | 前 → 前 |
+| z | = | +y | 上 → 上 |
+
+```python
+# WebGL（STL）座標からGenesis座標への変換
+# Convert from WebGL (STL) to Genesis coordinates
+def webgl_to_genesis(webgl):
+    return {
+        'x': -webgl['x'],   # Left → Right (sign inverted)
+        'y':  webgl['z'],   # Forward → Forward
+        'z':  webgl['y']    # Up → Up
+    }
+```
+
+**変換行列:**
+```
+              | -1  0  0 |
+T_WebGL→Genesis = |  0  0  1 |    det(T) = +1 (右手系維持)
+              |  0  1  0 |
+```
+
+### Genesis → WebGL（STL） 変換
+
+Genesisシミュレーション結果をWebGLで可視化する際の座標変換です。
+
+| WebGL | = | Genesis | 説明 |
+|-------|---|---------|------|
+| x | = | **-x** | 右 → 左（符号反転） |
+| y | = | +z | 上 → 上 |
+| z | = | +y | 前 → 前 |
+
+```python
+# Genesis座標からWebGL座標への変換
+# Convert from Genesis to WebGL coordinates
+def genesis_to_webgl(genesis):
+    return {
+        'x': -genesis['x'],   # Right → Left (sign inverted)
+        'y':  genesis['z'],   # Up → Up
+        'z':  genesis['y']    # Forward → Forward
+    }
+```
+
+### GenesisでのSTL読み込み例
+
+```python
+import genesis as gs
+
+# STLファイルを読み込む際、Genesisが自動的に座標を解釈
+# ただし、軸の対応を明示的に変換する場合：
+mesh = scene.add_entity(
+    gs.morphs.Mesh(
+        file='frame.stl',
+        scale=0.001,  # mm → m
+        # 必要に応じて回転でWebGL→Genesis座標変換
+        # euler=(90, 0, 0) などで調整
+    ),
+)
+```
+
+**注意:** Genesisは多くのSTL形式を自動認識しますが、軸の向きが期待と異なる場合は`euler`パラメータで回転調整が必要です。
+
 ## 4. 回転の座標変換
 
 ### 回転軸の対応
@@ -521,6 +589,72 @@ def genesis_to_ned(genesis):
         'z': -genesis['z']    # Up → Down (sign inverted)
     }
 ```
+
+### WebGL (STL) → Genesis Transformation
+
+Coordinate transformation for loading STL files (WebGL coordinates) into Genesis simulation.
+
+| Genesis | = | WebGL | Description |
+|---------|---|-------|-------------|
+| x | = | **-x** | Left → Right (sign inverted) |
+| y | = | +z | Forward → Forward |
+| z | = | +y | Up → Up |
+
+```python
+# Convert from WebGL (STL) to Genesis coordinates
+def webgl_to_genesis(webgl):
+    return {
+        'x': -webgl['x'],   # Left → Right (sign inverted)
+        'y':  webgl['z'],   # Forward → Forward
+        'z':  webgl['y']    # Up → Up
+    }
+```
+
+**Transformation Matrix:**
+```
+              | -1  0  0 |
+T_WebGL→Genesis = |  0  0  1 |    det(T) = +1 (preserves handedness)
+              |  0  1  0 |
+```
+
+### Genesis → WebGL (STL) Transformation
+
+Coordinate transformation for visualizing Genesis simulation results in WebGL.
+
+| WebGL | = | Genesis | Description |
+|-------|---|---------|-------------|
+| x | = | **-x** | Right → Left (sign inverted) |
+| y | = | +z | Up → Up |
+| z | = | +y | Forward → Forward |
+
+```python
+# Convert from Genesis to WebGL coordinates
+def genesis_to_webgl(genesis):
+    return {
+        'x': -genesis['x'],   # Right → Left (sign inverted)
+        'y':  genesis['z'],   # Up → Up
+        'z':  genesis['y']    # Forward → Forward
+    }
+```
+
+### Loading STL in Genesis
+
+```python
+import genesis as gs
+
+# When loading STL files, Genesis automatically interprets coordinates
+# However, to explicitly transform axes:
+mesh = scene.add_entity(
+    gs.morphs.Mesh(
+        file='frame.stl',
+        scale=0.001,  # mm → m
+        # Adjust with rotation for WebGL→Genesis coordinate transform if needed
+        # euler=(90, 0, 0) etc.
+    ),
+)
+```
+
+**Note:** Genesis auto-recognizes many STL formats, but if axis orientation differs from expectation, use the `euler` parameter for rotation adjustment.
 
 ## 4. Rotation Coordinate Transformation
 
