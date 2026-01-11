@@ -101,13 +101,13 @@ class ControlAllocator:
 
         # Allocation matrix B: u = B @ T
         # Row 0: Total thrust (sum of all thrusts)
-        # Row 1: Roll torque (Y-axis moment arms)
-        # Row 2: Pitch torque (negative X-axis moment arms)
+        # Row 1: Roll torque = -y × T (moment around X-axis from thrust at y position)
+        # Row 2: Pitch torque = +x × T (moment around Y-axis from thrust at x position)
         # Row 3: Yaw torque (reaction torques)
         self.B = np.array([
             [1.0, 1.0, 1.0, 1.0],
-            [c.motor_y[0], c.motor_y[1], c.motor_y[2], c.motor_y[3]],
-            [-c.motor_x[0], -c.motor_x[1], -c.motor_x[2], -c.motor_x[3]],
+            [-c.motor_y[0], -c.motor_y[1], -c.motor_y[2], -c.motor_y[3]],
+            [c.motor_x[0], c.motor_x[1], c.motor_x[2], c.motor_x[3]],
             [-c.motor_dir[0] * c.kappa,
              -c.motor_dir[1] * c.kappa,
              -c.motor_dir[2] * c.kappa,
