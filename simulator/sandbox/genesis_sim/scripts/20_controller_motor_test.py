@@ -92,9 +92,9 @@ def main():
     # 制御設定（物理単位）
     DEADZONE = 0.05
     MAX_THRUST_DELTA = 0.2      # 最大推力変化 (N) ±0.2N
-    MAX_ROLL_TORQUE = 2e-3      # 最大ロールトルク (Nm) ±2mNm
-    MAX_PITCH_TORQUE = 2e-3     # 最大ピッチトルク (Nm) ±2mNm
-    MAX_YAW_TORQUE = 0.5e-3     # 最大ヨートルク (Nm) ±0.5mNm
+    MAX_ROLL_TORQUE = 0.2e-3    # 最大ロールトルク (Nm) ±0.2mNm
+    MAX_PITCH_TORQUE = 0.2e-3   # 最大ピッチトルク (Nm) ±0.2mNm
+    MAX_YAW_TORQUE = 0.05e-3    # 最大ヨートルク (Nm) ±0.05mNm
 
     print(f"\nPhysical Parameters:")
     print(f"  Mass: {MASS*1000:.0f}g")
