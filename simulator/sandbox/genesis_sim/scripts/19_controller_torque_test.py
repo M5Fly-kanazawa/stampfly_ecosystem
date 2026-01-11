@@ -63,8 +63,9 @@ def main():
     RENDER_FPS = 60
     RENDER_DT = 1 / RENDER_FPS
 
-    # トルク設定
-    MAX_TORQUE = 2e-4  # 最大トルク (Nm)
+    # 制御設定
+    MAX_TORQUE = 5e-5  # 最大トルク (Nm) - 小さめに設定
+    MAX_THRUST = 0.5   # 最大推力 (N) - ホバー推力 ≈ 0.034kg × 9.81 ≈ 0.33N
     DEADZONE = 0.1     # スティックのデッドゾーン
 
     # pygame初期化（コントローラ用）
@@ -88,8 +89,8 @@ def main():
     print("\n[2] Initializing Genesis...")
     gs.init(backend=gs.cpu)
 
-    # シーン作成（無重力）
-    print("\n[3] Creating scene (zero gravity)...")
+    # シーン作成（重力あり）
+    print("\n[3] Creating scene (with gravity)...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
@@ -99,7 +100,7 @@ def main():
             max_FPS=RENDER_FPS,
         ),
         sim_options=gs.options.SimOptions(
-            gravity=(0, 0, 0),
+            gravity=(0, 0, -9.81),  # Genesis Z-up: 重力は-Z方向
             dt=PHYSICS_DT,
         ),
     )
@@ -153,14 +154,16 @@ def main():
     print("\n" + "=" * 60)
     print("Controls (StampFly Controller USB HID)")
     print("=" * 60)
-    print("  Roll stick  (Axis 1): Roll  (NED X軸/前方軸)")
-    print("  Pitch stick (Axis 2): Pitch (NED Y軸/右方軸)")
-    print("  Yaw stick   (Axis 3): Yaw   (NED Z軸/下方軸)")
+    print("  Throttle stick (Axis 0): Thrust (上向き推力)")
+    print("  Roll stick     (Axis 1): Roll   (NED X軸/前方軸)")
+    print("  Pitch stick    (Axis 2): Pitch  (NED Y軸/右方軸)")
+    print("  Yaw stick      (Axis 3): Yaw    (NED Z軸/下方軸)")
     print("  Mode button (Button 2): Reset")
     print("  Option button (Button 3): Exit")
     print()
     print("  Coordinate: NED (X=Forward, Y=Right, Z=Down)")
     print(f"  Max torque: {MAX_TORQUE} Nm")
+    print(f"  Max thrust: {MAX_THRUST} N (hover ≈ 0.33N)")
     print(f"  Deadzone: {DEADZONE}")
     print("=" * 60)
 
@@ -197,13 +200,20 @@ def main():
                         raise KeyboardInterrupt
 
             # コントローラ入力取得 (USB HID axis mapping)
-            # Axis 0: Throttle - 未使用
+            # Axis 0: Throttle (スロットル軸) - 推力制御
             # Axis 1: Roll/Aileron (ロール軸)
             # Axis 2: Pitch/Elevator (ピッチ軸)
             # Axis 3: Yaw/Rudder (ヨー軸)
+            throttle_raw = joystick.get_axis(0)  # -1.0 ~ +1.0
             roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)   # ロール軸
             pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # ピッチ軸
             yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # ヨー軸
+
+            # スロットル: -1.0~+1.0 → 0.0~1.0 に正規化
+            # スティック下 = -1.0 → 0.0 (推力なし)
+            # スティック上 = +1.0 → 1.0 (最大推力)
+            throttle_normalized = (throttle_raw + 1.0) / 2.0
+            thrust_force = throttle_normalized * MAX_THRUST  # 上向き推力 (N)
 
             # NED座標系でのトルク計算
             # Roll: NED X軸(前方)周り, +で右翼下げ
@@ -222,11 +232,19 @@ def main():
 
             # 物理ステップ
             while sim_time <= real_time:
-                # NED → Genesis 座標変換してトルク適用
-                # NED Roll  (X/前方軸) → Genesis DOF 4 (ry/前方軸)
-                # NED Pitch (Y/右方軸) → Genesis DOF 3 (rx/右方軸)
-                # NED Yaw   (Z/下方軸) → Genesis DOF 5 (rz/上方軸) 符号反転
+                # NED → Genesis 座標変換して力・トルク適用
+                #
+                # 推力 (世界座標系):
+                #   上向き推力 → Genesis +Z
+                #
+                # トルク (NED → Genesis):
+                #   NED Roll  (X/前方軸) → Genesis DOF 4 (ry/前方軸)
+                #   NED Pitch (Y/右方軸) → Genesis DOF 3 (rx/右方軸)
+                #   NED Yaw   (Z/下方軸) → Genesis DOF 5 (rz/上方軸) 符号反転
                 force = np.zeros(drone.n_dofs)
+                # 並進力 (DOF 0,1,2 = Genesis x,y,z)
+                force[2] = thrust_force       # 上向き推力 → Genesis +Z
+                # 回転トルク (DOF 3,4,5 = Genesis rx,ry,rz)
                 force[3] = ned_torque_pitch   # NED Pitch → Genesis rx
                 force[4] = ned_torque_roll    # NED Roll  → Genesis ry
                 force[5] = -ned_torque_yaw    # NED Yaw   → Genesis rz (符号反転)
@@ -275,10 +293,15 @@ def main():
                 ned_q = float(genesis_ang_vel[0])  # Genesis ωx → NED q
                 ned_r = -float(genesis_ang_vel[2]) # Genesis ωz → NED r (符号反転)
 
+                # 位置取得 (Genesis → NED)
+                pos = drone.get_pos()
+                ned_z = -float(pos[2])  # Genesis Z(上) → NED Z(下)
+
                 print(f"  t={sim_time:.0f}s | "
+                      f"thr={throttle_normalized:.2f} | "
                       f"stick=({roll_input:+.2f},{pitch_input:+.2f},{yaw_input:+.2f}) | "
-                      f"NED angle=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})deg | "
-                      f"NED ω=({ned_p:+.1f},{ned_q:+.1f},{ned_r:+.1f})rad/s")
+                      f"alt={-ned_z:.2f}m | "
+                      f"angle=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})deg")
 
     except KeyboardInterrupt:
         pass
