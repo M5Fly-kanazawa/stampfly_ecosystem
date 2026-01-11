@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-17_realtime_torque_test.py - StampFly トルク応答テスト（リアルタイム版）
-StampFly torque response test in zero gravity (realtime)
+17_realtime_torque_test.py - StampFly トルク応答テスト（正しいリアルタイム版）
+StampFly torque response test in zero gravity (correct realtime implementation)
 
 リアルタイム設計:
-  - dt = 1/60秒 (ビューアFPSに合わせる)
-  - substeps = 4 (内部で4回物理計算 → 実効240Hz相当の精度)
-  - ビューア: 60 FPS (vsync)
-  - scene.step() 1回 = 実時間 ~16.7ms = シミュレーション時間 1/60s
-  → リアルタイム一致
+  - dt = 1/240秒 (物理刻み幅、望む精度で設定)
+  - 描画FPS = 60 (ビューア設定)
+  - 物理計算: scene.step(update_visualizer=False, refresh_visualizer=False)
+  - レンダリング: scene.visualizer.update() (物理を進めない)
+  - 同期: 実時間に対してシミュレーション時間を追従
+
+原理:
+  - シミュレーション時間 = step数 × dt
+  - 実時間より遅れていたら物理ステップを実行
+  - 実時間より先行していたら待機
+  - レンダリング時刻に達したら描画
 
 DOF構成 (fixed=False URDF):
   - DOF 0, 1, 2: 並進 (x, y, z)
@@ -36,37 +42,34 @@ def main():
         print(f"ERROR: URDF not found: {urdf_file}")
         return
 
-    # リアルタイム設定
-    VIEWER_FPS = 60            # ビューアFPS (vsync)
-    DT = 1 / VIEWER_FPS        # シミュレーション時間刻み = ビューアフレーム時間
-    SUBSTEPS = 4               # 内部サブステップ数 (実効240Hz)
-    PHYSICS_DT = DT / SUBSTEPS # 実効物理刻み幅
+    # タイミング設定
+    PHYSICS_HZ = 240           # 物理シミュレーション周波数
+    PHYSICS_DT = 1 / PHYSICS_HZ  # 物理時間刻み
+    RENDER_FPS = 60            # 描画FPS
+    RENDER_DT = 1 / RENDER_FPS  # 描画間隔
 
     print(f"\nRealtime Configuration:")
-    print(f"  dt: {DT*1000:.2f} ms (= 1/{VIEWER_FPS} s)")
-    print(f"  substeps: {SUBSTEPS}")
-    print(f"  Effective physics: {1/PHYSICS_DT:.0f} Hz (dt_eff = {PHYSICS_DT*1000:.2f} ms)")
-    print(f"  Viewer: {VIEWER_FPS} FPS")
-    print(f"  => 1 step = 1 frame = realtime")
+    print(f"  Physics: {PHYSICS_HZ} Hz (dt = {PHYSICS_DT*1000:.2f} ms)")
+    print(f"  Render: {RENDER_FPS} FPS (interval = {RENDER_DT*1000:.1f} ms)")
+    print(f"  Sync method: realtime wall-clock")
 
     # Genesis初期化
     print("\n[1] Initializing Genesis...")
     gs.init(backend=gs.cpu)
 
-    # シーン作成（無重力、リアルタイム設定）
-    print("\n[2] Creating scene (zero gravity, realtime)...")
+    # シーン作成（無重力）
+    print("\n[2] Creating scene (zero gravity)...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
             camera_pos=(0.4, 0.4, 0.3),
             camera_lookat=(0, 0, 0.15),
             camera_fov=45,
-            max_FPS=VIEWER_FPS,
+            max_FPS=RENDER_FPS,
         ),
         sim_options=gs.options.SimOptions(
             gravity=(0, 0, 0),
-            dt=DT,
-            substeps=SUBSTEPS,
+            dt=PHYSICS_DT,
         ),
     )
 
@@ -143,52 +146,73 @@ def main():
     print("  Controls: Q/ESC=Exit, Mouse=Rotate, Scroll=Zoom")
     print("=" * 60)
 
-    # シミュレーション実行
+    # シミュレーション実行（正しいリアルタイムループ）
     print("\n[7] Running simulation (REALTIME)...")
 
-    sim_step = 0
+    physics_steps = 0
     phase_idx = 0
     phase_start_step = 0
-    real_start_time = time.perf_counter()
-    last_print_step = -VIEWER_FPS  # 1秒ごとに表示
+    next_render_time = 0
+    last_print_time = -1  # 1秒ごとに表示
+    start_time = time.perf_counter()
 
     try:
         while phase_idx < len(phases) and scene.viewer.is_alive():
+            real_time = time.perf_counter() - start_time
+            sim_time = physics_steps * PHYSICS_DT
+
             phase = phases[phase_idx]
-            sim_time = sim_step * DT
-            phase_sim_time = (sim_step - phase_start_step) * DT
+            phase_sim_time = (physics_steps - phase_start_step) * PHYSICS_DT
 
             # フェーズ切り替え
             if phase_sim_time >= phase["duration"]:
                 phase_idx += 1
-                phase_start_step = sim_step
+                phase_start_step = physics_steps
                 if phase_idx < len(phases):
                     print(f"\n>>> Phase {phase_idx+1}: {phases[phase_idx]['name']}")
                 continue
 
             # フェーズ開始
-            if sim_step == phase_start_step:
+            if physics_steps == phase_start_step:
                 print(f"\n>>> Phase {phase_idx+1}: {phase['name']}")
                 if phase.get("reset"):
                     scene.reset()
-                    sim_step = phase_start_step = 0
-                    real_start_time = time.perf_counter()
-                    last_print_step = -VIEWER_FPS
+                    physics_steps = phase_start_step = 0
+                    next_render_time = 0
+                    last_print_time = -1
+                    start_time = time.perf_counter()
+                    real_time = 0
+                    sim_time = 0
                     print("    (Reset)")
 
-            # 1ステップ実行（内部でsubsteps回の物理計算）
-            force = np.zeros(stampfly.n_dofs)
-            if phase["dof"] is not None:
-                force[phase["dof"]] = TORQUE
-            stampfly.control_dofs_force(force)
-            scene.step()
-            sim_step += 1
+            # シミュレーションが実時間より遅れている間は物理を進める
+            while sim_time <= real_time:
+                # トルク適用
+                force = np.zeros(stampfly.n_dofs)
+                if phase["dof"] is not None:
+                    force[phase["dof"]] = TORQUE
+                stampfly.control_dofs_force(force)
 
-            # シミュレーション時間1秒ごとに状態表示
-            if sim_step - last_print_step >= VIEWER_FPS:
-                last_print_step = sim_step
-                real_elapsed = time.perf_counter() - real_start_time
-                sim_elapsed = sim_step * DT
+                # 物理ステップ（レンダリングなし）
+                scene.step(update_visualizer=False, refresh_visualizer=False)
+                physics_steps += 1
+                sim_time = physics_steps * PHYSICS_DT
+
+            # レンダリング時刻に達したら描画（物理は進めない）
+            if real_time >= next_render_time:
+                scene.visualizer.update()
+                next_render_time += RENDER_DT
+
+            # シミュレーションが実時間より先に進んだら待機
+            sleep_time = sim_time - real_time
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+            # 1秒ごとに状態表示
+            current_second = int(sim_time)
+            if current_second > last_print_time:
+                last_print_time = current_second
+                real_elapsed = time.perf_counter() - start_time
 
                 quat = stampfly.get_quat()
                 dofs_vel = stampfly.get_dofs_velocity()
@@ -200,18 +224,20 @@ def main():
                 pitch = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
                 yaw = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
 
-                # リアルタイム比率を計算
-                ratio = sim_elapsed / real_elapsed if real_elapsed > 0 else 0
+                # リアルタイム比率
+                ratio = sim_time / real_elapsed if real_elapsed > 0 else 0
 
-                print(f"  t={sim_elapsed:.1f}s (real:{real_elapsed:.1f}s, ratio:{ratio:.2f}) | "
+                print(f"  t={sim_time:.1f}s (real:{real_elapsed:.1f}s, ratio:{ratio:.2f}) | "
                       f"euler=({np.degrees(roll):.0f}°,{np.degrees(pitch):.0f}°,{np.degrees(yaw):.0f}°) | "
                       f"ω=({float(ang_vel[0]):.1f},{float(ang_vel[1]):.1f},{float(ang_vel[2]):.1f}) rad/s")
 
         print("\n  All phases completed!")
         print("  Close viewer to exit.")
 
+        # 終了後もビューア維持
         while scene.viewer.is_alive():
-            scene.step()
+            scene.visualizer.update()
+            time.sleep(RENDER_DT)
 
     except KeyboardInterrupt:
         pass
