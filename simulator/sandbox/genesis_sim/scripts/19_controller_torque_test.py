@@ -4,9 +4,9 @@
 Controller-based torque control test for StampFly
 
 操作 (StampFly Controller USB HID):
-  - 右スティック X (Axis 1): Roll (X軸トルク)
-  - 右スティック Y (Axis 2): Pitch (Y軸トルク)
-  - 左スティック X (Axis 3): Yaw (Z軸トルク)
+  - 右スティック X (Axis 1): Roll  (NED X軸/前方軸 回りのトルク)
+  - 右スティック Y (Axis 2): Pitch (NED Y軸/右方軸 回りのトルク)
+  - 左スティック X (Axis 3): Yaw   (NED Z軸/下方軸 回りのトルク)
   - Modeボタン (Button 2, 右サイド): リセット
   - Optionボタン (Button 3, 左サイド): 終了
 
@@ -22,9 +22,18 @@ USB HID Button構成:
   - Button 2: Mode (右サイドボタン)
   - Button 3: Option (左サイドボタン)
 
-DOF構成 (stampfly_fixed.urdf):
-  - DOF 0, 1, 2: 並進 (x, y, z)
-  - DOF 3, 4, 5: 回転 (rx, ry, rz)
+座標系変換 (NED → Genesis):
+  NED座標系: X=前, Y=右, Z=下 (航空工学標準)
+  Genesis座標系: X=右, Y=前, Z=上
+
+  位置/力:    NED (x,y,z) → Genesis (y, x, -z)
+  トルク:     NED (τx,τy,τz) → Genesis DOF (4, 3, 5) with τz sign flip
+  オイラー角: NED (roll,pitch,yaw) → Genesis euler (ry, rx, -rz)
+  角速度:     NED (p,q,r) → Genesis (ωy, ωx, -ωz)
+
+Genesis DOF構成 (stampfly_fixed.urdf):
+  - DOF 0, 1, 2: 並進 (gx, gy, gz) - Genesis座標
+  - DOF 3, 4, 5: 回転 (rx, ry, rz) - Genesis座標
 """
 
 import genesis as gs
@@ -144,12 +153,13 @@ def main():
     print("\n" + "=" * 60)
     print("Controls (StampFly Controller USB HID)")
     print("=" * 60)
-    print("  Right Stick X (Axis 1): Roll  (X-axis torque)")
-    print("  Right Stick Y (Axis 2): Pitch (Y-axis torque)")
-    print("  Left Stick X  (Axis 3): Yaw   (Z-axis torque)")
+    print("  Right Stick X (Axis 1): Roll  (NED X軸/前方軸)")
+    print("  Right Stick Y (Axis 2): Pitch (NED Y軸/右方軸)")
+    print("  Left Stick X  (Axis 3): Yaw   (NED Z軸/下方軸)")
     print("  Mode button (Button 2): Reset")
     print("  Option button (Button 3): Exit")
     print()
+    print("  Coordinate: NED (X=Forward, Y=Right, Z=Down)")
     print(f"  Max torque: {MAX_TORQUE} Nm")
     print(f"  Deadzone: {DEADZONE}")
     print("=" * 60)
@@ -195,20 +205,27 @@ def main():
             pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # 右スティックY
             yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # 左スティックX
 
-            # トルク計算
-            torque_x = roll_input * MAX_TORQUE    # Roll (X軸トルク)
-            torque_y = -pitch_input * MAX_TORQUE  # Pitch (Y軸トルク, 反転)
-            torque_z = yaw_input * MAX_TORQUE     # Yaw (Z軸トルク)
+            # NED座標系でのトルク計算
+            # Roll: NED X軸(前方)周り, +で右翼下げ
+            # Pitch: NED Y軸(右方)周り, +で機首上げ
+            # Yaw: NED Z軸(下方)周り, +で右旋回
+            ned_torque_roll = roll_input * MAX_TORQUE
+            ned_torque_pitch = -pitch_input * MAX_TORQUE  # スティック上で機首上げ
+            ned_torque_yaw = yaw_input * MAX_TORQUE
 
             real_time = time.perf_counter() - start_time
             sim_time = physics_steps * PHYSICS_DT
 
             # 物理ステップ
             while sim_time <= real_time:
+                # NED → Genesis 座標変換してトルク適用
+                # NED Roll  (X/前方軸) → Genesis DOF 4 (ry/前方軸)
+                # NED Pitch (Y/右方軸) → Genesis DOF 3 (rx/右方軸)
+                # NED Yaw   (Z/下方軸) → Genesis DOF 5 (rz/上方軸) 符号反転
                 force = np.zeros(drone.n_dofs)
-                force[3] = torque_x  # Roll
-                force[4] = torque_y  # Pitch
-                force[5] = torque_z  # Yaw
+                force[3] = ned_torque_pitch   # NED Pitch → Genesis rx
+                force[4] = ned_torque_roll    # NED Roll  → Genesis ry
+                force[5] = -ned_torque_yaw    # NED Yaw   → Genesis rz (符号反転)
                 drone.control_dofs_force(force)
 
                 scene.step(update_visualizer=False, refresh_visualizer=False)
@@ -230,21 +247,34 @@ def main():
             if current_second > last_print_time:
                 last_print_time = current_second
 
-                # 姿勢取得
+                # Genesis座標系での姿勢・角速度取得
                 quat = drone.get_quat()
                 dofs_vel = drone.get_dofs_velocity()
-                ang_vel = dofs_vel[3:6]
+                genesis_ang_vel = dofs_vel[3:6]  # (ωx, ωy, ωz) in Genesis
 
-                # クォータニオン → オイラー角
-                w, x, y, z = [float(v) for v in quat]
-                roll = np.degrees(np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y)))
-                pitch = np.degrees(np.arcsin(np.clip(2*(w*y - z*x), -1, 1)))
-                yaw = np.degrees(np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)))
+                # Genesis クォータニオン → Genesis オイラー角
+                # Genesis uses WXYZ quaternion format
+                w, gx, gy, gz = [float(v) for v in quat]
+                # Genesis euler angles (rx, ry, rz)
+                genesis_rx = np.degrees(np.arctan2(2*(w*gx + gy*gz), 1 - 2*(gx*gx + gy*gy)))
+                genesis_ry = np.degrees(np.arcsin(np.clip(2*(w*gy - gz*gx), -1, 1)))
+                genesis_rz = np.degrees(np.arctan2(2*(w*gz + gx*gy), 1 - 2*(gy*gy + gz*gz)))
+
+                # Genesis → NED 変換
+                # オイラー角: Genesis (rx, ry, rz) → NED (roll=ry, pitch=rx, yaw=-rz)
+                ned_roll = genesis_ry
+                ned_pitch = genesis_rx
+                ned_yaw = -genesis_rz
+
+                # 角速度: Genesis (ωx, ωy, ωz) → NED (p=ωy, q=ωx, r=-ωz)
+                ned_p = float(genesis_ang_vel[1])  # Genesis ωy → NED p
+                ned_q = float(genesis_ang_vel[0])  # Genesis ωx → NED q
+                ned_r = -float(genesis_ang_vel[2]) # Genesis ωz → NED r (符号反転)
 
                 print(f"  t={sim_time:.0f}s | "
                       f"stick=({roll_input:+.2f},{pitch_input:+.2f},{yaw_input:+.2f}) | "
-                      f"angle=({roll:+.0f},{pitch:+.0f},{yaw:+.0f})deg | "
-                      f"omega=({float(ang_vel[0]):+.1f},{float(ang_vel[1]):+.1f},{float(ang_vel[2]):+.1f})")
+                      f"NED angle=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})deg | "
+                      f"NED ω=({ned_p:+.1f},{ned_q:+.1f},{ned_r:+.1f})rad/s")
 
     except KeyboardInterrupt:
         pass
