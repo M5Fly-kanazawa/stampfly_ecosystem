@@ -147,17 +147,18 @@ def main():
     print("=" * 60)
 
     # シミュレーション実行（正しいリアルタイムループ）
-    print("\n[7] Running simulation (REALTIME)...")
+    print("\n[7] Running simulation (REALTIME, infinite loop)...")
 
     physics_steps = 0
     phase_idx = 0
     phase_start_step = 0
     next_render_time = 0
     last_print_time = -1  # 1秒ごとに表示
+    loop_count = 0
     start_time = time.perf_counter()
 
     try:
-        while phase_idx < len(phases) and scene.viewer.is_alive():
+        while scene.viewer.is_alive():
             real_time = time.perf_counter() - start_time
             sim_time = physics_steps * PHYSICS_DT
 
@@ -168,8 +169,14 @@ def main():
             if phase_sim_time >= phase["duration"]:
                 phase_idx += 1
                 phase_start_step = physics_steps
-                if phase_idx < len(phases):
-                    print(f"\n>>> Phase {phase_idx+1}: {phases[phase_idx]['name']}")
+                # 全フェーズ完了したら最初に戻る
+                if phase_idx >= len(phases):
+                    loop_count += 1
+                    phase_idx = 0
+                    print(f"\n{'='*60}")
+                    print(f"Loop {loop_count + 1} starting...")
+                    print(f"{'='*60}")
+                print(f"\n>>> Phase {phase_idx+1}: {phases[phase_idx]['name']}")
                 continue
 
             # フェーズ開始
@@ -231,18 +238,10 @@ def main():
                       f"euler=({np.degrees(roll):.0f}°,{np.degrees(pitch):.0f}°,{np.degrees(yaw):.0f}°) | "
                       f"ω=({float(ang_vel[0]):.1f},{float(ang_vel[1]):.1f},{float(ang_vel[2]):.1f}) rad/s")
 
-        print("\n  All phases completed!")
-        print("  Close viewer to exit.")
-
-        # 終了後もビューア維持
-        while scene.viewer.is_alive():
-            scene.visualizer.update()
-            time.sleep(RENDER_DT)
-
     except KeyboardInterrupt:
         pass
 
-    print("\nSimulation ended.")
+    print(f"\nSimulation ended after {loop_count + 1} loops.")
 
 
 if __name__ == "__main__":
