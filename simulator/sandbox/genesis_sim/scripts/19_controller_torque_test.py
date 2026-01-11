@@ -204,10 +204,12 @@ def main():
             # Axis 1: Roll/Aileron (ロール軸)
             # Axis 2: Pitch/Elevator (ピッチ軸)
             # Axis 3: Yaw/Rudder (ヨー軸)
-            throttle_raw = joystick.get_axis(0)  # -1.0 ~ +1.0
-            roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)   # ロール軸
-            pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # ピッチ軸
-            yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # ヨー軸
+            # 注: ファームウェアはスロットルに不感帯を適用していないため、
+            #     シミュレータ側で適用する
+            throttle_raw = apply_deadzone(joystick.get_axis(0), DEADZONE)  # 不感帯適用
+            roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)    # ロール軸
+            pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)   # ピッチ軸
+            yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)     # ヨー軸
 
             # スロットル: 中立(0)より上で推力発生
             # スティック中立以下 = 0.0 (推力なし)
