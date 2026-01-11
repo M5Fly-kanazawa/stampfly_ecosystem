@@ -102,7 +102,7 @@ def main():
     RENDER_DT = 1 / RENDER_FPS
 
     # 制御設定
-    MAX_TORQUE = 5e-5  # 最大トルク (Nm) - 小さめに設定
+    MAX_TORQUE = 2e-4  # 最大トルク (Nm)
     MAX_THRUST = 1.0   # 最大推力 (N) - ホバー推力 ≈ 0.33N, 余裕を持たせる
     DEADZONE = 0.1     # スティックのデッドゾーン
 

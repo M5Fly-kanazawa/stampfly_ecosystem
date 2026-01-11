@@ -138,10 +138,11 @@
 
     <!-- Collision geometry (simple box approximation) -->
     <!-- Can be disabled at load time with collision=False -->
+    <!-- 足の底面をカバーするように下方にオフセット -->
     <collision name="body_collision">
-      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.08 0.08 0.03"/>  <!-- 80mm x 80mm x 30mm -->
+        <box size="0.08 0.08 0.035"/>  <!-- 80mm x 80mm x 35mm, bottom at z=-17.5mm -->
       </geometry>
     </collision>
 
