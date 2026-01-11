@@ -209,10 +209,13 @@ def main():
             pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # ピッチ軸
             yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # ヨー軸
 
-            # スロットル: -1.0~+1.0 → 0.0~1.0 に正規化
-            # スティック下 = -1.0 → 0.0 (推力なし)
-            # スティック上 = +1.0 → 1.0 (最大推力)
-            throttle_normalized = (throttle_raw + 1.0) / 2.0
+            # スロットル: 中立(0)より上で推力発生
+            # スティック中立以下 = 0.0 (推力なし)
+            # スティック上 = +1.0 → 最大推力
+            if throttle_raw > 0:
+                throttle_normalized = throttle_raw  # 0~1
+            else:
+                throttle_normalized = 0.0
             thrust_force = throttle_normalized * MAX_THRUST  # 上向き推力 (N)
 
             # NED座標系でのトルク計算
