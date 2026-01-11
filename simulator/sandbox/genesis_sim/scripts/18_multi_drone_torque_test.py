@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 """
-18_multi_drone_torque_test.py - 36機 StampFly 同時トルク応答テスト
-36 StampFly drones torque response test in zero gravity (6x6 grid)
+18_multi_drone_torque_test.py - 固定プロペラ版 StampFly 大規模同時テスト
+Fixed-propeller StampFly swarm torque response test in zero gravity
 
 構成:
-  - 6×6 グリッド配置（36機）
+  - N×N グリッド配置
   - 各機体に同じトルクを適用
   - リアルタイム同期
 
-制限事項:
-  - Genesis (Taichi) の snode 数制限により 100機は不可
-  - 49機 (7×7): ratio ≈ 0.89 (やや遅い)
-  - 36機 (6×6): ratio ≈ 1.00 (リアルタイム達成)
+固定プロペラ版の利点:
+  - 通常版: 5 links, 5 joints, 10 DOFs → snode 多い
+  - 固定版: 1 link, 0 joints, 6 DOFs → snode 削減
 
 グリッド設計:
   - 間隔: 0.15m (機体幅の約2倍)
-  - 総サイズ: 0.75m × 0.75m
   - 中心: 原点 (0, 0)
 
-DOF構成 (fixed=False URDF):
+DOF構成 (stampfly_fixed.urdf):
   - DOF 0, 1, 2: 並進 (x, y, z)
   - DOF 3, 4, 5: 回転 (rx, ry, rz)
-  - DOF 6-9: プロペラジョイント
 """
 
 import genesis as gs
@@ -32,7 +29,7 @@ import time
 
 def main():
     # グリッド設定（先に定義）
-    GRID_SIZE = 6              # 6×6 = 36機
+    GRID_SIZE = 8              # 8×8 = 64機
 
     print("=" * 60)
     print(f"Multi StampFly Drones Torque Test ({GRID_SIZE}x{GRID_SIZE} Grid, REALTIME)")
@@ -41,7 +38,7 @@ def main():
     # パス設定
     script_dir = Path(__file__).parent
     assets_dir = script_dir.parent / "assets" / "meshes" / "parts"
-    urdf_file = assets_dir / "stampfly.urdf"
+    urdf_file = assets_dir / "stampfly_fixed.urdf"  # 固定プロペラ版
 
     if not urdf_file.exists():
         print(f"ERROR: URDF not found: {urdf_file}")
@@ -51,9 +48,9 @@ def main():
     DRONE_HEIGHT = 0.15        # 浮遊高度 (m)
 
     # タイミング設定
-    PHYSICS_HZ = 240           # 物理シミュレーション周波数
+    PHYSICS_HZ = 100           # 物理シミュレーション周波数
     PHYSICS_DT = 1 / PHYSICS_HZ
-    RENDER_FPS = 60            # 描画FPS
+    RENDER_FPS = 30            # 描画FPS
     RENDER_DT = 1 / RENDER_FPS
 
     print(f"\nConfiguration:")
@@ -153,7 +150,7 @@ def main():
 
     # トルク設定
     TORQUE = 1e-4  # Nm
-    PHASE_DURATION = 5.0  # 各軸5秒
+    PHASE_DURATION = 4.0  # 各軸4秒
 
     phases = [
         {"name": "X-axis (Red)", "dof": 3, "duration": PHASE_DURATION, "reset": True},
