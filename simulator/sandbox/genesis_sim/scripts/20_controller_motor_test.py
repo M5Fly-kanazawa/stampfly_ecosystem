@@ -9,12 +9,18 @@ Controller-based motor model test for StampFly
   - RK4積分による角速度計算
 
 操作 (StampFly Controller USB HID):
-  - スロットル軸 (Axis 0): Duty cycle (0~100%)
+  - スロットル軸 (Axis 0): ホバリングDutyからの増減 (±調整)
   - ロール軸 (Axis 1): Roll制御
   - ピッチ軸 (Axis 2): Pitch制御
   - ヨー軸 (Axis 3): Yaw制御
   - Modeボタン (Button 2): リセット
   - Optionボタン (Button 3): 終了
+
+スロットル動作:
+  - リセット後はホバリングDuty (約63%) がデフォルト
+  - スティック中立: ホバリング維持
+  - スティック上: 上昇 (Duty増加)
+  - スティック下: 下降 (Duty減少)
 
 モータミキシング (X-quad):
   M1 (FR): throttle - roll + pitch + yaw  CCW
@@ -134,6 +140,7 @@ def main():
     # 制御設定
     DEADZONE = 0.05      # スティックのデッドゾーン
     MIX_SCALE = 0.3      # ミキシングスケール
+    THROTTLE_RANGE = 0.4 # スロットル調整範囲 (±40%)
 
     # ホバリング条件を計算
     hover = compute_hover_conditions()
@@ -239,14 +246,15 @@ def main():
     print("\n" + "=" * 60)
     print("Controls (StampFly Controller USB HID)")
     print("=" * 60)
-    print("  Throttle (Axis 0): Motor duty (0~100%)")
+    print("  Throttle (Axis 0): Hover ± adjustment")
     print("  Roll     (Axis 1): Roll control")
     print("  Pitch    (Axis 2): Pitch control")
     print("  Yaw      (Axis 3): Yaw control")
     print("  Mode button (Button 2): Reset")
     print("  Option button (Button 3): Exit")
     print()
-    print(f"  Hover duty: {HOVER_DUTY*100:.0f}%")
+    print(f"  Base duty: {HOVER_DUTY*100:.0f}% (hover)")
+    print(f"  Throttle range: ±{THROTTLE_RANGE*100:.0f}%")
     print(f"  Physics: {PHYSICS_HZ} Hz")
     print(f"  Deadzone: {DEADZONE}")
     print("=" * 60)
@@ -283,13 +291,17 @@ def main():
                         raise KeyboardInterrupt
 
             # コントローラ入力取得
-            throttle_raw = joystick.get_axis(0)
+            throttle_raw = apply_deadzone(joystick.get_axis(0), DEADZONE)
             roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)
             pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)
             yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)
 
-            # スロットル: -1~+1 → 0~1
-            throttle = (throttle_raw + 1.0) / 2.0
+            # スロットル: ホバリングDutyを基準に±調整
+            # スティック中立(0) → ホバリングDuty
+            # スティック上(+1) → ホバリングDuty + THROTTLE_RANGE
+            # スティック下(-1) → ホバリングDuty - THROTTLE_RANGE
+            throttle_adjust = throttle_raw * THROTTLE_RANGE
+            throttle = HOVER_DUTY + throttle_adjust
 
             # モータDuty計算
             duties = mix_motors(throttle, roll_input, pitch_input, yaw_input, MIX_SCALE)
@@ -358,7 +370,7 @@ def main():
                 total_thrust = motor_system.total_thrust * 1000  # mN
 
                 print(f"  t={sim_time:.0f}s | "
-                      f"thr={throttle*100:.0f}% | "
+                      f"thr={throttle*100:.0f}%({throttle_adjust*100:+.0f}) | "
                       f"T={total_thrust:.0f}mN | "
                       f"alt={alt:.2f}m | "
                       f"RPY=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})deg")
