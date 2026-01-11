@@ -166,16 +166,16 @@ def main():
 
     # ワールド設定
     BLOCK_SIZE = 0.5      # 1ブロック = 50cm
-    WORLD_SIZE = 10.0     # 10m四方
-    GRID_SIZE = int(WORLD_SIZE / BLOCK_SIZE)  # 20x20グリッド
+    WORLD_SIZE = 50.0     # 50m四方
+    GRID_SIZE = int(WORLD_SIZE / BLOCK_SIZE)  # 100x100グリッド
 
     # シーン作成
     print("\n[2] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(12.0, -12.0, 8.0),
-            camera_lookat=(0, 0, 1.0),
+            camera_pos=(60.0, -60.0, 40.0),
+            camera_lookat=(0, 0, 2.0),
             camera_fov=60,
             max_FPS=60,
         ),
@@ -207,10 +207,14 @@ def main():
     # 木を数本追加
     print("\n[5] Adding trees...")
     tree_positions = [
-        (-3.0, -3.0, 1.5),
-        (2.5, 3.5, 1.0),
-        (-1.5, 2.5, 1.25),
-        (3.0, -2.0, 1.0),
+        (-15.0, -15.0, 1.5),
+        (12.0, 18.0, 1.0),
+        (-8.0, 12.0, 1.25),
+        (15.0, -10.0, 1.0),
+        (-20.0, 5.0, 1.5),
+        (8.0, -18.0, 1.0),
+        (0.0, 20.0, 1.25),
+        (-5.0, -20.0, 1.0),
     ]
     for pos in tree_positions:
         add_simple_tree(scene, pos, BLOCK_SIZE)
@@ -219,8 +223,8 @@ def main():
     print("\n[6] Adding test sphere...")
     sphere = scene.add_entity(
         gs.morphs.Sphere(
-            pos=(0, 0, 5.0),
-            radius=0.2,
+            pos=(0, 0, 10.0),
+            radius=0.5,
             fixed=False,
         ),
         surface=gs.surfaces.Default(color=(1, 0.3, 0)),
