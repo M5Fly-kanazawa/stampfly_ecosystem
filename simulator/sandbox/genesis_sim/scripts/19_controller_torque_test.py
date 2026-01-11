@@ -65,7 +65,7 @@ def main():
 
     # 制御設定
     MAX_TORQUE = 5e-5  # 最大トルク (Nm) - 小さめに設定
-    MAX_THRUST = 0.5   # 最大推力 (N) - ホバー推力 ≈ 0.034kg × 9.81 ≈ 0.33N
+    MAX_THRUST = 1.0   # 最大推力 (N) - ホバー推力 ≈ 0.33N, 余裕を持たせる
     DEADZONE = 0.1     # スティックのデッドゾーン
 
     # pygame初期化（コントローラ用）
@@ -163,7 +163,7 @@ def main():
     print()
     print("  Coordinate: NED (X=Forward, Y=Right, Z=Down)")
     print(f"  Max torque: {MAX_TORQUE} Nm")
-    print(f"  Max thrust: {MAX_THRUST} N (hover ≈ 0.33N)")
+    print(f"  Max thrust: {MAX_THRUST} N (hover ≈ 0.33N = 33%)")
     print(f"  Deadzone: {DEADZONE}")
     print("=" * 60)
 
