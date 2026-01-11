@@ -55,11 +55,19 @@ def generate_terrain_heightmap(width, depth, scale=1.0):
     return height
 
 
-def add_voxel_terrain(scene, width=16, depth=16, max_height=5, block_size=0.2, offset=(0, 0, 0)):
+def add_voxel_terrain(scene, width=20, depth=20, max_height=5, block_size=0.5, offset=(0, 0, 0)):
     """
     Voxel地形をシーンに追加
+
+    Args:
+        width: X方向のブロック数
+        depth: Y方向のブロック数
+        max_height: 最大高さ（ブロック数）
+        block_size: 1ブロックの1辺の長さ (m)
+        offset: オフセット位置
     """
-    print(f"    Generating {width}x{depth} voxel terrain...")
+    print(f"    Generating {width}x{depth} voxel terrain (block size: {block_size}m)...")
+    print(f"    World size: {width * block_size}m x {depth * block_size}m")
 
     # ハイトマップ生成
     heightmap = generate_terrain_heightmap(width, depth, scale=max_height)
@@ -73,10 +81,10 @@ def add_voxel_terrain(scene, width=16, depth=16, max_height=5, block_size=0.2, o
 
             # 各列にブロックを積む
             for iy in range(h + 1):
-                # ブロック位置
-                x = ox + (ix - width / 2) * block_size
-                y = oy + (iz - depth / 2) * block_size
-                z = oz + iy * block_size
+                # ブロック位置（隙間なく敷き詰め）
+                x = ox + (ix - width / 2) * block_size + block_size / 2
+                y = oy + (iz - depth / 2) * block_size + block_size / 2
+                z = oz + iy * block_size + block_size / 2
 
                 # ブロックタイプ決定
                 if iy == h:
@@ -86,11 +94,11 @@ def add_voxel_terrain(scene, width=16, depth=16, max_height=5, block_size=0.2, o
                 else:
                     color = COLORS['stone']
 
-                # ブロック追加
+                # ブロック追加（隙間なし）
                 scene.add_entity(
                     gs.morphs.Box(
-                        size=(block_size * 0.98, block_size * 0.98, block_size * 0.98),
-                        pos=(x, y, z + block_size / 2),
+                        size=(block_size, block_size, block_size),
+                        pos=(x, y, z),
                         fixed=True,
                         collision=False,  # 衝突無効（描画のみ）
                     ),
@@ -102,17 +110,21 @@ def add_voxel_terrain(scene, width=16, depth=16, max_height=5, block_size=0.2, o
     return blocks_added
 
 
-def add_simple_tree(scene, pos, block_size=0.2):
+def add_simple_tree(scene, pos, block_size=0.5):
     """
     簡単な木を追加
+
+    Args:
+        pos: 木の根元位置 (x, y, z)
+        block_size: ブロックサイズ (m)
     """
     x, y, z = pos
 
-    # 幹（3ブロック）
-    for i in range(3):
+    # 幹（4ブロック）
+    for i in range(4):
         scene.add_entity(
             gs.morphs.Box(
-                size=(block_size * 0.6, block_size * 0.6, block_size),
+                size=(block_size * 0.5, block_size * 0.5, block_size),
                 pos=(x, y, z + i * block_size + block_size / 2),
                 fixed=True,
                 collision=False,
@@ -120,15 +132,16 @@ def add_simple_tree(scene, pos, block_size=0.2):
             surface=gs.surfaces.Default(color=COLORS['wood']),
         )
 
-    # 葉（簡易的な十字形）
+    # 葉（簡易的な十字形 + 上）
     leaf_positions = [
-        (0, 0, 3), (1, 0, 3), (-1, 0, 3), (0, 1, 3), (0, -1, 3),
-        (0, 0, 4),
+        (0, 0, 4), (1, 0, 4), (-1, 0, 4), (0, 1, 4), (0, -1, 4),
+        (0, 0, 5), (1, 0, 5), (-1, 0, 5), (0, 1, 5), (0, -1, 5),
+        (0, 0, 6),
     ]
     for dx, dy, dz in leaf_positions:
         scene.add_entity(
             gs.morphs.Box(
-                size=(block_size * 0.95, block_size * 0.95, block_size * 0.95),
+                size=(block_size, block_size, block_size),
                 pos=(x + dx * block_size, y + dy * block_size, z + dz * block_size + block_size / 2),
                 fixed=True,
                 collision=False,
@@ -151,13 +164,18 @@ def main():
     print("\n[1] Initializing Genesis...")
     gs.init(backend=gs.cpu)
 
+    # ワールド設定
+    BLOCK_SIZE = 0.5      # 1ブロック = 50cm
+    WORLD_SIZE = 10.0     # 10m四方
+    GRID_SIZE = int(WORLD_SIZE / BLOCK_SIZE)  # 20x20グリッド
+
     # シーン作成
     print("\n[2] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(4.0, -4.0, 3.0),
-            camera_lookat=(0, 0, 0.5),
+            camera_pos=(12.0, -12.0, 8.0),
+            camera_lookat=(0, 0, 1.0),
             camera_fov=60,
             max_FPS=60,
         ),
@@ -176,33 +194,33 @@ def main():
 
     # Voxel地形を追加
     print("\n[4] Creating voxel terrain...")
-    block_size = 0.15
+    print(f"    Block size: {BLOCK_SIZE}m, Grid: {GRID_SIZE}x{GRID_SIZE}")
     add_voxel_terrain(
         scene,
-        width=12,
-        depth=12,
+        width=GRID_SIZE,
+        depth=GRID_SIZE,
         max_height=4,
-        block_size=block_size,
+        block_size=BLOCK_SIZE,
         offset=(0, 0, 0)
     )
 
     # 木を数本追加
     print("\n[5] Adding trees...")
     tree_positions = [
-        (-0.6, -0.6, 0.6),
-        (0.5, 0.7, 0.45),
-        (-0.3, 0.5, 0.5),
+        (-3.0, -3.0, 1.5),
+        (2.5, 3.5, 1.0),
+        (-1.5, 2.5, 1.25),
+        (3.0, -2.0, 1.0),
     ]
     for pos in tree_positions:
-        # 高さを地形に合わせて調整
-        add_simple_tree(scene, pos, block_size)
+        add_simple_tree(scene, pos, BLOCK_SIZE)
 
     # テスト用の球体（ドローン代わり）
     print("\n[6] Adding test sphere...")
     sphere = scene.add_entity(
         gs.morphs.Sphere(
-            pos=(0, 0, 2.0),
-            radius=0.08,
+            pos=(0, 0, 5.0),
+            radius=0.2,
             fixed=False,
         ),
         surface=gs.surfaces.Default(color=(1, 0.3, 0)),
