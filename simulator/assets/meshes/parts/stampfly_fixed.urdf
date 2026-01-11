@@ -1,0 +1,156 @@
+<?xml version="1.0"?>
+<!--
+  stampfly_fixed.urdf - 固定プロペラ版 StampFly
+  Fixed propeller version for large swarm simulations
+
+  構造:
+    - 1 link (base_link with all visuals)
+    - 0 joints (propellers are fixed visuals)
+    - 6 DOFs (free root joint only)
+
+  通常版との違い:
+    - 通常版: 5 links, 5 joints, 10 DOFs
+    - 固定版: 1 link, 0 joints, 6 DOFs
+-->
+<robot name="stampfly_fixed">
+
+  <!-- Materials -->
+  <material name="motor_material">
+    <color rgba="0.7765 0.8314 0.8431 1"/>
+  </material>
+  <material name="propeller_material">
+    <color rgba="1.0000 0.0000 0.0000 0.7"/>
+  </material>
+  <material name="battery_material">
+    <color rgba="0.1569 0.0667 0.0039 1"/>
+  </material>
+  <material name="battery_adapter_material">
+    <color rgba="0.2196 0.2118 0.2000 1"/>
+  </material>
+  <material name="frame_material">
+    <color rgba="0.9000 0.9000 0.9000 0.9"/>
+  </material>
+  <material name="pcb_material">
+    <color rgba="0.1020 0.0980 0.0980 1"/>
+  </material>
+  <material name="m5stamps3_material">
+    <color rgba="1.0000 0.4000 0.0000 1"/>
+  </material>
+
+  <!-- Base Link (all components as fixed visuals) -->
+  <link name="base_link">
+    <!-- Motors -->
+    <visual name="motor_fl_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="motor_fl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_material"/>
+    </visual>
+    <visual name="motor_rl_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="motor_rl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_material"/>
+    </visual>
+    <visual name="motor_fr_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="motor_fr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_material"/>
+    </visual>
+    <visual name="motor_rr_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="motor_rr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="motor_material"/>
+    </visual>
+
+    <!-- Propellers (fixed) -->
+    <visual name="propeller_fl_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="propeller_fl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_material"/>
+    </visual>
+    <visual name="propeller_rr_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="propeller_rr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_material"/>
+    </visual>
+    <visual name="propeller_rl_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="propeller_rl.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_material"/>
+    </visual>
+    <visual name="propeller_fr_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="propeller_fr.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="propeller_material"/>
+    </visual>
+
+    <!-- Body components -->
+    <visual name="battery_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="battery.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="battery_material"/>
+    </visual>
+    <visual name="battery_adapter_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="battery_adapter.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="battery_adapter_material"/>
+    </visual>
+    <visual name="frame_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="frame.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="frame_material"/>
+    </visual>
+    <visual name="pcb_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="pcb.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="pcb_material"/>
+    </visual>
+    <visual name="m5stamps3_visual">
+      <origin xyz="0 0 0" rpy="-1.5708 3.14159 0"/>
+      <geometry>
+        <mesh filename="m5stamps3.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="m5stamps3_material"/>
+    </visual>
+
+    <!-- Collision geometry (simple box approximation) -->
+    <!-- Can be disabled at load time with collision=False -->
+    <collision name="body_collision">
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.08 0.08 0.03"/>  <!-- 80mm x 80mm x 30mm -->
+      </geometry>
+    </collision>
+
+    <!-- Inertial (total mass including propellers) -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.034"/>  <!-- 30g body + 4g propellers -->
+      <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>
+    </inertial>
+  </link>
+
+</robot>
