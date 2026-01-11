@@ -89,8 +89,8 @@ def main():
     print("\n[2] Initializing Genesis...")
     gs.init(backend=gs.cpu)
 
-    # シーン作成（無重力）
-    print("\n[3] Creating scene (zero gravity)...")
+    # シーン作成（重力あり）
+    print("\n[3] Creating scene (with gravity)...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
@@ -100,7 +100,7 @@ def main():
             max_FPS=RENDER_FPS,
         ),
         sim_options=gs.options.SimOptions(
-            gravity=(0, 0, 0),  # 無重力
+            gravity=(0, 0, -9.81),  # Genesis Z-up: 重力は-Z方向
             dt=PHYSICS_DT,
         ),
     )
