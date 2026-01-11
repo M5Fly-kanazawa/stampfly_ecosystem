@@ -150,23 +150,27 @@ def main():
         surface=gs.surfaces.Default(color=(0.3, 0.3, 0.3)),
     )
 
-    # 座標軸マーカー
+    # 座標軸マーカー（コーナーに配置）
     print("\n[5] Adding axis markers...")
-    axis_len, axis_thick = 0.1, 0.002
+    axis_origin = (-0.4, -0.4, 0.001)  # 左奥コーナー
+    axis_len, axis_thick = 0.15, 0.003
     scene.add_entity(
         gs.morphs.Box(size=(axis_len, axis_thick, axis_thick),
-                      pos=(axis_len/2, 0, 0.001), fixed=True, collision=False),
-        surface=gs.surfaces.Default(color=(1, 0.2, 0.2)),
+                      pos=(axis_origin[0] + axis_len/2, axis_origin[1], axis_origin[2]),
+                      fixed=True, collision=False),
+        surface=gs.surfaces.Default(color=(1, 0.2, 0.2)),  # X: 赤
     )
     scene.add_entity(
         gs.morphs.Box(size=(axis_thick, axis_len, axis_thick),
-                      pos=(0, axis_len/2, 0.001), fixed=True, collision=False),
-        surface=gs.surfaces.Default(color=(0.2, 1, 0.2)),
+                      pos=(axis_origin[0], axis_origin[1] + axis_len/2, axis_origin[2]),
+                      fixed=True, collision=False),
+        surface=gs.surfaces.Default(color=(0.2, 1, 0.2)),  # Y: 緑
     )
     scene.add_entity(
         gs.morphs.Box(size=(axis_thick, axis_thick, axis_len),
-                      pos=(0, 0, axis_len/2), fixed=True, collision=False),
-        surface=gs.surfaces.Default(color=(0.2, 0.5, 1)),
+                      pos=(axis_origin[0], axis_origin[1], axis_origin[2] + axis_len/2),
+                      fixed=True, collision=False),
+        surface=gs.surfaces.Default(color=(0.2, 0.5, 1)),  # Z: 青
     )
 
     # StampFly読み込み
