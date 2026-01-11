@@ -207,10 +207,14 @@ def main():
 
             # NED座標系でのトルク計算
             # Roll: NED X軸(前方)周り, +で右翼下げ
-            # Pitch: NED Y軸(右方)周り, +で機首上げ
+            # Pitch: NED Y軸(右方)周り, +で機首上げ, -で機首下げ
             # Yaw: NED Z軸(下方)周り, +で右旋回
+            #
+            # パイロット操作規約:
+            #   スティック前 = 負の信号 = 機首下げ (ダイブ) = -Pitch
+            #   スティック後 = 正の信号 = 機首上げ (引き起こし) = +Pitch
             ned_torque_roll = roll_input * MAX_TORQUE
-            ned_torque_pitch = -pitch_input * MAX_TORQUE  # スティック上で機首上げ
+            ned_torque_pitch = pitch_input * MAX_TORQUE  # 符号反転不要：スティック前→負→機首下げ
             ned_torque_yaw = yaw_input * MAX_TORQUE
 
             real_time = time.perf_counter() - start_time
