@@ -284,11 +284,11 @@ def main():
     # 構造物を配置
     print("\n[4] Creating voxel structures...")
 
-    # 輪（リング）- ドローンがくぐれる
+    # 輪（リング）- ドローンがくぐれる（中心4m四方は空ける）
     print("    Adding rings...")
     rings = [
         # (center, radius, color, axis)
-        ((0, 0, 5), 3.0, COLORS['red'], 'y'),
+        ((12, 8, 5), 3.0, COLORS['red'], 'y'),       # 中心から移動
         ((20, 20, 4), 2.5, COLORS['orange'], 'x'),
         ((-20, 16, 6), 2.0, COLORS['yellow'], 'y'),
         ((30, -25, 5), 3.0, COLORS['green'], 'x'),

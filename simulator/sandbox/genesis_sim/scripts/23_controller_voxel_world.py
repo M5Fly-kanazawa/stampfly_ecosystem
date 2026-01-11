@@ -137,12 +137,12 @@ def add_grid_floor(scene, size, tile_size=1.0, line_width=0.02):
 
 
 def add_voxel_structures(scene, block_size=0.5):
-    """Voxel構造物を追加"""
+    """Voxel構造物を追加（中心4m四方は空けておく）"""
     total = 0
 
-    # リング
+    # リング（中心の赤リングを移動）
     rings = [
-        ((0, 0, 5), 3.0, COLORS['red'], 'y'),
+        ((12, 8, 5), 3.0, COLORS['red'], 'y'),      # 中心から移動
         ((20, 20, 4), 2.5, COLORS['orange'], 'x'),
         ((-20, 16, 6), 2.0, COLORS['yellow'], 'y'),
         ((30, -25, 5), 3.0, COLORS['green'], 'x'),
@@ -153,7 +153,7 @@ def add_voxel_structures(scene, block_size=0.5):
     for center, radius, color, axis in rings:
         total += add_ring(scene, center, radius, block_size, color, axis)
 
-    # 柱
+    # 柱（中心4m四方を避ける）
     pillars = [
         ((10, -10, 0), 16, COLORS['gray']),
         ((-10, -10, 0), 12, COLORS['white']),
@@ -171,7 +171,7 @@ def add_voxel_structures(scene, block_size=0.5):
     for base_pos, height, color in pillars:
         total += add_pillar(scene, base_pos, height, block_size, color)
 
-    # アーチ門
+    # アーチ門（中心4m四方を避ける：±2m以内には配置しない）
     arches = [
         ((15, 0, 0), 6, 8, COLORS['orange'], 'x'),
         ((-15, 0, 0), 8, 10, COLORS['cyan'], 'x'),
