@@ -105,10 +105,10 @@ def main():
         ),
     )
 
-    # 地面（視覚参照のみ）
+    # 地面（衝突あり）
     print("\n[4] Adding ground plane...")
     scene.add_entity(
-        gs.morphs.Plane(collision=False),
+        gs.morphs.Plane(collision=True),
         surface=gs.surfaces.Default(color=(0.3, 0.3, 0.3)),
     )
 
