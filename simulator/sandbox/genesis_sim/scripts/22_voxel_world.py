@@ -189,10 +189,53 @@ def add_arch(scene, center, width_blocks, height_blocks, block_size, color, dire
     return blocks
 
 
+def add_grid_floor(scene, size, tile_size=1.0, line_width=0.02):
+    """
+    グリッド線で床タイルを表現
+
+    Args:
+        scene: Genesisシーン
+        size: 床のサイズ (m)
+        tile_size: タイルサイズ (m)
+        line_width: 線の幅 (m)
+    """
+    half_size = size / 2
+    num_lines = int(size / tile_size) + 1
+    z = 0.001  # 地面より少し上
+
+    # X方向の線
+    for i in range(num_lines):
+        y = -half_size + i * tile_size
+        scene.add_entity(
+            gs.morphs.Box(
+                size=(size, line_width, line_width),
+                pos=(0, y, z),
+                fixed=True,
+                collision=False,
+            ),
+            surface=gs.surfaces.Default(color=(0.3, 0.3, 0.3)),
+        )
+
+    # Y方向の線
+    for i in range(num_lines):
+        x = -half_size + i * tile_size
+        scene.add_entity(
+            gs.morphs.Box(
+                size=(line_width, size, line_width),
+                pos=(x, 0, z),
+                fixed=True,
+                collision=False,
+            ),
+            surface=gs.surfaces.Default(color=(0.3, 0.3, 0.3)),
+        )
+
+    return (num_lines - 1) * 2
+
+
 def main():
     print("=" * 60)
     print("Voxel Structure World")
-    print("50m x 50m with rings, tunnels, and pillars")
+    print("100m x 100m with rings, tunnels, and pillars")
     print("=" * 60)
 
     # pygame初期化
@@ -206,14 +249,15 @@ def main():
 
     # ワールド設定
     BLOCK_SIZE = 0.5      # 1ブロック = 50cm
-    WORLD_SIZE = 50.0     # 50m四方
+    WORLD_SIZE = 100.0    # 100m四方
+    TILE_SIZE = 1.0       # 床タイル = 1m
 
     # シーン作成
     print("\n[2] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(40.0, -40.0, 30.0),
+            camera_pos=(80.0, -80.0, 50.0),
             camera_lookat=(0, 0, 5.0),
             camera_fov=60,
             max_FPS=60,
@@ -225,11 +269,15 @@ def main():
     )
 
     # 地面
-    print("\n[3] Adding ground plane...")
+    print("\n[3] Adding ground plane with grid...")
     scene.add_entity(
         gs.morphs.Plane(collision=True),
-        surface=gs.surfaces.Default(color=(0.15, 0.15, 0.15)),
+        surface=gs.surfaces.Default(color=(0.12, 0.12, 0.12)),
     )
+
+    # グリッド線を追加
+    grid_lines = add_grid_floor(scene, WORLD_SIZE, TILE_SIZE)
+    print(f"    Added {grid_lines} grid lines ({TILE_SIZE}m tiles)")
 
     total_blocks = 0
 
@@ -241,12 +289,12 @@ def main():
     rings = [
         # (center, radius, color, axis)
         ((0, 0, 5), 3.0, COLORS['red'], 'y'),
-        ((10, 10, 4), 2.5, COLORS['orange'], 'x'),
-        ((-10, 8, 6), 2.0, COLORS['yellow'], 'y'),
-        ((15, -12, 5), 3.0, COLORS['green'], 'x'),
-        ((-15, -10, 4), 2.5, COLORS['cyan'], 'y'),
-        ((0, 20, 7), 2.0, COLORS['blue'], 'x'),
-        ((-20, 0, 5), 3.0, COLORS['purple'], 'y'),
+        ((20, 20, 4), 2.5, COLORS['orange'], 'x'),
+        ((-20, 16, 6), 2.0, COLORS['yellow'], 'y'),
+        ((30, -25, 5), 3.0, COLORS['green'], 'x'),
+        ((-30, -20, 4), 2.5, COLORS['cyan'], 'y'),
+        ((0, 40, 7), 2.0, COLORS['blue'], 'x'),
+        ((-40, 0, 5), 3.0, COLORS['purple'], 'y'),
     ]
     for center, radius, color, axis in rings:
         total_blocks += add_ring(scene, center, radius, BLOCK_SIZE, color, axis)
@@ -255,18 +303,18 @@ def main():
     print("    Adding pillars...")
     pillars = [
         # (base_pos, height_blocks, color)
-        ((5, -5, 0), 16, COLORS['gray']),
-        ((-5, -5, 0), 12, COLORS['white']),
-        ((5, 5, 0), 10, COLORS['gray']),
-        ((-5, 5, 0), 14, COLORS['white']),
-        ((18, 0, 0), 20, COLORS['red']),
-        ((-18, 0, 0), 18, COLORS['blue']),
-        ((0, 18, 0), 16, COLORS['green']),
-        ((0, -18, 0), 14, COLORS['yellow']),
-        ((12, 12, 0), 8, COLORS['cyan']),
-        ((-12, 12, 0), 10, COLORS['orange']),
-        ((12, -12, 0), 12, COLORS['purple']),
-        ((-12, -12, 0), 6, COLORS['white']),
+        ((10, -10, 0), 16, COLORS['gray']),
+        ((-10, -10, 0), 12, COLORS['white']),
+        ((10, 10, 0), 10, COLORS['gray']),
+        ((-10, 10, 0), 14, COLORS['white']),
+        ((35, 0, 0), 20, COLORS['red']),
+        ((-35, 0, 0), 18, COLORS['blue']),
+        ((0, 35, 0), 16, COLORS['green']),
+        ((0, -35, 0), 14, COLORS['yellow']),
+        ((25, 25, 0), 8, COLORS['cyan']),
+        ((-25, 25, 0), 10, COLORS['orange']),
+        ((25, -25, 0), 12, COLORS['purple']),
+        ((-25, -25, 0), 6, COLORS['white']),
     ]
     for base_pos, height, color in pillars:
         total_blocks += add_pillar(scene, base_pos, height, BLOCK_SIZE, color)
@@ -275,12 +323,12 @@ def main():
     print("    Adding arches...")
     arches = [
         # (center, width_blocks, height_blocks, color, direction)
-        ((8, 0, 0), 6, 8, COLORS['orange'], 'x'),
-        ((-8, 0, 0), 8, 10, COLORS['cyan'], 'x'),
-        ((0, 8, 0), 6, 6, COLORS['green'], 'y'),
-        ((0, -8, 0), 8, 8, COLORS['purple'], 'y'),
-        ((20, 15, 0), 6, 12, COLORS['red'], 'x'),
-        ((-20, -15, 0), 8, 10, COLORS['blue'], 'y'),
+        ((15, 0, 0), 6, 8, COLORS['orange'], 'x'),
+        ((-15, 0, 0), 8, 10, COLORS['cyan'], 'x'),
+        ((0, 15, 0), 6, 6, COLORS['green'], 'y'),
+        ((0, -15, 0), 8, 8, COLORS['purple'], 'y'),
+        ((40, 30, 0), 6, 12, COLORS['red'], 'x'),
+        ((-40, -30, 0), 8, 10, COLORS['blue'], 'y'),
     ]
     for center, width, height, color, direction in arches:
         total_blocks += add_arch(scene, center, width, height, BLOCK_SIZE, color, direction)
@@ -289,8 +337,8 @@ def main():
     print("    Adding tunnels...")
     tunnels = [
         # (start_pos, length_blocks, color, direction)
-        ((-15, 15, 0), 8, COLORS['gray'], 'x'),
-        ((15, -15, 0), 10, COLORS['white'], 'y'),
+        ((-30, 30, 0), 8, COLORS['gray'], 'x'),
+        ((30, -30, 0), 10, COLORS['white'], 'y'),
     ]
     for start_pos, length, color, direction in tunnels:
         total_blocks += add_tunnel(scene, start_pos, length, BLOCK_SIZE, color, direction)
@@ -301,7 +349,7 @@ def main():
     print("\n[5] Adding test sphere...")
     sphere = scene.add_entity(
         gs.morphs.Sphere(
-            pos=(0, 0, 10.0),
+            pos=(0, 0, 15.0),
             radius=0.3,
             fixed=False,
         ),
