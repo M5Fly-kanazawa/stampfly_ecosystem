@@ -210,15 +210,30 @@ def ned_to_genesis_moment(moment_ned):
     return np.array([moment_ned[1], moment_ned[0], -moment_ned[2]])
 
 
-def genesis_gyro_to_ned(gyro_genesis):
+def world_ang_vel_to_body(ang_vel_world, R):
     """
-    Convert Genesis angular velocity to NED coordinate
-    Genesis座標系の角速度をNED座標系に変換
+    Transform angular velocity from world frame to body frame
+    世界座標系の角速度を機体座標系に変換
 
-    Genesis: (wx, wy, wz) - X forward, Y left, Z up
-    NED: (wx, wy, wz) - X north/forward, Y east/right, Z down
+    Args:
+        ang_vel_world: Angular velocity in world frame [wx, wy, wz]
+        R: Rotation matrix (body to world)
+
+    Returns:
+        Angular velocity in body frame
     """
-    return np.array([gyro_genesis[1], gyro_genesis[0], -gyro_genesis[2]])
+    return R.T @ ang_vel_world
+
+
+def genesis_gyro_to_ned(gyro_genesis_body):
+    """
+    Convert Genesis body frame angular velocity to NED body frame
+    Genesis機体座標系の角速度をNED機体座標系に変換
+
+    Genesis body: (wx, wy, wz) - X forward, Y left, Z up
+    NED body: (p, q, r) - roll rate, pitch rate, yaw rate
+    """
+    return np.array([gyro_genesis_body[1], gyro_genesis_body[0], -gyro_genesis_body[2]])
 
 
 def main():
@@ -438,12 +453,20 @@ def main():
 
             # Control loop (at CONTROL_HZ)
             if sim_time >= next_control_time:
-                # Get current angular velocity from Genesis
-                vel = drone.get_vel()  # [vx, vy, vz, wx, wy, wz] in Genesis frame
-                gyro_genesis = np.array([float(vel[3]), float(vel[4]), float(vel[5])])
+                # Get current angular velocity from Genesis (DOF velocity)
+                # DOF 0-2: linear velocity, DOF 3-5: angular velocity (world frame)
+                dofs_vel = drone.get_dofs_velocity()
+                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
 
-                # Convert to NED coordinate system
-                gyro_ned = genesis_gyro_to_ned(gyro_genesis)
+                # Get rotation matrix for world-to-body transformation
+                quat = drone.get_quat()
+                R = quat_to_rotation_matrix(quat)
+
+                # Transform world frame angular velocity to body frame
+                gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R)
+
+                # Convert Genesis body frame to NED body frame
+                gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
                 # PID rate control: stick -> rate setpoint -> PID -> voltage output
                 roll_out, pitch_out, yaw_out = rate_controller.update_from_stick(
@@ -513,10 +536,12 @@ def main():
                 genesis_ry = np.degrees(np.arcsin(np.clip(2*(w*gy - gz*gx), -1, 1)))
                 genesis_rz = np.degrees(np.arctan2(2*(w*gz + gx*gy), 1 - 2*(gy*gy + gz*gz)))
 
-                # Get gyro for display
-                vel = drone.get_vel()
-                gyro_genesis = np.array([float(vel[3]), float(vel[4]), float(vel[5])])
-                gyro_ned = genesis_gyro_to_ned(gyro_genesis)
+                # Get gyro for display (body frame)
+                R_disp = quat_to_rotation_matrix(quat)
+                dofs_vel = drone.get_dofs_velocity()
+                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R_disp)
+                gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
                 print(f"  t={sim_time:.0f}s | "
                       f"pos=({float(pos[0]):+.1f},{float(pos[1]):+.1f},{float(pos[2]):.1f}) | "
