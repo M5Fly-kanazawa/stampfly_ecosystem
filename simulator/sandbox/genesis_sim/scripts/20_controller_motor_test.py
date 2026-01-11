@@ -14,8 +14,8 @@ Controller-based motor model test for StampFly
   - ロール軸 (Axis 1): ロールトルク u_φ (Nm)
   - ピッチ軸 (Axis 2): ピッチトルク u_θ (Nm)
   - ヨー軸 (Axis 3): ヨートルク u_ψ (Nm)
-  - Modeボタン (Button 2): リセット
-  - Optionボタン (Button 3): 終了
+  - Modeボタン (Button 2) / Rキー: リセット
+  - Optionボタン (Button 3) / Qキー: 終了
 
 スロットル動作:
   - リセット後はホバリング推力がデフォルト
@@ -204,7 +204,7 @@ def main():
     print(f"  Roll:     ±{MAX_ROLL_TORQUE*1000:.1f} mNm")
     print(f"  Pitch:    ±{MAX_PITCH_TORQUE*1000:.1f} mNm")
     print(f"  Yaw:      ±{MAX_YAW_TORQUE*1000:.2f} mNm")
-    print(f"  Mode: Reset, Option: Exit")
+    print(f"  Mode/R: Reset, Option/Q: Exit")
     print("=" * 60)
 
     # シミュレーション実行
@@ -225,6 +225,17 @@ def main():
         while scene.viewer.is_alive():
             # pygameイベント処理
             for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:  # Q: Exit
+                        print("\n>>> Exit (Q key)")
+                        raise KeyboardInterrupt
+                    if event.key == pygame.K_r:  # R: Reset
+                        scene.reset()
+                        motor_system.reset()
+                        physics_steps = 0
+                        next_render_time = 0
+                        start_time = time.perf_counter()
+                        print("\n>>> Reset (R key)")
                 if event.type == pygame.JOYBUTTONDOWN:
                     if event.button == 2:  # Mode: Reset
                         scene.reset()
