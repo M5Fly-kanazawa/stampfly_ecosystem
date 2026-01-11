@@ -140,9 +140,9 @@
     <!-- Can be disabled at load time with collision=False -->
     <!-- 足の底面をカバーするように配置 -->
     <collision name="body_collision">
-      <origin xyz="0 0 0.005" rpy="0 0 0"/>
+      <origin xyz="0 0 0.006" rpy="0 0 0"/>
       <geometry>
-        <box size="0.08 0.08 0.035"/>  <!-- 80mm x 80mm x 35mm, bottom at z=-12.5mm -->
+        <box size="0.08 0.08 0.035"/>  <!-- 80mm x 80mm x 35mm, bottom at z=-11.5mm -->
       </geometry>
     </collision>
 
