@@ -149,7 +149,7 @@
     <!-- Inertial (total mass including propellers) -->
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.034"/>  <!-- 30g body + 4g propellers -->
+      <mass value="0.035"/>  <!-- 35g total -->
       <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>
     </inertial>
   </link>
