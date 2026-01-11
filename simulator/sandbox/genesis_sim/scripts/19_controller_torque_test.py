@@ -27,13 +27,18 @@ USB HID Button構成:
   Genesis座標系: X=右, Y=前, Z=上
 
   位置/力:    NED (x,y,z) → Genesis (y, x, -z)
-  トルク:     NED (τx,τy,τz) → Genesis DOF (4, 3, 5) with τz sign flip
+  トルク:     NED (τx,τy,τz) → Genesis body (τy, τx, -τz)
   オイラー角: NED (roll,pitch,yaw) → Genesis euler (ry, rx, -rz)
   角速度:     NED (p,q,r) → Genesis (ωy, ωx, -ωz)
 
+機体座標系での力・トルク適用:
+  - 推力は機体座標系で定義され、機体の傾きに追従して回転する
+  - トルクも機体座標系で定義され、機体軸周りに作用する
+  - クォータニオンを使って機体座標系→世界座標系に変換後、DOFに適用
+
 Genesis DOF構成 (stampfly_fixed.urdf):
-  - DOF 0, 1, 2: 並進 (gx, gy, gz) - Genesis座標
-  - DOF 3, 4, 5: 回転 (rx, ry, rz) - Genesis座標
+  - DOF 0, 1, 2: 並進 (gx, gy, gz) - 世界座標系
+  - DOF 3, 4, 5: 回転 (rx, ry, rz) - 世界座標系
 """
 
 import genesis as gs
@@ -41,6 +46,39 @@ from pathlib import Path
 import numpy as np
 import time
 import pygame
+
+
+def quat_to_rotation_matrix(quat):
+    """
+    クォータニオン (w, x, y, z) から回転行列を計算
+    Compute rotation matrix from quaternion (w, x, y, z)
+
+    Returns: 3x3 rotation matrix (body to world)
+    """
+    w, x, y, z = [float(v) for v in quat]
+
+    # Rotation matrix from quaternion
+    R = np.array([
+        [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
+        [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+        [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+    ])
+    return R
+
+
+def body_to_world_force(force_body, quat):
+    """
+    機体座標系の力を世界座標系に変換
+    Transform body-frame force to world-frame force
+
+    force_body: 機体座標系での力ベクトル (Genesis座標系)
+    quat: 機体の姿勢クォータニオン (w, x, y, z)
+
+    Returns: 世界座標系での力ベクトル
+    """
+    R = quat_to_rotation_matrix(quat)
+    force_world = R @ force_body
+    return force_world
 
 
 def main():
@@ -154,14 +192,15 @@ def main():
     print("\n" + "=" * 60)
     print("Controls (StampFly Controller USB HID)")
     print("=" * 60)
-    print("  Throttle stick (Axis 0): Thrust (上向き推力)")
-    print("  Roll stick     (Axis 1): Roll   (NED X軸/前方軸)")
-    print("  Pitch stick    (Axis 2): Pitch  (NED Y軸/右方軸)")
-    print("  Yaw stick      (Axis 3): Yaw    (NED Z軸/下方軸)")
+    print("  Throttle stick (Axis 0): Thrust (機体上向き推力)")
+    print("  Roll stick     (Axis 1): Roll   (機体X軸/前方軸)")
+    print("  Pitch stick    (Axis 2): Pitch  (機体Y軸/右方軸)")
+    print("  Yaw stick      (Axis 3): Yaw    (機体Z軸/下方軸)")
     print("  Mode button (Button 2): Reset")
     print("  Option button (Button 3): Exit")
     print()
-    print("  Coordinate: NED (X=Forward, Y=Right, Z=Down)")
+    print("  Coordinate: NED body frame (X=Forward, Y=Right, Z=Down)")
+    print("  Force/Torque: Applied in body frame, rotates with drone")
     print(f"  Max torque: {MAX_TORQUE} Nm")
     print(f"  Max thrust: {MAX_THRUST} N (hover ≈ 0.33N = 33%)")
     print(f"  Deadzone: {DEADZONE}")
@@ -237,22 +276,41 @@ def main():
 
             # 物理ステップ
             while sim_time <= real_time:
-                # NED → Genesis 座標変換して力・トルク適用
-                #
-                # 推力 (世界座標系):
-                #   上向き推力 → Genesis +Z
-                #
-                # トルク (NED → Genesis):
-                #   NED Roll  (X/前方軸) → Genesis DOF 4 (ry/前方軸)
-                #   NED Pitch (Y/右方軸) → Genesis DOF 3 (rx/右方軸)
-                #   NED Yaw   (Z/下方軸) → Genesis DOF 5 (rz/上方軸) 符号反転
+                # 現在の姿勢を取得
+                quat = drone.get_quat()  # (w, x, y, z) in Genesis
+
+                # 機体座標系での推力 (Genesis座標系)
+                # Genesis機体座標系: Z軸が上向き（ローター推力方向）
+                thrust_body = np.array([0.0, 0.0, thrust_force])
+
+                # 機体座標系 → 世界座標系に変換
+                # 機体が傾くと推力方向も傾く（実際の物理現象を再現）
+                thrust_world = body_to_world_force(thrust_body, quat)
+
+                # 機体座標系でのトルク (Genesis座標系)
+                # Genesis機体座標系でのトルク:
+                #   NED Roll  (X/前方軸) → Genesis body ry (前方軸)
+                #   NED Pitch (Y/右方軸) → Genesis body rx (右方軸)
+                #   NED Yaw   (Z/下方軸) → Genesis body rz (上方軸) 符号反転
+                torque_body = np.array([
+                    ned_torque_pitch,   # Genesis rx = NED pitch
+                    ned_torque_roll,    # Genesis ry = NED roll
+                    -ned_torque_yaw     # Genesis rz = -NED yaw
+                ])
+
+                # 機体座標系 → 世界座標系に変換
+                torque_world = body_to_world_force(torque_body, quat)
+
+                # DOF力として適用 (世界座標系)
                 force = np.zeros(drone.n_dofs)
-                # 並進力 (DOF 0,1,2 = Genesis x,y,z)
-                force[2] = thrust_force       # 上向き推力 → Genesis +Z
-                # 回転トルク (DOF 3,4,5 = Genesis rx,ry,rz)
-                force[3] = ned_torque_pitch   # NED Pitch → Genesis rx
-                force[4] = ned_torque_roll    # NED Roll  → Genesis ry
-                force[5] = -ned_torque_yaw    # NED Yaw   → Genesis rz (符号反転)
+                # 並進力 (DOF 0,1,2 = Genesis world x,y,z)
+                force[0] = thrust_world[0]
+                force[1] = thrust_world[1]
+                force[2] = thrust_world[2]
+                # 回転トルク (DOF 3,4,5 = Genesis world rx,ry,rz)
+                force[3] = torque_world[0]
+                force[4] = torque_world[1]
+                force[5] = torque_world[2]
                 drone.control_dofs_force(force)
 
                 scene.step(update_visualizer=False, refresh_visualizer=False)
