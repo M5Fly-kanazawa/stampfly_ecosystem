@@ -3,41 +3,31 @@
 20_controller_motor_test.py - コントローラでモータモデルテスト
 Controller-based motor model test for StampFly
 
-モータ・プロペラダイナミクスをシミュレート:
-  - DCモータ電気系 (R, L, Km)
-  - プロペラ空力 (Ct, Cq)
-  - RK4積分による角速度計算
+物理単位ベースの制御アロケーション:
+  スティック入力 → 制御入力 [uₜ, u_φ, u_θ, u_ψ] (N, Nm)
+  ミキサー行列 → モータ推力 [T₁, T₂, T₃, T₄] (N)
+  逆モータモデル → Duty (0~1)
+  モータダイナミクス → 実推力 (N)
 
 操作 (StampFly Controller USB HID):
-  - スロットル軸 (Axis 0): ホバリングDutyからの増減 (±調整)
-  - ロール軸 (Axis 1): Roll制御
-  - ピッチ軸 (Axis 2): Pitch制御
-  - ヨー軸 (Axis 3): Yaw制御
+  - スロットル軸 (Axis 0): 推力増減 ±ΔT (N)
+  - ロール軸 (Axis 1): ロールトルク u_φ (Nm)
+  - ピッチ軸 (Axis 2): ピッチトルク u_θ (Nm)
+  - ヨー軸 (Axis 3): ヨートルク u_ψ (Nm)
   - Modeボタン (Button 2): リセット
   - Optionボタン (Button 3): 終了
 
 スロットル動作:
-  - リセット後はホバリングDuty (約63%) がデフォルト
+  - リセット後はホバリング推力がデフォルト
   - スティック中立: ホバリング維持
-  - スティック上: 上昇 (Duty増加)
-  - スティック下: 下降 (Duty減少)
-
-モータミキシング (X-quad):
-  M1 (FR): throttle - roll + pitch + yaw  CCW
-  M2 (RR): throttle - roll - pitch - yaw  CW
-  M3 (RL): throttle + roll - pitch + yaw  CCW
-  M4 (FL): throttle + roll + pitch - yaw  CW
-
-座標系:
-  - モータモデル出力: NED機体座標系
-  - Genesis入力: Genesis世界座標系
-  - 変換: クォータニオン回転行列使用
+  - スティック上: 上昇 (推力増加)
+  - スティック下: 下降 (推力減少)
 """
 
 import sys
 from pathlib import Path
 
-# Add parent directory to path for motor_model import
+# Add parent directory to path for imports
 script_dir = Path(__file__).parent
 sys.path.insert(0, str(script_dir.parent))
 
@@ -46,18 +36,21 @@ import numpy as np
 import time
 import pygame
 
-from motor_model import QuadMotorSystem, compute_hover_conditions
+from motor_model import QuadMotorSystem, MotorParams
+from control_allocation import ControlAllocator, thrusts_to_duties
+
+
+# Physical constants
+GRAVITY = 9.81  # m/s²
+MASS = 0.035    # kg (35g)
+WEIGHT = MASS * GRAVITY  # N
 
 
 def quat_to_rotation_matrix(quat):
     """
     クォータニオン (w, x, y, z) から回転行列を計算
-    Compute rotation matrix from quaternion (w, x, y, z)
-
-    Returns: 3x3 rotation matrix (body to world)
     """
     w, x, y, z = [float(v) for v in quat]
-
     R = np.array([
         [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
         [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
@@ -67,60 +60,19 @@ def quat_to_rotation_matrix(quat):
 
 
 def ned_to_genesis_force(force_ned):
-    """
-    NED機体座標系の力をGenesis機体座標系に変換
-    NED: X=Forward, Y=Right, Z=Down
-    Genesis: X=Right, Y=Forward, Z=Up
-    """
+    """NED機体座標系の力をGenesis機体座標系に変換"""
     return np.array([force_ned[1], force_ned[0], -force_ned[2]])
 
 
 def ned_to_genesis_moment(moment_ned):
-    """
-    NED機体座標系のモーメントをGenesis機体座標系に変換
-    NED: roll=X, pitch=Y, yaw=Z
-    Genesis: rx=pitch, ry=roll, rz=-yaw
-    """
+    """NED機体座標系のモーメントをGenesis機体座標系に変換"""
     return np.array([moment_ned[1], moment_ned[0], -moment_ned[2]])
-
-
-def mix_motors(throttle, roll, pitch, yaw, mix_scale=0.3):
-    """
-    X-quad motor mixing
-    スティック入力から各モータのDuty比を計算
-
-    Args:
-        throttle: 0.0 to 1.0
-        roll, pitch, yaw: -1.0 to 1.0
-        mix_scale: Control authority scaling
-
-    Returns:
-        [duty1, duty2, duty3, duty4] for motors M1-M4
-    """
-    # Scale control inputs
-    r = roll * mix_scale
-    p = pitch * mix_scale
-    y = yaw * mix_scale
-
-    # X-quad mixing matrix
-    #        thrust  roll  pitch  yaw
-    # M1 FR:   +      -      +     +   CCW
-    # M2 RR:   +      -      -     -   CW
-    # M3 RL:   +      +      -     +   CCW
-    # M4 FL:   +      +      +     -   CW
-    d1 = throttle - r + p + y
-    d2 = throttle - r - p - y
-    d3 = throttle + r - p + y
-    d4 = throttle + r + p - y
-
-    # Clamp to valid range
-    duties = [max(0.0, min(1.0, d)) for d in [d1, d2, d3, d4]]
-    return duties
 
 
 def main():
     print("=" * 60)
     print("Controller Motor Model Test - StampFly")
+    print("Physical Units Based Control Allocation")
     print("=" * 60)
 
     # パス設定
@@ -132,53 +84,57 @@ def main():
         return
 
     # タイミング設定
-    PHYSICS_HZ = 1000    # モータモデル用に高周波数
+    PHYSICS_HZ = 1000
     PHYSICS_DT = 1 / PHYSICS_HZ
     RENDER_FPS = 60
     RENDER_DT = 1 / RENDER_FPS
 
-    # 制御設定
-    DEADZONE = 0.05      # スティックのデッドゾーン
-    MIX_SCALE = 0.1      # ミキシングスケール（トルクゲイン）
-    THROTTLE_RANGE = 0.4 # スロットル調整範囲 (±40%)
+    # 制御設定（物理単位）
+    DEADZONE = 0.05
+    MAX_THRUST_DELTA = 0.2      # 最大推力変化 (N) ±0.2N
+    MAX_ROLL_TORQUE = 2e-3      # 最大ロールトルク (Nm) ±2mNm
+    MAX_PITCH_TORQUE = 2e-3     # 最大ピッチトルク (Nm) ±2mNm
+    MAX_YAW_TORQUE = 0.5e-3     # 最大ヨートルク (Nm) ±0.5mNm
 
-    # ホバリング条件を計算
-    hover = compute_hover_conditions()
-    HOVER_DUTY = hover['duty_hover']
+    print(f"\nPhysical Parameters:")
+    print(f"  Mass: {MASS*1000:.0f}g")
+    print(f"  Weight: {WEIGHT*1000:.1f}mN")
+    print(f"  Hover thrust/motor: {WEIGHT/4*1000:.1f}mN")
 
-    print(f"\nHover conditions:")
-    print(f"  Thrust/motor: {hover['thrust_per_motor']*1000:.1f} mN")
-    print(f"  RPM: {hover['rpm_hover']:.0f}")
-    print(f"  Voltage: {hover['voltage_hover']:.2f} V")
-    print(f"  Duty: {HOVER_DUTY*100:.1f}%")
+    print(f"\nControl Ranges:")
+    print(f"  Thrust: {WEIGHT*1000:.0f} ± {MAX_THRUST_DELTA*1000:.0f} mN")
+    print(f"  Roll torque: ±{MAX_ROLL_TORQUE*1000:.1f} mNm")
+    print(f"  Pitch torque: ±{MAX_PITCH_TORQUE*1000:.1f} mNm")
+    print(f"  Yaw torque: ±{MAX_YAW_TORQUE*1000:.2f} mNm")
 
-    # pygame初期化（コントローラ用）
+    # pygame初期化
     print("\n[1] Initializing controller...")
     pygame.init()
     pygame.joystick.init()
 
     if pygame.joystick.get_count() == 0:
         print("ERROR: No controller found!")
-        print("Please connect a controller and try again.")
         pygame.quit()
         return
 
     joystick = pygame.joystick.Joystick(0)
     joystick.init()
     print(f"  Controller: {joystick.get_name()}")
-    print(f"  Axes: {joystick.get_numaxes()}")
-    print(f"  Buttons: {joystick.get_numbuttons()}")
+
+    # コントロールアロケータ初期化
+    print("\n[2] Initializing control allocator...")
+    allocator = ControlAllocator()
 
     # モータモデル初期化
-    print("\n[2] Initializing motor model...")
+    print("\n[3] Initializing motor model...")
     motor_system = QuadMotorSystem()
 
     # Genesis初期化
-    print("\n[3] Initializing Genesis...")
+    print("\n[4] Initializing Genesis...")
     gs.init(backend=gs.cpu)
 
-    # シーン作成（重力あり）
-    print("\n[4] Creating scene (with gravity)...")
+    # シーン作成
+    print("\n[5] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
@@ -188,13 +144,12 @@ def main():
             max_FPS=RENDER_FPS,
         ),
         sim_options=gs.options.SimOptions(
-            gravity=(0, 0, -9.81),
+            gravity=(0, 0, -GRAVITY),
             dt=PHYSICS_DT,
         ),
     )
 
     # 地面
-    print("\n[5] Adding ground plane...")
     scene.add_entity(
         gs.morphs.Plane(collision=True),
         surface=gs.surfaces.Default(color=(0.3, 0.3, 0.3)),
@@ -239,24 +194,17 @@ def main():
     print("\n[8] Building scene...")
     build_start = time.perf_counter()
     scene.build()
-    build_elapsed = time.perf_counter() - build_start
-    print(f"    Build time: {build_elapsed:.1f}s")
+    print(f"    Build time: {time.perf_counter() - build_start:.1f}s")
 
     # 情報表示
     print("\n" + "=" * 60)
-    print("Controls (StampFly Controller USB HID)")
+    print("Controls (Physical Units)")
     print("=" * 60)
-    print("  Throttle (Axis 0): Hover ± adjustment")
-    print("  Roll     (Axis 1): Roll control")
-    print("  Pitch    (Axis 2): Pitch control")
-    print("  Yaw      (Axis 3): Yaw control")
-    print("  Mode button (Button 2): Reset")
-    print("  Option button (Button 3): Exit")
-    print()
-    print(f"  Base duty: {HOVER_DUTY*100:.0f}% (hover)")
-    print(f"  Throttle range: ±{THROTTLE_RANGE*100:.0f}%")
-    print(f"  Physics: {PHYSICS_HZ} Hz")
-    print(f"  Deadzone: {DEADZONE}")
+    print(f"  Throttle: Hover({WEIGHT*1000:.0f}mN) ± {MAX_THRUST_DELTA*1000:.0f}mN")
+    print(f"  Roll:     ±{MAX_ROLL_TORQUE*1000:.1f} mNm")
+    print(f"  Pitch:    ±{MAX_PITCH_TORQUE*1000:.1f} mNm")
+    print(f"  Yaw:      ±{MAX_YAW_TORQUE*1000:.2f} mNm")
+    print(f"  Mode: Reset, Option: Exit")
     print("=" * 60)
 
     # シミュレーション実行
@@ -268,7 +216,6 @@ def main():
     last_print_time = -1
 
     def apply_deadzone(value, deadzone):
-        """デッドゾーン適用"""
         if abs(value) < deadzone:
             return 0.0
         sign = 1 if value > 0 else -1
@@ -292,27 +239,34 @@ def main():
 
             # コントローラ入力取得
             throttle_raw = apply_deadzone(joystick.get_axis(0), DEADZONE)
-            roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)
-            pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)
-            yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)
+            roll_raw = apply_deadzone(joystick.get_axis(1), DEADZONE)
+            pitch_raw = apply_deadzone(joystick.get_axis(2), DEADZONE)
+            yaw_raw = apply_deadzone(joystick.get_axis(3), DEADZONE)
 
-            # スロットル: ホバリングDutyを基準に±調整
-            # スティック中立(0) → ホバリングDuty
-            # スティック上(+1) → ホバリングDuty + THROTTLE_RANGE
-            # スティック下(-1) → ホバリングDuty - THROTTLE_RANGE
-            throttle_adjust = throttle_raw * THROTTLE_RANGE
-            throttle = HOVER_DUTY + throttle_adjust
+            # 物理単位に変換
+            # 制御入力 [uₜ, u_φ, u_θ, u_ψ] (N, Nm, Nm, Nm)
+            u_thrust = WEIGHT + throttle_raw * MAX_THRUST_DELTA  # 総推力 (N)
+            u_roll = roll_raw * MAX_ROLL_TORQUE                   # ロールトルク (Nm)
+            u_pitch = pitch_raw * MAX_PITCH_TORQUE                # ピッチトルク (Nm)
+            u_yaw = yaw_raw * MAX_YAW_TORQUE                      # ヨートルク (Nm)
 
-            # モータDuty計算
-            duties = mix_motors(throttle, roll_input, pitch_input, yaw_input, MIX_SCALE)
+            control = np.array([u_thrust, u_roll, u_pitch, u_yaw])
+
+            # ミキサー: 制御入力 → モータ推力 (N)
+            target_thrusts = allocator.mix(control)
+
+            # 推力 → Duty変換（定常状態近似）
+            target_duties = thrusts_to_duties(target_thrusts)
 
             real_time = time.perf_counter() - start_time
             sim_time = physics_steps * PHYSICS_DT
 
             # 物理ステップ
             while sim_time <= real_time:
-                # モータモデル更新 (NED機体座標系で力・モーメント計算)
-                force_ned, moment_ned = motor_system.step_with_duty(duties, PHYSICS_DT)
+                # モータモデル更新（Duty入力、NED機体座標系で出力）
+                force_ned, moment_ned = motor_system.step_with_duty(
+                    target_duties.tolist(), PHYSICS_DT
+                )
 
                 # NED → Genesis機体座標系に変換
                 force_genesis_body = ned_to_genesis_force(force_ned)
@@ -357,23 +311,20 @@ def main():
                 genesis_rx = np.degrees(np.arctan2(2*(w*gx + gy*gz), 1 - 2*(gx*gx + gy*gy)))
                 genesis_ry = np.degrees(np.arcsin(np.clip(2*(w*gy - gz*gx), -1, 1)))
                 genesis_rz = np.degrees(np.arctan2(2*(w*gz + gx*gy), 1 - 2*(gy*gy + gz*gz)))
-
-                ned_roll = genesis_ry
-                ned_pitch = genesis_rx
-                ned_yaw = -genesis_rz
+                ned_roll, ned_pitch, ned_yaw = genesis_ry, genesis_rx, -genesis_rz
 
                 # 位置取得
                 pos = drone.get_pos()
                 alt = float(pos[2])
 
                 # モータ状態
-                total_thrust = motor_system.total_thrust * 1000  # mN
+                actual_thrust = motor_system.total_thrust * 1000  # mN
 
                 print(f"  t={sim_time:.0f}s | "
-                      f"thr={throttle*100:.0f}%({throttle_adjust*100:+.0f}) | "
-                      f"T={total_thrust:.0f}mN | "
+                      f"cmd=({u_thrust*1000:.0f},{u_roll*1e6:.0f},{u_pitch*1e6:.0f},{u_yaw*1e6:.0f}) | "
+                      f"T={actual_thrust:.0f}mN | "
                       f"alt={alt:.2f}m | "
-                      f"RPY=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})deg")
+                      f"RPY=({ned_roll:+.0f},{ned_pitch:+.0f},{ned_yaw:+.0f})")
 
     except KeyboardInterrupt:
         pass
