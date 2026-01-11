@@ -4,23 +4,23 @@
 Controller-based torque control test for StampFly
 
 操作 (StampFly Controller USB HID):
-  - 右スティック X (Axis 1): Roll  (NED X軸/前方軸 回りのトルク)
-  - 右スティック Y (Axis 2): Pitch (NED Y軸/右方軸 回りのトルク)
-  - 左スティック X (Axis 3): Yaw   (NED Z軸/下方軸 回りのトルク)
-  - Modeボタン (Button 2, 右サイド): リセット
-  - Optionボタン (Button 3, 左サイド): 終了
+  - ロール軸スティック (Axis 1): Roll  (NED X軸/前方軸 回りのトルク)
+  - ピッチ軸スティック (Axis 2): Pitch (NED Y軸/右方軸 回りのトルク)
+  - ヨー軸スティック (Axis 3): Yaw   (NED Z軸/下方軸 回りのトルク)
+  - Modeボタン (Button 2): リセット
+  - Optionボタン (Button 3): 終了
 
-USB HID Axis構成:
-  - Axis 0: Throttle (左Y)
-  - Axis 1: Roll/Aileron (右X)
-  - Axis 2: Pitch/Elevator (右Y)
-  - Axis 3: Yaw/Rudder (左X)
+USB HID Axis構成 (モード非依存の論理軸):
+  - Axis 0: Throttle (スロットル軸)
+  - Axis 1: Roll/Aileron (ロール軸)
+  - Axis 2: Pitch/Elevator (ピッチ軸)
+  - Axis 3: Yaw/Rudder (ヨー軸)
 
 USB HID Button構成:
-  - Button 0: Arm (左スティック押込)
-  - Button 1: Flip (右スティック押込)
-  - Button 2: Mode (右サイドボタン)
-  - Button 3: Option (左サイドボタン)
+  - Button 0: Arm (スロットル側スティック押込)
+  - Button 1: Flip (エレベータ側スティック押込)
+  - Button 2: Mode (サイドボタン)
+  - Button 3: Option (サイドボタン)
 
 座標系変換 (NED → Genesis):
   NED座標系: X=前, Y=右, Z=下 (航空工学標準)
@@ -153,9 +153,9 @@ def main():
     print("\n" + "=" * 60)
     print("Controls (StampFly Controller USB HID)")
     print("=" * 60)
-    print("  Right Stick X (Axis 1): Roll  (NED X軸/前方軸)")
-    print("  Right Stick Y (Axis 2): Pitch (NED Y軸/右方軸)")
-    print("  Left Stick X  (Axis 3): Yaw   (NED Z軸/下方軸)")
+    print("  Roll stick  (Axis 1): Roll  (NED X軸/前方軸)")
+    print("  Pitch stick (Axis 2): Pitch (NED Y軸/右方軸)")
+    print("  Yaw stick   (Axis 3): Yaw   (NED Z軸/下方軸)")
     print("  Mode button (Button 2): Reset")
     print("  Option button (Button 3): Exit")
     print()
@@ -197,13 +197,13 @@ def main():
                         raise KeyboardInterrupt
 
             # コントローラ入力取得 (USB HID axis mapping)
-            # Axis 0: Throttle (左Y) - 未使用
-            # Axis 1: Roll/Aileron (右X)
-            # Axis 2: Pitch/Elevator (右Y)
-            # Axis 3: Yaw/Rudder (左X)
-            roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)   # 右スティックX
-            pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # 右スティックY
-            yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # 左スティックX
+            # Axis 0: Throttle - 未使用
+            # Axis 1: Roll/Aileron (ロール軸)
+            # Axis 2: Pitch/Elevator (ピッチ軸)
+            # Axis 3: Yaw/Rudder (ヨー軸)
+            roll_input = apply_deadzone(joystick.get_axis(1), DEADZONE)   # ロール軸
+            pitch_input = apply_deadzone(joystick.get_axis(2), DEADZONE)  # ピッチ軸
+            yaw_input = apply_deadzone(joystick.get_axis(3), DEADZONE)    # ヨー軸
 
             # NED座標系でのトルク計算
             # Roll: NED X軸(前方)周り, +で右翼下げ
