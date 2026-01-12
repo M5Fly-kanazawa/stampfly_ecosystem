@@ -117,7 +117,8 @@ namespace eskf {
 inline constexpr bool USE_OPTICAL_FLOW = true;     // オプティカルフロー（水平速度推定）
 inline constexpr bool USE_BAROMETER = true;        // 気圧センサー（高度推定）
 inline constexpr bool USE_TOF = true;              // ToFセンサー（高度推定）
-inline constexpr bool USE_MAGNETOMETER = false;    // 地磁気センサー（ヨー推定）※テスト用に無効化
+inline constexpr bool USE_MAGNETOMETER = false;    // 地磁気観測更新（ヨー補正）※テスト用に無効化
+inline constexpr bool ENABLE_YAW_ESTIMATION = true; // ヨー推定（ジャイロ積分）※falseで0固定
 
 // -----------------------------------------------------------------------------
 // プロセスノイズ (Q行列)

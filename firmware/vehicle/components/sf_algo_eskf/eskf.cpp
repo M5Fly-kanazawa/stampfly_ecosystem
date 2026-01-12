@@ -255,8 +255,8 @@ void ESKF::predict(const Vector3& accel, const Vector3& gyro, float dt, bool ski
     Vector3 gyro_corrected = gyro - state_.gyro_bias;
     Vector3 accel_corrected = accel - state_.accel_bias;
 
-    // mag_enabled=false時はYawレートを0に固定（ドリフト防止）
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYawレートを0に固定（ドリフト防止）
+    if (!config_.yaw_estimation_enabled) {
         gyro_corrected.z = 0.0f;
     }
 
@@ -303,8 +303,8 @@ void ESKF::predict(const Vector3& accel, const Vector3& gyro, float dt, bool ski
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    // mag_enabled=false時はYaw=0に固定
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
@@ -721,13 +721,15 @@ void ESKF::updateBaro(float altitude)
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -818,13 +820,15 @@ void ESKF::updateToF(float distance)
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -993,13 +997,15 @@ void ESKF::updateMag(const Vector3& mag)
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -1180,13 +1186,15 @@ void ESKF::updateFlowWithGyro(float flow_x, float flow_y, float distance,
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -1372,13 +1380,15 @@ void ESKF::updateFlowRaw(int16_t flow_dx, int16_t flow_dy, float distance,
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -1578,13 +1588,15 @@ void ESKF::updateAccelAttitude(const Vector3& accel)
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
     state_.gyro_bias.x += dx[BG_X];
     state_.gyro_bias.y += dx[BG_Y];
+    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx[BG_Z];
     }
@@ -1663,8 +1675,8 @@ void ESKF::injectErrorState(const Matrix<15, 1>& dx)
     state_.orientation.normalize();
     state_.orientation.toEuler(state_.roll, state_.pitch, state_.yaw);
 
-    // mag_enabled=false時はYaw=0に固定
-    if (!config_.mag_enabled) {
+    // yaw_estimation_enabled=false時はYaw=0に固定
+    if (!config_.yaw_estimation_enabled) {
         state_.yaw = 0.0f;
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }

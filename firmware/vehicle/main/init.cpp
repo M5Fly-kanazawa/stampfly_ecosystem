@@ -337,8 +337,10 @@ esp_err_t estimators()
         sensor_enables.tof_distance_min = TOF_DISTANCE_MIN;
         sensor_enables.tof_distance_max = TOF_DISTANCE_MAX;
 
-        // ESKF内部の地磁気有効フラグ（predict内のgyro_z処理に影響）
+        // ESKF内部の地磁気有効フラグ（観測更新のみに影響）
         eskf_config.mag_enabled = config::eskf::USE_MAGNETOMETER;
+        // ヨー推定有効フラグ（ジャイロZ積分に影響）
+        eskf_config.yaw_estimation_enabled = config::eskf::ENABLE_YAW_ESTIMATION;
 
         // プロセスノイズ (Q行列)
         eskf_config.gyro_noise = config::eskf::GYRO_NOISE;

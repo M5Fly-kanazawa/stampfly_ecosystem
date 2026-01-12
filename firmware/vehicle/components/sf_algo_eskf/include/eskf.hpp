@@ -97,8 +97,12 @@ public:
         float flow_offset[2];           // {dx_offset, dy_offset}
 
         // 地磁気有効フラグ
-        // false: 地磁気観測なし、ジャイロバイアスZは初期値から更新しない
+        // false: 地磁気観測更新なし
         bool mag_enabled;
+
+        // ヨー推定有効フラグ
+        // false: ヨーを0に固定、ジャイロZ積分なし
+        bool yaw_estimation_enabled;
 
         // 姿勢補正モード
         // 0: 加速度絶対値フィルタのみ (accel_motion_thresholdで判定)
@@ -162,7 +166,8 @@ public:
             cfg.flow_offset[0] = 0.0f;
             cfg.flow_offset[1] = 0.0f;
 
-            cfg.mag_enabled = true;            // デフォルトは全センサー有効
+            cfg.mag_enabled = true;            // デフォルトは地磁気観測有効
+            cfg.yaw_estimation_enabled = true; // デフォルトはヨー推定有効
 
             // 姿勢補正モード
             cfg.att_update_mode = 0;
