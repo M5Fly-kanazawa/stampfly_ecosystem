@@ -164,6 +164,7 @@ inline constexpr float MAG_REF_Z = 40.0f;              // 下成分 [uT]
 // -----------------------------------------------------------------------------
 inline constexpr float MAHALANOBIS_THRESHOLD = 15.0f;  // アウトライア棄却閾値
 inline constexpr float TOF_TILT_THRESHOLD = 0.70f;     // ToF傾き閾値 [rad] (~40度)
+inline constexpr float TOF_CHI2_GATE = 3.84f;          // ToFχ²ゲート閾値 [χ²(1,0.95)=3.84, 0=無効]
 inline constexpr float ACCEL_MOTION_THRESHOLD = 1.0f;  // 加速度モーション閾値 [m/s²]
 
 // 発散検出閾値

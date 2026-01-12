@@ -372,6 +372,7 @@ esp_err_t estimators()
         // 閾値
         eskf_config.mahalanobis_threshold = config::eskf::MAHALANOBIS_THRESHOLD;
         eskf_config.tof_tilt_threshold = config::eskf::TOF_TILT_THRESHOLD;
+        eskf_config.tof_chi2_gate = config::eskf::TOF_CHI2_GATE;
         eskf_config.accel_motion_threshold = config::eskf::ACCEL_MOTION_THRESHOLD;
 
         // オプティカルフロー設定

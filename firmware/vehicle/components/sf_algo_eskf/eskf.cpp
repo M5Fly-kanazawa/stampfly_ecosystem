@@ -794,6 +794,16 @@ void ESKF::updateToF(float distance)
     if (S < 1e-10f) return;
     float S_inv = 1.0f / S;
 
+    // マハラノビス距離によるアウトライア棄却
+    // d² = y² / S (χ²分布, 自由度1)
+    if (config_.tof_chi2_gate > 0.0f) {
+        float d2 = (y * y) * S_inv;
+        if (d2 > config_.tof_chi2_gate) {
+            // 外れ値として棄却
+            return;
+        }
+    }
+
     // カルマンゲイン K (15x1): K[i] = P[i][2] / S
     float K[15];
     for (int i = 0; i < 15; i++) {

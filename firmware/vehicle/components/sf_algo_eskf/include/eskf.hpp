@@ -58,6 +58,10 @@ public:
         // ToF傾き閾値 [rad] (これ以上傾いていると更新スキップ)
         float tof_tilt_threshold;
 
+        // ToFマハラノビス距離ゲート閾値 (χ²分布, 自由度1)
+        // 3.84 = 95%, 6.63 = 99%, 0 = 無効
+        float tof_chi2_gate;
+
         // 加速度計姿勢補正のモーション閾値 [m/s²]
         float accel_motion_threshold;
 
@@ -151,6 +155,7 @@ public:
             // 閾値
             cfg.mahalanobis_threshold = 15.0f;
             cfg.tof_tilt_threshold = 0.70f;    // ~40度
+            cfg.tof_chi2_gate = 3.84f;         // χ²(1,0.95) = 95%信頼区間
             cfg.accel_motion_threshold = 1.0f; // m/s²
             cfg.flow_min_height = 0.02f;       // m
             cfg.flow_max_height = 4.0f;        // m
