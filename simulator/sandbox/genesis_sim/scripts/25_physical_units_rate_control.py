@@ -3,6 +3,17 @@
 25_physical_units_rate_control.py - Physical Units Rate Control
 物理単位ベース角速度制御
 
+!!! WIP: DEBUG PAUSED !!!
+デバッグ休止中
+
+Known issue / 既知の問題:
+  - Drone becomes unstable (pitch diverges) even with no stick input
+  - ドローンが不安定（スティック入力なしでもピッチ発散）
+  - PID gains and rate_max now match firmware config.hpp
+  - PIDゲインとrate_maxはファームウェアと一致済み
+  - Root cause not yet identified - possibly Genesis DOF force/torque convention
+  - 原因未特定 - GenesisのDOF力/トルク規約の可能性
+
 Physical units mode matching firmware USE_PHYSICAL_UNITS=1:
 ファームウェア USE_PHYSICAL_UNITS=1 と一致する物理単位モード:
   - PID output in torque [Nm]
