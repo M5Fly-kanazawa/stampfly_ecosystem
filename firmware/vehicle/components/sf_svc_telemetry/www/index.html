@@ -349,6 +349,18 @@
                 <span id="sensors" class="value" style="font-size:10px;">-----</span>
             </div>
         </div>
+
+        <div class="card" style="border-left-color: #ff9500;">
+            <div class="card-title">ToF Distance</div>
+            <div class="row">
+                <span class="label" style="color:#ff9500">Bottom</span>
+                <span><span id="tof_bottom" class="value" style="color:#ff9500">---</span><span class="unit">m</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#00bfff">Front</span>
+                <span><span id="tof_front" class="value" style="color:#00bfff">---</span><span class="unit">m</span></span>
+            </div>
+        </div>
     </div>
 
     <!-- Graphs Section -->
@@ -473,9 +485,9 @@ const COLORS = {
     THR: '#ffaa00' // Orange - Throttle
 };
 
-// V2.1 Packet offsets (108 bytes)
+// V2.2 Packet offsets (116 bytes) - Added ToF data
 const PKT = {
-    SIZE: 108,
+    SIZE: 116,
     HEADER: 0,
     TYPE: 1,
     TIMESTAMP: 2,
@@ -498,14 +510,16 @@ const PKT = {
     CTRL_ROLL: 70,
     CTRL_PITCH: 74,
     CTRL_YAW: 78,
-    MAG_X: 82,         // [NEW]
-    MAG_Y: 86,         // [NEW]
-    MAG_Z: 90,         // [NEW]
+    MAG_X: 82,
+    MAG_Y: 86,
+    MAG_Z: 90,
     VOLTAGE: 94,
-    FLIGHT_STATE: 98,
-    SENSOR_STATUS: 99,
-    HEARTBEAT: 100,
-    CHECKSUM: 104,
+    TOF_BOTTOM: 98,    // [NEW] 底面ToF距離 [m]
+    TOF_FRONT: 102,    // [NEW] 前方ToF距離 [m]
+    FLIGHT_STATE: 106,
+    SENSOR_STATUS: 107,
+    HEARTBEAT: 108,
+    CHECKSUM: 112,
 };
 const HISTORY_SIZE = 500;
 
@@ -1027,7 +1041,7 @@ function stopLog() {
 function downloadLog() {
     if (logData.length === 0) return;
 
-    const header = 'timestamp_ms,roll_deg,pitch_deg,yaw_deg,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,mag_x,mag_y,mag_z,throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,voltage,state\n';
+    const header = 'timestamp_ms,roll_deg,pitch_deg,yaw_deg,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,mag_x,mag_y,mag_z,throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,voltage,tof_bottom,tof_front,state\n';
     const csv = header + logData.map(d => d.join(',')).join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -1118,6 +1132,7 @@ function connect() {
             let accel_x = 0, accel_y = 0, accel_z = 0;
             let ctrl_throttle = 0, ctrl_roll = 0, ctrl_pitch = 0, ctrl_yaw = 0;
             let mag_x = 0, mag_y = 0, mag_z = 0;
+            let tof_bottom = 0, tof_front = 0;
             let sensor_status = 0x1F;
 
             if (packetType === 0x20) {
@@ -1137,6 +1152,9 @@ function connect() {
                 mag_x = data.getFloat32(PKT.MAG_X, true);
                 mag_y = data.getFloat32(PKT.MAG_Y, true);
                 mag_z = data.getFloat32(PKT.MAG_Z, true);
+
+                tof_bottom = data.getFloat32(PKT.TOF_BOTTOM, true);
+                tof_front = data.getFloat32(PKT.TOF_FRONT, true);
 
                 sensor_status = data.getUint8(PKT.SENSOR_STATUS);
             }
@@ -1191,7 +1209,7 @@ function connect() {
                     accel_x.toFixed(3), accel_y.toFixed(3), accel_z.toFixed(3),
                     mag_x.toFixed(1), mag_y.toFixed(1), mag_z.toFixed(1),
                     ctrl_throttle.toFixed(3), ctrl_roll.toFixed(3), ctrl_pitch.toFixed(3), ctrl_yaw.toFixed(3),
-                    voltage.toFixed(2), state
+                    voltage.toFixed(2), tof_bottom.toFixed(3), tof_front.toFixed(3), state
                 ]);
             }
 
@@ -1224,6 +1242,8 @@ function connect() {
             document.getElementById('state').textContent = STATES[state] || 'UNKNOWN';
             document.getElementById('sensors').textContent = parseSensorStatus(sensor_status);
             document.getElementById('heartbeat').textContent = heartbeat;
+            document.getElementById('tof_bottom').textContent = tof_bottom.toFixed(3);
+            document.getElementById('tof_front').textContent = tof_front.toFixed(3);
 
         } catch (e) {
             errorCount++;
