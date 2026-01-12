@@ -168,6 +168,50 @@ def ned_torque_to_genesis(tx, ty, tz):
     return (ty, tx, -tz)
 ```
 
+### Genesis DOF API のフレーム規約
+
+**重要:** Genesis の `control_dofs_force()` と `get_dofs_velocity()` は異なるフレームを使用します。
+
+| API | DOF [0:3] | DOF [3:6] |
+|-----|-----------|-----------|
+| `control_dofs_force()` | **ワールド**フレームの力 | **ボディ**フレームのトルク |
+| `get_dofs_velocity()` | ワールドフレームの速度 | **ボディ**フレームの角速度 |
+| `get_ang()` | - | **ワールド**フレームの角速度 |
+
+```python
+# 正しい力・トルクの適用方法
+# Correct force/torque application
+
+# 1. NED座標系からGenesis座標系への変換
+force_genesis_body = ned_force_to_genesis(fx, fy, fz)
+torque_genesis_body = ned_torque_to_genesis(tx, ty, tz)
+
+# 2. 力のみワールドフレームに変換（トルクはボディフレームのまま）
+R = quat_to_rotation_matrix(drone.get_quat())
+force_world = R @ force_genesis_body
+
+# 3. DOFに適用
+dof_force = np.zeros(6)
+dof_force[0:3] = force_world          # ワールドフレームの力
+dof_force[3:6] = torque_genesis_body  # ボディフレームのトルク（変換しない！）
+drone.control_dofs_force(dof_force)
+```
+
+```python
+# 正しい角速度の取得方法
+# Correct angular velocity acquisition
+
+# get_dofs_velocity()[3:6] はボディフレームの角速度を直接返す
+dofs_vel = drone.get_dofs_velocity()
+gyro_genesis_body = np.array([dofs_vel[3], dofs_vel[4], dofs_vel[5]])
+
+# NEDに変換
+gyro_ned = genesis_omega_to_ned(gyro_genesis_body[0], gyro_genesis_body[1], gyro_genesis_body[2])
+# gyro_ned = (p, q, r) in NED body frame
+```
+
+**注意:** `get_ang()` はワールドフレームの角速度を返します。レート制御にはボディフレームの角速度が必要なため、`get_dofs_velocity()[3:6]` を使用してください。
+
 ## 5. 制御システム統合のアーキテクチャ
 
 ### 推奨構成
@@ -387,6 +431,18 @@ def ned_pos_to_genesis(x, y, z):
 def genesis_pos_to_ned(gx, gy, gz):
     return (gy, gx, -gz)  # (forward, right, down)
 ```
+
+### Genesis DOF API Frame Convention
+
+**Important:** Genesis `control_dofs_force()` and `get_dofs_velocity()` use different frames.
+
+| API | DOF [0:3] | DOF [3:6] |
+|-----|-----------|-----------|
+| `control_dofs_force()` | **World** frame force | **Body** frame torque |
+| `get_dofs_velocity()` | World frame velocity | **Body** frame angular velocity |
+| `get_ang()` | - | **World** frame angular velocity |
+
+**Note:** For rate control, use `get_dofs_velocity()[3:6]` to get body-frame angular velocity directly. `get_ang()` returns world-frame angular velocity which requires additional transformation.
 
 ## 5. Summary
 
