@@ -147,10 +147,13 @@
     </collision>
 
     <!-- Inertial (total mass including propellers) -->
+    <!-- Genesis座標系: X=右(Pitch), Y=前(Roll), Z=上(Yaw) -->
+    <!-- NED座標系: X=前(Roll), Y=右(Pitch), Z=下(Yaw) -->
+    <!-- 軸対応: Genesis ixx=NED Iyy(Pitch), Genesis iyy=NED Ixx(Roll) -->
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="0.035"/>  <!-- 35g total -->
-      <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>
+      <inertia ixx="13.3e-6" ixy="0" ixz="0" iyy="9.16e-6" iyz="0" izz="20.4e-6"/>
     </inertial>
   </link>
 
