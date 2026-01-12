@@ -204,7 +204,7 @@ class FollowCamera:
     - X: forward, Y: left, Z: up
     """
 
-    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15, alpha_height=0.5):
+    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15, alpha_height=1.0):
         """
         Args:
             distance: Distance behind drone [m]
@@ -459,7 +459,7 @@ def main():
 
     # Follow camera (behind drone)
     # Increased alpha values for tighter following
-    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.3, alpha_look=0.5, alpha_height=0.7)
+    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.3, alpha_look=0.5, alpha_height=1.0)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
