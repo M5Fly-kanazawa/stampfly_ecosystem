@@ -465,12 +465,17 @@ def main():
     gs.init(backend=gs.cpu)
 
     # Scene creation
+    # Initial camera: behind drone (drone at (0,0,2), camera at (-1,0,2.3))
+    # Genesis: X-forward, so behind = -X
+    DRONE_SPAWN_POS = (0, 0, 2.0)
     print("\n[4] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(8.0, -8.0, 6.0),
-            camera_lookat=(0, 0, 2.0),
+            camera_pos=(DRONE_SPAWN_POS[0] - follow_camera.distance,
+                        DRONE_SPAWN_POS[1],
+                        DRONE_SPAWN_POS[2] + follow_camera.height),
+            camera_lookat=DRONE_SPAWN_POS,
             camera_fov=60,
             max_FPS=RENDER_FPS,
         ),
@@ -497,8 +502,8 @@ def main():
     drone = scene.add_entity(
         gs.morphs.URDF(
             file=str(urdf_file),
-            pos=(0, 0, 2.0),
-            euler=(0, 0, 0),
+            pos=DRONE_SPAWN_POS,
+            euler=(0, 0, 0),  # yaw=0: facing +X direction
             fixed=False,
             prioritize_urdf_material=True,
         ),
@@ -509,6 +514,13 @@ def main():
     build_start = time.perf_counter()
     scene.build()
     print(f"    Build time: {time.perf_counter() - build_start:.1f}s")
+
+    # Initialize follow camera with drone's initial position and yaw
+    initial_pos = drone.get_pos()
+    initial_quat = drone.get_quat()
+    initial_euler = quat_to_euler(initial_quat)
+    initial_yaw = initial_euler[2]
+    follow_camera.update(scene, initial_pos, initial_yaw)
 
     # Info display
     print("\n" + "=" * 60)
