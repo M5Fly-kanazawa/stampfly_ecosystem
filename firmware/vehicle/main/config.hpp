@@ -85,7 +85,7 @@ inline constexpr float IMU_DT = 0.0025f;          // 400Hz
 inline constexpr float OPTFLOW_DT = 0.01f;        // 100Hz
 inline constexpr float MAG_DT = 0.01f;            // 100Hz
 inline constexpr float BARO_DT = 0.02f;           // 50Hz
-inline constexpr float TOF_DT = 0.033f;           // ~30Hz
+inline constexpr float TOF_DT = 0.05f;            // 20Hz
 
 // =============================================================================
 // Sensor Thresholds
@@ -253,7 +253,7 @@ inline constexpr int MIN_ACCEL_SAMPLES = 50;
 inline constexpr int MIN_GYRO_SAMPLES = 50;
 inline constexpr int MIN_MAG_SAMPLES = 50;
 inline constexpr int MIN_BARO_SAMPLES = 20;      // 50Hz × 20 = 400ms
-inline constexpr int MIN_TOF_SAMPLES = 20;       // 30Hz × 20 = 667ms
+inline constexpr int MIN_TOF_SAMPLES = 20;       // 20Hz × 20 = 1000ms
 inline constexpr int MIN_OPTFLOW_SAMPLES = 50;   // 100Hz × 50 = 500ms
 
 } // namespace stability

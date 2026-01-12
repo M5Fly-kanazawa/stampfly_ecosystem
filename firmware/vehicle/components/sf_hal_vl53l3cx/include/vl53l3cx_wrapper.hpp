@@ -77,7 +77,7 @@ public:
             config.xshut_pin = GPIO_NUM_7;
             config.i2c_addr = BOTTOM_I2C_ADDR;
             config.location = ToFLocation::BOTTOM;
-            config.timing_budget_ms = 33;  // ~30Hz
+            config.timing_budget_ms = 50;  // 20Hz
             return config;
         }
 
@@ -90,7 +90,7 @@ public:
             config.xshut_pin = GPIO_NUM_9;
             config.i2c_addr = FRONT_I2C_ADDR;
             config.location = ToFLocation::FRONT;
-            config.timing_budget_ms = 33;  // ~30Hz
+            config.timing_budget_ms = 50;  // 20Hz
             return config;
         }
     };
