@@ -17,6 +17,7 @@
 #include "control_allocation.hpp"
 #include "motor_model.hpp"
 #include "controller_comm.hpp"  // for CTRL_FLAG_MODE
+#include "led_manager.hpp"      // for flight mode LED indication
 
 static const char* TAG = "ControlTask";
 
@@ -243,6 +244,11 @@ void ControlTask(void* pvParameters)
     g_rate_controller.init();
     g_attitude_controller.init();
 
+    // 初期フライトモードをLEDに反映（デフォルト: ACRO=青）
+    // Set initial flight mode LED (default: ACRO=blue)
+    stampfly::LEDManager::getInstance().onFlightModeChanged(
+        g_flight_mode == FlightMode::STABILIZE);
+
     // 前回のフライト状態（ARMED遷移時にPIDリセット用）
     stampfly::FlightState prev_flight_state = stampfly::FlightState::INIT;
 
@@ -315,8 +321,13 @@ void ControlTask(void* pvParameters)
             g_flight_mode != g_pending_mode) {
             g_flight_mode = g_pending_mode;
             g_attitude_controller.reset();
+
+            // LED表示更新（MCU LED: STABILIZE=緑, ACRO=青）
+            bool is_stabilize = (g_flight_mode == FlightMode::STABILIZE);
+            stampfly::LEDManager::getInstance().onFlightModeChanged(is_stabilize);
+
             ESP_LOGI(TAG, "Mode changed to %s",
-                     g_flight_mode == FlightMode::STABILIZE ? "STABILIZE" : "ACRO");
+                     is_stabilize ? "STABILIZE" : "ACRO");
         }
 
         float roll_rate_target, pitch_rate_target, yaw_rate_target;

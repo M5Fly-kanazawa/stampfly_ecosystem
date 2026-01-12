@@ -150,6 +150,18 @@ void LEDManager::onFlightStateChanged(FlightState state)
     requestChannel(LEDChannel::FLIGHT, LEDPriority::FLIGHT_STATE, pattern, color);
 }
 
+void LEDManager::onFlightModeChanged(bool is_stabilize)
+{
+    if (!initialized_) return;
+
+    // SYSTEMチャンネル（MCU LED）でフライトモードを表示
+    // STABILIZE: 緑（角度制御 - 安定）
+    // ACRO: 青（角速度制御 - アクロバティック）
+    uint32_t color = is_stabilize ? 0x00FF00 : 0x0000FF;
+    requestChannel(LEDChannel::SYSTEM, LEDPriority::FLIGHT_STATE,
+                   LEDPattern::SOLID, color);
+}
+
 void LEDManager::onBatteryStateChanged(float voltage, bool low_battery)
 {
     if (!initialized_) return;

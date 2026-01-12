@@ -82,6 +82,12 @@ public:
     void onFlightStateChanged(FlightState state);
 
     /**
+     * @brief フライトモード変更通知
+     * @param is_stabilize true=STABILIZE（角度制御）, false=ACRO（角速度制御）
+     */
+    void onFlightModeChanged(bool is_stabilize);
+
+    /**
      * @brief バッテリー状態変更通知
      * @param voltage 電圧 [V]
      * @param low_battery 低電圧フラグ
