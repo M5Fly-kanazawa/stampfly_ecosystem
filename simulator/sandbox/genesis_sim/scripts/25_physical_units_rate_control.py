@@ -459,7 +459,7 @@ def main():
 
     # Follow camera (behind drone)
     # Increased alpha values for tighter following
-    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.3, alpha_look=0.5, alpha_height=1.0)
+    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.9, alpha_look=0.9, alpha_height=1.0)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
