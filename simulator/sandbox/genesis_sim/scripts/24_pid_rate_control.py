@@ -230,7 +230,7 @@ def genesis_gyro_to_ned(gyro_genesis_body):
     Convert Genesis body frame angular velocity to NED body frame
     Genesis機体座標系の角速度をNED機体座標系に変換
 
-    Genesis body: (wx, wy, wz) - X forward, Y left, Z up
+    Genesis body: (wx, wy, wz) - X right, Y forward, Z up
     NED body: (p, q, r) - roll rate, pitch rate, yaw rate
     """
     return np.array([gyro_genesis_body[1], gyro_genesis_body[0], -gyro_genesis_body[2]])
