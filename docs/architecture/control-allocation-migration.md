@@ -220,7 +220,91 @@ k_τ = (0.25 / 3.7) × T_max × d
 
 ---
 
-## 5. 移行計画
+## 5. PIDゲイン変換の理論的根拠
+
+### ファームウェアPID形式の確認
+
+ファームウェア（`sf_algo_pid/pid.cpp`）は**標準形式（ISA形式）**を採用：
+
+```cpp
+output = P_ + I_ + D_
+       = Kp_ * error_ + Kp_ * integral_ + Kp_ * deriv_filtered_
+       = Kp_ × [e + integral_ + deriv_filtered_]
+```
+
+連続時間表現：
+
+```
+u = Kp × [e + (1/Ti)∫e dt + Td × de/dt]
+```
+
+### なぜTi, Tdは変換不要か：数学的証明
+
+**旧システム（電圧出力 u_V）：**
+```
+u_V = Kp_old × [e + (1/Ti_old)∫e dt + Td_old × de/dt]
+```
+
+**新システム（トルク出力 u_τ）：**
+```
+u_τ = Kp_new × [e + (1/Ti_new)∫e dt + Td_new × de/dt]
+```
+
+等価動作条件 `u_τ = k × u_V`（kはスケーリング係数）を満たすには：
+
+```
+Kp_new × [e + (1/Ti_new)∫e dt + Td_new × de/dt]
+    = k × Kp_old × [e + (1/Ti_old)∫e dt + Td_old × de/dt]
+```
+
+任意のe(t)で成立するためには、各項の係数が一致：
+
+| 項 | 左辺係数 | 右辺係数 | 結論 |
+|----|---------|---------|------|
+| e | Kp_new | k × Kp_old | Kp_new = k × Kp_old |
+| ∫e dt | Kp_new/Ti_new | k × Kp_old/Ti_old | Ti_new = Ti_old |
+| de/dt | Kp_new × Td_new | k × Kp_old × Td_old | Td_new = Td_old |
+
+**証明（Ti）：**
+```
+Kp_new/Ti_new = k × Kp_old/Ti_old
+(k × Kp_old)/Ti_new = k × Kp_old/Ti_old
+∴ Ti_new = Ti_old
+```
+
+**証明（Td）：**
+```
+Kp_new × Td_new = k × Kp_old × Td_old
+(k × Kp_old) × Td_new = k × Kp_old × Td_old
+∴ Td_new = Td_old
+```
+
+### 物理的解釈
+
+| パラメータ | 単位 | 物理的意味 | 変換 |
+|-----------|------|-----------|------|
+| Kp | [出力単位/誤差単位] | 比例ゲイン（出力スケール） | **要変換** |
+| Ti | [s] | 積分時定数（P項と同等になる時間） | 不変 |
+| Td | [s] | 微分時定数（予測時間） | 不変 |
+| η | [-] | 微分フィルタ係数（無次元） | 不変 |
+
+**Ti, Tdが不変な理由：**
+- 時定数（秒）であり、**時間領域の動的挙動**を定義
+- P項、I項、D項の**相対的な寄与比率**を決定
+- 出力の物理単位には依存しない
+
+### 結論
+
+```
+新Kp = k_scale × 旧Kp
+新Ti = 旧Ti（変更不要）
+新Td = 旧Td（変更不要）
+新η  = 旧η（変更不要）
+```
+
+---
+
+## 6. 移行計画
 
 ### Phase 1: 制御アロケーションモジュール作成
 
@@ -304,7 +388,7 @@ Kp = ω_c × I / Kt
 
 ---
 
-## 6. 変更対象ファイル
+## 7. 変更対象ファイル
 
 | ファイル | 変更内容 |
 |---------|---------|
@@ -319,7 +403,7 @@ Kp = ω_c × I / Kt
 
 ---
 
-## 7. 検証方法
+## 8. 検証方法
 
 ### シミュレータ検証
 
@@ -391,7 +475,34 @@ B⁻¹ = [1   -1/d   -1/d   -1/κ] × (1/4)
 
 ---
 
-## 5. Migration Plan
+## 5. Theoretical Basis for PID Gain Conversion
+
+### Firmware PID Form
+
+The firmware (`sf_algo_pid/pid.cpp`) uses **Standard Form (ISA Form)**:
+
+```
+u = Kp × [e + (1/Ti)∫e dt + Td × de/dt]
+```
+
+### Mathematical Proof: Why Ti and Td Remain Unchanged
+
+For equivalent behavior `u_τ = k × u_V` (k = scaling factor):
+
+| Term | LHS Coefficient | RHS Coefficient | Result |
+|------|-----------------|-----------------|--------|
+| e | Kp_new | k × Kp_old | Kp_new = k × Kp_old |
+| ∫e dt | Kp_new/Ti_new | k × Kp_old/Ti_old | **Ti_new = Ti_old** |
+| de/dt | Kp_new × Td_new | k × Kp_old × Td_old | **Td_new = Td_old** |
+
+**Conclusion:**
+- Ti, Td are **time constants** [seconds] defining dynamic behavior
+- They determine **relative contribution ratios** of P, I, D terms
+- Only **Kp needs scaling** (it has output units)
+
+---
+
+## 6. Migration Plan
 
 ### Phase 1: Create Control Allocation Module
 
@@ -415,7 +526,7 @@ Design gains for physical unit output based on inertia and target bandwidth.
 
 ---
 
-## 7. Verification
+## 8. Verification
 
 ### Simulator Verification
 
