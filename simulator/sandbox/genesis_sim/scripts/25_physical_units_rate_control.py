@@ -72,40 +72,40 @@ class PhysicalUnitsRateController:
         # Kp units: [Nm / (rad/s)]
         # Output limits: [Nm]
 
-        # Roll PID (Td reduced for simulation stability)
+        # Roll PID - match firmware config.hpp
         self.roll_pid = PID(
             Kp=1.51e-4,  # Nm/(rad/s)
             Ti=0.7,      # s
-            Td=0.001,    # s (reduced from 0.01)
+            Td=0.01,     # s
             eta=0.125,
             output_min=-8.6e-4,  # Nm
             output_max=8.6e-4,   # Nm
         )
 
-        # Pitch PID (Td reduced for simulation stability)
+        # Pitch PID - match firmware config.hpp
         self.pitch_pid = PID(
             Kp=2.21e-4,  # Nm/(rad/s)
             Ti=0.7,      # s
-            Td=0.001,    # s (reduced from 0.025)
+            Td=0.025,    # s
             eta=0.125,
             output_min=-8.6e-4,  # Nm
             output_max=8.6e-4,   # Nm
         )
 
-        # Yaw PID (Td reduced for simulation stability)
+        # Yaw PID - match firmware config.hpp
         self.yaw_pid = PID(
             Kp=2.95e-4,  # Nm/(rad/s)
             Ti=0.8,      # s
-            Td=0.001,    # s (reduced from 0.01)
+            Td=0.01,     # s
             eta=0.125,
             output_min=-3.6e-4,  # Nm
             output_max=3.6e-4,   # Nm
         )
 
-        # Rate limits (rad/s)
-        self.roll_rate_max = 3.84   # rad/s (~220 deg/s)
-        self.pitch_rate_max = 3.84  # rad/s (~220 deg/s)
-        self.yaw_rate_max = 3.49    # rad/s (~200 deg/s)
+        # Rate limits (rad/s) - match firmware config.hpp
+        self.roll_rate_max = 1.0    # rad/s (~57 deg/s)
+        self.pitch_rate_max = 1.0   # rad/s (~57 deg/s)
+        self.yaw_rate_max = 5.0     # rad/s (~286 deg/s)
 
     def update(self, rate_setpoint: np.ndarray, gyro: np.ndarray, dt: float):
         """
