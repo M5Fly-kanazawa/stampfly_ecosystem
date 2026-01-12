@@ -400,19 +400,19 @@ inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad
 // ==========================================================================
 
 // Roll rate PID
-inline constexpr float ROLL_RATE_KP = 9.1e-4f;     // [Nm/(rad/s)] = 0.65 × 1.4e-3
-inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s] (不変)
-inline constexpr float ROLL_RATE_TD = 0.01f;       // 微分時間 [s] (不変)
+inline constexpr float ROLL_RATE_KP = 1.52e-4f;    // [Nm/(rad/s)] (Loop Shaping設計)
+inline constexpr float ROLL_RATE_TI = 0.1181f;     // 積分時間 [s] (118.1ms)
+inline constexpr float ROLL_RATE_TD = 0.0169f;     // 微分時間 [s] (16.9ms)
 
 // Pitch rate PID
-inline constexpr float PITCH_RATE_KP = 1.33e-3f;   // [Nm/(rad/s)] = 0.95 × 1.4e-3
-inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s] (不変)
-inline constexpr float PITCH_RATE_TD = 0.025f;     // 微分時間 [s] (不変)
+inline constexpr float PITCH_RATE_KP = 2.20e-4f;   // [Nm/(rad/s)] (Loop Shaping設計)
+inline constexpr float PITCH_RATE_TI = 1.181f;     // 積分時間 [s] (1181ms)
+inline constexpr float PITCH_RATE_TD = 0.0169f;    // 微分時間 [s] (16.9ms)
 
 // Yaw rate PID
-inline constexpr float YAW_RATE_KP = 1.77e-3f;     // [Nm/(rad/s)] = 3.0 × 5.9e-4
-inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s] (不変)
-inline constexpr float YAW_RATE_TD = 0.01f;        // 微分時間 [s] (不変)
+inline constexpr float YAW_RATE_KP = 3.38e-4f;     // [Nm/(rad/s)] (Loop Shaping設計)
+inline constexpr float YAW_RATE_TI = 0.1181f;      // 積分時間 [s] (118.1ms)
+inline constexpr float YAW_RATE_TD = 0.0169f;      // 微分時間 [s] (16.9ms)
 
 // 出力制限 [Nm]
 inline constexpr float ROLL_OUTPUT_LIMIT = 5.2e-3f;   // 3.7 × 1.4e-3
