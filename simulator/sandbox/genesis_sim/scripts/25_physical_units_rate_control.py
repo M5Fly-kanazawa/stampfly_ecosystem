@@ -46,7 +46,7 @@ import numpy as np
 import time
 import pygame
 
-from motor_model import QuadMotorSystem
+from motor_model import QuadMotorSystem, compute_hover_conditions
 from control_allocation import ControlAllocator, thrusts_to_duties
 
 # Import PID from simulator/control
@@ -491,6 +491,13 @@ def main():
     print("\n[2] Initializing control system...")
     allocator = ControlAllocator()
     motor_system = QuadMotorSystem()
+
+    # Initialize motors at hover speed (critical for stability!)
+    # モータをホバー回転数で初期化（安定性のために必須！）
+    hover = compute_hover_conditions()
+    for motor in motor_system.motors:
+        motor.omega = hover['omega_hover']
+    print(f"  Motors initialized at hover: ω={hover['omega_hover']:.0f} rad/s")
 
     # Controllers
     rate_controller = PhysicalUnitsRateController()
