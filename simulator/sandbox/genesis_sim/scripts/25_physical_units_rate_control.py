@@ -444,11 +444,11 @@ def main():
         return
 
     # Timing settings
-    PHYSICS_HZ = 1000
-    PHYSICS_DT = 1 / PHYSICS_HZ
-    CONTROL_HZ = 400
+    PHYSICS_HZ = 2000  # 2000Hz physics
+    PHYSICS_DT = 1 / PHYSICS_HZ  # 0.0005s = 0.5ms
+    CONTROL_HZ = 400  # 5 physics steps per control (integer ratio)
     CONTROL_DT = 1 / CONTROL_HZ
-    RENDER_FPS = 60
+    RENDER_FPS = 30
     RENDER_DT = 1 / RENDER_FPS
 
     # World settings
@@ -586,6 +586,11 @@ def main():
     next_control_time = 0
     start_time = time.perf_counter()
     last_print_time = -1
+    last_control_sim_time = 0.0  # Track actual time of last control update
+
+    # Debug: print first N control steps
+    DEBUG_CONTROL_STEPS = 20
+    debug_enabled = True
 
     # Current control outputs
     current_torque = np.array([0.0, 0.0, 0.0])  # [roll, pitch, yaw] Nm
@@ -699,10 +704,22 @@ def main():
                 control_steps += 1
                 next_control_time = control_steps * CONTROL_DT
 
+                # Debug: print first N control steps
+                if debug_enabled and control_steps <= DEBUG_CONTROL_STEPS:
+                    print(f"  [DEBUG step {control_steps}] "
+                          f"stick=({roll_raw:+.3f},{pitch_raw:+.3f},{yaw_raw:+.3f}) | "
+                          f"gyro=({np.degrees(gyro_ned[0]):+.1f},{np.degrees(gyro_ned[1]):+.1f},{np.degrees(gyro_ned[2]):+.1f})deg/s | "
+                          f"torque=({current_torque[0]*1e6:+.1f},{current_torque[1]*1e6:+.1f},{current_torque[2]*1e6:+.1f})uNm")
+
             # Control allocation: [thrust, roll_torque, pitch_torque, yaw_torque] -> motor thrusts
             control = np.array([u_thrust, current_torque[0], current_torque[1], current_torque[2]])
             target_thrusts = allocator.mix(control)
             target_duties = thrusts_to_duties(target_thrusts)
+
+            # Debug: print motor thrusts for first few steps
+            if debug_enabled and control_steps <= DEBUG_CONTROL_STEPS and control_steps > 0:
+                print(f"           thrusts=({target_thrusts[0]*1000:.1f},{target_thrusts[1]*1000:.1f},{target_thrusts[2]*1000:.1f},{target_thrusts[3]*1000:.1f})mN | "
+                      f"duties=({target_duties[0]:.3f},{target_duties[1]:.3f},{target_duties[2]:.3f},{target_duties[3]:.3f})")
 
             # Physics loop
             while sim_time <= real_time:
