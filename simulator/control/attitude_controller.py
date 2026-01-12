@@ -61,12 +61,12 @@ class AttitudeControlConfig:
     # 姿勢（外側ループ）PIDゲイン
     # These output rate setpoints (rad/s)
     roll_angle_kp: float = 5.0
-    roll_angle_ti: float = 4.0   # 積分時間 [s] (元: 0.0)
-    roll_angle_td: float = 0.04  # 微分時間 [s] (元: 0.0)
+    roll_angle_ti: float = 0.0   # No integral for attitude
+    roll_angle_td: float = 0.0   # No derivative (rate loop handles it)
 
     pitch_angle_kp: float = 5.0
-    pitch_angle_ti: float = 4.0   # (元: 0.0)
-    pitch_angle_td: float = 0.04  # (元: 0.0)
+    pitch_angle_ti: float = 0.0
+    pitch_angle_td: float = 0.0
 
     # Yaw uses rate control directly (heading hold is separate)
     # Yawはレート制御を直接使用（ヘディングホールドは別）
