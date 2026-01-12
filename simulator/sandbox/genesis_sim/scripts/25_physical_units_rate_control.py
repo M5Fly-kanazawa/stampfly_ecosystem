@@ -191,6 +191,85 @@ class AttitudeController:
 
 
 # =============================================================================
+# Follow Camera
+# =============================================================================
+
+class FollowCamera:
+    """
+    Follow camera that tracks drone from behind.
+    後ろから追いかけるカメラ
+
+    Genesis coordinate system:
+    - X: forward, Y: left, Z: up
+    """
+
+    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15):
+        """
+        Args:
+            distance: Distance behind drone [m]
+            height: Height above drone [m]
+            alpha_pos: Smoothing factor for camera position (smaller = smoother)
+            alpha_look: Smoothing factor for lookat point
+        """
+        self.distance = distance
+        self.height = height
+        self.alpha_pos = alpha_pos
+        self.alpha_look = alpha_look
+
+        # Smoothed camera state
+        self.cam_pos = None
+        self.lookat_pos = None
+        self.initialized = False
+
+    def update(self, scene, drone_pos, drone_yaw):
+        """
+        Update camera position to follow drone.
+
+        Args:
+            scene: Genesis scene object
+            drone_pos: Drone position (x, y, z) in Genesis frame
+            drone_yaw: Drone yaw angle [rad] in Genesis frame
+        """
+        # Target lookat = drone position
+        lookat_target = np.array([
+            float(drone_pos[0]),
+            float(drone_pos[1]),
+            float(drone_pos[2]),
+        ])
+
+        # Target camera position = behind and above drone
+        # Genesis: X-forward, Y-left, Z-up
+        # Behind drone: negative X direction when yaw=0
+        cam_target = np.array([
+            lookat_target[0] - self.distance * np.cos(drone_yaw),
+            lookat_target[1] - self.distance * np.sin(drone_yaw),
+            lookat_target[2] + self.height,
+        ])
+
+        # Initialize or smooth
+        if not self.initialized:
+            self.cam_pos = cam_target.copy()
+            self.lookat_pos = lookat_target.copy()
+            self.initialized = True
+        else:
+            # Low-pass filter smoothing
+            self.cam_pos += self.alpha_pos * (cam_target - self.cam_pos)
+            self.lookat_pos += self.alpha_look * (lookat_target - self.lookat_pos)
+
+        # Update viewer camera
+        scene.viewer.set_camera_pose(
+            pos=tuple(self.cam_pos),
+            lookat=tuple(self.lookat_pos),
+        )
+
+    def reset(self):
+        """Reset camera state."""
+        self.cam_pos = None
+        self.lookat_pos = None
+        self.initialized = False
+
+
+# =============================================================================
 # Utility Functions
 # =============================================================================
 
@@ -367,11 +446,15 @@ def main():
     rate_controller = PhysicalUnitsRateController()
     attitude_controller = AttitudeController()
 
+    # Follow camera (behind drone)
+    follow_camera = FollowCamera(distance=1.0, height=0.3)
+
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
     prev_mode_button = False
 
     print(f"  Initial mode: ACRO (Rate Control)")
+    print(f"  Camera: Follow mode (behind drone)")
     print(f"  Physical units PID gains:")
     print(f"    Roll:  Kp={1.51e-4:.2e} Nm/(rad/s)")
     print(f"    Pitch: Kp={2.21e-4:.2e} Nm/(rad/s)")
@@ -463,6 +546,7 @@ def main():
         motor_system.reset()
         rate_controller.reset()
         attitude_controller.reset()
+        follow_camera.reset()
         physics_steps = 0
         control_steps = 0
         next_render_time = 0
@@ -582,8 +666,15 @@ def main():
                 physics_steps += 1
                 sim_time = physics_steps * PHYSICS_DT
 
-            # Rendering
+            # Rendering with follow camera
             if real_time >= next_render_time:
+                # Update follow camera position
+                pos = drone.get_pos()
+                quat = drone.get_quat()
+                euler_genesis = quat_to_euler(quat)
+                drone_yaw = euler_genesis[2]  # Genesis yaw
+                follow_camera.update(scene, pos, drone_yaw)
+
                 scene.visualizer.update()
                 next_render_time += RENDER_DT
 
