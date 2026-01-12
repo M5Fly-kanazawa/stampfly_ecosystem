@@ -334,6 +334,18 @@
             </div>
         </div>
 
+        <div class="card" style="border-left-color: #ff9500;">
+            <div class="card-title">ToF Distance</div>
+            <div class="row">
+                <span class="label" style="color:#ff9500">Bottom</span>
+                <span><span id="tof_bottom" class="value" style="color:#ff9500">---</span><span class="unit">m</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#00bfff">Front</span>
+                <span><span id="tof_front" class="value" style="color:#00bfff">---</span><span class="unit">m</span></span>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-title">System</div>
             <div class="row">
@@ -347,18 +359,6 @@
             <div class="row">
                 <span class="label">Sensors</span>
                 <span id="sensors" class="value" style="font-size:10px;">-----</span>
-            </div>
-        </div>
-
-        <div class="card" style="border-left-color: #ff9500;">
-            <div class="card-title">ToF Distance</div>
-            <div class="row">
-                <span class="label" style="color:#ff9500">Bottom</span>
-                <span><span id="tof_bottom" class="value" style="color:#ff9500">---</span><span class="unit">m</span></span>
-            </div>
-            <div class="row">
-                <span class="label" style="color:#00bfff">Front</span>
-                <span><span id="tof_front" class="value" style="color:#00bfff">---</span><span class="unit">m</span></span>
             </div>
         </div>
     </div>
@@ -447,6 +447,17 @@
                 <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>Roll</div>
                 <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Pitch</div>
                 <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Yaw</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
+                <div class="graph-title">ToF Distance [m]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphToF"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff9500"></div>Bottom</div>
+                <div class="legend-item"><div class="legend-color" style="background:#00bfff"></div>Front</div>
             </div>
         </div>
     </div>
@@ -565,6 +576,8 @@ const history = {
     ctrl_roll: new RingBuffer(HISTORY_SIZE),
     ctrl_pitch: new RingBuffer(HISTORY_SIZE),
     ctrl_yaw: new RingBuffer(HISTORY_SIZE),
+    tof_bottom: new RingBuffer(HISTORY_SIZE),
+    tof_front: new RingBuffer(HISTORY_SIZE),
 };
 
 // Current state for views
@@ -1005,6 +1018,8 @@ function updateGraphs() {
               [COLORS.X, COLORS.Y, COLORS.Z, '#888'], 50);      // ±50 uT default
     drawGraph('graphControl', history.ctrl_throttle, history.ctrl_roll, history.ctrl_pitch, history.ctrl_yaw,
               [COLORS.THR, COLORS.X, COLORS.Y, COLORS.Z], 1);   // ±1 default
+    drawGraph('graphToF', history.tof_bottom, history.tof_front, null, null,
+              ['#ff9500', '#00bfff', '#888', '#888'], 2);       // ±2 m default
 }
 
 function updateViews() {
@@ -1198,6 +1213,8 @@ function connect() {
             history.mag_x.push(mag_x);
             history.mag_y.push(mag_y);
             history.mag_z.push(mag_z);
+            history.tof_bottom.push(tof_bottom);
+            history.tof_front.push(tof_front);
 
             // Log if recording
             if (isLogging) {
