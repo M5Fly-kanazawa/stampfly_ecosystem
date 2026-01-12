@@ -19,9 +19,9 @@ Controls (StampFly Controller USB HID):
   - Roll axis (Axis 1): Roll rate/angle command
   - Pitch axis (Axis 2): Pitch rate/angle command
   - Yaw axis (Axis 3): Yaw rate command
+  - Arm button (Button 0): Reset simulation
   - Mode button (Button 2): Toggle ACRO/STABILIZE mode
   - Option button (Button 3) / Q key: Exit
-  - R key: Reset simulation
 """
 
 import sys
@@ -393,9 +393,9 @@ def main():
     print("Physical Units Rate Control")
     print("物理単位ベース角速度制御")
     print("=" * 60)
+    print("Arm button (Button 0): Reset simulation")
     print("Mode button (Button 2): Toggle ACRO/STABILIZE")
     print("Option button (Button 3) / Q: Exit")
-    print("R: Reset simulation")
     print("=" * 60)
 
     # Path setup
@@ -578,10 +578,11 @@ def main():
                     if event.key == pygame.K_q:
                         print("\n>>> Exit (Q key)")
                         raise KeyboardInterrupt
-                    if event.key == pygame.K_r:
-                        reset_simulation()
 
                 if event.type == pygame.JOYBUTTONDOWN:
+                    if event.button == 0:  # Arm button
+                        reset_simulation()
+
                     if event.button == 2:  # Mode button
                         # Toggle mode
                         use_acro_mode = not use_acro_mode
