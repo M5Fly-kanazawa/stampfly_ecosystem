@@ -351,40 +351,103 @@ inline constexpr int LEDC_TIMER = 1;               // LEDCタイマー
 // 感度パラメータ: スティック最大倒し量時の目標角速度 [rad/s]
 // PIDゲイン: 角速度追従のためのPIDパラメータ
 //
+// 物理単位モード有効時:
+//   PID出力は物理トルク [Nm] → ControlAllocator → モータ推力 [N] → Duty
+// 電圧スケールモード（レガシー）:
+//   PID出力は電圧 [V] → 従来ミキサー → Duty
+//
 
 namespace rate_control {
+
+// -----------------------------------------------------------------------------
+// 物理単位モード切り替え (Physical Units Mode Switch)
+// 1: 物理単位ベース（トルク [Nm] 出力）
+// 0: 電圧スケール（レガシー [V] 出力）
+// -----------------------------------------------------------------------------
+#define USE_PHYSICAL_UNITS 1
+
+// C++コードからアクセス可能なフラグ
+inline constexpr bool PHYSICAL_UNITS_ENABLED = (USE_PHYSICAL_UNITS == 1);
 
 // -----------------------------------------------------------------------------
 // 感度設定 (Sensitivity)
 // スティック入力 ±1.0 に対する最大目標角速度 [rad/s]
 // -----------------------------------------------------------------------------
-inline constexpr float ROLL_RATE_MAX = 1.0f;       // ロール最大角速度 [rad/s] (~286 deg/s)
-inline constexpr float PITCH_RATE_MAX = 1.0f;      // ピッチ最大角速度 [rad/s] (~286 deg/s)
-inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad/s] (~172 deg/s)
+inline constexpr float ROLL_RATE_MAX = 1.0f;       // ロール最大角速度 [rad/s] (~57 deg/s)
+inline constexpr float PITCH_RATE_MAX = 1.0f;      // ピッチ最大角速度 [rad/s] (~57 deg/s)
+inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad/s] (~286 deg/s)
 
 // -----------------------------------------------------------------------------
 // PIDゲイン (Rate Controller)
 // 不完全微分PID: C(s) = Kp(1 + 1/(Ti·s) + Td·s/(η·Td·s + 1))
+//
+// ゲイン変換理論 (docs/architecture/control-allocation-migration.md 参照):
+//   新Kp = k_τ × 旧Kp  (出力単位変換)
+//   新Ti = 旧Ti       (時定数は不変)
+//   新Td = 旧Td       (時定数は不変)
+//
+// k_τ_roll/pitch = (0.25/3.7) × 0.15 × 0.023 = 2.33×10⁻⁴ Nm/V
+// k_τ_yaw        = (0.25/3.7) × 0.15 × 0.00971 = 9.84×10⁻⁵ Nm/V
 // -----------------------------------------------------------------------------
+
+#if USE_PHYSICAL_UNITS
+// ==========================================================================
+// 物理単位ベースゲイン (Physical Units: Torque [Nm])
+// ==========================================================================
+
+// Roll rate PID
+inline constexpr float ROLL_RATE_KP = 1.51e-4f;    // [Nm/(rad/s)] = 0.65 × 2.33e-4
+inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s] (不変)
+inline constexpr float ROLL_RATE_TD = 0.01f;       // 微分時間 [s] (不変)
+
+// Pitch rate PID
+inline constexpr float PITCH_RATE_KP = 2.21e-4f;   // [Nm/(rad/s)] = 0.95 × 2.33e-4
+inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s] (不変)
+inline constexpr float PITCH_RATE_TD = 0.025f;     // 微分時間 [s] (不変)
+
+// Yaw rate PID
+inline constexpr float YAW_RATE_KP = 2.95e-4f;     // [Nm/(rad/s)] = 3.0 × 9.84e-5
+inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s] (不変)
+inline constexpr float YAW_RATE_TD = 0.01f;        // 微分時間 [s] (不変)
+
+// 出力制限 [Nm]
+inline constexpr float ROLL_OUTPUT_LIMIT = 8.6e-4f;   // 3.7 × 2.33e-4
+inline constexpr float PITCH_OUTPUT_LIMIT = 8.6e-4f;  // 3.7 × 2.33e-4
+inline constexpr float YAW_OUTPUT_LIMIT = 3.6e-4f;    // 3.7 × 9.84e-5
+
+// 共通出力制限（最大値、後方互換性）
+inline constexpr float OUTPUT_LIMIT = 8.6e-4f;     // [Nm] (ロール/ピッチ基準)
+
+#else
+// ==========================================================================
+// 電圧スケールゲイン (Legacy: Voltage [V])
+// ==========================================================================
 
 // Roll rate PID
 inline constexpr float ROLL_RATE_KP = 0.65f;       // 比例ゲイン
-inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s] (0以下で無効) ← P制御のみ
-inline constexpr float ROLL_RATE_TD = 0.01f;        // 微分時間 [s] (0以下で無効) ← P制御のみ
+inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s]
+inline constexpr float ROLL_RATE_TD = 0.01f;       // 微分時間 [s]
 
 // Pitch rate PID
 inline constexpr float PITCH_RATE_KP = 0.95f;      // 比例ゲイン
-inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s] ← P制御のみ
-inline constexpr float PITCH_RATE_TD = 0.025f;       // 微分時間 [s] ← P制御のみ
+inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s]
+inline constexpr float PITCH_RATE_TD = 0.025f;     // 微分時間 [s]
 
 // Yaw rate PID
 inline constexpr float YAW_RATE_KP = 3.0f;         // 比例ゲイン
-inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s] ← P制御のみ
-inline constexpr float YAW_RATE_TD = 0.01f;         // 微分時間 [s] ← P制御のみ
+inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s]
+inline constexpr float YAW_RATE_TD = 0.01f;        // 微分時間 [s]
 
-// 共通パラメータ
-inline constexpr float PID_ETA = 0.125f;             // 不完全微分フィルタ係数 (0.1~0.2)
-inline constexpr float OUTPUT_LIMIT = 3.7f;        // PID出力制限 [V] (電圧スケール)
+// 出力制限 [V]
+inline constexpr float ROLL_OUTPUT_LIMIT = 3.7f;
+inline constexpr float PITCH_OUTPUT_LIMIT = 3.7f;
+inline constexpr float YAW_OUTPUT_LIMIT = 3.7f;
+inline constexpr float OUTPUT_LIMIT = 3.7f;        // [V] (電圧スケール)
+
+#endif
+
+// 共通パラメータ（モード非依存）
+inline constexpr float PID_ETA = 0.125f;           // 不完全微分フィルタ係数 (0.1~0.2)
 
 } // namespace rate_control
 

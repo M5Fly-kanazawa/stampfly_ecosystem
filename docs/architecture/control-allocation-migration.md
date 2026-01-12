@@ -334,9 +334,12 @@ k_τ_yaw        = (0.25 / 3.7) × T_max × κ = 0.0676 × 0.15 × 0.00971 ≈ 9.
 
 ## 6. 移行計画
 
-### Phase 1: 制御アロケーションモジュール作成
+### Phase 1: 制御アロケーションモジュール作成 ✅ 完了
 
-**新規ファイル:** `firmware/vehicle/components/sf_algo_control/control_allocation.hpp`
+**実装ファイル:** `firmware/vehicle/components/sf_algo_control/`
+
+- `include/control_allocation.hpp` - QuadConfig, ControlAllocatorクラス
+- `control_allocation.cpp` - B行列、B⁻¹行列の構築とミキシング実装
 
 ```cpp
 namespace stampfly {
@@ -347,87 +350,122 @@ struct QuadConfig {
     float motor_x[4] = {0.023f, -0.023f, -0.023f, 0.023f};
     float motor_y[4] = {0.023f, 0.023f, -0.023f, -0.023f};
     int motor_dir[4] = {-1, 1, -1, 1};
+    float max_thrust_per_motor = 0.15f;
 };
 
 class ControlAllocator {
 public:
     void init(const QuadConfig& config);
+    void setMotorParams(const MotorParams& params);
 
     // 制御入力 [N, Nm] → モータ推力 [N]
-    void mix(float u_thrust, float u_roll, float u_pitch, float u_yaw,
-             float* thrusts_out);
+    bool mix(const float control[4], float thrusts_out[4]) const;
+
+    // モータ推力 [N] → 制御入力 [N, Nm]
+    void allocate(const float thrusts[4], float control_out[4]) const;
 
     // モータ推力 [N] → Duty [0-1]
-    void thrusts_to_duties(const float* thrusts, float* duties_out);
+    void thrustsToDuties(const float thrusts[4], float duties_out[4]) const;
 
 private:
+    float B_[4][4];      // アロケーション行列
     float B_inv_[4][4];  // ミキシング行列
 };
 
 } // namespace stampfly
 ```
 
-### Phase 2: モータモデル統合
+### Phase 2: モータモデル統合 ✅ 完了
 
-**新規ファイル:** `firmware/vehicle/components/sf_algo_control/motor_model.hpp`
+**実装ファイル:** `firmware/vehicle/components/sf_algo_control/`
+
+- `include/motor_model.hpp` - MotorParams, スタンドアロン変換関数
+- `motor_model.cpp` - DEFAULT_MOTOR_PARAMS定義
 
 ```cpp
 namespace stampfly {
 
 struct MotorParams {
-    float Ct = 1.0e-8f;    // Thrust coefficient
-    float Cq = 9.71e-11f;  // Torque coefficient
-    float Rm = 0.34f;      // Resistance
-    float Km = 6.125e-4f;  // Motor constant
-    float Vbat = 3.7f;     // Battery voltage
+    float Ct = 1.0e-8f;     // Thrust coefficient [N/(rad/s)²]
+    float Cq = 9.71e-11f;   // Torque coefficient [Nm/(rad/s)²]
+    float Rm = 0.34f;       // Motor resistance [Ω]
+    float Km = 6.125e-4f;   // Motor constant [V·s/rad]
+    float Dm = 3.69e-8f;    // Viscous damping [Nm·s/rad]
+    float Qf = 2.76e-5f;    // Friction torque [Nm]
+    float Jm = 1.0e-9f;     // Motor+propeller inertia [kg·m²]
+    float Vbat = 3.7f;      // Battery voltage [V]
 };
 
-// 推力→Duty変換（定常状態近似）
-float thrust_to_duty(float thrust, const MotorParams& params);
+// スタンドアロン変換関数
+inline float thrustToDuty(float thrust, const MotorParams& params);
+inline float thrustToOmega(float thrust, float Ct);
+inline float omegaToVoltage(float omega, const MotorParams& params);
+inline float dutyToThrust(float duty, const MotorParams& params, int max_iter = 10);
+
+extern const MotorParams DEFAULT_MOTOR_PARAMS;
 
 } // namespace stampfly
 ```
 
-### Phase 3: PIDゲイン再設計
+### Phase 3: PIDゲイン再設計 ✅ 完了
 
-物理単位出力用のゲイン設計：
+**実装ファイル:** `firmware/vehicle/main/config.hpp`
 
-| 軸 | 慣性モーメント | 目標帯域 | Kp (物理) |
-|----|--------------|---------|----------|
-| Roll | 9.16×10⁻⁶ kg·m² | 30 rad/s | ~0.008 Nm/(rad/s) |
-| Pitch | 13.3×10⁻⁶ kg·m² | 30 rad/s | ~0.012 Nm/(rad/s) |
-| Yaw | 20.4×10⁻⁶ kg·m² | 15 rad/s | ~0.009 Nm/(rad/s) |
+コンパイルスイッチ `USE_PHYSICAL_UNITS` による切り替え：
 
-**導出：**
-```
-閉ループ帯域 ω_c = Kp × Kt / I
-Kp = ω_c × I / Kt
+```cpp
+namespace rate_control {
 
-ここで Kt ≈ 1 (角速度→トルクの物理ゲイン)
+// 物理単位モード切り替え (1: トルク出力, 0: 電圧出力)
+#define USE_PHYSICAL_UNITS 1
+
+#if USE_PHYSICAL_UNITS
+// 物理単位ベースゲイン [Nm/(rad/s)]
+inline constexpr float ROLL_RATE_KP = 1.51e-4f;   // 0.65 × 2.33e-4
+inline constexpr float PITCH_RATE_KP = 2.21e-4f;  // 0.95 × 2.33e-4
+inline constexpr float YAW_RATE_KP = 2.95e-4f;    // 3.0 × 9.84e-5
+inline constexpr float ROLL_OUTPUT_LIMIT = 8.6e-4f;   // [Nm]
+inline constexpr float PITCH_OUTPUT_LIMIT = 8.6e-4f;  // [Nm]
+inline constexpr float YAW_OUTPUT_LIMIT = 3.6e-4f;    // [Nm]
+#else
+// 電圧スケールゲイン（レガシー）
+inline constexpr float ROLL_RATE_KP = 0.65f;
+// ...
+#endif
+
+// Ti, Td は不変（時定数）
+inline constexpr float ROLL_RATE_TI = 0.7f;
+inline constexpr float ROLL_RATE_TD = 0.01f;
+// ...
+
+} // namespace rate_control
 ```
 
 ### Phase 4: 段階的移行
 
-1. **Step 1**: 新アロケーションモジュールを追加（既存と並存）
-2. **Step 2**: コンパイルスイッチで切り替え可能に
-3. **Step 3**: シミュレータで検証
-4. **Step 4**: 実機テスト
-5. **Step 5**: 旧コード削除
+| ステップ | 内容 | 状態 |
+|---------|------|------|
+| Step 1 | 新アロケーションモジュールを追加（既存と並存） | ✅ 完了 |
+| Step 2 | コンパイルスイッチで切り替え可能に | ✅ 完了 |
+| Step 3 | シミュレータで検証 | 🔄 未実施 |
+| Step 4 | 実機テスト | 🔄 未実施 |
+| Step 5 | 旧コード削除 | 🔄 未実施 |
 
 ---
 
 ## 7. 変更対象ファイル
 
-| ファイル | 変更内容 |
-|---------|---------|
-| `components/sf_algo_control/control_allocation.hpp` | **新規作成** |
-| `components/sf_algo_control/control_allocation.cpp` | **新規作成** |
-| `components/sf_algo_control/motor_model.hpp` | **新規作成** |
-| `components/sf_algo_control/motor_model.cpp` | **新規作成** |
-| `components/sf_hal_motor/motor_driver.hpp` | setMixerOutput廃止、setMotors追加 |
-| `components/sf_hal_motor/motor_driver.cpp` | 同上 |
-| `main/tasks/control_task.cpp` | 新アロケータ使用 |
-| `main/config.hpp` | 物理パラメータ追加 |
+| ファイル | 変更内容 | 状態 |
+|---------|---------|------|
+| `components/sf_algo_control/include/control_allocation.hpp` | 新規作成 | ✅ |
+| `components/sf_algo_control/control_allocation.cpp` | 新規作成 | ✅ |
+| `components/sf_algo_control/include/motor_model.hpp` | 新規作成 | ✅ |
+| `components/sf_algo_control/motor_model.cpp` | 新規作成 | ✅ |
+| `components/sf_algo_control/CMakeLists.txt` | 新規作成 | ✅ |
+| `main/config.hpp` | 物理単位PIDゲイン追加、USE_PHYSICAL_UNITSスイッチ | ✅ |
+| `components/sf_hal_motor/motor_driver.hpp` | setMixerOutput廃止、setMotors追加 | 🔄 Phase 4 |
+| `components/sf_hal_motor/motor_driver.cpp` | 同上 | 🔄 Phase 4 |
+| `main/tasks/control_task.cpp` | 新アロケータ使用 | 🔄 Phase 4 |
 
 ---
 
