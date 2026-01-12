@@ -448,7 +448,7 @@ def main():
     attitude_controller = AttitudeController()
 
     # Follow camera (behind drone)
-    follow_camera = FollowCamera(distance=1.0, height=0.3)
+    follow_camera = FollowCamera(distance=0.3, height=0.1)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
