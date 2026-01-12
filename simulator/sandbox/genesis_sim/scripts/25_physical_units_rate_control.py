@@ -259,9 +259,11 @@ class FollowCamera:
             self.lookat_pos += self.alpha_look * (lookat_target - self.lookat_pos)
 
         # Update viewer camera (requires numpy arrays)
+        # Keep camera level (up = Z axis) for human perspective
         scene.viewer.set_camera_pose(
             pos=self.cam_pos,
             lookat=self.lookat_pos,
+            up=np.array([0.0, 0.0, 1.0]),  # Z-up, always horizontal
         )
 
     def reset(self):
