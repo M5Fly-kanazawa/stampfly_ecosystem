@@ -314,6 +314,18 @@
             </div>
         </div>
 
+        <div class="card" style="border-left-color: #ff9500;">
+            <div class="card-title">ToF Distance</div>
+            <div class="row">
+                <span class="label" style="color:#ff9500">Bottom</span>
+                <span><span id="tof_bottom" class="value" style="color:#ff9500">---</span><span class="unit">m</span></span>
+            </div>
+            <div class="row">
+                <span class="label" style="color:#00bfff">Front</span>
+                <span><span id="tof_front" class="value" style="color:#00bfff">---</span><span class="unit">m</span></span>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-title">Control Input</div>
             <div class="row">
@@ -331,18 +343,6 @@
             <div class="row">
                 <span class="label" style="color:#6b9fff">Yaw</span>
                 <span><span id="ctrl_yaw" class="value">---</span></span>
-            </div>
-        </div>
-
-        <div class="card" style="border-left-color: #ff9500;">
-            <div class="card-title">ToF Distance</div>
-            <div class="row">
-                <span class="label" style="color:#ff9500">Bottom</span>
-                <span><span id="tof_bottom" class="value" style="color:#ff9500">---</span><span class="unit">m</span></span>
-            </div>
-            <div class="row">
-                <span class="label" style="color:#00bfff">Front</span>
-                <span><span id="tof_front" class="value" style="color:#00bfff">---</span><span class="unit">m</span></span>
             </div>
         </div>
 
@@ -439,6 +439,17 @@
 
         <div class="graph-card">
             <div class="graph-header">
+                <div class="graph-title">ToF Distance [m]</div>
+            </div>
+            <canvas class="graph-canvas" id="graphToF"></canvas>
+            <div class="legend">
+                <div class="legend-item"><div class="legend-color" style="background:#ff9500"></div>Bottom</div>
+                <div class="legend-item"><div class="legend-color" style="background:#00bfff"></div>Front</div>
+            </div>
+        </div>
+
+        <div class="graph-card">
+            <div class="graph-header">
                 <div class="graph-title">Control Input</div>
             </div>
             <canvas class="graph-canvas" id="graphControl"></canvas>
@@ -447,17 +458,6 @@
                 <div class="legend-item"><div class="legend-color" style="background:#ff6b6b"></div>Roll</div>
                 <div class="legend-item"><div class="legend-color" style="background:#4edc4e"></div>Pitch</div>
                 <div class="legend-item"><div class="legend-color" style="background:#6b9fff"></div>Yaw</div>
-            </div>
-        </div>
-
-        <div class="graph-card">
-            <div class="graph-header">
-                <div class="graph-title">ToF Distance [m]</div>
-            </div>
-            <canvas class="graph-canvas" id="graphToF"></canvas>
-            <div class="legend">
-                <div class="legend-item"><div class="legend-color" style="background:#ff9500"></div>Bottom</div>
-                <div class="legend-item"><div class="legend-color" style="background:#00bfff"></div>Front</div>
             </div>
         </div>
     </div>
