@@ -32,6 +32,7 @@ sys.path.insert(0, str(script_dir.parent))
 sys.path.insert(0, str(script_dir.parent.parent.parent))  # simulator/ for control module
 
 import genesis as gs
+import genesis.utils.geom as gu
 import numpy as np
 import time
 import pygame
@@ -258,12 +259,11 @@ class FollowCamera:
             self.cam_pos += self.alpha_pos * (cam_target - self.cam_pos)
             self.lookat_pos += self.alpha_look * (lookat_target - self.lookat_pos)
 
-        # Update viewer camera (requires numpy arrays)
-        # Genesis viewer keeps camera level automatically (Z-up)
-        scene.viewer.set_camera_pose(
-            pos=self.cam_pos,
-            lookat=self.lookat_pos,
-        )
+        # Update viewer camera using 4x4 pose matrix
+        # This allows explicit control of up vector (always Z-up for level horizon)
+        up = np.array([0.0, 0.0, 1.0])
+        pose = gu.pos_lookat_up_to_T(self.cam_pos, self.lookat_pos, up)
+        scene.viewer.set_camera_pose(pose=pose)
 
     def reset(self):
         """Reset camera state."""
