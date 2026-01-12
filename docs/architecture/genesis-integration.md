@@ -359,7 +359,84 @@ def verify_ned_genesis_conversion():
     print(f"  角速度: {np.allclose(ned_omega, ned_omega_back)}")
 ```
 
-## 8. まとめ
+## 8. リアルタイムシミュレーションのループ構造
+
+### 問題：制御ループと物理ループの分離
+
+リアルタイム同期を行うシミュレーションでは、制御ループ（400Hz）と物理ループ（2000Hz）の**実行構造**が重要です。
+
+**誤った構造（不安定になる）:**
+
+```python
+while running:
+    real_time = get_wall_time()
+    sim_time = physics_steps * PHYSICS_DT
+
+    # ❌ 制御ループが物理ループの外にある
+    if sim_time >= next_control_time:
+        # PID更新
+        # Control allocation → target_duties更新
+        next_control_time += CONTROL_DT
+
+    # 物理ループ（複数回実行される可能性）
+    while sim_time <= real_time:
+        motor_system.step(target_duties, PHYSICS_DT)  # モータダイナミクス
+        scene.step()  # Genesis物理演算
+        physics_steps += 1
+        sim_time = physics_steps * PHYSICS_DT
+```
+
+この構造では、`real_time` が先行している場合に物理ループが複数回実行されますが、**制御更新は1回しか行われません**。例えば10ms遅れている場合、物理ステップは20回実行されるのに制御は1回だけ（本来は4回更新すべき）となり、不安定になります。
+
+### 正しい構造：制御ループを物理ループの中に統合
+
+```python
+while running:
+    real_time = get_wall_time()
+    sim_time = physics_steps * PHYSICS_DT
+
+    # ✅ 制御ループが物理ループの中にある
+    while sim_time <= real_time:
+        # 制御更新（400Hzタイミングで）
+        if sim_time >= next_control_time:
+            # PID更新
+            # Control allocation → target_duties更新
+            next_control_time += CONTROL_DT
+
+        # モータダイナミクス（2000Hz）
+        motor_system.step(target_duties, PHYSICS_DT)
+
+        # Genesis物理演算（2000Hz）
+        scene.step()
+        physics_steps += 1
+        sim_time = physics_steps * PHYSICS_DT
+```
+
+### 同期の図解
+
+```
+時間 →
+        0ms    0.5ms   1.0ms   1.5ms   2.0ms   2.5ms
+        │      │       │       │       │       │
+物理    ●──────●───────●───────●───────●───────●  (2000Hz)
+制御    ●──────────────────────────────●          (400Hz = 5物理ステップごと)
+        ↑                              ↑
+        制御更新                        制御更新
+```
+
+### 教訓
+
+| 比較観点 | 見落としやすい | 重要 |
+|----------|--------------|------|
+| 数値（ゲイン等） | ✗ | ○ |
+| 座標変換 | ✗ | ○ |
+| アルゴリズム | ✗ | ○ |
+| **ループ構造** | **✓** | **◎** |
+| **実行タイミング** | **✓** | **◎** |
+
+コードの比較では「**何を計算しているか**」だけでなく「**いつ計算しているか**」も確認すること。
+
+## 9. まとめ
 
 ### 変換のポイント
 
@@ -444,7 +521,72 @@ def genesis_pos_to_ned(gx, gy, gz):
 
 **Note:** For rate control, use `get_dofs_velocity()[3:6]` to get body-frame angular velocity directly. `get_ang()` returns world-frame angular velocity which requires additional transformation.
 
-## 5. Summary
+## 5. Real-Time Simulation Loop Structure
+
+### Problem: Separation of Control Loop and Physics Loop
+
+In real-time synchronized simulations, the **execution structure** of the control loop (400Hz) and physics loop (2000Hz) is critical.
+
+**Incorrect structure (causes instability):**
+
+```python
+while running:
+    real_time = get_wall_time()
+    sim_time = physics_steps * PHYSICS_DT
+
+    # ❌ Control loop is outside the physics loop
+    if sim_time >= next_control_time:
+        # PID update
+        # Control allocation → update target_duties
+        next_control_time += CONTROL_DT
+
+    # Physics loop (may execute multiple times)
+    while sim_time <= real_time:
+        motor_system.step(target_duties, PHYSICS_DT)  # Motor dynamics
+        scene.step()  # Genesis physics
+        physics_steps += 1
+        sim_time = physics_steps * PHYSICS_DT
+```
+
+With this structure, when `real_time` is ahead, the physics loop executes multiple times but **control update happens only once**. For example, if 10ms behind, physics executes 20 times but control only once (should be 4 times), causing instability.
+
+### Correct structure: Integrate control loop inside physics loop
+
+```python
+while running:
+    real_time = get_wall_time()
+    sim_time = physics_steps * PHYSICS_DT
+
+    # ✅ Control loop is inside the physics loop
+    while sim_time <= real_time:
+        # Control update (at 400Hz timing)
+        if sim_time >= next_control_time:
+            # PID update
+            # Control allocation → update target_duties
+            next_control_time += CONTROL_DT
+
+        # Motor dynamics (2000Hz)
+        motor_system.step(target_duties, PHYSICS_DT)
+
+        # Genesis physics (2000Hz)
+        scene.step()
+        physics_steps += 1
+        sim_time = physics_steps * PHYSICS_DT
+```
+
+### Lesson Learned
+
+| Comparison Aspect | Easy to Overlook | Important |
+|-------------------|------------------|-----------|
+| Values (gains, etc.) | ✗ | ○ |
+| Coordinate transforms | ✗ | ○ |
+| Algorithms | ✗ | ○ |
+| **Loop structure** | **✓** | **◎** |
+| **Execution timing** | **✓** | **◎** |
+
+When comparing code, verify not only "**what** is being computed" but also "**when** it is computed."
+
+## 6. Summary
 
 ### Conversion Key Points
 
