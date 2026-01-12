@@ -174,8 +174,10 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
         return ESP_FAIL;
     }
 
-    // Set distance mode (Long by default for altitude sensing)
-    status = VL53LX_SetDistanceMode(&device_, VL53LX_DISTANCEMODE_LONG);
+    // Set distance mode (Medium for better accuracy at shorter range)
+    // MEDIUM: up to 3m, better ambient light rejection than LONG
+    // LONG: up to 4m, but more susceptible to ambient light
+    status = VL53LX_SetDistanceMode(&device_, VL53LX_DISTANCEMODE_MEDIUM);
     if (status != VL53LX_ERROR_NONE) {
         ESP_LOGE(TAG, "SetDistanceMode failed: %d", status);
         i2c_master_bus_rm_device(i2c_dev_handle_);
