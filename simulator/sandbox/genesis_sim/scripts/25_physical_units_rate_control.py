@@ -622,13 +622,16 @@ def main():
             if sim_time >= next_control_time:
                 # Get current state from Genesis
                 quat = drone.get_quat()
-                R = quat_to_rotation_matrix(quat)
 
-                # Get angular velocity using get_ang() (returns world frame angular velocity)
-                # Note: get_dofs_velocity() returns Euler angle rates, NOT angular velocity!
-                ang_vel_world = drone.get_ang()
-                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
-                gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R)
+                # Get angular velocity from DOFs (body frame directly)
+                # Genesis DOF convention:
+                #   get_dofs_velocity()[3:6] = body frame angular velocity (wx, wy, wz)
+                #   get_ang() = world frame angular velocity
+                dofs_vel = drone.get_dofs_velocity()
+                gyro_genesis_body = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                # Convert Genesis body frame (wx, wy, wz) to NED body frame (p, q, r)
+                # See docs/architecture/genesis-integration.md:
+                #   (wx, wy, wz)_genesis → (wy, wx, -wz) = (p, q, r)_ned
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
                 if use_acro_mode:
@@ -675,18 +678,25 @@ def main():
                     target_duties.tolist(), PHYSICS_DT
                 )
 
+                # Convert NED body frame to Genesis body frame
+                # See docs/architecture/genesis-integration.md:
+                #   (fx, fy, fz)_ned → (fy, fx, -fz)_genesis
+                #   (τx, τy, τz)_ned → (τy, τx, -τz)_genesis
                 force_genesis_body = ned_to_genesis_force(force_ned)
                 moment_genesis_body = ned_to_genesis_moment(moment_ned)
 
+                # Genesis DOF force convention:
+                #   dof_force[0:3] = WORLD frame force
+                #   dof_force[3:6] = BODY frame torque
                 quat = drone.get_quat()
                 R = quat_to_rotation_matrix(quat)
 
-                force_world = R @ force_genesis_body
-                moment_world = R @ moment_genesis_body
+                force_world = R @ force_genesis_body  # Body → World (for force)
+                # Torque stays in body frame (no transformation needed)
 
                 dof_force = np.zeros(drone.n_dofs)
-                dof_force[0:3] = force_world
-                dof_force[3:6] = moment_world
+                dof_force[0:3] = force_world           # World frame force
+                dof_force[3:6] = moment_genesis_body   # Body frame torque
                 drone.control_dofs_force(dof_force)
 
                 scene.step(update_visualizer=False, refresh_visualizer=False)
@@ -720,11 +730,9 @@ def main():
                 euler_genesis = quat_to_euler(quat)
                 euler_ned = genesis_euler_to_ned(euler_genesis)
 
-                # Get gyro for display using get_ang() (world frame angular velocity)
-                R_disp = quat_to_rotation_matrix(quat)
-                ang_vel_world = drone.get_ang()
-                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
-                gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R_disp)
+                # Get gyro for display using get_dofs_velocity() (body frame directly)
+                dofs_vel_disp = drone.get_dofs_velocity()
+                gyro_genesis_body = np.array([float(dofs_vel_disp[3]), float(dofs_vel_disp[4]), float(dofs_vel_disp[5])])
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
                 mode_str = "ACRO" if use_acro_mode else "STAB"
