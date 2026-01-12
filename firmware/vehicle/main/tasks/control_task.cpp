@@ -13,10 +13,22 @@
 
 #include "tasks_common.hpp"
 #include "../rate_controller.hpp"
+#include "../attitude_controller.hpp"
 #include "control_allocation.hpp"
 #include "motor_model.hpp"
 
 static const char* TAG = "ControlTask";
+
+// =============================================================================
+// Flight Mode Definition
+// =============================================================================
+enum class FlightMode {
+    ACRO,       // Rate control (angular velocity)
+    STABILIZE,  // Angle control (cascade: attitude → rate)
+};
+
+// Current flight mode (default: ACRO)
+static FlightMode g_flight_mode = FlightMode::ACRO;
 
 using namespace config;
 using namespace globals;
@@ -107,6 +119,81 @@ RateController g_rate_controller;
 // CLIからアクセスするためのポインタ
 RateController* g_rate_controller_ptr = &g_rate_controller;
 
+// =============================================================================
+// Attitude Controller Implementation (Outer Loop)
+// 姿勢コントローラ実装（外側ループ）
+// =============================================================================
+
+void AttitudeController::init() {
+    // デフォルト値で初期化
+    // Initialize with default values
+    max_roll_angle = attitude_control::MAX_ROLL_ANGLE;
+    max_pitch_angle = attitude_control::MAX_PITCH_ANGLE;
+    yaw_rate_max = rate_control::YAW_RATE_MAX;
+
+    // Roll angle PID (outer loop)
+    stampfly::PIDConfig roll_cfg;
+    roll_cfg.Kp = attitude_control::ROLL_ANGLE_KP;
+    roll_cfg.Ti = attitude_control::ROLL_ANGLE_TI;
+    roll_cfg.Td = attitude_control::ROLL_ANGLE_TD;
+    roll_cfg.eta = attitude_control::PID_ETA;
+    roll_cfg.output_min = -attitude_control::MAX_RATE_SETPOINT;
+    roll_cfg.output_max = attitude_control::MAX_RATE_SETPOINT;
+    roll_cfg.derivative_on_measurement = true;
+    roll_angle_pid.init(roll_cfg);
+
+    // Pitch angle PID (outer loop)
+    stampfly::PIDConfig pitch_cfg;
+    pitch_cfg.Kp = attitude_control::PITCH_ANGLE_KP;
+    pitch_cfg.Ti = attitude_control::PITCH_ANGLE_TI;
+    pitch_cfg.Td = attitude_control::PITCH_ANGLE_TD;
+    pitch_cfg.eta = attitude_control::PID_ETA;
+    pitch_cfg.output_min = -attitude_control::MAX_RATE_SETPOINT;
+    pitch_cfg.output_max = attitude_control::MAX_RATE_SETPOINT;
+    pitch_cfg.derivative_on_measurement = true;
+    pitch_angle_pid.init(pitch_cfg);
+
+    initialized = true;
+    ESP_LOGI(TAG, "AttitudeController initialized");
+    ESP_LOGI(TAG, "  Max angles: Roll=%.1f° Pitch=%.1f°",
+             max_roll_angle * 180.0f / 3.14159f,
+             max_pitch_angle * 180.0f / 3.14159f);
+    ESP_LOGI(TAG, "  Roll  Angle PID: Kp=%.2f Ti=%.2f Td=%.3f",
+             roll_cfg.Kp, roll_cfg.Ti, roll_cfg.Td);
+    ESP_LOGI(TAG, "  Pitch Angle PID: Kp=%.2f Ti=%.2f Td=%.3f",
+             pitch_cfg.Kp, pitch_cfg.Ti, pitch_cfg.Td);
+}
+
+void AttitudeController::reset() {
+    roll_angle_pid.reset();
+    pitch_angle_pid.reset();
+}
+
+void AttitudeController::update(
+    float stick_roll, float stick_pitch, float stick_yaw,
+    float roll_current, float pitch_current,
+    float dt,
+    float& roll_rate_ref, float& pitch_rate_ref, float& yaw_rate_ref)
+{
+    // Convert stick to angle setpoints
+    // スティック入力を角度セットポイントに変換
+    float roll_angle_target = stick_roll * max_roll_angle;
+    float pitch_angle_target = stick_pitch * max_pitch_angle;
+
+    // Outer loop: angle PID → rate setpoint
+    // 外側ループ：角度PID → レートセットポイント
+    roll_rate_ref = roll_angle_pid.update(roll_angle_target, roll_current, dt);
+    pitch_rate_ref = pitch_angle_pid.update(pitch_angle_target, pitch_current, dt);
+
+    // Yaw: direct rate control (same as ACRO)
+    // Yaw：直接レート制御（ACROと同じ）
+    yaw_rate_ref = stick_yaw * yaw_rate_max;
+}
+
+// グローバル姿勢コントローラ
+// Global attitude controller
+AttitudeController g_attitude_controller;
+
 /**
  * @brief Control Task - 400Hz (2.5ms period)
  *
@@ -144,11 +231,14 @@ void ControlTask(void* pvParameters)
 
     auto& state = stampfly::StampFlyState::getInstance();
 
-    // レートコントローラ初期化
+    // コントローラ初期化
+    // Initialize controllers
     g_rate_controller.init();
+    g_attitude_controller.init();
 
     // 前回のフライト状態（ARMED遷移時にPIDリセット用）
     stampfly::FlightState prev_flight_state = stampfly::FlightState::INIT;
+    FlightMode prev_flight_mode = FlightMode::ACRO;
 
     while (true) {
         // Wait for control semaphore (given by IMU task after ESKF update)
@@ -163,6 +253,7 @@ void ControlTask(void* pvParameters)
         if (flight_state == stampfly::FlightState::ARMED &&
             prev_flight_state != stampfly::FlightState::ARMED) {
             g_rate_controller.reset();
+            g_attitude_controller.reset();
             ESP_LOGI(TAG, "PID reset on ARM");
         }
         prev_flight_state = flight_state;
@@ -187,12 +278,48 @@ void ControlTask(void* pvParameters)
         state.getControlInput(throttle, roll_cmd, pitch_cmd, yaw_cmd);
 
         // =====================================================================
-        // 2. 目標角速度計算
+        // 2. フライトモード判定 & 目標角速度計算
         // =====================================================================
-        // スティック入力 × 感度 = 目標角速度 [rad/s]
-        float roll_rate_target = roll_cmd * g_rate_controller.roll_rate_max;
-        float pitch_rate_target = pitch_cmd * g_rate_controller.pitch_rate_max;
-        float yaw_rate_target = yaw_cmd * g_rate_controller.yaw_rate_max;
+        // TODO: コントローラのMODEビットから取得（現在は固定）
+        // TODO: Get from controller MODE bit (currently fixed)
+        // g_flight_mode = (ctrl_flags & CTRL_FLAG_MODE) ? FlightMode::STABILIZE : FlightMode::ACRO;
+
+        // モード切替時にPIDリセット
+        // Reset PIDs on mode change
+        if (g_flight_mode != prev_flight_mode) {
+            g_attitude_controller.reset();
+            ESP_LOGI(TAG, "Mode changed to %s",
+                     g_flight_mode == FlightMode::STABILIZE ? "STABILIZE" : "ACRO");
+        }
+        prev_flight_mode = g_flight_mode;
+
+        float roll_rate_target, pitch_rate_target, yaw_rate_target;
+
+        if (g_flight_mode == FlightMode::STABILIZE) {
+            // STABILIZE: カスケード制御（姿勢 → レート）
+            // STABILIZE: Cascade control (attitude → rate)
+
+            // 現在の姿勢をESKFから取得
+            // Get current attitude from ESKF
+            float roll_current, pitch_current, yaw_current;
+            state.getAttitudeEuler(roll_current, pitch_current, yaw_current);
+
+            // 外側ループ：姿勢制御
+            // Outer loop: attitude control
+            constexpr float dt = IMU_DT;  // 2.5ms
+            g_attitude_controller.update(
+                roll_cmd, pitch_cmd, yaw_cmd,
+                roll_current, pitch_current,
+                dt,
+                roll_rate_target, pitch_rate_target, yaw_rate_target
+            );
+        } else {
+            // ACRO: 直接レート制御（既存）
+            // ACRO: Direct rate control (existing)
+            roll_rate_target = roll_cmd * g_rate_controller.roll_rate_max;
+            pitch_rate_target = pitch_cmd * g_rate_controller.pitch_rate_max;
+            yaw_rate_target = yaw_cmd * g_rate_controller.yaw_rate_max;
+        }
 
         // =====================================================================
         // 3. 現在の角速度取得（バイアス補正済み）
