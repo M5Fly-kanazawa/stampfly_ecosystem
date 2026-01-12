@@ -36,62 +36,21 @@ pip install torch  # PyTorch公式サイトで適切なバージョンを確認
 
 ```bash
 cd scripts
-python 25_physical_units_rate_control.py
+python run_genesis_sim.py
 ```
 
-## 3. スクリプト一覧
+## 3. スクリプト構成
 
-### メインスクリプト
+```
+scripts/
+├── run_genesis_sim.py    # メインスクリプト（物理量ベース制御）
+└── archive/              # 開発履歴・デバッグスクリプト
+    ├── 01_hello_genesis.py 〜 24_pid_rate_control.py
+    ├── debug_*.py
+    └── generate_stampfly_urdf.py
+```
 
-| スクリプト | 内容 |
-|-----------|------|
-| `25_physical_units_rate_control.py` | **物理量ベースレート制御（推奨）** |
-
-### 開発履歴スクリプト
-
-段階的な開発履歴として以下のスクリプトが残っています：
-
-| カテゴリ | スクリプト | 内容 |
-|----------|-----------|------|
-| 基礎テスト | `01_hello_genesis.py` | Genesis初期化テスト |
-| | `02_ground_plane.py` | 地面追加テスト |
-| | `03_falling_cube.py` | 立方体の自由落下 |
-| | `04_load_stl.py` | STLファイル読み込み |
-| | `05_stampfly_fall.py` | StampFly自由落下 |
-| 座標系・モデル | `06_coordinate_test.py` | 座標系確認 |
-| | `07_stl_orientation_test.py` | STL向きテスト |
-| | `08_stampfly_rigid_body.py` | 剛体モデルテスト |
-| | `09_stampfly_freefall.py` | StampFly自由落下 |
-| | `10_single_body_freefall.py` | 単一ボディ落下 |
-| URDF | `11_urdf_test.py` | URDFテスト |
-| | `generate_stampfly_urdf.py` | URDF生成 |
-| | `12_parts_viewer.py` | パーツビューア |
-| | `13_all_parts_viewer.py` | 全パーツビューア |
-| | `14_stampfly_viewer.py` | StampFlyビューア |
-| | `15_stampfly_freefall.py` | URDF落下テスト |
-| トルク・モータ | `16_stampfly_torque_test.py` | トルク応答テスト |
-| | `17_realtime_torque_test.py` | リアルタイムトルク |
-| | `18_multi_drone_torque_test.py` | マルチドローン |
-| | `19_controller_torque_test.py` | コントローラ+トルク |
-| | `20_controller_motor_test.py` | コントローラ+モータ |
-| ワールド | `21_terrain_world.py` | 地形ワールド |
-| | `22_voxel_world.py` | ボクセルワールド |
-| | `23_controller_voxel_world.py` | コントローラ+ボクセル |
-| 制御開発 | `24_pid_rate_control.py` | PIDレート制御（電圧スケール） |
-| | `25_physical_units_rate_control.py` | **物理量ベース制御** |
-
-### デバッグスクリプト
-
-| スクリプト | 内容 |
-|-----------|------|
-| `debug_hover_only.py` | ホバリング専用テスト |
-| `debug_gyro_sign.py` | ジャイロ符号確認 |
-| `debug_control_loop.py` | 制御ループデバッグ |
-| `debug_torque_response.py` | トルク応答確認 |
-| `debug_p_control_only.py` | P制御のみ |
-| `debug_no_joystick.py` | ジョイスティックなし |
-| `debug_pid_terms.py` | PID各項テスト |
-| `debug_viewer_timing.py` | ビューア/ヘッドレスタイミング |
+開発履歴スクリプトは `archive/` フォルダに格納されています。
 
 ## 4. 制御アーキテクチャ
 
@@ -173,36 +132,21 @@ pip install torch  # Check PyTorch website for appropriate version
 
 ```bash
 cd scripts
-python 25_physical_units_rate_control.py
+python run_genesis_sim.py
 ```
 
-## 3. Scripts
+## 3. Script Structure
 
-### Main Script
+```
+scripts/
+├── run_genesis_sim.py    # Main script (physical-unit control)
+└── archive/              # Development history & debug scripts
+    ├── 01_hello_genesis.py ... 24_pid_rate_control.py
+    ├── debug_*.py
+    └── generate_stampfly_urdf.py
+```
 
-| Script | Description |
-|--------|-------------|
-| `25_physical_units_rate_control.py` | **Physical-unit-based rate control (Recommended)** |
-
-### Development History Scripts
-
-The following scripts remain as incremental development history:
-
-| Category | Script | Description |
-|----------|--------|-------------|
-| Basic Tests | `01_hello_genesis.py` | Genesis initialization |
-| | `02_ground_plane.py` | Ground plane test |
-| | `03_falling_cube.py` | Falling cube |
-| | `04_load_stl.py` | STL loading |
-| | `05_stampfly_fall.py` | StampFly free fall |
-| Coordinates/Model | `06_coordinate_test.py` | Coordinate verification |
-| | `07_stl_orientation_test.py` | STL orientation |
-| | `08-10_*.py` | Rigid body tests |
-| URDF | `11-15_*.py` | URDF development |
-| Torque/Motor | `16-20_*.py` | Torque and motor tests |
-| World | `21-23_*.py` | World environments |
-| Control | `24_pid_rate_control.py` | PID (voltage scale) |
-| | `25_physical_units_rate_control.py` | **Physical units** |
+Development history scripts are stored in the `archive/` folder.
 
 ## 4. Control Architecture
 

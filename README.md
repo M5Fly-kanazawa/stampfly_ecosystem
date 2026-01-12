@@ -32,7 +32,7 @@ python run_sim.py
 cd simulator/sandbox/genesis_sim
 source venv/bin/activate
 cd scripts
-python 25_physical_units_rate_control.py
+python run_genesis_sim.py
 ```
 
 コントローラをUSB HIDモードに切り替えてPCに接続すれば、
@@ -142,7 +142,7 @@ python run_sim.py
 cd simulator/sandbox/genesis_sim
 source venv/bin/activate
 cd scripts
-python 25_physical_units_rate_control.py
+python run_genesis_sim.py
 ```
 
 Switch the controller to USB HID mode and connect to your PC.
