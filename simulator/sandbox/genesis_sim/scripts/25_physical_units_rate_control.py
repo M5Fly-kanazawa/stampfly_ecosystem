@@ -204,7 +204,8 @@ class FollowCamera:
     - X: forward, Y: left, Z: up
     """
 
-    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15, alpha_height=1.0):
+    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15,
+                 alpha_height=1.0, alpha_yaw=0.05):
         """
         Args:
             distance: Distance behind drone [m]
@@ -212,17 +213,38 @@ class FollowCamera:
             alpha_pos: Smoothing factor for camera XY position (smaller = smoother)
             alpha_look: Smoothing factor for lookat point XY
             alpha_height: Smoothing factor for height tracking (larger = faster response)
+            alpha_yaw: Smoothing factor for yaw angle tracking (smaller = smoother rotation)
         """
         self.distance = distance
         self.height = height
         self.alpha_pos = alpha_pos
         self.alpha_look = alpha_look
         self.alpha_height = alpha_height
+        self.alpha_yaw = alpha_yaw
 
         # Smoothed camera state
         self.cam_pos = None
         self.lookat_pos = None
+        self.smoothed_yaw = None
         self.initialized = False
+
+    def _wrap_angle(self, angle):
+        """Wrap angle to [-pi, pi]"""
+        while angle > np.pi:
+            angle -= 2 * np.pi
+        while angle < -np.pi:
+            angle += 2 * np.pi
+        return angle
+
+    def _smooth_angle(self, current, target, alpha):
+        """
+        Smooth angle with proper wrapping.
+        角度を正しくラップしながらスムージング
+        """
+        # Calculate shortest angular difference
+        diff = self._wrap_angle(target - current)
+        # Apply smoothing
+        return self._wrap_angle(current + alpha * diff)
 
     def update(self, scene, drone_pos, drone_yaw):
         """
@@ -240,32 +262,37 @@ class FollowCamera:
             float(drone_pos[2]),
         ])
 
-        # Target camera position = behind and above drone
-        # Genesis coordinate: X=Right, Y=Forward, Z=Up
-        # Drone's "front" in Genesis is +Y direction when yaw=0
-        # Forward vector: (-sin(yaw), cos(yaw), 0)
-        # Behind vector: (sin(yaw), -cos(yaw), 0)
-        cam_target = np.array([
-            lookat_target[0] + self.distance * np.sin(drone_yaw),
-            lookat_target[1] - self.distance * np.cos(drone_yaw),
-            lookat_target[2] + self.height,
-        ])
-
-        # Initialize or smooth
+        # Initialize or smooth yaw
         if not self.initialized:
-            self.cam_pos = cam_target.copy()
+            self.smoothed_yaw = drone_yaw
             self.lookat_pos = lookat_target.copy()
-            self.initialized = True
         else:
-            # Low-pass filter smoothing
-            # XY: slower smoothing for stable horizontal tracking
-            # Z: faster smoothing (smaller time constant) for responsive height tracking
-            self.cam_pos[0] += self.alpha_pos * (cam_target[0] - self.cam_pos[0])
-            self.cam_pos[1] += self.alpha_pos * (cam_target[1] - self.cam_pos[1])
-            self.cam_pos[2] += self.alpha_height * (cam_target[2] - self.cam_pos[2])
+            # Smooth yaw angle (handles wrapping at ±π)
+            self.smoothed_yaw = self._smooth_angle(self.smoothed_yaw, drone_yaw, self.alpha_yaw)
+            # Smooth lookat position
             self.lookat_pos[0] += self.alpha_look * (lookat_target[0] - self.lookat_pos[0])
             self.lookat_pos[1] += self.alpha_look * (lookat_target[1] - self.lookat_pos[1])
             self.lookat_pos[2] += self.alpha_height * (lookat_target[2] - self.lookat_pos[2])
+
+        # Target camera position = behind and above drone (using smoothed yaw)
+        # Genesis coordinate: X=Right, Y=Forward, Z=Up
+        # Drone's "front" in Genesis is +Y direction when yaw=0
+        # Behind vector: (sin(yaw), -cos(yaw), 0)
+        cam_target = np.array([
+            self.lookat_pos[0] + self.distance * np.sin(self.smoothed_yaw),
+            self.lookat_pos[1] - self.distance * np.cos(self.smoothed_yaw),
+            self.lookat_pos[2] + self.height,
+        ])
+
+        # Initialize or smooth camera position
+        if not self.initialized:
+            self.cam_pos = cam_target.copy()
+            self.initialized = True
+        else:
+            # Low-pass filter smoothing for camera position
+            self.cam_pos[0] += self.alpha_pos * (cam_target[0] - self.cam_pos[0])
+            self.cam_pos[1] += self.alpha_pos * (cam_target[1] - self.cam_pos[1])
+            self.cam_pos[2] += self.alpha_height * (cam_target[2] - self.cam_pos[2])
 
         # Update viewer camera using 4x4 pose matrix
         # This allows explicit control of up vector (always Z-up for level horizon)
@@ -277,6 +304,7 @@ class FollowCamera:
         """Reset camera state."""
         self.cam_pos = None
         self.lookat_pos = None
+        self.smoothed_yaw = None
         self.initialized = False
 
 
@@ -459,7 +487,10 @@ def main():
 
     # Follow camera (behind drone)
     # Increased alpha values for tighter following
-    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.9, alpha_look=0.9, alpha_height=1.0)
+    # Follow camera with yaw smoothing for smooth rotation tracking
+    # alpha_yaw=0.1: smooth camera rotation when drone yaws
+    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.9, alpha_look=0.9,
+                                 alpha_height=1.0, alpha_yaw=0.1)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
