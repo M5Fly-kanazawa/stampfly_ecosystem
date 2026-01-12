@@ -453,14 +453,14 @@ def main():
 
             # Control loop (at CONTROL_HZ)
             if sim_time >= next_control_time:
-                # Get current angular velocity from Genesis (DOF velocity)
-                # DOF 0-2: linear velocity, DOF 3-5: angular velocity (world frame)
-                dofs_vel = drone.get_dofs_velocity()
-                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
-
                 # Get rotation matrix for world-to-body transformation
                 quat = drone.get_quat()
                 R = quat_to_rotation_matrix(quat)
+
+                # Get angular velocity using get_ang() (returns world frame angular velocity)
+                # Note: get_dofs_velocity() returns Euler angle rates, NOT angular velocity!
+                ang_vel_world = drone.get_ang()
+                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
 
                 # Transform world frame angular velocity to body frame
                 gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R)
@@ -536,10 +536,10 @@ def main():
                 genesis_ry = np.degrees(np.arcsin(np.clip(2*(w*gy - gz*gx), -1, 1)))
                 genesis_rz = np.degrees(np.arctan2(2*(w*gz + gx*gy), 1 - 2*(gy*gy + gz*gz)))
 
-                # Get gyro for display (body frame)
+                # Get gyro for display using get_ang() (world frame angular velocity)
                 R_disp = quat_to_rotation_matrix(quat)
-                dofs_vel = drone.get_dofs_velocity()
-                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                ang_vel_world = drone.get_ang()
+                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
                 gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R_disp)
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 

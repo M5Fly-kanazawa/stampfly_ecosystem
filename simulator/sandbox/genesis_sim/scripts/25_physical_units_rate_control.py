@@ -624,9 +624,10 @@ def main():
                 quat = drone.get_quat()
                 R = quat_to_rotation_matrix(quat)
 
-                # Get angular velocity (world frame -> body frame -> NED)
-                dofs_vel = drone.get_dofs_velocity()
-                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                # Get angular velocity using get_ang() (returns world frame angular velocity)
+                # Note: get_dofs_velocity() returns Euler angle rates, NOT angular velocity!
+                ang_vel_world = drone.get_ang()
+                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
                 gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R)
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
@@ -719,10 +720,10 @@ def main():
                 euler_genesis = quat_to_euler(quat)
                 euler_ned = genesis_euler_to_ned(euler_genesis)
 
-                # Get gyro for display
+                # Get gyro for display using get_ang() (world frame angular velocity)
                 R_disp = quat_to_rotation_matrix(quat)
-                dofs_vel = drone.get_dofs_velocity()
-                ang_vel_world = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                ang_vel_world = drone.get_ang()
+                ang_vel_world = np.array([float(ang_vel_world[0]), float(ang_vel_world[1]), float(ang_vel_world[2])])
                 gyro_genesis_body = world_ang_vel_to_body(ang_vel_world, R_disp)
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
