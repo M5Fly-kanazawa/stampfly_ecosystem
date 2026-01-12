@@ -364,7 +364,7 @@ namespace rate_control {
 // 1: 物理単位ベース（トルク [Nm] 出力）
 // 0: 電圧スケール（レガシー [V] 出力）
 // -----------------------------------------------------------------------------
-#define USE_PHYSICAL_UNITS 1
+#define USE_PHYSICAL_UNITS 1  // Physical units mode with corrected k_τ
 
 // C++コードからアクセス可能なフラグ
 inline constexpr bool PHYSICAL_UNITS_ENABLED = (USE_PHYSICAL_UNITS == 1);
@@ -381,13 +381,17 @@ inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad
 // PIDゲイン (Rate Controller)
 // 不完全微分PID: C(s) = Kp(1 + 1/(Ti·s) + Td·s/(η·Td·s + 1))
 //
-// ゲイン変換理論 (docs/architecture/control-allocation-migration.md 参照):
+// ゲイン変換理論:
 //   新Kp = k_τ × 旧Kp  (出力単位変換)
 //   新Ti = 旧Ti       (時定数は不変)
 //   新Td = 旧Td       (時定数は不変)
 //
-// k_τ_roll/pitch = (0.25/3.7) × 0.15 × 0.023 = 2.33×10⁻⁴ Nm/V
-// k_τ_yaw        = (0.25/3.7) × 0.15 × 0.00971 = 9.84×10⁻⁵ Nm/V
+// k_τ計算（ホバー動作点での線形化）:
+//   ホバー時: duty ≈ 0.63, thrust ≈ 0.086 N/motor
+//   dT/dDuty ≈ 0.23 N at hover (非線形のためT_maxより小さい)
+//   4モータの寄与を考慮:
+//     k_τ_roll/pitch = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4×10⁻³ Nm/V
+//     k_τ_yaw        = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
 // -----------------------------------------------------------------------------
 
 #if USE_PHYSICAL_UNITS
@@ -396,27 +400,27 @@ inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad
 // ==========================================================================
 
 // Roll rate PID
-inline constexpr float ROLL_RATE_KP = 1.51e-4f;    // [Nm/(rad/s)] = 0.65 × 2.33e-4
+inline constexpr float ROLL_RATE_KP = 9.1e-4f;     // [Nm/(rad/s)] = 0.65 × 1.4e-3
 inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s] (不変)
 inline constexpr float ROLL_RATE_TD = 0.01f;       // 微分時間 [s] (不変)
 
 // Pitch rate PID
-inline constexpr float PITCH_RATE_KP = 2.21e-4f;   // [Nm/(rad/s)] = 0.95 × 2.33e-4
+inline constexpr float PITCH_RATE_KP = 1.33e-3f;   // [Nm/(rad/s)] = 0.95 × 1.4e-3
 inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s] (不変)
 inline constexpr float PITCH_RATE_TD = 0.025f;     // 微分時間 [s] (不変)
 
 // Yaw rate PID
-inline constexpr float YAW_RATE_KP = 2.95e-4f;     // [Nm/(rad/s)] = 3.0 × 9.84e-5
+inline constexpr float YAW_RATE_KP = 1.77e-3f;     // [Nm/(rad/s)] = 3.0 × 5.9e-4
 inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s] (不変)
 inline constexpr float YAW_RATE_TD = 0.01f;        // 微分時間 [s] (不変)
 
 // 出力制限 [Nm]
-inline constexpr float ROLL_OUTPUT_LIMIT = 8.6e-4f;   // 3.7 × 2.33e-4
-inline constexpr float PITCH_OUTPUT_LIMIT = 8.6e-4f;  // 3.7 × 2.33e-4
-inline constexpr float YAW_OUTPUT_LIMIT = 3.6e-4f;    // 3.7 × 9.84e-5
+inline constexpr float ROLL_OUTPUT_LIMIT = 5.2e-3f;   // 3.7 × 1.4e-3
+inline constexpr float PITCH_OUTPUT_LIMIT = 5.2e-3f;  // 3.7 × 1.4e-3
+inline constexpr float YAW_OUTPUT_LIMIT = 2.2e-3f;    // 3.7 × 5.9e-4
 
 // 共通出力制限（最大値、後方互換性）
-inline constexpr float OUTPUT_LIMIT = 8.6e-4f;     // [Nm] (ロール/ピッチ基準)
+inline constexpr float OUTPUT_LIMIT = 5.2e-3f;     // [Nm] (ロール/ピッチ基準)
 
 #else
 // ==========================================================================

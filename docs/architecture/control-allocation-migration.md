@@ -206,17 +206,22 @@ duty = thrust_to_duty(T)        ... 推力→Duty
 
 **物理単位への変換：**
 
-電圧出力をトルクに変換するスケーリング係数：
+電圧出力をトルクに変換するスケーリング係数（ホバー動作点での線形化）：
 
 ```
-k_τ = (0.25 / 3.7) × T_max × d
-    = 0.0676 × 0.15 × 0.023
-    ≈ 2.33×10⁻⁴ Nm/V
+k_τ = 4 × (0.25 / 3.7) × (dT/dDuty)_hover × d
+    ≈ 4 × 0.0676 × 0.23 × 0.023
+    ≈ 1.4×10⁻³ Nm/V
 ```
+
+**注意:**
+- 4モータ全ての寄与を考慮（factor of 4）
+- 非線形モータモデルをホバー点で線形化: (dT/dDuty)_hover ≈ 0.23 N/duty
+- 以前の導出（k_τ = 2.33×10⁻⁴）は1モータ分かつT_max=0.15を使用しており誤り
 
 これにより：
-- Roll最大トルク: 3.7V × 2.33×10⁻⁴ ≈ 0.86 mNm
-- 角加速度: τ/Ixx = 0.86e-3 / 9.16e-6 ≈ 94 rad/s²
+- Roll最大トルク: 3.7V × 1.4×10⁻³ ≈ 5.2 mNm
+- 角加速度: τ/Ixx = 5.2e-3 / 9.16e-6 ≈ 570 rad/s²
 
 ---
 
@@ -304,17 +309,17 @@ Kp_new × Td_new = k × Kp_old × Td_old
 
 ### ゲイン変換対応表
 
-スケーリング係数：
+スケーリング係数（ホバー動作点での線形化、4モータ寄与）：
 ```
-k_τ_roll/pitch = (0.25 / 3.7) × T_max × d = 0.0676 × 0.15 × 0.023 ≈ 2.33×10⁻⁴ Nm/V
-k_τ_yaw        = (0.25 / 3.7) × T_max × κ = 0.0676 × 0.15 × 0.00971 ≈ 9.84×10⁻⁵ Nm/V
+k_τ_roll/pitch = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4×10⁻³ Nm/V
+k_τ_yaw        = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
 ```
 
 | 軸 | 旧Kp [V/(rad/s)] | k_τ [Nm/V] | 新Kp [Nm/(rad/s)] |
 |----|-----------------|------------|-------------------|
-| Roll | 0.65 | 2.33×10⁻⁴ | **1.51×10⁻⁴** |
-| Pitch | 0.95 | 2.33×10⁻⁴ | **2.21×10⁻⁴** |
-| Yaw | 3.0 | 9.84×10⁻⁵ | **2.95×10⁻⁴** |
+| Roll | 0.65 | 1.4×10⁻³ | **9.1×10⁻⁴** |
+| Pitch | 0.95 | 1.4×10⁻³ | **1.33×10⁻³** |
+| Yaw | 3.0 | 5.9×10⁻⁴ | **1.77×10⁻³** |
 
 | 軸 | 旧Ti [s] | 新Ti [s] | 旧Td [s] | 新Td [s] |
 |----|---------|---------|---------|---------|
@@ -324,9 +329,9 @@ k_τ_yaw        = (0.25 / 3.7) × T_max × κ = 0.0676 × 0.15 × 0.00971 ≈ 9.
 
 | 軸 | 旧出力上限 [V] | 新出力上限 [Nm] |
 |----|--------------|----------------|
-| Roll | ±3.7 | **±8.6×10⁻⁴** |
-| Pitch | ±3.7 | **±8.6×10⁻⁴** |
-| Yaw | ±3.7 | **±3.6×10⁻⁴** |
+| Roll | ±3.7 | **±5.2×10⁻³** |
+| Pitch | ±3.7 | **±5.2×10⁻³** |
+| Yaw | ±3.7 | **±2.2×10⁻³** |
 
 **注記：** η（微分フィルタ係数）= 0.125 は変更不要
 
@@ -421,12 +426,13 @@ namespace rate_control {
 
 #if USE_PHYSICAL_UNITS
 // 物理単位ベースゲイン [Nm/(rad/s)]
-inline constexpr float ROLL_RATE_KP = 1.51e-4f;   // 0.65 × 2.33e-4
-inline constexpr float PITCH_RATE_KP = 2.21e-4f;  // 0.95 × 2.33e-4
-inline constexpr float YAW_RATE_KP = 2.95e-4f;    // 3.0 × 9.84e-5
-inline constexpr float ROLL_OUTPUT_LIMIT = 8.6e-4f;   // [Nm]
-inline constexpr float PITCH_OUTPUT_LIMIT = 8.6e-4f;  // [Nm]
-inline constexpr float YAW_OUTPUT_LIMIT = 3.6e-4f;    // [Nm]
+// k_τ = 4 × (0.25/3.7) × 0.23 × d ≈ 1.4e-3 Nm/V (roll/pitch)
+inline constexpr float ROLL_RATE_KP = 9.1e-4f;    // 0.65 × 1.4e-3
+inline constexpr float PITCH_RATE_KP = 1.33e-3f;  // 0.95 × 1.4e-3
+inline constexpr float YAW_RATE_KP = 1.77e-3f;    // 3.0 × 5.9e-4
+inline constexpr float ROLL_OUTPUT_LIMIT = 5.2e-3f;   // [Nm] = 3.7 × 1.4e-3
+inline constexpr float PITCH_OUTPUT_LIMIT = 5.2e-3f;  // [Nm]
+inline constexpr float YAW_OUTPUT_LIMIT = 2.2e-3f;    // [Nm] = 3.7 × 5.9e-4
 #else
 // 電圧スケールゲイン（レガシー）
 inline constexpr float ROLL_RATE_KP = 0.65f;
@@ -595,17 +601,17 @@ For equivalent behavior `u_τ = k × u_V` (k = scaling factor):
 
 ### Gain Conversion Table
 
-Scaling factors:
+Scaling factors (linearized at hover operating point, 4 motor contributions):
 ```
-k_τ_roll/pitch = (0.25 / 3.7) × T_max × d = 0.0676 × 0.15 × 0.023 ≈ 2.33×10⁻⁴ Nm/V
-k_τ_yaw        = (0.25 / 3.7) × T_max × κ = 0.0676 × 0.15 × 0.00971 ≈ 9.84×10⁻⁵ Nm/V
+k_τ_roll/pitch = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4×10⁻³ Nm/V
+k_τ_yaw        = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
 ```
 
 | Axis | Old Kp [V/(rad/s)] | k_τ [Nm/V] | New Kp [Nm/(rad/s)] |
 |------|-------------------|------------|---------------------|
-| Roll | 0.65 | 2.33×10⁻⁴ | **1.51×10⁻⁴** |
-| Pitch | 0.95 | 2.33×10⁻⁴ | **2.21×10⁻⁴** |
-| Yaw | 3.0 | 9.84×10⁻⁵ | **2.95×10⁻⁴** |
+| Roll | 0.65 | 1.4×10⁻³ | **9.1×10⁻⁴** |
+| Pitch | 0.95 | 1.4×10⁻³ | **1.33×10⁻³** |
+| Yaw | 3.0 | 5.9×10⁻⁴ | **1.77×10⁻³** |
 
 | Axis | Old Ti [s] | New Ti [s] | Old Td [s] | New Td [s] |
 |------|-----------|-----------|-----------|-----------|
@@ -615,9 +621,9 @@ k_τ_yaw        = (0.25 / 3.7) × T_max × κ = 0.0676 × 0.15 × 0.00971 ≈ 9.
 
 | Axis | Old Output Limit [V] | New Output Limit [Nm] |
 |------|---------------------|----------------------|
-| Roll | ±3.7 | **±8.6×10⁻⁴** |
-| Pitch | ±3.7 | **±8.6×10⁻⁴** |
-| Yaw | ±3.7 | **±3.6×10⁻⁴** |
+| Roll | ±3.7 | **±5.2×10⁻³** |
+| Pitch | ±3.7 | **±5.2×10⁻³** |
+| Yaw | ±3.7 | **±2.2×10⁻³** |
 
 **Note:** η (derivative filter coefficient) = 0.125 remains unchanged
 
