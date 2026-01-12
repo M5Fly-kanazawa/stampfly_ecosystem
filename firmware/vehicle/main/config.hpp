@@ -85,7 +85,7 @@ inline constexpr float IMU_DT = 0.0025f;          // 400Hz
 inline constexpr float OPTFLOW_DT = 0.01f;        // 100Hz
 inline constexpr float MAG_DT = 0.01f;            // 100Hz
 inline constexpr float BARO_DT = 0.02f;           // 50Hz
-inline constexpr float TOF_DT = 0.05f;            // 20Hz
+inline constexpr float TOF_DT = 0.033f;           // 30Hz
 
 // =============================================================================
 // Sensor Thresholds
@@ -134,7 +134,7 @@ inline constexpr float ACCEL_BIAS_NOISE = 0.0001f;     // 加速度バイアス�
 // 値が大きい = 観測を信頼しない、値が小さい = 観測を信頼
 // -----------------------------------------------------------------------------
 inline constexpr float BARO_NOISE = 0.1f;              // 気圧高度ノイズ [m]
-inline constexpr float TOF_NOISE = 0.002540f;          // ToFノイズ [m]
+inline constexpr float TOF_NOISE = 0.03f;              // ToFノイズ [m] (VL53L3CX sigma ~20-30mm)
 inline constexpr float MAG_NOISE = 1.0f;               // 地磁気ノイズ [uT] 実測std≈0.94
 inline constexpr float FLOW_NOISE = 0.01f;             // オプティカルフローノイズ [m/s] 実測std≈0.011
 inline constexpr float ACCEL_ATT_NOISE = 0.06f;        // 加速度計姿勢補正ノイズ [m/s²] (初期値: 0.02)

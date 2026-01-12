@@ -26,8 +26,15 @@ void ToFTask(void* pvParameters)
     g_health.tof.setThresholds(5, 10);
     // 距離の急激な変化検出用
     float tof_last_valid_distance = 0.0f;
-    constexpr float TOF_MAX_CHANGE_RATE = 2.0f;  // 最大変化率 [m/s]
+    constexpr float TOF_MAX_CHANGE_RATE = 5.0f;  // 最大変化率 [m/s]（急昇降対応）
     const float TOF_MAX_CHANGE_PER_CYCLE = TOF_MAX_CHANGE_RATE * TOF_DT;  // TOF_DT秒あたりの最大変化
+
+    // ジャンプ検出リセット用（連続ジャンプ時に新値を採用）
+    int consecutive_jumps = 0;
+    float jump_candidate_sum = 0.0f;
+    constexpr int JUMP_RESET_THRESHOLD = 10;  // 10連続ジャンプで新値採用
+    constexpr float JUMP_CANDIDATE_TOLERANCE = 0.2f;  // 候補値の許容誤差 [m]（ばらつき許容）
+
     int bottom_errors = 0;
     int front_errors = 0;
     bool bottom_disabled = false;
@@ -50,28 +57,66 @@ void ToFTask(void* pvParameters)
                     bottom_errors = 0;  // Reset on success
 
                     // Only update if completely valid measurement (status == 0)
-                    // status 0 = valid, 1-7 = various errors
-                    if (status == 0 && distance_mm > 0) {
+                    // status 0 = valid, 1-7 = various errors, 14 = unknown
+                    bool valid_reading = (status == 0 && distance_mm > 0);
+
+                    if (valid_reading) {
                         float distance_m = distance_mm * 0.001f;
 
                         // 距離の急激な変化をチェック
                         bool distance_jump_detected = false;
+
                         if (tof_last_valid_distance > 0.01f) {
                             float change = std::abs(distance_m - tof_last_valid_distance);
                             if (change > TOF_MAX_CHANGE_PER_CYCLE) {
                                 distance_jump_detected = true;
-                                ESP_LOGW(TAG, "ToF distance jump: %.3f -> %.3f (change=%.3f)",
-                                         tof_last_valid_distance, distance_m, change);
+
+                                // 連続ジャンプのトラッキング
+                                float avg_candidate = (consecutive_jumps > 0)
+                                    ? jump_candidate_sum / consecutive_jumps : distance_m;
+                                float candidate_diff = std::abs(distance_m - avg_candidate);
+
+                                if (candidate_diff < JUMP_CANDIDATE_TOLERANCE) {
+                                    // 類似した値が連続 → カウント増加
+                                    consecutive_jumps++;
+                                    jump_candidate_sum += distance_m;
+
+                                    if (consecutive_jumps >= JUMP_RESET_THRESHOLD) {
+                                        // 新値を採用
+                                        float new_distance = jump_candidate_sum / consecutive_jumps;
+                                        ESP_LOGW(TAG, "ToF jump reset: %.3f -> %.3f (after %d consecutive)",
+                                                 tof_last_valid_distance, new_distance, consecutive_jumps);
+                                        distance_m = new_distance;
+                                        distance_jump_detected = false;
+                                        consecutive_jumps = 0;
+                                        jump_candidate_sum = 0.0f;
+                                    }
+                                } else {
+                                    // 異なる値 → リセット
+                                    consecutive_jumps = 1;
+                                    jump_candidate_sum = distance_m;
+                                }
+
+                                if (distance_jump_detected) {
+                                    ESP_LOGD(TAG, "ToF jump: %.3f -> %.3f (consec=%d)",
+                                             tof_last_valid_distance, distance_m, consecutive_jumps);
+                                }
+                            } else {
+                                // ジャンプなし → カウンタリセット
+                                consecutive_jumps = 0;
+                                jump_candidate_sum = 0.0f;
                             }
                         }
 
-                        state.updateToF(stampfly::ToFPosition::BOTTOM, distance_m, status);
-
+                        // 有効かつジャンプなしの場合のみ更新
                         if (!distance_jump_detected) {
+                            tof_last_valid_distance = distance_m;
+                            consecutive_jumps = 0;
+                            jump_candidate_sum = 0.0f;
                             g_health.tof.recordSuccess();
                             g_tof_task_healthy = g_health.tof.isHealthy();
 
-                            // リングバッファに追加（常時更新）
+                            // リングバッファに追加
                             g_tof_bottom_buffer[g_tof_bottom_buffer_index] = distance_m;
                             g_tof_bottom_buffer_index = (g_tof_bottom_buffer_index + 1) % REF_BUFFER_SIZE;
                             if (g_tof_bottom_buffer_count < REF_BUFFER_SIZE) {
@@ -85,17 +130,20 @@ void ToFTask(void* pvParameters)
                                 g_altitude_est.updateToF(distance_m, att.pitch, att.roll);
                             }
                         } else {
-                            // 距離ジャンプ検出
+                            // 距離ジャンプ検出 - 無効として扱う
                             g_health.tof.recordFailure();
                             g_tof_task_healthy = g_health.tof.isHealthy();
                         }
-
-                        // 有効距離を記録（ジャンプ後も更新して追従可能に）
-                        tof_last_valid_distance = distance_m;
                     } else {
-                        // ステータス異常
+                        // 無効測定
                         g_health.tof.recordFailure();
                         g_tof_task_healthy = g_health.tof.isHealthy();
+                    }
+
+                    // 状態は常に最後の有効値で更新（0表示問題を回避）
+                    if (tof_last_valid_distance > 0.01f) {
+                        state.updateToF(stampfly::ToFPosition::BOTTOM, tof_last_valid_distance,
+                                        valid_reading ? status : 255);  // 255 = stale data
                     }
 
                     // Debug log every 300 readings (~10 seconds at 30Hz)

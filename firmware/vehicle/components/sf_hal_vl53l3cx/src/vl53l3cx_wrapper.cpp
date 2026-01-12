@@ -264,13 +264,48 @@ esp_err_t VL53L3CXWrapper::getDistance(DistanceData& data)
     data.timestamp = ranging_data.StreamCount;
 
     if (ranging_data.NumberOfObjectsFound > 0) {
-        // Use first (closest) target
-        const VL53LX_TargetRangeData_t& target = ranging_data.RangeData[0];
-        data.distance_mm = target.RangeMilliMeter;
-        data.range_status = target.RangeStatus;
-        data.signal_rate = target.SignalRateRtnMegaCps / 65536.0f;
-        data.ambient_rate = target.AmbientRateRtnMegaCps / 65536.0f;
-        data.sigma_mm = target.SigmaMilliMeter / 65536.0f;
+        // Minimum distance threshold to filter ghost reflections [mm]
+        constexpr int16_t MIN_VALID_DISTANCE_MM = 30;
+
+        // Count objects (capped at max)
+        int n = ranging_data.NumberOfObjectsFound;
+        if (n > VL53LX_MAX_RANGE_RESULTS) n = VL53LX_MAX_RANGE_RESULTS;
+
+        // Find the farthest valid target (for altitude measurement, ground is usually farthest)
+        // Valid: status == 0 and distance > MIN_VALID_DISTANCE_MM
+        int best_idx = -1;
+        int16_t max_distance = 0;
+        for (int i = 0; i < n; i++) {
+            const VL53LX_TargetRangeData_t& t = ranging_data.RangeData[i];
+            if (t.RangeStatus == 0 && t.RangeMilliMeter > MIN_VALID_DISTANCE_MM) {
+                if (t.RangeMilliMeter > max_distance) {
+                    max_distance = t.RangeMilliMeter;
+                    best_idx = i;
+                }
+            }
+        }
+
+        if (best_idx >= 0) {
+            const VL53LX_TargetRangeData_t& target = ranging_data.RangeData[best_idx];
+            data.distance_mm = target.RangeMilliMeter;
+            data.range_status = target.RangeStatus;
+            data.signal_rate = target.SignalRateRtnMegaCps / 65536.0f;
+            data.ambient_rate = target.AmbientRateRtnMegaCps / 65536.0f;
+            data.sigma_mm = target.SigmaMilliMeter / 65536.0f;
+
+            if (best_idx > 0 || n > 1) {
+                ESP_LOGD(TAG, "Selected target[%d]=%dmm from %d objects",
+                         best_idx, data.distance_mm, n);
+            }
+        } else {
+            // All targets invalid - use first target's data for status reporting
+            const VL53LX_TargetRangeData_t& target = ranging_data.RangeData[0];
+            data.distance_mm = 0;
+            data.range_status = (target.RangeStatus != 0) ? target.RangeStatus : 254;  // 254 = all targets invalid
+            data.signal_rate = target.SignalRateRtnMegaCps / 65536.0f;
+            data.ambient_rate = target.AmbientRateRtnMegaCps / 65536.0f;
+            data.sigma_mm = target.SigmaMilliMeter / 65536.0f;
+        }
     } else {
         data.distance_mm = 0;
         data.range_status = 255;  // No target
