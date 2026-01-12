@@ -64,13 +64,23 @@ public:
     void setMotor(int motor, float value);
 
     /**
-     * @brief Set mixer output
+     * @brief Set mixer output (legacy voltage-scale mode)
+     * レガシーミキサー出力（電圧スケールモード）
+     *
      * @param thrust Thrust (0.0-1.0)
-     * @param roll Roll (-1.0 to 1.0)
-     * @param pitch Pitch (-1.0 to 1.0)
-     * @param yaw Yaw (-1.0 to 1.0)
+     * @param roll Roll output from PID [V] (-3.7 to 3.7)
+     * @param pitch Pitch output from PID [V] (-3.7 to 3.7)
+     * @param yaw Yaw output from PID [V] (-3.7 to 3.7)
      */
     void setMixerOutput(float thrust, float roll, float pitch, float yaw);
+
+    /**
+     * @brief Set motor duties directly (physical units mode)
+     * モーターDutyを直接設定（物理単位モード）
+     *
+     * @param duties Array of 4 duty cycles [0.0-1.0] for M1(FR), M2(RR), M3(RL), M4(FL)
+     */
+    void setMotorDuties(const float duties[4]);
 
     /**
      * @brief Test single motor

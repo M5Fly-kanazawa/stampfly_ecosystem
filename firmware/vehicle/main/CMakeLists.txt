@@ -31,6 +31,7 @@ idf_component_register(
         sf_algo_eskf
         sf_algo_fusion
         sf_algo_pid
+        sf_algo_control
         sf_svc_health
         sf_svc_state
         sf_svc_comm

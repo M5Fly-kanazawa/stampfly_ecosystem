@@ -3,10 +3,18 @@
  * @brief 制御タスク (400Hz) - 角速度制御（Rate Control）
  *
  * コントローラ入力から目標角速度を計算し、PID制御でモーター出力を決定
+ *
+ * 物理単位モード (USE_PHYSICAL_UNITS=1):
+ *   PID出力 [Nm] → ControlAllocator → モータ推力 [N] → Duty → モーター
+ *
+ * 電圧スケールモード (USE_PHYSICAL_UNITS=0):
+ *   PID出力 [V] → レガシーミキサー → Duty → モーター
  */
 
 #include "tasks_common.hpp"
 #include "../rate_controller.hpp"
+#include "control_allocation.hpp"
+#include "motor_model.hpp"
 
 static const char* TAG = "ControlTask";
 
@@ -30,49 +38,61 @@ void RateController::init() {
     pitch_rate_max = rate_control::PITCH_RATE_MAX;
     yaw_rate_max = rate_control::YAW_RATE_MAX;
 
-    // Roll PID
+    // Roll PID (軸別出力制限を使用)
     stampfly::PIDConfig roll_cfg;
     roll_cfg.Kp = rate_control::ROLL_RATE_KP;
     roll_cfg.Ti = rate_control::ROLL_RATE_TI;
     roll_cfg.Td = rate_control::ROLL_RATE_TD;
     roll_cfg.eta = rate_control::PID_ETA;
-    roll_cfg.output_min = -rate_control::OUTPUT_LIMIT;
-    roll_cfg.output_max = rate_control::OUTPUT_LIMIT;
+    roll_cfg.output_min = -rate_control::ROLL_OUTPUT_LIMIT;
+    roll_cfg.output_max = rate_control::ROLL_OUTPUT_LIMIT;
     roll_cfg.derivative_on_measurement = true;
     roll_pid.init(roll_cfg);
 
-    // Pitch PID
+    // Pitch PID (軸別出力制限を使用)
     stampfly::PIDConfig pitch_cfg;
     pitch_cfg.Kp = rate_control::PITCH_RATE_KP;
     pitch_cfg.Ti = rate_control::PITCH_RATE_TI;
     pitch_cfg.Td = rate_control::PITCH_RATE_TD;
     pitch_cfg.eta = rate_control::PID_ETA;
-    pitch_cfg.output_min = -rate_control::OUTPUT_LIMIT;
-    pitch_cfg.output_max = rate_control::OUTPUT_LIMIT;
+    pitch_cfg.output_min = -rate_control::PITCH_OUTPUT_LIMIT;
+    pitch_cfg.output_max = rate_control::PITCH_OUTPUT_LIMIT;
     pitch_cfg.derivative_on_measurement = true;
     pitch_pid.init(pitch_cfg);
 
-    // Yaw PID
+    // Yaw PID (軸別出力制限を使用)
     stampfly::PIDConfig yaw_cfg;
     yaw_cfg.Kp = rate_control::YAW_RATE_KP;
     yaw_cfg.Ti = rate_control::YAW_RATE_TI;
     yaw_cfg.Td = rate_control::YAW_RATE_TD;
     yaw_cfg.eta = rate_control::PID_ETA;
-    yaw_cfg.output_min = -rate_control::OUTPUT_LIMIT;
-    yaw_cfg.output_max = rate_control::OUTPUT_LIMIT;
+    yaw_cfg.output_min = -rate_control::YAW_OUTPUT_LIMIT;
+    yaw_cfg.output_max = rate_control::YAW_OUTPUT_LIMIT;
     yaw_cfg.derivative_on_measurement = true;
     yaw_pid.init(yaw_cfg);
+
+#if USE_PHYSICAL_UNITS
+    // 物理単位モード: ControlAllocatorを初期化
+    // Physical units mode: Initialize ControlAllocator
+    allocator.init(stampfly::DEFAULT_QUAD_CONFIG);
+    allocator.setMotorParams(stampfly::DEFAULT_MOTOR_PARAMS);
+    ESP_LOGI(TAG, "Physical units mode enabled");
+    ESP_LOGI(TAG, "  Kp units: [Nm/(rad/s)], Output units: [Nm]");
+#else
+    ESP_LOGI(TAG, "Voltage scale mode (legacy)");
+    ESP_LOGI(TAG, "  Kp units: [V/(rad/s)], Output units: [V]");
+#endif
 
     initialized = true;
     ESP_LOGI(TAG, "RateController initialized");
     ESP_LOGI(TAG, "  Sensitivity: R=%.1f P=%.1f Y=%.1f [rad/s]",
              roll_rate_max, pitch_rate_max, yaw_rate_max);
-    ESP_LOGI(TAG, "  Roll  PID: Kp=%.3f Ti=%.3f Td=%.4f",
-             roll_cfg.Kp, roll_cfg.Ti, roll_cfg.Td);
-    ESP_LOGI(TAG, "  Pitch PID: Kp=%.3f Ti=%.3f Td=%.4f",
-             pitch_cfg.Kp, pitch_cfg.Ti, pitch_cfg.Td);
-    ESP_LOGI(TAG, "  Yaw   PID: Kp=%.3f Ti=%.3f Td=%.4f",
-             yaw_cfg.Kp, yaw_cfg.Ti, yaw_cfg.Td);
+    ESP_LOGI(TAG, "  Roll  PID: Kp=%.2e Ti=%.3f Td=%.4f Limit=%.2e",
+             roll_cfg.Kp, roll_cfg.Ti, roll_cfg.Td, roll_cfg.output_max);
+    ESP_LOGI(TAG, "  Pitch PID: Kp=%.2e Ti=%.3f Td=%.4f Limit=%.2e",
+             pitch_cfg.Kp, pitch_cfg.Ti, pitch_cfg.Td, pitch_cfg.output_max);
+    ESP_LOGI(TAG, "  Yaw   PID: Kp=%.2e Ti=%.3f Td=%.4f Limit=%.2e",
+             yaw_cfg.Kp, yaw_cfg.Ti, yaw_cfg.Td, yaw_cfg.output_max);
 }
 
 void RateController::reset() {
@@ -275,11 +295,43 @@ void ControlTask(void* pvParameters)
             yaw_rate_target, yaw_rate_current, dt);
 
         // =====================================================================
-        // 5. モーターミキサー
+        // 5. モーターミキサー / Control Allocation
         // =====================================================================
+#if USE_PHYSICAL_UNITS
+        // 物理単位モード: PID出力 [Nm] → ControlAllocator → モータDuty
+        // Physical units mode: PID output [Nm] -> ControlAllocator -> Motor Duty
+
+        // スロットル → 総推力 [N] (4モータ合計)
+        // Throttle (0-1) -> Total thrust [N] (sum of 4 motors)
+        // ホバー推力 0.343N (35g × 9.81) でthrottle=0.5程度を想定
+        constexpr float MAX_TOTAL_THRUST = 4.0f * 0.15f;  // 4 × max_thrust_per_motor
+        float total_thrust = throttle * MAX_TOTAL_THRUST;
+
+        // 制御入力ベクトル: [総推力, ロールトルク, ピッチトルク, ヨートルク]
+        // Control input vector: [total_thrust, roll_torque, pitch_torque, yaw_torque]
+        float control[4] = {total_thrust, roll_out, pitch_out, yaw_out};
+
+        // ミキシング: 制御入力 → モータ推力 [N]
+        // Mixing: Control inputs -> Motor thrusts [N]
+        float thrusts[4];
+        g_rate_controller.allocator.mix(control, thrusts);
+
+        // 推力 → Duty変換
+        // Thrust -> Duty conversion
+        float duties[4];
+        g_rate_controller.allocator.thrustsToDuties(thrusts, duties);
+
+        // モータ出力設定
+        // Set motor outputs
+        g_motor.setMotorDuties(duties);
+
+#else
+        // 電圧スケールモード（レガシー）: PID出力 [V] → ミキサー → モータDuty
+        // Voltage scale mode (legacy): PID output [V] -> Mixer -> Motor Duty
         // X-quad mixer: setMixerOutput handles the motor mixing
         // thrust: 0.0 ~ 1.0
-        // roll/pitch/yaw: -1.0 ~ +1.0 (already limited by PID output limits)
+        // roll/pitch/yaw: ±3.7V (already limited by PID output limits)
         g_motor.setMixerOutput(throttle, roll_out, pitch_out, yaw_out);
+#endif
     }
 }

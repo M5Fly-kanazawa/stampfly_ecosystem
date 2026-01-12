@@ -441,15 +441,39 @@ inline constexpr float ROLL_RATE_TD = 0.01f;
 } // namespace rate_control
 ```
 
-### Phase 4: 段階的移行
+### Phase 4: 段階的移行 ✅ 完了（コード統合）
+
+**実装内容:**
+
+1. `motor_driver.hpp/cpp` - `setMotorDuties()` 関数追加
+2. `control_task.cpp` - ControlAllocator統合、条件コンパイル対応
+3. `rate_controller.hpp` - ControlAllocatorメンバ追加
+
+**制御フロー（物理単位モード）:**
+
+```
+スロットル [0-1] → 総推力 [N] = throttle × 4 × 0.15
+PID出力 [Nm] → ロール/ピッチ/ヨートルク
+         ↓
+    ControlAllocator.mix()
+         ↓
+    モータ推力 [N] × 4
+         ↓
+    thrustsToDuties()
+         ↓
+    モータDuty [0-1] × 4
+         ↓
+    setMotorDuties()
+```
 
 | ステップ | 内容 | 状態 |
 |---------|------|------|
 | Step 1 | 新アロケーションモジュールを追加（既存と並存） | ✅ 完了 |
 | Step 2 | コンパイルスイッチで切り替え可能に | ✅ 完了 |
-| Step 3 | シミュレータで検証 | 🔄 未実施 |
-| Step 4 | 実機テスト | 🔄 未実施 |
-| Step 5 | 旧コード削除 | 🔄 未実施 |
+| Step 3 | control_task.cppに統合 | ✅ 完了 |
+| Step 4 | シミュレータで検証 | 🔄 未実施 |
+| Step 5 | 実機テスト | 🔄 未実施 |
+| Step 6 | 旧コード削除（オプション） | 🔄 未実施 |
 
 ---
 
@@ -463,9 +487,12 @@ inline constexpr float ROLL_RATE_TD = 0.01f;
 | `components/sf_algo_control/motor_model.cpp` | 新規作成 | ✅ |
 | `components/sf_algo_control/CMakeLists.txt` | 新規作成 | ✅ |
 | `main/config.hpp` | 物理単位PIDゲイン追加、USE_PHYSICAL_UNITSスイッチ | ✅ |
-| `components/sf_hal_motor/motor_driver.hpp` | setMixerOutput廃止、setMotors追加 | 🔄 Phase 4 |
-| `components/sf_hal_motor/motor_driver.cpp` | 同上 | 🔄 Phase 4 |
-| `main/tasks/control_task.cpp` | 新アロケータ使用 | 🔄 Phase 4 |
+| `components/sf_hal_motor/motor_driver.hpp` | setMotorDuties()追加 | ✅ |
+| `components/sf_hal_motor/motor_driver.cpp` | setMotorDuties()実装 | ✅ |
+| `main/rate_controller.hpp` | ControlAllocatorメンバ追加 | ✅ |
+| `main/tasks/control_task.cpp` | ControlAllocator統合、条件コンパイル | ✅ |
+| `main/CMakeLists.txt` | sf_algo_control依存追加 | ✅ |
+| `components/sf_svc_cli/CMakeLists.txt` | sf_algo_control依存追加 | ✅ |
 
 ---
 

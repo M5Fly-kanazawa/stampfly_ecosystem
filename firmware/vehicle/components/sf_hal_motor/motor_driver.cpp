@@ -147,20 +147,36 @@ void MotorDriver::setMixerOutput(float thrust, float roll, float pitch, float ya
         return;
     }
 
-    // X-quad mixer
+    // X-quad mixer (legacy voltage-scale mode)
+    // レガシー電圧スケールミキサー
     // M1 (FR, CCW): T - R + P + Y
     // M2 (RR, CW):  T - R - P - Y
     // M3 (RL, CCW): T + R - P + Y
     // M4 (FL, CW):  T + R + P - Y
-    float m1 = thrust + 0.25*(- roll + pitch + yaw)/3.7;
-    float m2 = thrust + 0.25*(- roll - pitch - yaw)/3.7;
-    float m3 = thrust + 0.25*(  roll - pitch + yaw)/3.7;
-    float m4 = thrust + 0.25*(  roll + pitch - yaw)/3.7;
+    float m1 = thrust + 0.25f * (- roll + pitch + yaw) / 3.7f;
+    float m2 = thrust + 0.25f * (- roll - pitch - yaw) / 3.7f;
+    float m3 = thrust + 0.25f * (  roll - pitch + yaw) / 3.7f;
+    float m4 = thrust + 0.25f * (  roll + pitch - yaw) / 3.7f;
 
     setMotor(MOTOR_FR, m1);
     setMotor(MOTOR_RR, m2);
     setMotor(MOTOR_RL, m3);
     setMotor(MOTOR_FL, m4);
+}
+
+void MotorDriver::setMotorDuties(const float duties[4])
+{
+    if (!initialized_ || !armed_) {
+        return;
+    }
+
+    // Direct duty assignment (physical units mode)
+    // 直接Duty設定（物理単位モード）
+    // Order: M1(FR), M2(RR), M3(RL), M4(FL)
+    setMotor(MOTOR_FR, duties[0]);
+    setMotor(MOTOR_RR, duties[1]);
+    setMotor(MOTOR_RL, duties[2]);
+    setMotor(MOTOR_FL, duties[3]);
 }
 
 void MotorDriver::testMotor(int motor, int throttle_percent)
