@@ -21,18 +21,25 @@
 # SOFTWARE.
 
 """
-Physical Units Mode Flight Simulation
-物理単位モードフライトシミュレーション
+Physical Units Mode Flight Simulation (Joystick Control)
+物理単位モードフライトシミュレーション（ジョイスティック操作）
 
 This script implements firmware-compatible physical units based control:
+ファームウェア互換の物理単位ベース制御を実装:
 - PID output in torque [Nm]
 - Control allocation via B⁻¹ matrix
 - Thrust to voltage conversion via motor model
 
-ファームウェア互換の物理単位ベース制御を実装:
-- PID出力はトルク [Nm]
-- B⁻¹行列による制御配分
-- モータモデルによる推力→電圧変換
+Based on run_sim.py with same joystick interface.
+run_sim.py と同じジョイスティックインターフェースに基づく。
+
+Controls (same as run_sim.py):
+操作（run_sim.py と同じ）:
+- Throttle (Axis 0): Hover ± delta thrust
+- Roll (Axis 1): Roll rate/angle command
+- Pitch (Axis 2): Pitch rate/angle command
+- Yaw (Axis 3): Yaw rate command
+- Mode button (Button 2 / bit 2): Toggle ACRO/STABILIZE
 """
 
 import sys
@@ -164,24 +171,24 @@ class PhysicalUnitsPIDConfig:
     k_τ_roll/pitch = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4×10⁻³ Nm/V
     k_τ_yaw = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
     """
-    # Rate sensitivity
-    roll_rate_max = 1.0    # rad/s
-    pitch_rate_max = 1.0   # rad/s
-    yaw_rate_max = 5.0     # rad/s
+    # Rate sensitivity (matching firmware)
+    roll_rate_max = 1.0    # rad/s (~57 deg/s)
+    pitch_rate_max = 1.0   # rad/s (~57 deg/s)
+    yaw_rate_max = 5.0     # rad/s (~286 deg/s)
 
-    # Roll PID [Nm/(rad/s)]
+    # Roll Rate PID [Nm/(rad/s)]
     roll_kp = 9.1e-4
     roll_ti = 0.7
     roll_td = 0.01
     roll_limit = 5.2e-3  # Nm
 
-    # Pitch PID [Nm/(rad/s)]
+    # Pitch Rate PID [Nm/(rad/s)]
     pitch_kp = 1.33e-3
     pitch_ti = 0.7
     pitch_td = 0.025
     pitch_limit = 5.2e-3  # Nm
 
-    # Yaw PID [Nm/(rad/s)]
+    # Yaw Rate PID [Nm/(rad/s)]
     yaw_kp = 1.77e-3
     yaw_ti = 0.8
     yaw_td = 0.01
@@ -194,10 +201,15 @@ class PhysicalUnitsPIDConfig:
 # =============================================================================
 # Main Simulation
 # =============================================================================
-def flight_sim_physical_units(world_type='voxel', seed=None):
+def flight_sim_physical_units(world_type='voxel', seed=None, control_mode='rate'):
     """
     Flight simulation with physical units based control
     物理単位ベース制御によるフライトシミュレーション
+
+    Parameters:
+        world_type: 'ringworld' or 'voxel'
+        seed: Terrain seed (None = random)
+        control_mode: 'rate' (ACRO) or 'angle' (STABILIZE)
     """
     mass = 0.035
     weight = mass * 9.81
@@ -222,8 +234,8 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
 
     # Simulation parameters
     t = 0.0
-    h = 0.001  # Physics timestep
-    control_interval = 0.0025  # 400Hz control
+    h = 0.001  # Physics timestep [s]
+    control_interval = 1e-2  # 100Hz control (matching run_sim.py)
     control_time = 0.0
 
     # Initialize drone state
@@ -232,7 +244,6 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
     stampfly.set_euler([[0], [0], [0]])
 
     # Initialize motors at hover
-    nominal_voltage = stampfly.motor_prop[0].equilibrium_voltage(weight / 4)
     nominal_omega = stampfly.motor_prop[0].equilibrium_anguler_velocity(weight / 4)
     for mp in stampfly.motor_prop:
         mp.omega = nominal_omega
@@ -244,14 +255,25 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
 
     # Initialize PID controllers with physical units gains
     cfg = PhysicalUnitsPIDConfig
-    roll_pid = PID(cfg.roll_kp, cfg.roll_ti, cfg.roll_td,
-                   output_min=-cfg.roll_limit, output_max=cfg.roll_limit)
-    pitch_pid = PID(cfg.pitch_kp, cfg.pitch_ti, cfg.pitch_td,
-                    output_min=-cfg.pitch_limit, output_max=cfg.pitch_limit)
-    yaw_pid = PID(cfg.yaw_kp, cfg.yaw_ti, cfg.yaw_td,
-                  output_min=-cfg.yaw_limit, output_max=cfg.yaw_limit)
 
-    # Joystick calibration
+    # Rate PID (inner loop) - output is torque [Nm]
+    roll_rate_pid = PID(cfg.roll_kp, cfg.roll_ti, cfg.roll_td,
+                        output_min=-cfg.roll_limit, output_max=cfg.roll_limit)
+    pitch_rate_pid = PID(cfg.pitch_kp, cfg.pitch_ti, cfg.pitch_td,
+                         output_min=-cfg.pitch_limit, output_max=cfg.pitch_limit)
+    yaw_rate_pid = PID(cfg.yaw_kp, cfg.yaw_ti, cfg.yaw_td,
+                       output_min=-cfg.yaw_limit, output_max=cfg.yaw_limit)
+
+    # Attitude PID (outer loop) - output is angular rate [rad/s]
+    roll_pid = PID(5.0, 1.0, 0.0)
+    pitch_pid = PID(5.0, 1.0, 0.0)
+
+    # Control mode: 'rate' (ACRO) or 'angle' (STABILIZE)
+    use_rate_mode = (control_mode == 'rate')
+    prev_mode_button = False
+    print(f"Control mode: {'ACRO (Rate)' if use_rate_mode else 'STABILIZE (Angle)'}")
+
+    # Joystick calibration (same as run_sim.py)
     print("Calibrating joystick...")
     thrust_offset = 0.0
     roll_offset = 0.0
@@ -268,6 +290,7 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
             pitch_offset += (joydata[2] - 127) / 127.0
             yaw_offset += (joydata[3] - 127) / 127.0
             i += 1
+            print(i)
 
     thrust_offset /= num
     roll_offset /= num
@@ -279,21 +302,29 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
     # Data logging
     T = [t]
     PQR = [stampfly.body.pqr.copy()]
+    PQR_REF = [np.array([[0.0], [0.0], [0.0]])]
     EULER = [stampfly.body.euler.copy()]
     POS = [stampfly.body.position.copy()]
 
-    # Control outputs (for logging)
+    # Control state variables
+    roll_ref = 0.0
+    pitch_ref = 0.0
+    yaw_ref = 0.0
+    delta_thrust = 0.0  # Thrust delta from hover
+
+    # Control outputs (torque)
     roll_torque = 0.0
     pitch_torque = 0.0
     yaw_torque = 0.0
-    throttle = 0.5  # Initial throttle
 
     print("=" * 60)
     print("Physical Units Mode Simulation")
+    print("物理単位モードシミュレーション")
     print("=" * 60)
-    print(f"Roll PID: Kp={cfg.roll_kp:.2e} Nm/(rad/s), Ti={cfg.roll_ti}s, Td={cfg.roll_td}s")
-    print(f"Pitch PID: Kp={cfg.pitch_kp:.2e} Nm/(rad/s), Ti={cfg.pitch_ti}s, Td={cfg.pitch_td}s")
-    print(f"Yaw PID: Kp={cfg.yaw_kp:.2e} Nm/(rad/s), Ti={cfg.yaw_ti}s, Td={cfg.yaw_td}s")
+    print(f"Roll Rate PID: Kp={cfg.roll_kp:.2e} Nm/(rad/s)")
+    print(f"Pitch Rate PID: Kp={cfg.pitch_kp:.2e} Nm/(rad/s)")
+    print(f"Yaw Rate PID: Kp={cfg.yaw_kp:.2e} Nm/(rad/s)")
+    print(f"Hover thrust: {hover_thrust*1000:.1f} mN")
     print("=" * 60)
 
     # Main simulation loop
@@ -302,40 +333,68 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
         rate_p = stampfly.body.pqr[0][0]
         rate_q = stampfly.body.pqr[1][0]
         rate_r = stampfly.body.pqr[2][0]
+        phi = stampfly.body.euler[0][0]
+        theta = stampfly.body.euler[1][0]
+        psi = stampfly.body.euler[2][0]
 
-        # Read joystick
+        # Read joystick (same as run_sim.py)
         joydata = joystick.read()
         if joydata is not None:
+            # Raw values with offset correction
             thrust_raw = (joydata[0] - 127) / 127.0 - thrust_offset
             roll_raw = (joydata[1] - 127) / 127.0 - roll_offset
             pitch_raw = (joydata[2] - 127) / 127.0 - pitch_offset
             yaw_raw = (joydata[3] - 127) / 127.0 - yaw_offset
 
-            # Throttle: 0-1 range
-            throttle = (thrust_raw + 1.0) / 2.0
-            throttle = max(0.0, min(1.0, throttle))
+            # Mode button (bit 2 of buttons byte)
+            buttons = joydata[4] if len(joydata) > 4 else 0
+            mode_button = bool(buttons & 0x04)
 
-            # Target angular rates
-            roll_rate_ref = roll_raw * cfg.roll_rate_max
-            pitch_rate_ref = pitch_raw * cfg.pitch_rate_max
-            yaw_rate_ref = yaw_raw * cfg.yaw_rate_max
-        else:
-            roll_rate_ref = 0.0
-            pitch_rate_ref = 0.0
-            yaw_rate_ref = 0.0
+            # Toggle mode on rising edge
+            if mode_button and not prev_mode_button:
+                use_rate_mode = not use_rate_mode
+                mode_name = 'ACRO (Rate)' if use_rate_mode else 'STABILIZE (Angle)'
+                print(f"Mode changed: {mode_name}")
+            prev_mode_button = mode_button
 
-        # Control loop at 400Hz
-        if t >= control_time:
+            # Thrust: hover + delta (same scale as run_sim.py)
+            delta_thrust = 0.5 * thrust_raw * hover_thrust  # ±50% of hover
+
+            if use_rate_mode:
+                # ACRO mode: stick -> target angular rate
+                roll_ref = cfg.roll_rate_max * roll_raw
+                pitch_ref = cfg.pitch_rate_max * pitch_raw
+                yaw_ref = cfg.yaw_rate_max * yaw_raw
+            else:
+                # STABILIZE mode: stick -> target angle
+                roll_ref = 0.25 * roll_raw * np.pi    # max ±45°
+                pitch_ref = 0.25 * pitch_raw * np.pi  # max ±45°
+                yaw_ref = 0.3 * yaw_raw * np.pi       # yaw rate
+
+        # Control loop
+        control_on = True
+        if t >= control_time and control_on:
             control_time += control_interval
 
-            # PID control -> torque output [Nm]
-            roll_torque = roll_pid.update(roll_rate_ref, rate_p, control_interval)
-            pitch_torque = pitch_pid.update(pitch_rate_ref, rate_q, control_interval)
-            yaw_torque = yaw_pid.update(yaw_rate_ref, rate_r, control_interval)
+            if use_rate_mode:
+                # ACRO mode: stick input is directly target angular rate
+                roll_rate_ref = roll_ref
+                pitch_rate_ref = pitch_ref
+                yaw_rate_ref = yaw_ref
+            else:
+                # STABILIZE mode: attitude error -> target angular rate
+                roll_rate_ref = roll_pid.update(roll_ref, phi, control_interval)
+                pitch_rate_ref = pitch_pid.update(pitch_ref, theta, control_interval)
+                yaw_rate_ref = yaw_ref
 
-        # Throttle to total thrust [N]
-        max_total_thrust = 4.0 * 0.15  # 4 motors × 0.15N max each = 0.6N
-        total_thrust = throttle * max_total_thrust
+            # Rate control (inner loop) - output is torque [Nm]
+            roll_torque = roll_rate_pid.update(roll_rate_ref, rate_p, control_interval)
+            pitch_torque = pitch_rate_pid.update(pitch_rate_ref, rate_q, control_interval)
+            yaw_torque = yaw_rate_pid.update(yaw_rate_ref, rate_r, control_interval)
+
+        # Total thrust = hover + delta
+        total_thrust = hover_thrust + delta_thrust
+        total_thrust = max(0.0, min(total_thrust, 4 * 0.15))  # Clamp to valid range
 
         # Control allocation: [thrust, τ_roll, τ_pitch, τ_yaw] -> motor thrusts
         motor_thrusts = allocator.mix(total_thrust, roll_torque, pitch_torque, yaw_torque)
@@ -350,60 +409,76 @@ def flight_sim_physical_units(world_type='voxel', seed=None):
         # Collision detection
         pos = stampfly.body.position
         if Render.check_collision(pos[0][0], pos[1][0], pos[2][0]):
-            print(f"COLLISION at t={t:.2f}s")
+            print(f"COLLISION at t={t:.2f}s, pos=({pos[0][0]:.2f}, {pos[1][0]:.2f}, {pos[2][0]:.2f})")
             Render.show_collision(pos[0][0], pos[1][0], pos[2][0])
             break
 
         # Render
-        Render.rendering(t, stampfly)
+        key = Render.rendering(t, stampfly)
 
         t += h
         T.append(t)
         PQR.append(stampfly.body.pqr.copy())
+        PQR_REF.append(np.array([[roll_ref], [pitch_ref], [yaw_ref]]))
         EULER.append(stampfly.body.euler.copy())
         POS.append(stampfly.body.position.copy())
 
     # Convert to numpy arrays
     T = np.array(T)
     PQR = np.array(PQR)
+    PQR_REF = np.array(PQR_REF)
     EULER = np.array(EULER)
     POS = np.array(POS)
 
     # Plot results
-    plt.figure(figsize=(12, 10))
+    if True:
+        plt.subplot(4, 1, 1)
+        plt.plot(T, PQR[:, 0, 0], label='P')
+        plt.plot(T, PQR[:, 1, 0], label='Q')
+        plt.plot(T, PQR[:, 2, 0], label='R')
+        plt.plot(T, PQR_REF[:, 0, 0], label='P_ref')
+        plt.plot(T, PQR_REF[:, 1, 0], label='Q_ref')
+        plt.plot(T, PQR_REF[:, 2, 0], label='R_ref')
+        plt.legend()
+        plt.grid()
+        plt.xlabel('Time (s)')
+        plt.ylabel('PQR (rad/s)')
 
-    plt.subplot(3, 1, 1)
-    plt.plot(T, PQR[:, 0, 0], label='P (roll rate)')
-    plt.plot(T, PQR[:, 1, 0], label='Q (pitch rate)')
-    plt.plot(T, PQR[:, 2, 0], label='R (yaw rate)')
-    plt.legend()
-    plt.grid()
-    plt.xlabel('Time (s)')
-    plt.ylabel('Angular Rate (rad/s)')
-    plt.title('Angular Rates')
+        plt.subplot(4, 1, 2)
+        plt.plot(T, np.rad2deg(EULER[:, 0, 0]), label='φ (roll)')
+        plt.plot(T, np.rad2deg(EULER[:, 1, 0]), label='θ (pitch)')
+        plt.plot(T, np.rad2deg(EULER[:, 2, 0]), label='ψ (yaw)')
+        plt.legend()
+        plt.grid()
+        plt.xlabel('Time (s)')
+        plt.ylabel('Euler Angle (deg)')
 
-    plt.subplot(3, 1, 2)
-    plt.plot(T, np.rad2deg(EULER[:, 0, 0]), label='φ (roll)')
-    plt.plot(T, np.rad2deg(EULER[:, 1, 0]), label='θ (pitch)')
-    plt.plot(T, np.rad2deg(EULER[:, 2, 0]), label='ψ (yaw)')
-    plt.legend()
-    plt.grid()
-    plt.xlabel('Time (s)')
-    plt.ylabel('Euler Angle (deg)')
-    plt.title('Euler Angles')
+        plt.subplot(4, 1, 3)
+        plt.plot(T, POS[:, 0, 0], label='X')
+        plt.plot(T, POS[:, 1, 0], label='Y')
+        plt.plot(T, POS[:, 2, 0], label='Z')
+        plt.legend()
+        plt.grid()
+        plt.xlabel('Time (s)')
+        plt.ylabel('Position (m)')
 
-    plt.subplot(3, 1, 3)
-    plt.plot(T, POS[:, 0, 0], label='X')
-    plt.plot(T, POS[:, 1, 0], label='Y')
-    plt.plot(T, POS[:, 2, 0], label='Z')
-    plt.legend()
-    plt.grid()
-    plt.xlabel('Time (s)')
-    plt.ylabel('Position (m)')
-    plt.title('Position')
+        plt.subplot(4, 1, 4)
+        # UVW not logged in this version, show position derivative approximation
+        if len(T) > 1:
+            dT = np.diff(T)
+            dX = np.diff(POS[:, 0, 0]) / dT
+            dY = np.diff(POS[:, 1, 0]) / dT
+            dZ = np.diff(POS[:, 2, 0]) / dT
+            plt.plot(T[:-1], dX, label='dX/dt')
+            plt.plot(T[:-1], dY, label='dY/dt')
+            plt.plot(T[:-1], dZ, label='dZ/dt')
+        plt.legend()
+        plt.grid()
+        plt.xlabel('Time (s)')
+        plt.ylabel('Velocity (m/s)')
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -415,7 +490,10 @@ if __name__ == "__main__":
                         help='World type (default: voxel)')
     parser.add_argument('--seed', '-s', type=int, default=None,
                         help='Terrain seed (random if not specified)')
+    parser.add_argument('--mode', '-m', type=str, default='rate',
+                        choices=['rate', 'angle'],
+                        help='Control mode: rate=ACRO, angle=STABILIZE (default: rate)')
     args = parser.parse_args()
 
-    print(f"Starting physical units mode simulation: world={args.world}")
-    flight_sim_physical_units(world_type=args.world, seed=args.seed)
+    print(f"Starting physical units mode simulation: world={args.world}, mode={args.mode}")
+    flight_sim_physical_units(world_type=args.world, seed=args.seed, control_mode=args.mode)
