@@ -25,6 +25,15 @@ idf.py build
 idf.py flash monitor
 ```
 
+### Genesis Simulator
+Genesis物理シミュレータはvenv仮想環境にインストールされている:
+```bash
+cd simulator/sandbox/genesis_sim
+source venv/bin/activate
+cd scripts
+python <script_name>.py
+```
+
 ## Writing Conventions
 
 ### Code Comments
