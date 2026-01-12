@@ -117,7 +117,7 @@ namespace eskf {
 inline constexpr bool USE_OPTICAL_FLOW = true;     // オプティカルフロー（水平速度推定）
 inline constexpr bool USE_BAROMETER = true;        // 気圧センサー（高度推定）
 inline constexpr bool USE_TOF = true;              // ToFセンサー（高度推定）
-inline constexpr bool USE_MAGNETOMETER = true;     // 地磁気センサー（ヨー推定）
+inline constexpr bool USE_MAGNETOMETER = false;    // 地磁気センサー（ヨー推定）※テスト用に無効化
 
 // -----------------------------------------------------------------------------
 // プロセスノイズ (Q行列)
@@ -136,7 +136,7 @@ inline constexpr float BARO_NOISE = 0.1f;              // 気圧高度ノイズ 
 inline constexpr float TOF_NOISE = 0.002540f;          // ToFノイズ [m]
 inline constexpr float MAG_NOISE = 1.0f;               // 地磁気ノイズ [uT] 実測std≈0.94
 inline constexpr float FLOW_NOISE = 0.01f;             // オプティカルフローノイズ [m/s] 実測std≈0.011
-inline constexpr float ACCEL_ATT_NOISE = 0.001f;       // 加速度計姿勢補正ノイズ [m/s²] (元: 0.02, 前回: 0.01)
+inline constexpr float ACCEL_ATT_NOISE = 0.02f;        // 加速度計姿勢補正ノイズ [m/s²]
 
 // -----------------------------------------------------------------------------
 // 初期共分散 (P行列の初期値)
