@@ -452,12 +452,19 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate'):
                     raise KeyboardInterrupt  # Exit cleanly
 
             # ===========================================
-            # Rendering at 60Hz
+            # Rendering at target FPS (without rate() blocking)
             # ===========================================
             if wall_now >= next_render_time:
                 t0 = time.perf_counter()
-                # Update VPython display
-                Render.rendering(sim_time, stampfly)
+                # Direct VPython update without rate() blocking
+                # rate()を使わず直接VPythonオブジェクトを更新
+                Render.copter.pos = vector(*stampfly.body.position)
+                axis_x = vector(stampfly.body.DCM[0,0], stampfly.body.DCM[1,0], stampfly.body.DCM[2,0])
+                axis_z = vector(stampfly.body.DCM[0,2], stampfly.body.DCM[1,2], stampfly.body.DCM[2,2])
+                Render.copter.axis = axis_x
+                Render.copter.up = axis_z
+                Render.follow_camera_setting(stampfly, t=sim_time)
+                Render.timer_text.text = f"Elapsed Time: {sim_time:.1f} s"
                 render_steps += 1
                 next_render_time = render_steps * RENDER_DT
                 perf_render_count += 1
