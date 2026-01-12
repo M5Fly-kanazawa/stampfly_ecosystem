@@ -16,6 +16,7 @@
 #include "../attitude_controller.hpp"
 #include "control_allocation.hpp"
 #include "motor_model.hpp"
+#include "controller_comm.hpp"  // for CTRL_FLAG_MODE
 
 static const char* TAG = "ControlTask";
 
@@ -29,6 +30,12 @@ enum class FlightMode {
 
 // Current flight mode (default: ACRO)
 static FlightMode g_flight_mode = FlightMode::ACRO;
+
+// Mode switch debounce counter for noise immunity
+// ノイズ耐性のためのモード切替デバウンスカウンタ
+static constexpr int MODE_SWITCH_DEBOUNCE_COUNT = 10;  // 10 cycles @ 400Hz = 25ms
+static int g_mode_switch_counter = 0;
+static FlightMode g_pending_mode = FlightMode::ACRO;
 
 using namespace config;
 using namespace globals;
@@ -238,7 +245,6 @@ void ControlTask(void* pvParameters)
 
     // 前回のフライト状態（ARMED遷移時にPIDリセット用）
     stampfly::FlightState prev_flight_state = stampfly::FlightState::INIT;
-    FlightMode prev_flight_mode = FlightMode::ACRO;
 
     while (true) {
         // Wait for control semaphore (given by IMU task after ESKF update)
@@ -280,18 +286,38 @@ void ControlTask(void* pvParameters)
         // =====================================================================
         // 2. フライトモード判定 & 目標角速度計算
         // =====================================================================
-        // TODO: コントローラのMODEビットから取得（現在は固定）
-        // TODO: Get from controller MODE bit (currently fixed)
-        // g_flight_mode = (ctrl_flags & CTRL_FLAG_MODE) ? FlightMode::STABILIZE : FlightMode::ACRO;
+        // コントローラのMODEビットから取得（デバウンス処理付き）
+        // Get from controller MODE bit (with debounce for noise immunity)
+        //
+        // Controller MODE bit definition:
+        //   MODE = 0 (CTRL_FLAG_MODE not set) → ANGLECONTROL (STABILIZE)
+        //   MODE = 1 (CTRL_FLAG_MODE set)     → RATECONTROL (ACRO)
+        //
+        uint8_t ctrl_flags = state.getControlFlags();
+        FlightMode requested_mode = (ctrl_flags & stampfly::CTRL_FLAG_MODE)
+                                    ? FlightMode::ACRO
+                                    : FlightMode::STABILIZE;
 
-        // モード切替時にPIDリセット
-        // Reset PIDs on mode change
-        if (g_flight_mode != prev_flight_mode) {
+        // デバウンス処理：連続N回同じモードを検出したら切替
+        // Debounce: switch only after N consecutive same mode readings
+        if (requested_mode == g_pending_mode) {
+            if (g_mode_switch_counter < MODE_SWITCH_DEBOUNCE_COUNT) {
+                g_mode_switch_counter++;
+            }
+        } else {
+            // 異なるモードが来たらカウンタリセット
+            g_pending_mode = requested_mode;
+            g_mode_switch_counter = 1;
+        }
+
+        // デバウンス閾値に達したらモード切替
+        if (g_mode_switch_counter >= MODE_SWITCH_DEBOUNCE_COUNT &&
+            g_flight_mode != g_pending_mode) {
+            g_flight_mode = g_pending_mode;
             g_attitude_controller.reset();
             ESP_LOGI(TAG, "Mode changed to %s",
                      g_flight_mode == FlightMode::STABILIZE ? "STABILIZE" : "ACRO");
         }
-        prev_flight_mode = g_flight_mode;
 
         float roll_rate_target, pitch_rate_target, yaw_rate_target;
 
