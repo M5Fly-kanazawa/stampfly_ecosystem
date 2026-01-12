@@ -204,18 +204,20 @@ class FollowCamera:
     - X: forward, Y: left, Z: up
     """
 
-    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15):
+    def __init__(self, distance=1.0, height=0.3, alpha_pos=0.08, alpha_look=0.15, alpha_height=0.5):
         """
         Args:
             distance: Distance behind drone [m]
             height: Height above drone [m]
-            alpha_pos: Smoothing factor for camera position (smaller = smoother)
-            alpha_look: Smoothing factor for lookat point
+            alpha_pos: Smoothing factor for camera XY position (smaller = smoother)
+            alpha_look: Smoothing factor for lookat point XY
+            alpha_height: Smoothing factor for height tracking (larger = faster response)
         """
         self.distance = distance
         self.height = height
         self.alpha_pos = alpha_pos
         self.alpha_look = alpha_look
+        self.alpha_height = alpha_height
 
         # Smoothed camera state
         self.cam_pos = None
@@ -255,14 +257,15 @@ class FollowCamera:
             self.lookat_pos = lookat_target.copy()
             self.initialized = True
         else:
-            # Low-pass filter smoothing for X, Y only
-            # Height (Z) tracks immediately without smoothing
+            # Low-pass filter smoothing
+            # XY: slower smoothing for stable horizontal tracking
+            # Z: faster smoothing (smaller time constant) for responsive height tracking
             self.cam_pos[0] += self.alpha_pos * (cam_target[0] - self.cam_pos[0])
             self.cam_pos[1] += self.alpha_pos * (cam_target[1] - self.cam_pos[1])
-            self.cam_pos[2] = cam_target[2]  # Immediate height tracking
+            self.cam_pos[2] += self.alpha_height * (cam_target[2] - self.cam_pos[2])
             self.lookat_pos[0] += self.alpha_look * (lookat_target[0] - self.lookat_pos[0])
             self.lookat_pos[1] += self.alpha_look * (lookat_target[1] - self.lookat_pos[1])
-            self.lookat_pos[2] = lookat_target[2]  # Immediate height tracking
+            self.lookat_pos[2] += self.alpha_height * (lookat_target[2] - self.lookat_pos[2])
 
         # Update viewer camera using 4x4 pose matrix
         # This allows explicit control of up vector (always Z-up for level horizon)
@@ -456,7 +459,7 @@ def main():
 
     # Follow camera (behind drone)
     # Increased alpha values for tighter following
-    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.3, alpha_look=0.5)
+    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.3, alpha_look=0.5, alpha_height=0.7)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
