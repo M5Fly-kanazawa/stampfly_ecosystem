@@ -489,7 +489,8 @@ def main():
     # Increased alpha values for tighter following
     # Follow camera with yaw smoothing for smooth rotation tracking
     # alpha_yaw=0.1: smooth camera rotation when drone yaws
-    follow_camera = FollowCamera(distance=0.3, height=0.1, alpha_pos=0.9, alpha_look=0.9,
+    # height=0.05: slightly above drone for natural perspective
+    follow_camera = FollowCamera(distance=0.3, height=0.05, alpha_pos=0.9, alpha_look=0.9,
                                  alpha_height=1.0, alpha_yaw=0.1)
 
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
@@ -520,7 +521,7 @@ def main():
                         DRONE_SPAWN_POS[1] - follow_camera.distance,
                         DRONE_SPAWN_POS[2] + follow_camera.height),
             camera_lookat=DRONE_SPAWN_POS,
-            camera_fov=60,
+            camera_fov=100,
             max_FPS=RENDER_FPS,
         ),
         sim_options=gs.options.SimOptions(
