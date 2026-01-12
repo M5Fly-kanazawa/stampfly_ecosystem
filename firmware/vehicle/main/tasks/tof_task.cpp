@@ -49,8 +49,10 @@ void ToFTask(void* pvParameters)
                 if (ret == ESP_OK) {
                     bottom_errors = 0;  // Reset on success
 
-                    // Only update if valid measurement (status 0-4)
-                    if (status <= 4) {
+                    // Only update if valid measurement (status 0-4) and distance > 0
+                    // distance_mm = 0 means no target detected or measurement failed
+                    // 距離0は無効（ターゲット未検出または測定失敗）
+                    if (status <= 4 && distance_mm > 0) {
                         float distance_m = distance_mm * 0.001f;
 
                         // 距離の急激な変化をチェック
@@ -127,7 +129,9 @@ void ToFTask(void* pvParameters)
                 uint8_t status;
                 if (g_tof_front.getDistance(distance_mm, status) == ESP_OK) {
                     front_errors = 0;  // Reset on success
-                    if (status <= 4) {
+                    // distance_mm = 0 means no target detected
+                    // 距離0は無効（ターゲット未検出）
+                    if (status <= 4 && distance_mm > 0) {
                         float distance_m = distance_mm * 0.001f;
                         state.updateToF(stampfly::ToFPosition::FRONT, distance_m, status);
 
