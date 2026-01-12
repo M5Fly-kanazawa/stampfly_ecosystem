@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-25_physical_units_rate_control.py - Physical Units Rate Control
-物理単位ベース角速度制御
+run_genesis_sim.py - Genesis StampFly Simulator with Physical Units Control
+Genesis StampFly シミュレータ（物理単位ベース制御）
 
-History / 履歴:
-  - 2024-01: Initial implementation with incorrect k_τ conversion
-  - 2024-01: Fixed k_τ calculation (was ~6× too small due to missing 4-motor factor
-             and incorrect linear thrust-duty assumption)
+Features / 機能:
+  - Physical units control (PID output: torque [Nm])
+  - 2000Hz physics, 400Hz control, 60Hz rendering
+  - RK4 motor/propeller dynamics
+  - 60 FPS real-time performance monitoring
+  - Joystick control with ACRO/STABILIZE modes
 
-PID gains now match corrected firmware config.hpp (USE_PHYSICAL_UNITS=1):
-  - k_τ_roll/pitch = 4 × (L/V) × (dT/dDuty) × d ≈ 1.4e-3 Nm/V
-  - k_τ_yaw = 4 × (L/V) × (dT/dDuty) × kτ ≈ 5.9e-4 Nm/V
+Performance Monitoring / 性能モニタリング:
+  - Real-time FPS tracking (target: 60 FPS)
+  - Frame time statistics (min/avg/max)
+  - Behind-realtime detection
 
 Physical units mode matching firmware USE_PHYSICAL_UNITS=1:
 ファームウェア USE_PHYSICAL_UNITS=1 と一致する物理単位モード:
   - PID output in torque [Nm]
   - Control allocation: [thrust(N), roll_torque(Nm), pitch_torque(Nm), yaw_torque(Nm)]
 
-Control modes:
-制御モード:
+Control modes / 制御モード:
   - ACRO (Rate): Stick -> Rate setpoint [rad/s] -> PID -> Torque [Nm]
   - STABILIZE (Angle): Stick -> Angle setpoint [rad] -> Attitude PID -> Rate -> PID -> Torque
 
-Controls (StampFly Controller USB HID):
-操作:
+Controls (StampFly Controller USB HID) / 操作:
   - Throttle axis (Axis 0): Total thrust (N)
   - Roll axis (Axis 1): Roll rate/angle command
   - Pitch axis (Axis 2): Pitch rate/angle command
@@ -205,6 +206,97 @@ class AttitudeController:
 # =============================================================================
 # Follow Camera
 # =============================================================================
+
+# =============================================================================
+# Performance Monitor
+# =============================================================================
+
+class PerformanceMonitor:
+    """
+    Monitor real-time performance (FPS, timing).
+    リアルタイム性能モニタ（FPS、タイミング）
+    """
+
+    def __init__(self, window_size=60):
+        """
+        Args:
+            window_size: Number of frames for rolling average
+        """
+        self.window_size = window_size
+        self.frame_times = []
+        self.physics_times = []
+        self.last_frame_time = None
+        self.total_frames = 0
+        self.total_physics_steps = 0
+        self.behind_count = 0  # Number of times sim fell behind real-time
+        self.start_time = None
+
+    def start(self):
+        """Start monitoring."""
+        self.start_time = time.perf_counter()
+        self.last_frame_time = self.start_time
+
+    def record_frame(self, physics_steps_this_frame, sim_behind_realtime=False):
+        """
+        Record a rendered frame.
+
+        Args:
+            physics_steps_this_frame: Number of physics steps executed this frame
+            sim_behind_realtime: True if simulation is behind real-time
+        """
+        now = time.perf_counter()
+        if self.last_frame_time is not None:
+            frame_time = now - self.last_frame_time
+            self.frame_times.append(frame_time)
+            if len(self.frame_times) > self.window_size:
+                self.frame_times.pop(0)
+
+        self.last_frame_time = now
+        self.total_frames += 1
+        self.total_physics_steps += physics_steps_this_frame
+
+        if sim_behind_realtime:
+            self.behind_count += 1
+
+    def get_fps(self):
+        """Get current rolling average FPS."""
+        if len(self.frame_times) < 2:
+            return 0.0
+        avg_frame_time = sum(self.frame_times) / len(self.frame_times)
+        return 1.0 / avg_frame_time if avg_frame_time > 0 else 0.0
+
+    def get_frame_time_stats(self):
+        """Get frame time statistics (min, avg, max) in ms."""
+        if not self.frame_times:
+            return 0.0, 0.0, 0.0
+        min_t = min(self.frame_times) * 1000
+        avg_t = (sum(self.frame_times) / len(self.frame_times)) * 1000
+        max_t = max(self.frame_times) * 1000
+        return min_t, avg_t, max_t
+
+    def get_summary(self, target_fps=60):
+        """Get performance summary string."""
+        fps = self.get_fps()
+        min_t, avg_t, max_t = self.get_frame_time_stats()
+        elapsed = time.perf_counter() - self.start_time if self.start_time else 0
+
+        realtime_ok = "OK" if fps >= target_fps * 0.95 else "SLOW"
+        behind_pct = (self.behind_count / self.total_frames * 100) if self.total_frames > 0 else 0
+
+        return (f"FPS: {fps:.1f}/{target_fps} ({realtime_ok}) | "
+                f"frame: {avg_t:.1f}ms (min:{min_t:.1f}, max:{max_t:.1f}) | "
+                f"behind: {behind_pct:.1f}%")
+
+    def reset(self):
+        """Reset all statistics."""
+        self.frame_times = []
+        self.physics_times = []
+        self.last_frame_time = None
+        self.total_frames = 0
+        self.total_physics_steps = 0
+        self.behind_count = 0
+        self.start_time = None
+
 
 class FollowCamera:
     """
@@ -459,7 +551,7 @@ def main():
     PHYSICS_DT = 1 / PHYSICS_HZ  # 0.0005s = 0.5ms
     CONTROL_HZ = 400  # 5 physics steps per control (integer ratio)
     CONTROL_DT = 1 / CONTROL_HZ
-    RENDER_FPS = 30
+    RENDER_FPS = 60   # Target 60 FPS for real-time check
     RENDER_DT = 1 / RENDER_FPS
 
     # World settings
@@ -514,6 +606,10 @@ def main():
     # Control mode: True = ACRO (rate), False = STABILIZE (angle)
     use_acro_mode = True
     prev_mode_button = False
+
+    # Performance monitor for 60 FPS real-time check
+    # 60FPSリアルタイム性能チェック用モニタ
+    perf_monitor = PerformanceMonitor(window_size=60)
 
     print(f"  Initial mode: ACRO (Rate Control)")
     print(f"  Camera: Follow mode (behind drone)")
@@ -597,6 +693,7 @@ def main():
 
     # Simulation loop
     print("\n[9] Running simulation...")
+    print(f"    Target: {RENDER_FPS} FPS real-time")
 
     physics_steps = 0
     control_steps = 0
@@ -604,6 +701,10 @@ def main():
     next_control_time = 0
     start_time = time.perf_counter()
     last_print_time = -1
+    physics_steps_at_last_render = 0
+
+    # Start performance monitoring
+    perf_monitor.start()
 
     # Current control outputs
     current_torque = np.array([0.0, 0.0, 0.0])  # [roll, pitch, yaw] Nm
@@ -622,11 +723,13 @@ def main():
         rate_controller.reset()
         attitude_controller.reset()
         follow_camera.reset()
+        perf_monitor.reset()
         physics_steps = 0
         control_steps = 0
         next_render_time = 0
         next_control_time = 0
         start_time = time.perf_counter()
+        perf_monitor.start()
         current_torque = np.array([0.0, 0.0, 0.0])
         print("\n>>> Reset")
 
@@ -759,6 +862,14 @@ def main():
 
             # Rendering with follow camera
             if real_time >= next_render_time:
+                # Track physics steps this frame
+                physics_this_frame = physics_steps - physics_steps_at_last_render
+                physics_steps_at_last_render = physics_steps
+
+                # Check if we're behind real-time (sim_time < real_time means we're catching up)
+                sim_behind = (sim_time < real_time - RENDER_DT)
+                perf_monitor.record_frame(physics_this_frame, sim_behind)
+
                 # Update follow camera position
                 pos = drone.get_pos()
                 quat = drone.get_quat()
@@ -790,13 +901,35 @@ def main():
                 gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
 
                 mode_str = "ACRO" if use_acro_mode else "STAB"
-                print(f"  [{mode_str}] t={sim_time:.0f}s | "
-                      f"pos=({float(pos[0]):+.1f},{float(pos[1]):+.1f},{float(pos[2]):.1f}) | "
-                      f"RPY=({np.degrees(euler_ned[0]):+.0f},{np.degrees(euler_ned[1]):+.0f},{np.degrees(euler_ned[2]):+.0f}) | "
-                      f"gyro=({np.degrees(gyro_ned[0]):+.0f},{np.degrees(gyro_ned[1]):+.0f},{np.degrees(gyro_ned[2]):+.0f})deg/s")
+
+                # Performance stats line
+                perf_summary = perf_monitor.get_summary(target_fps=RENDER_FPS)
+                print(f"  [{mode_str}] t={sim_time:.0f}s | {perf_summary}")
+                print(f"         pos=({float(pos[0]):+.1f},{float(pos[1]):+.1f},{float(pos[2]):.1f}) | "
+                      f"RPY=({np.degrees(euler_ned[0]):+.0f},{np.degrees(euler_ned[1]):+.0f},{np.degrees(euler_ned[2]):+.0f})°")
 
     except KeyboardInterrupt:
         pass
+
+    # Final performance summary
+    print("\n" + "=" * 60)
+    print("Performance Summary (60 FPS Real-time Test)")
+    print("=" * 60)
+    fps = perf_monitor.get_fps()
+    min_t, avg_t, max_t = perf_monitor.get_frame_time_stats()
+    behind_pct = (perf_monitor.behind_count / perf_monitor.total_frames * 100) if perf_monitor.total_frames > 0 else 0
+
+    print(f"  Target FPS:     {RENDER_FPS}")
+    print(f"  Achieved FPS:   {fps:.1f}")
+    print(f"  Frame time:     avg={avg_t:.2f}ms, min={min_t:.2f}ms, max={max_t:.2f}ms")
+    print(f"  Total frames:   {perf_monitor.total_frames}")
+    print(f"  Behind count:   {perf_monitor.behind_count} ({behind_pct:.1f}%)")
+
+    if fps >= RENDER_FPS * 0.95:
+        print(f"\n  Result: PASS - Real-time 60 FPS achieved")
+    else:
+        print(f"\n  Result: FAIL - Cannot sustain 60 FPS real-time")
+    print("=" * 60)
 
     print("\nSimulation ended.")
     pygame.quit()
