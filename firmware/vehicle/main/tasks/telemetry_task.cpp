@@ -71,6 +71,13 @@ void TelemetryTask(void* pvParameters)
             state.getPowerData(voltage, current);
             pkt.voltage = voltage;
 
+            // Get ToF data (bottom and front)
+            // ToFデータ（底面・前方距離）
+            float tof_bottom, tof_front;
+            state.getToFData(tof_bottom, tof_front);
+            pkt.tof_bottom = tof_bottom;
+            pkt.tof_front = tof_front;
+
             // Get flight state
             pkt.flight_state = static_cast<uint8_t>(state.getFlightState());
 

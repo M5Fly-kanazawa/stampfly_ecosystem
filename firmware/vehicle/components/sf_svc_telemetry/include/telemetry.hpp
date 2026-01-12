@@ -67,6 +67,10 @@ struct TelemetryWSPacket {
     // Battery (4 bytes)
     float voltage;            // [V]
 
+    // ToF sensors (8 bytes) - 底面・前方距離
+    float tof_bottom;         // [m] 底面ToF距離
+    float tof_front;          // [m] 前方ToF距離
+
     // Status (2 bytes)
     uint8_t  flight_state;    // FlightState enum
     uint8_t  sensor_status;   // Sensor health flags
@@ -79,7 +83,7 @@ struct TelemetryWSPacket {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(TelemetryWSPacket) == 108, "TelemetryWSPacket size mismatch");
+static_assert(sizeof(TelemetryWSPacket) == 116, "TelemetryWSPacket size mismatch");
 
 /**
  * @brief Sensor status flags (bitfield)
