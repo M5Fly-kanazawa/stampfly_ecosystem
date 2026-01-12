@@ -40,6 +40,8 @@
 
 #pragma once
 
+#include "motor_model.hpp"
+
 namespace stampfly {
 
 /**
@@ -69,19 +71,8 @@ struct QuadConfig {
     float max_thrust_per_motor = 0.15f;
 };
 
-/**
- * @brief Motor parameters for thrust-to-duty conversion
- * 推力-Duty変換用モータパラメータ
- */
-struct MotorParams {
-    float Ct = 1.0e-8f;       // Thrust coefficient [N/(rad/s)²]
-    float Cq = 9.71e-11f;     // Torque coefficient [Nm/(rad/s)²]
-    float Rm = 0.34f;         // Motor resistance [Ω]
-    float Km = 6.125e-4f;     // Motor constant [V·s/rad]
-    float Dm = 3.69e-8f;      // Viscous damping [Nm·s/rad]
-    float Qf = 2.76e-5f;      // Friction torque [Nm]
-    float Vbat = 3.7f;        // Battery voltage [V]
-};
+// Note: MotorParams is defined in motor_model.hpp
+// 注: MotorParamsはmotor_model.hppで定義
 
 /**
  * @brief Control allocation for X-Quad
@@ -184,9 +175,11 @@ private:
     float max_thrust_ = 0.15f;
 };
 
-// Default instances
-// デフォルトインスタンス
+// Default quad configuration instance
+// デフォルトクワッド設定インスタンス
 extern const QuadConfig DEFAULT_QUAD_CONFIG;
-extern const MotorParams DEFAULT_MOTOR_PARAMS;
+
+// Note: DEFAULT_MOTOR_PARAMS is defined in motor_model.hpp
+// 注: DEFAULT_MOTOR_PARAMSはmotor_model.hppで定義
 
 }  // namespace stampfly

@@ -4,15 +4,15 @@
  */
 
 #include "control_allocation.hpp"
-#include <cmath>
-#include <algorithm>
 
 namespace stampfly {
 
-// Default configuration instances
-// デフォルト設定インスタンス
+// Default quad configuration instance
+// デフォルトクワッド設定インスタンス
 const QuadConfig DEFAULT_QUAD_CONFIG = {};
-const MotorParams DEFAULT_MOTOR_PARAMS = {};
+
+// Note: DEFAULT_MOTOR_PARAMS is defined in motor_model.cpp
+// 注: DEFAULT_MOTOR_PARAMSはmotor_model.cppで定義
 
 void ControlAllocator::init(const QuadConfig& config)
 {
@@ -120,38 +120,16 @@ void ControlAllocator::allocate(const float thrusts[4], float control_out[4]) co
 
 float ControlAllocator::thrustToDuty(float thrust) const
 {
-    if (thrust <= 0.0f) {
-        return 0.0f;
-    }
-
-    const MotorParams& p = motor_params_;
-
-    // Equilibrium angular velocity for desired thrust
-    // ω = √(T / Ct)
-    float omega = std::sqrt(thrust / p.Ct);
-
-    // Equilibrium voltage from motor dynamics (steady state)
-    // V = Rm[(Dm + Km²/Rm)ω + Cqω² + Qf] / Km
-    float viscous_term = (p.Dm + p.Km * p.Km / p.Rm) * omega;
-    float aero_term = p.Cq * omega * omega;
-    float friction_term = p.Qf;
-    float voltage = p.Rm * (viscous_term + aero_term + friction_term) / p.Km;
-
-    // Duty cycle
-    float duty = voltage / p.Vbat;
-
-    // Clamp to valid range
-    if (duty < 0.0f) duty = 0.0f;
-    if (duty > 1.0f) duty = 1.0f;
-
-    return duty;
+    // Delegate to motor_model function
+    // motor_model関数に委譲
+    return stampfly::thrustToDuty(thrust, motor_params_);
 }
 
 void ControlAllocator::thrustsToDuties(const float thrusts[4], float duties_out[4]) const
 {
-    for (int i = 0; i < 4; i++) {
-        duties_out[i] = thrustToDuty(thrusts[i]);
-    }
+    // Delegate to motor_model function
+    // motor_model関数に委譲
+    stampfly::thrustsToDuties(thrusts, duties_out, motor_params_);
 }
 
 }  // namespace stampfly
