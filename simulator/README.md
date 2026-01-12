@@ -4,9 +4,16 @@
 
 StampFly用のPythonベースフライトシミュレータ。物理エンジン、センサモデル、制御システム、HILテスト機能を備えた教育・研究プラットフォーム。
 
+## シミュレータの選択
+
+| シミュレータ | 特徴 | 用途 |
+|-------------|------|------|
+| **VPython版**（本ディレクトリ） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SIL/HIL |
+| **Genesis版**（[sandbox/genesis_sim/](sandbox/genesis_sim/)） | 高精度物理エンジン、2000Hz物理演算、物理量ベース制御 | 高精度シミュレーション |
+
 ## 1. 概要
 
-### このシミュレータについて
+### このシミュレータについて（VPython版）
 
 StampFly Simulatorは、マイクロドローン「StampFly」の動力学をPythonでシミュレートするツールです。実機ファームウェア（`firmware/vehicle/`）と互換性のある制御アルゴリズムを実装しており、以下の用途に使用できます：
 
@@ -490,9 +497,16 @@ for device in hid.enumerate():
 
 <a id="english"></a>
 
+## Simulator Selection
+
+| Simulator | Features | Use Cases |
+|-----------|----------|-----------|
+| **VPython version** (this directory) | Lightweight, browser 3D, rich sensor models | Control learning, SIL/HIL |
+| **Genesis version** ([sandbox/genesis_sim/](sandbox/genesis_sim/)) | High-precision physics, 2000Hz, physical units | High-fidelity simulation |
+
 ## 1. Overview
 
-### About This Simulator
+### About This Simulator (VPython Version)
 
 StampFly Simulator is a Python-based tool for simulating the dynamics of the "StampFly" micro drone. It implements control algorithms compatible with the actual firmware (`firmware/vehicle/`) and can be used for:
 

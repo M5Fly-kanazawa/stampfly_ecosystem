@@ -19,13 +19,29 @@
 
 **実機がなくても大丈夫。** コントローラとPCがあれば、今すぐドローン操縦を体験できます。
 
+### VPython版（軽量・ブラウザ表示）
+
 ```bash
 cd simulator/scripts
 python run_sim.py
 ```
 
+### Genesis版（高精度物理エンジン）
+
+```bash
+cd simulator/sandbox/genesis_sim
+source venv/bin/activate
+cd scripts
+python 25_physical_units_rate_control.py
+```
+
 コントローラをUSB HIDモードに切り替えてPCに接続すれば、
 3Dビューでドローンを自由に飛ばせます。
+
+| シミュレータ | 特徴 |
+|-------------|------|
+| VPython版 | 軽量、センサモデル充実、SIL/HIL対応 |
+| Genesis版 | 2000Hz物理演算、物理量ベース制御 |
 
 **→ [シミュレータで遊ぶ（詳細手順）](docs/getting-started.md#0-まずはシミュレータで遊んでみよう)**
 
@@ -113,13 +129,29 @@ This ecosystem exists for you.
 
 **No drone needed.** With just a controller and PC, you can experience drone piloting right now.
 
+### VPython Version (Lightweight, Browser)
+
 ```bash
 cd simulator/scripts
 python run_sim.py
 ```
 
+### Genesis Version (High-Precision Physics)
+
+```bash
+cd simulator/sandbox/genesis_sim
+source venv/bin/activate
+cd scripts
+python 25_physical_units_rate_control.py
+```
+
 Switch the controller to USB HID mode and connect to your PC.
 You can fly a drone freely in the 3D view.
+
+| Simulator | Features |
+|-----------|----------|
+| VPython | Lightweight, rich sensor models, SIL/HIL |
+| Genesis | 2000Hz physics, physical-unit control |
 
 **→ [Play with the Simulator (Detailed Steps)](docs/getting-started.md#0-try-the-simulator-first)**
 
