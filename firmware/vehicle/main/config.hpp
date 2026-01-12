@@ -406,7 +406,7 @@ inline constexpr float ROLL_RATE_TD = 0.0169f;     // 微分時間 [s] (16.9ms)
 
 // Pitch rate PID
 inline constexpr float PITCH_RATE_KP = 2.20e-4f;   // [Nm/(rad/s)] (Loop Shaping設計)
-inline constexpr float PITCH_RATE_TI = 1.181f;     // 積分時間 [s] (1181ms)
+inline constexpr float PITCH_RATE_TI = 0.1181f;    // 積分時間 [s] (118.1ms)
 inline constexpr float PITCH_RATE_TD = 0.0169f;    // 微分時間 [s] (16.9ms)
 
 // Yaw rate PID
