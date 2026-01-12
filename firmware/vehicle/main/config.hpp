@@ -477,18 +477,14 @@ inline constexpr float MAX_PITCH_ANGLE = 0.5236f;  // 30 deg = π/6 rad
 // -----------------------------------------------------------------------------
 // Attitude PID Gains (Outer Loop) - 姿勢PIDゲイン（外側ループ）
 // 出力: レートセットポイント [rad/s]
-//
-// P制御のみ推奨:
-//   - 積分は不要（オーバーシュート・発振防止）
-//   - 微分は内側ループが担当
 // -----------------------------------------------------------------------------
-inline constexpr float ROLL_ANGLE_KP = 5.0f;   // 比例ゲイン [(rad/s) / rad]
-inline constexpr float ROLL_ANGLE_TI = 0.0f;   // 積分時間 [s] (0 = 無効)
-inline constexpr float ROLL_ANGLE_TD = 0.0f;   // 微分時間 [s] (0 = 無効)
+inline constexpr float ROLL_ANGLE_KP = 5.0f;    // 比例ゲイン [(rad/s) / rad]
+inline constexpr float ROLL_ANGLE_TI = 4.0f;    // 積分時間 [s]
+inline constexpr float ROLL_ANGLE_TD = 0.04f;   // 微分時間 [s]
 
-inline constexpr float PITCH_ANGLE_KP = 5.0f;  // 比例ゲイン [(rad/s) / rad]
-inline constexpr float PITCH_ANGLE_TI = 0.0f;  // 積分時間 [s] (0 = 無効)
-inline constexpr float PITCH_ANGLE_TD = 0.0f;  // 微分時間 [s] (0 = 無効)
+inline constexpr float PITCH_ANGLE_KP = 5.0f;   // 比例ゲイン [(rad/s) / rad]
+inline constexpr float PITCH_ANGLE_TI = 4.0f;   // 積分時間 [s]
+inline constexpr float PITCH_ANGLE_TD = 0.04f;  // 微分時間 [s]
 
 // -----------------------------------------------------------------------------
 // Output Limits - 出力制限
