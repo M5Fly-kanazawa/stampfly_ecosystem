@@ -232,13 +232,13 @@ inline constexpr int LANDING_HOLD_COUNT = 200;          // 着陸判定維持回
 
 namespace stability {
 
-// 安定判定の標準偏差閾値（std norm）+3%
-inline constexpr float ACCEL_STD_THRESHOLD = 0.0258f;    // [m/s²] (元: 0.025)
-inline constexpr float GYRO_STD_THRESHOLD = 0.00515f;    // [rad/s] (元: 0.005)
-inline constexpr float MAG_STD_THRESHOLD = 1.34f;        // [µT] (元: 1.3)
-inline constexpr float BARO_STD_THRESHOLD = 0.206f;      // [m] (元: 0.20)
-inline constexpr float TOF_STD_THRESHOLD = 0.0031f;      // [m] (元: 0.003)
-inline constexpr float OPTFLOW_STD_THRESHOLD = 3.1f;     // [counts] (元: 3.0)
+// 安定判定の標準偏差閾値（std norm）+8%
+inline constexpr float ACCEL_STD_THRESHOLD = 0.027f;     // [m/s²] (元: 0.025)
+inline constexpr float GYRO_STD_THRESHOLD = 0.0054f;     // [rad/s] (元: 0.005)
+inline constexpr float MAG_STD_THRESHOLD = 1.404f;       // [µT] (元: 1.3)
+inline constexpr float BARO_STD_THRESHOLD = 0.216f;      // [m] (元: 0.20)
+inline constexpr float TOF_STD_THRESHOLD = 0.00324f;     // [m] (元: 0.003)
+inline constexpr float OPTFLOW_STD_THRESHOLD = 3.24f;    // [counts] (元: 3.0)
 
 // 安定判定のタイミング
 inline constexpr int CHECK_INTERVAL_MS = 200;            // チェック間隔 [ms]
