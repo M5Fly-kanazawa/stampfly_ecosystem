@@ -68,8 +68,8 @@ protocol/
 | 20 | 1 | flags | - | 警告フラグ |
 | 21 | 1 | checksum | - | チェックサム（sum） |
 
-### TelemetryWSPacket (108 bytes)
-機体からGCSへの拡張テレメトリ（WebSocket）。
+### TelemetryWSPacket (116 bytes)
+機体からGCSへの拡張テレメトリ（WebSocket）。v2.2でToFセンサーデータを追加。
 
 | Offset | Size | Field | Unit | Description |
 |--------|------|-------|------|-------------|
@@ -86,11 +86,13 @@ protocol/
 | 66 | 16 | control | - | 制御入力 (throttle,roll,pitch,yaw) |
 | 82 | 12 | magnetometer | uT | 磁力計 (x,y,z) |
 | 94 | 4 | voltage | V | バッテリー電圧 |
-| 98 | 1 | flight_state | - | FlightState |
-| 99 | 1 | sensor_status | - | センサ状態フラグ |
-| 100 | 4 | heartbeat | - | パケットカウンタ |
-| 104 | 1 | checksum | - | チェックサム（XOR） |
-| 105 | 3 | padding | - | アラインメント |
+| 98 | 4 | tof_bottom | m | 底面ToF距離 |
+| 102 | 4 | tof_front | m | 前方ToF距離 |
+| 106 | 1 | flight_state | - | FlightState |
+| 107 | 1 | sensor_status | - | センサ状態フラグ |
+| 108 | 4 | heartbeat | - | パケットカウンタ |
+| 112 | 1 | checksum | - | チェックサム（XOR） |
+| 113 | 3 | padding | - | アラインメント |
 
 ## 4. TDMAフレーム構造
 

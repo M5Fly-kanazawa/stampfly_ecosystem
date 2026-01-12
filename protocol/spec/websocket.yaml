@@ -1,8 +1,8 @@
 # StampFly Protocol - WebSocket Telemetry Specification
-# Version: 1.0.0
-# Last Updated: 2026-01-05
+# Version: 2.2.0
+# Last Updated: 2026-01-13
 
-version: "1.0.0"
+version: "2.2.0"
 
 # =============================================================================
 # WebSocket Server Configuration
@@ -43,8 +43,8 @@ data_format:
 message_types:
   extended_telemetry:
     packet_type: 0x20
-    description: "Full telemetry with ESKF state"
-    size: 108
+    description: "Full telemetry with ESKF state and ToF data"
+    size: 116
     rate_hz: 50
 
   # Future message types
@@ -115,6 +115,13 @@ units:
     unit: "V"
     description: "Battery voltage"
 
+  tof_distance:
+    unit: "m"
+    description: "Time-of-Flight distance sensors"
+    sensors:
+      bottom: "Ground clearance measurement"
+      front: "Forward obstacle detection"
+
 # =============================================================================
 # Error Handling
 # =============================================================================
@@ -133,12 +140,12 @@ error_handling:
 # =============================================================================
 checksum:
   algorithm: "xor"
-  position: "byte 104"
-  coverage: "bytes 0-103"
+  position: "byte 112"
+  coverage: "bytes 0-111"
 
   code: |
     uint8_t checksum = 0;
-    for (size_t i = 0; i < 104; i++) {
+    for (size_t i = 0; i < 112; i++) {
         checksum ^= data[i];
     }
     return checksum;
@@ -171,7 +178,7 @@ client_notes:
     import struct
 
     def on_message(ws, message):
-        if len(message) != 108:
+        if len(message) != 116:
             return
 
         header, ptype = struct.unpack_from('<BB', message, 0)
@@ -180,6 +187,9 @@ client_notes:
 
         timestamp, = struct.unpack_from('<I', message, 2)
         roll, pitch, yaw = struct.unpack_from('<fff', message, 6)
+        # ... position, velocity, gyro, accel, control, mag ...
+        voltage, = struct.unpack_from('<f', message, 94)
+        tof_bottom, tof_front = struct.unpack_from('<ff', message, 98)
         # ... etc
 
     ws = websocket.WebSocketApp("ws://192.168.4.1/",
