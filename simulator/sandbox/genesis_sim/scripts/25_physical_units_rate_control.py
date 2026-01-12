@@ -83,20 +83,23 @@ class PhysicalUnitsRateController:
 
         # Roll PID - match firmware config.hpp (corrected k_τ)
         # k_τ = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4e-3 Nm/V
+        # NOTE: Ti=0, Td=0 for P-only control (I/D were causing instability)
+        # TODO: Investigate I/D instability and re-enable
         self.roll_pid = PID(
             Kp=9.1e-4,   # Nm/(rad/s) = 0.65 × 1.4e-3
-            Ti=0.7,      # s
-            Td=0.01,     # s
+            Ti=0,        # s (disabled - was 0.7)
+            Td=0,        # s (disabled - was 0.01)
             eta=0.125,
             output_min=-5.2e-3,  # Nm = 3.7 × 1.4e-3
             output_max=5.2e-3,   # Nm
         )
 
         # Pitch PID - match firmware config.hpp (corrected k_τ)
+        # NOTE: Ti=0, Td=0 for P-only control (I/D were causing instability)
         self.pitch_pid = PID(
             Kp=1.33e-3,  # Nm/(rad/s) = 0.95 × 1.4e-3
-            Ti=0.7,      # s
-            Td=0.025,    # s
+            Ti=0,        # s (disabled - was 0.7)
+            Td=0,        # s (disabled - was 0.025)
             eta=0.125,
             output_min=-5.2e-3,  # Nm = 3.7 × 1.4e-3
             output_max=5.2e-3,   # Nm
@@ -104,10 +107,11 @@ class PhysicalUnitsRateController:
 
         # Yaw PID - match firmware config.hpp (corrected k_τ)
         # k_τ_yaw = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9e-4 Nm/V
+        # NOTE: Ti=0, Td=0 for P-only control (I/D were causing instability)
         self.yaw_pid = PID(
             Kp=1.77e-3,  # Nm/(rad/s) = 3.0 × 5.9e-4
-            Ti=0.8,      # s
-            Td=0.01,     # s
+            Ti=0,        # s (disabled - was 0.8)
+            Td=0,        # s (disabled - was 0.01)
             eta=0.125,
             output_min=-2.2e-3,  # Nm = 3.7 × 5.9e-4
             output_max=2.2e-3,   # Nm
@@ -714,6 +718,7 @@ def main():
                     )
 
                 current_torque = np.array([roll_torque, pitch_torque, yaw_torque])
+
                 control_steps += 1
                 next_control_time = control_steps * CONTROL_DT
 
