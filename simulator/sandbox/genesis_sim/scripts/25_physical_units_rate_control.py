@@ -255,9 +255,14 @@ class FollowCamera:
             self.lookat_pos = lookat_target.copy()
             self.initialized = True
         else:
-            # Low-pass filter smoothing
-            self.cam_pos += self.alpha_pos * (cam_target - self.cam_pos)
-            self.lookat_pos += self.alpha_look * (lookat_target - self.lookat_pos)
+            # Low-pass filter smoothing for X, Y only
+            # Height (Z) tracks immediately without smoothing
+            self.cam_pos[0] += self.alpha_pos * (cam_target[0] - self.cam_pos[0])
+            self.cam_pos[1] += self.alpha_pos * (cam_target[1] - self.cam_pos[1])
+            self.cam_pos[2] = cam_target[2]  # Immediate height tracking
+            self.lookat_pos[0] += self.alpha_look * (lookat_target[0] - self.lookat_pos[0])
+            self.lookat_pos[1] += self.alpha_look * (lookat_target[1] - self.lookat_pos[1])
+            self.lookat_pos[2] = lookat_target[2]  # Immediate height tracking
 
         # Update viewer camera using 4x4 pose matrix
         # This allows explicit control of up vector (always Z-up for level horizon)
