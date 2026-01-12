@@ -121,7 +121,7 @@ def test_template():
 
         plt.show()
 
-def flight_sim(world_type='ringworld', seed=None):
+def flight_sim(world_type='ringworld', seed=None, control_mode='rate'):
     """
     フライトシミュレーション実行
     Run flight simulation
@@ -129,6 +129,7 @@ def flight_sim(world_type='ringworld', seed=None):
     Parameters:
         world_type: 'ringworld' or 'voxel'
         seed: 地形生成シード（None=ランダム）
+        control_mode: 'rate' (ACRO) or 'angle' (STABILIZE)
     """
     mass = 0.035
     Weight = mass * 9.81
@@ -194,6 +195,11 @@ def flight_sim(world_type='ringworld', seed=None):
     pitch_rate_pid =PID(0.2,10.0,0.002)
     yaw_rate_pid =PID(1.0,2.0,0.001)
 
+    # Control mode: 'rate' (ACRO) or 'angle' (STABILIZE)
+    # 制御モード: 'rate'（ACRO）または 'angle'（STABILIZE）
+    use_rate_mode = (control_mode == 'rate')
+    prev_mode_button = False
+    print(f"Control mode: {'ACRO (Rate)' if use_rate_mode else 'STABILIZE (Angle)'}")
 
     # Joystick calibration（生の値でオフセット計算）
     # Joystick calibration (compute offset with raw values)
@@ -247,25 +253,58 @@ def flight_sim(world_type='ringworld', seed=None):
             pitch_raw = (joydata[2]-127)/127.0 - pitch_offset
             yaw_raw = (joydata[3]-127)/127.0 - yaw_offset
 
+            # Mode button (bit 2 of buttons byte)
+            # モードボタン（ボタンバイトのビット2）
+            buttons = joydata[4] if len(joydata) > 4 else 0
+            mode_button = bool(buttons & 0x04)
+
+            # Toggle mode on rising edge
+            # 立ち上がりエッジでモード切替
+            if mode_button and not prev_mode_button:
+                use_rate_mode = not use_rate_mode
+                mode_name = 'ACRO (Rate)' if use_rate_mode else 'STABILIZE (Angle)'
+                print(f"Mode changed: {mode_name}")
+            prev_mode_button = mode_button
+
             delta_voltage = 0.5 * thrust_raw
-            roll_ref = 0.25 * roll_raw * np.pi    # 最大±45°
-            pitch_ref = 0.25 * pitch_raw * np.pi  # 最大±45°
-            yaw_ref = 0.3 * yaw_raw * np.pi       # ヨーレート感度
+
+            if use_rate_mode:
+                # ACRO mode: スティック入力 → 目標角速度
+                # ACRO mode: Stick input -> Target angular rate
+                roll_ref = 4.0 * roll_raw    # 最大±4 rad/s (約230°/s)
+                pitch_ref = 4.0 * pitch_raw  # 最大±4 rad/s (約230°/s)
+                yaw_ref = 3.5 * yaw_raw      # 最大±3.5 rad/s (約200°/s)
+            else:
+                # STABILIZE mode: スティック入力 → 目標姿勢角
+                # STABILIZE mode: Stick input -> Target attitude angle
+                roll_ref = 0.25 * roll_raw * np.pi    # 最大±45°
+                pitch_ref = 0.25 * pitch_raw * np.pi  # 最大±45°
+                yaw_ref = 0.3 * yaw_raw * np.pi       # ヨーレート感度
         
-        #スタビライズモードは実装ちゅう
+        # Control loop
+        # 制御ループ
         control_on = True
         if t >= control_time and control_on:
             control_time += control_interval
-            roll_rate_ref = roll_pid.update(roll_ref, phi, control_interval)
-            pitch_rate_ref = pitch_pid.update(pitch_ref, theta, control_interval)
-            yaw_rate_ref = yaw_ref
-            #yaw_rate_ref = yaw_pid.update(yaw_ref, psi, control_interval)
 
+            if use_rate_mode:
+                # ACRO mode: スティック入力が直接目標角速度
+                # ACRO mode: Stick input is directly the target angular rate
+                roll_rate_ref = roll_ref
+                pitch_rate_ref = pitch_ref
+                yaw_rate_ref = yaw_ref
+            else:
+                # STABILIZE mode: 姿勢角誤差 → 目標角速度
+                # STABILIZE mode: Attitude error -> Target angular rate
+                roll_rate_ref = roll_pid.update(roll_ref, phi, control_interval)
+                pitch_rate_ref = pitch_pid.update(pitch_ref, theta, control_interval)
+                yaw_rate_ref = yaw_ref
 
+            # Rate control (inner loop) - common to both modes
+            # 角速度制御（内ループ）- 両モード共通
             delta_roll = roll_rate_pid.update(roll_rate_ref, rate_p, control_interval)
             delta_pitch = pitch_rate_pid.update(pitch_rate_ref, rate_q, control_interval)
             delta_yaw = yaw_rate_pid.update(yaw_rate_ref, rate_r, control_interval)
-            #delta_voltage = alt_pid.update(0.0, zi, control_interval)
 
         voltage = nominal_voltage + delta_voltage
         fr = voltage - delta_roll + delta_pitch + delta_yaw  # - 0.01*np.cos(psi - 10*np.pi/180)
@@ -670,7 +709,10 @@ if __name__ == "__main__":
                         help='ワールドタイプ (ringworld, voxel)')
     parser.add_argument('--seed', '-s', type=int, default=None,
                         help='地形生成シード（省略時はランダム）')
+    parser.add_argument('--mode', '-m', type=str, default='rate',
+                        choices=['rate', 'angle'],
+                        help='制御モード: rate=ACRO, angle=STABILIZE (default: rate)')
     args = parser.parse_args()
 
-    print(f"Starting simulation with world: {args.world}")
-    flight_sim(world_type=args.world, seed=args.seed)
+    print(f"Starting simulation with world: {args.world}, mode: {args.mode}")
+    flight_sim(world_type=args.world, seed=args.seed, control_mode=args.mode)
