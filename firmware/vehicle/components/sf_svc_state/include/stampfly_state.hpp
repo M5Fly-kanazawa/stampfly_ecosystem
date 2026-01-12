@@ -25,6 +25,17 @@ enum class FlightState {
     ERROR
 };
 
+/**
+ * @brief Flight control mode
+ *
+ * ACRO: Direct rate control (angular velocity)
+ * STABILIZE: Cascade control (attitude → rate)
+ */
+enum class FlightMode {
+    ACRO,       // Rate control - アクロモード（角速度制御）
+    STABILIZE   // Angle control - スタビライズモード（角度制御）
+};
+
 enum class PairingState {
     NOT_PAIRED,
     PAIRING,
@@ -76,6 +87,7 @@ public:
 
     // State access
     FlightState getFlightState() const;
+    FlightMode getFlightMode() const;
     PairingState getPairingState() const;
     ErrorCode getErrorCode() const;
 
@@ -83,6 +95,7 @@ public:
     bool requestArm();
     bool requestDisarm();
     void setFlightState(FlightState state);
+    void setFlightMode(FlightMode mode);
     void setPairingState(PairingState state);
     void setError(ErrorCode code);
     void clearError();
@@ -155,6 +168,7 @@ private:
     mutable SemaphoreHandle_t mutex_ = nullptr;
 
     FlightState flight_state_ = FlightState::INIT;
+    FlightMode flight_mode_ = FlightMode::ACRO;  // Default: ACRO
     PairingState pairing_state_ = PairingState::NOT_PAIRED;
     ErrorCode error_code_ = ErrorCode::NONE;
 

@@ -21,22 +21,12 @@
 
 static const char* TAG = "ControlTask";
 
-// =============================================================================
-// Flight Mode Definition
-// =============================================================================
-enum class FlightMode {
-    ACRO,       // Rate control (angular velocity)
-    STABILIZE,  // Angle control (cascade: attitude → rate)
-};
-
-// Current flight mode (default: ACRO)
-static FlightMode g_flight_mode = FlightMode::ACRO;
-
 // Mode switch debounce counter for noise immunity
 // ノイズ耐性のためのモード切替デバウンスカウンタ
+// FlightMode is defined in stampfly_state.hpp
 static constexpr int MODE_SWITCH_DEBOUNCE_COUNT = 10;  // 10 cycles @ 400Hz = 25ms
 static int g_mode_switch_counter = 0;
-static FlightMode g_pending_mode = FlightMode::ACRO;
+static stampfly::FlightMode g_pending_mode = stampfly::FlightMode::ACRO;
 
 using namespace config;
 using namespace globals;
@@ -246,8 +236,9 @@ void ControlTask(void* pvParameters)
 
     // 初期フライトモードをLEDに反映（デフォルト: ACRO=青）
     // Set initial flight mode LED (default: ACRO=blue)
+    // Note: led_task will also monitor this, but set initial state here for immediate feedback
     stampfly::LEDManager::getInstance().onFlightModeChanged(
-        g_flight_mode == FlightMode::STABILIZE);
+        state.getFlightMode() == stampfly::FlightMode::STABILIZE);
 
     // 前回のフライト状態（ARMED遷移時にPIDリセット用）
     stampfly::FlightState prev_flight_state = stampfly::FlightState::INIT;
@@ -300,9 +291,9 @@ void ControlTask(void* pvParameters)
         //   MODE = 1 (CTRL_FLAG_MODE set)     → RATECONTROL (ACRO)
         //
         uint8_t ctrl_flags = state.getControlFlags();
-        FlightMode requested_mode = (ctrl_flags & stampfly::CTRL_FLAG_MODE)
-                                    ? FlightMode::ACRO
-                                    : FlightMode::STABILIZE;
+        stampfly::FlightMode requested_mode = (ctrl_flags & stampfly::CTRL_FLAG_MODE)
+                                    ? stampfly::FlightMode::ACRO
+                                    : stampfly::FlightMode::STABILIZE;
 
         // デバウンス処理：連続N回同じモードを検出したら切替
         // Debounce: switch only after N consecutive same mode readings
@@ -317,22 +308,20 @@ void ControlTask(void* pvParameters)
         }
 
         // デバウンス閾値に達したらモード切替
+        // LED更新はled_taskが担当（Disarm中も監視可能）
         if (g_mode_switch_counter >= MODE_SWITCH_DEBOUNCE_COUNT &&
-            g_flight_mode != g_pending_mode) {
-            g_flight_mode = g_pending_mode;
+            state.getFlightMode() != g_pending_mode) {
+            state.setFlightMode(g_pending_mode);
             g_attitude_controller.reset();
 
-            // LED表示更新（MCU LED: STABILIZE=緑, ACRO=青）
-            bool is_stabilize = (g_flight_mode == FlightMode::STABILIZE);
-            stampfly::LEDManager::getInstance().onFlightModeChanged(is_stabilize);
-
+            bool is_stabilize = (g_pending_mode == stampfly::FlightMode::STABILIZE);
             ESP_LOGI(TAG, "Mode changed to %s",
                      is_stabilize ? "STABILIZE" : "ACRO");
         }
 
         float roll_rate_target, pitch_rate_target, yaw_rate_target;
 
-        if (g_flight_mode == FlightMode::STABILIZE) {
+        if (state.getFlightMode() == stampfly::FlightMode::STABILIZE) {
             // STABILIZE: カスケード制御（姿勢 → レート）
             // STABILIZE: Cascade control (attitude → rate)
 

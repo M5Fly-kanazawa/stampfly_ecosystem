@@ -30,6 +30,7 @@ void LEDTask(void* pvParameters)
     constexpr float LOW_BATTERY_THRESHOLD = 3.4f;
 
     stampfly::FlightState prev_flight_state = stampfly::FlightState::INIT;
+    stampfly::FlightMode prev_flight_mode = stampfly::FlightMode::ACRO;
     bool prev_low_battery = false;
 
     while (true) {
@@ -47,6 +48,14 @@ void LEDTask(void* pvParameters)
         if (flight_state != prev_flight_state) {
             led_mgr.onFlightStateChanged(flight_state);
             prev_flight_state = flight_state;
+        }
+
+        // フライトモードのチェックと通知（Disarm中も監視）
+        // Monitor flight mode (also when disarmed)
+        stampfly::FlightMode flight_mode = state.getFlightMode();
+        if (flight_mode != prev_flight_mode) {
+            led_mgr.onFlightModeChanged(flight_mode == stampfly::FlightMode::STABILIZE);
+            prev_flight_mode = flight_mode;
         }
 
         // LEDアニメーション更新（タイムアウト処理含む）

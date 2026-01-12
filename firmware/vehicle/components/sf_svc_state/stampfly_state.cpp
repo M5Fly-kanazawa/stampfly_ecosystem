@@ -35,6 +35,14 @@ FlightState StampFlyState::getFlightState() const
     return state;
 }
 
+FlightMode StampFlyState::getFlightMode() const
+{
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    FlightMode mode = flight_mode_;
+    xSemaphoreGive(mutex_);
+    return mode;
+}
+
 PairingState StampFlyState::getPairingState() const
 {
     xSemaphoreTake(mutex_, portMAX_DELAY);
@@ -90,6 +98,13 @@ void StampFlyState::setFlightState(FlightState state)
 {
     xSemaphoreTake(mutex_, portMAX_DELAY);
     flight_state_ = state;
+    xSemaphoreGive(mutex_);
+}
+
+void StampFlyState::setFlightMode(FlightMode mode)
+{
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    flight_mode_ = mode;
     xSemaphoreGive(mutex_);
 }
 
