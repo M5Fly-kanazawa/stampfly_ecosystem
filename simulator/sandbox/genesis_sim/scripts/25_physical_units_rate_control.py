@@ -72,31 +72,31 @@ class PhysicalUnitsRateController:
         # Kp units: [Nm / (rad/s)]
         # Output limits: [Nm]
 
-        # Roll PID
+        # Roll PID (Td reduced for simulation stability)
         self.roll_pid = PID(
             Kp=1.51e-4,  # Nm/(rad/s)
             Ti=0.7,      # s
-            Td=0.01,     # s
+            Td=0.001,    # s (reduced from 0.01)
             eta=0.125,
             output_min=-8.6e-4,  # Nm
             output_max=8.6e-4,   # Nm
         )
 
-        # Pitch PID
+        # Pitch PID (Td reduced for simulation stability)
         self.pitch_pid = PID(
             Kp=2.21e-4,  # Nm/(rad/s)
             Ti=0.7,      # s
-            Td=0.025,    # s
+            Td=0.001,    # s (reduced from 0.025)
             eta=0.125,
             output_min=-8.6e-4,  # Nm
             output_max=8.6e-4,   # Nm
         )
 
-        # Yaw PID
+        # Yaw PID (Td reduced for simulation stability)
         self.yaw_pid = PID(
             Kp=2.95e-4,  # Nm/(rad/s)
             Ti=0.8,      # s
-            Td=0.01,     # s
+            Td=0.001,    # s (reduced from 0.01)
             eta=0.125,
             output_min=-3.6e-4,  # Nm
             output_max=3.6e-4,   # Nm
@@ -586,11 +586,6 @@ def main():
     next_control_time = 0
     start_time = time.perf_counter()
     last_print_time = -1
-    last_control_sim_time = 0.0  # Track actual time of last control update
-
-    # Debug: print first N control steps
-    DEBUG_CONTROL_STEPS = 20
-    debug_enabled = True
 
     # Current control outputs
     current_torque = np.array([0.0, 0.0, 0.0])  # [roll, pitch, yaw] Nm
@@ -704,22 +699,10 @@ def main():
                 control_steps += 1
                 next_control_time = control_steps * CONTROL_DT
 
-                # Debug: print first N control steps
-                if debug_enabled and control_steps <= DEBUG_CONTROL_STEPS:
-                    print(f"  [DEBUG step {control_steps}] "
-                          f"stick=({roll_raw:+.3f},{pitch_raw:+.3f},{yaw_raw:+.3f}) | "
-                          f"gyro=({np.degrees(gyro_ned[0]):+.1f},{np.degrees(gyro_ned[1]):+.1f},{np.degrees(gyro_ned[2]):+.1f})deg/s | "
-                          f"torque=({current_torque[0]*1e6:+.1f},{current_torque[1]*1e6:+.1f},{current_torque[2]*1e6:+.1f})uNm")
-
             # Control allocation: [thrust, roll_torque, pitch_torque, yaw_torque] -> motor thrusts
             control = np.array([u_thrust, current_torque[0], current_torque[1], current_torque[2]])
             target_thrusts = allocator.mix(control)
             target_duties = thrusts_to_duties(target_thrusts)
-
-            # Debug: print motor thrusts for first few steps
-            if debug_enabled and control_steps <= DEBUG_CONTROL_STEPS and control_steps > 0:
-                print(f"           thrusts=({target_thrusts[0]*1000:.1f},{target_thrusts[1]*1000:.1f},{target_thrusts[2]*1000:.1f},{target_thrusts[3]*1000:.1f})mN | "
-                      f"duties=({target_duties[0]:.3f},{target_duties[1]:.3f},{target_duties[2]:.3f},{target_duties[3]:.3f})")
 
             # Physics loop
             while sim_time <= real_time:
