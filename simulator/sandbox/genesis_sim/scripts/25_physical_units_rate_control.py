@@ -256,10 +256,10 @@ class FollowCamera:
             self.cam_pos += self.alpha_pos * (cam_target - self.cam_pos)
             self.lookat_pos += self.alpha_look * (lookat_target - self.lookat_pos)
 
-        # Update viewer camera
+        # Update viewer camera (requires numpy arrays)
         scene.viewer.set_camera_pose(
-            pos=tuple(self.cam_pos),
-            lookat=tuple(self.lookat_pos),
+            pos=self.cam_pos,
+            lookat=self.lookat_pos,
         )
 
     def reset(self):
