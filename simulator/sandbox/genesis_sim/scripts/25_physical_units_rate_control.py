@@ -238,12 +238,13 @@ class FollowCamera:
         ])
 
         # Target camera position = behind and above drone
-        # STL is in NED, URDF rotation rpy=(-90°,180°,0°) transforms to Genesis
-        # Result: Drone's "front" in Genesis is -X direction
-        # So "behind" the drone is +X direction when yaw=0
+        # Genesis coordinate: X=Right, Y=Forward, Z=Up
+        # Drone's "front" in Genesis is +Y direction when yaw=0
+        # Forward vector: (-sin(yaw), cos(yaw), 0)
+        # Behind vector: (sin(yaw), -cos(yaw), 0)
         cam_target = np.array([
-            lookat_target[0] + self.distance * np.cos(drone_yaw),
-            lookat_target[1] + self.distance * np.sin(drone_yaw),
+            lookat_target[0] + self.distance * np.sin(drone_yaw),
+            lookat_target[1] - self.distance * np.cos(drone_yaw),
             lookat_target[2] + self.height,
         ])
 
@@ -467,15 +468,15 @@ def main():
 
     # Scene creation
     # Initial camera: behind drone
-    # STL is NED, URDF rotation makes drone's front = -X in Genesis
-    # So behind drone = +X direction
+    # Genesis coordinate: X=Right, Y=Forward, Z=Up
+    # Drone front = +Y when yaw=0, so behind = -Y
     DRONE_SPAWN_POS = (0, 0, 2.0)
     print("\n[4] Creating scene...")
     scene = gs.Scene(
         show_viewer=True,
         viewer_options=gs.options.ViewerOptions(
-            camera_pos=(DRONE_SPAWN_POS[0] + follow_camera.distance,
-                        DRONE_SPAWN_POS[1],
+            camera_pos=(DRONE_SPAWN_POS[0],
+                        DRONE_SPAWN_POS[1] - follow_camera.distance,
                         DRONE_SPAWN_POS[2] + follow_camera.height),
             camera_lookat=DRONE_SPAWN_POS,
             camera_fov=60,
