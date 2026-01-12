@@ -3,16 +3,14 @@
 25_physical_units_rate_control.py - Physical Units Rate Control
 物理単位ベース角速度制御
 
-!!! WIP: DEBUG PAUSED !!!
-デバッグ休止中
+History / 履歴:
+  - 2024-01: Initial implementation with incorrect k_τ conversion
+  - 2024-01: Fixed k_τ calculation (was ~6× too small due to missing 4-motor factor
+             and incorrect linear thrust-duty assumption)
 
-Known issue / 既知の問題:
-  - Drone becomes unstable (pitch diverges) even with no stick input
-  - ドローンが不安定（スティック入力なしでもピッチ発散）
-  - PID gains and rate_max now match firmware config.hpp
-  - PIDゲインとrate_maxはファームウェアと一致済み
-  - Root cause not yet identified - possibly Genesis DOF force/torque convention
-  - 原因未特定 - GenesisのDOF力/トルク規約の可能性
+PID gains now match corrected firmware config.hpp (USE_PHYSICAL_UNITS=1):
+  - k_τ_roll/pitch = 4 × (L/V) × (dT/dDuty) × d ≈ 1.4e-3 Nm/V
+  - k_τ_yaw = 4 × (L/V) × (dT/dDuty) × kτ ≈ 5.9e-4 Nm/V
 
 Physical units mode matching firmware USE_PHYSICAL_UNITS=1:
 ファームウェア USE_PHYSICAL_UNITS=1 と一致する物理単位モード:
@@ -83,34 +81,36 @@ class PhysicalUnitsRateController:
         # Kp units: [Nm / (rad/s)]
         # Output limits: [Nm]
 
-        # Roll PID - match firmware config.hpp
+        # Roll PID - match firmware config.hpp (corrected k_τ)
+        # k_τ = 4 × (0.25/3.7) × 0.23 × 0.023 ≈ 1.4e-3 Nm/V
         self.roll_pid = PID(
-            Kp=1.51e-4,  # Nm/(rad/s)
+            Kp=9.1e-4,   # Nm/(rad/s) = 0.65 × 1.4e-3
             Ti=0.7,      # s
             Td=0.01,     # s
             eta=0.125,
-            output_min=-8.6e-4,  # Nm
-            output_max=8.6e-4,   # Nm
+            output_min=-5.2e-3,  # Nm = 3.7 × 1.4e-3
+            output_max=5.2e-3,   # Nm
         )
 
-        # Pitch PID - match firmware config.hpp
+        # Pitch PID - match firmware config.hpp (corrected k_τ)
         self.pitch_pid = PID(
-            Kp=2.21e-4,  # Nm/(rad/s)
+            Kp=1.33e-3,  # Nm/(rad/s) = 0.95 × 1.4e-3
             Ti=0.7,      # s
             Td=0.025,    # s
             eta=0.125,
-            output_min=-8.6e-4,  # Nm
-            output_max=8.6e-4,   # Nm
+            output_min=-5.2e-3,  # Nm = 3.7 × 1.4e-3
+            output_max=5.2e-3,   # Nm
         )
 
-        # Yaw PID - match firmware config.hpp
+        # Yaw PID - match firmware config.hpp (corrected k_τ)
+        # k_τ_yaw = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9e-4 Nm/V
         self.yaw_pid = PID(
-            Kp=2.95e-4,  # Nm/(rad/s)
+            Kp=1.77e-3,  # Nm/(rad/s) = 3.0 × 5.9e-4
             Ti=0.8,      # s
             Td=0.01,     # s
             eta=0.125,
-            output_min=-3.6e-4,  # Nm
-            output_max=3.6e-4,   # Nm
+            output_min=-2.2e-3,  # Nm = 3.7 × 5.9e-4
+            output_max=2.2e-3,   # Nm
         )
 
         # Rate limits (rad/s) - match firmware config.hpp
@@ -510,10 +510,10 @@ def main():
 
     print(f"  Initial mode: ACRO (Rate Control)")
     print(f"  Camera: Follow mode (behind drone)")
-    print(f"  Physical units PID gains:")
-    print(f"    Roll:  Kp={1.51e-4:.2e} Nm/(rad/s)")
-    print(f"    Pitch: Kp={2.21e-4:.2e} Nm/(rad/s)")
-    print(f"    Yaw:   Kp={2.95e-4:.2e} Nm/(rad/s)")
+    print(f"  Physical units PID gains (corrected k_τ):")
+    print(f"    Roll:  Kp={9.1e-4:.2e} Nm/(rad/s)")
+    print(f"    Pitch: Kp={1.33e-3:.2e} Nm/(rad/s)")
+    print(f"    Yaw:   Kp={1.77e-3:.2e} Nm/(rad/s)")
 
     # Genesis initialization
     print("\n[3] Initializing Genesis...")
@@ -585,7 +585,7 @@ def main():
     print(f"  Mode: ACRO (Rate Control)")
     print(f"  Hover thrust: {WEIGHT*1000:.1f}mN")
     print(f"  Rate limits: Roll/Pitch=±{np.degrees(rate_controller.roll_rate_max):.0f} deg/s")
-    print(f"  Output limits: Roll/Pitch=±{8.6e-4*1e6:.0f}uNm, Yaw=±{3.6e-4*1e6:.0f}uNm")
+    print(f"  Output limits: Roll/Pitch=±{5.2e-3*1e3:.1f}mNm, Yaw=±{2.2e-3*1e3:.1f}mNm")
     print("=" * 60)
 
     # Simulation loop
