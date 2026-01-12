@@ -5,15 +5,16 @@ Genesis StampFly シミュレータ（物理単位ベース制御）
 
 Features / 機能:
   - Physical units control (PID output: torque [Nm])
-  - 2000Hz physics, 400Hz control, 60Hz rendering
+  - 2000Hz physics, 400Hz control, 30Hz rendering
   - RK4 motor/propeller dynamics
-  - 60 FPS real-time performance monitoring
+  - Real-time performance monitoring
   - Joystick control with ACRO/STABILIZE modes
 
-Performance Monitoring / 性能モニタリング:
-  - Real-time FPS tracking (target: 60 FPS)
-  - Frame time statistics (min/avg/max)
-  - Behind-realtime detection
+Performance Note / 性能に関する注意:
+  - 60 FPS tested but Genesis viewer is bottleneck (~25ms/frame)
+  - 30 FPS is stable upper limit for real-time rendering
+  - 60FPSテスト済みだがGenesisビューアがボトルネック（~25ms/フレーム）
+  - 30FPSがリアルタイム描画の安定上限
 
 Physical units mode matching firmware USE_PHYSICAL_UNITS=1:
 ファームウェア USE_PHYSICAL_UNITS=1 と一致する物理単位モード:
@@ -551,7 +552,11 @@ def main():
     PHYSICS_DT = 1 / PHYSICS_HZ  # 0.0005s = 0.5ms
     CONTROL_HZ = 400  # 5 physics steps per control (integer ratio)
     CONTROL_DT = 1 / CONTROL_HZ
-    RENDER_FPS = 60   # Target 60 FPS for real-time check
+    # Note: 60 FPS tested but Genesis viewer bottleneck limits to ~40 FPS
+    # Genesis viewer takes ~25ms per frame, so 30 FPS is stable upper limit
+    # 注: 60FPSをテストしたがGenesisビューアがボトルネックで~40FPSが限界
+    # ビューア更新に~25ms/フレームかかるため30FPSが安定上限
+    RENDER_FPS = 30
     RENDER_DT = 1 / RENDER_FPS
 
     # World settings
@@ -913,7 +918,7 @@ def main():
 
     # Final performance summary
     print("\n" + "=" * 60)
-    print("Performance Summary (60 FPS Real-time Test)")
+    print("Performance Summary")
     print("=" * 60)
     fps = perf_monitor.get_fps()
     min_t, avg_t, max_t = perf_monitor.get_frame_time_stats()
