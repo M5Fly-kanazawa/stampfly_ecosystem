@@ -261,6 +261,42 @@ void ControlTask(void* pvParameters)
         }
         prev_flight_state = flight_state;
 
+        // =====================================================================
+        // フライトモード判定（Disarm中も実行 - LED更新のため）
+        // Flight mode detection (runs even when disarmed - for LED update)
+        // =====================================================================
+        // コントローラのMODEビットから取得（デバウンス処理付き）
+        // Controller MODE bit definition:
+        //   MODE = 0 (CTRL_FLAG_MODE not set) → ANGLECONTROL (STABILIZE)
+        //   MODE = 1 (CTRL_FLAG_MODE set)     → RATECONTROL (ACRO)
+        {
+            uint8_t ctrl_flags = state.getControlFlags();
+            stampfly::FlightMode requested_mode = (ctrl_flags & stampfly::CTRL_FLAG_MODE)
+                                        ? stampfly::FlightMode::ACRO
+                                        : stampfly::FlightMode::STABILIZE;
+
+            // デバウンス処理：連続N回同じモードを検出したら切替
+            if (requested_mode == g_pending_mode) {
+                if (g_mode_switch_counter < MODE_SWITCH_DEBOUNCE_COUNT) {
+                    g_mode_switch_counter++;
+                }
+            } else {
+                g_pending_mode = requested_mode;
+                g_mode_switch_counter = 1;
+            }
+
+            // デバウンス閾値に達したらモード切替
+            if (g_mode_switch_counter >= MODE_SWITCH_DEBOUNCE_COUNT &&
+                state.getFlightMode() != g_pending_mode) {
+                state.setFlightMode(g_pending_mode);
+                g_attitude_controller.reset();
+
+                bool is_stabilize = (g_pending_mode == stampfly::FlightMode::STABILIZE);
+                ESP_LOGI(TAG, "Mode changed to %s",
+                         is_stabilize ? "STABILIZE" : "ACRO");
+            }
+        }
+
         // Only run control when ARMED or FLYING
         if (flight_state != stampfly::FlightState::ARMED &&
             flight_state != stampfly::FlightState::FLYING) {
@@ -281,44 +317,8 @@ void ControlTask(void* pvParameters)
         state.getControlInput(throttle, roll_cmd, pitch_cmd, yaw_cmd);
 
         // =====================================================================
-        // 2. フライトモード判定 & 目標角速度計算
+        // 2. 目標角速度計算
         // =====================================================================
-        // コントローラのMODEビットから取得（デバウンス処理付き）
-        // Get from controller MODE bit (with debounce for noise immunity)
-        //
-        // Controller MODE bit definition:
-        //   MODE = 0 (CTRL_FLAG_MODE not set) → ANGLECONTROL (STABILIZE)
-        //   MODE = 1 (CTRL_FLAG_MODE set)     → RATECONTROL (ACRO)
-        //
-        uint8_t ctrl_flags = state.getControlFlags();
-        stampfly::FlightMode requested_mode = (ctrl_flags & stampfly::CTRL_FLAG_MODE)
-                                    ? stampfly::FlightMode::ACRO
-                                    : stampfly::FlightMode::STABILIZE;
-
-        // デバウンス処理：連続N回同じモードを検出したら切替
-        // Debounce: switch only after N consecutive same mode readings
-        if (requested_mode == g_pending_mode) {
-            if (g_mode_switch_counter < MODE_SWITCH_DEBOUNCE_COUNT) {
-                g_mode_switch_counter++;
-            }
-        } else {
-            // 異なるモードが来たらカウンタリセット
-            g_pending_mode = requested_mode;
-            g_mode_switch_counter = 1;
-        }
-
-        // デバウンス閾値に達したらモード切替
-        // LED更新はled_taskが担当（Disarm中も監視可能）
-        if (g_mode_switch_counter >= MODE_SWITCH_DEBOUNCE_COUNT &&
-            state.getFlightMode() != g_pending_mode) {
-            state.setFlightMode(g_pending_mode);
-            g_attitude_controller.reset();
-
-            bool is_stabilize = (g_pending_mode == stampfly::FlightMode::STABILIZE);
-            ESP_LOGI(TAG, "Mode changed to %s",
-                     is_stabilize ? "STABILIZE" : "ACRO");
-        }
-
         float roll_rate_target, pitch_rate_target, yaw_rate_target;
 
         if (state.getFlightMode() == stampfly::FlightMode::STABILIZE) {
