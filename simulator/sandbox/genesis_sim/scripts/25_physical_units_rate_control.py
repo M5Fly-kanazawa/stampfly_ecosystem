@@ -668,63 +668,66 @@ def main():
             real_time = time.perf_counter() - start_time
             sim_time = physics_steps * PHYSICS_DT
 
-            # Control loop (at CONTROL_HZ)
-            if sim_time >= next_control_time:
-                # Get current state from Genesis
-                quat = drone.get_quat()
-
-                # Get angular velocity from DOFs (body frame directly)
-                # Genesis DOF convention:
-                #   get_dofs_velocity()[3:6] = body frame angular velocity (wx, wy, wz)
-                #   get_ang() = world frame angular velocity
-                dofs_vel = drone.get_dofs_velocity()
-                gyro_genesis_body = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
-                # Convert Genesis body frame (wx, wy, wz) to NED body frame (p, q, r)
-                # See docs/architecture/genesis-integration.md:
-                #   (wx, wy, wz)_genesis → (wy, wx, -wz) = (p, q, r)_ned
-                gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
-
-                if use_acro_mode:
-                    # ACRO mode: Stick -> Rate setpoint -> PID -> Torque
-                    roll_torque, pitch_torque, yaw_torque = rate_controller.update_from_stick(
-                        stick_roll=roll_raw,
-                        stick_pitch=pitch_raw,
-                        stick_yaw=yaw_raw,
-                        gyro=gyro_ned,
-                        dt=CONTROL_DT,
-                    )
-                else:
-                    # STABILIZE mode: Stick -> Angle -> Attitude PID -> Rate -> Rate PID -> Torque
-                    euler_genesis = quat_to_euler(quat)
-                    euler_ned = genesis_euler_to_ned(euler_genesis)
-
-                    # Attitude controller gives rate setpoints
-                    roll_rate_ref, pitch_rate_ref = attitude_controller.update(
-                        stick_roll=roll_raw,
-                        stick_pitch=pitch_raw,
-                        attitude=euler_ned,
-                        dt=CONTROL_DT,
-                    )
-                    yaw_rate_ref = yaw_raw * rate_controller.yaw_rate_max
-
-                    # Rate controller
-                    rate_setpoint = np.array([roll_rate_ref, pitch_rate_ref, yaw_rate_ref])
-                    roll_torque, pitch_torque, yaw_torque = rate_controller.update(
-                        rate_setpoint, gyro_ned, CONTROL_DT
-                    )
-
-                current_torque = np.array([roll_torque, pitch_torque, yaw_torque])
-
-                control_steps += 1
-                next_control_time = control_steps * CONTROL_DT
-
-            # Control allocation: [thrust, roll_torque, pitch_torque, yaw_torque] -> motor thrusts
-            control = np.array([u_thrust, current_torque[0], current_torque[1], current_torque[2]])
-            target_thrusts = allocator.mix(control)
-            target_duties = thrusts_to_duties(target_thrusts)
-
-            # Physics loop
+            # Physics loop with integrated control
+            # 物理ループと制御ループを統合
             while sim_time <= real_time:
+                # Control loop (at CONTROL_HZ) - inside physics loop
+                # 制御ループは物理ループの中で実行
+                if sim_time >= next_control_time:
+                    # Get current state from Genesis
+                    quat = drone.get_quat()
+
+                    # Get angular velocity from DOFs (body frame directly)
+                    # Genesis DOF convention:
+                    #   get_dofs_velocity()[3:6] = body frame angular velocity (wx, wy, wz)
+                    #   get_ang() = world frame angular velocity
+                    dofs_vel = drone.get_dofs_velocity()
+                    gyro_genesis_body = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
+                    # Convert Genesis body frame (wx, wy, wz) to NED body frame (p, q, r)
+                    # See docs/architecture/genesis-integration.md:
+                    #   (wx, wy, wz)_genesis → (wy, wx, -wz) = (p, q, r)_ned
+                    gyro_ned = genesis_gyro_to_ned(gyro_genesis_body)
+
+                    if use_acro_mode:
+                        # ACRO mode: Stick -> Rate setpoint -> PID -> Torque
+                        roll_torque, pitch_torque, yaw_torque = rate_controller.update_from_stick(
+                            stick_roll=roll_raw,
+                            stick_pitch=pitch_raw,
+                            stick_yaw=yaw_raw,
+                            gyro=gyro_ned,
+                            dt=CONTROL_DT,
+                        )
+                    else:
+                        # STABILIZE mode: Stick -> Angle -> Attitude PID -> Rate -> Rate PID -> Torque
+                        euler_genesis = quat_to_euler(quat)
+                        euler_ned = genesis_euler_to_ned(euler_genesis)
+
+                        # Attitude controller gives rate setpoints
+                        roll_rate_ref, pitch_rate_ref = attitude_controller.update(
+                            stick_roll=roll_raw,
+                            stick_pitch=pitch_raw,
+                            attitude=euler_ned,
+                            dt=CONTROL_DT,
+                        )
+                        yaw_rate_ref = yaw_raw * rate_controller.yaw_rate_max
+
+                        # Rate controller
+                        rate_setpoint = np.array([roll_rate_ref, pitch_rate_ref, yaw_rate_ref])
+                        roll_torque, pitch_torque, yaw_torque = rate_controller.update(
+                            rate_setpoint, gyro_ned, CONTROL_DT
+                        )
+
+                    current_torque = np.array([roll_torque, pitch_torque, yaw_torque])
+
+                    # Control allocation: [thrust, roll_torque, pitch_torque, yaw_torque] -> motor thrusts
+                    control = np.array([u_thrust, current_torque[0], current_torque[1], current_torque[2]])
+                    target_thrusts = allocator.mix(control)
+                    target_duties = thrusts_to_duties(target_thrusts)
+
+                    control_steps += 1
+                    next_control_time = control_steps * CONTROL_DT
+
+                # Motor dynamics (at PHYSICS_HZ)
                 force_ned, moment_ned = motor_system.step_with_duty(
                     target_duties.tolist(), PHYSICS_DT
                 )
