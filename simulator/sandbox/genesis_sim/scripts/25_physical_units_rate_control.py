@@ -408,7 +408,7 @@ def main():
         return
 
     # Timing settings
-    PHYSICS_HZ = 1000
+    PHYSICS_HZ = 2000  # Increased to avoid NaN errors
     PHYSICS_DT = 1 / PHYSICS_HZ
     CONTROL_HZ = 400
     CONTROL_DT = 1 / CONTROL_HZ
