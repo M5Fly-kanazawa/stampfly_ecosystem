@@ -838,12 +838,33 @@ The vehicle has a built-in WebSocket server, allowing you to view sensor data in
 | Password | None (Open) |
 | URL | `http://192.168.4.1/` |
 | Update Rate | 50Hz |
+| Packet Size | 116 bytes |
 
 **Connection Steps:**
 1. Power on the vehicle
 2. Connect to `StampFly` WiFi from your PC/smartphone
 3. Open `http://192.168.4.1/` in a browser
-4. 3D visualizer displays attitude in real-time
+4. Real-time data visualization appears
+
+**Available Data Cards:**
+
+| Card | Contents |
+|------|----------|
+| Attitude | Roll, Pitch, Yaw angles |
+| Position | X, Y, Z position (NED) |
+| Velocity | Vx, Vy, Vz velocity |
+| Gyro | Angular velocity (bias corrected) |
+| Accel | Acceleration (bias corrected) |
+| Magnetometer | Magnetic field X, Y, Z |
+| Control Input | Throttle, Roll, Pitch, Yaw commands |
+| System | Battery voltage, Flight state, Sensor status |
+| ToF Distance | Bottom and Front ToF sensor distances |
+
+**Additional Features:**
+- Attitude indicator (artificial horizon)
+- Top view and side view visualizations
+- Time-series graphs for all data
+- CSV log recording and download
 
 > **Note:** The current firmware's attitude and position estimation algorithms are not yet tuned, so attitude and position data shown in telemetry may display inaccurate values. This will be improved in future updates.
 

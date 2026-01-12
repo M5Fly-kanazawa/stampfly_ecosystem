@@ -484,9 +484,43 @@ USBシリアル経由でCLIコマンドが使用できます。
 
 ESP-NOWと同時にWiFiアクセスポイントを起動し、WebSocketでテレメトリデータを配信します。
 
-- SSID: `StampFly_XXXXXX`
-- ポート: 80
-- レート: 50Hz
+| 項目 | 値 |
+|------|-----|
+| SSID | `StampFly` |
+| パスワード | なし（オープン） |
+| URL | `http://192.168.4.1/` |
+| 更新レート | 50Hz |
+| パケットサイズ | 116 bytes |
+
+**テレメトリパケット構造（v2.2）：**
+
+| フィールド | サイズ | 単位 | 説明 |
+|-----------|--------|------|------|
+| header | 1B | - | 0xAA固定 |
+| packet_type | 1B | - | 0x20（v2パケット） |
+| timestamp | 4B | ms | 起動からの時間 |
+| roll/pitch/yaw | 12B | rad | 姿勢角（ESKF推定） |
+| pos_x/y/z | 12B | m | 位置（NED座標） |
+| vel_x/y/z | 12B | m/s | 速度 |
+| gyro_x/y/z | 12B | rad/s | 角速度（バイアス補正済み） |
+| accel_x/y/z | 12B | m/s² | 加速度（バイアス補正済み） |
+| ctrl_throttle/roll/pitch/yaw | 16B | - | 制御入力（正規化） |
+| mag_x/y/z | 12B | uT | 地磁気 |
+| voltage | 4B | V | バッテリ電圧 |
+| tof_bottom | 4B | m | 底面ToF距離 |
+| tof_front | 4B | m | 前方ToF距離 |
+| flight_state | 1B | - | 飛行状態 |
+| sensor_status | 1B | - | センサーステータス |
+| heartbeat | 4B | - | 送信カウンタ |
+| checksum | 1B | - | XORチェックサム |
+| padding | 3B | - | アライメント |
+
+**Web UI機能：**
+- 姿勢インジケータ（人工水平儀）
+- 上面ビュー・側面ビュー
+- 各種センサーデータカード（姿勢、位置、速度、IMU、地磁気、ToF距離など）
+- 時系列グラフ
+- CSVログ記録・ダウンロード
 
 ### バイナリログ
 
