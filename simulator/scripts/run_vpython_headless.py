@@ -165,8 +165,9 @@ def run_headless(input_file, output_file, duration=10.0):
         inersia=[[9.16e-6, 0.0, 0.0], [0.0, 13.3e-6, 0.0], [0.0, 0.0, 20.4e-6]]
     )
 
-    # Initial state
-    stampfly.body.set_position([[0.0], [0.0], [2.0]])
+    # Initial state (start at origin for comparison)
+    # 比較用に原点から開始
+    stampfly.body.set_position([[0.0], [0.0], [0.0]])
     stampfly.set_pqr([[0.0], [0.0], [0.0]])
     stampfly.set_uvw([[0.0], [0.0], [0.0]])
     stampfly.set_euler([[0], [0], [0]])

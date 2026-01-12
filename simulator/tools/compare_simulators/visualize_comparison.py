@@ -25,6 +25,37 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 from sim_io import load_output_csv, StateLog
 
 
+# =============================================================================
+# Coordinate Transforms
+# 座標変換
+# =============================================================================
+
+def genesis_to_ned(data):
+    """
+    Convert Genesis coordinate to NED coordinate.
+    Genesis座標系をNED座標系に変換
+
+    Genesis: Y-forward, X-right, Z-up
+    NED: X-forward (North), Y-right (East), Z-down
+
+    Position: genesis(x,y,z) -> ned(y, x, -z)
+    Attitude: genesis(roll,pitch,yaw) -> ned(pitch, roll, -yaw)
+    Angular rate: genesis(p,q,r) -> ned(q, p, -r)
+    """
+    return {
+        'time': data['time'],
+        'x': data['y'].copy(),      # Genesis Y -> NED X (forward)
+        'y': data['x'].copy(),      # Genesis X -> NED Y (right)
+        'z': -data['z'].copy(),     # Genesis Z -> NED Z (down)
+        'roll': data['pitch'].copy(),   # Genesis pitch -> NED roll
+        'pitch': data['roll'].copy(),   # Genesis roll -> NED pitch
+        'yaw': -data['yaw'].copy(),     # Genesis yaw -> NED yaw (inverted)
+        'p': data['q'].copy(),      # Genesis q -> NED p
+        'q': data['p'].copy(),      # Genesis p -> NED q
+        'r': -data['r'].copy(),     # Genesis r -> NED r (inverted)
+    }
+
+
 def extract_arrays(logs):
     """
     Extract numpy arrays from state logs.
@@ -319,6 +350,8 @@ def main():
                        help='Save error analysis plot to file')
     parser.add_argument('--no-show', action='store_true',
                        help='Do not display plots (only save)')
+    parser.add_argument('--convert-genesis', action='store_true',
+                       help='Convert Genesis output from Genesis coords to NED coords')
     args = parser.parse_args()
 
     print("=" * 60)
@@ -340,6 +373,12 @@ def main():
     # Extract arrays
     vpython_data = extract_arrays(vpython_logs)
     genesis_data = extract_arrays(genesis_logs)
+
+    # Apply coordinate transform if requested
+    # 座標変換を適用
+    if args.convert_genesis:
+        print("\nConverting Genesis coords to NED...")
+        genesis_data = genesis_to_ned(genesis_data)
 
     # Compute metrics
     print("\n" + "=" * 60)

@@ -156,12 +156,12 @@ def run_headless(input_file, output_file, duration=10.0):
         ),
     )
 
-    # Add ground and drone
-    scene.add_entity(gs.morphs.Plane(collision=True))
+    # Add drone only (no ground for headless comparison)
+    # 比較用ヘッドレスでは床なし
     drone = scene.add_entity(
         gs.morphs.URDF(
             file=str(urdf_file),
-            pos=(0, 0, 2.0),
+            pos=(0, 0, 0.0),  # Start at origin
             euler=(0, 0, 0),
             fixed=False,
         ),
