@@ -118,6 +118,57 @@ struct TelemetryFFTPacket {
 static_assert(sizeof(TelemetryFFTPacket) == 32, "TelemetryFFTPacket size mismatch");
 
 /**
+ * @brief Single FFT sample (28 bytes)
+ *
+ * Used within batch packets.
+ * バッチパケット内の1サンプル
+ */
+struct FFTSample {
+    uint32_t timestamp_ms;    // ms since boot
+    float gyro_x;             // [rad/s]
+    float gyro_y;             // [rad/s]
+    float gyro_z;             // [rad/s]
+    float accel_x;            // [m/s²]
+    float accel_y;            // [m/s²]
+    float accel_z;            // [m/s²]
+};
+
+static_assert(sizeof(FFTSample) == 28, "FFTSample size mismatch");
+
+/**
+ * @brief Batch FFT packet structure (120 bytes)
+ *
+ * Contains 4 samples in one WebSocket frame to overcome
+ * per-frame overhead limitation (~155 frames/sec max).
+ *
+ * 4サンプルを1フレームにまとめて送信。
+ * フレームあたりのオーバーヘッド制限(~155fps)を回避。
+ *
+ * Frame rate: 100Hz → Sample rate: 400Hz
+ */
+#pragma pack(push, 1)
+struct TelemetryFFTBatchPacket {
+    // Header (4 bytes)
+    uint8_t  header;          // 0xBC (batch FFT packet)
+    uint8_t  packet_type;     // 0x31
+    uint8_t  sample_count;    // Number of samples (4)
+    uint8_t  reserved;
+
+    // Samples (28 bytes × 4 = 112 bytes)
+    FFTSample samples[4];
+
+    // Footer (4 bytes)
+    uint8_t  checksum;        // XOR of all preceding bytes
+    uint8_t  padding[3];      // 4-byte alignment
+};
+#pragma pack(pop)
+
+static_assert(sizeof(TelemetryFFTBatchPacket) == 120, "TelemetryFFTBatchPacket size mismatch");
+
+// Batch size constant
+inline constexpr int FFT_BATCH_SIZE = 4;
+
+/**
  * @brief Sensor status flags (bitfield)
  */
 enum SensorStatusFlags : uint8_t {

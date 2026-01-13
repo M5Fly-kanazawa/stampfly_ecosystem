@@ -1475,9 +1475,10 @@ static void cmd_fftmode(int argc, char** argv, void* context)
         cli->print("=== FFT Capture Mode ===\r\n");
         cli->print("  Status: %s\r\n", mode_str);
         cli->print("  Telemetry rate: %lu Hz\r\n", (unsigned long)g_telemetry_rate_hz);
-        cli->print("\r\nPacket size:\r\n");
-        cli->print("  Normal (50Hz): 116 bytes (full data)\r\n");
-        cli->print("  FFT (>50Hz):   32 bytes (gyro+accel only)\r\n");
+        cli->print("\r\nPacket format:\r\n");
+        cli->print("  Normal (50Hz): 116B full packet\r\n");
+        cli->print("  FFT (>50Hz):   120B batch (4 samples x 28B)\r\n");
+        cli->print("                 Frame rate = Sample rate / 4\r\n");
         cli->print("\r\nUsage:\r\n");
         cli->print("  fftmode on       - Enable high-speed mode (400Hz)\r\n");
         cli->print("  fftmode off      - Return to normal mode (50Hz)\r\n");

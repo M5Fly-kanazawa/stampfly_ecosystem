@@ -5,9 +5,10 @@ wifi_capture.py - WiFi Telemetry Capture Tool for FFT Analysis
 Captures high-rate telemetry data from StampFly drone via WiFi WebSocket
 for sensor FFT analysis and notch filter design.
 
-Supports two packet formats:
+Supports three packet formats:
 - Normal mode (50Hz): 116-byte full packet (header 0xAA)
-- FFT mode (>50Hz): 32-byte lightweight packet (header 0xBB, gyro+accel only)
+- FFT batch mode (>50Hz): 120-byte batch packet (header 0xBC, 4 samples)
+- Legacy FFT mode: 32-byte single packet (header 0xBB, deprecated)
 
 Usage:
     python wifi_capture.py [options]
@@ -82,18 +83,32 @@ NORMAL_PACKET_FORMAT += '3B'   # padding
 NORMAL_PACKET_SIZE = struct.calcsize(NORMAL_PACKET_FORMAT)
 assert NORMAL_PACKET_SIZE == 116, f"Normal packet size mismatch: {NORMAL_PACKET_SIZE}"
 
-# FFT packet format (32 bytes, header 0xBB)
-FFT_PACKET_FORMAT = '<'     # Little-endian
-FFT_PACKET_FORMAT += 'B'    # header (0xBB)
-FFT_PACKET_FORMAT += 'B'    # packet_type (0x30)
-FFT_PACKET_FORMAT += 'I'    # timestamp_ms
-FFT_PACKET_FORMAT += 'fff'  # gyro_x, gyro_y, gyro_z
-FFT_PACKET_FORMAT += 'fff'  # accel_x, accel_y, accel_z
-FFT_PACKET_FORMAT += 'B'    # checksum
-FFT_PACKET_FORMAT += 'B'    # padding
+# FFT Batch packet format (120 bytes, header 0xBC)
+# Contains 4 samples of 28 bytes each
+FFT_SAMPLE_FORMAT = '<Iffffff'  # timestamp_ms, gyro_xyz, accel_xyz (28 bytes)
+FFT_SAMPLE_SIZE = struct.calcsize(FFT_SAMPLE_FORMAT)
+assert FFT_SAMPLE_SIZE == 28, f"FFT sample size mismatch: {FFT_SAMPLE_SIZE}"
 
-FFT_PACKET_SIZE = struct.calcsize(FFT_PACKET_FORMAT)
-assert FFT_PACKET_SIZE == 32, f"FFT packet size mismatch: {FFT_PACKET_SIZE}"
+FFT_BATCH_SIZE = 4
+FFT_BATCH_PACKET_FORMAT = '<'   # Little-endian
+FFT_BATCH_PACKET_FORMAT += 'B'  # header (0xBC)
+FFT_BATCH_PACKET_FORMAT += 'B'  # packet_type (0x31)
+FFT_BATCH_PACKET_FORMAT += 'B'  # sample_count (4)
+FFT_BATCH_PACKET_FORMAT += 'B'  # reserved
+# 4 samples × 28 bytes = 112 bytes (parsed separately)
+FFT_BATCH_HEADER_SIZE = 4
+FFT_BATCH_PACKET_SIZE = 120  # 4 + 112 + 4
+
+# Legacy single FFT packet (32 bytes, header 0xBB) - deprecated
+LEGACY_FFT_PACKET_FORMAT = '<'
+LEGACY_FFT_PACKET_FORMAT += 'B'    # header (0xBB)
+LEGACY_FFT_PACKET_FORMAT += 'B'    # packet_type (0x30)
+LEGACY_FFT_PACKET_FORMAT += 'I'    # timestamp_ms
+LEGACY_FFT_PACKET_FORMAT += 'fff'  # gyro_x, gyro_y, gyro_z
+LEGACY_FFT_PACKET_FORMAT += 'fff'  # accel_x, accel_y, accel_z
+LEGACY_FFT_PACKET_FORMAT += 'B'    # checksum
+LEGACY_FFT_PACKET_FORMAT += 'B'    # padding
+LEGACY_FFT_PACKET_SIZE = 32
 
 # CSV columns for FFT mode (minimal)
 FFT_CSV_COLUMNS = [
@@ -119,12 +134,56 @@ NORMAL_CSV_COLUMNS = [
 ]
 
 
-def parse_fft_packet(data: bytes) -> dict:
-    """Parse FFT packet (32 bytes, header 0xBB)"""
-    if len(data) != FFT_PACKET_SIZE:
+def parse_fft_batch_packet(data: bytes) -> list:
+    """Parse FFT batch packet (120 bytes, header 0xBC)
+    Returns list of 4 sample dicts
+    """
+    if len(data) != FFT_BATCH_PACKET_SIZE:
         return None
 
-    values = struct.unpack(FFT_PACKET_FORMAT, data)
+    # Verify header
+    if data[0] != 0xBC:
+        return None
+
+    # Calculate checksum (XOR of bytes 0-115)
+    checksum = 0
+    for i in range(116):
+        checksum ^= data[i]
+
+    if checksum != data[116]:  # checksum at offset 116
+        return None
+
+    # Parse header
+    header = data[0]
+    packet_type = data[1]
+    sample_count = data[2]
+
+    # Parse samples
+    samples = []
+    for i in range(FFT_BATCH_SIZE):
+        offset = 4 + i * FFT_SAMPLE_SIZE  # 4-byte header + sample offset
+        sample_data = data[offset:offset + FFT_SAMPLE_SIZE]
+        values = struct.unpack(FFT_SAMPLE_FORMAT, sample_data)
+
+        samples.append({
+            'timestamp_ms': values[0],
+            'gyro_x': values[1],
+            'gyro_y': values[2],
+            'gyro_z': values[3],
+            'accel_x': values[4],
+            'accel_y': values[5],
+            'accel_z': values[6],
+        })
+
+    return samples
+
+
+def parse_legacy_fft_packet(data: bytes) -> dict:
+    """Parse legacy single FFT packet (32 bytes, header 0xBB)"""
+    if len(data) != LEGACY_FFT_PACKET_SIZE:
+        return None
+
+    values = struct.unpack(LEGACY_FFT_PACKET_FORMAT, data)
 
     # Verify header
     if values[0] != 0xBB:
@@ -135,7 +194,7 @@ def parse_fft_packet(data: bytes) -> dict:
     for i in range(30):
         checksum ^= data[i]
 
-    if checksum != values[-2]:  # checksum is second to last
+    if checksum != values[-2]:
         return None
 
     return {
@@ -165,7 +224,7 @@ def parse_normal_packet(data: bytes) -> dict:
     for i in range(112):
         checksum ^= data[i]
 
-    if checksum != values[-4]:  # checksum is 4th from last
+    if checksum != values[-4]:
         return None
 
     return {
@@ -204,19 +263,34 @@ def parse_normal_packet(data: bytes) -> dict:
 def parse_packet(data: bytes) -> tuple:
     """
     Parse packet, auto-detecting format from header byte.
-    Returns (packet_dict, is_fft_mode)
+    Returns (list_of_samples, mode_string)
+    - Normal: returns ([packet_dict], "normal")
+    - FFT Batch: returns ([sample1, sample2, sample3, sample4], "fft_batch")
+    - Legacy FFT: returns ([packet_dict], "fft_legacy")
     """
     if len(data) == 0:
         return None, None
 
     header = data[0]
 
-    if header == 0xBB and len(data) == FFT_PACKET_SIZE:
-        pkt = parse_fft_packet(data)
-        return pkt, True
+    if header == 0xBC and len(data) == FFT_BATCH_PACKET_SIZE:
+        samples = parse_fft_batch_packet(data)
+        if samples:
+            return samples, "fft_batch"
+        return None, None
+
+    elif header == 0xBB and len(data) == LEGACY_FFT_PACKET_SIZE:
+        pkt = parse_legacy_fft_packet(data)
+        if pkt:
+            return [pkt], "fft_legacy"
+        return None, None
+
     elif header == 0xAA and len(data) == NORMAL_PACKET_SIZE:
         pkt = parse_normal_packet(data)
-        return pkt, False
+        if pkt:
+            return [pkt], "normal"
+        return None, None
+
     else:
         return None, None
 
@@ -229,7 +303,8 @@ class TelemetryCapture:
         self.packets = []
         self.start_time = None
         self.errors = 0
-        self.fft_mode = None  # Detected from first packet
+        self.mode = None  # Detected from first packet
+        self.frame_count = 0
 
     async def capture(self, duration: float, progress_callback=None):
         """Capture packets for specified duration"""
@@ -245,13 +320,18 @@ class TelemetryCapture:
                     try:
                         data = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         if isinstance(data, bytes):
-                            packet, is_fft = parse_packet(data)
-                            if packet:
-                                self.packets.append(packet)
+                            samples, mode = parse_packet(data)
+                            if samples:
+                                self.packets.extend(samples)
+                                self.frame_count += 1
                                 # Detect mode from first packet
-                                if self.fft_mode is None:
-                                    self.fft_mode = is_fft
-                                    mode_str = "FFT (32B)" if is_fft else "Normal (116B)"
+                                if self.mode is None:
+                                    self.mode = mode
+                                    mode_str = {
+                                        "normal": "Normal (116B)",
+                                        "fft_batch": "FFT Batch (120B, 4 samples)",
+                                        "fft_legacy": "FFT Legacy (32B)"
+                                    }.get(mode, mode)
                                     print(f"Detected mode: {mode_str}")
                             else:
                                 self.errors += 1
@@ -262,7 +342,7 @@ class TelemetryCapture:
                     # Progress update
                     if progress_callback:
                         elapsed = time.time() - self.start_time
-                        progress_callback(elapsed, duration, len(self.packets))
+                        progress_callback(elapsed, duration, len(self.packets), self.frame_count)
 
         except ConnectionRefusedError:
             print(f"Error: Connection refused to {self.uri}")
@@ -281,7 +361,8 @@ class TelemetryCapture:
             return False
 
         # Choose columns based on mode
-        columns = FFT_CSV_COLUMNS if self.fft_mode else NORMAL_CSV_COLUMNS
+        is_fft = self.mode in ("fft_batch", "fft_legacy")
+        columns = FFT_CSV_COLUMNS if is_fft else NORMAL_CSV_COLUMNS
 
         with open(filename, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=columns, extrasaction='ignore')
@@ -289,7 +370,7 @@ class TelemetryCapture:
             for pkt in self.packets:
                 writer.writerow(pkt)
 
-        print(f"Saved {len(self.packets)} packets to {filename}")
+        print(f"Saved {len(self.packets)} samples to {filename}")
         return True
 
     def print_stats(self):
@@ -300,16 +381,24 @@ class TelemetryCapture:
 
         n = len(self.packets)
         duration = (self.packets[-1]['timestamp_ms'] - self.packets[0]['timestamp_ms']) / 1000.0
-        rate = n / duration if duration > 0 else 0
+        sample_rate = n / duration if duration > 0 else 0
+        frame_rate = self.frame_count / duration if duration > 0 else 0
 
-        mode_str = "FFT (32B)" if self.fft_mode else "Normal (116B)"
+        mode_str = {
+            "normal": "Normal (116B)",
+            "fft_batch": "FFT Batch (120B, 4 samples/frame)",
+            "fft_legacy": "FFT Legacy (32B)"
+        }.get(self.mode, self.mode)
+
         print(f"\n=== Capture Statistics ===")
         print(f"Mode: {mode_str}")
-        print(f"Packets: {n}")
+        print(f"Samples: {n}")
+        print(f"Frames: {self.frame_count}")
         print(f"Errors: {self.errors}")
         print(f"Duration: {duration:.2f}s")
-        print(f"Rate: {rate:.1f} Hz")
-        print(f"Nyquist: {rate/2:.1f} Hz")
+        print(f"Sample rate: {sample_rate:.1f} Hz")
+        print(f"Frame rate: {frame_rate:.1f} Hz")
+        print(f"Nyquist: {sample_rate/2:.1f} Hz")
 
         # Gyro/Accel stats
         if HAS_NUMPY:
@@ -415,14 +504,15 @@ class TelemetryCapture:
         plt.show()
 
 
-def progress_bar(elapsed, total, packets):
+def progress_bar(elapsed, total, samples, frames):
     """Print progress bar"""
     pct = elapsed / total * 100
     bar_len = 30
     filled = int(bar_len * elapsed / total)
     bar = '=' * filled + '-' * (bar_len - filled)
-    rate = packets / elapsed if elapsed > 0 else 0
-    print(f"\r[{bar}] {pct:.0f}% | {packets} pkts | {rate:.0f} Hz", end='', flush=True)
+    sample_rate = samples / elapsed if elapsed > 0 else 0
+    frame_rate = frames / elapsed if elapsed > 0 else 0
+    print(f"\r[{bar}] {pct:.0f}% | {samples} samples | {sample_rate:.0f} Hz | {frames} frames", end='', flush=True)
 
 
 async def main():
