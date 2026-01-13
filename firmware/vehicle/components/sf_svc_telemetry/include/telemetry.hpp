@@ -86,6 +86,38 @@ struct TelemetryWSPacket {
 static_assert(sizeof(TelemetryWSPacket) == 116, "TelemetryWSPacket size mismatch");
 
 /**
+ * @brief Lightweight FFT packet structure (32 bytes)
+ *
+ * Minimal packet for high-rate FFT data capture.
+ * Contains only gyro and accel data for vibration analysis.
+ * 軽量FFTパケット - 振動解析用のジャイロ・加速度のみ
+ */
+#pragma pack(push, 1)
+struct TelemetryFFTPacket {
+    // Header (2 bytes)
+    uint8_t  header;          // 0xBB (different from normal packet)
+    uint8_t  packet_type;     // 0x30 = FFT packet
+    uint32_t timestamp_ms;    // ms since boot
+
+    // Gyro - bias corrected (12 bytes)
+    float gyro_x;             // [rad/s]
+    float gyro_y;             // [rad/s]
+    float gyro_z;             // [rad/s]
+
+    // Accel - bias corrected (12 bytes)
+    float accel_x;            // [m/s²]
+    float accel_y;            // [m/s²]
+    float accel_z;            // [m/s²]
+
+    // Footer (2 bytes)
+    uint8_t  checksum;        // XOR of all preceding bytes
+    uint8_t  padding;         // 4-byte alignment
+};
+#pragma pack(pop)
+
+static_assert(sizeof(TelemetryFFTPacket) == 32, "TelemetryFFTPacket size mismatch");
+
+/**
  * @brief Sensor status flags (bitfield)
  */
 enum SensorStatusFlags : uint8_t {

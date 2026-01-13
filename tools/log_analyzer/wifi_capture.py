@@ -5,6 +5,10 @@ wifi_capture.py - WiFi Telemetry Capture Tool for FFT Analysis
 Captures high-rate telemetry data from StampFly drone via WiFi WebSocket
 for sensor FFT analysis and notch filter design.
 
+Supports two packet formats:
+- Normal mode (50Hz): 116-byte full packet (header 0xAA)
+- FFT mode (>50Hz): 32-byte lightweight packet (header 0xBB, gyro+accel only)
+
 Usage:
     python wifi_capture.py [options]
 
@@ -17,12 +21,10 @@ Options:
     --no-save           Don't save to file, just display stats
 
 Workflow:
-    1. Connect USB to StampFly, run 'fftmode on' in CLI (160Hz max)
+    1. Connect USB to StampFly, run 'fftmode on' in CLI
     2. Disconnect USB, power on with battery
     3. Connect your PC to StampFly WiFi AP
     4. Run: python wifi_capture.py --duration 30 --fft
-
-Note: WiFi bandwidth limits max rate to ~160Hz (Nyquist: 80Hz)
 
 Examples:
     python wifi_capture.py                    # Capture 30s, auto-save
@@ -54,31 +56,54 @@ except ImportError:
     HAS_NUMPY = False
 
 
-# Packet format (matches TelemetryWSPacket in firmware)
-# Total size: 116 bytes
-PACKET_FORMAT = '<'  # Little-endian
-PACKET_FORMAT += 'B'    # header (0xAA)
-PACKET_FORMAT += 'B'    # packet_type (0x20)
-PACKET_FORMAT += 'I'    # timestamp_ms
-PACKET_FORMAT += 'fff'  # roll, pitch, yaw
-PACKET_FORMAT += 'fff'  # pos_x, pos_y, pos_z
-PACKET_FORMAT += 'fff'  # vel_x, vel_y, vel_z
-PACKET_FORMAT += 'fff'  # gyro_x, gyro_y, gyro_z
-PACKET_FORMAT += 'fff'  # accel_x, accel_y, accel_z
-PACKET_FORMAT += 'ffff' # ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw
-PACKET_FORMAT += 'fff'  # mag_x, mag_y, mag_z
-PACKET_FORMAT += 'f'    # voltage
-PACKET_FORMAT += 'ff'   # tof_bottom, tof_front
-PACKET_FORMAT += 'BB'   # flight_state, sensor_status
-PACKET_FORMAT += 'I'    # heartbeat
-PACKET_FORMAT += 'B'    # checksum
-PACKET_FORMAT += '3B'   # padding
+# =============================================================================
+# Packet Formats
+# =============================================================================
 
-PACKET_SIZE = struct.calcsize(PACKET_FORMAT)
-assert PACKET_SIZE == 116, f"Packet size mismatch: {PACKET_SIZE} != 116"
+# Normal packet format (116 bytes, header 0xAA)
+NORMAL_PACKET_FORMAT = '<'  # Little-endian
+NORMAL_PACKET_FORMAT += 'B'    # header (0xAA)
+NORMAL_PACKET_FORMAT += 'B'    # packet_type (0x20)
+NORMAL_PACKET_FORMAT += 'I'    # timestamp_ms
+NORMAL_PACKET_FORMAT += 'fff'  # roll, pitch, yaw
+NORMAL_PACKET_FORMAT += 'fff'  # pos_x, pos_y, pos_z
+NORMAL_PACKET_FORMAT += 'fff'  # vel_x, vel_y, vel_z
+NORMAL_PACKET_FORMAT += 'fff'  # gyro_x, gyro_y, gyro_z
+NORMAL_PACKET_FORMAT += 'fff'  # accel_x, accel_y, accel_z
+NORMAL_PACKET_FORMAT += 'ffff' # ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw
+NORMAL_PACKET_FORMAT += 'fff'  # mag_x, mag_y, mag_z
+NORMAL_PACKET_FORMAT += 'f'    # voltage
+NORMAL_PACKET_FORMAT += 'ff'   # tof_bottom, tof_front
+NORMAL_PACKET_FORMAT += 'BB'   # flight_state, sensor_status
+NORMAL_PACKET_FORMAT += 'I'    # heartbeat
+NORMAL_PACKET_FORMAT += 'B'    # checksum
+NORMAL_PACKET_FORMAT += '3B'   # padding
 
-# CSV header columns
-CSV_COLUMNS = [
+NORMAL_PACKET_SIZE = struct.calcsize(NORMAL_PACKET_FORMAT)
+assert NORMAL_PACKET_SIZE == 116, f"Normal packet size mismatch: {NORMAL_PACKET_SIZE}"
+
+# FFT packet format (32 bytes, header 0xBB)
+FFT_PACKET_FORMAT = '<'     # Little-endian
+FFT_PACKET_FORMAT += 'B'    # header (0xBB)
+FFT_PACKET_FORMAT += 'B'    # packet_type (0x30)
+FFT_PACKET_FORMAT += 'I'    # timestamp_ms
+FFT_PACKET_FORMAT += 'fff'  # gyro_x, gyro_y, gyro_z
+FFT_PACKET_FORMAT += 'fff'  # accel_x, accel_y, accel_z
+FFT_PACKET_FORMAT += 'B'    # checksum
+FFT_PACKET_FORMAT += 'B'    # padding
+
+FFT_PACKET_SIZE = struct.calcsize(FFT_PACKET_FORMAT)
+assert FFT_PACKET_SIZE == 32, f"FFT packet size mismatch: {FFT_PACKET_SIZE}"
+
+# CSV columns for FFT mode (minimal)
+FFT_CSV_COLUMNS = [
+    'timestamp_ms',
+    'gyro_x', 'gyro_y', 'gyro_z',
+    'accel_x', 'accel_y', 'accel_z',
+]
+
+# CSV columns for normal mode (full)
+NORMAL_CSV_COLUMNS = [
     'timestamp_ms',
     'roll_deg', 'pitch_deg', 'yaw_deg',
     'pos_x', 'pos_y', 'pos_z',
@@ -94,16 +119,45 @@ CSV_COLUMNS = [
 ]
 
 
-def parse_packet(data: bytes) -> dict:
-    """Parse binary telemetry packet into dict"""
-    if len(data) != PACKET_SIZE:
+def parse_fft_packet(data: bytes) -> dict:
+    """Parse FFT packet (32 bytes, header 0xBB)"""
+    if len(data) != FFT_PACKET_SIZE:
         return None
 
-    values = struct.unpack(PACKET_FORMAT, data)
+    values = struct.unpack(FFT_PACKET_FORMAT, data)
 
-    # Verify header and checksum
-    header = values[0]
-    if header != 0xAA:
+    # Verify header
+    if values[0] != 0xBB:
+        return None
+
+    # Calculate checksum (XOR of bytes 0-29)
+    checksum = 0
+    for i in range(30):
+        checksum ^= data[i]
+
+    if checksum != values[-2]:  # checksum is second to last
+        return None
+
+    return {
+        'timestamp_ms': values[2],
+        'gyro_x': values[3],
+        'gyro_y': values[4],
+        'gyro_z': values[5],
+        'accel_x': values[6],
+        'accel_y': values[7],
+        'accel_z': values[8],
+    }
+
+
+def parse_normal_packet(data: bytes) -> dict:
+    """Parse normal packet (116 bytes, header 0xAA)"""
+    if len(data) != NORMAL_PACKET_SIZE:
+        return None
+
+    values = struct.unpack(NORMAL_PACKET_FORMAT, data)
+
+    # Verify header
+    if values[0] != 0xAA:
         return None
 
     # Calculate checksum (XOR of bytes 0-111)
@@ -111,7 +165,7 @@ def parse_packet(data: bytes) -> dict:
     for i in range(112):
         checksum ^= data[i]
 
-    if checksum != values[-4]:  # checksum is at index -4 before padding
+    if checksum != values[-4]:  # checksum is 4th from last
         return None
 
     return {
@@ -147,6 +201,26 @@ def parse_packet(data: bytes) -> dict:
     }
 
 
+def parse_packet(data: bytes) -> tuple:
+    """
+    Parse packet, auto-detecting format from header byte.
+    Returns (packet_dict, is_fft_mode)
+    """
+    if len(data) == 0:
+        return None, None
+
+    header = data[0]
+
+    if header == 0xBB and len(data) == FFT_PACKET_SIZE:
+        pkt = parse_fft_packet(data)
+        return pkt, True
+    elif header == 0xAA and len(data) == NORMAL_PACKET_SIZE:
+        pkt = parse_normal_packet(data)
+        return pkt, False
+    else:
+        return None, None
+
+
 class TelemetryCapture:
     """Capture telemetry data from WebSocket"""
 
@@ -155,6 +229,7 @@ class TelemetryCapture:
         self.packets = []
         self.start_time = None
         self.errors = 0
+        self.fft_mode = None  # Detected from first packet
 
     async def capture(self, duration: float, progress_callback=None):
         """Capture packets for specified duration"""
@@ -170,9 +245,14 @@ class TelemetryCapture:
                     try:
                         data = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         if isinstance(data, bytes):
-                            packet = parse_packet(data)
+                            packet, is_fft = parse_packet(data)
                             if packet:
                                 self.packets.append(packet)
+                                # Detect mode from first packet
+                                if self.fft_mode is None:
+                                    self.fft_mode = is_fft
+                                    mode_str = "FFT (32B)" if is_fft else "Normal (116B)"
+                                    print(f"Detected mode: {mode_str}")
                             else:
                                 self.errors += 1
                     except asyncio.TimeoutError:
@@ -200,13 +280,14 @@ class TelemetryCapture:
             print("No packets to save")
             return False
 
+        # Choose columns based on mode
+        columns = FFT_CSV_COLUMNS if self.fft_mode else NORMAL_CSV_COLUMNS
+
         with open(filename, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+            writer = csv.DictWriter(f, fieldnames=columns, extrasaction='ignore')
             writer.writeheader()
             for pkt in self.packets:
-                # Map packet fields to CSV columns
-                row = {col: pkt.get(col, '') for col in CSV_COLUMNS}
-                writer.writerow(row)
+                writer.writerow(pkt)
 
         print(f"Saved {len(self.packets)} packets to {filename}")
         return True
@@ -221,24 +302,32 @@ class TelemetryCapture:
         duration = (self.packets[-1]['timestamp_ms'] - self.packets[0]['timestamp_ms']) / 1000.0
         rate = n / duration if duration > 0 else 0
 
+        mode_str = "FFT (32B)" if self.fft_mode else "Normal (116B)"
         print(f"\n=== Capture Statistics ===")
+        print(f"Mode: {mode_str}")
         print(f"Packets: {n}")
         print(f"Errors: {self.errors}")
         print(f"Duration: {duration:.2f}s")
         print(f"Rate: {rate:.1f} Hz")
+        print(f"Nyquist: {rate/2:.1f} Hz")
 
-        # Voltage stats
-        voltages = [p['voltage'] for p in self.packets]
-        print(f"Voltage: {min(voltages):.2f} - {max(voltages):.2f}V")
-
-        # Gyro stats (for FFT preview)
+        # Gyro/Accel stats
         if HAS_NUMPY:
             gyro_x = np.array([p['gyro_x'] for p in self.packets])
             gyro_y = np.array([p['gyro_y'] for p in self.packets])
             gyro_z = np.array([p['gyro_z'] for p in self.packets])
-            print(f"Gyro X: mean={np.mean(gyro_x):.4f}, std={np.std(gyro_x):.4f} rad/s")
-            print(f"Gyro Y: mean={np.mean(gyro_y):.4f}, std={np.std(gyro_y):.4f} rad/s")
-            print(f"Gyro Z: mean={np.mean(gyro_z):.4f}, std={np.std(gyro_z):.4f} rad/s")
+            accel_x = np.array([p['accel_x'] for p in self.packets])
+            accel_y = np.array([p['accel_y'] for p in self.packets])
+            accel_z = np.array([p['accel_z'] for p in self.packets])
+
+            print(f"\nGyro [rad/s]:")
+            print(f"  X: mean={np.mean(gyro_x):+.4f}, std={np.std(gyro_x):.4f}")
+            print(f"  Y: mean={np.mean(gyro_y):+.4f}, std={np.std(gyro_y):.4f}")
+            print(f"  Z: mean={np.mean(gyro_z):+.4f}, std={np.std(gyro_z):.4f}")
+            print(f"Accel [m/s^2]:")
+            print(f"  X: mean={np.mean(accel_x):+.2f}, std={np.std(accel_x):.2f}")
+            print(f"  Y: mean={np.mean(accel_y):+.2f}, std={np.std(accel_y):.2f}")
+            print(f"  Z: mean={np.mean(accel_z):+.2f}, std={np.std(accel_z):.2f}")
 
     def run_fft_analysis(self):
         """Run FFT analysis on captured data"""
@@ -272,7 +361,7 @@ class TelemetryCapture:
         print(f"\n=== FFT Analysis ===")
         print(f"Samples: {n}")
         print(f"Sample rate: {fs:.1f} Hz")
-        print(f"Frequency resolution: {fs/n:.2f} Hz")
+        print(f"Frequency resolution: {fs/n:.3f} Hz")
         print(f"Max frequency: {fs/2:.1f} Hz (Nyquist)")
 
         # Compute FFT
@@ -286,15 +375,15 @@ class TelemetryCapture:
 
         # Plot
         fig, axes = plt.subplots(2, 3, figsize=(14, 8))
-        fig.suptitle(f'FFT Analysis (Fs={fs:.1f}Hz, N={n})', fontsize=12)
+        fig.suptitle(f'FFT Analysis (Fs={fs:.1f}Hz, N={n}, Nyquist={fs/2:.1f}Hz)', fontsize=12)
 
         signals = [
             (gyro_x, 'Gyro X [rad/s]'),
             (gyro_y, 'Gyro Y [rad/s]'),
             (gyro_z, 'Gyro Z [rad/s]'),
-            (accel_x, 'Accel X [m/s²]'),
-            (accel_y, 'Accel Y [m/s²]'),
-            (accel_z, 'Accel Z [m/s²]'),
+            (accel_x, 'Accel X [m/s^2]'),
+            (accel_y, 'Accel Y [m/s^2]'),
+            (accel_z, 'Accel Z [m/s^2]'),
         ]
 
         for ax, (signal, label) in zip(axes.flat, signals):
@@ -304,15 +393,23 @@ class TelemetryCapture:
             ax.set_ylabel('Magnitude [dB]')
             ax.set_title(label)
             ax.grid(True, alpha=0.3)
-            ax.set_xlim(0, min(200, fs/2))  # Limit to 200Hz or Nyquist
+            ax.set_xlim(0, min(fs/2, 250))  # Limit to Nyquist or 250Hz
 
-            # Find peaks
-            peak_idx = np.argmax(fft_db[1:]) + 1  # Skip DC
-            peak_freq = freq[peak_idx]
-            peak_db = fft_db[peak_idx]
-            ax.axvline(peak_freq, color='r', linewidth=0.5, alpha=0.5)
-            ax.annotate(f'{peak_freq:.1f}Hz', xy=(peak_freq, peak_db),
-                       fontsize=8, color='r')
+            # Find top 3 peaks (excluding DC)
+            fft_db_no_dc = fft_db.copy()
+            fft_db_no_dc[:3] = -100  # Mask DC and very low freq
+            for i in range(3):
+                peak_idx = np.argmax(fft_db_no_dc)
+                if fft_db_no_dc[peak_idx] > -60:  # Only show significant peaks
+                    peak_freq = freq[peak_idx]
+                    peak_db = fft_db[peak_idx]
+                    color = ['r', 'orange', 'green'][i]
+                    ax.axvline(peak_freq, color=color, linewidth=0.8, alpha=0.7)
+                    ax.annotate(f'{peak_freq:.1f}Hz', xy=(peak_freq, peak_db),
+                               fontsize=7, color=color)
+                    # Mask this peak and nearby frequencies
+                    mask_width = max(3, int(n * 0.01))
+                    fft_db_no_dc[max(0, peak_idx-mask_width):peak_idx+mask_width] = -100
 
         plt.tight_layout()
         plt.show()
@@ -325,7 +422,7 @@ def progress_bar(elapsed, total, packets):
     filled = int(bar_len * elapsed / total)
     bar = '=' * filled + '-' * (bar_len - filled)
     rate = packets / elapsed if elapsed > 0 else 0
-    print(f"\r[{bar}] {pct:.0f}% | {packets} packets | {rate:.0f} Hz", end='', flush=True)
+    print(f"\r[{bar}] {pct:.0f}% | {packets} pkts | {rate:.0f} Hz", end='', flush=True)
 
 
 async def main():
