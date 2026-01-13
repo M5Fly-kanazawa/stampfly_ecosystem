@@ -3,15 +3,20 @@
  * @brief テレメトリタスク - WebSocketブロードキャスト
  *
  * Rate is configurable via CLI 'fftmode' command
- * - Normal mode (50Hz): Full 116-byte packet
- * - FFT mode (>50Hz): Batch 120-byte packet (4 samples × 28B)
+ * - Normal mode (50Hz): Full 116-byte packet, uses vTaskDelayUntil
+ * - FFT mode (>50Hz): Batch 120-byte packet (4 samples × 28B), synced with IMU
  *
  * レートはCLI 'fftmode'コマンドで設定可能
- * - 通常モード (50Hz): フル116バイトパケット
- * - FFTモード (>50Hz): バッチ120バイトパケット (4サンプル)
+ * - 通常モード (50Hz): フル116バイトパケット、vTaskDelayUntil使用
+ * - FFTモード (>50Hz): バッチ120バイトパケット、IMU同期
  *
- * FFT mode overcomes per-frame overhead (~155 fps limit) by batching:
- * - Sample rate 400Hz, Frame rate 100Hz (4 samples/frame)
+ * FFT mode uses semaphore synchronization with IMU task to ensure
+ * each sample has unique data. This overcomes per-frame overhead
+ * (~155 fps limit) by batching 4 samples per frame.
+ *
+ * FFTモードはセマフォでIMUタスクと同期し、各サンプルが
+ * ユニークなデータを持つことを保証。4サンプルをバッチ化して
+ * フレームオーバーヘッド制限を回避。
  */
 
 #include "tasks_common.hpp"
@@ -35,19 +40,17 @@ void TelemetryTask(void* pvParameters)
     TickType_t last_wake_time = xTaskGetTickCount();
 
     // Determine mode and calculate periods
-    // FFTモードは高速サンプリング + バッチ送信
+    // FFTモードは高速サンプリング + バッチ送信 (IMU同期)
     bool fft_mode = (g_telemetry_rate_hz > 50);
 
-    // Sample period (how often we collect data)
-    // サンプリング周期
+    // Sample period for normal mode (FFT mode uses semaphore sync)
+    // 通常モード用サンプリング周期（FFTモードはセマフォ同期）
     uint32_t sample_period_ms = 1000 / g_telemetry_rate_hz;
     TickType_t sample_period = pdMS_TO_TICKS(sample_period_ms);
 
     if (fft_mode) {
-        ESP_LOGI(TAG, "FFT mode: %lu Hz sampling, batch of %d, frame rate %lu Hz",
-                 (unsigned long)g_telemetry_rate_hz,
-                 stampfly::FFT_BATCH_SIZE,
-                 (unsigned long)(g_telemetry_rate_hz / stampfly::FFT_BATCH_SIZE));
+        ESP_LOGI(TAG, "FFT mode: 400Hz IMU-synced sampling, batch of %d, frame rate ~100Hz",
+                 stampfly::FFT_BATCH_SIZE);
     } else {
         ESP_LOGI(TAG, "Normal mode: %lu Hz, 116B full packet",
                  (unsigned long)g_telemetry_rate_hz);
@@ -63,10 +66,18 @@ void TelemetryTask(void* pvParameters)
 
     while (true) {
         if (fft_mode) {
-            // === FFT Mode: Collect sample into batch ===
-            // FFTモード: サンプルをバッチに蓄積
+            // === FFT Mode: Collect sample into batch (IMU-synced) ===
+            // FFTモード: IMU同期でサンプルをバッチに蓄積
 
-            // Collect sample
+            // Wait for IMU update (400Hz, synchronized with IMU task)
+            // IMU更新を待機（400Hz、IMUタスクと同期）
+            if (xSemaphoreTake(g_telemetry_imu_semaphore, pdMS_TO_TICKS(10)) != pdTRUE) {
+                // Timeout - IMU task might be stuck, skip this iteration
+                continue;
+            }
+
+            // Collect sample (now guaranteed to have fresh IMU data)
+            // サンプル取得（新しいIMUデータが保証される）
             stampfly::Vec3 accel, gyro;
             state.getIMUCorrected(accel, gyro);
 
@@ -106,6 +117,9 @@ void TelemetryTask(void* pvParameters)
                 // Reset batch
                 batch_index = 0;
             }
+
+            // No vTaskDelayUntil here - timing is controlled by IMU semaphore
+            // ここでは vTaskDelayUntil を使わない - タイミングはIMUセマフォで制御
 
         } else {
             // === Normal Mode: Full packet (116 bytes) ===
@@ -185,8 +199,10 @@ void TelemetryTask(void* pvParameters)
 
                 telemetry.broadcast(&pkt, sizeof(pkt));
             }
-        }
 
-        vTaskDelayUntil(&last_wake_time, sample_period);
+            // Normal mode uses periodic timing
+            // 通常モードは周期的タイミングを使用
+            vTaskDelayUntil(&last_wake_time, sample_period);
+        }
     }
 }

@@ -151,6 +151,7 @@ TaskHandle_t g_telemetry_task_handle = nullptr;
 esp_timer_handle_t g_imu_timer = nullptr;
 SemaphoreHandle_t g_imu_semaphore = nullptr;
 SemaphoreHandle_t g_control_semaphore = nullptr;
+SemaphoreHandle_t g_telemetry_imu_semaphore = nullptr;
 
 } // namespace globals
 

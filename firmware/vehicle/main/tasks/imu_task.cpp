@@ -95,6 +95,10 @@ void IMUTask(void* pvParameters)
                 stampfly::StateVector3 gyro_vec(filtered_gyro[0], filtered_gyro[1], filtered_gyro[2]);
                 state.updateIMU(accel_vec, gyro_vec);
 
+                // Signal telemetry task for FFT mode (400Hz sync)
+                // FFTモードのテレメトリタスクに新しいIMUデータを通知
+                xSemaphoreGive(g_telemetry_imu_semaphore);
+
                 // Prepare vectors for estimators
                 stampfly::math::Vector3 a(filtered_accel[0], filtered_accel[1], filtered_accel[2]);
                 stampfly::math::Vector3 g(filtered_gyro[0], filtered_gyro[1], filtered_gyro[2]);

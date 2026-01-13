@@ -198,6 +198,7 @@ extern TaskHandle_t g_telemetry_task_handle;
 extern esp_timer_handle_t g_imu_timer;
 extern SemaphoreHandle_t g_imu_semaphore;
 extern SemaphoreHandle_t g_control_semaphore;
+extern SemaphoreHandle_t g_telemetry_imu_semaphore;  // For FFT mode sync with IMU
 
 } // namespace globals
 

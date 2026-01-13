@@ -364,6 +364,13 @@ static void startTasks()
         ESP_LOGE(TAG, "Failed to create control semaphore");
     }
 
+    // Semaphore for telemetry FFT mode sync with IMU (400Hz)
+    // テレメトリFFTモード用IMU同期セマフォ
+    g_telemetry_imu_semaphore = xSemaphoreCreateBinary();
+    if (g_telemetry_imu_semaphore == nullptr) {
+        ESP_LOGE(TAG, "Failed to create telemetry IMU semaphore");
+    }
+
     esp_timer_create_args_t imu_timer_args = {
         .callback = imu_timer_callback,
         .arg = nullptr,
