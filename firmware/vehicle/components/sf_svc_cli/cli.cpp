@@ -30,9 +30,71 @@
 
 static const char* TAG = "CLI";
 
-// NVS namespace and key for log level
+// NVS namespace and keys
 static const char* NVS_NAMESPACE_CLI = "stampfly_cli";
 static const char* NVS_KEY_LOGLEVEL = "loglevel";
+static const char* NVS_KEY_TRIM_ROLL = "trim_roll";
+static const char* NVS_KEY_TRIM_PITCH = "trim_pitch";
+static const char* NVS_KEY_TRIM_YAW = "trim_yaw";
+
+// =============================================================================
+// Trim State - グローバルトリム値
+// =============================================================================
+// control_task.cppからアクセスされる
+// Accessed from control_task.cpp
+
+float g_trim_roll = 0.0f;
+float g_trim_pitch = 0.0f;
+float g_trim_yaw = 0.0f;
+
+// =============================================================================
+// NVS Helper Functions
+// =============================================================================
+
+// Helper: Load trim values from NVS
+static void loadTrimFromNVS()
+{
+    nvs_handle_t handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE_CLI, NVS_READONLY, &handle);
+    if (ret != ESP_OK) {
+        return;  // Keep defaults
+    }
+
+    // Read trim values (stored as int32 × 10000 for precision)
+    int32_t val;
+    if (nvs_get_i32(handle, NVS_KEY_TRIM_ROLL, &val) == ESP_OK) {
+        g_trim_roll = val / 10000.0f;
+    }
+    if (nvs_get_i32(handle, NVS_KEY_TRIM_PITCH, &val) == ESP_OK) {
+        g_trim_pitch = val / 10000.0f;
+    }
+    if (nvs_get_i32(handle, NVS_KEY_TRIM_YAW, &val) == ESP_OK) {
+        g_trim_yaw = val / 10000.0f;
+    }
+
+    nvs_close(handle);
+    ESP_LOGI(TAG, "Trim loaded: R=%.4f P=%.4f Y=%.4f", g_trim_roll, g_trim_pitch, g_trim_yaw);
+}
+
+// Helper: Save trim values to NVS
+static esp_err_t saveTrimToNVS()
+{
+    nvs_handle_t handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE_CLI, NVS_READWRITE, &handle);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS for trim: %d", ret);
+        return ret;
+    }
+
+    // Store as int32 × 10000 for precision
+    nvs_set_i32(handle, NVS_KEY_TRIM_ROLL, static_cast<int32_t>(g_trim_roll * 10000));
+    nvs_set_i32(handle, NVS_KEY_TRIM_PITCH, static_cast<int32_t>(g_trim_pitch * 10000));
+    nvs_set_i32(handle, NVS_KEY_TRIM_YAW, static_cast<int32_t>(g_trim_yaw * 10000));
+
+    ret = nvs_commit(handle);
+    nvs_close(handle);
+    return ret;
+}
 
 // Helper: Load log level from NVS
 static esp_log_level_t loadLogLevelFromNVS()
@@ -132,6 +194,7 @@ static void cmd_debug(int argc, char** argv, void* context);
 static void cmd_led(int argc, char** argv, void* context);
 static void cmd_sound(int argc, char** argv, void* context);
 static void cmd_pos(int argc, char** argv, void* context);
+static void cmd_trim(int argc, char** argv, void* context);
 
 esp_err_t CLI::init()
 {
@@ -164,6 +227,9 @@ esp_err_t CLI::init()
         "none", "error", "warn", "info", "debug", "verbose"
     };
     ESP_LOGI(TAG, "Log level restored from NVS: %s", level_names[saved_level]);
+
+    // Load trim values from NVS
+    loadTrimFromNVS();
 
     initialized_ = true;
     ESP_LOGI(TAG, "CLI initialized");
@@ -303,6 +369,7 @@ void CLI::registerDefaultCommands()
     registerCommand("led", cmd_led, "LED [brightness <0-255>]", this);
     registerCommand("sound", cmd_sound, "Sound [on|off]", this);
     registerCommand("pos", cmd_pos, "Position [reset|status]", this);
+    registerCommand("trim", cmd_trim, "Trim adjust [roll|pitch|yaw <val>|save|reset]", this);
 }
 
 // ========== Command Handlers ==========
@@ -1251,6 +1318,95 @@ static void cmd_pos(int argc, char** argv, void* context)
         cli->print("Diverged: %s\r\n", g_fusion_ptr->isDiverged() ? "YES" : "NO");
     } else {
         cli->print("Usage: pos [reset|status]\r\n");
+    }
+}
+
+static void cmd_trim(int argc, char** argv, void* context)
+{
+    CLI* cli = static_cast<CLI*>(context);
+
+    // Include config for trim limits
+    constexpr float MAX_TRIM = 0.2f;
+
+    if (argc < 2) {
+        // Show current trim values
+        cli->print("=== Trim Settings ===\r\n");
+        cli->print("  Roll:  %+.4f\r\n", g_trim_roll);
+        cli->print("  Pitch: %+.4f\r\n", g_trim_pitch);
+        cli->print("  Yaw:   %+.4f\r\n", g_trim_yaw);
+        cli->print("\r\nUsage:\r\n");
+        cli->print("  trim roll <value>   - Set roll trim (%.2f to +%.2f)\r\n", -MAX_TRIM, MAX_TRIM);
+        cli->print("  trim pitch <value>  - Set pitch trim\r\n");
+        cli->print("  trim yaw <value>    - Set yaw trim\r\n");
+        cli->print("  trim save           - Save to NVS\r\n");
+        cli->print("  trim reset          - Reset to zero\r\n");
+        return;
+    }
+
+    const char* cmd = argv[1];
+
+    if (strcmp(cmd, "roll") == 0) {
+        if (argc < 3) {
+            cli->print("Roll trim: %+.4f\r\n", g_trim_roll);
+            cli->print("Usage: trim roll <value>\r\n");
+            return;
+        }
+        float val = atof(argv[2]);
+        if (val < -MAX_TRIM || val > MAX_TRIM) {
+            cli->print("Value out of range. Use %.2f to +%.2f\r\n", -MAX_TRIM, MAX_TRIM);
+            return;
+        }
+        g_trim_roll = val;
+        cli->print("Roll trim set to %+.4f\r\n", g_trim_roll);
+    }
+    else if (strcmp(cmd, "pitch") == 0) {
+        if (argc < 3) {
+            cli->print("Pitch trim: %+.4f\r\n", g_trim_pitch);
+            cli->print("Usage: trim pitch <value>\r\n");
+            return;
+        }
+        float val = atof(argv[2]);
+        if (val < -MAX_TRIM || val > MAX_TRIM) {
+            cli->print("Value out of range. Use %.2f to +%.2f\r\n", -MAX_TRIM, MAX_TRIM);
+            return;
+        }
+        g_trim_pitch = val;
+        cli->print("Pitch trim set to %+.4f\r\n", g_trim_pitch);
+    }
+    else if (strcmp(cmd, "yaw") == 0) {
+        if (argc < 3) {
+            cli->print("Yaw trim: %+.4f\r\n", g_trim_yaw);
+            cli->print("Usage: trim yaw <value>\r\n");
+            return;
+        }
+        float val = atof(argv[2]);
+        if (val < -MAX_TRIM || val > MAX_TRIM) {
+            cli->print("Value out of range. Use %.2f to +%.2f\r\n", -MAX_TRIM, MAX_TRIM);
+            return;
+        }
+        g_trim_yaw = val;
+        cli->print("Yaw trim set to %+.4f\r\n", g_trim_yaw);
+    }
+    else if (strcmp(cmd, "save") == 0) {
+        if (saveTrimToNVS() == ESP_OK) {
+            cli->print("Trim saved to NVS\r\n");
+            cli->print("  Roll:  %+.4f\r\n", g_trim_roll);
+            cli->print("  Pitch: %+.4f\r\n", g_trim_pitch);
+            cli->print("  Yaw:   %+.4f\r\n", g_trim_yaw);
+        } else {
+            cli->print("Failed to save trim to NVS\r\n");
+        }
+    }
+    else if (strcmp(cmd, "reset") == 0) {
+        g_trim_roll = 0.0f;
+        g_trim_pitch = 0.0f;
+        g_trim_yaw = 0.0f;
+        cli->print("Trim reset to zero\r\n");
+        cli->print("Use 'trim save' to persist\r\n");
+    }
+    else {
+        cli->print("Unknown subcommand: %s\r\n", cmd);
+        cli->print("Usage: trim [roll|pitch|yaw <val>|save|reset]\r\n");
     }
 }
 

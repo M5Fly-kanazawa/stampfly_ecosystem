@@ -18,6 +18,13 @@
 #include "motor_model.hpp"
 #include "controller_comm.hpp"  // for CTRL_FLAG_MODE
 #include "led_manager.hpp"      // for flight mode LED indication
+#include <algorithm>            // for std::clamp
+
+// Trim values (defined in cli.cpp)
+// トリム値（cli.cppで定義）
+extern float g_trim_roll;
+extern float g_trim_pitch;
+extern float g_trim_yaw;
 
 static const char* TAG = "ControlTask";
 
@@ -315,6 +322,18 @@ void ControlTask(void* pvParameters)
         // roll, pitch, yaw: -1.0 ~ +1.0
         float throttle, roll_cmd, pitch_cmd, yaw_cmd;
         state.getControlInput(throttle, roll_cmd, pitch_cmd, yaw_cmd);
+
+        // Apply trim offsets (normalized input space)
+        // トリムオフセット適用（正規化入力空間）
+        roll_cmd += g_trim_roll;
+        pitch_cmd += g_trim_pitch;
+        yaw_cmd += g_trim_yaw;
+
+        // Clamp to valid range after trim
+        // トリム適用後のクランプ
+        roll_cmd = std::clamp(roll_cmd, -1.0f, 1.0f);
+        pitch_cmd = std::clamp(pitch_cmd, -1.0f, 1.0f);
+        yaw_cmd = std::clamp(yaw_cmd, -1.0f, 1.0f);
 
         // =====================================================================
         // 2. 目標角速度計算

@@ -521,6 +521,30 @@ namespace button {
 inline constexpr int DEBOUNCE_MS = 50;             // デバウンス時間 [ms]
 } // namespace button
 
+// =============================================================================
+// Trim Settings - トリム調整
+// =============================================================================
+//
+// コントローラ入力のオフセット補正。機体の微妙な傾きや
+// スティックのセンターずれを補正するために使用。
+//
+// Offset correction for controller input. Used to compensate for
+// subtle aircraft tilt or stick center drift.
+//
+namespace trim {
+
+// デフォルト値（初期値 = 0、トリムなし）
+// Default values (initial = 0, no trim)
+inline constexpr float DEFAULT_ROLL = 0.0f;        // ロールトリム [-1.0 ~ +1.0]
+inline constexpr float DEFAULT_PITCH = 0.0f;       // ピッチトリム [-1.0 ~ +1.0]
+inline constexpr float DEFAULT_YAW = 0.0f;         // ヨートリム [-1.0 ~ +1.0]
+
+// トリム値の最大範囲
+// Maximum trim range
+inline constexpr float MAX_TRIM = 0.2f;            // 最大±20% (±0.2)
+
+} // namespace trim
+
 namespace led {
 // M5Stamp S3 内蔵LED
 inline constexpr int NUM_LEDS_MCU = 1;
