@@ -12,7 +12,9 @@ StampFlyデバイスのESKF（Error-State Kalman Filter）開発・検証・最�
 ```
 tools/log_analyzer/
 ├── 可視化ツール
-│   ├── visualize_eskf.py         # 統合可視化ツール（メイン）
+│   ├── visualize_eskf.py         # バイナリログ統合可視化（USB経由）
+│   ├── visualize_telemetry.py    # WiFiテレメトリCSV可視化（★推奨）
+│   ├── viz_telemetry.py          # WiFi CSV用ラッパー
 │   ├── viz_all.py                # 全パネル表示（ラッパー）
 │   ├── viz_sensors.py            # センサ生値のみ（ラッパー）
 │   ├── viz_attitude.py           # 姿勢のみ（ラッパー）
@@ -37,9 +39,59 @@ pip install numpy pandas matplotlib pyserial scipy
 
 ---
 
-## 1. visualize_eskf.py - 統合可視化ツール
+## 1. visualize_telemetry.py - WiFiテレメトリ可視化ツール（★推奨）
 
-ESKFの状態量とセンサ生値を包括的に可視化するメインツールです。
+WiFiテレメトリで取得したCSVログを包括的に可視化するツールです。
+CSVファイルは `firmware/vehicle/logs/` に保存されています。
+
+### 基本的な使い方
+
+```bash
+# 全状態量を可視化（ファイル指定）
+python visualize_telemetry.py stampfly_log_20260113T070745.csv
+
+# 引数なしで実行すると最新CSVを自動検出
+python visualize_telemetry.py
+
+# 特定パネルのみ表示
+python visualize_telemetry.py log.csv --attitude      # 姿勢のみ
+python visualize_telemetry.py log.csv --position      # 位置・速度
+python visualize_telemetry.py log.csv --sensors       # センサ生値
+python visualize_telemetry.py log.csv --control       # 制御入力
+python visualize_telemetry.py log.csv --tof           # ToFセンサ
+
+# 画像保存
+python visualize_telemetry.py log.csv --save output.png --no-show
+```
+
+### 出力パネル（--all時）
+
+5x4グリッドで以下を表示：
+
+| 行 | 内容 |
+|----|------|
+| 1行目 | Roll、Pitch、Yaw、FlightState |
+| 2行目 | 位置X、位置Y、位置Z、XY軌跡 |
+| 3行目 | 速度X、速度Y、速度Z、バッテリー電圧 |
+| 4行目 | 加速度、ジャイロ、地磁気、ToF Bottom |
+| 5行目 | スロットル、制御入力、ToF Front |
+
+### CSVカラム（WiFiテレメトリ）
+
+```
+timestamp_ms, roll_deg, pitch_deg, yaw_deg,
+pos_x, pos_y, pos_z, vel_x, vel_y, vel_z,
+gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z,
+mag_x, mag_y, mag_z,
+throttle, ctrl_roll, ctrl_pitch, ctrl_yaw,
+voltage, tof_bottom, tof_front, state
+```
+
+---
+
+## 2. visualize_eskf.py - バイナリログ可視化ツール
+
+ESKFの状態量とセンサ生値を包括的に可視化するツールです（USB経由のバイナリログ用）。
 
 ### 基本的な使い方
 
