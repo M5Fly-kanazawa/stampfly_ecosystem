@@ -30,6 +30,7 @@
 // Actuators
 #include "motor_driver.hpp"
 #include "led.hpp"
+#include "led_manager.hpp"
 #include "button.hpp"
 
 // State and estimation

@@ -375,6 +375,17 @@ public:
     void initializeAttitude(const Vector3& accel, const Vector3& mag);
 
     /**
+     * @brief 水平基準を設定（着陸キャリブレーション用）
+     * @param level_accel 水平面で静止時の平均加速度 [m/s²] (ボディ座標系)
+     * @param gyro_bias 静止時に測定したジャイロバイアス [rad/s]
+     *
+     * 水平面に静止している時の加速度を「roll=0, pitch=0」と定義。
+     * センサーのアライメント誤差を補正する効果がある。
+     * ヨー角は維持され、地磁気リファレンスは更新される。
+     */
+    void setAttitudeReference(const Vector3& level_accel, const Vector3& gyro_bias);
+
+    /**
      * @brief Yaw角を強制的に設定
      * @param yaw Yaw角 [rad]
      *

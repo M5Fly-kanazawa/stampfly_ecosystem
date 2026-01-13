@@ -36,6 +36,7 @@ stampfly::Button g_button;
 sf::SensorFusion g_fusion;
 stampfly::AttitudeEstimator g_attitude_est;
 stampfly::AltitudeEstimator g_altitude_est;
+stampfly::LandingHandler g_landing_handler;
 
 // =============================================================================
 // Filters

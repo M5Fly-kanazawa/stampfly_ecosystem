@@ -168,6 +168,14 @@ void SensorFusion::setGyroBias(const stampfly::math::Vector3& bias) {
     eskf_.setGyroBias(bias);
 }
 
+void SensorFusion::setAccelBias(const stampfly::math::Vector3& bias) {
+    if (!initialized_) {
+        return;
+    }
+
+    eskf_.setAccelBias(bias);
+}
+
 void SensorFusion::setMagReference(const stampfly::math::Vector3& ref) {
     if (!initialized_) {
         return;
@@ -183,6 +191,15 @@ void SensorFusion::initializeAttitude(const stampfly::math::Vector3& accel,
     }
 
     eskf_.initializeAttitude(accel, mag);
+}
+
+void SensorFusion::setAttitudeReference(const stampfly::math::Vector3& level_accel,
+                                         const stampfly::math::Vector3& gyro_bias) {
+    if (!initialized_) {
+        return;
+    }
+
+    eskf_.setAttitudeReference(level_accel, gyro_bias);
 }
 
 bool SensorFusion::checkDivergence(const stampfly::ESKF::State& state) {

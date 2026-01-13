@@ -127,7 +127,7 @@ inline constexpr bool ENABLE_YAW_ESTIMATION = true; // ヨー推定（ジャイ�
 inline constexpr float GYRO_NOISE = 0.009655f;         // ジャイロノイズ [rad/s/√Hz]
 inline constexpr float ACCEL_NOISE = 0.062885f;        // 加速度ノイズ [m/s²/√Hz]
 inline constexpr float GYRO_BIAS_NOISE = 0.000013f;    // ジャイロバイアスランダムウォーク
-inline constexpr float ACCEL_BIAS_NOISE = 0.0001f;     // 加速度バイアスランダムウォーク（安定重視）
+inline constexpr float ACCEL_BIAS_NOISE = 0.001f;      // 加速度バイアスランダムウォーク [m/s²/√s]
 
 // -----------------------------------------------------------------------------
 // 観測ノイズ (R行列)

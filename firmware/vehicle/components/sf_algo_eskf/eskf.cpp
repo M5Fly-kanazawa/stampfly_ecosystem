@@ -121,11 +121,11 @@ void ESKF::holdPositionVelocity()
 
 void ESKF::resetForLanding()
 {
-    // 位置・速度・加速度バイアスを0にリセット
-    // 姿勢・ジャイロバイアスは維持（姿勢推定継続）
+    // 位置・速度を0にリセット
+    // 姿勢・ジャイロバイアス・加速度バイアスは維持（飛行中の推定値を保持）
     state_.position = Vector3::zero();
     state_.velocity = Vector3::zero();
-    state_.accel_bias = Vector3::zero();
+    // state_.accel_bias は維持（飛行中に推定した値を保持）
 
     // 加速度バイアス推定をフリーズ（接地中は可観測性がないため）
     freeze_accel_bias_ = true;
@@ -133,7 +133,6 @@ void ESKF::resetForLanding()
     // 共分散の設定
     float pos_var = config_.init_pos_std * config_.init_pos_std;
     float vel_var = config_.init_vel_std * config_.init_vel_std;
-    float ba_var = config_.init_accel_bias_std * config_.init_accel_bias_std;
 
     // 位置・速度ブロック（0-5）をクリアして対角成分を設定
     for (int i = 0; i < 6; i++) {
@@ -148,15 +147,7 @@ void ESKF::resetForLanding()
     P_(VEL_Y, VEL_Y) = vel_var;
     P_(VEL_Z, VEL_Z) = vel_var;
 
-    // 加速度バイアスブロック（12-14）をクリアして対角成分を設定
-    for (int i = 12; i < 15; i++) {
-        for (int j = 12; j < 15; j++) {
-            P_(i, j) = 0.0f;
-        }
-    }
-    P_(BA_X, BA_X) = ba_var;
-    P_(BA_Y, BA_Y) = ba_var;
-    P_(BA_Z, BA_Z) = ba_var;
+    // 加速度バイアスの共分散は維持（推定値と共分散両方を保持）
 
     // 位置・速度と他状態（姿勢、バイアス）の相関をクリア
     for (int i = 0; i < 6; i++) {
@@ -245,6 +236,93 @@ void ESKF::initializeAttitude(const Vector3& accel, const Vector3& mag)
              state_.roll * 180.0f / M_PI, state_.pitch * 180.0f / M_PI);
     ESP_LOGI(TAG, "Mag ref (NED): (%.1f, %.1f, %.1f) uT",
              config_.mag_ref.x, config_.mag_ref.y, config_.mag_ref.z);
+}
+
+void ESKF::setAttitudeReference(const Vector3& level_accel, const Vector3& gyro_bias)
+{
+    // 水平面で静止時の加速度を「roll=0, pitch=0」と定義
+    // センサーのアライメント誤差を補正する効果がある
+    //
+    // 現在のヨー角は維持（地磁気リファレンスはそのまま）
+
+    // ジャイロバイアスを設定
+    // Set gyro bias from stationary measurement
+    state_.gyro_bias = gyro_bias;
+
+    // 現在のヨー角を保存
+    float current_yaw = state_.yaw;
+
+    // 水平基準加速度から「見かけの傾き」を計算
+    // 理想的な水平状態では accel = [0, 0, -g]
+    // 実際の測定値との差がアライメント誤差を表す
+    float accel_norm = std::sqrt(level_accel.x * level_accel.x +
+                                  level_accel.y * level_accel.y +
+                                  level_accel.z * level_accel.z);
+
+    if (accel_norm < 1.0f) {
+        ESP_LOGW(TAG, "setAttitudeReference: accel norm too small (%.2f)", accel_norm);
+        return;
+    }
+
+    // level_accelから計算される「見かけの傾き」を求める
+    // これがアライメント誤差
+    float apparent_roll = std::atan2(-level_accel.y, -level_accel.z);
+    float apparent_pitch = std::atan2(level_accel.x,
+                                       std::sqrt(level_accel.y * level_accel.y +
+                                                level_accel.z * level_accel.z));
+
+    ESP_LOGI(TAG, "Level calibration: apparent roll=%.2f° pitch=%.2f° (alignment error)",
+             apparent_roll * 180.0f / M_PI, apparent_pitch * 180.0f / M_PI);
+
+    // 姿勢を「水平」としてリセット（roll=0, pitch=0, yaw維持）
+    state_.roll = 0.0f;
+    state_.pitch = 0.0f;
+    state_.yaw = current_yaw;
+    state_.orientation = Quaternion::fromEuler(0.0f, 0.0f, current_yaw);
+
+    // アライメント誤差を加速度バイアスに吸収させる
+    // これにより、今後の姿勢推定で同じ加速度を測定した時にroll=0, pitch=0と推定される
+    //
+    // 理論: 水平時に測定される加速度は [0, 0, -g] であるべき
+    // 実際: level_accel が測定される
+    // 差分: level_accel - [0, 0, -g] がアライメント由来のバイアス
+    //
+    // ただし、飛行中に推定したバイアスも考慮する必要があるため、
+    // 現在のバイアスに加算ではなく、フレッシュに設定
+    state_.accel_bias = Vector3(
+        level_accel.x - 0.0f,                    // 水平時のX成分は0であるべき
+        level_accel.y - 0.0f,                    // 水平時のY成分は0であるべき
+        level_accel.z - (-config_.gravity)       // 水平時のZ成分は-gであるべき
+    );
+
+    ESP_LOGI(TAG, "Accel bias set from level ref: (%.4f, %.4f, %.4f) m/s²",
+             state_.accel_bias.x, state_.accel_bias.y, state_.accel_bias.z);
+    ESP_LOGI(TAG, "Gyro bias set: (%.4f, %.4f, %.4f) rad/s",
+             state_.gyro_bias.x, state_.gyro_bias.y, state_.gyro_bias.z);
+
+    // 姿勢の共分散をリセット（新しいリファレンスに対して不確かさを持つ）
+    float att_var = config_.init_att_std * config_.init_att_std;
+    P_(ATT_X, ATT_X) = att_var;
+    P_(ATT_Y, ATT_Y) = att_var;
+    P_(ATT_Z, ATT_Z) = att_var;
+
+    // 加速度バイアスの共分散をリセット
+    float ab_var = config_.init_accel_bias_std * config_.init_accel_bias_std;
+    P_(BA_X, BA_X) = ab_var;
+    P_(BA_Y, BA_Y) = ab_var;
+    P_(BA_Z, BA_Z) = ab_var;
+
+    // ジャイロバイアスの共分散をリセット
+    float gb_var = config_.init_gyro_bias_std * config_.init_gyro_bias_std;
+    P_(BG_X, BG_X) = gb_var;
+    P_(BG_Y, BG_Y) = gb_var;
+    P_(BG_Z, BG_Z) = gb_var;
+
+    // 加速度バイアス推定をフリーズ解除（次回飛行で推定再開）
+    freeze_accel_bias_ = false;
+
+    ESP_LOGI(TAG, "Attitude reference set: roll=0° pitch=0° yaw=%.1f°",
+             current_yaw * 180.0f / M_PI);
 }
 
 void ESKF::predict(const Vector3& accel, const Vector3& gyro, float dt, bool skip_position)
@@ -1436,7 +1514,8 @@ void ESKF::updateAccelAttitude(const Vector3& accel)
 {
     if (!initialized_) return;
 
-    // バイアス補正された加速度
+    // Bias-corrected acceleration
+    // バイアス補正済み加速度
     float ax = accel.x - state_.accel_bias.x;
     float ay = accel.y - state_.accel_bias.y;
     float az = accel.z - state_.accel_bias.z;

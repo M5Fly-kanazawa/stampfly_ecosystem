@@ -490,6 +490,17 @@ esp_err_t estimators()
         }
     }
 
+    // Landing Handler initialization
+    // 着陸検出・キャリブレーション統合ハンドラ初期化
+    {
+        stampfly::LandingHandler::Config landing_cfg;
+        landing_cfg.landing_altitude_threshold = config::eskf::LANDING_ALT_THRESHOLD;
+        landing_cfg.landing_hold_samples = 80;  // 200ms @ 400Hz
+        g_landing_handler.init(landing_cfg);
+        ESP_LOGI(TAG, "Landing handler initialized (alt threshold=%.2fm)",
+                 landing_cfg.landing_altitude_threshold);
+    }
+
     // Simple Attitude Estimator (backup/complementary)
     {
         stampfly::AttitudeEstimator::Config cfg;

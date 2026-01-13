@@ -116,6 +116,55 @@ void IMUTask(void* pvParameters)
 
                 g_imu_checkpoint = 10;  // ESKF更新前
 
+                // ============================================================
+                // Landing Handler update (for level calibration)
+                // 着陸キャリブレーション（Disarm時のみ動作）
+                // ============================================================
+                {
+                    bool is_disarmed = (state.getFlightState() == stampfly::FlightState::IDLE ||
+                                        state.getFlightState() == stampfly::FlightState::CALIBRATING ||
+                                        state.getFlightState() == stampfly::FlightState::INIT);
+
+                    float tof_bottom_now = 0.0f;
+                    if (g_tof_bottom_buffer_count > 0) {
+                        int tof_latest_idx = (g_tof_bottom_buffer_index - 1 + REF_BUFFER_SIZE) % REF_BUFFER_SIZE;
+                        tof_bottom_now = g_tof_bottom_buffer[tof_latest_idx];
+                    }
+
+                    // Update landing handler with current sensor data
+                    g_landing_handler.update(is_disarmed, tof_bottom_now, g, a);
+
+                    // Check for calibration complete
+                    if (g_landing_handler.justCalibrated()) {
+                        // Set attitude reference from level calibration
+                        g_fusion.setAttitudeReference(
+                            g_landing_handler.getAccelReference(),
+                            g_landing_handler.getGyroBias()
+                        );
+                        g_fusion.resetForLanding();
+                        ESP_LOGI(TAG, "Level calibration complete - attitude reference set");
+                    }
+
+                    // Update LED state based on calibration
+                    static stampfly::LandingHandler::CalibrationState last_cal_state =
+                        stampfly::LandingHandler::CalibrationState::NOT_STARTED;
+                    auto cal_state = g_landing_handler.getCalibrationState();
+
+                    if (cal_state != last_cal_state) {
+                        if (cal_state == stampfly::LandingHandler::CalibrationState::CALIBRATING) {
+                            state.setFlightState(stampfly::FlightState::CALIBRATING);
+                            stampfly::LEDManager::getInstance().onFlightStateChanged(stampfly::FlightState::CALIBRATING);
+                        } else if (cal_state == stampfly::LandingHandler::CalibrationState::COMPLETED) {
+                            // If still disarmed, go back to IDLE
+                            if (is_disarmed && state.getFlightState() == stampfly::FlightState::CALIBRATING) {
+                                state.setFlightState(stampfly::FlightState::IDLE);
+                                stampfly::LEDManager::getInstance().onFlightStateChanged(stampfly::FlightState::IDLE);
+                            }
+                        }
+                        last_cal_state = cal_state;
+                    }
+                }
+
                 // Update sensor fusion predict step (400Hz)
                 // g_eskf_ready: センサー安定・キャリブレーション完了後にtrue
                 if (g_fusion.isInitialized() && g_eskf_ready) {

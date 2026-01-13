@@ -232,6 +232,12 @@ void onButtonEvent(stampfly::Button::Event event)
             ESP_LOGI(TAG, "Button: CLICK");
             // Toggle arm/disarm in IDLE state
             if (state.getFlightState() == stampfly::FlightState::IDLE) {
+                // Check if calibration is complete
+                if (!g_landing_handler.canArm()) {
+                    ESP_LOGW(TAG, "Cannot ARM: calibration in progress");
+                    g_buzzer.errorTone();
+                    break;
+                }
                 if (state.requestArm()) {
                     // ARM時に姿勢を初期化（現在の向き=Yaw 0°）
                     initializeAttitudeFromBuffers();
@@ -307,8 +313,12 @@ void onControlPacket(const stampfly::ControlPacket& packet)
         stampfly::FlightState flight_state = state.getFlightState();
         if (flight_state == stampfly::FlightState::IDLE ||
             flight_state == stampfly::FlightState::ERROR) {
-            // IDLE/ERROR → ARM
-            if (state.requestArm()) {
+            // Check if calibration is complete
+            if (!g_landing_handler.canArm()) {
+                ESP_LOGW(TAG, "Cannot ARM: calibration in progress");
+                g_buzzer.errorTone();
+            } else if (state.requestArm()) {
+                // IDLE/ERROR → ARM
                 g_motor.arm();  // Enable motor driver
                 initializeAttitudeFromBuffers();
                 g_motor.resetStats();  // モーター統計リセット

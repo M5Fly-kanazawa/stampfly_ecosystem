@@ -33,6 +33,7 @@
 #include "sensor_health.hpp"
 #include "system_manager.hpp"
 #include "filter.hpp"
+#include "landing_handler.hpp"
 
 // Communication
 #include "controller_comm.hpp"
@@ -73,6 +74,7 @@ extern stampfly::Button g_button;
 extern sf::SensorFusion g_fusion;
 extern stampfly::AttitudeEstimator g_attitude_est;
 extern stampfly::AltitudeEstimator g_altitude_est;
+extern stampfly::LandingHandler g_landing_handler;
 
 // =============================================================================
 // Filters

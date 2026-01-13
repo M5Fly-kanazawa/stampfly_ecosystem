@@ -214,6 +214,11 @@ public:
     void setGyroBias(const stampfly::math::Vector3& bias);
 
     /**
+     * @brief 加速度バイアス設定
+     */
+    void setAccelBias(const stampfly::math::Vector3& bias);
+
+    /**
      * @brief 磁気リファレンス設定
      */
     void setMagReference(const stampfly::math::Vector3& ref);
@@ -229,6 +234,17 @@ public:
      */
     void initializeAttitude(const stampfly::math::Vector3& accel,
                             const stampfly::math::Vector3& mag);
+
+    /**
+     * @brief 水平基準を設定（着陸キャリブレーション用）
+     * @param level_accel 水平面で静止時の平均加速度 [m/s²] (ボディ座標系)
+     * @param gyro_bias 静止時に測定したジャイロバイアス [rad/s]
+     *
+     * 水平面に静止している時の加速度を「roll=0, pitch=0」と定義。
+     * センサーのアライメント誤差を補正する効果がある。
+     */
+    void setAttitudeReference(const stampfly::math::Vector3& level_accel,
+                              const stampfly::math::Vector3& gyro_bias);
 
     /**
      * @brief 地磁気参照ベクトル取得 (デバッグ用)

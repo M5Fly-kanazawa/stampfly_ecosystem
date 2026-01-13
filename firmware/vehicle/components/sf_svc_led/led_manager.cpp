@@ -122,8 +122,8 @@ void LEDManager::onFlightStateChanged(FlightState state)
             color = 0x0000FF;  // Blue
             break;
         case FlightState::CALIBRATING:
-            pattern = LEDPattern::BLINK_FAST;
-            color = 0xFFFF00;  // Yellow
+            pattern = LEDPattern::SOLID;
+            color = 0xFFFFFF;  // White - calibration in progress, arm blocked
             break;
         case FlightState::IDLE:
             pattern = LEDPattern::SOLID;
