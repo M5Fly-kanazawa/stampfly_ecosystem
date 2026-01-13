@@ -364,9 +364,10 @@ static void startTasks()
         ESP_LOGE(TAG, "Failed to create control semaphore");
     }
 
-    // Semaphore for telemetry FFT mode sync with IMU (400Hz)
-    // テレメトリFFTモード用IMU同期セマフォ
-    g_telemetry_imu_semaphore = xSemaphoreCreateBinary();
+    // Counting semaphore for telemetry FFT mode sync with IMU (400Hz)
+    // カウンティングセマフォ: broadcast中のIMU信号をキューイング
+    // Max count = 16 (enough to buffer during WebSocket transmission)
+    g_telemetry_imu_semaphore = xSemaphoreCreateCounting(16, 0);
     if (g_telemetry_imu_semaphore == nullptr) {
         ESP_LOGE(TAG, "Failed to create telemetry IMU semaphore");
     }

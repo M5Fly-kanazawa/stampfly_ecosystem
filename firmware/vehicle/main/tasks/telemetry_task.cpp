@@ -61,8 +61,19 @@ void TelemetryTask(void* pvParameters)
     stampfly::TelemetryFFTBatchPacket batch_pkt = {};
     int batch_index = 0;
 
+    // Read index for ring buffer (FFT mode)
+    // リングバッファ読み取りインデックス（FFTモード用）
+    int telemetry_read_index = 0;
+
     // DEBUG: ESP32送信カウンタ
     static uint32_t esp32_send_counter = 0;
+
+    // Wait for IMU to start populating the buffer
+    // IMUがバッファにデータを入れ始めるのを待つ
+    if (fft_mode) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        telemetry_read_index = g_accel_buffer_index;  // Start from current position
+    }
 
     while (true) {
         if (fft_mode) {
@@ -76,10 +87,10 @@ void TelemetryTask(void* pvParameters)
                 continue;
             }
 
-            // Collect sample (now guaranteed to have fresh IMU data)
-            // サンプル取得（新しいIMUデータが保証される）
-            stampfly::Vec3 accel, gyro;
-            state.getIMUCorrected(accel, gyro);
+            // Read from ring buffer at current read index
+            // リングバッファから現在の読み取りインデックスで読む
+            const auto& accel = g_accel_buffer[telemetry_read_index];
+            const auto& gyro = g_gyro_buffer[telemetry_read_index];
 
             batch_pkt.samples[batch_index].timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
             batch_pkt.samples[batch_index].gyro_x = gyro.x;
@@ -88,6 +99,9 @@ void TelemetryTask(void* pvParameters)
             batch_pkt.samples[batch_index].accel_x = accel.x;
             batch_pkt.samples[batch_index].accel_y = accel.y;
             batch_pkt.samples[batch_index].accel_z = accel.z;
+
+            // Advance read index (ring buffer wrap)
+            telemetry_read_index = (telemetry_read_index + 1) % REF_BUFFER_SIZE;
 
             batch_index++;
 
