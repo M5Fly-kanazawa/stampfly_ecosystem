@@ -1,11 +1,18 @@
 /**
  * @file telemetry_task.cpp
- * @brief テレメトリタスク (50Hz) - WebSocketブロードキャスト
+ * @brief テレメトリタスク - WebSocketブロードキャスト
+ *
+ * Rate is configurable via CLI 'fftmode' command (50/100/200/400 Hz)
+ * レートはCLI 'fftmode'コマンドで設定可能 (50/100/200/400 Hz)
  */
 
 #include "tasks_common.hpp"
 
 static const char* TAG = "TelemetryTask";
+
+// Telemetry rate (Hz) - set by CLI fftmode command, persisted in NVS
+// テレメトリレート - CLIのfftmodeコマンドで設定、NVSに保存
+extern uint32_t g_telemetry_rate_hz;
 
 using namespace config;
 using namespace globals;
@@ -18,7 +25,12 @@ void TelemetryTask(void* pvParameters)
     auto& state = stampfly::StampFlyState::getInstance();
 
     TickType_t last_wake_time = xTaskGetTickCount();
-    const TickType_t period = pdMS_TO_TICKS(20);  // 50Hz
+
+    // Calculate period from rate (checked at startup, persisted via NVS)
+    // レートから周期を計算（起動時に読み込み、NVS経由で永続化）
+    uint32_t period_ms = 1000 / g_telemetry_rate_hz;
+    TickType_t period = pdMS_TO_TICKS(period_ms);
+    ESP_LOGI(TAG, "Telemetry rate: %lu Hz (%lu ms)", (unsigned long)g_telemetry_rate_hz, (unsigned long)period_ms);
 
     // DEBUG: ESP32側送信カウンタ
     static uint32_t esp32_send_counter = 0;

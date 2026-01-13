@@ -36,6 +36,7 @@ static const char* NVS_KEY_LOGLEVEL = "loglevel";
 static const char* NVS_KEY_TRIM_ROLL = "trim_roll";
 static const char* NVS_KEY_TRIM_PITCH = "trim_pitch";
 static const char* NVS_KEY_TRIM_YAW = "trim_yaw";
+static const char* NVS_KEY_TELEMETRY_RATE = "telem_rate";
 
 // =============================================================================
 // Trim State - グローバルトリム値
@@ -46,6 +47,15 @@ static const char* NVS_KEY_TRIM_YAW = "trim_yaw";
 float g_trim_roll = 0.0f;
 float g_trim_pitch = 0.0f;
 float g_trim_yaw = 0.0f;
+
+// =============================================================================
+// Telemetry Rate - テレメトリレート
+// =============================================================================
+// telemetry_task.cppからアクセスされる
+// Accessed from telemetry_task.cpp
+// 0 = default (50Hz), otherwise specified rate
+
+uint32_t g_telemetry_rate_hz = 50;  // Default 50Hz
 
 // =============================================================================
 // NVS Helper Functions
@@ -92,6 +102,46 @@ static esp_err_t saveTrimToNVS()
     nvs_set_i32(handle, NVS_KEY_TRIM_YAW, static_cast<int32_t>(g_trim_yaw * 10000));
 
     ret = nvs_commit(handle);
+    nvs_close(handle);
+    return ret;
+}
+
+// Helper: Load telemetry rate from NVS
+static void loadTelemetryRateFromNVS()
+{
+    nvs_handle_t handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE_CLI, NVS_READONLY, &handle);
+    if (ret != ESP_OK) {
+        return;  // Keep default
+    }
+
+    uint32_t rate = 50;
+    if (nvs_get_u32(handle, NVS_KEY_TELEMETRY_RATE, &rate) == ESP_OK) {
+        // Validate rate (50, 100, 200, 400 Hz allowed)
+        if (rate == 50 || rate == 100 || rate == 200 || rate == 400) {
+            g_telemetry_rate_hz = rate;
+        }
+    }
+
+    nvs_close(handle);
+    ESP_LOGI(TAG, "Telemetry rate loaded: %lu Hz", (unsigned long)g_telemetry_rate_hz);
+}
+
+// Helper: Save telemetry rate to NVS
+static esp_err_t saveTelemetryRateToNVS()
+{
+    nvs_handle_t handle;
+    esp_err_t ret = nvs_open(NVS_NAMESPACE_CLI, NVS_READWRITE, &handle);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS for telemetry rate: %d", ret);
+        return ret;
+    }
+
+    ret = nvs_set_u32(handle, NVS_KEY_TELEMETRY_RATE, g_telemetry_rate_hz);
+    if (ret == ESP_OK) {
+        ret = nvs_commit(handle);
+    }
+
     nvs_close(handle);
     return ret;
 }
@@ -195,6 +245,7 @@ static void cmd_led(int argc, char** argv, void* context);
 static void cmd_sound(int argc, char** argv, void* context);
 static void cmd_pos(int argc, char** argv, void* context);
 static void cmd_trim(int argc, char** argv, void* context);
+static void cmd_fftmode(int argc, char** argv, void* context);
 
 esp_err_t CLI::init()
 {
@@ -230,6 +281,9 @@ esp_err_t CLI::init()
 
     // Load trim values from NVS
     loadTrimFromNVS();
+
+    // Load telemetry rate from NVS
+    loadTelemetryRateFromNVS();
 
     initialized_ = true;
     ESP_LOGI(TAG, "CLI initialized");
@@ -370,6 +424,7 @@ void CLI::registerDefaultCommands()
     registerCommand("sound", cmd_sound, "Sound [on|off]", this);
     registerCommand("pos", cmd_pos, "Position [reset|status]", this);
     registerCommand("trim", cmd_trim, "Trim adjust [roll|pitch|yaw <val>|save|reset]", this);
+    registerCommand("fftmode", cmd_fftmode, "FFT capture mode [on|off|<rate>]", this);
 }
 
 // ========== Command Handlers ==========
@@ -1407,6 +1462,70 @@ static void cmd_trim(int argc, char** argv, void* context)
     else {
         cli->print("Unknown subcommand: %s\r\n", cmd);
         cli->print("Usage: trim [roll|pitch|yaw <val>|save|reset]\r\n");
+    }
+}
+
+static void cmd_fftmode(int argc, char** argv, void* context)
+{
+    CLI* cli = static_cast<CLI*>(context);
+
+    if (argc < 2) {
+        // Show current status
+        const char* mode_str = (g_telemetry_rate_hz > 50) ? "ON" : "OFF";
+        cli->print("=== FFT Capture Mode ===\r\n");
+        cli->print("  Status: %s\r\n", mode_str);
+        cli->print("  Telemetry rate: %lu Hz\r\n", (unsigned long)g_telemetry_rate_hz);
+        cli->print("\r\nUsage:\r\n");
+        cli->print("  fftmode on       - Enable high-speed mode (400Hz)\r\n");
+        cli->print("  fftmode off      - Return to normal mode (50Hz)\r\n");
+        cli->print("  fftmode <rate>   - Set specific rate (50/100/200/400)\r\n");
+        cli->print("\r\nWorkflow:\r\n");
+        cli->print("  1. Connect USB, run 'fftmode on'\r\n");
+        cli->print("  2. Disconnect USB, connect battery\r\n");
+        cli->print("  3. WiFi telemetry will run at high rate\r\n");
+        cli->print("  4. Capture with Python wifi_capture.py\r\n");
+        return;
+    }
+
+    const char* cmd = argv[1];
+
+    // Parse rate value or command
+    uint32_t new_rate = 0;
+
+    if (strcmp(cmd, "on") == 0) {
+        new_rate = 400;  // Default high-speed rate
+    }
+    else if (strcmp(cmd, "off") == 0) {
+        new_rate = 50;   // Normal rate
+    }
+    else {
+        // Try parsing as number
+        int rate_val = atoi(cmd);
+        if (rate_val == 50 || rate_val == 100 || rate_val == 200 || rate_val == 400) {
+            new_rate = static_cast<uint32_t>(rate_val);
+        } else {
+            cli->print("Invalid rate: %s\r\n", cmd);
+            cli->print("Valid rates: 50, 100, 200, 400 Hz\r\n");
+            return;
+        }
+    }
+
+    // Apply new rate
+    g_telemetry_rate_hz = new_rate;
+
+    // Save to NVS
+    if (saveTelemetryRateToNVS() == ESP_OK) {
+        cli->print("Telemetry rate set to %lu Hz (saved to NVS)\r\n",
+                   (unsigned long)g_telemetry_rate_hz);
+        if (new_rate > 50) {
+            cli->print("FFT capture mode ENABLED\r\n");
+            cli->print("Rate will persist after power cycle.\r\n");
+        } else {
+            cli->print("FFT capture mode DISABLED (normal mode)\r\n");
+        }
+    } else {
+        cli->print("Telemetry rate set to %lu Hz (NVS save failed)\r\n",
+                   (unsigned long)g_telemetry_rate_hz);
     }
 }
 
