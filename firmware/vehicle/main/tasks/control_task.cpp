@@ -323,18 +323,6 @@ void ControlTask(void* pvParameters)
         float throttle, roll_cmd, pitch_cmd, yaw_cmd;
         state.getControlInput(throttle, roll_cmd, pitch_cmd, yaw_cmd);
 
-        // Apply trim offsets (normalized input space)
-        // トリムオフセット適用（正規化入力空間）
-        roll_cmd += g_trim_roll;
-        pitch_cmd += g_trim_pitch;
-        yaw_cmd += g_trim_yaw;
-
-        // Clamp to valid range after trim
-        // トリム適用後のクランプ
-        roll_cmd = std::clamp(roll_cmd, -1.0f, 1.0f);
-        pitch_cmd = std::clamp(pitch_cmd, -1.0f, 1.0f);
-        yaw_cmd = std::clamp(yaw_cmd, -1.0f, 1.0f);
-
         // =====================================================================
         // 2. 目標角速度計算
         // =====================================================================
@@ -343,6 +331,12 @@ void ControlTask(void* pvParameters)
         if (state.getFlightMode() == stampfly::FlightMode::STABILIZE) {
             // STABILIZE: カスケード制御（姿勢 → レート）
             // STABILIZE: Cascade control (attitude → rate)
+
+            // Apply trim offsets (STABILIZE mode only)
+            // トリムオフセット適用（STABILIZEモードのみ）
+            float roll_trimmed = std::clamp(roll_cmd + g_trim_roll, -1.0f, 1.0f);
+            float pitch_trimmed = std::clamp(pitch_cmd + g_trim_pitch, -1.0f, 1.0f);
+            float yaw_trimmed = std::clamp(yaw_cmd + g_trim_yaw, -1.0f, 1.0f);
 
             // 現在の姿勢をESKFから取得
             // Get current attitude from ESKF
@@ -353,7 +347,7 @@ void ControlTask(void* pvParameters)
             // Outer loop: attitude control
             constexpr float dt = IMU_DT;  // 2.5ms
             g_attitude_controller.update(
-                roll_cmd, pitch_cmd, yaw_cmd,
+                roll_trimmed, pitch_trimmed, yaw_trimmed,
                 roll_current, pitch_current,
                 dt,
                 roll_rate_target, pitch_rate_target, yaw_rate_target
