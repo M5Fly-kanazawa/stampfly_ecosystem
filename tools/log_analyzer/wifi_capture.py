@@ -17,10 +17,12 @@ Options:
     --no-save           Don't save to file, just display stats
 
 Workflow:
-    1. Connect USB to StampFly, run 'fftmode on' in CLI
+    1. Connect USB to StampFly, run 'fftmode on' in CLI (160Hz max)
     2. Disconnect USB, power on with battery
     3. Connect your PC to StampFly WiFi AP
     4. Run: python wifi_capture.py --duration 30 --fft
+
+Note: WiFi bandwidth limits max rate to ~160Hz (Nyquist: 80Hz)
 
 Examples:
     python wifi_capture.py                    # Capture 30s, auto-save

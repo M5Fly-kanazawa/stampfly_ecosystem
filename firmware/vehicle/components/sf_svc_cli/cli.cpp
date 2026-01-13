@@ -117,8 +117,8 @@ static void loadTelemetryRateFromNVS()
 
     uint32_t rate = 50;
     if (nvs_get_u32(handle, NVS_KEY_TELEMETRY_RATE, &rate) == ESP_OK) {
-        // Validate rate (50, 100, 200, 400 Hz allowed)
-        if (rate == 50 || rate == 100 || rate == 200 || rate == 400) {
+        // Validate rate (50, 100, 160 Hz allowed - WiFi bandwidth limit)
+        if (rate == 50 || rate == 100 || rate == 160) {
             g_telemetry_rate_hz = rate;
         }
     }
@@ -1476,9 +1476,9 @@ static void cmd_fftmode(int argc, char** argv, void* context)
         cli->print("  Status: %s\r\n", mode_str);
         cli->print("  Telemetry rate: %lu Hz\r\n", (unsigned long)g_telemetry_rate_hz);
         cli->print("\r\nUsage:\r\n");
-        cli->print("  fftmode on       - Enable high-speed mode (400Hz)\r\n");
+        cli->print("  fftmode on       - Enable high-speed mode (160Hz)\r\n");
         cli->print("  fftmode off      - Return to normal mode (50Hz)\r\n");
-        cli->print("  fftmode <rate>   - Set specific rate (50/100/200/400)\r\n");
+        cli->print("  fftmode <rate>   - Set specific rate (50/100/160)\r\n");
         cli->print("\r\nWorkflow:\r\n");
         cli->print("  1. Connect USB, run 'fftmode on'\r\n");
         cli->print("  2. Disconnect USB, connect battery\r\n");
@@ -1493,7 +1493,7 @@ static void cmd_fftmode(int argc, char** argv, void* context)
     uint32_t new_rate = 0;
 
     if (strcmp(cmd, "on") == 0) {
-        new_rate = 400;  // Default high-speed rate
+        new_rate = 160;  // Default high-speed rate (WiFi limit)
     }
     else if (strcmp(cmd, "off") == 0) {
         new_rate = 50;   // Normal rate
@@ -1501,11 +1501,11 @@ static void cmd_fftmode(int argc, char** argv, void* context)
     else {
         // Try parsing as number
         int rate_val = atoi(cmd);
-        if (rate_val == 50 || rate_val == 100 || rate_val == 200 || rate_val == 400) {
+        if (rate_val == 50 || rate_val == 100 || rate_val == 160) {
             new_rate = static_cast<uint32_t>(rate_val);
         } else {
             cli->print("Invalid rate: %s\r\n", cmd);
-            cli->print("Valid rates: 50, 100, 200, 400 Hz\r\n");
+            cli->print("Valid rates: 50, 100, 160 Hz\r\n");
             return;
         }
     }
