@@ -118,10 +118,13 @@ struct TelemetryFFTPacket {
 static_assert(sizeof(TelemetryFFTPacket) == 32, "TelemetryFFTPacket size mismatch");
 
 /**
- * @brief Single FFT sample (28 bytes)
+ * @brief Single FFT sample (44 bytes)
  *
  * Used within batch packets.
  * バッチパケット内の1サンプル
+ *
+ * Includes controller inputs for PID debugging.
+ * PIDデバッグ用にコントローラ入力を含む
  */
 struct FFTSample {
     uint32_t timestamp_ms;    // ms since boot
@@ -131,12 +134,18 @@ struct FFTSample {
     float accel_x;            // [m/s²]
     float accel_y;            // [m/s²]
     float accel_z;            // [m/s²]
+    // Controller inputs (normalized)
+    // コントローラ入力（正規化済み）
+    float ctrl_throttle;      // [0-1]
+    float ctrl_roll;          // [-1 to 1]
+    float ctrl_pitch;         // [-1 to 1]
+    float ctrl_yaw;           // [-1 to 1]
 };
 
-static_assert(sizeof(FFTSample) == 28, "FFTSample size mismatch");
+static_assert(sizeof(FFTSample) == 44, "FFTSample size mismatch");
 
 /**
- * @brief Batch FFT packet structure (120 bytes)
+ * @brief Batch FFT packet structure (184 bytes)
  *
  * Contains 4 samples in one WebSocket frame to overcome
  * per-frame overhead limitation (~155 frames/sec max).
@@ -154,7 +163,7 @@ struct TelemetryFFTBatchPacket {
     uint8_t  sample_count;    // Number of samples (4)
     uint8_t  reserved;
 
-    // Samples (28 bytes × 4 = 112 bytes)
+    // Samples (44 bytes × 4 = 176 bytes)
     FFTSample samples[4];
 
     // Footer (4 bytes)
@@ -163,7 +172,7 @@ struct TelemetryFFTBatchPacket {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(TelemetryFFTBatchPacket) == 120, "TelemetryFFTBatchPacket size mismatch");
+static_assert(sizeof(TelemetryFFTBatchPacket) == 184, "TelemetryFFTBatchPacket size mismatch");
 
 // Batch size constant
 inline constexpr int FFT_BATCH_SIZE = 4;

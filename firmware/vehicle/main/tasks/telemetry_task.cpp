@@ -92,6 +92,11 @@ void TelemetryTask(void* pvParameters)
             const auto& accel = g_accel_buffer[telemetry_read_index];
             const auto& gyro = g_gyro_buffer[telemetry_read_index];
 
+            // Get controller input from state
+            // コントローラ入力をstateから取得
+            float ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw;
+            state.getControlInput(ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw);
+
             batch_pkt.samples[batch_index].timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
             batch_pkt.samples[batch_index].gyro_x = gyro.x;
             batch_pkt.samples[batch_index].gyro_y = gyro.y;
@@ -99,6 +104,10 @@ void TelemetryTask(void* pvParameters)
             batch_pkt.samples[batch_index].accel_x = accel.x;
             batch_pkt.samples[batch_index].accel_y = accel.y;
             batch_pkt.samples[batch_index].accel_z = accel.z;
+            batch_pkt.samples[batch_index].ctrl_throttle = ctrl_throttle;
+            batch_pkt.samples[batch_index].ctrl_roll = ctrl_roll;
+            batch_pkt.samples[batch_index].ctrl_pitch = ctrl_pitch;
+            batch_pkt.samples[batch_index].ctrl_yaw = ctrl_yaw;
 
             // Advance read index (ring buffer wrap)
             telemetry_read_index = (telemetry_read_index + 1) % REF_BUFFER_SIZE;
