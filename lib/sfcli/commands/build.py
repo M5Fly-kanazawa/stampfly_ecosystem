@@ -7,9 +7,8 @@ ESP-IDFを使用してファームウェアをビルドします。
 
 import argparse
 import subprocess
-import os
 from pathlib import Path
-from ..utils import console, paths, platform
+from ..utils import console, paths, platform, espidf
 
 COMMAND_NAME = "build"
 COMMAND_HELP = "Build firmware"
@@ -70,8 +69,8 @@ def run(args: argparse.Namespace) -> int:
         console.print("  See: https://docs.espressif.com/projects/esp-idf/")
         return 1
 
-    # Prepare environment
-    env = _prepare_idf_env(idf_path)
+    # Prepare environment (uses ESP-IDF's Python, not our venv)
+    env = espidf.prepare_idf_env(idf_path)
     if env is None:
         console.error("Failed to prepare ESP-IDF environment")
         return 1
@@ -119,58 +118,6 @@ def run(args: argparse.Namespace) -> int:
         console.print()
         console.error(f"Build failed: {args.target}")
         return result.returncode
-
-
-def _prepare_idf_env(idf_path: Path) -> dict:
-    """Prepare environment with ESP-IDF settings"""
-    env = os.environ.copy()
-    env["IDF_PATH"] = str(idf_path)
-
-    # Source export.sh and capture environment
-    if platform.is_windows():
-        # Windows: use export.bat
-        export_script = idf_path / "export.bat"
-        if not export_script.exists():
-            return env
-
-        # Run export.bat and capture environment
-        try:
-            result = subprocess.run(
-                f'cmd /c "{export_script}" && set',
-                shell=True,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.split("\n"):
-                    if "=" in line:
-                        key, _, value = line.partition("=")
-                        env[key.strip()] = value.strip()
-        except Exception:
-            pass
-    else:
-        # Unix: source export.sh
-        export_script = idf_path / "export.sh"
-        if not export_script.exists():
-            return env
-
-        try:
-            result = subprocess.run(
-                f'source "{export_script}" > /dev/null 2>&1 && env',
-                shell=True,
-                capture_output=True,
-                text=True,
-                executable="/bin/bash",
-            )
-            if result.returncode == 0:
-                for line in result.stdout.split("\n"):
-                    if "=" in line:
-                        key, _, value = line.partition("=")
-                        env[key.strip()] = value.strip()
-        except Exception:
-            pass
-
-    return env
 
 
 def _get_project_name(project_dir: Path) -> str:

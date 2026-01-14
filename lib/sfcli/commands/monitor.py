@@ -7,9 +7,8 @@ Opens serial monitor to connected device.
 
 import argparse
 import subprocess
-import os
 from pathlib import Path
-from ..utils import console, paths, platform
+from ..utils import console, paths, platform, espidf
 
 COMMAND_NAME = "monitor"
 COMMAND_HELP = "Open serial monitor"
@@ -80,8 +79,8 @@ def run(args: argparse.Namespace) -> int:
     console.print("  Press Ctrl+] to exit")
     console.print()
 
-    # Prepare environment
-    env = _prepare_idf_env(idf_path)
+    # Prepare environment (uses ESP-IDF's Python, not our venv)
+    env = espidf.prepare_idf_env(idf_path)
 
     # Monitor command
     cmd = ["idf.py", "-p", port, "-b", str(args.baud), "monitor"]
@@ -90,30 +89,3 @@ def run(args: argparse.Namespace) -> int:
     result = subprocess.run(cmd, cwd=target_dir, env=env)
 
     return result.returncode
-
-
-def _prepare_idf_env(idf_path: Path) -> dict:
-    """Prepare environment with ESP-IDF settings"""
-    env = os.environ.copy()
-    env["IDF_PATH"] = str(idf_path)
-
-    if not platform.is_windows():
-        export_script = idf_path / "export.sh"
-        if export_script.exists():
-            try:
-                result = subprocess.run(
-                    f'source "{export_script}" > /dev/null 2>&1 && env',
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    executable="/bin/bash",
-                )
-                if result.returncode == 0:
-                    for line in result.stdout.split("\n"):
-                        if "=" in line:
-                            key, _, value = line.partition("=")
-                            env[key.strip()] = value.strip()
-            except Exception:
-                pass
-
-    return env
