@@ -47,6 +47,14 @@ build/
 .mypy_cache/
 
 # ====================
+# StampFly Ecosystem
+# ====================
+# Local ESP-IDF installation
+.esp-idf/
+# CLI configuration
+.sfconfig.json
+
+# ====================
 # Analysis outputs
 # ====================
 analysis/reports/*

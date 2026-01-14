@@ -1,0 +1,46 @@
+# StampFly Ecosystem Dependencies
+# Install with: pip install -r requirements.txt
+
+# ============================================================
+# Core - Required for all functionality
+# ============================================================
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+
+# ============================================================
+# Serial Communication
+# ============================================================
+pyserial>=3.5
+esptool>=4.6
+
+# ============================================================
+# CLI Framework
+# ============================================================
+# Using argparse (built-in) for main CLI
+jinja2>=3.1.0            # Template engine for scaffolding
+
+# ============================================================
+# Image Processing (optional, for visualization)
+# ============================================================
+Pillow>=10.0.0
+opencv-python>=4.8.0     # cv2
+
+# ============================================================
+# 3D Visualization (optional)
+# ============================================================
+# vpython>=7.6.0         # Uncomment for 3D visualization
+# numpy-stl>=3.0.0       # STL file loading
+
+# ============================================================
+# Development
+# ============================================================
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# ============================================================
+# Simulator - Genesis (optional, large dependency)
+# ============================================================
+# Uncomment below for Genesis physics simulator support
+# genesis-world>=0.2.0

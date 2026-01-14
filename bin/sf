@@ -1,0 +1,31 @@
+#!/bin/bash
+# StampFly CLI Wrapper (Unix)
+# This script activates the virtual environment and runs the CLI
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+VENV_DIR="$ROOT_DIR/.venv"
+
+# Check if virtual environment exists
+if [ ! -d "$VENV_DIR" ]; then
+    echo "[ERROR] Virtual environment not found: $VENV_DIR"
+    echo "        Run ./scripts/install.sh first"
+    exit 1
+fi
+
+# Activate virtual environment
+source "$VENV_DIR/bin/activate"
+
+# Add lib to PYTHONPATH
+export PYTHONPATH="$ROOT_DIR/lib:$PYTHONPATH"
+export STAMPFLY_ROOT="$ROOT_DIR"
+
+# Source ESP-IDF if available (for build/flash commands)
+if [ -d "$ROOT_DIR/.esp-idf" ] && [ -f "$ROOT_DIR/.esp-idf/export.sh" ]; then
+    source "$ROOT_DIR/.esp-idf/export.sh" > /dev/null 2>&1
+elif [ -d "$HOME/esp/esp-idf" ] && [ -f "$HOME/esp/esp-idf/export.sh" ]; then
+    source "$HOME/esp/esp-idf/export.sh" > /dev/null 2>&1
+fi
+
+# Run CLI
+python -m sfcli "$@"

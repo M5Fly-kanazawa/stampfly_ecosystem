@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stampfly-ecosystem"
+version = "0.1.0"
+description = "StampFly Flight Control Development Environment"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "StampFly Team"}
+]
+keywords = ["drone", "quadcopter", "flight-control", "esp32"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "pyserial>=3.5",
+    "jinja2>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+full = [
+    "esptool>=4.6",
+    "Pillow>=10.0.0",
+    "opencv-python>=4.8.0",
+]
+
+[project.scripts]
+sf = "sfcli.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/stampfly/stampfly-ecosystem"
+Documentation = "https://github.com/stampfly/stampfly-ecosystem/docs"
+Repository = "https://github.com/stampfly/stampfly-ecosystem"
+
+[tool.setuptools.packages.find]
+where = ["lib"]
+
+[tool.setuptools.package-dir]
+"" = "lib"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
