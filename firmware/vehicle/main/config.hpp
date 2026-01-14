@@ -83,7 +83,7 @@ inline constexpr uint32_t STACK_SIZE_TELEMETRY = 4096;
 
 inline constexpr float IMU_DT = 0.0025f;          // 400Hz
 inline constexpr float OPTFLOW_DT = 0.01f;        // 100Hz
-inline constexpr float MAG_DT = 0.01f;            // 100Hz
+inline constexpr float MAG_DT = 0.04f;            // 25Hz
 inline constexpr float BARO_DT = 0.02f;           // 50Hz
 inline constexpr float TOF_DT = 0.033f;           // 30Hz
 
@@ -234,26 +234,24 @@ inline constexpr int LANDING_HOLD_COUNT = 200;          // 着陸判定維持回
 
 namespace stability {
 
-// 安定判定の標準偏差閾値（std norm）+15%
-inline constexpr float ACCEL_STD_THRESHOLD = 0.02875f;   // [m/s²] (初期値×1.15: 0.025×1.15)
-inline constexpr float GYRO_STD_THRESHOLD = 0.00575f;    // [rad/s] (初期値×1.15: 0.005×1.15)
-inline constexpr float MAG_STD_THRESHOLD = 1.495f;       // [µT] (初期値×1.15: 1.3×1.15)
-inline constexpr float BARO_STD_THRESHOLD = 0.23f;       // [m] (初期値×1.15: 0.20×1.15)
-inline constexpr float TOF_STD_THRESHOLD = 0.00345f;     // [m] (初期値×1.15: 0.003×1.15)
-inline constexpr float OPTFLOW_STD_THRESHOLD = 3.45f;    // [counts] (初期値×1.15: 3.0×1.15)
+// 安定判定の標準偏差閾値（std norm）×2.0
+inline constexpr float ACCEL_STD_THRESHOLD = 0.05f;      // [m/s²] (初期値×2.0: 0.025×2.0)
+inline constexpr float GYRO_STD_THRESHOLD = 0.01f;       // [rad/s] (初期値×2.0: 0.005×2.0)
+inline constexpr float MAG_STD_THRESHOLD = 2.6f;         // [µT] (初期値×2.0: 1.3×2.0)
+inline constexpr float BARO_STD_THRESHOLD = 0.40f;       // [m] (初期値×2.0: 0.20×2.0)
+inline constexpr float TOF_STD_THRESHOLD = 0.006f;       // [m] (初期値×2.0: 0.003×2.0)
+inline constexpr float OPTFLOW_STD_THRESHOLD = 6.0f;     // [counts] (初期値×2.0: 3.0×2.0)
 
 // 安定判定のタイミング
 inline constexpr int CHECK_INTERVAL_MS = 200;            // チェック間隔 [ms]
-inline constexpr int MIN_WAIT_MS = 2000;                 // 最小待機時間 [ms]
 inline constexpr int MAX_WAIT_MS = 10000;                // 最大待機時間 [ms]
-inline constexpr int STABLE_COUNT_REQUIRED = 5;          // 連続安定回数
 
 // バッファ最小サンプル数（統計計算に必要）
 inline constexpr int MIN_ACCEL_SAMPLES = 50;
 inline constexpr int MIN_GYRO_SAMPLES = 50;
-inline constexpr int MIN_MAG_SAMPLES = 50;
+inline constexpr int MIN_MAG_SAMPLES = 50;        // 25Hz × 50 = 2000ms
 inline constexpr int MIN_BARO_SAMPLES = 20;      // 50Hz × 20 = 400ms
-inline constexpr int MIN_TOF_SAMPLES = 20;       // 20Hz × 20 = 1000ms
+inline constexpr int MIN_TOF_SAMPLES = 20;       // 30Hz × 20 = 667ms
 inline constexpr int MIN_OPTFLOW_SAMPLES = 50;   // 100Hz × 50 = 500ms
 
 } // namespace stability
@@ -291,7 +289,7 @@ namespace sensor {
 
 // BMM150 (地磁気センサー)
 // data_rate: 0=10Hz, 1=2Hz, 2=6Hz, 3=8Hz, 4=15Hz, 5=20Hz, 6=25Hz, 7=30Hz
-inline constexpr int BMM150_DATA_RATE = 0;         // ODR_10HZ
+inline constexpr int BMM150_DATA_RATE = 6;         // ODR_25HZ
 // preset: 0=LOW_POWER, 1=REGULAR, 2=ENHANCED, 3=HIGH_ACCURACY
 inline constexpr int BMM150_PRESET = 1;            // REGULAR
 
@@ -403,18 +401,18 @@ inline constexpr float YAW_RATE_MAX = 5.0f;        // ヨー最大角速度 [rad
 
 // Roll rate PID
 inline constexpr float ROLL_RATE_KP = 9.1e-4f;     // [Nm/(rad/s)] = 0.65 × 1.4e-3
-inline constexpr float ROLL_RATE_TI = 2.0f;        // 積分時間 [s] (0.7→2.0, I項応答を遅く)
-inline constexpr float ROLL_RATE_TD = 0.02f;       // 微分時間 [s] (0.01→0.02, D項強化)
+inline constexpr float ROLL_RATE_TI = 0.7f;        // 積分時間 [s]
+inline constexpr float ROLL_RATE_TD = 0.01f;       // 微分時間 [s]
 
 // Pitch rate PID
 inline constexpr float PITCH_RATE_KP = 1.33e-3f;   // [Nm/(rad/s)] = 0.95 × 1.4e-3
-inline constexpr float PITCH_RATE_TI = 2.0f;       // 積分時間 [s] (0.7→2.0, I項応答を遅く)
-inline constexpr float PITCH_RATE_TD = 0.05f;      // 微分時間 [s] (0.025→0.05, D項強化)
+inline constexpr float PITCH_RATE_TI = 0.7f;       // 積分時間 [s]
+inline constexpr float PITCH_RATE_TD = 0.01f;      // 微分時間 [s]
 
 // Yaw rate PID
 inline constexpr float YAW_RATE_KP = 1.77e-3f;     // [Nm/(rad/s)] = 3.0 × 5.9e-4
-inline constexpr float YAW_RATE_TI = 2.0f;         // 積分時間 [s] (0.8→2.0, I項応答を遅く)
-inline constexpr float YAW_RATE_TD = 0.02f;        // 微分時間 [s] (0.01→0.02, D項強化)
+inline constexpr float YAW_RATE_TI = 0.8f;         // 積分時間 [s]
+inline constexpr float YAW_RATE_TD = 0.01f;        // 微分時間 [s]
 
 // 出力制限 [Nm]
 inline constexpr float ROLL_OUTPUT_LIMIT = 5.2e-3f;   // 3.7 × 1.4e-3

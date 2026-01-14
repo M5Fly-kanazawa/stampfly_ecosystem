@@ -1,6 +1,6 @@
 /**
  * @file mag_task.cpp
- * @brief 地磁気タスク (100Hz) - BMM150読み取り、キャリブレーション適用
+ * @brief 地磁気タスク (25Hz) - BMM150読み取り、キャリブレーション適用
  */
 
 #include "tasks_common.hpp"
@@ -71,7 +71,7 @@ void MagTask(void* pvParameters)
                         g_mag_buffer_count++;
                     }
 
-                    // 新しいデータがあることを示すフラグ（100Hz）
+                    // 新しいデータがあることを示すフラグ（25Hz）
                     // ESKF updateはIMUTask内で行う（レースコンディション防止）
                     g_mag_data_ready = true;
                 }

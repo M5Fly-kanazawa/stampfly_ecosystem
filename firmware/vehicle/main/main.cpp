@@ -248,6 +248,7 @@ void onButtonEvent(stampfly::Button::Event event)
             } else if (state.getFlightState() == stampfly::FlightState::ARMED) {
                 if (state.requestDisarm()) {
                     g_motor.saveStatsToNVS();  // モーター統計保存
+                    g_motor.disarm();          // モーター停止（統計更新防止）
                     g_buzzer.disarmTone();
                     ESP_LOGI(TAG, "Motors DISARMED");
                 }
@@ -596,232 +597,165 @@ extern "C" void app_main(void)
     // 安定判定パラメータ（config.hpp から取得）
     using namespace config::stability;
 
-    int stable_count = 0;
     int elapsed_ms = 0;
+    int64_t start_time = esp_timer_get_time();
 
-    // 各センサーの最終std norm値を保持
+    // 各センサーの合格フラグ（一度合格したらチェック終了）
+    bool accel_passed = false;
+    bool gyro_passed = false;
+    bool mag_passed = false;
+    bool baro_passed = false;
+    bool tof_passed = false;
+
+    // 各センサーの最終std値を保持
     float last_accel_std_norm = 0.0f;
     float last_gyro_std_norm = 0.0f;
     float last_mag_std_norm = 0.0f;
     float last_baro_std = 0.0f;
     float last_tof_std = 0.0f;
-    float last_optflow_std = 0.0f;
-
-    int64_t start_time = esp_timer_get_time();
 
     // デバッグログ用（1秒ごとにログ出力）
     int last_log_sec = 0;
 
+    // ヘルパー: Vector3の標準偏差ノルムを計算
+    auto calcVector3StdNorm = [](const auto& buffer, int count, int buffer_size) {
+        stampfly::math::Vector3 sum = stampfly::math::Vector3::zero();
+        stampfly::math::Vector3 sum_sq = stampfly::math::Vector3::zero();
+        int n = std::min(count, buffer_size);
+        for (int i = 0; i < n; i++) {
+            sum += buffer[i];
+            sum_sq.x += buffer[i].x * buffer[i].x;
+            sum_sq.y += buffer[i].y * buffer[i].y;
+            sum_sq.z += buffer[i].z * buffer[i].z;
+        }
+        float fn = static_cast<float>(n);
+        stampfly::math::Vector3 avg = sum * (1.0f / fn);
+        float var_x = std::max(0.0f, sum_sq.x / fn - avg.x * avg.x);
+        float var_y = std::max(0.0f, sum_sq.y / fn - avg.y * avg.y);
+        float var_z = std::max(0.0f, sum_sq.z / fn - avg.z * avg.z);
+        return std::sqrt(var_x + var_y + var_z);
+    };
+
+    // ヘルパー: スカラーの標準偏差を計算
+    auto calcScalarStd = [](const auto& buffer, int count, int buffer_size) {
+        float sum = 0.0f, sum_sq = 0.0f;
+        int n = std::min(count, buffer_size);
+        for (int i = 0; i < n; i++) {
+            sum += buffer[i];
+            sum_sq += buffer[i] * buffer[i];
+        }
+        float fn = static_cast<float>(n);
+        float avg = sum / fn;
+        float var = std::max(0.0f, sum_sq / fn - avg * avg);
+        return std::sqrt(var);
+    };
+
     while (elapsed_ms < MAX_WAIT_MS) {
-        // LEDTaskが既に動作中なので、ここでのLED更新は不要
-        // （同時アクセスでRMT "channel not in init state" エラーが発生するため削除）
         vTaskDelay(pdMS_TO_TICKS(CHECK_INTERVAL_MS));
         elapsed_ms += CHECK_INTERVAL_MS;
 
-        // 全センサーのバッファが最小サンプル数を満たしているかチェック
-        // 注: OptFlowは高度が低いとsqualが低くバッファが埋まらないため除外
-        bool buffers_ready =
-            g_accel_buffer_count >= MIN_ACCEL_SAMPLES &&
-            g_gyro_buffer_count >= MIN_GYRO_SAMPLES &&
-            g_mag_buffer_count >= MIN_MAG_SAMPLES &&
-            g_baro_buffer_count >= MIN_BARO_SAMPLES &&
-            g_tof_bottom_buffer_count >= MIN_TOF_SAMPLES;
-            // g_optflow_buffer_count >= MIN_OPTFLOW_SAMPLES は除外
-
-        // 1秒ごとにバッファ状態をログ出力（buffers_ready関係なく）
+        // 1秒ごとにログ出力
         int current_sec = elapsed_ms / 1000;
-        if (current_sec > last_log_sec) {
+        bool do_log = (current_sec > last_log_sec);
+        if (do_log) {
             last_log_sec = current_sec;
             ESP_LOGI(TAG, "----------------------------------------");
-            ESP_LOGI(TAG, "Stabilization t=%ds: accel=%d gyro=%d mag=%d baro=%d tof=%d flow=%d ready=%d",
-                     current_sec,
-                     g_accel_buffer_count, g_gyro_buffer_count, g_mag_buffer_count,
-                     g_baro_buffer_count, g_tof_bottom_buffer_count, g_optflow_buffer_count,
-                     buffers_ready ? 1 : 0);
+            ESP_LOGI(TAG, "Stabilization t=%ds:", current_sec);
         }
 
-        // バッファからstd normを計算
-        if (buffers_ready) {
-            // 加速度の平均と標準偏差を計算
-            stampfly::math::Vector3 accel_sum = stampfly::math::Vector3::zero();
-            stampfly::math::Vector3 accel_sum_sq = stampfly::math::Vector3::zero();
-            int accel_n = std::min(g_accel_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < accel_n; i++) {
-                accel_sum += g_accel_buffer[i];
-                accel_sum_sq.x += g_accel_buffer[i].x * g_accel_buffer[i].x;
-                accel_sum_sq.y += g_accel_buffer[i].y * g_accel_buffer[i].y;
-                accel_sum_sq.z += g_accel_buffer[i].z * g_accel_buffer[i].z;
-            }
-            float n = static_cast<float>(accel_n);
-            stampfly::math::Vector3 accel_avg = accel_sum * (1.0f / n);
-            float accel_var_x = accel_sum_sq.x / n - accel_avg.x * accel_avg.x;
-            float accel_var_y = accel_sum_sq.y / n - accel_avg.y * accel_avg.y;
-            float accel_var_z = accel_sum_sq.z / n - accel_avg.z * accel_avg.z;
-            stampfly::math::Vector3 accel_std(
-                std::sqrt(std::max(0.0f, accel_var_x)),
-                std::sqrt(std::max(0.0f, accel_var_y)),
-                std::sqrt(std::max(0.0f, accel_var_z)));
-            float accel_std_norm = std::sqrt(accel_var_x + accel_var_y + accel_var_z);
-            accel_std_norm = std::sqrt(std::max(0.0f, accel_var_x) +
-                                        std::max(0.0f, accel_var_y) +
-                                        std::max(0.0f, accel_var_z));
-
-            // 地磁気の平均と標準偏差を計算
-            stampfly::math::Vector3 mag_sum = stampfly::math::Vector3::zero();
-            stampfly::math::Vector3 mag_sum_sq = stampfly::math::Vector3::zero();
-            int mag_n = std::min(g_mag_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < mag_n; i++) {
-                mag_sum += g_mag_buffer[i];
-                mag_sum_sq.x += g_mag_buffer[i].x * g_mag_buffer[i].x;
-                mag_sum_sq.y += g_mag_buffer[i].y * g_mag_buffer[i].y;
-                mag_sum_sq.z += g_mag_buffer[i].z * g_mag_buffer[i].z;
-            }
-            n = static_cast<float>(mag_n);
-            stampfly::math::Vector3 mag_avg = mag_sum * (1.0f / n);
-            float mag_var_x = mag_sum_sq.x / n - mag_avg.x * mag_avg.x;
-            float mag_var_y = mag_sum_sq.y / n - mag_avg.y * mag_avg.y;
-            float mag_var_z = mag_sum_sq.z / n - mag_avg.z * mag_avg.z;
-            stampfly::math::Vector3 mag_std(
-                std::sqrt(std::max(0.0f, mag_var_x)),
-                std::sqrt(std::max(0.0f, mag_var_y)),
-                std::sqrt(std::max(0.0f, mag_var_z)));
-            float mag_std_norm = std::sqrt(std::max(0.0f, mag_var_x) +
-                                            std::max(0.0f, mag_var_y) +
-                                            std::max(0.0f, mag_var_z));
-
-            // ジャイロの統計計算
-            stampfly::math::Vector3 gyro_sum = stampfly::math::Vector3::zero();
-            stampfly::math::Vector3 gyro_sum_sq = stampfly::math::Vector3::zero();
-            int gyro_n = std::min(g_gyro_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < gyro_n; i++) {
-                gyro_sum += g_gyro_buffer[i];
-                gyro_sum_sq.x += g_gyro_buffer[i].x * g_gyro_buffer[i].x;
-                gyro_sum_sq.y += g_gyro_buffer[i].y * g_gyro_buffer[i].y;
-                gyro_sum_sq.z += g_gyro_buffer[i].z * g_gyro_buffer[i].z;
-            }
-            float gn = static_cast<float>(gyro_n);
-            stampfly::math::Vector3 gyro_avg = gyro_sum * (1.0f / gn);
-            float gyro_var_x = gyro_sum_sq.x / gn - gyro_avg.x * gyro_avg.x;
-            float gyro_var_y = gyro_sum_sq.y / gn - gyro_avg.y * gyro_avg.y;
-            float gyro_var_z = gyro_sum_sq.z / gn - gyro_avg.z * gyro_avg.z;
-            stampfly::math::Vector3 gyro_std(
-                std::sqrt(std::max(0.0f, gyro_var_x)),
-                std::sqrt(std::max(0.0f, gyro_var_y)),
-                std::sqrt(std::max(0.0f, gyro_var_z)));
-            float gyro_std_norm = std::sqrt(std::max(0.0f, gyro_var_x) +
-                                            std::max(0.0f, gyro_var_y) +
-                                            std::max(0.0f, gyro_var_z));
-
-            // 気圧高度の統計計算
-            float baro_sum = 0.0f, baro_sum_sq = 0.0f;
-            int baro_n = std::min(g_baro_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < baro_n; i++) {
-                baro_sum += g_baro_buffer[i];
-                baro_sum_sq += g_baro_buffer[i] * g_baro_buffer[i];
-            }
-            float baro_avg = baro_sum / baro_n;
-            float baro_var = baro_sum_sq / baro_n - baro_avg * baro_avg;
-            float baro_std = std::sqrt(std::max(0.0f, baro_var));
-
-            // ToF底面の統計計算
-            float tof_sum = 0.0f, tof_sum_sq = 0.0f;
-            int tof_n = std::min(g_tof_bottom_buffer_count, REF_BUFFER_SIZE);
-            for (int i = 0; i < tof_n; i++) {
-                tof_sum += g_tof_bottom_buffer[i];
-                tof_sum_sq += g_tof_bottom_buffer[i] * g_tof_bottom_buffer[i];
-            }
-            float tof_avg = tof_sum / tof_n;
-            float tof_var = tof_sum_sq / tof_n - tof_avg * tof_avg;
-            float tof_std = std::sqrt(std::max(0.0f, tof_var));
-
-            // オプティカルフローの統計計算
-            float dx_sum = 0.0f, dy_sum = 0.0f, squal_sum = 0.0f;
-            float dx_sum_sq = 0.0f, dy_sum_sq = 0.0f;
-            int flow_n = std::min(g_optflow_buffer_count, REF_BUFFER_SIZE);
-            float optflow_std = 0.0f;  // デフォルト値
-            if (flow_n > 0) {
-                for (int i = 0; i < flow_n; i++) {
-                    dx_sum += g_optflow_buffer[i].dx;
-                    dy_sum += g_optflow_buffer[i].dy;
-                    squal_sum += g_optflow_buffer[i].squal;
-                    dx_sum_sq += g_optflow_buffer[i].dx * g_optflow_buffer[i].dx;
-                    dy_sum_sq += g_optflow_buffer[i].dy * g_optflow_buffer[i].dy;
-                }
-                float dx_avg = dx_sum / flow_n;
-                float dy_avg = dy_sum / flow_n;
-                (void)squal_sum;  // 将来のsqual安定判定用に保持
-                float dx_var = dx_sum_sq / flow_n - dx_avg * dx_avg;
-                float dy_var = dy_sum_sq / flow_n - dy_avg * dy_avg;
-                float dx_std = std::sqrt(std::max(0.0f, dx_var));
-                float dy_std = std::sqrt(std::max(0.0f, dy_var));
-                optflow_std = dx_std + dy_std;  // dx_std + dy_std で判定
-            }
-
-            // 最終値を保存
-            last_accel_std_norm = accel_std_norm;
-            last_gyro_std_norm = gyro_std_norm;
-            last_mag_std_norm = mag_std_norm;
-            last_baro_std = baro_std;
-            last_tof_std = tof_std;
-            last_optflow_std = optflow_std;
-
-            // 詳細デバッグログ出力（1秒ごと、外側のログと同じタイミング）
-            // current_sec と last_log_sec は外側で更新済み
-            if (current_sec == last_log_sec && current_sec > 0) {
-                ESP_LOGI(TAG, "  Accel: %.4f (th=%.3f) %s | Gyro: %.5f (th=%.3f) %s",
-                         accel_std_norm, ACCEL_STD_THRESHOLD,
-                         accel_std_norm < ACCEL_STD_THRESHOLD ? "OK" : "NG",
-                         gyro_std_norm, GYRO_STD_THRESHOLD,
-                         gyro_std_norm < GYRO_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  Mag: %.3f (th=%.1f) %s | Baro: %.4f (th=%.2f) %s",
-                         mag_std_norm, MAG_STD_THRESHOLD,
-                         mag_std_norm < MAG_STD_THRESHOLD ? "OK" : "NG",
-                         baro_std, BARO_STD_THRESHOLD,
-                         baro_std < BARO_STD_THRESHOLD ? "OK" : "NG");
-                ESP_LOGI(TAG, "  ToF: %.4f (th=%.3f) %s | stable_count=%d/%d",
-                         tof_std, TOF_STD_THRESHOLD,
-                         tof_std < TOF_STD_THRESHOLD ? "OK" : "NG",
-                         stable_count, STABLE_COUNT_REQUIRED);
-            }
-
-            // 全センサーの安定判定（最小待機時間経過後）
-            // 注: OptFlowは起動時にsqualが低いためチェック対象外
-            bool accel_stable = accel_std_norm < ACCEL_STD_THRESHOLD;
-            bool gyro_stable = gyro_std_norm < GYRO_STD_THRESHOLD;
-            bool mag_stable = mag_std_norm < MAG_STD_THRESHOLD;
-            bool baro_stable = baro_std < BARO_STD_THRESHOLD;
-            bool tof_stable = tof_std < TOF_STD_THRESHOLD;
-            // bool optflow_stable = optflow_std < OPTFLOW_STD_THRESHOLD;  // 除外
-
-            bool all_stable = accel_stable && gyro_stable && mag_stable &&
-                              baro_stable && tof_stable;
-
-            if (elapsed_ms >= MIN_WAIT_MS && all_stable) {
-                stable_count++;
-                ESP_LOGI(TAG, "Stability check %d/%d: ALL SENSORS STABLE (t=%dms)",
-                         stable_count, STABLE_COUNT_REQUIRED, elapsed_ms);
-
-                if (stable_count >= STABLE_COUNT_REQUIRED) {
-                    break;  // 安定条件を満たした
-                }
+        // === 加速度 ===
+        if (!accel_passed && g_accel_buffer_count >= MIN_ACCEL_SAMPLES) {
+            float std_norm = calcVector3StdNorm(g_accel_buffer, g_accel_buffer_count, REF_BUFFER_SIZE);
+            last_accel_std_norm = std_norm;
+            if (std_norm < ACCEL_STD_THRESHOLD) {
+                accel_passed = true;
+                ESP_LOGI(TAG, "  Accel: PASSED (%.4f < %.3f)", std_norm, ACCEL_STD_THRESHOLD);
             } else {
-                if (stable_count > 0) {
-                    ESP_LOGW(TAG, "Stability reset at t=%dms - unstable sensors:", elapsed_ms);
-                    if (!accel_stable) ESP_LOGW(TAG, "  Accel: %.4f > %.3f", accel_std_norm, ACCEL_STD_THRESHOLD);
-                    if (!gyro_stable) ESP_LOGW(TAG, "  Gyro: %.5f > %.3f", gyro_std_norm, GYRO_STD_THRESHOLD);
-                    if (!mag_stable) ESP_LOGW(TAG, "  Mag: %.3f > %.1f", mag_std_norm, MAG_STD_THRESHOLD);
-                    if (!baro_stable) ESP_LOGW(TAG, "  Baro: %.4f > %.2f", baro_std, BARO_STD_THRESHOLD);
-                    if (!tof_stable) ESP_LOGW(TAG, "  ToF: %.4f > %.3f", tof_std, TOF_STD_THRESHOLD);
-                }
-                stable_count = 0;  // 条件を満たさなければリセット
+                // 不合格: バッファクリアして再サンプリング
+                g_accel_buffer_count = 0;
+                g_accel_buffer_index = 0;
+                if (do_log) ESP_LOGW(TAG, "  Accel: NG (%.4f > %.3f) -> retry", std_norm, ACCEL_STD_THRESHOLD);
             }
+        } else if (do_log && !accel_passed) {
+            ESP_LOGI(TAG, "  Accel: waiting (%d/%d samples)", g_accel_buffer_count, MIN_ACCEL_SAMPLES);
+        }
+
+        // === ジャイロ ===
+        if (!gyro_passed && g_gyro_buffer_count >= MIN_GYRO_SAMPLES) {
+            float std_norm = calcVector3StdNorm(g_gyro_buffer, g_gyro_buffer_count, REF_BUFFER_SIZE);
+            last_gyro_std_norm = std_norm;
+            if (std_norm < GYRO_STD_THRESHOLD) {
+                gyro_passed = true;
+                ESP_LOGI(TAG, "  Gyro:  PASSED (%.5f < %.3f)", std_norm, GYRO_STD_THRESHOLD);
+            } else {
+                g_gyro_buffer_count = 0;
+                g_gyro_buffer_index = 0;
+                if (do_log) ESP_LOGW(TAG, "  Gyro:  NG (%.5f > %.3f) -> retry", std_norm, GYRO_STD_THRESHOLD);
+            }
+        } else if (do_log && !gyro_passed) {
+            ESP_LOGI(TAG, "  Gyro:  waiting (%d/%d samples)", g_gyro_buffer_count, MIN_GYRO_SAMPLES);
+        }
+
+        // === 地磁気 ===
+        if (!mag_passed && g_mag_buffer_count >= MIN_MAG_SAMPLES) {
+            float std_norm = calcVector3StdNorm(g_mag_buffer, g_mag_buffer_count, REF_BUFFER_SIZE);
+            last_mag_std_norm = std_norm;
+            if (std_norm < MAG_STD_THRESHOLD) {
+                mag_passed = true;
+                ESP_LOGI(TAG, "  Mag:   PASSED (%.3f < %.1f)", std_norm, MAG_STD_THRESHOLD);
+            } else {
+                g_mag_buffer_count = 0;
+                g_mag_buffer_index = 0;
+                if (do_log) ESP_LOGW(TAG, "  Mag:   NG (%.3f > %.1f) -> retry", std_norm, MAG_STD_THRESHOLD);
+            }
+        } else if (do_log && !mag_passed) {
+            ESP_LOGI(TAG, "  Mag:   waiting (%d/%d samples)", g_mag_buffer_count, MIN_MAG_SAMPLES);
+        }
+
+        // === 気圧 ===
+        if (!baro_passed && g_baro_buffer_count >= MIN_BARO_SAMPLES) {
+            float std_val = calcScalarStd(g_baro_buffer, g_baro_buffer_count, REF_BUFFER_SIZE);
+            last_baro_std = std_val;
+            if (std_val < BARO_STD_THRESHOLD) {
+                baro_passed = true;
+                ESP_LOGI(TAG, "  Baro:  PASSED (%.4f < %.2f)", std_val, BARO_STD_THRESHOLD);
+            } else {
+                g_baro_buffer_count = 0;
+                g_baro_buffer_index = 0;
+                if (do_log) ESP_LOGW(TAG, "  Baro:  NG (%.4f > %.2f) -> retry", std_val, BARO_STD_THRESHOLD);
+            }
+        } else if (do_log && !baro_passed) {
+            ESP_LOGI(TAG, "  Baro:  waiting (%d/%d samples)", g_baro_buffer_count, MIN_BARO_SAMPLES);
+        }
+
+        // === ToF ===
+        if (!tof_passed && g_tof_bottom_buffer_count >= MIN_TOF_SAMPLES) {
+            float std_val = calcScalarStd(g_tof_bottom_buffer, g_tof_bottom_buffer_count, REF_BUFFER_SIZE);
+            last_tof_std = std_val;
+            if (std_val < TOF_STD_THRESHOLD) {
+                tof_passed = true;
+                ESP_LOGI(TAG, "  ToF:   PASSED (%.4f < %.3f)", std_val, TOF_STD_THRESHOLD);
+            } else {
+                g_tof_bottom_buffer_count = 0;
+                g_tof_bottom_buffer_index = 0;
+                if (do_log) ESP_LOGW(TAG, "  ToF:   NG (%.4f > %.3f) -> retry", std_val, TOF_STD_THRESHOLD);
+            }
+        } else if (do_log && !tof_passed) {
+            ESP_LOGI(TAG, "  ToF:   waiting (%d/%d samples)", g_tof_bottom_buffer_count, MIN_TOF_SAMPLES);
+        }
+
+        // 全センサー合格したら終了
+        if (accel_passed && gyro_passed && mag_passed && baro_passed && tof_passed) {
+            break;
         }
     }
 
     int64_t end_time = esp_timer_get_time();
     float stabilization_time_ms = (end_time - start_time) / 1000.0f;
 
-    if (stable_count >= STABLE_COUNT_REQUIRED) {
+    bool all_passed = accel_passed && gyro_passed && mag_passed && baro_passed && tof_passed;
+
+    if (all_passed) {
         ESP_LOGI(TAG, "========================================");
         ESP_LOGI(TAG, "ALL SENSORS STABILIZED after %.0f ms", stabilization_time_ms);
         ESP_LOGI(TAG, "  Accel: %.4f < %.3f", last_accel_std_norm, ACCEL_STD_THRESHOLD);
@@ -829,23 +763,15 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "  Mag:   %.3f < %.1f", last_mag_std_norm, MAG_STD_THRESHOLD);
         ESP_LOGI(TAG, "  Baro:  %.4f < %.2f", last_baro_std, BARO_STD_THRESHOLD);
         ESP_LOGI(TAG, "  ToF:   %.4f < %.3f", last_tof_std, TOF_STD_THRESHOLD);
-        ESP_LOGI(TAG, "  Flow:  %.1f < %.1f", last_optflow_std, OPTFLOW_STD_THRESHOLD);
         ESP_LOGI(TAG, "========================================");
     } else {
         ESP_LOGW(TAG, "Sensor stabilization timeout after %.0f ms", stabilization_time_ms);
         ESP_LOGW(TAG, "Final sensor status:");
-        ESP_LOGW(TAG, "  Accel: %.4f (th=%.3f) %s", last_accel_std_norm, ACCEL_STD_THRESHOLD,
-                 last_accel_std_norm < ACCEL_STD_THRESHOLD ? "OK" : "NG");
-        ESP_LOGW(TAG, "  Gyro:  %.5f (th=%.3f) %s", last_gyro_std_norm, GYRO_STD_THRESHOLD,
-                 last_gyro_std_norm < GYRO_STD_THRESHOLD ? "OK" : "NG");
-        ESP_LOGW(TAG, "  Mag:   %.3f (th=%.1f) %s", last_mag_std_norm, MAG_STD_THRESHOLD,
-                 last_mag_std_norm < MAG_STD_THRESHOLD ? "OK" : "NG");
-        ESP_LOGW(TAG, "  Baro:  %.4f (th=%.2f) %s", last_baro_std, BARO_STD_THRESHOLD,
-                 last_baro_std < BARO_STD_THRESHOLD ? "OK" : "NG");
-        ESP_LOGW(TAG, "  ToF:   %.4f (th=%.3f) %s", last_tof_std, TOF_STD_THRESHOLD,
-                 last_tof_std < TOF_STD_THRESHOLD ? "OK" : "NG");
-        ESP_LOGW(TAG, "  Flow:  %.1f (th=%.1f) %s", last_optflow_std, OPTFLOW_STD_THRESHOLD,
-                 last_optflow_std < OPTFLOW_STD_THRESHOLD ? "OK" : "NG");
+        ESP_LOGW(TAG, "  Accel: %s (%.4f, th=%.3f)", accel_passed ? "OK" : "NG", last_accel_std_norm, ACCEL_STD_THRESHOLD);
+        ESP_LOGW(TAG, "  Gyro:  %s (%.5f, th=%.3f)", gyro_passed ? "OK" : "NG", last_gyro_std_norm, GYRO_STD_THRESHOLD);
+        ESP_LOGW(TAG, "  Mag:   %s (%.3f, th=%.1f)", mag_passed ? "OK" : "NG", last_mag_std_norm, MAG_STD_THRESHOLD);
+        ESP_LOGW(TAG, "  Baro:  %s (%.4f, th=%.2f)", baro_passed ? "OK" : "NG", last_baro_std, BARO_STD_THRESHOLD);
+        ESP_LOGW(TAG, "  ToF:   %s (%.4f, th=%.3f)", tof_passed ? "OK" : "NG", last_tof_std, TOF_STD_THRESHOLD);
         ESP_LOGW(TAG, "Proceeding with initialization anyway...");
     }
 

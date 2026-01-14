@@ -406,6 +406,7 @@ void ControlTask(void* pvParameters)
             ESP_LOGE(TAG, "CRASH DETECTED [%s] - Auto DISARM", impact_reason);
 
             if (state.requestDisarm()) {
+                g_motor.saveStatsToNVS();  // モーター統計保存
                 g_motor.disarm();
                 g_buzzer.errorTone();
                 stampfly::LEDManager::getInstance().requestChannel(
