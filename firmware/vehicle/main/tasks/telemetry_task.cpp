@@ -92,18 +92,30 @@ void TelemetryTask(void* pvParameters)
             const auto& accel = g_accel_buffer[telemetry_read_index];
             const auto& gyro = g_gyro_buffer[telemetry_read_index];
 
+            // Get bias-corrected IMU data (what control loop sees)
+            // バイアス補正済みIMUデータ（制御ループが見る値）
+            stampfly::Vec3 accel_corrected, gyro_corrected;
+            state.getIMUCorrected(accel_corrected, gyro_corrected);
+
             // Get controller input from state
             // コントローラ入力をstateから取得
             float ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw;
             state.getControlInput(ctrl_throttle, ctrl_roll, ctrl_pitch, ctrl_yaw);
 
             batch_pkt.samples[batch_index].timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            // Raw gyro (LPF only, no bias correction)
             batch_pkt.samples[batch_index].gyro_x = gyro.x;
             batch_pkt.samples[batch_index].gyro_y = gyro.y;
             batch_pkt.samples[batch_index].gyro_z = gyro.z;
+            // Raw accel (LPF only, no bias correction)
             batch_pkt.samples[batch_index].accel_x = accel.x;
             batch_pkt.samples[batch_index].accel_y = accel.y;
             batch_pkt.samples[batch_index].accel_z = accel.z;
+            // Bias-corrected gyro (what control loop uses)
+            batch_pkt.samples[batch_index].gyro_corrected_x = gyro_corrected.x;
+            batch_pkt.samples[batch_index].gyro_corrected_y = gyro_corrected.y;
+            batch_pkt.samples[batch_index].gyro_corrected_z = gyro_corrected.z;
+            // Controller inputs
             batch_pkt.samples[batch_index].ctrl_throttle = ctrl_throttle;
             batch_pkt.samples[batch_index].ctrl_roll = ctrl_roll;
             batch_pkt.samples[batch_index].ctrl_pitch = ctrl_pitch;

@@ -83,11 +83,11 @@ NORMAL_PACKET_FORMAT += '3B'   # padding
 NORMAL_PACKET_SIZE = struct.calcsize(NORMAL_PACKET_FORMAT)
 assert NORMAL_PACKET_SIZE == 116, f"Normal packet size mismatch: {NORMAL_PACKET_SIZE}"
 
-# FFT Batch packet format (184 bytes, header 0xBC)
-# Contains 4 samples of 44 bytes each (with controller inputs)
-FFT_SAMPLE_FORMAT = '<Iffffff ffff'  # timestamp_ms, gyro_xyz, accel_xyz, ctrl_throttle/roll/pitch/yaw (44 bytes)
+# FFT Batch packet format (232 bytes, header 0xBC)
+# Contains 4 samples of 56 bytes each (with controller inputs + bias-corrected gyro)
+FFT_SAMPLE_FORMAT = '<Iffffff fff ffff'  # timestamp_ms, gyro_xyz, accel_xyz, gyro_corrected_xyz, ctrl (56 bytes)
 FFT_SAMPLE_SIZE = struct.calcsize(FFT_SAMPLE_FORMAT)
-assert FFT_SAMPLE_SIZE == 44, f"FFT sample size mismatch: {FFT_SAMPLE_SIZE}"
+assert FFT_SAMPLE_SIZE == 56, f"FFT sample size mismatch: {FFT_SAMPLE_SIZE}"
 
 FFT_BATCH_SIZE = 4
 FFT_BATCH_PACKET_FORMAT = '<'   # Little-endian
@@ -95,9 +95,9 @@ FFT_BATCH_PACKET_FORMAT += 'B'  # header (0xBC)
 FFT_BATCH_PACKET_FORMAT += 'B'  # packet_type (0x31)
 FFT_BATCH_PACKET_FORMAT += 'B'  # sample_count (4)
 FFT_BATCH_PACKET_FORMAT += 'B'  # reserved
-# 4 samples × 44 bytes = 176 bytes (parsed separately)
+# 4 samples × 56 bytes = 224 bytes (parsed separately)
 FFT_BATCH_HEADER_SIZE = 4
-FFT_BATCH_PACKET_SIZE = 184  # 4 + 176 + 4
+FFT_BATCH_PACKET_SIZE = 232  # 4 + 224 + 4
 
 # Legacy single FFT packet (32 bytes, header 0xBB) - deprecated
 LEGACY_FFT_PACKET_FORMAT = '<'
@@ -110,11 +110,12 @@ LEGACY_FFT_PACKET_FORMAT += 'B'    # checksum
 LEGACY_FFT_PACKET_FORMAT += 'B'    # padding
 LEGACY_FFT_PACKET_SIZE = 32
 
-# CSV columns for FFT mode (with controller inputs)
+# CSV columns for FFT mode (with bias-corrected gyro + controller inputs)
 FFT_CSV_COLUMNS = [
     'timestamp_ms',
     'gyro_x', 'gyro_y', 'gyro_z',
     'accel_x', 'accel_y', 'accel_z',
+    'gyro_corrected_x', 'gyro_corrected_y', 'gyro_corrected_z',
     'ctrl_throttle', 'ctrl_roll', 'ctrl_pitch', 'ctrl_yaw',
 ]
 
@@ -136,7 +137,7 @@ NORMAL_CSV_COLUMNS = [
 
 
 def parse_fft_batch_packet(data: bytes) -> list:
-    """Parse FFT batch packet (184 bytes, header 0xBC)
+    """Parse FFT batch packet (232 bytes, header 0xBC)
     Returns list of 4 sample dicts
     """
     if len(data) != FFT_BATCH_PACKET_SIZE:
@@ -147,8 +148,8 @@ def parse_fft_batch_packet(data: bytes) -> list:
         return None
 
     # Calculate checksum (XOR of bytes 0 to checksum_offset-1)
-    # checksum is at offset 180 (4 header + 176 samples)
-    checksum_offset = 4 + FFT_BATCH_SIZE * FFT_SAMPLE_SIZE  # 180
+    # checksum is at offset 228 (4 header + 224 samples)
+    checksum_offset = 4 + FFT_BATCH_SIZE * FFT_SAMPLE_SIZE  # 228
     checksum = 0
     for i in range(checksum_offset):
         checksum ^= data[i]
@@ -176,10 +177,13 @@ def parse_fft_batch_packet(data: bytes) -> list:
             'accel_x': values[4],
             'accel_y': values[5],
             'accel_z': values[6],
-            'ctrl_throttle': values[7],
-            'ctrl_roll': values[8],
-            'ctrl_pitch': values[9],
-            'ctrl_yaw': values[10],
+            'gyro_corrected_x': values[7],
+            'gyro_corrected_y': values[8],
+            'gyro_corrected_z': values[9],
+            'ctrl_throttle': values[10],
+            'ctrl_roll': values[11],
+            'ctrl_pitch': values[12],
+            'ctrl_yaw': values[13],
         })
 
     return samples

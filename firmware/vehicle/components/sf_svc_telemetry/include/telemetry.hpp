@@ -118,22 +118,31 @@ struct TelemetryFFTPacket {
 static_assert(sizeof(TelemetryFFTPacket) == 32, "TelemetryFFTPacket size mismatch");
 
 /**
- * @brief Single FFT sample (44 bytes)
+ * @brief Single FFT sample (56 bytes)
  *
  * Used within batch packets.
  * バッチパケット内の1サンプル
  *
- * Includes controller inputs for PID debugging.
- * PIDデバッグ用にコントローラ入力を含む
+ * Includes controller inputs and bias-corrected gyro for PID debugging.
+ * PIDデバッグ用にコントローラ入力とバイアス補正済みジャイロを含む
  */
 struct FFTSample {
     uint32_t timestamp_ms;    // ms since boot
+    // Raw gyro (LPF filtered, no bias correction)
+    // 生ジャイロ（LPFフィルタ済み、バイアス補正なし）
     float gyro_x;             // [rad/s]
     float gyro_y;             // [rad/s]
     float gyro_z;             // [rad/s]
+    // Raw accel (LPF filtered, no bias correction)
+    // 生加速度（LPFフィルタ済み、バイアス補正なし）
     float accel_x;            // [m/s²]
     float accel_y;            // [m/s²]
     float accel_z;            // [m/s²]
+    // Bias-corrected gyro (what control loop sees)
+    // バイアス補正済みジャイロ（制御ループが見る値）
+    float gyro_corrected_x;   // [rad/s]
+    float gyro_corrected_y;   // [rad/s]
+    float gyro_corrected_z;   // [rad/s]
     // Controller inputs (normalized)
     // コントローラ入力（正規化済み）
     float ctrl_throttle;      // [0-1]
@@ -142,10 +151,10 @@ struct FFTSample {
     float ctrl_yaw;           // [-1 to 1]
 };
 
-static_assert(sizeof(FFTSample) == 44, "FFTSample size mismatch");
+static_assert(sizeof(FFTSample) == 56, "FFTSample size mismatch");
 
 /**
- * @brief Batch FFT packet structure (184 bytes)
+ * @brief Batch FFT packet structure (232 bytes)
  *
  * Contains 4 samples in one WebSocket frame to overcome
  * per-frame overhead limitation (~155 frames/sec max).
@@ -163,7 +172,7 @@ struct TelemetryFFTBatchPacket {
     uint8_t  sample_count;    // Number of samples (4)
     uint8_t  reserved;
 
-    // Samples (44 bytes × 4 = 176 bytes)
+    // Samples (56 bytes × 4 = 224 bytes)
     FFTSample samples[4];
 
     // Footer (4 bytes)
@@ -172,7 +181,7 @@ struct TelemetryFFTBatchPacket {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(TelemetryFFTBatchPacket) == 184, "TelemetryFFTBatchPacket size mismatch");
+static_assert(sizeof(TelemetryFFTBatchPacket) == 232, "TelemetryFFTBatchPacket size mismatch");
 
 // Batch size constant
 inline constexpr int FFT_BATCH_SIZE = 4;
