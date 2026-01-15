@@ -179,15 +179,15 @@ def run_sim(args: argparse.Namespace) -> int:
         console.print("  Run 'sf sim list' to check available backends")
         return 1
 
+    # Prepare Python command (check dependencies first)
+    python_cmd = _get_python_cmd(backend)
+    if not python_cmd:
+        return 1
+
     console.info(f"Starting {backend['name']} simulator...")
     console.print(f"  Backend: {backend_id}")
     console.print(f"  Script: {script_path}")
     console.print()
-
-    # Prepare Python command
-    python_cmd = _get_python_cmd(backend)
-    if not python_cmd:
-        return 1
 
     # Build command
     cmd = [python_cmd, str(script_path)]
@@ -241,17 +241,17 @@ def run_headless(args: argparse.Namespace) -> int:
         console.error(f"Headless script not found: {script_path}")
         return 1
 
+    # Prepare Python command (check dependencies first)
+    python_cmd = _get_python_cmd(backend)
+    if not python_cmd:
+        return 1
+
     console.info(f"Starting headless {backend['name']} simulation...")
     console.print(f"  Backend: {backend_id}")
     console.print(f"  Duration: {args.duration}s")
     if args.output:
         console.print(f"  Output: {args.output}")
     console.print()
-
-    # Prepare Python command
-    python_cmd = _get_python_cmd(backend)
-    if not python_cmd:
-        return 1
 
     # Build command
     cmd = [python_cmd, str(script_path)]
@@ -277,6 +277,19 @@ def run_headless(args: argparse.Namespace) -> int:
         return 1
 
 
+def _check_vpython_available(python_cmd: str) -> bool:
+    """Check if vpython is available"""
+    try:
+        result = subprocess.run(
+            [python_cmd, "-c", "import vpython"],
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def _get_python_cmd(backend: dict) -> Optional[str]:
     """Get Python command for backend"""
     if backend.get("requires_venv"):
@@ -295,5 +308,33 @@ def _get_python_cmd(backend: dict) -> Optional[str]:
 
         return str(python_path)
     else:
-        # Use system Python
+        # For vpython, check if it's available
+        backend_id = backend.get("script", "")
+        if "vpython" in backend_id.lower() or backend.get("name") == "VPython":
+            # Try system Python first (more likely to have vpython)
+            system_pythons = ["/usr/bin/python3", "/usr/local/bin/python3"]
+
+            # Check current Python
+            if _check_vpython_available(sys.executable):
+                return sys.executable
+
+            # Check system Pythons
+            for py in system_pythons:
+                if Path(py).exists() and _check_vpython_available(py):
+                    return py
+
+            # Not found
+            console.error("vpython module not found")
+            console.print()
+            console.print("  Install vpython:")
+            console.print("    pip3 install vpython pygame numpy")
+            console.print()
+            console.print("  Or create a dedicated venv:")
+            console.print("    cd simulator")
+            console.print("    python3 -m venv venv")
+            console.print("    source venv/bin/activate")
+            console.print("    pip install vpython pygame numpy")
+            return None
+
+        # Use current Python
         return sys.executable
