@@ -15,6 +15,18 @@
 
 ---
 
+## 何ができるのか？
+
+| できること | 内容 |
+|-----------|------|
+| **シミュレータで練習** | 実機なしでドローン操縦を体験。制御アルゴリズムの検証にも |
+| **すぐに飛ばせる** | ファームウェアをビルドして、実機で飛行 |
+| **制御を自作できる** | 角速度制御のスケルトンコードを提供。姿勢制御、位置制御を自分で実装 |
+| **センサーデータを見れる** | IMU、気圧、ToF、オプティカルフロー等のリアルタイムデータをCLI/WiFiで取得 |
+| **実験データを解析できる** | ログを記録し、Pythonで解析・可視化 |
+
+---
+
 ## 📦 インストール
 
 ```bash
@@ -88,18 +100,6 @@ sf build vehicle && sf flash vehicle -m
 
 ---
 
-## 何ができるのか？
-
-| できること | 内容 |
-|-----------|------|
-| **シミュレータで練習** | 実機なしでドローン操縦を体験。制御アルゴリズムの検証にも |
-| **すぐに飛ばせる** | ファームウェアをビルドして、実機で飛行 |
-| **制御を自作できる** | 角速度制御のスケルトンコードを提供。姿勢制御、位置制御を自分で実装 |
-| **センサーデータを見れる** | IMU、気圧、ToF、オプティカルフロー等のリアルタイムデータをCLI/WiFiで取得 |
-| **実験データを解析できる** | ログを記録し、Pythonで解析・可視化 |
-
----
-
 ## ディレクトリ構成
 
 ```
@@ -134,7 +134,7 @@ ESP-IDFのセットアップから、ファームウェアのビルド、
 | 項目 | 仕様 |
 |------|------|
 | MCU | ESP32-S3（M5Stamp S3） |
-| フレームワーク | ESP-IDF v5.4.1 + FreeRTOS |
+| フレームワーク | ESP-IDF v5.5.2 + FreeRTOS |
 | 姿勢推定 | ESKF（Error-State Kalman Filter） |
 | 通信 | ESP-NOW + WiFi（テレメトリ） |
 | センサー | BMI270, BMM150, BMP280, VL53L3CX, PMW3901 |
@@ -163,6 +163,18 @@ MIT License
 "I need a flight experiment platform for my research."
 
 This ecosystem exists for you.
+
+---
+
+## What can you do?
+
+| Capability | Description |
+|-----------|-------------|
+| **Practice in simulator** | Experience drone piloting without real hardware. Also for testing control algorithms |
+| **Fly immediately** | Build firmware and fly the real drone |
+| **Build your own control** | Rate control skeleton provided. Implement attitude/position control yourself |
+| **View sensor data** | Real-time IMU, barometer, ToF, optical flow data via CLI/WiFi |
+| **Analyze experiments** | Record flight logs and analyze with Python |
 
 ---
 
@@ -239,18 +251,6 @@ sf build vehicle && sf flash vehicle -m
 
 ---
 
-## What can you do?
-
-| Capability | Description |
-|-----------|-------------|
-| **Practice in simulator** | Experience drone piloting without real hardware. Also for testing control algorithms |
-| **Fly immediately** | Build firmware and fly the real drone |
-| **Build your own control** | Rate control skeleton provided. Implement attitude/position control yourself |
-| **View sensor data** | Real-time IMU, barometer, ToF, optical flow data via CLI/WiFi |
-| **Analyze experiments** | Record flight logs and analyze with Python |
-
----
-
 ## Directory Structure
 
 ```
@@ -285,7 +285,7 @@ All steps explained step-by-step.
 | Item | Specification |
 |------|---------------|
 | MCU | ESP32-S3 (M5Stamp S3) |
-| Framework | ESP-IDF v5.4.1 + FreeRTOS |
+| Framework | ESP-IDF v5.5.2 + FreeRTOS |
 | Pose Estimation | ESKF (Error-State Kalman Filter) |
 | Communication | ESP-NOW + WiFi (telemetry) |
 | Sensors | BMI270, BMM150, BMP280, VL53L3CX, PMW3901 |
