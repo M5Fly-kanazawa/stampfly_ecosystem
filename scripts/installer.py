@@ -217,7 +217,10 @@ class ESPIDFDetector:
 class ESPIDFInstaller:
     """Install ESP-IDF"""
 
-    DEFAULT_VERSION = "v5.4"
+    # Use specific stable release tag, not branch name
+    # v5.4.1 is the latest stable release as of January 2026
+    # Update this when new stable releases are available
+    DEFAULT_VERSION = "v5.4.1"
     REPO_URL = "https://github.com/espressif/esp-idf.git"
 
     @classmethod
