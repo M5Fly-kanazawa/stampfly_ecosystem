@@ -108,6 +108,34 @@ public:
         // false: ヨーを0に固定、ジャイロZ積分なし
         bool yaw_estimation_enabled;
 
+        // ========================================================================
+        // バイアス推定スイッチ
+        // Bias estimation switches
+        //
+        // 各軸のバイアス推定を個別に有効/無効化できる。
+        // 可観測性が弱い状態での誤推定を防ぐために使用。
+        // ========================================================================
+
+        // ジャイロバイアス XY推定
+        // Gyro bias XY estimation
+        // true: BG_X, BG_Yを観測更新で推定
+        // 注: BG_Zはmag_enabledで制御（ヨー観測がないと不可観測）
+        bool estimate_gyro_bias_xy;
+
+        // 加速度バイアス XY推定
+        // Accel bias XY estimation
+        // true: BA_X, BA_Yを観測更新で推定
+        // 注: オプティカルフローのみでは可観測性が弱い
+        //     実験で効果を確認してからONにすることを推奨
+        bool estimate_accel_bias_xy;
+
+        // 加速度バイアス Z推定
+        // Accel bias Z estimation
+        // true: BA_Zを観測更新で推定
+        // 注: ToF/気圧計による高度観測があるため可観測
+        //     高度推定精度向上に必要
+        bool estimate_accel_bias_z;
+
         // 姿勢補正モード
         // 0: 加速度絶対値フィルタのみ (accel_motion_thresholdで判定)
         // 1: 適応的R (水平加速度でRをスケーリング)
@@ -173,6 +201,11 @@ public:
 
             cfg.mag_enabled = true;            // デフォルトは地磁気観測有効
             cfg.yaw_estimation_enabled = true; // デフォルトはヨー推定有効
+
+            // バイアス推定スイッチ
+            cfg.estimate_gyro_bias_xy = true;  // ジャイロXYバイアス推定有効
+            cfg.estimate_accel_bias_xy = false; // 加速度XYバイアス推定無効（可観測性弱い）
+            cfg.estimate_accel_bias_z = true;  // 加速度Zバイアス推定有効（高度推定に必要）
 
             // 姿勢補正モード
             cfg.att_update_mode = 0;
@@ -425,6 +458,19 @@ private:
     Matrix<15, 15> Q_;      // プロセスノイズ共分散
     Matrix<15, 15> temp1_;  // 一時計算用
     Matrix<15, 15> temp2_;  // 一時計算用
+
+    /**
+     * @brief バイアス更新の適用（観測更新共通ヘルパー）
+     * @param dx 15次元エラー状態更新量
+     *
+     * Config設定に基づき、各軸のバイアス更新を適用する。
+     * - estimate_gyro_bias_xy: BG_X, BG_Y の更新
+     * - mag_enabled: BG_Z の更新（ヨー観測がないと不可観測）
+     * - estimate_accel_bias_xy: BA_X, BA_Y の更新
+     * - estimate_accel_bias_z: BA_Z の更新
+     * - freeze_accel_bias_: 一時的な加速度バイアス推定停止
+     */
+    void applyBiasUpdate(const float dx[15]);
 
     /**
      * @brief エラー状態を名目状態に注入

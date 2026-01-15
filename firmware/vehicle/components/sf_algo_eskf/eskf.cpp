@@ -76,6 +76,32 @@ void ESKF::reset()
     P_(BA_Z, BA_Z) = ba_var;
 }
 
+void ESKF::applyBiasUpdate(const float dx[15])
+{
+    // ジャイロバイアス更新
+    // Gyro bias update
+    if (config_.estimate_gyro_bias_xy) {
+        state_.gyro_bias.x += dx[BG_X];
+        state_.gyro_bias.y += dx[BG_Y];
+    }
+    // BG_Zはmag_enabledで制御（ヨー観測がないと不可観測）
+    if (config_.mag_enabled) {
+        state_.gyro_bias.z += dx[BG_Z];
+    }
+
+    // 加速度バイアス更新
+    // Accel bias update
+    if (!freeze_accel_bias_) {
+        if (config_.estimate_accel_bias_xy) {
+            state_.accel_bias.x += dx[BA_X];
+            state_.accel_bias.y += dx[BA_Y];
+        }
+        if (config_.estimate_accel_bias_z) {
+            state_.accel_bias.z += dx[BA_Z];
+        }
+    }
+}
+
 void ESKF::resetPositionVelocity()
 {
     // 位置・速度のみゼロにリセット（姿勢・バイアスは維持）
@@ -805,17 +831,8 @@ void ESKF::updateBaro(float altitude)
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // Joseph形式共分散更新: P' = (I - K*H) * P * (I - K*H)^T + K * R * K^T
     // I_KH[i][j] = delta_ij - K[i]*(j==2)
@@ -914,17 +931,8 @@ void ESKF::updateToF(float distance)
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // Joseph形式共分散更新: P' = (I - K*H) * P * (I - K*H)^T + K * R * K^T
     // I_KH[i][j] = delta_ij - K[i]*(j==2)
@@ -1091,17 +1099,8 @@ void ESKF::updateMag(const Vector3& mag)
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // Joseph形式共分散更新: P' = (I - K*H) * P * (I - K*H)^T + K * R * K^T
     // I_KH[i][j] = delta_ij - K[i][0]*H[0][j] - K[i][1]*H[1][j] - K[i][2]*H[2][j]
@@ -1280,17 +1279,8 @@ void ESKF::updateFlowWithGyro(float flow_x, float flow_y, float distance,
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // ========================================================================
     // Joseph形式共分散更新: P' = (I - K*H) * P * (I - K*H)^T + K * R * K^T
@@ -1474,17 +1464,8 @@ void ESKF::updateFlowRaw(int16_t flow_dx, int16_t flow_dy, float distance,
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // Joseph形式共分散更新
     // Step 1: temp1_ = (I - K*H) * P
@@ -1683,17 +1664,8 @@ void ESKF::updateAccelAttitude(const Vector3& accel)
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx[BG_X];
-    state_.gyro_bias.y += dx[BG_Y];
-    // mag_enabled=false時はGyro Bias Zを更新しない（観測不可）
-    if (config_.mag_enabled) {
-        state_.gyro_bias.z += dx[BG_Z];
-    }
-    if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx[BA_X];
-        state_.accel_bias.y += dx[BA_Y];
-        state_.accel_bias.z += dx[BA_Z];
-    }
+    // バイアス更新
+    applyBiasUpdate(dx);
 
     // ========================================================================
     // Joseph形式共分散更新: P' = (I - K*H) * P * (I - K*H)^T + K * R * K^T
@@ -1770,19 +1742,27 @@ void ESKF::injectErrorState(const Matrix<15, 1>& dx)
         state_.orientation = Quaternion::fromEuler(state_.roll, state_.pitch, 0.0f);
     }
 
-    state_.gyro_bias.x += dx(BG_X, 0);
-    state_.gyro_bias.y += dx(BG_Y, 0);
-    // mag_enabled=false時はGyro Bias Zを更新しない
+    // バイアス更新（applyBiasUpdateと同じロジック、Matrix形式用）
+    // Bias update (same logic as applyBiasUpdate, for Matrix format)
+
+    // ジャイロバイアス
+    if (config_.estimate_gyro_bias_xy) {
+        state_.gyro_bias.x += dx(BG_X, 0);
+        state_.gyro_bias.y += dx(BG_Y, 0);
+    }
     if (config_.mag_enabled) {
         state_.gyro_bias.z += dx(BG_Z, 0);
     }
 
-    // 加速度バイアス推定がフリーズ中は状態を更新しない
-    // （接地中など可観測性がない状況でバイアス破壊を防止）
+    // 加速度バイアス
     if (!freeze_accel_bias_) {
-        state_.accel_bias.x += dx(BA_X, 0);
-        state_.accel_bias.y += dx(BA_Y, 0);
-        state_.accel_bias.z += dx(BA_Z, 0);
+        if (config_.estimate_accel_bias_xy) {
+            state_.accel_bias.x += dx(BA_X, 0);
+            state_.accel_bias.y += dx(BA_Y, 0);
+        }
+        if (config_.estimate_accel_bias_z) {
+            state_.accel_bias.z += dx(BA_Z, 0);
+        }
     }
 }
 
