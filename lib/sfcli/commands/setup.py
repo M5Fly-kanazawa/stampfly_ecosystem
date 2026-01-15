@@ -23,9 +23,15 @@ COMMAND_HELP = "Install optional dependencies"
 # Dependency groups
 GROUPS = {
     "sim": {
-        "name": "Simulator",
+        "name": "VPython Simulator",
         "description": "VPython simulator dependencies (vpython, pygame, numpy-stl)",
         "packages": ["vpython>=7.6.0", "pygame>=2.5.0", "numpy-stl>=3.0.0", "hid>=1.0.0"],
+    },
+    "genesis": {
+        "name": "Genesis Simulator",
+        "description": "Genesis physics simulator (requires GPU, large download)",
+        "packages": ["genesis-world", "torch", "pygame>=2.5.0"],
+        "warning": "This will install PyTorch (~2GB). GPU recommended.",
     },
     "dev": {
         "name": "Development",
@@ -34,7 +40,7 @@ GROUPS = {
     },
     "full": {
         "name": "Full",
-        "description": "All optional dependencies",
+        "description": "All optional dependencies (excluding Genesis)",
         "packages": [
             "esptool>=4.6",
             "Pillow>=10.0.0",
@@ -74,10 +80,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # --- sim ---
     sim_parser = setup_subparsers.add_parser(
         "sim",
-        help="Install simulator dependencies",
+        help="Install VPython simulator dependencies",
         description="Install VPython simulator dependencies.",
     )
     sim_parser.set_defaults(func=lambda args: run_install(args, "sim"))
+
+    # --- genesis ---
+    genesis_parser = setup_subparsers.add_parser(
+        "genesis",
+        help="Install Genesis simulator dependencies",
+        description="Install Genesis physics simulator (requires GPU, large download).",
+    )
+    genesis_parser.set_defaults(func=lambda args: run_install(args, "genesis"))
 
     # --- dev ---
     dev_parser = setup_subparsers.add_parser(
@@ -103,14 +117,16 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("Usage: sf setup <subcommand>")
     console.print()
     console.print("Subcommands:")
-    console.print("  list  List available dependency groups")
-    console.print("  sim   Install simulator dependencies (vpython, pygame)")
-    console.print("  dev   Install development dependencies")
-    console.print("  full  Install all optional dependencies")
+    console.print("  list     List available dependency groups")
+    console.print("  sim      Install VPython simulator dependencies")
+    console.print("  genesis  Install Genesis simulator (GPU, ~2GB)")
+    console.print("  dev      Install development dependencies")
+    console.print("  full     Install all optional dependencies")
     console.print()
     console.print("Examples:")
-    console.print("  sf setup sim   # Install VPython simulator dependencies")
-    console.print("  sf setup full  # Install all optional dependencies")
+    console.print("  sf setup sim      # Install VPython simulator")
+    console.print("  sf setup genesis  # Install Genesis simulator")
+    console.print("  sf setup full     # Install all optional dependencies")
     console.print()
     console.print("Alternative (using pip):")
     console.print("  pip install -e '.[sim]'")
@@ -126,6 +142,8 @@ def run_list(args: argparse.Namespace) -> int:
     for group_id, group in GROUPS.items():
         console.print(f"  {group_id:8s} - {group['name']}")
         console.print(f"             {group['description']}")
+        if "warning" in group:
+            console.print(f"             Warning: {group['warning']}")
         console.print(f"             Packages: {', '.join(group['packages'])}")
         console.print()
 
@@ -145,6 +163,12 @@ def run_install(args: argparse.Namespace, group_id: str) -> int:
         return 1
 
     console.info(f"Installing {group['name']} dependencies...")
+
+    # Show warning if present
+    if "warning" in group:
+        console.print()
+        console.print(f"  Warning: {group['warning']}")
+
     console.print()
     console.print("Packages:")
     for pkg in group["packages"]:
@@ -160,8 +184,12 @@ def run_install(args: argparse.Namespace, group_id: str) -> int:
             console.info(f"{group['name']} dependencies installed successfully!")
             if group_id == "sim":
                 console.print()
-                console.print("You can now run the simulator:")
+                console.print("You can now run the VPython simulator:")
                 console.print("  sf sim run vpython")
+            elif group_id == "genesis":
+                console.print()
+                console.print("You can now run the Genesis simulator:")
+                console.print("  sf sim run genesis")
         return result.returncode
 
     except Exception as e:
