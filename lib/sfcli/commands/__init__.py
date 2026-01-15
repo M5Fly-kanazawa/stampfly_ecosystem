@@ -12,6 +12,7 @@ from . import monitor
 from . import log
 from . import sim
 from . import cal
+from . import setup
 
 __all__ = [
     "version",
@@ -22,4 +23,5 @@ __all__ = [
     "log",
     "sim",
     "cal",
+    "setup",
 ]

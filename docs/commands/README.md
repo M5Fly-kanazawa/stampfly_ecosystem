@@ -26,6 +26,7 @@ sf <command> [subcommand] [options]
 |---------|------|-------------|
 | `sf version` | バージョン情報表示 | [sf-version.md](sf-version.md) |
 | `sf doctor` | 環境診断 | [sf-doctor.md](sf-doctor.md) |
+| `sf setup` | 依存パッケージインストール | [sf-setup.md](sf-setup.md) |
 | `sf build` | ファームウェアビルド | [sf-build.md](sf-build.md) |
 | `sf flash` | ファームウェア書き込み | [sf-flash.md](sf-flash.md) |
 | `sf monitor` | シリアルモニタ | [sf-monitor.md](sf-monitor.md) |
@@ -126,6 +127,7 @@ sf <command> [subcommand] [options]
 |---------|-------------|---------------|
 | `sf version` | Show version info | [sf-version.md](sf-version.md) |
 | `sf doctor` | Environment diagnostics | [sf-doctor.md](sf-doctor.md) |
+| `sf setup` | Install dependencies | [sf-setup.md](sf-setup.md) |
 | `sf build` | Build firmware | [sf-build.md](sf-build.md) |
 | `sf flash` | Flash firmware | [sf-flash.md](sf-flash.md) |
 | `sf monitor` | Serial monitor | [sf-monitor.md](sf-monitor.md) |

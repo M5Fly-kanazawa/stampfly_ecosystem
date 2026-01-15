@@ -41,10 +41,19 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
+sim = [
+    "vpython>=7.6.0",
+    "pygame>=2.5.0",
+    "numpy-stl>=3.0.0",
+    "hid>=1.0.0",
+]
 full = [
     "esptool>=4.6",
     "Pillow>=10.0.0",
     "opencv-python>=4.8.0",
+    "vpython>=7.6.0",
+    "pygame>=2.5.0",
+    "numpy-stl>=3.0.0",
 ]
 
 [project.scripts]

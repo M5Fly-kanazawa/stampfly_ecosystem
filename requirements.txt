@@ -28,10 +28,12 @@ Pillow>=10.0.0
 opencv-python>=4.8.0     # cv2
 
 # ============================================================
-# 3D Visualization (optional)
+# Simulator / VPython 3D Visualization
 # ============================================================
-# vpython>=7.6.0         # Uncomment for 3D visualization
-# numpy-stl>=3.0.0       # STL file loading
+vpython>=7.6.0
+pygame>=2.5.0
+numpy-stl>=3.0.0
+hid>=1.0.0               # Joystick HID support
 
 # ============================================================
 # Development
