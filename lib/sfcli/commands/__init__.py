@@ -10,6 +10,7 @@ from . import build
 from . import flash
 from . import monitor
 from . import log
+from . import sim
 
 __all__ = [
     "version",
@@ -18,4 +19,5 @@ __all__ = [
     "flash",
     "monitor",
     "log",
+    "sim",
 ]
