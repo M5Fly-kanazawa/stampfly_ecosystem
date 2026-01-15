@@ -66,9 +66,11 @@ static void espnow_recv_cb(const esp_now_recv_info_t* recv_info, const uint8_t* 
 }
 
 // ESP-NOW send callback
-static void espnow_send_cb(const uint8_t* mac_addr, esp_now_send_status_t status)
+// Note: ESP-IDF v5.5+ changed the callback signature to use wifi_tx_info_t
+static void espnow_send_cb(const esp_now_send_info_t* send_info, esp_now_send_status_t status)
 {
-    if (status != ESP_NOW_SEND_SUCCESS) {
+    if (status != ESP_NOW_SEND_SUCCESS && send_info != nullptr && send_info->des_addr != nullptr) {
+        const uint8_t* mac_addr = send_info->des_addr;
         ESP_LOGD(TAG, "Send failed to %02X:%02X:%02X:%02X:%02X:%02X",
                  mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
     }
