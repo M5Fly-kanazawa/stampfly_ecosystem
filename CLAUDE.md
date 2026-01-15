@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `.claude/settings.local.json`
 - **応答は日本語で行うこと**
 - **コードを変更したら必ずコミットすること** - 変更をローカルに残さず、適切な単位でコミットする
+- **sf CLI を積極的に使用すること** - ビルド、書き込み、診断などは `idf.py` を直接呼ぶのではなく `sf` コマンドを優先する
 
 ## Build Environment
 
@@ -24,6 +25,25 @@ cd firmware/vehicle  # or firmware/controller
 idf.py build
 idf.py flash monitor
 ```
+
+### sf CLI（推奨）
+sf CLI は ESP-IDF 環境に統合された開発ツール。`idf.py` を直接使う代わりにこちらを優先する：
+```bash
+source ~/esp/esp-idf/export.sh  # ESP-IDF環境をアクティブ化（sfを使うため）
+
+sf doctor              # 環境診断（問題があればまずこれを実行）
+sf build vehicle       # vehicleファームウェアをビルド
+sf build controller    # controllerファームウェアをビルド
+sf flash vehicle       # vehicleに書き込み
+sf monitor             # シリアルモニタを開く
+sf flash vehicle -m    # 書き込み後にモニタを開く
+```
+
+**sf CLI の開発・改善:**
+- コマンド実装: `lib/sfcli/commands/`
+- ユーティリティ: `lib/sfcli/utils/`
+- 新コマンド追加時は既存コマンドのパターンに従う
+- 問題発見時は積極的に修正してフレームワークを改善する
 
 ### Genesis Simulator
 Genesis物理シミュレータはvenv仮想環境にインストールされている:
@@ -210,11 +230,14 @@ The `firmware/vehicle/` follows ESP-IDF component structure:
 
 ## Build System
 
-**Planned:** ESP-IDF for embedded firmware (ESP32 target)
-
-Build commands will be added as implementation progresses. Expected workflow:
+ESP-IDF for embedded firmware (ESP32 target)。**sf CLI を優先して使用する:**
 ```bash
-# Firmware build (ESP-IDF)
+# 推奨: sf CLI を使用
+source ~/esp/esp-idf/export.sh
+sf build vehicle
+sf flash vehicle -m
+
+# 代替: idf.py を直接使用（sf で問題がある場合のみ）
 cd firmware/vehicle
 idf.py build
 idf.py flash monitor
