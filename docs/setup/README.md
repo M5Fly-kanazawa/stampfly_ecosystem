@@ -24,12 +24,19 @@ git clone https://github.com/your-org/stampfly-ecosystem.git
 cd stampfly-ecosystem
 ```
 
-### ステップ 2: ESP-IDFをインストール
+### ステップ 2: インストーラを実行
 
-プラットフォーム別ガイドを参照:
-- [macOS](macos.md)
-- [Linux](linux.md)
-- [Windows](windows.md)
+```bash
+./install.sh
+```
+
+これにより以下がインストールされます:
+- sf CLI（コマンドラインツール）
+- VPythonシミュレータ依存（vpython, pygame等）
+- 解析ツール依存（numpy, matplotlib等）
+
+> **Note**: ESP-IDFが未インストールの場合、インストーラが案内します。
+> プラットフォーム別の詳細は [macOS](macos.md) / [Linux](linux.md) / [Windows](windows.md) を参照。
 
 ### ステップ 3: sf CLIの確認
 
@@ -63,7 +70,27 @@ sf flash vehicle
 sf monitor
 ```
 
-## 5. プラットフォーム別ガイド
+## 5. シミュレータのセットアップ
+
+### VPythonシミュレータ（デフォルトでインストール済み）
+
+```bash
+sf sim run vpython
+```
+
+### Genesisシミュレータ（オプション）
+
+Genesisは高精度物理エンジンですが、PyTorch（~2GB）を含む大きな依存があります。
+
+```bash
+# Genesisをインストール
+sf setup genesis
+
+# Genesisを起動
+sf sim run genesis
+```
+
+## 6. プラットフォーム別ガイド
 
 | プラットフォーム | ガイド |
 |-----------------|--------|
@@ -97,12 +124,19 @@ git clone https://github.com/your-org/stampfly-ecosystem.git
 cd stampfly-ecosystem
 ```
 
-### Step 2: Install ESP-IDF
+### Step 2: Run Installer
 
-See platform-specific guides:
-- [macOS](macos.md)
-- [Linux](linux.md)
-- [Windows](windows.md)
+```bash
+./install.sh
+```
+
+This installs:
+- sf CLI (command-line tool)
+- VPython simulator dependencies (vpython, pygame, etc.)
+- Analysis tool dependencies (numpy, matplotlib, etc.)
+
+> **Note**: If ESP-IDF is not installed, the installer will guide you.
+> See platform guides for details: [macOS](macos.md) / [Linux](linux.md) / [Windows](windows.md)
 
 ### Step 3: Verify sf CLI
 
@@ -136,7 +170,27 @@ sf flash vehicle
 sf monitor
 ```
 
-## 5. Platform Guides
+## 5. Simulator Setup
+
+### VPython Simulator (Installed by Default)
+
+```bash
+sf sim run vpython
+```
+
+### Genesis Simulator (Optional)
+
+Genesis is a high-precision physics engine but has large dependencies including PyTorch (~2GB).
+
+```bash
+# Install Genesis
+sf setup genesis
+
+# Run Genesis
+sf sim run genesis
+```
+
+## 6. Platform Guides
 
 | Platform | Guide |
 |----------|-------|

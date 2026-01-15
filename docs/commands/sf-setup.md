@@ -11,9 +11,10 @@
 | サブコマンド | 説明 |
 |-------------|------|
 | `list` | 利用可能な依存グループ一覧 |
-| `sim` | シミュレータ依存をインストール |
+| `sim` | VPythonシミュレータ依存をインストール |
+| `genesis` | Genesisシミュレータ依存をインストール |
 | `dev` | 開発ツールをインストール |
-| `full` | すべてのオプション依存をインストール |
+| `full` | すべてのオプション依存をインストール（Genesis除く） |
 
 ## 3. sf setup list
 
@@ -40,26 +41,48 @@ sf setup sim
 | numpy-stl | STLファイル読み込み |
 | hid | HIDデバイスサポート |
 
-## 5. sf setup full
+## 5. sf setup genesis
 
-すべてのオプション依存をインストールします。
+Genesisシミュレータに必要な依存をインストールします。
+
+```bash
+sf setup genesis
+```
+
+### 注意事項
+
+- **大容量ダウンロード**: PyTorch（~2GB）を含みます
+- **GPU推奨**: CUDA対応GPUがあると高速に動作します
+- **別途インストール**: `./install.sh`には含まれません
+
+### インストールされるパッケージ
+
+| パッケージ | 説明 |
+|-----------|------|
+| genesis-world | Genesis物理エンジン |
+| torch | PyTorch（機械学習フレームワーク） |
+| pygame | ジョイスティック入力 |
+
+## 6. sf setup full
+
+すべてのオプション依存をインストールします（Genesis除く）。
 
 ```bash
 sf setup full
 ```
 
-## 6. 代替方法
+## 7. 代替方法
 
 pipを使った代替インストール方法:
 
 ```bash
-# シミュレータ依存のみ
+# VPythonシミュレータ依存のみ
 pip install -e '.[sim]'
 
-# すべての依存
+# すべての依存（Genesis除く）
 pip install -e '.[full]'
 
-# requirements.txtを使用
+# requirements.txtを使用（VPython含む）
 pip install -r requirements.txt
 ```
 
@@ -76,9 +99,10 @@ Install optional dependencies.
 | Subcommand | Description |
 |------------|-------------|
 | `list` | List available dependency groups |
-| `sim` | Install simulator dependencies |
+| `sim` | Install VPython simulator dependencies |
+| `genesis` | Install Genesis simulator dependencies |
 | `dev` | Install development tools |
-| `full` | Install all optional dependencies |
+| `full` | Install all optional dependencies (excluding Genesis) |
 
 ## 3. sf setup sim
 
@@ -97,17 +121,47 @@ sf setup sim
 | numpy-stl | STL file loading |
 | hid | HID device support |
 
-## 4. Alternative
+## 4. sf setup genesis
+
+Install dependencies required for Genesis simulator.
+
+```bash
+sf setup genesis
+```
+
+### Notes
+
+- **Large download**: Includes PyTorch (~2GB)
+- **GPU recommended**: Runs faster with CUDA-compatible GPU
+- **Separate install**: Not included in `./install.sh`
+
+### Installed Packages
+
+| Package | Description |
+|---------|-------------|
+| genesis-world | Genesis physics engine |
+| torch | PyTorch (ML framework) |
+| pygame | Joystick input |
+
+## 5. sf setup full
+
+Install all optional dependencies (excluding Genesis).
+
+```bash
+sf setup full
+```
+
+## 6. Alternative
 
 Alternative installation using pip:
 
 ```bash
-# Simulator dependencies only
+# VPython simulator dependencies only
 pip install -e '.[sim]'
 
-# All dependencies
+# All dependencies (excluding Genesis)
 pip install -e '.[full]'
 
-# Using requirements.txt
+# Using requirements.txt (includes VPython)
 pip install -r requirements.txt
 ```
