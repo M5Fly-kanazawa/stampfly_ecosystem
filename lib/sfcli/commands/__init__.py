@@ -9,6 +9,7 @@ from . import doctor
 from . import build
 from . import flash
 from . import monitor
+from . import log
 
 __all__ = [
     "version",
@@ -16,4 +17,5 @@ __all__ = [
     "build",
     "flash",
     "monitor",
+    "log",
 ]

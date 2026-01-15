@@ -65,7 +65,14 @@ analysis/reports/*
 # Logs
 # ====================
 *.log
-logs/
+logs/*
+!logs/.gitkeep
+!logs/README.md
+
+# Log analyzer data files (keep scripts, ignore data)
+tools/log_analyzer/*.csv
+tools/log_analyzer/*.bin
+tools/log_analyzer/*.png
 
 # ====================
 # Compiled
