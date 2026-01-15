@@ -81,8 +81,10 @@ static inline uint32_t millis_now(void) {
 }
 
 // 送信コールバック
-static void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status)
+// Note: ESP-IDF v5.5+ changed callback signature to use esp_now_send_info_t
+static void on_data_sent(const esp_now_send_info_t *send_info, esp_now_send_status_t status)
 {
+    const uint8_t *mac_addr = send_info->des_addr;
     bool is_beacon = (mac_addr[0] == 0xFF && mac_addr[5] == 0xFF);
 
     if (status == ESP_NOW_SEND_SUCCESS) {
