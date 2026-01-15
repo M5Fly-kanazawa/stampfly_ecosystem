@@ -20,28 +20,18 @@ def find_idf_path() -> Optional[Path]:
 def prepare_idf_env(idf_path: Optional[Path] = None) -> dict:
     """Prepare environment with ESP-IDF settings
 
-    Important: We need to use ESP-IDF's Python environment, not our venv.
-    This is because ESP-IDF tools like esp_idf_monitor are installed in
-    ESP-IDF's Python environment.
-
-    The key is to start with a CLEAN environment (no venv paths) and
-    then source export.sh to get ESP-IDF's proper Python paths.
+    Since sfcli is now installed in ESP-IDF's Python environment,
+    we assume the user has already sourced export.sh before running sf commands.
+    We simply inherit the current environment.
 
     Args:
-        idf_path: Path to ESP-IDF, or None to auto-detect
+        idf_path: Path to ESP-IDF, or None to auto-detect (unused, kept for compatibility)
 
     Returns:
-        Environment dictionary with ESP-IDF settings
+        Environment dictionary (copy of current environment)
     """
-    if idf_path is None:
-        idf_path = find_idf_path()
-        if idf_path is None:
-            return os.environ.copy()
-
-    if platform.is_windows():
-        return _prepare_idf_env_windows(idf_path)
-    else:
-        return _prepare_idf_env_unix(idf_path)
+    # Just use the current environment - user should have sourced export.sh
+    return os.environ.copy()
 
 
 def _prepare_idf_env_unix(idf_path: Path) -> dict:
