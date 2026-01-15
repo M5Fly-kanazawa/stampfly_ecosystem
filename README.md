@@ -22,17 +22,13 @@
 ### VPython版（軽量・ブラウザ表示）
 
 ```bash
-cd simulator/scripts
-python run_sim.py
+sf sim run vpython
 ```
 
 ### Genesis版（高精度物理エンジン）
 
 ```bash
-cd simulator/sandbox/genesis_sim
-source venv/bin/activate
-cd scripts
-python run_genesis_sim.py
+sf sim run genesis
 ```
 
 コントローラをUSB HIDモードに切り替えてPCに接続すれば、
@@ -44,6 +40,36 @@ python run_genesis_sim.py
 | Genesis版 | 2000Hz物理演算、物理量ベース制御 |
 
 **→ [シミュレータで遊ぶ（詳細手順）](docs/getting-started.md#0-まずはシミュレータで遊んでみよう)**
+
+---
+
+## 🚀 sf CLI クイックスタート
+
+**sf CLI** は、ビルド、書き込み、モニタ、ログ取得などをシンプルに実行できる統合コマンドラインツールです。
+
+```bash
+# 環境をアクティブ化
+source ~/esp/esp-idf/export.sh
+
+# 環境診断
+sf doctor
+
+# ビルド → 書き込み → モニタ
+sf build vehicle && sf flash vehicle -m
+```
+
+### よく使うコマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `sf build vehicle` | 機体ファームウェアをビルド |
+| `sf flash vehicle -m` | 書き込み後にモニタを開く |
+| `sf monitor` | シリアルモニタを開く |
+| `sf log wifi` | WiFiテレメトリをキャプチャ |
+| `sf cal gyro` | ジャイロキャリブレーション |
+| `sf sim run vpython` | シミュレータを起動 |
+
+**→ [コマンドリファレンス](docs/commands/README.md)** | **[セットアップガイド](docs/setup/README.md)**
 
 ---
 
@@ -132,17 +158,13 @@ This ecosystem exists for you.
 ### VPython Version (Lightweight, Browser)
 
 ```bash
-cd simulator/scripts
-python run_sim.py
+sf sim run vpython
 ```
 
 ### Genesis Version (High-Precision Physics)
 
 ```bash
-cd simulator/sandbox/genesis_sim
-source venv/bin/activate
-cd scripts
-python run_genesis_sim.py
+sf sim run genesis
 ```
 
 Switch the controller to USB HID mode and connect to your PC.
@@ -154,6 +176,36 @@ You can fly a drone freely in the 3D view.
 | Genesis | 2000Hz physics, physical-unit control |
 
 **→ [Play with the Simulator (Detailed Steps)](docs/getting-started.md#0-try-the-simulator-first)**
+
+---
+
+## 🚀 sf CLI Quick Start
+
+**sf CLI** is an integrated command-line tool for build, flash, monitor, log capture, and more.
+
+```bash
+# Activate environment
+source ~/esp/esp-idf/export.sh
+
+# Run diagnostics
+sf doctor
+
+# Build → Flash → Monitor
+sf build vehicle && sf flash vehicle -m
+```
+
+### Common Commands
+
+| Command | Description |
+|---------|-------------|
+| `sf build vehicle` | Build vehicle firmware |
+| `sf flash vehicle -m` | Flash and open monitor |
+| `sf monitor` | Open serial monitor |
+| `sf log wifi` | Capture WiFi telemetry |
+| `sf cal gyro` | Gyro calibration |
+| `sf sim run vpython` | Run simulator |
+
+**→ [Command Reference](docs/commands/README.md)** | **[Setup Guide](docs/setup/README.md)**
 
 ---
 
