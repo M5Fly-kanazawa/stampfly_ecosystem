@@ -114,16 +114,16 @@ def run(args: argparse.Namespace) -> int:
     else:
         console.print("  No serial ports found (connect device to see ports)")
 
-    # Check virtual environment
+    # Check StampFly configuration
     console.print()
-    console.info("Checking virtual environment...")
-    venv_path = paths.venv()
-    if venv_path.exists():
-        console.success(f"  .venv: {venv_path}")
+    console.info("Checking StampFly configuration...")
+    config_file = paths.root() / ".sf" / "config.toml"
+    if config_file.exists():
+        console.success(f"  Config: {config_file}")
     else:
-        warnings.append("Virtual environment not created")
-        console.warning("  .venv: NOT CREATED")
-        console.print("    Run: ./scripts/install.sh")
+        warnings.append("Configuration not found (run ./install.sh)")
+        console.warning("  Config: NOT FOUND")
+        console.print("    Run: ./install.sh")
 
     # Summary
     console.print()

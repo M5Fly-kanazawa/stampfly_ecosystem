@@ -87,9 +87,9 @@ class Paths:
         log_dir.mkdir(exist_ok=True)
         return log_dir
 
-    def venv(self) -> Path:
-        """Get .venv/ directory"""
-        return self.root() / ".venv"
+    def config_dir(self) -> Path:
+        """Get .sf/ configuration directory"""
+        return self.root() / ".sf"
 
     def esp_idf(self) -> Optional[Path]:
         """Get ESP-IDF directory (searches multiple locations)"""
@@ -121,7 +121,7 @@ class Paths:
 
     def config_file(self) -> Path:
         """Get CLI configuration file path"""
-        return self.root() / ".sfconfig.json"
+        return self.config_dir() / "config.toml"
 
     def templates(self) -> Path:
         """Get templates directory"""
