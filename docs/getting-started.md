@@ -20,19 +20,28 @@
 
 ### クイックスタート（5分で飛行開始！）
 
-#### Step 1: コントローラのファームウェア書き込み
-
-最初にコントローラにファームウェアを書き込みます（初回のみ）。
+#### Step 1: エコシステムのインストール
 
 ```bash
-# ESP-IDFのセットアップ（詳細は「2. ESP-IDFのインストール」参照）
-cd stampfly_ecosystem/firmware/controller
-idf.py build
-idf.py -p /dev/cu.usbmodem* flash  # macOS
-# idf.py -p COM3 flash  # Windows
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly-ecosystem
+./install.sh
 ```
 
-#### Step 2: コントローラをUSB HIDモードに切り替え
+インストーラがESP-IDFの検出・インストールも案内します。
+
+#### Step 2: コントローラのファームウェア書き込み（初回のみ）
+
+```bash
+# ESP-IDF環境をアクティブ化
+source ~/esp/esp-idf/export.sh
+
+# コントローラファームウェアをビルド・書き込み
+sf build controller
+sf flash controller
+```
+
+#### Step 3: コントローラをUSB HIDモードに切り替え
 
 1. コントローラの電源を入れる
 2. **画面を押して**メニューを開く
@@ -41,24 +50,15 @@ idf.py -p /dev/cu.usbmodem* flash  # macOS
 
 > **Tips**: USB HIDモードでは、コントローラがPCに直接ゲームパッドとして認識されます。ESP-NOWモードに戻すには、再度メニューから切り替えてください。
 
-#### Step 3: シミュレータの起動
+#### Step 4: シミュレータの起動
 
 ```bash
-# 依存パッケージのインストール（初回のみ）
-cd stampfly_ecosystem/simulator
-pip install -r requirements.txt
-
-# macOSの場合、HIDライブラリも必要
-brew install hidapi
-
-# シミュレータ起動！
-cd scripts
-python run_sim.py
+sf sim run vpython
 ```
 
 ブラウザが自動で開き、3Dビューが表示されます。
 
-#### Step 4: 飛ばしてみよう！
+#### Step 5: 飛ばしてみよう！
 
 | 操作 | Mode 2（デフォルト） | Mode 3 |
 |-----|---------------------|--------|
@@ -74,14 +74,16 @@ python run_sim.py
 ### シミュレータのオプション
 
 ```bash
-# ボクセルワールド（デフォルト）- ランダム地形
-python run_sim.py
+# VPythonシミュレータ（デフォルト）
+sf sim run vpython
 
-# リングワールド - 円形コース
-python run_sim.py --world ringworld
+# Genesisシミュレータ（高精度物理、要別途インストール）
+sf setup genesis
+sf sim run genesis
 
-# シード値を指定して同じ地形を再現
-python run_sim.py --seed 12345
+# ワールドオプション
+sf sim run vpython --world ringworld  # リングワールド
+sf sim run vpython --seed 12345       # シード指定
 ```
 
 ### トラブルシューティング
@@ -90,7 +92,7 @@ python run_sim.py --seed 12345
 |-----|------|
 | コントローラが認識されない | USB HIDモードに切り替えたか確認。PCを再起動 |
 | スティックがドリフトする | メニューから「Calibration」を実行 |
-| 感度が高すぎる/低すぎる | メニューから「Deadband」を調整（0-5%） |
+| vpythonが見つからない | `sf setup sim` を実行 |
 
 シミュレータに慣れたら、実機での飛行に挑戦しましょう！
 
@@ -111,109 +113,103 @@ python run_sim.py --seed 12345
 
 | 項目 | バージョン | 備考 |
 |-----|----------|------|
-| ESP-IDF | v5.4.1 | 必須 |
+| ESP-IDF | v5.5.2 | install.shで自動インストール可 |
 | Git | 最新版 | - |
-| Python | 3.8以上 | ESP-IDF依存 |
+| Python | 3.10以上 | - |
 
-## 2. ESP-IDF のインストール
+## 2. インストール
 
-### macOS / Linux
-
-```bash
-# 1. リポジトリをクローン
-git clone -b v5.4.1 --recursive https://github.com/espressif/esp-idf.git ~/esp/esp-idf
-
-# 2. インストールスクリプトを実行
-cd ~/esp/esp-idf
-./install.sh esp32s3
-
-# 3. 環境変数を設定（毎回実行、または .bashrc/.zshrc に追加）
-. ~/esp/esp-idf/export.sh
-```
-
-### Windows
-
-1. [ESP-IDF Tools Installer](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/windows-setup.html) をダウンロード
-2. インストーラを実行し、ESP-IDF v5.4.1 を選択
-3. "ESP-IDF PowerShell" または "ESP-IDF Command Prompt" を使用
-
-### インストール確認
-
-```bash
-idf.py --version
-# 出力例: ESP-IDF v5.4.1
-```
-
-## 3. リポジトリのクローン
+### Step 1: リポジトリをクローン
 
 ```bash
 git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
-cd stampfly_ecosystem
+cd stampfly-ecosystem
 ```
 
-## 4. 機体ファームウェアのビルドと書き込み
+### Step 2: インストーラを実行
+
+```bash
+./install.sh
+```
+
+インストーラが以下を行います:
+- ESP-IDFの検出（未インストールの場合はインストール案内）
+- sf CLI のインストール
+- シミュレータ依存（vpython, pygame等）のインストール
+
+### Step 3: 環境をアクティブ化
+
+```bash
+source ~/esp/esp-idf/export.sh
+```
+
+> **Tips**: `~/.bashrc` または `~/.zshrc` に `alias get_idf='source ~/esp/esp-idf/export.sh'` を追加すると便利です。
+
+### Step 4: インストール確認
+
+```bash
+sf doctor
+```
+
+すべて `[OK]` と表示されれば成功です。
+
+## 3. 機体ファームウェアのビルドと書き込み
 
 ### ビルド
 
 ```bash
-cd firmware/vehicle
-idf.py build
+sf build vehicle
 ```
 
-初回ビルドには数分かかります。`build/firmware_vehicle.bin` が生成されれば成功です。
+初回ビルドには数分かかります。
 
 ### 書き込み
 
 StampFly 機体をUSBで接続し、以下を実行:
 
 ```bash
-# Linux
-idf.py -p /dev/ttyACM0 flash
-
-# macOS
-idf.py -p /dev/cu.usbmodem* flash
-
-# Windows
-idf.py -p COM3 flash
+sf flash vehicle
 ```
 
-ポート名は環境によって異なります。`ls /dev/tty*` (Linux/macOS) や デバイスマネージャー (Windows) で確認してください。
+ポートは自動検出されます。手動指定する場合:
+
+```bash
+sf flash vehicle -p /dev/ttyACM0    # Linux
+sf flash vehicle -p /dev/cu.usbmodem*  # macOS
+sf flash vehicle -p COM3            # Windows
+```
 
 ### シリアルモニタ
 
 ```bash
-idf.py -p /dev/ttyACM0 monitor
+sf monitor
 ```
 
 終了は `Ctrl + ]` です。
 
-## 5. コントローラファームウェアのビルドと書き込み
+### ビルド→書き込み→モニタを一括実行
+
+```bash
+sf build vehicle && sf flash vehicle -m
+```
+
+## 4. コントローラファームウェアのビルドと書き込み
 
 ### ビルド
 
 ```bash
-cd firmware/controller
-idf.py build
+sf build controller
 ```
-
-`build/firmware_controller.bin` が生成されれば成功です。
 
 ### 書き込み
 
 AtomS3 をUSBで接続し、以下を実行:
 
 ```bash
-# Linux
-idf.py -p /dev/ttyACM0 flash
-
-# macOS
-idf.py -p /dev/cu.usbmodem* flash
-
-# Windows
-idf.py -p COM3 flash
+sf flash controller
 ```
 
-## 6. ペアリング
+## 5. ペアリング
 
 初回使用時、またはペアリング情報をリセットしたい場合に実行します。
 
@@ -225,7 +221,7 @@ idf.py -p COM3 flash
 4. 両方からビープ音が鳴ればペアリング完了
 5. ペアリング情報は自動保存され、次回以降は自動接続
 
-## 7. 飛行前の確認
+## 6. 飛行前の確認
 
 ### チェックリスト
 
@@ -236,21 +232,12 @@ idf.py -p COM3 flash
 
 ### スティックモード (Mode 2 / Mode 3)
 
-StampFly は Mode 2 と Mode 3 に対応しています。
-
-- **Mode 2**: 世界標準のスティック配置。多くのドローンやラジコンで採用されており、他の機体との操作感を統一したい場合に最適です。
-- **Mode 3**: 作者が強く推奨するモード！スロットルが右手にあり、ゲームコントローラのような直感的な操作が可能です。ぜひ試してみてください。
-
-#### モード切り替え方法
-
 | 起動方法 | 選択されるモード |
 |---------|----------------|
 | 通常起動 | Mode 2 |
 | **左ボタンを押しながら起動** | **Mode 3（推奨）** |
 
-コントローラのLCDに `MODE: 2` または `MODE: 3` と表示されます。
-
-## 8. 飛行方法
+## 7. 飛行方法
 
 ### スティック配置
 
@@ -262,9 +249,7 @@ StampFly は Mode 2 と Mode 3 に対応しています。
      │      ↑      │          │      ↑      │
      │   スロットル  │          │   ピッチ    │
      │ ←ヨー    ヨー→│          │←ロール ロール→│
-     │   (上昇)    │          │   (前進)    │
      │      ↓      │          │      ↓      │
-     │   (下降)    │          │   (後退)    │
      └─────────────┘          └─────────────┘
 ```
 
@@ -276,13 +261,9 @@ StampFly は Mode 2 と Mode 3 に対応しています。
      │      ↑      │          │      ↑      │
      │   ピッチ     │          │   スロットル │
      │ ←ロール ロール→│          │ ←ヨー    ヨー→│
-     │   (前進)    │          │   (上昇)    │
      │      ↓      │          │      ↓      │
-     │   (後退)    │          │   (下降)    │
      └─────────────┘          └─────────────┘
 ```
-
-Mode 3 では、右手でスロットル（高度）を操作し、左手で機体の姿勢を制御します。ゲームコントローラに慣れている方には特に直感的です。
 
 ### 基本操作
 
@@ -290,169 +271,93 @@ Mode 3 では、右手でスロットル（高度）を操作し、左手で機�
 
 1. 機体を平らな場所に置く
 2. スロットルを最下げ位置にする
-3. **スロットルスティックボタン**を押す（Mode 2: 左 / Mode 3: 右）
+3. **スロットルスティックボタン**を押す
 4. モーターが回転を始める
 
 #### 2. 離陸
 
 1. スロットルをゆっくり上げる
 2. 機体が浮き始めたら、ホバリング位置で止める
-3. 目安: スロットル50%前後
 
-#### 3. ホバリング
-
-- **姿勢スティック**（Mode 2: 右 / Mode 3: 左）でピッチ・ロールを調整
-- **スロットルスティック**の左右でヨー（機首方向）を調整
-- 現在は ACRO モードのため、スティックを離しても姿勢は維持されます（自動水平復帰なし）
-
-#### 4. 着陸
+#### 3. 着陸
 
 1. スロットルをゆっくり下げる
 2. 機体が着地したらスロットルを最下げ
 3. **スロットルスティックボタン**を押してディスアーム
 
-### ボタン操作一覧
-
-| ボタン | 機能 |
-|-------|------|
-| スロットルスティックボタン (Mode 2: 左 / Mode 3: 右) | Arm / Disarm（モーター起動/停止） |
-| 姿勢スティックボタン (Mode 2: 右 / Mode 3: 左) | Flip ※将来実装予定 |
-| 左ボタン | 高度モード切替 ※将来実装予定 |
-| 右ボタン | 制御モード切替 ※将来実装予定 |
-| M5ボタン短押し | タイマー開始/停止 |
-| M5ボタン長押し | タイマーリセット |
-
-### 制御モード（現在の状態と将来計画）
+### 制御モード
 
 > **現在のファームウェアは ACRO モードのみで動作します。**
->
-> このスケルトンファームウェアは、制御理論を学びたいエンジニアや研究者のための出発点として設計されています。STABILIZE モード（角度制御）や高度維持機能は**意図的に未実装**としており、ユーザー自身が実装することを想定しています。
->
-> ぜひ、あなた自身の手で姿勢制御アルゴリズムを実装してみてください！
+> STABILIZE モードや高度維持機能は**意図的に未実装**です。
+> 制御理論を学びたい方は、ぜひ自分で実装してみてください！
 
 | モード | 説明 | 状態 |
 |-------|------|------|
-| ACRO | 角速度制御、スティック入力が角速度指令値になる | **現在有効** |
-| STABILIZE | スティックを離すと自動で水平に戻る角度制御 | 将来実装予定 |
+| ACRO | 角速度制御 | **現在有効** |
+| STABILIZE | 角度制御（自動水平） | 未実装 |
 
-### 高度モード（将来実装予定）
-
-> 高度制御も現在は未実装です。ToFセンサからのデータは取得可能ですので、PID制御やより高度な制御手法を実装してみてください。
-
-| モード | 説明 | 状態 |
-|-------|------|------|
-| Manual ALT | スロットルで直接高度を制御 | **現在有効** |
-| Auto ALT | 高度を自動維持（ToFセンサ使用） | 将来実装予定 |
-
-## 9. 緊急時の対応
-
-### モーターを緊急停止したい場合
-
-- **スロットルスティックボタン**を押してディスアーム
-- または、スロットルを最下げにして待つ
-
-### 機体が暴走した場合
-
-1. スロットルを最下げにする
-2. スロットルスティックボタンでディスアーム
-3. バッテリーを外す
-
-### よくあるトラブル
-
-| 症状 | 原因 | 対処 |
-|-----|------|------|
-| モーターが回らない | アームされていない | スロットルスティックボタンを押す |
-| 機体が傾く | キャリブレーション不足 | 平らな場所で再起動 |
-| ホバリングが安定しない | バッテリー電圧低下 | バッテリーを充電/交換 |
-| コントローラと接続できない | ペアリング切れ | ペアリングを再実行 |
-
-## 10. 開発者向け機能
+## 8. 開発者向け機能
 
 ### WiFi テレメトリー
 
-機体はWebSocketサーバーを内蔵しており、PCやスマートフォンからリアルタイムでセンサデータを確認できます。
-
-**接続情報:**
+機体はWebSocketサーバーを内蔵しており、リアルタイムでセンサデータを確認できます。
 
 | 項目 | 値 |
 |-----|-----|
 | SSID | `StampFly` |
-| パスワード | なし（オープン） |
+| パスワード | なし |
 | URL | `http://192.168.4.1/` |
-| 送信レート | 50Hz |
 
-**接続手順:**
-1. 機体に電源を入れる
-2. PC/スマートフォンのWiFi設定から `StampFly` に接続
-3. ブラウザで `http://192.168.4.1/` を開く
-4. 3Dビジュアライザで姿勢がリアルタイム表示される
+### ログキャプチャ
 
-> **注意:** 現在のファームウェアでは姿勢推定・位置推定アルゴリズムが未調整のため、テレメトリーで表示される姿勢・位置データは不正確な値を示すことがあります。今後のアップデートで改善予定です。
+```bash
+# WiFiでテレメトリをキャプチャ（30秒）
+sf log wifi -d 30
+
+# USBシリアルでキャプチャ
+sf log capture -d 60
+
+# ログ一覧
+sf log list
+
+# フライト解析
+sf log analyze
+```
+
+### キャリブレーション
+
+```bash
+# ジャイロキャリブレーション
+sf cal gyro
+
+# 磁気キャリブレーション
+sf cal mag start
+# 機体を8の字に回転...
+sf cal mag stop
+sf cal mag save
+```
 
 ### CLI（コマンドラインインターフェース）
 
-USB シリアル接続でCLIコンソールにアクセスできます。センサの生データ確認やパラメータ調整に使用します。
-
-**接続方法:**
 ```bash
-idf.py -p /dev/ttyACM0 monitor
+sf monitor
 ```
 
-**主要コマンド:**
+主要コマンド:
 
 | コマンド | 説明 |
 |---------|------|
-| `help` | コマンド一覧を表示 |
-| `status` | システム状態を表示 |
-| `sensor all` | 全センサデータを表示 |
-| `ctrl watch` | コントローラ入力をリアルタイム表示 |
+| `help` | コマンド一覧 |
+| `status` | システム状態 |
+| `sensor` | センサデータ表示 |
 | `motor test 1 30` | モーター1を30%で回転 |
-| `motor stop` | 全モーター停止 |
-| `pair start` | ペアリングモード開始 |
-| `gain` | PIDゲイン表示・設定 |
+| `gain` | PIDゲイン設定 |
 
-**表示例:**
+## 9. 次のステップ
 
-```
-> help
-
-=== StampFly CLI ===
-Available commands:
-  help         Show available commands
-  status       Show system status
-  sensor       Show sensor data
-  motor        Motor control
-  pair         Enter pairing mode
-  gain         Rate control gains [axis param value]
-  ...
-
-> status
-=== System Status ===
-Flight State: IDLE
-Error: NONE
-Battery: 3.85V
-ESP-NOW: paired, connected
-ESKF: initialized
-Attitude: R=0.5 P=-0.3 Y=45.2 deg
-
-> sensor all
-IMU:
-  Accel: X=0.12, Y=-0.05, Z=-9.78 [m/s^2]
-  Gyro:  X=0.002, Y=-0.001, Z=0.000 [rad/s]
-Mag: X=22.5, Y=-5.3, Z=38.1 [uT]
-Baro: Pressure=101325 [Pa], Alt=0.15 [m]
-ToF: Bottom=0.250 [m], Front=2.100 [m]
-OptFlow: Vx=0.001, Vy=-0.002 [m/s]
-Power: 3.85 [V], 120.5 [mA]
-```
-
-詳細は [firmware/vehicle/README.md](../firmware/vehicle/README.md) を参照してください。
-
-## 11. 次のステップ
-
-- [firmware/vehicle/README.md](../firmware/vehicle/README.md) - 機体ファームウェアの詳細
-- [firmware/controller/README.md](../firmware/controller/README.md) - コントローラファームウェアの詳細
-- [PROJECT_PLAN.md](../PROJECT_PLAN.md) - プロジェクト全体計画
+- [コマンドリファレンス](commands/README.md) - sf CLI の全コマンド
+- [firmware/vehicle/README.md](../firmware/vehicle/README.md) - 機体ファームウェア詳細
+- [firmware/controller/README.md](../firmware/controller/README.md) - コントローラ詳細
 
 ---
 
@@ -466,91 +371,73 @@ This document explains the steps from environment setup to your first flight wit
 
 ## 0. Try the Simulator First!
 
-Even without the actual drone, you can experience drone piloting with just the controller and a PC. **This is also perfect for practice before flying the real thing!**
+Even without the actual drone, you can experience drone piloting with just the controller and a PC.
 
 ### Requirements
 
 | Item | Description |
 |------|-------------|
-| M5Stack AtomS3 + Atom JoyStick | Controller (used in USB HID mode) |
+| M5Stack AtomS3 + Atom JoyStick | Controller (USB HID mode) |
 | PC | macOS / Windows / Linux |
 | USB-C Cable | For controller connection |
 
 ### Quick Start (Flying in 5 minutes!)
 
-#### Step 1: Flash Controller Firmware
-
-First, flash the firmware to the controller (only needed once).
+#### Step 1: Install Ecosystem
 
 ```bash
-# ESP-IDF setup (see "2. Installing ESP-IDF" for details)
-cd stampfly_ecosystem/firmware/controller
-idf.py build
-idf.py -p /dev/cu.usbmodem* flash  # macOS
-# idf.py -p COM3 flash  # Windows
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly-ecosystem
+./install.sh
 ```
 
-#### Step 2: Switch Controller to USB HID Mode
+The installer also guides ESP-IDF installation if needed.
+
+#### Step 2: Flash Controller Firmware (First time only)
+
+```bash
+# Activate ESP-IDF environment
+source ~/esp/esp-idf/export.sh
+
+# Build and flash controller
+sf build controller
+sf flash controller
+```
+
+#### Step 3: Switch Controller to USB HID Mode
 
 1. Power on the controller
-2. **Press the screen** to open the menu
+2. **Press the screen** to open menu
 3. Select "**USB Mode**"
-4. The controller restarts and is recognized as a USB HID gamepad
+4. Controller restarts as USB HID gamepad
 
-> **Tips**: In USB HID mode, the controller is directly recognized by the PC as a gamepad. To return to ESP-NOW mode, switch again from the menu.
-
-#### Step 3: Launch the Simulator
+#### Step 4: Launch Simulator
 
 ```bash
-# Install dependencies (only needed once)
-cd stampfly_ecosystem/simulator
-pip install -r requirements.txt
-
-# macOS also requires the HID library
-brew install hidapi
-
-# Launch the simulator!
-cd scripts
-python run_sim.py
+sf sim run vpython
 ```
 
-A browser will automatically open displaying the 3D view.
+A browser opens with the 3D view.
 
-#### Step 4: Let's Fly!
+#### Step 5: Let's Fly!
 
 | Control | Mode 2 (Default) | Mode 3 |
 |---------|------------------|--------|
-| Throttle (ascend/descend) | Left stick up/down | Right stick up/down |
-| Roll (move left/right) | Right stick left/right | Left stick left/right |
-| Pitch (move forward/back) | Right stick up/down | Left stick up/down |
-| Yaw (rotate) | Left stick left/right | Right stick left/right |
-
-1. **Slowly raise the throttle** → The drone lifts off
-2. **Adjust attitude with the sticks** → Fly in any direction
-3. **Lower the throttle** → Land
+| Throttle | Left stick up/down | Right stick up/down |
+| Roll | Right stick left/right | Left stick left/right |
+| Pitch | Right stick up/down | Left stick up/down |
+| Yaw | Left stick left/right | Right stick left/right |
 
 ### Simulator Options
 
 ```bash
-# Voxel world (default) - random terrain
-python run_sim.py
+# VPython simulator (default)
+sf sim run vpython
 
-# Ring world - circular course
-python run_sim.py --world ringworld
-
-# Specify seed for reproducible terrain
-python run_sim.py --seed 12345
+# Genesis simulator (high-precision, separate install)
+sf setup genesis
+sf sim run genesis
 ```
-
-### Troubleshooting
-
-| Symptom | Solution |
-|---------|----------|
-| Controller not recognized | Check if USB HID mode is enabled. Restart PC |
-| Stick drifting | Run "Calibration" from menu |
-| Sensitivity too high/low | Adjust "Deadband" from menu (0-5%) |
-
-Once you're comfortable with the simulator, challenge yourself with the real drone!
 
 ---
 
@@ -569,366 +456,133 @@ Once you're comfortable with the simulator, challenge yourself with the real dro
 
 | Item | Version | Notes |
 |------|---------|-------|
-| ESP-IDF | v5.4.1 | Required |
+| ESP-IDF | v5.5.2 | Auto-install via install.sh |
 | Git | Latest | - |
-| Python | 3.8+ | ESP-IDF dependency |
+| Python | 3.10+ | - |
 
-## 2. Installing ESP-IDF
+## 2. Installation
 
-### macOS / Linux
-
-```bash
-# 1. Clone the repository
-git clone -b v5.4.1 --recursive https://github.com/espressif/esp-idf.git ~/esp/esp-idf
-
-# 2. Run the install script
-cd ~/esp/esp-idf
-./install.sh esp32s3
-
-# 3. Set environment variables (run each time, or add to .bashrc/.zshrc)
-. ~/esp/esp-idf/export.sh
-```
-
-### Windows
-
-1. Download [ESP-IDF Tools Installer](https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32s3/get-started/windows-setup.html)
-2. Run the installer and select ESP-IDF v5.4.1
-3. Use "ESP-IDF PowerShell" or "ESP-IDF Command Prompt"
-
-### Verify Installation
-
-```bash
-idf.py --version
-# Example output: ESP-IDF v5.4.1
-```
-
-## 3. Clone the Repository
+### Step 1: Clone Repository
 
 ```bash
 git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
-cd stampfly_ecosystem
+cd stampfly-ecosystem
 ```
 
-## 4. Building and Flashing Vehicle Firmware
+### Step 2: Run Installer
+
+```bash
+./install.sh
+```
+
+### Step 3: Activate Environment
+
+```bash
+source ~/esp/esp-idf/export.sh
+```
+
+### Step 4: Verify Installation
+
+```bash
+sf doctor
+```
+
+## 3. Build and Flash Vehicle Firmware
 
 ### Build
 
 ```bash
-cd firmware/vehicle
-idf.py build
+sf build vehicle
 ```
-
-The first build takes several minutes. Success when `build/firmware_vehicle.bin` is generated.
 
 ### Flash
 
-Connect the StampFly vehicle via USB and run:
+Connect StampFly via USB:
 
 ```bash
-# Linux
-idf.py -p /dev/ttyACM0 flash
-
-# macOS
-idf.py -p /dev/cu.usbmodem* flash
-
-# Windows
-idf.py -p COM3 flash
+sf flash vehicle
 ```
 
-Port names vary by environment. Check with `ls /dev/tty*` (Linux/macOS) or Device Manager (Windows).
-
-### Serial Monitor
+### Build → Flash → Monitor
 
 ```bash
-idf.py -p /dev/ttyACM0 monitor
+sf build vehicle && sf flash vehicle -m
 ```
 
-Exit with `Ctrl + ]`.
-
-## 5. Building and Flashing Controller Firmware
-
-### Build
+## 4. Build and Flash Controller Firmware
 
 ```bash
-cd firmware/controller
-idf.py build
+sf build controller
+sf flash controller
 ```
 
-Success when `build/firmware_controller.bin` is generated.
+## 5. Pairing
 
-### Flash
+1. **Controller**: Hold M5 button while powering on
+2. LCD shows "Pairing mode..."
+3. **StampFly**: Long-press button (~2 sec) to enter pairing mode
+4. Both beep when pairing completes
 
-Connect the AtomS3 via USB and run:
+## 6. Pre-Flight Checks
 
-```bash
-# Linux
-idf.py -p /dev/ttyACM0 flash
-
-# macOS
-idf.py -p /dev/cu.usbmodem* flash
-
-# Windows
-idf.py -p COM3 flash
-```
-
-## 6. Pairing
-
-Required for first use or when resetting pairing information.
-
-### Procedure
-
-1. **Controller**: Hold M5 button (below screen) while powering on
-2. LCD shows "Pairing mode..." and beeping starts
-3. **StampFly**: Long-press button (~2 seconds) to enter pairing mode
-4. Both emit beeps when pairing is complete
-5. Pairing info is auto-saved and auto-connects on next boot
-
-## 7. Pre-Flight Checks
-
-### Checklist
-
-- [ ] Battery sufficiently charged (3.7V+ recommended)
+- [ ] Battery charged (3.7V+ recommended)
 - [ ] Propellers correctly attached
-- [ ] Clear surroundings (minimum 2m × 2m space)
-- [ ] Controller sticks in neutral position
+- [ ] Clear surroundings (2m × 2m minimum)
+- [ ] Controller sticks in neutral
 
-### Stick Mode (Mode 2 / Mode 3)
-
-StampFly supports both Mode 2 and Mode 3.
-
-- **Mode 2**: The world standard stick layout. Used by most drones and RC aircraft, ideal if you want consistent control feel across different vehicles.
-- **Mode 3**: Strongly recommended by the author! Places throttle on the right hand, allowing for intuitive control similar to game controllers. Please give it a try!
-
-#### How to Switch Modes
-
-| Boot Method | Selected Mode |
-|-------------|---------------|
-| Normal boot | Mode 2 |
-| **Hold left button while booting** | **Mode 3 (Recommended)** |
-
-The controller LCD displays `MODE: 2` or `MODE: 3`.
-
-## 8. How to Fly
-
-### Stick Layout
-
-#### Mode 2
-
-```
-        Left Stick               Right Stick
-     ┌─────────────┐          ┌─────────────┐
-     │      ↑      │          │      ↑      │
-     │   Throttle  │          │    Pitch    │
-     │ ←Yaw    Yaw→│          │←Roll    Roll→│
-     │   (Ascend)  │          │  (Forward)  │
-     │      ↓      │          │      ↓      │
-     │  (Descend)  │          │ (Backward)  │
-     └─────────────┘          └─────────────┘
-```
-
-#### Mode 3 (Recommended)
-
-```
-        Left Stick               Right Stick
-     ┌─────────────┐          ┌─────────────┐
-     │      ↑      │          │      ↑      │
-     │    Pitch    │          │   Throttle  │
-     │ ←Roll   Roll→│          │ ←Yaw    Yaw→│
-     │  (Forward)  │          │   (Ascend)  │
-     │      ↓      │          │      ↓      │
-     │ (Backward)  │          │  (Descend)  │
-     └─────────────┘          └─────────────┘
-```
-
-In Mode 3, the right hand controls throttle (altitude) while the left hand controls the vehicle's attitude. This is especially intuitive for those familiar with game controllers.
+## 7. How to Fly
 
 ### Basic Operation
 
-#### 1. Arm (Start Motors)
+1. **Arm**: Press throttle stick button
+2. **Takeoff**: Slowly raise throttle
+3. **Land**: Lower throttle, then disarm
 
-1. Place vehicle on a flat surface
-2. Set throttle to minimum position
-3. Press **throttle stick button** (Mode 2: left / Mode 3: right)
-4. Motors start spinning
+### Control Modes
 
-#### 2. Takeoff
-
-1. Slowly raise throttle
-2. Stop at hover position when vehicle lifts off
-3. Estimate: around 50% throttle
-
-#### 3. Hovering
-
-- Use **attitude stick** (Mode 2: right / Mode 3: left) to adjust pitch and roll
-- Use **throttle stick** left/right to adjust yaw (heading)
-- Currently in ACRO mode only, so attitude is maintained when stick is released (no auto-leveling)
-
-#### 4. Landing
-
-1. Slowly lower throttle
-2. Once landed, set throttle to minimum
-3. Press **throttle stick button** to disarm
-
-### Button Reference
-
-| Button | Function |
-|--------|----------|
-| Throttle Stick Button (Mode 2: left / Mode 3: right) | Arm / Disarm (motor start/stop) |
-| Attitude Stick Button (Mode 2: right / Mode 3: left) | Flip *Future implementation* |
-| Left Button | Altitude mode toggle *Future implementation* |
-| Right Button | Control mode toggle *Future implementation* |
-| M5 Button Short | Timer start/stop |
-| M5 Button Long | Timer reset |
-
-### Control Modes (Current State and Future Plans)
-
-> **The current firmware operates in ACRO mode only.**
->
-> This skeleton firmware is designed as a starting point for engineers and researchers who want to learn control theory. STABILIZE mode (angle control) and altitude hold features are **intentionally not implemented**, with the expectation that users will implement them themselves.
->
-> We encourage you to implement your own attitude control algorithms!
+> **Current firmware operates in ACRO mode only.**
+> STABILIZE mode and altitude hold are **intentionally not implemented**.
+> Implement them yourself to learn control theory!
 
 | Mode | Description | Status |
 |------|-------------|--------|
-| ACRO | Rate control, stick input becomes angular velocity command | **Currently Active** |
-| STABILIZE | Angle control that auto-levels when stick released | Future implementation |
+| ACRO | Rate control | **Active** |
+| STABILIZE | Angle control | Not implemented |
 
-### Altitude Modes (Future Implementation)
-
-> Altitude control is also currently not implemented. ToF sensor data is available, so please try implementing PID control or more advanced control methods.
-
-| Mode | Description | Status |
-|------|-------------|--------|
-| Manual ALT | Direct altitude control with throttle | **Currently Active** |
-| Auto ALT | Auto altitude hold (uses ToF sensor) | Future implementation |
-
-## 9. Emergency Response
-
-### Emergency Motor Stop
-
-- Press **throttle stick button** to disarm
-- Or set throttle to minimum and wait
-
-### If Vehicle Goes Out of Control
-
-1. Set throttle to minimum
-2. Disarm with throttle stick button
-3. Disconnect battery
-
-### Common Issues
-
-| Symptom | Cause | Solution |
-|---------|-------|----------|
-| Motors don't spin | Not armed | Press throttle stick button |
-| Vehicle tilts | Calibration needed | Restart on flat surface |
-| Unstable hover | Low battery voltage | Charge/replace battery |
-| Can't connect to controller | Pairing lost | Re-run pairing |
-
-## 10. Developer Features
+## 8. Developer Features
 
 ### WiFi Telemetry
-
-The vehicle has a built-in WebSocket server, allowing you to view sensor data in real-time from a PC or smartphone.
-
-**Connection Info:**
 
 | Item | Value |
 |------|-------|
 | SSID | `StampFly` |
-| Password | None (Open) |
+| Password | None |
 | URL | `http://192.168.4.1/` |
-| Update Rate | 50Hz |
-| Packet Size | 116 bytes |
 
-**Connection Steps:**
-1. Power on the vehicle
-2. Connect to `StampFly` WiFi from your PC/smartphone
-3. Open `http://192.168.4.1/` in a browser
-4. Real-time data visualization appears
+### Log Capture
 
-**Available Data Cards:**
-
-| Card | Contents |
-|------|----------|
-| Attitude | Roll, Pitch, Yaw angles |
-| Position | X, Y, Z position (NED) |
-| Velocity | Vx, Vy, Vz velocity |
-| Gyro | Angular velocity (bias corrected) |
-| Accel | Acceleration (bias corrected) |
-| Magnetometer | Magnetic field X, Y, Z |
-| Control Input | Throttle, Roll, Pitch, Yaw commands |
-| System | Battery voltage, Flight state, Sensor status |
-| ToF Distance | Bottom and Front ToF sensor distances |
-
-**Additional Features:**
-- Attitude indicator (artificial horizon)
-- Top view and side view visualizations
-- Time-series graphs for all data
-- CSV log recording and download
-
-> **Note:** The current firmware's attitude and position estimation algorithms are not yet tuned, so attitude and position data shown in telemetry may display inaccurate values. This will be improved in future updates.
-
-### CLI (Command Line Interface)
-
-Access the CLI console via USB serial connection. Use it to check raw sensor data and adjust parameters.
-
-**Connection:**
 ```bash
-idf.py -p /dev/ttyACM0 monitor
+sf log wifi -d 30      # WiFi capture (30s)
+sf log capture -d 60   # USB serial capture
+sf log list            # List logs
+sf log analyze         # Flight analysis
 ```
 
-**Main Commands:**
+### Calibration
 
-| Command | Description |
-|---------|-------------|
-| `help` | Show command list |
-| `status` | Show system status |
-| `sensor all` | Show all sensor data |
-| `ctrl watch` | Show controller input in real-time |
-| `motor test 1 30` | Run motor 1 at 30% |
-| `motor stop` | Stop all motors |
-| `pair start` | Enter pairing mode |
-| `gain` | Show/set PID gains |
-
-**Example Output:**
-
-```
-> help
-
-=== StampFly CLI ===
-Available commands:
-  help         Show available commands
-  status       Show system status
-  sensor       Show sensor data
-  motor        Motor control
-  pair         Enter pairing mode
-  gain         Rate control gains [axis param value]
-  ...
-
-> status
-=== System Status ===
-Flight State: IDLE
-Error: NONE
-Battery: 3.85V
-ESP-NOW: paired, connected
-ESKF: initialized
-Attitude: R=0.5 P=-0.3 Y=45.2 deg
-
-> sensor all
-IMU:
-  Accel: X=0.12, Y=-0.05, Z=-9.78 [m/s^2]
-  Gyro:  X=0.002, Y=-0.001, Z=0.000 [rad/s]
-Mag: X=22.5, Y=-5.3, Z=38.1 [uT]
-Baro: Pressure=101325 [Pa], Alt=0.15 [m]
-ToF: Bottom=0.250 [m], Front=2.100 [m]
-OptFlow: Vx=0.001, Vy=-0.002 [m/s]
-Power: 3.85 [V], 120.5 [mA]
+```bash
+sf cal gyro            # Gyro calibration
+sf cal mag start       # Start mag calibration
+sf cal mag save        # Save calibration
 ```
 
-See [firmware/vehicle/README.md](../firmware/vehicle/README.md) for details.
+### CLI
 
-## 11. Next Steps
+```bash
+sf monitor
+```
 
+## 9. Next Steps
+
+- [Command Reference](commands/README.md) - All sf CLI commands
 - [firmware/vehicle/README.md](../firmware/vehicle/README.md) - Vehicle firmware details
-- [firmware/controller/README.md](../firmware/controller/README.md) - Controller firmware details
-- [PROJECT_PLAN.md](../PROJECT_PLAN.md) - Overall project plan

@@ -15,6 +15,21 @@
 
 ---
 
+## 📦 インストール
+
+```bash
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly-ecosystem
+./install.sh
+```
+
+これだけで sf CLI とシミュレータ依存がインストールされます。
+ESP-IDFが未インストールの場合は、インストーラが案内します。
+
+**→ [セットアップガイド（詳細）](docs/setup/README.md)**
+
+---
+
 ## 🎮 まずはシミュレータで飛ばしてみよう！
 
 **実機がなくても大丈夫。** コントローラとPCがあれば、今すぐドローン操縦を体験できます。
@@ -148,6 +163,21 @@ MIT License
 "I need a flight experiment platform for my research."
 
 This ecosystem exists for you.
+
+---
+
+## 📦 Installation
+
+```bash
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly-ecosystem
+./install.sh
+```
+
+This installs sf CLI and simulator dependencies.
+If ESP-IDF is not installed, the installer will guide you.
+
+**→ [Setup Guide (Details)](docs/setup/README.md)**
 
 ---
 
