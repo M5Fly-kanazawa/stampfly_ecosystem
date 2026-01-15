@@ -11,6 +11,7 @@ Usage:
 Options:
     --idf-path PATH    Specify ESP-IDF path
     --skip-deps        Skip dependency installation
+    --minimal          Install minimal dependencies (skip simulator)
     --uninstall        Remove sfcli from ESP-IDF environment
 """
 
@@ -280,7 +281,7 @@ class Installer:
         self.config_dir = self.root / ".sf"
         self.config_file = self.config_dir / "config.toml"
 
-    def run(self, idf_path: Optional[Path] = None, skip_deps: bool = False) -> int:
+    def run(self, idf_path: Optional[Path] = None, skip_deps: bool = False, minimal: bool = False) -> int:
         """Run installation"""
 
         # Step 1: Find or install ESP-IDF
@@ -377,7 +378,10 @@ class Installer:
         header("Step 3/3: StampFly CLI")
 
         if not skip_deps:
-            info("Installing dependencies...")
+            if minimal:
+                info("Installing minimal dependencies (simulator excluded)...")
+            else:
+                info("Installing dependencies (including simulator)...")
 
             # Get pip from ESP-IDF environment
             if sys.platform == "win32":
@@ -387,29 +391,46 @@ class Installer:
                 export_script = idf_path / "export.sh"
                 pip_cmd = f'bash -c \'source "{export_script}" > /dev/null 2>&1 && python -m pip'
 
-            # Install dependencies
-            requirements = self.root / "requirements.txt"
-            if requirements.exists():
+            if minimal:
+                # Install only core dependencies from pyproject.toml
+                info("Installing sfcli with core dependencies...")
                 if sys.platform == "win32":
-                    cmd = f'{pip_cmd} install -r "{requirements}"'
+                    cmd = f'{pip_cmd} install -e "{self.root}"'
                 else:
-                    cmd = f'{pip_cmd} install -r "{requirements}"\''
+                    cmd = f'{pip_cmd} install -e "{self.root}"\''
 
                 result = subprocess.run(cmd, shell=True)
                 if result.returncode != 0:
-                    warn("Some dependencies may have failed to install")
+                    error("Failed to install sfcli")
+                    return 1
 
-            # Install sfcli in editable mode
-            info("Installing sfcli...")
-            if sys.platform == "win32":
-                cmd = f'{pip_cmd} install -e "{self.root}"'
+                info("Simulator dependencies skipped. Install later with: sf setup sim")
             else:
-                cmd = f'{pip_cmd} install -e "{self.root}"\''
+                # Install full dependencies including simulator
+                requirements = self.root / "requirements.txt"
+                if requirements.exists():
+                    info("Installing all dependencies...")
+                    if sys.platform == "win32":
+                        cmd = f'{pip_cmd} install -r "{requirements}"'
+                    else:
+                        cmd = f'{pip_cmd} install -r "{requirements}"\''
 
-            result = subprocess.run(cmd, shell=True)
-            if result.returncode != 0:
-                error("Failed to install sfcli")
-                return 1
+                    result = subprocess.run(cmd, shell=True)
+                    if result.returncode != 0:
+                        warn("Some dependencies may have failed to install")
+                        warn("You can install simulator dependencies later with: sf setup sim")
+
+                # Install sfcli in editable mode
+                info("Installing sfcli...")
+                if sys.platform == "win32":
+                    cmd = f'{pip_cmd} install -e "{self.root}"'
+                else:
+                    cmd = f'{pip_cmd} install -e "{self.root}"\''
+
+                result = subprocess.run(cmd, shell=True)
+                if result.returncode != 0:
+                    error("Failed to install sfcli")
+                    return 1
 
         success("StampFly CLI installed!")
         print()
@@ -428,8 +449,10 @@ class Installer:
             print(f"  source {idf_path}/export.sh")
         print()
         print("Then run:")
-        print("  sf --help")
-        print("  sf doctor")
+        print("  sf --help          # Show all commands")
+        print("  sf doctor          # Check environment")
+        print("  sf sim run         # Run VPython simulator")
+        print("  sf build vehicle   # Build firmware")
         print()
 
         return 0
@@ -515,6 +538,11 @@ def main() -> int:
         help="Skip dependency installation",
     )
     parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="Install minimal dependencies (skip simulator)",
+    )
+    parser.add_argument(
         "--no-color",
         action="store_true",
         help="Disable colored output",
@@ -539,6 +567,7 @@ def main() -> int:
         return installer.run(
             idf_path=args.idf_path,
             skip_deps=args.skip_deps,
+            minimal=args.minimal,
         )
 
 
