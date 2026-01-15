@@ -416,8 +416,10 @@ float roll_angle_target = roll_cmd * MAX_ROLL_ANGLE;
 float pitch_angle_target = pitch_cmd * MAX_PITCH_ANGLE;
 
 // 2. 現在の姿勢を取得（ESKFから）
-float roll_current, pitch_current, yaw_current;
-g_fusion.getEulerAngles(roll_current, pitch_current, yaw_current);
+auto state = g_fusion.getState();
+float roll_current = state.roll;
+float pitch_current = state.pitch;
+float yaw_current = state.yaw;
 
 // 3. 姿勢制御PIDで目標角速度を計算
 float roll_rate_target = attitude_pid.update(roll_angle_target, roll_current, dt);
@@ -867,8 +869,10 @@ float roll_angle_target = roll_cmd * MAX_ROLL_ANGLE;
 float pitch_angle_target = pitch_cmd * MAX_PITCH_ANGLE;
 
 // 2. Get current attitude (from ESKF)
-float roll_current, pitch_current, yaw_current;
-g_fusion.getEulerAngles(roll_current, pitch_current, yaw_current);
+auto state = g_fusion.getState();
+float roll_current = state.roll;
+float pitch_current = state.pitch;
+float yaw_current = state.yaw;
 
 // 3. Calculate target rate with attitude PID
 float roll_rate_target = attitude_pid.update(roll_angle_target, roll_current, dt);
