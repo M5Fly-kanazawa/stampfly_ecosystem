@@ -11,6 +11,7 @@ from . import flash
 from . import monitor
 from . import log
 from . import sim
+from . import cal
 
 __all__ = [
     "version",
@@ -20,4 +21,5 @@ __all__ = [
     "monitor",
     "log",
     "sim",
+    "cal",
 ]
