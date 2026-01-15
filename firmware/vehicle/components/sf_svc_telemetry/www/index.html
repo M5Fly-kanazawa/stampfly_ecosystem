@@ -496,7 +496,7 @@ const COLORS = {
     THR: '#ffaa00' // Orange - Throttle
 };
 
-// V2.2 Packet offsets (116 bytes) - Added ToF data
+// V2.2 Packet offsets (116 bytes) - Legacy format (kept for compatibility)
 const PKT = {
     SIZE: 116,
     HEADER: 0,
@@ -525,13 +525,70 @@ const PKT = {
     MAG_Y: 86,
     MAG_Z: 90,
     VOLTAGE: 94,
-    TOF_BOTTOM: 98,    // [NEW] 底面ToF距離 [m]
-    TOF_FRONT: 102,    // [NEW] 前方ToF距離 [m]
+    TOF_BOTTOM: 98,
+    TOF_FRONT: 102,
     FLIGHT_STATE: 106,
     SENSOR_STATUS: 107,
     HEARTBEAT: 108,
     CHECKSUM: 112,
 };
+
+// V3.0 Extended Batch Packet (552 bytes) - 400Hz unified telemetry
+// 4 samples × 136 bytes per batch, sent at 100fps
+const PKT_EXT = {
+    SIZE: 552,
+    HEADER: 0,          // 0xBD
+    TYPE: 1,            // 0x32
+    SAMPLE_COUNT: 2,
+    RESERVED: 3,
+    SAMPLES_START: 4,
+    SAMPLE_SIZE: 136,
+    CHECKSUM: 548,
+};
+
+// ExtendedSample offsets within each sample (136 bytes)
+const SAMPLE = {
+    TIMESTAMP_US: 0,        // uint32_t [μs]
+    GYRO_X: 4,              // float [rad/s] raw
+    GYRO_Y: 8,
+    GYRO_Z: 12,
+    ACCEL_X: 16,            // float [m/s²] raw
+    ACCEL_Y: 20,
+    ACCEL_Z: 24,
+    GYRO_CORR_X: 28,        // float [rad/s] bias-corrected
+    GYRO_CORR_Y: 32,
+    GYRO_CORR_Z: 36,
+    CTRL_THROTTLE: 40,      // float [0-1]
+    CTRL_ROLL: 44,          // float [-1,1]
+    CTRL_PITCH: 48,
+    CTRL_YAW: 52,
+    QUAT_W: 56,             // float quaternion
+    QUAT_X: 60,
+    QUAT_Y: 64,
+    QUAT_Z: 68,
+    POS_X: 72,              // float [m] NED
+    POS_Y: 76,
+    POS_Z: 80,
+    VEL_X: 84,              // float [m/s]
+    VEL_Y: 88,
+    VEL_Z: 92,
+    GYRO_BIAS_X: 96,        // int16_t × 0.0001 [rad/s]
+    GYRO_BIAS_Y: 98,
+    GYRO_BIAS_Z: 100,
+    ACCEL_BIAS_X: 102,      // int16_t × 0.0001 [m/s²]
+    ACCEL_BIAS_Y: 104,
+    ACCEL_BIAS_Z: 106,
+    ESKF_STATUS: 108,       // uint8_t
+    PADDING1: 109,          // 7 bytes
+    BARO_ALT: 116,          // float [m]
+    TOF_BOTTOM: 120,        // float [m]
+    TOF_FRONT: 124,         // float [m]
+    FLOW_X: 128,            // int16_t
+    FLOW_Y: 130,            // int16_t
+    FLOW_QUALITY: 132,      // uint8_t
+    PADDING2: 133,          // 3 bytes -> total 136
+};
+
 const HISTORY_SIZE = 500;
 
 // ============================================================================
@@ -1056,14 +1113,32 @@ function stopLog() {
 function downloadLog() {
     if (logData.length === 0) return;
 
-    const header = 'timestamp_ms,roll_deg,pitch_deg,yaw_deg,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,mag_x,mag_y,mag_z,throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,voltage,tof_bottom,tof_front,state\n';
+    // Detect format based on column count (400Hz extended has 36 columns, legacy has 27)
+    const isExtended = logData[0] && logData[0].length > 30;
+
+    let header;
+    if (isExtended) {
+        // 400Hz Extended format (36 columns)
+        header = 'timestamp_us,gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,' +
+                 'gyro_corr_x,gyro_corr_y,gyro_corr_z,ctrl_throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,' +
+                 'quat_w,quat_x,quat_y,quat_z,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,' +
+                 'gyro_bias_x,gyro_bias_y,gyro_bias_z,accel_bias_x,accel_bias_y,accel_bias_z,' +
+                 'baro_alt,tof_bottom,tof_front,flow_x,flow_y,flow_quality\n';
+    } else {
+        // Legacy format (27 columns)
+        header = 'timestamp_ms,roll_deg,pitch_deg,yaw_deg,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,' +
+                 'gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z,mag_x,mag_y,mag_z,' +
+                 'throttle,ctrl_roll,ctrl_pitch,ctrl_yaw,voltage,tof_bottom,tof_front,state\n';
+    }
+
     const csv = header + logData.map(d => d.join(',')).join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `stampfly_log_${new Date().toISOString().slice(0,19).replace(/[:-]/g,'')}.csv`;
+    const suffix = isExtended ? '400hz' : 'legacy';
+    a.download = `stampfly_${suffix}_${new Date().toISOString().slice(0,19).replace(/[:-]/g,'')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -1122,12 +1197,220 @@ function connect() {
     ws.onmessage = (event) => {
         try {
             if (!(event.data instanceof ArrayBuffer)) return;
-            if (event.data.byteLength < PKT.SIZE) return;
 
             const data = new DataView(event.data);
-            if (data.getUint8(PKT.HEADER) !== 0xAA) return;
+            const header = data.getUint8(0);
+            const packetType = data.getUint8(1);
 
-            const packetType = data.getUint8(PKT.TYPE);
+            // === Extended Batch Packet (0xBD, 0x32) - 400Hz unified ===
+            if (header === 0xBD && packetType === 0x32 && event.data.byteLength >= PKT_EXT.SIZE) {
+                // Parse last sample for display (4th sample, index 3)
+                const sampleIdx = 3;
+                const base = PKT_EXT.SAMPLES_START + sampleIdx * PKT_EXT.SAMPLE_SIZE;
+
+                const timestamp = data.getUint32(base + SAMPLE.TIMESTAMP_US, true) / 1000; // μs to ms
+
+                // Quaternion to Euler (simplified)
+                const qw = data.getFloat32(base + SAMPLE.QUAT_W, true);
+                const qx = data.getFloat32(base + SAMPLE.QUAT_X, true);
+                const qy = data.getFloat32(base + SAMPLE.QUAT_Y, true);
+                const qz = data.getFloat32(base + SAMPLE.QUAT_Z, true);
+
+                // Convert quaternion to Euler angles
+                const sinr_cosp = 2 * (qw * qx + qy * qz);
+                const cosr_cosp = 1 - 2 * (qx * qx + qy * qy);
+                const roll = Math.atan2(sinr_cosp, cosr_cosp);
+
+                const sinp = 2 * (qw * qy - qz * qx);
+                const pitch = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+
+                const siny_cosp = 2 * (qw * qz + qx * qy);
+                const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
+                const yaw = Math.atan2(siny_cosp, cosy_cosp);
+
+                const pos_x = data.getFloat32(base + SAMPLE.POS_X, true);
+                const pos_y = data.getFloat32(base + SAMPLE.POS_Y, true);
+                const pos_z = data.getFloat32(base + SAMPLE.POS_Z, true);
+
+                const vel_x = data.getFloat32(base + SAMPLE.VEL_X, true);
+                const vel_y = data.getFloat32(base + SAMPLE.VEL_Y, true);
+                const vel_z = data.getFloat32(base + SAMPLE.VEL_Z, true);
+
+                // Bias-corrected gyro for display
+                const gyro_x = data.getFloat32(base + SAMPLE.GYRO_CORR_X, true);
+                const gyro_y = data.getFloat32(base + SAMPLE.GYRO_CORR_Y, true);
+                const gyro_z = data.getFloat32(base + SAMPLE.GYRO_CORR_Z, true);
+
+                // Raw accel
+                const accel_x = data.getFloat32(base + SAMPLE.ACCEL_X, true);
+                const accel_y = data.getFloat32(base + SAMPLE.ACCEL_Y, true);
+                const accel_z = data.getFloat32(base + SAMPLE.ACCEL_Z, true);
+
+                const ctrl_throttle = data.getFloat32(base + SAMPLE.CTRL_THROTTLE, true);
+                const ctrl_roll = data.getFloat32(base + SAMPLE.CTRL_ROLL, true);
+                const ctrl_pitch = data.getFloat32(base + SAMPLE.CTRL_PITCH, true);
+                const ctrl_yaw = data.getFloat32(base + SAMPLE.CTRL_YAW, true);
+
+                // Additional sensor data
+                const baro_alt = data.getFloat32(base + SAMPLE.BARO_ALT, true);
+                const tof_bottom = data.getFloat32(base + SAMPLE.TOF_BOTTOM, true);
+                const tof_front = data.getFloat32(base + SAMPLE.TOF_FRONT, true);
+
+                const flow_x = data.getInt16(base + SAMPLE.FLOW_X, true);
+                const flow_y = data.getInt16(base + SAMPLE.FLOW_Y, true);
+                const flow_quality = data.getUint8(base + SAMPLE.FLOW_QUALITY);
+
+                // Biases (scaled by 10000)
+                const gyro_bias_x = data.getInt16(base + SAMPLE.GYRO_BIAS_X, true) * 0.0001;
+                const gyro_bias_y = data.getInt16(base + SAMPLE.GYRO_BIAS_Y, true) * 0.0001;
+                const gyro_bias_z = data.getInt16(base + SAMPLE.GYRO_BIAS_Z, true) * 0.0001;
+                const accel_bias_x = data.getInt16(base + SAMPLE.ACCEL_BIAS_X, true) * 0.0001;
+                const accel_bias_y = data.getInt16(base + SAMPLE.ACCEL_BIAS_Y, true) * 0.0001;
+                const accel_bias_z = data.getInt16(base + SAMPLE.ACCEL_BIAS_Z, true) * 0.0001;
+
+                const eskf_status = data.getUint8(base + SAMPLE.ESKF_STATUS);
+
+                // Convert to degrees for display
+                const rollDeg = roll * RAD_TO_DEG;
+                const pitchDeg = pitch * RAD_TO_DEG;
+                const yawDeg = yaw * RAD_TO_DEG;
+                const gyro_x_deg = gyro_x * RAD_TO_DEG;
+                const gyro_y_deg = gyro_y * RAD_TO_DEG;
+                const gyro_z_deg = gyro_z * RAD_TO_DEG;
+
+                // Update current state
+                currentState = { roll, pitch, yaw, pos_x, pos_y, pos_z };
+
+                // Update history (only last sample per frame to avoid overwhelming)
+                history.time.push(timestamp);
+                history.roll.push(rollDeg);
+                history.pitch.push(pitchDeg);
+                history.yaw.push(yawDeg);
+                history.pos_x.push(pos_x);
+                history.pos_y.push(pos_y);
+                history.pos_z.push(pos_z);
+                history.vel_x.push(vel_x);
+                history.vel_y.push(vel_y);
+                history.vel_z.push(vel_z);
+                history.gyro_x.push(gyro_x_deg);
+                history.gyro_y.push(gyro_y_deg);
+                history.gyro_z.push(gyro_z_deg);
+                history.accel_x.push(accel_x);
+                history.accel_y.push(accel_y);
+                history.accel_z.push(accel_z);
+                history.ctrl_throttle.push(ctrl_throttle);
+                history.ctrl_roll.push(ctrl_roll);
+                history.ctrl_pitch.push(ctrl_pitch);
+                history.ctrl_yaw.push(ctrl_yaw);
+                history.tof_bottom.push(tof_bottom);
+                history.tof_front.push(tof_front);
+                history.mag_x.push(0); // Not in extended packet
+                history.mag_y.push(0);
+                history.mag_z.push(0);
+
+                // Log if recording (all 4 samples for full 400Hz logging)
+                if (isLogging) {
+                    for (let i = 0; i < 4; i++) {
+                        const b = PKT_EXT.SAMPLES_START + i * PKT_EXT.SAMPLE_SIZE;
+                        const ts = data.getUint32(b + SAMPLE.TIMESTAMP_US, true);
+                        const gx = data.getFloat32(b + SAMPLE.GYRO_X, true);
+                        const gy = data.getFloat32(b + SAMPLE.GYRO_Y, true);
+                        const gz = data.getFloat32(b + SAMPLE.GYRO_Z, true);
+                        const ax = data.getFloat32(b + SAMPLE.ACCEL_X, true);
+                        const ay = data.getFloat32(b + SAMPLE.ACCEL_Y, true);
+                        const az = data.getFloat32(b + SAMPLE.ACCEL_Z, true);
+                        const gcx = data.getFloat32(b + SAMPLE.GYRO_CORR_X, true);
+                        const gcy = data.getFloat32(b + SAMPLE.GYRO_CORR_Y, true);
+                        const gcz = data.getFloat32(b + SAMPLE.GYRO_CORR_Z, true);
+                        const ct = data.getFloat32(b + SAMPLE.CTRL_THROTTLE, true);
+                        const cr = data.getFloat32(b + SAMPLE.CTRL_ROLL, true);
+                        const cp = data.getFloat32(b + SAMPLE.CTRL_PITCH, true);
+                        const cy = data.getFloat32(b + SAMPLE.CTRL_YAW, true);
+                        const sqw = data.getFloat32(b + SAMPLE.QUAT_W, true);
+                        const sqx = data.getFloat32(b + SAMPLE.QUAT_X, true);
+                        const sqy = data.getFloat32(b + SAMPLE.QUAT_Y, true);
+                        const sqz = data.getFloat32(b + SAMPLE.QUAT_Z, true);
+                        const spx = data.getFloat32(b + SAMPLE.POS_X, true);
+                        const spy = data.getFloat32(b + SAMPLE.POS_Y, true);
+                        const spz = data.getFloat32(b + SAMPLE.POS_Z, true);
+                        const svx = data.getFloat32(b + SAMPLE.VEL_X, true);
+                        const svy = data.getFloat32(b + SAMPLE.VEL_Y, true);
+                        const svz = data.getFloat32(b + SAMPLE.VEL_Z, true);
+                        const gbx = data.getInt16(b + SAMPLE.GYRO_BIAS_X, true) * 0.0001;
+                        const gby = data.getInt16(b + SAMPLE.GYRO_BIAS_Y, true) * 0.0001;
+                        const gbz = data.getInt16(b + SAMPLE.GYRO_BIAS_Z, true) * 0.0001;
+                        const abx = data.getInt16(b + SAMPLE.ACCEL_BIAS_X, true) * 0.0001;
+                        const aby = data.getInt16(b + SAMPLE.ACCEL_BIAS_Y, true) * 0.0001;
+                        const abz = data.getInt16(b + SAMPLE.ACCEL_BIAS_Z, true) * 0.0001;
+                        const sba = data.getFloat32(b + SAMPLE.BARO_ALT, true);
+                        const stb = data.getFloat32(b + SAMPLE.TOF_BOTTOM, true);
+                        const stf = data.getFloat32(b + SAMPLE.TOF_FRONT, true);
+                        const sfx = data.getInt16(b + SAMPLE.FLOW_X, true);
+                        const sfy = data.getInt16(b + SAMPLE.FLOW_Y, true);
+                        const sfq = data.getUint8(b + SAMPLE.FLOW_QUALITY);
+
+                        logData.push([
+                            ts,
+                            gx.toFixed(6), gy.toFixed(6), gz.toFixed(6),
+                            ax.toFixed(6), ay.toFixed(6), az.toFixed(6),
+                            gcx.toFixed(6), gcy.toFixed(6), gcz.toFixed(6),
+                            ct.toFixed(4), cr.toFixed(4), cp.toFixed(4), cy.toFixed(4),
+                            sqw.toFixed(6), sqx.toFixed(6), sqy.toFixed(6), sqz.toFixed(6),
+                            spx.toFixed(6), spy.toFixed(6), spz.toFixed(6),
+                            svx.toFixed(6), svy.toFixed(6), svz.toFixed(6),
+                            gbx.toFixed(6), gby.toFixed(6), gbz.toFixed(6),
+                            abx.toFixed(6), aby.toFixed(6), abz.toFixed(6),
+                            sba.toFixed(4), stb.toFixed(4), stf.toFixed(4),
+                            sfx, sfy, sfq
+                        ]);
+                    }
+                }
+
+                // Update UI
+                packetCount += 4; // 4 samples per batch
+                document.getElementById('packets').textContent = packetCount;
+                document.getElementById('roll').textContent = rollDeg.toFixed(1);
+                document.getElementById('pitch').textContent = pitchDeg.toFixed(1);
+                document.getElementById('yaw').textContent = yawDeg.toFixed(1);
+                document.getElementById('pos_x').textContent = pos_x.toFixed(2);
+                document.getElementById('pos_y').textContent = pos_y.toFixed(2);
+                document.getElementById('pos_z').textContent = pos_z.toFixed(2);
+                document.getElementById('vel_x').textContent = vel_x.toFixed(2);
+                document.getElementById('vel_y').textContent = vel_y.toFixed(2);
+                document.getElementById('vel_z').textContent = vel_z.toFixed(2);
+                document.getElementById('gyro_x').textContent = gyro_x_deg.toFixed(1);
+                document.getElementById('gyro_y').textContent = gyro_y_deg.toFixed(1);
+                document.getElementById('gyro_z').textContent = gyro_z_deg.toFixed(1);
+                document.getElementById('accel_x').textContent = accel_x.toFixed(2);
+                document.getElementById('accel_y').textContent = accel_y.toFixed(2);
+                document.getElementById('accel_z').textContent = accel_z.toFixed(2);
+                document.getElementById('mag_x').textContent = '---';
+                document.getElementById('mag_y').textContent = '---';
+                document.getElementById('mag_z').textContent = '---';
+                document.getElementById('ctrl_throttle').textContent = (ctrl_throttle * 100).toFixed(0);
+                document.getElementById('ctrl_roll').textContent = ctrl_roll.toFixed(2);
+                document.getElementById('ctrl_pitch').textContent = ctrl_pitch.toFixed(2);
+                document.getElementById('ctrl_yaw').textContent = ctrl_yaw.toFixed(2);
+                document.getElementById('voltage').textContent = '---';
+                document.getElementById('state').textContent = eskf_status & 0x01 ? 'ESKF_OK' : 'ESKF_INIT';
+                document.getElementById('sensors').textContent = '400Hz';
+                document.getElementById('heartbeat').textContent = Math.floor(timestamp);
+                document.getElementById('tof_bottom').textContent = tof_bottom.toFixed(3);
+                document.getElementById('tof_front').textContent = tof_front.toFixed(3);
+
+                // Calculate rate (should show ~400Hz effective)
+                const now = Date.now();
+                if (now - lastRateTime >= 1000) {
+                    const rate = (packetCount - lastRateCount) / ((now - lastRateTime) / 1000);
+                    document.getElementById('rate').textContent = rate.toFixed(0);
+                    lastRateTime = now;
+                    lastRateCount = packetCount;
+                }
+                return;
+            }
+
+            // === Legacy Packet (0xAA, 0x20) - kept for compatibility ===
+            if (header !== 0xAA || event.data.byteLength < PKT.SIZE) return;
 
             // Parse packet
             const timestamp = data.getUint32(PKT.TIMESTAMP, true);

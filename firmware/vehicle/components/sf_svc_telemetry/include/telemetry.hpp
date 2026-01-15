@@ -187,6 +187,132 @@ static_assert(sizeof(TelemetryFFTBatchPacket) == 232, "TelemetryFFTBatchPacket s
 inline constexpr int FFT_BATCH_SIZE = 4;
 
 /**
+ * @brief Extended sample with ESKF estimates and sensor data (136 bytes)
+ *
+ * 400Hz unified telemetry format.
+ * 400Hz統一テレメトリフォーマット
+ *
+ * Contains:
+ * - Raw sensor data (for system identification)
+ * - ESKF estimates (attitude, position, velocity, biases)
+ * - Additional sensors (baro, ToF, optical flow)
+ */
+struct ExtendedSample {
+    // --- Core sensor data (56 bytes, same layout as FFTSample) ---
+    uint32_t timestamp_us;    // μs since boot (changed from ms for precision)
+
+    // Raw gyro (LPF filtered, no bias correction)
+    // 生ジャイロ（LPFフィルタ済み、バイアス補正なし）
+    float gyro_x;             // [rad/s]
+    float gyro_y;             // [rad/s]
+    float gyro_z;             // [rad/s]
+
+    // Raw accel (LPF filtered, no bias correction)
+    // 生加速度（LPFフィルタ済み、バイアス補正なし）
+    float accel_x;            // [m/s²]
+    float accel_y;            // [m/s²]
+    float accel_z;            // [m/s²]
+
+    // Bias-corrected gyro (what control loop sees)
+    // バイアス補正済みジャイロ（制御ループが見る値）
+    float gyro_corrected_x;   // [rad/s]
+    float gyro_corrected_y;   // [rad/s]
+    float gyro_corrected_z;   // [rad/s]
+
+    // Controller inputs (normalized)
+    // コントローラ入力（正規化済み）
+    float ctrl_throttle;      // [0-1]
+    float ctrl_roll;          // [-1 to 1]
+    float ctrl_pitch;         // [-1 to 1]
+    float ctrl_yaw;           // [-1 to 1]
+
+    // --- ESKF estimates (60 bytes) ---
+    // Attitude quaternion [w, x, y, z]
+    // 姿勢クォータニオン
+    float quat_w;             // quaternion scalar
+    float quat_x;             // quaternion vector x
+    float quat_y;             // quaternion vector y
+    float quat_z;             // quaternion vector z
+
+    // Position NED [m]
+    // 位置 NED座標系
+    float pos_x;              // North [m]
+    float pos_y;              // East [m]
+    float pos_z;              // Down [m]
+
+    // Velocity NED [m/s]
+    // 速度 NED座標系
+    float vel_x;              // [m/s]
+    float vel_y;              // [m/s]
+    float vel_z;              // [m/s]
+
+    // Gyro bias estimate (scaled: value * 10000 rad/s)
+    // ジャイロバイアス推定値（スケール: 値×10000 rad/s）
+    int16_t gyro_bias_x;      // [0.0001 rad/s]
+    int16_t gyro_bias_y;      // [0.0001 rad/s]
+    int16_t gyro_bias_z;      // [0.0001 rad/s]
+
+    // Accel bias estimate (scaled: value * 10000 m/s²)
+    // 加速度バイアス推定値（スケール: 値×10000 m/s²）
+    int16_t accel_bias_x;     // [0.0001 m/s²]
+    int16_t accel_bias_y;     // [0.0001 m/s²]
+    int16_t accel_bias_z;     // [0.0001 m/s²]
+
+    // ESKF status flags
+    // ESKF状態フラグ
+    uint8_t eskf_status;      // bit0: converged, bit1-7: reserved
+
+    uint8_t padding1[7];      // alignment to make ESKF section 60 bytes
+
+    // --- Additional sensor data (20 bytes) ---
+    // Barometer altitude [m]
+    // 気圧高度
+    float baro_altitude;      // [m] MSL altitude
+
+    // ToF distance [m]
+    // ToF距離
+    float tof_bottom;         // [m] bottom sensor
+    float tof_front;          // [m] front sensor
+
+    // Optical flow (raw sensor output)
+    // 光学フロー（センサ生出力）
+    int16_t flow_x;           // [pixels/frame or sensor units]
+    int16_t flow_y;           // [pixels/frame or sensor units]
+    uint8_t flow_quality;     // [0-255] quality/confidence
+
+    uint8_t padding2[3];      // alignment to 136 bytes total
+};
+
+static_assert(sizeof(ExtendedSample) == 136, "ExtendedSample size mismatch");
+
+/**
+ * @brief Extended batch packet (552 bytes)
+ *
+ * 400Hz unified telemetry: 4 samples per frame at 100fps.
+ * 400Hz統一テレメトリ: 100fps × 4サンプル/フレーム
+ *
+ * Bandwidth: 552 bytes × 100 fps = 55.2 KB/s ≈ 442 kbps
+ */
+#pragma pack(push, 1)
+struct TelemetryExtendedBatchPacket {
+    // Header (4 bytes)
+    uint8_t  header;          // 0xBD (extended batch packet)
+    uint8_t  packet_type;     // 0x32
+    uint8_t  sample_count;    // Number of samples (4)
+    uint8_t  reserved;
+
+    // Samples (136 bytes × 4 = 544 bytes)
+    ExtendedSample samples[4];
+
+    // Footer (4 bytes)
+    uint8_t  checksum;        // XOR of all preceding bytes
+    uint8_t  padding[3];      // 4-byte alignment
+};
+#pragma pack(pop)
+
+static_assert(sizeof(TelemetryExtendedBatchPacket) == 552, "TelemetryExtendedBatchPacket size mismatch");
+
+/**
  * @brief Sensor status flags (bitfield)
  */
 enum SensorStatusFlags : uint8_t {
