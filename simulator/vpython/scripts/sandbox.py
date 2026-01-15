@@ -25,13 +25,12 @@
 import sys
 import os
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIMULATOR_DIR = os.path.dirname(_SCRIPT_DIR)
-_ECOSYSTEM_DIR = os.path.dirname(_SIMULATOR_DIR)
-if _ECOSYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _ECOSYSTEM_DIR)
+_VPYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+if _VPYTHON_DIR not in sys.path:
+    sys.path.insert(0, _VPYTHON_DIR)
 
-from simulator.core import dynamics as mc
+from core import dynamics as mc
 import numpy as np
 import matplotlib.pyplot as plt
-from simulator.visualization.vpython_backend import *
+from visualization.vpython_backend import *
 from vpython import *

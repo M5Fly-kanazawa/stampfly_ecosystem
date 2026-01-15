@@ -19,17 +19,17 @@ import argparse
 
 # Add paths
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIMULATOR_DIR = os.path.dirname(_SCRIPT_DIR)
-_ECOSYSTEM_DIR = os.path.dirname(_SIMULATOR_DIR)
+_VPYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+_SIMULATOR_DIR = os.path.dirname(_VPYTHON_DIR)
 _TOOLS_DIR = os.path.join(_SIMULATOR_DIR, "tools", "compare_simulators")
 
-if _ECOSYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _ECOSYSTEM_DIR)
+if _VPYTHON_DIR not in sys.path:
+    sys.path.insert(0, _VPYTHON_DIR)
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
-from simulator.core import dynamics as mc
-from simulator.control.pid import PID
+from core import dynamics as mc
+from control.pid import PID
 from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time
 
 

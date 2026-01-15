@@ -12,13 +12,12 @@ Phase 2で追加したセンサモデルをテスト：気圧計、オプティ�
 import sys
 import os
 
-# Add simulator package to path
-# simulatorパッケージをパスに追加
+# Add vpython package to path
+# vpythonパッケージをパスに追加
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIMULATOR_DIR = os.path.dirname(_SCRIPT_DIR)
-_ECOSYSTEM_DIR = os.path.dirname(_SIMULATOR_DIR)
-if _ECOSYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _ECOSYSTEM_DIR)
+_VPYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+if _VPYTHON_DIR not in sys.path:
+    sys.path.insert(0, _VPYTHON_DIR)
 
 import numpy as np
 
@@ -29,7 +28,7 @@ def test_barometer():
     print("Barometer (BMP280) Test / 気圧計テスト")
     print("=" * 50)
 
-    from simulator.sensors.barometer import Barometer
+    from sensors.barometer import Barometer
 
     baro = Barometer(
         sea_level_pressure_pa=101325.0,
@@ -60,7 +59,7 @@ def test_optical_flow():
     print("Optical Flow (PMW3901) Test / オプティカルフローテスト")
     print("=" * 50)
 
-    from simulator.sensors.opticalflow import OpticalFlow
+    from sensors.opticalflow import OpticalFlow
 
     of = OpticalFlow(
         focal_length_px=35.0,
@@ -121,7 +120,7 @@ def test_noise_models():
     print("Noise Models (Allan Variance) Test / ノイズモデルテスト")
     print("=" * 50)
 
-    from simulator.sensors.noise_models import (
+    from sensors.noise_models import (
         BMI270_GyroParams,
         BMI270_AccelParams,
         IMUNoiseGenerator,

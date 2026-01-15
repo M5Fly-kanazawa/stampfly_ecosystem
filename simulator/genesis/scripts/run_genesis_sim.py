@@ -39,8 +39,12 @@ import sys
 from pathlib import Path
 
 script_dir = Path(__file__).parent
-sys.path.insert(0, str(script_dir.parent))
-sys.path.insert(0, str(script_dir.parent.parent.parent))  # simulator/ for control module
+genesis_dir = script_dir.parent
+simulator_dir = genesis_dir.parent
+vpython_dir = simulator_dir / "vpython"
+
+sys.path.insert(0, str(genesis_dir))  # for motor_model, control_allocation
+sys.path.insert(0, str(vpython_dir))  # for control.pid
 
 import genesis as gs
 import genesis.utils.geom as gu
@@ -51,7 +55,7 @@ import pygame
 from motor_model import QuadMotorSystem, compute_hover_conditions
 from control_allocation import ControlAllocator, thrusts_to_duties
 
-# Import PID from simulator/control
+# Import PID from simulator/vpython/control
 from control.pid import PID
 
 

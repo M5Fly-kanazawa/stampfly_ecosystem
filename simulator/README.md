@@ -8,8 +8,16 @@ StampFly用のPythonベースフライトシミュレータ。物理エンジン
 
 | シミュレータ | 特徴 | 用途 |
 |-------------|------|------|
-| **VPython版**（本ディレクトリ） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SIL/HIL |
-| **Genesis版**（[sandbox/genesis_sim/](sandbox/genesis_sim/)） | 高精度物理エンジン、2000Hz物理演算、物理量ベース制御 | 高精度シミュレーション |
+| **VPython版**（[vpython/](vpython/)） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SIL/HIL |
+| **Genesis版**（[genesis/](genesis/)） | 高精度物理エンジン、2000Hz物理演算、物理量ベース制御 | 高精度シミュレーション |
+
+```bash
+# VPythonシミュレータを起動
+sf sim run vpython
+
+# Genesisシミュレータを起動
+sf sim run genesis
+```
 
 ## 1. 概要
 
@@ -95,56 +103,40 @@ sudo apt-get install libhidapi-hidraw0
 ```
 simulator/
 ├── README.md              # 本ドキュメント
-├── MIGRATION_PLAN.md      # 移植計画（開発者向け）
 ├── requirements.txt       # 依存パッケージ
-├── __init__.py
 │
-├── core/                  # 物理エンジン
-│   ├── physics.py         # 剛体力学（RigidBody）
-│   ├── dynamics.py        # マルチコプタ動力学
-│   ├── aerodynamics.py    # 空気力学
-│   ├── motors.py          # モーター・プロペラモデル
-│   └── battery.py         # バッテリーモデル
+├── vpython/               # VPython版シミュレータ
+│   ├── core/              # 物理エンジン
+│   │   ├── physics.py     # 剛体力学（RigidBody）
+│   │   ├── dynamics.py    # マルチコプタ動力学
+│   │   └── motors.py      # モーター・プロペラモデル
+│   ├── sensors/           # センサモデル
+│   │   ├── imu.py         # BMI270 6軸IMU
+│   │   ├── barometer.py   # BMP280 気圧センサ
+│   │   └── ...            # 他センサ
+│   ├── control/           # 制御システム
+│   │   ├── pid.py         # 不完全微分フィルタ付きPID
+│   │   └── ...            # 制御器
+│   ├── interfaces/        # 外部インターフェース
+│   ├── visualization/     # VPython 3Dレンダラ
+│   └── scripts/           # 実行スクリプト
+│       └── run_sim.py     # メインシミュレータ
 │
-├── sensors/               # センサモデル
-│   ├── imu.py             # BMI270 6軸IMU
-│   ├── magnetometer.py    # BMM150 地磁気センサ
-│   ├── barometer.py       # BMP280 気圧センサ
-│   ├── tof.py             # VL53L3CX ToFセンサ
-│   ├── opticalflow.py     # PMW3901 オプティカルフロー
-│   ├── power_monitor.py   # INA3221 電源モニタ
-│   └── noise_models.py    # Allan分散ベースノイズ
+├── genesis/               # Genesis版シミュレータ
+│   ├── scripts/           # 実行スクリプト
+│   │   └── run_genesis_sim.py
+│   ├── motor_model.py     # モーターモデル
+│   └── control_allocation.py  # 制御配分
 │
-├── control/               # 制御システム
-│   ├── pid.py             # 不完全微分フィルタ付きPID
-│   ├── rate_controller.py # レート（角速度）制御
-│   ├── attitude_controller.py  # 姿勢・高度制御
-│   └── motor_mixer.py     # X-quadモーターミキサー
+├── shared/                # 共有リソース
+│   ├── assets/            # 3Dモデル・テクスチャ
+│   ├── configs/           # 設定ファイル
+│   └── scenarios/         # シナリオ定義
 │
-├── interfaces/            # 外部インターフェース
-│   ├── joystick.py        # HIDジョイスティック
-│   ├── messages.py        # プロトコルメッセージ
-│   ├── protocol_bridge.py # シミュレータ状態↔プロトコル変換
-│   ├── sil_interface.py   # SILインターフェース
-│   └── hil_interface.py   # HILインターフェース
-│
-├── visualization/         # 可視化
-│   └── vpython_backend.py # VPython 3Dレンダラ
-│
-├── assets/                # リソース
-│   ├── meshes/            # 3Dモデル（STL）
-│   ├── textures/          # テクスチャ画像
-│   └── loaders/           # ファイルローダ
-│
-├── scripts/               # 実行スクリプト
-│   ├── run_sim.py         # メインシミュレータ
-│   ├── sandbox.py         # 開発用テスト
-│   ├── test_sensors.py    # センサモデルテスト
-│   ├── test_protocol.py   # プロトコルテスト
-│   ├── test_control.py    # 制御システムテスト
-│   └── visualize_sensors.py  # センサ特性可視化
-│
-└── output/                # 出力ファイル（.gitignore済み）
+├── sandbox/               # 実験用ツール
+├── tools/                 # ユーティリティ
+├── tests/                 # テスト
+└── output/                # 出力ファイル
 ```
 
 ## 4. 基本的な使い方
@@ -163,26 +155,43 @@ simulator/
 #### Step 2: シミュレータの起動
 
 ```bash
-cd stampfly_ecosystem/simulator/scripts
+# sf CLIを使用（推奨）
+sf sim run vpython
+
+# または直接起動
+cd stampfly_ecosystem/simulator/vpython/scripts
 python run_sim.py
 ```
 
 ブラウザが開き、3Dビューが表示されます。スティックを操作してドローンを飛ばしましょう！
 
-### コマンドラインオプション
+### sf CLIコマンド
+
+```bash
+# VPythonシミュレータを起動（デフォルト）
+sf sim run
+
+# Genesisシミュレータを起動
+sf sim run genesis
+
+# 利用可能なシミュレータを一覧
+sf sim list
+
+# ヘッドレスモード（テスト用）
+sf sim headless -d 30
+```
+
+### 直接起動オプション
 
 ```bash
 # 基本起動（ボクセルワールド、ランダム地形）
-python run_sim.py
+python vpython/scripts/run_sim.py
 
 # リングワールド（円形コース）で起動
-python run_sim.py --world ringworld
+python vpython/scripts/run_sim.py --world ringworld
 
 # シード値を指定して同じ地形を再現
-python run_sim.py --seed 12345
-
-# リングワールドをシード値指定で起動
-python run_sim.py --world ringworld --seed 42
+python vpython/scripts/run_sim.py --seed 12345
 ```
 
 | オプション | 短縮形 | 説明 | デフォルト |

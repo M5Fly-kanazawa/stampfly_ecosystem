@@ -25,18 +25,17 @@
 import sys
 import os
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIMULATOR_DIR = os.path.dirname(_SCRIPT_DIR)
-_ECOSYSTEM_DIR = os.path.dirname(_SIMULATOR_DIR)
-if _ECOSYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _ECOSYSTEM_DIR)
+_VPYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+if _VPYTHON_DIR not in sys.path:
+    sys.path.insert(0, _VPYTHON_DIR)
 
-from simulator.core import dynamics as mc
+from core import dynamics as mc
 import numpy as np
 import matplotlib.pyplot as plt
-from simulator.visualization.vpython_backend import *
+from visualization.vpython_backend import *
 from vpython import *
-from simulator.control.pid import PID
-from simulator.interfaces.joystick import *
+from control.pid import PID
+from interfaces.joystick import *
 
 def test_template():
     mass = 0.035

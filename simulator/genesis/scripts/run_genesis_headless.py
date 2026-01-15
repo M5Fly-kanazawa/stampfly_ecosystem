@@ -14,9 +14,14 @@ import sys
 from pathlib import Path
 
 script_dir = Path(__file__).parent
-sys.path.insert(0, str(script_dir.parent))
-sys.path.insert(0, str(script_dir.parent.parent.parent))  # simulator/
-sys.path.insert(0, str(script_dir.parent.parent.parent / "tools" / "compare_simulators"))
+genesis_dir = script_dir.parent
+simulator_dir = genesis_dir.parent
+vpython_dir = simulator_dir / "vpython"
+tools_dir = simulator_dir / "tools" / "compare_simulators"
+
+sys.path.insert(0, str(genesis_dir))  # for motor_model, control_allocation
+sys.path.insert(0, str(vpython_dir))  # for control.pid
+sys.path.insert(0, str(tools_dir))    # for sim_io
 
 import genesis as gs
 import numpy as np

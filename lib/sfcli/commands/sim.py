@@ -26,17 +26,17 @@ BACKENDS = {
     "vpython": {
         "name": "VPython",
         "description": "VPython-based 3D visualization (2000Hz physics, 400Hz control)",
-        "script": "simulator/scripts/run_sim.py",
-        "headless_script": "simulator/scripts/run_vpython_headless.py",
+        "script": "simulator/vpython/scripts/run_sim.py",
+        "headless_script": "simulator/vpython/scripts/run_vpython_headless.py",
         "requires_venv": False,
     },
     "genesis": {
         "name": "Genesis",
         "description": "Genesis physics engine (2000Hz physics, 400Hz control, 30Hz render)",
-        "script": "simulator/sandbox/genesis_sim/scripts/run_genesis_sim.py",
-        "headless_script": "simulator/sandbox/genesis_sim/scripts/run_genesis_headless.py",
+        "script": "simulator/genesis/scripts/run_genesis_sim.py",
+        "headless_script": "simulator/genesis/scripts/run_genesis_headless.py",
         "requires_venv": True,
-        "venv_path": "simulator/sandbox/genesis_sim/venv",
+        "venv_path": "simulator/genesis/venv",
     },
 }
 

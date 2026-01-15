@@ -13,10 +13,9 @@ import sys
 import os
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIMULATOR_DIR = os.path.dirname(_SCRIPT_DIR)
-_ECOSYSTEM_DIR = os.path.dirname(_SIMULATOR_DIR)
-if _ECOSYSTEM_DIR not in sys.path:
-    sys.path.insert(0, _ECOSYSTEM_DIR)
+_VPYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+if _VPYTHON_DIR not in sys.path:
+    sys.path.insert(0, _VPYTHON_DIR)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +26,7 @@ plt.rcParams['font.family'] = ['Hiragino Sans', 'Arial', 'sans-serif']
 
 def visualize_barometer():
     """Visualize barometer characteristics / 気圧計特性を可視化"""
-    from simulator.sensors.barometer import Barometer
+    from sensors.barometer import Barometer
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('BMP280 Barometer Model / BMP280気圧計モデル', fontsize=14)
@@ -98,7 +97,7 @@ def visualize_barometer():
 
 def visualize_optical_flow():
     """Visualize optical flow characteristics / オプティカルフロー特性を可視化"""
-    from simulator.sensors.opticalflow import OpticalFlow
+    from sensors.opticalflow import OpticalFlow
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('PMW3901 Optical Flow Model / PMW3901オプティカルフローモデル', fontsize=14)
@@ -209,8 +208,8 @@ def visualize_optical_flow():
 
 def visualize_imu():
     """Visualize IMU noise characteristics / IMUノイズ特性を可視化"""
-    from simulator.sensors.imu import IMU
-    from simulator.sensors.noise_models import compute_allan_variance
+    from sensors.imu import IMU
+    from sensors.noise_models import compute_allan_variance
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('BMI270 IMU Model / BMI270 IMUモデル', fontsize=14)
@@ -282,7 +281,7 @@ def visualize_imu():
 
 def visualize_magnetometer():
     """Visualize magnetometer characteristics / 地磁気センサ特性を可視化"""
-    from simulator.sensors.magnetometer import Magnetometer
+    from sensors.magnetometer import Magnetometer
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('BMM150 Magnetometer Model / BMM150地磁気センサモデル', fontsize=14)
@@ -384,7 +383,7 @@ def visualize_magnetometer():
 
 def visualize_tof():
     """Visualize ToF sensor characteristics / ToFセンサ特性を可視化"""
-    from simulator.sensors.tof import ToF
+    from sensors.tof import ToF
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('VL53L3CX ToF Sensor Model / VL53L3CX ToFセンサモデル', fontsize=14)
@@ -464,7 +463,7 @@ def visualize_tof():
 
 def visualize_power_monitor():
     """Visualize power monitor characteristics / 電源モニタ特性を可視化"""
-    from simulator.sensors.power_monitor import PowerMonitor
+    from sensors.power_monitor import PowerMonitor
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('INA3221 Power Monitor Model / INA3221電源モニタモデル', fontsize=14)
