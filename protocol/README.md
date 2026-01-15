@@ -11,7 +11,7 @@ StampFlyエコシステムは以下の通信プロトコルを使用：
 | プロトコル | 用途 | 方向 | レート |
 |-----------|------|------|--------|
 | ESP-NOW + TDMA | 制御・基本テレメトリ | Controller ↔ Vehicle | 50Hz |
-| WebSocket | 拡張テレメトリ | Vehicle → GCS | 50Hz |
+| WebSocket | 拡張テレメトリ（ESKF+センサ） | Vehicle → GCS | 400Hz |
 
 ## 2. ディレクトリ構成
 
@@ -68,8 +68,8 @@ protocol/
 | 20 | 1 | flags | - | 警告フラグ |
 | 21 | 1 | checksum | - | チェックサム（sum） |
 
-### TelemetryWSPacket (116 bytes)
-機体からGCSへの拡張テレメトリ（WebSocket）。v2.2でToFセンサーデータを追加。
+### TelemetryWSPacket (116 bytes) - Legacy
+機体からGCSへの拡張テレメトリ（WebSocket、レガシー50Hz用）。
 
 | Offset | Size | Field | Unit | Description |
 |--------|------|-------|------|-------------|
@@ -93,6 +93,68 @@ protocol/
 | 108 | 4 | heartbeat | - | パケットカウンタ |
 | 112 | 1 | checksum | - | チェックサム（XOR） |
 | 113 | 3 | padding | - | アラインメント |
+
+### TelemetryExtendedBatchPacket (552 bytes) - 現行
+400Hz統一テレメトリ。4サンプル×136バイト/サンプルをバッチ送信。
+
+**パケットヘッダ (4 bytes):**
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 1 | header | 0xBD |
+| 1 | 1 | packet_type | 0x32 |
+| 2 | 1 | sample_count | 4 |
+| 3 | 1 | reserved | 0 |
+
+**ExtendedSample (136 bytes × 4 = 544 bytes):**
+
+各サンプルは以下の3セクションで構成：
+
+**センサデータ (56 bytes):**
+
+| Offset | Size | Field | Unit | Description |
+|--------|------|-------|------|-------------|
+| 0 | 4 | timestamp_us | μs | 起動からの経過時間 |
+| 4 | 12 | gyro_xyz | rad/s | 生ジャイロ（LPFのみ）|
+| 16 | 12 | accel_xyz | m/s² | 生加速度（LPFのみ）|
+| 28 | 12 | gyro_corrected_xyz | rad/s | バイアス補正済みジャイロ |
+| 40 | 16 | ctrl_throttle/roll/pitch/yaw | - | 正規化制御入力 [-1,1] |
+
+**ESKF推定値 (60 bytes):**
+
+| Offset | Size | Field | Unit | Description |
+|--------|------|-------|------|-------------|
+| 56 | 16 | quat_wxyz | - | 姿勢クォータニオン |
+| 72 | 12 | pos_xyz | m | 位置 NED座標 |
+| 84 | 12 | vel_xyz | m/s | 速度 NED座標 |
+| 96 | 6 | gyro_bias_xyz | rad/s×10000 | ジャイロバイアス（int16） |
+| 102 | 6 | accel_bias_xyz | m/s²×10000 | 加速度バイアス（int16） |
+| 108 | 1 | eskf_status | - | bit0: initialized |
+| 109 | 7 | padding | - | アラインメント |
+
+**追加センサ (20 bytes):**
+
+| Offset | Size | Field | Unit | Description |
+|--------|------|-------|------|-------------|
+| 116 | 4 | baro_altitude | m | 気圧高度 |
+| 120 | 4 | tof_bottom | m | 底面ToF距離 |
+| 124 | 4 | tof_front | m | 前方ToF距離 |
+| 128 | 4 | flow_x/y | counts | 光学フロー生データ（int16×2） |
+| 132 | 1 | flow_quality | - | フロー品質（SQUAL） |
+| 133 | 3 | padding | - | アラインメント |
+
+**パケットフッタ (4 bytes):**
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 548 | 1 | checksum | XOR（bytes 0-547） |
+| 549 | 3 | padding | アラインメント |
+
+**帯域計算:**
+- パケットサイズ: 552 bytes
+- フレームレート: 100 fps
+- 実効サンプルレート: 400 Hz (4 samples × 100 fps)
+- 帯域幅: 552 × 100 × 8 = 442 kbps
 
 ## 4. TDMAフレーム構造
 
@@ -179,6 +241,12 @@ StampFly ecosystem uses the following protocols:
 | Protocol | Purpose | Direction | Rate |
 |----------|---------|-----------|------|
 | ESP-NOW + TDMA | Control & basic telemetry | Controller ↔ Vehicle | 50Hz |
-| WebSocket | Extended telemetry | Vehicle → GCS | 50Hz |
+| WebSocket | Extended telemetry (ESKF+sensors) | Vehicle → GCS | 400Hz |
 
 See `spec/*.yaml` for detailed machine-readable specifications.
+
+**Key Packet Types:**
+- `0xAA/0x20`: Legacy WebSocket packet (116 bytes, deprecated)
+- `0xBD/0x32`: Extended batch packet (552 bytes, current)
+  - 4 samples × 136 bytes with ESKF estimates and sensor data
+  - Effective rate: 400 Hz (4 samples × 100 fps)

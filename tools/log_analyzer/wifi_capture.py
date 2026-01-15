@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-wifi_capture.py - WiFi Telemetry Capture Tool for FFT Analysis
+wifi_capture.py - WiFi Telemetry Capture Tool for StampFly
 
-Captures high-rate telemetry data from StampFly drone via WiFi WebSocket
-for sensor FFT analysis and notch filter design.
+Captures telemetry data from StampFly drone via WiFi WebSocket
+for logging, analysis, and system identification.
 
-Supports three packet formats:
-- Normal mode (50Hz): 116-byte full packet (header 0xAA)
-- FFT batch mode (>50Hz): 120-byte batch packet (header 0xBC, 4 samples)
+Supports four packet formats:
+- Extended batch (400Hz): 552-byte batch (header 0xBD, 4 samples with ESKF estimates)
+- FFT batch mode (>50Hz): 232-byte batch (header 0xBC, 4 samples, legacy)
+- Normal mode (50Hz): 116-byte full packet (header 0xAA, legacy)
 - Legacy FFT mode: 32-byte single packet (header 0xBB, deprecated)
 
 Usage:
@@ -21,11 +22,10 @@ Options:
     --fft               Run FFT analysis after capture
     --no-save           Don't save to file, just display stats
 
-Workflow:
-    1. Connect USB to StampFly, run 'fftmode on' in CLI
-    2. Disconnect USB, power on with battery
-    3. Connect your PC to StampFly WiFi AP
-    4. Run: python wifi_capture.py --duration 30 --fft
+Workflow (400Hz mode - default):
+    1. Power on StampFly (400Hz telemetry is always active)
+    2. Connect your PC to StampFly WiFi AP
+    3. Run: python wifi_capture.py --duration 30
 
 Examples:
     python wifi_capture.py                    # Capture 30s, auto-save
@@ -110,6 +110,77 @@ LEGACY_FFT_PACKET_FORMAT += 'B'    # checksum
 LEGACY_FFT_PACKET_FORMAT += 'B'    # padding
 LEGACY_FFT_PACKET_SIZE = 32
 
+# =============================================================================
+# Extended Batch Packet (552 bytes, header 0xBD) - 400Hz unified telemetry
+# =============================================================================
+# Contains 4 samples of 136 bytes each with ESKF estimates and sensor data
+EXTENDED_SAMPLE_SIZE = 136
+EXTENDED_BATCH_SIZE = 4
+EXTENDED_BATCH_HEADER_SIZE = 4  # header, type, count, reserved
+EXTENDED_BATCH_FOOTER_SIZE = 4  # checksum + padding
+EXTENDED_BATCH_PACKET_SIZE = 552  # 4 + 136*4 + 4
+
+# ExtendedSample structure (136 bytes):
+#   Core sensor data (56 bytes):
+#     uint32_t timestamp_us
+#     float gyro_x/y/z (raw)
+#     float accel_x/y/z (raw)
+#     float gyro_corrected_x/y/z
+#     float ctrl_throttle/roll/pitch/yaw
+#   ESKF estimates (60 bytes):
+#     float quat_w/x/y/z
+#     float pos_x/y/z
+#     float vel_x/y/z
+#     int16_t gyro_bias_x/y/z (scaled by 10000)
+#     int16_t accel_bias_x/y/z (scaled by 10000)
+#     uint8_t eskf_status
+#     uint8_t[7] padding
+#   Sensor data (20 bytes):
+#     float baro_altitude
+#     float tof_bottom
+#     float tof_front
+#     int16_t flow_x/y
+#     uint8_t flow_quality
+#     uint8_t[3] padding
+
+EXTENDED_SAMPLE_FORMAT = '<'
+EXTENDED_SAMPLE_FORMAT += 'I'       # timestamp_us
+EXTENDED_SAMPLE_FORMAT += 'fff'     # gyro_x/y/z (raw)
+EXTENDED_SAMPLE_FORMAT += 'fff'     # accel_x/y/z (raw)
+EXTENDED_SAMPLE_FORMAT += 'fff'     # gyro_corrected_x/y/z
+EXTENDED_SAMPLE_FORMAT += 'ffff'    # ctrl_throttle/roll/pitch/yaw
+EXTENDED_SAMPLE_FORMAT += 'ffff'    # quat_w/x/y/z
+EXTENDED_SAMPLE_FORMAT += 'fff'     # pos_x/y/z
+EXTENDED_SAMPLE_FORMAT += 'fff'     # vel_x/y/z
+EXTENDED_SAMPLE_FORMAT += 'hhh'     # gyro_bias_x/y/z (int16)
+EXTENDED_SAMPLE_FORMAT += 'hhh'     # accel_bias_x/y/z (int16)
+EXTENDED_SAMPLE_FORMAT += 'B'       # eskf_status
+EXTENDED_SAMPLE_FORMAT += '7B'      # padding1
+EXTENDED_SAMPLE_FORMAT += 'f'       # baro_altitude
+EXTENDED_SAMPLE_FORMAT += 'ff'      # tof_bottom/front
+EXTENDED_SAMPLE_FORMAT += 'hh'      # flow_x/y
+EXTENDED_SAMPLE_FORMAT += 'B'       # flow_quality
+EXTENDED_SAMPLE_FORMAT += '3B'      # padding2
+
+_EXTENDED_SAMPLE_CALCSIZE = struct.calcsize(EXTENDED_SAMPLE_FORMAT)
+assert _EXTENDED_SAMPLE_CALCSIZE == 136, f"Extended sample size mismatch: {_EXTENDED_SAMPLE_CALCSIZE}"
+
+# CSV columns for extended mode (full ESKF + sensors)
+EXTENDED_CSV_COLUMNS = [
+    'timestamp_us',
+    'gyro_x', 'gyro_y', 'gyro_z',
+    'accel_x', 'accel_y', 'accel_z',
+    'gyro_corrected_x', 'gyro_corrected_y', 'gyro_corrected_z',
+    'ctrl_throttle', 'ctrl_roll', 'ctrl_pitch', 'ctrl_yaw',
+    'quat_w', 'quat_x', 'quat_y', 'quat_z',
+    'pos_x', 'pos_y', 'pos_z',
+    'vel_x', 'vel_y', 'vel_z',
+    'gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z',
+    'accel_bias_x', 'accel_bias_y', 'accel_bias_z',
+    'baro_altitude', 'tof_bottom', 'tof_front',
+    'flow_x', 'flow_y', 'flow_quality',
+]
+
 # CSV columns for FFT mode (with bias-corrected gyro + controller inputs)
 FFT_CSV_COLUMNS = [
     'timestamp_ms',
@@ -134,6 +205,120 @@ NORMAL_CSV_COLUMNS = [
     'state', 'sensor_status',
     'heartbeat'
 ]
+
+
+def parse_extended_batch_packet(data: bytes) -> list:
+    """Parse extended batch packet (552 bytes, header 0xBD)
+    Returns list of 4 sample dicts with ESKF estimates and sensor data
+    """
+    if len(data) != EXTENDED_BATCH_PACKET_SIZE:
+        return None
+
+    # Verify header
+    if data[0] != 0xBD:
+        return None
+
+    # Calculate checksum (XOR of bytes before checksum field)
+    # checksum is at offset 548 (4 header + 136*4 samples)
+    checksum_offset = EXTENDED_BATCH_HEADER_SIZE + EXTENDED_BATCH_SIZE * EXTENDED_SAMPLE_SIZE
+    checksum = 0
+    for i in range(checksum_offset):
+        checksum ^= data[i]
+
+    if checksum != data[checksum_offset]:
+        return None
+
+    # Parse samples
+    samples = []
+    for i in range(EXTENDED_BATCH_SIZE):
+        offset = EXTENDED_BATCH_HEADER_SIZE + i * EXTENDED_SAMPLE_SIZE
+        sample_data = data[offset:offset + EXTENDED_SAMPLE_SIZE]
+        values = struct.unpack(EXTENDED_SAMPLE_FORMAT, sample_data)
+
+        # Unpack values in order (matching EXTENDED_SAMPLE_FORMAT)
+        idx = 0
+        sample = {
+            'timestamp_us': values[idx],
+        }
+        idx += 1
+
+        # Gyro raw (3 floats)
+        sample['gyro_x'] = values[idx]
+        sample['gyro_y'] = values[idx + 1]
+        sample['gyro_z'] = values[idx + 2]
+        idx += 3
+
+        # Accel raw (3 floats)
+        sample['accel_x'] = values[idx]
+        sample['accel_y'] = values[idx + 1]
+        sample['accel_z'] = values[idx + 2]
+        idx += 3
+
+        # Gyro corrected (3 floats)
+        sample['gyro_corrected_x'] = values[idx]
+        sample['gyro_corrected_y'] = values[idx + 1]
+        sample['gyro_corrected_z'] = values[idx + 2]
+        idx += 3
+
+        # Controller inputs (4 floats)
+        sample['ctrl_throttle'] = values[idx]
+        sample['ctrl_roll'] = values[idx + 1]
+        sample['ctrl_pitch'] = values[idx + 2]
+        sample['ctrl_yaw'] = values[idx + 3]
+        idx += 4
+
+        # Quaternion (4 floats)
+        sample['quat_w'] = values[idx]
+        sample['quat_x'] = values[idx + 1]
+        sample['quat_y'] = values[idx + 2]
+        sample['quat_z'] = values[idx + 3]
+        idx += 4
+
+        # Position (3 floats)
+        sample['pos_x'] = values[idx]
+        sample['pos_y'] = values[idx + 1]
+        sample['pos_z'] = values[idx + 2]
+        idx += 3
+
+        # Velocity (3 floats)
+        sample['vel_x'] = values[idx]
+        sample['vel_y'] = values[idx + 1]
+        sample['vel_z'] = values[idx + 2]
+        idx += 3
+
+        # Gyro bias (3 int16, scaled by 10000)
+        sample['gyro_bias_x'] = values[idx] / 10000.0
+        sample['gyro_bias_y'] = values[idx + 1] / 10000.0
+        sample['gyro_bias_z'] = values[idx + 2] / 10000.0
+        idx += 3
+
+        # Accel bias (3 int16, scaled by 10000)
+        sample['accel_bias_x'] = values[idx] / 10000.0
+        sample['accel_bias_y'] = values[idx + 1] / 10000.0
+        sample['accel_bias_z'] = values[idx + 2] / 10000.0
+        idx += 3
+
+        # ESKF status (1 byte) + padding (7 bytes)
+        sample['eskf_status'] = values[idx]
+        idx += 8  # Skip eskf_status + 7 padding bytes
+
+        # Baro altitude (1 float)
+        sample['baro_altitude'] = values[idx]
+        idx += 1
+
+        # ToF (2 floats)
+        sample['tof_bottom'] = values[idx]
+        sample['tof_front'] = values[idx + 1]
+        idx += 2
+
+        # Optical flow (2 int16 + 1 uint8)
+        sample['flow_x'] = values[idx]
+        sample['flow_y'] = values[idx + 1]
+        sample['flow_quality'] = values[idx + 2]
+
+        samples.append(sample)
+
+    return samples
 
 
 def parse_fft_batch_packet(data: bytes) -> list:
@@ -275,8 +460,9 @@ def parse_packet(data: bytes) -> tuple:
     """
     Parse packet, auto-detecting format from header byte.
     Returns (list_of_samples, mode_string)
-    - Normal: returns ([packet_dict], "normal")
+    - Extended: returns ([sample1, sample2, sample3, sample4], "extended")
     - FFT Batch: returns ([sample1, sample2, sample3, sample4], "fft_batch")
+    - Normal: returns ([packet_dict], "normal")
     - Legacy FFT: returns ([packet_dict], "fft_legacy")
     """
     if len(data) == 0:
@@ -284,18 +470,28 @@ def parse_packet(data: bytes) -> tuple:
 
     header = data[0]
 
-    if header == 0xBC and len(data) == FFT_BATCH_PACKET_SIZE:
+    # Extended batch packet (400Hz with ESKF + sensors)
+    if header == 0xBD and len(data) == EXTENDED_BATCH_PACKET_SIZE:
+        samples = parse_extended_batch_packet(data)
+        if samples:
+            return samples, "extended"
+        return None, None
+
+    # FFT batch packet (legacy 400Hz)
+    elif header == 0xBC and len(data) == FFT_BATCH_PACKET_SIZE:
         samples = parse_fft_batch_packet(data)
         if samples:
             return samples, "fft_batch"
         return None, None
 
+    # Legacy single FFT packet
     elif header == 0xBB and len(data) == LEGACY_FFT_PACKET_SIZE:
         pkt = parse_legacy_fft_packet(data)
         if pkt:
             return [pkt], "fft_legacy"
         return None, None
 
+    # Normal packet
     elif header == 0xAA and len(data) == NORMAL_PACKET_SIZE:
         pkt = parse_normal_packet(data)
         if pkt:
@@ -339,8 +535,9 @@ class TelemetryCapture:
                                 if self.mode is None:
                                     self.mode = mode
                                     mode_str = {
+                                        "extended": "Extended (552B, 4 samples with ESKF+sensors)",
+                                        "fft_batch": "FFT Batch (232B, 4 samples)",
                                         "normal": "Normal (116B)",
-                                        "fft_batch": "FFT Batch (120B, 4 samples)",
                                         "fft_legacy": "FFT Legacy (32B)"
                                     }.get(mode, mode)
                                     print(f"Detected mode: {mode_str}")
@@ -372,8 +569,12 @@ class TelemetryCapture:
             return False
 
         # Choose columns based on mode
-        is_fft = self.mode in ("fft_batch", "fft_legacy")
-        columns = FFT_CSV_COLUMNS if is_fft else NORMAL_CSV_COLUMNS
+        if self.mode == "extended":
+            columns = EXTENDED_CSV_COLUMNS
+        elif self.mode in ("fft_batch", "fft_legacy"):
+            columns = FFT_CSV_COLUMNS
+        else:
+            columns = NORMAL_CSV_COLUMNS
 
         with open(filename, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=columns, extrasaction='ignore')
@@ -391,13 +592,22 @@ class TelemetryCapture:
             return
 
         n = len(self.packets)
-        duration = (self.packets[-1]['timestamp_ms'] - self.packets[0]['timestamp_ms']) / 1000.0
+
+        # Calculate duration based on timestamp format
+        if self.mode == "extended":
+            # Extended mode uses timestamp_us (microseconds)
+            duration = (self.packets[-1]['timestamp_us'] - self.packets[0]['timestamp_us']) / 1e6
+        else:
+            # Other modes use timestamp_ms (milliseconds)
+            duration = (self.packets[-1]['timestamp_ms'] - self.packets[0]['timestamp_ms']) / 1000.0
+
         sample_rate = n / duration if duration > 0 else 0
         frame_rate = self.frame_count / duration if duration > 0 else 0
 
         mode_str = {
+            "extended": "Extended (552B, 4 samples/frame with ESKF+sensors)",
+            "fft_batch": "FFT Batch (232B, 4 samples/frame)",
             "normal": "Normal (116B)",
-            "fft_batch": "FFT Batch (120B, 4 samples/frame)",
             "fft_legacy": "FFT Legacy (32B)"
         }.get(self.mode, self.mode)
 
@@ -429,6 +639,24 @@ class TelemetryCapture:
             print(f"  Y: mean={np.mean(accel_y):+.2f}, std={np.std(accel_y):.2f}")
             print(f"  Z: mean={np.mean(accel_z):+.2f}, std={np.std(accel_z):.2f}")
 
+            # Extended mode: show ESKF estimates
+            if self.mode == "extended":
+                gyro_bias_x = np.array([p['gyro_bias_x'] for p in self.packets])
+                gyro_bias_y = np.array([p['gyro_bias_y'] for p in self.packets])
+                gyro_bias_z = np.array([p['gyro_bias_z'] for p in self.packets])
+                accel_bias_x = np.array([p['accel_bias_x'] for p in self.packets])
+                accel_bias_y = np.array([p['accel_bias_y'] for p in self.packets])
+                accel_bias_z = np.array([p['accel_bias_z'] for p in self.packets])
+
+                print(f"\nESKF Gyro Bias [rad/s]:")
+                print(f"  X: final={gyro_bias_x[-1]:+.6f}, mean={np.mean(gyro_bias_x):+.6f}")
+                print(f"  Y: final={gyro_bias_y[-1]:+.6f}, mean={np.mean(gyro_bias_y):+.6f}")
+                print(f"  Z: final={gyro_bias_z[-1]:+.6f}, mean={np.mean(gyro_bias_z):+.6f}")
+                print(f"ESKF Accel Bias [m/s^2]:")
+                print(f"  X: final={accel_bias_x[-1]:+.4f}, mean={np.mean(accel_bias_x):+.4f}")
+                print(f"  Y: final={accel_bias_y[-1]:+.4f}, mean={np.mean(accel_bias_y):+.4f}")
+                print(f"  Z: final={accel_bias_z[-1]:+.4f}, mean={np.mean(accel_bias_z):+.4f}")
+
     def run_fft_analysis(self):
         """Run FFT analysis on captured data"""
         if not HAS_NUMPY:
@@ -447,8 +675,15 @@ class TelemetryCapture:
 
         # Extract data
         n = len(self.packets)
-        timestamps = np.array([p['timestamp_ms'] for p in self.packets])
-        dt = np.mean(np.diff(timestamps)) / 1000.0  # seconds
+
+        # Handle different timestamp formats
+        if self.mode == "extended":
+            timestamps = np.array([p['timestamp_us'] for p in self.packets])
+            dt = np.mean(np.diff(timestamps)) / 1e6  # microseconds to seconds
+        else:
+            timestamps = np.array([p['timestamp_ms'] for p in self.packets])
+            dt = np.mean(np.diff(timestamps)) / 1000.0  # milliseconds to seconds
+
         fs = 1.0 / dt  # sampling frequency
 
         gyro_x = np.array([p['gyro_x'] for p in self.packets])

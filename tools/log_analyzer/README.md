@@ -11,9 +11,12 @@ StampFlyデバイスのESKF（Error-State Kalman Filter）開発・検証・最�
 
 ```
 tools/log_analyzer/
+├── 400Hz WiFiテレメトリツール（★推奨）
+│   ├── wifi_capture.py           # WiFi経由400Hzログキャプチャ
+│   └── visualize_extended.py     # 拡張テレメトリ包括可視化
 ├── 可視化ツール
 │   ├── visualize_eskf.py         # バイナリログ統合可視化（USB経由）
-│   ├── visualize_telemetry.py    # WiFiテレメトリCSV可視化（★推奨）
+│   ├── visualize_telemetry.py    # WiFiテレメトリCSV可視化
 │   ├── viz_telemetry.py          # WiFi CSV用ラッパー
 │   ├── viz_all.py                # 全パネル表示（ラッパー）
 │   ├── viz_sensors.py            # センサ生値のみ（ラッパー）
@@ -34,12 +37,107 @@ tools/log_analyzer/
 ## 必要なライブラリ
 
 ```bash
-pip install numpy pandas matplotlib pyserial scipy
+pip install numpy pandas matplotlib pyserial scipy websockets
 ```
 
 ---
 
-## 1. visualize_telemetry.py - WiFiテレメトリ可視化ツール（★推奨）
+## 0. 400Hz WiFiテレメトリツール（★推奨）
+
+### wifi_capture.py - WiFi経由400Hzログキャプチャ
+
+StampFlyのWiFi APに接続し、400Hzの拡張テレメトリをキャプチャしてCSVに保存します。
+ESKF推定値（姿勢・位置・速度・バイアス）とセンサ生データ（IMU・ToF・気圧・光学フロー）を含みます。
+
+**ワークフロー:**
+1. StampFlyの電源を入れる（400Hzテレメトリが自動で有効）
+2. PCをStampFly WiFi APに接続
+3. `wifi_capture.py`を実行
+
+```bash
+# 基本的なキャプチャ（30秒、自動ファイル名）
+python wifi_capture.py
+
+# 60秒キャプチャ + FFT解析
+python wifi_capture.py -d 60 --fft
+
+# 指定ファイルに保存
+python wifi_capture.py -d 30 -o flight_test.csv
+
+# 統計のみ表示（ファイル保存なし）
+python wifi_capture.py --no-save
+```
+
+**オプション:**
+
+| オプション | 説明 | デフォルト |
+|-----------|------|-----------|
+| `-d, --duration` | キャプチャ時間（秒） | 30 |
+| `-o, --output` | 出力CSVファイル名 | 自動生成 |
+| `-i, --ip` | StampFly IPアドレス | 192.168.4.1 |
+| `-p, --port` | WebSocketポート | 80 |
+| `--fft` | キャプチャ後にFFT解析 | - |
+| `--no-save` | ファイル保存しない | - |
+
+**出力統計例:**
+```
+=== Capture Statistics ===
+Mode: Extended (552B, 4 samples/frame with ESKF+sensors)
+Samples: 12000
+Frames: 3000
+Duration: 30.00s
+Sample rate: 400.0 Hz
+Frame rate: 100.0 Hz
+
+ESKF Gyro Bias [rad/s]:
+  X: final=+0.001234, mean=+0.001200
+  Y: final=-0.000567, mean=-0.000550
+  Z: final=+0.000089, mean=+0.000085
+```
+
+### visualize_extended.py - 拡張テレメトリ可視化
+
+`wifi_capture.py`で取得したCSVを包括的に可視化します。IMU、ESKF推定値、センサデータを一覧表示。
+
+```bash
+# 全状態を可視化
+python visualize_extended.py stampfly_fft_20260115T120000.csv
+
+# 画像に保存
+python visualize_extended.py flight.csv --save flight_analysis.png
+
+# 時間範囲を指定（5秒〜15秒）
+python visualize_extended.py flight.csv --time-range 5 15
+
+# ESKFパネルを非表示
+python visualize_extended.py flight.csv --no-eskf
+
+# センサパネルを非表示
+python visualize_extended.py flight.csv --no-sensors
+```
+
+**出力パネル（全表示時）:**
+
+| セクション | 内容 |
+|-----------|------|
+| IMU | 生ジャイロ、生加速度、バイアス補正済みジャイロ |
+| 制御 | コントローラ入力（スロットル、ロール、ピッチ、ヨー） |
+| ESKF | 姿勢（Euler）、位置、速度、ジャイロバイアス、加速度バイアス |
+| センサ | 気圧高度、ToF距離、光学フロー |
+
+**拡張CSVカラム（36列）:**
+```
+timestamp_us, gyro_x/y/z, accel_x/y/z,
+gyro_corrected_x/y/z, ctrl_throttle/roll/pitch/yaw,
+quat_w/x/y/z, pos_x/y/z, vel_x/y/z,
+gyro_bias_x/y/z, accel_bias_x/y/z,
+baro_altitude, tof_bottom, tof_front,
+flow_x, flow_y, flow_quality
+```
+
+---
+
+## 1. visualize_telemetry.py - WiFiテレメトリ可視化ツール
 
 WiFiテレメトリで取得したCSVログを包括的に可視化するツールです。
 CSVファイルは `firmware/vehicle/logs/` に保存されています。
