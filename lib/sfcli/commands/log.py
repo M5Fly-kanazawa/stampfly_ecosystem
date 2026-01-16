@@ -11,6 +11,7 @@ Subcommands:
     convert  - Convert binary log to CSV
     info     - Show log file information
     analyze  - Analyze flight log data
+    viz      - Visualize log data
 """
 
 import argparse
@@ -205,6 +206,47 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     analyze_parser.set_defaults(func=run_analyze)
 
+    # --- viz ---
+    viz_parser = log_subparsers.add_parser(
+        "viz",
+        help="Visualize log data",
+        description="Visualize telemetry log data with comprehensive plots.",
+    )
+    viz_parser.add_argument(
+        "file",
+        nargs="?",
+        help="Log file path (default: latest CSV)",
+    )
+    viz_parser.add_argument(
+        "--mode",
+        choices=["all", "sensors", "attitude", "position", "eskf"],
+        default="all",
+        help="Visualization mode (default: all)",
+    )
+    viz_parser.add_argument(
+        "--save",
+        metavar="FILE",
+        help="Save plot to file instead of displaying",
+    )
+    viz_parser.add_argument(
+        "--time-range",
+        nargs=2,
+        type=float,
+        metavar=("START", "END"),
+        help="Time range to plot (seconds)",
+    )
+    viz_parser.add_argument(
+        "--no-eskf",
+        action="store_true",
+        help="Hide ESKF panels",
+    )
+    viz_parser.add_argument(
+        "--no-sensors",
+        action="store_true",
+        help="Hide additional sensor panels (baro, tof, flow)",
+    )
+    viz_parser.set_defaults(func=run_viz)
+
     parser.set_defaults(func=run_help)
 
 
@@ -219,6 +261,7 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  convert   Convert binary log to CSV")
     console.print("  info      Show log file information")
     console.print("  analyze   Analyze flight log data")
+    console.print("  viz       Visualize log data")
     console.print()
     console.print("Run 'sf log <subcommand> --help' for details.")
     return 0
@@ -480,6 +523,92 @@ def run_analyze(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         console.error(f"Analysis failed: {e}")
+        return 1
+
+
+def run_viz(args: argparse.Namespace) -> int:
+    """Visualize log data"""
+    file_path = args.file
+
+    # Find latest CSV if not specified
+    if not file_path:
+        file_path = _find_latest_log(extension=".csv")
+        if not file_path:
+            console.error("No CSV log files found.")
+            return 1
+        console.info(f"Using latest CSV: {file_path}")
+
+    path = Path(file_path)
+    if not path.exists():
+        console.error(f"File not found: {path}")
+        return 1
+
+    if path.suffix != ".csv":
+        console.error("Visualization requires CSV file. Use 'sf log convert' first.")
+        return 1
+
+    console.info(f"Visualizing: {path.name}")
+
+    try:
+        # Import visualization module
+        sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+
+        # Detect CSV format to choose appropriate visualizer
+        import csv
+        with open(path, 'r') as f:
+            reader = csv.DictReader(f)
+            columns = reader.fieldnames
+
+        # Extended format (400Hz with ESKF) - has timestamp_us and quat_w
+        if 'timestamp_us' in columns and 'quat_w' in columns:
+            import visualize_extended
+            console.info("Detected: Extended telemetry (400Hz with ESKF)")
+
+            data, fmt = visualize_extended.load_csv(str(path))
+            visualize_extended.plot_extended(
+                data,
+                output_file=args.save,
+                time_range=args.time_range,
+                show_eskf=not args.no_eskf,
+                show_sensors=not args.no_sensors,
+            )
+        # FFT batch format - has timestamp_ms and gyro_corrected_x
+        elif 'timestamp_ms' in columns and 'gyro_corrected_x' in columns:
+            import visualize_extended
+            console.info("Detected: FFT batch telemetry")
+
+            data, fmt = visualize_extended.load_csv(str(path))
+            visualize_extended.plot_legacy(data, fmt, output_file=args.save)
+        # Normal WiFi telemetry - has timestamp_ms and roll_deg
+        elif 'timestamp_ms' in columns and 'roll_deg' in columns:
+            import visualize_telemetry
+            console.info("Detected: Normal WiFi telemetry")
+
+            # Load data and call appropriate function
+            df = visualize_telemetry.load_telemetry_csv(str(path))
+            show = args.save is None
+
+            if args.mode == "sensors":
+                visualize_telemetry.visualize_sensors_only(df, str(path), args.save, show)
+            elif args.mode == "attitude":
+                visualize_telemetry.visualize_attitude_only(df, str(path), args.save, show)
+            elif args.mode == "position":
+                visualize_telemetry.visualize_position_only(df, str(path), args.save, show)
+            else:
+                visualize_telemetry.visualize_all(df, str(path), args.save, show)
+        else:
+            console.error("Unknown CSV format. Cannot determine visualizer.")
+            return 1
+
+        sys.path.pop(0)
+        return 0
+
+    except ImportError as e:
+        console.error(f"Failed to import visualization module: {e}")
+        console.print("  Required: matplotlib, numpy")
+        return 1
+    except Exception as e:
+        console.error(f"Visualization failed: {e}")
         return 1
 
 

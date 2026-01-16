@@ -45,6 +45,30 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 - 新コマンド追加時は既存コマンドのパターンに従う
 - 問題発見時は積極的に修正してフレームワークを改善する
 
+**ツール統合方針:**
+- **全てのツールは sf CLI 経由で使用する** - スタンドアロンの Python スクリプトを直接実行しない
+- `tools/` 配下のスクリプトは sf CLI のバックエンド実装として扱う
+- 新しいツールを作成する場合は、必ず対応する sf コマンドも追加する
+- ラッパースクリプト（viz_*.py 等）は非推奨、sf コマンドのオプションで対応する
+
+**sf CLI コマンド一覧:**
+| コマンド | 説明 |
+|---------|------|
+| `sf doctor` | 環境診断 |
+| `sf build [target]` | ファームウェアビルド |
+| `sf flash [target]` | 書き込み（-m でモニタ付き）|
+| `sf monitor` | シリアルモニタ |
+| `sf log list` | ログファイル一覧 |
+| `sf log capture` | USB経由バイナリログ取得 |
+| `sf log wifi` | WiFi経由400Hzテレメトリ取得 |
+| `sf log convert` | バイナリ→CSV変換 |
+| `sf log info` | ログファイル情報表示 |
+| `sf log analyze` | フライトログ解析 |
+| `sf log viz` | ログ可視化 |
+| `sf cal list` | キャリブレーション一覧 |
+| `sf cal gyro/accel/mag` | 各種キャリブレーション |
+| `sf sim list/run` | シミュレータ操作 |
+
 ### Genesis Simulator
 Genesis物理シミュレータはvenv仮想環境にインストールされている:
 ```bash
