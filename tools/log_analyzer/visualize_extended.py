@@ -113,79 +113,73 @@ def plot_extended(data, output_file=None, time_range=None, show_eskf=True, show_
     print(f"Duration: {duration:.2f}s")
     print(f"Sample rate: {sample_rate:.1f} Hz")
 
-    # Determine layout
-    n_rows = 4
+    # Determine layout - all full-width rows
+    n_rows = 4  # Gyro, Accel, Gyro Corrected, Control
     if show_eskf:
-        n_rows += 3
+        n_rows += 4  # Euler, Position, Velocity, Biases
     if show_sensors:
-        n_rows += 2
+        n_rows += 2  # Height, Flow
 
-    # Increased row height and spacing
-    row_height = 2.2
-    fig = plt.figure(figsize=(16, row_height * n_rows + 1))
-    gs = GridSpec(n_rows, 3, figure=fig, hspace=0.45, wspace=0.30,
-                  left=0.06, right=0.98, top=0.95, bottom=0.04)
+    # Create figure with shared x-axis
+    row_height = 1.8
+    fig, axes = plt.subplots(n_rows, 1, figsize=(14, row_height * n_rows),
+                              sharex=True, squeeze=False)
+    axes = axes.flatten()
 
-    row = 0
-
-    # Common legend style - outside plot area with semi-transparent background
+    # Common legend style
     legend_style = dict(
         fontsize=8,
         framealpha=0.9,
         edgecolor='gray',
         fancybox=True,
         handlelength=1.5,
+        loc='upper left',
+        ncol=6,
     )
 
-    # === Row 1: Raw Gyro ===
-    ax_gyro = fig.add_subplot(gs[row, :])
-    ax_gyro.plot(t, np.rad2deg(data['gyro_x']), 'r-', label='X', linewidth=0.5, alpha=0.8)
-    ax_gyro.plot(t, np.rad2deg(data['gyro_y']), 'g-', label='Y', linewidth=0.5, alpha=0.8)
-    ax_gyro.plot(t, np.rad2deg(data['gyro_z']), 'b-', label='Z', linewidth=0.5, alpha=0.8)
-    ax_gyro.set_ylabel('Gyro [deg/s]', fontsize=9)
-    ax_gyro.set_xlabel('Time [s]', fontsize=9)
-    ax_gyro.legend(loc='upper left', ncol=3, **legend_style)
-    ax_gyro.grid(True, alpha=0.3)
-    ax_gyro.set_title(f'Raw Gyroscope (Fs={sample_rate:.0f}Hz, N={n_samples})', fontsize=10, fontweight='bold')
-    row += 1
+    ax_idx = 0
 
-    # === Row 2: Raw Accel ===
-    ax_accel = fig.add_subplot(gs[row, :])
-    ax_accel.plot(t, data['accel_x'], 'r-', label='X', linewidth=0.5, alpha=0.8)
-    ax_accel.plot(t, data['accel_y'], 'g-', label='Y', linewidth=0.5, alpha=0.8)
-    ax_accel.plot(t, data['accel_z'], 'b-', label='Z', linewidth=0.5, alpha=0.8)
-    ax_accel.set_ylabel('Accel [m/s²]', fontsize=9)
-    ax_accel.set_xlabel('Time [s]', fontsize=9)
-    ax_accel.legend(loc='upper left', ncol=3, **legend_style)
-    ax_accel.grid(True, alpha=0.3)
-    ax_accel.set_title('Raw Accelerometer', fontsize=10, fontweight='bold')
-    row += 1
+    # === Raw Gyro ===
+    ax = axes[ax_idx]
+    ax.plot(t, np.rad2deg(data['gyro_x']), 'r-', label='X', linewidth=0.5, alpha=0.8)
+    ax.plot(t, np.rad2deg(data['gyro_y']), 'g-', label='Y', linewidth=0.5, alpha=0.8)
+    ax.plot(t, np.rad2deg(data['gyro_z']), 'b-', label='Z', linewidth=0.5, alpha=0.8)
+    ax.set_ylabel('Gyro Raw\n[deg/s]', fontsize=8)
+    ax.legend(**legend_style)
+    ax.grid(True, alpha=0.3)
+    ax_idx += 1
 
-    # === Row 3: Bias-corrected Gyro ===
-    ax_gyro_corr = fig.add_subplot(gs[row, :])
-    ax_gyro_corr.plot(t, np.rad2deg(data['gyro_corrected_x']), 'r-', label='X', linewidth=0.5, alpha=0.8)
-    ax_gyro_corr.plot(t, np.rad2deg(data['gyro_corrected_y']), 'g-', label='Y', linewidth=0.5, alpha=0.8)
-    ax_gyro_corr.plot(t, np.rad2deg(data['gyro_corrected_z']), 'b-', label='Z', linewidth=0.5, alpha=0.8)
-    ax_gyro_corr.set_ylabel('Gyro [deg/s]', fontsize=9)
-    ax_gyro_corr.set_xlabel('Time [s]', fontsize=9)
-    ax_gyro_corr.legend(loc='upper left', ncol=3, **legend_style)
-    ax_gyro_corr.grid(True, alpha=0.3)
-    ax_gyro_corr.set_title('Bias-Corrected Gyroscope (control loop input)', fontsize=10, fontweight='bold')
-    row += 1
+    # === Raw Accel ===
+    ax = axes[ax_idx]
+    ax.plot(t, data['accel_x'], 'r-', label='X', linewidth=0.5, alpha=0.8)
+    ax.plot(t, data['accel_y'], 'g-', label='Y', linewidth=0.5, alpha=0.8)
+    ax.plot(t, data['accel_z'], 'b-', label='Z', linewidth=0.5, alpha=0.8)
+    ax.set_ylabel('Accel Raw\n[m/s²]', fontsize=8)
+    ax.legend(**legend_style)
+    ax.grid(True, alpha=0.3)
+    ax_idx += 1
 
-    # === Row 4: Controller Inputs ===
-    ax_ctrl = fig.add_subplot(gs[row, :])
-    ax_ctrl.plot(t, data['ctrl_throttle'], 'k-', label='Thr', linewidth=0.8)
-    ax_ctrl.plot(t, data['ctrl_roll'], 'r-', label='Roll', linewidth=0.8, alpha=0.8)
-    ax_ctrl.plot(t, data['ctrl_pitch'], 'g-', label='Pitch', linewidth=0.8, alpha=0.8)
-    ax_ctrl.plot(t, data['ctrl_yaw'], 'b-', label='Yaw', linewidth=0.8, alpha=0.8)
-    ax_ctrl.set_ylabel('Control [-1,1]', fontsize=9)
-    ax_ctrl.set_xlabel('Time [s]', fontsize=9)
-    ax_ctrl.legend(loc='upper left', ncol=4, **legend_style)
-    ax_ctrl.grid(True, alpha=0.3)
-    ax_ctrl.set_ylim(-1.1, 1.1)
-    ax_ctrl.set_title('Controller Inputs (normalized)', fontsize=10, fontweight='bold')
-    row += 1
+    # === Bias-corrected Gyro ===
+    ax = axes[ax_idx]
+    ax.plot(t, np.rad2deg(data['gyro_corrected_x']), 'r-', label='X', linewidth=0.5, alpha=0.8)
+    ax.plot(t, np.rad2deg(data['gyro_corrected_y']), 'g-', label='Y', linewidth=0.5, alpha=0.8)
+    ax.plot(t, np.rad2deg(data['gyro_corrected_z']), 'b-', label='Z', linewidth=0.5, alpha=0.8)
+    ax.set_ylabel('Gyro Corr\n[deg/s]', fontsize=8)
+    ax.legend(**legend_style)
+    ax.grid(True, alpha=0.3)
+    ax_idx += 1
+
+    # === Controller Inputs ===
+    ax = axes[ax_idx]
+    ax.plot(t, data['ctrl_throttle'], 'k-', label='Thr', linewidth=0.8)
+    ax.plot(t, data['ctrl_roll'], 'r-', label='Roll', linewidth=0.8, alpha=0.8)
+    ax.plot(t, data['ctrl_pitch'], 'g-', label='Pitch', linewidth=0.8, alpha=0.8)
+    ax.plot(t, data['ctrl_yaw'], 'b-', label='Yaw', linewidth=0.8, alpha=0.8)
+    ax.set_ylabel('Control\n[-1,1]', fontsize=8)
+    ax.legend(**legend_style)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(-1.1, 1.1)
+    ax_idx += 1
 
     # === ESKF Panels ===
     if show_eskf:
@@ -194,98 +188,82 @@ def plot_extended(data, output_file=None, time_range=None, show_eskf=True, show_
             data['quat_w'], data['quat_x'], data['quat_y'], data['quat_z']
         )
 
-        # Row: Euler angles from quaternion
-        ax_euler = fig.add_subplot(gs[row, :])
-        ax_euler.plot(t, np.rad2deg(roll), 'r-', label='Roll', linewidth=0.8)
-        ax_euler.plot(t, np.rad2deg(pitch), 'g-', label='Pitch', linewidth=0.8)
-        ax_euler.plot(t, np.rad2deg(yaw), 'b-', label='Yaw', linewidth=0.8)
-        ax_euler.set_ylabel('Angle [deg]', fontsize=9)
-        ax_euler.set_xlabel('Time [s]', fontsize=9)
-        ax_euler.legend(loc='upper left', ncol=3, **legend_style)
-        ax_euler.grid(True, alpha=0.3)
-        ax_euler.set_title('ESKF Orientation (Euler from quaternion)', fontsize=10, fontweight='bold')
-        row += 1
+        # Euler angles
+        ax = axes[ax_idx]
+        ax.plot(t, np.rad2deg(roll), 'r-', label='Roll', linewidth=0.8)
+        ax.plot(t, np.rad2deg(pitch), 'g-', label='Pitch', linewidth=0.8)
+        ax.plot(t, np.rad2deg(yaw), 'b-', label='Yaw', linewidth=0.8)
+        ax.set_ylabel('Attitude\n[deg]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
-        # Row: Position and Velocity (split into subplots)
-        ax_pos = fig.add_subplot(gs[row, 0:2])
-        ax_pos.plot(t, data['pos_x'], 'r-', label='X', linewidth=0.8)
-        ax_pos.plot(t, data['pos_y'], 'g-', label='Y', linewidth=0.8)
-        ax_pos.plot(t, data['pos_z'], 'b-', label='Z', linewidth=0.8)
-        ax_pos.set_ylabel('Position [m]', fontsize=9)
-        ax_pos.set_xlabel('Time [s]', fontsize=9)
-        ax_pos.legend(loc='upper left', ncol=3, **legend_style)
-        ax_pos.grid(True, alpha=0.3)
-        ax_pos.set_title('ESKF Position (NED)', fontsize=10, fontweight='bold')
+        # Position
+        ax = axes[ax_idx]
+        ax.plot(t, data['pos_x'], 'r-', label='X', linewidth=0.8)
+        ax.plot(t, data['pos_y'], 'g-', label='Y', linewidth=0.8)
+        ax.plot(t, data['pos_z'], 'b-', label='Z', linewidth=0.8)
+        ax.set_ylabel('Position\n[m]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
-        ax_vel = fig.add_subplot(gs[row, 2])
-        ax_vel.plot(t, data['vel_x'], 'r-', label='Vx', linewidth=0.8)
-        ax_vel.plot(t, data['vel_y'], 'g-', label='Vy', linewidth=0.8)
-        ax_vel.plot(t, data['vel_z'], 'b-', label='Vz', linewidth=0.8)
-        ax_vel.set_ylabel('Velocity [m/s]', fontsize=9)
-        ax_vel.set_xlabel('Time [s]', fontsize=9)
-        ax_vel.legend(loc='upper left', ncol=1, **legend_style)
-        ax_vel.grid(True, alpha=0.3)
-        ax_vel.set_title('ESKF Velocity', fontsize=10, fontweight='bold')
-        row += 1
+        # Velocity
+        ax = axes[ax_idx]
+        ax.plot(t, data['vel_x'], 'r-', label='Vx', linewidth=0.8)
+        ax.plot(t, data['vel_y'], 'g-', label='Vy', linewidth=0.8)
+        ax.plot(t, data['vel_z'], 'b-', label='Vz', linewidth=0.8)
+        ax.set_ylabel('Velocity\n[m/s]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
-        # Row: Biases
-        ax_gbias = fig.add_subplot(gs[row, 0:2])
-        ax_gbias.plot(t, np.rad2deg(data['gyro_bias_x']), 'r-', label='X', linewidth=0.8)
-        ax_gbias.plot(t, np.rad2deg(data['gyro_bias_y']), 'g-', label='Y', linewidth=0.8)
-        ax_gbias.plot(t, np.rad2deg(data['gyro_bias_z']), 'b-', label='Z', linewidth=0.8)
-        ax_gbias.set_ylabel('Bias [deg/s]', fontsize=9)
-        ax_gbias.set_xlabel('Time [s]', fontsize=9)
-        ax_gbias.legend(loc='upper left', ncol=3, **legend_style)
-        ax_gbias.grid(True, alpha=0.3)
-        ax_gbias.set_title('ESKF Gyro Bias', fontsize=10, fontweight='bold')
-
-        ax_abias = fig.add_subplot(gs[row, 2])
-        ax_abias.plot(t, data['accel_bias_x'], 'r-', label='X', linewidth=0.8)
-        ax_abias.plot(t, data['accel_bias_y'], 'g-', label='Y', linewidth=0.8)
-        ax_abias.plot(t, data['accel_bias_z'], 'b-', label='Z', linewidth=0.8)
-        ax_abias.set_ylabel('Bias [m/s²]', fontsize=9)
-        ax_abias.set_xlabel('Time [s]', fontsize=9)
-        ax_abias.legend(loc='upper left', ncol=1, **legend_style)
-        ax_abias.grid(True, alpha=0.3)
-        ax_abias.set_title('ESKF Accel Bias', fontsize=10, fontweight='bold')
-        row += 1
+        # Biases (combined gyro and accel)
+        ax = axes[ax_idx]
+        ax.plot(t, np.rad2deg(data['gyro_bias_x']), 'r-', label='Gyro X', linewidth=0.8)
+        ax.plot(t, np.rad2deg(data['gyro_bias_y']), 'g-', label='Gyro Y', linewidth=0.8)
+        ax.plot(t, np.rad2deg(data['gyro_bias_z']), 'b-', label='Gyro Z', linewidth=0.8)
+        ax.plot(t, data['accel_bias_x'] * 10, 'r--', label='Acc X×10', linewidth=0.8, alpha=0.6)
+        ax.plot(t, data['accel_bias_y'] * 10, 'g--', label='Acc Y×10', linewidth=0.8, alpha=0.6)
+        ax.plot(t, data['accel_bias_z'] * 10, 'b--', label='Acc Z×10', linewidth=0.8, alpha=0.6)
+        ax.set_ylabel('Bias\n[deg/s]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
     # === Sensor Panels ===
     if show_sensors:
-        # Row: Height sensors
-        ax_height = fig.add_subplot(gs[row, :])
-        ax_height.plot(t, data['baro_altitude'], 'purple', label='Baro', linewidth=0.8)
-        ax_height.plot(t, data['tof_bottom'], 'orange', label='ToF Bot', linewidth=0.8)
-        ax_height.plot(t, data['tof_front'], 'cyan', label='ToF Fwd', linewidth=0.8)
-        ax_height.set_ylabel('Distance [m]', fontsize=9)
-        ax_height.set_xlabel('Time [s]', fontsize=9)
-        ax_height.legend(loc='upper left', ncol=3, **legend_style)
-        ax_height.grid(True, alpha=0.3)
-        ax_height.set_title('Height Sensors (Baro + ToF)', fontsize=10, fontweight='bold')
-        row += 1
+        # Height sensors
+        ax = axes[ax_idx]
+        ax.plot(t, data['baro_altitude'], 'purple', label='Baro', linewidth=0.8)
+        ax.plot(t, data['tof_bottom'], 'orange', label='ToF Bot', linewidth=0.8)
+        ax.plot(t, data['tof_front'], 'cyan', label='ToF Fwd', linewidth=0.8)
+        ax.set_ylabel('Height\n[m]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
-        # Row: Optical flow
-        ax_flow = fig.add_subplot(gs[row, 0:2])
-        ax_flow.plot(t, data['flow_x'], 'r-', label='X', linewidth=0.5, alpha=0.8)
-        ax_flow.plot(t, data['flow_y'], 'g-', label='Y', linewidth=0.5, alpha=0.8)
-        ax_flow.set_ylabel('Flow [counts]', fontsize=9)
-        ax_flow.set_xlabel('Time [s]', fontsize=9)
-        ax_flow.legend(loc='upper left', ncol=2, **legend_style)
-        ax_flow.grid(True, alpha=0.3)
-        ax_flow.set_title('Optical Flow', fontsize=10, fontweight='bold')
+        # Optical flow (combined with quality)
+        ax = axes[ax_idx]
+        ax.plot(t, data['flow_x'], 'r-', label='Flow X', linewidth=0.5, alpha=0.8)
+        ax.plot(t, data['flow_y'], 'g-', label='Flow Y', linewidth=0.5, alpha=0.8)
+        ax2 = ax.twinx()
+        ax2.plot(t, data['flow_quality'], 'k-', label='SQUAL', linewidth=0.5, alpha=0.5)
+        ax2.set_ylabel('SQUAL', fontsize=8)
+        ax2.set_ylim(0, 255)
+        ax.set_ylabel('Flow\n[counts]', fontsize=8)
+        ax.legend(**legend_style)
+        ax.grid(True, alpha=0.3)
+        ax_idx += 1
 
-        ax_squal = fig.add_subplot(gs[row, 2])
-        ax_squal.plot(t, data['flow_quality'], 'k-', linewidth=0.8)
-        ax_squal.set_ylabel('SQUAL', fontsize=9)
-        ax_squal.set_xlabel('Time [s]', fontsize=9)
-        ax_squal.grid(True, alpha=0.3)
-        ax_squal.set_ylim(0, 255)
-        ax_squal.set_title('Flow Quality', fontsize=10, fontweight='bold')
-        row += 1
+    # Set x-axis label only on bottom plot
+    axes[-1].set_xlabel('Time [s]', fontsize=9)
 
-    # Main title at the very top
-    fig.suptitle(f'Extended Telemetry Analysis ({n_samples} samples @ {sample_rate:.0f}Hz)',
-                 fontsize=13, fontweight='bold')
+    # Main title
+    fig.suptitle(f'Extended Telemetry ({n_samples} samples @ {sample_rate:.0f}Hz, {duration:.1f}s)',
+                 fontsize=11, fontweight='bold')
+
+    plt.tight_layout()
 
     if output_file:
         plt.savefig(output_file, dpi=150, bbox_inches='tight')
