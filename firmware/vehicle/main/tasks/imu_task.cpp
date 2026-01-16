@@ -95,10 +95,6 @@ void IMUTask(void* pvParameters)
                 stampfly::StateVector3 gyro_vec(filtered_gyro[0], filtered_gyro[1], filtered_gyro[2]);
                 state.updateIMU(accel_vec, gyro_vec);
 
-                // Signal telemetry task for FFT mode (400Hz sync)
-                // FFTモードのテレメトリタスクに新しいIMUデータを通知
-                xSemaphoreGive(g_telemetry_imu_semaphore);
-
                 // Prepare vectors for estimators
                 stampfly::math::Vector3 a(filtered_accel[0], filtered_accel[1], filtered_accel[2]);
                 stampfly::math::Vector3 g(filtered_gyro[0], filtered_gyro[1], filtered_gyro[2]);
@@ -117,6 +113,12 @@ void IMUTask(void* pvParameters)
                 if (g_gyro_buffer_count < REF_BUFFER_SIZE) {
                     g_gyro_buffer_count++;
                 }
+
+                // Signal telemetry task for FFT mode (400Hz sync)
+                // FFTモードのテレメトリタスクに新しいIMUデータを通知
+                // IMPORTANT: Must be AFTER buffer writes so telemetry reads fresh data
+                // 重要: バッファ書き込み後に通知することでテレメトリが最新データを読める
+                xSemaphoreGive(g_telemetry_imu_semaphore);
 
                 g_imu_checkpoint = 10;  // ESKF更新前
 
