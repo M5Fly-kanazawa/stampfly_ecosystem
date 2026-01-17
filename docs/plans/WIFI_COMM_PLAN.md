@@ -482,7 +482,7 @@ private:
 }  // namespace stampfly
 ```
 
-### 6.3 通信モード切り替え
+### 6.3 通信モード定義
 
 ```cpp
 // comm_mode.hpp (shared between Vehicle and Controller)
@@ -492,15 +492,79 @@ private:
 namespace stampfly {
 
 enum class CommMode : uint8_t {
-    ESPNOW = 0,      // ESP-NOW direct (default, legacy)
-    UDP_AP = 1,      // UDP over Vehicle's AP
-    UDP_INFRA = 2,   // UDP over infrastructure (router)
+    ESPNOW = 0,      // ESP-NOW direct (default)
+    UDP = 1,         // UDP over Vehicle's AP
+    USB_HID = 2,     // USB HID (Controller only)
 };
 
 // NVS key for storing mode
 constexpr const char* NVS_KEY_COMM_MODE = "comm_mode";
 
 }  // namespace stampfly
+```
+
+### 6.4 Controller LCDメニューによるモード切替
+
+現在のControllerメニューシステムを活用し、「USB Mode」を「Comm Mode」に拡張する。
+
+**現在のメニュー構成：**
+```
+1. Stick: Mode 2/3
+2. USB Mode        ← ESP-NOW / USB HID の2択
+3. Batt: 3.3V
+...
+```
+
+**変更後のメニュー構成：**
+```
+1. Stick: Mode 2/3
+2. Comm: ESP-NOW   ← ESP-NOW / UDP / USB HID の3択（サイクル切替）
+3. Batt: 3.3V
+...
+```
+
+**実装変更点（menu_system.cpp）：**
+
+```cpp
+// 現在
+static const char* usb_mode_labels[] = {"ESP-NOW", "USB HID"};
+
+// 変更後
+typedef enum {
+    COMM_MODE_ESPNOW = 0,
+    COMM_MODE_UDP = 1,
+    COMM_MODE_USB_HID = 2,
+    COMM_MODE_COUNT = 3
+} comm_mode_t;
+
+static const char* comm_mode_labels[] = {"ESP-NOW", "UDP", "USB HID"};
+
+// メニュー選択時のサイクル切替
+void on_comm_mode_selected() {
+    current_comm_mode = (current_comm_mode + 1) % COMM_MODE_COUNT;
+    update_menu_label(MENU_ITEM_COMM, comm_mode_labels[current_comm_mode]);
+    save_comm_mode_to_nvs(current_comm_mode);
+
+    // モード変更後は再起動が必要
+    if (needs_restart) {
+        esp_restart();
+    }
+}
+```
+
+**LCD表示例：**
+
+```
+┌────────────────────┐
+│   StampFly Menu    │
+├────────────────────┤
+│ > Comm: ESP-NOW    │  ← 選択でサイクル
+│   Comm: UDP        │
+│   Comm: USB HID    │
+├────────────────────┤
+│ [Mode] Select      │
+│ [M5]   Back        │
+└────────────────────┘
 ```
 
 ## 7. ESP-NOW / UDP 併存戦略
@@ -525,9 +589,10 @@ ESP-NOWとUDPは**どちらも正式な通信方式**として維持する。用
 │  - 開発、研究、ログ解析に推奨                                            │
 │                                                                         │
 │  【切り替え方法】                                                        │
-│  - Controller/Vehicle両方のCLIでモード設定                              │
+│  - Controller: LCDメニューで選択（Comm: ESP-NOW/UDP/USB HID）           │
+│  - Vehicle: CLIコマンド（comm mode espnow/udp）                         │
 │  - NVSに保存、次回起動時も維持                                          │
-│  - ランタイム切り替え対応（再起動不要）                                   │
+│  - モード変更時は再起動                                                  │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -537,8 +602,8 @@ ESP-NOWとUDPは**どちらも正式な通信方式**として維持する。用
 | Step | 内容 | Vehicle | Controller |
 |------|------|---------|------------|
 | 1 | UDP追加 | UDPサーバー追加 | UDPクライアント追加 |
-| 2 | モード切替CLI | `comm mode` コマンド | `comm mode` コマンド |
-| 3 | NVS保存 | モード永続化 | モード永続化 |
+| 2 | モード切替UI | CLIコマンド追加 | LCDメニュー拡張（USB Mode → Comm Mode） |
+| 3 | NVS保存 | モード永続化 | 既存NVS活用 |
 | 4 | 検証 | 両モードテスト | 両モードテスト |
 
 **注意:** ESP-NOWは「レガシー」ではなく、低レイテンシが必要な場面での推奨モード。
@@ -554,7 +619,7 @@ ESP-NOWとUDPは**どちらも正式な通信方式**として維持する。用
 │       │                                                                 │
 │       ▼                                                                 │
 │  ┌─────────────────┐                                                   │
-│  │ NVSからモード読込 │                                                   │
+│  │ NVSからモード読込 │  ※LCDメニューで事前設定済み                       │
 │  └────────┬────────┘                                                   │
 │           │                                                             │
 │     ┌─────┴──────┐                                                     │
@@ -564,21 +629,30 @@ ESP-NOWとUDPは**どちらも正式な通信方式**として維持する。用
 │   ┌───────┼───────┐                                                    │
 │   │       │       │                                                    │
 │   ▼       ▼       ▼                                                    │
-│ ESPNOW  UDP_AP  (将来)                                                  │
-│   │       │                                                            │
-│   ▼       ▼                                                            │
-│ ┌───────────────────┐  ┌─────────────────────────────────────────┐     │
-│ │ ESP-NOW初期化     │  │ WiFi STA初期化                           │     │
-│ │ ペアリング開始    │  │ → "StampFly_XXXX" APスキャン             │     │
-│ │ 制御ループ開始    │  │ → AP接続 (DHCP: 192.168.4.x)             │     │
-│ └───────────────────┘  │ → UDPソケット作成                        │     │
-│                        │ → 制御ループ開始 (50Hz TX/RX)            │     │
-│                        └─────────────────────────────────────────┘     │
+│ ESPNOW    UDP   USB_HID                                                 │
+│   │       │       │                                                    │
+│   ▼       ▼       ▼                                                    │
+│ ┌────────────┐ ┌────────────────────────┐ ┌────────────┐               │
+│ │ ESP-NOW    │ │ WiFi STA初期化         │ │ USB HID    │               │
+│ │ 初期化     │ │ → "StampFly_XXXX"     │ │ 初期化     │               │
+│ │ ペアリング │ │    APスキャン・接続    │ │ (既存)     │               │
+│ │ 制御ループ │ │ → UDPソケット作成     │ │            │               │
+│ │ 開始       │ │ → 制御ループ開始      │ │            │               │
+│ └────────────┘ │    (50Hz TX/RX)        │ └────────────┘               │
+│                └────────────────────────┘                               │
 │                                                                         │
-│  ※ランタイムでモード切替可能: `comm mode espnow` / `comm mode udp`      │
+│  【モード切替方法】                                                      │
+│  LCDメニュー → "Comm: ESP-NOW" 選択 → サイクル切替 → 再起動             │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**LCDメニューでのモード切替手順：**
+
+1. メニュー画面を開く（M5ボタン）
+2. 「Comm: ESP-NOW」項目を選択
+3. Modeボタンで切替（ESP-NOW → UDP → USB HID → ...）
+4. 自動的に再起動、新モードで動作開始
 
 ---
 
