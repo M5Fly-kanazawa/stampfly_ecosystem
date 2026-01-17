@@ -61,16 +61,21 @@ StampFlyの通信機能を拡張し、以下を実現する：
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     目標: UDP + WiFi CLI                                │
+│                     目標: ESP-NOW / UDP 併存 + WiFi CLI                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  ┌────────────────┐                   ┌────────────────────────────┐   │
-│  │   Controller   │ ─── WiFi ──────► │        Vehicle             │   │
-│  │    (ESP32)     │  Connect to AP   │       (ESP32-S3)           │   │
-│  │  192.168.4.x   │                  │      192.168.4.1           │   │
-│  │                │ ◄─── UDP ──────► │                            │   │
-│  └────────────────┘  Control/Telem   │  ┌──────────────────────┐  │   │
-│                      :8888/:8889     │  │   UDP Server         │  │   │
+│  ┌────────────────┐     ESP-NOW      ┌────────────────────────────┐   │
+│  │   Controller   │ ◄──────────────► │        Vehicle             │   │
+│  │    (ESP32)     │   (モード1)      │       (ESP32-S3)           │   │
+│  │                │                  │      192.168.4.1           │   │
+│  │  ┌──────────┐  │ ─── WiFi AP ───► │                            │   │
+│  │  │ WiFi STA │  │   (モード2)      │  ┌──────────────────────┐  │   │
+│  │  └──────────┘  │ ◄─── UDP ──────► │  │   ESP-NOW Receiver   │  │   │
+│  │  192.168.4.x   │  :8888/:8889     │  │   (既存)             │  │   │
+│  └────────────────┘                  │  └──────────────────────┘  │   │
+│                                      │                            │   │
+│  ※ControllerはESP-NOW/UDP両方対応    │  ┌──────────────────────┐  │   │
+│    CLIコマンドで切り替え可能          │  │   UDP Server         │  │   │
 │                                      │  │   - Control RX       │  │   │
 │  ┌────────────────┐                  │  │   - Telemetry TX     │  │   │
 │  │   PC (GCS)     │ ─── WiFi ──────► │  └──────────────────────┘  │   │
@@ -87,12 +92,24 @@ StampFlyの通信機能を拡張し、以下を実現する：
 │                                      │                            │   │
 │                                      │  ┌──────────────────────┐  │   │
 │                                      │  │   Control Arbiter    │  │   │
-│                                      │  │   UDP > WebSocket    │  │   │
+│                                      │  │ ESP-NOW/UDP/WebSocket│  │   │
 │                                      │  └──────────────────────┘  │   │
 │                                      └────────────────────────────┘   │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 通信モード比較
+
+| 項目 | ESP-NOW | UDP (WiFi AP) |
+|------|---------|---------------|
+| レイテンシ | 1-5ms（最速） | 5-15ms |
+| インフラ | 不要 | Vehicle AP必要 |
+| デバッグ | 困難 | Wireshark可 |
+| PC同時接続 | 不可 | 可能 |
+| 推奨用途 | 通常飛行、屋外 | 開発、研究、デバッグ |
+
+**重要:** ESP-NOWとUDPは併存し、用途に応じて切り替え可能。移行ではなく選択肢の追加。
 
 ---
 
@@ -486,37 +503,51 @@ constexpr const char* NVS_KEY_COMM_MODE = "comm_mode";
 }  // namespace stampfly
 ```
 
-## 7. ESP-NOWからの移行
+## 7. ESP-NOW / UDP 併存戦略
 
-### 7.1 移行戦略
+### 7.1 併存アーキテクチャ
+
+ESP-NOWとUDPは**どちらも正式な通信方式**として維持する。用途に応じて選択可能。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        移行戦略                                         │
+│                        併存戦略                                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  Step 1: UDP追加（ESP-NOW維持）                                         │
-│  - ESP-NOWをデフォルトとして維持                                        │
-│  - UDPモードをオプションとして追加                                      │
-│  - CLIコマンド `comm mode udp_ap` で切り替え                           │
-│  - 両方のコードを共存させる                                             │
+│  【ESP-NOW モード】（デフォルト）                                        │
+│  - 最も低レイテンシ (1-5ms)                                             │
+│  - インフラ不要、電源ONですぐ接続                                        │
+│  - 通常飛行、屋外、競技用途に推奨                                        │
 │                                                                         │
-│  Step 2: 検証期間                                                       │
-│  - UDPモードの安定性・レイテンシ検証                                    │
-│  - 問題があればESP-NOWにフォールバック                                  │
+│  【UDP モード】                                                          │
+│  - デバッグ容易 (Wireshark対応)                                         │
+│  - PC/GCSと同時接続可能                                                 │
+│  - 開発、研究、ログ解析に推奨                                            │
 │                                                                         │
-│  Step 3: デフォルト変更（オプション）                                    │
-│  - 十分な検証後、UDPをデフォルトに                                      │
-│  - ESP-NOWはレガシーモードとして維持                                    │
+│  【切り替え方法】                                                        │
+│  - Controller/Vehicle両方のCLIでモード設定                              │
+│  - NVSに保存、次回起動時も維持                                          │
+│  - ランタイム切り替え対応（再起動不要）                                   │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 Controller接続フロー
+### 7.2 実装ステップ
+
+| Step | 内容 | Vehicle | Controller |
+|------|------|---------|------------|
+| 1 | UDP追加 | UDPサーバー追加 | UDPクライアント追加 |
+| 2 | モード切替CLI | `comm mode` コマンド | `comm mode` コマンド |
+| 3 | NVS保存 | モード永続化 | モード永続化 |
+| 4 | 検証 | 両モードテスト | 両モードテスト |
+
+**注意:** ESP-NOWは「レガシー」ではなく、低レイテンシが必要な場面での推奨モード。
+
+### 7.3 Controller接続フロー
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                  Controller接続フロー（UDPモード）                       │
+│                  Controller接続フロー                                    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  Controller起動                                                         │
@@ -526,30 +557,25 @@ constexpr const char* NVS_KEY_COMM_MODE = "comm_mode";
 │  │ NVSからモード読込 │                                                   │
 │  └────────┬────────┘                                                   │
 │           │                                                             │
-│     ┌─────┴─────┐                                                      │
-│     │ UDP_AP?   │                                                      │
-│     └─────┬─────┘                                                      │
-│       Yes │  No → ESP-NOW初期化（従来通り）                              │
-│           ▼                                                             │
-│  ┌─────────────────┐                                                   │
-│  │ WiFi STA初期化   │                                                   │
-│  └────────┬────────┘                                                   │
-│           ▼                                                             │
-│  ┌─────────────────┐                                                   │
-│  │ AP スキャン      │  "StampFly_XXXX" を検索                           │
-│  └────────┬────────┘                                                   │
-│           ▼                                                             │
-│  ┌─────────────────┐                                                   │
-│  │ AP 接続          │  DHCP で 192.168.4.x 取得                         │
-│  └────────┬────────┘                                                   │
-│           ▼                                                             │
-│  ┌─────────────────┐                                                   │
-│  │ UDP ソケット作成  │  送信先: 192.168.4.1:8888                         │
-│  └────────┬────────┘                                                   │
-│           ▼                                                             │
-│  ┌─────────────────┐                                                   │
-│  │ 制御ループ開始   │  50Hz Control TX / Telemetry RX                   │
-│  └─────────────────┘                                                   │
+│     ┌─────┴──────┐                                                     │
+│     │ comm_mode? │                                                     │
+│     └─────┬──────┘                                                     │
+│           │                                                             │
+│   ┌───────┼───────┐                                                    │
+│   │       │       │                                                    │
+│   ▼       ▼       ▼                                                    │
+│ ESPNOW  UDP_AP  (将来)                                                  │
+│   │       │                                                            │
+│   ▼       ▼                                                            │
+│ ┌───────────────────┐  ┌─────────────────────────────────────────┐     │
+│ │ ESP-NOW初期化     │  │ WiFi STA初期化                           │     │
+│ │ ペアリング開始    │  │ → "StampFly_XXXX" APスキャン             │     │
+│ │ 制御ループ開始    │  │ → AP接続 (DHCP: 192.168.4.x)             │     │
+│ └───────────────────┘  │ → UDPソケット作成                        │     │
+│                        │ → 制御ループ開始 (50Hz TX/RX)            │     │
+│                        └─────────────────────────────────────────┘     │
+│                                                                         │
+│  ※ランタイムでモード切替可能: `comm mode espnow` / `comm mode udp`      │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -846,7 +872,19 @@ See Japanese section for detailed diagrams.
 
 **Current:** ESP-NOW for Controller-Vehicle, WebSocket for telemetry only.
 
-**Target:** UDP for Controller-Vehicle, Telnet for CLI, WebSocket maintained for high-rate telemetry.
+**Target:** ESP-NOW and UDP **coexisting** for Controller-Vehicle (switchable), Telnet for CLI, WebSocket maintained for high-rate telemetry.
+
+### Communication Mode Comparison
+
+| Aspect | ESP-NOW | UDP (WiFi AP) |
+|--------|---------|---------------|
+| Latency | 1-5ms (fastest) | 5-15ms |
+| Infrastructure | None required | Vehicle AP needed |
+| Debugging | Difficult | Wireshark compatible |
+| PC concurrent access | No | Yes |
+| Recommended for | Normal flight, outdoor | Development, research |
+
+**Important:** ESP-NOW and UDP coexist as equal options. This is not a migration but adding choices.
 
 ## 3. UDP Protocol
 
@@ -883,12 +921,21 @@ See Japanese section for detailed structure.
 3. sf CLI integration
 4. Testing and validation
 
-## 5. Migration Strategy
+## 5. Coexistence Strategy
 
-- Maintain ESP-NOW as default
-- Add UDP as optional mode
-- CLI command to switch modes
-- Gradual migration after validation
+ESP-NOW and UDP are **both official communication methods**, selectable based on use case.
+
+| Mode | Default | Use Case | Latency |
+|------|---------|----------|---------|
+| ESP-NOW | Yes | Normal flight, outdoor, competition | 1-5ms |
+| UDP | No | Development, research, debugging | 5-15ms |
+
+**Switching Methods:**
+- CLI command: `comm mode espnow` or `comm mode udp`
+- Saved to NVS (persists across reboots)
+- Runtime switching supported (no reboot required)
+
+**Note:** ESP-NOW is not "legacy" - it remains the recommended mode for low-latency requirements.
 
 ## 6. References
 
