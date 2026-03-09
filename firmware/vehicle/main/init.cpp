@@ -42,6 +42,7 @@
 #include "udp_server.hpp"
 #include "wifi_cli.hpp"
 #include "flight_command.hpp"
+#include "flight_command_adapters.hpp"
 #include "command_queue.hpp"
 
 // NVS
@@ -634,14 +635,28 @@ esp_err_t communication()
         }
     }
 
-    // Initialize FlightCommandService
-    // FlightCommandService を初期化
+    // Initialize FlightCommandService with dependency injection
+    // FlightCommandService を依存注入で初期化
     {
         auto& flight_cmd = stampfly::FlightCommandService::getInstance();
         esp_err_t ret = flight_cmd.init();
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "FlightCommandService init failed: %s", esp_err_to_name(ret));
         }
+
+        // Inject dependencies (adapters wrap vehicle/main globals)
+        // 依存注入（アダプタが vehicle/main のグローバルをラップ）
+        static stampfly::VehicleFlightReadiness flight_readiness(g_landing_handler);
+        static stampfly::VehicleStateEstimator state_estimator(
+            g_fusion, g_tof_bottom_buffer, &g_tof_bottom_buffer_index,
+            &g_tof_bottom_buffer_count, REF_BUFFER_SIZE);
+        static stampfly::VehiclePositionControl position_control(g_position_controller);
+
+        flight_cmd.setFlightReadiness(&flight_readiness);
+        flight_cmd.setStateEstimator(&state_estimator);
+        flight_cmd.setPositionControl(&position_control);
+
+        ESP_LOGI(TAG, "FlightCommandService dependencies injected");
     }
 
     // Restore comm mode from NVS

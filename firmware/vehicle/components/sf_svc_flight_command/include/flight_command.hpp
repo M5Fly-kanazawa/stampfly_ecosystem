@@ -5,6 +5,7 @@
 #include <cstdint>
 #include "esp_err.h"
 #include "system_state.hpp"  // For FlightCommandType
+#include "flight_command_deps.hpp"
 
 namespace stampfly {
 
@@ -42,6 +43,12 @@ public:
     // サービスの初期化
     esp_err_t init();
 
+    // Inject dependencies (must be called before use)
+    // 依存注入（使用前に呼ぶこと）
+    void setFlightReadiness(IFlightReadiness* readiness) { flight_readiness_ = readiness; }
+    void setStateEstimator(IStateEstimator* estimator) { state_estimator_ = estimator; }
+    void setPositionControl(IPositionControl* control) { position_control_ = control; }
+
     // Execute command (non-blocking)
     // コマンド実行（非ブロッキング）
     bool executeCommand(FlightCommandType type, const FlightCommandParams& params);
@@ -70,6 +77,12 @@ public:
 
 private:
     FlightCommandService() = default;
+
+    // Injected dependencies
+    // 注入された依存
+    IFlightReadiness* flight_readiness_ = nullptr;
+    IStateEstimator* state_estimator_ = nullptr;
+    IPositionControl* position_control_ = nullptr;
 
     FlightCommandState state_ = FlightCommandState::IDLE;
     FlightCommandType current_command_ = FlightCommandType::NONE;

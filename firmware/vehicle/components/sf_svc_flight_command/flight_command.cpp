@@ -4,27 +4,10 @@
 #include "command_queue.hpp"
 #include "system_state.hpp"
 #include "control_arbiter.hpp"
-#include "sensor_fusion.hpp"
-#include "landing_handler.hpp"
 #include "stampfly_state.hpp"
 #include "controller_comm.hpp"
-#include "position_controller.hpp"
 #include "esp_log.h"
 #include <cmath>
-
-// Forward declarations for globals
-// グローバル変数の前方宣言
-namespace globals {
-    extern stampfly::LandingHandler g_landing_handler;
-    extern sf::SensorFusion g_fusion;
-
-    // ToF sensor buffer (for open-loop climb altitude check)
-    // ToFセンサーバッファ（開ループ上昇の高度チェック用）
-    constexpr int REF_BUFFER_SIZE = 100;
-    extern float g_tof_bottom_buffer[REF_BUFFER_SIZE];
-    extern int g_tof_bottom_buffer_index;
-    extern int g_tof_bottom_buffer_count;
-}
 
 static const char* TAG = "FlightCmd";
 
@@ -306,7 +289,7 @@ void FlightCommandService::update(float dt) {
 bool FlightCommandService::canExecute() const {
     // Check landing status
     // 着陸状態をチェック
-    if (!globals::g_landing_handler.isLanded()) {
+    if (flight_readiness_ && !flight_readiness_->isLanded()) {
         ESP_LOGW(TAG, "Warning: vehicle not landed (allowing for WiFi commands)");
         // Don't block - allow WiFi commands even when not landed
         // WiFiコマンドのために許可（着陸検出なしでも実行可能）
@@ -314,7 +297,7 @@ bool FlightCommandService::canExecute() const {
 
     // Check calibration status
     // キャリブレーション状態をチェック
-    if (!globals::g_landing_handler.canArm()) {
+    if (flight_readiness_ && !flight_readiness_->canArm()) {
         ESP_LOGW(TAG, "Calibration not completed - command rejected");
         // Block execution - calibration is required for safe flight
         // キャリブレーション必須（安全な飛行のため）
@@ -348,13 +331,12 @@ void FlightCommandService::sendControlInput(float throttle, float roll, float pi
 // Get current altitude estimate
 // 現在の高度推定値を取得
 float FlightCommandService::getCurrentAltitude() const {
-    // Get altitude from sensor fusion (NED frame, so negative = up)
-    // センサーフュージョンから高度を取得（NEDフレームなので負の値が上方向）
-    auto state = globals::g_fusion.getState();
-
-    // Return positive altitude (negate Z in NED frame)
-    // 正の高度を返す（NEDフレームのZを反転）
-    return -state.position.z;
+    // Get altitude from state estimator interface
+    // 状態推定インターフェースから高度を取得
+    if (state_estimator_) {
+        return state_estimator_->getAltitude();
+    }
+    return 0.0f;
 }
 
 // ============================================================================
@@ -373,9 +355,8 @@ void FlightCommandService::updateJumpCommand(float dt, float current_altitude) {
     // Get raw ToF altitude (used throughout jump command)
     // ToF生値を取得（Jumpコマンド全体で使用）
     float tof_altitude = 0.0f;
-    if (globals::g_tof_bottom_buffer_count > 0) {
-        int tof_latest_idx = (globals::g_tof_bottom_buffer_index - 1 + globals::REF_BUFFER_SIZE) % globals::REF_BUFFER_SIZE;
-        tof_altitude = globals::g_tof_bottom_buffer[tof_latest_idx];
+    if (state_estimator_) {
+        state_estimator_->getToFAltitude(tof_altitude);
     }
 
     switch (phase_) {
@@ -703,15 +684,17 @@ void FlightCommandService::updateMoveHorizontalCommand(float dt, float current_a
             {
                 // Enable POSITION_HOLD mode and set target position
                 // POSITION_HOLD モードを有効化し、目標位置を設定
-                auto state = globals::g_fusion.getState();
-                float current_x = state.position.x;
-                float current_y = state.position.y;
+                float current_x = 0.0f, current_y = 0.0f;
+                if (state_estimator_) {
+                    state_estimator_->getPositionXY(current_x, current_y);
+                }
 
                 // Capture current position, then override setpoint with target
                 // 現在位置をキャプチャ後、セットポイントを目標位置に上書き
-                g_position_controller.capturePosition(current_x, current_y);
-                g_position_controller.pos_setpoint_x = params_.target_pos_x;
-                g_position_controller.pos_setpoint_y = params_.target_pos_y;
+                if (position_control_) {
+                    position_control_->capturePosition(current_x, current_y);
+                    position_control_->setPositionSetpoint(params_.target_pos_x, params_.target_pos_y);
+                }
 
                 ESP_LOGI(TAG, "MOVE_HORIZONTAL: Moving from (%.2f, %.2f) to (%.2f, %.2f) m",
                          current_x, current_y, params_.target_pos_x, params_.target_pos_y);
@@ -736,9 +719,12 @@ void FlightCommandService::updateMoveHorizontalCommand(float dt, float current_a
 
                 // Check if position reached
                 // 位置到達チェック
-                auto state = globals::g_fusion.getState();
-                float error_x = params_.target_pos_x - state.position.x;
-                float error_y = params_.target_pos_y - state.position.y;
+                float pos_x = 0.0f, pos_y = 0.0f;
+                if (state_estimator_) {
+                    state_estimator_->getPositionXY(pos_x, pos_y);
+                }
+                float error_x = params_.target_pos_x - pos_x;
+                float error_y = params_.target_pos_y - pos_y;
                 float error_dist = sqrtf(error_x * error_x + error_y * error_y);
 
                 if (error_dist < 0.05f) {
@@ -752,7 +738,7 @@ void FlightCommandService::updateMoveHorizontalCommand(float dt, float current_a
                 static int move_log_counter = 0;
                 if (++move_log_counter >= 100) {
                     ESP_LOGI(TAG, "MOVE_HORIZONTAL: pos=(%.2f, %.2f), target=(%.2f, %.2f), error=%.3f m",
-                             state.position.x, state.position.y,
+                             pos_x, pos_y,
                              params_.target_pos_x, params_.target_pos_y, error_dist);
                     move_log_counter = 0;
                 }
@@ -775,8 +761,12 @@ void FlightCommandService::updateMoveHorizontalCommand(float dt, float current_a
 // Get current yaw angle estimate [rad]
 // 現在のヨー角推定値を取得 [rad]
 float FlightCommandService::getCurrentYaw() const {
-    auto state = globals::g_fusion.getState();
-    return state.yaw;
+    // Get yaw from state estimator interface
+    // 状態推定インターフェースからヨー角を取得
+    if (state_estimator_) {
+        return state_estimator_->getYaw();
+    }
+    return 0.0f;
 }
 
 // Constrain helper function
