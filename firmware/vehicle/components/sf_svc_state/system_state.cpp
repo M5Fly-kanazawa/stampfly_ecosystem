@@ -5,7 +5,6 @@
  */
 
 #include "system_state.hpp"
-#include "control_arbiter.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
 

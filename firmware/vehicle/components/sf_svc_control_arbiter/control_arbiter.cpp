@@ -5,7 +5,6 @@
  */
 
 #include "control_arbiter.hpp"
-#include "system_state.hpp"
 #include "esp_log.h"
 #include <algorithm>
 
@@ -83,9 +82,9 @@ void ControlArbiter::updateFromESPNOW(uint16_t throttle, uint16_t roll,
         espnow_count_++;
         xSemaphoreGive(mutex_);
 
-        // Update SystemStateManager with active control source
-        // SystemStateManagerにアクティブ制御ソースを通知
-        SystemStateManager::getInstance().updateControlSource(ControlSource::ESPNOW);
+        // Notify via callback if registered
+        // コールバックが登録されていれば通知
+        if (on_source_change_) on_source_change_(ControlSource::ESPNOW);
     }
 }
 
@@ -104,9 +103,9 @@ void ControlArbiter::updateFromUDP(uint16_t throttle, uint16_t roll,
         udp_count_++;
         xSemaphoreGive(mutex_);
 
-        // Update SystemStateManager with active control source
-        // SystemStateManagerにアクティブ制御ソースを通知
-        SystemStateManager::getInstance().updateControlSource(ControlSource::UDP);
+        // Notify via callback if registered
+        // コールバックが登録されていれば通知
+        if (on_source_change_) on_source_change_(ControlSource::UDP);
     }
 }
 
@@ -125,9 +124,9 @@ void ControlArbiter::updateFromWebSocket(float throttle, float roll,
         ws_count_++;
         xSemaphoreGive(mutex_);
 
-        // Update SystemStateManager with active control source
-        // SystemStateManagerにアクティブ制御ソースを通知
-        SystemStateManager::getInstance().updateControlSource(ControlSource::WEBSOCKET);
+        // Notify via callback if registered
+        // コールバックが登録されていれば通知
+        if (on_source_change_) on_source_change_(ControlSource::WEBSOCKET);
     }
 }
 

@@ -595,6 +595,12 @@ esp_err_t communication()
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "ControlArbiter init failed: %s", esp_err_to_name(ret));
         }
+
+        // Bridge control source changes to SystemStateManager
+        // 制御ソース変更を SystemStateManager に橋渡し
+        arbiter.setOnSourceChange([](stampfly::ControlSource source) {
+            stampfly::SystemStateManager::getInstance().updateControlSource(source);
+        });
     }
 
     // SystemStateManager is already initialized in main.cpp before all other components

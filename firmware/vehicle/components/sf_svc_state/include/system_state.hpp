@@ -18,12 +18,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "stampfly_state.hpp"
+#include "control_types.hpp"
 
 namespace stampfly {
-
-// Forward declarations
-// 前方宣言
-enum class ControlSource : uint8_t;
 
 /**
  * @brief Flight command type (defined here to avoid circular dependency)

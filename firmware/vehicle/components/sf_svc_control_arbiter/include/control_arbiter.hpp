@@ -12,44 +12,12 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "control_types.hpp"
 
 namespace stampfly {
-
-/**
- * @brief Control input source enumeration
- *        制御入力ソース列挙
- */
-enum class ControlSource : uint8_t {
-    NONE = 0,       ///< No source active / ソースなし
-    ESPNOW,         ///< ESP-NOW from Controller / ESP-NOW
-    UDP,            ///< UDP from Controller / UDP
-    WEBSOCKET,      ///< WebSocket from GCS / WebSocket
-};
-
-/**
- * @brief Communication mode enumeration
- *        通信モード列挙
- */
-enum class CommMode : uint8_t {
-    ESPNOW = 0,     ///< ESP-NOW mode (default) / ESP-NOWモード
-    UDP = 1,        ///< UDP mode / UDPモード
-};
-
-/**
- * @brief Normalized control input structure
- *        正規化済み制御入力構造体
- */
-struct ControlInput {
-    float throttle;         ///< [0, 1] normalized throttle / 正規化スロットル
-    float roll;             ///< [-1, 1] normalized roll / 正規化ロール
-    float pitch;            ///< [-1, 1] normalized pitch / 正規化ピッチ
-    float yaw;              ///< [-1, 1] normalized yaw / 正規化ヨー
-    uint8_t flags;          ///< Control flags / 制御フラグ
-    ControlSource source;   ///< Input source / 入力ソース
-    uint32_t timestamp_ms;  ///< Timestamp in ms / タイムスタンプ(ms)
-};
 
 /**
  * @brief Control Arbiter - manages control inputs from multiple sources
@@ -192,6 +160,28 @@ public:
     uint32_t getTimeSinceLastInput() const;
 
     // ========================================================================
+    // Callback
+    // コールバック
+    // ========================================================================
+
+    /// Callback type for control source change notifications
+    /// 制御ソース変更通知用コールバック型
+    using SourceChangeCallback = std::function<void(ControlSource)>;
+
+    /**
+     * @brief Set callback for control source changes
+     *        制御ソース変更時のコールバックを設定
+     *
+     * Called when a new control input is received.
+     * Used by vehicle/main to bridge to SystemStateManager.
+     * 新しい制御入力を受信した際に呼ばれる。
+     * vehicle/main が SystemStateManager への橋渡しに使用。
+     *
+     * @param cb Callback function / コールバック関数
+     */
+    void setOnSourceChange(SourceChangeCallback cb) { on_source_change_ = std::move(cb); }
+
+    // ========================================================================
     // Timeout Configuration
     // タイムアウト設定
     // ========================================================================
@@ -274,6 +264,10 @@ private:
     uint32_t espnow_count_ = 0;
     uint32_t udp_count_ = 0;
     uint32_t ws_count_ = 0;
+
+    // Callback
+    // コールバック
+    SourceChangeCallback on_source_change_;
 
     // Constants
     static constexpr uint16_t ADC_CENTER = 2048;
