@@ -3,6 +3,7 @@ idf_component_register(
         "main.cpp"
         "globals.cpp"
         "init.cpp"
+        "platform_context.cpp"
         "tasks/imu_task.cpp"
         "tasks/control_task.cpp"
         "tasks/optflow_task.cpp"

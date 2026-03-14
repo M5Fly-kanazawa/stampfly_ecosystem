@@ -44,6 +44,7 @@
 #include "flight_command.hpp"
 #include "flight_command_adapters.hpp"
 #include "command_queue.hpp"
+#include "platform_context.hpp"
 
 // NVS
 #include "nvs_flash.h"
@@ -658,6 +659,10 @@ esp_err_t communication()
 
         ESP_LOGI(TAG, "FlightCommandService dependencies injected");
     }
+
+    // Initialize platform context (aggregates all platform service references)
+    // プラットフォームコンテキストを初期化（全プラットフォームサービス参照を集約）
+    platform::initPlatformContext();
 
     // Restore comm mode from NVS
     // NVSから通信モードを復元
