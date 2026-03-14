@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.16)
 # ローカルコンポーネントと共通コンポーネントの両方を含める
 set(EXTRA_COMPONENT_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/components
+    ${CMAKE_CURRENT_SOURCE_DIR}/../platform/components
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
