@@ -250,7 +250,6 @@ esp_err_t actuators()
             return ret;
         }
         ESP_LOGI(TAG, "Motor Driver initialized");
-        g_motor_ptr = &g_motor;  // Set pointer for CLI access
     }
 
     // LED Manager (3つのLEDを管理: MCU=GPIO21, BODY=GPIO39x2)
@@ -281,7 +280,7 @@ esp_err_t actuators()
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "Buzzer init failed: %s", esp_err_to_name(ret));
         } else {
-            g_buzzer_ptr = &g_buzzer;  // Set pointer for CLI access
+            // g_buzzer_ptr set by initPlatformContext()
             g_buzzer.loadFromNVS();    // Load mute setting from NVS
             ESP_LOGI(TAG, "Buzzer initialized");
         }
@@ -316,7 +315,7 @@ esp_err_t estimators()
     }
 
     // Initialize magnetometer calibrator and load from NVS
-    g_mag_calibrator = &g_mag_cal;  // Set global pointer for CLI access
+    // g_mag_calibrator set by initPlatformContext()
     if (g_mag_cal.loadFromNVS() == ESP_OK) {
         ESP_LOGI(TAG, "Magnetometer calibration loaded from NVS");
         // デバッグ: isCalibrated()の状態を確認
@@ -423,7 +422,7 @@ esp_err_t estimators()
                      sensor_enables.optical_flow, sensor_enables.barometer,
                      sensor_enables.tof, sensor_enables.magnetometer);
             state.setESKFInitialized(true);
-            g_fusion_ptr = &g_fusion;  // Set pointer for CLI access
+            // g_fusion_ptr set by initPlatformContext()
 
             // ジャイロバイアスキャリブレーション（静止状態で実行）
             if (g_imu.isInitialized()) {
@@ -583,8 +582,7 @@ esp_err_t communication()
 
         g_comm.start();
 
-        // Set global pointer for CLI access
-        g_comm_ptr = &g_comm;
+        // g_comm_ptr set by initPlatformContext()
 
         ESP_LOGI(TAG, "ControllerComm initialized");
     }
@@ -745,8 +743,7 @@ esp_err_t logger()
     // Set start callback (ESKF reset + mag_ref setting)
     g_logger.setStartCallback(onBinlogStart);
 
-    // Set global pointer for CLI access
-    g_logger_ptr = &g_logger;
+    // g_logger_ptr set by initPlatformContext()
 
     ESP_LOGI(TAG, "Logger initialized at %dHz", logger::RATE_HZ);
     return ESP_OK;

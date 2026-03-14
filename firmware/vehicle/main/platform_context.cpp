@@ -47,7 +47,16 @@ void initPlatformContext()
     // Health
     s_context.health = &globals::g_health;
 
-    ESP_LOGI(TAG, "Platform context initialized");
+    // Set CLI-accessible global pointers from context
+    // CLI アクセス用グローバルポインタをコンテキストから設定
+    g_mag_calibrator = s_context.mag_cal;
+    g_motor_ptr = s_context.motor;
+    g_buzzer_ptr = s_context.buzzer;
+    g_comm_ptr = s_context.comm;
+    g_logger_ptr = s_context.logger;
+    g_fusion_ptr = s_context.fusion;
+
+    ESP_LOGI(TAG, "Platform context initialized (CLI pointers set)");
 }
 
 }  // namespace platform
