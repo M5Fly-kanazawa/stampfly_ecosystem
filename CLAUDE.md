@@ -349,6 +349,11 @@ StampFly Ecosystem is an educational/research platform for drone control enginee
 
 **Current Status:** Vehicle firmware (ACRO mode skeleton) and controller firmware are implemented and buildable.
 
+**保留案件: プラットフォームレイヤー分離リファクタリング**
+- ブランチ `refactor/platform-layer` で Phase 1〜3 まで進めていたが、mainの大幅改修と衝突するため一時保留（2026-04-07）
+- mainが一区切りついた時点で、最新mainから再開予定
+- 詳細は auto-memory の `project_platform_refactor_suspended.md` を参照
+
 ## Architecture
 
 The project uses a **responsibility-based directory structure**:
