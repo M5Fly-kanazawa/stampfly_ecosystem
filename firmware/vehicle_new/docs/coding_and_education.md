@@ -28,6 +28,54 @@ vehicle_newのコードは単なるファームウェアではなく、ドロー
 | **略語禁止** | `s`, `p`, `r` ではなく `state`, `params`, `roll` |
 | **ネスト2段まで** | 深いif/forは早期returnか関数分割で解消 |
 | **Pub-Subで分離** | コンポーネント間の直接呼び出しを禁止 |
+| **@designタグ必須** | クラス・インターフェース・状態遷移の実装に設計文書の参照を記載 |
+| **設計矛盾の即時報告** | 実装中に設計文書との矛盾・不都合を発見したら、実装を進めず報告・議論する |
+
+### @designタグ（設計トレーサビリティ）
+
+クラス定義、インターフェース実装、状態遷移コールバックには `@design` タグで設計文書の該当箇所を参照すること。内部ヘルパーや自明な実装には不要。
+
+```cpp
+/// Compute control output from state estimate and setpoint
+/// 推定値とセットポイントから制御出力を計算
+///
+/// @design architecture.md §4 — IController interface definition
+/// @design detailed_design.md §4 — Control interface: compute/reset/onModeChange
+/// @design requirements.md §4 — Component #6: replaceable control
+///
+ControlOutput PidController::compute(
+    const StateEstimate& state,
+    const CommandSetpoint& setpoint,
+    float dt)
+{
+    // ...
+}
+```
+
+```cpp
+/// State transition: FLYING → IDLE_GROUND (crash or pilot DISARM)
+/// 状態遷移: FLYING → IDLE_GROUND（衝突検知 or パイロットDISARM）
+///
+/// @design architecture.md §4 — FAILSAFE as event, State Mgr transitions
+/// @design detailed_design.md §3 — onExit/onEnter callback table
+/// @design requirements.md §2 — Transition: FLYING → IDLE_GROUND
+///
+void StateManager::onEnterIdleGround()
+{
+    motor.stop();           // @design detailed_design.md §3 — モーター停止
+    eskf.reset();           // @design detailed_design.md §3 — ESKFリセット
+    buzzer.play(DISARM);    // @design detailed_design.md §3 — ブザー(disarm音)
+}
+```
+
+### 設計矛盾の発見時の対応
+
+実装中に設計文書（requirements.md / architecture.md / detailed_design.md）との矛盾や不都合が明らかになった場合：
+
+1. **実装を進めずに立ち止まる** — 矛盾を抱えたまま実装しない
+2. **矛盾の内容を具体的に報告する** — どの設計文書のどの項目と、実装上の何が矛盾するか
+3. **議論して設計を更新する** — 設計変更が必要なら文書を更新してからコードに反映する
+4. **変更履歴を残す** — コミットメッセージに設計変更の理由を記載する
 
 ### コードスタイル例
 
@@ -221,6 +269,8 @@ vehicle_new code is not just firmware — it must serve as **exemplary source co
 | **No abbreviations** | `state`, `params`, `roll` — not `s`, `p`, `r` |
 | **Max 2 levels of nesting** | Use early returns or function extraction |
 | **Pub-Sub separation** | No direct cross-component calls |
+| **@design tag required** | Reference design docs on class/interface/state transition implementations |
+| **Report design conflicts** | If implementation reveals conflicts with design docs, stop and discuss before proceeding |
 
 ## 3. Examples Plan
 
