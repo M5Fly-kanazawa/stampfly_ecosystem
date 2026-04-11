@@ -63,7 +63,7 @@
 
 ### 通信方式: 軽量Pub-Sub
 
-PX4のuORBやROSのDDSをコピーするのではなく、StampFlyの制約に最適化した独自設計。
+StampFlyの制約に最適化した独自の軽量設計。
 
 **特徴:**
 - 同一MCU内のタスク間通信のみ（プロセス間通信不要）
@@ -436,7 +436,7 @@ This document defines the architecture design of vehicle_new, based on the requi
 
 ### Communication Method: Lightweight Pub-Sub
 
-Custom design optimized for StampFly constraints — not a copy of PX4 uORB or ROS DDS.
+Lightweight custom design optimized for StampFly constraints.
 
 **Characteristics:**
 - Intra-MCU task communication only (no IPC needed)

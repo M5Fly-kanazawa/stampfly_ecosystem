@@ -22,7 +22,7 @@
 
 ### 設計方針
 
-- PX4 uORBやROS DDSのコピーではない、StampFly独自の軽量設計
+- StampFlyの制約に最適化した独自の軽量設計
 - 同一MCU内のタスク間通信のみ
 - シリアライズ不要（構造体メモリ直接共有）
 - 全トピックはコンパイル時に確定
@@ -409,7 +409,7 @@ This document defines the detailed design of vehicle_new, based on the architect
 
 ### Design Policy
 
-- Lightweight custom design optimized for StampFly (not a copy of uORB/DDS)
+- Lightweight custom design optimized for StampFly constraints
 - Intra-MCU task communication only, no serialization
 - All topics determined at compile time
 - Internal buffer policy selected per data flow characteristics
