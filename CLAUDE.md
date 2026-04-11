@@ -463,6 +463,23 @@ When developing this codebase, follow this order:
 - **Analysis/Tools**: Python (Jupyter notebooks, scripts)
 - **Protocol Spec**: YAML or Protocol Buffers
 
+## vehicle_new（次世代機体ファームウェア）
+
+`firmware/vehicle_new/` の実装・修正を行う場合は、**作業開始前に必ず以下の4文書を読むこと:**
+
+1. `firmware/vehicle_new/docs/requirements.md` — 要件定義書
+2. `firmware/vehicle_new/docs/architecture.md` — アーキテクチャ設計書
+3. `firmware/vehicle_new/docs/detailed_design.md` — 詳細設計書
+4. `firmware/vehicle_new/docs/coding_and_education.md` — **コーディング方針・教育計画（必読）**
+
+**特に重要な原則:**
+- コードは**ドローンファームを作ろうとする人が参考にできる模範的なソースコード**であること
+- **可読性と簡潔さ**を兼ね備えること（1関数50行以内、ネスト2段まで、略語禁止）
+- **バイリンガルコメント**（英語→日本語）を全関数・全ブロックに記載
+- コンポーネント間は**Pub-Subトピック経由**で通信（直接呼び出し禁止）
+- **マジックナンバー禁止** — 全数値にconfig定数名またはパラメータ名
+- Exampleは**単独ビルド可能**、**コメントは本体より多くてもいい**
+
 ## SCI26 原稿
 
 `docs/sci26/` に SCI26 OS04 の学会原稿（LaTeX）がある。原稿の執筆・推敲を行う場合は、必ず `docs/sci26/WRITING_POLICY.md` を最初に読み、方針に従うこと。
