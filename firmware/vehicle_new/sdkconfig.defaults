@@ -1,0 +1,78 @@
+# StampFly vehicle_new — Default SDK Configuration
+# StampFly vehicle_new — デフォルトSDK設定
+#
+# @design requirements.md §5-6 — Sensors and actuators (ESP32-S3)      [--]
+# @design detailed_design.md §8 — Memory layout                        [--]
+
+# Target: ESP32-S3 (M5Stamp S3)
+CONFIG_IDF_TARGET="esp32s3"
+
+# Flash size (8MB)
+# フラッシュサイズ（8MB）
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# Custom partition table
+# カスタムパーティションテーブル
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# FreeRTOS: 1kHz tick, dual core
+# FreeRTOS: 1kHzティック、デュアルコア
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_UNICORE=n
+
+# CPU frequency: 240MHz
+# CPU周波数: 240MHz
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# USB CDC Console
+# USBシリアルコンソール
+CONFIG_ESP_CONSOLE_USB_CDC=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Log level
+# ログレベル
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+# Watchdog timeout
+# ウォッチドッグタイムアウト
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+
+# System event task stack (WiFi requires larger stack)
+# システムイベントタスクスタック（WiFi用に拡大）
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# WiFi for ESP-NOW and telemetry
+# WiFi（ESP-NOWおよびテレメトリ用）
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+CONFIG_ESP_WIFI_IRAM_OPT=y
+
+# NVS for parameter persistence
+# NVS（パラメータ永続化用）
+CONFIG_NVS_DEFAULT_PART_SIZE=0x6000
+
+# SPI (IMU, OptFlow)
+CONFIG_SPI_MASTER_IN_IRAM=y
+
+# I2C (ToF, Mag, Baro, Power)
+CONFIG_I2C_ISR_IRAM_SAFE=y
+
+# GPIO
+CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y
+
+# LEDC PWM (Motors)
+# LEDC PWM（モーター用）
+CONFIG_LEDC_CTRL_FUNC_IN_IRAM=y
+
+# RMT (WS2812 LED)
+CONFIG_RMT_ISR_IRAM_SAFE=y
+
+# C++ exceptions (required by some sensor drivers)
+# C++例外（一部センサドライバで必要）
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
