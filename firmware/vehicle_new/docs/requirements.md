@@ -50,7 +50,7 @@ IDLE_GROUND
 - 親状態が共通処理を保証
 - TAKEOFF/LANDINGは専用モード（離着陸マネージャーが統括）
 - シーケンス（FLIP, AUTO_LAND等）は将来拡張可能
-- FAILSAFEの位置づけは設計フェーズで決定
+- FAILSAFEは状態ではなくイベント — フェイルセーフコンポーネントが `system.alert` を発行し、状態管理が既存モードへの遷移で対応する
 
 ### 遷移条件
 
@@ -258,7 +258,7 @@ IDLE_GROUND
 - Parent state guarantees common behavior
 - TAKEOFF/LANDING are dedicated modes (managed by Takeoff/Landing Manager)
 - Sequences (FLIP, AUTO_LAND, etc.) are extensible for future use
-- FAILSAFE positioning to be determined during design phase
+- FAILSAFE is an event, not a state — Failsafe component publishes `system.alert`, State Management responds with mode transitions
 
 ### Transition Conditions
 

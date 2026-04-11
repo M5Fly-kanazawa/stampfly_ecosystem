@@ -198,7 +198,7 @@
     \item 親状態が共通処理を保証
     \item TAKEOFF/LANDINGは専用モード（離着陸マネージャーが統括）
     \item シーケンス（FLIP, AUTO\_LAND等）は将来拡張可能
-    \item FAILSAFEの位置づけは設計フェーズで決定
+    \item FAILSAFEは状態ではなくイベント --- フェイルセーフが \texttt{system.alert} を発行し、状態管理が既存モードへの遷移で対応
 \end{itemize}
 
 \subsection{遷移条件 / Transition Conditions}
