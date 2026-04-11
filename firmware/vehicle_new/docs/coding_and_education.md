@@ -31,17 +31,31 @@ vehicle_newのコードは単なるファームウェアではなく、ドロー
 | **@designタグ必須** | クラス・インターフェース・状態遷移の実装に設計文書の参照を記載 |
 | **設計矛盾の即時報告** | 実装中に設計文書との矛盾・不都合を発見したら、実装を進めず報告・議論する |
 
-### @designタグ（設計トレーサビリティ）
+### @designタグ（設計トレーサビリティ）— 本プロジェクトの特徴
 
-クラス定義、インターフェース実装、状態遷移コールバックには `@design` タグで設計文書の該当箇所を参照すること。内部ヘルパーや自明な実装には不要。
+**設計と実装の対応をコード上で可視化する。** クラス定義、インターフェース実装、状態遷移コールバックには `@design` タグで設計文書の該当箇所を参照し、判定ステータスを付記すること。内部ヘルパーや自明な実装には不要。
+
+#### 判定ステータス
+
+| ステータス | 意味 |
+|-----------|------|
+| `[OK]` | 設計通りに実装済み・確認済み |
+| `[NG]` | 未実装または設計と乖離あり（理由を併記） |
+| `[--]` | 未チェック（実装直後、レビュー前） |
+
+**リリース時点で全ての@designタグが `[OK]` であること。** `[NG]` や `[--]` が残っている状態はリリース不可。
+
+#### 例: 全項目OK（完成状態）
 
 ```cpp
 /// Compute control output from state estimate and setpoint
 /// 推定値とセットポイントから制御出力を計算
 ///
-/// @design architecture.md §4 — IController interface definition
-/// @design detailed_design.md §4 — Control interface: compute/reset/onModeChange
-/// @design requirements.md §4 — Component #6: replaceable control
+/// @design architecture.md §4 — IController interface definition       [OK]
+/// @design detailed_design.md §4 — Control interface: compute/reset    [OK]
+/// @design requirements.md §4 — Component #6: replaceable control      [OK]
+/// @design coding_and_education.md §2 — Bilingual comments             [OK]
+/// @design coding_and_education.md §2 — Max 50 lines                   [OK]
 ///
 ControlOutput PidController::compute(
     const StateEstimate& state,
@@ -52,20 +66,36 @@ ControlOutput PidController::compute(
 }
 ```
 
+#### 例: 中間段階（NGあり）
+
 ```cpp
 /// State transition: FLYING → IDLE_GROUND (crash or pilot DISARM)
 /// 状態遷移: FLYING → IDLE_GROUND（衝突検知 or パイロットDISARM）
 ///
-/// @design architecture.md §4 — FAILSAFE as event, State Mgr transitions
-/// @design detailed_design.md §3 — onExit/onEnter callback table
-/// @design requirements.md §2 — Transition: FLYING → IDLE_GROUND
+/// @design architecture.md §4 — FAILSAFE as event, State Mgr transitions  [OK]
+/// @design detailed_design.md §3 — onEnter: ESKFリセット                   [OK]
+/// @design detailed_design.md §3 — onEnter: ブザー(disarm音)               [NG] sf_notify未実装
+/// @design detailed_design.md §3 — onEnter: モーター停止                   [OK]
 ///
 void StateManager::onEnterIdleGround()
 {
-    motor.stop();           // @design detailed_design.md §3 — モーター停止
-    eskf.reset();           // @design detailed_design.md §3 — ESKFリセット
-    buzzer.play(DISARM);    // @design detailed_design.md §3 — ブザー(disarm音)
+    motor.stop();
+    eskf.reset();
+    // TODO: buzzer.play(DISARM) — sf_notify未実装
 }
+```
+
+#### 例: 実装直後（未チェック）
+
+```cpp
+/// @design detailed_design.md §2 — Topic<T, BufferPolicy, Size>        [--]
+/// @design architecture.md §3 — Lightweight Pub-Sub                    [--]
+///
+template<typename T, typename Policy, int Size>
+class Topic {
+    // ...
+};
+```
 ```
 
 ### 設計矛盾の発見時の対応
