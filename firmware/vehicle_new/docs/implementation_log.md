@@ -31,7 +31,8 @@
 
 | 日付 | 開始時刻 | 終了時刻 | 作業時間 | 作業内容 | 成果物 | コミット |
 |------|---------|---------|---------|---------|--------|---------|
-| 2026-04-12 | 08:26 | 08:40 | 14min | ESP-IDFスケルトン + sf_core（Pub-Sub、データ型、トピック定義） | CMakeLists.txt, partitions.csv, sdkconfig.defaults, main.cpp, config.hpp, topic.hpp, topics.hpp, data_types.hpp, params.cpp | — |
+| 2026-04-12 | 08:26 | 08:40 | 14min | ESP-IDFスケルトン + sf_core（Pub-Sub、データ型、トピック定義） | CMakeLists.txt, partitions.csv, sdkconfig.defaults, main.cpp, config.hpp, topic.hpp, topics.hpp, data_types.hpp, params.cpp | 9bfb04b |
+| 2026-04-12 | 08:49 | 08:51 | 2min | sf_state（状態管理：enum定義、StateManager、遷移テーブル、アラート処理） | flight_state.hpp, state_manager.hpp, state_manager.cpp | — |
 
 ## 集計
 
@@ -50,7 +51,7 @@
 | コンポーネント | 着手日 | 完了日 | 作業時間 | LOC | 状態 |
 |--------------|-------|-------|---------|-----|------|
 | sf_core（Pub-Sub、データ型、パラメータ） | 2026-04-12 | — | — | — | 実装中（トピック完了、パラメータTODO） |
-| sf_state（状態管理） | | | | | 未着手 |
+| sf_state（状態管理） | 2026-04-12 | 2026-04-12 | 2min | 3 | ビルド成功 |
 | sf_estimator（インターフェース） | | | | | 未着手 |
 | sf_estimator_eskf（ESKF実装） | | | | | 未着手 |
 | sf_controller（インターフェース） | | | | | 未着手 |
