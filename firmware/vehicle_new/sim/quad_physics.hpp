@@ -72,8 +72,12 @@ struct ContactParams {
     // Critical damping: c_crit = 2*sqrt(k*m) = 2*sqrt(500*0.037) = 8.6
     // Underdamped (c < c_crit) for slight bounce
     // 不足減衰（c < c_crit）で軽いバウンス
-    float k_contact  = 500.0f;    // [N/m] moderate stiffness
-    float c_contact  = 6.0f;      // [N·s/m] slightly underdamped
+    // Contact spring: pen = mg/k = 0.363/726 ≈ 0.5mm at rest
+    // 接触バネ: 静止時の凹み = mg/k = 0.363/726 ≈ 0.5mm
+    // With 10x substep (dt=0.25ms), k=726 is stable
+    // 10倍サブステップ（dt=0.25ms）でk=726は安定
+    float k_contact  = 726.0f;    // [N/m]
+    float c_contact  = 8.0f;      // [N·s/m] (c_crit = 2*sqrt(726*0.037) = 10.4)
     float mu_friction = 0.6f;     // Coulomb friction coefficient
 
     // Ground plane at z = 0 (NED: z positive = down)
@@ -162,10 +166,14 @@ public:
     // メインシミュレーションステップ
     // =========================================================================
 
+    /// Physics sub-step count per control step
+    /// 制御ステップあたりの物理サブステップ数
+    static constexpr int PHYSICS_SUBSTEPS = 10;
+
     void step(const float motor_cmd[4], float dt)
     {
-        // Motor dynamics (1st-order lag)
-        // モーターダイナミクス（1次遅れ）
+        // Motor dynamics at control rate
+        // 制御レートでのモーターダイナミクス
         float avg = 0;
         for (int i = 0; i < 4; i++) {
             float cmd = fmaxf(0, fminf(1.0f, motor_cmd[i]));
@@ -175,6 +183,17 @@ public:
         }
         state_.avg_duty = avg * 0.25f;
 
+        // Run physics at higher rate (10x control rate)
+        // 物理を高レートで実行（制御レートの10倍）
+        float sub_dt = dt / PHYSICS_SUBSTEPS;
+        for (int sub = 0; sub < PHYSICS_SUBSTEPS; sub++) {
+            physicsSubStep(sub_dt);
+        }
+    }
+
+    // physicsSubStep is internal — public API uses step()
+    void physicsSubStep(float dt)
+    {
         // Compute motor forces and torques
         // モーター力とトルクを計算
         float thrust[4];
@@ -541,10 +560,12 @@ private:
 
         // Rotational damping from ground contact
         // 地面接触による回転減衰
-        float rot_factor = 1.0f / (1.0f + 20.0f * dt * n);
+        // Stronger damping to prevent tumbling away
+        // 転がって飛んでいくのを防止する強い減衰
+        float rot_factor = 1.0f / (1.0f + 100.0f * dt * n);
         state_.angular_rate.x *= rot_factor;
         state_.angular_rate.y *= rot_factor;
-        state_.angular_rate.z *= (1.0f / (1.0f + 5.0f * dt * n));
+        state_.angular_rate.z *= (1.0f / (1.0f + 30.0f * dt * n));
     }
 
     // =========================================================================
