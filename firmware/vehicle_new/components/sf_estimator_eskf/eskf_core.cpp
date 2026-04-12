@@ -278,6 +278,14 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     Si[2][1] = (S[0][1]*S[2][0]-S[0][0]*S[2][1]) * inv_det;
     Si[2][2] = (S[0][0]*S[1][1]-S[0][1]*S[1][0]) * inv_det;
 
+    // Chi-squared outlier rejection: d² = y^T S⁻¹ y
+    // χ²外れ値棄却: d² = y^T S⁻¹ y
+    float d2 = 0;
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            d2 += innov[i] * Si[i][j] * innov[j];
+    if (d2 > cfg_.accel_chi2_gate) return;
+
     // K = P*H^T*S^-1 (Nx3)
     float K[N][3];
     for (int i = 0; i < N; i++) {
@@ -580,6 +588,42 @@ void EskfCore::holdPositionVelocity()
 {
     pos_ = {0, 0, 0};
     vel_ = {0, 0, 0};
+}
+
+void EskfCore::setAttitudeFromGravity(const Vec3& accel_avg)
+{
+    // Compute roll/pitch from gravity vector direction
+    // 重力ベクトルの方向からroll/pitchを計算
+    // accel_avg at rest ≈ [0, 0, -g] in NED body (level)
+    // Non-level: gravity projects onto x,y axes
+    //
+    // roll  = atan2(ay, -az)  (rotation around x to align gravity with -z)
+    // pitch = atan2(-ax, sqrt(ay² + az²))
+    float roll  = atan2f(accel_avg.y, -accel_avg.z);
+    float pitch = atan2f(-accel_avg.x,
+                         sqrtf(accel_avg.y * accel_avg.y
+                             + accel_avg.z * accel_avg.z));
+    float yaw = 0;  // No heading reference from accel alone
+                     // 加速度だけではヘディング基準なし
+
+    // Set quaternion from Euler angles (ZYX convention)
+    // オイラー角からクォータニオンを設定（ZYX順）
+    // q = q_yaw * q_pitch * q_roll
+    Quat qr = Quat::from_rotvec(Vec3(roll, 0, 0));
+    Quat qp = Quat::from_rotvec(Vec3(0, pitch, 0));
+    Quat qy = Quat::from_rotvec(Vec3(0, 0, yaw));
+    q_ = qy * qp * qr;
+    q_.normalize();
+}
+
+void EskfCore::shrinkBiasCovariance(float factor)
+{
+    // Shrink bias covariance to trust calibration
+    // キャリブレーションを信頼するためバイアス共分散を縮小
+    for (int i = 0; i < 3; i++) {
+        P_.set_diag(BG_X + i, P_.data[BG_X + i][BG_X + i] * factor);
+        P_.set_diag(BA_X + i, P_.data[BA_X + i][BA_X + i] * factor);
+    }
 }
 
 // =============================================================================

@@ -132,6 +132,14 @@ public:
     /// Set accel bias (from calibration) / 加速度バイアスを設定（キャリブレーションから）
     void setAccelBias(const Vec3& bias) { ba_ = bias; }
 
+    /// Set initial attitude from gravity vector (roll/pitch from accel)
+    /// 重力ベクトルから初期姿勢を設定（加速度からroll/pitch）
+    void setAttitudeFromGravity(const Vec3& accel_avg);
+
+    /// Shrink bias covariance (trust calibration result)
+    /// バイアス共分散を縮小（キャリブレーション結果を信頼）
+    void shrinkBiasCovariance(float factor);
+
     /// Get active sensor mask / 有効センサマスクを取得
     uint16_t getActiveMask() const { return active_mask_; }
 

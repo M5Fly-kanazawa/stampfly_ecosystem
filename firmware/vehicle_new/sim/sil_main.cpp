@@ -3,15 +3,29 @@
  * @brief SIL Simulation — fly StampFly on PC with visualization
  *        SILシミュレーション — PC上でStampFlyを飛ばして可視化
  *
- * Full pipeline: Physics → Sensors(+noise) → ESKF → PID → Mixer → Motors
- * Output: CSV to stdout for plotting with plot_flight.py
+ * Reproduces the firmware startup sequence:
+ *   Phase1: Sensor init (1s)
+ *   Phase2: Sensor stabilization + calibration (2s)
+ *   Phase3: ESKF init from calibration data (instant)
+ *   IDLE:   ESKF running, pos/vel held, wait for ARM
+ *   ARM:    Motors start
+ *   TAKEOFF: resetPosVel + unfreeze accel bias
+ *   FLYING:  Full ESKF closed-loop control
+ *
+ * ファームの起動シーケンスを再現:
+ *   Phase1: センサ初期化（1秒）
+ *   Phase2: センサ安定化 + キャリブレーション（2秒）
+ *   Phase3: キャリブレーションデータからESKF初期化
+ *   IDLE:   ESKF動作中、pos/vel保持、ARM待ち
+ *   ARM:    モーター始動
+ *   離陸:   resetPosVel + accelBias解凍
+ *   飛行:   ESKF完全閉ループ制御
  *
  * Build & run: make run
  * Save CSV:    make csv
  * Plot:        make plot
  *
  * @design requirements.md §10 — SIL simulator                        [--]
- * @design noise_and_vibration_model.md — Noise/vibration model        [--]
  */
 
 #include <cstdio>
@@ -36,21 +50,14 @@ using namespace sf::sim;
 // =============================================================================
 // Mixer: thrust/torque → motor duty (matches sf_actuator)
 // ミキサー: 推力/トルク → モーターduty（sf_actuatorと一致）
-//
-// X-quad: M1(FR,CCW) M2(RR,CW) M3(RL,CCW) M4(FL,CW)
-// With quadratic thrust: duty = sqrt(thrust_normalized)
 // =============================================================================
 
 static void mixer(float thrust_cmd, const float torque[3], float duty[4],
                   float k_thrust)
 {
-    // Solve for individual motor thrusts
-    // 個別モーター推力を求める
     float L = 0.023f;
     float kappa = 0.00971f;
 
-    // Thrust allocation (same signs as quad_model.hpp)
-    // 推力配分（quad_model.hppと同じ符号）
     float t = thrust_cmd * 0.25f;
     float r = torque[0] / (4.0f * L);
     float p = torque[1] / (4.0f * L);
@@ -61,8 +68,6 @@ static void mixer(float thrust_cmd, const float torque[3], float duty[4],
     float t3 = t + r - p + y;  // M3 RL CCW
     float t4 = t + r + p - y;  // M4 FL CW
 
-    // Thrust → duty: inverse of quadratic model (duty = sqrt(T/k))
-    // 推力 → duty: 二次モデルの逆（duty = sqrt(T/k)）
     for (int i = 0; i < 4; i++) {
         float ti = (i == 0) ? t1 : (i == 1) ? t2 : (i == 2) ? t3 : t4;
         if (ti < 0) ti = 0;
@@ -70,6 +75,21 @@ static void mixer(float thrust_cmd, const float torque[3], float duty[4],
         if (duty[i] > 0.95f) duty[i] = 0.95f;
     }
 }
+
+// =============================================================================
+// Simulation timeline (matches firmware startup)
+// シミュレーションタイムライン（ファーム起動に対応）
+// =============================================================================
+
+// Phase timing / フェーズタイミング
+static constexpr float T_PHASE1_END  = 1.0f;   // Sensor init complete
+static constexpr float T_PHASE2_END  = 3.0f;   // Calibration complete, ESKF init
+static constexpr float T_ARM         = 4.0f;    // ARM command (like stick input)
+static constexpr float T_SIM_END     = 14.0f;   // Total simulation time
+
+// Calibration parameters / キャリブレーションパラメータ
+static constexpr int   CAL_SAMPLES   = 400;     // 1s at 400Hz (Phase2)
+static constexpr float TAKEOFF_ALT   = 0.03f;   // Takeoff detection threshold [m]
 
 // =============================================================================
 // Main Simulation
@@ -80,42 +100,29 @@ int main()
     srand(static_cast<unsigned>(time(nullptr)));
 
     fprintf(stderr, "=== StampFly SIL Simulation ===\n");
+    fprintf(stderr, "Startup sequence: Phase1(0-%.0fs) → Phase2(%.0f-%.0fs) → "
+            "IDLE(%.0fs) → ARM(%.0fs) → FLY\n\n",
+            T_PHASE1_END, T_PHASE1_END, T_PHASE2_END, T_PHASE2_END, T_ARM);
 
     // --- Initialize physics engine ---
     // --- 物理エンジンを初期化 ---
     QuadPhysics quad;
     QuadParams qp;
     ContactParams cp;
-    SensorNoiseParams np;
-    // Noise off for ESKF control validation
-    // ESKF制御検証のためノイズオフ
-    np.gyro_noise_density = 0; np.accel_noise_density = 0;
-    np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
-    np.gyro_bias_rw = 0; np.accel_bias_rw = 0;
-    np.vib_accel_k = 0; np.vib_gyro_k = 0;
-    np.tof_noise_base = 0; np.tof_noise_scale = 0;
-    np.baro_noise_std = 0; np.baro_drift_rate = 0;
+    SensorNoiseParams np;  // Default noise from 72-log analysis
     quad.init(qp, cp, np);
 
-    // --- Initialize ESKF ---
+    // --- Initialize ESKF (but don't enable yet — matches firmware Phase1-2) ---
+    // --- ESKF初期化（まだ有効化しない — ファームPhase1-2に対応）---
     EskfCore eskf;
     EskfConfig cfg;
     cfg.use_tof = true;
     cfg.use_baro = false;
     cfg.use_mag = false;
     cfg.use_flow = false;
-    // Q parameters matched to SIL sensor noise level
-    // SILセンサノイズレベルに合わせたQパラメータ
-    // Flight accel σ=1.54 m/s² → noise_density = 1.54/√400 = 0.077
-    // Flight gyro σ=1.05 rad/s → noise_density = 1.05/√400 = 0.053
-    // ESKF Q/R tuning for SIL
-    // - accel_noise controls predict bandwidth (larger = more IMU trust)
-    // - tof_noise controls observation strength (smaller = more ToF trust)
-    // Vehicle-tuned values: wider bandwidth lets ToF correct velocity faster
-    // 実機チューニング値: 広い帯域でToFが速度を速く補正
     cfg.accel_noise = 0.3f;
     cfg.gyro_noise = 0.009655f;
-    cfg.tof_noise = 0.01f;        // Slightly stronger ToF trust
+    cfg.tof_noise = 0.01f;
     eskf.init(cfg);
 
     // --- Initialize PIDs ---
@@ -136,53 +143,25 @@ int main()
 
     // --- Simulation parameters ---
     const float dt = 0.0025f;
-    const float sim_time = 10.0f;
-    const int steps = static_cast<int>(sim_time / dt);
-    const int tof_div = 4;   // ~100Hz (test: more frequent ToF updates)
+    const int steps = static_cast<int>(T_SIM_END / dt);
+    const int tof_div = 13;  // ~30Hz (400/13 ≈ 30.8Hz, matches real ToF rate)
     const float hover_thrust = qp.mass * qp.gravity;
     const float target_alt = 0.5f;
 
-    fprintf(stderr, "Duration: %.1fs at %.0fHz (%d steps)\n", sim_time, 1/dt, steps);
-    fprintf(stderr, "Target alt: %.2fm, Hover thrust: %.4fN\n\n", target_alt, hover_thrust);
+    fprintf(stderr, "Duration: %.1fs at %.0fHz (%d steps)\n",
+            T_SIM_END, 1/dt, steps);
+    fprintf(stderr, "Target alt: %.2fm, Hover thrust: %.4fN\n\n",
+            target_alt, hover_thrust);
 
-    // --- Startup calibration: collect bias from static sensors ---
-    // --- 起動キャリブレーション: 静的センサからバイアスを収集 ---
-    fprintf(stderr, "Calibrating (100 samples)...\n");
-    Vec3 accel_sum = {}, gyro_sum = {};
-    for (int i = 0; i < 100; i++) {
-        float zero_cmd[4] = {0, 0, 0, 0};
-        quad.step(zero_cmd, dt);
-        quad.updateBiases(dt);
-        SimSensors cal = quad.getSensors(dt);
-        accel_sum += Vec3(cal.accel.x, cal.accel.y, cal.accel.z);
-        gyro_sum += Vec3(cal.gyro.x, cal.gyro.y, cal.gyro.z);
-    }
+    // --- State tracking ---
+    bool eskf_ready = false;        // ESKF initialized and running
+    bool armed = false;             // Motors enabled
+    bool has_taken_off = false;     // Takeoff detected (one-shot)
+    bool is_flying = false;         // Airborne (pos/vel estimation active)
 
-    // Set ESKF initial biases from calibration
-    // キャリブレーションからESKF初期バイアスを設定
-    // Gyro bias = average gyro reading (should be near zero + bias)
-    // Accel bias = measured - expected
-    // 加速度バイアス = 測定値 - 期待値
-    // At rest, expected accel = [0, 0, -g] in NED body frame
-    // 静止時の期待加速度 = [0, 0, -g]（NED body frame）
-    // ba = accel_avg - [0, 0, -g] = [avg_x, avg_y, avg_z + g]
-    Vec3 gyro_avg = gyro_sum * (1.0f / 100.0f);
-    Vec3 accel_avg = accel_sum * (1.0f / 100.0f);
-
-    fprintf(stderr, "Gyro avg:   [%.4f %.4f %.4f] rad/s\n",
-            gyro_avg.x, gyro_avg.y, gyro_avg.z);
-    fprintf(stderr, "Accel avg:  [%.4f %.4f %.4f] m/s² (expect [0,0,%.2f])\n",
-            accel_avg.x, accel_avg.y, accel_avg.z, -qp.gravity);
-    Vec3 accel_bias(accel_avg.x - 0,
-                    accel_avg.y - 0,
-                    accel_avg.z - (-qp.gravity));  // = accel_avg.z + g
-    fprintf(stderr, "Accel bias: [%.4f %.4f %.4f] m/s²\n",
-            accel_bias.x, accel_bias.y, accel_bias.z);
-
-    // Set calibrated biases to ESKF
-    // キャリブレーション値をESKFに設定
-    eskf.setGyroBias(gyro_avg);
-    eskf.setAccelBias(accel_bias);
+    // Calibration accumulators / キャリブレーション累積
+    Vec3 cal_accel_sum = {}, cal_gyro_sum = {};
+    int cal_count = 0;
 
     // --- CSV header (stdout) ---
     printf("time,true_x,true_y,true_z,true_vz,"
@@ -199,63 +178,154 @@ int main()
 
     for (int step = 0; step < steps; step++) {
         float t = step * dt;
+        float zero_cmd[4] = {0, 0, 0, 0};
 
-        bool armed = (t >= 1.0f);
-
-        // --- Sensors ---
+        // --- Sensors (always available after Phase1) ---
+        // --- センサ（Phase1後は常に利用可能）---
         SimSensors sens = quad.getSensors(dt);
         quad.updateBiases(dt);
-
-        // --- ESKF predict + observe ---
         Vec3 accel(sens.accel.x, sens.accel.y, sens.accel.z);
         Vec3 gyro(sens.gyro.x, sens.gyro.y, sens.gyro.z);
-        eskf.predict(accel, gyro, dt);
-        eskf.updateAccelAttitude(accel);
-        if (step % tof_div == 0) {
-            eskf.updateToF(sens.tof_bottom);
-            eskf.updateToFVelocity(sens.tof_bottom, tof_div * dt);
+
+        // =============================================================
+        // Phase 1: Sensor init (t < 1s)
+        // フェーズ1: センサ初期化
+        // Physics runs but no control, no ESKF
+        // 物理は動作するが制御なし、ESKFなし
+        // =============================================================
+        if (t < T_PHASE1_END) {
+            quad.step(zero_cmd, dt);
+            // No ESKF, no CSV output during init
+            continue;
         }
 
-        // --- ESKF closed-loop control ---
-        // Position/velocity from ESKF, attitude from ESKF
-        // Rate control: true angular rate (ESKF gyro bias correction TODO)
+        // =============================================================
+        // Phase 2: Calibration (1s ≤ t < 3s)
+        // フェーズ2: キャリブレーション
+        // Collect stable sensor data for bias estimation
+        // バイアス推定のため安定したセンサデータを収集
+        // =============================================================
+        if (t < T_PHASE2_END) {
+            quad.step(zero_cmd, dt);
+
+            // Accumulate calibration samples
+            // キャリブレーションサンプルを蓄積
+            if (cal_count < CAL_SAMPLES) {
+                cal_accel_sum += accel;
+                cal_gyro_sum += gyro;
+                cal_count++;
+            }
+
+            // At end of Phase 2: initialize ESKF
+            // Phase2の終了時: ESKFを初期化
+            if (cal_count == CAL_SAMPLES && !eskf_ready) {
+                Vec3 accel_avg = cal_accel_sum * (1.0f / cal_count);
+                Vec3 gyro_avg = cal_gyro_sum * (1.0f / cal_count);
+
+                fprintf(stderr, "=== Phase 2: Calibration Complete ===\n");
+                fprintf(stderr, "Gyro avg:  [%.4f %.4f %.4f] rad/s\n",
+                        gyro_avg.x, gyro_avg.y, gyro_avg.z);
+                fprintf(stderr, "Accel avg: [%.4f %.4f %.4f] m/s²\n",
+                        accel_avg.x, accel_avg.y, accel_avg.z);
+
+                // Compute biases / バイアスを計算
+                Vec3 accel_bias(accel_avg.x,
+                                accel_avg.y,
+                                accel_avg.z - (-qp.gravity));
+
+                fprintf(stderr, "Accel bias: [%.4f %.4f %.4f] m/s²\n",
+                        accel_bias.x, accel_bias.y, accel_bias.z);
+
+                // Initialize ESKF (matches firmware Phase 3)
+                // ESKF初期化（ファームPhase3に対応）
+                eskf.setGyroBias(gyro_avg);
+                eskf.setAccelBias(accel_bias);
+
+                // Set initial attitude from gravity vector
+                // 重力ベクトルから初期姿勢を設定
+                eskf.setAttitudeFromGravity(accel_avg);
+
+                // Shrink bias covariance by 100x (trust calibration)
+                // バイアス共分散を1/100に縮小（キャリブレーションを信頼）
+                eskf.shrinkBiasCovariance(0.01f);
+
+                // Freeze accel bias during ground phase
+                // 地上フェーズ中はaccelバイアスをフリーズ
+                eskf.setFreezeAccelBias(true);
+
+                eskf_ready = true;
+                fprintf(stderr, "=== Phase 3: ESKF Ready ===\n\n");
+            }
+
+            continue;
+        }
+
+        // =============================================================
+        // IDLE / ARMED / FLYING phases (t ≥ 3s)
+        // IDLE / ARMED / FLYING フェーズ
+        // =============================================================
+
+        // ARM at T_ARM / ARM時刻
+        if (t >= T_ARM && !armed) {
+            armed = true;
+            fprintf(stderr, "t=%.1f ARM\n", t);
+        }
+
+        // --- ESKF predict + observe (runs every step after init) ---
+        // --- ESKF予測 + 観測（初期化後は毎ステップ実行）---
+        if (eskf_ready) {
+            eskf.predict(accel, gyro, dt);
+            eskf.updateAccelAttitude(accel);
+
+            if (step % tof_div == 0) {
+                eskf.updateToF(sens.tof_bottom);
+                eskf.updateToFVelocity(sens.tof_bottom, tof_div * dt);
+            }
+        }
+
+        // --- State estimation selection ---
+        // --- 状態推定の選択 ---
         auto true_st = quad.getState();
         Vec3 eskf_pos = eskf.getPosition();
         Vec3 eskf_vel = eskf.getVelocity();
         Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        // State transition: ground → takeoff → airborne(ESKF)
-        // 状態遷移: 地上 → 離陸 → 空中(ESKF)
-        //
-        // Ground: true state for control, ESKF reset each step
-        // Takeoff: true state until stable airborne (>10cm, >0.5s)
-        // Airborne: ESKF for position/velocity
-        //
-        float true_height = -true_st.position.z;
-        bool airborne = true_height > 0.03f && t > 1.2f;  // Airborne detection
-
-        Vec3 est_pos, est_vel, est_euler;
-
-        if (airborne) {
-            est_pos = eskf_pos;
-            est_vel = eskf_vel;
-            est_euler = eskf_euler;
-        } else {
-            est_pos = true_st.position;
-            est_vel = true_st.velocity;
-            est_euler = true_st.attitude.to_euler();
-            // Continuously reset ESKF until airborne
-            // 空中になるまでESKFを継続リセット
-            eskf.resetPositionVelocity();
+        // Ground phase: hold pos/vel, use ESKF attitude
+        // 地上フェーズ: pos/vel保持、ESKF姿勢を使用
+        if (!is_flying) {
+            eskf.holdPositionVelocity();
         }
+
+        // Takeoff detection (one-shot)
+        // 離陸検出（ワンショット）
+        float true_height = -true_st.position.z;
+        if (armed && !has_taken_off && true_height > TAKEOFF_ALT) {
+            has_taken_off = true;
+            is_flying = true;
+
+            // Reset position/velocity for clean start
+            // クリーンスタートのためpos/velをリセット
+            eskf.resetPositionVelocity();
+
+            // Unfreeze accel bias estimation during flight
+            // 飛行中はaccelバイアス推定を解凍
+            eskf.setFreezeAccelBias(false);
+
+            fprintf(stderr, "t=%.2f TAKEOFF detected (h=%.1fcm)\n",
+                    t, true_height * 100);
+        }
+
+        // Select estimates for control
+        // 制御用の推定値を選択
+        Vec3 est_pos = eskf_pos;
+        Vec3 est_vel = eskf_vel;
+        Vec3 est_euler = eskf_euler;
 
         // --- Control ---
         float thrust = 0;
         float torque[3] = {0, 0, 0};
 
         if (armed) {
-            // Simple control: altitude PID + attitude PID, no special phases
-            // シンプル制御: 高度PID + 姿勢PID、特殊フェーズなし
             float est_height = -est_pos.z;
             float est_climb = -est_vel.z;
 
@@ -266,9 +336,12 @@ int main()
             float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
             float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
 
-            torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
-            torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
-            torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
+            // Rate control uses sensor gyro - ESKF bias (not true rate)
+            // レート制御はセンサジャイロ - ESKFバイアスを使用（真値ではない）
+            Vec3 gyro_corrected = gyro - eskf.getGyroBias();
+            torque[0] = rate_r.compute(rate_sp_r - gyro_corrected.x, dt);
+            torque[1] = rate_p.compute(rate_sp_p - gyro_corrected.y, dt);
+            torque[2] = rate_y.compute(0 - gyro_corrected.z, dt);
         }
 
         // --- Mixer ---
@@ -277,29 +350,21 @@ int main()
             mixer(thrust, torque, motor_duty, qp.k_thrust);
         }
 
-        // Debug: print periodically
-        if (step >= 400 && step % 100 == 0) {
-            auto dst = quad.getState();
-            fprintf(stderr, "t=%.1f true_z=%.4f eskf_z=%.4f T=%.3f d=%.3f\n",
-                    t, dst.position.z, est_pos.z, thrust, motor_duty[0]);
-        }
-
-        // Debug: physics state at ARM
-        if (step >= 400 && step < 410) {
-            auto ds = quad.getState();
-            fprintf(stderr, "s=%d pos_z=%.6f vel_z=%.6f m=[%.3f %.3f %.3f %.3f] avg=%.3f\n",
-                    step, ds.position.z, ds.velocity.z,
-                    motor_duty[0], motor_duty[1], motor_duty[2], motor_duty[3],
-                    ds.avg_duty);
-        }
-
         // --- Physics step ---
-        quad.step(motor_duty, dt);
+        quad.step(armed ? motor_duty : zero_cmd, dt);
 
-        // --- CSV output (50Hz) ---
-        if (step % 8 == 0) {
-            auto st = quad.getState();
-            Vec3 true_euler = st.attitude.to_euler();
+        // --- Debug output ---
+        if (step % 400 == 0 && t >= T_PHASE2_END) {
+            fprintf(stderr, "t=%.1f h_true=%.3f h_eskf=%.3f T=%.3f d=%.3f "
+                    "att=[%.1f %.1f]° %s\n",
+                    t, -true_st.position.z, -eskf_pos.z, thrust, motor_duty[0],
+                    eskf_euler.x * 57.3f, eskf_euler.y * 57.3f,
+                    is_flying ? "FLY" : (armed ? "ARM" : "IDLE"));
+        }
+
+        // --- CSV output (50Hz, after Phase2) ---
+        if (step % 8 == 0 && t >= T_PHASE2_END) {
+            Vec3 true_euler = true_st.attitude.to_euler();
 
             printf("%.4f,%.4f,%.4f,%.4f,%.4f,"
                    "%.4f,%.4f,%.4f,"
@@ -308,7 +373,8 @@ int main()
                    "%.4f,%.3f,%.3f,%.3f,%.3f,"
                    "%.4f,%.4f\n",
                    t,
-                   st.position.x, st.position.y, st.position.z, st.velocity.z,
+                   true_st.position.x, true_st.position.y,
+                   true_st.position.z, true_st.velocity.z,
                    true_euler.x*57.3f, true_euler.y*57.3f, true_euler.z*57.3f,
                    eskf_pos.x, eskf_pos.y, eskf_pos.z, eskf_vel.z,
                    eskf_euler.x*57.3f, eskf_euler.y*57.3f, eskf_euler.z*57.3f,
