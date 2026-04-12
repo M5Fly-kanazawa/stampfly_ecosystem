@@ -40,7 +40,8 @@
 | 2026-04-12 | 09:40 | 09:43 | 3min | パラメータシステム完全実装（45パラメータ、NVS永続化、API） | params.hpp, params.def, params.cpp更新 | 0e55cf9 |
 | 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。スタブに戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | 4f21b89 |
 | 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | c40717c |
-| 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | — |
+| 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | 6c0ef53 |
+| 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | — |
 
 ## 集計
 
@@ -64,15 +65,15 @@
 | sf_estimator_eskf（ESKF実装） | 2026-04-12 | 2026-04-12 | 7min | 1129 | 新規実装完了（旧1754行→1129行、36%削減） |
 | sf_controller（インターフェース） | 2026-04-12 | 2026-04-12 | ↑ | 1 | ビルド成功 |
 | sf_controller_pid（PID実装） | 2026-04-12 | 2026-04-12 | 2min | 337 | カスケードPID完了（Rate/Attitude/Altitude/Position） |
-| sf_actuator（ミキサー+モーター） | | | | | 未着手 |
-| sf_command（コマンド処理） | | | | | 未着手 |
-| sf_comm（通信） | | | | | 未着手 |
-| sf_failsafe（フェイルセーフ） | | | | | 未着手 |
-| sf_takeoff_landing（離着陸MGR） | | | | | 未着手 |
-| sf_logger（データロガー+Blackbox） | | | | | 未着手 |
-| sf_telemetry（テレメトリ） | | | | | 未着手 |
-| sf_notify（通知） | | | | | 未着手 |
-| sf_calibration（キャリブレーション） | | | | | 未着手 |
+| sf_actuator（ミキサー+モーター） | 2026-04-12 | 2026-04-12 | 20min | — | ミキサー完全実装 |
+| sf_command（コマンド処理） | 2026-04-12 | 2026-04-12 | ↑ | — | 正規化+デッドバンド実装 |
+| sf_comm（通信） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（ESP-NOW/UDP TODO） |
+| sf_failsafe（フェイルセーフ） | 2026-04-12 | 2026-04-12 | ↑ | — | チェック関数実装 |
+| sf_takeoff_landing（離着陸MGR） | 2026-04-12 | 2026-04-12 | ↑ | — | ToF検出ロジック実装 |
+| sf_logger（データロガー+Blackbox） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（SPIFFS TODO） |
+| sf_telemetry（テレメトリ） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（UDP TODO） |
+| sf_notify（通知） | 2026-04-12 | 2026-04-12 | ↑ | — | LEDパターンテーブル実装 |
+| sf_calibration（キャリブレーション） | 2026-04-12 | 2026-04-12 | ↑ | — | 平均計算+レベル補正実装 |
 | HALドライバ群（コピー+適応） | 2026-04-12 | 2026-04-12 | 11min | 371 | ビルド成功（コピー完了、適応はTODO） |
 | タスク群（14タスク） | 2026-04-12 | 2026-04-12 | 8min | 14 | 全14タスク実装・ビルド成功 |
 | Examples Level 1（01-08） | | | | | 未着手 |
