@@ -201,11 +201,13 @@ int main()
         Vec3 eskf_vel = eskf.getVelocity();
         Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        // Control uses true state for position/velocity, ESKF for comparison
-        // 制御には真値、ESKFは比較用
-        Vec3 est_pos = true_st.position;
-        Vec3 est_vel = true_st.velocity;
-        Vec3 est_euler = true_st.attitude.to_euler();
+        // ESKF-controlled flight: use ESKF for position/velocity
+        // ESKF制御飛行: 位置/速度にESKFを使用
+        // Rate control still uses true angular rate (gyro bias not corrected yet)
+        // レート制御は引き続き真の角速度を使用（ジャイロバイアス未補正）
+        Vec3 est_pos = eskf_pos;
+        Vec3 est_vel = eskf_vel;
+        Vec3 est_euler = eskf_euler;
 
         // --- Control ---
         float thrust = 0;
