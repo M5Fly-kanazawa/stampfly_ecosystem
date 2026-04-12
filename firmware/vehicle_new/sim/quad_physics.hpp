@@ -350,23 +350,26 @@ public:
         // For SIL: output specific force + 2g to match vehicle convention.
         // SIL用: specific forceに2gを加算してvehicle慣例に合わせる
 
-        // Accelerometer model: measures non-gravitational, non-contact force
-        // 加速度計モデル: 非重力・非接触力を測定
+        // Accelerometer model: measures ALL forces on the body
+        // 加速度計モデル: 機体に作用する全ての力を測定
         //
-        // Real accelerometer on a proof mass:
-        // - Feels gravity: +g (body z-down at rest)
-        // - Feels thrust: -T/m (body z-up)
-        // - Does NOT feel contact force (it's applied to the frame, not proof mass)
-        //   → actually it DOES feel contact through the frame, but at rest
-        //     the contact exactly cancels gravity → net = 0, output = +g
+        // Specific force = (F_total / m) - g
+        //   F_total = thrust + gravity + drag + contact
+        //   a_inertial = F_total / m
+        //   specific_force = a_inertial - g = (thrust + drag + contact) / m
         //
-        // Simplification: use free_force (thrust+drag, no gravity, no contact)
-        // At rest: free_force = 0 → specific_force = 0 → body = [0,0,0] + 2g = [0,0,+g] ✓
-        // Hovering: free_force = -mg (thrust up) → specific = -g → body = [0,0,-g] + 2g = [0,0,+g] ✓
-        // Climbing: free_force = -(mg+extra) → specific = -(g+a) → body = [0,0,-(g+a)] + 2g = [0,0,g-a]
+        // At rest: contact = -mg → specific = (-mg + 0 + 0)/m = -g
+        //   → body = inv_rotate(-g) = [0,0,-g] + 2g = [0,0,+g] ✓
         //
-        Vec3 free_nongrav = free_force_cache_ - Vec3(0, 0, qp_.mass * qp_.gravity);
-        Vec3 specific_force_ned = free_nongrav * (1.0f / qp_.mass);
+        // The contact force is now solved from constraints (not approximate spring)
+        // so F_contact = -mg exactly at rest → no bias
+        //
+        // 接触力は拘束から解かれた値（近似バネではない）
+        // 静止時 F_contact = -mg が正確 → バイアスなし
+        //
+        Vec3 total_force = free_force_cache_ + contact_force_cache_;
+        Vec3 nongrav = total_force - Vec3(0, 0, qp_.mass * qp_.gravity);
+        Vec3 specific_force_ned = nongrav * (1.0f / qp_.mass);
         Vec3 specific_force_body = state_.attitude.inv_rotate(specific_force_ned);
 
         // Add 2g to z to match vehicle convention:
@@ -534,172 +537,164 @@ private:
     // =========================================================================
 
     // =========================================================================
-    // SDIRK2 implicit contact solver with Newton iteration
-    // ニュートン反復付きSDIRK2陰的接触ソルバー
+    // Constraint-based contact solver (Projected Gauss-Seidel)
+    // 拘束ベース接触ソルバー（射影ガウス-ザイデル法）
     //
-    // SDIRK2 Butcher tableau (γ = 1 - 1/√2 ≈ 0.2929):
-    //   γ   | γ   0          (A-stable, L-stable, 2nd order)
-    //   1   | 1-γ  γ
-    //   ----+--------
-    //       | 1-γ  γ
+    // The contact force λ is an UNKNOWN solved from the constraint:
+    //   Constraint: v_n_new ≥ 0 (no penetration velocity)
+    //   λ ≥ 0 (contact can only push)
+    //   Complementarity: λ * v_n_new = 0
     //
-    // For each penetrating corner, solve the 2D stiff system:
-    //   d(pen)/dt = v_n
-    //   d(v_n)/dt = F(pen, v_n) / m_eff
+    // For each contact point:
+    //   v_n_new = v_n + (1/m) * λ * dt + a_free * dt
+    //   where a_free = free acceleration (gravity + thrust + drag) / m
     //
-    // where F = -k*pen - c*v_n  (spring-damper, active when pen > 0)
+    // Solve: λ = max(0, -m * (v_n + a_free*dt) / dt)
+    //        (+ restitution for bounce)
     //
-    // Newton iteration for implicit stage:
-    //   Residual: r_i = k_i - f(y + h*γ*k_i + known)
-    //   Jacobian: J = I - h*γ * ∂f/∂y
-    //   Update:   k_i -= J^{-1} * r_i
+    // 接触力λは拘束条件から解く未知数:
+    //   拘束: v_n_new ≥ 0（貫通速度なし）
+    //   λ ≥ 0（接触は押すだけ）
+    //   相補性: λ * v_n_new = 0
+    //
+    // PGS反復で複数接触点を同時解決
     // =========================================================================
 
     void solveContact(float dt)
     {
-        static constexpr float GAMMA = 0.29289321881f;  // 1 - 1/√2
-        static constexpr int MAX_NEWTON = 5;
-        static constexpr float TOL = 1e-8f;
+        static constexpr int PGS_ITERATIONS = 10;
+        static constexpr float RESTITUTION = 0.25f;  // Bounce coefficient
 
         contact_force_cache_ = {};
-        Vec3 contact_torque_sum = {};
+
+        // Collect active contacts
+        // アクティブ接触点を収集
+        struct ContactPoint {
+            Vec3 r_world;    // Body center to contact point (NED)
+            float pen;       // Penetration depth
+            float vn;        // Normal velocity (into ground)
+            Vec3 v_tangent;  // Tangential velocity
+            float lambda_n;  // Normal impulse (solved)
+        };
+
+        ContactPoint contacts[8];
+        int n_contacts = 0;
 
         for (int ci = 0; ci < 8; ci++) {
             Vec3 corner_body = getCorner(ci);
             Vec3 r_world = state_.attitude.rotate(corner_body);
             Vec3 corner_world = state_.position + r_world;
 
-            float pen0 = corner_world.z - cp_.ground_z;
-            if (pen0 <= 0) continue;
+            float pen = corner_world.z - cp_.ground_z;
+            if (pen <= 0) continue;
 
             Vec3 v_corner = state_.velocity + state_.angular_rate.cross(r_world);
-            float vn0 = v_corner.z;
 
-            float k = cp_.k_contact;
-            float c = cp_.c_contact;
-            float m = qp_.mass;
-            float hg = dt * GAMMA;
+            contacts[n_contacts].r_world = r_world;
+            contacts[n_contacts].pen = pen;
+            contacts[n_contacts].vn = v_corner.z;
+            contacts[n_contacts].v_tangent = Vec3(v_corner.x, v_corner.y, 0);
+            contacts[n_contacts].lambda_n = 0;
+            n_contacts++;
+        }
 
-            // ---- Contact force function ----
-            // f(pen, vn) = [vn, -(k*pen + c*vn)/m]  when pen > 0
-            auto f_contact = [&](float p, float v, float& fp, float& fv) {
-                fp = v;
-                if (p > 0) {
-                    float fn = -(k * p + c * v);
-                    if (fn > 0) fn = 0;  // Push only
-                    fv = fn / m;
-                } else {
-                    fv = 0;
+        if (n_contacts == 0) return;
+
+        // Free acceleration in z (from RK4 step, without contact)
+        // z方向の自由加速度（RK4ステップから、接触なし）
+        float a_free_z = (free_force_cache_.z) / qp_.mass;
+
+        // PGS iterations to solve for contact impulses
+        // PGS反復で接触インパルスを解く
+        for (int iter = 0; iter < PGS_ITERATIONS; iter++) {
+            for (int ci = 0; ci < n_contacts; ci++) {
+                ContactPoint& cp = contacts[ci];
+
+                // Current velocity at contact point (updated by previous contacts)
+                // 現在の接触点速度（前の接触で更新済み）
+                Vec3 v_at_point = state_.velocity + state_.angular_rate.cross(cp.r_world);
+                float vn_current = v_at_point.z;
+
+                // Target: v_n_new = -e * v_n_incoming  (restitution)
+                // For resting contact (small vn): target = 0
+                // 目標: v_n_new = -e * v_n_incoming（反発）
+                // 静止接触（小さいvn）: 目標 = 0
+                float v_target = 0;
+                if (cp.vn > 0.01f) {
+                    // Incoming velocity: apply restitution
+                    // 入射速度: 反発適用
+                    v_target = -RESTITUTION * cp.vn;
                 }
-            };
 
-            // ---- SDIRK2 Stage 1: k1 = f(y + h*γ*k1) ----
-            float k1p = vn0;
-            float k1v = (pen0 > 0) ? -(k * pen0 + c * vn0) / m : 0;
+                // Effective mass at contact point for normal direction
+                // 法線方向の接触点有効質量
+                // 1/m_eff = 1/m + (r × n)^T * I^{-1} * (r × n)
+                // For z-direction normal: n = [0,0,1]
+                // r × n = [r.y, -r.x, 0]
+                float rxn_x = cp.r_world.y;
+                float rxn_y = -cp.r_world.x;
+                float inv_m_eff = 1.0f / qp_.mass
+                    + rxn_x * rxn_x / qp_.Ixx
+                    + rxn_y * rxn_y / qp_.Iyy;
+                float m_eff = 1.0f / inv_m_eff;
 
-            for (int it = 0; it < MAX_NEWTON; it++) {
-                float p1 = pen0 + hg * k1p;
-                float v1 = vn0  + hg * k1v;
-                float fp, fv;
-                f_contact(p1, v1, fp, fv);
+                // Solve for impulse: λ = m_eff * (v_target - vn_current) / dt
+                // インパルスを解く
+                float delta_lambda = m_eff * (v_target - vn_current);
 
-                float rp = k1p - fp;
-                float rv = k1v - fv;
-                if (fabsf(rp) < TOL && fabsf(rv) < TOL) break;
+                // Project: λ ≥ 0 (push only)
+                // 射影: λ ≥ 0（押すだけ）
+                float new_lambda = fmaxf(0, cp.lambda_n + delta_lambda);
+                delta_lambda = new_lambda - cp.lambda_n;
+                cp.lambda_n = new_lambda;
 
-                // J = I - hg * df/dy
-                // df/dy = [[0,1],[-k/m,-c/m]] when p>0
-                bool active = (p1 > 0);
-                float j11 = 1.0f;
-                float j12 = -hg;
-                float j21 = active ? hg * k / m : 0;
-                float j22 = 1.0f + (active ? hg * c / m : 0);
-                float det = j11 * j22 - j12 * j21;
-                if (fabsf(det) < 1e-12f) break;
+                // Apply impulse to velocity and angular velocity
+                // インパルスを速度と角速度に適用
+                state_.velocity.z += delta_lambda / qp_.mass;
+                state_.angular_rate.x += delta_lambda * rxn_x / qp_.Ixx;
+                state_.angular_rate.y += delta_lambda * rxn_y / qp_.Iyy;
+            }
+        }
 
-                k1p -= ( j22 * rp - j12 * rv) / det;
-                k1v -= (-j21 * rp + j11 * rv) / det;
+        // Position correction: push out of ground (Baumgarte stabilization)
+        // 位置補正: 地面から押し出す（バウムガルテ安定化）
+        float beta = 0.2f;  // Stabilization factor
+        for (int ci = 0; ci < n_contacts; ci++) {
+            if (contacts[ci].pen > 0) {
+                state_.position.z -= beta * contacts[ci].pen;
+            }
+        }
+
+        // Compute contact force for accelerometer and torque
+        // 加速度計とトルク用に接触力を計算
+        // F = λ / dt (impulse → force)
+        Vec3 contact_torque_sum = {};
+        for (int ci = 0; ci < n_contacts; ci++) {
+            float force_n = contacts[ci].lambda_n / dt;
+            Vec3 f_vec(0, 0, -force_n);  // Upward in NED = negative z
+
+            // Friction impulse (Coulomb, explicit)
+            // 摩擦インパルス（クーロン、陽的）
+            Vec3 vt = contacts[ci].v_tangent;
+            float vt_mag = vt.norm();
+            if (vt_mag > 1e-6f && force_n > 0) {
+                float f_friction = cp_.mu_friction * force_n;
+                Vec3 friction_dir = vt * (-1.0f / vt_mag);
+                f_vec.x = friction_dir.x * f_friction;
+                f_vec.y = friction_dir.y * f_friction;
+                state_.velocity.x += f_vec.x * dt / qp_.mass;
+                state_.velocity.y += f_vec.y * dt / qp_.mass;
             }
 
-            // ---- SDIRK2 Stage 2: k2 = f(y + h*(1-γ)*k1 + h*γ*k2) ----
-            float k2p = k1p;
-            float k2v = k1v;
-
-            for (int it = 0; it < MAX_NEWTON; it++) {
-                float p2 = pen0 + dt * ((1.0f - GAMMA) * k1p + GAMMA * k2p);
-                float v2 = vn0  + dt * ((1.0f - GAMMA) * k1v + GAMMA * k2v);
-                float fp, fv;
-                f_contact(p2, v2, fp, fv);
-
-                float rp = k2p - fp;
-                float rv = k2v - fv;
-                if (fabsf(rp) < TOL && fabsf(rv) < TOL) break;
-
-                bool active = (p2 > 0);
-                float j11 = 1.0f;
-                float j12 = -hg;
-                float j21 = active ? hg * k / m : 0;
-                float j22 = 1.0f + (active ? hg * c / m : 0);
-                float det = j11 * j22 - j12 * j21;
-                if (fabsf(det) < 1e-12f) break;
-
-                k2p -= ( j22 * rp - j12 * rv) / det;
-                k2v -= (-j21 * rp + j11 * rv) / det;
-            }
-
-            // ---- Update: y_{n+1} = y_n + h*((1-γ)*k1 + γ*k2) ----
-            float dp = dt * ((1.0f - GAMMA) * k1p + GAMMA * k2p);
-            float dv = dt * ((1.0f - GAMMA) * k1v + GAMMA * k2v);
-
-            state_.position.z += dp;
-            state_.velocity.z += dv;
-
-            // Compute contact force for torque and accelerometer
-            // トルクと加速度計用に接触力を計算
-            float pen_new = pen0 + dp;
-            float vn_new = vn0 + dv;
-            Vec3 f_vec = {};
-            if (pen_new > 0) {
-                float fn = -(k * pen_new + c * vn_new);
-                if (fn > 0) fn = 0;
-                f_vec.z = fn;
-            }
-
-            // Friction (explicit, tangential)
-            // 摩擦（陽的、接線方向）
-            float vt_sq = v_corner.x * v_corner.x + v_corner.y * v_corner.y;
-            if (vt_sq > 1e-8f && f_vec.z < 0) {
-                float vt = sqrtf(vt_sq);
-                float ff = cp_.mu_friction * fabsf(f_vec.z);
-                f_vec.x = -ff * v_corner.x / vt;
-                f_vec.y = -ff * v_corner.y / vt;
-                state_.velocity.x += f_vec.x * dt / m;
-                state_.velocity.y += f_vec.y * dt / m;
-            }
-
-            // Contact torque: τ = r × F
-            contact_torque_sum += r_world.cross(f_vec);
             contact_force_cache_ += f_vec;
+            contact_torque_sum += contacts[ci].r_world.cross(f_vec);
         }
 
-        // Apply contact torque to angular velocity
-        // 接触トルクを角速度に適用
-        if (contact_torque_sum.norm_sq() > 1e-12f) {
-            Vec3 alpha_c;
-            alpha_c.x = contact_torque_sum.x / qp_.Ixx;
-            alpha_c.y = contact_torque_sum.y / qp_.Iyy;
-            alpha_c.z = contact_torque_sum.z / qp_.Izz;
-
-            // Contact torque intensity for angular damping
-            // 角減衰のための接触トルク強度
-            float intensity = contact_force_cache_.norm() /
-                              (qp_.mass * qp_.gravity + 1e-6f);
-            float damp = 1.0f / (1.0f + intensity * 20.0f * dt);
-
-            state_.angular_rate.x = state_.angular_rate.x * damp + alpha_c.x * dt;
-            state_.angular_rate.y = state_.angular_rate.y * damp + alpha_c.y * dt;
-            state_.angular_rate.z = state_.angular_rate.z * damp + alpha_c.z * dt;
-        }
+        // Apply contact torque
+        // 接触トルクを適用
+        state_.angular_rate.x += contact_torque_sum.x * dt / qp_.Ixx;
+        state_.angular_rate.y += contact_torque_sum.y * dt / qp_.Iyy;
+        state_.angular_rate.z += contact_torque_sum.z * dt / qp_.Izz;
     }
 
     // =========================================================================
