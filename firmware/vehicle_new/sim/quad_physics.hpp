@@ -77,7 +77,7 @@ struct ContactParams {
     // With 10x substep (dt=0.25ms), k=726 is stable
     // 10倍サブステップ（dt=0.25ms）でk=726は安定
     float k_contact  = 726.0f;    // [N/m]
-    float c_contact  = 8.0f;      // [N·s/m] (c_crit = 2*sqrt(726*0.037) = 10.4)
+    float c_contact  = 1.5f;      // [N·s/m] (c_crit=10.4, ratio=0.14 → visible bounce)
     float mu_friction = 0.6f;     // Coulomb friction coefficient
 
     // Ground plane at z = 0 (NED: z positive = down)
@@ -540,17 +540,19 @@ private:
 
         if (contact_count == 0) return;
 
-        // Semi-implicit correction for vertical velocity
-        // 垂直速度の陰的補正
-        //
-        // Solve: m * v_new = m * v_old + dt * (-k*pen - c*v_new) * n_contacts
-        // → v_new * (m + c*dt*n) = m*v_old - k*pen*dt*n
-        // → v_new = (m*v_old - k*pen*dt*n) / (m + c*dt*n)
+        // Semi-implicit: damper applied only while penetrating AND moving into ground
+        // 陰的処理: 貫通中かつ地面に向かって移動中のみダンパ適用
+        // When bouncing away (vel_z < 0, moving up), don't damp — let it bounce
+        // バウンド中（vel_z < 0, 上向き移動）は減衰しない — バウンドさせる
         //
         float n = static_cast<float>(contact_count);
-        float denom = qp_.mass + cp_.c_contact * dt * n;
-        state_.velocity.z = (qp_.mass * state_.velocity.z
-                           - cp_.k_contact * max_pen * dt * n) / denom;
+
+        if (state_.velocity.z > 0) {
+            // Moving into ground: apply implicit damping
+            // 地面に向かって移動中: 陰的減衰を適用
+            float implicit_factor = 1.0f / (1.0f + cp_.c_contact * dt * n / qp_.mass);
+            state_.velocity.z *= implicit_factor;
+        }
 
         // Prevent deep penetration: push position back
         // 深い貫通を防止: 位置を押し戻す
@@ -560,8 +562,6 @@ private:
 
         // Rotational damping from ground contact
         // 地面接触による回転減衰
-        // Stronger damping to prevent tumbling away
-        // 転がって飛んでいくのを防止する強い減衰
         float rot_factor = 1.0f / (1.0f + 100.0f * dt * n);
         state_.angular_rate.x *= rot_factor;
         state_.angular_rate.y *= rot_factor;
