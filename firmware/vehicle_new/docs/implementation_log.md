@@ -34,7 +34,8 @@
 | 2026-04-12 | 08:26 | 08:40 | 14min | ESP-IDFスケルトン + sf_core（Pub-Sub、データ型、トピック定義） | CMakeLists.txt, partitions.csv, sdkconfig.defaults, main.cpp, config.hpp, topic.hpp, topics.hpp, data_types.hpp, params.cpp | 9bfb04b |
 | 2026-04-12 | 08:49 | 08:51 | 2min | sf_state（状態管理：enum定義、StateManager、遷移テーブル、アラート処理） | flight_state.hpp, state_manager.hpp, state_manager.cpp | 216145d |
 | 2026-04-12 | 08:54 | 08:56 | 2min | sf_estimator + sf_controller（インターフェース定義、ヘッダーのみ） | estimator.hpp, controller.hpp | 355e453 |
-| 2026-04-12 | 08:58 | 09:09 | 11min | HAL 10コンポーネントコピー + led_strip依存解決 + ビルド確認 | sf_hal_* (371ファイル), idf_component.yml | — |
+| 2026-04-12 | 08:58 | 09:09 | 11min | HAL 10コンポーネントコピー + led_strip依存解決 + ビルド確認 | sf_hal_* (371ファイル), idf_component.yml | fdf7821 |
+| 2026-04-12 | 09:15 | 09:19 | 4min | メインパイプライン: スタブ推定器/制御器 + 3タスク(IMU/Control/State) + main.cpp結合 | eskf_estimator, pid_controller, imu_task, control_task, state_task, tasks.hpp, main.cpp更新 | — |
 
 ## 集計
 
@@ -55,9 +56,9 @@
 | sf_core（Pub-Sub、データ型、パラメータ） | 2026-04-12 | — | — | — | 実装中（トピック完了、パラメータTODO） |
 | sf_state（状態管理） | 2026-04-12 | 2026-04-12 | 2min | 3 | ビルド成功 |
 | sf_estimator（インターフェース） | 2026-04-12 | 2026-04-12 | 2min | 1 | ビルド成功 |
-| sf_estimator_eskf（ESKF実装） | | | | | 未着手 |
+| sf_estimator_eskf（ESKF実装） | 2026-04-12 | — | — | — | スタブ実装（パイプライン結合用） |
 | sf_controller（インターフェース） | 2026-04-12 | 2026-04-12 | ↑ | 1 | ビルド成功 |
-| sf_controller_pid（PID実装） | | | | | 未着手 |
+| sf_controller_pid（PID実装） | 2026-04-12 | — | — | — | スタブ実装（パイプライン結合用） |
 | sf_actuator（ミキサー+モーター） | | | | | 未着手 |
 | sf_command（コマンド処理） | | | | | 未着手 |
 | sf_comm（通信） | | | | | 未着手 |
@@ -68,7 +69,7 @@
 | sf_notify（通知） | | | | | 未着手 |
 | sf_calibration（キャリブレーション） | | | | | 未着手 |
 | HALドライバ群（コピー+適応） | 2026-04-12 | 2026-04-12 | 11min | 371 | ビルド成功（コピー完了、適応はTODO） |
-| タスク群（14タスク） | | | | | 未着手 |
+| タスク群（14タスク） | 2026-04-12 | — | — | — | 3/14完了（IMU, Control, State） |
 | Examples Level 1（01-08） | | | | | 未着手 |
 | Examples Level 2（09-13） | | | | | 未着手 |
 | Examples Level 3（14-20） | | | | | 未着手 |

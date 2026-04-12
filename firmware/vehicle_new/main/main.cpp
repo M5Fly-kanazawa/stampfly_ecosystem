@@ -3,27 +3,34 @@
  * @brief StampFly vehicle_new — Main Entry Point
  *        StampFly vehicle_new — メインエントリポイント
  *
- * Executes the INIT phase sequentially, then transitions to IDLE.
- * All initialization runs here in app_main() before tasks are started.
+ * Executes the INIT phase sequentially, then starts tasks
+ * and transitions to IDLE.
  *
- * INITフェーズを逐次実行し、完了後にIDLEへ遷移する。
- * タスク起動前の全初期化はここ（app_main）で行う。
+ * INITフェーズを逐次実行し、タスクを起動後にIDLEへ遷移する。
  *
  * @design requirements.md §2 — INIT: sequential, no sub-modes         [--]
  * @design architecture.md §4 — State machine: INIT → IDLE             [--]
  * @design detailed_design.md §3 — onEnter(IDLE): start calibration    [--]
  */
 
-#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "esp_system.h"
 #include "nvs_flash.h"
 
 #include "config.hpp"
+#include "topics.hpp"
+#include "tasks.hpp"
 
 static const char* TAG = "main";
+
+/// Control task handle (used by ImuTask for sync notification)
+/// 制御タスクハンドル（ImuTaskの同期通知に使用）
+extern TaskHandle_t g_control_task_handle;
+
+/// State task handle (used for event notification)
+/// 状態タスクハンドル（イベント通知に使用）
+static TaskHandle_t state_task_handle = nullptr;
 
 extern "C" void app_main(void)
 {
@@ -43,7 +50,12 @@ extern "C" void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    ESP_LOGI(TAG, "NVS initialized");
+    ESP_LOGI(TAG, "Phase 0: NVS initialized");
+
+    // Initialize all Pub-Sub topics
+    // 全Pub-Subトピックを初期化
+    sf::topics_init();
+    ESP_LOGI(TAG, "Phase 0: Topics initialized");
 
     // =========================================================================
     // Phase 1: Sensor and peripheral initialization
@@ -56,23 +68,44 @@ extern "C" void app_main(void)
     // TODO: Initialize actuators (Motor, LED, Buzzer, Button)
     // TODO: Initialize communication (ESP-NOW, WiFi, UDP)
     // TODO: Initialize parameter system (load from NVS)
+    ESP_LOGI(TAG, "Phase 1: Peripherals initialized (stub)");
 
     // =========================================================================
-    // Phase 2: Estimator and controller initialization
-    // Phase 2: 推定器および制御器の初期化
+    // Phase 2: Wait for sensor stabilization
+    // Phase 2: センサ安定待ち
     // =========================================================================
 
-    // TODO: Initialize state estimator (ESKF)
-    // TODO: Initialize controller (PID)
-    // TODO: Wait for sensor stabilization
+    // TODO: Wait for sensor buffers to fill
+    // TODO: Compute initial biases
+    ESP_LOGI(TAG, "Phase 2: Sensor stabilization (stub)");
 
     // =========================================================================
-    // Phase 3: Start tasks and transition to IDLE
-    // Phase 3: タスク起動およびIDLEへ遷移
+    // Phase 3: Start tasks
+    // Phase 3: タスク起動
+    //
+    // @design architecture.md §6 — Task list                          [--]
+    // @design detailed_design.md §8 — Task priorities and stacks      [--]
     // =========================================================================
 
-    // TODO: Start all FreeRTOS tasks
-    // TODO: Transition state to IDLE_GROUND
+    // Start state task first (event-driven, manages transitions)
+    // 状態タスクを最初に起動（イベント駆動、遷移を管理）
+    xTaskCreatePinnedToCore(StateTask, "StateTask",
+        config::STACK_STATE, nullptr,
+        config::PRIORITY_STATE, &state_task_handle, 1);
 
-    ESP_LOGI(TAG, "=== Initialization complete ===");
+    // Start control task (waits for IMU notification)
+    // 制御タスクを起動（IMU通知を待つ）
+    xTaskCreatePinnedToCore(ControlTask, "ControlTask",
+        config::STACK_CONTROL, nullptr,
+        config::PRIORITY_CONTROL, &g_control_task_handle, 1);
+
+    // Start IMU task (highest priority, drives the pipeline)
+    // IMUタスクを起動（最高優先度、パイプラインを駆動）
+    xTaskCreatePinnedToCore(ImuTask, "ImuTask",
+        config::STACK_IMU, nullptr,
+        config::PRIORITY_IMU, nullptr, 1);
+
+    // TODO: Start remaining tasks (Flow, Mag, Baro, ToF, Comm, etc.)
+
+    ESP_LOGI(TAG, "=== Phase 3: Tasks started — INIT complete ===");
 }
