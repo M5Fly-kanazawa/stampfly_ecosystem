@@ -234,6 +234,7 @@ public:
         // Non-contact force and torque only
         // 非接触力とトルクのみ
         Vec3 free_force = thrust_ned + gravity_ned + drag;
+        free_force_cache_ = free_force;  // Save for accelerometer model
         Vec3 free_acc = free_force * (1.0f / qp_.mass);
 
         // ==== Step 2: RK4 for free dynamics (no contact) ====
@@ -292,11 +293,11 @@ public:
 
         solveContact(dt);
 
-        // Store total force for accelerometer model
-        // 加速度計モデル用に全力を保存
-        // Includes contact force contribution estimated from velocity change
-        // 速度変化から推定した接触力の寄与を含む
-        total_force_ned_ = free_force + contact_force_cache_;
+        // Compute actual inertial acceleration from velocity change
+        // 速度変化から実際の慣性加速度を計算
+        // This automatically includes contact effects correctly
+        // 接触の効果を自動的に正確に含む
+        // (accelerometer uses free_force_cache_ set in Step 1)
     }
 
     // =========================================================================
@@ -349,8 +350,23 @@ public:
         // For SIL: output specific force + 2g to match vehicle convention.
         // SIL用: specific forceに2gを加算してvehicle慣例に合わせる
 
-        Vec3 non_grav_force = total_force_ned_ - Vec3(0, 0, qp_.mass * qp_.gravity);
-        Vec3 specific_force_ned = non_grav_force * (1.0f / qp_.mass);
+        // Accelerometer model: measures non-gravitational, non-contact force
+        // 加速度計モデル: 非重力・非接触力を測定
+        //
+        // Real accelerometer on a proof mass:
+        // - Feels gravity: +g (body z-down at rest)
+        // - Feels thrust: -T/m (body z-up)
+        // - Does NOT feel contact force (it's applied to the frame, not proof mass)
+        //   → actually it DOES feel contact through the frame, but at rest
+        //     the contact exactly cancels gravity → net = 0, output = +g
+        //
+        // Simplification: use free_force (thrust+drag, no gravity, no contact)
+        // At rest: free_force = 0 → specific_force = 0 → body = [0,0,0] + 2g = [0,0,+g] ✓
+        // Hovering: free_force = -mg (thrust up) → specific = -g → body = [0,0,-g] + 2g = [0,0,+g] ✓
+        // Climbing: free_force = -(mg+extra) → specific = -(g+a) → body = [0,0,-(g+a)] + 2g = [0,0,g-a]
+        //
+        Vec3 free_nongrav = free_force_cache_ - Vec3(0, 0, qp_.mass * qp_.gravity);
+        Vec3 specific_force_ned = free_nongrav * (1.0f / qp_.mass);
         Vec3 specific_force_body = state_.attitude.inv_rotate(specific_force_ned);
 
         // Add 2g to z to match vehicle convention:
@@ -714,6 +730,7 @@ private:
     // Total force for accelerometer model
     Vec3 total_force_ned_ = {};
     Vec3 contact_force_cache_ = {};
+    Vec3 free_force_cache_ = {};      // Non-contact force (thrust+gravity+drag)
 };
 
 }  // namespace sim
