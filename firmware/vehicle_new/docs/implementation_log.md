@@ -43,7 +43,8 @@
 | 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | 6c0ef53 |
 | 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | 63e4bc3 |
 | 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | c855700 |
-| 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hスタブ | — |
+| 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hスタブ | c033ad7 |
+| 2026-04-12 | 10:54 | 11:01 | 7min | Examples Level 1（8個）作成 | 01_blink_led〜08_battery_monitor、各4ファイル(32ファイル) | — |
 
 ## 集計
 
@@ -78,7 +79,7 @@
 | sf_calibration（キャリブレーション） | 2026-04-12 | 2026-04-12 | ↑ | — | 平均計算+レベル補正実装 |
 | HALドライバ群（コピー+適応） | 2026-04-12 | 2026-04-12 | 11min | 371 | ビルド成功（コピー完了、適応はTODO） |
 | タスク群（14タスク） | 2026-04-12 | 2026-04-12 | 8min | 14 | 全14タスク実装・ビルド成功 |
-| Examples Level 1（01-08） | | | | | 未着手 |
+| Examples Level 1（01-08） | 2026-04-12 | 2026-04-12 | 7min | 32 | 全8Example完成 |
 | Examples Level 2（09-13） | | | | | 未着手 |
 | Examples Level 3（14-20） | | | | | 未着手 |
 | Examples Level 4（21-25） | | | | | 未着手 |
