@@ -127,7 +127,7 @@ public:
         noise_params_ = noise;
         state_ = {};
         state_.attitude = {1, 0, 0, 0};
-        state_.position.z = -0.05f;  // 5cm above ground (NED)
+        state_.position.z = 0.0f;  // On ground (NED z=0)
 
         // Initialize random biases (unique per boot)
         // ランダムバイアスを初期化（起動毎に異なる）
@@ -210,12 +210,27 @@ public:
         state_.position += state_.velocity * dt;
 
         // Ground constraint / 地面制約
-        if (state_.position.z > -0.005f) {
-            state_.position.z = -0.005f;
+        // Ground level is z = 0 in NED (z positive = down)
+        // 地面レベルはNEDでz=0（z正=下向き）
+        const float ground_z = 0.0f;  // Ground at z=0
+        if (state_.position.z > ground_z) {
+            // Penetrated ground / 地面を貫通
+            state_.position.z = ground_z;
+
             if (state_.velocity.z > 0) {
+                // Moving downward → stop / 下向きに移動 → 停止
                 state_.velocity.z = 0;
             }
-            // Damp angular rate on ground / 地上で角速度を減衰
+
+            if (total_accel.z > 0) {
+                // Net force pushes into ground → ground reaction cancels it
+                // 正味力が地面方向 → 垂直抗力が相殺
+                true_accel_ned_.z = 0;
+            }
+            // If total_accel.z <= 0 → lifting off (thrust > weight)
+            // total_accel.z <= 0 → 離陸中（推力 > 重量）
+            // → position.z will go negative (up) next step
+
             state_.angular_rate = state_.angular_rate * 0.95f;
         }
     }

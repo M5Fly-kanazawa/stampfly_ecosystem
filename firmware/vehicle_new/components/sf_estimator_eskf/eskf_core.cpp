@@ -182,13 +182,43 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
         }
     }
 
-    // Step 4: Update columns (transpose of above) for symmetry
-    // ステップ4: 対称性のため列を更新（上記の転置）
+    // Step 4: Right-multiply by F^T (column operations)
+    // ステップ4: F^Tの右乗算（列操作）
+    //
+    // Same transformations applied to columns (transpose of row ops):
+    //   col_vel += D_va^T * col_att + D_vb^T * col_ba
+    //   col_pos += col_vel * dt
+    //   col_att -= col_bg * dt
+    //
+    // Must use the ALREADY-UPDATED rows (from steps 1-3)
+    // ステップ1-3で更新済みの行を使用する必要がある
+
+    // Step 4a: Velocity columns
     for (int row = 0; row < N; row++) {
         for (int i = 0; i < 3; i++) {
-            P_(row, VEL_X + i) = P_(VEL_X + i, row);
-            P_(row, POS_X + i) = P_(POS_X + i, row);
-            P_(row, ATT_X + i) = P_(ATT_X + i, row);
+            float sum = P_(row, VEL_X + i);
+            for (int k = 0; k < 3; k++) {
+                sum += D_va[k][i] * P_(row, ATT_X + k);  // D_va^T
+                sum += D_vb[k][i] * P_(row, BA_X + k);   // D_vb^T
+            }
+            tmp[i] = sum;
+        }
+        for (int i = 0; i < 3; i++) {
+            P_(row, VEL_X + i) = tmp[i];
+        }
+    }
+
+    // Step 4b: Position columns
+    for (int row = 0; row < N; row++) {
+        for (int i = 0; i < 3; i++) {
+            P_(row, POS_X + i) += P_(row, VEL_X + i) * dt;
+        }
+    }
+
+    // Step 4c: Attitude columns
+    for (int row = 0; row < N; row++) {
+        for (int i = 0; i < 3; i++) {
+            P_(row, ATT_X + i) -= P_(row, BG_X + i) * dt;
         }
     }
 

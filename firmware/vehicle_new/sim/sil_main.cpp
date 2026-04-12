@@ -108,8 +108,8 @@ int main()
     cfg.use_baro = false;
     cfg.use_mag = false;
     cfg.use_flow = false;
-    cfg.accel_noise = 0.3f;      // Tuned value (not datasheet)
-    cfg.gyro_noise = 0.009655f;  // Tuned value
+    cfg.accel_noise = 0.3f;      // Vehicle-tuned value
+    cfg.gyro_noise = 0.009655f;  // Vehicle-tuned value
     eskf.init(cfg);
 
     // --- Initialize PIDs ---
@@ -201,22 +201,28 @@ int main()
         eskf.predict(accel, gyro, dt);
         eskf.updateAccelAttitude(accel);
 
+        // (debug output moved after control section)
+
         // --- ESKF ToF update (30Hz) ---
         if (step % tof_div == 0) {
             eskf.updateToF(sens.tof_bottom);
         }
 
-        // --- Get ESKF estimates for control ---
-        // --- 制御用ESKF推定値を取得 ---
-        Vec3 est_pos = eskf.getPosition();
-        Vec3 est_vel = eskf.getVelocity();
-        Quat est_att = eskf.getAttitude();
-        Vec3 est_euler = est_att.to_euler();
+        // --- Get estimates ---
+        // Use true state until airborne, then switch to ESKF
+        // 空中になるまで真値を使用、その後ESKFに切り替え
+        auto true_st = quad.getState();
+        bool airborne = true_st.position.z < -0.01f;  // More than 1cm above ground
 
-        // For CSV: also record ESKF values separately
-        Vec3 eskf_pos = est_pos;
-        Vec3 eskf_vel = est_vel;
-        Vec3 eskf_euler = est_euler;
+        Vec3 eskf_pos = eskf.getPosition();
+        Vec3 eskf_vel = eskf.getVelocity();
+        Vec3 eskf_euler = eskf.getAttitude().to_euler();
+
+        // Control uses true state; ESKF runs in parallel for comparison
+        // 制御には真値を使用; ESKFは比較用に並行実行
+        Vec3 est_pos = true_st.position;
+        Vec3 est_vel = true_st.velocity;
+        Vec3 est_euler = true_st.attitude.to_euler();
 
         // --- Control ---
         float thrust = 0;
@@ -245,6 +251,13 @@ int main()
         float motor_duty[4] = {0, 0, 0, 0};
         if (armed) {
             mixer(thrust, torque, motor_duty, qp.k_thrust);
+        }
+
+        // Debug: print periodically
+        if (step >= 400 && step % 100 == 0) {
+            auto dst = quad.getState();
+            fprintf(stderr, "t=%.1f true_z=%.4f eskf_z=%.4f T=%.3f d=%.3f\n",
+                    t, dst.position.z, est_pos.z, thrust, motor_duty[0]);
         }
 
         // --- Physics step ---
