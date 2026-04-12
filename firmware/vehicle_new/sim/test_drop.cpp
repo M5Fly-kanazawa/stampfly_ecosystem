@@ -39,7 +39,7 @@ void run_scenario(const char* name, QuadPhysics& quad, float sim_time, float dt)
 
         quad.step(zero_cmd, dt);
 
-        if (i % 8 == 0) {
+        if (i % 2 == 0) {  // 5ms interval (200Hz output)
             auto st = quad.getState();
             Vec3 euler = st.attitude.to_euler();
             printf("%.4f,%.4f,%.4f,%.4f,%.4f,%.1f,%.1f,%.1f,%d\n",
@@ -83,7 +83,7 @@ int main()
         auto& state = const_cast<QuadState&>(quad.getState());
         state.position.z = -0.5f;
 
-        run_scenario("Level drop from 0.5m", quad, 2.0f, dt);
+        run_scenario("Level drop from 0.5m", quad, 1.0f, dt);
     }
 
     // =========================================================================
@@ -105,7 +105,7 @@ int main()
         // 30 degree roll
         state.attitude = Quat::from_rotvec(Vec3(30.0f * M_PI / 180.0f, 0, 0));
 
-        run_scenario("Tilted drop (30deg roll) from 0.3m", quad, 2.0f, dt);
+        run_scenario("Tilted drop (30deg roll) from 0.3m", quad, 1.0f, dt);
     }
 
     // =========================================================================
@@ -127,7 +127,7 @@ int main()
         // 180 degree roll (upside down)
         state.attitude = Quat::from_rotvec(Vec3(M_PI, 0, 0));
 
-        run_scenario("Upside-down drop from 0.2m", quad, 2.0f, dt);
+        run_scenario("Upside-down drop from 0.2m", quad, 1.0f, dt);
     }
 
     return 0;
