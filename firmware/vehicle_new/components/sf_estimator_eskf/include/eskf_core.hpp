@@ -45,7 +45,7 @@ struct EskfConfig {
     float flow_noise       = 0.30f;       // [m/s]
     float baro_noise       = 0.1f;        // [m]
     float mag_noise        = 1.0f;        // [uT]
-    float accel_att_noise  = 0.06f;       // [m/s²]
+    float accel_att_noise  = 2.0f;        // [m/s²] — matches vibration noise at hover
 
     // Initial covariance / 初期共分散
     float init_pos_std     = 0.1f;        // [m]
@@ -73,7 +73,7 @@ struct EskfConfig {
 
     // Attitude correction / 姿勢補正
     float att_correction_clamp = 0.05f;   // [rad]
-    float k_adaptive       = 10.0f;       // Adaptive R scaling
+    float k_adaptive       = 0.0f;        // Disabled — vibration makes it counterproductive
 
     // Sensor enable / センサ有効
     bool use_tof           = true;

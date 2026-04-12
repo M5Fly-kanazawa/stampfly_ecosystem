@@ -109,7 +109,7 @@ int main()
     QuadPhysics quad;
     QuadParams qp;
     ContactParams cp;
-    SensorNoiseParams np;  // Default noise from 72-log analysis
+    SensorNoiseParams np;  // Full noise from 72-log analysis
     quad.init(qp, cp, np);
 
     // --- Initialize ESKF (but don't enable yet — matches firmware Phase1-2) ---
@@ -123,6 +123,7 @@ int main()
     cfg.accel_noise = 0.3f;
     cfg.gyro_noise = 0.009655f;
     cfg.tof_noise = 0.01f;
+    // accel_chi2_gate = 7.81 (default, chi²(3, 0.95))
     eskf.init(cfg);
 
     // --- Initialize PIDs ---
@@ -159,6 +160,18 @@ int main()
     bool has_taken_off = false;     // Takeoff detected (one-shot)
     bool is_flying = false;         // Airborne (pos/vel estimation active)
 
+    // --- IMU LPF (matches firmware notch+LPF pipeline) ---
+    // --- IMU LPF（ファームのnotch+LPFパイプラインに対応）---
+    // ESKF path: 30Hz LPF (heavy filtering for attitude estimation)
+    // Rate control path: 80Hz LPF (lighter for responsiveness)
+    // ESKF: 30Hz LPF（姿勢推定用の強いフィルタ）
+    // レート制御: 80Hz LPF（応答性のための軽いフィルタ）
+    const float alpha_eskf = 0.32f;   // ~30Hz cutoff at 400Hz
+    const float alpha_rate = 0.67f;   // ~80Hz cutoff at 400Hz
+    Vec3 gyro_eskf_lpf = {}, accel_eskf_lpf = {};
+    Vec3 gyro_rate_lpf = {};
+    bool lpf_initialized = false;
+
     // Calibration accumulators / キャリブレーション累積
     Vec3 cal_accel_sum = {}, cal_gyro_sum = {};
     int cal_count = 0;
@@ -184,8 +197,22 @@ int main()
         // --- センサ（Phase1後は常に利用可能）---
         SimSensors sens = quad.getSensors(dt);
         quad.updateBiases(dt);
-        Vec3 accel(sens.accel.x, sens.accel.y, sens.accel.z);
-        Vec3 gyro(sens.gyro.x, sens.gyro.y, sens.gyro.z);
+        Vec3 accel_raw(sens.accel.x, sens.accel.y, sens.accel.z);
+        Vec3 gyro_raw(sens.gyro.x, sens.gyro.y, sens.gyro.z);
+
+        // Apply LPF to IMU (matches firmware filter pipeline)
+        // IMUにLPFを適用（ファームのフィルタパイプラインに対応）
+        if (!lpf_initialized) {
+            gyro_eskf_lpf = gyro_raw;
+            accel_eskf_lpf = accel_raw;
+            gyro_rate_lpf = gyro_raw;
+            lpf_initialized = true;
+        }
+        gyro_eskf_lpf = gyro_eskf_lpf * (1.0f - alpha_eskf) + gyro_raw * alpha_eskf;
+        accel_eskf_lpf = accel_eskf_lpf * (1.0f - alpha_eskf) + accel_raw * alpha_eskf;
+        gyro_rate_lpf = gyro_rate_lpf * (1.0f - alpha_rate) + gyro_raw * alpha_rate;
+        Vec3 accel = accel_eskf_lpf;   // ESKF uses 30Hz filtered
+        Vec3 gyro = gyro_eskf_lpf;     // ESKF uses 30Hz filtered
 
         // =============================================================
         // Phase 1: Sensor init (t < 1s)
@@ -273,10 +300,15 @@ int main()
 
         // --- ESKF predict + observe (runs every step after init) ---
         // --- ESKF予測 + 観測（初期化後は毎ステップ実行）---
+        // === Incremental ESKF debug ===
+        // === 段階的ESKFデバッグ ===
+        // Step 1: predict only (expect drift)
+        // Step 2: + updateAccelAttitude (expect attitude stabilization)
+        // Step 3: + updateToF (expect altitude tracking)
+        // Step 4: + updateToFVelocity (expect velocity tracking)
         if (eskf_ready) {
             eskf.predict(accel, gyro, dt);
             eskf.updateAccelAttitude(accel);
-
             if (step % tof_div == 0) {
                 eskf.updateToF(sens.tof_bottom);
                 eskf.updateToFVelocity(sens.tof_bottom, tof_div * dt);
@@ -290,36 +322,33 @@ int main()
         Vec3 eskf_vel = eskf.getVelocity();
         Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        // Ground phase: hold pos/vel, use ESKF attitude
-        // 地上フェーズ: pos/vel保持、ESKF姿勢を使用
-        if (!is_flying) {
-            eskf.holdPositionVelocity();
-        }
-
-        // Takeoff detection (one-shot)
-        // 離陸検出（ワンショット）
+        // State transition: ground → airborne (ESKF for pos/vel)
+        // 状態遷移: 地上 → 空中（ESKFでpos/vel）
         float true_height = -true_st.position.z;
-        if (armed && !has_taken_off && true_height > TAKEOFF_ALT) {
-            has_taken_off = true;
-            is_flying = true;
+        bool airborne = true_height > 0.03f && armed && (t > T_ARM + 0.2f);
 
-            // Reset position/velocity for clean start
-            // クリーンスタートのためpos/velをリセット
+        Vec3 est_pos, est_vel, est_euler;
+
+        if (airborne) {
+            if (!is_flying) {
+                is_flying = true;
+                eskf.resetPositionVelocity();
+                fprintf(stderr, "t=%.2f AIRBORNE (h=%.1fcm)\n",
+                        t, true_height * 100);
+            }
+            // ESKF for pos/vel, true attitude for control
+            // ESKFでpos/vel推定、制御には真値姿勢を使用
+            // ESKF attitude runs as observer for validation
+            // ESKF姿勢はオブザーバとして検証用に動作
+            est_pos = eskf_pos;
+            est_vel = eskf_vel;
+            est_euler = true_st.attitude.to_euler();
+        } else {
+            est_pos = true_st.position;
+            est_vel = true_st.velocity;
+            est_euler = true_st.attitude.to_euler();
             eskf.resetPositionVelocity();
-
-            // Unfreeze accel bias estimation during flight
-            // 飛行中はaccelバイアス推定を解凍
-            eskf.setFreezeAccelBias(false);
-
-            fprintf(stderr, "t=%.2f TAKEOFF detected (h=%.1fcm)\n",
-                    t, true_height * 100);
         }
-
-        // Select estimates for control
-        // 制御用の推定値を選択
-        Vec3 est_pos = eskf_pos;
-        Vec3 est_vel = eskf_vel;
-        Vec3 est_euler = eskf_euler;
 
         // --- Control ---
         float thrust = 0;
@@ -336,12 +365,12 @@ int main()
             float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
             float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
 
-            // Rate control uses sensor gyro - ESKF bias (not true rate)
-            // レート制御はセンサジャイロ - ESKFバイアスを使用（真値ではない）
-            Vec3 gyro_corrected = gyro - eskf.getGyroBias();
-            torque[0] = rate_r.compute(rate_sp_r - gyro_corrected.x, dt);
-            torque[1] = rate_p.compute(rate_sp_p - gyro_corrected.y, dt);
-            torque[2] = rate_y.compute(0 - gyro_corrected.z, dt);
+            // Rate control uses true angular rate for SIL validation
+            // SIL検証用に真値角速度を使用
+            // TODO: switch to gyro - bias once ESKF is validated
+            torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
+            torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
+            torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
         }
 
         // --- Mixer ---
@@ -355,10 +384,14 @@ int main()
 
         // --- Debug output ---
         if (step % 400 == 0 && t >= T_PHASE2_END) {
+            Vec3 true_euler_dbg = true_st.attitude.to_euler();
             fprintf(stderr, "t=%.1f h_true=%.3f h_eskf=%.3f T=%.3f d=%.3f "
-                    "att=[%.1f %.1f]° %s\n",
+                    "att=[%.1f %.1f]° true=[%.1f %.1f]° err=[%.1f %.1f]° %s\n",
                     t, -true_st.position.z, -eskf_pos.z, thrust, motor_duty[0],
                     eskf_euler.x * 57.3f, eskf_euler.y * 57.3f,
+                    true_euler_dbg.x * 57.3f, true_euler_dbg.y * 57.3f,
+                    (eskf_euler.x - true_euler_dbg.x) * 57.3f,
+                    (eskf_euler.y - true_euler_dbg.y) * 57.3f,
                     is_flying ? "FLY" : (armed ? "ARM" : "IDLE"));
         }
 

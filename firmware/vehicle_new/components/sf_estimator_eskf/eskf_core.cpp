@@ -284,7 +284,25 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
             d2 += innov[i] * Si[i][j] * innov[j];
-    if (d2 > cfg_.accel_chi2_gate) return;
+
+    // Debug: track chi2 gate statistics
+    // デバッグ: χ²ゲートの統計を追跡
+    static int gate_total = 0, gate_reject = 0;
+    gate_total++;
+    if (d2 > cfg_.accel_chi2_gate) {
+        gate_reject++;
+        if (gate_total % 400 == 0) {
+            fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%)\n",
+                    d2, cfg_.accel_chi2_gate, gate_reject, gate_total,
+                    100.0f * gate_reject / gate_total);
+        }
+        return;
+    }
+    if (gate_total % 400 == 0) {
+        fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%) R=%.4f\n",
+                d2, cfg_.accel_chi2_gate, gate_reject, gate_total,
+                100.0f * gate_reject / gate_total, R_val);
+    }
 
     // K = P*H^T*S^-1 (Nx3)
     float K[N][3];
@@ -445,9 +463,18 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // Bias-corrected accel / バイアス補正済み加速度
     Vec3 accel = accel_raw - ba_;
 
+    // Norm-based gate: skip when accel norm deviates from gravity
+    // ノルムゲート: 加速度ノルムが重力から大きく逸脱したらスキップ
+    // During thrust transients, |a| ≠ g, and accel cannot be used
+    // for attitude estimation (specific force contaminates gravity)
+    // 推力過渡期は|a| ≠ gとなり、比力が重力を汚染するため
+    // 姿勢推定に加速度を使用できない
+    float gravity_diff = accel.norm() - cfg_.gravity;
+    float norm_ratio = fabsf(gravity_diff) / cfg_.gravity;
+    if (norm_ratio > 0.1f) return;  // Skip if >10% deviation
+
     // Adaptive R scaling: R = R_base * (1 + k * |a - g|²)
     // 適応Rスケーリング: R = R_base * (1 + k * |a - g|²)
-    float gravity_diff = accel.norm() - cfg_.gravity;
     float R_val = cfg_.accel_att_noise * cfg_.accel_att_noise
                 * (1.0f + cfg_.k_adaptive * gravity_diff * gravity_diff);
 
