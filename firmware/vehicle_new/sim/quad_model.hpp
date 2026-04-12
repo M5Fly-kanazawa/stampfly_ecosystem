@@ -222,37 +222,31 @@ public:
         state_.position += state_.velocity * dt;
 
         // Ground constraint / 地面制約
-        // Ground level is z = 0 in NED (z positive = down)
-        // 地面レベルはNEDでz=0（z正=下向き）
-        const float ground_z = 0.0f;  // Ground at z=0
+        // Ground is a rigid surface at z=0 (NED).
+        // While on ground: no vertical motion, no rotation, level attitude.
+        // 地面はz=0の剛体面。地上では垂直運動なし、回転なし、水平姿勢。
+        const float ground_z = 0.0f;
+        bool on_ground = (state_.position.z >= ground_z) && (total_accel.z >= 0);
+
         if (state_.position.z > ground_z) {
-            // Penetrated ground / 地面を貫通
             state_.position.z = ground_z;
+        }
 
-            if (state_.velocity.z > 0) {
-                // Moving downward → stop / 下向きに移動 → 停止
-                state_.velocity.z = 0;
-            }
+        if (on_ground) {
+            // Ground contact: constrain all vertical motion
+            // 地面接触: 全垂直運動を拘束
+            state_.velocity.z = 0;
+            state_.velocity.x *= 0.9f;  // Friction damping
+            state_.velocity.y *= 0.9f;
 
-            if (total_accel.z > 0) {
-                // Net force pushes into ground → ground reaction cancels it
-                // 正味力が地面方向 → 垂直抗力が相殺
-                true_accel_ned_.z = 0;
-            }
-            // If total_accel.z <= 0 → lifting off (thrust > weight)
-            // total_accel.z <= 0 → 離陸中（推力 > 重量）
-            // → position.z will go negative (up) next step
+            // Ground prevents rotation: force level attitude
+            // 地面が回転を防止: 水平姿勢を強制
+            state_.attitude = Quat(1, 0, 0, 0);
+            state_.angular_rate = {0, 0, 0};
 
-            // Strong damping on ground (physical contact prevents rotation)
-            // 地上では強い減衰（物理的接触が回転を防止）
-            state_.angular_rate = state_.angular_rate * 0.5f;
-            // Also clamp attitude to near-level on ground
-            // 地上では姿勢をほぼ水平にクランプ
-            Vec3 euler = state_.attitude.to_euler();
-            if (fabsf(euler.x) > 0.1f || fabsf(euler.y) > 0.1f) {
-                state_.attitude = Quat(1, 0, 0, 0);  // Reset to level
-                state_.angular_rate = {0, 0, 0};
-            }
+            // Accelerometer sees static reading (gravity only)
+            // 加速度計は静的な値（重力のみ）
+            true_accel_ned_ = {0, 0, 0};
         }
     }
 

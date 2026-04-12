@@ -213,24 +213,35 @@ int main()
         float torque[3] = {0, 0, 0};
 
         if (armed) {
-            // Altitude cascade / 高度カスケード
-            float est_height = -est_pos.z;
-            float est_climb = -est_vel.z;
-            float vel_sp = alt_p.compute(target_alt - est_height, dt);
-            float thrust_corr = alt_v.compute(vel_sp - est_climb, dt);
-            thrust = hover_thrust + thrust_corr;
+            bool on_ground = true_st.position.z >= -0.01f;
 
-            // Attitude cascade (hold level) / 姿勢カスケード
-            float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
-            float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
+            // Takeoff: open-loop thrust until well airborne (>10cm)
+            // 離陸: 十分に空中（>10cm）になるまでオープンループ推力
+            float true_height = -true_st.position.z;
+            bool takeoff_phase = true_height < 0.10f;
 
-            // Rate control using true angular rate (for physics validation)
-            // レート制御には真の角速度を使用（物理検証用）
-            // In real flight: use bias-corrected gyro from ESKF
-            // 実飛行時: ESKFのバイアス補正済みジャイロを使用
-            torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
-            torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
-            torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
+            if (takeoff_phase) {
+                thrust = hover_thrust * 1.2f;  // 20% above hover for takeoff
+            } else {
+                // Altitude cascade (airborne) / 高度カスケード（空中）
+                float est_height = -est_pos.z;
+                float est_climb = -est_vel.z;
+                float vel_sp = alt_p.compute(target_alt - est_height, dt);
+                float thrust_corr = alt_v.compute(vel_sp - est_climb, dt);
+                thrust = hover_thrust + thrust_corr;
+            }
+            if (!on_ground) {
+                // Attitude cascade (airborne only)
+                // 姿勢カスケード（空中のみ）
+                float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
+                float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
+
+                torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
+                torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
+                torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
+            }
+            // On ground: torque = 0, thrust goes equally to all motors
+            // 地上: トルク=0、推力は全モーター均等
         }
 
         // --- Mixer ---
