@@ -338,8 +338,8 @@ int main()
             }
             // ESKF for pos/vel, true attitude for control
             // ESKFでpos/vel推定、制御には真値姿勢を使用
-            // ESKF attitude runs as observer for validation
-            // ESKF姿勢はオブザーバとして検証用に動作
+            // ESKF attitude runs open-loop (not fed back to control)
+            // ESKF姿勢はオープンループ推定（制御にフィードバックしない）
             est_pos = eskf_pos;
             est_vel = eskf_vel;
             est_euler = true_st.attitude.to_euler();
