@@ -27,7 +27,7 @@
 #include "sf_math.hpp"
 #include "eskf_core.hpp"
 #include "pid.hpp"
-#include "quad_model.hpp"
+#include "quad_physics.hpp"
 
 using namespace sf;
 using namespace sf::math;
@@ -81,15 +81,15 @@ int main()
 
     fprintf(stderr, "=== StampFly SIL Simulation ===\n");
 
-    // --- Initialize physics model ---
-    QuadModel quad;
+    // --- Initialize physics engine ---
+    // --- 物理エンジンを初期化 ---
+    QuadPhysics quad;
     QuadParams qp;
+    ContactParams cp;
     SensorNoiseParams np;
-    // Full noise model (Phase 2: static + bias + vibration)
-    // フルノイズモデル（Phase 2: 静的 + バイアス + 振動）
-    // All parameters from real flight log analysis (72 logs)
-    // 全パラメータは実飛行ログ解析（72ログ）から導出
-    quad.init(qp, np);
+    // All noise params from real flight log analysis (72 logs)
+    // 全ノイズパラメータは実飛行ログ解析（72ログ）から導出
+    quad.init(qp, cp, np);
 
     // --- Initialize ESKF ---
     EskfCore eskf;
