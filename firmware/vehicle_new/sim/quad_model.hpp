@@ -250,15 +250,27 @@ public:
         // @design noise_and_vibration_model.md §5 — Correct specific force
         // =================================================================
 
-        // Non-gravitational acceleration → body frame
-        // 非重力加速度 → ボディフレーム
-        Vec3 specific_force = state_.attitude.inv_rotate(true_accel_ned_);
-
-        // Add gravity component (sensor feels -g in body)
-        // 重力成分を追加（センサはボディで-gを感じる）
+        // Dynamic acceleration in body frame
+        // ボディフレームでの動的な加速度
+        //
+        // Accelerometer output = R_nb × (a_total - g)
+        // where a_total includes gravity: a_total = thrust/m + drag/m + g
+        // So: output = R_nb × (thrust/m + drag/m + g - g) = R_nb × (thrust/m + drag/m)
+        //
+        // BUT the real vehicle firmware (imu_task.cpp) outputs:
+        //   body_z = +g at rest (NED down-positive convention after BMI270 axis swap)
+        // This means the accelerometer output convention is:
+        //   output = R_nb × (g - a_freefall) = -specific_force
+        //   At rest: output = R_nb × g = [0, 0, +g] (body z-down)
+        //   In free fall: output = [0, 0, 0]
+        //
+        // Match the real vehicle convention:
+        // 実機の慣例に合わせる:
         Vec3 g_ned(0, 0, params_.gravity);
-        Vec3 g_body = state_.attitude.inv_rotate(g_ned);
-        specific_force = specific_force - g_body;
+        Vec3 total_accel_ned = true_accel_ned_ + g_ned;  // thrust/m + drag/m + g
+        Vec3 accel_body = state_.attitude.inv_rotate(total_accel_ned);
+        // At rest: accel_body = inv_rotate([0,0,+g]) = [0,0,+g]
+        Vec3 specific_force = accel_body;
 
         // Add noise / ノイズを追加
         float accel_static_sigma = noise_params_.accel_noise_density * sqrtf(fs);

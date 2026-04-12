@@ -164,8 +164,14 @@ int main()
             gyro_avg.x, gyro_avg.y, gyro_avg.z);
     fprintf(stderr, "Accel avg:  [%.4f %.4f %.4f] m/s²\n",
             accel_avg.x, accel_avg.y, accel_avg.z);
+    Vec3 accel_bias(accel_avg.x, accel_avg.y, accel_avg.z + qp.gravity);
     fprintf(stderr, "Accel bias: [%.4f %.4f %.4f] m/s² (avg - [0,0,-g])\n",
-            accel_avg.x, accel_avg.y, accel_avg.z + qp.gravity);
+            accel_bias.x, accel_bias.y, accel_bias.z);
+
+    // Set calibrated biases to ESKF
+    // キャリブレーション値をESKFに設定
+    eskf.setGyroBias(gyro_avg);
+    eskf.setAccelBias(accel_bias);
 
     // --- CSV header (stdout) ---
     printf("time,true_x,true_y,true_z,true_vz,"
@@ -200,20 +206,17 @@ int main()
             eskf.updateToF(sens.tof_bottom);
         }
 
-        // --- Get estimates ---
-        // Use TRUE state for control (bypass ESKF for now)
-        // 制御には真の状態を使用（ESKFを一旦バイパス）
-        // TODO: Fix ESKF bias initialization, then switch back
-        auto true_state = quad.getState();
-        Vec3 est_pos = true_state.position;
-        Vec3 est_vel = true_state.velocity;
-        Quat est_att = true_state.attitude;
+        // --- Get ESKF estimates for control ---
+        // --- 制御用ESKF推定値を取得 ---
+        Vec3 est_pos = eskf.getPosition();
+        Vec3 est_vel = eskf.getVelocity();
+        Quat est_att = eskf.getAttitude();
         Vec3 est_euler = est_att.to_euler();
 
-        // Also run ESKF for comparison / 比較用にESKFも実行
-        Vec3 eskf_pos = eskf.getPosition();
-        Vec3 eskf_vel = eskf.getVelocity();
-        Vec3 eskf_euler = eskf.getAttitude().to_euler();
+        // For CSV: also record ESKF values separately
+        Vec3 eskf_pos = est_pos;
+        Vec3 eskf_vel = est_vel;
+        Vec3 eskf_euler = est_euler;
 
         // --- Control ---
         float thrust = 0;

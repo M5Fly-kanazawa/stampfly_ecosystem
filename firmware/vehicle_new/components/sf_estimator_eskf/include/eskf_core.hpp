@@ -125,6 +125,12 @@ public:
     Vec3 getGyroBias() const { return bg_; }
     Vec3 getAccelBias() const { return ba_; }
 
+    /// Set gyro bias (from calibration) / ジャイロバイアスを設定（キャリブレーションから）
+    void setGyroBias(const Vec3& bias) { bg_ = bias; }
+
+    /// Set accel bias (from calibration) / 加速度バイアスを設定（キャリブレーションから）
+    void setAccelBias(const Vec3& bias) { ba_ = bias; }
+
     /// Get active sensor mask / 有効センサマスクを取得
     uint16_t getActiveMask() const { return active_mask_; }
 
