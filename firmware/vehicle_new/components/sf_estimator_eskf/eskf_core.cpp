@@ -358,6 +358,38 @@ void EskfCore::updateToF(float distance)
     scalarUpdate(H, innovation, cfg_.tof_noise * cfg_.tof_noise);
 }
 
+void EskfCore::updateToFVelocity(float distance, float dt)
+{
+    if (!cfg_.use_tof) return;
+    if (dt < 1e-6f) return;
+
+    // Tilt check
+    Vec3 euler = q_.to_euler();
+    float tilt = sqrtf(euler.x*euler.x + euler.y*euler.y);
+    if (tilt > cfg_.tof_tilt_threshold) return;
+
+    float height = distance * cosf(euler.x) * cosf(euler.y);
+
+    // Velocity from ToF difference: v_z ≈ d(pos_z)/dt
+    // ToF微分からの速度: v_z ≈ d(pos_z)/dt
+    // Since pos_z = -height in NED: v_z = -d(height)/dt
+    // Previous height stored internally
+    static float prev_height = height;
+    float vel_z_observed = -(height - prev_height) / dt;
+    prev_height = height;
+
+    // H = [0,0,0, 0,0,1, 0...0] (observes VEL_Z)
+    float H[N] = {};
+    H[VEL_Z] = 1.0f;
+
+    float innovation = vel_z_observed - vel_.z;
+
+    // Larger noise for velocity (derivative is noisy)
+    // 速度は微分なのでノイズが大きい
+    float vel_noise = cfg_.tof_noise * 5.0f;  // 5x position noise
+    scalarUpdate(H, innovation, vel_noise * vel_noise);
+}
+
 void EskfCore::updateBaro(float altitude)
 {
     if (!cfg_.use_baro) return;

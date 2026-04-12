@@ -109,6 +109,7 @@ public:
     // =========================================================================
 
     void updateToF(float distance);
+    void updateToFVelocity(float distance, float dt);  // ToF velocity observation
     void updateBaro(float altitude);
     void updateMag(const Vec3& mag);
     void updateAccelAttitude(const Vec3& accel);

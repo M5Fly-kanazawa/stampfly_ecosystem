@@ -87,8 +87,14 @@ int main()
     QuadParams qp;
     ContactParams cp;
     SensorNoiseParams np;
-    // All noise params from real flight log analysis (72 logs)
-    // 全ノイズパラメータは実飛行ログ解析（72ログ）から導出
+    // Noise off for ESKF control validation
+    // ESKF制御検証のためノイズオフ
+    np.gyro_noise_density = 0; np.accel_noise_density = 0;
+    np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
+    np.gyro_bias_rw = 0; np.accel_bias_rw = 0;
+    np.vib_accel_k = 0; np.vib_gyro_k = 0;
+    np.tof_noise_base = 0; np.tof_noise_scale = 0;
+    np.baro_noise_std = 0; np.baro_drift_rate = 0;
     quad.init(qp, cp, np);
 
     // --- Initialize ESKF ---
@@ -202,6 +208,7 @@ int main()
         eskf.updateAccelAttitude(accel);
         if (step % tof_div == 0) {
             eskf.updateToF(sens.tof_bottom);
+            eskf.updateToFVelocity(sens.tof_bottom, tof_div * dt);
         }
 
         // --- ESKF closed-loop control ---
@@ -220,7 +227,7 @@ int main()
         // Airborne: ESKF for position/velocity
         //
         float true_height = -true_st.position.z;
-        bool airborne = true_height > 0.05f && t > 1.5f;  // Airborne detection
+        bool airborne = true_height > 0.03f && t > 1.2f;  // Airborne detection
 
         Vec3 est_pos, est_vel, est_euler;
 
