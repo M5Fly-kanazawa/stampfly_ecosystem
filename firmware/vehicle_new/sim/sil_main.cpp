@@ -98,8 +98,12 @@ int main()
     cfg.use_baro = false;
     cfg.use_mag = false;
     cfg.use_flow = false;
-    cfg.accel_noise = 0.3f;      // Vehicle-tuned value
-    cfg.gyro_noise = 0.009655f;  // Vehicle-tuned value
+    // Q parameters matched to SIL sensor noise level
+    // SILセンサノイズレベルに合わせたQパラメータ
+    // Flight accel σ=1.54 m/s² → noise_density = 1.54/√400 = 0.077
+    // Flight gyro σ=1.05 rad/s → noise_density = 1.05/√400 = 0.053
+    cfg.accel_noise = 0.077f;
+    cfg.gyro_noise = 0.053f;
     eskf.init(cfg);
 
     // --- Initialize PIDs ---
@@ -185,20 +189,42 @@ int main()
         SimSensors sens = quad.getSensors(dt);
         quad.updateBiases(dt);
 
-        // --- ESKF disabled for fundamental physics test ---
+        // --- ESKF predict + observe ---
         Vec3 accel(sens.accel.x, sens.accel.y, sens.accel.z);
         Vec3 gyro(sens.gyro.x, sens.gyro.y, sens.gyro.z);
-        // eskf disabled
+        eskf.predict(accel, gyro, dt);
+        eskf.updateAccelAttitude(accel);
+        if (step % tof_div == 0) {
+            eskf.updateToF(sens.tof_bottom);
+        }
 
-        // --- All true state for control ---
+        // --- ESKF closed-loop control ---
+        // Position/velocity from ESKF, attitude from ESKF
+        // Rate control: true angular rate (ESKF gyro bias correction TODO)
         auto true_st = quad.getState();
-        Vec3 eskf_pos = {0,0,0};
-        Vec3 eskf_vel = {0,0,0};
-        Vec3 eskf_euler = {0,0,0};
+        Vec3 eskf_pos = eskf.getPosition();
+        Vec3 eskf_vel = eskf.getVelocity();
+        Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        Vec3 est_pos = true_st.position;
-        Vec3 est_vel = true_st.velocity;
-        Vec3 est_euler = true_st.attitude.to_euler();
+        // Transition: use true state on ground, ESKF once airborne
+        // 遷移: 地上では真値、空中ではESKFを使用
+        // This matches real vehicle behavior (calibrate on ground → fly with ESKF)
+        // 実機の動作に合致（地上でキャリブレーション → ESKFで飛行）
+        bool airborne = true_st.position.z < -0.03f;  // >3cm above ground
+        Vec3 est_pos, est_vel, est_euler;
+
+        if (airborne) {
+            est_pos = eskf_pos;
+            est_vel = eskf_vel;
+            est_euler = eskf_euler;
+        } else {
+            est_pos = true_st.position;
+            est_vel = true_st.velocity;
+            est_euler = true_st.attitude.to_euler();
+            // Keep ESKF aligned while on ground
+            // 地上ではESKFを同期
+            eskf.resetPositionVelocity();
+        }
 
         // --- Control ---
         float thrust = 0;
