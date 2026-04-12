@@ -1,0 +1,135 @@
+================================================================================
+FLIGHT LOG NOISE ANALYSIS v2 — Segment-based
+================================================================================
+
+Logs analyzed: 72
+Flight segments: 32 (209.8s total)
+Static segments: 99 (911.4s total)
+Transition segments: 50 (37.7s total)
+Ambiguous logs: 10
+
+--- Per-log summary ---
+  flight.csv                                         flight= 15.0s  static=  3.7s  trans=  8.2s  segs=15
+  hover01.csv                                        flight=  9.9s  static=  5.7s  trans=  0.9s  segs=9
+  hover02.csv                                        flight= 13.7s  static=  1.7s  trans=  0.7s  segs=3
+  hover03.csv                                        flight=  0.0s  static=  9.1s  trans=  0.0s  segs=1
+  hover04.csv                                        flight=  0.0s  static=  9.0s  trans=  0.0s  segs=1
+  hover06.csv                                        flight=  0.0s  static=  9.0s  trans=  0.0s  segs=1
+  hover07.csv                                        flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  hover08.csv                                        flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  hover09.csv                                        flight=  0.0s  static=  7.3s  trans=  1.5s  segs=5
+  hover10.csv                                        flight=  0.0s  static=  9.2s  trans=  0.0s  segs=1
+  hover11.csv                                        flight=  0.0s  static=  9.2s  trans=  0.0s  segs=1
+  hover12.csv                                        flight=  5.5s  static=  2.4s  trans=  0.7s  segs=4
+  hover13.csv                                        flight=  4.2s  static=  3.2s  trans=  1.4s  segs=3
+  hover_test_static.csv                              flight= 20.6s  static= 37.1s  trans=  1.8s  segs=9
+  hover_test_static02.csv                            flight= 20.7s  static= 31.3s  trans=  5.3s  segs=23
+  hover_test_static03.csv                            flight= 20.1s  static= 34.5s  trans=  4.4s  segs=9
+  log_wifi_test.csv                                  flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test02.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test03.csv                                flight=  0.0s  static=  9.7s  trans=  0.0s  segs=1
+  log_wifi_test04.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test05.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test06.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test07.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test08.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test09.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test10.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test11.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test12.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test13.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test14.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test15.csv                                flight=  0.0s  static=  9.6s  trans=  0.0s  segs=1
+  log_wifi_test16.csv                                flight=  0.0s  static=  9.7s  trans=  0.0s  segs=1
+  log_wifi_test17.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test18.csv                                flight=  0.0s  static=119.0s  trans=  0.5s  segs=2
+  log_wifi_test19.csv                                flight=  0.0s  static=119.5s  trans=  0.5s  segs=2
+  log_wifi_test20.csv                                flight=  0.0s  static=  9.3s  trans=  0.5s  segs=3
+  log_wifi_test21.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test22.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test23.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test24.csv                                flight=  0.0s  static=  9.6s  trans=  0.0s  segs=1
+  log_wifi_test25.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test26.csv                                flight=  0.0s  static=  9.4s  trans=  0.6s  segs=2
+  log_wifi_test27.csv                                flight=  0.9s  static=  3.7s  trans=  1.0s  segs=6
+  log_wifi_test28.csv                                flight=  0.0s  static=  7.9s  trans=  0.0s  segs=1
+  log_wifi_test29.csv                                flight=  0.6s  static=  6.8s  trans=  0.0s  segs=3
+  log_wifi_test30.csv                                flight=  3.6s  static=  5.1s  trans=  1.2s  segs=6
+  log_wifi_test31.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test32.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test33.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test34.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test35.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test36.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test37.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test38.csv                                flight=  0.0s  static=  9.9s  trans=  0.0s  segs=1
+  log_wifi_test39.csv                                flight=  0.0s  static=  8.4s  trans=  0.0s  segs=1
+  log_wifi_test40.csv                                flight=  0.0s  static=  9.6s  trans=  0.0s  segs=1
+  log_wifi_test41.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test42.csv                                flight=  0.0s  static=  9.7s  trans=  0.0s  segs=1
+  log_wifi_test43.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test44.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test45.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test46.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test47.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test48.csv                                flight=  0.0s  static=  9.8s  trans=  0.0s  segs=1
+  log_wifi_test49.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  log_wifi_test50.csv                                flight=  0.0s  static= 10.0s  trans=  0.0s  segs=1
+  stampfly_udp_20260401T155904.csv                   flight= 23.1s  static=  0.0s  trans=  0.0s  segs=1
+  stampfly_udp_20260401T161253.csv                   flight= 12.6s  static=  0.0s  trans=  0.0s  segs=1
+  stampfly_udp_20260401T162900.csv                   flight= 25.4s  static=  0.0s  trans=  0.0s  segs=1
+  stampfly_wifi_20260303T014044.csv                  flight=  9.9s  static= 19.6s  trans=  0.0s  segs=5
+  stampfly_wifi_20260303T025543.csv                  flight=  8.7s  static=  0.9s  trans=  0.3s  segs=4
+  stampfly_wifi_20260303T134820.csv                  flight= 15.0s  static=  3.7s  trans=  8.2s  segs=15
+
+================================================================================
+STATIC SEGMENTS — Sensor noise baseline (motors OFF)
+================================================================================
+  accel_x_std              : median=0.008675  mean=0.027302  [0.007552, 0.178593] (n=99)
+  accel_y_std              : median=0.010257  mean=0.035020  [0.009558, 0.238422] (n=99)
+  accel_z_std              : median=0.011326  mean=0.015020  [0.010266, 0.040824] (n=99)
+  gyro_x_std               : median=0.001546  mean=0.003413  [0.001456, 0.014779] (n=99)
+  gyro_y_std               : median=0.001475  mean=0.002530  [0.001404, 0.008089] (n=99)
+  gyro_z_std               : median=0.001457  mean=0.004937  [0.001368, 0.020713] (n=99)
+
+================================================================================
+FLIGHT SEGMENTS — In-flight noise (motors ON, vibration)
+================================================================================
+  accel_x_std              : median=2.0026  mean=1.9126  [0.0080, 4.5053] (n=32)
+  accel_y_std              : median=1.6828  mean=1.7337  [0.0102, 3.7480] (n=32)
+  accel_z_std              : median=1.5455  mean=1.8942  [0.0126, 5.4417] (n=32)
+  gyro_x_std               : median=1.0471  mean=1.4215  [0.0016, 3.6668] (n=32)
+  gyro_y_std               : median=0.9661  mean=1.4395  [0.0015, 4.3982] (n=32)
+  gyro_z_std               : median=0.5548  mean=0.9748  [0.0014, 2.8188] (n=32)
+  tof_std                  : median=0.0350  mean=0.0929  [0.0000, 0.4182] (n=29)
+  tof_mean                 : median=0.1330  mean=0.1717  [0.0344, 0.4295] (n=29)
+  throttle_mean            : median=0.0000  mean=0.1490  [0.0000, 0.7585] (n=32)
+
+================================================================================
+VIBRATION RATIO — Flight / Static
+================================================================================
+  accel_x_std              : static=0.008675  flight=2.0026  ratio=231x
+  accel_y_std              : static=0.010257  flight=1.6828  ratio=164x
+  accel_z_std              : static=0.011326  flight=1.5455  ratio=136x
+  gyro_x_std               : static=0.001546  flight=1.0471  ratio=677x
+  gyro_y_std               : static=0.001475  flight=0.9661  ratio=655x
+  gyro_z_std               : static=0.001457  flight=0.5548  ratio=381x
+
+================================================================================
+BIAS VALUES — From flight segments
+================================================================================
+  gyro_bias_x_mean         : median=-0.004443  std=0.006143  (n=32)
+  gyro_bias_y_mean         : median=0.002663  std=0.019390  (n=32)
+  gyro_bias_z_mean         : median=0.003433  std=0.005430  (n=32)
+  accel_bias_x_mean        : median=-0.049100  std=0.108928  (n=32)
+  accel_bias_y_mean        : median=0.000000  std=0.043698  (n=32)
+  accel_bias_z_mean        : median=-0.129022  std=0.090698  (n=32)
+
+================================================================================
+RECOMMENDED SIL NOISE PARAMETERS
+================================================================================
+  accel_noise_density (static):  0.000566 m/s²/√Hz  (from median σ=0.011326)
+  gyro_noise_density (static):   0.000077 rad/s/√Hz  (from median σ=0.001546)
+  vib_accel_k (hover):           1.55 m/s² (median flight accel_z σ)
+  vib_gyro_k (hover):            1.05 rad/s (median flight gyro_x σ)
+  tof_noise (flight):            0.0350 m (median flight ToF σ)
