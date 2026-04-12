@@ -42,7 +42,8 @@
 | 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | c40717c |
 | 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | 6c0ef53 |
 | 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | 63e4bc3 |
-| 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | — |
+| 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | c855700 |
+| 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hスタブ | — |
 
 ## 集計
 
