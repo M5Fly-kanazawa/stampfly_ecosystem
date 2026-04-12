@@ -44,7 +44,9 @@
 | 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | 63e4bc3 |
 | 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | c855700 |
 | 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hスタブ | c033ad7 |
-| 2026-04-12 | 10:54 | 11:01 | 7min | Examples Level 1（8個）作成 | 01_blink_led〜08_battery_monitor、各4ファイル(32ファイル) | — |
+| 2026-04-12 | 10:54 | 11:01 | 7min | Examples Level 1（8個）作成 | 01_blink_led〜08_battery_monitor、各4ファイル(32ファイル) | e0db046 |
+| 2026-04-12 | 11:02 | 11:15 | 13min | SILシミュレータ初版作成（物理モデル+パイプライン結合）→ モデル精度問題発覚 | quad_model.hpp, sil_main.cpp, Makefile | — |
+| 2026-04-12 | 11:15 | 11:45 | 30min | SILモデル精査: 座標系整合性調査、ノイズモデル設計レポート | 座標系不整合4箇所発見、比力計算の致命的誤り特定 | — |
 
 ## 集計
 
