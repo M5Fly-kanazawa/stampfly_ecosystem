@@ -100,9 +100,12 @@ def render_scenario(ax, ax_alt, data, title, frame_idx, indices, face_colors):
     pitch_d = data['pitch'] if 'pitch' in data.dtype.names else np.zeros_like(t)
     yaw_d = data['yaw'] if 'yaw' in data.dtype.names else np.zeros_like(t)
 
-    # NED → display (z up)
-    # NED → 表示座標（z上向き）
+    # NED → display (z up), COM position
+    # NED → 表示座標（z上向き）、重心位置
     disp_x, disp_y, disp_z = pos_x, pos_y, -pos_z_ned
+    # Bottom height = COM height - half_z (for altitude plot)
+    # 底面高さ = 重心高さ - half_z（高度グラフ用）
+    bottom_z = disp_z - HZ
     z_max = max(np.max(disp_z) + 0.1, 0.7)
     xy_r = max(np.max(np.abs(disp_x)) + 0.15, np.max(np.abs(disp_y)) + 0.15, 0.2)
 
@@ -157,28 +160,29 @@ def render_scenario(ax, ax_alt, data, title, frame_idx, indices, face_colors):
             'b-', alpha=0.3, linewidth=0.8)
     ax.plot([disp_x[idx]], [disp_y[idx]], [0], 'ko', alpha=0.2, markersize=4)
     ax.view_init(elev=25, azim=-60)
-    ax.set_title(f'{title}  t={t[idx]:.2f}s  alt={disp_z[idx]*100:.1f}cm',
+    ax.set_title(f'{title}  t={t[idx]:.2f}s  alt={bottom_z[idx]*100:.1f}cm',
                  fontsize=10)
 
-    # Altitude subplot
-    # 高度サブプロット
+    # Altitude subplot (bottom surface height, not COM)
+    # 高度サブプロット（底面高さ、重心ではない）
     ax_alt.cla()
-    ax_alt.plot(t, disp_z * 100, 'b-', linewidth=0.8, alpha=0.5)
+    ax_alt.plot(t, bottom_z * 100, 'b-', linewidth=0.8, alpha=0.5,
+                label='Bottom')
     ax_alt.axhline(y=0, color='brown', linewidth=1)
-    ax_alt.plot(t[idx], disp_z[idx] * 100, 'ro', markersize=6)
+    ax_alt.plot(t[idx], bottom_z[idx] * 100, 'ro', markersize=6)
     ax_alt.axvline(x=t[idx], color='red', alpha=0.3)
     ax_alt.set_ylabel('Height [cm]')
     ax_alt.set_xlabel('Time [s]')
-    ax_alt.set_title('Altitude', fontsize=9)
+    ax_alt.set_title('Altitude (bottom surface)', fontsize=9)
     ax_alt.set_xlim(t[0], t[-1])
-    ax_alt.set_ylim(min(np.min(disp_z * 100) - 2, -2),
-                    max(np.max(disp_z * 100) + 5, 60))
+    ax_alt.set_ylim(min(np.min(bottom_z * 100) - 2, -2),
+                    max(np.max(bottom_z * 100) + 5, 60))
 
     # ESKF overlay (hover scenario only)
     # ESKFオーバーレイ（ホバリングシナリオのみ）
     if 'eskf_z' in data.dtype.names:
-        eskf_z_disp = -data['eskf_z'] * 100
-        ax_alt.plot(t, eskf_z_disp, 'r--', linewidth=0.8, alpha=0.4,
+        eskf_bottom = (-data['eskf_z'] - HZ) * 100
+        ax_alt.plot(t, eskf_bottom, 'r--', linewidth=0.8, alpha=0.4,
                     label='ESKF')
         ax_alt.legend(fontsize=7, loc='lower right')
 
@@ -190,12 +194,12 @@ def main():
     drop_t = load_csv('drop_tilted.csv')
 
     fps = 30
-    # Subsample each scenario
-    # 各シナリオをサブサンプル
+    # 3 scenarios: hover, level drop, tilted drop
+    # 3シナリオ: ホバリング、水平落下、傾斜落下
     scenarios = [
-        (hover,  "Hover Flight (target 50cm)", 5),
-        (drop_l, "Level Drop 0.5m",            2),
-        (drop_t, "Tilted Drop 30\u00b0",       2),
+        (hover,  "Hover (target 50cm)", 5),
+        (drop_l, "Level Drop 0.5m",     2),
+        (drop_t, "Tilted Drop 30\u00b0", 2),
     ]
 
     TITLE_FRAMES = 15  # 0.5s title card
