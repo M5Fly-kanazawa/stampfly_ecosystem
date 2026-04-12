@@ -102,8 +102,14 @@ int main()
     // SILセンサノイズレベルに合わせたQパラメータ
     // Flight accel σ=1.54 m/s² → noise_density = 1.54/√400 = 0.077
     // Flight gyro σ=1.05 rad/s → noise_density = 1.05/√400 = 0.053
-    cfg.accel_noise = 0.077f;
-    cfg.gyro_noise = 0.053f;
+    // ESKF Q/R tuning for SIL
+    // - accel_noise controls predict bandwidth (larger = more IMU trust)
+    // - tof_noise controls observation strength (smaller = more ToF trust)
+    // Vehicle-tuned values: wider bandwidth lets ToF correct velocity faster
+    // 実機チューニング値: 広い帯域でToFが速度を速く補正
+    cfg.accel_noise = 0.3f;
+    cfg.gyro_noise = 0.009655f;
+    cfg.tof_noise = 0.01f;        // Slightly stronger ToF trust
     eskf.init(cfg);
 
     // --- Initialize PIDs ---
@@ -126,7 +132,7 @@ int main()
     const float dt = 0.0025f;
     const float sim_time = 10.0f;
     const int steps = static_cast<int>(sim_time / dt);
-    const int tof_div = 13;  // ~30Hz
+    const int tof_div = 4;   // ~100Hz (test: more frequent ToF updates)
     const float hover_thrust = qp.mass * qp.gravity;
     const float target_alt = 0.5f;
 
@@ -206,11 +212,16 @@ int main()
         Vec3 eskf_vel = eskf.getVelocity();
         Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        // Transition: use true state on ground, ESKF once airborne
-        // 遷移: 地上では真値、空中ではESKFを使用
-        // This matches real vehicle behavior (calibrate on ground → fly with ESKF)
-        // 実機の動作に合致（地上でキャリブレーション → ESKFで飛行）
-        bool airborne = true_st.position.z < -0.03f;  // >3cm above ground
+        // State transition: ground → takeoff → airborne(ESKF)
+        // 状態遷移: 地上 → 離陸 → 空中(ESKF)
+        //
+        // Ground: true state for control, ESKF reset each step
+        // Takeoff: true state until stable airborne (>10cm, >0.5s)
+        // Airborne: ESKF for position/velocity
+        //
+        float true_height = -true_st.position.z;
+        bool airborne = true_height > 0.05f && t > 1.5f;  // Airborne detection
+
         Vec3 est_pos, est_vel, est_euler;
 
         if (airborne) {
@@ -221,8 +232,8 @@ int main()
             est_pos = true_st.position;
             est_vel = true_st.velocity;
             est_euler = true_st.attitude.to_euler();
-            // Keep ESKF aligned while on ground
-            // 地上ではESKFを同期
+            // Continuously reset ESKF until airborne
+            // 空中になるまでESKFを継続リセット
             eskf.resetPositionVelocity();
         }
 
