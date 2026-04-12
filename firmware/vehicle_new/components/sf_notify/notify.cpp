@@ -1,0 +1,138 @@
+/**
+ * @file notify.cpp
+ * @brief Notification manager implementation
+ *        通知マネージャー実装
+ *
+ * @design architecture.md §8 — Notification subsystem                  [--]
+ * @design detailed_design.md §10 — LED pattern table                   [--]
+ */
+
+#include "notify.hpp"
+#include "topics.hpp"
+#include "esp_log.h"
+#include "esp_timer.h"
+
+static const char* TAG = "notify";
+
+namespace sf {
+
+// =============================================================================
+// LED pattern table — one entry per FlightState
+// LEDパターンテーブル — FlightState毎に1エントリ
+//
+// @design detailed_design.md §10 — LED pattern definitions              [--]
+// =============================================================================
+
+static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
+    // INIT:         blue slow blink   / 青 ゆっくり点滅
+    { {0, 0, 255},    500, 500 },
+    // IDLE_GROUND:  green solid       / 緑 常灯
+    { {0, 255, 0},   1000,   0 },
+    // IDLE_HELD:    cyan fast blink   / シアン 高速点滅
+    { {0, 255, 255},  200, 200 },
+    // ARMED_GROUND: yellow solid      / 黄色 常灯
+    { {255, 255, 0}, 1000,   0 },
+    // TAKEOFF:      white fast blink  / 白 高速点滅
+    { {255, 255, 255}, 100, 100 },
+    // FLYING:       green solid       / 緑 常灯
+    { {0, 255, 0},   1000,   0 },
+    // LANDING:      orange slow blink / オレンジ ゆっくり点滅
+    { {255, 128, 0},  300, 300 },
+};
+
+// -----------------------------------------------------------------------------
+// init — initialize LED and buzzer HAL
+// 初期化 — LEDとブザーHALを初期化
+// -----------------------------------------------------------------------------
+void Notify::init()
+{
+    // TODO: Initialize LED HAL (Neopixel or PWM)
+    // TODO: LED HALを初期化（NeopixelまたはPWM）
+
+    // TODO: Initialize buzzer HAL
+    // TODO: ブザーHALを初期化
+
+    ESP_LOGI(TAG, "Notify initialized");
+}
+
+// -----------------------------------------------------------------------------
+// update — read system_mode topic, apply LED pattern
+// 更新 — system_modeトピックを読み、LEDパターンを適用
+// -----------------------------------------------------------------------------
+void Notify::update()
+{
+    // Read current system mode from topic
+    // トピックから現在のシステムモードを読み取る
+    SystemMode mode = system_mode.latest();
+    FlightState state = static_cast<FlightState>(mode.state);
+
+    // Get and apply LED pattern for current state
+    // 現在の状態のLEDパターンを取得して適用
+    const LedPattern& pattern = getPattern(state);
+    applyLedPattern(pattern);
+
+    // Check for alerts and play buzzer if needed
+    // アラートをチェックし必要に応じブザーを鳴らす
+    SystemAlert alert;
+    if (system_alert.read(alert)) {
+        playTone(static_cast<AlertType>(alert.type));
+    }
+}
+
+// -----------------------------------------------------------------------------
+// playTone — play buzzer tone for alert event
+// トーン再生 — アラートイベント用ブザートーンを再生
+// -----------------------------------------------------------------------------
+void Notify::playTone(AlertType type)
+{
+    // TODO: Map AlertType to frequency + duration
+    // TODO: AlertTypeを周波数＋持続時間にマッピング
+    // TODO: Call buzzer HAL to play tone
+    // TODO: ブザーHALを呼んでトーンを再生
+    (void)type;
+}
+
+// -----------------------------------------------------------------------------
+// getPattern — look up LED pattern by flight state
+// パターン取得 — フライト状態でLEDパターンを検索
+// -----------------------------------------------------------------------------
+const LedPattern& Notify::getPattern(FlightState state) const
+{
+    uint8_t idx = static_cast<uint8_t>(state);
+    if (idx >= FLIGHT_STATE_COUNT) {
+        idx = 0;  // Fallback to INIT pattern / INITパターンにフォールバック
+    }
+    return kPatternTable[idx];
+}
+
+// -----------------------------------------------------------------------------
+// applyLedPattern — toggle LED based on on/off timing
+// LEDパターン適用 — ON/OFFタイミングに基づきLEDを切り替え
+// -----------------------------------------------------------------------------
+void Notify::applyLedPattern(const LedPattern& pattern)
+{
+    uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+
+    // Solid mode (off_ms == 0): always on
+    // 常灯モード (off_ms == 0): 常にON
+    if (pattern.off_ms == 0) {
+        // TODO: led_hal::set_color(pattern.color.r, g, b);
+        // TODO: led_hal::set_color(pattern.color.r, g, b);
+        return;
+    }
+
+    // Blink mode: toggle based on timing
+    // 点滅モード: タイミングに基づき切り替え
+    uint32_t period = led_on_ ? pattern.on_ms : pattern.off_ms;
+    if (now_ms - last_toggle_ms_ >= period) {
+        led_on_ = !led_on_;
+        last_toggle_ms_ = now_ms;
+
+        // TODO: Set LED on/off via HAL
+        // TODO: HAL経由でLEDをON/OFF
+        // if (led_on_) led_hal::set_color(r, g, b);
+        // else         led_hal::set_color(0, 0, 0);
+    }
+}
+
+}  // namespace sf
