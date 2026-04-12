@@ -186,31 +186,23 @@ int main()
         SimSensors sens = quad.getSensors(dt);
         quad.updateBiases(dt);
 
-        // --- ESKF predict ---
+        // --- ESKF prediction and updates ---
         Vec3 accel(sens.accel.x, sens.accel.y, sens.accel.z);
         Vec3 gyro(sens.gyro.x, sens.gyro.y, sens.gyro.z);
         eskf.predict(accel, gyro, dt);
         eskf.updateAccelAttitude(accel);
-
-        // (debug output moved after control section)
-
-        // --- ESKF ToF update (30Hz) ---
         if (step % tof_div == 0) {
             eskf.updateToF(sens.tof_bottom);
         }
 
-        // --- Get estimates ---
-        // Use true state until airborne, then switch to ESKF
-        // 空中になるまで真値を使用、その後ESKFに切り替え
+        // --- Get states ---
         auto true_st = quad.getState();
-        bool airborne = true_st.position.z < -0.01f;  // More than 1cm above ground
-
         Vec3 eskf_pos = eskf.getPosition();
         Vec3 eskf_vel = eskf.getVelocity();
         Vec3 eskf_euler = eskf.getAttitude().to_euler();
 
-        // Control uses true state; ESKF runs in parallel for comparison
-        // 制御には真値を使用; ESKFは比較用に並行実行
+        // Control uses true state for position/velocity, ESKF for comparison
+        // 制御には真値、ESKFは比較用
         Vec3 est_pos = true_st.position;
         Vec3 est_vel = true_st.velocity;
         Vec3 est_euler = true_st.attitude.to_euler();
@@ -231,11 +223,13 @@ int main()
             float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
             float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
 
-            // Rate control (use sensor gyro directly for inner loop)
-            // レート制御（内ループはセンサジャイロを直接使用）
-            torque[0] = rate_r.compute(rate_sp_r - sens.gyro.x, dt);
-            torque[1] = rate_p.compute(rate_sp_p - sens.gyro.y, dt);
-            torque[2] = rate_y.compute(0 - sens.gyro.z, dt);
+            // Rate control using true angular rate (for physics validation)
+            // レート制御には真の角速度を使用（物理検証用）
+            // In real flight: use bias-corrected gyro from ESKF
+            // 実飛行時: ESKFのバイアス補正済みジャイロを使用
+            torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
+            torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
+            torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
         }
 
         // --- Mixer ---
@@ -249,6 +243,15 @@ int main()
             auto dst = quad.getState();
             fprintf(stderr, "t=%.1f true_z=%.4f eskf_z=%.4f T=%.3f d=%.3f\n",
                     t, dst.position.z, est_pos.z, thrust, motor_duty[0]);
+        }
+
+        // Debug: physics state at ARM
+        if (step >= 400 && step < 410) {
+            auto ds = quad.getState();
+            fprintf(stderr, "s=%d pos_z=%.6f vel_z=%.6f m=[%.3f %.3f %.3f %.3f] avg=%.3f\n",
+                    step, ds.position.z, ds.velocity.z,
+                    motor_duty[0], motor_duty[1], motor_duty[2], motor_duty[3],
+                    ds.avg_duty);
         }
 
         // --- Physics step ---
