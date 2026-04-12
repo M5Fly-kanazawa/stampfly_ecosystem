@@ -161,17 +161,22 @@ int main()
     // Set ESKF initial biases from calibration
     // キャリブレーションからESKF初期バイアスを設定
     // Gyro bias = average gyro reading (should be near zero + bias)
-    // Accel bias: static accel should be [0, 0, -g] in body
-    // So accel_bias = measured - expected = measured - [0, 0, -g]
+    // Accel bias = measured - expected
+    // 加速度バイアス = 測定値 - 期待値
+    // At rest, expected accel = [0, 0, -g] in NED body frame
+    // 静止時の期待加速度 = [0, 0, -g]（NED body frame）
+    // ba = accel_avg - [0, 0, -g] = [avg_x, avg_y, avg_z + g]
     Vec3 gyro_avg = gyro_sum * (1.0f / 100.0f);
     Vec3 accel_avg = accel_sum * (1.0f / 100.0f);
 
-    fprintf(stderr, "Gyro bias:  [%.4f %.4f %.4f] rad/s\n",
+    fprintf(stderr, "Gyro avg:   [%.4f %.4f %.4f] rad/s\n",
             gyro_avg.x, gyro_avg.y, gyro_avg.z);
-    fprintf(stderr, "Accel avg:  [%.4f %.4f %.4f] m/s²\n",
-            accel_avg.x, accel_avg.y, accel_avg.z);
-    Vec3 accel_bias(accel_avg.x, accel_avg.y, accel_avg.z + qp.gravity);
-    fprintf(stderr, "Accel bias: [%.4f %.4f %.4f] m/s² (avg - [0,0,-g])\n",
+    fprintf(stderr, "Accel avg:  [%.4f %.4f %.4f] m/s² (expect [0,0,%.2f])\n",
+            accel_avg.x, accel_avg.y, accel_avg.z, -qp.gravity);
+    Vec3 accel_bias(accel_avg.x - 0,
+                    accel_avg.y - 0,
+                    accel_avg.z - (-qp.gravity));  // = accel_avg.z + g
+    fprintf(stderr, "Accel bias: [%.4f %.4f %.4f] m/s²\n",
             accel_bias.x, accel_bias.y, accel_bias.z);
 
     // Set calibrated biases to ESKF

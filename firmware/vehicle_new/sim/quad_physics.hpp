@@ -375,10 +375,13 @@ public:
         // Add 2g to z to match vehicle convention:
         // static: specific_force_body.z = -g → + 2g → +g (matches vehicle)
         // vehicle慣例に合わせてzに2gを加算
-        // Add 2g to match vehicle IMU convention (BMI270→NED axis swap)
-        // vehicle IMU慣例に合わせて2gを加算（BMI270→NED軸変換）
-        // This will be absorbed by ESKF accel bias initialization (ba_z ≈ 2g)
-        // ESKFの加速度バイアス初期化（ba_z ≈ 2g）で吸収される
+        // TODO: +2g is a temporary convention workaround.
+        // The PGS contact solver sign convention needs careful redesign
+        // to eliminate this addition and produce correct -g at rest.
+        // See discussion: accel_z should be -9.81 at rest in NED body Z.
+        // TODO: +2gは一時的な慣例回避策。
+        // PGS接触ソルバーの符号定義を慎重に再設計して
+        // この加算を排除し、静止時に正しい-gを出力する必要がある。
         specific_force_body.z += 2.0f * qp_.gravity;
 
         // Add noise
@@ -643,10 +646,9 @@ private:
                 float m_eff = 1.0f / inv_m_eff;
 
                 // Solve for impulse
-                // インパルスを解く
                 float delta_lambda = m_eff * (v_target - vn_current);
 
-                // Project: λ ≥ 0 (push only)
+                // Project: λ ≥ 0
                 float new_lambda = fmaxf(0, cp.lambda_n + delta_lambda);
                 delta_lambda = new_lambda - cp.lambda_n;
                 cp.lambda_n = new_lambda;
@@ -672,8 +674,10 @@ private:
         // F = λ / dt (impulse → force)
         Vec3 contact_torque_sum = {};
         for (int ci = 0; ci < n_contacts; ci++) {
-            float force_n = contacts[ci].lambda_n / dt;  // Impulse → force
-            Vec3 f_vec(0, 0, -force_n);  // λ is upward push → force is NED negative z
+            // λ is positive upward impulse → force is NED negative z
+            // λは正の上向きインパルス → 力はNED負z
+            float force_n = contacts[ci].lambda_n / dt;
+            Vec3 f_vec(0, 0, -force_n);
 
             // Friction impulse (Coulomb, explicit)
             // 摩擦インパルス（クーロン、陽的）
