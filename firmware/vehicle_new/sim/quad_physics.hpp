@@ -375,6 +375,10 @@ public:
         // Add 2g to z to match vehicle convention:
         // static: specific_force_body.z = -g → + 2g → +g (matches vehicle)
         // vehicle慣例に合わせてzに2gを加算
+        // Add 2g to match vehicle IMU convention (BMI270→NED axis swap)
+        // vehicle IMU慣例に合わせて2gを加算（BMI270→NED軸変換）
+        // This will be absorbed by ESKF accel bias initialization (ba_z ≈ 2g)
+        // ESKFの加速度バイアス初期化（ba_z ≈ 2g）で吸収される
         specific_force_body.z += 2.0f * qp_.gravity;
 
         // Add noise
@@ -638,18 +642,16 @@ private:
                     + rxn_y * rxn_y / qp_.Iyy;
                 float m_eff = 1.0f / inv_m_eff;
 
-                // Solve for impulse: λ = m_eff * (v_target - vn_current) / dt
+                // Solve for impulse
                 // インパルスを解く
                 float delta_lambda = m_eff * (v_target - vn_current);
 
                 // Project: λ ≥ 0 (push only)
-                // 射影: λ ≥ 0（押すだけ）
                 float new_lambda = fmaxf(0, cp.lambda_n + delta_lambda);
                 delta_lambda = new_lambda - cp.lambda_n;
                 cp.lambda_n = new_lambda;
 
-                // Apply impulse to velocity and angular velocity
-                // インパルスを速度と角速度に適用
+                // Apply impulse
                 state_.velocity.z += delta_lambda / qp_.mass;
                 state_.angular_rate.x += delta_lambda * rxn_x / qp_.Ixx;
                 state_.angular_rate.y += delta_lambda * rxn_y / qp_.Iyy;
@@ -670,8 +672,8 @@ private:
         // F = λ / dt (impulse → force)
         Vec3 contact_torque_sum = {};
         for (int ci = 0; ci < n_contacts; ci++) {
-            float force_n = contacts[ci].lambda_n / dt;
-            Vec3 f_vec(0, 0, -force_n);  // Upward in NED = negative z
+            float force_n = contacts[ci].lambda_n / dt;  // Impulse → force
+            Vec3 f_vec(0, 0, -force_n);  // λ is upward push → force is NED negative z
 
             // Friction impulse (Coulomb, explicit)
             // 摩擦インパルス（クーロン、陽的）
