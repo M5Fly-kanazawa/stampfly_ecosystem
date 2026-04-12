@@ -4,6 +4,17 @@ idf_component_register(
         "../tasks/imu_task.cpp"
         "../tasks/control_task.cpp"
         "../tasks/state_task.cpp"
+        "../tasks/flow_task.cpp"
+        "../tasks/mag_task.cpp"
+        "../tasks/baro_task.cpp"
+        "../tasks/tof_task.cpp"
+        "../tasks/power_task.cpp"
+        "../tasks/comm_task.cpp"
+        "../tasks/telemetry_task.cpp"
+        "../tasks/button_task.cpp"
+        "../tasks/notify_task.cpp"
+        "../tasks/cli_task.cpp"
+        "../tasks/log_task.cpp"
     INCLUDE_DIRS "." "../tasks"
     REQUIRES
         esp_timer

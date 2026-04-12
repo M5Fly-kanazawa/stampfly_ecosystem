@@ -28,9 +28,9 @@ static const char* TAG = "main";
 /// 制御タスクハンドル（ImuTaskの同期通知に使用）
 extern TaskHandle_t g_control_task_handle;
 
-/// State task handle (used for event notification)
-/// 状態タスクハンドル（イベント通知に使用）
-static TaskHandle_t state_task_handle = nullptr;
+/// State task handle (used for event notification from failsafe)
+/// 状態タスクハンドル（フェイルセーフからのイベント通知に使用）
+TaskHandle_t g_state_task_handle = nullptr;
 
 extern "C" void app_main(void)
 {
@@ -91,7 +91,7 @@ extern "C" void app_main(void)
     // 状態タスクを最初に起動（イベント駆動、遷移を管理）
     xTaskCreatePinnedToCore(StateTask, "StateTask",
         config::STACK_STATE, nullptr,
-        config::PRIORITY_STATE, &state_task_handle, 1);
+        config::PRIORITY_STATE, &g_state_task_handle, 1);
 
     // Start control task (waits for IMU notification)
     // 制御タスクを起動（IMU通知を待つ）
@@ -105,7 +105,53 @@ extern "C" void app_main(void)
         config::STACK_IMU, nullptr,
         config::PRIORITY_IMU, nullptr, 1);
 
-    // TODO: Start remaining tasks (Flow, Mag, Baro, ToF, Comm, etc.)
+    // Start sensor tasks
+    // センサタスクを起動
+    xTaskCreatePinnedToCore(FlowTask, "FlowTask",
+        config::STACK_OPTFLOW, nullptr,
+        config::PRIORITY_OPTFLOW, nullptr, 0);
 
-    ESP_LOGI(TAG, "=== Phase 3: Tasks started — INIT complete ===");
+    xTaskCreatePinnedToCore(MagTask, "MagTask",
+        config::STACK_MAG, nullptr,
+        config::PRIORITY_MAG, nullptr, 0);
+
+    xTaskCreatePinnedToCore(BaroTask, "BaroTask",
+        config::STACK_BARO, nullptr,
+        config::PRIORITY_BARO, nullptr, 0);
+
+    xTaskCreatePinnedToCore(TofTask, "TofTask",
+        config::STACK_TOF, nullptr,
+        config::PRIORITY_TOF, nullptr, 0);
+
+    xTaskCreatePinnedToCore(PowerTask, "PowerTask",
+        config::STACK_POWER, nullptr,
+        config::PRIORITY_POWER, nullptr, 0);
+
+    // Start communication and service tasks
+    // 通信・サービスタスクを起動
+    xTaskCreatePinnedToCore(CommTask, "CommTask",
+        config::STACK_COMM, nullptr,
+        config::PRIORITY_COMM, nullptr, 0);
+
+    xTaskCreatePinnedToCore(TelemetryTask, "TelemetryTask",
+        config::STACK_TELEMETRY, nullptr,
+        config::PRIORITY_TELEMETRY, nullptr, 0);
+
+    xTaskCreatePinnedToCore(ButtonTask, "ButtonTask",
+        config::STACK_BUTTON, nullptr,
+        config::PRIORITY_BUTTON, nullptr, 0);
+
+    xTaskCreatePinnedToCore(NotifyTask, "NotifyTask",
+        config::STACK_NOTIFY, nullptr,
+        config::PRIORITY_NOTIFY, nullptr, 0);
+
+    xTaskCreatePinnedToCore(CLITask, "CLITask",
+        config::STACK_CLI, nullptr,
+        config::PRIORITY_CLI, nullptr, 0);
+
+    xTaskCreatePinnedToCore(LogTask, "LogTask",
+        config::STACK_LOG, nullptr,
+        config::PRIORITY_LOG, nullptr, 0);
+
+    ESP_LOGI(TAG, "=== Phase 3: All 14 tasks started — INIT complete ===");
 }
