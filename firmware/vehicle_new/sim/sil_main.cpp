@@ -85,20 +85,11 @@ int main()
     QuadModel quad;
     QuadParams qp;
     SensorNoiseParams np;
-    // Start with zero noise for physics validation
-    // 物理検証のためノイズゼロで開始
-    np.gyro_noise_density = 0;
-    np.accel_noise_density = 0;
-    np.gyro_bias_init_std = 0;
-    np.accel_bias_init_std = 0;
-    np.gyro_bias_rw = 0;
-    np.accel_bias_rw = 0;
+    // Enable sensor noise (Phase 1: static noise + bias)
+    // センサノイズ有効（Phase 1: 静的ノイズ + バイアス）
+    // Vibration disabled for now / 振動は今は無効
     np.vib_accel_k = 0;
     np.vib_gyro_k = 0;
-    np.tof_noise_base = 0;
-    np.tof_noise_scale = 0;
-    np.baro_noise_std = 0;
-    np.baro_drift_rate = 0;
     quad.init(qp, np);
 
     // --- Initialize ESKF ---
