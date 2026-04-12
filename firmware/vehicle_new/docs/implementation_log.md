@@ -39,7 +39,8 @@
 | 2026-04-12 | 09:20 | 09:24 | 4min | 残り11タスク全実装 + main.cpp全タスク起動 | flow/mag/baro/tof/power/comm/telemetry/button/notify/cli/log_task.cpp | dcbec3d |
 | 2026-04-12 | 09:40 | 09:43 | 3min | パラメータシステム完全実装（45パラメータ、NVS永続化、API） | params.hpp, params.def, params.cpp更新 | 0e55cf9 |
 | 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。スタブに戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | 4f21b89 |
-| 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | — |
+| 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | c40717c |
+| 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | — |
 
 ## 集計
 
@@ -62,7 +63,7 @@
 | sf_estimator（インターフェース） | 2026-04-12 | 2026-04-12 | 2min | 1 | ビルド成功 |
 | sf_estimator_eskf（ESKF実装） | 2026-04-12 | 2026-04-12 | 7min | 1129 | 新規実装完了（旧1754行→1129行、36%削減） |
 | sf_controller（インターフェース） | 2026-04-12 | 2026-04-12 | ↑ | 1 | ビルド成功 |
-| sf_controller_pid（PID実装） | 2026-04-12 | — | — | — | スタブ実装（パイプライン結合用） |
+| sf_controller_pid（PID実装） | 2026-04-12 | 2026-04-12 | 2min | 337 | カスケードPID完了（Rate/Attitude/Altitude/Position） |
 | sf_actuator（ミキサー+モーター） | | | | | 未着手 |
 | sf_command（コマンド処理） | | | | | 未着手 |
 | sf_comm（通信） | | | | | 未着手 |

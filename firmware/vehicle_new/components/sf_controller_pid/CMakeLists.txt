@@ -6,4 +6,5 @@ idf_component_register(
         sf_core
         sf_state
         sf_controller
+        sf_math
 )
