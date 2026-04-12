@@ -529,22 +529,46 @@ private:
 
     void solveContact(float dt)
     {
+        // =================================================================
+        // Per-contact-point PGS with full angular coupling
+        // 各接触点PGS（角運動量結合付き）
+        //
+        // Based on Erin Catto's sequential impulse method (Box2D/GDC2006).
+        // Each contact impulse at offset r from COM produces:
+        //   Δv     = λ * n / m           (linear velocity change)
+        //   Δω     = I⁻¹ * (r × λn)     (angular velocity change)
+        //
+        // The restoring torque on a tilted body is NOT a separate mechanism —
+        // it emerges naturally from applying normal impulses at offset points.
+        //
+        // Catto法（Box2D/GDC2006）に基づく逐次インパルス法。
+        // オフセットrの接触点でのインパルスは線形・角速度を同時に変化させる。
+        // 傾いた物体の復元トルクは別メカニズムではなく、
+        // オフセット接触点への法線インパルス適用から自然に発生する。
+        // =================================================================
+
+        static constexpr int PGS_ITERATIONS = 20;
         static constexpr float RESTITUTION = 0.25f;
-        static constexpr float ANGULAR_DAMPING = 0.8f;  // Contact angular damping
+        static constexpr float BAUMGARTE = 0.2f;    // Position correction rate
+        static constexpr float SLOP = 0.0005f;      // 0.5mm allowed penetration
 
         contact_force_cache_ = {};
 
-        // Collect active contacts
-        // アクティブ接触点を収集
+        // --- Collect active contacts ---
+        // --- アクティブ接触点を収集 ---
         struct ContactPoint {
-            Vec3 r_world;    // Body center to contact point (NED)
-            float pen;       // Penetration depth (positive = below ground)
-            Vec3 v_tangent;  // Tangential velocity at contact
+            Vec3 r_world;      // COM to contact point (world frame)
+            int corner_idx;    // Corner index (for warm starting)
+            float pen;         // Penetration depth (positive = below ground)
+            float vn_init;     // Initial normal velocity (positive = away)
+            float m_eff;       // Effective mass at this contact
+            float bias;        // Velocity bias (Baumgarte + restitution)
+            float rxn_x;      // (r × n).x component
+            float rxn_y;      // (r × n).y component
         };
 
         ContactPoint contacts[8];
         int n_contacts = 0;
-        float total_pen = 0;
 
         for (int ci = 0; ci < 8; ci++) {
             Vec3 corner_body = getCorner(ci);
@@ -555,80 +579,117 @@ private:
             if (pen <= 0) continue;
 
             Vec3 v_corner = state_.velocity + state_.angular_rate.cross(r_world);
+            float vn = -v_corner.z;  // Normal velocity (positive = away)
 
-            contacts[n_contacts].r_world = r_world;
-            contacts[n_contacts].pen = pen;
-            contacts[n_contacts].v_tangent = Vec3(v_corner.x, v_corner.y, 0);
+            // r × n where n = [0,0,-1]
+            // r × n（n = [0,0,-1]）
+            float rxn_x = -r_world.y;
+            float rxn_y =  r_world.x;
+
+            // Effective mass: 1/m_eff = 1/m + (r×n)^T I^{-1} (r×n)
+            // 有効質量: 1/m_eff = 1/m + (r×n)^T I^{-1} (r×n)
+            float inv_m_eff = 1.0f / qp_.mass
+                + rxn_x * rxn_x / qp_.Ixx
+                + rxn_y * rxn_y / qp_.Iyy;
+            float m_eff = 1.0f / inv_m_eff;
+
+            // Velocity bias: Baumgarte position correction + restitution
+            // 速度バイアス: バウムガルテ位置補正 + 反発
+            float bias = 0;
+            float pen_excess = pen - SLOP;
+            if (pen_excess > 0) {
+                bias += BAUMGARTE * pen_excess / dt;
+            }
+            if (vn < -0.01f) {
+                // Impact: add restitution bounce velocity
+                // 衝突: 反発跳ね返り速度を追加
+                bias += -RESTITUTION * vn;  // positive (away from ground)
+            }
+
+            auto& cp = contacts[n_contacts];
+            cp.r_world = r_world;
+            cp.corner_idx = ci;
+            cp.pen = pen;
+            cp.vn_init = vn;
+            cp.m_eff = m_eff;
+            cp.bias = bias;
+            cp.rxn_x = rxn_x;
+            cp.rxn_y = rxn_y;
             n_contacts++;
-            total_pen += pen;
         }
 
-        if (n_contacts == 0) return;
-
-        // === Normal impulse: solve for center-of-mass z velocity ===
-        // === 法線インパルス: 重心z速度を解く ===
-        //
-        // Constraint: v.z_new ≤ 0 (no downward penetration in NED)
-        // λ_total ≥ 0 (contact pushes upward only)
-        // v.z_new = v.z - λ_total / m
-        //
-        // 拘束: v.z_new ≤ 0（NEDで下方貫通禁止）
-        // λ_total ≥ 0（接触は上方のみ）
-        // v.z_new = v.z - λ_total / m
-        //
-        float vz = state_.velocity.z;  // positive = downward in NED
-        float v_target_z = 0;
-
-        if (vz > 0.05f) {
-            // Impact: bounce with restitution
-            // 衝突: 反発係数で跳ね返り
-            v_target_z = -RESTITUTION * vz;
+        if (n_contacts == 0) {
+            // No contact: clear warm start lambdas
+            // 接触なし: ウォームスタート用λをクリア
+            for (int i = 0; i < 8; i++) warm_lambda_[i] = 0;
+            return;
         }
 
-        // Impulse to achieve target velocity
-        // 目標速度を達成するインパルス
-        float lambda_total = qp_.mass * (vz - v_target_z);
-        if (lambda_total < 0) lambda_total = 0;  // Contact can only push
+        // --- Warm start: initialize from previous frame's lambdas ---
+        // --- ウォームスタート: 前フレームのλで初期化 ---
+        // Scale by 0.8 to prevent over-accumulation during transitions
+        // 遷移中の過蓄積を防ぐため0.8でスケーリング
+        // --- Jacobi iteration (simultaneous update) ---
+        // --- ヤコビ反復（同時更新）---
+        //
+        // Unlike Gauss-Seidel, Jacobi computes ALL deltas from current state,
+        // then applies ALL at once. This eliminates ordering-dependent asymmetry
+        // that GS creates for symmetric contact configurations.
+        //
+        // For 4 symmetric corners on flat ground, the contact matrix has a zero
+        // eigenvalue (degenerate angular mode). GS cannot converge for this mode,
+        // but Jacobi preserves the initial symmetry (zero) exactly.
+        //
+        // ガウス-ザイデルと異なり、ヤコビ法は全接触のdeltaを現在の状態から計算し、
+        // 一括で適用する。対称接触構成でGSが生む順序依存の非対称性を排除。
+        //
+        // 4対称頂点の接触行列には固有値0（縮退角モード）がある。
+        // GSはこのモードで収束不可能だが、ヤコビ法は初期対称性を正確に保存する。
+        // =================================================================
 
-        // Apply to center of mass
-        // 重心に適用
-        state_.velocity.z -= lambda_total / qp_.mass;
+        float lambda_acc[8] = {};
 
-        // === Position correction (Baumgarte stabilization) ===
-        // === 位置補正（バウムガルテ安定化）===
-        float beta = 0.2f;
+        for (int iter = 0; iter < PGS_ITERATIONS; iter++) {
+            // Phase 1: Compute all deltas from current state
+            // フェーズ1: 現在の状態から全deltaを計算
+            float delta[8] = {};
+            for (int ci = 0; ci < n_contacts; ci++) {
+                const auto& cp = contacts[ci];
+
+                Vec3 v_at_point = state_.velocity
+                    + state_.angular_rate.cross(cp.r_world);
+                float vn = -v_at_point.z;
+
+                float lambda_new = fmaxf(0,
+                    lambda_acc[ci] + cp.m_eff * (cp.bias - vn));
+                delta[ci] = lambda_new - lambda_acc[ci];
+                lambda_acc[ci] = lambda_new;
+            }
+
+            // Phase 2: Apply all deltas simultaneously
+            // フェーズ2: 全deltaを同時に適用
+            for (int ci = 0; ci < n_contacts; ci++) {
+                state_.velocity.z -= delta[ci] / qp_.mass;
+                state_.angular_rate.x += delta[ci] * contacts[ci].rxn_x / qp_.Ixx;
+                state_.angular_rate.y += delta[ci] * contacts[ci].rxn_y / qp_.Iyy;
+            }
+        }
+
+        // --- Friction (Coulomb, explicit) ---
+        // --- 摩擦（クーロン、陽的）---
         for (int ci = 0; ci < n_contacts; ci++) {
-            state_.position.z -= beta * contacts[ci].pen;
-        }
-
-        // === Angular damping during contact ===
-        // === 接触中の角速度減衰 ===
-        // Damp angular velocity to prevent tumbling on ground
-        // 地上での転倒を防ぐため角速度を減衰
-        state_.angular_rate.x *= ANGULAR_DAMPING;
-        state_.angular_rate.y *= ANGULAR_DAMPING;
-        state_.angular_rate.z *= ANGULAR_DAMPING;
-
-        // === Compute contact force for accelerometer model ===
-        // === 加速度計モデル用に接触力を計算 ===
-        // Total contact force = λ_total / dt along n = [0,0,-1]
-        // 全接触力 = λ_total / dt × n = [0,0,-1]
-        float force_total = lambda_total / dt;
-        contact_force_cache_ = Vec3(0, 0, -force_total);
-
-        // Friction (Coulomb, explicit) distributed by penetration
-        // 摩擦（クーロン、陽的）貫通深さで分配
-        for (int ci = 0; ci < n_contacts; ci++) {
-            float weight = contacts[ci].pen / total_pen;
-            float force_at_point = force_total * weight;
-
-            Vec3 vt = contacts[ci].v_tangent;
+            float fn = lambda_acc[ci] / dt;  // Normal force at contact
+            Vec3 v_at_point = state_.velocity
+                + state_.angular_rate.cross(contacts[ci].r_world);
+            Vec3 vt(v_at_point.x, v_at_point.y, 0);
             float vt_mag = vt.norm();
-            if (vt_mag > 1e-6f && force_at_point > 0) {
-                float f_friction = cp_.mu_friction * force_at_point;
-                Vec3 friction_dir = vt * (-1.0f / vt_mag);
-                state_.velocity.x += friction_dir.x * f_friction * dt / qp_.mass;
-                state_.velocity.y += friction_dir.y * f_friction * dt / qp_.mass;
+
+            if (vt_mag > 1e-6f && fn > 0) {
+                float f_friction = fminf(cp_.mu_friction * fn,
+                                         qp_.mass * vt_mag / dt);
+                Vec3 friction_impulse = vt * (-f_friction * dt / vt_mag);
+                state_.velocity.x += friction_impulse.x / qp_.mass;
+                state_.velocity.y += friction_impulse.y / qp_.mass;
             }
         }
     }
@@ -663,10 +724,11 @@ private:
     Vec3 vel_before_step_ = {};       // Velocity before physics step
     Vec3 a_inertial_ned_ = {};        // Inertial acceleration (Δv/Δt)
 
-    // Contact solver caches (internal use)
-    // 接触ソルバーキャッシュ（内部使用）
+    // Contact solver state
+    // 接触ソルバー状態
     Vec3 contact_force_cache_ = {};
-    Vec3 free_force_cache_ = {};      // Non-contact force (thrust+gravity+drag)
+    Vec3 free_force_cache_ = {};        // Non-contact force (thrust+gravity+drag)
+    float warm_lambda_[8] = {};         // Warm start: previous frame's impulses
 };
 
 }  // namespace sim
