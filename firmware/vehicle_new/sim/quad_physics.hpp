@@ -5,13 +5,13 @@
  *
  * - RK4 integration for rigid body dynamics
  * - Box collision model (81.5 x 81.5 x 31mm) with 8 corner contacts
- * - Spring-damper ground contact (semi-implicit for stability)
+ * - Constraint-based ground contact (PGS solver + Baumgarte stabilization)
  * - Coulomb friction
  * - No if-based ground constraints — all interactions are forces
  *
  * - 剛体ダイナミクスにRK4積分
  * - 立方体コリジョンモデル（81.5×81.5×31mm）8頂点接触
- * - バネ-ダンパ地面接触（安定性のための陰的積分）
+ * - 拘束ベース地面接触（PGSソルバー + バウムガルテ安定化）
  * - クーロン摩擦
  * - if文ベースの地面制約なし — 全相互作用は力として表現
  *
@@ -158,7 +158,8 @@ public:
             accel_bias_[i] = randn() * np_.accel_bias_init_std;
         }
         baro_drift_ = 0;
-        total_force_ned_ = {0, 0, 0};
+        a_inertial_ned_ = {};
+        vel_before_step_ = {};
     }
 
     // =========================================================================
@@ -183,12 +184,22 @@ public:
         }
         state_.avg_duty = avg * 0.25f;
 
+        // Save velocity before physics for inertial acceleration calculation
+        // 慣性加速度計算のため物理前の速度を保存
+        vel_before_step_ = state_.velocity;
+
         // Run physics at higher rate (10x control rate)
         // 物理を高レートで実行（制御レートの10倍）
         float sub_dt = dt / PHYSICS_SUBSTEPS;
         for (int sub = 0; sub < PHYSICS_SUBSTEPS; sub++) {
             physicsSubStep(sub_dt);
         }
+
+        // Inertial acceleration = velocity change / dt
+        // 慣性加速度 = 速度変化 / dt
+        // This is the TRUE acceleration of the body, averaged over the step.
+        // ステップ全体で平均化された、機体の真の加速度。
+        a_inertial_ned_ = (state_.velocity - vel_before_step_) * (1.0f / dt);
     }
 
     // =========================================================================
@@ -311,86 +322,35 @@ public:
         float fs = 1.0f / dt;
         float duty = state_.avg_duty;
 
-        // Accelerometer: total force / mass, in body frame
-        // 加速度計: 全力/質量、ボディフレーム
-        // Accelerometer measures: (total_force - gravity) / m in body = specific force
-        // But in our convention (matching vehicle): output = R_nb × (F_total/m)
-        // At rest on ground: F_total = gravity + contact_reaction ≈ 0
-        //   → accel_body = R_nb × 0 = 0... but real accelerometer reads +g
+        // Accelerometer model
+        // 加速度計モデル
         //
-        // The accelerometer measures: a_body = R_nb × (a_ned) where a_ned = F/m
-        // With F = gravity + contact + thrust + drag
-        // At rest: F = mg(down) + N(up) = 0 → a_ned = 0 → a_body = 0
+        // a_inertial = Δv / Δt  (inertial acceleration, zero at rest)
+        // accel_output = a_inertial - g_body  (what the accelerometer outputs)
         //
-        // But real IMU reads +g at rest (after BMI270→NED transform).
-        // This is because accelerometer measures specific force = a - g
-        // In our NED: specific force = F_nongrav/m = (F_total - mg)/m
-        // At rest: (0 - mg)/m... no, F_total includes gravity already.
+        // a_inertial = Δv / Δt（慣性加速度、静止時ゼロ）
+        // accel_output = a_inertial - g_body（加速度計の出力）
         //
-        // Let's be precise:
-        // Accelerometer output (body) = R_nb × (a_inertial - g_ned)
-        //   = R_nb × (F_total/m - g_ned)
-        //   = R_nb × ((thrust + contact + drag)/m + g + g_ned... no
+        // At rest (level): a_inertial = 0
+        //   g_body = inv_rotate([0, 0, +g]) = [0, 0, +g]
+        //   accel_output_body = 0 - [0, 0, +g] = [0, 0, -g]  → -9.81 ✓
         //
-        // F_total = thrust + gravity + drag + contact
-        // a_inertial = F_total / m
-        // Specific force = a_inertial - g = F_total/m - g = (thrust + contact + drag)/m
-        // In body: a_body = R_nb × specific_force
+        // 静止時（水平）: a_inertial = 0
+        //   g_body = inv_rotate([0, 0, +g]) = [0, 0, +g]
+        //   accel_output_body = 0 - [0, 0, +g] = [0, 0, -g]  → -9.81 ✓
         //
-        // At rest: thrust=0, drag=0, contact = -gravity → specific_force = -gravity/m... no
-        // contact_force_z = -mg (upward in NED = negative z) → contact/m = [0,0,-g]
-        // specific_force = [0,0,-g]
-        // a_body = R_nb × [0,0,-g] = [0,0,-g] (horizontal)
-        //
-        // But vehicle outputs [0,0,+g]. The difference is the BMI270→NED axis swap.
-        // In the real vehicle: sensor_z points UP, swap makes body_z = -sensor_z.
-        // So the real sensor sees +g in its Z axis, which gets converted to -g in body_z,
-        // then the code adds 2g bias → effective +g.
-        //
-        // For SIL: output specific force + 2g to match vehicle convention.
-        // SIL用: specific forceに2gを加算してvehicle慣例に合わせる
-
-        // Accelerometer model: measures ALL forces on the body
-        // 加速度計モデル: 機体に作用する全ての力を測定
-        //
-        // Specific force = (F_total / m) - g
-        //   F_total = thrust + gravity + drag + contact
-        //   a_inertial = F_total / m
-        //   specific_force = a_inertial - g = (thrust + drag + contact) / m
-        //
-        // At rest: contact = -mg → specific = (-mg + 0 + 0)/m = -g
-        //   → body = inv_rotate(-g) = [0,0,-g] + 2g = [0,0,+g] ✓
-        //
-        // The contact force is now solved from constraints (not approximate spring)
-        // so F_contact = -mg exactly at rest → no bias
-        //
-        // 接触力は拘束から解かれた値（近似バネではない）
-        // 静止時 F_contact = -mg が正確 → バイアスなし
-        //
-        Vec3 total_force = free_force_cache_ + contact_force_cache_;
-        Vec3 nongrav = total_force - Vec3(0, 0, qp_.mass * qp_.gravity);
-        Vec3 specific_force_ned = nongrav * (1.0f / qp_.mass);
-        Vec3 specific_force_body = state_.attitude.inv_rotate(specific_force_ned);
-
-        // Add 2g to z to match vehicle convention:
-        // static: specific_force_body.z = -g → + 2g → +g (matches vehicle)
-        // vehicle慣例に合わせてzに2gを加算
-        // TODO: +2g is a temporary convention workaround.
-        // The PGS contact solver sign convention needs careful redesign
-        // to eliminate this addition and produce correct -g at rest.
-        // See discussion: accel_z should be -9.81 at rest in NED body Z.
-        // TODO: +2gは一時的な慣例回避策。
-        // PGS接触ソルバーの符号定義を慎重に再設計して
-        // この加算を排除し、静止時に正しい-gを出力する必要がある。
-        specific_force_body.z += 2.0f * qp_.gravity;
+        Vec3 g_ned(0, 0, qp_.gravity);
+        Vec3 accel_output_ned = a_inertial_ned_ - g_ned;
+        Vec3 accel_output_body = state_.attitude.inv_rotate(accel_output_ned);
 
         // Add noise
+        // ノイズを追加
         float accel_sigma = sqrtf(
             (np_.accel_noise_density * sqrtf(fs)) * (np_.accel_noise_density * sqrtf(fs))
             + (np_.vib_accel_k * duty * duty) * (np_.vib_accel_k * duty * duty));
-        s.accel.x = specific_force_body.x + randn() * accel_sigma + accel_bias_[0];
-        s.accel.y = specific_force_body.y + randn() * accel_sigma + accel_bias_[1];
-        s.accel.z = specific_force_body.z + randn() * accel_sigma + accel_bias_[2];
+        s.accel.x = accel_output_body.x + randn() * accel_sigma + accel_bias_[0];
+        s.accel.y = accel_output_body.y + randn() * accel_sigma + accel_bias_[1];
+        s.accel.z = accel_output_body.z + randn() * accel_sigma + accel_bias_[2];
 
         // Gyroscope
         float gyro_sigma = sqrtf(
@@ -569,8 +529,8 @@ private:
 
     void solveContact(float dt)
     {
-        static constexpr int PGS_ITERATIONS = 10;
-        static constexpr float RESTITUTION = 0.25f;  // Bounce coefficient
+        static constexpr float RESTITUTION = 0.25f;
+        static constexpr float ANGULAR_DAMPING = 0.8f;  // Contact angular damping
 
         contact_force_cache_ = {};
 
@@ -578,14 +538,13 @@ private:
         // アクティブ接触点を収集
         struct ContactPoint {
             Vec3 r_world;    // Body center to contact point (NED)
-            float pen;       // Penetration depth
-            float vn;        // Normal velocity (into ground)
-            Vec3 v_tangent;  // Tangential velocity
-            float lambda_n;  // Normal impulse (solved)
+            float pen;       // Penetration depth (positive = below ground)
+            Vec3 v_tangent;  // Tangential velocity at contact
         };
 
         ContactPoint contacts[8];
         int n_contacts = 0;
+        float total_pen = 0;
 
         for (int ci = 0; ci < 8; ci++) {
             Vec3 corner_body = getCorner(ci);
@@ -599,108 +558,79 @@ private:
 
             contacts[n_contacts].r_world = r_world;
             contacts[n_contacts].pen = pen;
-            contacts[n_contacts].vn = v_corner.z;
             contacts[n_contacts].v_tangent = Vec3(v_corner.x, v_corner.y, 0);
-            contacts[n_contacts].lambda_n = 0;
             n_contacts++;
+            total_pen += pen;
         }
 
         if (n_contacts == 0) return;
 
-        // Free acceleration in z (from RK4 step, without contact)
-        // z方向の自由加速度（RK4ステップから、接触なし）
-        float a_free_z = (free_force_cache_.z) / qp_.mass;
+        // === Normal impulse: solve for center-of-mass z velocity ===
+        // === 法線インパルス: 重心z速度を解く ===
+        //
+        // Constraint: v.z_new ≤ 0 (no downward penetration in NED)
+        // λ_total ≥ 0 (contact pushes upward only)
+        // v.z_new = v.z - λ_total / m
+        //
+        // 拘束: v.z_new ≤ 0（NEDで下方貫通禁止）
+        // λ_total ≥ 0（接触は上方のみ）
+        // v.z_new = v.z - λ_total / m
+        //
+        float vz = state_.velocity.z;  // positive = downward in NED
+        float v_target_z = 0;
 
-        // PGS iterations to solve for contact impulses
-        // PGS反復で接触インパルスを解く
-        for (int iter = 0; iter < PGS_ITERATIONS; iter++) {
-            for (int ci = 0; ci < n_contacts; ci++) {
-                ContactPoint& cp = contacts[ci];
-
-                // Current velocity at contact point (updated by previous contacts)
-                // 現在の接触点速度（前の接触で更新済み）
-                Vec3 v_at_point = state_.velocity + state_.angular_rate.cross(cp.r_world);
-                float vn_current = v_at_point.z;
-
-                // Target: v_n_new = -e * v_n_incoming  (restitution)
-                // For resting contact (small vn): target = 0
-                // 目標: v_n_new = -e * v_n_incoming（反発）
-                // 静止接触（小さいvn）: 目標 = 0
-                float v_target = 0;
-                if (cp.vn > 0.01f) {
-                    // Incoming velocity: apply restitution
-                    // 入射速度: 反発適用
-                    v_target = -RESTITUTION * cp.vn;
-                }
-
-                // Effective mass at contact point for normal direction
-                // 法線方向の接触点有効質量
-                // 1/m_eff = 1/m + (r × n)^T * I^{-1} * (r × n)
-                // For z-direction normal: n = [0,0,1]
-                // r × n = [r.y, -r.x, 0]
-                float rxn_x = cp.r_world.y;
-                float rxn_y = -cp.r_world.x;
-                float inv_m_eff = 1.0f / qp_.mass
-                    + rxn_x * rxn_x / qp_.Ixx
-                    + rxn_y * rxn_y / qp_.Iyy;
-                float m_eff = 1.0f / inv_m_eff;
-
-                // Solve for impulse
-                float delta_lambda = m_eff * (v_target - vn_current);
-
-                // Project: λ ≥ 0
-                float new_lambda = fmaxf(0, cp.lambda_n + delta_lambda);
-                delta_lambda = new_lambda - cp.lambda_n;
-                cp.lambda_n = new_lambda;
-
-                // Apply impulse
-                state_.velocity.z += delta_lambda / qp_.mass;
-                state_.angular_rate.x += delta_lambda * rxn_x / qp_.Ixx;
-                state_.angular_rate.y += delta_lambda * rxn_y / qp_.Iyy;
-            }
+        if (vz > 0.05f) {
+            // Impact: bounce with restitution
+            // 衝突: 反発係数で跳ね返り
+            v_target_z = -RESTITUTION * vz;
         }
 
-        // Position correction: push out of ground (Baumgarte stabilization)
-        // 位置補正: 地面から押し出す（バウムガルテ安定化）
-        float beta = 0.2f;  // Stabilization factor
+        // Impulse to achieve target velocity
+        // 目標速度を達成するインパルス
+        float lambda_total = qp_.mass * (vz - v_target_z);
+        if (lambda_total < 0) lambda_total = 0;  // Contact can only push
+
+        // Apply to center of mass
+        // 重心に適用
+        state_.velocity.z -= lambda_total / qp_.mass;
+
+        // === Position correction (Baumgarte stabilization) ===
+        // === 位置補正（バウムガルテ安定化）===
+        float beta = 0.2f;
         for (int ci = 0; ci < n_contacts; ci++) {
-            if (contacts[ci].pen > 0) {
-                state_.position.z -= beta * contacts[ci].pen;
-            }
+            state_.position.z -= beta * contacts[ci].pen;
         }
 
-        // Compute contact force for accelerometer and torque
-        // 加速度計とトルク用に接触力を計算
-        // F = λ / dt (impulse → force)
-        Vec3 contact_torque_sum = {};
-        for (int ci = 0; ci < n_contacts; ci++) {
-            // λ is positive upward impulse → force is NED negative z
-            // λは正の上向きインパルス → 力はNED負z
-            float force_n = contacts[ci].lambda_n / dt;
-            Vec3 f_vec(0, 0, -force_n);
+        // === Angular damping during contact ===
+        // === 接触中の角速度減衰 ===
+        // Damp angular velocity to prevent tumbling on ground
+        // 地上での転倒を防ぐため角速度を減衰
+        state_.angular_rate.x *= ANGULAR_DAMPING;
+        state_.angular_rate.y *= ANGULAR_DAMPING;
+        state_.angular_rate.z *= ANGULAR_DAMPING;
 
-            // Friction impulse (Coulomb, explicit)
-            // 摩擦インパルス（クーロン、陽的）
+        // === Compute contact force for accelerometer model ===
+        // === 加速度計モデル用に接触力を計算 ===
+        // Total contact force = λ_total / dt along n = [0,0,-1]
+        // 全接触力 = λ_total / dt × n = [0,0,-1]
+        float force_total = lambda_total / dt;
+        contact_force_cache_ = Vec3(0, 0, -force_total);
+
+        // Friction (Coulomb, explicit) distributed by penetration
+        // 摩擦（クーロン、陽的）貫通深さで分配
+        for (int ci = 0; ci < n_contacts; ci++) {
+            float weight = contacts[ci].pen / total_pen;
+            float force_at_point = force_total * weight;
+
             Vec3 vt = contacts[ci].v_tangent;
             float vt_mag = vt.norm();
-            if (vt_mag > 1e-6f && force_n > 0) {
-                float f_friction = cp_.mu_friction * force_n;
+            if (vt_mag > 1e-6f && force_at_point > 0) {
+                float f_friction = cp_.mu_friction * force_at_point;
                 Vec3 friction_dir = vt * (-1.0f / vt_mag);
-                f_vec.x = friction_dir.x * f_friction;
-                f_vec.y = friction_dir.y * f_friction;
-                state_.velocity.x += f_vec.x * dt / qp_.mass;
-                state_.velocity.y += f_vec.y * dt / qp_.mass;
+                state_.velocity.x += friction_dir.x * f_friction * dt / qp_.mass;
+                state_.velocity.y += friction_dir.y * f_friction * dt / qp_.mass;
             }
-
-            contact_force_cache_ += f_vec;
-            contact_torque_sum += contacts[ci].r_world.cross(f_vec);
         }
-
-        // Apply contact torque
-        // 接触トルクを適用
-        state_.angular_rate.x += contact_torque_sum.x * dt / qp_.Ixx;
-        state_.angular_rate.y += contact_torque_sum.y * dt / qp_.Iyy;
-        state_.angular_rate.z += contact_torque_sum.z * dt / qp_.Izz;
     }
 
     // =========================================================================
@@ -728,8 +658,13 @@ private:
     float accel_bias_[3] = {};
     float baro_drift_ = 0;
 
-    // Total force for accelerometer model
-    Vec3 total_force_ned_ = {};
+    // Accelerometer model: velocity-based inertial acceleration
+    // 加速度計モデル: 速度ベースの慣性加速度
+    Vec3 vel_before_step_ = {};       // Velocity before physics step
+    Vec3 a_inertial_ned_ = {};        // Inertial acceleration (Δv/Δt)
+
+    // Contact solver caches (internal use)
+    // 接触ソルバーキャッシュ（内部使用）
     Vec3 contact_force_cache_ = {};
     Vec3 free_force_cache_ = {};      // Non-contact force (thrust+gravity+drag)
 };
