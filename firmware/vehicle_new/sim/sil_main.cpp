@@ -230,9 +230,9 @@ int main()
                 float thrust_corr = alt_v.compute(vel_sp - est_climb, dt);
                 thrust = hover_thrust + thrust_corr;
             }
-            if (!on_ground) {
-                // Attitude cascade (airborne only)
-                // 姿勢カスケード（空中のみ）
+            if (!takeoff_phase) {
+                // Attitude cascade (stable flight only, not during takeoff)
+                // 姿勢カスケード（安定飛行時のみ、離陸中は除く）
                 float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
                 float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
 
@@ -240,6 +240,8 @@ int main()
                 torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
                 torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
             }
+            // During takeoff: torque = 0 (thrust only, motors balanced)
+            // 離陸中: トルク = 0（推力のみ、モーター均等）
             // On ground: torque = 0, thrust goes equally to all motors
             // 地上: トルク=0、推力は全モーター均等
         }
