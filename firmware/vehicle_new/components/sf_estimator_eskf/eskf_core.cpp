@@ -116,111 +116,59 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
     // Covariance propagation: P' = F*P*F^T + Q
     // 共分散伝搬: P' = F*P*F^T + Q
     //
-    // F matrix non-trivial blocks (sparse multiplication):
-    // F行列の非自明ブロック（疎行列乗算）:
-    //   ∂p/∂v = I*dt
-    //   ∂v/∂δθ = -R*[a_c×]*dt  (D_va)
-    //   ∂v/∂ba = -R*dt
-    //   ∂δθ/∂bg = -I*dt
+    // Full 15x15 matrix implementation for correctness.
+    // 正確性のためフル15x15行列実装。
+    //
+    // F = I + dF where dF has non-zero blocks:
+    //   dF[pos][vel]  = I*dt
+    //   dF[vel][att]  = D_va = -R*[a_c×]*dt
+    //   dF[vel][ba]   = D_vb = -R*dt
+    //   dF[att][bg]   = -I*dt
     // =========================================================================
 
-    // Compute D_va = -R*[a_c×]*dt (3x3)
-    // D_va = -R*[a_c×]*dt を計算（3x3）
-    float D_va[3][3];
+    // Build F matrix explicitly / F行列を明示的に構築
+    float F[N][N] = {};
+    for (int i = 0; i < N; i++) F[i][i] = 1.0f;  // Identity
+
+    // dF[pos][vel] = I*dt
+    for (int i = 0; i < 3; i++) F[POS_X+i][VEL_X+i] = dt;
+
+    // dF[vel][att] = D_va = -R*[a_c×]*dt
     for (int i = 0; i < 3; i++) {
-        D_va[i][0] = (R[i][1]*accel.z - R[i][2]*accel.y) * dt;
-        D_va[i][1] = (R[i][2]*accel.x - R[i][0]*accel.z) * dt;
-        D_va[i][2] = (R[i][0]*accel.y - R[i][1]*accel.x) * dt;
+        F[VEL_X+i][ATT_X+0] = (R[i][1]*accel.z - R[i][2]*accel.y) * dt;
+        F[VEL_X+i][ATT_X+1] = (R[i][2]*accel.x - R[i][0]*accel.z) * dt;
+        F[VEL_X+i][ATT_X+2] = (R[i][0]*accel.y - R[i][1]*accel.x) * dt;
     }
 
-    // D_vb = -R*dt (3x3) / 加速度バイアスの影響
-    float D_vb[3][3];
+    // dF[vel][ba] = -R*dt
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
-            D_vb[i][j] = -R[i][j] * dt;
+            F[VEL_X+i][BA_X+j] = -R[i][j] * dt;
 
-    // Apply F*P*F^T in-place using the sparse structure
-    // 疎構造を利用してF*P*F^Tをin-placeで適用
-    //
-    // This is equivalent to the full matrix multiplication but only
-    // touches the non-identity blocks of F.
-    // これは完全な行列乗算と等価だが、Fの非単位ブロックのみ操作する。
+    // dF[att][bg] = -I*dt
+    for (int i = 0; i < 3; i++) F[ATT_X+i][BG_X+i] = -dt;
 
-    // Temporary storage for affected rows
-    // 影響を受ける行の一時格納
-    float tmp[N];
-
-    // Step 1: P' rows for velocity (affected by D_va, D_vb)
-    // ステップ1: 速度の行を更新（D_va, D_vbの影響）
-    for (int col = 0; col < N; col++) {
-        for (int i = 0; i < 3; i++) {
-            float sum = P_(VEL_X + i, col);
-            for (int k = 0; k < 3; k++) {
-                sum += D_va[i][k] * P_(ATT_X + k, col);
-                sum += D_vb[i][k] * P_(BA_X + k, col);
-            }
-            tmp[i] = sum;
+    // Compute FP = F * P (15x15 matrix multiply)
+    // FP = F * P を計算
+    float FP[N][N];
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) {
+            float sum = 0;
+            for (int k = 0; k < N; k++)
+                sum += F[i][k] * P_(k, j);
+            FP[i][j] = sum;
         }
-        for (int i = 0; i < 3; i++) {
-            P_(VEL_X + i, col) = tmp[i];
-        }
-    }
 
-    // Step 2: P' rows for position (affected by ∂p/∂v = I*dt)
-    // ステップ2: 位置の行を更新（∂p/∂v = I*dtの影響）
-    for (int col = 0; col < N; col++) {
-        for (int i = 0; i < 3; i++) {
-            P_(POS_X + i, col) += P_(VEL_X + i, col) * dt;
+    // Compute P' = FP * F^T (15x15 matrix multiply)
+    // P' = FP * F^T を計算
+    for (int i = 0; i < N; i++)
+        for (int j = i; j < N; j++) {
+            float sum = 0;
+            for (int k = 0; k < N; k++)
+                sum += FP[i][k] * F[j][k];  // F^T[k][j] = F[j][k]
+            P_(i, j) = sum;
+            P_(j, i) = sum;  // Symmetric
         }
-    }
-
-    // Step 3: P' rows for attitude (affected by ∂δθ/∂bg = -I*dt)
-    // ステップ3: 姿勢の行を更新（∂δθ/∂bg = -I*dtの影響）
-    for (int col = 0; col < N; col++) {
-        for (int i = 0; i < 3; i++) {
-            P_(ATT_X + i, col) -= P_(BG_X + i, col) * dt;
-        }
-    }
-
-    // Step 4: Right-multiply by F^T (column operations)
-    // ステップ4: F^Tの右乗算（列操作）
-    //
-    // Same transformations applied to columns (transpose of row ops):
-    //   col_vel += D_va^T * col_att + D_vb^T * col_ba
-    //   col_pos += col_vel * dt
-    //   col_att -= col_bg * dt
-    //
-    // Must use the ALREADY-UPDATED rows (from steps 1-3)
-    // ステップ1-3で更新済みの行を使用する必要がある
-
-    // Step 4a: Velocity columns
-    for (int row = 0; row < N; row++) {
-        for (int i = 0; i < 3; i++) {
-            float sum = P_(row, VEL_X + i);
-            for (int k = 0; k < 3; k++) {
-                sum += D_va[k][i] * P_(row, ATT_X + k);  // D_va^T
-                sum += D_vb[k][i] * P_(row, BA_X + k);   // D_vb^T
-            }
-            tmp[i] = sum;
-        }
-        for (int i = 0; i < 3; i++) {
-            P_(row, VEL_X + i) = tmp[i];
-        }
-    }
-
-    // Step 4b: Position columns
-    for (int row = 0; row < N; row++) {
-        for (int i = 0; i < 3; i++) {
-            P_(row, POS_X + i) += P_(row, VEL_X + i) * dt;
-        }
-    }
-
-    // Step 4c: Attitude columns
-    for (int row = 0; row < N; row++) {
-        for (int i = 0; i < 3; i++) {
-            P_(row, ATT_X + i) -= P_(row, BG_X + i) * dt;
-        }
-    }
 
     // Step 5: Add process noise Q (with active_mask gating)
     // ステップ5: プロセスノイズQを加算（active_maskゲーティング付き）
