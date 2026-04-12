@@ -62,26 +62,38 @@ struct QuadParams {
 // @design noise_and_vibration_model.md §2-4
 // =============================================================================
 
+/// Sensor noise parameters derived from 72 real flight logs
+/// 実飛行ログ72ファイルから導出したセンサノイズパラメータ
+///
+/// Static: 35 pre-flight segments (102s), median values
+/// Flight: 32 trimmed segments (168s), median values
+/// See: noise_analysis_v3.txt for full statistical report
 struct SensorNoiseParams {
-    // IMU static noise (from datasheet / データシートから)
-    float gyro_noise_density   = 0.000122f;  // [rad/s/√Hz] BMI270 typ
-    float accel_noise_density  = 0.00157f;   // [m/s²/√Hz] BMI270 typ
+    // IMU static noise (from flight log pre-flight segments)
+    // IMU静的ノイズ（飛行前静止区間から）
+    float gyro_noise_density   = 0.000098f;  // [rad/s/√Hz] measured static
+    float accel_noise_density  = 0.000664f;  // [m/s²/√Hz] measured static
 
-    // IMU startup bias (random per boot / 毎起動ランダム)
-    float gyro_bias_init_std   = 0.017f;     // [rad/s] ≈ 1°/s
-    float accel_bias_init_std  = 0.196f;     // [m/s²] ≈ 20mg
+    // IMU startup bias (from bias statistics across 72 logs)
+    // IMU起動時バイアス（72ログのバイアス統計から）
+    float gyro_bias_init_std   = 0.006f;     // [rad/s] log median ~0.004
+    float accel_bias_init_std  = 0.13f;      // [m/s²] log median ~0.13
 
     // IMU bias random walk / バイアスランダムウォーク
     float gyro_bias_rw         = 0.000013f;  // [rad/s/√s]
     float accel_bias_rw        = 0.0001f;    // [m/s²/√s]
 
-    // Throttle-dependent vibration (L1 model) / スロットル依存振動
-    float vib_accel_k          = 8.0f;       // σ_accel = K × duty² [m/s²]
-    float vib_gyro_k           = 15.0f;      // σ_gyro = K × duty² [°/s → rad/s]
+    // Throttle-dependent vibration (from flight segments)
+    // スロットル依存振動（飛行区間から）
+    // At hover duty ~0.6: σ_accel ≈ 1.54 m/s², σ_gyro ≈ 0.76 rad/s
+    // K = σ / duty² ≈ 1.54 / 0.36 ≈ 4.3 (accel), 0.76 / 0.36 ≈ 2.1 (gyro)
+    float vib_accel_k          = 4.3f;       // σ_accel = K × duty² [m/s²]
+    float vib_gyro_k           = 2.1f;       // σ_gyro = K × duty² [rad/s]
 
-    // ToF noise / ToFノイズ
-    float tof_noise_base       = 0.005f;     // [m] base noise
-    float tof_noise_scale      = 0.02f;      // [m/m] distance-proportional
+    // ToF noise (from flight segments, median σ = 0.033m)
+    // ToFノイズ（飛行区間から、中央値σ = 0.033m）
+    float tof_noise_base       = 0.010f;     // [m] base noise
+    float tof_noise_scale      = 0.015f;     // [m/m] distance-proportional
 
     // Baro noise / 気圧ノイズ
     float baro_noise_std       = 0.05f;      // [m] altitude noise
@@ -231,7 +243,16 @@ public:
             // total_accel.z <= 0 → 離陸中（推力 > 重量）
             // → position.z will go negative (up) next step
 
-            state_.angular_rate = state_.angular_rate * 0.95f;
+            // Strong damping on ground (physical contact prevents rotation)
+            // 地上では強い減衰（物理的接触が回転を防止）
+            state_.angular_rate = state_.angular_rate * 0.5f;
+            // Also clamp attitude to near-level on ground
+            // 地上では姿勢をほぼ水平にクランプ
+            Vec3 euler = state_.attitude.to_euler();
+            if (fabsf(euler.x) > 0.1f || fabsf(euler.y) > 0.1f) {
+                state_.attitude = Quat(1, 0, 0, 0);  // Reset to level
+                state_.angular_rate = {0, 0, 0};
+            }
         }
     }
 

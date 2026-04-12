@@ -1,0 +1,81 @@
+================================================================================
+FLIGHT LOG NOISE ANALYSIS REPORT
+================================================================================
+
+Total logs analyzed: 72
+  hover: 6 logs
+  static: 66 logs
+
+================================================================================
+STATIC NOISE (motors off) — Sensor baseline
+================================================================================
+  accel_x_std                   : mean=0.178639  range=[0.007426, 3.456115]  (n=66)
+  accel_y_std                   : mean=0.161810  range=[0.009274, 2.553766]  (n=66)
+  accel_z_std                   : mean=0.150928  range=[0.009874, 2.992697]  (n=66)
+  gyro_x_std                    : mean=0.129927  range=[0.001474, 2.345915]  (n=66)
+  gyro_y_std                    : mean=0.133979  range=[0.001396, 2.415457]  (n=66)
+  gyro_z_std                    : mean=0.097014  range=[0.001389, 2.496948]  (n=66)
+  accel_raw_x_std               : mean=0.031565  range=[0.012911, 0.413542]  (n=53)
+  accel_raw_y_std               : mean=0.040095  range=[0.016429, 0.731787]  (n=53)
+  accel_raw_z_std               : mean=0.044194  range=[0.017925, 0.695932]  (n=53)
+  gyro_raw_x_std                : mean=0.030554  range=[0.002069, 1.216189]  (n=53)
+  gyro_raw_y_std                : mean=0.011872  range=[0.001961, 0.285361]  (n=53)
+  gyro_raw_z_std                : mean=0.011856  range=[0.001964, 0.308668]  (n=53)
+
+================================================================================
+HOVER NOISE (in flight) — Including motor vibration
+================================================================================
+  accel_x_std                   : mean=1.898093  range=[0.801299, 3.169965]  (n=6)
+  accel_y_std                   : mean=1.590112  range=[0.541736, 2.800210]  (n=6)
+  accel_z_std                   : mean=4.051566  range=[1.400739, 8.466947]  (n=6)
+  gyro_x_std                    : mean=1.692699  range=[0.639633, 2.655185]  (n=6)
+  gyro_y_std                    : mean=1.664548  range=[0.535698, 2.959754]  (n=6)
+  gyro_z_std                    : mean=0.727218  range=[0.126643, 1.897311]  (n=6)
+  tof_std                       : mean=0.375960  range=[0.111004, 0.803231]  (n=6)
+  tof_mean                      : mean=0.353338  range=[0.098534, 0.809397]  (n=6)
+
+================================================================================
+THROTTLE-DEPENDENT NOISE — Vibration scaling
+================================================================================
+  accel_z σ @ idle : mean=0.4308 m/s²  range=[0.0099, 9.8684]  (n=69)
+  gyro_x σ @ idle : mean=0.1340 rad/s range=[0.0015, 2.3459]  (n=69)
+  accel_z σ @ low  : mean=1.6913 m/s²  range=[0.1839, 4.3588]  (n=6)
+  gyro_x σ @ low  : mean=1.4438 rad/s range=[0.0274, 2.4379]  (n=6)
+  accel_z σ @ mid  : mean=1.5012 m/s²  range=[0.3979, 2.6760]  (n=6)
+  gyro_x σ @ mid  : mean=1.8297 rad/s range=[0.0699, 4.2163]  (n=6)
+  accel_z σ @ high : mean=2.4965 m/s²  range=[1.4269, 4.2709]  (n=6)
+  gyro_x σ @ high : mean=2.1134 rad/s range=[0.7790, 4.1240]  (n=6)
+
+================================================================================
+BIAS VALUES — Gyro and accel bias from ESKF
+================================================================================
+  gyro_bias_x_mean              : mean=-0.003736  std=0.002747  range=[-0.013005, 0.008946]  (n=72)
+  gyro_bias_y_mean              : mean=0.002772  std=0.010801  range=[-0.021241, 0.085643]  (n=72)
+  gyro_bias_z_mean              : mean=0.006120  std=0.003185  range=[-0.009163, 0.013708]  (n=72)
+  accel_bias_x_mean             : mean=-0.046666  std=0.070231  range=[-0.282769, 0.081900]  (n=72)
+  accel_bias_y_mean             : mean=-0.046248  std=0.063586  range=[-0.139600, 0.174200]  (n=72)
+  accel_bias_z_mean             : mean=-0.128916  std=0.293460  range=[-0.251700, 2.242700]  (n=72)
+
+================================================================================
+BIAS DRIFT — Change over flight duration
+================================================================================
+  gyro_bias_x_drift             : mean=0.001139  std=0.007600  (n=72)
+  gyro_bias_y_drift             : mean=0.001583  std=0.006992  (n=72)
+  gyro_bias_z_drift             : mean=-0.000199  std=0.002812  (n=72)
+  accel_bias_x_drift            : mean=0.009736  std=0.043520  (n=72)
+  accel_bias_y_drift            : mean=0.002947  std=0.025028  (n=72)
+  accel_bias_z_drift            : mean=0.002199  std=0.218910  (n=72)
+
+================================================================================
+STATIC vs HOVER COMPARISON — Vibration impact
+================================================================================
+  accel_z_std: static=0.150928  hover=4.051566  ratio=26.8x
+  gyro_x_std: static=0.129927  hover=1.692699  ratio=13.0x
+
+================================================================================
+RECOMMENDED SIL PARAMETERS
+================================================================================
+  accel_noise_density (static): 0.007546 m/s²/√Hz
+  gyro_noise_density (static):  0.006496 rad/s/√Hz
+  accel_rms (hover):             4.0516 m/s²
+  gyro_rms (hover):              1.6927 rad/s

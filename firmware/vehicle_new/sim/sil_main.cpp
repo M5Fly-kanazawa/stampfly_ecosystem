@@ -85,11 +85,10 @@ int main()
     QuadModel quad;
     QuadParams qp;
     SensorNoiseParams np;
-    // Enable sensor noise (Phase 1: static noise + bias)
-    // センサノイズ有効（Phase 1: 静的ノイズ + バイアス）
-    // Vibration disabled for now / 振動は今は無効
-    np.vib_accel_k = 0;
-    np.vib_gyro_k = 0;
+    // Full noise model (Phase 2: static + bias + vibration)
+    // フルノイズモデル（Phase 2: 静的 + バイアス + 振動）
+    // All parameters from real flight log analysis (72 logs)
+    // 全パラメータは実飛行ログ解析（72ログ）から導出
     quad.init(qp, np);
 
     // --- Initialize ESKF ---

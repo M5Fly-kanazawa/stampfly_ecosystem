@@ -252,11 +252,16 @@ def main():
     print(f"Found {len(files)} log files\n")
 
     # Collect all flight segments across all logs
-    all_static = []
-    all_flight = []
+    all_static = []       # Static segments (pre-flight ground, high confidence)
+    all_static_any = []   # All static segments
+    all_flight = []       # Flight segments (trimmed)
     all_trans = []
     log_summaries = []
     ambiguous_files = []
+
+    # Trim ratio: discard first/last 10% of flight segments
+    # トリム比: 飛行セグメントの前後10%を破棄
+    TRIM_RATIO = 0.10
 
     for filepath in files:
         name = os.path.basename(filepath)
@@ -272,18 +277,48 @@ def main():
         total_static_s = sum(s['duration_s'] for s in segments if s['phase'] == 'static')
         total_trans_s = sum(s['duration_s'] for s in segments if s['phase'] == 'trans')
 
-        # Analyze each segment
-        for seg in segments:
-            stats = analyze_segment(data, seg)
-            stats['file'] = name
-            stats['phase'] = seg['phase']
-            stats['duration_s'] = seg['duration_s']
-
+        # Identify pre-flight static segments (static segment immediately before flight)
+        # 飛行前静止区間を特定（飛行の直前の静止区間）
+        for i, seg in enumerate(segments):
             if seg['phase'] == 'static':
-                all_static.append(stats)
+                # Check if next segment is flight
+                is_preflight = (i + 1 < len(segments) and
+                               segments[i + 1]['phase'] in ('flight', 'trans'))
+                stats = analyze_segment(data, seg)
+                stats['file'] = name
+                stats['phase'] = 'static'
+                stats['duration_s'] = seg['duration_s']
+                stats['is_preflight'] = is_preflight
+                all_static_any.append(stats)
+                if is_preflight:
+                    all_static.append(stats)
+
             elif seg['phase'] == 'flight':
+                # Trim flight segment edges
+                # 飛行区間の端をトリム
+                seg_len = seg['end'] - seg['start']
+                trim = int(seg_len * TRIM_RATIO)
+                if seg_len - 2 * trim < 50:
+                    trim = 0  # Too short to trim / 短すぎてトリムできない
+
+                trimmed_seg = {
+                    'start': seg['start'] + trim,
+                    'end': seg['end'] - trim,
+                    'phase': 'flight',
+                    'duration_s': (seg_len - 2 * trim) * 0.0025,
+                }
+                stats = analyze_segment(data, trimmed_seg)
+                stats['file'] = name
+                stats['phase'] = 'flight'
+                stats['duration_s'] = trimmed_seg['duration_s']
+                stats['trimmed'] = True
                 all_flight.append(stats)
+
             else:
+                stats = analyze_segment(data, seg)
+                stats['file'] = name
+                stats['phase'] = 'trans'
+                stats['duration_s'] = seg['duration_s']
                 all_trans.append(stats)
 
         # Log summary
@@ -304,8 +339,9 @@ def main():
     report.append("FLIGHT LOG NOISE ANALYSIS v2 — Segment-based")
     report.append("=" * 80)
     report.append(f"\nLogs analyzed: {len(log_summaries)}")
-    report.append(f"Flight segments: {len(all_flight)} ({sum(s['duration_s'] for s in all_flight):.1f}s total)")
-    report.append(f"Static segments: {len(all_static)} ({sum(s['duration_s'] for s in all_static):.1f}s total)")
+    report.append(f"Flight segments: {len(all_flight)} ({sum(s['duration_s'] for s in all_flight):.1f}s total, trimmed {TRIM_RATIO*100:.0f}%)")
+    report.append(f"Pre-flight static segments: {len(all_static)} ({sum(s['duration_s'] for s in all_static):.1f}s total, high confidence)")
+    report.append(f"All static segments: {len(all_static_any)} ({sum(s['duration_s'] for s in all_static_any):.1f}s total)")
     report.append(f"Transition segments: {len(all_trans)} ({sum(s['duration_s'] for s in all_trans):.1f}s total)")
     report.append(f"Ambiguous logs: {len(ambiguous_files)}")
 
@@ -315,7 +351,7 @@ def main():
 
     # Static noise statistics
     report.append("\n" + "=" * 80)
-    report.append("STATIC SEGMENTS — Sensor noise baseline (motors OFF)")
+    report.append("PRE-FLIGHT STATIC — Ground waiting before flight (highest confidence)")
     report.append("=" * 80)
     if all_static:
         for key in ['accel_x_std', 'accel_y_std', 'accel_z_std',
@@ -329,7 +365,7 @@ def main():
 
     # Flight noise statistics
     report.append("\n" + "=" * 80)
-    report.append("FLIGHT SEGMENTS — In-flight noise (motors ON, vibration)")
+    report.append(f"FLIGHT SEGMENTS — Trimmed {TRIM_RATIO*100:.0f}% edges, stable flight only")
     report.append("=" * 80)
     if all_flight:
         for key in ['accel_x_std', 'accel_y_std', 'accel_z_std',
