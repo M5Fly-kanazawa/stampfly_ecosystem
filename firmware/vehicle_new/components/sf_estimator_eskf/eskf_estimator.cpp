@@ -1,13 +1,7 @@
 /**
  * @file eskf_estimator.cpp
- * @brief ESKF estimator stub implementation
- *        ESKF推定器スタブ実装
- *
- * Minimal stub for pipeline integration testing.
- * Full ESKF will be ported from vehicle firmware.
- *
- * パイプライン結合テスト用の最小スタブ。
- * 完全なESKFはvehicleファームから移植予定。
+ * @brief ESKF estimator stub — to be implemented from mathematical foundations
+ *        ESKFスタブ — 数学的基礎から新規実装予定
  *
  * @design detailed_design.md §5 — IEstimator                         [--]
  */
@@ -27,49 +21,22 @@ void EskfEstimator::init()
 
 void EskfEstimator::predict(const ImuData& imu, float dt)
 {
-    // Stub: store latest IMU timestamp
-    // スタブ: 最新のIMUタイムスタンプを保存
     state_.timestamp = imu.timestamp;
-
-    // TODO: Full ESKF prediction step
-    // TODO: 完全なESKF予測ステップ
+    // TODO: Implement ESKF prediction from mathematical foundations
+    // TODO: 数学的基礎からESKF予測を実装
 }
 
-void EskfEstimator::updateTof(const TofData& tof)
-{
-    // TODO: ToF observation update
-}
+void EskfEstimator::updateTof(const TofData& tof)   { /* TODO */ }
+void EskfEstimator::updateFlow(const FlowData& flow) { /* TODO */ }
+void EskfEstimator::updateMag(const MagData& mag)    { /* TODO */ }
+void EskfEstimator::updateBaro(const BaroData& baro) { /* TODO */ }
 
-void EskfEstimator::updateFlow(const FlowData& flow)
-{
-    // TODO: Optical flow observation update
-}
-
-void EskfEstimator::updateMag(const MagData& mag)
-{
-    // TODO: Magnetometer observation update
-}
-
-void EskfEstimator::updateBaro(const BaroData& baro)
-{
-    // TODO: Barometer observation update
-}
-
-StateEstimate EskfEstimator::getState() const
-{
-    return state_;
-}
+StateEstimate EskfEstimator::getState() const { return state_; }
 
 void EskfEstimator::reset()
 {
     state_ = {};
-    // Identity quaternion [w,x,y,z]
-    // 単位クォータニオン
-    state_.attitude[0] = 1.0f;
-    state_.attitude[1] = 0.0f;
-    state_.attitude[2] = 0.0f;
-    state_.attitude[3] = 0.0f;
-
+    state_.attitude[0] = 1.0f;  // Identity quaternion w
     ESP_LOGI(TAG, "ESKF state reset");
 }
 

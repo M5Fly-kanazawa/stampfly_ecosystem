@@ -37,7 +37,8 @@
 | 2026-04-12 | 08:58 | 09:09 | 11min | HAL 10コンポーネントコピー + led_strip依存解決 + ビルド確認 | sf_hal_* (371ファイル), idf_component.yml | fdf7821 |
 | 2026-04-12 | 09:15 | 09:19 | 4min | メインパイプライン: スタブ推定器/制御器 + 3タスク(IMU/Control/State) + main.cpp結合 | eskf_estimator, pid_controller, imu_task, control_task, state_task, tasks.hpp, main.cpp更新 | 92444be |
 | 2026-04-12 | 09:20 | 09:24 | 4min | 残り11タスク全実装 + main.cpp全タスク起動 | flow/mag/baro/tof/power/comm/telemetry/button/notify/cli/log_task.cpp | dcbec3d |
-| 2026-04-12 | 09:40 | 09:43 | 3min | パラメータシステム完全実装（45パラメータ、NVS永続化、API） | params.hpp, params.def, params.cpp更新 | — |
+| 2026-04-12 | 09:40 | 09:43 | 3min | パラメータシステム完全実装（45パラメータ、NVS永続化、API） | params.hpp, params.def, params.cpp更新 | 0e55cf9 |
+| 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。スタブに戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | — |
 
 ## 集計
 
