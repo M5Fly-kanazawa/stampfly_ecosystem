@@ -67,8 +67,13 @@ struct ContactParams {
 
     // Spring-damper contact parameters
     // バネ-ダンパ接触パラメータ
-    float k_contact  = 3000.0f;   // [N/m] spring stiffness
-    float c_contact  = 8.0f;      // [N·s/m] damping (< critical for bounce)
+    // Spring stiffness and damping tuned for dt=2.5ms stability
+    // dt=2.5msの安定性のために調整されたバネ定数と減衰
+    // Critical damping: c_crit = 2*sqrt(k*m) = 2*sqrt(500*0.037) = 8.6
+    // Underdamped (c < c_crit) for slight bounce
+    // 不足減衰（c < c_crit）で軽いバウンス
+    float k_contact  = 500.0f;    // [N/m] moderate stiffness
+    float c_contact  = 6.0f;      // [N·s/m] slightly underdamped
     float mu_friction = 0.6f;     // Coulomb friction coefficient
 
     // Ground plane at z = 0 (NED: z positive = down)
@@ -500,31 +505,46 @@ private:
 
     void applyImplicitContactDamping(float dt)
     {
-        bool any_contact = false;
+        // Count penetrating corners and max penetration
+        // 貫通頂点数と最大貫通深さ
+        int contact_count = 0;
+        float max_pen = 0;
 
         for (int c = 0; c < 8; c++) {
             Vec3 corner_world = state_.position + state_.attitude.rotate(getCorner(c));
             float pen = corner_world.z - cp_.ground_z;
             if (pen > 0) {
-                any_contact = true;
-                break;
+                contact_count++;
+                if (pen > max_pen) max_pen = pen;
             }
         }
 
-        if (!any_contact) return;
+        if (contact_count == 0) return;
 
-        // Apply implicit damping to vertical velocity
-        // 垂直速度に陰的減衰を適用
-        float implicit_factor = 1.0f / (1.0f + cp_.c_contact * dt / qp_.mass);
-        state_.velocity.z *= implicit_factor;
+        // Semi-implicit correction for vertical velocity
+        // 垂直速度の陰的補正
+        //
+        // Solve: m * v_new = m * v_old + dt * (-k*pen - c*v_new) * n_contacts
+        // → v_new * (m + c*dt*n) = m*v_old - k*pen*dt*n
+        // → v_new = (m*v_old - k*pen*dt*n) / (m + c*dt*n)
+        //
+        float n = static_cast<float>(contact_count);
+        float denom = qp_.mass + cp_.c_contact * dt * n;
+        state_.velocity.z = (qp_.mass * state_.velocity.z
+                           - cp_.k_contact * max_pen * dt * n) / denom;
 
-        // Also apply rotational damping from contact
-        // 接触による回転減衰も適用
-        float rot_damping = 1.0f / (1.0f + 50.0f * dt);  // Strong rotational damping
-        state_.angular_rate.x *= rot_damping;
-        state_.angular_rate.y *= rot_damping;
-        // z (yaw) less damped
-        state_.angular_rate.z *= (1.0f / (1.0f + 10.0f * dt));
+        // Prevent deep penetration: push position back
+        // 深い貫通を防止: 位置を押し戻す
+        if (max_pen > 0.005f) {
+            state_.position.z -= (max_pen - 0.002f);
+        }
+
+        // Rotational damping from ground contact
+        // 地面接触による回転減衰
+        float rot_factor = 1.0f / (1.0f + 20.0f * dt * n);
+        state_.angular_rate.x *= rot_factor;
+        state_.angular_rate.y *= rot_factor;
+        state_.angular_rate.z *= (1.0f / (1.0f + 5.0f * dt * n));
     }
 
     // =========================================================================
