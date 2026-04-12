@@ -1,0 +1,36 @@
+
+Inside this STM32CubeIDE example folder, the STM32F401RETX_FLASH.ld is still compatible supporting the GCC10 and early version. 
+
+The latest CubeIDE from www.st.com have integrated GCC11 or later version, If you are using latest CubeIDE, below waring message will pop up during compiling:
+
+	../arm-none-eabi/bin/ld.exe: warning: VL53L1CB_SimpleRanging_F401.elf has a LOAD segment with RWX permissions
+
+You can add (READONLY) to below items inside STM32F401RETX_FLASH.ld to remove the waring message. 
+	.ARM.extab 
+	.ARM
+	.preinit_array
+	.init_array
+	.fini_array
+
+
+Example: 
+
+
+update  
+ 	.ARM.extab : 
+  	{
+    	  . = ALIGN(4);
+    	  *(.ARM.extab* .gnu.linkonce.armextab.*)
+    	  . = ALIGN(4);
+  	} >FLASH
+
+to 
+ 	.ARM.extab (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
+  	{
+    	  . = ALIGN(4);
+    	  *(.ARM.extab* .gnu.linkonce.armextab.*)
+    	  . = ALIGN(4);
+  	} >FLASH
+
+
+

@@ -33,7 +33,8 @@
 |------|---------|---------|---------|---------|--------|---------|
 | 2026-04-12 | 08:26 | 08:40 | 14min | ESP-IDFスケルトン + sf_core（Pub-Sub、データ型、トピック定義） | CMakeLists.txt, partitions.csv, sdkconfig.defaults, main.cpp, config.hpp, topic.hpp, topics.hpp, data_types.hpp, params.cpp | 9bfb04b |
 | 2026-04-12 | 08:49 | 08:51 | 2min | sf_state（状態管理：enum定義、StateManager、遷移テーブル、アラート処理） | flight_state.hpp, state_manager.hpp, state_manager.cpp | 216145d |
-| 2026-04-12 | 08:54 | 08:56 | 2min | sf_estimator + sf_controller（インターフェース定義、ヘッダーのみ） | estimator.hpp, controller.hpp | — |
+| 2026-04-12 | 08:54 | 08:56 | 2min | sf_estimator + sf_controller（インターフェース定義、ヘッダーのみ） | estimator.hpp, controller.hpp | 355e453 |
+| 2026-04-12 | 08:58 | 09:09 | 11min | HAL 10コンポーネントコピー + led_strip依存解決 + ビルド確認 | sf_hal_* (371ファイル), idf_component.yml | — |
 
 ## 集計
 
@@ -66,7 +67,7 @@
 | sf_telemetry（テレメトリ） | | | | | 未着手 |
 | sf_notify（通知） | | | | | 未着手 |
 | sf_calibration（キャリブレーション） | | | | | 未着手 |
-| HALドライバ群（コピー+適応） | | | | | 未着手 |
+| HALドライバ群（コピー+適応） | 2026-04-12 | 2026-04-12 | 11min | 371 | ビルド成功（コピー完了、適応はTODO） |
 | タスク群（14タスク） | | | | | 未着手 |
 | Examples Level 1（01-08） | | | | | 未着手 |
 | Examples Level 2（09-13） | | | | | 未着手 |

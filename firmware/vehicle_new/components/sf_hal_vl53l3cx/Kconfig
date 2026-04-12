@@ -1,0 +1,52 @@
+menu "StampFly ToF Sensor Configuration"
+
+    config STAMPFLY_TOF_I2C_SDA_GPIO
+        int "I2C SDA GPIO"
+        default 3
+        help
+            GPIO number for I2C SDA line (StampFly default: GPIO3)
+
+    config STAMPFLY_TOF_I2C_SCL_GPIO
+        int "I2C SCL GPIO"
+        default 4
+        help
+            GPIO number for I2C SCL line (StampFly default: GPIO4)
+
+    config STAMPFLY_TOF_I2C_FREQ_HZ
+        int "I2C Frequency (Hz)"
+        default 400000
+        help
+            I2C clock frequency in Hz (400kHz recommended for VL53L3CX)
+
+    config STAMPFLY_TOF_FRONT_XSHUT_GPIO
+        int "Front ToF XSHUT GPIO"
+        default 9
+        help
+            GPIO for front ToF sensor XSHUT pin
+
+    config STAMPFLY_TOF_FRONT_INT_GPIO
+        int "Front ToF INT GPIO"
+        default 8
+        help
+            GPIO for front ToF sensor interrupt pin
+
+    config STAMPFLY_TOF_BOTTOM_XSHUT_GPIO
+        int "Bottom ToF XSHUT GPIO"
+        default 7
+        help
+            GPIO for bottom ToF sensor XSHUT pin
+
+    config STAMPFLY_TOF_BOTTOM_INT_GPIO
+        int "Bottom ToF INT GPIO"
+        default 6
+        help
+            GPIO for bottom ToF sensor interrupt pin
+
+    config STAMPFLY_TOF_TIMING_BUDGET_MS
+        int "Timing Budget (ms)"
+        default 33
+        range 8 500
+        help
+            Measurement timing budget in milliseconds
+
+endmenu
