@@ -185,65 +185,41 @@ int main()
         SimSensors sens = quad.getSensors(dt);
         quad.updateBiases(dt);
 
-        // --- ESKF prediction and updates ---
+        // --- ESKF disabled for fundamental physics test ---
         Vec3 accel(sens.accel.x, sens.accel.y, sens.accel.z);
         Vec3 gyro(sens.gyro.x, sens.gyro.y, sens.gyro.z);
-        eskf.predict(accel, gyro, dt);
-        eskf.updateAccelAttitude(accel);
-        if (step % tof_div == 0) {
-            eskf.updateToF(sens.tof_bottom);
-        }
+        // eskf disabled
 
-        // --- Get states ---
+        // --- All true state for control ---
         auto true_st = quad.getState();
-        Vec3 eskf_pos = eskf.getPosition();
-        Vec3 eskf_vel = eskf.getVelocity();
-        Vec3 eskf_euler = eskf.getAttitude().to_euler();
+        Vec3 eskf_pos = {0,0,0};
+        Vec3 eskf_vel = {0,0,0};
+        Vec3 eskf_euler = {0,0,0};
 
-        // ESKF-controlled flight: use ESKF for position/velocity
-        // ESKF制御飛行: 位置/速度にESKFを使用
-        // Rate control still uses true angular rate (gyro bias not corrected yet)
-        // レート制御は引き続き真の角速度を使用（ジャイロバイアス未補正）
-        Vec3 est_pos = eskf_pos;
-        Vec3 est_vel = eskf_vel;
-        Vec3 est_euler = eskf_euler;
+        Vec3 est_pos = true_st.position;
+        Vec3 est_vel = true_st.velocity;
+        Vec3 est_euler = true_st.attitude.to_euler();
 
         // --- Control ---
         float thrust = 0;
         float torque[3] = {0, 0, 0};
 
         if (armed) {
-            bool on_ground = true_st.position.z >= -0.01f;
+            // Simple control: altitude PID + attitude PID, no special phases
+            // シンプル制御: 高度PID + 姿勢PID、特殊フェーズなし
+            float est_height = -est_pos.z;
+            float est_climb = -est_vel.z;
 
-            // Takeoff: open-loop thrust until well airborne (>10cm)
-            // 離陸: 十分に空中（>10cm）になるまでオープンループ推力
-            float true_height = -true_st.position.z;
-            bool takeoff_phase = true_height < 0.10f;
+            float vel_sp = alt_p.compute(target_alt - est_height, dt);
+            float thrust_corr = alt_v.compute(vel_sp - est_climb, dt);
+            thrust = hover_thrust + thrust_corr;
 
-            if (takeoff_phase) {
-                thrust = hover_thrust * 1.2f;  // 20% above hover for takeoff
-            } else {
-                // Altitude cascade (airborne) / 高度カスケード（空中）
-                float est_height = -est_pos.z;
-                float est_climb = -est_vel.z;
-                float vel_sp = alt_p.compute(target_alt - est_height, dt);
-                float thrust_corr = alt_v.compute(vel_sp - est_climb, dt);
-                thrust = hover_thrust + thrust_corr;
-            }
-            if (!takeoff_phase) {
-                // Attitude cascade (stable flight only, not during takeoff)
-                // 姿勢カスケード（安定飛行時のみ、離陸中は除く）
-                float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
-                float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
+            float rate_sp_r = att_r.compute(0 - est_euler.x, dt);
+            float rate_sp_p = att_p.compute(0 - est_euler.y, dt);
 
-                torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
-                torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
-                torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
-            }
-            // During takeoff: torque = 0 (thrust only, motors balanced)
-            // 離陸中: トルク = 0（推力のみ、モーター均等）
-            // On ground: torque = 0, thrust goes equally to all motors
-            // 地上: トルク=0、推力は全モーター均等
+            torque[0] = rate_r.compute(rate_sp_r - true_st.angular_rate.x, dt);
+            torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
+            torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
         }
 
         // --- Mixer ---
