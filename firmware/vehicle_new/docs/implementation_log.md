@@ -41,7 +41,8 @@
 | 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。スタブに戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | 4f21b89 |
 | 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | c40717c |
 | 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | 6c0ef53 |
-| 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | — |
+| 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | 63e4bc3 |
+| 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | — |
 
 ## 集計
 

@@ -15,9 +15,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "topics.hpp"
+// TODO: #include "bmp280.hpp"
 #include "config.hpp"
 
 static const char* TAG = "BaroTask";
+
+// TODO: BMP280 driver instance
 
 void BaroTask(void* pvParameters)
 {
@@ -27,12 +30,12 @@ void BaroTask(void* pvParameters)
     const TickType_t period = pdMS_TO_TICKS(20);  // 50Hz
 
     while (true) {
-        // TODO: Read from BMP280 hardware
         sf::BaroData data = {};
         data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        // TODO: Wire BMP280 API
+        // TODO: BMP280 APIを結合
 
         sf::sensor_baro.publish(data);
-
         vTaskDelayUntil(&last_wake, period);
     }
 }

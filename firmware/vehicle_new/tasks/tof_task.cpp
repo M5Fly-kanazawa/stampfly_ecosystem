@@ -18,9 +18,13 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "topics.hpp"
+// TODO: #include "vl53l3cx_wrapper.hpp"
 #include "config.hpp"
 
 static const char* TAG = "TofTask";
+
+// TODO: ToF driver instances — wire when API confirmed
+// TODO: ToFドライバインスタンス — API確認後に結合
 
 void TofTask(void* pvParameters)
 {
@@ -30,14 +34,19 @@ void TofTask(void* pvParameters)
     const TickType_t period = pdMS_TO_TICKS(33);  // ~30Hz
 
     while (true) {
-        // TODO: Read from VL53L3CX hardware (bottom + front)
+        uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+
+        // Read bottom ToF for altitude
+        // 底面ToFを高度用に読み取る
         sf::TofData data = {};
-        data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        data.timestamp = now;
+        // TODO: Wire VL53L3CX API
+        // TODO: VL53L3CX APIを結合
 
         sf::sensor_tof.publish(data);
 
-        // TODO: Takeoff/landing detection logic
-        // TODO: 離着陸検出ロジック
+        // TODO: Takeoff/landing detection using TakeoffLandingMgr
+        // TODO: TakeoffLandingMgrを使った離着陸検出
 
         vTaskDelayUntil(&last_wake, period);
     }

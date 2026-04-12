@@ -25,6 +25,7 @@
 #include "topics.hpp"
 #include "estimator.hpp"
 #include "eskf_estimator.hpp"
+// TODO: #include "bmi270_wrapper.hpp" — wire when API is confirmed
 #include "config.hpp"
 
 static const char* TAG = "ImuTask";
@@ -33,9 +34,12 @@ static const char* TAG = "ImuTask";
 /// 制御タスク通知用のタスクハンドル
 extern TaskHandle_t g_control_task_handle;
 
-/// Estimator instance (global for callback access)
-/// 推定器インスタンス（コールバックアクセス用にグローバル）
+/// Estimator instance
+/// 推定器インスタンス
 static sf::EskfEstimator estimator;
+
+// TODO: BMI270 driver instance — wire when API confirmed
+// TODO: BMI270ドライバインスタンス — API確認後に結合
 
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
@@ -81,10 +85,12 @@ void ImuTask(void* pvParameters)
         // Step 1: IMUセンサデータを読み取る
         // =====================================================================
 
-        // TODO: Read from BMI270 hardware
-        // TODO: BMI270ハードウェアから読み取る
+        // Read IMU data from BMI270
+        // BMI270からIMUデータを読み取る
         sf::ImuData imu = {};
         imu.timestamp = now;
+        // TODO: Wire BMI270 API (readFIFO or polling)
+        // TODO: BMI270 API結合（FIFOまたはポーリング）
 
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行

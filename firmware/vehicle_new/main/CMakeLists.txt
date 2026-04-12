@@ -20,9 +20,29 @@ idf_component_register(
         esp_timer
         nvs_flash
         sf_core
+        sf_math
         sf_state
         sf_estimator
         sf_estimator_eskf
         sf_controller
         sf_controller_pid
+        sf_actuator
+        sf_comm
+        sf_command
+        sf_telemetry
+        sf_logger
+        sf_notify
+        sf_failsafe
+        sf_takeoff_landing
+        sf_calibration
+        sf_hal_bmi270
+        sf_hal_bmm150
+        sf_hal_bmp280
+        sf_hal_vl53l3cx
+        sf_hal_pmw3901
+        sf_hal_motor
+        sf_hal_led
+        sf_hal_buzzer
+        sf_hal_button
+        sf_hal_power
 )

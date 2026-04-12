@@ -52,10 +52,13 @@ void PowerTask(void* pvParameters)
     const TickType_t period = pdMS_TO_TICKS(100);  // 10Hz
 
     while (true) {
-        // TODO: Read from INA3221 hardware
+        // Read from INA3221 power monitor
+        // INA3221電源モニタから読み取る
         sf::PowerData data = {};
-        data.voltage = 4.2f;  // Stub: full battery
         data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        // TODO: Wire power_monitor driver
+        // TODO: power_monitorドライバを結合
+        data.voltage = 4.2f;  // Stub until driver is wired / ドライバ結合まで仮値
 
         sf::sensor_power.publish(data);
 

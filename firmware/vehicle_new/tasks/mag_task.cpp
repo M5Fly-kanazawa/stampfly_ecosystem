@@ -15,9 +15,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "topics.hpp"
+// TODO: #include "bmm150.hpp"
 #include "config.hpp"
 
 static const char* TAG = "MagTask";
+
+// TODO: BMM150 driver instance
 
 void MagTask(void* pvParameters)
 {
@@ -27,12 +30,12 @@ void MagTask(void* pvParameters)
     const TickType_t period = pdMS_TO_TICKS(40);  // 25Hz
 
     while (true) {
-        // TODO: Read from BMM150 hardware
         sf::MagData data = {};
         data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        // TODO: Wire BMM150 API
+        // TODO: BMM150 APIを結合
 
         sf::sensor_mag.publish(data);
-
         vTaskDelayUntil(&last_wake, period);
     }
 }

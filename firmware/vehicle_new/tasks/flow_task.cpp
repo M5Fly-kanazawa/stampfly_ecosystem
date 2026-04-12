@@ -15,9 +15,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "topics.hpp"
+// TODO: #include "pmw3901_wrapper.hpp"
 #include "config.hpp"
 
 static const char* TAG = "FlowTask";
+
+// TODO: PMW3901 driver instance
 
 void FlowTask(void* pvParameters)
 {
@@ -27,15 +30,12 @@ void FlowTask(void* pvParameters)
     const TickType_t period = pdMS_TO_TICKS(10);  // 100Hz
 
     while (true) {
-        // TODO: Read from PMW3901 hardware
-        // TODO: PMW3901ハードウェアから読み取る
         sf::FlowData data = {};
         data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        // TODO: Wire PMW3901 API
+        // TODO: PMW3901 APIを結合
 
-        // Publish to topic
-        // トピックに発行
         sf::sensor_flow.publish(data);
-
         vTaskDelayUntil(&last_wake, period);
     }
 }
