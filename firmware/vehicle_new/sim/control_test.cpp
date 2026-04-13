@@ -172,18 +172,26 @@ static TestResult run_test(TestLevel level, FILE* csv)
         eskf.setFreezeAccelBias(true);
     }
 
-    // --- Disturbance schedule ---
-    // Torque impulse → Δω ≈ torque * duration / Ixx
-    // With Ixx=5e-6: 5e-5 Nm * 10ms → Δω = 0.1 rad/s ≈ 5.7°/s
-    // 外乱トルクインパルス → Δω ≈ torque * duration / Ixx
-    struct Disturbance { float t; float roll_torque; float pitch_torque; };
-    Disturbance disturbances[] = {
-        {1.0f,  5e-5f,  0.0f},      // Roll: Δω ≈ 0.1 rad/s
-        {2.5f,  0.0f,  -7e-5f},     // Pitch: Δω ≈ 0.14 rad/s
-        {4.0f,  4e-5f,   4e-5f},    // Combined
+    // --- Gust disturbance schedule ---
+    // Wind force + torque applied to body frame via physics engine
+    // ボディ座標系の風力+トルクを物理エンジンに印加
+    //
+    // Model: lateral wind hits drone body above CG → force + torque
+    // モデル: 横風が重心より上に当たる → 並進力 + 回転トルク
+    //   Force: drag-like lateral push (~10mN ≈ 3% of weight)
+    //   Torque: force × moment arm (~10mm above CG)
+    //     5e-5 Nm on Ixx=5e-6 → α = 10 rad/s², in 200ms: Δω ≈ 2 rad/s
+    struct Gust {
+        float t, duration;
+        Vec3 force;    // Body-frame force [N]
+        Vec3 torque;   // Body-frame torque [Nm]
     };
-    const int n_dist = 3;
-    const float dist_duration = 0.01f;  // 10ms impulse
+    Gust gusts[] = {
+        {1.0f, 0.2f,  {0.01f,  0.0f,  0.0f}, {0.0f,  5e-5f,  0.0f}},  // +X wind → pitch
+        {2.5f, 0.2f,  {0.0f, -0.015f, 0.0f}, {7e-5f, 0.0f,   0.0f}},  // -Y wind → roll
+        {4.0f, 0.3f,  {0.008f, 0.008f, 0.0f},{-4e-5f,4e-5f,  0.0f}},  // Combined
+    };
+    const int n_gusts = 3;
 
     // --- CSV header ---
     fprintf(csv, "time,true_roll,true_pitch,true_rate_x,true_rate_y,"
@@ -283,15 +291,18 @@ static TestResult run_test(TestLevel level, FILE* csv)
             torque[2] = rate_y.compute(0 - est_rate_z, dt);
         }
 
-        // --- Disturbance ---
+        // --- Gust disturbance (body-frame force on physics) ---
+        // --- 突風外乱（ボディ座標系の力を物理エンジンに印加）---
         float dist_flag = 0;
-        for (int di = 0; di < n_dist; di++) {
-            if (t >= disturbances[di].t && t < disturbances[di].t + dist_duration) {
-                torque[0] += disturbances[di].roll_torque;
-                torque[1] += disturbances[di].pitch_torque;
+        Vec3 gust_force = {}, gust_torque = {};
+        for (int gi = 0; gi < n_gusts; gi++) {
+            if (t >= gusts[gi].t && t < gusts[gi].t + gusts[gi].duration) {
+                gust_force += gusts[gi].force;
+                gust_torque += gusts[gi].torque;
                 dist_flag = 1;
             }
         }
+        quad.setExternalForceBody(gust_force, gust_torque);
 
         // --- Mixer + step ---
         float motor_duty[4];
@@ -363,8 +374,8 @@ int main()
     };
 
     fprintf(stderr, "=== Progressive Control Validation ===\n\n");
-    fprintf(stderr, "Disturbances: roll 0.3mNm@1.0s, pitch -0.4mNm@2.5s, "
-                    "combined 0.2mNm@4.0s (50ms pulses)\n\n");
+    fprintf(stderr, "Gusts: +X 10mN@1.0s(200ms), -Y 15mN@2.5s(200ms), "
+                    "combined@4.0s(300ms)\n\n");
 
     fprintf(stderr, "%-30s %10s %10s %10s %10s\n",
             "Test", "max_roll", "max_pitch", "rms_roll", "rms_pitch");

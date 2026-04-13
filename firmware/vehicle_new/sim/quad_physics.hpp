@@ -248,9 +248,12 @@ public:
         Vec3 gravity_ned(0, 0, qp_.mass * qp_.gravity);
         Vec3 drag = state_.velocity * (-qp_.drag_coeff);
 
-        // Non-contact force and torque only
-        // 非接触力とトルクのみ
-        Vec3 free_force = thrust_ned + gravity_ned + drag;
+        // External force (body → NED) / 外力（ボディ→NED）
+        Vec3 ext_force_ned = state_.attitude.rotate(ext_force_body_);
+
+        // Non-contact force and torque
+        // 非接触力とトルク
+        Vec3 free_force = thrust_ned + gravity_ned + drag + ext_force_ned;
         free_force_cache_ = free_force;  // Save for accelerometer model
         Vec3 free_acc = free_force * (1.0f / qp_.mass);
 
@@ -268,16 +271,17 @@ public:
         state_.velocity += k1_v * dt;  // For constant force, RK4 = Euler
         state_.position += (k1_p + k2_p * 2.0f + k3_p * 2.0f + k4_p) * (dt / 6.0f);
 
-        // Rotational RK4 (Euler equation, non-contact torque only)
-        // 回転RK4（オイラー方程式、非接触トルクのみ）
+        // Rotational RK4 (Euler equation)
+        // 回転RK4（オイラー方程式）
+        Vec3 total_torque = motor_torque + ext_torque_body_;
         Vec3 w = state_.angular_rate;
-        Vec3 a1 = eulerEquation(w, motor_torque);
+        Vec3 a1 = eulerEquation(w, total_torque);
         Vec3 w2 = w + a1 * (dt * 0.5f);
-        Vec3 a2 = eulerEquation(w2, motor_torque);
+        Vec3 a2 = eulerEquation(w2, total_torque);
         Vec3 w3 = w + a2 * (dt * 0.5f);
-        Vec3 a3 = eulerEquation(w3, motor_torque);
+        Vec3 a3 = eulerEquation(w3, total_torque);
         Vec3 w4 = w + a3 * dt;
-        Vec3 a4 = eulerEquation(w4, motor_torque);
+        Vec3 a4 = eulerEquation(w4, total_torque);
 
         state_.angular_rate += (a1 + a2 * 2.0f + a3 * 2.0f + a4) * (dt / 6.0f);
 
@@ -402,6 +406,20 @@ public:
         s.mag = state_.attitude.inv_rotate(mag_ned);
 
         return s;
+    }
+
+    /// Apply external force/torque in body frame (e.g. gust)
+    /// ボディ座標系の外力/外トルクを設定（突風など）
+    void setExternalForceBody(const Vec3& force, const Vec3& torque)
+    {
+        ext_force_body_ = force;
+        ext_torque_body_ = torque;
+    }
+
+    void clearExternalForce()
+    {
+        ext_force_body_ = {};
+        ext_torque_body_ = {};
     }
 
     void updateBiases(float dt)
@@ -741,6 +759,11 @@ private:
     // 加速度計モデル: 速度ベースの慣性加速度
     Vec3 vel_before_step_ = {};       // Velocity before physics step
     Vec3 a_inertial_ned_ = {};        // Inertial acceleration (Δv/Δt)
+
+    // External force/torque (body frame, e.g. gust)
+    // 外力/外トルク（ボディ座標系、突風など）
+    Vec3 ext_force_body_ = {};
+    Vec3 ext_torque_body_ = {};
 
     // Contact solver state
     // 接触ソルバー状態
