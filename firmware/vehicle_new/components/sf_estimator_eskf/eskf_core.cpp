@@ -471,7 +471,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // 姿勢推定に加速度を使用できない
     float gravity_diff = accel.norm() - cfg_.gravity;
     float norm_ratio = fabsf(gravity_diff) / cfg_.gravity;
-    if (norm_ratio > 0.1f) return;  // Skip if >10% deviation
+    if (norm_ratio > cfg_.accel_norm_gate) return;  // Skip if deviation exceeds threshold
 
     // Adaptive R scaling: R = R_base * (1 + k * |a - g|²)
     // 適応Rスケーリング: R = R_base * (1 + k * |a - g|²)

@@ -73,7 +73,8 @@ struct EskfConfig {
 
     // Attitude correction / 姿勢補正
     float att_correction_clamp = 0.05f;   // [rad]
-    float k_adaptive       = 0.0f;        // Disabled — vibration makes it counterproductive
+    float k_adaptive       = 50.0f;       // Adaptive R: R *= (1 + k * |a-g|²)
+    float accel_norm_gate  = 0.10f;       // Norm gate threshold (fraction of g)
 
     // Sensor enable / センサ有効
     bool use_tof           = true;
@@ -125,6 +126,9 @@ public:
     Vec3 getVelocity() const { return vel_; }
     Vec3 getGyroBias() const { return bg_; }
     Vec3 getAccelBias() const { return ba_; }
+
+    /// Get P-matrix diagonal element / P行列対角要素を取得
+    float getPDiag(int idx) const { return P_(idx, idx); }
 
     /// Set gyro bias (from calibration) / ジャイロバイアスを設定（キャリブレーションから）
     void setGyroBias(const Vec3& bias) { bg_ = bias; }

@@ -75,6 +75,16 @@ tools/log_analyzer/*.bin
 tools/log_analyzer/*.png
 
 # ====================
+# SIL simulation outputs
+# ====================
+firmware/vehicle_new/sim/eskf_diag_test
+firmware/vehicle_new/sim/eskf_accel_compare
+firmware/vehicle_new/sim/eskf_sine_compare
+firmware/vehicle_new/sim/eskf_final_compare
+firmware/vehicle_new/sim/diag_sine_*.csv
+firmware/vehicle_new/sim/compare_*.csv
+
+# ====================
 # Compiled
 # ====================
 *.o
@@ -112,3 +122,4 @@ _wip/
 # Private documents (conference papers, etc.)
 # 非公開ドキュメント（学会原稿等）
 docs/sci26/
+firmware/vehicle_new/.cache/

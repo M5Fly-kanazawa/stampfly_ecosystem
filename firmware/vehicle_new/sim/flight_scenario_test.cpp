@@ -84,19 +84,21 @@ static void run_scenario(Level level, FILE* csv)
     // --- PIDs ---
     PID rate_r, rate_p, rate_y, att_r, att_p, alt_p, alt_v;
 
-    rate_r.kp = 1.365e-3f; rate_r.ti = 0.7f; rate_r.td = 0.01f;
+    // Tuned PIDs (from parameter sweep)
+    // チューニング済みPID（パラメータスイープ結果）
+    rate_r.kp = 1.365e-3f; rate_r.ti = 0.7f; rate_r.td = 0.008f;
     rate_r.output_limit = 5.2e-3f; rate_r.eta = 0.125f;
     rate_p = rate_r; rate_p.kp = 1.995e-3f;
     rate_y.kp = 5.31e-3f; rate_y.ti = 1.6f; rate_y.output_limit = 2.2e-3f;
 
-    att_r.kp = 5.0f; att_r.ti = 4.0f; att_r.output_limit = 3.0f;
+    att_r.kp = 14.0f; att_r.ti = 4.0f; att_r.output_limit = 3.0f;
     att_p = att_r;
 
-    alt_p.kp = 0.6f; alt_p.ti = 7.0f; alt_p.output_limit = 0.5f;
-    alt_v.kp = 0.1f; alt_v.ti = 2.5f; alt_v.output_limit = 0.15f;
+    alt_p.kp = 1.2f; alt_p.ti = 3.0f; alt_p.output_limit = 0.5f;
+    alt_v.kp = 0.20f; alt_v.ti = 1.0f; alt_v.output_limit = 0.25f;
 
     // --- LPF ---
-    const float alpha_eskf = 0.32f, alpha_rate = 0.67f;
+    const float alpha_eskf = 0.20f, alpha_rate = 0.67f;
     Vec3 gyro_eskf_lpf={}, accel_eskf_lpf={}, gyro_rate_lpf={};
     bool lpf_init = false;
 
@@ -204,7 +206,7 @@ static void run_scenario(Level level, FILE* csv)
                 cfg.use_tof = true; cfg.use_baro = false;
                 cfg.use_mag = false; cfg.use_flow = false;
                 cfg.accel_noise = 0.3f;
-                cfg.gyro_noise = 0.009655f;
+                cfg.gyro_noise = 0.03f;
                 cfg.tof_noise = 0.01f;
                 eskf.init(cfg);
                 eskf.setGyroBias(gyro_avg);

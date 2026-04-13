@@ -432,6 +432,7 @@ public:
     }
 
     const QuadState& getState() const { return state_; }
+    Vec3 getInertialAccelNed() const { return a_inertial_ned_; }
 
     /// Check if any corner is in contact with ground
     /// 頂点が地面に接触しているか確認
