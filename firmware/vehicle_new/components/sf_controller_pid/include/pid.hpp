@@ -49,11 +49,15 @@ struct PID {
         }
 
         // Incomplete derivative (filtered) / 不完全微分（フィルタ付き）
+        // D(s) = Kp * Td * s / (eta*Td*s + 1)
+        // Discrete: d[n] = α*d[n-1] + K*(e[n]-e[n-1])
+        //   α = η*Td / (η*Td + dt),  K = Kp*Td / (η*Td + dt)
         float d_term = 0;
         if (td > 0) {
-            float alpha = td / (td * eta + dt);
-            deriv_filter = alpha * deriv_filter
-                         + alpha * kp * td * (error - prev_error) / dt;
+            float tau = td * eta;            // Filter time constant
+            float alpha = tau / (tau + dt);  // Filter coefficient (0 < α < 1)
+            float K = kp * td / (tau + dt);  // Derivative gain
+            deriv_filter = alpha * deriv_filter + K * (error - prev_error);
             d_term = deriv_filter;
         }
 
