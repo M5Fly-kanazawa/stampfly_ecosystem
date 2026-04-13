@@ -92,8 +92,14 @@ struct SensorNoiseParams {
     float accel_bias_init_std  = 0.13f;
     float gyro_bias_rw         = 0.000013f;
     float accel_bias_rw        = 0.0001f;
-    float vib_accel_k          = 4.3f;
-    float vib_gyro_k           = 2.1f;
+
+    // Per-axis vibration coupling: σ_vib = vib_k[axis] × duty²
+    // 軸別振動結合: σ_vib = vib_k[axis] × duty²
+    // Derived from hover02 log (50Hz HPF residual, duty=0.71)
+    // hover02ログから導出（50Hz HPF残差、duty=0.71）
+    float vib_accel_k[3]       = {3.96f, 2.35f, 5.64f};  // X, Y, Z [m/s²]
+    float vib_gyro_k[3]        = {1.08f, 0.83f, 0.15f};  // X, Y, Z [rad/s]
+
     float tof_noise_base       = 0.010f;
     float tof_noise_scale      = 0.015f;
     float baro_noise_std       = 0.05f;
@@ -343,22 +349,34 @@ public:
         Vec3 accel_output_ned = a_inertial_ned_ - g_ned;
         Vec3 accel_output_body = state_.attitude.inv_rotate(accel_output_ned);
 
-        // Add noise
-        // ノイズを追加
-        float accel_sigma = sqrtf(
-            (np_.accel_noise_density * sqrtf(fs)) * (np_.accel_noise_density * sqrtf(fs))
-            + (np_.vib_accel_k * duty * duty) * (np_.vib_accel_k * duty * duty));
-        s.accel.x = accel_output_body.x + randn() * accel_sigma + accel_bias_[0];
-        s.accel.y = accel_output_body.y + randn() * accel_sigma + accel_bias_[1];
-        s.accel.z = accel_output_body.z + randn() * accel_sigma + accel_bias_[2];
+        // Add per-axis vibration noise
+        // 軸別振動ノイズを追加
+        float accel_base = np_.accel_noise_density * sqrtf(fs);
+        float d2 = duty * duty;
+        for (int i = 0; i < 3; i++) {
+            float vib = np_.vib_accel_k[i] * d2;
+            float sigma = sqrtf(accel_base * accel_base + vib * vib);
+            float true_val = (i == 0) ? accel_output_body.x :
+                             (i == 1) ? accel_output_body.y : accel_output_body.z;
+            float noisy = true_val + randn() * sigma + accel_bias_[i];
+            if (i == 0) s.accel.x = noisy;
+            else if (i == 1) s.accel.y = noisy;
+            else s.accel.z = noisy;
+        }
 
-        // Gyroscope
-        float gyro_sigma = sqrtf(
-            (np_.gyro_noise_density * sqrtf(fs)) * (np_.gyro_noise_density * sqrtf(fs))
-            + (np_.vib_gyro_k * duty * duty) * (np_.vib_gyro_k * duty * duty));
-        s.gyro.x = state_.angular_rate.x + randn() * gyro_sigma + gyro_bias_[0];
-        s.gyro.y = state_.angular_rate.y + randn() * gyro_sigma + gyro_bias_[1];
-        s.gyro.z = state_.angular_rate.z + randn() * gyro_sigma + gyro_bias_[2];
+        // Gyroscope (per-axis vibration)
+        // ジャイロスコープ（軸別振動）
+        float gyro_base = np_.gyro_noise_density * sqrtf(fs);
+        for (int i = 0; i < 3; i++) {
+            float vib = np_.vib_gyro_k[i] * d2;
+            float sigma = sqrtf(gyro_base * gyro_base + vib * vib);
+            float true_val = (i == 0) ? state_.angular_rate.x :
+                             (i == 1) ? state_.angular_rate.y : state_.angular_rate.z;
+            float noisy = true_val + randn() * sigma + gyro_bias_[i];
+            if (i == 0) s.gyro.x = noisy;
+            else if (i == 1) s.gyro.y = noisy;
+            else s.gyro.z = noisy;
+        }
 
         // ToF: distance from bottom of box to ground
         // ToF: 箱底面から地面までの距離

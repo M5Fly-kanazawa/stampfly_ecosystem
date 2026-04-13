@@ -182,7 +182,10 @@ int main()
            "eskf_x,eskf_y,eskf_z,eskf_vz,"
            "eskf_roll,eskf_pitch,eskf_yaw,"
            "thrust,m1,m2,m3,m4,"
-           "accel_z,gyro_x\n");
+           "accel_z,gyro_x,"
+           "raw_ax,raw_ay,raw_az,raw_gx,raw_gy,raw_gz,"
+           "flt_ax,flt_ay,flt_az,flt_gx,flt_gy,flt_gz,"
+           "duty_avg\n");
 
     // =================================================================
     // Simulation loop
@@ -404,7 +407,10 @@ int main()
                    "%.4f,%.4f,%.4f,%.4f,"
                    "%.4f,%.4f,%.4f,"
                    "%.4f,%.3f,%.3f,%.3f,%.3f,"
-                   "%.4f,%.4f\n",
+                   "%.4f,%.4f,"
+                   "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
+                   "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
+                   "%.3f\n",
                    t,
                    true_st.position.x, true_st.position.y,
                    true_st.position.z, true_st.velocity.z,
@@ -413,7 +419,12 @@ int main()
                    eskf_euler.x*57.3f, eskf_euler.y*57.3f, eskf_euler.z*57.3f,
                    thrust,
                    motor_duty[0], motor_duty[1], motor_duty[2], motor_duty[3],
-                   sens.accel.z, sens.gyro.x);
+                   sens.accel.z, sens.gyro.x,
+                   accel_raw.x, accel_raw.y, accel_raw.z,
+                   gyro_raw.x, gyro_raw.y, gyro_raw.z,
+                   accel.x, accel.y, accel.z,
+                   gyro.x, gyro.y, gyro.z,
+                   true_st.avg_duty);
         }
     }
 

@@ -75,7 +75,8 @@ int main()
         SensorNoiseParams np = {};  // No noise for physics test
         np.gyro_noise_density = 0; np.accel_noise_density = 0;
         np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
-        np.vib_accel_k = 0; np.vib_gyro_k = 0;
+        np.vib_accel_k[0] = np.vib_accel_k[1] = np.vib_accel_k[2] = 0;
+        np.vib_gyro_k[0] = np.vib_gyro_k[1] = np.vib_gyro_k[2] = 0;
 
         quad.init(qp, cp, np);
         // Set initial height to 0.5m (NED: z = -0.5)
@@ -97,7 +98,8 @@ int main()
         SensorNoiseParams np = {};
         np.gyro_noise_density = 0; np.accel_noise_density = 0;
         np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
-        np.vib_accel_k = 0; np.vib_gyro_k = 0;
+        np.vib_accel_k[0] = np.vib_accel_k[1] = np.vib_accel_k[2] = 0;
+        np.vib_gyro_k[0] = np.vib_gyro_k[1] = np.vib_gyro_k[2] = 0;
 
         quad.init(qp, cp, np);
         auto& state = const_cast<QuadState&>(quad.getState());
@@ -119,7 +121,8 @@ int main()
         SensorNoiseParams np = {};
         np.gyro_noise_density = 0; np.accel_noise_density = 0;
         np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
-        np.vib_accel_k = 0; np.vib_gyro_k = 0;
+        np.vib_accel_k[0] = np.vib_accel_k[1] = np.vib_accel_k[2] = 0;
+        np.vib_gyro_k[0] = np.vib_gyro_k[1] = np.vib_gyro_k[2] = 0;
 
         quad.init(qp, cp, np);
         auto& state = const_cast<QuadState&>(quad.getState());
