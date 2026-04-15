@@ -20,17 +20,17 @@
 
 % Algorithm layer
 \node[layer=blue] (algo) at (0, 0) {};
-\node[label=blue, anchor=west] at ([xshift=4mm]algo.north west) {Algorithm (sf\_algo\_*)};
-\node[item, anchor=west] at ([xshift=4mm, yshift=-3mm]algo.west) {ESKF \quad PID \quad Control Alloc \quad Sensor Fusion \quad Filter \quad Math};
+\node[label=blue, anchor=west] at ([xshift=4mm, yshift=-4mm]algo.north west) {Algorithm (sf\_algo\_*)};
+\node[item, anchor=west] at ([xshift=4mm, yshift=-4mm]algo.west) {ESKF \quad PID \quad Control Alloc \quad Sensor Fusion \quad Filter \quad Math};
 
 % Service layer
 \node[layer=teal] (svc) at (0, -2.2) {};
-\node[label=teal, anchor=west] at ([xshift=4mm]svc.north west) {Service (sf\_svc\_*)};
-\node[item, anchor=west] at ([xshift=4mm, yshift=-3mm]svc.west) {State \quad Telemetry \quad CLI \quad Logger \quad LED \quad Comm \quad Health \quad Flight Cmd};
+\node[label=teal, anchor=west] at ([xshift=4mm, yshift=-4mm]svc.north west) {Service (sf\_svc\_*)};
+\node[item, anchor=west] at ([xshift=4mm, yshift=-4mm]svc.west) {State \quad Telemetry \quad CLI \quad Logger \quad LED \quad Comm \quad Health \quad Flight Cmd};
 
 % HAL layer
 \node[layer=orange] (hal) at (0, -4.4) {};
-\node[label=orange, anchor=west] at ([xshift=4mm]hal.north west) {HAL (sf\_hal\_*)};
+\node[label=orange, anchor=west] at ([xshift=4mm, yshift=-4mm]hal.north west) {HAL (sf\_hal\_*)};
 \node[item, anchor=center] at (0, -4.4 - 0.3) {BMI270 \quad BMP280 \quad BMM150 \quad VL53L3CX \quad PMW3901 \quad Motor \quad LED \quad Buzzer};
 
 % (arrows drawn below with better visibility)
