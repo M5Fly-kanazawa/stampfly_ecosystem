@@ -82,7 +82,7 @@ style: |
 
 ## StampFly 機体
 
-![bg right:50% 85%](stampfly_spec.png)
+![bg right:50% 102%](stampfly_spec.png)
 
 - **質量**: 35g
 - **MCU**: ESP32-S3 (M5Stamp S3)
