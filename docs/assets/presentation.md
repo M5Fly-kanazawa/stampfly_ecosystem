@@ -82,17 +82,11 @@ style: |
 
 ## StampFly 機体
 
-![bg right:55% contain](stampfly_spec.png)
+![bg right:45% contain](stampfly_spec.png)
 
 - **質量**: 35g
 - **MCU**: ESP32-S3 (M5Stamp S3)
-- **センサ**:
-  - IMU (BMI270) 400Hz
-  - 気圧計 (BMP280) 50Hz
-  - 地磁気 (BMM150)
-  - ToF (VL53L3CX)
-  - オプティカルフロー (PMW3901)
-  - 電源監視 (INA3221)
+- **センサ**: IMU (BMI270), 気圧 (BMP280), 地磁気 (BMM150), ToF (VL53L3CX), 光学フロー (PMW3901), 電源監視 (INA3221)
 
 ---
 
