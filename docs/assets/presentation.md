@@ -173,6 +173,8 @@ style: |
 
 ## VPython シミュレータ
 
+![bg right:50% contain](simulator_demo.png)
+
 - コントローラを USB HID で接続して操作
 - 3D ビューでリアルタイム飛行
 - **SIL テスト**: 制御コードをPC上で検証
