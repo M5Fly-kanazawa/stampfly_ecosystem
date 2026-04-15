@@ -7,7 +7,7 @@
 \begin{tikzpicture}[
   layer/.style={
     draw=#1!60, fill=#1!8, rounded corners=4pt,
-    minimum width=130mm, minimum height=18mm,
+    minimum width=140mm, minimum height=18mm,
     font=\large, align=center, line width=0.8pt
   },
   label/.style={
@@ -31,7 +31,7 @@
 % HAL layer
 \node[layer=orange] (hal) at (0, -4.4) {};
 \node[label=orange, anchor=west] at ([xshift=4mm]hal.north west) {HAL (sf\_hal\_*)};
-\node[item, anchor=west] at ([xshift=4mm, yshift=-3mm]hal.west) {BMI270 \quad BMP280 \quad BMM150 \quad VL53L3CX \quad PMW3901 \quad Motor \quad LED \quad Buzzer};
+\node[item, anchor=center] at (0, -4.4 - 0.3) {BMI270 \quad BMP280 \quad BMM150 \quad VL53L3CX \quad PMW3901 \quad Motor \quad LED \quad Buzzer};
 
 % (arrows drawn below with better visibility)
 
