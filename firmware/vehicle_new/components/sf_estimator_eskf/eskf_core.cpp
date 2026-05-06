@@ -23,6 +23,7 @@
 #include "eskf_core.hpp"
 #include "esp_log.h"
 #include <cmath>
+#include <cstdio>
 #include <algorithm>
 
 static const char* TAG = "ESKF_CORE";
