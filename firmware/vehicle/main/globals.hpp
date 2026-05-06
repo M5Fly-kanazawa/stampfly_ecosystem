@@ -157,7 +157,6 @@ extern stampfly::math::Vector3 g_initial_accel_bias;
 
 extern volatile bool g_eskf_ready;
 extern volatile bool g_boot_complete;
-extern volatile bool g_cli_ready;       // CLI banner displayed, user setup() can run
 
 // Sensor health flags (for cross-task communication)
 extern volatile bool g_imu_task_healthy;

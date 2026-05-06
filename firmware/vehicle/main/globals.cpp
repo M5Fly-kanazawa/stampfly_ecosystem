@@ -98,7 +98,6 @@ stampfly::math::Vector3 g_initial_accel_bias = stampfly::math::Vector3::zero();
 
 volatile bool g_eskf_ready = false;
 volatile bool g_boot_complete = false;
-volatile bool g_cli_ready = false;
 
 volatile bool g_imu_task_healthy = false;
 volatile bool g_tof_task_healthy = false;
