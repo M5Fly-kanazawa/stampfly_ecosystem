@@ -9,6 +9,7 @@
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "params.hpp"
 using namespace sf;using namespace sf::math;using namespace sf::sim;
 
 static void mixer(float T,const float tau[3],float d[4],float kt){
@@ -24,10 +25,17 @@ static Res run(P p){
     QuadPhysics quad;QuadParams qp;ContactParams cp;SensorNoiseParams np;quad.init(qp,cp,np);
     EskfCore eskf;bool er=false;
     PID rr,rp,ry,ar,ap,alp,alv;
-    rr.kp=1.365e-3f;rr.ti=0.7f;rr.td=p.rtd;rr.output_limit=5.2e-3f;rr.eta=0.125f;
-    rp=rr;rp.kp=1.995e-3f;
-    ry.kp=5.31e-3f;ry.ti=1.6f;ry.output_limit=2.2e-3f;
-    ar.kp=p.ak;ar.ti=4.0f;ar.output_limit=3.0f;ap=ar;
+    sf::params::get_float("rate.roll.kp",  rr.kp);
+    sf::params::get_float("rate.roll.ti",  rr.ti);
+    rr.td=p.rtd;rr.output_limit=5.2e-3f;rr.eta=0.125f;
+    rp=rr;
+    sf::params::get_float("rate.pitch.kp", rp.kp);
+    sf::params::get_float("rate.yaw.kp",   ry.kp);
+    sf::params::get_float("rate.yaw.ti",   ry.ti);
+    ry.output_limit=2.2e-3f;
+    ar.kp=p.ak;
+    sf::params::get_float("attitude.roll.ti", ar.ti);
+    ar.output_limit=3.0f;ap=ar;
     alp.kp=1.2f;alp.ti=3.0f;alp.output_limit=0.5f;
     alv.kp=0.20f;alv.ti=1.0f;alv.output_limit=0.25f;
     Vec3 ge={},ae={},gr={};bool li=false;
@@ -48,7 +56,8 @@ static Res run(P p){
         if(t<2){quad.step(z,dt);if(cn<400){ca+=a;cg+=g;cn++;}
             if(cn==400&&!er){Vec3 aa=ca*(1.f/400),ga=cg*(1.f/400);
                 EskfConfig c;c.use_tof=true;c.use_baro=false;c.use_mag=false;c.use_flow=false;
-                c.accel_noise=0.3f;c.gyro_noise=p.gq;c.tof_noise=0.01f;c.accel_att_noise=p.R;
+                sf::params::get_float("eskf.process.accel_noise", c.accel_noise);
+                c.gyro_noise=p.gq;c.tof_noise=0.01f;c.accel_att_noise=p.R;
                 eskf.init(c);eskf.setGyroBias(ga);eskf.setAccelBias(Vec3(aa.x,aa.y,aa.z+qp.gravity));
                 eskf.setAttitudeFromGravity(aa);eskf.shrinkBiasCovariance(.01f);
                 eskf.setFreezeAccelBias(true);er=true;}continue;}
@@ -72,6 +81,7 @@ static Res run(P p){
     return{sqrtf(sa/sn),ma,sqrtf(sl/sn)*1000,true};}
 
 int main(){
+    sf::params::init();
     fprintf(stderr,"=== att_kp × rate_td grid (alpha=0.20, R=2.0, gq=0.03) ===\n\n");
     fprintf(stderr,"%6s %8s %8s %8s %8s\n","att_kp","rate_td","att_rms","att_max","alt_rms");
     fprintf(stderr,"----------------------------------------------\n");

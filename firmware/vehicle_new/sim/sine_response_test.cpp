@@ -11,6 +11,7 @@
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "params.hpp"
 
 using namespace sf; using namespace sf::math; using namespace sf::sim;
 
@@ -32,9 +33,14 @@ static void run_sine(float freq, FILE* csv) {
 
     EskfCore eskf;
     EskfConfig cfg;
-    cfg.use_tof=true; cfg.use_baro=false; cfg.use_mag=false; cfg.use_flow=false;
-    cfg.accel_noise=0.3f; cfg.gyro_noise=0.03f; cfg.tof_noise=0.01f;
-    cfg.accel_att_noise=2.0f;
+    sf::params::get_bool("eskf.use_tof",  cfg.use_tof);
+    sf::params::get_bool("eskf.use_baro", cfg.use_baro);
+    sf::params::get_bool("eskf.use_mag",  cfg.use_mag);
+    cfg.use_flow = false;  // diverges from params.def default (true)
+    sf::params::get_float("eskf.process.accel_noise", cfg.accel_noise);
+    cfg.gyro_noise = 0.03f;        // diverges from params.def default (0.009655)
+    cfg.tof_noise = 0.01f;         // diverges from params.def default (0.03)
+    cfg.accel_att_noise = 2.0f;    // diverges from params.def default (0.06)
     eskf.init(cfg);
     // Simple cal: assume level, no bias (airborne start)
     eskf.setGyroBias({0,0,0});
@@ -43,12 +49,21 @@ static void run_sine(float freq, FILE* csv) {
     eskf.setFreezeAccelBias(true);
 
     PID rr,rp,ry,ar,ap,alp,alv;
-    rr.kp=1.365e-3f; rr.ti=0.7f; rr.td=0.008f; rr.output_limit=5.2e-3f; rr.eta=0.125f;
-    rp=rr; rp.kp=1.995e-3f;
-    ry.kp=5.31e-3f; ry.ti=1.6f; ry.output_limit=2.2e-3f;
-    ar.kp=14.0f; ar.ti=4.0f; ar.output_limit=3.0f; ap=ar;
-    alp.kp=1.2f; alp.ti=3.0f; alp.output_limit=0.5f;
-    alv.kp=0.20f; alv.ti=1.0f; alv.output_limit=0.25f;
+    sf::params::get_float("rate.roll.kp", rr.kp);
+    sf::params::get_float("rate.roll.ti", rr.ti);
+    rr.td = 0.008f;  // diverges from params.def default (0.01)
+    rr.output_limit = 5.2e-3f; rr.eta = 0.125f;
+    rp = rr;
+    sf::params::get_float("rate.pitch.kp", rp.kp);
+    sf::params::get_float("rate.yaw.kp",   ry.kp);
+    sf::params::get_float("rate.yaw.ti",   ry.ti);
+    ry.output_limit = 2.2e-3f;
+    ar.kp = 14.0f;  // diverges from params.def default (5.0)
+    sf::params::get_float("attitude.roll.ti", ar.ti);
+    ar.output_limit = 3.0f;
+    ap = ar;
+    alp.kp=1.2f; alp.ti=3.0f; alp.output_limit=0.5f;       // diverges from params.def
+    alv.kp=0.20f; alv.ti=1.0f; alv.output_limit=0.25f;     // diverges from params.def
 
     float alpha_eskf=0.20f, alpha_rate=0.67f;
     Vec3 ge={},ae={},gr={}; bool li=false;
@@ -113,6 +128,8 @@ static void run_sine(float freq, FILE* csv) {
 }
 
 int main() {
+    sf::params::init();
+
     float freqs[] = {0.3f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f};
     int nf = 7;
 

@@ -17,6 +17,7 @@
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "params.hpp"
 
 using namespace sf;
 using namespace sf::math;
@@ -61,11 +62,18 @@ static TuneResult run_l4(TuneParams tp, FILE* csv)
     bool eskf_ready = false;
 
     PID rate_r, rate_p, rate_y, att_r, att_p, alt_p, alt_v;
-    rate_r.kp=1.365e-3f; rate_r.ti=0.7f; rate_r.td=0.01f;
+    sf::params::get_float("rate.roll.kp",  rate_r.kp);
+    sf::params::get_float("rate.roll.ti",  rate_r.ti);
+    sf::params::get_float("rate.roll.td",  rate_r.td);
     rate_r.output_limit=5.2e-3f; rate_r.eta=0.125f;
-    rate_p=rate_r; rate_p.kp=1.995e-3f;
-    rate_y.kp=5.31e-3f; rate_y.ti=1.6f; rate_y.output_limit=2.2e-3f;
-    att_r.kp=5.0f; att_r.ti=4.0f; att_r.output_limit=3.0f;
+    rate_p=rate_r;
+    sf::params::get_float("rate.pitch.kp", rate_p.kp);
+    sf::params::get_float("rate.yaw.kp",   rate_y.kp);
+    sf::params::get_float("rate.yaw.ti",   rate_y.ti);
+    rate_y.output_limit=2.2e-3f;
+    sf::params::get_float("attitude.roll.kp", att_r.kp);
+    sf::params::get_float("attitude.roll.ti", att_r.ti);
+    att_r.output_limit=3.0f;
     att_p=att_r;
 
     alt_p.kp=tp.alt_p_kp; alt_p.ti=tp.alt_p_ti; alt_p.output_limit=0.5f;
@@ -119,7 +127,9 @@ static TuneResult run_l4(TuneParams tp, FILE* csv)
                 Vec3 aa=cal_a*(1.0f/400), ga=cal_g*(1.0f/400);
                 EskfConfig cfg;
                 cfg.use_tof=true;cfg.use_baro=false;cfg.use_mag=false;cfg.use_flow=false;
-                cfg.accel_noise=0.3f;cfg.gyro_noise=0.009655f;cfg.tof_noise=0.01f;
+                sf::params::get_float("eskf.process.accel_noise", cfg.accel_noise);
+                sf::params::get_float("eskf.process.gyro_noise",  cfg.gyro_noise);
+                cfg.tof_noise=0.01f;
                 cfg.accel_att_noise=tp.accel_att_noise;
                 eskf.init(cfg);
                 eskf.setGyroBias(ga);
@@ -211,6 +221,7 @@ static TuneResult run_l4(TuneParams tp, FILE* csv)
 
 int main()
 {
+    sf::params::init();
     fprintf(stderr,"=== ESKF + PID Tuning Sweep ===\n\n");
 
     // Phase 1: ESKF accel_att_noise sweep

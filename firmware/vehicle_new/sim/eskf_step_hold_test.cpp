@@ -12,6 +12,7 @@
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "params.hpp"
 
 using namespace sf; using namespace sf::math; using namespace sf::sim;
 
@@ -23,6 +24,7 @@ static void mixer(float T, const float tau[3], float d[4], float kt) {
 }
 
 int main() {
+    sf::params::init();
     QuadPhysics quad; QuadParams qp; ContactParams cp; SensorNoiseParams np;
     quad.init(qp, cp, np);
     auto& st = const_cast<QuadState&>(quad.getState());
@@ -32,16 +34,24 @@ int main() {
 
     EskfCore eskf; EskfConfig ec;
     ec.use_tof=true; ec.use_baro=false; ec.use_mag=false; ec.use_flow=false;
-    ec.accel_noise=0.3f; ec.gyro_noise=0.03f; ec.tof_noise=0.01f;
+    sf::params::get_float("eskf.process.accel_noise", ec.accel_noise);
+    ec.gyro_noise=0.03f; ec.tof_noise=0.01f;
     eskf.init(ec);
     eskf.setGyroBias({0,0,0}); eskf.setAccelBias({0,0,0});
     eskf.shrinkBiasCovariance(0.01f); eskf.setFreezeAccelBias(true);
 
     PID rr,rp,ry,ar,ap,alp,alv;
-    rr.kp=1.365e-3f;rr.ti=0.7f;rr.td=0.008f;rr.output_limit=5.2e-3f;rr.eta=0.125f;
-    rp=rr;rp.kp=1.995e-3f;
-    ry.kp=5.31e-3f;ry.ti=1.6f;ry.output_limit=2.2e-3f;
-    ar.kp=14.0f;ar.ti=4.0f;ar.output_limit=3.0f;ap=ar;
+    sf::params::get_float("rate.roll.kp",  rr.kp);
+    sf::params::get_float("rate.roll.ti",  rr.ti);
+    rr.td=0.008f;rr.output_limit=5.2e-3f;rr.eta=0.125f;
+    rp=rr;
+    sf::params::get_float("rate.pitch.kp", rp.kp);
+    sf::params::get_float("rate.yaw.kp",   ry.kp);
+    sf::params::get_float("rate.yaw.ti",   ry.ti);
+    ry.output_limit=2.2e-3f;
+    ar.kp=14.0f;
+    sf::params::get_float("attitude.roll.ti", ar.ti);
+    ar.output_limit=3.0f;ap=ar;
     alp.kp=1.2f;alp.ti=3.0f;alp.output_limit=0.5f;
     alv.kp=0.20f;alv.ti=1.0f;alv.output_limit=0.25f;
 

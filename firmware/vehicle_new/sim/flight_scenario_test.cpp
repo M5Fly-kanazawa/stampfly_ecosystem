@@ -25,6 +25,7 @@
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "params.hpp"
 
 using namespace sf;
 using namespace sf::math;
@@ -86,16 +87,23 @@ static void run_scenario(Level level, FILE* csv)
 
     // Tuned PIDs (from parameter sweep)
     // チューニング済みPID（パラメータスイープ結果）
-    rate_r.kp = 1.365e-3f; rate_r.ti = 0.7f; rate_r.td = 0.008f;
+    sf::params::get_float("rate.roll.kp",  rate_r.kp);
+    sf::params::get_float("rate.roll.ti",  rate_r.ti);
+    rate_r.td = 0.008f;  // diverges from params.def default (0.01)
     rate_r.output_limit = 5.2e-3f; rate_r.eta = 0.125f;
-    rate_p = rate_r; rate_p.kp = 1.995e-3f;
-    rate_y.kp = 5.31e-3f; rate_y.ti = 1.6f; rate_y.output_limit = 2.2e-3f;
+    rate_p = rate_r;
+    sf::params::get_float("rate.pitch.kp", rate_p.kp);
+    sf::params::get_float("rate.yaw.kp",   rate_y.kp);
+    sf::params::get_float("rate.yaw.ti",   rate_y.ti);
+    rate_y.output_limit = 2.2e-3f;
 
-    att_r.kp = 14.0f; att_r.ti = 4.0f; att_r.output_limit = 3.0f;
+    att_r.kp = 14.0f;  // diverges from params.def default (5.0)
+    sf::params::get_float("attitude.roll.ti", att_r.ti);
+    att_r.output_limit = 3.0f;
     att_p = att_r;
 
-    alt_p.kp = 1.2f; alt_p.ti = 3.0f; alt_p.output_limit = 0.5f;
-    alt_v.kp = 0.20f; alt_v.ti = 1.0f; alt_v.output_limit = 0.25f;
+    alt_p.kp = 1.2f; alt_p.ti = 3.0f; alt_p.output_limit = 0.5f;       // diverges from params.def
+    alt_v.kp = 0.20f; alt_v.ti = 1.0f; alt_v.output_limit = 0.25f;     // diverges from params.def
 
     // --- LPF ---
     const float alpha_eskf = 0.20f, alpha_rate = 0.67f;
@@ -203,11 +211,13 @@ static void run_scenario(Level level, FILE* csv)
                 Vec3 accel_avg = cal_accel_sum * (1.0f/cal_count);
                 Vec3 gyro_avg = cal_gyro_sum * (1.0f/cal_count);
                 EskfConfig cfg;
-                cfg.use_tof = true; cfg.use_baro = false;
-                cfg.use_mag = false; cfg.use_flow = false;
-                cfg.accel_noise = 0.3f;
-                cfg.gyro_noise = 0.03f;
-                cfg.tof_noise = 0.01f;
+                sf::params::get_bool("eskf.use_tof",   cfg.use_tof);
+                sf::params::get_bool("eskf.use_baro",  cfg.use_baro);
+                sf::params::get_bool("eskf.use_mag",   cfg.use_mag);
+                cfg.use_flow = false;  // diverges from params.def default (true)
+                sf::params::get_float("eskf.process.accel_noise", cfg.accel_noise);
+                cfg.gyro_noise = 0.03f;  // diverges from params.def default (0.009655)
+                cfg.tof_noise  = 0.01f;  // diverges from params.def default (0.03)
                 eskf.init(cfg);
                 eskf.setGyroBias(gyro_avg);
                 eskf.setAccelBias(Vec3(accel_avg.x, accel_avg.y,
@@ -367,6 +377,8 @@ static void run_scenario(Level level, FILE* csv)
 
 int main()
 {
+    sf::params::init();
+
     const char* names[] = {
         "L1: Rate+Att (true)",
         "L2: Rate+Att (true)",
