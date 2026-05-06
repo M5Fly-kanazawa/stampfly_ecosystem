@@ -63,6 +63,17 @@ static bool validateArm(const SystemState& state)
 }
 
 /**
+ * @brief Validate FLYING transition (ARMED → FLYING)
+ * @brief FLYING遷移検証 (ARMED → FLYING)
+ */
+static bool validateFlying(const SystemState& state)
+{
+    // No specific checks needed - throttle up is implicit
+    // 特別なチェック不要 - スロットルアップは暗黙的
+    return true;
+}
+
+/**
  * @brief Validate LANDING transition (FLYING → LANDING)
  * @brief LANDING遷移検証 (FLYING → LANDING)
  */
@@ -141,13 +152,13 @@ static const TransitionRule TRANSITION_TABLE[] = {
         validateArm
     },
 
-    // ARMED → FLYING (takeoff detected by ToF altitude > 0.10m for 200ms)
-    // ARMED → FLYING (ToF高度 > 0.10m が200ms継続で離陸検出)
+    // ARMED → FLYING (throttle up detected)
+    // ARMED → FLYING (スロットルアップ検出)
     {
         FlightState::ARMED,
         FlightState::FLYING,
-        ReadinessFlags::NONE,
-        nullptr
+        ReadinessFlags::CONTROL_INPUT_OK,
+        validateFlying
     },
 
     // FLYING → LANDING (landing initiated)

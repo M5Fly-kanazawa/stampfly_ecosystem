@@ -63,7 +63,6 @@ inline constexpr uint8_t PKT_TOF_FRONT     = 0x47;
 inline constexpr uint8_t PKT_BARO          = 0x45;
 inline constexpr uint8_t PKT_MAG           = 0x46;
 inline constexpr uint8_t PKT_CTRL_REF      = 0x48;  // Control loop reference targets
-inline constexpr uint8_t PKT_ESKF_PDIAG    = 0x49;  // ESKF P matrix diagonal (10Hz)
 inline constexpr uint8_t PKT_STATUS        = 0x4F;
 inline constexpr uint8_t PKT_UNIFIED       = 0x50;  // 8-cycle unified packet
 
@@ -190,31 +189,9 @@ struct CtrlRefSample {
     int16_t  angle_ref_pitch;    // 2B [rad × 10000] outer loop target angle
     float    total_thrust;       // 4B [N] actual commanded thrust (all modes)
     float    motor_duty[4];      // 16B [0-1] actual motor duties (FR,RR,RL,FL)
-    float    alt_setpoint;       // 4B [m] altitude setpoint (positive up)
-    float    alt_vel_target;     // 4B [m/s] altitude PID velocity target (positive up)
-    float    climb_rate_cmd;     // 4B [m/s] stick → climb rate command
-    float    pos_setpoint_x;     // 4B [m] position setpoint X (NED)
-    float    pos_setpoint_y;     // 4B [m] position setpoint Y (NED)
 };
 
-static_assert(sizeof(CtrlRefSample) == 50, "CtrlRefSample size mismatch");
-
-// =============================================================================
-// 0x49: ESKF P Matrix Diagonal (64B/sample, 10Hz sensor entry)
-// ESKF P行列対角要素（64B/サンプル、10Hzセンサエントリ）
-// =============================================================================
-
-struct EskfPDiagSample {
-    uint32_t timestamp_us;       // 4B
-    float    p_diag[15];         // 60B: P(i,i) for i=0..14
-                                 //   [0-2] pos_x/y/z
-                                 //   [3-5] vel_x/y/z
-                                 //   [6-8] att_x/y/z
-                                 //   [9-11] bg_x/y/z
-                                 //   [12-14] ba_x/y/z
-};
-
-static_assert(sizeof(EskfPDiagSample) == 64, "EskfPDiagSample size mismatch");
+static_assert(sizeof(CtrlRefSample) == 30, "CtrlRefSample size mismatch");
 
 /// Rate reference (400Hz, fixed part of unified packet, no timestamp - shares IMU ts)
 /// レート目標値（400Hz、統合パケット固定部分、タイムスタンプなし - IMU ts と共有）
@@ -373,7 +350,7 @@ static_assert(sizeof(SensorEntryHeader) == 2, "SensorEntryHeader size mismatch")
 
 /// Maximum unified packet size (must fit in UDP MTU)
 /// 統合パケットの最大サイズ（UDP MTU に収まること）
-inline constexpr int UNIFIED_MAX_SIZE = 1280;  // ~1060B with P_diag, MTU=1472B safe
+inline constexpr int UNIFIED_MAX_SIZE = 1024;
 
 /// Unified packet buffer (built dynamically)
 /// 統合パケットバッファ（動的に構築）

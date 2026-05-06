@@ -59,7 +59,7 @@ static int s_unified_count = 0;  // 0..7, send when reaches 8
 // 8サイクル中に蓄積されるセンサエントリ（可変部分）
 struct PendingSensor {
     uint8_t id;
-    uint8_t data[64];  // max single sensor sample size (EskfPDiagSample=64B)
+    uint8_t data[32];  // max single sensor sample size (CtrlRefSample=30B)
     uint8_t size;
 };
 static PendingSensor s_pending_sensors[32];  // max entries per unified packet
@@ -351,28 +351,7 @@ static void udpCollectCycle(int read_idx, uint32_t imu_ts,
         cr.angle_ref_pitch = static_cast<int16_t>(ap * 10000.0f);
         cr.total_thrust = state.getTotalThrust();
         state.getMotorDuties(cr.motor_duty);
-        cr.alt_setpoint = state.getAltSetpoint();
-        cr.alt_vel_target = state.getAltVelTarget();
-        cr.climb_rate_cmd = state.getClimbRateCmd();
-        cr.pos_setpoint_x = state.getPosSPx();
-        cr.pos_setpoint_y = state.getPosSPy();
         addSensorEntry(PKT_CTRL_REF, &cr, sizeof(cr));
-    }
-
-    // ESKF P matrix diagonal (10Hz = every 5th ctrl_ref cycle)
-    // ESKF P行列対角要素（10Hz = ctrl_ref の5回に1回）
-    {
-        static int p_diag_divider = 0;
-        if ((cycle & 7) == 0 && ++p_diag_divider >= 5) {
-            p_diag_divider = 0;
-            EskfPDiagSample ps;
-            ps.timestamp_us = imu_ts;
-            const auto& P = g_fusion.getESKF().getCovariance();
-            for (int i = 0; i < 15; i++) {
-                ps.p_diag[i] = P(i, i);
-            }
-            addSensorEntry(PKT_ESKF_PDIAG, &ps, sizeof(ps));
-        }
     }
 
     // Optical Flow (~100Hz)
@@ -496,9 +475,7 @@ void TelemetryTask(void* pvParameters)
 
     // Create send task
     // 送信タスク作成
-    // Stack: SendItem(1282B) + sendto/lwIP internals (~2KB) + FreeRTOS(200B)
-    // スタック: SendItem(1282B) + sendto/lwIP内部(~2KB) + FreeRTOS(200B)
-    xTaskCreatePinnedToCore(TelemetrySendTask, "TelemSend", 6144,
+    xTaskCreatePinnedToCore(TelemetrySendTask, "TelemSend", 4096,
                             nullptr, 12, nullptr, 0);
 
     // Local state (small — only counters and indices)

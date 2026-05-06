@@ -193,23 +193,6 @@ public:
     void setTotalThrust(float thrust) { total_thrust_ = thrust; }
     float getTotalThrust() const { return total_thrust_; }
 
-    /// Set/get altitude control targets (for telemetry)
-    /// 高度制御目標値（テレメトリ用）
-    void setAltitudeRef(float setpoint, float vel_target, float climb_cmd) {
-        alt_setpoint_ = setpoint;
-        alt_vel_target_ = vel_target;
-        climb_rate_cmd_ = climb_cmd;
-    }
-    float getAltSetpoint() const { return alt_setpoint_; }
-    float getAltVelTarget() const { return alt_vel_target_; }
-    float getClimbRateCmd() const { return climb_rate_cmd_; }
-
-    /// Set/get position setpoint (for telemetry)
-    /// 位置目標値（テレメトリ用）
-    void setPositionSetpoint(float x, float y) { pos_sp_x_ = x; pos_sp_y_ = y; }
-    float getPosSPx() const { return pos_sp_x_; }
-    float getPosSPy() const { return pos_sp_y_; }
-
     /// Set/get actual motor duties [0-1] (for telemetry)
     /// 実際のモータDuty [0-1]（テレメトリ用）
     void setMotorDuties(const float duties[4]) {
@@ -278,11 +261,6 @@ private:
     float ctrl_rate_ref_yaw_ = 0;     // [rad/s]
     float total_thrust_ = 0;          // [N] actual commanded total thrust
     float motor_duties_[4] = {};      // [0-1] actual motor duty (FR,RR,RL,FL)
-    float alt_setpoint_ = 0;          // [m] altitude setpoint (positive up)
-    float alt_vel_target_ = 0;        // [m/s] altitude PID velocity target
-    float climb_rate_cmd_ = 0;        // [m/s] stick climb rate command
-    float pos_sp_x_ = 0;             // [m] position setpoint X (NED)
-    float pos_sp_y_ = 0;             // [m] position setpoint Y (NED)
 
     // Debug mode
     bool debug_mode_ = false;

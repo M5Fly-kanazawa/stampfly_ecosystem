@@ -237,15 +237,13 @@ void IMUTask(void* pvParameters)
                         const auto& accel_latest = g_accel_buf.latest();
                         const auto& gyro_latest = g_gyro_buf.latest();
 
-                        // Flight phase: FlightState is the single source of truth
-                        // フライトフェーズ: FlightState が唯一の管理者
-                        // ARMED = pre-takeoff (sensors frozen, hover thrust only)
-                        // FLYING = airborne (full sensor fusion + closed-loop control)
-                        auto imu_flight_state = state.getFlightState();
-                        bool is_flying = (imu_flight_state == stampfly::FlightState::FLYING);
-                        // Freeze position until FLYING (prevent predict-only drift)
-                        // FLYING になるまで位置をフリーズ（predict のみのドリフト防止）
-                        bool skip_position = !is_flying && eskf::ENABLE_LANDING_RESET;
+                        // 接地判定: LandingHandler が唯一の管理者
+                        // Ground state: LandingHandler is the single source of truth
+                        bool is_landed = g_landing_handler.isLanded();
+                        bool has_taken_off = g_landing_handler.hasTakenOff();
+                        // Freeze position until takeoff detected (prevent predict-only drift)
+                        // 離陸検出まで位置をフリーズ（predict のみのドリフト防止）
+                        bool skip_position = (is_landed || !has_taken_off) && eskf::ENABLE_LANDING_RESET;
 
                         // IMU予測 + 加速度計姿勢補正（predictIMUが両方を実行）
                         // 接地中はskip_position=trueで位置更新をスキップ（ドリフト防止）
@@ -258,26 +256,18 @@ void IMUTask(void* pvParameters)
                             ESP_LOGI(TAG, "Landed - calibration sequence will start");
                         }
 
-                        // ARMED(pre-takeoff) or DISARMED: 位置・速度を0に保持
-                        // Not flying: hold position/velocity at zero
-                        if (!is_flying) {
+                        // 接地中 or 離陸前: 位置・速度を0に保持
+                        // Grounded or pre-takeoff: hold position/velocity at zero
+                        if (is_landed || !has_taken_off) {
                             g_fusion.holdPositionVelocity();
                         }
 
-                        // 離陸イベント: 共分散リセット + ARMED→FLYING 遷移
-                        // Takeoff event: reset covariance + ARMED → FLYING transition
+                        // 離陸イベント: 共分散リセット（armed 後に初めて高度が上がった時）
+                        // Takeoff event: reset covariance
                         if (g_landing_handler.justTakenOff()) {
                             g_fusion.resetPositionVelocity();
                             g_fusion.setFreezeAccelBias(false);
-
-                            // Central ARMED → FLYING transition
-                            // 中央集権的な ARMED → FLYING 遷移
-                            auto& sys_state_mgr = stampfly::SystemStateManager::getInstance();
-                            sys_state_mgr.requestTransition(
-                                stampfly::FlightState::FLYING, "Takeoff detected (ToF)");
-                            state.setFlightState(stampfly::FlightState::FLYING);
-
-                            ESP_LOGI(TAG, "Takeoff - ARMED -> FLYING, position estimation enabled");
+                            ESP_LOGI(TAG, "Takeoff - position estimation enabled, accel bias unfrozen");
                         }
 
                         g_imu_checkpoint = 14;  // フロー更新セクション
@@ -287,16 +277,15 @@ void IMUTask(void* pvParameters)
                         // 接地中: 位置・速度更新を停止するため呼ばない
                         // 飛行中: 実センサ値を使用
                         static int optflow_takeoff_skip_counter = 0;  // 離陸後のスキップカウンタ
-                        if (!is_flying) {
-                            optflow_takeoff_skip_counter = 20;  // FLYING後20回（0.2秒@100Hz）スキップ
+                        if (!has_taken_off) {
+                            optflow_takeoff_skip_counter = 20;  // 離陸後20回（0.2秒@100Hz）スキップ
                         }
 
                         if (g_optflow_data_ready) {
                             g_optflow_data_ready = false;
 
-                            // FLYING 状態でのみセンサー更新を実行
-                            // Only update sensors when FLYING
-                            if (is_flying && g_optflow_task_healthy && g_tof_task_healthy) {
+                            // 離陸前・接地中は位置・速度更新を停止（センサー更新を呼ばない）
+                            if (has_taken_off && !is_landed && g_optflow_task_healthy && g_tof_task_healthy) {
                                 if (optflow_takeoff_skip_counter > 0) {
                                     optflow_takeoff_skip_counter--;
                                     // 共分散リセット直後は過剰補正防止のためスキップ
@@ -329,16 +318,18 @@ void IMUTask(void* pvParameters)
                         g_imu_checkpoint = 16;  // ToF更新セクション
 
                         // ToF更新（data_readyフラグで制御、30Hz）
-                        // FLYING 状態でのみ更新（ARMED/DISARMED ではスキップ）
-                        // ToF update: only when FLYING (skip during ARMED/DISARMED)
+                        // 接地中: 位置更新を停止するため呼ばない
+                        // 飛行中: 実センサ値を使用
                         static int tof_takeoff_skip_counter = 0;
-                        if (!is_flying) {
-                            tof_takeoff_skip_counter = 10;  // FLYING後10回（~0.3秒@30Hz）スキップ
+                        if (!has_taken_off) {
+                            tof_takeoff_skip_counter = 10;  // 離陸後10回（~0.3秒@30Hz）スキップ
                         }
                         if (g_tof_bottom_data_ready) {
                             g_tof_bottom_data_ready = false;
 
-                            if (is_flying && g_tof_task_healthy) {
+                            // ToF更新は常に行う（接地中でも高度情報は必要）
+                            // 位置のドリフト防止は predictIMU の skip_position フラグで対応
+                            if (g_tof_task_healthy) {
                                 if (tof_takeoff_skip_counter > 0) {
                                     tof_takeoff_skip_counter--;
                                     // 共分散リセット直後は過剰補正防止のためスキップ
@@ -408,7 +399,7 @@ void IMUTask(void* pvParameters)
                                 ESP_LOGI(TAG, "Att: R=%.2f P=%.2f Y=%.2f | BA=[%.4f,%.4f,%.4f] %s",
                                          eskf_state.roll * 57.3f, eskf_state.pitch * 57.3f, eskf_state.yaw * 57.3f,
                                          eskf_state.accel_bias.x, eskf_state.accel_bias.y, eskf_state.accel_bias.z,
-                                         is_flying ? "(flying)" : "(grounded)");
+                                         is_landed ? "(grounded)" : "(flying)");
                             }
 
                             g_imu_checkpoint = 23;  // state更新後、ロギング前
