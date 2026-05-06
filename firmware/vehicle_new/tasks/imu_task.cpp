@@ -11,10 +11,10 @@
  * 非同期センサ観測（ToF、Flow、Mag、Baro）を処理し、
  * 状態推定値を発行し、制御タスクに通知する。
  *
- * @design architecture.md §5 — Main pipeline: IMU → Estimation        [--]
- * @design architecture.md §6 — ImuTask: Sensing(IMU) + Estimation     [--]
- * @design detailed_design.md §8 — ImuTask: 400Hz, priority 24        [--]
- * @design coding_and_education.md §2 — 1 function 1 responsibility    [--]
+ * @design architecture.md §5 — Main pipeline: IMU → Estimation        [OK]
+ * @design architecture.md §6 — ImuTask: Sensing(IMU) + Estimation     [OK]
+ * @design detailed_design.md §8 — ImuTask: 400Hz, priority 24        [OK]
+ * @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
  */
 
 #include "freertos/FreeRTOS.h"
@@ -25,10 +25,22 @@
 #include "topics.hpp"
 #include "estimator.hpp"
 #include "eskf_estimator.hpp"
-// TODO: #include "bmi270_wrapper.hpp" — wire when API is confirmed
+#include "bmi270_wrapper.hpp"
 #include "config.hpp"
 
 static const char* TAG = "ImuTask";
+
+/// Conversion factor: 1 g to m/s² (standard gravity)
+/// 換算係数: 1 g → m/s²（標準重力）
+static constexpr float G_TO_MPS2 = 9.80665f;
+
+/// Temperature is read every N IMU cycles (400Hz / 100 = 4Hz)
+/// 温度は N サイクルごとに読み取る（400Hz / 100 = 4Hz）
+static constexpr uint32_t TEMPERATURE_READ_INTERVAL = 100;
+
+/// Read-failure log throttle: warn at most once every N cycles
+/// 読み取り失敗ログの抑制: N サイクルに 1 回まで警告
+static constexpr uint32_t READ_FAIL_LOG_INTERVAL = 400;
 
 /// Task handle for control task notification
 /// 制御タスク通知用のタスクハンドル
@@ -38,8 +50,67 @@ extern TaskHandle_t g_control_task_handle;
 /// 推定器インスタンス
 static sf::EskfEstimator estimator;
 
-// TODO: BMI270 driver instance — wire when API confirmed
-// TODO: BMI270ドライバインスタンス — API確認後に結合
+/// BMI270 IMU driver instance (file-scope, not exposed as global)
+/// BMI270 IMU ドライバインスタンス（ファイルスコープ、グローバル非公開）
+///
+/// @design architecture.md §6 — Component encapsulation, no globals    [OK]
+/// @design coding_and_education.md §3 — No global singletons            [OK]
+static stampfly::BMI270Wrapper imu_wrapper;
+
+/// Last cached temperature [°C], updated every TEMPERATURE_READ_INTERVAL cycles
+/// 最後にキャッシュした温度 [°C]、TEMPERATURE_READ_INTERVAL サイクルごとに更新
+static float cached_temperature_c = 0.0f;
+
+/// IMU SPI driver debug breadcrumb (referenced by sf_hal_bmi270/bmi270_spi.c).
+/// The BMI270 C driver writes checkpoint codes (40..44) for crash-dump analysis.
+/// Define here with C linkage so the HAL's extern declaration resolves.
+///
+/// IMU SPI ドライバのデバッグ用ブレッドクラム（sf_hal_bmi270/bmi270_spi.c が参照）。
+/// BMI270 C ドライバがクラッシュダンプ解析用にチェックポイント値（40..44）を書き込む。
+/// HAL の extern 宣言を解決するため C リンケージで定義する。
+extern "C" volatile uint8_t g_imu_checkpoint = 0;
+
+/// Apply BMI270→body-frame coordinate transform and unit conversion.
+/// BMI270→機体座標系変換と単位変換を適用する。
+///
+/// StampFly body frame is NED (X forward, Y right, Z down).
+/// BMI270 sensor axes are mapped as follows:
+///
+/// StampFly機体座標系は NED（X前方、Y右、Z下方）。
+/// BMI270 のセンサ軸マッピングは以下の通り:
+///
+///   ┌─────────────────────────────────────────┐
+///   │   BMI270 axis  →  body axis             │
+///   │   ───────────────────────────           │
+///   │   X (sensor)   →  Y body  (right)       │
+///   │   Y (sensor)   →  X body  (forward)     │
+///   │   Z (sensor)   →  −Z body (down, sign-flip)
+///   └─────────────────────────────────────────┘
+///
+/// Accel is converted from g to m/s² (× G_TO_MPS2).
+/// Gyro stays in rad/s (already in SI units from the wrapper).
+///
+/// 加速度は g から m/s² へ変換（× G_TO_MPS2）。
+/// 角速度は rad/s のまま（ラッパが既に SI 単位で返す）。
+///
+/// @design detailed_design.md §3.1 — IMU body-frame convention (NED)   [OK]
+/// @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
+static void applyImuTransform(const stampfly::AccelData& accel_sensor,
+                               const stampfly::GyroData& gyro_sensor,
+                               sf::ImuData& imu_out)
+{
+    // Accel: sensor g → body m/s² with axis remap
+    // 加速度: センサ g → 機体 m/s²、軸を再マッピング
+    imu_out.accel[0] =  accel_sensor.y * G_TO_MPS2;  // body X (forward)  / 機体X（前方）
+    imu_out.accel[1] =  accel_sensor.x * G_TO_MPS2;  // body Y (right)    / 機体Y（右）
+    imu_out.accel[2] = -accel_sensor.z * G_TO_MPS2;  // body Z (down)     / 機体Z（下方、符号反転）
+
+    // Gyro: sensor rad/s → body rad/s with same axis remap
+    // 角速度: センサ rad/s → 機体 rad/s、同じ軸マッピング
+    imu_out.gyro[0] =  gyro_sensor.y;   // body X (roll rate)   / 機体X（ロールレート）
+    imu_out.gyro[1] =  gyro_sensor.x;   // body Y (pitch rate)  / 機体Y（ピッチレート）
+    imu_out.gyro[2] = -gyro_sensor.z;   // body Z (yaw rate)    / 機体Z（ヨーレート、符号反転）
+}
 
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
@@ -70,6 +141,22 @@ void ImuTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ImuTask started");
 
+    // -------------------------------------------------------------------------
+    // Setup: initialize BMI270 IMU sensor (must succeed before entering loop)
+    // セットアップ: BMI270 IMU を初期化（ループ開始前に成功必須）
+    //
+    // @design detailed_design.md §8 — IMU init in task setup phase     [OK]
+    // -------------------------------------------------------------------------
+    esp_err_t imu_init_result = imu_wrapper.init(
+        stampfly::BMI270Wrapper::Config::defaultStampFly());
+    if (imu_init_result != ESP_OK) {
+        ESP_LOGE(TAG, "BMI270 init failed: %s — task aborting",
+                 esp_err_to_name(imu_init_result));
+        vTaskDelete(NULL);
+        return;
+    }
+    ESP_LOGI(TAG, "BMI270 init OK (400Hz read loop starting)");
+
     // Initialize estimator
     // 推定器を初期化
     estimator.init();
@@ -77,20 +164,54 @@ void ImuTask(void* pvParameters)
     TickType_t last_wake = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(2);  // ~400Hz (2.5ms → 2ms tick granularity)
 
+    uint32_t cycle_count = 0;          // For temperature/log throttling
+                                       // 温度・ログ抑制カウンタ
+    uint32_t last_fail_log_cycle = 0;  // Last cycle a read-fail warning was logged
+                                       // 直近で読み取り失敗を警告したサイクル
+
     while (true) {
         uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+        ++cycle_count;
 
         // =====================================================================
         // Step 1: Read IMU sensor data
         // Step 1: IMUセンサデータを読み取る
+        //
+        // @design architecture.md §5 — Sensing(IMU) stage              [OK]
         // =====================================================================
-
-        // Read IMU data from BMI270
-        // BMI270からIMUデータを読み取る
         sf::ImuData imu = {};
         imu.timestamp = now;
-        // TODO: Wire BMI270 API (readFIFO or polling)
-        // TODO: BMI270 API結合（FIFOまたはポーリング）
+
+        // Read accel + gyro from BMI270 (single SPI burst transaction)
+        // BMI270 から加速度+角速度を読み取り（単一 SPI バースト）
+        stampfly::AccelData accel_sensor = {};
+        stampfly::GyroData  gyro_sensor  = {};
+        esp_err_t read_result = imu_wrapper.readSensorData(accel_sensor, gyro_sensor);
+        if (read_result != ESP_OK) {
+            // Rate-limited warning to avoid log flooding at 400Hz
+            // 400Hz でのログ氾濫を避けるため、ログを抑制
+            if (cycle_count - last_fail_log_cycle >= READ_FAIL_LOG_INTERVAL) {
+                ESP_LOGW(TAG, "BMI270 read failed: %s",
+                         esp_err_to_name(read_result));
+                last_fail_log_cycle = cycle_count;
+            }
+            vTaskDelayUntil(&last_wake, period);
+            continue;
+        }
+
+        // Apply body-frame coordinate transform and unit conversion
+        // 機体座標系変換と単位変換を適用
+        applyImuTransform(accel_sensor, gyro_sensor, imu);
+
+        // Refresh cached temperature periodically (not every cycle)
+        // 温度を定期的に更新（毎サイクルではない）
+        if ((cycle_count % TEMPERATURE_READ_INTERVAL) == 0) {
+            float temperature_c = 0.0f;
+            if (imu_wrapper.readTemperature(temperature_c) == ESP_OK) {
+                cached_temperature_c = temperature_c;
+            }
+        }
+        imu.temperature = cached_temperature_c;
 
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
@@ -122,7 +243,7 @@ void ImuTask(void* pvParameters)
         // Step 5: Notify control task
         // Step 5: 制御タスクに通知
         //
-        // @design architecture.md §5 — IMU-synced control pipeline    [--]
+        // @design architecture.md §5 — IMU-synced control pipeline    [OK]
         // =====================================================================
 
         if (g_control_task_handle != nullptr) {
