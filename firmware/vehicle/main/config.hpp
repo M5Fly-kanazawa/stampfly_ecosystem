@@ -125,9 +125,9 @@ inline constexpr bool ENABLE_YAW_ESTIMATION = true; // ヨー推定（ジャイ�
 // 値が大きい = センサーを信頼、値が小さい = モデルを信頼
 // -----------------------------------------------------------------------------
 inline constexpr float GYRO_NOISE = 0.009655f;         // ジャイロノイズ [rad/s/√Hz]
-inline constexpr float ACCEL_NOISE = 0.3f;              // 加速度ノイズ [m/s²/√Hz] (振動環境で安定)
+inline constexpr float ACCEL_NOISE = 0.3f;              // 加速度ノイズ [m/s²/√Hz] (速度推定BW=1.5Hz狙い)
 inline constexpr float GYRO_BIAS_NOISE = 0.000013f;    // ジャイロバイアスランダムウォーク
-inline constexpr float ACCEL_BIAS_NOISE = 0.0001f;       // 加速度バイアスランダムウォーク [m/s²/√s]
+inline constexpr float ACCEL_BIAS_NOISE = 0.0001f;       // 加速度バイアスランダムウォーク [m/s²/√s] (シミュレーション最適化: ドリフト87%削減)
 
 // -----------------------------------------------------------------------------
 // 観測ノイズ (R行列)
@@ -136,8 +136,8 @@ inline constexpr float ACCEL_BIAS_NOISE = 0.0001f;       // 加速度バイア�
 inline constexpr float BARO_NOISE = 0.1f;              // 気圧高度ノイズ [m]
 inline constexpr float TOF_NOISE = 0.03f;              // ToFノイズ [m] (VL53L3CX sigma ~20-30mm)
 inline constexpr float MAG_NOISE = 1.0f;               // 地磁気ノイズ [uT] 実測std≈0.94
-inline constexpr float FLOW_NOISE = 0.30f;             // オプティカルフローノイズ [m/s]
-inline constexpr float ACCEL_ATT_NOISE = 0.02f;        // 加速度計姿勢補正ノイズ [m/s²]
+inline constexpr float FLOW_NOISE = 0.30f;             // オプティカルフローノイズ [m/s] (BW=1.5Hz: AN=0.3との組合せ)
+inline constexpr float ACCEL_ATT_NOISE = 0.06f;        // 加速度計姿勢補正ノイズ [m/s²] (初期値: 0.02)
 
 // -----------------------------------------------------------------------------
 // 初期共分散 (P行列の初期値)

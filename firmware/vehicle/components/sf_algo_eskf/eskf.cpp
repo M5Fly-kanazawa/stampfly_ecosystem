@@ -185,22 +185,10 @@ void ESKF::recomputeActiveMask()
         mask |= MASK_BARO;  // Re-enable the shared bits
     }
 
-    // BA_X/BA_Y: always frozen during flight.
-    // Theoretically weakly observable via gravity during attitude changes,
-    // but in practice causes destructive feedback: BA drift → attitude drift
-    // → more BA drift → divergence in ~19s. accel_bias_noise=0.0001 is
-    // still too fast for the weak observability.
-    // BA_X/BA_Y estimation is safe ONLY on the ground (setAttitudeReference).
-    // BA_X/BA_Y: 飛行中は常時凍結。
-    // 理論的には姿勢変動時に重力経由で弱く可観測だが、
-    // 実際にはBA→姿勢→BAの正帰還で~19秒で発散する。
-    // 推定は地上キャリブレーション（setAttitudeReference）でのみ安全。
-    mask &= ~((1u << BA_X) | (1u << BA_Y));
-
-    // BA_Z: freeze when requested (grounded), unfreeze when flying (Baro/ToF observe)
-    // BA_Z: 要求時に凍結（接地中）、飛行中は解凍（Baro/ToFが観測）
+    // Freeze accel bias when requested
+    // 加速度バイアスフリーズ要求時
     if (freeze_accel_bias_) {
-        mask &= ~(1u << BA_Z);
+        mask &= ~((1u << BA_X) | (1u << BA_Y) | (1u << BA_Z));
     }
 
     active_mask_ = mask;
@@ -403,12 +391,7 @@ void ESKF::setAttitudeReference(const Vector3& level_accel, const Vector3& gyro_
     P_(BG_Y, BG_Y) = init_P_diag_[BG_Y];
     P_(BG_Z, BG_Z) = init_P_diag_[BG_Z];
 
-    // Do NOT change freeze_accel_bias_ here.
-    // BA_X/BA_Y are always frozen (no observable sensor).
-    // BA_Z freeze/unfreeze is managed by setFreezeAccelBias() at takeoff/landing.
-    // freeze_accel_bias_ をここで変更しない。
-    // BA_X/BA_Y は常時凍結（観測可能なセンサなし）。
-    // BA_Z の凍結/解凍は takeoff/landing 時に setFreezeAccelBias() で管理。
+    freeze_accel_bias_ = false;
     recomputeActiveMask();
     enforceCovarianceConstraints();
 
@@ -534,28 +517,8 @@ void ESKF::predict(const Vector3& accel, const Vector3& gyro, float dt, bool ski
     }
 
     // ---- Sparse P' = F*P*F^T + Q ----
-    //
-    // When skip_position=true (grounded/pre-takeoff):
-    //   Nav blocks (rows/cols 0-5) are NOT propagated.
-    //   State pos/vel is known to be zero (held by holdPositionVelocity),
-    //   so P_nav should remain at reset values — propagating would cause
-    //   unbounded growth without sensor corrections (ToF/Flow are gated).
-    //   Cross-terms nav↔ahrs are also frozen to prevent bias contamination.
-    //
-    // skip_position=true（接地中/離陸前）:
-    //   nav ブロック（行/列 0-5）は伝播しない。
-    //   pos/vel は holdPositionVelocity で 0 に固定されており、
-    //   P_nav はリセット値を維持すべき。伝播するとセンサ補正なしで
-    //   P が発散し、離陸時にバイアスへ誤差が注入される。
 
     float dt2 = dt * dt;
-
-    if (skip_position) {
-        // Nav blocks unchanged: copy P rows/cols 0-5 as-is
-        // then AHRS blocks will be overwritten below
-        // nav ブロック不変: P の行/列 0-5 をそのままコピー
-        temp1_ = P_;
-    } else {
 
     // ---- pos-pos (0-2, 0-2) ----
     for (int i = 0; i < 3; i++) {
@@ -778,13 +741,6 @@ void ESKF::predict(const Vector3& accel, const Vector3& gyro, float dt, bool ski
             temp1_(jj, ii) = val;
         }
     }
-
-    } // end else (!skip_position) — nav blocks propagation
-
-    // ================================================================
-    // AHRS blocks: always propagated regardless of skip_position
-    // AHRS ブロック: skip_position に関係なく常に伝播
-    // ================================================================
 
     // ---- att-att (6-8, 6-8) ----
     for (int i = 0; i < 3; i++) {
