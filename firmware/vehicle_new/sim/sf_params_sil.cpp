@@ -27,10 +27,13 @@
  */
 
 #include "params.hpp"
+#include "sf_params_file.hpp"
 
-#include <cstdio>
-#include <cstring>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 namespace sf::params {
 
@@ -208,6 +211,174 @@ void load()
 {
     // Phase 1.3 will add file-based persistence
     // Phase 1.3 でファイル永続化を追加
+}
+
+// =============================================================================
+// File-based override loader (SIL only)
+// ファイルベースのオーバーライドローダ（SIL 専用）
+// =============================================================================
+
+namespace {
+
+// Trim ASCII whitespace from both ends in place; returns the new start.
+// 両端の ASCII 空白をトリムし、新しい開始ポインタを返す。
+char* trim(char* s)
+{
+    while (*s != '\0' && std::isspace(static_cast<unsigned char>(*s))) {
+        ++s;
+    }
+    if (*s == '\0') return s;
+    char* end = s + std::strlen(s) - 1;
+    while (end > s && std::isspace(static_cast<unsigned char>(*end))) {
+        *end-- = '\0';
+    }
+    return s;
+}
+
+// Strip an inline comment: `value  # rest` → `value`.
+// Only `#` preceded by whitespace counts; this preserves names that
+// might legitimately contain `#` (none today, but cheap insurance).
+// インラインコメントを除去する: `value  # rest` → `value`。
+// `#` の前に空白がある場合のみコメントとして扱う。
+void strip_inline_comment(char* s)
+{
+    for (char* p = s; *p != '\0'; ++p) {
+        if (*p == '#' && p > s &&
+            std::isspace(static_cast<unsigned char>(*(p - 1)))) {
+            *p = '\0';
+            return;
+        }
+    }
+}
+
+// Parse a boolean literal: true/false/1/0 (case-insensitive on words).
+// Returns true on success and writes the parsed value to `out`.
+// ブールリテラルを解析する: true/false/1/0（単語は大文字小文字無視）。
+bool parse_bool(const char* s, bool& out)
+{
+    if (std::strcmp(s, "1") == 0) { out = true;  return true; }
+    if (std::strcmp(s, "0") == 0) { out = false; return true; }
+    // Case-insensitive compare for "true" / "false"
+    // "true" / "false" は大文字小文字を無視して比較
+    char buf[8] = {0};
+    std::size_t n = std::strlen(s);
+    if (n >= sizeof(buf)) return false;
+    for (std::size_t i = 0; i < n; ++i) {
+        buf[i] = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(s[i])));
+    }
+    if (std::strcmp(buf, "true")  == 0) { out = true;  return true; }
+    if (std::strcmp(buf, "false") == 0) { out = false; return true; }
+    return false;
+}
+
+}  // anonymous namespace
+
+int load_file(const char* path)
+{
+    if (!initialized) init();
+
+    std::FILE* fp = std::fopen(path, "r");
+    if (fp == nullptr) {
+        std::fprintf(stderr,
+            "params: load_file('%s') failed to open file\n", path);
+        return -1;
+    }
+
+    int applied = 0;
+    int line_no = 0;
+    char line[512];
+
+    while (std::fgets(line, sizeof(line), fp) != nullptr) {
+        ++line_no;
+
+        // Strip inline `# ...` comments, then trim whitespace.
+        // インラインの `# ...` コメントを除去し、空白をトリムする。
+        strip_inline_comment(line);
+        char* p = trim(line);
+
+        // Skip blank lines and full-line comments.
+        // 空行と行頭コメントをスキップ。
+        if (*p == '\0' || *p == '#') continue;
+
+        // Split on '=' — name on the left, value on the right.
+        // '=' で分割 — 左側が名前、右側が値。
+        char* eq = std::strchr(p, '=');
+        if (eq == nullptr) {
+            std::fprintf(stderr,
+                "params: load_file('%s'):%d missing '=' in: %s\n",
+                path, line_no, p);
+            continue;
+        }
+        *eq = '\0';
+        char* name  = trim(p);
+        char* value = trim(eq + 1);
+
+        if (*name == '\0' || *value == '\0') {
+            std::fprintf(stderr,
+                "params: load_file('%s'):%d empty name or value\n",
+                path, line_no);
+            continue;
+        }
+
+        // Look up the parameter to determine its type.
+        // パラメータを検索して型を判定する。
+        int idx = find_index(name);
+        if (idx < 0) {
+            std::fprintf(stderr,
+                "params: load_file('%s'):%d unknown parameter '%s'\n",
+                path, line_no, name);
+            continue;
+        }
+
+        // Dispatch on type, reusing set_* for range validation.
+        // 型に応じて分岐し、範囲検証は set_* に委譲する。
+        bool ok = false;
+        switch (meta_table[idx].type) {
+            case ParamType::FLOAT: {
+                char* end = nullptr;
+                float fv = std::strtof(value, &end);
+                if (end == value || *end != '\0') {
+                    std::fprintf(stderr,
+                        "params: load_file('%s'):%d "
+                        "invalid float for '%s': '%s'\n",
+                        path, line_no, name, value);
+                    break;
+                }
+                ok = set_float(name, fv);
+                break;
+            }
+            case ParamType::BOOL: {
+                bool bv = false;
+                if (!parse_bool(value, bv)) {
+                    std::fprintf(stderr,
+                        "params: load_file('%s'):%d "
+                        "invalid bool for '%s': '%s'\n",
+                        path, line_no, name, value);
+                    break;
+                }
+                ok = set_bool(name, bv);
+                break;
+            }
+            case ParamType::INT: {
+                char* end = nullptr;
+                long lv = std::strtol(value, &end, 10);
+                if (end == value || *end != '\0') {
+                    std::fprintf(stderr,
+                        "params: load_file('%s'):%d "
+                        "invalid int for '%s': '%s'\n",
+                        path, line_no, name, value);
+                    break;
+                }
+                ok = set_int(name, static_cast<int32_t>(lv));
+                break;
+            }
+        }
+        if (ok) ++applied;
+    }
+
+    std::fclose(fp);
+    return applied;
 }
 
 void reset_all()

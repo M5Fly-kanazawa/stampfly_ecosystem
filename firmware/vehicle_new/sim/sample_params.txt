@@ -1,0 +1,18 @@
+# Sample parameter override file for the SIL params runtime.
+# SIL params ランタイム用のオーバーライドファイル例。
+#
+# Loaded via sf::params::load_file("sample_params.txt").
+# Lines not mentioned here keep their params.def defaults.
+# ここに記述のない項目は params.def の defaults を保持する。
+
+# Float override (with inline comment)
+# Float のオーバーライド（インラインコメント付き）
+eskf.process.gyro_noise = 0.03      # tuned value
+
+# Float, with whitespace tolerated around '='
+# '=' の前後の空白は無視される
+attitude.roll.kp =  14.0
+
+# Bool override (case-insensitive: TRUE/false/1/0 all accepted)
+# Bool のオーバーライド（TRUE/false/1/0 すべて受理、大文字小文字無視）
+eskf.use_baro = true
