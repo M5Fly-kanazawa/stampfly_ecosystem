@@ -119,13 +119,26 @@ struct SensorNoiseModel {
     float gyro_bias_rw;           // [rad/s/√s]
     float accel_bias_rw;          // [m/s²/√s]
 
-    // 4. Throttle-dependent vibration
-    // 4. スロットル依存振動
-    float vib_accel_k;            // K_accel: σ = K × duty²
-    float vib_gyro_k;             // K_gyro
+    // 4. Throttle-dependent vibration (per-axis)
+    // 4. スロットル依存振動（軸ごと）
+    //
+    // Per-axis K is required because hover02 backtest showed gyro Z is 16x
+    // smaller than X/Y, accel Z is 13% larger than X/Y. Isotropic K under-
+    // or over-estimates each axis by 1.1-16x.
+    // 軸別Kが必要: hover02 ログ実測でジャイロZがX/Yより16倍小、
+    // 加速度ZがX/Yより13%大。等方Kは各軸を1.1〜16倍で誤推定する。
+    float vib_accel_k[3];         // K_accel per axis (X,Y,Z): σ_axis = K[axis] × duty²
+    float vib_gyro_k[3];          // K_gyro  per axis (X,Y,Z)
     float vib_freq_low;           // [Hz] bandpass lower bound
     float vib_freq_high;          // [Hz] bandpass upper bound
 };
+
+// Validated values from hover02 flight log (2026-04-13, commit 92f4a65)
+// hover02 飛行ログから校正済みの値（2026-04-13、コミット 92f4a65）
+//   vib_accel_k = {3.96, 2.35, 5.64}  [m/s²]
+//   vib_gyro_k  = {1.08, 0.83, 0.15}  [rad/s]
+//   Backtest residuals all within 1.1-1.2x of real-data σ
+//   バックテスト残差: 全軸で実データσの 1.1〜1.2倍以内
 ```
 
 ## 5. SIL物理モデルの修正事項

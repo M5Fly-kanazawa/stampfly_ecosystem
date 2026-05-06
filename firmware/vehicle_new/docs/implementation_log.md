@@ -49,7 +49,21 @@
 | 2026-04-12 | 11:15 | 11:45 | 30min | SILモデル精査: 座標系整合性調査、ノイズモデル設計レポート | 座標系不整合4箇所発見、比力計算の致命的誤り特定 | — |
 | 2026-04-12 | 11:45 | 12:30 | 45min | 座標系検証（実機vehicleと比較）+ ノイズ理論調査 + 振動モデル調査 | 座標系はESKF整合確認、バイアス初期化が真の問題、ノイズ/振動設計書作成 | 4d148e4 |
 | 2026-04-12 | 11:36 | 11:54 | 18min | SIL Phase 0修正 + 可視化パイプライン構築 | quad_model.hpp再設計（二次推力、ジャイロスコピック項、ノイズモデル、動的な加速度修正）、sil_main.cpp（キャリブレーション、真値制御バイパス）、plot_flight.py（6パネル解析プロット）。ノイズゼロで0.5mホバー成功 | — |
-| 2026-05-06 | — | — | — | 開発ロードマップ・SIL→実機ワークフロー文書を新規作成。3原則（Code Identity / Parameter Identity / Model Fidelity）と ACRO レート制御を起点とする層別プラント同定戦略を明文化。Phase 0〜6 のフェーズ計画と各合格基準を定義 | development_roadmap.md | — |
+| 2026-04-12 | 12:10 | 12:35 | 25min | SIL ESKF closed-loopホバー初成功 + ノイズ環境 + ESKF predict 共分散修正（full F·P·F^T 化） | sil_main.cpp拡張、ESKFトラッキング検証、フライトログ実測ノイズ解析開始 | d9154b0, 08add70, 82905cd, c89c665, 8ab11b1 |
+| 2026-04-12 | 12:53 | 13:24 | 31min | フライトログノイズ解析 v2（segment-based）+ 実ノイズパラメータ反映 + 接地動力学整備 | ノイズプロファイル算出、SIL 接地モデル、ノイズあり離陸成功 | df10751, ae7de37, be77cc3, a393d3b, 781d2bb |
+| 2026-04-12 | 13:44 | 15:51 | 2h7min | 接触動力学エンジン本実装（PGS solver、SDIRK2、3Dアニメーション、デモ動画）+ ESKF 加速度モデル（接触力除外） | 落下→バウンド→静止が物理的に再現、ESKF closed-loop hover が constraint contact 環境下で成功 | 794df40, 5661480, d522496, 6681a7c, 46481c2, 2592a6c, 1d1367a, b94a471, 2f7f6c5, c63010b |
+| 2026-04-12 | 20:47 | 22:34 | 1h47min | PGS sign convention 修正、加速度計モデル正規化、3シナリオでの高度表示修正 | 接触動力学が安定動作 | 4652469, 66e27e3, 10ede12, 1ea3cfc, f0fa58e |
+| 2026-04-12 | 23:07 | — | — | ファームウェア起動シーケンス + chi2 ゲート + ESKF API 拡張 | startup sequence, chi2 outlier rejection, ESKF accessor methods | d9172c4 |
+| 2026-04-13 | 04:56 | 05:50 | 54min | ESKF 振動ノイズロバスト性向上 + SIL フィルタパイプライン整備、用語修正（observer → open-loop estimation） | 振動下での ESKF 安定性確認 | 00a7a7b, 1c9cecf |
+| 2026-04-13 | 17:22 | 17:37 | 15min | per-axis 振動ノイズモデル校正（hover02 フライトログ） | `vib_accel_k = {3.96, 2.35, 5.64}`, `vib_gyro_k = {1.08, 0.83, 0.15}`、全軸で実データ σ の 1.1〜1.2倍以内に収束（旧 isotropic は最大 16倍誤差） | 92f4a65 |
+| 2026-04-13 | 17:37 | 17:58 | 21min | PID 微分フィルタバグ修正（α=2.67で不安定）+ control_test 4階層検証 | α = η·Td/(η·Td+dt) = 0.333 に修正。L1〜L4 で姿勢安定確認、ESKF closed-loop で初の安定動作 | 06b4cd6 |
+| 2026-04-13 | 17:58 | 18:02 | 4min | 突風外乱モデル + フルフライトシナリオテスト（ground→takeoff→hover+gusts→descend→land） | body-frame の force/torque 注入、5回突風シーケンス、L1〜L4 で全段階安定 | e9c21bd |
+| 2026-04-13 | 18:02 | 18:20 | 18min | PID 双線形変換（Tustin）化 — 後退差分から trapezoidal積分・bilinear微分へ | vehicle/ 実装に整合。L1: max 0.30°/rms 0.08°、L4: 7.63°/3.88° | 07005fb |
+| 2026-04-13 | 18:20 | 18:34 | 14min | ESKF + PID パラメータスイープ（3フェーズ: ESKF R → 高度PID → 姿勢PID + LPF + rate_td） | 姿勢 RMS 2.27°、高度 RMS 44mm 達成（旧 3.88° / 263mm） | ba95de2 |
+| 2026-04-13 | 18:34 | 19:02 | 28min | 正弦波応答テストで ESKF tracking 問題発見 — 0.3Hz でゲイン1.75（+4.9dB） | 加速度観測が thrust 成分を gravity と誤推定する根本原因の特定 | 409a771 |
+| 2026-04-13 | 19:02 | 19:36 | 34min | adaptive R 修正で thrust contamination を緩和（k_adaptive=50） | sine 0.3Hz トラッキング誤差 16.5° → 9.1° (45%削減)、姿勢RMS 3.94° → 3.87°（hover維持） | 98839a6 |
+| 2026-04-13 | 19:36 | — | — | ESKF 線形化限界の定量化（200s ステップ保持テスト） | 10° tilt で −2.3° 定常バイアス（収束しない構造的限界）、復帰時間 1〜3s 確認。教材として「線形化が破綻する条件」の定量データ取得 | 8a2e6ca |
+| 2026-05-06 | 16:09 | 17:05 | 56min | SIL outputs 整理 + 開発ロードマップ作成 + L1〜L4 用語衝突解消 + コンポーネント粒度マッピング表追加 | development_roadmap.md 新規（3原則 + ACRO 起点プラント同定 + Phase 0〜6）、Noise Model L0-L4 → N0-N4 改名、architecture.md 14責務 ↔ 26コンポーネント対応表追加 | 7734981, 3fd0ebf, 9bf4c2c, 0983cce |
 
 ## 集計
 

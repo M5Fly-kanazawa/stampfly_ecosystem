@@ -59,6 +59,31 @@
 - **コールバック集約**: 状態遷移のリセット処理はonExit/onEnterに集約
 - **疎結合**: コンポーネント間はPub-Subトピック経由で通信、直接依存しない
 
+### 責務 ↔ ESP-IDF コンポーネント対応表
+
+設計上の14責務は、ESP-IDF のコンポーネント単位に展開すると、以下の対応で実装される。1つの責務がインターフェース層 + 実装層に分かれる場合（差替可能設計のため）や、責務に直接対応しない基盤コンポーネント（Pub-Subフレームワーク、数学ライブラリ）が存在する。
+
+| # | 責務 | ESP-IDF コンポーネント | 備考 |
+|---|------|----------------------|------|
+| 1 | センシング | `sf_hal_bmi270`, `sf_hal_bmm150`, `sf_hal_bmp280`, `sf_hal_pmw3901`, `sf_hal_vl53l3cx`, `sf_hal_button`, `sf_hal_power` | センサごとに HAL コンポーネント |
+| 2 | 状態推定 | `sf_estimator`（インターフェース）, `sf_estimator_eskf`（ESKF実装） | 差替可能設計のため2層 |
+| 3 | 状態管理 | `sf_state` | — |
+| 4 | フェイルセーフ | `sf_failsafe` | — |
+| 5 | 離着陸マネージャー | `sf_takeoff_landing` | — |
+| 6 | 制御 | `sf_controller`（インターフェース）, `sf_controller_pid`（PID実装） | 差替可能設計のため2層 |
+| 7 | アクチュエーション | `sf_actuator`, `sf_hal_motor` | ロジック層 + ハード層 |
+| 8 | コマンド処理 | `sf_command` | — |
+| 9 | 通信 | `sf_comm` | — |
+| 10 | ナビゲーター | （未実装、将来） | — |
+| 11 | キャリブレーション管理 | `sf_calibration` | — |
+| 12 | パラメータ | `sf_core` 内に統合（`params.def`） | コア基盤として配置 |
+| 13 | データロガー | `sf_logger`, `sf_telemetry` | Blackbox + テレメトリで分離 |
+| 14 | 通知 | `sf_notify`, `sf_hal_led`, `sf_hal_buzzer` | ロジック層 + ハード層 |
+| — | （責務外）Pub-Sub基盤、データ型、トピック定義、パラメータ基盤 | `sf_core` | 全コンポーネントの基盤 |
+| — | （責務外）数学ライブラリ（Vector / Matrix / Quaternion） | `sf_math` | 推定/制御から共有 |
+
+**実装コンポーネント数: 26**（HAL 10 + 責務系 14 + コア基盤 2）
+
 ## 3. インターフェース設計
 
 ### 通信方式: 軽量Pub-Sub
@@ -431,6 +456,31 @@ This document defines the architecture design of vehicle_new, based on the requi
 - **Unified interfaces**: Control and State Estimation are replaceable via unified interfaces
 - **Callback consolidation**: Reset processing during state transitions consolidated in onExit/onEnter
 - **Loose coupling**: Components communicate via Pub-Sub topics, no direct dependencies
+
+### Responsibility ↔ ESP-IDF Component Mapping
+
+The 14 design responsibilities expand to ESP-IDF component granularity as follows. Some responsibilities split into interface + implementation layers (for replaceability), and some infrastructure components (Pub-Sub, math) do not map to a single responsibility.
+
+| # | Responsibility | ESP-IDF Component(s) | Notes |
+|---|----------------|---------------------|-------|
+| 1 | Sensing | `sf_hal_bmi270`, `sf_hal_bmm150`, `sf_hal_bmp280`, `sf_hal_pmw3901`, `sf_hal_vl53l3cx`, `sf_hal_button`, `sf_hal_power` | One HAL component per sensor |
+| 2 | State Estimation | `sf_estimator` (interface), `sf_estimator_eskf` (ESKF impl) | Two layers for replaceability |
+| 3 | State Management | `sf_state` | — |
+| 4 | Failsafe | `sf_failsafe` | — |
+| 5 | Takeoff/Landing Mgr | `sf_takeoff_landing` | — |
+| 6 | Control | `sf_controller` (interface), `sf_controller_pid` (PID impl) | Two layers for replaceability |
+| 7 | Actuation | `sf_actuator`, `sf_hal_motor` | Logic + hardware |
+| 8 | Command Processing | `sf_command` | — |
+| 9 | Communication | `sf_comm` | — |
+| 10 | Navigator | (not yet implemented) | Future |
+| 11 | Calibration Mgr | `sf_calibration` | — |
+| 12 | Parameters | folded into `sf_core` (`params.def`) | Located in core infrastructure |
+| 13 | Data Logger | `sf_logger`, `sf_telemetry` | Blackbox + telemetry split |
+| 14 | Notification | `sf_notify`, `sf_hal_led`, `sf_hal_buzzer` | Logic + hardware |
+| — | (infra) Pub-Sub framework, data types, topics, parameter base | `sf_core` | Foundation for all components |
+| — | (infra) Math library (Vector / Matrix / Quaternion) | `sf_math` | Shared by estimator/controller |
+
+**Implemented component count: 26** (HAL 10 + responsibility-mapped 14 + infra 2)
 
 ## 3. Interface Design
 
