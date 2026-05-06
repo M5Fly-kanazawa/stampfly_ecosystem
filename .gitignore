@@ -83,6 +83,19 @@ firmware/vehicle_new/sim/eskf_sine_compare
 firmware/vehicle_new/sim/eskf_final_compare
 firmware/vehicle_new/sim/diag_sine_*.csv
 firmware/vehicle_new/sim/compare_*.csv
+# Host-built simulator test binaries (Mach-O, no extension)
+firmware/vehicle_new/sim/control_test
+firmware/vehicle_new/sim/eskf_sine_then_hover_test
+firmware/vehicle_new/sim/eskf_step_hold_test
+firmware/vehicle_new/sim/eskf_step_recovery_test
+firmware/vehicle_new/sim/flight_scenario_test
+firmware/vehicle_new/sim/sine_response_test
+firmware/vehicle_new/sim/test_drop
+firmware/vehicle_new/sim/tune_attitude
+firmware/vehicle_new/sim/tune_extended
+firmware/vehicle_new/sim/tune_final
+firmware/vehicle_new/sim/tune_lpf
+firmware/vehicle_new/sim/tune_sweep
 
 # ====================
 # Compiled
@@ -122,4 +135,18 @@ _wip/
 # Private documents (conference papers, etc.)
 # 非公開ドキュメント（学会原稿等）
 docs/sci26/
-firmware/vehicle_new/.cache/
+
+# ====================
+# Build / runtime caches
+# ====================
+**/.cache/
+
+# ====================
+# Beamer auto-generated listings
+# ====================
+docs/workshop/slides/beamer/*.listing
+
+# ====================
+# Temporary / WIP firmware projects
+# ====================
+firmware/my_drone/
