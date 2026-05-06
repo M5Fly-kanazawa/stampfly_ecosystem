@@ -30,28 +30,50 @@
 
 ### トピック定義
 
+トピックの実装方針は **ヘッダで `extern` 宣言、対応する `.cpp` で実体定義** とする。`inline` グローバル変数は ESP-IDF のリンク方針と相性が悪く（複数翻訳単位を跨ぐ初期化順序に依存しやすい）、`extern` + 実体定義のほうが安全。
+
 ```cpp
-// topics.hpp — 全トピックの定義（1箇所）
-// All topic definitions (single location)
-// トピック追加はここに1行追加するだけ
-// Adding a topic requires only one line here
+// topics.hpp — 全トピックの宣言（1箇所）
+// All topic declarations (single location)
+// トピック追加はここに1行追加し、対応する .cpp に定義を1行追加する
+// Adding a topic: add one extern line here + one definition line in .cpp
 
 #include "topic.hpp"
 #include "data_types.hpp"
 
+namespace sf {
+
 // Topic<DataType, BufferPolicy, BufferSize>
-inline Topic<ImuData,         RingBuffer, 8>  sensor_imu;
-inline Topic<TofData,         Queue, 2>       sensor_tof;
-inline Topic<FlowData,        Queue, 2>       sensor_flow;
-inline Topic<MagData,         Queue, 2>       sensor_mag;
-inline Topic<BaroData,        Queue, 2>       sensor_baro;
-inline Topic<PowerData,       Latest, 1>      sensor_power;
-inline Topic<StateEstimate,   Latest, 1>      estimate_state;
-inline Topic<SystemMode,      Latest, 1>      system_mode;
-inline Topic<CommandSetpoint, Latest, 1>      command_setpoint;
-inline Topic<ControlOutput,   Latest, 1>      control_output;
-inline Topic<MotorOutput,     Latest, 1>      actuator_motor;
-inline Topic<SystemAlert,     Queue, 4>       system_alert;
+extern Topic<ImuData,         RingBuffer, 8>  sensor_imu;
+extern Topic<TofData,         Queue, 2>       sensor_tof;
+extern Topic<FlowData,        Queue, 2>       sensor_flow;
+extern Topic<MagData,         Queue, 2>       sensor_mag;
+extern Topic<BaroData,        Queue, 2>       sensor_baro;
+extern Topic<PowerData,       Latest, 1>      sensor_power;
+extern Topic<StateEstimate,   Latest, 1>      estimate_state;
+extern Topic<CommandSetpoint, Latest, 1>      command_setpoint;
+extern Topic<ControlOutput,   Latest, 1>      control_output;
+extern Topic<MotorOutput,     Latest, 1>      actuator_motor;
+extern Topic<SystemMode,      Latest, 1>      system_mode;
+extern Topic<SystemAlert,     Queue, 4>       system_alert;
+
+}  // namespace sf
+```
+
+```cpp
+// topics.cpp — トピック実体定義
+// Topic instance definitions
+
+#include "topics.hpp"
+
+namespace sf {
+
+Topic<ImuData,         RingBuffer, 8>  sensor_imu;
+Topic<TofData,         Queue, 2>       sensor_tof;
+// ... 以下同様
+// ... and so on
+
+}  // namespace sf
 ```
 
 ### バッファ方式（3種）
@@ -84,8 +106,9 @@ auto data = estimate_state.latest();
 ### トピック追加手順
 
 1. `data_types.hpp` に構造体を追加
-2. `topics.hpp` に `Topic<>` を1行追加
-3. 発行側で `publish()`、購読側で `subscribe()` を呼ぶ
+2. `topics.hpp` に `extern Topic<>` 宣言を1行追加
+3. `topics.cpp` に対応する実体定義を1行追加
+4. 発行側で `publish()`、購読側で `subscribe()` を呼ぶ
 
 ## 3. 状態遷移テーブル
 
@@ -138,6 +161,17 @@ public:
 };
 ```
 
+### PID 実装の離散化方式（SIL検証済み）
+
+`sf_controller_pid` の PID 実装は **双線形変換（Tustin 法）** を採用する。SIL での検証で、後退差分による離散化が α = Td/(η·Td+dt) > 1 となり微分フィルタが発散する致命バグを発生させたため（コミット `06b4cd6`）、bilinear に統一した（コミット `07005fb`、vehicle/ 旧実装と一致）。
+
+| 項 | 離散化 |
+|----|--------|
+| 積分（trapezoidal）| `integral += (kp/ti) · (error + prev_error) · dt/2` |
+| 微分（bilinear）| α = 2·η·Td/dt、a = (α−1)/(α+1)、b = 2·Td/(dt·(α+1))<br>`d[n] = a·d[n−1] + b·(e[n] − e[n−1])`<br>Kp は filter 外で適用: `d_term = kp · d[n]` |
+
+η = 0.125、Td = 0.01、dt = 0.0025 で α = 1.0、a = 0、b = 4.0 の安定動作。SIL L1 で max 0.30°/RMS 0.08°、L4（フル ESKF）で max 7.63°/RMS 3.88° → パラメータスイープ後 RMS 2.27° / 高度 RMS 44mm（コミット `ba95de2`）。
+
 ## 5. 状態推定インターフェース定義
 
 ESKF/EKF/Complementary Filterを差替可能にするための統一インターフェース。
@@ -187,6 +221,34 @@ sensor.tof → 推定コンポーネントに常に届く
 ```
 
 パラメータ変更時のコールバックで推定コンポーネントの内部マスクを即時更新する。これにより段階的にセンサを有効化しながらデバッグが可能。
+
+### ESKF 実装の特性（SIL検証済み）
+
+`sf_estimator_eskf` には SIL での検証を経て次の機能が実装されている。
+
+#### χ²ゲート（外れ値棄却）
+
+各観測更新前にイノベーション e と共分散 S = H·P·Hᵀ + R から χ² = eᵀ·S⁻¹·e を計算し、自由度に応じた閾値を超える観測を棄却する。実機 vehicle/ で「ふらつきが PID ゲイン変更なしでほぼ解消」した実績あり（加速度計の外れ値が `updateAccelAttitude` で姿勢を乱していたのを抑制）。コミット `d9172c4`。
+
+#### Adaptive R（加速度姿勢補正の thrust 汚染対策）
+
+加速度計が観測する比力は厳密には `[0, 0, −T/m]`（body frame）であり、ホバー以外では `R^T·g` から乖離する。15° ロールでは |a| ≈ g/cos(15°) で、ノルムゲートは通過するが方向は誤りで、姿勢推定が破綻する。
+
+対策として観測ノイズを **R_actual = R_base² × (1 + k_adaptive · |a − g|²)** で動的に膨らませ、g から外れた観測の重みを下げる。`k_adaptive = 50` を default とし、SIL での 0.3Hz サイン応答で:
+
+| 指標 | Before | After | 改善 |
+|------|--------|-------|------|
+| ゲイン | 2.34× | 2.00× | — |
+| トラッキング誤差 | 16.5° | 9.1° | 45% |
+| ホバー姿勢 RMS | 3.94° | 3.87° | 維持 |
+
+コミット `98839a6`。**根本解（thrust 補償観測モデル）は Phase 5 へ繰越**。
+
+#### 線形化バイアス（既知の構造的限界）
+
+加速度ベース姿勢補正の観測モデル `h(x) = R^T·g` はホバー近傍でのみ妥当な線形化。10° ステップ保持を 200s 実行すると、ESKF 推定値と真値の間に **−2.3° の定常バイアス** が残り、収束しない。これは推力寄与（`a_body = [0, 0, −T/m]`）が観測モデルから抜けているための構造的限界で、ESKF + PID ループのフィードバック構造により ESKF は指令値を追跡し、真値はバイアス分ずれる。
+
+復帰時間は 1〜3s。ホバー定点用には十分だが、姿勢追跡用途には限界あり。コミット `8a2e6ca`。教材として「線形化が破綻する条件」の定量データに位置付ける。
 
 ## 6. パラメータシステム
 
