@@ -91,6 +91,7 @@ firmware/vehicle_new/sim/eskf_step_recovery_test
 firmware/vehicle_new/sim/flight_scenario_test
 firmware/vehicle_new/sim/sine_response_test
 firmware/vehicle_new/sim/test_drop
+firmware/vehicle_new/sim/test_params_sil
 firmware/vehicle_new/sim/tune_attitude
 firmware/vehicle_new/sim/tune_extended
 firmware/vehicle_new/sim/tune_final
