@@ -18,6 +18,19 @@ vehicle_new の **開発の進め方**（=どの順番で何を作り、何を�
 - vehicle_new の実装に関わる開発者（人間 + AI）
 - 既存実装をベースに研究・教育を行う学生・研究者
 
+### 用語の使い分け（重要）
+
+本書および vehicle_new プロジェクト全体で、複数の番号付き概念が併存する。混同しないこと。
+
+| 用語 | 意味 | 出典 |
+|------|------|------|
+| **Phase 0〜6** | 開発工程の段階。本書 §4 の計画 | 本書 §4 |
+| **Layer 1〜4** | 段階的プラント同定の層（ACRO → STAB → ALT → POS） | 本書 §3 |
+| **SIL Control Level L1〜L4** | SIL 制御テストの複雑度レベル（true rate / true att / noisy / ESKF）| `sim/flight_scenario_test.cpp` の `enum Level`、`sim/control_test.cpp` の `enum TestLevel` |
+| **Noise Model Stage N0〜N4** | センサノイズモデルの複雑度段階（教材） | `noise_and_vibration_model.md` §4 |
+
+`L1〜L4` は **SIL Control Level の意味で使う**。ノイズモデルの段階は `N0〜N4` を使い、両者を区別する。
+
 ---
 
 ## 2. 開発方針の3原則
@@ -282,6 +295,19 @@ This document defines **how vehicle_new is developed** — the order of work, th
 
 - Developers working on vehicle_new (humans + AI)
 - Students and researchers building research/education on top of the existing implementation
+
+### Terminology
+
+Multiple numbered concepts coexist in this project. Keep them distinct.
+
+| Term | Meaning | Source |
+|------|---------|--------|
+| **Phase 0–6** | Development stages defined in §4 of this doc | This doc §4 |
+| **Layer 1–4** | Layered plant-identification stack (ACRO → STAB → ALT → POS) | This doc §3 |
+| **SIL Control Level L1–L4** | SIL control-test complexity levels (true rate / true att / noisy / ESKF) | `sim/flight_scenario_test.cpp` `enum Level`, `sim/control_test.cpp` `enum TestLevel` |
+| **Noise Model Stage N0–N4** | Sensor-noise complexity stages (educational) | `noise_and_vibration_model.md` §4 |
+
+`L1–L4` always refers to **SIL Control Levels**. Noise model stages use the `N0–N4` notation to avoid collision.
 
 ---
 

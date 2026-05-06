@@ -84,17 +84,20 @@ w[k] ~ N(0, σ_rw² × Δt)
 
 スロットル依存性: `振幅 ≈ K × duty²`
 
-### SILでの振動再現レベル
+### SILでの振動再現レベル（Noise Model Stage）
 
-| レベル | モデル | 教育用途 |
+> **Note:** 本節の `N0〜N4` はノイズモデルの理論的段階を指す（教材としての複雑度区分）。<br>
+> SIL の制御テストレベル `L1〜L4`（`flight_scenario_test.cpp` の `enum Level`）とは**別概念**で、衝突を避けるため `N` プレフィックスを用いる。
+
+| 段階 | モデル | 教育用途 |
 |-------|-------|---------|
-| L0 | ホワイトガウスノイズ（固定σ） | KFの基礎理解 |
-| L1 | スロットル依存ガウスノイズ | ノイズ-スロットル相関の理解 |
-| **L2** | **L1 + 帯域制限ノイズ** | **LPFの必要性理解（推奨）** |
-| L3 | L2 + 正弦波（BPF成分） | ノッチフィルタ設計演習 |
-| L4 | 実機FFTプロファイル注入 | 実機との定量比較 |
+| N0 | ホワイトガウスノイズ（固定σ） | KFの基礎理解 |
+| N1 | スロットル依存ガウスノイズ | ノイズ-スロットル相関の理解 |
+| **N2** | **N1 + 帯域制限ノイズ** | **LPFの必要性理解（推奨）** |
+| N3 | N2 + 正弦波（BPF成分） | ノッチフィルタ設計演習 |
+| N4 | 実機FFTプロファイル注入 | 実機との定量比較 |
 
-### 推奨: L2（帯域制限スロットル依存ノイズ）
+### 推奨: N2（帯域制限スロットル依存ノイズ）
 
 ```cpp
 // SILセンサモデルの構成
@@ -198,12 +201,15 @@ The primary cause is **motor/propeller vibration**, making static noise models i
 - BG: gyro_bias_noise² × Δt = 4.2e-13
 - BA: accel_bias_noise² × Δt = 2.5e-11
 
-**Vibration Model Levels:**
-- L0: White Gaussian (basic KF understanding)
-- L1: Throttle-dependent (noise-throttle correlation)
-- **L2: L1 + band-limited (LPF motivation) — Recommended**
-- L3: L2 + sinusoidal BPF (notch filter design)
-- L4: Real FFT profile injection (validation)
+**Noise Model Stages (N0-N4):**
+
+> Note: `N0-N4` denote noise-model complexity tiers (educational). They are distinct from the SIL control-test levels `L1-L4` defined by the `enum Level` in `flight_scenario_test.cpp`. The `N` prefix is used to avoid collision.
+
+- N0: White Gaussian (basic KF understanding)
+- N1: Throttle-dependent (noise-throttle correlation)
+- **N2: N1 + band-limited (LPF motivation) — Recommended**
+- N3: N2 + sinusoidal BPF (notch filter design)
+- N4: Real FFT profile injection (validation)
 
 **SIL Fix Priority:**
 1. Fix specific force calculation (include thrust)
