@@ -9,13 +9,16 @@ Subcommands:
     switch    - Switch to a lesson (copy student.cpp to user_code.cpp)
     solution  - Show solution diff for a lesson
     info      - Show detailed lesson information
+    edit      - Open user_code.cpp in editor (VSCode > vi)
     build     - Build workshop firmware (= sf build workshop)
     flash     - Flash workshop firmware (= sf flash workshop -m)
 """
 
 import argparse
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -203,6 +206,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Lesson number (e.g., 5) or ID (e.g., pid_control)",
     )
     info_parser.set_defaults(func=run_info)
+
+    # --- edit ---
+    edit_parser = lesson_subparsers.add_parser(
+        "edit",
+        help="Open user_code.cpp in editor",
+        description="Open the workshop user_code.cpp in your editor (VSCode > vi).",
+    )
+    edit_parser.add_argument(
+        "--editor",
+        default=None,
+        help="Override editor command (e.g., --editor nvim)",
+    )
+    edit_parser.set_defaults(func=run_edit)
 
     # --- build ---
     build_parser = lesson_subparsers.add_parser(
@@ -492,6 +508,160 @@ def run_info(args: argparse.Namespace) -> int:
         console.print(f"  Firmware:    (no firmware directory)")
 
     return 0
+
+
+def _vscode_app_candidates() -> List[Tuple[str, List[str]]]:
+    """Platform-specific VSCode install locations not on PATH.
+
+    Returns list of (display_name, launch_command) for VSCode installations
+    that exist on disk but whose CLI may not be on PATH.
+    PATH 上に CLI がない VSCode インストールの (表示名, 起動コマンド) リスト。
+    """
+    candidates: List[Tuple[str, List[str]]] = []
+
+    if sys.platform == "darwin":
+        # macOS: VSCode app bundle
+        vscode_app = Path("/Applications/Visual Studio Code.app")
+        if vscode_app.exists():
+            candidates.append(("VSCode (via open -a)", ["open", "-a", "Visual Studio Code"]))
+
+    elif sys.platform == "win32":
+        # Windows: per-user and system-wide install locations
+        # Windows: ユーザー単位とシステム全体のインストール先
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
+        program_files = os.environ.get("ProgramFiles", "")
+        program_files_x86 = os.environ.get("ProgramFiles(x86)", "")
+        for base in (local_appdata, program_files, program_files_x86):
+            if not base:
+                continue
+            cmd = Path(base) / "Programs" / "Microsoft VS Code" / "bin" / "code.cmd"
+            if cmd.exists():
+                candidates.append(("VSCode", [str(cmd)]))
+                break
+            cmd = Path(base) / "Microsoft VS Code" / "bin" / "code.cmd"
+            if cmd.exists():
+                candidates.append(("VSCode", [str(cmd)]))
+                break
+
+    elif sys.platform.startswith("linux"):
+        # Linux: Snap and Flatpak installations may not put `code` on PATH
+        # Linux: Snap や Flatpak は `code` を PATH に置かないことがある
+        for path in ("/snap/bin/code", "/var/lib/flatpak/exports/bin/com.visualstudio.code"):
+            if Path(path).exists():
+                candidates.append(("VSCode", [path]))
+                break
+
+    return candidates
+
+
+def _find_editor(preferred: Optional[str] = None) -> Optional[Tuple[str, List[str]]]:
+    """Find available editor.
+
+    Search order: explicit preferred -> VSCode (code on PATH) -> platform VSCode app
+    -> vi -> vim -> Windows Notepad.
+    検索順: 明示指定 -> VSCode (PATH 上) -> プラットフォーム別 VSCode -> vi -> vim -> Notepad (Windows)
+
+    Returns:
+        (display_name, command_list) tuple, or None if no editor found.
+    """
+    if preferred:
+        path = shutil.which(preferred)
+        if path:
+            return (preferred, [path])
+        return None
+
+    # VSCode CLI on PATH (handles `code`/`code.cmd` via PATHEXT on Windows)
+    # PATH 上の VSCode CLI（Windows では PATHEXT 経由で `code.cmd` も検出）
+    code_path = shutil.which("code")
+    if code_path:
+        return ("VSCode", [code_path])
+
+    # Platform-specific VSCode locations
+    # プラットフォーム別の VSCode インストール先
+    for candidate in _vscode_app_candidates():
+        return candidate
+
+    # vi / vim fallback (POSIX, also if installed via Git for Windows)
+    # vi / vim フォールバック（POSIX、Git for Windows 経由のインストールも検出）
+    for editor in ("vi", "vim"):
+        path = shutil.which(editor)
+        if path:
+            return (editor, [path])
+
+    # Windows last resort: Notepad
+    # Windows 最後の手段: Notepad
+    if sys.platform == "win32":
+        notepad = shutil.which("notepad")
+        if notepad:
+            return ("Notepad", [notepad])
+
+    return None
+
+
+def _editor_install_hint() -> List[str]:
+    """Platform-specific install instructions for editors.
+    プラットフォーム別のエディタインストール手順
+    """
+    lines = [
+        "  Install one of the following:",
+        "    VSCode:  https://code.visualstudio.com/",
+    ]
+    if sys.platform == "darwin":
+        lines.append("             After install, run from VSCode command palette:")
+        lines.append("             'Shell Command: Install \"code\" command in PATH'")
+        lines.append("    vim:     brew install vim")
+    elif sys.platform == "win32":
+        lines.append("             Or:  winget install Microsoft.VisualStudioCode")
+        lines.append("             During install, check 'Add to PATH'")
+        lines.append("    vim:     winget install vim.vim")
+    elif sys.platform.startswith("linux"):
+        lines.append("             Or via package manager (snap install code --classic etc.)")
+        lines.append("    vim:     sudo apt install vim   /   sudo dnf install vim")
+    else:
+        lines.append("    vim:     install via your platform package manager")
+    lines.append("")
+    lines.append("  Or specify explicitly:  sf lesson edit --editor <command>")
+    return lines
+
+
+def run_edit(args: argparse.Namespace) -> int:
+    """Open user_code.cpp in the editor"""
+    user_code = _get_user_code_path()
+
+    if not user_code.exists():
+        console.error(f"user_code.cpp not found: {user_code}")
+        console.print()
+        console.print("  Switch to a lesson first:")
+        console.print("    sf lesson switch <N>")
+        return 1
+
+    preferred = getattr(args, "editor", None)
+    found = _find_editor(preferred)
+
+    if found is None:
+        if preferred:
+            console.error(f"Editor not found: '{preferred}'")
+        else:
+            console.error("No editor found (tried: code, vi, vim)")
+        console.print()
+        for line in _editor_install_hint():
+            console.print(line)
+        return 1
+
+    name, cmd = found
+    full_cmd = cmd + [str(user_code)]
+
+    console.info(f"Opening user_code.cpp in {name}")
+    console.print(f"  Path: {user_code}")
+
+    try:
+        # shell=False is safe: command + path are passed as a list
+        # shell=False で安全: コマンドとパスをリストで渡す
+        result = subprocess.run(full_cmd)
+        return result.returncode
+    except FileNotFoundError:
+        console.error(f"Failed to launch editor: {' '.join(full_cmd)}")
+        return 1
 
 
 def run_build(args: argparse.Namespace) -> int:
