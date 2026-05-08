@@ -59,20 +59,16 @@ void ControlTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "WorkshopTask started (400Hz via semaphore)");
 
-    // Wait for CLI banner to be displayed before calling user code
-    // CLIバナー表示完了を待ってからユーザーコードを呼び出す
-    // This ensures setup() output appears after the banner, not mixed with boot logs
-    // setup()の出力がブートログに混ざらず、バナーの後に表示される
-    while (!g_cli_ready) {
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-
-    // Call user's setup function
-    // ユーザーの setup() を呼び出す
+    // Call user's setup function before CLI banner is shown
+    // CLIバナー表示前にユーザーの setup() を呼び出す
+    // SerialCLI waits on g_setup_complete (weak symbol) so setup() output
+    // appears in the boot log and the banner/prompt come after it.
+    // SerialCLI は g_setup_complete (weak シンボル) を待つため、
+    // setup() の出力はブートログに残り、その後にバナーとプロンプトが表示される
     setup();
 
-    // Signal that setup() is done - CLITask waits for this before showing prompt
-    // setup() 完了を通知 - CLITaskはプロンプト表示前にこれを待つ
+    // Signal setup() done — SerialCLI shows the banner after this flips true
+    // setup() 完了を通知 - SerialCLI はこれが true になった後にバナーを表示
     g_setup_complete = true;
 
     constexpr float dt = IMU_DT;

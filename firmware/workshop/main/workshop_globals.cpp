@@ -103,7 +103,6 @@ stampfly::math::Vector3 g_initial_accel_bias = stampfly::math::Vector3::zero();
 
 volatile bool g_eskf_ready = false;
 volatile bool g_boot_complete = false;   // Set by app_main after init is done
-volatile bool g_cli_ready = false;       // Set by CLITask after banner displayed
 volatile bool g_setup_complete = false;  // Set by ControlTask after setup()
 
 volatile bool g_imu_task_healthy = false;
