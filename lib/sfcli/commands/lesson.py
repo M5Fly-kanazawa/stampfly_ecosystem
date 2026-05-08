@@ -218,6 +218,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Override editor command (e.g., --editor nvim)",
     )
+    edit_parser.add_argument(
+        "--reuse-window",
+        action="store_true",
+        help="Open in existing VSCode window instead of a new one (default: new window)",
+    )
     edit_parser.set_defaults(func=run_edit)
 
     # --- build ---
@@ -514,16 +519,21 @@ def _vscode_app_candidates() -> List[Tuple[str, List[str]]]:
     """Platform-specific VSCode install locations not on PATH.
 
     Returns list of (display_name, launch_command) for VSCode installations
-    that exist on disk but whose CLI may not be on PATH.
+    that exist on disk but whose CLI may not be on PATH. The launch_command
+    must accept VSCode CLI flags (e.g., -n) directly.
     PATH 上に CLI がない VSCode インストールの (表示名, 起動コマンド) リスト。
+    起動コマンドは VSCode CLI のフラグ（例: -n）を直接受け取れる形式であること。
     """
     candidates: List[Tuple[str, List[str]]] = []
 
     if sys.platform == "darwin":
-        # macOS: VSCode app bundle
-        vscode_app = Path("/Applications/Visual Studio Code.app")
-        if vscode_app.exists():
-            candidates.append(("VSCode (via open -a)", ["open", "-a", "Visual Studio Code"]))
+        # macOS: prefer the `code` script inside the app bundle so VSCode CLI
+        # flags (e.g. -n) can be passed directly. This avoids the awkward
+        # `open -a "..." --args` invocation.
+        # macOS: app バンドル内の `code` スクリプトを優先（-n 等のフラグを直接渡せる）
+        bundled_code = Path("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
+        if bundled_code.exists():
+            candidates.append(("VSCode", [str(bundled_code)]))
 
     elif sys.platform == "win32":
         # Windows: per-user and system-wide install locations
@@ -649,9 +659,19 @@ def run_edit(args: argparse.Namespace) -> int:
         return 1
 
     name, cmd = found
-    full_cmd = cmd + [str(user_code)]
+    reuse_window = bool(getattr(args, "reuse_window", False))
 
-    console.info(f"Opening user_code.cpp in {name}")
+    # VSCode: open in a new window by default so user_code.cpp does not
+    # piggyback into an unrelated workspace already open in VSCode.
+    # VSCode: 既に開いている別プロジェクトのウィンドウに紛れないよう、デフォルトで新規ウィンドウ
+    extra_flags: List[str] = []
+    if name.startswith("VSCode") and not reuse_window:
+        extra_flags = ["-n"]
+
+    full_cmd = cmd + extra_flags + [str(user_code)]
+
+    window_note = "" if not extra_flags else " (new window)"
+    console.info(f"Opening user_code.cpp in {name}{window_note}")
     console.print(f"  Path: {user_code}")
 
     try:
