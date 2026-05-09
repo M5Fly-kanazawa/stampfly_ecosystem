@@ -29,6 +29,7 @@
 #include "config.hpp"
 #include "topics.hpp"
 #include "tasks.hpp"
+#include "sf_board.hpp"
 
 static const char* TAG = "main";
 
@@ -66,17 +67,24 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Phase 0: Topics initialized");
 
     // =========================================================================
-    // Phase 1: Sensor and peripheral initialization
-    // Phase 1: センサおよび周辺機器の初期化
+    // Phase 1: BSP initialization — all shared HW resources
+    // Phase 1: BSP 初期化 — 全共有 HW 資源
+    //
+    // sf_board が共有 HW 資源 (I2C bus、将来的に SPI host / LEDC timer /
+    // esp_netif) を集約所有する。各 HAL タスクは Phase 3 起動後に
+    // sf::internal::board::i2c_bus() などの getter から借用する。
+    //
+    // @design architecture.md §7 — ハードウェア初期化と所有権         [--]
+    // @design hardware_init.md §4 — 起動シーケンス                  [--]
     // =========================================================================
 
-    // TODO: Initialize I2C bus
-    // TODO: Initialize SPI bus
-    // TODO: Initialize sensors (IMU, ToF, Flow, Mag, Baro, Power)
-    // TODO: Initialize actuators (Motor, LED, Buzzer, Button)
-    // TODO: Initialize communication (ESP-NOW, WiFi, UDP)
-    // TODO: Initialize parameter system (load from NVS)
-    ESP_LOGI(TAG, "Phase 1: Peripherals initialized (stub)");
+    ESP_ERROR_CHECK(sf::internal::board::init());
+    ESP_LOGI(TAG, "Phase 1: BSP ready (sf_board)");
+
+    // Remaining HAL / actuator / comm initialization is performed inside
+    // each task's setup phase, borrowing handles from sf_board.
+    // M2b 以降で imu_task / sf_actuator / sf_comm を board 経由に書き換え、
+    // sf_telemetry の WiFi polling 廃止を実施する。
 
     // =========================================================================
     // Phase 2: Wait for sensor stabilization

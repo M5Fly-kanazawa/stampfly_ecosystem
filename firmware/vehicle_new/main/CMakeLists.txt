@@ -19,6 +19,7 @@ idf_component_register(
     REQUIRES
         esp_timer
         nvs_flash
+        sf_board
         sf_core
         sf_math
         sf_state
