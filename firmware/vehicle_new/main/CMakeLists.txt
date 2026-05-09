@@ -21,6 +21,7 @@ idf_component_register(
         nvs_flash
         sf_board
         sf_core
+        sf_api
         sf_math
         sf_state
         sf_estimator
