@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "logger.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES sf_core spiffs
+    REQUIRES sf_core spiffs esp_timer
 )
