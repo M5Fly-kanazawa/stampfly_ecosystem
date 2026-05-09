@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file eskf_core.cpp
  * @brief ESKF 15-state implementation — from mathematical foundations

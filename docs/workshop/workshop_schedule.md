@@ -32,7 +32,7 @@
 ### エコシステム紹介の内容 (Day 1 冒頭 1時間)
 
 - リポジトリ構成図（firmware / control / analysis / tools / simulator / protocol の6層）
-- 設計思想: 責務分離、HAL / SVC / Algo 3層構成
+- 設計思想: 関心の分離、HAL / SVC / Algo 3層構成
 - ツール群デモ: `sf doctor` → `sf sim list` → `sf cal list` → `sf log wifi`
 - 旧 M5StampFly_skeleton vs 新 ecosystem の違い
 - ワークショップでの使い方: スケルトン（C++ 制御学習）+ sf CLI + Python SDK

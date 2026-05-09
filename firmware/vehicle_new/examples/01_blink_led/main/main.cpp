@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file main.cpp
  * @brief Example 01 — Blink the on-board WS2812 RGB LED

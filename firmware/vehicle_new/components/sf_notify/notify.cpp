@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file notify.cpp
  * @brief Notification manager implementation
