@@ -45,6 +45,9 @@
 #include "esp_timer.h"
 #include "esp_mac.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
 static const char* TAG = "comm";
 
 namespace sf {
@@ -111,6 +114,30 @@ static constexpr uint8_t kButtonBitArm = 0x01;
 /// Source ID published into CommandSetpoint.source (0 = ESP-NOW link)
 /// CommandSetpoint.source に発行するソース ID（0 = ESP-NOW リンク）
 static constexpr uint8_t kCommandSourceEspNow = 0;
+
+// -----------------------------------------------------------------------------
+// WiFi readiness EventGroup (R16 — replaces sf_telemetry polling)
+// WiFi 準備完了 EventGroup (R16 — sf_telemetry polling を廃止)
+// -----------------------------------------------------------------------------
+//
+// Event handler registered in initWifi() sets WIFI_GOT_IP_BIT when the
+// STA netif obtains an IPv4 address (IP_EVENT_STA_GOT_IP). sf_telemetry
+// awaits this bit instead of busy-polling esp_netif_get_ip_info().
+//
+// initWifi() で登録するハンドラが IP_EVENT_STA_GOT_IP 受信時に
+// WIFI_GOT_IP_BIT をセットする。sf_telemetry はこのビットを待つことで
+// busy-poll を回避する。
+
+constexpr EventBits_t kWifiGotIpBit = BIT0;
+EventGroupHandle_t g_wifi_event_group = nullptr;
+
+void onIpEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
+               int32_t event_id, void* /*event_data*/)
+{
+    if (event_id == IP_EVENT_STA_GOT_IP && g_wifi_event_group != nullptr) {
+        xEventGroupSetBits(g_wifi_event_group, kWifiGotIpBit);
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Singleton pointer for the static C-style ESP-NOW recv callback to reach
@@ -369,8 +396,48 @@ void Comm::initWifi()
     // ラジオを ESP-NOW チャンネルに固定する。esp_wifi_start() より後に呼ぶ。
     ESP_ERROR_CHECK(esp_wifi_set_channel(kWifiChannel, WIFI_SECOND_CHAN_NONE));
 
+    // Register IP event handler so sf_telemetry can wait on WiFi readiness
+    // without polling. Bit is set on IP_EVENT_STA_GOT_IP (R16).
+    // sf_telemetry が polling せずに WiFi 準備を待てるよう IP イベント
+    // ハンドラを登録する。IP_EVENT_STA_GOT_IP 受信時にビットをセット (R16)。
+    if (g_wifi_event_group == nullptr) {
+        g_wifi_event_group = xEventGroupCreate();
+    }
+    ESP_ERROR_CHECK(esp_event_handler_register(
+        IP_EVENT, IP_EVENT_STA_GOT_IP, &onIpEvent, nullptr));
+
     ESP_LOGI(TAG, "WiFi STA up on channel %u (hostname '%s')",
              kWifiChannel, kHostname);
+}
+
+// -----------------------------------------------------------------------------
+// waitForWifiReady — block until STA has IP, or timeout
+// WiFi 準備完了待機 — STA が IP を取得するまでブロック (タイムアウト付き)
+// -----------------------------------------------------------------------------
+//
+// Replaces the polling loop previously used by sf_telemetry::waitForWifi().
+// xEventGroupWaitBits is used so that the calling task sleeps efficiently
+// rather than spinning. clearOnExit=false leaves the bit set so subsequent
+// callers (or reconnects) can also detect readiness.
+//
+// 旧 sf_telemetry::waitForWifi() の polling ループを置換する。
+// xEventGroupWaitBits を使うため呼び出しタスクは効率的にスリープする。
+// clearOnExit=false でビットを保持し、再呼び出しや再接続でも検出可能。
+bool waitForWifiReady(uint32_t timeout_ms)
+{
+    if (g_wifi_event_group == nullptr) {
+        // initWifi() has not run yet; nothing to wait on.
+        // initWifi() 未実行。待つべき対象がない。
+        return false;
+    }
+    const TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+    const EventBits_t bits = xEventGroupWaitBits(
+        g_wifi_event_group,
+        kWifiGotIpBit,
+        pdFALSE,    // clearOnExit: keep bit set
+        pdTRUE,     // waitForAllBits (we only have one bit)
+        ticks);
+    return (bits & kWifiGotIpBit) != 0;
 }
 
 // -----------------------------------------------------------------------------

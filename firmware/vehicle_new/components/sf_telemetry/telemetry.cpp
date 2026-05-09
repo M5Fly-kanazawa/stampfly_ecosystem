@@ -24,6 +24,7 @@
  */
 
 #include "telemetry.hpp"
+#include "comm.hpp"
 #include "topics.hpp"
 #include "sf_math.hpp"
 
@@ -106,38 +107,46 @@ void Telemetry::init()
 }
 
 // -----------------------------------------------------------------------------
-// waitForWifi — poll esp_netif until STA has a valid IPv4 address
-// WiFi待機 — STAインターフェースが有効なIPv4アドレスを得るまでポーリング
+// waitForWifi — block on sf_comm's WiFi-ready EventGroup
+// WiFi待機 — sf_comm の WiFi 準備完了 EventGroup を待つ
+// -----------------------------------------------------------------------------
+//
+// Previously this polled esp_netif_get_ip_info() in a loop. Now it
+// delegates to sf::waitForWifiReady() which sleeps efficiently on an
+// EventGroup bit set by sf_comm's IP_EVENT_STA_GOT_IP handler (R16).
+//
+// 旧実装は esp_netif_get_ip_info() を polling ループで呼んでいた。
+// 現在は sf::waitForWifiReady() に委譲し、sf_comm の
+// IP_EVENT_STA_GOT_IP ハンドラがセットする EventGroup ビットで効率的に
+// スリープする (R16)。
+//
+// On timeout we log a warning and return — callers must tolerate the
+// case where IP is never obtained (e.g. ESP-NOW-only operation without
+// AP association). The UDP socket is still opened; broadcast may or
+// may not work depending on the actual network state.
+//
+// タイムアウト時は警告ログを出して return する。呼び出し側は IP を
+// 取得しないケース (ESP-NOW のみで AP 非接続) を許容する必要がある。
+// UDP ソケット自体は開かれるが、ブロードキャスト送信が機能するかは
+// 実ネットワーク状態に依存する。
 // -----------------------------------------------------------------------------
 void Telemetry::waitForWifi()
 {
-    esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    esp_netif_ip_info_t ip{};
-
-    for (int attempt = 0; attempt < kWifiPollMaxAttempts; ++attempt) {
-        if (sta_netif == nullptr) {
-            // sf_comm may not have created the STA netif yet; retry the lookup.
-            // sf_comm が STA netif を未生成の可能性 → 再取得を試みる。
-            sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-        }
-
+    constexpr uint32_t kReadyTimeoutMs = 30000;  // 30s: previous polling cap
+    if (waitForWifiReady(kReadyTimeoutMs)) {
+        esp_netif_t* sta_netif =
+            esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        esp_netif_ip_info_t ip{};
         if (sta_netif != nullptr &&
-            esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK &&
-            ip.ip.addr != 0) {
+            esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK) {
             ESP_LOGI(TAG, "WiFi ready: IP=" IPSTR, IP2STR(&ip.ip));
-            return;
+        } else {
+            ESP_LOGI(TAG, "WiFi ready (IP info unavailable)");
         }
-
-        if ((attempt % 10) == 0) {
-            ESP_LOGI(TAG, "Waiting for WiFi STA IP... (%d/%d)",
-                     attempt, kWifiPollMaxAttempts);
-        }
-        vTaskDelay(kWifiPollIntervalTicks);
+        return;
     }
-
-    // TODO: Replace with proper readiness signaling (event group from sf_comm)
-    // TODO: 適切な readiness 通知（sf_comm からのイベントグループ）に置き換える
-    ESP_LOGW(TAG, "WiFi readiness timeout — proceeding anyway");
+    ESP_LOGW(TAG, "WiFi readiness timeout (%lu ms) — proceeding anyway",
+             static_cast<unsigned long>(kReadyTimeoutMs));
 }
 
 // -----------------------------------------------------------------------------

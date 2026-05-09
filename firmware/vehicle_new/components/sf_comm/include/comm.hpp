@@ -98,4 +98,23 @@ private:
                                              //   valid recv / 最終有効受信時刻
 };
 
+// -----------------------------------------------------------------------------
+// WiFi readiness signaling (used by sf_telemetry to avoid polling)
+// WiFi 準備完了通知 (sf_telemetry が polling を避けるために使う)
+// -----------------------------------------------------------------------------
+
+/// Block until WiFi STA has obtained an IPv4 address, or until timeout.
+///
+/// 内部で IP_EVENT_STA_GOT_IP を listen する EventGroup を待つため、
+/// busy-poll なしで効率的。Comm::init() が IP イベントハンドラを登録
+/// しているため、本関数を呼ぶ前に Comm::init() が完了している必要がある。
+///
+/// Internally waits on an EventGroup whose bit is set by the
+/// IP_EVENT_STA_GOT_IP handler registered in Comm::init(). No busy-polling.
+/// Comm::init() must have completed before this function is called.
+///
+/// @param timeout_ms  Maximum wait [ms]. 0 means non-blocking peek.
+/// @return true if IP is acquired within the timeout, false otherwise.
+bool waitForWifiReady(uint32_t timeout_ms);
+
 }  // namespace sf
