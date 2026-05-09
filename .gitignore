@@ -75,15 +75,18 @@ tools/log_analyzer/*.bin
 tools/log_analyzer/*.png
 
 # ====================
-# SIL simulation outputs
+# SIL simulation outputs (CSV / PNG / MP4 / log_plots / analysis text reports)
 # ====================
+firmware/vehicle_new/sim/*.csv
+firmware/vehicle_new/sim/*.png
+firmware/vehicle_new/sim/*.mp4
+firmware/vehicle_new/sim/log_plots/
+firmware/vehicle_new/sim/noise_analysis_*.txt
+# Host-built simulator test binaries (Mach-O, no extension)
 firmware/vehicle_new/sim/eskf_diag_test
 firmware/vehicle_new/sim/eskf_accel_compare
 firmware/vehicle_new/sim/eskf_sine_compare
 firmware/vehicle_new/sim/eskf_final_compare
-firmware/vehicle_new/sim/diag_sine_*.csv
-firmware/vehicle_new/sim/compare_*.csv
-# Host-built simulator test binaries (Mach-O, no extension)
 firmware/vehicle_new/sim/control_test
 firmware/vehicle_new/sim/eskf_sine_then_hover_test
 firmware/vehicle_new/sim/eskf_step_hold_test
@@ -97,6 +100,20 @@ firmware/vehicle_new/sim/tune_extended
 firmware/vehicle_new/sim/tune_final
 firmware/vehicle_new/sim/tune_lpf
 firmware/vehicle_new/sim/tune_sweep
+
+# ====================
+# Vehicle test artifacts (eskf_debug regenerable outputs)
+# ====================
+firmware/vehicle/tests/eskf_debug/*.csv
+firmware/vehicle/tests/eskf_debug/*.png
+firmware/vehicle/tests/eskf_debug/*.gif
+firmware/vehicle/tests/eskf_debug/*.mp4
+
+# ====================
+# Sample datasets (regenerable from real flights — keep README only)
+# ====================
+analysis/datasets/education/*.csv
+analysis/datasets/sysid/*.csv
 
 # ====================
 # Compiled
