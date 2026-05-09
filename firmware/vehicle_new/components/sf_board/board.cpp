@@ -20,6 +20,7 @@
 
 #include "esp_log.h"
 #include "esp_event.h"
+#include "esp_netif.h"
 #include "driver/i2c_master.h"
 #include "driver/spi_master.h"
 #include "driver/ledc.h"
@@ -128,6 +129,30 @@ esp_err_t init_event_loop()
 }
 
 // ---------------------------------------------------------------------------
+// Step: TCP/IP stack
+// ステップ: TCP/IP スタック
+// ---------------------------------------------------------------------------
+//
+// esp_netif_init() initialises the lwIP TCP/IP stack. WiFi (sf_comm) and
+// UDP socket creation (sf_telemetry) both need this to be up before they
+// run. Idempotent semantics: ESP_ERR_INVALID_STATE on re-call is benign.
+//
+// esp_netif_init() は lwIP TCP/IP スタックを初期化する。WiFi (sf_comm) と
+// UDP ソケット生成 (sf_telemetry) の両方がこの上に乗る。再呼び出しは
+// ESP_ERR_INVALID_STATE が返るが副作用なし (idempotent)。
+esp_err_t init_netif()
+{
+    esp_err_t err = esp_netif_init();
+    if (err == ESP_ERR_INVALID_STATE) {
+        // Already initialised (legacy code path). Safe to ignore.
+        // 既に初期化済み (旧コード経路)。無視して問題なし。
+        ESP_LOGI(TAG, "TCP/IP stack already initialized");
+        return ESP_OK;
+    }
+    return err;
+}
+
+// ---------------------------------------------------------------------------
 // Step: I2C master bus
 // ステップ: I2C マスターバス
 // ---------------------------------------------------------------------------
@@ -224,13 +249,18 @@ esp_err_t init()
 
     ESP_LOGI(TAG, "Phase 1 boot: initializing shared HW");
 
-    // Level 0: pre-kernel resources
+    // Level 0: pre-kernel resources (event loop + TCP/IP stack)
     esp_err_t err = init_event_loop();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "default event loop init failed: %s", esp_err_to_name(err));
         return err;
     }
-    ESP_LOGI(TAG, "  L0: default event loop ready");
+    err = init_netif();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "TCP/IP stack init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "  L0: event loop + TCP/IP stack ready");
 
     // Level 1: I2C master bus
     err = init_i2c_bus();

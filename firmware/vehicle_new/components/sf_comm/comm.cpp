@@ -158,12 +158,22 @@ static uint16_t crc16(const uint8_t* data, size_t len)
 // init — bring up WiFi (STA) and ESP-NOW, register receive callback.
 // init — WiFi (STA) と ESP-NOW を起動し、受信コールバックを登録する。
 //
-// Order matters / 順序が重要:
-//   1. esp_netif_init + default event loop
+// Prerequisites (assumed already done by app_main / sf_board):
+//   - NVS:                 nvs_flash_init() in app_main()
+//   - default event loop:  sf::internal::board::init() (Phase 1, L0)
+//   - TCP/IP stack:        sf::internal::board::init() (Phase 1, L0)
+//
+// 前提条件 (app_main / sf_board が既に行っている):
+//   - NVS:                 app_main() の nvs_flash_init()
+//   - デフォルト event loop: sf::internal::board::init() の Phase 1 L0
+//   - TCP/IP スタック:      sf::internal::board::init() の Phase 1 L0
+//
+// What this function does (in order) / 本関数の実行内容 (順序):
+//   1. STA netif の生成 (esp_netif_create_default_wifi_sta)
 //   2. esp_wifi_init / set storage / set mode(STA) / set channel / start
 //   3. esp_now_init + register recv cb
-// NVS is initialized in app_main() before this is called.
-// NVS は app_main() で本関数呼び出し前に初期化される。
+//
+// @design hardware_init.md §3 — sf_board が共有 HW 資源を所有 (R1)  [--]
 // -----------------------------------------------------------------------------
 void Comm::init()
 {
@@ -322,10 +332,15 @@ float Comm::clampUnit(float v)
 // -----------------------------------------------------------------------------
 void Comm::initWifi()
 {
-    // Initialize the TCP/IP stack and the default event loop.
-    // TCP/IP スタックとデフォルトイベントループを初期化する。
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // TCP/IP stack and default event loop are owned by sf_board (BSP),
+    // initialized in sf::internal::board::init() (Phase 1, Level 0).
+    // Per v3 design rule R1, this Comm component does not duplicate
+    // those calls — it relies on the BSP having brought them up first.
+    //
+    // TCP/IP スタックとデフォルトイベントループは sf_board (BSP) が
+    // sf::internal::board::init() の Phase 1 Level 0 で所有・初期化する。
+    // v3 設計ルール R1 に従い、本 Comm コンポーネントはそれらの呼び出し
+    // を二重化しない。BSP が先に立ち上げている前提で動く。
 
     // Create the default STA netif. Must be created before esp_wifi_init().
     // デフォルト STA netif を生成する。esp_wifi_init() より前に必要。
