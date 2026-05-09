@@ -21,6 +21,8 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "driver/i2c_master.h"
+#include "driver/spi_master.h"
+#include "driver/ledc.h"
 #include "driver/gpio.h"
 
 namespace sf::internal::board {
@@ -44,6 +46,46 @@ constexpr const char* TAG = "sf_board";
 constexpr i2c_port_num_t kI2cPort = I2C_NUM_0;
 constexpr gpio_num_t     kI2cSda  = GPIO_NUM_3;
 constexpr gpio_num_t     kI2cScl  = GPIO_NUM_4;
+
+// ---------------------------------------------------------------------------
+// IMU SPI bus (shared by BMI270 and PMW3901 OptFlow)
+// IMU SPI バス (BMI270 と PMW3901 OptFlow で共有)
+// ---------------------------------------------------------------------------
+//
+// ピン配置は M5StampFly 公式ハードウェアで固定。BMI270Wrapper の
+// defaultStampFly() と同じ値を使う必要がある。BMI270 と PMW3901 が
+// 同じバスを共有し、CS は別々 (BMI270=GPIO46, PMW3901=GPIO12)。
+//
+// Pin assignments are fixed by M5StampFly PCB. Must match
+// BMI270Wrapper::Config::defaultStampFly(). BMI270 (CS=GPIO46) and
+// PMW3901 (CS=GPIO12) share this bus with separate chip-select lines.
+constexpr spi_host_device_t kImuSpiHost = SPI2_HOST;
+constexpr gpio_num_t        kSpiMosi    = GPIO_NUM_14;
+constexpr gpio_num_t        kSpiMiso    = GPIO_NUM_43;
+constexpr gpio_num_t        kSpiSclk    = GPIO_NUM_44;
+
+// BMI270 config_file は最大 8KB。max_transfer_sz は config_file_size + header
+// で十分。ここでは BMI270 ドライバの BMI270_CONFIG_FILE_SIZE と整合する
+// 12KB (8192 + alignment margin) にする。
+//
+// BMI270 firmware config blob is 8 KiB. max_transfer_sz must accommodate
+// it plus a small header. 12 KiB matches sf_hal_bmi270's BMI270_CONFIG_FILE_SIZE.
+constexpr int kSpiMaxTransferSize = 12288;
+
+// ---------------------------------------------------------------------------
+// Motor LEDC timer
+// モータ LEDC タイマー
+// ---------------------------------------------------------------------------
+//
+// MotorDriver と整合する設定。150kHz / 8bit は M5StampFly モータの
+// 標準設定 (sf_actuator::actuator.cpp と同値)。
+//
+// Matches sf_actuator/MotorDriver: 150 kHz / 8-bit, low-speed mode for
+// ESP32-S3 (high-speed mode does not exist on S3).
+constexpr ledc_timer_t      kMotorTimer        = LEDC_TIMER_0;
+constexpr ledc_mode_t       kMotorSpeedMode    = LEDC_LOW_SPEED_MODE;
+constexpr int               kMotorPwmFreqHz    = 150000;
+constexpr ledc_timer_bit_t  kMotorPwmResolution = LEDC_TIMER_8_BIT;
 
 // ---------------------------------------------------------------------------
 // Singleton state
@@ -109,6 +151,60 @@ esp_err_t init_i2c_bus()
     return i2c_new_master_bus(&cfg, &g_i2c_bus);
 }
 
+// ---------------------------------------------------------------------------
+// Step: SPI bus (IMU + OptFlow)
+// ステップ: SPI バス (IMU + OptFlow)
+// ---------------------------------------------------------------------------
+//
+// sf_board が SPI bus を所有し、BMI270Wrapper と PMW3901Wrapper は
+// spi_bus_add_device() のみ自身で行う。BMI270 ドライバ
+// (sf_hal_bmi270/src/bmi270_spi.c) は spi_bus_initialize() の
+// ESP_ERR_INVALID_STATE を許容するパッチが入っており、二重初期化を
+// 検出して device add のみ進む。
+//
+// sf_board owns the SPI bus; BMI270Wrapper and PMW3901Wrapper only call
+// spi_bus_add_device(). The BMI270 C driver tolerates ESP_ERR_INVALID_STATE
+// from spi_bus_initialize() (already initialized) and proceeds to add_device.
+esp_err_t init_spi_bus()
+{
+    spi_bus_config_t cfg = {};
+    cfg.mosi_io_num     = kSpiMosi;
+    cfg.miso_io_num     = kSpiMiso;
+    cfg.sclk_io_num     = kSpiSclk;
+    cfg.quadwp_io_num   = -1;
+    cfg.quadhd_io_num   = -1;
+    cfg.max_transfer_sz = kSpiMaxTransferSize;
+    cfg.flags           = SPICOMMON_BUSFLAG_MASTER;
+    return spi_bus_initialize(kImuSpiHost, &cfg, SPI_DMA_CH_AUTO);
+}
+
+// ---------------------------------------------------------------------------
+// Step: LEDC motor timer
+// ステップ: LEDC モータタイマー
+// ---------------------------------------------------------------------------
+//
+// MotorDriver は ledc_channel_config() のみ自身で行う。ledc_timer_config()
+// を MotorDriver 側でも呼ぶ可能性があるが、ESP-IDF は同じ timer 番号への
+// 重複呼び出しを reconfiguration として扱うため衝突しない。それでも、
+// 「物理的所有は sf_board」「channel 設定は MotorDriver」の責務分離を
+// 明確化する目的で、ここで先に config しておく。
+//
+// MotorDriver only calls ledc_channel_config(). Even if it also calls
+// ledc_timer_config() on the same timer number, ESP-IDF treats this as
+// reconfiguration (no conflict). We pre-configure here to make ownership
+// explicit per v3 design (R1).
+esp_err_t init_motor_timer()
+{
+    ledc_timer_config_t cfg = {};
+    cfg.speed_mode      = kMotorSpeedMode;
+    cfg.duty_resolution = kMotorPwmResolution;
+    cfg.timer_num       = kMotorTimer;
+    cfg.freq_hz         = static_cast<uint32_t>(kMotorPwmFreqHz);
+    cfg.clk_cfg         = LEDC_AUTO_CLK;
+    cfg.deconfigure     = false;
+    return ledc_timer_config(&cfg);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -145,10 +241,23 @@ esp_err_t init()
     ESP_LOGI(TAG, "  L1: I2C bus ready (port=%d, SDA=%d, SCL=%d)",
              kI2cPort, kI2cSda, kI2cScl);
 
-    // Level 2-3 (SPI host, LEDC timer) will be added in M2b when imu_task
-    // and sf_actuator are migrated to board-managed handles.
-    // Level 2-3 (SPI host、LEDC タイマー) は M2b で imu_task と sf_actuator
-    // を board 経由に書き換えるときに追加する。
+    // Level 2: SPI bus (shared by IMU and OptFlow)
+    err = init_spi_bus();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "  L2: SPI bus ready (host=%d, MOSI=%d, MISO=%d, SCLK=%d)",
+             kImuSpiHost, kSpiMosi, kSpiMiso, kSpiSclk);
+
+    // Level 3: LEDC motor timer
+    err = init_motor_timer();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "LEDC motor timer init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "  L3: LEDC motor timer ready (timer=%d, freq=%d Hz, %d-bit)",
+             kMotorTimer, kMotorPwmFreqHz, kMotorPwmResolution);
 
     g_initialized = true;
     ESP_LOGI(TAG, "Phase 1 complete: BSP ready");
@@ -158,6 +267,21 @@ esp_err_t init()
 i2c_master_bus_handle_t i2c_bus()
 {
     return g_i2c_bus;
+}
+
+spi_host_device_t imu_spi()
+{
+    return kImuSpiHost;
+}
+
+ledc_timer_t motor_timer()
+{
+    return kMotorTimer;
+}
+
+ledc_mode_t motor_speed_mode()
+{
+    return kMotorSpeedMode;
 }
 
 bool sensor_present(SensorId /*id*/)

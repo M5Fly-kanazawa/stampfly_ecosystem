@@ -35,6 +35,8 @@
 
 #include "esp_err.h"
 #include "driver/i2c_master.h"
+#include "driver/spi_master.h"
+#include "driver/ledc.h"
 
 namespace sf::internal::board {
 
@@ -73,6 +75,42 @@ esp_err_t init();
  * @return I2C bus handle, or nullptr if uninitialized.
  */
 i2c_master_bus_handle_t i2c_bus();
+
+/**
+ * @brief Get the SPI host used by the IMU (and shared with OptFlow).
+ *        IMU が使う SPI ホスト (OptFlow と共有) を取得する。
+ *
+ * board::init() で spi_bus_initialize() 済み。BMI270Wrapper / PMW3901Wrapper
+ * は Config の spi_host にこの値を渡し、内部の重複初期化はスキップされる
+ * (bmi270_spi.c が ESP_ERR_INVALID_STATE を許容する)。
+ *
+ * board::init() initializes the SPI bus once. Wrappers pass this value as
+ * Config::spi_host; their internal spi_bus_initialize() is tolerated to
+ * fail with ESP_ERR_INVALID_STATE because the bus is already up.
+ *
+ * @return SPI host enum value (currently SPI2_HOST).
+ */
+spi_host_device_t imu_spi();
+
+/**
+ * @brief Get the LEDC timer used by motor PWM.
+ *        モータ PWM が使う LEDC タイマーを取得する。
+ *
+ * board::init() で ledc_timer_config() 済み。MotorDriver は本タイマー番号を
+ * 使い、ledc_channel_config() のみ自身で呼ぶ (重複した ledc_timer_config()
+ * 呼び出しは ESP-IDF 上で reconfiguration として扱われ衝突しない)。
+ *
+ * @return LEDC timer number (currently LEDC_TIMER_0).
+ */
+ledc_timer_t motor_timer();
+
+/**
+ * @brief Get the LEDC speed mode used by motor PWM.
+ *        モータ PWM の LEDC スピードモードを取得する。
+ *
+ * @return LEDC speed mode (currently LEDC_LOW_SPEED_MODE on ESP32-S3).
+ */
+ledc_mode_t motor_speed_mode();
 
 /**
  * @brief Sensor presence query for Optional-class HAL.

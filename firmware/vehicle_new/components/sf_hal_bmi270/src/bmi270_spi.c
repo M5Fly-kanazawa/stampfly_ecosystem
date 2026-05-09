@@ -99,14 +99,24 @@ esp_err_t bmi270_spi_init(bmi270_dev_t *dev, const bmi270_config_t *config) {
         .flags = SPICOMMON_BUSFLAG_MASTER,
     };
 
-    // Initialize SPI bus with DMA
+    // Initialize SPI bus with DMA. Tolerate ESP_ERR_INVALID_STATE because
+    // sf_board (BSP) may have already initialized this bus per v3 design (R1).
+    // In that case the bus is up and we just need to add this device.
+    //
+    // SPI バスを DMA 付きで初期化する。v3 設計 (R1) において sf_board (BSP)
+    // が先にこのバスを初期化している可能性がある。その場合は ESP_ERR_INVALID_STATE
+    // が返るが、バス自体は使用可能なので device add 段階に進む。
     ret = spi_bus_initialize(config->spi_host, &bus_config, SPI_DMA_CH_AUTO);
-    if (ret != ESP_OK) {
+    if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "SPI bus already initialized on host %d (assuming sf_board owns it)",
+                 config->spi_host);
+        ret = ESP_OK;
+    } else if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
         return ret;
+    } else {
+        ESP_LOGI(TAG, "SPI bus initialized on host %d", config->spi_host);
     }
-
-    ESP_LOGI(TAG, "SPI bus initialized on host %d", config->spi_host);
 
     // Configure BMI270 device
     spi_device_interface_config_t dev_config = {
