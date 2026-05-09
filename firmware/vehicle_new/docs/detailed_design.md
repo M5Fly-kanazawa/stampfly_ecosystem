@@ -105,10 +105,44 @@ auto data = estimate_state.latest();
 
 ### トピック追加手順
 
-1. `data_types.hpp` に構造体を追加
+1. `data_types.hpp` に構造体を追加（`timestamp` フィールド必須）
 2. `topics.hpp` に `extern Topic<>` 宣言を1行追加
 3. `topics.cpp` に対応する実体定義を1行追加
-4. 発行側で `publish()`、購読側で `subscribe()` を呼ぶ
+4. 発行側で `publish()`、購読側で `subscribe()` または `latest()` / `read()`
+5. **`docs/topic_reference.md` §3 の表に 1 行追加**（R9 — Topic SSOT 文書）
+6. **publisher / subscriber 側のタスクヘッダに `@publisher` / `@subscriber` アノテーション**を追加（R13）
+
+### Publisher / Subscriber アノテーション規約（R13）
+
+各タスク（`tasks/*.cpp`）の冒頭 Doxygen ブロックに、利用する Topic を明記する。これにより「どの Topic を誰が publish / subscribe するか」がコードを読むだけで分かり、`topic_reference.md` の表との一貫性も担保される。
+
+```cpp
+/**
+ * @file imu_task.cpp
+ * @brief IMU reading and state estimation task (400Hz)
+ *
+ * @publisher  sensor_imu, estimate_state
+ * @subscriber sensor_tof, sensor_flow, sensor_mag, sensor_baro
+ *
+ * @design architecture.md §6 — ImuTask                                [OK]
+ * @design detailed_design.md §8 — ImuTask: 400Hz, priority 24         [OK]
+ */
+```
+
+将来は lint で「アノテーション ↔ 実コード」の整合検証も視野に入れる。
+
+### 将来予約 Topic（v3 設計、未実装）
+
+v3 設計で 4 つの Topic を予約定義した。実装は後続マイルストーンで行うが、置き場所と入出力契約は今のうちに確定する（R11）。
+
+| Topic | データ型 | バッファ | Publisher | 用途 | 実装予定 |
+|-------|---------|--------|-----------|------|---------|
+| `sensor_imu_raw` | `ImuRawData` | RingBuffer 8 | ImuTask | キャリブ前生 IMU。L2 学習者向け教材 | M2 |
+| `sensor_health` | `SensorHealth` | Latest | sf_board / 各 task | publisher 死活監視（presence / last_update_us / quality） | M2 |
+| `command_target` | `GuidanceTarget` | Latest | Guidance / Navigator | 位置 + yaw target、ウェイポイント | M4+ |
+| `nav_path` | `NavigationPath` | Queue 4 | Navigator | 経路シーケンス | Phase 6 |
+
+詳細な使用方針・データ型定義・選定根拠は [`topic_reference.md`](topic_reference.md) §3.2 を参照。
 
 ## 3. 状態遷移テーブル
 
@@ -458,6 +492,119 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 | **合計** | **92KB** |
 
 残り約420KBでPub-Subバッファ、ESKF行列、ヒープ等を賄う。
+
+## 9. Guidance / Navigation 層の予約設計（v3）
+
+### 設計の動機
+
+vehicle_new は「学習者がレイヤーを段階的に登れる」ことを目標にしている（[`architecture.md`](architecture.md) §2.5「学習者の入口」）。学習段階の最終形は **ガイダンス（目的地・経路指定）→ ナビゲーション（経路計画）** 層であり、要件 (`requirements.md` §4) でも「ナビゲーター（将来追加）」として位置づけられている。
+
+実装は後続フェーズ（M4 以降、Phase 6）で行うが、**Topic 上の置き場所と入出力契約を v3 で確定**する（R11）。これにより：
+- Guidance / Navigation を学びたい学習者が「自分のコードはどこに書くのか」を最初から把握できる
+- 既存 Controller / Estimator のインターフェースを変更せずに追加できる構造を保証
+
+### 階層構造
+
+```
+┌─────────────────────────────────────────────┐
+│  L4 Application: free-style learner code     │
+│   "ウェイポイントを設定して飛ばす"            │
+├─────────────────────────────────────────────┤
+│  Navigator    (`sf_navigator`、将来実装)       │
+│   経路計画 → nav_path Topic                    │
+├─────────────────────────────────────────────┤
+│  Guidance     (`sf_guidance`、将来実装)        │
+│   目的地 + nav_path → command_target Topic     │
+├─────────────────────────────────────────────┤
+│  Controller   (既存 sf_controller_pid)         │
+│   command_target / command_setpoint           │
+│           → control_output                    │
+├─────────────────────────────────────────────┤
+│  Estimator    (既存 sf_estimator_eskf)        │
+└─────────────────────────────────────────────┘
+```
+
+### Topic 入出力契約
+
+| Topic | データ型（予定） | Publisher | Subscriber | Rate |
+|-------|-------------|-----------|-----------|------|
+| `nav_path` | `NavigationPath` (waypoint sequence) | Navigator | Guidance | 1Hz |
+| `command_target` | `GuidanceTarget` (position [m] + yaw [rad]) | Guidance / Navigator | ControlTask, NotifyTask | 10Hz |
+
+`NavigationPath` データ型案:
+```cpp
+struct Waypoint {
+    float x_m, y_m, z_m;
+    float yaw_rad;
+    float velocity_mps;        // 通過時の希望速度
+    float acceptance_radius_m; // 到着判定半径
+};
+
+struct NavigationPath {
+    uint32_t timestamp;
+    uint8_t  num_waypoints;
+    Waypoint waypoints[8];     // MVP は最大 8 点
+    uint8_t  current_index;    // 現在追跡中のインデックス
+};
+```
+
+`GuidanceTarget` データ型案:
+```cpp
+struct GuidanceTarget {
+    uint32_t timestamp;
+    float    position_target_m[3];  // x, y, z (NED)
+    float    yaw_target_rad;
+    float    velocity_target_mps[3]; // 速度 feed-forward (optional)
+    bool     is_active;             // false なら直接 setpoint を使う
+};
+```
+
+### Controller 側の優先順位
+
+ControlTask は `command_target`（Guidance 出力）と `command_setpoint`（パイロット直接指令）の両方を subscribe するが、**system.mode により優先順位を決める**：
+
+| system.mode | 入力 | 用途 |
+|------------|-----|------|
+| `MANUAL` (ACRO / STABILIZE / ALT / POS) | `command_setpoint` | パイロット直接操縦 |
+| `AUTO_MISSION` (将来) | `command_target` | ウェイポイント追従 |
+| `AUTO_RTH` (将来) | `command_target`（home 座標で固定） | Return To Home |
+
+これにより既存 `command_setpoint` のセマンティクスを壊さずに自律モードを追加できる。
+
+### 学習者から見える形
+
+L1 Topic API ユーザーが「自分の Navigator」「自分の Guidance」を書くときのコード例：
+
+```cpp
+// MyGuidance.cpp — 学習者のコード
+void MyGuidanceTask(void* pvParameters) {
+    while (true) {
+        // 経路を読む
+        sf::NavigationPath path;
+        if (sf::nav_path.read(path)) {
+            // 現在の位置を読む
+            auto state = sf::estimate_state.latest();
+
+            // 自分のロジックで次の target を計算
+            sf::GuidanceTarget target = my_pure_pursuit(state, path);
+            sf::command_target.publish(target);   // ← Topic に流すだけ
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));  // 10Hz
+    }
+}
+```
+
+Controller / Estimator / HW のことは何も触らずに、自分のロジックだけ書けば済む。これが 4 階層アクセスの「L1 だけで完結」の意味。
+
+### 実装フェーズ
+
+| Phase | 作業 |
+|-------|------|
+| M2 | 必要な Topic データ型 (`GuidanceTarget`, `NavigationPath`) を data_types.hpp に予約定義（実体生成は M4 以降） |
+| M4 | `sf_guidance` コンポーネント新設、Pure Pursuit / Carrot Following など基本アルゴリズムの実装 |
+| Phase 6 | `sf_navigator` コンポーネント新設、経路計画（A* / RRT などは選択肢として残す） |
+
+実装が進んだ時点で本節を更新し、`@design` ステータスを `[OK]` に更新する。
 
 ---
 
