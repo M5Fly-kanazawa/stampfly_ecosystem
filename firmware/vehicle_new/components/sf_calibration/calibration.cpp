@@ -17,11 +17,8 @@
 
 #include "calibration.hpp"
 #include "esp_log.h"
-
-// TODO: Include NVS headers
-// TODO: NVSヘッダをインクルード
-// #include "nvs_flash.h"
-// #include "nvs.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
 #include <cmath>
 #include <cstring>
@@ -151,28 +148,95 @@ void CalibrationMgr::computeLevelOffset()
 // saveToNvs — persist calibration data to NVS
 // NVS保存 — キャリブレーションデータをNVSに永続化
 // -----------------------------------------------------------------------------
+//
+// Pre-condition: nvs_flash_init() has been called from app_main() (Phase 0).
+// We open the dedicated namespace "sf_cal", store data_ as a blob under
+// the key "cal_data", commit, and close.
+//
+// 前提条件: app_main() (Phase 0) で nvs_flash_init() 済み。
+// 専用 namespace "sf_cal" を開いて、キー "cal_data" 下に data_ を blob
+// として保存、commit、close する流れ。
+// -----------------------------------------------------------------------------
 void CalibrationMgr::saveToNvs()
 {
-    // TODO: nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle)
-    // TODO: nvs_set_blob(handle, NVS_KEY, &data_, sizeof(data_))
-    // TODO: nvs_commit(handle)
-    // TODO: nvs_close(handle)
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_open failed: %s", esp_err_to_name(err));
+        return;
+    }
 
-    ESP_LOGI(TAG, "Calibration saved to NVS (stub)");
+    err = nvs_set_blob(handle, NVS_KEY, &data_, sizeof(data_));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_set_blob failed: %s", esp_err_to_name(err));
+        nvs_close(handle);
+        return;
+    }
+
+    err = nvs_commit(handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Calibration saved to NVS (%u bytes)",
+                 static_cast<unsigned>(sizeof(data_)));
+    }
+    nvs_close(handle);
 }
 
 // -----------------------------------------------------------------------------
 // loadFromNvs — load calibration data from NVS
 // NVS読み込み — NVSからキャリブレーションデータを読み込む
 // -----------------------------------------------------------------------------
+//
+// Returns true only when:
+//   1. nvs_open succeeds (namespace exists)
+//   2. nvs_get_blob succeeds with the exact stored size
+//   3. data_.valid flag is true (sentinel for genuine calibration)
+//
+// 以下の全てを満たすときのみ true を返す:
+//   1. nvs_open 成功 (namespace 存在)
+//   2. nvs_get_blob 成功、保存時と同サイズ
+//   3. data_.valid フラグが true (キャリブ完了の sentinel)
+// -----------------------------------------------------------------------------
 bool CalibrationMgr::loadFromNvs()
 {
-    // TODO: nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle)
-    // TODO: nvs_get_blob(handle, NVS_KEY, &data_, &len)
-    // TODO: nvs_close(handle)
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        // First boot or never-saved is the common case — log at INFO not ERROR.
+        // 初回起動 or 未保存は通常状況、INFO レベルでログ
+        ESP_LOGI(TAG, "NVS namespace '%s' not found (%s)",
+                 NVS_NAMESPACE, esp_err_to_name(err));
+        return false;
+    }
 
-    ESP_LOGI(TAG, "NVS load (stub)");
-    return false;  // No data yet / まだデータなし
+    size_t required = sizeof(data_);
+    err = nvs_get_blob(handle, NVS_KEY, &data_, &required);
+    nvs_close(handle);
+
+    if (err != ESP_OK) {
+        ESP_LOGI(TAG, "NVS key '%s' not found (%s)",
+                 NVS_KEY, esp_err_to_name(err));
+        return false;
+    }
+
+    if (required != sizeof(data_)) {
+        // Size mismatch means the struct layout changed since save. Treat
+        // as invalid; user must recalibrate.
+        // サイズ不一致は struct レイアウト変更を意味する。再キャリブ要求。
+        ESP_LOGW(TAG, "NVS blob size mismatch (got %u, expected %u) — discarding",
+                 static_cast<unsigned>(required),
+                 static_cast<unsigned>(sizeof(data_)));
+        std::memset(&data_, 0, sizeof(data_));
+        return false;
+    }
+
+    if (!data_.valid) {
+        ESP_LOGI(TAG, "NVS calibration blob present but valid=false");
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace sf
