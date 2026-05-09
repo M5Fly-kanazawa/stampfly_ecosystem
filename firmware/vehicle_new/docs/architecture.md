@@ -20,18 +20,24 @@
 ### レイヤードアーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Application Layer    タスク: StateTask, etc.     │
-├─────────────────────────────────────────────────┤
-│  Service Layer        状態管理, 通知, ログ, 通信    │
-├─────────────────────────────────────────────────┤
-│  Algorithm Layer      状態推定, 制御, フィルタ      │
-├─────────────────────────────────────────────────┤
-│  HAL Layer            IMU, Motor, LED, ToF, etc.  │
-├─────────────────────────────────────────────────┤
-│  Hardware             ESP32-S3 peripherals        │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  Application Layer    タスク: StateTask, etc.         │
+├─────────────────────────────────────────────────────┤
+│  Service Layer        状態管理, 通知, ログ, 通信        │
+├─────────────────────────────────────────────────────┤
+│  Algorithm Layer      状態推定, 制御, フィルタ          │
+├─────────────────────────────────────────────────────┤
+│  HAL Layer            IMU, Motor, LED, ToF, etc.      │
+├─────────────────────────────────────────────────────┤
+│  BSP Layer  (sf_board)  共有HW資源の唯一の所有者:        │
+│                         I2C/SPI bus, LEDC timer,     │
+│                         esp_netif, event_loop, NVS    │
+├─────────────────────────────────────────────────────┤
+│  Hardware             ESP32-S3 peripherals            │
+└─────────────────────────────────────────────────────┘
 ```
+
+**BSP（Board Support Package）層の役割:** 複数の HAL コンポーネント（ToF / Baro / Mag / Power 等が共有する I2C バス、IMU が使う SPI バス、Motor / LED / Buzzer が共有する LEDC タイマー、WiFi / ESP-NOW が必要とする esp_netif と event_loop など）を **唯一の場所で所有・初期化する**。各 HAL は `sf_board` から bus handle を借りて動作する（extern グローバル禁止）。詳細は [`hardware_init.md`](hardware_init.md) を参照。
 
 ### コンポーネント一覧
 
@@ -59,6 +65,46 @@
 - **コールバック集約**: 状態遷移のリセット処理はonExit/onEnterに集約
 - **疎結合**: コンポーネント間はPub-Subトピック経由で通信、直接依存しない
 
+### 横断ルール（v3）
+
+旧 vehicle/ で発生したスパゲッティ徴候、組み込み制御業界標準パターン、教育用ファームとしての要請をまとめた 16 項目。実装はこれらに違反しないこと。違反を発見したら設計矛盾として即時報告する。
+
+**HW / 起動シーケンス**
+
+| # | ルール |
+|---|------|
+| R1 | `sf_board` が共有 HW 資源（I2C/SPI/LEDC/esp_netif/event_loop/NVS）の唯一の所有者である |
+| R2 | HAL は Config 経由で bus handle を借用する（2 段階初期化、戻り値は `esp_err_t`） |
+| R3 | `main.cpp` は線形・宣言的（Phase 0→1→2→3→4 を読めば起動順序が完全に分かる） |
+| R4 | 失敗を 3 段階に分類: Critical = `abort()`、Optional = `sensor_present(id) = false` で続行、Recoverable = task ループ内 retry + ログ throttle |
+
+**コンポーネント間通信**
+
+| # | ルール |
+|---|------|
+| R5 | データ共有は Pub-Sub Topic のみ。複数 producer / 複数 consumer が同じバッファに無ロック並走することを禁止 |
+| R6 | CLI コマンドはレジストリパターン（`{name, callback}` 配列で登録）。CLI 用の extern グローバルポインタを作らない |
+| R7 | 同期手段は **3 種類のみ**: Pub-Sub Topic / `xTaskNotify` / `std::atomic`。`volatile bool` の散在を禁止 |
+
+**学習者対応（4 階層アクセス）**
+
+| # | ルール |
+|---|------|
+| R8 | 公開 API は `sf::api` namespace、内部 API は `sf::internal` namespace に分離。学習者は `sf::api` のみを include する |
+| R9 | `docs/topic_reference.md` を Topic SSOT 文書とする。Topic 追加時は同時に表を更新する PR 必須 |
+| R10 | 学習者バイパス機構を提供（`params::sim::use_true_*` 等で Estimator/Controller を素朴化、SIL/学習段階で各層を独立検証可能） |
+| R11 | Guidance / Navigation Topic を予約定義（`command_target`, `nav_path`）。実装は将来でも、置き場所と入出力契約を今決める |
+| R12 | `firmware/workshop/` の HAL コピーを廃止し、vehicle_new の HAL を共有する。Workshop API は L0 ラッパーとして再実装する |
+
+**Topic 運用**
+
+| # | ルール |
+|---|------|
+| R13 | 各 task ヘッダに `@publisher` / `@subscriber` アノテーションで Topic 利用関係を明記する |
+| R14 | 各 Topic に `overflow_count` を内蔵し、telemetry / sensor_health から監視可能にする |
+| R15 | `sensor_health` Topic を `sf_board` が 1Hz publish（各センサの presence / last_update_us / quality） |
+| R16 | タイムスタンプ付きデータ（`CommandSetpoint` 等）は subscriber 側でタイムアウト判定し、Failsafe 発動の根拠とする |
+
 ### 責務 ↔ ESP-IDF コンポーネント対応表
 
 設計上の14責務は、ESP-IDF のコンポーネント単位に展開すると、以下の対応で実装される。1つの責務がインターフェース層 + 実装層に分かれる場合（差替可能設計のため）や、責務に直接対応しない基盤コンポーネント（Pub-Subフレームワーク、数学ライブラリ）が存在する。
@@ -81,8 +127,43 @@
 | 14 | 通知 | `sf_notify`, `sf_hal_led`, `sf_hal_buzzer` | ロジック層 + ハード層 |
 | — | （責務外）Pub-Sub基盤、データ型、トピック定義、パラメータ基盤 | `sf_core` | 全コンポーネントの基盤 |
 | — | （責務外）数学ライブラリ（Vector / Matrix / Quaternion） | `sf_math` | 推定/制御から共有 |
+| — | （責務外）BSP — 共有HW資源の所有・初期化 | `sf_board` | I2C/SPI/LEDC/netif/event_loop/NVS の所有者 |
 
-**実装コンポーネント数: 26**（HAL 10 + 責務系 14 + コア基盤 2）
+**実装コンポーネント数: 27**（HAL 10 + 責務系 14 + コア基盤 3）
+
+### 学習者の入口（4 階層アクセス）
+
+vehicle_new は **学習者がレベルに応じて入口を選べる** 並列 API を提供する。Workshop 受講者から HW 学習者、ファーム実装者まで、全員が同じファームウェアを共有しつつ、自分のテーマに集中できる。
+
+| 層 | 名前空間 | 典型ユーザー | できること |
+|----|---------|------------|----------|
+| **L0: Sketch API** | `ws::*` | Workshop 受講者・初心者 | `setup()` / `loop_400Hz(dt)`、`ws::motor_set_duty()`, `ws::gyro_x()` 等の 30+ 関数で完結。HW・タスク・Topic 知識ゼロでフライト制御まで体験 |
+| **L1: Topic API** | `sf::api::*` | 推定・制御・ガイダンス学習者 | Topic を subscribe / publish して自分の ESKF / PID / Navigator を実装。`IEstimator` / `IController` を実装して既存と差替え |
+| **L2: HAL Direct** | `stampfly::*Wrapper` | HW 学習者 | `BMI270Wrapper.readSensorData()` 等を直接呼び、SPI / I2C / RMT / LEDC を理解。Topic を介さない経路 |
+| **L3: BSP Internal** | `sf::internal::board` | ファーム実装者・拡張者 | `sf_board` の getter で bus handle を取得、esp-idf 直叩き。起動順序や HW 資源管理を変更できる |
+
+各層は **並列に共存する** — Workshop 受講者は L0 だけ、PID 学習者は L1 だけ、BMI270 の SPI 通信を理解したい学生は L2 まで降りる。**HW を「隠す」のではなく「学べる」** よう、どの層も完成度高く整備する。
+
+#### HW 要素から見た入口マッピング
+
+| HW 要素 | L0 (Sketch) | L1 (Topic) | L2 (HAL) | L3 (BSP) |
+|---------|-----------|-----------|----------|----------|
+| BMI270 IMU | `ws::gyro_x()` | `sensor_imu` | `BMI270Wrapper` | SPI bus |
+| BMP280 Baro | `ws::baro_altitude()` | `sensor_baro` | `BMP280Wrapper` | I2C bus |
+| BMM150 Mag | `ws::mag_x()` | `sensor_mag` | `BMM150Wrapper` | I2C bus |
+| VL53L3CX ToF | `ws::tof_bottom()` | `sensor_tof` | `VL53L3CXWrapper` | I2C + XSHUT |
+| PMW3901 Flow | `ws::flow_vx()` | `sensor_flow` | `PMW3901Wrapper` | SPI bus |
+| Power monitor | `ws::battery_voltage()` | `sensor_power` | `PowerMonitor` | I2C |
+| LEDC PWM motor | `ws::motor_set_duty()` | `actuator_motor` | `MotorDriver` | LEDC timer |
+| WS2812 RGB LED | `ws::led_color()` | (`notify_pattern`) | `LEDDriver` | RMT |
+| Buzzer | (内部) | (`notify_tone`) | `BuzzerDriver` | LEDC ch |
+| Button | (内部) | (`button_event`) | `ButtonDriver` | GPIO ISR |
+| ESP-NOW | (内部) | `command_setpoint` | `sf_comm` | WiFi STA |
+| WiFi UDP | (内部) | (telemetry pkt) | `sf_telemetry` | netif/socket |
+
+L0〜L2 は学習者が任意に選択し、隣接層へ階段的に降りられる構造とする。L3 はファーム実装者専用（学習者は通常触らない）。
+
+詳細な API 設計指針と Examples 計画は [`coding_and_education.md`](coding_and_education.md) を参照。
 
 ## 3. インターフェース設計
 
@@ -396,6 +477,67 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 |---|---|---|
 | キャリブレーション管理 | 状態管理のonEnterコールバックから呼ばれる | INIT/IDLE時のみ動作、常駐不要 |
 | ナビゲーター | 将来追加時に独立タスクとして追加 | 初期実装では構造のみ |
+| BSP（`sf_board`） | `app_main()` の Phase 1 で `sf::board::init()` を 1 回呼ぶ | 起動時 1 回のみ、常駐タスクなし |
+
+## 7. ハードウェア初期化と所有権
+
+### 設計の背景
+
+旧 `firmware/vehicle/` では、共有 HW 資源（I2C バス、esp_netif、WiFi 等）の所有が複数モジュールに分散していた。例: I2C バスは `init.cpp` の file-scope static、`esp_netif_create_default_wifi_sta()` は `controller_comm.cpp` 内、センサ wrapper 群は `globals.hpp` の extern グローバル。これにより以下の問題が発生した。
+
+- 初期化順序の暗黙依存（順番を間違えると crash）
+- 「このグローバルは誰が所有しているか」がコードを読んで追えない
+- センサ init 失敗時の挙動が WARN + fail-through で、後続の null pointer リスクがあった
+
+vehicle_new では、これらを **`sf_board` という単一の BSP コンポーネントに集約** する。
+
+### sf_board の責務
+
+`sf_board` は以下の共有 HW 資源の **唯一の所有者** である。
+
+| 資源 | 用途 | 借用する HAL |
+|------|------|------------|
+| I2C master bus | 30Hz〜100Hz の低レートセンサ通信 | sf_hal_bmp280, sf_hal_bmm150, sf_hal_vl53l3cx, sf_hal_power |
+| SPI host (IMU) | 400Hz の IMU 通信 | sf_hal_bmi270 |
+| SPI host (Flow) | 100Hz の OptFlow 通信 | sf_hal_pmw3901 |
+| LEDC timer | PWM モータ・LED・ブザー駆動 | sf_hal_motor, sf_hal_led, sf_hal_buzzer |
+| esp_netif + event_loop | TCP/IP スタックとイベントループ | sf_comm（WiFi/ESP-NOW実体）, sf_telemetry（UDP socket） |
+| NVS partition | パラメータ・キャリブレーション永続化 | sf_calibration, params system |
+
+各 HAL は **`sf_board` から bus handle を Config 経由で借りて** 動作する（extern グローバル禁止、R1〜R2）。
+
+### 起動シーケンス（main.cpp の宣言的構造）
+
+```cpp
+extern "C" void app_main() {
+  // Phase 0: pre-kernel resources
+  ESP_ERROR_CHECK(nvs_flash_init());
+
+  // Phase 1: BSP init — all shared HW resources
+  ESP_ERROR_CHECK(sf::board::init());
+
+  // Phase 2: Pub-Sub topics
+  sf::topics_init();
+
+  // Phase 3: parameter loading from NVS
+  sf::params::loadFromNvs();
+
+  // Phase 4: tasks
+  sf::tasks::start_all();
+}
+```
+
+`main.cpp` は線形・宣言的（R3）。Phase 1 の `sf::board::init()` 内部で I2C → SPI → LEDC → netif → event_loop → 各センサ HAL → アクチュエータ HAL の順に初期化される。順序変更が必要な場合は `board.cpp` 1 ファイル内のみで完結する。
+
+### 失敗の 3 段階分類
+
+| 分類 | 例 | 挙動 |
+|------|-----|-----|
+| **Critical** | BMI270, モータ HAL, NVS | `abort()` でブートを止め、LED 赤点滅でユーザーに伝達 |
+| **Optional** | BMM150, Front ToF | `sensor_present(id) = false` でフラグ降ろし、機能無効で続行 |
+| **Recoverable** | 一時的 I/O エラー | task ループ内で retry、`READ_FAIL_LOG_INTERVAL` で警告抑制 |
+
+詳細な分類リスト・LED エラーパターン・HAL との接続規約・namespace 規約は [`hardware_init.md`](hardware_init.md) を参照。
 
 ---
 
@@ -415,20 +557,26 @@ This document defines the architecture design of vehicle_new, based on the requi
 
 ## 2. Responsibility Assignment (14 Components)
 
+> **v3 update note:** The Japanese §2 has been extended with cross-cutting rules R1–R16, a new BSP layer (`sf_board`), and the 4-tier learner access model (L0 Sketch / L1 Topic / L2 HAL / L3 BSP). Full English translation will be completed in milestone M1c. For the authoritative v3 design, see the Japanese sections above and [`hardware_init.md`](hardware_init.md).
+
 ### Layered Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Application Layer    Tasks: StateTask, etc.     │
-├─────────────────────────────────────────────────┤
-│  Service Layer        State Mgr, Notify, Log     │
-├─────────────────────────────────────────────────┤
-│  Algorithm Layer      Estimation, Control, Filter│
-├─────────────────────────────────────────────────┤
-│  HAL Layer            IMU, Motor, LED, ToF, etc. │
-├─────────────────────────────────────────────────┤
-│  Hardware             ESP32-S3 peripherals       │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  Application Layer    Tasks: StateTask, etc.         │
+├─────────────────────────────────────────────────────┤
+│  Service Layer        State Mgr, Notify, Log         │
+├─────────────────────────────────────────────────────┤
+│  Algorithm Layer      Estimation, Control, Filter    │
+├─────────────────────────────────────────────────────┤
+│  HAL Layer            IMU, Motor, LED, ToF, etc.     │
+├─────────────────────────────────────────────────────┤
+│  BSP Layer  (sf_board)  Sole owner of shared HW:     │
+│                         I2C/SPI bus, LEDC timer,    │
+│                         esp_netif, event_loop, NVS   │
+├─────────────────────────────────────────────────────┤
+│  Hardware             ESP32-S3 peripherals           │
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Component List

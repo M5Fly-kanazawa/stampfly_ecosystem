@@ -465,13 +465,14 @@ When developing this codebase, follow this order:
 
 ## vehicle_new（次世代機体ファームウェア）
 
-`firmware/vehicle_new/` の実装・修正を行う場合は、**作業開始前に必ず以下の5文書を読むこと:**
+`firmware/vehicle_new/` の実装・修正を行う場合は、**作業開始前に必ず以下の6文書を読むこと:**
 
 1. `firmware/vehicle_new/docs/requirements.md` — 要件定義書
-2. `firmware/vehicle_new/docs/architecture.md` — アーキテクチャ設計書
+2. `firmware/vehicle_new/docs/architecture.md` — アーキテクチャ設計書（v3: 4階層アクセス + 横断ルール R1〜R16 + BSP 層）
 3. `firmware/vehicle_new/docs/detailed_design.md` — 詳細設計書
 4. `firmware/vehicle_new/docs/coding_and_education.md` — **コーディング方針・教育計画（必読）**
 5. `firmware/vehicle_new/docs/development_roadmap.md` — **開発ロードマップ・SIL→実機ワークフロー（必読）** — 3原則（Code/Param/Model Identity）、ACROレート制御を起点とする層別プラント同定戦略、Phase 0〜6 の合格基準
+6. `firmware/vehicle_new/docs/hardware_init.md` — **BSP・ハードウェア初期化設計** — sf_board 責務、起動シーケンス、Critical/Optional/Recoverable 分類、HAL 接続規約、namespace 規約（sf::api / sf::internal）
 
 **特に重要な原則:**
 - コードは**ドローンファームを作ろうとする人が参考にできる模範的なソースコード**であること
