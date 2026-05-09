@@ -57,7 +57,7 @@ brew install python@3.12
 
 ### 1-5. エディタ
 
-`sf lesson edit` は VSCode → vi/vim の順で探して起動します。`vi` は macOS 標準なので追加インストール不要、VSCode を使いたい場合は以下でインストールします。
+このチュートリアルでは後ほどソースコード（`user_code.cpp`）を書き換える場面があります。エディタとして VSCode か vi/vim を用意します。`vi` は macOS 標準で追加インストール不要、VSCode を使いたい場合は以下でインストールします。
 
 #### VSCode
 
