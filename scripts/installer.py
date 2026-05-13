@@ -148,32 +148,75 @@ def _idf_tools_path_candidates() -> list[Path]:
     return [Path.home() / ".espressif"]
 
 
-def _find_idf_python(idf_path: Path) -> Optional[Path]:
-    """Find ESP-IDF's virtual environment Python directly.
-    ESP-IDFの仮想環境Pythonを直接検索する
+def _idf_major_minor(idf_path: Path) -> Optional[str]:
+    """Extract MAJOR.MINOR from ESP-IDF version (e.g. v5.5.2 -> '5.5').
+    ESP-IDF バージョンから MAJOR.MINOR を抽出
 
-    Scans IDF_TOOLS_PATH (default: ~/.espressif or C:\\Espressif) for
-    python_env/idf*_py*/Scripts/python.exe (Windows) or bin/python (Unix).
+    Tries version.txt / git describe first, falls back to parsing the
+    directory name (esp-idf-v5.4 -> 5.4) so multi-version setups can be
+    distinguished even when one of the trees has no .git/version.txt.
     """
+    import re
+    version = ESPIDFDetector._get_version(idf_path)
+    if version.startswith("v"):
+        parts = version.lstrip("v").split(".")
+        if len(parts) >= 2:
+            return f"{parts[0]}.{parts[1]}"
+    # Fallback: parse directory name e.g. esp-idf-v5.4
+    # フォールバック: ディレクトリ名から抽出 (esp-idf-v5.4 等)
+    m = re.search(r"v(\d+)\.(\d+)", idf_path.name)
+    if m:
+        return f"{m.group(1)}.{m.group(2)}"
+    return None
+
+
+def _find_idf_python(idf_path: Path) -> Optional[Path]:
+    """Find the ESP-IDF venv Python that matches `idf_path`.
+    `idf_path` に対応する ESP-IDF venv の Python を探す
+
+    ESP-IDF names its venv directories ``idf<MAJOR.MINOR>_py<MAJOR.MINOR>_env``.
+    When multiple ESP-IDF versions coexist (e.g. v5.4 and v5.5), the user may
+    pick one in the installer prompt — we MUST return the venv that matches
+    that specific ESP-IDF version, not just any venv that happens to be
+    present. Otherwise pip will silently install into the wrong venv.
+
+    複数バージョン共存時、選択した ESP-IDF と無関係な venv に install されない
+    よう、idf_path のバージョンに一致する venv のみ返す。マッチが見つから
+    なければ None (ESP-IDF 未インストール、未活性化、または命名規約違反)。
+    """
+    target = _idf_major_minor(idf_path)
+    if not target:
+        # Without a confirmed version we cannot pick a venv safely; a wrong
+        # guess would silently install into the wrong ESP-IDF's venv.
+        # バージョン不明時に推測で venv を返すと別 ESP-IDF の venv に
+        # 誤って install してしまうため、fail closed する
+        return None
+    prefix = f"idf{target}_py"
+
+    bin_subdir = "Scripts" if sys.platform == "win32" else "bin"
+    python_name = "python.exe" if sys.platform == "win32" else "python"
+
     for base in _idf_tools_path_candidates():
         python_env_dir = base / "python_env"
         if not python_env_dir.exists():
             continue
-        # Find the newest idf*_py*_env directory
-        # 最新の idf*_py*_env ディレクトリを探す
         try:
-            venvs = sorted(python_env_dir.iterdir(), reverse=True)
+            entries = list(python_env_dir.iterdir())
         except OSError:
             continue
-        for venv_dir in venvs:
-            if not venv_dir.is_dir():
-                continue
-            if sys.platform == "win32":
-                python_exe = venv_dir / "Scripts" / "python.exe"
-            else:
-                python_exe = venv_dir / "bin" / "python"
+        # Pick newest Python (sort descending) that matches the ESP-IDF prefix
+        # ESP-IDF バージョンに一致する venv のうち Python 版が一番新しいものを選ぶ
+        candidates = [
+            d for d in entries
+            if d.is_dir() and d.name.startswith(prefix) and d.name.endswith("_env")
+        ]
+        for venv_dir in sorted(candidates, reverse=True):
+            python_exe = venv_dir / bin_subdir / python_name
             if python_exe.exists():
                 return python_exe
+
+    # Strict match failed — caller can treat None as "venv not built yet"
+    # 厳密マッチに失敗 — venv 未作成と同じ扱い
     return None
 
 
@@ -271,7 +314,21 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
     venv_python = _find_idf_python(idf_path)
     if venv_python:
         cmd = [str(venv_python), "-m", "pip"] + pip_args
-        return subprocess.run(cmd).returncode
+        # Strip env vars that would steer pip toward a user venv / conda env
+        # instead of the ESP-IDF venv we are explicitly targeting. pip respects
+        # VIRTUAL_ENV/CONDA_PREFIX for warnings and PYTHONHOME/PYTHONPATH for
+        # interpreter setup; leaving them set can cause subtle missteps even
+        # when the python binary itself is the right one.
+        # 既に user venv / conda が activate されていると VIRTUAL_ENV 等が
+        # 継承され pip が誤誘導されうるので、ESP-IDF venv に絞った subprocess
+        # ではこれらを必ず除去する
+        env = os.environ.copy()
+        for var in ("VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
+                    "CONDA_SHLVL", "PYTHONHOME", "PYTHONPATH",
+                    "PIP_REQUIRE_VIRTUALENV", "PIP_TARGET", "PIP_PREFIX",
+                    "PIP_USER"):
+            env.pop(var, None)
+        return subprocess.run(cmd, env=env).returncode
 
     # Fallback: venv not yet created (e.g. mid-install). Source export script.
     # フォールバック: venv 未作成時のみ export スクリプトを source する
@@ -533,34 +590,117 @@ class Installer:
         self.config_file = self.config_dir / "config.toml"
 
     def _is_sfcli_installed(self, idf_path: Path) -> bool:
-        """Check if sfcli is installed in ESP-IDF Python environment.
-        sfcliがESP-IDF Python環境にインストール済みか確認"""
-        if sys.platform == "win32":
-            # Use venv Python directly
-            # venv Pythonを直接使用
-            venv_python = _find_idf_python(idf_path)
-            if venv_python:
-                try:
-                    result = subprocess.run(
-                        [str(venv_python), "-c", "import sfcli"],
-                        capture_output=True, text=True,
-                    )
-                    return result.returncode == 0
-                except Exception:
-                    return False
+        """Check if sfcli is installed AND importable in the ESP-IDF venv.
+        sfcli が ESP-IDF venv で実際に import できるか確認
+
+        We deliberately do this with the venv python by absolute path (not via
+        a sourced export.sh) so the check answers "is sfcli importable from
+        this specific venv" rather than "is sfcli importable from whatever
+        python happens to be on PATH after activation." The latter has been
+        a source of false positives when pyenv shims override the venv.
+        絶対パスで venv python を呼び、activate 経由ではなく直接 import を
+        試す。PATH 経由だと pyenv 等が誤誘導して false positive になる。
+        """
+        venv_python = _find_idf_python(idf_path)
+        if not venv_python:
             return False
+        try:
+            result = subprocess.run(
+                [str(venv_python), "-c", "import sfcli"],
+                capture_output=True, text=True,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    # Alias to make the intent explicit at the post-install verification site.
+    # 同じチェックを post-install 検証用に別名で公開しておく
+    _verify_sfcli_import = _is_sfcli_installed
+
+    def _diagnose_broken_install(self, idf_path: Path) -> None:
+        """Print actionable diagnostic info when sfcli is unimportable
+        despite pip having reported a successful install.
+        pip が成功と報告したのに sfcli が import できない状態の診断情報を出す"""
+        venv_python = _find_idf_python(idf_path)
+        if not venv_python:
+            error(f"  No ESP-IDF venv matching {idf_path} was found.")
+            error("  Run ESP-IDF's install.sh first, then re-run this installer.")
+            return
+
+        site_pkgs = venv_python.parent.parent / "lib"
+        # Find sfcli-related artifacts
+        # sfcli 関連の成果物を列挙
+        try:
+            artifacts = []
+            for p in site_pkgs.rglob("__editable__.stampfly*"):
+                artifacts.append(("pth", p))
+            for p in site_pkgs.rglob("stampfly_ecosystem-*.dist-info"):
+                artifacts.append(("dist-info", p))
+            for p in (venv_python.parent / "sf",):
+                if p.exists():
+                    artifacts.append(("shim", p))
+        except OSError:
+            artifacts = []
+
+        error("  Diagnostic info:")
+        error(f"    venv python : {venv_python}")
+        error(f"    repo root   : {self.root}")
+        kinds = {kind for kind, _ in artifacts}
+        if not artifacts:
+            error("    No sfcli artifacts found in venv.")
+            error("    pip likely installed into a different python (e.g. a")
+            error("    pre-activated user venv / conda env).")
         else:
-            env_prefix = _build_idf_env_command(idf_path)
-            inner = f'{env_prefix} && python -c "import sfcli"'
-            try:
-                result = subprocess.run(
-                    ["bash", "-c", inner],
-                    capture_output=True,
-                    text=True,
-                )
-                return result.returncode == 0
-            except Exception:
-                return False
+            for kind, p in artifacts:
+                error(f"    {kind:10s}: {p}")
+            # Diagnose the asymmetry between what pip recorded and what
+            # actually resolves at import time
+            # pip の記録と実際の import 解決の食い違いを診断
+            if "pth" not in kinds and ("dist-info" in kinds or "shim" in kinds):
+                error("    >>> No editable .pth file. pip records the package as")
+                error("    >>> installed (dist-info exists) but sys.path will not")
+                error("    >>> include the source dir → import fails.")
+            for kind, p in artifacts:
+                if kind == "pth":
+                    try:
+                        target = p.read_text().strip().splitlines()[0]
+                        target_p = Path(target)
+                        if not target_p.exists():
+                            error(f"    >>> .pth points to NON-EXISTENT path: {target}")
+                            error("    >>> The repo was moved/renamed, or installed from")
+                            error("    >>> a symlinked path that no longer resolves.")
+                    except (OSError, IndexError):
+                        pass
+        error("")
+        error("  Recovery: ensure no user venv / conda env is active, then re-run")
+        error("    deactivate 2>/dev/null; conda deactivate 2>/dev/null; ./install.sh --clean")
+
+    def _warn_if_env_preactivated(self) -> None:
+        """Detect pre-activated user venv / conda env and warn the user.
+        ユーザの venv / conda env が事前 activate されていたら警告
+
+        Even with our subprocess env-sanitization, an active VIRTUAL_ENV
+        or CONDA_PREFIX is a strong signal the user expected pip to land
+        somewhere other than the ESP-IDF venv. Surface it loudly.
+        subprocess 側で環境変数を消すように直したが、ユーザの意図と齟齬が
+        ある可能性が高いので、警告だけは出しておく。
+        """
+        venv = os.environ.get("VIRTUAL_ENV")
+        conda = os.environ.get("CONDA_PREFIX")
+        if not venv and not conda:
+            return
+        warn("An active Python environment was detected:")
+        if venv:
+            warn(f"  VIRTUAL_ENV  = {venv}")
+        if conda:
+            warn(f"  CONDA_PREFIX = {conda}")
+        warn("The installer will still target the ESP-IDF venv directly, but")
+        warn("you should consider deactivating before running this script:")
+        if venv:
+            warn("  deactivate")
+        if conda:
+            warn("  conda deactivate")
+        print()
 
     def run(
         self,
@@ -570,6 +710,12 @@ class Installer:
         force: bool = False,
     ) -> int:
         """Run installation"""
+
+        # Surface pre-activated venv / conda env early so the user can
+        # course-correct before pip operations begin.
+        # 事前 activate 済みの環境は最初に警告して、pip が動き始める前に
+        # ユーザが軌道修正できるようにする
+        self._warn_if_env_preactivated()
 
         # Step 1: Find or install ESP-IDF
         header("Step 1/3: ESP-IDF")
@@ -712,6 +858,22 @@ class Installer:
                     if rc != 0:
                         error("Failed to install sfcli")
                         return 1
+
+        # Post-install verification: actually try to import sfcli using the
+        # ESP-IDF venv's python. pip can report success while leaving the
+        # editable install in a half-broken state (e.g. .pth pointing to a
+        # path that no longer exists, or the install having landed in a
+        # different venv that happened to be on PATH). The shim alone is not
+        # enough — we must verify the module actually loads.
+        # インストール後検証: ESP-IDF venv の python で実際に sfcli を
+        # import できることを確認する。pip が「成功」と表示しても editable
+        # の .pth が壊れていたり、別 venv に着地したりすることがあるため、
+        # shim の有無だけでなく実際の import 成否を確認しなければ意味がない
+        if not self._verify_sfcli_import(idf_path):
+            error("sfcli was reported as installed but cannot be imported "
+                  "from the ESP-IDF venv.")
+            self._diagnose_broken_install(idf_path)
+            return 1
 
         success("StampFly CLI installed!")
         print()
