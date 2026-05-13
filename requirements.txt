@@ -36,6 +36,7 @@ esptool>=4.6
 # ============================================================
 # Using argparse (built-in) for main CLI
 jinja2>=3.1.0            # Template engine for scaffolding
+PyYAML>=6.0              # YAML config loader (used by sf sysid / sf eskf)
 
 # ============================================================
 # Image Processing (optional, for visualization)

@@ -35,6 +35,7 @@ dependencies = [
     "pyserial>=3.5",
     "jinja2>=3.1.0",
     "websockets>=12.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
