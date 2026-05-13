@@ -10,7 +10,9 @@ setuptools>=68.0,<81
 # ============================================================
 # Core - Required for all functionality
 # ============================================================
-numpy>=1.24.0
+# numpy upper bound matches opencv-python's constraint (numpy<2.3.0)
+# numpyの上限はopencv-pythonの要件 (numpy<2.3.0) に合わせる
+numpy>=1.24.0,<2.3.0
 scipy>=1.10.0
 matplotlib>=3.7.0
 pandas>=2.0.0

@@ -18,6 +18,7 @@ Options:
 """
 
 import os
+import shlex
 import sys
 import subprocess
 import shutil
@@ -190,24 +191,33 @@ def _build_idf_env_command(idf_path: Path) -> str:
 
 def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
     """Run pip in ESP-IDF Python environment.
-    ESP-IDFのPython環境でpipを実行"""
+    ESP-IDFのPython環境でpipを実行
+
+    NOTE: Callers must pass pip_args as plain (unquoted) strings. This function
+    applies shell-appropriate quoting internally. Passing pre-quoted values
+    (e.g. f'"{path}"') will double-quote and break commands containing version
+    specifiers like 'setuptools>=68.0,<81' where '>' and '<' would otherwise be
+    interpreted as shell redirections.
+    """
     if sys.platform == "win32":
         # Use venv Python directly instead of export.bat to avoid PATH conflicts
         # PATH競合を避けるため、export.batではなくvenv Pythonを直接使用
         venv_python = _find_idf_python(idf_path)
         if venv_python:
-            # Strip shell quotes from args (not needed for list-based subprocess)
-            # リスト形式のsubprocessではシェル引用符は不要なので除去
-            clean_args = [a.strip('"') for a in pip_args]
-            cmd = [str(venv_python), "-m", "pip"] + clean_args
+            cmd = [str(venv_python), "-m", "pip"] + pip_args
             return subprocess.run(cmd).returncode
         # Fallback: export.bat (if venv not found yet, e.g. during initial install)
+        # cmd.exe quoting via subprocess.list2cmdline
         export_script = idf_path / "export.bat"
-        escaped = " ".join(pip_args)
+        escaped = subprocess.list2cmdline(pip_args)
         cmd = f'call "{export_script}" && python -m pip {escaped}'
         return subprocess.run(cmd, shell=True, env=_clean_env_for_cmd()).returncode
     else:
-        escaped = " ".join(pip_args)
+        # POSIX-safe quoting prevents shell metacharacters (<, >, |, &, ;, $, *)
+        # in version specifiers or paths from being interpreted by bash
+        # POSIX安全なクォートで <, >, | 等のメタ文字がリダイレクト等に
+        # 解釈されないようにする
+        escaped = " ".join(shlex.quote(arg) for arg in pip_args)
         env_prefix = _build_idf_env_command(idf_path)
         inner = f'{env_prefix} && python -m pip {escaped}'
         return subprocess.run(["bash", "-c", inner]).returncode
@@ -601,7 +611,7 @@ class Installer:
                     pip_args = ["install"]
                     if force:
                         pip_args.append("--force-reinstall")
-                    pip_args.extend(["-e", f'"{self.root}"'])
+                    pip_args.extend(["-e", str(self.root)])
                     rc = _run_in_idf_env(idf_path, pip_args)
                     if rc != 0:
                         error("Failed to install sfcli")
@@ -614,7 +624,7 @@ class Installer:
                     requirements = self.root / "requirements.txt"
                     if requirements.exists():
                         info("Installing all dependencies...")
-                        pip_args = ["install", "-r", f'"{requirements}"']
+                        pip_args = ["install", "-r", str(requirements)]
                         rc = _run_in_idf_env(idf_path, pip_args)
                         if rc != 0:
                             warn("Some dependencies may have failed to install")
@@ -626,7 +636,7 @@ class Installer:
                     pip_args = ["install"]
                     if force:
                         pip_args.append("--force-reinstall")
-                    pip_args.extend(["-e", f'"{self.root}"'])
+                    pip_args.extend(["-e", str(self.root)])
                     rc = _run_in_idf_env(idf_path, pip_args)
                     if rc != 0:
                         error("Failed to install sfcli")
