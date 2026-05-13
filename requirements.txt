@@ -17,6 +17,14 @@ scipy>=1.10.0
 matplotlib>=3.7.0
 pandas>=2.0.0
 
+# ESP-IDF venv constraint: pyparsing<3.3 (matplotlib pulls it transitively).
+# Without this pin, matplotlib's resolver upgrades pyparsing past ESP-IDF's
+# allowed range and `source export.sh` fails to activate the venv.
+# ESP-IDF venv の制約: pyparsing<3.3 (matplotlibが推移的に引き込む)。
+# このピンがないと matplotlib が pyparsing を ESP-IDF の許容範囲外に上げ、
+# source export.sh が venv の活性化に失敗する
+pyparsing>=3.1.0,<3.3
+
 # ============================================================
 # Serial Communication
 # ============================================================

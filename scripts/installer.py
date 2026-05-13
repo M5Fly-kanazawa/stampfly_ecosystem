@@ -193,30 +193,35 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
     """Run pip in ESP-IDF Python environment.
     ESP-IDFのPython環境でpipを実行
 
-    NOTE: Callers must pass pip_args as plain (unquoted) strings. This function
-    applies shell-appropriate quoting internally. Passing pre-quoted values
-    (e.g. f'"{path}"') will double-quote and break commands containing version
-    specifiers like 'setuptools>=68.0,<81' where '>' and '<' would otherwise be
-    interpreted as shell redirections.
+    Strategy: always prefer calling the venv's python executable directly.
+    Sourcing export.sh is unreliable because: (1) ESP-IDF's activate_venv.py
+    can fail silently (exit non-zero internally but `source` returns 0), and
+    (2) pyenv shims or other PATH-priority tools can intercept `python` even
+    after a successful activation, causing pip to install into the WRONG
+    interpreter. Calling the venv python by absolute path bypasses both.
+
+    戦略: 常に venv の python を絶対パスで直接呼び出す。export.sh の
+    source は信頼できない: 内部で失敗しても `source` 自体は 0 を返すこと
+    があり、また pyenv shim 等が PATH 優先で `python` を奪うことがある。
+
+    NOTE: Callers must pass pip_args as plain (unquoted) strings. This
+    function applies shell-appropriate quoting internally for fallback paths.
     """
+    # Primary path: call venv python by absolute path (no shell, no PATH)
+    # 主経路: venv の python を絶対パスで直接呼ぶ (シェル/PATH に依存しない)
+    venv_python = _find_idf_python(idf_path)
+    if venv_python:
+        cmd = [str(venv_python), "-m", "pip"] + pip_args
+        return subprocess.run(cmd).returncode
+
+    # Fallback: venv not yet created (e.g. mid-install). Source export script.
+    # フォールバック: venv 未作成時のみ export スクリプトを source する
     if sys.platform == "win32":
-        # Use venv Python directly instead of export.bat to avoid PATH conflicts
-        # PATH競合を避けるため、export.batではなくvenv Pythonを直接使用
-        venv_python = _find_idf_python(idf_path)
-        if venv_python:
-            cmd = [str(venv_python), "-m", "pip"] + pip_args
-            return subprocess.run(cmd).returncode
-        # Fallback: export.bat (if venv not found yet, e.g. during initial install)
-        # cmd.exe quoting via subprocess.list2cmdline
         export_script = idf_path / "export.bat"
         escaped = subprocess.list2cmdline(pip_args)
         cmd = f'call "{export_script}" && python -m pip {escaped}'
         return subprocess.run(cmd, shell=True, env=_clean_env_for_cmd()).returncode
     else:
-        # POSIX-safe quoting prevents shell metacharacters (<, >, |, &, ;, $, *)
-        # in version specifiers or paths from being interpreted by bash
-        # POSIX安全なクォートで <, >, | 等のメタ文字がリダイレクト等に
-        # 解釈されないようにする
         escaped = " ".join(shlex.quote(arg) for arg in pip_args)
         env_prefix = _build_idf_env_command(idf_path)
         inner = f'{env_prefix} && python -m pip {escaped}'
@@ -307,16 +312,23 @@ class ESPIDFDetector:
     @classmethod
     def get_python_env(cls, idf_path: Path) -> Optional[Path]:
         """Get the Python environment for an ESP-IDF installation.
-        ESP-IDFインストールのPython環境を取得"""
-        if sys.platform == "win32":
-            # Find venv Python directly (avoids export.bat PATH issues)
-            # venv Pythonを直接検索（export.batのPATH問題を回避）
-            venv_python = _find_idf_python(idf_path)
-            if venv_python:
-                return venv_python
-        else:
-            # Use _build_idf_env_command to handle WSL2 PATH filtering
-            # WSL2 PATH除外を含むコマンドを使用
+        ESP-IDFインストールのPython環境を取得
+
+        Locates the venv Python by absolute path. Sourcing export.sh and
+        running 'which python' is unreliable: if activate_venv.py fails
+        (e.g. constraint violation), `source` still exits 0 and `which
+        python` returns pyenv's shim instead of the venv interpreter.
+        絶対パスで venv の python を特定する。`source export.sh` 経由は
+        activate_venv.py が失敗しても `source` 自体は 0 を返すため、
+        pyenv shim 等を誤検出する危険がある。
+        """
+        venv_python = _find_idf_python(idf_path)
+        if venv_python:
+            return venv_python
+
+        # Fallback only when venv has not been created yet
+        # venv 未作成時のみフォールバック
+        if sys.platform != "win32":
             env_prefix = _build_idf_env_command(idf_path)
             inner = f'{env_prefix} && which python'
             try:
