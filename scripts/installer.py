@@ -620,11 +620,26 @@ class Installer:
     def _diagnose_broken_install(self, idf_path: Path) -> None:
         """Print actionable diagnostic info when sfcli is unimportable
         despite pip having reported a successful install.
-        pip が成功と報告したのに sfcli が import できない状態の診断情報を出す"""
+        pip が成功と報告したのに sfcli が import できない状態の診断情報を出す
+
+        Always ends with both a "preferred" recovery (re-run ./install.sh
+        --clean after deactivating any user env) and a "manual escape hatch"
+        that bypasses install.sh entirely — so even when the high-level
+        installer cannot make progress for some reason (e.g. broken stdin,
+        no network, intermediate scripts misbehaving), the user has a
+        concrete shell command they can paste to recover.
+        ./install.sh --clean が何らかの理由で先に進めないケースに備えて、
+        必ず手動の脱出経路(venv python を絶対パスで叩く pip コマンド)も
+        併記する。
+        """
         venv_python = _find_idf_python(idf_path)
         if not venv_python:
-            error(f"  No ESP-IDF venv matching {idf_path} was found.")
-            error("  Run ESP-IDF's install.sh first, then re-run this installer.")
+            error("  No ESP-IDF venv matching this ESP-IDF installation was found.")
+            error(f"    idf_path : {idf_path}")
+            error("  This typically means ESP-IDF's own install.sh has not been run")
+            error("  for this version yet. Run it manually, then re-run this installer:")
+            error(f"    bash {idf_path}/install.sh esp32s3")
+            error("    ./install.sh")
             return
 
         site_pkgs = venv_python.parent.parent / "lib"
@@ -646,10 +661,12 @@ class Installer:
         error(f"    venv python : {venv_python}")
         error(f"    repo root   : {self.root}")
         kinds = {kind for kind, _ in artifacts}
+        scenario = None  # what kind of break we detected
         if not artifacts:
             error("    No sfcli artifacts found in venv.")
             error("    pip likely installed into a different python (e.g. a")
             error("    pre-activated user venv / conda env).")
+            scenario = "wrong_target"
         else:
             for kind, p in artifacts:
                 error(f"    {kind:10s}: {p}")
@@ -660,6 +677,7 @@ class Installer:
                 error("    >>> No editable .pth file. pip records the package as")
                 error("    >>> installed (dist-info exists) but sys.path will not")
                 error("    >>> include the source dir → import fails.")
+                scenario = "missing_pth"
             for kind, p in artifacts:
                 if kind == "pth":
                     try:
@@ -669,11 +687,48 @@ class Installer:
                             error(f"    >>> .pth points to NON-EXISTENT path: {target}")
                             error("    >>> The repo was moved/renamed, or installed from")
                             error("    >>> a symlinked path that no longer resolves.")
+                            scenario = "stale_pth"
                     except (OSError, IndexError):
                         pass
+        # Surface any pre-activated user env that probably contributed
+        # 寄与している可能性のある pre-activated 環境を表示
+        active_venv = os.environ.get("VIRTUAL_ENV")
+        active_conda = os.environ.get("CONDA_PREFIX")
+        if active_venv or active_conda:
+            error("")
+            error("  Detected an active Python environment that may be interfering:")
+            if active_venv:
+                error(f"    VIRTUAL_ENV  = {active_venv}")
+            if active_conda:
+                error(f"    CONDA_PREFIX = {active_conda}")
+
         error("")
-        error("  Recovery: ensure no user venv / conda env is active, then re-run")
-        error("    deactivate 2>/dev/null; conda deactivate 2>/dev/null; ./install.sh --clean")
+        error("  Recommended recovery (preferred):")
+        if active_venv or active_conda:
+            error("    deactivate 2>/dev/null; conda deactivate 2>/dev/null")
+        error("    ./install.sh --clean")
+        error("")
+        error("  Manual escape hatch (if ./install.sh --clean does not work):")
+        error(f"    {venv_python} -m pip uninstall -y stampfly-ecosystem")
+        constraint = _find_idf_constraint_file(idf_path)
+        if constraint:
+            error(f"    {venv_python} -m pip install \\")
+            error(f"        -c {constraint} \\")
+            error(f"        -e {self.root}")
+        else:
+            error(f"    {venv_python} -m pip install -e {self.root}")
+        error(f"    {venv_python} -c 'import sfcli; print(sfcli.__file__)'")
+        error("")
+        if scenario == "stale_pth":
+            error("  If the manual escape hatch is run from the CURRENT repo path,")
+            error("  the new .pth will point at the right place and the import will work.")
+        elif scenario == "wrong_target":
+            error("  The manual escape hatch bypasses PATH/env entirely by calling")
+            error("  the venv python with its absolute path, so a pre-activated env")
+            error("  cannot misroute the install.")
+        elif scenario == "missing_pth":
+            error("  Uninstall + reinstall via the manual escape hatch will rewrite")
+            error("  the editable .pth file and unblock the import.")
 
     def _warn_if_env_preactivated(self) -> None:
         """Detect pre-activated user venv / conda env and warn the user.
