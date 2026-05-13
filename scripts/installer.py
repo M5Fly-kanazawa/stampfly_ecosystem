@@ -137,6 +137,17 @@ def _clean_env_for_cmd() -> dict:
     return env
 
 
+def _idf_tools_path_candidates() -> list[Path]:
+    """Return likely IDF_TOOLS_PATH locations in priority order.
+    IDF_TOOLS_PATH の候補を優先順に返す"""
+    tools_path = os.environ.get("IDF_TOOLS_PATH")
+    if tools_path:
+        return [Path(tools_path)]
+    if sys.platform == "win32":
+        return [Path("C:/Espressif"), Path.home() / ".espressif"]
+    return [Path.home() / ".espressif"]
+
+
 def _find_idf_python(idf_path: Path) -> Optional[Path]:
     """Find ESP-IDF's virtual environment Python directly.
     ESP-IDFの仮想環境Pythonを直接検索する
@@ -144,17 +155,7 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
     Scans IDF_TOOLS_PATH (default: ~/.espressif or C:\\Espressif) for
     python_env/idf*_py*/Scripts/python.exe (Windows) or bin/python (Unix).
     """
-    # Determine IDF_TOOLS_PATH
-    # IDF_TOOLS_PATH を決定
-    tools_path = os.environ.get("IDF_TOOLS_PATH")
-    if tools_path:
-        candidates = [Path(tools_path)]
-    elif sys.platform == "win32":
-        candidates = [Path("C:/Espressif"), Path.home() / ".espressif"]
-    else:
-        candidates = [Path.home() / ".espressif"]
-
-    for base in candidates:
+    for base in _idf_tools_path_candidates():
         python_env_dir = base / "python_env"
         if not python_env_dir.exists():
             continue
@@ -173,6 +174,52 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
                 python_exe = venv_dir / "bin" / "python"
             if python_exe.exists():
                 return python_exe
+    return None
+
+
+def _find_idf_constraint_file(idf_path: Path) -> Optional[Path]:
+    """Find ESP-IDF's pip constraint file for the given installation.
+    ESP-IDF のインストールに対応する pip constraint ファイルを探す
+
+    ESP-IDF writes a version-specific constraint file like
+    `<IDF_TOOLS_PATH>/espidf.constraints.v<major.minor>.txt` during install.
+    Passing this via `pip install -c <file>` keeps user-installed packages
+    inside the version ranges ESP-IDF's own scripts validate against, so
+    `source export.sh`'s activate_venv.py check never fails because a
+    transitive dep (e.g. pyparsing pulled by matplotlib) was upgraded past
+    ESP-IDF's allowed range.
+
+    ESP-IDF はインストール時に
+    `<IDF_TOOLS_PATH>/espidf.constraints.v<メジャー.マイナー>.txt`
+    というバージョン固有の constraint ファイルを書き出す。これを
+    `pip install -c <file>` で渡せば、ユーザ追加パッケージが ESP-IDF の
+    許容範囲外に押し出されることを防げる(例: matplotlib が引き込む
+    pyparsing が ESP-IDF の <3.3 範囲を超えて upgrade される問題)。
+    """
+    # Try exact match by ESP-IDF version (vMAJOR.MINOR)
+    # ESP-IDF バージョンに正確にマッチするファイルを探す
+    version = ESPIDFDetector._get_version(idf_path)
+    major_minor: Optional[str] = None
+    if version.startswith("v"):
+        parts = version.split(".")
+        if len(parts) >= 2:
+            major_minor = ".".join(parts[:2])  # e.g. "v5.5"
+
+    for base in _idf_tools_path_candidates():
+        if not base.exists():
+            continue
+        if major_minor:
+            specific = base / f"espidf.constraints.{major_minor}.txt"
+            if specific.exists():
+                return specific
+        # Fallback: pick newest matching glob in this base
+        # フォールバック: globで一番新しいものを選ぶ
+        try:
+            matches = sorted(base.glob("espidf.constraints.v*.txt"), reverse=True)
+        except OSError:
+            continue
+        if matches:
+            return matches[0]
     return None
 
 
@@ -207,6 +254,18 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
     NOTE: Callers must pass pip_args as plain (unquoted) strings. This
     function applies shell-appropriate quoting internally for fallback paths.
     """
+    # Auto-inject ESP-IDF's constraint file for `install` commands so that
+    # transitive deps (e.g. pyparsing pulled by matplotlib) cannot be
+    # upgraded past ESP-IDF's pinned ranges. Without this, every
+    # pip install --force-reinstall -e . will resolve dependencies fresh
+    # from pyproject.toml and re-break the venv.
+    # install サブコマンドには ESP-IDF の constraint ファイルを自動付与し、
+    # 推移的依存が ESP-IDF の許容範囲外に upgrade されることを防ぐ
+    if pip_args and pip_args[0] == "install":
+        constraint = _find_idf_constraint_file(idf_path)
+        if constraint and "-c" not in pip_args and "--constraint" not in pip_args:
+            pip_args = [pip_args[0], "-c", str(constraint)] + pip_args[1:]
+
     # Primary path: call venv python by absolute path (no shell, no PATH)
     # 主経路: venv の python を絶対パスで直接呼ぶ (シェル/PATH に依存しない)
     venv_python = _find_idf_python(idf_path)
