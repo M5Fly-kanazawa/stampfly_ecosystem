@@ -52,6 +52,40 @@ def _get_user_code_path() -> Path:
     return paths.workshop() / "main" / USER_CODE
 
 
+def _ensure_user_code_exists() -> bool:
+    """Bootstrap user_code.cpp from the Lesson 0 seed if absent.
+
+    Mirrors the CMake configure-time bootstrap in
+    firmware/workshop/main/CMakeLists.txt so that commands which only
+    read or edit user_code.cpp (without invoking a build) still work on a
+    fresh clone, before any `idf.py reconfigure` has been run.
+
+    user_code.cpp は CMake configure 時にも自動生成されるが、
+    `sf lesson edit` のようにビルドを経由しないコマンドのために、
+    sf 側にも同等の bootstrap を置く（新規 clone 直後でも動作させる）。
+
+    Returns True if the file exists (or was created), False if bootstrap
+    failed (seed missing or copy error).
+    """
+    user_code = _get_user_code_path()
+    if user_code.exists():
+        return True
+
+    seed = _get_lessons_dir() / "lesson_00_setup" / "student.cpp"
+    if not seed.exists():
+        return False
+
+    try:
+        user_code.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(seed, user_code)
+    except OSError:
+        return False
+
+    console.info("Bootstrapped user_code.cpp from Lesson 0 template")
+    console.print(f"  Path: {user_code}")
+    return True
+
+
 def _load_manifest() -> Optional[List[Dict[str, Any]]]:
     """Load lesson manifest YAML. Returns None if unavailable."""
     manifest_path = _get_lessons_dir() / MANIFEST_FILE
@@ -636,14 +670,17 @@ def _editor_install_hint() -> List[str]:
 
 def run_edit(args: argparse.Namespace) -> int:
     """Open user_code.cpp in the editor"""
-    user_code = _get_user_code_path()
-
-    if not user_code.exists():
-        console.error(f"user_code.cpp not found: {user_code}")
+    if not _ensure_user_code_exists():
+        user_code = _get_user_code_path()
+        console.error(
+            f"user_code.cpp not found and Lesson 0 seed is missing: {user_code}"
+        )
         console.print()
         console.print("  Switch to a lesson first:")
         console.print("    sf lesson switch <N>")
         return 1
+
+    user_code = _get_user_code_path()
 
     preferred = getattr(args, "editor", None)
     found = _find_editor(preferred)
