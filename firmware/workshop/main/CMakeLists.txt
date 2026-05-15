@@ -4,6 +4,22 @@
 set(VEHICLE_TASKS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/main/tasks")
 set(VEHICLE_MAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/main")
 
+# Auto-bootstrap user_code.cpp from the Lesson 0 seed if absent.
+# This file is gitignored; `sf lesson switch` overwrites it on demand,
+# and existing edits are preserved (NOT EXISTS guard).
+# user_code.cpp が無ければ Lesson 0 テンプレートから生成する（gitignore 対象）
+# `sf lesson switch` での上書きは従来通り、編集済みファイルは保護される
+set(USER_CODE "${CMAKE_CURRENT_SOURCE_DIR}/user_code.cpp")
+set(USER_CODE_SEED "${CMAKE_CURRENT_SOURCE_DIR}/../lessons/lesson_00_setup/student.cpp")
+if(NOT EXISTS "${USER_CODE}")
+    if(NOT EXISTS "${USER_CODE_SEED}")
+        message(FATAL_ERROR
+            "user_code.cpp bootstrap failed: seed not found at ${USER_CODE_SEED}")
+    endif()
+    configure_file("${USER_CODE_SEED}" "${USER_CODE}" COPYONLY)
+    message(STATUS "[workshop] Bootstrapped user_code.cpp from Lesson 0 template")
+endif()
+
 idf_component_register(
     SRCS
         "workshop_main.cpp"
