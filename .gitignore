@@ -153,6 +153,7 @@ _wip/
 # Private documents (conference papers, etc.)
 # 非公開ドキュメント（学会原稿等）
 docs/sci26/
+docs/juida2026/
 
 # ====================
 # Build / runtime caches
