@@ -169,3 +169,9 @@ docs/workshop/slides/beamer/*.listing
 # Temporary / WIP firmware projects
 # ====================
 firmware/my_drone/
+
+# ====================
+# Local binary backups
+# ローカルバイナリバックアップ
+# ====================
+*.bak.bin
