@@ -1,6 +1,7 @@
 # Build artifacts / ビルド成果物
 sil_min_check
 integrated_sil
+old_eskf_check
 *.o
 *.out
 

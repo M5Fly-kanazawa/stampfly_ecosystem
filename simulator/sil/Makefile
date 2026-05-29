@@ -45,6 +45,19 @@ sil_min_check: sil_min_check.cpp $(CORE_SRCS)
 integrated_sil: integrated_sil.cpp $(CORE_SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+# M11 regression challenge: compile the LEGACY firmware/vehicle ESKF by
+# reference (unmodified) via the compat shim. Foundation for reproducing
+# known legacy bugs (P-collapse, BA divergence) in the SIL.
+# M11 回帰チャレンジ: 旧 firmware/vehicle のESKFを compat シム経由で
+# 無改変参照コンパイル。既知の旧バグをSILで再現する基盤。
+OLD = ../../firmware/vehicle
+OLD_ESKF_CXXFLAGS = -std=c++17 -O2 -Wall -I compat \
+  -I $(OLD)/components/sf_algo_eskf/include \
+  -I $(OLD)/components/sf_algo_math/include
+
+old_eskf_check: old_eskf_check.cpp $(OLD)/components/sf_algo_eskf/eskf.cpp
+	$(CXX) $(OLD_ESKF_CXXFLAGS) -o $@ $^ -lm
+
 check: sil_min_check
 	./sil_min_check
 
