@@ -160,13 +160,23 @@ int main(int argc, char** argv)
     // 旧 sil_main は time() ベースのシードだった。
     srand(1);
 
-    // --- Parse scenario ---
+    // --- Parse CLI: --scenario <name>, --feedback {truth|eskf}, --gust ---
+    // CLI解析: --scenario <name>, --feedback {truth|eskf}, --gust
     Scenario scn = Scenario::NOMINAL;
-    for (int i = 1; i < argc - 1; i++) {
-        if (std::strcmp(argv[i], "--scenario") == 0) scn = parseScenario(argv[i + 1]);
+    bool feedback_eskf = false;  // false=true attitude (M3 baseline), true=ESKF attitude (L4 closed loop)
+    bool use_gust = false;       // inject body-frame gusts during FLYING / FLYING中に突風注入
+    for (int i = 1; i < argc; i++) {
+        if (std::strcmp(argv[i], "--scenario") == 0 && i + 1 < argc) {
+            scn = parseScenario(argv[++i]);
+        } else if (std::strcmp(argv[i], "--feedback") == 0 && i + 1 < argc) {
+            feedback_eskf = (std::strcmp(argv[++i], "eskf") == 0);
+        } else if (std::strcmp(argv[i], "--gust") == 0) {
+            use_gust = true;
+        }
     }
 
-    fprintf(stderr, "=== StampFly Integrated SIL (scenario=%s) ===\n", scenarioName(scn));
+    fprintf(stderr, "=== StampFly Integrated SIL (scenario=%s, feedback=%s, gust=%s) ===\n",
+            scenarioName(scn), feedback_eskf ? "eskf" : "truth", use_gust ? "on" : "off");
 
     // --- Topics, StateManager, Failsafe ---
     topics_init();
@@ -234,6 +244,21 @@ int main(int argc, char** argv)
     bool eskf_ready = false;
     bool was_airborne = false;
     bool mission_complete = false;  // set true after first full land / 初回着陸完了で true
+
+    // --- Gust schedule (body-frame force[N]/torque[Nm], injected only while FLYING) ---
+    // --- 突風スケジュール（body座標 力[N]/トルク[Nm]、FLYING中のみ注入）---
+    // Values from flight_scenario_test.cpp (wind on asymmetric body), retimed to
+    // this harness's FLYING window (~t=4.5..10s). Enabled with --gust.
+    // 値は flight_scenario_test.cpp 由来（非対称体への風）、本ハーネスの
+    // FLYING期間(~t=4.5..10s)に再配置。--gust で有効化。
+    struct Gust { float t, dur; Vec3 force, torque; const char* name; };
+    const Gust gusts[] = {
+        {5.0f, 0.5f,  {0.0f,   -0.012f, 0.0f},  {6e-5f,  0.0f,   0.0f}, "side wind"},
+        {6.5f, 0.2f,  {0.015f, 0.01f,   0.0f},  {-5e-5f, 7e-5f,  0.0f}, "strong burst"},
+        {7.5f, 1.5f,  {0.003f, -0.003f, 0.0f},  {2e-5f,  -2e-5f, 0.0f}, "turbulence"},
+        {9.2f, 0.15f, {0.02f,  0.0f,    0.005f},{0.0f,   8e-5f,  0.0f}, "sharp gust"},
+    };
+    const int n_gusts = 4;
     Vec3 cal_accel_sum = {}, cal_gyro_sum = {};
     int cal_count = 0;
 
@@ -404,9 +429,11 @@ int main(int argc, char** argv)
             eskf.resetPositionVelocity();
             was_airborne = false;
         }
-        // Control uses true attitude (ESKF attitude is open-loop, as in sil_main)
-        // 制御は真値姿勢を使用（ESKF姿勢はオープンループ、sil_main と同じ）
-        Vec3 est_euler = true_st.attitude.to_euler();
+        // Attitude fed to control: truth (M3 baseline) or ESKF estimate (closed loop).
+        // With --feedback eskf this becomes a true L4 closed loop (estimate in the loop).
+        // 制御に渡す姿勢: 真値(M3基準) または ESKF推定(閉ループ)。
+        // --feedback eskf で真のL4閉ループ（推定値をループ内に）になる。
+        Vec3 est_euler = feedback_eskf ? eskf_euler : true_st.attitude.to_euler();
 
         // --- Control (motors only when airborne) ---
         float thrust = 0;
@@ -424,6 +451,19 @@ int main(int argc, char** argv)
             torque[1] = rate_p.compute(rate_sp_p - true_st.angular_rate.y, dt);
             torque[2] = rate_y.compute(0 - true_st.angular_rate.z, dt);
         }
+
+        // --- Gust injection (FLYING only, if enabled) ---
+        // --- 突風注入（FLYING中のみ、有効時）---
+        Vec3 gust_f = {}, gust_tq = {};
+        if (use_gust && st == FlightState::FLYING) {
+            for (int gi = 0; gi < n_gusts; gi++) {
+                if (t >= gusts[gi].t && t < gusts[gi].t + gusts[gi].dur) {
+                    gust_f += gusts[gi].force;
+                    gust_tq += gusts[gi].torque;
+                }
+            }
+        }
+        quad.setExternalForceBody(gust_f, gust_tq);
 
         // --- Mixer + physics ---
         float motor_duty[4] = {0, 0, 0, 0};
