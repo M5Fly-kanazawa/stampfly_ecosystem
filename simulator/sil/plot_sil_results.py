@@ -14,6 +14,7 @@
 
 import io
 import os
+import re
 import subprocess
 
 import numpy as np
@@ -135,13 +136,67 @@ def plot_altitude_overlay(datasets):
     return path
 
 
+def run_eval(extra_args):
+    """Run the SIL and parse roll RMS [deg] from the evaluation summary (stderr)."""
+    res = subprocess.run(["./integrated_sil"] + extra_args, capture_output=True, text=True)
+    m = re.search(r"roll : RMS=([\d.]+)", res.stderr)
+    return float(m.group(1)) if m else float("nan")
+
+
+def plot_diagnostic_ladder():
+    """Figure 4: attitude error vs noise stage (the diagnostic ladder, M5)."""
+    stages = ["N0", "N1", "N2"]
+    rms = [run_eval(["--feedback", "eskf", "--noise-stage", s]) for s in stages]
+    fig, ax = plt.subplots(figsize=(6, 4))
+    bars = ax.bar(stages, rms, color=["#2ca02c", "#ff7f0e", "#d62728"])
+    for b, v in zip(bars, rms):
+        ax.text(b.get_x() + b.get_width() / 2, v + 0.03, f"{v:.2f}", ha="center")
+    ax.set_ylabel("roll RMS [deg]")
+    ax.set_title("Diagnostic ladder — attitude error vs noise stage (--feedback eskf)")
+    ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    path = os.path.join(OUT_DIR, "fig4_diagnostic_ladder.png")
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+
+
+def plot_ab_sweep():
+    """Figure 5: control-design A/B sweeps of LPF alpha and ESKF R (M6)."""
+    alphas = [0.32, 0.20, 0.10, 0.05]
+    rms_a = [run_eval(["--feedback", "eskf", "--noise-stage", "N2", "--lpf-alpha", str(a)])
+             for a in alphas]
+    Rs = [0.3, 1.0, 3.0, 10.0]
+    rms_r = [run_eval(["--feedback", "eskf", "--noise-stage", "N2", "--accel-noise", str(r)])
+             for r in Rs]
+    fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+    ax[0].plot(alphas, rms_a, "o-", color="#1f77b4")
+    ax[0].set_xlabel("LPF alpha (smaller = stronger filter)")
+    ax[0].set_ylabel("roll RMS [deg]")
+    ax[0].set_title("LPF sweep (eskf, N2)")
+    ax[0].grid(alpha=0.3)
+    ax[0].invert_xaxis()
+    ax[1].plot(Rs, rms_r, "s-", color="#9467bd")
+    ax[1].set_xlabel("ESKF accel-noise R (larger = trust accel less)")
+    ax[1].set_ylabel("roll RMS [deg]")
+    ax[1].set_title("ESKF R sweep (eskf, N2)")
+    ax[1].grid(alpha=0.3)
+    fig.tight_layout()
+    path = os.path.join(OUT_DIR, "fig5_ab_sweep.png")
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     datasets = {scn: run_scenario(scn) for scn in SCENARIOS}
     p1 = plot_nominal_detail(datasets["nominal"])
     p2 = plot_state_timelines(datasets)
     p3 = plot_altitude_overlay(datasets)
-    for p in (p1, p2, p3):
+    p4 = plot_diagnostic_ladder()
+    p5 = plot_ab_sweep()
+    for p in (p1, p2, p3, p4, p5):
         print("wrote", p)
 
 
