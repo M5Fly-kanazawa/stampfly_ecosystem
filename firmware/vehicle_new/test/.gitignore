@@ -1,0 +1,5 @@
+# Build artifacts / ビルド成果物
+test_vehicle_new
+test_state_manager
+*.o
+*.out
