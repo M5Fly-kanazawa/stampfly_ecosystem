@@ -83,8 +83,20 @@ old_eskf_regression: old_eskf_regression.cpp \
                      $(FW)/components/sf_estimator_eskf/eskf_core.cpp
 	$(CXX) $(REG_CXXFLAGS) -o $@ $^ -lm
 
+# M7 differential diagnosis: replay a REAL flight log (converted by
+# log_to_replay.py) through the legacy ESKF (primary) + redesign (bonus) as
+# open-loop observers, and compare the SIL estimate against the firmware's own
+# logged ESKF output. Same reference-compile as old_eskf_regression (both ESKFs).
+# M7 差分診断: 実機フライトログ(log_to_replay.py で変換)を旧ESKF(主)+新(ボーナス)
+# にオープンループ観測で再生し、SIL推定をファーム自身のログESKF出力と照合。
+# old_eskf_regression と同じ参照コンパイル(両ESKF)。
+log_replay: log_replay.cpp \
+            $(OLD)/components/sf_algo_eskf/eskf.cpp \
+            $(FW)/components/sf_estimator_eskf/eskf_core.cpp
+	$(CXX) $(REG_CXXFLAGS) -o $@ $^ -lm
+
 check: sil_min_check
 	./sil_min_check
 
 clean:
-	rm -f sil_min_check integrated_sil old_eskf_check old_eskf_regression
+	rm -f sil_min_check integrated_sil old_eskf_check old_eskf_regression log_replay

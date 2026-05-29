@@ -3,6 +3,7 @@ sil_min_check
 integrated_sil
 old_eskf_check
 old_eskf_regression
+log_replay
 *.o
 *.out
 
