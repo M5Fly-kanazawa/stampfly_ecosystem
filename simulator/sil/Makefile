@@ -69,11 +69,18 @@ REG_CXXFLAGS = -std=c++17 -O2 -Wall -Wextra \
   -I compat \
   -I $(FW)/components/sf_math/include \
   -I $(FW)/components/sf_controller_pid/include \
+  -I $(FW)/components/sf_estimator_eskf/include \
   -I $(FW)/sim \
   -I $(OLD)/components/sf_algo_eskf/include \
   -I $(OLD)/components/sf_algo_math/include
 
-old_eskf_regression: old_eskf_regression.cpp $(OLD)/components/sf_algo_eskf/eskf.cpp
+# M11-3 extends the harness to drive the NEW ESKF (eskf_core.cpp) alongside the
+# legacy one on identical inputs — an A/B that shows the redesign fixes A/C.
+# M11-3 はハーネスを拡張し新ESKF(eskf_core.cpp)を旧と同一入力で並走駆動 —
+# redesign が A/C を直すことを示すA/B。
+old_eskf_regression: old_eskf_regression.cpp \
+                     $(OLD)/components/sf_algo_eskf/eskf.cpp \
+                     $(FW)/components/sf_estimator_eskf/eskf_core.cpp
 	$(CXX) $(REG_CXXFLAGS) -o $@ $^ -lm
 
 check: sil_min_check

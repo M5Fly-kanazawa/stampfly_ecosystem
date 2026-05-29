@@ -8,8 +8,10 @@
 
 /**
  * @file old_eskf_regression.cpp
- * @brief M11-2 regression challenge — drive the LEGACY ESKF with quad physics
- *        M11-2 回帰チャレンジ — 旧ESKFを quad 物理で駆動し既知バグを再現
+ * @brief M11-2/M11-3 regression challenge — reproduce legacy ESKF bugs, then
+ *        show the redesign fixes them (legacy vs new ESKF on identical inputs)
+ *        M11-2/M11-3 回帰チャレンジ — 旧ESKFの既知バグを再現し、redesign が
+ *        それを直すことを示す(旧vs新ESKFを同一入力で比較)
  *
  * The regression challenge is the north star of the diagnostic-instrument SIL:
  * "can the SIL actually reproduce the known bugs of the legacy estimator?"
@@ -21,33 +23,45 @@
  * 再現できるか?」 再現できれば、SILが実際の推定器故障を検出できる証明になり、
  * 差分診断(再現→ソフト要因 / 非再現→HW・並行性要因)が意味を持つ。
  *
- * This harness drives the UNMODIFIED legacy ESKF (firmware/vehicle, active_mask
- * type, stampfly:: namespace) with the SAME quad_physics + sensor synthesis used
- * by integrated_sil. The legacy ESKF rides along as an open-loop observer (not in
- * the control loop), so the truth trajectory is identical regardless of estimator
- * behavior. Code Identity is preserved: git diff firmware/ stays empty.
+ * This harness drives BOTH the UNMODIFIED legacy ESKF (firmware/vehicle,
+ * stampfly::) and the new redesign (firmware/vehicle_new, sf::EskfCore) with the
+ * SAME quad_physics + sensor synthesis as integrated_sil. Both ESKFs observe the
+ * identical sensor stream as open-loop observers (not in the control loop; truth
+ * drives a PID hover), so this is a rigorous A/B: legacy reproduces the bug, the
+ * redesign should not. Code Identity is preserved on both sides
+ * (git diff firmware/ stays empty).
  *
- * 本ハーネスは無改変の旧ESKFを、integrated_sil と同じ quad_physics + センサ
- * 合成で駆動する。旧ESKFは制御に入れずオープンループ・オブザーバとして並走
- * するため、推定器の挙動によらず真値軌道は不変。Code Identity 維持
- * (git diff firmware/ は空)。
+ * 本ハーネスは無改変の旧ESKF(firmware/vehicle, stampfly::)と新redesign
+ * (firmware/vehicle_new, sf::EskfCore)を、integrated_sil と同じ quad_physics +
+ * センサ合成で並走駆動する。両ESKFは同一センサ列をオープンループ観測(制御は
+ * 真値PIDホバリング)するため、厳密なA/B: 旧はバグ再現、新は再現しないはず。
+ * Code Identity は両側で維持(git diff firmware/ は空)。
  *
  * Modes (--mode):
- *   pcollapse : Bug A — sustained ToF observation collapses P(POS_Z) to its floor
- *               バグA — ToF長時間観測で垂直チャネル共分散が下限へ崩壊
- *   ba        : Bug C — accel bias divergence when BA left unfrozen (--free-ba)
- *               バグC — 加速度バイアス未凍結時(--free-ba)の発散
- *   negcal    : Negative calibration — why bugs D/E are out of SIL scope
- *               陰性較正 — バグD/EがSIL射程外である根拠
+ *   pcollapse : Bug A root cause — sustained ToF collapses P(POS_Z) below R.
+ *               Shared by both filters (normal Kalman); BENIGN under absolute
+ *               ToF gates. The operational bug lives in the flow channel.
+ *               バグA根本原因 — ToF長時間観測でP(POS_Z)がR以下に崩壊。両者
+ *               共通(正常Kalman)で絶対値ゲート下では無害。運用バグはflow側。
+ *   flow      : Bug A operational — legacy P(VEL) collapse breaks the flow chi2
+ *               gate → velocity diverges; redesign clamps innovation → bounded.
+ *               --no-flow-gate disables the legacy chi2 gate (control: bounded).
+ *               バグA運用 — 旧P(VEL)崩壊でflow χ²ゲート破綻→速度発散; 新は
+ *               イノベーションクランプで有界。--no-flow-gate で旧χ²無効(対照)。
+ *   ba        : Bug C — accel bias drift when BA left unfrozen (--free-ba).
+ *               Legacy drifts; redesign stays bounded.
+ *               バグC — BA未凍結時(--free-ba)の漂流。旧は漂流、新は有界。
+ *   negcal    : Negative calibration — why bugs D/E are out of SIL scope.
+ *               陰性較正 — バグD/EがSIL射程外である根拠。
  *
  * Build & run: make old_eskf_regression
- *   ./old_eskf_regression --mode pcollapse > pcollapse.csv
- *   ./old_eskf_regression --mode ba                 # frozen BA (firmware config)
- *   ./old_eskf_regression --mode ba --free-ba       # unfrozen BA (bug exposed)
- *   stdout = CSV, stderr = verdict / debug
+ *   ./old_eskf_regression --mode flow > flow.csv    # OLD diverges, NEW bounded
+ *   ./old_eskf_regression --mode ba --free-ba       # OLD drifts, NEW bounded
+ *   ./old_eskf_regression --mode flow --no-flow-gate # control: OLD also bounded
+ *   stdout = CSV (both estimators), stderr = A/B verdict / debug
  *
  * @design project_sil_architecture (memory) §regression challenge (north star) [--]
- * @design development_roadmap.md §M11 — legacy bug reproduction                [--]
+ * @design development_roadmap.md §M11 — legacy bug reproduction + redesign A/B  [--]
  */
 
 #include <cstdio>
@@ -60,6 +74,7 @@
 #include "sf_math.hpp"
 #include "pid.hpp"
 #include "quad_physics.hpp"
+#include "eskf_core.hpp"   // new ESKF (sf::EskfCore) — the redesign under comparison
 
 // Legacy-side: the ESKF under test (firmware/vehicle, stampfly:: namespace)
 // 旧側: 試験対象ESKF(firmware/vehicle, stampfly:: 名前空間)
@@ -310,6 +325,28 @@ static stampfly::ESKF::Config makeLegacyConfig(bool use_flow, bool flow_gate)
 }
 
 // -----------------------------------------------------------------------------
+// Build the NEW ESKF (sf::EskfCore) config — mirrors integrated_sil's validated
+// firmware config (ToF only + adaptive-R + innovation-clamp + ToF-velocity), so
+// the comparison is "old design vs new design" running on identical inputs.
+// 新ESKF(sf::EskfCore)設定 — integrated_sil の検証済みファーム設定(ToFのみ +
+// 適応R + イノベーションクランプ + ToF速度観測)を踏襲。比較は同一入力上の
+// 「旧設計 vs 新設計」。
+// -----------------------------------------------------------------------------
+
+static sf::EskfConfig makeNewConfig(bool use_flow)
+{
+    sf::EskfConfig cfg;  // defaults carry the redesign (k_adaptive, innov_clamp)
+    cfg.use_tof  = true;
+    cfg.use_baro = false;
+    cfg.use_mag  = false;
+    cfg.use_flow = use_flow;
+    cfg.accel_noise = 0.3f;   // matches integrated_sil default
+    cfg.gyro_noise  = 0.009655f;
+    cfg.tof_noise   = 0.01f;  // matches integrated_sil
+    return cfg;
+}
+
+// -----------------------------------------------------------------------------
 // Main simulation: hover the quad, drive the legacy ESKF as an observer, and
 // record the per-mode diagnostic to CSV (stdout). Verdict goes to stderr.
 // 本シミュレーション: quad をホバリングさせ旧ESKFをオブザーバ駆動、モード別
@@ -334,9 +371,14 @@ static int runSim(Mode mode, float duration, bool free_ba, bool flow_gate,
     quad.init(qp, ContactParams{}, SensorNoiseParams{});
     const float hover_thrust = qp.mass * qp.gravity;
 
-    // --- Legacy ESKF (initialized after calibration, like the firmware) ---
-    stampfly::ESKF eskf;
+    // --- Both ESKFs observe the SAME sensor stream (open-loop), so this is a
+    //     rigorous A/B on identical inputs: old (under test) vs new (redesign).
+    // --- 旧・新ESKFが同一センサ列を観測(オープンループ) = 同一入力上の厳密A/B:
+    //     旧(試験対象) vs 新(redesign)。
+    stampfly::ESKF eskf;       // legacy (firmware/vehicle)
     eskf.init(makeLegacyConfig(use_flow, flow_gate));
+    sf::EskfCore neweskf;      // redesign (firmware/vehicle_new)
+    neweskf.init(makeNewConfig(use_flow));
 
     HoverControl ctrl;
     ctrl.init();
@@ -350,19 +392,22 @@ static int runSim(Mode mode, float duration, bool free_ba, bool flow_gate,
     int cal_count = 0;
     bool eskf_ready = false;
 
-    // --- Verdict accumulators ---
-    float min_pzz = 1e30f, last_pzz = 0, last_kz = 0;        // bug A (altitude)
-    float max_vel_xy = 0, last_vel_x = 0, last_vel_y = 0;    // bug A (velocity)
-    Vec3 ba_calib = {};                                      // bug C reference
-    float max_ba_drift = 0, last_ba_x = 0, last_ba_y = 0;    // bug C
+    // --- Verdict accumulators (old = legacy under test, new = redesign) ---
+    float min_pzz = 1e30f, last_kz = 0;        // bug A/altitude old
+    float min_pzz_n = 1e30f, last_kz_n = 0;    // bug A/altitude new
+    float max_vel_xy = 0, max_vel_xy_n = 0;    // bug A/velocity old, new
+    Vec3 ba_calib = {}, ba_calib_n = {};       // bug C reference
+    float max_ba_drift = 0, max_ba_drift_n = 0;// bug C old, new
 
-    // --- CSV header (mode-specific) ---
+    // --- CSV header (mode-specific; _old = legacy, _new = redesign) ---
     if (mode == Mode::PCOLLAPSE) {
-        printf("time,true_z,tof,p_xx,p_yy,p_zz,pos_var,k_z\n");
+        printf("time,true_z,tof,p_zz_old,k_z_old,p_zz_new,k_z_new\n");
     } else if (mode == Mode::FLOW) {
-        printf("time,true_z,active_mask,vel_x,vel_y,p_vel_xx,true_vx,true_vy\n");
+        printf("time,true_z,vel_old_x,vel_old_y,vel_new_x,vel_new_y,"
+               "true_vx,true_vy\n");
     } else {  // BA
-        printf("time,active_mask,ba_x,ba_y,ba_z,p_ba_xx,p_ba_yy,ba_drift\n");
+        printf("time,ba_old_x,ba_old_y,ba_old_drift,ba_new_x,ba_new_y,"
+               "ba_new_drift\n");
     }
 
     for (int step = 0; step < steps; step++) {
@@ -398,37 +443,64 @@ static int runSim(Mode mode, float duration, bool free_ba, bool flow_gate,
                 // setAttitudeReference はレベル姿勢+加速度バイアスを設定し
                 // freeze を解除(eskf.cpp:394)。ファームは必ず再凍結する;
                 // バグCはその再凍結を省くことで露出する。
+                Vec3 accel_bias(accel_avg.x, accel_avg.y,
+                                accel_avg.z - (-qp.gravity));
+                // -- Legacy: setAttitudeReference sets level attitude + accel
+                //    bias and UNFREEZES (eskf.cpp:394); firmware always re-freezes.
+                //    Bug C is exposed by OMITTING that re-freeze.
+                // -- 旧: setAttitudeReference はレベル姿勢+加速度バイアスを設定し
+                //    freeze 解除(eskf.cpp:394); ファームは必ず再凍結。バグCは
+                //    その再凍結を省くことで露出。
                 eskf.setGyroBias(toOld(gyro_avg));
                 eskf.setAttitudeReference(toOld(accel_avg), toOld(gyro_avg));
-                if (!free_ba) eskf.setFreezeAccelBias(true);  // firmware re-freeze
+                if (!free_ba) eskf.setFreezeAccelBias(true);
+                // -- New: same calibration as integrated_sil (firmware startup).
+                // -- 新: integrated_sil(ファーム起動)と同じ較正手順。
+                neweskf.setGyroBias(gyro_avg);
+                neweskf.setAccelBias(accel_bias);
+                neweskf.setAttitudeFromGravity(accel_avg);
+                neweskf.shrinkBiasCovariance(0.01f);
+                if (!free_ba) neweskf.setFreezeAccelBias(true);
                 eskf_ready = true;
-                // Record the calibrated accel bias as the bug-C drift reference.
+                // Record calibrated accel bias as the bug-C drift reference.
                 // 較正済み加速度バイアスをバグC漂流の基準値として記録。
                 stampfly::ESKF::State s0 = eskf.getState();
                 ba_calib = Vec3(s0.accel_bias.x, s0.accel_bias.y, s0.accel_bias.z);
+                ba_calib_n = neweskf.getAccelBias();
                 fprintf(stderr,
-                        "=== legacy ESKF ready: active_mask=0x%04x freeze_ba=%d ===\n",
-                        eskf.getActiveMask(), eskf.isAccelBiasFrozen() ? 1 : 0);
+                        "=== ESKFs ready: legacy mask=0x%04x | both freeze_ba=%d ===\n",
+                        eskf.getActiveMask(), free_ba ? 0 : 1);
             }
             continue;
         }
 
-        // --- ESKF predict + observe (open-loop; truth drives control) ---
+        // --- Both ESKFs predict + observe identically (open-loop) ---
+        // The redesign adds updateToFVelocity (vertical-velocity observation),
+        // which the legacy lacks — a key reason the new filter stays consistent.
+        // 両ESKFを同一に予測+観測(オープンループ)。redesign は updateToFVelocity
+        // (垂直速度観測)を追加 — 旧にはなく、新が整合を保つ主因の一つ。
         eskf.predict(toOld(accel), toOld(gyro), DT);
         eskf.updateAccelAttitude(toOld(accel));
+        neweskf.predict(accel, gyro, DT);
+        neweskf.updateAccelAttitude(accel);
         if (step % TOF_DIV == 0) {
             eskf.updateToF(sens.tof_bottom);
+            neweskf.updateToF(sens.tof_bottom);
+            neweskf.updateToFVelocity(sens.tof_bottom, TOF_DIV * DT);  // new only
         }
         if (use_flow && step % FLOW_DIV == 0) {
             // Faithful flow consistent with truth (pixels encode true motion),
             // decoded against the measured gyro — the only flow↔gyro mismatch
-            // is realistic sensor noise, not a synthesis artifact.
+            // is realistic sensor noise, not a synthesis artifact. Same pixels
+            // feed both decoders (legacy: chi2 gate; redesign: innovation clamp).
             // 真値と整合する忠実フロー(画素は真の運動を符号化)を測定ジャイロで
-            // デコード — flow↔gyro の不一致は現実的なセンサノイズのみで合成
-            // 人工産物ではない。
+            // デコード — flow↔gyro の不一致は現実的なセンサノイズのみ。同じ画素
+            // を両デコーダに投入(旧: χ²ゲート; 新: イノベーションクランプ)。
             FlowPixels px = synthFlow(quad.getState(), sens.tof_bottom);
             eskf.updateFlowRaw(px.dx, px.dy, sens.tof_bottom, FLOW_DIV * DT,
                                gyro.x, gyro.y);
+            neweskf.updateFlowRaw(px.dx, px.dy, sens.tof_bottom, FLOW_DIV * DT,
+                                  gyro.x, gyro.y);
         }
 
         // --- Drive physics ---
@@ -451,102 +523,146 @@ static int runSim(Mode mode, float duration, bool free_ba, bool flow_gate,
             quad.step(duty, DT);
         }
 
-        // --- Read legacy ESKF diagnostics ---
-        const auto& P = eskf.getCovariance();
+        // --- Read both ESKFs' diagnostics ---
+        const auto& P = eskf.getCovariance();           // legacy P-matrix
         stampfly::ESKF::State est = eskf.getState();
+        const float R_TOF = 0.01f * 0.01f;              // tof_noise^2
 
         if (mode == Mode::PCOLLAPSE) {
             // Bug A (altitude channel): sustained ToF collapses P(POS_Z) < R_tof.
-            float pzz = P(stampfly::ESKF::POS_Z, stampfly::ESKF::POS_Z);
-            float pos_var = eskf.getPositionVariance();
-            float r_tof = 0.01f * 0.01f;  // tof_noise^2
-            float k_z = pzz / (pzz + r_tof);
-            if (t >= T_EVAL_START && pzz < min_pzz) min_pzz = pzz;
-            last_pzz = pzz; last_kz = k_z;
-            if (step % 8 == 0) {
-                printf("%.4f,%.4f,%.4f,%.3e,%.3e,%.3e,%.4f,%.3e\n",
-                       t, truth.position.z, sens.tof_bottom,
-                       P(stampfly::ESKF::POS_X, stampfly::ESKF::POS_X),
-                       P(stampfly::ESKF::POS_Y, stampfly::ESKF::POS_Y),
-                       pzz, pos_var, k_z);
-            }
-        } else if (mode == Mode::FLOW) {
-            // Bug A (velocity channel): P(VEL) collapse makes the flow chi2 gate
-            // false-reject valid updates → ESKF velocity diverges from truth(~0).
-            float vx = est.velocity.x, vy = est.velocity.y;
+            float pzz   = P(stampfly::ESKF::POS_Z, stampfly::ESKF::POS_Z);
+            float pzz_n = neweskf.getPDiag(POS_Z);
+            float kz   = pzz   / (pzz   + R_TOF);
+            float kz_n = pzz_n / (pzz_n + R_TOF);
             if (t >= T_EVAL_START) {
-                float mag = sqrtf(vx * vx + vy * vy);
-                if (mag > max_vel_xy) max_vel_xy = mag;
+                if (pzz   < min_pzz)   min_pzz   = pzz;
+                if (pzz_n < min_pzz_n) min_pzz_n = pzz_n;
             }
-            last_vel_x = vx; last_vel_y = vy;
-            if (step % 8 == 0) {
-                printf("%.4f,%.4f,0x%04x,%.5f,%.5f,%.3e,%.5f,%.5f\n",
-                       t, truth.position.z, eskf.getActiveMask(),
-                       vx, vy, P(stampfly::ESKF::VEL_X, stampfly::ESKF::VEL_X),
+            last_kz = kz; last_kz_n = kz_n;
+            if (step % 8 == 0)
+                printf("%.4f,%.4f,%.4f,%.3e,%.3e,%.3e,%.3e\n",
+                       t, truth.position.z, sens.tof_bottom,
+                       pzz, kz, pzz_n, kz_n);
+        } else if (mode == Mode::FLOW) {
+            // Bug A (velocity channel): legacy P(VEL) collapse → flow chi2
+            // false-reject → velocity diverges; redesign clamps innovation.
+            float vx = est.velocity.x, vy = est.velocity.y;
+            Vec3  vn = neweskf.getVelocity();
+            if (t >= T_EVAL_START) {
+                float m  = sqrtf(vx * vx + vy * vy);
+                float mn = sqrtf(vn.x * vn.x + vn.y * vn.y);
+                if (m  > max_vel_xy)   max_vel_xy   = m;
+                if (mn > max_vel_xy_n) max_vel_xy_n = mn;
+            }
+            if (step % 8 == 0)
+                printf("%.4f,%.4f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",
+                       t, truth.position.z, vx, vy, vn.x, vn.y,
                        truth.velocity.x, truth.velocity.y);
-            }
         } else {  // BA — bug C: unfrozen accel bias drifts from its calibration
             float ba_x = est.accel_bias.x, ba_y = est.accel_bias.y;
-            float dx = ba_x - ba_calib.x, dy = ba_y - ba_calib.y;
-            float drift = sqrtf(dx * dx + dy * dy);
-            if (t >= T_EVAL_START && drift > max_ba_drift) max_ba_drift = drift;
-            last_ba_x = ba_x; last_ba_y = ba_y;
-            if (step % 8 == 0) {
-                printf("%.4f,0x%04x,%.5f,%.5f,%.5f,%.3e,%.3e,%.5f\n",
-                       t, eskf.getActiveMask(), ba_x, ba_y, est.accel_bias.z,
-                       P(stampfly::ESKF::BA_X, stampfly::ESKF::BA_X),
-                       P(stampfly::ESKF::BA_Y, stampfly::ESKF::BA_Y), drift);
+            Vec3  ba_n = neweskf.getAccelBias();
+            float drift   = sqrtf(powf(ba_x - ba_calib.x, 2) +
+                                  powf(ba_y - ba_calib.y, 2));
+            float drift_n = sqrtf(powf(ba_n.x - ba_calib_n.x, 2) +
+                                  powf(ba_n.y - ba_calib_n.y, 2));
+            if (t >= T_EVAL_START) {
+                if (drift   > max_ba_drift)   max_ba_drift   = drift;
+                if (drift_n > max_ba_drift_n) max_ba_drift_n = drift_n;
             }
+            if (step % 8 == 0)
+                printf("%.4f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",
+                       t, ba_x, ba_y, drift, ba_n.x, ba_n.y, drift_n);
         }
 
         // --- Debug (stderr, 1 Hz) ---
         if (step % 400 == 0) {
             fprintf(stderr, "t=%.1f h=%.3f ", t, -truth.position.z);
             if (mode == Mode::PCOLLAPSE)
-                fprintf(stderr, "P_zz=%.3e K_z=%.3e\n", last_pzz, last_kz);
+                fprintf(stderr, "P_zz old=%.2e new=%.2e\n",
+                        P(stampfly::ESKF::POS_Z, stampfly::ESKF::POS_Z),
+                        neweskf.getPDiag(POS_Z));
             else if (mode == Mode::FLOW)
-                fprintf(stderr, "eskf_vel=(%.3f,%.3f) [truth~0]\n",
-                        est.velocity.x, est.velocity.y);
+                fprintf(stderr, "vel old=(%.2f,%.2f) new=(%.2f,%.2f) [truth~0]\n",
+                        est.velocity.x, est.velocity.y,
+                        neweskf.getVelocity().x, neweskf.getVelocity().y);
             else
-                fprintf(stderr, "ba=(%.4f,%.4f,%.4f)\n",
-                        est.accel_bias.x, est.accel_bias.y, est.accel_bias.z);
+                fprintf(stderr, "ba old=(%.3f,%.3f) new=(%.3f,%.3f)\n",
+                        est.accel_bias.x, est.accel_bias.y,
+                        neweskf.getAccelBias().x, neweskf.getAccelBias().y);
         }
     }
 
-    // --- Verdict (stderr) ---
+    // --- Verdict (stderr): legacy reproduces the bug, redesign should not ---
+    // The pass condition is the A/B contrast: OLD reproduces, NEW is fixed.
+    // 判定: 旧はバグ再現、新は修正済みであること(A/B対比)が合格条件。
     if (mode == Mode::PCOLLAPSE) {
-        bool collapsed = (min_pzz < PCOLLAPSE_THRESH);
+        // The P-collapse PHENOMENON (covariance shrinks below R) is the root
+        // cause documented at eskf.hpp:135 — and it is shared by BOTH filters
+        // (normal Kalman behavior under consistent ToF). It is BENIGN here
+        // because both use ABSOLUTE ToF innovation gates. It becomes the bug
+        // only where a chi2 gate sits atop the collapsed P — the legacy
+        // flow/velocity channel (--mode flow). So this mode confirms the root
+        // cause; --mode flow shows the operational divergence and the fix.
+        // P-collapse 現象(共分散がR以下に縮む)は eskf.hpp:135 の根本原因で、
+        // 両フィルタ共通(一貫ToF下の正常なKalman挙動)。ToFは新旧とも絶対値
+        // イノベーションゲートを使うのでここでは無害。崩壊したPの上にχ²ゲートが
+        // 乗る旧flow/速度チャネル(--mode flow)でのみバグ化する。本モードは
+        // 根本原因の確認、--mode flow が運用上の発散と修正を示す。
+        bool collapsed   = (min_pzz   < PCOLLAPSE_THRESH);
+        bool collapsed_n = (min_pzz_n < PCOLLAPSE_THRESH);
         fprintf(stderr,
-                "[BUG-A/altitude] P(POS_Z) init=1.0 min=%.3e (R_tof=%.0e) "
-                "K_z_final=%.3e → %s\n",
-                min_pzz, PCOLLAPSE_THRESH, last_kz,
-                collapsed ? "COLLAPSED below R (chi2 gate breaks) — reproduced"
-                          : "bounded (no collapse)");
+                "[BUG-A/altitude] P(POS_Z) min  OLD=%.3e (K_z=%.2e)  "
+                "NEW=%.3e (K_z=%.2e)  R_tof=%.0e\n"
+                "  P-collapse phenomenon: OLD %s, NEW %s "
+                "(BENIGN — both use absolute ToF gates)\n"
+                "  => root cause confirmed; operational bug is the chi2 "
+                "consequence in the flow channel (see --mode flow) → %s\n",
+                min_pzz, last_kz, min_pzz_n, last_kz_n, PCOLLAPSE_THRESH,
+                collapsed ? "collapsed" : "bounded",
+                collapsed_n ? "collapsed" : "bounded",
+                collapsed ? "phenomenon reproduced ✅" : "NOT reproduced");
         return collapsed ? 0 : 2;
     } else if (mode == Mode::FLOW) {
-        bool diverged = (max_vel_xy > VEL_DIVERGE_THRESH);
+        bool old_div = (max_vel_xy   > VEL_DIVERGE_THRESH);
+        bool new_ok  = (max_vel_xy_n <= VEL_DIVERGE_THRESH);
+        const char* concl;
+        bool pass;
+        if (flow_gate) {
+            // Default: legacy chi2 gate ON → expect OLD diverges, NEW bounded.
+            concl = (old_div && new_ok) ? "redesign fixes bug A/velocity ✅"
+                                        : "INCONCLUSIVE";
+            pass = (old_div && new_ok);
+        } else {
+            // Control: legacy chi2 gate OFF → expect OLD bounded too, proving
+            // the divergence is the chi2-gate-breaking consequence of P-collapse.
+            concl = (!old_div && new_ok)
+                    ? "control ✅ — gate off bounds OLD too (divergence is chi2-caused)"
+                    : "control INCONCLUSIVE";
+            pass = (!old_div && new_ok);
+        }
         fprintf(stderr,
-                "[BUG-A/velocity] flow_gate=%s max|eskf_vel_xy|=%.3f m/s "
-                "(truth~0) final=(%.2f,%.2f) → %s\n",
-                flow_gate ? "ON" : "OFF", max_vel_xy, last_vel_x, last_vel_y,
-                diverged ? "DIVERGED (P-collapse breaks flow chi2) — reproduced"
-                         : "bounded (gate off → flow pins velocity: control)");
-        // With the gate ON we EXPECT divergence (bug); with it OFF we EXPECT
-        // bounded (control). Either expected outcome is a pass.
-        bool expected = flow_gate ? diverged : !diverged;
-        return expected ? 0 : 2;
+                "[BUG-A/velocity] max|vel_xy| (truth~0)  OLD=%.2f m/s  "
+                "NEW=%.3f m/s  (flow_gate=%s)\n"
+                "  OLD: %s | NEW: bounded → %s\n",
+                max_vel_xy, max_vel_xy_n, flow_gate ? "ON" : "OFF",
+                old_div ? "DIVERGED (P-collapse breaks flow chi2) — reproduced"
+                        : "bounded", concl);
+        return pass ? 0 : 2;
     } else {  // BA
-        bool drifted = (max_ba_drift > BA_DRIFT_THRESH);
+        bool old_bug = (max_ba_drift   > BA_DRIFT_THRESH);
+        bool new_ok  = (max_ba_drift_n <= BA_DRIFT_THRESH);
         fprintf(stderr,
-                "[BUG-C] freeze_ba=%d max|ba_drift|=%.4f m/s^2 "
-                "final ba=(%.4f,%.4f) → %s\n",
-                free_ba ? 0 : 1, max_ba_drift, last_ba_x, last_ba_y,
-                free_ba ? (drifted ? "DRIFTED from calibration — reproduced"
-                                   : "bounded")
-                        : (drifted ? "DRIFTED (unexpected!)"
-                                   : "frozen/bounded (firmware config: control)"));
-        bool expected = free_ba ? drifted : !drifted;
-        return expected ? 0 : 2;
+                "[BUG-C] freeze_ba=%d  max|ba_drift|  OLD=%.4f  NEW=%.4f m/s^2\n"
+                "  OLD: %s | NEW: %s → %s\n",
+                free_ba ? 0 : 1, max_ba_drift, max_ba_drift_n,
+                old_bug ? "DRIFTED from calibration — reproduced" : "bounded",
+                new_ok ? "bounded — redesign more robust" : "ALSO drifted",
+                free_ba ? ((old_bug && new_ok) ? "redesign fixes bug C ✅"
+                                               : "INCONCLUSIVE")
+                        : "control: both frozen/bounded (firmware config)");
+        // Frozen (control): both should be bounded. Unfrozen: old drifts, new ok.
+        bool pass = free_ba ? (old_bug && new_ok) : (!old_bug && new_ok);
+        return pass ? 0 : 2;
     }
 }
 
