@@ -1,4 +1,4 @@
-# StampFly 統合SIL 検証レポート — 診断計器ロードマップ（M1〜M11）
+# StampFly 統合SIL 検証レポート（M1〜M11）
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -6,290 +6,290 @@
 
 ### このドキュメントについて
 
-本レポートは、StampFly の SIL（Software-in-the-Loop）を**単なる動作確認の場から「診断計器」へ昇華させる**取り組みのロードマップ（M1〜M11）の成果と検証結果を1枚にまとめたものである。M1〜M3 のみを扱った旧レポート（`M1-M3_validation_report.md`）を置き換える統合版である。
+このレポートは、StampFly の SIL（Software-in-the-Loop。PC 上でファームを動かす検証環境）を、単なる動作確認の場から「バグの原因を切り分けるための診断ツール」として使えるところまで育ててきた開発（M1〜M11）の成果と検証結果をまとめたものである。M1〜M3 だけを扱っていた旧レポート（`M1-M3_validation_report.md`）を置き換える。
 
-旧 `firmware/vehicle/` では状態推定（ESKF）と状態遷移管理に起因する不明バグが発生し、これがファームウェア刷新（vehicle_new）の最大の動機となった。本取り組みは、**本体C++コードを無改変で参照コンパイル（Code Identity）**しながら、PC 上で制御則と状態機械を決定論的に検証し、さらに**旧ファームの既知バグを SIL で再現できるか（回帰チャレンジ）**で SIL の検出力そのものを較正する。
+旧ファーム `firmware/vehicle/` では、状態推定（ESKF）と状態遷移の管理が原因とみられる不明なバグが起きており、これがファームを作り直す（vehicle_new）一番の動機になった。この開発では、ファーム本体の C++ コードを一切書き換えずに参照コンパイルし（Code Identity）、PC 上で制御則と状態遷移を毎回同じ結果になる形で検証する。そのうえで、旧ファームで実際に起きた既知のバグを SIL で再現できるかどうかを試し（プロジェクト内での呼称「回帰チャレンジ」）、SIL 自体がどこまでバグを捕まえられるかを見極める。
 
 ### 対象読者
 
-- vehicle_new の開発者（人間 + AI）
-- SIL を用いて制御系・状態機械を設計・検証する研究者・学生
-- 旧機の不明バグの原因切り分けを追う者
+- vehicle_new の開発者（人間・AI）
+- SIL を使って制御系や状態遷移を設計・検証する研究者・学生
+- 旧機の不明バグの原因を追っている人
 
-### 達成サマリー
+### これまでの達成
 
 | マイルストーン | 内容 | 状態 |
 |--------------|------|:---:|
-| **M1** | PC化基盤（ESP-IDF 互換シム + トピック実体） | ✅ |
-| **M2** | 状態遷移ユニットテスト 47件 | ✅ |
-| **M3** | StateManager 駆動 統合SIL（5シナリオ） | ✅ |
-| **M4** | 閉ループ化（`--feedback truth\|eskf`）+ gust 注入 | ✅ |
-| **M5** | 診断の梯子（N0〜N2、要因分離） | ✅ |
-| **M6** | 制御設計検証（評価指標・A/Bスイープ・`control/` 配置） | ✅ |
-| **M11-1** | 旧ESKF（active_mask型）をホストで無改変参照コンパイル | ✅ |
-| **M11-2** | 回帰チャレンジ：旧バグ A/C 再現（陽性較正）+ D/E 陰性較正 | ✅ |
-| **M11-3** | redesign A/B：新ESKFで A/C が直ることを同一入力で定量証明 | ✅ |
-| M7 | 差分診断（実機ログ注入・実機↔SIL残差） | ⬜ 未着手 |
-| M8 | Model Fidelity 校正（実機ログ照合） | ⬜ 未着手 |
-| M9 | ファーム検討の拡充（起動・failsafe連鎖・遷移カバレッジ） | ⬜ 未着手 |
-| M10 | sf CLI 統合（host-SIL バックエンド） | ⬜ 未着手 |
+| **M1** | PC で動かす土台（ESP-IDF 互換シム + トピックの実体定義） | ✅ |
+| **M2** | 状態遷移のユニットテスト 47件 | ✅ |
+| **M3** | StateManager を中心に据えた統合SIL（5シナリオ） | ✅ |
+| **M4** | 閉ループ化（`--feedback truth\|eskf`）と突風の注入 | ✅ |
+| **M5** | 段階的な要因の切り分け（ノイズ N0〜N2） | ✅ |
+| **M6** | 制御設計の検証（評価指標・A/B比較・`control/` への記録） | ✅ |
+| **M11-1** | 旧 ESKF（active_mask 型）を PC 上で無改変のままコンパイル | ✅ |
+| **M11-2** | 旧バグ A/C を SIL で再現、並行処理由来の D/E は再現しないことを確認 | ✅ |
+| **M11-3** | 新 ESKF を旧と同じ入力で並べ、A/C が直っていることを定量的に示した | ✅ |
+| M7 | 差分診断（実機ログを注入し、実機と SIL の差を測る） | ⬜ 未着手 |
+| M8 | Model Fidelity（実機ログと照合し SIL の再現度を測る） | ⬜ 未着手 |
+| M9 | ファーム全体の検証（起動・failsafe 連鎖・状態遷移の網羅） | ⬜ 未着手 |
+| M10 | sf CLI への統合（PC-SIL バックエンド） | ⬜ 未着手 |
 
-### SIL 設計思想 — 3本柱
+### SIL をどう使うか — 3つの考え方
 
-| 柱 | 内容 | 本レポートでの実証 |
-|----|------|------------------|
-| **回帰チャレンジ（北極星）** | 旧ファームの既知バグを SIL で再現・検出できるか＝SILの真価の最終受け入れ基準 | §6（M11） |
-| **差分診断** | Code/Parameter Identity ゆえ「SILで再現→ソフト要因／非再現→HW・並行性・通信要因」と切り分けられる | §6.2 陰性較正、§7 |
-| **診断の梯子** | 層（L1〜L4 / ノイズ N0〜N4 / HW・並行性境界）を段階的にON/OFFし、どの層で再現するかで要因を特定 | §5（M5/M6） |
+| 考え方 | 内容 | 本レポートでの実証 |
+|-------|------|------------------|
+| **既知バグの再現テスト（回帰チャレンジ）** | 旧ファームで起きたバグを SIL で再現・検出できるか。SIL の実力を測る最も重要な検証 | §6（M11） |
+| **差分診断** | 本体と同じコード・同じパラメータで動くので、実機で出たバグが「SIL で再現する＝ソフトが原因」「再現しない＝ハード・並行処理・通信が原因」と切り分けられる | §6.2、§7 |
+| **段階的な要因の切り分け** | ノイズや非線形の要素を一段ずつ加えていき、どの段階で問題が出るかで原因を特定する | §5（M5/M6） |
 
-## 2. 設計原則 — 参照による Code Identity
+## 2. 設計の柱 — 参照による Code Identity
 
-本取り組みの中核は **「分離しているのに本体と同じコードが走る」** ことである。
+この開発の中心にあるのは、**「ファーム本体と切り離した場所に置いているのに、走っているのは本体とまったく同じコードである」** という状態を保つことである。
 
-- SIL ハーネスは `simulator/sil/` に独立配置するが、ファーム本体（`eskf_core.cpp` / `state_manager.cpp` / `failsafe.cpp` 等）を **コピーせず相対パス参照でコンパイル**する。
-- ESP-IDF 依存（FreeRTOS / esp_timer / esp_log、回帰チャレンジでは旧ESKF用の `esp_err.h`）は `compat/` シムで吸収し、**本体ソースは1行も改変しない**。
-- 全工程を通じて `git diff firmware/` が空であることを Code Identity の判定基準とした。**新ファーム（vehicle_new）だけでなく、回帰チャレンジで参照する旧ファーム（vehicle）にも同じ鉄則を適用している。**
+- SIL は `simulator/sil/` に独立して置くが、ファーム本体（`eskf_core.cpp` / `state_manager.cpp` / `failsafe.cpp` など）を**コピーせず、相対パスで参照してコンパイルする**。
+- ESP-IDF 依存（FreeRTOS / esp_timer / esp_log、旧 ESKF 用の `esp_err.h`）は `compat/` のシムが肩代わりし、**本体のソースは1行も書き換えない**。
+- 全工程を通じて `git diff firmware/` が空であることを、コードが同一だと判定する基準とした。この基準は新ファーム（vehicle_new）だけでなく、再現テストで参照する旧ファーム（vehicle）にも同じく適用している。
 
 ```
 firmware/vehicle_new/        ← 新ファーム（無改変）
    ├ components/sf_state/state_manager.cpp       ┐
-   ├ components/sf_failsafe/failsafe.cpp         │ 相対パス参照でコンパイル
+   ├ components/sf_failsafe/failsafe.cpp         │ 相対パスで参照してコンパイル
    └ components/sf_estimator_eskf/eskf_core.cpp  ┘
-firmware/vehicle/            ← 旧ファーム（無改変、回帰チャレンジ用）
+firmware/vehicle/            ← 旧ファーム（無改変、再現テスト用）
    └ components/sf_algo_eskf/eskf.cpp            ┐ compat/esp_err.h 経由で参照
-simulator/sil/               ← SILハーネス（独立ツール環境）
-   ├ compat/                 ← ESP-IDF互換シム（新旧本体を無改変で通す）
-   ├ sil_topics.cpp          ← トピックextern実体（params.cpp と同期）
-   ├ integrated_sil.cpp      ← StateManager駆動 統合ループ（M3〜M6）
-   ├ old_eskf_regression.cpp ← 旧/新ESKF 並走 A/B（M11）
+simulator/sil/               ← SIL（独立したツール環境）
+   ├ compat/                 ← ESP-IDF 互換シム（新旧の本体を無改変で通す）
+   ├ sil_topics.cpp          ← トピックの実体定義（params.cpp と同期）
+   ├ integrated_sil.cpp      ← StateManager 中心の統合ループ（M3〜M6）
+   ├ old_eskf_regression.cpp ← 旧/新 ESKF を並べる比較（M11）
    └ scenario.hpp / battery_model.hpp
 ```
 
-## 3. ロードマップと進捗
+## 3. 開発の道筋と進捗
 
-最終ゴールは2系統 —（1）開発ファームの検討、（2）制御設計の正しさの検証。これらから逆算した依存関係に沿って着実順で進めている。
+目指すゴールは2つ —（1）ファーム全体の振る舞いの検証、（2）制御設計の正しさの検証。この2つから逆算した依存関係に沿って、土台のできたものから順に進めている。
 
 ```
-M3(済)─┬─M4 閉ループ化──M5 診断梯子─┬─M6 制御設計検証(ゴール2)
-       │                            └─M7 差分診断──M8 Model Fidelity
-       └─M9 ファーム検討(ゴール1, M4と並行可)
-                          M5,M7,M8──M10 sf CLI統合
-            M5,M7,M9,M10──────────────M11 回帰チャレンジ(北極星)
+M3(済)─┬─M4 閉ループ化──M5 要因の切り分け─┬─M6 制御設計の検証(ゴール2)
+       │                                  └─M7 差分診断──M8 Model Fidelity
+       └─M9 ファーム全体の検証(ゴール1, M4と並行可)
+                          M5,M7,M8──M10 sf CLI 統合
+            M5,M7,M9,M10──────────────M11 既知バグの再現テスト(中核)
 ```
 
-北極星である M11 を先行実施し、**「SILでバグ発見 → 修正 → SILで直ったと確認」のループが旧→新の実例で一周した**。M7〜M10（実機ログを要するフェーズ／ツール化）は残作業（§8）。
+最も重要な M11（既知バグの再現テスト）を先に実施した。これにより、**「SIL でバグを見つける → 直す → SIL で直ったことを確かめる」という一連の流れが、旧→新の実例で一周した**。実機ログを必要とする M7〜M10 と、ツール化の M10 は残っている（§8）。
 
-## 4. M1〜M3 — 基盤と状態遷移
+## 4. M1〜M3 — 土台と状態遷移
 
-### M1 — PC化基盤
+### M1 — PC で動かす土台
 
-`compat/` ディレクトリが最小の ESP-IDF 互換ヘッダを提供する。
+`compat/` に最小限の ESP-IDF 互換ヘッダを用意した。
 
 | ファイル | 役割 |
 |---------|------|
-| `compat/freertos/FreeRTOS.h` | `TickType_t` / `pdTRUE` / `portMAX_DELAY` 等の基本型・定数 |
-| `compat/freertos/semphr.h` | `SemaphoreHandle_t` を `std::mutex` にマップ |
-| `compat/freertos/queue.h` | `QueueHandle_t` を byte-copy `std::deque` にマップ |
+| `compat/freertos/FreeRTOS.h` | `TickType_t` / `pdTRUE` / `portMAX_DELAY` などの基本型・定数 |
+| `compat/freertos/semphr.h` | `SemaphoreHandle_t` を `std::mutex` に置き換え |
+| `compat/freertos/queue.h` | `QueueHandle_t` をバイトコピーの `std::deque` に置き換え |
 | `compat/esp_timer.h` | `esp_timer_get_time()` を `std::chrono` で実装 |
-| `compat/esp_log.h` | `ESP_LOGx` を stderr へ（CSV stdout を汚染しない） |
-| `compat/esp_err.h` | `esp_err_t` / `ESP_OK` 等（M11 で旧ESKF用に追加） |
-| `sil_topics.cpp` | トピックextern実体12個 + `topics_init()`（`params.cpp` と同期） |
+| `compat/esp_log.h` | `ESP_LOGx` を stderr へ（標準出力の CSV を汚さない） |
+| `compat/esp_err.h` | `esp_err_t` / `ESP_OK` など（M11 で旧 ESKF 用に追加） |
+| `sil_topics.cpp` | トピックの実体定義12個と `topics_init()`（`params.cpp` と同期） |
 
-`make check` で最小 main が無改変の StateManager を `INIT → IDLE_GROUND → ARMED_GROUND` と遷移させる（"M1 OK"）。`git diff firmware/` は空。
+`make check` で、無改変の StateManager が `INIT → IDLE_GROUND → ARMED_GROUND` と正しく遷移する（"M1 OK"）。`git diff firmware/` は空。
 
-### M2 — 状態遷移ユニットテスト
+### M2 — 状態遷移のユニットテスト
 
-`firmware/vehicle_new/test/test_state_manager.cpp` に決定論ユニットテスト47件を実装。**全47件 PASS**。
+`firmware/vehicle_new/test/test_state_manager.cpp` に、毎回同じ結果になるユニットテストを47件用意した。**47件すべて PASS**。
 
-| カテゴリ | 件数 | 検証内容 |
-|---------|:---:|---------|
-| A. 正常遷移 | 11 | INIT→IDLE→ARMED→TAKEOFF→FLYING→LANDING→IDLE 全エッジ + disarm / soft-landing / held↔ |
-| B. ガード拒否 | 12 | 不正な現在状態からの遷移要求が `false` / 状態不変（二重ARM、INITからARM 等） |
-| C. モード変更 | 3 | FLYING 内 `requestModeChange` 全モード、同一モード冪等 |
-| D. 全Alert分岐 | 10 | IMPACT/GYRO_ANOMALY×(空中/地上)、COMM_LOST×(FLYING/非FLYING)、LOW_BATTERY/USB_POWER/ESKF_DIVERGED/NONE |
-| E. コールバック | 5 | onExit→onEnter 順序、同一遷移で非発火、onModeChange、複数登録順、MAX_CALLBACKS(8)上限 |
-| F. Failsafe閾値 | 5 | impact 4G ラッチ、gyro 1000dps、battery WARNING(3.3V)/EMERGENCY(3.0V)/未接続(≤0.1V) |
-| G. エンドツーエンド | 1 | FLYING→高G→`failsafe.update`→`system_alert`→`handleAlert`→IDLE_GROUND |
-| **合計** | **47** | **全PASS** |
+| 種別 | 件数 | 検証内容 |
+|------|:---:|---------|
+| A. 正常な遷移 | 11 | INIT→IDLE→ARMED→TAKEOFF→FLYING→LANDING→IDLE の全エッジ、disarm、ソフトランディング、held の往復 |
+| B. ガードによる拒否 | 12 | 不正な状態からの遷移要求が `false` を返し、状態が変わらない（二重 ARM、INIT からの ARM など） |
+| C. モード変更 | 3 | FLYING 中の `requestModeChange` 全モード、同一モードへの要求は無変化 |
+| D. アラート分岐 | 10 | IMPACT/GYRO_ANOMALY ×（空中/地上）、COMM_LOST ×（FLYING/非FLYING）、LOW_BATTERY/USB_POWER/ESKF_DIVERGED/NONE |
+| E. コールバック | 5 | onExit→onEnter の順序、同一遷移では発火しない、onModeChange、複数登録の順序、上限 8 件 |
+| F. Failsafe 閾値 | 5 | 衝撃 4G のラッチ、ジャイロ 1000dps、電圧 WARNING(3.3V)/EMERGENCY(3.0V)/未接続(≤0.1V) |
+| G. 端から端まで | 1 | FLYING→高G→`failsafe.update`→`system_alert`→`handleAlert`→IDLE_GROUND |
+| **合計** | **47** | **全 PASS** |
 
-> **補足:** 既存 `test_main.cpp` の `pid_integral` が1件 FAIL（0.95 vs 1.0）。本作業より前から存在する別件で、状態遷移テストとは無関係。
+> **補足:** 既存の `test_main.cpp` にある `pid_integral` が1件 FAIL（0.95 と 1.0）。これはこの作業より前からあった別件で、状態遷移テストとは関係しない。
 
-### M3 — StateManager 駆動 統合SIL
+### M3 — StateManager を中心に据えた統合SIL
 
-旧 `sil_main.cpp` の偽状態管理（`bool armed` + ハードコード時刻 `T_ARM`）を撤廃し、**無改変の本物の StateManager / Failsafe をループで駆動**する。物理 + ESKF + PID + 状態遷移 + failsafe が一気通貫で動作し、フライト状態がモーター制御ゲートと制御モードの唯一の真実となる。固定シード（`srand(1)`）で決定論的。
+旧 `sil_main.cpp` では状態管理が `bool armed` と固定時刻 `T_ARM` で代用されていた。これをやめ、**本物の StateManager / Failsafe を無改変のままループで動かす**形に変えた。物理・ESKF・PID・状態遷移・failsafe が通しで動き、飛行状態がモーター制御のゲートと制御モードを決める唯一の基準になる。乱数の種を固定（`srand(1)`）しているので結果は毎回同じになる。
 
-| シナリオ | 注入 | 期待挙動 | 遷移数 | 最終状態 |
+| シナリオ | 注入する事象 | 期待する動き | 遷移数 | 最終状態 |
 |---------|------|---------|:---:|---------|
-| nominal | なし | 正常飛行（離陸→ホバー→着陸） | 6 | IDLE_GROUND |
-| comm_lost | t=8s COMM_LOST | FLYING → LANDING → 着陸 | 6 | IDLE_GROUND |
-| impact | t=8s 8G | **緊急 IDLE**（再離陸なし） | 5 | IDLE_GROUND |
-| low_battery | 3.3V低下 | 警告のみ（**状態不変**）→ 通常着陸 | 6 | IDLE_GROUND |
-| eskf_diverged | t=8s ESKF発散 | reset要求のみ（**状態不変**）→ 通常着陸 | 6 | IDLE_GROUND |
+| nominal | なし | 正常な飛行（離陸→ホバー→着陸） | 6 | IDLE_GROUND |
+| comm_lost | t=8s に COMM_LOST | FLYING → LANDING → 着陸 | 6 | IDLE_GROUND |
+| impact | t=8s に 8G | **緊急停止して IDLE**（再離陸しない） | 5 | IDLE_GROUND |
+| low_battery | 3.3V まで低下 | 警告だけ（**状態は変えず**）→ 通常着陸 | 6 | IDLE_GROUND |
+| eskf_diverged | t=8s に ESKF 発散 | リセット要求だけ（**状態は変えず**）→ 通常着陸 | 6 | IDLE_GROUND |
 
 #### 図1: 正常飛行の詳細（高度・姿勢・状態遷移）
 
 ![Nominal flight detail](assets/fig1_nominal_detail.png)
 
-真値高度と ESKF 推定高度が良好に追従（離陸 → 0.5m ホバー → 着陸）。姿勢が平坦なのは外乱なしのトリム飛行＋制御に真値姿勢を用いるため（M3 時点では ESKF 姿勢はオープンループ推定。閉ループ化は M4）。下段の状態遷移が高度プロファイルと正しく対応している。
+真値の高度と ESKF が推定した高度がよく一致している（離陸 → 0.5m ホバー → 着陸）。姿勢がほぼ平らなのは、外乱のないトリム飛行で、かつ制御に真値の姿勢を使っているためである（M3 の時点では ESKF の姿勢は制御に戻していないオープンループ推定。閉ループ化は M4）。下段の状態遷移が高度の動きと正しく対応している。
 
 #### 図2: 全シナリオの状態遷移タイムライン
 
 ![State timelines](assets/fig2_state_timelines.png)
 
-点線がアラート発生時刻。**異常系（comm_lost / impact）はアラートで即座に状態遷移**し、**警告系（low_battery / eskf_diverged）は状態を変えず飛行を継続**することが一目で対比できる。`handleAlert` の設計（IMPACT/COMM_LOST は遷移、LOW_BATTERY/ESKF_DIVERGED は通知のみ）が正しく機能している証拠である。
+点線がアラートの発生時刻。**異常系（comm_lost / impact）はアラートですぐに状態が遷移し**、**警告系（low_battery / eskf_diverged）は状態を変えずに飛行を続ける**ことが一目で分かる。これは `handleAlert` の設計（IMPACT/COMM_LOST は遷移させ、LOW_BATTERY/ESKF_DIVERGED は通知だけにする）が正しく働いていることを示している。
 
 #### 図3: 全シナリオの高度プロファイル
 
 ![Altitude overlay](assets/fig3_altitude_overlay.png)
 
-impact（赤）が t=8s で急降下（緊急着陸）、comm_lost（橙）が緩やかに自動着陸降下する一方、警告系3シナリオ（nominal / low_battery / eskf_diverged）は飛行軌道が完全に一致して重なる。「警告は飛行に影響しない（状態不変）」ことを軌道レベルで裏付けている。
+impact（赤）が t=8s で急降下し（緊急着陸）、comm_lost（橙）は緩やかに自動着陸する。一方、警告系の3シナリオ（nominal / low_battery / eskf_diverged）は飛行の軌道が完全に重なる。「警告は飛行に影響しない（状態が変わらない）」ことが、軌道のレベルで裏付けられている。
 
-## 5. M4〜M6 — 閉ループ化と制御設計検証
+## 5. M4〜M6 — 閉ループ化と制御設計の検証
 
-詳細な制御設計検証の知見は `control/validation/sil_control_validation.md`（設計根拠の受け皿）に格納している。本節はその要点を抜粋する。
+制御設計の詳しい検証結果は `control/validation/sil_control_validation.md` に記録している。本節はその要点だけをまとめる。
 
 ### M4 — 閉ループ化
 
-制御に真値姿勢でなく **ESKF 推定姿勢をフィードバックする本来の閉ループ**を実現した。`integrated_sil.cpp` に `--feedback {truth|eskf}` を追加。`truth` は M3 と数値一致（回帰の基準点）、`eskf` が L4 閉ループ。突風外乱（gust）注入機構も移植した。
+制御に真値の姿勢ではなく、**ESKF が推定した姿勢を戻す本来の閉ループ**にした。`integrated_sil.cpp` に `--feedback {truth|eskf}` を追加し、`truth` は M3 と数値が一致する（比較の基準点）、`eskf` が本来の閉ループになる。突風の注入も移植した。
 
-- **合格基準達成:** `--feedback truth` が M3 とビット一致、`--feedback eskf` の閉ループホバーが安定（発散しない）。
+- **確認できたこと:** `--feedback truth` が M3 とビット単位で一致し、`--feedback eskf` の閉ループでもホバリングが安定する（発散しない）。
 
-### M5 — 診断の梯子（要因分離）
+### M5 — 段階的な要因の切り分け
 
-`--feedback eskf` でノイズ層を段階的に ON/OFF し、姿勢誤差の要因を切り分けた。
+`--feedback eskf`（ESKF 推定姿勢を戻した閉ループ）で、ノイズの要素を一段ずつ加えていき、姿勢誤差の原因がどこにあるかを切り分けた（プロジェクト内での呼称「診断の梯子」）。
 
-#### 図4: 診断の梯子 — ノイズ段別の姿勢誤差
+#### 図4: ノイズの段階ごとの姿勢誤差
 
 ![Diagnostic ladder](assets/fig4_diagnostic_ladder.png)
 
-| ノイズ段 | roll RMS | 結論 |
+| ノイズの段階 | roll RMS | 分かったこと |
 |---------|:---:|------|
-| N0（ノイズなし） | 0.000° | ESKF閉ループは構造的に健全（線形化バイアスは無外乱で出ない） |
-| N1（白色＋バイアス） | 0.013° | 白色ノイズはほぼ無影響 |
-| N2（フル振動） | 3.321° | **スロットル結合振動が姿勢誤差の主因** |
+| N0（ノイズなし） | 0.000° | 閉ループ自体は健全（線形化の誤差は外乱がなければ出ない） |
+| N1（白色ノイズ＋バイアス） | 0.013° | 白色ノイズはほとんど効かない |
+| N2（振動を含むフル） | 3.321° | **スロットルに連動した振動が姿勢誤差の主因** |
 
-層を ON/OFF するだけで「ESKF構造の問題か、ノイズの問題か」を定量的に切り分けられた。
+段階を切り替えるだけで「ESKF の構造の問題か、ノイズの問題か」を数値で切り分けられた。
 
-### M6 — 制御設計検証（A/Bスイープ）
+### M6 — 制御設計の検証（A/B比較）
 
-主因と判明した振動に対し、ESKF系LPF α と加速度観測ノイズ R を決定論的に A/B 検証した（`--feedback eskf --noise-stage N2`）。
+主因と分かった振動に対して、ESKF 系の LPF 係数 α と加速度の観測ノイズ R を A/B 比較した（`--feedback eskf --noise-stage N2`）。結果は毎回同じになる。
 
-#### 図5: 制御パラメータの A/B スイープ
+#### 図5: 制御パラメータの A/B 比較
 
 ![A/B sweep](assets/fig5_ab_sweep.png)
 
 | パラメータ | 範囲 | roll RMS | 効果 |
 |-----------|------|:---:|------|
-| LPF α | 0.32 → 0.05 | 3.32 → 2.64° | 強フィルタで ~20% 改善 |
-| ESKF R | 0.3 → 10 | 3.32 → 2.93° | ~12% 改善、R≥3で頭打ち |
+| LPF α | 0.32 → 0.05 | 3.32 → 2.64° | フィルタを強めると約20%改善 |
+| ESKF R | 0.3 → 10 | 3.32 → 2.93° | 約12%改善、R≥3 で頭打ち |
 
-gust 外乱下でも α=0.05 で roll RMS 3.43→2.74°、roll max 4.43→4.00°（この外乱強度では位相遅れの副作用は顕在化せず）。
+突風を加えても α=0.05 で roll RMS が 3.43→2.74°、roll の最大が 4.43→4.00° になった（この外乱の強さでは、フィルタを強めたことによる位相遅れの副作用はまだ目立たない）。
 
-**知見と留保:** 振動起因の姿勢誤差は LPF 強化や R 増加で**限定的（~20%）にしか改善せず根治しない**。これは旧機の実機知見（「元ゲインが最良・ノッチNG」）とも整合する。**SILで得た改善が実機に転移するかは Model Fidelity（M8）で照合してから判断する**（SIL設計検証 → Model Fidelity → 実機適用 の順を厳守）。
+**分かったことと留保:** 振動による姿勢誤差は、LPF を強めても R を増やしても**改善は約20%にとどまり、根本的にはなくならない**。これは旧機の実機での知見（「元のゲインが一番よく、ノッチフィルタは効かない」）とも合っている。なお、この SIL は外乱が軽く激しい操作もないため、**フィルタを強めたときの位相遅れの副作用はまだ十分には現れていない**。強い外乱や速い操作での再評価が必要になる。**SIL で得た改善が実機でも効くかどうかは、Model Fidelity（M8、実機ログとの照合）で確かめてから判断する**（SIL での設計検証 → Model Fidelity → 実機適用 の順を守り、いきなり実機に入れることはしない）。
 
-## 6. M11 — 回帰チャレンジ（北極星）
+## 6. M11 — 既知バグの再現テスト（回帰チャレンジ）
 
-SIL の真価は「**本物の推定器バグを捕まえられるか**」で決まる。M11 は旧 `firmware/vehicle/` の ESKF（active_mask型）を SIL に載せ、既知の旧バグを再現（陽性較正）し、新 ESKF で直ることを同一入力で定量証明する。
+SIL に価値があるかどうかは、結局「**本物の推定器バグを捕まえられるか**」で決まる。M11 では、旧 `firmware/vehicle/` の ESKF（active_mask 型）を SIL に載せ、既知のバグを再現し（陽性確認）、新しい ESKF では同じ入力でそれが直っていることを示す。
 
-### M11-1 — 旧ESKF の参照コンパイル基盤
+### M11-1 — 旧 ESKF をそのままコンパイルする土台
 
-旧 ESKF の ESP-IDF 依存は `esp_err.h` のみ（FreeRTOS/NVS非依存）。`compat/esp_err.h` を追加して**無改変で参照コンパイル**に成功（`active_mask=0x06c0`, `pos_var=0.03` で初期化、"M11 link OK"）。`git diff firmware/` は空。
+旧 ESKF が依存している ESP-IDF は `esp_err.h` だけである（FreeRTOS や NVS には依存しない）。`compat/esp_err.h` を1つ足すだけで、**無改変のまま参照コンパイルできた**（初期化後に `active_mask=0x06c0`、`pos_var=0.03`、"M11 link OK"）。`git diff firmware/` は空。
 
-### M11-2 — 陽性較正（旧バグ A/C の再現）と陰性較正（D/E）
+### M11-2 — 旧バグ A/C の再現（陽性確認）と、D/E が再現しないことの確認（陰性確認）
 
-`old_eskf_regression.cpp` で、旧 ESKF を quad 物理 + 真値PIDホバリングで**観測専用（オープンループ推定）**に並走駆動した。軌道は真値で決定論的なので、旧/新の比較は厳密な A/B になる。
+`old_eskf_regression.cpp` で、旧 ESKF を quad の物理 + 真値ベースの PID ホバリングのもとで動かした。ただし旧 ESKF の出力は制御には戻さず、横で推定だけを走らせている（オープンループ推定）。軌道は真値で毎回同じなので、旧と新の比較はそのまま厳密な A/B になる。
 
-**陽性較正（再現すべき推定器系バグを SIL で再現）:**
+**陽性確認（再現すべき推定器バグが SIL で再現するか）:**
 
-| バグ | モード | 現象 | 結論 |
+| バグ | モード | 何が起きるか | 意味 |
 |------|--------|------|------|
-| A / 速度 | `--mode flow` | ホバリング+忠実flowで P(VEL)崩壊 → 正常な flow 更新が χ² 誤棄却 → **ESKF速度が 119.7 m/s へ発散**（真値≈0） | 運用上破滅的な帰結を可視化 |
-| A / 高度 | `--mode pcollapse` | 静止ToF長時間観測で P(POS_Z) が 1.0 → 2.4e-5（R_tof=1e-4 以下）へ崩壊 | 共分散レベルで再現 |
-| C | `--mode ba --free-ba` | BA再凍結を省くと加速度バイアスが較正値から 0.65 m/s² 漂流（既定の凍結なら 0） | ファームが BA を凍結する理由を実証 |
+| A / 速度 | `--mode flow` | ホバリング中に実機相当のオプティカルフローを与えると P(VEL) が縮みきり、正しいフロー更新が χ² ゲートで誤って棄却され、**ESKF の速度が 119.7 m/s まで発散する**（真値はほぼ 0） | 実運用では致命的な結果になる |
+| A / 高度 | `--mode pcollapse` | 地上で静止したまま ToF を長く観測すると、P(POS_Z) が 1.0 から 2.4e-5（観測ノイズ R_tof=1e-4 を下回る）まで縮む | 共分散の値として再現できた |
+| C | `--mode ba --free-ba` | 加速度バイアスを再び凍結する処理を省くと、バイアスが較正値から 0.65 m/s² ずれていく（既定どおり凍結すれば 0） | ファームがバイアスを凍結している理由を裏付ける |
 
-**判別対照（`--no-flow-gate`）:** χ²ゲートを OFF にすると旧の速度発散が 0.54 m/s に有界化する。これは**発散の原因が χ²ゲート破綻（P-collapseの帰結）であり、合成された人工産物ではない**ことを証明する。
+**切り分けのための対照（`--no-flow-gate`）:** χ² ゲートを切ると、旧の速度発散は 0.54 m/s に収まる。これは、**発散の原因が χ² ゲートの破綻（P が縮みきったことの帰結）であって、こちらが人工的に作り出したものではない**ことを示している。
 
-**陰性較正（`--mode negcal`）:** 並行性系バグ D（着陸検出タイミング）・E（arbiter仲裁競合）は、3根拠 —（1）リンク境界（`eskf.cpp` のみリンク、`landing_handler`/`control_arbiter` 非リンク）（2）依存閉包（ESKFは FreeRTOS 非依存、D/E は mutex/状態文脈に依存）（3）決定論性（単一スレッドでレースは定義上発生しない）— により **SIL 射程外**と陳述。**非再現は期待される結果**であり、差分診断の対偶（再現→ソフト要因／非再現→HW・並行性要因）を成す。
+**陰性確認（`--mode negcal`）:** 並行処理が絡むバグ D（着陸検出のタイミング）・E（arbiter の競合）は、次の3つの理由から **SIL では扱えない**。(1) リンクの範囲（`eskf.cpp` だけをリンクし、`landing_handler` や `control_arbiter` はリンクしない）、(2) 依存関係（ESKF は FreeRTOS に依存しないが、D/E は mutex や状態の文脈に依存する）、(3) 単一スレッドで動かすため、競合（レース）は原理的に起きない。**これらが再現しないのは想定どおりの結果**であり、差分診断の裏返し（再現する＝ソフトが原因／再現しない＝ハードや並行処理が原因）になっている。
 
-### M11-3 — redesign A/B（新ESKFで A/C が直ることを定量証明）
+### M11-3 — 旧/新の A/B（新 ESKF で A/C が直っていることを定量的に示す）
 
-同ハーネスに新 ESKF（`sf::EskfCore`）を旧と**同一センサ列で並走駆動**（両者とも観測専用で軌道不変）。新側はファーム設定（ToF + 適応R + innovクランプ + ToF速度観測）を用いる。
+同じハーネスに新 ESKF（`sf::EskfCore`）を載せ、旧と**まったく同じセンサ列で並べて動かした**（どちらも推定だけで、軌道は変わらない）。新側はファームと同じ設定（ToF + 適応 R + イノベーションのクランプ + ToF による速度観測）を使う。
 
-#### 図6: 回帰チャレンジ — 旧 vs 新 ESKF（同一入力）
+#### 図6: 旧 ESKF と新 ESKF を同じ入力で比較
 
 ![Regression challenge](assets/fig6_regression_challenge.png)
 
-| パネル | 旧（赤） | 新（緑） | 判定 |
+| 図のパネル | 旧（赤） | 新（緑） | 判定 |
 |--------|---------|---------|------|
-| バグA / 速度（対数軸） | 119.7 m/s 発散 | 0.31 m/s 有界（`flow_innov_clamp` + `updateToFVelocity`） | **redesign 修正 ✅** |
-| バグC（加速度バイアス漂流） | 0.65 m/s² | 0.0009 m/s² | **redesign 修正 ✅** |
-| バグA / 高度（対数軸、P(POS_Z)） | 2.4e-5 へ崩壊 | 1.5e-5 へ崩壊 | **旧新とも崩壊（共通現象）** |
+| バグA / 速度（縦軸は対数） | 119.7 m/s に発散 | 0.31 m/s に収まる（`flow_innov_clamp` + `updateToFVelocity`） | **作り直しで解消 ✅** |
+| バグC（加速度バイアスのずれ） | 0.65 m/s² | 0.0009 m/s² | **作り直しで解消 ✅** |
+| バグA / 高度（対数、P(POS_Z)） | 2.4e-5 まで縮む | 1.5e-5 まで縮む | **旧・新とも縮む（共通の現象）** |
 
-#### 重要な訂正 — P-collapse の正しい理解
+#### 大事な訂正 — P が縮みきる現象の正しい理解
 
-M11-2 の理解を M11-3 で精緻化した。**P-collapse「現象」自体はバグではなく正常な Kalman 挙動**（一貫した観測下で共分散は縮む）であり、旧・新の両フィルタで起きる（図6 第3パネル）。ToF/高度チャネルは新旧とも**絶対値**イノベーションゲートを使うので、崩壊しても無害である。
+M11-2 で得た理解を M11-3 で正しく捉え直した。**P が縮みきる「現象」そのものはバグではなく、正常なカルマンフィルタの挙動**である（観測が一貫していれば共分散は縮む）。これは旧・新どちらのフィルタでも起きる（図6 の第3パネル）。ToF・高度のチャネルは新旧とも**絶対値**でイノベーションを判定するゲートを使うので、縮んでも害はない。
 
-バグ化するのは「**崩壊した P の上に χ²（マハラノビス）ゲートが乗る**」とき＝旧の flow/速度チャネルである。`--no-flow-gate` 対照で旧の発散が消えることが、発散の原因が χ²ゲート破綻であると確定させる。これは旧コード `eskf.hpp:135` のコメント「P-collapseでχ²ゲートが位置センサで機能しない」の運用上の実害そのものである。
+問題になるのは、「**縮みきった P の上に χ²（マハラノビス距離）のゲートが乗る**」とき、つまり旧のフロー／速度チャネルである。`--no-flow-gate` の対照で旧の発散が消えることが、発散の原因が χ² ゲートの破綻だと裏付ける。これはまさに、旧コード `eskf.hpp:135` のコメント「P が縮みきると χ² ゲートが位置センサで機能しない」が指していた、実運用での実害そのものである。
 
-→ **`pcollapse` モード＝根本原因の確認（旧新共通）、`flow` モード＝運用バグと修正の差別化点**、と位置づけが明確になった。
+→ つまり、`pcollapse` モードは**根本原因（旧・新に共通）を確認する**ためのもの、`flow` モードは**実運用上のバグと、その修正とを区別する**ためのもの、と位置づけがはっきりした。
 
-### SILループの一周
+### 一連の流れが一周した
 
-M11 により「**SILでバグ発見 → 修正 → SILで直ったと確認**」のループが旧→新の実例で一周した。これが診断計器としての SIL の北極星の達成である。
+M11 によって、「**SIL でバグを見つける → 直す → SIL で直ったことを確かめる**」という流れが、旧→新の実例で一周した。これが、SIL を診断ツールとして仕上げるうえで最も重要な到達点である。
 
-## 7. SIL の限界（射程外の明示）
+## 7. SIL で扱えないこと（範囲の明示）
 
-診断計器の信頼の条件は、**捕まえられないバグのクラスを明示できること**である。本SILは以下を射程外とする。
+診断ツールが信頼されるためには、**自分では捕まえられないバグの種類をはっきり言えること**が条件になる。本 SIL は次のものを扱わない。
 
-- **並行性（race condition）** — 単一スレッド決定論実行のため定義上発生しない
-- **割り込みジッタ／スケジューリング** — `compat` シムは実時間挙動を再現しない
-- **通信物理層／キュー溢れ** — ESP-NOW/WiFi の物理層はモデル化しない
+- **並行処理の競合（race condition）** — 単一スレッドで毎回同じ順に動かすため、原理的に起きない
+- **割り込みのジッタ・スケジューリング** — `compat` のシムは実時間の挙動を再現しない
+- **通信の物理層・キューあふれ** — ESP-NOW / WiFi の物理層はモデル化しない
 
-差分診断（M7）は実機↔SIL の「再現/非再現」二値判定を出し、**非再現を「HW・並行性・通信要因」へ積極的に切り分ける**ことを価値とする（M11-2 の D/E 陰性較正がその原型）。
+差分診断（M7）は、実機と SIL で「再現する／しない」の判定を出し、**再現しない場合は「ハード・並行処理・通信が原因」と積極的に切り分ける**ことに価値がある（M11-2 の D/E の陰性確認がその原型）。
 
-## 8. 残作業（M7〜M10）
+## 8. 残っている作業（M7〜M10）
 
 | フェーズ | 内容 | 前提 |
 |---------|------|------|
-| **M7 差分診断** | `--inject-input <csv>` で実機操縦コマンドを SIL に注入、実機↔SIL の軸別RMSE + PSD残差を定量化、再現/非再現の二値判定 | 実機フライトログの入手・形式確認 |
-| **M8 Model Fidelity** | 層別 Model Fidelity スコア、`development_roadmap.md` Phase 3.2 の許容差（ACROホバー gyro RMS ±50%、ステップ立上り時定数 ±20%）に対する定量判定 | 実機ログ、M7 |
-| **M9 ファーム検討** | 起動シーケンス・failsafe連鎖・状態遷移カバレッジ測定（`scenario.hpp` enum拡張、47件テストとの突合） | M4 |
-| **M10 sf CLI統合** | `sf sim` に host-SIL バックエンド、`sf log→注入→差分→tune` のパイプライン化 | M5/M7/M8 |
+| **M7 差分診断** | `--inject-input <csv>` で実機の操縦コマンドを SIL に流し込み、実機と SIL の差を軸ごとの RMSE と PSD 残差で測り、再現する／しないを判定する | 実機フライトログの入手・形式確認 |
+| **M8 Model Fidelity** | SIL が実機をどれだけ再現するかを層ごとにスコア化し、`development_roadmap.md` Phase 3.2 の許容差（ACRO ホバーのジャイロ RMS ±50%、ステップ応答の立ち上がり時定数 ±20%）を満たすか判定する | 実機ログ、M7 |
+| **M9 ファーム全体の検証** | 起動シーケンス、failsafe の連鎖、状態遷移の網羅を測る（`scenario.hpp` の enum 拡張、47件のテストとの突き合わせ） | M4 |
+| **M10 sf CLI 統合** | `sf sim` に PC-SIL バックエンドを足し、`sf log → 注入 → 差分 → tune` を一続きで回せるようにする | M5/M7/M8 |
 
-M7/M8 は実機フライトログを前提とするため、次の着手時はまずログの入手・形式確認から始める。
+M7・M8 は実機フライトログがないと進められないため、次に着手するときはまずログの入手と形式の確認から始める。
 
 ## 9. 再現手順
 
 ```bash
 cd simulator/sil
 
-# M1: PC化基盤のリンク確認
+# M1: PC で動かす土台のリンク確認
 make check                                  # → "M1 OK"
 
-# M2: 状態遷移ユニットテスト（別ディレクトリ）
+# M2: 状態遷移のユニットテスト（別ディレクトリ）
 cd ../../firmware/vehicle_new/test && make test   # → 47/47 passed
 cd ../../../simulator/sil
 
-# M3: 統合SIL（決定論）
+# M3: 統合SIL（毎回同じ結果）
 make integrated_sil
-./integrated_sil                            # nominal、CSV を stdout に
+./integrated_sil                            # nominal、CSV を標準出力へ
 ./integrated_sil --scenario impact 2>&1 >/dev/null | grep Transition
 
-# M5: 診断の梯子
+# M5: ノイズ段階ごとの切り分け
 for s in N0 N1 N2; do
   ./integrated_sil --feedback eskf --noise-stage $s 2>&1 >/dev/null | grep "roll :"
 done
 
-# M6: A/B スイープ
+# M6: A/B 比較
 ./integrated_sil --feedback eskf --noise-stage N2 --lpf-alpha 0.05 2>&1 >/dev/null | grep "roll :"
 ./integrated_sil --feedback eskf --noise-stage N2 --accel-noise 3.0 2>&1 >/dev/null | grep "roll :"
 
-# M11: 回帰チャレンジ（旧/新 ESKF A/B）
+# M11: 既知バグの再現テスト（旧/新 ESKF の A/B）
 make old_eskf_regression
-./old_eskf_regression --mode flow                 # バグA/速度: 旧発散 vs 新有界
-./old_eskf_regression --mode ba --free-ba         # バグC: 旧漂流 vs 新有界
-./old_eskf_regression --mode pcollapse            # バグA/高度: 旧新とも崩壊
-./old_eskf_regression --mode negcal               # D/E 陰性較正
+./old_eskf_regression --mode flow                 # バグA/速度: 旧は発散、新は収まる
+./old_eskf_regression --mode ba --free-ba         # バグC: 旧はずれる、新は収まる
+./old_eskf_regression --mode pcollapse            # バグA/高度: 旧・新とも縮む
+./old_eskf_regression --mode negcal               # D/E が再現しないことの確認
 
 # 全グラフ（fig1〜fig6）を再生成
 python3 plot_sil_results.py                 # docs/assets/*.png を出力
@@ -303,9 +303,9 @@ python3 plot_sil_results.py                 # docs/assets/*.png を出力
 
 ### About This Document
 
-This report consolidates the results and verification of the roadmap (M1–M11) that elevates the StampFly SIL **from a mere sanity-check rig into a "diagnostic instrument."** It supersedes the earlier report (`M1-M3_validation_report.md`), which covered only M1–M3.
+This report consolidates the results and verification of the roadmap (M1–M11) that grows the StampFly SIL from a mere sanity-check rig into a tool for **isolating the cause of bugs**. It supersedes the earlier report (`M1-M3_validation_report.md`), which covered only M1–M3.
 
-The legacy `firmware/vehicle/` suffered unidentified bugs rooted in state estimation (ESKF) and state-transition management — the primary motivation for the firmware rewrite (vehicle_new). This effort verifies the control law and state machine deterministically on a PC while **reference-compiling the firmware C++ core unmodified (Code Identity)**, and then calibrates the SIL's own detection power by **reproducing the legacy firmware's known bugs (the regression challenge).**
+The legacy `firmware/vehicle/` suffered unidentified bugs rooted in state estimation (ESKF) and state-transition management — the primary motivation for the firmware rewrite (vehicle_new). This effort verifies the control law and state machine deterministically on a PC while **reference-compiling the firmware C++ core unmodified (Code Identity)**, and then gauges how far the SIL can catch bugs at all by **reproducing the legacy firmware's known bugs** (called the "regression challenge").
 
 ### Achievement Summary
 
@@ -315,33 +315,33 @@ The legacy `firmware/vehicle/` suffered unidentified bugs rooted in state estima
 | **M2** | State-transition unit tests (47) | ✅ |
 | **M3** | StateManager-driven integrated SIL (5 scenarios) | ✅ |
 | **M4** | Closed loop (`--feedback truth\|eskf`) + gust injection | ✅ |
-| **M5** | Diagnostic ladder (N0–N2, cause isolation) | ✅ |
+| **M5** | Step-by-step cause isolation (noise N0–N2) | ✅ |
 | **M6** | Control-design validation (metrics, A/B sweeps, `control/`) | ✅ |
 | **M11-1** | Legacy ESKF (active_mask type) reference-compiled on host | ✅ |
-| **M11-2** | Regression challenge: reproduce legacy bugs A/C; D/E negative-calibrate | ✅ |
-| **M11-3** | Redesign A/B: prove A/C fixed in new ESKF on identical inputs | ✅ |
-| M7 | Diff diagnosis (real-flight injection, real↔SIL residual) | ⬜ TODO |
-| M8 | Model Fidelity calibration (real-flight matching) | ⬜ TODO |
+| **M11-2** | Reproduce legacy bugs A/C; confirm concurrency-rooted D/E do not reproduce | ✅ |
+| **M11-3** | Run new ESKF on identical inputs; show A/C are fixed, quantitatively | ✅ |
+| M7 | Diff diagnosis (inject real-flight logs, measure real vs SIL) | ⬜ TODO |
+| M8 | Model Fidelity (match against real-flight logs) | ⬜ TODO |
 | M9 | Firmware behavior coverage (boot, failsafe chains, transitions) | ⬜ TODO |
 | M10 | sf CLI integration (host-SIL backend) | ⬜ TODO |
 
-### SIL Design Philosophy — Three Pillars
+### How the SIL Is Used — Three Ideas
 
-1. **Regression challenge (north star):** can the SIL reproduce/detect the legacy firmware's known bugs? — the ultimate acceptance criterion (§6).
-2. **Diff diagnosis:** thanks to Code/Parameter Identity, a hardware bug is classified as "reproduced → software cause" vs "not reproduced → HW/concurrency/comm cause" (§6.2 negative calibration, §7).
-3. **Diagnostic ladder:** toggle layers (L1–L4 / noise N0–N4 / HW & concurrency boundaries) to localize the cause by which layer reproduces it (§5).
+1. **Reproducing known bugs (the "regression challenge"):** can the SIL reproduce/detect the legacy firmware's known bugs? — the most important measure of the SIL's worth (§6).
+2. **Diff diagnosis:** because it runs the same code and the same parameters as the firmware, a hardware bug can be classified as "reproduces in SIL → software cause" vs "does not reproduce → hardware / concurrency / comm cause" (§6.2, §7).
+3. **Step-by-step cause isolation:** add noise and nonlinear effects one stage at a time, and localize the cause by which stage the problem appears at (§5).
 
 ## 2. Design Principle — Code Identity by Reference
 
-The core idea is that **the SIL runs the exact same code as the firmware despite being separated**.
+The core idea is to keep the SIL **running the exact same code as the firmware, even though it lives in a separate place**.
 
-- The SIL harness lives independently in `simulator/sil/` but compiles the firmware core (`eskf_core.cpp` / `state_manager.cpp` / `failsafe.cpp`) **by relative-path reference, not by copy**.
-- ESP-IDF dependencies (FreeRTOS / esp_timer / esp_log, and `esp_err.h` for the legacy ESKF) are absorbed by `compat/` shims; the **firmware sources are never edited**.
-- An empty `git diff firmware/` is the acceptance criterion for Code Identity throughout — applied to **both** the new firmware (vehicle_new) and the legacy firmware (vehicle) referenced by the regression challenge.
+- The SIL lives independently in `simulator/sil/` but compiles the firmware core (`eskf_core.cpp` / `state_manager.cpp` / `failsafe.cpp`) **by relative-path reference, not by copy**.
+- ESP-IDF dependencies (FreeRTOS / esp_timer / esp_log, and `esp_err.h` for the legacy ESKF) are handled by `compat/` shims; the **firmware sources are never edited**.
+- An empty `git diff firmware/` is the criterion for "the code is identical" throughout — applied to both the new firmware (vehicle_new) and the legacy firmware (vehicle) referenced by the reproduction test.
 
 ## 3. Roadmap and Progress
 
-The two end goals — (1) firmware behavior review, (2) control-design validation — drive a dependency-faithful order. The north-star M11 was executed early, closing the loop **"find a bug in SIL → fix → confirm fixed in SIL"** on a legacy→new example. M7–M10 (phases needing real-flight logs / tooling) remain (§8).
+The two end goals — (1) firmware behavior verification, (2) control-design validation — drive a dependency-faithful order, building from the parts whose foundations are ready. The most important milestone, M11 (reproducing known bugs), was done first, closing the loop **"find a bug in SIL → fix it → confirm it is fixed in SIL"** on a legacy→new example. M7–M10 (phases needing real-flight logs, plus tooling) remain (§8).
 
 ## 4. M1–M3 — Base and State Transitions
 
@@ -359,50 +359,50 @@ The two end goals — (1) firmware behavior review, (2) control-design validatio
 
 ## 5. M4–M6 — Closed Loop and Control-Design Validation
 
-Detailed control-design findings live in `control/validation/sil_control_validation.md` (the home for design rationale). Summary:
+Detailed control-design findings are recorded in `control/validation/sil_control_validation.md`. Summary:
 
-- **M4 (closed loop):** feed back **ESKF-estimated attitude** instead of truth. `--feedback {truth|eskf}` added; `truth` matches M3 bit-for-bit (regression baseline), `eskf` is the L4 closed loop. Gust injection ported. Closed-loop hover is stable.
-- **M5 (diagnostic ladder):** toggling the noise stage isolates the cause (Figure 4): N0 (none) → roll RMS 0.000°, N1 (white+bias) → 0.013°, N2 (full vibration) → **3.321°**. Throttle-coupled vibration is the dominant cause.
-- **M6 (A/B sweeps):** (Figure 5) LPF α 0.32→0.05 gives roll RMS 3.32→2.64° (~20%); ESKF R 0.3→10 gives 3.32→2.93° (~12%, saturates at R≥3). Vibration-induced error improves only modestly and is not eliminated — consistent with the legacy finding "stock gains best / notch NG." **Whether this transfers to hardware is judged only after Model Fidelity (M8).**
+- **M4 (closed loop):** feed back **ESKF-estimated attitude** instead of truth. `--feedback {truth|eskf}` added; `truth` matches M3 bit-for-bit (the baseline for comparison), `eskf` is the real closed loop. Gust injection ported. Closed-loop hover is stable.
+- **M5 (step-by-step cause isolation):** adding noise one stage at a time isolates the cause (Figure 4): N0 (none) → roll RMS 0.000°, N1 (white+bias) → 0.013°, N2 (full, with vibration) → **3.321°**. Throttle-coupled vibration is the dominant cause.
+- **M6 (A/B sweeps):** (Figure 5) LPF α 0.32→0.05 gives roll RMS 3.32→2.64° (~20%); ESKF R 0.3→10 gives 3.32→2.93° (~12%, saturates at R≥3). Vibration-induced error improves only modestly and is not eliminated — consistent with the legacy finding "stock gains best / notch filter ineffective." **Whether this transfers to hardware is judged only after Model Fidelity (M8).**
 
-## 6. M11 — Regression Challenge (North Star)
+## 6. M11 — Reproducing Known Bugs (the "Regression Challenge")
 
-The SIL's worth is whether it **catches real estimator bugs**. M11 loads the legacy `firmware/vehicle/` ESKF (active_mask type) into the SIL, reproduces known bugs (positive calibration), and proves the new ESKF fixes them on identical inputs.
+Whether the SIL is worth anything comes down to whether it **catches real estimator bugs**. M11 loads the legacy `firmware/vehicle/` ESKF (active_mask type) into the SIL, reproduces known bugs (positive check), and shows the new ESKF fixes them on identical inputs.
 
-### 6.1 Positive Calibration (M11-1, M11-2)
+### 6.1 Positive Check (M11-1, M11-2)
 
 - **M11-1:** the legacy ESKF's only ESP-IDF dependency is `esp_err.h`. Adding `compat/esp_err.h` reference-compiles it **unmodified** (`active_mask=0x06c0`); `git diff firmware/` empty.
-- **M11-2:** `old_eskf_regression.cpp` drives the legacy ESKF observe-only (open-loop) under quad physics + truth-PID hover, so the legacy/new comparison is a clean A/B.
+- **M11-2:** `old_eskf_regression.cpp` drives the legacy ESKF under quad physics + truth-PID hover, with its output not fed back into control — only the estimate runs alongside (open-loop). The trajectory is from truth and is identical every run, so the legacy/new comparison is a clean A/B.
 
-| Bug | Mode | Phenomenon |
+| Bug | Mode | What happens |
 |-----|------|------------|
-| A / velocity | `--mode flow` | P(VEL) collapse → valid flow update χ²-rejected → **ESKF velocity diverges to 119.7 m/s** (truth ≈ 0) |
-| A / altitude | `--mode pcollapse` | static ToF → P(POS_Z) collapses 1.0 → 2.4e-5 (below R_tof=1e-4) |
-| C | `--mode ba --free-ba` | unfrozen accel bias drifts 0.65 m/s² from calibration (0 when frozen) |
+| A / velocity | `--mode flow` | P(VEL) collapses; a valid flow update is wrongly rejected by the χ² gate; **ESKF velocity diverges to 119.7 m/s** (truth ≈ 0) |
+| A / altitude | `--mode pcollapse` | static ToF → P(POS_Z) shrinks 1.0 → 2.4e-5 (below R_tof=1e-4) |
+| C | `--mode ba --free-ba` | with bias re-freezing omitted, the accel bias drifts 0.65 m/s² from calibration (0 when frozen) |
 
-The `--no-flow-gate` control bounds the legacy divergence to 0.54 m/s, proving the divergence comes from **χ²-gate breakdown (a consequence of P-collapse), not a synthetic artifact**.
+The `--no-flow-gate` control bounds the legacy divergence to 0.54 m/s, showing the divergence comes from **the χ² gate breaking down (a consequence of the collapsed P), not from something we manufactured**.
 
-### 6.2 Negative Calibration (D/E)
+### 6.2 Negative Check (D/E)
 
-Concurrency bugs D (landing-detection timing) and E (arbiter contention) are **out of SIL scope** on three grounds: link boundary (only `eskf.cpp` linked), dependency closure (ESKF is FreeRTOS-free; D/E need mutex/state context), and determinism (single-thread → no races by definition). **Non-reproduction is the expected result** and forms the contrapositive of diff diagnosis.
+Concurrency bugs D (landing-detection timing) and E (arbiter contention) are **out of SIL scope** for three reasons: link boundary (only `eskf.cpp` is linked), dependencies (ESKF is FreeRTOS-free, while D/E need mutex/state context), and determinism (single-thread → no races by definition). **Their non-reproduction is the expected result** and is the flip side of diff diagnosis.
 
-### 6.3 Redesign A/B (M11-3)
+### 6.3 Legacy vs New A/B (M11-3)
 
-The new ESKF (`sf::EskfCore`) is driven alongside the legacy one on the **same sensor stream** (both observe-only, trajectory invariant). See **Figure 6**:
+The new ESKF (`sf::EskfCore`) is run alongside the legacy one on the **same sensor stream** (both estimate-only, trajectory unchanged). See **Figure 6**:
 
-| Panel | Legacy (red) | Redesign (green) | Verdict |
-|-------|--------------|------------------|---------|
-| Bug A / velocity (log) | 119.7 m/s diverges | 0.31 m/s bounded (`flow_innov_clamp` + `updateToFVelocity`) | **fixed ✅** |
-| Bug C (accel-bias drift) | 0.65 m/s² | 0.0009 m/s² | **fixed ✅** |
-| Bug A / altitude (log, P(POS_Z)) | collapses to 2.4e-5 | collapses to 1.5e-5 | **both collapse (shared)** |
+| Panel | Legacy (red) | New (green) | Verdict |
+|-------|--------------|-------------|---------|
+| Bug A / velocity (log) | diverges to 119.7 m/s | bounded at 0.31 m/s (`flow_innov_clamp` + `updateToFVelocity`) | **fixed by the rewrite ✅** |
+| Bug C (accel-bias drift) | 0.65 m/s² | 0.0009 m/s² | **fixed by the rewrite ✅** |
+| Bug A / altitude (log, P(POS_Z)) | shrinks to 2.4e-5 | shrinks to 1.5e-5 | **both shrink (shared phenomenon)** |
 
-**Key correction on P-collapse:** the collapse *phenomenon* itself is not a bug but normal Kalman behavior (covariance shrinks under consistent observation) and occurs in both filters. ToF/altitude channels use **absolute-value** innovation gates in both, so collapse is benign. The bug appears only when a **χ² (Mahalanobis) gate sits on top of a collapsed P** — the legacy flow/velocity channel. This is exactly the operational harm of the legacy comment at `eskf.hpp:135`. Thus `pcollapse` confirms the shared root cause; `flow` is the differentiator between the operational bug and its fix.
+**An important correction:** the shrinking of P is itself not a bug but normal Kalman behavior (covariance shrinks under consistent observation), and it happens in both filters (Figure 6, panel 3). The ToF/altitude channels gate innovation by **absolute value** in both, so shrinking is harmless. The bug only appears when a **χ² (Mahalanobis) gate sits on top of a collapsed P** — the legacy flow/velocity channel. That `--no-flow-gate` removes the divergence confirms the χ² gate is the cause. This is exactly the operational harm pointed at by the legacy comment at `eskf.hpp:135`. So `pcollapse` confirms the shared root cause; `flow` distinguishes the operational bug from its fix.
 
-M11 closes the loop **"find a bug in SIL → fix → confirm fixed in SIL"** on a real legacy→new example.
+M11 closes the loop **"find a bug in SIL → fix it → confirm it is fixed in SIL"** on a real legacy→new example.
 
-## 7. SIL Boundaries (Explicit Out-of-Scope)
+## 7. What the SIL Cannot Cover (Explicit Scope)
 
-A diagnostic instrument earns trust by **naming the bug classes it cannot catch**: concurrency (single-thread deterministic → none by definition), interrupt jitter/scheduling (shims do not model real-time), and comm physical layer / queue overflow (ESP-NOW/WiFi PHY not modeled). Diff diagnosis (M7) outputs a real↔SIL reproduce/not-reproduce verdict and **actively classifies non-reproduction as "HW/concurrency/comm cause"** — the D/E negative calibration in M11-2 is its prototype.
+A diagnostic tool earns trust by **clearly stating which kinds of bugs it cannot catch**: concurrency races (single-thread deterministic → none by definition), interrupt jitter/scheduling (the shims do not reproduce real-time behavior), and the comm physical layer / queue overflow (ESP-NOW/WiFi PHY not modeled). Diff diagnosis (M7) outputs a reproduce/not-reproduce verdict between real and SIL, and **actively classifies non-reproduction as a "hardware / concurrency / comm cause"** — the D/E negative check in M11-2 is its prototype.
 
 ## 8. Remaining Work (M7–M10)
 
@@ -410,13 +410,11 @@ A diagnostic instrument earns trust by **naming the bug classes it cannot catch*
 |-------|---------|--------------|
 | **M7 Diff diagnosis** | `--inject-input <csv>`; per-axis RMSE + PSD residual; reproduce/not verdict | real-flight logs |
 | **M8 Model Fidelity** | layered fidelity scores vs `development_roadmap.md` Phase 3.2 tolerances (ACRO hover gyro RMS ±50%, step time-constant ±20%) | real logs, M7 |
-| **M9 Firmware review** | boot sequence, failsafe chains, transition coverage (vs the 47 tests) | M4 |
-| **M10 sf CLI** | host-SIL backend for `sf sim`; `sf log→inject→diff→tune` pipeline | M5/M7/M8 |
+| **M9 Firmware verification** | boot sequence, failsafe chains, transition coverage (vs the 47 tests) | M4 |
+| **M10 sf CLI** | host-SIL backend for `sf sim`; `sf log → inject → diff → tune` pipeline | M5/M7/M8 |
 
 M7/M8 require real-flight logs, so the next step starts by obtaining and confirming the log format.
 
 ## 9. Reproduction
 
 See the command block in the Japanese section (§9).
-</content>
-</invoke>
