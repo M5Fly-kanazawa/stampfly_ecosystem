@@ -196,6 +196,8 @@ int main(int argc, char** argv)
     bool feedback_eskf = false;  // false=true attitude (M3 baseline), true=ESKF attitude (L4 closed loop)
     bool use_gust = false;       // inject body-frame gusts during FLYING / FLYING中に突風注入
     int  noise_stage = 2;        // N0..N2 (N2=full default; N3/N4 reserved) / ノイズ段階
+    float lpf_alpha   = 0.32f;   // accel/gyro LPF coeff on ESKF path / ESKF系LPF係数
+    float accel_noise = 0.3f;    // ESKF accel observation noise R / ESKF加速度観測ノイズ
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--scenario") == 0 && i + 1 < argc) {
             scn = parseScenario(argv[++i]);
@@ -206,6 +208,10 @@ int main(int argc, char** argv)
         } else if (std::strcmp(argv[i], "--noise-stage") == 0 && i + 1 < argc) {
             const char* ns = argv[++i];                        // accept "N2" or "2"
             noise_stage = (ns[0] == 'N' || ns[0] == 'n') ? atoi(ns + 1) : atoi(ns);
+        } else if (std::strcmp(argv[i], "--lpf-alpha") == 0 && i + 1 < argc) {
+            lpf_alpha = (float)atof(argv[++i]);                // stronger filter = smaller alpha
+        } else if (std::strcmp(argv[i], "--accel-noise") == 0 && i + 1 < argc) {
+            accel_noise = (float)atof(argv[++i]);              // larger R = trust accel less
         }
     }
 
@@ -238,7 +244,7 @@ int main(int argc, char** argv)
     cfg.use_baro = false;
     cfg.use_mag = false;
     cfg.use_flow = false;
-    cfg.accel_noise = 0.3f;
+    cfg.accel_noise = accel_noise;  // CLI-overridable for control-design A/B
     cfg.gyro_noise = 0.009655f;
     cfg.tof_noise = 0.01f;
     eskf.init(cfg);
@@ -270,7 +276,7 @@ int main(int argc, char** argv)
     const int   CAL_SAMPLES = 400;
 
     // --- LPF (matches sil_main ESKF path) ---
-    const float alpha_eskf = 0.32f;
+    const float alpha_eskf = lpf_alpha;  // CLI-overridable for control-design A/B
     Vec3 gyro_eskf_lpf = {}, accel_eskf_lpf = {};
     bool lpf_initialized = false;
 
