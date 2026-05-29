@@ -22,7 +22,11 @@
 
 #include <cstdio>
 
-#define ESP_LOGI(tag, fmt, ...) printf("[INFO] %s: " fmt "\n", tag, ##__VA_ARGS__)
-#define ESP_LOGW(tag, fmt, ...) printf("[WARN] %s: " fmt "\n", tag, ##__VA_ARGS__)
-#define ESP_LOGE(tag, fmt, ...) printf("[ERR]  %s: " fmt "\n", tag, ##__VA_ARGS__)
+// Logs go to stderr so they never contaminate the CSV that the integrated SIL
+// writes to stdout. Unit tests print results on stdout, logs on stderr.
+// ログは stderr へ出す。統合SILが stdout に書く CSV を汚染しないため。
+// ユニットテストは結果を stdout、ログを stderr に出す。
+#define ESP_LOGI(tag, fmt, ...) fprintf(stderr, "[INFO] %s: " fmt "\n", tag, ##__VA_ARGS__)
+#define ESP_LOGW(tag, fmt, ...) fprintf(stderr, "[WARN] %s: " fmt "\n", tag, ##__VA_ARGS__)
+#define ESP_LOGE(tag, fmt, ...) fprintf(stderr, "[ERR]  %s: " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGD(tag, fmt, ...)

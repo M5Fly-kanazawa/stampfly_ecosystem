@@ -33,11 +33,16 @@ CORE_SRCS = \
   sil_topics.cpp
 
 .PHONY: all clean check
-all: sil_min_check
+all: sil_min_check integrated_sil
 
 # M1 link smoke test: prove the unmodified core links on a PC
 # M1 リンク確認: 無改変コアがPCでリンクすることを実証
 sil_min_check: sil_min_check.cpp $(CORE_SRCS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+# M3 integrated SIL: physics + ESKF + PID + StateManager + Failsafe
+# M3 統合SIL: 物理 + ESKF + PID + StateManager + Failsafe
+integrated_sil: integrated_sil.cpp $(CORE_SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
 check: sil_min_check
