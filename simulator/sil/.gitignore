@@ -1,0 +1,9 @@
+# Build artifacts / ビルド成果物
+sil_min_check
+integrated_sil
+*.o
+*.out
+
+# SIL run outputs / SIL 実行出力
+*.csv
+*.log
