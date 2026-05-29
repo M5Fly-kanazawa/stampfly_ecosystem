@@ -108,6 +108,36 @@ static bool eskfDiverged(EskfCore& eskf)
 }
 
 // =============================================================================
+// Noise-stage selector — the diagnostic ladder's noise axis
+// ノイズ段階セレクタ — 診断梯子のノイズ軸
+//
+// N0: perfectly clean sensors (isolate ESKF/linearization structure)
+// N1: white noise + bias, no throttle-coupled vibration
+// N2: full vibration model (calibrated from hover02 log) = default
+// N3/N4 (colored/FFT-profile) reserved → treated as N2 for now.
+//
+// N0: 完全クリーン（ESKF・線形化の構造を分離）
+// N1: 白色ノイズ+バイアス、スロットル結合振動なし
+// N2: フル振動モデル（hover02ログ校正）= 既定。 N3/N4 は予約（暫定N2扱い）
+// =============================================================================
+
+static SensorNoiseParams makeNoise(int stage)
+{
+    SensorNoiseParams np;  // default = N2 (full)
+    if (stage <= 0) {
+        np.gyro_noise_density = 0; np.accel_noise_density = 0;
+        np.gyro_bias_init_std = 0; np.accel_bias_init_std = 0;
+        np.gyro_bias_rw = 0; np.accel_bias_rw = 0;
+        for (int i = 0; i < 3; i++) { np.vib_accel_k[i] = 0; np.vib_gyro_k[i] = 0; }
+        np.tof_noise_base = 0; np.tof_noise_scale = 0;
+        np.baro_noise_std = 0; np.baro_drift_rate = 0;
+    } else if (stage == 1) {
+        for (int i = 0; i < 3; i++) { np.vib_accel_k[i] = 0; np.vib_gyro_k[i] = 0; }
+    }
+    return np;
+}
+
+// =============================================================================
 // Nominal flight progression — issues StateManager events from flight context
 // 正常フライト進行 — フライト状況から StateManager イベントを発行
 // =============================================================================
@@ -165,6 +195,7 @@ int main(int argc, char** argv)
     Scenario scn = Scenario::NOMINAL;
     bool feedback_eskf = false;  // false=true attitude (M3 baseline), true=ESKF attitude (L4 closed loop)
     bool use_gust = false;       // inject body-frame gusts during FLYING / FLYING中に突風注入
+    int  noise_stage = 2;        // N0..N2 (N2=full default; N3/N4 reserved) / ノイズ段階
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--scenario") == 0 && i + 1 < argc) {
             scn = parseScenario(argv[++i]);
@@ -172,11 +203,14 @@ int main(int argc, char** argv)
             feedback_eskf = (std::strcmp(argv[++i], "eskf") == 0);
         } else if (std::strcmp(argv[i], "--gust") == 0) {
             use_gust = true;
+        } else if (std::strcmp(argv[i], "--noise-stage") == 0 && i + 1 < argc) {
+            const char* ns = argv[++i];                        // accept "N2" or "2"
+            noise_stage = (ns[0] == 'N' || ns[0] == 'n') ? atoi(ns + 1) : atoi(ns);
         }
     }
 
-    fprintf(stderr, "=== StampFly Integrated SIL (scenario=%s, feedback=%s, gust=%s) ===\n",
-            scenarioName(scn), feedback_eskf ? "eskf" : "truth", use_gust ? "on" : "off");
+    fprintf(stderr, "=== StampFly Integrated SIL (scenario=%s, feedback=%s, gust=%s, noise=N%d) ===\n",
+            scenarioName(scn), feedback_eskf ? "eskf" : "truth", use_gust ? "on" : "off", noise_stage);
 
     // --- Topics, StateManager, Failsafe ---
     topics_init();
@@ -194,7 +228,7 @@ int main(int argc, char** argv)
     QuadPhysics quad;
     QuadParams qp;
     ContactParams cp;
-    SensorNoiseParams np;
+    SensorNoiseParams np = makeNoise(noise_stage);
     quad.init(qp, cp, np);
 
     // --- ESKF (initialized after calibration, like the firmware) ---
@@ -275,7 +309,8 @@ int main(int argc, char** argv)
            "eskf_x,eskf_y,eskf_z,eskf_vz,"
            "eskf_roll,eskf_pitch,eskf_yaw,"
            "thrust,m1,m2,m3,m4,"
-           "flight_state,flight_mode,armed,alert_type\n");
+           "flight_state,flight_mode,armed,alert_type,"
+           "norm_ratio,innov_norm,p_att_x,p_att_y\n");
 
     // =========================================================================
     // Simulation loop
@@ -479,12 +514,23 @@ int main(int argc, char** argv)
         // --- CSV (stdout, 50 Hz) ---
         if (step % 8 == 0) {
             Vec3 true_euler = true_st.attitude.to_euler();
+            // ESKF diagnostics (the diagnostic ladder's observability axis):
+            // norm gate ratio, accel innovation magnitude, attitude covariance.
+            // ESKF診断（診断梯子の可観測性軸）: ノルムゲート比・加速度イノベーション・姿勢共分散
+            Vec3 accel_bc = accel - eskf.getAccelBias();
+            float norm_ratio = fabsf(accel_bc.norm() - cfg.gravity) / cfg.gravity;
+            Vec3 g_ned_vec(0.0f, 0.0f, -cfg.gravity);
+            Vec3 g_exp = eskf.getAttitude().inv_rotate(g_ned_vec);
+            float innov_norm = (accel_bc - g_exp).norm();
+            float p_att_x = eskf.getPDiag(ATT_X);
+            float p_att_y = eskf.getPDiag(ATT_Y);
             printf("%.4f,%.4f,%.4f,%.4f,%.4f,"
                    "%.4f,%.4f,%.4f,"
                    "%.4f,%.4f,%.4f,%.4f,"
                    "%.4f,%.4f,%.4f,"
                    "%.4f,%.3f,%.3f,%.3f,%.3f,"
-                   "%d,%d,%d,%d\n",
+                   "%d,%d,%d,%d,"
+                   "%.5f,%.4f,%.6f,%.6f\n",
                    t,
                    true_st.position.x, true_st.position.y,
                    true_st.position.z, true_st.velocity.z,
@@ -494,7 +540,8 @@ int main(int argc, char** argv)
                    thrust,
                    motor_duty[0], motor_duty[1], motor_duty[2], motor_duty[3],
                    static_cast<int>(st), static_cast<int>(g_sm.getMode()),
-                   g_sm.isArmed() ? 1 : 0, static_cast<int>(last_alert_type));
+                   g_sm.isArmed() ? 1 : 0, static_cast<int>(last_alert_type),
+                   norm_ratio, innov_norm, p_att_x, p_att_y);
         }
     }
 
