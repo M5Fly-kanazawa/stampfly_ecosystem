@@ -188,15 +188,85 @@ def plot_ab_sweep():
     return path
 
 
+def run_regression(args):
+    """Run ./old_eskf_regression and return the stdout CSV as a numpy array."""
+    res = subprocess.run(["./old_eskf_regression"] + args,
+                         capture_output=True, text=True)
+    return np.genfromtxt(io.StringIO(res.stdout), delimiter=",", names=True)
+
+
+def plot_regression_challenge():
+    """Figure 6: regression challenge (M11-3) — legacy ESKF vs redesign on
+    IDENTICAL inputs. Both observe the same sensor stream open-loop, so this is
+    a clean A/B: legacy reproduces bugs A/C, the redesign fixes them.
+    回帰チャレンジ(M11-3) — 旧ESKF vs 新redesign を同一入力で比較。"""
+    flow = run_regression(["--mode", "flow", "--dur", "25"])
+    ba = run_regression(["--mode", "ba", "--free-ba", "--dur", "30"])
+    pc = run_regression(["--mode", "pcollapse", "--dur", "25"])
+
+    OLD, NEW = "#d62728", "#2ca02c"  # red = legacy (bug), green = redesign (fixed)
+    fig, ax = plt.subplots(1, 3, figsize=(14, 4.3))
+
+    # Panel 1 — Bug A / velocity: legacy P(VEL) collapse breaks the flow chi2
+    # gate → velocity diverges; redesign clamps innovation → bounded. (log scale)
+    vo = np.hypot(flow["vel_old_x"], flow["vel_old_y"])
+    vn = np.hypot(flow["vel_new_x"], flow["vel_new_y"])
+    ax[0].semilogy(flow["time"], np.maximum(vo, 1e-3), color=OLD,
+                   label="legacy (χ² gate)")
+    ax[0].semilogy(flow["time"], np.maximum(vn, 1e-3), color=NEW,
+                   label="redesign (innov clamp)")
+    ax[0].axhline(5.0, color="k", ls=":", lw=1, label="divergence threshold")
+    ax[0].set_xlabel("Time [s]")
+    ax[0].set_ylabel("|ESKF velocity| [m/s]  (truth ≈ 0)")
+    ax[0].set_title("Bug A / velocity — P-collapse breaks flow χ²")
+    ax[0].legend(loc="center right", fontsize=8)
+    ax[0].grid(alpha=0.3, which="both")
+
+    # Panel 2 — Bug C: unfrozen accel bias drifts (legacy) vs bounded (redesign).
+    ax[1].plot(ba["time"], ba["ba_old_drift"], color=OLD,
+               label="legacy (BA unfrozen)")
+    ax[1].plot(ba["time"], ba["ba_new_drift"], color=NEW, label="redesign")
+    ax[1].axhline(0.2, color="k", ls=":", lw=1, label="corruption threshold")
+    ax[1].set_xlabel("Time [s]")
+    ax[1].set_ylabel("|accel-bias drift| [m/s²]")
+    ax[1].set_title("Bug C — accel-bias drift (BA unfrozen)")
+    ax[1].legend(loc="center right", fontsize=8)
+    ax[1].grid(alpha=0.3)
+
+    # Panel 3 — Bug A / altitude: P(POS_Z) collapses below R in BOTH filters
+    # (shared phenomenon, benign under absolute ToF gates). (log scale)
+    ax[2].semilogy(pc["time"], pc["p_zz_old"], color=OLD, label="legacy")
+    ax[2].semilogy(pc["time"], pc["p_zz_new"], color=NEW, label="redesign")
+    ax[2].axhline(1e-4, color="k", ls=":", lw=1, label="R_tof (meas. noise)")
+    ax[2].set_xlabel("Time [s]")
+    ax[2].set_ylabel("P(POS_Z) [m²]")
+    ax[2].set_title("Bug A / altitude — P-collapse (shared, benign)")
+    ax[2].legend(loc="upper right", fontsize=8)
+    ax[2].grid(alpha=0.3, which="both")
+
+    fig.suptitle("Regression challenge (M11-3): legacy vs redesign ESKF "
+                 "on identical inputs", fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    path = os.path.join(OUT_DIR, "fig6_regression_challenge.png")
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    # Ensure the harnesses are built (deterministic, fixed seed).
+    # ハーネスをビルド(決定論、固定シード)。
+    subprocess.run(["make", "-s", "integrated_sil", "old_eskf_regression"],
+                   check=False)
     datasets = {scn: run_scenario(scn) for scn in SCENARIOS}
     p1 = plot_nominal_detail(datasets["nominal"])
     p2 = plot_state_timelines(datasets)
     p3 = plot_altitude_overlay(datasets)
     p4 = plot_diagnostic_ladder()
     p5 = plot_ab_sweep()
-    for p in (p1, p2, p3, p4, p5):
+    p6 = plot_regression_challenge()
+    for p in (p1, p2, p3, p4, p5, p6):
         print("wrote", p)
 
 
