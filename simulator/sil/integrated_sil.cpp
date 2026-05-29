@@ -279,6 +279,12 @@ int main(int argc, char** argv)
     bool was_airborne = false;
     bool mission_complete = false;  // set true after first full land / 初回着陸完了で true
 
+    // --- Control-design evaluation accumulators (over the FLYING window) ---
+    // --- 制御設計の評価アキュムレータ（FLYING窓で集計）---
+    double sum_r2 = 0, sum_p2 = 0, sum_alt2 = 0;
+    float eval_max_r = 0, eval_max_p = 0;
+    long eval_n = 0;
+
     // --- Gust schedule (body-frame force[N]/torque[Nm], injected only while FLYING) ---
     // --- 突風スケジュール（body座標 力[N]/トルク[Nm]、FLYING中のみ注入）---
     // Values from flight_scenario_test.cpp (wind on asymmetric body), retimed to
@@ -511,6 +517,20 @@ int main(int argc, char** argv)
                     t, flightStateName(st), height, thrust);
         }
 
+        // --- Evaluation metrics (accumulate every step over the FLYING window) ---
+        // --- 評価指標（FLYING窓で毎ステップ集計）---
+        if (st == FlightState::FLYING) {
+            Vec3 ev_euler = true_st.attitude.to_euler();
+            float r = ev_euler.x * 57.2958f, p = ev_euler.y * 57.2958f;
+            sum_r2 += (double)r * r;
+            sum_p2 += (double)p * p;
+            if (fabsf(r) > eval_max_r) eval_max_r = fabsf(r);
+            if (fabsf(p) > eval_max_p) eval_max_p = fabsf(p);
+            float ae = (-true_st.position.z) - target_alt;  // altitude error [m]
+            sum_alt2 += (double)ae * ae;
+            eval_n++;
+        }
+
         // --- CSV (stdout, 50 Hz) ---
         if (step % 8 == 0) {
             Vec3 true_euler = true_st.attitude.to_euler();
@@ -543,6 +563,17 @@ int main(int argc, char** argv)
                    g_sm.isArmed() ? 1 : 0, static_cast<int>(last_alert_type),
                    norm_ratio, innov_norm, p_att_x, p_att_y);
         }
+    }
+
+    // --- Control-design evaluation summary (stderr) ---
+    // --- 制御設計の評価サマリ（stderr）---
+    fprintf(stderr, "\n=== Control evaluation (FLYING window, n=%ld) ===\n", eval_n);
+    if (eval_n > 0) {
+        fprintf(stderr, "  roll : RMS=%.3f deg  max=%.3f deg\n",
+                sqrt(sum_r2 / (double)eval_n), eval_max_r);
+        fprintf(stderr, "  pitch: RMS=%.3f deg  max=%.3f deg\n",
+                sqrt(sum_p2 / (double)eval_n), eval_max_p);
+        fprintf(stderr, "  alt  : RMS=%.1f mm\n", sqrt(sum_alt2 / (double)eval_n) * 1000.0);
     }
 
     fprintf(stderr, "\n=== Final state: %s ===\n", flightStateName(g_sm.getState()));
