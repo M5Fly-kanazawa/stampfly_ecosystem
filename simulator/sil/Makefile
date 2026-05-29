@@ -58,8 +58,26 @@ OLD_ESKF_CXXFLAGS = -std=c++17 -O2 -Wall -I compat \
 old_eskf_check: old_eskf_check.cpp $(OLD)/components/sf_algo_eskf/eskf.cpp
 	$(CXX) $(OLD_ESKF_CXXFLAGS) -o $@ $^ -lm
 
+# M11-2 regression challenge: drive the LEGACY ESKF (unmodified) with the SAME
+# quad_physics + control as integrated_sil, and reproduce known legacy bugs
+# (A: P-collapse, C: BA divergence). Links BOTH the vehicle_new physics/control
+# headers and the legacy eskf.cpp by reference (Code Identity on both sides).
+# M11-2 回帰チャレンジ: 旧ESKF(無改変)を integrated_sil と同じ quad_physics +
+# 制御で駆動し、既知の旧バグ(A:P崩壊, C:BA発散)を再現。新側の物理/制御ヘッダと
+# 旧 eskf.cpp の両方を参照リンク(両側で Code Identity)。
+REG_CXXFLAGS = -std=c++17 -O2 -Wall -Wextra \
+  -I compat \
+  -I $(FW)/components/sf_math/include \
+  -I $(FW)/components/sf_controller_pid/include \
+  -I $(FW)/sim \
+  -I $(OLD)/components/sf_algo_eskf/include \
+  -I $(OLD)/components/sf_algo_math/include
+
+old_eskf_regression: old_eskf_regression.cpp $(OLD)/components/sf_algo_eskf/eskf.cpp
+	$(CXX) $(REG_CXXFLAGS) -o $@ $^ -lm
+
 check: sil_min_check
 	./sil_min_check
 
 clean:
-	rm -f sil_min_check integrated_sil
+	rm -f sil_min_check integrated_sil old_eskf_check old_eskf_regression
