@@ -261,9 +261,9 @@ M11 によって、「**SIL でバグを見つける → 直す → SIL で直�
 
 実機フライトログ（`logs/stampfly_udp_20260408T160105.jsonl`, 60秒飛行）の記録センサ列を、ログを実際に飛ばした旧ESKF（`stampfly::ESKF`）にオープンループ観測として再生し、SIL 推定を実機ログ自身の ESKF 出力と軸別 RMSE で照合した（ハーネス: `log_to_replay.py` → `log_replay` → `plot_replay.py`、両 ESKF とも参照コンパイルで Code Identity を維持）。
 
-検証の核心は「同じ旧 ESKF コード・同じ実機 flow なのに、SIL は水平位置・速度が発散（pos_x RMSE 112 m）する一方、実機ログ自身は有界（[-0.39, 0.19] m）」という差分の切り分けだった。原因は **SIL が実機の運用 config（`firmware/vehicle/main/config.hpp`）を再現せず、ライブラリ既定値（`defaultConfig()`）で走らせていたソフト要因**にあった。実機は config.hpp で意図的に flow χ² ゲートを無効化（`FLOW_CHI2_GATE=0`、コメント「発散防止のため」）・innovation クランプを有効化（`FLOW_INNOV_CLAMP=0.3`）・大きな flow R（`FLOW_NOISE=0.30`）を用い、チューニングでバグ A（崩壊 P 上の χ² 誤棄却による速度発散）を運用上回避していた。SIL の `makeLegacyConfig()` を config.hpp の直接 include で `init.cpp` と 1 対 1 に合わせると、旧 ESKF の水平発散は完全に有界化した。
+検証は2段階で進んだ。**第1段（H3, 代表ログ1本）** では「同じ旧 ESKF コード・同じ実機 flow なのに、SIL は水平位置・速度が発散（pos_x RMSE 112 m）する一方、実機ログ自身は有界（[-0.39, 0.19] m）」という差分を切り分けた。一因は **SIL が実機の運用 config（`firmware/vehicle/main/config.hpp`）を再現せず、ライブラリ既定値（`defaultConfig()`）で走らせていたソフト要因**だった。実機は config.hpp で意図的に flow χ² ゲートを無効化（`FLOW_CHI2_GATE=0`、コメント「発散防止のため」）・innovation クランプを有効化（`FLOW_INNOV_CLAMP=0.3`）・大きな flow R（`FLOW_NOISE=0.30`）を用い、チューニングでバグ A（崩壊 P 上の χ² 誤棄却による速度発散）を運用上回避していた。SIL の `makeLegacyConfig()` を config.hpp の直接 include で `init.cpp` と 1 対 1 に合わせると、この代表ログでは旧 ESKF の水平発散が有界化した。
 
-**表10: M7 差分診断 — config 不一致修正（H3）の効果（代表ログ, RMSE over t≥6s）**
+**表10: M7 差分診断 — config 不一致修正（H3）の効果（代表ログ `160105`, RMSE over t≥6s）**
 
 | 軸 | 修正前（defaultConfig） | 修正後（実機config） | 新ESKF |
 |----|------------------------|----------------------|--------|
@@ -273,13 +273,26 @@ M11 によって、「**SIL でバグを見つける → 直す → SIL で直�
 | vel_y [m/s] | 2.02 | 0.06 | 0.05 |
 | roll / pitch / yaw [deg] | 1.77 / 1.70 / 0.88 | 1.98 / 1.88 / 0.77 | 1.82 / 1.42 / 0.84 |
 
-**M7 結論:** 旧 ESKF はオープンループ再生で実機ログの水平位置を ~0.12 m・姿勢を 3 軸平均 1.54° の軸別 RMSE で追従する。水平チャネルの発散は config 再現で完全に解消したため、その要因は **HW/タイミング/通信ではなくソフト（config）要因**と確定した（本レポートの中心的主張＝「再現＝ソフト要因／非再現＝HW・通信要因」が実機データで裏づけられた）。姿勢残差 ~1.5° は P 初期化・ウォームスタート・センサ到着順の差に帰属し、実機の `k_adaptive=10` が動的加速度時に加速度姿勢補正を弱めるため default config より僅かに大きい（厳密な 1° 以内一致には至らないが実用追従レベル）。本結果は §6 回帰チャレンジの「`--no-flow-gate` で旧発散が消える＝原因は χ² 破綻」とも整合する（実機は最初からゲート無効で運用）。**重要な学び:** コアを参照コンパイルしても**パラメータ（config）を再現しなければ Code Identity は不完全**であり、今回 config.hpp を直接 include してチューニングまで同一化した。詳細な検証過程（仮説 H1→H2→H3 の時系列ログと図）は `docs/m7_verification_journal.md` を参照。
+**第2段（H4, ロバスト性確認 — 全87ログ）** で、上の有界化が代表ログ特有でないかを検証した。再生 RMSE は `|SIL − 実機ログ参照|` なので、「SIL が実機を再現したか」を問えるのは**実機ログ参照そのものが信頼できるホバ/巡航のとき**だけである（実機 ESKF 自身が飛行中に発散したログ＝60 秒室内で物理的にあり得ない大きさの参照移動を示すものは、参照に使えないため除外）。参照水平移動量で分類すると、解析対象 74 フライトのうちホバ（<3 m）48・機動（3–30 m）16・参照発散（>30 m）10 だった。
+
+**表11: M7 ロバスト性 — 48本のクリーンなホバ参照での有界率（有界 = 水平位置 RMSE < 5 m）**
+
+| 推定器 | 有界本数 | 有界率 |
+|--------|:---:|:---:|
+| 旧 ESKF（実機 config, H3 修正済） | 38 / 48 | **79%** |
+| 新 ESKF（redesign） | 48 / 48 | **100%** |
+
+決定的な実例は `185138`（実機はホバリング, 参照移動 0 m）で、同じ旧 ESKF コード・同じ実機 config・同じ再生入力で SIL の旧 ESKF は roll 75.8°・pos_z 4865 m と全面崩壊したが、redesign は同一入力で roll 6.5°・pos 0.17 m と完全に有界だった（flow χ² ゲートは既に OFF なので、これは §6 バグ A の χ² 誤棄却とは別機序の構造的脆弱性である）。
+
+**M7 結論:** config 同一化（H3）は再生忠実度の必要条件だが、旧 ESKF の不安定さの**十分な原因ではない**。クリーンなホバ参照 48 本のうち旧 ESKF は config を実機と合わせても 79% しか有界化せず、残り 21% は発散した。一方、**redesign は同一の再生入力で 100% 有界**であり、入力列が妥当（＝崩壊の原因が入力側でなく旧 ESKF の脆弱性側）であることを示す。これは SIL の北極星「既知バグの再現テスト（回帰チャレンジ, §6）＝作り直しで直った」を、合成データでなく**実機 87 ログ規模で**裏づける最も強い証拠である。差分診断として、旧 ESKF が SIL で発散し実機参照は有界だった 21% は「非再現」であり、その発散は**クリーンな 400 Hz 再生が表現しない要因（実時間のセンサ到着順・タイミング・ジッタ）と、config では消せない旧 ESKF の構造的脆弱性の組合せ**に局在する。**重要な学び:** コアを参照コンパイルしても**パラメータ（config）を再現しなければ Code Identity は不完全**。詳細な検証過程（仮説 H1→H4 の時系列ログと図）は `docs/m7_verification_journal.md` を参照。
+
+![robustness](images/m7_robustness.png)
 
 ### 残作業 — M8〜M10
 
 M8〜M10 はいずれも**実機フライトログとの突き合わせ**を前提とし、SIL 単体では到達できない領域である。
 
-**表11: 残っている作業（M8〜M10）**
+**表12: 残っている作業（M8〜M10）**
 
 | フェーズ | 内容 | 前提 |
 |---------|------|------|
@@ -449,11 +462,13 @@ A recorded sensor stream from a real flight (`logs/stampfly_udp_20260408T160105.
 
 The puzzle: with the *same* legacy code and the *same* real flow, the SIL diverged horizontally (pos_x RMSE 112 m) while the real flight stayed bounded ([-0.39, 0.19] m). The cause was a **software (config) factor** — the SIL ran the library `defaultConfig()` instead of the firmware's operational config (`config.hpp`). The firmware deliberately **disables the flow chi-square gate** (`FLOW_CHI2_GATE=0`), **enables the innovation clamp** (`FLOW_INNOV_CLAMP=0.3`), and uses a large flow R (`FLOW_NOISE=0.30`) — it avoids bug A by tuning. Matching `makeLegacyConfig()` to `init.cpp` (by `#include`-ing the firmware's own config.hpp) made the legacy horizontal divergence vanish: pos_x 112.88 → 0.12 m, vel_x 4.85 → 0.05 m/s; attitude tracks the log at ~1.54° mean RMSE.
 
-**M7 conclusion:** the horizontal divergence is a software (config) factor, not HW/timing/comm — the report's central claim (reproduce = software cause / not = HW·comm cause) is now backed by real data. The ~1.5° attitude residual is attributed to P-init / warm-start / sensor-arrival-order differences. This is consistent with §6's "`--no-flow-gate` removes the legacy divergence → cause is chi-square breakdown" (the real firmware ran with the gate off from the start). Key lesson: reference-compiling the core is not enough — **Code Identity is incomplete unless the parameters (config) are reproduced too**. See `docs/m7_verification_journal.md` for the H1→H2→H3 log.
+A whole-corpus robustness sweep (H4) over all 87 logs then tested whether this generalizes. Since the replay RMSE is `|SIL − flight-log reference|`, the "did the SIL reproduce the flight" question only applies when the logged reference is a trustworthy hover/cruise (logs where the firmware's own ESKF diverged in flight — physically impossible reference travel — are excluded). On the 48 clean hover references, the legacy ESKF (real config) stays bounded (pos RMSE < 5 m) on only **38/48 = 79%**, while the redesign is **48/48 = 100%**. The decisive case `185138` (real flight hovering, 0 m reference travel) blew up under the legacy ESKF (roll 75.8°, pos_z 4865 m) while the redesign stayed bounded (roll 6.5°, pos 0.17 m) on the same input.
+
+**M7 conclusion:** config identity (H3) is necessary for replay fidelity but **not a sufficient cure** for the legacy ESKF's instability — even with the real config, the legacy diverges on 21% of clean hover flights, whereas the redesign is bounded on 100% of the same inputs. This backs the report's north star (§6 regression challenge — "the rebuild fixed it") on **real data at 87-log scale**, not synthetic data. The 21% legacy-diverges-but-reference-bounded cases are "not reproduced" and localize to factors a clean 400 Hz replay does not model (real-time sensor arrival order / timing / jitter) combined with structural fragility the config cannot remove. Key lesson: reference-compiling the core is not enough — **Code Identity is incomplete unless the parameters (config) are reproduced too**. See `docs/m7_verification_journal.md` for the H1→H4 log.
 
 ### Remaining work — M8–M10
 
-**Table 11: Remaining work (M8–M10)**
+**Table 12: Remaining work (M8–M10)**
 
 | Phase | Content | Prerequisite |
 |-------|---------|--------------|
