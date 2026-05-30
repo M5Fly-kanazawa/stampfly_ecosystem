@@ -48,6 +48,8 @@ def read_log(path):
     t_pv, pos_h, pos_z, spd = [], [], [], []
     t_st, st, volt = [], [], []
     t_cr, thrust = [], []
+    t_tof, tof_d = [], []   # bottom ToF: RAW ground distance, NOT through the ESKF
+                            # 底面ToF: 生の対地距離（ESKFを通さない独立証拠）
     with open(path) as f:
         for line in f:
             line = line.strip()
@@ -89,6 +91,11 @@ def read_log(path):
             elif mid == "ctrl_ref":
                 t_cr.append(ts)
                 thrust.append(o.get("total_thrust", 0.0))
+            elif mid == "tof_b":
+                # status 0 = valid range reading; keep all but mark for filtering
+                # status 0 = 有効測距; 全て保持しフィルタは後段で
+                t_tof.append(ts)
+                tof_d.append(o.get("distance", 0.0))
     return dict(
         t_imu=np.array(t_imu, float), acc_z=np.array(acc_z, float),
         acc_n=np.array(acc_n, float), gyro_n=np.array(gyro_n, float),
@@ -97,6 +104,7 @@ def read_log(path):
         pos_z=np.array(pos_z, float), spd=np.array(spd, float),
         t_st=np.array(t_st, float), st=st, volt=np.array(volt, float),
         t_cr=np.array(t_cr, float), thrust=np.array(thrust, float),
+        t_tof=np.array(t_tof, float), tof_d=np.array(tof_d, float),
     )
 
 
@@ -156,21 +164,56 @@ def detect_motion(d):
                 inverted=inverted, invert_frac=invert_frac, move_frac=move_frac)
 
 
-def heuristic_category(s, mo):
-    """Rough auto-label to ORDER the table — MUST be confirmed by eye on figures.
-    表を並べるための粗いラベル — 必ず図を目で見て確認すること。"""
-    if not mo["moved"]:
-        return "static?"            # never really moved => stationary on ground
-    if mo["inverted"]:
-        # inverted late in the record but estimate stayed sane => post-land flip
-        # 記録後半で反転かつ推定は健全 => 着地後の手持ち反転の疑い
-        if mo["invert_frac"] is not None and mo["invert_frac"] > 0.8 \
-                and s["ref_pos_h_max"] < 5 and s["ref_pos_z_absmax"] < 5:
-            return "flew+landflip?"
-        return "crash?"             # sustained inversion during the record
-    if s["ref_pos_h_max"] > 30 or s["ref_pos_z_absmax"] > 30:
-        return "est-blowup?"        # moved, not inverted, but logged est went huge
-    return "flew?"                  # moved, upright, estimate bounded
+# Airborne / agreement constants — based on the RAW bottom-ToF, which does NOT
+# pass through the ESKF, so using it to judge "did it fly" is NOT circular.
+# 浮上・一致の定数 — 生の底面ToF基準。ToFはESKFを通らないので「飛んだか」の判定に
+# 使っても循環しない。
+AIRBORNE_M = 0.15      # raw ToF above this = off the ground
+AIRBORNE_HOLD_S = 1.0  # must persist this long to count as a real lift-off
+TOF_MAX_VALID = 4.0    # ToF sensor range ceiling [m]
+
+
+def tof_airborne(d):
+    """Did the RAW ToF show a sustained lift-off? Returns (airborne, tof_max).
+    生ToFが持続的な浮上を示したか。(浮上したか, ToF最大) を返す。"""
+    td = d["tof_d"]
+    if len(td) < 5:
+        return False, 0.0
+    valid = td[(td > 0.0) & (td < TOF_MAX_VALID)]
+    tof_max = float(valid.max()) if len(valid) else 0.0
+    # sustained run above AIRBORNE_M (ToF ~30 Hz => samples for 1 s ≈ 30)
+    # AIRBORNE_M 超えの持続（ToF約30Hz => 1秒≈30サンプル）
+    need = max(10, int(AIRBORNE_HOLD_S * 30))
+    air = (td > AIRBORNE_M) & (td < TOF_MAX_VALID)
+    run = 0
+    for v in air:
+        run = run + 1 if v else 0
+        if run >= need:
+            return True, tof_max
+    return False, tof_max
+
+
+def classify(s, mo, has_tof, airborne, tof_max):
+    """Circular-free category using RAW ToF as ground truth for height.
+    The ESKF position is the THING UNDER TEST, so it is NOT used to decide
+    whether the drone flew — only to flag estimator blow-up against the ToF.
+    生ToFを高度の真値とする循環なし分類。ESKF位置は検証対象なので飛行判定には
+    使わず、ToFとの乖離で推定暴走を検出するためだけに見る。
+    末尾 ? は暫定（図で要確認）。"""
+    if not has_tof:
+        return "no-tof?"            # no independent height evidence => unusable ruler
+    if airborne:
+        # flew for real. Does the ESKF height roughly track the real ToF height?
+        # 実際に飛んだ。ESKF高度が実ToF高度を概ね追えているか？
+        if s["ref_pos_z_absmax"] <= tof_max * 2.0 + 1.0 and s["ref_pos_h_max"] < 10:
+            return "flew-clean?"    # flew AND estimate tracks => good ruler
+        return "flew-divergent?"    # flew BUT estimate diverged => estimator suspect
+    # NOT airborne (ToF says on the ground) ...
+    if s["ref_pos_z_absmax"] > 2.0 or s["ref_pos_h_max"] > 5.0:
+        return "est-blowup?"        # on the ground per ToF, yet ESKF huge => bug (no circularity)
+    if mo["moved"]:
+        return "ground-motor?"      # moved/vibrated but never lifted off
+    return "static?"                # truly still
 
 
 def summarize(path):
@@ -197,9 +240,12 @@ def summarize(path):
         "_d": d, "_t0": t0,
     }
     mo = detect_motion(d)
+    has_tof = len(d["t_tof"]) > 0
+    airborne, tof_max = tof_airborne(d)
     s.update(gyro_max=mo["gyro_max"], acc_std=mo["acc_std"],
              inverted=mo["inverted"], invert_frac=mo["invert_frac"],
-             cat=heuristic_category(s, mo))
+             has_tof=has_tof, airborne=airborne, tof_max=tof_max,
+             cat=classify(s, mo, has_tof, airborne, tof_max))
     return s
 
 
@@ -226,13 +272,26 @@ def plot_log(s):
 
     if len(d["t_pv"]):
         tp = (d["t_pv"] - t0) / 1e6
-        ax[1].plot(tp, -d["pos_z"], "C0-", lw=0.7, label="-pos_z (height)")
-        ax[1].set_ylabel("height [m]")
-        ax[1].legend(fontsize=7, loc="upper right")
+        ax[1].plot(tp, -d["pos_z"], "C0-", lw=0.7, label="-pos_z (ESKF est.)")
+    # RAW ToF height (independent of the ESKF) — the circular-free ground truth.
+    # 生ToF高度（ESKF非依存）— 循環しない高度の真値。
+    if len(d["t_tof"]):
+        tt = (d["t_tof"] - t0) / 1e6
+        td = np.where((d["tof_d"] > 0) & (d["tof_d"] < TOF_MAX_VALID), d["tof_d"], np.nan)
+        ax[1].plot(tt, td, "k.", ms=1.5, label="ToF dist (RAW, truth)")
+        ax[1].axhline(AIRBORNE_M, color="0.6", ls="--", lw=0.7,
+                      label=f"airborne {AIRBORNE_M:.2f}m")
+    ax[1].set_ylabel("height [m]")
+    ax[1].legend(fontsize=7, loc="upper right")
+
+    # horizontal pos + speed (ESKF-derived; shown for divergence visibility)
+    # 水平位置・速度(ESKF由来; 発散の可視化用)
+    if len(d["t_pv"]):
+        tp = (d["t_pv"] - t0) / 1e6
         ax[2].plot(tp, d["pos_h"], "C2-", lw=0.7, label="horizontal |pos|")
         ax[2].plot(tp, d["spd"], "C1-", lw=0.5, alpha=0.7, label="speed |vel|")
-        ax[2].set_ylabel("pos_h / speed")
         ax[2].legend(fontsize=7, loc="upper right")
+    ax[2].set_ylabel("pos_h / speed")
 
     if len(d["t_cr"]):
         tc = (d["t_cr"] - t0) / 1e6
@@ -276,50 +335,79 @@ def main():
               f"{'(too-short)' if not s['ok'] else ''}", file=sys.stderr)
 
     ok = [r for r in rows if r["ok"]]
-
-    # group counts for the heuristic categories (to be confirmed by eye)
-    # ヒューリスティック分類の集計（図で要確認）
     from collections import Counter
-    catc = Counter(r["cat"] for r in ok)
 
-    md = ["# M7 ログ地図 — 全フライトログの事実一覧（判定でなく観測事実）",
-          "",
-          "> 各ログが実際に何だったかを俯瞰するための事実テーブル。**仮分類列は粗い"
-          "ヒューリスティックで、必ず `docs/logmap/<name>.png` の俯瞰図を目で見て"
-          "確定すること**（末尾 `?` は暫定の意）。",
-          "",
-          "> 注: 本コーパスは制御出力（total_thrust/motor_duty/throttle）が全ログ0で"
-          "記録されており飛行検出に使えないため、運動は IMU の gyro/accel から検出した。",
-          "",
-          "**仮分類の内訳（要目視確認）:** "
-          + " / ".join(f"{k}={v}" for k, v in catc.most_common()),
-          "",
-          "| log | 仮分類 | 記録秒 | status | 飛行状態の遷移 | gyro最大[rad/s] "
-          "| accel-std | 持続反転 | ログ水平最大[m] | ログ\\|pos_z\\|最大[m] | 最低電圧 |",
-          "|-----|:--:|------:|:--:|------|------:|------:|:--:|------:|------:|------:|"]
-    # order: by category then by duration, so similar logs sit together
-    cat_order = {"flew?": 0, "flew+landflip?": 1, "crash?": 2,
-                 "est-blowup?": 3, "static?": 4}
-    for r in sorted(ok, key=lambda r: (cat_order.get(r["cat"], 9), -r["dur_s"])):
+    # Split by the independent height evidence: only ToF-bearing logs can serve
+    # as a verification ruler (their "did it fly" answer is not circular).
+    # 独立した高度証拠で二分: ToFを持つログだけが検証の物差しになりうる
+    # （飛行判定が循環しないため）。
+    tof_logs = [r for r in ok if r["has_tof"]]
+    notof_logs = [r for r in ok if not r["has_tof"]]
+    catc = Counter(r["cat"] for r in tof_logs)
+
+    def row(r):
         inv = "—"
         if r["inverted"] and r["invert_frac"] is not None:
             inv = f"@{r['invert_frac']*100:.0f}%"
-        md.append(
-            f"| {r['name']} | {r['cat']} | {r['dur_s']:.0f} | "
-            f"{'✓' if r['has_status'] else '—'} | {r['state_seq']} "
-            f"| {r['gyro_max']:.1f} | {r['acc_std']:.2f} | {inv} "
-            f"| {r['ref_pos_h_max']:.1f} | {r['ref_pos_z_absmax']:.1f} "
-            f"| {r['v_min']:.2f} |")
+        air = "浮上" if r["airborne"] else "—"
+        return (f"| {r['name']} | {r['cat']} | {r['dur_s']:.0f} | "
+                f"{'✓' if r['has_status'] else '—'} | {air} | {r['tof_max']:.2f} "
+                f"| {r['ref_pos_z_absmax']:.1f} | {r['ref_pos_h_max']:.1f} "
+                f"| {r['gyro_max']:.1f} | {inv} | {r['v_min']:.2f} |")
+
+    md = ["# M7 ログ地図 — 全フライトログの事実一覧（循環しない高度証拠で分類）",
+          "",
+          "> **設計の核心:** 「飛んだか」は生の底面ToF（`tof_b.distance`, ESKF を通らない"
+          "対地距離）で判定する。ESKF の pos/height は**検証対象**なので飛行判定には使わ"
+          "ない（使うと循環する）。ToF と ESKF 高度の**乖離**こそが推定器バグの証拠になる。",
+          "",
+          "> 制御出力（total_thrust/motor_duty/throttle）は全ログ 0 で記録され飛行検出に"
+          "使えない（ログ品質の欠陥）。運動は生 gyro/accel から、高度は生 ToF から判定した。",
+          "",
+          "> 仮分類（末尾 `?`）は粗い自動判定で、必ず `docs/logmap/<name>.png` を目で"
+          "見て確定すること。",
+          "",
+          f"## A. 物差し候補 — 生ToF を持つ {len(tof_logs)} 本（飛行判定が循環しない）",
+          "",
+          "**仮分類の内訳:** " + " / ".join(f"{k}={v}" for k, v in catc.most_common()),
+          "",
+          "| log | 仮分類 | 記録秒 | status | 浮上(ToF) | ToF最大[m] "
+          "| ESKF\\|pos_z\\|最大[m] | ESKF水平最大[m] | gyro最大 | 反転 | 最低電圧 |",
+          "|-----|:--:|------:|:--:|:--:|------:|------:|------:|------:|:--:|------:|"]
+    cat_order = {"flew-clean?": 0, "flew-divergent?": 1, "est-blowup?": 2,
+                 "ground-motor?": 3, "static?": 4}
+    for r in sorted(tof_logs, key=lambda r: (cat_order.get(r["cat"], 9), -r["dur_s"])):
+        md.append(row(r))
+
+    md += ["",
+           f"## B. 物差しに使えない — 生ToF なしの {len(notof_logs)} 本（4月前半）",
+           "",
+           "> これらは高度の独立証拠がなく、「飛んだか」を ESKF 出力でしか言えない"
+           "（循環）。**物差しには使わない。** 参考に IMU 由来の事実だけ載せる。",
+           "",
+           "| log | 記録秒 | gyro最大[rad/s] | accel-std | 反転 | ESKF\\|pos_z\\|最大[m] | ESKF水平最大[m] |",
+           "|-----|------:|------:|------:|:--:|------:|------:|"]
+    for r in sorted(notof_logs, key=lambda r: -r["dur_s"]):
+        inv = "—"
+        if r["inverted"] and r["invert_frac"] is not None:
+            inv = f"@{r['invert_frac']*100:.0f}%"
+        md.append(f"| {r['name']} | {r['dur_s']:.0f} | {r['gyro_max']:.1f} "
+                  f"| {r['acc_std']:.2f} | {inv} | {r['ref_pos_z_absmax']:.1f} "
+                  f"| {r['ref_pos_h_max']:.1f} |")
+
     bad = [r for r in rows if not r["ok"]]
     if bad:
         md += ["", f"**使用不可（短すぎ等）: {len(bad)}本** — "
                + ", ".join(r["name"] for r in bad)]
-    md += ["", f"合計 {len(rows)} 本（解析可 {len(ok)}・使用不可 {len(bad)}）。"
-           f"status 記録あり {sum(1 for r in ok if r['has_status'])} 本。",
+    md += ["",
+           f"合計 {len(rows)} 本 = 物差し候補(ToFあり) {len(tof_logs)} + "
+           f"ToFなし {len(notof_logs)} + 使用不可 {len(bad)}。",
            "",
-           "**仮分類の意味:** flew?=動いた・直立・推定有界 / flew+landflip?=飛行後"
-           "記録末尾で反転(着地後手持ち疑い) / crash?=記録中に持続反転 / "
-           "est-blowup?=動いたが推定が巨大値へ / static?=ほぼ静止（飛んでいない疑い）"]
+           "**仮分類の意味（ToF基準・循環なし）:** "
+           "flew-clean?=浮上しESKF高度がToFを追えている（良い物差し） / "
+           "flew-divergent?=浮上したがESKF高度がToFと乖離（推定器が怪しい） / "
+           "est-blowup?=ToFは地上なのにESKFが巨大値（推定器バグ＝循環なしで断定） / "
+           "ground-motor?=動いたが浮上せず / static?=静止"]
 
     with open(os.path.join(OUTDIR, "logmap.md"), "w") as f:
         f.write("\n".join(md) + "\n")

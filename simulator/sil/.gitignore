@@ -10,3 +10,6 @@ log_replay
 # SIL run outputs / SIL 実行出力
 *.csv
 *.log
+
+# Log-map survey thumbnails (regenerable) / ログ地図サムネ(再生成可)
+docs/logmap/*.png
