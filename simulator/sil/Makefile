@@ -90,10 +90,14 @@ old_eskf_regression: old_eskf_regression.cpp \
 # M7 差分診断: 実機フライトログ(log_to_replay.py で変換)を旧ESKF(主)+新(ボーナス)
 # にオープンループ観測で再生し、SIL推定をファーム自身のログESKF出力と照合。
 # old_eskf_regression と同じ参照コンパイル(両ESKF)。
+# -I $(OLD)/main lets log_replay #include the firmware's own config.hpp, so the
+# legacy ESKF runs the EXACT tuning that flew the log (Code Identity on params).
+# -I $(OLD)/main で旧ファーム自身の config.hpp を include し、ログを飛ばした厳密な
+# チューニングで旧ESKFを走らせる(パラメータの Code Identity)。
 log_replay: log_replay.cpp \
             $(OLD)/components/sf_algo_eskf/eskf.cpp \
             $(FW)/components/sf_estimator_eskf/eskf_core.cpp
-	$(CXX) $(REG_CXXFLAGS) -o $@ $^ -lm
+	$(CXX) $(REG_CXXFLAGS) -I $(OLD)/main -o $@ $^ -lm
 
 check: sil_min_check
 	./sil_min_check

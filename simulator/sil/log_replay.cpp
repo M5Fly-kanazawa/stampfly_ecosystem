@@ -51,6 +51,15 @@
 // 旧側: このログを実際に飛ばしたESKF(firmware/vehicle)
 #include "eskf.hpp"
 
+// Legacy firmware tuning — the SAME config.hpp the firmware compiled with.
+// Including it (rather than re-typing the numbers) extends Code Identity from
+// the algorithm to the PARAMETERS: the SIL runs the exact tuning that flew the
+// log. config.hpp depends only on <cstdint>/<math.h>, so it compiles on a PC.
+// 旧ファームのチューニング — ファームがコンパイルした config.hpp そのもの。
+// 数値を再入力せず include することで Code Identity をアルゴリズムから
+// パラメータへ拡張する(ログを飛ばした厳密なチューニングをSILで走らせる)。
+#include "config.hpp"
+
 using namespace sf;
 using namespace sf::math;
 
@@ -132,19 +141,98 @@ float wrapPi(float a)
 }
 
 // -----------------------------------------------------------------------------
-// Legacy ESKF config to match the firmware/vehicle default (USE_OPTICAL_FLOW =
-// true, USE_TOF = true, USE_BAROMETER = false, USE_MAGNETOMETER = false; flow
-// chi2 gate left at the firmware default = ON). See imu_task.cpp / config.hpp.
-// 旧ESKF設定をファーム(firmware/vehicle)既定に一致(flow ON, tof ON, baro/mag OFF;
-// flow χ²ゲートはファーム既定=ON)。imu_task.cpp / config.hpp 参照。
+// Legacy ESKF config — mirrors firmware/vehicle init.cpp EXACTLY: start from the
+// library default, then apply every config.hpp override the real firmware applies
+// (init.cpp lines 336-428). Using config::eskf:: makes the tuning Code-Identity
+// with the log, not just the algorithm.
+//
+// H3 FIX (M7 differential diagnosis): the previous version left the library
+// defaults (flow_chi2_gate=5.99 ON, flow_innov_clamp=0 OFF, flow_noise=0.005232),
+// which made the legacy ESKF diverge horizontally in SIL while the real flight
+// stayed bounded. The firmware actually DISABLES the flow chi2 gate
+// (FLOW_CHI2_GATE=0, "発散防止のため"), ENABLES the innovation clamp
+// (FLOW_INNOV_CLAMP=0.3), and uses a large flow R (FLOW_NOISE=0.30) — i.e. it
+// avoids bug A by tuning. Replicating the real config is the faithful replay.
+//
+// 旧ESKF設定 — ファーム init.cpp(336-428行)を厳密に踏襲: ライブラリ既定から
+// 開始し、実機が適用する config.hpp の上書きを全て適用。config::eskf:: を使う
+// ことでチューニングまで Code Identity 化する。
+// H3 修正(M7差分診断): 従来はライブラリ既定(flow χ²ゲート ON/クランプ OFF/微小R)
+// のままで、SILでは水平発散したが実機ログは有界だった。実機は config.hpp で flow
+// χ²ゲートを無効化(=0)・イノベーションクランプ有効(0.3)・大きな flow R(0.30)を
+// 用い、チューニングでバグAを回避していた。実機configの再現が忠実な再生。
 // -----------------------------------------------------------------------------
 stampfly::ESKF::Config makeLegacyConfig()
 {
+    namespace e = config::eskf;
     stampfly::ESKF::Config cfg = stampfly::ESKF::Config::defaultConfig();
-    cfg.sensor_enabled[stampfly::ESKF::SENSOR_MAG]  = false;
-    cfg.sensor_enabled[stampfly::ESKF::SENSOR_BARO] = false;
-    cfg.sensor_enabled[stampfly::ESKF::SENSOR_TOF]  = true;
-    cfg.sensor_enabled[stampfly::ESKF::SENSOR_FLOW] = true;
+
+    // Sensor enables + yaw (init.cpp 339-343)
+    cfg.sensor_enabled[stampfly::ESKF::SENSOR_MAG]  = e::USE_MAGNETOMETER;
+    cfg.sensor_enabled[stampfly::ESKF::SENSOR_BARO] = e::USE_BAROMETER;
+    cfg.sensor_enabled[stampfly::ESKF::SENSOR_TOF]  = e::USE_TOF;
+    cfg.sensor_enabled[stampfly::ESKF::SENSOR_FLOW] = e::USE_OPTICAL_FLOW;
+    cfg.yaw_estimation_enabled = e::ENABLE_YAW_ESTIMATION;
+
+    // Process noise Q (init.cpp 361-364)
+    cfg.gyro_noise       = e::GYRO_NOISE;
+    cfg.accel_noise      = e::ACCEL_NOISE;
+    cfg.gyro_bias_noise  = e::GYRO_BIAS_NOISE;
+    cfg.accel_bias_noise = e::ACCEL_BIAS_NOISE;
+
+    // Measurement noise R (init.cpp 367-371)
+    cfg.baro_noise      = e::BARO_NOISE;
+    cfg.tof_noise       = e::TOF_NOISE;
+    cfg.mag_noise       = e::MAG_NOISE;
+    cfg.flow_noise      = e::FLOW_NOISE;
+    cfg.accel_att_noise = e::ACCEL_ATT_NOISE;
+
+    // Initial covariance (init.cpp 374-378)
+    cfg.init_pos_std        = e::INIT_POS_STD;
+    cfg.init_vel_std        = e::INIT_VEL_STD;
+    cfg.init_att_std        = e::INIT_ATT_STD;
+    cfg.init_gyro_bias_std  = e::INIT_GYRO_BIAS_STD;
+    cfg.init_accel_bias_std = e::INIT_ACCEL_BIAS_STD;
+
+    // Physical constants + mag reference (init.cpp 381-385)
+    cfg.gravity = e::GRAVITY;
+    cfg.mag_ref = stampfly::math::Vector3(e::MAG_REF_X, e::MAG_REF_Y, e::MAG_REF_Z);
+
+    // Thresholds (init.cpp 388-390)
+    cfg.mahalanobis_threshold = e::MAHALANOBIS_THRESHOLD;
+    cfg.tof_tilt_threshold    = e::TOF_TILT_THRESHOLD;
+    cfg.accel_motion_threshold = e::ACCEL_MOTION_THRESHOLD;
+
+    // Innovation gates for position sensors (init.cpp 393-394)
+    cfg.baro_innov_gate = e::BARO_INNOV_GATE;
+    cfg.tof_innov_gate  = e::TOF_INNOV_GATE;
+
+    // Chi-squared gates for attitude sensors — flow gate OFF, clamp ON
+    // (init.cpp 397-400) — THE bug-A avoidance the real firmware relied on.
+    cfg.flow_chi2_gate      = e::FLOW_CHI2_GATE;
+    cfg.flow_innov_clamp    = e::FLOW_INNOV_CLAMP;
+    cfg.mag_chi2_gate       = e::MAG_CHI2_GATE;
+    cfg.accel_att_chi2_gate = e::ACCEL_ATT_CHI2_GATE;
+
+    // Optical flow calibration (init.cpp 403-411)
+    cfg.flow_min_height     = e::FLOW_MIN_HEIGHT;
+    cfg.flow_rad_per_pixel  = e::FLOW_RAD_PER_PIXEL;
+    cfg.flow_cam_to_body[0] = e::FLOW_CAM_TO_BODY_XX;
+    cfg.flow_cam_to_body[1] = e::FLOW_CAM_TO_BODY_XY;
+    cfg.flow_cam_to_body[2] = e::FLOW_CAM_TO_BODY_YX;
+    cfg.flow_cam_to_body[3] = e::FLOW_CAM_TO_BODY_YY;
+    cfg.flow_gyro_scale     = e::FLOW_GYRO_SCALE;
+    cfg.flow_offset[0]      = e::FLOW_OFFSET_X;
+    cfg.flow_offset[1]      = e::FLOW_OFFSET_Y;
+
+    // Adaptive attitude correction (init.cpp 416-417)
+    cfg.k_adaptive           = e::K_ADAPTIVE;
+    cfg.att_correction_clamp = e::ATT_CORRECTION_CLAMP;
+
+    // Magnetometer norm range (init.cpp 420-421)
+    cfg.mag_norm_min = e::MAG_NORM_MIN;
+    cfg.mag_norm_max = e::MAG_NORM_MAX;
+
     return cfg;
 }
 

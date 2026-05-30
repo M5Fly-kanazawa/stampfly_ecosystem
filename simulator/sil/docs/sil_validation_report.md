@@ -31,7 +31,7 @@
 | **M11-1** | 旧 ESKF（active_mask 型）を PC 上で無改変のままコンパイル | ✅ |
 | **M11-2** | 旧バグ A/C を SIL で再現、並行処理由来の D/E は再現しないことを確認 | ✅ |
 | **M11-3** | 新 ESKF を旧と同じ入力で並べ、A/C が直っていることを定量的に示した | ✅ |
-| M7 | 差分診断（実機ログを注入し、実機と SIL の差を測る） | ⬜ 未着手 |
+| **M7** | 差分診断（実機ログを再生し、実機と SIL の差を測る） | ✅ |
 | M8 | Model Fidelity（実機ログと照合し SIL の再現度を測る） | ⬜ 未着手 |
 | M9 | ファーム全体の検証（起動・failsafe 連鎖・状態遷移の網羅） | ⬜ 未着手 |
 | M10 | sf CLI への統合（PC-SIL バックエンド） | ⬜ 未着手 |
@@ -255,18 +255,37 @@ M11 によって、「**SIL でバグを見つける → 直す → SIL で直�
 
 差分診断（M7）は、実機と SIL で「再現する／しない」の判定を出し、**再現しない場合は「ハード・並行処理・通信が原因」と積極的に切り分ける**ことに価値がある（M11-2 の D/E の陰性確認がその原型）。
 
-## 8. 残っている作業（M7〜M10）
+## 8. M7 差分診断（完了）と残作業 M8〜M10
 
-**表10: 残っている作業**
+### M7 — 実機ログ再生による差分診断（✅ 完了, 2026-05-30）
+
+実機フライトログ（`logs/stampfly_udp_20260408T160105.jsonl`, 60秒飛行）の記録センサ列を、ログを実際に飛ばした旧ESKF（`stampfly::ESKF`）にオープンループ観測として再生し、SIL 推定を実機ログ自身の ESKF 出力と軸別 RMSE で照合した（ハーネス: `log_to_replay.py` → `log_replay` → `plot_replay.py`、両 ESKF とも参照コンパイルで Code Identity を維持）。
+
+検証の核心は「同じ旧 ESKF コード・同じ実機 flow なのに、SIL は水平位置・速度が発散（pos_x RMSE 112 m）する一方、実機ログ自身は有界（[-0.39, 0.19] m）」という差分の切り分けだった。原因は **SIL が実機の運用 config（`firmware/vehicle/main/config.hpp`）を再現せず、ライブラリ既定値（`defaultConfig()`）で走らせていたソフト要因**にあった。実機は config.hpp で意図的に flow χ² ゲートを無効化（`FLOW_CHI2_GATE=0`、コメント「発散防止のため」）・innovation クランプを有効化（`FLOW_INNOV_CLAMP=0.3`）・大きな flow R（`FLOW_NOISE=0.30`）を用い、チューニングでバグ A（崩壊 P 上の χ² 誤棄却による速度発散）を運用上回避していた。SIL の `makeLegacyConfig()` を config.hpp の直接 include で `init.cpp` と 1 対 1 に合わせると、旧 ESKF の水平発散は完全に有界化した。
+
+**表10: M7 差分診断 — config 不一致修正（H3）の効果（代表ログ, RMSE over t≥6s）**
+
+| 軸 | 修正前（defaultConfig） | 修正後（実機config） | 新ESKF |
+|----|------------------------|----------------------|--------|
+| pos_x [m] | 112.88 | 0.12 | 0.08 |
+| pos_y [m] | 27.23 | 0.08 | 0.16 |
+| vel_x [m/s] | 4.85 | 0.05 | 0.05 |
+| vel_y [m/s] | 2.02 | 0.06 | 0.05 |
+| roll / pitch / yaw [deg] | 1.77 / 1.70 / 0.88 | 1.98 / 1.88 / 0.77 | 1.82 / 1.42 / 0.84 |
+
+**M7 結論:** 旧 ESKF はオープンループ再生で実機ログの水平位置を ~0.12 m・姿勢を 3 軸平均 1.54° の軸別 RMSE で追従する。水平チャネルの発散は config 再現で完全に解消したため、その要因は **HW/タイミング/通信ではなくソフト（config）要因**と確定した（本レポートの中心的主張＝「再現＝ソフト要因／非再現＝HW・通信要因」が実機データで裏づけられた）。姿勢残差 ~1.5° は P 初期化・ウォームスタート・センサ到着順の差に帰属し、実機の `k_adaptive=10` が動的加速度時に加速度姿勢補正を弱めるため default config より僅かに大きい（厳密な 1° 以内一致には至らないが実用追従レベル）。本結果は §6 回帰チャレンジの「`--no-flow-gate` で旧発散が消える＝原因は χ² 破綻」とも整合する（実機は最初からゲート無効で運用）。**重要な学び:** コアを参照コンパイルしても**パラメータ（config）を再現しなければ Code Identity は不完全**であり、今回 config.hpp を直接 include してチューニングまで同一化した。詳細な検証過程（仮説 H1→H2→H3 の時系列ログと図）は `docs/m7_verification_journal.md` を参照。
+
+### 残作業 — M8〜M10
+
+M8〜M10 はいずれも**実機フライトログとの突き合わせ**を前提とし、SIL 単体では到達できない領域である。
+
+**表11: 残っている作業（M8〜M10）**
 
 | フェーズ | 内容 | 前提 |
 |---------|------|------|
-| **M7 差分診断** | `--inject-input <csv>` で実機の操縦コマンドを SIL に流し込み、実機と SIL の差を軸ごとの RMSE と PSD 残差で測り、再現する／しないを判定する | 実機フライトログの入手・形式確認 |
 | **M8 Model Fidelity** | SIL が実機をどれだけ再現するかを層ごとにスコア化し、`development_roadmap.md` Phase 3.2 の許容差（ACRO ホバーのジャイロ RMS ±50%、ステップ応答の立ち上がり時定数 ±20%）を満たすか判定する | 実機ログ、M7 |
 | **M9 ファーム全体の検証** | 起動シーケンス、failsafe の連鎖、状態遷移の網羅を測る（`scenario.hpp` の enum 拡張、47件のテストとの突き合わせ） | M4 |
 | **M10 sf CLI 統合** | `sf sim` に PC-SIL バックエンドを足し、`sf log → 注入 → 差分 → tune` を一続きで回せるようにする | M5/M7/M8 |
-
-M7・M8 は実機フライトログがないと進められないため、次に着手するときはまずログの入手と形式の確認から始める。
 
 ## 9. 再現手順
 
@@ -332,7 +351,7 @@ The legacy `firmware/vehicle/` suffered unidentified bugs rooted in state estima
 | **M11-1** | Legacy ESKF (active_mask type) reference-compiled on host | ✅ |
 | **M11-2** | Reproduce legacy bugs A/C; confirm concurrency-rooted D/E do not reproduce | ✅ |
 | **M11-3** | Run new ESKF on identical inputs; show A/C are fixed, quantitatively | ✅ |
-| M7 | Diff diagnosis (inject real-flight logs, measure real vs SIL) | ⬜ TODO |
+| M7 | Diff diagnosis (replay real-flight logs, real vs SIL) | ✅ Done |
 | M8 | Model Fidelity (match against real-flight logs) | ⬜ TODO |
 | M9 | Firmware behavior coverage (boot, failsafe chains, transitions) | ⬜ TODO |
 | M10 | sf CLI integration (host-SIL backend) | ⬜ TODO |
@@ -422,18 +441,27 @@ M11 closes the loop **"find a bug in SIL → fix it → confirm it is fixed in S
 
 A diagnostic tool earns trust by **clearly stating which kinds of bugs it cannot catch**: concurrency races (single-thread deterministic → none by definition), interrupt jitter/scheduling (the shims do not reproduce real-time behavior), and the comm physical layer / queue overflow (ESP-NOW/WiFi PHY not modeled). Diff diagnosis (M7) outputs a reproduce/not-reproduce verdict between real and SIL, and **actively classifies non-reproduction as a "hardware / concurrency / comm cause"** — the D/E negative check in M11-2 is its prototype.
 
-## 8. Remaining Work (M7–M10)
+## 8. M7 Diff Diagnosis (Done) and Remaining Work M8–M10
 
-**Table 10: Remaining work**
+### M7 — differential diagnosis by real-log replay (✅ done, 2026-05-30)
+
+A recorded sensor stream from a real flight (`logs/stampfly_udp_20260408T160105.jsonl`, 60 s) was replayed through the legacy ESKF that flew it (`stampfly::ESKF`) as an open-loop observer and compared, per axis, against the firmware's own logged ESKF output (harness: `log_to_replay.py` → `log_replay` → `plot_replay.py`; both ESKFs reference-compiled, Code Identity preserved).
+
+The puzzle: with the *same* legacy code and the *same* real flow, the SIL diverged horizontally (pos_x RMSE 112 m) while the real flight stayed bounded ([-0.39, 0.19] m). The cause was a **software (config) factor** — the SIL ran the library `defaultConfig()` instead of the firmware's operational config (`config.hpp`). The firmware deliberately **disables the flow chi-square gate** (`FLOW_CHI2_GATE=0`), **enables the innovation clamp** (`FLOW_INNOV_CLAMP=0.3`), and uses a large flow R (`FLOW_NOISE=0.30`) — it avoids bug A by tuning. Matching `makeLegacyConfig()` to `init.cpp` (by `#include`-ing the firmware's own config.hpp) made the legacy horizontal divergence vanish: pos_x 112.88 → 0.12 m, vel_x 4.85 → 0.05 m/s; attitude tracks the log at ~1.54° mean RMSE.
+
+**M7 conclusion:** the horizontal divergence is a software (config) factor, not HW/timing/comm — the report's central claim (reproduce = software cause / not = HW·comm cause) is now backed by real data. The ~1.5° attitude residual is attributed to P-init / warm-start / sensor-arrival-order differences. This is consistent with §6's "`--no-flow-gate` removes the legacy divergence → cause is chi-square breakdown" (the real firmware ran with the gate off from the start). Key lesson: reference-compiling the core is not enough — **Code Identity is incomplete unless the parameters (config) are reproduced too**. See `docs/m7_verification_journal.md` for the H1→H2→H3 log.
+
+### Remaining work — M8–M10
+
+**Table 11: Remaining work (M8–M10)**
 
 | Phase | Content | Prerequisite |
 |-------|---------|--------------|
-| **M7 Diff diagnosis** | `--inject-input <csv>`; per-axis RMSE + PSD residual; reproduce/not verdict | real-flight logs |
 | **M8 Model Fidelity** | layered fidelity scores vs `development_roadmap.md` Phase 3.2 tolerances (ACRO hover gyro RMS ±50%, step time-constant ±20%) | real logs, M7 |
 | **M9 Firmware verification** | boot sequence, failsafe chains, transition coverage (vs the 47 tests) | M4 |
 | **M10 sf CLI** | host-SIL backend for `sf sim`; `sf log → inject → diff → tune` pipeline | M5/M7/M8 |
 
-M7/M8 require real-flight logs, so the next step starts by obtaining and confirming the log format.
+M8–M10 require matching against real-flight logs, so they are the next steps.
 
 ## 9. Reproduction
 
