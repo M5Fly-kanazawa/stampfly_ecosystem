@@ -17,34 +17,23 @@ SRCS = test_main.cpp \
 
 TARGET = test_vehicle_new
 
-# State transition / failsafe tests: compile the UNMODIFIED firmware sources
-# through the simulator/sil/compat shim (Code Identity). sil_topics.cpp provides
-# the topic extern instances normally defined by NVS-dependent params.cpp.
-# 状態遷移/failsafe テスト: 無改変のファームソースを simulator/sil/compat シム
-# 経由でコンパイル(Code Identity)。sil_topics.cpp が NVS依存 params.cpp の代わりに
-# トピック extern 実体を提供する。
-SIL = ../../../simulator/sil
-STATE_TARGET   = test_state_manager
-STATE_CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -I$(SIL)/compat $(CXXFLAGS) \
-                 -I../components/sf_failsafe/include
-STATE_SRCS = test_state_manager.cpp \
-             ../components/sf_state/state_manager.cpp \
-             ../components/sf_failsafe/failsafe.cpp \
-             $(SIL)/sil_topics.cpp
+# NOTE: test_state_manager is temporarily disabled. It compiled the firmware
+# state_manager/failsafe through the now-removed simulator/sil/compat shim and
+# sil_topics.cpp (deleted in the SIL clean-slate, 2026-05-31). It will be
+# re-wired onto the new SIL host shim; test_state_manager.cpp is kept for that.
+# 注: test_state_manager は一時無効化。削除済み simulator/sil/compat シム +
+# sil_topics.cpp 経由でビルドしていたため(SIL更地化)。新SILのホストシム上で
+# 再配線予定。test_state_manager.cpp は再配線のため残置。
 
 .PHONY: all clean test
 
-all: $(TARGET) $(STATE_TARGET)
+all: $(TARGET)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
-$(STATE_TARGET): $(STATE_SRCS)
-	$(CXX) $(STATE_CXXFLAGS) -o $@ $^ -lm
-
 test: all
-	-./$(TARGET)
-	./$(STATE_TARGET)
+	./$(TARGET)
 
 clean:
-	rm -f $(TARGET) $(STATE_TARGET)
+	rm -f $(TARGET) test_state_manager

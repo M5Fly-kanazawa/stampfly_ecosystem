@@ -12,7 +12,7 @@ import sys
 from typing import Optional, List
 
 from . import __version__
-from .commands import version, doctor, build, flash, monitor, log, sim, cal, setup, eskf, sysid, flight, query, rc, lesson, competition, app, docs, tune
+from .commands import version, doctor, build, flash, monitor, log, sim, cal, setup, sysid, flight, query, rc, lesson, competition, app, docs
 from .utils import console
 
 
@@ -54,7 +54,6 @@ def create_parser() -> argparse.ArgumentParser:
     log.register(subparsers)
     sim.register(subparsers)
     cal.register(subparsers)
-    eskf.register(subparsers)
     sysid.register(subparsers)
     flight.register(subparsers)
     query.register(subparsers)
@@ -63,7 +62,6 @@ def create_parser() -> argparse.ArgumentParser:
     competition.register(subparsers)
     app.register(subparsers)
     docs.register(subparsers)
-    tune.register(subparsers)
 
     return parser
 

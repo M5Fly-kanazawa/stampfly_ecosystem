@@ -1,2 +1,0 @@
-# StampFly Tuning Framework
-# チューニングフレームワーク
