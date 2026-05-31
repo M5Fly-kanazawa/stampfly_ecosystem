@@ -79,14 +79,18 @@ def graph_frame(traj, i, w_px, h_px):
     panel(axes[0, 0], "altitude [m]",
           [("truth", traj["alt"], "C0-"), ("estimate", traj["alt_est"], "C1--")],
           ylim=(-0.03, 0.62))
-    # Tilt stays under ~0.12° (no roll/pitch command; yaw doesn't tilt the craft), so
-    # a fine ±0.3° scale resolves the tiny takeoff/landing perturbations instead of a
-    # flat line on a wide axis — it reads as "rock-solid level" with visible detail.
-    # tilt は ~0.12° 未満（ロール/ピッチ指令なし、ヨーは傾けない）。細かい ±0.3° 目盛で
-    # 離着陸の微小擾乱まで見えるようにする（広軸の直線にしない）。
-    panel(axes[0, 1], "tilt [deg]",
-          [("truth", traj["tilt"], "C0-"), ("estimate", traj["tilt_est"], "C1--")],
-          ylim=(-0.03, 0.3))
+    # Signed roll & pitch (not the tilt magnitude). A magnitude uses arccos, always
+    # ≥0, which rectifies the estimate's near-zero noise into positive "pulses" and
+    # hides the sign; roll/pitch keep it. Truth shows a real ~0.1° lean (the yaw spin
+    # induces it); the estimate sits near 0 (a 0.1° tilt is below the accel noise
+    # floor). Symmetric ±0.12° axis centered on level.
+    # 符号付きロール・ピッチ（傾斜の大きさではない）。大きさは arccos で常に≥0、推定の
+    # ゼロ近傍ノイズを正の「パルス」に整流し符号も消す。roll/pitch は符号を保つ。真値は
+    # ~0.1° の実リーン（ヨー旋回が誘起）、推定は ~0（0.1°傾斜は加速度ノイズ床以下）。
+    panel(axes[0, 1], "roll / pitch [deg]",
+          [("roll", traj["roll"], "C0-"), ("pitch", traj["pitch"], "C3-"),
+           ("roll est", traj["roll_est"], "C0--"), ("pitch est", traj["pitch_est"], "C3--")],
+          ylim=(-0.12, 0.12))
     panel(axes[1, 0], "yaw rate [rad/s]",
           [("command", traj["yawcmd"], "C3-"), ("truth", traj["yawrate"], "C0-")],
           ylim=(-0.2, 1.4))

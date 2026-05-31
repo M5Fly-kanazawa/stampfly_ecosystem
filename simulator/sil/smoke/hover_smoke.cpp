@@ -118,6 +118,23 @@ float tiltDeg(const sf::math::Quat& q_nb)
     return std::acos(c) * 180.0f / 3.14159265f;
 }
 
+// Signed roll & pitch [deg] from the attitude quaternion. Unlike the tilt magnitude
+// (arccos, always ≥0, which rectifies near-zero estimation noise into positive
+// pulses), roll/pitch keep their sign — the natural, physically meaningful attitude
+// for the graph. Same degenerate-quaternion guard as tiltDeg (t=0 estimate = level).
+// 姿勢クォータニオンから符号付きロール・ピッチ[deg]。傾斜角の大きさ（arccos、常に≥0で
+// ゼロ近傍ノイズを正パルスに整流）と違い符号を保つ — グラフに自然で物理的に意味のある姿勢。
+// tiltDeg と同じ退化ガード（t=0 の推定は水平扱い）。
+void rollPitchDeg(const sf::math::Quat& q_nb, float& roll_deg, float& pitch_deg)
+{
+    const float n2 = q_nb.w * q_nb.w + q_nb.x * q_nb.x +
+                     q_nb.y * q_nb.y + q_nb.z * q_nb.z;
+    if (n2 < 1e-6f) { roll_deg = 0.0f; pitch_deg = 0.0f; return; }
+    const sf::math::Vec3 e = q_nb.to_euler();   // [rad] (x=roll, y=pitch, z=yaw)
+    roll_deg  = e.x * (180.0f / 3.14159265f);
+    pitch_deg = e.y * (180.0f / 3.14159265f);
+}
+
 // Flight schedule: throttle + yaw command + flight mode as a function of time.
 // alt_hold=true selects ALT_HOLD (closed-loop altitude); false is STABILIZE with
 // the motors idle (ground / touchdown).
@@ -210,12 +227,19 @@ void physics(int64_t now_us)
         const double* q = g_plant.data()->qpos;
         sf::StateEstimate est = sf::estimate_state.latest();
         sf::math::Quat qe(est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]);
+        // Signed roll/pitch for truth and estimate (deg, 4 decimals — the angles are
+        // ~0.1°, so coarse rounding would itself look like pulses).
+        // 真値・推定の符号付きロール/ピッチ（deg、小数4桁 — 角度が ~0.1° なので粗い丸めは
+        // それ自体がパルスに見える）。
+        float roll, pitch, roll_e, pitch_e;
+        rollPitchDeg(tr.q_nb, roll, pitch);
+        rollPitchDeg(qe, roll_e, pitch_e);
         std::fprintf(g_traj,
                 "%.4f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.6f,"
-                "%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.4f,%.4f,%.4f,%.4f\n",
+                "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
                 t, q[0], q[1], q[2], q[3], q[4], q[5], q[6],
-                alt, tilt, tr.omega_frd.z, g_yaw_cmd_now,
-                -est.position[2], tiltDeg(qe),
+                alt, roll, pitch, tr.omega_frd.z, g_yaw_cmd_now,
+                -est.position[2], roll_e, pitch_e,
                 cmd.duty[0], cmd.duty[1], cmd.duty[2], cmd.duty[3]);
     }
 }
@@ -235,8 +259,8 @@ int main(int argc, char** argv)
         g_traj = std::fopen(path, "w");
         if (g_traj != nullptr) {
             std::fprintf(g_traj,
-                "t,px,py,pz,qw,qx,qy,qz,alt,tilt,yawrate,yawcmd,"
-                "alt_est,tilt_est,m0,m1,m2,m3\n");
+                "t,px,py,pz,qw,qx,qy,qz,alt,roll,pitch,yawrate,yawcmd,"
+                "alt_est,roll_est,pitch_est,m0,m1,m2,m3\n");
         }
     }
 
