@@ -1,0 +1,77 @@
+<!--
+  StampFly flight model for the SIL (MuJoCo, natural ENU / Z-up world; body FLU).
+  Physical parameters are the calibrated StampFly values
+  (docs/architecture/stampfly-parameters.md, cross-checked with firmware):
+    mass 0.037 kg; inertia Ixx/Iyy/Izz = 9.16 / 13.3 / 20.4 e-6 kg·m²;
+    motors at ±0.023 m, +0.005 m above CG; X-quad (M1=FR..M4=FL).
+
+  StampFly 飛行モデル（MuJoCo, 自然な ENU/Z上 ワールド; 機体 FLU）。
+  物理パラメータは校正済み StampFly 値（出典は上記）。
+
+  Frame note: this MJCF is written in MuJoCo's natural frame (ENU world / FLU
+  body). The SIL frames module (simulator/sil/frames) converts to StampFly
+  NED/FRD. See simulator/sil/docs/coordinate_frames.md.
+  Self-written motor model (thrust = k·duty²) lives in the SIL; here each rotor
+  is a site with a Z-axis force actuator (control = per-motor thrust [N]).
+-->
+<mujoco model="stampfly">
+  <option timestep="0.0025" gravity="0 0 -9.81" integrator="RK4"/>
+
+  <visual>
+    <headlight ambient="0.4 0.4 0.4"/>
+    <global offwidth="1280" offheight="720"/>
+  </visual>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.3 0.4"
+             rgb2="0.1 0.15 0.2" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="6 6" reflectance="0.1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 2" dir="0 0 -1"/>
+    <geom name="ground" type="plane" size="3 3 0.1" material="grid"/>
+
+    <!-- Drone body, FLU (X fwd, Y left, Z up). Hover start at 0.5 m. -->
+    <!-- 機体 FLU（X前, Y左, Z上）。0.5 m でホバー開始。 -->
+    <body name="drone" pos="0 0 0.5">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="0.037" diaginertia="9.16e-6 13.3e-6 20.4e-6"/>
+      <geom name="frame" type="box" size="0.0408 0.0408 0.0103" rgba="0.2 0.5 0.8 1"/>
+
+      <!-- IMU site (body/FLU frame) for built-in accelerometer/gyro cross-check -->
+      <!-- IMU site（body/FLU 系）— 内蔵 accel/gyro の照合用 -->
+      <site name="imu" pos="0 0 0" size="0.003"/>
+
+      <!-- Rotor sites at the 4 corners (FLU positions = FRD with Y,Z negated) -->
+      <!-- 4隅のロータ site（FLU 位置 = FRD の Y,Z を反転） -->
+      <site name="rotor1" pos=" 0.023 -0.023 0.005" size="0.004" rgba="1 0.4 0.2 1"/>  <!-- M1 FR CCW -->
+      <site name="rotor2" pos="-0.023 -0.023 0.005" size="0.004" rgba="0.3 1 0.4 1"/>  <!-- M2 RR CW  -->
+      <site name="rotor3" pos="-0.023  0.023 0.005" size="0.004" rgba="1 0.4 0.2 1"/>  <!-- M3 RL CCW -->
+      <site name="rotor4" pos=" 0.023  0.023 0.005" size="0.004" rgba="0.3 1 0.4 1"/>  <!-- M4 FL CW  -->
+    </body>
+  </worldbody>
+
+  <!-- Each motor applies a thrust force along its site +Z (up). control = thrust [N].
+       The SIL computes thrust = k_thrust·duty² and writes it to ctrl.
+       Yaw reaction torque (±κ·thrust) is applied separately by the SIL. -->
+  <!-- 各モータは site +Z（上）に推力を与える。control = 推力 [N]。
+       SIL が thrust = k_thrust·duty² を計算して ctrl に書く。
+       ヨー反トルク（±κ·thrust）は SIL が別途与える。 -->
+  <actuator>
+    <motor name="m1" site="rotor1" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>
+    <motor name="m2" site="rotor2" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>
+    <motor name="m3" site="rotor3" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>
+    <motor name="m4" site="rotor4" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>
+  </actuator>
+
+  <!-- Truth + built-in sensors (the SIL frames module converts these to NED/FRD). -->
+  <!-- 真値＋内蔵センサ（SIL の frames が NED/FRD へ変換）。 -->
+  <sensor>
+    <accelerometer name="imu_accel" site="imu"/>
+    <gyro          name="imu_gyro"  site="imu"/>
+    <framequat     name="body_quat" objtype="site" objname="imu"/>
+    <framepos      name="body_pos"  objtype="site" objname="imu"/>
+    <framelinvel   name="body_vel"  objtype="site" objname="imu"/>
+  </sensor>
+</mujoco>

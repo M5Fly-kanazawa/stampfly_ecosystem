@@ -106,6 +106,16 @@ if(SIL_BUILD_MUJOCO_SMOKE)
 
   add_executable(mujoco_smoke smoke/mujoco_smoke.cpp)
   target_link_libraries(mujoco_smoke PRIVATE mujoco)
+
+  # Physics smoke: StampFly model hovers; built-in sensors agree with the
+  # StampFly frame convention via the frames module.
+  # 物理スモーク: StampFly モデルがホバーし、内蔵センサが frames 経由で一致。
+  add_executable(physics_smoke smoke/physics_smoke.cpp)
+  target_include_directories(physics_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${VN}/components/sf_math/include
+  )
+  target_link_libraries(physics_smoke PRIVATE mujoco)
 endif()
 
 # -----------------------------------------------------------------------------
