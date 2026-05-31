@@ -1,0 +1,43 @@
+<!--
+  SIL P1.0 viewer demo — a StampFly-sized body dropped tilted so it lands on
+  an edge and tumbles before settling. Just for eyeballing MuJoCo physics in
+  the interactive viewer; it is not the flight model (that comes in P1.2 with
+  4 rotors, inertia, and synthetic sensors).
+
+  SIL P1.0 ビューア用デモ — StampFly 大の機体を傾けて落とし、辺で着地して
+  転がってから静定する。MuJoCo 物理を対話ビューアで目視するだけのもの。
+  飛行モデルではない（4ロータ・慣性・合成センサ付きは P1.2）。
+-->
+<mujoco model="sil_demo_drop">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
+
+  <visual>
+    <headlight ambient="0.4 0.4 0.4"/>
+    <global offwidth="1280" offheight="720"/>
+  </visual>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.3 0.4"
+             rgb2="0.1 0.15 0.2" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance="0.1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 2" dir="0 0 -1"/>
+    <geom name="ground" type="plane" size="2 2 0.1" material="grid"/>
+
+    <!-- Dropped tilted from 0.8 m so it tumbles on landing -->
+    <!-- 0.8 m から傾けて落とし、着地で転がる -->
+    <body name="drone" pos="0 0 0.8" euler="35 20 0">
+      <freejoint name="root"/>
+      <geom name="body" type="box" size="0.0408 0.0408 0.0155" mass="0.036"
+            rgba="0.2 0.7 1.0 1" friction="0.7 0.02 0.002"/>
+      <!-- Little markers at the 4 rotor corners (visual only) -->
+      <!-- 4ロータ隅の小マーカー（見た目だけ） -->
+      <geom type="cylinder" pos=" 0.035  0.035 0.016" size="0.012 0.002" rgba="1 0.4 0.2 1"/>
+      <geom type="cylinder" pos=" 0.035 -0.035 0.016" size="0.012 0.002" rgba="1 0.4 0.2 1"/>
+      <geom type="cylinder" pos="-0.035  0.035 0.016" size="0.012 0.002" rgba="0.3 1 0.4 1"/>
+      <geom type="cylinder" pos="-0.035 -0.035 0.016" size="0.012 0.002" rgba="0.3 1 0.4 1"/>
+    </body>
+  </worldbody>
+</mujoco>

@@ -13,9 +13,17 @@
 
 include(FetchContent)
 
+# Optionally build MuJoCo's interactive viewer (`simulate`) for eyeballing a
+# model in a 3D window. OFF by default (headless core only); turn ON with
+# -DSIL_MUJOCO_VIEWER=ON. It pulls GLFW, so it is opt-in.
+# MuJoCo の対話ビューア（`simulate`）を任意でビルドする。3D ウィンドウで
+# モデルを目視するため。既定 OFF（ヘッドレスのコアのみ）。-DSIL_MUJOCO_VIEWER=ON
+# で有効化。GLFW を取得するのでオプトイン。
+option(SIL_MUJOCO_VIEWER "Build the MuJoCo interactive viewer (simulate)" OFF)
+
 set(MUJOCO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(MUJOCO_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-set(MUJOCO_BUILD_SIMULATE OFF CACHE BOOL "" FORCE)
+set(MUJOCO_BUILD_SIMULATE ${SIL_MUJOCO_VIEWER} CACHE BOOL "" FORCE)
 set(MUJOCO_BUILD_PYTHON   OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
