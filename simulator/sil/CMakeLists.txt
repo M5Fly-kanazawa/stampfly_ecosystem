@@ -31,6 +31,7 @@ endif()
 # ビルドできるように。逆も同様。
 option(SIL_BUILD_CORES_SMOKE  "Build the firmware-cores host smoke test" ON)
 option(SIL_BUILD_MUJOCO_SMOKE "Build the MuJoCo host smoke test"         ON)
+option(SIL_BUILD_RTOS_SMOKE   "Build the host RTOS-emulator smoke test"  ON)
 
 # Paths
 # パス
@@ -43,7 +44,7 @@ set(SIL_COMPAT ${CMAKE_CURRENT_SOURCE_DIR}/compat)
 # ファームの算法コアを host ライブラリ化（compat スタブ経由で無改変
 # コンパイル）。Code Identity: ファームが出荷するのと同じソース。
 # -----------------------------------------------------------------------------
-if(SIL_BUILD_CORES_SMOKE)
+if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
   add_library(sf_cores STATIC
     ${VN}/components/sf_estimator_eskf/eskf_estimator.cpp
     ${VN}/components/sf_estimator_eskf/eskf_core.cpp
@@ -62,9 +63,37 @@ if(SIL_BUILD_CORES_SMOKE)
     ${VN}/components/sf_controller_pid/include
     ${VN}/components/sf_state/include
   )
+endif()
 
+if(SIL_BUILD_CORES_SMOKE)
   add_executable(cores_smoke smoke/cores_smoke.cpp)
   target_link_libraries(cores_smoke PRIVATE sf_cores)
+endif()
+
+# -----------------------------------------------------------------------------
+# RTOS-emulator smoke: run the real ImuTask/ControlTask/StateTask on the host
+# cooperative scheduler. Sensor HALs are replaced at the wrapper seam (sim_hal).
+# RTOS エミュレータのスモーク: 実 ImuTask/ControlTask/StateTask をホストの
+# 協調スケジューラで走らせる。センサ HAL はラッパー境界で差し替え（sim_hal）。
+# -----------------------------------------------------------------------------
+if(SIL_BUILD_RTOS_SMOKE)
+  find_package(Threads REQUIRED)
+
+  add_executable(rtos_smoke
+    smoke/rtos_smoke.cpp
+    rtos/scheduler.cpp
+    sim_hal/sim_bmi270.cpp
+    ${VN}/tasks/imu_task.cpp
+    ${VN}/tasks/control_task.cpp
+    ${VN}/tasks/state_task.cpp
+    ${VN}/components/sf_state/state_manager.cpp
+  )
+  target_include_directories(rtos_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal   # sim BMI270 wrapper replaces the HAL
+    ${VN}/main                            # config.hpp
+  )
+  target_link_libraries(rtos_smoke PRIVATE sf_cores Threads::Threads)
 endif()
 
 # -----------------------------------------------------------------------------

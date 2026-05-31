@@ -12,26 +12,32 @@
 
 | 場所 | 役割 |
 |------|------|
-| `compat/` | ESP-IDF / FreeRTOS のホスト用スタブ（esp_log/esp_err/esp_timer/nvs ＝ P1.0、RTOS エミュレータ ＝ P1.1） |
-| `rtos/` | 決定論的協調 RTOS エミュレータ（疑似OS、P1.1） |
+| `compat/` | ESP-IDF / FreeRTOS のホスト用スタブ。受動レイヤ（esp_log/esp_err/esp_timer/nvs・mutex/queue）＋能動面（`freertos/task.h`） |
+| `rtos/` | 決定論的協調 RTOS エミュレータ（疑似OS、P1.1）。単一トークン＋仮想時計の離散事象スケジューラ |
 | `physics/` | MuJoCo 物理＋自作のモータ/センサ/風モデル（P1.2） |
-| `sim_hal/` | 合成センサを返す SIL 用 HAL ラッパー（P1.2） |
-| `models/` | 機体の MJCF（`quad_smoke.xml` ＝ P1.0 最小、StampFly 完全版 ＝ P1.2） |
-| `smoke/` | P1.0 スモークテスト（`mujoco_smoke` / `cores_smoke`） |
+| `sim_hal/` | 合成センサを返す SIL 用 HAL ラッパー（`bmi270_wrapper` ＝ P1.1、残り ＝ P1.2） |
+| `models/` | 機体の MJCF（`quad_smoke.xml`／`demo_drop.xml` ＝ P1.0、StampFly 完全版 ＝ P1.2） |
+| `smoke/` | スモークテスト（`mujoco_smoke`・`cores_smoke` ＝ P1.0、`rtos_smoke` ＝ P1.1） |
 
-### P1.0 のビルド（スモークテスト）
+### ビルド（スモークテスト）
 
 ```bash
 cd simulator/sil
-# 算法コアだけ（高速・ネット不要）
+# 算法コア＋RTOS エミュレータ（高速・ネット不要）
 cmake -S . -B build -DSIL_BUILD_MUJOCO_SMOKE=OFF
 cmake --build build
-./build/cores_smoke
+./build/cores_smoke      # 本物の ESKF/PID を host で実行（P1.0）
+./build/rtos_smoke       # 実タスクを疑似OS上で走らせ決定論スケジュール（P1.1）
 
 # MuJoCo も含めて（初回は MuJoCo 3.9.0 を取得＝数分）
 cmake -S . -B build
 cmake --build build
-./build/mujoco_smoke models/quad_smoke.xml
+./build/mujoco_smoke models/quad_smoke.xml   # 物理エンジン（P1.0）
+
+# MuJoCo の対話ビューアで目視（GLFW を取得）
+cmake -S . -B build -DSIL_MUJOCO_VIEWER=ON
+cmake --build build --target simulate
+./build/bin/simulate models/demo_drop.xml
 ```
 
 ## 2. ロードマップ
