@@ -151,14 +151,14 @@ ControlOutput PidController::compute(
     // Gyro feedback from state estimate (bias-corrected by ESKF)
     // 状態推定からのジャイロフィードバック（ESKFでバイアス補正済み）
     // =========================================================================
+    // Body angular rate from the state estimate (bias-corrected by the ESKF, FRD).
+    // This closes the rate inner loop; it was previously hardcoded to 0 (open loop).
+    // 状態推定からの機体角速度（ESKF でバイアス補正済み、FRD）。これでレート内ループが
+    // 閉じる。以前は 0 固定＝開ループだった。
     math::Vec3 gyro_rate;
-    // Approximate body rates from quaternion derivative
-    // クォータニオン微分からボディレートを近似
-    // For now, use the gyro bias as a proxy (actual gyro comes via topic)
-    // 暫定: ジャイロバイアスをプロキシとして使用（実ジャイロはトピック経由）
-    gyro_rate.x = 0;  // TODO: Get actual body rates
-    gyro_rate.y = 0;
-    gyro_rate.z = 0;
+    gyro_rate.x = state.angular_rate[0];
+    gyro_rate.y = state.angular_rate[1];
+    gyro_rate.z = state.angular_rate[2];
 
     output.torque[0] = rate_roll_.compute(rate_sp_roll - gyro_rate.x, dt);
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch - gyro_rate.y, dt);

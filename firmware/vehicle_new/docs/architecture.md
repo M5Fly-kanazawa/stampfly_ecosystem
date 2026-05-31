@@ -279,6 +279,7 @@ struct StateEstimate {        // estimate.state (400Hz)
     float velocity[3];        // Velocity [m/s] NED
     float gyro_bias[3];       // Gyro bias estimate [rad/s]
     float accel_bias[3];      // Accel bias estimate [m/s²]
+    float angular_rate[3];    // Body angular rate [rad/s] FRD (gyro − bias)
     uint8_t sensor_mask;      // Active sensor bitmask
     uint32_t timestamp;       // [us]
 };
