@@ -127,6 +127,19 @@ if(SIL_BUILD_MUJOCO_SMOKE)
   # 配置用 — モータ缶上面・プロペラハブ等）。
   add_executable(mesh_inspect smoke/mesh_inspect.cpp)
   target_link_libraries(mesh_inspect PRIVATE mujoco)
+
+  # Plant smoke: the SIL physics plant (motor model + truth + synthetic FRD
+  # sensors) hovers and its synthetic sensors agree with physics truth.
+  # プラントスモーク: SIL 物理プラント（モータモデル＋真値＋合成 FRD センサ）が
+  # ホバーし、合成センサが物理真値と一致する。
+  add_executable(plant_smoke smoke/plant_smoke.cpp plant/plant.cpp)
+  target_include_directories(plant_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${VN}/components/sf_math/include
+    ${VN}/components/sf_core/include   # data_types.hpp (header-only)
+  )
+  target_link_libraries(plant_smoke PRIVATE mujoco)
 endif()
 
 # -----------------------------------------------------------------------------
