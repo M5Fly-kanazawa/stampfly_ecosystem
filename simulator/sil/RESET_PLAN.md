@@ -353,8 +353,8 @@ SIL の検証結果を、そのまま**外部に見せられる動画**として
 
 ### この計画の承認後にやること
 
-- 残しておいた設計文書を、この計画に合わせて**書き直す**: `firmware/vehicle_new/docs/{development_roadmap, noise_and_vibration_model}.md`（旧 SIL を前提にした L1-L4 などの記述）、`control/validation/sil_control_validation.md`（旧 SIL を前提にした検証レポート＝残すか別扱いにするか判断する）。
-- 旧 SIL の削除で動かなくなったコードの始末: `tools/log_analyzer/visualize_{optimization,pose_3d}.py`、`lib/stampfly_edu/eskf/__init__.py`。
+- ✅ **完了（2026-05-31）— 設計文書のリライト:** `firmware/vehicle_new/docs/development_roadmap.md` をこの計画に合わせて書き直した（旧「SIL Control Level L1〜L4」を廃止＝物理真値のゲート G1〜G4 に、Code Identity をループ全体／アルゴリズム非依存に、Model Fidelity を実機飛行後の後追いに、Phase 1 を物理ベース SIL の再構築＝本計画 P1〜P4 として前置）。`noise_and_vibration_model.md` を MuJoCo 上に自作する合成センサ・モータモデルの仕様として再構成（剛体運動は MuJoCo が担当、削除済みファイル参照を除去）。`control/validation/sil_control_validation.md`（旧 SIL の検証レポート）は**完全削除**した（図リンク切れ・再現不能・ESKF 専用診断で方針6と不整合。知見はメモリと git 履歴に保存済み）。`implementation_log.md` に削除の前方注記を追加（履歴は改竄せず保持）。
+- 旧 SIL の削除で動かなくなったコードの始末: `tools/log_analyzer/visualize_{optimization,pose_3d}.py`、`lib/stampfly_edu/eskf/__init__.py`（P1 着手時に対応）。
 - `sysid` は新ファーム完成後に、汎用のシステム同定ツールとして全面的に作り直す予定（いまは残す）。
 
 ---

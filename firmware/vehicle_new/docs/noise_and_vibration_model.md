@@ -5,8 +5,10 @@
 
 ## 1. 概要
 
-本文書はSILシミュレータのセンサノイズモデルと振動モデルの設計を定義する。
+本文書は **SIL の合成センサに与えるノイズモデルと振動モデル**の設計を定義する。
 大学制御工学教育レベルの物理的妥当性を目指す。
+
+物理エンジンは **MuJoCo**（剛体運動＋接触、RESET_PLAN §6）が担い、**IMU・ToF・フロー・気圧の合成、モータ、風は自前で実装する**。本文書は、その自作センサ・モータモデルに載せるノイズ／振動の仕様である。SIL の作り方の全体像は `simulator/sil/RESET_PLAN.md` を参照。
 
 ### 重要な認識
 
@@ -31,6 +33,8 @@ Q_d = σ_c² × Δt    [単位²]
 - Δt: サンプリング間隔 [s]
 
 ### ESKF 15状態のQ行列
+
+> **SIL が出すのは §3〜§4 の物理的なセンサノイズだけ**で、各推定器（ESKF／相補／Madgwick／MPC）はそこから自分の Q/R・ゲインを導く（アルゴリズム非依存、RESET_PLAN 方針2）。下の Q/R 表は**現行 ESKF の例示**であり、同じ物理ノイズが一つの推定器の行列にどう写るかを示すもの。SIL の義務は 15 状態 ESKF 形の構造を出すことではなく、物理ノイズを出すことである。
 
 | 状態 | Q要素 | StampFly値 |
 |------|-------|-----------|
@@ -87,7 +91,7 @@ w[k] ~ N(0, σ_rw² × Δt)
 ### SILでの振動再現レベル（Noise Model Stage）
 
 > **Note:** 本節の `N0〜N4` はノイズモデルの理論的段階を指す（教材としての複雑度区分）。<br>
-> SIL の制御テストレベル `L1〜L4`（`flight_scenario_test.cpp` の `enum Level`）とは**別概念**で、衝突を避けるため `N` プレフィックスを用いる。
+> 開発工程の `Phase 0〜6` やプラント同定層 `Layer 1〜4`（`development_roadmap.md`）とは別概念で、衝突を避けるため `N` プレフィックスを用いる。
 
 | 段階 | モデル | 教育用途 |
 |-------|-------|---------|
@@ -95,13 +99,13 @@ w[k] ~ N(0, σ_rw² × Δt)
 | N1 | スロットル依存ガウスノイズ | ノイズ-スロットル相関の理解 |
 | **N2** | **N1 + 帯域制限ノイズ** | **LPFの必要性理解（推奨）** |
 | N3 | N2 + 正弦波（BPF成分） | ノッチフィルタ設計演習 |
-| N4 | 実機FFTプロファイル注入 | 実機との定量比較 |
+| N4 | 実機FFTプロファイル注入 | 実機との定量比較（Model Fidelity、実機飛行後） |
 
 ### 推奨: N2（帯域制限スロットル依存ノイズ）
 
 ```cpp
-// SILセンサモデルの構成
-// SIL sensor model structure
+// SIL 合成センサのノイズモデル構成
+// SIL synthetic-sensor noise model structure
 
 struct SensorNoiseModel {
     // 1. Static noise (datasheet)
@@ -133,37 +137,52 @@ struct SensorNoiseModel {
     float vib_freq_high;          // [Hz] bandpass upper bound
 };
 
-// Validated values from hover02 flight log (2026-04-13, commit 92f4a65)
-// hover02 飛行ログから校正済みの値（2026-04-13、コミット 92f4a65）
+// Starting values seeded from a legacy-hardware flight log (firmware/vehicle,
+// hover02, 2026-04-13). They give a realistic initial noise model for the new
+// SIL; refining them against vehicle_new's own logs is Model Fidelity work,
+// done only after vehicle_new flies (development_roadmap.md Phase 5).
+// 旧機（firmware/vehicle, hover02, 2026-04-13）のログから採った初期値。
+// 新 SIL の現実的な初期ノイズモデルになる。vehicle_new 自身のログでの精緻化は
+// Model Fidelity（実機飛行後＝development_roadmap.md Phase 5）で行う。
 //   vib_accel_k = {3.96, 2.35, 5.64}  [m/s²]
 //   vib_gyro_k  = {1.08, 0.83, 0.15}  [rad/s]
-//   Backtest residuals all within 1.1-1.2x of real-data σ
-//   バックテスト残差: 全軸で実データσの 1.1〜1.2倍以内
+//   Backtest residuals all within 1.1-1.2x of the legacy-data σ
+//   バックテスト残差: 全軸で旧機データσの 1.1〜1.2倍以内
 ```
 
-## 5. SIL物理モデルの修正事項
+## 5. 合成センサ・モータモデルの要件（MuJoCo 上に自作）
 
-### 比力（specific force）の正しい計算
+MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロスコピック項を含む）と接触を計算する。**自作するのは、その状態量から作る合成センサと、モータ／風モデル**である。MuJoCo の内蔵センサ（`<accelerometer>`／`<gyro>`／`<rangefinder>`）・内蔵アクチュエータ（`<motor>`）は、**自作実装が正しいかを照らし合わせるリファレンス**として使う（RESET_PLAN §6）。
 
-```
-加速度計出力 = R_nb × (a_ned - g_ned)
-            = R_nb × ((thrust_ned + drag) / mass)
-```
+### 比力（specific force）の正しい計算 ← 合成加速度計
 
-現在の`getSensors()`は推力加速度を含んでいない。修正必須。
-
-### バイアス初期化
-
-vehicleファームは`setAttitudeReference()`で`ba_z ≈ 2g`をセットする。
-SILでも起動キャリブレーションフローを再現する必要がある。
-
-### 推力の二乗則
+加速度計は重力を含む比力を出力する。MuJoCo の機体加速度（ワールド系）と姿勢から、機体系の比力を合成する。
 
 ```
-thrust = k_thrust × duty²    （現在は線形: k_thrust × duty）
+加速度計出力 = R_nb × (a_world - g_ned)
+            = R_nb × ((thrust_ned + drag) / mass - g_ned)
 ```
 
-### オイラー方程式のジャイロスコピック項
+旧 SIL の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>` と突き合わせて検算する。
+
+### バイアス初期化 ← 起動キャリブレーションの再現
+
+vehicle ファームは起動時に `setAttitudeReference()` で `ba_z ≈ 2g` をセットする。
+SIL でも起動キャリブレーションフローを再現し、推定器が実機と同じ初期化を踏むようにする。
+
+### 推力の二乗則 ← 自作モータモデル
+
+モータモデルは duty を推力に変換する。線形ではなく二乗則。
+
+```
+thrust = k_thrust × duty²
+```
+
+これに加えて、モータ遅れ（一次遅れ τ）・健全度／劣化（推力スケール）を持たせる（RESET_PLAN §5 の「外乱（風）・モータ健全度」を最初から実装）。生成した推力／トルクは MuJoCo の機体に力として与える。
+
+### オイラー方程式のジャイロスコピック項 ← MuJoCo が担当
+
+剛体回転（下式のジャイロスコピック結合を含む）は **MuJoCo の剛体積分が計算する**。自作はしない。合成ジャイロは MuJoCo の機体角速度 ω を読み、§4 のノイズ／振動を載せて出力する。式は教材・検算の参照として残す。
 
 ```
 I_xx × ω̇_x = τ_x - (I_zz - I_yy) × ω_y × ω_z
@@ -179,16 +198,20 @@ I_zz × ω̇_z = τ_z - (I_yy - I_xx) × ω_x × ω_y
 | f_low, f_high | FFT PSDの-10dBポイント | 定常ホバリングのFFT |
 | バイアスドリフト | Allan分散解析 | 長時間静置データ |
 
+> **実機ログは SIL を作る・動かす前提ではない（RESET_PLAN §2 方針1）。** §4 のレガシー値は「現実的な初期値の**任意のシード**」にすぎず、SIL はデータシート値×経験的倍率のような妥当な初期値でも build/run してゲートまで到達できる。旧機（既に飛んだ**別の**機体）のログがたまたま存在するのでシードに使うだけで、vehicle_new 自身での同定は実機飛行後（Model Fidelity、Phase 5）に行う。
+
 ## 7. 実装ロードマップ
 
-| Phase | 内容 | 教育目標 |
-|-------|------|---------|
-| 0 | 比力修正 + バイアス初期化 | SILが正常に飛ぶ |
-| 1 | IMUガウスノイズ + バイアス | KFの基礎 |
-| 2 | スロットル依存ノイズ | 振動とノイズの関係 |
-| 3 | 帯域制限 + ToF/Baroノイズ | フィルタ設計の動機 |
-| 4 | 正弦波BPF + Flow | ノッチフィルタ、高度依存ノイズ |
-| 5 | 実機FFTプロファイル | モデル検証 |
+SIL の合成センサ整備の順序。RESET_PLAN の **P1（物理ベース SIL の骨格）**の中で進め、N3/N4 は教材・Model Fidelity として後段に置く。
+
+| 段階 | 内容 | 教育目標 | 対応（RESET_PLAN / Phase） |
+|------|------|---------|--------------------------|
+| 基礎 | 比力修正 + バイアス初期化（合成IMUが正しく動く） | SILが正常に飛ぶ | P1 |
+| N0 | IMUガウスノイズ + バイアス | KFの基礎 | P1 |
+| N1 | スロットル依存ノイズ | 振動とノイズの関係 | P1 |
+| N2 | 帯域制限 + ToF/Baroノイズ | フィルタ設計の動機 | P1 |
+| N3 | 正弦波BPF + Flow | ノッチフィルタ、高度依存ノイズ | 教材 |
+| N4 | 実機FFTプロファイル | モデル検証 | Phase 5（実機飛行後） |
 
 ---
 
@@ -196,15 +219,17 @@ I_zz × ω̇_z = τ_z - (I_yy - I_xx) × ω_x × ω_y
 
 ## 1. Overview
 
-This document defines the sensor noise and vibration models for the SIL simulator.
+This document defines the **sensor noise and vibration models fed to the SIL's synthetic sensors**.
 Target: university-level control engineering education with physical validity.
+
+The physics engine is **MuJoCo** (rigid-body + contact, RESET_PLAN §6); the **IMU/ToF/flow/baro synthesis, the motor, and wind are written by hand**. This document is the noise/vibration spec layered on top of those self-written sensor/motor models. For the full SIL design, see `simulator/sil/RESET_PLAN.md`.
 
 ### Key Insight
 
 Datasheet noise values and actual in-flight noise differ by **orders of magnitude**.
 The primary cause is **motor/propeller vibration**, making static noise models insufficient.
 
-## 2-7. (See Japanese sections above for complete specifications)
+## 2. Specifications (see Japanese §2–§7 for full detail)
 
 ### Summary Tables
 
@@ -216,17 +241,16 @@ The primary cause is **motor/propeller vibration**, making static noise models i
 
 **Noise Model Stages (N0-N4):**
 
-> Note: `N0-N4` denote noise-model complexity tiers (educational). They are distinct from the SIL control-test levels `L1-L4` defined by the `enum Level` in `flight_scenario_test.cpp`. The `N` prefix is used to avoid collision.
+> Note: `N0-N4` denote noise-model complexity tiers (educational). They are distinct from the development `Phase 0-6` and the plant-identification `Layer 1-4` in `development_roadmap.md`. The `N` prefix is used to avoid collision.
 
 - N0: White Gaussian (basic KF understanding)
 - N1: Throttle-dependent (noise-throttle correlation)
 - **N2: N1 + band-limited (LPF motivation) — Recommended**
 - N3: N2 + sinusoidal BPF (notch filter design)
-- N4: Real FFT profile injection (validation)
+- N4: Real FFT profile injection (validation — Model Fidelity, after first real flight)
 
-**SIL Fix Priority:**
-1. Fix specific force calculation (include thrust)
-2. Add startup calibration (bias initialization)
-3. Add sensor noise (Gaussian + bias + vibration)
-4. Quadratic thrust model
-5. Euler equation gyroscopic terms
+**Self-written sensor/motor model requirements (on top of MuJoCo):**
+1. Specific force: the synthetic accelerometer must include the thrust contribution (the old SIL's bug); cross-check against MuJoCo's built-in `<accelerometer>`
+2. Startup calibration (bias initialization, `ba_z ≈ 2g`)
+3. Quadratic thrust motor model (`thrust = k·duty²`) plus motor lag and health/degradation; rigid-body rotation (Euler/gyroscopic terms) is handled by MuJoCo, not hand-integrated
+4. Sensor noise (Gaussian + bias + per-axis vibration), seeded from legacy logs, refined later via Model Fidelity

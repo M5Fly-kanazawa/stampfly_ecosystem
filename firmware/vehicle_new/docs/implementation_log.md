@@ -29,6 +29,8 @@
 
 ## 実装フェーズ
 
+> **注記（2026-05-31）:** 下表の 2026-04-12〜04-13 の SIL 関連エントリ（`quad_model.hpp`／`sil_main.cpp`／`plot_flight.py` 等）が作った旧 SIL は、**2026-05-31 のクリーンスレート転換で完全削除した**（§設計変更履歴参照）。本表は時系列の記録としてそのまま残す（履歴は改竄しない）。SIL は物理ベース・MuJoCo・アルゴリズム非依存で更地から作り直す。新方針は `simulator/sil/RESET_PLAN.md` を正とする。
+
 | 日付 | 開始時刻 | 終了時刻 | 作業時間 | 作業内容 | 成果物 | コミット |
 |------|---------|---------|---------|---------|--------|---------|
 | 2026-04-12 | 08:26 | 08:40 | 14min | ESP-IDFスケルトン + sf_core（Pub-Sub、データ型、トピック定義） | CMakeLists.txt, partitions.csv, sdkconfig.defaults, main.cpp, config.hpp, topic.hpp, topics.hpp, data_types.hpp, params.cpp | 9bfb04b |
@@ -118,4 +120,4 @@
 
 | 日付 | 変更対象 | 変更内容 | 理由 |
 |------|---------|---------|------|
-| | | | |
+| 2026-05-31 | SIL 全体（旧 `quad_model`／`sil_main`／`flight_scenario_test` 等）と関連設計記述 | 旧 SIL を**完全削除**し、物理ベース・MuJoCo・アルゴリズム非依存で**クリーンスレートから再構築**する方針に転換。`development_roadmap.md`・`noise_and_vibration_model.md` を RESET_PLAN 準拠にリライト、`control/validation/sil_control_validation.md`（旧 SIL の検証レポート）を削除 | 旧 SIL が M7 調査で約4,500行＋多数ツールに肥大化し進捗追跡が不能に。旧コードが AI を引っ張るため凍結でなく削除。詳細は `simulator/sil/RESET_PLAN.md` |
