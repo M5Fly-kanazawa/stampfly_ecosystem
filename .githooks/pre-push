@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# StampFly Ecosystem — milestone gate git hook.
+#
+# Refuse to push a SIL milestone tag `sil-p<N>` unless its artifact bundle
+# (simulator/sil/viz/out_p<N>/) passes the gate: results.json + review video +
+# trajectory.csv present AND the machine verdict pass=true. This ties git
+# milestones to the output-driven bundle (RESET_PLAN.md §8/§10) — you cannot
+# publish a milestone tag without the proof.
+#
+# SIL マイルストーンタグ `sil-p<N>` は、その成果物バンドルがゲート（results.json＋
+# レビュー動画＋trajectory.csv 揃い＋機械判定 pass）を通らない限り push を拒否する。
+# git のマイルストーンをアウトプット主導のバンドルに結びつける。
+#
+# Enable (opt-in):  git config core.hooksPath .githooks
+# 有効化:           git config core.hooksPath .githooks
+
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/simulator/sil/viz/venv/bin/python"
+[ -x "$PY" ] || PY=python3
+
+rc=0
+# stdin lines: <local ref> <local sha> <remote ref> <remote sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/sil-p*)
+      n="${remote_ref#refs/tags/sil-p}"
+      bundle="$ROOT/simulator/sil/viz/out_p${n}"
+      echo "[pre-push] milestone tag $remote_ref → gating bundle $bundle"
+      if ! "$PY" "$ROOT/simulator/sil/tools/sil_gate.py" "$bundle"; then
+        echo "[pre-push] REJECTED: bundle gate failed for $remote_ref" >&2
+        rc=1
+      fi
+      ;;
+  esac
+done
+exit $rc
