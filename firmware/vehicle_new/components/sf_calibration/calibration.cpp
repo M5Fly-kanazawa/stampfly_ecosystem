@@ -115,9 +115,14 @@ void CalibrationMgr::computeAverages()
         data_.accel_bias[i] = static_cast<float>(accel_sum_[i] / n);
     }
 
-    // Remove gravity from Z-axis accel bias (assuming Z-down)
-    // Z軸加速度バイアスから重力を除去（Z-down仮定）
-    data_.accel_bias[2] -= G;
+    // Remove gravity from the Z-axis accel bias. At level rest the accelerometer
+    // reads −G on body Z (gravity −9.8 on body-down, NED-consistent), so the true
+    // bias is the mean PLUS G. (The old "-= G" yielded −2G — a latent sign bug:
+    // the accelerometer is in the −g convention, not +g.)
+    // Z軸加速度バイアスから重力を除去。水平静止で加速度計は機体 Z に −G を返す
+    // （機体下方に重力 −9.8、NED 整合）ので、真のバイアスは平均＋G。
+    // （旧 "-= G" は −2G を生む潜在符号バグ＝加速度計は −g 規約で +g ではない。）
+    data_.accel_bias[2] += G;
 }
 
 // -----------------------------------------------------------------------------
