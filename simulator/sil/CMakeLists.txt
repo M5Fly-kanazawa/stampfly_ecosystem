@@ -173,6 +173,35 @@ if(SIL_BUILD_MUJOCO_SMOKE)
     ${VN}/components/sf_core/include
   )
   target_link_libraries(hover_smoke PRIVATE sf_cores Threads::Threads mujoco)
+
+  # Rate-loop tuning harness: yaw-rate step with runtime-injected gains, for the
+  # SIL-backed recalibration sweep. Same wiring as hover_smoke.
+  # レートループ調整ハーネス: 実行時注入ゲインでヨーレートステップ。掃引用。
+  add_executable(rate_tune
+    smoke/rate_tune.cpp
+    plant/plant.cpp
+    rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp
+    sim_hal/sim_bmi270.cpp
+    sim_hal/sim_motor_driver.cpp
+    ${VN}/tasks/imu_task.cpp
+    ${VN}/tasks/control_task.cpp
+    ${VN}/tasks/state_task.cpp
+    ${VN}/components/sf_state/state_manager.cpp
+    ${VN}/components/sf_actuator/actuator.cpp
+  )
+  target_include_directories(rate_tune PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${VN}/main
+    ${VN}/components/sf_actuator/include
+    ${VN}/components/sf_hal_motor/include
+    ${VN}/components/sf_math/include
+    ${VN}/components/sf_core/include
+  )
+  target_link_libraries(rate_tune PRIVATE sf_cores Threads::Threads mujoco)
 endif()
 
 # -----------------------------------------------------------------------------

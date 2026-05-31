@@ -78,8 +78,8 @@ namespace param_vars {
     float rate_pitch_kp   = 1.995e-3f;
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.01f;
-    float rate_yaw_kp     = 5.31e-3f;
-    float rate_yaw_ti     = 1.6f;
+    float rate_yaw_kp     = 1.0f;   // SIL-recalibrated (rate_tune); was 5.31e-3
+    float rate_yaw_ti     = 20.0f;  // SIL-recalibrated; was 1.6 (near-P, integrator plant)
     float rate_yaw_td     = 0.01f;
 
     // Attitude control
@@ -149,8 +149,17 @@ static const ParamEntry table[] = {
     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.995e-3f, 0.0f,  0.1f,   nullptr},
     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, nullptr},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   nullptr},
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.1f,   nullptr},
-    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, nullptr},
+    // Yaw rate gains recalibrated in the SIL (rate_tune): the yaw loop is an
+    // integrator plant, so a high-gain near-P controller tracks cleanly (kp 1.0,
+    // ti 20 → ~1% error, ~1% overshoot, linear). The old kp 5.31e-3/ti 1.6
+    // tracked a 1 rad/s command at only 0.05 rad/s because the simplified mixer
+    // attenuates yaw by kappa (see actuator.cpp). Bench-confirm before flight.
+    // ヨーレートゲインを SIL(rate_tune)で再較正。ヨーは積分器プラントなので高ゲインの
+    // ほぼ P 制御で綺麗に追従（kp 1.0, ti 20 → 誤差~1%・overshoot~1%・線形）。旧
+    // kp 5.31e-3/ti 1.6 は簡易ミキサーが κ でヨーを減衰するため 1 rad/s 指令を 0.05
+    // しか追従しなかった。飛行前にベンチ確認のこと。
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    1.0f,      0.0f,  2.0f,   nullptr},
+    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, nullptr},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   nullptr},
 
     // Attitude control

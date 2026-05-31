@@ -7,3 +7,4 @@ _deps/
 # Fetched MuJoCo source (acquired via FetchContent, not vendored)
 # FetchContent で取得する MuJoCo ソース（コピー同梱しない）
 mujoco-build/
+simulator/sil/viz/venv/

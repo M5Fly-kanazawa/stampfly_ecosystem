@@ -221,18 +221,18 @@ int main(int argc, char** argv)
     check(g_max_horiz < 0.10f, "horizontal position bounded (< 10 cm)");
     check(m.duty[0] > 0.05f && m.duty[0] < 0.99f, "motors active, not saturated");
 
-    // DIAGNOSTIC (not a G3 gate): the rate loop IS connected — it responds to a
-    // yaw command (>0) — but the rate gains (rate.yaw.kp=5.31e-3) are calibrated
-    // for small stabilization corrections, so they produce too little torque to
-    // track a 1 rad/s command. This is a torque-scaling / gain question for the
-    // control engineer (see synthesis unresolved #5), independent of the hover.
-    // 診断（G3 ゲートではない）: レート内ループは接続済み — ヨー指令に応答する（>0）—
-    // が、レートゲイン（rate.yaw.kp=5.31e-3）は微小補正用の較正で、1 rad/s 指令を
-    // 追従するトルクには不足。torque スケール/ゲインの制御工学課題（synthesis 未解決
-    // #5）で、ホバーとは独立。
-    printf("[hover_smoke] DIAGNOSTIC yaw-rate tracking: commanded=%.2f rad/s, "
-           "measured=%.2f rad/s (loop connected but gain low — see report)\n",
+    // Rate loop tracks a commanded yaw rate. This was 0.05 rad/s before the SIL
+    // gain recalibration (rate.yaw.kp 5.31e-3 → 1.0, ti 1.6 → 20): the simplified
+    // mixer attenuates yaw by kappa, so the yaw loop needs a high-gain near-P
+    // controller (integrator plant). Proves the rate loop is doing real work.
+    // レート内ループが指令ヨーレートを追従する。SIL のゲイン再較正（rate.yaw.kp
+    // 5.31e-3→1.0, ti 1.6→20）前は 0.05 rad/s だった。簡易ミキサーが κ でヨーを
+    // 減衰するため高ゲインのほぼ P 制御（積分器プラント）が要る。レート内ループが
+    // 実際に働いている証拠。
+    printf("[hover_smoke] yaw-rate tracking: commanded=%.2f rad/s, measured=%.2f rad/s\n",
            kYawExpected, g_final_yaw_rate);
+    check(std::fabs(g_final_yaw_rate - kYawExpected) < 0.20f,
+          "rate loop tracks yaw command (omega_z → 1 rad/s)");
 
     printf("[hover_smoke] %s — G3 closed-loop hover\n",
            failures == 0 ? "OK" : "FAILED");
