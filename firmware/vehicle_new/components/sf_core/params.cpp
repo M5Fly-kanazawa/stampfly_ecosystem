@@ -90,6 +90,12 @@ namespace param_vars {
     float rate_yaw_ti     = 20.0f;
     float rate_yaw_td     = 0.01f;
 
+    // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
+    // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
+    // bench swaps estimators via this parameter alone — no code change.
+    // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補。
+    int32_t estimator_type = 0;
+
     // Attitude control
     float att_roll_kp     = 5.0f;
     float att_roll_ti     = 4.0f;
@@ -163,6 +169,9 @@ static const ParamEntry table[] = {
     {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    4.08e-4f,  0.0f,  0.01f,  nullptr},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, nullptr},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   nullptr},
+
+    // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
+    {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},
 
     // Attitude control
     {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  nullptr},

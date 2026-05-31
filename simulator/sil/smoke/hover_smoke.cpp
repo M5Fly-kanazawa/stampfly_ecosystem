@@ -32,6 +32,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "scheduler.hpp"
 #include "topics.hpp"
@@ -195,6 +196,7 @@ int main(int argc, char** argv)
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sil/models/stampfly.xml";
     const char* out_dir = (argc > 2) ? argv[2] : nullptr;  // record bundle if given
+    const int est_type = (argc > 3) ? std::atoi(argv[3]) : 0;  // 0=ESKF, 1=complementary
 
     // Open the trajectory file for the review video (header = column names).
     // レビュー動画用の軌跡ファイルを開く（ヘッダ = 列名）。
@@ -211,6 +213,17 @@ int main(int argc, char** argv)
 
     sf::params::init();
     sf::topics_init();
+
+    // Algorithm-independence (RESET_PLAN P2): select the estimator by a parameter
+    // only. The bench (physics, loop, sensors, gates) is byte-for-byte the same;
+    // the firmware's IMU-task factory reads estimator.type and swaps ESKF ↔
+    // complementary. Nothing in this harness or the firmware tasks changes.
+    // アルゴリズム非依存（P2）: 推定器を param だけで選ぶ。ベンチ（物理・ループ・
+    // センサ・ゲート）は完全に同一で、ファームの IMU タスクのファクトリが
+    // estimator.type を読んで ESKF ↔ 相補を差し替える。
+    sf::params::set_int("estimator.type", est_type);
+    printf("[hover_smoke] estimator.type=%d (%s)\n",
+           est_type, est_type == 1 ? "complementary filter" : "ESKF");
 
     if (!g_plant.init(model_path)) {
         fprintf(stderr, "[hover_smoke] plant init failed (model: %s)\n", model_path);

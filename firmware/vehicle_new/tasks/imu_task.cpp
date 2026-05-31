@@ -33,8 +33,10 @@
 #include "topics.hpp"
 #include "estimator.hpp"
 #include "eskf_estimator.hpp"
+#include "complementary_estimator.hpp"
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
+#include "params.hpp"
 
 static const char* TAG = "ImuTask";
 
@@ -54,9 +56,34 @@ static constexpr uint32_t READ_FAIL_LOG_INTERVAL = 400;
 /// 制御タスク通知用のタスクハンドル
 extern TaskHandle_t g_control_task_handle;
 
-/// Estimator instance
-/// 推定器インスタンス
-static sf::EskfEstimator estimator;
+/// Active estimator, selected by the estimator.type parameter via the factory
+/// below. Held as an IEstimator* so the implementation is swappable WITHOUT
+/// touching this task — the SIL bench picks ESKF or complementary via a param
+/// (RESET_PLAN P2: algorithm-independence).
+/// アクティブな推定器（下のファクトリが estimator.type で選ぶ）。実装を差し替え可能に
+/// するため IEstimator* で持つ。SIL ベンチは param で ESKF/相補を選ぶ（P2）。
+static sf::IEstimator* g_estimator = nullptr;
+
+/// Estimator factory: select by estimator.type (0 = ESKF, 1 = complementary),
+/// construct statically (no heap), initialize, and return via IEstimator. This is
+/// the only place that names the concrete types; everything else uses IEstimator.
+/// 推定器ファクトリ: estimator.type（0=ESKF, 1=相補）で選び、静的生成・初期化して
+/// IEstimator で返す。具象型を知るのはここだけ。
+static sf::IEstimator* createEstimator()
+{
+    static sf::EskfEstimator eskf;
+    static sf::ComplementaryEstimator comp;
+    int32_t type = 0;
+    sf::params::get_int("estimator.type", type);
+    if (type == 1) {
+        comp.init();
+        ESP_LOGI(TAG, "Estimator: complementary filter (attitude + rate)");
+        return &comp;
+    }
+    eskf.init();
+    ESP_LOGI(TAG, "Estimator: ESKF (15-state)");
+    return &eskf;
+}
 
 /// BMI270 IMU driver instance (file-scope, not exposed as global)
 /// BMI270 IMU ドライバインスタンス（ファイルスコープ、グローバル非公開）
@@ -126,22 +153,22 @@ static void processAsyncSensors()
 {
     sf::TofData tof;
     while (sf::sensor_tof.read(tof)) {
-        estimator.updateTof(tof);
+        g_estimator->updateTof(tof);
     }
 
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
-        estimator.updateFlow(flow);
+        g_estimator->updateFlow(flow);
     }
 
     sf::MagData mag;
     while (sf::sensor_mag.read(mag)) {
-        estimator.updateMag(mag);
+        g_estimator->updateMag(mag);
     }
 
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
-        estimator.updateBaro(baro);
+        g_estimator->updateBaro(baro);
     }
 }
 
@@ -177,9 +204,9 @@ void ImuTask(void* pvParameters)
     }
     ESP_LOGI(TAG, "BMI270 init OK (400Hz read loop starting)");
 
-    // Initialize estimator
-    // 推定器を初期化
-    estimator.init();
+    // Create + initialize the estimator selected by estimator.type.
+    // estimator.type で選ばれた推定器を生成・初期化。
+    g_estimator = createEstimator();
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
     // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
@@ -266,7 +293,7 @@ void ImuTask(void* pvParameters)
         // Step 2: 推定器の予測ステップを実行
         // =====================================================================
 
-        estimator.predict(imu, config::IMU_DT);
+        g_estimator->predict(imu, config::IMU_DT);
 
         // =====================================================================
         // Step 3: Process async sensor observations
@@ -280,7 +307,7 @@ void ImuTask(void* pvParameters)
         // Step 4: 状態推定値を発行
         // =====================================================================
 
-        sf::StateEstimate state = estimator.getState();
+        sf::StateEstimate state = g_estimator->getState();
         sf::estimate_state.publish(state);
 
         // =====================================================================

@@ -49,6 +49,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
   add_library(sf_cores STATIC
     ${VN}/components/sf_estimator_eskf/eskf_estimator.cpp
     ${VN}/components/sf_estimator_eskf/eskf_core.cpp
+    ${VN}/components/sf_estimator_complementary/complementary_estimator.cpp
     ${VN}/components/sf_controller_pid/pid_controller.cpp
     ${VN}/components/sf_core/params.cpp
     ${SIL_COMPAT}/nvs_shim.cpp
@@ -60,6 +61,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_core/include
     ${VN}/components/sf_estimator/include
     ${VN}/components/sf_estimator_eskf/include
+    ${VN}/components/sf_estimator_complementary/include
     ${VN}/components/sf_controller/include
     ${VN}/components/sf_controller_pid/include
     ${VN}/components/sf_state/include

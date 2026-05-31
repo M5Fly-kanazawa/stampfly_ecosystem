@@ -26,6 +26,7 @@ idf_component_register(
         sf_state
         sf_estimator
         sf_estimator_eskf
+        sf_estimator_complementary
         sf_controller
         sf_controller_pid
         sf_actuator
