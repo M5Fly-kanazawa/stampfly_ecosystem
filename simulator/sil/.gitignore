@@ -1,0 +1,9 @@
+# SIL host build artifacts / SIL ホストビルドの生成物
+build/
+_deps/
+*.o
+*.a
+*.out
+# Fetched MuJoCo source (acquired via FetchContent, not vendored)
+# FetchContent で取得する MuJoCo ソース（コピー同梱しない）
+mujoco-build/
