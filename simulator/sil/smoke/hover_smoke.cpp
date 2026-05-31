@@ -74,6 +74,15 @@ float g_max_tilt_deg = 0.0f;
 float g_max_horiz = 0.0f;
 float g_final_yaw_rate = 0.0f;
 
+// Optional trajectory recording for the review video (set when an out dir is
+// given). One CSV row every kRecDiv physics steps (400Hz / 8 = 50 fps).
+// レビュー動画用の任意の軌跡記録（出力ディレクトリ指定時）。kRecDiv ステップ毎に
+// 1 行（400Hz/8 = 50 fps）。
+FILE* g_traj = nullptr;
+int   g_rec_count = 0;
+constexpr int kRecDiv = 8;
+float g_yaw_cmd_now = 0.0f;  // current commanded yaw rate (for the graph)
+
 float tiltDeg(const sf::math::Quat& q_nb)
 {
     // Angle between NED-down and the body's down axis (0 = perfectly level).
@@ -118,6 +127,7 @@ void physics(int64_t now_us)
     static bool yaw_cmd = false;
     if (!yaw_cmd && now_us >= kYawCmdUs) {
         yaw_cmd = true;
+        g_yaw_cmd_now = kYawExpected;
         sf::CommandSetpoint sp = {};
         sp.throttle = g_hover_duty;
         sp.roll = sp.pitch = 0.0f;
@@ -149,6 +159,27 @@ void physics(int64_t now_us)
     if (horiz > g_max_horiz) g_max_horiz = horiz;
     if (tilt > g_max_tilt_deg) g_max_tilt_deg = tilt;
     g_final_yaw_rate = t.omega_frd.z;  // tracked yaw rate (settles after the cmd)
+
+    // Record a trajectory frame for the review video (downsampled to ~50 fps).
+    // The estimate is the firmware's own ESKF output (estimate_state topic) so
+    // the video can overlay estimate vs physics truth.
+    // レビュー動画用に軌跡フレームを記録（~50fps にダウンサンプル）。推定はファーム
+    // 自身の ESKF 出力（estimate_state トピック）なので推定 vs 物理真値を重ねられる。
+    if (g_traj != nullptr && (g_rec_count++ % kRecDiv) == 0) {
+        const double* q = g_plant.data()->qpos;  // MuJoCo [x,y,z, qw,qx,qy,qz]
+        sf::StateEstimate est = sf::estimate_state.latest();
+        sf::math::Quat qe(est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]);
+        float est_alt = -est.position[2];
+        float est_tilt = tiltDeg(qe);
+        fprintf(g_traj,
+                "%.4f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.6f,"
+                "%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.4f,%.4f,%.4f,%.4f\n",
+                now_us * 1e-6,
+                q[0], q[1], q[2], q[3], q[4], q[5], q[6],
+                -t.pos_ned.z, tilt, t.omega_frd.z, g_yaw_cmd_now,
+                est_alt, est_tilt,
+                cmd.duty[0], cmd.duty[1], cmd.duty[2], cmd.duty[3]);
+    }
 }
 }  // namespace
 
@@ -156,6 +187,20 @@ int main(int argc, char** argv)
 {
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sil/models/stampfly.xml";
+    const char* out_dir = (argc > 2) ? argv[2] : nullptr;  // record bundle if given
+
+    // Open the trajectory file for the review video (header = column names).
+    // レビュー動画用の軌跡ファイルを開く（ヘッダ = 列名）。
+    if (out_dir != nullptr) {
+        char path[1024];
+        std::snprintf(path, sizeof(path), "%s/trajectory.csv", out_dir);
+        g_traj = std::fopen(path, "w");
+        if (g_traj != nullptr) {
+            std::fprintf(g_traj,
+                "t,px,py,pz,qw,qx,qy,qz,alt,tilt,yawrate,yawcmd,"
+                "alt_est,tilt_est,m0,m1,m2,m3\n");
+        }
+    }
 
     sf::params::init();
     sf::topics_init();
@@ -236,5 +281,55 @@ int main(int argc, char** argv)
 
     printf("[hover_smoke] %s — G3 closed-loop hover\n",
            failures == 0 ? "OK" : "FAILED");
+
+    // Write the machine-readable bundle (results.json) alongside the trajectory.
+    // This is the single source of truth for the milestone gate (RESET_PLAN §8).
+    // 機械可読バンドル（results.json）を軌跡と並べて書く。マイルストーンゲートの
+    // 唯一の正（RESET_PLAN §8）。
+    if (g_traj != nullptr) {
+        std::fclose(g_traj);
+        g_traj = nullptr;
+    }
+    if (out_dir != nullptr) {
+        char path[1024];
+        std::snprintf(path, sizeof(path), "%s/results.json", out_dir);
+        FILE* rf = std::fopen(path, "w");
+        if (rf != nullptr) {
+            std::fprintf(rf,
+                "{\n"
+                "  \"gate\": \"G3\",\n"
+                "  \"milestone\": \"P1\",\n"
+                "  \"pass\": %s,\n"
+                "  \"duration_s\": %.1f,\n"
+                "  \"hover_duty\": %.4f,\n"
+                "  \"metrics\": {\n"
+                "    \"max_tilt_deg\": %.3f,\n"
+                "    \"max_alt_err_m\": %.4f,\n"
+                "    \"max_horiz_m\": %.4f,\n"
+                "    \"yaw_cmd_rad_s\": %.3f,\n"
+                "    \"yaw_meas_rad_s\": %.3f\n"
+                "  },\n"
+                "  \"checks\": [\n"
+                "    {\"name\": \"attitude_level\",   \"pass\": %s, \"limit_deg\": 10.0},\n"
+                "    {\"name\": \"altitude_bounded\", \"pass\": %s, \"limit_m\": 0.10},\n"
+                "    {\"name\": \"horiz_bounded\",    \"pass\": %s, \"limit_m\": 0.10},\n"
+                "    {\"name\": \"motors_active\",    \"pass\": %s},\n"
+                "    {\"name\": \"yaw_tracks\",       \"pass\": %s, \"tol_rad_s\": 0.20}\n"
+                "  ]\n"
+                "}\n",
+                failures == 0 ? "true" : "false",
+                kSimDurationUs * 1e-6, g_hover_duty,
+                g_max_tilt_deg, g_max_alt_err, g_max_horiz,
+                kYawExpected, g_final_yaw_rate,
+                g_max_tilt_deg < 10.0f ? "true" : "false",
+                g_max_alt_err < 0.10f ? "true" : "false",
+                g_max_horiz < 0.10f ? "true" : "false",
+                (m.duty[0] > 0.05f && m.duty[0] < 0.99f) ? "true" : "false",
+                std::fabs(g_final_yaw_rate - kYawExpected) < 0.20f ? "true" : "false");
+            std::fclose(rf);
+            printf("[hover_smoke] bundle written to %s/ (trajectory.csv + results.json)\n",
+                   out_dir);
+        }
+    }
     return failures == 0 ? 0 : 2;
 }

@@ -1,0 +1,21 @@
+{
+  "gate": "G3",
+  "milestone": "P1",
+  "pass": true,
+  "duration_s": 3.0,
+  "hover_duty": 0.6517,
+  "metrics": {
+    "max_tilt_deg": 0.020,
+    "max_alt_err_m": 0.0002,
+    "max_horiz_m": 0.0000,
+    "yaw_cmd_rad_s": 1.000,
+    "yaw_meas_rad_s": 1.010
+  },
+  "checks": [
+    {"name": "attitude_level",   "pass": true, "limit_deg": 10.0},
+    {"name": "altitude_bounded", "pass": true, "limit_m": 0.10},
+    {"name": "horiz_bounded",    "pass": true, "limit_m": 0.10},
+    {"name": "motors_active",    "pass": true},
+    {"name": "yaw_tracks",       "pass": true, "tol_rad_s": 0.20}
+  ]
+}
