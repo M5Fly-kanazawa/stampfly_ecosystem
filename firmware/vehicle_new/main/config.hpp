@@ -124,6 +124,7 @@ inline constexpr uint32_t STACK_LOG       = 4096;
 // =============================================================================
 
 inline constexpr float IMU_DT     = 0.0025f;   // 400Hz
+inline constexpr uint32_t IMU_PERIOD_US = 2500;  // 400Hz loop period [us] (= IMU_DT·1e6)
 inline constexpr float OPTFLOW_DT = 0.01f;     // 100Hz
 inline constexpr float MAG_DT     = 0.04f;     // 25Hz
 inline constexpr float BARO_DT    = 0.02f;     // 50Hz

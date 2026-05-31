@@ -134,15 +134,45 @@ public:
     void notify_give(Task* target);
     void delete_self();
 
+    // Handle of the task currently holding the token (xTaskGetCurrentTaskHandle).
+    // 現在トークンを保持しているタスクのハンドル（xTaskGetCurrentTaskHandle）。
+    TaskHandle_t current_handle();
+
+    // --- Periodic timers (driven by the esp_timer shim) ---
+    // A periodic timer is a deterministic virtual-clock wake source: when the
+    // clock reaches next_fire_us, the scheduler runs the firmware callback (which
+    // typically does xTaskNotifyGive). This is how a true 400Hz esp_timer loop is
+    // reproduced on the host. Fired during the all-blocked advance phase, in
+    // registration order, for a stable trace.
+    // --- 周期タイマ（esp_timer シムが駆動）---
+    // 周期タイマは決定論的な仮想時計の起床源: 時計が next_fire_us に達すると
+    // スケジューラが本体コールバック（通常 xTaskNotifyGive）を実行する。これで真の
+    // 400Hz esp_timer ループを host 上で再現する。全ブロックの advance 中に登録順で
+    // 発火し、トレースを安定させる。
+    using TimerCallback = void (*)(void*);
+    int  add_periodic(TimerCallback cb, void* arg, int64_t period_us);  // returns id
+    void remove_periodic(int id);
+
 private:
     Scheduler() = default;
 
     Task* pick_ready();              // highest priority among Ready, tie-break by id
     int64_t earliest_wake() const;   // min wake_us among BlockedDelay; -1 if none
+    int64_t earliest_timer_fire() const;  // min next_fire_us among active timers; -1 if none
+    void fire_due_timers(std::unique_lock<std::mutex>& lk);  // run callbacks due at now_us_
     void run_task_thread(Task* self);          // per-task thread body
     void block_current(TaskState new_state);   // give up token, wait until re-granted
     void grant_and_wait(std::unique_lock<std::mutex>& lk, Task* task);  // hand off token, wait for yield
     void stop_all();                 // unwind + join every task thread (clean teardown)
+
+    // A periodic virtual-clock timer. / 周期的な仮想時計タイマ。
+    struct PeriodicTimer {
+        TimerCallback cb = nullptr;
+        void* arg = nullptr;
+        int64_t period_us = 0;
+        int64_t next_fire_us = 0;
+        bool active = false;
+    };
 
     std::mutex m_;
     std::condition_variable sched_cv_;   // signalled when the running task yields
@@ -152,6 +182,7 @@ private:
     bool shutdown_ = false;
     std::function<void(int64_t)> on_advance_;
     std::vector<TraceEvent> trace_;
+    std::vector<PeriodicTimer> timers_;  // registered periodic (esp_timer) sources
 };
 
 }  // namespace rtos

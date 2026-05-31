@@ -145,6 +145,18 @@ static void processAsyncSensors()
     }
 }
 
+/// esp_timer callback: paces the IMU loop at 400Hz by notifying the IMU task.
+/// Runs in the esp_timer task context (not an ISR), so xTaskNotifyGive is used.
+/// esp_timer コールバック: IMU タスクに通知して IMU ループを 400Hz で刻む。
+/// esp_timer タスク文脈（ISR ではない）で動くので xTaskNotifyGive を使う。
+static void imuTimerCallback(void* arg)
+{
+    TaskHandle_t imu_task = static_cast<TaskHandle_t>(arg);
+    if (imu_task != nullptr) {
+        xTaskNotifyGive(imu_task);
+    }
+}
+
 void ImuTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ImuTask started");
@@ -169,8 +181,29 @@ void ImuTask(void* pvParameters)
     // 推定器を初期化
     estimator.init();
 
-    TickType_t last_wake = xTaskGetTickCount();
-    const TickType_t period = pdMS_TO_TICKS(2);  // ~400Hz (2.5ms → 2ms tick granularity)
+    // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
+    // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
+    // this makes the wall period match config::IMU_DT (eliminating the old
+    // 2ms/500Hz vs 2.5ms dt mismatch that mis-scaled the ESKF/PID timing).
+    // ループを esp_timer periodic（2500us）で真の 400Hz に駆動する。FreeRTOS tick
+    // では 2.5ms を表現できないためハードウェアタイマでループを刻む。これで実周期が
+    // config::IMU_DT と一致する（旧 2ms/500Hz vs 2.5ms の不一致＝ESKF/PID のタイミング
+    // 誤差を解消）。
+    TaskHandle_t self = xTaskGetCurrentTaskHandle();
+    const esp_timer_create_args_t imu_timer_args = {
+        .callback = &imuTimerCallback,
+        .arg = self,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "imu_400hz",
+        .skip_unhandled_events = true,
+    };
+    esp_timer_handle_t imu_timer = nullptr;
+    if (esp_timer_create(&imu_timer_args, &imu_timer) != ESP_OK ||
+        esp_timer_start_periodic(imu_timer, config::IMU_PERIOD_US) != ESP_OK) {
+        ESP_LOGE(TAG, "IMU 400Hz timer setup failed — task aborting");
+        vTaskDelete(NULL);
+        return;
+    }
 
     uint32_t cycle_count = 0;          // For temperature/log throttling
                                        // 温度・ログ抑制カウンタ
@@ -178,6 +211,10 @@ void ImuTask(void* pvParameters)
                                        // 直近で読み取り失敗を警告したサイクル
 
     while (true) {
+        // Block until the 400Hz esp_timer ticks (it notifies this task).
+        // 400Hz の esp_timer がティック（このタスクに通知）するまでブロック。
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
         uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         ++cycle_count;
 
@@ -203,8 +240,7 @@ void ImuTask(void* pvParameters)
                          esp_err_to_name(read_result));
                 last_fail_log_cycle = cycle_count;
             }
-            vTaskDelayUntil(&last_wake, period);
-            continue;
+            continue;  // wait for the next 400Hz tick / 次の 400Hz ティックを待つ
         }
 
         // Apply body-frame coordinate transform and unit conversion
@@ -257,7 +293,9 @@ void ImuTask(void* pvParameters)
         if (g_control_task_handle != nullptr) {
             xTaskNotifyGive(g_control_task_handle);
         }
-
-        vTaskDelayUntil(&last_wake, period);
+        // The esp_timer paces the loop; the ulTaskNotifyTake at the top blocks
+        // until the next 400Hz tick, so no explicit delay is needed here.
+        // ループは esp_timer が刻む。先頭の ulTaskNotifyTake が次の 400Hz ティック
+        // までブロックするので、ここで明示的な待ちは不要。
     }
 }

@@ -83,6 +83,7 @@ if(SIL_BUILD_RTOS_SMOKE)
   add_executable(rtos_smoke
     smoke/rtos_smoke.cpp
     rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp               # esp_timer periodic → deterministic 400Hz source
     sim_hal/sim_bmi270.cpp
     sim_hal/sim_motor_driver.cpp          # host MotorDriver stub (no driver/ledc.h)
     ${VN}/tasks/imu_task.cpp

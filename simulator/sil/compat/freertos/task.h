@@ -64,6 +64,10 @@ void vTaskDelayUntil(TickType_t* last_wake, TickType_t period);
 // 仮想時計からの現在 tick（1 tick = 1 ms）。
 TickType_t xTaskGetTickCount(void);
 
+// Handle of the task currently running (used to register esp_timer notifications).
+// 現在走っているタスクのハンドル（esp_timer 通知の登録に使う）。
+TaskHandle_t xTaskGetCurrentTaskHandle(void);
+
 // Give a notification to `handle` (increments its notification value).
 // `handle` に通知を1つ与える（通知値をインクリメント）。
 BaseType_t xTaskNotifyGive(TaskHandle_t handle);

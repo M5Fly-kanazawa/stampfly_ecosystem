@@ -151,15 +151,15 @@ int main()
     printf("[rtos_smoke] trace hash = 0x%016llx (identical across runs ⇒ deterministic)\n",
            static_cast<unsigned long long>(trace_hash(trace)));
 
-    // Expected cadence: ImuTask every 2 ms over 0.5 s ⇒ ~250 runs. Control must
-    // match ImuTask EXACTLY (strict lock-step): each IMU cycle notifies Control
-    // once and Control takes it. Requiring equality (not ≥-1) makes a silently
-    // dropped/collapsed notification fail the gate.
-    // 期待のリズム: ImuTask は 0.5 s で 2 ms ごと ⇒ 約250回。Control は ImuTask と
-    // 厳密に一致（ロックステップ）すること: 各 IMU サイクルが Control を1回通知し
-    // Control が受ける。≥-1 でなく等号を要求することで、静かに落ちた/まとめられた
-    // 通知をゲートで弾く。
-    const bool ok = (count[2] >= 240 && count[2] <= 260) && (count[1] == count[2]);
+    // Expected cadence: ImuTask every 2.5 ms (true 400Hz via esp_timer) over 0.5 s
+    // ⇒ ~200 runs. Control must match ImuTask EXACTLY (strict lock-step): each IMU
+    // cycle notifies Control once and Control takes it. Requiring equality (not
+    // ≥-1) makes a silently dropped/collapsed notification fail the gate.
+    // 期待のリズム: ImuTask は 0.5 s で 2.5 ms ごと（esp_timer による真の 400Hz）⇒
+    // 約200回。Control は ImuTask と厳密に一致（ロックステップ）すること: 各 IMU
+    // サイクルが Control を1回通知し Control が受ける。≥-1 でなく等号を要求することで、
+    // 静かに落ちた/まとめられた通知をゲートで弾く。
+    const bool ok = (count[2] >= 190 && count[2] <= 210) && (count[1] == count[2]);
     printf("[rtos_smoke] %s — real tasks ran on the host RTOS emulator\n",
            ok ? "OK" : "UNEXPECTED cadence");
 

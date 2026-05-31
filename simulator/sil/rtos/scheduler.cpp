@@ -229,6 +229,80 @@ void Scheduler::grant_and_wait(std::unique_lock<std::mutex>& lk, Task* task)
     }
 }
 
+// =============================================================================
+// Current task handle + periodic timers (esp_timer backing).
+// 現在タスクハンドル＋周期タイマ（esp_timer の裏付け）。
+// =============================================================================
+
+TaskHandle_t Scheduler::current_handle()
+{
+    // Called from inside a running task, so running_ is that task.
+    // 走行中のタスクから呼ばれるので running_ がそのタスク。
+    return static_cast<TaskHandle_t>(running_);
+}
+
+int Scheduler::add_periodic(TimerCallback cb, void* arg, int64_t period_us)
+{
+    // Called from a running task (it holds the token; no other thread runs), so
+    // touching timers_ here needs no extra lock.
+    // 走行中のタスクから呼ばれる（トークン保持・他スレッドは走らない）ので、ここで
+    // timers_ を触るのに追加ロックは不要。
+    PeriodicTimer t;
+    t.cb = cb;
+    t.arg = arg;
+    t.period_us = period_us;
+    t.next_fire_us = now_us_ + period_us;
+    t.active = true;
+    for (size_t i = 0; i < timers_.size(); ++i) {
+        if (!timers_[i].active && timers_[i].cb == nullptr) {  // reuse a freed slot
+            timers_[i] = t;
+            return static_cast<int>(i);
+        }
+    }
+    timers_.push_back(t);
+    return static_cast<int>(timers_.size() - 1);
+}
+
+void Scheduler::remove_periodic(int id)
+{
+    if (id >= 0 && id < static_cast<int>(timers_.size())) {
+        timers_[id].active = false;
+        timers_[id].cb = nullptr;
+    }
+}
+
+int64_t Scheduler::earliest_timer_fire() const
+{
+    int64_t earliest = -1;
+    for (const PeriodicTimer& t : timers_) {
+        if (!t.active) continue;
+        if (earliest < 0 || t.next_fire_us < earliest) earliest = t.next_fire_us;
+    }
+    return earliest;
+}
+
+void Scheduler::fire_due_timers(std::unique_lock<std::mutex>& lk)
+{
+    // Fire every timer due at now_us_, in registration order, with the scheduler
+    // mutex UNLOCKED: the firmware callback calls xTaskNotifyGive → notify_give,
+    // which locks m_ (non-recursive). No task runs during the advance phase, so
+    // unlocking here is safe and deterministic.
+    // now_us_ に期限の来た全タイマを登録順で発火。スケジューラ mutex は解放して
+    // 行う: 本体コールバックは xTaskNotifyGive → notify_give を呼び m_（非再帰）を
+    // ロックするため。advance 中はどのタスクも走らないので安全かつ決定論的。
+    for (size_t i = 0; i < timers_.size(); ++i) {
+        if (!timers_[i].active) continue;
+        if (timers_[i].next_fire_us <= now_us_) {
+            TimerCallback cb = timers_[i].cb;
+            void* arg = timers_[i].arg;
+            timers_[i].next_fire_us += timers_[i].period_us;
+            lk.unlock();
+            cb(arg);
+            lk.lock();
+        }
+    }
+}
+
 void Scheduler::run(int64_t max_sim_us)
 {
     // Initial scenario injection at t = 0.
@@ -244,10 +318,16 @@ void Scheduler::run(int64_t max_sim_us)
             continue;
         }
 
-        // No ready task → advance the virtual clock to the next wake-up.
-        // Ready が無い → 仮想時計を次の起床へ進める。
-        int64_t next_wake = earliest_wake();
-        if (next_wake < 0) break;  // all blocked on notify forever → done
+        // No ready task → advance the virtual clock to the next wake-up: the
+        // earliest of a BlockedDelay wake or a periodic-timer fire.
+        // Ready が無い → 仮想時計を次の起床へ進める。BlockedDelay 起床か周期タイマ
+        // 発火のうち最も早いもの。
+        int64_t next_wake  = earliest_wake();
+        int64_t next_timer = earliest_timer_fire();
+        if (next_wake < 0 && next_timer < 0) break;  // nothing pending → done
+        if (next_wake < 0 || (next_timer >= 0 && next_timer < next_wake)) {
+            next_wake = next_timer;
+        }
 
         now_us_ = next_wake;
         sil::compat::set_virtual_time_us(now_us_);
@@ -256,6 +336,12 @@ void Scheduler::run(int64_t max_sim_us)
                 task->state = TaskState::Ready;
             }
         }
+
+        // Fire any periodic timers due now, before pick_ready, in registration
+        // order. Their callbacks (xTaskNotifyGive) mark tasks Ready.
+        // 期限の来た周期タイマを pick_ready 前に登録順で発火。コールバック
+        // （xTaskNotifyGive）がタスクを Ready にする。
+        fire_due_timers(lk);
 
         // Scenario injection at the new virtual time (unlock to avoid holding
         // the scheduler mutex while topics are touched).
@@ -349,6 +435,11 @@ void vTaskDelayUntil(TickType_t* last_wake, TickType_t period)
 TickType_t xTaskGetTickCount(void)
 {
     return static_cast<TickType_t>(Scheduler::instance().now_us() / 1000);
+}
+
+TaskHandle_t xTaskGetCurrentTaskHandle(void)
+{
+    return Scheduler::instance().current_handle();
 }
 
 BaseType_t xTaskNotifyGive(TaskHandle_t handle)
