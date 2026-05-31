@@ -6,19 +6,23 @@
     motors at ±0.023 m, +0.005 m above CG; X-quad (M1=FR..M4=FL).
 
   StampFly 飛行モデル（MuJoCo, 自然な ENU/Z上 ワールド; 機体 FLU）。
-  物理パラメータは校正済み StampFly 値（出典は上記）。
 
-  Frame note: this MJCF is written in MuJoCo's natural frame (ENU world / FLU
-  body). The SIL frames module (simulator/sil/frames) converts to StampFly
-  NED/FRD. See simulator/sil/docs/coordinate_frames.md.
-  Self-written motor model (thrust = k·duty²) lives in the SIL; here each rotor
-  is a site with a Z-axis force actuator (control = per-motor thrust [N]).
+  Appearance: the real StampFly visual meshes (frame, 4 motors, 4 propellers,
+  PCB, M5StampS3, battery) reused from the Genesis work
+  (simulator/shared/assets/meshes/parts). They are VISUAL ONLY (no collision /
+  no inertia); physics uses the explicit inertial + a hidden box collision.
+  STL is mm (scale 0.001) and in WebGL axes (X=left,Y=up,Z=fwd); the geom quat
+  [0.5,0.5,0.5,0.5] maps STL → MuJoCo body FLU (mj=[stl_z,stl_x,stl_y]).
+
+  見た目: 実機 StampFly の視覚メッシュ（Genesis 作業の流用）を反映。視覚専用
+  （衝突・慣性に寄与しない）。物理は明示 inertial ＋隠した箱衝突。
 -->
 <mujoco model="stampfly">
+  <compiler meshdir="../../shared/assets/meshes/parts" angle="radian"/>
   <option timestep="0.0025" gravity="0 0 -9.81" integrator="RK4"/>
 
   <visual>
-    <headlight ambient="0.4 0.4 0.4"/>
+    <headlight ambient="0.5 0.5 0.5"/>
     <global offwidth="1280" offheight="720"/>
   </visual>
 
@@ -26,6 +30,31 @@
     <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.3 0.4"
              rgb2="0.1 0.15 0.2" width="300" height="300"/>
     <material name="grid" texture="grid" texrepeat="6 6" reflectance="0.1"/>
+
+    <!-- StampFly visual meshes (mm → m). / 実機視覚メッシュ（mm→m）。 -->
+    <mesh name="m_frame"     file="frame.stl"           scale="0.001 0.001 0.001"/>
+    <mesh name="m_pcb"       file="pcb.stl"             scale="0.001 0.001 0.001"/>
+    <mesh name="m_m5"        file="m5stamps3.stl"       scale="0.001 0.001 0.001"/>
+    <mesh name="m_battery"   file="battery.stl"         scale="0.001 0.001 0.001"/>
+    <mesh name="m_adapter"   file="battery_adapter.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="m_motor_fl"  file="motor_fl.stl"        scale="0.001 0.001 0.001"/>
+    <mesh name="m_motor_fr"  file="motor_fr.stl"        scale="0.001 0.001 0.001"/>
+    <mesh name="m_motor_rl"  file="motor_rl.stl"        scale="0.001 0.001 0.001"/>
+    <mesh name="m_motor_rr"  file="motor_rr.stl"        scale="0.001 0.001 0.001"/>
+    <mesh name="m_prop_fl"   file="propeller_fl.stl"    scale="0.001 0.001 0.001"/>
+    <mesh name="m_prop_fr"   file="propeller_fr.stl"    scale="0.001 0.001 0.001"/>
+    <mesh name="m_prop_rl"   file="propeller_rl.stl"    scale="0.001 0.001 0.001"/>
+    <mesh name="m_prop_rr"   file="propeller_rr.stl"    scale="0.001 0.001 0.001"/>
+
+    <!-- Part colors from the Genesis parts_config.json. / 色は Genesis の設定から。 -->
+    <material name="mat_frame"   rgba="0.9 0.9 0.9 1.0"/>
+    <material name="mat_pcb"     rgba="0.102 0.098 0.098 1"/>
+    <material name="mat_m5"      rgba="1.0 0.4 0.0 1"/>
+    <material name="mat_battery" rgba="0.157 0.067 0.004 1"/>
+    <material name="mat_adapter" rgba="0.22 0.212 0.2 1"/>
+    <material name="mat_motor"   rgba="0.776 0.831 0.843 1"/>
+    <material name="mat_prop"    rgba="1.0 0.4 0.4 1.0"/>  <!-- medium-light red (transparency renders poorly in MuJoCo) -->
+
   </asset>
 
   <worldbody>
@@ -37,27 +66,42 @@
     <body name="drone" pos="0 0 0.5">
       <freejoint name="root"/>
       <inertial pos="0 0 0" mass="0.037" diaginertia="9.16e-6 13.3e-6 20.4e-6"/>
-      <geom name="frame" type="box" size="0.0408 0.0408 0.0103" rgba="0.2 0.5 0.8 1"/>
 
-      <!-- IMU site (body/FLU frame) for built-in accelerometer/gyro cross-check -->
-      <!-- IMU site（body/FLU 系）— 内蔵 accel/gyro の照合用 -->
-      <site name="imu" pos="0 0 0" size="0.003"/>
+      <!-- Collision: hidden box approximating the frame. / 衝突: 隠した箱。 -->
+      <geom name="collision" type="box" size="0.0408 0.0408 0.0103"
+            rgba="0.5 0.5 0.5 0" group="3"/>
 
-      <!-- Rotor sites at the 4 corners (FLU positions = FRD with Y,Z negated) -->
-      <!-- 4隅のロータ site（FLU 位置 = FRD の Y,Z を反転） -->
-      <site name="rotor1" pos=" 0.023 -0.023 0.005" size="0.004" rgba="1 0.4 0.2 1"/>  <!-- M1 FR CCW -->
-      <site name="rotor2" pos="-0.023 -0.023 0.005" size="0.004" rgba="0.3 1 0.4 1"/>  <!-- M2 RR CW  -->
-      <site name="rotor3" pos="-0.023  0.023 0.005" size="0.004" rgba="1 0.4 0.2 1"/>  <!-- M3 RL CCW -->
-      <site name="rotor4" pos=" 0.023  0.023 0.005" size="0.004" rgba="0.3 1 0.4 1"/>  <!-- M4 FL CW  -->
+      <!-- Visual meshes (visual only; oriented STL→FLU). / 視覚メッシュ。 -->
+      <geom type="mesh" mesh="m_frame"    material="mat_frame"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_pcb"      material="mat_pcb"     quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_m5"       material="mat_m5"      quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_battery"  material="mat_battery" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_adapter"  material="mat_adapter" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_motor_fl" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_motor_fr" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_motor_rl" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_motor_rr" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <!-- Props sit with their disk bottom on the motor CAN top (z≈+0.0011);
+           prop original bottom is +0.0028, so pos z = -0.0017. -->
+      <!-- プロペラ円盤の底面をモータ缶の上面（z≈+0.0011）に合わせる。原寸底面
+           +0.0028 なので pos z = -0.0017。 -->
+      <geom type="mesh" mesh="m_prop_fl"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_fr"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_rl"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_rr"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+
+      <!-- IMU + rotor sites (used by sensors/actuators; rendered invisible). -->
+      <!-- IMU + ロータ site（センサ/アクチュエータが使用; 非表示）。 -->
+      <site name="imu"    pos="0 0 0"               size="0.003" rgba="0 0 0 0"/>
+      <site name="rotor1" pos=" 0.023 -0.023 0.005" size="0.004" rgba="0 0 0 0"/>  <!-- M1 FR CCW -->
+      <site name="rotor2" pos="-0.023 -0.023 0.005" size="0.004" rgba="0 0 0 0"/>  <!-- M2 RR CW  -->
+      <site name="rotor3" pos="-0.023  0.023 0.005" size="0.004" rgba="0 0 0 0"/>  <!-- M3 RL CCW -->
+      <site name="rotor4" pos=" 0.023  0.023 0.005" size="0.004" rgba="0 0 0 0"/>  <!-- M4 FL CW  -->
     </body>
   </worldbody>
 
-  <!-- Each motor applies a thrust force along its site +Z (up). control = thrust [N].
-       The SIL computes thrust = k_thrust·duty² and writes it to ctrl.
-       Yaw reaction torque (±κ·thrust) is applied separately by the SIL. -->
-  <!-- 各モータは site +Z（上）に推力を与える。control = 推力 [N]。
-       SIL が thrust = k_thrust·duty² を計算して ctrl に書く。
-       ヨー反トルク（±κ·thrust）は SIL が別途与える。 -->
+  <!-- Each motor applies thrust along its site +Z (up). control = thrust [N]. -->
+  <!-- 各モータは site +Z（上）に推力。control = 推力 [N]。 -->
   <actuator>
     <motor name="m1" site="rotor1" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>
     <motor name="m2" site="rotor2" gear="0 0 1 0 0 0" ctrlrange="0 0.2"/>

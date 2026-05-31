@@ -116,6 +116,13 @@ if(SIL_BUILD_MUJOCO_SMOKE)
     ${VN}/components/sf_math/include
   )
   target_link_libraries(physics_smoke PRIVATE mujoco)
+
+  # Mesh inspector: print mesh Z-extents / radius profiles (for placing visual
+  # meshes — motor-can top, prop hub, etc.).
+  # メッシュ検査: メッシュの Z 範囲・半径プロファイルを表示（視覚メッシュの
+  # 配置用 — モータ缶上面・プロペラハブ等）。
+  add_executable(mesh_inspect smoke/mesh_inspect.cpp)
+  target_link_libraries(mesh_inspect PRIVATE mujoco)
 endif()
 
 # -----------------------------------------------------------------------------
