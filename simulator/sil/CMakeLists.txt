@@ -84,15 +84,19 @@ if(SIL_BUILD_RTOS_SMOKE)
     smoke/rtos_smoke.cpp
     rtos/scheduler.cpp
     sim_hal/sim_bmi270.cpp
+    sim_hal/sim_motor_driver.cpp          # host MotorDriver stub (no driver/ledc.h)
     ${VN}/tasks/imu_task.cpp
     ${VN}/tasks/control_task.cpp
     ${VN}/tasks/state_task.cpp
     ${VN}/components/sf_state/state_manager.cpp
+    ${VN}/components/sf_actuator/actuator.cpp   # real X-quad mixer (control_task wires it)
   )
   target_include_directories(rtos_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/rtos
     ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal   # sim BMI270 wrapper replaces the HAL
     ${VN}/main                            # config.hpp
+    ${VN}/components/sf_actuator/include   # actuator.hpp (mixer)
+    ${VN}/components/sf_hal_motor/include  # motor_driver.hpp (stubbed by sim_hal)
   )
   target_link_libraries(rtos_smoke PRIVATE sf_cores Threads::Threads)
 endif()

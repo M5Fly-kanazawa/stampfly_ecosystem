@@ -32,6 +32,7 @@
 #include "topics.hpp"
 #include "controller.hpp"
 #include "pid_controller.hpp"
+#include "actuator.hpp"
 #include "flight_state.hpp"
 #include "config.hpp"
 
@@ -45,34 +46,22 @@ TaskHandle_t g_control_task_handle = nullptr;
 /// コントローラインスタンス
 static sf::PidController controller;
 
-/// Apply mixer: convert thrust/torque to motor duty
-/// ミキサー適用: 推力/トルクをモーターdutyに変換
-///
-/// @design requirements.md §6 — X-quad motor layout                   [--]
-static sf::MotorOutput applyMixer(const sf::ControlOutput& control)
-{
-    sf::MotorOutput motors = {};
-    motors.timestamp = control.timestamp;
-
-    // TODO: Full mixer implementation
-    // TODO: 完全なミキサー実装
-    //
-    // X-quad layout:
-    // M1(FR) = T - Roll + Pitch + Yaw (CCW)
-    // M2(RR) = T - Roll - Pitch - Yaw (CW)
-    // M3(RL) = T + Roll - Pitch + Yaw (CCW)
-    // M4(FL) = T + Roll + Pitch - Yaw (CW)
-
-    return motors;
-}
+/// Actuator: X-quad mixer + motor output. Reads control_output and publishes
+/// per-motor duty on actuator_motor. The real mixer lives in sf_actuator;
+/// control_task only wires it (see Step 4 below).
+/// アクチュエータ: X-quad ミキサー＋モーター出力。control_output を読み、各モーター
+/// duty を actuator_motor に発行する。実ミキサーは sf_actuator にあり、control_task は
+/// 配線するだけ（下の Step 4 参照）。
+static sf::Actuator actuator;
 
 void ControlTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ControlTask started");
 
-    // Initialize controller
-    // コントローラを初期化
+    // Initialize controller and actuator (mixer + motor HAL)
+    // コントローラとアクチュエータ（ミキサー＋モーター HAL）を初期化
     controller.init();
+    actuator.init();
 
     while (true) {
         // =====================================================================
@@ -114,14 +103,14 @@ void ControlTask(void* pvParameters)
         sf::control_output.publish(control);
 
         // =====================================================================
-        // Step 4: Apply mixer and publish motor duty
-        // Step 4: ミキサー適用してモーターdutyを発行
+        // Step 4: Run the X-quad mixer. It reads the control_output published
+        // just above, publishes per-motor duty on actuator_motor (telemetry +
+        // SIL plant), and drives the motor HAL.
+        // Step 4: X-quad ミキサーを実行。直上で発行した control_output を読み、各
+        // モーター duty を actuator_motor に発行（テレメトリ＋SIL プラント）し、
+        // モーター HAL を駆動する。
         // =====================================================================
 
-        sf::MotorOutput motors = applyMixer(control);
-        sf::actuator_motor.publish(motors);
-
-        // TODO: Write motor duty to hardware
-        // TODO: モーターdutyをハードウェアに書き込む
+        actuator.update();
     }
 }

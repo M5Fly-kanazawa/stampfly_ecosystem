@@ -37,10 +37,10 @@
  * Mixer formula (kappa applied to yaw inside the implementation):
  * ミキサー式（kappa は実装内でヨーに適用）:
  *
- *     d_FR =  thrust − roll − pitch − yaw·κ
- *     d_RR =  thrust − roll + pitch + yaw·κ
- *     d_RL =  thrust + roll + pitch − yaw·κ
- *     d_FL =  thrust + roll − pitch + yaw·κ
+ *     d_FR (CCW) =  thrust − roll + pitch + yaw·κ
+ *     d_RR (CW)  =  thrust − roll − pitch − yaw·κ
+ *     d_RL (CCW) =  thrust + roll − pitch + yaw·κ
+ *     d_FL (CW)  =  thrust + roll + pitch − yaw·κ
  *
  * @design architecture.md §5 — Actuator subsystem                       [OK]
  * @design detailed_design.md §5 — X-quad mixer                          [OK]
