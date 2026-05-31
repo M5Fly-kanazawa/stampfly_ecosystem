@@ -104,11 +104,18 @@ namespace param_vars {
     float att_pitch_ti    = 4.0f;
     float att_pitch_td    = 0.04f;
 
-    // Altitude control
-    float alt_alt_kp      = 0.6f;
-    float alt_alt_ti      = 7.0f;
-    float alt_vel_kp      = 0.1f;
-    float alt_vel_ti      = 2.5f;
+    // Altitude control — cascade alt → vertical-velocity → thrust [N].
+    // SIL-validated (hover_smoke ALT_HOLD: holds within ~2 cm through a yaw spin;
+    // see RESET_PLAN P1). Stronger than the legacy vehicle/ values (0.6/7/0.1/2.5)
+    // because vehicle_new's loop outputs PHYSICAL thrust [N], not normalized
+    // throttle — to re-validate on hardware (ToF altitude) before flight.
+    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。SIL検証済み（hover_smoke ALT_HOLD:
+    // ヨー旋回中も約2cm以内で保持、RESET_PLAN P1）。旧 vehicle/ 値（0.6/7/0.1/2.5）より
+    // 強い。vehicle_new は物理推力[N]を出力するため。実機（ToF高度）で再検証要。
+    float alt_alt_kp      = 1.5f;
+    float alt_alt_ti      = 8.0f;
+    float alt_vel_kp      = 0.3f;
+    float alt_vel_ti      = 2.0f;
 
     // Position control
     float pos_pos_kp      = 1.0f;
@@ -181,11 +188,11 @@ static const ParamEntry table[] = {
     {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, nullptr},
     {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   nullptr},
 
-    // Altitude control
-    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.6f,  0.0f, 10.0f,  nullptr},
-    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, nullptr},
-    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  nullptr},
-    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, nullptr},
+    // Altitude control (SIL-validated; see the variable defaults above)
+    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  1.5f,  0.0f, 10.0f,  nullptr},
+    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  8.0f,  0.1f, 100.0f, nullptr},
+    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.3f,  0.0f, 10.0f,  nullptr},
+    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.0f,  0.1f, 100.0f, nullptr},
 
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  nullptr},

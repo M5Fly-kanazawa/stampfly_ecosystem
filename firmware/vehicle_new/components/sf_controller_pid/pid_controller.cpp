@@ -118,18 +118,31 @@ ControlOutput PidController::compute(
     // 高度制御（ALT_HOLD以上）
     // =========================================================================
     if (current_mode_ >= FlightMode::ALT_HOLD) {
+        const float altitude = -state.position[2];   // NED z-down → altitude up
+        const float vel_up   = -state.velocity[2];   // vertical velocity, up positive
+
+        // Capture the altitude target when entering ALT_HOLD, and keep tracking it
+        // while the throttle stick is off-center (climb/descend), so releasing the
+        // stick holds the altitude actually reached.
+        // ALT_HOLD 進入時に高度目標を捕捉し、スロットルが中央外（上昇/下降）の間は追従。
+        // スティックを戻すと到達した高度を保持する。
+        if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
+
         // Stick → climb rate / スティック → 上昇率
         float climb_rate_sp = 0;
         if (fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
             climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
+            alt_setpoint_ = altitude;   // track while moving / 移動中は追従
         }
 
-        // Cascade: altitude error → velocity sp → thrust correction
-        // カスケード: 高度誤差 → 速度目標 → 推力補正
-        float vel_sp_z = alt_pos_.compute(alt_setpoint_ - (-state.position[2]), dt);
+        // Cascade: altitude error → velocity sp → thrust correction. With the
+        // stick centered, the position loop holds alt_setpoint (closed-loop).
+        // カスケード: 高度誤差 → 速度目標 → 推力補正。中央では位置ループが alt_setpoint
+        // を閉ループで保持する。
+        float vel_sp_z = alt_pos_.compute(alt_setpoint_ - altitude, dt);
         if (climb_rate_sp != 0) vel_sp_z = climb_rate_sp;
 
-        float thrust_correction = alt_vel_.compute(vel_sp_z - (-state.velocity[2]), dt);
+        float thrust_correction = alt_vel_.compute(vel_sp_z - vel_up, dt);
 
         // Hover thrust + correction / ホバー推力 + 補正
         thrust = hover_thrust_ + thrust_correction;
@@ -193,6 +206,11 @@ void PidController::onModeChange(FlightMode new_mode)
         if (current_mode_ >= FlightMode::ALT_HOLD || new_mode >= FlightMode::ALT_HOLD) {
             alt_pos_.reset();
             alt_vel_.reset();
+        }
+        // Capture the current altitude as the hold target when entering ALT_HOLD.
+        // ALT_HOLD 進入時、現在高度を保持目標として捕捉する。
+        if (new_mode >= FlightMode::ALT_HOLD && current_mode_ < FlightMode::ALT_HOLD) {
+            capture_alt_ = true;
         }
         if (current_mode_ >= FlightMode::POS_HOLD || new_mode >= FlightMode::POS_HOLD) {
             pos_x_.reset(); pos_y_.reset();

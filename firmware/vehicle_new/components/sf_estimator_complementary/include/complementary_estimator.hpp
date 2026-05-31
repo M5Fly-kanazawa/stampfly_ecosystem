@@ -13,17 +13,18 @@
  *
  * Proves the SIL is algorithm-independent (RESET_PLAN P2): swapping ESKF →
  * complementary filter requires ZERO change to the SIL bench or the firmware
- * tasks — only the `estimator.type` parameter. This estimator computes only what
- * a stabilized hover needs: attitude (gyro integration corrected toward the
- * accelerometer's gravity direction) and the body angular rate (= gyro). It does
- * NOT estimate position/velocity; those StateEstimate fields stay zero (a
- * stabilize-mode hover does not use them). ~70 lines of actual math.
+ * tasks — only the `estimator.type` parameter. This estimator computes what
+ * stabilized hover and altitude-hold need: attitude (gyro integration corrected
+ * toward the accelerometer's gravity direction), the body angular rate (= gyro),
+ * and the vertical channel (altitude + vertical velocity from the accelerometer
+ * integral, anchored by the barometer). Horizontal position/velocity are NOT
+ * estimated; those StateEstimate fields stay zero. ~90 lines of actual math.
  *
  * SIL がアルゴリズム非依存であることを実証する（RESET_PLAN P2）: ESKF → 相補フィルタ
  * の差し替えは SIL ベンチもファームタスクも一切変更せず、`estimator.type` パラメータ
- * だけで行える。本推定器は安定化ホバーに必要な分だけ計算する: 姿勢（ジャイロ積分を
- * 加速度計の重力方向へ補正）と機体角速度（= ジャイロ）。位置・速度は推定しない
- * （StateEstimate の該当フィールドは 0。STABILIZE ホバーは使わない）。
+ * だけで行える。本推定器は安定化ホバーと高度保持に必要な分を計算する: 姿勢（ジャイロ積分を
+ * 加速度計の重力方向へ補正）、機体角速度（= ジャイロ）、鉛直チャネル（加速度積分による
+ * 高度＋鉛直速度を気圧で固定）。水平位置・速度は推定しない（該当フィールドは 0）。
  *
  * @design requirements.md §10 — replaceable estimation                  [--]
  * @design coding_and_education.md §… — 22_custom_estimator exercise      [--]
@@ -55,8 +56,9 @@ public:
 private:
     math::Quat q_{1.0f, 0.0f, 0.0f, 0.0f};  ///< attitude q_nb (body→NED)
     math::Vec3 rate_{0.0f, 0.0f, 0.0f};     ///< body angular rate FRD [rad/s] (= gyro)
-    float altitude_ = 0.0f;                 ///< baro altitude [m] (pos_z = −altitude)
-    float mahony_kp_ = 1.0f;                ///< accel-correction gain
+    float altitude_ = 0.0f;                 ///< altitude [m] up (pos_z = −altitude)
+    float vz_up_ = 0.0f;                    ///< vertical velocity [m/s] up (vel_z = −vz_up)
+    float mahony_kp_ = 1.0f;                ///< accel attitude-correction gain
     uint32_t timestamp_ = 0;
 };
 

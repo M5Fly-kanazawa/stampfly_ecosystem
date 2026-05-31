@@ -68,7 +68,8 @@ private:
     float hover_thrust_   = 0.363f;  // [N] mg = 0.037 × 9.81
     float max_climb_rate_ = 0.5f;    // [m/s]
     float stick_deadzone_ = 0.1f;
-    float alt_setpoint_   = 0;       // [m] captured altitude
+    float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
+    bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
 };
 
 }  // namespace sf

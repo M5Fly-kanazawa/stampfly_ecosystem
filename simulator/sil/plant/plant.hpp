@@ -115,6 +115,12 @@ public:
     /// NED の外乱風力 [N] を設定（既定ゼロ）。
     void setWind(const sf::math::Vec3& force_ned);
 
+    /// Place the body at rest, level, at height z [m] (MuJoCo ENU up). Used to
+    /// start a flight on the ground (z ≈ box half-height) for a takeoff demo.
+    /// 機体を高さ z [m]（MuJoCo ENU 上）で水平・静止配置する。地上から離陸する
+    /// デモのため、地上スタート（z ≈ 箱の半分の高さ）に使う。
+    void setStartHeight(float z);
+
     /// Per-motor duty [0,1] that produces hover thrust (mg/4) via the motor curve.
     /// Inverts the model: T = mg/4 → ω = √(T/Ct) → V = Am·ω²+Bm·ω+Cm → duty = V/v_batt.
     /// モータ曲線でホバー推力（mg/4）を出す各モータ duty[0,1]。モデルを逆算する。

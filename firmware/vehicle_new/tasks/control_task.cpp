@@ -92,9 +92,17 @@ void ControlTask(void* pvParameters)
         }
 
         // =====================================================================
-        // Step 3: Compute control output
-        // Step 3: 制御出力を計算
+        // Step 3: Apply the commanded flight mode, then compute control output.
+        // Step 3: 指令フライトモードを反映し、制御出力を計算する。
+        //
+        // Mode arbitration: the controller switches ACRO/STABILIZE/ALT_HOLD/
+        // POS_HOLD based on system_mode.sub_mode. onModeChange resets the relevant
+        // loops on a transition (no-op when the mode is unchanged).
+        // モード調停: コントローラは system_mode.sub_mode で各モードを切替える。
+        // onModeChange は遷移時に該当ループをリセットする（不変時は no-op）。
         // =====================================================================
+
+        controller.onModeChange(static_cast<sf::FlightMode>(mode.sub_mode));
 
         sf::ControlOutput control = controller.compute(state, setpoint, config::IMU_DT);
 

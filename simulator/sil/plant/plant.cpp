@@ -83,6 +83,16 @@ void Plant::setWind(const sf::math::Vec3& force_ned)
     cfg_.wind_force_ned = force_ned;
 }
 
+void Plant::setStartHeight(float z)
+{
+    // Free-joint state: position (0,0,z) ENU, level orientation, zero velocity.
+    // フリージョイント状態: 位置(0,0,z) ENU・水平姿勢・速度ゼロ。
+    d_->qpos[0] = 0.0; d_->qpos[1] = 0.0; d_->qpos[2] = z;
+    d_->qpos[3] = 1.0; d_->qpos[4] = 0.0; d_->qpos[5] = 0.0; d_->qpos[6] = 0.0;
+    for (int i = 0; i < 6; ++i) d_->qvel[i] = 0.0;
+    mj_forward(m_, d_);
+}
+
 // -----------------------------------------------------------------------------
 // dutyToThrust — normalized duty [0,1] → steady-state thrust [N] via the real
 // motor + propeller curve (docs/architecture/stampfly-parameters.md §3):

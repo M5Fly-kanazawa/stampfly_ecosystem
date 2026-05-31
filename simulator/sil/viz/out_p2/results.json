@@ -1,21 +1,24 @@
 {
   "gate": "G3",
-  "milestone": "P1",
+  "milestone": "P2",
   "pass": true,
-  "duration_s": 3.0,
-  "hover_duty": 0.6517,
+  "flight": "takeoff-hover-yaw-stop-landing",
+  "duration_s": 5.6,
+  "estimator": "complementary",
   "metrics": {
+    "max_alt_m": 0.537,
     "max_tilt_deg": 0.020,
-    "max_alt_err_m": 0.0021,
-    "max_horiz_m": 0.0000,
-    "yaw_cmd_rad_s": 1.000,
-    "yaw_meas_rad_s": 1.002
+    "yaw_spin_rad_s": 1.002,
+    "yaw_after_stop_rad_s": 0.000,
+    "alt_hold_band_m": 0.019,
+    "final_alt_m": 0.010
   },
   "checks": [
-    {"name": "attitude_level",   "pass": true, "limit_deg": 10.0},
-    {"name": "altitude_bounded", "pass": true, "limit_m": 0.10},
-    {"name": "horiz_bounded",    "pass": true, "limit_m": 0.10},
-    {"name": "motors_active",    "pass": true},
-    {"name": "yaw_tracks",       "pass": true, "tol_rad_s": 0.20}
+    {"name": "took_off",        "pass": true},
+    {"name": "attitude_bounded", "pass": true},
+    {"name": "yaw_spin",         "pass": true},
+    {"name": "yaw_stopped",      "pass": true},
+    {"name": "alt_held",         "pass": true},
+    {"name": "landed",           "pass": true}
   ]
 }

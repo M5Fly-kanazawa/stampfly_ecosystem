@@ -44,13 +44,25 @@ def render_3d(model, data, renderer, qpos, cam):
     return renderer.render()
 
 
-def graph_frame(traj, i, title, w_px, h_px):
+def title_banner(text, w_px, h_px=48):
+    """Render a full-width title strip as an RGB array (drawn once, reused)."""
+    dpi = 100
+    fig = plt.figure(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
+    fig.patch.set_facecolor("white")
+    fig.text(0.5, 0.5, text, ha="center", va="center",
+             fontsize=15, fontweight="bold")
+    fig.canvas.draw()
+    buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
+    plt.close(fig)
+    return buf
+
+
+def graph_frame(traj, i, w_px, h_px):
     """Render the state graphs up to frame i with a time cursor, as an RGB array."""
     t = traj["t"]
     now = t[i]
     dpi = 100
     fig, axes = plt.subplots(2, 2, figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
-    fig.suptitle(title, fontsize=13, fontweight="bold")
 
     def panel(ax, ylabel, series, ylim=None):
         for label, y, style in series:
@@ -66,7 +78,7 @@ def graph_frame(traj, i, title, w_px, h_px):
 
     panel(axes[0, 0], "altitude [m]",
           [("truth", traj["alt"], "C0-"), ("estimate", traj["alt_est"], "C1--")],
-          ylim=(0.3, 0.7))
+          ylim=(-0.03, 0.6))
     panel(axes[0, 1], "tilt [deg]",
           [("truth", traj["tilt"], "C0-"), ("estimate", traj["tilt_est"], "C1--")],
           ylim=(-2, 12))
@@ -80,7 +92,7 @@ def graph_frame(traj, i, title, w_px, h_px):
     for ax in axes[1, :]:
         ax.set_xlabel("time [s]", fontsize=9)
 
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.tight_layout(pad=0.6)   # use the full height; the title is a separate banner
     fig.canvas.draw()
     buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
     plt.close(fig)
@@ -103,8 +115,10 @@ def main():
     rpath = os.path.join(args.bundle, "results.json")
     if os.path.exists(rpath):
         results = json.load(open(rpath))
-    verdict = "G3 PASS" if results.get("pass") else "G3"
-    title = f"StampFly SIL — P1 closed-loop hover ({verdict})"
+    verdict = "PASS" if results.get("pass") else "FAIL"
+    ms = results.get("milestone", "P1")
+    est = results.get("estimator", "eskf")
+    title = f"StampFly SIL — {ms}: takeoff → hover → yaw → landing  ({est}, G3 {verdict})"
 
     model = mujoco.MjModel.from_xml_path(args.model)
     data = mujoco.MjData(model)
@@ -112,11 +126,19 @@ def main():
     W3 = int(H * 4 / 3)            # 3D pane 4:3
     renderer = mujoco.Renderer(model, height=H, width=W3)
 
+    # Frame the full vertical flight (ground z≈0.01 → peak z≈0.54). The 3D pane is
+    # 4:3 landscape, so the vertical field of view is the limit: at distance d the
+    # visible height ≈ 2·d·tan(fovy/2) ≈ 0.83·d. distance 0.85 → ~0.70 m tall,
+    # centered on lookat z=0.27 → covers roughly z∈[-0.08, 0.62] with margin so
+    # takeoff and touchdown stay in frame.
+    # 鉛直飛行（地上 z≈0.01 → ピーク z≈0.54）を画角に収める。3Dペインは4:3横長なので
+    # 鉛直視野が律速: 距離 d で可視高さ ≈ 0.83·d。0.85 → 約0.70m、lookat z=0.27 を中心に
+    # z∈[-0.08, 0.62] を余裕を持って覆い、離陸・着地が切れない。
     cam = mujoco.MjvCamera()
-    cam.azimuth = 135
-    cam.elevation = -20
-    cam.distance = 0.32
-    cam.lookat[:] = [0.0, 0.0, 0.5]
+    cam.azimuth = 130
+    cam.elevation = -10
+    cam.distance = 0.85
+    cam.lookat[:] = [0.0, 0.0, 0.27]
 
     qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
 
@@ -129,16 +151,24 @@ def main():
         return
 
     Wg = W3                       # graph pane same width as the 3D pane
+    # Full-width title banner, drawn once and stacked on top of every frame so the
+    # title spans both panes and never clips (the old per-pane suptitle overflowed).
+    # 全幅タイトルバナーを一度だけ描き、各フレーム上端に重ねる。タイトルが両ペインに
+    # またがり切れない（旧来のペイン内 suptitle は幅を超過して両端が切れていた）。
+    banner = title_banner(title, W3 + Wg)
     writer = imageio.get_writer(args.out, fps=args.fps, codec="libx264",
                                 quality=8, macro_block_size=None)
     for i in range(n):
         img3d = render_3d(model, data, renderer,
                           np.array([traj[c][i] for c in qcols]), cam)
-        graphs = graph_frame(traj, i, title, Wg, H)
-        # Match heights and concatenate side by side.
+        graphs = graph_frame(traj, i, Wg, H)
+        # Match heights and concatenate side by side, then add the title banner on top.
         if graphs.shape[0] != img3d.shape[0]:
             graphs = graphs[:img3d.shape[0], :, :]
-        frame = np.concatenate([img3d, graphs], axis=1)
+        body = np.concatenate([img3d, graphs], axis=1)
+        if banner.shape[1] != body.shape[1]:
+            banner = banner[:, :body.shape[1], :]
+        frame = np.concatenate([banner, body], axis=0)
         writer.append_data(frame)
     writer.close()
     print(f"[render_video] wrote {args.out} ({n} frames @ {args.fps} fps)")
