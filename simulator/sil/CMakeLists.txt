@@ -32,6 +32,7 @@ endif()
 option(SIL_BUILD_CORES_SMOKE  "Build the firmware-cores host smoke test" ON)
 option(SIL_BUILD_MUJOCO_SMOKE "Build the MuJoCo host smoke test"         ON)
 option(SIL_BUILD_RTOS_SMOKE   "Build the host RTOS-emulator smoke test"  ON)
+option(SIL_BUILD_FRAMES_TEST  "Build the coordinate-frames unit test"    ON)
 
 # Paths
 # パス
@@ -105,4 +106,16 @@ if(SIL_BUILD_MUJOCO_SMOKE)
 
   add_executable(mujoco_smoke smoke/mujoco_smoke.cpp)
   target_link_libraries(mujoco_smoke PRIVATE mujoco)
+endif()
+
+# -----------------------------------------------------------------------------
+# Coordinate-frames unit test: the ONLY coordinate transform in the SIL.
+# 座標系の単体テスト: SIL で唯一の座標変換。
+# -----------------------------------------------------------------------------
+if(SIL_BUILD_FRAMES_TEST)
+  add_executable(frames_test frames/frames_test.cpp)
+  target_include_directories(frames_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${VN}/components/sf_math/include   # header-only Vec3/Quat
+  )
 endif()
