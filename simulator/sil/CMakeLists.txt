@@ -141,6 +141,38 @@ if(SIL_BUILD_MUJOCO_SMOKE)
     ${VN}/components/sf_core/include   # data_types.hpp (header-only)
   )
   target_link_libraries(plant_smoke PRIVATE mujoco)
+
+  # Closed-loop hover (P1.2c / gate G3): the real firmware loop on the RTOS
+  # emulator + the MuJoCo Plant closing the loop. Needs both the RTOS infra
+  # (sf_cores + threads + esp_timer shim) and MuJoCo.
+  # 閉ループホバー（P1.2c / ゲート G3）: RTOS エミュレータ上の実ファームループ＋
+  # MuJoCo Plant でループを閉じる。RTOS インフラと MuJoCo の両方が必要。
+  find_package(Threads REQUIRED)
+  add_executable(hover_smoke
+    smoke/hover_smoke.cpp
+    plant/plant.cpp
+    rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp
+    sim_hal/sim_bmi270.cpp
+    sim_hal/sim_motor_driver.cpp
+    ${VN}/tasks/imu_task.cpp
+    ${VN}/tasks/control_task.cpp
+    ${VN}/tasks/state_task.cpp
+    ${VN}/components/sf_state/state_manager.cpp
+    ${VN}/components/sf_actuator/actuator.cpp
+  )
+  target_include_directories(hover_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${VN}/main
+    ${VN}/components/sf_actuator/include
+    ${VN}/components/sf_hal_motor/include
+    ${VN}/components/sf_math/include
+    ${VN}/components/sf_core/include
+  )
+  target_link_libraries(hover_smoke PRIVATE sf_cores Threads::Threads mujoco)
 endif()
 
 # -----------------------------------------------------------------------------

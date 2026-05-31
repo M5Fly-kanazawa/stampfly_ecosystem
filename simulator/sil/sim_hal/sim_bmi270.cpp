@@ -21,6 +21,8 @@
 
 #include "bmi270_wrapper.hpp"
 
+#include "plant_bridge.hpp"
+
 namespace stampfly {
 
 esp_err_t BMI270Wrapper::init(const Config& /*config*/)
@@ -31,6 +33,25 @@ esp_err_t BMI270Wrapper::init(const Config& /*config*/)
 
 esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
 {
+    // Closed loop: take the Plant's synthetic IMU (body-FRD, m/s², −9.8 at rest)
+    // and inverse-remap it to the chip frame, so imu_task's (unchanged) forward
+    // remap restores body-FRD. Accel back to [g]. This round-trip exists only
+    // while the 论点2 driver normalization is deferred.
+    // 閉ループ: Plant の合成 IMU（機体 FRD・m/s²・静止 −9.8）をチップ系へ逆 remap し、
+    // imu_task の(無改変の)前進 remap が機体 FRD を復元する。加速度は [g] に戻す。
+    // この往復は論点2 ドライバ正規化を保留している間だけ存在する。
+    if (sil::bridge::has_plant) {
+        const sf::ImuData& imu = sil::bridge::current_imu;
+        constexpr float G = 9.80665f;
+        accel.x =  imu.accel[1] / G;   // chip X = body Y / G
+        accel.y =  imu.accel[0] / G;   // chip Y = body X / G
+        accel.z = -imu.accel[2] / G;   // chip Z = −body Z / G
+        gyro.x =  imu.gyro[1];         // chip X = body Y
+        gyro.y =  imu.gyro[0];         // chip Y = body X
+        gyro.z = -imu.gyro[2];         // chip Z = −body Z
+        return ESP_OK;
+    }
+
     // At level rest the BMI270 reads +1 g on chip Z (this is what the real
     // hardware reports). imu_task's axis remap (body.z = −chip.z·G) then yields
     // −9.8 m/s² on body Z (down) — the NED-consistent convention the ESKF expects
