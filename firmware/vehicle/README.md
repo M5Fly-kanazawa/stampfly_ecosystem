@@ -143,8 +143,7 @@ firmware/vehicle/
 │   ├── sf_algo_*/             # アルゴリズム（ESKF、PID、フィルタ）
 │   └── sf_svc_*/              # サービス（状態管理、通信、CLI）
 ├── tools/                     # 開発支援ツール
-│   ├── scripts/               # Python解析スクリプト
-│   └── eskf_debug/            # ESKF デバッグ用PCシミュレータ
+│   └── scripts/               # Python解析スクリプト
 ├── logs/                      # フライトログ保存先
 ├── CMakeLists.txt             # ビルド設定
 ├── sdkconfig.defaults         # SDK デフォルト設定
@@ -852,8 +851,7 @@ firmware/vehicle/
 │   ├── sf_algo_*/             # Algorithms (ESKF, PID, filters)
 │   └── sf_svc_*/              # Services (state management, communication, CLI)
 ├── tools/                     # Development tools
-│   ├── scripts/               # Python analysis scripts
-│   └── eskf_debug/            # ESKF debug PC simulator
+│   └── scripts/               # Python analysis scripts
 ├── logs/                      # Flight log storage
 ├── CMakeLists.txt             # Build configuration
 ├── sdkconfig.defaults         # SDK default settings

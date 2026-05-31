@@ -199,8 +199,6 @@ nav:
               - Stage 6 Dual: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage6_dual_sensor/README.md
               - Stage 7 Teleplot: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage7_teleplot_streaming/README.md
               - Stage 8 Filter: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage8_filtered_streaming/README.md
-      - テスト:
-        - フローキャリブレーション: firmware/vehicle/tests/eskf_debug/docs/flow_calibration_plan.md
     - Controller:
       - 概要: firmware/controller/README.md
     - Common:

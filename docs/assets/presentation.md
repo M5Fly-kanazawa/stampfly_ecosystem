@@ -200,19 +200,17 @@ sf log wifi          # 400Hz テレメトリ取得
 sf log analyze       # フライトログ解析
 sf sim run vpython   # シミュレータ起動
 sf cal gyro          # ジャイロキャリブレーション
-sf tune gui          # チューニングダッシュボード
 sf sysid run         # システム同定
 sf lesson switch 5   # レッスン切替
 ```
 
 ---
 
-## パラメータチューニング
+## パラメータ管理 — config.hpp SSOT
 
-- **sf tune gui**: Streamlit ダッシュボードで可視的にチューニング
-- **sf tune auto**: フライトログから自動最適化
-- **sf tune eskf**: ESKF パラメータスイープ
 - **config.hpp** を SSOT（Single Source of Truth）として一元管理
+- PID ゲイン・フィルタ定数・制御リミットを単一ファイルに集約
+- 制御系パラメータの変更はフライトログシミュレーションで数値検証
 
 ![center](tuning_workflow.png)
 
@@ -415,7 +413,7 @@ sf sim run vpython
 | `sf doctor` | 環境診断 | `sf log wifi` | テレメトリ取得 |
 | `sf build` | ビルド | `sf log analyze` | ログ解析 |
 | `sf flash` | 書き込み | `sf log viz` | 可視化 |
-| `sf monitor` | モニタ | `sf tune gui` | チューニング |
+| `sf monitor` | モニタ | `sf log capture` | バイナリログ取得 |
 | `sf sim run` | シミュレータ | `sf sysid run` | システム同定 |
 | `sf cal gyro` | 校正 | `sf lesson switch` | レッスン切替 |
-| `sf flight` | 飛行制御 | `sf eskf` | ESKF 解析 |
+| `sf flight` | 飛行制御 | `sf cal accel` | 加速度校正 |

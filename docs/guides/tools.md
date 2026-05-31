@@ -123,42 +123,6 @@ python visualize_pose_3d.py data.bin
 python visualize_pose_3d.py data.bin --mp4
 ```
 
-### 最適化ツール
-
-#### optimize_eskf.py
-
-ESKFのQ/Rパラメータを最適化します。
-
-```bash
-# 単一データセット
-python optimize_eskf.py flight.bin
-
-# 複数データセット（汎用性向上）
-python optimize_eskf.py small.bin large.bin
-
-# eskf.hppに自動適用
-python optimize_eskf.py flight.bin --apply
-```
-
-**オプション:**
-
-| オプション | 説明 | デフォルト |
-|-----------|------|-----------|
-| `--method {sa,gd}` | 最適化手法（SA推奨） | sa |
-| `--iter N` | イテレーション数 | 500 |
-| `--roll-weight W` | Roll誤差の重み | 0.3 |
-| `--apply` | eskf.hppに適用 | - |
-| `--output FILE` | JSONで保存 | - |
-
-#### estimate_qr.py
-
-静止データからQ/Rパラメータを統計的に推定します。
-
-```bash
-python estimate_qr.py --input static.bin --output params.json
-python estimate_qr.py --input static.bin --plot noise.png
-```
-
 ### 解析ツール
 
 #### pure_accel_integration.py
@@ -189,7 +153,7 @@ python plot_mag_xy.py sensor.bin
 
 ## 典型的なワークフロー
 
-### ESKF開発サイクル
+### ESKFログ解析サイクル
 
 ```bash
 # 1. ログ取得
@@ -200,13 +164,7 @@ python log_capture.py capture -p /dev/tty.usbmodem* -o test.bin -d 30
 cd ../log_analyzer
 python visualize_eskf.py ../log_capture/test.bin --attitude --position
 
-# 3. パラメータ最適化
-python optimize_eskf.py ../log_capture/test.bin --method sa --iter 500
-
-# 4. 結果適用
-python optimize_eskf.py ../log_capture/test.bin --apply
-
-# 5. ファームウェア再ビルド・テスト
+# 3. ファームウェア再ビルド・テスト
 cd ../../firmware/vehicle
 idf.py build flash monitor
 ```
@@ -221,10 +179,6 @@ python log_capture.py capture -p /dev/tty.usbmodem* -o static.bin -d 30
 # 2. 地磁気確認
 cd ../calibration
 python plot_mag_xy.py ../log_capture/static.bin
-
-# 3. ノイズ特性確認
-cd ../log_analyzer
-python estimate_qr.py --input ../log_capture/static.bin --plot noise.png
 ```
 
 ---

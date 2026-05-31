@@ -6,7 +6,7 @@
 
 ### このチュートリアルについて
 
-StampFlyのフライトログを取得し、ESKF状態推定の結果を可視化する手順を説明します。
+StampFlyのフライトログを取得し、`sf log viz` で可視化する手順を説明します。
 
 ### 前提条件
 
@@ -98,100 +98,7 @@ sf log viz logs/flight_001.csv --time-range 5 15
 | `--mode attitude` | 姿勢のみ |
 | `--mode position` | 位置のみ |
 
-## 4. ESKF状態の可視化
-
-### sf eskf plot を使用
-
-ESKF状態推定結果の詳細可視化：
-
-```bash
-# ESKF状態をプロット
-sf eskf plot logs/flight_001.csv
-
-# 画像として保存
-sf eskf plot logs/flight_001.csv -o eskf_states.png
-
-# 位置のみ表示
-sf eskf plot logs/flight_001.csv --mode position
-```
-
-### 2つのログの比較（オーバーレイ）
-
-```bash
-# 参照ログをオーバーレイして表示
-sf eskf plot estimated.csv --overlay reference.csv -o comparison.png
-```
-
-## 5. ESKFリプレイと比較
-
-### パラメータを変えてリプレイ
-
-センサーログからESKFを再計算し、パラメータチューニングの効果を確認：
-
-```bash
-# デフォルトパラメータを確認
-sf eskf params show
-
-# カスタムパラメータでリプレイ
-sf eskf replay logs/flight_001.csv --params custom_params.yaml -o replay_result.csv
-
-# 可視化（元ログとオーバーレイ）
-sf eskf plot replay_result.csv --overlay logs/flight_001.csv -o comparison.png
-```
-
-### 誤差メトリクスの計算
-
-```bash
-# リプレイ結果と元のESKF出力を比較
-sf eskf compare replay_result.csv --ref logs/flight_001.csv
-```
-
-出力例：
-```
-============================================================
-ESKF Error Metrics Summary
-============================================================
-Samples: 12000, Duration: 30.00s
-
-Position [m]:
-  RMSE: X=0.0234, Y=0.0189, Z=0.0156
-  MAE:  X=0.0156, Y=0.0123, Z=0.0098
-  Max:  X=0.0789, Y=0.0654, Z=0.0432
-
-Velocity [m/s]:
-  RMSE: X=0.0567, Y=0.0456, Z=0.0234
-
-Attitude [deg]:
-  RMSE: R=1.23, P=0.98, Y=2.34
-  MAE:  R=0.89, P=0.67, Y=1.56
-
-Total Position RMSE: 0.0341 m
-============================================================
-```
-
-## 6. パラメータ最適化
-
-### 自動パラメータチューニング
-
-```bash
-# 焼きなまし法でパラメータ最適化
-sf eskf tune logs/flight_001.csv -o optimized.yaml --method sa --iter 500
-
-# 複数ログで最適化（より堅牢）
-sf eskf tune logs/flight_001.csv logs/flight_002.csv -o optimized.yaml
-```
-
-### 最適化パラメータの検証
-
-```bash
-# 最適化前後のパラメータ比較
-sf eskf params diff default.yaml optimized.yaml
-
-# 最適化パラメータでリプレイして効果を確認
-sf eskf replay logs/flight_001.csv --params optimized.yaml | sf eskf compare --ref logs/flight_001.csv
-```
-
-## 7. 典型的なワークフロー
+## 4. 典型的なワークフロー
 
 ### 基本フロー
 
@@ -201,42 +108,9 @@ sf log wifi -d 30 -o logs/test_flight.csv
 
 # 2. 基本可視化
 sf log viz logs/test_flight.csv --save test_flight.png
-
-# 3. ESKF状態の詳細確認
-sf eskf plot logs/test_flight.csv --mode all -o eskf_detail.png
 ```
 
-### チューニングフロー
-
-```bash
-# 1. 複数のテストフライトログを取得
-sf log wifi -d 30 -o logs/tune_01.csv
-sf log wifi -d 30 -o logs/tune_02.csv
-
-# 2. パラメータ最適化
-sf eskf tune logs/tune_01.csv logs/tune_02.csv -o tuned.yaml
-
-# 3. 新パラメータで効果確認
-sf eskf replay logs/tune_01.csv --params tuned.yaml -o replayed.csv
-sf eskf plot replayed.csv --overlay logs/tune_01.csv -o comparison.png
-
-# 4. メトリクス確認
-sf eskf compare replayed.csv --ref logs/tune_01.csv
-```
-
-### パイプライン活用
-
-Unix哲学に基づくパイプ連携：
-
-```bash
-# リプレイ → 比較（中間ファイル不要）
-sf eskf replay flight.csv --params tuned.yaml | sf eskf compare --ref flight.csv
-
-# JSON形式で誤差出力
-sf eskf compare estimated.csv --ref reference.csv --format json > metrics.json
-```
-
-## 8. トラブルシューティング
+## 5. トラブルシューティング
 
 ### よくある問題
 
@@ -251,9 +125,6 @@ sf log wifi -i 192.168.4.1
 ```bash
 # ログファイルの情報を確認
 sf log info logs/flight.csv
-
-# フォーマット検出
-python3 -c "from tools.eskf_sim import detect_csv_format, load_csv; print(detect_csv_format(...))"
 ```
 
 **matplotlibエラー**
@@ -270,7 +141,7 @@ pip install matplotlib numpy scipy pyyaml
 
 ### About This Tutorial
 
-This tutorial explains how to capture flight logs from StampFly and visualize ESKF state estimation results.
+This tutorial explains how to capture flight logs from StampFly and visualize them with `sf log viz`.
 
 ### Prerequisites
 
@@ -315,42 +186,10 @@ sf log viz logs/flight_001.csv
 sf log viz logs/flight_001.csv --save flight_analysis.png
 ```
 
-## 4. ESKF State Visualization
+## 4. Typical Workflow
 
 ```bash
-# Plot ESKF states
-sf eskf plot logs/flight_001.csv
-
-# Overlay two logs for comparison
-sf eskf plot estimated.csv --overlay reference.csv -o comparison.png
-```
-
-## 5. ESKF Replay and Comparison
-
-```bash
-# Replay with custom parameters
-sf eskf replay logs/flight_001.csv --params custom.yaml -o replay.csv
-
-# Compare error metrics
-sf eskf compare replay.csv --ref logs/flight_001.csv
-```
-
-## 6. Parameter Optimization
-
-```bash
-# Optimize parameters using Simulated Annealing
-sf eskf tune logs/flight_001.csv -o optimized.yaml --method sa
-
-# Verify with replay
-sf eskf replay logs/flight_001.csv --params optimized.yaml | sf eskf compare --ref logs/flight_001.csv
-```
-
-## 7. Typical Workflow
-
-```bash
-# Capture -> Visualize -> Tune -> Verify
+# Capture -> Visualize
 sf log wifi -d 30 -o logs/test.csv
 sf log viz logs/test.csv --save overview.png
-sf eskf tune logs/test.csv -o tuned.yaml
-sf eskf replay logs/test.csv --params tuned.yaml | sf eskf compare --ref logs/test.csv
 ```

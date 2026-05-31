@@ -38,8 +38,6 @@
 | [commands/sf-sim.md](commands/sf-sim.md) | `sf sim` - シミュレータ |
 | [commands/sf-cal.md](commands/sf-cal.md) | `sf cal` - センサキャリブレーション |
 
-| [commands/sf-tune.md](commands/sf-tune.md) | `sf tune` - パラメータチューニング |
-
 ### アーキテクチャ・設計
 
 | ファイル | 説明 |
@@ -137,12 +135,6 @@
 |-------------|------|
 | [firmware/vehicle/components/sf_hal_bmi270/examples/](../firmware/vehicle/components/sf_hal_bmi270/examples/) | BMI270 使用例（polling, interrupt, FIFO, 開発ステージ） |
 | [firmware/vehicle/components/sf_hal_vl53l3cx/examples/](../firmware/vehicle/components/sf_hal_vl53l3cx/examples/) | VL53L3CX 使用例（polling, interrupt, 開発ステージ） |
-
-### Vehicle テスト
-
-| ファイル | 説明 |
-|---------|------|
-| [firmware/vehicle/tests/eskf_debug/docs/flow_calibration_plan.md](../firmware/vehicle/tests/eskf_debug/docs/flow_calibration_plan.md) | オプティカルフローキャリブレーション計画 |
 
 ### Controller（コントローラ）
 

@@ -113,20 +113,6 @@ sf log wifi -d 30 --fft
 sf log analyze --fft
 ```
 
-### 3. Q/Rパラメータ最適化
-
-```bash
-# 1. テストデータ取得
-sf log capture -d 30
-
-# 2. 最適化実行（直接スクリプト使用）
-cd tools/log_analyzer
-python optimize_eskf.py ../logs/stampfly_*.bin --method sa --iter 500
-
-# 3. 結果をファームウェアに適用
-python optimize_eskf.py ../logs/stampfly_*.bin --apply
-```
-
 ## バックエンドスクリプト
 
 > **注:** これらのスクリプトは sf CLI のバックエンド実装です。直接実行せず、sf CLI を使用してください。
@@ -153,8 +139,6 @@ python optimize_eskf.py ../logs/stampfly_*.bin --apply
 | スクリプト | sf コマンド | 説明 |
 |-----------|------------|------|
 | `flight_analysis.py` | `sf log analyze` | フライト解析 |
-| `optimize_eskf.py` | - | Q/Rパラメータ最適化 |
-| `estimate_qr.py` | - | 静止データからQ/R推定 |
 | `analyze_fft.py` | `sf log analyze --fft` | FFT解析 |
 
 ## 必要なライブラリ

@@ -73,11 +73,6 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf cal list` | キャリブレーション一覧 |
 | `sf cal gyro/accel/mag` | 各種キャリブレーション |
 | `sf sim list/run` | シミュレータ操作 |
-| `sf tune gui` | チューニングダッシュボード（Streamlit） |
-| `sf tune auto` | マンインザループ自動チューニング |
-| `sf tune eskf` | ESKF パラメータスイープ |
-| `sf tune position` | 位置制御 PID スイープ |
-| `sf tune params` | config.hpp パラメータ一覧 |
 
 ### Genesis Simulator
 Genesis物理シミュレータはvenv仮想環境にインストールされている:

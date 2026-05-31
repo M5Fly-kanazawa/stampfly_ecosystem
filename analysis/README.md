@@ -46,7 +46,7 @@
 | 目的 | 開発支援 | 結果評価 |
 | 使用タイミング | 開発中 | 実験後 |
 | 出力先 | コード修正 | 図表・レポート |
-| 例 | optimize_eskf.py | flight_accuracy.ipynb |
+| 例 | flight_analysis.py | flight_accuracy.ipynb |
 
 ---
 

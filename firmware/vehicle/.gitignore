@@ -32,11 +32,6 @@ tools/scripts/archive/
 tools/scripts/*.bin
 tools/scripts/*.csv
 tools/scripts/*.png
-tools/eskf_debug/*.bin
-tools/eskf_debug/*.csv
-tools/eskf_debug/*.png
-tools/eskf_debug/*.mp4
-tools/eskf_debug/*.gif
 tools/scripts/*.mp4
 tools/scripts/*.gif
 
