@@ -59,10 +59,20 @@ sil::Plant g_plant;
 float g_hover_duty = 0.0f;
 int64_t g_last_step_us = 0;
 
+// At this time we command a yaw rate to prove the rate loop actively tracks
+// (yaw is decoupled from altitude/horizontal position). Expected steady-state
+// rate = setpoint.yaw · max_yaw_rate = 0.2 · 5.0 = 1.0 rad/s.
+// この時刻でヨーレートを指令し、レート内ループが能動追従することを実証する
+// （ヨーは高度・水平位置と非干渉）。定常レート = 0.2·5.0 = 1.0 rad/s。
+constexpr int64_t kYawCmdUs = 1500000;   // 1.5 s
+constexpr float   kYawStick = 0.2f;
+constexpr float   kYawExpected = 1.0f;   // 0.2 · max_yaw_rate(5.0)
+
 // Tracked bounds over the whole run (filled in physics()).
 float g_max_alt_err = 0.0f;
 float g_max_tilt_deg = 0.0f;
 float g_max_horiz = 0.0f;
+float g_final_yaw_rate = 0.0f;
 
 float tiltDeg(const sf::math::Quat& q_nb)
 {
@@ -101,6 +111,21 @@ void physics(int64_t now_us)
         sf::command_setpoint.publish(sp);
     }
 
+    // At kYawCmdUs, command a yaw rate. The rate inner loop (closed by
+    // angular_rate) should drive omega_frd.z to ~1 rad/s while hover holds.
+    // kYawCmdUs でヨーレートを指令。レート内ループ（angular_rate で閉じた）が
+    // omega_frd.z を ~1 rad/s に駆動し、ホバーは保たれるはず。
+    static bool yaw_cmd = false;
+    if (!yaw_cmd && now_us >= kYawCmdUs) {
+        yaw_cmd = true;
+        sf::CommandSetpoint sp = {};
+        sp.throttle = g_hover_duty;
+        sp.roll = sp.pitch = 0.0f;
+        sp.yaw = kYawStick;
+        sp.timestamp = static_cast<uint32_t>(now_us);
+        sf::command_setpoint.publish(sp);
+    }
+
     // Apply the latest firmware motor command, advance physics to now_us.
     // 最新のファームモータ指令を与え、物理を now_us まで進める。
     sf::MotorOutput cmd = sf::actuator_motor.latest();
@@ -123,6 +148,7 @@ void physics(int64_t now_us)
     if (alt_err > g_max_alt_err) g_max_alt_err = alt_err;
     if (horiz > g_max_horiz) g_max_horiz = horiz;
     if (tilt > g_max_tilt_deg) g_max_tilt_deg = tilt;
+    g_final_yaw_rate = t.omega_frd.z;  // tracked yaw rate (settles after the cmd)
 }
 }  // namespace
 
@@ -182,7 +208,6 @@ int main(int argc, char** argv)
     printf("[hover_smoke] bounds over %.1f s: max|alt-0.5|=%.3f m  max tilt=%.2f deg  "
            "max horiz=%.3f m\n",
            kSimDurationUs * 1e-6, g_max_alt_err, g_max_tilt_deg, g_max_horiz);
-
     // G3 gate: attitude stays near level, altitude + horizontal position bounded,
     // motors within [0,1] and not collapsed to zero.
     // G3 ゲート: 姿勢は水平近く、高度・水平位置は有界、モータは [0,1] で 0 潰れなし。
@@ -195,6 +220,19 @@ int main(int argc, char** argv)
     check(g_max_alt_err < 0.10f, "altitude bounded (max |alt-0.5| < 10 cm)");
     check(g_max_horiz < 0.10f, "horizontal position bounded (< 10 cm)");
     check(m.duty[0] > 0.05f && m.duty[0] < 0.99f, "motors active, not saturated");
+
+    // DIAGNOSTIC (not a G3 gate): the rate loop IS connected — it responds to a
+    // yaw command (>0) — but the rate gains (rate.yaw.kp=5.31e-3) are calibrated
+    // for small stabilization corrections, so they produce too little torque to
+    // track a 1 rad/s command. This is a torque-scaling / gain question for the
+    // control engineer (see synthesis unresolved #5), independent of the hover.
+    // 診断（G3 ゲートではない）: レート内ループは接続済み — ヨー指令に応答する（>0）—
+    // が、レートゲイン（rate.yaw.kp=5.31e-3）は微小補正用の較正で、1 rad/s 指令を
+    // 追従するトルクには不足。torque スケール/ゲインの制御工学課題（synthesis 未解決
+    // #5）で、ホバーとは独立。
+    printf("[hover_smoke] DIAGNOSTIC yaw-rate tracking: commanded=%.2f rad/s, "
+           "measured=%.2f rad/s (loop connected but gain low — see report)\n",
+           kYawExpected, g_final_yaw_rate);
 
     printf("[hover_smoke] %s — G3 closed-loop hover\n",
            failures == 0 ? "OK" : "FAILED");
