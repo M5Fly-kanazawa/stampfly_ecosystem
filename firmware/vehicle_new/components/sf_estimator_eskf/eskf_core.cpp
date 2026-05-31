@@ -476,7 +476,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // ノルムゲート: 加速度ノルムが重力から大きく逸脱したらスキップ
     // During thrust transients, |a| ≠ g, and accel cannot be used
     // for attitude estimation (specific force contaminates gravity)
-    // 推力過渡期は|a| ≠ gとなり、比力が重力を汚染するため
+    // 推力過渡期は|a| ≠ gとなり、加速度計の測定値が重力を汚染するため
     // 姿勢推定に加速度を使用できない
     float gravity_diff = accel.norm() - cfg_.gravity;
     float norm_ratio = fabsf(gravity_diff) / cfg_.gravity;
