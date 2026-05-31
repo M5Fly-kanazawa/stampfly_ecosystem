@@ -79,18 +79,23 @@ def graph_frame(traj, i, w_px, h_px):
     panel(axes[0, 0], "altitude [m]",
           [("truth", traj["alt"], "C0-"), ("estimate", traj["alt_est"], "C1--")],
           ylim=(-0.03, 0.62))
-    # Signed roll & pitch (not the tilt magnitude). A magnitude uses arccos, always
-    # ≥0, which rectifies the estimate's near-zero noise into positive "pulses" and
-    # hides the sign; roll/pitch keep it. Truth shows a real ~0.1° lean (the yaw spin
-    # induces it); the estimate sits near 0 (a 0.1° tilt is below the accel noise
-    # floor). Symmetric ±0.12° axis centered on level.
-    # 符号付きロール・ピッチ（傾斜の大きさではない）。大きさは arccos で常に≥0、推定の
-    # ゼロ近傍ノイズを正の「パルス」に整流し符号も消す。roll/pitch は符号を保つ。真値は
-    # ~0.1° の実リーン（ヨー旋回が誘起）、推定は ~0（0.1°傾斜は加速度ノイズ床以下）。
+    # Signed roll & pitch (not the tilt magnitude). The magnitude uses arccos, which
+    # is always ≥0: it folds the estimate's near-zero ± noise onto the positive side
+    # ("pulses") and drops the sign; roll/pitch keep both. The axis auto-scales per
+    # run (symmetric, ≥±0.02° floor): the ESKF run leans a real ~0.1° (the yaw spin
+    # induces it, fed back through control), the complementary run stays within
+    # ~0.01° — so each video resolves its own attitude detail without clipping.
+    # 符号付きロール・ピッチ（傾斜の大きさではない）。大きさは arccos で常に≥0なので、推定の
+    # ゼロ近傍の±ノイズを正側へ折り返し（「パルス」化）符号も落とす。roll/pitch は両方残す。
+    # 縦軸は実行ごとに自動スケール（0中心・下限±0.02°）: ESKF 実行は実際に~0.1°傾く
+    # （ヨー旋回が制御を介して誘起）、相補実行は~0.01°内 — 各動画が切れずに姿勢の詳細を出す。
+    rp = np.concatenate([traj["roll"], traj["pitch"],
+                         traj["roll_est"], traj["pitch_est"]])
+    rp_max = max(0.02, 1.15 * float(np.abs(rp).max()))
     panel(axes[0, 1], "roll / pitch [deg]",
           [("roll", traj["roll"], "C0-"), ("pitch", traj["pitch"], "C3-"),
            ("roll est", traj["roll_est"], "C0--"), ("pitch est", traj["pitch_est"], "C3--")],
-          ylim=(-0.12, 0.12))
+          ylim=(-rp_max, rp_max))
     panel(axes[1, 0], "yaw rate [rad/s]",
           [("command", traj["yawcmd"], "C3-"), ("truth", traj["yawrate"], "C0-")],
           ylim=(-0.2, 1.4))

@@ -119,12 +119,12 @@ float tiltDeg(const sf::math::Quat& q_nb)
 }
 
 // Signed roll & pitch [deg] from the attitude quaternion. Unlike the tilt magnitude
-// (arccos, always ≥0, which rectifies near-zero estimation noise into positive
-// pulses), roll/pitch keep their sign — the natural, physically meaningful attitude
-// for the graph. Same degenerate-quaternion guard as tiltDeg (t=0 estimate = level).
+// (arccos, always ≥0, which folds near-zero estimation noise onto the positive side
+// as pulses), roll/pitch keep their sign — the natural, physically meaningful
+// attitude for the graph. Same degenerate-quaternion guard as tiltDeg (t=0 = level).
 // 姿勢クォータニオンから符号付きロール・ピッチ[deg]。傾斜角の大きさ（arccos、常に≥0で
-// ゼロ近傍ノイズを正パルスに整流）と違い符号を保つ — グラフに自然で物理的に意味のある姿勢。
-// tiltDeg と同じ退化ガード（t=0 の推定は水平扱い）。
+// ゼロ近傍ノイズを正側へ折り返してパルス化）と違い符号を保つ — グラフに自然で物理的に
+// 意味のある姿勢。tiltDeg と同じ退化ガード（t=0 の推定は水平扱い）。
 void rollPitchDeg(const sf::math::Quat& q_nb, float& roll_deg, float& pitch_deg)
 {
     const float n2 = q_nb.w * q_nb.w + q_nb.x * q_nb.x +
