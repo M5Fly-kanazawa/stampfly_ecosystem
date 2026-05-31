@@ -103,6 +103,15 @@ float g_hold_alt_max = -1e9f;
 
 float tiltDeg(const sf::math::Quat& q_nb)
 {
+    // Guard a degenerate quaternion: at t=0 the estimator has not published yet, so
+    // estimate_state holds the zero-initialized [0,0,0,0] — treat that as level (0°)
+    // instead of the arccos(0)=90° artifact it would otherwise produce.
+    // 退化クォータニオンのガード: t=0 は推定器が未発行で estimate_state が [0,0,0,0]。
+    // arccos(0)=90° のアーティファクトを避け、水平(0°)として扱う。
+    const float n2 = q_nb.w * q_nb.w + q_nb.x * q_nb.x +
+                     q_nb.y * q_nb.y + q_nb.z * q_nb.z;
+    if (n2 < 1e-6f) return 0.0f;
+
     float c = q_nb.inv_rotate(Vec3{0, 0, 1}).z;
     if (c > 1.0f) c = 1.0f;
     if (c < -1.0f) c = -1.0f;

@@ -78,10 +78,15 @@ def graph_frame(traj, i, w_px, h_px):
 
     panel(axes[0, 0], "altitude [m]",
           [("truth", traj["alt"], "C0-"), ("estimate", traj["alt_est"], "C1--")],
-          ylim=(-0.03, 0.6))
+          ylim=(-0.03, 0.62))
+    # Tilt stays under ~0.12° (no roll/pitch command; yaw doesn't tilt the craft), so
+    # a fine ±0.3° scale resolves the tiny takeoff/landing perturbations instead of a
+    # flat line on a wide axis — it reads as "rock-solid level" with visible detail.
+    # tilt は ~0.12° 未満（ロール/ピッチ指令なし、ヨーは傾けない）。細かい ±0.3° 目盛で
+    # 離着陸の微小擾乱まで見えるようにする（広軸の直線にしない）。
     panel(axes[0, 1], "tilt [deg]",
           [("truth", traj["tilt"], "C0-"), ("estimate", traj["tilt_est"], "C1--")],
-          ylim=(-2, 12))
+          ylim=(-0.03, 0.3))
     panel(axes[1, 0], "yaw rate [rad/s]",
           [("command", traj["yawcmd"], "C3-"), ("truth", traj["yawrate"], "C0-")],
           ylim=(-0.2, 1.4))
