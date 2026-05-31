@@ -14,6 +14,14 @@
 - **理由（ユーザー判断）**: 完成後にビューアで新ファームや制御理論を確認するとき、MuJoCo を StampFly に合わせて Z 下にすると、画面で**感覚と逆さまに動いて見えて混乱する**。ビューアの目的（視覚確認・レビュー動画）を守るため、MuJoCo は正立のままにする。
 - 代償（座標変換が SIL に入る）は、**この1モジュールに閉じ込めて単体テストで保証**し、本文書で対応を明文化することで管理する。
 
+### 決定（2026-05-31）— センサのドライバ正規化（論点2）
+
+**各センサのチップ軸→機体軸の振り替え・符号合わせは各ドライバ（HAL）の中で行い、ドライバは機体 FRD の正しい物理量を返す。**
+
+- **理由（ユーザー判断）**: StampFly は単一ハードで搭載向きは固定 → 一度正しく決めれば永久に正しい定数。上位（推定器/制御器を書く人）はチップ軸・搭載向き・符号に煩わされず、機体軸の綺麗な物理量だけを見ればよい。例: 加速度計は重力を Z 軸 **−9.8 m/s²** として返す（NED Z 下と整合。旧ファームの生値 +9.8＋`ba_z≈+2g` ハックは新ファームでは不要）。
+- **含意**: チップ軸の混乱（右手/左手混在・鏡映・極性/軸性符号）は全部ドライバ内に閉じ込め、各ドライバで一度だけ実機検証。→ **SIL の sim ドライバは機体 FRD の量を直接返す**ので、この `frames` モジュールは**チップ軸の写像を持たず、§3 の世界/機体回転だけ**を担う。
+- **旧ファーム不可侵**: `firmware/vehicle`(87飛行) と `firmware/vehicle_new` は別コードベース（別ドライバコピー・相互参照なし）。変更は vehicle_new のみ。
+
 ### 対象読者
 
 - `frames` モジュールの実装者
@@ -124,24 +132,24 @@ q_nb = q_we ⊗ q_mj ⊗ q_bf        # ⊗ は Hamilton 積（左が後から作
 
 合成センサは**物理から第一原理で StampFly 系（FRD）で作る**。MuJoCo 内蔵センサ（`<accelerometer>`/`<gyro>`/`<rangefinder>`）は**検算リファレンス**として使う（規約差に注意）。
 
-### 4.1 加速度計（最重要・符号注意）
+### 4.1 加速度計（ドライバ正規化後）
 
-- StampFly 生値（body FRD、反作用＝+g 規約）: `raw_frd = R_bn·(g_ned − a_world_ned)`、`g_ned=[0,0,+9.81]`、`R_bn = inv_rotate(q_nb)`。水平静止で `[0,0,+9.81]`。
+- **ドライバ出力（機体 FRD、重力を −9.8 として返す）**: `out_frd = R_bn·(a_world_ned − g_ned)`、`g_ned=[0,0,+9.81]`、`R_bn = inv_rotate(q_nb)`。水平静止で `[0,0,−9.81]`（重力が下軸 −9.8）。
 - a_world_ned は機体 CG の運動加速度（MuJoCo の機体加速度を §3.1 で NED へ）。
-- **MuJoCo `<accelerometer>` との規約差**: MuJoCo は比力（proper accel = a−g、site 系）を返す。FLU site・水平静止で `[0,0,+9.81]`（+Z 上）。これを §3.2 で FRD にすると `[0,0,−9.81]`。StampFly 生値（+9.81 FRD）とは**符号が逆** → 検算時は符号を合わせる（`raw_frd = −(M_bf·mj_accel)` で一致）。
-- ファームは生値（+g）を起動時 `ba_z≈+2g` バイアスで内部的に −g へ直す。**SIL もこの起動バイアス初期化を再現する**こと。
+- **MuJoCo `<accelerometer>` と直接一致**: MuJoCo の加速度計は a−g を site(FLU) 系で返す。FLU site・水平静止で `[0,0,+9.81]`、これを §3.2 で FRD にすると `[0,0,−9.81]` ＝ **ドライバ出力と符号まで一致**（新方針は MuJoCo の加速度計規約と整合 → 検算が素直）。
+- 旧ファームの `ba_z≈+2g` 起動ハックは**新ファームでは不要**（ドライバが −9.8 を直接返す）。SIL の sim ドライバも `out_frd` を直接返す。
 
 ### 4.2 ジャイロ
 
 - StampFly（body FRD, rad/s, [roll-x, pitch-y, yaw-z]）= MuJoCo `<gyro>`（FLU site の角速度）を §3.2 で FRD へ: `gyro_frd = M_bf·gyro_flu`。符号は RH about FRD で一致。
 
-### 4.3 BMI270 センサ実装（センサ系 ↔ 機体系）
+### 4.3 センサ系 → 機体系（ドライバ正規化, 論点2）
 
-`imu_task` が **センサ系 → 機体系** の remap を固定で持つ:
-`body.x=sensor.y, body.y=sensor.x, body.z=−sensor.z`（加速度・ジャイロ共通、involution）。
+各センサのチップ軸→機体軸の振り替え（remap）・符号合わせは**各ドライバ（HAL）の中**で行い、ドライバは**機体 FRD の正しい物理量**を返す。
 
-SIL は Code Identity（imu_task を無改変で走らせる）のため、**機体 FRD の量を作って remap の逆を当て、センサ系で返す**（remap は自分が逆なので同操作）:
-`sensor.x=body.y, sensor.y=body.x, sensor.z=−body.z`。`sim_bmi270` がこれを返し、`imu_task` が機体系へ戻す（往復一致）。
+- チップ軸は右手/左手混在しうる → 写像は**鏡映（det=−1）にもなり得る**。極性ベクトル（加速度・速度）はそのまま、**軸性ベクトル（ジャイロ・磁気）は鏡映時に符号が1つ余分**（`a' = det(R)·R·a`）。これらは**ドライバ内で一度だけ正しく実装し、実機で検証**する固定値。
+- 旧ファームは imu_task で remap していた（`body.x=sensor.y` 等）。**新ファームはこれをドライバへ移す**ので imu_task は薄くなる。
+- → **SIL の sim ドライバは機体 FRD の量を直接返す**（チップ系の往復モデルは不要）。この `frames` モジュールはチップ remap を持たない。
 
 ### 4.4 ToF / Baro / Flow / Mag
 
@@ -162,7 +170,7 @@ SIL は Code Identity（imu_task を無改変で走らせる）のため、**機
 
 ## 5. 検証（`frames` 単体テスト・正準ケース）
 
-1. **水平静止 → 合成加速度計 `raw_frd = [0,0,+9.81]`、ジャイロ `[0,0,0]`**（最重要）。
+1. **水平静止 → 加速度計のドライバ出力 `out_frd = [0,0,−9.81]`（重力が下軸 −9.8）、ジャイロ `[0,0,0]`**（最重要）。
 2. **姿勢往復**: 水平北向きで `q_nb = 単位元`（±）。任意姿勢で MuJoCo→StampFly→（逆）が元に戻る。
 3. **固定回転の性質**: `M_we`, `M_bf` が det=+1・involution。`q_we ⊗ q_we* = 単位`。
 4. **軸符号**: 純ロール/ピッチ/ヨー角速度 → 対応軸だけ正符号で立つ。
@@ -207,14 +215,14 @@ Both NED and ENU are right-handed, so a proper rotation (det=+1) exists between 
 
 ## 4. Sensors / Actuator
 
-- **Accelerometer:** synthesize from first principles in FRD, `raw_frd = R_bn·(g_ned − a_world)` (+g reaction, [0,0,+9.81] at rest). MuJoCo's built-in `<accelerometer>` (proper accel, opposite sign after FLU→FRD) is a cross-check; reproduce the firmware's `ba_z≈+2g` startup bias.
+- **Accelerometer (driver-normalized):** the driver returns body-FRD acceleration with gravity as −9.8: `out_frd = R_bn·(a_world − g_ned)`, `[0,0,−9.81]` at rest. MuJoCo's built-in `<accelerometer>` (a−g, FLU) matches directly after FLU→FRD — same sign. The legacy `ba_z≈+2g` startup hack is no longer needed (per the driver-normalization decision, 論点2).
 - **Gyro:** MuJoCo `<gyro>` (FLU) → FRD via `M_bf`.
 - **BMI270 sensor frame:** SIL returns sensor-frame data = `(body.y, body.x, −body.z)` so `imu_task`'s fixed remap recovers body FRD (Code Identity).
 - **ToF/Baro/Flow/Mag/Mixer:** see Japanese §4.4–4.5. Motor: duty→thrust `k·duty²` up = −Z_frd, applied at motor positions with yaw reaction κ, then FRD→FLU into MuJoCo.
 
 ## 5. Verification
 
-Canonical unit tests (Japanese §5): level rest accel=[0,0,+9.81]; attitude round-trip & level/north=identity; det/involution of fixed rotations; gyro axis signs; velocity round-trip; gravity-tilt sign; agreement with MuJoCo built-in sensors after convention correction.
+Canonical unit tests (Japanese §5): level rest accel=[0,0,−9.81] (driver-normalized); attitude round-trip & level/north=identity; det/involution of fixed rotations; gyro axis signs; velocity round-trip; gravity-tilt sign; agreement with MuJoCo built-in sensors.
 
 ## 6. Implementation
 
