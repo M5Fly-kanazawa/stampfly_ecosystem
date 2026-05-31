@@ -57,6 +57,7 @@ void EskfCore::reset()
     q_ = {1, 0, 0, 0};  // Identity / 単位クォータニオン
     bg_ = {0, 0, 0};
     ba_ = {0, 0, 0};
+    ang_rate_ = {0, 0, 0};
 
     // Initialize P with config standard deviations
     // 設定の標準偏差でPを初期化
@@ -100,6 +101,10 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
     // Bias-corrected IMU / バイアス補正済みIMU
     Vec3 accel = accel_raw - ba_;
     Vec3 gyro  = gyro_raw - bg_;
+
+    // Cache the bias-corrected body rate for the rate controller (FRD).
+    // レート制御器のためバイアス補正済み機体角速度を保持（FRD）。
+    ang_rate_ = gyro;
 
     // Rotation matrix from quaternion / クォータニオンから回転行列
     float R[3][3];

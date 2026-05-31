@@ -135,6 +135,9 @@ public:
     Vec3 getGyroBias() const { return bg_; }
     Vec3 getAccelBias() const { return ba_; }
 
+    /// Get bias-corrected body angular rate FRD [rad/s] / バイアス補正済み機体角速度を取得
+    Vec3 getAngularRate() const { return ang_rate_; }
+
     /// Get P-matrix diagonal element / P行列対角要素を取得
     float getPDiag(int idx) const { return P_(idx, idx); }
 
@@ -172,6 +175,7 @@ private:
     Quat q_;           // Attitude quaternion / 姿勢クォータニオン
     Vec3 bg_;          // Gyro bias [rad/s] / ジャイロバイアス
     Vec3 ba_;          // Accel bias [m/s²] / 加速度バイアス
+    Vec3 ang_rate_;    // Bias-corrected body angular rate FRD [rad/s] / バイアス補正済み機体角速度
 
     // Error-state covariance P (15x15) / 誤差状態共分散
     SymMat15 P_;

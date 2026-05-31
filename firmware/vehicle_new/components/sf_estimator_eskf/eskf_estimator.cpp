@@ -142,6 +142,9 @@ StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
     auto ab = core_.getAccelBias();
     s.accel_bias[0] = ab.x; s.accel_bias[1] = ab.y; s.accel_bias[2] = ab.z;
 
+    auto w = core_.getAngularRate();
+    s.angular_rate[0] = w.x; s.angular_rate[1] = w.y; s.angular_rate[2] = w.z;
+
     s.sensor_mask = static_cast<uint8_t>(core_.getActiveMask() & 0xFF);
     s.timestamp = timestamp;
 
