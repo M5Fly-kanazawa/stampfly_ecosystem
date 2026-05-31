@@ -53,6 +53,10 @@ constexpr float   kMaxYawRate = 5.0f;      // config: max_yaw_rate_
 
 sil::Plant g_plant;
 float g_hover_duty = 0.0f;
+// Physical hover throttle: thrust [N] = throttle · max_thrust_(0.672), so for
+// hover thrust mg → throttle = mg / 0.672 (B^-1 mixer consumes physical units).
+// 物理ホバー throttle: 推力[N] = throttle·max_thrust_(0.672) なので mg/0.672。
+const float g_hover_throttle = (0.037f * 9.81f) / 0.672f;
 int64_t g_last_step_us = 0;
 float g_yaw_stick = 0.2f;
 int64_t g_sim_us = 3000000;     // run duration (argv[5])
@@ -77,7 +81,7 @@ void physics(int64_t now_us)
         sf::system_mode.publish(mode);
 
         sf::CommandSetpoint sp = {};
-        sp.throttle = g_hover_duty;       // hover, no yaw yet
+        sp.throttle = g_hover_throttle;       // hover, no yaw yet
         sp.timestamp = static_cast<uint32_t>(now_us);
         sf::command_setpoint.publish(sp);
     }
@@ -86,7 +90,7 @@ void physics(int64_t now_us)
     if (!stepped && now_us >= kStepUs) {
         stepped = true;
         sf::CommandSetpoint sp = {};
-        sp.throttle = g_hover_duty;
+        sp.throttle = g_hover_throttle;
         sp.yaw = g_yaw_stick;             // step the yaw-rate command
         sp.timestamp = static_cast<uint32_t>(now_us);
         sf::command_setpoint.publish(sp);

@@ -58,16 +58,14 @@ private:
     float max_rate_       = 1.0f;    // [rad/s] max rate setpoint
     float max_yaw_rate_   = 5.0f;    // [rad/s] max yaw rate
     float max_angle_      = 0.5236f; // [rad] max tilt (30 deg)
-    // Thrust is a NORMALIZED per-motor duty [0,1] (what the mixer/MotorDriver
-    // consume), NOT Newtons. The physical duty→thrust curve lives in the motor,
-    // not here (docs/architecture/stampfly-parameters.md §3): at hover the duty
-    // is ~0.652 (1S LiPo 3.7V). max_thrust_=1.0 uses the full duty range so the
-    // craft has climb authority (T/W ≈ 2.0); the old 0.672 capped T/W at ~1.06.
-    // スラストは正規化された各モータ duty[0,1]（ミキサー/MotorDriver が使う量）で
-    // [N] ではない。物理の duty→推力 曲線はモータ側（同 §3）。ホバー duty ≈0.652
-    // （1S LiPo 3.7V）。max_thrust_=1.0 で全 duty を使い上昇余裕（T/W≈2.0）を持つ。
-    float max_thrust_     = 1.0f;    // normalized duty [0,1], full range
-    float hover_thrust_   = 0.652f;  // normalized hover duty (motor curve, m=0.037, 3.7V)
+    // Thrust output is PHYSICAL total thrust [N]: the B^-1 mixer (actuator.cpp)
+    // allocates it across the motors and converts to duty via the motor curve.
+    // max_thrust_ = 4 × max-per-motor (0.168 N) = 0.672 N (T/W ≈ 1.85); hover
+    // is mg = 0.037 × 9.81 = 0.363 N (throttle ≈ 0.54 in STABILIZE).
+    // スラスト出力は物理の総推力 [N]: B^-1 ミキサーが各モータに配分しモータ曲線で duty に。
+    // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）、ホバーは mg=0.363N。
+    float max_thrust_     = 0.672f;  // [N] total (4 × 0.168 N per motor)
+    float hover_thrust_   = 0.363f;  // [N] mg = 0.037 × 9.81
     float max_climb_rate_ = 0.5f;    // [m/s]
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude

@@ -72,14 +72,22 @@ void topics_init()
 // 明示的なパラメータ変数定義
 namespace param_vars {
     // Rate control
-    float rate_roll_kp    = 1.365e-3f;
-    float rate_roll_ti    = 0.7f;
+    // Rate gains are PHYSICAL [Nm/(rad/s)] now that the mixer is a B^-1 allocation
+    // (actuator.cpp): the rate loop is ω̇ = u/I, so kp = I / τ_resp with the rate
+    // time constant τ_resp = 0.05 s. They differ only by the body inertia
+    // (Ixx/Iyy/Izz = 9.16/13.3/20.4 e-6), not by the old ad-hoc mixer scaling.
+    // SIL-derived/verified (rate_tune). ti large = near-P inner loop (the outer
+    // attitude loop carries the integral action, standard cascade design).
+    // ミキサーが B^-1 配分になったのでレートゲインは物理 [Nm/(rad/s)]。レートループは
+    // ω̇ = u/I なので kp = 慣性/応答時定数（τ_resp=0.05s）。各軸は慣性比だけで異なる。
+    float rate_roll_kp    = 1.83e-4f;  // Ixx/τ_resp
+    float rate_roll_ti    = 20.0f;     // near-P (outer attitude loop integrates)
     float rate_roll_td    = 0.01f;
-    float rate_pitch_kp   = 1.995e-3f;
-    float rate_pitch_ti   = 0.7f;
+    float rate_pitch_kp   = 2.66e-4f;  // Iyy/τ_resp
+    float rate_pitch_ti   = 20.0f;
     float rate_pitch_td   = 0.01f;
-    float rate_yaw_kp     = 1.0f;   // SIL-recalibrated (rate_tune); was 5.31e-3
-    float rate_yaw_ti     = 20.0f;  // SIL-recalibrated; was 1.6 (near-P, integrator plant)
+    float rate_yaw_kp     = 4.08e-4f;  // Izz/τ_resp
+    float rate_yaw_ti     = 20.0f;
     float rate_yaw_td     = 0.01f;
 
     // Attitude control
@@ -142,23 +150,17 @@ using namespace param_vars;
 /// Parameter table — generated from params.def values
 /// パラメータテーブル — params.defの値から生成
 static const ParamEntry table[] = {
-    // Rate control
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.365e-3f, 0.0f,  0.1f,   nullptr},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, nullptr},
+    // Rate control — PHYSICAL gains [Nm/(rad/s)] for the B^-1 mixer (actuator.cpp).
+    // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
+    // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
+    // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.83e-4f,  0.0f,  0.01f,  nullptr},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   20.0f,     0.01f, 100.0f, nullptr},
     {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   nullptr},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.995e-3f, 0.0f,  0.1f,   nullptr},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, nullptr},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  2.66e-4f,  0.0f,  0.01f,  nullptr},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  20.0f,     0.01f, 100.0f, nullptr},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   nullptr},
-    // Yaw rate gains recalibrated in the SIL (rate_tune): the yaw loop is an
-    // integrator plant, so a high-gain near-P controller tracks cleanly (kp 1.0,
-    // ti 20 → ~1% error, ~1% overshoot, linear). The old kp 5.31e-3/ti 1.6
-    // tracked a 1 rad/s command at only 0.05 rad/s because the simplified mixer
-    // attenuates yaw by kappa (see actuator.cpp). Bench-confirm before flight.
-    // ヨーレートゲインを SIL(rate_tune)で再較正。ヨーは積分器プラントなので高ゲインの
-    // ほぼ P 制御で綺麗に追従（kp 1.0, ti 20 → 誤差~1%・overshoot~1%・線形）。旧
-    // kp 5.31e-3/ti 1.6 は簡易ミキサーが κ でヨーを減衰するため 1 rad/s 指令を 0.05
-    // しか追従しなかった。飛行前にベンチ確認のこと。
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    1.0f,      0.0f,  2.0f,   nullptr},
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    4.08e-4f,  0.0f,  0.01f,  nullptr},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, nullptr},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   nullptr},
 

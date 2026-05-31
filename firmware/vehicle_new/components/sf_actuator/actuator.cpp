@@ -24,6 +24,8 @@
  * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
+#include <cmath>
+
 #include "actuator.hpp"
 #include "topics.hpp"
 #include "motor_driver.hpp"
@@ -64,14 +66,22 @@ static constexpr int MOTOR_PWM_RESOLUTION_BIT = 8;
 static constexpr float MIN_DUTY = 0.0f;
 static constexpr float MAX_DUTY = 1.0f;
 
-// Yaw torque coefficient ratio (Cq / Ct) for the X-quad propellers.
-// X-quad プロペラのヨートルク係数比 (Cq / Ct)。
-//
-// Used as the multiplier on the yaw command in the mixer. Matches the
-// value in the legacy `vehicle/` firmware (control_allocation.hpp).
-// ミキサー内のヨー指令に掛ける係数。レガシー `vehicle/` ファーム
-// (control_allocation.hpp) と同じ値。
-static constexpr float MIXER_KAPPA_DEFAULT = 0.00971f;
+// X-quad geometry + motor curve for the B^-1 control allocation. Mirrors the
+// flight-proven legacy `vehicle/` allocator (control_allocation.hpp) and the
+// documented motor model (docs/architecture/stampfly-parameters.md §3). The
+// control inputs are PHYSICAL — thrust [N] and torques [Nm] — and the mixer
+// inverts the allocation, then converts each motor thrust to a PWM duty through
+// the motor curve (the exact inverse of the SIL plant's duty→thrust).
+// X-quad 幾何＋モータ曲線（B^-1 制御配分用）。飛行実績のあるレガシー配分器と文書の
+// モータモデルに準拠。制御入力は物理量（推力 [N]・トルク [Nm]）で、ミキサーは配分を
+// 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SIL プラントの duty→推力 の逆）。
+static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
+static constexpr float KAPPA    = 0.00971f;  // torque/thrust ratio Cq/Ct [m]
+static constexpr float MOTOR_AM = 5.39e-8f;  // V = Am·ω² + Bm·ω + Cm
+static constexpr float MOTOR_BM = 6.33e-4f;
+static constexpr float MOTOR_CM = 1.53e-2f;
+static constexpr float MOTOR_CT = 1.00e-8f;  // thrust T = Ct·ω² [N]
+static constexpr float V_BATT   = 3.7f;      // 1S LiPo nominal [V]
 
 // =============================================================================
 // Motor driver instance (file-local singleton)
@@ -122,49 +132,61 @@ void Actuator::init()
 }
 
 // -----------------------------------------------------------------------------
-// mixerCompute — pure X-quad mixer (no I/O, unit-testable)
-// mixerCompute — 純粋な X-quad ミキサー（I/O 無し、単体テスト可能）
+// thrustToDuty — per-motor thrust [N] → PWM duty [0,1] via the motor curve:
+//   ω = √(T/Ct) ;  V = Am·ω² + Bm·ω + Cm ;  duty = V / Vbat.
+// Exact inverse of the SIL plant's duty→thrust, so a thrust the allocator
+// commands is the thrust the (modeled) motor produces.
+// thrustToDuty — 各モータ推力 [N] → PWM duty [0,1]（モータ曲線）。SIL プラントの
+// duty→推力 の厳密な逆。
+// -----------------------------------------------------------------------------
+static float thrustToDuty(float thrust)
+{
+    if (thrust <= 0.0f) return MIN_DUTY;
+    const float omega = std::sqrt(thrust / MOTOR_CT);
+    const float volts = MOTOR_AM * omega * omega + MOTOR_BM * omega + MOTOR_CM;
+    return volts / V_BATT;   // final clamp to [MIN,MAX]_DUTY by clampDuties()
+}
+
+// -----------------------------------------------------------------------------
+// mixerCompute — B^-1 control allocation (physical units, no I/O, unit-testable).
+// mixerCompute — B^-1 制御配分（物理単位・I/O 無し・単体テスト可能）。
 // -----------------------------------------------------------------------------
 //
-// Maps total thrust + body-frame torques to per-motor duty cycles for an
-// X-frame quad with rotor layout M1=FR, M2=RR, M3=RL, M4=FL.
+// Inputs are PHYSICAL (matching ControlOutput's declared units): u.thrust = total
+// thrust [N], u.torque = body torques [Nm] (roll φ, pitch θ, yaw ψ). The mixing
+// matrix B^-1 (from the flight-proven legacy allocator, control_allocation.hpp)
+// gives each motor's thrust, then thrustToDuty gives the PWM duty. Rotor layout
+// M1=FR, M2=RR, M3=RL, M4=FL; NED body frame (+X fwd, +Y right, +Z down);
+// CCW props M1/M3, CW props M2/M4.
 //
-// 総推力＋機体座標トルクを X-frame quad の各モーター duty に変換する。
-// ロータ配置: M1=FR, M2=RR, M3=RL, M4=FL。
+// 入力は物理量（ControlOutput の宣言単位どおり）: u.thrust = 総推力 [N]、u.torque =
+// 機体トルク [Nm]（ロール/ピッチ/ヨー）。飛行実績のあるレガシー配分器の B^-1 で各モータ
+// 推力を求め、thrustToDuty で PWM duty にする。
 //
-// Sign convention (verified against firmware/vehicle/sf_algo_control B^-1 matrix):
-// 符号規約（vehicle/sf_algo_control の B^-1 行列で実機検証済み）:
-//   - NED frame: +X forward, +Y right, +Z down.
-//   - Pitch>0  = nose-down (right-hand rule about +Y) → FRONT motors get +pitch.
-//   - Yaw>0    = clockwise from above (right-hand rule about +Z, i.e. nose-right)
-//                → CCW propellers (M1=FR, M3=RL) get +yaw, CW propellers (M2=RR,
-//                  M4=FL) get -yaw, because CCW props create CW reaction torque.
-//   - Roll>0   = right-wing-down (right-hand rule about +X) → LEFT motors get +roll.
+//   T_i = ¼( u_t  ±  u_φ/d  ±  u_θ/d  ±  u_ψ/κ )
 //
-// Motor positions (from main/config.hpp): M1=FR (+x,+y,CCW), M2=RR (-x,+y,CW),
-//                                          M3=RL (-x,-y,CCW), M4=FL (+x,-y,CW).
-//
-// Formula (kappa = MIXER_KAPPA_DEFAULT; roll/pitch already pre-divided by 4·L
-// in the controller, yaw scaled here by kappa):
-// 式（kappa = MIXER_KAPPA_DEFAULT、roll/pitch は制御器側で 4·L 既除算、
-// ここでは yaw のみ kappa を掛ける）:
-//
-//     d_FR (CCW) = thrust − roll + pitch + yaw·κ
-//     d_RR (CW ) = thrust − roll − pitch − yaw·κ
-//     d_RL (CCW) = thrust + roll − pitch + yaw·κ
-//     d_FL (CW ) = thrust + roll + pitch − yaw·κ
+// NOTE: yaw uses 1/κ (NOT ·κ). The old simplified mixer multiplied by κ and so
+// under-drove yaw by ~1/κ² (a 1 rad/s yaw command tracked at 0.05 rad/s).
+// 注意: ヨーは 1/κ（·κ ではない）。旧簡易ミキサーは ·κ でヨーを約 1/κ² も弱めていた。
 //
 static void mixerCompute(const ControlOutput& u, float duties[4])
 {
-    const float T = u.thrust;
-    const float R = u.torque[0];   // Roll  / ロール
-    const float P = u.torque[1];   // Pitch / ピッチ
-    const float Y = u.torque[2] * MIXER_KAPPA_DEFAULT;  // Scaled yaw / κ補正済ヨー
+    const float ut = u.thrust;       // total thrust [N]
+    const float up = u.torque[0];    // roll torque  [Nm]
+    const float uq = u.torque[1];    // pitch torque [Nm]
+    const float ur = u.torque[2];    // yaw torque   [Nm]
+    const float id = 1.0f / ARM_D;   // 1/d
+    const float ik = 1.0f / KAPPA;   // 1/κ
 
-    duties[stampfly::MotorDriver::MOTOR_FR] = T - R + P + Y;
-    duties[stampfly::MotorDriver::MOTOR_RR] = T - R - P - Y;
-    duties[stampfly::MotorDriver::MOTOR_RL] = T + R - P + Y;
-    duties[stampfly::MotorDriver::MOTOR_FL] = T + R + P - Y;
+    // Per-motor thrust [N] from B^-1 (rows = M1FR, M2RR, M3RL, M4FL).
+    // 各モータ推力 [N]（B^-1 の行 = M1FR, M2RR, M3RL, M4FL）。
+    float T[4];
+    T[stampfly::MotorDriver::MOTOR_FR] = 0.25f * (ut - id * up + id * uq + ik * ur);
+    T[stampfly::MotorDriver::MOTOR_RR] = 0.25f * (ut - id * up - id * uq - ik * ur);
+    T[stampfly::MotorDriver::MOTOR_RL] = 0.25f * (ut + id * up - id * uq + ik * ur);
+    T[stampfly::MotorDriver::MOTOR_FL] = 0.25f * (ut + id * up + id * uq - ik * ur);
+
+    for (int i = 0; i < 4; ++i) duties[i] = thrustToDuty(T[i]);
 }
 
 // -----------------------------------------------------------------------------

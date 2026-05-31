@@ -56,7 +56,14 @@ constexpr int64_t kSimDurationUs = 3000000;  // 3 s
 constexpr float kStartAlt = 0.5f;            // model starts the body at 0.5 m
 
 sil::Plant g_plant;
-float g_hover_duty = 0.0f;
+float g_hover_duty = 0.0f;       // Plant motor duty at hover (for priming)
+// Controller throttle that yields hover thrust. The controller output is now
+// PHYSICAL (thrust [N] = throttle · max_thrust_) and the B^-1 mixer allocates it,
+// so hover throttle = mg / max_thrust_total (0.363 / 0.672 ≈ 0.54).
+// コントローラ出力は物理量（推力[N] = throttle·max_thrust_）で B^-1 が配分するため、
+// ホバー throttle = mg / 最大総推力（0.363/0.672 ≈ 0.54）。
+constexpr float kMaxThrustN = 0.672f;                    // = controller max_thrust_
+const float g_hover_throttle = (0.037f * 9.81f) / kMaxThrustN;
 int64_t g_last_step_us = 0;
 
 // At this time we command a yaw rate to prove the rate loop actively tracks
@@ -114,7 +121,7 @@ void physics(int64_t now_us)
         // STABILIZE（既定）: thrust = throttle·max_thrust_(=1.0) を duty として使うので
         // throttle = ホバー duty で高度を保つ。
         sf::CommandSetpoint sp = {};
-        sp.throttle = g_hover_duty;
+        sp.throttle = g_hover_throttle;
         sp.roll = sp.pitch = sp.yaw = 0.0f;
         sp.timestamp = static_cast<uint32_t>(now_us);
         sf::command_setpoint.publish(sp);
@@ -129,7 +136,7 @@ void physics(int64_t now_us)
         yaw_cmd = true;
         g_yaw_cmd_now = kYawExpected;
         sf::CommandSetpoint sp = {};
-        sp.throttle = g_hover_duty;
+        sp.throttle = g_hover_throttle;
         sp.roll = sp.pitch = 0.0f;
         sp.yaw = kYawStick;
         sp.timestamp = static_cast<uint32_t>(now_us);
