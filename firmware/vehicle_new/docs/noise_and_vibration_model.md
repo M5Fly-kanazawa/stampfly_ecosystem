@@ -156,14 +156,22 @@ MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロ�
 
 ### 比力（specific force）の正しい計算 ← 合成加速度計
 
-加速度計は重力を含む比力を出力する。MuJoCo の機体加速度（ワールド系）と姿勢から、機体系の比力を合成する。
+加速度計は重力を含む比力を出力する。**符号と回転行列はファーム本体の規約に厳密に合わせること**（裏取り済み、`eskf_core.cpp` / `calibration.cpp`）:
+
+- **StampFly の生加速度計は水平静止で `[0,0,+9.81]`（反作用＝proper-acceleration 規約、+g）を読む。** 比力 `f = R_bn(a_world − g_ned)` の **負**にあたる。
+- 回転は **`R_bn = R_nb^T`（NED→body）**。`q`（`attitude`）は `q_nb`（body→NED）なので、NED 量を body へ移すには `inv_rotate`（=`R_bn`）を使う。`g_ned = [0,0,+9.81]`（+Z 下）。
 
 ```
-加速度計出力 = R_nb × (a_world - g_ned)
-            = R_nb × ((thrust_ned + drag) / mass - g_ned)
+合成加速度計（生・body・+g 規約）
+  raw_body = R_bn × (g_ned − a_world)
+           = R_bn × (g_ned − (thrust_ned + drag) / mass)
+  ただし R_bn = inv_rotate(by q_nb) = R_nb^T,  g_ned = [0,0,+9.81]
+  水平静止: a_world=0, R_bn=I → raw_body = [0,0,+9.81]
 ```
 
-旧 SIL の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>` と突き合わせて検算する。
+ファームはこの生値（+g）を受け、起動時の `ba_z ≈ +2g` バイアス（次項）で内部的に比力（−g）へ変換する。**SIL はこのバイアス初期化も再現すること**（さもないと重力を誤符号で積分）。
+
+旧 SIL の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>`（site=body 系で比力を返す）と突き合わせて検算する。
 
 ### バイアス初期化 ← 起動キャリブレーションの再現
 
