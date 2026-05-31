@@ -49,11 +49,8 @@ int main(int argc, char** argv)
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sil/models/stampfly.xml";
 
-    sil::Plant::Config cfg;  // defaults: k_thrust 0.168, kappa 0.00971, mass 0.037
+    sil::Plant::Config cfg;  // documented motor curve: Am/Bm/Cm/Ct, v_batt 3.7
     const float mg = cfg.mass * cfg.g;
-    const float hover_duty = std::sqrt((mg / 4.0f) / cfg.k_thrust);  // ~0.735
-    printf("[plant_smoke] mg=%.4f N, hover_duty=%.4f, thrust/motor=%.4f N\n",
-           mg, hover_duty, cfg.k_thrust * hover_duty * hover_duty);
 
     // =========================================================================
     // (1) HOVER
@@ -64,6 +61,12 @@ int main(int argc, char** argv)
         fprintf(stderr, "[plant_smoke] plant init failed (model: %s)\n", model_path);
         return 1;
     }
+
+    // Hover duty from the real motor curve (inverts V=Am·ω²+Bm·ω+Cm, T=Ct·ω²).
+    // 実モータ曲線から導くホバー duty（V=Am·ω²+Bm·ω+Cm, T=Ct·ω² の逆算）。
+    const float hover_duty = plant.hoverDuty();
+    printf("[plant_smoke] mg=%.4f N, hover_duty=%.4f, thrust/motor=%.4f N\n",
+           mg, hover_duty, plant.dutyToThrust(hover_duty));
 
     sf::MotorOutput hover{};
     for (int i = 0; i < 4; ++i) hover.duty[i] = hover_duty;

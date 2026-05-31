@@ -84,6 +84,40 @@ void Plant::setWind(const sf::math::Vec3& force_ned)
 }
 
 // -----------------------------------------------------------------------------
+// dutyToThrust — normalized duty [0,1] → steady-state thrust [N] via the real
+// motor + propeller curve (docs/architecture/stampfly-parameters.md §3):
+//   V = duty·v_batt ; solve V = Am·ω² + Bm·ω + Cm for ω ; T = Ct·ω².
+// dutyToThrust — 正規化 duty[0,1] → 実モータ＋プロペラ曲線で定常推力 [N]。
+// -----------------------------------------------------------------------------
+float Plant::dutyToThrust(float duty) const
+{
+    if (duty <= 0.0f) return 0.0f;
+    const float V = duty * cfg_.v_batt;            // terminal voltage [V]
+    if (V <= cfg_.motor_Cm) return 0.0f;           // below the offset → no spin
+
+    // Positive root of Am·ω² + Bm·ω + (Cm − V) = 0.
+    // Am·ω² + Bm·ω + (Cm − V) = 0 の正の根。
+    const float a = cfg_.motor_Am;
+    const float b = cfg_.motor_Bm;
+    const float disc = b * b + 4.0f * a * (V - cfg_.motor_Cm);  // > 0 since V > Cm
+    const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
+    if (omega <= 0.0f) return 0.0f;
+    return cfg_.Ct * omega * omega;                // thrust T = Ct·ω² [N]
+}
+
+// -----------------------------------------------------------------------------
+// hoverDuty — per-motor duty that gives mg/4 of thrust (inverts the motor curve).
+// hoverDuty — mg/4 の推力を出す各モータ duty（モータ曲線の逆算）。
+// -----------------------------------------------------------------------------
+float Plant::hoverDuty() const
+{
+    const float thrust = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
+    const float omega = std::sqrt(thrust / cfg_.Ct);      // ω = √(T/Ct)
+    const float V = cfg_.motor_Am * omega * omega + cfg_.motor_Bm * omega + cfg_.motor_Cm;
+    return V / cfg_.v_batt;                                // duty = V / v_batt
+}
+
+// -----------------------------------------------------------------------------
 // step — motor lag → thrust → reaction yaw torque + wind → mj_step.
 // step — モータ遅れ → 推力 → ヨー反トルク＋風 → mj_step。
 //
@@ -105,7 +139,7 @@ void Plant::step(float dt)
     float thrust[4];
     for (int i = 0; i < 4; ++i) {
         motor_duty_[i] += (motor_target_[i] - motor_duty_[i]) * alpha;
-        thrust[i] = cfg_.k_thrust * motor_duty_[i] * motor_duty_[i] * cfg_.health[i];
+        thrust[i] = dutyToThrust(motor_duty_[i]) * cfg_.health[i];
         if (i < m_->nu) d_->ctrl[i] = thrust[i];
     }
 

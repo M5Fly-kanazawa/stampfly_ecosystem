@@ -50,13 +50,29 @@ namespace sil {
 class Plant {
 public:
     /// Tunable plant parameters (StampFly physical values + plant-only models).
-    /// 調整可能なプラントパラメータ（StampFly 物理値＋プラント固有モデル）。
+    ///
+    /// Motor + propeller model derived from the documented electrical/mechanical
+    /// parameters (docs/architecture/stampfly-parameters.md §3), NOT a fitted
+    /// k·duty². The per-motor command is a normalized duty in [0,1] (what the
+    /// firmware mixer outputs); the duty is converted to thrust through the real
+    /// motor curve: V = duty·v_batt, solve V = Am·ω² + Bm·ω + Cm for the prop
+    /// speed ω, then thrust T = Ct·ω² and reaction torque Q = kappa·T.
+    ///
+    /// モータ＋プロペラモデルは文書の電気・機械パラメータ
+    /// （docs/architecture/stampfly-parameters.md §3）から導出（フィットの k·duty²
+    /// ではない）。各モータ指令は正規化 duty[0,1]（ファームのミキサー出力）。duty を
+    /// 実モータ曲線で推力に変換: V = duty·v_batt、V = Am·ω² + Bm·ω + Cm を ω について
+    /// 解き、推力 T = Ct·ω²、反トルク Q = kappa·T。
     struct Config {
-        float k_thrust = 0.168f;   ///< thrust = k_thrust·duty² [N] (coord_frames §4.5)
-        float kappa    = 0.00971f; ///< yaw reaction torque ratio Cq/Ct (mixer kappa)
-        float motor_tau = 0.02f;   ///< first-order motor lag time constant [s] (plant-only)
-        float mass     = 0.037f;   ///< body mass [kg]
-        float g        = 9.81f;    ///< gravity [m/s²]
+        float v_batt   = 3.7f;      ///< 1S LiPo nominal terminal voltage [V]
+        float motor_Am = 5.39e-8f;  ///< V/(rad/s)²  (V = Am·ω² + Bm·ω + Cm)
+        float motor_Bm = 6.33e-4f;  ///< V/(rad/s)
+        float motor_Cm = 1.53e-2f;  ///< V (offset)
+        float Ct       = 1.00e-8f;  ///< thrust coeff N/(rad/s)²  (T = Ct·ω²)
+        float kappa    = 9.71e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T)
+        float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
+        float mass     = 0.037f;    ///< body mass [kg]
+        float g        = 9.81f;     ///< gravity [m/s²]
         float health[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< per-motor thrust gain (1=healthy)
         sf::math::Vec3 wind_force_ned = {0.0f, 0.0f, 0.0f}; ///< external wind force NED [N]
         float flow_rad_per_pixel = 0.00222f; ///< PMW3901 rad per count (matches ESKF)
@@ -98,6 +114,15 @@ public:
     /// Set the external wind force in NED [N] (default zero).
     /// NED の外乱風力 [N] を設定（既定ゼロ）。
     void setWind(const sf::math::Vec3& force_ned);
+
+    /// Per-motor duty [0,1] that produces hover thrust (mg/4) via the motor curve.
+    /// Inverts the model: T = mg/4 → ω = √(T/Ct) → V = Am·ω²+Bm·ω+Cm → duty = V/v_batt.
+    /// モータ曲線でホバー推力（mg/4）を出す各モータ duty[0,1]。モデルを逆算する。
+    float hoverDuty() const;
+
+    /// Convert a single motor duty [0,1] to steady-state thrust [N] via the curve.
+    /// 1モータの duty[0,1] を曲線で定常推力 [N] に変換する。
+    float dutyToThrust(float duty) const;
 
     /// Advance the physics by dt: motor lag → thrust → reaction torque + wind → mj_step.
     /// 物理を dt 進める: モータ遅れ → 推力 → 反トルク＋風 → mj_step。
