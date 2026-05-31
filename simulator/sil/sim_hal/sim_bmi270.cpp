@@ -31,13 +31,23 @@ esp_err_t BMI270Wrapper::init(const Config& /*config*/)
 
 esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
 {
-    // At rest the accelerometer measures reaction to gravity: −1 g on sensor Z.
-    // After imu_task's axis remap this becomes +9.8 m/s² on body Z (down).
-    // 静止時、加速度計は重力への反作用を測る: センサ Z に −1 g。imu_task の
-    // 軸変換後、機体 Z（下方）に +9.8 m/s² になる。
+    // At level rest the BMI270 reads +1 g on chip Z (this is what the real
+    // hardware reports). imu_task's axis remap (body.z = −chip.z·G) then yields
+    // −9.8 m/s² on body Z (down) — the NED-consistent convention the ESKF expects
+    // (gravity −9.8 down, so predict R·accel + g_ned balances to 0 at rest).
+    // The previous −1 g here was a sign bug: it produced +9.8 on body Z and made
+    // the ESKF integrate gravity the wrong way (the drone "fell" in rtos_smoke).
+    // See [[project_sil_coordinate_frames]] (论点2). NOTE: chip Z = +1 g at level
+    // rest must be bench-confirmed before flight.
+    //
+    // 水平静止で BMI270 はチップ Z に +1 g を返す（実機の報告値）。imu_task の軸変換
+    // （body.z = −chip.z·G）後、機体 Z（下方）に −9.8 m/s²＝ESKF が期待する NED 整合の
+    // 規約（重力 −9.8 が下、予測 R·accel + g_ned が静止で 0 に均衡）。旧 −1 g は符号
+    // バグで機体 Z に +9.8 を生み、ESKF が重力を逆積分していた（rtos_smoke で機体が
+    // 「落下」）。飛行前にチップ Z=+1 g を実機確認すること。
     accel.x = 0.0f;
     accel.y = 0.0f;
-    accel.z = -1.0f;  // [g]
+    accel.z = 1.0f;   // [g] chip Z: +1 g at level rest (matches the real BMI270)
 
     gyro.x = 0.0f;
     gyro.y = 0.0f;
