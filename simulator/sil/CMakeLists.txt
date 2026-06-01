@@ -58,6 +58,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
   )
   target_include_directories(sf_cores PUBLIC
     ${SIL_COMPAT}
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host   # compat/esp_log.h re-exports esp_heap_caps.h (lives here)
     ${VN}/components/sf_math/include
     ${VN}/components/sf_core/include
     ${VN}/components/sf_estimator/include
