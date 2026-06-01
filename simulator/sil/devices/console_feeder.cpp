@@ -17,6 +17,7 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <unistd.h>
 
 #include "freertos/FreeRTOS.h"
@@ -40,10 +41,6 @@ void sil_console_write(const char* bytes, int n)
 {
     if (g_cli_fd < 0 || bytes == nullptr || n <= 0) return;
 
-    // Record what we feed (virtual-time stamped) before delivering.
-    // 配信前に投入バイトを記録（仮想時刻スタンプ）。
-    sil_emu_record_bytes("key", reinterpret_cast<const uint8_t*>(bytes), n);
-
     int written = 0;
     int retries = 0;
     while (written < n) {
@@ -57,11 +54,24 @@ void sil_console_write(const char* bytes, int n)
             // Pipe full: yield one tick so the firmware CLI task can drain it,
             // then retry. NEVER block the run-token in the kernel.
             // pipe 満杯: 1tick yield して CLI タスクに排出させ再試行。
-            if (++retries > kMaxYieldRetries) return;  // give up (bounded)
+            if (++retries > kMaxYieldRetries) break;  // give up (bounded)
             vTaskDelay(1);
             continue;
         }
-        return;  // hard error (e.g. EPIPE) — stop
+        break;  // hard error (e.g. EPIPE) — stop
+    }
+
+    // Record exactly the bytes the firmware actually received (virtual-time
+    // stamped). Recording AFTER the loop keeps the events log truthful even on a
+    // partial write; a short write is also flagged so the drop is visible.
+    // ファームが実際に受け取ったバイトだけを記録（仮想時刻）。途中脱落も正直に残す。
+    if (written > 0) {
+        sil_emu_record_bytes("key", reinterpret_cast<const uint8_t*>(bytes), written);
+    }
+    if (written < n) {
+        sil_emu_record_note("key_drop", "pipe never drained — bytes dropped");
+        std::fprintf(stderr, "[console_feeder] pipe never drained: dropped %d/%d bytes\n",
+                     n - written, n);
     }
 }
 

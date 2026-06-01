@@ -47,7 +47,15 @@ void write_json_string(FILE* f, const char* s)
             case '\n': std::fputs("\\n", f);  break;
             case '\r': std::fputs("\\r", f);  break;
             case '\t': std::fputs("\\t", f);  break;
-            default:   std::fputc(*p, f);     break;
+            default:
+                // RFC 8259 §7: every control character U+0000..U+001F must be
+                // escaped, else events.jsonl is not valid JSON.
+                if (static_cast<unsigned char>(*p) < 0x20) {
+                    std::fprintf(f, "\\u%04x", static_cast<unsigned char>(*p));
+                } else {
+                    std::fputc(*p, f);
+                }
+                break;
         }
     }
     std::fputc('"', f);

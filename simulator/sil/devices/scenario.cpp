@@ -59,8 +59,24 @@ struct Event {
 std::vector<Event> g_events;
 bool g_active = false;
 
-// period (ms) for a given send rate, integer-floored (1 tick = 1 ms).
+// period (ms) for a given send rate, integer-floored (1 tick = 1 ms). The parser
+// validates rate_hz in [1,1000] so period is always >= 1 (no vTaskDelay(0)).
+// 送信周期(ms)。パーサが rate_hz を [1,1000] に制限するので period>=1（vTaskDelay(0)なし）。
 int period_ms(int rate_hz) { return rate_hz > 0 ? (1000 / rate_hz) : 50; }
+
+// Frames the driver emits for an rc hold: at least one for any positive hold,
+// rounded to the nearest send period (hold_ms is quantized to the period). The
+// 64-bit product guards against overflow. ONE helper shared by the parser
+// (timeline duration) and the driver (emit loop) so '+'-relative timing matches
+// the bytes actually sent — and a sub-period hold can never emit zero frames.
+// rc ホールドの発射フレーム数: 正のホールドは最低1、周期最近接に丸め（64bitで桁あふれ回避）。
+// パーサ（時間幅）とドライバ（発射ループ）が同一ヘルパを共有 → '+' 相対時刻が実送出と一致。
+long long rc_hold_frames(int hold_ms, int rate_hz)
+{
+    if (hold_ms <= 0) return 0;
+    long long f = ((long long)hold_ms * rate_hz + 500) / 1000;  // round to nearest
+    return f < 1 ? 1 : f;
+}
 
 int ramp_frames(uint16_t from, uint16_t to, int step)
 {
@@ -70,12 +86,16 @@ int ramp_frames(uint16_t from, uint16_t to, int step)
     return span / s + 1;
 }
 
-// duration the event occupies on the timeline (for '+'-relative resolution).
+// Duration the event occupies on the timeline (for '+'-relative resolution).
+// For rc this is EXACTLY what the driver spends (frames * period), so the parser
+// and driver agree even when rate_hz does not divide 1000.
+// 事象がタイムライン上で占める時間。rc はドライバの実消費（frames*period）と厳密一致。
 int64_t event_duration_us(const Event& e)
 {
     switch (e.ch) {
         case Channel::Rc:
-            return (e.hold_ms > 0) ? (int64_t)e.hold_ms * 1000 : 0;
+            return rc_hold_frames(e.hold_ms, e.rate_hz)
+                 * (int64_t)period_ms(e.rate_hz) * 1000;
         case Channel::RcRamp:
             return (int64_t)ramp_frames(e.ramp_from, e.ramp_to, e.ramp_step)
                  * period_ms(e.rate_hz) * 1000;
@@ -170,8 +190,17 @@ int sil_scenario_load(const char* path)
             }
             at_us = (int64_t)ms * 1000;
         }
-        if (!g_events.empty() && at_us < g_events.back().at_us) {
-            err(path, lineno, "time goes backwards (must be non-decreasing)");
+        // Reject an event that starts BEFORE the previous event finishes: the
+        // single-threaded driver runs events sequentially, so an absolute time
+        // landing inside a prior rc hold/ramp would fire late and silently. '+'
+        // resolves to exactly prev_end_us, so relative events always pass.
+        // 直前事象の終了より前に始まる事象は拒否（逐次ドライバで遅延発火＝見えない不具合に）。
+        if (!g_events.empty() && at_us < prev_end_us) {
+            char m[96];
+            std::snprintf(m, sizeof(m),
+                "event starts before the previous one ends (prev ends at %lld ms)",
+                (long long)(prev_end_us / 1000));
+            err(path, lineno, m);
             return -1;
         }
 
@@ -198,7 +227,9 @@ int sil_scenario_load(const char* path)
             long hold = 0, rate = 20;
             if (iss >> hold) {
                 if (hold < 0) { err(path, lineno, "rc hold_ms must be >= 0"); return -1; }
-                if (iss >> rate) { if (rate <= 0) { err(path, lineno, "rc rate_hz must be > 0"); return -1; } }
+                if (iss >> rate) {
+                    if (rate < 1 || rate > 1000) { err(path, lineno, "rc rate_hz must be 1..1000 (1 tick = 1 ms)"); return -1; }
+                }
             }
             e.hold_ms = (int)hold; e.rate_hz = (int)rate;
 
@@ -210,7 +241,7 @@ int sil_scenario_load(const char* path)
             if (!parse_rc_field(field, e.ramp_field)) { err(path, lineno, "rc_ramp field must be throttle|roll|pitch|yaw"); return -1; }
             if (!in_adc(from) || !in_adc(to)) { err(path, lineno, "rc_ramp from/to out of ADC range 0..4095"); return -1; }
             if (step == 0) { err(path, lineno, "rc_ramp step must be != 0"); return -1; }
-            if (rate <= 0) { err(path, lineno, "rc_ramp rate_hz must be > 0"); return -1; }
+            if (rate < 1 || rate > 1000) { err(path, lineno, "rc_ramp rate_hz must be 1..1000 (1 tick = 1 ms)"); return -1; }
             if (arm != 0 && arm != 1) { err(path, lineno, "rc_ramp <arm> must be 0 or 1"); return -1; }
             e.ch = Channel::RcRamp;
             e.ramp_from = (uint16_t)from; e.ramp_to = (uint16_t)to;
@@ -269,8 +300,11 @@ void sil_scenario_driver_task(void* /*arg*/)
                 if (e.hold_ms <= 0) {
                     sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {
-                    const int frames = e.hold_ms * e.rate_hz / 1000;
-                    for (int i = 0; i < frames; ++i) {
+                    // Same frame count the parser used for the timeline duration
+                    // (>=1 for any positive hold) so emit and timing agree.
+                    // パーサの時間幅と同じフレーム数（正のホールドは最低1）で発射・時刻を一致。
+                    const long long frames = rc_hold_frames(e.hold_ms, e.rate_hz);
+                    for (long long i = 0; i < frames; ++i) {
                         sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
                         vTaskDelay((TickType_t)period);
                     }

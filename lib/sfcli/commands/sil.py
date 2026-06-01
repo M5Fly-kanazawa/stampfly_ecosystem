@@ -182,15 +182,26 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
     streams = {"out": out_text, "err": err_text, "any": merged}
     checks = []
     for raw in expect_path.read_text().splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        if line.startswith("skip"):
-            reason = line[len("skip"):].strip()
+        if stripped.startswith("skip"):
+            reason = stripped[len("skip"):].strip()
             checks.append({"name": f"skipped: {reason}", "pass": True, "skipped": True,
                            "detail": "capability-gated; not evaluated"})
             continue
-        toks = shlex.split(line)
+        # Quote-aware tokenize that also strips an UNQUOTED trailing '#' comment,
+        # so a '#' inside a quoted assertion text survives. A malformed line is
+        # recorded as a failing check rather than crashing the command.
+        # 引用符を尊重したトークン化（引用符外の '#' のみコメント除去）。不正行はクラッシュ
+        # させず失敗チェックとして記録する。
+        try:
+            toks = shlex.split(raw, comments=True)
+        except ValueError as e:
+            checks.append({"name": f"bad assertion: {stripped!r}", "pass": False, "detail": str(e)})
+            continue
+        if not toks:
+            continue
         kind = toks[0]
         if kind in ("log_contains", "log_absent") and len(toks) >= 3:
             stream, text = toks[1], toks[2]
@@ -205,11 +216,24 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
             checks.append({"name": f"order {a!r} before {b!r}", "pass": bool(ok),
                            "detail": f"idx_a={ia} idx_b={ib}"})
         elif kind == "exit" and len(toks) >= 2:
-            want = int(toks[1])
+            try:
+                want = int(toks[1])
+            except ValueError:
+                checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                               "detail": "non-numeric exit code"})
+                continue
             checks.append({"name": f"exit == {want}", "pass": exit_code == want,
                            "detail": f"got {exit_code}"})
         else:
-            checks.append({"name": f"bad assertion: {line!r}", "pass": False, "detail": "syntax"})
+            checks.append({"name": f"bad assertion: {stripped!r}", "pass": False, "detail": "syntax"})
+
+    # An .expect that evaluates NO real assertion (empty / all-comment / all-skip)
+    # must FAIL, not pass vacuously (all([]) is True in Python).
+    # 実評価が1つも無い .expect は空虚 PASS にせず FAIL させる（all([])==True 対策）。
+    evaluated = [c for c in checks if not c.get("skipped")]
+    if not evaluated:
+        checks.append({"name": "no assertions evaluated", "pass": False,
+                       "detail": "expect file has no evaluable assertion"})
     all_pass = all(c["pass"] for c in checks)
     return checks, all_pass
 
@@ -240,13 +264,26 @@ def run_scenario(args: argparse.Namespace) -> int:
     (bundle / "console.err").write_text(r.stderr)
     (bundle / "console.log").write_text(r.stdout + r.stderr)
 
+    # Guardrail: every scenario injects at least one event, so events.jsonl must
+    # exist and be non-empty. A target that is not wired for scripted input (e.g.
+    # an emulator entry that ignores argv[3]/SIL_EMU_EVENTS) would inject NOTHING
+    # and could otherwise masquerade as a passing run on exit==0 — fail it loudly.
+    # ガードレール: シナリオは必ず1事象以上注入するので events.jsonl は非空のはず。台本入力
+    # 未配線のターゲット（argv[3]/SIL_EMU_EVENTS を無視）は何も注入せず exit==0 で偽合格しうる。
+    injected = events.exists() and events.stat().st_size > 0
+    inject_check = {"name": "input injected (events.jsonl non-empty)", "pass": injected,
+                    "detail": f"{events.stat().st_size if events.exists() else 0} bytes"
+                              + ("" if injected else f" — is {exe.name} wired for scripted input?")}
+
     expect = Path(args.expect) if args.expect else scn.with_suffix(".expect")
     if expect.exists():
         checks, verdict = _eval_expect(expect, r.stdout, r.stderr, r.returncode)
     else:
-        console.info(f"(no .expect at {expect.name} — verdict = exit code only)")
+        console.info(f"(no .expect at {expect.name} — verdict = injection + exit code)")
         checks = [{"name": "exit == 0", "pass": r.returncode == 0, "detail": f"got {r.returncode}"}]
         verdict = (r.returncode == 0)
+    checks.insert(0, inject_check)
+    verdict = bool(verdict and injected)
 
     results = {
         "gate": "scenario", "milestone": f"scn_{scn.stem}", "kind": "scenario",
