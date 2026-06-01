@@ -181,11 +181,13 @@ static inline esp_err_t ledc_channel_config(const ledc_channel_config_t* ledc_co
 
 // Set channel duty (latched on next ledc_update_duty)
 // チャンネルのデューティを設定（次の ledc_update_duty で反映）
+// SIL: route motor channels (0..3) to the virtual board → Plant. 8-bit full scale.
+// SIL: モータ channel(0..3) を仮想ボード→Plant へ。8bit フルスケール。
+void sil_board_ledc_set_duty(int channel, uint32_t duty, uint32_t max_duty);
 static inline esp_err_t ledc_set_duty(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t duty)
 {
     (void)speed_mode;
-    (void)channel;
-    (void)duty;
+    sil_board_ledc_set_duty((int)channel, duty, 255u);   // StampFly motors: 8-bit
     return ESP_OK;
 }
 

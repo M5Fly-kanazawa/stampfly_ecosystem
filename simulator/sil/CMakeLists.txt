@@ -280,6 +280,8 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/emu/emu_main.cpp
     ${EMU_FW_SRCS}
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp     # E1: BMI270 + motors → Plant
+    plant/plant.cpp                                           # MuJoCo physics plant
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
     compat/clock_shim.cpp
@@ -287,6 +289,8 @@ if(SIL_BUILD_EMU)
   # esp_idf_host + compat FIRST so the shim headers win over anything else.
   # esp_idf_host ＋ compat を最優先にしてシムヘッダを優先解決させる。
   target_include_directories(emu_vehicle_new BEFORE PRIVATE
-    ${EMU_HOST} ${SIL_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos ${EMU_FW_INCS})
-  target_link_libraries(emu_vehicle_new PRIVATE Threads::Threads)
+    ${EMU_HOST} ${SIL_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_FW_INCS})
+  target_link_libraries(emu_vehicle_new PRIVATE Threads::Threads mujoco)
 endif()

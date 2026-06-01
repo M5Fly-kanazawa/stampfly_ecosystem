@@ -120,6 +120,13 @@ typedef struct spi_master_bus_t* spi_master_bus_handle_t;
 // SPI device handle (opaque) / SPI デバイスハンドル（不透明）
 typedef struct spi_device_t* spi_device_handle_t;
 
+// SIL: the handle carries its chip-select so a transaction routes to the right
+// virtual chip. sil_board_spi_transfer() is defined in devices/virtual_board.cpp.
+// SIL: ハンドルが CS を持ち、トランザクションを仮想チップへ振り分ける。
+#include <stdlib.h>   // malloc/free for the device handle
+struct spi_device_t { int cs; };
+int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes);
+
 /* ------------------------------------------------------------------------- */
 /* Transaction / トランザクション                                             */
 /* ------------------------------------------------------------------------- */
@@ -240,11 +247,14 @@ static inline esp_err_t spi_bus_add_device(spi_host_device_t host_id,
                                            spi_device_handle_t* handle)
 {
     (void)host_id;
-    (void)dev_config;
     if (handle != NULL) {
-        // Non-NULL sentinel so NULL-checks in the firmware pass.
-        // ファームの NULL チェックを通すための非 NULL センチネル。
-        *handle = (spi_device_handle_t)(uintptr_t)0x1;
+        // Allocate a handle that remembers the device's chip-select, so
+        // spi_device_transmit can route the transaction to the right chip.
+        // CS を覚えるハンドルを確保し、transmit で正しいチップへ振り分ける。
+        struct spi_device_t* dev =
+            (struct spi_device_t*)malloc(sizeof(struct spi_device_t));
+        dev->cs = (dev_config != NULL) ? dev_config->spics_io_num : -1;
+        *handle = dev;
     }
     return ESP_OK;
 }
@@ -264,12 +274,16 @@ static inline esp_err_t spi_bus_remove_device(spi_device_handle_t handle)
 static inline esp_err_t spi_device_transmit(spi_device_handle_t handle,
                                             spi_transaction_t* trans)
 {
-    (void)handle;
-    if (trans != NULL && trans->rx_buffer != NULL &&
-        !(trans->flags & SPI_TRANS_USE_RXDATA)) {
-        size_t rx_bits = trans->rxlength != 0 ? trans->rxlength : trans->length;
-        memset(trans->rx_buffer, 0, rx_bits / 8);
-    }
+    if (trans == NULL) return ESP_OK;
+    // Route the full-duplex transfer to the device's virtual chip (by CS).
+    // 全二重転送をデバイスの仮想チップ（CS）へ振り分ける。
+    const uint8_t* tx = (trans->flags & SPI_TRANS_USE_TXDATA)
+                            ? trans->tx_data : (const uint8_t*)trans->tx_buffer;
+    uint8_t* rx = (trans->flags & SPI_TRANS_USE_RXDATA)
+                      ? trans->rx_data : (uint8_t*)trans->rx_buffer;
+    size_t nbytes = (size_t)(trans->length / 8);
+    int cs = (handle != NULL) ? ((struct spi_device_t*)handle)->cs : -1;
+    sil_board_spi_transfer(cs, tx, rx, nbytes);
     return ESP_OK;
 }
 
