@@ -154,6 +154,12 @@ done
 
 ## 7. M2 後の道（空中ホバー動画）
 
+> **→ 検証済みの完全な手順は `simulator/sil/docs/hover_resume.md` を正とする**（実コード裏取り済み）。
+> 以下の §7 原案は**2点誤りがあり hover_resume.md で訂正済み**: ①ALT_HOLD のスロットルは絶対高度でなく
+> 上昇/下降**レート**（目標へは上げ続ける）。②1.12 の climb は「Vbat 一定」結合でなく固定 FF バイアス
+> （既定 hover 推定は vbat 無視）→ 閉ループが71%余裕で吸収、**HOVER_THRUST_CORRECTION は変更不要**。
+> また `hover_espnow.scn` はサブホバー接地維持なので**新規 `hover_alt.scn`**（alt=1+離陸→中央保持）が要る。
+
 ToF が距離を返せたら:
 1. ファーム高度推定（ESKF SENSOR_TOF, 出荷 config で既に USE_TOF=true）が有意になる。
 2. **ALTITUDE_HOLD をシナリオで起動**: `CTRL_FLAG_ALT_MODE=0x08`（ControlPacket byte[11] bit3）を
@@ -165,8 +171,7 @@ ToF が距離を返せたら:
 5. 注意: `HOVER_THRUST_CORRECTION=1.12` は実機の電池サグ前提。emu は INA3221 で Vbat 一定ゆえ
    緩い climb/sink の可能性 → 数値裏付けの上で要調整（CLAUDE.md 制御パラメータ規約）。
 
-**保留中のユーザー判断**: ToF 完遂で出荷 config（USE_TOF=true）維持 vs baro config flip
-（USE_BAROMETER=true/USE_TOF=false, Code Identity 例外）。M2 が通れば前者で行ける見込み。
+**config 判断 = 解決**: M2 が通ったので出荷 config（USE_TOF=true）を維持する（baro flip 不要、Code Identity 維持）。
 
 ---
 
