@@ -81,3 +81,9 @@ uint32_t ulTaskNotifyTake(BaseType_t clear_on_exit, TickType_t timeout);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
+// SIL additions: non-pinned create (→ core 0) + stack high-water (stub).
+static inline BaseType_t xTaskCreate(TaskFunction_t fn, const char* name, uint32_t stack,
+                                     void* param, UBaseType_t prio, TaskHandle_t* handle)
+{ return xTaskCreatePinnedToCore(fn, name, stack, param, prio, handle, 0); }
+static inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t h) { (void)h; return 4096; }

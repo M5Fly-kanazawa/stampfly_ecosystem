@@ -31,6 +31,7 @@
 // から再エクスポートして透過的な可用性を再現する。
 #include "esp_heap_caps.h"
 #include "esp_rom_sys.h"    // esp_rom_delay_us / esp_rom_printf (broadly available)
+#include "esp_err.h"
 
 // Log levels map to stderr prints. ESP_LOGD/V are silenced by default.
 // ログレベルは stderr 出力にマップ。ESP_LOGD/V は既定で無音。
@@ -39,3 +40,10 @@
 #define ESP_LOGE(tag, fmt, ...) fprintf(stderr, "[ERR]  %s: " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGD(tag, fmt, ...) ((void)0)
 #define ESP_LOGV(tag, fmt, ...) ((void)0)
+
+// SIL addition: log levels (old firmware uses esp_log_level_t / esp_log_level_set).
+typedef enum {
+    ESP_LOG_NONE = 0, ESP_LOG_ERROR = 1, ESP_LOG_WARN = 2,
+    ESP_LOG_INFO = 3, ESP_LOG_DEBUG = 4, ESP_LOG_VERBOSE = 5,
+} esp_log_level_t;
+static inline void esp_log_level_set(const char* tag, esp_log_level_t level) { (void)tag; (void)level; }

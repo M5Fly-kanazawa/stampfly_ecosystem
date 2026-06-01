@@ -349,3 +349,22 @@ static inline esp_err_t esp_wifi_get_mac(wifi_interface_t interface,
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+// --- SIL additions: WiFi event base + station events (old firmware comm) -----
+#include "esp_event.h"
+#ifndef WIFI_EVENT
+#define WIFI_EVENT ((esp_event_base_t)"WIFI_EVENT")
+#endif
+enum {
+    WIFI_EVENT_WIFI_READY = 0, WIFI_EVENT_SCAN_DONE = 1,
+    WIFI_EVENT_STA_START = 2, WIFI_EVENT_STA_STOP = 3,
+    WIFI_EVENT_STA_CONNECTED = 4, WIFI_EVENT_STA_DISCONNECTED = 5,
+};
+typedef struct {
+    uint8_t ssid[33]; uint8_t ssid_len; uint8_t bssid[6];
+    uint8_t channel; int authmode; uint16_t aid;
+} wifi_event_sta_connected_t;
+typedef struct {
+    uint8_t ssid[33]; uint8_t ssid_len; uint8_t bssid[6];
+    uint8_t reason; int8_t rssi;
+} wifi_event_sta_disconnected_t;

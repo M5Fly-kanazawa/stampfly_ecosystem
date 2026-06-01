@@ -293,4 +293,50 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_FW_INCS})
   target_link_libraries(emu_vehicle_new PRIVATE Threads::Threads mujoco)
+
+  # ---------------------------------------------------------------------------
+  # Second firmware: firmware/vehicle (OLD, 87 real flights, complete). Proves
+  # the emulator is firmware-agnostic — a DIFFERENT codebase (own drivers, own
+  # services, own state machine) runs on the SAME libsf_emu (host platform +
+  # virtual board + Plant). The SIL infra (plant/virtual_board) keeps using
+  # vehicle_new's sf_core/sf_math types; the firmware boundary is raw chip bytes,
+  # so there is no firmware coupling (no header-name collisions — verified).
+  # 2本目: 旧ファーム firmware/vehicle（完成・87飛行）。別実装が同じ基盤で走る＝
+  # ファーム非依存の実証。SIL基盤は vehicle_new の sf_core/sf_math を使い続け、
+  # ファーム境界は raw チップバイトなので結合なし。
+  # ---------------------------------------------------------------------------
+  set(VV ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/vehicle)
+  file(GLOB_RECURSE EMU_VV_SRCS CONFIGURE_DEPENDS
+       ${VV}/main/*.cpp ${VV}/main/*.c
+       ${VV}/components/*.cpp ${VV}/components/*.c)
+  list(FILTER EMU_VV_SRCS EXCLUDE REGEX "/(docs|examples|test|build)/|_test\\.|/CubeIDE")
+
+  file(GLOB EMU_VV_INCS LIST_DIRECTORIES true ${VV}/components/*/include)
+  list(APPEND EMU_VV_INCS
+       ${VV}/components/sf_hal_vl53l3cx/include/vl53lx
+       ${VV}/components/sf_hal_vl53l3cx/src
+       ${VV}/components/sf_hal_vl53l3cx/src/vl53lx
+       ${VV}/components/sf_hal_bmi270/src
+       ${VV}/components/sf_hal_pmw3901/src
+       ${VV}/main
+       ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/common/protocol/include  # shared protocol
+       # SIL infra (Plant/virtual_board) types — no collision with old firmware:
+       ${VN}/components/sf_core/include ${VN}/components/sf_math/include)
+
+  add_executable(emu_vehicle
+    ${CMAKE_CURRENT_SOURCE_DIR}/emu/emu_main_generic.cpp
+    ${EMU_VV_SRCS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c   # missing fw platform fn
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp    # workshop-only weak symbol
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
+    plant/plant.cpp
+    rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp
+    compat/clock_shim.cpp
+    compat/nvs_shim.cpp)
+  target_include_directories(emu_vehicle BEFORE PRIVATE
+    ${EMU_HOST} ${SIL_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_VV_INCS})
+  target_link_libraries(emu_vehicle PRIVATE Threads::Threads mujoco)
 endif()

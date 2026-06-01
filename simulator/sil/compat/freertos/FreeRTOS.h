@@ -33,6 +33,7 @@
 // including FreeRTOS.h (event groups, register masks) gets them.
 // BIT マクロを FreeRTOS.h から再エクスポート（ESP-IDF と同様に広く使えるように）。
 #include "esp_bit_defs.h"
+#include "esp_err.h"   // esp_err_t is ubiquitous on ESP-IDF; expose it broadly
 
 typedef int32_t  BaseType_t;
 typedef uint32_t UBaseType_t;
@@ -62,3 +63,6 @@ typedef uint32_t TickType_t;
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 #endif
+
+// SIL: old-firmware files use xTaskGetTickCount etc. via FreeRTOS.h alone.
+#include "freertos/task.h"

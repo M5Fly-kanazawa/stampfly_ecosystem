@@ -62,3 +62,9 @@ esp_err_t nvs_get_blob(nvs_handle_t handle, const char* key, void* out_value, si
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
+// --- SIL additions: string get/set (old firmware CLI param store) ----------
+static inline esp_err_t nvs_set_str(nvs_handle_t h, const char* key, const char* value)
+{ (void)h; (void)key; (void)value; return ESP_OK; }
+static inline esp_err_t nvs_get_str(nvs_handle_t h, const char* key, char* out, size_t* len)
+{ (void)h; (void)key; if (out && len && *len) out[0] = 0; return ESP_ERR_NVS_NOT_FOUND; }
