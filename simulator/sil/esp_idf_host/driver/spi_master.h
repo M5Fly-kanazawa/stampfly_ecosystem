@@ -27,6 +27,7 @@
 #include "esp_err.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 
 #ifdef __cplusplus

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 // Error code type (ESP-IDF uses a signed int)
 // エラーコード型（ESP-IDF は符号付き int）
@@ -36,6 +36,11 @@ typedef int32_t esp_err_t;
 #define ESP_ERR_NOT_FOUND           0x105
 #define ESP_ERR_NOT_SUPPORTED       0x106
 #define ESP_ERR_TIMEOUT             0x107
+#define ESP_ERR_INVALID_RESPONSE    0x108
+#define ESP_ERR_INVALID_CRC         0x109
+#define ESP_ERR_INVALID_VERSION     0x10a
+#define ESP_ERR_INVALID_MAC         0x10b
+#define ESP_ERR_NOT_FINISHED        0x10c
 
 // NVS-specific codes referenced by params / calibration
 // params・calibration が参照する NVS 固有コード
@@ -53,8 +58,8 @@ static inline const char* esp_err_to_name(esp_err_t err)
 
 // On host, a failed check aborts loudly (mirrors ESP_ERROR_CHECK intent)
 // ホストでは失敗時に大きく abort する（ESP_ERROR_CHECK の意図を踏襲）
-#include <cstdio>
-#include <cstdlib>
+#include <stdio.h>
+#include <stdlib.h>
 #define ESP_ERROR_CHECK(x)                                                   \
     do {                                                                     \
         esp_err_t __err_rc = (x);                                           \

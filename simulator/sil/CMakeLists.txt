@@ -229,3 +229,64 @@ if(SIL_BUILD_NOISE_TEST)
   add_executable(noise_test smoke/noise_test.cpp)
   target_include_directories(noise_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plant)
 endif()
+
+# -----------------------------------------------------------------------------
+# StampFly Emulator — run the REAL firmware app_main() on the host.
+#
+# The ESP-IDF host platform (esp_idf_host/ + compat/) replaces the SoC; the
+# StampFly chips/board are emulated as virtual devices (E1+). The firmware is
+# compiled UNMODIFIED and firmware-agnostic (E5 builds firmware/vehicle the same
+# way). E0 goal: app_main() links and all 14 tasks run on the cooperative
+# scheduler. The shim chain is C++-only (esp_err.h uses <cstdint>), so the .c
+# HAL/driver sources are compiled as C++.
+#
+# StampFly エミュレータ — 実ファームの app_main() をホストで走らせる。esp_idf_host/＋
+# compat/ が SoC を肩代わりし、チップ/ボードは仮想デバイス（E1+）。ファームは無改変・
+# ファーム非依存（E5 で firmware/vehicle も同様）。.c も C++ としてコンパイル。
+# -----------------------------------------------------------------------------
+option(SIL_BUILD_EMU "Build the StampFly emulator (real firmware app_main on host)" ON)
+if(SIL_BUILD_EMU)
+  find_package(Threads REQUIRED)
+  set(EMU_HOST ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host)
+
+  # All firmware sources under main/tasks/components, EXCLUDING the VL53L3CX
+  # vendor docs/ (STM32 CubeIDE examples) and any examples/tests/build output.
+  # main/tasks/components の全ソース。VL53 の docs/（STM32例）・examples/test は除外。
+  file(GLOB_RECURSE EMU_FW_SRCS CONFIGURE_DEPENDS
+       ${VN}/main/*.cpp ${VN}/main/*.c
+       ${VN}/tasks/*.cpp ${VN}/tasks/*.c
+       ${VN}/components/*.cpp ${VN}/components/*.c)
+  list(FILTER EMU_FW_SRCS EXCLUDE REGEX "/(docs|examples|test|build)/|_test\\.|/CubeIDE")
+
+  # The C HAL/driver sources (BMI270, PMW3901, VL53L3CX BareDriver) compile as C
+  # against the C-compatible host shims — exactly as on real ESP-IDF. The .cpp
+  # firmware compiles as C++. (Earlier attempt compiled .c as C++ and hit
+  # extern "C" + C++-stdlib clashes; C-compiling the C drivers is the right fix.)
+  # C の HAL/ドライバは C 互換シムに対し C でコンパイル（実 ESP-IDF と同じ）。
+  set(CMAKE_C_STANDARD 11)
+
+  # Public include dirs of every component + the driver-internal subdirs.
+  # 各コンポーネントの公開 include ＋ ドライバ内部の src サブディレクトリ。
+  file(GLOB EMU_FW_INCS LIST_DIRECTORIES true ${VN}/components/*/include)
+  list(APPEND EMU_FW_INCS
+       ${VN}/components/sf_hal_vl53l3cx/include/vl53lx
+       ${VN}/components/sf_hal_vl53l3cx/src
+       ${VN}/components/sf_hal_vl53l3cx/src/vl53lx
+       ${VN}/components/sf_hal_bmi270/src
+       ${VN}/components/sf_hal_pmw3901/src
+       ${VN}/main ${VN}/tasks)
+
+  add_executable(emu_vehicle_new
+    ${CMAKE_CURRENT_SOURCE_DIR}/emu/emu_main.cpp
+    ${EMU_FW_SRCS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
+    rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp
+    compat/clock_shim.cpp
+    compat/nvs_shim.cpp)
+  # esp_idf_host + compat FIRST so the shim headers win over anything else.
+  # esp_idf_host ＋ compat を最優先にしてシムヘッダを優先解決させる。
+  target_include_directories(emu_vehicle_new BEFORE PRIVATE
+    ${EMU_HOST} ${SIL_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos ${EMU_FW_INCS})
+  target_link_libraries(emu_vehicle_new PRIVATE Threads::Threads)
+endif()

@@ -22,7 +22,15 @@
 
 #pragma once
 
-#include <cstdio>
+#include <stdio.h>
+
+// esp_heap_caps is broadly available on ESP-IDF (drivers call heap_caps_malloc
+// with MALLOC_CAP_DMA without an explicit include). Re-export via esp_log.h,
+// which the HAL .c drivers include, to mirror that transitive availability.
+// ESP-IDF では heap_caps が広く使えるので、HAL ドライバが include する esp_log.h
+// から再エクスポートして透過的な可用性を再現する。
+#include "esp_heap_caps.h"
+#include "esp_rom_sys.h"    // esp_rom_delay_us / esp_rom_printf (broadly available)
 
 // Log levels map to stderr prints. ESP_LOGD/V are silenced by default.
 // ログレベルは stderr 出力にマップ。ESP_LOGD/V は既定で無音。

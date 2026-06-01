@@ -21,9 +21,10 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus

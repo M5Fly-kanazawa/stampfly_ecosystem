@@ -21,8 +21,8 @@
 #pragma once
 
 #include "esp_err.h"
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {

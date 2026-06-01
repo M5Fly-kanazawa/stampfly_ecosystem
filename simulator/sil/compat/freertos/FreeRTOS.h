@@ -26,7 +26,13 @@
 
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
+#include <stdbool.h>
+
+// BIT(n)/BIT0..BIT31 — widely available on ESP-IDF; re-export here so any file
+// including FreeRTOS.h (event groups, register masks) gets them.
+// BIT マクロを FreeRTOS.h から再エクスポート（ESP-IDF と同様に広く使えるように）。
+#include "esp_bit_defs.h"
 
 typedef int32_t  BaseType_t;
 typedef uint32_t UBaseType_t;
@@ -45,9 +51,14 @@ typedef uint32_t TickType_t;
 // SIL の仮想時計では 1 tick = 1 ms。
 #define pdMS_TO_TICKS(ms)    ((TickType_t)(ms))
 
-// Pull in the passive data-structure primitives so any file including
+// Pull in the passive data-structure primitives so any C++ file including
 // FreeRTOS.h gets the semaphore/queue surface (as on ESP-IDF in practice).
-// FreeRTOS.h を include したファイルがセマフォ/キュー一式を得られるよう、
-// 受動プリミティブを取り込む（実運用の ESP-IDF と同様）。
+// These are std::-backed (C++ only); the C sensor drivers that include
+// FreeRTOS.h only need the base types + task API, so guard them out for C.
+// FreeRTOS.h を include した C++ ファイルがセマフォ/キュー一式を得られるよう
+// 取り込む（std:: 実装ゆえ C++ 専用）。C のセンサドライバは基本型＋タスク API
+// だけ要るので C ではガードアウトする。
+#ifdef __cplusplus
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
+#endif

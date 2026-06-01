@@ -24,7 +24,7 @@
 
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include "esp_err.h"
 
 // Reuse shared port constants and the new master API.

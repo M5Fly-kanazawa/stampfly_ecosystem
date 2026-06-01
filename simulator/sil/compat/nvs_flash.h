@@ -21,6 +21,7 @@
 #pragma once
 
 #include "esp_err.h"
+#include "nvs.h"   // ESP-IDF's nvs_flash.h transitively exposes the nvs.h API
 
 #ifdef __cplusplus
 extern "C" {

@@ -24,8 +24,8 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
+#include <stdint.h>
+#include <stddef.h>
 #include "esp_err.h"
 
 // Opaque handle (an id into the in-memory store)
