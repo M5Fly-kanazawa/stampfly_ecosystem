@@ -41,6 +41,7 @@ struct Event {
     // rc
     uint16_t thr = 0, roll = 0, pitch = 0, yaw = 0;
     uint8_t  arm = 0;
+    uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
 
@@ -232,6 +233,16 @@ int sil_scenario_load(const char* path)
                 }
             }
             e.hold_ms = (int)hold; e.rate_hz = (int)rate;
+            // OPTIONAL 4th token: alt (1 => ALTITUDE_HOLD). Only reachable after
+            // hold_ms and rate_hz are present, so always write the full form when
+            // requesting alt: `rc <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>`.
+            // 任意の4番目トークン alt（1 で高度保持）。hold_ms・rate_hz の後にのみ到達するため、
+            // alt を出す行は完全形で書くこと。
+            long alt = 0;
+            if (iss >> alt) {
+                if (alt != 0 && alt != 1) { err(path, lineno, "rc <alt> must be 0 or 1"); return -1; }
+            }
+            e.alt = (uint8_t)alt;
 
         } else if (ch == "rc_ramp") {
             std::string field; long from, to, step, rate, arm;
@@ -247,6 +258,13 @@ int sil_scenario_load(const char* path)
             e.ramp_from = (uint16_t)from; e.ramp_to = (uint16_t)to;
             e.ramp_step = (int)(step < 0 ? -step : step);  // magnitude; direction from from/to
             e.rate_hz = (int)rate; e.arm = (uint8_t)arm;
+            // OPTIONAL 7th token: alt (1 => ALTITUDE_HOLD), after the 6 required.
+            // 任意の7番目トークン alt（1 で高度保持）。必須6個の後。
+            long ralt = 0;
+            if (iss >> ralt) {
+                if (ralt != 0 && ralt != 1) { err(path, lineno, "rc_ramp <alt> must be 0 or 1"); return -1; }
+            }
+            e.alt = (uint8_t)ralt;
 
         } else if (ch == "key") {
             std::string rest;
@@ -296,7 +314,8 @@ void sil_scenario_driver_task(void* /*arg*/)
         switch (e.ch) {
             case Channel::Rc: {
                 const int period = period_ms(e.rate_hz);
-                const uint8_t flags = e.arm ? sil::kFlagArm : 0;
+                const uint8_t flags = (e.arm ? sil::kFlagArm : 0) |
+                                      (e.alt ? sil::kFlagAltMode : 0);
                 if (e.hold_ms <= 0) {
                     sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {
@@ -313,7 +332,8 @@ void sil_scenario_driver_task(void* /*arg*/)
             }
             case Channel::RcRamp: {
                 const int period = period_ms(e.rate_hz);
-                const uint8_t flags = e.arm ? sil::kFlagArm : 0;
+                const uint8_t flags = (e.arm ? sil::kFlagArm : 0) |
+                                      (e.alt ? sil::kFlagAltMode : 0);
                 const int astep = (e.ramp_to >= e.ramp_from) ? e.ramp_step : -e.ramp_step;
                 for (long v = e.ramp_from;
                      (astep > 0) ? (v <= e.ramp_to) : (v >= e.ramp_to);

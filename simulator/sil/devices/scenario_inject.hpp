@@ -37,6 +37,11 @@ constexpr uint16_t kAdcCentre = 2048;
 // CTRL_FLAG_ARM bit / アームフラグ。
 constexpr uint8_t kFlagArm = 0x01;
 
+// CTRL_FLAG_ALT_MODE bit — selects ALTITUDE_HOLD on the firmware side.
+// Must match controller_comm.hpp:38 (CTRL_FLAG_ALT_MODE = 0x08).
+// CTRL_FLAG_ALT_MODE ビット — 本体側で ALTITUDE_HOLD を選択。controller_comm.hpp:38 と一致。
+constexpr uint8_t kFlagAltMode = 0x08;
+
 // Build the 14-byte ControlPacket into `out` (must hold >= 14 bytes).
 // Layout: [0..2]=drone_mac, [3..4]=throttle, [5..6]=roll, [7..8]=pitch,
 // [9..10]=yaw, [11]=flags, [12]=reserved, [13]=checksum (sum of bytes 0..12).
