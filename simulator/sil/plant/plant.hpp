@@ -42,6 +42,7 @@
 #include "sf_math.hpp"
 #include "frames.hpp"
 #include "data_types.hpp"
+#include "sensor_noise.hpp"
 
 namespace sil {
 
@@ -76,6 +77,7 @@ public:
         float health[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< per-motor thrust gain (1=healthy)
         sf::math::Vec3 wind_force_ned = {0.0f, 0.0f, 0.0f}; ///< external wind force NED [N]
         float flow_rad_per_pixel = 0.00222f; ///< PMW3901 rad per count (matches ESKF)
+        SensorNoise::Config noise; ///< IMU sensor noise (N0, default OFF). RESET_PLAN §13
     };
 
     /// Ground-truth state in StampFly conventions (NED world, FRD body).
@@ -156,6 +158,7 @@ private:
     mjModel* m_ = nullptr;
     mjData*  d_ = nullptr;
     Config cfg_;
+    SensorNoise noise_;  ///< IMU noise model (seeded; advanced each step). §13 P5
 
     float motor_duty_[4]   = {0.0f, 0.0f, 0.0f, 0.0f}; ///< actual (lagged) duty
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty

@@ -27,6 +27,10 @@ COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gat
 
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
+NOISE_LEVELS = ["off", "n0"]
+# Default sensor-noise level per milestone (RESET_PLAN §13): noise milestones run N0.
+# マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で走る。
+MILESTONE_NOISE = {"P5": "n0", "P6": "n0", "P7": "n0"}
 
 
 # --- path helpers / パスヘルパ -------------------------------------------------
@@ -64,6 +68,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("run", help="Run the closed loop and write the bundle")
     p.add_argument("-m", "--milestone", default="P1")
     p.add_argument("-e", "--estimator", choices=list(ESTIMATORS), default="eskf")
+    p.add_argument("--noise", choices=NOISE_LEVELS, default="off", help="sensor noise level (§13)")
+    p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
     p.set_defaults(func=run_run)
 
     p = sub.add_parser("video", help="Render the review video for a milestone bundle")
@@ -89,6 +95,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("milestone", help="build → run → video → gate in one shot")
     p.add_argument("-m", "--milestone", default="P1")
     p.add_argument("-e", "--estimator", choices=list(ESTIMATORS), default="eskf")
+    # default None → resolved per-milestone (MILESTONE_NOISE) unless the user overrides.
+    # 既定 None → ユーザー指定が無ければマイルストーン別(MILESTONE_NOISE)で解決。
+    p.add_argument("--noise", choices=NOISE_LEVELS, default=None, help="sensor noise level (§13)")
+    p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
     p.set_defaults(func=run_milestone)
 
     parser.set_defaults(func=lambda a: (parser.print_help(), 0)[1])
@@ -122,10 +132,14 @@ def run_run(args: argparse.Namespace) -> int:
     bundle = _bundle_dir(args.milestone)
     bundle.mkdir(parents=True, exist_ok=True)
     et = ESTIMATORS[args.estimator]
-    console.info(f"Running closed loop (milestone={args.milestone}, estimator={args.estimator})...")
-    # argv: model, bundle, estimator_type, milestone (labels the results.json bundle).
-    # 引数: モデル, バンドル, 推定器種別, マイルストーン(results.json のラベル)。
-    r = subprocess.run([str(exe), str(_model()), str(bundle), str(et), str(args.milestone)])
+    noise = getattr(args, "noise", "off") or "off"
+    seed = getattr(args, "seed", 12345)
+    console.info(f"Running closed loop (milestone={args.milestone}, "
+                 f"estimator={args.estimator}, noise={noise})...")
+    # argv: model, bundle, estimator_type, milestone, noise_level, seed.
+    # 引数: モデル, バンドル, 推定器種別, マイルストーン, ノイズ準位, シード。
+    r = subprocess.run([str(exe), str(_model()), str(bundle), str(et),
+                        str(args.milestone), noise, str(seed)])
     if r.returncode == 0:
         console.success(f"Bundle written to {bundle}")
     else:
@@ -272,6 +286,10 @@ def run_milestone(args: argparse.Namespace) -> int:
     # 無関係な SIL ターゲットが milestone を壊さないよう、そのターゲットだけビルドする。
     if not getattr(args, "target", None):
         args.target = "hover_smoke"
+    # Resolve the per-milestone sensor-noise default unless the user set --noise.
+    # ユーザーが --noise 指定しなければマイルストーン別の既定ノイズを解決。
+    if getattr(args, "noise", None) is None:
+        args.noise = MILESTONE_NOISE.get(str(args.milestone).upper(), "off")
     # P4 is the side-by-side comparison milestone: build once, then run BOTH
     # estimators and render one compare video (run_compare gates at the end).
     # P4 は並置比較マイルストーン: 1回ビルドし両推定器を走らせ1本の比較動画を描く。

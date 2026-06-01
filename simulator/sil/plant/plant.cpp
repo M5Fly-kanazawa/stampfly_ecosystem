@@ -57,6 +57,10 @@ bool Plant::init(const char* model_path, const Config& cfg)
     pos_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_pos");
     vel_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_vel");
 
+    // Seed the sensor-noise model (default OFF). Deterministic per cfg.noise.seed.
+    // センサノイズモデルをシード（既定 OFF）。cfg.noise.seed で決定論的。
+    noise_.init(cfg_.noise);
+
     // Start with motors off and compute sensordata for the initial pose.
     // モータ停止で開始し、初期姿勢のセンサ値を計算する。
     for (int i = 0; i < m_->nu; ++i) d_->ctrl[i] = 0.0;
@@ -181,6 +185,11 @@ void Plant::step(float dt)
     f[3] = torque_world.x; f[4] = torque_world.y; f[5] = torque_world.z;
 
     mj_step(m_, d_);
+
+    // Advance the IMU noise one step (bias random walk + fresh white sample) so the
+    // next imu() reads this step's noise. No-op when noise is disabled.
+    // IMU ノイズを1ステップ進める（バイアスRW＋新しい白色サンプル）。無効時は無操作。
+    noise_.advance(dt);
 }
 
 // -----------------------------------------------------------------------------
@@ -224,6 +233,11 @@ sf::ImuData Plant::imu() const
     sf::ImuData out{};
     out.accel[0] = accel_frd.x; out.accel[1] = accel_frd.y; out.accel[2] = accel_frd.z;
     out.gyro[0]  = gyro_frd.x;  out.gyro[1]  = gyro_frd.y;  out.gyro[2]  = gyro_frd.z;
+    // Layer the N0 sensor noise (bias + white) on the clean sample. No-op if disabled
+    // → the clean path stays byte-identical. RESET_PLAN §13 P5.
+    // クリーンサンプルに N0 ノイズ（バイアス＋白色）を載せる。無効時は無操作＝クリーン経路は不変。
+    noise_.applyAccel(out.accel);
+    noise_.applyGyro(out.gyro);
     out.temperature = 25.0f;
     out.timestamp = (uint32_t)(d_->time * 1e6);
     return out;

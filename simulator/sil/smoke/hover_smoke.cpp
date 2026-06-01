@@ -35,6 +35,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "scheduler.hpp"
 #include "topics.hpp"
@@ -56,6 +57,7 @@ using sf::math::Vec3;
 namespace {
 constexpr int64_t kSimDurationUs = 5600000;   // 5.6 s
 constexpr float kGroundZ = 0.013f;            // body rest height on the ground (ENU up)
+constexpr float kG2AttRmseMaxDeg = 6.0f;      // G2: estimate-vs-truth attitude RMSE bound
 
 // Closed-loop ALT_HOLD schedule. The throttle stick commands a vertical RATE:
 // climb_rate = (throttle − 0.5)·2·max_climb_rate(0.5), so throttle 0.9 → +0.4 m/s,
@@ -100,6 +102,11 @@ float g_yaw_cmd_now = 0.0f;
 // 中央スティック窓 [T_HOVER, T_LAND) の高度保持バンド: ヨー中に高度が下がらない証拠。
 float g_hold_alt_min = 1e9f;
 float g_hold_alt_max = -1e9f;
+
+// G2 attitude-tracking accumulators (estimate vs truth, settled airborne window).
+// G2 姿勢追従の累積（推定 vs 真値、整定後の飛行窓）。
+double g_att_err2_sum = 0.0;   // Σ error² [deg²]
+long   g_att_err_n    = 0;     // sample count
 
 float tiltDeg(const sf::math::Quat& q_nb)
 {
@@ -223,10 +230,32 @@ void physics(int64_t now_us)
     }
     g_final_alt = alt;
 
+    // G2 — estimate tracking: angle between the estimated and true attitude
+    // quaternions [deg], accumulated over the settled airborne window [1 s, T_LAND).
+    // The startup gyro/accel bias is where ESKF (estimates BG/BA) pulls ahead of the
+    // complementary filter (no bias state).
+    // G2 — 推定追従: 推定姿勢と真値姿勢クォータニオン間の角度[deg]を整定後の飛行窓で累積。
+    // 起動バイアスにより ESKF（BG/BA を推定）が相補（バイアス状態なし）より優位になる箇所。
+    sf::StateEstimate est = sf::estimate_state.latest();
+    sf::math::Quat qe(est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]);
+    const float qe_n2 = qe.w * qe.w + qe.x * qe.x + qe.y * qe.y + qe.z * qe.z;
+    if (qe_n2 > 1e-6f && t >= 1.0f && t < T_LAND) {
+        // Roll/pitch tracking error [deg] (gravity-observable attitude — the channel
+        // the gyro/accel bias perturbs). Uses the same signed rollPitchDeg as the
+        // recorder, so estimate and truth share one convention (yaw has no absolute
+        // reference, so it is excluded).
+        // ロール/ピッチ追従誤差[deg]（重力で観測できる姿勢＝バイアスが効く軸）。記録と同じ
+        // 符号付き rollPitchDeg を使い推定と真値の規約を一致させる（ヨーは絶対基準が無く除外）。
+        float r_t, p_t, r_e, p_e;
+        rollPitchDeg(tr.q_nb, r_t, p_t);
+        rollPitchDeg(qe, r_e, p_e);
+        const double er = (double)r_e - r_t, ep = (double)p_e - p_t;
+        g_att_err2_sum += er * er + ep * ep;
+        g_att_err_n += 2;   // two components (roll, pitch)
+    }
+
     if (g_traj != nullptr && (g_rec_count++ % kRecDiv) == 0) {
         const double* q = g_plant.data()->qpos;
-        sf::StateEstimate est = sf::estimate_state.latest();
-        sf::math::Quat qe(est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]);
         // Signed roll/pitch for truth and estimate (deg, 4 decimals — the angles are
         // ~0.1°, so coarse rounding would itself look like pulses).
         // 真値・推定の符号付きロール/ピッチ（deg、小数4桁 — 角度が ~0.1° なので粗い丸めは
@@ -252,6 +281,10 @@ int main(int argc, char** argv)
     const char* out_dir = (argc > 2) ? argv[2] : nullptr;
     const int est_type = (argc > 3) ? std::atoi(argv[3]) : 0;  // 0=ESKF, 1=complementary
     const char* milestone = (argc > 4) ? argv[4] : "P1";       // review-bundle label
+    const char* noise_lvl = (argc > 5) ? argv[5] : "off";      // "off" | "n0" (RESET_PLAN §13)
+    const unsigned noise_seed =
+        (argc > 6) ? (unsigned)std::strtoul(argv[6], nullptr, 10) : 12345u;
+    const bool noise_on = (std::strcmp(noise_lvl, "off") != 0);
 
     if (out_dir != nullptr) {
         char path[1024];
@@ -304,7 +337,29 @@ int main(int argc, char** argv)
     sf::params::set_bool("eskf.use_tof", false);
     sf::params::set_bool("eskf.use_flow", false);
 
-    if (!g_plant.init(model_path)) {
+    // Plant config: enable the N0 sensor-noise model when requested (seeded for
+    // determinism). Default (no argv) → clean sensors, identical to P1–P4.
+    // Plant 構成: 要求時に N0 センサノイズを有効化（シード付き＝決定論）。既定はクリーン。
+    sil::Plant::Config plant_cfg;
+    if (noise_on) {
+        plant_cfg.noise.enable = true;
+        plant_cfg.noise.seed = noise_seed;
+        // Per-component env overrides (sweep noise terms without recompiling, like the
+        // ALT_* gain hooks). Unset → the N0 defaults in SensorNoise::Config.
+        // 成分別の env 上書き（再コンパイルせずノイズ成分を掃引）。未設定なら N0 既定。
+        auto envf = [](const char* e, float& v) {
+            const char* s = std::getenv(e);
+            if (s != nullptr) v = (float)std::atof(s);
+        };
+        envf("N_GYRO_DENS",  plant_cfg.noise.gyro_density);
+        envf("N_ACCEL_DENS", plant_cfg.noise.accel_density);
+        envf("N_GYRO_BIAS",  plant_cfg.noise.gyro_bias_sigma);
+        envf("N_ACCEL_BIAS", plant_cfg.noise.accel_bias_sigma);
+        envf("N_GYRO_RW",    plant_cfg.noise.gyro_bias_rw);
+        envf("N_ACCEL_RW",   plant_cfg.noise.accel_bias_rw);
+    }
+    printf("[flight] noise=%s seed=%u\n", noise_on ? noise_lvl : "off", noise_seed);
+    if (!g_plant.init(model_path, plant_cfg)) {
         fprintf(stderr, "[flight] plant init failed (model: %s)\n", model_path);
         return 1;
     }
@@ -326,11 +381,14 @@ int main(int argc, char** argv)
 
     scheduler.run(kSimDurationUs);
 
-    // ---- G3 verdict (full flight, from physics truth) ----
+    // ---- G2 + G3 verdict (full flight, from physics truth) ----
     const float hold_band = g_hold_alt_max - g_hold_alt_min;  // altitude sag over hold
+    const double att_rmse =
+        g_att_err_n > 0 ? std::sqrt(g_att_err2_sum / (double)g_att_err_n) : 0.0;
     printf("[flight] max_alt=%.3f m  max_tilt=%.2f deg  yaw_spin=%.2f rad/s  "
-           "yaw_after_stop=%.3f  final_alt=%.3f m  hold_band=%.3f m\n",
-           g_max_alt, g_max_tilt, g_yaw_during_spin, g_yaw_after_stop, g_final_alt, hold_band);
+           "yaw_after_stop=%.3f  final_alt=%.3f m  hold_band=%.3f m  att_rmse=%.3f deg\n",
+           g_max_alt, g_max_tilt, g_yaw_during_spin, g_yaw_after_stop, g_final_alt,
+           hold_band, att_rmse);
 
     int failures = 0;
     auto check = [&](bool ok, const char* name) {
@@ -343,8 +401,9 @@ int main(int argc, char** argv)
     check(g_yaw_after_stop < 0.2f, "yaw stopped (< 0.2 rad/s)");
     check(hold_band < 0.08f, "altitude held through yaw (band < 8 cm)");
     check(g_final_alt < 0.08f, "landed (final alt < 8 cm)");
+    check(att_rmse < kG2AttRmseMaxDeg, "estimate tracked truth (G2 att RMSE < bound)");
 
-    printf("[flight] %s — G3 takeoff->hover->yaw->stop->landing\n",
+    printf("[flight] %s — G2+G3 takeoff->hover->yaw->stop->landing\n",
            failures == 0 ? "OK" : "FAILED");
 
     if (g_traj != nullptr) { std::fclose(g_traj); g_traj = nullptr; }
@@ -354,31 +413,36 @@ int main(int argc, char** argv)
         FILE* rf = std::fopen(path, "w");
         if (rf != nullptr) {
             std::fprintf(rf,
-                "{\n  \"gate\": \"G3\",\n  \"milestone\": \"%s\",\n  \"pass\": %s,\n"
+                "{\n  \"gate\": \"G2+G3\",\n  \"milestone\": \"%s\",\n  \"pass\": %s,\n"
                 "  \"flight\": \"takeoff-hover-yaw-stop-landing\",\n"
                 "  \"duration_s\": %.1f,\n  \"estimator\": \"%s\",\n"
+                "  \"noise\": \"%s\",\n  \"noise_seed\": %u,\n"
                 "  \"metrics\": {\n"
                 "    \"max_alt_m\": %.3f,\n    \"max_tilt_deg\": %.3f,\n"
                 "    \"yaw_spin_rad_s\": %.3f,\n    \"yaw_after_stop_rad_s\": %.3f,\n"
-                "    \"alt_hold_band_m\": %.3f,\n    \"final_alt_m\": %.3f\n  },\n"
+                "    \"alt_hold_band_m\": %.3f,\n    \"final_alt_m\": %.3f,\n"
+                "    \"g2_att_rmse_deg\": %.3f\n  },\n"
                 "  \"checks\": [\n"
-                "    {\"name\": \"took_off\",        \"pass\": %s},\n"
-                "    {\"name\": \"attitude_bounded\", \"pass\": %s},\n"
-                "    {\"name\": \"yaw_spin\",         \"pass\": %s},\n"
-                "    {\"name\": \"yaw_stopped\",      \"pass\": %s},\n"
-                "    {\"name\": \"alt_held\",         \"pass\": %s},\n"
-                "    {\"name\": \"landed\",           \"pass\": %s}\n  ]\n}\n",
+                "    {\"name\": \"took_off\",         \"pass\": %s},\n"
+                "    {\"name\": \"attitude_bounded\",  \"pass\": %s},\n"
+                "    {\"name\": \"yaw_spin\",          \"pass\": %s},\n"
+                "    {\"name\": \"yaw_stopped\",       \"pass\": %s},\n"
+                "    {\"name\": \"alt_held\",          \"pass\": %s},\n"
+                "    {\"name\": \"landed\",            \"pass\": %s},\n"
+                "    {\"name\": \"estimate_tracked\",  \"pass\": %s}\n  ]\n}\n",
                 milestone,
                 failures == 0 ? "true" : "false", kSimDurationUs * 1e-6,
                 est_type == 1 ? "complementary" : "eskf",
+                noise_on ? noise_lvl : "off", noise_seed,
                 g_max_alt, g_max_tilt, g_yaw_during_spin, g_yaw_after_stop,
-                hold_band, g_final_alt,
+                hold_band, g_final_alt, att_rmse,
                 g_max_alt > 0.35f ? "true" : "false",
                 g_max_tilt < 15.0f ? "true" : "false",
                 g_yaw_during_spin > 0.8f ? "true" : "false",
                 g_yaw_after_stop < 0.2f ? "true" : "false",
                 hold_band < 0.08f ? "true" : "false",
-                g_final_alt < 0.08f ? "true" : "false");
+                g_final_alt < 0.08f ? "true" : "false",
+                att_rmse < kG2AttRmseMaxDeg ? "true" : "false");
             std::fclose(rf);
             printf("[flight] bundle written to %s/\n", out_dir);
         }

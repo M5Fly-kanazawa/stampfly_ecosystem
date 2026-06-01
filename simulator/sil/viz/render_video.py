@@ -301,7 +301,11 @@ def main():
     verdict = "PASS" if results.get("pass") else "FAIL"
     ms = results.get("milestone", "P1")
     est = results.get("estimator", "eskf")
-    title = f"StampFly SIL — {ms}: takeoff → hover → yaw → landing  ({est}, G3 {verdict})"
+    gate = results.get("gate", "G3")
+    noise = results.get("noise", "off")
+    noise_tag = "" if noise in ("off", None) else f", noise {noise}"
+    title = (f"StampFly SIL — {ms}: takeoff → hover → yaw → landing  "
+             f"({est}{noise_tag}, {gate} {verdict})")
 
     model = mujoco.MjModel.from_xml_path(args.model)
     data = mujoco.MjData(model)

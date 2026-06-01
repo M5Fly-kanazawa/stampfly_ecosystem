@@ -33,6 +33,7 @@ option(SIL_BUILD_CORES_SMOKE  "Build the firmware-cores host smoke test" ON)
 option(SIL_BUILD_MUJOCO_SMOKE "Build the MuJoCo host smoke test"         ON)
 option(SIL_BUILD_RTOS_SMOKE   "Build the host RTOS-emulator smoke test"  ON)
 option(SIL_BUILD_FRAMES_TEST  "Build the coordinate-frames unit test"    ON)
+option(SIL_BUILD_NOISE_TEST   "Build the sensor-noise (N0) unit test"    ON)
 
 # Paths
 # パス
@@ -216,4 +217,15 @@ if(SIL_BUILD_FRAMES_TEST)
     ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${VN}/components/sf_math/include   # header-only Vec3/Quat
   )
+endif()
+
+# -----------------------------------------------------------------------------
+# Sensor-noise (N0) unit test: white σ, off=clean, startup bias, RW √t,
+# determinism. Physics-free (no MuJoCo) — tests SensorNoise in isolation.
+# センサノイズ(N0)単体テスト: 白色σ・off=クリーン・起動バイアス・RW√t・決定論。
+# 物理非依存（MuJoCo 不要）— SensorNoise 単体を検証。
+# -----------------------------------------------------------------------------
+if(SIL_BUILD_NOISE_TEST)
+  add_executable(noise_test smoke/noise_test.cpp)
+  target_include_directories(noise_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plant)
 endif()
