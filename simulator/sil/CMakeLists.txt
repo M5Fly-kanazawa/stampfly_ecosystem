@@ -329,6 +329,8 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c   # missing fw platform fn
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp    # workshop-only weak symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp          # shared ESP-NOW recv/send hub
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_pilot_vehicle.cpp  # ESP-NOW virtual pilot (E3)
     plant/plant.cpp
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp

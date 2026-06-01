@@ -38,6 +38,12 @@
 
 extern "C" void app_main(void);
 
+// Optional firmware-specific virtual pilot (ESP-NOW transmitter). Defined by the
+// per-firmware emu target (e.g. virtual_pilot_vehicle.cpp); weak so emulators
+// without a pilot link to nullptr and simply run no pilot.
+// 任意のファーム固有仮想パイロット。ターゲット側で定義（weak）。未定義なら nullptr。
+extern "C" __attribute__((weak)) void sil_virtual_pilot_task(void*);
+
 namespace {
 
 sil::Plant g_plant;
@@ -114,6 +120,15 @@ int main(int argc, char** argv)
     // app_main を main タスクとして起動し、スケジューラを回す。
     TaskHandle_t h = nullptr;
     xTaskCreatePinnedToCore(app_main_task, "main", 16384, nullptr, 1, &h, 0);
+
+    // If this firmware's emu target links a virtual pilot, spawn it as a task so
+    // it injects ESP-NOW controller frames into the running firmware.
+    // 仮想パイロットがリンクされていればタスクとして起動し、ESP-NOW フレームを注入する。
+    if (sil_virtual_pilot_task != nullptr) {
+        TaskHandle_t ph = nullptr;
+        xTaskCreatePinnedToCore(sil_virtual_pilot_task, "pilot", 8192, nullptr, 1, &ph, 0);
+    }
+
     std::printf("[emu] running scheduler for %lld us\n", (long long)duration_us);
     sil::rtos::Scheduler::instance().run(duration_us);
 

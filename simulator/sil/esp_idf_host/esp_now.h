@@ -133,15 +133,17 @@ typedef void (*esp_now_send_cb_t)(const esp_now_send_info_t* tx_info,
                                   esp_now_send_status_t status);
 
 /* ===========================================================================
- * Host-internal callback storage (E0 inert; E3 wires the virtual pilot)
- * ホスト内部のコールバック保存（E0 は無動作、E3 で仮想パイロット配線）
+ * Shared callback hub (defined in devices/espnow_hub.cpp). The callbacks live
+ * in ONE shared slot, not a per-TU static, so the virtual pilot in another
+ * source file can deliver frames into the firmware's recv callback.
+ * 共有コールバックハブ（devices/espnow_hub.cpp に実体）。TU ごとの static でなく
+ * 単一スロットに保持し、別ファイルの仮想パイロットが本体へフレームを配信できる。
  * ===========================================================================*/
 
-/* Stored receive callback / 保存された受信コールバック */
-static esp_now_recv_cb_t g_esp_now_recv_cb = nullptr;
-
-/* Stored send callback / 保存された送信コールバック */
-static esp_now_send_cb_t g_esp_now_send_cb = nullptr;
+esp_err_t sil_espnow_set_recv_cb(esp_now_recv_cb_t cb);
+esp_err_t sil_espnow_set_send_cb(esp_now_send_cb_t cb);
+void      sil_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int len);
+void      sil_espnow_report_send(const uint8_t* des_mac);
 
 /* ===========================================================================
  * Functions (stubs) / 関数（スタブ）
@@ -156,39 +158,33 @@ static inline esp_err_t esp_now_init(void)
 /* Deinitialize ESP-NOW / ESP-NOW を終了する */
 static inline esp_err_t esp_now_deinit(void)
 {
-    g_esp_now_recv_cb = nullptr;
-    g_esp_now_send_cb = nullptr;
+    sil_espnow_set_recv_cb(nullptr);
+    sil_espnow_set_send_cb(nullptr);
     return ESP_OK;
 }
 
 /* Register the receive callback / 受信コールバックを登録する */
 static inline esp_err_t esp_now_register_recv_cb(esp_now_recv_cb_t cb)
 {
-    /* E0: just remember it; E3 delivers virtual frames through it.
-     * E0: 保存するだけ。E3 で仮想フレームをこれ経由で配信する。 */
-    g_esp_now_recv_cb = cb;
-    return ESP_OK;
+    return sil_espnow_set_recv_cb(cb);
 }
 
 /* Unregister the receive callback / 受信コールバックを解除する */
 static inline esp_err_t esp_now_unregister_recv_cb(void)
 {
-    g_esp_now_recv_cb = nullptr;
-    return ESP_OK;
+    return sil_espnow_set_recv_cb(nullptr);
 }
 
 /* Register the send callback / 送信コールバックを登録する */
 static inline esp_err_t esp_now_register_send_cb(esp_now_send_cb_t cb)
 {
-    g_esp_now_send_cb = cb;
-    return ESP_OK;
+    return sil_espnow_set_send_cb(cb);
 }
 
 /* Unregister the send callback / 送信コールバックを解除する */
 static inline esp_err_t esp_now_unregister_send_cb(void)
 {
-    g_esp_now_send_cb = nullptr;
-    return ESP_OK;
+    return sil_espnow_set_send_cb(nullptr);
 }
 
 /* Add a peer / ピアを追加する */
@@ -235,10 +231,14 @@ static inline bool esp_now_is_peer_exist(const uint8_t* peer_addr)
 static inline esp_err_t esp_now_send(const uint8_t* peer_addr,
                                      const uint8_t* data, size_t len)
 {
-    /* E0: no-op. The transport is not yet wired. / E0: 無動作。転送は未配線。 */
-    (void)peer_addr;
+    /* The inert link drops the bytes (no RF), but we DO report a successful send
+     * completion so any firmware path that waits on the send-done callback (e.g.
+     * telemetry-to-controller) proceeds instead of stalling.
+     * inert リンクはバイトを捨てる（RF 無し）が、送信完了は「成功」で通知し、送信
+     * 完了コールバックを待つ本体経路（例: 機体→送信機テレメトリ）が止まらないようにする。 */
     (void)data;
     (void)len;
+    sil_espnow_report_send(peer_addr);
     return ESP_OK;
 }
 
