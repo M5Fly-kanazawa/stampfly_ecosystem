@@ -1,0 +1,55 @@
+# hover_alt.scn — airborne ALTITUDE_HOLD hover (legacy firmware / emu_vehicle)
+# 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle）
+#
+# Sticks are raw 12-bit ADC, 0..4095, centre 2048 (firmware treats them as ADC;
+# the "0..1000" comment in controller_comm.hpp is stale).
+# スティックは raw 12bit ADC（0..4095, 中央 2048）。
+#
+# Throttle mapping (verified): open-loop T = clamp((raw-2048)/2048, 0, 1); thrust =
+# T * MAX_TOTAL_THRUST (0.672 N). weight = 0.363 N → lift-off needs T>0.540 (raw>3155).
+# Centre raw 2048 → T=0 (idle) AND the ALT_HOLD hold deadzone (|norm|<0.1).
+# スロットル写像（裏取り済）: 開ループ T=clamp((raw-2048)/2048,0,1)、thrust=T*0.672N。
+# 荷重0.363N → 離陸は T>0.540(raw>3155)。raw2048 は T=0 かつ ALT_HOLD 保持 deadzone。
+#
+# alt token: the OPTIONAL 4th rc field. alt=1 sets CTRL_FLAG_ALT_MODE(0x08) →
+# ALTITUDE_HOLD on the firmware side. '+' = immediately after the previous event.
+# alt トークン: rc の任意 4番目。alt=1 で CTRL_FLAG_ALT_MODE(0x08)→ALTITUDE_HOLD。
+#
+# rc: <t> rc <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt]
+#
+# ARM TIMING (critical): the firmware accepts ARM only on a RISING EDGE of
+# CTRL_FLAG_ARM AND only while FlightState == IDLE (main.cpp:302-305; requestArm()
+# returns false SILENTLY otherwise — stampfly_state.cpp:67). An ARM edge before IDLE
+# is consumed and never re-fires (s_prev_arm_flag latches), so the craft never arms.
+# IDLE is set at the very end of boot, and boot starts LATE in virtual time:
+#   t=0..3 s   app_main's vTaskDelay(3000) "USB connect" delay (main.cpp:449)
+#   t~3.5 s    Phase 1 starts; fixed 5 s settle (main.cpp:521 SETTLE_TIME_MS)
+#   t~8.5 s    Phase 1 complete; Phase 2 sensor stabilisation (exits early ~1 s)
+#   t~9.5 s    "Phase 3: System ready!" → setFlightState(IDLE) (main.cpp:955→963)
+# So IDLE ~= 9.5 s. Phase A stays disarmed 13 s so the single ARM edge in Phase B
+# lands well past IDLE. (Do NOT patch out the 3 s delay — SIL runs firmware UNMODIFIED.)
+# アーム受理は CTRL_FLAG_ARM 立上りエッジ かつ FlightState==IDLE のときのみ（外れると
+# requestArm は無言 false）。IDLE 前のエッジは消費され再発火しない。boot は app_main 冒頭の
+# vTaskDelay(3000)（USB待ち）で 3s 遅れて始まり、Phase1 固定5s + Phase2 → IDLE は仮想 t≈9.5s。
+# ゆえに位相Aは 13s 待つ。3s 遅延は SIL の Code Identity 原則によりパッチしない。
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc   2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s — clear boot→IDLE (~9.5 s) before ARM edge
+   +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (now in IDLE), throttle T=0 (motors idle) 1 s
+   +    rc   3250  2048   2048    2048  1     1300      50              # C: open-loop take-off (STABILIZE, alt=0), T=0.59→0.378 N, ~1.3 s
+   +    rc   2048  2048   2048    2048  1     16000     50        1     # D: ALT_HOLD(alt=1) + centre stick → capture & hover 16 s
+   +    rc   0     2048   2048    2048  1     2500      50        1     # E: ALT_HOLD descend (raw0 → -0.3 m/s) toward MIN 0.10 m, 2.5 s
+   +    rc   0     2048   2048    2048  0     1000      50              # F: DISARM, motors cut 1 s
+#
+# Expectation (tune from trajectory.csv `alt` column, NOT control gains):
+#   C: alt rises above ~0.20 m (leaves the ground; cf. hover_espnow stays alt~0.013 m).
+#   D: ALT_HOLD captures current altitude (clamped [0.10,3.0] m) and HOLDS it; raw2048 is
+#      inside the ±0.1 deadzone → stick unlocks → climb_cmd=0 → setpoint frozen. Steady
+#      thrust settles near 0.363 N (the inner VEL PID removes the +0.0435 N of the 1.12
+#      HOVER_THRUST_CORRECTION feedforward bias), NOT 0.4065 N.
+#   E: controlled descent at up to 0.3 m/s; setpoint clamps at MIN 0.10 m.
+#   F: motors cut.
+#
+# TUNING: raw3250 / 1.3 s are starting guesses. If C overshoots MAX 3.0 m or stays under
+#   MIN 0.10 m, adjust raw(3180..3400) and hold_ms from the `alt` column. NEVER touch
+#   HOVER_THRUST_CORRECTION — the closed loop absorbs it (hover_resume.md §1).
