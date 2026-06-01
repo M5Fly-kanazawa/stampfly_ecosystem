@@ -117,14 +117,15 @@ void pack_bin(uint8_t* d, uint32_t v)
 }
 
 // Build the 83-byte histogram block at 0x0088 (offset = absreg - 0x0088) from the
-// target distance: an ambient floor + a single peak whose center-of-mass phase
-// encodes the range. SYMMETRIC peak at the nearest bin (±96 mm quantization);
-// shoulder-skew for finer accuracy comes later. range_status (off1)=0x09
-// (RANGECOMPLETE) avoids the RANGE_ERROR abort; the driver's RangeStatus upgrades to
-// 0 (VALID) from ~frame 3 once the rolling/phase-consistency state settles (frames
-// 0,1=6 NO_WRAP_CHECK, frame 2=4 transient, frame 3+=0), with the distance stable.
-// 83バイト histogram を目標距離から構築。ambient floor＋単峰（重心位相が距離を符号化）。
-// 最近傍 bin の対称ピーク（±96mm量子化）。skew は次段で。
+// target distance: an ambient floor + a sub-bin-resolved pulse whose gen4-decoded
+// centroid phase encodes the range. A TWO-BIN split (b0 / b0+1, weighted by the
+// fractional position) moves the centroid continuously, so the decoded range tracks
+// the target to ~±17 mm (vs ±96 mm for a single symmetric peak at the nearest bin).
+// range_status (off1)=0x09 (RANGECOMPLETE) avoids the RANGE_ERROR abort; the driver's
+// RangeStatus upgrades to 0 (VALID) from ~frame 3 once the rolling/phase-consistency
+// state settles (frames 0,1=6 NO_WRAP_CHECK, frame 2=4 transient, frame 3+=0).
+// 83バイト histogram を構築。ambient floor＋サブbin分解パルス（gen4 復号重心が距離を符号化）。
+// b0/b0+1 の2分割で重心を連続移動→復号レンジが ~±17mm で追従（単峰±96mm 比）。
 void fill_histogram(uint8_t* d, size_t n)
 {
     std::memset(d, 0, n);
@@ -135,21 +136,35 @@ void fill_histogram(uint8_t* d, size_t n)
     if (dist_mm > MAX_MM)   dist_mm = MAX_MM;
     // Phase a real sensor's return peak would sit at: zero-distance phase + range.
     // gen4 strips the 4 leading ambient bins and left-shifts, so it decodes the peak
-    // at OUTPUT bin out_bin (center phase out_bin*2048+1024). Pack the peak into the
-    // RAW buffer at out_bin + AMBIENT_BIN_STRIP so it survives the shift.
+    // at OUTPUT bin out_bin; pack the pulse into the RAW buffer at out_bin +
+    // AMBIENT_BIN_STRIP so it survives the shift. fbin is the CONTINUOUS raw-bin
+    // position of the true target phase (sub-bin resolved below).
     // 実センサの戻りピーク位相 = 零距離位相 + 距離。gen4 は先頭4bin を strip+左シフトして
-    // output bin で復号するため、RAW buffer には out_bin+4 に置く。
+    // output bin で復号するため RAW buffer には out_bin+4 に置く。fbin は連続的な raw bin 位置。
     const float peak_phase = ZERO_DIST_PHASE + dist_mm * PHASE_PER_MM;
-    const int   out_bin    = (int)lrintf((peak_phase - 1024.0f) / 2048.0f);
-    int b0 = out_bin + AMBIENT_BIN_STRIP;
-    if (b0 < AMBIENT_BIN_STRIP + 2) b0 = AMBIENT_BIN_STRIP + 2;  // keep a leading floor bin post-shift
-    if (b0 > 22) b0 = 22;                                        // leave room for shoulder + bin-23 fixup
+    const float fbin = (peak_phase - 1024.0f) / 2048.0f + (float)AMBIENT_BIN_STRIP;
+
+    // Sub-bin skew. A real return spreads across adjacent bins by the SPAD response;
+    // gen4 recovers the phase as a centroid of the filtered pulse. We model the target
+    // as a two-bin split between b0 and b0+1 weighted by the fractional position frac,
+    // so the decoded centroid tracks the distance CONTINUOUSLY (not just bin centers).
+    // Outer shoulders b0-1 / b0+2 give clean pulse edges for f_007 detection.
+    // サブbin skew。実戻りは隣接 bin に広がり gen4 は重心で位相復元。目標を b0 と b0+1 に
+    // frac 比で2分割し、復号重心を距離に連続追従させる（bin 中心への量子化を解消）。
+    int   b0   = (int)floorf(fbin);
+    float frac = fbin - (float)b0;              // [0,1): centroid sits at b0 + frac
+    if (b0 < AMBIENT_BIN_STRIP + 2) { b0 = AMBIENT_BIN_STRIP + 2; frac = 0.0f; }
+    if (b0 > 21) { b0 = 21; frac = 0.0f; }      // need b0, b0+1, b0+2 within bins 0..23
+
+    const uint32_t main_lo = (uint32_t)lrintf((float)PEAK * (1.0f - frac));
+    const uint32_t main_hi = (uint32_t)lrintf((float)PEAK * frac);
 
     uint32_t bins[24];
     for (int k = 0; k < 24; ++k) bins[k] = AMBIENT;
-    bins[b0]     = AMBIENT + PEAK;
-    bins[b0 - 1] = AMBIENT + SHOULDER;     // symmetric shoulders → COM at bin center
-    bins[b0 + 1] = AMBIENT + SHOULDER;
+    bins[b0]     = AMBIENT + main_lo;       // two-bin split → centroid at b0 + frac
+    bins[b0 + 1] = AMBIENT + main_hi;
+    bins[b0 - 1] = AMBIENT + SHOULDER;      // outer shoulders for clean pulse edges
+    bins[b0 + 2] = AMBIENT + SHOULDER;
 
     d[0] = 0x03;                    // interrupt_status (cosmetic)
     d[1] = 0x09;                    // range_status = RANGECOMPLETE (no abort)

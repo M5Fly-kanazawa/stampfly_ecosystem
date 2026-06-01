@@ -60,9 +60,15 @@ frame 2=4(一過性)→**frame 3 以降ずっと 0**（14フレームで安定�
 `sil_vl53::xfer` / `fill_histogram` / `target_mm` と定数 `ZERO_DIST_PHASE` / `AMBIENT_BIN_STRIP` / `REG_MODE_START`。
 virtual_board.cpp の `sil_board_i2c_xfer` は 0x29/0x30 を `sil_vl53::set_distance_mm`+`xfer` へ委譲。
 
-### 残課題（M2 仕上げ）
-- **skew 較正（サブbin精度）**: 現状 ±96mm 量子化。§5 の肩 skew で数 mm に。probe で 1-2 回較正。
-- **MAX_MM=1400 の制約**: zdp=11bin + strip 4 で usable output bin は 11..18（~1540mm まで）。ホバー(<1m)は十分だが、
+### skew 較正 = 完了（サブbin精度 ±96mm→±17mm）
+- §5 の「肩 skew」ではなく**2-bin split**を採用: 目標を `b0` と `b0+1` に frac 比で分割し、gen4 の復号重心を
+  距離に連続追従させる（`fill_histogram` の `main_lo`/`main_hi`）。probe 細粒度掃引で検証:
+  100..1400mm 全域で誤差 ±17mm 以内・全 status=0・定常安定（量子化の 192mm ステップを解消）。
+- 残差 ±17mm は gen4 の f_022（半幅2窓）重心フィルタの系統的サザナミ。実センサのノイズと同等の実用域ゆえ
+  これ以上の較正は過剰（必要なら frac 依存の補正項で詰められるが diminishing returns）。
+
+### 残課題
+- **MAX_MM=1400 の制約**: zdp=11bin + strip 4 で usable output bin は 11..21（~1540mm まで）。ホバー(<1m)は十分だが、
   高高度は phase wrap 処理が要る（M2 範囲外）。
 
 ---
