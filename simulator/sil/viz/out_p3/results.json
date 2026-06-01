@@ -1,0 +1,24 @@
+{
+  "gate": "G3",
+  "milestone": "P3",
+  "pass": true,
+  "flight": "takeoff-hover-yaw-stop-landing",
+  "duration_s": 5.6,
+  "estimator": "eskf",
+  "metrics": {
+    "max_alt_m": 0.500,
+    "max_tilt_deg": 0.114,
+    "yaw_spin_rad_s": 1.002,
+    "yaw_after_stop_rad_s": 0.000,
+    "alt_hold_band_m": 0.011,
+    "final_alt_m": 0.010
+  },
+  "checks": [
+    {"name": "took_off",        "pass": true},
+    {"name": "attitude_bounded", "pass": true},
+    {"name": "yaw_spin",         "pass": true},
+    {"name": "yaw_stopped",      "pass": true},
+    {"name": "alt_held",         "pass": true},
+    {"name": "landed",           "pass": true}
+  ]
+}

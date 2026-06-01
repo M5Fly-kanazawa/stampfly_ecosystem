@@ -8,9 +8,31 @@ disable-model-invocation: true
 
 SIL の各マイルストーン（P1〜P4）で**必ず**作る成果物バンドルを1コマンドで揃える。
 `/lecture-video` と同じ「決定論ツール＋オーケストレーション」型。**スキル＝作る手順、
-フック＝抜けを防ぐ仕組み**（`simulator/sil/tools/sil_gate.py`）。
+フック＝抜けを防ぐ仕組み**（`sf sil gate` / `simulator/sil/tools/sil_gate.py`）。
 
 > 設計の正本: `simulator/sil/RESET_PLAN.md`（§8 CLI/フック、§9 動画、§10 アウトプット主導）
+
+## 単一入口 = `sf sil milestone`
+
+このスキルの手順は**すべて `sf sil` サブコマンドに集約済み**。生のビルド／実行コマンドを
+手で並べない（CLI が正本＝ Single Source of Truth）。マイルストーン1本は次の1コマンド:
+
+```bash
+source setup_env.sh          # sf CLI を有効化（SIL は host 専用・ESP-IDF 不要）
+sf sil milestone -m P1 -e eskf
+```
+
+`sf sil milestone` が **build → run → video → gate** を順に実行する（`lib/sfcli/commands/sil.py`
+の `run_milestone`）。各段の意味:
+
+| 段 | 中身 | 成果物 |
+|----|------|--------|
+| build | ホスト SIL を cmake ビルド（`hover_smoke` のみ。初回は MuJoCo を取得） | `simulator/sil/build/hover_smoke` |
+| run | 閉ループを実行（実タスクを疑似 RTOS で 400Hz 稼働＋ MuJoCo Plant） | `trajectory.csv` ＋ `results.json` |
+| video | レビュー動画を描画（MuJoCo 3D ＋ 状態グラフ、§9・必須） | `<ms>_flight.mp4` |
+| gate | バンドル完全性＋機械判定 pass を検査（揃わねば exit 1） | GATE APPROVED / REJECTED |
+
+バンドル出力先は `simulator/sil/viz/out_<milestone小文字>/`。
 
 ## アウトプット（成果物バンドル）
 
@@ -20,103 +42,80 @@ SIL の各マイルストーン（P1〜P4）で**必ず**作る成果物バン�
 1. `results.json` — 機械によるゲート合否（唯一の正）
 2. レビュー動画 `*.mp4` — 飛行3Dアニメ＋状態グラフ（人間の確認＋アピール素材、§9）
 3. `trajectory.csv` — 再現可能な時系列（同じ実行→同じ動画）
-4. ゲート承認（`sil_gate.py` が exit 0）
+4. ゲート承認（`sf sil gate` が exit 0）
 
 ## 実行手順
 
-引数: マイルストーン名（既定 `P1`）。バンドル出力先は `simulator/sil/viz/out_<milestone小文字>/`。
+### 1. マイルストーン1本を生成・ゲート
 
-### 1. 環境とパスの確定
-
-```bash
-cd "$(git rev-parse --show-toplevel)"
-MS="${1:-P1}"; MSL=$(echo "$MS" | tr 'A-Z' 'a-z')
-BUNDLE="simulator/sil/viz/out_${MSL}"
-MODEL="$PWD/simulator/sil/models/stampfly.xml"
-PY="simulator/sil/viz/venv/bin/python"
-mkdir -p "$BUNDLE"
-```
-
-venv（mujoco==3.9.0 + matplotlib + imageio）が無ければ作る:
+引数: マイルストーン名（既定 `P1`）と推定器（`eskf` / `complementary`、既定 `eskf`）。
 
 ```bash
-test -x "$PY" || { python3 -m venv simulator/sil/viz/venv && \
-  simulator/sil/viz/venv/bin/pip install -q "mujoco==3.9.0" numpy matplotlib imageio imageio-ffmpeg; }
+source setup_env.sh
+sf sil milestone -m P2 -e complementary
 ```
 
-### 2. SIL をビルド（ホスト、MuJoCo 込み）
+- 末尾に `Milestone P2 bundle complete and gated.` が出れば成功。
+- 途中で停止したら `Milestone … stopped at <step>` が原因段を示す。バンドルを
+  「達成」と宣言せず、原因を報告して止める（アウトプット主導の強制）。
+
+> `sf sil milestone` は冪等。再実行すれば同じ `trajectory.csv`／動画を再生成する
+> （SIL は決定論的＝同じ実行→同じ成果物）。
+
+### 2. 段を個別に回したいとき（任意）
+
+`milestone` は4段を束ねた糖衣。デバッグや再生成で段を分けたいときは個別に叩く:
 
 ```bash
-cmake -S simulator/sil -B simulator/sil/build >/dev/null
-cmake --build simulator/sil/build -j8 --target hover_smoke
+sf sil build                       # ホスト SIL をビルド
+sf sil run     -m P2 -e complementary   # 閉ループ実行 → trajectory.csv + results.json
+sf sil video   -m P2               # レビュー動画を描画
+sf sil status  -m P2               # 機械判定（results.json）を表示
+sf sil gate    -m P2               # バンドル完全性＋ pass を検査
 ```
 
-`error` が出たら停止して原因を報告する（バンドルを作らない）。
+`sf sil status` は G3 の各チェック（took_off / attitude_bounded / yaw_spin /
+yaw_stopped / alt_held / landed）と metrics を表示する＝ダッシュボード（RESET_PLAN §8）。
 
-### 3. 閉ループ run でバンドル（trajectory.csv ＋ results.json）を生成
-
-現状は P1=`hover_smoke`（G3 閉ループホバー＋ヨー追従）。将来のマイルストーンは対応
-する run バイナリに差し替える（例: P2 は `--estimator complementary`）。
-
-```bash
-./simulator/sil/build/hover_smoke "$MODEL" "$BUNDLE"
-```
-
-stdout の `OK — G3 closed-loop hover` と `bundle written to ...` を確認する。
-
-### 4. レビュー動画を生成（§9・必須）
-
-```bash
-"$PY" simulator/sil/viz/render_video.py \
-  --model "$MODEL" --bundle "$BUNDLE" --out "$BUNDLE/${MSL}_hover.mp4" --fps 50
-```
-
-3D 飛行アニメ＋状態グラフ（高度・傾き・ヨーレート・モータ duty を真値/推定/指令で
-重ね描き）を合成した MP4 ができる。`ffprobe` で破損が無いか確認:
+### 3. 動画の破損確認（任意）
 
 ```bash
 ffprobe -v error -show_entries format=duration:stream=width,height,nb_frames \
-  -of default=noprint_wrappers=1 "$BUNDLE"/*.mp4
+  -of default=noprint_wrappers=1 simulator/sil/viz/out_<ms>/*.mp4
 ```
 
-### 5. ゲート検査（機械判定＋バンドル完全性）
-
-```bash
-"$PY" simulator/sil/tools/sil_gate.py "$BUNDLE"
-```
-
-- **exit 0（GATE APPROVED）**: バンドル完全・機械判定 pass。マイルストーン達成。
-- **exit 1（GATE REJECTED）**: 不足項目を報告して停止。揃うまでマイルストーンを
-  「達成」と宣言しない（アウトプット主導の強制）。
-
-### 6. 動画の目視確認（サブエージェント限定）
+### 4. 動画の目視確認（サブエージェント限定・必須）
 
 **動画フレームの画像 Read はメインコンテキストで行わない**（CLAUDE.md スライド画像
-ルールに準ずる）。サブエージェントで数フレーム（ホバー時・マニューバ時）を抽出・
-確認し、テキストの所見だけ返す:
+ルールに準ずる。画像 Read はコンテキストを大きく消費し rate limit の原因になる）。
+サブエージェントで数フレーム（ホバー時・マニューバ時）を抽出・確認し、テキストの
+所見だけ返させる:
 
 ```
-ffmpeg -y -ss <t> -i "$BUNDLE"/*.mp4 -frames:v 1 /tmp/sil_frame.png
+ffmpeg -y -ss <t> -i simulator/sil/viz/out_<ms>/*.mp4 -frames:v 1 /tmp/sil_frame.png
 ```
-（3D に機体が映る／グラフが時刻カーソルと同期／指令追従が見える、を確認）
 
-### 7. 報告
+確認項目: 3D に機体が映る／グラフが時刻カーソルと同期／指令追従が見える。
+
+### 5. 報告
 
 人間が確認できる形でまとめる:
-- ゲート結果（APPROVED/REJECTED）と `results.json` の主要 metrics
-- 動画パス（`$BUNDLE/<ms>_hover.mp4`）と長さ・解像度
+- ゲート結果（APPROVED/REJECTED）と `results.json` の主要 metrics（`sf sil status`）
+- 動画パス（`simulator/sil/viz/out_<ms>/<ms>_flight.mp4`）と長さ・解像度
 - 目視所見（サブエージェント）
 - 不合格なら不足項目と次アクション
 
 ## フック連携（抜けを防ぐ仕組み）
 
-このスキルは**作る手順**。**抜けを防ぐ**のはゲート（`sil_gate.py`）と git フック:
+このスキルは**作る手順**。**抜けを防ぐ**のはゲート（`sf sil gate` →
+`simulator/sil/tools/sil_gate.py`）と git フック:
 
-- **ゲート**: マイルストーンを「達成」と宣言する前に必ず exit 0 を要求する。
-  `sf sil gate <Gn> --approve` を将来作る場合も、内部でこのスクリプトを呼ぶ。
+- **ゲート**: マイルストーンを「達成」と宣言する前に必ず `sf sil gate` の exit 0 を
+  要求する。バンドル（`results.json` ＋ レビュー動画 ＋ `trajectory.csv`）が揃い、
+  機械判定が pass でなければ承認を拒否する。
 - **git タグ・フック**（任意・推奨）: マイルストーンタグ（例 `sil-p1`）を打つ前に
-  `simulator/sil/tools/sil_gate.py <bundle>` を走らせ、exit 1 ならタグを拒否する。
-  例（`.git/hooks/pre-push` 等にバンドル検査を仕込む、または CI で実行）。
+  `simulator/sil/tools/sil_gate.py <bundle>` を走らせ、exit 1 ならタグを拒否する
+  （`.githooks/pre-push`、opt-in: `git config core.hooksPath .githooks`）。
 - **注意**: Claude Code の settings.json フックはツールイベント（PreToolUse 等）に
   反応するもので「マイルストーン」イベントは無い。マイルストーンの強制は上記の
   ゲートスクリプト＋git フックで行う（settings.json フックは用途が別）。
