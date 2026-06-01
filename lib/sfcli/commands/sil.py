@@ -26,6 +26,7 @@ COMMAND_NAME = "sil"
 COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gate)"
 
 ESTIMATORS = {"eskf": 0, "complementary": 1}
+ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
 
 
 # --- path helpers / パスヘルパ -------------------------------------------------
@@ -77,6 +78,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("gate", help="Gate check: bundle complete and verdict passes")
     p.add_argument("-m", "--milestone", default="P1")
     p.set_defaults(func=run_gate)
+
+    p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4)")
+    p.add_argument("-m", "--milestone", default="P4")
+    p.add_argument("--ea", choices=list(ESTIMATORS), default="eskf", help="run A estimator")
+    p.add_argument("--eb", choices=list(ESTIMATORS), default="complementary", help="run B estimator")
+    p.add_argument("--fps", type=int, default=50)
+    p.set_defaults(func=run_compare)
 
     p = sub.add_parser("milestone", help="build → run → video → gate in one shot")
     p.add_argument("-m", "--milestone", default="P1")
@@ -143,6 +151,84 @@ def run_video(args: argparse.Namespace) -> int:
     return r.returncode
 
 
+def run_compare(args: argparse.Namespace) -> int:
+    # P4: run both estimators through the SAME flight and render a side-by-side
+    # review video (twin 3D + overlay graphs), then write the aggregate verdict.
+    # The bundle is unchanged between runs — that is the algorithm-independence
+    # proof (RESET_PLAN P2/§9) turned into one shareable artifact.
+    # P4: 同じ飛行で両推定器を走らせ並置レビュー動画を描く → 集約判定を書く。
+    # ベンチは実行間で無改変 ＝ アルゴリズム非依存の実証を1本の共有素材に。
+    if args.ea == args.eb:
+        # Comparing an estimator to itself would falsely "prove" independence.
+        # 同じ推定器同士の比較は非依存を偽証する。
+        console.error(f"--ea and --eb must differ (both '{args.ea}') — a comparison "
+                      "needs two distinct estimators"); return 1
+    exe = _build_dir() / "hover_smoke"
+    if not exe.exists():
+        console.error("hover_smoke not built — run 'sf sil build' first"); return 1
+    py = _venv()
+    if py is None:
+        return 1
+    bundle = _bundle_dir(args.milestone)          # out_p4
+    bundle.mkdir(parents=True, exist_ok=True)
+    runs = {}
+    for est in (args.ea, args.eb):
+        sub = bundle / est
+        sub.mkdir(parents=True, exist_ok=True)
+        console.info(f"Running closed loop for comparison ({est})...")
+        rc = subprocess.run([str(exe), str(_model()), str(sub), str(ESTIMATORS[est]),
+                             f"{args.milestone}-{est}"]).returncode
+        # hover_smoke writes the bundle even on a G3 fail; only a hard early exit
+        # (e.g. model load) leaves no files. Require both before render/aggregate so
+        # a crash surfaces here, not as an opaque traceback downstream.
+        # G3不合格でもバンドルは書かれる。ファイルが無いのは早期異常終了のみ。先に要求する。
+        if not (sub / "trajectory.csv").exists() or not (sub / "results.json").exists():
+            console.error(f"run '{est}' wrote no bundle (exit {rc}) — aborting comparison")
+            return 1
+        runs[est] = sub
+
+    out = bundle / f"{args.milestone.lower()}_compare.mp4"
+    console.info("Rendering side-by-side comparison (twin 3D + overlay graphs)...")
+    fps = getattr(args, "fps", 50)
+    r = subprocess.run([str(py), str(_sil_dir() / "viz" / "render_video.py"),
+                        "--model", str(_model()),
+                        "--bundle", str(runs[args.ea]), "--compare", str(runs[args.eb]),
+                        "--label-a", ESTIMATOR_LABELS[args.ea],
+                        "--label-b", ESTIMATOR_LABELS[args.eb],
+                        "--out", str(out), "--fps", str(fps)])
+    if r.returncode != 0:
+        console.error("comparison render failed"); return r.returncode
+
+    # Aggregate verdict: P4 passes iff BOTH runs pass G3 with the bench unchanged.
+    # results.json stays the single source of truth (status/gate read only this).
+    # 集約判定: 両実行がベンチ無改変で G3 合格のとき P4 合格。results.json が唯一の正。
+    a = json.loads((runs[args.ea] / "results.json").read_text())
+    b = json.loads((runs[args.eb] / "results.json").read_text())
+    both = bool(a.get("pass") and b.get("pass"))
+    agg = {
+        "gate": "P4-compare",
+        "milestone": args.milestone,
+        "kind": "comparison",
+        "pass": both,
+        "flight": a.get("flight", "takeoff-hover-yaw-stop-landing"),
+        "runs": [
+            {"estimator": args.ea, "bundle": args.ea,
+             "g3_pass": bool(a.get("pass")), "metrics": a.get("metrics", {})},
+            {"estimator": args.eb, "bundle": args.eb,
+             "g3_pass": bool(b.get("pass")), "metrics": b.get("metrics", {})},
+        ],
+        "checks": [
+            {"name": f"{args.ea}_g3_pass", "pass": bool(a.get("pass"))},
+            {"name": f"{args.eb}_g3_pass", "pass": bool(b.get("pass"))},
+            {"name": "algorithm_independent", "pass": both},
+        ],
+    }
+    (bundle / "results.json").write_text(json.dumps(agg, indent=2) + "\n")
+    console.success(f"Comparison bundle written to {bundle}")
+    # Gate the comparison bundle (bundle complete AND both runs passing).
+    return run_gate(args)
+
+
 def run_status(args: argparse.Namespace) -> int:
     res = _bundle_dir(args.milestone) / "results.json"
     if not res.exists():
@@ -150,8 +236,20 @@ def run_status(args: argparse.Namespace) -> int:
     r = json.loads(res.read_text())
     verdict = "PASS" if r.get("pass") else "FAIL"
     console.info(f"{r.get('milestone','?')}/{r.get('gate','?')}: {verdict}")
-    for k, v in r.get("metrics", {}).items():
-        print(f"  {k:20s} {v}")
+    # A comparison bundle (P4) carries per-run metrics under "runs"; a single
+    # bundle carries flat "metrics". Show whichever shape this results.json has.
+    # 比較バンドル(P4)は "runs" に各実行の metrics を持つ。単一は "metrics"。
+    if r.get("kind") == "comparison":
+        for run in r.get("runs", []):
+            m = run.get("metrics", {})
+            tilt = m.get("max_tilt_deg", "?")
+            alt = m.get("max_alt_m", "?")
+            g3 = "PASS" if run.get("g3_pass") else "FAIL"
+            name = run.get("estimator") or "?"
+            print(f"  {name:14s} G3 {g3}  max_alt={alt} m  max_tilt={tilt} deg")
+    else:
+        for k, v in r.get("metrics", {}).items():
+            print(f"  {k:20s} {v}")
     for c in r.get("checks", []):
         mark = "PASS" if c.get("pass") else "FAIL"
         print(f"  [{mark}] {c.get('name')}")
@@ -174,6 +272,15 @@ def run_milestone(args: argparse.Namespace) -> int:
     # 無関係な SIL ターゲットが milestone を壊さないよう、そのターゲットだけビルドする。
     if not getattr(args, "target", None):
         args.target = "hover_smoke"
+    # P4 is the side-by-side comparison milestone: build once, then run BOTH
+    # estimators and render one compare video (run_compare gates at the end).
+    # P4 は並置比較マイルストーン: 1回ビルドし両推定器を走らせ1本の比較動画を描く。
+    if str(args.milestone).upper() == "P4":
+        if run_build(args) != 0:
+            console.error("Milestone P4 stopped at build"); return 1
+        args.ea = getattr(args, "ea", "eskf")
+        args.eb = getattr(args, "eb", "complementary")
+        return run_compare(args)
     for step in (run_build, run_run, run_video, run_gate):
         rc = step(args)
         if rc != 0 and step is not run_run:  # run_run defers its verdict to the gate

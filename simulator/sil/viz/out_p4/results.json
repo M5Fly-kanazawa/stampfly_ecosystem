@@ -1,0 +1,49 @@
+{
+  "gate": "P4-compare",
+  "milestone": "P4",
+  "kind": "comparison",
+  "pass": true,
+  "flight": "takeoff-hover-yaw-stop-landing",
+  "runs": [
+    {
+      "estimator": "eskf",
+      "bundle": "eskf",
+      "g3_pass": true,
+      "metrics": {
+        "max_alt_m": 0.5,
+        "max_tilt_deg": 0.114,
+        "yaw_spin_rad_s": 1.002,
+        "yaw_after_stop_rad_s": 0.0,
+        "alt_hold_band_m": 0.011,
+        "final_alt_m": 0.01
+      }
+    },
+    {
+      "estimator": "complementary",
+      "bundle": "complementary",
+      "g3_pass": true,
+      "metrics": {
+        "max_alt_m": 0.537,
+        "max_tilt_deg": 0.02,
+        "yaw_spin_rad_s": 1.002,
+        "yaw_after_stop_rad_s": 0.0,
+        "alt_hold_band_m": 0.019,
+        "final_alt_m": 0.01
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "eskf_g3_pass",
+      "pass": true
+    },
+    {
+      "name": "complementary_g3_pass",
+      "pass": true
+    },
+    {
+      "name": "algorithm_independent",
+      "pass": true
+    }
+  ]
+}

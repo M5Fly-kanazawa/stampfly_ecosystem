@@ -27,11 +27,20 @@ import imageio.v2 as imageio
 
 
 def load_trajectory(path):
-    """Read trajectory.csv into a dict of numpy arrays keyed by column name."""
+    """Read trajectory.csv into a dict of numpy arrays keyed by column name.
+    Fails with a clear diagnostic on an empty/header-only/ragged file (a run that
+    crashed mid-write) instead of an opaque IndexError/inhomogeneous-shape error.
+    空/見出しのみ/不揃いのファイル（書き込み途中で異常終了）は不明瞭な例外でなく明確に失敗。"""
     with open(path, newline="") as f:
         reader = csv.reader(f)
-        header = next(reader)
-        rows = [[float(x) for x in row] for row in reader]
+        header = next(reader, None)
+        if header is None:
+            raise ValueError(f"{path}: empty trajectory (no header)")
+        rows = [[float(x) for x in row] for row in reader if row]
+    if not rows:
+        raise ValueError(f"{path}: trajectory has a header but no data rows")
+    if any(len(r) != len(header) for r in rows):
+        raise ValueError(f"{path}: ragged rows (expected {len(header)} columns)")
     cols = np.array(rows).T
     return {name: cols[i] for i, name in enumerate(header)}
 
@@ -44,13 +53,27 @@ def render_3d(model, data, renderer, qpos, cam):
     return renderer.render()
 
 
-def title_banner(text, w_px, h_px=48):
+def title_banner(text, w_px, h_px=48, fontsize=15):
     """Render a full-width title strip as an RGB array (drawn once, reused)."""
     dpi = 100
     fig = plt.figure(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
     fig.patch.set_facecolor("white")
     fig.text(0.5, 0.5, text, ha="center", va="center",
-             fontsize=15, fontweight="bold")
+             fontsize=fontsize, fontweight="bold")
+    fig.canvas.draw()
+    buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
+    plt.close(fig)
+    return buf
+
+
+def label_strip(text, w_px, h_px=30, facecolor="white", textcolor="black"):
+    """Render a small colored caption strip (stacked above a 3D pane to name it).
+    3D ペインの上に重ねる、推定器名の小さな見出し帯。"""
+    dpi = 100
+    fig = plt.figure(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
+    fig.patch.set_facecolor(facecolor)
+    fig.text(0.5, 0.5, text, ha="center", va="center",
+             fontsize=12, fontweight="bold", color=textcolor)
     fig.canvas.draw()
     buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
     plt.close(fig)
@@ -113,6 +136,142 @@ def graph_frame(traj, i, w_px, h_px):
     return buf
 
 
+# --- side-by-side comparison (P4) / 並置比較動画（P4） ------------------------
+# Two estimators (A, B) flown through the SAME bench, same flight. The twin 3D
+# panes (top) show the two runs in lockstep; the overlay graphs (bottom) put both
+# estimators' estimates on the SAME truth axes — so "different algorithm, same
+# flight, both fly" reads at a glance (RESET_PLAN §9, P4 algorithm-independence).
+# 2つの推定器(A,B)を同じベンチ・同じ飛行で走らせる。上のツイン3Dは2機がロックステップで
+# 飛ぶ様子、下の重ね描きグラフは両推定値を同一の真値軸へ重ねる ＝「中身が違っても同じ
+# 飛行で両方飛ぶ」を一目で（RESET_PLAN §9, P4 アルゴリズム非依存）。
+def overlay_graph_frame(A, B, i, w_px, h_px, la, lb):
+    """Render the comparison graphs up to frame i: truth (solid) with A and B
+    estimates overlaid (dashed / dotted), plus a synchronized time cursor."""
+    t = A["t"]
+    now = t[i]
+    dpi = 100
+    fig, axes = plt.subplots(1, 4, figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
+
+    def panel(ax, ylabel, series, ylim=None):
+        for label, tt, y, style in series:
+            ax.plot(tt, y, style, label=label, linewidth=1.3)
+        ax.axvline(now, color="0.5", linewidth=1.0)          # time cursor
+        ax.set_xlim(t[0], t[-1])
+        if ylim:
+            ax.set_ylim(*ylim)
+        ax.set_ylabel(ylabel, fontsize=8)
+        ax.set_xlabel("time [s]", fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=6, loc="upper right")
+        ax.tick_params(labelsize=6)
+
+    # Consistent legend wording across all four panels: a reference series
+    # (truth / command) plus the two run labels (la, lb). No per-panel "est" suffix.
+    # 4パネルで凡例表記を統一: 基準（truth/command）＋2実行ラベル(la, lb)。"est"接尾辞なし。
+    panel(axes[0], "altitude [m]",
+          [("truth", A["t"], A["alt"], "k-"),
+           (la, A["t"], A["alt_est"], "C0--"),
+           (lb, B["t"], B["alt_est"], "C1:")],
+          ylim=(-0.03, 0.62))
+    # Roll/pitch auto-scale across BOTH runs' truth + estimates so neither clips.
+    # The ESKF leans a real ~0.1° (yaw spin fed through control); complementary
+    # stays ~0.01° — the shared axis makes that difference visible, not hidden.
+    # nan_to_num so a partial/NaN estimate can't poison the axis limit (order-safe).
+    # 縦軸は両実行の真値＋推定を跨いで自動スケール（切れ防止）。ESKF は実際に~0.1°傾き、
+    # 相補は~0.01°内 — 共通軸でその差が見える。nan_to_num で NaN が軸を壊さない。
+    rp = np.concatenate([A["roll"], A["pitch"], A["roll_est"], A["pitch_est"],
+                         B["roll_est"], B["pitch_est"]])
+    rpm = max(0.05, 1.15 * float(np.nan_to_num(np.abs(rp), nan=0.0).max()))
+    panel(axes[1], "roll [deg]",
+          [("truth", A["t"], A["roll"], "k-"),
+           (la, A["t"], A["roll_est"], "C0--"),
+           (lb, B["t"], B["roll_est"], "C1:")],
+          ylim=(-rpm, rpm))
+    panel(axes[2], "pitch [deg]",
+          [("truth", A["t"], A["pitch"], "k-"),
+           (la, A["t"], A["pitch_est"], "C0--"),
+           (lb, B["t"], B["pitch_est"], "C1:")],
+          ylim=(-rpm, rpm))
+    panel(axes[3], "yaw rate [rad/s]",
+          [("command", A["t"], A["yawcmd"], "k-"),
+           (la, A["t"], A["yawrate"], "C0--"),
+           (lb, B["t"], B["yawrate"], "C1:")],
+          ylim=(-0.2, 1.4))
+
+    fig.tight_layout(pad=0.5)
+    fig.canvas.draw()
+    buf = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
+    plt.close(fig)
+    return buf
+
+
+def render_compare(args):
+    """Render the P4 side-by-side video: twin 3D panes (A | B) over full-width
+    overlay graphs. Both runs share one flight, so the panes move in lockstep."""
+    A = load_trajectory(os.path.join(args.bundle, "trajectory.csv"))
+    B = load_trajectory(os.path.join(args.compare, "trajectory.csv"))
+    n = min(len(A["t"]), len(B["t"]))                    # same flight → equal, but be safe
+    A = {k: v[:n] for k, v in A.items()}                 # one time base: graphs ↔ 3D agree
+    B = {k: v[:n] for k, v in B.items()}                 # （長さが食い違っても自己整合）
+    la, lb = args.label_a, args.label_b
+
+    def verdict(bundle):
+        p = os.path.join(bundle, "results.json")
+        return json.load(open(p)) if os.path.exists(p) else {}
+    ra, rb = verdict(args.bundle), verdict(args.compare)
+    va = "PASS" if ra.get("pass") else "FAIL"
+    vb = "PASS" if rb.get("pass") else "FAIL"
+    title = (f"StampFly SIL  ·  same flight, two estimators  ·  "
+             f"{la} (G3 {va})  vs  {lb} (G3 {vb})  ·  algorithm-independent")
+
+    model = mujoco.MjModel.from_xml_path(args.model)
+    data = mujoco.MjData(model)
+    H3 = args.height                 # 3D pane height
+    W3 = int(H3 * 4 / 3)             # 3D pane 4:3
+    renderer = mujoco.Renderer(model, height=H3, width=W3)
+    # Tighter framing than the single-bundle render (distance 0.85): the twin panes
+    # are the hero shot, so pull in to make the drones larger and shrink the empty
+    # sky/floor. distance 0.74 → visible height ≈ 0.83·0.74 ≈ 0.61 m centered on
+    # lookat z=0.28 → covers z∈[−0.03, 0.59]: peak hover (≈0.55) and touchdown
+    # (≈0.01) both stay in frame with margin.
+    # 単一描画(距離0.85)より寄せる: ツインペインが主役なので機体を大きく、空/床の余白を縮小。
+    cam = mujoco.MjvCamera()
+    cam.azimuth = 130
+    cam.elevation = -10
+    cam.distance = 0.74
+    cam.lookat[:] = [0.0, 0.0, 0.28]
+    qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
+
+    Wtot = 2 * W3
+    Hg = args.graph_height
+    banner = title_banner(title, Wtot, fontsize=13)
+    # Pane captions: A bluish (C0), B orange (C1) — matching the graph line colors.
+    # ペイン見出し: A=青系(C0), B=橙系(C1)。グラフの線色と対応させる。
+    cap_a = label_strip(f"{la}", W3, facecolor="#dbe7ff")
+    cap_b = label_strip(f"{lb}", W3, facecolor="#ffe7cc")
+
+    writer = imageio.get_writer(args.out, fps=args.fps, codec="libx264",
+                                quality=8, macro_block_size=None)
+    for i in range(n):
+        a3d = render_3d(model, data, renderer,
+                        np.array([A[c][i] for c in qcols]), cam)
+        b3d = render_3d(model, data, renderer,
+                        np.array([B[c][i] for c in qcols]), cam)
+        pane_a = np.concatenate([cap_a, a3d], axis=0)
+        pane_b = np.concatenate([cap_b, b3d], axis=0)
+        top = np.concatenate([pane_a, pane_b], axis=1)       # twin 3D row
+        graphs = overlay_graph_frame(A, B, i, Wtot, Hg, la, lb)
+        # Match widths defensively (matplotlib/render rounding), then stack.
+        w = min(top.shape[1], graphs.shape[1], banner.shape[1])
+        body = np.concatenate([top[:, :w], graphs[:, :w]], axis=0)
+        frame = np.concatenate([banner[:, :w], body], axis=0)
+        # libx264 needs even width/height; trim a row/column if odd.
+        frame = frame[:frame.shape[0] // 2 * 2, :frame.shape[1] // 2 * 2]
+        writer.append_data(frame)
+    writer.close()
+    print(f"[render_video] wrote {args.out} (compare, {n} frames @ {args.fps} fps)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -121,7 +280,17 @@ def main():
     ap.add_argument("--fps", type=int, default=50)
     ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--test-frame", action="store_true", help="render one frame to a PNG and exit")
+    # Side-by-side comparison (P4): --compare is run B's bundle (A is --bundle).
+    # 並置比較（P4）: --compare は実行Bのバンドル（Aは --bundle）。
+    ap.add_argument("--compare", default=None, help="run B's bundle dir → side-by-side video")
+    ap.add_argument("--label-a", default="ESKF", help="caption for run A")
+    ap.add_argument("--label-b", default="Complementary", help="caption for run B")
+    ap.add_argument("--graph-height", type=int, default=300, help="overlay-graph row height (compare)")
     args = ap.parse_args()
+
+    if args.compare:
+        render_compare(args)
+        return
 
     traj = load_trajectory(os.path.join(args.bundle, "trajectory.csv"))
     n = len(traj["t"])

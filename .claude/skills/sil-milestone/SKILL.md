@@ -62,6 +62,21 @@ sf sil milestone -m P2 -e complementary
 > `sf sil milestone` は冪等。再実行すれば同じ `trajectory.csv`／動画を再生成する
 > （SIL は決定論的＝同じ実行→同じ成果物）。
 
+#### P4 = 並置比較マイルストーン（特例）
+
+P4 は単一飛行でなく **ESKF ↔ 相補フィルタの side-by-side 比較動画**（アルゴリズム
+非依存をSNS品質で見せる、RESET_PLAN §9）。`milestone -m P4` は自動で比較フローに
+委譲する（2推定器を同じ飛行で走らせ、ツイン3D＋重ね描きグラフを1本に合成）:
+
+```bash
+sf sil milestone -m P4           # = sf sil compare（build → 2 run → compare → gate）
+sf sil compare   -m P4           # 直接呼ぶ場合（--ea/--eb で推定器を指定可）
+```
+
+P4 バンドルは `out_p4/{p4_compare.mp4, results.json, eskf/, complementary/}`。
+集約 `results.json` は `kind=comparison`・`pass=両run G3合格`・`algorithm_independent`
+チェックを持つ（`sf sil status -m P4` で各runの metrics と3チェックを表示）。
+
 ### 2. 段を個別に回したいとき（任意）
 
 `milestone` は4段を束ねた糖衣。デバッグや再生成で段を分けたいときは個別に叩く:
