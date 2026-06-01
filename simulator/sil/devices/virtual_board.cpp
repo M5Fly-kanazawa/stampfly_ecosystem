@@ -246,6 +246,144 @@ int ina3221_xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     return 0;
 }
 
+// --- BMP280 barometer (I2C addr 0x76) ----------------------------------------
+// Bosch BMP280. The firmware driver reads chip-id 0xD0 (=0x58), a 24-byte
+// little-endian calibration block at 0x88, and a 6-byte burst at 0xF7 (20-bit
+// adc_P, adc_T, MSB-first), then applies the datasheet 32/64-bit compensation and
+// the international barometric formula. We synthesize the raw registers so the
+// UNMODIFIED driver reconstructs the Plant's pressure-altitude: load the canonical
+// Bosch datasheet reference calibration, then per-read INVERT the (monotonic)
+// 64-bit pressure compensation to the 20-bit adc_P that decodes to Plant pressure.
+//
+// BMP280 気圧計（I2C 0x76）。ドライバは chip-id(0xD0=0x58)・24バイトLE校正(0x88)・
+// 6バイトburst(0xF7, 20bit adc_P/adc_T MSB先頭)を読み、データシートの32/64bit補償と
+// 国際気圧式で高度化する。無改変ドライバが Plant の気圧高度を復元できるよう raw を合成:
+// 正規の Bosch データシート参照校正を載せ、単調な64bit気圧補償を毎回逆算して
+// Plant 気圧に復号される 20bit adc_P を求める。
+constexpr uint16_t BMP280_ADDR          = 0x76;
+constexpr uint8_t  BMP280_CHIP_ID_VALUE = 0x58;
+
+// Canonical Bosch datasheet reference calibration (the worked-example constants,
+// so the forward compensation is verifiable against the published example).
+// 正規の Bosch データシート参照校正（worked-example 定数）。
+constexpr uint16_t kDigT1 = 27504;
+constexpr int16_t  kDigT2 = 26435, kDigT3 = -1000;
+constexpr uint16_t kDigP1 = 36477;
+constexpr int16_t  kDigP2 = -10685, kDigP3 = 3024, kDigP4 = 2855, kDigP5 = 140,
+                   kDigP6 = -7, kDigP7 = 15500, kDigP8 = -14600, kDigP9 = 6000;
+// Fixed raw temperature → ~25.09 °C (Plant baro temperature is 25 °C). Its t_fine
+// also feeds pressure compensation, so the inversion must use the same t_fine.
+// 固定の生温度 → 約25.09°C。その t_fine は気圧補償にも入るので逆算と一致させる。
+constexpr int32_t kAdcT = 519888;
+
+uint8_t g_bmp_ptr = 0;   // last addressed register (write-then-read pointer)
+
+// Driver-identical temperature compensation → t_fine (datasheet 32-bit routine).
+// ドライバと同一の温度補償 → t_fine。
+int32_t bmp280_t_fine(int32_t adc_T)
+{
+    int32_t var1 = ((((adc_T >> 3) - ((int32_t)kDigT1 << 1))) * (int32_t)kDigT2) >> 11;
+    int32_t var2 = (((((adc_T >> 4) - (int32_t)kDigT1) * ((adc_T >> 4) - (int32_t)kDigT1)) >> 12)
+                    * (int32_t)kDigT3) >> 14;
+    return var1 + var2;
+}
+
+// Driver-identical 64-bit pressure compensation → Q24.8 Pa (a copy of the firmware
+// routine with the calibration above, so our inversion decodes EXACTLY as the
+// firmware will). ドライバと同一の64bit気圧補償 → Q24.8 Pa（逆算が厳密に一致）。
+uint32_t bmp280_press_q24_8(int32_t adc_P, int32_t t_fine)
+{
+    int64_t var1, var2, p;
+    var1 = ((int64_t)t_fine) - 128000;
+    var2 = var1 * var1 * (int64_t)kDigP6;
+    var2 = var2 + ((var1 * (int64_t)kDigP5) << 17);
+    var2 = var2 + (((int64_t)kDigP4) << 35);
+    var1 = ((var1 * var1 * (int64_t)kDigP3) >> 8) + ((var1 * (int64_t)kDigP2) << 12);
+    var1 = (((((int64_t)1) << 47) + var1)) * ((int64_t)kDigP1) >> 33;
+    if (var1 == 0) return 0;
+    p = 1048576 - adc_P;
+    p = (((p << 31) - var2) * 3125) / var1;
+    var1 = (((int64_t)kDigP9) * (p >> 13) * (p >> 13)) >> 25;
+    var2 = (((int64_t)kDigP8) * p) >> 19;
+    p = ((p + var1 + var2) >> 8) + (((int64_t)kDigP7) << 4);
+    return (uint32_t)p;
+}
+
+// Invert the (monotonically decreasing) pressure compensation: find the 20-bit
+// adc_P whose decoded pressure ≈ target_pa. FIXED-iteration bisection over the full
+// 20-bit range → deterministic (no tolerance early-exit), preserving SIL determinism.
+// 単調減少の気圧補償を逆算: target_pa に復号される 20bit adc_P を固定回数二分探索で。
+int32_t bmp280_invert_adc_p(float target_pa, int32_t t_fine)
+{
+    int32_t lo = 0, hi = 0x100000;            // 20-bit adc_P range
+    for (int i = 0; i < 32; ++i) {
+        const int32_t mid = lo + (hi - lo) / 2;
+        const float pa = (float)bmp280_press_q24_8(mid, t_fine) / 256.0f;
+        if (pa > target_pa) lo = mid;          // pressure falls as adc_P rises
+        else                hi = mid;
+    }
+    return lo + (hi - lo) / 2;
+}
+
+// Fill the 24-byte calibration block at 0x88 (little-endian per 16-bit word).
+// 0x88 の24バイト校正ブロックを LE で埋める。
+void bmp280_fill_calib(uint8_t* d, size_t n)
+{
+    const uint16_t words[12] = {
+        kDigT1, (uint16_t)kDigT2, (uint16_t)kDigT3,
+        kDigP1, (uint16_t)kDigP2, (uint16_t)kDigP3, (uint16_t)kDigP4,
+        (uint16_t)kDigP5, (uint16_t)kDigP6, (uint16_t)kDigP7,
+        (uint16_t)kDigP8, (uint16_t)kDigP9 };
+    for (size_t i = 0; i < n; ++i) {
+        const size_t w = i / 2;
+        if (w >= 12) { d[i] = 0; continue; }
+        d[i] = (i & 1) ? (uint8_t)(words[w] >> 8) : (uint8_t)(words[w] & 0xFF);
+    }
+}
+
+// Fill the 6-byte data burst at 0xF7 from the Plant pressure-altitude: invert the
+// target pressure to adc_P (20-bit) and emit it + the fixed adc_T, MSB-first.
+// 0xF7 の6バイトを Plant 気圧高度から: 目標気圧を adc_P に逆算し固定 adc_T と共に MSB先頭で。
+void bmp280_fill_data(uint8_t* d, size_t n)
+{
+    sf::BaroData baro = {};
+    if (g_plant != nullptr) baro = g_plant->baro();
+    const float target_pa = (baro.pressure > 0.0f) ? baro.pressure : 101325.0f;
+    const int32_t t_fine = bmp280_t_fine(kAdcT);
+    const int32_t adc_P = bmp280_invert_adc_p(target_pa, t_fine);
+
+    uint8_t buf[6];
+    buf[0] = (uint8_t)((adc_P >> 12) & 0xFF);   // P[19:12]
+    buf[1] = (uint8_t)((adc_P >> 4) & 0xFF);    // P[11:4]
+    buf[2] = (uint8_t)((adc_P << 4) & 0xF0);    // P[3:0] in high nibble
+    buf[3] = (uint8_t)((kAdcT >> 12) & 0xFF);   // T[19:12]
+    buf[4] = (uint8_t)((kAdcT >> 4) & 0xFF);    // T[11:4]
+    buf[5] = (uint8_t)((kAdcT << 4) & 0xF0);    // T[3:0] in high nibble
+    for (size_t i = 0; i < n; ++i) d[i] = (i < 6) ? buf[i] : 0;
+}
+
+// One BMP280 I2C transaction (driver: read = write[reg] then read N bytes;
+// write = write[reg, val]). BMP280 の1 I2Cトランザクション。
+int bmp280_xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
+{
+    // Write-only (transmit): [reg, data] — reset/ctrl_meas/config. Latch ptr; ack.
+    // 書き込みのみ: [reg,data]（reset/ctrl_meas/config）。ポインタ更新して ack。
+    if (rbuf == nullptr) {
+        if (wbuf != nullptr && wlen >= 1) g_bmp_ptr = wbuf[0];
+        return 0;
+    }
+    // Read (transmit_receive): wbuf=[reg], rbuf=data[rlen].
+    // 読み出し: wbuf=[reg], rbuf=data[rlen]。
+    const uint8_t reg = (wbuf != nullptr && wlen >= 1) ? wbuf[0] : g_bmp_ptr;
+    std::memset(rbuf, 0, rlen);
+    if (reg == 0xD0)         rbuf[0] = BMP280_CHIP_ID_VALUE;  // CHIP_ID
+    else if (reg == 0x88)    bmp280_fill_calib(rbuf, rlen);   // calibration block
+    else if (reg == 0xF7)    bmp280_fill_data(rbuf, rlen);    // pressure+temp burst
+    else if (reg == 0xF3)    rbuf[0] = 0x00;                  // STATUS: never busy
+    // other regs (ctrl_meas/config read-back) → 0, harmless.
+    return 0;
+}
+
 }  // namespace
 
 // --- C-linkage hooks called by the ESP-IDF driver shims ----------------------
@@ -288,6 +426,9 @@ int sil_board_i2c_xfer(uint16_t addr, const uint8_t* write_buf, size_t write_siz
     // （旧 inert シムと同一）。Optional ドライバは chip-ID チェックで優雅に失敗。
     if (addr == INA3221_ADDR) {
         return ina3221_xfer(write_buf, write_size, read_buf, read_size);
+    }
+    if (addr == BMP280_ADDR) {
+        return bmp280_xfer(write_buf, write_size, read_buf, read_size);
     }
     if (read_buf != nullptr && read_size > 0) std::memset(read_buf, 0, read_size);
     return 0;
