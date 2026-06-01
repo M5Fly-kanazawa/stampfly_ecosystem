@@ -1,0 +1,13 @@
+# hover_espnow.expect — assert the radio→comm→arm→control→motor path runs from
+# genuine ESP-NOW controller input (no back-door). 無線→comm→arm→制御の全鎖を検証。
+exit 0
+log_contains any "scenario] driver online"            # the scenario driver ran
+log_contains any "Connected to controller"            # comm accepted the packets
+log_contains any "Motors ARMED"                       # arm rising edge handled
+log_contains any "ControlArbiter: T=0.50"             # hover throttle reached the control loop
+order "Armed" "ControlArbiter: T=0.50"                # arm precedes throttle-up
+# Stable hover is NOT asserted here: with the INA3221 power monitor unemulated
+# (E3), vbat decays and duty saturates, so the craft lifts off then climbs away.
+# The command/arm/control path is correct; altitude hold is gated on E3.
+# 安定ホバーはここでは検証しない（E3 INA3221 未実装で vbat 減衰→上昇継続）。
+skip stable-hover gated on E3 INA3221 (vbat) — craft climbs until vbat is modelled

@@ -11,11 +11,14 @@ Subcommands:
   video      Render the review video (MuJoCo 3D + state graphs)
   status     Show the machine verdict (results.json) for a milestone
   gate       Gate check: bundle complete AND verdict passes (output-driven)
+  scenario   Run a *.scn input scenario (console/ESP-NOW) and assert outputs (E6)
   milestone  build → run → video → gate in one shot (the /sil-milestone skill)
 """
 
 import argparse
 import json
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -85,6 +88,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("-m", "--milestone", default="P1")
     p.set_defaults(func=run_gate)
 
+    # E6: run a deterministic *.scn input scenario and assert the firmware output.
+    # E6: 決定論的な *.scn 入力シナリオを走らせ、ファーム出力をアサートする。
+    p = sub.add_parser("scenario", help="Run a *.scn input scenario and assert outputs (E6)")
+    p.add_argument("scenario", help="path to the .scn scenario file")
+    p.add_argument("--target", choices=["vehicle", "vehicle_new"], default="vehicle",
+                   help="emulator binary (default: vehicle = old firmware)")
+    p.add_argument("--expect", default=None,
+                   help="assertions file (default: <scenario>.expect if it exists)")
+    p.add_argument("--duration", type=int, default=25_000_000,
+                   help="sim duration in microseconds (default 25 s)")
+    p.set_defaults(func=run_scenario)
+
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
     p.add_argument("-m", "--milestone", default="P4")
     p.add_argument("--ea", choices=list(ESTIMATORS), default="eskf", help="run A estimator")
@@ -147,6 +162,111 @@ def run_run(args: argparse.Namespace) -> int:
     else:
         console.error(f"Closed loop FAILED (exit {r.returncode}) — see output / results.json")
     return 0  # the verdict lives in results.json; gate decides pass/fail
+
+
+def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int):
+    """Evaluate an assertions file against the captured output. Returns (checks,
+    all_pass). Assertions are anchored to OUTPUT TEXT/ORDER, never wall-clock, so
+    a check is deterministic exactly because the scenario's output is byte-
+    identical across runs. 出力テキスト/順序にアンカー（壁時計不使用）＝決定論的。
+
+      log_contains <out|err|any> "<text>"   stream contains the text
+      log_absent   <out|err|any> "<text>"   stream does NOT contain the text
+      order "<a>" "<b>"                       a's first occurrence precedes b's
+      exit <code>                             process exit code matches
+      skip <reason...>                        record a capability-gated check as
+                                              SKIPPED (passes, not evaluated) —
+                                              e.g. stable hover gated on E3 INA3221
+    """
+    merged = out_text + err_text
+    streams = {"out": out_text, "err": err_text, "any": merged}
+    checks = []
+    for raw in expect_path.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("skip"):
+            reason = line[len("skip"):].strip()
+            checks.append({"name": f"skipped: {reason}", "pass": True, "skipped": True,
+                           "detail": "capability-gated; not evaluated"})
+            continue
+        toks = shlex.split(line)
+        kind = toks[0]
+        if kind in ("log_contains", "log_absent") and len(toks) >= 3:
+            stream, text = toks[1], toks[2]
+            found = text in streams.get(stream, merged)
+            ok = found if kind == "log_contains" else not found
+            checks.append({"name": f"{kind} {stream} {text!r}", "pass": bool(ok),
+                           "detail": "found" if found else "absent"})
+        elif kind == "order" and len(toks) >= 3:
+            a, b = toks[1], toks[2]
+            ia, ib = merged.find(a), merged.find(b)
+            ok = ia >= 0 and ib >= 0 and ia < ib
+            checks.append({"name": f"order {a!r} before {b!r}", "pass": bool(ok),
+                           "detail": f"idx_a={ia} idx_b={ib}"})
+        elif kind == "exit" and len(toks) >= 2:
+            want = int(toks[1])
+            checks.append({"name": f"exit == {want}", "pass": exit_code == want,
+                           "detail": f"got {exit_code}"})
+        else:
+            checks.append({"name": f"bad assertion: {line!r}", "pass": False, "detail": "syntax"})
+    all_pass = all(c["pass"] for c in checks)
+    return checks, all_pass
+
+
+def run_scenario(args: argparse.Namespace) -> int:
+    target = getattr(args, "target", "vehicle")
+    exe = _build_dir() / ("emu_vehicle" if target == "vehicle" else "emu_vehicle_new")
+    if not exe.exists():
+        console.error(f"{exe.name} not built — run 'sf sil build' first"); return 1
+    scn = Path(args.scenario)
+    if not scn.exists():
+        console.error(f"scenario not found: {scn}"); return 1
+
+    bundle = _sil_dir() / "viz" / f"out_scn_{scn.stem}"
+    bundle.mkdir(parents=True, exist_ok=True)
+    events = bundle / "events.jsonl"
+    env = dict(os.environ, SIL_EMU_EVENTS=str(events))
+
+    console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us)...")
+    # The emulator reads stdin (the firmware CLI); feed /dev/null so any non-key
+    # read yields EAGAIN. Capture stdout and stderr SEPARATELY (ESP_LOGx → stderr).
+    # ファーム CLI の stdin は /dev/null。stdout/stderr を分離捕捉（ESP_LOGx は stderr）。
+    with open(os.devnull) as devnull:
+        r = subprocess.run([str(exe), str(_model()), str(args.duration), str(scn)],
+                           stdin=devnull, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           text=True, env=env)
+    (bundle / "console.out").write_text(r.stdout)
+    (bundle / "console.err").write_text(r.stderr)
+    (bundle / "console.log").write_text(r.stdout + r.stderr)
+
+    expect = Path(args.expect) if args.expect else scn.with_suffix(".expect")
+    if expect.exists():
+        checks, verdict = _eval_expect(expect, r.stdout, r.stderr, r.returncode)
+    else:
+        console.info(f"(no .expect at {expect.name} — verdict = exit code only)")
+        checks = [{"name": "exit == 0", "pass": r.returncode == 0, "detail": f"got {r.returncode}"}]
+        verdict = (r.returncode == 0)
+
+    results = {
+        "gate": "scenario", "milestone": f"scn_{scn.stem}", "kind": "scenario",
+        "scenario": str(scn), "target": target, "exit_code": r.returncode,
+        "pass": bool(verdict), "checks": checks,
+    }
+    (bundle / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+
+    console.info(f"scenario {scn.name}: {'PASS' if verdict else 'FAIL'} "
+                 f"(exit {r.returncode}, {len(checks)} checks, events={events.name})")
+    for c in checks:
+        if c.get("skipped"):
+            print(f"  [SKIP] {c['name']}")
+        else:
+            print(f"  [{'PASS' if c['pass'] else 'FAIL'}] {c['name']}  ({c.get('detail','')})")
+    if verdict:
+        console.success(f"bundle: {bundle}")
+    else:
+        console.error(f"scenario FAILED — see {bundle}/console.log")
+    return 0 if verdict else 2
 
 
 def run_video(args: argparse.Namespace) -> int:

@@ -1,0 +1,10 @@
+# console_cli.expect — assert the firmware CLI executed the typed commands.
+# Anchored to unique command OUTPUT markers + their order (deterministic because
+# the scenario output is byte-identical across runs). 出力マーカーと順序にアンカー。
+exit 0
+log_contains any "StampFly RTOS"             # `version` output
+log_contains any "=== System Status ==="     # `status` output
+log_contains any "Available commands:"        # `help` output
+log_absent  any "Unknown command:"            # no command was misrouted
+order "StampFly RTOS" "=== System Status ==="          # version typed before status
+order "=== System Status ===" "Available commands:"    # status typed before help
