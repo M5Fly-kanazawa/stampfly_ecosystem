@@ -63,9 +63,15 @@ virtual_board.cpp の `sil_board_i2c_xfer` は 0x29/0x30 を `sil_vl53::set_dist
 ### skew 較正 = 完了（サブbin精度 ±96mm→±17mm）
 - §5 の「肩 skew」ではなく**2-bin split**を採用: 目標を `b0` と `b0+1` に frac 比で分割し、gen4 の復号重心を
   距離に連続追従させる（`fill_histogram` の `main_lo`/`main_hi`）。probe 細粒度掃引で検証:
-  100..1400mm 全域で誤差 ±17mm 以内・全 status=0・定常安定（量子化の 192mm ステップを解消）。
+  50..1400mm 全域で誤差 **±17mm 以内**・全 status=0・定常安定（量子化の 192mm ステップを解消）。
+- **外側 shoulder は付けない**: 当初 b0-1/b0+2 に raised shoulder を置いたが、frac≈0/1（分割が退化し片方の
+  main bin が floor まで落ちる）で peak と shoulder の間に1bin gap → gen4 が **wrap-target(status7)** 誤判定
+  （例: 接地時の Plant ToF≈0..30mm が status254 化）。周囲の ambient floor 自体が pulse edge ゆえ shoulder 不要。
+  除去で全 frac 域 status0。
 - 残差 ±17mm は gen4 の f_022（半幅2窓）重心フィルタの系統的サザナミ。実センサのノイズと同等の実用域ゆえ
   これ以上の較正は過剰（必要なら frac 依存の補正項で詰められるが diminishing returns）。
+- **接地時 ToF≈0 は status254（無効）が正**: ラッパー MIN_VALID_DISTANCE_MM=30mm 未満を弾く。skew 前の対称
+  ピークは量子化で 96mm と過大報告していた（離陸し高度>30mmで valid）。
 
 ### 残課題
 - **MAX_MM=1400 の制約**: zdp=11bin + strip 4 で usable output bin は 11..21（~1540mm まで）。ホバー(<1m)は十分だが、

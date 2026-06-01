@@ -53,8 +53,7 @@ constexpr int      HIST_BYTES      = 83;      // 0x00DA - 0x0088 + 1
 // 距離傾き 0.093994 mm/位相 の逆数 10.639 位相/mm（1bin=192.5mm）。
 constexpr float    PHASE_PER_MM = 10.639f;
 constexpr uint32_t AMBIENT      = 40;     // ambient floor events / bin
-constexpr uint32_t PEAK         = 2000;   // peak amplitude over floor
-constexpr uint32_t SHOULDER     = 200;    // neighbor amplitude over floor (1-2 bin width)
+constexpr uint32_t PEAK         = 2000;   // total peak amplitude over floor (split across 2 bins)
 
 // Zero-distance phase. A real sensor's peak sits at phase = zdp + range*slope (the
 // driver SUBTRACTS zdp to recover the distance). The driver computes zdp from the
@@ -146,15 +145,19 @@ void fill_histogram(uint8_t* d, size_t n)
 
     // Sub-bin skew. A real return spreads across adjacent bins by the SPAD response;
     // gen4 recovers the phase as a centroid of the filtered pulse. We model the target
-    // as a two-bin split between b0 and b0+1 weighted by the fractional position frac,
+    // as a TWO-BIN split between b0 and b0+1 weighted by the fractional position frac,
     // so the decoded centroid tracks the distance CONTINUOUSLY (not just bin centers).
-    // Outer shoulders b0-1 / b0+2 give clean pulse edges for f_007 detection.
-    // サブbin skew。実戻りは隣接 bin に広がり gen4 は重心で位相復元。目標を b0 と b0+1 に
-    // frac 比で2分割し、復号重心を距離に連続追従させる（bin 中心への量子化を解消）。
+    // The surrounding ambient floor (below the gen4 detection threshold) is itself the
+    // clean pulse edge — NO extra raised shoulders (they would distort the centroid and,
+    // at frac≈0/1 where one split bin collapses to the floor, leave a 1-bin gap to the
+    // shoulder that gen4 misreads as a wrap target).
+    // サブbin skew。目標を b0/b0+1 に frac 比で2分割し復号重心を距離に連続追従させる。
+    // 周囲の ambient floor（検出閾値以下）自体が pulse edge ＝外側 shoulder は付けない
+    // （重心を歪め、frac≈0/1 の退化時に gap を生み wrap-target 誤判定を招くため）。
     int   b0   = (int)floorf(fbin);
     float frac = fbin - (float)b0;              // [0,1): centroid sits at b0 + frac
-    if (b0 < AMBIENT_BIN_STRIP + 2) { b0 = AMBIENT_BIN_STRIP + 2; frac = 0.0f; }
-    if (b0 > 21) { b0 = 21; frac = 0.0f; }      // need b0, b0+1, b0+2 within bins 0..23
+    if (b0 < AMBIENT_BIN_STRIP + 1) { b0 = AMBIENT_BIN_STRIP + 1; frac = 0.0f; }
+    if (b0 > 22) { b0 = 22; frac = 0.0f; }      // need b0, b0+1 within bins 0..23
 
     const uint32_t main_lo = (uint32_t)lrintf((float)PEAK * (1.0f - frac));
     const uint32_t main_hi = (uint32_t)lrintf((float)PEAK * frac);
@@ -163,8 +166,6 @@ void fill_histogram(uint8_t* d, size_t n)
     for (int k = 0; k < 24; ++k) bins[k] = AMBIENT;
     bins[b0]     = AMBIENT + main_lo;       // two-bin split → centroid at b0 + frac
     bins[b0 + 1] = AMBIENT + main_hi;
-    bins[b0 - 1] = AMBIENT + SHOULDER;      // outer shoulders for clean pulse edges
-    bins[b0 + 2] = AMBIENT + SHOULDER;
 
     d[0] = 0x03;                    // interrupt_status (cosmetic)
     d[1] = 0x09;                    // range_status = RANGECOMPLETE (no abort)
