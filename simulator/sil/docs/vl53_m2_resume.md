@@ -3,82 +3,82 @@
 > 作業再開用の自己完結メモ。新しいセッション（空コンテキスト）でも、このファイルだけで M2 を続行できることを目標にする。
 > Self-contained resume note: a fresh session should be able to continue M2 from this file alone.
 
-最終更新: 2026-06-02 / 直近コミット: `9bd685d`（M1 完了, M2 WIP）
+最終更新: 2026-06-02 / 直近コミット: `d858191`（M1 完了, M2 WIP）。**本更新で M2 コア達成**（下記 §0）。
 
 ---
 
-## 1. 現状（State）
+## 0. M2 コア = 達成・検証済み（2026-06-02）
 
-**Milestone 1 = 完了・検証済み。** 無改変の ST BareDriver 1.2.14（HISTOGRAM モード）がエミュレータ `emu_vehicle` で
-boot → DataInit → 0x29→0x30 再アドレス → 測距ループ完走する。実機ログ:
+**結論: emu_vehicle の ToFTask が `bottom≈target status=0`（VALID）を返すようになった。** 距離掃引（実エミュレータ）:
+
+| target | bottom | status |
+|--------|--------|--------|
+| 100mm | 96mm | 0 |
+| 300mm | 289mm | 0 |
+| 500mm | 481mm | 0 |
+| 700mm | 674mm | 0 |
+| 1000mm | 1059mm | 0 |
+| 1300mm | 1251mm | 0 |
+
+誤差は**対称ピークの±96mm 量子化**（1bin=192.5mm）の範囲内。status は frame 0,1=6(NO_WRAP_CHECK)→
+frame 2=4(一過性)→**frame 3 以降ずっと 0**（14フレームで安定確認）。
+
+**resume ノート §2/§4/§5 の前提は誤りだった。** 実際は「ピーク未検出（NumberOfObjectsFound=0）」ではなく、
+**ピークは検出されていた（=1）が 3 つの別問題でレンジが無効だった**。オフライン probe（§3 Option B、実装済み）が
+即座に暴いた。真の原因と修正（実コード裏取り済み）:
+
+### 修正1: zero_distance_phase = 22528（zdp≠0）★最重要
+- §5 は「phasecal_result__reference_phase=0 → zdp=0」と仮定していたが**誤り**。
+  `VL53LX_hist_calc_zero_distance_phase`（vl53lx_core_support.c:165）は
+  `zdp = (period + ref_phase + 2048·vcsel_start − 2048·cal_vcsel_start) % period`。
+  我々の ref_phase=0, vcsel_start=0 でも、HISTOGRAM_LONG の vcsel period(9)・cal_config__vcsel_start により
+  **zdp = 22528 = 11 bin**（決定論的）。
+- driver は `range = (peak_phase − zdp) × 0.094`。ピークを phase=R×10.639（zdp=0前提）に置くと
+  **負レンジ → status 4(OUT_OF_BOUNDS)**。f_017（gen3.c:786）の valid window は
+  `[zdp−(valid_phase_low<<8), zdp+(valid_phase_high<<8)] = [20480, 57344]`。
+- **修正**: ピーク phase = `ZERO_DIST_PHASE(22528) + R×10.639` に置く。
+
+### 修正2: ambient-bin strip = 4
+- HISTOGRAM_LONG の bin_seq=[7,0,1,2,3,4]。0x07 コード→`number_of_ambient_bins=4`。
+  gen4 は `VL53LX_hist_remove_ambient_bins`（core_support.c:244）で**先頭4bin を strip し左シフト**してから
+  ピーク検出。よって raw bin に置いたピークは output で 4 bin 左にずれる。
+- 実証: raw bin 5 のピーク → output bin 1 → phase 3072 → range (3072−22528)×0.094 = **−1828mm**（probe と完全一致）。
+- **修正**: RAW buffer には `output_bin + AMBIENT_BIN_STRIP(4)` に置く。
+
+### 修正3: result__stream_count を進める ★status 0 昇格の鍵
+- 旧モデルは `g_vl.ptr == 0x0086` 完全一致で stream++。だが driver の measurement 再開
+  （`init_and_start_range`）は **MODE_START(0x0087) を末尾に含むブロック書き込み**（StartMeasurement=0x0001..0x0088,
+  ClearInterruptAndStartMeasurement=0x0044..0x0088）。先頭ポインタは下位アドレスなので**完全一致では捕捉できず
+  stream が 0 固定**だった。
+- stream=0 固定 → driver は毎フレームを「最初のフレーム」と誤認（multi_bins_rec を毎回リセット, api_core.c:2642）→
+  rolling 再結合・`VL53LX_hist_phase_consistency_check`（core.c:1729, prev フレームが ranging 状態でないと早期 return）が
+  破綻 → status が 6,6,4,7 と振動し**永遠に 0 にならない**。
+- **修正**: 書き込みが MODE_START(0x0087) を含めば stream++（init=0xFF で frame 0 が 0）。これで stream が
+  0,1,2,... と進み、phase-consistency が成立 → frame 3 以降 status 0。
+
+実装場所: **`simulator/sil/devices/vl53_device.cpp`**（virtual_board.cpp から分離。probe と共有）の
+`sil_vl53::xfer` / `fill_histogram` / `target_mm` と定数 `ZERO_DIST_PHASE` / `AMBIENT_BIN_STRIP` / `REG_MODE_START`。
+virtual_board.cpp の `sil_board_i2c_xfer` は 0x29/0x30 を `sil_vl53::set_distance_mm`+`xfer` へ委譲。
+
+### 残課題（M2 仕上げ）
+- **skew 較正（サブbin精度）**: 現状 ±96mm 量子化。§5 の肩 skew で数 mm に。probe で 1-2 回較正。
+- **MAX_MM=1400 の制約**: zdp=11bin + strip 4 で usable output bin は 11..18（~1540mm まで）。ホバー(<1m)は十分だが、
+  高高度は phase wrap 処理が要る（M2 範囲外）。
+
+---
+
+## 3. オフライン gen4 probe（実装済み・検証ツール）
+
+`simulator/sil/smoke/vl53_probe.cpp`（CMake `SIL_BUILD_VL53_PROBE`, OFF 既定）。無改変 ST ドライバを
+チップモデル（`devices/vl53_device.cpp`）に直結（FreeRTOS/MuJoCo/scheduler 無し、自前 platform port）。
+毎フレーム `MultiRangingData` 全体＋ decoded `histogram_bin_data`（number_of_ambient_bins, total_periods_elapsed,
+vcsel_width, bin_seq, zero_distance_phase, bins）＋ post-process config を printf。ビルド・実行:
+```bash
+cmake -S simulator/sil -B simulator/sil/build -DSIL_BUILD_VL53_PROBE=ON
+cmake --build simulator/sil/build --target vl53_probe -j
+./simulator/sil/build/vl53_probe 700 6   # target_mm frames
 ```
-VL53L3CX (BOTTOM) initialized at address 0x30
-Bottom ToF sensor initialized successfully
-Bottom ToF initialized and ranging
-ToFTask: ToFTask alive: bottom=0mm status=255
-```
-
-**Milestone 2 = WIP（未達）。** histogram 合成は実装済みだが、gen4 が **`NumberOfObjectsFound=0`（ピーク未検出）**
-→ ラッパー `getDistance` が status=255 / distance=0 を返す（`vl53l3cx_wrapper.cpp:309-311`）。
-距離が出ない。**これを解くのが M2 のゴール。**
-
-実装場所: `simulator/sil/devices/virtual_board.cpp` の `vl53_*`（`vl53_xfer` / `vl53_fill_histogram` /
-`vl53_target_mm` / `vl53_pack_bin` と定数）+ `sil_board_i2c_xfer` の `0x29||0x30` 分岐。
-
----
-
-## 2. M2 の唯一の壁（The blocker）
-
-gen4 パイプライン（`VL53LX_ipp_hist_process_data` → `VL53LX_f_025`, gen4.c）が、合成した histogram から
-**ピークを「物体」として検出していない** → `NumberOfObjectsFound=0`。
-
-確認済み: status=255 は「物体0個」を意味する（254=物体ありだが全無効, 6=no-wrap-check）。つまり
-**まだ検出器の手前で落ちている**（RangeStatus の段階まで到達していない）。
-
----
-
-## 3. 再開の初手 = gen4 の可視化（最優先）
-
-盲目反復（リビルド＋20秒起動で status だけ見る）は遅すぎる。**まず gen4 の内部値を見えるようにする。**
-2 案。**Option B（オフライン harness）を推奨**（init 状態を実 driver で確立でき、Plant 不要、反復が速い）。
-
-### Option A: ST トレースを有効化
-- `vl53lx_platform_log.h` は `#ifdef VL53LX_LOG_ENABLE` でゲート。有効時 `VL53LX_trace_print_module_function`,
-  `_trace_level`(extern), `VL53LX_get/set_trace_functions`, `VL53LX_clock` が必要（**src/ に実装なし** → 自前で用意）。
-- 手順: emu_vehicle ターゲットに `target_compile_definitions(emu_vehicle PRIVATE VL53LX_LOG_ENABLE)` を追加し、
-  小さな backend（printf 版 `VL53LX_trace_print_module_function` + `uint32_t _trace_level;` + get/set スタブ）を
-  `devices/` に新規作成してリンク。`VL53LX_clock` は `devices/vl53_platform_glue.c` 由来の tick があれば流用、無ければ 0 返し。
-- trace レベル/モジュールを CORE+DEBUG（`VL53LX_TRACE_MODULE_CORE | _ALL`, `_trace_level=VL53LX_TRACE_LEVEL_ALL`）に。
-- **リスク**: 巨大 ST コードで一斉に展開 → format-string 警告や未定義シンボルが出る可能性。OFF 既定の CMake option で隔離する。
-
-### Option B: オフライン gen4 harness（推奨）
-- 新規 `simulator/sil/smoke/vl53_probe.cpp`: ST driver 一式 + `devices/virtual_board.cpp`（の vl53 model）+
-  `devices/vl53_platform_glue.c` をリンクし、`VL53LX_DEV` を作って
-  `WaitDeviceBooted → DataInit → SetDistanceMode(LONG) → StartMeasurement → (loop) GetMultiRangingData` を直接呼ぶ。
-- **各フレームで `VL53LX_MultiRangingData_t` 全体を printf**: `NumberOfObjectsFound`, 各 target の
-  `RangeStatus`, `RangeMilliMeter`, `SignalRateRtnMegaCps`, `AmbientRateRtnMegaCps`, `SigmaMilliMeter`。
-- 距離は `SIL_VL53_TEST_MM` で与える（`vl53_target_mm()` が拾う。g_plant 不要）。
-- I2C 配線: ST driver の `VL53LX_ReadMulti/WriteMulti`（vl53lx_platform.c）が ESP-IDF `i2c_master_*` を使うか確認し、
-  使うなら既存 shim 経由で `sil_board_i2c_xfer`→`vl53_xfer` に届く。届かない場合は platform を直接 `sil_board_i2c_xfer` に繋ぐ薄いブリッジを harness 側で用意。
-- これで「合成 histogram → gen4 の生の判定」が**1 ビルドで何十距離も**見える。CMake に `SIL_BUILD_VL53_PROBE` option（OFF 既定）で追加。
-
----
-
-## 4. ピーク未検出の根本原因 候補（可視化後にこの順で潰す）
-
-1. **信号ゲート未通過**: pulse net events `VL53LX_p_010`（pulse 幅でピーク−ambient の和）が
-   `signal_total_events_limit=100` 未満 → active_results=0。現状 peak=2000 で十分なはずだが、bin の
-   読み取り or ambient 減算が想定とズレている可能性。harness で `SignalRateRtnMegaCps` を見る。
-2. **gen4 設定依存（最有力）**: `bin_seq` / `vcsel period`(`VL53LX_p_005`) / `number_of_ambient_bins` /
-   `total_periods_elapsed` 等が init の RAM 状態由来。NVM ゼロ返しや config-write を「ACK だけで保存しない」ため、
-   gen4 が期待する内部状態と不整合の可能性。特に `number_of_ambient_bins`（bin_seq の 0x07 ニブルで増える）が
-   非0だと **読んだ 24 bin と論理 bin の対応がズレる**（`VL53LX_hist_remove_ambient_bins` がバッファをシフト）。
-   → harness で bin_seq / number_of_ambient_bins を確認。
-3. **rolling/stream の不整合**: gen4 は `pdev->ll_state.rd_stream_count`（driver 内部カウンタ）で
-   even/odd bin 列を選ぶ（私が出す 0x008B stream_count とは別物）。`stream_count==0` の最初のフレームは
-   `multi_bins_rec` をリセット（api_core.c:2642）。検出には複数フレームの蓄積が要る可能性。
-4. **histogram のスケール/符号**: bin 値 24bit BE は正しいと確認済みだが、ambient 推定（低 bin の平均）が
-   floor=40 を「全部信号」と誤認 or 閾値計算で潰れている可能性。ambient bin を明確に低く、peak を鋭くする。
+これが「合成 histogram → gen4 の生の判定」を 1 ビルドで何十距離も見せ、上記3原因を即座に暴いた。
 
 ---
 
@@ -103,7 +103,7 @@ gen4 パイプライン（`VL53LX_ipp_hist_process_data` → `VL53LX_f_025`, gen
   - off0(0x88) interrupt_status / off1(0x89) **range_status=0x09**(RANGECOMPLETE, abort 回避) /
     off2 report / off3 stream_count / off4-5(0x8C-0x8D) dss_spads u16 BE
   - **bins: off6(0x8E) から 24個 × 3 バイト BE**（bin k = off 6+3k）。`HISTOGRAM_BIN_0_2=0x008E` 確認済み。
-  - phasecal_result__reference_phase u16 BE at off78(0x00D6) = 0 → zdp 0
+  - phasecal_result__reference_phase u16 BE at off78(0x00D6) = 0 → **zdp = 22528（≠0!）** §0 修正1 参照
   - phasecal_result__vcsel_start u8 at off80(0x00D8) = 0
   - **bin23 修復**: driver が `buf[0x00D5(off77)] = (buf[0x00D9(off81)]<<2) + buf[0x00DA(off82)]` で
     bin23 の低バイトを上書き（api_core.c:2606-2622, **bin ループ前**）。整合させること。

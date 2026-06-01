@@ -32,6 +32,7 @@
 
 #include "plant.hpp"        // sil::Plant
 #include "data_types.hpp"   // sf::ImuData, sf::MotorOutput
+#include "vl53_device.hpp"  // sil_vl53 (VL53L3CX ToF chip model, shared with the probe)
 
 namespace {
 
@@ -385,151 +386,11 @@ int bmp280_xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     return 0;
 }
 
-// --- VL53L3CX ToF (I2C addr 0x29 → re-addressed to 0x30 bottom) ---------------
-// ST BareDriver 1.2.14 in HISTOGRAM mode runs UNMODIFIED on the host. Unlike
-// INA3221/BMP280 (8-bit register pointer), VL53 uses a 16-bit BIG-ENDIAN register
-// index. The real driver boots, inits (reading NVM blocks we zero-fill → it
-// self-heals fast_osc to 0xBCCC), sets HISTOGRAM_LONG_RANGE, then in the ranging
-// loop polls data-ready (0x0031, ACTIVE_LOW → ready when bit0==0) and reads an
-// 83-byte histogram block at 0x0088 that the on-host gen4 pipeline decodes to a
-// range. We synthesize that histogram from the Plant down-range distance: a single
-// peak whose center-of-mass phase encodes the range (range = 0.093994·phase, 1 bin
-// = 192.5 mm; vl53lx_core_support.c VL53LX_range_maths). Verified register facts:
-// 0x0088 size 83 (=0xDA-0x88+1), 0x00E5 boot bit0, 0x0031 ACTIVE_LOW data-ready.
-//
-// VL53L3CX ToF（I2C 0x29→bottom 0x30）。ST ベアドライバをホストで無改変稼働。16bit
-// BE レジスタポインタ。実ドライバが boot/init（NVMはゼロ返しで fast_osc 0xBCCC へ自己
-// 修復）→HISTOGRAM_LONG→測定ループで data-ready(0x0031, ACTIVE_LOW)をポーリングし
-// 0x0088 の83バイト histogram を読む。それを Plant の下向き距離から合成（距離=0.094·位相,
-// 1bin=192.5mm）。
-constexpr uint16_t VL53_ADDR_DEFAULT  = 0x29;   // power-on I2C address
-constexpr uint16_t VL53_ADDR_BOTTOM   = 0x30;   // re-addressed bottom altimeter
-constexpr uint16_t VL53_REG_SYS_STATUS = 0x00E5;  // FIRMWARE__SYSTEM_STATUS (boot gate)
-constexpr uint16_t VL53_REG_GPIO_STAT  = 0x0031;  // GPIO__TIO_HV_STATUS (data-ready)
-constexpr uint16_t VL53_REG_INT_CLEAR  = 0x0086;  // SYSTEM__INTERRUPT_CLEAR (frame advance)
-constexpr uint16_t VL53_REG_HIST       = 0x0088;  // RESULT__INTERRUPT_STATUS (histogram base)
-constexpr uint16_t VL53_REG_OSC_CAL    = 0x00DE;  // RESULT__OSC_CALIBRATE_VAL (must be non-zero)
-constexpr int      VL53_HIST_BYTES     = 83;      // 0x00DA - 0x0088 + 1
-
-struct Vl53State {
-    uint16_t ptr    = 0;   // 16-bit register pointer (write-then-read)
-    uint8_t  stream = 0;   // stream_count, advanced on interrupt-clear
-};
-Vl53State g_vl;
-
-// Histogram synthesis constants. The runtime range slope (vl53lx_core_support.c
-// VL53LX_range_maths with fast_osc=0xBCCC, gain=1987, offset=0, zdp=0) is
-// 0.093994 mm per phase unit → its inverse 10.639 phase units per mm. One bin = 2048
-// phase units = 192.5 mm. A clean single peak passes the gen4 sigma/signal gates.
-// 距離傾き 0.093994 mm/位相 の逆数 10.639 位相/mm（1bin=192.5mm）。単峰でゲート通過。
-constexpr float    VL53_PHASE_PER_MM = 10.639f;
-constexpr uint32_t VL53_AMBIENT      = 40;     // ambient floor events / bin
-constexpr uint32_t VL53_PEAK         = 2000;   // peak amplitude over floor
-constexpr uint32_t VL53_SHOULDER     = 200;    // neighbor amplitude over floor (1-2 bin width)
-constexpr float    VL53_MAX_MM       = 3200.0f;  // single-peak phase window cap (~3.27 m)
-
-// Target down-range distance [mm]: the Plant ToF, or a test override (SIL_VL53_TEST_MM)
-// for sweeping the histogram→range mapping without an airborne craft. Cached once.
-// 目標下向き距離[mm]: Plant ToF、または検証用の SIL_VL53_TEST_MM 上書き（1回キャッシュ）。
-float vl53_target_mm()
-{
-    static float override_mm = -1.0f;
-    static bool  checked = false;
-    if (!checked) {
-        checked = true;
-        const char* e = std::getenv("SIL_VL53_TEST_MM");
-        if (e != nullptr && e[0] != '\0') override_mm = (float)std::atof(e);
-    }
-    if (override_mm >= 0.0f) return override_mm;
-    sf::TofData t = {};
-    if (g_plant != nullptr) t = g_plant->tof();
-    return t.distance * 1000.0f;
-}
-
-// Pack a 24-bit big-endian event count into 3 bytes at d (clamped to 0..0xFFFFFF).
-// 24bit BE のイベント数を3バイトに詰める。
-void vl53_pack_bin(uint8_t* d, uint32_t v)
-{
-    if (v > 0x00FFFFFFu) v = 0x00FFFFFFu;
-    d[0] = (uint8_t)((v >> 16) & 0xFF);
-    d[1] = (uint8_t)((v >> 8) & 0xFF);
-    d[2] = (uint8_t)(v & 0xFF);
-}
-
-// Build the 83-byte histogram block at 0x0088 (offset = absreg - 0x0088) from the
-// target distance: an ambient floor + a single peak whose center-of-mass phase
-// encodes the range. Milestone 2a = SYMMETRIC peak at the nearest bin (±96 mm
-// quantization); shoulder-skew for finer accuracy is added next. range_status
-// (off1)=0x09 (RANGECOMPLETE) avoids the RANGE_ERROR abort; RangeStatus upgrades to
-// 0 from frame 2 (phase-consistency) when the distance is stable.
-// 83バイト histogram を目標距離から構築。ambient floor＋単峰（重心位相が距離を符号化）。
-// 2a は最近傍 bin の対称ピーク（±96mm量子化）。skew は次段で。
-void vl53_fill_histogram(uint8_t* d, size_t n)
-{
-    std::memset(d, 0, n);
-    if (n < (size_t)VL53_HIST_BYTES) return;
-
-    float dist_mm = vl53_target_mm();
-    if (dist_mm < 0.0f)        dist_mm = 0.0f;
-    if (dist_mm > VL53_MAX_MM) dist_mm = VL53_MAX_MM;
-    const int32_t phase = (int32_t)lrintf(dist_mm * VL53_PHASE_PER_MM);   // target phase (zdp=0)
-    // Nearest bin whose center phase (b0*2048+1024) matches the target; clamp to a
-    // safe range (bin window cap, leave room for shoulders, avoid the bin-23 fixup).
-    // 目標に最も近い中心位相を持つ bin（端は回避）。
-    int b0 = (int)lrintf(((float)phase - 1024.0f) / 2048.0f);
-    if (b0 < 1)  b0 = 1;
-    if (b0 > 16) b0 = 16;
-
-    uint32_t bins[24];
-    for (int k = 0; k < 24; ++k) bins[k] = VL53_AMBIENT;
-    bins[b0]     = VL53_AMBIENT + VL53_PEAK;
-    bins[b0 - 1] = VL53_AMBIENT + VL53_SHOULDER;     // symmetric shoulders → COM at bin center
-    bins[b0 + 1] = VL53_AMBIENT + VL53_SHOULDER;
-
-    d[0] = 0x03;                    // interrupt_status (cosmetic)
-    d[1] = 0x09;                    // range_status = RANGECOMPLETE (no abort)
-    d[2] = 0x00;                    // report_status
-    d[3] = g_vl.stream;             // stream_count (advances per frame)
-    d[4] = 0x00; d[5] = 0xC0;       // dss_actual_effective_spads = 192 (BE)
-    for (int k = 0; k < 24; ++k) vl53_pack_bin(d + 6 + 3 * k, bins[k]);
-    d[78] = 0x00; d[79] = 0x00;     // phasecal_result__reference_phase = 0 → zdp 0
-    d[80] = 0x00;                   // phasecal_result__vcsel_start = 0
-    const uint8_t bin23_lsb = (uint8_t)(bins[23] & 0xFF);
-    d[81] = (uint8_t)(bin23_lsb >> 2);    // BIN_23_0_MSB: reproduce bin23 low byte
-    d[82] = (uint8_t)(bin23_lsb & 0x03);  // BIN_23_0_LSB
-}
-
-// One VL53 I2C transaction. 16-bit BE register pointer in write_buf[0..1].
-// VL53 の1 I2Cトランザクション。16bit BE レジスタポインタは write_buf[0..1]。
-int vl53_xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
-{
-    if (wbuf != nullptr && wlen >= 2) {
-        g_vl.ptr = (uint16_t)((wbuf[0] << 8) | wbuf[1]);
-    }
-    // Write-only (transmit): config writes — ACK. Advance the frame on interrupt-clear.
-    // 書き込みのみ（config）: ACK。interrupt-clear でフレームを進める。
-    if (rbuf == nullptr) {
-        if (g_vl.ptr == VL53_REG_INT_CLEAR) g_vl.stream++;
-        return 0;
-    }
-    // Read phase.
-    std::memset(rbuf, 0, rlen);
-    if (g_vl.ptr == VL53_REG_SYS_STATUS) {
-        rbuf[0] = 0x01;                                       // boot complete (bit0=1)
-    } else if (g_vl.ptr == VL53_REG_GPIO_STAT) {
-        rbuf[0] = 0x00;                                       // data ready (ACTIVE_LOW: bit0=0)
-    } else if (g_vl.ptr == VL53_REG_OSC_CAL && rlen >= 2) {
-        // RESULT__OSC_CALIBRATE_VAL (BE word) — MUST be non-zero or the driver's
-        // set_inter_measurement_period_ms returns DIVISION_BY_ZERO during init. The
-        // value only scales the (unused, back-to-back) inter-measurement timer.
-        // 非ゼロ必須（0だと init で DIVISION_BY_ZERO）。back-to-back では未使用の計時係数。
-        rbuf[0] = 0x06; rbuf[1] = 0x00;                       // 0x0600
-    } else if (g_vl.ptr == VL53_REG_HIST) {
-        vl53_fill_histogram(rbuf, rlen);
-    }
-    // else: NVM/identity/config read-back → zeros (driver self-heals).
-    return 0;
-}
+// VL53L3CX ToF (I2C 0x29 → re-addressed to 0x30 bottom): the chip model lives in
+// devices/vl53_device.cpp (namespace sil_vl53), shared with the offline gen4 probe
+// (smoke/vl53_probe.cpp). sil_board_i2c_xfer pushes the Plant ToF and delegates.
+// VL53L3CX ToF モデルは devices/vl53_device.cpp（sil_vl53）に分離（プローブと共有）。
+// sil_board_i2c_xfer が Plant ToF を渡して委譲する。
 
 }  // namespace
 
@@ -579,9 +440,15 @@ int sil_board_i2c_xfer(uint16_t addr, const uint8_t* write_buf, size_t write_siz
     }
     // VL53L3CX bottom altimeter: power-on 0x29, then re-addressed to 0x30. Route both
     // (the model is stateless w.r.t. address; front 0x31 is left to the catch-all).
-    // VL53L3CX 下向き測距: 起動時 0x29 → 0x30 へ再アドレス。両方を振り分け（front 0x31 は catch-all）。
-    if (addr == VL53_ADDR_DEFAULT || addr == VL53_ADDR_BOTTOM) {
-        return vl53_xfer(write_buf, write_size, read_buf, read_size);
+    // Push the current Plant down-range distance so the synthesized histogram encodes
+    // it (the env override SIL_VL53_TEST_MM, if set, still wins inside the model).
+    // VL53L3CX 下向き測距: 起動時 0x29 → 0x30 へ再アドレス。両方を振り分け（front 0x31 は
+    // catch-all）。Plant の下向き距離を渡し合成 histogram に符号化させる。
+    if (addr == sil_vl53::ADDR_DEFAULT || addr == sil_vl53::ADDR_BOTTOM) {
+        if (g_plant != nullptr) {
+            sil_vl53::set_distance_mm(g_plant->tof().distance * 1000.0f);
+        }
+        return sil_vl53::xfer(write_buf, write_size, read_buf, read_size);
     }
     if (read_buf != nullptr && read_size > 0) std::memset(read_buf, 0, read_size);
     return 0;

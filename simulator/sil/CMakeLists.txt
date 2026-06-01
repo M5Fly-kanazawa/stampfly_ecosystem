@@ -282,6 +282,7 @@ if(SIL_BUILD_EMU)
     ${EMU_FW_SRCS}
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp     # E1: BMI270 + motors → Plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp       # E2: VL53L3CX ToF chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
     plant/plant.cpp                                           # MuJoCo physics plant
@@ -332,6 +333,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c   # missing fw platform fn
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp    # workshop-only weak symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp        # E2: VL53L3CX ToF chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp          # shared ESP-NOW recv/send hub
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp     # E6: shared ControlPacket builder
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_pilot_vehicle.cpp  # ESP-NOW virtual pilot (E3)
@@ -350,4 +352,41 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_VV_INCS})
   target_link_libraries(emu_vehicle PRIVATE Threads::Threads mujoco)
+endif()
+
+# -----------------------------------------------------------------------------
+# VL53L3CX offline gen4 probe (Milestone 2 visibility tool). Drives the UNMODIFIED
+# ST BareDriver against the chip model (devices/vl53_device.cpp) directly on the
+# host — NO FreeRTOS / esp_timer / MuJoCo / scheduler — and prints, per frame, the
+# full MultiRangingData AND the decoded histogram_bin_data gen4 consumes. OFF by
+# default: a debugging tool, not part of the regression set. Fast to rebuild/run.
+# VL53L3CX オフライン gen4 プローブ（M2 可視化ツール）。無改変 ST ドライバをチップモデルに
+# 直結（FreeRTOS/MuJoCo/スケジューラ無し）。OFF 既定。高速反復用。
+# -----------------------------------------------------------------------------
+option(SIL_BUILD_VL53_PROBE "Build the offline VL53L3CX gen4 probe (Milestone 2)" OFF)
+if(SIL_BUILD_VL53_PROBE)
+  set(VL53_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/vehicle/components/sf_hal_vl53l3cx)
+
+  # ST driver core (compiled UNMODIFIED). The firmware's vl53lx_platform.c
+  # (FreeRTOS/esp) is deliberately NOT in this list — the probe links its own host
+  # platform port instead (so no scheduler/timer deps leak in).
+  # ST ドライバコア（無改変）。ファームの vl53lx_platform.c は不使用（プローブが自前 port）。
+  file(GLOB VL53_CORE_SRCS ${VL53_SRC}/src/vl53lx/*.c)
+  list(APPEND VL53_CORE_SRCS
+       ${VL53_SRC}/src/vl53lx_platform_ipp.c
+       ${VL53_SRC}/src/vl53lx_outlier_filter.c)
+
+  add_executable(vl53_probe
+    smoke/vl53_probe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp
+    ${VL53_CORE_SRCS})
+  set_target_properties(vl53_probe PROPERTIES C_STANDARD 11)
+  # esp_idf_host (driver/i2c_master.h) + compat (esp_err.h) are header-only here.
+  target_include_directories(vl53_probe BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host ${SIL_COMPAT}
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices
+    ${VL53_SRC}/include
+    ${VL53_SRC}/include/vl53lx
+    ${VL53_SRC}/src
+    ${VL53_SRC}/src/vl53lx)
 endif()
