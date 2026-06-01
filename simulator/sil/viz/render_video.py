@@ -330,7 +330,12 @@ def main():
     gate = results.get("gate", "G3")
     noise = results.get("noise", "off")
     noise_tag = "" if noise in ("off", None) else f", noise {noise}"
-    title = (f"StampFly SIL — {ms}: takeoff → hover → yaw → landing  "
+    # Flight description: a milestone (hover_smoke) keeps the takeoff→landing default;
+    # a scenario bundle supplies its own accurate phrase so the title does not
+    # over-claim a flight that did not happen.
+    # 飛行の説明: マイルストーンは既定（takeoff→landing）、シナリオは自前の正確な語句を出す。
+    flight = results.get("flight", "takeoff → hover → yaw → landing")
+    title = (f"StampFly SIL — {ms}: {flight}  "
              f"({est}{noise_tag}, {gate} {verdict})")
 
     model = mujoco.MjModel.from_xml_path(args.model)

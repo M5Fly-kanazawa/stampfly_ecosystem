@@ -98,6 +98,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="assertions file (default: <scenario>.expect if it exists)")
     p.add_argument("--duration", type=int, default=25_000_000,
                    help="sim duration in microseconds (default 25 s)")
+    p.add_argument("--video", action="store_true",
+                   help="on PASS, render a review MP4 (MuJoCo 3D + state graphs) from the run")
     p.set_defaults(func=run_scenario)
 
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
@@ -250,7 +252,13 @@ def run_scenario(args: argparse.Namespace) -> int:
     bundle = _sil_dir() / "viz" / f"out_scn_{scn.stem}"
     bundle.mkdir(parents=True, exist_ok=True)
     events = bundle / "events.jsonl"
-    env = dict(os.environ, SIL_EMU_EVENTS=str(events))
+    traj = bundle / "trajectory.csv"
+    # SIL_EMU_TRAJ tells the emulator to record a render_video.py-compatible
+    # trajectory.csv into the bundle (so --video can render the run). Harmless and
+    # deterministic; the recorder is a no-op in any emulator that ignores it.
+    # SIL_EMU_TRAJ は render_video.py 互換の trajectory.csv をバンドルへ記録させる
+    # （--video で描画可能に）。決定論的で無害、未対応エミュレータでは no-op。
+    env = dict(os.environ, SIL_EMU_EVENTS=str(events), SIL_EMU_TRAJ=str(traj))
 
     console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us)...")
     # The emulator reads stdin (the firmware CLI); feed /dev/null so any non-key
@@ -289,6 +297,9 @@ def run_scenario(args: argparse.Namespace) -> int:
         "gate": "scenario", "milestone": f"scn_{scn.stem}", "kind": "scenario",
         "scenario": str(scn), "target": target, "exit_code": r.returncode,
         "pass": bool(verdict), "checks": checks,
+        # Accurate flight label for the review-video title (no takeoff/landing claim).
+        # レビュー動画タイトル用の正確な飛行ラベル（離着陸を主張しない）。
+        "flight": "scripted-input scenario",
     }
     (bundle / "results.json").write_text(json.dumps(results, indent=2) + "\n")
 
@@ -303,6 +314,28 @@ def run_scenario(args: argparse.Namespace) -> int:
         console.success(f"bundle: {bundle}")
     else:
         console.error(f"scenario FAILED — see {bundle}/console.log")
+
+    # --video: render a review MP4 (MuJoCo 3D + state graphs) from the trajectory the
+    # run just recorded. Only on PASS and only if a trajectory was actually written.
+    # --video: 実行が記録した軌跡からレビュー動画（MuJoCo 3D＋状態グラフ）を描画。
+    # PASS かつ軌跡が書かれた場合のみ。
+    if verdict and getattr(args, "video", False):
+        py = _venv()
+        if py is None:
+            console.error("viz venv missing — cannot render (see simulator/sil/viz)")
+        elif not (traj.exists() and traj.stat().st_size > 0):
+            console.error(f"no trajectory.csv in {bundle} — is {exe.name} wired for "
+                          "SIL_EMU_TRAJ recording?")
+        else:
+            out = bundle / f"scn_{scn.stem}.mp4"
+            console.info("Rendering review video (MuJoCo 3D + state graphs)...")
+            rv = subprocess.run([str(py), str(_sil_dir() / "viz" / "render_video.py"),
+                                 "--model", str(_model()), "--bundle", str(bundle),
+                                 "--out", str(out), "--fps", "50"])
+            if rv.returncode == 0:
+                console.success(f"Video: {out}")
+            else:
+                console.error("render_video.py failed")
     return 0 if verdict else 2
 
 

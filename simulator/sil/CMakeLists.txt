@@ -339,6 +339,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp     # E6: scripted console bytes
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp   # E6: dispatching console registry
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp         # E6: events.jsonl recorder
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp     # review-video trajectory recorder
     plant/plant.cpp
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp

@@ -306,4 +306,12 @@ void sil_board_ledc_set_duty(int channel, uint32_t duty, uint32_t max_duty)
     }
 }
 
+void sil_board_get_motor_duty(float out[4])
+{
+    // Hand back the latched motor duties (M1..M4) for the trajectory recorder.
+    // ラッチ済みのモータ duty（M1..M4）を軌跡レコーダへ返す。
+    if (out == nullptr) return;
+    for (int i = 0; i < 4; ++i) out[i] = g_motor_duty[i];
+}
+
 }  // extern "C"

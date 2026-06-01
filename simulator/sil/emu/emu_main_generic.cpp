@@ -36,6 +36,7 @@
 #include "scenario.hpp"          // E6: deterministic scripted-input timeline
 #include "console_feeder.hpp"    // E6: scripted console bytes -> firmware stdin
 #include "emu_record.hpp"        // E6: virtual-time-stamped input/event log
+#include "emu_trajectory.hpp"    // review-video trajectory recorder (SIL_EMU_TRAJ)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -66,6 +67,9 @@ void on_advance(int64_t now_us)
         // 有界判定できるようにする（一時的に上昇して戻る軌跡を最終値だけでは見逃す）。
         const float alt = -g_plant.truth().pos_ned.z;
         if (alt > g_peak_alt) g_peak_alt = alt;
+        // Record a review-video trajectory row (no-op unless SIL_EMU_TRAJ was set).
+        // レビュー動画用に軌跡を1行記録（SIL_EMU_TRAJ 未設定なら no-op）。
+        sil_emu_traj_sample((double)now_us * 1e-6, &g_plant);
     }
 }
 
@@ -127,6 +131,11 @@ int main(int argc, char** argv)
     // 未設定なら閉じたまま＝record は no-op ＝ 既定実行は本機能前と byte-identical。
     sil_emu_record_open(std::getenv("SIL_EMU_EVENTS"));
 
+    // Open the review-video trajectory if requested (SIL_EMU_TRAJ → CSV path). Unset
+    // → recorder stays closed and every sample is a no-op (run unchanged).
+    // レビュー動画の軌跡を要求時に開く（SIL_EMU_TRAJ → CSV パス）。未設定なら閉じたまま。
+    sil_emu_traj_open(std::getenv("SIL_EMU_TRAJ"));
+
     std::printf("[emu] === StampFly emulator (firmware-agnostic entry) ===\n");
 
     // E6: load a scripted input scenario if given (argv[3]). A parse error aborts
@@ -137,6 +146,7 @@ int main(int argc, char** argv)
     if (sil_scenario_load(scenario_path) < 0) {
         std::fprintf(stderr, "[emu] scenario load failed — aborting before run\n");
         sil_emu_record_close();
+        sil_emu_traj_close();
         return 2;
     }
 
@@ -185,6 +195,7 @@ int main(int argc, char** argv)
     // 任意順の破棄は mutex 二重操作で abort する（ホスト固有の人工物）。_Exit で
     // 「電源断」を忠実に再現し、破棄を走らせずクリーンに終了する。
     sil_emu_record_close();   // flush/close the events log (lines were flushed)
+    sil_emu_traj_close();     // flush/close the review-video trajectory (if open)
     std::fflush(stdout);
     std::fflush(stderr);
     std::_Exit(0);

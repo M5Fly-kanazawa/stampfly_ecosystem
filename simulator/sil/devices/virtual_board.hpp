@@ -65,6 +65,11 @@ int sil_board_i2c_xfer(uint16_t addr,
 // LEDC duty フック。channel 0..3 = モータ M1..M4、duty は生 LEDC 値。
 void sil_board_ledc_set_duty(int channel, uint32_t duty, uint32_t max_duty);
 
+// Read the latched per-motor duties [0,1] (M1..M4) the board last received over
+// LEDC. Used by the review-video trajectory recorder; does not touch the Plant.
+// ボードが LEDC で最後に受け取った各モータ duty[0,1]（M1..M4）を読む。動画軌跡記録用。
+void sil_board_get_motor_duty(float out[4]);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
