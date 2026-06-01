@@ -155,6 +155,97 @@ int bmi270_xfer(const uint8_t* tx, uint8_t* rx, int n)
     return 0;
 }
 
+// --- INA3221 power monitor (I2C addr 0x40) -----------------------------------
+// 3-channel current/voltage monitor (TI). The firmware's power HAL reads a
+// register by writing the 1-byte register pointer then reading 2 big-endian
+// bytes (i2c_master_transmit_receive); it writes a register as [reg, hi, lo]
+// (i2c_master_transmit). Battery voltage lives on the bus-voltage register of
+// the configured channel (POWER_BATTERY_CHANNEL); we report the PLANT terminal
+// voltage so the firmware's thrust→duty voltage compensation (duty = V/Vbat)
+// closes the loop consistently. Without this the HAL read Vbat=0, the firmware's
+// Vbat LPF decayed 3.7→0, duty saturated to 1.0 and the craft climbed away.
+//
+// INA3221 電源モニタ（I2C 0x40）。ファームの電源 HAL は「レジスタポインタ1バイト書込→
+// 2バイト big-endian 読出」でレジスタを読む。電池電圧は設定チャンネルのバス電圧
+// レジスタにある。Plant の端子電圧を返し、ファームの thrust→duty 電圧補償
+// （duty = V/Vbat）の閉ループを整合させる。これが無いと Vbat=0→duty 飽和→暴走上昇。
+constexpr uint16_t INA3221_ADDR       = 0x40;
+constexpr uint16_t INA3221_MANUF_ID   = 0x5449;   // "TI"
+constexpr uint16_t INA3221_DIE_ID     = 0x3220;
+constexpr uint8_t  INA3221_REG_CONFIG = 0x00;
+constexpr uint8_t  INA3221_REG_MANUF  = 0xFE;
+constexpr uint8_t  INA3221_REG_DIE    = 0xFF;
+constexpr float    INA3221_BUS_LSB_V  = 0.008f;   // 8 mV per bit, value in bits [15:3]
+
+// INA3221 virtual chip state: the config register (read back after writes) and a
+// register pointer for a bare receive that follows a 1-byte write.
+// INA3221 仮想チップ状態: config レジスタ（書込後の読み戻し用）と、1バイト書込に
+// 続く単独読出のためのレジスタポインタ。
+struct Ina3221State {
+    uint16_t config = 0x7127;   // datasheet power-on default (cosmetic; FW overwrites)
+    uint8_t  ptr    = 0x00;     // last-addressed register
+};
+Ina3221State g_ina;
+
+// Encode a battery voltage [V] into the INA3221 bus-voltage register layout:
+// a 13-bit count of 8 mV steps left-shifted into bits [15:3] (bits [2:0] = 0).
+// 電池電圧[V]を INA3221 バス電圧レジスタ形式へ（8mV刻み13bitを[15:3]に配置）。
+uint16_t ina3221_bus_reg(float volts)
+{
+    long counts = lrintf(volts / INA3221_BUS_LSB_V);
+    if (counts < 0)      counts = 0;
+    if (counts > 0x1FFF) counts = 0x1FFF;
+    return (uint16_t)((counts << 3) & 0xFFF8);
+}
+
+// 16-bit value of an INA3221 register. Bus-voltage regs (CH1/2/3 = 0x02/0x04/
+// 0x06) report the Plant battery (any channel works → robust to the configured
+// POWER_BATTERY_CHANNEL); shunt-voltage regs (0x01/0x03/0x05) read 0 (no current
+// model yet); ID regs are constant; CONFIG reads back what was written.
+// INA3221 レジスタの16bit値。バス電圧レジスタは Plant 電池を返す（全チャンネル対応）。
+uint16_t ina3221_read_reg(uint8_t reg)
+{
+    switch (reg) {
+        case INA3221_REG_MANUF:  return INA3221_MANUF_ID;
+        case INA3221_REG_DIE:    return INA3221_DIE_ID;
+        case INA3221_REG_CONFIG: return g_ina.config;
+        case 0x02: case 0x04: case 0x06: {   // CH1/CH2/CH3 bus voltage
+            const float v = (g_plant != nullptr) ? g_plant->batteryVoltage() : 3.7f;
+            return ina3221_bus_reg(v);
+        }
+        case 0x01: case 0x05:                // CH1/CH3 shunt voltage (no current)
+        case 0x03:                           // CH2 shunt voltage
+            return 0x0000;
+        default:
+            return 0x0000;
+    }
+}
+
+// One INA3221 I2C transaction. Wire format is big-endian (MSB first).
+// INA3221 の1 I2Cトランザクション。バス上は big-endian（MSB 先頭）。
+int ina3221_xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
+{
+    // Write phase: [reg] sets the pointer; [reg, hi, lo] also stores a 16-bit reg.
+    // 書き込み相: [reg] でポインタ設定、[reg,hi,lo] なら16bit値も格納。
+    if (wbuf != nullptr && wlen >= 1) {
+        g_ina.ptr = wbuf[0];
+        if (wlen >= 3 && g_ina.ptr == INA3221_REG_CONFIG) {
+            // RST (bit 15) self-clears on the real chip → keep it clear here.
+            // 実チップは RST(bit15) が自動クリア → ここでも落としておく。
+            g_ina.config = (uint16_t)(((wbuf[1] << 8) | wbuf[2]) & 0x7FFF);
+        }
+    }
+    // Read phase: 2 big-endian bytes of the addressed register (rest zero-filled).
+    // 読み出し相: 対象レジスタの2バイトを big-endian で（残りはゼロ埋め）。
+    if (rbuf != nullptr && rlen >= 1) {
+        const uint16_t v = ina3221_read_reg(g_ina.ptr);
+        rbuf[0] = (uint8_t)(v >> 8);
+        if (rlen >= 2) rbuf[1] = (uint8_t)(v & 0xFF);
+        for (size_t i = 2; i < rlen; ++i) rbuf[i] = 0;
+    }
+    return 0;
+}
+
 }  // namespace
 
 // --- C-linkage hooks called by the ESP-IDF driver shims ----------------------
@@ -183,6 +274,22 @@ int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes
         return bmi270_xfer(tx, rx, (int)nbytes);
     }
     if (rx != nullptr) std::memset(rx, 0, nbytes);
+    return 0;
+}
+
+int sil_board_i2c_xfer(uint16_t addr, const uint8_t* write_buf, size_t write_size,
+                       uint8_t* read_buf, size_t read_size)
+{
+    // INA3221 power monitor on 0x40 → real register model (battery voltage).
+    // Others (BMM150/BMP280/VL53L3CX) are unmodeled until E2: zero-fill the read
+    // and ACK, exactly as the old inert shim did, so those Optional drivers fail
+    // gracefully on their chip-ID check (no behaviour change for them).
+    // INA3221 は 0x40 でレジスタモデルへ。他は未模型（E2まで）→read をゼロ埋めし ACK
+    // （旧 inert シムと同一）。Optional ドライバは chip-ID チェックで優雅に失敗。
+    if (addr == INA3221_ADDR) {
+        return ina3221_xfer(write_buf, write_size, read_buf, read_size);
+    }
+    if (read_buf != nullptr && read_size > 0) std::memset(read_buf, 0, read_size);
     return 0;
 }
 

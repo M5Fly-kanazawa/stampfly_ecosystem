@@ -77,6 +77,40 @@ typedef struct i2c_master_bus_t* i2c_master_bus_handle_t;
 typedef struct i2c_master_dev_t* i2c_master_dev_handle_t;
 
 /* -------------------------------------------------------------------------
+ * SIL device-address encoding
+ * SIL デバイスアドレス符号化
+ *
+ * The shim is stateless and header-only, so it cannot keep a registry mapping
+ * device handles → addresses. Instead it encodes the I2C device address INTO
+ * the opaque handle value: a fixed non-null tag in the high bits + the 10-bit
+ * address in the low bits. The handle is never dereferenced (it is opaque to
+ * the driver), so this is safe. Each transfer decodes the address and routes to
+ * the virtual board's device model via sil_board_i2c_xfer().
+ *
+ * シムはステートレスかつヘッダのみのため、ハンドル→アドレスの対応表を持てない。
+ * 代わりに I2C デバイスアドレスを不透明ハンドル値に埋め込む（高位に非NULLタグ、
+ * 低位10ビットにアドレス）。ハンドルは参照されない（ドライバには不透明）ため安全。
+ * 各転送でアドレスを復号し sil_board_i2c_xfer() で仮想ボードのモデルへ振り分ける。
+ * ---------------------------------------------------------------------- */
+#define SIL_I2C_HANDLE_TAG ((uintptr_t)0x51C20000u)   /* "SIC2", non-null tag */
+#define SIL_I2C_ADDR_MASK  ((uintptr_t)0x000003FFu)   /* 10-bit device address */
+
+/* I2C transaction hook — defined in devices/virtual_board.cpp. Decoded address,
+ * optional write phase, optional read phase (write-then-read = repeated-START).
+ * Returns 0 on ACK; unmodeled addresses zero-fill the read and still return 0.
+ * I2C トランザクションフック（devices/virtual_board.cpp で定義）。 */
+int sil_board_i2c_xfer(uint16_t addr,
+                       const uint8_t* write_buf, size_t write_size,
+                       uint8_t* read_buf, size_t read_size);
+
+/* Decode the device address carried by an opaque device handle. */
+/* 不透明デバイスハンドルが運ぶデバイスアドレスを復号する。 */
+static inline uint16_t sil_i2c_addr_of(i2c_master_dev_handle_t h)
+{
+    return (uint16_t)((uintptr_t)h & SIL_I2C_ADDR_MASK);
+}
+
+/* -------------------------------------------------------------------------
  * Master bus configuration
  * マスタバス設定
  *
@@ -145,16 +179,18 @@ static inline esp_err_t i2c_del_master_bus(i2c_master_bus_handle_t bus_handle)
     return ESP_OK;
 }
 
-// Add a device to a bus; hand back a non-null sentinel handle.
-// バスにデバイスを追加し、非NULLの番兵ハンドルを返す。
+// Add a device to a bus; hand back a handle that ENCODES the device address so
+// later transfers can route to the right virtual chip (see encoding note above).
+// バスにデバイスを追加し、デバイスアドレスを埋め込んだハンドルを返す（上記参照）。
 static inline esp_err_t i2c_master_bus_add_device(i2c_master_bus_handle_t bus_handle,
                                                   const i2c_device_config_t* dev_config,
                                                   i2c_master_dev_handle_t* ret_handle)
 {
     (void)bus_handle;
-    (void)dev_config;
     if (ret_handle) {
-        *ret_handle = (i2c_master_dev_handle_t)(uintptr_t)0x1;
+        const uintptr_t addr =
+            dev_config ? ((uintptr_t)dev_config->device_address & SIL_I2C_ADDR_MASK) : 0u;
+        *ret_handle = (i2c_master_dev_handle_t)(SIL_I2C_HANDLE_TAG | addr);
     }
     return ESP_OK;
 }
@@ -167,37 +203,34 @@ static inline esp_err_t i2c_master_bus_rm_device(i2c_master_dev_handle_t dev_han
     return ESP_OK;
 }
 
-// Transmit bytes to a device (discarded on host).
-// デバイスへバイト列を送信（ホストでは破棄）。
+// Transmit bytes to a device → write phase of the virtual chip transaction.
+// デバイスへバイト列を送信 → 仮想チップ取引の書き込み相。
 static inline esp_err_t i2c_master_transmit(i2c_master_dev_handle_t dev_handle,
                                             const uint8_t* write_buffer,
                                             size_t write_size,
                                             int xfer_timeout_ms)
 {
-    (void)dev_handle;
-    (void)write_buffer;
-    (void)write_size;
     (void)xfer_timeout_ms;
-    return ESP_OK;
+    return sil_board_i2c_xfer(sil_i2c_addr_of(dev_handle),
+                              write_buffer, write_size, NULL, 0) == 0
+               ? ESP_OK : ESP_FAIL;
 }
 
-// Receive bytes from a device (zero-filled on host).
-// デバイスからバイト列を受信（ホストではゼロ埋め）。
+// Receive bytes from a device → read phase of the virtual chip transaction.
+// デバイスからバイト列を受信 → 仮想チップ取引の読み出し相。
 static inline esp_err_t i2c_master_receive(i2c_master_dev_handle_t dev_handle,
                                            uint8_t* read_buffer,
                                            size_t read_size,
                                            int xfer_timeout_ms)
 {
-    (void)dev_handle;
     (void)xfer_timeout_ms;
-    if (read_buffer && read_size) {
-        memset(read_buffer, 0, read_size);
-    }
-    return ESP_OK;
+    return sil_board_i2c_xfer(sil_i2c_addr_of(dev_handle),
+                              NULL, 0, read_buffer, read_size) == 0
+               ? ESP_OK : ESP_FAIL;
 }
 
-// Write-then-read in one transaction (read side zero-filled on host).
-// 1トランザクションで書込→読出（読出側はホストでゼロ埋め）。
+// Write-then-read in one transaction (repeated-START register read).
+// 1トランザクションで書込→読出（repeated-START のレジスタ読み）。
 static inline esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t dev_handle,
                                                     const uint8_t* write_buffer,
                                                     size_t write_size,
@@ -205,14 +238,11 @@ static inline esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t dev_
                                                     size_t read_size,
                                                     int xfer_timeout_ms)
 {
-    (void)dev_handle;
-    (void)write_buffer;
-    (void)write_size;
     (void)xfer_timeout_ms;
-    if (read_buffer && read_size) {
-        memset(read_buffer, 0, read_size);
-    }
-    return ESP_OK;
+    return sil_board_i2c_xfer(sil_i2c_addr_of(dev_handle),
+                              write_buffer, write_size,
+                              read_buffer, read_size) == 0
+               ? ESP_OK : ESP_FAIL;
 }
 
 // Probe whether a device ACKs at an address (host: always "present").

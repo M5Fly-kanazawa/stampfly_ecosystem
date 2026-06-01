@@ -1,13 +1,41 @@
 # hover_espnow.expect — assert the radio→comm→arm→control→motor path runs from
-# genuine ESP-NOW controller input (no back-door). 無線→comm→arm→制御の全鎖を検証。
+# genuine ESP-NOW controller input (no back-door), AND that the INA3221 power
+# monitor (E3) now feeds a valid battery voltage so the thrust→duty conversion
+# stays bounded (no runaway climb).
+# 無線→comm→arm→制御→モータの全鎖を実 ESP-NOW 入力で検証し、さらに INA3221 電源
+# モニタ（E3）が有効な電池電圧を供給して thrust→duty が有界に保たれる（暴走しない）
+# ことを検証する。
+#
+# SCOPE: the throttle holds raw 3072 (T=0.50 → 0.336 N < weight 0.363 N) in ACRO
+# (open loop), so the craft stays ground-pinned at sub-hover thrust. This gate
+# therefore proves "thrust→duty is bounded / never saturates / the craft does not
+# climb away" — the exact regression E3 fixed (unemulated INA3221 → Vbat 0 → duty
+# 1.0 → climb-away). It does NOT prove an airborne altitude hold; that belongs to
+# a future ALTITUDE_HOLD scenario.
+# 範囲: throttle は raw 3072(T=0.50→0.336N<荷重0.363N)を ACRO(開ループ)で保持するため
+# 機体は接地のまま。本ゲートは「thrust→duty が有界・非飽和・上昇しない」（E3 が直した
+# 退行そのもの）を検証する。空中での高度保持は将来の ALTITUDE_HOLD シナリオの領分。
 exit 0
 log_contains any "scenario] driver online"            # the scenario driver ran
 log_contains any "Connected to controller"            # comm accepted the packets
 log_contains any "Motors ARMED"                       # arm rising edge handled
 log_contains any "ControlArbiter: T=0.50"             # hover throttle reached the control loop
 order "Armed" "ControlArbiter: T=0.50"                # arm precedes throttle-up
-# Stable hover is NOT asserted here: with the INA3221 power monitor unemulated
-# (E3), vbat decays and duty saturates, so the craft lifts off then climbs away.
-# The command/arm/control path is correct; altitude hold is gated on E3.
-# 安定ホバーはここでは検証しない（E3 INA3221 未実装で vbat 減衰→上昇継続）。
-skip stable-hover gated on E3 INA3221 (vbat) — craft climbs until vbat is modelled
+
+# E3 — INA3221 power monitor device model: the real power HAL reads it over I2C.
+# E3 — INA3221 電源モニタのデバイスモデル: 実電源 HAL が I2C 経由で読む。
+log_contains any "INA3221 initialized successfully"   # manufacturer ID 0x5449 verified by driver
+log_contains any "Power Monitor initialized"          # power HAL came up
+log_contains any "Battery: 3.7"                        # valid Vbat ~3.7 V (Plant terminal voltage)
+
+# No runaway: with a real Vbat the thrust→duty stage holds a bounded hover duty and
+# NEVER saturates to 1.00 (which is what an unemulated INA3221 caused: Vbat→0,
+# duty→1.0, climb-away). "FR=0.6" is a coarse band (0.60–0.69) — it proves a MOTOR
+# line was emitted near hover, decoupled from the exact motor-curve constants; the
+# saturation/runaway guards below are the real invariant.
+# 暴走なし: 有効な Vbat により thrust→duty は有界なホバー duty を保ち 1.00 に飽和しない。
+# "FR=0.6" は粗い帯域(0.60–0.69)で、モータ曲線定数に依存せずホバー近傍を示す。
+log_contains any "duties[FR=0.6"                      # hover duty near 0.6x, not saturated
+log_absent   any "duties[FR=1.00"                     # duty never pins to full scale (no runaway)
+log_contains any "peak alt=0."                        # PEAK altitude < 1 m over the whole run (not just final)
+log_contains any "truth alt=0."                       # final altitude also bounded (< 1 m)

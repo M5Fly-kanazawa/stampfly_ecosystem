@@ -132,6 +132,16 @@ public:
     /// 1モータの duty[0,1] を曲線で定常推力 [N] に変換する。
     float dutyToThrust(float duty) const;
 
+    /// Battery terminal voltage [V] as the INA3221 power monitor would measure it.
+    /// In SIL the "battery" is the Plant supply (fixed nominal today; a future
+    /// sag/discharge model would surface here automatically). The firmware's
+    /// thrust→duty stage divides by this, so it must match the v_batt the motor
+    /// curve uses for the closed loop to be consistent.
+    /// INA3221 電源モニタが測る電池端子電圧 [V]。SIL では「電池」= Plant 電源
+    /// （今は固定公称値、将来の電圧降下モデルがあればここに現れる）。ファームの
+    /// thrust→duty 段はこれで割るため、モータ曲線が使う v_batt と一致させる。
+    float batteryVoltage() const { return cfg_.v_batt; }
+
     /// Advance the physics by dt: motor lag → thrust → reaction torque + wind → mj_step.
     /// 物理を dt 進める: モータ遅れ → 推力 → 反トルク＋風 → mj_step。
     void step(float dt);

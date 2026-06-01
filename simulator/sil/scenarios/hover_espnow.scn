@@ -14,8 +14,13 @@
    +    rc_ramp  throttle 2048 3072 45 20 1         # Phase C: ramp throttle centre->hover (+45/frame)
    +    rc       3072 2048 2048 2048 1   60000 20   # Hold hover throttle until the run ends
 #
-# NOTE: with the INA3221 power monitor still unemulated (E3), vbat decays and the
-# thrust->duty conversion saturates, so the craft lifts off then climbs away. The
-# scenario format is already correct; a stable hover is gated on the E3 vbat model.
-# 注: INA3221 未実装（E3）のため vbat 減衰→duty 飽和で離陸後に上昇継続。形式は正しく、
-# 安定ホバーは E3 の vbat 模型が前提。
+# NOTE: E3 done — the INA3221 power monitor is now emulated (addr 0x40, mfr ID
+# 0x5449), so the firmware reads a real Vbat ~3.7 V and the thrust->duty stage
+# stays bounded (hover duty ~0.62, never 1.00). At this sub-hover throttle the
+# craft stays ground-pinned (alt < 1 m); the lift-off-then-climb-away seen before
+# E3 was the Vbat->0 duty-saturation pathology (duty pinned to 1.0 ~= 2x weight),
+# not a normal hover. See hover_espnow.expect for the asserted no-runaway behavior.
+# 注: E3 完了 — INA3221 を模型化(addr 0x40, mfr ID 0x5449)し Vbat~3.7V を供給。
+# thrust->duty は有界(ホバー duty 約0.62, 1.00 に飽和しない)。このサブホバー throttle
+# では接地のまま(alt<1m)。E3 前の上昇継続は Vbat=0 の duty 飽和(約2倍荷重)であり
+# 正常ホバーではない。検証は hover_espnow.expect を参照。

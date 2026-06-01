@@ -51,6 +51,7 @@ namespace {
 
 sil::Plant g_plant;
 int64_t    g_last_step_us = 0;
+float      g_peak_alt = 0.0f;   // highest truth altitude over the whole run / 実行中の最高高度
 constexpr float kGroundZ = 0.013f;
 
 void on_advance(int64_t now_us)
@@ -58,6 +59,13 @@ void on_advance(int64_t now_us)
     if (now_us > g_last_step_us) {
         sil_board_step_plant((float)(now_us - g_last_step_us) * 1e-6f);
         g_last_step_us = now_us;
+        // Track the peak altitude so a no-runaway gate can bound the whole flight
+        // path, not just the final sample (a transient climb that descends would
+        // otherwise slip past a final-only check).
+        // 最高高度を追跡し、no-runaway ゲートが最終サンプルだけでなく飛行経路全体を
+        // 有界判定できるようにする（一時的に上昇して戻る軌跡を最終値だけでは見逃す）。
+        const float alt = -g_plant.truth().pos_ned.z;
+        if (alt > g_peak_alt) g_peak_alt = alt;
     }
 }
 
@@ -163,8 +171,8 @@ int main(int argc, char** argv)
     std::printf("[emu] running scheduler for %lld us\n", (long long)duration_us);
     sil::rtos::Scheduler::instance().run(duration_us);
 
-    std::printf("[emu] scheduler stopped — run complete. truth alt=%.3f m\n",
-                -g_plant.truth().pos_ned.z);
+    std::printf("[emu] scheduler stopped — run complete. truth alt=%.3f m  peak alt=%.3f m\n",
+                -g_plant.truth().pos_ned.z, g_peak_alt);
 
     // The run is complete and the scheduler has joined every task thread. We now
     // exit WITHOUT running static destructors: the firmware's singletons (state,
