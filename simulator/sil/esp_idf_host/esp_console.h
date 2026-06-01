@@ -62,10 +62,19 @@ typedef struct {
     int cdc_dev;
 } esp_console_dev_usb_cdc_config_t;
 
+// Shared dispatching registry (esp_console_shim.cpp). Registration stores the
+// command; run tokenizes the line and calls the matching firmware handler, so a
+// console line typed by the scenario feeder really executes. Declared here;
+// linked only into targets whose firmware uses the console (e.g. emu_vehicle).
+// 共有ディスパッチレジストリ（esp_console_shim.cpp）。登録は保存、run は行を分割して
+// 一致するファームハンドラを呼ぶ。コンソールを使うターゲットにのみリンクする。
+esp_err_t sil_console_register(const esp_console_cmd_t* c);
+esp_err_t sil_console_dispatch(const char* cmdline, int* cmd_ret);
+
 static inline esp_err_t esp_console_init(const esp_console_config_t* c) { (void)c; return ESP_OK; }
 static inline esp_err_t esp_console_deinit(void) { return ESP_OK; }
-static inline esp_err_t esp_console_cmd_register(const esp_console_cmd_t* c) { (void)c; return ESP_OK; }
-static inline esp_err_t esp_console_run(const char* cmdline, int* ret) { (void)cmdline; if (ret) *ret = 0; return ESP_OK; }
+static inline esp_err_t esp_console_cmd_register(const esp_console_cmd_t* c) { return sil_console_register(c); }
+static inline esp_err_t esp_console_run(const char* cmdline, int* ret) { return sil_console_dispatch(cmdline, ret); }
 static inline esp_err_t esp_console_register_help_command(void) { return ESP_OK; }
 
 static inline esp_err_t esp_console_new_repl_usb_cdc(const esp_console_dev_usb_cdc_config_t* dev,

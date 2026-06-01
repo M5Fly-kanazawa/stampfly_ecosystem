@@ -281,6 +281,8 @@ if(SIL_BUILD_EMU)
     ${EMU_FW_SRCS}
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp     # E1: BMI270 + motors → Plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
     plant/plant.cpp                                           # MuJoCo physics plant
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
@@ -330,7 +332,12 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp    # workshop-only weak symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp          # shared ESP-NOW recv/send hub
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp     # E6: shared ControlPacket builder
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_pilot_vehicle.cpp  # ESP-NOW virtual pilot (E3)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp           # E6: *.scn parser + driver task
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp     # E6: scripted console bytes
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp   # E6: dispatching console registry
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp         # E6: events.jsonl recorder
     plant/plant.cpp
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp

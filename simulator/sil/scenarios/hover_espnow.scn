@@ -1,0 +1,21 @@
+# hover_espnow.scn — ESP-NOW hover scenario (replicates virtual_pilot_vehicle.cpp)
+# ESP-NOW ホバーシナリオ（仮想パイロットの台本を宣言的に再現）
+#
+# Stick fields are raw 12-bit ADC counts, 0..4095, centre 2048 (the firmware
+# treats them as ADC; the "0..1000" comment in controller_comm.hpp is stale).
+# スティックは raw 12bit ADC（0..4095, 中央 2048）。
+#
+# '+' time = "immediately after the previous event ends" → sequential phases,
+# byte-equivalent to the pilot's stream()/ramp() loops.
+#
+#  <t>  channel  <args...>
+   0    rc       0    2048 2048 2048 0   20000 20   # Phase A: disarmed, centred, 20 s @ 20 Hz
+   +    rc       0    2048 2048 2048 1    1000 20   # Phase B: ARM rising edge (throttle 0), 1 s
+   +    rc_ramp  throttle 2048 3072 45 20 1         # Phase C: ramp throttle centre->hover (+45/frame)
+   +    rc       3072 2048 2048 2048 1   60000 20   # Hold hover throttle until the run ends
+#
+# NOTE: with the INA3221 power monitor still unemulated (E3), vbat decays and the
+# thrust->duty conversion saturates, so the craft lifts off then climbs away. The
+# scenario format is already correct; a stable hover is gated on the E3 vbat model.
+# 注: INA3221 未実装（E3）のため vbat 減衰→duty 飽和で離陸後に上昇継続。形式は正しく、
+# 安定ホバーは E3 の vbat 模型が前提。

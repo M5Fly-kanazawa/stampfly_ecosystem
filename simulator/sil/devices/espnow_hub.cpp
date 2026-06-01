@@ -25,6 +25,7 @@
  */
 
 #include "esp_now.h"
+#include "emu_record.hpp"   // record each delivered frame (virtual-time stamped)
 
 namespace {
 
@@ -55,6 +56,10 @@ void sil_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int len)
     info.src_addr = s_src;
     info.des_addr = s_des;
     info.rx_ctrl  = nullptr;
+    // Record the on-air bytes (virtual-time stamped). Passive: no-op unless the
+    // recorder is open, so the default run stays byte-identical.
+    // 電波バイト列を記録（仮想時刻）。レコーダ未オープン時は no-op ＝ 既定実行は不変。
+    sil_emu_record_bytes("espnow", data, len);
     g_recv_cb(&info, data, len);
 }
 

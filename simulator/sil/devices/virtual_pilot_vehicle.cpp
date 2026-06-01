@@ -34,22 +34,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-extern "C" void sil_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int len);
+#include "scenario_inject.hpp"   // sil::inject_rc, sil::kAdcCentre, sil::kFlagArm
 
 namespace {
 
-// On-air ControlPacket layout (controller_comm.hpp): 14 bytes, packed.
-// byte0-2 drone_mac, 3-4 throttle, 5-6 roll, 7-8 pitch, 9-10 yaw, 11 flags
-// (bit0 Arm), 12 reserved, 13 checksum = sum(bytes0..12).
+// Stick fields are raw 12-bit ADC counts (0..4095, centre 2048) — the firmware
+// treats them as ADC, NOT the stale 0..1000 in the struct comment. See
+// scenario_inject.hpp for the shared builder both this pilot and the scenario
+// driver use, so their on-air bytes are identical.
+// スティックは raw 12bit ADC（0..4095, 中央2048）。共有ビルダは scenario_inject.hpp。
 //
-// IMPORTANT: although the struct comment says 0..1000, the firmware actually
-// treats the stick fields as raw 12-bit ADC counts, 0..4095 with 2048 = centre
-// (ControlArbiter::normalizeThrottle/normalizeAxis use ADC_CENTER=2048). The
-// real hand controller sends ADC counts; the "0..1000" comment is stale. So the
-// pilot MUST send ADC-scale values, or throttle clamps to 0 and sticks deflect.
-// 重要: 構造体コメントは 0..1000 だが、本体はスティックを 12bit ADC（0..4095, 中央
-// 2048）として扱う。実送信機は ADC 値を送る。コメントが古い。ADC スケールで送る。
-constexpr uint16_t kAdcCentre   = 2048;  // ADC_CENTER — stick neutral / 中央
 // Hover throttle. The firmware maps throttle -> total_thrust = T·MAX_TOTAL_THRUST
 // directly (no altitude loop in STABILIZE), so hover (thrust = mg) is at T≈0.5,
 // i.e. ADC ≈ 2048 + 0.5·2048 = 3072.
@@ -58,48 +52,18 @@ constexpr uint16_t kAdcCentre   = 2048;  // ADC_CENTER — stick neutral / 中�
 // battery-voltage-compensated (control_task.cpp ~L829-855). The PowerMonitor
 // (INA3221) is not yet emulated, so state.getVoltage() returns 0 and the vbat
 // LPF decays 3.7 V → 0, inflating every duty to 1.0 → the craft lifts off but
-// then climbs away. A stable hover is gated on the E3 INA3221 device model
-// (valid vbat) and, for altitude-hold, the E2 VL53L3CX ToF.
-// ホバースロットル。本体は throttle→total_thrust 直結（STABILIZE に高度ループ無し）で
-// ホバーは T≈0.5（ADC≈3072）。既知の欠落（SIL が炙り出した本物の発見）: thrust→duty 変換は
-// 電池電圧補償付きだが INA3221 未実装で getVoltage()=0 → vbat が 3.7→0 に減衰し duty が 1.0 へ
-// 膨張 → 離陸後に上昇し続ける。安定ホバーは E3(INA3221) と高度保持に E2(VL53 ToF) が前提。
-constexpr uint16_t kHoverThr    = 3072;  // ~0.50 normalized -> total_thrust ≈ mg
-constexpr uint8_t  kFlagArm     = 0x01;  // CTRL_FLAG_ARM
+// then climbs away. A stable hover is gated on the E3 INA3221 device model.
+// ホバースロットル。本体は throttle→total_thrust 直結。既知の欠落: thrust→duty は
+// 電池電圧補償付きだが INA3221 未実装で vbat が 3.7→0 に減衰し duty が飽和→上昇継続。
+constexpr uint16_t kHoverThr = 3072;  // ~0.50 normalized -> total_thrust ≈ mg
 
-// A locally-administered "controller" MAC (0x02 = locally administered bit).
-// ローカル管理アドレスの「送信機」MAC。
-constexpr uint8_t kPilotMac[6] = {0x02, 0x53, 0x49, 0x4C, 0x00, 0x01};  // "SIL"
-
-void build_packet(uint8_t* p, uint16_t throttle, uint16_t roll, uint16_t pitch,
-                  uint16_t yaw, uint8_t flags)
-{
-    p[0] = p[1] = p[2] = 0;                       // drone_mac lower 3 (match-any)
-    p[3] = (uint8_t)(throttle & 0xFF); p[4] = (uint8_t)(throttle >> 8);
-    p[5] = (uint8_t)(roll     & 0xFF); p[6] = (uint8_t)(roll     >> 8);
-    p[7] = (uint8_t)(pitch    & 0xFF); p[8] = (uint8_t)(pitch    >> 8);
-    p[9] = (uint8_t)(yaw      & 0xFF); p[10] = (uint8_t)(yaw     >> 8);
-    p[11] = flags;
-    p[12] = 0;
-    uint32_t sum = 0;
-    for (int i = 0; i < 13; ++i) sum += p[i];
-    p[13] = (uint8_t)(sum & 0xFF);
-}
-
-void send(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw, uint8_t flags)
-{
-    uint8_t pkt[14];
-    build_packet(pkt, throttle, roll, pitch, yaw, flags);
-    sil_espnow_deliver(kPilotMac, pkt, sizeof(pkt));
-}
-
-// Send at ~20 Hz for `ms` milliseconds of virtual time.
-// 仮想時間 `ms` ミリ秒のあいだ ~20 Hz で送信する。
+// Send at ~20 Hz for `ms` milliseconds of virtual time, sticks centred.
+// 仮想時間 `ms` ミリ秒のあいだ ~20 Hz で送信（スティック中央）。
 void stream(int ms, uint16_t throttle, uint8_t flags)
 {
     const int frames = ms / 50;
     for (int i = 0; i < frames; ++i) {
-        send(throttle, kAdcCentre, kAdcCentre, kAdcCentre, flags);
+        sil::inject_rc(throttle, sil::kAdcCentre, sil::kAdcCentre, sil::kAdcCentre, flags);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -124,7 +88,7 @@ extern "C" void sil_virtual_pilot_task(void* /*arg*/)
     // firmware arms only from IDLE with calibration complete.
     // フェーズB — スロットル 0 で ARM フラグ立ち上げ（IDLE＋校正完了でアーム）。
     std::printf("[pilot] ARM\n");
-    stream(1000, 0, kFlagArm);
+    stream(1000, 0, sil::kFlagArm);
 
     // Phase C — ramp throttle from idle (ADC centre = 0 thrust) up to the hover
     // setting over ~1.5 s, then hold. Sticks centred (2048) so the attitude/rate
@@ -133,12 +97,12 @@ extern "C" void sil_virtual_pilot_task(void* /*arg*/)
     // フェーズC — スロットルを中央(=推力0)からホバー値へ約1.5秒で上げて維持。
     // スティックは中央(2048)。スロットルアップで ARMED→FLYING も駆動。
     std::printf("[pilot] throttle ramp -> hover\n");
-    for (int t = kAdcCentre; t <= kHoverThr; t += 45) {   // centre..hover at 20 Hz
-        send((uint16_t)t, kAdcCentre, kAdcCentre, kAdcCentre, kFlagArm);
+    for (int t = sil::kAdcCentre; t <= kHoverThr; t += 45) {   // centre..hover at 20 Hz
+        sil::inject_rc((uint16_t)t, sil::kAdcCentre, sil::kAdcCentre, sil::kAdcCentre, sil::kFlagArm);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
     std::printf("[pilot] hold hover throttle (ADC %u)\n", (unsigned)kHoverThr);
-    stream(60000, kHoverThr, kFlagArm);          // hold until the run ends
+    stream(60000, kHoverThr, sil::kFlagArm);          // hold until the run ends
 
     vTaskDelete(nullptr);
 }

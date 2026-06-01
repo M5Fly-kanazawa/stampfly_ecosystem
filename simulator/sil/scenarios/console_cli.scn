@@ -1,0 +1,14 @@
+# console_cli.scn — exercise the firmware serial CLI deterministically (no flight)
+# ファーム serial CLI を決定論的に試す（飛行なし）
+#
+# The firmware boots (~3 s USB delay + ~5 s gyro keep-still + settle) and brings
+# up the SerialCLI REPL, then prints a "stampfly>" prompt. After that we type real
+# console commands; the unmodified line editor + command handlers run, and their
+# replies appear on the captured output. No rc events → the craft stays grounded.
+# 起動後に CLI プロンプトが出る。その後に実コンソールコマンドを打鍵し、無改変の
+# 行エディタ＋コマンドハンドラが応答する。rc 事象なし＝接地のまま。
+#
+#  <t_ms>  channel  <args>
+   16000   key      "version\n"     # firmware/version banner
+   17000   key      "status\n"      # state / sensors summary
+   18000   key      "help\n"        # registered command list

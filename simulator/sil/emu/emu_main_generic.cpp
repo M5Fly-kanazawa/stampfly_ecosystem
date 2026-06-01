@@ -33,6 +33,9 @@
 #include "scheduler.hpp"
 #include "plant.hpp"
 #include "virtual_board.hpp"
+#include "scenario.hpp"          // E6: deterministic scripted-input timeline
+#include "console_feeder.hpp"    // E6: scripted console bytes -> firmware stdin
+#include "emu_record.hpp"        // E6: virtual-time-stamped input/event log
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -98,13 +101,36 @@ int main(int argc, char** argv)
     int cli_pipe[2];
     if (pipe(cli_pipe) == 0) {
         fcntl(cli_pipe[0], F_SETFL, O_NONBLOCK);  // read end: non-blocking
+        fcntl(cli_pipe[1], F_SETFL, O_NONBLOCK);  // write end: non-blocking (feeder)
         dup2(cli_pipe[0], STDIN_FILENO);
-        // Keep the write end (cli_pipe[1]) open and never write to it, so reads
-        // return EAGAIN rather than EOF. Intentionally not closed for the run.
-        // 書き込み端は開いたまま（書かない）→ read は EOF でなく EAGAIN を返す。
+        // The write end stays open for the whole run (never closed → read() gets
+        // EAGAIN, not EOF). A scenario "key" event writes scripted bytes into it
+        // via the console feeder; with no scenario nothing is written (unchanged).
+        // 書き込み端は実行中ずっと開いたまま（→ read は EOF でなく EAGAIN）。シナリオの
+        // key 事象がフィーダ経由でここへ台本バイトを書く。シナリオ無しなら何も書かない。
+        sil_console_set_fd(cli_pipe[1]);
     }
 
+    // E6: open the deterministic input/event recorder if requested. The path
+    // comes from the SIL_EMU_EVENTS env var (set by the sf CLI / scenario runs).
+    // When unset, the recorder stays closed and every record call is a no-op, so
+    // the default run is byte-identical to before this feature.
+    // E6: SIL_EMU_EVENTS が指すパスへ決定論レコーダをオープン（sf CLI/シナリオ実行が設定）。
+    // 未設定なら閉じたまま＝record は no-op ＝ 既定実行は本機能前と byte-identical。
+    sil_emu_record_open(std::getenv("SIL_EMU_EVENTS"));
+
     std::printf("[emu] === StampFly emulator (firmware-agnostic entry) ===\n");
+
+    // E6: load a scripted input scenario if given (argv[3]). A parse error aborts
+    // BEFORE the scheduler starts (no firmware singletons exist yet → safe return).
+    // E6: 指定があれば入力シナリオ（argv[3]）をロード。パースエラーはスケジューラ起動前に
+    // 中断（ファームのシングルトン未生成ゆえ安全に return）。
+    const char* scenario_path = (argc > 3) ? argv[3] : nullptr;
+    if (sil_scenario_load(scenario_path) < 0) {
+        std::fprintf(stderr, "[emu] scenario load failed — aborting before run\n");
+        sil_emu_record_close();
+        return 2;
+    }
 
     std::printf("[emu] (1) plant.init ...\n");
     if (!g_plant.init(model_path)) {
@@ -121,11 +147,16 @@ int main(int argc, char** argv)
     TaskHandle_t h = nullptr;
     xTaskCreatePinnedToCore(app_main_task, "main", 16384, nullptr, 1, &h, 0);
 
-    // If this firmware's emu target links a virtual pilot, spawn it as a task so
-    // it injects ESP-NOW controller frames into the running firmware.
-    // 仮想パイロットがリンクされていればタスクとして起動し、ESP-NOW フレームを注入する。
-    if (sil_virtual_pilot_task != nullptr) {
-        TaskHandle_t ph = nullptr;
+    // Input source (mutually exclusive, same spawn site/priority as before so the
+    // no-scenario path is byte-identical):
+    //  - a loaded scenario → the deterministic scenario driver task,
+    //  - else the firmware's weak virtual pilot (legacy default, unchanged).
+    // 入力源（排他、spawn 位置/優先度は従来同一＝シナリオ無しは byte-identical）:
+    // シナリオがあればドライバ、無ければ従来の weak 仮想パイロット。
+    TaskHandle_t ph = nullptr;
+    if (sil_scenario_active()) {
+        xTaskCreatePinnedToCore(sil_scenario_driver_task, "scn_driver", 8192, nullptr, 1, &ph, 0);
+    } else if (sil_virtual_pilot_task != nullptr) {
         xTaskCreatePinnedToCore(sil_virtual_pilot_task, "pilot", 8192, nullptr, 1, &ph, 0);
     }
 
@@ -145,6 +176,7 @@ int main(int argc, char** argv)
     // 実機では静的シングルトンは破棄されない（プログラムは戻らない）。ホスト終了時の
     // 任意順の破棄は mutex 二重操作で abort する（ホスト固有の人工物）。_Exit で
     // 「電源断」を忠実に再現し、破棄を走らせずクリーンに終了する。
+    sil_emu_record_close();   // flush/close the events log (lines were flushed)
     std::fflush(stdout);
     std::fflush(stderr);
     std::_Exit(0);
