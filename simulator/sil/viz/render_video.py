@@ -221,26 +221,48 @@ def render_compare(args):
     ra, rb = verdict(args.bundle), verdict(args.compare)
     va = "PASS" if ra.get("pass") else "FAIL"
     vb = "PASS" if rb.get("pass") else "FAIL"
-    title = (f"StampFly SIL  ·  same flight, two estimators  ·  "
-             f"{la} (G3 {va})  vs  {lb} (G3 {vb})  ·  algorithm-independent")
+    noise = ra.get("noise", "off")
+    ra_rmse = ra.get("metrics", {}).get("g2_att_rmse_deg")
+    rb_rmse = rb.get("metrics", {}).get("g2_att_rmse_deg")
+    if noise not in ("off", None) and ra_rmse is not None and rb_rmse is not None:
+        # Noise comparison: surface the attitude-tracking RMSE so the contrast is explicit.
+        # ノイズ比較: 姿勢追従 RMSE を出して差を明示。
+        title = (f"StampFly SIL  ·  same flight under noise {noise}  ·  "
+                 f"{la} (att RMSE {ra_rmse:.1f}°, G3 {va})  vs  "
+                 f"{lb} (att RMSE {rb_rmse:.1f}°, G3 {vb})")
+    else:
+        title = (f"StampFly SIL  ·  same flight, two estimators  ·  "
+                 f"{la} (G3 {va})  vs  {lb} (G3 {vb})  ·  algorithm-independent")
 
     model = mujoco.MjModel.from_xml_path(args.model)
     data = mujoco.MjData(model)
     H3 = args.height                 # 3D pane height
     W3 = int(H3 * 4 / 3)             # 3D pane 4:3
     renderer = mujoco.Renderer(model, height=H3, width=W3)
-    # Tighter framing than the single-bundle render (distance 0.85): the twin panes
-    # are the hero shot, so pull in to make the drones larger and shrink the empty
-    # sky/floor. distance 0.74 → visible height ≈ 0.83·0.74 ≈ 0.61 m centered on
-    # lookat z=0.28 → covers z∈[−0.03, 0.59]: peak hover (≈0.55) and touchdown
-    # (≈0.01) both stay in frame with margin.
-    # 単一描画(距離0.85)より寄せる: ツインペインが主役なので機体を大きく、空/床の余白を縮小。
+    # Dynamic vertical framing: cover the full flight of BOTH runs. Under noise the
+    # complementary altitude can overshoot higher than the ESKF run, so a fixed tight
+    # camera pushes the taller drone out of frame (the right pane went empty). Center
+    # on the mid-height and set the distance from the taller peak (visible height ≈
+    # 0.83·distance), with a small margin — keeps the clean case as tight as before.
+    # 動的な鉛直フレーミング: 両実行の全飛行を画角に収める。ノイズ下で相補の高度が
+    # ESKF より高くオーバーシュートし得るため、固定の寄せた画角だと高い方が枠外に出る。
+    # 高い方のピークから距離を決め（可視高さ≈0.83·距離）、余裕を少し持たせる。
+    qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
+    # Horizontal chase + fixed vertical framing. Under noise the horizontal position
+    # is unobservable (ToF/flow off) and DRIFTS metres, so a fixed lookat loses the
+    # drone sideways; the camera tracks each pane's own px/py (set per frame in the
+    # loop) to keep it centered. Vertical stays fixed (covers the taller flight's
+    # peak) so the climb/descent still reads.
+    # 水平チェイス＋鉛直固定。ノイズ下で水平位置は観測不能(ToF/flow off)で数m流れるため、
+    # 各ペインが自分の px/py を追従（ループ内で毎フレーム設定）。鉛直は固定で上昇/下降を見せる。
+    pz_peak = max(float(A["pz"].max()), float(B["pz"].max()))
+    z_hi, z_lo = pz_peak + 0.05, -0.02
+    z_center = 0.5 * (z_lo + z_hi)
     cam = mujoco.MjvCamera()
     cam.azimuth = 130
     cam.elevation = -10
-    cam.distance = 0.74
-    cam.lookat[:] = [0.0, 0.0, 0.28]
-    qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
+    cam.distance = max(0.6, 1.10 * (z_hi - z_lo) / 0.83)
+    cam.lookat[:] = [0.0, 0.0, z_center]
 
     Wtot = 2 * W3
     Hg = args.graph_height
@@ -253,8 +275,12 @@ def render_compare(args):
     writer = imageio.get_writer(args.out, fps=args.fps, codec="libx264",
                                 quality=8, macro_block_size=None)
     for i in range(n):
+        # Chase each drone horizontally (keep it centered despite the drift).
+        # 各ドローンを水平追従（ドリフトしても中央に保つ）。
+        cam.lookat[:] = [float(A["px"][i]), float(A["py"][i]), z_center]
         a3d = render_3d(model, data, renderer,
                         np.array([A[c][i] for c in qcols]), cam)
+        cam.lookat[:] = [float(B["px"][i]), float(B["py"][i]), z_center]
         b3d = render_3d(model, data, renderer,
                         np.array([B[c][i] for c in qcols]), cam)
         pane_a = np.concatenate([cap_a, a3d], axis=0)

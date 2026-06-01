@@ -1,0 +1,28 @@
+{
+  "gate": "G2+G3",
+  "milestone": "P6-complementary",
+  "pass": true,
+  "flight": "takeoff-hover-yaw-stop-landing",
+  "duration_s": 5.6,
+  "estimator": "complementary",
+  "noise": "n0",
+  "noise_seed": 12345,
+  "metrics": {
+    "max_alt_m": 0.566,
+    "max_tilt_deg": 1.351,
+    "yaw_spin_rad_s": 0.990,
+    "yaw_after_stop_rad_s": 0.013,
+    "alt_hold_band_m": 0.006,
+    "final_alt_m": 0.010,
+    "g2_att_rmse_deg": 0.722
+  },
+  "checks": [
+    {"name": "took_off",         "pass": true},
+    {"name": "attitude_bounded",  "pass": true},
+    {"name": "yaw_spin",          "pass": true},
+    {"name": "yaw_stopped",       "pass": true},
+    {"name": "alt_held",          "pass": true},
+    {"name": "landed",            "pass": true},
+    {"name": "estimate_tracked",  "pass": true}
+  ]
+}

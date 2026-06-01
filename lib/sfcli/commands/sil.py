@@ -85,10 +85,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("-m", "--milestone", default="P1")
     p.set_defaults(func=run_gate)
 
-    p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4)")
+    p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
     p.add_argument("-m", "--milestone", default="P4")
     p.add_argument("--ea", choices=list(ESTIMATORS), default="eskf", help="run A estimator")
     p.add_argument("--eb", choices=list(ESTIMATORS), default="complementary", help="run B estimator")
+    p.add_argument("--noise", choices=NOISE_LEVELS, default=None, help="sensor noise (default per milestone)")
+    p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (same for both runs → fair)")
     p.add_argument("--fps", type=int, default=50)
     p.set_defaults(func=run_compare)
 
@@ -183,15 +185,22 @@ def run_compare(args: argparse.Namespace) -> int:
     py = _venv()
     if py is None:
         return 1
-    bundle = _bundle_dir(args.milestone)          # out_p4
+    bundle = _bundle_dir(args.milestone)          # out_p4 / out_p6
     bundle.mkdir(parents=True, exist_ok=True)
+    # Same noise level AND seed for both runs → identical noise realization → a fair
+    # estimator contrast. Noise default resolves per milestone (P6 → n0).
+    # 両実行に同じノイズ準位＋同じシード＝同一ノイズ実現で公平に比較。既定はマイルストーン別。
+    noise = getattr(args, "noise", None)
+    if noise is None:
+        noise = MILESTONE_NOISE.get(str(args.milestone).upper(), "off")
+    seed = getattr(args, "seed", 12345)
     runs = {}
     for est in (args.ea, args.eb):
         sub = bundle / est
         sub.mkdir(parents=True, exist_ok=True)
-        console.info(f"Running closed loop for comparison ({est})...")
+        console.info(f"Running closed loop for comparison ({est}, noise={noise})...")
         rc = subprocess.run([str(exe), str(_model()), str(sub), str(ESTIMATORS[est]),
-                             f"{args.milestone}-{est}"]).returncode
+                             f"{args.milestone}-{est}", noise, str(seed)]).returncode
         # hover_smoke writes the bundle even on a G3 fail; only a hard early exit
         # (e.g. model load) leaves no files. Require both before render/aggregate so
         # a crash surfaces here, not as an opaque traceback downstream.
@@ -220,10 +229,11 @@ def run_compare(args: argparse.Namespace) -> int:
     b = json.loads((runs[args.eb] / "results.json").read_text())
     both = bool(a.get("pass") and b.get("pass"))
     agg = {
-        "gate": "P4-compare",
+        "gate": "compare",
         "milestone": args.milestone,
         "kind": "comparison",
         "pass": both,
+        "noise": noise,
         "flight": a.get("flight", "takeoff-hover-yaw-stop-landing"),
         "runs": [
             {"estimator": args.ea, "bundle": args.ea,
