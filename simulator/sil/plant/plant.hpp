@@ -70,6 +70,20 @@ public:
         float motor_Bm = 6.33e-4f;  ///< V/(rad/s)
         float motor_Cm = 1.53e-2f;  ///< V (offset)
         float Ct       = 1.00e-8f;  ///< thrust coeff N/(rad/s)²  (T = Ct·ω²)
+        /// Real-world thrust efficiency vs the IDEALIZED curve above (motor/prop losses
+        /// + battery sag the firmware's vbat reading doesn't capture). The firmware's
+        /// HOVER_THRUST_CORRECTION = 1.12 (config.hpp:533, measured from flight-log
+        /// throttle) compensates exactly this deficit, so it commands mass·g·1.12 for
+        /// hover. WITHOUT this factor the Plant uses the loss-free datasheet curve and
+        /// produces 1.12× the firmware's intended thrust → the hover command over-thrusts
+        /// (~1 m/s² climb), drifts past the ToF ceiling, the ESKF goes blind and the craft
+        /// never holds. With efficiency = 1/1.12 the firmware's hover command yields actual
+        /// mg, matching the real hardware the firmware flew on (Model Identity).
+        /// 実機の推力効率（理想曲線比、モータ/プロップ損失＋ファームが測れない電池サグ）。
+        /// ファームの HOVER_THRUST_CORRECTION=1.12 がこの欠損を補償するため hover に
+        /// mass·g·1.12 を指令する。この係数が無いと Plant は損失ゼロの理想曲線で 1.12 倍の
+        /// 過推力を出し hover 指令が暴走上昇する。1/1.12 で実機同様に hover 指令＝mg となる。
+        float thrust_efficiency = 1.0f / 1.12f;  ///< ≈0.893 (matches firmware HOVER_THRUST_CORRECTION)
         float kappa    = 9.71e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T)
         float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
         float mass     = 0.037f;    ///< body mass [kg]

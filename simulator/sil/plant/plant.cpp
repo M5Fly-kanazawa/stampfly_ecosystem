@@ -116,7 +116,10 @@ float Plant::dutyToThrust(float duty) const
     const float disc = b * b + 4.0f * a * (V - cfg_.motor_Cm);  // > 0 since V > Cm
     const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
     if (omega <= 0.0f) return 0.0f;
-    return cfg_.Ct * omega * omega;                // thrust T = Ct·ω² [N]
+    // T = Ct·ω², scaled by the real-world thrust efficiency (see Config::thrust_efficiency:
+    // the firmware's HOVER_THRUST_CORRECTION 1.12 compensates this deficit on real hw).
+    // T = Ct·ω² に実機推力効率を乗ずる（ファームの 1.12 補償が打ち消す実機の欠損）。
+    return cfg_.thrust_efficiency * cfg_.Ct * omega * omega;   // thrust T [N]
 }
 
 // -----------------------------------------------------------------------------
@@ -126,7 +129,9 @@ float Plant::dutyToThrust(float duty) const
 float Plant::hoverDuty() const
 {
     const float thrust = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
-    const float omega = std::sqrt(thrust / cfg_.Ct);      // ω = √(T/Ct)
+    // Invert T = efficiency·Ct·ω² so the OUTPUT thrust (after efficiency) is mg/4.
+    // 効率込みの T=efficiency·Ct·ω² を逆算し、出力推力が mg/4 になる ω を得る。
+    const float omega = std::sqrt(thrust / (cfg_.Ct * cfg_.thrust_efficiency));  // ω = √(T/(Ct·η))
     const float V = cfg_.motor_Am * omega * omega + cfg_.motor_Bm * omega + cfg_.motor_Cm;
     return V / cfg_.v_batt;                                // duty = V / v_batt
 }
