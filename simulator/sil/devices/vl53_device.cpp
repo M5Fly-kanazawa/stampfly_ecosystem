@@ -80,10 +80,47 @@ constexpr float    ZERO_DIST_PHASE = 22528.0f;   // driver zdp for HISTOGRAM_LON
 constexpr int      AMBIENT_BIN_STRIP = 4;
 constexpr float    MAX_MM            = 1400.0f;  // peak stays in usable output bins 11..18 (valid window)
 
+// Dual VCSEL-period wrap resolution (the key to DYNAMIC validity). The driver runs an
+// interleaved A/B ranging: it toggles ll_state.rd_timing_status every frame
+// (vl53lx_core.c:181) and decodes the histogram with vcsel_period_a (config A) or
+// vcsel_period_b (config B), api_core.c:2677-2689. The two configs have DIFFERENT
+// VCSEL periods, so the driver derives DIFFERENT zero-distance phases (all values below
+// measured directly via smoke/vl53_probe.cpp's internal dump):
+//   config A: period span 24576 (vcsel reg 9)  -> zdp = 22528  (4 ambient bins)
+//   config B: period span 49152 (vcsel reg 11) -> zdp = 30720  (0 ambient bins)
+// (zdp = (period + reference_phase - 2048*cal_vcsel_start) % period, core_support.c:165.
+//  Feeding reference_phase=0 to both, gen4 reports zdp 22528 / 30720 respectively.)
+//
+// Two problems this creates when we feed an IDENTICAL histogram to both configs:
+//  1. config B's valid-phase window OVERFLOWS: upper_limit = (valid_phase_high<<8) + zdp
+//     = (136<<8) + 30720 = 65536, which wraps to 0 in the uint16_t of gen3.c:847 -> any
+//     positive phase is flagged RANGEPHASECHECK (public OUTOFBOUNDS, status 4).
+//  2. consecutive frames are in OPPOSITE configs whose zdp differs by 8192 (30720-22528),
+//     so the phase-consistency check (core.c:1786, tolerance 2048) sees an 8192 phase jump
+//     every frame and fails (public WRAP_TARGET, status 7) — EVEN when static. The only
+//     reason a static target ever reads VALID is a downstream history recovery (UWR) that
+//     needs CONSECUTIVE RANGES TO AGREE; it collapses above ~0.30 m/s of vertical motion.
+//
+// Fix (physically correct, mirrors real phasecal): a REAL sensor reports a per-config
+// phasecal_result__reference_phase (a measured value) that pulls both configs' zdp into
+// ONE reference frame. We set reference_phase=0 for both, which is the unrealistic part.
+// We instead supply config B with REF_PHASE_B so its zdp lands on the SAME 22528 as
+// config A: zdp_B = (49152 + 40960 - 2048) % 49152 = (30720 + 40960) % 49152 = 22528.
+// Then (1) no overflow and (2) consecutive p_011 differ only by the per-frame MOTION, so
+// phase-consistency passes up to ~192 mm/frame (1 bin) and gen4 returns RANGECOMPLETE(9)
+// directly — no fragile UWR, so dynamic flight stays VALID.
+// デュアル VCSEL period の wrap 分解能（動的 valid 性の鍵）。ドライバは rd_timing_status を
+// 毎フレーム反転し、設定A(period span 24576→zdp22528, amb4)/設定B(period span 49152→zdp30720,
+// amb0)で交互に復号。同一 histogram を両設定に送ると ①設定Bの位相窓が uint16 overflow(status4)
+// ②連続フレームの zdp が 8192 食い違い位相整合が破綻(status7, 静止でも)。実機は config 毎に
+// 校正された reference_phase で zdp を揃える。我々も設定Bに REF_PHASE_B を与え zdp を 22528 に統一。
+constexpr uint16_t REF_PHASE_B = 40960;   // aligns config-B zdp to 22528 (= config-A zdp)
+
 struct State {
-    uint16_t ptr        = 0;      // 16-bit register pointer (write-then-read)
-    uint8_t  stream     = 0xFF;   // stream_count; first MODE_START write wraps it to 0
-    float    pushed_mm  = -1.0f;  // board-pushed Plant distance [mm] (-1 = none)
+    uint16_t ptr        = 0;          // 16-bit register pointer (write-then-read)
+    uint8_t  stream     = 0xFF;       // stream_count; first MODE_START write wraps it to 0
+    uint32_t frame      = 0xFFFFFFFF; // free-running frame index (first MODE_START -> 0); NON-wrapping
+    float    pushed_mm  = -1.0f;      // board-pushed Plant distance [mm] (-1 = none)
 };
 State g_st;
 
@@ -145,19 +182,35 @@ void fill_histogram(uint8_t* d, size_t n)
     // させる(ESKF が偽の一定高度を信頼して鉛直推定が腐敗するのを防ぐ)。
     const bool out_of_range = (dist_mm > MAX_MM);
 
+    // Which interleaved config will the driver decode THIS frame with? rd_timing_status
+    // starts 0 (config A) for the first two frames, then toggles EVERY frame, so the
+    // driver's sequence is A,A,B,A,B,A,B,… (config B = period-49152/amb0 at frames
+    // 2,4,6,…). We mirror it with our own free-running, NON-wrapping frame index so the
+    // phase stays locked for the whole run — using result__stream_count's parity would
+    // DESYNC at its uint8 256-frame wrap (the driver's internal counter wraps 0xFF->0x80,
+    // preserving parity, while d[3] wraps 0xFF->0x00). frame increments on the same
+    // MODE_START write that advances stream, so the two stay in lockstep.
+    // このフレームをドライバがどちらの設定で復号するか。rd_timing_status は最初の2フレームは0
+    // (設定A)、以後毎フレーム反転 → A,A,B,A,B,…（設定B=period49152/amb0 は frame 2,4,6,…）。
+    // d[3] のパリティは uint8 wrap で desync するため、非wrap の自前フレーム番号で位相を固定する。
+    const bool config_b = (g_st.frame >= 2u) && ((g_st.frame % 2u) == 0u);
+    const int  strip    = config_b ? 0 : AMBIENT_BIN_STRIP;  // ambient bins: 0 (B) vs 4 (A)
+
     uint32_t bins[24];
     for (int k = 0; k < 24; ++k) bins[k] = AMBIENT;
 
     if (!out_of_range) {
-        // Phase a real sensor's return peak would sit at: zero-distance phase + range.
-        // gen4 strips the 4 leading ambient bins and left-shifts, so it decodes the peak
-        // at OUTPUT bin out_bin; pack the pulse into the RAW buffer at out_bin +
-        // AMBIENT_BIN_STRIP so it survives the shift. fbin is the CONTINUOUS raw-bin
-        // position of the true target phase (sub-bin resolved below).
-        // 実センサの戻りピーク位相 = 零距離位相 + 距離。gen4 は先頭4bin を strip+左シフトして
-        // output bin で復号するため RAW buffer には out_bin+4 に置く。fbin は連続的な raw bin 位置。
+        // Phase a real sensor's return peak would sit at, in BOTH configs once we align
+        // their zdp to 22528 (config B via REF_PHASE_B below): peak_phase = zdp + range.
+        // gen4 strips `strip` leading ambient bins and left-shifts, so to decode the peak
+        // at OUTPUT bin out_bin we pack the pulse into the RAW buffer at out_bin + strip.
+        // Because both configs now share zdp=22528, the SAME peak_phase yields the same
+        // decoded phase/range AND keeps consecutive-frame phase deltas down to the motion.
+        // 両設定の zdp を 22528 に揃えたので peak_phase は両設定で共通。gen4 は先頭 strip 個を
+        // strip+左シフトするため RAW には out_bin+strip に置く。連続フレームの位相差が motion 分
+        // だけになり、位相整合チェックを通る。
         const float peak_phase = ZERO_DIST_PHASE + dist_mm * PHASE_PER_MM;
-        const float fbin = (peak_phase - 1024.0f) / 2048.0f + (float)AMBIENT_BIN_STRIP;
+        const float fbin = (peak_phase - 1024.0f) / 2048.0f + (float)strip;
 
         // Sub-bin skew. A real return spreads across adjacent bins by the SPAD response;
         // gen4 recovers the phase as a centroid of the filtered pulse. We model the target
@@ -172,7 +225,7 @@ void fill_histogram(uint8_t* d, size_t n)
         // （重心を歪め、frac≈0/1 の退化時に gap を生み wrap-target 誤判定を招くため）。
         int   b0   = (int)floorf(fbin);
         float frac = fbin - (float)b0;              // [0,1): centroid sits at b0 + frac
-        if (b0 < AMBIENT_BIN_STRIP + 1) { b0 = AMBIENT_BIN_STRIP + 1; frac = 0.0f; }
+        if (b0 < strip + 1) { b0 = strip + 1; frac = 0.0f; }  // keep peak past the stripped bins
         if (b0 > 22) { b0 = 22; frac = 0.0f; }      // need b0, b0+1 within bins 0..23
 
         const uint32_t main_lo = (uint32_t)lrintf((float)PEAK * (1.0f - frac));
@@ -188,7 +241,11 @@ void fill_histogram(uint8_t* d, size_t n)
     d[3] = g_st.stream;             // stream_count (advances per frame)
     d[4] = 0x00; d[5] = 0xC0;       // dss_actual_effective_spads = 192 (BE)
     for (int k = 0; k < 24; ++k) pack_bin(d + 6 + 3 * k, bins[k]);
-    d[78] = 0x00; d[79] = 0x00;     // phasecal_result__reference_phase = 0 (zdp → 22528)
+    // phasecal_result__reference_phase (BE u16). config A: 0 -> zdp 22528. config B:
+    // REF_PHASE_B -> zdp (32768 + REF_PHASE_B - 2048) % 32768 = 22528 (matches A).
+    // phasecal_result__reference_phase（BE）。設定Aは0、設定Bは REF_PHASE_B で zdp を 22528 に揃える。
+    const uint16_t ref_phase = config_b ? REF_PHASE_B : 0;
+    d[78] = (uint8_t)(ref_phase >> 8); d[79] = (uint8_t)(ref_phase & 0xFF);
     d[80] = 0x00;                   // phasecal_result__vcsel_start = 0
     const uint8_t bin23_lsb = (uint8_t)(bins[23] & 0xFF);
     d[81] = (uint8_t)(bin23_lsb >> 2);    // BIN_23_0_MSB: reproduce bin23 low byte
@@ -223,7 +280,8 @@ int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     if (rbuf == nullptr) {
         const uint16_t write_end = (uint16_t)(g_st.ptr + (wlen >= 2 ? wlen - 2 : 0));
         if (g_st.ptr <= REG_MODE_START && REG_MODE_START < write_end) {
-            g_st.stream = (uint8_t)((g_st.stream + 1) & 0xFF);
+            g_st.stream = (uint8_t)((g_st.stream + 1) & 0xFF);  // 8-bit field for d[3]
+            g_st.frame  = g_st.frame + 1u;                      // free-running; drives config A/B parity
         }
         return 0;
     }

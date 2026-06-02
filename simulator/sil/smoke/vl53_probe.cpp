@@ -225,9 +225,15 @@ static void print_internal(VL53LX_DEV dev)
     VL53LX_LLDriverResults_t* pres = VL53LXDevStructGetLLResultsHandle(dev);
     const VL53LX_histogram_bin_data_t& hd = pdev->hist_data;
 
-    std::printf("   [internal] merged_zdp=%u stream=%u amb_bins=%u  merged_bins=",
+    const VL53LX_hist_post_process_config_t& pp = pdev->histpostprocess;
+    // upper_phase_limit replicates gen3.c:847-848 (uint16_t) to expose the overflow.
+    // upper_phase_limit は gen3.c の uint16 計算を再現（オーバーフローを可視化）。
+    const uint16_t upper_lim = (uint16_t)(((uint16_t)pp.valid_phase_high << 8) + hd.zero_distance_phase);
+    std::printf("   [internal] zdp=%u stream=%u amb_bins=%u vcsel_p=%u vph_lo/hi=%u/%u upper_lim(u16)=%u\n",
                 (unsigned)hd.zero_distance_phase, (unsigned)hd.result__stream_count,
-                (unsigned)hd.number_of_ambient_bins);
+                (unsigned)hd.number_of_ambient_bins, (unsigned)hd.VL53LX_p_005,
+                (unsigned)pp.valid_phase_low, (unsigned)pp.valid_phase_high, (unsigned)upper_lim);
+    std::printf("   [internal] merged_bins=");
     for (int k = 0; k < VL53LX_HISTOGRAM_BUFFER_SIZE; ++k) std::printf(" %d", (int)hd.bin_data[k]);
     std::printf("\n");
 
