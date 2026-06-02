@@ -28,7 +28,11 @@
  *        ドライバコアは無改変リンク（Code Identity）。プラットフォーム port（I2C/timer の
  *        継ぎ目）だけハーネスローカルでモデルへ直結。ファームの vl53lx_platform.c は不使用。
  *
- * Usage:  vl53_probe [target_mm] [frames]      (default 1000 mm, 6 frames)
+ * Usage:  vl53_probe [target_mm] [frames] [step_mm]   (default 1000 mm, 6 frames, 0)
+ *         step_mm adds a per-frame distance increment so the probe can reproduce a
+ *         DYNAMIC (changing-distance) flight, not just a static stand-off. This is the
+ *         切り分け tool for "does status=0 survive a moving target?"
+ *         step_mm は毎フレーム距離を加算し、静止でなく「動的（距離変化）飛行」を再現する。
  *
  * @design simulator/sil/docs/vl53_m2_resume.md §3 Option B — offline gen4 harness
  */
@@ -209,6 +213,34 @@ static void print_bin_data(VL53LX_DEV dev)
     std::printf("\n");
 }
 
+// Dump the INTERNAL gen4 state AFTER the ranging pipeline: the post-merge histogram
+// (pdev->hist_data — shows motion smearing) and each range object's decoded phase
+// (VL53LX_p_011) + internal range_status (the device-error code BEFORE the public
+// RangeStatus conversion). This exposes which gen4 check fails on a moving target.
+// パイプライン後の gen4 内部状態を出す: merge 後 histogram（動き smear が見える）と
+// 各オブジェクトの復号位相 p_011・内部 range_status（public 変換前のデバイスエラー）。
+static void print_internal(VL53LX_DEV dev)
+{
+    VL53LX_LLDriverData_t*    pdev = VL53LXDevStructGetLLDriverHandle(dev);
+    VL53LX_LLDriverResults_t* pres = VL53LXDevStructGetLLResultsHandle(dev);
+    const VL53LX_histogram_bin_data_t& hd = pdev->hist_data;
+
+    std::printf("   [internal] merged_zdp=%u stream=%u amb_bins=%u  merged_bins=",
+                (unsigned)hd.zero_distance_phase, (unsigned)hd.result__stream_count,
+                (unsigned)hd.number_of_ambient_bins);
+    for (int k = 0; k < VL53LX_HISTOGRAM_BUFFER_SIZE; ++k) std::printf(" %d", (int)hd.bin_data[k]);
+    std::printf("\n");
+
+    const VL53LX_range_results_t& rr = pres->range_results;
+    std::printf("   [internal] active_results=%u :", (unsigned)rr.active_results);
+    for (int i = 0; i < rr.active_results && i < VL53LX_MAX_RANGE_RESULTS; ++i) {
+        std::printf(" obj%d{p_011=%u dev_status=%u}", i,
+                    (unsigned)rr.VL53LX_p_003[i].VL53LX_p_011,
+                    (unsigned)rr.VL53LX_p_003[i].range_status);
+    }
+    std::printf("\n");
+}
+
 static void print_ranging(int frame, const VL53LX_MultiRangingData_t& r)
 {
     std::printf("[frame %d] NumberOfObjectsFound=%u StreamCount=%u\n",
@@ -231,10 +263,16 @@ int main(int argc, char** argv)
 {
     const float  target_mm = (argc > 1) ? (float)std::atof(argv[1]) : 1000.0f;
     const int    frames    = (argc > 2) ? std::atoi(argv[2]) : 6;
+    const float  step_mm   = (argc > 3) ? (float)std::atof(argv[3]) : 0.0f;
+    // hold: number of consecutive frames that share one distance sample (test the
+    // "dual-config wrap pair sees one instant" hypothesis). hold=2 -> A/B pair holds.
+    // hold: 同一距離を共有する連続フレーム数（デュアル設定 wrap 組が一瞬を見る仮説の検証）。
+    const int    hold      = (argc > 4) ? std::atoi(argv[4]) : 1;
 
     std::printf("=== VL53L3CX offline gen4 probe ===\n");
-    std::printf("target = %.1f mm, frames = %d (expect bin ~ %.1f, phase ~ %.0f)\n",
-                target_mm, frames, (target_mm / 192.5f), target_mm * 10.639f);
+    std::printf("target = %.1f mm, frames = %d, step = %.1f mm/frame "
+                "(expect bin ~ %.1f, phase ~ %.0f)\n",
+                target_mm, frames, step_mm, (target_mm / 192.5f), target_mm * 10.639f);
 
     VL53LX_Dev_t device;
     std::memset(&device, 0, sizeof(device));
@@ -260,7 +298,9 @@ int main(int argc, char** argv)
     std::printf("StartMeasurement: %d\n", (int)st);
 
     for (int f = 0; f < frames; ++f) {
-        sil_vl53::set_distance_mm(target_mm);
+        const int   hf     = (hold > 1) ? (f / hold) : f;     // hold distance across `hold` frames
+        const float dist_f = target_mm + step_mm * (float)hf;  // dynamic ramp if step != 0
+        sil_vl53::set_distance_mm(dist_f);
 
         uint8_t ready = 0;
         VL53LX_Error rs = VL53LX_GetMeasurementDataReady(&device, &ready);
@@ -274,6 +314,7 @@ int main(int argc, char** argv)
         if (gs != VL53LX_ERROR_NONE) { std::printf("[frame %d] GetMultiRangingData err %d\n", f, (int)gs); break; }
 
         print_ranging(f, rd);
+        print_internal(&device);
 
         VL53LX_ClearInterruptAndStartMeasurement(&device);
     }
