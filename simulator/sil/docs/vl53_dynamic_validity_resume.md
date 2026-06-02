@@ -13,7 +13,7 @@
 | 項目 | 状態 |
 |------|------|
 | **VL53 動的 valid 性** | **✅ 解決**（commit `59bf02b`）。ToF が ~1.5 m/s の鉛直運動まで status=0 を維持（旧: 0.30 m/s で崖状に全滅）。probe + フル emu で検証済み。 |
-| ToF-only ALT_HOLD 空中ホバー | ❌ **未成立**。別の故障連鎖でブロック（§2）。VL53 とは独立の問題。 |
+| ToF-only ALT_HOLD 空中ホバー | **✅ 成立**（commit `cea0d8c`, 2026-06-03）。§2 の「残ブロッカー」の真因は **SIL Plant 時間基準バグ＝物理が仮想時間の約3倍速**だった（推力でもESKFでもない）。修正（timestep 0.0025→0.00025=4000Hz ＋ Plant::step の固定timestep累積器）で hover_alt peak 900m→0.677m, ESKF ALT capture 0.62m（修正前 -0.00m 発散）, ALT_HOLD 0.62m 保持。**§2 以降の記述は二次症状の観察であり真因ではない — 詳細は `simulator/sil/docs/plant_timebase_bug.md`**。 |
 
 ---
 
