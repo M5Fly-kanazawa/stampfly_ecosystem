@@ -6,6 +6,13 @@
 > Self-contained resume note: a fresh session can produce an airborne stable-hover review
 > video from this file alone.
 
+> **【2026-06-02 更新・本ノートは上位ノートに引き継ぎ】** 本ノート §1 の「閉ループが 1.12 バイアスを
+> 吸収してホバーする」は **ESKF が正しい前提**だった。実際は初の空中試験で ESKF 鉛直が発散（runaway）し、
+> 真因は **VL53 模型が飛行中に valid を返さない**ことと判明（推力物理は正しい＝検証済み）。続きは
+> **`vl53_dynamic_validity_resume.md`**（ToF 模型の動的 valid 性の作り込み）と auto-memory
+> `project_eskf_vertical_divergence.md` を参照。アームタイミング/throttle 写像/DSL alt トークン等の
+> 本ノートの裏取り事実は引き続き有効。
+
 最終更新: 2026-06-02 / 直近コミット: `d03532c`（VL53 M2 完了＝ToF が status0・±17mm で ESKF POS_Z に供給）。
 **前提**: 全参照は調査ワークフローで実コード裏取り済み（M2 ノート §7 が未検証の誤りを含んだ反省を踏まえた）。
 
