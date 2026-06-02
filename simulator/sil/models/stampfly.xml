@@ -19,7 +19,14 @@
 -->
 <mujoco model="stampfly">
   <compiler meshdir="../../shared/assets/meshes/parts" angle="radian"/>
-  <option timestep="0.0025" gravity="0 0 -9.81" integrator="RK4"/>
+  <!-- Physics integrates at 4000 Hz (0.25 ms) = 10x the 400 Hz controller, so the
+       inter-sample plant dynamics under the held motor command are captured (a
+       physics step == control period leaves no physics between control updates).
+       The SIL steps mj_step in these fixed substeps, locked to virtual time. -->
+  <!-- 物理は 4000Hz(0.25ms)=400Hz 制御の10倍で積分。制御サンプル間のプラント挙動を
+       捉える（物理刻み=制御周期だと制御の間の物理が無くなる）。SIL はこの固定刻みで
+       仮想時間にロックして mj_step を回す。 -->
+  <option timestep="0.00025" gravity="0 0 -9.81" integrator="RK4"/>
 
   <visual>
     <headlight ambient="0.5 0.5 0.5"/>

@@ -3,7 +3,7 @@
 > 自己完結の分析ノート。空コンテキストの新セッションでも、このファイルだけで状況を把握できる。
 > Self-contained root-cause note.
 
-最終更新: 2026-06-03 / 状態: **原因特定済み・修正未着手（ユーザー判断で文書化を先行）**。
+最終更新: 2026-06-03 / 状態: **✅ 修正済・検証済**（物理4000Hz化＋固定timestep累積器）。
 **前提**: 全数値は実コード裏取り・実測（emu_vehicle / hover_alt.scn）。
 
 ---
@@ -82,35 +82,44 @@
 
 ---
 
-## 5. 修正方針（未着手・要実装）
+## 5. 実施した修正（✅ 完了）
 
-**固定 timestep 累積器（accumulator）**:
-- 経過仮想時間を累積し、`m_->opt.timestep`（0.0025s）刻みで**必要回数だけ** `mj_step` を呼ぶ。
-  端数は次回へ繰り越す。→ `d_->time` が `now_us` と 1 timestep 以内で 1:1 同期。
-- RK4 はネイティブ刻み（0.0025s）のまま＝安定。モータ遅れ `alpha` とノイズ前進も substep の
-  h を使う（従来は誤った可変 dt を使っていた＝ここも副次的に正される）。
-- 実装位置の候補:
-  - **`sil_board_step_plant`（virtual_board.cpp）**: 両エミュ共通基盤。ここに累積器を置けば
-    emu_vehicle / emu_vehicle_new 双方が一度に直る。**第一候補**。
-  - あるいは `Plant::step(dt)` 自身を「dt を substep で消化する」よう改修（全 step 呼び出し元が
-    正される。固定 dt 呼び出し元は挙動不変）。
-- 期待効果（要・実測検証）: 物理がスケジューラと 1:1 → climb は真値 0.196 m/s²（穏やか）→ ToF が
-  実レートで変化 → jump filter 誤発火せず → ESKF が ToF を追従 → **離陸ハンドオフ blocker が連鎖的に
-  解消**する見込み。検証して初めて確定。
+**2点を同時に直した（制御検証の標準＝物理は制御の10倍以上で積分する）:**
+
+1. **物理を 4000Hz に細かく**（`models/stampfly.xml`）: `option timestep` を `0.0025`→`0.00025`
+   （400Hz 制御の10倍）。制御サンプル間のプラント挙動を積分する（物理刻み=制御周期だと制御の
+   間の物理が無い）。RK4 はそのまま、刻みだけ細かく。
+2. **固定 timestep 累積器**（`plant.cpp` `Plant::step` / `Plant::substep`）: `step(dt)` は経過仮想
+   時間 `dt` を `step_accum_` に累積し、`m_->opt.timestep`（=h）刻みで**収まる整数回だけ** `substep(h)`
+   を回し端数を繰り越す。`substep` が従来の step 本体（モータ遅れ→推力→反トルク+風→mj_step→ノイズ、
+   ただし dt の代わりに h を使う）。→ `d_->time` が `now_us` と 1:1 同期、かつプラントは 4000Hz で積分。
+   - 実装位置は `Plant::step` 自身。全 step 呼び出し元（emu 両系統＋固定dt smoke群）が一貫して
+     「dt ぶん進む」よう正される。固定 dt=0.0025 で呼ぶ smoke は substep 10回＝同じ総時間・10倍精細。
+
+**検証結果（実測, 2026-06-03）**:
+- **runaway 解消**: hover_alt peak alt **900m → 0.677m**（穏やかな離陸）。
+- **離陸ハンドオフ修正**: ESKF の `ALT capture: alt=0.62m`（修正前は **-0.00m** で発散）。
+- **climb 真値化**: phase C(t=14→16) の加速度 ≈ **0.22 m/s²**（予測 0.196 と一致, 修正前 1.75）。
+- **ALT_HOLD 保持**: sp=0.62m, alt が 0.62m に整定, vz≈0, thrust 0.406N≈hover 0.407N。
+- **時間 1:1**: trajectory が t=38s で終了（修正前は物理 t=100s まで暴走）。
+- **決定論的**: 2回連続実行で peak alt=0.677m 一致。
+- **回帰なし**: plant_smoke 全PASS / hover_espnow 14/14 / console_cli 8/8（**sf 既定 25s で**。
+  注意: 仮想 pilot の arm は ~20s 以降ゆえ duration 20s だと arm 前に終わる＝偽 FAIL になる）。
+- **ESKF 鉛直発散 blocker = 連鎖解消**を確認（§4 の予測どおり、物理が実レートに戻り ToF/ESKF が
+  整合した）。`project_eskf_vertical_divergence` の「離陸ハンドオフ」blocker はこの時間基準バグの
+  二次症状だったと確定。
 
 ---
 
-## 6. 検証レシピ（修正後）
+## 6. 検証レシピ（再確認用）
 
 ```bash
-# 修正後、物理/スケジューラ比が ~1.0 になることを STEPDBG 相当で確認
 sf sil scenario simulator/sil/scenarios/hover_alt.scn --duration 38000000
-# trajectory.csv col9=alt: phase C(t=14-16.6) の climb 加速度が ~0.2 m/s² になること
-# console.log: ESKF alt が真値追従、ALT_HOLD で alt 平坦、runaway しないこと
+# console.out: peak alt ~0.68 m（runaway しない）
+# console.log: "ALT capture: alt=0.62m"、ALT_HOLD で alt が 0.62m 平坦、vz≈0
+# 回帰: sf sil scenario .../hover_espnow.scn （既定25s）= 14/14、console_cli.scn = 8/8
+./simulator/sil/build/plant_smoke   # 全PASS（hover 維持）
 ```
-
-合格条件: ① 物理/スケジューラ時間比 ≈ 1.0、② phase C climb ≈ 0.2 m/s²、③ ESKF alt が真値追従、
-④ ALT_HOLD で安定ホバー（runaway なし）。
 
 ---
 

@@ -137,24 +137,57 @@ float Plant::hoverDuty() const
 }
 
 // -----------------------------------------------------------------------------
-// step — motor lag → thrust → reaction yaw torque + wind → mj_step.
-// step — モータ遅れ → 推力 → ヨー反トルク＋風 → mj_step。
+// step — advance the physics by `dt` of VIRTUAL time in fixed model-timestep
+// substeps, carrying the remainder so the physics clock tracks the caller's
+// virtual clock 1:1.
+//
+// Why an accumulator: mj_step always advances exactly one model timestep (it
+// takes no dt). If the caller invokes step() at an irregular rate (the SIL
+// scheduler jumps its virtual clock to the next wake/timer), stepping once per
+// call would decouple physics time from virtual time. The accumulator runs the
+// integer number of substeps that fit the elapsed `dt` and keeps the remainder,
+// so physics time = virtual time. The model timestep is 0.25 ms (4000 Hz) = 10×
+// the 400 Hz controller, so the inter-sample plant dynamics under the held motor
+// command are integrated (a physics step == control period would leave none).
+//
+// step — 物理を「仮想時間 dt」ぶん、固定モデル timestep の substep で進め、端数を
+// 繰り越して物理時計を呼び出し側の仮想時計と 1:1 に保つ。mj_step は dt を取らず常に
+// モデル timestep を1回進めるため、不規則な呼び出し（SIL スケジューラの仮想時計ジャンプ）
+// では1呼び出し1ステップだと物理時間が仮想時間から乖離する。累積器で dt に収まる整数回
+// の substep を回し端数を残す。モデル timestep は 0.25ms(4000Hz)=400Hz 制御の10倍。
+// -----------------------------------------------------------------------------
+void Plant::step(float dt)
+{
+    last_dt_ = dt;  // flow integrates over the elapsed call interval (unchanged)
+
+    // Accumulate the elapsed virtual time and run as many fixed substeps as fit.
+    // The model timestep (double) is the substep length h; the remainder carries.
+    // 経過仮想時間を累積し、収まる回数だけ固定 substep を回す。端数は次回へ繰り越す。
+    const double h = m_->opt.timestep;
+    step_accum_ += (double)dt;
+    while (step_accum_ >= h) {
+        substep((float)h);
+        step_accum_ -= h;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// substep — one fixed-timestep physics step of length h:
+//   motor lag → thrust → reaction yaw torque + wind → mj_step → advance noise.
 //
 // MuJoCo <motor gear="0 0 1 0 0 0"> applies thrust along each rotor site's +Z
 // (FLU up); the off-center sites give the roll/pitch arm moment for free. Only the
 // aerodynamic yaw reaction torque and wind are applied manually via xfrc_applied.
 //
-// MuJoCo の <motor gear="0 0 1 0 0 0"> は各ロータ site の +Z（FLU 上）に推力を加える。
-// 中心からずれた site がロール/ピッチの腕モーメントを自動で生む。ヨー反トルクと風だけを
-// xfrc_applied で手動付与する。
+// substep — 長さ h の固定刻み物理 1 ステップ。MuJoCo の <motor gear="0 0 1 0 0 0"> は
+// 各ロータ site の +Z（FLU 上）に推力を加え、中心からずれた site が腕モーメントを生む。
+// ヨー反トルクと風だけ xfrc_applied で手動付与する。
 // -----------------------------------------------------------------------------
-void Plant::step(float dt)
+void Plant::substep(float h)
 {
-    last_dt_ = dt;
-
     // First-order motor lag toward the commanded target, then quadratic thrust.
     // 指令目標への一次遅れ、続いて二次推力。
-    const float alpha = 1.0f - std::exp(-dt / cfg_.motor_tau);
+    const float alpha = 1.0f - std::exp(-h / cfg_.motor_tau);
     float thrust[4];
     for (int i = 0; i < 4; ++i) {
         motor_duty_[i] += (motor_target_[i] - motor_duty_[i]) * alpha;
@@ -191,10 +224,10 @@ void Plant::step(float dt)
 
     mj_step(m_, d_);
 
-    // Advance the IMU noise one step (bias random walk + fresh white sample) so the
-    // next imu() reads this step's noise. No-op when noise is disabled.
-    // IMU ノイズを1ステップ進める（バイアスRW＋新しい白色サンプル）。無効時は無操作。
-    noise_.advance(dt);
+    // Advance the IMU noise one substep (bias random walk + fresh white sample) so
+    // the next imu() reads this step's noise. No-op when noise is disabled.
+    // IMU ノイズを1 substep 進める（バイアスRW＋新しい白色サンプル）。無効時は無操作。
+    noise_.advance(h);
 }
 
 // -----------------------------------------------------------------------------

@@ -156,8 +156,16 @@ public:
     /// thrust→duty 段はこれで割るため、モータ曲線が使う v_batt と一致させる。
     float batteryVoltage() const { return cfg_.v_batt; }
 
-    /// Advance the physics by dt: motor lag → thrust → reaction torque + wind → mj_step.
-    /// 物理を dt 進める: モータ遅れ → 推力 → 反トルク＋風 → mj_step。
+    /// Advance the physics by dt of VIRTUAL time, integrating in fixed
+    /// model-timestep (m_->opt.timestep) substeps with a carried remainder, so
+    /// the physics clock tracks the caller's virtual clock 1:1. mj_step always
+    /// advances exactly one model timestep (it takes no dt), and the controller
+    /// samples at 400 Hz while the plant integrates at the finer model timestep
+    /// (≥10× oversampling) — the inter-sample plant dynamics are preserved.
+    /// 物理を「仮想時間 dt」ぶん進める。固定モデル timestep（m_->opt.timestep）刻みの
+    /// substep で積分し端数を繰り越す → 物理時計が呼び出し側の仮想時計と 1:1 で一致。
+    /// mj_step は常にモデル timestep を1回進める（dt を取らない）。制御は 400Hz で
+    /// サンプルし、プラントはより細かいモデル timestep（10倍以上）で積分する。
     void step(float dt);
 
     /// Ground-truth state (NED/FRD), converted from MuJoCo via frames only.
@@ -175,6 +183,12 @@ public:
     mjData*        data()        { return d_; }   ///< for the optional viewer / ビューア用
 
 private:
+    /// One fixed-timestep physics substep of length h [s]: motor lag → thrust →
+    /// reaction torque + wind → mj_step → advance noise. h is the model timestep.
+    /// 長さ h [s] の固定刻み物理 substep 1回: モータ遅れ → 推力 → 反トルク＋風 →
+    /// mj_step → ノイズ前進。h はモデル timestep。
+    void substep(float h);
+
     /// Pointer to a named sensor's data inside d_->sensordata.
     /// 名前付きセンサの d_->sensordata 内の先頭ポインタ。
     const double* sensor(int sid) const { return d_->sensordata + m_->sensor_adr[sid]; }
@@ -187,6 +201,7 @@ private:
     float motor_duty_[4]   = {0.0f, 0.0f, 0.0f, 0.0f}; ///< actual (lagged) duty
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty
     float last_dt_ = 0.0025f;  ///< last step dt (for flow count integration)
+    double step_accum_ = 0.0;  ///< virtual-time accumulator [s] for fixed substeps
 
     int body_id_  = -1;
     int accel_sid_ = -1, gyro_sid_ = -1, quat_sid_ = -1, pos_sid_ = -1, vel_sid_ = -1;
