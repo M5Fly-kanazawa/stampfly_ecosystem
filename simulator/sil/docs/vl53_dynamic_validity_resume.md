@@ -50,7 +50,44 @@ gen4 内部 zdp/位相窓/p_011/status をダンプ）。`cmake -S simulator/sil
 
 ---
 
-## 2. 空中ホバーの真のブロッカー（VL53 とは別問題・次の作業対象）
+## 1.5 電池/動力モデルの過推力 = 解決（commit 66752df, ユーザー指摘）
+
+**原則（ユーザー）**: ファームは実機で飛んだコード＝正しい。飛ばないならエミュレータの
+バグかパラメータ誤り。→ 過推力は **Plant 側の不備**だった。
+
+- ファームの hover FF は `mass·g·HOVER_THRUST_CORRECTION(1.12)`（config.hpp:533, 実飛行
+  ログのスロットル実測）を指令。1.12 は実機モータ/プロップが理想曲線より弱い分＋電池サグの補償。
+- だが Plant は損失ゼロの理想曲線をそのまま使い、この 1.12 の実機欠損を再現していなかった
+  → ファームの hover 指令(duty~0.70)で Plant が 0.40N(hover 0.363N の 1.12倍)を出し、
+  net 0.037N の定常過推力（DUTYDBG で直接計測, 一時計装→revert）。
+- **修正**: `Plant::Config::thrust_efficiency = 1/1.12 ≈ 0.893` を dutyToThrust に乗ずる
+  （hoverDuty も反映）。plant_smoke で Plant の net-0 hover_duty が 0.652→0.698 に上がり
+  ファーム指令 duty(~0.70)と一致 → ファームの hover 指令が実 mg を生む（Model Identity）。
+- 回帰: hover_espnow 14/14, console_cli 8/8 PASS, plant_smoke 全 PASS。
+
+## 2. 空中ホバーの残ブロッカー：ESKF 離陸ハンドオフ（次の作業対象）
+
+VL53 valid 化＋過推力修正の後も hover_alt は runaway 上昇する。VDBG（imu_task:393 直後,
+検証後 revert）で確定した残る故障連鎖:
+
+- **ToF は valid で climb を追従している**（tofH=1, tof=0.29→1.38m）。VL53 修正は効いている。
+- **だが ESKF position が追従しない**: 離陸検出時 `resetPositionVelocity()`（imu_task.cpp:268）が
+  pz を 0 に戻すが、機体は離陸閾値(tof>0.10m を 200ms 保持=takeoff_hold_samples 80)を満たす
+  頃には既に空中(~0.3m+)。直後 ToF は 10サイクル(~0.33s)スキップ(imu_task.cpp:324)。
+  スキップ明けに ToF イノベーション(真alt − (−pz=0) ≈ 0.5m+)が TOF_INNOV_GATE(0.5m,
+  config.hpp:172)を超え**棄却→pz が 0 に固着→以後 accel-bias 発散(baz 0.07→負)→ESKF alt が
+  負へ発散**。ALT_HOLD はこの盲目 ESKF を追って増推(thrust>hover)→ climb → 正帰還 runaway。
+
+**未解明**: STABILIZE 開ループ phase C の climb が η 適用後のモデル予測(raw3310→net~0.13 m/s²)
+より速い（trajectory/DUTYDBG とも ~2-3 m/s²）。推力/スロットル経路にもう1つ subtlety がある
+可能性（throttle 正規化? duty 飽和?）。要・数値切り分け。
+
+**ユーザー原則に照らした解釈**: ①離陸ハンドオフは firmware の正しい挙動（実機で飛んだ）→
+エミュレータ側の何か（ToF/高度タイミング, 残る過推力, シナリオ）が実機と違う。②シナリオは
+「STABILIZE で穏やかに離陸→空中で ToF ロック確立→ALT_HOLD 切替」が正しい構造（地上 engage は
+NG）。現 hover_alt.scn はこの構造だが phase C の過推力で 1.4m を突破してしまう。
+
+## 2bis. 旧ノートの「真のブロッカー」記述（参考・上記 §2 に統合）
 
 **hover_alt.scn を走らせると機体が runaway上昇（数百〜数千m）し crash-disarm する。** VDBG
 （imu_task.cpp に一時挿入し検証後 revert 済み）で確定した故障連鎖:

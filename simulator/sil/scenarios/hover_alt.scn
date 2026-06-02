@@ -36,17 +36,19 @@
 #  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s — clear boot→IDLE (~9.5 s) before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (now in IDLE), throttle centre = T=0 (motors idle) 1 s
-   +    rc   2048  2048   2048    2048  1     4000      50        1     # C: enter ALT_HOLD (alt=1) with centre stick → captureAltitude clamps to MIN 0.10 m, stick in deadzone unlocks hold → gentle closed-loop lift to 0.10 m, settle 4 s
-   +    rc   3359  2048   2048    2048  1     2500      50        1     # D: climb stick (norm 0.64 → +0.3 m/s, within the 0.5 m/s ToF-valid band) → setpoint ramps 0.10→~0.85 m over 2.5 s
-   +    rc   2048  2048   2048    2048  1     14000     50        1     # E: centre stick → climb_cmd 0 → HOLD ~0.85 m hover 14 s
-   +    rc   1000  2048   2048    2048  1     3000      50        1     # F: descent stick (norm -0.51 → -0.14 m/s) → setpoint sinks toward MIN 0.10 m, 3 s
-   +    rc   2048  2048   2048    2048  0     1000      50              # G: DISARM, motors cut 1 s
+   +    rc   3310  2048   2048    2048  1     2600      50              # C: STABILIZE VERY gentle take-off — T=0.616, Plant net ≈0.007 N → ~0.19 m/s climb (lift-off needs T>0.605=raw>3287 with the 1/1.12 efficiency Plant). Slow enough that the craft moves <0.5 m during the 10-cycle ToF-skip after take-off, so the ToF innovation stays inside TOF_INNOV_GATE(0.5 m) and the ESKF keeps a CLEAN lock instead of gating ToF out. Reaches ~0.5 m in 2.6 s, well under the 1.4 m ToF ceiling.
+   +    rc   2048  2048   2048    2048  1     16000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE with a good lock → captureAltitude(current) holds it; centre stick unlocks hold. Hover 16 s.
+   +    rc   1000  2048   2048    2048  1     2500      50        1     # E: descent stick (norm -0.51 → -0.14 m/s) → setpoint sinks toward MIN 0.10 m, 2.5 s
+   +    rc   2048  2048   2048    2048  0     1000      50              # F: DISARM, motors cut 1 s
 #
-# This is a CLOSED-LOOP ALT_HOLD take-off (replaces the old open-loop kick that
-# over-thrusts and rockets past the 1.4 m ToF range before capture). The whole climb is
-# rate-limited to MAX_CLIMB_RATE 0.5 m/s — within the band where the config-aware VL53
-# model holds status=0 (fix 59bf02b) — so ToF stays valid throughout and the ESKF never
-# goes blind. 閉ループ ALT_HOLD 離陸: 上昇は 0.5 m/s 以下に制限され ToF が valid を保つ。
+# REAL-FLIGHT-STYLE take-off: a gentle STABILIZE lift-off FIRST (so the ESKF gets a clean
+# ToF lock and LandingHandler registers take-off while airborne), THEN hand to ALT_HOLD —
+# NOT engaging ALT_HOLD on the ground (which makes resetPositionVelocity zero pz mid-air
+# and the ToF innovation gate lock out). The Plant now carries the 1/1.12 thrust efficiency
+# (commit 66752df) that the firmware's HOVER_THRUST_CORRECTION compensates, so the lift is
+# gentle (no 1.12 over-thrust) and stays under the 1.4 m ToF ceiling.
+# 実飛行流の離陸: まず STABILIZE で穏やかに離陸し空中で ToF ロック確立→ALT_HOLD へ切替。
+# 地上で ALT_HOLD engage しない(pz リセット+innov gate で固着するため)。Plant は推力効率込み。
 #
 # Expectation (tune from trajectory.csv `alt` column, NOT control gains):
 #   C: alt rises above ~0.20 m (leaves the ground; cf. hover_espnow stays alt~0.013 m).
