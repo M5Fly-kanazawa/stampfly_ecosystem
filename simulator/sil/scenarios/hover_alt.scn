@@ -36,29 +36,43 @@
 #  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s — clear boot→IDLE (~9.5 s) before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (now in IDLE), throttle centre = T=0 (motors idle) 1 s
-   +    rc   3310  2048   2048    2048  1     2600      50              # C: STABILIZE VERY gentle take-off — T=0.616, Plant net ≈0.007 N → ~0.19 m/s climb (lift-off needs T>0.605=raw>3287 with the 1/1.12 efficiency Plant). Slow enough that the craft moves <0.5 m during the 10-cycle ToF-skip after take-off, so the ToF innovation stays inside TOF_INNOV_GATE(0.5 m) and the ESKF keeps a CLEAN lock instead of gating ToF out. Reaches ~0.5 m in 2.6 s, well under the 1.4 m ToF ceiling.
+   +    rc   3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off — T=0.616, firmware commands 0.414 N; the Plant's 1/1.12 efficiency yields ≈0.370 N → net ≈+0.007 N → climb ≈0.2 m/s². Measured: reaches ≈0.62 m in 2.6 s (peak ~0.68 m), well under the 1.4 m ToF ceiling. The physics integrates at 4000 Hz LOCKED to virtual time (cea0d8c), so the ToF distance and the ESKF velocity advance at the SAME rate the firmware predicts — the ESKF keeps a clean ToF lock through the climb (ALT capture reads the true ~0.62 m, not a diverged value).
    +    rc   2048  2048   2048    2048  1     16000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE with a good lock → captureAltitude(current) holds it; centre stick unlocks hold. Hover 16 s.
    +    rc   1000  2048   2048    2048  1     2500      50        1     # E: descent stick (norm -0.51 → -0.14 m/s) → setpoint sinks toward MIN 0.10 m, 2.5 s
    +    rc   2048  2048   2048    2048  0     1000      50              # F: DISARM, motors cut 1 s
 #
 # REAL-FLIGHT-STYLE take-off: a gentle STABILIZE lift-off FIRST (so the ESKF gets a clean
-# ToF lock and LandingHandler registers take-off while airborne), THEN hand to ALT_HOLD —
-# NOT engaging ALT_HOLD on the ground (which makes resetPositionVelocity zero pz mid-air
-# and the ToF innovation gate lock out). The Plant now carries the 1/1.12 thrust efficiency
-# (commit 66752df) that the firmware's HOVER_THRUST_CORRECTION compensates, so the lift is
-# gentle (no 1.12 over-thrust) and stays under the 1.4 m ToF ceiling.
-# 実飛行流の離陸: まず STABILIZE で穏やかに離陸し空中で ToF ロック確立→ALT_HOLD へ切替。
-# 地上で ALT_HOLD engage しない(pz リセット+innov gate で固着するため)。Plant は推力効率込み。
+# ToF lock and LandingHandler registers take-off while airborne), THEN hand to ALT_HOLD,
+# which captures the CURRENT altitude — the real-flight sequence. Two SIL-plant fixes make
+# this faithful (NOT firmware changes — the firmware flew on real hardware):
+#   1. Plant 1/1.12 thrust efficiency (66752df) matching the firmware's HOVER_THRUST_CORRECTION,
+#      so the hover command yields actual mg (no 1.12 over-thrust). Without it the craft
+#      over-climbs to ~6 m.
+#   2. Fixed-timestep physics LOCKED to virtual time at 4000 Hz (cea0d8c). Previously the
+#      Plant was stepped once per scheduler clock-event (~3x per 2.5 ms), so physics ran ~3x
+#      faster than virtual time — the apparent climb was 1.75 m/s² (= true 0.196 × 3²) and the
+#      ESKF saw a ToF that moved 3x faster than its own velocity prediction, so its accel bias
+#      diverged (the old "ESKF vertical divergence / takeoff handoff" blocker). With the fix
+#      ToF and the ESKF advance at the same rate and the lock stays clean. See
+#      simulator/sil/docs/plant_timebase_bug.md.
+# 実飛行流の離陸: まず STABILIZE で穏やかに離陸し空中で ToF ロック確立→ALT_HOLD が現在高度を
+# キャプチャ。忠実化は SIL プラント側の2修正（firmware は無改変）: ①推力効率 1/1.12(66752df)で
+# hover 指令が実 mg を生む ②物理を仮想時間にロックした 4000Hz 固定刻み(cea0d8c)。以前は物理が
+# 約3倍速で「ESKF鉛直発散」blocker を生んでいたが、これで ToF と ESKF が同レートで進み解消。
 #
-# Expectation (tune from trajectory.csv `alt` column, NOT control gains):
-#   C: alt rises above ~0.20 m (leaves the ground; cf. hover_espnow stays alt~0.013 m).
-#   D: ALT_HOLD captures current altitude (clamped [0.10,3.0] m) and HOLDS it; raw2048 is
-#      inside the ±0.1 deadzone → stick unlocks → climb_cmd=0 → setpoint frozen. Steady
-#      thrust settles near 0.363 N (the inner VEL PID removes the +0.0435 N of the 1.12
-#      HOVER_THRUST_CORRECTION feedforward bias), NOT 0.4065 N.
-#   E: controlled descent at up to 0.3 m/s; setpoint clamps at MIN 0.10 m.
-#   F: motors cut.
+# Expectation (MEASURED with both fixes; tune from trajectory.csv `alt`, NOT control gains):
+#   C: alt rises to ~0.62 m (leaves the ground; cf. hover_espnow at T=0.50 stays grounded).
+#   D: ALT_HOLD captures the current altitude (~0.62 m, clamped [0.10,3.0] m) and HOLDS it;
+#      raw2048 is inside the ±0.1 deadzone → climb_cmd=0 → setpoint frozen. The COMMANDED
+#      thrust settles near the hover feedforward 0.407 N (= mg×1.12); the Plant's 1/1.12
+#      efficiency turns that into actual mg=0.363 N → hover (vz≈0). So the firmware-side
+#      thrust log reads ~0.406 N, NOT 0.363 N — the efficiency, not the VEL PID, removes the
+#      1.12 factor.
+#   E: controlled descent; setpoint sinks toward MIN 0.10 m.
+#   F: motors cut, craft lands (truth alt → ~0.01 m).
 #
-# TUNING: raw3250 / 1.3 s are starting guesses. If C overshoots MAX 3.0 m or stays under
-#   MIN 0.10 m, adjust raw(3180..3400) and hold_ms from the `alt` column. NEVER touch
-#   HOVER_THRUST_CORRECTION — the closed loop absorbs it (hover_resume.md §1).
+# TUNING: raw3310 / 2600 ms are the working values (peak ~0.68 m, ALT_HOLD holds ~0.62 m).
+#   If C overshoots MAX 3.0 m or stays under MIN 0.10 m, adjust raw(3180..3400) and hold_ms
+#   from the `alt` column. NEVER touch HOVER_THRUST_CORRECTION — the closed loop absorbs it
+#   (hover_resume.md §1). The 4000 Hz virtual-time-locked physics (cea0d8c) is REQUIRED for
+#   the climb / ToF / ESKF to be physically consistent (plant_timebase_bug.md).
