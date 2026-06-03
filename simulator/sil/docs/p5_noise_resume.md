@@ -152,11 +152,19 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   duty(~0.7)が同定点より高く K·duty² が過大気味な点も。**→ フォロー**: ①ファーム IMU フィルタ設定が
   ~100–177Hz をどれだけ落とすか ②K の duty 整合 ③段階3 比較。
 
-### 段階3/3 ⬜ ESKF vs 相補の比較（P6 ゲート、要ハーネス判断）
-- **設計判断が必要**: 比較は現状 `hover_smoke`（旧核ループ）で動く（`sf sil compare`）が、忠実な比較は
-  emu 上で行うべき。emu_vehicle は旧ファーム（推定器固定）、emu_vehicle_new は IEstimator(ESKF/相補)切替可。
-  → **emu_vehicle_new で ALT_HOLD 飛行＋estimator 切替の経路を確認**するか、hover_smoke 比較を許容するか。
-  着手時に裏取り（emu_vehicle_new の airborne シナリオ・estimator 選択 env の有無）。
+### 段階3/3 ✅ ESKF vs 相補の比較・P6 ゲート（2026-06-04 達成）
+- **ハーネス裏取り結果**: emu_vehicle_new は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
+  estimator 切替 env 無し**＝arm/離陸できず、忠実比較には数日（データ駆動フェーズと重複）。一方 hover_smoke は
+  **実 vehicle_new の推定器を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp:72` createEstimator）
+  で走らせる**＝推定器比較には忠実（フル firmware 非実行の欠陥は推定器比較自体に無関係）。→ **hover_smoke 採用**。
+- hover_smoke に N1/N2 を配線（`smoke/hover_smoke.cpp` の noise_lvl→vib_enable/vib_bandlimit/obs_enable、
+  emu と同じ対応）。hover_smoke は baro 融合（use_baro=true/use_tof=false）ゆえ n2 の baro 観測ノイズが効く。
+- **定量結果（5シード平均、hover_smoke 自身の g2_att_rmse_deg 厳密指標）**:
+  姿勢 comp/ESKF＝N0 0.33x／N1 **2.20x**／N2 0.93x、高度 comp/ESKF＝N0 0.41x／N1 1.60x／N2 1.32x（>1=ESKF優位）。
+  **＝低ノイズ(N0)は単純な相補が優位、現実ノイズ(N1振動)では ESKF が明確優位（相補姿勢が 4.26°±3.05 で不安定化）、
+  N2 は高度で ESKF 優位**。「中身が違うと結果も違う」＋「ノイズ下で ESKF 優位」を定量実証。
+- 比較動画 `viz/out_p6/p6_compare.mp4`（`sf sil compare -m P6 --noise n2`、ゲート承認 pass=true）。
+- **将来課題**: emu_vehicle_new 上の完全忠実比較（airborne シナリオ＋estimator 切替 env）はデータ駆動フェーズと統合。
 
 - **P5 が炙り出した宿題（P6 で追う）**: N0 残留 accel バイアスで ESKF 姿勢が~4°チルト→水平ドリフト。
   **起動校正（水平静止 ba_z≈2g, `noise_and_vibration_model.md` §3）を再現**して全オフセットを捕え、

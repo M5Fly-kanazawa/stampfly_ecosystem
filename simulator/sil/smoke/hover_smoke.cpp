@@ -281,7 +281,7 @@ int main(int argc, char** argv)
     const char* out_dir = (argc > 2) ? argv[2] : nullptr;
     const int est_type = (argc > 3) ? std::atoi(argv[3]) : 0;  // 0=ESKF, 1=complementary
     const char* milestone = (argc > 4) ? argv[4] : "P1";       // review-bundle label
-    const char* noise_lvl = (argc > 5) ? argv[5] : "off";      // "off" | "n0" (RESET_PLAN §13)
+    const char* noise_lvl = (argc > 5) ? argv[5] : "off";      // off|n0|n1|n2 (RESET_PLAN §13)
     const unsigned noise_seed =
         (argc > 6) ? (unsigned)std::strtoul(argv[6], nullptr, 10) : 12345u;
     const bool noise_on = (std::strcmp(noise_lvl, "off") != 0);
@@ -344,6 +344,20 @@ int main(int argc, char** argv)
     if (noise_on) {
         plant_cfg.noise.enable = true;
         plant_cfg.noise.seed = noise_seed;
+        // Noise level → vibration / observation-noise flags (same mapping as the
+        // emulator's plant_config_from_env): n0=static only, n1=+broadband throttle
+        // vibration, n2=+band-limited vibration +ToF/baro obs noise. This bench fuses
+        // BARO (use_baro=true, use_tof=false below), so under n2 the baro observation
+        // noise is what reaches the estimators — a fair ESKF-vs-complementary contrast.
+        // ノイズ準位 → 振動/観測ノイズフラグ（emu の plant_config_from_env と同じ対応）:
+        // n0=静的のみ / n1=+広帯域スロットル振動 / n2=+帯域制限振動＋ToF/baro 観測ノイズ。
+        // 本ベンチは baro 融合（下で use_baro=true/use_tof=false）ゆえ n2 では baro 観測ノイズが
+        // 推定器に効く＝ESKF vs 相補の公平な対比になる。
+        const bool n1 = (std::strcmp(noise_lvl, "n1") == 0);
+        const bool n2 = (std::strcmp(noise_lvl, "n2") == 0);
+        plant_cfg.noise.vib_enable    = (n1 || n2);
+        plant_cfg.noise.vib_bandlimit = n2;
+        plant_cfg.noise.obs_enable    = n2;
         // Per-component env overrides (sweep noise terms without recompiling, like the
         // ALT_* gain hooks). Unset → the N0 defaults in SensorNoise::Config.
         // 成分別の env 上書き（再コンパイルせずノイズ成分を掃引）。未設定なら N0 既定。

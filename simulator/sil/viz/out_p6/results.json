@@ -3,7 +3,7 @@
   "milestone": "P6",
   "kind": "comparison",
   "pass": true,
-  "noise": "n0",
+  "noise": "n2",
   "flight": "takeoff-hover-yaw-stop-landing",
   "runs": [
     {
@@ -11,13 +11,13 @@
       "bundle": "eskf",
       "g3_pass": true,
       "metrics": {
-        "max_alt_m": 0.498,
-        "max_tilt_deg": 8.67,
-        "yaw_spin_rad_s": 0.99,
-        "yaw_after_stop_rad_s": 0.013,
-        "alt_hold_band_m": 0.015,
+        "max_alt_m": 0.398,
+        "max_tilt_deg": 8.17,
+        "yaw_spin_rad_s": 1.019,
+        "yaw_after_stop_rad_s": 0.03,
+        "alt_hold_band_m": 0.04,
         "final_alt_m": 0.01,
-        "g2_att_rmse_deg": 2.486
+        "g2_att_rmse_deg": 1.815
       }
     },
     {
@@ -25,13 +25,13 @@
       "bundle": "complementary",
       "g3_pass": true,
       "metrics": {
-        "max_alt_m": 0.566,
-        "max_tilt_deg": 1.351,
-        "yaw_spin_rad_s": 0.99,
-        "yaw_after_stop_rad_s": 0.013,
-        "alt_hold_band_m": 0.006,
+        "max_alt_m": 0.423,
+        "max_tilt_deg": 1.592,
+        "yaw_spin_rad_s": 1.019,
+        "yaw_after_stop_rad_s": 0.031,
+        "alt_hold_band_m": 0.031,
         "final_alt_m": 0.01,
-        "g2_att_rmse_deg": 0.722
+        "g2_att_rmse_deg": 0.6
       }
     }
   ],
