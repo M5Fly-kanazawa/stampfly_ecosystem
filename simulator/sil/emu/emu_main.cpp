@@ -57,11 +57,11 @@ void on_advance(int64_t now_us)
 }
 
 // Build the Plant config from the environment. Sensor noise stays OFF unless
-// SIL_EMU_NOISE selects a level: n0 (static white + bias + RW) or n1 (n0 + the
-// throttle-dependent vibration). Seed is overridable via SIL_EMU_SEED. Unset/off
-// reproduces the previous behaviour byte-for-byte (clean path unchanged).
-// 環境変数から Plant 設定を作る。SIL_EMU_NOISE で準位選択: n0（静的）/ n1（n0＋スロットル
-// 依存振動）。シードは SIL_EMU_SEED で上書き可。未設定/off は従来と byte-identical。
+// SIL_EMU_NOISE selects a level: n0 (static white + bias + RW), n1 (n0 + broadband
+// throttle vibration), or n2 (n1 + band-limited vibration + ToF/baro observation
+// noise). Seed is overridable via SIL_EMU_SEED. Unset/off → byte-identical.
+// 環境変数から Plant 設定を作る。SIL_EMU_NOISE で準位選択: n0（静的）/ n1（n0＋広帯域
+// スロットル振動）/ n2（n1＋帯域制限振動＋ToF/baro 観測ノイズ）。未設定/off は byte-identical。
 sil::Plant::Config plant_config_from_env()
 {
     sil::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
@@ -69,14 +69,18 @@ sil::Plant::Config plant_config_from_env()
     if (!noise) return cfg;
     const bool n0 = (std::strcmp(noise, "n0") == 0);
     const bool n1 = (std::strcmp(noise, "n1") == 0);
-    if (n0 || n1) {
-        cfg.noise.enable = true;
-        cfg.noise.vib_enable = n1;            // n1 adds throttle-dependent vibration
+    const bool n2 = (std::strcmp(noise, "n2") == 0);
+    if (n0 || n1 || n2) {
+        cfg.noise.enable        = true;
+        cfg.noise.vib_enable    = (n1 || n2);   // throttle-dependent vibration
+        cfg.noise.vib_bandlimit = n2;           // n2: band-limit the vibration spectrum
+        cfg.noise.obs_enable    = n2;           // n2: ToF/baro observation noise
         if (const char* seed = std::getenv("SIL_EMU_SEED")) {
             cfg.noise.seed = (uint32_t)std::atoi(seed);
         }
-        std::printf("[emu] sensor noise: %s ON (seed=%u%s)\n", noise, cfg.noise.seed,
-                    n1 ? ", throttle vibration" : "");
+        std::printf("[emu] sensor noise: %s ON (seed=%u%s%s)\n", noise, cfg.noise.seed,
+                    (n1 || n2) ? ", vibration" : "",
+                    n2 ? " (band-limited) + ToF/baro obs" : "");
     }
     return cfg;
 }

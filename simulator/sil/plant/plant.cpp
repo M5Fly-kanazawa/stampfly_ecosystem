@@ -304,8 +304,26 @@ sf::TofData Plant::tof() const
 
     sf::TofData out{};
     out.distance = dist;
+    // Validity reflects whether a real target is in range (from the TRUE distance), NOT
+    // the noisy reading — a real VL53 sees the surface and reports VALID even with noise.
+    // 妥当性は真の距離（実標的が範囲内か）で決める。ノイズで揺れた値ではない。
+    out.valid = (dist > 0.0f && dist < 4.0f);   // VL53L3CX range gate (true distance)
+
+    // N2 observation noise, applied ONLY above the VL53 reliable close-range minimum
+    // (kTofMinRange). The body rests at ~13 mm, which is BELOW the sensor's reliable
+    // range; adding σ-class noise there drives the reading negative/invalid and makes
+    // the boot ToF gate (and the takeoff/landing state machine) chatter. Above ~5 cm the
+    // craft is airborne where the noise actually matters for altitude hold. No-op unless
+    // N2 obs noise is enabled; then it propagates through the VL53 model to the firmware.
+    // N2 観測ノイズは VL53 の信頼近接下限（kTofMinRange）より上でのみ付与。静止高 ~13mm は
+    // 信頼範囲より近く、そこへ σ 級ノイズを載せると負/無効になり起動 ToF 判定と離着陸状態機械が
+    // チャタリングする。~5cm 超は空中で高度保持にノイズが効く領域。N2 ON 時のみ、VL53 経由で伝播。
+    constexpr float kTofMinRange = 0.05f;       // VL53 reliable close-range minimum [m]
+    if (dist > kTofMinRange) {
+        noise_.applyTof(out.distance);
+        if (out.distance < kTofMinRange) out.distance = kTofMinRange;  // stay in valid range
+    }
     out.status = 0;
-    out.valid = (dist > 0.0f && dist < 4.0f);  // VL53L3CX range gate
     out.timestamp = (uint32_t)(d_->time * 1e6);
     return out;
 }
@@ -318,6 +336,14 @@ sf::BaroData Plant::baro() const
 {
     Truth t = truth();
     float alt = -t.pos_ned.z;
+    // N2 observation noise on the altitude [m], added BEFORE the ISA pressure mapping so
+    // it propagates through the BMP280 pressure encode/decode to the firmware. No-op
+    // unless N2 obs noise is on. (Shipping config has USE_BAROMETER=false, so the ESKF
+    // does not fuse baro — the noise is faithful but currently affects telemetry only.)
+    // N2 観測ノイズを高度[m]に付与（ISA 気圧変換の前＝BMP280 の気圧エンコード/デコード経由で
+    // ファームへ伝播）。出荷 config は USE_BAROMETER=false ゆえ ESKF は baro 未融合（ノイズは
+    // 忠実だが現状テレメトリのみに影響）。
+    noise_.applyBaro(alt);
 
     sf::BaroData out{};
     out.altitude = alt;

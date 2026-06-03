@@ -134,14 +134,23 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   広帯域ゆえ低周波成分がファーム LPF を通過し ESKF を実機以上に劣化させる＝**N2 帯域制限の動機**。
   SIL hover duty(~0.62-0.70)は legacy hover02 のフィット点より高く K·duty² が過大気味な点も留意。
 
-### 段階2/3 ⬜ N2 帯域制限＋ToF/Baro 観測ノイズ（次）
-- 振動の帯域制限（500-667Hz）: 白色とは別経路。**物理 4kHz substep で帯域通過フィルタ（biquad 等）を
-  通して生成し、ファーム 400Hz 読みでエイリアシングさせる**のが忠実（白色は read レートで引くが、振動は
-  substep レートで色付けして読みで畳む）。N1 の broadband を帯域制限すると低周波成分が落ち、ファーム LPF
-  が除去できる→ ESKF への害が減り hover が改善するはず（これが「LPF の必要性」の実証）。
-- ToF/Baro 観測ノイズ（doc §3 R 表: ToF σ=0.03m, Baro σ=0.1m）: const な `tof()/baro()` 用に、
-  advance() で seeded サンプルを事前抽選して足す（IMU 白色と同パターン）。Flow(σ=0.30 m/s, 高度依存・
-  counts 変換)・Mag は N3 tier（後段）。
+### 段階2/3 ✅ N2 帯域制限＋ToF/Baro 観測ノイズ（2026-06-03 実装済み）
+- `sensor_noise.hpp`: `vib_bandlimit`/`vib_freq_low,high`、2次帯域通過（RBJ・中心 √(500·667)≈577Hz、
+  Q=f0/帯域幅）。**物理 4kHz substep で生成 → ファーム 400Hz 読みで ~100–177Hz にエイリアシング**
+  （白色は read レート、振動は substep レートで色付け＝別経路。`stepVibration`/`biquadStep`/`computeBandpass`、
+  H2 ノルムで単位 rms 正規化）。`obs_enable`/`tof_sigma`/`baro_sigma`、advance() で ToF/baro サンプルを
+  事前抽選し const な `applyTof/applyBaro` が足す。`plant.cpp` の `tof()/baro()` に配線。
+- **ToF ノイズの地上問題と修正**: σ=0.03（doc R 表）は ESKF の膨張 R で**真のセンサノイズではない**。
+  プラントには真値（datasheet 級 0.01m）を入れる。さらに静止高 13mm では σ が負/無効を生み起動 ToF 判定と
+  離着陸状態機械をチャタリングさせ**アーム拒否**→ ToF ノイズは VL53 信頼下限 >5cm でのみ付与、valid は
+  真の距離から決める、で解決（armed:1 確認）。baro(σ=0.1)はテレメトリのみ（USE_BAROMETER=false で未融合）。
+- 検証: 単体（帯域制限 rms＋自己相関 0.553＋デシメート分散保存／観測ノイズ σ）全 PASS、N0/N1/off
+  byte-identical、n2 決定論。Flow(σ=0.30, 高度依存)・Mag は N3 tier（後段）。
+- **所見（重要）**: N2（帯域制限）は N1 より**劇的には改善しない**（複数シードで n1≈n2、peak~0.3m）。
+  振動の1サンプル大きさ（duty 0.7 で σ_accel≈1.9・σ_gyro≈30°/s）は帯域制限でも不変で、ESKF の
+  accel→傾き補正がこの瞬時値に敏感（ジャイロ積分は高周波を均すが accel-tilt は均さない）。SIL hover
+  duty(~0.7)が同定点より高く K·duty² が過大気味な点も。**→ フォロー**: ①ファーム IMU フィルタ設定が
+  ~100–177Hz をどれだけ落とすか ②K の duty 整合 ③段階3 比較。
 
 ### 段階3/3 ⬜ ESKF vs 相補の比較（P6 ゲート、要ハーネス判断）
 - **設計判断が必要**: 比較は現状 `hover_smoke`（旧核ループ）で動く（`sf sil compare`）が、忠実な比較は

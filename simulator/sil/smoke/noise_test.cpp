@@ -194,6 +194,106 @@ void test_throttle_vibration() {
     check(av[0] == 0.0f && av[1] == 0.0f && av[2] == 0.0f, "vibration vanishes at zero throttle");
 }
 
+// Lag-1 autocorrelation (normalized): ~0 for white, clearly positive for a band-pass
+// process. 1次自己相関（正規化）: 白色で~0、帯域通過で明確に正。
+double autocorr1(const std::vector<float>& v) {
+    double m, s;
+    meanStd(v, m, s);
+    double num = 0.0;
+    for (size_t k = 1; k < v.size(); ++k) num += (v[k] - m) * (v[k - 1] - m);
+    num /= static_cast<double>(v.size() - 1);
+    return num / (s * s);
+}
+
+// --- 1d. N2 band-limited vibration: same rms as N1 but spectrally shaped (colored) ---
+// Generated at the 4 kHz substep so the 500–667 Hz band fits; the firmware then reads
+// at 400 Hz and ALIASES it down. Verify (a) substep rms ≈ K·duty² (energy preserved),
+// (b) the signal is COLORED (lag-1 autocorrelation ≫ 0, unlike white N1 ≈ 0), and
+// (c) the decimated 400 Hz read keeps the same rms (sampling preserves the variance).
+// 4kHz substep で生成（500–667Hz 帯が収まる）→ ファーム 400Hz 読みでエイリアシング。検証:
+// (a) substep rms ≈ K·duty²（エネルギー保存）(b) 有色＝1次自己相関≫0（白色 N1≈0 と対照）
+// (c) デシメート 400Hz 読みでも同じ rms（標本化は分散を保つ）。
+void test_bandlimited_vibration() {
+    SensorNoise::Config c;
+    c.enable = true;
+    c.seed = 5;
+    c.gyro_density = 0.0f;   c.accel_density = 0.0f;    // isolate the vibration term
+    c.gyro_bias_sigma = 0.0f; c.accel_bias_sigma = 0.0f;
+    c.gyro_bias_rw = 0.0f;   c.accel_bias_rw = 0.0f;
+    c.vib_enable = true;     c.vib_bandlimit = true;    // N2: band-limited vibration
+    // f_low=500, f_high=667 defaults → f0 = √(500·667) ≈ 577.5 Hz.
+
+    SensorNoise n;
+    n.init(c);
+    const float H = 0.00025f;        // 4 kHz physics substep
+    const float duty = 0.7f;
+    n.setThrottle(duty);
+    const float d2 = duty * duty;
+    const int N = 400000;
+    std::vector<float> ax, dec;      // accel X at substep rate, and decimated to 400 Hz
+    ax.reserve(N);
+    dec.reserve(N / 10 + 1);
+    for (int k = 0; k < N; ++k) {
+        n.advance(H);
+        float a[3] = {0, 0, 0};
+        n.applyAccel(a);
+        ax.push_back(a[0]);
+        if (k % 10 == 0) dec.push_back(a[0]);   // firmware reads every 10th substep
+    }
+    double sm, ss, dm, ds;
+    meanStd(ax, sm, ss);
+    meanStd(dec, dm, ds);
+    const double exp_a = c.vib_accel_k[0] * d2;       // 3.96 · 0.49
+    const double r1 = autocorr1(ax);
+    std::printf("    substep σ=%.4f (exp %.4f)  decimated σ=%.4f  lag1-autocorr=%.3f (white≈0)\n",
+                ss, exp_a, ds, r1);
+    check(std::fabs(ss - exp_a) / exp_a < 0.05, "band-limited substep σ ≈ K·duty² (±5%)");
+    check(std::fabs(ds - exp_a) / exp_a < 0.06, "decimated 400 Hz read keeps σ ≈ K·duty² (±6%)");
+    check(r1 > 0.3, "vibration is band-limited (lag-1 autocorrelation ≫ 0, unlike white)");
+}
+
+// --- 1e. N2 observation noise on ToF / baro: per-sample σ matches the R table ---
+void test_observation_noise() {
+    SensorNoise::Config c;
+    c.enable = true;
+    c.seed = 3;
+    c.obs_enable = true;
+    c.tof_sigma = 0.03f;     // R table (doc §3)
+    c.baro_sigma = 0.10f;
+
+    SensorNoise n;
+    n.init(c);
+    const int N = 200000;
+    std::vector<float> tof, baro;
+    tof.reserve(N);
+    baro.reserve(N);
+    for (int k = 0; k < N; ++k) {
+        n.advance(DT);
+        float d = 0.5f, alt = 1.0f;       // nominal range / altitude
+        n.applyTof(d);
+        n.applyBaro(alt);
+        tof.push_back(d - 0.5f);          // isolate the added noise
+        baro.push_back(alt - 1.0f);
+    }
+    double tm, ts, bm, bs;
+    meanStd(tof, tm, ts);
+    meanStd(baro, bm, bs);
+    std::printf("    ToF σ=%.4f (exp %.4f)  baro σ=%.4f (exp %.4f)\n",
+                ts, c.tof_sigma, bs, c.baro_sigma);
+    check(std::fabs(ts - c.tof_sigma) / c.tof_sigma < 0.03, "ToF obs σ ≈ 0.03 m (±3%)");
+    check(std::fabs(bs - c.baro_sigma) / c.baro_sigma < 0.03, "baro obs σ ≈ 0.10 m (±3%)");
+    // Obs noise must be a no-op when disabled (no-op for N0/N1).
+    SensorNoise::Config c2;
+    c2.enable = true;        // N0: obs_enable defaults false
+    SensorNoise n2;
+    n2.init(c2);
+    n2.advance(DT);
+    float d = 0.5f, alt = 1.0f;
+    n2.applyTof(d);
+    n2.applyBaro(alt);
+    check(d == 0.5f && alt == 1.0f, "obs noise is a no-op when disabled (N0/N1 unchanged)");
+}
+
 // --- 2. disabled model adds exactly nothing ---
 void test_off_is_clean() {
     SensorNoise::Config c;       // enable defaults to false
@@ -314,6 +414,8 @@ int main() {
     test_white_statistics();
     test_white_substep_decoupled();
     test_throttle_vibration();
+    test_bandlimited_vibration();
+    test_observation_noise();
     test_off_is_clean();
     test_startup_bias();
     test_bias_random_walk();
