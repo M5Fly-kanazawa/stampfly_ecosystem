@@ -311,6 +311,14 @@ def main():
     ap.add_argument("--out", required=True, help="output MP4 path")
     ap.add_argument("--fps", type=int, default=50)
     ap.add_argument("--height", type=int, default=480)
+    # Skip the dead boot/idle wait before flight: render only from --start [s] (the
+    # state graphs still plot the FULL trajectory, only the playhead start moves).
+    # 飛行前の無為なブート/待機を飛ばす: --start[s] からのみ描画（状態グラフは全軌跡を
+    # 描いたまま、再生ヘッドの開始位置だけ動く）。
+    ap.add_argument("--start", type=float, default=0.0,
+                    help="skip frames before this trajectory time [s] (trim boot wait)")
+    ap.add_argument("--end", type=float, default=None,
+                    help="stop rendering after this trajectory time [s]")
     ap.add_argument("--test-frame", action="store_true", help="render one frame to a PNG and exit")
     # Side-by-side comparison (P4): --compare is run B's bundle (A is --bundle).
     # 並置比較（P4）: --compare は実行Bのバンドル（Aは --bundle）。
@@ -350,19 +358,23 @@ def main():
     W3 = int(H * 4 / 3)            # 3D pane 4:3
     renderer = mujoco.Renderer(model, height=H, width=W3)
 
-    # Frame the full vertical flight (ground z≈0.01 → peak z≈0.54). The 3D pane is
-    # 4:3 landscape, so the vertical field of view is the limit: at distance d the
-    # visible height ≈ 2·d·tan(fovy/2) ≈ 0.83·d. distance 0.85 → ~0.70 m tall,
-    # centered on lookat z=0.27 → covers roughly z∈[-0.08, 0.62] with margin so
-    # takeoff and touchdown stay in frame.
-    # 鉛直飛行（地上 z≈0.01 → ピーク z≈0.54）を画角に収める。3Dペインは4:3横長なので
-    # 鉛直視野が律速: 距離 d で可視高さ ≈ 0.83·d。0.85 → 約0.70m、lookat z=0.27 を中心に
-    # z∈[-0.08, 0.62] を余裕を持って覆い、離陸・着地が切れない。
+    # Frame the full vertical flight AUTOMATICALLY from this run's peak height, so the
+    # ascent is never clipped at the top (a fixed frame cut off climbs past its peak
+    # assumption). The 3D pane is 4:3 landscape, so the vertical field of view is the
+    # limit: at distance d the visible height ≈ 2·d·tan(fovy/2) ≈ 0.83·d. Cover
+    # z∈[-0.06, peak+0.10] with a 10% margin, centered on that range.
+    # 鉛直飛行を、この実行のピーク高度から自動で画角に収める（上昇が上で切れない）。
+    # 3Dペインは4:3横長で鉛直視野が律速: 距離 d で可視高さ ≈ 0.83·d。z∈[-0.06, peak+0.10]
+    # を10%余裕付きで、その範囲の中心を見て覆う。
+    z_peak = float(np.max(traj["pz"]))
+    z_lo, z_hi = -0.06, max(0.60, z_peak) + 0.10
+    z_mid = 0.5 * (z_lo + z_hi)
+    visible_h = (z_hi - z_lo) * 1.10                 # +10% margin
     cam = mujoco.MjvCamera()
     cam.azimuth = 130
     cam.elevation = -10
-    cam.distance = 0.85
-    cam.lookat[:] = [0.0, 0.0, 0.27]
+    cam.distance = max(0.85, visible_h / 0.83)       # never tighter than the old frame
+    cam.lookat[:] = [0.0, 0.0, z_mid]
 
     qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
 
@@ -380,9 +392,18 @@ def main():
     # 全幅タイトルバナーを一度だけ描き、各フレーム上端に重ねる。タイトルが両ペインに
     # またがり切れない（旧来のペイン内 suptitle は幅を超過して両端が切れていた）。
     banner = title_banner(title, W3 + Wg)
+    # Render only the [start, end] time window (default = whole trajectory). Trims the
+    # dead boot/idle wait from the front without touching the graphs' full-flight plot.
+    # [start, end] 時間窓だけ描画（既定=全軌跡）。グラフの全飛行プロットは保ったまま、
+    # 前方の無為なブート/待機を切り詰める。
+    t_arr = traj["t"]
+    i_start = int(np.searchsorted(t_arr, args.start, side="left"))
+    i_end = n if args.end is None else int(np.searchsorted(t_arr, args.end, side="right"))
+    i_start = max(0, min(i_start, n))
+    i_end = max(i_start, min(i_end, n))
     writer = imageio.get_writer(args.out, fps=args.fps, codec="libx264",
                                 quality=8, macro_block_size=None)
-    for i in range(n):
+    for i in range(i_start, i_end):
         img3d = render_3d(model, data, renderer,
                           np.array([traj[c][i] for c in qcols]), cam)
         graphs = graph_frame(traj, i, Wg, H)
@@ -395,7 +416,10 @@ def main():
         frame = np.concatenate([banner, body], axis=0)
         writer.append_data(frame)
     writer.close()
-    print(f"[render_video] wrote {args.out} ({n} frames @ {args.fps} fps)")
+    span = (f", t∈[{args.start:.1f},{t_arr[i_end-1]:.1f}]s"
+            if (args.start > 0.0 or args.end is not None) else "")
+    print(f"[render_video] wrote {args.out} "
+          f"({i_end - i_start} frames @ {args.fps} fps{span})")
 
 
 if __name__ == "__main__":
