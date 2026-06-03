@@ -8,8 +8,8 @@
 
 > **【2026-06-02 更新・本ノートは上位ノートに引き継ぎ】** 本ノート §1 の「閉ループが 1.12 バイアスを
 > 吸収してホバーする」は **ESKF が正しい前提**だった。実際は初の空中試験で ESKF 鉛直が発散（runaway）し、
-> 真因は **VL53 模型が飛行中に valid を返さない**ことと判明（推力物理は正しい＝検証済み）。続きは
-> **`vl53_dynamic_validity_resume.md`**（ToF 模型の動的 valid 性の作り込み）と auto-memory
+> 真因は **VL53 モデルが飛行中に valid を返さない**ことと判明（推力物理は正しい＝検証済み）。続きは
+> **`vl53_dynamic_validity_resume.md`**（ToF モデルの動的 valid 性の作り込み）と auto-memory
 > `project_eskf_vertical_divergence.md` を参照。アームタイミング/throttle 写像/DSL alt トークン等の
 > 本ノートの裏取り事実は引き続き有効。
 

@@ -430,7 +430,7 @@ int sil_board_i2c_xfer(uint16_t addr, const uint8_t* write_buf, size_t write_siz
     // Others (BMM150/BMP280/VL53L3CX) are unmodeled until E2: zero-fill the read
     // and ACK, exactly as the old inert shim did, so those Optional drivers fail
     // gracefully on their chip-ID check (no behaviour change for them).
-    // INA3221 は 0x40 でレジスタモデルへ。他は未模型（E2まで）→read をゼロ埋めし ACK
+    // INA3221 は 0x40 でレジスタモデルへ。他は未モデル（E2まで）→read をゼロ埋めし ACK
     // （旧 inert シムと同一）。Optional ドライバは chip-ID チェックで優雅に失敗。
     if (addr == INA3221_ADDR) {
         return ina3221_xfer(write_buf, write_size, read_buf, read_size);

@@ -25,7 +25,7 @@
 - 設定A: period span 24576（vcsel reg 9）→ zdp=22528, ambient 4bin
 - 設定B: period span 49152（vcsel reg 11）→ zdp=30720, ambient 0bin
 
-模型は**両設定に同一バイト**を送っていたため:
+モデルは**両設定に同一バイト**を送っていたため:
 1. 設定B の位相窓 `upper=(valid_phase_high<<8)+zdp=(136<<8)+30720=65536` が gen3.c:847 の
    **uint16 で 0 にオーバーフロー** → 任意の正位相が RANGEPHASECHECK（public OUTOFBOUNDS=4）。
 2. 連続フレームは逆設定で **zdp が 8192 食い違う** → phase_consistency_check（core.c:1786,

@@ -12,7 +12,7 @@
 
 - **P0〜P4 ✅完了**（更地化／物理SIL骨格／アルゴリズム非依存実証／CLI・ダッシュボード／レビュー動画）。
 - **エミュレータ E0〜E6 ✅**（実 app_main を14タスクでホスト実行・Plant 閉ループ・決定論シナリオ注入・
-  VL53/INA3221/BMP280 模型）。
+  VL53/INA3221/BMP280 モデル）。
 - **時間基準バグ修正済**（commit `cea0d8c`, 物理4000Hz・仮想時間1:1ロック）→ 空中ホバー忠実成立、
   90秒長時間ホバーで ESKF 鉛直安定を確証（`hover_long.scn`）。詳細 `simulator/sil/docs/plant_timebase_bug.md`。
 - **次の目標 = P5 センサノイズ N0**（RESET_PLAN §10 表 / §13）。
@@ -22,11 +22,11 @@
 
 ---
 
-## 1. ノイズ模型は実装済み・適用済み（作り直し不要）
+## 1. ノイズモデルは実装済み・適用済み（作り直し不要）
 
 | 要素 | 状態 |
 |------|------|
-| ノイズ模型 `simulator/sil/plant/sensor_noise.hpp` | **完成**。N0 = 白色ガウス（gyro 0.000122 rad/s/√Hz, accel 0.00157 m/s²/√Hz）＋起動時バイアス1σ（gyro 0.005, accel 0.02 = **起動校正「後」の残留**）＋バイアスRW（gyro 1e-4, accel 1e-3 /√s）。シード付き決定論。 |
+| ノイズモデル `simulator/sil/plant/sensor_noise.hpp` | **完成**。N0 = 白色ガウス（gyro 0.000122 rad/s/√Hz, accel 0.00157 m/s²/√Hz）＋起動時バイアス1σ（gyro 0.005, accel 0.02 = **起動校正「後」の残留**）＋バイアスRW（gyro 1e-4, accel 1e-3 /√s）。シード付き決定論。 |
 | 単体テスト `simulator/sil/smoke/noise_test.cpp` | あり |
 | Plant が適用 `plant.cpp` | `noise_.init(cfg_.noise)`(L62)、`imu()` で `applyAccel/applyGyro`(L277-278)、`substep` で `noise_.advance(h)`(L230)。**時間基準修正後は substep(0.25ms)ごとに advance** |
 | 仕様書 | `firmware/vehicle_new/docs/noise_and_vibration_model.md` §2-3 |
@@ -76,7 +76,7 @@ g_plant.init(model_path, cfg);                // 既存の init(path) でなく 
 ```bash
 # (1) ビルド
 source setup_env.sh; cmake --build simulator/sil/build --target emu_vehicle noise_test
-./simulator/sil/build/noise_test                       # 模型の単体テスト
+./simulator/sil/build/noise_test                       # モデルの単体テスト
 
 # (2) ノイズONでホバー（hover_long で長時間の有界性を見る）
 sf sil scenario simulator/sil/scenarios/hover_long.scn --duration 116000000 --noise n0 --seed 12345
@@ -116,6 +116,6 @@ diff <trajectory or console>  # 完全一致なら決定論OK
   (時間基準修正・ホバー成立)、`project_estimator_attitude_comparison`(相補 vs ESKF 姿勢の宿題=P6で追求)。
 - 文書: `RESET_PLAN.md` §10(ロードマップ)/§13(P5-P10 検証能力)、`plant_timebase_bug.md`、
   `firmware/vehicle_new/docs/noise_and_vibration_model.md`。
-- 主要ファイル: `plant/sensor_noise.hpp`(模型)、`plant/plant.cpp`(適用)、`emu/emu_main_generic.cpp`(配線先)、
+- 主要ファイル: `plant/sensor_noise.hpp`(モデル)、`plant/plant.cpp`(適用)、`emu/emu_main_generic.cpp`(配線先)、
   `lib/sfcli/commands/sil.py`(CLI配線先)、`smoke/noise_test.cpp`(単体テスト)、
   `scenarios/hover_long.scn`/`hover_alt.scn`(試験飛行)。

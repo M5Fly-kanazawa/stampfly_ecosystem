@@ -20,7 +20,7 @@
 # craft stays ground-pinned (alt < 1 m); the lift-off-then-climb-away seen before
 # E3 was the Vbat->0 duty-saturation pathology (duty pinned to 1.0 ~= 2x weight),
 # not a normal hover. See hover_espnow.expect for the asserted no-runaway behavior.
-# 注: E3 完了 — INA3221 を模型化(addr 0x40, mfr ID 0x5449)し Vbat~3.7V を供給。
+# 注: E3 完了 — INA3221 をモデル化(addr 0x40, mfr ID 0x5449)し Vbat~3.7V を供給。
 # thrust->duty は有界(ホバー duty 約0.62, 1.00 に飽和しない)。このサブホバー throttle
 # では接地のまま(alt<1m)。E3 前の上昇継続は Vbat=0 の duty 飽和(約2倍荷重)であり
 # 正常ホバーではない。検証は hover_espnow.expect を参照。

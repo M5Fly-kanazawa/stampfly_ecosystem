@@ -55,7 +55,7 @@ int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes
 // gracefully on their chip-ID check until their device models land).
 // I2C トランザクションフック。addr = デバイスアドレス（シムが不透明ハンドルから復号）。
 // 書き込み相＋読み出し相（同一呼び出しで repeated-START のレジスタ読みを表現）。
-// 0 = ACK。未模型アドレスは read をゼロ埋めし 0 を返す（旧 inert シムと同一）。
+// 0 = ACK。未モデルアドレスは read をゼロ埋めし 0 を返す（旧 inert シムと同一）。
 int sil_board_i2c_xfer(uint16_t addr,
                        const uint8_t* write_buf, size_t write_size,
                        uint8_t* read_buf, size_t read_size);
