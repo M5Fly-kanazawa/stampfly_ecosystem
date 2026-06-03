@@ -27,12 +27,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>    // strcmp — parse the SIL_EMU_NOISE level
+#include <fcntl.h>    // fcntl, O_NONBLOCK — non-blocking host stdin for the CLI
+#include <unistd.h>   // STDIN_FILENO
 
 #include "scheduler.hpp"
 #include "plant.hpp"
 #include "virtual_board.hpp"
 #include "topics.hpp"
 #include "data_types.hpp"
+#include "scenario.hpp"          // P8: deterministic *.scn scripted-input driver
+#include "console_feeder.hpp"    // P8: scripted console bytes → firmware stdin
+#include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
+#include "emu_trajectory.hpp"    // P8: review-video trajectory recorder (SIL_EMU_TRAJ)
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern "C" void app_main(void);
 
@@ -53,6 +61,9 @@ void on_advance(int64_t now_us)
         const float dt = (float)(now_us - g_last_step_us) * 1e-6f;
         sil_board_step_plant(dt);
         g_last_step_us = now_us;
+        // Record a review-video trajectory row (no-op unless SIL_EMU_TRAJ was set).
+        // レビュー動画用に軌跡を1行記録（SIL_EMU_TRAJ 未設定なら no-op）。
+        sil_emu_traj_sample((double)now_us * 1e-6, &g_plant);
     }
 }
 
@@ -94,7 +105,39 @@ int main(int argc, char** argv)
     const int64_t duration_us =
         (argc > 2) ? (int64_t)std::atoll(argv[2]) : 1'000'000;   // 1 s default
 
+    std::setvbuf(stdout, nullptr, _IONBF, 0);   // unbuffered: keep logs across _Exit
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
     std::printf("[emu] === StampFly emulator: vehicle_new app_main on host ===\n");
+
+    // Non-blocking, never-written pipe as stdin so the firmware's CLI read() gets
+    // EAGAIN (not block, not EOF). A scenario "key" event writes scripted bytes here
+    // via the console feeder. Same pattern as emu_main_generic.cpp.
+    // 非ブロッキングの空パイプを stdin に被せ CLI read() を EAGAIN にする。シナリオの key
+    // 事象がフィーダ経由で書き込む。emu_main_generic.cpp と同じ手法。
+    int cli_pipe[2];
+    if (pipe(cli_pipe) == 0) {
+        fcntl(cli_pipe[0], F_SETFL, O_NONBLOCK);
+        fcntl(cli_pipe[1], F_SETFL, O_NONBLOCK);
+        dup2(cli_pipe[0], STDIN_FILENO);
+        sil_console_set_fd(cli_pipe[1]);
+    }
+
+    // P8: open the deterministic event log + review-video trajectory if requested
+    // (env from the sf CLI). Unset → both stay closed and every call is a no-op.
+    // P8: 要求時に決定論イベントログ＋レビュー動画軌跡を開く。未設定なら no-op。
+    sil_emu_record_open(std::getenv("SIL_EMU_EVENTS"));
+    sil_emu_traj_open(std::getenv("SIL_EMU_TRAJ"));
+
+    // P8: load a scripted input scenario (argv[3]) BEFORE the scheduler starts. A
+    // parse error aborts before any firmware singleton exists (safe return).
+    // P8: 入力シナリオ（argv[3]）をスケジューラ起動前にロード。パースエラーは安全に中断。
+    const char* scenario_path = (argc > 3) ? argv[3] : nullptr;
+    if (sil_scenario_load(scenario_path) < 0) {
+        std::fprintf(stderr, "[emu] scenario load failed — aborting before run\n");
+        sil_emu_record_close();
+        sil_emu_traj_close();
+        return 2;
+    }
 
     // Bring up the MuJoCo Plant and connect it to the virtual board (E1).
     // MuJoCo Plant を起こし、仮想ボードに接続（E1）。
@@ -113,7 +156,20 @@ int main(int argc, char** argv)
     std::printf("[emu] app_main returned; running scheduler for %lld us\n",
                 (long long)duration_us);
 
+    // P8: spawn the scenario driver task — it injects the scripted ESP-NOW
+    // ControlPackets (via the real recv seam) at their virtual times. Only when a
+    // scenario was loaded; the no-scenario path is unchanged.
+    // P8: シナリオドライバを起動 — 台本の ESP-NOW ControlPacket を実受信シーム経由で
+    // 仮想時刻に注入する。シナリオ読込時のみ。無シナリオ経路は不変。
+    if (sil_scenario_active()) {
+        TaskHandle_t ph = nullptr;
+        xTaskCreatePinnedToCore(sil_scenario_driver_task, "scn_driver", 8192, nullptr, 1, &ph, 0);
+    }
+
     sil::rtos::Scheduler::instance().run(duration_us);
+
+    sil_emu_record_close();   // flush/close the events log
+    sil_emu_traj_close();     // flush/close the review-video trajectory (if open)
 
     // --- post-run validation: did the real estimator track the Plant? ---------
     // 実行後の検証: 実推定器が Plant を追従したか。
@@ -128,5 +184,13 @@ int main(int argc, char** argv)
     std::printf("[emu] estimate quat=[%.4f %.4f %.4f %.4f]  truth alt=%.3f m\n",
                 est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3],
                 -truth.pos_ned.z);
+    // Confirm the real comm decoded the controller's SSOT ControlPacket: the last
+    // command_setpoint should reflect the injected sticks (non-zero when the
+    // scenario commanded throttle/attitude). Before the 14-byte alignment fix the
+    // comm rejected every packet and this stayed all-zero. 受信確認: 実 comm が SSOT
+    // ControlPacket を復号したか。注入スティックが反映されれば成功（整合前は全て0）。
+    sf::CommandSetpoint cmd = sf::command_setpoint.latest();
+    std::printf("[emu] last command_setpoint: throttle=%.3f roll=%.3f pitch=%.3f yaw=%.3f (src=%u)\n",
+                cmd.throttle, cmd.roll, cmd.pitch, cmd.yaw, cmd.source);
     return 0;
 }

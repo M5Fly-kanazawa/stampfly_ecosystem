@@ -42,25 +42,31 @@ messages:
         offset: 0
         description: "Destination drone MAC (lower 3 bytes)"
 
+      # On-air values are 12-bit ADC counts (0..4095), spring-centred at ~2048.
+      # The legacy "0..1000 / 500=center" text was stale; the real controller
+      # (firmware/controller, Throttle = 4095 - stick) and the proven vehicle
+      # firmware both use 2048-centred 12-bit. uint16, little-endian.
+      # on-air は 12bit ADC カウント(0..4095)、スプリング中央 ~2048。旧 "0..1000/500"
+      # 表記は古い。実コントローラと実証済みファームは 2048 中央の 12bit を使う。
       - name: throttle
-        type: normalized_value
+        type: uint16
         offset: 3
-        description: "Throttle (0=min, 1000=max)"
+        description: "Throttle, 12-bit ADC (2048=zero, 4095=max; spring-centred)"
 
       - name: roll
-        type: normalized_value
+        type: uint16
         offset: 5
-        description: "Roll (500=center, <500=left, >500=right)"
+        description: "Roll, 12-bit ADC (2048=center, <2048=left, >2048=right)"
 
       - name: pitch
-        type: normalized_value
+        type: uint16
         offset: 7
-        description: "Pitch (500=center, <500=forward, >500=backward)"
+        description: "Pitch, 12-bit ADC (2048=center, <2048=forward, >2048=backward)"
 
       - name: yaw
-        type: normalized_value
+        type: uint16
         offset: 9
-        description: "Yaw (500=center, <500=CCW, >500=CW)"
+        description: "Yaw, 12-bit ADC (2048=center, <2048=CCW, >2048=CW)"
 
       - name: flags
         type: uint8

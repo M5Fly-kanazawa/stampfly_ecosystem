@@ -37,8 +37,10 @@
 namespace sf {
 
 // Forward declaration of the ESP-NOW packet type (definition in comm.cpp).
-// ESP-NOW パケット型の前方宣言（定義は comm.cpp）。
-struct CommanderPacket;
+// The on-air layout is the protocol SSOT ControlPacket (14 bytes).
+// ESP-NOW パケット型の前方宣言（定義は comm.cpp）。on-air はプロトコル SSOT の
+// ControlPacket（14バイト）。
+struct ControlPacket;
 
 /// Communication manager
 /// 通信マネージャー
@@ -72,7 +74,7 @@ private:
 
     /// Decode a validated packet and publish to `command_setpoint`.
     /// 検証済みパケットをデコードし `command_setpoint` に発行する。
-    void parseEspNowData(const CommanderPacket& pkt);
+    void parseEspNowData(const ControlPacket& pkt);
 
     /// Clamp a float to the range [-1.0, 1.0].
     /// float を [-1.0, 1.0] に制限する。

@@ -70,21 +70,30 @@ namespace sf {
 // 送信機側は別タスクで実装する。それまではブロードキャストピア
 // (FF:FF:FF:FF:FF:FF) でリスンする運用を Phase 2a では許容する。
 //
-// @design detailed_design.md §7 — Packet format (CommanderPacket)       [OK]
+// @design protocol/spec/messages.yaml — ControlPacket (SSOT, 14 bytes)  [OK]
+//
+// The transmitter (firmware/controller, FIXED) sends THIS layout — the protocol
+// Single Source of Truth. An earlier 12-byte CommanderPacket here had diverged from
+// the SSOT (wrong size/scale/checksum) and would have rejected every controller
+// packet (len != 12). On-air stick values are 12-bit ADC (2048-centred), NOT 0..1000.
+// 送信機(firmware/controller, 固定)はこのレイアウト＝プロトコル SSOT を送る。以前の
+// 12バイト CommanderPacket は SSOT から逸脱しており（サイズ/スケール/検査が違い）コント
+// ローラの全パケットを len!=12 で弾いていた。on-air は 12bit ADC(中央2048)、0..1000 ではない。
 // =============================================================================
 
-struct CommanderPacket {
-    uint16_t throttle;     // 0..65535 / スロットル
-    int16_t  roll;         // -32768..32767 / ロール
-    int16_t  pitch;        // -32768..32767 / ピッチ
-    int16_t  yaw;          // -32768..32767 / ヨー
-    uint8_t  buttons;      // bit0=arm / ビット0=ARM
-    uint8_t  seq;          // monotonic / 単調増加
-    uint16_t crc16;        // CRC-16/CCITT-FALSE over bytes [0..9]
+struct ControlPacket {
+    uint8_t  drone_mac[3];  // bytes 0-2 : destination MAC lower 3 (match-any here)
+    uint16_t throttle;      // bytes 3-4 : 12-bit ADC, 2048=zero (spring-centred)
+    uint16_t roll;          // bytes 5-6 : 12-bit ADC, 2048=center
+    uint16_t pitch;         // bytes 7-8 : 12-bit ADC, 2048=center
+    uint16_t yaw;           // bytes 9-10: 12-bit ADC, 2048=center
+    uint8_t  flags;         // byte  11  : bit0=ARM,1=FLIP,2=MODE,3=ALT_MODE,4=POS_MODE
+    uint8_t  reserved;      // byte  12  : proactive_flag (ignored)
+    uint8_t  checksum;      // byte  13  : low 8 bits of the sum of bytes 0-12
 } __attribute__((packed));
 
-static_assert(sizeof(CommanderPacket) == 12,
-              "CommanderPacket must be exactly 12 bytes");
+static_assert(sizeof(ControlPacket) == 14,
+              "ControlPacket must match the protocol SSOT (14 bytes)");
 
 // -----------------------------------------------------------------------------
 // Constants for normalization and link configuration
@@ -99,17 +108,21 @@ static constexpr uint8_t kWifiChannel = 1;
 /// WiFi インターフェースに通知するホスト名。
 static constexpr const char* kHostname = "stampfly-vehicle";
 
-/// Throttle scale: uint16 full-scale → 1.0
-/// スロットルスケール: uint16 フルスケール → 1.0
-static constexpr float kThrottleScale = 1.0f / 65535.0f;
+/// 12-bit ADC stick centre and half-span. On-air channels are spring-centred at
+/// 2048; (raw - centre) / half-span maps to [-1,1] (throttle clamped to [0,1]).
+/// Matches firmware/controller and the proven legacy vehicle firmware.
+/// 12bit ADC スティックの中央と半幅。on-air は 2048 中央、(raw-中央)/半幅 で [-1,1]
+/// （スロットルは [0,1] にクランプ）。実コントローラ・実証済み旧ファームと一致。
+static constexpr float kAdcCenter   = 2048.0f;
+static constexpr float kAdcHalfSpan = 2048.0f;
 
-/// Stick scale: int16 max magnitude → 1.0
-/// スティックスケール: int16 の最大絶対値 → 1.0
-static constexpr float kStickScale = 1.0f / 32767.0f;
-
-/// Bit positions inside CommanderPacket.buttons
-/// CommanderPacket.buttons 内のビット位置
-static constexpr uint8_t kButtonBitArm = 0x01;
+/// ControlPacket.flags bit masks (protocol SSOT / controller_comm).
+/// ControlPacket.flags のビットマスク（プロトコル SSOT / controller_comm）。
+static constexpr uint8_t kFlagArm     = 0x01;  // bit0
+static constexpr uint8_t kFlagFlip    = 0x02;  // bit1
+static constexpr uint8_t kFlagMode    = 0x04;  // bit2
+static constexpr uint8_t kFlagAltMode = 0x08;  // bit3: ALTITUDE_HOLD
+static constexpr uint8_t kFlagPosMode = 0x10;  // bit4: POSITION_HOLD
 
 /// Source ID published into CommandSetpoint.source (0 = ESP-NOW link)
 /// CommandSetpoint.source に発行するソース ID（0 = ESP-NOW リンク）
@@ -150,30 +163,20 @@ void onIpEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
 static Comm* g_comm_instance = nullptr;
 
 // -----------------------------------------------------------------------------
-// crc16 — CRC-16/CCITT-FALSE (polynomial 0x1021, init 0xFFFF, no reflect, no xorout)
-// crc16 — CRC-16/CCITT-FALSE（多項式 0x1021、初期値 0xFFFF、反転なし、xorなし）
+// checksum8 — low 8 bits of the byte sum (protocol SSOT checksum, byte 13).
+// checksum8 — バイト総和の下位8ビット（プロトコル SSOT のチェックサム、byte 13）。
 //
-// Tiny inline implementation suitable for ISR-context use. Educational —
-// avoids pulling in a table to keep the code obvious.
-// ISR コンテキストでも使える小さなインライン実装。教育用にテーブルを使わない。
+// The transmitter computes byte[13] = (sum of bytes[0..12]) & 0xFF. We recompute
+// over the same span and compare. Matches firmware/controller and the SSOT.
+// 送信機は byte[13]=(bytes[0..12]の総和)&0xFF を計算する。同じ範囲で再計算して照合。
 // -----------------------------------------------------------------------------
-static uint16_t crc16(const uint8_t* data, size_t len)
+static uint8_t checksum8(const uint8_t* data, size_t len)
 {
-    // Initialize CRC register / CRC レジスタ初期化
-    uint16_t crc = 0xFFFF;
-
-    // Process each byte / 1バイトずつ処理
+    uint32_t sum = 0;
     for (size_t i = 0; i < len; ++i) {
-        crc ^= static_cast<uint16_t>(data[i]) << 8;
-        for (int bit = 0; bit < 8; ++bit) {
-            if (crc & 0x8000) {
-                crc = (crc << 1) ^ 0x1021;
-            } else {
-                crc <<= 1;
-            }
-        }
+        sum += data[i];
     }
-    return crc;
+    return static_cast<uint8_t>(sum & 0xFF);
 }
 
 // =============================================================================
@@ -277,17 +280,16 @@ void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
 
     // Reject anything not exactly the expected packet size.
     // 想定サイズと異なるものは拒否する。
-    if (data == nullptr || len != static_cast<int>(sizeof(CommanderPacket))) {
+    if (data == nullptr || len != static_cast<int>(sizeof(ControlPacket))) {
         return;
     }
 
-    // Validate CRC over the first 10 bytes (everything except the trailing CRC).
-    // 末尾 CRC を除く先頭 10 バイトで CRC を検証する。
-    CommanderPacket pkt;
+    // Validate the checksum: byte 13 = sum of bytes 0-12 (low 8 bits).
+    // チェックサム検証: byte 13 = bytes 0-12 の総和（下位8ビット）。
+    ControlPacket pkt;
     std::memcpy(&pkt, data, sizeof(pkt));
-    const uint16_t expected = crc16(data, sizeof(CommanderPacket) - 2);
-    if (expected != pkt.crc16) {
-        return;  // bad CRC / CRC 不一致
+    if (pkt.checksum != checksum8(data, sizeof(ControlPacket) - 1)) {
+        return;  // bad checksum / チェックサム不一致
     }
 
     (void)info;  // src MAC is unused in Phase 2a (broadcast peer accepted)
@@ -299,20 +301,24 @@ void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
 // parseEspNowData — decode validated packet into CommandSetpoint and publish.
 // parseEspNowData — 検証済みパケットを CommandSetpoint にデコードし発行する。
 //
-// Normalization / 正規化:
-//   throttle: 0..65535 → [0.0, 1.0]
-//   roll/pitch/yaw: -32768..32767 → [-1.0, 1.0] (clipped to ±1.0)
-//   buttons: bit0 → arm flag (currently dropped — sf_command will absorb)
+// Normalization (12-bit ADC, spring-centred at 2048; matches the controller):
+//   throttle:        (raw - 2048) / 2048, clamped to [0, 1]   (2048 = zero)
+//   roll/pitch/yaw:  (raw - 2048) / 2048, clamped to [-1, 1]   (2048 = center)
+// flags (arm/mode) are decoded but routed in a separate change (a pilot-request
+// topic → StateManager); StateManager is the sole arm/mode decision authority.
+// 正規化（12bit ADC, 2048 中央, コントローラと一致）。flags(arm/mode) は別変更で
+// pilot-request トピック→StateManager へ配線する（判断は StateManager が唯一行う）。
 // -----------------------------------------------------------------------------
-void Comm::parseEspNowData(const CommanderPacket& pkt)
+void Comm::parseEspNowData(const ControlPacket& pkt)
 {
     // Build setpoint with normalized stick values.
     // 正規化されたスティック値でセットポイントを構築する。
     CommandSetpoint sp{};
-    sp.throttle = static_cast<float>(pkt.throttle) * kThrottleScale;
-    sp.roll  = clampUnit(static_cast<float>(pkt.roll)  * kStickScale);
-    sp.pitch = clampUnit(static_cast<float>(pkt.pitch) * kStickScale);
-    sp.yaw   = clampUnit(static_cast<float>(pkt.yaw)   * kStickScale);
+    sp.throttle = clampUnit((static_cast<float>(pkt.throttle) - kAdcCenter) / kAdcHalfSpan);
+    if (sp.throttle < 0.0f) sp.throttle = 0.0f;   // throttle is [0,1] (2048 = zero)
+    sp.roll  = clampUnit((static_cast<float>(pkt.roll)  - kAdcCenter) / kAdcHalfSpan);
+    sp.pitch = clampUnit((static_cast<float>(pkt.pitch) - kAdcCenter) / kAdcHalfSpan);
+    sp.yaw   = clampUnit((static_cast<float>(pkt.yaw)   - kAdcCenter) / kAdcHalfSpan);
     sp.source    = kCommandSourceEspNow;
     sp.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
@@ -324,12 +330,11 @@ void Comm::parseEspNowData(const CommanderPacket& pkt)
     // フェイルセーフのポーリング用に新鮮度タイムスタンプを更新する。
     last_packet_us_.store(esp_timer_get_time(), std::memory_order_release);
 
-    // Note: pkt.buttons / pkt.seq are decoded but not yet routed. sf_command
-    // (separate task) will absorb arm/mode bits when wired up.
-    // 注: pkt.buttons / pkt.seq はデコード済みだが未配線。sf_command が
-    //     配線されたら ARM/モードビットを吸収する。
-    (void)pkt.buttons;
-    (void)pkt.seq;
+    // pkt.flags (ARM/ALT_MODE/POS_MODE) are decoded here; routing to StateManager
+    // via a pilot-request topic lands in the next change (R5: Pub-Sub, no direct call).
+    // pkt.flags(ARM/ALT/POS) はここでデコード済み。StateManager への配線は次変更で
+    // pilot-request トピック経由（R5: Pub-Sub・直接呼出禁止）。
+    (void)pkt.flags;
 }
 
 // -----------------------------------------------------------------------------
