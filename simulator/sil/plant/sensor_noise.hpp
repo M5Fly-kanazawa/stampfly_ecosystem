@@ -20,7 +20,12 @@
  * クリーンな合成IMU（Plant）に載せる N0 ノイズ。物理から切り離して MuJoCo 無しで
  * 単体テスト可能にし、シード付きで決定論を保つ（同じシード→同じノイズ→同じ飛行→同じ動画）。
  *
- * @design simulator/sil/RESET_PLAN.md §13 P5 — sensor noise N0   [--]
+ * @design simulator/sil/RESET_PLAN.md §13 P5 — sensor noise N0   [OK]
+ *   Verified on the emulator: N0 hover stays G2-bounded (alt std ~2.7 cm over a 90 s
+ *   hold, attitude ~4° tilt, no divergence) across 7 seeds, runs are byte-identical
+ *   per seed, and the white σ tracks the 400 Hz firmware read rate (white_dt), not
+ *   the 4 kHz physics substep. エミュレータで検証済（90s保持で alt std~2.7cm 有界、
+ *   7シードで決定論、白色σはファーム読み取りレートに追従）。
  */
 
 #pragma once
@@ -42,6 +47,20 @@ public:
         // 静的白色ノイズ密度 [単位/√Hz]（N0 はデータシート級）。
         float gyro_density   = 0.000122f;  ///< rad/s/√Hz
         float accel_density  = 0.00157f;   ///< m/s²/√Hz
+        // IMU read period the FIRMWARE samples at [s] — the white-noise discretization
+        // rate (per-sample σ = density/√white_dt). DECOUPLED from the physics substep
+        // ON PURPOSE: after the timebase fix the Plant substeps at the model timestep
+        // (0.25 ms / 4 kHz) and calls advance() per substep, but the firmware reads the
+        // BMI270 at 400 Hz (2.5 ms). The white σ the ESKF's R is tuned for is the
+        // per-400-Hz-sample σ; discretizing white at the 4 kHz substep would inflate it
+        // by √(2.5/0.25)=√10≈3.16×. Fixing white_dt to the firmware read rate keeps the
+        // effective σ the firmware sees correct regardless of how finely the Plant steps.
+        // ファームが IMU をサンプルする周期 [s]＝白色ノイズの離散化レート（1サンプルσ=density/√white_dt）。
+        // 物理 substep（時間基準修正後 0.25ms/4kHz, advance は substep 毎）から意図的に分離する。
+        // ファームは BMI270 を 400Hz(2.5ms) で読み、ESKF の R はこの 400Hz サンプルσに合わせて
+        // ある。白色を 4kHz substep で離散化すると σ が √10≈3.16倍に膨らむ。white_dt をファーム
+        // 読み取りレートに固定し、物理刻みの細かさに依らず実効σを正しく保つ。
+        float white_dt = 0.0025f;          ///< 1/400 Hz IMU sample period [s]
         // Per-boot startup bias 1σ (drawn once at init). These are the RESIDUAL bias
         // AFTER the firmware's boot calibration — NOT the raw MEMS offset. A real
         // accel offset (~0.1–0.4 m/s²) is removed by the level-rest boot calibration
@@ -76,11 +95,16 @@ public:
             gyro_white_[i]  = 0.0f;
             accel_white_[i] = 0.0f;
         }
-        if (c.enable) drawWhite(0.0025f);   // prime the first sample (nominal dt)
+        if (c.enable) drawWhite();   // prime the first sample (at white_dt)
     }
 
-    /// Advance one step: random-walk the bias, then draw a fresh white-noise sample.
-    /// 1ステップ進める: バイアスをランダムウォークさせ、新しい白色ノイズを抽選。
+    /// Advance one physics substep of length dt [s]: random-walk the bias by √dt
+    /// (so the walk accumulates correctly however finely the Plant substeps), then
+    /// draw a fresh white-noise sample at the FIXED firmware read rate (white_dt),
+    /// NOT at dt — see Config::white_dt for why the white σ is substep-independent.
+    /// 物理 substep（長さ dt [s]）を1回進める: バイアスを √dt でランダムウォーク
+    /// （刻みの細かさに依らず正しく累積）させ、白色は固定のファーム読み取りレート
+    /// （white_dt、dt ではない）で新規抽選する。理由は Config::white_dt 参照。
     void advance(float dt) {
         if (!cfg_.enable) return;
         const float sdt = std::sqrt(dt > 1.0e-6f ? dt : 1.0e-6f);
@@ -88,7 +112,7 @@ public:
             gyro_bias_[i]  += cfg_.gyro_bias_rw  * sdt * norm_(rng_);   // RW ∝ √dt
             accel_bias_[i] += cfg_.accel_bias_rw * sdt * norm_(rng_);
         }
-        drawWhite(dt);
+        drawWhite();
     }
 
     /// Add bias + white noise to a body-frame accel sample [m/s²] (no-op if disabled).
@@ -109,10 +133,13 @@ public:
     const float* accelBias() const { return accel_bias_; }  ///< test accessor
 
 private:
-    /// White-noise sample with discrete σ = density / √dt (continuous density → per-sample).
-    /// 離散 σ = 密度 / √dt の白色ノイズ（連続密度 → 1サンプルあたり）。
-    void drawWhite(float dt) {
-        const float inv_sdt = 1.0f / std::sqrt(dt > 1.0e-6f ? dt : 1.0e-6f);
+    /// White-noise sample with discrete σ = density / √white_dt (continuous density →
+    /// per-sample at the firmware IMU read rate, independent of the physics substep).
+    /// 離散 σ = 密度 / √white_dt の白色ノイズ（連続密度 → ファーム IMU 読み取りレートの
+    /// 1サンプルあたり。物理 substep には依存しない）。
+    void drawWhite() {
+        const float wdt = cfg_.white_dt > 1.0e-6f ? cfg_.white_dt : 1.0e-6f;
+        const float inv_sdt = 1.0f / std::sqrt(wdt);
         for (int i = 0; i < 3; ++i) {
             gyro_white_[i]  = cfg_.gyro_density  * inv_sdt * norm_(rng_);
             accel_white_[i] = cfg_.accel_density * inv_sdt * norm_(rng_);

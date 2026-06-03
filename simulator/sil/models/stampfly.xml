@@ -36,7 +36,13 @@
   <asset>
     <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.3 0.4"
              rgb2="0.1 0.15 0.2" width="300" height="300"/>
-    <material name="grid" texture="grid" texrepeat="6 6" reflectance="0.1"/>
+    <!-- texrepeat scaled with the ground plane below (same 1 m checker pitch). The
+         plane is enlarged so the review-video camera, which chases the drone, keeps a
+         visual floor reference even when ALTITUDE_HOLD + sensor noise drift it tens of
+         metres off the origin (a finite floor left the 3D pane black mid-flight).
+         地面プレーン拡大に合わせ texrepeat も比例（1mマス維持）。レビュー動画のカメラが
+         機体追従する際、ノイズで原点から数十m流れても床の手掛かりを保つため拡大。 -->
+    <material name="grid" texture="grid" texrepeat="400 400" reflectance="0.1"/>
 
     <!-- StampFly visual meshes (mm → m). / 実機視覚メッシュ（mm→m）。 -->
     <mesh name="m_frame"     file="frame.stl"           scale="0.001 0.001 0.001"/>
@@ -66,7 +72,12 @@
 
   <worldbody>
     <light pos="0 0 2" dir="0 0 -1"/>
-    <geom name="ground" type="plane" size="3 3 0.1" material="grid"/>
+    <!-- Visual half-extent only (a MuJoCo plane is INFINITE for collision regardless
+         of size, so this is physics-neutral). Enlarged 3 m → 200 m so the drone stays
+         over a visible checkerboard during noise-driven horizontal drift. -->
+    <!-- 視覚の半径のみ（衝突はサイズに依らず無限ゆえ物理は不変）。ドリフトしても床が見える
+         よう 3m→200m に拡大。 -->
+    <geom name="ground" type="plane" size="200 200 0.1" material="grid"/>
 
     <!-- Drone body, FLU (X fwd, Y left, Z up). Hover start at 0.5 m. -->
     <!-- 機体 FLU（X前, Y左, Z上）。0.5 m でホバー開始。 -->

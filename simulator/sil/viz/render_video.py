@@ -374,7 +374,7 @@ def main():
     cam.azimuth = 130
     cam.elevation = -10
     cam.distance = max(0.85, visible_h / 0.83)       # never tighter than the old frame
-    cam.lookat[:] = [0.0, 0.0, z_mid]
+    cam.lookat[:] = [0.0, 0.0, z_mid]                # x/y re-set per frame in the loop (chase)
 
     qcols = ["px", "py", "pz", "qw", "qx", "qy", "qz"]
 
@@ -404,6 +404,15 @@ def main():
     writer = imageio.get_writer(args.out, fps=args.fps, codec="libx264",
                                 quality=8, macro_block_size=None)
     for i in range(i_start, i_end):
+        # Chase the drone horizontally so it stays centered. In ALTITUDE_HOLD the
+        # firmware holds altitude + attitude but NOT horizontal position, so under
+        # sensor noise a tiny residual tilt integrates into metres of x/y drift; a
+        # fixed lookat at (0,0) loses the drone sideways (the 3D pane went empty mid-
+        # hover). Vertical framing stays fixed so the climb/descent still reads.
+        # 機体を水平追従して中央に保つ。ALTITUDE_HOLD は高度＋姿勢を保持するが水平位置は
+        # 保持しないため、ノイズ下では微小な残留傾きが積分され x/y が数m流れる。固定 lookat
+        # だと横方向に見失う（ホバー途中で3Dペインが空になる）。鉛直は固定で上昇/下降を見せる。
+        cam.lookat[:] = [float(traj["px"][i]), float(traj["py"][i]), z_mid]
         img3d = render_3d(model, data, renderer,
                           np.array([traj[c][i] for c in qcols]), cam)
         graphs = graph_frame(traj, i, Wg, H)

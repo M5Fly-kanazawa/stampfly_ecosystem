@@ -91,6 +91,55 @@ void test_white_statistics() {
     check(std::fabs(gm) < 0.02 * exp_g, "gyro  white mean ≈ 0");
 }
 
+// --- 1b. white σ tracks the firmware IMU read rate, NOT the physics substep ---
+// After the timebase fix the Plant substeps at 4 kHz (advance called per 0.25 ms
+// substep) while the firmware reads the IMU at 400 Hz. The σ the firmware SEES must
+// stay the 400-Hz-sample σ (density/√0.0025), not inflate by √10 to the 4-kHz σ.
+// This pins the Config::white_dt decoupling that keeps the effective σ correct.
+// 時間基準修正後 Plant は 4kHz で substep（advance は 0.25ms 毎）するが、ファームは IMU を
+// 400Hz で読む。ファームが見る σ は 400Hz サンプルσ（density/√0.0025）に留まり、√10 倍に
+// 膨らんではならない。white_dt 分離が実効σを正しく保つことを固定する。
+void test_white_substep_decoupled() {
+    SensorNoise::Config c;
+    c.enable = true;
+    c.seed = 7;
+    c.gyro_density = 0.01f;
+    c.accel_density = 0.05f;
+    c.gyro_bias_sigma = 0.0f;      // isolate the white term
+    c.accel_bias_sigma = 0.0f;
+    c.gyro_bias_rw = 0.0f;
+    c.accel_bias_rw = 0.0f;
+    // c.white_dt stays at its default 0.0025 (firmware 400 Hz read rate).
+
+    SensorNoise n;
+    n.init(c);
+    const float H = 0.00025f;      // 4 kHz physics substep (model timestep)
+    const int SUBSTEPS = 10;       // 10 substeps per 400 Hz firmware read
+    const int N = 200000;
+    std::vector<float> ax, gx;
+    ax.reserve(N);
+    gx.reserve(N);
+    for (int k = 0; k < N; ++k) {
+        for (int s = 0; s < SUBSTEPS; ++s) n.advance(H);  // Plant substeps at 4 kHz
+        float a[3] = {0, 0, 0}, g[3] = {0, 0, 0};
+        n.applyAccel(a);                                   // firmware reads at 400 Hz
+        n.applyGyro(g);
+        ax.push_back(a[0]);
+        gx.push_back(g[0]);
+    }
+    double am, as, gm, gs;
+    meanStd(ax, am, as);
+    meanStd(gx, gm, gs);
+    const double exp_a = c.accel_density / std::sqrt(0.0025);  // 400 Hz σ (NOT 4 kHz)
+    const double exp_g = c.gyro_density / std::sqrt(0.0025);
+    std::printf("    accel: std=%.4f (exp %.4f, 4kHz-σ would be %.4f)\n",
+                as, exp_a, c.accel_density / std::sqrt(H));
+    std::printf("    gyro : std=%.4f (exp %.4f, 4kHz-σ would be %.4f)\n",
+                gs, exp_g, c.gyro_density / std::sqrt(H));
+    check(std::fabs(as - exp_a) / exp_a < 0.03, "accel white σ tracks 400 Hz read, not 4 kHz substep");
+    check(std::fabs(gs - exp_g) / exp_g < 0.03, "gyro  white σ tracks 400 Hz read, not 4 kHz substep");
+}
+
 // --- 2. disabled model adds exactly nothing ---
 void test_off_is_clean() {
     SensorNoise::Config c;       // enable defaults to false
@@ -209,6 +258,7 @@ void test_determinism() {
 int main() {
     std::printf("[noise_test] N0 sensor-noise model (SensorNoise)\n");
     test_white_statistics();
+    test_white_substep_decoupled();
     test_off_is_clean();
     test_startup_bias();
     test_bias_random_walk();

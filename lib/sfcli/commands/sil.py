@@ -98,6 +98,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="assertions file (default: <scenario>.expect if it exists)")
     p.add_argument("--duration", type=int, default=25_000_000,
                    help="sim duration in microseconds (default 25 s)")
+    p.add_argument("--noise", choices=NOISE_LEVELS, default="off",
+                   help="sensor noise level on the emulator Plant (§13 P5; default off)")
+    p.add_argument("--seed", type=int, default=12345,
+                   help="noise RNG seed (determinism: same seed → byte-identical run)")
     p.add_argument("--video", action="store_true",
                    help="on PASS, render a review MP4 (MuJoCo 3D + state graphs) from the run")
     p.set_defaults(func=run_scenario)
@@ -260,7 +264,18 @@ def run_scenario(args: argparse.Namespace) -> int:
     # （--video で描画可能に）。決定論的で無害、未対応エミュレータでは no-op。
     env = dict(os.environ, SIL_EMU_EVENTS=str(events), SIL_EMU_TRAJ=str(traj))
 
-    console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us)...")
+    # SIL_EMU_NOISE/SIL_EMU_SEED turn on the seeded N0 sensor-noise model on the
+    # emulator Plant (§13 P5). Default "off" → env passed but the emulator keeps the
+    # clean path (byte-identical), so the no-noise scenario verdict is unaffected.
+    # SIL_EMU_NOISE/SIL_EMU_SEED でエミュレータ Plant の N0 ノイズを ON（§13 P5）。
+    # 既定 "off" では従来のクリーン経路（byte-identical）を保つ。
+    noise = getattr(args, "noise", "off") or "off"
+    seed = getattr(args, "seed", 12345)
+    env["SIL_EMU_NOISE"] = noise
+    env["SIL_EMU_SEED"] = str(seed)
+
+    console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us, "
+                 f"noise={noise}, seed={seed})...")
     # The emulator reads stdin (the firmware CLI); feed /dev/null so any non-key
     # read yields EAGAIN. Capture stdout and stderr SEPARATELY (ESP_LOGx → stderr).
     # ファーム CLI の stdin は /dev/null。stdout/stderr を分離捕捉（ESP_LOGx は stderr）。
@@ -296,6 +311,7 @@ def run_scenario(args: argparse.Namespace) -> int:
     results = {
         "gate": "scenario", "milestone": f"scn_{scn.stem}", "kind": "scenario",
         "scenario": str(scn), "target": target, "exit_code": r.returncode,
+        "noise": noise, "seed": seed,
         "pass": bool(verdict), "checks": checks,
         # Accurate flight label for the review-video title (no takeoff/landing claim).
         # レビュー動画タイトル用の正確な飛行ラベル（離着陸を主張しない）。

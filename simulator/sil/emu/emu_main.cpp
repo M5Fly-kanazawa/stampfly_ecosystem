@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>    // strcmp — parse the SIL_EMU_NOISE level
 
 #include "scheduler.hpp"
 #include "plant.hpp"
@@ -55,6 +56,25 @@ void on_advance(int64_t now_us)
     }
 }
 
+// Build the Plant config from the environment. Sensor noise stays OFF unless
+// SIL_EMU_NOISE=n0 is set (then the seeded N0 model is enabled, seed overridable
+// via SIL_EMU_SEED). Defaults reproduce the previous behaviour byte-for-byte.
+// 環境変数から Plant 設定を作る。SIL_EMU_NOISE=n0 のときだけ N0 ノイズを ON
+// （シードは SIL_EMU_SEED で上書き可）。未設定なら従来と byte-identical。
+sil::Plant::Config plant_config_from_env()
+{
+    sil::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
+    const char* noise = std::getenv("SIL_EMU_NOISE");
+    if (noise && std::strcmp(noise, "n0") == 0) {
+        cfg.noise.enable = true;
+        if (const char* seed = std::getenv("SIL_EMU_SEED")) {
+            cfg.noise.seed = (uint32_t)std::atoi(seed);
+        }
+        std::printf("[emu] sensor noise: N0 ON (seed=%u)\n", cfg.noise.seed);
+    }
+    return cfg;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -68,7 +88,7 @@ int main(int argc, char** argv)
 
     // Bring up the MuJoCo Plant and connect it to the virtual board (E1).
     // MuJoCo Plant を起こし、仮想ボードに接続（E1）。
-    if (!g_plant.init(model_path)) {
+    if (!g_plant.init(model_path, plant_config_from_env())) {
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;
     }

@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>    // strcmp — parse the SIL_EMU_NOISE level
 #include <fcntl.h>    // fcntl, O_NONBLOCK — make host stdin non-blocking
 #include <unistd.h>   // STDIN_FILENO
 
@@ -54,6 +55,26 @@ sil::Plant g_plant;
 int64_t    g_last_step_us = 0;
 float      g_peak_alt = 0.0f;   // highest truth altitude over the whole run / 実行中の最高高度
 constexpr float kGroundZ = 0.013f;
+
+// Build the Plant config from the environment. Sensor noise stays OFF unless
+// SIL_EMU_NOISE=n0 is set (then the seeded N0 model is enabled, seed overridable
+// via SIL_EMU_SEED). Defaults reproduce the previous behaviour byte-for-byte:
+// the clean path is unchanged, preserving the no-noise determinism invariant.
+// 環境変数から Plant 設定を作る。SIL_EMU_NOISE=n0 のときだけセンサノイズを ON
+// （シード付き N0、シードは SIL_EMU_SEED で上書き可）。未設定なら従来と byte-identical。
+sil::Plant::Config plant_config_from_env()
+{
+    sil::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
+    const char* noise = std::getenv("SIL_EMU_NOISE");
+    if (noise && std::strcmp(noise, "n0") == 0) {
+        cfg.noise.enable = true;
+        if (const char* seed = std::getenv("SIL_EMU_SEED")) {
+            cfg.noise.seed = (uint32_t)std::atoi(seed);
+        }
+        std::printf("[emu] sensor noise: N0 ON (seed=%u)\n", cfg.noise.seed);
+    }
+    return cfg;
+}
 
 void on_advance(int64_t now_us)
 {
@@ -151,7 +172,7 @@ int main(int argc, char** argv)
     }
 
     std::printf("[emu] (1) plant.init ...\n");
-    if (!g_plant.init(model_path)) {
+    if (!g_plant.init(model_path, plant_config_from_env())) {
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;
     }

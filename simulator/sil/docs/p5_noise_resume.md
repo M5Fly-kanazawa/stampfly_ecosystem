@@ -1,24 +1,42 @@
-# P5 センサノイズ N0 — 再開ノート（次セッションの起点）
+# P5 センサノイズ N0 — ✅完了ノート＋P6 への引き継ぎ
 
-> 自己完結の再開メモ。空コンテキストの新セッションでも、このファイルだけで P5 を始められる。
-> Self-contained resume note for milestone P5 (sensor noise N0).
+> 自己完結の到達点メモ。空コンテキストの新セッションでも、このファイルだけで状況を把握できる。
+> P5 (sensor noise N0) is DONE; this note now hands off to P6.
 
-最終更新: 2026-06-03 / 直近コミット: `5623ff6`（90秒長時間ホバー）。
-**前提**: 全参照は実コード裏取り済み。ロードマップは `simulator/sil/RESET_PLAN.md` §10/§13。
+最終更新: 2026-06-03（P5 達成）。**前提**: 全参照は実コード裏取り済み。ロードマップは
+`simulator/sil/RESET_PLAN.md` §10/§13。
 
 ---
 
-## 0. ここまでの到達点（State）
+## 0. P5 ✅完了（What was done）
 
-- **P0〜P4 ✅完了**（更地化／物理SIL骨格／アルゴリズム非依存実証／CLI・ダッシュボード／レビュー動画）。
+**合格基準（RESET_PLAN §10）= G2（推定誤差有界）＋決定論＋統計テスト＋レビュー動画 — 全て達成。**
+
+- **配線**: ノイズモデルは実装済みだったが emu が既定 off で `Plant::init` を呼んでいた。両 emu 入口
+  （`emu/emu_main_generic.cpp`=emu_vehicle, `emu/emu_main.cpp`=emu_vehicle_new）に
+  `SIL_EMU_NOISE=n0`/`SIL_EMU_SEED` env を配線し、`sf sil scenario --noise n0 --seed N` から制御可能に。
+  既定 off は従来と **byte-identical**（クリーン経路不変・回帰確認済み）。
+- **白色σの substep 非依存化**: 時間基準修正で物理が 4kHz substep ＝ `advance()` が 4kHz 呼びになり、
+  白色を substep（0.25ms）で離散化すると σ が √10 倍に膨張する欠陥を是正。`SensorNoise::Config::white_dt`
+  （=ファーム 400Hz 読み取り周期）で白色を離散化するよう分離。`smoke/noise_test.cpp` に
+  substep 分離テストを追加し数値確認済（4kHz substep でもファームが見る σ は 400Hz 相当）。
+- **検証**: G2＝`hover_alt`(16s) 7シード全て有界（保持窓 std 1.3–3.9cm）、`hover_long`(90s) で alt std~2.7cm・
+  緩い有界ドリフト・姿勢チルト平均~4°(max10°)で発散なし。決定論＝同シードで traj/stdout/stderr 完全一致。
+  レビュー動画＝`viz/out_scn_hover_alt/scn_hover_alt.mp4`（`render_video.py` 単一 run カメラを px/py 毎フレーム
+  追従に修正、床 3m→200m 拡大＝物理不変）。`sensor_noise.hpp` の `@design` を `[--]→[OK]`、RESET_PLAN P5 を ✅。
+
+**知見（→P6 動機）**: ALTITUDE_HOLD は水平位置を保持しないため、N0 残留 accel バイアスが ESKF 姿勢に~4°
+チルトを生み機体が水平に数十m ドリフトする（高度・姿勢は有界＝G2満たす）。`hover_long` 着地での 12m 上昇は
+接地衝撃検出→crash DISARM 後の MuJoCo 剛体接触の数値爆発（モータ disarm 済み）で P5 欠陥ではない。
+
+---
+
+## 0b. 前提として完了済み（背景）
+
+- **P0〜P4 ✅**（更地化／物理SIL骨格／アルゴリズム非依存／CLI・ダッシュボード／レビュー動画）。
 - **エミュレータ E0〜E6 ✅**（実 app_main を14タスクでホスト実行・Plant 閉ループ・決定論シナリオ注入・
   VL53/INA3221/BMP280 モデル）。
-- **時間基準バグ修正済**（commit `cea0d8c`, 物理4000Hz・仮想時間1:1ロック）→ 空中ホバー忠実成立、
-  90秒長時間ホバーで ESKF 鉛直安定を確証（`hover_long.scn`）。詳細 `simulator/sil/docs/plant_timebase_bug.md`。
-- **次の目標 = P5 センサノイズ N0**（RESET_PLAN §10 表 / §13）。
-
-**P5 の合格基準（RESET_PLAN §10）**: 「ノイズ下でホバーが G2（推定誤差有界）＋決定論・統計テストに合格」。
-**G2** = 推定誤差が有界（発散しない）。**決定論** = 同シード→同結果（byte-identical）。
+- **時間基準バグ修正済**（commit `cea0d8c`, 物理4000Hz・仮想時間1:1ロック）。詳細 `plant_timebase_bug.md`。
 
 ---
 
@@ -33,45 +51,22 @@
 
 ---
 
-## 2. P5 のギャップ（やること） — エミュレータにノイズを配線する
+## 2. 実施済みの配線（参照） — 変更ファイル
 
-**問題**: エミュレータ（`emu_vehicle` / `sf sil scenario`）は `g_plant.init(model_path)` を
-**既定 Config（noise.enable=false）**で呼ぶ（`emu/emu_main_generic.cpp:154`, `emu/emu_main.cpp:71`）。
-→ **ノイズを有効化する経路が無い**。`--noise n0` は旧 `sf sil run`（=`hover_smoke`、核ループ部分試験で
-**欠陥**＝実ファーム全コードを走らせない）にしか繋がっていない（`lib/sfcli/commands/sil.py:148` run_run）。
+| 変更 | ファイル | 内容 |
+|------|---------|------|
+| emu に noise env | `emu/emu_main_generic.cpp`, `emu/emu_main.cpp` | `plant_config_from_env()` を追加。`SIL_EMU_NOISE=n0`/`SIL_EMU_SEED` を読み `g_plant.init(path, cfg)`。env 未設定/off は `Config{}`＝従来と byte-identical |
+| CLI | `lib/sfcli/commands/sil.py` | `sf sil scenario` に `--noise`(off/n0)・`--seed` を追加。subprocess env に `SIL_EMU_NOISE/SEED` を渡し、results.json に記録 |
+| 白色σ分離 | `plant/sensor_noise.hpp` | `Config::white_dt`(=0.0025=400Hz) を追加し `drawWhite()` を引数なし化。白色を物理 substep でなくファーム読み取りレートで離散化（√10倍膨張を是正）。RW は substep の √dt 累積のまま正しい |
+| 単体テスト | `smoke/noise_test.cpp` | `test_white_substep_decoupled` を追加（4kHz substep + 400Hz 読みで σ が 400Hz 相当に留まることを数値確認） |
+| 動画カメラ/床 | `viz/render_video.py`, `models/stampfly.xml` | 単一 run カメラを px/py 毎フレーム追従。床プレーン 3m→200m（texrepeat 比例、物理不変） |
 
-**忠実な P5 は emu_vehicle 上で行う。** 必要な配線（SIL_EMU_TRAJ/SIL_EMU_EVENTS と同じ env パターン）:
-
-### 2-1. emu に noise/seed の env を読ませる
-`emu/emu_main_generic.cpp`（および `emu/emu_main.cpp`）で、`g_plant.init(model_path)` の前に
-`sil::Plant::Config` を作り、env から noise を設定して `g_plant.init(model_path, cfg)` を呼ぶ:
-```cpp
-sil::Plant::Config cfg;                       // defaults
-const char* noise = std::getenv("SIL_EMU_NOISE");   // "off"(既定) / "n0"
-if (noise && std::string(noise) == "n0") {
-    cfg.noise.enable = true;
-    if (const char* s = std::getenv("SIL_EMU_SEED")) cfg.noise.seed = (uint32_t)atoi(s);
-}
-g_plant.init(model_path, cfg);                // 既存の init(path) でなく init(path,cfg)
-```
-※ `Plant::init(const char*, const Config&)` は既存（plant.hpp:113）。既定 off なら現行と byte-identical。
-
-### 2-2. `sf sil scenario` に --noise / --seed を追加（sil.py）
-`lib/sfcli/commands/sil.py` の scenario サブパーサ（L93付近）に `--noise`(choices=NOISE_LEVELS, 既定off)
-と `--seed`(既定12345) を追加し、`run_scenario`(L243) の subprocess env に
-`SIL_EMU_NOISE`/`SIL_EMU_SEED` を渡す（既存の SIL_EMU_EVENTS/SIL_EMU_TRAJ と同じ dict に足す, L261）。
-
-### 2-3. ⚠️ 白色ノイズの σ スケーリングを要確認（時間基準修正の副作用）
-`drawWhite(dt)` は σ = density/√dt（連続密度→1サンプル）。**修正後は substep h=0.25ms ごとに白色を
-引く**が、**ファームは IMU を 400Hz（2.5ms）で読む**。ファームは Plant の「最新の 0.25ms 分散の白色
-サンプル」を読むため、σ が √(2.5ms/0.25ms)=√10≈3.16倍 大きく見える恐れ。
-→ **P5 でファームが見る実効 σ が意図した N0（density×√400Hz）になっているか数値確認**し、必要なら
-白色を「ファーム読み取りレート（2.5ms）で引く」か density を補正する。
-（バイアスRW は √dt 累積ゆえ substep 化で正しい＝総時間で正規化される。問題は白色のみ。）
+> 旧 `sf sil run`(=`hover_smoke`) も同じ白色σ膨張欠陥を持っていたが、`sensor_noise.hpp` 修正で同時に是正
+> 済み。ただし hover_smoke は核ループ部分試験ゆえ P5 の正路ではない（忠実な検証は emu_vehicle 上）。
 
 ---
 
-## 3. P5 検証レシピ（配線後）
+## 3. 検証レシピ（P5 達成の再現手順・回帰確認用）
 
 ```bash
 # (1) ビルド
@@ -93,12 +88,13 @@ diff <trajectory or console>  # 完全一致なら決定論OK
 #   ESKF vs 相補(--target/estimator)の比較は P6 で意味を持つ(N0は両者大差ない見込み)。
 
 # (5) P5 レビュー動画(§9 必須): sf sil scenario .../hover_alt.scn --noise n0 --video
-#   render_video.py に --start/--end・カメラ自動フレーミング実装済(commit 3118df3)。
+#   単一 run カメラは px/py 毎フレーム追従に修正済（位置保持なし＋ノイズで機体が数十m流れるため、
+#   固定 lookat だと画面外）。床は 200m に拡大（追従しても床が見える）。
 #   ※ 画像確認はサブエージェント限定(CLAUDE.md)。
 ```
 
-**合格判定（P5 達成）**: ① noise n0 でホバーが有界（G2）② 同シード決定論 ③ 統計テスト合格
-④ レビュー動画。達成後 `sensor_noise.hpp` の `@design ... [--]→[OK]`、RESET_PLAN P5 を ✅。
+**合格判定（P5 達成済み・2026-06-03）**: ① noise n0 でホバーが有界（G2）✅ ② 同シード決定論 ✅
+③ 統計テスト（7シード有界）✅ ④ レビュー動画 ✅。`sensor_noise.hpp` `@design [--]→[OK]`、RESET_PLAN P5 ✅。
 
 ---
 
@@ -119,3 +115,20 @@ diff <trajectory or console>  # 完全一致なら決定論OK
 - 主要ファイル: `plant/sensor_noise.hpp`(モデル)、`plant/plant.cpp`(適用)、`emu/emu_main_generic.cpp`(配線先)、
   `lib/sfcli/commands/sil.py`(CLI配線先)、`smoke/noise_test.cpp`(単体テスト)、
   `scenarios/hover_long.scn`/`hover_alt.scn`(試験飛行)。
+
+---
+
+## 6. 次の目標 = P6（センサノイズ N1/N2 ＋ ToF/Baro/Flow ＋ ESKF vs 相補）
+
+RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノイズ（σ_axis=K[axis]·duty²、f_low/f_high）
+と ToF/Baro/Flow の観測ノイズ（R 表）を加え、**ノイズ下で ESKF が相補フィルタより優位なことを定量化**
+（P4 比較動画をノイズ版に更新）＋ G4（飽和率）。
+
+- **P5 が炙り出した宿題（P6 で追う）**: N0 残留 accel バイアスで ESKF 姿勢が~4°チルト→水平ドリフト。
+  **起動校正（水平静止 ba_z≈2g, `noise_and_vibration_model.md` §3）を再現**して全オフセットを捕え、
+  チルト/ドリフトを抑える。`project_estimator_attitude_comparison`（相補の方が姿勢安定）の原因究明もここ。
+- **着手前に確認**: ノイズモデル（`sensor_noise.hpp`）は N0 のみ。N1/N2 は密度の duty 依存項・帯域制限
+  （1次/2次フィルタ）を追加実装する必要がある。ToF/Baro/Flow ノイズは Plant の各センサ合成（`plant.cpp`
+  の `tof()/baro()/flow()`）に R を載せる。**firmware 無改変**の原則を守る（ノイズは Plant 側）。
+- **比較経路は既存**: `sf sil compare`（hover_smoke ベース）。ただし忠実版は emu_vehicle 上で
+  ESKF/相補を切り替える経路（`--target`/estimator 選択）が要る。P6 着手時に emu の estimator 切替を要確認。
