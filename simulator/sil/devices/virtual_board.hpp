@@ -70,6 +70,14 @@ void sil_board_ledc_set_duty(int channel, uint32_t duty, uint32_t max_duty);
 // ボードが LEDC で最後に受け取った各モータ duty[0,1]（M1..M4）を読む。動画軌跡記録用。
 void sil_board_get_motor_duty(float out[4]);
 
+// P7 disturbance hooks (scenario wind/fault events → Plant). Set the external wind
+// force in NED [N], or degrade one motor's thrust health gain (motor 0..3, 1=healthy,
+// 0=dead). No-op until a Plant is attached. RESET_PLAN §13 P7.
+// P7 外乱フック（シナリオの wind/fault → Plant）。NED 風力 [N] の設定、または1モータの
+// 推力健全度ゲインの劣化（motor 0..3, 1=正常/0=停止）。Plant 未接続なら no-op。
+void sil_board_set_wind(float fx, float fy, float fz);
+void sil_board_set_motor_health(int motor, float gain);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

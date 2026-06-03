@@ -131,6 +131,13 @@ public:
     /// NED の外乱風力 [N] を設定（既定ゼロ）。
     void setWind(const sf::math::Vec3& force_ned);
 
+    /// Set per-motor thrust health gain at runtime (1=healthy, 0=dead). Used by the
+    /// P7 disturbance scenarios to degrade a motor mid-flight and watch the mixer
+    /// compensate. Out-of-range motor index is ignored; gain is clamped to [0,1].
+    /// 各モータの推力健全度ゲインを実行時設定（1=正常, 0=停止）。P7 外乱シナリオが飛行中に
+    /// モータを劣化させ、ミキサーの補償を見るのに使う。範囲外 index は無視、gain は [0,1] にクランプ。
+    void setHealth(int motor, float gain);
+
     /// Place the body at rest, level, at height z [m] (MuJoCo ENU up). Used to
     /// start a flight on the ground (z ≈ box half-height) for a takeoff demo.
     /// 機体を高さ z [m]（MuJoCo ENU 上）で水平・静止配置する。地上から離陸する

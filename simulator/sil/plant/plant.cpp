@@ -87,6 +87,12 @@ void Plant::setWind(const sf::math::Vec3& force_ned)
     cfg_.wind_force_ned = force_ned;
 }
 
+void Plant::setHealth(int motor, float gain)
+{
+    if (motor < 0 || motor > 3) return;
+    cfg_.health[motor] = gain < 0.0f ? 0.0f : (gain > 1.0f ? 1.0f : gain);
+}
+
 void Plant::setStartHeight(float z)
 {
     // Free-joint state: position (0,0,z) ENU, level orientation, zero velocity.

@@ -16,6 +16,7 @@
 #include "scenario_inject.hpp"
 #include "console_feeder.hpp"
 #include "emu_record.hpp"
+#include "virtual_board.hpp"     // P7: sil_board_set_wind / sil_board_set_motor_health
 
 #include <cstdint>
 #include <cstdio>
@@ -53,7 +54,18 @@ struct Event {
     // key
     std::string text;
 
-    // btn/wind/fault (deferred): keep raw args for the warn note
+    // wind (P7): external force NED [N]; dur_ms>0 = gust pulse (revert to 0 after).
+    // wind (P7): NED 外乱力 [N]。dur_ms>0 で突風パルス（後で 0 に戻す）。
+    float wind_fx = 0.0f, wind_fy = 0.0f, wind_fz = 0.0f;
+    int   wind_dur_ms = 0;
+
+    // fault (P7): degrade one motor's thrust health gain (motor 0..3, gain 0..1).
+    // fault (P7): 1モータの推力健全度ゲインを劣化（motor 0..3, gain 0..1）。
+    int   fault_motor = 0;
+    float fault_gain = 1.0f;
+
+    // btn (still deferred): keep raw args for the warn note.
+    // btn（未実装）: warn 用に生引数を保持。
     std::string raw;
 };
 
@@ -100,8 +112,13 @@ int64_t event_duration_us(const Event& e)
         case Channel::RcRamp:
             return (int64_t)ramp_frames(e.ramp_from, e.ramp_to, e.ramp_step)
                  * period_ms(e.rate_hz) * 1000;
+        case Channel::Wind:
+            // A gust pulse (dur_ms>0) holds the wind then reverts, so it occupies
+            // dur_ms on the timeline; a sustained step (dur_ms=0) is instantaneous.
+            // 突風パルス(dur_ms>0)は風を保持後に戻すので dur_ms 占有。定常(0)は瞬時。
+            return (int64_t)e.wind_dur_ms * 1000;
         default:
-            return 0;  // key/btn/wind/fault are instantaneous on the timeline
+            return 0;  // key/btn/fault are instantaneous on the timeline
     }
 }
 
@@ -272,9 +289,33 @@ int sil_scenario_load(const char* path)
             if (!parse_quoted(rest, e.text)) { err(path, lineno, "key needs a quoted \"...\" string"); return -1; }
             e.ch = Channel::Key;
 
-        } else if (ch == "btn" || ch == "wind" || ch == "fault") {
+        } else if (ch == "wind") {
+            // wind <fx> <fy> <fz> [dur_ms] — external force NED [N]; dur_ms>0 = gust.
+            // wind <fx> <fy> <fz> [dur_ms] — NED 外乱力 [N]、dur_ms>0 で突風。
+            e.ch = Channel::Wind;
+            if (!(iss >> e.wind_fx >> e.wind_fy >> e.wind_fz)) {
+                err(path, lineno, "wind needs <fx> <fy> <fz> [dur_ms]"); return -1;
+            }
+            if (!(iss >> e.wind_dur_ms)) e.wind_dur_ms = 0;     // optional → sustained step
+            if (e.wind_dur_ms < 0) { err(path, lineno, "wind dur_ms must be >= 0"); return -1; }
+
+        } else if (ch == "fault") {
+            // fault <motor 0-3> <gain 0-1> — degrade one motor's thrust health.
+            // fault <motor 0-3> <gain 0-1> — 1モータの推力健全度を劣化。
+            e.ch = Channel::Fault;
+            if (!(iss >> e.fault_motor >> e.fault_gain)) {
+                err(path, lineno, "fault needs <motor 0-3> <gain 0-1>"); return -1;
+            }
+            if (e.fault_motor < 0 || e.fault_motor > 3) {
+                err(path, lineno, "fault <motor> must be 0..3"); return -1;
+            }
+            if (e.fault_gain < 0.0f || e.fault_gain > 1.0f) {
+                err(path, lineno, "fault <gain> must be 0.0..1.0"); return -1;
+            }
+
+        } else if (ch == "btn") {
             std::string rest; std::getline(iss, rest);
-            e.ch = (ch == "btn") ? Channel::Btn : (ch == "wind") ? Channel::Wind : Channel::Fault;
+            e.ch = Channel::Btn;
             e.raw = ch + rest;
 
         } else {
@@ -348,11 +389,38 @@ void sil_scenario_driver_task(void* /*arg*/)
             case Channel::Key:
                 sil_console_write(e.text.data(), (int)e.text.size());
                 break;
+            case Channel::Wind: {
+                // P7: apply the external wind force to the Plant. A gust pulse
+                // (dur_ms>0) holds the force, then reverts to zero so the controller
+                // must recover; a sustained step (dur_ms=0) leaves it applied.
+                // P7: 外乱風力を Plant に適用。突風パルス(dur_ms>0)は保持後ゼロに戻し制御の
+                // 回復を要求。定常(dur_ms=0)は適用したまま。
+                sil_board_set_wind(e.wind_fx, e.wind_fy, e.wind_fz);
+                char note[96];
+                std::snprintf(note, sizeof(note), "wind %.3f %.3f %.3f dur=%dms",
+                              e.wind_fx, e.wind_fy, e.wind_fz, e.wind_dur_ms);
+                sil_emu_record_note("wind", note);
+                if (e.wind_dur_ms > 0) {
+                    vTaskDelay((TickType_t)e.wind_dur_ms);
+                    sil_board_set_wind(0.0f, 0.0f, 0.0f);
+                    sil_emu_record_note("wind", "0 0 0 (gust end)");
+                }
+                break;
+            }
+            case Channel::Fault: {
+                // P7: degrade one motor's thrust health (sustained). The mixer must
+                // compensate to keep attitude/altitude bounded (G3).
+                // P7: 1モータの推力健全度を劣化（持続）。ミキサーが補償し姿勢/高度を有界に保つ（G3）。
+                sil_board_set_motor_health(e.fault_motor, e.fault_gain);
+                char note[64];
+                std::snprintf(note, sizeof(note), "fault motor=%d gain=%.2f",
+                              e.fault_motor, e.fault_gain);
+                sil_emu_record_note("fault", note);
+                break;
+            }
             case Channel::Btn:
-            case Channel::Wind:
-            case Channel::Fault:
                 if (!warned_deferred) {
-                    std::printf("[scenario] note: btn/wind/fault are deferred (E6 future) — skipping\n");
+                    std::printf("[scenario] note: btn is deferred (GPIO future) — skipping\n");
                     warned_deferred = true;
                 }
                 sil_emu_record_note("skip", e.raw.c_str());

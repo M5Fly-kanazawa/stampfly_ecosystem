@@ -411,6 +411,18 @@ void sil_board_step_plant(float dt_s)
     g_plant->step(dt_s);
 }
 
+void sil_board_set_wind(float fx, float fy, float fz)
+{
+    if (g_plant == nullptr) return;
+    g_plant->setWind(sf::math::Vec3{fx, fy, fz});
+}
+
+void sil_board_set_motor_health(int motor, float gain)
+{
+    if (g_plant == nullptr) return;
+    g_plant->setHealth(motor, gain);
+}
+
 int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes)
 {
     // BMI270 is on CS GPIO46 (sf_board). Others (PMW3901 on 12) get zeros →
