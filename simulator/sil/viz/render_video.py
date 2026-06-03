@@ -99,9 +99,15 @@ def graph_frame(traj, i, w_px, h_px):
         ax.legend(fontsize=7, loc="upper right")
         ax.tick_params(labelsize=7)
 
+    # Altitude auto-scales the top to 1.15× the peak (floor 0.62 m to keep a tight
+    # hover clean), so a higher climb is never clipped at the axis edge.
+    # 高度の上端はピークの1.15倍に自動スケール（下限0.62mで密なホバーは締まったまま）。
+    # より高い上昇でも軸端で切れない。
+    alt_all = np.concatenate([traj["alt"], traj["alt_est"]])
+    alt_top = max(0.62, 1.15 * float(alt_all.max()))
     panel(axes[0, 0], "altitude [m]",
           [("truth", traj["alt"], "C0-"), ("estimate", traj["alt_est"], "C1--")],
-          ylim=(-0.03, 0.62))
+          ylim=(-0.03, alt_top))
     # Signed roll & pitch (not the tilt magnitude). The magnitude uses arccos, which
     # is always ≥0: it folds the estimate's near-zero ± noise onto the positive side
     # ("pulses") and drops the sign; roll/pitch keep both. The axis auto-scales per
