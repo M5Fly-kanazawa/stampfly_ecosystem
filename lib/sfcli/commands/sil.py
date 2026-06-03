@@ -30,7 +30,7 @@ COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gat
 
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
-NOISE_LEVELS = ["off", "n0"]
+NOISE_LEVELS = ["off", "n0", "n1"]
 # Default sensor-noise level per milestone (RESET_PLAN §13): noise milestones run N0.
 # マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で走る。
 MILESTONE_NOISE = {"P5": "n0", "P6": "n0", "P7": "n0"}

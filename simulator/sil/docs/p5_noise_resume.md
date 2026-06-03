@@ -118,11 +118,36 @@ diff <trajectory or console>  # 完全一致なら決定論OK
 
 ---
 
-## 6. 次の目標 = P6（センサノイズ N1/N2 ＋ ToF/Baro/Flow ＋ ESKF vs 相補）
+## 6. P6 進行中（センサノイズ N1/N2 ＋ ToF/Baro/Flow ＋ ESKF vs 相補）
 
 RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノイズ（σ_axis=K[axis]·duty²、f_low/f_high）
 と ToF/Baro/Flow の観測ノイズ（R 表）を加え、**ノイズ下で ESKF が相補フィルタより優位なことを定量化**
-（P4 比較動画をノイズ版に更新）＋ G4（飽和率）。
+（P4 比較動画をノイズ版に更新）＋ G4（飽和率）。仕様書 §7 の段階: N1→N2→(N3 Flow)。
+
+### 段階1/3 ✅ N1 スロットル依存振動（2026-06-03 実装済み）
+- `sensor_noise.hpp`: `Config::vib_enable`/`vib_accel_k[3]`/`vib_gyro_k[3]` を追加。`drawWhite()` で
+  σ_axis=K[axis]·throttle² の白色振動を静的白色に加算（1サンプル rms ゆえ 1/√dt なし）。`setThrottle()` を
+  Plant が substep 毎に4モータ平均 duty で呼ぶ。`SIL_EMU_NOISE=n1`（NOISE_LEVELS に追加、emu の
+  plant_config_from_env が n0/n1 を分岐）。`noise_test` に軸別 σ＋ゼロスロットル消失を追加。
+- 検証: 単体 PASS（軸別 σ ≈ K·duty²）、N0/off byte-identical（不変）、n1 決定論。
+- **所見（重要）**: N1（広帯域）下で hover_alt は離陸が揚力不足→沈下（有界・非発散だが hover 品質劣化）。
+  広帯域ゆえ低周波成分がファーム LPF を通過し ESKF を実機以上に劣化させる＝**N2 帯域制限の動機**。
+  SIL hover duty(~0.62-0.70)は legacy hover02 のフィット点より高く K·duty² が過大気味な点も留意。
+
+### 段階2/3 ⬜ N2 帯域制限＋ToF/Baro 観測ノイズ（次）
+- 振動の帯域制限（500-667Hz）: 白色とは別経路。**物理 4kHz substep で帯域通過フィルタ（biquad 等）を
+  通して生成し、ファーム 400Hz 読みでエイリアシングさせる**のが忠実（白色は read レートで引くが、振動は
+  substep レートで色付けして読みで畳む）。N1 の broadband を帯域制限すると低周波成分が落ち、ファーム LPF
+  が除去できる→ ESKF への害が減り hover が改善するはず（これが「LPF の必要性」の実証）。
+- ToF/Baro 観測ノイズ（doc §3 R 表: ToF σ=0.03m, Baro σ=0.1m）: const な `tof()/baro()` 用に、
+  advance() で seeded サンプルを事前抽選して足す（IMU 白色と同パターン）。Flow(σ=0.30 m/s, 高度依存・
+  counts 変換)・Mag は N3 tier（後段）。
+
+### 段階3/3 ⬜ ESKF vs 相補の比較（P6 ゲート、要ハーネス判断）
+- **設計判断が必要**: 比較は現状 `hover_smoke`（旧核ループ）で動く（`sf sil compare`）が、忠実な比較は
+  emu 上で行うべき。emu_vehicle は旧ファーム（推定器固定）、emu_vehicle_new は IEstimator(ESKF/相補)切替可。
+  → **emu_vehicle_new で ALT_HOLD 飛行＋estimator 切替の経路を確認**するか、hover_smoke 比較を許容するか。
+  着手時に裏取り（emu_vehicle_new の airborne シナリオ・estimator 選択 env の有無）。
 
 - **P5 が炙り出した宿題（P6 で追う）**: N0 残留 accel バイアスで ESKF 姿勢が~4°チルト→水平ドリフト。
   **起動校正（水平静止 ba_z≈2g, `noise_and_vibration_model.md` §3）を再現**して全オフセットを捕え、

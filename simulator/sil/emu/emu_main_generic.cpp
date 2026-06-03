@@ -57,21 +57,27 @@ float      g_peak_alt = 0.0f;   // highest truth altitude over the whole run / �
 constexpr float kGroundZ = 0.013f;
 
 // Build the Plant config from the environment. Sensor noise stays OFF unless
-// SIL_EMU_NOISE=n0 is set (then the seeded N0 model is enabled, seed overridable
-// via SIL_EMU_SEED). Defaults reproduce the previous behaviour byte-for-byte:
-// the clean path is unchanged, preserving the no-noise determinism invariant.
-// 環境変数から Plant 設定を作る。SIL_EMU_NOISE=n0 のときだけセンサノイズを ON
-// （シード付き N0、シードは SIL_EMU_SEED で上書き可）。未設定なら従来と byte-identical。
+// SIL_EMU_NOISE selects a level: n0 (static white + bias + RW) or n1 (n0 + the
+// throttle-dependent vibration). Seed is overridable via SIL_EMU_SEED. Unset/off
+// reproduces the previous behaviour byte-for-byte (clean path unchanged).
+// 環境変数から Plant 設定を作る。SIL_EMU_NOISE で準位を選ぶ: n0（静的白色＋バイアス＋RW）
+// / n1（n0＋スロットル依存振動）。シードは SIL_EMU_SEED で上書き可。未設定/off は従来と
+// byte-identical（クリーン経路不変）。
 sil::Plant::Config plant_config_from_env()
 {
     sil::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
     const char* noise = std::getenv("SIL_EMU_NOISE");
-    if (noise && std::strcmp(noise, "n0") == 0) {
+    if (!noise) return cfg;
+    const bool n0 = (std::strcmp(noise, "n0") == 0);
+    const bool n1 = (std::strcmp(noise, "n1") == 0);
+    if (n0 || n1) {
         cfg.noise.enable = true;
+        cfg.noise.vib_enable = n1;            // n1 adds throttle-dependent vibration
         if (const char* seed = std::getenv("SIL_EMU_SEED")) {
             cfg.noise.seed = (uint32_t)std::atoi(seed);
         }
-        std::printf("[emu] sensor noise: N0 ON (seed=%u)\n", cfg.noise.seed);
+        std::printf("[emu] sensor noise: %s ON (seed=%u%s)\n", noise, cfg.noise.seed,
+                    n1 ? ", throttle vibration" : "");
     }
     return cfg;
 }

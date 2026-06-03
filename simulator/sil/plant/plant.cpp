@@ -224,6 +224,14 @@ void Plant::substep(float h)
 
     mj_step(m_, d_);
 
+    // Feed the current throttle (mean of the four actual motor duties) to the noise
+    // model so the N1 throttle-dependent vibration σ tracks the commanded thrust. No
+    // effect for N0 (vib disabled). 現在のスロットル（4モータ実 duty の平均）をノイズ
+    // モデルへ渡し、N1 のスロットル依存振動 σ を推力に追従させる（N0 では無効）。
+    const float mean_duty =
+        0.25f * (motor_duty_[0] + motor_duty_[1] + motor_duty_[2] + motor_duty_[3]);
+    noise_.setThrottle(mean_duty);
+
     // Advance the IMU noise one substep (bias random walk + fresh white sample) so
     // the next imu() reads this step's noise. No-op when noise is disabled.
     // IMU ノイズを1 substep 進める（バイアスRW＋新しい白色サンプル）。無効時は無操作。

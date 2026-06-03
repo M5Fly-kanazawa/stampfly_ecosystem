@@ -140,6 +140,60 @@ void test_white_substep_decoupled() {
     check(std::fabs(gs - exp_g) / exp_g < 0.03, "gyro  white σ tracks 400 Hz read, not 4 kHz substep");
 }
 
+// --- 1c. N1 throttle-dependent vibration: per-axis σ_axis = K[axis]·duty² ---
+// The dominant in-flight IMU noise is motor/prop vibration scaling with throttle².
+// Isolate it (static density + bias + RW all zero) and verify each axis' measured σ
+// matches its own K·duty² (per-axis K: accel Z larger, gyro Z much smaller than X/Y).
+// 飛行中の支配的 IMU ノイズ＝スロットル²に比例するモータ/プロペラ振動。静的項を全ゼロにして
+// 各軸の実測 σ が自軸の K·duty² に一致するか検証（軸別 K: accel Z 大、gyro Z は X/Y より小）。
+void test_throttle_vibration() {
+    SensorNoise::Config c;
+    c.enable = true;
+    c.seed = 11;
+    c.gyro_density = 0.0f;   c.accel_density = 0.0f;    // isolate the vibration term
+    c.gyro_bias_sigma = 0.0f; c.accel_bias_sigma = 0.0f;
+    c.gyro_bias_rw = 0.0f;   c.accel_bias_rw = 0.0f;
+    c.vib_enable = true;     // K defaults: accel {3.96,2.35,5.64}, gyro {1.08,0.83,0.15}
+
+    SensorNoise n;
+    n.init(c);
+    const float duty = 0.7f;
+    n.setThrottle(duty);
+    const float d2 = duty * duty;
+    const int N = 200000;
+    std::vector<float> a[3], g[3];
+    for (int ax = 0; ax < 3; ++ax) { a[ax].reserve(N); g[ax].reserve(N); }
+    for (int k = 0; k < N; ++k) {
+        n.advance(DT);
+        float av[3] = {0, 0, 0}, gv[3] = {0, 0, 0};
+        n.applyAccel(av);
+        n.applyGyro(gv);
+        for (int ax = 0; ax < 3; ++ax) { a[ax].push_back(av[ax]); g[ax].push_back(gv[ax]); }
+    }
+    const char axis[3] = {'X', 'Y', 'Z'};
+    for (int ax = 0; ax < 3; ++ax) {
+        double am, as, gm, gs;
+        meanStd(a[ax], am, as);
+        meanStd(g[ax], gm, gs);
+        const double exp_a = c.vib_accel_k[ax] * d2;
+        const double exp_g = c.vib_gyro_k[ax]  * d2;
+        std::printf("    %c accel σ=%.4f (exp %.4f)  gyro σ=%.4f (exp %.4f)\n",
+                    axis[ax], as, exp_a, gs, exp_g);
+        char na[48], ng[48];
+        std::snprintf(na, sizeof(na), "accel %c vib σ ≈ K·duty² (±3%%)", axis[ax]);
+        std::snprintf(ng, sizeof(ng), "gyro  %c vib σ ≈ K·duty² (±3%%)", axis[ax]);
+        check(std::fabs(as - exp_a) / exp_a < 0.03, na);
+        check(std::fabs(gs - exp_g) / exp_g < 0.03, ng);
+    }
+    // Vibration must vanish when throttle is zero (motors off → no vibration).
+    // スロットル0（モータOFF）では振動は消える。
+    n.setThrottle(0.0f);
+    n.advance(DT);
+    float av[3] = {0, 0, 0};
+    n.applyAccel(av);
+    check(av[0] == 0.0f && av[1] == 0.0f && av[2] == 0.0f, "vibration vanishes at zero throttle");
+}
+
 // --- 2. disabled model adds exactly nothing ---
 void test_off_is_clean() {
     SensorNoise::Config c;       // enable defaults to false
@@ -259,6 +313,7 @@ int main() {
     std::printf("[noise_test] N0 sensor-noise model (SensorNoise)\n");
     test_white_statistics();
     test_white_substep_decoupled();
+    test_throttle_vibration();
     test_off_is_clean();
     test_startup_bias();
     test_bias_random_walk();

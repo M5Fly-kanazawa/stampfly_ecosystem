@@ -61,6 +61,25 @@ public:
         // ある。白色を 4kHz substep で離散化すると σ が √10≈3.16倍に膨らむ。white_dt をファーム
         // 読み取りレートに固定し、物理刻みの細かさに依らず実効σを正しく保つ。
         float white_dt = 0.0025f;          ///< 1/400 Hz IMU sample period [s]
+        // N1 — throttle-dependent vibration (per-axis): σ_axis = K[axis]·duty². The
+        // DOMINANT in-flight IMU noise is motor/propeller vibration, not the static
+        // density (datasheet → in-flight is ×79 gyro, ×191 accel — noise_and_vibration
+        // _model.md §1), so N0 alone is unrealistic in flight. Per-axis K because the
+        // legacy hover02 backtest showed gyro Z is ~16× smaller than X/Y and accel Z
+        // ~13% larger (an isotropic K mis-estimates each axis). duty is the mean of the
+        // four motor commands (set per substep by the Plant). N1 treats the vibration
+        // as BROADBAND white scaled by duty² (per-sample rms at the read rate); the
+        // band-limited (500–667 Hz, aliasing at the 400 Hz read) refinement is the N2
+        // tier and is NOT modeled here. Disabled → N0 (static only), byte-identical.
+        // N1 — スロットル依存振動（軸別）: σ_axis = K[axis]·duty²。飛行中の支配的 IMU
+        // ノイズはモータ/プロペラ振動で（データシート比 gyro×79/accel×191）、N0 だけでは
+        // 飛行中は非現実的。軸別 K（hover02 実測で gyro Z は X/Y の約1/16、accel Z は約13%大）。
+        // duty は4モータ指令の平均（Plant が substep 毎に設定）。N1 は振動を duty² でスケール
+        // した広帯域白色として扱う（読み取りレートの1サンプル rms）。帯域制限（500–667Hz、
+        // 400Hz 読みでエイリアシング）は N2 の精緻化で本段では非モデル化。無効時は N0＝byte-identical。
+        bool  vib_enable = false;                       ///< N1: throttle vibration on
+        float vib_accel_k[3] = {3.96f, 2.35f, 5.64f};   ///< σ_accel,axis = K·duty² [m/s²]
+        float vib_gyro_k[3]  = {1.08f, 0.83f, 0.15f};   ///< σ_gyro,axis  = K·duty² [rad/s]
         // Per-boot startup bias 1σ (drawn once at init). These are the RESIDUAL bias
         // AFTER the firmware's boot calibration — NOT the raw MEMS offset. A real
         // accel offset (~0.1–0.4 m/s²) is removed by the level-rest boot calibration
@@ -128,6 +147,11 @@ public:
         for (int i = 0; i < 3; ++i) g[i] += gyro_bias_[i] + gyro_white_[i];
     }
 
+    /// Set the current throttle (mean motor duty in [0,1]) used to scale the N1
+    /// throttle-dependent vibration σ on the NEXT drawn sample. No-op for N0.
+    /// 現在のスロットル（4モータ平均 duty [0,1]）を設定。次に引く N1 振動 σ のスケールに使う。
+    void setThrottle(float duty01) { throttle_ = duty01; }
+
     bool enabled() const { return cfg_.enable; }
     const float* gyroBias()  const { return gyro_bias_; }   ///< test accessor
     const float* accelBias() const { return accel_bias_; }  ///< test accessor
@@ -140,13 +164,23 @@ private:
     void drawWhite() {
         const float wdt = cfg_.white_dt > 1.0e-6f ? cfg_.white_dt : 1.0e-6f;
         const float inv_sdt = 1.0f / std::sqrt(wdt);
+        // N1 vibration σ scales with duty² (σ_axis = K[axis]·throttle²). This is a
+        // per-sample rms (NOT a density), so it is added directly without 1/√dt.
+        // N1 振動 σ は duty² でスケール（σ_axis=K·throttle²）。これは1サンプル rms
+        // （密度ではない）ゆえ 1/√dt を掛けず直接加える。
+        const float duty2 = cfg_.vib_enable ? throttle_ * throttle_ : 0.0f;
         for (int i = 0; i < 3; ++i) {
             gyro_white_[i]  = cfg_.gyro_density  * inv_sdt * norm_(rng_);
             accel_white_[i] = cfg_.accel_density * inv_sdt * norm_(rng_);
+            if (cfg_.vib_enable) {
+                gyro_white_[i]  += cfg_.vib_gyro_k[i]  * duty2 * norm_(rng_);
+                accel_white_[i] += cfg_.vib_accel_k[i] * duty2 * norm_(rng_);
+            }
         }
     }
 
     Config cfg_{};
+    float throttle_ = 0.0f;   ///< current mean motor duty [0,1] for N1 vibration σ
     std::mt19937 rng_{12345};
     std::normal_distribution<float> norm_{0.0f, 1.0f};
     float gyro_bias_[3]   = {0.0f, 0.0f, 0.0f};
