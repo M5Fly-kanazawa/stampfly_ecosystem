@@ -138,11 +138,17 @@ void Scheduler::delay_until_us(int64_t wake_us)
     m_.unlock();
 }
 
-uint32_t Scheduler::notify_take(bool clear_on_exit)
+uint32_t Scheduler::notify_take(bool clear_on_exit, int64_t timeout_us)
 {
     m_.lock();
     Task* self = tls_self;
     if (self->notify_count == 0) {
+        // Arm a timeout deadline so the scheduler can also wake us on time (not only
+        // on a notification). INT64_MAX = wait forever (portMAX_DELAY). The scheduler
+        // wakes BlockedNotify tasks at wake_us just like BlockedDelay.
+        // タイムアウト期限を設定し、通知だけでなく時刻でも起床できるようにする。
+        // INT64_MAX=無限待ち。スケジューラは BlockedDelay 同様 wake_us で起こす。
+        self->wake_us = (timeout_us < 0) ? INT64_MAX : (now_us_ + timeout_us);
         block_current(TaskState::BlockedNotify);
     }
     uint32_t value = self->notify_count;
@@ -201,7 +207,13 @@ int64_t Scheduler::earliest_wake() const
 {
     int64_t earliest = -1;
     for (const Task* task : tasks_) {
-        if (task->state != TaskState::BlockedDelay) continue;
+        // BlockedDelay always has a finite deadline; BlockedNotify only when a finite
+        // timeout was armed (INT64_MAX = wait-forever, excluded so it never advances time).
+        // BlockedDelay は常に有限期限。BlockedNotify は有限 timeout を張ったときだけ
+        // （INT64_MAX=無限待ちは除外、時計を進めない）。
+        const bool timed = task->state == TaskState::BlockedDelay ||
+                           (task->state == TaskState::BlockedNotify && task->wake_us < INT64_MAX);
+        if (!timed) continue;
         if (earliest < 0 || task->wake_us < earliest) {
             earliest = task->wake_us;
         }
@@ -332,7 +344,12 @@ void Scheduler::run(int64_t max_sim_us)
         now_us_ = next_wake;
         sil::compat::set_virtual_time_us(now_us_);
         for (Task* task : tasks_) {
-            if (task->state == TaskState::BlockedDelay && task->wake_us <= now_us_) {
+            // Wake both delay-blocked and notify-with-timeout tasks at their deadline.
+            // A wait-forever notify (wake_us = INT64_MAX) is never time-woken (only by
+            // a notification). 期限到達で BlockedDelay と timeout 付き BlockedNotify を起床。
+            // 無限待ち(wake_us=INT64_MAX)は時刻では起きない（通知のみ）。
+            if ((task->state == TaskState::BlockedDelay ||
+                 task->state == TaskState::BlockedNotify) && task->wake_us <= now_us_) {
                 task->state = TaskState::Ready;
             }
         }
@@ -448,9 +465,16 @@ BaseType_t xTaskNotifyGive(TaskHandle_t handle)
     return pdTRUE;
 }
 
-uint32_t ulTaskNotifyTake(BaseType_t clear_on_exit, TickType_t /*timeout*/)
+uint32_t ulTaskNotifyTake(BaseType_t clear_on_exit, TickType_t timeout)
 {
-    return Scheduler::instance().notify_take(clear_on_exit != pdFALSE);
+    // 1 SIL tick = 1 ms (xTaskGetTickCount = now_us/1000). portMAX_DELAY = wait forever
+    // (timeout_us < 0). Honoring the timeout makes a periodic ulTaskNotifyTake poll work
+    // in the SIL exactly as on real FreeRTOS (Code Identity).
+    // 1 SIL tick=1ms。portMAX_DELAY は無限待ち(<0)。timeout を honor し、周期的な
+    // ulTaskNotifyTake ポーリングが実 FreeRTOS と同じく SIL でも機能する（Code Identity）。
+    const int64_t timeout_us = (timeout == portMAX_DELAY)
+                                   ? -1 : (int64_t)timeout * 1000;
+    return Scheduler::instance().notify_take(clear_on_exit != pdFALSE, timeout_us);
 }
 
 }  // extern "C"

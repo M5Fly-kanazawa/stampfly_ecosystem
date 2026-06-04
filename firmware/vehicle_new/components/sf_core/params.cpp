@@ -40,6 +40,7 @@ Topic<BaroData,        Queue, 2>       sensor_baro;
 Topic<PowerData,       Latest, 1>      sensor_power;
 Topic<StateEstimate,   Latest, 1>      estimate_state;
 Topic<CommandSetpoint, Latest, 1>      command_setpoint;
+Topic<PilotRequest,    Latest, 1>      pilot_request;
 Topic<ControlOutput,   Latest, 1>      control_output;
 Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<SystemMode,      Latest, 1>      system_mode;
@@ -55,6 +56,7 @@ void topics_init()
     sensor_power.init();
     estimate_state.init();
     command_setpoint.init();
+    pilot_request.init();
     control_output.init();
     actuator_motor.init();
     system_mode.init();

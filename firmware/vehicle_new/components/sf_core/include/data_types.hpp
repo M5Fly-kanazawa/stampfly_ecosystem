@@ -120,6 +120,23 @@ struct CommandSetpoint {
     uint32_t timestamp;   // [us]
 };
 
+/// Discrete pilot requests (ARM switch + flight-mode selection), carried SEPARATELY
+/// from the continuous CommandSetpoint stick stream. sf_comm decodes the ESP-NOW
+/// flags byte and publishes these as FACTS (it does not decide); the StateManager —
+/// the sole transition authority — edge-detects ARM and applies the mode (R5: this
+/// flows by topic, not a direct call). 離散パイロット要求（ARM スイッチ＋飛行モード選択）。
+/// 連続スティックの CommandSetpoint とは分離して運ぶ。sf_comm が ESP-NOW flags を
+/// デコードし「事実」として発行（判断しない）。判断は唯一の遷移実行者 StateManager が
+/// 行う（R5: 直接呼び出しでなくトピック経由）。
+struct PilotRequest {
+    bool     arm;         // ARM switch          (flags bit0) / ARM スイッチ
+    bool     acro;        // ACRO/rate request   (flags bit2) / ACRO（レート）要求
+    bool     alt_hold;    // ALTITUDE_HOLD switch(flags bit3) / 高度保持スイッチ
+    bool     pos_hold;    // POSITION_HOLD switch(flags bit4) / 位置保持スイッチ
+    uint8_t  source;      // input source ID                 / 入力ソース ID
+    uint32_t timestamp;   // [us]; 0 = never published        / 0=未発行
+};
+
 // =============================================================================
 // Control Data Types
 // 制御データ型

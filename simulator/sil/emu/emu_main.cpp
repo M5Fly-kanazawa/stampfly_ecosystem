@@ -192,5 +192,9 @@ int main(int argc, char** argv)
     sf::CommandSetpoint cmd = sf::command_setpoint.latest();
     std::printf("[emu] last command_setpoint: throttle=%.3f roll=%.3f pitch=%.3f yaw=%.3f (src=%u)\n",
                 cmd.throttle, cmd.roll, cmd.pitch, cmd.yaw, cmd.source);
+    sf::SystemMode sm = sf::system_mode.latest();
+    std::printf("[emu] final state=%u sub_mode=%u armed=%d | imu.ts=%u est.ts=%u\n",
+                sm.state, sm.sub_mode, (int)sm.armed,
+                sf::sensor_imu.latest().timestamp, est.timestamp);
     return 0;
 }

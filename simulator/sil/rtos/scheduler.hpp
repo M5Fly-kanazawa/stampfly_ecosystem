@@ -130,7 +130,10 @@ public:
     // --- Primitives called by the FreeRTOS shims (task.h) ---
     // --- FreeRTOS シム（task.h）から呼ばれるプリミティブ ---
     void delay_until_us(int64_t wake_us);
-    uint32_t notify_take(bool clear_on_exit);
+    // timeout_us < 0 = wait forever (portMAX_DELAY); else wake at now+timeout even
+    // without a notification (returns 0 on timeout). FreeRTOS ulTaskNotifyTake semantics.
+    // timeout_us<0 で無限待ち、それ以外は通知無しでも now+timeout で起床（timeout 時 0 を返す）。
+    uint32_t notify_take(bool clear_on_exit, int64_t timeout_us);
     void notify_give(Task* target);
     void delete_self();
 

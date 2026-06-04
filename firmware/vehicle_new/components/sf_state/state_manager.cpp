@@ -45,6 +45,16 @@ void StateManager::init()
 // 遷移リクエスト
 // =============================================================================
 
+/// @design requirements.md §2 — INIT → IDLE_GROUND on init complete   [--]
+void StateManager::notifyInitComplete()
+{
+    if (state_ != FlightState::INIT) {
+        return;   // already past INIT — nothing to do / INIT を過ぎていれば無操作
+    }
+    ESP_LOGI(TAG, "Init complete → IDLE_GROUND");
+    transition(FlightState::IDLE_GROUND);
+}
+
 /// @design requirements.md §2 — ARM from GROUND only                  [--]
 /// @design requirements.md §9 — USB power: ARM prohibited             [--]
 bool StateManager::requestArm()

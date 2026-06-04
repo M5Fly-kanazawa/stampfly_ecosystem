@@ -94,6 +94,14 @@ public:
     // 無効なリクエストは無視される（デバッグレベルでログ出力）。
     // =========================================================================
 
+    /// Notify initialization complete (INIT → IDLE_GROUND). Called once by StateTask
+    /// after the sensors + estimator are up and producing valid output. No-op unless
+    /// still in INIT. 初期化完了通知（INIT → IDLE_GROUND）。センサ＋推定器が立ち上がり
+    /// 有効出力を出した後に StateTask が1回呼ぶ。INIT 以外では無操作。
+    ///
+    /// @design requirements.md §2 — INIT → IDLE_GROUND on init complete [--]
+    void notifyInitComplete();
+
     /// Request ARM (IDLE_GROUND → ARMED_GROUND)
     /// ARMリクエスト（IDLE_GROUND → ARMED_GROUND）
     ///

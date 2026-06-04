@@ -330,11 +330,20 @@ void Comm::parseEspNowData(const ControlPacket& pkt)
     // フェイルセーフのポーリング用に新鮮度タイムスタンプを更新する。
     last_packet_us_.store(esp_timer_get_time(), std::memory_order_release);
 
-    // pkt.flags (ARM/ALT_MODE/POS_MODE) are decoded here; routing to StateManager
-    // via a pilot-request topic lands in the next change (R5: Pub-Sub, no direct call).
-    // pkt.flags(ARM/ALT/POS) はここでデコード済み。StateManager への配線は次変更で
-    // pilot-request トピック経由（R5: Pub-Sub・直接呼出禁止）。
-    (void)pkt.flags;
+    // Forward the discrete pilot switches as FACTS on the pilot_request topic. sf_comm
+    // does NOT decide arm/mode — it only reports which switches the controller sent.
+    // StateManager (the sole authority) edge-detects ARM and derives the FlightMode
+    // (R5: this reaches StateTask by topic, never a direct call). 離散スイッチを「事実」
+    // として pilot_request に転送する。arm/mode の判断はしない（どのスイッチが来たかの報告のみ）。
+    // 判断は StateManager（唯一の権限）が行う（R5: トピック経由・直接呼出禁止）。
+    PilotRequest req{};
+    req.arm      = (pkt.flags & kFlagArm)     != 0;
+    req.acro     = (pkt.flags & kFlagMode)    != 0;
+    req.alt_hold = (pkt.flags & kFlagAltMode) != 0;
+    req.pos_hold = (pkt.flags & kFlagPosMode) != 0;
+    req.source   = kCommandSourceEspNow;
+    req.timestamp = sp.timestamp;
+    sf::pilot_request.publish(req);
 }
 
 // -----------------------------------------------------------------------------
