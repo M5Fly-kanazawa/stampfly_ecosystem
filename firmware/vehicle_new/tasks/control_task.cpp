@@ -83,13 +83,25 @@ void ControlTask(void* pvParameters)
         sf::SystemMode mode = sf::system_mode.latest();
 
         // =====================================================================
-        // Step 2: Skip control if not armed
-        // Step 2: ARM状態でなければ制御をスキップ
+        // Step 2: Gate the motor output on the system arm state.
+        // Step 2: システムの ARM 状態でモーター出力を gate する。
+        //
+        // When disarmed, disarm the actuator (zero the motors) and skip control.
+        // When armed, arm the actuator so the motor HAL accepts duty writes — the
+        // HAL silently swallows every write until armed, so without this the
+        // mixer would compute correct duties that never reach the motors.
+        // Both calls are idempotent (act only on the arm-state edge).
+        // disarm 時はアクチュエータを disarm（モーターを 0 に）して制御をスキップ。
+        // arm 時はアクチュエータを arm し HAL が duty 書き込みを受理するようにする
+        // （HAL は arm されるまで全書き込みを握り潰すため、これが無いとミキサーが
+        // 正しい duty を計算してもモーターへ届かない）。両呼び出しは冪等（エッジでのみ作用）。
         // =====================================================================
 
         if (!sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
+            actuator.disarm();
             continue;
         }
+        actuator.arm();
 
         // =====================================================================
         // Step 3: Apply the commanded flight mode, then compute control output.

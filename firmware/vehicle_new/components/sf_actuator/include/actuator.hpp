@@ -61,13 +61,32 @@ public:
     /// アクチュエータサブシステムを初期化（LEDC PWM モーター HAL を設定）
     void init();
 
+    /// Enable motor output (safety gate for ARM transitions). Idempotent: the
+    /// motor HAL is armed only on the disarmed→armed edge. Until armed, the HAL
+    /// silently swallows every duty write — so update() does nothing useful
+    /// unless arm() has been called first.
+    /// モーター出力を有効化（ARM 遷移用の安全ゲート）。冪等: 立上りエッジでのみ HAL を
+    /// arm する。arm されるまで HAL は全 duty 書き込みを握り潰すため、arm() 後でないと
+    /// update() は実際にはモーターを回さない。
+    void arm();
+
     /// Run mixer: read ControlOutput, compute motor duties, publish & apply
     /// ミキサー実行: ControlOutput読み取り、モーターduty計算、発行＆適用
     void update();
 
-    /// Stop all motors immediately (safety hook for DISARM transitions)
-    /// 全モーターを直ちに停止（DISARM 遷移用の安全フック）
+    /// Stop all motors immediately (safety hook for DISARM transitions).
+    /// Idempotent: zeroes the LEDC outputs and clears the HAL arm gate on the
+    /// armed→disarmed edge.
+    /// 全モーターを直ちに停止（DISARM 遷移用の安全フック）。冪等: 立下りエッジで LEDC を
+    /// 0 にし HAL の arm ゲートを下げる。
     void disarm();
+
+private:
+    /// Actuator-level arm state, mirrors the motor HAL gate so arm()/disarm()
+    /// can be called every control cycle without re-arming or log spam.
+    /// アクチュエータ層の arm 状態。HAL ゲートを写し、毎制御周期に arm()/disarm() を
+    /// 呼んでも再 arm やログ氾濫が起きないようにする。
+    bool armed_ = false;
 };
 
 }  // namespace sf

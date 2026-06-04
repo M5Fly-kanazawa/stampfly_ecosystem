@@ -226,6 +226,29 @@ static void publishMotorOutput(const float duties[4], uint32_t timestamp)
 }
 
 // -----------------------------------------------------------------------------
+// arm — enable motor output (safety gate for ARM transitions).
+// arm — モーター出力を有効化（ARM 遷移用の安全ゲート）。
+//
+// The motor HAL gates every duty write behind its own armed_ flag, so update()
+// is a no-op until the HAL is armed here. Idempotent: only the disarmed→armed
+// edge touches the HAL, so control_task can call arm() each cycle while armed.
+// モーター HAL は全 duty 書き込みを自身の armed_ で gate するため、ここで arm する
+// まで update() は無効。冪等: 立上りエッジのみ HAL に触れ、armed 中は毎周期呼べる。
+// -----------------------------------------------------------------------------
+void Actuator::arm()
+{
+    if (armed_) {
+        return;   // already armed — nothing to do / 既に arm 済み
+    }
+    if (!g_motor.isInitialized()) {
+        return;   // HAL not ready; stay disarmed / HAL 未初期化なら disarm のまま
+    }
+    g_motor.arm();
+    armed_ = true;
+    ESP_LOGI(TAG, "Actuator armed (motor output enabled)");
+}
+
+// -----------------------------------------------------------------------------
 // update — read control output, mix, publish, then drive motors
 // 更新 — 制御出力を読み取り、ミキシングし、発行してからモーターを駆動
 // -----------------------------------------------------------------------------
@@ -255,14 +278,21 @@ void Actuator::update()
 // -----------------------------------------------------------------------------
 void Actuator::disarm()
 {
-    // Build a zeroed duty vector and write it both to telemetry and HAL.
-    // 0 の duty ベクタを作りテレメトリと HAL の両方に書き込む。
-    float zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    if (!armed_) {
+        return;   // already disarmed — motors already at 0 / 既に disarm 済み
+    }
+    armed_ = false;
 
+    // Telemetry: reflect motors-off. NOTE: zero the HAL via g_motor.disarm(),
+    // NOT setMotorDuties(zeros) — the latter is itself gated behind the HAL
+    // armed_ flag and would no-op exactly when we need it (during DISARM).
+    // テレメトリ: モーター停止を反映。HAL のゼロ化は g_motor.disarm() で行う
+    // （setMotorDuties は HAL の armed_ で gate されており DISARM 時に無効になる）。
+    float zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     publishMotorOutput(zeros, 0);
 
     if (g_motor.isInitialized()) {
-        g_motor.setMotorDuties(zeros);
+        g_motor.disarm();   // forces LEDC duty=0 and clears the HAL arm gate
     }
 
     ESP_LOGI(TAG, "Actuator disarmed (all duties = 0)");
