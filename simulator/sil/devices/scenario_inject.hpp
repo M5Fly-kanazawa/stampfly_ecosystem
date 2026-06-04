@@ -37,6 +37,13 @@ constexpr uint16_t kAdcCentre = 2048;
 // CTRL_FLAG_ARM bit / アームフラグ。
 constexpr uint8_t kFlagArm = 0x01;
 
+// CTRL_FLAG_MODE bit (bit2) — on vehicle_new this selects ACRO (rate) mode
+// (sf_comm decodes it to PilotRequest.acro). Must match the protocol SSOT /
+// firmware/vehicle_new sf_comm kFlagMode = 0x04.
+// CTRL_FLAG_MODE ビット(bit2) — vehicle_new では ACRO（角速度）モードを選択
+// （sf_comm が PilotRequest.acro にデコード）。SSOT / sf_comm kFlagMode=0x04 と一致。
+constexpr uint8_t kFlagMode = 0x04;
+
 // CTRL_FLAG_ALT_MODE bit — selects ALTITUDE_HOLD on the firmware side.
 // Must match controller_comm.hpp:38 (CTRL_FLAG_ALT_MODE = 0x08).
 // CTRL_FLAG_ALT_MODE ビット — 本体側で ALTITUDE_HOLD を選択。controller_comm.hpp:38 と一致。

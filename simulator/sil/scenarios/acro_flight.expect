@@ -1,0 +1,13 @@
+# acro_flight.expect — assert ARM → TAKEOFF → FLYING AND the in-flight switch to
+# ACRO (rate) mode, driven by the `acro` scenario token (CTRL_FLAG_MODE). ACRO
+# rate tracking itself is checked numerically from trajectory.csv.
+# ARM→TAKEOFF→FLYING に加え、acro トークン(CTRL_FLAG_MODE)による飛行中の ACRO（角速度）
+# モード切替を検証する。ACRO レート追従は trajectory.csv で数値確認する。
+exit 0
+log_contains any "ARM accepted"                       # IDLE_GROUND → ARMED_GROUND
+log_contains any "Takeoff detected"                   # ARMED_GROUND → TAKEOFF
+log_contains any "Takeoff complete"                   # TAKEOFF → FLYING
+log_contains any "Mode change: STABILIZE"             # FLYING: STABILIZE → ACRO (requestModeChange accepted)
+log_contains any "DISARM accepted"                    # FLYING → IDLE_GROUND (pilot DISARM)
+order "Takeoff complete" "Mode change: STABILIZE"     # mode change only after reaching FLYING
+order "Mode change: STABILIZE" "DISARM accepted"      # flies in ACRO before disarm

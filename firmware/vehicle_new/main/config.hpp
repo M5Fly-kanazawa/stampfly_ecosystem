@@ -161,4 +161,29 @@ inline constexpr int BUTTON_DEBOUNCE_MS = 50;
 inline constexpr int BUZZER_LEDC_CHANNEL = 4;
 inline constexpr int BUZZER_LEDC_TIMER   = 1;
 
+// =============================================================================
+// Flight State Transition Constants
+// フライト状態遷移定数
+//
+// @design requirements.md §2 — ARMED_GROUND → TAKEOFF → FLYING        [--]
+// =============================================================================
+
+// Normalized throttle (0=stick centre/idle .. 1=full up) above which an
+// ARMED_GROUND craft begins takeoff (requirements §2: "throttle input").
+// Hover throttle is ≈0.54 (mg / max_thrust), so 0.5 means the pilot has
+// advanced the stick toward/above hover — a deliberate intent to lift off.
+// 正規化スロットル(0=中央/アイドル..1=全上げ)。ARMED_GROUND でこれを超えると離陸
+// 開始(要件§2「スロットル入力」)。ホバーは≈0.54 ゆえ 0.5 は意図的な上げ＝離陸意思。
+inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
+
+// Dwell in TAKEOFF before declaring takeoff complete → FLYING. This is an
+// interim, estimator-independent stand-in for the ToF "altitude threshold
+// reached" detection (requirements §2); it is replaced by the ToF-based
+// TakeoffLandingMgr once the vertical estimate is trustworthy
+// (development_roadmap Phase B / Layer 3). See state_task.cpp.
+// TAKEOFF にこの時間留まったら離陸完了→FLYING。ToF「高度閾値到達」検出(要件§2)の
+// estimator 非依存の暫定代替。鉛直推定が信頼できる段階(ロードマップ Phase B / Layer 3)
+// で ToF ベースの TakeoffLandingMgr に置換する。state_task.cpp 参照。
+inline constexpr uint32_t TAKEOFF_DWELL_MS = 500;
+
 }  // namespace config

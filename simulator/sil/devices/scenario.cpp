@@ -43,6 +43,7 @@ struct Event {
     uint16_t thr = 0, roll = 0, pitch = 0, yaw = 0;
     uint8_t  arm = 0;
     uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
+    uint8_t  acro = 0;        // 1 => CTRL_FLAG_MODE (ACRO/rate) / 1 で ACRO（角速度）
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
 
@@ -260,6 +261,15 @@ int sil_scenario_load(const char* path)
                 if (alt != 0 && alt != 1) { err(path, lineno, "rc <alt> must be 0 or 1"); return -1; }
             }
             e.alt = (uint8_t)alt;
+            // OPTIONAL 5th token: acro (1 => CTRL_FLAG_MODE → ACRO/rate mode).
+            // After alt, so the full form is:
+            // `rc <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro>`.
+            // 任意の5番目トークン acro（1 で CTRL_FLAG_MODE → ACRO/角速度モード）。alt の後。
+            long acro = 0;
+            if (iss >> acro) {
+                if (acro != 0 && acro != 1) { err(path, lineno, "rc <acro> must be 0 or 1"); return -1; }
+            }
+            e.acro = (uint8_t)acro;
 
         } else if (ch == "rc_ramp") {
             std::string field; long from, to, step, rate, arm;
@@ -282,6 +292,13 @@ int sil_scenario_load(const char* path)
                 if (ralt != 0 && ralt != 1) { err(path, lineno, "rc_ramp <alt> must be 0 or 1"); return -1; }
             }
             e.alt = (uint8_t)ralt;
+            // OPTIONAL 8th token: acro (1 => CTRL_FLAG_MODE → ACRO/rate mode), after alt.
+            // 任意の8番目トークン acro（1 で ACRO/角速度モード）。alt の後。
+            long racro = 0;
+            if (iss >> racro) {
+                if (racro != 0 && racro != 1) { err(path, lineno, "rc_ramp <acro> must be 0 or 1"); return -1; }
+            }
+            e.acro = (uint8_t)racro;
 
         } else if (ch == "key") {
             std::string rest;
@@ -355,8 +372,9 @@ void sil_scenario_driver_task(void* /*arg*/)
         switch (e.ch) {
             case Channel::Rc: {
                 const int period = period_ms(e.rate_hz);
-                const uint8_t flags = (e.arm ? sil::kFlagArm : 0) |
-                                      (e.alt ? sil::kFlagAltMode : 0);
+                const uint8_t flags = (e.arm  ? sil::kFlagArm     : 0) |
+                                      (e.alt  ? sil::kFlagAltMode : 0) |
+                                      (e.acro ? sil::kFlagMode    : 0);
                 if (e.hold_ms <= 0) {
                     sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {
@@ -373,8 +391,9 @@ void sil_scenario_driver_task(void* /*arg*/)
             }
             case Channel::RcRamp: {
                 const int period = period_ms(e.rate_hz);
-                const uint8_t flags = (e.arm ? sil::kFlagArm : 0) |
-                                      (e.alt ? sil::kFlagAltMode : 0);
+                const uint8_t flags = (e.arm  ? sil::kFlagArm     : 0) |
+                                      (e.alt  ? sil::kFlagAltMode : 0) |
+                                      (e.acro ? sil::kFlagMode    : 0);
                 const int astep = (e.ramp_to >= e.ramp_from) ? e.ramp_step : -e.ramp_step;
                 for (long v = e.ramp_from;
                      (astep > 0) ? (v <= e.ramp_to) : (v >= e.ramp_to);

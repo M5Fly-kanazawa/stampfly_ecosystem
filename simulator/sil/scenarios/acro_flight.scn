@@ -1,0 +1,39 @@
+# acro_flight.scn — ACRO rate-loop flight (vehicle_new, Layer 1)
+# ACRO レートループ飛行（vehicle_new, Layer 1）
+#
+# Goal: reach FLYING, switch to ACRO (rate control), and exercise the inner rate
+# PID with short rate doublets on roll/pitch/yaw. ACRO is the plant-identification
+# foundation (development_roadmap §3): raw gyro = controlled state, no estimator
+# attitude/altitude needed. Doublets (brief +step then -step) keep the craft
+# bounded instead of flipping.
+# 目的: FLYING 到達後 ACRO（角速度制御）へ切替え、roll/pitch/yaw に短いレートダブレット
+# を与えて内側レート PID を動かす。ACRO はプラント同定の土台（ロードマップ §3）。生ジャイロ
+# ＝制御対象で、姿勢/高度推定は不要。ダブレット（短い+ステップ→-ステップ）で機体を有界に保つ。
+#
+# The `acro` token (5th optional rc field, after alt) sets CTRL_FLAG_MODE → sf_comm
+# decodes PilotRequest.acro → StateTask requests ACRO once FLYING. Full form:
+#   rc <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro>
+# acro トークン（rc の5番目任意フィールド, alt の後）が CTRL_FLAG_MODE を立て、sf_comm が
+# PilotRequest.acro にデコード→FLYING 到達後 StateTask が ACRO を要求。
+#
+# Sticks raw 12-bit ADC, centre 2048. ACRO rate_sp = norm * max_rate(1.0 rad/s).
+# raw 3000 → ≈+0.46 rad/s; raw 1096 → ≈-0.46 rad/s. Throttle 3160 ≈ hover.
+# スティック raw 12bit ADC（中央2048）。ACRO レート=norm×1.0rad/s。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro>
+   0    rc   2048  2048   2048    2048  0     4000      50        0    0   # A: disarmed 4 s → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50        0    0   # B: ARM (IDLE_GROUND → ARMED_GROUND)
+   +    rc   3330  2048   2048    2048  1     2000      50        0    1   # C: throttle up → TAKEOFF→FLYING, acro=1 → mode ACRO; climbs off ground
+   +    rc   3290  3000   2048    2048  1     300       50        0    1   # D: roll-rate + doublet (≈+0.46 rad/s, 0.3 s), near-hover throttle
+   +    rc   3290  1096   2048    2048  1     300       50        0    1   # E: roll-rate - (return)
+   +    rc   3290  2048   3000    2048  1     300       50        0    1   # F: pitch-rate +
+   +    rc   3290  2048   1096    2048  1     300       50        0    1   # G: pitch-rate -
+   +    rc   3290  2048   2048    3000  1     500       50        0    1   # H: yaw-rate + (0.5 s)
+   +    rc   3290  2048   2048    2048  1     1000      50        0    1   # I: centre, settle
+   +    rc   2048  2048   2048    2048  0     1000      50        0    0   # J: DISARM (motors cut)
+#
+# Expectation: log shows ARMED_GROUND→TAKEOFF→FLYING then "Mode change: STABILIZE → ACRO";
+# trajectory shows roll/pitch/yawrate responding to each doublet and returning toward
+# neutral, bounded (rate loop tracks, no divergence/saturation runaway). DISARM cuts motors.
+# 期待: ログに ARMED_GROUND→TAKEOFF→FLYING と "Mode change: STABILIZE → ACRO"、
+# trajectory の roll/pitch/yawrate が各ダブレットに応答し中立へ戻り有界。DISARM でモータ停止。

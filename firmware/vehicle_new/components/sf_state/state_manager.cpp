@@ -74,15 +74,29 @@ bool StateManager::requestArm()
     return true;
 }
 
+/// @design requirements.md §2 — ARMED_GROUND→IDLE_GROUND (DISARM),       [--]
+/// @design requirements.md §2 — FLYING→IDLE_GROUND (pilot DISARM)        [--]
 bool StateManager::requestDisarm()
 {
-    if (state_ != FlightState::ARMED_GROUND) {
-        ESP_LOGD(TAG, "DISARM rejected: not in ARMED_GROUND (state=%s)",
+    // DISARM is a pilot kill action. From ARMED_GROUND it stops the idle motors;
+    // from any airborne state (TAKEOFF/FLYING/LANDING) it is an emergency cut
+    // straight to IDLE_GROUND. Requirements §2 lists both "ARMED_GROUND →
+    // IDLE_GROUND (DISARM)" and "FLYING → IDLE_GROUND (pilot DISARM)", so the
+    // gate is "armed", not "ARMED_GROUND only". Motors are zeroed by ControlTask
+    // once isArmed() goes false. Use the free function (the member isArmed()
+    // hides it inside this scope).
+    // DISARM はパイロットのキル操作。ARMED_GROUND ではアイドルのモータを止め、空中状態
+    // (TAKEOFF/FLYING/LANDING)からは IDLE_GROUND への緊急カット。要件§2 は
+    // 「ARMED_GROUND→IDLE_GROUND」と「FLYING→IDLE_GROUND(パイロット DISARM)」の両方を
+    // 挙げるため、ゲートは「ARMED_GROUND 限定」でなく「armed」。モータは isArmed() が
+    // false になり次第 ControlTask が 0 にする。
+    if (!sf::isArmed(state_)) {
+        ESP_LOGD(TAG, "DISARM rejected: not armed (state=%s)",
                  flightStateName(state_));
         return false;
     }
 
-    ESP_LOGI(TAG, "DISARM accepted");
+    ESP_LOGI(TAG, "DISARM accepted (%s → IDLE_GROUND)", flightStateName(state_));
     transition(FlightState::IDLE_GROUND);
     return true;
 }

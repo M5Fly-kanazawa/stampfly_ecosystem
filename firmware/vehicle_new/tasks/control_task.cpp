@@ -63,6 +63,10 @@ void ControlTask(void* pvParameters)
     controller.init();
     actuator.init();
 
+    // Previous arm state, to detect the disarmed→armed edge (reset PID integrators).
+    // 前回の arm 状態。disarmed→armed エッジ検出用（PID 積分器をリセット）。
+    bool prev_armed = false;
+
     while (true) {
         // =====================================================================
         // Wait for IMU task notification (400Hz sync)
@@ -99,7 +103,20 @@ void ControlTask(void* pvParameters)
 
         if (!sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
             actuator.disarm();
+            prev_armed = false;
             continue;
+        }
+
+        // On the disarmed→armed edge, clear the PID integrators so a fresh ARM
+        // never inherits stale integral wind-up from a previous flight. (The
+        // proper home for this is a StateManager onEnter(ARMED_GROUND) callback,
+        // wired in a later milestone — development_roadmap Phase C.)
+        // disarmed→armed エッジで PID 積分器をクリアし、新しい ARM が前回飛行の積分
+        // ワインドアップを引き継がないようにする。（本来は StateManager の
+        // onEnter(ARMED_GROUND) コールバックが担うべきで、後段 Phase C で配線する。）
+        if (!prev_armed) {
+            controller.reset();
+            prev_armed = true;
         }
         actuator.arm();
 
