@@ -82,8 +82,11 @@ public:
      * @brief Motion burst data structure (all sensor data)
      */
     struct MotionBurst {
-        int16_t delta_x;        ///< X displacement (pixels)
-        int16_t delta_y;        ///< Y displacement (pixels)
+        // Body-frame (FRD) displacement [pixels] — the driver absorbs the sensor
+        // mounting (raw chip axes → body). Callers see body forward/right directly.
+        // 機体(FRD)変位[pixels] — ドライバが搭載向きを吸収済み（生チップ軸→機体）。
+        int16_t delta_x;        ///< body forward displacement (FRD X) [pixels]
+        int16_t delta_y;        ///< body right   displacement (FRD Y) [pixels]
         uint8_t squal;          ///< Surface quality (0-255)
         uint16_t shutter;       ///< Shutter value
         uint8_t raw_data_sum;   ///< Raw data sum

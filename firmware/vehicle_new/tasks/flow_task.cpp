@@ -119,18 +119,16 @@ void FlowTask(void* /*pvParameters*/)
         try {
             stampfly::PMW3901::MotionBurst burst = g_flow->readMotionBurst();
 
-            // Remap the raw sensor axes to the body frame (FRD). The PMW3901 is
-            // mounted rotated, so the raw delta_x/delta_y are NOT body forward/right.
-            // The proven firmware/vehicle (optflow_task.cpp) maps:
-            //   body forward (X) = -delta_y,  body right (Y) = +delta_x.
-            // The ESKF (updateFlowRaw) expects dx = body forward, dy = body right.
-            // 生センサ軸を機体座標(FRD)へ remap する。PMW3901 は回転搭載で、生
-            // delta_x/delta_y は機体の前方/右ではない。実証済みの firmware/vehicle
-            // (optflow_task.cpp) は body前方=-delta_y, body右=+delta_x。ESKF は
-            // dx=機体前方, dy=機体右 を期待する。
+            // burst.delta_x/delta_y are already body-frame (FRD): the PMW3901 driver
+            // (pmw3901_wrapper) absorbs the sensor mounting and returns body forward
+            // (X) / right (Y). Per project policy the task does NO axis remap — it just
+            // forwards the body-axis flow to the ESKF.
+            // burst.delta_x/delta_y は既に機体(FRD)座標: PMW3901 ドライバ(pmw3901_wrapper)が
+            // 搭載向きを吸収し body前方(X)/右(Y) を返す。方針によりタスクは軸 remap をせず、
+            // 機体軸のフローを ESKF へそのまま渡すだけ。
             sf::FlowData out{};
-            out.dx        = -burst.delta_y;   // body forward (FRD X)
-            out.dy        =  burst.delta_x;   // body right   (FRD Y)
+            out.dx        = burst.delta_x;   // body forward (FRD X)
+            out.dy        = burst.delta_y;   // body right   (FRD Y)
             out.squal     = burst.squal;
             out.timestamp = static_cast<uint32_t>(esp_timer_get_time());
             sf::sensor_flow.publish(out);
