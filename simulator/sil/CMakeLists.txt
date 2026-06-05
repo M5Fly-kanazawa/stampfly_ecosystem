@@ -285,6 +285,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp     # E1: BMI270 + motors → Plant
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp       # E2: VL53L3CX ToF chip model
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp    # PMW3901 optical-flow chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SIL_EMU_TRAJ)
@@ -341,6 +342,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp    # workshop-only weak symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp        # E2: VL53L3CX ToF chip model
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp     # PMW3901 optical-flow chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp          # shared ESP-NOW recv/send hub
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp     # E6: shared ControlPacket builder
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_pilot_vehicle.cpp  # ESP-NOW virtual pilot (E3)
@@ -396,4 +398,21 @@ if(SIL_BUILD_VL53_PROBE)
     ${VL53_SRC}/include/vl53lx
     ${VL53_SRC}/src
     ${VL53_SRC}/src/vl53lx)
+endif()
+
+# -----------------------------------------------------------------------------
+# PMW3901 offline flow probe — drives the chip model (devices/pmw3901_device.cpp)
+# directly on the host (no FreeRTOS / MuJoCo) to verify the SPI register protocol,
+# the motion-burst framing, and the translational flow round-trip deterministically.
+# ON by default: it is fast, self-contained, and part of the regression set.
+# PMW3901 オフラインフロー probe — チップモデルを host で直接駆動し、SPI レジスタ規約・
+# motion burst・並進フロー round-trip を決定論的に検証。既定 ON（高速・自己完結・回帰）。
+# -----------------------------------------------------------------------------
+option(SIL_BUILD_PMW3901_PROBE "Build the offline PMW3901 optical-flow probe" ON)
+if(SIL_BUILD_PMW3901_PROBE)
+  add_executable(pmw3901_probe
+    smoke/pmw3901_probe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp)
+  target_include_directories(pmw3901_probe PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices)
 endif()

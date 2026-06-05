@@ -33,6 +33,7 @@
 #include "plant.hpp"        // sil::Plant
 #include "data_types.hpp"   // sf::ImuData, sf::MotorOutput
 #include "vl53_device.hpp"  // sil_vl53 (VL53L3CX ToF chip model, shared with the probe)
+#include "pmw3901_device.hpp" // sil_pmw3901 (PMW3901 optical-flow chip model)
 
 namespace {
 
@@ -425,11 +426,23 @@ void sil_board_set_motor_health(int motor, float gain)
 
 int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes)
 {
-    // BMI270 is on CS GPIO46 (sf_board). Others (PMW3901 on 12) get zeros →
-    // their driver init fails gracefully (Optional sensors) until E3.
-    // BMI270 は CS GPIO46。他（PMW3901=12）はゼロ→ドライバが優雅に失敗（E3まで）。
+    // BMI270 is on CS GPIO46 (sf_board); PMW3901 optical flow is on CS GPIO12.
+    // BMI270 は CS GPIO46、PMW3901 オプティカルフローは CS GPIO12。
     if (cs == 46 && tx != nullptr) {
         return bmi270_xfer(tx, rx, (int)nbytes);
+    }
+    if (cs == sil_pmw3901::CS_PIN && tx != nullptr) {
+        // Push the Plant's true body-frame horizontal velocity into the flow model
+        // so the synthesized motion burst encodes it (the firmware ESKF then
+        // recovers it). Body-FRD velocity = NED→body of the truth velocity.
+        // Plant の真の body 水平速度をフローモデルへ渡し、合成 motion burst に符号化
+        // させる（ファーム ESKF が復元）。body-FRD 速度 = 真値速度の NED→body。
+        if (g_plant != nullptr) {
+            const sil::Plant::Truth tr = g_plant->truth();
+            const sf::math::Vec3 v_body = tr.q_nb.inv_rotate(tr.vel_ned);
+            sil_pmw3901::set_motion_from_velocity(v_body.x, v_body.y, -tr.pos_ned.z);
+        }
+        return sil_pmw3901::xfer(tx, rx, (int)nbytes);
     }
     if (rx != nullptr) std::memset(rx, 0, nbytes);
     return 0;
