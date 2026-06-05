@@ -1,0 +1,48 @@
+# pos_flight.scn — POSITION_HOLD (vehicle_new, Layer 4, P8)
+# 位置保持（vehicle_new, Layer 4, P8）
+#
+# Goal (Layer 4 gate): take off in STABILIZE, perturb the craft sideways with a brief
+# roll step so it gains lateral velocity + displacement, then hand to POSITION_HOLD
+# and verify the closed loop ARRESTS the drift and HOLDS the captured horizontal
+# position (bounded px/py, no fly-away). POS_HOLD is the closed-loop validator for the
+# optical-flow path: the position/velocity cascade reads the ESKF horizontal estimate
+# (fed by PMW3901 flow with gyro compensation) and commands tilt to hold position.
+# POS_HOLD implies ALT_HOLD, so altitude is held too.
+# 目的（Layer 4 ゲート）: STABILIZE で離陸し、短いロールステップで横方向に擾乱を与えて
+# 横速度＋変位を持たせ、POSITION_HOLD に渡して閉ループがドリフトを抑え捕捉水平位置を
+# 保持する（px/py 有界・飛び去り無し）ことを検証する。POS_HOLD はオプティカルフロー経路の
+# 閉ループ検証器（位置/速度カスケードが ESKF 水平推定＝PMW3901 フロー＋ジャイロ補償を読み
+# 傾きで位置保持）。POS_HOLD は ALT_HOLD を含むので高度も保持。
+#
+# Sticks are raw 12-bit ADC, centre 2048. In POS_HOLD the throttle stick is the
+# climb-rate command (centre = norm 0.5 = raw 3072 → hold altitude) and the roll/pitch
+# sticks are OVERRIDDEN by the position cascade. pos token = optional 6th rc field.
+# スティックは raw 12bit ADC（中央2048）。POS_HOLD では throttle は上昇率（中央=raw3072=高度
+# 保持）、roll/pitch は位置カスケードが上書き。pos トークン = rc の任意6番目。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
+   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
+   +    rc   3290  2600   2048    2048  1     600       50                       # C2: roll-right step (~+8°) 0.6 s → lateral drift (gains +East velocity)
+   +    rc   3072  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold position & altitude 14 s
+   +    rc   2048  2048   2048    2048  0     1000      50                       # E: DISARM (motors cut)
+#
+# STATUS (P8, WIP — POS_HOLD currently DIVERGES): the cascade is implemented and the
+# mode engages ("Mode change: STABILIZE → POS_HOLD"), but after the roll-step
+# perturbation the horizontal position runs away (~300 m) regardless of the tilt-output
+# sign. ALT_HOLD alone (alt_flight, no POS control) holds horizontal position at 0, so
+# the instability is in the POS_HOLD loop, NOT the underlying flight/flow. Diagnosis is
+# deferred — it needs: (1) a frame-convention pass (trajectory px/py are MuJoCo qpos
+# ENU, but the ESKF/controller use NED — different axes), and (2) the design question
+# that optical flow constrains VELOCITY, not absolute position, so a flow-only absolute
+# position loop may be ill-posed (flow "position hold" is really velocity hold).
+# ステータス（P8, WIP — POS_HOLD は現状発散）: カスケードは実装済みでモードは入る
+# （Mode change: STABILIZE → POS_HOLD）が、ロールステップ擾乱後に水平位置が暴走（~300m、
+# 傾き出力の符号によらず）。ALT_HOLD 単独（alt_flight, POS制御なし）は水平位置 0 を保持する
+# ので、不安定は POS_HOLD ループにあり素の飛行/フローではない。診断は保留: (1) frame 規約の
+# 精査（trajectory px/py は MuJoCo qpos ENU だが ESKF/制御器は NED＝別軸）、(2) フローは
+# 速度を拘束し絶対位置を拘束しない＝フローのみの絶対位置ループは ill-posed の可能性
+# （フローの「位置保持」は実質「速度保持」）。
+#
+# No .expect: this scenario is the Layer 4 reproduction/diagnosis harness (not yet a gate).

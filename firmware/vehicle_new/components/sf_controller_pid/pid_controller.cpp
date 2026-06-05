@@ -106,8 +106,17 @@ ControlOutput PidController::compute(
     // 姿勢制御（STABILIZE以上）
     // =========================================================================
     if (current_mode_ >= FlightMode::STABILIZE) {
+        // Default: sticks command the tilt angle directly (STABILIZE).
+        // 既定: スティックが傾き角を直接指令する（STABILIZE）。
         float roll_sp  = setpoint.roll * max_angle_;
         float pitch_sp = setpoint.pitch * max_angle_;
+
+        // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
+        // craft holds its captured horizontal position instead of following sticks.
+        // POS_HOLD: 位置カスケードがスティック傾き指令を上書きし、捕捉した水平位置を保持する。
+        if (current_mode_ >= FlightMode::POS_HOLD) {
+            computePositionHold(state, euler.z, dt, roll_sp, pitch_sp);
+        }
 
         rate_sp_roll  = att_roll_.compute(roll_sp - euler.x, dt);
         rate_sp_pitch = att_pitch_.compute(pitch_sp - euler.y, dt);
@@ -148,14 +157,11 @@ ControlOutput PidController::compute(
         thrust = hover_thrust_ + thrust_correction;
     }
 
-    // =========================================================================
-    // Position control (POS_HOLD)
-    // 位置制御（POS_HOLD）
-    // =========================================================================
-    if (current_mode_ >= FlightMode::POS_HOLD) {
-        // TODO: Position → velocity → angle cascade
-        // TODO: 位置 → 速度 → 角度 カスケード
-    }
+    // Position control (POS_HOLD) is applied inside the attitude block above —
+    // computePositionHold() turns the position/velocity error into the tilt
+    // setpoints the attitude loop tracks. See the helper below.
+    // 位置制御（POS_HOLD）は上の姿勢ブロック内で適用される（computePositionHold が
+    // 位置/速度誤差を姿勢ループが追従する傾き指令に変換）。下のヘルパ参照。
 
     // =========================================================================
     // Rate control (always active, innermost loop)
@@ -179,6 +185,47 @@ ControlOutput PidController::compute(
     output.thrust = thrust;
 
     return output;
+}
+
+void PidController::computePositionHold(const StateEstimate& state, float yaw,
+                                        float dt, float& roll_sp, float& pitch_sp)
+{
+    // Capture the hold target (NED north/east) when entering POS_HOLD.
+    // POS_HOLD 進入時に保持目標（NED 北/東）を捕捉する。
+    if (capture_pos_) {
+        pos_setpoint_x_ = state.position[0];
+        pos_setpoint_y_ = state.position[1];
+        capture_pos_ = false;
+    }
+
+    // Outer loop (NED): position error → desired horizontal velocity.
+    // 外ループ（NED）: 位置誤差 → 目標水平速度。
+    const float vx_sp = pos_x_.compute(pos_setpoint_x_ - state.position[0], dt);
+    const float vy_sp = pos_y_.compute(pos_setpoint_y_ - state.position[1], dt);
+
+    // Inner loop (NED): velocity error → desired horizontal acceleration.
+    // 内ループ（NED）: 速度誤差 → 目標水平加速度。
+    const float ax_ned = vel_x_.compute(vx_sp - state.velocity[0], dt);
+    const float ay_ned = vel_y_.compute(vy_sp - state.velocity[1], dt);
+
+    // Rotate the desired NED acceleration into the body frame (yaw only).
+    // 目標 NED 加速度を機体座標へ回転（ヨーのみ）。
+    const float cy = cosf(yaw), sy = sinf(yaw);
+    const float ax_body =  cy * ax_ned + sy * ay_ned;   // forward (FRD X) / 前方
+    const float ay_body = -sy * ax_ned + cy * ay_ned;   // right   (FRD Y) / 右
+
+    // Map acceleration to tilt (a ≈ g·tilt). Accelerate forward → pitch nose down
+    // (negative pitch); accelerate right → roll right (positive roll). Clamp to the
+    // POS_HOLD tilt limit so the outer loop cannot command an aggressive attitude.
+    // 加速度を傾きへ写像（a≈g·tilt）。前進=ノーズダウン(負pitch)、右=右ロール(正roll)。
+    // 外ループが過激な姿勢を指令しないよう POS_HOLD 傾き上限でクランプ。
+    auto clampTilt = [this](float t) {
+        if (t >  max_pos_tilt_) return  max_pos_tilt_;
+        if (t < -max_pos_tilt_) return -max_pos_tilt_;
+        return t;
+    };
+    pitch_sp = clampTilt(-ax_body / gravity_);
+    roll_sp  = clampTilt( ay_body / gravity_);
 }
 
 void PidController::reset()
@@ -215,6 +262,11 @@ void PidController::onModeChange(FlightMode new_mode)
         if (current_mode_ >= FlightMode::POS_HOLD || new_mode >= FlightMode::POS_HOLD) {
             pos_x_.reset(); pos_y_.reset();
             vel_x_.reset(); vel_y_.reset();
+        }
+        // Capture the current horizontal position as the hold target on entry.
+        // POS_HOLD 進入時、現在の水平位置を保持目標として捕捉する。
+        if (new_mode >= FlightMode::POS_HOLD && current_mode_ < FlightMode::POS_HOLD) {
+            capture_pos_ = true;
         }
     }
 

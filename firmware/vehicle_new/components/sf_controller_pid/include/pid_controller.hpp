@@ -39,6 +39,13 @@ private:
     /// Load PID gains from parameter system / パラメータからゲインを読み込み
     void loadParams();
 
+    /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
+    /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
+    /// POS_HOLD カスケード: 位置/速度誤差 → 傾き指令（roll/pitch）。roll_sp/pitch_sp[rad]
+    /// を書き込み、呼び出し側のスティック値を上書きする。
+    void computePositionHold(const StateEstimate& state, float yaw, float dt,
+                             float& roll_sp, float& pitch_sp);
+
     FlightMode current_mode_ = FlightMode::STABILIZE;
 
     // Rate control PIDs (innermost loop) / レート制御PID（最内ループ）
@@ -70,6 +77,11 @@ private:
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
+    float gravity_        = 9.81f;   // [m/s²] for the accel→tilt mapping in POS_HOLD
+    float max_pos_tilt_   = 0.2618f; // [rad] POS_HOLD tilt limit (15 deg, < max_angle_)
+    float pos_setpoint_x_ = 0;       // [m] captured position N (POS_HOLD target, NED)
+    float pos_setpoint_y_ = 0;       // [m] captured position E (POS_HOLD target, NED)
+    bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute
 };
 
 }  // namespace sf

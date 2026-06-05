@@ -44,6 +44,7 @@ struct Event {
     uint8_t  arm = 0;
     uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
     uint8_t  acro = 0;        // 1 => CTRL_FLAG_MODE (ACRO/rate) / 1 で ACRO（角速度）
+    uint8_t  pos = 0;         // 1 => CTRL_FLAG_POS_MODE (POSITION_HOLD) / 1 で位置保持
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
 
@@ -270,6 +271,15 @@ int sil_scenario_load(const char* path)
                 if (acro != 0 && acro != 1) { err(path, lineno, "rc <acro> must be 0 or 1"); return -1; }
             }
             e.acro = (uint8_t)acro;
+            // OPTIONAL 6th token: pos (1 => CTRL_FLAG_POS_MODE → POSITION_HOLD). After
+            // acro, so the full form is:
+            // `rc <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>`.
+            // 任意の6番目トークン pos（1 で CTRL_FLAG_POS_MODE → POSITION_HOLD）。acro の後。
+            long pos = 0;
+            if (iss >> pos) {
+                if (pos != 0 && pos != 1) { err(path, lineno, "rc <pos> must be 0 or 1"); return -1; }
+            }
+            e.pos = (uint8_t)pos;
 
         } else if (ch == "rc_ramp") {
             std::string field; long from, to, step, rate, arm;
@@ -374,7 +384,8 @@ void sil_scenario_driver_task(void* /*arg*/)
                 const int period = period_ms(e.rate_hz);
                 const uint8_t flags = (e.arm  ? sil::kFlagArm     : 0) |
                                       (e.alt  ? sil::kFlagAltMode : 0) |
-                                      (e.acro ? sil::kFlagMode    : 0);
+                                      (e.acro ? sil::kFlagMode    : 0) |
+                                      (e.pos  ? sil::kFlagPosMode : 0);
                 if (e.hold_ms <= 0) {
                     sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {
@@ -393,7 +404,8 @@ void sil_scenario_driver_task(void* /*arg*/)
                 const int period = period_ms(e.rate_hz);
                 const uint8_t flags = (e.arm  ? sil::kFlagArm     : 0) |
                                       (e.alt  ? sil::kFlagAltMode : 0) |
-                                      (e.acro ? sil::kFlagMode    : 0);
+                                      (e.acro ? sil::kFlagMode    : 0) |
+                                      (e.pos  ? sil::kFlagPosMode : 0);
                 const int astep = (e.ramp_to >= e.ramp_from) ? e.ramp_step : -e.ramp_step;
                 for (long v = e.ramp_from;
                      (astep > 0) ? (v <= e.ramp_to) : (v >= e.ramp_to);

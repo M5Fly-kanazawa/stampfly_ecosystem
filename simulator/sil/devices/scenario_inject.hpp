@@ -49,6 +49,12 @@ constexpr uint8_t kFlagMode = 0x04;
 // CTRL_FLAG_ALT_MODE ビット — 本体側で ALTITUDE_HOLD を選択。controller_comm.hpp:38 と一致。
 constexpr uint8_t kFlagAltMode = 0x08;
 
+// CTRL_FLAG_POS_MODE bit (bit4) — selects POSITION_HOLD on the firmware side.
+// Must match sf_comm kFlagPosMode (0x10). POS_HOLD implies ALT_HOLD (mode hierarchy).
+// CTRL_FLAG_POS_MODE ビット(bit4) — 本体側で POSITION_HOLD を選択。sf_comm kFlagPosMode=0x10
+// と一致。POS_HOLD は ALT_HOLD を含む（モード階層）。
+constexpr uint8_t kFlagPosMode = 0x10;
+
 // Build the 14-byte ControlPacket into `out` (must hold >= 14 bytes).
 // Layout: [0..2]=drone_mac, [3..4]=throttle, [5..6]=roll, [7..8]=pitch,
 // [9..10]=yaw, [11]=flags, [12]=reserved, [13]=checksum (sum of bytes 0..12).
