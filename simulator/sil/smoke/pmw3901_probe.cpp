@@ -72,15 +72,17 @@ constexpr float kFrameDt     = 0.01f;
 constexpr float kMinHeight   = 0.02f;
 constexpr float kGyroScale   = 1.0f;
 
-// Expected delta_x = (vx/h + scale*pitch_rate) * dt / rad_per_pixel.
-// Expected delta_y = (vy/h - scale*roll_rate)  * dt / rad_per_pixel.
-long expectedDx(float vx, float height, float gyro_y_pitch)
-{
-    return std::lround((vx / height + kGyroScale * gyro_y_pitch) * (kFrameDt / kRadPerPixel));
-}
-long expectedDy(float vy, float height, float gyro_x_roll)
+// Raw sensor axes (PMW3901 mounted rotated, matching firmware/vehicle's remap
+// body_fwd = -delta_y, body_right = +delta_x):
+//   raw delta_x = +right  flow = (vy/h - scale*roll_rate)  * dt / rad_per_pixel
+//   raw delta_y = -forward flow = -(vx/h + scale*pitch_rate) * dt / rad_per_pixel
+long expectedDx(float vy, float height, float gyro_x_roll)
 {
     return std::lround((vy / height - kGyroScale * gyro_x_roll) * (kFrameDt / kRadPerPixel));
+}
+long expectedDy(float vx, float height, float gyro_y_pitch)
+{
+    return std::lround(-(vx / height + kGyroScale * gyro_y_pitch) * (kFrameDt / kRadPerPixel));
 }
 
 }  // namespace
@@ -108,8 +110,8 @@ int main()
         sil_pmw3901::set_motion_from_velocity(c.vx, c.vy, c.h, c.gx, c.gy);
         int16_t dx = 0, dy = 0; uint8_t squal = 0;
         readBurst(dx, dy, squal);
-        const long want_dx = expectedDx(c.vx, c.h, c.gy);
-        const long want_dy = expectedDy(c.vy, c.h, c.gx);
+        const long want_dx = expectedDx(c.vy, c.h, c.gx);   // raw X = +right flow
+        const long want_dy = expectedDy(c.vx, c.h, c.gy);   // raw Y = -forward flow
         std::printf("  vx=%.2f vy=%.2f h=%.2f gx=%.2f gy=%.2f → dx=%d dy=%d\n",
                     c.vx, c.vy, c.h, c.gx, c.gy, dx, dy);
         check(dx == want_dx, "delta_x round-trip", dx, want_dx);

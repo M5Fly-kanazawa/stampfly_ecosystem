@@ -95,19 +95,26 @@ void set_motion_from_velocity(float vx_body, float vy_body, float height_m,
         return;
     }
 
-    // Total optical-flow rate [rad/s] = translational (v_body / height) + rotational
+    // Body-axis flow rates [rad/s] = translational (v_body / height) + rotational
     // (flow_gyro_scale * body rate). Signs mirror the firmware's gyro removal
-    // (updateFlowRaw: trans_x = rate_x - scale*gyro_y, trans_y = rate_y + scale*gyro_x)
-    // so the round-trip recovers v_body. Pixel count = rate * frame_dt / rad_per_pixel.
-    // 総フロー角速度 = 並進(v_body/height) + 回転(flow_gyro_scale·body角速度)。符号は
-    // ファームのジャイロ除去に合わせ、round-trip が v_body を復元する。
+    // (updateFlowRaw: trans_x = rate_x - scale*gyro_y, trans_y = rate_y + scale*gyro_x).
+    // body 軸のフロー角速度 = 並進(v_body/height) + 回転(flow_gyro_scale·body角速度)。
     const float kPixPerRate = FLOW_FRAME_DT / FLOW_RAD_PER_PIXEL;
-    const float rate_x = vx_body / height_m + FLOW_GYRO_SCALE * gyro_y;
-    const float rate_y = vy_body / height_m - FLOW_GYRO_SCALE * gyro_x;
-    const long dx = std::lround(rate_x * kPixPerRate);
-    const long dy = std::lround(rate_y * kPixPerRate);
+    const float rate_fwd   = vx_body / height_m + FLOW_GYRO_SCALE * gyro_y;  // body X (forward)
+    const float rate_right = vy_body / height_m - FLOW_GYRO_SCALE * gyro_x;  // body Y (right)
 
-    set_motion(static_cast<int16_t>(dx), static_cast<int16_t>(dy), SQUAL_GOOD);
+    // RAW sensor mounting (the PMW3901 is NOT axis-aligned with the body): the proven
+    // firmware/vehicle maps raw → body as body_fwd = -delta_y, body_right = +delta_x
+    // (optflow_task.cpp). Invert that to emit the raw counts: delta_x = +right flow,
+    // delta_y = -forward flow. The firmware then remaps + gyro-compensates and recovers
+    // v_body. Emitting the physical raw (not body-aligned) keeps the model faithful.
+    // 生センサ搭載向き（PMW3901 は機体軸非整列）: 実証済み firmware/vehicle は
+    // body_fwd=-delta_y, body_right=+delta_x（optflow_task.cpp）。その逆で生カウントを出す:
+    // delta_x=+右フロー, delta_y=-前方フロー。ファームが remap＋ジャイロ補償して v_body を復元。
+    const long delta_x = std::lround( rate_right * kPixPerRate);  // raw X = body right
+    const long delta_y = std::lround(-rate_fwd   * kPixPerRate);  // raw Y = -body forward
+
+    set_motion(static_cast<int16_t>(delta_x), static_cast<int16_t>(delta_y), SQUAL_GOOD);
 }
 
 void set_motion(int16_t dx, int16_t dy, uint8_t squal)
