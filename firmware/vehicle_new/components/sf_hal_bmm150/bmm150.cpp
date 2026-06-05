@@ -134,10 +134,21 @@ esp_err_t BMM150::read(MagData& data)
         return ret;
     }
 
-    // Apply compensation
-    data.x = compensateX(raw.x, raw.rhall);
-    data.y = compensateY(raw.y, raw.rhall);
-    data.z = compensateZ(raw.z, raw.rhall);
+    // Apply compensation, then remap chip axes → body frame (FRD) here, in the driver,
+    // so callers receive body-axis field and never deal with the sensor mounting
+    // (project policy: drivers return body-axis quantities). Mapping verified on the
+    // proven firmware/vehicle hardware (mag_task): body.x = -chip.y, body.y = chip.x,
+    // body.z = chip.z (note: differs from the IMU/flow mounting).
+    // 補償後、チップ軸→機体(FRD)へここ（ドライバ）で remap し、呼び出し側は機体軸の磁場を
+    // 受け取り搭載向きを意識しない（方針: ドライバは機体軸の量を返す）。対応は実証済みハード
+    // (firmware/vehicle mag_task)で確認: body.x=-chip.y, body.y=chip.x, body.z=chip.z
+    // （IMU/flow とは異なる搭載向き）。
+    const float chip_x = compensateX(raw.x, raw.rhall);
+    const float chip_y = compensateY(raw.y, raw.rhall);
+    const float chip_z = compensateZ(raw.z, raw.rhall);
+    data.x = -chip_y;   // body forward (FRD X)
+    data.y =  chip_x;   // body right   (FRD Y)
+    data.z =  chip_z;   // body down    (FRD Z)
     data.timestamp_us = esp_timer_get_time();
     data.data_ready = true;
 

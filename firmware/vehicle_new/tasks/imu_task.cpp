@@ -129,46 +129,31 @@ static float cached_temperature_c = 0.0f;
 /// HAL の extern 宣言を解決するため C リンケージで定義する。
 extern "C" volatile uint8_t g_imu_checkpoint = 0;
 
-/// Apply BMI270→body-frame coordinate transform and unit conversion.
-/// BMI270→機体座標系変換と単位変換を適用する。
-///
-/// StampFly body frame is NED (X forward, Y right, Z down).
-/// BMI270 sensor axes are mapped as follows:
-///
-/// StampFly機体座標系は NED（X前方、Y右、Z下方）。
-/// BMI270 のセンサ軸マッピングは以下の通り:
-///
-///   ┌─────────────────────────────────────────┐
-///   │   BMI270 axis  →  body axis             │
-///   │   ───────────────────────────           │
-///   │   X (sensor)   →  Y body  (right)       │
-///   │   Y (sensor)   →  X body  (forward)     │
-///   │   Z (sensor)   →  −Z body (down, sign-flip)
-///   └─────────────────────────────────────────┘
-///
-/// Accel is converted from g to m/s² (× G_TO_MPS2).
-/// Gyro stays in rad/s (already in SI units from the wrapper).
-///
-/// 加速度は g から m/s² へ変換（× G_TO_MPS2）。
-/// 角速度は rad/s のまま（ラッパが既に SI 単位で返す）。
+/// Convert the BMI270 driver's body-frame reading into ImuData (unit conversion only).
+/// The axis remap (chip → body FRD) is done in the BMI270 driver (bmi270_wrapper) per
+/// project policy, so AccelData/GyroData are ALREADY body forward/right/down. Here we
+/// only convert accel from g to m/s² (gyro is already rad/s). No axis swap, no sign.
+/// BMI270 ドライバの機体座標読みを ImuData へ（単位変換のみ）。軸 remap（チップ→機体FRD）は
+/// 方針によりドライバ(bmi270_wrapper)で実施済みゆえ、AccelData/GyroData は既に機体
+/// 前方/右/下。ここでは加速度を g→m/s² 変換するのみ（ジャイロは既に rad/s）。軸入替・符号なし。
 ///
 /// @design detailed_design.md §3.1 — IMU body-frame convention (NED)   [OK]
 /// @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
-static void applyImuTransform(const stampfly::AccelData& accel_sensor,
-                               const stampfly::GyroData& gyro_sensor,
+static void applyImuTransform(const stampfly::AccelData& accel_body,
+                               const stampfly::GyroData& gyro_body,
                                sf::ImuData& imu_out)
 {
-    // Accel: sensor g → body m/s² with axis remap
-    // 加速度: センサ g → 機体 m/s²、軸を再マッピング
-    imu_out.accel[0] =  accel_sensor.y * G_TO_MPS2;  // body X (forward)  / 機体X（前方）
-    imu_out.accel[1] =  accel_sensor.x * G_TO_MPS2;  // body Y (right)    / 機体Y（右）
-    imu_out.accel[2] = -accel_sensor.z * G_TO_MPS2;  // body Z (down)     / 機体Z（下方、符号反転）
+    // Accel: body g → body m/s² (driver already supplied body FRD axes).
+    // 加速度: 機体 g → 機体 m/s²（ドライバが機体 FRD 軸で供給済み）。
+    imu_out.accel[0] = accel_body.x * G_TO_MPS2;  // body X (forward)
+    imu_out.accel[1] = accel_body.y * G_TO_MPS2;  // body Y (right)
+    imu_out.accel[2] = accel_body.z * G_TO_MPS2;  // body Z (down)
 
-    // Gyro: sensor rad/s → body rad/s with same axis remap
-    // 角速度: センサ rad/s → 機体 rad/s、同じ軸マッピング
-    imu_out.gyro[0] =  gyro_sensor.y;   // body X (roll rate)   / 機体X（ロールレート）
-    imu_out.gyro[1] =  gyro_sensor.x;   // body Y (pitch rate)  / 機体Y（ピッチレート）
-    imu_out.gyro[2] = -gyro_sensor.z;   // body Z (yaw rate)    / 機体Z（ヨーレート、符号反転）
+    // Gyro: already body FRD rad/s — pass through.
+    // 角速度: 既に機体 FRD rad/s — そのまま。
+    imu_out.gyro[0] = gyro_body.x;   // body X (roll rate)
+    imu_out.gyro[1] = gyro_body.y;   // body Y (pitch rate)
+    imu_out.gyro[2] = gyro_body.z;   // body Z (yaw rate)
 }
 
 /// Process async sensor observations from queues

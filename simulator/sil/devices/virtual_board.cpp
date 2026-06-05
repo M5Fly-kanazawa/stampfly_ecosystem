@@ -97,9 +97,11 @@ int16_t sat16(float v)
 }
 
 // Fill 12 bytes [acc x/y/z, gyr x/y/z] (int16 LE) from the Plant body-FRD IMU,
-// inverse-remapped to chip axes and scaled to raw by the configured range.
-// imu_task remap is: body.x=chip.y, body.y=chip.x, body.z=-chip.z (accel & gyro).
-// Plant body-FRD IMU から12バイトを生成。chip軸へ逆remap・範囲でraw化。
+// inverse-remapped to chip axes and scaled to raw by the configured range. The
+// BMI270 driver (bmi270_wrapper) applies the forward remap body.x=chip.y, body.y=
+// chip.x, body.z=-chip.z (accel & gyro), so we emit the chip-axis bytes here.
+// Plant body-FRD IMU から12バイトを生成。chip軸へ逆remap・範囲でraw化。前進 remap は
+// BMI270 ドライバ(bmi270_wrapper)が行う（body.x=chip.y 等）ので、ここはチップ軸バイトを出す。
 void bmi270_fill_data(uint8_t* dst)
 {
     sf::ImuData imu = {};

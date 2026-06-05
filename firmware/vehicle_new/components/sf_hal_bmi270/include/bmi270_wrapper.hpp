@@ -37,19 +37,21 @@ namespace stampfly {
 /**
  * @brief Accelerometer data structure
  */
+// Body-frame (FRD) data — the driver absorbs the BMI270 mounting, so X/Y/Z are body
+// forward/right/down (NOT chip axes). 機体(FRD)。X/Y/Z は機体前方/右/下（チップ軸でない）。
 struct AccelData {
-    float x;  ///< X-axis acceleration [g]
-    float y;  ///< Y-axis acceleration [g]
-    float z;  ///< Z-axis acceleration [g]
+    float x;  ///< body forward acceleration (FRD X) [g]
+    float y;  ///< body right   acceleration (FRD Y) [g]
+    float z;  ///< body down    acceleration (FRD Z) [g]
 };
 
 /**
- * @brief Gyroscope data structure
+ * @brief Gyroscope data structure (body frame, FRD)
  */
 struct GyroData {
-    float x;  ///< X-axis angular velocity [rad/s]
-    float y;  ///< Y-axis angular velocity [rad/s]
-    float z;  ///< Z-axis angular velocity [rad/s]
+    float x;  ///< body roll rate  (FRD X) [rad/s]
+    float y;  ///< body pitch rate (FRD Y) [rad/s]
+    float z;  ///< body yaw rate   (FRD Z) [rad/s]
 };
 
 /**

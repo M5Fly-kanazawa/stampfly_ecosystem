@@ -33,42 +33,35 @@ esp_err_t BMI270Wrapper::init(const Config& /*config*/)
 
 esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
 {
-    // Closed loop: take the Plant's synthetic IMU (body-FRD, m/s², −9.8 at rest)
-    // and inverse-remap it to the chip frame, so imu_task's (unchanged) forward
-    // remap restores body-FRD. Accel back to [g]. This round-trip exists only
-    // while the 论点2 driver normalization is deferred.
-    // 閉ループ: Plant の合成 IMU（機体 FRD・m/s²・静止 −9.8）をチップ系へ逆 remap し、
-    // imu_task の(無改変の)前進 remap が機体 FRD を復元する。加速度は [g] に戻す。
-    // この往復は論点2 ドライバ正規化を保留している間だけ存在する。
+    // AccelData/GyroData are body-frame (FRD) [g]/[rad/s]: the real BMI270 driver
+    // (bmi270_wrapper) now absorbs the mounting and returns body axes, so this stub
+    // (which replaces that driver on the host) must do the same. The Plant's synthetic
+    // IMU is already body-FRD m/s², so just rescale accel to [g] — no remap (the old
+    // chip-frame round-trip is gone now that the remap lives in the driver).
+    // AccelData/GyroData は機体(FRD) [g]/[rad/s]: 実 BMI270 ドライバ(bmi270_wrapper)が
+    // 搭載向きを吸収し機体軸を返すようになったので、それを host で置換する本スタブも同様に
+    // する。Plant の合成 IMU は既に機体 FRD m/s² ゆえ加速度を [g] に直すだけ（remap は
+    // ドライバへ移ったので旧チップ系往復は不要）。
     if (sil::bridge::has_plant) {
         const sf::ImuData& imu = sil::bridge::current_imu;
         constexpr float G = 9.80665f;
-        accel.x =  imu.accel[1] / G;   // chip X = body Y / G
-        accel.y =  imu.accel[0] / G;   // chip Y = body X / G
-        accel.z = -imu.accel[2] / G;   // chip Z = −body Z / G
-        gyro.x =  imu.gyro[1];         // chip X = body Y
-        gyro.y =  imu.gyro[0];         // chip Y = body X
-        gyro.z = -imu.gyro[2];         // chip Z = −body Z
+        accel.x = imu.accel[0] / G;   // body forward (FRD X) [g]
+        accel.y = imu.accel[1] / G;   // body right   (FRD Y) [g]
+        accel.z = imu.accel[2] / G;   // body down    (FRD Z) [g]
+        gyro.x = imu.gyro[0];         // body roll rate  (FRD X) [rad/s]
+        gyro.y = imu.gyro[1];         // body pitch rate (FRD Y)
+        gyro.z = imu.gyro[2];         // body yaw rate   (FRD Z)
         return ESP_OK;
     }
 
-    // At level rest the BMI270 reads +1 g on chip Z (this is what the real
-    // hardware reports). imu_task's axis remap (body.z = −chip.z·G) then yields
-    // −9.8 m/s² on body Z (down) — the NED-consistent convention the ESKF expects
-    // (gravity −9.8 down, so predict R·accel + g_ned balances to 0 at rest).
-    // The previous −1 g here was a sign bug: it produced +9.8 on body Z and made
-    // the ESKF integrate gravity the wrong way (the drone "fell" in rtos_smoke).
-    // See [[project_sil_coordinate_frames]] (论点2). NOTE: chip Z = +1 g at level
-    // rest must be bench-confirmed before flight.
-    //
-    // 水平静止で BMI270 はチップ Z に +1 g を返す（実機の報告値）。imu_task の軸変換
-    // （body.z = −chip.z·G）後、機体 Z（下方）に −9.8 m/s²＝ESKF が期待する NED 整合の
-    // 規約（重力 −9.8 が下、予測 R·accel + g_ned が静止で 0 に均衡）。旧 −1 g は符号
-    // バグで機体 Z に +9.8 を生み、ESKF が重力を逆積分していた（rtos_smoke で機体が
-    // 「落下」）。飛行前にチップ Z=+1 g を実機確認すること。
+    // At level rest, body-frame accel is [0, 0, -1 g] (FRD Z is down; the sensor
+    // measures -9.8 m/s² on body Z, the NED-consistent convention the ESKF expects —
+    // gravity -9.8 down, so predict R·accel + g_ned balances to 0 at rest).
+    // 水平静止で機体加速度は [0,0,-1g]（FRD Z は下、機体 Z に -9.8 m/s²＝ESKF が期待する
+    // NED 整合の規約。重力 -9.8 が下、予測 R·accel + g_ned が静止で 0 に均衡）。
     accel.x = 0.0f;
     accel.y = 0.0f;
-    accel.z = 1.0f;   // [g] chip Z: +1 g at level rest (matches the real BMI270)
+    accel.z = -1.0f;  // [g] body Z (down): -1 g at level rest
 
     gyro.x = 0.0f;
     gyro.y = 0.0f;

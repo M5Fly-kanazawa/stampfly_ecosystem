@@ -101,10 +101,13 @@ enum class BMM150Preset : uint8_t {
     HIGH_ACCURACY,  // XY: 47, Z: 83
 };
 
+// Body-frame (FRD) magnetic field [uT] — the driver absorbs the BMM150 mounting,
+// so x/y/z are body forward/right/down (NOT chip axes).
+// 機体(FRD)磁場[uT] — ドライバが搭載向きを吸収済み。x/y/z は機体前方/右/下（チップ軸でない）。
 struct MagData {
-    float x;  // uT (micro Tesla)
-    float y;
-    float z;
+    float x;  // body forward (FRD X) [uT]
+    float y;  // body right   (FRD Y) [uT]
+    float z;  // body down    (FRD Z) [uT]
     uint32_t timestamp_us;
     bool data_ready;
 };
