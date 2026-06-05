@@ -440,7 +440,11 @@ int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes
         if (g_plant != nullptr) {
             const sil::Plant::Truth tr = g_plant->truth();
             const sf::math::Vec3 v_body = tr.q_nb.inv_rotate(tr.vel_ned);
-            sil_pmw3901::set_motion_from_velocity(v_body.x, v_body.y, -tr.pos_ned.z);
+            // Pass the true body roll/pitch rates so the model adds the rotational
+            // optical-flow component the firmware compensates for.
+            // 真の body roll/pitch 角速度も渡し、ファームが補償する回転フロー成分を載せる。
+            sil_pmw3901::set_motion_from_velocity(v_body.x, v_body.y, -tr.pos_ned.z,
+                                                  tr.omega_frd.x, tr.omega_frd.y);
         }
         return sil_pmw3901::xfer(tx, rx, (int)nbytes);
     }

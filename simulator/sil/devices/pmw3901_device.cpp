@@ -56,6 +56,7 @@ constexpr int     REG_XFER_BYTES = 2;     // address + data
 constexpr float FLOW_RAD_PER_PIXEL = 0.00222f;  // [rad/pixel] eskf_core.hpp:77
 constexpr float FLOW_FRAME_DT      = 0.01f;     // [s] flow_task 100Hz period
 constexpr float FLOW_MIN_HEIGHT    = 0.02f;     // [m] eskf_core.hpp:79 flow_min_height
+constexpr float FLOW_GYRO_SCALE    = 1.0f;      // eskf_core.hpp:78 flow_gyro_scale
 constexpr uint8_t SQUAL_GOOD       = 0x50;      // surface quality when locked (~80)
 
 // --- Motion-burst payload constants (plausible, not gated by the driver) ----
@@ -84,7 +85,8 @@ uint8_t readRegister(uint8_t reg)
 
 }  // namespace
 
-void set_motion_from_velocity(float vx_body, float vy_body, float height_m)
+void set_motion_from_velocity(float vx_body, float vy_body, float height_m,
+                              float gyro_x, float gyro_y)
 {
     // Below the usable height the flow has no ground lock → report no motion.
     // 使用可能高度未満はフローが床にロックしない → motion なしを報告。
@@ -93,12 +95,17 @@ void set_motion_from_velocity(float vx_body, float vy_body, float height_m)
         return;
     }
 
-    // Translational optical-flow rate [rad/s] = horizontal velocity / height.
-    // Pixel count over one frame = rate * frame_dt / rad_per_pixel.
-    // 並進フロー角速度 [rad/s] = 水平速度 / 高度。1フレームのピクセル数 = 角速度·dt/rad_per_pixel。
+    // Total optical-flow rate [rad/s] = translational (v_body / height) + rotational
+    // (flow_gyro_scale * body rate). Signs mirror the firmware's gyro removal
+    // (updateFlowRaw: trans_x = rate_x - scale*gyro_y, trans_y = rate_y + scale*gyro_x)
+    // so the round-trip recovers v_body. Pixel count = rate * frame_dt / rad_per_pixel.
+    // 総フロー角速度 = 並進(v_body/height) + 回転(flow_gyro_scale·body角速度)。符号は
+    // ファームのジャイロ除去に合わせ、round-trip が v_body を復元する。
     const float kPixPerRate = FLOW_FRAME_DT / FLOW_RAD_PER_PIXEL;
-    const long dx = std::lround((vx_body / height_m) * kPixPerRate);
-    const long dy = std::lround((vy_body / height_m) * kPixPerRate);
+    const float rate_x = vx_body / height_m + FLOW_GYRO_SCALE * gyro_y;
+    const float rate_y = vy_body / height_m - FLOW_GYRO_SCALE * gyro_x;
+    const long dx = std::lround(rate_x * kPixPerRate);
+    const long dy = std::lround(rate_y * kPixPerRate);
 
     set_motion(static_cast<int16_t>(dx), static_cast<int16_t>(dy), SQUAL_GOOD);
 }

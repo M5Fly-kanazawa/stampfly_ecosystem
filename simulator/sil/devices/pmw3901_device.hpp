@@ -31,15 +31,19 @@ namespace sil_pmw3901 {
 /// StampFly の PMW3901 チップセレクト GPIO（sf_board）。BMI270 は同じバスの 46。
 constexpr int CS_PIN = 12;
 
-/// Synthesize the next motion burst from the body-frame horizontal velocity.
-/// Translational optical flow: angular rate = v_body / height [rad/s]; the pixel
-/// count over one frame is rate * frame_dt / rad_per_pixel, using the SAME constants
-/// the firmware ESKF uses so the round-trip recovers the true velocity. Below the
-/// minimum height the flow is invalid (zero motion, zero surface quality).
-/// body 水平速度から次の motion burst を合成する。並進フロー: 角速度 = v_body/height、
-/// 1フレームのピクセル数 = 角速度·frame_dt/rad_per_pixel（ファーム ESKF と同じ定数で
-/// round-trip が真速度を復元）。最小高度未満はフロー無効（motion 0・品質 0）。
-void set_motion_from_velocity(float vx_body, float vy_body, float height_m);
+/// Synthesize the next motion burst from the body-frame horizontal velocity AND the
+/// body angular rate. Total optical flow = translational (v_body / height) +
+/// rotational (flow_gyro_scale * body rate); the firmware ESKF removes the rotational
+/// part, so including it makes the round-trip recover the true velocity even while
+/// the craft pitches/rolls. Uses the SAME constants as the firmware (eskf_core.hpp).
+/// Below the minimum height the flow is invalid (zero motion, zero surface quality).
+/// gyro_x/gyro_y are the body roll/pitch rates [rad/s] (FRD).
+/// body 水平速度＋body 角速度から次の motion burst を合成する。総フロー = 並進(v_body/
+/// height) + 回転(flow_gyro_scale·body角速度)。ファーム ESKF が回転分を除去するので、
+/// ここで含めると pitch/roll 中でも round-trip が真速度を復元する。gyro_x/gyro_y は
+/// body の roll/pitch 角速度 [rad/s]（FRD）。最小高度未満はフロー無効。
+void set_motion_from_velocity(float vx_body, float vy_body, float height_m,
+                              float gyro_x, float gyro_y);
 
 /// Directly set the raw motion the next burst reports (pixel counts + quality).
 /// Used by the offline probe to inject known counts.

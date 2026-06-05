@@ -84,10 +84,17 @@ void EskfEstimator::updateFlow(const FlowData& flow)
     float height = -core_.getPosition().z;
     if (height < 0.02f) height = 0.02f;
 
-    math::Vec3 gb = core_.getGyroBias();
+    // Gyro compensation needs the body ANGULAR RATE (bias-corrected gyro), not the
+    // gyro bias — pitch/roll rotation adds a rotational component to the optical flow
+    // that updateFlowRaw removes via flow_gyro_scale * rate. Passing the bias (~0)
+    // left the compensation effectively disabled, injecting spurious horizontal
+    // velocity during rotation.
+    // ジャイロ補償には body 角速度（バイアス補正済みジャイロ）が必要で、バイアスではない。
+    // pitch/roll 回転はフローに回転成分を加え、updateFlowRaw が flow_gyro_scale·rate で
+    // 除去する。バイアス(≈0)を渡すと補償が実質無効になり、回転中に偽の水平速度が入る。
     core_.updateFlowRaw(flow.dx, flow.dy, height, dt,
-                        cached_state_.gyro_bias[0],
-                        cached_state_.gyro_bias[1]);
+                        cached_state_.angular_rate[0],   // body roll rate (gyro_x, FRD)
+                        cached_state_.angular_rate[1]);  // body pitch rate (gyro_y, FRD)
 }
 
 void EskfEstimator::updateMag(const MagData& mag)

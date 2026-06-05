@@ -70,10 +70,17 @@ void readBurst(int16_t& dx, int16_t& dy, uint8_t& squal)
 constexpr float kRadPerPixel = 0.00222f;
 constexpr float kFrameDt     = 0.01f;
 constexpr float kMinHeight   = 0.02f;
+constexpr float kGyroScale   = 1.0f;
 
-long expectedCount(float v_body, float height)
+// Expected delta_x = (vx/h + scale*pitch_rate) * dt / rad_per_pixel.
+// Expected delta_y = (vy/h - scale*roll_rate)  * dt / rad_per_pixel.
+long expectedDx(float vx, float height, float gyro_y_pitch)
 {
-    return std::lround((v_body / height) * (kFrameDt / kRadPerPixel));
+    return std::lround((vx / height + kGyroScale * gyro_y_pitch) * (kFrameDt / kRadPerPixel));
+}
+long expectedDy(float vy, float height, float gyro_x_roll)
+{
+    return std::lround((vy / height - kGyroScale * gyro_x_roll) * (kFrameDt / kRadPerPixel));
 }
 
 }  // namespace
@@ -87,29 +94,30 @@ int main()
     writeReg(0x55, 0x5A);
     check(readReg(0x55) == 0x5A, "config write/read-back",      readReg(0x55), 0x5A);
 
-    std::printf("[pmw3901_probe] --- (2) flow round-trip (translational) ---\n");
-    struct Case { float vx, vy, h; };
+    std::printf("[pmw3901_probe] --- (2) flow round-trip (translational + rotational) ---\n");
+    struct Case { float vx, vy, h, gx, gy; };   // gx=roll rate, gy=pitch rate [rad/s]
     const Case cases[] = {
-        {0.0f,  0.0f,  0.60f},   // hover: no motion
-        {0.5f,  0.0f,  0.60f},   // forward 0.5 m/s
-        {0.0f, -0.3f,  0.60f},   // left 0.3 m/s (negative body-right)
-        {0.4f,  0.2f,  1.00f},   // diagonal at 1 m
-        {1.0f,  0.0f,  0.30f},   // fast + low: large count
+        {0.0f,  0.0f,  0.60f,  0.0f,  0.0f},   // hover: no motion
+        {0.5f,  0.0f,  0.60f,  0.0f,  0.0f},   // forward 0.5 m/s, no rotation
+        {0.0f, -0.3f,  0.60f,  0.0f,  0.0f},   // left 0.3 m/s, no rotation
+        {0.0f,  0.0f,  0.60f,  0.0f,  0.5f},   // pure pitch 0.5 rad/s → dx only
+        {0.0f,  0.0f,  0.60f,  0.4f,  0.0f},   // pure roll 0.4 rad/s → dy only
+        {0.4f,  0.2f,  1.00f,  0.1f, -0.2f},   // translation + rotation combined
     };
     for (const Case& c : cases) {
-        sil_pmw3901::set_motion_from_velocity(c.vx, c.vy, c.h);
+        sil_pmw3901::set_motion_from_velocity(c.vx, c.vy, c.h, c.gx, c.gy);
         int16_t dx = 0, dy = 0; uint8_t squal = 0;
         readBurst(dx, dy, squal);
-        const long want_dx = expectedCount(c.vx, c.h);
-        const long want_dy = expectedCount(c.vy, c.h);
-        std::printf("  vx=%.2f vy=%.2f h=%.2f → dx=%d dy=%d squal=0x%02X\n",
-                    c.vx, c.vy, c.h, dx, dy, squal);
+        const long want_dx = expectedDx(c.vx, c.h, c.gy);
+        const long want_dy = expectedDy(c.vy, c.h, c.gx);
+        std::printf("  vx=%.2f vy=%.2f h=%.2f gx=%.2f gy=%.2f → dx=%d dy=%d\n",
+                    c.vx, c.vy, c.h, c.gx, c.gy, dx, dy);
         check(dx == want_dx, "delta_x round-trip", dx, want_dx);
         check(dy == want_dy, "delta_y round-trip", dy, want_dy);
     }
 
     std::printf("[pmw3901_probe] --- (3) below min height → no flow ---\n");
-    sil_pmw3901::set_motion_from_velocity(0.5f, 0.5f, kMinHeight - 0.001f);
+    sil_pmw3901::set_motion_from_velocity(0.5f, 0.5f, kMinHeight - 0.001f, 0.0f, 0.0f);
     int16_t dx = 0, dy = 0; uint8_t squal = 0;
     readBurst(dx, dy, squal);
     check(dx == 0 && dy == 0, "no motion below min height", (dx == 0 && dy == 0), 1);
