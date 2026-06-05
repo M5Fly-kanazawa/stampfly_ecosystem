@@ -51,46 +51,52 @@ void TakeoffLandingMgr::init(const TakeoffLandingConfig& config)
 // update — run takeoff/landing detection
 // 更新 — 離陸/着陸検出を実行
 // -----------------------------------------------------------------------------
-void TakeoffLandingMgr::update()
+void TakeoffLandingMgr::update(const TofData& tof, bool armed)
 {
     // Clear one-shot event flags
     // ワンショットイベントフラグをクリア
     takeoff_detected_ = false;
     landing_detected_ = false;
 
-    evaluateToF();
+    // Disarmed → definitively on the ground (proven firmware/vehicle pattern).
+    // Re-anchors the vertical estimate after landing even when the ground ToF is
+    // invalid below its minimum range, and resets the takeoff timer for the next flight.
+    // disarmed → 確実に接地（実証済みの firmware/vehicle パターン）。接地中 ToF が最小
+    // レンジ未満で無効でも着地後に鉛直推定を再錨付けし、次飛行のため離陸タイマーをリセット。
+    if (!armed) {
+        on_ground_ = true;
+        takeoff_start_ms_ = 0;
+        landing_start_ms_ = 0;
+        return;
+    }
+
+    evaluateToF(tof);
     detectTakeoff();
     detectLanding();
 }
 
 // -----------------------------------------------------------------------------
-// evaluateToF — determine ground contact from ToF distance
-// ToF評価 — ToF距離から地面接地を判定
+// evaluateToF — determine ground contact from the injected ToF distance
+// ToF評価 — 注入された ToF 距離から地面接地を判定
 // -----------------------------------------------------------------------------
-void TakeoffLandingMgr::evaluateToF()
+void TakeoffLandingMgr::evaluateToF(const TofData& tof)
 {
-    // Read ToF data from topic
-    // トピックからToFデータを読み取る
-    TofData tof;
-    if (!sensor_tof.read(tof)) {
-        return;  // No new data / 新しいデータなし
-    }
-
-    // Skip invalid readings
-    // 無効な読み取りをスキップ
+    // Skip invalid readings — on the ground the ToF sits below its minimum range
+    // and returns invalid, so on_ground_ holds its last value (true at boot).
+    // 無効な読み取りをスキップ — 接地中は ToF が最小レンジ未満で無効を返すため、
+    // on_ground_ は直前値を保持（起動時 true）。
     if (!tof.valid) {
         return;
     }
 
-    // Determine ground contact based on distance threshold
-    // 距離閾値に基づき地面接地を判定
+    // Determine ground contact based on distance threshold (hysteresis band
+    // between ground and airborne thresholds prevents chatter).
+    // 距離閾値に基づき地面接地を判定（地上閾値と空中閾値の間はヒステリシス）。
     if (tof.distance < config_.ground_tof_m) {
         on_ground_ = true;
     } else if (tof.distance > config_.airborne_tof_m) {
         on_ground_ = false;
     }
-    // Hysteresis band between ground and airborne thresholds
-    // 地上閾値と空中閾値の間はヒステリシスバンド
 }
 
 // -----------------------------------------------------------------------------

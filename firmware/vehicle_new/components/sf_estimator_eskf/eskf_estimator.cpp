@@ -122,6 +122,18 @@ void EskfEstimator::resetPositionVelocity()
     }
 }
 
+void EskfEstimator::holdPositionVelocity()
+{
+    // Clamp pos/vel to zero (no covariance change) — anchors the estimate at the
+    // known ground state each cycle while the craft is on the ground.
+    // pos/vel をゼロに固定（共分散は変えない）— 接地中、毎サイクル既知の地上状態に錨を打つ。
+    core_.holdPositionVelocity();
+    for (int i = 0; i < 3; i++) {
+        cached_state_.position[i] = 0;
+        cached_state_.velocity[i] = 0;
+    }
+}
+
 StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
 {
     StateEstimate s = {};

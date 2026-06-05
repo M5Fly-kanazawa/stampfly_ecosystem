@@ -52,6 +52,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_estimator_eskf/eskf_core.cpp
     ${VN}/components/sf_estimator_complementary/complementary_estimator.cpp
     ${VN}/components/sf_controller_pid/pid_controller.cpp
+    ${VN}/components/sf_takeoff_landing/takeoff_landing.cpp   # ToF ground/airborne detect (imu_task)
     ${VN}/components/sf_core/params.cpp
     ${SIL_COMPAT}/nvs_shim.cpp
     ${SIL_COMPAT}/clock_shim.cpp
@@ -67,6 +68,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_controller/include
     ${VN}/components/sf_controller_pid/include
     ${VN}/components/sf_state/include
+    ${VN}/components/sf_takeoff_landing/include
   )
 endif()
 
@@ -286,6 +288,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SIL_EMU_TRAJ)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_new_glue.cpp # estimate overlay (ESKF est → trajectory)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin

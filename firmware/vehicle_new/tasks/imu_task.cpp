@@ -34,6 +34,7 @@
 #include "estimator.hpp"
 #include "eskf_estimator.hpp"
 #include "complementary_estimator.hpp"
+#include "takeoff_landing.hpp"
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "params.hpp"
@@ -63,6 +64,29 @@ extern TaskHandle_t g_control_task_handle;
 /// アクティブな推定器（下のファクトリが estimator.type で選ぶ）。実装を差し替え可能に
 /// するため IEstimator* で持つ。SIL ベンチは param で ESKF/相補を選ぶ（P2）。
 static sf::IEstimator* g_estimator = nullptr;
+
+/// Takeoff/landing manager — derives the on-ground/airborne state from ToF altitude
+/// (ToF-only, no baro). imu_task owns it (not state_task) because the vertical
+/// ground→airborne handoff is an ESTIMATION concern: it tells the estimator when to
+/// anchor the vertical state on the ground and when to hand off to ToF at takeoff.
+/// This mirrors the proven firmware/vehicle pattern (landing handler run in imu_task).
+/// 離着陸マネージャ — ToF 高度から接地/空中状態を導く（ToF のみ、baro なし）。
+/// 鉛直の接地→空中ハンドオフは推定の関心事（いつ地上に錨を打ち、いつ離陸で ToF に
+/// 渡すか）なので imu_task が所有する。実証済みの firmware/vehicle（landing handler を
+/// imu_task で回す）と同じ構造。
+static sf::TakeoffLandingMgr g_takeoff_landing;
+
+/// Whether the vertical ground-hold/handoff applies — true when ToF is the vertical
+/// sensor. On the ground the ToF sits below its min range and returns invalid, so
+/// the vertical channel has NO observation and would drift without the hold. When a
+/// barometer anchors altitude from the ground instead (eskf.use_tof=false), the hold
+/// is neither needed nor wanted (the ToF-driven airborne detector would never release
+/// it), so it is disabled. Read once from eskf.use_tof at task start.
+/// 鉛直の地上ホールド/ハンドオフを適用するか — ToF が鉛直センサなら true。接地中 ToF は
+/// 最小レンジ未満で無効を返し鉛直チャネルに観測が無くホールド無しではドリフトする。気圧計が
+/// 地上から高度を錨付けする構成（eskf.use_tof=false）ではホールドは不要かつ有害（ToF 駆動の
+/// 空中検出が解除されない）なので無効化する。タスク開始時に eskf.use_tof から1回読む。
+static bool g_tof_vertical = true;
 
 /// Estimator factory: select by estimator.type (0 = ESKF, 1 = complementary),
 /// construct statically (no heap), initialize, and return via IEstimator. This is
@@ -151,9 +175,22 @@ static void applyImuTransform(const stampfly::AccelData& accel_sensor,
 /// キューからの非同期センサ観測を処理する
 static void processAsyncSensors()
 {
+    // Arm state gates the takeoff/landing manager's ground detection (disarmed →
+    // on the ground). Read once per cycle from the system_mode topic (Latest, non-
+    // consuming, no queue competition).
+    // arm 状態が離着陸マネージャの接地判定を制御（disarmed→接地）。system_mode トピック
+    // （Latest, 非消費）から毎サイクル1回読む。
+    const sf::SystemMode mode = sf::system_mode.latest();
+    const bool armed = sf::isArmed(static_cast<sf::FlightState>(mode.state));
+
     sf::TofData tof;
     while (sf::sensor_tof.read(tof)) {
         g_estimator->updateTof(tof);
+        // Inject the SAME sample into the takeoff/landing manager so it does not
+        // compete with the estimator for the sensor_tof queue (single consumer).
+        // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と
+        // 奪い合わないようにする（単一 consumer）。
+        g_takeoff_landing.update(tof, armed);
     }
 
     sf::FlowData flow;
@@ -170,6 +207,50 @@ static void processAsyncSensors()
     while (sf::sensor_baro.read(baro)) {
         g_estimator->updateBaro(baro);
     }
+}
+
+/// Vertical ground→airborne handoff — anchor the vertical estimate on the ground
+/// and hand off to ToF at takeoff (ToF-only vertical; no baro).
+///
+/// On the ground the only vertical observation (ToF) is invalid below its minimum
+/// range, so without an anchor the predict-only vertical state drifts (a residual
+/// vel_z integrates into a pos_z ramp). By takeoff the drift exceeds the ToF
+/// innovation gate, so the first airborne ToF reading is rejected and the estimate
+/// never recovers — ALT_HOLD then chases a diverged altitude. Holding pos/vel at
+/// zero while grounded kills the drift; resetting at the ground→airborne edge gives
+/// ToF a clean lock (innovation ≈ true altitude, well inside the gate).
+///
+/// This mirrors the proven firmware/vehicle handoff (hold while grounded, reset at
+/// takeoff). Must run AFTER predict + ToF update so the hold overrides any drift.
+///
+/// 鉛直の接地→空中ハンドオフ — 接地中は鉛直推定を錨で固定し、離陸で ToF に渡す
+/// （鉛直は ToF のみ、baro なし）。接地中は唯一の鉛直観測 ToF が最小レンジ未満で無効
+/// ゆえ、錨が無いと予測のみの鉛直状態がドリフトし（残差 vel_z が pos_z ランプに積分）、
+/// 離陸時には ToF innovation ゲートを超えて最初の空中 ToF が棄却され回復不能になる
+/// （ALT_HOLD が発散した高度を追う）。接地中 pos/vel をゼロ保持でドリフトを殺し、
+/// 接地→空中エッジで reset すれば ToF がクリーンにロックする。実証済みの
+/// firmware/vehicle と同じ。predict + ToF 更新の後に実行（hold がドリフトを上書き）。
+///
+/// @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff  [OK]
+static void applyVerticalGroundHandoff()
+{
+    const bool on_ground = g_takeoff_landing.isOnGround();
+    static bool was_on_ground = true;   // boot state: on the ground / 起動時は接地
+
+    // Ground→airborne edge: reset pos/vel (and covariance) for a clean ToF lock.
+    // 接地→空中エッジ: クリーンな ToF ロックのため pos/vel（と共分散）をリセット。
+    if (was_on_ground && !on_ground) {
+        g_estimator->resetPositionVelocity();
+        ESP_LOGI(TAG, "Vertical handoff: takeoff — position tracking enabled");
+    }
+
+    // While on the ground: clamp pos/vel to zero each cycle to kill predict-only drift.
+    // 接地中: 毎サイクル pos/vel をゼロ固定して予測のみのドリフトを殺す。
+    if (on_ground) {
+        g_estimator->holdPositionVelocity();
+    }
+
+    was_on_ground = on_ground;
 }
 
 /// esp_timer callback: paces the IMU loop at 400Hz by notifying the IMU task.
@@ -207,6 +288,19 @@ void ImuTask(void* pvParameters)
     // Create + initialize the estimator selected by estimator.type.
     // estimator.type で選ばれた推定器を生成・初期化。
     g_estimator = createEstimator();
+
+    // Initialize the takeoff/landing manager (ToF-altitude ground/airborne detection).
+    // 離着陸マネージャを初期化（ToF 高度で接地/空中を判定）。
+    g_takeoff_landing.init();
+
+    // The vertical ground-hold applies only when ToF is the vertical sensor (a
+    // barometer would anchor altitude from the ground, making the hold unnecessary
+    // and its ToF-driven release impossible). Read eskf.use_tof once.
+    // 地上ホールドは ToF が鉛直センサの時のみ適用（気圧計があれば地上から錨付けでき
+    // ホールドは不要かつ ToF 駆動の解除が不能になる）。eskf.use_tof を1回読む。
+    bool use_tof = true;
+    sf::params::get_bool("eskf.use_tof", use_tof);
+    g_tof_vertical = use_tof;
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
     // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
@@ -301,6 +395,21 @@ void ImuTask(void* pvParameters)
         // =====================================================================
 
         processAsyncSensors();
+
+        // =====================================================================
+        // Step 3.5: Vertical ground→airborne handoff (ToF-only)
+        // Step 3.5: 鉛直の接地→空中ハンドオフ（ToF のみ）
+        //
+        // Runs after predict + ToF update so the on-ground hold overrides any
+        // predict-only vertical drift before the state is published. Skipped when a
+        // barometer (not ToF) anchors altitude from the ground (g_tof_vertical).
+        // predict + ToF 更新の後に実行し、接地ホールドが予測のみの鉛直ドリフトを
+        // 上書きしてから状態を発行する。気圧計が地上から錨付けする構成では飛ばす。
+        // =====================================================================
+
+        if (g_tof_vertical) {
+            applyVerticalGroundHandoff();
+        }
 
         // =====================================================================
         // Step 4: Publish state estimate

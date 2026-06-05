@@ -35,6 +35,7 @@ public:
     StateEstimate getState() const override;
     void reset() override;
     void resetPositionVelocity() override;
+    void holdPositionVelocity() override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;

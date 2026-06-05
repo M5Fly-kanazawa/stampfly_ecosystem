@@ -25,6 +25,7 @@
 #pragma once
 
 #include "flight_state.hpp"
+#include "data_types.hpp"   // sf::TofData
 #include <cstdint>
 
 namespace sf {
@@ -51,9 +52,21 @@ public:
     /// カスタム設定で初期化する
     void init(const TakeoffLandingConfig& config);
 
-    /// Update detection logic (call at control rate)
-    /// 検出ロジックを更新する（制御レートで呼ぶ）
-    void update();
+    /// Update detection logic with a fresh ToF sample (call when ToF data arrives).
+    /// The owning task reads the sensor_tof topic ONCE and injects the sample here,
+    /// so this manager does not compete with the estimator for the same queue.
+    ///
+    /// `armed` gates ground detection: while disarmed the craft is definitively on
+    /// the ground (on the ground the ToF sits below its minimum range and returns
+    /// invalid, so it cannot by itself confirm ground contact). This mirrors the
+    /// proven firmware/vehicle landing handler ("landed whenever disarmed") and lets
+    /// the manager re-anchor after landing and arm the next flight cleanly.
+    /// 新しい ToF サンプルで検出ロジックを更新する（ToF データ到着時に呼ぶ）。
+    /// 所有タスクが sensor_tof を1回だけ読んで注入するため推定器とキューを奪い合わない。
+    /// `armed` で接地判定を制御: disarmed 中は確実に接地（接地中 ToF は最小レンジ未満で
+    /// 無効を返し単独で接地を確認できない）。実証済みの firmware/vehicle（disarmed なら
+    /// landed）と同じで、着地後の再錨付けと次飛行のクリーンな開始を可能にする。
+    void update(const TofData& tof, bool armed);
 
     /// Check if vehicle is on the ground
     /// 機体が地上にあるか確認する
@@ -70,7 +83,7 @@ public:
 private:
     /// Evaluate ToF distance for ground contact
     /// ToF距離で地面接地を評価する
-    void evaluateToF();
+    void evaluateToF(const TofData& tof);
 
     /// Detect takeoff: sustained altitude above threshold
     /// 離陸検出: 閾値以上の高度を持続

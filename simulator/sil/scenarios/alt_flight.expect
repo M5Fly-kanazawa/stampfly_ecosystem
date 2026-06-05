@@ -1,0 +1,20 @@
+# alt_flight.expect — assert ARM → TAKEOFF → FLYING, the ToF ground→airborne
+# vertical handoff (imu_task), and the in-flight switch to ALTITUDE_HOLD driven by
+# the `alt` scenario token (CTRL_FLAG_ALT_MODE). The altitude HOLD itself (truth alt
+# bounded, ESKF est tracks truth) is checked numerically from trajectory.csv — the
+# expect DSL is log-only. Measured (P8 Phase B): holds ~0.86 m, ESKF est tracks truth
+# to mean 1.2 cm / max 6.8 cm; no divergence on the ground or after landing.
+# ARM→TAKEOFF→FLYING、ToF 接地→空中の鉛直ハンドオフ（imu_task）、alt トークン
+# (CTRL_FLAG_ALT_MODE) による飛行中の ALTITUDE_HOLD 切替を検証する。高度保持そのもの
+# （真値 alt 有界・ESKF est が真値追従）は trajectory.csv で数値確認する（expect は
+# ログのみ）。実測(P8 Phase B): ~0.86m 保持、est 追従 平均1.2cm/最大6.8cm、地上・着地後の
+# 発散なし。
+exit 0
+log_contains any "ARM accepted"                          # IDLE_GROUND → ARMED_GROUND
+log_contains any "Takeoff complete"                      # TAKEOFF → FLYING
+log_contains any "Vertical handoff: takeoff"             # imu_task: ToF ground→airborne handoff (resetPositionVelocity)
+log_contains any "Mode change: STABILIZE → ALT_HOLD"     # FLYING: in-flight switch to ALTITUDE_HOLD
+log_contains any "DISARM accepted"                       # FLYING → IDLE_GROUND (pilot DISARM)
+order "ARM accepted" "Vertical handoff: takeoff"         # arm precedes the takeoff handoff
+order "Vertical handoff: takeoff" "Mode change: STABILIZE → ALT_HOLD"  # handoff (ToF lock) precedes ALT_HOLD engage
+order "Mode change: STABILIZE → ALT_HOLD" "DISARM accepted"            # holds altitude before disarm

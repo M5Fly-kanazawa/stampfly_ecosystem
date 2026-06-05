@@ -128,9 +128,24 @@ public:
     /// Reset position and velocity only (keep attitude)
     /// 位置・速度のみリセット（姿勢は保持）
     ///
-    /// Called after takeoff to start position tracking from origin.
-    /// 離陸後に呼ばれ、原点から位置追跡を開始する。
+    /// Called at the ground→airborne edge to start position tracking from origin
+    /// with a fresh covariance (clean ToF lock at takeoff).
+    /// 接地→空中エッジで呼ばれ、新しい共分散で原点から位置追跡を開始する
+    /// （離陸時のクリーンな ToF ロック）。
     virtual void resetPositionVelocity() = 0;
+
+    /// Hold position and velocity at zero (called every cycle while on the ground)
+    /// 位置・速度をゼロに保持（接地中は毎サイクル呼ばれる）
+    ///
+    /// While on the ground the only vertical observation (ToF) is invalid below its
+    /// minimum range, so the predict-only vertical state would drift (vel_z
+    /// integrates into a pos_z ramp). Clamping pos/vel to zero anchors the estimate
+    /// at the known ground state. Default no-op: estimators that do not track
+    /// position (e.g. attitude-only filters) need not implement it.
+    /// 接地中は唯一の鉛直観測 ToF が最小レンジ未満で無効なため、予測のみの鉛直状態が
+    /// ドリフトする（vel_z が積分され pos_z がランプ）。pos/vel をゼロに固定して既知の
+    /// 地上状態に錨を打つ。既定 no-op: 位置を推定しない推定器（姿勢のみ等）は未実装でよい。
+    virtual void holdPositionVelocity() {}
 };
 
 }  // namespace sf
