@@ -24,10 +24,13 @@
  * Actuator::update() は actuator_motor トピック（SIL Plant が読む）を発行しつつ、
  * host に存在しない HW 書き込みを飛ばす。ファームは無改変。
  *
- * Only the two methods Actuator references (init, setMotorDuties) are defined;
- * isInitialized() is inline in the header (returns the always-false initialized_).
- * Actuator が参照する2メソッド（init, setMotorDuties）だけ定義する。
+ * The methods Actuator references (init, setMotorDuties, arm, disarm) are defined
+ * here; isInitialized() is inline in the header (returns the always-false
+ * initialized_). arm/disarm track the armed_ flag (no hardware) so the arm gate
+ * wired in Actuator works on the host.
+ * Actuator が参照するメソッド（init, setMotorDuties, arm, disarm）を定義する。
  * isInitialized() はヘッダのインライン（常に false の initialized_ を返す）。
+ * arm/disarm は armed_ フラグを追従（HW なし）し、Actuator の arm ゲートが host でも働く。
  */
 
 #include "motor_driver.hpp"
@@ -59,6 +62,28 @@ void MotorDriver::setMotorDuties(const float duties[4])
     for (int i = 0; i < NUM_MOTORS; ++i) {
         motor_output_[i] = duties[i];
     }
+}
+
+// arm — host stub: track the armed flag (no LEDC). Unlike the real driver it does
+// not require initialized_ (the host leaves it false on purpose), so the Actuator
+// arm gate still engages on the host.
+// arm — host スタブ: armed フラグを追従（LEDC なし）。実ドライバと違い initialized_ を
+// 要求しない（host は意図的に false）ので、Actuator の arm ゲートが host でも働く。
+esp_err_t MotorDriver::arm()
+{
+    armed_ = true;
+    return ESP_OK;
+}
+
+// disarm — host stub: clear the armed flag and zero the duties (no LEDC).
+// disarm — host スタブ: armed フラグを下げ duty をゼロにする（LEDC なし）。
+esp_err_t MotorDriver::disarm()
+{
+    armed_ = false;
+    for (int i = 0; i < NUM_MOTORS; ++i) {
+        motor_output_[i] = 0.0f;
+    }
+    return ESP_OK;
 }
 
 }  // namespace stampfly
