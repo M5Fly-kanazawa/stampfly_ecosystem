@@ -354,6 +354,22 @@ void StateManager::transition(FlightState new_state)
     // 状態を更新
     state_ = new_state;
 
+    // On returning to the ground, reset the flight mode to STABILIZE so the NEXT
+    // takeoff always starts in the direct-throttle mode that lifts off. Without this a
+    // mode selected in flight (e.g. ALT_HOLD) PERSISTS across DISARM/emergency-IDLE, and
+    // a re-takeoff in that mode never produces takeoff thrust from the ground — a real
+    // crash→re-fly robustness bug found by crash_refly.scn. The controller follows the
+    // published sub_mode (control_task reads system_mode each cycle), so no callback fire.
+    // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す
+    // 直接スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
+    // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
+    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器は発行 sub_mode に追従する
+    // （control_task が毎周期 system_mode を読む）ので callback 発火は不要。
+    if (new_state == FlightState::IDLE_GROUND && mode_ != FlightMode::STABILIZE) {
+        ESP_LOGI(TAG, "Flight mode reset to STABILIZE (on ground)");
+        mode_ = FlightMode::STABILIZE;
+    }
+
     // Fire onEnter callbacks for new state
     // 新状態のonEnterコールバックを発火
     for (int i = 0; i < enter_callback_count_; i++) {
