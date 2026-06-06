@@ -1,6 +1,8 @@
-# 次セッション指示書 — 実機に向けた地固め（残: P2-4 → P3）
+# 次セッション指示書 — 地固め完了 → 次は実機ブリングアップ
 
-最終更新: 2026-06-06（P1・P2-1・P2-2・P2-3 完了。残 P2-4・P3）
+最終更新: 2026-06-06（**地固め P1〜P3 全完了**。次は roadmap Phase 2/3 実機）
+
+> **本指示書の P1〜P3 は全て完了しました（下記）。次セッションは「実機ブリングアップ」または「P2 follow-up」から始めること。** 末尾「次フェーズ」参照。
 
 ## 0. 現状サマリ（ここまで達成）
 
@@ -15,7 +17,9 @@
 - ✅ **P2-3 完了**（commit `dcb4118`=ファーム, `436e007`=SIL）— 起動ジャイロ/加速度バイアス校正を ImuTask に配線。**対照試験で実証**: 生バイアス(accel 0.12/gyro 0.02)注入下で校正ON=tilt 3.2°有界 / OFF=tilt 176°転倒。
   - 重要発見: **params.cpp の手書き table[] が真の SSOT、params.def は非機能**（auto-memory `reference_params_ssot`）。新 param は params.cpp 両所に追加必須。
   - 校正の設計上の急所: disarmed・地上のみ収集（arm で中止）、settle 過渡破棄、**デッドバンドで無視可能バイアスは適用せず**（収束済み ESKF 上書き＝marginal POS_HOLD 撹乱を回避）。
-- ⏳ **残: P2-4（ARM前チェック）, P3（離陸判定統一）**。
+- ✅ **P2-4 完了**（commit `4109ccf`）— requestArm に ARM 前チェック: ①USB/低電圧禁止（実電圧 ≤ 3.3V で reject）②キャリブ済みゲート（system_status トピックで公開）。`prearm.scn` で「校正中=拒否 / 完了後=受理」を実証。③センサ健全性は M2b 繰延。
+- ✅ **P3 完了**（commit `6ce498f`）— state_task の dwell 暫定離陸判定を TakeoffLandingMgr の ToF 検出に統一（system_status.airborne 経由）。TAKEOFF_DWELL_MS 除去。全モードで離陸完了が ToF 高度交差で発火。
+- 🎯 **地固め完了 → 次は実機ブリングアップ（roadmap Phase 2/3）。末尾「次フェーズ」参照。**
 
 ### 着手前に読む
 1. `firmware/vehicle_new/docs/development_roadmap.md`（Phase 2/3、SIL→実機 Code Identity）
@@ -79,7 +83,7 @@ SIL では飛ぶが、**実機で安全に飛ばすための機能**を配線す
 | P2-1 | **power INA3221 実配線** | ✅ 完了 `b578216` | power_task が実 INA3221 を呼び `sensor_power` に実電圧。SIL で `Battery: 3.70V`（emu v_batt と一致）。Optional 分類・読み失敗ガード。 |
 | P2-2 | **Failsafe 配線** | ✅ 完了 `aa3f7c1` | Failsafe を PowerTask に配線（update() で battery/comm/impact/gyro）。`checkCommTimeout()` を CommandSetpoint 経過時間(R16)で実装。`commloss.scn` で COMM_LOST→LANDING を E2E ゲート化。**低電圧/衝撃の専用ゲートは emu knob 待ち（一部 P2-3a で電池以外のバイアス knob 整備済、電池電圧 knob は未）**。 |
 | P2-3 | **CalibrationMgr 起動配線** | ✅ 完了 `dcb4118`+`436e007` | ImuTask に in-loop 校正を配線（disarmed・地上のみ・arm 中止・settle・デッドバンド）。emu に生バイアス注入(`bias` scn イベント)+`SIL_EMU_NO_CALIB`。`calib.scn` 対照: ON=tilt3.2°有界 / OFF=tilt176°転倒。 |
-| P2-4 | **ARM 前チェック** | ⏳ **残（次の着手）** | state_manager.cpp:68-70 の3つの TODO を実装: ①USB電源 ARM 禁止（P2-1 の実電圧 `sensor_power` < usb閾値で reject）②キャリブ済みゲート（P2-3 の CalibrationMgr 状態 — **task-local ゆえ cross-component 公開手段の設計が要る**: トピック or accessor。P2-2 の comm timeout と同様に状態を晒す）③センサ健全性（`sensor_health` トピック）。requestArm に追加し、回帰全 PASS。 |
+| P2-4 | **ARM 前チェック** | ✅ 完了 `4109ccf` | requestArm に ①USB/低電圧禁止（実電圧 ≤ safety.battery.usb_v で reject、0=不明は許可）②キャリブ済みゲート（`system_status` トピックで ImuTask が公開）を実装。`prearm.scn` で実証。③センサ健全性は M2b（sensor_present）繰延。 |
 
 ### 進め方の原則
 - **1項目ずつ**：配線 → 回帰（上記スイート）→ コミット。まとめてやらない。
@@ -93,7 +97,9 @@ SIL では飛ぶが、**実機で安全に飛ばすための機能**を配線す
 
 ---
 
-## P3 ＝ 技術的負債の解消：離陸判定の統一
+## P3 ＝ 技術的負債の解消：離陸判定の統一 ✅ 完了 `6ce498f`
+
+**結果**: state_task の dwell を TakeoffLandingMgr の ToF 検出（`system_status.airborne`）に統一。`TAKEOFF_DWELL_MS` 除去。全モードで離陸完了が ToF 高度交差で発火（全回帰 PASS）。以下は記録（着手時の計画）。
 
 ### 目的
 state_task の「dwell による暫定離陸判定」を **TakeoffLandingMgr の ToF 検出に統一**する（離陸判定ロジックが2本ある状態を1本化）。
@@ -128,7 +134,34 @@ state_task の「dwell による暫定離陸判定」を **TakeoffLandingMgr の
 
 ---
 
+## 次フェーズ（地固め完了後の着手候補）
+
+地固め（P1〜P3）は完了。次セッションは以下のいずれかから始める。
+
+### A. 実機ブリングアップ（本丸 — roadmap Phase 2→3）
+- `sf flash vehicle -m` で起動ログ確認（`ESKF initialized (... accel_comp=1 ...)`、`Boot calibration applied: ...`、`INA3221 ready`、`Battery: x.xxV`）。
+- **初回は NVS クリア**を検討（古い params が残ると `position.vel.kp=0.8` 等の既定が効かない）。
+- 静止して起動 → 起動校正が実バイアスを測るか（`Boot calibration applied` のバイアス値が妥当か）。
+- ARM 前チェック実機確認: USB 給電のみで ARM 拒否されるか、校正完了まで ARM 拒否されるか。
+- HAL 接続 → ACRO 初飛行（roadmap Phase 4.1）。
+
+### B. P2 follow-up（SIL 忠実度・安全機能の上積み）
+- **emu 電池電圧 knob**: P2-3a の `bias` イベントと同様に電池電圧を可変にし、①P2-4 の USB/低電圧 ARM 禁止 ②P2-2 の LOW_BATTERY failsafe を SIL でゲート化（現状は emu v_batt 固定 3.7V で発火不可）。
+- **Failsafe が `safety.*` params を読む**: 現状 FailsafeConfig のハードコード既定値を使用。params.cpp に `safety.*` は登録済なので接続するだけ。
+- **センサ健全性 ARM ゲート**: M2b の `sf_board::sensor_present()` 実装後に requestApt ゲート3を配線。
+- **衝撃 failsafe の SIL 注入**: 4G 衝撃を emu で生成する手段（接触イベント等）。
+
+### C. P4〜P6（別フェーズ・性能/研究）
+| 項目 | 概要 |
+|------|------|
+| POS_HOLD 入口過渡の整定 | ~10秒の減衰を締める（vel td / 位置 ti）。脆弱領域注意（[[reference_params_ssot]] の通り params.cpp で調整） |
+| n1/n2 振動処理 | ノッチ、フローノイズモデル精緻化 |
+| データ駆動ノイズ化 | `project_sil_noise_data_driven` |
+
+---
+
 ## メモ
-- 各 P の作業後は**必ず回帰スイート全 PASS を確認 → `/commit`（Next steps 必須）**。
+- 各作業後は**必ず回帰スイート全 PASS を確認 → `/commit`（Next steps 必須）**。回帰コマンドは §0 の更新版を使う（`sf sil build` + commloss/calib/prearm 追加、最後に `sf build vehicle_new`）。
 - ESKF/制御パラメータを変える提案は**必ず SIL の数値シミュレーションで裏付けてから**（CLAUDE.md 原則）。
-- P2 の安全機能は実機で命に関わるので、**スタブを「動いたつもり」にしない**こと（emu で実経路を発火させて確認）。
+- 安全機能は実機で命に関わるので、**スタブを「動いたつもり」にしない**こと（emu で実経路を発火させて確認）。
+- **params 追加は params.cpp の param_vars + table[] 両方に**（params.def は非機能。auto-memory `reference_params_ssot`）。
