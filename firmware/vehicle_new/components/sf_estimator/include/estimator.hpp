@@ -146,6 +146,33 @@ public:
     /// ドリフトする（vel_z が積分され pos_z がランプ）。pos/vel をゼロに固定して既知の
     /// 地上状態に錨を打つ。既定 no-op: 位置を推定しない推定器（姿勢のみ等）は未実装でよい。
     virtual void holdPositionVelocity() {}
+
+    // =========================================================================
+    // Calibration
+    // キャリブレーション
+    // =========================================================================
+
+    /// Seed the estimator with boot-calibration biases measured at rest (gyro and
+    /// accel offsets, body frame, gravity already removed). Called ONCE on the ground
+    /// before flight so the filter starts at the true bias instead of converging from
+    /// zero during the critical takeoff transient — an uncalibrated accel bias is the
+    /// documented ESKF attitude-loop destabilizer.
+    ///
+    /// Default no-op so an estimator that does not seed bias (e.g. an attitude-only
+    /// complementary filter) need not implement it. NOTE: a full reset() zeros the
+    /// bias, so if a future onEnter(ARMED_GROUND) wires an ESKF reset, the calibration
+    /// must be re-applied AFTER that reset.
+    ///
+    /// 静止で測った起動校正バイアス（機体系のジャイロ/加速度オフセット、重力は除去済み）を
+    /// 推定器に種付けする。飛行前に地上で1回呼び、フィルタがゼロから収束する代わりに真の
+    /// バイアスから始められるようにする（離陸過渡で未校正の加速度バイアスは ESKF 姿勢ループを
+    /// 不安定化させる既知の要因）。既定 no-op: バイアスを種付けしない推定器（姿勢のみの相補
+    /// フィルタ等）は未実装でよい。注意: full reset() はバイアスをゼロ化するため、将来
+    /// onEnter(ARMED_GROUND) で ESKF reset を配線したら、その後に校正を再適用すること。
+    ///
+    /// @param gyro_bias   Measured gyro bias [rad/s], body frame / 測定ジャイロバイアス
+    /// @param accel_bias  Measured accel bias [m/s²], body frame (gravity removed) / 加速度バイアス
+    virtual void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) {}
 };
 
 }  // namespace sf

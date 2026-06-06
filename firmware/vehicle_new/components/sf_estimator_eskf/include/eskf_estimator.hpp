@@ -36,6 +36,7 @@ public:
     void reset() override;
     void resetPositionVelocity() override;
     void holdPositionVelocity() override;
+    void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;

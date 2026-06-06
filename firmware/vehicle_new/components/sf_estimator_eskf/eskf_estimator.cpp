@@ -155,6 +155,35 @@ void EskfEstimator::holdPositionVelocity()
     }
 }
 
+void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel_bias[3])
+{
+    // Seed the filter's bias states with the rest-measured biases. The ESKF predict
+    // subtracts these (accel − ba_, gyro − bg_), so a correct seed removes the raw
+    // offset from cycle 1 — the filter need not converge from zero through the
+    // takeoff transient (where an uncalibrated accel bias destabilizes attitude).
+    // We deliberately do NOT shrink the bias covariance: keeping the normal
+    // covariance lets the filter still track the slow in-flight bias drift (random
+    // walk), and makes a zero-bias calibration (a clean IMU) an EXACT no-op, so the
+    // default SIL path stays regression-neutral.
+    // フィルタのバイアス状態を静止測定値で種付けする。ESKF predict はこれを引く
+    // （accel−ba_, gyro−bg_）ので、正しい種は1サイクル目から生オフセットを除去する
+    // （未校正の加速度バイアスが姿勢を不安定化する離陸過渡を、ゼロから収束しない）。
+    // バイアス共分散は意図的に縮小しない: 通常の共分散を保てば飛行中の緩いバイアス
+    // ドリフト（ランダムウォーク）を追え、ゼロバイアス校正（クリーンな IMU）が厳密
+    // no-op になり、既定 SIL 経路が回帰中立に保たれる。
+    core_.setGyroBias(math::Vec3(gyro_bias[0], gyro_bias[1], gyro_bias[2]));
+    core_.setAccelBias(math::Vec3(accel_bias[0], accel_bias[1], accel_bias[2]));
+
+    // Reflect the seeded biases in the cached snapshot immediately (the next predict
+    // overwrites it, but getState() before then should report the calibration).
+    // 種付けしたバイアスをキャッシュにも即反映（次の predict が上書きするが、それまでの
+    // getState() は校正値を返すべき）。
+    for (int i = 0; i < 3; ++i) {
+        cached_state_.gyro_bias[i]  = gyro_bias[i];
+        cached_state_.accel_bias[i] = accel_bias[i];
+    }
+}
+
 StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
 {
     StateEstimate s = {};

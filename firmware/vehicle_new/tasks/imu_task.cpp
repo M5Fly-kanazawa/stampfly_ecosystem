@@ -35,6 +35,7 @@
 #include "eskf_estimator.hpp"
 #include "complementary_estimator.hpp"
 #include "takeoff_landing.hpp"
+#include "calibration.hpp"
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "params.hpp"
@@ -75,6 +76,14 @@ static sf::IEstimator* g_estimator = nullptr;
 /// 渡すか）なので imu_task が所有する。実証済みの firmware/vehicle（landing handler を
 /// imu_task で回す）と同じ構造。
 static sf::TakeoffLandingMgr g_takeoff_landing;
+
+/// CalibrationMgr — boot gyro/accel bias calibration, owned by ImuTask because it has
+/// the IMU samples. Measures the at-rest bias on the ground and seeds the estimator
+/// with it before flight (an uncalibrated accel bias destabilizes the ESKF attitude).
+/// CalibrationMgr — 起動時のジャイロ/加速度バイアス校正。IMU サンプルを持つ ImuTask が
+/// 所有。地上静止のバイアスを測り、飛行前に推定器へ種付けする（未校正の加速度バイアスは
+/// ESKF 姿勢を不安定化させる）。
+static sf::CalibrationMgr g_calib;
 
 /// Whether the vertical ground-hold/handoff applies — true when ToF is the vertical
 /// sensor. On the ground the ToF sits below its min range and returns invalid, so
@@ -238,6 +247,120 @@ static void applyVerticalGroundHandoff()
     was_on_ground = on_ground;
 }
 
+// Boot-calibration loop state. The calibration runs INSIDE the 400Hz loop (not as a
+// blocking setup phase) so it never delays the estimator/loop start — a blocking phase
+// desyncs the estimator from the rest of the system and the scenario timeline. While
+// on the ground the estimate is anchored, so accumulating in parallel is harmless.
+// 起動校正のループ状態。校正は 400Hz ループ「内」で実行し（ブロッキングな setup フェーズに
+// しない）、推定器/ループ開始を遅らせない — ブロッキングは推定器を他系やシナリオ時系列と
+// desync させる。接地中は推定が錨付けされるので並行蓄積は無害。
+static bool     g_calib_active        = false;  // settling/collecting now / 整定・収集中
+static uint32_t g_calib_settle_cycles = 0;      // remaining settle cycles to discard / 破棄する整定残り
+
+/// Set up the boot gyro/accel bias calibration (called once in ImuTask setup). Reads
+/// calibration.enable; when on, primes the CalibrationMgr and arms the in-loop feed.
+/// Does NOT block — feedBootCalibration() does the per-cycle work.
+/// 起動時のジャイロ/加速度バイアス校正をセットアップ（ImuTask setup で1回）。
+/// calibration.enable を読み、ON なら CalibrationMgr を準備しループ内 feed を起動。
+/// ブロックしない — 周期処理は feedBootCalibration() が行う。
+///
+/// @design detailed_design.md §3 — onEnter(IDLE): start calibration    [OK]
+static void startBootCalibration()
+{
+    bool enable = true;
+    sf::params::get_bool("calibration.enable", enable);
+    if (!enable) {
+        ESP_LOGW(TAG, "Boot calibration DISABLED (calibration.enable=0) "
+                      "— estimator starts at zero bias");
+        return;
+    }
+
+    // Load any persisted NVS calibration first (overwritten by the fresh measure).
+    // まず保存済み NVS 校正を読む（新規測定で上書きされる）。
+    g_calib.init();
+    g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES);
+    g_calib_active        = true;
+    g_calib_settle_cycles = config::CALIB_SETTLE_MS * 1000u / config::IMU_PERIOD_US;
+    ESP_LOGI(TAG, "Boot calibration: settle %lu cycles, then average %lu samples",
+             static_cast<unsigned long>(g_calib_settle_cycles),
+             static_cast<unsigned long>(config::CALIB_GYRO_SAMPLES));
+}
+
+/// Per-cycle boot-calibration step (called from the 400Hz loop while active). Discards
+/// the settling-transient cycles, then averages CALIB_GYRO_SAMPLES at-rest samples and
+/// seeds the estimator with the measured bias exactly once on completion.
+/// 周期ごとの起動校正ステップ（active 中は 400Hz ループから呼ぶ）。整定過渡の周期を捨て、
+/// 静止サンプルを CALIB_GYRO_SAMPLES 個平均し、完了時に一度だけ推定器へ種付けする。
+static void feedBootCalibration(const sf::ImuData& imu)
+{
+    // Calibration is valid only at rest. If the craft is armed (taking off or already
+    // flying) before the average completes, abort and leave the estimator untouched —
+    // averaging through flight motion (e.g. a yaw spin) yields a garbage bias. Read the
+    // arm state from system_mode (Latest, non-consuming).
+    // 校正は静止時のみ有効。平均完了前に arm された（離陸中/飛行中）なら中止し推定器を
+    // 触らない — 飛行運動（例: ヨー回転）を平均するとバイアスがゴミになる。arm 状態は
+    // system_mode（Latest, 非消費）から読む。
+    const sf::SystemMode mode = sf::system_mode.latest();
+    if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
+        g_calib_active = false;
+        ESP_LOGW(TAG, "Boot calibration aborted — armed before completion "
+                      "(estimator left untouched)");
+        return;
+    }
+
+    // Skip the settling transient so the average reflects gravity + true bias only.
+    // 整定過渡を捨て、平均が重力＋真のバイアスのみを反映するようにする。
+    if (g_calib_settle_cycles > 0) {
+        --g_calib_settle_cycles;
+        return;
+    }
+
+    const float gyro[3]  = {imu.gyro[0],  imu.gyro[1],  imu.gyro[2]};
+    const float accel[3] = {imu.accel[0], imu.accel[1], imu.accel[2]};
+    if (!g_calib.feedSample(gyro, accel)) {
+        return;   // still accumulating / まだ蓄積中
+    }
+
+    // Complete. Stop the in-loop feed regardless of what we decide below.
+    // 完了。以降の判断に関わらずループ内 feed は停止する。
+    g_calib_active = false;
+    const sf::CalibrationData& d = g_calib.data();
+
+    // Largest per-axis absolute bias (|x| inline, no <cmath> dependency).
+    // 軸ごとの絶対バイアスの最大（<cmath> 依存を避け |x| をインラインで）。
+    auto absf = [](float v) { return v < 0.0f ? -v : v; };
+    float gyro_mag = absf(d.gyro_bias[0]);
+    float accel_mag = absf(d.accel_bias[0]);
+    for (int i = 1; i < 3; ++i) {
+        if (absf(d.gyro_bias[i])  > gyro_mag)  gyro_mag  = absf(d.gyro_bias[i]);
+        if (absf(d.accel_bias[i]) > accel_mag) accel_mag = absf(d.accel_bias[i]);
+    }
+
+    // Deadband: a negligible measured bias (a clean IMU) is NOT seeded. Seeding a
+    // near-zero "calibration" mid-run would overwrite the filter's own converged bias
+    // estimate and perturb the marginal POSITION_HOLD entry, so leave the estimator
+    // untouched (a true no-op) when there is nothing meaningful to correct.
+    // デッドバンド: 無視可能な測定バイアス（クリーンな IMU）は種付けしない。ほぼゼロの
+    // 「校正」を実行中に種付けするとフィルタの収束済みバイアス推定を上書きし、脆弱な
+    // POSITION_HOLD 入口を撹乱する — 補正すべきものが無ければ推定器に触れない（真の no-op）。
+    if (gyro_mag < config::CALIB_GYRO_DEADBAND && accel_mag < config::CALIB_ACCEL_DEADBAND) {
+        ESP_LOGI(TAG,
+                 "Boot calibration: bias negligible (gyro %.4f<%.4f, accel %.3f<%.3f) "
+                 "— estimator left untouched",
+                 gyro_mag, config::CALIB_GYRO_DEADBAND, accel_mag, config::CALIB_ACCEL_DEADBAND);
+        return;
+    }
+
+    // Significant bias: seed the estimator (gravity already removed for accel Z).
+    // 有意なバイアス: 推定器に種付け（加速度 Z の重力は除去済み）。
+    g_estimator->applyCalibration(d.gyro_bias, d.accel_bias);
+    ESP_LOGI(TAG,
+             "Boot calibration applied: gyro_bias=[%.4f %.4f %.4f] rad/s, "
+             "accel_bias=[%.3f %.3f %.3f] m/s2",
+             d.gyro_bias[0], d.gyro_bias[1], d.gyro_bias[2],
+             d.accel_bias[0], d.accel_bias[1], d.accel_bias[2]);
+}
+
 /// esp_timer callback: paces the IMU loop at 400Hz by notifying the IMU task.
 /// Runs in the esp_timer task context (not an ISR), so xTaskNotifyGive is used.
 /// esp_timer コールバック: IMU タスクに通知して IMU ループを 400Hz で刻む。
@@ -286,6 +409,20 @@ void ImuTask(void* pvParameters)
     bool use_tof = true;
     sf::params::get_bool("eskf.use_tof", use_tof);
     g_tof_vertical = use_tof;
+
+    // Arm the boot gyro/accel bias calibration. It runs INSIDE the 400Hz loop (see
+    // feedBootCalibration) while the craft rests on the ground, measuring the IMU bias
+    // and seeding the estimator with it before takeoff — an uncalibrated accel bias
+    // destabilizes the ESKF attitude loop. The craft is stationary on the ground at
+    // boot, the natural rest window. (Design §3 triggers this on onEnter(IDLE_GROUND);
+    // arming it in ImuTask setup achieves the same without the not-yet-wired onEnter
+    // callback path, and the in-loop feed keeps the 400Hz timing unshifted.)
+    // 起動時のジャイロ/加速度バイアス校正を起動する。校正は 400Hz ループ「内」
+    // （feedBootCalibration）で機体が地上静止のうちに走り、IMU バイアスを測って離陸前に
+    // 推定器へ種付けする — 未校正の加速度バイアスは ESKF 姿勢ループを不安定化させる。起動時は
+    // 機体が地上静止で自然な静止窓。（設計§3 は onEnter(IDLE_GROUND) で起動するが、未配線の
+    // onEnter 経路なしで setup 起動でも同じ効果。ループ内 feed で 400Hz タイミングは不変。）
+    startBootCalibration();
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
     // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
@@ -366,6 +503,16 @@ void ImuTask(void* pvParameters)
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
         sf::sensor_imu.publish(imu);
+
+        // Boot calibration: while still active (on the ground at boot), accumulate the
+        // at-rest bias and seed the estimator once on completion. Runs in parallel with
+        // the normal predict below (the on-ground estimate is anchored), so it adds no
+        // delay and the 400Hz timing is unchanged.
+        // 起動校正: active 中（起動時の地上）は静止バイアスを蓄積し、完了時に一度だけ推定器へ
+        // 種付け。下の通常 predict と並行（接地推定は錨付け）で遅延を生まず 400Hz は不変。
+        if (g_calib_active) {
+            feedBootCalibration(imu);
+        }
 
         // =====================================================================
         // Step 2: Run estimator prediction step
