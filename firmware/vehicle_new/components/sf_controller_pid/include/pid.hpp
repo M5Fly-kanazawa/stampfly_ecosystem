@@ -54,24 +54,14 @@ struct PID {
         // Proportional / 比例
         float p_term = kp * error;
 
-        // Integral (trapezoidal / Tustin) with anti-windup
-        // 積分（台形積分 / Tustin）+ アンチワインドアップ
-        if (ti > 0.01f) {
-            integral += (kp / ti) * (error + prev_error) * (dt * 0.5f);
-            if (integral > output_limit) integral = output_limit;
-            if (integral < -output_limit) integral = -output_limit;
-        }
-
-        // Incomplete derivative (bilinear transform / Tustin)
-        // 不完全微分（双一次変換 / Tustin）
+        // Incomplete derivative (bilinear transform / Tustin). Computed before the
+        // integral so the anti-windup saturation check below sees the full output.
+        // 不完全微分（双一次変換 / Tustin）。アンチワインドアップの飽和判定が全出力を
+        // 見られるよう、積分より先に計算する。
         //
         // D(s) = Kp * Td * s / (eta*Td*s + 1)
-        //
         // Bilinear: s → 2/dt * (z-1)/(z+1)
-        // D(z) = ((α-1)/(α+1)) * D(z)*z⁻¹ + (2Td/(dt(α+1))) * (e-e⁻¹)
-        // where α = 2*eta*Td/dt
-        //
-        // 双一次変換: s → 2/dt * (z-1)/(z+1)
+        // D(z) = ((α-1)/(α+1)) * D(z)*z⁻¹ + (2Td/(dt(α+1))) * (e-e⁻¹), α = 2*eta*Td/dt
         float d_term = 0;
         if (td > 0) {
             float alpha = 2.0f * eta * td / dt;
@@ -79,6 +69,28 @@ struct PID {
             float b = 2.0f * td / ((alpha + 1.0f) * dt);
             deriv_filter = a * deriv_filter + b * (error - prev_error);
             d_term = kp * deriv_filter;
+        }
+
+        // Integral (trapezoidal / Tustin) with CONDITIONAL-INTEGRATION anti-windup.
+        // Merely clamping the integral to ±output_limit is NOT anti-windup: the
+        // integral can still wind up to the full output magnitude while the output is
+        // saturated, then unwinds slowly when the error reverses → overshoot. So we
+        // only accumulate when the resulting output would NOT push an already-saturated
+        // output further into saturation. A hard clamp remains as a backstop.
+        // 積分（台形 / Tustin）＋条件付き積分アンチワインドアップ。積分を ±output_limit で
+        // クランプするだけは不十分: 出力が飽和している間も積分が出力全幅まで巻き上がり、
+        // 誤差反転後にゆっくり戻る→オーバーシュート。よって、飽和中の出力をさらに飽和方向へ
+        // 押す場合は積分を更新しない（条件付き積分）。ハードクランプは保険として残す。
+        if (ti > 0.01f) {
+            float i_next = integral + (kp / ti) * (error + prev_error) * (dt * 0.5f);
+            float out_test = p_term + i_next + d_term;
+            bool push_high = (out_test >  output_limit) && (error > 0);
+            bool push_low  = (out_test < -output_limit) && (error < 0);
+            if (!push_high && !push_low) {
+                integral = i_next;
+            }
+            if (integral >  output_limit) integral =  output_limit;   // backstop
+            if (integral < -output_limit) integral = -output_limit;
         }
 
         prev_error = error;
