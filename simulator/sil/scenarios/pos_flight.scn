@@ -28,21 +28,21 @@
    +    rc   3072  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold position & altitude 14 s
    +    rc   2048  2048   2048    2048  0     1000      50                       # E: DISARM (motors cut)
 #
-# STATUS (P8, WIP — POS_HOLD currently DIVERGES): the cascade is implemented and the
-# mode engages ("Mode change: STABILIZE → POS_HOLD"), but after the roll-step
-# perturbation the horizontal position runs away (~300 m) regardless of the tilt-output
-# sign. ALT_HOLD alone (alt_flight, no POS control) holds horizontal position at 0, so
-# the instability is in the POS_HOLD loop, NOT the underlying flight/flow. Diagnosis is
-# deferred — it needs: (1) a frame-convention pass (trajectory px/py are MuJoCo qpos
-# ENU, but the ESKF/controller use NED — different axes), and (2) the design question
-# that optical flow constrains VELOCITY, not absolute position, so a flow-only absolute
-# position loop may be ill-posed (flow "position hold" is really velocity hold).
-# ステータス（P8, WIP — POS_HOLD は現状発散）: カスケードは実装済みでモードは入る
-# （Mode change: STABILIZE → POS_HOLD）が、ロールステップ擾乱後に水平位置が暴走（~300m、
-# 傾き出力の符号によらず）。ALT_HOLD 単独（alt_flight, POS制御なし）は水平位置 0 を保持する
-# ので、不安定は POS_HOLD ループにあり素の飛行/フローではない。診断は保留: (1) frame 規約の
-# 精査（trajectory px/py は MuJoCo qpos ENU だが ESKF/制御器は NED＝別軸）、(2) フローは
-# 速度を拘束し絶対位置を拘束しない＝フローのみの絶対位置ループは ill-posed の可能性
+# STATUS (P8, WIP — POS_HOLD MARGINALLY HOLDS, ~7 s then drifts): the root cause of the
+# earlier tumble/runaway was found and fixed (commit 98dd05f) — the ESKF accel-attitude
+# update was hard-gated during the tilt+accelerate maneuver, so it estimated "level"
+# (est_roll +5°) while the craft was rolled to -48°, and the attitude loop over-rolled
+# into a tumble. Converging to the proven firmware/vehicle config (no norm gate,
+# k_adaptive=10) makes est_roll TRACK truth; the craft now holds position for ~7 s and
+# the worst-case horizontal runaway dropped from ~371 m to ~51 m. The remaining issue is
+# a slow drift after ~7 s (a few-degree est_roll bias accumulates) — tuning room, the
+# same "marginally holds" regime as the old firmware. NOT yet a hard gate.
+# ステータス（P8, WIP — POS_HOLD は約7秒 marginal 保持後に緩ドリフト）: 以前のタンブル/暴走の
+# 真因を特定・修正済(commit 98dd05f) — ESKF の加速度-姿勢更新が傾斜+加速マニューバ中に
+# ハードゲートされ「水平」(est_roll +5°)と誤推定(真 roll -48°)→姿勢ループが過剰ロール→タンブル。
+# 実証済み firmware/vehicle 構成(norm gate無し・k_adaptive=10)へ収束で est_roll が真値追従、
+# 約7秒位置保持・水平暴走 371m→51m。残=約7秒後の緩ドリフト(est_roll 数度バイアス蓄積)＝旧版同様
+# の「marginal hold・調整余地」。まだ厳密ゲートではない。
 # （フローの「位置保持」は実質「速度保持」）。
 #
 # No .expect: this scenario is the Layer 4 reproduction/diagnosis harness (not yet a gate).
