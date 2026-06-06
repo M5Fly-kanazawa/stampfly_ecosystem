@@ -134,9 +134,72 @@ state_task の「dwell による暫定離陸判定」を **TakeoffLandingMgr の
 
 ---
 
+## ★最優先: ロバスト再飛行 readiness（状況の知覚・分類 + 再校正）
+
+### 要件（ユーザー指示 2026-06-07）
+**何らかの理由でフライトが中断（墜落・緊急DISARM・通信断等）しても、機体を置き直したら
+「①状態リセット ②飛行前キャリブ完了 ③飛行可能」な準備完了状態に戻らねばならない。**
+さらに、**機体プログラムが現在の状況を正しく知覚し、状況を分類できるように作られているか**を
+検証する（これは状態機械＋センサ駆動の検出器のテスト）。**置き直しは数値的なポジション変更
+（teleport）ではなく、物理的に「持ち上げ→運び→置く」動作をセンサ(IMU/ToF)が検知し、その間も
+ファームが正しく動作することを確認する。**
+
+### 状況分類の配線監査（2026-06-07 実施）— ファームが分類「できる/できない」
+| 状況遷移（知覚） | 駆動トリガ | 配線 |
+|---|---|---|
+| INIT→IDLE_GROUND（初期化完了） | 推定器出力 | ✅ state_task |
+| IDLE_GROUND→ARMED_GROUND（ARM） | pilot + ARM前チェック | ✅ state_task |
+| ARMED_GROUND/FLYING→IDLE_GROUND（DISARM） | pilot falling edge | ✅ state_task |
+| ARMED_GROUND→TAKEOFF（スロットル） | throttle 閾値 | ✅ state_task |
+| TAKEOFF→FLYING（離陸完了） | ToF airborne (TakeoffLandingMgr) | ✅ P3 |
+| FLYING→IDLE_GROUND（衝撃/異常） | IMPACT/GYRO_ANOMALY failsafe | ✅ P2-2（crash で自動DISARM実証） |
+| FLYING→LANDING（通信断） | COMM_LOST failsafe | ✅ P2-2 |
+| **IDLE_GROUND↔IDLE_HELD（手持ち）** | notifyIdleGroundHeld | ❌ **未配線**（検出器なし。TakeoffLandingMgr に isHeld() 無し、disarmed は常に on_ground 扱い） |
+| **LANDING→IDLE_GROUND（着陸完了）** | notifyLandingComplete | ❌ **未配線**（isLandingDetected() 未消費 → 自動着陸が完了しない） |
+| **FLYING→LANDING（pilot着陸指令）** | notifyLandingRequest | ❌ 未配線（pilot land コマンドなし） |
+| **FLYING→ARMED_GROUND（touch-and-go）** | notifySoftLanding | ❌ 未配線 |
+
+→ **結論: 状態は enum/状態機械/単体テストに「存在」するが、IDLE_HELD・着陸完了・soft-landing は
+センサ駆動の検出器が未配線 ＝ 機体はこれらの状況を「分類できない」。** Failsafe/calibration が
+未配線だったのと同じパターン。
+
+### crash_refly 調査で見つけた実バグ・ギャップ
+1. ✅**修正済 `5819a38`**: 飛行中モード（ALT_HOLD等）が DISARM を跨いで残り、再離陸が
+   その非離陸モードで離陸不能 → IDLE_GROUND 復帰時に mode→STABILIZE リセット。
+2. ❌**再校正が未実装**: 起動校正は boot 1回のみ（g_calibrated ラッチ、再 trigger なし）。
+   置き直し後に再校正されない（要件②未達）。設計§3「onEnter(IDLE): start calibration」は
+   毎回の IDLE 入場でやる意図だが、現状 boot setup のみ。
+3. ❌**ESKF reset が未配線**: g_estimator->reset() はどこからも呼ばれない（要件①の一部未達）。
+4. ❌**IDLE_HELD 未配線**（上記監査）。
+5. ⚠**teleport place は不可**: truth を瞬間移動させると IMU/ESKF が不連続を「見て」いないため
+   再離陸が不安定化（実測: 置き直し後に再度 roll 180°転倒）。物理ハンドリング必須。
+
+### 設計（次セッションで実装する順序）
+1. **IDLE_HELD 検出を配線**（状況分類）: TakeoffLandingMgr に「disarmed かつ ToF が有効距離
+   （> airborne 閾値）→ held」を追加し、imu_task が `notifyIdleGroundHeld(true/false)` を駆動。
+   これで「持ち上げられた」を分類できる。
+2. **再校正トリガ**: IDLE_HELD→IDLE_GROUND（置き直し）エッジ、または IDLE_GROUND 入場かつ静止で
+   起動校正を再 arm（g_calibrated を false に戻し再収集）。ARM前チェック(P2-4)が再校正完了まで
+   ARM を拒否 → 要件②③を満たす。
+3. **ESKF reset**: 接地復帰（IDLE_GROUND 入場、非INIT）で g_estimator->reset()（要件①）。
+   再校正の bias を reset 後に再注入する順序に注意（[[reference_params_ssot]] と同様、設計矛盾に注意）。
+4. **物理ハンドリング SIL モデル**（teleport 厳禁）: emu に「手で持ち上げ→反転を正立へ→運ぶ→置く」
+   の**連続キネマティック軌道**を駆動する `handle` 機構を追加。Plant が軌道から IMU(比力=a_kin−g を
+   機体姿勢で回転)・ToF(高さ/cos傾き、反転中は無効)・gyro(姿勢変化率)を**合成**し、センサが動作を
+   検知する。MuJoCo の accel センサは prescribed kinematics では正しく出ない（qacc が free-fall に
+   なる）ため、ハンドリング窓では Plant が解析的に合成する方式が要。
+5. **検証シナリオ** `crash_refly.scn`（物理ハンドリング版）: 飛行→衝撃で自動DISARM/墜落（反転）→
+   **物理 handle で持ち上げ→正立→設置**（IMU/ToFがハンドリングを検知、IDLE_HELD→IDLE_GROUND遷移）→
+   **再校正完了**→再ARM→再離陸→ホバー回復、を全てゲート化。`metric alt_min>0.3 in <hover2窓>`
+   で再飛行成功を、ログで IDLE_HELD/再校正/再ARM の順序を検証。
+6. **modeswitch.scn**（飛行中モード切替）: takeoff→ALT_HOLD→POS_HOLD→ALT_HOLD のトグルで姿勢/高度が
+   各遷移で有界（カスケード reset のロバスト性）。
+
+---
+
 ## 次フェーズ（地固め完了後の着手候補）
 
-地固め（P1〜P3）は完了。次セッションは以下のいずれかから始める。
+地固め（P1〜P3）は完了。次セッションは以下のいずれかから始める（ただし上記★が最優先）。
 
 ### A. 実機ブリングアップ（本丸 — roadmap Phase 2→3）
 - `sf flash vehicle -m` で起動ログ確認（`ESKF initialized (... accel_comp=1 ...)`、`Boot calibration applied: ...`、`INA3221 ready`、`Battery: x.xxV`）。
