@@ -45,6 +45,7 @@ Topic<ControlOutput,   Latest, 1>      control_output;
 Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<SystemMode,      Latest, 1>      system_mode;
 Topic<SystemAlert,     Queue, 4>       system_alert;
+Topic<SystemStatus,    Latest, 1>      system_status;
 
 void topics_init()
 {
@@ -61,6 +62,7 @@ void topics_init()
     actuator_motor.init();
     system_mode.init();
     system_alert.init();
+    system_status.init();
 }
 
 // =============================================================================

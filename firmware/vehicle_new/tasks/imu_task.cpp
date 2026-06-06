@@ -257,6 +257,19 @@ static void applyVerticalGroundHandoff()
 static bool     g_calib_active        = false;  // settling/collecting now / 整定・収集中
 static uint32_t g_calib_settle_cycles = 0;      // remaining settle cycles to discard / 破棄する整定残り
 
+/// Publish the boot-readiness status so StateManager::requestArm() can gate ARM on it
+/// (R16-style: status via a topic, not a cross-task object). calibrated=false while the
+/// calibration is still collecting; true once it is no longer pending.
+/// 起動準備状態を発行し、StateManager::requestArm() が ARM をゲートできるようにする
+/// （R16 流: トピック経由）。校正収集中は false、保留でなくなれば true。
+static void publishCalibStatus(bool calibrated)
+{
+    sf::SystemStatus st{};
+    st.calibrated = calibrated;
+    st.timestamp  = static_cast<uint32_t>(esp_timer_get_time());
+    sf::system_status.publish(st);
+}
+
 /// Set up the boot gyro/accel bias calibration (called once in ImuTask setup). Reads
 /// calibration.enable; when on, primes the CalibrationMgr and arms the in-loop feed.
 /// Does NOT block — feedBootCalibration() does the per-cycle work.
@@ -272,6 +285,7 @@ static void startBootCalibration()
     if (!enable) {
         ESP_LOGW(TAG, "Boot calibration DISABLED (calibration.enable=0) "
                       "— estimator starts at zero bias");
+        publishCalibStatus(true);   // nothing to wait for → ARM not gated on calibration
         return;
     }
 
@@ -281,6 +295,7 @@ static void startBootCalibration()
     g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES);
     g_calib_active        = true;
     g_calib_settle_cycles = config::CALIB_SETTLE_MS * 1000u / config::IMU_PERIOD_US;
+    publishCalibStatus(false);      // calibration pending → pre-arm check rejects ARM
     ESP_LOGI(TAG, "Boot calibration: settle %lu cycles, then average %lu samples",
              static_cast<unsigned long>(g_calib_settle_cycles),
              static_cast<unsigned long>(config::CALIB_GYRO_SAMPLES));
@@ -303,6 +318,7 @@ static void feedBootCalibration(const sf::ImuData& imu)
     const sf::SystemMode mode = sf::system_mode.latest();
     if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
         g_calib_active = false;
+        publishCalibStatus(true);   // no longer pending (aborted)
         ESP_LOGW(TAG, "Boot calibration aborted — armed before completion "
                       "(estimator left untouched)");
         return;
@@ -321,9 +337,12 @@ static void feedBootCalibration(const sf::ImuData& imu)
         return;   // still accumulating / まだ蓄積中
     }
 
-    // Complete. Stop the in-loop feed regardless of what we decide below.
-    // 完了。以降の判断に関わらずループ内 feed は停止する。
+    // Complete. Stop the in-loop feed and mark boot readiness regardless of what we
+    // decide below (apply or deadband-skip) — the calibration is no longer pending.
+    // 完了。以降（適用 or デッドバンドスキップ）に関わらずループ内 feed を止め、起動準備
+    // 完了を通知する — 校正はもう保留中でない。
     g_calib_active = false;
+    publishCalibStatus(true);
     const sf::CalibrationData& d = g_calib.data();
 
     // Largest per-axis absolute bias (|x| inline, no <cmath> dependency).

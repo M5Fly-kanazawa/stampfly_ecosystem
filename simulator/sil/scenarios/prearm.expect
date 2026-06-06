@@ -1,0 +1,7 @@
+# prearm.expect — P2-4 pre-arm calibration gate. Asserts requestArm() REJECTS ARM while
+# the boot calibration is still collecting, then ACCEPTS it once calibration completes.
+# prearm.expect — ARM 前キャリブゲート。校正収集中は ARM を拒否し、完了後に受理することを検証。
+exit 0
+log_contains any "ARM rejected: boot calibration not complete"   # early ARM blocked while calibrating
+log_contains any "ARM accepted"                                  # later ARM allowed once calibrated
+order "ARM rejected: boot calibration not complete" "ARM accepted"

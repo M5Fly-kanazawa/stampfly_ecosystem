@@ -77,5 +77,6 @@ extern Topic<MotorOutput,     Latest, 1>      actuator_motor;
 
 extern Topic<SystemMode,      Latest, 1>      system_mode;
 extern Topic<SystemAlert,     Queue, 4>       system_alert;
+extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
 
 }  // namespace sf

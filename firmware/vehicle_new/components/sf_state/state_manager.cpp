@@ -17,11 +17,20 @@
  */
 
 #include "state_manager.hpp"
+#include "params.hpp"
 #include "esp_log.h"
 
 static const char* TAG = "StateManager";
 
 namespace sf {
+
+/// Below this voltage the sensor_power reading is "unknown" (power monitor absent or a
+/// failed read publishes 0). A 0/unknown reading must NOT block ARM — power monitoring is
+/// Optional (hardware_init.md §5) — so the pre-arm voltage gate ignores readings below it.
+/// この電圧未満は sensor_power の読みが「不明」（電源モニタ不在 or 読み失敗で 0 が発行）。
+/// 電源監視は Optional（hardware_init.md §5）ゆえ 0/不明は ARM を阻まない — ARM 前電圧ゲートは
+/// これ未満の読みを無視する。
+static constexpr float kVoltageValidMin = 0.1f;
 
 // =============================================================================
 // Initialization
@@ -55,8 +64,9 @@ void StateManager::notifyInitComplete()
     transition(FlightState::IDLE_GROUND);
 }
 
-/// @design requirements.md §2 — ARM from GROUND only                  [--]
-/// @design requirements.md §9 — USB power: ARM prohibited             [--]
+/// @design requirements.md §2 — ARM from GROUND only                  [OK]
+/// @design requirements.md §9 — USB power / low-V: ARM prohibited     [OK]
+/// @design detailed_design.md §3 — ARM gated on calibration complete  [OK]
 bool StateManager::requestArm()
 {
     if (state_ != FlightState::IDLE_GROUND) {
@@ -65,9 +75,41 @@ bool StateManager::requestArm()
         return false;
     }
 
-    // TODO: Check USB power (voltage <= 3.3V → reject)
-    // TODO: Check calibration complete
-    // TODO: Check sensor health
+    // --- Pre-arm gate 1: battery / USB power (requirements §9) ------------------------
+    // Reject ARM if a VALID voltage reading is at or below the unsafe threshold — either
+    // running on the USB rail (no pack) or a critically low battery. A 0/unknown reading
+    // (power monitor absent → Optional, hardware_init.md §5) does NOT block. Threshold
+    // from the safety.battery.usb_v param.
+    // ARM 前ゲート1: 電池/USB 電源（要件§9）。有効な電圧読みが危険閾値以下なら ARM を拒否
+    // （USB レール=電池なし or 危険な低電圧）。0/不明（電源モニタ不在→Optional）は阻まない。
+    // 閾値は safety.battery.usb_v param から。
+    float usb_v = 3.3f;
+    params::get_float("safety.battery.usb_v", usb_v);
+    const float voltage = sensor_power.latest().voltage;
+    if (voltage > kVoltageValidMin && voltage <= usb_v) {
+        ESP_LOGW(TAG, "ARM rejected: battery %.2fV <= %.2fV (USB/low — unsafe to fly)",
+                 voltage, usb_v);
+        return false;
+    }
+
+    // --- Pre-arm gate 2: boot calibration complete (requirements §9 / design §3) ------
+    // The boot gyro/accel bias calibration must no longer be pending (ImuTask publishes
+    // system_status.calibrated). Don't fly on a half-measured bias. Status via topic
+    // (R16-style), not a cross-task object.
+    // ARM 前ゲート2: 起動校正完了（要件§9 / 設計§3）。起動バイアス校正が保留中でないこと
+    // （ImuTask が system_status.calibrated を発行）。半端なバイアスで飛ばさない。状態は
+    // トピック経由（R16 流）。
+    if (!system_status.latest().calibrated) {
+        ESP_LOGW(TAG, "ARM rejected: boot calibration not complete");
+        return false;
+    }
+
+    // --- Pre-arm gate 3: sensor health — DEFERRED ------------------------------------
+    // A meaningful health gate needs sf_board::sensor_present() (the M2b per-sensor
+    // presence infrastructure, which still returns false today), so it is wired with
+    // that work, not here.
+    // ARM 前ゲート3: センサ健全性 — 繰延。意味あるゲートには sf_board::sensor_present()
+    // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
 
     ESP_LOGI(TAG, "ARM accepted");
     transition(FlightState::ARMED_GROUND);

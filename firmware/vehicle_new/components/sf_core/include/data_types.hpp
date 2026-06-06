@@ -184,4 +184,16 @@ struct SystemAlert {
     uint32_t timestamp;   // [us]
 };
 
+/// Boot/system readiness status — published by ImuTask, read by the pre-arm checks
+/// in StateManager::requestArm(). Lets the transition authority gate ARM on readiness
+/// without reaching into a task-local object across tasks (R16-style: status via topic).
+/// 起動/システム準備状態 — ImuTask が発行し、StateManager::requestArm() の ARM 前チェックが
+/// 読む。遷移実行者がタスクをまたいで task-local オブジェクトに触れずに ARM を準備状態で
+/// ゲートできるようにする（R16 流: 状態はトピック経由）。
+struct SystemStatus {
+    bool calibrated;      // boot gyro/accel bias calibration is no longer pending
+                          // 起動バイアス校正が保留中でない（完了/スキップ/無効/中止）
+    uint32_t timestamp;   // [us]
+};
+
 }  // namespace sf
