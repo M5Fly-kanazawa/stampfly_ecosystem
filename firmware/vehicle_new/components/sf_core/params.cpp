@@ -46,6 +46,12 @@ Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<SystemMode,      Latest, 1>      system_mode;
 Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
+Topic<EstimatorCommand,  Queue, 4>     estimator_command;
+Topic<ControllerCommand, Queue, 4>     controller_command;
+Topic<NotifyCommand,     Queue, 8>     notify_command;
+Topic<SensorHealth,      Latest, 1>    sensor_health;
+Topic<GuidanceTarget,    Latest, 1>    command_target;
+Topic<NavigationPath,    Queue, 4>     nav_path;
 
 void topics_init()
 {
@@ -63,6 +69,12 @@ void topics_init()
     system_mode.init();
     system_alert.init();
     system_status.init();
+    estimator_command.init();
+    controller_command.init();
+    notify_command.init();
+    sensor_health.init();
+    command_target.init();
+    nav_path.init();
 }
 
 // =============================================================================

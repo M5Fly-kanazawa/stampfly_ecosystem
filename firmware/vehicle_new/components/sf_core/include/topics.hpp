@@ -14,8 +14,9 @@
  * Adding a new topic requires only one line here.
  * トピック追加はここに1行追加するだけ。
  *
- * @design architecture.md §3 — Topic list (12 topics)                 [--]
+ * @design architecture.md §3 — Topic list                            [--]
  * @design detailed_design.md §2 — Topic definitions                   [--]
+ * @design detailed_design.md §2 — R13/R14 annotation & overflow_count [--]
  */
 
 #pragma once
@@ -78,5 +79,32 @@ extern Topic<MotorOutput,     Latest, 1>      actuator_motor;
 extern Topic<SystemMode,      Latest, 1>      system_mode;
 extern Topic<SystemAlert,     Queue, 4>       system_alert;
 extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
+
+// =============================================================================
+// Transition Command Topics — reset commands (StateManager callbacks → owning task)
+// 遷移コマンドトピック — リセット指令（StateManager コールバック → 所有タスク）
+//
+// StateManager の onExit/onEnter コールバックが publish し、リソース所有タスクが消費する
+// （architecture.md §4 コールバック集約 + R5 Pub-Sub 疎結合）。
+// =============================================================================
+
+extern Topic<EstimatorCommand,  Queue, 4>     estimator_command;   // StateMgr → ImuTask (estimator)
+extern Topic<ControllerCommand, Queue, 4>     controller_command;  // StateMgr → ControlTask (controller)
+extern Topic<NotifyCommand,     Queue, 8>     notify_command;      // StateMgr/Failsafe → NotifyTask
+
+// =============================================================================
+// Health Topic (R15)
+// 健全性トピック（R15）
+// =============================================================================
+
+extern Topic<SensorHealth,      Latest, 1>    sensor_health;       // sf_board ~1Hz → failsafe/telemetry
+
+// =============================================================================
+// Reserved Topics — Guidance / Navigation (R11, not yet produced)
+// 予約トピック — ガイダンス/ナビゲーション（R11、未発行）
+// =============================================================================
+
+extern Topic<GuidanceTarget,    Latest, 1>    command_target;      // RESERVED (M4+)
+extern Topic<NavigationPath,    Queue, 4>     nav_path;            // RESERVED (Phase 6)
 
 }  // namespace sf

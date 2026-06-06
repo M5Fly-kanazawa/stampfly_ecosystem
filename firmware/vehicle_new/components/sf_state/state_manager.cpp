@@ -19,6 +19,7 @@
 #include "state_manager.hpp"
 #include "params.hpp"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 static const char* TAG = "StateManager";
 
@@ -389,7 +390,7 @@ void StateManager::publishMode()
     mode_msg.state = static_cast<uint8_t>(state_);
     mode_msg.sub_mode = static_cast<uint8_t>(mode_);
     mode_msg.armed = sf::isArmed(state_);
-    mode_msg.timestamp = 0;  // TODO: use esp_timer_get_time()
+    mode_msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
     system_mode.publish(mode_msg);
 }

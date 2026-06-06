@@ -113,6 +113,12 @@ public:
         updated_ = false;
     }
 
+    /// Overflow count — Latest overwrites by design (no loss concept), always 0.
+    /// Provided for R14 uniformity so monitors can query every topic the same way.
+    /// オーバーフロー数 — Latest は上書きが仕様（喪失概念なし）で常に0。R14 の統一性のため
+    /// 監視側が全トピックを同じ方法で問い合わせられるよう提供する。
+    uint32_t overflowCount() const { return 0; }
+
 private:
     mutable SemaphoreHandle_t mutex_ = nullptr;
     T data_ = {};
@@ -140,8 +146,13 @@ public:
     {
         uint32_t head = head_.load(std::memory_order_relaxed);
         uint32_t next = (head + 1) & mask_;
-        // If full, overwrite oldest (drop)
-        // 満杯の場合は最古を上書き（ドロップ）
+        // Full when the next slot is the consumer's tail: writing here overwrites an
+        // unread sample, so count the loss (R14). The write still proceeds (drop-oldest).
+        // 次スロットが consumer の tail なら満杯: ここに書くと未読サンプルを上書きするので
+        // 喪失をカウント（R14）。書き込み自体は続行（最古をドロップ）。
+        if (next == tail_.load(std::memory_order_acquire)) {
+            overflow_count_.fetch_add(1, std::memory_order_relaxed);
+        }
         buf_[head] = data;
         head_.store(next, std::memory_order_release);
     }
@@ -183,14 +194,20 @@ public:
     {
         head_.store(0, std::memory_order_relaxed);
         tail_.store(0, std::memory_order_relaxed);
+        overflow_count_.store(0, std::memory_order_relaxed);
         memset(buf_, 0, sizeof(buf_));
     }
+
+    /// Overflow count — samples lost to drop-oldest while the ring was full (R14)
+    /// オーバーフロー数 — 満杯時に最古ドロップで失われたサンプル数（R14）
+    uint32_t overflowCount() const { return overflow_count_.load(std::memory_order_relaxed); }
 
 private:
     static constexpr uint32_t mask_ = Size - 1;
     T buf_[Size] = {};
     std::atomic<uint32_t> head_{0};
     std::atomic<uint32_t> tail_{0};
+    std::atomic<uint32_t> overflow_count_{0};
 };
 
 // =============================================================================
@@ -207,7 +224,11 @@ public:
     /// 新しい値を発行する（ノンブロッキング、満杯時はドロップ）
     void publish(const T& data)
     {
-        xQueueSend(queue_, &data, 0);
+        // Non-blocking send; if the queue is full the sample is dropped — count it (R14).
+        // ノンブロッキング送信。満杯ならサンプルは破棄される — カウントする（R14）。
+        if (xQueueSend(queue_, &data, 0) != pdTRUE) {
+            overflow_count_.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     /// Read next value, returns false if empty
@@ -236,10 +257,16 @@ public:
     void init()
     {
         queue_ = xQueueCreate(Size, sizeof(T));
+        overflow_count_.store(0, std::memory_order_relaxed);
     }
+
+    /// Overflow count — samples dropped because the queue was full (R14)
+    /// オーバーフロー数 — キュー満杯で破棄されたサンプル数（R14）
+    uint32_t overflowCount() const { return overflow_count_.load(std::memory_order_relaxed); }
 
 private:
     QueueHandle_t queue_ = nullptr;
+    std::atomic<uint32_t> overflow_count_{0};
 };
 
 // =============================================================================

@@ -195,7 +195,123 @@ struct SystemStatus {
                           // 起動バイアス校正が保留中でない（完了/スキップ/無効/中止）
     bool airborne;        // ToF-based airborne detection (TakeoffLandingMgr): off the
                           // ground. Drives TAKEOFF → FLYING. / ToF 離陸検出: 空中。
+    bool held;            // ToF-based held-in-hand detection (disarmed + ToF valid above
+                          // the airborne threshold). Drives IDLE_GROUND ↔ IDLE_HELD.
+                          // ToF 手持ち検出（disarmed＋ToF有効＋空中閾値超）。IDLE地上↔手持ち。
     uint32_t timestamp;   // [us]
+};
+
+// =============================================================================
+// Transition Command Topics — reset commands issued by StateManager callbacks
+// 遷移コマンドトピック — StateManager コールバックが発行するリセット指令
+//
+// architecture.md §4 mandates that reset processing be consolidated in the
+// state-machine onExit/onEnter callbacks, and R5 mandates that cross-component
+// communication go through Pub-Sub topics only. So a transition callback does
+// not reach into the estimator/controller directly; it publishes a command and
+// the owning task (ImuTask owns the estimator, ControlTask owns the controller)
+// consumes it. This replaces the previous ad-hoc edge detection inside those tasks.
+//
+// architecture.md §4 は「リセット処理を状態機械の onExit/onEnter コールバックに集約」、
+// R5 は「コンポーネント間通信は Pub-Sub トピックのみ」を要求する。よって遷移コールバックは
+// 推定器/制御器を直接叩かず、コマンドを publish し、所有タスク（ImuTask=推定器、
+// ControlTask=制御器）が消費して実行する。これが旧来のタスク内エッジ検出を置き換える。
+// =============================================================================
+
+/// Estimator command verbs — issued by StateManager transition callbacks
+/// 推定器コマンドの種別 — StateManager の遷移コールバックが発行
+enum class EstimatorCmd : uint8_t {
+    None         = 0,   // no-op (default-constructed)        / 無操作
+    Reset        = 1,   // full state reset (ARM, re-fly)     / 全状態リセット
+    ResetPosVel  = 2,   // position/velocity reset (takeoff)  / 位置・速度のみリセット
+    FreezeBias   = 3,   // freeze bias estimation (on ground) / バイアス推定を凍結
+    UnfreezeBias = 4,   // unfreeze bias estimation (takeoff) / バイアス凍結を解除
+    Recalibrate  = 5,   // restart boot bias calibration      / 起動バイアス校正を再実行
+};
+
+/// Estimator command — ImuTask consumes and applies to the active IEstimator
+/// 推定器コマンド — ImuTask が消費しアクティブな IEstimator に適用
+struct EstimatorCommand {
+    uint8_t  command;     // EstimatorCmd value / EstimatorCmd の値
+    uint32_t timestamp;   // [us]
+};
+
+/// Controller command verbs — issued by StateManager transition callbacks
+/// 制御器コマンドの種別 — StateManager の遷移コールバックが発行
+enum class ControllerCmd : uint8_t {
+    None        = 0,   // no-op                                       / 無操作
+    Reset       = 1,   // reset all integrators/filters (ARM)         / 全積分器・フィルタリセット
+    ResetAltPos = 2,   // reset altitude/position loops (mode exit)   / 高度・位置ループのみリセット
+};
+
+/// Controller command — ControlTask consumes and applies to the active IController
+/// 制御器コマンド — ControlTask が消費しアクティブな IController に適用
+struct ControllerCommand {
+    uint8_t  command;     // ControllerCmd value / ControllerCmd の値
+    uint32_t timestamp;   // [us]
+};
+
+/// Notification events — issued by StateManager/Failsafe, consumed by NotifyTask
+/// 通知イベント — StateManager/Failsafe が発行し NotifyTask が消費
+enum class NotifyEvent : uint8_t {
+    None        = 0,   // no-op                       / 無操作
+    ArmTone     = 1,   // arm confirmation tone        / ARM 確認音
+    DisarmTone  = 2,   // disarm tone                  / DISARM 音
+    LowBattery  = 3,   // low-battery warning          / 低電圧警告
+    Calibrating = 4,   // calibration in progress      / 校正中
+    Ready       = 5,   // ready to arm                 / ARM 可能
+};
+
+/// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)
+/// 通知コマンド — NotifyTask が消費し LED/ブザーを駆動（HAL 直接）
+struct NotifyCommand {
+    uint8_t  event;       // NotifyEvent value / NotifyEvent の値
+    uint32_t timestamp;   // [us]
+};
+
+// =============================================================================
+// Sensor Health (R15) — published ~1Hz by sf_board
+// センサ健全性（R15）— sf_board が約1Hz発行
+// =============================================================================
+
+/// Sensor identity index for SensorHealth bitmasks / SensorHealth ビットマスク用の識別
+enum class SensorId : uint8_t {
+    Imu = 0, Mag = 1, Baro = 2, Tof = 3, Flow = 4, Power = 5, Count = 6,
+};
+
+/// Sensor health — presence + freshness per sensor for failsafe/telemetry monitoring
+/// センサ健全性 — フェイルセーフ/テレメトリ監視用のセンサ毎 presence と鮮度
+struct SensorHealth {
+    uint8_t  present_mask;   // bit per SensorId: hardware present     / センサ存在
+    uint8_t  healthy_mask;   // bit per SensorId: producing fresh data / 鮮度OK
+    uint32_t last_update_us[static_cast<int>(SensorId::Count)];  // last sample time / 最終更新
+    uint32_t timestamp;      // [us]
+};
+
+// =============================================================================
+// Reserved Topics — Guidance / Navigation (R11, detailed_design §9)
+// 予約トピック — ガイダンス/ナビゲーション（R11、実装は将来）
+//
+// Placeholders so the topic location and I/O contract are fixed now (R11).
+// 置き場所と入出力契約を今のうちに確定するためのプレースホルダ（R11）。
+// =============================================================================
+
+/// command_target — RESERVED (M4+). Guidance/Navigator → Controller position+yaw target.
+/// 予約（M4+）。Guidance/Navigator → 制御器への位置+yaw目標。
+struct GuidanceTarget {
+    float    position[3];   // target position [m] NED / 目標位置
+    float    yaw;           // target yaw [rad]        / 目標ヨー
+    uint8_t  mode;          // guidance mode           / ガイダンスモード
+    uint32_t timestamp;     // [us]
+};
+
+/// nav_path — RESERVED (Phase 6). Waypoint sequence from the Navigator.
+/// 予約（Phase 6）。ナビゲータからの経路シーケンス。
+struct NavigationPath {
+    static constexpr int MAX_WAYPOINTS = 8;
+    float    waypoints[MAX_WAYPOINTS][3];   // [m] NED / ウェイポイント
+    uint8_t  count;                         // active waypoint count / 有効ウェイポイント数
+    uint32_t timestamp;                     // [us]
 };
 
 }  // namespace sf

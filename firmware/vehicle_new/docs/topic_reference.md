@@ -90,7 +90,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 
 ## 3. Topic 一覧表
 
-### 3.1 既存 Topic（実装済み 12 件）
+### 3.1 定義済み Topic（実体定義済み）
 
 | # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 |
 |---|---------|---------|--------|------|-----------|-----------|------|----|
@@ -106,17 +106,22 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 10 | `actuator_motor` | `MotorOutput` | Latest | 1 | ControlTask | (motor driver) | 400Hz | モータ duty |
 | 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask | event | ARM 状態・フライトモード |
 | 12 | `system_alert` | `SystemAlert` | Queue | 4 | FailsafeTask | TelemetryTask, NotifyTask | event | 警告・エラー |
+| 13 | `pilot_request` | `PilotRequest` | Latest | 1 | CommTask | StateTask | 50Hz | ARM + フライトモード選択（sf_comm → StateTask） |
+| 14 | `system_status` | `SystemStatus` | Latest | 1 | ImuTask | StateManager(pre-arm), StateTask | 400Hz | 起動準備（calibrated）+ airborne + held |
+| 15 | `estimator_command` | `EstimatorCommand` | Queue | 4 | StateManager callbacks | ImuTask | event | 推定器 reset / 位置速度reset / bias freeze / recalibrate 指令（onEnter/onExit 集約） |
+| 16 | `controller_command` | `ControllerCommand` | Queue | 4 | StateManager callbacks | ControlTask | event | 制御器 reset 指令（onEnter/onExit 集約） |
+| 17 | `notify_command` | `NotifyCommand` | Queue | 8 | StateManager / Failsafe | NotifyTask | event | LED/ブザー通知指令（arm/disarm 音等。配線は Phase 6） |
+| 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6） |
 
-### 3.2 新規 Topic（v3 で予約、未実装）
+### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 
-vehicle_new v3 設計で予約した将来 Topic。実装は後続マイルストーンで。
+vehicle_new v3 設計で予約した将来 Topic。`command_target` / `nav_path` は実体を定義済み（producer は将来配線）、`sensor_imu_raw` は未定義（型 `ImuRawData` も未定義）。
 
-| # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 | 実装予定 |
-|---|---------|---------|--------|------|-----------|-----------|------|------|--------|
-| 13 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | M2 |
-| 14 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board / 各 task | TelemetryTask, FailsafeTask | 1Hz | 各 publisher の presence / last_update_us / quality | M2 |
-| 15 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | M4+ |
-| 16 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | Phase 6 |
+| # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 | 状態 |
+|---|---------|---------|--------|------|-----------|-----------|------|------|------|
+| 19 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
+| 20 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
+| 21 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
 
 **新規 Topic の根拠（横断ルール対応）:**
 - `sensor_imu_raw` — L2 学習者が「キャリブ前の生 IMU を見たい」「自分でキャリブを学びたい」シナリオに対応
@@ -261,9 +266,7 @@ if (now - cmd.timestamp > 500'000) {  // 500ms 以上古い
 
 ### 6.1 サイレント overflow（R14）
 
-**現状**: RingBuffer の最古上書き、Queue のドロップ、いずれもログ・カウンタなし。
-
-**改善計画 (M2 以降)**: 各 Topic に `std::atomic<uint32_t> overflow_count` を内蔵し、`sensor_health` Topic 経由で telemetry に出す。
+**実装済み（R14 達成）**: 全 Topic テンプレート（`TopicRing` / `TopicQueue`）に `std::atomic<uint32_t> overflow_count_` を内蔵し、満杯時のドロップ（RingBuffer の最古上書き、Queue のドロップ）を計上する。`overflowCount()` getter で参照可能（`TopicLatest` は上書きが仕様ゆえ常に 0 を返す＝監視側の統一アクセス用）。telemetry / sensor_health 経由の監視出力への接続は Phase 6 で行う。
 
 ```cpp
 template<typename T, int Size>
@@ -347,6 +350,10 @@ struct SensorHealth {
 |------|------|-------|---------|
 | 2026-04-12 | 追加 | sensor_imu, sensor_tof, sensor_flow, sensor_mag, sensor_baro, sensor_power, estimate_state, command_setpoint, control_output, actuator_motor, system_mode, system_alert | 初期実装（12 Topic） |
 | 2026-05-09 | 予約 | sensor_imu_raw, sensor_health, command_target, nav_path | v3 設計で予約定義（M1b） |
+| 2026-06-07 | 追加 | estimator_command, controller_command, notify_command | 設計準拠リファクタ Phase 0 — reset を onEnter/onExit に集約するための指令チャネル（R5） |
+| 2026-06-07 | 同期 | pilot_request, system_status | 既存だが §3.1 表に未記載だったため追記（R9 同期） |
+| 2026-06-07 | 実体定義 | sensor_health（予約→実体, publish は Phase 6）, command_target, nav_path | 予約 Topic の実体を定義（producer は将来配線） |
+| 2026-06-07 | 全 Topic | overflow_count 内蔵（R14） | TopicRing/TopicQueue に overflow_count_ + getter を追加 |
 
 ---
 
