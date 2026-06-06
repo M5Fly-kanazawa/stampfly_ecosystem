@@ -11,13 +11,17 @@
  * @brief Power monitor + failsafe task (10Hz)
  *        電源モニタ + フェイルセーフタスク（10Hz）
  *
- * Reads INA3221 power data, publishes to sensor.power topic,
- * and performs failsafe checks (low battery, USB power).
+ * Reads INA3221 power data, publishes to sensor.power topic, and runs the
+ * Failsafe monitor (battery / comm-loss / impact / gyro anomaly). The Failsafe
+ * only DETECTS and publishes system_alert; the StateManager (sole transition
+ * authority) decides the response — architecture.md §4 (failsafe as event).
  *
- * INA3221電源データを読み取り、sensor.powerトピックに発行し、
- * フェイルセーフチェック（低電圧、USB給電）を実行する。
+ * INA3221電源データを読み取り、sensor.powerトピックに発行し、Failsafe モニタ
+ * （電池/通信断/衝撃/ジャイロ異常）を実行する。Failsafe は検出して system_alert
+ * に発報するだけで、応答は StateManager（唯一の遷移実行者）が決める
+ * — architecture.md §4（フェイルセーフはイベント）。
  *
- * @design architecture.md §6 — PowerTask: Sensing(Power) + Failsafe  [--]
+ * @design architecture.md §6 — PowerTask: Sensing(Power) + Failsafe  [OK]
  * @design detailed_design.md §8 — PowerTask: 10Hz, priority 12       [OK]
  * @design requirements.md §9 — LiPo ≤3.4V warning, USB ≤3.3V ARM ban [--]
  * @design hardware_init.md §5 — Power monitor = Optional             [OK]
@@ -28,36 +32,22 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "topics.hpp"
-#include "flight_state.hpp"
 #include "config.hpp"
 #include "sf_board.hpp"
 #include "power_monitor.hpp"
+#include "failsafe.hpp"
 
 static const char* TAG = "PowerTask";
-
-/// Notify state task of an alert
-/// 状態タスクにアラートを通知する
-extern TaskHandle_t g_state_task_handle;
 
 /// INA3221 power monitor — task-local file-scope static (no extern global, R2).
 /// INA3221 電源モニタ — タスクローカルな file-scope static（extern グローバル禁止, R2）。
 static stampfly::PowerMonitor g_power;
 
-static void publishAlert(sf::AlertType type, sf::AlertSeverity severity)
-{
-    sf::SystemAlert alert = {};
-    alert.type = static_cast<uint8_t>(type);
-    alert.severity = static_cast<uint8_t>(severity);
-    alert.timestamp = static_cast<uint32_t>(esp_timer_get_time());
-
-    sf::system_alert.publish(alert);
-
-    // Notify state task to process alert
-    // 状態タスクにアラート処理を通知
-    if (g_state_task_handle != nullptr) {
-        xTaskNotifyGive(g_state_task_handle);
-    }
-}
+/// Failsafe monitor — task-local file-scope static. Subscribes to topics and
+/// publishes system_alert; owns no hardware.
+/// Failsafe モニタ — タスクローカルな file-scope static。トピックを購読し
+/// system_alert を発行する。ハードウェアは持たない。
+static sf::Failsafe g_failsafe;
 
 void PowerTask(void* pvParameters)
 {
@@ -83,6 +73,10 @@ void PowerTask(void* pvParameters)
         ESP_LOGW(TAG, "INA3221 init failed — power monitoring disabled (Optional)");
     }
 
+    // Failsafe needs no hardware — it reads topics and publishes alerts.
+    // Failsafe はハードウェア不要 — トピックを読みアラートを発行する。
+    g_failsafe.init();
+
     TickType_t last_wake = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(100);  // 10Hz
     bool logged_first = false;  // one-shot boot battery log / 起動時電池電圧の単発ログ
@@ -93,14 +87,12 @@ void PowerTask(void* pvParameters)
         sf::PowerData data = {};
         data.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
-        bool valid = false;
         if (present) {
             stampfly::PowerData reading{};
             if (g_power.read(reading) == ESP_OK) {
                 data.voltage = reading.voltage_v;
                 data.current = reading.current_ma;
                 data.power   = reading.power_mw;
-                valid = true;
 
                 // One-shot boot battery log — useful for hardware bring-up
                 // (don't fly on a low pack) and confirms the read path in SIL.
@@ -117,19 +109,13 @@ void PowerTask(void* pvParameters)
 
         sf::sensor_power.publish(data);
 
-        // Failsafe checks — only on a valid reading, so a missing or failed
-        // sensor (voltage == 0) never raises a false low-voltage alert.
-        // (Alert thresholds will move into the Failsafe component in P2-2.)
-        // フェイルセーフチェック — 有効な読み取り時のみ実行。センサ欠落/失敗
-        // (voltage==0) で誤った低電圧アラートを出さない。（閾値は P2-2 で
-        // Failsafe コンポーネントへ移管予定。）
-        if (valid) {
-            if (data.voltage <= 3.3f) {
-                publishAlert(sf::AlertType::USB_POWER, sf::AlertSeverity::WARNING);
-            } else if (data.voltage <= 3.4f) {
-                publishAlert(sf::AlertType::LOW_BATTERY, sf::AlertSeverity::WARNING);
-            }
-        }
+        // Run all failsafe checks AFTER publishing power, so checkBattery() sees
+        // this cycle's reading. Battery thresholds and the 0 = unknown guard now
+        // live in the Failsafe component (failsafe.cpp checkBattery).
+        // 電源 publish の後に全 failsafe チェックを走らせる（checkBattery が今周期の
+        // 読み値を見るため）。電池閾値と 0=不明ガードは Failsafe コンポーネント
+        // （failsafe.cpp checkBattery）に集約済み。
+        g_failsafe.update();
 
         vTaskDelayUntil(&last_wake, period);
     }

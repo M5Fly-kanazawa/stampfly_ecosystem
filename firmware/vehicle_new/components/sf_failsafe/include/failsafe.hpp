@@ -17,9 +17,9 @@
  * 安全に関わる重要な状態を監視し、閾値を超えた場合に
  * system_alertトピックへSystemAlertを発行する。
  *
- * @design architecture.md §4 — Failsafe subsystem                     [--]
+ * @design architecture.md §4 — Failsafe subsystem (wired in PowerTask) [OK]
  * @design requirements.md §9 — Safety requirements                     [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once

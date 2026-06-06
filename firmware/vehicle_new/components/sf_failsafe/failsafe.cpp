@@ -11,7 +11,7 @@
  * @brief Failsafe monitor implementation
  *        フェイルセーフモニター実装
  *
- * @design architecture.md §4 — Failsafe subsystem                     [--]
+ * @design architecture.md §4 — Failsafe subsystem (wired in PowerTask) [OK]
  * @design requirements.md §9 — Safety requirements                     [--]
  */
 
@@ -95,11 +95,38 @@ void Failsafe::checkImpact()
 // -----------------------------------------------------------------------------
 void Failsafe::checkCommTimeout()
 {
-    // TODO: Check time since last ESP-NOW packet via Comm component
-    // TODO: Commコンポーネント経由で最後のESP-NOWパケットからの経過時間を確認
+    // Judge link loss from the AGE of the latest CommandSetpoint (R16), not by
+    // reaching across tasks into the Comm object: comm.cpp stamps every setpoint
+    // with esp_timer_get_time() on receive, so a stale stamp means packets stopped.
+    // リンク喪失は最新 CommandSetpoint の「経過時間」で判定する（R16）。タスクを
+    // またいで Comm オブジェクトに触れるのではなく、comm.cpp が受信時に刻む
+    // esp_timer_get_time() の古さで「パケットが途絶えた」と判断する。
+    CommandSetpoint cmd = command_setpoint.latest();
 
-    // TODO: If timeout exceeded, raise alert
-    // TODO: タイムアウト超過時はアラートを発報
+    // No packet ever received (timestamp 0) → nothing to time out yet (boot/bench).
+    // パケット未受信（timestamp 0）→ まだタイムアウト対象なし（起動時/ベンチ）。
+    if (cmd.timestamp == 0) {
+        return;
+    }
+
+    // uint32_t microsecond stamps wrap every ~71 min; the subtraction is still
+    // correct modulo 2^32 for any age far below that, which the 500 ms timeout is.
+    // uint32_t マイクロ秒は約71分で巻き戻るが、差分は 2^32 を法として正しく、
+    // 500ms タイムアウトはそれより遥かに小さいので問題ない。
+    uint32_t now    = static_cast<uint32_t>(esp_timer_get_time());
+    uint32_t age_ms = (now - cmd.timestamp) / 1000;
+
+    if (age_ms > config_.comm_timeout_ms) {
+        // Rising edge only: raise once, let StateManager decide (FLYING → LANDING).
+        // 立ち上がりエッジのみ: 1回だけ発報し、判断は StateManager（FLYING→LANDING）。
+        if (!comm_lost_) {
+            raiseAlert(AlertType::COMM_LOST, AlertSeverity::CRITICAL);
+            ESP_LOGW(TAG, "Comm lost: %lu ms since last packet", (unsigned long)age_ms);
+        }
+        comm_lost_ = true;
+    } else {
+        comm_lost_ = false;   // link recovered / リンク復帰
+    }
 }
 
 // -----------------------------------------------------------------------------
