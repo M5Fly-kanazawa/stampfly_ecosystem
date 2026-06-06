@@ -1,0 +1,28 @@
+# pos_yaw.scn — POSITION_HOLD at a NON-ZERO heading (vehicle_new, Layer 4, P8)
+# 非ゼロ機首方位での位置保持（vehicle_new, Layer 4, P8）
+#
+# Layer-4 test #4 of 4 (roll → pitch → diagonal → YAW). pos_roll/pitch/flight all keep
+# yaw ≈ 0, so a body-axis disturbance maps to a single world axis. Here we first ROTATE
+# the heading (~yaw step before the disturbance), THEN apply a roll-right step. At a
+# rotated heading the body-y drift projects onto BOTH world axes, so this verifies the
+# position cascade's body↔NED yaw transform (pid_controller computePositionHold) — a
+# wrong yaw rotation would hold along the wrong axis or diverge.
+# Layer-4 テスト 4/4（ロール→ピッチ→斜め→ヨー）。pos_roll/pitch/flight は yaw≈0 ゆえ
+# body 軸の擾乱は単一世界軸に対応する。本シナリオは先に機首方位を回し（擾乱前にヨーステップ）
+# その後ロール右ステップを与える。回った機首では body-y ドリフトが両世界軸に投影されるので、
+# 位置カスケードの body↔NED ヨー変換（pid_controller computePositionHold）を検証する ―
+# ヨー変換が誤っていれば誤った軸で保持するか発散する。
+#
+# Sticks: raw 12-bit ADC, centre 2048. yaw > 2048 commands a yaw RATE (heading rotates
+# while held). pos token (12th field) = 1 engages POSITION_HOLD (implies ALTITUDE_HOLD).
+# スティックは raw 12bit ADC（中央2048）。yaw>2048 はヨーレート指令（保持中に機首が回る）。
+# pos トークン(12列目)=1 で POS_HOLD（ALT_HOLD 含む）。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
+   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
+   +    rc   3290  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command)
+   +    rc   3290  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading
+   +    rc   3072  2048   2048    2048  1     13000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 13 s
+   +    rc   2048  2048   2048    2048  0     1000      50                       # E: DISARM (motors cut)

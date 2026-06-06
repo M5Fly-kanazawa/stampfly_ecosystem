@@ -52,12 +52,20 @@ void EskfEstimator::init()
     params::get_bool("eskf.use_baro", cfg.use_baro);
     params::get_bool("eskf.use_mag", cfg.use_mag);
 
+    // Acceleration-compensated accel-attitude (POS_HOLD; α-β flow-acceleration tracker).
+    // 運動加速度補償の accel-attitude（POS_HOLD; α-β フロー加速度トラッカ）。
+    params::get_bool("eskf.accel_comp.enable", cfg.accel_comp_enable);
+    params::get_float("eskf.accel_comp.alpha", cfg.accel_comp_alpha);
+    params::get_float("eskf.accel_comp.beta",  cfg.accel_comp_beta);
+    params::get_float("eskf.accel_comp.max",   cfg.accel_comp_max);
+
     core_.init(cfg);
     cached_state_ = {};
     cached_state_.attitude[0] = 1.0f;
 
-    ESP_LOGI(TAG, "ESKF initialized (tof=%d flow=%d baro=%d mag=%d)",
-             cfg.use_tof, cfg.use_flow, cfg.use_baro, cfg.use_mag);
+    ESP_LOGI(TAG, "ESKF initialized (tof=%d flow=%d baro=%d mag=%d accel_comp=%d a=%.2f b=%.3f)",
+             cfg.use_tof, cfg.use_flow, cfg.use_baro, cfg.use_mag,
+             cfg.accel_comp_enable, cfg.accel_comp_alpha, cfg.accel_comp_beta);
 }
 
 void EskfEstimator::predict(const ImuData& imu, float dt)

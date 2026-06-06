@@ -1,0 +1,26 @@
+# pos_roll.scn — POSITION_HOLD, ISOLATED ROLL axis (vehicle_new, Layer 4, P8)
+# 位置保持・ロール軸単独（vehicle_new, Layer 4, P8）
+#
+# Layer-4 per-axis test #1 of 4 (roll → pitch → diagonal → yaw). Take off in STABILIZE,
+# perturb with a brief ROLL-right step so the craft gains lateral velocity on ONE
+# horizontal axis, hand to POSITION_HOLD and verify the closed loop ARRESTS the drift
+# and HOLDS the captured position. A pure roll step excites only the body-y (lateral)
+# axis, so this isolates the roll/lateral channel of the position cascade.
+# Layer-4 軸別テスト 1/4（ロール→ピッチ→斜め→ヨー）。STABILIZE で離陸し、短いロール右
+# ステップで横方向（1軸）に速度を持たせ、POSITION_HOLD に渡して閉ループがドリフトを止め
+# 捕捉位置を保持することを検証。純ロールステップは body-y（横）軸だけを励振するので、
+# 位置カスケードのロール/横チャネルを単独で切り分ける。
+#
+# Sticks: raw 12-bit ADC, centre 2048. In POS_HOLD the throttle stick is the climb-rate
+# command (3072 = hold altitude) and roll/pitch are OVERRIDDEN by the position cascade.
+# pos token (12th field) = 1 engages POSITION_HOLD (implies ALTITUDE_HOLD).
+# スティックは raw 12bit ADC（中央2048）。POS_HOLD では throttle は上昇率(3072=高度保持)、
+# roll/pitch は位置カスケードが上書き。pos トークン(12列目)=1 で POS_HOLD（ALT_HOLD 含む）。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
+   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
+   +    rc   3290  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s → lateral drift
+   +    rc   3072  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 14 s
+   +    rc   2048  2048   2048    2048  0     1000      50                       # E: DISARM (motors cut)

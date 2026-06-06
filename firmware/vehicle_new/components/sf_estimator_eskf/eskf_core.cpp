@@ -71,12 +71,26 @@ void EskfCore::reset()
     }
 
     freeze_accel_bias_ = false;
+
+    // Drop the accel-compensation flow history so the first post-reset flow sample
+    // re-seeds the α-β tracker without a spurious large difference.
+    // 運動加速度補償のフロー履歴を破棄し、リセット後最初のフローが α-β を暴れずに再シード。
+    have_flow_vel_ = false;
+    flow_vel_lpf_  = {0, 0, 0};
+    a_kin_ned_     = {0, 0, 0};
 }
 
 void EskfCore::resetPositionVelocity()
 {
     pos_ = {0, 0, 0};
     vel_ = {0, 0, 0};
+
+    // Velocity was just reset, so the stored flow velocity is stale — re-seed the
+    // α-β tracker on the next flow sample to avoid a one-shot bogus a_kin.
+    // 速度をリセットした直後ゆえ保存フロー速度は陳腐化 → 次フローで α-β を再シード。
+    have_flow_vel_ = false;
+    flow_vel_lpf_  = {0, 0, 0};
+    a_kin_ned_     = {0, 0, 0};
     for (int i = 0; i < 3; i++) {
         P_.set_diag(POS_X + i, cfg_.init_pos_std * cfg_.init_pos_std);
         P_.set_diag(VEL_X + i, cfg_.init_vel_std * cfg_.init_vel_std);
@@ -489,18 +503,34 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // corrective な更新ごと捨て姿勢を盲目化し、協調傾斜+加速で「水平」と誤推定する。実証済み
     // firmware/vehicle に norm gate は無く、適応R＋vectorUpdate3 内の χ² 外れ値ゲートで捌く。
     float gravity_diff = accel.norm() - cfg_.gravity;
-    float R_val = cfg_.accel_att_noise * cfg_.accel_att_noise
-                * (1.0f + cfg_.k_adaptive * gravity_diff * gravity_diff);
 
     // Expected gravity in body: g_body = R^T * [0, 0, -g]
     // ボディ座標の期待重力: g_body = R^T * [0, 0, -g]
     Vec3 g_ned = {0, 0, -cfg_.gravity};
     Vec3 g_expected = q_.inv_rotate(g_ned);
 
+    float R_val = cfg_.accel_att_noise * cfg_.accel_att_noise
+                * (1.0f + cfg_.k_adaptive * gravity_diff * gravity_diff);
+
+    // Predicted specific force. Plain: just gravity (g_expected). With acceleration
+    // compensation: add the flow-derived kinematic acceleration in body, so f_pred =
+    // g_expected + R^T·a_kin and the residual is the TRUE attitude error instead of the
+    // kinematic term. At hover (a_kin≈0) h_vec == g_expected, so it reduces to the plain
+    // update there. 予測比力。素では重力のみ(g_expected)。運動加速度補償ありではフロー由来の
+    // 運動加速度を body で加算 f_pred = g_expected + R^T·a_kin → 残差が運動加速度項でなく真の
+    // 姿勢誤差に。ホバー(a_kin≈0)では h_vec==g_expected ゆえ素の更新に一致。
+    Vec3 h_vec = g_expected;
+    if (cfg_.accel_comp_enable) {
+        Vec3 a_kin_body = q_.inv_rotate(a_kin_ned_);
+        h_vec.x += a_kin_body.x;
+        h_vec.y += a_kin_body.y;
+        h_vec.z += a_kin_body.z;
+    }
+
     float innov[3] = {
-        accel.x - g_expected.x,
-        accel.y - g_expected.y,
-        accel.z - g_expected.z
+        accel.x - h_vec.x,
+        accel.y - h_vec.y,
+        accel.z - h_vec.z
     };
 
     // H matrix: attitude part + accel bias part
@@ -509,10 +539,10 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     q_.to_dcm(R_dcm);
 
     float H[3][N] = {};
-    // Attitude columns: -[g_expected×]
-    H[0][ATT_Y] = -g_expected.z;  H[0][ATT_Z] =  g_expected.y;
-    H[1][ATT_X] =  g_expected.z;  H[1][ATT_Z] = -g_expected.x;
-    H[2][ATT_X] = -g_expected.y;  H[2][ATT_Y] =  g_expected.x;
+    // Attitude columns: -[h_vec×] (h_vec = predicted specific force; = g_expected baseline)
+    H[0][ATT_Y] = -h_vec.z;  H[0][ATT_Z] =  h_vec.y;
+    H[1][ATT_X] =  h_vec.z;  H[1][ATT_Z] = -h_vec.x;
+    H[2][ATT_X] = -h_vec.y;  H[2][ATT_Y] =  h_vec.x;
 
     // Accel bias columns: I (direct observation)
     // 加速度バイアス列: I（直接観測）
@@ -571,6 +601,44 @@ void EskfCore::updateFlowRaw(int16_t dx, int16_t dy, float height,
         innov_y = fmaxf(-cfg_.flow_innov_clamp, fminf(cfg_.flow_innov_clamp, innov_y));
     }
     scalarUpdate(H, innov_y, cfg_.flow_noise * cfg_.flow_noise);
+
+    // Acceleration-compensated accel-attitude (POS_HOLD): estimate the horizontal NED
+    // kinematic acceleration a_kin with an α-β tracker on the flow velocity. The flow
+    // velocity is used (NOT the fused vel_, which re-injects the accel via predict and makes
+    // the pitch axis self-reinforce), so a_kin stays INDEPENDENT of attitude-from-accel. The
+    // α-β filter (state = velocity flow_vel_lpf_ + acceleration a_kin_ned_) captures the
+    // SUSTAINED drift acceleration — a naive high-pass derivative washes out the DC term and
+    // only passes oscillation, which the per-axis tests held but the diagonal did not. Fixed
+    // nominal period (jitter-proof) + physical clamp. updateAccelAttitude subtracts R^T·a_kin.
+    // 運動加速度補償の accel-attitude（POS_HOLD）: フロー速度の α-β トラッカで水平 NED 運動加速度
+    // a_kin を推定。フロー速度を使う（融合 vel_ は predict で accel を再注入しピッチ軸が自己強化
+    // ゆえ不可）ので a_kin は姿勢-加速度と独立。α-β（状態=速度 flow_vel_lpf_ + 加速度 a_kin_ned_）
+    // は持続ドリフト加速度を捉える — 単純高域微分は DC を washout し振動のみ通すため軸別は保持
+    // できても斜めが破綻した。公称周期（ジッタ耐性）＋物理クランプ。updateAccelAttitude が R^T·a_kin を差し引く。
+    if (cfg_.accel_comp_enable) {
+        constexpr float kFlowDt = 0.01f;               // nominal flow period (100 Hz)
+        const float alpha = cfg_.accel_comp_alpha;     // α-β velocity gain
+        const float beta  = cfg_.accel_comp_beta;      // α-β acceleration gain
+        const float amax  = cfg_.accel_comp_max;
+        if (have_flow_vel_) {
+            // Predict the velocity forward by the acceleration state, correct with the flow
+            // velocity, fold the residual into BOTH states. 加速度状態で速度を予測→フロー速度で
+            // 補正→残差を両状態へ。
+            const float vpx = flow_vel_lpf_.x + a_kin_ned_.x * kFlowDt;
+            const float vpy = flow_vel_lpf_.y + a_kin_ned_.y * kFlowDt;
+            const float rx = vx_ned - vpx;             // velocity residual
+            const float ry = vy_ned - vpy;
+            flow_vel_lpf_.x = vpx + alpha * rx;
+            flow_vel_lpf_.y = vpy + alpha * ry;
+            a_kin_ned_.x += (beta / kFlowDt) * rx;
+            a_kin_ned_.y += (beta / kFlowDt) * ry;
+            a_kin_ned_.x = fmaxf(-amax, fminf(amax, a_kin_ned_.x));   // physical clamp
+            a_kin_ned_.y = fmaxf(-amax, fminf(amax, a_kin_ned_.y));
+        } else {
+            flow_vel_lpf_ = {vx_ned, vy_ned, 0.0f};    // seed the velocity state
+        }
+        have_flow_vel_ = true;
+    }
 }
 
 // =============================================================================

@@ -158,6 +158,23 @@ namespace param_vars {
     float eskf_att_chi2_gate  = 7.81f;   // χ²(3, 0.95) accel-attitude outlier gate
     float eskf_att_corr_clamp = 0.05f;   // [rad] per-update roll/pitch correction clamp
 
+    // ESKF acceleration-compensated accel-attitude (POS_HOLD). The accelerometer measures
+    // specific force f = a_kin − g; during a horizontal maneuver the kinematic term a_kin
+    // is mistaken for a tilt and the attitude sticks at the "apparent gravity" angle
+    // atan(a/g), so POS_HOLD flies away. An α-β tracker on the flow velocity estimates
+    // a_kin (state = velocity + acceleration; β small so the SUSTAINED drift acceleration
+    // is captured, not washed out like a naive derivative), and the accel-attitude update
+    // subtracts R^T·a_kin → the residual is the TRUE attitude error.
+    // ESKF 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は比力 f=a_kin−g を測り、水平
+    // マニューバ中は運動加速度 a_kin を傾きと誤認し姿勢が「見かけの重力」角 atan(a/g) に張付き
+    // POS_HOLD が飛び去る。フロー速度の α-β トラッカで a_kin を推定（状態=速度+加速度、β 小で
+    // 持続ドリフト加速度を単純微分のように washout せず捕捉）、accel-attitude が R^T·a_kin を
+    // 差し引き残差を真の姿勢誤差にする。
+    bool  eskf_accel_comp_enable = true;  // on (adopted; SIL clean+N0 all 4 axes hold)
+    float eskf_accel_comp_alpha  = 0.2f;  // α-β velocity gain
+    float eskf_accel_comp_beta   = 0.02f; // α-β acceleration gain (small = capture DC drift)
+    float eskf_accel_comp_max    = 5.0f;  // [m/s²] physical clamp on a_kin
+
     // Safety
     float safety_accel_g     = 3.0f;
     float safety_gyro_dps    = 800.0f;
@@ -239,6 +256,12 @@ static const ParamEntry table[] = {
     {"eskf.att.k_adaptive",   ParamType::FLOAT, &eskf_att_k_adaptive, 10.0f, 0.0f,  100.0f, nullptr},
     {"eskf.att.chi2_gate",    ParamType::FLOAT, &eskf_att_chi2_gate,  7.81f, 0.0f,  100.0f, nullptr},
     {"eskf.att.corr_clamp",   ParamType::FLOAT, &eskf_att_corr_clamp, 0.05f, 0.001f, 1.0f,  nullptr},
+
+    // ESKF acceleration-compensated accel-attitude (POS_HOLD; α-β flow-acceleration tracker)
+    {"eskf.accel_comp.enable", ParamType::BOOL,  &eskf_accel_comp_enable, 1.0f,  0.0f,  1.0f,  nullptr},
+    {"eskf.accel_comp.alpha",  ParamType::FLOAT, &eskf_accel_comp_alpha,  0.2f,  0.01f, 1.0f,  nullptr},
+    {"eskf.accel_comp.beta",   ParamType::FLOAT, &eskf_accel_comp_beta,   0.02f, 0.0f,  1.0f,  nullptr},
+    {"eskf.accel_comp.max",    ParamType::FLOAT, &eskf_accel_comp_max,    5.0f,  0.5f,  20.0f, nullptr},
 
     // Safety
     {"safety.impact.accel_g",  ParamType::FLOAT, &safety_accel_g,     3.0f,   1.0f,   10.0f,   nullptr},

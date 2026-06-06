@@ -85,6 +85,24 @@ struct EskfConfig {
     float att_correction_clamp = 0.05f;   // [rad] per-update roll/pitch correction clamp
     float k_adaptive       = 10.0f;       // Adaptive R: R *= (1 + k * |a-g|²)
 
+    // Acceleration-compensated accel-attitude (POS_HOLD). The accelerometer measures the
+    // specific force f = a_kin − g; the plain accel-attitude update assumes a_kin = 0, so
+    // during a horizontal maneuver it mistakes the kinematic term a_kin for a tilt and the
+    // estimate sticks at the "apparent gravity" angle atan(a/g) → POS_HOLD flies away. We
+    // estimate a_kin from the OPTICAL-FLOW velocity (independent of attitude-from-accel) with
+    // an α-β tracker, and updateAccelAttitude predicts f = g_expected + R^T·a_kin so the
+    // residual is the TRUE attitude error. SIL Layer-4: all of roll/pitch/diagonal/yaw hold
+    // (clean + N0). 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は比力 f=a_kin−g を
+    // 測り、素の更新は a_kin=0 を仮定するので水平マニューバ中に a_kin を傾きと誤認し推定が
+    // 「見かけの重力」角 atan(a/g) に張付き POS_HOLD が飛び去る。a_kin を（姿勢-加速度と独立な）
+    // オプティカルフロー速度から α-β トラッカで推定し、updateAccelAttitude が
+    // f = g_expected + R^T·a_kin と予測 → 残差が真の姿勢誤差に。SIL Layer-4 で roll/pitch/斜め/
+    // yaw すべて保持（clean + N0）。
+    bool  accel_comp_enable = true;     // master enable / マスタ有効
+    float accel_comp_alpha  = 0.2f;     // α-β velocity gain / α-β 速度ゲイン
+    float accel_comp_beta   = 0.02f;    // α-β acceleration gain (small = capture DC drift)
+    float accel_comp_max    = 5.0f;     // [m/s²] physical clamp on a_kin / a_kin の物理クランプ
+
     // Sensor enable / センサ有効
     bool use_tof           = true;
     bool use_flow          = true;
@@ -187,6 +205,15 @@ private:
     // Active mask (bit i = state i is active) / 有効マスク
     uint16_t active_mask_ = 0x7FFF;  // All 15 states active
     bool freeze_accel_bias_ = false;
+
+    // Acceleration-compensated accel-attitude state (α-β tracker on the flow velocity).
+    // flow_vel_lpf_ = filtered velocity state, a_kin_ned_ = the horizontal NED kinematic
+    // acceleration that updateAccelAttitude subtracts from the specific force.
+    // 運動加速度補償の状態（フロー速度の α-β トラッカ）。flow_vel_lpf_=濾波速度状態、
+    // a_kin_ned_=updateAccelAttitude が比力から差し引く水平 NED 運動加速度。
+    Vec3  flow_vel_lpf_  = {0, 0, 0};   // α-β velocity state / α-β 速度状態
+    Vec3  a_kin_ned_     = {0, 0, 0};   // α-β acceleration state (a_kin, NED) / α-β 加速度状態
+    bool  have_flow_vel_ = false;
 
     // Internal / 内部
     void recomputeActiveMask();

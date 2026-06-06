@@ -1,0 +1,21 @@
+# pos_pitch.scn — POSITION_HOLD, ISOLATED PITCH axis (vehicle_new, Layer 4, P8)
+# 位置保持・ピッチ軸単独（vehicle_new, Layer 4, P8）
+#
+# Layer-4 per-axis test #2 of 4 (roll → pitch → diagonal → yaw). Same as pos_roll but
+# the disturbance is a brief PITCH-forward step, exciting only the body-x (fore-aft)
+# axis. This isolates the pitch/longitudinal channel of the position cascade — the axis
+# the roll-only pos_roll never exercises (a pure roll step leaves pitch at 0°, so px≈0).
+# Layer-4 軸別テスト 2/4。pos_roll と同じだが擾乱は短いピッチ前進ステップで、body-x
+# （前後）軸だけを励振。位置カスケードのピッチ/前後チャネルを単独で切り分ける ―
+# ロール単独の pos_roll が決して励振しない軸（純ロールはピッチ0°ゆえ px≈0）。
+#
+# Sticks: raw 12-bit ADC, centre 2048. pos token (12th field) = 1 engages POSITION_HOLD.
+# スティックは raw 12bit ADC（中央2048）。pos トークン(12列目)=1 で POS_HOLD。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
+   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
+   +    rc   3290  2048   2600    2048  1     600       50                       # C2: PITCH-forward step (~+8°) 0.6 s → longitudinal drift
+   +    rc   3072  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 14 s
+   +    rc   2048  2048   2048    2048  0     1000      50                       # E: DISARM (motors cut)
