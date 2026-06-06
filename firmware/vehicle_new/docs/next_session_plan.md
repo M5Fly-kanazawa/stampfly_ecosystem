@@ -1,29 +1,37 @@
-# 次セッション指示書 — 実機に向けた地固め（P1 → P2 → P3）
+# 次セッション指示書 — 実機に向けた地固め（残: P2-4 → P3）
 
-最終更新: 2026-06-06
+最終更新: 2026-06-06（P1・P2-1・P2-2・P2-3 完了。残 P2-4・P3）
 
 ## 0. 現状サマリ（ここまで達成）
 
 - **vehicle_new は SIL で全4飛行モードが成立**：ACRO / STABILIZE / ALTITUDE_HOLD / POSITION_HOLD。
-- **POS_HOLD は全4軸（roll/pitch/斜め/yaw）でタイト保持**（運動加速度補償 + `position.vel.kp=0.8`）。詳細は `poshold_accel_compensation.md`。
-- **数値ゲート（G1〜G4）の試験スイートが整備済**：`simulator/sil/scenarios/TEST_MATRIX.md`。
-- 次の本来の山は **roadmap Phase 2/3（実機）**。本指示書は**そこへ向けた地固め**を P1→P2→P3 の順で行う。
+- **POS_HOLD は全4軸でタイト保持**（運動加速度補償 + `position.vel.kp=0.8`）。詳細 `poshold_accel_compensation.md`。
+- **数値ゲート試験スイート整備済**：`simulator/sil/scenarios/TEST_MATRIX.md`。
+
+### 本指示書の進捗（2026-06-06 セッション）
+- ✅ **P1 完了** — `sf build vehicle_new` ESP-IDF 実機ビルド検証（944KB、警告のみ・良性）。
+- ✅ **P2-1 完了**（commit `b578216`）— INA3221 実配線。emu I2C モデル経由で実電圧 3.70V を `sensor_power` に発行（Code Identity）。
+- ✅ **P2-2 完了**（commit `aa3f7c1`）— Failsafe を PowerTask に配線（デッドコードだった）+ `checkCommTimeout()` 実装。`commloss.scn` で COMM_LOST→FLYING→LANDING を E2E ゲート化。
+- ✅ **P2-3 完了**（commit `dcb4118`=ファーム, `436e007`=SIL）— 起動ジャイロ/加速度バイアス校正を ImuTask に配線。**対照試験で実証**: 生バイアス(accel 0.12/gyro 0.02)注入下で校正ON=tilt 3.2°有界 / OFF=tilt 176°転倒。
+  - 重要発見: **params.cpp の手書き table[] が真の SSOT、params.def は非機能**（auto-memory `reference_params_ssot`）。新 param は params.cpp 両所に追加必須。
+  - 校正の設計上の急所: disarmed・地上のみ収集（arm で中止）、settle 過渡破棄、**デッドバンドで無視可能バイアスは適用せず**（収束済み ESKF 上書き＝marginal POS_HOLD 撹乱を回避）。
+- ⏳ **残: P2-4（ARM前チェック）, P3（離陸判定統一）**。
 
 ### 着手前に読む
 1. `firmware/vehicle_new/docs/development_roadmap.md`（Phase 2/3、SIL→実機 Code Identity）
-2. `firmware/vehicle_new/docs/poshold_accel_compensation.md`（直近の成果と残課題）
-3. `simulator/sil/scenarios/TEST_MATRIX.md`（回帰の回し方）
-4. 直近コミットログ（`d8b5a37` まで）
+2. 直近コミットログ（`436e007` まで）— P2-3 の対照試験と設計判断
+3. auto-memory `reference_params_ssot`（params 追加の罠）
 
-### 回帰の回し方（各 P の作業後に必ず実行）
+### 回帰の回し方（各 P の作業後に必ず実行 — コマンド更新済）
 ```bash
 source setup_env.sh
-sf sil build vehicle_new
-for s in pos_roll pos_pitch pos_flight pos_yaw alt_flight stab_flight acro_flight disturb; do
+sf sil build                                              # 注: 旧表記 "build vehicle_new" は誤り。-t は cmake target
+for s in pos_roll pos_pitch pos_flight pos_yaw alt_flight stab_flight acro_flight disturb commloss calib; do
   sf sil scenario simulator/sil/scenarios/$s.scn --target vehicle_new
 done
 sf sil scenario simulator/sil/scenarios/hover_espnow.scn --target vehicle   # legacy 無回帰
 simulator/sil/build/hover_smoke simulator/sil/models/stampfly.xml           # G2+G3
+sf build vehicle_new                                      # ← ESP-IDF 実機ビルド（ファーム変更時は必須）
 ```
 全 PASS を確認してからコミット（`/commit`、Next steps 必須）。
 
@@ -66,12 +74,12 @@ SIL では飛ぶが、**実機で安全に飛ばすための機能**を配線す
 
 ### サブタスク（現状を確認 → 配線 → SIL で検証）
 
-| # | 項目 | 現状 | やること |
+| # | 項目 | 状態 | 結果 / やること |
 |---|------|------|----------|
-| P2-1 | **power INA3221 実配線** | `tasks/power_task.cpp:69` が `data.voltage = 4.2f; // Stub` の固定値。実ドライバ `components/sf_hal_power/power_monitor.cpp` は存在 | power_task で実 INA3221 ドライバを呼び `sensor_power` に実電圧を publish。emu は INA3221 をモデル済み（memory）なので SIL で検証可 |
-| P2-2 | **Failsafe 配線** | `components/sf_failsafe/`（failsafe.cpp/.hpp）は実装済。**配線状況を要確認** | failsafe が ①通信断 ②低電圧（P2-1 の実電圧が前提）③衝撃 を検知し EMERGENCY/着陸/キルへ遷移するか確認。未配線なら state_manager/タスクへ接続。`disturb.scn` の fault 注入で検証 |
-| P2-3 | **CalibrationMgr 起動配線** | `components/sf_calibration/` は存在。**起動シーケンスで参照されているか要確認**（memory「未参照」） | 起動時にジャイロ/加速度バイアスを取り込む経路を配線（`hardware_init.md` の起動シーケンス参照） |
-| P2-4 | **ARM 前チェック** | 要確認 | ARM 受理前にセンサ健全性・電圧・キャリブ済みを確認するゲートを state_manager の requestArm 経路に追加 |
+| P2-1 | **power INA3221 実配線** | ✅ 完了 `b578216` | power_task が実 INA3221 を呼び `sensor_power` に実電圧。SIL で `Battery: 3.70V`（emu v_batt と一致）。Optional 分類・読み失敗ガード。 |
+| P2-2 | **Failsafe 配線** | ✅ 完了 `aa3f7c1` | Failsafe を PowerTask に配線（update() で battery/comm/impact/gyro）。`checkCommTimeout()` を CommandSetpoint 経過時間(R16)で実装。`commloss.scn` で COMM_LOST→LANDING を E2E ゲート化。**低電圧/衝撃の専用ゲートは emu knob 待ち（一部 P2-3a で電池以外のバイアス knob 整備済、電池電圧 knob は未）**。 |
+| P2-3 | **CalibrationMgr 起動配線** | ✅ 完了 `dcb4118`+`436e007` | ImuTask に in-loop 校正を配線（disarmed・地上のみ・arm 中止・settle・デッドバンド）。emu に生バイアス注入(`bias` scn イベント)+`SIL_EMU_NO_CALIB`。`calib.scn` 対照: ON=tilt3.2°有界 / OFF=tilt176°転倒。 |
+| P2-4 | **ARM 前チェック** | ⏳ **残（次の着手）** | state_manager.cpp:68-70 の3つの TODO を実装: ①USB電源 ARM 禁止（P2-1 の実電圧 `sensor_power` < usb閾値で reject）②キャリブ済みゲート（P2-3 の CalibrationMgr 状態 — **task-local ゆえ cross-component 公開手段の設計が要る**: トピック or accessor。P2-2 の comm timeout と同様に状態を晒す）③センサ健全性（`sensor_health` トピック）。requestArm に追加し、回帰全 PASS。 |
 
 ### 進め方の原則
 - **1項目ずつ**：配線 → 回帰（上記スイート）→ コミット。まとめてやらない。
