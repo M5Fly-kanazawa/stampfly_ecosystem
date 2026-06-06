@@ -216,14 +216,4 @@ inline constexpr int BUZZER_LEDC_TIMER   = 1;
 // 開始(要件§2「スロットル入力」)。ホバーは≈0.54 ゆえ 0.5 は意図的な上げ＝離陸意思。
 inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
 
-// Dwell in TAKEOFF before declaring takeoff complete → FLYING. This is an
-// interim, estimator-independent stand-in for the ToF "altitude threshold
-// reached" detection (requirements §2); it is replaced by the ToF-based
-// TakeoffLandingMgr once the vertical estimate is trustworthy
-// (development_roadmap Phase B / Layer 3). See state_task.cpp.
-// TAKEOFF にこの時間留まったら離陸完了→FLYING。ToF「高度閾値到達」検出(要件§2)の
-// estimator 非依存の暫定代替。鉛直推定が信頼できる段階(ロードマップ Phase B / Layer 3)
-// で ToF ベースの TakeoffLandingMgr に置換する。state_task.cpp 参照。
-inline constexpr uint32_t TAKEOFF_DWELL_MS = 500;
-
 }  // namespace config

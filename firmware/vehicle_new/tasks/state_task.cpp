@@ -52,11 +52,6 @@ void StateTask(void* pvParameters)
     bool prev_arm = false;
     bool init_done = false;   // INIT → IDLE_GROUND done once / 初期化完了遷移を1回
 
-    // Virtual time the craft entered TAKEOFF, for the dwell that stands in for
-    // ToF-based "airborne" detection until the vertical estimate is trustworthy.
-    // TAKEOFF 進入時刻。鉛直推定が信頼できるまで ToF の「離陸完了」検出を代替する dwell 用。
-    int64_t takeoff_start_us = 0;
-
     while (true) {
         // =====================================================================
         // Wake on a failsafe notification OR every 20 ms to poll the pilot's RC
@@ -122,21 +117,19 @@ void StateTask(void* pvParameters)
         //
         // Requirements §2: ARMED_GROUND→TAKEOFF on "throttle input";
         // TAKEOFF→FLYING on "takeoff complete (altitude threshold reached)".
-        // The altitude-threshold detector is the ToF-based TakeoffLandingMgr,
-        // which needs a trustworthy vertical estimate — a later milestone
-        // (development_roadmap Phase B / Layer 3). Until then we substitute an
-        // estimator-independent dwell: staying in TAKEOFF for TAKEOFF_DWELL_MS
-        // stands in for "airborne". This lets ACRO/STABILIZE (Layer 1-2) fly
-        // without depending on the vertical estimate. Reaching FLYING is what
-        // unlocks requestModeChange (so ACRO can be selected).
-        // 要件§2: スロットル入力で離陸、高度閾値到達で離陸完了。高度検出は ToF ベースの
-        // TakeoffLandingMgr だが信頼できる鉛直推定が要り後段(ロードマップ Phase B / Layer 3)。
-        // それまでは estimator 非依存の dwell（TAKEOFF に TAKEOFF_DWELL_MS 留まる）を
-        // 「離陸完了」の代替とし、Layer 1-2 を鉛直推定なしで飛ばす。FLYING 到達で
-        // requestModeChange が解放される（ACRO を選べる）。
+        // The altitude-threshold detector is the ToF-based TakeoffLandingMgr, owned by
+        // ImuTask (it has the ToF and the vertical estimate); it publishes its airborne
+        // state on system_status. With the vertical estimate now trustworthy (ALT/POS
+        // hold, development_roadmap Phase B), this replaces the earlier estimator-
+        // independent dwell. Reaching FLYING unlocks requestModeChange.
+        // 要件§2: スロットル入力で離陸、高度閾値到達で離陸完了。高度検出は ImuTask 所有の
+        // ToF ベース TakeoffLandingMgr（ToF と鉛直推定を持つ）で、airborne 状態を
+        // system_status に発行する。鉛直推定が信頼できる今（ALT/POS 保持, ロードマップ
+        // Phase B）、これが旧 estimator 非依存 dwell を置き換える。FLYING 到達で
+        // requestModeChange が解放される。
         //
-        // TODO(Phase B): replace the dwell with TakeoffLandingMgr ToF detection.
-        // @design requirements.md §2 — ARMED_GROUND→TAKEOFF→FLYING        [--]
+        // @design requirements.md §2 — ARMED_GROUND→TAKEOFF→FLYING        [OK]
+        // @design development_roadmap.md §3 Layer 3 — ToF takeoff detect  [OK]
         // =====================================================================
 
         const sf::FlightState fs = g_state_manager.getState();
@@ -145,11 +138,9 @@ void StateTask(void* pvParameters)
         if (fs == sf::FlightState::ARMED_GROUND &&
             throttle > config::TAKEOFF_THROTTLE_THRESH) {
             g_state_manager.notifyTakeoff();              // → TAKEOFF
-            takeoff_start_us = esp_timer_get_time();
         } else if (fs == sf::FlightState::TAKEOFF &&
-                   (esp_timer_get_time() - takeoff_start_us) >=
-                       static_cast<int64_t>(config::TAKEOFF_DWELL_MS) * 1000) {
-            g_state_manager.notifyTakeoffComplete();      // → FLYING
+                   sf::system_status.latest().airborne) {
+            g_state_manager.notifyTakeoffComplete();      // → FLYING (ToF: off the ground)
         }
 
         // =====================================================================

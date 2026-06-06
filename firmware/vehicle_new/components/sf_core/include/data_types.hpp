@@ -193,6 +193,8 @@ struct SystemAlert {
 struct SystemStatus {
     bool calibrated;      // boot gyro/accel bias calibration is no longer pending
                           // 起動バイアス校正が保留中でない（完了/スキップ/無効/中止）
+    bool airborne;        // ToF-based airborne detection (TakeoffLandingMgr): off the
+                          // ground. Drives TAKEOFF → FLYING. / ToF 離陸検出: 空中。
     uint32_t timestamp;   // [us]
 };
 

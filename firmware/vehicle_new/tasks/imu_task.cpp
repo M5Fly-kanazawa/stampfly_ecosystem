@@ -256,17 +256,21 @@ static void applyVerticalGroundHandoff()
 // desync させる。接地中は推定が錨付けされるので並行蓄積は無害。
 static bool     g_calib_active        = false;  // settling/collecting now / 整定・収集中
 static uint32_t g_calib_settle_cycles = 0;      // remaining settle cycles to discard / 破棄する整定残り
+static bool     g_calibrated          = false;  // latched: calibration no longer pending / 校正が保留中でない
 
-/// Publish the boot-readiness status so StateManager::requestArm() can gate ARM on it
-/// (R16-style: status via a topic, not a cross-task object). calibrated=false while the
-/// calibration is still collecting; true once it is no longer pending.
-/// 起動準備状態を発行し、StateManager::requestArm() が ARM をゲートできるようにする
-/// （R16 流: トピック経由）。校正収集中は false、保留でなくなれば true。
-static void publishCalibStatus(bool calibrated)
+/// Publish the boot/system readiness status so other tasks can gate on it via the topic
+/// (R16-style, not a cross-task object): StateManager::requestArm() reads `calibrated`,
+/// StateTask reads `airborne` (ToF takeoff detection) to drive TAKEOFF → FLYING. Called
+/// every cycle from the loop so `airborne` tracks continuously.
+/// 起動/システム準備状態をトピックで発行し、他タスクがゲートできるようにする（R16 流、
+/// クロスタスクのオブジェクトでなく）: requestArm() は calibrated を、StateTask は airborne
+/// （ToF 離陸検出）を読み TAKEOFF→FLYING を駆動。airborne が連続追従するよう毎周期発行。
+static void publishSystemStatus(uint32_t now_us)
 {
     sf::SystemStatus st{};
-    st.calibrated = calibrated;
-    st.timestamp  = static_cast<uint32_t>(esp_timer_get_time());
+    st.calibrated = g_calibrated;
+    st.airborne   = !g_takeoff_landing.isOnGround();
+    st.timestamp  = now_us;
     sf::system_status.publish(st);
 }
 
@@ -285,7 +289,7 @@ static void startBootCalibration()
     if (!enable) {
         ESP_LOGW(TAG, "Boot calibration DISABLED (calibration.enable=0) "
                       "— estimator starts at zero bias");
-        publishCalibStatus(true);   // nothing to wait for → ARM not gated on calibration
+        g_calibrated = true;        // nothing to wait for → ARM not gated on calibration
         return;
     }
 
@@ -295,7 +299,7 @@ static void startBootCalibration()
     g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES);
     g_calib_active        = true;
     g_calib_settle_cycles = config::CALIB_SETTLE_MS * 1000u / config::IMU_PERIOD_US;
-    publishCalibStatus(false);      // calibration pending → pre-arm check rejects ARM
+    g_calibrated          = false;  // calibration pending → pre-arm check rejects ARM
     ESP_LOGI(TAG, "Boot calibration: settle %lu cycles, then average %lu samples",
              static_cast<unsigned long>(g_calib_settle_cycles),
              static_cast<unsigned long>(config::CALIB_GYRO_SAMPLES));
@@ -318,7 +322,7 @@ static void feedBootCalibration(const sf::ImuData& imu)
     const sf::SystemMode mode = sf::system_mode.latest();
     if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
         g_calib_active = false;
-        publishCalibStatus(true);   // no longer pending (aborted)
+        g_calibrated   = true;      // no longer pending (aborted)
         ESP_LOGW(TAG, "Boot calibration aborted — armed before completion "
                       "(estimator left untouched)");
         return;
@@ -342,7 +346,7 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // 完了。以降（適用 or デッドバンドスキップ）に関わらずループ内 feed を止め、起動準備
     // 完了を通知する — 校正はもう保留中でない。
     g_calib_active = false;
-    publishCalibStatus(true);
+    g_calibrated   = true;
     const sf::CalibrationData& d = g_calib.data();
 
     // Largest per-axis absolute bias (|x| inline, no <cmath> dependency).
@@ -561,6 +565,12 @@ void ImuTask(void* pvParameters)
         if (g_tof_vertical) {
             applyVerticalGroundHandoff();
         }
+
+        // Publish boot/system readiness (calibrated + ToF airborne) for the pre-arm
+        // check (requestArm) and the takeoff sequencer (StateTask: TAKEOFF → FLYING).
+        // 起動/システム準備状態（calibrated + ToF 空中）を発行: ARM 前チェック（requestArm）と
+        // 離陸シーケンサ（StateTask: TAKEOFF→FLYING）が読む。
+        publishSystemStatus(now);
 
         // =====================================================================
         // Step 4: Publish state estimate
