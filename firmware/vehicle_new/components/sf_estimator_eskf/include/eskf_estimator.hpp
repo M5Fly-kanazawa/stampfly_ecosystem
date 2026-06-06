@@ -37,6 +37,8 @@ public:
     void resetPositionVelocity() override;
     void holdPositionVelocity() override;
     void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) override;
+    void freezeBias() override;
+    void unfreezeBias() override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;

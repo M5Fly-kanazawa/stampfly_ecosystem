@@ -181,6 +181,27 @@ void physics(int64_t now_us)
     mode.timestamp = static_cast<uint32_t>(now_us);
     sf::system_mode.publish(mode);
 
+    // ControlTask consumes flight-mode changes via controller_command (Phase 1: mode
+    // change is callback-driven through StateManager::onModeChange, not polled from
+    // system_mode each cycle). This bench injects system_mode directly — bypassing the
+    // StateManager — so it must ALSO publish the mode-change command the controller now
+    // relies on; otherwise the controller stays in its init mode (STABILIZE) and the
+    // ALT_HOLD altitude schedule never engages (the craft would not land on schedule).
+    // ControlTask は controller_command 経由でフライトモード変更を消費する（Phase 1: モード変更は
+    // StateManager::onModeChange 経由のコールバック駆動で、毎サイクルの system_mode ポーリング
+    // ではない）。本ベンチは system_mode を直接注入＝StateManager をバイパスするため、制御器が
+    // 依存するモード変更指令も publish する必要がある。さもないと制御器が init モード（STABILIZE）の
+    // ままで ALT_HOLD 高度スケジュールが係合しない（機体が予定通り着陸しない）。
+    static uint8_t s_prev_sub_mode = 0xFF;
+    if (mode.sub_mode != s_prev_sub_mode) {
+        sf::ControllerCommand cc = {};
+        cc.command   = static_cast<uint8_t>(sf::ControllerCmd::ModeChange);
+        cc.mode      = mode.sub_mode;
+        cc.timestamp = static_cast<uint32_t>(now_us);
+        sf::controller_command.publish(cc);
+        s_prev_sub_mode = mode.sub_mode;
+    }
+
     sf::CommandSetpoint sp = {};
     sp.throttle = throttle;
     sp.roll = sp.pitch = 0.0f;

@@ -239,15 +239,17 @@ struct EstimatorCommand {
 /// Controller command verbs — issued by StateManager transition callbacks
 /// 制御器コマンドの種別 — StateManager の遷移コールバックが発行
 enum class ControllerCmd : uint8_t {
-    None        = 0,   // no-op                                       / 無操作
-    Reset       = 1,   // reset all integrators/filters (ARM)         / 全積分器・フィルタリセット
-    ResetAltPos = 2,   // reset altitude/position loops (mode exit)   / 高度・位置ループのみリセット
+    None        = 0,   // no-op                                        / 無操作
+    Reset       = 1,   // reset all integrators/filters (ARM)          / 全積分器・フィルタリセット
+    ResetAltPos = 2,   // reset altitude/position loops (mode exit)    / 高度・位置ループのみリセット
+    ModeChange  = 3,   // flight-mode switch: reconfigure + reset loops / モード切替: 再構成+ループreset
 };
 
 /// Controller command — ControlTask consumes and applies to the active IController
 /// 制御器コマンド — ControlTask が消費しアクティブな IController に適用
 struct ControllerCommand {
-    uint8_t  command;     // ControllerCmd value / ControllerCmd の値
+    uint8_t  command;     // ControllerCmd value                              / ControllerCmd の値
+    uint8_t  mode;        // FlightMode value (valid when command==ModeChange) / モード値
     uint32_t timestamp;   // [us]
 };
 

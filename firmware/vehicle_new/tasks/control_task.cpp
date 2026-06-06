@@ -54,6 +54,42 @@ static sf::PidController controller;
 /// 配線するだけ（下の Step 4 参照）。
 static sf::Actuator actuator;
 
+/// Consume controller commands published by the StateManager transition callbacks
+/// (architecture §4): full reset (ARM), altitude/position reset (mode exit / soft
+/// landing), and flight-mode change (FLYING sub-mode switch). This is the controller-side
+/// endpoint of the reset consolidation — the state machine decides WHEN, ControlTask
+/// (which owns the controller) decides HOW. Replaces the ad-hoc prev_armed edge and the
+/// per-cycle onModeChange poll that used to live in the loop.
+/// StateManager の遷移コールバックが発行した制御器コマンドを消費する（architecture §4）:
+/// full reset（ARM）、高度/位置リセット（モード退出/soft landing）、フライトモード変更（FLYING
+/// サブモード切替）。reset 集約の制御器側エンドポイント — いつは状態機械、どうは制御器を所有する
+/// ControlTask が決める。ループ内にあった旧来の prev_armed エッジと毎周期 onModeChange を置き換える。
+///
+/// @design architecture.md §4 — reset consolidation (controller side)    [OK]
+/// @design detailed_design.md §3 — FLYING sub-mode switch → onModeChange  [OK]
+static void processControllerCommands(sf::IController& controller)
+{
+    sf::ControllerCommand cmd;
+    while (sf::controller_command.read(cmd)) {
+        switch (static_cast<sf::ControllerCmd>(cmd.command)) {
+        case sf::ControllerCmd::Reset:
+            controller.reset();
+            break;
+        case sf::ControllerCmd::ModeChange:
+            controller.onModeChange(static_cast<sf::FlightMode>(cmd.mode));
+            break;
+        case sf::ControllerCmd::ResetAltPos:
+            // Phase 2: altitude/position-only reset (soft landing / FLYING exit). For now
+            // a no-op — a subsequent ARM issues a full Reset. Wired with soft-landing.
+            // Phase 2: 高度/位置のみリセット（soft landing/FLYING退出）。現状 no-op
+            // （後続 ARM が full Reset を出す）。soft-landing と共に配線。
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 void ControlTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ControlTask started");
@@ -62,10 +98,6 @@ void ControlTask(void* pvParameters)
     // コントローラとアクチュエータ（ミキサー＋モーター HAL）を初期化
     controller.init();
     actuator.init();
-
-    // Previous arm state, to detect the disarmed→armed edge (reset PID integrators).
-    // 前回の arm 状態。disarmed→armed エッジ検出用（PID 積分器をリセット）。
-    bool prev_armed = false;
 
     while (true) {
         // =====================================================================
@@ -76,6 +108,13 @@ void ControlTask(void* pvParameters)
         // =====================================================================
 
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        // Consume controller reset/mode commands from the StateManager transition
+        // callbacks (architecture §4). Done first so a reset / mode change applies
+        // before this cycle's compute.
+        // StateManager の遷移コールバックからの制御器 reset/mode 指令を消費（architecture §4）。
+        // 最初に行い、reset/モード変更がこの周期の compute 前に効くようにする。
+        processControllerCommands(controller);
 
         // =====================================================================
         // Step 1: Read latest state and setpoint from topics
@@ -103,35 +142,27 @@ void ControlTask(void* pvParameters)
 
         if (!sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
             actuator.disarm();
-            prev_armed = false;
             continue;
         }
 
-        // On the disarmed→armed edge, clear the PID integrators so a fresh ARM
-        // never inherits stale integral wind-up from a previous flight. (The
-        // proper home for this is a StateManager onEnter(ARMED_GROUND) callback,
-        // wired in a later milestone — development_roadmap Phase C.)
-        // disarmed→armed エッジで PID 積分器をクリアし、新しい ARM が前回飛行の積分
-        // ワインドアップを引き継がないようにする。（本来は StateManager の
-        // onEnter(ARMED_GROUND) コールバックが担うべきで、後段 Phase C で配線する。）
-        if (!prev_armed) {
-            controller.reset();
-            prev_armed = true;
-        }
+        // Arm the actuator so the motor HAL accepts duty writes. The PID integrator reset
+        // on the ARM transition is now done by the onEnter(ARMED_GROUND) callback via
+        // controller_command(Reset), consumed in processControllerCommands() above
+        // (architecture §4) — no more prev_armed edge detection here.
+        // アクチュエータを arm し、モータ HAL が duty 書き込みを受理するようにする。ARM 遷移での
+        // PID 積分器リセットは onEnter(ARMED_GROUND) コールバックが controller_command(Reset)
+        // 経由で行い、上の processControllerCommands() が消費する（architecture §4）— ここでの
+        // prev_armed エッジ検出は廃止。
         actuator.arm();
 
         // =====================================================================
-        // Step 3: Apply the commanded flight mode, then compute control output.
-        // Step 3: 指令フライトモードを反映し、制御出力を計算する。
-        //
-        // Mode arbitration: the controller switches ACRO/STABILIZE/ALT_HOLD/
-        // POS_HOLD based on system_mode.sub_mode. onModeChange resets the relevant
-        // loops on a transition (no-op when the mode is unchanged).
-        // モード調停: コントローラは system_mode.sub_mode で各モードを切替える。
-        // onModeChange は遷移時に該当ループをリセットする（不変時は no-op）。
+        // Step 3: Compute control output. The flight mode is applied by the onModeChange
+        // callback (StateManager → controller_command → processControllerCommands), so
+        // the controller is already configured for the current sub_mode here.
+        // Step 3: 制御出力を計算する。フライトモードは onModeChange コールバック
+        // （StateManager → controller_command → processControllerCommands）が反映済みで、
+        // ここでは制御器が現在の sub_mode 用に構成済み。
         // =====================================================================
-
-        controller.onModeChange(static_cast<sf::FlightMode>(mode.sub_mode));
 
         sf::ControlOutput control = controller.compute(state, setpoint, config::IMU_DT);
 

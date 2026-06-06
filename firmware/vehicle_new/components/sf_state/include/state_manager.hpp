@@ -41,13 +41,18 @@ namespace sf {
 // 遷移コールバック型
 // =============================================================================
 
-/// Callback invoked when exiting a state
-/// 状態を出る時に呼ばれるコールバック
-using OnExitCallback = std::function<void(FlightState old_state)>;
+/// Callback invoked on a transition BEFORE the state changes. Receives both endpoints
+/// (from, to) so a handler can act on the specific transition pair — e.g.
+/// "FLYING → IDLE_GROUND" resets the ESKF but "ARMED_GROUND → IDLE_GROUND" does not.
+/// 状態遷移時（状態変更の前）に呼ばれるコールバック。両端 (from, to) を受け取り、特定の遷移
+/// ペアに応じた処理ができる（例: FLYING→IDLE_GROUND は ESKF reset するが ARMED_GROUND→
+/// IDLE_GROUND はしない）。
+using OnExitCallback = std::function<void(FlightState from, FlightState to)>;
 
-/// Callback invoked when entering a state
-/// 状態に入る時に呼ばれるコールバック
-using OnEnterCallback = std::function<void(FlightState new_state)>;
+/// Callback invoked on a transition AFTER the state changes. Receives both endpoints
+/// (from, to) for the same reason as OnExitCallback.
+/// 状態遷移時（状態変更の後）に呼ばれるコールバック。OnExitCallback と同じ理由で両端を受け取る。
+using OnEnterCallback = std::function<void(FlightState from, FlightState to)>;
 
 /// Callback invoked when flight mode changes within FLYING
 /// FLYING内でフライトモードが変わった時に呼ばれるコールバック

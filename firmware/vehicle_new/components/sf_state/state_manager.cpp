@@ -347,7 +347,7 @@ void StateManager::transition(FlightState new_state)
     // 旧状態のonExitコールバックを発火
     for (int i = 0; i < exit_callback_count_; i++) {
         if (exit_callbacks_[i]) {
-            exit_callbacks_[i](old_state);
+            exit_callbacks_[i](old_state, new_state);
         }
     }
 
@@ -375,7 +375,7 @@ void StateManager::transition(FlightState new_state)
     // 新状態のonEnterコールバックを発火
     for (int i = 0; i < enter_callback_count_; i++) {
         if (enter_callbacks_[i]) {
-            enter_callbacks_[i](new_state);
+            enter_callbacks_[i](old_state, new_state);
         }
     }
 

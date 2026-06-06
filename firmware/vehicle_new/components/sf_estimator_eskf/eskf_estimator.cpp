@@ -184,6 +184,22 @@ void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel
     }
 }
 
+void EskfEstimator::freezeBias()
+{
+    // Hold the accel bias constant (the ESKF core stops updating ba_). Called on the
+    // ground / at landing so settling vibration does not perturb the calibrated bias.
+    // 加速度バイアスを一定に保つ（ESKF コアが ba_ 更新を停止）。地上・着陸時に呼び、整定の
+    // 振動が校正済みバイアスを乱さないようにする。
+    core_.setFreezeAccelBias(true);
+}
+
+void EskfEstimator::unfreezeBias()
+{
+    // Resume online accel-bias estimation for the dynamic flight regime (at takeoff).
+    // 動的な飛行域での加速度バイアスのオンライン推定を再開（離陸時）。
+    core_.setFreezeAccelBias(false);
+}
+
 StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
 {
     StateEstimate s = {};

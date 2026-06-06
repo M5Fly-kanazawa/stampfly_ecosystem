@@ -173,6 +173,29 @@ public:
     /// @param gyro_bias   Measured gyro bias [rad/s], body frame / 測定ジャイロバイアス
     /// @param accel_bias  Measured accel bias [m/s²], body frame (gravity removed) / 加速度バイアス
     virtual void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) {}
+
+    // =========================================================================
+    // Bias freeze (ground / flight regimes)
+    // バイアス凍結（地上 / 飛行レジーム）
+    // =========================================================================
+
+    /// Freeze bias estimation (on the ground / at landing). The at-rest bias is held
+    /// constant instead of being re-estimated, so ground vibration/settling does not
+    /// perturb the calibrated bias. Default no-op for estimators that do not estimate
+    /// bias (e.g. the attitude-only complementary filter).
+    /// バイアス推定を凍結（地上・着陸時）。静止バイアスを再推定せず一定に保ち、地上の振動・
+    /// 整定が校正済みバイアスを乱さないようにする。バイアスを推定しない推定器（姿勢のみの相補
+    /// フィルタ等）は既定 no-op。
+    ///
+    /// @design detailed_design.md §3 — onEnter(LANDING→IDLE): バイアスフリーズ      [--]
+    virtual void freezeBias() {}
+
+    /// Unfreeze bias estimation (at takeoff). Resumes online bias estimation for the
+    /// dynamic flight regime. Default no-op.
+    /// バイアス推定の凍結を解除（離陸時）。動的な飛行域でのオンライン推定を再開。既定 no-op。
+    ///
+    /// @design detailed_design.md §3 — onEnter(TAKEOFF→FLYING): バイアスフリーズ解除 [--]
+    virtual void unfreezeBias() {}
 };
 
 }  // namespace sf

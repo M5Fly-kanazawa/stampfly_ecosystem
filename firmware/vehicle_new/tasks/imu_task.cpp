@@ -228,6 +228,28 @@ static void processAsyncSensors()
 /// @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff  [OK]
 static void applyVerticalGroundHandoff()
 {
+    // Vertical ground→airborne handoff — an ESTIMATION-internal concern owned by ImuTask
+    // because it is tightly coupled to the ToF sensor and must fire the instant the ToF
+    // detects airborne (a one-cycle-precise event). It is deliberately NOT moved to the
+    // onEnter(FLYING) transition callback: that fires ~20 ms later (StateTask's RC-poll
+    // tick after system_status.airborne), and the α-β accel-compensation tracker is
+    // sensitive enough that a 20 ms-late pos/vel reset measurably degrades POS_HOLD
+    // attitude (pos_flight/pos_yaw att_rmse). So the state machine owns the CONTROLLER
+    // resets and the full-state ESKF reset (architecture §4), while this ToF-synced
+    // vertical handoff (a one-shot reset at the airborne edge + the on-ground hold) stays
+    // here in estimation where the ToF event is observed directly.
+    // 鉛直の接地→空中ハンドオフ — ToF センサと密結合で、ToF が空中を検知した瞬間（1サイクル
+    // 精度のイベント）に発火する必要がある estimation 内部の関心事ゆえ ImuTask が所有する。
+    // onEnter(FLYING) 遷移コールバックに移さない: それは ~20ms 遅れて発火し（system_status.
+    // airborne 後の StateTask の RC ポーリングティック）、α-β 運動加速度補償トラッカは 20ms
+    // 遅れの pos/vel reset で POS_HOLD 姿勢が測定可能なほど劣化するほど敏感（pos_flight/
+    // pos_yaw の att_rmse）。よって状態機械は CONTROLLER リセットと ESKF full-state reset を
+    // 所有し（architecture §4）、この ToF 同期の鉛直ハンドオフ（空中エッジの one-shot reset ＋
+    // 接地ホールド）は ToF イベントを直接観測する estimation 側のここに残す。
+    //
+    // @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff        [OK]
+    // @design architecture.md §4 — controller/full-state reset is owned by the state
+    //         machine; the timing-critical ToF-synced vertical handoff stays here    [OK]
     const bool on_ground = g_takeoff_landing.isOnGround();
     static bool was_on_ground = true;   // boot state: on the ground / 起動時は接地
 
@@ -257,6 +279,16 @@ static void applyVerticalGroundHandoff()
 static bool     g_calib_active        = false;  // settling/collecting now / 整定・収集中
 static uint32_t g_calib_settle_cycles = 0;      // remaining settle cycles to discard / 破棄する整定残り
 static bool     g_calibrated          = false;  // latched: calibration no longer pending / 校正が保留中でない
+
+// Applied calibration biases, retained so a full estimator reset (estimator_command
+// Reset — e.g. ARM or crash-return in Phase 2) can re-seed them: reset() zeroes the bias
+// states (estimator.hpp), so the calibration must be re-applied AFTER the reset.
+// 適用した校正バイアス。full reset（estimator_command Reset — 例: Phase 2 の ARM や墜落復帰）後に
+// 再注入できるよう保持する: reset() はバイアス状態をゼロ化する（estimator.hpp）ので、reset 後に
+// 校正を再適用する必要がある。
+static bool     g_calib_applied         = false;
+static float    g_applied_gyro_bias[3]  = {0, 0, 0};
+static float    g_applied_accel_bias[3] = {0, 0, 0};
 
 /// Publish the boot/system readiness status so other tasks can gate on it via the topic
 /// (R16-style, not a cross-task object): StateManager::requestArm() reads `calibrated`,
@@ -377,11 +409,69 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // Significant bias: seed the estimator (gravity already removed for accel Z).
     // 有意なバイアス: 推定器に種付け（加速度 Z の重力は除去済み）。
     g_estimator->applyCalibration(d.gyro_bias, d.accel_bias);
+    g_calib_applied = true;
+    for (int i = 0; i < 3; ++i) {
+        g_applied_gyro_bias[i]  = d.gyro_bias[i];
+        g_applied_accel_bias[i] = d.accel_bias[i];
+    }
     ESP_LOGI(TAG,
              "Boot calibration applied: gyro_bias=[%.4f %.4f %.4f] rad/s, "
              "accel_bias=[%.3f %.3f %.3f] m/s2",
              d.gyro_bias[0], d.gyro_bias[1], d.gyro_bias[2],
              d.accel_bias[0], d.accel_bias[1], d.accel_bias[2]);
+}
+
+/// Re-apply the retained boot-calibration biases after a full estimator reset. A full
+/// reset() zeroes the bias states (estimator.hpp), so without this a post-reset estimator
+/// starts from zero bias and re-converges through the next takeoff transient — the very
+/// instability the boot calibration removes. No-op if no calibration was applied.
+/// full reset 後に保持した起動校正バイアスを再適用する。full reset() はバイアス状態をゼロ化
+/// する（estimator.hpp）ので、これが無いと reset 後の推定器がゼロバイアスから始まり次の離陸
+/// 過渡で再収束する — 起動校正が除去するまさにその不安定。校正未適用なら no-op。
+static void reseedCalibration()
+{
+    if (!g_calib_applied) {
+        return;
+    }
+    g_estimator->applyCalibration(g_applied_gyro_bias, g_applied_accel_bias);
+    ESP_LOGI(TAG, "Calibration re-seeded after estimator reset");
+}
+
+/// Consume estimator commands published by the StateManager transition callbacks
+/// (architecture §4). This is the estimator-side endpoint of the reset consolidation:
+/// the state machine decides WHEN to reset; ImuTask (which owns the estimator) decides
+/// HOW. Replaces the ad-hoc edge detection that used to live in this task.
+/// StateManager の遷移コールバックが発行した推定器コマンドを消費する（architecture §4）。
+/// reset 集約の推定器側エンドポイント: いつ reset するかは状態機械が、どう reset するかは
+/// 推定器を所有する ImuTask が決める。本タスクにあった旧来のエッジ検出を置き換える。
+///
+/// @design architecture.md §4 — reset consolidation (estimator side)   [OK]
+static void processEstimatorCommands()
+{
+    sf::EstimatorCommand cmd;
+    while (sf::estimator_command.read(cmd)) {
+        switch (static_cast<sf::EstimatorCmd>(cmd.command)) {
+        case sf::EstimatorCmd::Reset:
+            g_estimator->reset();
+            reseedCalibration();   // reset zeroed the bias — re-apply the calibration
+            break;
+        case sf::EstimatorCmd::ResetPosVel:
+            g_estimator->resetPositionVelocity();
+            ESP_LOGI(TAG, "Estimator pos/vel reset (takeoff handoff)");
+            break;
+        case sf::EstimatorCmd::FreezeBias:
+            g_estimator->freezeBias();
+            break;
+        case sf::EstimatorCmd::UnfreezeBias:
+            g_estimator->unfreezeBias();
+            break;
+        case sf::EstimatorCmd::Recalibrate:
+            startBootCalibration();
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 /// esp_timer callback: paces the IMU loop at 400Hz by notifying the IMU task.
@@ -433,19 +523,18 @@ void ImuTask(void* pvParameters)
     sf::params::get_bool("eskf.use_tof", use_tof);
     g_tof_vertical = use_tof;
 
-    // Arm the boot gyro/accel bias calibration. It runs INSIDE the 400Hz loop (see
-    // feedBootCalibration) while the craft rests on the ground, measuring the IMU bias
-    // and seeding the estimator with it before takeoff — an uncalibrated accel bias
-    // destabilizes the ESKF attitude loop. The craft is stationary on the ground at
-    // boot, the natural rest window. (Design §3 triggers this on onEnter(IDLE_GROUND);
-    // arming it in ImuTask setup achieves the same without the not-yet-wired onEnter
-    // callback path, and the in-loop feed keeps the 400Hz timing unshifted.)
-    // 起動時のジャイロ/加速度バイアス校正を起動する。校正は 400Hz ループ「内」
-    // （feedBootCalibration）で機体が地上静止のうちに走り、IMU バイアスを測って離陸前に
-    // 推定器へ種付けする — 未校正の加速度バイアスは ESKF 姿勢ループを不安定化させる。起動時は
-    // 機体が地上静止で自然な静止窓。（設計§3 は onEnter(IDLE_GROUND) で起動するが、未配線の
-    // onEnter 経路なしで setup 起動でも同じ効果。ループ内 feed で 400Hz タイミングは不変。）
-    startBootCalibration();
+    // The boot gyro/accel bias calibration is now started by the onEnter(IDLE_GROUND)
+    // transition callback (architecture §6 / detailed_design §3 — calibration is
+    // callback-driven), which publishes estimator_command(Recalibrate); this task
+    // consumes it in processEstimatorCommands() and arms startBootCalibration(). The
+    // in-loop feed (feedBootCalibration) then runs while the craft rests on the ground,
+    // measuring the IMU bias and seeding the estimator before takeoff. (Previously this
+    // was called directly here in setup — an ad-hoc bypass of the onEnter callback path.)
+    // 起動バイアス校正は onEnter(IDLE_GROUND) 遷移コールバックが開始する（architecture §6 /
+    // detailed_design §3 — 校正はコールバック駆動）。コールバックが estimator_command(Recalibrate)
+    // を publish し、本タスクが processEstimatorCommands() で消費して startBootCalibration() を
+    // 起動する。以降ループ内 feed（feedBootCalibration）が地上静止中に走り、IMU バイアスを測って
+    // 離陸前に推定器へ種付けする。（以前はここ setup で直接呼んでいた — onEnter 経路の場当たり迂回。）
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
     // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
@@ -526,6 +615,14 @@ void ImuTask(void* pvParameters)
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
         sf::sensor_imu.publish(imu);
+
+        // Process estimator commands from the StateManager transition callbacks
+        // (reset / pos-vel reset / bias freeze / recalibrate). Done before predict so a
+        // reset takes effect this cycle (architecture §4 reset consolidation).
+        // StateManager の遷移コールバックからの推定器コマンドを処理（reset/pos-vel reset/
+        // bias freeze/recalibrate）。predict 前に行い reset がこの周期で効くようにする
+        // （architecture §4 reset 集約）。
+        processEstimatorCommands();
 
         // Boot calibration: while still active (on the ground at boot), accumulate the
         // at-rest bias and seed the estimator once on completion. Runs in parallel with

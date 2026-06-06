@@ -37,6 +37,84 @@ static const char* TAG = "StateTask";
 /// グローバル状態管理インスタンス
 sf::StateManager g_state_manager;
 
+/// Register the StateManager transition callbacks (called once at task start, after
+/// init()). Each callback publishes reset commands on the estimator/controller/notify
+/// command topics per the detailed_design §3 transition table; the resource-owning
+/// tasks (ImuTask=estimator, ControlTask=controller, NotifyTask=LED/buzzer) consume them.
+/// This is the single place that encodes the transition table and makes the state
+/// machine the sole owner of transition resets, replacing the ad-hoc edge detection that
+/// used to live in ImuTask/ControlTask.
+/// StateManager の遷移コールバックを登録する（タスク開始時に init() 後1回）。各コールバックは
+/// detailed_design §3 遷移表に従い推定器/制御器/通知の指令トピックにリセット指令を publish し、
+/// リソース所有タスク（ImuTask=推定器, ControlTask=制御器, NotifyTask=LED/ブザー）が消費する。
+/// ここが遷移表を符号化する唯一の場所で、ImuTask/ControlTask に散らばっていたエッジ検出を
+/// 置き換え、遷移リセットの唯一の所有者を状態機械にする。
+///
+/// @design architecture.md §4 — onExit/onEnter callbacks consolidate reset    [OK]
+/// @design detailed_design.md §3 — state transition table                     [OK]
+static void registerStateCallbacks(sf::StateManager& manager)
+{
+    using sf::FlightState;
+    using sf::FlightMode;
+
+    // onEnter — reset/init on entering the new state (detailed_design §3 onEnter column).
+    // The (from, to) pair disambiguates transitions that share a destination.
+    // onEnter — 新状態に入った時の reset/初期化（detailed_design §3 onEnter 列）。
+    // (from, to) ペアで、行き先を共有する遷移を区別する。
+    manager.onEnter([](FlightState from, FlightState to) {
+        const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+        switch (to) {
+        case FlightState::IDLE_GROUND:
+            if (from == FlightState::INIT) {
+                // INIT → IDLE_GROUND: start the boot bias calibration (callback-driven,
+                // architecture §6 — moved out of ImuTask setup).
+                // INIT→IDLE_GROUND: 起動バイアス校正を開始（コールバック駆動、ImuTask setup から移管）。
+                sf::estimator_command.publish(
+                    {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now});
+            } else {
+                // Return to ground (DISARM / land): disarm tone. The crash-return ESKF
+                // reset + recalibration are wired in Phase 2 (re-fly readiness).
+                // 接地復帰（DISARM/着陸）: disarm 音。墜落復帰の ESKF reset/再校正は Phase 2。
+                sf::notify_command.publish(
+                    {static_cast<uint8_t>(sf::NotifyEvent::DisarmTone), now});
+            }
+            break;
+        case FlightState::ARMED_GROUND:
+            if (from == FlightState::IDLE_GROUND) {
+                // ARM: clear PID integrators (no stale wind-up) + arm tone.
+                // ARM: PID 積分器をクリア（古いワインドアップ無し）+ arm 音。
+                sf::controller_command.publish(
+                    {static_cast<uint8_t>(sf::ControllerCmd::Reset), 0, now});
+                sf::notify_command.publish(
+                    {static_cast<uint8_t>(sf::NotifyEvent::ArmTone), now});
+            }
+            break;
+        // TAKEOFF → FLYING: the ESKF position/velocity reset for a clean ToF lock is NOT
+        // issued here. It is the ToF-synced vertical handoff in ImuTask (one-cycle
+        // precise); a ~20 ms-late reset via this callback degrades POS_HOLD attitude.
+        // See applyVerticalGroundHandoff(). This callback owns the controller + full-state
+        // resets, not the timing-critical estimation handoff.
+        // TAKEOFF→FLYING: クリーンな ToF ロックのための ESKF 位置/速度リセットはここでは出さない。
+        // それは ImuTask の ToF 同期鉛直ハンドオフが担う（1サイクル精度）。このコールバック経由の
+        // ~20ms 遅れ reset は POS_HOLD 姿勢を劣化させる。applyVerticalGroundHandoff() 参照。
+        // 本コールバックは制御器＋full-state reset を所有し、タイミング命の estimation ハンドオフは
+        // 担わない。
+        default:
+            break;
+        }
+    });
+
+    // onModeChange — FLYING sub-mode switch: reconfigure the controller (resets the
+    // relevant loops, captures hold targets). detailed_design §3 FLYING row.
+    // onModeChange — FLYING サブモード切替: 制御器を再構成（該当ループ reset、保持目標捕捉）。
+    manager.onModeChange([](FlightMode /*old_mode*/, FlightMode new_mode) {
+        const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+        sf::controller_command.publish(
+            {static_cast<uint8_t>(sf::ControllerCmd::ModeChange),
+             static_cast<uint8_t>(new_mode), now});
+    });
+}
+
 void StateTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "StateTask started");
@@ -46,6 +124,12 @@ void StateTask(void* pvParameters)
     //
     // @design requirements.md §2 — INIT → IDLE_GROUND on init complete [--]
     g_state_manager.init();
+
+    // Register the transition callbacks that consolidate all reset processing
+    // (architecture §4). Must be after init() — init() zeroes the callback counts.
+    // 全リセット処理を集約する遷移コールバックを登録する（architecture §4）。init() の後で
+    // 行う — init() はコールバック数をゼロにするため。
+    registerStateCallbacks(g_state_manager);
 
     // Previous ARM switch state, for rising/falling edge detection across iterations.
     // 前回の ARM スイッチ状態（立上り/立下りエッジ検出用、反復間で保持）。
