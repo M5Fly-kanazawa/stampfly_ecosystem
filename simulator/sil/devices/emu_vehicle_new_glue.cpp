@@ -35,9 +35,51 @@
  * @design simulator/sil/RESET_PLAN.md §9 — reproducible review video (estimate overlay)  [--]
  */
 
+#include <cstdio>          // std::fopen / fprintf / fflush
+#include <cstdlib>         // std::getenv
+
 #include "topics.hpp"     // sf::estimate_state
 #include "data_types.hpp" // sf::StateEstimate
 #include "sf_math.hpp"    // sf::math::Quat
+
+namespace {
+
+// --- POS_HOLD est_roll-bias diagnostic (env-gated, read-only) ---------------
+// SIL_EMU_ESKF_DIAG=<path> dumps the firmware's published ESKF internals (accel
+// bias, gyro bias, NED vel/pos, Euler estimate, sensor mask) at the trajectory
+// cadence, one row per recorded trajectory sample (this hook is called exactly
+// once per trajectory.csv row), so diag row N aligns with trajectory row N (the
+// truth roll lives there). Lets us decide WHERE the steady -6° est_roll bias is
+// born: H1 = accel_bias_y absorbs the steady tilt (ba_y ≈ g·sin(roll_err)), or
+// H2 = thrust-contamination residual (est_roll biased while ba_y ≈ 0). Purely
+// additive instrumentation: it READS the published estimate, no firmware change.
+// SIL_EMU_ESKF_DIAG=<path> でファーム発行の ESKF 内部（加速度バイアス・ジャイロ
+// バイアス・NED速度/位置・オイラー推定・センサマスク）を軌跡と同じ間引きで出力。
+// このフックは軌跡1行につき必ず1回呼ばれるので diag 行 N = trajectory 行 N（真値
+// roll はそちらにある）。定常 -6° est_roll バイアスの発生源（H1: accel_bias_y が
+// 定常傾斜を吸収 / H2: 推力汚染残差）を切り分ける。発行トピックを読むだけの計装。
+std::FILE* g_diag = nullptr;
+bool       g_diag_tried = false;
+
+std::FILE* diag_file()
+{
+    if (!g_diag_tried) {
+        g_diag_tried = true;
+        const char* path = std::getenv("SIL_EMU_ESKF_DIAG");
+        if (path != nullptr && path[0] != '\0') {
+            g_diag = std::fopen(path, "w");
+            if (g_diag != nullptr) {
+                std::fprintf(g_diag,
+                    "t_us,est_roll,est_pitch,est_yaw,"
+                    "ba_x,ba_y,ba_z,bg_x,bg_y,bg_z,"
+                    "vn,ve,vd,pn,pe,pd,mask\n");
+            }
+        }
+    }
+    return g_diag;
+}
+
+}  // namespace
 
 extern "C" void sil_emu_estimate(float* alt_est, float* roll_est,
                                  float* pitch_est, float* yawcmd)
@@ -49,16 +91,35 @@ extern "C" void sil_emu_estimate(float* alt_est, float* roll_est,
     // Altitude (up positive) from NED position z. NED 位置 z から高度（上が正）。
     if (alt_est != nullptr) *alt_est = -s.position[2];
 
-    // Roll / pitch from the attitude quaternion [w,x,y,z] → Euler.
-    // 姿勢クォータニオン [w,x,y,z] → オイラー角でロール/ピッチ。
+    // Roll / pitch / yaw from the attitude quaternion [w,x,y,z] → Euler.
+    // 姿勢クォータニオン [w,x,y,z] → オイラー角でロール/ピッチ/ヨー。
+    constexpr float kRad2Deg = 57.2957795131f;
     const sf::math::Quat q(s.attitude[0], s.attitude[1],
                            s.attitude[2], s.attitude[3]);
     const float n2 = q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z;
+    sf::math::Vec3 e{0.0f, 0.0f, 0.0f};
     if (n2 > 1e-6f) {
-        const sf::math::Vec3 e = q.to_euler();   // [rad] (x=roll, y=pitch, z=yaw)
-        constexpr float kRad2Deg = 57.2957795131f;
+        e = q.to_euler();                        // [rad] (x=roll, y=pitch, z=yaw)
         if (roll_est  != nullptr) *roll_est  = e.x * kRad2Deg;
         if (pitch_est != nullptr) *pitch_est = e.y * kRad2Deg;
+    }
+
+    // Diagnostic dump (env-gated). flush each row so _Exit(0) loses nothing.
+    // 診断ダンプ（env ゲート）。_Exit(0) で取りこぼさぬよう各行 flush。
+    std::FILE* d = diag_file();
+    if (d != nullptr) {
+        std::fprintf(d,
+            "%u,%.4f,%.4f,%.4f,"
+            "%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,"
+            "%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%u\n",
+            s.timestamp,
+            e.x * kRad2Deg, e.y * kRad2Deg, e.z * kRad2Deg,
+            s.accel_bias[0], s.accel_bias[1], s.accel_bias[2],
+            s.gyro_bias[0], s.gyro_bias[1], s.gyro_bias[2],
+            s.velocity[0], s.velocity[1], s.velocity[2],
+            s.position[0], s.position[1], s.position[2],
+            static_cast<unsigned>(s.sensor_mask));
+        std::fflush(d);
     }
 
     // yawcmd: leave the recorder's seed (truth) untouched — not part of the estimate.

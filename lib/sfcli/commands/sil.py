@@ -17,6 +17,7 @@ Subcommands:
 
 import argparse
 import json
+import math
 import os
 import shlex
 import subprocess
@@ -170,7 +171,62 @@ def run_run(args: argparse.Namespace) -> int:
     return 0  # the verdict lives in results.json; gate decides pass/fail
 
 
-def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int):
+def _traj_metric(traj_path: Path, name: str, t0=None, t1=None):
+    """Compute a physical-truth metric from trajectory.csv for the numerical gates
+    (G2 estimate tracking, G3 bounded attitude/position, G4 actuator health). The
+    expect DSL is log-only (≈G1); this turns the bundle's truth+estimate columns into
+    machine-judgeable numbers. Returns None on a missing file / unknown metric / empty
+    window. Optional [t0, t1] seconds restrict the metric to a flight phase (e.g. the
+    POS_HOLD window). trajectory.csv から物理真値メトリクスを算出（G2/G3/G4）。expect の
+    ログ判定(≈G1)に対し、真値＋推定列を機械判定可能な数値にする。
+    """
+    import csv as _csv
+    try:
+        with open(traj_path) as f:
+            rows = list(_csv.DictReader(f))
+    except OSError:
+        return None
+    def fv(r, k): return float(r[k])
+    if t0 is not None and t1 is not None:
+        rows = [r for r in rows if t0 <= fv(r, "t") <= t1]
+    if not rows:
+        return None
+    def col(k): return [fv(r, k) for r in rows]
+    def rms(xs): return math.sqrt(sum(x * x for x in xs) / len(xs))
+
+    if name == "horizontal_drift_max":   # G3: max planar distance from the window's start
+        cx, cy = fv(rows[0], "px"), fv(rows[0], "py")
+        return max(math.hypot(fv(r, "px") - cx, fv(r, "py") - cy) for r in rows)
+    if name == "roll_rmse":              # G2: est roll vs truth roll
+        return rms([fv(r, "roll_est") - fv(r, "roll") for r in rows])
+    if name == "pitch_rmse":             # G2: est pitch vs truth pitch
+        return rms([fv(r, "pitch_est") - fv(r, "pitch") for r in rows])
+    if name == "att_rmse":               # G2: combined roll+pitch attitude error magnitude
+        return rms([math.hypot(fv(r, "roll_est") - fv(r, "roll"),
+                               fv(r, "pitch_est") - fv(r, "pitch")) for r in rows])
+    if name == "alt_rmse":               # G2: est alt vs truth alt
+        return rms([fv(r, "alt_est") - fv(r, "alt") for r in rows])
+    if name == "tilt_max":               # G3: max true tilt magnitude (no tumble)
+        return max(math.hypot(fv(r, "roll"), fv(r, "pitch")) for r in rows)
+    if name == "alt_band":               # G3: peak-to-peak altitude over the window
+        a = col("alt"); return max(a) - min(a)
+    if name == "alt_mean":
+        a = col("alt"); return sum(a) / len(a)
+    if name == "alt_min":  return min(col("alt"))
+    if name == "alt_max":  return max(col("alt"))
+    if name == "duty_max":               # G4: peak motor duty (saturation guard)
+        return max(max(fv(r, "m0"), fv(r, "m1"), fv(r, "m2"), fv(r, "m3")) for r in rows)
+    return None  # unknown metric name / 未知のメトリクス名
+
+
+_METRIC_OPS = {
+    "<":  lambda a, b: a < b,   "<=": lambda a, b: a <= b,
+    ">":  lambda a, b: a > b,   ">=": lambda a, b: a >= b,
+}
+
+
+def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int,
+                 traj_path: Path = None):
     """Evaluate an assertions file against the captured output. Returns (checks,
     all_pass). Assertions are anchored to OUTPUT TEXT/ORDER, never wall-clock, so
     a check is deterministic exactly because the scenario's output is byte-
@@ -183,6 +239,13 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
       skip <reason...>                        record a capability-gated check as
                                               SKIPPED (passes, not evaluated) —
                                               e.g. stable hover gated on E3 INA3221
+      metric <name> <op> <value> [in <t0> <t1>]
+                                              numerical physical-truth gate from
+                                              trajectory.csv (G2/G3/G4). op ∈ < <= > >= ;
+                                              optional "in t0 t1" restricts to a phase.
+                                              names: horizontal_drift_max, roll_rmse,
+                                              pitch_rmse, att_rmse, alt_rmse, tilt_max,
+                                              alt_band, alt_mean, alt_min, alt_max, duty_max
     """
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
@@ -230,6 +293,36 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                 continue
             checks.append({"name": f"exit == {want}", "pass": exit_code == want,
                            "detail": f"got {exit_code}"})
+        elif kind == "metric" and len(toks) >= 4:
+            # metric <name> <op> <value> [in <t0> <t1>]
+            # Numerical physical-truth gate from trajectory.csv (G2/G3/G4). The
+            # optional "in <t0> <t1>" window restricts it to a flight phase.
+            # trajectory.csv からの数値ゲート。"in t0 t1" で飛行フェーズに限定。
+            name, op, valstr = toks[1], toks[2], toks[3]
+            t0 = t1 = None
+            if len(toks) >= 7 and toks[4] == "in":
+                try:
+                    t0, t1 = float(toks[5]), float(toks[6])
+                except ValueError:
+                    checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                                   "detail": "non-numeric window"}); continue
+            if op not in _METRIC_OPS:
+                checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                               "detail": f"unknown op {op!r}"}); continue
+            try:
+                want = float(valstr)
+            except ValueError:
+                checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                               "detail": "non-numeric threshold"}); continue
+            m = _traj_metric(traj_path, name, t0, t1) if traj_path else None
+            win = f" in [{t0},{t1}]" if t0 is not None else ""
+            if m is None:
+                checks.append({"name": f"metric {name} {op} {want}{win}", "pass": False,
+                               "detail": "no trajectory / unknown metric / empty window"})
+            else:
+                ok = _METRIC_OPS[op](m, want)
+                checks.append({"name": f"metric {name} {op} {want}{win}", "pass": bool(ok),
+                               "detail": f"{name}={m:.4f}"})
         else:
             checks.append({"name": f"bad assertion: {stripped!r}", "pass": False, "detail": "syntax"})
 
@@ -300,7 +393,7 @@ def run_scenario(args: argparse.Namespace) -> int:
 
     expect = Path(args.expect) if args.expect else scn.with_suffix(".expect")
     if expect.exists():
-        checks, verdict = _eval_expect(expect, r.stdout, r.stderr, r.returncode)
+        checks, verdict = _eval_expect(expect, r.stdout, r.stderr, r.returncode, traj)
     else:
         console.info(f"(no .expect at {expect.name} — verdict = injection + exit code)")
         checks = [{"name": "exit == 0", "pass": r.returncode == 0, "detail": f"got {r.returncode}"}]

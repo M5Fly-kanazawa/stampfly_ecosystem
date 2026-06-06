@@ -85,7 +85,7 @@ def graph_frame(traj, i, w_px, h_px):
     t = traj["t"]
     now = t[i]
     dpi = 100
-    fig, axes = plt.subplots(2, 2, figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
+    fig, axes = plt.subplots(2, 3, figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
 
     def panel(ax, ylabel, series, ylim=None):
         for label, y, style in series:
@@ -125,6 +125,15 @@ def graph_frame(traj, i, w_px, h_px):
           [("roll", traj["roll"], "C0-"), ("pitch", traj["pitch"], "C3-"),
            ("roll est", traj["roll_est"], "C0--"), ("pitch est", traj["pitch_est"], "C3--")],
           ylim=(-rp_max, rp_max))
+    # Horizontal position vs time (px, py). The key POS_HOLD readout: a successful hold
+    # keeps both bounded; a fly-away ramps them away. Auto-scaled symmetric (≥±0.5 m).
+    # 水平位置(px,py)の時系列。POS_HOLD の要：保持成立なら両方有界、飛び去りなら発散。
+    hp = np.concatenate([traj["px"], traj["py"]])
+    hp_max = max(0.5, 1.15 * float(np.abs(hp).max()))
+    panel(axes[0, 2], "horizontal pos [m]",
+          [("x", traj["px"], "C0-"), ("y", traj["py"], "C1-")],
+          ylim=(-hp_max, hp_max))
+
     panel(axes[1, 0], "yaw rate [rad/s]",
           [("command", traj["yawcmd"], "C3-"), ("truth", traj["yawrate"], "C0-")],
           ylim=(-0.2, 1.4))
@@ -132,8 +141,39 @@ def graph_frame(traj, i, w_px, h_px):
           [("M1", traj["m0"], "C0-"), ("M2", traj["m1"], "C1-"),
            ("M3", traj["m2"], "C2-"), ("M4", traj["m3"], "C3-")],
           ylim=(0.0, 1.0))
-    for ax in axes[1, :]:
-        ax.set_xlabel("time [s]", fontsize=9)
+
+    # Top-down horizontal track (px–py plane). The path so far is bold, the full path is
+    # faint, the current point is a red dot and the start a black square. Equal aspect so
+    # a tight hold reads as a small blob and a fly-away as a long streak.
+    # 俯瞰水平トラック(px–py 平面)。現在までの経路を太線、全経路を淡線、現在位置を赤点、
+    # 開始を黒四角。等アスペクトで、密な保持は小さな塊・飛び去りは長い筋に見える。
+    axt = axes[1, 2]
+    px_a, py_a = traj["px"], traj["py"]
+    axt.plot(px_a, py_a, color="0.8", linewidth=1.0)
+    axt.plot(px_a[:i + 1], py_a[:i + 1], "C0-", linewidth=1.3)
+    axt.plot(px_a[i], py_a[i], "C3o", markersize=4)
+    axt.plot(px_a[0], py_a[0], "ks", markersize=3)
+    # Square window centred on the path with a floor half-range, so a one-axis drift
+    # (a pure roll-step pushes the craft along ONE axis → the other axis variance is
+    # microscopic) does not collapse to a degenerate 1e-5 m axis. A tight hold then
+    # reads as a small central blob, a fly-away as a streak reaching the edge.
+    # 経路中心の正方ウィンドウ＋下限半幅。片軸ドリフト(純ロールステップは片軸に押すので他軸の
+    # 分散が極微→1e-5m に潰れる)を防ぐ。密な保持は中央の小塊、飛び去りは端に届く筋に見える。
+    cx0 = 0.5 * (float(np.max(px_a)) + float(np.min(px_a)))
+    cy0 = 0.5 * (float(np.max(py_a)) + float(np.min(py_a)))
+    half = max(2.0, 0.58 * max(float(np.ptp(px_a)), float(np.ptp(py_a))))
+    axt.set_xlim(cx0 - half, cx0 + half)
+    axt.set_ylim(cy0 - half, cy0 + half)
+    axt.set_aspect("equal", "box")
+    axt.set_xlabel("x [m]", fontsize=8)
+    axt.set_ylabel("y [m]", fontsize=8)
+    axt.set_title("horizontal track", fontsize=8)
+    axt.grid(True, alpha=0.3)
+    axt.tick_params(labelsize=7)
+
+    axes[0, 2].set_xlabel("time [s]", fontsize=9)
+    axes[1, 0].set_xlabel("time [s]", fontsize=9)
+    axes[1, 1].set_xlabel("time [s]", fontsize=9)
 
     fig.tight_layout(pad=0.6)   # use the full height; the title is a separate banner
     fig.canvas.draw()
