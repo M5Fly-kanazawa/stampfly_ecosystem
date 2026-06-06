@@ -150,6 +150,14 @@ namespace param_vars {
     float eskf_baro_innov   = 0.5f;
     float eskf_flow_clamp   = 0.3f;
 
+    // ESKF accel-attitude (proven firmware/vehicle values). Registered here as the
+    // single source of truth so they are NOT silently taken from the struct defaults.
+    // 加速度-姿勢（実証済み firmware/vehicle 値）。SSOT として登録し struct 既定値に
+    // 暗黙依存しないようにする。
+    float eskf_att_k_adaptive = 10.0f;   // adaptive R: R *= (1 + k|a-g|²)
+    float eskf_att_chi2_gate  = 7.81f;   // χ²(3, 0.95) accel-attitude outlier gate
+    float eskf_att_corr_clamp = 0.05f;   // [rad] per-update roll/pitch correction clamp
+
     // Safety
     float safety_accel_g     = 3.0f;
     float safety_gyro_dps    = 800.0f;
@@ -226,6 +234,11 @@ static const ParamEntry table[] = {
     {"eskf.gate.tof_innov",   ParamType::FLOAT, &eskf_tof_innov,   0.5f,  0.01f, 5.0f,   nullptr},
     {"eskf.gate.baro_innov",  ParamType::FLOAT, &eskf_baro_innov,  0.5f,  0.01f, 5.0f,   nullptr},
     {"eskf.gate.flow_clamp",  ParamType::FLOAT, &eskf_flow_clamp,  0.3f,  0.01f, 5.0f,   nullptr},
+
+    // ESKF accel-attitude (SSOT — proven firmware/vehicle values)
+    {"eskf.att.k_adaptive",   ParamType::FLOAT, &eskf_att_k_adaptive, 10.0f, 0.0f,  100.0f, nullptr},
+    {"eskf.att.chi2_gate",    ParamType::FLOAT, &eskf_att_chi2_gate,  7.81f, 0.0f,  100.0f, nullptr},
+    {"eskf.att.corr_clamp",   ParamType::FLOAT, &eskf_att_corr_clamp, 0.05f, 0.001f, 1.0f,  nullptr},
 
     // Safety
     {"safety.impact.accel_g",  ParamType::FLOAT, &safety_accel_g,     3.0f,   1.0f,   10.0f,   nullptr},

@@ -79,10 +79,11 @@ struct EskfConfig {
     float flow_min_height    = 0.02f;
     float flow_innov_clamp   = 0.3f;
 
-    // Attitude correction / 姿勢補正
-    float att_correction_clamp = 0.05f;   // [rad]
-    float k_adaptive       = 50.0f;       // Adaptive R: R *= (1 + k * |a-g|²)
-    float accel_norm_gate  = 0.10f;       // Norm gate threshold (fraction of g)
+    // Attitude correction / 姿勢補正 (proven firmware/vehicle values; no norm gate —
+    // the accel-attitude update downweights via k_adaptive + χ², never hard-gates).
+    // 実証済み firmware/vehicle 値。norm gate は持たない（k_adaptive＋χ² で弱める）。
+    float att_correction_clamp = 0.05f;   // [rad] per-update roll/pitch correction clamp
+    float k_adaptive       = 10.0f;       // Adaptive R: R *= (1 + k * |a-g|²)
 
     // Sensor enable / センサ有効
     bool use_tof           = true;

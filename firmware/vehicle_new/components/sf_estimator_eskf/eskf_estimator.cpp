@@ -41,6 +41,12 @@ void EskfEstimator::init()
     params::get_float("eskf.gate.baro_innov", cfg.baro_innov_gate);
     params::get_float("eskf.gate.flow_clamp", cfg.flow_innov_clamp);
 
+    // Accel-attitude (SSOT — these used to silently take the struct defaults).
+    // 加速度-姿勢（SSOT — 以前は struct 既定値を暗黙使用していた）。
+    params::get_float("eskf.att.k_adaptive", cfg.k_adaptive);
+    params::get_float("eskf.att.chi2_gate",  cfg.accel_chi2_gate);
+    params::get_float("eskf.att.corr_clamp", cfg.att_correction_clamp);
+
     params::get_bool("eskf.use_tof", cfg.use_tof);
     params::get_bool("eskf.use_flow", cfg.use_flow);
     params::get_bool("eskf.use_baro", cfg.use_baro);

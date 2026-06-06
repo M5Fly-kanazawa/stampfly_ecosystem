@@ -78,7 +78,10 @@ private:
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
     float gravity_        = 9.81f;   // [m/s²] for the accel→tilt mapping in POS_HOLD
-    float max_pos_tilt_   = 0.2618f; // [rad] POS_HOLD tilt limit (15 deg, < max_angle_)
+    float max_pos_tilt_   = 0.1745f; // [rad] POS_HOLD tilt limit (10 deg; matches the
+                                     // proven firmware/vehicle margin so altitude holds
+                                     // without 1/cosθ thrust compensation, and the small
+                                     // tilt keeps |a|≈g so accel-attitude stays valid)
     float pos_setpoint_x_ = 0;       // [m] captured position N (POS_HOLD target, NED)
     float pos_setpoint_y_ = 0;       // [m] captured position E (POS_HOLD target, NED)
     bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute

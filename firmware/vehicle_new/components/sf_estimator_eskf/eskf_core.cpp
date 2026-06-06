@@ -477,18 +477,18 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // Bias-corrected accel / バイアス補正済み加速度
     Vec3 accel = accel_raw - ba_;
 
-    // Norm-based gate: skip when accel norm deviates from gravity
-    // ノルムゲート: 加速度ノルムが重力から大きく逸脱したらスキップ
-    // During thrust transients, |a| ≠ g, and accel cannot be used
-    // for attitude estimation (specific force contaminates gravity)
-    // 推力過渡期は|a| ≠ gとなり、加速度計の測定値が重力を汚染するため
-    // 姿勢推定に加速度を使用できない
+    // Adaptive R scaling — DOWNWEIGHT (do not hard-gate) when |a| deviates from g.
+    // R = R_base² * (1 + k * |‖a‖ - g|²). During thrust/maneuver transients the
+    // specific force contaminates gravity, but a HARD norm gate (early return) discards
+    // exactly the corrective updates while the craft is tilted and leaves the attitude
+    // blind → it estimates "level" during a coordinated tilt+accelerate. The proven
+    // firmware/vehicle has NO norm gate; it relies on the adaptive R plus the χ²
+    // outlier gate inside vectorUpdate3. We do the same here.
+    // 適応Rスケーリング — |a|がgから逸脱したら補正を弱める(ハードゲートしない)。推力/
+    // マニューバ過渡で比力が重力を汚染するが、ハードな norm gate(早期return)は傾斜中の
+    // corrective な更新ごと捨て姿勢を盲目化し、協調傾斜+加速で「水平」と誤推定する。実証済み
+    // firmware/vehicle に norm gate は無く、適応R＋vectorUpdate3 内の χ² 外れ値ゲートで捌く。
     float gravity_diff = accel.norm() - cfg_.gravity;
-    float norm_ratio = fabsf(gravity_diff) / cfg_.gravity;
-    if (norm_ratio > cfg_.accel_norm_gate) return;  // Skip if deviation exceeds threshold
-
-    // Adaptive R scaling: R = R_base * (1 + k * |a - g|²)
-    // 適応Rスケーリング: R = R_base * (1 + k * |a - g|²)
     float R_val = cfg_.accel_att_noise * cfg_.accel_att_noise
                 * (1.0f + cfg_.k_adaptive * gravity_diff * gravity_diff);
 
