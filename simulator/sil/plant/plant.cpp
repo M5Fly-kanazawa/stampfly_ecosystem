@@ -93,6 +93,12 @@ void Plant::setHealth(int motor, float gain)
     cfg_.health[motor] = gain < 0.0f ? 0.0f : (gain > 1.0f ? 1.0f : gain);
 }
 
+void Plant::setImuBias(const sf::math::Vec3& accel_bias, const sf::math::Vec3& gyro_bias)
+{
+    cfg_.imu_bias_accel = accel_bias;
+    cfg_.imu_bias_gyro  = gyro_bias;
+}
+
 void Plant::setStartHeight(float z)
 {
     // Free-joint state: position (0,0,z) ENU, level orientation, zero velocity.
@@ -290,6 +296,17 @@ sf::ImuData Plant::imu() const
     // クリーンサンプルに N0 ノイズ（バイアス＋白色）を載せる。無効時は無操作＝クリーン経路は不変。
     noise_.applyAccel(out.accel);
     noise_.applyGyro(out.gyro);
+    // Add the deterministic raw IMU bias last (a constant pre-calibration MEMS offset,
+    // body FRD). Default zero → clean path unchanged; nonzero is what the firmware boot
+    // calibration measures and removes (P2-3 contrast test).
+    // 最後に決定論的な生 IMU バイアスを加算（校正前 MEMS オフセットの定数、機体 FRD）。
+    // 既定ゼロ＝クリーン経路は不変。非ゼロをファーム起動校正が測定・除去する（P2-3 対照試験）。
+    out.accel[0] += cfg_.imu_bias_accel.x;
+    out.accel[1] += cfg_.imu_bias_accel.y;
+    out.accel[2] += cfg_.imu_bias_accel.z;
+    out.gyro[0]  += cfg_.imu_bias_gyro.x;
+    out.gyro[1]  += cfg_.imu_bias_gyro.y;
+    out.gyro[2]  += cfg_.imu_bias_gyro.z;
     out.temperature = 25.0f;
     out.timestamp = (uint32_t)(d_->time * 1e6);
     return out;

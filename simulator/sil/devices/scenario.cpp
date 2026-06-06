@@ -32,7 +32,7 @@
 
 namespace {
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias };
 
 struct Event {
     int64_t at_us = 0;        // absolute virtual time (frozen) / 絶対仮想時刻
@@ -65,6 +65,11 @@ struct Event {
     // fault (P7): 1モータの推力健全度ゲインを劣化（motor 0..3, gain 0..1）。
     int   fault_motor = 0;
     float fault_gain = 1.0f;
+
+    // bias (P2-3): deterministic raw IMU bias (body FRD), accel [m/s²] + gyro [rad/s].
+    // bias (P2-3): 決定論的な生 IMU バイアス（機体 FRD）、accel[m/s²] + gyro[rad/s]。
+    float bias_ax = 0.0f, bias_ay = 0.0f, bias_az = 0.0f;
+    float bias_gx = 0.0f, bias_gy = 0.0f, bias_gz = 0.0f;
 
     // btn (still deferred): keep raw args for the warn note.
     // btn（未実装）: warn 用に生引数を保持。
@@ -340,6 +345,17 @@ int sil_scenario_load(const char* path)
                 err(path, lineno, "fault <gain> must be 0.0..1.0"); return -1;
             }
 
+        } else if (ch == "bias") {
+            // bias <ax> <ay> <az> <gx> <gy> <gz> — deterministic raw IMU bias (body
+            // FRD): accel [m/s²] + gyro [rad/s]. Models a pre-calibration MEMS offset.
+            // bias <ax> <ay> <az> <gx> <gy> <gz> — 決定論的な生 IMU バイアス（機体 FRD）:
+            // accel[m/s²] + gyro[rad/s]。校正前 MEMS オフセットを模擬。
+            e.ch = Channel::Bias;
+            if (!(iss >> e.bias_ax >> e.bias_ay >> e.bias_az
+                      >> e.bias_gx >> e.bias_gy >> e.bias_gz)) {
+                err(path, lineno, "bias needs <ax> <ay> <az> <gx> <gy> <gz>"); return -1;
+            }
+
         } else if (ch == "btn") {
             std::string rest; std::getline(iss, rest);
             e.ch = Channel::Btn;
@@ -447,6 +463,22 @@ void sil_scenario_driver_task(void* /*arg*/)
                 std::snprintf(note, sizeof(note), "fault motor=%d gain=%.2f",
                               e.fault_motor, e.fault_gain);
                 sil_emu_record_note("fault", note);
+                break;
+            }
+            case Channel::Bias: {
+                // P2-3: inject a deterministic raw IMU bias (body FRD). The firmware
+                // boot calibration should measure and remove it; without calibration
+                // the ESKF attitude loop degrades (the contrast test).
+                // P2-3: 決定論的な生 IMU バイアス（機体 FRD）を注入。ファーム起動校正が
+                // 測定・除去すべき。校正なしでは ESKF 姿勢ループが劣化（対照試験）。
+                sil_board_set_imu_bias(e.bias_ax, e.bias_ay, e.bias_az,
+                                       e.bias_gx, e.bias_gy, e.bias_gz);
+                char note[96];
+                std::snprintf(note, sizeof(note),
+                              "bias accel=[%.3f %.3f %.3f] gyro=[%.4f %.4f %.4f]",
+                              e.bias_ax, e.bias_ay, e.bias_az,
+                              e.bias_gx, e.bias_gy, e.bias_gz);
+                sil_emu_record_note("bias", note);
                 break;
             }
             case Channel::Btn:

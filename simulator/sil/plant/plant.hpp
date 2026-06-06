@@ -90,6 +90,13 @@ public:
         float g        = 9.81f;     ///< gravity [m/s²]
         float health[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< per-motor thrust gain (1=healthy)
         sf::math::Vec3 wind_force_ned = {0.0f, 0.0f, 0.0f}; ///< external wind force NED [N]
+        /// Deterministic RAW IMU bias (body FRD), modeling the pre-calibration MEMS
+        /// offset. Added as a constant to the synthetic IMU output. Default zero. The
+        /// firmware boot calibration measures and removes it (P2-3 contrast test).
+        /// 決定論的な生 IMU バイアス（機体 FRD）。校正前の MEMS オフセットを模擬。合成 IMU
+        /// 出力に定数として加算。既定ゼロ。ファームの起動校正が測定・除去する（P2-3 対照試験）。
+        sf::math::Vec3 imu_bias_accel = {0.0f, 0.0f, 0.0f}; ///< accel raw bias [m/s²]
+        sf::math::Vec3 imu_bias_gyro  = {0.0f, 0.0f, 0.0f}; ///< gyro  raw bias [rad/s]
         float flow_rad_per_pixel = 0.00222f; ///< PMW3901 rad per count (matches ESKF)
         SensorNoise::Config noise; ///< IMU sensor noise (N0, default OFF). RESET_PLAN §13
     };
@@ -137,6 +144,13 @@ public:
     /// 各モータの推力健全度ゲインを実行時設定（1=正常, 0=停止）。P7 外乱シナリオが飛行中に
     /// モータを劣化させ、ミキサーの補償を見るのに使う。範囲外 index は無視、gain は [0,1] にクランプ。
     void setHealth(int motor, float gain);
+
+    /// Set the deterministic raw IMU bias (body FRD) at runtime — a constant added to
+    /// the synthetic accel [m/s²] / gyro [rad/s]. Models a pre-calibration MEMS offset
+    /// so the firmware boot calibration has something real to measure and remove.
+    /// 決定論的な生 IMU バイアス（機体 FRD）を実行時設定 — 合成 accel[m/s²]/gyro[rad/s] に
+    /// 定数加算。校正前 MEMS オフセットを模擬し、ファーム起動校正に測定・除去対象を与える。
+    void setImuBias(const sf::math::Vec3& accel_bias, const sf::math::Vec3& gyro_bias);
 
     /// Place the body at rest, level, at height z [m] (MuJoCo ENU up). Used to
     /// start a flight on the ground (z ≈ box half-height) for a takeoff demo.

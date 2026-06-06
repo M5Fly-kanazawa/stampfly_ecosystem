@@ -1,0 +1,31 @@
+# calib.scn — P2-3 boot-calibration contrast (raw IMU bias → calibration removes it)
+# P2-3 起動校正の対照（生 IMU バイアス → 校正が除去する）
+#
+# Injects a deterministic RAW IMU bias at t=0 (a pre-calibration MEMS offset the real
+# device would carry), then flies an ALTITUDE_HOLD hover. With the boot calibration ON
+# (default) ImuTask measures the bias during the 4 s on-ground window and seeds the
+# estimator with it, so the ESKF attitude stays bounded. Run with SIL_EMU_NO_CALIB set
+# to see the "without calibration" half: the raw accel bias degrades the ESKF attitude
+# loop (the documented destabilizer) and the gyro bias drifts yaw.
+#
+# t=0 に決定論的な生 IMU バイアス（実機が持つ校正前 MEMS オフセット）を注入し、
+# ALTITUDE_HOLD ホバーを飛ぶ。起動校正 ON（既定）では ImuTask が 4 秒の地上窓でバイアスを
+# 測り推定器に種付けするので ESKF 姿勢は有界。SIL_EMU_NO_CALIB を付けると「校正なし」側：
+# 生の加速度バイアスが ESKF 姿勢ループを劣化させ（既知の不安定化要因）、ジャイロバイアスが
+# ヨーをドリフトさせる。
+#
+# ALTITUDE_HOLD is used (not POSITION_HOLD) on purpose: it is far from the marginal
+# POS_HOLD entry, so the contrast reflects the calibration, not entry sensitivity.
+# 意図的に ALTITUDE_HOLD を使う（POSITION_HOLD でなく）: marginal な POS_HOLD 入口から
+# 遠く、対照が入口感度でなく校正そのものを反映する。
+#
+# Run (calibration ON, gated):   sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle_new
+# Run (calibration OFF, contrast): SIL_EMU_NO_CALIB=1 sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle_new
+#
+#  <t>  ch    args
+   0    bias  0.12  0.0  0.0   0.0  0.0  0.02         # raw IMU bias: accel +0.12 m/s² (body X), gyro +0.02 rad/s (body Z / yaw)
+   0    rc    2048  2048   2048    2048  0  4000  50          # A: disarmed 4 s → IDLE_GROUND (boot calibration measures the bias here)
+   +    rc    2048  2048   2048    2048  1  1000  50          # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND)
+   +    rc    3330  2048   2048    2048  1  2500  50          # C: STABILIZE take-off → TAKEOFF → FLYING
+   +    rc    3072  2048   2048    2048  1  12000 50     1    # D: ALT_HOLD capture + hover 12 s (watch attitude vs the injected bias)
+   +    rc    2048  2048   2048    2048  0  1000  50          # E: DISARM (FLYING → IDLE_GROUND)

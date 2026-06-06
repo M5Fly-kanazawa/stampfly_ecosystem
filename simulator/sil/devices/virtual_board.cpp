@@ -426,6 +426,12 @@ void sil_board_set_motor_health(int motor, float gain)
     g_plant->setHealth(motor, gain);
 }
 
+void sil_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, float gz)
+{
+    if (g_plant == nullptr) return;
+    g_plant->setImuBias(sf::math::Vec3{ax, ay, az}, sf::math::Vec3{gx, gy, gz});
+}
+
 int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes)
 {
     // BMI270 is on CS GPIO46 (sf_board); PMW3901 optical flow is on CS GPIO12.

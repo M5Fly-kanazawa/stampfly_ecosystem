@@ -35,6 +35,7 @@
 #include "virtual_board.hpp"
 #include "topics.hpp"
 #include "data_types.hpp"
+#include "params.hpp"           // P2-3 contrast: toggle calibration.enable via env
 #include "scenario.hpp"          // P8: deterministic *.scn scripted-input driver
 #include "console_feeder.hpp"    // P8: scripted console bytes → firmware stdin
 #include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
@@ -164,6 +165,20 @@ int main(int argc, char** argv)
     if (sil_scenario_active()) {
         TaskHandle_t ph = nullptr;
         xTaskCreatePinnedToCore(sil_scenario_driver_task, "scn_driver", 8192, nullptr, 1, &ph, 0);
+    }
+
+    // P2-3 contrast: SIL_EMU_NO_CALIB disables the firmware boot calibration so the
+    // estimator runs with the raw injected bias — the "without calibration" half of the
+    // contrast test. Set AFTER app_main (params already loaded from the empty SIL NVS,
+    // which leaves the table defaults) and BEFORE the scheduler runs (ImuTask setup
+    // reads calibration.enable). Unset → calibration stays on (default), path unchanged.
+    // P2-3 対照: SIL_EMU_NO_CALIB でファーム起動校正を無効化し、推定器を生バイアスのまま
+    // 走らせる（対照試験の「校正なし」側）。app_main 後（params は空 SIL NVS から読まれ table
+    // 既定が残る）かつ scheduler 実行前（ImuTask setup が calibration.enable を読む）に設定。
+    // 未設定なら校正は ON のまま（既定）で経路不変。
+    if (std::getenv("SIL_EMU_NO_CALIB")) {
+        sf::params::set_bool("calibration.enable", false);
+        std::printf("[emu] SIL_EMU_NO_CALIB set — boot calibration DISABLED\n");
     }
 
     sil::rtos::Scheduler::instance().run(duration_us);

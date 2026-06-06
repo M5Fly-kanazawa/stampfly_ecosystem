@@ -78,6 +78,13 @@ void sil_board_get_motor_duty(float out[4]);
 void sil_board_set_wind(float fx, float fy, float fz);
 void sil_board_set_motor_health(int motor, float gain);
 
+// Set a deterministic raw IMU bias (body FRD): accel [m/s²], gyro [rad/s]. Models a
+// pre-calibration MEMS offset so the firmware boot calibration has something to remove
+// (P2-3 contrast test). No-op until a Plant is attached.
+// 決定論的な生 IMU バイアス（機体 FRD）を設定: accel[m/s²], gyro[rad/s]。校正前 MEMS
+// オフセットを模擬し、ファーム起動校正に除去対象を与える（P2-3 対照試験）。Plant 未接続なら no-op。
+void sil_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, float gz);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
