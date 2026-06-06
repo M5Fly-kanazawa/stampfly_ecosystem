@@ -11,3 +11,9 @@ log_contains any "Mode change: STABILIZE"             # FLYING: STABILIZE → AC
 log_contains any "DISARM accepted"                    # FLYING → IDLE_GROUND (pilot DISARM)
 order "Takeoff complete" "Mode change: STABILIZE"     # mode change only after reaching FLYING
 order "Mode change: STABILIZE" "DISARM accepted"      # flies in ACRO before disarm
+# Numerical gates over the rate-doublet flight window (G2/G3). 飛行窓 [7.0,9.7]s。
+metric att_rmse < 3.0  in 7.0 9.7    # G2: ESKF roll/pitch tracks truth through the doublets
+metric tilt_max < 25.0 in 7.0 9.7    # G3: attitude bounded — no tumble during ACRO
+# G4 (duty): ACRO rate doublets briefly saturate the motors BY DESIGN (broadband
+# excitation, roadmap §3.1.3), so motor duty is intentionally NOT gated for ACRO.
+# G4(duty): ACRO のレートダブレットは設計上モータを瞬間飽和させるため未ゲート。

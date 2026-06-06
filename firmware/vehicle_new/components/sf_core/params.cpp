@@ -122,8 +122,8 @@ namespace param_vars {
     // Position control
     float pos_pos_kp      = 1.0f;
     float pos_pos_ti      = 5.0f;
-    float pos_vel_kp      = 0.3f;
-    float pos_vel_ti      = 2.0f;
+    float pos_vel_kp      = 0.8f;   // tight hold: enabled by the accel-comp estimator fix
+    float pos_vel_ti      = 2.0f;   // (the old 0.3 was the limit with the contaminated est)
 
     // ESKF process noise
     float eskf_gyro_noise   = 0.009655f;
@@ -224,7 +224,7 @@ static const ParamEntry table[] = {
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  nullptr},
     {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, nullptr},
-    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  0.3f,  0.0f, 10.0f,  nullptr},
+    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  0.8f,  0.0f, 10.0f,  nullptr},
     {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, nullptr},
 
     // ESKF process noise

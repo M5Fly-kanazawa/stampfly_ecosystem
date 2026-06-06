@@ -71,9 +71,9 @@ void PidController::loadParams()
     // Position control / 位置制御
     params::get_float("position.pos.kp", pos_x_.kp);
     params::get_float("position.pos.ti", pos_x_.ti);
-    pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     params::get_float("position.vel.kp", vel_x_.kp);
     params::get_float("position.vel.ti", vel_x_.ti);
+    pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     vel_y_ = vel_x_;
 }
 

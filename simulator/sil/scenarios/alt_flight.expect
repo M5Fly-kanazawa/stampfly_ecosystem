@@ -18,3 +18,7 @@ log_contains any "DISARM accepted"                       # FLYING → IDLE_GROUN
 order "ARM accepted" "Vertical handoff: takeoff"         # arm precedes the takeoff handoff
 order "Vertical handoff: takeoff" "Mode change: STABILIZE → ALT_HOLD"  # handoff (ToF lock) precedes ALT_HOLD engage
 order "Mode change: STABILIZE → ALT_HOLD" "DISARM accepted"            # holds altitude before disarm
+# Numerical gates over the ALTITUDE_HOLD window (G2/G3/G4). 保持窓 [8.0,19.0]s。
+metric alt_rmse < 0.08 in 8.0 19.0   # G2: ESKF altitude tracks truth
+metric alt_band < 0.35 in 8.0 19.0   # G3: altitude held (peak-to-peak bounded)
+metric duty_max < 0.92 in 8.0 19.0   # G4: motors not saturated

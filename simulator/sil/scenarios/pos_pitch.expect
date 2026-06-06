@@ -1,9 +1,10 @@
 # pos_pitch.expect — Layer-4 POSITION_HOLD gate (isolated pitch). G1 state-machine (log) + G2 estimate
-# tracking + G3 bounded attitude/position + G4 actuator health (numerical, from
+# tracking + G3 bounded/tight position + G4 actuator health (numerical, from
 # trajectory.csv). Passes with the adopted acceleration-compensated accel-attitude
-# (eskf.accel_comp.enable=1); the plain accel-attitude flies away (drift ≫ 10 m).
-# Layer-4 位置保持ゲート（isolated pitch）。G1 状態遷移(ログ) + G2 推定追従 + G3 姿勢/位置有界 +
-# G4 アクチュエータ健全(trajectory.csv からの数値)。採用した運動加速度補償で合格。
+# (eskf.accel_comp.enable=1) + the position velocity loop at position.vel.kp=0.8; the
+# plain accel-attitude flies away (drift ≫ 10 m).
+# Layer-4 位置保持ゲート（isolated pitch）。G1 状態遷移(ログ) + G2 推定追従 + G3 位置をタイトに保持 +
+# G4 アクチュエータ健全。採用した運動加速度補償 + position.vel.kp=0.8 で合格。
 exit 0
 log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING
@@ -11,7 +12,7 @@ log_contains any "Mode change: STABILIZE → POS_HOLD"  # G1: in-flight POSITION
 log_contains any "DISARM accepted"                    # G1: FLYING → IDLE_GROUND
 order "ARM accepted" "Mode change: STABILIZE → POS_HOLD"
 order "Mode change: STABILIZE → POS_HOLD" "DISARM accepted"
-metric horizontal_drift_max < 8.0  in 7.6 21.6   # G3: position bounded (no fly-away)
-metric tilt_max            < 20.0  in 7.6 21.6   # G3: attitude bounded (no tumble)
-metric duty_max            < 0.92  in 7.6 21.6   # G4: motors not saturated
-metric att_rmse            < 7.0   in 14.6 21.6   # G2: ESKF roll/pitch tracks truth (steady)
+metric horizontal_drift_max < 3.0  in 7.6 21.6   # G3: position held tight (no fly-away, converges)
+metric tilt_max            < 18.0  in 7.6 21.6   # G3: attitude bounded (no tumble)
+metric duty_max            < 0.90  in 7.6 21.6   # G4: motors not saturated
+metric att_rmse            < 5.0   in 14.6 21.6   # G2: ESKF roll/pitch tracks truth (steady)
