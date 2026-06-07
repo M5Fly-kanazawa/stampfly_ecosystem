@@ -85,9 +85,13 @@ void BaroTask(void* /*pvParameters*/)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "BMP280 init failed: %s — Baro disabled (Optional)",
                  esp_err_to_name(err));
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::Baro, false);
         vTaskDelete(NULL);
         return;
     }
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::Baro, true);
     ESP_LOGI(TAG, "BMP280 ready (50Hz)");
 
     TickType_t last_wake = xTaskGetTickCount();

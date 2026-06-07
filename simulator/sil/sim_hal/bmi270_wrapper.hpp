@@ -56,8 +56,13 @@ struct GyroData {
 class BMI270Wrapper {
 public:
     // Config is accepted for interface compatibility and ignored on the SIL.
+    // skip_bus_init mirrors the HAL field so imu_task.cpp (shared source) sets
+    // it identically on both builds; the SIL has no real bus so it is a no-op.
     // Config はインターフェース互換のため受け取り、SIL では無視する。
+    // skip_bus_init は HAL と同じフィールドを持たせ、共有ソースの imu_task.cpp が
+    // 両ビルドで同一に設定できるようにする(SIL は実バスが無いので無動作)。
     struct Config {
+        bool skip_bus_init = false;
         static Config defaultStampFly() { return Config{}; }
     };
 

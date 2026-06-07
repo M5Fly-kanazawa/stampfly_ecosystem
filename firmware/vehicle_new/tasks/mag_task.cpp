@@ -86,9 +86,13 @@ void MagTask(void* /*pvParameters*/)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "BMM150 init failed: %s — Mag disabled (Optional)",
                  esp_err_to_name(err));
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::Mag, false);
         vTaskDelete(NULL);
         return;
     }
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::Mag, true);
     ESP_LOGI(TAG, "BMM150 ready (25Hz)");
 
     TickType_t last_wake = xTaskGetTickCount();

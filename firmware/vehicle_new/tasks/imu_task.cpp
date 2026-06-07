@@ -520,13 +520,29 @@ void ImuTask(void* pvParameters)
     //
     // @design detailed_design.md §8 — IMU init in task setup phase     [OK]
     // -------------------------------------------------------------------------
-    esp_err_t imu_init_result = imu_wrapper.init(
-        stampfly::BMI270Wrapper::Config::defaultStampFly());
+    // sf_board owns the SPI bus (R1): it called spi_bus_initialize() in Phase 1,
+    // so the IMU driver must only add its device, not re-init the bus. We set the
+    // flag here (a plain bool) rather than calling sf::internal::board::imu_spi()
+    // because this source is shared with the partial SIL test programs that do
+    // not link sf_board; spi_host stays SPI2_HOST = board::imu_spi() by design.
+    // SPI バスは sf_board が所有(R1)し Phase 1 で spi_bus_initialize() 済み。よって
+    // IMU ドライバは device add のみ行う。この .cpp は sf_board をリンクしない部分
+    // SIL 試験プログラムと共有のため board::imu_spi() を呼ばず bool で設定する。
+    auto imu_cfg = stampfly::BMI270Wrapper::Config::defaultStampFly();
+    imu_cfg.skip_bus_init = true;
+    esp_err_t imu_init_result = imu_wrapper.init(imu_cfg);
     if (imu_init_result != ESP_OK) {
-        ESP_LOGE(TAG, "BMI270 init failed: %s — task aborting",
+        // IMU is Critical (R4, hardware_init.md §5): no attitude estimation means
+        // no flight. Do NOT vTaskDelete and let the rest of the system limp —
+        // halt loudly (no esp_restart, so the cause stays observable; the LED
+        // error pattern is wired in Phase 6 when LED ownership lands).
+        // IMU は Critical (R4, §5): 姿勢推定不能＝飛行不能。vTaskDelete で他を片肺
+        // 運転させず、大きく停止する (esp_restart せず原因を保つ。LED は Phase 6)。
+        ESP_LOGE(TAG, "CRITICAL: BMI270 init failed: %s — vehicle cannot fly. Halting.",
                  esp_err_to_name(imu_init_result));
-        vTaskDelete(NULL);
-        return;
+        for (;;) {
+            vTaskDelay(portMAX_DELAY);
+        }
     }
     ESP_LOGI(TAG, "BMI270 init OK (400Hz read loop starting)");
 

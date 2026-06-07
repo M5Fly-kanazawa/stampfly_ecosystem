@@ -42,6 +42,7 @@
 
 #include "topics.hpp"
 #include "config.hpp"
+#include "sf_board.hpp"
 #include "pmw3901_wrapper.hpp"
 #include "pmw3901_exception.hpp"
 
@@ -83,24 +84,35 @@ void FlowTask(void* /*pvParameters*/)
     // セットアップ: PMW3901 を構築 (skip_bus_init=true、SPI バスは sf_board 所有)
     // -------------------------------------------------------------------
     auto cfg = stampfly::PMW3901::Config::defaultStampFly();
-    // defaultStampFly() は config.skip_bus_init = true を既に設定しており、
-    // sf_board が SPI バスを既に立ち上げている前提と整合する。
-    // defaultStampFly() already sets skip_bus_init = true, matching the
-    // assumption that sf_board has already initialised the SPI bus.
+    // Borrow the board-owned SPI host explicitly (R1). defaultStampFly() already
+    // sets skip_bus_init = true (sf_board ran spi_bus_initialize() in Phase 1);
+    // taking the host from board::flow_spi() makes the borrow unambiguous rather
+    // than relying on a hard-coded SPI2_HOST that happens to match.
+    // board 所有の SPI ホストを明示的に借用する (R1)。defaultStampFly() は既に
+    // skip_bus_init = true (sf_board が Phase 1 で spi_bus_initialize() 済み)。
+    // ホストを board::flow_spi() から取ることで、ハードコード SPI2_HOST 依存を避け
+    // 借用関係を明示する。
+    cfg.spi_host = sf::internal::board::flow_spi();
 
     try {
         g_flow.reset(new stampfly::PMW3901(cfg));
     } catch (const stampfly::PMW3901Exception& e) {
         ESP_LOGW(TAG, "PMW3901 init failed: %s — Flow disabled (Optional)",
                  e.what());
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::Flow, false);
         vTaskDelete(NULL);
         return;
     } catch (const std::exception& e) {
         ESP_LOGW(TAG, "PMW3901 init failed (std::exception): %s — Flow disabled",
                  e.what());
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::Flow, false);
         vTaskDelete(NULL);
         return;
     }
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::Flow, true);
     ESP_LOGI(TAG, "PMW3901 ready (100Hz)");
 
     TickType_t last_wake = xTaskGetTickCount();

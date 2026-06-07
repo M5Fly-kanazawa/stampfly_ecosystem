@@ -99,23 +99,29 @@ esp_err_t bmi270_spi_init(bmi270_dev_t *dev, const bmi270_config_t *config) {
         .flags = SPICOMMON_BUSFLAG_MASTER,
     };
 
-    // Initialize SPI bus with DMA. Tolerate ESP_ERR_INVALID_STATE because
-    // sf_board (BSP) may have already initialized this bus per v3 design (R1).
-    // In that case the bus is up and we just need to add this device.
+    // Bus ownership (R1). When skip_bus_init is set, sf_board (BSP) owns the
+    // SPI bus and has already called spi_bus_initialize(); we only add the
+    // device. Standalone use (no BSP) leaves skip_bus_init=false so this driver
+    // brings the bus up itself. ESP_ERR_INVALID_STATE is still tolerated in the
+    // self-init path so back-to-back standalone inits do not fail.
     //
-    // SPI バスを DMA 付きで初期化する。v3 設計 (R1) において sf_board (BSP)
-    // が先にこのバスを初期化している可能性がある。その場合は ESP_ERR_INVALID_STATE
-    // が返るが、バス自体は使用可能なので device add 段階に進む。
-    ret = spi_bus_initialize(config->spi_host, &bus_config, SPI_DMA_CH_AUTO);
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "SPI bus already initialized on host %d (assuming sf_board owns it)",
+    // バス所有 (R1)。skip_bus_init のときは sf_board (BSP) がバスを所有し
+    // spi_bus_initialize() 済みなので、ここでは device add のみ行う。BSP の無い
+    // 単体利用では skip_bus_init=false のまま本ドライバがバスを立ち上げる。
+    // 単体での連続 init を壊さないよう自前初期化経路では INVALID_STATE を許容。
+    if (config->skip_bus_init) {
+        ESP_LOGI(TAG, "SPI bus init skipped on host %d (owned by sf_board)",
                  config->spi_host);
-        ret = ESP_OK;
-    } else if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
-        return ret;
     } else {
-        ESP_LOGI(TAG, "SPI bus initialized on host %d", config->spi_host);
+        ret = spi_bus_initialize(config->spi_host, &bus_config, SPI_DMA_CH_AUTO);
+        if (ret == ESP_ERR_INVALID_STATE) {
+            ESP_LOGI(TAG, "SPI bus already initialized on host %d", config->spi_host);
+        } else if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
+            return ret;
+        } else {
+            ESP_LOGI(TAG, "SPI bus initialized on host %d", config->spi_host);
+        }
     }
 
     // Configure BMI270 device

@@ -81,24 +81,47 @@ i2c_master_bus_handle_t i2c_bus();
  *        IMU が使う SPI ホスト (OptFlow と共有) を取得する。
  *
  * board::init() で spi_bus_initialize() 済み。BMI270Wrapper / PMW3901Wrapper
- * は Config の spi_host にこの値を渡し、内部の重複初期化はスキップされる
- * (bmi270_spi.c が ESP_ERR_INVALID_STATE を許容する)。
+ * は Config の spi_host にこの値を渡し、skip_bus_init=true で自前のバス初期化を
+ * 省く (device add のみ)。所有権は sf_board に一元化される (R1)。
  *
  * board::init() initializes the SPI bus once. Wrappers pass this value as
- * Config::spi_host; their internal spi_bus_initialize() is tolerated to
- * fail with ESP_ERR_INVALID_STATE because the bus is already up.
+ * Config::spi_host and set skip_bus_init=true so they only add their device,
+ * never re-init the bus. Ownership is centralized in sf_board (R1).
  *
  * @return SPI host enum value (currently SPI2_HOST).
  */
 spi_host_device_t imu_spi();
 
 /**
+ * @brief Get the SPI host used by the optical flow sensor (PMW3901).
+ *        オプティカルフローセンサ (PMW3901) が使う SPI ホストを取得する。
+ *
+ * On StampFly the flow sensor physically shares one SPI bus with the IMU
+ * (separate CS lines), so this returns the same host as imu_spi(). It exists
+ * as a distinct getter to make the two logical borrowers explicit (R1): the
+ * IMU and the flow sensor each borrow the board-owned bus via their own getter.
+ *
+ * StampFly ではフローセンサは IMU と物理的に同一 SPI バスを共有する (CS は別)
+ * ため imu_spi() と同じ値を返す。2 つの論理的借用者を明示する目的で別 getter に
+ * している (R1): IMU とフローはそれぞれ自分の getter で board 所有バスを借りる。
+ *
+ * @return SPI host enum value (currently SPI2_HOST, shared with the IMU).
+ */
+spi_host_device_t flow_spi();
+
+/**
  * @brief Get the LEDC timer used by motor PWM.
  *        モータ PWM が使う LEDC タイマーを取得する。
  *
- * board::init() で ledc_timer_config() 済み。MotorDriver は本タイマー番号を
- * 使い、ledc_channel_config() のみ自身で呼ぶ (重複した ledc_timer_config()
- * 呼び出しは ESP-IDF 上で reconfiguration として扱われ衝突しない)。
+ * board::init() で ledc_timer_config() 済み (R1: 唯一の所有者)。MotorDriver は
+ * 本タイマー番号を使い、Config::skip_timer_init=true で再構成を省いて
+ * ledc_channel_config() のみ呼ぶ。これは sf_board 側の権威ある宣言であり、
+ * sf_hal_motor 内の LEDC_TIMER 定数はこの値を鏡写しにする。
+ *
+ * board::init() configured this timer (R1: sole owner). MotorDriver uses this
+ * timer number and, with Config::skip_timer_init=true, skips re-config and only
+ * calls ledc_channel_config(). This is the authoritative owner-side declaration;
+ * sf_hal_motor's internal LEDC_TIMER constant mirrors this value.
  *
  * @return LEDC timer number (currently LEDC_TIMER_0).
  */
@@ -140,9 +163,27 @@ enum class SensorId : uint8_t {
  * 各 HAL タスクが起動して init() を成功したときにフラグが立つ。
  * 詳細な API は M2b 以降で拡張予定。
  *
- * Always returns false until M2b extends this API. Reserved for
- * future use; safe to call but not yet meaningful.
+ * Returns the latest presence flag set by the owning Optional-sensor task via
+ * set_sensor_present(). false until that task reports a successful init (or if
+ * it reports failure). Thread-safe (atomic).
+ *
+ * Optional センサの所有タスクが set_sensor_present() で設定した最新の存在フラグを
+ * 返す。タスクが init 成功を報告するまで (失敗報告時も) false。スレッド安全 (atomic)。
  */
 bool sensor_present(SensorId id);
+
+/**
+ * @brief Report whether an Optional sensor initialized successfully.
+ *        Optional センサの初期化成否を報告する。
+ *
+ * Called once by each Optional-sensor task from its setup phase, right after it
+ * attempts HAL init: true on success, false on failure. Critical sensors do not
+ * use this (they halt via fatal()). Thread-safe (atomic).
+ *
+ * 各 Optional センサタスクが setup フェーズで HAL init を試みた直後に 1 回呼ぶ:
+ * 成功で true、失敗で false。Critical センサは使わない (fatal() で停止)。
+ * スレッド安全 (atomic)。
+ */
+void set_sensor_present(SensorId id, bool present);
 
 }  // namespace sf::internal::board

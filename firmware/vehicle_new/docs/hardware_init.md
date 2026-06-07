@@ -222,6 +222,8 @@ ledc_timer     ─→  Motor / LED / Buzzer
 
 abort 後は `esp_restart()` を呼ばず、LED 表示のまま停止する（学習者が原因を読み取れる時間を確保）。watchdog 設定は `coding_and_education.md` 側で議論する。
 
+**実装状況（Phase 4 時点）:** Critical 失敗時の **halt（停止）は実装済み** — `sf_board` の Critical バス/タイマ失敗は `board::init()` 内の `fatal()` が `vTaskDelay(portMAX_DELAY)` ループで停止し（`esp_restart` を呼ばない＝上記方針どおり）、IMU/モータの Critical 失敗は所有タスク（`imu_task` / `sf_actuator`）が同様に halt する。**LED エラーパターンの表示は Phase 6 に繰延**（LED/notify の所有確立後に配線）。それまで原因はシリアルログの `CRITICAL: …` 行で報告する。理由: LED ドライバ（`sf_hal_led`, WS2812/RMT）は現状どのタスクも初期化・所有しておらず（`notify_task` はスタブ）、`sf_board` に LED 依存を先行追加すると実機ブリングアップ直前のビルドリスクになるため。
+
 ---
 
 ## 6. HAL との接続規約

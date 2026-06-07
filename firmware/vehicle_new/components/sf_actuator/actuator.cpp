@@ -26,6 +26,8 @@
 
 #include <cmath>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "actuator.hpp"
 #include "topics.hpp"
 #include "motor_driver.hpp"
@@ -124,6 +126,14 @@ static stampfly::MotorDriver::Config makeMotorConfig()
     cfg.gpio[stampfly::MotorDriver::MOTOR_FL] = GPIO_MOTOR_M4;
     cfg.pwm_freq_hz         = MOTOR_PWM_FREQ_HZ;
     cfg.pwm_resolution_bits = MOTOR_PWM_RESOLUTION_BIT;
+    // sf_board owns the shared LEDC timer (R1) and configures it in Phase 1, so
+    // the motor HAL must not re-configure it — only bind its channels. Set as a
+    // plain bool (not via sf_board) because this source is shared with the
+    // partial SIL test programs that do not link sf_board.
+    // 共有 LEDC タイマは sf_board が所有(R1)し Phase 1 で構成するため、モータ HAL
+    // は再構成せずチャンネル紐付けのみ行う。この .cpp は sf_board をリンクしない
+    // 部分 SIL 試験と共有のため bool で設定する。
+    cfg.skip_timer_init = true;
     return cfg;
 }
 
@@ -141,8 +151,18 @@ void Actuator::init()
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Actuator initialized (LEDC %d Hz, %d-bit)",
                  cfg.pwm_freq_hz, cfg.pwm_resolution_bits);
-    } else {
-        ESP_LOGE(TAG, "Motor HAL init failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    // Motor HAL is Critical (R4, hardware_init.md §5): no PWM means no thrust.
+    // Do not return and let control_task run a dead motor path — halt loudly
+    // (no esp_restart, so the cause stays observable; LED pattern is Phase 6).
+    // モータ HAL は Critical (R4, §5): PWM 不能＝推力ゼロ。control_task に死んだ
+    // モータ経路を回させず大きく停止する (esp_restart せず原因を保つ。LED は Phase 6)。
+    ESP_LOGE(TAG, "CRITICAL: Motor HAL init failed: %s — vehicle cannot fly. Halting.",
+             esp_err_to_name(err));
+    for (;;) {
+        vTaskDelay(portMAX_DELAY);
     }
 }
 

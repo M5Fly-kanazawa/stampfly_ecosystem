@@ -86,6 +86,7 @@ public:
         spi_host_device_t spi_host;   ///< SPI host (SPI2_HOST or SPI3_HOST)
         uint32_t spi_clock_hz;        ///< SPI clock frequency (max 10MHz)
         gpio_num_t other_cs;          ///< CS pin of other device on shared SPI bus (-1 if not used)
+        bool skip_bus_init;           ///< Skip spi_bus_initialize() when sf_board owns the bus (R1); only add_device runs. / sf_board がバス所有(R1)のとき spi_bus_initialize() を省く
 
         // Sensor configuration
         bmi270_acc_range_t accel_range;   ///< Accelerometer range
@@ -107,6 +108,11 @@ public:
             config.spi_host = SPI2_HOST;
             config.spi_clock_hz = 10000000;  // 10MHz
             config.other_cs = GPIO_NUM_12;   // PMW3901 CS
+            // Default: this driver owns the bus (standalone use). Under sf_board
+            // (vehicle_new), the caller sets skip_bus_init=true to borrow the bus.
+            // 既定: 本ドライバがバス所有(単体利用)。sf_board 下(vehicle_new)では
+            // 呼び出し側が skip_bus_init=true にしてバスを借用する。
+            config.skip_bus_init = false;
 
             // Default sensor settings for drone control
             config.accel_range = BMI270_ACC_RANGE_8G;

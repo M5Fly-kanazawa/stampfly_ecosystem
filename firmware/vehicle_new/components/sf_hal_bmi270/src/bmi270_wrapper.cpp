@@ -84,7 +84,8 @@ esp_err_t BMI270Wrapper::init(const Config& config)
         .gpio_cs = static_cast<uint8_t>(config.pin_cs),
         .spi_clock_hz = config.spi_clock_hz,
         .spi_host = config.spi_host,
-        .gpio_other_cs = static_cast<int8_t>(config.other_cs)
+        .gpio_other_cs = static_cast<int8_t>(config.other_cs),
+        .skip_bus_init = config.skip_bus_init
     };
 
     // Initialize SPI

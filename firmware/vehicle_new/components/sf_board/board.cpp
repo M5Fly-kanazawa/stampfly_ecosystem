@@ -18,6 +18,10 @@
 
 #include "sf_board.hpp"
 
+#include <atomic>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -104,6 +108,15 @@ constexpr ledc_timer_bit_t  kMotorPwmResolution = LEDC_TIMER_8_BIT;
 i2c_master_bus_handle_t g_i2c_bus = nullptr;
 bool                    g_initialized = false;
 
+// Optional-sensor presence flags, indexed by SensorId. Written once per sensor
+// by its task setup (set_sensor_present), read by Failsafe / Telemetry. atomic
+// so the cross-task read needs no lock. Size tracks the SensorId enum.
+// Optional センサの存在フラグ。SensorId で索引。各センサの setup が1回書き込み
+// (set_sensor_present)、Failsafe / Telemetry が読む。クロスタスク読み取りを
+// ロック無しにするため atomic。サイズは SensorId enum に追従。
+constexpr size_t kSensorSlots = 5;  // Mag, FrontToF, Flow, Baro, Power
+std::atomic<bool> g_sensor_present[kSensorSlots] = {};
+
 // ---------------------------------------------------------------------------
 // Step: default event loop
 // ステップ: デフォルトイベントループ
@@ -181,15 +194,15 @@ esp_err_t init_i2c_bus()
 // ステップ: SPI バス (IMU + OptFlow)
 // ---------------------------------------------------------------------------
 //
-// sf_board が SPI bus を所有し、BMI270Wrapper と PMW3901Wrapper は
-// spi_bus_add_device() のみ自身で行う。BMI270 ドライバ
-// (sf_hal_bmi270/src/bmi270_spi.c) は spi_bus_initialize() の
-// ESP_ERR_INVALID_STATE を許容するパッチが入っており、二重初期化を
-// 検出して device add のみ進む。
+// sf_board が SPI bus を所有し (R1)、BMI270Wrapper と PMW3901Wrapper は
+// spi_bus_add_device() のみ自身で行う。両ドライバとも Config の
+// skip_bus_init=true を受け取り、自前の spi_bus_initialize() を省く。
+// (二重初期化の "握り潰し" ではなく、所有権を明示した省略。)
 //
-// sf_board owns the SPI bus; BMI270Wrapper and PMW3901Wrapper only call
-// spi_bus_add_device(). The BMI270 C driver tolerates ESP_ERR_INVALID_STATE
-// from spi_bus_initialize() (already initialized) and proceeds to add_device.
+// sf_board owns the SPI bus (R1); BMI270Wrapper and PMW3901Wrapper only call
+// spi_bus_add_device(). Both receive skip_bus_init=true in their Config and
+// skip their own spi_bus_initialize() — an explicit ownership-driven skip,
+// not a swallowed double-init.
 esp_err_t init_spi_bus()
 {
     spi_bus_config_t cfg = {};
@@ -230,6 +243,58 @@ esp_err_t init_motor_timer()
     return ledc_timer_config(&cfg);
 }
 
+// ---------------------------------------------------------------------------
+// Critical-failure handling (R4, hardware_init.md §5)
+// Critical 失敗の処理 (R4, hardware_init.md §5)
+// ---------------------------------------------------------------------------
+//
+// A Critical shared-HW failure (bus/timer/infra) means the vehicle cannot fly.
+// We must NOT continue: log the cause and halt (do NOT esp_restart, so the cause
+// stays observable and a future LED pattern stays lit — §5). The halt loop uses
+// vTaskDelay so the idle task keeps feeding the watchdog (no reboot). board::init
+// runs in app_main before any flight task starts, so halting here stops the
+// whole bring-up cleanly.
+//
+// 共有 HW の Critical 失敗 (バス/タイマ/インフラ) は飛行不能を意味する。続行禁止:
+// 原因をログして停止する (esp_restart しない＝原因と将来の LED 表示を保つ, §5)。
+// 停止ループは vTaskDelay を使い idle タスクが WDT を食わせ続ける (リブート無し)。
+// board::init は飛行タスク開始前の app_main で走るため、ここで停止すれば
+// ブリングアップ全体を綺麗に止められる。
+enum class FatalReason {
+    EventLoop,   ///< default event loop / イベントループ
+    Netif,       ///< TCP/IP stack / TCP/IP スタック
+    I2cBus,      ///< shared I2C master bus / 共有 I2C マスターバス
+    SpiBus,      ///< shared SPI bus (IMU + Flow) / 共有 SPI バス
+    LedcTimer,   ///< motor LEDC timer / モータ LEDC タイマー
+};
+
+const char* fatalReasonText(FatalReason r)
+{
+    switch (r) {
+        case FatalReason::EventLoop: return "default event loop init";
+        case FatalReason::Netif:     return "TCP/IP stack init";
+        case FatalReason::I2cBus:    return "I2C master bus init";
+        case FatalReason::SpiBus:    return "SPI bus init";
+        case FatalReason::LedcTimer: return "LEDC motor timer init";
+    }
+    return "unknown";
+}
+
+[[noreturn]] void fatal(FatalReason reason, esp_err_t err)
+{
+    ESP_LOGE(TAG, "CRITICAL: %s failed: %s — vehicle cannot fly. Halting.",
+             fatalReasonText(reason), esp_err_to_name(err));
+
+    // LED error pattern (hardware_init.md §5): wired in Phase 6 when LED/notify
+    // ownership is established. Until then the cause is reported on the log.
+    // LED エラーパターン (hardware_init.md §5) は Phase 6 (LED/notify 所有確立時)
+    // で配線する。それまでは原因をログで報告する。
+
+    for (;;) {
+        vTaskDelay(portMAX_DELAY);  // Halt; never returns. / 停止。戻らない。
+    }
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -249,42 +314,42 @@ esp_err_t init()
 
     ESP_LOGI(TAG, "Phase 1 boot: initializing shared HW");
 
-    // Level 0: pre-kernel resources (event loop + TCP/IP stack)
+    // Level 0: pre-kernel resources (event loop + TCP/IP stack). All Critical:
+    // every networked service depends on them — a failure halts via fatal().
+    // Level 0: 全て Critical。全ネットワークサービスが依存するため失敗は fatal() で停止。
     esp_err_t err = init_event_loop();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "default event loop init failed: %s", esp_err_to_name(err));
-        return err;
+        fatal(FatalReason::EventLoop, err);
     }
     err = init_netif();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "TCP/IP stack init failed: %s", esp_err_to_name(err));
-        return err;
+        fatal(FatalReason::Netif, err);
     }
     ESP_LOGI(TAG, "  L0: event loop + TCP/IP stack ready");
 
-    // Level 1: I2C master bus
+    // Level 1: I2C master bus (Critical — every I2C HAL depends on it).
+    // Level 1: I2C マスターバス (Critical — 全 I2C HAL が依存)。
     err = init_i2c_bus();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "I2C master bus init failed: %s", esp_err_to_name(err));
-        return err;
+        fatal(FatalReason::I2cBus, err);
     }
     ESP_LOGI(TAG, "  L1: I2C bus ready (port=%d, SDA=%d, SCL=%d)",
              kI2cPort, kI2cSda, kI2cScl);
 
-    // Level 2: SPI bus (shared by IMU and OptFlow)
+    // Level 2: SPI bus (shared by IMU and OptFlow; Critical — the IMU needs it).
+    // Level 2: SPI バス (IMU + OptFlow 共有; Critical — IMU が依存)。
     err = init_spi_bus();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(err));
-        return err;
+        fatal(FatalReason::SpiBus, err);
     }
     ESP_LOGI(TAG, "  L2: SPI bus ready (host=%d, MOSI=%d, MISO=%d, SCLK=%d)",
              kImuSpiHost, kSpiMosi, kSpiMiso, kSpiSclk);
 
-    // Level 3: LEDC motor timer
+    // Level 3: LEDC motor timer (Critical — no timer, no motor PWM).
+    // Level 3: LEDC モータタイマー (Critical — タイマ無しでは PWM 出力不能)。
     err = init_motor_timer();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "LEDC motor timer init failed: %s", esp_err_to_name(err));
-        return err;
+        fatal(FatalReason::LedcTimer, err);
     }
     ESP_LOGI(TAG, "  L3: LEDC motor timer ready (timer=%d, freq=%d Hz, %d-bit)",
              kMotorTimer, kMotorPwmFreqHz, kMotorPwmResolution);
@@ -304,6 +369,13 @@ spi_host_device_t imu_spi()
     return kImuSpiHost;
 }
 
+spi_host_device_t flow_spi()
+{
+    // Flow shares the IMU's physical SPI bus (separate CS). Same host on purpose.
+    // フローは IMU と物理 SPI バスを共有 (CS は別)。意図的に同一ホストを返す。
+    return kImuSpiHost;
+}
+
 ledc_timer_t motor_timer()
 {
     return kMotorTimer;
@@ -314,12 +386,22 @@ ledc_mode_t motor_speed_mode()
     return kMotorSpeedMode;
 }
 
-bool sensor_present(SensorId /*id*/)
+void set_sensor_present(SensorId id, bool present)
 {
-    // Reserved for M2b. Always returns false until the per-sensor
-    // presence-tracking infrastructure is added.
-    // M2b で実装予定。それまでは常に false を返す。
-    return false;
+    const size_t idx = static_cast<size_t>(id);
+    if (idx >= kSensorSlots) {
+        return;  // Out of range — ignore (defensive). / 範囲外は無視 (防御的)。
+    }
+    g_sensor_present[idx].store(present, std::memory_order_relaxed);
+}
+
+bool sensor_present(SensorId id)
+{
+    const size_t idx = static_cast<size_t>(id);
+    if (idx >= kSensorSlots) {
+        return false;
+    }
+    return g_sensor_present[idx].load(std::memory_order_relaxed);
 }
 
 }  // namespace sf::internal::board

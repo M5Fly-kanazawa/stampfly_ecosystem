@@ -67,6 +67,8 @@ void PowerTask(void* pvParameters)
     stampfly::PowerMonitor::Config cfg{};
     cfg.i2c_bus = sf::internal::board::i2c_bus();
     const bool present = (g_power.init(cfg) == ESP_OK);
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::Power, present);
     if (present) {
         ESP_LOGI(TAG, "INA3221 ready (10Hz)");
     } else {

@@ -1,6 +1,10 @@
-# 次セッション指示書 — 設計準拠リファクタリング Phase 4 から再開
+# 次セッション指示書 — 設計準拠リファクタリング Phase 5 から再開
 
-最終更新: 2026-06-07（**Phase 0 / 1 / 2a / 2b / 3 完了 ＋ SIL 電池モデル実装・V_BATT 実電圧化済。次は Phase 4（HW所有一元化）。ただし χ² ラッチアップ調査・デッドバンド復活が割り込み候補**）
+最終更新: 2026-06-07（**Phase 0 / 1 / 2a / 2b / 3 / 4 完了。次は Phase 5（起動シーケンス整備＋params SSOT）。ただし χ² ラッチアップ調査・デッドバンド復活が割り込み候補**）
+
+> **Phase 4 完了（HW所有の一元化, R1/R2/R4）:** BMI270/PMW3901 の SPI は `skip_bus_init`、motor の LEDC は `skip_timer_init` で sf_board 借用に統一（二重初期化の「握り潰し」を所有権明示の省略へ）。`sensor_present()` を実装（Mag/Flow/Baro/Power の各タスクが init 成否を board に報告、atomic）。Critical 失敗（I2C/SPI/LEDC バス＝board::fatal、IMU＝imu_task、Motor＝actuator）を **halt 統一**（vTaskDelay ループ・esp_restart しない、§5）。**重要なスコープ判断: LED エラーパターン表示は Phase 6 に繰延**（LED/notify の所有が未確立＝notify_task スタブのため。board に sf_hal_led 依存を先行追加すると実機ビルド直前のリスク）。board::fatal に1行フックを残置。検証=11シナリオ＋hover_espnow＋hover_smoke G2/G3＋plant_smoke 全PASS、ESP-IDF 実機ビルド 953.5KB。
+>
+> **実装上の設計逸脱（記録）:** 計画は「imu_task が board::imu_spi() を渡す」だったが、imu_task/control_task/actuator は **emu_vehicle_new と部分試験(hover_smoke/rtos_smoke/rate_tune)の両方でコンパイルされ、後者は sf_board をリンクしない**。よって共有タスクは board を呼ばず plain bool（skip_bus_init/skip_timer_init）で借用を表現した（spi_host は SPI2_HOST=board::imu_spi() に一致）。flow/mag/baro/power/tof は emu 専用なので board 直呼び出し可。
 
 > このセッションは★ロバスト再飛行 readiness の実装に着手したが、その基盤の状態機械が
 > 設計違反の場当たりコードだらけと判明し、ユーザー指示で「場当たりコードを全廃して
@@ -64,25 +68,31 @@
 | 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset。②COMM_LOST 3秒ホバー遅延。③**ARM時=姿勢共分散のみ膨張**（`InflateCov(Attitude)`）。 | `00468d0` |
 | 3 | **責務分離の是正（コア）**。sf_command に正規化・デッドバンド・flags デコードを集約（死蔵コード解消）。正規化を実証パス（2048中央, throttle clamp[0,1]）に統一。sf_comm は生パケットを RawControlInput として渡すだけ＋RawInputSink 注入で comm_task が配線（層逆転回避）。motor_driver 旧HAL残骸（setMixerOutput=二重ミキサー/testMotor/stats）削除。挙動完全保存（ドリフト値ベースライン一致）。 | `95f9418` |
 | 3+ | **SIL 1S LiPo 電池サグモデル＋V_BATT 実電圧化**。plant に動的端子電圧 v_batt=OCV(SoC)−I·R_int（電流=モータ電気モデル＋アビオ、クーロンカウント、vpython OCV曲線移植）。emu で有効化、actuator を live(sensor_power)へ。χ²ラッチアップ非発火で全PASS。 | `b8fd27e` |
+| 4 | **HW所有の一元化（R1/R2/R4）**。BMI270/PMW3901 SPI を `skip_bus_init`、motor LEDC を `skip_timer_init` で sf_board 借用に統一（二重init握り潰し→所有明示の省略、board::flow_spi() 追加）。`sensor_present()` 実装（atomic, Mag/Flow/Baro/Power の init 成否を board へ報告）。Critical 失敗を halt 統一（board::fatal＋imu_task/actuator、esp_restart せず §5）。**LED 表示は Phase 6 繰延**（LED 所有未確立）。共有タスクは smoke 非リンク制約で board 直呼びせず plain bool で借用。 | (本コミット) |
 
-**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3 + plant_smoke）。**Phase 3+ で ESP-IDF 実機ビルド確認済み（953.1KB）。**
+**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3 + plant_smoke）。**Phase 4 で ESP-IDF 実機ビルド確認済み（953.5KB）。**
 
 ---
 
-## 3. 次にやること: Phase 4（HW所有の一元化）— ただし χ²/deadband が割り込み候補
+## 3. 次にやること: Phase 5（起動シーケンス整備＋params SSOT）— ただし χ²/deadband・LED が割り込み候補
 
-Phase 3（コア＋電池モデル＋V_BATT実電圧化）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 4**。
+Phase 4（HW所有一元化）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 5**。
 
 **割り込み候補（ユーザーと相談して順序決定）:**
 - **χ² ラッチアップ調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
 - **デッドバンド復活**: χ² 改善後に 0.05 を有効化（現状は機構配線・既定0）。
+- **Phase 4 LED 繰延分**: Critical 失敗時の LED エラーパターン表示。Phase 6（notify/LED 所有確立）でやるのが本来だが、安全UXとして前倒しも可。board::fatal にフック有り。
 
-**Phase 4 本体（HW所有 R1/R2/R4）:**
-- IMU/Flow/Motor を board の SPI/LEDC 借用に、二重初期化解消、`sensor_present()` 実装、Critical失敗の abort+LED統一。
+**Phase 5 本体（起動シーケンス R3 ＋ params SSOT）:**
+- `main.cpp` を設計の宣言的 Phase 構造（0:NVS / 1:board / 2:topics / 3:params load / 4:tasks）に整合。14タスク直書きを `sf::tasks::start_all()`（tasks.hpp）へ集約。extern TaskHandle 排除。Phase 2 空スタブ撤去。
+- params NVS ロードを Phase 3 に配線。`params.def` SSOT化（X-macro 実機能化 or 撤去＝reference_params_ssot.md 参照、要判断）。
 
-### Phase 3 でやったこと（完了・参考）
-- sf_command 正規化集約（commit 95f9418）。SIL 電池モデル＋V_BATT実電圧化（commit b8fd27e）。
-- 残: 旧 Phase 3 に挙げた「config.hpp の GPIO/PWM 複製解消」は循環依存ゆえ **Phase 4（board 所有）に移譲**（actuator.cpp にコメント明記済）。
+### Phase 4 でやったこと（完了・参考）
+- BMI270/PMW3901 SPI 借用（skip_bus_init）、motor LEDC 借用（skip_timer_init）、board::flow_spi() 追加。
+- sensor_present() 実装（atomic、Mag/Flow/Baro/Power の init 成否報告）。
+- Critical 失敗 halt 統一（board::fatal＋imu_task/actuator）。LED は Phase 6 繰延。
+- **共有タスク制約**: imu_task/control_task/actuator は smoke 系で sf_board 非リンク → plain bool で借用（board 直呼び不可）。flow/mag/baro/power/tof は emu 専用ゆえ board 可。
+- 残: 「config.hpp の GPIO/PWM 複製解消」は Phase 5（main/起動整備）で扱う余地（actuator.cpp にコメント有）。
 
 ### Phase 2b でやったこと（完了・参考）
 

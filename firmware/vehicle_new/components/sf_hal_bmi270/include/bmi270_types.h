@@ -72,6 +72,7 @@ typedef struct {
     uint32_t spi_clock_hz;               ///< SPI clock frequency (max 10MHz for BMI270)
     spi_host_device_t spi_host;          ///< SPI host (SPI2_HOST or SPI3_HOST)
     int8_t gpio_other_cs;                ///< CS pin of other device on shared SPI bus (set to -1 if not used, e.g., GPIO12 for PMW3901)
+    bool skip_bus_init;                  ///< Skip spi_bus_initialize() when the bus is owned elsewhere (sf_board, R1). Only spi_bus_add_device() runs. / バスを別所有者(sf_board, R1)が初期化済みのとき spi_bus_initialize() を省く。device add のみ実行
 } bmi270_config_t;
 
 /**

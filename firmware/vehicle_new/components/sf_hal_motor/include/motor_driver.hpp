@@ -38,6 +38,13 @@ public:
         int gpio[NUM_MOTORS];     // GPIO pins for each motor
         int pwm_freq_hz;          // PWM frequency (default: 150000)
         int pwm_resolution_bits;  // PWM resolution (default: 8)
+        // Skip ledc_timer_config() when sf_board already configured the shared
+        // LEDC timer (R1). The driver then only does ledc_channel_config().
+        // A plain bool (no driver/ledc.h here) keeps this header host-buildable
+        // for the SIL motor stub. / sf_board が共有 LEDC タイマを構成済み(R1)の
+        // とき ledc_timer_config() を省く。本ドライバは channel 設定のみ行う。
+        // ここを bool にして driver/ledc.h を持ち込まず SIL スタブのビルドを保つ。
+        bool skip_timer_init = false;
     };
 
     MotorDriver() = default;

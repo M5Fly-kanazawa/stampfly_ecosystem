@@ -20,7 +20,13 @@ static const char* TAG = "MotorDriver";
 
 namespace stampfly {
 
-// LEDC configuration constants
+// LEDC configuration constants. These mirror sf_board's kMotorTimer /
+// kMotorSpeedMode (the timer's owner under R1). When skip_timer_init is set,
+// sf_board has configured this timer and we bind channels to it without
+// re-config; the two definitions must stay in agreement.
+// これらは sf_board の kMotorTimer / kMotorSpeedMode (R1 のタイマ所有者) と一致
+// させる。skip_timer_init のとき sf_board が構成済みなので、再構成せずチャンネル
+// を紐付ける。両定義は常に一致させること。
 static constexpr ledc_timer_t LEDC_TIMER = LEDC_TIMER_0;
 static constexpr ledc_mode_t LEDC_MODE = LEDC_LOW_SPEED_MODE;
 
@@ -46,20 +52,29 @@ esp_err_t MotorDriver::init(const Config& config)
     ESP_LOGI(TAG, "  PWM Freq: %d Hz, Resolution: %d bits",
              config.pwm_freq_hz, config.pwm_resolution_bits);
 
-    // Configure LEDC timer
-    ledc_timer_config_t timer_config = {
-        .speed_mode = LEDC_MODE,
-        .duty_resolution = static_cast<ledc_timer_bit_t>(config.pwm_resolution_bits),
-        .timer_num = LEDC_TIMER,
-        .freq_hz = static_cast<uint32_t>(config.pwm_freq_hz),
-        .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false,
-    };
+    esp_err_t ret = ESP_OK;
 
-    esp_err_t ret = ledc_timer_config(&timer_config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure LEDC timer: %s", esp_err_to_name(ret));
-        return ret;
+    // Configure the LEDC timer unless sf_board already owns it (R1). When the
+    // BSP configured LEDC_TIMER_0 in Phase 1, we skip re-config and only bind
+    // our channels to it below — sf_board is the single timer owner.
+    // sf_board が LEDC タイマを所有(R1)していなければ構成する。BSP が Phase 1 で
+    // LEDC_TIMER_0 を構成済みのときは再構成せず、下のチャンネルを紐付けるだけ。
+    if (config.skip_timer_init) {
+        ESP_LOGI(TAG, "LEDC timer config skipped (owned by sf_board)");
+    } else {
+        ledc_timer_config_t timer_config = {
+            .speed_mode = LEDC_MODE,
+            .duty_resolution = static_cast<ledc_timer_bit_t>(config.pwm_resolution_bits),
+            .timer_num = LEDC_TIMER,
+            .freq_hz = static_cast<uint32_t>(config.pwm_freq_hz),
+            .clk_cfg = LEDC_AUTO_CLK,
+            .deconfigure = false,
+        };
+        ret = ledc_timer_config(&timer_config);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to configure LEDC timer: %s", esp_err_to_name(ret));
+            return ret;
+        }
     }
 
     // Configure LEDC channels for each motor
