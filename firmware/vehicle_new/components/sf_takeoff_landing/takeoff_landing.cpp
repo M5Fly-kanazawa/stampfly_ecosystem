@@ -11,8 +11,8 @@
  * @brief Takeoff/landing manager implementation
  *        離着陸マネージャー実装
  *
- * @design architecture.md §4 — State machine transitions               [--]
- * @design detailed_design.md §11 — Takeoff/landing logic               [--]
+ * @design architecture.md §4 — State machine transitions               [OK]
+ * @design detailed_design.md §3 — State transition table (TAKEOFF/LANDING) [OK]
  */
 
 #include "takeoff_landing.hpp"

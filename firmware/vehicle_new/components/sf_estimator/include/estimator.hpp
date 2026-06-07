@@ -26,11 +26,11 @@
  * センサ観測のON/OFFは推定器実装内部でパラメータ制御する。
  * 生データは常に推定器に届き、各観測を使うかは推定器が判断する。
  *
- * @design requirements.md §4 — Component #2: replaceable estimation   [--]
- * @design requirements.md §10 — Replaceable estimation                [--]
- * @design architecture.md §2 — Estimation: unified interface          [--]
- * @design detailed_design.md §5 — IEstimator definition               [--]
- * @design coding_and_education.md §2 — Bilingual comments             [--]
+ * @design requirements.md §4 — Component #2: replaceable estimation   [OK]
+ * @design requirements.md §10 — Replaceable estimation                [OK]
+ * @design architecture.md §2 — Estimation: unified interface          [OK]
+ * @design detailed_design.md §5 — IEstimator definition               [OK]
+ * @design coding_and_education.md §2 — Bilingual comments             [OK]
  */
 
 #pragma once
@@ -50,7 +50,7 @@ namespace sf {
 /// 仮想メソッドを実装する。推定タスクがこれらのメソッドを呼ぶ。
 /// 推定器はFreeRTOSタスクを知らない。
 ///
-/// @design detailed_design.md §5 — predict/update*/getState/reset     [--]
+/// @design detailed_design.md §5 — predict/update*/getState/reset     [OK]
 class IEstimator {
 public:
     virtual ~IEstimator() = default;
@@ -82,7 +82,7 @@ public:
     // パラメータ設定に基づいて使用するか判断する
     // （例: eskf.use_tof = false → ToF更新をスキップ）。
     //
-    // @design detailed_design.md §5 — Sensor observation switch       [--]
+    // @design detailed_design.md §5 — Sensor observation switch       [OK]
     // =========================================================================
 
     /// ToF distance observation update
@@ -200,14 +200,14 @@ public:
     /// 整定が校正済みバイアスを乱さないようにする。バイアスを推定しない推定器（姿勢のみの相補
     /// フィルタ等）は既定 no-op。
     ///
-    /// @design detailed_design.md §3 — onEnter(LANDING→IDLE): バイアスフリーズ      [--]
+    /// @design detailed_design.md §3 注3 — bias freeze: capability retained, NOT wired (dropped) [OK]
     virtual void freezeBias() {}
 
     /// Unfreeze bias estimation (at takeoff). Resumes online bias estimation for the
     /// dynamic flight regime. Default no-op.
     /// バイアス推定の凍結を解除（離陸時）。動的な飛行域でのオンライン推定を再開。既定 no-op。
     ///
-    /// @design detailed_design.md §3 — onEnter(TAKEOFF→FLYING): バイアスフリーズ解除 [--]
+    /// @design detailed_design.md §3 注3 — bias unfreeze: capability retained, NOT wired (dropped) [OK]
     virtual void unfreezeBias() {}
 
     /// Inflate the covariance of the states selected by `state_mask` (bit i = state i in
@@ -220,7 +220,7 @@ public:
     /// 状態推定値は変えない。地上→飛行境界で「地上収束は飛行を代表しない」ことを、状態の全
     /// リセット(不安定化)なしに宣言できる。明示的な共分散を持たない推定器(相補フィルタ等)は既定 no-op。
     ///
-    /// @design architecture.md §4 — ground→flight covariance handoff (sweep)  [--]
+    /// @design architecture.md §4 — ground→flight covariance handoff (sweep)  [OK]
     virtual void inflateCovariance(uint16_t state_mask) { (void)state_mask; }
 };
 

@@ -27,11 +27,11 @@
  * 機体座標系での推力/トルクを出力する。モーター、ミキサー、
  * FreeRTOSタスクを知らない。
  *
- * @design requirements.md §4 — Component #6: replaceable control      [--]
- * @design requirements.md §10 — Replaceable control                   [--]
- * @design architecture.md §2 — Control: unified interface             [--]
- * @design detailed_design.md §4 — IController definition              [--]
- * @design coding_and_education.md §2 — Bilingual comments             [--]
+ * @design requirements.md §4 — Component #6: replaceable control      [OK]
+ * @design requirements.md §10 — Replaceable control                   [OK]
+ * @design architecture.md §2 — Control: unified interface             [OK]
+ * @design detailed_design.md §4 — IController definition              [OK]
+ * @design coding_and_education.md §2 — Bilingual comments             [OK]
  */
 
 #pragma once
@@ -52,7 +52,7 @@ namespace sf {
 /// 仮想メソッドを実装する。制御タスクが毎周期compute()を呼ぶ。
 /// コントローラは自身のタイミングを管理しない。
 ///
-/// @design detailed_design.md §4 — compute/reset/onModeChange         [--]
+/// @design detailed_design.md §4 — compute/reset/onModeChange         [OK]
 class IController {
 public:
     virtual ~IController() = default;

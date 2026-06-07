@@ -26,8 +26,8 @@
  * 加速度計の重力方向へ補正）、機体角速度（= ジャイロ）、鉛直チャネル（加速度積分による
  * 高度＋鉛直速度を気圧で固定）。水平位置・速度は推定しない（該当フィールドは 0）。
  *
- * @design requirements.md §10 — replaceable estimation                  [--]
- * @design coding_and_education.md §… — 22_custom_estimator exercise      [--]
+ * @design requirements.md §10 — replaceable estimation                  [OK]
+ * @design coding_and_education.md §… — 22_custom_estimator exercise      [OK]
  */
 
 #pragma once

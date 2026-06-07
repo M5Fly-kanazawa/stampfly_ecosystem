@@ -19,9 +19,9 @@
  * 発行者と購読者は疎結合 — 互いを知らない。
  * 型付き共有バッファ経由でデータを交換する。
  *
- * @design architecture.md §3 — Lightweight Pub-Sub                    [--]
- * @design detailed_design.md §2 — Topic<T, BufferPolicy, Size>        [--]
- * @design coding_and_education.md §2 — Pub-Sub separation rule        [--]
+ * @design architecture.md §3 — Lightweight Pub-Sub                    [OK]
+ * @design detailed_design.md §2 — Topic<T, BufferPolicy, Size>        [OK]
+ * @design coding_and_education.md §2 — Pub-Sub separation rule        [OK]
  */
 
 #pragma once
@@ -38,7 +38,7 @@ namespace sf {
 // Buffer Policies
 // バッファ方式
 //
-// @design detailed_design.md §2 — Three buffer policies               [--]
+// @design detailed_design.md §2 — Three buffer policies               [OK]
 // =============================================================================
 
 /// Latest-value buffer: stores only the most recent value

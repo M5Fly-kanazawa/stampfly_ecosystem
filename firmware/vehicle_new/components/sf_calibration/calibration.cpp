@@ -11,8 +11,8 @@
  * @brief Calibration manager implementation
  *        キャリブレーション管理の実装
  *
- * @design architecture.md §3 — Calibration subsystem                   [--]
- * @design detailed_design.md §12 — Calibration procedures              [--]
+ * @design architecture.md §2 — Calibration (responsibility #11)        [OK]
+ * @design detailed_design.md §3 — onEnter(IDLE_GROUND): boot calibration [OK]
  */
 
 #include "calibration.hpp"

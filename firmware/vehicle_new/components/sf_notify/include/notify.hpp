@@ -19,9 +19,9 @@
  * - LED: 状態ごとの色＋点滅パターン
  * - ブザー: イベント（ARM、DISARM、アラート）のトーンシーケンス
  *
- * @design architecture.md §8 — Notification subsystem                  [--]
- * @design detailed_design.md §10 — LED pattern table                   [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design architecture.md §2 — Notification (responsibility #14)       [OK]
+ * @design architecture.md §5 — Notify data flow (LED/buzzer)           [OK]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once

@@ -11,9 +11,9 @@
  * @brief BSP implementation — owns I2C bus and (future) other shared HW
  *        BSP 実装 — I2C バスと (将来の) 他共有 HW を所有
  *
- * @design hardware_init.md §3 — sf_board の責務               [--]
- * @design hardware_init.md §4 — 起動シーケンス                [--]
- * @design hardware_init.md §5 — 失敗 3 段階分類               [--]
+ * @design hardware_init.md §3 — sf_board の責務               [OK]
+ * @design hardware_init.md §4 — 起動シーケンス                [OK]
+ * @design hardware_init.md §5 — 失敗 3 段階分類               [OK]
  */
 
 #include "sf_board.hpp"

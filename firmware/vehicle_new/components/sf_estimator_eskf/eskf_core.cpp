@@ -25,7 +25,7 @@
  * - 位置センサには絶対値イノベーションゲート（P崩壊対策）
  * - 数値安定性のためJoseph形式
  *
- * @design detailed_design.md §5 — IEstimator                         [--]
+ * @design detailed_design.md §5 — IEstimator                         [OK]
  */
 
 #include "eskf_core.hpp"

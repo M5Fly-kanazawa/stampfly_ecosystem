@@ -21,9 +21,9 @@
  * - 加速度計レベル: 重力ベクトルを測定し、傾斜オフセットを計算
  * - NVS永続化: リブート間でキャリブレーションデータを保存/読み込み
  *
- * @design architecture.md §3 — Calibration subsystem                   [--]
- * @design detailed_design.md §12 — Calibration procedures              [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design architecture.md §2 — Calibration (responsibility #11)        [OK]
+ * @design detailed_design.md §3 — onEnter(IDLE_GROUND): boot calibration [OK]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once

@@ -11,9 +11,9 @@
  * @brief ESKF state estimator — IEstimator wrapping EskfCore
  *        ESKF状態推定器 — EskfCoreをラップするIEstimator
  *
- * @design requirements.md §4 — Component #2: replaceable estimation   [--]
- * @design detailed_design.md §5 — IEstimator implementation           [--]
- * @design detailed_design.md §5 — Sensor observation switch           [--]
+ * @design requirements.md §4 — Component #2: replaceable estimation   [OK]
+ * @design detailed_design.md §5 — IEstimator implementation           [OK]
+ * @design detailed_design.md §5 — Sensor observation switch           [OK]
  */
 
 #pragma once

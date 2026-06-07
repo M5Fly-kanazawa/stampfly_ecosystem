@@ -18,9 +18,9 @@
  * Pub-Subトピック経由でコンポーネント間で交換される全データ構造体。
  * センサトピックは生値のみを運ぶ — フィルタリングは購読者側の責務。
  *
- * @design architecture.md §3 — Topic data types                       [--]
- * @design detailed_design.md §2 — Data type definitions               [--]
- * @design coding_and_education.md §2 — Bilingual comments             [--]
+ * @design architecture.md §3 — Topic data types                       [OK]
+ * @design detailed_design.md §2 — Data type definitions               [OK]
+ * @design coding_and_education.md §2 — Bilingual comments             [OK]
  */
 
 #pragma once

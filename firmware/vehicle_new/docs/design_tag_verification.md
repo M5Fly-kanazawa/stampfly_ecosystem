@@ -230,3 +230,41 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 3. **`[--]`→`[OK]` 反映**: 上記を反映後、検証済み 111件 ＋ 修正で OK 化する 18件（STALE 16＋bias 2）を `[OK]` に更新。NG 残（failsafe/netif）はユーザー判断で決着後に反映。
 
 > 本レポートは検証の記録であり、ソース注釈の一括更新（`[--]`→`[OK]`）は次ステップ。安全閾値・設計矛盾の決定を待ってから実施する。
+
+---
+
+## 7. 対応結果（2026-06-08 反映済み）
+
+ユーザー判断（4-A）を受け、以下を実施。**@design タグは全て `[OK]`（243件中 242件が状態付き＝全[OK]、残1件は状態を持たない説明用 @design 行）、`[--]`/`[NG]` は 0。**
+
+### 7-A. ユーザー決定の反映（NG 6件 → 解消）
+
+| 項目 | 決定 | 実装 | コミット |
+|------|------|------|---------|
+| failsafe 安全閾値（§9, NG×3） | **コードを要件に合わせる** | impact 4.0→3.0G、gyro 1000→800dps、LiPo 警告 3.3→3.4V、連続2回デバウンス（consecutive_count=2）を実装。critical 3.0V 緊急着陸は追加安全網として維持 | `10b96d1` |
+| esp_netif STA 所有（NG×1） | **board 所有に統一** | board::init() が STA netif を生成し `sta_netif()` で公開、comm は借用に変更（自前生成を撤去）。SIL に esp_wifi_default.h shim 追加 | `a7810a3` |
+| bias freeze/unfreeze（NG×2） | 設計§3 注3（見送り）に整合 | タグを「capability retained, NOT wired (dropped)」に書き換え（コードは見送り決定どおり no-op 残置）→ [OK] | （本バッチ） |
+
+### 7-B. STALE 16件の参照修正（→ [OK]）
+
+存在しない節（detailed_design §10/§11/§12、architecture §8 等）や節タイトル不一致の参照を、実在節へ向け直した（コードは元から正しい）。
+
+| ファイル | 修正前 → 修正後 |
+|---------|----------------|
+| eskf_core.hpp:21 | architecture §3 → detailed_design §5（Sensor observation switch） |
+| params.cpp:86 | §6 Single-macro definition → §6 Parameter table (SSOT = params.cpp) |
+| sf_math.hpp:17 | detailed_design §7 → architecture §2（sf_math Math library） |
+| notify.cpp/hpp（4件） | architecture §8 / detailed_design §10 → architecture §2 #14 / §5（Notify data flow） |
+| logger.hpp（2件） | architecture §7 / detailed_design §9 → architecture §2 #13 / detailed_design §8（Memory Layout） |
+| calibration.cpp/hpp（4件） | architecture §3 / detailed_design §12 → architecture §2 #11 / detailed_design §3（onEnter(IDLE_GROUND)） |
+| takeoff_landing.cpp/hpp（2件） | detailed_design §11 → detailed_design §3（State transition table TAKEOFF/LANDING） |
+
+### 7-C. 残課題（設計文書側の拡充・任意）
+
+トレーサビリティは実在節へ向け直して解消したが、以下は**文書側に詳細節が未作成**（将来の文書拡充候補。コード・タグは正しい）:
+- LED パターン表（notify）の詳細仕様節
+- DataStream 形式（logger）の定義節
+- キャリブレーション手順（calibration）の詳細節
+- failsafe の「連続2回」は PowerTask レート(10Hz)で約200ms継続 — 極短の衝撃スパイク取りこぼしの可能性（failsafe.cpp にコメントで明記、レート見直しは将来課題）
+
+検証: 全フェーズで vehicle_new 11シナリオ＋legacy hover_espnow＋hover_smoke G2+G3＋ESP-IDF 実機ビルド 全PASS。@design タグ flip はコメントのみ（SIL ビルド OK で確認）。

@@ -17,8 +17,8 @@
  * 全14タスク関数をここで宣言。各タスクファイルが1関数を実装する。
  * タスクはmain.cppのapp_main()で起動される。
  *
- * @design architecture.md §6 — Task design (14 tasks)                 [--]
- * @design detailed_design.md §8 — Task list                           [--]
+ * @design architecture.md §6 — Task design (14 tasks)                 [OK]
+ * @design detailed_design.md §8 — Task list                           [OK]
  */
 
 #pragma once

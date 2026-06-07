@@ -19,9 +19,9 @@
  * - Blackbox: フライト後解析用のSPIFFS上バイナリフライトログ
  * - DataStream: USBシリアルまたはUDP経由のリアルタイムストリーミング
  *
- * @design architecture.md §7 — Logging subsystem                       [--]
- * @design detailed_design.md §9 — Blackbox format and DataStream       [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design architecture.md §2 — Logging (responsibility #13)            [OK]
+ * @design detailed_design.md §8 — Memory Layout (Blackbox/SPIFFS)      [OK]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once

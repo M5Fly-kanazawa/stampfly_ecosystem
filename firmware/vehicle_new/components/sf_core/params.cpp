@@ -11,8 +11,8 @@
  * @brief Parameter system and topic instance implementation
  *        パラメータシステムおよびトピックインスタンス実装
  *
- * @design detailed_design.md §6 — Parameter system                    [--]
- * @design requirements.md §3 — Parameter management                   [--]
+ * @design detailed_design.md §6 — Parameter system                    [OK]
+ * @design requirements.md §3 — Parameter management                   [OK]
  */
 
 #include "topics.hpp"
@@ -83,7 +83,7 @@ void topics_init()
 // Parameter System Implementation
 // パラメータシステム実装
 //
-// @design detailed_design.md §6 — Single-macro definition             [--]
+// @design detailed_design.md §6 — Parameter table (SSOT = params.cpp) [OK]
 // =============================================================================
 
 // Explicit parameter variable definitions

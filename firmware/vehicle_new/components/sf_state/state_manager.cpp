@@ -11,9 +11,9 @@
  * @brief StateManager implementation
  *        StateManager実装
  *
- * @design requirements.md §4 — Component #3: State Management         [--]
- * @design architecture.md §2 — Sole transition owner                  [--]
- * @design detailed_design.md §3 — State transition table              [--]
+ * @design requirements.md §4 — Component #3: State Management         [OK]
+ * @design architecture.md §2 — Sole transition owner                  [OK]
+ * @design detailed_design.md §3 — State transition table              [OK]
  */
 
 #include "state_manager.hpp"
@@ -67,7 +67,7 @@ void StateManager::init()
 // 遷移リクエスト
 // =============================================================================
 
-/// @design requirements.md §2 — INIT → IDLE_GROUND on init complete   [--]
+/// @design requirements.md §2 — INIT → IDLE_GROUND on init complete   [OK]
 void StateManager::notifyInitComplete()
 {
     if (state_ != FlightState::INIT) {
@@ -129,8 +129,8 @@ bool StateManager::requestArm()
     return true;
 }
 
-/// @design requirements.md §2 — ARMED_GROUND→IDLE_GROUND (DISARM),       [--]
-/// @design requirements.md §2 — FLYING→IDLE_GROUND (pilot DISARM)        [--]
+/// @design requirements.md §2 — ARMED_GROUND→IDLE_GROUND (DISARM),       [OK]
+/// @design requirements.md §2 — FLYING→IDLE_GROUND (pilot DISARM)        [OK]
 bool StateManager::requestDisarm()
 {
     // DISARM is a pilot kill action. From ARMED_GROUND it stops the idle motors;
@@ -192,7 +192,7 @@ void StateManager::notifyLandingComplete()
     transition(FlightState::IDLE_GROUND);
 }
 
-/// @design requirements.md §2 — Soft landing / touch-and-go           [--]
+/// @design requirements.md §2 — Soft landing / touch-and-go           [OK]
 void StateManager::notifySoftLanding()
 {
     if (state_ != FlightState::FLYING) {
@@ -202,7 +202,7 @@ void StateManager::notifySoftLanding()
     transition(FlightState::ARMED_GROUND);
 }
 
-/// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF        [--]
+/// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF        [OK]
 void StateManager::notifyIdleGroundHeld(bool is_held)
 {
     if (is_held && state_ == FlightState::IDLE_GROUND) {
@@ -247,8 +247,8 @@ bool StateManager::requestModeChange(FlightMode new_mode)
 // Alert Handling
 // アラート処理
 //
-// @design architecture.md §4 — FAILSAFE as event                      [--]
-// @design requirements.md §9 — Safety requirements                    [--]
+// @design architecture.md §4 — FAILSAFE as event                      [OK]
+// @design requirements.md §9 — Safety requirements                    [OK]
 // =============================================================================
 
 void StateManager::handleAlert(const SystemAlert& alert)

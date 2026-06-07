@@ -17,8 +17,8 @@
  * 機体の全状態とサブモードを定義する。
  * ARM/DISARMはアクション（モードではない）。
  *
- * @design requirements.md §2 — State model                            [--]
- * @design architecture.md §4 — State machine design                   [--]
+ * @design requirements.md §2 — State model                            [OK]
+ * @design architecture.md §4 — State machine design                   [OK]
  */
 
 #pragma once
@@ -31,7 +31,7 @@ namespace sf {
 // Flight State — top-level state of the vehicle
 // フライト状態 — 機体のトップレベル状態
 //
-// @design requirements.md §2 — State transition diagram               [--]
+// @design requirements.md §2 — State transition diagram               [OK]
 // =============================================================================
 
 enum class FlightState : uint8_t {
@@ -68,7 +68,7 @@ inline const char* flightStateName(FlightState state)
 // Flight Mode — sub-mode within FLYING state
 // フライトモード — FLYING状態内のサブモード
 //
-// @design requirements.md §2 — ACRO, STABILIZE, ALT_HOLD, POS_HOLD   [--]
+// @design requirements.md §2 — ACRO, STABILIZE, ALT_HOLD, POS_HOLD   [OK]
 // =============================================================================
 
 enum class FlightMode : uint8_t {
@@ -99,8 +99,8 @@ inline const char* flightModeName(FlightMode mode)
 // Alert Type — failsafe event types
 // アラート種別 — フェイルセーフイベント種別
 //
-// @design architecture.md §4 — FAILSAFE as event                      [--]
-// @design requirements.md §9 — Safety requirements                    [--]
+// @design architecture.md §4 — FAILSAFE as event                      [OK]
+// @design requirements.md §9 — Safety requirements                    [OK]
 // =============================================================================
 
 enum class AlertType : uint8_t {
@@ -126,7 +126,7 @@ enum class AlertSeverity : uint8_t {
 // Utility: is the vehicle armed in a given state?
 // ユーティリティ: 指定状態でARMされているか？
 //
-// @design requirements.md §2 — ARM/DISARM as actions                  [--]
+// @design requirements.md §2 — ARM/DISARM as actions                  [OK]
 // =============================================================================
 
 /// Check if a state implies armed (motors can spin)

@@ -11,8 +11,8 @@
  * @brief ESKF estimator — IEstimator adapter
  *        ESKF推定器 — IEstimatorアダプター
  *
- * @design detailed_design.md §5 — IEstimator                         [--]
- * @design detailed_design.md §5 — Sensor observation switch           [--]
+ * @design detailed_design.md §5 — IEstimator                         [OK]
+ * @design detailed_design.md §5 — Sensor observation switch           [OK]
  */
 
 #include "eskf_estimator.hpp"

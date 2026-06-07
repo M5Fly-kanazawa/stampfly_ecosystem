@@ -17,9 +17,9 @@
  * ToFセンサデータと状態推定を使用して地面接地を検出し、
  * 離陸/着陸シーケンスを管理し、状態遷移をトリガーする。
  *
- * @design architecture.md §4 — State machine transitions               [--]
- * @design detailed_design.md §11 — Takeoff/landing logic               [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design architecture.md §4 — State machine transitions               [OK]
+ * @design detailed_design.md §3 — State transition table (TAKEOFF/LANDING) [OK]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once

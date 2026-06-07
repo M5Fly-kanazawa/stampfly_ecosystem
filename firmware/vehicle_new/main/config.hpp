@@ -24,8 +24,8 @@
  * チューニング可能なパラメータ（PIDゲイン、ESKF設定等）は
  * sf_core/params.hpp のパラメータシステムを参照。
  *
- * @design requirements.md §3 — Fixed params as constexpr              [--]
- * @design detailed_design.md §7 — config.hpp in main/                 [--]
+ * @design requirements.md §3 — Fixed params as constexpr              [OK]
+ * @design detailed_design.md §7 — config.hpp in main/                 [OK]
  */
 
 #pragma once
@@ -75,8 +75,8 @@ inline constexpr int GPIO_BUTTON   = 0;
 // Task Priorities (higher number = higher priority)
 // タスク優先度（大きいほど高優先度）
 //
-// @design detailed_design.md §8 — Task list                           [--]
-// @design architecture.md §6 — Task design                            [--]
+// @design detailed_design.md §8 — Task list                           [OK]
+// @design architecture.md §6 — Task design                            [OK]
 // =============================================================================
 
 inline constexpr UBaseType_t PRIORITY_IMU       = 24;
@@ -98,7 +98,7 @@ inline constexpr UBaseType_t PRIORITY_LOG       = 5;
 // Task Stack Sizes [bytes]
 // タスクスタックサイズ [バイト]
 //
-// @design detailed_design.md §8 — RAM: 92KB total stacks              [--]
+// @design detailed_design.md §8 — RAM: 92KB total stacks              [OK]
 // =============================================================================
 
 inline constexpr uint32_t STACK_IMU       = 16384;
@@ -120,7 +120,7 @@ inline constexpr uint32_t STACK_LOG       = 4096;
 // Timing Constants
 // タイミング定数
 //
-// @design requirements.md §8 — Timing requirements                    [--]
+// @design requirements.md §8 — Timing requirements                    [OK]
 // =============================================================================
 
 inline constexpr float IMU_DT     = 0.0025f;   // 400Hz
@@ -133,7 +133,7 @@ inline constexpr float TOF_DT     = 0.033f;    // 30Hz
 // =============================================================================
 // Boot Calibration — 起動キャリブレーション
 //
-// @design detailed_design.md §3 — onEnter(IDLE): start calibration    [--]
+// @design detailed_design.md §3 — onEnter(IDLE): start calibration    [OK]
 // =============================================================================
 
 // Number of at-rest IMU samples averaged for the boot gyro/accel bias estimate.
@@ -205,7 +205,7 @@ inline constexpr int BUZZER_LEDC_TIMER   = 1;
 // Flight State Transition Constants
 // フライト状態遷移定数
 //
-// @design requirements.md §2 — ARMED_GROUND → TAKEOFF → FLYING        [--]
+// @design requirements.md §2 — ARMED_GROUND → TAKEOFF → FLYING        [OK]
 // =============================================================================
 
 // Normalized throttle (0=stick centre/idle .. 1=full up) above which an

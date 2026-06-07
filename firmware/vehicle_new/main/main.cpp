@@ -21,8 +21,8 @@
  * ハンドルは持たない — パイプラインタスクが自分のハンドルを登録する（R3）。
  *
  * @design hardware_init.md §4 — 起動シーケンス (Phase 0..4)           [OK]
- * @design architecture.md §4 — State machine: INIT → IDLE             [--]
- * @design detailed_design.md §3 — onEnter(IDLE): start calibration    [--]
+ * @design architecture.md §4 — State machine: INIT → IDLE             [OK]
+ * @design detailed_design.md §3 — onEnter(IDLE): start calibration    [OK]
  */
 
 #include "esp_log.h"

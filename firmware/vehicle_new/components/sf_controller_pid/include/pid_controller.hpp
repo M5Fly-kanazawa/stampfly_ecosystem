@@ -11,8 +11,8 @@
  * @brief Cascade PID controller — IController implementation
  *        カスケードPIDコントローラ — IController実装
  *
- * @design requirements.md §4 — Component #6: replaceable control      [--]
- * @design detailed_design.md §4 — IController                        [--]
+ * @design requirements.md §4 — Component #6: replaceable control      [OK]
+ * @design detailed_design.md §4 — IController                        [OK]
  */
 
 #pragma once

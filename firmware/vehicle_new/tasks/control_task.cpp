@@ -19,10 +19,10 @@
  * コマンドセットポイントを読み取り、アクティブなコントローラで
  * 制御出力を計算し、モーターdutyを発行する。
  *
- * @design architecture.md §5 — Main pipeline: Control + Actuation     [--]
- * @design architecture.md §6 — ControlTask: Control + Actuation       [--]
- * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [--]
- * @design coding_and_education.md §2 — 1 function 1 responsibility    [--]
+ * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
+ * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
+ * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [OK]
+ * @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
  */
 
 #include "freertos/FreeRTOS.h"
@@ -122,7 +122,7 @@ void ControlTask(void* pvParameters)
         // Wait for IMU task notification (400Hz sync)
         // IMUタスクからの通知を待つ（400Hz同期）
         //
-        // @design architecture.md §5 — IMU-synced control pipeline    [--]
+        // @design architecture.md §5 — IMU-synced control pipeline    [OK]
         // =====================================================================
 
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);

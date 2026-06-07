@@ -20,7 +20,7 @@
  * Matches vehicle/ firmware PID implementation (sf_algo_pid).
  * 旧ファーム（vehicle/）のPID実装と同じ離散化手法。
  *
- * @design detailed_design.md §4 — IController implementation          [--]
+ * @design detailed_design.md §4 — IController implementation          [OK]
  */
 
 #pragma once

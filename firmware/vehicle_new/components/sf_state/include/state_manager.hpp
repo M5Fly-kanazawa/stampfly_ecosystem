@@ -21,11 +21,11 @@
  * 遷移時にonExit/onEnterコールバックが発火し、
  * 全リセット処理を1箇所に集約する。
  *
- * @design requirements.md §4 — Component #3: State Management         [--]
- * @design architecture.md §2 — State Management: sole transition owner [--]
- * @design architecture.md §4 — onExit/onEnter callbacks               [--]
- * @design detailed_design.md §3 — State transition table              [--]
- * @design coding_and_education.md §2 — 1 function 1 responsibility    [--]
+ * @design requirements.md §4 — Component #3: State Management         [OK]
+ * @design architecture.md §2 — State Management: sole transition owner [OK]
+ * @design architecture.md §4 — onExit/onEnter callbacks               [OK]
+ * @design detailed_design.md §3 — State transition table              [OK]
+ * @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
  */
 
 #pragma once
@@ -68,7 +68,7 @@ public:
     /// Initialize the state manager (starts in INIT state)
     /// 状態管理を初期化する（INIT状態から開始）
     ///
-    /// @design detailed_design.md §3 — Initial state: INIT            [--]
+    /// @design detailed_design.md §3 — Initial state: INIT            [OK]
     void init();
 
     // =========================================================================
@@ -104,7 +104,7 @@ public:
     /// still in INIT. 初期化完了通知（INIT → IDLE_GROUND）。センサ＋推定器が立ち上がり
     /// 有効出力を出した後に StateTask が1回呼ぶ。INIT 以外では無操作。
     ///
-    /// @design requirements.md §2 — INIT → IDLE_GROUND on init complete [--]
+    /// @design requirements.md §2 — INIT → IDLE_GROUND on init complete [OK]
     void notifyInitComplete();
 
     /// Request ARM (IDLE_GROUND → ARMED_GROUND)
@@ -112,8 +112,8 @@ public:
     ///
     /// @return true if transition succeeded
     ///
-    /// @design requirements.md §2 — ARM from GROUND only              [--]
-    /// @design requirements.md §9 — USB power: ARM prohibited         [--]
+    /// @design requirements.md §2 — ARM from GROUND only              [OK]
+    /// @design requirements.md §9 — USB power: ARM prohibited         [OK]
     bool requestArm();
 
     /// Request DISARM (ARMED_GROUND → IDLE_GROUND)
@@ -141,13 +141,13 @@ public:
     /// Notify soft landing (FLYING → ARMED_GROUND)
     /// ソフトランディング通知（FLYING → ARMED_GROUND）
     ///
-    /// @design requirements.md §2 — Soft landing / touch-and-go       [--]
+    /// @design requirements.md §2 — Soft landing / touch-and-go       [OK]
     void notifySoftLanding();
 
     /// Notify idle ground/held transition based on ToF
     /// ToFに基づくIDLE地上/手持ち遷移通知
     ///
-    /// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF    [--]
+    /// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF    [OK]
     void notifyIdleGroundHeld(bool is_held);
 
     /// Request flight mode change within FLYING
@@ -159,8 +159,8 @@ public:
     /// Handle system alert from failsafe
     /// フェイルセーフからのシステムアラートを処理する
     ///
-    /// @design architecture.md §4 — FAILSAFE as event                 [--]
-    /// @design requirements.md §9 — Safety requirements               [--]
+    /// @design architecture.md §4 — FAILSAFE as event                 [OK]
+    /// @design requirements.md §9 — Safety requirements               [OK]
     void handleAlert(const SystemAlert& alert);
 
     /// Periodic update for TIME-DEFERRED transitions (call once per StateTask cycle).
@@ -177,8 +177,8 @@ public:
     /// エッジで1回だけ発報するので、経過判定にはアラートでなく独立した周期ティックが要る。
     ///
     /// @param now_us  current time [us] (esp_timer_get_time) supplied by the caller
-    /// @design requirements.md §9 — comm loss: hover 3 s → LANDING     [--]
-    /// @design architecture.md §4 — FAILSAFE as event                 [--]
+    /// @design requirements.md §9 — comm loss: hover 3 s → LANDING     [OK]
+    /// @design architecture.md §4 — FAILSAFE as event                 [OK]
     void update(uint32_t now_us);
 
     /// Force transition to IDLE_GROUND (emergency use only)

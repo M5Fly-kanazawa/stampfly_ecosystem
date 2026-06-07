@@ -78,7 +78,7 @@ struct ParamEntry {
 // Public API
 // 公開API
 //
-// @design detailed_design.md §6 — Parameter access API                [--]
+// @design detailed_design.md §6 — Parameter access API                [OK]
 // =============================================================================
 
 /// Initialize parameter system — load from NVS or use defaults

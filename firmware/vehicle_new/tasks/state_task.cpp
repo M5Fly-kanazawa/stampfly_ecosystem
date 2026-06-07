@@ -17,9 +17,9 @@
  * イベント（アラート、コマンド）を待ち、StateManagerに委譲する。
  * フライト状態を変更する唯一のタスク。
  *
- * @design architecture.md §6 — StateTask: event-driven, priority 22   [--]
- * @design architecture.md §2 — State Management: sole transition owner [--]
- * @design detailed_design.md §8 — StateTask                          [--]
+ * @design architecture.md §6 — StateTask: event-driven, priority 22   [OK]
+ * @design architecture.md §2 — State Management: sole transition owner [OK]
+ * @design detailed_design.md §8 — StateTask                          [OK]
  */
 
 #include "freertos/FreeRTOS.h"
@@ -201,7 +201,7 @@ void StateTask(void* pvParameters)
     // Transition from INIT → IDLE_GROUND
     // INIT → IDLE_GROUNDへ遷移
     //
-    // @design requirements.md §2 — INIT → IDLE_GROUND on init complete [--]
+    // @design requirements.md §2 — INIT → IDLE_GROUND on init complete [OK]
     g_state_manager.init();
 
     // Register the transition callbacks that consolidate all reset processing
@@ -225,7 +225,7 @@ void StateTask(void* pvParameters)
         // （コントローラは 50Hz 送信）。アラートはイベント駆動のまま、周期ティックで ARM/
         // モードのエッジ検出を行う（各パケットがコンポーネント跨ぎで通知しなくて済む）。
         //
-        // @design detailed_design.md §8 — StateTask: event-driven + 50 Hz RC poll [--]
+        // @design detailed_design.md §8 — StateTask: event-driven + 50 Hz RC poll [OK]
         // =====================================================================
 
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
@@ -250,7 +250,7 @@ void StateTask(void* pvParameters)
         // として報告し、判断は StateManager が行う（ARM を IDLE_GROUND に限定し、モード
         // 遷移を内部で検証）。
         //
-        // @design architecture.md §2 — detection reports, state management decides [--]
+        // @design architecture.md §2 — detection reports, state management decides [OK]
         // =====================================================================
 
         sf::PilotRequest req = sf::pilot_request.latest();
@@ -365,7 +365,7 @@ void StateTask(void* pvParameters)
         // Process system alerts from failsafe
         // フェイルセーフからのシステムアラートを処理
         //
-        // @design architecture.md §4 — FAILSAFE as event              [--]
+        // @design architecture.md §4 — FAILSAFE as event              [OK]
         // =====================================================================
 
         sf::SystemAlert alert;

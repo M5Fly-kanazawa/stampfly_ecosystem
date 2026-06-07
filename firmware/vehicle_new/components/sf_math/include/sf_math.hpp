@@ -14,7 +14,7 @@
  * Header-only. Designed for ESKF and control algorithms on ESP32.
  * ヘッダーのみ。ESP32上のESKFおよび制御アルゴリズム向け設計。
  *
- * @design detailed_design.md §7 — sf_math                            [--]
+ * @design architecture.md §2 — sf_math (Math library)               [OK]
  */
 
 #pragma once

@@ -19,8 +19,8 @@
  *   ALT_HOLD:  setpoint → Alt PID → Vel PID → thrust correction
  *   POS_HOLD:  setpoint → Pos PID → Vel PID → angle correction
  *
- * @design requirements.md §4 — Component #6: replaceable control      [--]
- * @design detailed_design.md §4 — IController                        [--]
+ * @design requirements.md §4 — Component #6: replaceable control      [OK]
+ * @design detailed_design.md §4 — IController                        [OK]
  */
 
 #include "pid_controller.hpp"

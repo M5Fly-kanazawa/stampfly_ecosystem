@@ -11,8 +11,8 @@
  * @brief Notification manager implementation
  *        通知マネージャー実装
  *
- * @design architecture.md §8 — Notification subsystem                  [--]
- * @design detailed_design.md §10 — LED pattern table                   [--]
+ * @design architecture.md §2 — Notification (responsibility #14)       [OK]
+ * @design architecture.md §5 — Notify data flow (LED/buzzer)           [OK]
  */
 
 #include "notify.hpp"
@@ -28,7 +28,7 @@ namespace sf {
 // LED pattern table — one entry per FlightState
 // LEDパターンテーブル — FlightState毎に1エントリ
 //
-// @design detailed_design.md §10 — LED pattern definitions              [--]
+// @design architecture.md §5 — Notify data flow (LED pattern per state) [OK]
 // =============================================================================
 
 static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {

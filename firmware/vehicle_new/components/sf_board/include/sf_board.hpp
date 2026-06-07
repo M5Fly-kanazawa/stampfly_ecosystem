@@ -19,9 +19,9 @@
  * vehicle_new. Each HAL component borrows bus handles via sf_board
  * getters, ensuring no extern global state is required.
  *
- * @design architecture.md §7 — ハードウェア初期化と所有権        [--]
- * @design hardware_init.md §3 — sf_board の責務                [--]
- * @design hardware_init.md §4 — 起動シーケンス                  [--]
+ * @design architecture.md §7 — ハードウェア初期化と所有権        [OK]
+ * @design hardware_init.md §3 — sf_board の責務                [OK]
+ * @design hardware_init.md §4 — 起動シーケンス                  [OK]
  *
  * Cross-cutting rules / 横断ルール:
  *   R1: sf_board が共有 HW 資源の唯一の所有者である

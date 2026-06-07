@@ -17,8 +17,8 @@
  * 数学的基礎から実装。状態ベクトル:
  *   [位置(3), 速度(3), 姿勢誤差(3), ジャイロバイアス(3), 加速度バイアス(3)] = 15状態
  *
- * @design requirements.md §4 — Component #2: state estimation         [--]
- * @design architecture.md §3 — Sensor observation switch              [--]
+ * @design requirements.md §4 — Component #2: state estimation         [OK]
+ * @design detailed_design.md §5 — Sensor observation switch           [OK]
  */
 
 #pragma once

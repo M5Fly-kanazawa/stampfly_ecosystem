@@ -32,9 +32,9 @@
  *   - These need StateManager idempotency work (workshop_migration.md §4-2)
  *     and are handled in the same milestone.
  *
- * @design architecture.md §2.5 — 学習者の入口 (4 階層アクセス)         [--]
- * @design coding_and_education.md §2 — Namespace 規約                 [--]
- * @design topic_reference.md §4 — Usage patterns                      [--]
+ * @design architecture.md §2.5 — 学習者の入口 (4 階層アクセス)         [OK]
+ * @design coding_and_education.md §2 — Namespace 規約                 [OK]
+ * @design topic_reference.md §4 — Usage patterns                      [OK]
  *
  * Cross-cutting rules / 横断ルール:
  *   R8: namespace は sf::api (L1 専用)。sf::internal::* には依存しない

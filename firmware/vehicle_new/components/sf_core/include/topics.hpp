@@ -14,9 +14,9 @@
  * Adding a new topic requires only one line here.
  * トピック追加はここに1行追加するだけ。
  *
- * @design architecture.md §3 — Topic list                            [--]
- * @design detailed_design.md §2 — Topic definitions                   [--]
- * @design detailed_design.md §2 — R13/R14 annotation & overflow_count [--]
+ * @design architecture.md §3 — Topic list                            [OK]
+ * @design detailed_design.md §2 — Topic definitions                   [OK]
+ * @design detailed_design.md §2 — R13/R14 annotation & overflow_count [OK]
  */
 
 #pragma once
