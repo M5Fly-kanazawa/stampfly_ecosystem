@@ -240,24 +240,43 @@ section{position:relative}
 .spec-table td{padding:14px 6px;border-bottom:1px solid var(--panel-border);font-size:.96rem}
 .spec-table td:first-child{color:var(--muted);width:42%}
 .spec-table td:last-child{font-weight:600}
-/* light diagram on transparent bg → show on a light card so it's readable / 明るい図は白カード上に */
-.arch-img{width:100%;border-radius:var(--radius);border:1px solid var(--panel-border);
-  background:#f4f6fb;padding:18px;display:block}
+/* Flashy CSS layered architecture diagram / 派手なCSS階層アーキ図 */
+.arch{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+.arch-flow{display:flex;justify-content:space-between;gap:12px;font-size:.8rem;color:var(--muted);
+  letter-spacing:.03em;padding:0 6px;margin-bottom:2px}
+.arch-flow b{color:#cdd6ea;font-weight:600}
+.arch-layer{position:relative;display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+  padding:18px 22px 18px 28px;border-radius:16px;border:1px solid var(--panel-border);
+  background:linear-gradient(90deg,var(--lcbg),rgba(18,24,40,.55) 62%);
+  backdrop-filter:blur(8px);overflow:hidden;transition:transform .2s}
+.arch-layer:hover{transform:translateX(5px)}
+.arch-layer::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--lc);box-shadow:0 0 16px var(--lc),0 0 5px var(--lc)}
+.lyr{min-width:150px;display:flex;flex-direction:column;gap:3px}
+.lyr-name{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.06rem;color:var(--lc)}
+.lyr-ns{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.76rem;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.chip2{font-size:.82rem;padding:6px 12px;border-radius:9px;border:1px solid var(--panel-border);
+  background:rgba(8,11,20,.6);color:#dbe2f0;white-space:nowrap;
+  transition:border-color .2s,box-shadow .2s,color .2s,transform .2s}
+.chip2:hover{color:#fff;border-color:var(--lc);box-shadow:0 0 16px var(--lc);transform:translateY(-2px)}
+.al-app{--lc:#fbbf24;--lcbg:rgba(251,191,36,.10)}
+.al-algo{--lc:#a855f7;--lcbg:rgba(168,85,247,.13)}
+.al-svc{--lc:#22d3ee;--lcbg:rgba(34,211,238,.13)}
+.al-hal{--lc:#34d399;--lcbg:rgba(52,211,153,.12)}
+.al-hw{--lc:#7c8cff;--lcbg:rgba(124,140,255,.10)}
+.al-hw .lyr-name{font-size:.96rem}
+.spec-wrap{max-width:840px;margin:42px auto 0}
+@media(max-width:620px){.lyr{min-width:100%}.arch-flow{font-size:.72rem}}
 @media(max-width:880px){.specs-grid{grid-template-columns:1fr}}
 
 /* Workshop lessons / ワークショップ */
 .lessons{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.lesson{display:block;color:inherit;padding:18px 18px 40px;border-radius:14px;border:1px solid var(--panel-border);
-  background:var(--panel);backdrop-filter:blur(8px);position:relative;cursor:pointer;
-  transition:transform .2s,border-color .2s,box-shadow .2s}
-.lesson:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.5);box-shadow:var(--shadow)}
+.lesson{padding:18px;border-radius:14px;border:1px solid var(--panel-border);background:var(--panel);
+  backdrop-filter:blur(8px)}
 .lesson .ln{font-family:"Space Grotesk",sans-serif;color:var(--violet);font-weight:700;font-size:.8rem;letter-spacing:.08em}
 .lesson h3{font-size:.98rem;margin:6px 0 4px}
 .lesson p{color:var(--muted);font-size:.82rem;margin:0}
-.lesson .slide-link{position:absolute;left:18px;bottom:14px;font-size:.76rem;font-weight:600;color:var(--cyan);
-  display:inline-flex;align-items:center;gap:5px}
-.lesson .slide-link::after{content:"▸";transition:transform .2s}
-.lesson:hover .slide-link::after{transform:translateX(3px)}
 @media(max-width:900px){.lessons{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.lessons{grid-template-columns:1fr}}
 
@@ -401,12 +420,12 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <div class="section-head reveal">
       <span class="eyebrow">In Action</span>
       <h2 class="section-title"><span class="grad-text">シミュレータ</span>で飛ばす</h2>
-      <p class="section-lead">実機がなくても大丈夫。物理シミュレータ上で同じファームウェアを走らせ、制御アルゴリズムを安全に検証できます。</p>
+      <p class="section-lead">実機がなくても大丈夫。まずは軽量な VPython で操縦を練習し、物理シミュレータ上で同じ制御コードを安全に検証できます。</p>
     </div>
     <div class="demo-grid">
       <div class="demo-card reveal">
-        <video src="assets/demo_basic.mp4" autoplay muted loop playsinline></video>
-        <div class="cap"><h3>基本飛行</h3><p>SIL上での離陸・ホバリング。実機と同一の制御コードが動作。</p></div>
+        <video src="assets/stampfly_sim.mp4" autoplay muted loop playsinline></video>
+        <div class="cap"><h3>操縦訓練（VPython）</h3><p>実機なしでコントローラ操縦を体験。軽量な3Dシミュレータで飛ばし方を練習できます。</p></div>
       </div>
       <div class="demo-card reveal d1">
         <video src="assets/demo_estimator.mp4" autoplay muted loop playsinline></video>
@@ -456,12 +475,42 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
   </div>
 </section>
 
-<!-- ===================== Specs + architecture / 仕様＋構成 ===================== -->
+<!-- ===================== Architecture + specs / アーキテクチャ＋仕様 ===================== -->
 <section class="block" id="specs">
-  <div class="wrap specs-grid">
-    <div class="reveal">
-      <span class="eyebrow">Specifications</span>
-      <h2 class="section-title">技術仕様</h2>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Architecture</span>
+      <h2 class="section-title">責務分離 × <span class="grad-text">Pub-Sub</span> のファーム構成</h2>
+      <p class="section-lead">センサからモータまで各層が責務を分離し、コンポーネント同士は Pub-Sub トピック経由で疎結合。400 Hz のリアルタイム制御ループを支えます。</p>
+    </div>
+
+    <!-- Layered architecture (sensors flow up, commands flow down) / 階層図 -->
+    <div class="arch reveal d1">
+      <div class="arch-flow"><span><b>▲</b> センサデータ（下から上へ）</span><span>制御コマンド（上から下へ）<b>▼</b></span></div>
+      <div class="arch-layer al-app">
+        <div class="lyr"><span class="lyr-name">Application</span><span class="lyr-ns">main/</span></div>
+        <div class="chips"><span class="chip2">Control Task</span><span class="chip2">State Machine</span><span class="chip2">Config (SSOT)</span><span class="chip2">Landing Handler</span></div>
+      </div>
+      <div class="arch-layer al-algo">
+        <div class="lyr"><span class="lyr-name">Algorithm</span><span class="lyr-ns">sf_algo_*</span></div>
+        <div class="chips"><span class="chip2">ESKF</span><span class="chip2">Sensor Fusion</span><span class="chip2">PID</span><span class="chip2">Control Alloc</span><span class="chip2">Filter</span><span class="chip2">Math</span></div>
+      </div>
+      <div class="arch-layer al-svc">
+        <div class="lyr"><span class="lyr-name">Service</span><span class="lyr-ns">sf_svc_*</span></div>
+        <div class="chips"><span class="chip2">State</span><span class="chip2">Comm</span><span class="chip2">Telemetry</span><span class="chip2">Logger</span><span class="chip2">Console</span><span class="chip2">Control Arbiter</span></div>
+      </div>
+      <div class="arch-layer al-hal">
+        <div class="lyr"><span class="lyr-name">HAL</span><span class="lyr-ns">sf_hal_*</span></div>
+        <div class="chips"><span class="chip2">BMI270</span><span class="chip2">BMP280</span><span class="chip2">BMM150</span><span class="chip2">VL53L3CX</span><span class="chip2">PMW3901</span><span class="chip2">Motor</span><span class="chip2">LED</span></div>
+      </div>
+      <div class="arch-layer al-hw">
+        <div class="lyr"><span class="lyr-name">Hardware</span><span class="lyr-ns">ESP32-S3</span></div>
+        <div class="chips"><span class="chip2">IMU</span><span class="chip2">気圧</span><span class="chip2">地磁気</span><span class="chip2">ToF</span><span class="chip2">オプティカルフロー</span><span class="chip2">Motor ×4</span><span class="chip2">RGB LED</span></div>
+      </div>
+    </div>
+
+    <!-- Technical specs / 技術仕様 -->
+    <div class="spec-wrap reveal d2">
       <table class="spec-table">
         <tr><td>MCU</td><td>ESP32-S3（M5Stamp S3）</td></tr>
         <tr><td>フレームワーク</td><td>ESP-IDF v5.5.2 + FreeRTOS</td></tr>
@@ -470,9 +519,6 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
         <tr><td>センサー</td><td>BMI270 / BMM150 / BMP280 / VL53L3CX / PMW3901</td></tr>
         <tr><td>制御周期</td><td>400 Hz リアルタイムループ</td></tr>
       </table>
-    </div>
-    <div class="reveal d1">
-      <img class="arch-img" src="assets/architecture.png" alt="ファームウェア・アーキテクチャ" loading="lazy" />
     </div>
   </div>
 </section>
@@ -483,17 +529,17 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <div class="section-head reveal">
       <span class="eyebrow">Learn step by step</span>
       <h2 class="section-title"><span class="grad-text">ワークショップ</span>で学ぶ</h2>
-      <p class="section-lead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。<strong>各レッスンをクリックすると対応するスライドが開きます。</strong></p>
+      <p class="section-lead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。</p>
     </div>
     <div class="lessons">
-      <a class="lesson reveal" href="assets/slides/lesson1.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 1</div><h3>環境構築</h3><p>ESP-IDF セットアップ、ビルド＆書き込み</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d1" href="assets/slides/lesson2.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 2</div><h3>コントローラ入力</h3><p>ESP-NOW 通信、スティック値の読み取り</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d2" href="assets/slides/lesson3.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 3</div><h3>LED 制御</h3><p>システム状態の可視化</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d3" href="assets/slides/lesson4.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 4</div><h3>IMU センサー</h3><p>加速度・ジャイロデータの取得と理解</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal" href="assets/slides/lesson5.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 5</div><h3>モータ制御</h3><p>PWM によるモータ個別制御</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d1" href="assets/slides/lesson6.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 6</div><h3>姿勢推定</h3><p>相補フィルタによる姿勢角の算出</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d2" href="assets/slides/lesson7.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 7</div><h3>レート P 制御</h3><p>角速度フィードバックによる安定化</p><span class="slide-link">スライドを開く</span></a>
-      <a class="lesson reveal d3" href="assets/slides/lesson8.pdf" target="_blank" rel="noopener"><div class="ln">LESSON 8</div><h3>PID 制御</h3><p>姿勢角の PID 制御と飛行</p><span class="slide-link">スライドを開く</span></a>
+      <div class="lesson reveal"><div class="ln">LESSON 1</div><h3>環境構築</h3><p>ESP-IDF セットアップ、ビルド＆書き込み</p></div>
+      <div class="lesson reveal d1"><div class="ln">LESSON 2</div><h3>コントローラ入力</h3><p>ESP-NOW 通信、スティック値の読み取り</p></div>
+      <div class="lesson reveal d2"><div class="ln">LESSON 3</div><h3>LED 制御</h3><p>システム状態の可視化</p></div>
+      <div class="lesson reveal d3"><div class="ln">LESSON 4</div><h3>IMU センサー</h3><p>加速度・ジャイロデータの取得と理解</p></div>
+      <div class="lesson reveal"><div class="ln">LESSON 5</div><h3>モータ制御</h3><p>PWM によるモータ個別制御</p></div>
+      <div class="lesson reveal d1"><div class="ln">LESSON 6</div><h3>姿勢推定</h3><p>相補フィルタによる姿勢角の算出</p></div>
+      <div class="lesson reveal d2"><div class="ln">LESSON 7</div><h3>レート P 制御</h3><p>角速度フィードバックによる安定化</p></div>
+      <div class="lesson reveal d3"><div class="ln">LESSON 8</div><h3>PID 制御</h3><p>姿勢角の PID 制御と飛行</p></div>
     </div>
     <div class="reveal" style="text-align:center;margin-top:28px">
       <a class="btn btn-ghost" href="assets/workshop_slides.pdf" target="_blank" rel="noopener">📑 ワークショップスライド全156ページを開く</a>
