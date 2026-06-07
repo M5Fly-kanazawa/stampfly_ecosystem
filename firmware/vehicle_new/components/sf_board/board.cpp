@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_wifi_default.h"  // esp_netif_create_default_wifi_sta() (board owns STA netif, R1)
 #include "driver/i2c_master.h"
 #include "driver/spi_master.h"
 #include "driver/ledc.h"
@@ -126,6 +127,7 @@ constexpr int kStatusLedCount = 1;
 // しつつ extern グローバルを避ける。
 
 i2c_master_bus_handle_t g_i2c_bus = nullptr;
+esp_netif_t*            g_sta_netif = nullptr;  // default WiFi STA netif (R1: board-owned)
 bool                    g_initialized = false;
 
 // Optional-sensor presence flags, indexed by SensorId. Written once per sensor
@@ -180,23 +182,39 @@ esp_err_t init_event_loop()
 // ステップ: TCP/IP スタック
 // ---------------------------------------------------------------------------
 //
-// esp_netif_init() initialises the lwIP TCP/IP stack. WiFi (sf_comm) and
-// UDP socket creation (sf_telemetry) both need this to be up before they
-// run. Idempotent semantics: ESP_ERR_INVALID_STATE on re-call is benign.
+// esp_netif_init() initialises the lwIP TCP/IP stack, then we create the default
+// WiFi STA netif here so that sf_board is its single owner (R1). Previously sf_comm
+// called esp_netif_create_default_wifi_sta() itself — exactly the ownership-scatter
+// anti-pattern this BSP was introduced to remove (hardware_init.md §3/§4). sf_comm now
+// borrows the handle via sta_netif() and only does esp_wifi_init/start (which bind to
+// this default STA netif). Creating it needs the default event loop (L0 step 1, already
+// up) and esp_netif_init (above); it does NOT need esp_wifi_init, so doing it here in
+// Phase 1 is correct. Idempotent: ESP_ERR_INVALID_STATE from esp_netif_init on re-call
+// is benign.
 //
-// esp_netif_init() は lwIP TCP/IP スタックを初期化する。WiFi (sf_comm) と
-// UDP ソケット生成 (sf_telemetry) の両方がこの上に乗る。再呼び出しは
-// ESP_ERR_INVALID_STATE が返るが副作用なし (idempotent)。
+// esp_netif_init() で lwIP TCP/IP スタックを初期化し、続けてデフォルト WiFi STA netif を
+// ここで生成して sf_board を唯一の所有者にする (R1)。以前は sf_comm が自前で
+// esp_netif_create_default_wifi_sta() を呼んでいた — まさにこの BSP が排除するために
+// 導入された「所有分散アンチパターン」(hardware_init.md §3/§4)。sf_comm は sta_netif() で
+// handle を借用し esp_wifi_init/start のみ行う (このデフォルト STA netif に bind される)。
+// 生成にはデフォルト event loop (L0 step1・起動済) と esp_netif_init (上) が要るが
+// esp_wifi_init は不要なので、Phase 1 のここで行うのが正しい。
 esp_err_t init_netif()
 {
     esp_err_t err = esp_netif_init();
-    if (err == ESP_ERR_INVALID_STATE) {
-        // Already initialised (legacy code path). Safe to ignore.
-        // 既に初期化済み (旧コード経路)。無視して問題なし。
-        ESP_LOGI(TAG, "TCP/IP stack already initialized");
-        return ESP_OK;
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        return err;  // real failure / 真の失敗
     }
-    return err;
+    if (err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "TCP/IP stack already initialized");  // legacy path, benign
+    }
+
+    g_sta_netif = esp_netif_create_default_wifi_sta();
+    if (g_sta_netif == nullptr) {
+        ESP_LOGE(TAG, "Failed to create default WiFi STA netif");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +436,11 @@ esp_err_t init()
 i2c_master_bus_handle_t i2c_bus()
 {
     return g_i2c_bus;
+}
+
+esp_netif_t* sta_netif()
+{
+    return g_sta_netif;
 }
 
 spi_host_device_t imu_spi()

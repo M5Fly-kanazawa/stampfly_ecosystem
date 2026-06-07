@@ -6,6 +6,7 @@ idf_component_register(
         driver
         esp_event
         esp_netif
+        esp_wifi
         nvs_flash
         sf_core
         sf_hal_led

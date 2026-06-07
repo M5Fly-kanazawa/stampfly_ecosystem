@@ -36,6 +36,7 @@
 
 #include "comm.hpp"
 #include "data_types.hpp"
+#include "sf_board.hpp"  // borrow the BSP-owned default STA netif (R1)
 
 #include <cstring>
 
@@ -190,11 +191,11 @@ static uint8_t checksum8(const uint8_t* data, size_t len)
 //   - TCP/IP スタック:      sf::internal::board::init() の Phase 1 L0
 //
 // What this function does (in order) / 本関数の実行内容 (順序):
-//   1. STA netif の生成 (esp_netif_create_default_wifi_sta)
+//   1. STA netif を BSP から借用し hostname を設定 (生成は board が実施)
 //   2. esp_wifi_init / set storage / set mode(STA) / set channel / start
 //   3. esp_now_init + register recv cb
 //
-// @design hardware_init.md §3 — sf_board が共有 HW 資源を所有 (R1)  [--]
+// @design hardware_init.md §3 — sf_board が共有 HW 資源を所有 (R1: netif は board 生成・comm 借用)  [OK]
 // -----------------------------------------------------------------------------
 void Comm::init()
 {
@@ -359,9 +360,15 @@ void Comm::initWifi()
     // v3 設計ルール R1 に従い、本 Comm コンポーネントはそれらの呼び出し
     // を二重化しない。BSP が先に立ち上げている前提で動く。
 
-    // Create the default STA netif. Must be created before esp_wifi_init().
-    // デフォルト STA netif を生成する。esp_wifi_init() より前に必要。
-    esp_netif_t* sta_netif = esp_netif_create_default_wifi_sta();
+    // Borrow the default STA netif from the BSP (R1: sf_board owns esp_netif and
+    // created it in board::init()). We only set the application-level hostname here;
+    // we do NOT create the netif — that was the old ownership-scatter anti-pattern
+    // (hardware_init.md §3/§4). esp_wifi_init/start below bind to this default STA netif.
+    // BSP からデフォルト STA netif を借用する (R1: sf_board が esp_netif を所有し
+    // board::init() で生成済み)。ここではアプリ層の hostname のみ設定し、netif は生成しない
+    // — それが旧来の所有分散アンチパターン (hardware_init.md §3/§4)。下の esp_wifi_init/start
+    // はこのデフォルト STA netif に bind される。
+    esp_netif_t* sta_netif = sf::internal::board::sta_netif();
     if (sta_netif != nullptr) {
         esp_netif_set_hostname(sta_netif, kHostname);
     }
