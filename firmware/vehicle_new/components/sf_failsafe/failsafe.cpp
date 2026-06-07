@@ -12,7 +12,7 @@
  *        フェイルセーフモニター実装
  *
  * @design architecture.md §4 — Failsafe subsystem (wired in PowerTask) [OK]
- * @design requirements.md §9 — Safety requirements                     [--]
+ * @design requirements.md §9 — Safety requirements                     [OK]
  */
 
 #include "failsafe.hpp"
@@ -82,10 +82,24 @@ void Failsafe::checkImpact()
 
     float mag_g = mag / G;
 
-    if (mag_g > config_.impact_accel_g && !impact_detected_) {
-        impact_detected_ = true;
-        raiseAlert(AlertType::IMPACT, AlertSeverity::EMERGENCY);
-        ESP_LOGW(TAG, "Impact detected: %.1fG", mag_g);
+    // requirements §9: impact = threshold G "× 連続2回" → auto DISARM. Require
+    // consecutive_count over-threshold cycles before raising, so a single noisy
+    // sample does not trip the failsafe; latch once raised. NOTE: update() runs at
+    // the PowerTask rate (10 Hz), so "2 consecutive" is ~200 ms sustained — this
+    // debounces noise but a very brief impact spike may be missed; revisit the
+    // failsafe rate if sharper impact sensitivity is needed.
+    // 要件§9: 衝撃 = 閾値G「× 連続2回」→ 自動DISARM。発報前に連続 consecutive_count 回の
+    // 閾値超を要求し、単発ノイズで誤発報しない。発報後は latch。注: update() は PowerTask
+    // レート(10Hz)で走るため「連続2回」は約200ms継続 — ノイズは除けるが極短の衝撃スパイクは
+    // 取りこぼし得る。鋭敏化が必要なら failsafe レートの見直しを。
+    if (mag_g > config_.impact_accel_g) {
+        if (++impact_count_ >= config_.consecutive_count && !impact_detected_) {
+            impact_detected_ = true;
+            raiseAlert(AlertType::IMPACT, AlertSeverity::EMERGENCY);
+            ESP_LOGW(TAG, "Impact detected: %.1fG (x%u)", mag_g, impact_count_);
+        }
+    } else {
+        impact_count_ = 0;  // below threshold → reset the consecutive counter
     }
 }
 
@@ -170,13 +184,27 @@ void Failsafe::checkGyroAnomaly()
     // 閾値比較のためrad/sをdeg/sに変換
     static constexpr float RAD2DEG = 57.2957795f;
 
+    // requirements §9: abnormal angular rate = threshold deg/s "× 連続2回" → auto
+    // DISARM. An uncontrolled tumble sustains a high rate, so the consecutive-count
+    // debounce rejects single-sample spikes while still catching a real anomaly.
+    // 要件§9: 異常角速度 = 閾値deg/s「× 連続2回」→ 自動DISARM。制御不能のタンブルは高い
+    // レートが継続するため、連続回数デバウンスで単発スパイクを除きつつ実異常を検出する。
+    float max_dps = 0.0f;
+    int max_axis = 0;
     for (int i = 0; i < 3; ++i) {
         float dps = std::fabs(imu.gyro[i]) * RAD2DEG;
-        if (dps > config_.gyro_anomaly_dps) {
+        if (dps > max_dps) { max_dps = dps; max_axis = i; }
+    }
+
+    if (max_dps > config_.gyro_anomaly_dps) {
+        if (++gyro_count_ >= config_.consecutive_count) {
             raiseAlert(AlertType::GYRO_ANOMALY, AlertSeverity::CRITICAL);
-            ESP_LOGW(TAG, "Gyro anomaly: axis=%d, %.0f deg/s", i, dps);
-            return;
+            ESP_LOGW(TAG, "Gyro anomaly: axis=%d, %.0f deg/s (x%u)",
+                     max_axis, max_dps, gyro_count_);
+            gyro_count_ = 0;  // re-arm so a sustained anomaly re-raises periodically
         }
+    } else {
+        gyro_count_ = 0;  // below threshold → reset the consecutive counter
     }
 }
 

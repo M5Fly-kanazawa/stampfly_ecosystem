@@ -23,7 +23,7 @@
  *
  * @design architecture.md §6 — PowerTask: Sensing(Power) + Failsafe  [OK]
  * @design detailed_design.md §8 — PowerTask: 10Hz, priority 12       [OK]
- * @design requirements.md §9 — LiPo ≤3.4V warning, USB ≤3.3V ARM ban [--]
+ * @design requirements.md §9 — LiPo ≤3.4V warning, USB ≤3.3V ARM ban [OK]
  * @design hardware_init.md §5 — Power monitor = Optional             [OK]
  */
 

@@ -18,7 +18,7 @@
  * system_alertトピックへSystemAlertを発行する。
  *
  * @design architecture.md §4 — Failsafe subsystem (wired in PowerTask) [OK]
- * @design requirements.md §9 — Safety requirements                     [--]
+ * @design requirements.md §9 — Safety requirements                     [OK]
  * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
@@ -29,14 +29,15 @@
 
 namespace sf {
 
-/// Failsafe configuration thresholds
-/// フェイルセーフ設定閾値
+/// Failsafe configuration thresholds (requirements §9)
+/// フェイルセーフ設定閾値（要件§9）
 struct FailsafeConfig {
-    float impact_accel_g     = 4.0f;     // Impact threshold [G]     / 衝撃閾値
-    float low_battery_v      = 3.3f;     // Low battery [V]          / 低電圧閾値
-    float critical_battery_v = 3.0f;     // Critical battery [V]     / 危険電圧閾値
-    uint32_t comm_timeout_ms = 500;      // Comm timeout [ms]        / 通信タイムアウト
-    float gyro_anomaly_dps   = 1000.0f;  // Gyro anomaly [deg/s]     / ジャイロ異常閾値
+    float impact_accel_g     = 3.0f;     // Impact threshold [G] (§9)     / 衝撃閾値
+    float low_battery_v      = 3.4f;     // LiPo low-voltage warning [V] (§9) / 低電圧警告
+    float critical_battery_v = 3.0f;     // Critical battery [V] — emergency land (extra safety net below §9 warning) / 危険電圧（§9警告の下の追加安全網）
+    uint32_t comm_timeout_ms = 500;      // Comm timeout [ms] (§9)        / 通信タイムアウト
+    float gyro_anomaly_dps   = 800.0f;   // Gyro anomaly [deg/s] (§9)     / ジャイロ異常閾値
+    uint8_t consecutive_count = 2;       // §9 "× 連続2回" debounce for impact/gyro / 連続検出回数
 };
 
 /// Failsafe monitor: detect unsafe conditions and raise alerts
@@ -80,6 +81,8 @@ private:
     bool comm_lost_        = false;   // Comm lost flag / 通信途絶フラグ
     bool low_battery_      = false;   // Low battery flag / 低電圧フラグ
     bool impact_detected_  = false;   // Impact flag / 衝撃検出フラグ
+    uint8_t impact_count_  = 0;       // consecutive over-threshold impact cycles / 連続衝撃回数
+    uint8_t gyro_count_    = 0;       // consecutive over-threshold gyro cycles / 連続ジャイロ異常回数
 };
 
 }  // namespace sf
