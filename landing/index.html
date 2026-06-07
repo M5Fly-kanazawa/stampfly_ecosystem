@@ -247,11 +247,17 @@ section{position:relative}
 
 /* Workshop lessons / ワークショップ */
 .lessons{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.lesson{padding:18px;border-radius:14px;border:1px solid var(--panel-border);background:var(--panel);
-  backdrop-filter:blur(8px)}
+.lesson{display:block;color:inherit;padding:18px 18px 40px;border-radius:14px;border:1px solid var(--panel-border);
+  background:var(--panel);backdrop-filter:blur(8px);position:relative;cursor:pointer;
+  transition:transform .2s,border-color .2s,box-shadow .2s}
+.lesson:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.5);box-shadow:var(--shadow)}
 .lesson .ln{font-family:"Space Grotesk",sans-serif;color:var(--violet);font-weight:700;font-size:.8rem;letter-spacing:.08em}
 .lesson h3{font-size:.98rem;margin:6px 0 4px}
 .lesson p{color:var(--muted);font-size:.82rem;margin:0}
+.lesson .slide-link{position:absolute;left:18px;bottom:14px;font-size:.76rem;font-weight:600;color:var(--cyan);
+  display:inline-flex;align-items:center;gap:5px}
+.lesson .slide-link::after{content:"▸";transition:transform .2s}
+.lesson:hover .slide-link::after{transform:translateX(3px)}
 @media(max-width:900px){.lessons{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.lessons{grid-template-columns:1fr}}
 
@@ -477,17 +483,20 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <div class="section-head reveal">
       <span class="eyebrow">Learn step by step</span>
       <h2 class="section-title"><span class="grad-text">ワークショップ</span>で学ぶ</h2>
-      <p class="section-lead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。</p>
+      <p class="section-lead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。<strong>各レッスンをクリックすると対応するスライドが開きます。</strong></p>
     </div>
     <div class="lessons">
-      <div class="lesson reveal"><div class="ln">LESSON 1</div><h3>環境構築</h3><p>ESP-IDF セットアップ、ビルド＆書き込み</p></div>
-      <div class="lesson reveal d1"><div class="ln">LESSON 2</div><h3>コントローラ入力</h3><p>ESP-NOW 通信、スティック値の読み取り</p></div>
-      <div class="lesson reveal d2"><div class="ln">LESSON 3</div><h3>LED 制御</h3><p>システム状態の可視化</p></div>
-      <div class="lesson reveal d3"><div class="ln">LESSON 4</div><h3>IMU センサー</h3><p>加速度・ジャイロデータの取得と理解</p></div>
-      <div class="lesson reveal"><div class="ln">LESSON 5</div><h3>モータ制御</h3><p>PWM によるモータ個別制御</p></div>
-      <div class="lesson reveal d1"><div class="ln">LESSON 6</div><h3>姿勢推定</h3><p>相補フィルタによる姿勢角の算出</p></div>
-      <div class="lesson reveal d2"><div class="ln">LESSON 7</div><h3>レート P 制御</h3><p>角速度フィードバックによる安定化</p></div>
-      <div class="lesson reveal d3"><div class="ln">LESSON 8</div><h3>PID 制御</h3><p>姿勢角の PID 制御と飛行</p></div>
+      <a class="lesson reveal" href="assets/workshop_slides.pdf#page=7" target="_blank" rel="noopener"><div class="ln">LESSON 1</div><h3>環境構築</h3><p>ESP-IDF セットアップ、ビルド＆書き込み</p><span class="slide-link">スライド p.7</span></a>
+      <a class="lesson reveal d1" href="assets/workshop_slides.pdf#page=32" target="_blank" rel="noopener"><div class="ln">LESSON 2</div><h3>コントローラ入力</h3><p>ESP-NOW 通信、スティック値の読み取り</p><span class="slide-link">スライド p.32</span></a>
+      <a class="lesson reveal d2" href="assets/workshop_slides.pdf#page=44" target="_blank" rel="noopener"><div class="ln">LESSON 3</div><h3>LED 制御</h3><p>システム状態の可視化</p><span class="slide-link">スライド p.44</span></a>
+      <a class="lesson reveal d3" href="assets/workshop_slides.pdf#page=51" target="_blank" rel="noopener"><div class="ln">LESSON 4</div><h3>IMU センサー</h3><p>加速度・ジャイロデータの取得と理解</p><span class="slide-link">スライド p.51</span></a>
+      <a class="lesson reveal" href="assets/workshop_slides.pdf#page=24" target="_blank" rel="noopener"><div class="ln">LESSON 5</div><h3>モータ制御</h3><p>PWM によるモータ個別制御</p><span class="slide-link">スライド p.24</span></a>
+      <a class="lesson reveal d1" href="assets/workshop_slides.pdf#page=99" target="_blank" rel="noopener"><div class="ln">LESSON 6</div><h3>姿勢推定</h3><p>相補フィルタによる姿勢角の算出</p><span class="slide-link">スライド p.99</span></a>
+      <a class="lesson reveal d2" href="assets/workshop_slides.pdf#page=59" target="_blank" rel="noopener"><div class="ln">LESSON 7</div><h3>レート P 制御</h3><p>角速度フィードバックによる安定化</p><span class="slide-link">スライド p.59</span></a>
+      <a class="lesson reveal d3" href="assets/workshop_slides.pdf#page=89" target="_blank" rel="noopener"><div class="ln">LESSON 8</div><h3>PID 制御</h3><p>姿勢角の PID 制御と飛行</p><span class="slide-link">スライド p.89</span></a>
+    </div>
+    <div class="reveal" style="text-align:center;margin-top:28px">
+      <a class="btn btn-ghost" href="assets/workshop_slides.pdf" target="_blank" rel="noopener">📑 ワークショップスライド全156ページを開く</a>
     </div>
   </div>
 </section>
