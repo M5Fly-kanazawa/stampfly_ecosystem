@@ -207,8 +207,11 @@ namespace params {
 
 using namespace param_vars;
 
-/// Parameter table — generated from params.def values
-/// パラメータテーブル — params.defの値から生成
+/// Parameter table — the single source of truth (SSOT). Each row binds a name to
+/// a param_vars variable with its default/min/max/callback. To add a parameter,
+/// add a variable to param_vars (above) and a row here.
+/// パラメータテーブル — 唯一の真実源 (SSOT)。各行が名前を param_vars 変数に
+/// 既定/最小/最大/コールバック付きで結ぶ。追加は param_vars に変数を、ここに行を。
 static const ParamEntry table[] = {
     // Rate control — PHYSICAL gains [Nm/(rad/s)] for the B^-1 mixer (actuator.cpp).
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable

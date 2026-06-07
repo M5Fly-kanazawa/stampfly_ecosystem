@@ -123,8 +123,8 @@ extern "C" void app_main() {
   sf::topics_init();
 
   // ===== Phase 3: parameter loading from NVS =====
-  // params.def の全パラメータを NVS から復元、未保存値はデフォルト
-  sf::params::loadFromNvs();
+  // params.cpp の table[] 全パラメータを NVS から復元、未保存値はデフォルト
+  sf::params::init();
 
   // ===== Phase 4: tasks =====
   // 14 タスクを優先度付きで生成、ImuTask が pipeline を駆動

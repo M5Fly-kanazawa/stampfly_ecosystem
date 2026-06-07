@@ -1,6 +1,11 @@
-# 次セッション指示書 — 設計準拠リファクタリング Phase 5 から再開
+# 次セッション指示書 — 設計準拠リファクタリング Phase 6 から再開
 
-最終更新: 2026-06-07（**Phase 0 / 1 / 2a / 2b / 3 / 4 完了。次は Phase 5（起動シーケンス整備＋params SSOT）。ただし χ² ラッチアップ調査・デッドバンド復活が割り込み候補**）
+最終更新: 2026-06-07（**Phase 0 / 1 / 2a / 2b / 3 / 4 / 5 完了。次は Phase 6（未実装機能の配線: Logger/Notify/CLI/Button、sensor_health 1Hz、mag χ²ゲート）。ただし χ² ラッチアップ調査・デッドバンド復活・Phase 4 LED 繰延分が割り込み候補**）
+
+> **Phase 5 完了（起動シーケンス R3 ＋ params SSOT）:**
+> - **5a（commit 0246dd2）**: main.cpp を宣言的 Phase 0-4（NVS/BSP/topics/params/tasks）に。14タスク生成を `sf::tasks::start_all()`（tasks.cpp 新設）へ集約。extern TaskHandle 排除（ControlTask が xTaskGetCurrentTaskHandle で自己登録→`sf::tasks::control_handle()`、死蔵 g_state_task_handle 削除）。**`params::init()` を Phase 3 に配線（重大: これまで未呼出＝NVS保存値が起動時に読まれていなかった）**。SIL smoke 3本の手動 handle 配線も撤去。
+> - **5b（本コミット）**: 非機能で値もずれた `params.def` と params.hpp の壊れた X-macro スタブを**削除**。`params.cpp`（param_vars + table[]）を正式 SSOT と文書化（development_roadmap 原則2 / architecture / detailed_design §6 / hardware_init §4 を是正）。X-macro 復活はしない（明示テーブルが模範コードとして良いと判断）。
+> - 検証: 全 metric が Phase 4 と完全一致（pos_roll 1.4575 等）、ESP-IDF 954.3KB。
 
 > **Phase 4 完了（HW所有の一元化, R1/R2/R4）:** BMI270/PMW3901 の SPI は `skip_bus_init`、motor の LEDC は `skip_timer_init` で sf_board 借用に統一（二重初期化の「握り潰し」を所有権明示の省略へ）。`sensor_present()` を実装（Mag/Flow/Baro/Power の各タスクが init 成否を board に報告、atomic）。Critical 失敗（I2C/SPI/LEDC バス＝board::fatal、IMU＝imu_task、Motor＝actuator）を **halt 統一**（vTaskDelay ループ・esp_restart しない、§5）。**重要なスコープ判断: LED エラーパターン表示は Phase 6 に繰延**（LED/notify の所有が未確立＝notify_task スタブのため。board に sf_hal_led 依存を先行追加すると実機ビルド直前のリスク）。board::fatal に1行フックを残置。検証=11シナリオ＋hover_espnow＋hover_smoke G2/G3＋plant_smoke 全PASS、ESP-IDF 実機ビルド 953.5KB。
 >
@@ -74,25 +79,32 @@
 
 ---
 
-## 3. 次にやること: Phase 5（起動シーケンス整備＋params SSOT）— ただし χ²/deadband・LED が割り込み候補
+## 3. 次にやること: Phase 6（未実装機能の配線）— ただし χ²/deadband・LED が割り込み候補
 
-Phase 4（HW所有一元化）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 5**。
+Phase 5（起動シーケンス＋params SSOT）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 6**。
 
 **割り込み候補（ユーザーと相談して順序決定）:**
 - **χ² ラッチアップ調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
 - **デッドバンド復活**: χ² 改善後に 0.05 を有効化（現状は機構配線・既定0）。
-- **Phase 4 LED 繰延分**: Critical 失敗時の LED エラーパターン表示。Phase 6（notify/LED 所有確立）でやるのが本来だが、安全UXとして前倒しも可。board::fatal にフック有り。
+- **Phase 4 LED 繰延分**: Critical 失敗時の LED エラーパターン表示。Phase 6（notify/LED 所有確立）でやるのが本来＝Phase 6 と一緒に片付くはず。board::fatal にフック有り。
 
-**Phase 5 本体（起動シーケンス R3 ＋ params SSOT）:**
-- `main.cpp` を設計の宣言的 Phase 構造（0:NVS / 1:board / 2:topics / 3:params load / 4:tasks）に整合。14タスク直書きを `sf::tasks::start_all()`（tasks.hpp）へ集約。extern TaskHandle 排除。Phase 2 空スタブ撤去。
-- params NVS ロードを Phase 3 に配線。`params.def` SSOT化（X-macro 実機能化 or 撤去＝reference_params_ssot.md 参照、要判断）。
+**Phase 6 本体（未実装機能の配線）:**
+- `tasks/log_task.cpp`: `sf_logger::Logger` を配線（Blackbox/データストリーム）。
+- `tasks/notify_task.cpp`: `sf_notify::Notify` を配線（`notify_command` 消費、LED/ブザー実HAL駆動）。**ここで Phase 4 の Critical-fail LED も実装可**（board::fatal フック）。
+- `tasks/button_task.cpp`: ボタン→`button_event` or ARM/DISARM。
+- `tasks/cli_task.cpp`: コマンドレジストリ（R6）＋ params get/set/save。
+- `sf_board` or 各task: `sensor_health` を 1Hz publish（R15）。sensor_present() は実装済（Phase 4）。
+- `eskf`: mag 観測 χ²ゲート（TODO解消）。
+
+### Phase 5 でやったこと（完了・参考）
+- 5a: main.cpp 宣言的 Phase 0-4、start_all() 集約（tasks.cpp）、extern TaskHandle 排除（control 自己登録）、params::init() 配線（未呼出だった）、smoke 3本の手動 handle 撤去。
+- 5b: params.def 撤去＋X-macro スタブ撤去、params.cpp を SSOT 文書化、4設計文書是正。
+- **共有タスク制約（再掲・重要）**: imu_task/control_task/actuator は emu と smoke 両方でコンパイル＆smoke は sf_board 非リンク。control_handle() は control_task.cpp に定義（両方コンパイル）、宣言は tasks.hpp（smoke の include に VN/tasks 追加）。start_all() は tasks.cpp（smoke 非コンパイル）。
 
 ### Phase 4 でやったこと（完了・参考）
 - BMI270/PMW3901 SPI 借用（skip_bus_init）、motor LEDC 借用（skip_timer_init）、board::flow_spi() 追加。
 - sensor_present() 実装（atomic、Mag/Flow/Baro/Power の init 成否報告）。
 - Critical 失敗 halt 統一（board::fatal＋imu_task/actuator）。LED は Phase 6 繰延。
-- **共有タスク制約**: imu_task/control_task/actuator は smoke 系で sf_board 非リンク → plain bool で借用（board 直呼び不可）。flow/mag/baro/power/tof は emu 専用ゆえ board 可。
-- 残: 「config.hpp の GPIO/PWM 複製解消」は Phase 5（main/起動整備）で扱う余地（actuator.cpp にコメント有）。
 
 ### Phase 2b でやったこと（完了・参考）
 

@@ -122,7 +122,7 @@
 | 9 | 通信 | `sf_comm` | — |
 | 10 | ナビゲーター | （未実装、将来） | — |
 | 11 | キャリブレーション管理 | `sf_calibration` | — |
-| 12 | パラメータ | `sf_core` 内に統合（`params.def`） | コア基盤として配置 |
+| 12 | パラメータ | `sf_core` 内に統合（`params.cpp` の `param_vars`+`table[]` が SSOT） | コア基盤として配置 |
 | 13 | データロガー | `sf_logger`, `sf_telemetry` | Blackbox + テレメトリで分離 |
 | 14 | 通知 | `sf_notify`, `sf_hal_led`, `sf_hal_buzzer` | ロジック層 + ハード層 |
 | — | （責務外）Pub-Sub基盤、データ型、トピック定義、パラメータ基盤 | `sf_core` | 全コンポーネントの基盤 |
@@ -548,8 +548,8 @@ extern "C" void app_main() {
   // Phase 2: Pub-Sub topics
   sf::topics_init();
 
-  // Phase 3: parameter loading from NVS
-  sf::params::loadFromNvs();
+  // Phase 3: parameter loading from NVS (params.cpp table[] → NVS → runtime)
+  sf::params::init();
 
   // Phase 4: tasks
   sf::tasks::start_all();
@@ -651,7 +651,7 @@ The 14 design responsibilities expand to ESP-IDF component granularity as follow
 | 9 | Communication | `sf_comm` | — |
 | 10 | Navigator | (not yet implemented) | Future |
 | 11 | Calibration Mgr | `sf_calibration` | — |
-| 12 | Parameters | folded into `sf_core` (`params.def`) | Located in core infrastructure |
+| 12 | Parameters | folded into `sf_core` (`params.cpp` `param_vars`+`table[]` = SSOT) | Located in core infrastructure |
 | 13 | Data Logger | `sf_logger`, `sf_telemetry` | Blackbox + telemetry split |
 | 14 | Notification | `sf_notify`, `sf_hal_led`, `sf_hal_buzzer` | Logic + hardware |
 | — | (infra) Pub-Sub framework, data types, topics, parameter base | `sf_core` | Foundation for all components |

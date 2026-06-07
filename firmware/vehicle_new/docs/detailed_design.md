@@ -296,53 +296,53 @@ sensor.tof → 推定コンポーネントに常に届く
 
 ### 設計方針
 
-マクロ1行でパラメータの定義・バリデーション・コールバック・NVS永続化を全て完結させる。
+全パラメータの SSOT は `params.cpp`。型付き変数（`namespace param_vars`）と、名前→変数→
+既定/最小/最大/コールバックを結ぶ明示的 `table[]` で、定義・バリデーション・コールバック・
+NVS 永続化を完結させる。明示テーブルは意図的（模範コードとして読みやすく、値・範囲・根拠が
+見える）。
 
-### パラメータ定義
+> 注（Phase 5b, 2026-06-07）: 当初は `params.def` の X-macro コード生成を想定していたが、
+> 実体は `params.cpp` の手書きテーブルに収束していた。`params.def` は非機能で値もずれて
+> いたため撤去し、`params.cpp` を正式 SSOT とした（[[reference_params_ssot]]）。
+
+### パラメータ定義（`params.cpp`）
 
 ```cpp
-// params.def — 全パラメータ定義（1箇所）
-// All parameter definitions (single location)
-// パラメータ追加はここに1行追加するだけ
-//
-//              名前                    デフォルト   min      max      コールバック
-PARAM_FLOAT("rate.roll.kp",           1.365e-3f,  0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("rate.roll.ti",           0.7f,       0.01f,   100.0f,  on_pid_changed)
-PARAM_FLOAT("rate.roll.td",           0.01f,      0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("rate.pitch.kp",         1.995e-3f,  0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("rate.pitch.ti",         0.7f,       0.01f,   100.0f,  on_pid_changed)
-PARAM_FLOAT("rate.pitch.td",         0.01f,      0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("rate.yaw.kp",           5.31e-3f,   0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("rate.yaw.ti",           1.6f,       0.01f,   100.0f,  on_pid_changed)
-PARAM_FLOAT("rate.yaw.td",           0.01f,      0.0f,    1.0f,    on_pid_changed)
-PARAM_FLOAT("eskf.process.accel_noise", 0.3f,    0.01f,   10.0f,   on_eskf_changed)
-PARAM_FLOAT("eskf.obs.tof_noise",    0.03f,      0.001f,  1.0f,    on_eskf_changed)
-PARAM_BOOL ("eskf.use_tof",          true,       0,       1,       on_eskf_mask_changed)
-PARAM_BOOL ("eskf.use_flow",         true,       0,       1,       on_eskf_mask_changed)
-PARAM_BOOL ("eskf.use_baro",         false,      0,       1,       on_eskf_mask_changed)
-PARAM_BOOL ("eskf.use_mag",          false,      0,       1,       on_eskf_mask_changed)
-// ... 他のパラメータも同様に追加
+// 1) namespace param_vars に型付き変数を追加（既定値もここ）
+namespace param_vars {
+    float rate_roll_kp = 1.83e-4f;   // Ixx/τ_resp（物理ゲイン）
+    // ...
+}
+
+// 2) table[] に行を追加（名前 → 変数 → 既定 / min / max / コールバック）
+static const ParamEntry table[] = {
+    //   名前              型               変数ポインタ      既定       min    max     callback
+    {"rate.roll.kp", ParamType::FLOAT, &rate_roll_kp, 1.83e-4f, 0.0f, 0.01f, nullptr},
+    // ...
+};
+// パラメータ追加＝この2箇所（同一ファイル）に書く
 ```
 
 ### アクセスAPI
 
 ```cpp
-// Read parameter value
-// パラメータ値の読み取り
-float kp = params::get<float>("rate.roll.kp");
+// Read parameter value (by name, into an out-param; returns false if not found)
+// パラメータ値の読み取り（名前で out 引数へ。未発見なら false）
+float kp = 0.0f;
+params::get_float("rate.roll.kp", kp);
 
 // Write parameter value (from WiFi/CLI)
 // パラメータ値の書き込み（WiFi/CLIから）
-// → バリデーション → 値更新 → コールバック実行 → NVS保存
-params::set("rate.roll.kp", 2.0e-3f);
+// → バリデーション → 値更新 → コールバック実行
+params::set_float("rate.roll.kp", 2.0e-3f);
 
 // List all parameters (for CLI)
 // 全パラメータ一覧（CLI用）
 params::list();
-// Output: "rate.roll.kp = 1.365e-3 [0.0, 1.0]"
 
-// Save all to NVS / Load from NVS
-// NVS一括保存・読み込み
+// Init (load from NVS, else table defaults) / Save all to NVS / Load from NVS
+// 初期化（NVS から、無ければ table 既定）/ NVS 一括保存・読み込み
+params::init();
 params::save();
 params::load();
 
@@ -393,9 +393,8 @@ firmware/vehicle_new/
 │   │   │   ├── topic.hpp          # Topic<T> テンプレート
 │   │   │   ├── topics.hpp         # 全トピック定義
 │   │   │   ├── data_types.hpp     # 全構造体定義
-│   │   │   ├── params.hpp         # パラメータシステム
-│   │   │   └── params.def         # パラメータ定義（1箇所）
-│   │   └── params.cpp
+│   │   │   └── params.hpp         # パラメータ公開API
+│   │   └── params.cpp             # パラメータ SSOT（param_vars + table[]）
 │   ├── sf_state/                  # 状態管理
 │   │   └── include/
 │   │       ├── state_manager.hpp  # 状態遷移、onExit/onEnter

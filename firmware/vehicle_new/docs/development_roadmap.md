@@ -55,10 +55,12 @@ vehicle_new の SIL → 実機ワークフローは次の3原則に基づく。R
 
 ### 原則2: Parameter Identity（パラメータ一致）
 
-**SIL も実機も `params.def` を Single Source of Truth として読む。**
+**SIL も実機も `params.cpp`（`param_vars` + `table[]`）を Single Source of Truth として読む。**
 
-- 実機: `params.def` → コード生成 → NVS 永続化 → ランタイム読み取り
-- SIL: `params.def` → コード生成 → デフォルト値 / `--params <file>` でオーバライド
+> 注（Phase 5b, 2026-06-07）: 当初は `params.def` の X-macro コード生成を SSOT とする設計だったが、実体は `params.cpp` の手書き `param_vars` + 明示 `table[]` に収束していた。`params.def` は非機能で値もずれていたため撤去し、`params.cpp` を正式な SSOT とした（[[reference_params_ssot]]）。Parameter Identity の本質（SIL と実機が同一スキーマの同一値を読む）は不変 — `params.cpp` は両ビルドが参照コンパイルする。
+
+- 実機: `params.cpp` の `table[]` → 既定値 → NVS 永続化 → ランタイム読み取り
+- SIL: `params.cpp` の `table[]` → 既定値（SIL NVS は空ゆえ既定が残る）
 
 実機側は WiFi/CLI でチューニングした値を NVS に保存し、必要に応じてファイルにエクスポート。SIL で詰めたパラメータと実機で詰めたパラメータが、**同じスキーマで相互流通する** こと。
 
@@ -143,7 +145,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 | 1.2 | ESP-IDF 互換シムを作り直し、本体の Pub-Sub ループをホストで走らせる | §7 |
 | 1.3 | 合成センサ（IMU/ToF/フロー/気圧）・モータ・風モデルを自前実装（`noise_and_vibration_model.md`） | §6 |
 | 1.4 | ファーム last-mile: `applyMixer` 実装（`control_task.cpp:52-66`）、モータ出力→物理（`:124`）、推定器/制御器のファクトリ化、`@design` を `[--]`→`[OK]` に | §7 |
-| 1.5 | `params.def` を SIL からも読む（Parameter Identity の実装） | 原則2 |
+| 1.5 | `params.cpp`（`table[]`）を SIL からも参照（Parameter Identity の実装） | 原則2 |
 | 1.6 | 基本のレビュー動画書き出し（`sf sil video` 最小版） | §9 |
 
 **合格基準（RESET_PLAN P1〜P2 のゲート）:**
@@ -348,7 +350,7 @@ So "passes in SIL" **means the same behavior on hardware** (loop-level Code Iden
 
 ### Principle 2: Parameter Identity
 
-**SIL and real hardware both read `params.def` as the single source of truth.** Tuning values flow bidirectionally between SIL files and real-hardware NVS through the same schema.
+**SIL and real hardware both read `params.cpp` (`param_vars` + `table[]`) as the single source of truth.** (The original `params.def` X-macro codegen was removed in Phase 5b — it had drifted out of use; `params.cpp`'s explicit table is the SSOT. Parameter Identity is unchanged: both builds reference-compile `params.cpp`.) Tuning values flow between SIL and real-hardware NVS through the same schema.
 
 ### Principle 3: Model Fidelity (post-flight, after-the-fact)
 
