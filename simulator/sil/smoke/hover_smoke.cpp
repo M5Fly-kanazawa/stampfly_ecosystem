@@ -49,7 +49,8 @@
 void ImuTask(void*);
 void ControlTask(void*);
 void StateTask(void*);
-extern TaskHandle_t g_control_task_handle;
+// ControlTask self-registers its handle (sf::tasks::control_handle(), R3).
+// ControlTask が自分のハンドルを登録する（sf::tasks::control_handle(), R3）。
 
 using sil::rtos::Scheduler;
 using sf::math::Vec3;
@@ -410,7 +411,8 @@ int main(int argc, char** argv)
                             nullptr, config::PRIORITY_STATE,   &h_state,   1);
     xTaskCreatePinnedToCore(ControlTask, "ControlTask", config::STACK_CONTROL,
                             nullptr, config::PRIORITY_CONTROL, &h_control, 1);
-    g_control_task_handle = h_control;
+    // ControlTask registers its own handle in setup (sf::tasks::control_handle()).
+    // ControlTask は setup で自分のハンドルを登録する。
     xTaskCreatePinnedToCore(ImuTask,     "ImuTask",     config::STACK_IMU,
                             nullptr, config::PRIORITY_IMU,     &h_imu,     1);
 

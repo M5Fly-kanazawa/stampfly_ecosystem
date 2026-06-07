@@ -31,6 +31,7 @@
 #include "esp_timer.h"
 
 #include "topics.hpp"
+#include "tasks.hpp"
 #include "estimator.hpp"
 #include "eskf_estimator.hpp"
 #include "complementary_estimator.hpp"
@@ -53,10 +54,6 @@ static constexpr uint32_t TEMPERATURE_READ_INTERVAL = 100;
 /// Read-failure log throttle: warn at most once every N cycles
 /// 読み取り失敗ログの抑制: N サイクルに 1 回まで警告
 static constexpr uint32_t READ_FAIL_LOG_INTERVAL = 400;
-
-/// Task handle for control task notification
-/// 制御タスク通知用のタスクハンドル
-extern TaskHandle_t g_control_task_handle;
 
 /// Active estimator, selected by the estimator.type parameter via the factory
 /// below. Held as an IEstimator* so the implementation is swappable WITHOUT
@@ -724,8 +721,9 @@ void ImuTask(void* pvParameters)
         // @design architecture.md §5 — IMU-synced control pipeline    [OK]
         // =====================================================================
 
-        if (g_control_task_handle != nullptr) {
-            xTaskNotifyGive(g_control_task_handle);
+        TaskHandle_t control = sf::tasks::control_handle();
+        if (control != nullptr) {
+            xTaskNotifyGive(control);
         }
         // The esp_timer paces the loop; the ulTaskNotifyTake at the top blocks
         // until the next 400Hz tick, so no explicit delay is needed here.

@@ -30,6 +30,7 @@
 #include "esp_log.h"
 
 #include "topics.hpp"
+#include "tasks.hpp"
 #include "controller.hpp"
 #include "pid_controller.hpp"
 #include "actuator.hpp"
@@ -38,9 +39,20 @@
 
 static const char* TAG = "ControlTask";
 
-/// Task handle (set in main.cpp, used by ImuTask for notification)
-/// タスクハンドル（main.cppで設定、ImuTaskが通知に使用）
-TaskHandle_t g_control_task_handle = nullptr;
+/// ControlTask handle, registered by the task itself at startup and exposed via
+/// sf::tasks::control_handle(). ImuTask reads it through that accessor to wake us
+/// after each estimate. Replaces the old extern global set from main.cpp
+/// (R3: no extern task handles).
+/// ControlTask のハンドル。タスク自身が起動時に登録し sf::tasks::control_handle()
+/// で公開する。ImuTask が推定後に起こすために accessor 経由で読む。main.cpp から
+/// 設定していた旧 extern グローバルを置き換える（R3: extern 排除）。
+static TaskHandle_t s_control_handle = nullptr;
+
+namespace sf {
+namespace tasks {
+TaskHandle_t control_handle() { return s_control_handle; }
+}  // namespace tasks
+}  // namespace sf
 
 /// Controller instance
 /// コントローラインスタンス
@@ -93,6 +105,12 @@ static void processControllerCommands(sf::IController& controller)
 void ControlTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ControlTask started");
+
+    // Register our own handle so ImuTask can wake us (sf::tasks::control_handle()).
+    // Done before any blocking call; ImuTask guards on null until this runs.
+    // ImuTask が起こせるよう自分のハンドルを登録（sf::tasks::control_handle()）。
+    // ブロッキング前に実行。これが走るまで ImuTask は null ガードで待つ。
+    s_control_handle = xTaskGetCurrentTaskHandle();
 
     // Initialize controller and actuator (mixer + motor HAL)
     // コントローラとアクチュエータ（ミキサー＋モーター HAL）を初期化

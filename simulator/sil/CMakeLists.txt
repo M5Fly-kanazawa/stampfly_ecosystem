@@ -104,6 +104,7 @@ if(SIL_BUILD_RTOS_SMOKE)
     ${CMAKE_CURRENT_SOURCE_DIR}/rtos
     ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal   # sim BMI270 wrapper replaces the HAL
     ${VN}/main                            # config.hpp
+    ${VN}/tasks                           # tasks.hpp (sf::tasks::control_handle)
     ${VN}/components/sf_actuator/include   # actuator.hpp (mixer)
     ${VN}/components/sf_hal_motor/include  # motor_driver.hpp (stubbed by sim_hal)
   )
@@ -175,6 +176,7 @@ if(SIL_BUILD_MUJOCO_SMOKE)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant
     ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${VN}/main
+    ${VN}/tasks
     ${VN}/components/sf_actuator/include
     ${VN}/components/sf_hal_motor/include
     ${VN}/components/sf_math/include
@@ -204,6 +206,7 @@ if(SIL_BUILD_MUJOCO_SMOKE)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant
     ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${VN}/main
+    ${VN}/tasks
     ${VN}/components/sf_actuator/include
     ${VN}/components/sf_hal_motor/include
     ${VN}/components/sf_math/include

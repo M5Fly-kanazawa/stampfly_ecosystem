@@ -40,12 +40,13 @@
 #include "flight_state.hpp"
 #include "config.hpp"
 
-// Firmware task functions (unmodified) and the IMU→Control notification handle.
-// 本体タスク関数（無改変）と IMU→Control 通知ハンドル。
+// Firmware task functions (unmodified). ControlTask self-registers its handle
+// via sf::tasks::control_handle() now (R3), so no extern wiring here.
+// 本体タスク関数（無改変）。ControlTask が sf::tasks::control_handle() で自分の
+// ハンドルを登録する（R3）ため、ここでの extern 配線は不要。
 void ImuTask(void*);
 void ControlTask(void*);
 void StateTask(void*);
-extern TaskHandle_t g_control_task_handle;
 
 using sil::rtos::Scheduler;
 
@@ -112,7 +113,8 @@ int main()
                             nullptr, config::PRIORITY_STATE,   &h_state,   1);
     xTaskCreatePinnedToCore(ControlTask, "ControlTask", config::STACK_CONTROL,
                             nullptr, config::PRIORITY_CONTROL, &h_control, 1);
-    g_control_task_handle = h_control;
+    // ControlTask registers its own handle in setup (sf::tasks::control_handle()).
+    // ControlTask は setup で自分のハンドルを登録する（sf::tasks::control_handle()）。
     xTaskCreatePinnedToCore(ImuTask,     "ImuTask",     config::STACK_IMU,
                             nullptr, config::PRIORITY_IMU,     &h_imu,     1);
 

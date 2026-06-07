@@ -23,6 +23,35 @@
 
 #pragma once
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+// === Task lifecycle (sf::tasks) ===
+// === タスクのライフサイクル（sf::tasks） ===
+
+namespace sf {
+namespace tasks {
+
+/// Create all 14 FreeRTOS tasks with their configured priorities/stacks/cores.
+/// Called once from app_main() Phase 4 — keeps the entry point declarative.
+/// 14 個の FreeRTOS タスクを所定の優先度/スタック/コアで生成する。app_main() の
+/// Phase 4 から 1 回呼ぶ — エントリポイントを宣言的に保つ。
+///
+/// @design hardware_init.md §4 — Phase 4: tasks::start_all()           [OK]
+void start_all();
+
+/// Handle of the ControlTask, registered by the task itself at startup
+/// (xTaskGetCurrentTaskHandle). ImuTask reads this to wake ControlTask after each
+/// estimate. Returns nullptr until ControlTask has run its setup. Replaces the old
+/// extern global g_control_task_handle (R3: no extern task handles).
+/// ControlTask のハンドル。タスク自身が起動時に登録する（xTaskGetCurrentTaskHandle）。
+/// ImuTask が推定後に ControlTask を起こすために読む。ControlTask の setup 実行前は
+/// nullptr。旧 extern グローバル g_control_task_handle を置き換える（R3: extern 排除）。
+TaskHandle_t control_handle();
+
+}  // namespace tasks
+}  // namespace sf
+
 // === Core pipeline tasks (highest priority)
 // === コアパイプラインタスク（最高優先度）
 

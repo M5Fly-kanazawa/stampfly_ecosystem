@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "main.cpp"
+        "../tasks/tasks.cpp"
         "../tasks/imu_task.cpp"
         "../tasks/control_task.cpp"
         "../tasks/state_task.cpp"
