@@ -1,28 +1,41 @@
 <!DOCTYPE html>
 <!--
-  StampFly Ecosystem — Landing Page (single-file showcase)
-  StampFly エコシステム — 紹介ページ（1ファイル完結のショーケース）
+  StampFly Ecosystem — Landing Page (single-file showcase, JA/EN/ZH i18n)
+  StampFly エコシステム — 紹介ページ（1ファイル完結・日英中切替）
 
   - All CSS/JS are inlined here. Media lives in ./assets/.
     CSS/JS はすべてこのファイルに内蔵。メディアは ./assets/ を参照。
-  - The rotating 3D drone uses Three.js from a CDN (ES module).
-    回転する 3D ドローンは CDN の Three.js（ESモジュール）を使用。
-  - To see the 3D drone, serve over http (ES modules are blocked on file://):
-    3D を表示するには http で配信すること（ESモジュールは file:// で動かない）:
+  - The 3D drone uses Three.js from a CDN (ES module). Serve over http:
+    3D ドローンは CDN の Three.js（ESモジュール）。http で配信すること:
         cd landing && python3 -m http.server 8000   →  http://localhost:8000
+  - Language: Japanese is the in-DOM default; English/Chinese live in the I18N dict.
+    言語: 日本語はDOM既定、英語・中国語は I18N 辞書。右上ボタンで即時切替。
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<!-- Mark JS-enabled early so reveal animations only hide content when JS can show it again.
-     JS有効を早期に印付け。reveal は JS が再表示できる時だけ内容を隠す（チラつき・空白防止）。 -->
+<!-- Mark JS-enabled early so reveal animations only hide content when JS can show it again. -->
 <script>document.documentElement.classList.add('js');</script>
 <title>StampFly Ecosystem — 自分の手で、ドローンの飛行制御を作る</title>
-<meta name="description" content="ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。設計→実装→実験→解析→教育を一気通貫で。" />
-<meta property="og:title" content="StampFly Ecosystem" />
-<meta property="og:description" content="自分の手で、ドローンの飛行制御を作る。教育・研究のためのオープンソース・プラットフォーム。" />
+<meta name="description" content="1機$50・37g・1教室で30機同時。ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。" />
+
+<!-- Open Graph / Twitter card (absolute URLs for X link preview) / X等のリンクカード用OGP（絶対URL） -->
 <meta property="og:type" content="website" />
+<meta property="og:site_name" content="StampFly Ecosystem" />
+<meta property="og:url" content="https://m5fly-kanazawa.github.io/stampfly_ecosystem/" />
+<meta property="og:title" content="StampFly Ecosystem — 自分の手で、ドローンの飛行制御を作る" />
+<meta property="og:description" content="1機$50・37g・1教室で30機同時。ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。" />
+<meta property="og:image" content="https://m5fly-kanazawa.github.io/stampfly_ecosystem/assets/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="ja_JP" />
+<meta property="og:locale:alternate" content="en_US" />
+<meta property="og:locale:alternate" content="zh_CN" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="StampFly Ecosystem — 自分の手で、ドローンの飛行制御を作る" />
+<meta name="twitter:description" content="1機$50・37g・1教室で30機同時。ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。" />
+<meta name="twitter:image" content="https://m5fly-kanazawa.github.io/stampfly_ecosystem/assets/og-image.png" />
 
 <!-- Favicon: stylized quad-rotor / クアッドローターを模したファビコン -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='8' cy='8' r='4.5' fill='%2322d3ee'/><circle cx='24' cy='8' r='4.5' fill='%23a855f7'/><circle cx='8' cy='24' r='4.5' fill='%23a855f7'/><circle cx='24' cy='24' r='4.5' fill='%2322d3ee'/><rect x='13' y='13' width='6' height='6' rx='1.5' fill='%23e5e7eb'/></svg>" />
@@ -30,14 +43,14 @@
 <!-- Web fonts (graceful fallback to system fonts) / Webフォント（システムフォントへフォールバック） -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" />
 
 <style>
 /* ============================================================
    Design tokens / デザイントークン
    ============================================================ */
 :root{
-  --bg:#06080f;            /* near-black background / ほぼ黒の背景 */
+  --bg:#06080f;
   --bg-soft:#0b0f1c;
   --panel:rgba(20,26,44,.55);
   --panel-border:rgba(120,140,200,.18);
@@ -59,12 +72,11 @@ body{
   margin:0;
   background:var(--bg);
   color:var(--text);
-  font-family:"Noto Sans JP","Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-family:"Noto Sans JP","Noto Sans SC","Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   line-height:1.7;
   overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
 }
-/* Ambient color glows fixed behind everything / 背景に固定された色のグロー */
 body::before{
   content:"";position:fixed;inset:0;z-index:-2;
   background:
@@ -74,12 +86,12 @@ body::before{
     var(--bg);
 }
 a{color:inherit;text-decoration:none}
-h1,h2,h3{font-family:"Space Grotesk","Noto Sans JP",sans-serif;line-height:1.2;margin:0}
+h1,h2,h3{font-family:"Space Grotesk","Noto Sans JP","Noto Sans SC",sans-serif;line-height:1.2;margin:0}
 section{position:relative}
 
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.nb{white-space:nowrap}  /* keep a word from breaking mid-way (e.g. katakana) / 語の途中改行を防ぐ */
+.nb{white-space:nowrap}
 .eyebrow{
   display:inline-block;font-family:"Space Grotesk",sans-serif;font-weight:600;
   letter-spacing:.22em;text-transform:uppercase;font-size:.72rem;color:var(--cyan);
@@ -95,7 +107,7 @@ section{position:relative}
    ============================================================ */
 .nav{
   position:fixed;top:0;left:0;right:0;z-index:50;
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;align-items:center;gap:16px;
   padding:14px 24px;transition:background .3s,border-color .3s,backdrop-filter .3s;
   border-bottom:1px solid transparent;
 }
@@ -103,7 +115,7 @@ section{position:relative}
   background:rgba(6,8,15,.72);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--panel-border);
 }
-.brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.05rem}
+.brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.05rem;margin-right:auto}
 .brand .dot{width:22px;height:22px;border-radius:7px;background:var(--grad);box-shadow:0 0 18px rgba(124,140,255,.6)}
 .nav-links{display:flex;gap:26px;align-items:center}
 .nav-links a{color:var(--muted);font-size:.92rem;font-weight:500;transition:color .2s}
@@ -112,6 +124,12 @@ section{position:relative}
   padding:9px 18px;border-radius:999px;background:var(--grad);color:#06080f;
   font-weight:700;font-size:.9rem;box-shadow:0 8px 26px -8px rgba(124,140,255,.8);
 }
+/* Language switcher / 言語切替（常時表示） */
+.lang-switch{display:flex;gap:2px;border:1px solid var(--panel-border);border-radius:999px;padding:3px;background:rgba(10,14,26,.55)}
+.lang-switch button{border:none;background:none;color:var(--muted);font:inherit;font-size:.78rem;font-weight:600;
+  padding:5px 10px;border-radius:999px;cursor:pointer;transition:background .2s,color .2s;white-space:nowrap}
+.lang-switch button.active{background:var(--grad);color:#06080f}
+.lang-switch button:hover:not(.active){color:var(--text)}
 .nav-toggle{display:none;background:none;border:1px solid var(--panel-border);color:var(--text);
   border-radius:10px;padding:8px 10px;font-size:1.1rem;cursor:pointer}
 @media(max-width:860px){
@@ -120,12 +138,12 @@ section{position:relative}
 }
 
 /* ============================================================
-   Hero / ヒーロー（全画面動画 + キャッチコピー）
+   Hero / ヒーロー
    ============================================================ */
 .hero{min-height:100svh;display:flex;align-items:center;overflow:hidden;padding-top:90px}
 .hero-video{position:absolute;inset:0;z-index:-1}
 .hero-video canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
-.hero-video::after{ /* darkening + tint overlay so text stays readable / 可読性のための暗幕 */
+.hero-video::after{
   content:"";position:absolute;inset:0;
   background:
     linear-gradient(180deg,rgba(6,8,15,.55) 0%,rgba(6,8,15,.35) 35%,rgba(6,8,15,.92) 100%),
@@ -166,12 +184,12 @@ section{position:relative}
 @media(max-width:760px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ============================================================
-   Generic section spacing / 汎用セクション余白
+   Generic section spacing
    ============================================================ */
 .block{padding:84px 0}
 .block-alt{background:linear-gradient(180deg,transparent,rgba(11,15,28,.6) 12%,rgba(11,15,28,.6) 88%,transparent)}
 
-/* Workflow / ワークフロー（設計→実装→実験→解析→教育） */
+/* Workflow */
 .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
 .flow-step{position:relative;padding:26px 20px;border-radius:var(--radius);background:var(--panel);
   border:1px solid var(--panel-border);backdrop-filter:blur(8px);overflow:hidden}
@@ -183,7 +201,7 @@ section{position:relative}
 @media(max-width:980px){.flow{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.flow{grid-template-columns:1fr}}
 
-/* 3D drone / 3Dドローン */
+/* 3D drone */
 .drone-section{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
 #drone-canvas{width:100%;height:460px;display:block;cursor:grab;
   background:radial-gradient(60% 60% at 50% 45%,rgba(34,211,238,.10),transparent 70%)}
@@ -201,19 +219,18 @@ section{position:relative}
 .spec-list li span:last-child{font-weight:600;text-align:right}
 @media(max-width:880px){.drone-section{grid-template-columns:1fr}#drone-canvas,.drone-fallback{height:360px}}
 
-/* Demo gallery / デモ動画ギャラリー */
+/* Demo gallery */
 .demo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .demo-card{border-radius:var(--radius);overflow:hidden;border:1px solid var(--panel-border);
   background:var(--panel);backdrop-filter:blur(8px);transition:transform .25s,box-shadow .25s}
 .demo-card:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-/* all demo videos share one aspect → equal heights; wider clips center-cropped / 全デモ動画を同比率に揃え高さを統一(横長は中央トリミング) */
 .demo-card video{width:100%;display:block;aspect-ratio:1280/858;object-fit:cover;background:#000}
 .demo-card .cap{padding:16px 18px}
 .demo-card .cap h3{font-size:1.02rem;margin-bottom:4px}
 .demo-card .cap p{color:var(--muted);font-size:.86rem;margin:0}
 @media(max-width:900px){.demo-grid{grid-template-columns:1fr;max-width:520px;margin:0 auto}}
 
-/* Features / 特徴カード */
+/* Features */
 .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .feat{padding:28px 24px;border-radius:var(--radius);background:var(--panel);
   border:1px solid var(--panel-border);backdrop-filter:blur(8px);transition:transform .2s,border-color .2s}
@@ -224,7 +241,7 @@ section{position:relative}
 .feat p{color:var(--muted);font-size:.92rem;margin:0}
 @media(max-width:900px){.feat-grid{grid-template-columns:1fr}}
 
-/* Flight modes / 飛行モード */
+/* Flight modes */
 .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .mode{padding:24px 20px;border-radius:var(--radius);border:1px solid var(--panel-border);
   background:var(--panel);backdrop-filter:blur(8px);position:relative}
@@ -235,13 +252,11 @@ section{position:relative}
 @media(max-width:900px){.modes{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.modes{grid-template-columns:1fr}}
 
-/* Specs + architecture / 技術仕様＋アーキテクチャ図 */
-.specs-grid{display:grid;grid-template-columns:1fr 1.1fr;gap:40px;align-items:center}
+/* Specs + architecture */
 .spec-table{width:100%;border-collapse:collapse}
 .spec-table td{padding:14px 6px;border-bottom:1px solid var(--panel-border);font-size:.96rem}
 .spec-table td:first-child{color:var(--muted);width:42%}
 .spec-table td:last-child{font-weight:600}
-/* Flashy CSS layered architecture diagram / 派手なCSS階層アーキ図 */
 .arch{display:flex;flex-direction:column;gap:14px;margin-top:8px}
 .arch-flow{display:flex;justify-content:space-between;gap:12px;font-size:.8rem;color:var(--muted);
   letter-spacing:.03em;padding:0 6px;margin-bottom:2px}
@@ -269,9 +284,8 @@ section{position:relative}
 .al-hw .lyr-name{font-size:.96rem}
 .spec-wrap{max-width:840px;margin:42px auto 0}
 @media(max-width:620px){.lyr{min-width:100%}.arch-flow{font-size:.72rem}}
-@media(max-width:880px){.specs-grid{grid-template-columns:1fr}}
 
-/* Workshop lessons / ワークショップ */
+/* Workshop lessons */
 .lessons{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .lesson{padding:18px;border-radius:14px;border:1px solid var(--panel-border);background:var(--panel);
   backdrop-filter:blur(8px)}
@@ -281,7 +295,7 @@ section{position:relative}
 @media(max-width:900px){.lessons{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.lessons{grid-template-columns:1fr}}
 
-/* Install CTA / インストール */
+/* Install CTA */
 .cta{border-radius:24px;border:1px solid var(--panel-border);overflow:hidden;
   background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(168,85,247,.12));position:relative}
 .cta-inner{padding:56px 40px;text-align:center}
@@ -295,7 +309,7 @@ section{position:relative}
   padding:9px 14px;font-weight:700;cursor:pointer;font-size:.82rem}
 .cta .btns{justify-content:center;margin-top:26px}
 
-/* Footer / フッター */
+/* Footer */
 footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:30px}
 .foot-grid{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-start}
 .foot-links{display:flex;gap:26px;flex-wrap:wrap}
@@ -303,9 +317,7 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
 .foot-links a:hover{color:var(--text)}
 .foot-note{color:var(--muted);font-size:.82rem;margin-top:18px}
 
-/* Scroll reveal / スクロール出現アニメ
-   Only hide when JS is active (html.js). Without JS, content stays visible.
-   JS有効時(html.js)のみ非表示にする。JS無効でも内容は必ず表示される。 */
+/* Scroll reveal */
 .js .reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}
 .reveal.in{opacity:1;transform:none}
 .reveal.d1{transition-delay:.08s}.reveal.d2{transition-delay:.16s}
@@ -319,94 +331,98 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
 </head>
 <body>
 
-<!-- ===================== Navbar / ナビ ===================== -->
+<!-- ===================== Navbar ===================== -->
 <nav class="nav" id="nav">
   <a class="brand" href="#top"><span class="dot"></span>StampFly&nbsp;Ecosystem</a>
   <div class="nav-links">
-    <a href="#workflow">ワークフロー</a>
-    <a href="#demo">デモ</a>
-    <a href="#features">特徴</a>
-    <a href="#specs">仕様</a>
-    <a href="#workshop">ワークショップ</a>
+    <a href="#workflow" data-i18n="navWorkflow">ワークフロー</a>
+    <a href="#demo" data-i18n="navDemo">デモ</a>
+    <a href="#features" data-i18n="navFeatures">特徴</a>
+    <a href="#specs" data-i18n="navSpecs">仕様</a>
+    <a href="#workshop" data-i18n="navWorkshop">ワークショップ</a>
     <a class="nav-cta" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <div class="lang-switch" id="langSwitch" aria-label="language">
+    <button data-lang="ja">日本語</button>
+    <button data-lang="en">EN</button>
+    <button data-lang="zh">中文</button>
   </div>
   <button class="nav-toggle" id="navToggle" aria-label="menu">☰</button>
 </nav>
 
-<!-- ===================== Hero / ヒーロー ===================== -->
+<!-- ===================== Hero ===================== -->
 <section class="hero" id="top">
-  <!-- Live, moving 3D StampFly model as the hero backdrop / 動く実機3Dモデルを背景に -->
   <div class="hero-video">
     <canvas id="hero-canvas"></canvas>
   </div>
   <div class="wrap hero-inner">
     <span class="eyebrow reveal in">Open-source drone control platform</span>
-    <h1 class="reveal in">自分の手で、<br /><span class="grad-text">ドローンの飛行制御</span>を作る</h1>
-    <p class="sub reveal in d1">制御を<strong>学び</strong>、<strong>実装し</strong>、<strong>実験する</strong>ための<wbr><span class="nb">教育・研究プラットフォーム</span>。</p>
-    <p class="lead reveal in d2">教科書で学んだPID・姿勢推定を、シミュレータと実機で「実際に飛ぶもの」へ。設計から解析・教育までを一気通貫で扱えます。</p>
+    <h1 class="reveal in" data-i18n="heroH1">自分の手で、<br /><span class="grad-text">ドローンの飛行制御</span>を作る</h1>
+    <p class="sub reveal in d1" data-i18n="heroSub">制御を<strong>学び</strong>、<strong>実装し</strong>、<strong>実験する</strong>ための<wbr><span class="nb">教育・研究プラットフォーム</span>。</p>
+    <p class="lead reveal in d2" data-i18n="heroLead">教科書で学んだPID・姿勢推定を、シミュレータと実機で「実際に飛ぶもの」へ。設計から解析・教育までを一気通貫で扱えます。</p>
     <div class="hero-badges reveal in d2">
-      <span class="chip">1機 約 $50</span>
-      <span class="chip">重量 37 g</span>
-      <span class="chip">30機 同時飛行</span>
+      <span class="chip" data-i18n="badgePrice">1機 約 $50</span>
+      <span class="chip" data-i18n="badgeWeight">重量 37 g</span>
+      <span class="chip" data-i18n="badgeFleet">30機 同時飛行</span>
       <span class="chip">ESP32-S3 / ESKF</span>
       <span class="chip">MIT License</span>
     </div>
     <div class="btns reveal in d3">
-      <a class="btn btn-primary" href="#demo">▶ デモを見る</a>
-      <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub で見る</a>
-      <a class="btn btn-ghost" href="#install">インストール</a>
+      <a class="btn btn-primary" href="#demo" data-i18n="btnDemo">▶ デモを見る</a>
+      <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener" data-i18n="btnGithub">GitHub で見る</a>
+      <a class="btn btn-ghost" href="#install" data-i18n="btnInstall">インストール</a>
     </div>
   </div>
   <div class="scroll-cue">SCROLL<span class="arrow"></span></div>
 </section>
 
-<!-- ===================== Stats / 数値 ===================== -->
+<!-- ===================== Stats ===================== -->
 <section class="stats">
   <div class="wrap">
     <div class="stats-grid">
-      <div class="stat reveal"><div class="num" data-target="50" data-prefix="$">$50</div><div class="label">1機あたりの価格</div></div>
-      <div class="stat reveal d1"><div class="num" data-target="37" data-suffix="g">37<span class="suf">g</span></div><div class="label">機体重量（軽量・安全）</div></div>
-      <div class="stat reveal d2"><div class="num" data-target="30" data-suffix="機">30<span class="suf">機</span></div><div class="label">1教室で同時飛行</div></div>
-      <div class="stat reveal d3"><div class="num" data-target="400" data-suffix="Hz">400<span class="suf">Hz</span></div><div class="label">リアルタイム制御ループ</div></div>
+      <div class="stat reveal"><div class="num" data-target="50" data-prefix="$">$50</div><div class="label" data-i18n="statPrice">1機あたりの価格</div></div>
+      <div class="stat reveal d1"><div class="num" data-target="37" data-suffix="g">37<span class="suf">g</span></div><div class="label" data-i18n="statWeight">機体重量（軽量・安全）</div></div>
+      <div class="stat reveal d2"><div class="num" data-target="30">30</div><div class="label" data-i18n="statFleet">1教室で同時飛行（台数）</div></div>
+      <div class="stat reveal d3"><div class="num" data-target="400" data-suffix="Hz">400<span class="suf">Hz</span></div><div class="label" data-i18n="statRate">リアルタイム制御ループ</div></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== Classroom value / 教育現場での強み ===================== -->
+<!-- ===================== Classroom value ===================== -->
 <section class="block" id="classroom">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Built for the classroom</span>
-      <h2 class="section-title">教室で、<span class="grad-text">30機が一斉に飛ぶ</span></h2>
-      <p class="section-lead">安価・軽量・安全。だから「受講生全員が自分の機体を飛ばす」授業が現実になります。</p>
+      <h2 class="section-title" data-i18n="clsTitle">教室で、<span class="grad-text">30機が一斉に飛ぶ</span></h2>
+      <p class="section-lead" data-i18n="clsLead">安価・軽量・安全。だから「受講生全員が自分の機体を飛ばす」授業が現実になります。</p>
     </div>
     <div class="feat-grid">
-      <div class="feat reveal"><div class="ic">🛩️</div><h3>30機を同時飛行</h3><p>ESP-NOW のチャンネル分離で混信を避け、1教室で最大 30 機を同時運用。受講生全員が自分の機体で実習できます。</p></div>
-      <div class="feat reveal d1"><div class="ic">💴</div><h3>1機 約 $50 の低コスト</h3><p>高価な研究機材は不要。クラス全員分を揃えても導入しやすく、台数を気にせず実験・実習に使えます。</p></div>
-      <div class="feat reveal d2"><div class="ic">🪶</div><h3>37 g・安全設計</h3><p>手のひらサイズの超軽量機体＋ダクトガード。屋内・教室でも安全に飛ばせ、初学者の練習に最適です。</p></div>
+      <div class="feat reveal"><div class="ic">🛩️</div><h3 data-i18n="cls1h">30機を同時飛行</h3><p data-i18n="cls1p">ESP-NOW のチャンネル分離で混信を避け、1教室で最大 30 機を同時運用。受講生全員が自分の機体で実習できます。</p></div>
+      <div class="feat reveal d1"><div class="ic">💴</div><h3 data-i18n="cls2h">1機 約 $50 の低コスト</h3><p data-i18n="cls2p">高価な研究機材は不要。クラス全員分を揃えても導入しやすく、台数を気にせず実験・実習に使えます。</p></div>
+      <div class="feat reveal d2"><div class="ic">🪶</div><h3 data-i18n="cls3h">37 g・安全設計</h3><p data-i18n="cls3p">手のひらサイズの超軽量機体＋ダクトガード。屋内・教室でも安全に飛ばせ、初学者の練習に最適です。</p></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== Workflow / ワークフロー ===================== -->
+<!-- ===================== Workflow ===================== -->
 <section class="block block-alt" id="workflow">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">End-to-End</span>
-      <h2 class="section-title">設計から教育まで、<span class="grad-text">一気通貫</span></h2>
-      <p class="section-lead">アイデアを飛行制御として形にし、データで検証し、教材に還元する。研究と教育の両輪を1つのエコシステムで回します。</p>
+      <h2 class="section-title" data-i18n="wfTitle">設計から教育まで、<span class="grad-text">一気通貫</span></h2>
+      <p class="section-lead" data-i18n="wfLead">アイデアを飛行制御として形にし、データで検証し、教材に還元する。研究と教育の両輪を1つのエコシステムで回します。</p>
     </div>
     <div class="flow">
-      <div class="flow-step reveal"><div class="ic">📐</div><div class="n">STEP 01</div><h3>設計</h3><p>プラントモデル・カスケード制御・ループ整形を数値で設計。</p></div>
-      <div class="flow-step reveal d1"><div class="ic">⚙️</div><div class="n">STEP 02</div><h3>実装</h3><p>ESP-IDF 上に模範的なC++ファームウェアとして実装。</p></div>
-      <div class="flow-step reveal d2"><div class="ic">🛰️</div><div class="n">STEP 03</div><h3>実験</h3><p>SILシミュレータと実機で飛行試験。同じコードを検証。</p></div>
-      <div class="flow-step reveal d3"><div class="ic">📊</div><div class="n">STEP 04</div><h3>解析</h3><p>テレメトリ・ログをPythonで可視化し挙動を定量評価。</p></div>
-      <div class="flow-step reveal d4"><div class="ic">🎓</div><div class="n">STEP 05</div><h3>教育</h3><p>得られた知見をワークショップ教材へフィードバック。</p></div>
+      <div class="flow-step reveal"><div class="ic">📐</div><div class="n">STEP 01</div><h3 data-i18n="st1h">設計</h3><p data-i18n="st1p">プラントモデル・カスケード制御・ループ整形を数値で設計。</p></div>
+      <div class="flow-step reveal d1"><div class="ic">⚙️</div><div class="n">STEP 02</div><h3 data-i18n="st2h">実装</h3><p data-i18n="st2p">ESP-IDF 上に模範的なC++ファームウェアとして実装。</p></div>
+      <div class="flow-step reveal d2"><div class="ic">🛰️</div><div class="n">STEP 03</div><h3 data-i18n="st3h">実験</h3><p data-i18n="st3p">SILシミュレータと実機で飛行試験。同じコードを検証。</p></div>
+      <div class="flow-step reveal d3"><div class="ic">📊</div><div class="n">STEP 04</div><h3 data-i18n="st4h">解析</h3><p data-i18n="st4p">テレメトリ・ログをPythonで可視化し挙動を定量評価。</p></div>
+      <div class="flow-step reveal d4"><div class="ic">🎓</div><div class="n">STEP 05</div><h3 data-i18n="st5h">教育</h3><p data-i18n="st5p">得られた知見をワークショップ教材へフィードバック。</p></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== 3D drone / 3Dドローン ===================== -->
+<!-- ===================== 3D drone / Hardware ===================== -->
 <section class="block" id="drone3d">
   <div class="wrap drone-section">
     <div class="drone-stage reveal">
@@ -415,13 +431,13 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
         3D表示には http 配信が必要です。<br />
         <code>cd landing &amp;&amp; python3 -m http.server</code> で起動してください。
       </div>
-      <div class="drone-hint">ドラッグで回転 / drag to rotate</div>
+      <div class="drone-hint" data-i18n="droneHint">ドラッグで回転 / drag to rotate</div>
     </div>
     <div class="reveal d1">
       <span class="eyebrow">The Hardware</span>
-      <h2 class="section-title">手のひらサイズの<span class="grad-text">研究機体</span></h2>
-      <p class="section-lead">M5Stack StampFly をベースにした超小型クアッドコプター。豊富なセンサを積み、本格的な状態推定・制御を学べます。</p>
-      <ul class="spec-list">
+      <h2 class="section-title" data-i18n="hwTitle">手のひらサイズの<span class="grad-text">研究機体</span></h2>
+      <p class="section-lead" data-i18n="hwLead">M5Stack StampFly をベースにした超小型クアッドコプター。豊富なセンサを積み、本格的な状態推定・制御を学べます。</p>
+      <ul class="spec-list" data-i18n="specList">
         <li><span>MCU</span><span>ESP32-S3（M5Stamp S3）</span></li>
         <li><span>IMU / 地磁気</span><span>BMI270 / BMM150</span></li>
         <li><span>気圧 / ToF / フロー</span><span>BMP280 / VL53L3CX / PMW3901</span></li>
@@ -433,79 +449,78 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
   </div>
 </section>
 
-<!-- ===================== Demo gallery / デモ動画 ===================== -->
+<!-- ===================== Demo gallery ===================== -->
 <section class="block block-alt" id="demo">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">In Action</span>
-      <h2 class="section-title"><span class="grad-text">シミュレータ</span>で飛ばす</h2>
-      <p class="section-lead">実機がなくても大丈夫。まずは軽量な VPython で操縦を練習し、物理シミュレータ上で同じ制御コードを安全に検証できます。</p>
+      <h2 class="section-title" data-i18n="demoTitle"><span class="grad-text">シミュレータ</span>で飛ばす</h2>
+      <p class="section-lead" data-i18n="demoLead">実機がなくても大丈夫。まずは軽量な VPython で操縦を練習し、物理シミュレータ上で同じ制御コードを安全に検証できます。</p>
     </div>
     <div class="demo-grid">
       <div class="demo-card reveal">
         <video src="assets/stampfly_sim.mp4" autoplay muted loop playsinline></video>
-        <div class="cap"><h3>操縦訓練（VPython）</h3><p>実機なしでコントローラ操縦を体験。軽量な3Dシミュレータで飛ばし方を練習できます。</p></div>
+        <div class="cap"><h3 data-i18n="d1h">操縦訓練（VPython）</h3><p data-i18n="d1p">実機なしでコントローラ操縦を体験。軽量な3Dシミュレータで飛ばし方を練習できます。</p></div>
       </div>
       <div class="demo-card reveal d1">
         <video src="assets/demo_estimator.mp4" autoplay muted loop playsinline></video>
-        <div class="cap"><h3>推定器の比較</h3><p>ESKF と相補フィルタを同条件で並走させ姿勢推定を比較。</p></div>
+        <div class="cap"><h3 data-i18n="d2h">推定器の比較</h3><p data-i18n="d2p">ESKF と相補フィルタを同条件で並走させ姿勢推定を比較。</p></div>
       </div>
       <div class="demo-card reveal d2">
         <video src="assets/demo_noise.mp4" autoplay muted loop playsinline></video>
-        <div class="cap"><h3>ノイズ環境での頑健性</h3><p>現実的なセンサノイズ下での推定器の優劣を定量化。</p></div>
+        <div class="cap"><h3 data-i18n="d3h">ノイズ環境での頑健性</h3><p data-i18n="d3p">現実的なセンサノイズ下での推定器の優劣を定量化。</p></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===================== Features / 特徴 ===================== -->
+<!-- ===================== Features ===================== -->
 <section class="block" id="features">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">What you can do</span>
-      <h2 class="section-title">何が<span class="grad-text">できる</span>のか？</h2>
-      <p class="section-lead">学習から本格的な研究まで。コマンド1つでビルド・書き込み・解析まで完結します。</p>
+      <h2 class="section-title" data-i18n="ftTitle">何が<span class="grad-text">できる</span>のか？</h2>
+      <p class="section-lead" data-i18n="ftLead">学習から本格的な研究まで。コマンド1つでビルド・書き込み・解析まで完結します。</p>
     </div>
     <div class="feat-grid">
-      <div class="feat reveal"><div class="ic">🎮</div><h3>シミュレータで練習</h3><p>実機なしでドローン操縦を体験。制御アルゴリズムの検証にも使えます。</p></div>
-      <div class="feat reveal d1"><div class="ic">🚀</div><h3>すぐに飛ばせる</h3><p>ファームウェアをビルドして実機で飛行。<code>sf flash vehicle -m</code> の一発。</p></div>
-      <div class="feat reveal d2"><div class="ic">📡</div><h3>WiFi経由で制御</h3><p>PC/スマホから takeoff・hover・land などの高レベルコマンドを送信。</p></div>
-      <div class="feat reveal"><div class="ic">🛠️</div><h3>制御を自作できる</h3><p>4つの飛行モードを搭載。カスケード制御を学びカスタマイズ可能。</p></div>
-      <div class="feat reveal d1"><div class="ic">📈</div><h3>センサーデータを見れる</h3><p>IMU・気圧・ToF・オプティカルフローをリアルタイム取得。</p></div>
-      <div class="feat reveal d2"><div class="ic">🔬</div><h3>実験データを解析できる</h3><p>ログを記録し、Pythonで解析・可視化。研究にそのまま使えます。</p></div>
+      <div class="feat reveal"><div class="ic">🎮</div><h3 data-i18n="f1h">シミュレータで練習</h3><p data-i18n="f1p">実機なしでドローン操縦を体験。制御アルゴリズムの検証にも使えます。</p></div>
+      <div class="feat reveal d1"><div class="ic">🚀</div><h3 data-i18n="f2h">すぐに飛ばせる</h3><p data-i18n="f2p">ファームウェアをビルドして実機で飛行。<code>sf flash vehicle -m</code> の一発。</p></div>
+      <div class="feat reveal d2"><div class="ic">📡</div><h3 data-i18n="f3h">WiFi経由で制御</h3><p data-i18n="f3p">PC/スマホから takeoff・hover・land などの高レベルコマンドを送信。</p></div>
+      <div class="feat reveal"><div class="ic">🛠️</div><h3 data-i18n="f4h">制御を自作できる</h3><p data-i18n="f4p">4つの飛行モードを搭載。カスケード制御を学びカスタマイズ可能。</p></div>
+      <div class="feat reveal d1"><div class="ic">📈</div><h3 data-i18n="f5h">センサーデータを見れる</h3><p data-i18n="f5p">IMU・気圧・ToF・オプティカルフローをリアルタイム取得。</p></div>
+      <div class="feat reveal d2"><div class="ic">🔬</div><h3 data-i18n="f6h">実験データを解析できる</h3><p data-i18n="f6p">ログを記録し、Pythonで解析・可視化。研究にそのまま使えます。</p></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== Flight modes / 飛行モード ===================== -->
+<!-- ===================== Flight modes ===================== -->
 <section class="block block-alt">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Flight Modes</span>
-      <h2 class="section-title">4つの<span class="grad-text">飛行モード</span></h2>
-      <p class="section-lead">角速度制御から位置保持まで。カスケード制御の各層を段階的に体験できます。</p>
+      <h2 class="section-title" data-i18n="fmTitle">4つの<span class="grad-text">飛行モード</span></h2>
+      <p class="section-lead" data-i18n="fmLead">角速度制御から位置保持まで。カスケード制御の各層を段階的に体験できます。</p>
     </div>
     <div class="modes">
-      <div class="mode reveal"><div class="tag">ACRO</div><h3>角速度制御</h3><p>最内ループ。ジャイロのみで角速度をフィードバック制御。</p></div>
-      <div class="mode reveal d1"><div class="tag">STABILIZE</div><h3>姿勢角制御</h3><p>姿勢角をPID制御。スティックを離すと水平に復帰。</p></div>
-      <div class="mode reveal d2"><div class="tag">ALT HOLD</div><h3>高度維持</h3><p>ToF/気圧と鉛直速度で高度を自動保持。</p></div>
-      <div class="mode reveal d3"><div class="tag">POS HOLD</div><h3>位置保持</h3><p>オプティカルフローで水平位置をその場にキープ。</p></div>
+      <div class="mode reveal"><div class="tag">ACRO</div><h3 data-i18n="m1h">角速度制御</h3><p data-i18n="m1p">最内ループ。ジャイロのみで角速度をフィードバック制御。</p></div>
+      <div class="mode reveal d1"><div class="tag">STABILIZE</div><h3 data-i18n="m2h">姿勢角制御</h3><p data-i18n="m2p">姿勢角をPID制御。スティックを離すと水平に復帰。</p></div>
+      <div class="mode reveal d2"><div class="tag">ALT HOLD</div><h3 data-i18n="m3h">高度維持</h3><p data-i18n="m3p">ToF/気圧と鉛直速度で高度を自動保持。</p></div>
+      <div class="mode reveal d3"><div class="tag">POS HOLD</div><h3 data-i18n="m4h">位置保持</h3><p data-i18n="m4p">オプティカルフローで水平位置をその場にキープ。</p></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== Architecture + specs / アーキテクチャ＋仕様 ===================== -->
+<!-- ===================== Architecture + specs ===================== -->
 <section class="block" id="specs">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Architecture</span>
-      <h2 class="section-title">責務分離 × <span class="grad-text">Pub-Sub</span> のファーム構成</h2>
-      <p class="section-lead">センサからモータまで各層が責務を分離し、コンポーネント同士は Pub-Sub トピック経由で疎結合。400 Hz のリアルタイム制御ループを支えます。</p>
+      <h2 class="section-title" data-i18n="archTitle">責務分離 × <span class="grad-text">Pub-Sub</span> のファーム構成</h2>
+      <p class="section-lead" data-i18n="archLead">センサからモータまで各層が責務を分離し、コンポーネント同士は Pub-Sub トピック経由で疎結合。400 Hz のリアルタイム制御ループを支えます。</p>
     </div>
 
-    <!-- Layered architecture (sensors flow up, commands flow down) / 階層図 -->
     <div class="arch reveal d1">
-      <div class="arch-flow"><span><b>▲</b> センサデータ（下から上へ）</span><span>制御コマンド（上から下へ）<b>▼</b></span></div>
+      <div class="arch-flow" data-i18n="archFlow"><span><b>▲</b> センサデータ（下から上へ）</span><span>制御コマンド（上から下へ）<b>▼</b></span></div>
       <div class="arch-layer al-app">
         <div class="lyr"><span class="lyr-name">Application</span><span class="lyr-ns">main/</span></div>
         <div class="chips"><span class="chip2">Control Task</span><span class="chip2">State Machine</span><span class="chip2">Config (SSOT)</span><span class="chip2">Landing Handler</span></div>
@@ -524,13 +539,12 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
       </div>
       <div class="arch-layer al-hw">
         <div class="lyr"><span class="lyr-name">Hardware</span><span class="lyr-ns">ESP32-S3</span></div>
-        <div class="chips"><span class="chip2">IMU</span><span class="chip2">気圧</span><span class="chip2">地磁気</span><span class="chip2">ToF</span><span class="chip2">オプティカルフロー</span><span class="chip2">Motor ×4</span><span class="chip2">RGB LED</span></div>
+        <div class="chips" data-i18n="hwChips"><span class="chip2">IMU</span><span class="chip2">気圧</span><span class="chip2">地磁気</span><span class="chip2">ToF</span><span class="chip2">オプティカルフロー</span><span class="chip2">Motor ×4</span><span class="chip2">RGB LED</span></div>
       </div>
     </div>
 
-    <!-- Technical specs / 技術仕様 -->
     <div class="spec-wrap reveal d2">
-      <table class="spec-table">
+      <table class="spec-table" data-i18n="specTable">
         <tr><td>MCU</td><td>ESP32-S3（M5Stamp S3）</td></tr>
         <tr><td>フレームワーク</td><td>ESP-IDF v5.5.2 + FreeRTOS</td></tr>
         <tr><td>姿勢推定</td><td>ESKF（Error-State Kalman Filter）</td></tr>
@@ -542,37 +556,37 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
   </div>
 </section>
 
-<!-- ===================== Workshop / ワークショップ ===================== -->
+<!-- ===================== Workshop ===================== -->
 <section class="block block-alt" id="workshop">
   <div class="wrap">
     <div class="section-head reveal">
       <span class="eyebrow">Learn step by step</span>
-      <h2 class="section-title"><span class="grad-text">ワークショップ</span>で学ぶ</h2>
-      <p class="section-lead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。</p>
+      <h2 class="section-title" data-i18n="wsTitle"><span class="grad-text">ワークショップ</span>で学ぶ</h2>
+      <p class="section-lead" data-i18n="wsLead">環境構築から PID 制御による自律飛行まで。8つのレッスンで飛行制御の仕組みを体系的に習得します。</p>
     </div>
     <div class="lessons">
-      <div class="lesson reveal"><div class="ln">LESSON 1</div><h3>環境構築</h3><p>ESP-IDF セットアップ、ビルド＆書き込み</p></div>
-      <div class="lesson reveal d1"><div class="ln">LESSON 2</div><h3>コントローラ入力</h3><p>ESP-NOW 通信、スティック値の読み取り</p></div>
-      <div class="lesson reveal d2"><div class="ln">LESSON 3</div><h3>LED 制御</h3><p>システム状態の可視化</p></div>
-      <div class="lesson reveal d3"><div class="ln">LESSON 4</div><h3>IMU センサー</h3><p>加速度・ジャイロデータの取得と理解</p></div>
-      <div class="lesson reveal"><div class="ln">LESSON 5</div><h3>モータ制御</h3><p>PWM によるモータ個別制御</p></div>
-      <div class="lesson reveal d1"><div class="ln">LESSON 6</div><h3>姿勢推定</h3><p>相補フィルタによる姿勢角の算出</p></div>
-      <div class="lesson reveal d2"><div class="ln">LESSON 7</div><h3>レート P 制御</h3><p>角速度フィードバックによる安定化</p></div>
-      <div class="lesson reveal d3"><div class="ln">LESSON 8</div><h3>PID 制御</h3><p>姿勢角の PID 制御と飛行</p></div>
+      <div class="lesson reveal"><div class="ln">LESSON 1</div><h3 data-i18n="l1h">環境構築</h3><p data-i18n="l1p">ESP-IDF セットアップ、ビルド＆書き込み</p></div>
+      <div class="lesson reveal d1"><div class="ln">LESSON 2</div><h3 data-i18n="l2h">コントローラ入力</h3><p data-i18n="l2p">ESP-NOW 通信、スティック値の読み取り</p></div>
+      <div class="lesson reveal d2"><div class="ln">LESSON 3</div><h3 data-i18n="l3h">LED 制御</h3><p data-i18n="l3p">システム状態の可視化</p></div>
+      <div class="lesson reveal d3"><div class="ln">LESSON 4</div><h3 data-i18n="l4h">IMU センサー</h3><p data-i18n="l4p">加速度・ジャイロデータの取得と理解</p></div>
+      <div class="lesson reveal"><div class="ln">LESSON 5</div><h3 data-i18n="l5h">モータ制御</h3><p data-i18n="l5p">PWM によるモータ個別制御</p></div>
+      <div class="lesson reveal d1"><div class="ln">LESSON 6</div><h3 data-i18n="l6h">姿勢推定</h3><p data-i18n="l6p">相補フィルタによる姿勢角の算出</p></div>
+      <div class="lesson reveal d2"><div class="ln">LESSON 7</div><h3 data-i18n="l7h">レート P 制御</h3><p data-i18n="l7p">角速度フィードバックによる安定化</p></div>
+      <div class="lesson reveal d3"><div class="ln">LESSON 8</div><h3 data-i18n="l8h">PID 制御</h3><p data-i18n="l8p">姿勢角の PID 制御と飛行</p></div>
     </div>
     <div class="reveal" style="text-align:center;margin-top:28px">
-      <a class="btn btn-ghost" href="assets/workshop_slides.pdf" target="_blank" rel="noopener">📑 ワークショップスライド全156ページを開く</a>
+      <a class="btn btn-ghost" href="assets/workshop_slides.pdf" target="_blank" rel="noopener" data-i18n="wsBtn">📑 ワークショップスライド全156ページを開く</a>
     </div>
   </div>
 </section>
 
-<!-- ===================== Install CTA / インストール ===================== -->
+<!-- ===================== Install CTA ===================== -->
 <section class="block" id="install">
   <div class="wrap">
     <div class="cta reveal">
       <div class="cta-inner">
-        <h2>さあ、<span class="grad-text">飛ばしてみよう</span></h2>
-        <p>クローンして <code>install.sh</code> を実行するだけ。sf CLI とシミュレータ依存が一括で入ります。</p>
+        <h2 data-i18n="ctaTitle">さあ、<span class="grad-text">飛ばしてみよう</span></h2>
+        <p data-i18n="ctaP">クローンして <code>install.sh</code> を実行するだけ。sf CLI とシミュレータ依存が一括で入ります。</p>
         <div class="code">
           <pre id="installCmd">git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
 cd stampfly_ecosystem
@@ -580,7 +594,7 @@ cd stampfly_ecosystem
           <button class="copy-btn" id="copyBtn">コピー</button>
         </div>
         <div class="btns">
-          <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub リポジトリ</a>
+          <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener" data-i18n="ctaBtnRepo">GitHub リポジトリ</a>
           <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/docs/getting-started.md" target="_blank" rel="noopener">Getting Started</a>
         </div>
       </div>
@@ -588,17 +602,17 @@ cd stampfly_ecosystem
   </div>
 </section>
 
-<!-- ===================== Footer / フッター ===================== -->
+<!-- ===================== Footer ===================== -->
 <footer>
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <div class="brand"><span class="dot"></span>StampFly&nbsp;Ecosystem</div>
-        <p class="foot-note">ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。<br />Made for students &amp; researchers · M5Fly / 金沢工業大学 伊藤研究室</p>
+        <p class="foot-note" data-i18n="footNote">ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。<br />Made for students &amp; researchers · M5Fly / 金沢工業大学 伊藤研究室</p>
       </div>
       <div class="foot-links">
         <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/tree/main/docs" target="_blank" rel="noopener">ドキュメント</a>
+        <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/tree/main/docs" target="_blank" rel="noopener" data-i18n="footDocs">ドキュメント</a>
         <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/docs/getting-started.md" target="_blank" rel="noopener">Getting Started</a>
         <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
       </div>
@@ -607,20 +621,191 @@ cd stampfly_ecosystem
   </div>
 </footer>
 
-<!-- ===================== Scripts (vanilla, works on file://) / 通常スクリプト ===================== -->
+<!-- ===================== Scripts (vanilla, works on file://) ===================== -->
 <script>
-/* Navbar background on scroll / スクロールでナビ背景を出す */
+/* Navbar background on scroll / スクロールでナビ背景 */
 const nav = document.getElementById('nav');
 const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 40);
 window.addEventListener('scroll', onScroll, { passive:true }); onScroll();
 
-/* Mobile menu: just jump to GitHub fallback / モバイルは GitHub へ誘導（簡易） */
+/* Mobile menu: jump to sections / モバイルは概要へ誘導（簡易） */
 document.getElementById('navToggle').addEventListener('click', () => {
-  document.getElementById('workflow').scrollIntoView();
+  document.getElementById('classroom').scrollIntoView();
 });
 
-/* Scroll reveal via IntersectionObserver / スクロール出現アニメ
-   ?reveal=all で全要素を即時表示（検証・印刷・モーション無効向け）。 */
+/* ---------- i18n (JA default in DOM; EN/ZH in dictionary) / 多言語切替 ---------- */
+const I18N = {
+  en: {
+    navWorkflow:'Workflow', navDemo:'Demo', navFeatures:'Features', navSpecs:'Specs', navWorkshop:'Workshop',
+    heroH1:'Build your own<br /><span class="grad-text">drone flight control</span>',
+    heroSub:'An education &amp; research platform to <strong>learn</strong>, <strong>build</strong>, and <strong>experiment</strong> with control.',
+    heroLead:'Turn textbook PID and attitude estimation into something that actually flies — from design to analysis to teaching, end to end.',
+    badgePrice:'≈ $50 / unit', badgeWeight:'37 g', badgeFleet:'30 drones at once',
+    btnDemo:'▶ Watch demo', btnGithub:'View on GitHub', btnInstall:'Install',
+    statPrice:'Price per unit', statWeight:'Weight (light &amp; safe)', statFleet:'Flown at once per class', statRate:'Real-time control loop',
+    clsTitle:'In class, <span class="grad-text">30 drones fly at once</span>',
+    clsLead:'Cheap, light, and safe — so a class where every student flies their own drone becomes reality.',
+    cls1h:'Fly 30 at once', cls1p:'ESP-NOW channel separation avoids interference, running up to 30 drones in one classroom — every student practices on their own aircraft.',
+    cls2h:'≈ $50 per unit', cls2p:'No costly research gear needed. Affordable enough to equip a whole class, so you can experiment without worrying about numbers.',
+    cls3h:'37 g &amp; safe by design', cls3p:'A palm-sized, ultra-light airframe with ducted guards — safe to fly indoors and ideal for beginners.',
+    wfTitle:'From design to teaching, <span class="grad-text">end to end</span>',
+    wfLead:'Turn ideas into flight control, validate with data, and feed results back into teaching — research and education in one ecosystem.',
+    st1h:'Design', st1p:'Design plant models, cascade control, and loop shaping numerically.',
+    st2h:'Implement', st2p:'Implement as exemplary C++ firmware on ESP-IDF.',
+    st3h:'Experiment', st3p:'Flight-test in the SIL simulator and on real hardware with the same code.',
+    st4h:'Analyze', st4p:'Visualize telemetry and logs in Python to evaluate behavior quantitatively.',
+    st5h:'Teach', st5p:'Feed the insights back into workshop materials.',
+    droneHint:'Drag to rotate',
+    hwTitle:'A palm-sized <span class="grad-text">research drone</span>',
+    hwLead:'An ultra-compact quadcopter based on the M5Stack StampFly, packed with sensors for real state estimation and control.',
+    specList:'<li><span>MCU</span><span>ESP32-S3 (M5Stamp S3)</span></li><li><span>IMU / Mag</span><span>BMI270 / BMM150</span></li><li><span>Baro / ToF / Flow</span><span>BMP280 / VL53L3CX / PMW3901</span></li><li><span>Attitude est.</span><span>ESKF (Error-State Kalman Filter)</span></li><li><span>Comms</span><span>ESP-NOW + WiFi telemetry</span></li><li><span>Weight / Price</span><span>≈ 37 g / ≈ $50</span></li>',
+    demoTitle:'Fly it in the <span class="grad-text">simulator</span>',
+    demoLead:'No real drone needed. Practice piloting in lightweight VPython, then validate the same control code safely in a physics simulator.',
+    d1h:'Piloting practice (VPython)', d1p:'Experience controller piloting without hardware; practice flying in a lightweight 3D simulator.',
+    d2h:'Estimator comparison', d2p:'Run ESKF and a complementary filter side by side under the same conditions to compare attitude estimation.',
+    d3h:'Robustness under noise', d3p:'Quantify estimator performance under realistic sensor noise.',
+    ftTitle:'What can you <span class="grad-text">do</span>?',
+    ftLead:'From learning to serious research — build, flash, and analyze, all with a single command.',
+    f1h:'Practice in the simulator', f1p:'Experience piloting without hardware; also great for validating control algorithms.',
+    f2h:'Fly right away', f2p:'Build the firmware and fly — just <code>sf flash vehicle -m</code>.',
+    f3h:'Control over WiFi', f3p:'Send high-level commands like takeoff, hover, and land from a PC or phone.',
+    f4h:'Build your own control', f4p:'Four flight modes included; learn and customize cascade control.',
+    f5h:'See sensor data', f5p:'Stream IMU, barometer, ToF, and optical-flow data in real time.',
+    f6h:'Analyze experiment data', f6p:'Record logs and analyze/visualize in Python — ready for research.',
+    fmTitle:'Four <span class="grad-text">flight modes</span>',
+    fmLead:'From rate control to position hold — experience each layer of cascade control step by step.',
+    m1h:'Rate control', m1p:'The innermost loop: rate feedback using only the gyro.',
+    m2h:'Attitude control', m2p:'PID control of attitude; release the stick to level off.',
+    m3h:'Altitude hold', m3p:'Hold altitude automatically using ToF/baro and vertical velocity.',
+    m4h:'Position hold', m4p:'Keep horizontal position in place using optical flow.',
+    archTitle:'Firmware on separation of concerns × <span class="grad-text">Pub-Sub</span>',
+    archLead:'From sensors to motors, each layer separates concerns and components stay loosely coupled via Pub-Sub topics — powering a 400 Hz real-time control loop.',
+    archFlow:'<span><b>▲</b> Sensor data (bottom → top)</span><span>Control commands (top → bottom) <b>▼</b></span>',
+    hwChips:'<span class="chip2">IMU</span><span class="chip2">Baro</span><span class="chip2">Mag</span><span class="chip2">ToF</span><span class="chip2">Optical Flow</span><span class="chip2">Motor ×4</span><span class="chip2">RGB LED</span>',
+    specTable:'<tr><td>MCU</td><td>ESP32-S3 (M5Stamp S3)</td></tr><tr><td>Framework</td><td>ESP-IDF v5.5.2 + FreeRTOS</td></tr><tr><td>Attitude est.</td><td>ESKF (Error-State Kalman Filter)</td></tr><tr><td>Comms</td><td>ESP-NOW + WiFi (telemetry)</td></tr><tr><td>Sensors</td><td>BMI270 / BMM150 / BMP280 / VL53L3CX / PMW3901</td></tr><tr><td>Control rate</td><td>400 Hz real-time loop</td></tr>',
+    wsTitle:'Learn through the <span class="grad-text">workshop</span>',
+    wsLead:'From setup to autonomous flight with PID control — eight lessons that teach how flight control works, step by step.',
+    l1h:'Environment setup', l1p:'ESP-IDF setup, build &amp; flash',
+    l2h:'Controller input', l2p:'ESP-NOW comms, reading stick values',
+    l3h:'LED control', l3p:'Visualize system state',
+    l4h:'IMU sensor', l4p:'Read and understand accel &amp; gyro data',
+    l5h:'Motor control', l5p:'Individual motor control via PWM',
+    l6h:'Attitude estimation', l6p:'Compute attitude with a complementary filter',
+    l7h:'Rate P control', l7p:'Stabilization via angular-rate feedback',
+    l8h:'PID control', l8p:'PID attitude control and flight',
+    wsBtn:'📑 Open all 156 workshop slides',
+    ctaTitle:'Ready to <span class="grad-text">take off</span>?',
+    ctaP:'Just clone and run <code>install.sh</code> — it installs the sf CLI and simulator dependencies in one go.',
+    ctaBtnRepo:'GitHub repository',
+    footNote:'An education &amp; research platform to learn, build, and experiment with drone control.<br />Made for students &amp; researchers · M5Fly / Ito Lab, Kanazawa Institute of Technology',
+    footDocs:'Docs',
+  },
+  zh: {
+    navWorkflow:'工作流程', navDemo:'演示', navFeatures:'功能', navSpecs:'规格', navWorkshop:'工作坊',
+    heroH1:'亲手打造<br /><span class="grad-text">无人机飞行控制</span>',
+    heroSub:'用于<strong>学习</strong>、<strong>实现</strong>与<strong>实验</strong>控制的教育与研究平台。',
+    heroLead:'把课本上的 PID 与姿态估计变成真正会飞的东西——从设计到分析再到教学，一以贯之。',
+    badgePrice:'单台约 $50', badgeWeight:'重量 37 g', badgeFleet:'30 台同时飞行',
+    btnDemo:'▶ 观看演示', btnGithub:'在 GitHub 查看', btnInstall:'安装',
+    statPrice:'单台价格', statWeight:'整机重量（轻巧安全）', statFleet:'一间教室同时飞行（台）', statRate:'实时控制循环',
+    clsTitle:'课堂上，<span class="grad-text">30 台无人机同时起飞</span>',
+    clsLead:'便宜、轻巧、安全——让“每位学生都能操控自己的无人机”的课堂成为现实。',
+    cls1h:'30 台同时飞行', cls1p:'通过 ESP-NOW 信道隔离避免串扰，一间教室最多可同时运行 30 台，每位学生都能用自己的机体实操。',
+    cls2h:'单台约 $50 低成本', cls2p:'无需昂贵的研究设备。即使为全班配齐也易于负担，可放心用于实验与实操。',
+    cls3h:'37 g·安全设计', cls3p:'掌心大小的超轻机体＋涵道护罩，室内/教室也能安全飞行，最适合初学者练习。',
+    wfTitle:'从设计到教学，<span class="grad-text">一以贯之</span>',
+    wfLead:'把想法做成飞行控制，用数据验证，再反哺为教材——研究与教育在同一生态中循环。',
+    st1h:'设计', st1p:'数值化设计被控对象模型、串级控制与回路整形。',
+    st2h:'实现', st2p:'在 ESP-IDF 上实现为示范性的 C++ 固件。',
+    st3h:'实验', st3p:'用 SIL 仿真与实机进行飞行试验，验证同一套代码。',
+    st4h:'分析', st4p:'用 Python 可视化遥测与日志，定量评估行为。',
+    st5h:'教学', st5p:'将所得经验反哺到工作坊教材。',
+    droneHint:'拖动旋转',
+    hwTitle:'掌心大小的<span class="grad-text">研究机体</span>',
+    hwLead:'基于 M5Stack StampFly 的超小型四旋翼，搭载丰富传感器，可学习真正的状态估计与控制。',
+    specList:'<li><span>MCU</span><span>ESP32-S3（M5Stamp S3）</span></li><li><span>IMU / 磁力计</span><span>BMI270 / BMM150</span></li><li><span>气压 / ToF / 光流</span><span>BMP280 / VL53L3CX / PMW3901</span></li><li><span>姿态估计</span><span>ESKF（误差状态卡尔曼滤波）</span></li><li><span>通信</span><span>ESP-NOW ＋ WiFi 遥测</span></li><li><span>重量 / 价格</span><span>约 37 g ／ 约 $50</span></li>',
+    demoTitle:'在<span class="grad-text">仿真器</span>中飞行',
+    demoLead:'没有实机也没关系。先用轻量的 VPython 练习操控，再在物理仿真器中安全验证同一套控制代码。',
+    d1h:'操控训练（VPython）', d1p:'无需实机即可体验手柄操控，在轻量 3D 仿真器中练习飞行。',
+    d2h:'估计器对比', d2p:'在相同条件下并行运行 ESKF 与互补滤波器，比较姿态估计。',
+    d3h:'噪声环境下的鲁棒性', d3p:'在真实传感器噪声下量化估计器优劣。',
+    ftTitle:'你能<span class="grad-text">做什么</span>？',
+    ftLead:'从学习到正式研究——构建、烧录、分析，一条命令即可完成。',
+    f1h:'在仿真器中练习', f1p:'无需实机即可体验操控，也可用于验证控制算法。',
+    f2h:'即刻起飞', f2p:'构建固件即可实机飞行，一条 <code>sf flash vehicle -m</code> 搞定。',
+    f3h:'通过 WiFi 控制', f3p:'从电脑/手机发送 takeoff、hover、land 等高层指令。',
+    f4h:'自定义控制', f4p:'内置四种飞行模式，可学习并定制串级控制。',
+    f5h:'查看传感器数据', f5p:'实时获取 IMU、气压、ToF、光流数据。',
+    f6h:'分析实验数据', f6p:'记录日志并用 Python 分析与可视化，可直接用于研究。',
+    fmTitle:'四种<span class="grad-text">飞行模式</span>',
+    fmLead:'从角速度控制到位置保持，逐层体验串级控制。',
+    m1h:'角速度控制', m1p:'最内环，仅用陀螺仪反馈控制角速度。',
+    m2h:'姿态控制', m2p:'对姿态角进行 PID 控制，松杆即回正。',
+    m3h:'定高', m3p:'用 ToF/气压与垂直速度自动保持高度。',
+    m4h:'定点', m4p:'用光流原地保持水平位置。',
+    archTitle:'基于职责分离 × <span class="grad-text">Pub-Sub</span> 的固件架构',
+    archLead:'从传感器到电机，各层职责分离，组件间通过 Pub-Sub 主题松耦合，支撑 400 Hz 实时控制循环。',
+    archFlow:'<span><b>▲</b> 传感器数据（自下而上）</span><span>控制指令（自上而下）<b>▼</b></span>',
+    hwChips:'<span class="chip2">IMU</span><span class="chip2">气压</span><span class="chip2">磁力计</span><span class="chip2">ToF</span><span class="chip2">光流</span><span class="chip2">电机 ×4</span><span class="chip2">RGB LED</span>',
+    specTable:'<tr><td>MCU</td><td>ESP32-S3（M5Stamp S3）</td></tr><tr><td>框架</td><td>ESP-IDF v5.5.2 + FreeRTOS</td></tr><tr><td>姿态估计</td><td>ESKF（误差状态卡尔曼滤波）</td></tr><tr><td>通信</td><td>ESP-NOW + WiFi（遥测）</td></tr><tr><td>传感器</td><td>BMI270 / BMM150 / BMP280 / VL53L3CX / PMW3901</td></tr><tr><td>控制周期</td><td>400 Hz 实时循环</td></tr>',
+    wsTitle:'通过<span class="grad-text">工作坊</span>学习',
+    wsLead:'从环境搭建到 PID 自主飞行，8 节课系统掌握飞行控制原理。',
+    l1h:'环境搭建', l1p:'ESP-IDF 安装、构建与烧录',
+    l2h:'手柄输入', l2p:'ESP-NOW 通信、读取摇杆值',
+    l3h:'LED 控制', l3p:'可视化系统状态',
+    l4h:'IMU 传感器', l4p:'获取并理解加速度与陀螺仪数据',
+    l5h:'电机控制', l5p:'通过 PWM 单独控制电机',
+    l6h:'姿态估计', l6p:'用互补滤波器计算姿态角',
+    l7h:'角速度 P 控制', l7p:'通过角速度反馈实现稳定',
+    l8h:'PID 控制', l8p:'姿态角 PID 控制与飞行',
+    wsBtn:'📑 打开全部 156 页工作坊幻灯片',
+    ctaTitle:'现在就<span class="grad-text">起飞吧</span>',
+    ctaP:'只需克隆并运行 <code>install.sh</code>，即可一次性安装 sf CLI 与仿真器依赖。',
+    ctaBtnRepo:'GitHub 仓库',
+    footNote:'用于学习、实现与实验无人机控制的教育与研究平台。<br />Made for students &amp; researchers · M5Fly / 金泽工业大学 伊藤研究室',
+    footDocs:'文档',
+  }
+};
+const TITLES = {
+  ja:'StampFly Ecosystem — 自分の手で、ドローンの飛行制御を作る',
+  en:'StampFly Ecosystem — Build your own drone flight control',
+  zh:'StampFly Ecosystem — 亲手打造无人机飞行控制',
+};
+const COPYMSG = {
+  ja:{label:'コピー',copied:'コピー済み ✓',manual:'手動でコピー'},
+  en:{label:'Copy',copied:'Copied ✓',manual:'Copy manually'},
+  zh:{label:'复制',copied:'已复制 ✓',manual:'请手动复制'},
+};
+let LANG = 'ja';
+const copyBtn = document.getElementById('copyBtn');
+// Capture the in-DOM Japanese as the JA source / DOM内の日本語をJAの元データとして保持
+const jaOrig = {};
+document.querySelectorAll('[data-i18n]').forEach(el => { jaOrig[el.dataset.i18n] = el.innerHTML; });
+function applyLang(lang){
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    const v = (lang === 'ja') ? jaOrig[k] : (I18N[lang] && I18N[lang][k]);
+    if (v != null) el.innerHTML = v;
+  });
+  LANG = lang;
+  document.documentElement.lang = lang;
+  document.title = TITLES[lang] || document.title;
+  if (copyBtn) copyBtn.textContent = COPYMSG[lang].label;
+  document.querySelectorAll('#langSwitch button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  try { localStorage.setItem('sf_lang', lang); } catch(e){}
+}
+(function initLang(){
+  const param = new URLSearchParams(location.search).get('lang');   // ?lang=en/zh/ja override / 言語直指定
+  let saved = null; try { saved = localStorage.getItem('sf_lang'); } catch(e){}
+  const nav = (navigator.language || '').toLowerCase();
+  const guess = nav.startsWith('zh') ? 'zh' : nav.startsWith('en') ? 'en' : 'ja';
+  const pick = (['ja','en','zh'].includes(param)) ? param : (saved || guess);
+  applyLang(pick);
+  document.querySelectorAll('#langSwitch button').forEach(b =>
+    b.addEventListener('click', () => applyLang(b.dataset.lang)));
+})();
+
+/* Scroll reveal via IntersectionObserver / スクロール出現アニメ（?reveal=all で即時表示） */
 const showAll = new URLSearchParams(location.search).has('reveal');
 if (showAll || !('IntersectionObserver' in window)) {
   document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
@@ -651,17 +836,17 @@ const countIO = new IntersectionObserver((entries) => {
 }, { threshold:0.6 });
 document.querySelectorAll('.num[data-target]').forEach(el => countIO.observe(el));
 
-/* Copy install command / インストールコマンドをコピー */
-const copyBtn = document.getElementById('copyBtn');
+/* Copy install command (localized messages) / インストールコマンドをコピー（言語対応） */
 copyBtn.addEventListener('click', async () => {
+  const m = COPYMSG[LANG] || COPYMSG.ja;
   const text = document.getElementById('installCmd').innerText;
-  try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'コピー済み ✓'; }
-  catch { copyBtn.textContent = '手動でコピー'; }
-  setTimeout(() => copyBtn.textContent = 'コピー', 1800);
+  try { await navigator.clipboard.writeText(text); copyBtn.textContent = m.copied; }
+  catch { copyBtn.textContent = m.manual; }
+  setTimeout(() => copyBtn.textContent = m.label, 1800);
 });
 </script>
 
-<!-- ===================== Three.js drone (ES module, needs http) / 3Dドローン ===================== -->
+<!-- ===================== Three.js drone (ES module, needs http) ===================== -->
 <script type="importmap">
 { "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -672,9 +857,7 @@ copyBtn.addEventListener('click', async () => {
 /* Real StampFly 3D model: load actual STL body parts and build true-to-life
    3-blade propellers (the STL props are flat disks, so we model the blades).
    実機 StampFly の3Dモデル: 本物のSTLパーツを読み込み、実機そっくりの3枚羽根
-   プロペラを自作する（STLのプロペラは平らな円盤なので羽根を作り直す）。
-   Mesh coordinates are in millimetres, Y is up (model is already Y-up).
-   メッシュ座標はmm単位、上方向はY軸（モデルは元からY-up）。 */
+   プロペラを自作する。Mesh coordinates are in mm, Y is up. */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
@@ -683,41 +866,34 @@ const droneCanvas = document.getElementById('drone-canvas');
 const droneFallback = document.getElementById('droneFallback');
 const heroCanvas = document.getElementById('hero-canvas');
 
-// ===== Shared materials + geometry (built once, reused by both viewers) =====
-// 共有マテリアル・ジオメトリ（一度だけ生成し、両方のビューアで再利用）
-
-// Body-part materials (colors approximated from the real airframe) / 本体パーツのマテリアル
+// Shared materials (built once, reused by both viewers) / 共有マテリアル
 const partMat = {
-  frame:           new THREE.MeshStandardMaterial({ color:0xccd2db, roughness:0.5,  metalness:0.1 }),  // white duct guard / 白いダクト
-  pcb:             new THREE.MeshStandardMaterial({ color:0x0e1014, roughness:0.55, metalness:0.2 }),  // black PCB / 黒い基板
-  m5stamps3:       new THREE.MeshStandardMaterial({ color:0xff6a00, roughness:0.4,  metalness:0.1 }),  // orange M5Stamp / オレンジ
+  frame:           new THREE.MeshStandardMaterial({ color:0xccd2db, roughness:0.5,  metalness:0.1 }),
+  pcb:             new THREE.MeshStandardMaterial({ color:0x0e1014, roughness:0.55, metalness:0.2 }),
+  m5stamps3:       new THREE.MeshStandardMaterial({ color:0xff6a00, roughness:0.4,  metalness:0.1 }),
   battery:         new THREE.MeshStandardMaterial({ color:0x2a1d14, roughness:0.6,  metalness:0.1 }),
   battery_adapter: new THREE.MeshStandardMaterial({ color:0x33312d, roughness:0.6,  metalness:0.1 }),
-  motor_fl:        new THREE.MeshStandardMaterial({ color:0xb9c1cb, roughness:0.35, metalness:0.85 }), // silver motors / 銀のモータ
+  motor_fl:        new THREE.MeshStandardMaterial({ color:0xb9c1cb, roughness:0.35, metalness:0.85 }),
   motor_fr:        new THREE.MeshStandardMaterial({ color:0xb9c1cb, roughness:0.35, metalness:0.85 }),
   motor_rl:        new THREE.MeshStandardMaterial({ color:0xb9c1cb, roughness:0.35, metalness:0.85 }),
   motor_rr:        new THREE.MeshStandardMaterial({ color:0xb9c1cb, roughness:0.35, metalness:0.85 }),
 };
-
-// Translucent clear-red paddle blades + opaque dark-red hub / 半透明クリアレッド翼＋濃赤ハブ
 const bladeMat = new THREE.MeshStandardMaterial({
   color:0xff2b3d, transparent:true, opacity:0.62, roughness:0.18, metalness:0.0,
   emissive:0x4a0008, emissiveIntensity:0.35, side:THREE.DoubleSide });
 const hubMat = new THREE.MeshStandardMaterial({ color:0x8e0512, roughness:0.3, metalness:0.15 });
 
-// makeBlade: paddle outline (narrow root → max chord at ~65% span → rounded tip) with linear twist.
-// パドル形状の輪郭（細い根元→65%スパンで最大幅→丸い先端）に線形ねじれを付与。
+// makeBlade: paddle outline with linear twist / パドル形状＋線形ねじれ
 const makeBlade = (L, Wm, thick, twistRoot, twistTip) => {
   const s = new THREE.Shape();
-  s.moveTo(0, 0.20 * Wm);                                              // root, leading edge / 根元・前縁
-  s.bezierCurveTo(0.40*L, 0.50*Wm, 0.65*L, 0.50*Wm, 0.86*L, 0.30*Wm); // widen to max chord / 最大幅へ
-  s.quadraticCurveTo(L, 0.16*Wm, L, 0.0);                             // rounded tip / 丸い先端
-  s.quadraticCurveTo(L, -0.12*Wm, 0.86*L, -0.20*Wm);                 // tip trailing / 先端後縁
-  s.bezierCurveTo(0.65*L, -0.58*Wm, 0.40*L, -0.58*Wm, 0, -0.24*Wm);  // fuller trailing edge / 膨らんだ後縁
+  s.moveTo(0, 0.20 * Wm);
+  s.bezierCurveTo(0.40*L, 0.50*Wm, 0.65*L, 0.50*Wm, 0.86*L, 0.30*Wm);
+  s.quadraticCurveTo(L, 0.16*Wm, L, 0.0);
+  s.quadraticCurveTo(L, -0.12*Wm, 0.86*L, -0.20*Wm);
+  s.bezierCurveTo(0.65*L, -0.58*Wm, 0.40*L, -0.58*Wm, 0, -0.24*Wm);
   s.closePath();
   const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled:false });
   geo.translate(0, 0, -thick/2);
-  // Twist around the span (X) axis: more pitch at root, less at tip / 翼幅軸まわりのねじれ
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -725,13 +901,13 @@ const makeBlade = (L, Wm, thick, twistRoot, twistTip) => {
     const c = Math.cos(a), sn = Math.sin(a);
     p.setXYZ(i, x, y*c - z*sn, y*sn + z*c);
   }
-  geo.rotateX(Math.PI/2);   // lay blade into the rotor plane (chord→Z, thickness→Y) / 回転面へ寝かす
+  geo.rotateX(Math.PI/2);
   geo.computeVertexNormals();
   return geo;
 };
 
-const propRadius = 14.99;          // measured from the disk STL / 円盤STLから実測
-const hubR = propRadius * 0.22;    // hub ~22% of diameter / ハブは全径の約22%
+const propRadius = 14.99;
+const hubR = propRadius * 0.22;
 const bladeLen = propRadius - hubR * 0.6;
 const bladeGeo = makeBlade(bladeLen, bladeLen / 2.7, 0.6, 0.38, 0.10);
 const hubGeo = new THREE.CylinderGeometry(hubR, hubR*0.9, 2.6, 24);
@@ -741,7 +917,7 @@ const makeProp = () => {
   const prop = new THREE.Group();
   prop.add(new THREE.Mesh(hubGeo, hubMat));
   const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
-  for (let i = 0; i < 3; i++) {                       // 3 blades, 120° apart / 3枚羽根を120度間隔
+  for (let i = 0; i < 3; i++) {
     const blade = new THREE.Mesh(bladeGeo, bladeMat);
     blade.rotation.y = i * (Math.PI * 2 / 3);
     blade.translateX(hubR * 0.6);
@@ -750,8 +926,6 @@ const makeProp = () => {
   return prop;
 };
 
-// Four prop hubs (measured world coords), diagonal pairs spin opposite ways.
-// 4つのプロペラ中心（実測座標）。対角ペアは逆回転（CW/CCW）。
 const propHubs = [
   { pos:[ 22.80, 7.81,  22.80], dir: 1 },  // FL
   { pos:[-22.80, 7.81,  22.80], dir:-1 },  // FR
@@ -759,27 +933,24 @@ const propHubs = [
   { pos:[-22.80, 7.81, -22.81], dir: 1 },  // RR
 ];
 
-// Load the STL body parts once (shared by both viewers) / STL本体パーツを一度だけ読み込む
 const loader = new STLLoader();
 const loadSTL = (name) => new Promise((resolve) => {
   loader.load(`assets/model/${name}.stl`,
     (geo) => { geo.computeVertexNormals(); resolve({ name, geo }); },
     undefined,
-    () => resolve(null));   // skip missing parts / 欠損は飛ばす
+    () => resolve(null));
 });
 const bodyParts = ['frame','pcb','m5stamps3','battery','battery_adapter',
                    'motor_fl','motor_fr','motor_rl','motor_rr'];
 const loadedParts = (await Promise.all(bodyParts.map(loadSTL))).filter(Boolean);
 
-// Assemble one StampFly instance (fresh meshes, shared geometry/material) into a scene.
-// 1機分を組み立ててシーンへ（メッシュは都度生成、ジオメトリ/マテリアルは共有）。
 const addStampFly = (scene, scale) => {
   const modelGroup = new THREE.Group();
   loadedParts.forEach(({ name, geo }) => modelGroup.add(new THREE.Mesh(geo, partMat[name] || partMat.frame)));
   const props = [];
   propHubs.forEach(({ pos, dir }) => {
     const prop = makeProp();
-    prop.position.set(pos[0], pos[1] - 1.4, pos[2]);  // sit ~2mm lower, near the motor tops / 約2mm下げモータ上端付近へ
+    prop.position.set(pos[0], pos[1] - 1.4, pos[2]);
     prop.userData.dir = dir;
     modelGroup.add(prop); props.push(prop);
   });
@@ -793,7 +964,6 @@ const addStampFly = (scene, scale) => {
   return { pivot, props };
 };
 
-// Build a renderer/scene for one canvas / 1つのキャンバスにビューアを構築
 const initViewer = (canvas, fallback, opts) => {
   if (!canvas) return;
   if (!loadedParts.length) { canvas.style.display = 'none'; if (fallback) fallback.style.display = 'flex'; return; }
@@ -806,7 +976,6 @@ const initViewer = (canvas, fallback, opts) => {
     const camera = new THREE.PerspectiveCamera(opts.fov || 42, 1, 0.1, 1000);
     camera.position.set(opts.camPos[0], opts.camPos[1], opts.camPos[2]);
 
-    // Lights / 照明 — key + fill + accent rim lights (brand cyan / violet)
     scene.add(new THREE.AmbientLight(0x8895b5, 0.75));
     const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(5, 8, 6); scene.add(key);
     const fill = new THREE.DirectionalLight(0xc9d4ff, 0.5); fill.position.set(-4, 2, -3); scene.add(fill);
@@ -815,7 +984,7 @@ const initViewer = (canvas, fallback, opts) => {
 
     const { pivot, props } = addStampFly(scene, opts.scale);
 
-    if (opts.ring) {  // faint glowing ground ring for depth / 奥行き用の発光リング
+    if (opts.ring) {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(2.4, 2.55, 80),
         new THREE.MeshBasicMaterial({ color:0x7c8cff, transparent:true, opacity:0.22, side:THREE.DoubleSide }));
@@ -824,10 +993,10 @@ const initViewer = (canvas, fallback, opts) => {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
-    controls.enableRotate = !!opts.interactive;       // hero background is non-interactive / ヒーロー背景は操作不可
-    controls.autoRotate = !opts.flight;               // flight mode keeps the camera fixed / 飛行モードはカメラ固定
+    controls.enableRotate = !!opts.interactive;
+    controls.autoRotate = !opts.flight;
     controls.autoRotateSpeed = opts.autoRotateSpeed;
-    controls.minPolarAngle = 0.55; controls.maxPolarAngle = 1.45; // keep a pleasing tilt / 見栄えのよい俯角に固定
+    controls.minPolarAngle = 0.55; controls.maxPolarAngle = 1.45;
     controls.target.set(0, 0, 0);
 
     const resize = () => {
@@ -838,44 +1007,39 @@ const initViewer = (canvas, fallback, opts) => {
     };
     new ResizeObserver(resize).observe(canvas); resize();
 
-    // Animation loop / アニメーションループ
     const TAU = Math.PI * 2;
     let t = 0;
     const animate = () => {
       requestAnimationFrame(animate);
       t += 0.016;
-      props.forEach(p => p.rotation.y += opts.propSpeed * p.userData.dir);   // spin props / プロペラ回転
+      props.forEach(p => p.rotation.y += opts.propSpeed * p.userData.dir);
       if (opts.flight) {
-        // Flight choreography: sweep in from far, strafe across, bank, hover.
-        // 飛行コレオグラフィ: 遠くから飛来し、横切り、バンクし、ホバリング。
         const f = opts.flight;
         const a = t * TAU / f.period;
-        pivot.position.x = f.xAmp * Math.sin(a);                 // strafe left/right / 左右に横移動
-        pivot.position.z = f.zBase + f.zAmp * Math.cos(a);       // fly far away ↔ come near / 遠ざかる⇔近づく
-        pivot.position.y = f.yAmp * Math.sin(2 * a) + Math.sin(t * 1.6) * opts.bob; // altitude + bob / 上下動
-        pivot.rotation.y = f.yaw  * Math.sin(a);                 // gentle heading change / 機首ふり
-        pivot.rotation.z = -f.bank * Math.cos(a);                // bank into the strafe / 横移動に合わせバンク
-        pivot.rotation.x = f.pitch * Math.sin(a);                // pitch with fore/aft motion / 前後でピッチ
+        pivot.position.x = f.xAmp * Math.sin(a);
+        pivot.position.z = f.zBase + f.zAmp * Math.cos(a);
+        pivot.position.y = f.yAmp * Math.sin(2 * a) + Math.sin(t * 1.6) * opts.bob;
+        pivot.rotation.y = f.yaw  * Math.sin(a);
+        pivot.rotation.z = -f.bank * Math.cos(a);
+        pivot.rotation.x = f.pitch * Math.sin(a);
       } else {
-        pivot.position.y = Math.sin(t * 1.2) * opts.bob;         // gentle hover bob / ふわふわ上下
+        pivot.position.y = Math.sin(t * 1.2) * opts.bob;
       }
       controls.update();
       renderer.render(scene, camera);
     };
     animate();
   } catch (err) {
-    // WebGL unavailable or module blocked (file://) / WebGL不可・モジュール遮断時はフォールバック表示
     canvas.style.display = 'none';
     if (fallback) fallback.style.display = 'flex';
     console.warn('3D viewer disabled:', err);
   }
 };
 
-// Hardware section: interactive, draggable, with ground ring / Hardware欄: ドラッグ可・床リング付き
+// Hardware section: interactive turntable / Hardware欄: 操作可・観察用回転
 initViewer(droneCanvas, droneFallback,
   { camPos:[0, 3.0, 6.2], scale:3.7, autoRotateSpeed:1.3, propSpeed:0.85, bob:0.12, ring:true, interactive:true });
-// Hero background: a flying StampFly — sweeps in from far, strafes across, banks, hovers.
-// ヒーロー背景: 飛ぶStampFly — 遠くから飛来→横切り→バンク→ホバリング
+// Hero background: flying StampFly / ヒーロー背景: 飛行コレオグラフィ
 initViewer(heroCanvas, null,
   { camPos:[0, 4.2, 7.2], scale:3.0, propSpeed:0.8, bob:0.12, ring:false, interactive:false, maxPR:1.6,
     flight:{ period:16, xAmp:3.2, zBase:-2.0, zAmp:4.2, yAmp:0.5, bank:0.18, pitch:0.14, yaw:0.28 } });

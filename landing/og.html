@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!-- OG card source (1200x630). Screenshot this to assets/og-image.png.
+     OGカードの元(1200x630)。これをスクショして assets/og-image.png にする。 -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1200px;height:630px;overflow:hidden;
+    font-family:"Noto Sans JP","Space Grotesk",sans-serif;color:#e7ecf5;
+    background:
+      radial-gradient(50vw 50vw at 8% -10%,rgba(34,211,238,.22),transparent 60%),
+      radial-gradient(55vw 55vw at 100% 0%,rgba(168,85,247,.26),transparent 60%),
+      radial-gradient(60vw 60vw at 60% 130%,rgba(124,140,255,.18),transparent 60%),
+      #06080f;}
+  .card{width:100%;height:100%;padding:66px 72px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+  .brand{display:flex;align-items:center;gap:16px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:30px;letter-spacing:.01em}
+  .dot{width:40px;height:40px;border-radius:12px;background:linear-gradient(110deg,#22d3ee,#7c8cff 45%,#a855f7);box-shadow:0 0 28px rgba(124,140,255,.7)}
+  h1{font-family:"Space Grotesk","Noto Sans JP",sans-serif;font-weight:900;font-size:78px;line-height:1.12;letter-spacing:-.02em}
+  .grad{background:linear-gradient(110deg,#22d3ee,#7c8cff 45%,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{margin-top:22px;font-size:30px;color:#cdd6ea;font-weight:500}
+  .pills{display:flex;gap:18px;margin-top:6px}
+  .pill{font-size:27px;font-weight:700;padding:14px 26px;border-radius:999px;
+    border:1px solid rgba(120,140,200,.3);background:rgba(10,14,26,.55);color:#eaf1ff}
+  .pill b{color:#22d3ee}
+  .top{display:flex;justify-content:space-between;align-items:center}
+  .url{font-size:22px;color:#9fb2d6;font-family:"Space Grotesk",sans-serif;letter-spacing:.04em}
+  /* quad-rotor motif top-right / 右上のクアッド意匠 */
+  .quad{position:absolute;top:120px;right:90px;width:230px;height:230px;opacity:.9}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="brand"><span class="dot"></span>StampFly Ecosystem</div>
+      <div class="url">m5fly-kanazawa.github.io/stampfly_ecosystem</div>
+    </div>
+
+    <svg class="quad" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="55" cy="55" r="40" stroke="#22d3ee" stroke-width="3" opacity=".55"/>
+      <circle cx="145" cy="55" r="40" stroke="#a855f7" stroke-width="3" opacity=".55"/>
+      <circle cx="55" cy="145" r="40" stroke="#a855f7" stroke-width="3" opacity=".55"/>
+      <circle cx="145" cy="145" r="40" stroke="#22d3ee" stroke-width="3" opacity=".55"/>
+      <line x1="55" y1="55" x2="145" y2="145" stroke="#7c8cff" stroke-width="6"/>
+      <line x1="145" y1="55" x2="55" y2="145" stroke="#7c8cff" stroke-width="6"/>
+      <rect x="86" y="86" width="28" height="28" rx="7" fill="#ff6a00"/>
+      <g stroke="#ff2b3d" stroke-width="4" opacity=".85">
+        <line x1="35" y1="55" x2="75" y2="55"/><line x1="55" y1="35" x2="55" y2="75"/>
+        <line x1="125" y1="55" x2="165" y2="55"/><line x1="145" y1="35" x2="145" y2="75"/>
+        <line x1="35" y1="145" x2="75" y2="145"/><line x1="55" y1="125" x2="55" y2="165"/>
+        <line x1="125" y1="145" x2="165" y2="145"/><line x1="145" y1="125" x2="145" y2="165"/>
+      </g>
+    </svg>
+
+    <div>
+      <h1>ドローンの飛行制御を、<br /><span class="grad">自分の手で。</span></h1>
+      <div class="sub">学び、実装し、実験する — 教育・研究プラットフォーム</div>
+    </div>
+
+    <div class="pills">
+      <div class="pill"><b>1機 $50</b></div>
+      <div class="pill"><b>37 g</b> 軽量・安全</div>
+      <div class="pill"><b>30機</b> 同時飛行</div>
+    </div>
+  </div>
+</body>
+</html>

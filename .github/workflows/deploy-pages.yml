@@ -1,0 +1,45 @@
+# Deploy the landing page (landing/) to GitHub Pages.
+# 紹介ページ (landing/) を GitHub Pages へ配信するワークフロー。
+#
+# 有効化の手順 (1回だけ):
+#   リポジトリ Settings → Pages → Build and deployment → Source を
+#   「GitHub Actions」に設定する。以後 main の landing/ を変更して push すると自動公開。
+#   公開URL: https://m5fly-kanazawa.github.io/stampfly_ecosystem/
+name: Deploy landing page to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:   # 手動実行も可 / allow manual run
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時実行は1つに集約（古いデプロイはキャンセル） / one deployment at a time
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload landing/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: landing
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
