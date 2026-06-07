@@ -79,6 +79,7 @@ section{position:relative}
 
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nb{white-space:nowrap}  /* keep a word from breaking mid-way (e.g. katakana) / 語の途中改行を防ぐ */
 .eyebrow{
   display:inline-block;font-family:"Space Grotesk",sans-serif;font-weight:600;
   letter-spacing:.22em;text-transform:uppercase;font-size:.72rem;color:var(--cyan);
@@ -315,7 +316,7 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
   <div class="wrap hero-inner">
     <span class="eyebrow reveal in">Open-source drone control platform</span>
     <h1 class="reveal in">自分の手で、<br /><span class="grad-text">ドローンの飛行制御</span>を作る</h1>
-    <p class="sub reveal in d1">制御を<strong>学び</strong>、<strong>実装し</strong>、<strong>実験する</strong>ための教育・研究プラットフォーム。</p>
+    <p class="sub reveal in d1">制御を<strong>学び</strong>、<strong>実装し</strong>、<strong>実験する</strong>ための<wbr><span class="nb">教育・研究プラットフォーム</span>。</p>
     <p class="lead reveal in d2">教科書で学んだPID・姿勢推定を、シミュレータと実機で「実際に飛ぶもの」へ。設計から解析・教育までを一気通貫で扱えます。</p>
     <div class="hero-badges reveal in d2">
       <span class="chip">ESP32-S3 / ESP-IDF</span>
@@ -749,7 +750,8 @@ const initViewer = (canvas, fallback, opts) => {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
     controls.enableRotate = !!opts.interactive;       // hero background is non-interactive / ヒーロー背景は操作不可
-    controls.autoRotate = true; controls.autoRotateSpeed = opts.autoRotateSpeed;
+    controls.autoRotate = !opts.flight;               // flight mode keeps the camera fixed / 飛行モードはカメラ固定
+    controls.autoRotateSpeed = opts.autoRotateSpeed;
     controls.minPolarAngle = 0.55; controls.maxPolarAngle = 1.45; // keep a pleasing tilt / 見栄えのよい俯角に固定
     controls.target.set(0, 0, 0);
 
@@ -761,13 +763,27 @@ const initViewer = (canvas, fallback, opts) => {
     };
     new ResizeObserver(resize).observe(canvas); resize();
 
-    // Animation: spin props, gentle hover bob / プロペラ回転＋ふわふわ上下
+    // Animation loop / アニメーションループ
+    const TAU = Math.PI * 2;
     let t = 0;
     const animate = () => {
       requestAnimationFrame(animate);
       t += 0.016;
-      props.forEach(p => p.rotation.y += opts.propSpeed * p.userData.dir);
-      pivot.position.y = Math.sin(t * 1.2) * opts.bob;
+      props.forEach(p => p.rotation.y += opts.propSpeed * p.userData.dir);   // spin props / プロペラ回転
+      if (opts.flight) {
+        // Flight choreography: sweep in from far, strafe across, bank, hover.
+        // 飛行コレオグラフィ: 遠くから飛来し、横切り、バンクし、ホバリング。
+        const f = opts.flight;
+        const a = t * TAU / f.period;
+        pivot.position.x = f.xAmp * Math.sin(a);                 // strafe left/right / 左右に横移動
+        pivot.position.z = f.zBase + f.zAmp * Math.cos(a);       // fly far away ↔ come near / 遠ざかる⇔近づく
+        pivot.position.y = f.yAmp * Math.sin(2 * a) + Math.sin(t * 1.6) * opts.bob; // altitude + bob / 上下動
+        pivot.rotation.y = f.yaw  * Math.sin(a);                 // gentle heading change / 機首ふり
+        pivot.rotation.z = -f.bank * Math.cos(a);                // bank into the strafe / 横移動に合わせバンク
+        pivot.rotation.x = f.pitch * Math.sin(a);                // pitch with fore/aft motion / 前後でピッチ
+      } else {
+        pivot.position.y = Math.sin(t * 1.2) * opts.bob;         // gentle hover bob / ふわふわ上下
+      }
       controls.update();
       renderer.render(scene, camera);
     };
@@ -783,10 +799,11 @@ const initViewer = (canvas, fallback, opts) => {
 // Hardware section: interactive, draggable, with ground ring / Hardware欄: ドラッグ可・床リング付き
 initViewer(droneCanvas, droneFallback,
   { camPos:[0, 3.0, 6.2], scale:3.7, autoRotateSpeed:1.3, propSpeed:0.85, bob:0.12, ring:true, interactive:true });
-// Hero background: decorative, 3/4 top-down view so the quad reads clearly, slow auto-orbit.
-// ヒーロー背景: クアッドだと分かる斜め上からの俯瞰・ゆっくり旋回・装飾用
+// Hero background: a flying StampFly — sweeps in from far, strafes across, banks, hovers.
+// ヒーロー背景: 飛ぶStampFly — 遠くから飛来→横切り→バンク→ホバリング
 initViewer(heroCanvas, null,
-  { camPos:[0, 4.2, 7.2], scale:3.5, autoRotateSpeed:0.5, propSpeed:0.8, bob:0.2, ring:false, interactive:false, maxPR:1.6 });
+  { camPos:[0, 4.2, 7.2], scale:3.0, propSpeed:0.8, bob:0.12, ring:false, interactive:false, maxPR:1.6,
+    flight:{ period:16, xAmp:3.2, zBase:-2.0, zAmp:4.2, yAmp:0.5, bank:0.18, pitch:0.14, yaw:0.28 } });
 </script>
 </body>
 </html>
