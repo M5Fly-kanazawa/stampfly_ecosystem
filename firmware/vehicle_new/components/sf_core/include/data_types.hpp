@@ -157,6 +157,35 @@ struct PilotRequest {
 };
 
 // =============================================================================
+// Input Event Data Types
+// 入力イベントデータ型
+// =============================================================================
+
+/// Button gesture detected by ButtonTask at the GPIO. ButtonTask reports the gesture as
+/// a FACT (it does not decide the action); the StateManager — the sole transition
+/// authority — maps a click to an ARM/DISARM toggle (architecture §2: detection reports,
+/// state management decides; R5: by topic, not a direct call). The 3 s / 5 s long-press
+/// gestures are reserved for pairing / system-reset handling.
+/// ButtonTask が GPIO で検出したボタンジェスチャ。ButtonTask はジェスチャを「事実」として
+/// 報告するだけで動作を決めない。判断は唯一の遷移実行者 StateManager が行い、クリックを
+/// ARM/DISARM トグルに対応づける（architecture §2: 検出は報告・判断は状態管理、R5: 直接
+/// 呼び出しでなくトピック経由）。3秒/5秒の長押しはペアリング/システムリセット用に予約。
+enum class ButtonGesture : uint8_t {
+    None        = 0,   // no gesture                   / ジェスチャなし
+    Click       = 1,   // short press (<1 s)           / 短押し
+    DoubleClick = 2,   // two quick clicks             / ダブルクリック
+    LongPress3s = 3,   // held 3 s (clear pairing)     / 長押し3秒
+    LongPress5s = 4,   // held 5 s (system reset)      / 長押し5秒
+};
+
+/// Button event — ButtonTask publishes the detected gesture; StateTask consumes it.
+/// ボタンイベント — ButtonTask が検出ジェスチャを発行し、StateTask が消費する。
+struct ButtonEvent {
+    uint8_t  gesture;     // ButtonGesture value         / ButtonGesture の値
+    uint32_t timestamp;   // [us]; 0 = never published   / 0=未発行
+};
+
+// =============================================================================
 // Control Data Types
 // 制御データ型
 // =============================================================================

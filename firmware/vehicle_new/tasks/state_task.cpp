@@ -275,6 +275,42 @@ void StateTask(void* pvParameters)
         }
 
         // =====================================================================
+        // Button gestures (ButtonTask → button_event): a click toggles ARM/DISARM
+        // on the GROUND only. The on-board button is an ARM action (requirements §2:
+        // "ARM action (button or controller)"). We deliberately restrict the toggle to
+        // IDLE_GROUND ↔ ARMED_GROUND: a single accidental short click must NOT cut the
+        // motors in flight — an in-flight kill is a deliberate failsafe / controller
+        // DISARM, not a button tap. requestArm()/requestDisarm() still validate
+        // internally (pre-arm gates, armed-state check), so this is a request, not a
+        // forced transition. The button reports the gesture as a fact; this task — the
+        // sole transition authority — decides. Long-press gestures are reserved
+        // (pairing / system reset) and ignored here.
+        // ボタンジェスチャ（ButtonTask → button_event）: クリックは地上でのみ ARM/DISARM を
+        // トグルする。機体ボタンは ARM 操作（要件§2「ARM 操作（ボタン or コントローラ）」）。
+        // トグルを IDLE_GROUND↔ARMED_GROUND に意図的に限定する: 誤った単発の短押しが飛行中に
+        // モータを切ってはならない — 飛行中のキルは意図的な failsafe/コントローラ DISARM で
+        // あってボタンのタップではない。requestArm()/requestDisarm() は内部で検証する
+        // （ARM前ゲート・armed 判定）ため、これは強制遷移でなく「要求」。ボタンはジェスチャを
+        // 事実として報告し、唯一の遷移実行者である本タスクが判断する。長押しは予約
+        // （ペアリング/システムリセット）でここでは無視する。
+        //
+        // @subscriber button_event
+        // @design requirements.md §2 — ARM action (button or controller)   [OK]
+        // @design architecture.md §2 — detection reports, state decides     [OK]
+        // =====================================================================
+        sf::ButtonEvent button;
+        while (sf::button_event.read(button)) {
+            if (button.gesture != static_cast<uint8_t>(sf::ButtonGesture::Click)) {
+                continue;
+            }
+            switch (g_state_manager.getState()) {
+            case sf::FlightState::IDLE_GROUND:  g_state_manager.requestArm();    break;
+            case sf::FlightState::ARMED_GROUND: g_state_manager.requestDisarm(); break;
+            default: break;  // airborne / INIT / held: ignore a click (see note above)
+            }
+        }
+
+        // =====================================================================
         // Takeoff sequencing: ARMED_GROUND → TAKEOFF → FLYING.
         // 離陸シーケンス: ARMED_GROUND → TAKEOFF → FLYING。
         //

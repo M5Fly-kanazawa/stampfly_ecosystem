@@ -41,6 +41,7 @@ Topic<PowerData,       Latest, 1>      sensor_power;
 Topic<StateEstimate,   Latest, 1>      estimate_state;
 Topic<CommandSetpoint, Latest, 1>      command_setpoint;
 Topic<PilotRequest,    Latest, 1>      pilot_request;
+Topic<ButtonEvent,     Queue, 4>       button_event;
 Topic<ControlOutput,   Latest, 1>      control_output;
 Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<SystemMode,      Latest, 1>      system_mode;
@@ -64,6 +65,7 @@ void topics_init()
     estimate_state.init();
     command_setpoint.init();
     pilot_request.init();
+    button_event.init();
     control_output.init();
     actuator_motor.init();
     system_mode.init();

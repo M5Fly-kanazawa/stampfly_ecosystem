@@ -56,6 +56,7 @@ extern Topic<StateEstimate,   Latest, 1>      estimate_state;
 
 extern Topic<CommandSetpoint, Latest, 1>      command_setpoint;
 extern Topic<PilotRequest,    Latest, 1>      pilot_request;   // arm + mode (sf_comm → StateTask)
+extern Topic<ButtonEvent,     Queue, 4>       button_event;    // gesture fact (ButtonTask → StateTask)
 
 // =============================================================================
 // Control Topics
