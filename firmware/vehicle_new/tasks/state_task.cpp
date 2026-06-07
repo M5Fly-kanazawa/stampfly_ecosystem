@@ -335,6 +335,19 @@ void StateTask(void* pvParameters)
         sf::SystemAlert alert;
         while (sf::system_alert.read(alert)) {
             g_state_manager.handleAlert(alert);
+
+            // Mirror battery alerts onto notify_command so NotifyTask can sound the
+            // buzzer. Notify cannot read system_alert (this task owns that shared
+            // queue; a second reader would steal failsafe events), so we forward.
+            // 電池アラートを notify_command に転送し NotifyTask がブザーを鳴らせるように
+            // する。Notify は system_alert を読めない (本タスクが所有する共有キューで、
+            // 二重消費は failsafe イベントを奪う) ため、ここで転送する。
+            if (alert.type == static_cast<uint8_t>(sf::AlertType::LOW_BATTERY) ||
+                alert.type == static_cast<uint8_t>(sf::AlertType::USB_POWER)) {
+                sf::notify_command.publish(
+                    {static_cast<uint8_t>(sf::NotifyEvent::LowBattery),
+                     static_cast<uint32_t>(esp_timer_get_time())});
+            }
         }
 
         // =====================================================================

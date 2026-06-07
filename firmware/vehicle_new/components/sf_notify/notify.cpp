@@ -52,15 +52,29 @@ static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
 // init — initialize LED and buzzer HAL
 // 初期化 — LEDとブザーHALを初期化
 // -----------------------------------------------------------------------------
-void Notify::init()
+void Notify::init(const NotifyConfig& config)
 {
-    // TODO: Initialize LED HAL (Neopixel or PWM)
-    // TODO: LED HALを初期化（NeopixelまたはPWM）
+    led_count_ = config.led_count;
 
-    // TODO: Initialize buzzer HAL
-    // TODO: ブザーHALを初期化
+    // WS2812 body LED. HAL guards its own calls, so a failed init simply makes
+    // setColor() a no-op.
+    // WS2812 ボディ LED。HAL が自前でガードするので init 失敗時は setColor() が
+    // no-op になるだけ。
+    stampfly::LED::Config led_cfg{};
+    led_cfg.gpio     = config.led_gpio;
+    led_cfg.num_leds = config.led_count;
+    led_.init(led_cfg);
 
-    ESP_LOGI(TAG, "Notify initialized");
+    // LEDC buzzer (timer separate from the motor's timer 0).
+    // LEDC ブザー (モータのタイマ0とは別タイマ)。
+    stampfly::Buzzer::Config buz_cfg{};
+    buz_cfg.gpio         = config.buzzer_gpio;
+    buz_cfg.ledc_channel = config.buzzer_ledc_channel;
+    buz_cfg.ledc_timer   = config.buzzer_ledc_timer;
+    buzzer_.init(buz_cfg);
+
+    ESP_LOGI(TAG, "Notify initialized (LED gpio=%d x%d, buzzer gpio=%d)",
+             config.led_gpio, config.led_count, config.buzzer_gpio);
 }
 
 // -----------------------------------------------------------------------------
@@ -79,11 +93,33 @@ void Notify::update()
     const LedPattern& pattern = getPattern(state);
     applyLedPattern(pattern);
 
-    // Check for alerts and play buzzer if needed
-    // アラートをチェックし必要に応じブザーを鳴らす
-    SystemAlert alert;
-    if (system_alert.read(alert)) {
-        playTone(static_cast<AlertType>(alert.type));
+    // Discrete notify events (ARM/DISARM tones, low-battery warning) arrive on the
+    // notify_command queue. Notify is its ONLY consumer, so draining it here is
+    // safe. We deliberately do NOT read system_alert — state_task owns that queue
+    // (failsafe), and a shared FreeRTOS queue would have Notify steal its events.
+    // 離散通知イベント（ARM/DISARM 音、低電圧警告）は notify_command キューで届く。
+    // 消費者は Notify のみゆえここで drain して安全。system_alert は読まない —
+    // それは state_task(failsafe) が所有する共有キューで、読むとイベントを奪う。
+    NotifyCommand cmd;
+    while (notify_command.read(cmd)) {
+        playEvent(static_cast<NotifyEvent>(cmd.event));
+    }
+}
+
+// -----------------------------------------------------------------------------
+// playEvent — buzzer sequence for a discrete notify event (notify_command)
+// playEvent — 離散通知イベント用のブザー（notify_command）
+// -----------------------------------------------------------------------------
+void Notify::playEvent(NotifyEvent event)
+{
+    switch (event) {
+        case NotifyEvent::ArmTone:     buzzer_.armTone();           break;
+        case NotifyEvent::DisarmTone:  buzzer_.disarmTone();        break;
+        case NotifyEvent::LowBattery:  buzzer_.lowBatteryWarning(); break;
+        case NotifyEvent::Calibrating: buzzer_.beep();              break;
+        case NotifyEvent::Ready:       buzzer_.beep();              break;
+        case NotifyEvent::None:
+        default:                                                    break;
     }
 }
 
@@ -93,11 +129,22 @@ void Notify::update()
 // -----------------------------------------------------------------------------
 void Notify::playTone(AlertType type)
 {
-    // TODO: Map AlertType to frequency + duration
-    // TODO: AlertTypeを周波数＋持続時間にマッピング
-    // TODO: Call buzzer HAL to play tone
-    // TODO: ブザーHALを呼んでトーンを再生
-    (void)type;
+    // Maps a failsafe AlertType to a buzzer sound. Public helper for callers that
+    // hold an alert directly; the periodic update() path uses notify_command/
+    // playEvent so it does not consume the state_task-owned system_alert queue.
+    // failsafe の AlertType をブザー音に対応づける公開ヘルパ。アラートを直接持つ
+    // 呼び出し側用。周期 update() は notify_command/playEvent を使い、state_task が
+    // 所有する system_alert キューを消費しない。
+    switch (type) {
+        case AlertType::LOW_BATTERY:
+        case AlertType::USB_POWER:     buzzer_.lowBatteryWarning(); break;
+        case AlertType::COMM_LOST:
+        case AlertType::IMPACT:
+        case AlertType::ESKF_DIVERGED:
+        case AlertType::GYRO_ANOMALY:  buzzer_.errorTone();         break;
+        case AlertType::NONE:
+        default:                                                    break;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -124,8 +171,7 @@ void Notify::applyLedPattern(const LedPattern& pattern)
     // Solid mode (off_ms == 0): always on
     // 常灯モード (off_ms == 0): 常にON
     if (pattern.off_ms == 0) {
-        // TODO: led_hal::set_color(pattern.color.r, g, b);
-        // TODO: led_hal::set_color(pattern.color.r, g, b);
+        setBodyLeds(pattern.color);
         return;
     }
 
@@ -135,11 +181,21 @@ void Notify::applyLedPattern(const LedPattern& pattern)
     if (now_ms - last_toggle_ms_ >= period) {
         led_on_ = !led_on_;
         last_toggle_ms_ = now_ms;
+        setBodyLeds(led_on_ ? pattern.color : LedColor{0, 0, 0});
+    }
+}
 
-        // TODO: Set LED on/off via HAL
-        // TODO: HAL経由でLEDをON/OFF
-        // if (led_on_) led_hal::set_color(r, g, b);
-        // else         led_hal::set_color(0, 0, 0);
+// -----------------------------------------------------------------------------
+// setBodyLeds — set every body LED to one color (0xRRGGBB packed for the HAL)
+// setBodyLeds — 全ボディ LED を 1 色に（HAL 用に 0xRRGGBB へパック）
+// -----------------------------------------------------------------------------
+void Notify::setBodyLeds(const LedColor& color)
+{
+    const uint32_t packed = (static_cast<uint32_t>(color.r) << 16) |
+                            (static_cast<uint32_t>(color.g) << 8)  |
+                             static_cast<uint32_t>(color.b);
+    for (int i = 0; i < led_count_; ++i) {
+        led_.setColor(static_cast<uint8_t>(i), packed);
     }
 }
 
