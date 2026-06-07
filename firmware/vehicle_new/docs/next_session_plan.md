@@ -1,16 +1,15 @@
-# 次セッション指示書 — Phase 6 の残り（Notify/Button/sensor_health/CLI）から再開
+# 次セッション指示書 — Phase 6 完了。次は Phase 7（品質仕上げ）or χ²ラッチアップ調査
 
-最終更新: 2026-06-07（**Phase 0〜5 完了 ＋ Phase 6 の Logger・mag χ² 完了。Phase 6 残=Notify/Button/sensor_health/CLI。割り込み候補=χ²ラッチアップ調査・デッドバンド復活**）
+最終更新: 2026-06-07（**Phase 0〜6 完了。次フェーズの順序を要ユーザー判断: (A) Phase 7 品質仕上げ / (B) χ²ラッチアップ調査→デッドバンド復活**）
 
-> **Phase 6 進行中（未実装機能の配線）:**
-> - **✅ Logger（commit c773bac）**: log_task→sf_logger 配線。armed 中 100Hz で Blackbox(SPIFFS)記録、disarm で flush。Logger の per-cycle ログ氾濫バグ（open失敗時 100Hz で fopen エラー）を blackbox_failed_ ラッチで修正。実機は partitions.csv に storage パーティション確保で記録開始。
-> - **✅ mag χ²（commit 6681c69）**: vectorUpdate3 を chi2_gate 引数化。mag→mag_chi2_gate、accel→accel_chi2_gate。mag が accel ゲート定数を流用していた TODO を解消（mag 既定OFFゆえ挙動不変）。
-> - **⬜ 残り（次バッチ）:**
->   - **✅ Notify（commit f69861d）**: notify_task→sf_notify。system_mode→LED 色/点滅(WS2812)、notify_command→ブザー(ArmTone/DisarmTone/LowBattery)。NotifyConfig で HW 構成注入＝config.hpp 非依存。state_task が電池アラートを notify_command に転送（system_alert は state_task 所有ゆえ Notify 非消費）。
->   - **⬜ Button（中）**: button_task→sf_hal_button（100%完成）。**注意: pilot_request は comm が毎パケット所有ゆえ共有不可**。新規 button_event トピック＋state_task consumer が必要（R5）。クリック→ARM/DISARM toggle。
->   - **⬜ sensor_health 1Hz（中）**: SensorHealth 型あり・publisher 無し。present_mask（sensor_present 集約・Phase 4 で実装済）＋healthy_mask（各 sensor topic の鮮度）を 1Hz publish。
->   - **⬜ CLI（大）**: cli_task→esp_console（host shim あり）。params get/set/save、status、reboot。flight 非必須。
->   - **⬜ Phase 4 Critical-fail LED（小〜中）**: board::fatal の LED エラーパターン。board 所有の緊急 LED（lazy init）が要（bus 失敗は Phase 1＝notify 起動前ゆえ board 自前）。board→sf_hal_led 依存追加。
+> **✅ Phase 6 完了（未実装機能の全配線）:**
+> - **✅ Logger（commit c773bac）**: log_task→sf_logger 配線。armed 中 100Hz で Blackbox(SPIFFS)記録、disarm で flush。per-cycle ログ氾濫バグを blackbox_failed_ ラッチで修正。
+> - **✅ mag χ²（commit 6681c69）**: vectorUpdate3 を chi2_gate 引数化。mag→mag_chi2_gate、accel→accel_chi2_gate。
+> - **✅ Notify（commit f69861d）**: notify_task→sf_notify。system_mode→LED 色/点滅(WS2812)、notify_command→ブザー。NotifyConfig で HW 構成注入＝config.hpp 非依存。state_task が電池アラートを notify_command に転送。
+> - **✅ Button（commit 793b416）**: button_task→sf_hal_button。新規 button_event トピック(ButtonGesture/Queue,4)＋state_task consumer(R5)。クリック→**地上限定** ARM/DISARM toggle（飛行中クリックは無視＝誤キル防止）。SIL は gpio shim 常時 released でバイト一致。
+> - **✅ sensor_health 1Hz（commit 8caf32f）**: PowerTask が present_mask/healthy_mask/last_update_us を 1Hz publish(R15)。鮮度は各センサが set_sensor_update で BSP に報告(Queue トピックは融合タスクが消費ゆえ read 不可=R5)、IMU のみ RingBuffer の非消費 latest()。tof presence 報告も補完。SIL で 0x3D/0x3D 収束を確認。
+> - **✅ CLI（commit b895cb0）**: cli_task→esp_console USB-CDC REPL。param(list/get/set/save 型別)・status・reboot を R6 レジストリ({name,help,func}配列)で登録。console を REQUIRES、emu に esp_console_shim をリンク。registry-dispatch 経路を実発火確認。
+> - **✅ Critical-fail LED（commit 8483b8a）**: board::fatal が MCU 内蔵 LED(GPIO21)を高速赤点滅。board 所有(notify 本体 LED と別系統)・lazy init で Phase 1 失敗でも点灯。board→sf_hal_led 依存追加。
 
 > **Phase 5 完了（起動シーケンス R3 ＋ params SSOT）:**
 > - **5a（commit 0246dd2）**: main.cpp を宣言的 Phase 0-4（NVS/BSP/topics/params/tasks）に。14タスク生成を `sf::tasks::start_all()`（tasks.cpp 新設）へ集約。extern TaskHandle 排除（ControlTask が xTaskGetCurrentTaskHandle で自己登録→`sf::tasks::control_handle()`、死蔵 g_state_task_handle 削除）。**`params::init()` を Phase 3 に配線（重大: これまで未呼出＝NVS保存値が起動時に読まれていなかった）**。SIL smoke 3本の手動 handle 配線も撤去。
@@ -41,13 +40,13 @@
 
 ## ★最初にやること（未決の判断 — ユーザーに確認）
 
-前セッション末で**順序が未決**。次の3つを、まずユーザーに順序確認してから着手する：
+**Phase 0〜6 完了。** 次フェーズの順序が未決。まずユーザーに確認してから着手する：
 
-1. **χ² ラッチアップ調査**（推定器ロバスト性・実機にも関わる。`docs/chi2_latchup_finding.md` が起点）
-2. **デッドバンド復活**（χ² 改善後に 0.05 を有効化。現状は機構配線・既定0）
-3. **Phase 4（HW所有一元化）**（計画 `valiant-frolicking-sun.md` の本来の次フェーズ）
+1. **Phase 7（品質仕上げ）**（計画 `valiant-frolicking-sun.md` の本来の次フェーズ）: 全 `@design` タグを実装照合し [OK]/[NG] 化（リリースは全[OK]）、全タスクヘッダに `@publisher`/`@subscriber`（R13）、残 TODO 解消、マジックナンバー集約（重力 9.80665 統一・相補ゲイン params 化・pid 飛行リミット config 化）、コメントドリフト修正、esp_netif STA 所有の設計文書矛盾解決。
+2. **χ² ラッチアップ調査**（推定器ロバスト性・実機にも関わる。`docs/chi2_latchup_finding.md` が起点）→ **デッドバンド復活**（χ² 改善後に 0.05 有効化、現状は機構配線・既定0）。
+3. **Phase 8（★ロバスト再飛行 SIL 検証）**: emu に物理ハンドリング機構＋crash_refly.scn / modeswitch.scn ゲート化。
 
-推奨は **1 → 2 → 3**（χ² を直せば 2 もそのまま通る見込み）だが、Phase 4 を先にする選択もある。
+推奨は **Phase 7 で品質を仕上げてリリース可状態にする** か、研究的に重要な **χ²（2）を先に攻める**。
 **この判断を最初にユーザーへ。** χ² は当座 SIL 電池サグの動的ディザで非発火にしてあるだけで根治していない。
 
 ---
@@ -83,17 +82,21 @@
 | 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset。②COMM_LOST 3秒ホバー遅延。③**ARM時=姿勢共分散のみ膨張**（`InflateCov(Attitude)`）。 | `00468d0` |
 | 3 | **責務分離の是正（コア）**。sf_command に正規化・デッドバンド・flags デコードを集約（死蔵コード解消）。正規化を実証パス（2048中央, throttle clamp[0,1]）に統一。sf_comm は生パケットを RawControlInput として渡すだけ＋RawInputSink 注入で comm_task が配線（層逆転回避）。motor_driver 旧HAL残骸（setMixerOutput=二重ミキサー/testMotor/stats）削除。挙動完全保存（ドリフト値ベースライン一致）。 | `95f9418` |
 | 3+ | **SIL 1S LiPo 電池サグモデル＋V_BATT 実電圧化**。plant に動的端子電圧 v_batt=OCV(SoC)−I·R_int（電流=モータ電気モデル＋アビオ、クーロンカウント、vpython OCV曲線移植）。emu で有効化、actuator を live(sensor_power)へ。χ²ラッチアップ非発火で全PASS。 | `b8fd27e` |
-| 4 | **HW所有の一元化（R1/R2/R4）**。BMI270/PMW3901 SPI を `skip_bus_init`、motor LEDC を `skip_timer_init` で sf_board 借用に統一（二重init握り潰し→所有明示の省略、board::flow_spi() 追加）。`sensor_present()` 実装（atomic, Mag/Flow/Baro/Power の init 成否を board へ報告）。Critical 失敗を halt 統一（board::fatal＋imu_task/actuator、esp_restart せず §5）。**LED 表示は Phase 6 繰延**（LED 所有未確立）。共有タスクは smoke 非リンク制約で board 直呼びせず plain bool で借用。 | (本コミット) |
+| 4 | **HW所有の一元化（R1/R2/R4）**。BMI270/PMW3901 SPI を `skip_bus_init`、motor LEDC を `skip_timer_init` で sf_board 借用に統一（二重init握り潰し→所有明示の省略、board::flow_spi() 追加）。`sensor_present()` 実装（atomic, Mag/Flow/Baro/Power の init 成否を board へ報告）。Critical 失敗を halt 統一（board::fatal＋imu_task/actuator、esp_restart せず §5）。**LED 表示は Phase 6 繰延**（LED 所有未確立）。共有タスクは smoke 非リンク制約で board 直呼びせず plain bool で借用。 | `(Phase4)` |
+| 5 | **起動シーケンス R3 ＋ params SSOT**。main.cpp を宣言的 Phase 0-4 に・start_all() 集約・extern TaskHandle 排除・params::init() 配線（未呼出だった）。params.def 撤去し params.cpp を SSOT 文書化。 | `0246dd2` 他 |
+| 6 | **未実装機能の全配線**。Logger・mag χ²・Notify・Button(button_event 地上トグル)・sensor_health 1Hz(R15)・CLI(esp_console R6 レジストリ)・Critical-fail LED(board::fatal 高速赤点滅)。 | `c773bac`〜`8483b8a` |
 
-**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3 + plant_smoke）。**Phase 4 で ESP-IDF 実機ビルド確認済み（953.5KB）。**
+**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3 + plant_smoke）。**Phase 6 末で ESP-IDF 実機ビルド確認済み（1054.7KB, 67% free）。**
 
 ---
 
-## 3. 次にやること: Phase 6（未実装機能の配線）— ただし χ²/deadband・LED が割り込み候補
+## 3. 次にやること: Phase 7（品質仕上げ）or χ²ラッチアップ調査 — 要ユーザー判断
 
-Phase 5（起動シーケンス＋params SSOT）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 6**。
+**Phase 6 完了**。次は計画 `valiant-frolicking-sun.md` の **Phase 7（品質仕上げ）** が本来の次フェーズ。ただし χ²ラッチアップ調査（研究的に重要・実機にも関わる根治）を先に攻める選択もある。**順序をユーザーに確認してから着手（§★最初にやること 参照）。**
 
-**割り込み候補（ユーザーと相談して順序決定）:**
+**Phase 7（品質仕上げ）の作業:** 全 `@design` タグを実装照合し [OK]/[NG] 化（リリースは全[OK]）／全タスクヘッダに `@publisher`/`@subscriber`（R13）／残 TODO 解消／マジックナンバー集約（重力 9.80665 統一・相補ゲイン params 化・pid 飛行リミット config 化）／コメントドリフト修正／esp_netif STA 所有の設計文書矛盾（architecture §7 vs hardware_init §4）解決。
+
+**χ²/Phase 6 の参考（旧・割り込み候補メモ）:**
 - **χ² ラッチアップ調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
 - **デッドバンド復活**: χ² 改善後に 0.05 を有効化（現状は機構配線・既定0）。
 - **Phase 4 LED 繰延分**: Critical 失敗時の LED エラーパターン表示。Phase 6（notify/LED 所有確立）でやるのが本来＝Phase 6 と一緒に片付くはず。board::fatal にフック有り。
