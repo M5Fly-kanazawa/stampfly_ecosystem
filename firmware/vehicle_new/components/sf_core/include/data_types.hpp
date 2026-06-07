@@ -230,13 +230,34 @@ enum class EstimatorCmd : uint8_t {
     FreezeBias   = 3,   // freeze bias estimation (on ground) / バイアス推定を凍結
     UnfreezeBias = 4,   // unfreeze bias estimation (takeoff) / バイアス凍結を解除
     Recalibrate  = 5,   // restart boot bias calibration      / 起動バイアス校正を再実行
+    InflateCov   = 6,   // inflate covariance, keep state x   / 共分散だけ膨張（推定値は保持）
 };
 
-/// Estimator command — ImuTask consumes and applies to the active IEstimator
-/// 推定器コマンド — ImuTask が消費しアクティブな IEstimator に適用
+/// Covariance-inflation scope for EstimatorCmd::InflateCov. "Inflate" means re-set the
+/// selected states' covariance diagonal to its initial (uncertain) value and zero their
+/// cross-covariance, WITHOUT changing the state estimate x — i.e. "I no longer trust how
+/// confident I am about these states, but my best guess stands." Used by the ground→flight
+/// reset-timing sweep to declare that the on-ground convergence is not flight-representative
+/// without the destabilizing full-reset of the state.
+/// EstimatorCmd::InflateCov の膨張対象。"膨張"=選んだ状態の共分散対角を初期(不確か)値に
+/// 戻しクロス共分散をゼロ化するが、状態推定値 x は変えない=「これらの状態の自信は捨てるが
+/// 最良推定は据え置く」。地上→飛行のリセットタイミングsweepで、地上収束が飛行を代表しない
+/// ことを、状態の全リセット(不安定化)なしに宣言するために使う。
+enum class CovScope : uint16_t {
+    All        = 0,   // all 15 states                         / 全15状態
+    PosVel     = 1,   // position + velocity                   / 位置+速度
+    PosVelBias = 2,   // position + velocity + biases (keep att)/ 位置+速度+バイアス(姿勢据置)
+    Attitude   = 3,   // attitude only (culprit isolation)     / 姿勢のみ(原因切り分け)
+};
+
+/// Estimator command — ImuTask consumes and applies to the active IEstimator.
+/// `arg` carries a CovScope for InflateCov; unused (0) for the other verbs.
+/// 推定器コマンド — ImuTask が消費しアクティブな IEstimator に適用。`arg` は InflateCov の
+/// CovScope を運ぶ。他の verb では未使用(0)。
 struct EstimatorCommand {
     uint8_t  command;     // EstimatorCmd value / EstimatorCmd の値
     uint32_t timestamp;   // [us]
+    uint16_t arg;         // CovScope for InflateCov (else 0) / InflateCov の CovScope
 };
 
 /// Controller command verbs — issued by StateManager transition callbacks

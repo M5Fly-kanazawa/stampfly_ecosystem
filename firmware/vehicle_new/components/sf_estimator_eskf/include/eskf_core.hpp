@@ -122,6 +122,18 @@ public:
     /// Reset position and velocity only / 位置・速度のみリセット
     void resetPositionVelocity();
 
+    /// Inflate covariance for the states selected by `state_mask` (bit i = StateIdx i):
+    /// set each selected diagonal back to its init value and zero its cross-covariance,
+    /// WITHOUT changing the state estimate. Declares "I am no longer confident about these
+    /// states" while keeping the best estimate — used at the ground→flight boundary where
+    /// the on-ground convergence is not flight-representative, but a full reset of the
+    /// state destabilizes the takeoff transient.
+    /// state_mask（ビット i = StateIdx i）で選んだ状態の共分散を膨張する: 各対角を init 値に
+    /// 戻しクロス共分散をゼロ化するが、状態推定値は変えない。「これらの状態の自信を捨てる」
+    /// 宣言で最良推定は保持 — 地上収束が飛行を代表しないが状態の全リセットは離陸過渡を
+    /// 不安定化する、地上→飛行境界で使う。
+    void inflateCovariance(uint16_t state_mask);
+
     // =========================================================================
     // Prediction / 予測
     // =========================================================================

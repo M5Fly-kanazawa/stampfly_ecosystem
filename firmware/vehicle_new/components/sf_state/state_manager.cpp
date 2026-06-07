@@ -33,6 +33,18 @@ namespace sf {
 /// これ未満の読みを無視する。
 static constexpr float kVoltageValidMin = 0.1f;
 
+/// Comm-loss hover grace period [us]: on link loss while FLYING the craft holds its
+/// hover for this long before auto-landing (requirements §9: "hover hold 3 s → auto
+/// landing"). Recovery within the window does NOT cancel the landing — the requirement
+/// specifies an unconditional hover-then-land, and the failsafe re-raising on a fresh
+/// loss must not reset the timer. Named constant (no magic number); a follow-up phase
+/// may move it to params alongside the battery threshold (sf_state is config.hpp-free).
+/// 通信断ホバー猶予 [us]: FLYING 中のリンク喪失でこの時間ホバーを維持してから自動着陸
+/// （要件§9「ホバー維持3秒→自動着陸」）。窓内の復帰では着陸を取り消さない — 要件は無条件
+/// のホバー→着陸を規定し、再喪失での再発報でタイマをリセットしない。名前付き定数（マジック
+/// ナンバー回避）。電圧閾値と並べて params 化するのは後続フェーズ（sf_state は config.hpp 非依存）。
+static constexpr uint32_t kCommLossHoverUs = 3000u * 1000u;   // 3 s / 3秒
+
 // =============================================================================
 // Initialization
 // 初期化
@@ -258,12 +270,22 @@ void StateManager::handleAlert(const SystemAlert& alert)
             break;
 
         case AlertType::COMM_LOST:
-            // Communication lost → hover 3s then auto-land
-            // 通信途絶 → ホバー3秒後に自動着陸
-            if (state_ == FlightState::FLYING) {
-                ESP_LOGW(TAG, "Comm lost → LANDING");
-                // TODO: Implement 3s hover delay before landing
-                transition(FlightState::LANDING);
+            // Communication lost → keep hovering, then auto-land after the grace period
+            // (requirements §9: hover hold 3 s → auto landing). We do NOT land here:
+            // arm a timer (idempotent — only the first loss while FLYING arms it) and let
+            // update() command FLYING → LANDING once kCommLossHoverUs elapses. The
+            // failsafe raises COMM_LOST only on the rising edge, so the deferred landing
+            // cannot rely on a repeat alert. The alert timestamp is the loss instant.
+            // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
+            // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — FLYING 中の最初の喪失
+            // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
+            // failsafe は COMM_LOST を立ち上がりエッジで1回しか出さないので、遅延着陸を
+            // アラート再来に頼れない。アラートの timestamp が喪失時刻。
+            if (state_ == FlightState::FLYING && !comm_lost_pending_) {
+                ESP_LOGW(TAG, "Comm lost → hover %lu ms then LANDING",
+                         static_cast<unsigned long>(kCommLossHoverUs / 1000));
+                comm_lost_pending_ = true;
+                comm_lost_time_us_ = alert.timestamp;
             }
             break;
 
@@ -286,6 +308,35 @@ void StateManager::handleAlert(const SystemAlert& alert)
 
         default:
             break;
+    }
+}
+
+void StateManager::update(uint32_t now_us)
+{
+    // Comm-loss failsafe: deferred FLYING → LANDING (requirements §9). Nothing pending
+    // → nothing to do (the common case).
+    // 通信断フェイルセーフ: 遅延 FLYING → LANDING（要件§9）。保留なしなら何もしない（通常）。
+    if (!comm_lost_pending_) {
+        return;
+    }
+
+    // Cancel if we are no longer FLYING: a pilot DISARM, impact-IDLE, or any other
+    // transition already took us out of flight, so the auto-land is moot. (Recovery of
+    // the link does NOT cancel — the requirement is an unconditional hover-then-land.)
+    // FLYING を外れていたらキャンセル: パイロット DISARM・衝撃 IDLE 等で既に飛行を抜けて
+    // いれば自動着陸は不要。（リンク復帰ではキャンセルしない — 要件は無条件のホバー→着陸。）
+    if (state_ != FlightState::FLYING) {
+        comm_lost_pending_ = false;
+        return;
+    }
+
+    // Grace period elapsed → land. Modular uint32_t subtraction is correct for any age
+    // far below the ~71 min wrap, which 3 s is.
+    // 猶予経過 → 着陸。uint32_t の剰余差分は ~71分の巻き戻りより遥かに小さい経過（3秒）で正しい。
+    if (now_us - comm_lost_time_us_ >= kCommLossHoverUs) {
+        ESP_LOGW(TAG, "Comm lost → LANDING (hover grace elapsed)");
+        comm_lost_pending_ = false;
+        transition(FlightState::LANDING);
     }
 }
 

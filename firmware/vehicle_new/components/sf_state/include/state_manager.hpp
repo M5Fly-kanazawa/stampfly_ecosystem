@@ -163,6 +163,24 @@ public:
     /// @design requirements.md §9 — Safety requirements               [--]
     void handleAlert(const SystemAlert& alert);
 
+    /// Periodic update for TIME-DEFERRED transitions (call once per StateTask cycle).
+    /// Today this drives the comm-loss failsafe: a COMM_LOST while FLYING does not land
+    /// immediately — it arms a timer (handleAlert) and this method commands the
+    /// FLYING → LANDING transition only after the hover grace period elapses
+    /// (requirements §9: "hover hold 3 s → auto landing"). Kept separate from
+    /// handleAlert because the failsafe raises COMM_LOST only once (rising edge), so the
+    /// elapsed-time check needs an independent periodic tick, not another alert.
+    /// 時間遅延つき遷移の周期更新（StateTask の各サイクルで1回呼ぶ）。現状は通信断
+    /// フェイルセーフを駆動する: FLYING 中の COMM_LOST は即着陸せず、タイマを起動
+    /// （handleAlert）し、ホバー猶予が経過してから本メソッドが FLYING → LANDING を
+    /// 指令する（要件§9「ホバー維持3秒→自動着陸」）。failsafe は COMM_LOST を立ち上がり
+    /// エッジで1回だけ発報するので、経過判定にはアラートでなく独立した周期ティックが要る。
+    ///
+    /// @param now_us  current time [us] (esp_timer_get_time) supplied by the caller
+    /// @design requirements.md §9 — comm loss: hover 3 s → LANDING     [--]
+    /// @design architecture.md §4 — FAILSAFE as event                 [--]
+    void update(uint32_t now_us);
+
     /// Force transition to IDLE_GROUND (emergency use only)
     /// IDLE_GROUNDへ強制遷移（緊急用のみ）
     void forceIdle();
@@ -203,6 +221,15 @@ private:
     // 現在の状態
     FlightState state_ = FlightState::INIT;
     FlightMode mode_ = FlightMode::STABILIZE;
+
+    // Comm-loss failsafe timer (requirements §9: hover hold 3 s → auto landing).
+    // Armed by handleAlert(COMM_LOST) while FLYING; update() lands once the grace
+    // period from comm_lost_time_us_ elapses. Cleared on landing or on leaving FLYING.
+    // 通信断フェイルセーフのタイマ（要件§9: ホバー維持3秒→自動着陸）。FLYING 中の
+    // handleAlert(COMM_LOST) で起動し、comm_lost_time_us_ から猶予経過で update() が
+    // 着陸させる。着陸時または FLYING を外れた時にクリアする。
+    bool     comm_lost_pending_ = false;
+    uint32_t comm_lost_time_us_ = 0;
 
     // Callback lists
     // コールバックリスト

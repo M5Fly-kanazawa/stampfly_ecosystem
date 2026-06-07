@@ -1,11 +1,16 @@
-# 次セッション指示書 — 設計準拠リファクタリング Phase 2b から再開
+# 次セッション指示書 — 設計準拠リファクタリング Phase 3 から再開
 
-最終更新: 2026-06-07（**場当たりコード全廃リファクタ進行中。Phase 0 / 1 / 2a 完了、Phase 2b から再開**）
+最終更新: 2026-06-07（**場当たりコード全廃リファクタ進行中。Phase 0 / 1 / 2a / 2b 完了、Phase 3 から再開**）
 
 > このセッションは★ロバスト再飛行 readiness の実装に着手したが、その基盤の状態機械が
 > 設計違反の場当たりコードだらけと判明し、ユーザー指示で「場当たりコードを全廃して
 > あるべき姿にリファクタリング」する大方針へ発展した。承認済み計画 `valiant-frolicking-sun.md`
-> の Phase 0〜8 のうち **Phase 0 / 1 / 2a を完了**。次は **Phase 2b**。
+> の Phase 0〜8 のうち **Phase 0 / 1 / 2a / 2b を完了**。次は **Phase 3（責務分離の是正）**。
+>
+> **Phase 2b の重大発見（必読）:** 設計（detailed_design §3）の「ARM時 ESKF 全リセット」と
+> 「bias freeze/unfreeze」を素直に配線すると POS_HOLD が姿勢発散・墜落することが SIL で判明。
+> リセットタイミング掃引（8方策×飛行スイート）で最良策を数値選定し、**ARM時は「姿勢共分散のみ膨張」**
+> （`InflateCov(Attitude)`）を採用。詳細は本書 §6 と detailed_design §3 注1〜3。
 
 ---
 
@@ -37,45 +42,27 @@
 | 1 | **reset処理を StateManager の onEnter/onExit/onModeChange に集約**（場当たり排除の核心）。imu_task/control_task のエッジ検出を全廃しトピック経由（R5）に。freezeBias/unfreezeBias 追加。 | `d6b4478` |
 | docs | **reset の2層分類（クラスA/B）原則**を architecture §4 / detailed_design §3 に明記 | `ab92271` |
 | 2a | **IDLE_HELD検出・着陸完了の状態モデル配線**。TakeoffLandingMgr に isHeld()、detectLanding を velocity 注入の純粋関数化（estimate_state 直読み撤廃）＋レベルフラグ化。held/landing を system_status 経由で state_task が消費し notify 駆動。IDLE_HELD→IDLE_GROUND onEnter で再校正。 | `21a7727` |
+| 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset（FLYING/LANDING→IDLE_GROUND で isAirborne(from) ゲートの ESKF Reset、再飛行 readiness 要件①）。②COMM_LOST 3秒ホバー遅延（StateManager に `update()`＋pending timer、state_task が毎周期駆動、無条件着陸＝要件§9）。③**ARM時の ESKF 処理を SIL 掃引で確定**＝姿勢共分散のみ膨張（`InflateCov(Attitude)`）。ESKF に `inflateCovariance(mask)` 追加。 | （本コミット） |
 
-**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3）。Phase 0/1 は ESP-IDF 実機ビルドも確認済み（974KB）。**Phase 2a の ESP-IDF ビルドは未確認（Phase 2b 完了後にまとめて行う）。**
+**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3）。**Phase 2b で ESP-IDF 実機ビルド確認済み（952.7KB）。**
 
 ---
 
-## 3. 次にやること: Phase 2b（ロバスト再飛行 order2-3 ＋ COMM_LOST）
+## 3. 次にやること: Phase 3（責務分離の是正）
 
-Phase 1 で「ARM時/接地復帰の ESKF full reset」と「bias freeze/unfreeze の意味づけ」を、校正再注入と一体で行うため Phase 2b に委譲していた。それを配線する。**挙動変更が大きいので検証スイートで慎重に確認すること。**
+Phase 2b まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 3**。
 
-### 3.1 state_task の onEnter 拡張（クラスA = 遷移リセット、tasks/state_task.cpp の registerStateCallbacks）
+- `sf_command` に正規化を集約: `sf_comm` は生パケットを事実として渡し、ADC正規化・デッドバンド・調停を `sf_command`（責務#8）へ。退行したデッドバンドを復活。ADC中央値の不一致（2047.5 vs 2048）を統一。
+- `sf_actuator/actuator.cpp`: config.hpp/params の複製（GPIO/PWM/ARM_D/KAPPA/モータ曲線/V_BATT）を解消。`V_BATT` 固定を実電圧（`sensor_power`）参照に。
+- `motor_driver.cpp`: 旧HAL残骸（`setMixerOutput`/`testMotor`/stats系）を削除、二重ミキサー解消。
+- 検証: 全検証スイート＋スティック→duty が期待通り。
 
-detailed_design §3 状態遷移テーブルに従い、以下を追加（既存の Phase 1/2a 配線に上乗せ）:
+### Phase 2b でやったこと（完了・参考）
 
-| 遷移 (from→to) | 追加する発行 | 意図 |
-|---|---|---|
-| IDLE_GROUND→ARMED_GROUND（ARM） | `estimator_command(Reset)` ＋ `estimator_command(FreezeBias)` | 設計表「ARM時 ESKFリセット」。reset後 reseedCalibration（imu_task）が校正bias再注入、地上ゆえ freeze |
-| TAKEOFF→FLYING（離陸完了） | `estimator_command(UnfreezeBias)` | 飛行レジームで bias 推定再開。※pos/vel reset はクラスB（imu_task）のまま触らない |
-| FLYING/LANDING→IDLE_GROUND（接地復帰） | `estimator_command(Reset)` | 墜落・着陸・緊急DISARM 後に推定器を全状態リセット（再飛行 readiness の要件①） |
-| LANDING→IDLE_GROUND（着陸完了） | ＋ `estimator_command(FreezeBias)` | 地上レジームで bias 凍結 |
-
-- **校正再注入は imu_task 側で既に実装済み**（`processEstimatorCommands` の Reset ケースが `reset()` → `reseedCalibration()` を実行、`g_calib_applied`/`g_applied_*_bias` 保持済み）。state_task は Reset を発行するだけ。
-- **bias の地上/飛行レジームの一貫性に注意**: `EskfCore::reset()` は `freeze_accel_bias_=false` にする（estimator.hpp の設計者ノート参照）。よって地上で Reset を出したら必ず FreezeBias も出して「地上=frozen」を保つ（上表で ARM・着陸復帰に FreezeBias を併記しているのはこのため）。校正完了時（imu_task `feedBootCalibration` 末尾）にも `freezeBias()` を1回追加して初期も frozen にする。
-
-### 3.2 imu_task（components 側）
-
-- `feedBootCalibration()` の完了時（applyCalibration の後）に `g_estimator->freezeBias()` を追加（校正後は地上 frozen）。
-- `processEstimatorCommands()` の Reset/FreezeBias/UnfreezeBias ケースは Phase 1 で実装済み（追加不要、発行が増えるだけ）。
-
-### 3.3 COMM_LOST の3秒ホバー遅延（components/sf_state/state_manager.cpp:264 付近の TODO）
-
-- 現状: `handleAlert(COMM_LOST)` が即 `transition(LANDING)`。
-- 設計（architecture §4）: 通信途絶 → ホバー維持 3秒 → LANDING。
-- 実装案: COMM_LOST を受けたら時刻を記録し、3秒経過後に LANDING へ（state_task の周期ポーリングで経過判定、or タイマ）。`commloss.scn` の `.expect` の順序チェックに影響しうるので閾値・窓を再確認。
-
-### 3.4 検証
-
-- 下記「検証スイート」を全PASS。特に **ARM時 ESKF reset が att_rmse / 離陸過渡を悪化させていないか**（pos_flight/pos_yaw/alt_flight）。
-- 崩れたら: reset→reseed→freeze の順序、または ARM時 reset の要否を再検討（Phase 1 で「ARM時 reset は校正消失リスク」と判断し見送った経緯。reseedCalibration で解消する前提だが、離陸過渡への影響を数値で確認すること）。
-- ESP-IDF 実機ビルド `sf build vehicle_new` を Phase 2b 完了時に確認。
+1. **接地復帰 ESKF reset**（state_task onEnter, IDLE_GROUND の `else` 分岐）: `isAirborne(from)` ゲートで FLYING/TAKEOFF/LANDING→IDLE_GROUND の時のみ `estimator_command(Reset)`。ARMED_GROUND→IDLE_GROUND（飛ばずDISARM）はResetなし。再飛行 readiness 要件①。
+2. **COMM_LOST 3秒ホバー遅延**: `StateManager::update(now_us)`＋`comm_lost_pending_`/`comm_lost_time_us_`。handleAlert(COMM_LOST) は FLYING 中にタイマ起動（`alert.timestamp` 基準）、update() が `kCommLossHoverUs`(3s) 経過で LANDING、FLYING を外れたらキャンセル。state_task が毎周期 `update()` 駆動。failsafe は立ち上がりエッジ1回発報ゆえ周期ポーリング必須。無条件着陸（復帰でキャンセルしない＝要件§9）。
+3. **ARM時 ESKF処理＝姿勢共分散のみ膨張**（§6 参照で確定）: `EstimatorCmd::InflateCov`＋`CovScope`＋`EstimatorCommand.arg` 新設、ESKF `inflateCovariance(mask)`（推定値 x 保持・指定状態の P 対角を init へ・クロス共分散ゼロ化）。state_task ARM で `InflateCov(Attitude)`。
+4. **見送り**: bias freeze/unfreeze（ESKF 凍結機構が恒久隔離用でトグル非互換、detailed_design §3 注3）、校正完了時 freezeBias。freezeBias/unfreezeBias メソッドは capability として残置（estimator.hpp に再配線禁止の caution）。
 
 ---
 
@@ -121,6 +108,13 @@ sf build vehicle_new   # ESP-IDF 実機ビルド（ファーム変更時は必�
 3. **hover_smoke は StateManager をバイパス**して system_mode を直接注入する部分試験プログラム。インターフェースを変えたら近道している側（hover_smoke）も補填が要る（Phase 1 で controller_command(ModeChange) を補填）。
 
 4. **params.cpp の手書き table[] が真の SSOT、params.def は非機能**（auto-memory reference_params_ssot）。新 param は params.cpp の param_vars + table[] 両方に追加。Phase 5 で扱う。
+
+5. **地上→飛行の共分散ハンドオフは「姿勢のみ膨張」が最良（Phase 2b, SIL 掃引で確定）**:
+   - 設計の「ARM時 ESKF 全リセット」「bias freeze/unfreeze」は **POS_HOLD を姿勢発散・墜落させる**（pos_roll/pitch/flight、各々単独でも壊す）。根本原因＝離陸直前/離陸時に **BA・全状態の共分散が初期の大きな値へ再膨張**し、離陸スラスト加速度を加速度計が拾い、それをバイアス/姿勢誤差と誤推定（accel-attitude 観測モデルが a_body=−T/m を含まない構造限界＝detailed_design §3.x）。
+   - **掃引（8方策×飛行スイート）で全PASS は2つだけ**: 何もしない（code 0）と **ARMで姿勢共分散のみ膨張**（code 5）。姿勢は離陸前に地上で重力から再収束するので膨張が害にならない。位置/速度/バイアスの膨張は再収束の機会が無く離陸まで残り発散。タイミングは ARM が最良（地上で再収束する余地）、TAKEOFF/FLYING は最悪。
+   - **教訓**: 「地上収束は飛行を代表しない＝出鱈目」は **姿勢には当てはまらない**（重力は地上もホバーも同じ）。位置/速度の「地上ゼロ」非代表性は**既に離陸エッジの resetPositionVelocity（クラスB）が正確に処理済み**。定性推測でなく **掃引で最良策を数値選定**したのが要点（CLAUDE.md 原則）。
+   - **ESKF 凍結機構の限界**: `active_mask`＋`enforceCovarianceConstraints` は「センサ恒久不在」隔離用で、凍結状態の共分散を毎周期 init へ戻す。地上↔飛行トグルには非互換（解除で巨大共分散復活）。トグル運用には「共分散を init に戻さない soft-freeze」の別設計が要る（将来課題）。
+   - **Phase 8（crash_refly）への申し送り**: 接地復帰reset後すぐ再離陸すると同じ共分散再膨張で発散しうる。地上再収束の時間確保 or soft-freeze が要る見込み。
 
 ---
 

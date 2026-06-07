@@ -177,6 +177,19 @@ public:
     // =========================================================================
     // Bias freeze (ground / flight regimes)
     // バイアス凍結（地上 / 飛行レジーム）
+    //
+    // CAUTION (NOT currently wired): the ESKF freeze mechanism (active_mask +
+    // enforceCovarianceConstraints) is for PERMANENT sensor-absence isolation — it resets
+    // the frozen state's covariance to its init value each cycle. Toggling it across the
+    // ground↔flight boundary therefore restores a huge covariance at unfreeze and
+    // destabilizes the takeoff transient (SIL-validated). detailed_design §3 note 3 defers
+    // it; bias estimation stays active in flight. Do NOT re-wire into a transition without a
+    // covariance-preserving "soft freeze". Kept as a capability for that future redesign.
+    // 注意（現在未配線）: ESKF の凍結機構（active_mask＋enforceCovarianceConstraints）は
+    // 「センサ恒久不在」の隔離用で、凍結状態の共分散を毎周期 init 値へ戻す。地上↔飛行で
+    // トグルすると解除時に巨大な共分散が復活し離陸過渡を不安定化する（SIL 実証）。
+    // detailed_design §3 注3 で見送り。バイアス推定は飛行中もアクティブのまま。共分散保持の
+    // 「ソフト凍結」なしに遷移へ再配線しないこと。将来の再設計用に capability として残置。
     // =========================================================================
 
     /// Freeze bias estimation (on the ground / at landing). The at-rest bias is held
@@ -196,6 +209,19 @@ public:
     ///
     /// @design detailed_design.md §3 — onEnter(TAKEOFF→FLYING): バイアスフリーズ解除 [--]
     virtual void unfreezeBias() {}
+
+    /// Inflate the covariance of the states selected by `state_mask` (bit i = state i in
+    /// the estimator's own ordering) back to "uncertain", WITHOUT changing the state
+    /// estimate. Lets the state machine declare, at the ground→flight boundary, that the
+    /// on-ground convergence is not flight-representative — without the destabilizing full
+    /// reset of the state. Default no-op for estimators without an explicit covariance
+    /// (e.g. the complementary filter).
+    /// state_mask（ビット i = 推定器固有順の状態 i）で選んだ状態の共分散を「不確か」に膨張する。
+    /// 状態推定値は変えない。地上→飛行境界で「地上収束は飛行を代表しない」ことを、状態の全
+    /// リセット(不安定化)なしに宣言できる。明示的な共分散を持たない推定器(相補フィルタ等)は既定 no-op。
+    ///
+    /// @design architecture.md §4 — ground→flight covariance handoff (sweep)  [--]
+    virtual void inflateCovariance(uint16_t state_mask) { (void)state_mask; }
 };
 
 }  // namespace sf

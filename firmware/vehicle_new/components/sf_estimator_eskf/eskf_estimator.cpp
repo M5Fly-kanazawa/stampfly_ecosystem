@@ -200,6 +200,16 @@ void EskfEstimator::unfreezeBias()
     core_.setFreezeAccelBias(false);
 }
 
+void EskfEstimator::inflateCovariance(uint16_t state_mask)
+{
+    // Inflate the selected states' covariance back to uncertain (keep the estimate). The
+    // cached snapshot's state is unchanged; the covariance is internal to core_, so no
+    // cached_state_ update is needed.
+    // 選んだ状態の共分散を不確かへ膨張（推定値は保持）。キャッシュの状態は不変で、共分散は
+    // core_ 内部ゆえ cached_state_ の更新は不要。
+    core_.inflateCovariance(state_mask);
+}
+
 StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
 {
     StateEstimate s = {};

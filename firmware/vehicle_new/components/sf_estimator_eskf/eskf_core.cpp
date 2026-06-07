@@ -103,6 +103,45 @@ void EskfCore::resetPositionVelocity()
     }
 }
 
+void EskfCore::inflateCovariance(uint16_t state_mask)
+{
+    // For each selected state: reset its covariance diagonal to the init value and zero
+    // its cross-covariance with every other state. The state estimate (pos_/vel_/q_/
+    // bg_/ba_) is left UNTOUCHED — only the confidence is reset. This is the same diagonal
+    // values reset() uses, applied selectively without disturbing x.
+    // 選んだ各状態について: 共分散対角を init 値に戻し、他全状態とのクロス共分散をゼロ化する。
+    // 状態推定値(pos_/vel_/q_/bg_/ba_)は触らず、自信だけリセット。reset() と同じ対角値を、
+    // x を乱さず選択的に適用する。
+    float init_diag[N];
+    for (int i = 0; i < 3; i++) {
+        init_diag[POS_X+i] = cfg_.init_pos_std * cfg_.init_pos_std;
+        init_diag[VEL_X+i] = cfg_.init_vel_std * cfg_.init_vel_std;
+        init_diag[ATT_X+i] = cfg_.init_att_std * cfg_.init_att_std;
+        init_diag[BG_X+i]  = cfg_.init_bg_std * cfg_.init_bg_std;
+        init_diag[BA_X+i]  = cfg_.init_ba_std * cfg_.init_ba_std;
+    }
+
+    for (int i = 0; i < N; i++) {
+        if (!(state_mask & (1 << i))) {
+            continue;   // not selected — leave its covariance as-is / 非選択は据え置き
+        }
+        for (int j = 0; j < N; j++) {
+            P_(i, j) = 0;
+            P_(j, i) = 0;
+        }
+        P_(i, i) = init_diag[i];
+    }
+
+    // Flow / α-β tracker history depends on the velocity covariance; drop it when velocity
+    // confidence was inflated so the next flow sample re-seeds cleanly (mirrors reset()).
+    // フロー/α-β 履歴は速度共分散に依存する。速度の自信を膨張したら破棄し次フローで再シード。
+    if (state_mask & ((1 << VEL_X) | (1 << VEL_Y) | (1 << VEL_Z))) {
+        have_flow_vel_ = false;
+        flow_vel_lpf_  = {0, 0, 0};
+        a_kin_ned_     = {0, 0, 0};
+    }
+}
+
 // =============================================================================
 // Prediction / 予測ステップ
 //

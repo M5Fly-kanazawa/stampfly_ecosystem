@@ -37,6 +37,38 @@ static const char* TAG = "StateTask";
 /// グローバル状態管理インスタンス
 sf::StateManager g_state_manager;
 
+// =============================================================================
+// Ground→flight covariance handoff at ARM — why ATTITUDE-only, not a full reset
+//
+// detailed_design §3 originally called for a full ESKF reset at ARM (rationale: the
+// on-ground covariance convergence is not flight-representative). A SIL reset-timing
+// sweep (8 strategies × the flight suite) showed the literal full reset — and any
+// inflation of the POSITION/VELOCITY/BIAS covariance — destabilizes the takeoff
+// transient: the re-inflated covariance over-trusts the thrust-contaminated
+// accelerometer and POS_HOLD attitude diverges (pos_roll/pitch/flight crash). Only two
+// strategies passed the whole suite: doing nothing, and inflating the ATTITUDE
+// covariance alone. We adopt the latter: it honors the design intent (declare flight-
+// uncertainty about attitude at ARM) yet stays stable, because attitude re-converges
+// from gravity on the ground before takeoff. The position/velocity "ground is zero, not
+// flight-representative" handoff is handled separately and precisely at the airborne
+// edge by ImuTask's resetPositionVelocity (class-B, architecture §4); the bias is the
+// same IMU in flight, so its ground estimate is kept. (CLAUDE.md: control changes are
+// backed by simulation — the sweep is the evidence.)
+//
+// ARM での地上→飛行 共分散ハンドオフ — なぜ「姿勢のみ」で全リセットでないか。
+// detailed_design §3 は当初 ARM時 ESKF 全リセットを求めた（地上の共分散収束は飛行を代表
+// しない、という根拠）。SIL のリセットタイミング掃引（8方策×飛行スイート）で、字義通りの
+// 全リセット — および位置/速度/バイアスの共分散の膨張 — は離陸過渡を不安定化すると判明:
+// 再膨張した共分散がスラスト汚染された加速度計を過信し POS_HOLD 姿勢が発散
+// （pos_roll/pitch/flight 墜落）。スイート全PASS は2方策のみ＝「何もしない」と「姿勢の共分散
+// だけ膨張」。後者を採用: 設計意図（ARM で姿勢の自信をリセット）を満たしつつ安定 — 姿勢は
+// 離陸前に地上で重力から再収束するため。位置/速度の「地上ゼロは飛行を代表しない」ハンドオフは
+// 空中エッジで ImuTask の resetPositionVelocity が別途・正確に処理（クラスB, architecture §4）。
+// バイアスは飛行中も同じ IMU ゆえ地上推定を保持。（CLAUDE.md: 制御変更はシミュレーションで裏付け。）
+//
+// @design detailed_design.md §3 — ARM: ESKF attitude-covariance inflation (was full reset) [OK]
+// @design architecture.md §4 — ground→flight covariance handoff (SIL-validated)            [OK]
+
 /// Register the StateManager transition callbacks (called once at task start, after
 /// init()). Each callback publishes reset commands on the estimator/controller/notify
 /// command topics per the detailed_design §3 transition table; the resource-owning
@@ -76,34 +108,76 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 sf::estimator_command.publish(
                     {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now});
             } else {
-                // Return to ground from a flight/armed state (DISARM / land): disarm tone.
-                // The crash-return ESKF full reset is wired in Phase 2b.
-                // 飛行/arm 状態からの接地復帰（DISARM/着陸）: disarm 音。墜落復帰の ESKF full
-                // reset は Phase 2b で配線。
+                // Return to ground from an armed/airborne state (DISARM / crash / land).
+                // detailed_design §3: FLYING→IDLE_GROUND and LANDING→IDLE_GROUND do an
+                // ESKF full reset (clear in-flight/diverged state — re-fly readiness,
+                // requirement ①); ARMED_GROUND→IDLE_GROUND (disarm without flying) does
+                // NOT (the estimator was never disturbed). So gate the reset on
+                // isAirborne(from). imu_task re-seeds the boot calibration after the reset
+                // (reseedCalibration), and reset() un-freezes the accel bias.
+                // 武装/空中状態からの接地復帰（DISARM/墜落/着陸）。detailed_design §3:
+                // FLYING→IDLE_GROUND と LANDING→IDLE_GROUND は ESKF を全リセット（飛行中・
+                // 発散状態を一掃 — 再飛行 readiness 要件①）、ARMED_GROUND→IDLE_GROUND
+                // （飛ばずに DISARM）はしない（推定器は乱れていない）。よって reset は
+                // isAirborne(from) でゲートする。reset 後に imu_task が起動校正を再注入
+                // （reseedCalibration）し、reset() は加速度バイアスの凍結を解除する。
+                if (sf::isAirborne(from)) {
+                    sf::estimator_command.publish(
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
+                    // A controlled landing (LANDING→IDLE_GROUND) ends at rest on the
+                    // ground → freeze the bias to keep "ground = frozen" (reset un-froze
+                    // it). The crash/emergency path (FLYING/TAKEOFF→IDLE_GROUND) leaves it
+                    // un-frozen and re-freezes at the next ARM instead (detailed_design §3
+                    // lists バイアスフリーズ only for LANDING→IDLE_GROUND).
+                    // 制御着陸（LANDING→IDLE_GROUND）は地上静止で終わる → バイアスを凍結し
+                    // 「地上=frozen」を保つ（reset が解除済み）。墜落/緊急経路（FLYING/
+                    // TAKEOFF→IDLE_GROUND）は凍結せず次の ARM で再凍結する（detailed_design
+                    // §3 はバイアスフリーズを LANDING→IDLE_GROUND にのみ記載）。
+                    // [CANDIDATE] FreezeBias DROPPED (freeze mechanism broken — see ARM).
+                    // if (from == FlightState::LANDING) {
+                    //     sf::estimator_command.publish(
+                    //         {static_cast<uint8_t>(sf::EstimatorCmd::FreezeBias), now});
+                    // }
+                }
                 sf::notify_command.publish(
                     {static_cast<uint8_t>(sf::NotifyEvent::DisarmTone), now});
             }
             break;
         case FlightState::ARMED_GROUND:
             if (from == FlightState::IDLE_GROUND) {
-                // ARM: clear PID integrators (no stale wind-up) + arm tone.
-                // ARM: PID 積分器をクリア（古いワインドアップ無し）+ arm 音。
+                // ARM (detailed_design §3: 全PIDリセット、ESKF姿勢共分散の膨張、arm音):
+                //  1. controller Reset — clear the PID integrators (no stale wind-up).
+                //  2. estimator InflateCov(Attitude) — declare flight-uncertainty about the
+                //     attitude (the ground convergence is re-asserted against gravity before
+                //     takeoff). NOT a full reset / not pos-vel-bias — those destabilize the
+                //     takeoff transient (see the header note: SIL sweep result).
+                //  3. arm tone.
+                // ARM（detailed_design §3: 全PIDリセット、ESKF姿勢共分散の膨張、arm音）:
+                //  1. controller Reset — PID 積分器クリア。
+                //  2. estimator InflateCov(Attitude) — 姿勢の飛行不確かさを宣言（地上収束は
+                //     離陸前に重力で再主張される）。全リセットでも pos/vel/bias でもない — それらは
+                //     離陸過渡を不安定化する（ヘッダ注記: SIL 掃引結果）。
+                //  3. arm 音。
                 sf::controller_command.publish(
                     {static_cast<uint8_t>(sf::ControllerCmd::Reset), 0, now});
+                sf::estimator_command.publish(
+                    {static_cast<uint8_t>(sf::EstimatorCmd::InflateCov), now,
+                     static_cast<uint16_t>(sf::CovScope::Attitude)});
                 sf::notify_command.publish(
                     {static_cast<uint8_t>(sf::NotifyEvent::ArmTone), now});
             }
             break;
-        // TAKEOFF → FLYING: the ESKF position/velocity reset for a clean ToF lock is NOT
-        // issued here. It is the ToF-synced vertical handoff in ImuTask (one-cycle
-        // precise); a ~20 ms-late reset via this callback degrades POS_HOLD attitude.
-        // See applyVerticalGroundHandoff(). This callback owns the controller + full-state
-        // resets, not the timing-critical estimation handoff.
-        // TAKEOFF→FLYING: クリーンな ToF ロックのための ESKF 位置/速度リセットはここでは出さない。
-        // それは ImuTask の ToF 同期鉛直ハンドオフが担う（1サイクル精度）。このコールバック経由の
-        // ~20ms 遅れ reset は POS_HOLD 姿勢を劣化させる。applyVerticalGroundHandoff() 参照。
-        // 本コールバックは制御器＋full-state reset を所有し、タイミング命の estimation ハンドオフは
-        // 担わない。
+        // TAKEOFF → FLYING needs no class-A reset here. The "ESKF position/velocity reset"
+        // of detailed_design §3 is the timing-critical ToF-synced vertical handoff (class B,
+        // ImuTask::applyVerticalGroundHandoff) — a ~20 ms-late reset via this callback
+        // degrades POS_HOLD attitude (architecture §4). The bias unfreeze is dropped: the
+        // ESKF freeze mechanism (active_mask) is for permanent sensor-absence isolation, not
+        // ground↔flight toggling, so bias estimation simply stays active in flight.
+        // TAKEOFF→FLYING はここでのクラスA reset 不要。detailed_design §3 の「ESKF 位置/速度
+        // リセット」はタイミング命の ToF 同期鉛直ハンドオフ（クラスB, ImuTask）— 本コールバック
+        // 経由の ~20ms 遅れ reset は POS_HOLD 姿勢を劣化させる（architecture §4）。bias 解除は
+        // 見送り: ESKF 凍結機構（active_mask）は恒久センサ不在隔離用で地上↔飛行トグル用でない
+        // ため、バイアス推定は飛行中も単にアクティブのまま。
         default:
             break;
         }
@@ -262,5 +336,18 @@ void StateTask(void* pvParameters)
         while (sf::system_alert.read(alert)) {
             g_state_manager.handleAlert(alert);
         }
+
+        // =====================================================================
+        // Drive time-deferred transitions (the comm-loss hover→LANDING grace,
+        // requirements §9). Called every cycle: the failsafe raises COMM_LOST only
+        // once (rising edge), so the deferred landing needs this periodic tick, not
+        // another alert. No-op unless a timer is pending.
+        // 時間遅延つき遷移を駆動（通信断のホバー→LANDING 猶予、要件§9）。毎周期呼ぶ:
+        // failsafe は COMM_LOST を1回（立ち上がり）しか出さないので、遅延着陸には
+        // アラート再来でなくこの周期ティックが要る。保留タイマが無ければ no-op。
+        //
+        // @design requirements.md §9 — comm loss: hover 3 s → LANDING   [OK]
+        // =====================================================================
+        g_state_manager.update(static_cast<uint32_t>(esp_timer_get_time()));
     }
 }

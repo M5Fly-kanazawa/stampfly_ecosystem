@@ -368,7 +368,18 @@ TEST(d04_gyro_anomaly_ground) {
 TEST(d05_comm_lost_flying) {
     topics_init();
     StateManager sm; toFlying(sm);
+    // COMM_LOST while FLYING arms the hover-grace timer but does NOT land immediately
+    // (requirements §9: hover hold 3 s → auto landing). mkAlert stamps timestamp=0, so
+    // update(now) crosses the 3 s grace at now == 3'000'000 us. update() drives the
+    // deferred transition because the failsafe raises COMM_LOST only once (rising edge).
+    // COMM_LOST は FLYING 中にホバー猶予タイマを起動するが即着陸しない（要件§9: ホバー
+    // 維持3秒→自動着陸）。mkAlert は timestamp=0 ゆえ update(now) は now==3'000'000us で
+    // 3秒猶予を越える。failsafe は COMM_LOST を1回しか出さないので遅延遷移は update() が駆動。
     sm.handleAlert(mkAlert(AlertType::COMM_LOST, AlertSeverity::CRITICAL));
+    ASSERT_TRUE(sm.getState() == FlightState::FLYING);   // still hovering, timer armed
+    sm.update(1000000);                                  // +1 s: grace not yet elapsed
+    ASSERT_TRUE(sm.getState() == FlightState::FLYING);
+    sm.update(3000000);                                  // +3 s: grace elapsed → LANDING
     ASSERT_TRUE(sm.getState() == FlightState::LANDING);
 }
 
@@ -376,6 +387,7 @@ TEST(d06_comm_lost_not_flying) {
     topics_init();
     StateManager sm; sm.init(); sm.forceIdle(); sm.requestArm(); sm.notifyTakeoff();  // TAKEOFF
     sm.handleAlert(mkAlert(AlertType::COMM_LOST, AlertSeverity::CRITICAL));
+    sm.update(3000000);                                  // even past the grace window
     ASSERT_TRUE(sm.getState() == FlightState::TAKEOFF);  // COMM_LOST acts only in FLYING
 }
 

@@ -470,6 +470,25 @@ static void processEstimatorCommands()
         case sf::EstimatorCmd::UnfreezeBias:
             g_estimator->unfreezeBias();
             break;
+        case sf::EstimatorCmd::InflateCov: {
+            // Map the semantic CovScope (carried in cmd.arg) to the estimator's state-bit
+            // mask, then inflate. State bit layout (StateIdx): pos 0-2, vel 3-5, att 6-8,
+            // bg 9-11, ba 12-14. Keeps state_task free of estimator-internal indices.
+            // 意味的な CovScope（cmd.arg）を推定器の状態ビットマスクに変換して膨張。状態ビット
+            // 配置（StateIdx）: 位置0-2, 速度3-5, 姿勢6-8, ジャイロbias9-11, 加速度bias12-14。
+            // state_task を推定器内部インデックスから切り離す。
+            uint16_t mask = 0x7FFF;   // CovScope::All
+            switch (static_cast<sf::CovScope>(cmd.arg)) {
+            case sf::CovScope::PosVel:     mask = 0x003F; break;  // pos+vel
+            case sf::CovScope::PosVelBias: mask = 0x7E3F; break;  // pos+vel+bias (keep att)
+            case sf::CovScope::Attitude:   mask = 0x01C0; break;  // attitude only
+            case sf::CovScope::All:        mask = 0x7FFF; break;  // all 15
+            }
+            g_estimator->inflateCovariance(mask);
+            ESP_LOGI(TAG, "Estimator covariance inflated (scope=%u mask=0x%04X)",
+                     static_cast<unsigned>(cmd.arg), static_cast<unsigned>(mask));
+            break;
+        }
         case sf::EstimatorCmd::Recalibrate:
             startBootCalibration();
             break;

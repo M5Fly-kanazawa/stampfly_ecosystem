@@ -39,6 +39,7 @@ public:
     void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) override;
     void freezeBias() override;
     void unfreezeBias() override;
+    void inflateCovariance(uint16_t state_mask) override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;
