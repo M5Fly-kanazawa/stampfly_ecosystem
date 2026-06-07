@@ -169,6 +169,10 @@ void Logger::startSession()
 // -----------------------------------------------------------------------------
 void Logger::stopSession()
 {
+    // Clear the failure latch so the next session re-attempts the open once.
+    // 失敗ラッチを解除し、次セッションが open を 1 度だけ再試行できるようにする。
+    blackbox_failed_ = false;
+
     if (g_log_fp == nullptr) {
         return;
     }
@@ -220,12 +224,20 @@ void Logger::mountSpiffs()
 // -----------------------------------------------------------------------------
 void Logger::writeBlackbox()
 {
-    // Lazy-open: if no session file is open yet, start one.
-    // 遅延 open: セッション未開始ならここで開く。
+    // Lazy-open: if no session file is open yet, start one. If the open already
+    // failed this session, do NOT retry every cycle — that would spam the log at
+    // the logging rate when SPIFFS is unavailable (e.g. no partition, or host SIL).
+    // 遅延 open: セッション未開始ならここで開く。今セッションで既に失敗していれば
+    // 毎周期は再試行しない — SPIFFS が無い (パーティション無し / ホスト SIL) とき
+    // ロギングレートでログが氾濫するため。
     if (g_log_fp == nullptr) {
+        if (blackbox_failed_) {
+            return;
+        }
         startSession();
         if (g_log_fp == nullptr) {
-            return;  // SPIFFS unavailable / mount failure
+            blackbox_failed_ = true;  // latch until stopSession()
+            return;
         }
     }
 

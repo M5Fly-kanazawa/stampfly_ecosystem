@@ -8,19 +8,26 @@
 
 /**
  * @file log_task.cpp
- * @brief Data logger + Blackbox task (async)
- *        データロガー + Blackboxタスク（非同期）
+ * @brief Data logger + Blackbox task (100 Hz)
+ *        データロガー + Blackboxタスク（100Hz）
  *
- * Subscribes to all topics via ring buffers, writes data to
- * Telemetry (UDP), Data Stream (UDP/USB), and Blackbox (SPIFFS).
+ * Drives sf::Logger, which samples the IMU / estimate / control / motor topics
+ * into a binary Blackbox record on SPIFFS. The Blackbox session is gated on the
+ * armed flag: one session spans one flight (ARM → DISARM), so the small SPIFFS
+ * partition holds whole flights instead of ground idle. If no SPIFFS partition
+ * exists, Logger::init() leaves it disabled and writes become no-ops (graceful).
  *
- * リングバッファ経由で全トピックを購読し、
- * Telemetry（UDP）、Data Stream（UDP/USB）、Blackbox（SPIFFS）に書き込む。
+ * sf::Logger を駆動する。Logger は IMU/推定/制御/モータの各トピックを SPIFFS 上の
+ * バイナリ Blackbox レコードに記録する。Blackbox セッションは armed フラグでゲート
+ * する: 1 セッション = 1 飛行（ARM→DISARM）。これにより小さな SPIFFS には地上待機で
+ * なく飛行全体が残る。SPIFFS パーティションが無ければ init() が無効のままにし書き込みは
+ * no-op になる（グレースフル）。
  *
- * @design architecture.md §5 — Log flow: all topics → logger          [--]
- * @design architecture.md §6 — LogTask: Data Logger + Blackbox        [--]
- * @design detailed_design.md §8 — LogTask: async, priority 5         [--]
- * @design requirements.md §7 — Telemetry/Data Stream/Blackbox        [--]
+ * @design architecture.md §5 — Log flow: all topics → logger          [OK]
+ * @design architecture.md §6 — LogTask: Data Logger + Blackbox        [OK]
+ * @design detailed_design.md §8 — LogTask: 100 Hz, priority 5         [OK]
+ * @design requirements.md §7 — Blackbox (SPIFFS)                      [OK]
+ * @subscriber system_mode, sensor_imu, estimate_state, control_output, actuator_motor
  */
 
 #include "freertos/FreeRTOS.h"
@@ -28,21 +35,40 @@
 #include "esp_log.h"
 #include "topics.hpp"
 #include "config.hpp"
+#include "logger.hpp"
 
 static const char* TAG = "LogTask";
+
+/// Logging cadence: 100 Hz (matches the 76-byte BlackboxRecord budget).
+/// ロギング周期: 100Hz（76 バイト BlackboxRecord の収支に整合）。
+static constexpr TickType_t kPeriodTicks = pdMS_TO_TICKS(10);
 
 void LogTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "LogTask started");
 
-    while (true) {
-        // TODO: Read all topic ring buffers
-        // TODO: Write to Blackbox (SPIFFS) — ring buffer, overwrite oldest
-        // TODO: Send Data Stream via UDP/USB if enabled
-        // TODO: Manage Blackbox file lifecycle
+    sf::Logger logger;
+    logger.init();
+    logger.setMode(sf::LogMode::BLACKBOX);
 
-        // Wait for data availability notification or periodic check
-        // データ有効通知を待つか定期チェック
-        vTaskDelay(pdMS_TO_TICKS(10));  // 100Hz max check rate
+    bool was_armed = false;
+
+    while (true) {
+        // Record while armed; flush+close on the disarm edge. update() lazy-opens
+        // the session file on its first call (and rotates at the size cap), so the
+        // session spans exactly one flight (ARM → DISARM).
+        // ARM 中は記録、DISARM 立ち下がりで flush+close。update() が初回呼び出しで
+        // セッションファイルを遅延 open する（上限でローテート）ので、セッションは
+        // ちょうど 1 飛行（ARM→DISARM）になる。
+        const sf::SystemMode mode = sf::system_mode.latest();
+
+        if (mode.armed) {
+            logger.update();
+        } else if (was_armed) {
+            logger.stopSession();
+        }
+        was_armed = mode.armed;
+
+        vTaskDelay(kPeriodTicks);
     }
 }

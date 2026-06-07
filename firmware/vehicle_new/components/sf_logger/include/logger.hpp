@@ -82,6 +82,10 @@ private:
 
     LogMode  mode_        = LogMode::DISABLED;
     bool     spiffs_ok_   = false;    // SPIFFS mount status / SPIFSマウント状態
+    bool     blackbox_failed_ = false;// Latched after a failed open; stops per-cycle
+                                      // retry/log spam until the next stopSession().
+                                      // open 失敗でラッチし、次の stopSession() まで
+                                      // 毎周期の再試行/ログ氾濫を止める。
     int      log_fd_      = -1;       // Current log file fd / 現在のログファイルfd
     uint32_t record_count_ = 0;       // Records written     / 書き込みレコード数
 };
