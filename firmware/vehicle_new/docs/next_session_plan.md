@@ -6,10 +6,11 @@
 > - **✅ Logger（commit c773bac）**: log_task→sf_logger 配線。armed 中 100Hz で Blackbox(SPIFFS)記録、disarm で flush。Logger の per-cycle ログ氾濫バグ（open失敗時 100Hz で fopen エラー）を blackbox_failed_ ラッチで修正。実機は partitions.csv に storage パーティション確保で記録開始。
 > - **✅ mag χ²（commit 6681c69）**: vectorUpdate3 を chi2_gate 引数化。mag→mag_chi2_gate、accel→accel_chi2_gate。mag が accel ゲート定数を流用していた TODO を解消（mag 既定OFFゆえ挙動不変）。
 > - **⬜ 残り（次バッチ）:**
->   - **Notify（中）**: notify_task→sf_notify（40%）。LED(sf_hal_led 100%完成)/buzzer(sf_hal_buzzer 100%完成) を駆動。notify.cpp の applyLedPattern/playTone の HAL 呼び出し TODO を埋める。**Phase 4 の Critical-fail LED もここで実装**（board::fatal フック）。
->   - **Button（中）**: button_task→sf_hal_button（100%完成）。**注意: pilot_request は comm が毎パケット所有ゆえ共有不可**。新規 button_event トピック＋state_task consumer が必要（R5）。クリック→ARM/DISARM toggle。
->   - **sensor_health 1Hz（中）**: SensorHealth 型あり・publisher 無し。present_mask（sensor_present 集約）＋healthy_mask（各 sensor topic の鮮度）を 1Hz publish。新タスク or 既存タスク統合。
->   - **CLI（大）**: cli_task→esp_console（host shim あり）。params get/set/save、status、reboot。sf_console コンポーネント新設 or 旧 vehicle/ 参考移植。flight 非必須。
+>   - **✅ Notify（commit f69861d）**: notify_task→sf_notify。system_mode→LED 色/点滅(WS2812)、notify_command→ブザー(ArmTone/DisarmTone/LowBattery)。NotifyConfig で HW 構成注入＝config.hpp 非依存。state_task が電池アラートを notify_command に転送（system_alert は state_task 所有ゆえ Notify 非消費）。
+>   - **⬜ Button（中）**: button_task→sf_hal_button（100%完成）。**注意: pilot_request は comm が毎パケット所有ゆえ共有不可**。新規 button_event トピック＋state_task consumer が必要（R5）。クリック→ARM/DISARM toggle。
+>   - **⬜ sensor_health 1Hz（中）**: SensorHealth 型あり・publisher 無し。present_mask（sensor_present 集約・Phase 4 で実装済）＋healthy_mask（各 sensor topic の鮮度）を 1Hz publish。
+>   - **⬜ CLI（大）**: cli_task→esp_console（host shim あり）。params get/set/save、status、reboot。flight 非必須。
+>   - **⬜ Phase 4 Critical-fail LED（小〜中）**: board::fatal の LED エラーパターン。board 所有の緊急 LED（lazy init）が要（bus 失敗は Phase 1＝notify 起動前ゆえ board 自前）。board→sf_hal_led 依存追加。
 
 > **Phase 5 完了（起動シーケンス R3 ＋ params SSOT）:**
 > - **5a（commit 0246dd2）**: main.cpp を宣言的 Phase 0-4（NVS/BSP/topics/params/tasks）に。14タスク生成を `sf::tasks::start_all()`（tasks.cpp 新設）へ集約。extern TaskHandle 排除（ControlTask が xTaskGetCurrentTaskHandle で自己登録→`sf::tasks::control_handle()`、死蔵 g_state_task_handle 削除）。**`params::init()` を Phase 3 に配線（重大: これまで未呼出＝NVS保存値が起動時に読まれていなかった）**。SIL smoke 3本の手動 handle 配線も撤去。
