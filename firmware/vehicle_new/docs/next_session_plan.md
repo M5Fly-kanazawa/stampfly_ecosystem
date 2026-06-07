@@ -1,16 +1,22 @@
-# 次セッション指示書 — 設計準拠リファクタリング Phase 3 から再開
+# 次セッション指示書 — 設計準拠リファクタリング Phase 4 から再開
 
-最終更新: 2026-06-07（**場当たりコード全廃リファクタ進行中。Phase 0 / 1 / 2a / 2b 完了、Phase 3 から再開**）
+最終更新: 2026-06-07（**Phase 0 / 1 / 2a / 2b / 3 完了 ＋ SIL 電池モデル実装・V_BATT 実電圧化済。次は Phase 4（HW所有一元化）。ただし χ² ラッチアップ調査・デッドバンド復活が割り込み候補**）
 
 > このセッションは★ロバスト再飛行 readiness の実装に着手したが、その基盤の状態機械が
 > 設計違反の場当たりコードだらけと判明し、ユーザー指示で「場当たりコードを全廃して
 > あるべき姿にリファクタリング」する大方針へ発展した。承認済み計画 `valiant-frolicking-sun.md`
-> の Phase 0〜8 のうち **Phase 0 / 1 / 2a / 2b を完了**。次は **Phase 3（責務分離の是正）**。
+> の Phase 0〜8 のうち **Phase 0 / 1 / 2a / 2b / 3 を完了**。次は **Phase 4（HW所有の一元化）**。
 >
-> **Phase 2b の重大発見（必読）:** 設計（detailed_design §3）の「ARM時 ESKF 全リセット」と
-> 「bias freeze/unfreeze」を素直に配線すると POS_HOLD が姿勢発散・墜落することが SIL で判明。
-> リセットタイミング掃引（8方策×飛行スイート）で最良策を数値選定し、**ARM時は「姿勢共分散のみ膨張」**
-> （`InflateCov(Attitude)`）を採用。詳細は本書 §6 と detailed_design §3 注1〜3。
+> **Phase 3 の重大発見（必読）:** sf_command への正規化集約は完全に挙動保存。しかし副次の
+> 「V_BATT 実電圧化」と「デッドバンド復活」が、限界安定の毎軸 POSITION_HOLD/STABILIZE を
+> 崩すことが SIL で判明。真因は **ESKF accel-attitude の χ² ゲート(7.8)がマニューバ中 66% 棄却し、
+> 推定が一度発散すると回復補正も棄却して固着する「ラッチアップ」**。0.1% の推力変化や
+> デッドバンドがこの崖を越えさせる。→ **SIL に 1S LiPo 電池サグモデルを実装し、実電圧を live で
+> 追従させることで Model Identity を保ち χ² ラッチアップを非発火にして V_BATT 実電圧化を解除**
+> （commit b8fd27e）。デッドバンドは機構配線・既定0 で保留。詳細は本書 §6。
+>
+> **Phase 2b の発見（参考）:** 「ARM時 ESKF 全リセット」「bias freeze/unfreeze」は POS_HOLD を
+> 姿勢発散させる。ARM時は「姿勢共分散のみ膨張」（`InflateCov(Attitude)`）を採用。detailed_design §3 注1〜3。
 
 ---
 
@@ -42,20 +48,28 @@
 | 1 | **reset処理を StateManager の onEnter/onExit/onModeChange に集約**（場当たり排除の核心）。imu_task/control_task のエッジ検出を全廃しトピック経由（R5）に。freezeBias/unfreezeBias 追加。 | `d6b4478` |
 | docs | **reset の2層分類（クラスA/B）原則**を architecture §4 / detailed_design §3 に明記 | `ab92271` |
 | 2a | **IDLE_HELD検出・着陸完了の状態モデル配線**。TakeoffLandingMgr に isHeld()、detectLanding を velocity 注入の純粋関数化（estimate_state 直読み撤廃）＋レベルフラグ化。held/landing を system_status 経由で state_task が消費し notify 駆動。IDLE_HELD→IDLE_GROUND onEnter で再校正。 | `21a7727` |
-| 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset（FLYING/LANDING→IDLE_GROUND で isAirborne(from) ゲートの ESKF Reset、再飛行 readiness 要件①）。②COMM_LOST 3秒ホバー遅延（StateManager に `update()`＋pending timer、state_task が毎周期駆動、無条件着陸＝要件§9）。③**ARM時の ESKF 処理を SIL 掃引で確定**＝姿勢共分散のみ膨張（`InflateCov(Attitude)`）。ESKF に `inflateCovariance(mask)` 追加。 | `00468d0` |
+| 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset。②COMM_LOST 3秒ホバー遅延。③**ARM時=姿勢共分散のみ膨張**（`InflateCov(Attitude)`）。 | `00468d0` |
+| 3 | **責務分離の是正（コア）**。sf_command に正規化・デッドバンド・flags デコードを集約（死蔵コード解消）。正規化を実証パス（2048中央, throttle clamp[0,1]）に統一。sf_comm は生パケットを RawControlInput として渡すだけ＋RawInputSink 注入で comm_task が配線（層逆転回避）。motor_driver 旧HAL残骸（setMixerOutput=二重ミキサー/testMotor/stats）削除。挙動完全保存（ドリフト値ベースライン一致）。 | `95f9418` |
+| 3+ | **SIL 1S LiPo 電池サグモデル＋V_BATT 実電圧化**。plant に動的端子電圧 v_batt=OCV(SoC)−I·R_int（電流=モータ電気モデル＋アビオ、クーロンカウント、vpython OCV曲線移植）。emu で有効化、actuator を live(sensor_power)へ。χ²ラッチアップ非発火で全PASS。 | `b8fd27e` |
 
-**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3）。**Phase 2b で ESP-IDF 実機ビルド確認済み（952.7KB）。**
+**全フェーズで検証スイート全PASS**（vehicle_new 11シナリオ + legacy hover_espnow + hover_smoke G2+G3 + plant_smoke）。**Phase 3+ で ESP-IDF 実機ビルド確認済み（953.1KB）。**
 
 ---
 
-## 3. 次にやること: Phase 3（責務分離の是正）
+## 3. 次にやること: Phase 4（HW所有の一元化）— ただし χ²/deadband が割り込み候補
 
-Phase 2b まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 3**。
+Phase 3（コア＋電池モデル＋V_BATT実電圧化）まで完了。次は計画 `valiant-frolicking-sun.md` の **Phase 4**。
 
-- `sf_command` に正規化を集約: `sf_comm` は生パケットを事実として渡し、ADC正規化・デッドバンド・調停を `sf_command`（責務#8）へ。退行したデッドバンドを復活。ADC中央値の不一致（2047.5 vs 2048）を統一。
-- `sf_actuator/actuator.cpp`: config.hpp/params の複製（GPIO/PWM/ARM_D/KAPPA/モータ曲線/V_BATT）を解消。`V_BATT` 固定を実電圧（`sensor_power`）参照に。
-- `motor_driver.cpp`: 旧HAL残骸（`setMixerOutput`/`testMotor`/stats系）を削除、二重ミキサー解消。
-- 検証: 全検証スイート＋スティック→duty が期待通り。
+**割り込み候補（ユーザーと相談して順序決定）:**
+- **χ² ラッチアップ調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
+- **デッドバンド復活**: χ² 改善後に 0.05 を有効化（現状は機構配線・既定0）。
+
+**Phase 4 本体（HW所有 R1/R2/R4）:**
+- IMU/Flow/Motor を board の SPI/LEDC 借用に、二重初期化解消、`sensor_present()` 実装、Critical失敗の abort+LED統一。
+
+### Phase 3 でやったこと（完了・参考）
+- sf_command 正規化集約（commit 95f9418）。SIL 電池モデル＋V_BATT実電圧化（commit b8fd27e）。
+- 残: 旧 Phase 3 に挙げた「config.hpp の GPIO/PWM 複製解消」は循環依存ゆえ **Phase 4（board 所有）に移譲**（actuator.cpp にコメント明記済）。
 
 ### Phase 2b でやったこと（完了・参考）
 
@@ -115,6 +129,20 @@ sf build vehicle_new   # ESP-IDF 実機ビルド（ファーム変更時は必�
    - **教訓**: 「地上収束は飛行を代表しない＝出鱈目」は **姿勢には当てはまらない**（重力は地上もホバーも同じ）。位置/速度の「地上ゼロ」非代表性は**既に離陸エッジの resetPositionVelocity（クラスB）が正確に処理済み**。定性推測でなく **掃引で最良策を数値選定**したのが要点（CLAUDE.md 原則）。
    - **ESKF 凍結機構の限界**: `active_mask`＋`enforceCovarianceConstraints` は「センサ恒久不在」隔離用で、凍結状態の共分散を毎周期 init へ戻す。地上↔飛行トグルには非互換（解除で巨大共分散復活）。トグル運用には「共分散を init に戻さない soft-freeze」の別設計が要る（将来課題）。
    - **Phase 8（crash_refly）への申し送り**: 接地復帰reset後すぐ再離陸すると同じ共分散再膨張で発散しうる。地上再収束の時間確保 or soft-freeze が要る見込み。
+
+6. **χ² ゲートのラッチアップ＝過敏性の真因（Phase 3, データで特定）**:
+   - 毎軸 POSITION_HOLD/STABILIZE は限界安定。0.1% の推力変化やデッドバンドで pos_yaw が 1.08m→7.40m に発散する「崖」があった。
+   - **真因**: ESKF の accel-attitude 3次元更新の χ² ゲート（`eskf_core.cpp::vectorUpdate3`, `accel_chi2_gate=7.8`≒χ²3自由度95%点）。マニューバ中は運動加速度で innovation が大きく **常時66%が棄却**。さらにゲートは**ハードカットオフ**（d²>7.8 で更新を全 return）なので、推定が一度発散すると正しい補正も外れ値に見えて棄却され、d² が 100〜900 に跳ね永久に固着（**latch-up**）。回復補正をゲート自身が弾く。
+   - **計測**: FAIL時 roll_est が真値から数百度ズレて固着・att_rmse 巨大。PASS時は att_rmse 2〜3°で推定健全。棄却率は PASS/FAIL でほぼ同じ(66%)＝平均でなく臨界の瞬間に閾値を跨ぐか否か。
+   - **位置づけ**: 実機にも関わる**推定器ロバスト性の構造的弱点**（突風・ノイズスパイクでも臨界に当たれば発火しうる）。ただし顕在化は**激しい毎軸POS_HOLD捕捉**のみ。disturb（横風＋モータ故障）・N1/N2・通常飛行は全PASS。
+   - **当座の回避（Phase 3+）**: SIL 電池モデルで電圧を動的にし live で追従 → 量子化が一定バイアスでなく微小ディザになりラッチを跨がない。**根治ではない**。
+   - **根治の候補（別タスク）**: χ²ゲート緩和(7.8→11.3等)/ラッチ回復ロジック/適応R強化。直せばデッドバンド0.05も通る見込み。CLAUDE.md 原則で SIL 数値検証必須。
+
+7. **SIL 電池サグモデル（Phase 3+, commit b8fd27e）**:
+   - プラントは定電圧電池をモデル化していなかった（v_batt固定3.7）。実電圧化はサグ対象が無く量子化の害だけ→保留していた。
+   - 動的端子電圧 v_batt=OCV(SoC)−I·R_int を実装（電流=各モータ I_i=(V_motor−Km·ω)/Rm＋アビオ、クーロンカウント、OCV曲線は vpython 移植）。**Config::batt_model_enable 既定OFF**（物理smokeは定電圧）、emu のみON。
+   - 実測: 満充電4.2V起動、飛行中 端子3.36〜4.19V・電流~7.5A・SoC 100→90%。低電圧FS(3.3V)誤発報なし。
+   - **知見**: ホバー電流~7.5A は 300mAh で~2.5分相当（文書4分より高め）。測定 Rm/Km と内部整合・高C率コアレスでは妥当だが、`thrust_efficiency=1/1.12` と明示サグの二重計上の切り分けは将来の追検証。
 
 ---
 
