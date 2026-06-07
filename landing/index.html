@@ -206,7 +206,8 @@ section{position:relative}
 .demo-card{border-radius:var(--radius);overflow:hidden;border:1px solid var(--panel-border);
   background:var(--panel);backdrop-filter:blur(8px);transition:transform .25s,box-shadow .25s}
 .demo-card:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-.demo-card video{width:100%;display:block;aspect-ratio:auto;background:#000}
+/* all demo videos share one aspect → equal heights; wider clips center-cropped / 全デモ動画を同比率に揃え高さを統一(横長は中央トリミング) */
+.demo-card video{width:100%;display:block;aspect-ratio:1280/858;object-fit:cover;background:#000}
 .demo-card .cap{padding:16px 18px}
 .demo-card .cap h3{font-size:1.02rem;margin-bottom:4px}
 .demo-card .cap p{color:var(--muted);font-size:.86rem;margin:0}
