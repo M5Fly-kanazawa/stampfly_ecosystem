@@ -298,6 +298,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp  # Phase 6: CLI console registry (cli_task)
     plant/plant.cpp                                           # MuJoCo physics plant
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
