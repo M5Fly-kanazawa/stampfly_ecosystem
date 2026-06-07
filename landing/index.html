@@ -344,9 +344,10 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <p class="sub reveal in d1">制御を<strong>学び</strong>、<strong>実装し</strong>、<strong>実験する</strong>ための<wbr><span class="nb">教育・研究プラットフォーム</span>。</p>
     <p class="lead reveal in d2">教科書で学んだPID・姿勢推定を、シミュレータと実機で「実際に飛ぶもの」へ。設計から解析・教育までを一気通貫で扱えます。</p>
     <div class="hero-badges reveal in d2">
-      <span class="chip">ESP32-S3 / ESP-IDF</span>
-      <span class="chip">ESKF 姿勢推定</span>
-      <span class="chip">SIL シミュレータ</span>
+      <span class="chip">1機 約 $50</span>
+      <span class="chip">重量 37 g</span>
+      <span class="chip">30機 同時飛行</span>
+      <span class="chip">ESP32-S3 / ESKF</span>
       <span class="chip">MIT License</span>
     </div>
     <div class="btns reveal in d3">
@@ -362,10 +363,26 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
 <section class="stats">
   <div class="wrap">
     <div class="stats-grid">
-      <div class="stat reveal"><div class="num" data-target="400" data-suffix="Hz">400<span class="suf">Hz</span></div><div class="label">リアルタイム制御ループ</div></div>
-      <div class="stat reveal d1"><div class="num" data-target="4">4</div><div class="label">飛行モード（ACRO〜位置保持）</div></div>
-      <div class="stat reveal d2"><div class="num" data-target="5">5</div><div class="label">搭載センサ</div></div>
-      <div class="stat reveal d3"><div class="num" data-target="8">8</div><div class="label">ワークショップ・レッスン</div></div>
+      <div class="stat reveal"><div class="num" data-target="50" data-prefix="$">$50</div><div class="label">1機あたりの価格</div></div>
+      <div class="stat reveal d1"><div class="num" data-target="37" data-suffix="g">37<span class="suf">g</span></div><div class="label">機体重量（軽量・安全）</div></div>
+      <div class="stat reveal d2"><div class="num" data-target="30" data-suffix="機">30<span class="suf">機</span></div><div class="label">1教室で同時飛行</div></div>
+      <div class="stat reveal d3"><div class="num" data-target="400" data-suffix="Hz">400<span class="suf">Hz</span></div><div class="label">リアルタイム制御ループ</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Classroom value / 教育現場での強み ===================== -->
+<section class="block" id="classroom">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Built for the classroom</span>
+      <h2 class="section-title">教室で、<span class="grad-text">30機が一斉に飛ぶ</span></h2>
+      <p class="section-lead">安価・軽量・安全。だから「受講生全員が自分の機体を飛ばす」授業が現実になります。</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat reveal"><div class="ic">🛩️</div><h3>30機を同時飛行</h3><p>ESP-NOW のチャンネル分離で混信を避け、1教室で最大 30 機を同時運用。受講生全員が自分の機体で実習できます。</p></div>
+      <div class="feat reveal d1"><div class="ic">💴</div><h3>1機 約 $50 の低コスト</h3><p>高価な研究機材は不要。クラス全員分を揃えても導入しやすく、台数を気にせず実験・実習に使えます。</p></div>
+      <div class="feat reveal d2"><div class="ic">🪶</div><h3>37 g・安全設計</h3><p>手のひらサイズの超軽量機体＋ダクトガード。屋内・教室でも安全に飛ばせ、初学者の練習に最適です。</p></div>
     </div>
   </div>
 </section>
@@ -409,6 +426,7 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
         <li><span>気圧 / ToF / フロー</span><span>BMP280 / VL53L3CX / PMW3901</span></li>
         <li><span>姿勢推定</span><span>ESKF（誤差状態カルマンフィルタ）</span></li>
         <li><span>通信</span><span>ESP-NOW ＋ WiFiテレメトリ</span></li>
+        <li><span>重量 / 価格</span><span>約 37 g ／ 約 $50</span></li>
       </ul>
     </div>
   </div>
@@ -615,13 +633,14 @@ if (showAll || !('IntersectionObserver' in window)) {
 /* Animated number counters / 数値カウントアップ */
 const animateCount = (el) => {
   const target = parseFloat(el.dataset.target);
+  const prefix = el.dataset.prefix || '';
   const suffix = el.dataset.suffix || '';
   const dur = 1400; const start = performance.now();
   const ease = t => 1 - Math.pow(1 - t, 3);
   const tick = (now) => {
     const p = Math.min(1, (now - start) / dur);
     const val = Math.round(target * ease(p));
-    el.innerHTML = val.toLocaleString() + (suffix ? '<span class="suf">' + suffix + '</span>' : '');
+    el.innerHTML = prefix + val.toLocaleString() + (suffix ? '<span class="suf">' + suffix + '</span>' : '');
     if (p < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
