@@ -85,18 +85,18 @@ static constexpr float MOTOR_CM = 1.53e-2f;
 static constexpr float MOTOR_CT = 1.00e-8f;  // thrust T = Ct·ω² [N]
 
 // Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
-// DEFERRED to a fixed nominal: the SIL plant currently models a CONSTANT battery,
-// so reading the live (8mV-quantized) sensor_power voltage would introduce a ~0.1%
-// divisor mismatch vs the plant's exact value (Model Identity) and destabilize the
-// marginal POSITION_HOLD scenarios. Battery-sag compensation (dividing by the LIVE
-// voltage — required on real HW as the 1S LiPo sags) is switched on once the plant
-// gains a battery discharge model. See firmware/vehicle_new/docs/next_session_plan.md.
-// モータ曲線の電圧 → PWM duty 変換（duty = V/Vbat）に使う電源電圧。固定公称で保留中:
-// SIL プラントは今は定電圧電池をモデル化しているため、実 sensor_power（8mV量子化）を読むと
-// プラントの厳密値と ~0.1% の除数ズレ（Model Identity）が生じ、限界安定の POSITION_HOLD を
-// 崩す。電池サグ補償（実電圧で割る＝実機で 1S LiPo 垂下に必須）はプラントに放電モデルを入れた
-// 時点で有効化する。firmware/vehicle_new/docs/next_session_plan.md 参照。
-static constexpr float V_BATT_NOMINAL = 3.7f;   // 1S LiPo nominal supply [V]
+// Uses the LIVE battery voltage from sensor_power so the thrust→duty stage tracks
+// the 1S LiPo as it sags under load — REQUIRED on real HW (a fixed assumption would
+// under/over-drive the motors as the pack deviates from nominal) and matched in SIL
+// by the plant's battery sag model (Model Identity). The floor guards the boot
+// window (no PowerData yet → voltage 0) and any implausible reading so thrustToDuty
+// never divides by ~0 and blows up the duty.
+// モータ曲線の電圧 → PWM duty 変換（duty = V/Vbat）に使う電源電圧。sensor_power の実電圧を
+// 使い、負荷で垂下する 1S LiPo に thrust→duty 段を追従させる。実機で必須（固定だとパックが
+// 公称からずれると過/不足駆動）。SIL ではプラントの電池サグモデルで一致（Model Identity）。
+// 下限ガードは起動窓（PowerData 未発行→電圧0）と異常値を弾き、~0 除算で duty を暴発させない。
+static constexpr float V_BATT_NOMINAL = 3.7f;   // 1S LiPo nominal fallback [V]
+static constexpr float V_BATT_MIN     = 2.5f;   // below this → treat as invalid [V]
 
 // =============================================================================
 // Motor driver instance (file-local singleton)
@@ -150,10 +150,10 @@ void Actuator::init()
 // thrustToDuty — per-motor thrust [N] → PWM duty [0,1] via the motor curve:
 //   ω = √(T/Ct) ;  V = Am·ω² + Bm·ω + Cm ;  duty = V / Vbat.
 // Exact inverse of the SIL plant's duty→thrust, so a thrust the allocator
-// commands is the thrust the (modeled) motor produces. Vbat is the supply voltage
-// (passed in); once the plant models battery sag this carries the LIVE voltage.
+// commands is the thrust the (modeled) motor produces. Vbat is the LIVE supply
+// voltage (passed in), so the conversion tracks the 1S LiPo as it sags under load.
 // thrustToDuty — 各モータ推力 [N] → PWM duty [0,1]（モータ曲線）。SIL プラントの
-// duty→推力 の厳密な逆。Vbat は電源電圧（引数）。プラントが電池サグをモデル化したら実電圧を運ぶ。
+// duty→推力 の厳密な逆。Vbat は実電源電圧（引数）で、負荷で垂下する 1S LiPo に追従する。
 // -----------------------------------------------------------------------------
 static float thrustToDuty(float thrust, float vbat)
 {
@@ -206,18 +206,17 @@ static void mixerCompute(const ControlOutput& u, float vbat, float duties[4])
 }
 
 // -----------------------------------------------------------------------------
-// batteryVoltage — supply voltage for thrust→duty. DEFERRED to a fixed nominal to
-// match the SIL plant's constant battery (Model Identity). When the plant gains a
-// battery sag/discharge model, switch to the live, sag-tracking reading:
-//   const float v = sensor_power.latest().voltage;
-//   return (v < V_BATT_MIN) ? V_BATT_NOMINAL : v;   // floor guards boot 0 / divide-by-~0
-// batteryVoltage — thrust→duty 用の電源電圧。SIL プラントの定電圧電池に一致させるため固定
-// 公称で保留（Model Identity）。プラントに電池サグ/放電モデルが入ったら、上のサグ追従の
-// 実電圧読み（起動時0や~0除算を防ぐ下限ガード付き）へ切り替える。
+// batteryVoltage — live 1S LiPo voltage from sensor_power, with a safe fallback.
+// At boot (no PowerData yet → voltage 0) or on an implausible reading (< V_BATT_MIN)
+// fall back to the nominal so thrustToDuty never divides by ~0 and blows up the duty.
+// batteryVoltage — sensor_power からの実 1S LiPo 電圧（安全フォールバック付き）。起動時
+// (PowerData 未発行→電圧0) や異常値(< V_BATT_MIN)では公称に戻し、thrustToDuty が ~0 で
+// 割って duty を暴発させないようにする。
 // -----------------------------------------------------------------------------
 static float batteryVoltage()
 {
-    return V_BATT_NOMINAL;
+    const float v = sensor_power.latest().voltage;
+    return (v < V_BATT_MIN) ? V_BATT_NOMINAL : v;
 }
 
 // -----------------------------------------------------------------------------

@@ -77,6 +77,19 @@ void on_advance(int64_t now_us)
 sil::Plant::Config plant_config_from_env()
 {
     sil::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
+
+    // Battery sag/discharge model ON for the closed-loop emulator: the full firmware
+    // runs power_task and reads the live INA3221 voltage to compensate thrust→duty,
+    // so the dynamic supply is consistent end-to-end (Model Identity). Override with
+    // SIL_EMU_BATTERY=off for an ideal constant supply (debugging / A-B contrast).
+    // 閉ループ emu では電池サグモデル ON（full firmware が power_task 稼働＋実 INA3221 電圧で
+    // thrust→duty 補償）。動的電源が端から端まで整合（Model Identity）。SIL_EMU_BATTERY=off で
+    // 理想定電圧（デバッグ/A-B 対照）に切替。
+    cfg.batt_model_enable = true;
+    if (const char* batt = std::getenv("SIL_EMU_BATTERY")) {
+        if (std::strcmp(batt, "off") == 0) cfg.batt_model_enable = false;
+    }
+
     const char* noise = std::getenv("SIL_EMU_NOISE");
     if (!noise) return cfg;
     const bool n0 = (std::strcmp(noise, "n0") == 0);

@@ -86,6 +86,29 @@ public:
         float thrust_efficiency = 1.0f / 1.12f;  ///< ≈0.893 (matches firmware HOVER_THRUST_CORRECTION)
         float kappa    = 9.71e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T)
         float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
+
+        // --- Battery (1S LiPo) sag/discharge model — Model fidelity ---
+        // When enabled, the supply voltage is DYNAMIC: v_batt(t) = OCV(SoC) − I·R_int,
+        // with the battery current I summed from each motor's electrical draw
+        // I_i = (V_motor,i − Km·ω_i)/Rm (motor electrical model, params doc §3) plus a
+        // quiescent avionics draw. SoC is depleted by Coulomb counting. DISABLED by
+        // default → constant v_batt (the physics/smoke tests probe the motor curve at a
+        // fixed nominal voltage). The closed-loop emulator (emu_vehicle_new) enables it
+        // so the firmware's live-voltage thrust→duty compensation has a real sag to track.
+        // 電池(1S LiPo)サグ/放電モデル。有効時は電源電圧が動的: v_batt=OCV(SoC)−I·R_int。
+        // 電池電流 I は各モータ電気電流 I_i=(V_motor,i−Km·ω_i)/Rm（params文書§3）＋アビオ静止
+        // 電流の総和。SoC はクーロンカウントで減少。既定 OFF（物理/smoke テストは固定公称で
+        // モータ曲線を検証）。閉ループ emu が有効化し、ファームの実電圧 thrust→duty 補償に
+        // 追従すべき実サグを与える。
+        bool  batt_model_enable  = false;
+        float batt_capacity_mah  = 300.0f;   ///< 1S LiPo capacity [mAh] (juida2026 EVIDENCE)
+        float batt_r_int         = 0.1f;     ///< battery internal resistance [Ω] (vpython model)
+        float batt_full_v        = 4.2f;     ///< OCV at full charge [V]
+        float batt_empty_v       = 3.3f;     ///< OCV at empty [V]
+        float batt_initial_frac  = 1.0f;     ///< initial state of charge [0..1] (1 = full)
+        float motor_Rm           = 0.34f;    ///< winding resistance [Ω] (params doc, LCR)
+        float motor_Km           = 6.12e-4f; ///< back-EMF constant [V/(rad/s)] (params doc)
+        float avionics_current_a = 0.1f;     ///< MCU + sensors quiescent draw [A]
         float mass     = 0.037f;    ///< body mass [kg]
         float g        = 9.81f;     ///< gravity [m/s²]
         float health[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< per-motor thrust gain (1=healthy)
@@ -168,14 +191,14 @@ public:
     float dutyToThrust(float duty) const;
 
     /// Battery terminal voltage [V] as the INA3221 power monitor would measure it.
-    /// In SIL the "battery" is the Plant supply (fixed nominal today; a future
-    /// sag/discharge model would surface here automatically). The firmware's
-    /// thrust→duty stage divides by this, so it must match the v_batt the motor
-    /// curve uses for the closed loop to be consistent.
-    /// INA3221 電源モニタが測る電池端子電圧 [V]。SIL では「電池」= Plant 電源
-    /// （今は固定公称値、将来の電圧降下モデルがあればここに現れる）。ファームの
-    /// thrust→duty 段はこれで割るため、モータ曲線が使う v_batt と一致させる。
-    float batteryVoltage() const { return cfg_.v_batt; }
+    /// With the battery model OFF this is the fixed nominal (cfg_.v_batt); with it
+    /// ON it is the dynamic terminal voltage OCV(SoC) − I·R_int updated each substep.
+    /// The motor curve (duty→thrust) and the firmware (thrust→duty) both use this
+    /// value, so the closed loop stays consistent (Model Identity).
+    /// INA3221 電源モニタが測る電池端子電圧 [V]。電池モデル OFF なら固定公称（cfg_.v_batt）、
+    /// ON なら substep ごとに更新される動的端子電圧 OCV(SoC)−I·R_int。モータ曲線(duty→推力)
+    /// とファーム(推力→duty)が同じ値を使うので閉ループが整合（Model Identity）。
+    float batteryVoltage() const { return v_batt_; }
 
     /// Advance the physics by dt of VIRTUAL time, integrating in fixed
     /// model-timestep (m_->opt.timestep) substeps with a carried remainder, so
@@ -210,6 +233,22 @@ private:
     /// mj_step → ノイズ前進。h はモデル timestep。
     void substep(float h);
 
+    /// Motor curve inverse: terminal motor voltage V → steady-state prop speed ω
+    /// (positive root of Am·ω² + Bm·ω + (Cm − V) = 0; 0 if V ≤ Cm).
+    /// モータ曲線の逆: 端子電圧 V → 定常回転 ω（Am·ω²+Bm·ω+(Cm−V)=0 の正根、V≤Cm なら0）。
+    float solveOmega(float V) const;
+
+    /// Open-circuit voltage [V] from remaining charge [mAh] (1S LiPo discharge
+    /// curve, ported from simulator/vpython/sensors/power_monitor.py).
+    /// 残容量 [mAh] → 開回路電圧 [V]（1S LiPo 放電曲線、vpython 実装から移植）。
+    float ocvFromCharge(float charge_mah) const;
+
+    /// Update the battery: Coulomb-count the charge and recompute the terminal
+    /// voltage v_batt_ = OCV(SoC) − I·R_int. No-op when the model is disabled.
+    /// 電池更新: クーロンカウントで容量を減らし端子電圧 v_batt_=OCV(SoC)−I·R_int を再計算。
+    /// モデル無効時は何もしない。
+    void updateBattery(float i_total_a, float h);
+
     /// Pointer to a named sensor's data inside d_->sensordata.
     /// 名前付きセンサの d_->sensordata 内の先頭ポインタ。
     const double* sensor(int sid) const { return d_->sensordata + m_->sensor_adr[sid]; }
@@ -223,6 +262,9 @@ private:
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty
     float last_dt_ = 0.0025f;  ///< last step dt (for flow count integration)
     double step_accum_ = 0.0;  ///< virtual-time accumulator [s] for fixed substeps
+
+    float v_batt_ = 3.7f;          ///< current supply (terminal) voltage [V]
+    float batt_charge_mah_ = 0.0f; ///< remaining battery charge [mAh] (model on)
 
     int body_id_  = -1;
     int accel_sid_ = -1, gyro_sid_ = -1, quat_sid_ = -1, pos_sid_ = -1, vel_sid_ = -1;

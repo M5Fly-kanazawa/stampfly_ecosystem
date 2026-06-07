@@ -61,6 +61,19 @@ bool Plant::init(const char* model_path, const Config& cfg)
     // センサノイズモデルをシード（既定 OFF）。cfg.noise.seed で決定論的。
     noise_.init(cfg_.noise);
 
+    // Initialize the battery supply voltage. With the sag model OFF this stays the
+    // fixed nominal (cfg_.v_batt) forever; with it ON, start from the initial SoC.
+    // 電池電源電圧を初期化。サグモデル OFF なら固定公称（cfg_.v_batt）のまま、ON なら
+    // 初期 SoC から開始する。
+    if (cfg_.batt_model_enable) {
+        batt_charge_mah_ = cfg_.batt_initial_frac * cfg_.batt_capacity_mah;
+        // At rest only the avionics draw flows, so the initial sag is tiny.
+        // 静止時はアビオ電流のみ流れるため初期サグは僅か。
+        v_batt_ = ocvFromCharge(batt_charge_mah_) - cfg_.avionics_current_a * cfg_.batt_r_int;
+    } else {
+        v_batt_ = cfg_.v_batt;
+    }
+
     // Start with motors off and compute sensordata for the initial pose.
     // モータ停止で開始し、初期姿勢のセンサ値を計算する。
     for (int i = 0; i < m_->nu; ++i) d_->ctrl[i] = 0.0;
@@ -115,23 +128,66 @@ void Plant::setStartHeight(float z)
 //   V = duty·v_batt ; solve V = Am·ω² + Bm·ω + Cm for ω ; T = Ct·ω².
 // dutyToThrust — 正規化 duty[0,1] → 実モータ＋プロペラ曲線で定常推力 [N]。
 // -----------------------------------------------------------------------------
-float Plant::dutyToThrust(float duty) const
+// solveOmega — positive root of Am·ω² + Bm·ω + (Cm − V) = 0 (0 if V ≤ Cm).
+// solveOmega — Am·ω²+Bm·ω+(Cm−V)=0 の正の根（V≤Cm なら 0）。
+float Plant::solveOmega(float V) const
 {
-    if (duty <= 0.0f) return 0.0f;
-    const float V = duty * cfg_.v_batt;            // terminal voltage [V]
     if (V <= cfg_.motor_Cm) return 0.0f;           // below the offset → no spin
-
-    // Positive root of Am·ω² + Bm·ω + (Cm − V) = 0.
-    // Am·ω² + Bm·ω + (Cm − V) = 0 の正の根。
     const float a = cfg_.motor_Am;
     const float b = cfg_.motor_Bm;
     const float disc = b * b + 4.0f * a * (V - cfg_.motor_Cm);  // > 0 since V > Cm
     const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
-    if (omega <= 0.0f) return 0.0f;
+    return omega > 0.0f ? omega : 0.0f;
+}
+
+float Plant::dutyToThrust(float duty) const
+{
+    if (duty <= 0.0f) return 0.0f;
+    const float omega = solveOmega(duty * v_batt_);  // V = duty·v_batt (current supply)
     // T = Ct·ω², scaled by the real-world thrust efficiency (see Config::thrust_efficiency:
     // the firmware's HOVER_THRUST_CORRECTION 1.12 compensates this deficit on real hw).
     // T = Ct·ω² に実機推力効率を乗ずる（ファームの 1.12 補償が打ち消す実機の欠損）。
     return cfg_.thrust_efficiency * cfg_.Ct * omega * omega;   // thrust T [N]
+}
+
+// ocvFromCharge — remaining charge [mAh] → open-circuit voltage [V] via a simplified
+// 1S LiPo discharge curve (ported from vpython/sensors/power_monitor.py): mostly
+// linear in SoC with slightly steeper ends, clamped to [empty, full].
+// ocvFromCharge — 残容量 [mAh] → 開回路電圧 [V]（簡略 1S LiPo 放電曲線、vpython 移植）。
+// SoC にほぼ線形で両端だけ急峻、[empty, full] にクランプ。
+float Plant::ocvFromCharge(float charge_mah) const
+{
+    float pct = charge_mah / cfg_.batt_capacity_mah;   // state of charge [0..1]
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 1.0f) pct = 1.0f;
+
+    float adj;
+    if      (pct > 0.95f) adj = 0.9f + (pct - 0.9f) * 2.0f;  // steep near full
+    else if (pct < 0.05f) adj = pct * 2.0f;                  // steep near empty
+    else                  adj = pct;
+
+    float v = cfg_.batt_empty_v + adj * (cfg_.batt_full_v - cfg_.batt_empty_v);
+    if (v < cfg_.batt_empty_v) v = cfg_.batt_empty_v;
+    if (v > cfg_.batt_full_v)  v = cfg_.batt_full_v;
+    return v;
+}
+
+// updateBattery — Coulomb-count the consumed charge and recompute the terminal
+// voltage v_batt_ = OCV(SoC) − I·R_int. No-op when the model is disabled.
+// updateBattery — 消費容量をクーロンカウントし端子電圧 v_batt_=OCV(SoC)−I·R_int を再計算。
+// モデル無効時は何もしない。
+void Plant::updateBattery(float i_total_a, float h)
+{
+    if (!cfg_.batt_model_enable) return;            // constant v_batt_ (= cfg_.v_batt)
+
+    // Coulomb counting: charge[mAh] -= I[A]·h[s] / 3.6  (A·s → mAh).
+    // クーロンカウント: charge[mAh] -= I[A]·h[s]/3.6（A·s→mAh）。
+    batt_charge_mah_ -= i_total_a * h / 3.6f;
+    if (batt_charge_mah_ < 0.0f) batt_charge_mah_ = 0.0f;
+
+    // Terminal voltage = open-circuit voltage minus the internal-resistance drop.
+    // 端子電圧 = 開回路電圧 − 内部抵抗による電圧降下。
+    v_batt_ = ocvFromCharge(batt_charge_mah_) - i_total_a * cfg_.batt_r_int;
 }
 
 // -----------------------------------------------------------------------------
@@ -145,7 +201,7 @@ float Plant::hoverDuty() const
     // 効率込みの T=efficiency·Ct·ω² を逆算し、出力推力が mg/4 になる ω を得る。
     const float omega = std::sqrt(thrust / (cfg_.Ct * cfg_.thrust_efficiency));  // ω = √(T/(Ct·η))
     const float V = cfg_.motor_Am * omega * omega + cfg_.motor_Bm * omega + cfg_.motor_Cm;
-    return V / cfg_.v_batt;                                // duty = V / v_batt
+    return V / v_batt_;                                    // duty = V / v_batt (current supply)
 }
 
 // -----------------------------------------------------------------------------
@@ -198,14 +254,33 @@ void Plant::step(float dt)
 void Plant::substep(float h)
 {
     // First-order motor lag toward the commanded target, then quadratic thrust.
-    // 指令目標への一次遅れ、続いて二次推力。
+    // Each motor's terminal voltage is duty·v_batt_ (this substep's supply); ω and
+    // thrust follow the motor curve, and the electrical current I = (V − Km·ω)/Rm
+    // is accumulated to drive the battery sag (computed with this substep's v_batt_,
+    // then v_batt_ is updated for the next substep — an explicit 1-substep lag at 4kHz).
+    // 指令目標への一次遅れ、続いて二次推力。各モータ端子電圧は duty·v_batt_（本 substep の
+    // 電源）。ω・推力はモータ曲線、電気電流 I=(V−Km·ω)/Rm を積算して電池サグを駆動（本
+    // substep の v_batt_ で計算し、その後 v_batt_ を更新＝4kHz で陽的に1 substep 遅れ）。
     const float alpha = 1.0f - std::exp(-h / cfg_.motor_tau);
+    const float v_supply = v_batt_;          // this substep's supply voltage
     float thrust[4];
+    float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
     for (int i = 0; i < 4; ++i) {
         motor_duty_[i] += (motor_target_[i] - motor_duty_[i]) * alpha;
-        thrust[i] = dutyToThrust(motor_duty_[i]) * cfg_.health[i];
+        const float v_motor = motor_duty_[i] * v_supply;
+        const float omega   = solveOmega(v_motor);
+        thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega * omega * cfg_.health[i];
         if (i < m_->nu) d_->ctrl[i] = thrust[i];
+
+        // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.
+        // モータ電気電流（DC モデル: V = I·Rm + Km·ω）。0 以上にクランプ。
+        const float i_motor = (v_motor - cfg_.motor_Km * omega) / cfg_.motor_Rm;
+        i_total += (i_motor > 0.0f) ? i_motor : 0.0f;
     }
+
+    // Update the battery supply (Coulomb count + IR sag) for the next substep.
+    // 次 substep に向けて電池電源を更新（クーロンカウント＋IR サグ）。
+    updateBattery(i_total, h);
 
     // Net reaction yaw torque about body +Z in FLU (Z up). CCW props (M1 FR, M3 RL)
     // give −Z_FLU reaction; CW props (M2 RR, M4 FL) give +Z_FLU.
