@@ -11,16 +11,22 @@
  * @brief Command processor — input normalization, deadband, arbitration
  *        コマンド処理 — 入力正規化、デッドバンド、調停
  *
- * Processes raw pilot inputs from ESP-NOW or API, applies deadband
- * and normalization, then publishes a clean CommandSetpoint to the
- * command_setpoint topic.
+ * Responsibility #8 (Service): absorb every input source, normalize the raw
+ * sticks, apply a centre deadband, decode the discrete switch bits, and publish
+ * the clean CommandSetpoint + PilotRequest topics. sf_comm (HAL, #9) only
+ * delivers the raw wire packet as a RawControlInput fact — this component is the
+ * single place where raw ADC counts become physical commands, so the
+ * normalization rule lives in exactly one location.
  *
- * ESP-NOWまたはAPIからの生パイロット入力を処理し、デッドバンドと
- * 正規化を適用して、クリーンなCommandSetpointをcommand_setpointトピックに発行する。
+ * 責務#8（Service）: 全入力ソースを吸収し、生スティックを正規化、中央デッドバンドを
+ * 適用、離散スイッチビットをデコードして、クリーンな CommandSetpoint と PilotRequest
+ * トピックを発行する。sf_comm（HAL・#9）は生の電波パケットを RawControlInput という
+ * 「事実」として渡すだけ。本コンポーネントが「生 ADC 値→物理指令」変換の唯一の場所
+ * なので、正規化規則は一箇所だけに存在する。
  *
- * @design architecture.md §6 — Command processing pipeline             [--]
- * @design detailed_design.md §4 — Input normalization                   [--]
- * @design coding_and_education.md §2 — Bilingual comments               [--]
+ * @design architecture.md §6 — Command processing pipeline             [OK]
+ * @design detailed_design.md §4 — Input normalization                   [OK]
+ * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
 #pragma once
@@ -37,49 +43,58 @@ enum class CommandSource : uint8_t {
     ONBOARD    = 2,   // Onboard autonomous      / オンボード自律
 };
 
-/// Command processor: normalize, deadband, arbitrate, publish
-/// コマンドプロセッサ: 正規化、デッドバンド、調停、発行
+/// Command processor: normalize, deadband, decode switches, publish
+/// コマンドプロセッサ: 正規化、デッドバンド、スイッチデコード、発行
 class CommandProcessor {
 public:
     /// Initialize command processor with default deadband
     /// デフォルトデッドバンドでコマンドプロセッサを初期化する
     void init();
 
-    /// Process raw input and publish setpoint to topic
-    /// 生入力を処理しセットポイントをトピックに発行する
-    ///
-    /// @param raw_throttle  Raw throttle [0..4095]    / 生スロットル
-    /// @param raw_roll      Raw roll     [0..4095]    / 生ロール
-    /// @param raw_pitch     Raw pitch    [0..4095]    / 生ピッチ
-    /// @param raw_yaw       Raw yaw      [0..4095]    / 生ヨー
-    /// @param source        Input source               / 入力ソース
-    void processRawInput(uint16_t raw_throttle, uint16_t raw_roll,
-                         uint16_t raw_pitch, uint16_t raw_yaw,
-                         CommandSource source);
+    /// Process one raw input fact: normalize sticks, apply deadband, decode the
+    /// switch flags, and publish CommandSetpoint + PilotRequest.
+    /// 1件の生入力（事実）を処理する: スティック正規化、デッドバンド適用、スイッチ
+    /// flags をデコードし、CommandSetpoint と PilotRequest を発行する。
+    void process(const RawControlInput& raw);
 
-    /// Set deadband width (applied to roll, pitch, yaw)
-    /// デッドバンド幅を設定する（ロール、ピッチ、ヨーに適用）
+    /// Set deadband width (applied to roll, pitch, yaw — never to throttle)
+    /// デッドバンド幅を設定する（ロール、ピッチ、ヨーに適用、スロットルには非適用）
     void setDeadband(float deadband) { deadband_ = deadband; }
 
 private:
-    /// Normalize raw ADC value [0..4095] to [-1..1]
-    /// 生ADC値 [0..4095] を [-1..1] に正規化する
-    float normalize(uint16_t raw) const;
+    /// Normalize a spring-centred axis [0..4095] (2048 = centre) to [-1..1]
+    /// バネ中央軸 [0..4095]（2048=中央）を [-1..1] に正規化する
+    float normalizeAxis(uint16_t raw) const;
 
-    /// Normalize throttle [0..4095] to [0..1]
-    /// スロットル [0..4095] を [0..1] に正規化する
+    /// Normalize throttle [0..4095] (2048 = zero) to [0..1] (lower half clipped)
+    /// スロットル [0..4095]（2048=ゼロ）を [0..1] に正規化する（下半分は 0 にクリップ）
     float normalizeThrottle(uint16_t raw) const;
 
-    /// Apply deadband: values within +-deadband become zero
-    /// デッドバンド適用: +-deadband内の値をゼロにする
+    /// Apply deadband: values within +-deadband become zero, the remaining range
+    /// is rescaled so full deflection still reaches +-1.
+    /// デッドバンド適用: +-deadband 内の値を 0 にし、残りの範囲は全振りで +-1 に届くよう
+    /// 再スケールする。
     float applyDeadband(float value) const;
 
-    /// Publish processed setpoint to command_setpoint topic
-    /// 処理済みセットポイントをcommand_setpointトピックに発行する
-    void publishSetpoint(float throttle, float roll, float pitch,
-                         float yaw, CommandSource source);
+    /// Publish the normalized stick setpoint to command_setpoint.
+    /// 正規化済みスティックセットポイントを command_setpoint に発行する。
+    void publishSetpoint(const RawControlInput& raw);
 
-    float deadband_ = 0.05f;   // Default deadband width / デフォルトデッドバンド幅
+    /// Decode the discrete switch bits and publish them to pilot_request.
+    /// 離散スイッチビットをデコードし pilot_request に発行する。
+    void publishPilotRequest(const RawControlInput& raw);
+
+    // Deadband width for roll/pitch/yaw. Default 0 (off): a non-zero deadband
+    // shrinks the stick command, which tips the marginally-stable per-axis
+    // POSITION_HOLD/STABILIZE scenarios over their gates (the same accel-attitude
+    // χ² latch-up the live-voltage path exposed). The mechanism is wired and
+    // settable via setDeadband(); the value is fixed once those scenarios are
+    // hardened or on real-HW tuning. See docs/next_session_plan.md.
+    // ロール/ピッチ/ヨーのデッドバンド幅。既定0（無効）: 非ゼロはスティック指令を縮め、
+    // 限界安定の毎軸 POSITION_HOLD/STABILIZE をゲート超過させる（実電圧経路が露呈させた
+    // accel-attitude χ² ラッチアップと同根）。機構は配線済みで setDeadband() で設定可能。
+    // 値はそれらシナリオの堅牢化後／実機チューニングで確定。docs/next_session_plan.md 参照。
+    float deadband_ = 0.0f;
 };
 
 }  // namespace sf

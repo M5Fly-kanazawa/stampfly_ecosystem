@@ -14,16 +14,20 @@
  * sf_comm OWNS WiFi initialization. It brings up netif + event loop +
  * WiFi (STA) on a fixed channel, then enables ESP-NOW reception. Other
  * components (sf_telemetry) assume WiFi is already up before binding
- * UDP sockets. Incoming control packets are decoded and published to
- * the `command_setpoint` topic; failsafe code polls msSinceLastPacket()
- * to detect link loss (this module never triggers failsafe directly).
+ * UDP sockets. Incoming control packets are validated and LATCHED as a
+ * RawControlInput fact (no normalization); CommTask pulls it via
+ * takeLatestInput() and feeds sf_command, which publishes command_setpoint
+ * and pilot_request. Failsafe code polls msSinceLastPacket() to detect link
+ * loss (this module never triggers failsafe directly).
  *
  * sf_comm が WiFi 初期化を所有する。netif + イベントループ + WiFi (STA)
  * を固定チャンネルで起動した後、ESP-NOW 受信を有効化する。他コンポーネント
  * (sf_telemetry) は UDP ソケットを bind する前に WiFi が起動済みである
- * ことを前提とする。受信した制御パケットはデコードして `command_setpoint`
- * トピックに発行し、フェイルセーフは msSinceLastPacket() をポーリング
- * してリンク喪失を検出する（本モジュールはフェイルセーフを発火しない）。
+ * ことを前提とする。受信した制御パケットは検証して RawControlInput という
+ * 「事実」として保持する（正規化なし）。CommTask が takeLatestInput() で
+ * 取り出して sf_command に渡し、sf_command が command_setpoint と pilot_request
+ * を発行する。フェイルセーフは msSinceLastPacket() をポーリングしてリンク喪失を
+ * 検出する（本モジュールはフェイルセーフを発火しない）。
  *
  * @design architecture.md §6 — Communication subsystem                  [OK]
  * @design detailed_design.md §7 — sf_comm component                     [OK]
@@ -31,7 +35,6 @@
  */
 
 #include "comm.hpp"
-#include "topics.hpp"
 #include "data_types.hpp"
 
 #include <cstring>
@@ -108,24 +111,12 @@ static constexpr uint8_t kWifiChannel = 1;
 /// WiFi インターフェースに通知するホスト名。
 static constexpr const char* kHostname = "stampfly-vehicle";
 
-/// 12-bit ADC stick centre and half-span. On-air channels are spring-centred at
-/// 2048; (raw - centre) / half-span maps to [-1,1] (throttle clamped to [0,1]).
-/// Matches firmware/controller and the proven legacy vehicle firmware.
-/// 12bit ADC スティックの中央と半幅。on-air は 2048 中央、(raw-中央)/半幅 で [-1,1]
-/// （スロットルは [0,1] にクランプ）。実コントローラ・実証済み旧ファームと一致。
-static constexpr float kAdcCenter   = 2048.0f;
-static constexpr float kAdcHalfSpan = 2048.0f;
-
-/// ControlPacket.flags bit masks (protocol SSOT / controller_comm).
-/// ControlPacket.flags のビットマスク（プロトコル SSOT / controller_comm）。
-static constexpr uint8_t kFlagArm     = 0x01;  // bit0
-static constexpr uint8_t kFlagFlip    = 0x02;  // bit1
-static constexpr uint8_t kFlagMode    = 0x04;  // bit2
-static constexpr uint8_t kFlagAltMode = 0x08;  // bit3: ALTITUDE_HOLD
-static constexpr uint8_t kFlagPosMode = 0x10;  // bit4: POSITION_HOLD
-
-/// Source ID published into CommandSetpoint.source (0 = ESP-NOW link)
-/// CommandSetpoint.source に発行するソース ID（0 = ESP-NOW リンク）
+/// Source ID stamped into RawControlInput.source (0 = ESP-NOW link). The stick
+/// normalization, deadband and flags decoding all live in sf_command now — this
+/// HAL component only reports WHERE the packet came from.
+/// RawControlInput.source に刻む入力ソース ID（0 = ESP-NOW リンク）。スティック正規化・
+/// デッドバンド・flags デコードは全て sf_command にある。本 HAL はパケットの「出どころ」を
+/// 報告するだけ。
 static constexpr uint8_t kCommandSourceEspNow = 0;
 
 // -----------------------------------------------------------------------------
@@ -263,11 +254,13 @@ uint32_t Comm::timeSinceLastPacket() const
 // onEspNowRecv — static C callback (runs in WiFi task context).
 // onEspNowRecv — 静的 C コールバック（WiFi タスクコンテキストで実行される）。
 //
-// Validates length and CRC, then forwards to instance method for decode +
-// publish. Drops silently on any validation failure (educational note: a
-// chatty log here would flood the console under noise).
-// 長さと CRC を検証し、インスタンスメソッドに渡してデコード+発行する。
-// 検証失敗時は静かに破棄（ログを出すとノイズ下でコンソールが溢れる）。
+// Validates length and CRC, then latches the raw fields. Drops silently on any
+// validation failure (educational note: a chatty log here would flood the
+// console under noise). NO normalization or command publishing happens here —
+// that is sf_command's job, driven by CommTask.
+// 長さと CRC を検証し、生フィールドを保持する。検証失敗時は静かに破棄（ログを出すと
+// ノイズ下でコンソールが溢れる）。正規化やコマンド発行はここで行わない — それは
+// CommTask が駆動する sf_command の仕事。
 // -----------------------------------------------------------------------------
 void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
                         const uint8_t* data, int len)
@@ -294,67 +287,50 @@ void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
 
     (void)info;  // src MAC is unused in Phase 2a (broadcast peer accepted)
                  // src MAC は Phase 2a では未使用（ブロードキャスト許容）
-    g_comm_instance->parseEspNowData(pkt);
+    g_comm_instance->forwardRawInput(pkt);
 }
 
 // -----------------------------------------------------------------------------
-// parseEspNowData — decode validated packet into CommandSetpoint and publish.
-// parseEspNowData — 検証済みパケットを CommandSetpoint にデコードし発行する。
+// forwardRawInput — build a RawControlInput and forward it to the injected sink.
+// forwardRawInput — RawControlInput を組み、注入された sink へ転送する。
 //
-// Normalization (12-bit ADC, spring-centred at 2048; matches the controller):
-//   throttle:        (raw - 2048) / 2048, clamped to [0, 1]   (2048 = zero)
-//   roll/pitch/yaw:  (raw - 2048) / 2048, clamped to [-1, 1]   (2048 = center)
-// flags (arm/mode) are decoded but routed in a separate change (a pilot-request
-// topic → StateManager); StateManager is the sole arm/mode decision authority.
-// 正規化（12bit ADC, 2048 中央, コントローラと一致）。flags(arm/mode) は別変更で
-// pilot-request トピック→StateManager へ配線する（判断は StateManager が唯一行う）。
+// No normalization, no deadband, no flags interpretation — this HAL component
+// just packages the wire fields as a FACT and hands them to the sink (which
+// CommTask points at sf_command, the Service that normalizes, deadbands, and
+// decodes the switches). Processing AT PACKET TIME (here, in the recv context)
+// keeps the proven low-latency command path: the marginally-stable POSITION_HOLD
+// scenarios are sensitive to command-delivery phase, so a polled hand-off would
+// shift their dynamics. sf_comm still does not depend on sf_command — it only
+// calls a function-pointer sink (dependency injected by CommTask).
+// 正規化・デッドバンド・flags 解釈は一切しない — 本 HAL は電波フィールドを「事実」として
+// 包み、sink（CommTask が sf_command を指す。正規化・デッドバンド・スイッチデコードを行う
+// Service）へ渡すだけ。パケット到着時（ここ＝受信文脈）に処理することで実証済みの低レイテンシ
+// コマンド経路を保つ: 限界安定の POSITION_HOLD シナリオはコマンド配送の位相に敏感で、ポーリング
+// 受け渡しでは動特性がずれてしまう。sf_comm は依然 sf_command に依存しない — 関数ポインタ sink を
+// 呼ぶだけ（依存は CommTask が注入）。
 // -----------------------------------------------------------------------------
-void Comm::parseEspNowData(const ControlPacket& pkt)
+void Comm::forwardRawInput(const ControlPacket& pkt)
 {
-    // Build setpoint with normalized stick values.
-    // 正規化されたスティック値でセットポイントを構築する。
-    CommandSetpoint sp{};
-    sp.throttle = clampUnit((static_cast<float>(pkt.throttle) - kAdcCenter) / kAdcHalfSpan);
-    if (sp.throttle < 0.0f) sp.throttle = 0.0f;   // throttle is [0,1] (2048 = zero)
-    sp.roll  = clampUnit((static_cast<float>(pkt.roll)  - kAdcCenter) / kAdcHalfSpan);
-    sp.pitch = clampUnit((static_cast<float>(pkt.pitch) - kAdcCenter) / kAdcHalfSpan);
-    sp.yaw   = clampUnit((static_cast<float>(pkt.yaw)   - kAdcCenter) / kAdcHalfSpan);
-    sp.source    = kCommandSourceEspNow;
-    sp.timestamp = static_cast<uint32_t>(esp_timer_get_time());
-
-    // Publish to Pub-Sub. Latest topic publish is callback-safe.
-    // Pub-Sub に発行する。Latest トピックの publish はコールバック安全。
-    sf::command_setpoint.publish(sp);
-
-    // Update freshness timestamp for failsafe polling.
-    // フェイルセーフのポーリング用に新鮮度タイムスタンプを更新する。
+    // Update freshness timestamp for failsafe polling (always, even with no sink).
+    // フェイルセーフのポーリング用に新鮮度タイムスタンプを更新（sink 無しでも常時）。
     last_packet_us_.store(esp_timer_get_time(), std::memory_order_release);
 
-    // Forward the discrete pilot switches as FACTS on the pilot_request topic. sf_comm
-    // does NOT decide arm/mode — it only reports which switches the controller sent.
-    // StateManager (the sole authority) edge-detects ARM and derives the FlightMode
-    // (R5: this reaches StateTask by topic, never a direct call). 離散スイッチを「事実」
-    // として pilot_request に転送する。arm/mode の判断はしない（どのスイッチが来たかの報告のみ）。
-    // 判断は StateManager（唯一の権限）が行う（R5: トピック経由・直接呼出禁止）。
-    PilotRequest req{};
-    req.arm      = (pkt.flags & kFlagArm)     != 0;
-    req.acro     = (pkt.flags & kFlagMode)    != 0;
-    req.alt_hold = (pkt.flags & kFlagAltMode) != 0;
-    req.pos_hold = (pkt.flags & kFlagPosMode) != 0;
-    req.source   = kCommandSourceEspNow;
-    req.timestamp = sp.timestamp;
-    sf::pilot_request.publish(req);
-}
+    if (raw_sink_ == nullptr) {
+        return;   // no consumer wired yet / 消費者未配線
+    }
 
-// -----------------------------------------------------------------------------
-// clampUnit — clamp a float to the range [-1.0, 1.0].
-// clampUnit — float を [-1.0, 1.0] に制限する。
-// -----------------------------------------------------------------------------
-float Comm::clampUnit(float v)
-{
-    if (v >  1.0f) return  1.0f;
-    if (v < -1.0f) return -1.0f;
-    return v;
+    RawControlInput raw{};
+    raw.throttle  = pkt.throttle;
+    raw.roll      = pkt.roll;
+    raw.pitch     = pkt.pitch;
+    raw.yaw       = pkt.yaw;
+    raw.flags     = pkt.flags;
+    raw.source    = kCommandSourceEspNow;
+    raw.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+
+    // Hand the fact to the Service layer (sf_command via the injected sink).
+    // 事実を Service 層（注入された sink 経由で sf_command）へ渡す。
+    raw_sink_(raw);
 }
 
 // =============================================================================

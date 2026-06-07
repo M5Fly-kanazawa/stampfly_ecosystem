@@ -109,6 +109,25 @@ struct StateEstimate {
 // コマンドデータ型
 // =============================================================================
 
+/// Raw pilot input as delivered by the comm link, BEFORE normalization.
+/// sf_comm (HAL, responsibility #9) latches the decoded wire packet here as a
+/// FACT and does not interpret it; sf_command (Service, responsibility #8) reads
+/// it and produces the normalized CommandSetpoint + PilotRequest. This keeps the
+/// physical-layer (comm) and the command-processing layer (command) decoupled.
+/// 正規化前の生パイロット入力。sf_comm（HAL・責務#9）が復号した電波パケットを「事実」
+/// として保持するだけで解釈しない。sf_command（Service・責務#8）がこれを読み、正規化済み
+/// CommandSetpoint と PilotRequest を生成する。物理層（comm）とコマンド処理層（command）
+/// を疎結合に保つ。
+struct RawControlInput {
+    uint16_t throttle;    // Raw 12-bit ADC [0..4095], 2048 = zero  / 生スロットル
+    uint16_t roll;        // Raw 12-bit ADC [0..4095], 2048 = centre/ 生ロール
+    uint16_t pitch;       // Raw 12-bit ADC [0..4095], 2048 = centre/ 生ピッチ
+    uint16_t yaw;         // Raw 12-bit ADC [0..4095], 2048 = centre/ 生ヨー
+    uint8_t  flags;       // Discrete switch bits (protocol SSOT)   / スイッチビット
+    uint8_t  source;      // Input source ID (CommandSource)        / 入力ソースID
+    uint32_t timestamp;   // [us]; 0 = never                        / 0=未受信
+};
+
 /// Pilot/API command setpoint
 /// パイロット/APIコマンドセットポイント
 struct CommandSetpoint {
@@ -121,13 +140,13 @@ struct CommandSetpoint {
 };
 
 /// Discrete pilot requests (ARM switch + flight-mode selection), carried SEPARATELY
-/// from the continuous CommandSetpoint stick stream. sf_comm decodes the ESP-NOW
-/// flags byte and publishes these as FACTS (it does not decide); the StateManager —
-/// the sole transition authority — edge-detects ARM and applies the mode (R5: this
-/// flows by topic, not a direct call). 離散パイロット要求（ARM スイッチ＋飛行モード選択）。
-/// 連続スティックの CommandSetpoint とは分離して運ぶ。sf_comm が ESP-NOW flags を
-/// デコードし「事実」として発行（判断しない）。判断は唯一の遷移実行者 StateManager が
-/// 行う（R5: 直接呼び出しでなくトピック経由）。
+/// from the continuous CommandSetpoint stick stream. sf_command decodes the flags
+/// byte (delivered raw by sf_comm) and publishes these as FACTS (it does not decide);
+/// the StateManager — the sole transition authority — edge-detects ARM and applies
+/// the mode (R5: this flows by topic, not a direct call). 離散パイロット要求（ARM
+/// スイッチ＋飛行モード選択）。連続スティックの CommandSetpoint とは分離して運ぶ。
+/// sf_command が（sf_comm が生で渡した）flags をデコードし「事実」として発行（判断しない）。
+/// 判断は唯一の遷移実行者 StateManager が行う（R5: 直接呼び出しでなくトピック経由）。
 struct PilotRequest {
     bool     arm;         // ARM switch          (flags bit0) / ARM スイッチ
     bool     acro;        // ACRO/rate request   (flags bit2) / ACRO（レート）要求

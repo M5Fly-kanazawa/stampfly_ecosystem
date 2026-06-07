@@ -36,17 +36,19 @@ static const char* TAG = "actuator";
 namespace sf {
 
 // =============================================================================
-// Local constants — these must mirror main/config.hpp.
-// ローカル定数 — main/config.hpp と必ず同期させること。
+// Motor hardware constants (GPIO + PWM)
 //
-// They are duplicated here (instead of `#include "config.hpp"`) because
-// the `main` directory is not on the include path of this component, and
-// the task specification forbids modifying CMakeLists.txt. If a value in
-// config.hpp changes, update it here as well.
+// These currently mirror main/config.hpp because config.hpp lives under main/,
+// which DEPENDS ON this component — so sf_actuator cannot include it without a
+// circular dependency. Phase 4 (HW ownership, R1/R2) resolves this for real by
+// moving the LEDC timer + motor GPIOs into sf_board (the BSP), which both this
+// component and the motor HAL then borrow. Until then, keep these in sync with
+// config.hpp.
 //
-// `config.hpp` の include パスがこのコンポーネントから通っておらず、本タスク
-// では CMakeLists.txt の変更が禁止されているため、値をミラーしている。
-// config.hpp 側の値を変更したら、こちらも必ず更新すること。
+// モータ HW 定数（GPIO + PWM）。config.hpp は main/ にあり本コンポーネントに依存するため、
+// 循環依存になり include できない（その値をミラーしている理由）。Phase 4（HW 所有・R1/R2）で
+// LEDC タイマーとモータ GPIO を sf_board（BSP）へ移し、本コンポーネントとモータ HAL が借りる
+// 形で本質的に解消する。それまでは config.hpp と同期させること。
 // =============================================================================
 
 // Motor GPIOs (X-quad: M1=FR, M2=RR, M3=RL, M4=FL)
@@ -81,7 +83,20 @@ static constexpr float MOTOR_AM = 5.39e-8f;  // V = Am·ω² + Bm·ω + Cm
 static constexpr float MOTOR_BM = 6.33e-4f;
 static constexpr float MOTOR_CM = 1.53e-2f;
 static constexpr float MOTOR_CT = 1.00e-8f;  // thrust T = Ct·ω² [N]
-static constexpr float V_BATT   = 3.7f;      // 1S LiPo nominal [V]
+
+// Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
+// DEFERRED to a fixed nominal: the SIL plant currently models a CONSTANT battery,
+// so reading the live (8mV-quantized) sensor_power voltage would introduce a ~0.1%
+// divisor mismatch vs the plant's exact value (Model Identity) and destabilize the
+// marginal POSITION_HOLD scenarios. Battery-sag compensation (dividing by the LIVE
+// voltage — required on real HW as the 1S LiPo sags) is switched on once the plant
+// gains a battery discharge model. See firmware/vehicle_new/docs/next_session_plan.md.
+// モータ曲線の電圧 → PWM duty 変換（duty = V/Vbat）に使う電源電圧。固定公称で保留中:
+// SIL プラントは今は定電圧電池をモデル化しているため、実 sensor_power（8mV量子化）を読むと
+// プラントの厳密値と ~0.1% の除数ズレ（Model Identity）が生じ、限界安定の POSITION_HOLD を
+// 崩す。電池サグ補償（実電圧で割る＝実機で 1S LiPo 垂下に必須）はプラントに放電モデルを入れた
+// 時点で有効化する。firmware/vehicle_new/docs/next_session_plan.md 参照。
+static constexpr float V_BATT_NOMINAL = 3.7f;   // 1S LiPo nominal supply [V]
 
 // =============================================================================
 // Motor driver instance (file-local singleton)
@@ -135,16 +150,17 @@ void Actuator::init()
 // thrustToDuty — per-motor thrust [N] → PWM duty [0,1] via the motor curve:
 //   ω = √(T/Ct) ;  V = Am·ω² + Bm·ω + Cm ;  duty = V / Vbat.
 // Exact inverse of the SIL plant's duty→thrust, so a thrust the allocator
-// commands is the thrust the (modeled) motor produces.
+// commands is the thrust the (modeled) motor produces. Vbat is the supply voltage
+// (passed in); once the plant models battery sag this carries the LIVE voltage.
 // thrustToDuty — 各モータ推力 [N] → PWM duty [0,1]（モータ曲線）。SIL プラントの
-// duty→推力 の厳密な逆。
+// duty→推力 の厳密な逆。Vbat は電源電圧（引数）。プラントが電池サグをモデル化したら実電圧を運ぶ。
 // -----------------------------------------------------------------------------
-static float thrustToDuty(float thrust)
+static float thrustToDuty(float thrust, float vbat)
 {
     if (thrust <= 0.0f) return MIN_DUTY;
     const float omega = std::sqrt(thrust / MOTOR_CT);
     const float volts = MOTOR_AM * omega * omega + MOTOR_BM * omega + MOTOR_CM;
-    return volts / V_BATT;   // final clamp to [MIN,MAX]_DUTY by clampDuties()
+    return volts / vbat;   // final clamp to [MIN,MAX]_DUTY by clampDuties()
 }
 
 // -----------------------------------------------------------------------------
@@ -169,7 +185,7 @@ static float thrustToDuty(float thrust)
 // under-drove yaw by ~1/κ² (a 1 rad/s yaw command tracked at 0.05 rad/s).
 // 注意: ヨーは 1/κ（·κ ではない）。旧簡易ミキサーは ·κ でヨーを約 1/κ² も弱めていた。
 //
-static void mixerCompute(const ControlOutput& u, float duties[4])
+static void mixerCompute(const ControlOutput& u, float vbat, float duties[4])
 {
     const float ut = u.thrust;       // total thrust [N]
     const float up = u.torque[0];    // roll torque  [Nm]
@@ -186,7 +202,22 @@ static void mixerCompute(const ControlOutput& u, float duties[4])
     T[stampfly::MotorDriver::MOTOR_RL] = 0.25f * (ut + id * up - id * uq + ik * ur);
     T[stampfly::MotorDriver::MOTOR_FL] = 0.25f * (ut + id * up + id * uq - ik * ur);
 
-    for (int i = 0; i < 4; ++i) duties[i] = thrustToDuty(T[i]);
+    for (int i = 0; i < 4; ++i) duties[i] = thrustToDuty(T[i], vbat);
+}
+
+// -----------------------------------------------------------------------------
+// batteryVoltage — supply voltage for thrust→duty. DEFERRED to a fixed nominal to
+// match the SIL plant's constant battery (Model Identity). When the plant gains a
+// battery sag/discharge model, switch to the live, sag-tracking reading:
+//   const float v = sensor_power.latest().voltage;
+//   return (v < V_BATT_MIN) ? V_BATT_NOMINAL : v;   // floor guards boot 0 / divide-by-~0
+// batteryVoltage — thrust→duty 用の電源電圧。SIL プラントの定電圧電池に一致させるため固定
+// 公称で保留（Model Identity）。プラントに電池サグ/放電モデルが入ったら、上のサグ追従の
+// 実電圧読み（起動時0や~0除算を防ぐ下限ガード付き）へ切り替える。
+// -----------------------------------------------------------------------------
+static float batteryVoltage()
+{
+    return V_BATT_NOMINAL;
 }
 
 // -----------------------------------------------------------------------------
@@ -258,10 +289,10 @@ void Actuator::update()
     // 制御出力トピックを購読する。
     const ControlOutput cmd = control_output.latest();
 
-    // Compute mixer → clamp → publish for telemetry.
-    // ミキサー計算 → クランプ → テレメトリ発行。
+    // Compute mixer (with supply voltage) → clamp → publish for telemetry.
+    // ミキサー計算（電源電圧で）→ クランプ → テレメトリ発行。
     float duties[4];
-    mixerCompute(cmd, duties);
+    mixerCompute(cmd, batteryVoltage(), duties);
     clampDuties(duties);
     publishMotorOutput(duties, cmd.timestamp);
 
