@@ -314,7 +314,8 @@ void EskfCore::scalarUpdate(const float H[N], float innovation, float R_val)
 // 3D Kalman Update / 3次元カルマン更新
 // =============================================================================
 
-void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_val)
+void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_val,
+                             float chi2_gate)
 {
     // S = H*P*H^T + R*I (3x3)
     float S[3][3];
@@ -352,22 +353,25 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
         for (int j = 0; j < 3; j++)
             d2 += innov[i] * Si[i][j] * innov[j];
 
-    // Debug: track chi2 gate statistics
-    // デバッグ: χ²ゲートの統計を追跡
+    // Chi-squared gate. The threshold is passed in by the caller so each vector
+    // observation uses its own gate (accel → accel_chi2_gate, mag → mag_chi2_gate)
+    // rather than sharing one constant.
+    // χ²ゲート。閾値は呼び出し側が渡す。各ベクトル観測が自分のゲートを使う
+    // (accel→accel_chi2_gate, mag→mag_chi2_gate)。1 定数を共有しない。
     static int gate_total = 0, gate_reject = 0;
     gate_total++;
-    if (d2 > cfg_.accel_chi2_gate) {
+    if (d2 > chi2_gate) {
         gate_reject++;
         if (gate_total % 400 == 0) {
             fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%)\n",
-                    d2, cfg_.accel_chi2_gate, gate_reject, gate_total,
+                    d2, chi2_gate, gate_reject, gate_total,
                     100.0f * gate_reject / gate_total);
         }
         return;
     }
     if (gate_total % 400 == 0) {
         fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%) R=%.4f\n",
-                d2, cfg_.accel_chi2_gate, gate_reject, gate_total,
+                d2, chi2_gate, gate_reject, gate_total,
                 100.0f * gate_reject / gate_total, R_val);
     }
 
@@ -519,10 +523,11 @@ void EskfCore::updateMag(const Vec3& mag)
     H[1][ATT_X] =  h_expected.z;  H[1][ATT_Z] = -h_expected.x;
     H[2][ATT_X] = -h_expected.y;  H[2][ATT_Y] =  h_expected.x;
 
-    // Chi-squared gate / χ²ゲート
-    // TODO: compute chi2 and gate
-
-    vectorUpdate3(H, innov, cfg_.mag_noise * cfg_.mag_noise);
+    // Chi-squared outlier rejection happens inside vectorUpdate3 using the
+    // mag-specific gate (a magnetic disturbance shows up as a large innovation).
+    // χ² 外れ値棄却は vectorUpdate3 内で mag 専用ゲートを使って行う
+    // (磁気外乱は大きなイノベーションとして現れる)。
+    vectorUpdate3(H, innov, cfg_.mag_noise * cfg_.mag_noise, cfg_.mag_chi2_gate);
 }
 
 void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
@@ -589,7 +594,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     H[1][BA_Y] = 1.0f;
     H[2][BA_Z] = 1.0f;
 
-    vectorUpdate3(H, innov, R_val);
+    vectorUpdate3(H, innov, R_val, cfg_.accel_chi2_gate);
 }
 
 void EskfCore::updateFlowRaw(int16_t dx, int16_t dy, float height,

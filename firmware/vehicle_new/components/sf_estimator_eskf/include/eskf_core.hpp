@@ -236,7 +236,8 @@ private:
     void scalarUpdate(const float H[N], float innovation, float R);
 
     /// 3D Kalman update / 3次元カルマン更新
-    void vectorUpdate3(const float H[3][N], const float innov[3], float R);
+    void vectorUpdate3(const float H[3][N], const float innov[3], float R,
+                       float chi2_gate);
 };
 
 }  // namespace sf
