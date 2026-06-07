@@ -30,6 +30,8 @@
 #include "driver/ledc.h"
 #include "driver/gpio.h"
 
+#include "led.hpp"  // board-owned emergency status LED (Critical-fail pattern)
+
 namespace sf::internal::board {
 
 namespace {
@@ -91,6 +93,24 @@ constexpr ledc_timer_t      kMotorTimer        = LEDC_TIMER_0;
 constexpr ledc_mode_t       kMotorSpeedMode    = LEDC_LOW_SPEED_MODE;
 constexpr int               kMotorPwmFreqHz    = 150000;
 constexpr ledc_timer_bit_t  kMotorPwmResolution = LEDC_TIMER_8_BIT;
+
+// ---------------------------------------------------------------------------
+// Emergency status LED (Critical-fail error pattern)
+// 緊急ステータス LED (Critical 失敗のエラーパターン)
+// ---------------------------------------------------------------------------
+//
+// The M5Stamp S3 built-in WS2812 (GPIO21, 1 LED) is owned by sf_board as the
+// emergency status indicator. It is SEPARATE from the body LEDs (GPIO39) that
+// NotifyTask drives for flight status — so the board can light its error pattern
+// without conflicting with notify, and can do so during Phase 1 (bus bring-up)
+// before NotifyTask exists. Pin is fixed by the M5Stamp S3 module.
+//
+// M5Stamp S3 内蔵 WS2812 (GPIO21・1 個) を sf_board が緊急ステータス表示として所有する。
+// NotifyTask が飛行状態に使う本体 LED (GPIO39) とは別なので、notify と競合せずエラー
+// パターンを点灯でき、かつ NotifyTask 起動前の Phase 1 (バス起動) でも点灯できる。
+// ピンは M5Stamp S3 モジュールで固定。
+constexpr int kStatusLedGpio  = 21;
+constexpr int kStatusLedCount = 1;
 
 // ---------------------------------------------------------------------------
 // Singleton state
@@ -299,13 +319,35 @@ const char* fatalReasonText(FatalReason r)
     ESP_LOGE(TAG, "CRITICAL: %s failed: %s — vehicle cannot fly. Halting.",
              fatalReasonText(reason), esp_err_to_name(err));
 
-    // LED error pattern (hardware_init.md §5): wired in Phase 6 when LED/notify
-    // ownership is established. Until then the cause is reported on the log.
-    // LED エラーパターン (hardware_init.md §5) は Phase 6 (LED/notify 所有確立時)
-    // で配線する。それまでは原因をログで報告する。
+    // LED error pattern (hardware_init.md §5, R4): drive the board's built-in status
+    // LED with the fast-red error pattern so the failure is visible without a serial
+    // console. The LED is lazy-initialised HERE because a Critical failure can occur in
+    // Phase 1 — before NotifyTask/LED ownership exists — and board owns this LED
+    // (separate from notify's body LEDs, so there is no conflict). If the LED itself
+    // fails to init we just halt silently (the cause is already on the log). The blink
+    // is animated by calling update() at ~20 Hz; the loop never returns.
+    // LED エラーパターン (hardware_init.md §5, R4): board 内蔵ステータス LED を高速赤の
+    // エラーパターンで点灯し、シリアルコンソール無しでも失敗が見えるようにする。Critical
+    // 失敗は NotifyTask/LED 所有確立前の Phase 1 でも起こり得るためここで遅延初期化する。
+    // この LED は board 所有 (notify の本体 LED とは別ゆえ競合なし)。LED 自体の init が
+    // 失敗したら無音で停止する (原因はログ済み)。点滅は update() を ~20Hz で呼んで描画し、
+    // ループは戻らない。
+    stampfly::LED status_led;
+    stampfly::LED::Config led_cfg{};
+    led_cfg.gpio     = kStatusLedGpio;
+    led_cfg.num_leds = kStatusLedCount;
+    const bool led_ok = (status_led.init(led_cfg) == ESP_OK);
+    if (led_ok) {
+        status_led.showError();  // fast red blink / 高速赤点滅
+    }
 
     for (;;) {
-        vTaskDelay(portMAX_DELAY);  // Halt; never returns. / 停止。戻らない。
+        if (led_ok) {
+            status_led.update();
+            vTaskDelay(pdMS_TO_TICKS(50));  // ~20 Hz to animate the blink / 点滅描画
+        } else {
+            vTaskDelay(portMAX_DELAY);      // no LED — just halt / LED 無し=停止のみ
+        }
     }
 }
 

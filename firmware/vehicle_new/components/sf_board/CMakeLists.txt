@@ -8,4 +8,5 @@ idf_component_register(
         esp_netif
         nvs_flash
         sf_core
+        sf_hal_led
 )
