@@ -117,6 +117,20 @@ bool                    g_initialized = false;
 constexpr size_t kSensorSlots = 5;  // Mag, FrontToF, Flow, Baro, Power
 std::atomic<bool> g_sensor_present[kSensorSlots] = {};
 
+// Optional-sensor last-publish timestamp [us], indexed by SensorId. Each sensor task
+// stamps this right after it publishes its topic (set_sensor_update); the sensor_health
+// publisher (PowerTask) reads it to derive per-sensor freshness (R15: presence /
+// last_update_us / quality). We track it HERE rather than peeking the topics because the
+// Queue-policy sensor topics (mag/baro/tof/flow) are consumed by the fusion task — a second
+// reader would steal their data (R5). atomic for the lock-free cross-task read.
+// Optional センサの最終 publish 時刻 [us]。SensorId で索引。各センサタスクがトピックを
+// publish した直後にここへ記録し (set_sensor_update)、sensor_health の publisher
+// (PowerTask) が読んでセンサ毎の鮮度を導く (R15: presence / last_update_us / quality)。
+// トピックを覗かずここで追跡するのは、Queue 方式のセンサトピック (mag/baro/tof/flow) が
+// 融合タスクに消費されるため — 2番目の読者がデータを奪う (R5)。ロックフリーな
+// クロスタスク読み取りのため atomic。
+std::atomic<uint32_t> g_sensor_update_us[kSensorSlots] = {};
+
 // ---------------------------------------------------------------------------
 // Step: default event loop
 // ステップ: デフォルトイベントループ
@@ -402,6 +416,24 @@ bool sensor_present(SensorId id)
         return false;
     }
     return g_sensor_present[idx].load(std::memory_order_relaxed);
+}
+
+void set_sensor_update(SensorId id, uint32_t timestamp_us)
+{
+    const size_t idx = static_cast<size_t>(id);
+    if (idx >= kSensorSlots) {
+        return;  // Out of range — ignore (defensive). / 範囲外は無視 (防御的)。
+    }
+    g_sensor_update_us[idx].store(timestamp_us, std::memory_order_relaxed);
+}
+
+uint32_t sensor_last_update_us(SensorId id)
+{
+    const size_t idx = static_cast<size_t>(id);
+    if (idx >= kSensorSlots) {
+        return 0;  // Out of range — never updated. / 範囲外は未更新扱い。
+    }
+    return g_sensor_update_us[idx].load(std::memory_order_relaxed);
 }
 
 }  // namespace sf::internal::board

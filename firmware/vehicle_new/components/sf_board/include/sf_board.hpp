@@ -186,4 +186,27 @@ bool sensor_present(SensorId id);
  */
 void set_sensor_present(SensorId id, bool present);
 
+/**
+ * @brief Record an Optional sensor's last topic-publish timestamp [us].
+ *        Optional センサの最終トピック publish 時刻 [us] を記録する。
+ *
+ * Called by the owning sensor task right after it publishes, so the sensor_health
+ * publisher can derive per-sensor freshness without a second reader stealing data from
+ * the Queue-policy topics consumed by the fusion task (R5 / R15). Thread-safe (atomic).
+ *
+ * 所有センサタスクが publish 直後に呼ぶ。融合タスクが消費する Queue 方式トピックから
+ * 2番目の読者がデータを奪うことなく (R5 / R15)、sensor_health の publisher がセンサ毎の
+ * 鮮度を導けるようにする。スレッド安全 (atomic)。
+ */
+void set_sensor_update(SensorId id, uint32_t timestamp_us);
+
+/**
+ * @brief Returns an Optional sensor's last topic-publish timestamp [us] (0 = never).
+ *        Optional センサの最終 publish 時刻 [us] を返す (0 = 未発行)。
+ *
+ * Read by the sensor_health publisher (PowerTask) to compute freshness. Thread-safe.
+ * sensor_health の publisher (PowerTask) が鮮度計算に読む。スレッド安全。
+ */
+uint32_t sensor_last_update_us(SensorId id);
+
 }  // namespace sf::internal::board

@@ -105,7 +105,12 @@ void MagTask(void* /*pvParameters*/)
         stampfly::MagData reading{};
         err = g_mag.read(reading);
         if (err == ESP_OK && reading.data_ready) {
-            sf::sensor_mag.publish(toTopic(reading));
+            const sf::MagData topic = toTopic(reading);
+            sf::sensor_mag.publish(topic);
+            // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
+            // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
+            sf::internal::board::set_sensor_update(
+                sf::internal::board::SensorId::Mag, topic.timestamp);
         } else if (err != ESP_OK &&
                    cycle_count - last_fail_log_cycle >= kReadFailLogIntervalCycles) {
             ESP_LOGW(TAG, "BMM150 read failed: %s", esp_err_to_name(err));

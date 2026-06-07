@@ -49,6 +49,72 @@ static stampfly::PowerMonitor g_power;
 /// system_alert を発行する。ハードウェアは持たない。
 static sf::Failsafe g_failsafe;
 
+namespace {
+
+/// Build the SensorHealth snapshot (R15): presence comes from the BSP (sensor_present,
+/// its own data), freshness from each sensor topic's latest timestamp. We aggregate and
+/// publish HERE rather than inside sf_board so the BSP layer does not read application-
+/// level data topics (a layering inversion) — detailed_design §2 lists the publisher as
+/// "sf_board / 各 task", so the task path is design-sanctioned. The IMU is Critical: if it
+/// had failed, init() would have halted, so reaching this code means it is present.
+/// SensorHealth スナップショットを構築する（R15）: presence は BSP（sensor_present、BSP 自身の
+/// データ）、鮮度は各センサトピックの直近タイムスタンプから得る。集約と publish を sf_board 内
+/// でなくここで行うのは、BSP 層がアプリ層のデータトピックを読む層逆転を避けるため
+/// — detailed_design §2 は publisher を「sf_board / 各 task」と記載しており、タスク経由は
+/// 設計上許容される。IMU は Critical: 失敗していれば init() で停止しているため、ここに来た
+/// 時点で存在する。
+///
+/// @publisher sensor_health
+/// @design architecture.md §3 — R15 sensor_health 1 Hz                 [OK]
+/// @design detailed_design.md §2 — sensor_health publisher: sf_board / 各 task [OK]
+sf::SensorHealth buildSensorHealth(uint32_t now_us)
+{
+    namespace board = sf::internal::board;
+    using sf::SensorId;
+    using BoardId = board::SensorId;
+
+    // (published bit, last-publish [us], present). The IMU is Critical and always
+    // present once running; its timestamp comes from its RingBuffer topic, whose
+    // latest() does NOT consume (safe to read here). The 5 Optional sensors use the
+    // BSP last-update registry (set_sensor_update) because their Queue-policy topics
+    // are consumed by the fusion task — a second reader would steal data (R5).
+    // （発行ビット, 最終 publish 時刻 [us], present）。IMU は Critical で起動中は常在。
+    // タイムスタンプは RingBuffer トピックから取得し、その latest() は消費しない
+    // (ここで読んで安全)。Optional な5センサは BSP の last-update レジストリ
+    // (set_sensor_update) を使う — Queue 方式トピックは融合タスクが消費するため、
+    // 2番目の読者がデータを奪う (R5)。
+    const struct { SensorId id; uint32_t ts; bool present; } entries[] = {
+        {SensorId::Imu,   sf::sensor_imu.latest().timestamp,        true},
+        {SensorId::Mag,   board::sensor_last_update_us(BoardId::Mag),      board::sensor_present(BoardId::Mag)},
+        {SensorId::Baro,  board::sensor_last_update_us(BoardId::Baro),     board::sensor_present(BoardId::Baro)},
+        {SensorId::Tof,   board::sensor_last_update_us(BoardId::FrontToF), board::sensor_present(BoardId::FrontToF)},
+        {SensorId::Flow,  board::sensor_last_update_us(BoardId::Flow),     board::sensor_present(BoardId::Flow)},
+        {SensorId::Power, board::sensor_last_update_us(BoardId::Power),    board::sensor_present(BoardId::Power)},
+    };
+
+    sf::SensorHealth health{};
+    health.timestamp = now_us;
+    for (const auto& e : entries) {
+        const int bit = static_cast<int>(e.id);
+        health.last_update_us[bit] = e.ts;
+        if (!e.present) {
+            continue;
+        }
+        health.present_mask |= static_cast<uint8_t>(1u << bit);
+        // Healthy = present AND a sample arrived within the staleness window. ts==0 means
+        // "never published" → not fresh. The uint32 subtraction handles a single wrap.
+        // 健全 = 存在 かつ staleness 窓内にサンプル到着。ts==0 は未発行→非鮮度。uint32 の
+        // 引き算は1回の桁あふれを正しく扱う。
+        const bool fresh = (e.ts != 0) && ((now_us - e.ts) < config::SENSOR_HEALTH_STALE_US);
+        if (fresh) {
+            health.healthy_mask |= static_cast<uint8_t>(1u << bit);
+        }
+    }
+    return health;
+}
+
+}  // namespace
+
 void PowerTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "PowerTask started");
@@ -82,6 +148,8 @@ void PowerTask(void* pvParameters)
     TickType_t last_wake = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(100);  // 10Hz
     bool logged_first = false;  // one-shot boot battery log / 起動時電池電圧の単発ログ
+    bool logged_health = false; // one-shot boot sensor_health log / health 単発ログ
+    int health_tick = 0;        // 10Hz → 1Hz divider for sensor_health / health 用分周
 
     while (true) {
         // Read battery voltage / current / power from the INA3221 bus channel.
@@ -110,6 +178,10 @@ void PowerTask(void* pvParameters)
         }
 
         sf::sensor_power.publish(data);
+        // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
+        // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
+        sf::internal::board::set_sensor_update(
+            sf::internal::board::SensorId::Power, data.timestamp);
 
         // Run all failsafe checks AFTER publishing power, so checkBattery() sees
         // this cycle's reading. Battery thresholds and the 0 = unknown guard now
@@ -118,6 +190,33 @@ void PowerTask(void* pvParameters)
         // 読み値を見るため）。電池閾値と 0=不明ガードは Failsafe コンポーネント
         // （failsafe.cpp checkBattery）に集約済み。
         g_failsafe.update();
+
+        // Publish the system sensor-health snapshot at 1 Hz (R15), downsampled from this
+        // task's 10 Hz tick: presence (BSP) + per-sensor freshness (topics), for Failsafe
+        // and Telemetry liveness monitoring. The first tick publishes immediately so the
+        // topic holds a valid snapshot early instead of a zero-initialized default.
+        // システムのセンサ健全性スナップショットを 1Hz で publish（R15）。本タスクの 10Hz
+        // から分周: presence（BSP）＋センサ毎の鮮度（トピック）を Failsafe/Telemetry の
+        // 死活監視用に。初回ティックで即 publish し、トピックがゼロ初期化の既定値でなく
+        // 早期に有効スナップショットを保持するようにする。
+        if (health_tick == 0) {
+            const sf::SensorHealth health = buildSensorHealth(data.timestamp);
+            sf::sensor_health.publish(health);
+            // One-shot bring-up log: the first snapshot where every present sensor is
+            // fresh (healthy_mask == present_mask, non-empty). This is the "all sensors
+            // up" indicator — early boot snapshots are sparse because the sensor tasks
+            // are still initialising. bit order = SensorId: Imu,Mag,Baro,Tof,Flow,Power.
+            // ブリングアップ単発ログ: present な全センサが鮮度OKになった最初のスナップショット
+            // （healthy_mask == present_mask かつ非ゼロ）。「全センサ起動」の指標 — 起動直後の
+            // スナップショットはセンサタスク初期化中で疎。ビット順 = SensorId。
+            if (!logged_health && health.present_mask != 0 &&
+                health.healthy_mask == health.present_mask) {
+                logged_health = true;
+                ESP_LOGI(TAG, "sensor_health: all present sensors fresh "
+                              "(present=0x%02X)", health.present_mask);
+            }
+        }
+        health_tick = (health_tick + 1) % 10;
 
         vTaskDelayUntil(&last_wake, period);
     }

@@ -144,6 +144,10 @@ void FlowTask(void* /*pvParameters*/)
             out.squal     = burst.squal;
             out.timestamp = static_cast<uint32_t>(esp_timer_get_time());
             sf::sensor_flow.publish(out);
+            // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
+            // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
+            sf::internal::board::set_sensor_update(
+                sf::internal::board::SensorId::Flow, out.timestamp);
         } catch (const std::exception& e) {
             if (cycle_count - last_fail_log_cycle >= kReadFailLogIntervalCycles) {
                 ESP_LOGW(TAG, "PMW3901 read failed: %s", e.what());

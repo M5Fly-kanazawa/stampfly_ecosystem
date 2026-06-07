@@ -108,7 +108,12 @@ void BaroTask(void* /*pvParameters*/)
         stampfly::BaroData reading{};
         err = g_baro.read(reading);
         if (err == ESP_OK) {
-            sf::sensor_baro.publish(toTopic(reading));
+            const sf::BaroData topic = toTopic(reading);
+            sf::sensor_baro.publish(topic);
+            // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
+            // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
+            sf::internal::board::set_sensor_update(
+                sf::internal::board::SensorId::Baro, topic.timestamp);
         } else if (cycle_count - last_fail_log_cycle >= kReadFailLogIntervalCycles) {
             ESP_LOGW(TAG, "BMP280 read failed: %s", esp_err_to_name(err));
             last_fail_log_cycle = cycle_count;

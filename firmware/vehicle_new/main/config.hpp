@@ -216,4 +216,20 @@ inline constexpr int BUZZER_LEDC_TIMER   = 1;
 // 開始(要件§2「スロットル入力」)。ホバーは≈0.54 ゆえ 0.5 は意図的な上げ＝離陸意思。
 inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
 
+// =============================================================================
+// Sensor Health Monitoring (R15)
+// センサ健全性監視（R15）
+// =============================================================================
+
+// A sensor counts as "healthy" only if its most recent topic sample is newer than
+// this window. The slowest sensor is the power monitor at 10 Hz (100 ms period), so
+// 500 ms tolerates several missed samples before flagging a sensor dead — it detects
+// a stalled/absent sensor without false-tripping on transient single-sample drops.
+// Published at 1 Hz by PowerTask (sensor_health topic).
+// センサが「健全」とみなされるのは、直近のトピックサンプルがこの窓より新しい場合のみ。
+// 最も遅いセンサは電源モニタの 10Hz（周期 100ms）ゆえ、500ms なら数サンプルの欠落を
+// 許容してからセンサ死亡と判定する — 単発の瞬間的欠落で誤発火せず、停止/不在センサを
+// 検出する。PowerTask が 1Hz で publish（sensor_health トピック）。
+inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
+
 }  // namespace config

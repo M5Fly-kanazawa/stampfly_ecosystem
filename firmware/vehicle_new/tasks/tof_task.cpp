@@ -93,6 +93,8 @@ void TofTask(void* /*pvParameters*/)
     if (init_result != ESP_OK) {
         ESP_LOGE(TAG, "VL53L3CX bottom init failed: %s — task aborting",
                  esp_err_to_name(init_result));
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::FrontToF, false);
         vTaskDelete(NULL);
         return;
     }
@@ -103,9 +105,15 @@ void TofTask(void* /*pvParameters*/)
     if (range_result != ESP_OK) {
         ESP_LOGE(TAG, "VL53L3CX startRanging failed: %s — task aborting",
                  esp_err_to_name(range_result));
+        sf::internal::board::set_sensor_present(
+            sf::internal::board::SensorId::FrontToF, false);
         vTaskDelete(NULL);
         return;
     }
+    // ToF up and ranging — report presence for the sensor_health snapshot (R15).
+    // ToF 起動・測距開始 — sensor_health 用に presence を報告 (R15)。
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::FrontToF, true);
     ESP_LOGI(TAG, "VL53L3CX bottom ready (continuous ranging at ~30Hz)");
 
     TickType_t last_wake = xTaskGetTickCount();
@@ -142,6 +150,10 @@ void TofTask(void* /*pvParameters*/)
         if (err == ESP_OK) {
             uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
             sf::sensor_tof.publish(buildTofTopic(reading, now_us));
+            // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
+            // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
+            sf::internal::board::set_sensor_update(
+                sf::internal::board::SensorId::FrontToF, now_us);
         } else if (cycle_count - last_fail_log_cycle >= kReadFailLogIntervalCycles) {
             ESP_LOGW(TAG, "getDistance failed: %s", esp_err_to_name(err));
             last_fail_log_cycle = cycle_count;
