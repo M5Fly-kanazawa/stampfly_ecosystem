@@ -198,6 +198,9 @@ struct SystemStatus {
     bool held;            // ToF-based held-in-hand detection (disarmed + ToF valid above
                           // the airborne threshold). Drives IDLE_GROUND ↔ IDLE_HELD.
                           // ToF 手持ち検出（disarmed＋ToF有効＋空中閾値超）。IDLE地上↔手持ち。
+    bool landing;         // landing-complete detection (low altitude + low vertical
+                          // velocity sustained). Drives LANDING → IDLE_GROUND.
+                          // 着陸完了検出（低高度＋低鉛直速度の持続）。LANDING→IDLE地上。
     uint32_t timestamp;   // [us]
 };
 

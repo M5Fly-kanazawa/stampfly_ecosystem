@@ -180,11 +180,14 @@ static void processAsyncSensors()
     sf::TofData tof;
     while (sf::sensor_tof.read(tof)) {
         g_estimator->updateTof(tof);
-        // Inject the SAME sample into the takeoff/landing manager so it does not
-        // compete with the estimator for the sensor_tof queue (single consumer).
-        // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と
-        // 奪い合わないようにする（単一 consumer）。
-        g_takeoff_landing.update(tof, armed);
+        // Inject the SAME sample into the takeoff/landing manager so it does not compete
+        // with the estimator for the sensor_tof queue (single consumer). Also inject the
+        // current vertical velocity (NED down) so the landing detector stays a pure
+        // function of its inputs (no topic read inside the manager).
+        // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と奪い合わない
+        // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
+        // 関数に保つ（マネージャ内でトピックを読まない）。
+        g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2]);
     }
 
     sf::FlowData flow;
@@ -302,6 +305,8 @@ static void publishSystemStatus(uint32_t now_us)
     sf::SystemStatus st{};
     st.calibrated = g_calibrated;
     st.airborne   = !g_takeoff_landing.isOnGround();
+    st.held       = g_takeoff_landing.isHeld();           // IDLE_GROUND ↔ IDLE_HELD
+    st.landing    = g_takeoff_landing.isLandingDetected(); // LANDING → IDLE_GROUND
     st.timestamp  = now_us;
     sf::system_status.publish(st);
 }

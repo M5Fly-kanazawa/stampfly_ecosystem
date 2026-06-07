@@ -65,16 +65,21 @@ static void registerStateCallbacks(sf::StateManager& manager)
         const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         switch (to) {
         case FlightState::IDLE_GROUND:
-            if (from == FlightState::INIT) {
-                // INIT → IDLE_GROUND: start the boot bias calibration (callback-driven,
-                // architecture §6 — moved out of ImuTask setup).
-                // INIT→IDLE_GROUND: 起動バイアス校正を開始（コールバック駆動、ImuTask setup から移管）。
+            if (from == FlightState::INIT || from == FlightState::IDLE_HELD) {
+                // INIT → IDLE_GROUND: boot calibration. IDLE_HELD → IDLE_GROUND (placed
+                // back down): re-calibration for re-fly readiness — the pre-arm check then
+                // rejects ARM until calibration completes (requirements ②③). Both are
+                // callback-driven (architecture §6).
+                // INIT→IDLE_GROUND: 起動校正。IDLE_HELD→IDLE_GROUND（置き直し）: 再飛行
+                // readiness のための再校正 — ARM前チェックが完了までARMを拒否（要件②③）。
+                // どちらもコールバック駆動（architecture §6）。
                 sf::estimator_command.publish(
                     {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now});
             } else {
-                // Return to ground (DISARM / land): disarm tone. The crash-return ESKF
-                // reset + recalibration are wired in Phase 2 (re-fly readiness).
-                // 接地復帰（DISARM/着陸）: disarm 音。墜落復帰の ESKF reset/再校正は Phase 2。
+                // Return to ground from a flight/armed state (DISARM / land): disarm tone.
+                // The crash-return ESKF full reset is wired in Phase 2b.
+                // 飛行/arm 状態からの接地復帰（DISARM/着陸）: disarm 音。墜落復帰の ESKF full
+                // reset は Phase 2b で配線。
                 sf::notify_command.publish(
                     {static_cast<uint8_t>(sf::NotifyEvent::DisarmTone), now});
             }
@@ -225,6 +230,25 @@ void StateTask(void* pvParameters)
         } else if (fs == sf::FlightState::TAKEOFF &&
                    sf::system_status.latest().airborne) {
             g_state_manager.notifyTakeoffComplete();      // → FLYING (ToF: off the ground)
+        }
+
+        // =====================================================================
+        // Ground-situation transitions from the ToF detector (system_status): the held
+        // flag drives IDLE_GROUND ↔ IDLE_HELD (lifted / placed), and the landing flag
+        // drives LANDING → IDLE_GROUND (landing complete). Detection lives in ImuTask
+        // (it owns the ToF); the transition DECISION is here.
+        // ToF 検出器（system_status）からの地上状況遷移: held フラグが IDLE_GROUND↔IDLE_HELD
+        // （持上げ/設置）を、landing フラグが LANDING→IDLE_GROUND（着陸完了）を駆動する。検出は
+        // ImuTask（ToF 所有）、遷移の判断はここ。
+        //
+        // @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD, LANDING → IDLE_GROUND [OK]
+        // @design architecture.md §2 — separate detection from decision               [OK]
+        // =====================================================================
+        const sf::SystemStatus status = sf::system_status.latest();
+        if (fs == sf::FlightState::IDLE_GROUND || fs == sf::FlightState::IDLE_HELD) {
+            g_state_manager.notifyIdleGroundHeld(status.held);
+        } else if (fs == sf::FlightState::LANDING && status.landing) {
+            g_state_manager.notifyLandingComplete();
         }
 
         // =====================================================================
