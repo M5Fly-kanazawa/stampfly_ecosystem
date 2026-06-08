@@ -709,6 +709,18 @@ void ImuTask(void* pvParameters)
         // 離陸シーケンサ（StateTask: TAKEOFF→FLYING）が読む。
         publishSystemStatus(now);
 
+        // Boot-complete chime: on the calibration false→true edge (boot bias done →
+        // ready to arm), fire NotifyEvent::Ready once. NotifyTask plays the 3-beep
+        // readyTone (legacy vehicle's Phase-3 chime). One-shot via the edge latch.
+        // 起動完了音: 校正の false→true エッジ（起動バイアス完了→ARM 可能）で NotifyEvent::Ready
+        // を1回発火。NotifyTask が 3連ビープ readyTone（旧 vehicle の Phase3 音）を鳴らす。
+        static bool s_prev_calibrated = false;
+        if (g_calibrated && !s_prev_calibrated) {
+            sf::notify_command.publish(
+                {static_cast<uint8_t>(sf::NotifyEvent::Ready), static_cast<uint32_t>(now)});
+        }
+        s_prev_calibrated = g_calibrated;
+
         // =====================================================================
         // Step 4: Publish state estimate
         // Step 4: 状態推定値を発行

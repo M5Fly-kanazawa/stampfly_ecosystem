@@ -159,6 +159,19 @@ void Buzzer::startTone()
     playTone(NOTE_G5, 200);
 }
 
+void Buzzer::readyTone()
+{
+    // 3 short beeps with a brief rest between — "system ready to arm" (matches the
+    // legacy vehicle's boot-complete chime). frequency 0 = rest (silence).
+    // 3連の短いビープ（間に休符）— 「ARM 可能（起動完了）」。旧 vehicle の起動完了音に合わせる。
+    for (int i = 0; i < 3; ++i) {
+        playTone(NOTE_C5, 100);
+        if (i < 2) {
+            playTone(0, 80);   // short rest / 短い休符
+        }
+    }
+}
+
 void Buzzer::armTone()
 {
     playTone(NOTE_E5, 100);

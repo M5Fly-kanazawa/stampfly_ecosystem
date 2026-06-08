@@ -77,6 +77,8 @@ public:
     // Preset sounds
     void beep();
     void startTone();
+    void readyTone();      // 3 short beeps — "system ready to arm" (boot complete)
+                           // 3連ビープ — 「ARM 可能（起動完了）」
     void armTone();
     void disarmTone();
     void lowBatteryWarning();

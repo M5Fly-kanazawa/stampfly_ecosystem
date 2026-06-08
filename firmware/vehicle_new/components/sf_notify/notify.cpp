@@ -17,6 +17,7 @@
 
 #include "notify.hpp"
 #include "topics.hpp"
+#include "params.hpp"   // low-battery LED threshold (safety.battery.low_v)
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -25,35 +26,50 @@ static const char* TAG = "notify";
 namespace sf {
 
 // =============================================================================
-// LED pattern table — one entry per FlightState
-// LEDパターンテーブル — FlightState毎に1エントリ
+// LED colours and patterns — matched to the legacy vehicle's LEDManager scheme.
+// LED 色とパターン — 旧 vehicle の LEDManager 配色に合わせる。
 //
 // @design architecture.md §5 — Notify data flow (LED pattern per state) [OK]
 // =============================================================================
 
+// Named colours (RGB), so the table below has no magic numbers.
+// 名前付き色（RGB）。下のテーブルにマジックナンバーを置かないため。
+static constexpr LedColor kWhite       = {255, 255, 255};
+static constexpr LedColor kGreen       = {0, 255, 0};
+static constexpr LedColor kBlue        = {0, 0, 255};
+static constexpr LedColor kCyan        = {0, 255, 255};
+static constexpr LedColor kMagenta     = {255, 0, 255};
+static constexpr LedColor kOrange      = {255, 128, 0};   // ALT_HOLD mode / 高度保持
+static constexpr LedColor kYellowGreen = {128, 255, 0};   // STABILIZE mode / 姿勢安定
+
+// Blink timings [ms]. SOLID = always on (off_ms 0). / 点滅タイミング。SOLID は常灯。
+static constexpr uint16_t kSolidOn = 1000, kSolidOff = 0;
+static constexpr uint16_t kSlowOn  = 500,  kSlowOff  = 500;   // 1 Hz blink / 低速点滅
+static constexpr uint16_t kFastOn  = 100,  kFastOff  = 100;   // 5 Hz blink / 高速点滅
+
+// Flight-state LED table (legacy colours): white(INIT)→green(IDLE)→green-blink(ARMED)→
+// mode colour(FLYING)→orange-blink(LANDING). FLYING is replaced by flyingPattern().
+// 飛行状態 LED テーブル（旧の色）。FLYING は flyingPattern() が置き換える。
 static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
-    // INIT:         blue slow blink   / 青 ゆっくり点滅
-    { {0, 0, 255},    500, 500 },
-    // IDLE_GROUND:  green solid       / 緑 常灯
-    { {0, 255, 0},   1000,   0 },
-    // IDLE_HELD:    cyan fast blink   / シアン 高速点滅
-    { {0, 255, 255},  200, 200 },
-    // ARMED_GROUND: yellow solid      / 黄色 常灯
-    { {255, 255, 0}, 1000,   0 },
-    // TAKEOFF:      white fast blink  / 白 高速点滅
-    { {255, 255, 255}, 100, 100 },
-    // FLYING:       green solid       / 緑 常灯
-    { {0, 255, 0},   1000,   0 },
-    // LANDING:      orange slow blink / オレンジ ゆっくり点滅
-    { {255, 128, 0},  300, 300 },
+    { kWhite,  kSolidOn, kSolidOff },  // INIT:         white solid     / 白 常灯（静置）
+    { kGreen,  kSolidOn, kSolidOff },  // IDLE_GROUND:  green solid      / 緑 常灯（ARM可）
+    { kCyan,   kFastOn,  kFastOff  },  // IDLE_HELD:    cyan fast blink  / シアン 高速点滅
+    { kGreen,  kSlowOn,  kSlowOff  },  // ARMED_GROUND: green slow blink / 緑 低速点滅
+    { kWhite,  kFastOn,  kFastOff  },  // TAKEOFF:      white fast blink / 白 高速点滅
+    { kGreen,  kSolidOn, kSolidOff },  // FLYING:       (overridden by flight-mode colour)
+    { kOrange, kSlowOn,  kSlowOff  },  // LANDING:      orange slow blink/ オレンジ 低速点滅
 };
 
-// PAIRING LED pattern — blue FAST blink, overriding the FlightState pattern while
-// the parallel PairingState is Pairing. Distinct from INIT (blue SLOW blink) so a
-// searching-for-transmitter vehicle is obvious. (requirements §2/§7: pairing UI.)
-// ペアリング LED パターン — 青の高速点滅。並行する PairingState が Pairing の間 FlightState
-// パターンを上書きする。INIT（青の低速点滅）と区別し、送信機を探索中の機体が一目で分かる。
-static const LedPattern kPairingPattern = { {0, 0, 255}, 150, 150 };
+// Overlay patterns (priority over the flight-state table, see computeActivePattern):
+// オーバーレイ（飛行状態テーブルより優先、computeActivePattern 参照）:
+static constexpr LedPattern kLowBatteryPattern = { kCyan,    kSlowOn, kSlowOff };  // 低電圧
+static constexpr LedPattern kPairingPattern    = { kBlue,    kFastOn, kFastOff };  // 探索中
+static constexpr LedPattern kCalibratingPattern= { kMagenta, kSlowOn, kSlowOff };  // 校正中
+
+// Below this voltage the sensor_power reading is "unknown" (power monitor absent or a
+// failed read publishes 0) — do NOT show the low-battery LED for it.
+// この電圧未満は sensor_power の読みが「不明」（電源モニタ不在 or 0 発行）— 低電圧表示しない。
+static constexpr float kVoltageValidMin = 0.1f;
 
 // -----------------------------------------------------------------------------
 // init — initialize LED and buzzer HAL
@@ -80,8 +96,80 @@ void Notify::init(const NotifyConfig& config)
     buz_cfg.ledc_timer   = config.buzzer_ledc_timer;
     buzzer_.init(buz_cfg);
 
+    // Cache the low-battery LED threshold (params are loaded in Phase 3, before this
+    // task runs). The value rarely changes at runtime, so a one-time read suffices.
+    // 低電圧 LED 閾値をキャッシュ（params は Phase 3 で本タスク起動前に読込済）。実行時に
+    // ほぼ変わらないので一度読めば十分。
+    params::get_float("safety.battery.low_v", low_v_threshold_);
+
+    // Restore the buzzer mute setting, then play the power-on chime (startTone, the
+    // legacy vehicle's C5→E5→G5 melody). NotifyTask runs in Phase 4, so this is the
+    // "powering up" sound; the "ready to arm" chime (readyTone) follows once the boot
+    // calibration completes (NotifyEvent::Ready from ImuTask). Both respect the mute.
+    // ブザーの mute 設定を復元してから起動音（startTone, 旧 vehicle の C5→E5→G5）を鳴らす。
+    // NotifyTask は Phase 4 起動ゆえ「電源 ON」音。「ARM 可能」音（readyTone）は起動校正完了で
+    // 続く（ImuTask の NotifyEvent::Ready）。どちらも mute を尊重する。
+    buzzer_.loadFromNVS();
+    buzzer_.startTone();
+
     ESP_LOGI(TAG, "Notify initialized (LED gpio=%d x%d, buzzer gpio=%d)",
              config.led_gpio, config.led_count, config.buzzer_gpio);
+}
+
+// -----------------------------------------------------------------------------
+// computeActivePattern — pick the LED pattern to show NOW by priority overlay.
+// computeActivePattern — 優先度オーバーレイでいま表示する LED パターンを決める。
+//
+// Mirrors the legacy vehicle's LEDManager priority order:
+//   low-battery > pairing > calibrating > flight state.
+// 旧 vehicle の LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
+// -----------------------------------------------------------------------------
+LedPattern Notify::computeActivePattern() const
+{
+    // 1. Low battery (cyan slow blink) — a VALID reading at/below the threshold.
+    // 1. 低電圧（シアン低速点滅）— 有効な読みが閾値以下。
+    const float voltage = sensor_power.latest().voltage;
+    if (voltage > kVoltageValidMin && voltage <= low_v_threshold_) {
+        return kLowBatteryPattern;
+    }
+
+    // 2. Pairing (blue fast blink) — searching for a transmitter.
+    // 2. ペアリング（青高速点滅）— 送信機を探索中。
+    if (pairing_state.latest().state == static_cast<uint8_t>(PairingState::Pairing)) {
+        return kPairingPattern;
+    }
+
+    // 3. Calibrating (magenta slow blink) — on the ground, boot bias not yet done.
+    // 3. 校正中（マゼンタ低速点滅）— 地上、起動バイアス校正が未完了。
+    const SystemMode mode = system_mode.latest();
+    const FlightState state = static_cast<FlightState>(mode.state);
+    if (state == FlightState::IDLE_GROUND && !system_status.latest().calibrated) {
+        return kCalibratingPattern;
+    }
+
+    // 4. Flight state. FLYING shows the flight-mode colour.
+    // 4. 飛行状態。FLYING はモード色。
+    if (state == FlightState::FLYING) {
+        return flyingPattern(static_cast<FlightMode>(mode.sub_mode));
+    }
+    return getPattern(state);
+}
+
+// -----------------------------------------------------------------------------
+// flyingPattern — FLYING LED = solid flight-mode colour (legacy mode colours).
+// flyingPattern — FLYING の LED = モード色の常灯（旧のモード色）。
+// -----------------------------------------------------------------------------
+LedPattern Notify::flyingPattern(FlightMode mode) const
+{
+    LedColor color;
+    switch (mode) {
+        case FlightMode::ACRO:      color = kBlue;        break;  // 青
+        case FlightMode::STABILIZE: color = kYellowGreen; break;  // 黄緑
+        case FlightMode::ALT_HOLD:  color = kOrange;      break;  // オレンジ
+        case FlightMode::POS_HOLD:  color = kMagenta;     break;  // マゼンタ
+        default:                    color = kGreen;       break;
+    }
+    return { color, kSolidOn, kSolidOff };
 }
 
 // -----------------------------------------------------------------------------
@@ -90,19 +178,11 @@ void Notify::init(const NotifyConfig& config)
 // -----------------------------------------------------------------------------
 void Notify::update()
 {
-    // Pairing (a parallel state machine, owned by StateManager) overrides the
-    // FlightState LED pattern: while searching for a transmitter the LED blinks blue
-    // fast. Otherwise show the per-FlightState pattern. (requirements §2/§7: pairing UI.)
-    // ペアリング（StateManager 所有の並行状態機械）は FlightState の LED パターンを上書き
-    // する: 送信機を探索中は LED が青く高速点滅。それ以外は FlightState 毎のパターン。
-    const PairingStatus pairing = pairing_state.latest();
-    if (pairing.state == static_cast<uint8_t>(PairingState::Pairing)) {
-        applyLedPattern(kPairingPattern);
-    } else {
-        SystemMode mode = system_mode.latest();
-        FlightState state = static_cast<FlightState>(mode.state);
-        applyLedPattern(getPattern(state));
-    }
+    // Apply the priority-resolved LED pattern (low-battery > pairing > calibrating >
+    // flight state; FLYING shows the flight-mode colour). See computeActivePattern.
+    // 優先度解決した LED パターンを適用（低電圧 > ペアリング > 校正中 > 飛行状態; FLYING は
+    // モード色）。computeActivePattern 参照。
+    applyLedPattern(computeActivePattern());
 
     // Discrete notify events (ARM/DISARM tones, low-battery warning) arrive on the
     // notify_command queue. Notify is its ONLY consumer, so draining it here is
@@ -128,7 +208,7 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::DisarmTone:  buzzer_.disarmTone();        break;
         case NotifyEvent::LowBattery:  buzzer_.lowBatteryWarning(); break;
         case NotifyEvent::Calibrating: buzzer_.beep();              break;
-        case NotifyEvent::Ready:       buzzer_.beep();              break;
+        case NotifyEvent::Ready:       buzzer_.readyTone();         break;
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
         case NotifyEvent::None:
         default:                                                    break;

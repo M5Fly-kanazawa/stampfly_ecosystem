@@ -85,9 +85,22 @@ public:
     void playEvent(NotifyEvent event);
 
 private:
-    /// Get LED pattern for a given flight state
-    /// 指定フライト状態のLEDパターンを取得する
+    /// Compute the LED pattern to show NOW, by priority overlay (mirrors the legacy
+    /// vehicle's LEDManager priority): low-battery > pairing > calibrating > flight
+    /// state. FLYING shows the flight-mode colour (see flyingPattern).
+    /// いま表示する LED パターンを優先度オーバーレイで決める（旧 vehicle の LEDManager
+    /// 優先度を踏襲）: 低電圧 > ペアリング > 校正中 > 飛行状態。FLYING はモード色。
+    LedPattern computeActivePattern() const;
+
+    /// Get LED pattern for a given flight state (non-FLYING table lookup)
+    /// 指定フライト状態のLEDパターンを取得する（FLYING以外のテーブル参照）
     const LedPattern& getPattern(FlightState state) const;
+
+    /// FLYING LED pattern = solid flight-mode colour (ACRO blue / STABILIZE yellow-green
+    /// / ALT_HOLD orange / POS_HOLD magenta), matching the legacy vehicle's mode colours.
+    /// FLYING の LED = モード色の常灯（ACRO青/STABILIZE黄緑/ALT_HOLD橙/POS_HOLDマゼンタ）、
+    /// 旧 vehicle のモード色に合わせる。
+    LedPattern flyingPattern(FlightMode mode) const;
 
     /// Apply LED pattern (toggle on/off based on timing)
     /// LEDパターンを適用する（タイミングに基づきON/OFFを切り替え）
@@ -102,6 +115,8 @@ private:
     int      led_count_      = 0;     // Body LED count       / ボディ LED 数
     uint32_t last_toggle_ms_ = 0;    // Last LED toggle time / 最終LED切替時刻
     bool     led_on_         = false; // Current LED state    / 現在のLED状態
+    float    low_v_threshold_ = 3.4f; // Low-battery LED threshold [V] (from params)
+                                      // 低電圧 LED 閾値 [V]（params から）
 };
 
 }  // namespace sf
