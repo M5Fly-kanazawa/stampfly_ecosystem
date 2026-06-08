@@ -105,6 +105,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="noise RNG seed (determinism: same seed → byte-identical run)")
     p.add_argument("--video", action="store_true",
                    help="on PASS, render a review MP4 (MuJoCo 3D + state graphs) from the run")
+    p.add_argument("--unpaired", action="store_true",
+                   help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
+                        "auto-enters Pairing and binds via the injected RC — exercises the "
+                        "real pairing handshake (pairing.scn)")
     p.set_defaults(func=run_scenario)
 
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
@@ -374,6 +378,15 @@ def run_scenario(args: argparse.Namespace) -> int:
     seed = getattr(args, "seed", 12345)
     env["SIL_EMU_NOISE"] = noise
     env["SIL_EMU_SEED"] = str(seed)
+
+    # --unpaired: skip the pairing NVS seed so the vehicle boots unpaired and runs the
+    # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps
+    # the vehicle pre-paired so flight scenarios are not gated on pairing timing.
+    # --unpaired: ペアリング NVS seed をスキップし機体を未ペア起動させ、実ハンドシェイク
+    # （自動 Pairing 突入→注入 RC で bind）を走らせる。既定はペア済み起動で飛行シナリオを
+    # ペアリングのタイミングに依存させない。
+    if getattr(args, "unpaired", False):
+        env["SIL_EMU_UNPAIRED"] = "1"
 
     console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us, "
                  f"noise={noise}, seed={seed})...")

@@ -1,0 +1,20 @@
+# pairing.expect — assert the pairing handshake and the crosstalk filter.
+# MUST be run with --unpaired (see pairing.scn). Asserts:
+#   - unpaired boot auto-enters Pairing, then binds to the paired transmitter (mutual
+#     MAC learning): "Pairing started" → "Paired with" → "Pairing complete";
+#   - the FOREIGN transmitter's ARM + takeoff is DROPPED by the pairing filter — motors
+#     stay off through its window (duty_max ~0 in [5.8,7.8]s = crosstalk rejected);
+#   - the PAIRED transmitter then ARMs and takes off — motors spin (duty_max > 0.1 in
+#     [10.0,11.0]s) and the takeoff is logged.
+# pairing.expect — ペアリングハンドシェイクと混信フィルタを検証。--unpaired 必須。
+#   未ペア起動→自動 Pairing→ペア送信機に bind（相互 MAC 学習）、誤送信機の ARM＋離陸は
+#   フィルタが破棄（誤窓でモータ停止=混信拒否）、ペア送信機は ARM・離陸（モータ回転）。
+exit 0
+log_contains any "Pairing started"        # unpaired boot → StateManager auto-enters Pairing
+log_contains any "Paired with"            # comm learns the paired transmitter src MAC
+log_contains any "Pairing complete"       # StateManager → Paired
+log_contains any "ARM accepted"           # paired transmitter ARM (post-pairing) accepted
+log_contains any "Takeoff detected"       # paired transmitter takeoff (bind works)
+order "Pairing complete" "ARM accepted"   # must be paired before the legitimate ARM
+metric duty_max < 0.05 in 5.8 7.8         # CROSSTALK: foreign Tx ARM dropped → motors off
+metric duty_max > 0.1  in 10.0 11.0       # paired Tx flight: motors spin (contrast with foreign)

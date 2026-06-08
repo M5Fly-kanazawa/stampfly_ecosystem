@@ -68,6 +68,15 @@ void build_control_packet(uint8_t* out, uint16_t throttle, uint16_t roll,
 void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                uint8_t flags);
 
+// Same as inject_rc but delivered from a DIFFERENT (non-paired) transmitter MAC.
+// Used by the pairing scenario to verify the crosstalk filter drops ControlPackets
+// from a transmitter the vehicle is not paired with (it stays disarmed / motionless).
+// inject_rc と同じだが別の（未ペアの）送信機 MAC から配信する。ペアリングシナリオが、
+// 機体がペアしていない送信機の ControlPacket を混信フィルタが破棄すること（disarmed・不動の
+// まま）を検証するために使う。
+void inject_rc_foreign(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
+                       uint8_t flags);
+
 // Seed the firmware's pairing NVS so the emulated vehicle boots PAIRED to the
 // injector's transmitter MAC (kPilotMac). Real hardware boots unpaired and auto-
 // enters Pairing, which would block ARM; the flight scenarios inject RC without a

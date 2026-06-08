@@ -1,0 +1,28 @@
+# pairing.scn — transmitter↔vehicle pairing handshake + crosstalk rejection
+# 送信機↔機体のペアリングハンドシェイク + 混信拒否
+#
+# RUN WITH --unpaired so the vehicle boots UNPAIRED (skips the SIL pairing NVS seed):
+#   sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired
+#
+# This exercises the FULL pairing flow on the real firmware:
+#   1. Unpaired boot → StateManager auto-enters Pairing (comm broadcasts a PairingPacket).
+#   2. The injected RC (the paired transmitter, kPilotMac) is the first ControlPacket the
+#      vehicle receives while Pairing → comm learns its src MAC → Paired (mutual MAC learn).
+#   3. CROSSTALK: a DIFFERENT transmitter (rc_foreign, kForeignMac) sends an ARM + takeoff
+#      command. The pairing filter must DROP it — the vehicle stays disarmed, motors off.
+#   4. The paired transmitter then ARMs and takes off normally — proving the bind works.
+#
+# 本シナリオは実ファームの全ペアリング経路を検証する:
+#   1. 未ペア起動 → StateManager が自動で Pairing 突入（comm が PairingPacket を broadcast）。
+#   2. 注入 RC（ペア送信機 kPilotMac）が Pairing 中に最初に届く ControlPacket → comm が
+#      src MAC を学習 → Paired（相互 MAC 学習）。
+#   3. 混信: 別の送信機（rc_foreign, kForeignMac）が ARM＋離陸指令を送る。ペアリング
+#      フィルタはこれを破棄 — 機体は disarmed・モータ停止のまま。
+#   4. ペア送信機が通常通り ARM・離陸 — バインドが機能していることを実証。
+#
+#  <t>  ch          <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc          2048  2048   2048    2048  0     5000      50   # A: paired Tx, disarmed 5 s — bind on first RC + boot calibration completes (~3.5 s)
+   +    rc_foreign  3330  2048   2048    2048  1     3000      50   # B: FOREIGN Tx ARM + takeoff throttle 3 s → crosstalk filter DROPS it (motors stay off)
+   +    rc          2048  2048   2048    2048  1     1000      50   # C: paired Tx ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
+   +    rc          3330  2048   2048    2048  1     2500      50   # D: paired Tx take-off — throttle up (>0.5) → TAKEOFF → FLYING, gentle climb 2.5 s
+   +    rc          2048  2048   2048    2048  0     1000      50   # E: paired Tx DISARM (FLYING → IDLE_GROUND, motors cut) 1 s

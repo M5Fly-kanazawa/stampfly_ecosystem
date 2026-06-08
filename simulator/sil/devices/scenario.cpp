@@ -45,6 +45,8 @@ struct Event {
     uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
     uint8_t  acro = 0;        // 1 => CTRL_FLAG_MODE (ACRO/rate) / 1 で ACRO（角速度）
     uint8_t  pos = 0;         // 1 => CTRL_FLAG_POS_MODE (POSITION_HOLD) / 1 で位置保持
+    bool     foreign = false; // rc_foreign: inject from a DIFFERENT transmitter MAC
+                              //   (crosstalk-rejection test) / 別の送信機 MAC から注入
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
 
@@ -247,7 +249,12 @@ int sil_scenario_load(const char* path)
         e.at_us = at_us;
         e.line = lineno;
 
-        if (ch == "rc") {
+        if (ch == "rc" || ch == "rc_foreign") {
+            // rc_foreign injects an identical ControlPacket but from a DIFFERENT
+            // transmitter MAC — used to verify the pairing crosstalk filter drops
+            // packets from a non-paired transmitter. Same grammar as rc.
+            // rc_foreign は同一の ControlPacket を別の送信機 MAC から注入する — ペアリングの
+            // 混信フィルタが未ペア送信機のパケットを破棄することの検証に使う。文法は rc と同じ。
             long v[5];
             for (int k = 0; k < 5; ++k) {
                 if (!(iss >> v[k])) { err(path, lineno, "rc needs <thr> <roll> <pitch> <yaw> <arm>"); return -1; }
@@ -257,6 +264,7 @@ int sil_scenario_load(const char* path)
             }
             if (v[4] != 0 && v[4] != 1) { err(path, lineno, "rc <arm> must be 0 or 1"); return -1; }
             e.ch = Channel::Rc;
+            e.foreign = (ch == "rc_foreign");
             e.thr = (uint16_t)v[0]; e.roll = (uint16_t)v[1];
             e.pitch = (uint16_t)v[2]; e.yaw = (uint16_t)v[3];
             e.arm = (uint8_t)v[4];
@@ -434,15 +442,21 @@ void sil_scenario_driver_task(void* /*arg*/)
                                       (e.alt  ? sil::kFlagAltMode : 0) |
                                       (e.acro ? sil::kFlagMode    : 0) |
                                       (e.pos  ? sil::kFlagPosMode : 0);
+                // Pick the injector: the paired transmitter (rc) or a different,
+                // non-paired one (rc_foreign — exercises the crosstalk filter).
+                // 注入元を選ぶ: ペア済み送信機（rc）か別の未ペア送信機（rc_foreign — 混信
+                // フィルタを試す）。
+                void (*inject)(uint16_t, uint16_t, uint16_t, uint16_t, uint8_t) =
+                    e.foreign ? &sil::inject_rc_foreign : &sil::inject_rc;
                 if (e.hold_ms <= 0) {
-                    sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
+                    inject(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {
                     // Same frame count the parser used for the timeline duration
                     // (>=1 for any positive hold) so emit and timing agree.
                     // パーサの時間幅と同じフレーム数（正のホールドは最低1）で発射・時刻を一致。
                     const long long frames = rc_hold_frames(e.hold_ms, e.rate_hz);
                     for (long long i = 0; i < frames; ++i) {
-                        sil::inject_rc(e.thr, e.roll, e.pitch, e.yaw, flags);
+                        inject(e.thr, e.roll, e.pitch, e.yaw, flags);
                         vTaskDelay((TickType_t)period);
                     }
                 }

@@ -27,6 +27,12 @@ namespace {
 // ローカル管理アドレスの「送信機」MAC。
 constexpr uint8_t kPilotMac[6] = {0x02, 0x53, 0x49, 0x4C, 0x00, 0x01};  // "SIL"
 
+// A DIFFERENT transmitter MAC (a bystander's controller) for crosstalk tests. Must
+// differ from kPilotMac so the vehicle's pairing filter rejects it once paired.
+// 混信試験用の別の送信機 MAC（他人のコントローラ）。ペア後にフィルタが弾くよう
+// kPilotMac と異なる値にする。
+constexpr uint8_t kForeignMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xFF, 0xFE};  // "SIL"+FFFE
+
 }  // namespace
 
 namespace sil {
@@ -52,6 +58,14 @@ void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
     uint8_t pkt[14];
     build_control_packet(pkt, throttle, roll, pitch, yaw, flags);
     sil_espnow_deliver(kPilotMac, pkt, (int)sizeof(pkt));
+}
+
+void inject_rc_foreign(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
+                       uint8_t flags)
+{
+    uint8_t pkt[14];
+    build_control_packet(pkt, throttle, roll, pitch, yaw, flags);
+    sil_espnow_deliver(kForeignMac, pkt, (int)sizeof(pkt));
 }
 
 void seed_pairing_nvs()

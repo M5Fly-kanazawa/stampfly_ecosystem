@@ -54,6 +54,7 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | `hover_alt` / `hover_long` | 高度保持ホバー（短/長時間） | vehicle（旧） |
 | `hover_espnow` | ESP-NOW ホバー（仮想 pilot） | vehicle（旧） |
 | `console_cli` | シリアル CLI 決定論検証（非飛行） | vehicle_new |
+| `pairing` | ペアリングハンドシェイク（未ペア起動→自動Pairing→bind）＋混信拒否（誤MAC送信機のARM/離陸をフィルタが破棄）。`--unpaired` 必須 | vehicle_new |
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
 1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² ゲートが補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。
