@@ -28,6 +28,7 @@
  * @design architecture.md §3 — R13 @publisher/@subscriber annotation  [OK]
  */
 
+#include <cstdio>     // DIAG printf (temporary)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -137,6 +138,14 @@ static float cached_temperature_c = 0.0f;
 /// BMI270 C ドライバがクラッシュダンプ解析用にチェックポイント値（40..44）を書き込む。
 /// HAL の extern 宣言を解決するため C リンケージで定義する。
 extern "C" volatile uint8_t g_imu_checkpoint = 0;
+
+// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09). Defined
+// in state_task.cpp / notify_task.cpp; ImuTask prints them with raw printf (bypasses the
+// ESP_LOG console, which may be blocked) so we can see if StateTask/NotifyTask are alive.
+// 一時診断: state_task/notify_task で定義。ImuTask が raw printf で報告。
+extern "C" volatile uint32_t g_diag_state_loops;    // StateTask loop count
+extern "C" volatile uint8_t  g_diag_state_stage;    // StateTask last stage
+extern "C" volatile uint32_t g_diag_notify_updates; // NotifyTask update count
 
 /// Convert the BMI270 driver's body-frame reading into ImuData (unit conversion only).
 /// The axis remap (chip → body FRD) is done in the BMI270 driver (bmi270_wrapper) per
@@ -743,6 +752,25 @@ void ImuTask(void* pvParameters)
                 {static_cast<uint8_t>(sf::NotifyEvent::Ready), static_cast<uint32_t>(now)});
         }
         s_prev_calibrated = g_calibrated;
+
+        // TEMPORARY DIAGNOSTIC (real-hardware INIT-stuck): every ~400 cycles (~1 s) print
+        // StateTask/NotifyTask liveness + the state machine's view, via raw printf so it
+        // shows even if the ESP_LOG console is blocked. Interpretation:
+        //   state>0 + state_loops rising → StateTask transitioned (LED issue = NotifyTask)
+        //   state=0 + state_loops rising → StateTask runs but INIT check never fires
+        //   state_loops STUCK at stage=N → StateTask blocked right after stage N
+        //   notify_upd STUCK → NotifyTask starved (LED frozen) on core 0
+        // 一時診断: 1秒毎に StateTask/NotifyTask の生存と状態を raw printf で出す。
+        if ((cycle_count % 400u) == 0u) {
+            const sf::SystemMode sm = sf::system_mode.latest();
+            std::printf("  DIAG: state=%u armed=%d imu_ts=%lu | state_loops=%lu stage=%u | "
+                        "notify_upd=%lu\n",
+                        sm.state, static_cast<int>(sm.armed),
+                        static_cast<unsigned long>(sf::sensor_imu.latest().timestamp),
+                        static_cast<unsigned long>(g_diag_state_loops),
+                        static_cast<unsigned>(g_diag_state_stage),
+                        static_cast<unsigned long>(g_diag_notify_updates));
+        }
 
         // =====================================================================
         // Step 4: Publish state estimate

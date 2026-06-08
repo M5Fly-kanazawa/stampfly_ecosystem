@@ -37,6 +37,17 @@ static const char* TAG = "StateTask";
 /// グローバル状態管理インスタンス
 sf::StateManager g_state_manager;
 
+// -----------------------------------------------------------------------------
+// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09).
+// StateTask increments g_diag_state_loops at the top of each loop and sets
+// g_diag_state_stage through the loop; ImuTask prints them (raw printf) so we can
+// see whether StateTask's loop runs and, if blocked, WHERE. Remove once root-caused.
+// 一時診断（実機 INIT 停止調査）。StateTask がループ先頭で g_diag_state_loops を増やし
+// ステージを更新、ImuTask が raw printf で報告。StateTask が回っているか/どこで止まるかを見る。
+// -----------------------------------------------------------------------------
+extern "C" volatile uint32_t g_diag_state_loops = 0;   // loop iterations / ループ回数
+extern "C" volatile uint8_t  g_diag_state_stage = 0;   // last reached stage / 到達ステージ
+
 // =============================================================================
 // Ground→flight covariance handoff at ARM — why ATTITUDE-only, not a full reset
 //
@@ -257,6 +268,9 @@ void StateTask(void* pvParameters)
 
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
 
+        g_diag_state_loops = g_diag_state_loops + 1;  // DIAG: loop is running / ループ稼働
+        g_diag_state_stage = 1;      // DIAG: top of loop
+
         // =====================================================================
         // INIT → IDLE_GROUND once the estimator is producing valid output, i.e.
         // sensors are up and fused (our "initialization complete" signal). Until
@@ -280,6 +294,7 @@ void StateTask(void* pvParameters)
         // @design architecture.md §2 — detection reports, state management decides [OK]
         // =====================================================================
 
+        g_diag_state_stage = 2;      // DIAG: about to read pilot_request (mutex)
         sf::PilotRequest req = sf::pilot_request.latest();
         if (req.timestamp != 0) {                          // skip until a packet arrives
             if (req.arm && !prev_arm) {
@@ -367,6 +382,7 @@ void StateTask(void* pvParameters)
         // @design development_roadmap.md §3 Layer 3 — ToF takeoff detect  [OK]
         // =====================================================================
 
+        g_diag_state_stage = 4;      // DIAG: about to read command_setpoint (mutex)
         const sf::FlightState fs = g_state_manager.getState();
         const float throttle = sf::command_setpoint.latest().throttle;
 
@@ -416,6 +432,7 @@ void StateTask(void* pvParameters)
         // @design requirements.md §2 — PairingState (auto-enter on unpaired) [OK]
         // @design architecture.md §4 — StateManager owns PairingState        [OK]
         // =====================================================================
+        g_diag_state_stage = 6;      // DIAG: about to read pairing_complete (mutex)
         const sf::PairingComplete bind = sf::pairing_complete.latest();
         if (bind.timestamp != 0) {                         // comm has reported its bind status
             const bool bound = bind.bound;
@@ -468,6 +485,7 @@ void StateTask(void* pvParameters)
         //
         // @design requirements.md §9 — comm loss: hover 3 s → LANDING   [OK]
         // =====================================================================
+        g_diag_state_stage = 9;      // DIAG: about to call update() (end of loop)
         g_state_manager.update(static_cast<uint32_t>(esp_timer_get_time()));
     }
 }
