@@ -1,6 +1,24 @@
-# 次セッション指示書 — Phase 6 完了。次は Phase 7（品質仕上げ）or χ²ラッチアップ調査
+# 次セッション指示書 — Phase 0〜7 完了 ＋ χ²ラッチアップ根治。次は Phase 8（ロバスト再飛行 SIL 検証）
 
-最終更新: 2026-06-07（**Phase 0〜6 完了。次フェーズの順序を要ユーザー判断: (A) Phase 7 品質仕上げ / (B) χ²ラッチアップ調査→デッドバンド復活**）
+最終更新: 2026-06-08（**Phase 7 品質仕上げ ＋ χ²ラッチアップ根治 完了。次は Phase 8**）
+
+> **✅ χ²ラッチアップ根治（commit 90093c1）＝今セッションの最重要成果:**
+> - **真因**: `eskf.obs.accel_att_noise=0.06`（R=0.0036）が過小。飛行中の普通の運動加速度イノベーション(~1 m/s²=17σ)が χ²(3)ゲートを越え**マニューバ中66%棄却**→姿勢がジャイロ積分のみでドリフト→毎軸 POS_HOLD が限界安定。「数百度ラッチ」でなく「慢性的過剰棄却」だった。
+> - **根治**: accel_att_noise 0.06→**0.8**（params.cpp、max 1.0→2.0）。崖消失（電池OFF POS 全PASS att_rmse 0.52〜1.13°）、退行なし（11シナリオ・hover_smoke G2+G3・N1・legacy・ESP-IDF 全PASS）。
+> - **計測手法**: `SIL_EMU_BATTERY=off pos_yaw` で崖再現＋ d²/innov/R 時系列ログで真因特定。掃引ツール `SIL_EMU_CHI2_GATE/KADAPT/ACCEL_ATT`（emu_main、再ビルド無し掃引）。詳細 `docs/chi2_latchup_finding.md §8`。
+> - **2つの payoff も完了**: 重力統一 9.80665（commit 90e8f7c）・デッドバンド 0.05（commit f45a735）が根治後に通った。
+> - 教訓: 定性推測（数百度ラッチ/ノルム判別）は2回外れ、**計測が一発で真因を示した**。
+
+> **✅ Phase 7 完了（品質仕上げ）:**
+> - **@design 全[OK]化（ba97274〜07447d4）**: [--]137件を7並列監査（OK111/NG6/STALE16、根拠付き、`docs/design_tag_verification.md`）。STALE参照修正・決定反映で全242件[OK]。コードはほぼ全て設計通り、問題の大半は文書の節番号陳腐化。
+> - **failsafe 安全閾値を要件§9 整合（10b96d1）**: impact 4.0→3.0G・gyro 1000→800dps・LiPo 3.3→3.4V・連続2回判定。
+> - **esp_netif STA 所有を board に統一（a7810a3, 086f564）**: comm 自前生成（旧アンチパターン退行）を撤去し board 生成・comm 借用。文書矛盾も解消。
+> - **R13 @publisher/@subscriber 注釈＋コメントドリフト修正（130d27b）**: 全タスク、telemetry 132→104・comm 旧12B→14B。
+> - **重力統一 sf::math::kGravity（90e8f7c）・デッドバンド0.05（f45a735）**: χ²根治後に再適用。
+> - **残り（任意・低優先）**: 相補ゲイン params化、pid 飛行リミット config化（安定性影響小）。
+
+> **✅ Phase 6 完了（未実装機能の全配線）:**
+> - Logger(c773bac) / mag χ²(6681c69) / Notify(f69861d) / Button(793b416) / sensor_health(8caf32f) / CLI(b895cb0) / Critical-fail LED(8483b8a)。詳細は git log 参照。
 
 > **✅ Phase 6 完了（未実装機能の全配線）:**
 > - **✅ Logger（commit c773bac）**: log_task→sf_logger 配線。armed 中 100Hz で Blackbox(SPIFFS)記録、disarm で flush。per-cycle ログ氾濫バグを blackbox_failed_ ラッチで修正。
@@ -38,16 +56,19 @@
 
 ---
 
-## ★最初にやること（未決の判断 — ユーザーに確認）
+## ★最初にやること
 
-**Phase 0〜6 完了。** 次フェーズの順序が未決。まずユーザーに確認してから着手する：
+**Phase 0〜7 完了 ＋ χ²ラッチアップ根治済み。次は Phase 8（★ロバスト再飛行 SIL 検証）。**
 
-1. **Phase 7（品質仕上げ）**（計画 `valiant-frolicking-sun.md` の本来の次フェーズ）: 全 `@design` タグを実装照合し [OK]/[NG] 化（リリースは全[OK]）、全タスクヘッダに `@publisher`/`@subscriber`（R13）、残 TODO 解消、マジックナンバー集約（重力 9.80665 統一・相補ゲイン params 化・pid 飛行リミット config 化）、コメントドリフト修正、esp_netif STA 所有の設計文書矛盾解決。
-2. **χ² ラッチアップ調査**（推定器ロバスト性・実機にも関わる。`docs/chi2_latchup_finding.md` が起点）→ **デッドバンド復活**（χ² 改善後に 0.05 有効化、現状は機構配線・既定0）。
-3. **Phase 8（★ロバスト再飛行 SIL 検証）**: emu に物理ハンドリング機構＋crash_refly.scn / modeswitch.scn ゲート化。
+**Phase 8（計画 `valiant-frolicking-sun.md` の最終フェーズ）:**
+- **emu に物理ハンドリング機構**: 墜落後の機体を「持上げ→反転（正立へ）→運搬→設置」する連続キネマティック軌道を Plant に実装。Plant が IMU比力/ToF/gyro を解析合成（**teleport 厳禁** — 物理的に連続な姿勢/位置遷移）。
+- **`crash_refly.scn`**: 飛行→衝撃で自動DISARM/墜落→物理handleで設置→IDLE_HELD→再校正完了→再ARM→再離陸→ホバー回復をゲート化。
+- **`modeswitch.scn`**: 飛行中モード切替（ALT↔POS）で姿勢/高度が有界。
+- **申し送り（§6.5）**: 接地復帰reset後すぐ再離陸すると共分散再膨張で発散しうる → 地上再収束の時間確保 or soft-freeze が要る見込み。χ²根治で POS_HOLD の余裕が大きくなったので状況は改善しているはず（要検証）。
 
-推奨は **Phase 7 で品質を仕上げてリリース可状態にする** か、研究的に重要な **χ²（2）を先に攻める**。
-**この判断を最初にユーザーへ。** χ² は当座 SIL 電池サグの動的ディザで非発火にしてあるだけで根治していない。
+**Phase 7 の残り（任意・低優先、安定性影響小）:** 相補フィルタゲイン params化、pid 飛行リミット config化。
+
+**保留なし。** χ²ラッチアップは根治済み（accel_att_noise 0.8）。当座の電池サグディザに依存していない。
 
 ---
 
