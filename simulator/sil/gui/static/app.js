@@ -3,6 +3,7 @@
 // シナリオ作成・パラメータ・グラフ・ライブ3D。バックエンドは simulator/sil/gui/server.py。
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
 // ============================================================================ state
 const S = {
@@ -249,23 +250,58 @@ function dolly(factor) {
   camera.position.copy(controls.target).add(dir.setLength(dist));
 }
 
-// Reliable Mac-trackpad zoom: two-finger scroll AND pinch both arrive here as `wheel`
-// (pinch = ctrlKey, finer steps); Safari pinch also fires gesture* events. We preventDefault
-// so the browser neither page-zooms nor scrolls the parent panel. Mac トラックパッドの
-// 2本指スクロール/ピンチ両方を wheel で受け、Safari は gesture* も拾う。
+// Detect the OS so the zoom can be tuned per platform (the user asked for Mac/Win/Linux
+// support). Low-entropy hint first (Chromium), then the legacy navigator.platform.
+// OS 検出（Mac/Win/Linux 個別対応）。Chromium の低エントロピーヒント→旧 navigator.platform。
+const OS = (() => {
+  const p = ((navigator.userAgentData && navigator.userAgentData.platform) ||
+             navigator.platform || '').toLowerCase();
+  if (p.includes('mac')) return 'mac';
+  if (p.includes('win')) return 'win';
+  if (p.includes('linux')) return 'linux';
+  return 'other';
+})();
+
+// Per-OS zoom gains [zoom-exponent per normalized pixel]. `scroll` = two-finger / mouse
+// wheel; `pinch` = a trackpad/precision-touchpad pinch (ctrl+wheel), which sends much
+// smaller steps so it needs a larger gain. The deltaMode normalization below (lines/pages →
+// px) is what actually makes a Firefox line-mode mouse and a Mac trackpad behave the same;
+// these per-OS numbers only fine-tune the feel. OS ごとのズーム感度。pinch は刻みが小さい
+// ので gain 大。実際の機種差吸収は下の deltaMode 正規化が担い、ここは感触の微調整。
+const ZOOM_TUNE = {
+  mac:   { scroll: 0.0020, pinch: 0.013 },   // trackpad: small, smooth, momentum deltas
+  win:   { scroll: 0.0016, pinch: 0.012 },   // mouse notch ≈ 100 px + precision touchpad
+  linux: { scroll: 0.0018, pinch: 0.012 },   // mix of mouse (often line-mode) and touchpad
+  other: { scroll: 0.0018, pinch: 0.012 },
+};
+
+// Cross-platform wheel zoom. Two-finger scroll AND pinch arrive as `wheel` (pinch = ctrlKey,
+// finer steps); Safari pinch also fires gesture* events (handled below). We normalize for
+// deltaMode (a mouse may report lines/pages, a trackpad reports pixels) and clamp the
+// per-event factor so one big mouse notch or a fast flick can't teleport the zoom. All
+// platforms preventDefault so the browser neither page-zooms (ctrl+wheel) nor scrolls the
+// surrounding panel. Mac/Win/Linux 共通のホイールズーム。deltaMode を px に正規化し、
+// 1イベントの倍率をクランプ。全 OS で preventDefault（ページズーム/親スクロール阻止）。
 function installTrackpadZoom(canvas) {
+  const tune = ZOOM_TUNE[OS] || ZOOM_TUNE.other;
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const k = e.ctrlKey ? 0.012 : 0.0018;   // pinch (ctrl+wheel) is finer-grained than scroll
-    dolly(Math.exp(e.deltaY * k));           // deltaY>0 → zoom out, <0 → zoom in
+    let px = e.deltaY;
+    if (e.deltaMode === 1) px *= 16;            // DOM_DELTA_LINE  → ~16 px/line (Firefox, some mice)
+    else if (e.deltaMode === 2) px *= 100;      // DOM_DELTA_PAGE  → rough px
+    const gain = e.ctrlKey ? tune.pinch : tune.scroll;
+    let f = Math.exp(px * gain);                // deltaY>0 → zoom out, <0 → zoom in
+    f = Math.min(2.0, Math.max(0.5, f));        // clamp per-event so a big notch can't jump
+    dolly(f);
   }, { passive: false });
-  // Safari: pinch comes as gesture events (e.scale is cumulative since gesturestart).
+  // Safari (mac) pinch comes as gesture events; e.scale is cumulative since gesturestart.
+  // Other browsers never fire these, so the handler is inert there. Safari のピンチ用。
   let gscale = 1;
   canvas.addEventListener('gesturestart', (e) => { e.preventDefault(); gscale = e.scale; },
     { passive: false });
   canvas.addEventListener('gesturechange', (e) => {
     e.preventDefault();
-    dolly(gscale / e.scale);                 // scale grows (pinch out) → zoom in
+    dolly(gscale / e.scale);                    // scale grows (pinch out) → zoom in
     gscale = e.scale;
   }, { passive: false });
 }
@@ -316,28 +352,77 @@ function resize3D() {
   camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 
-// A simple X-quad defined in BODY FLU (x=forward, y=left, z=up). Front arms cyan, rear
-// magenta so attitude/heading is readable. Rotor positions match the StampFly MJCF.
-// 機体 FLU で定義する X 字クアッド。前腕シアン・後腕マゼンタで向きを判別。
+// The drone is the REAL StampFly: the same STL meshes the MuJoCo model uses, loaded in the
+// BODY FLU frame (x=forward, y=left, z=up). The MJCF imports each STL with scale 0.001
+// (mm→m) and quat (0.5,0.5,0.5,0.5), which rotates the STL frame (X=left,Y=up,Z=fwd) onto
+// FLU — we apply the identical transform so the model sits in the body frame and the
+// per-frame attitude quaternion orients it correctly (props point down when it flips).
+// 機体は本物の StampFly（MuJoCo と同じ STL）。MJCF と同じ scale 0.001 + quat(0.5,0.5,0.5,0.5)
+// で STL(X左/Y上/Z前)を FLU に向け、毎フレームの姿勢 quat が正しく回す（反転でプロペラが下向き）。
+const STL_PARTS = ['frame', 'pcb', 'm5stamps3', 'battery', 'battery_adapter',
+                   'motor_fl', 'motor_fr', 'motor_rl', 'motor_rr'];
+const PART_COLOR = { frame: 0x2b3442, pcb: 0x176f4f, m5stamps3: 0xe06a2a, battery: 0x8a6a3a,
+  battery_adapter: 0x394150, motor_fl: 0x6b7480, motor_fr: 0x6b7480, motor_rl: 0x6b7480, motor_rr: 0x6b7480 };
+// Rotor sites (FLU) + spin direction (CCW=+1 about +Z up) + which motor duty drives it.
+// MJCF: M1 FR CCW, M2 RR CW, M3 RL CCW, M4 FL CW. ロータFLU位置＋回転方向＋対応モータ。
+const ROTORS = [
+  { pos: [0.023, -0.023, 0.006], dir: +1, motor: 0 },   // M1 FR CCW
+  { pos: [-0.023, -0.023, 0.006], dir: -1, motor: 1 },  // M2 RR CW
+  { pos: [-0.023, 0.023, 0.006], dir: +1, motor: 2 },   // M3 RL CCW
+  { pos: [0.023, 0.023, 0.006], dir: -1, motor: 3 },    // M4 FL CW
+];
+
+// A 3-blade prop in the FLU frame, spinning about body +Z (up). Blades lie flat in the
+// body x-y plane (wide chord, thin vertically). 機体FLUで3枚羽根、z軸回り。羽根は水平面に平ら。
+function makeProp(color) {
+  const prop = new THREE.Group();
+  const r = 0.019;   // ~prop radius [m]
+  // hub — a short cylinder whose axis (CylinderGeometry's local Y) is turned to body +Z (up)
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.005, 12),
+    new THREE.MeshStandardMaterial({ color: 0x2a313c }));
+  hub.rotation.x = Math.PI / 2;
+  prop.add(hub);
+  // 3 flat blades at 120°, radial in the x-y plane
+  const bladeMat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.92,
+    side: THREE.DoubleSide, metalness: 0.1, roughness: 0.7 });
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2 * Math.PI / 3;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(r, 0.005, 0.0008), bladeMat);  // len × chord × thin
+    blade.position.set(Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0.001);
+    blade.rotation.z = a;
+    prop.add(blade);
+  }
+  // faint translucent swept-area disk (flat in x-y)
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0006, 24),
+    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.10, side: THREE.DoubleSide }));
+  disk.rotation.x = Math.PI / 2;
+  prop.add(disk);
+  return prop;
+}
+
 function buildDrone() {
   const g = new THREE.Group(); g.scale.setScalar(MODEL_SCALE);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.012),
-    new THREE.MeshStandardMaterial({ color: 0x9fb3c8 }));
-  g.add(body);
-  // rotor sites (FLU): M1 FR, M2 RR, M3 RL, M4 FL
-  const rot = [[0.023, -0.023, 'F'], [-0.023, -0.023, 'R'], [-0.023, 0.023, 'R'], [0.023, 0.023, 'F']];
-  rot.forEach(([x, y, fr]) => {
-    const col = fr === 'F' ? 0x22d3ee : 0xa78bfa;
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(x, y) * 1.4, 0.004, 0.004),
-      new THREE.MeshStandardMaterial({ color: col }));
-    arm.position.set(x / 2, y / 2, 0.003);
-    arm.rotation.z = Math.atan2(y, x);
-    g.add(arm);
-    const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.002, 20),
-      new THREE.MeshStandardMaterial({ color: col, transparent: true, opacity: 0.55 }));
-    disk.rotation.x = Math.PI / 2;            // cylinder axis Y → FLU z (up)
-    disk.position.set(x, y, 0.008);
-    g.add(disk); props.push(disk);
+  // small center marker so something shows before/if the STL parts load (fallback)
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.006),
+    new THREE.MeshStandardMaterial({ color: 0x9fb3c8 })));
+  // Load the StampFly STL parts (async) into the FLU body frame.
+  const loader = new STLLoader();
+  const qStlToFlu = new THREE.Quaternion(0.5, 0.5, 0.5, 0.5);   // (x,y,z,w) = MJCF geom quat
+  STL_PARTS.forEach(name => {
+    loader.load(`/mesh/${name}.stl`, (geo) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: PART_COLOR[name] || 0x6b7480, metalness: 0.25, roughness: 0.65 }));
+      m.scale.setScalar(0.001);          // mm → m (MJCF mesh scale)
+      m.quaternion.copy(qStlToFlu);      // STL frame → body FLU (MJCF geom quat)
+      g.add(m);
+    }, undefined, (err) => console.warn('[3D] STL load failed:', name, err));
+  });
+  // Props at the rotor sites; front cyan, rear violet for heading readability.
+  ROTORS.forEach((rt, i) => {
+    const prop = makeProp(rt.motor === 0 || rt.motor === 3 ? 0x22d3ee : 0xa78bfa);
+    prop.position.set(rt.pos[0], rt.pos[1], rt.pos[2]);
+    g.add(prop);
+    props.push({ pivot: prop, dir: rt.dir, motor: rt.motor });
   });
   return g;
 }
@@ -399,7 +484,15 @@ function animate() {
     if (tsec < d.t[S.frame]) j = 0;
     setFrame(j);
   } else { S.lastWall = now; }
-  props.forEach((p, k) => p.rotation.y += 0.6 + 0.05 * k);   // spin props (cosmetic)
+  // Spin each prop at a rate set by ITS motor's duty at the current frame, in its real
+  // turn direction (CCW/CW). Visual rate (not physical RPM — real props blur), but a higher
+  // duty visibly spins faster, so you can read the mixer's per-motor effort. 各プロペラを
+  // 現在フレームのそのモータ duty に比例した速さ・実際の回転方向で回す（視覚用レート）。
+  const d = S.traj && S.traj.data;
+  props.forEach(p => {
+    const duty = d ? (d['m' + p.motor][S.frame] || 0) : 0;
+    p.pivot.rotation.z += p.dir * (0.05 + duty * 1.6);   // idle creep + duty-proportional spin
+  });
   controls.update();
   renderer.render(scene, camera);
 }

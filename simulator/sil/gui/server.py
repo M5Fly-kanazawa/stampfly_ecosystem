@@ -42,6 +42,9 @@ ROOT = SIL_DIR.parents[1]                       # repo root
 SCN_DIR = SIL_DIR / "scenarios"
 VIZ_DIR = SIL_DIR / "viz"
 PARAMS_CPP = ROOT / "firmware/vehicle_new/components/sf_core/params.cpp"
+# The 3D view renders the SAME STL meshes the MuJoCo model uses (the sim's authoritative
+# StampFly geometry). 3D は MuJoCo モデルと同じ STL（sim 権威の StampFly 形状）を描く。
+MESH_DIR = ROOT / "simulator/shared/assets/meshes/parts"
 
 # Reusable scratch paths for ad-hoc (builder) runs and param overrides.
 # ビルダー走行・パラメータ上書き用の使い回しスクラッチ。
@@ -238,6 +241,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_file(STATIC / "app.js", "application/javascript; charset=utf-8")
         if path == "/style.css":
             return self._send_file(STATIC / "style.css", "text/css; charset=utf-8")
+        if path.startswith("/mesh/"):
+            # Serve a StampFly STL part for the 3D view. Whitelist the name (no traversal).
+            # 3D 用 STL パーツを配信。名前を制限しパストラバーサルを防ぐ。
+            name = path[len("/mesh/"):]
+            import re as _re
+            if not _re.fullmatch(r"[a-z0-9_]+\.stl", name):
+                return self.send_error(400, "bad mesh name")
+            return self._send_file(MESH_DIR / name, "model/stl")
         if path == "/api/scenarios":
             return self._send_json(list_scenarios())
         if path == "/api/scenario":
