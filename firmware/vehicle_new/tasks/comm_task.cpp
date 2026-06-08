@@ -37,8 +37,10 @@
  * 供給する。限界安定の POSITION_HOLD シナリオはコマンド配送の位相に敏感なので、（ポーリング
  * でなく）パケット時処理が実証済みの低レイテンシ経路を保つ。
  *
+ * @publisher command_setpoint, pilot_request (via the injected CommandProcessor)
  * @design architecture.md §6 — CommTask: Communication + Command       [OK]
  * @design detailed_design.md §8 — CommTask: 50Hz, priority 15          [OK]
+ * @design architecture.md §3 — R13 @publisher/@subscriber annotation   [OK]
  */
 
 #include "freertos/FreeRTOS.h"

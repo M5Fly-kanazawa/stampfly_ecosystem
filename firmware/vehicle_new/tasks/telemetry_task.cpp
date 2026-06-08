@@ -17,9 +17,11 @@
  * sf::Telemetry インスタンスを1つ所有し、init()（WiFi STA の IP 取得まで
  * ブロック）を1回実行した後、50Hz で永続的に update() を呼ぶ。
  *
+ * @subscriber estimate_state, control_output, actuator_motor, sensor_imu, system_mode (UDP egress)
  * @design architecture.md §6 — TelemetryTask                           [OK]
  * @design detailed_design.md §8 — TelemetryTask: 50Hz, priority 13     [OK]
  * @design requirements.md §7 — Telemetry: UDP only                     [OK]
+ * @design architecture.md §3 — R13 @publisher/@subscriber annotation   [OK]
  */
 
 #include "freertos/FreeRTOS.h"

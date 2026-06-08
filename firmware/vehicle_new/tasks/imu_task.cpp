@@ -19,10 +19,13 @@
  * 非同期センサ観測（ToF、Flow、Mag、Baro）を処理し、
  * 状態推定値を発行し、制御タスクに通知する。
  *
+ * @publisher sensor_imu, estimate_state, system_status
+ * @subscriber sensor_tof, sensor_flow, sensor_mag, sensor_baro, estimator_command, system_mode
  * @design architecture.md §5 — Main pipeline: IMU → Estimation        [OK]
  * @design architecture.md §6 — ImuTask: Sensing(IMU) + Estimation     [OK]
  * @design detailed_design.md §8 — ImuTask: 400Hz, priority 24        [OK]
  * @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
+ * @design architecture.md §3 — R13 @publisher/@subscriber annotation  [OK]
  */
 
 #include "freertos/FreeRTOS.h"

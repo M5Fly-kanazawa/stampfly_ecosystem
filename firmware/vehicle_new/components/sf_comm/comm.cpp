@@ -57,32 +57,30 @@ static const char* TAG = "comm";
 namespace sf {
 
 // =============================================================================
-// Protocol — ESP-NOW CommanderPacket (12 bytes, packed, little-endian)
-// プロトコル — ESP-NOW CommanderPacket（12バイト、パック、リトルエンディアン）
+// Protocol — ESP-NOW ControlPacket (14 bytes, packed, little-endian) — the SSOT
+// プロトコル — ESP-NOW ControlPacket（14バイト、パック、リトルエンディアン）= SSOT
 //
-// Layout / レイアウト:
-//   [0..1]  throttle  uint16  0..65535 → [0.0, 1.0]
-//   [2..3]  roll      int16   -32768..32767 → [-1.0, 1.0]
-//   [4..5]  pitch     int16   -32768..32767 → [-1.0, 1.0]
-//   [6..7]  yaw       int16   -32768..32767 → [-1.0, 1.0]
-//   [8]     buttons   uint8   bit0=arm, bit1..7=mode/reserved
-//   [9]     seq       uint8   monotonic sequence (wraps)
-//   [10..11] crc16    uint16  CRC-16/CCITT-FALSE over bytes [0..9]
-//
-// Transmitter side will be matched in a separate task. Until then, listening
-// on the broadcast peer (FF:FF:FF:FF:FF:FF) is acceptable for Phase 2a.
-// 送信機側は別タスクで実装する。それまではブロードキャストピア
-// (FF:FF:FF:FF:FF:FF) でリスンする運用を Phase 2a では許容する。
-//
-// @design protocol/spec/messages.yaml — ControlPacket (SSOT, 14 bytes)  [OK]
+// Layout / レイアウト (matches the struct below and protocol/spec/messages.yaml):
+//   [0..2]  drone_mac  uint8×3  destination MAC lower 3 (match-any here)
+//   [3..4]  throttle   uint16   12-bit ADC, 2048 = zero (spring-centred)
+//   [5..6]  roll       uint16   12-bit ADC, 2048 = center
+//   [7..8]  pitch      uint16   12-bit ADC, 2048 = center
+//   [9..10] yaw        uint16   12-bit ADC, 2048 = center
+//   [11]    flags      uint8    bit0=ARM,1=FLIP,2=MODE,3=ALT_MODE,4=POS_MODE
+//   [12]    reserved   uint8    proactive_flag (ignored)
+//   [13]    checksum   uint8    low 8 bits of the sum of bytes [0..12]
 //
 // The transmitter (firmware/controller, FIXED) sends THIS layout — the protocol
 // Single Source of Truth. An earlier 12-byte CommanderPacket here had diverged from
-// the SSOT (wrong size/scale/checksum) and would have rejected every controller
-// packet (len != 12). On-air stick values are 12-bit ADC (2048-centred), NOT 0..1000.
+// the SSOT (wrong size/scale/checksum) and rejected every controller packet
+// (len != 14); it was removed. On-air stick values are 12-bit ADC (2048-centred),
+// NOT 0..1000. Listening on the broadcast peer (FF:FF:FF:FF:FF:FF) is used.
 // 送信機(firmware/controller, 固定)はこのレイアウト＝プロトコル SSOT を送る。以前の
-// 12バイト CommanderPacket は SSOT から逸脱しており（サイズ/スケール/検査が違い）コント
-// ローラの全パケットを len!=12 で弾いていた。on-air は 12bit ADC(中央2048)、0..1000 ではない。
+// 12バイト CommanderPacket は SSOT から逸脱（サイズ/スケール/検査が違い）し全パケットを
+// len!=14 で弾いていたため削除した。on-air は 12bit ADC(中央2048)、0..1000 ではない。
+// ブロードキャストピア (FF:FF:FF:FF:FF:FF) でリスンする。
+//
+// @design protocol/spec/messages.yaml — ControlPacket (SSOT, 14 bytes)  [OK]
 // =============================================================================
 
 struct ControlPacket {

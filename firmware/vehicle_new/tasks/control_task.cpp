@@ -19,10 +19,13 @@
  * コマンドセットポイントを読み取り、アクティブなコントローラで
  * 制御出力を計算し、モーターdutyを発行する。
  *
+ * @subscriber estimate_state, command_setpoint, controller_command, system_mode
+ * @publisher control_output, actuator_motor
  * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
  * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
  * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [OK]
  * @design coding_and_education.md §2 — 1 function 1 responsibility    [OK]
+ * @design architecture.md §3 — R13 @publisher/@subscriber annotation  [OK]
  */
 
 #include "freertos/FreeRTOS.h"

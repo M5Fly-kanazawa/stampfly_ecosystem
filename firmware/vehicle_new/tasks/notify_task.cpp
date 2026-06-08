@@ -19,8 +19,10 @@
  * 機体状態を示すLEDパターンとブザー音を制御する。
  * HALを直接操作 — Pub-Sub出力なし。
  *
+ * @subscriber system_mode, notify_command (HAL egress: LED/buzzer — no topic publish)
  * @design architecture.md §2 — Notification: direct HAL access        [OK]
  * @design detailed_design.md §8 — NotifyTask: 30Hz, priority 8       [OK]
+ * @design architecture.md §3 — R13 @publisher/@subscriber annotation  [OK]
  */
 
 #include "freertos/FreeRTOS.h"

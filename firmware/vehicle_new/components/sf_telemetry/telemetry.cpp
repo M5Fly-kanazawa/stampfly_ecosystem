@@ -11,13 +11,14 @@
  * @brief Telemetry implementation — Phase 2a UDP broadcast
  *        テレメトリ実装 — Phase 2a UDPブロードキャスト
  *
- * Sends a single 132-byte binary packet over UDP to the broadcast address
- * 255.255.255.255:UDP_TELEMETRY_PORT at 50 Hz. WiFi STA mode is owned by
- * sf_comm; this module merely waits until WiFi reports an IP address.
+ * Sends a single 104-byte binary packet (TelemetryPacket, see telemetry.hpp
+ * static_assert) over UDP to the broadcast address 255.255.255.255:UDP_TELEMETRY_PORT
+ * at 50 Hz. WiFi STA mode is owned by sf_comm; this module merely waits until WiFi
+ * reports an IP address.
  *
- * 132バイトのバイナリパケットを 255.255.255.255:UDP_TELEMETRY_PORT に
- * 50 Hz でUDPブロードキャストする。WiFi STAモードは sf_comm が所有しており、
- * 本モジュールは IP 取得を待つだけ。
+ * 104バイトのバイナリパケット（TelemetryPacket、telemetry.hpp の static_assert 参照）を
+ * 255.255.255.255:UDP_TELEMETRY_PORT に 50 Hz でUDPブロードキャストする。WiFi STAモードは
+ * sf_comm が所有しており、本モジュールは IP 取得を待つだけ。
  *
  * @design architecture.md §6 — Telemetry subsystem                     [OK]
  * @design detailed_design.md §8 — UDP telemetry packet format          [OK]
