@@ -26,6 +26,12 @@ function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2200);
 }
+// Surface a JS error to the 3D message overlay (and console) instead of failing silently.
+// JS エラーを握り潰さず 3D メッセージ欄とコンソールに出す。
+window.addEventListener('error', (e) => {
+  console.error('PAGEERR', e.message, (e.filename || '') + ':' + (e.lineno || ''));
+  const m = $('scene-msg'); if (m) { m.style.display = 'flex'; m.textContent = '3D エラー: ' + e.message; }
+});
 
 // ============================================================================ boot
 async function boot() {
@@ -238,7 +244,10 @@ function updateCursor(tsec) {
 
 // ============================================================================ three.js live 3D
 let renderer, scene, camera, controls, worldGroup, drone, props = [], trailLine, trailGeo;
-const MODEL_SCALE = 3.0;   // visual only — positions stay in real metres / 見やすさのため見た目だけ拡大
+// Visual exaggeration of the drone ONLY (its flight position stays in real metres). The real
+// StampFly is ~9 cm — at real scale it is a speck against a metre-scale flight, so we enlarge
+// the model so its attitude/props are clearly readable. 機体の見た目だけ拡大（飛行位置は実寸）。
+const MODEL_SCALE = 7.0;
 
 // Dolly the camera toward/away from the orbit target by `factor` (<1 = zoom in), clamped to
 // a sensible distance for the metre-scale flight volume. OrbitControls.update() recomputes
@@ -311,7 +320,7 @@ function init3D() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200);
-  camera.position.set(2.2, 1.6, 2.2);
+  camera.position.set(1.4, 1.0, 1.4);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   // We zoom ourselves (below) instead of OrbitControls' built-in wheel zoom: on a Mac
@@ -322,8 +331,9 @@ function init3D() {
   // スクロール奪取を preventDefault で止め、カメラを直接ドリーする。
   controls.enableZoom = false;
   installTrackpadZoom(canvas);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(3, 6, 4); scene.add(dl);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.1); dl.position.set(3, 6, 4); scene.add(dl);
+  const dl2 = new THREE.DirectionalLight(0xc9d4ff, 0.5); dl2.position.set(-3, 2, -4); scene.add(dl2);
 
   // worldGroup maps ENU local coords (x=East, y=North, z=Up) to three.js Y-up display:
   // rotating -90° about X sends a local (x,y,z) to world (x, z, -y) = (E, U, -N). Inside it
@@ -334,8 +344,8 @@ function init3D() {
   // it into x-y. 地面グリッドを ENU 水平面(z=0)に。
   const grid = new THREE.GridHelper(8, 32, 0x2a3a55, 0x182336); grid.rotation.x = Math.PI / 2;
   worldGroup.add(grid);
-  // ENU axes helper (E=red, N=green, U=blue). 座標軸(東赤/北緑/上青)。
-  worldGroup.add(new THREE.AxesHelper(0.4));
+  // ENU axes helper (E=red, N=green, U=blue). 座標軸(東赤/北緑/上青)。小さめにして機体を主役に。
+  worldGroup.add(new THREE.AxesHelper(0.2));
 
   drone = buildDrone(); worldGroup.add(drone);
   trailGeo = new THREE.BufferGeometry();
@@ -382,19 +392,20 @@ function makeProp(color) {
     new THREE.MeshStandardMaterial({ color: 0x2a313c }));
   hub.rotation.x = Math.PI / 2;
   prop.add(hub);
-  // 3 flat blades at 120°, radial in the x-y plane
-  const bladeMat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.92,
-    side: THREE.DoubleSide, metalness: 0.1, roughness: 0.7 });
+  // 3 flat blades at 120°, radial in the x-y plane. Made chunky enough to read at the model
+  // scale (a few mm thick → a few px). 羽根は視認できる厚みに。
+  const bladeMat = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide,
+    metalness: 0.1, roughness: 0.6, emissive: color, emissiveIntensity: 0.15 });
   for (let i = 0; i < 3; i++) {
     const a = i * 2 * Math.PI / 3;
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(r, 0.005, 0.0008), bladeMat);  // len × chord × thin
-    blade.position.set(Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0.001);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(r, 0.006, 0.0016), bladeMat);  // len × chord × thick
+    blade.position.set(Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0.002);
     blade.rotation.z = a;
     prop.add(blade);
   }
-  // faint translucent swept-area disk (flat in x-y)
-  const disk = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0006, 24),
-    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.10, side: THREE.DoubleSide }));
+  // translucent swept-area disk (flat in x-y) so a fast prop reads as a disk
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0008, 24),
+    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
   disk.rotation.x = Math.PI / 2;
   prop.add(disk);
   return prop;
@@ -410,6 +421,7 @@ function buildDrone() {
   const qStlToFlu = new THREE.Quaternion(0.5, 0.5, 0.5, 0.5);   // (x,y,z,w) = MJCF geom quat
   STL_PARTS.forEach(name => {
     loader.load(`/mesh/${name}.stl`, (geo) => {
+      geo.computeVertexNormals();        // STL has no normals → MeshStandardMaterial would be black
       const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
         color: PART_COLOR[name] || 0x6b7480, metalness: 0.25, roughness: 0.65 }));
       m.scale.setScalar(0.001);          // mm → m (MJCF mesh scale)
