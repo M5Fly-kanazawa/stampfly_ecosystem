@@ -36,6 +36,7 @@
 
 #include "comm.hpp"
 #include "data_types.hpp"
+#include "topics.hpp"    // pairing_state / pairing_complete topics
 #include "sf_board.hpp"  // borrow the BSP-owned default STA netif (R1)
 
 #include <cstring>
@@ -48,6 +49,7 @@
 #include "esp_now.h"
 #include "esp_timer.h"
 #include "esp_mac.h"
+#include "nvs.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -96,6 +98,36 @@ struct ControlPacket {
 
 static_assert(sizeof(ControlPacket) == 14,
               "ControlPacket must match the protocol SSOT (14 bytes)");
+
+// =============================================================================
+// Protocol — PairingPacket (11 bytes) — the SSOT (protocol/spec/messages.yaml)
+// プロトコル — PairingPacket（11バイト）= SSOT
+//
+// Broadcast by the vehicle while in PairingState::Pairing to advertise its own
+// MAC + channel. The controller scans CH1-13 for the signature, learns the MAC,
+// and then unicasts ControlPackets back. Layout / レイアウト:
+//   [0]     channel    uint8     WiFi channel (this vehicle's)
+//   [1..6]  drone_mac  uint8×6   this vehicle's full STA MAC
+//   [7..10] signature  uint8×4   0xAA 0x55 0x16 0x88 (identifies a StampFly)
+//
+// 機体が PairingState::Pairing の間 broadcast し、自 MAC + チャンネルを広告する。
+// コントローラは CH1-13 を署名で走査して MAC を学習し、以降 ControlPacket をユニキャスト
+// で返す。署名はコントローラ（固定）と一致させること（espnow_tdma.c on_data_recv）。
+//
+// @design protocol/spec/messages.yaml — PairingPacket (SSOT, 11 bytes)  [OK]
+// =============================================================================
+
+/// PairingPacket signature bytes (must match the controller, FIXED firmware).
+/// PairingPacket 署名バイト（固定ファームのコントローラと一致させる）。
+static constexpr uint8_t kPairingSignature[4] = {0xAA, 0x55, 0x16, 0x88};
+
+/// PairingPacket wire size (1 channel + 6 MAC + 4 signature).
+/// PairingPacket の電文長（channel 1 + MAC 6 + 署名 4）。
+static constexpr size_t kPairingPacketSize = 11;
+
+/// Broadcast MAC (FF:FF:FF:FF:FF:FF) — destination for the PairingPacket.
+/// ブロードキャスト MAC（FF:FF:FF:FF:FF:FF）= PairingPacket の宛先。
+static constexpr uint8_t kBroadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // -----------------------------------------------------------------------------
 // Constants for normalization and link configuration
@@ -206,6 +238,31 @@ void Comm::init()
     initWifi();
     initEspNow();
 
+    // Read our own STA MAC once — it is advertised in every PairingPacket so the
+    // controller can learn where to unicast ControlPackets (a real vehicle never
+    // matches the controller's placeholder default MAC, so pairing is required).
+    // 自機 STA MAC を一度読む — PairingPacket で広告し、コントローラが ControlPacket を
+    // ユニキャストする宛先を学習できるようにする（実機はコントローラの既定 placeholder MAC
+    // と一致しないため、飛ばすにはペアリングが必要）。
+    esp_wifi_get_mac(WIFI_IF_STA, own_mac_);
+
+    // Restore a previously paired controller MAC from NVS. If present we are
+    // immediately Paired (register it as a unicast peer); otherwise we stay
+    // NotPaired and the StateManager will auto-enter Pairing on the ground.
+    // 以前ペアした相手 MAC を NVS から復元する。あれば即 Paired（ユニキャスト peer 登録）、
+    // 無ければ NotPaired のままで、StateManager が地上で自動的に Pairing へ入る。
+    loadPairingFromNvs();
+    if (paired_.load(std::memory_order_acquire)) {
+        addUnicastPeer(controller_mac_);
+        publishBindStatus(true, /*restored=*/true);
+        ESP_LOGI(TAG, "Pairing restored: %02X:%02X:%02X:%02X:%02X:%02X",
+                 controller_mac_[0], controller_mac_[1], controller_mac_[2],
+                 controller_mac_[3], controller_mac_[4], controller_mac_[5]);
+    } else {
+        publishBindStatus(false, /*restored=*/false);
+        ESP_LOGI(TAG, "No stored pairing (awaiting pairing on the ground)");
+    }
+
     last_packet_us_ = 0;  // 0 = "no packet ever received" / 未受信
     espnow_connected_ = false;
 
@@ -224,6 +281,10 @@ void Comm::update()
     // "connected" とする。実際のフェイルセーフは別所に存在する。
     espnow_connected_ = (last_packet_us_ != 0) &&
                         (timeSinceLastPacket() < kLinkTimeoutMs);
+
+    // Drive the pairing handshake from the StateManager's PairingState.
+    // StateManager の PairingState に従ってペアリングのハンドシェイクを駆動する。
+    servicePairing();
 }
 
 // -----------------------------------------------------------------------------
@@ -284,9 +345,10 @@ void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
         return;  // bad checksum / チェックサム不一致
     }
 
-    (void)info;  // src MAC is unused in Phase 2a (broadcast peer accepted)
-                 // src MAC は Phase 2a では未使用（ブロードキャスト許容）
-    g_comm_instance->forwardRawInput(pkt);
+    // Route by the ESP-NOW sender MAC: bind during pairing, else filter crosstalk.
+    // ESP-NOW 送信元 MAC で振り分ける: ペアリング中はバインド、それ以外は混信をフィルタ。
+    const uint8_t* src_mac = (info != nullptr) ? info->src_addr : nullptr;
+    g_comm_instance->handleControlPacket(pkt, src_mac);
 }
 
 // -----------------------------------------------------------------------------
@@ -330,6 +392,203 @@ void Comm::forwardRawInput(const ControlPacket& pkt)
     // Hand the fact to the Service layer (sf_command via the injected sink).
     // 事実を Service 層（注入された sink 経由で sf_command）へ渡す。
     raw_sink_(raw);
+}
+
+// =============================================================================
+// Pairing — handshake, crosstalk filter, and NVS persistence
+// ペアリング — ハンドシェイク、混信フィルタ、NVS 永続化
+//
+// Follows the legacy vehicle's mutual MAC learning (controller_comm.cpp). The
+// StateManager owns PairingState and publishes it on pairing_state; this radio
+// layer only EXECUTES (broadcast while Pairing, learn/save the peer MAC, filter
+// crosstalk) and reports the bind status fact on pairing_complete.
+// 旧 vehicle の相互 MAC 学習を踏襲（controller_comm.cpp）。PairingState は StateManager が
+// 所有し pairing_state で発行する。本無線層は実行のみ（Pairing 中の送出、相手 MAC の学習/保存、
+// 混信フィルタ）を行い、バインド状態の事実を pairing_complete で報告する。
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// servicePairing — drive the handshake from the StateManager's PairingState.
+// servicePairing — StateManager の PairingState に従ってハンドシェイクを駆動する。
+//
+// Called every update() (50Hz). Detects the rising edge into Pairing (a re-pair
+// request: clear any existing bind so a new controller can take over), then while
+// Pairing broadcasts a PairingPacket every kPairingBroadcastMs.
+// update() ごと（50Hz）に呼ばれる。Pairing への立ち上がりエッジ（再ペア要求: 既存バインドを
+// 破棄し新しい相手を受け入れる）を検出し、Pairing 中は kPairingBroadcastMs ごとに送出する。
+// -----------------------------------------------------------------------------
+void Comm::servicePairing()
+{
+    // Read the StateManager's decision. Default-init is NotPaired (state 0), so
+    // before the StateManager ever publishes we stay inert (no broadcast).
+    // StateManager の決定を読む。既定値は NotPaired(state 0) ゆえ、StateManager が
+    // 一度も発行する前は不活性（送出しない）。
+    const PairingStatus status = pairing_state.latest();
+    const bool now_active =
+        (status.state == static_cast<uint8_t>(PairingState::Pairing));
+
+    // Rising edge into Pairing = (re-)pair request. Discard any existing bind so
+    // a different controller can take over, and force an immediate broadcast.
+    // Pairing への立ち上がり = （再）ペア要求。既存バインドを破棄して別の相手を受け入れ可能に
+    // し、即時送出させる。
+    if (now_active && !prev_pairing_active_) {
+        if (paired_.load(std::memory_order_acquire)) {
+            clearPairingFromNvs();
+            esp_now_del_peer(controller_mac_);
+            std::memset(controller_mac_, 0, sizeof(controller_mac_));
+            paired_.store(false, std::memory_order_release);
+            publishBindStatus(false, /*restored=*/false);
+            ESP_LOGI(TAG, "Re-pairing: cleared existing bind");
+        }
+        last_pairing_bcast_us_ = 0;  // force immediate broadcast below / 即時送出
+    }
+    prev_pairing_active_ = now_active;
+    pairing_active_.store(now_active, std::memory_order_release);
+
+    if (!now_active) {
+        return;
+    }
+
+    // While searching, broadcast a PairingPacket every kPairingBroadcastMs.
+    // 探索中は kPairingBroadcastMs ごとに PairingPacket を broadcast する。
+    const int64_t now_us = esp_timer_get_time();
+    if (last_pairing_bcast_us_ == 0 ||
+        (now_us - last_pairing_bcast_us_) >=
+            static_cast<int64_t>(kPairingBroadcastMs) * 1000) {
+        sendPairingPacket();
+        last_pairing_bcast_us_ = now_us;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// sendPairingPacket — broadcast {channel, own MAC, signature} (11 bytes).
+// sendPairingPacket — {channel, 自MAC, 署名}（11バイト）を broadcast する。
+// -----------------------------------------------------------------------------
+void Comm::sendPairingPacket()
+{
+    uint8_t packet[kPairingPacketSize];
+    packet[0] = kWifiChannel;                                   // byte 0   : channel
+    std::memcpy(&packet[1], own_mac_, 6);                       // bytes 1-6: our MAC
+    std::memcpy(&packet[7], kPairingSignature,                  // bytes 7-10: signature
+                sizeof(kPairingSignature));
+
+    const esp_err_t ret = esp_now_send(kBroadcastMac, packet, sizeof(packet));
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Pairing broadcast failed: %s", esp_err_to_name(ret));
+    }
+}
+
+// -----------------------------------------------------------------------------
+// handleControlPacket — bind during Pairing, else filter crosstalk and forward.
+// handleControlPacket — Pairing 中はバインド、それ以外は混信をフィルタして転送。
+// -----------------------------------------------------------------------------
+void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
+{
+    // Pairing in progress: the first ControlPacket from a controller fixes it as
+    // our peer (mutual MAC learning). The binding packet is NOT fed to control.
+    // ペアリング中: コントローラからの最初の ControlPacket で相手を確定（相互 MAC 学習）。
+    // バインド用パケットは制御へ渡さない。
+    if (pairing_active_.load(std::memory_order_acquire)) {
+        if (src_mac == nullptr) {
+            return;  // no sender MAC -> cannot bind / 送信元MACなし
+        }
+        const bool already_bound = paired_.load(std::memory_order_acquire);
+        if (!already_bound || std::memcmp(src_mac, controller_mac_, 6) != 0) {
+            std::memcpy(controller_mac_, src_mac, 6);
+            paired_.store(true, std::memory_order_release);
+            savePairingToNvs(controller_mac_);
+            addUnicastPeer(controller_mac_);
+            publishBindStatus(true, /*restored=*/false);
+            ESP_LOGI(TAG, "Paired with %02X:%02X:%02X:%02X:%02X:%02X",
+                     controller_mac_[0], controller_mac_[1], controller_mac_[2],
+                     controller_mac_[3], controller_mac_[4], controller_mac_[5]);
+        }
+        return;  // do not forward during pairing / ペアリング中は転送しない
+    }
+
+    // Paired: drop ControlPackets from any controller other than our peer.
+    // ペア済み: 相手以外のコントローラからの ControlPacket は破棄する。
+    if (paired_.load(std::memory_order_acquire) && src_mac != nullptr &&
+        std::memcmp(src_mac, controller_mac_, 6) != 0) {
+        return;  // crosstalk from another transmitter / 他送信機の混信
+    }
+
+    forwardRawInput(pkt);
+}
+
+// -----------------------------------------------------------------------------
+// addUnicastPeer — register the controller as a unicast peer (for sending to it).
+// addUnicastPeer — コントローラをユニキャスト peer として登録する（送信用）。
+// -----------------------------------------------------------------------------
+void Comm::addUnicastPeer(const uint8_t mac[6])
+{
+    esp_now_peer_info_t peer{};
+    std::memcpy(peer.peer_addr, mac, 6);
+    peer.channel = kWifiChannel;
+    peer.encrypt = false;
+    peer.ifidx   = WIFI_IF_STA;
+    esp_now_del_peer(mac);  // remove a stale entry first (ignore "not found")
+    const esp_err_t ret = esp_now_add_peer(&peer);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Unicast peer add failed: %s", esp_err_to_name(ret));
+    }
+}
+
+// -----------------------------------------------------------------------------
+// publishBindStatus — publish the current bind status fact (pairing_complete).
+// publishBindStatus — 現在のバインド状態の事実を発行する（pairing_complete）。
+// -----------------------------------------------------------------------------
+void Comm::publishBindStatus(bool bound, bool restored)
+{
+    PairingComplete pc{};
+    std::memcpy(pc.controller_mac, controller_mac_, 6);
+    pc.bound     = bound;
+    pc.restored  = restored;
+    pc.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    pairing_complete.publish(pc);
+}
+
+// -----------------------------------------------------------------------------
+// NVS pairing persistence — namespace "sf_pair", key "ctrl_mac" (6-byte blob).
+// NVS ペアリング永続化 — namespace "sf_pair", key "ctrl_mac"（6バイトブロブ）。
+// -----------------------------------------------------------------------------
+void Comm::loadPairingFromNvs()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kPairingNvsNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return;  // namespace absent -> never paired / 未ペア
+    }
+    uint8_t mac[6] = {0};
+    size_t len = sizeof(mac);
+    const esp_err_t ret = nvs_get_blob(handle, kPairingNvsKey, mac, &len);
+    nvs_close(handle);
+    if (ret == ESP_OK && len == 6) {
+        std::memcpy(controller_mac_, mac, 6);
+        paired_.store(true, std::memory_order_release);
+    }
+}
+
+void Comm::savePairingToNvs(const uint8_t mac[6])
+{
+    nvs_handle_t handle;
+    if (nvs_open(kPairingNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        ESP_LOGW(TAG, "NVS open (save pairing) failed");
+        return;
+    }
+    nvs_set_blob(handle, kPairingNvsKey, mac, 6);
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+void Comm::clearPairingFromNvs()
+{
+    nvs_handle_t handle;
+    if (nvs_open(kPairingNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    nvs_erase_key(handle, kPairingNvsKey);
+    nvs_commit(handle);
+    nvs_close(handle);
 }
 
 // =============================================================================

@@ -47,6 +47,8 @@ Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<SystemMode,      Latest, 1>      system_mode;
 Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
+Topic<PairingStatus,   Latest, 1>      pairing_state;
+Topic<PairingComplete, Latest, 1>      pairing_complete;
 Topic<EstimatorCommand,  Queue, 4>     estimator_command;
 Topic<ControllerCommand, Queue, 4>     controller_command;
 Topic<NotifyCommand,     Queue, 8>     notify_command;
@@ -71,6 +73,8 @@ void topics_init()
     system_mode.init();
     system_alert.init();
     system_status.init();
+    pairing_state.init();
+    pairing_complete.init();
     estimator_command.init();
     controller_command.init();
     notify_command.init();

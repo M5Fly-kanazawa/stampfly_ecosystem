@@ -113,7 +113,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 17 | `notify_command` | `NotifyCommand` | Queue | 8 | StateManager / Failsafe | NotifyTask | event | LED/ブザー通知指令（arm/disarm 音等。配線は Phase 6） |
 | 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6） |
 | 19 | `pairing_state` | `PairingStatus` | Latest | 1 | StateTask (StateManager) | CommTask, NotifyTask | event | 現在の PairingState（NotPaired/Pairing/Paired）。comm が送出制御、notify が LED/ブザー表示 |
-| 20 | `pairing_complete` | `PairingComplete` | Queue | 2 | CommTask (ESP-NOW recv) | StateTask | event | Pairing 中に相手 ControlPacket を受信した事実（学習した送信機 src MAC） |
+| 20 | `pairing_complete` | `PairingComplete` | Latest | 1 | CommTask (ESP-NOW recv / NVS load) | StateTask | event | comm の現在のバインド状態（bound + 学習/復元した送信機 MAC）。起動時の NVS 復元と Pairing 成立の両方を運ぶ |
 
 ### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 

@@ -100,6 +100,58 @@ public:
     void setRawInputSink(RawInputSink sink) { raw_sink_ = sink; }
 
 private:
+    // -------------------------------------------------------------------------
+    // Pairing (transmitter↔vehicle binding, crosstalk prevention)
+    // ペアリング（送信機↔機体のバインド、混信対策）
+    //
+    // Mutual MAC learning handshake, following the legacy vehicle. While the
+    // StateManager has us in PairingState::Pairing (read each update() from the
+    // pairing_state topic), we broadcast a PairingPacket advertising our own MAC
+    // every kPairingBroadcastMs. The controller learns it and unicasts a
+    // ControlPacket back; the first one fixes the controller's src MAC as our peer
+    // (saved to NVS). When paired, ControlPackets from any other MAC are dropped.
+    //
+    // 相互 MAC 学習ハンドシェイク（旧 vehicle 踏襲）。StateManager が PairingState::Pairing
+    // にしている間（pairing_state トピックを update() ごとに読む）、自 MAC を広告する
+    // PairingPacket を kPairingBroadcastMs ごとに broadcast する。コントローラがそれを学習し
+    // ControlPacket をユニキャストで返す。最初の1通の src MAC を相手として確定（NVS保存）。
+    // ペア後は他 MAC の ControlPacket を破棄する。
+    //
+    // @design requirements.md §2/§7 — Pairing                              [OK]
+    // @design detailed_design.md §3 — Pairing state transitions            [OK]
+    // -------------------------------------------------------------------------
+
+    /// Read the latest PairingState (pairing_state topic) and act on edges:
+    /// entering Pairing clears any existing bind (re-pair) and forces an immediate
+    /// broadcast; while Pairing, broadcast a PairingPacket every kPairingBroadcastMs.
+    /// 最新の PairingState（pairing_state トピック）を読み、エッジで動作する: Pairing 突入で
+    /// 既存バインドを破棄（再ペア）し即時送出、Pairing 中は kPairingBroadcastMs ごとに送出。
+    void servicePairing();
+
+    /// Broadcast one PairingPacket {channel, own MAC, signature} to FF:FF:FF:FF:FF:FF.
+    /// PairingPacket {channel, 自MAC, 署名} を1通 broadcast する。
+    void sendPairingPacket();
+
+    /// Handle a checksum-valid ControlPacket: bind during Pairing, else filter by
+    /// peer MAC (drop crosstalk) and forward. src_mac is the ESP-NOW sender MAC.
+    /// チェックサム検証済み ControlPacket を処理: Pairing 中はバインド、それ以外は相手 MAC で
+    /// フィルタ（混信を破棄）して転送。src_mac は ESP-NOW 送信元 MAC。
+    void handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac);
+
+    /// Register the controller as a unicast peer (so we can also send to it).
+    /// コントローラをユニキャスト peer として登録する（こちらからも送れるように）。
+    void addUnicastPeer(const uint8_t mac[6]);
+
+    /// Publish the current bind status as a fact (pairing_complete topic).
+    /// 現在のバインド状態を事実として発行する（pairing_complete トピック）。
+    void publishBindStatus(bool bound, bool restored);
+
+    /// NVS pairing persistence (namespace kPairingNvsNamespace, key kPairingNvsKey).
+    /// NVS ペアリング永続化（namespace kPairingNvsNamespace, key kPairingNvsKey）。
+    void loadPairingFromNvs();
+    void savePairingToNvs(const uint8_t mac[6]);
+    void clearPairingFromNvs();
+
     /// Static ESP-NOW receive callback (runs in WiFi task context).
     /// 静的 ESP-NOW 受信コールバック（WiFi タスクコンテキストで実行）。
     static void onEspNowRecv(const esp_now_recv_info_t* info,
@@ -126,9 +178,33 @@ private:
     /// 閾値と一致しており、50Hz 送信周期に対して十分余裕がある。
     static constexpr uint32_t kLinkTimeoutMs = 500;
 
+    /// PairingPacket broadcast period while searching. 500ms matches the legacy
+    /// vehicle (controller_comm.cpp tick) and the controller's channel-scan dwell.
+    /// 探索中の PairingPacket 送出周期。500ms は旧 vehicle と一致し、コントローラの
+    /// チャンネルスキャン滞留と整合する。
+    static constexpr uint32_t kPairingBroadcastMs = 500;
+
+    /// NVS location for the paired controller MAC (separate from sf_params).
+    /// ペア済みコントローラ MAC の NVS 保存先（sf_params とは別 namespace）。
+    static constexpr const char* kPairingNvsNamespace = "sf_pair";
+    static constexpr const char* kPairingNvsKey       = "ctrl_mac";
+
     bool espnow_connected_ = false;          // Link status / リンク状態
     std::atomic<int64_t> last_packet_us_{0}; // esp_timer_get_time() at last
                                              //   valid recv / 最終有効受信時刻
+
+    // Pairing state. own_mac_ is read once at init. pairing_active_ and paired_ are
+    // written by CommTask (servicePairing) / the recv callback and read by both, so
+    // they are atomic. controller_mac_ is written only when (re-)binding.
+    // ペアリング状態。own_mac_ は init で一度読む。pairing_active_ と paired_ は CommTask
+    // （servicePairing）/ 受信コールバックが書き両者が読むため atomic。controller_mac_ は
+    // （再）バインド時のみ書く。
+    uint8_t own_mac_[6] = {0};               // this vehicle's STA MAC / 自機 STA MAC
+    uint8_t controller_mac_[6] = {0};        // bound transmitter MAC  / バインド済み送信機MAC
+    std::atomic<bool> paired_{false};        // bound to a controller  / 相手にバインド済み
+    std::atomic<bool> pairing_active_{false};// StateMgr has us searching / 探索中
+    bool prev_pairing_active_ = false;       // for rising-edge detect  / 立ち上がり検出用
+    int64_t last_pairing_bcast_us_ = 0;      // last PairingPacket send / 最終送出時刻
 
     /// Sink injected by CommTask; called with each validated raw input fact at
     /// packet time. Set once before init(), then only read by the recv path.

@@ -82,6 +82,14 @@ extern Topic<SystemAlert,     Queue, 4>       system_alert;
 extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
 
 // =============================================================================
+// Pairing Topics — transmitter↔vehicle binding (crosstalk prevention)
+// ペアリングトピック — 送信機↔機体のバインド（混信対策）
+// =============================================================================
+
+extern Topic<PairingStatus,   Latest, 1>      pairing_state;     // decided PairingState (StateMgr → comm/notify)
+extern Topic<PairingComplete, Latest, 1>      pairing_complete;  // comm bind status fact (comm → StateMgr)
+
+// =============================================================================
 // Transition Command Topics — reset commands (StateManager callbacks → owning task)
 // 遷移コマンドトピック — リセット指令（StateManager コールバック → 所有タスク）
 //

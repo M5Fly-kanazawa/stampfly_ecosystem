@@ -253,6 +253,63 @@ struct SystemStatus {
 };
 
 // =============================================================================
+// Pairing — transmitter↔vehicle binding (crosstalk prevention)
+// ペアリング — 送信機↔機体のバインド（混信対策）
+//
+// PairingState is a SEPARATE state machine, parallel to FlightState, single-owned
+// by the StateManager (architecture.md §4). Two topics carry the split of duties:
+//   - pairing_state    (StateManager → comm/notify): the decided PairingState.
+//   - pairing_complete (comm → StateManager): comm's current bind status fact.
+// The handshake follows the legacy vehicle: the vehicle broadcasts a PairingPacket
+// advertising its own MAC; the controller learns it and unicasts ControlPackets to
+// that MAC; the vehicle fixes the received src MAC as its peer (mutual MAC learning).
+//
+// PairingState は FlightState と並行する別の状態機械で、StateManager が単一所有する
+// （architecture.md §4）。責務分担を2トピックで運ぶ:
+//   - pairing_state    (StateManager → comm/notify): 決定された PairingState。
+//   - pairing_complete (comm → StateManager): comm の現在のバインド状態という事実。
+// ハンドシェイクは旧 vehicle 踏襲: 機体が自 MAC を広告する PairingPacket を broadcast し、
+// コントローラがそれを学習して機体 MAC へ ControlPacket をユニキャスト送信、機体は受信した
+// src MAC を相手として確定する（相互 MAC 学習）。
+//
+// @design requirements.md §2 — PairingState                            [OK]
+// @design architecture.md §4 — Pairing positioning (parallel to FSM)   [OK]
+// @design detailed_design.md §3 — Pairing state transitions            [OK]
+// =============================================================================
+
+/// Pairing state — parallel to FlightState, owned by StateManager
+/// ペアリング状態 — FlightState と並行、StateManager が所有
+enum class PairingState : uint8_t {
+    NotPaired = 0,   // no bound controller (nothing in NVS)  / 未ペア（NVS保存なし）
+    Pairing   = 1,   // searching; broadcasting PairingPacket / 探索中（PairingPacket送出）
+    Paired    = 2,   // peer MAC fixed (saved in NVS)         / ペア確定（NVS保存済）
+};
+
+/// Pairing status — StateManager publishes the decided PairingState; comm reads it
+/// to gate PairingPacket broadcast, notify reads it to drive the pairing LED/buzzer.
+/// ペアリング状態 — StateManager が決定した PairingState を発行。comm は PairingPacket 送出の
+/// ゲートに、notify は LED/ブザー駆動に読む。
+struct PairingStatus {
+    uint8_t  state;       // PairingState value            / PairingState の値
+    uint32_t timestamp;   // [us]; 0 = never published     / 0=未発行
+};
+
+/// Pairing bind status — comm's fact about whether it is bound to a controller and
+/// to which MAC. Published at boot (NVS restore: restored=true) and on live pairing
+/// completion (restored=false), and again with bound=false when the bind is cleared
+/// (re-pair). StateManager reads it to decide Paired vs (Pairing/NotPaired).
+/// ペアリングのバインド状態 — comm が「相手にバインド済みか・どの MAC か」を報告する事実。
+/// 起動時（NVS 復元: restored=true）と Pairing 成立時（restored=false）に発行し、バインド解除
+/// （再ペア）時は bound=false で再発行する。StateManager は Paired か（Pairing/NotPaired）かの
+/// 判断に読む。
+struct PairingComplete {
+    uint8_t  controller_mac[6];  // learned/restored transmitter MAC / 学習・復元した送信機MAC
+    bool     bound;              // true: bound to a controller       / 相手にバインド済み
+    bool     restored;           // true: restored from NVS at boot   / 起動時のNVS復元
+    uint32_t timestamp;          // [us]; 0 = never published         / 0=未発行
+};
+
+// =============================================================================
 // Transition Command Topics — reset commands issued by StateManager callbacks
 // 遷移コマンドトピック — StateManager コールバックが発行するリセット指令
 //
@@ -334,6 +391,7 @@ enum class NotifyEvent : uint8_t {
     LowBattery  = 3,   // low-battery warning          / 低電圧警告
     Calibrating = 4,   // calibration in progress      / 校正中
     Ready       = 5,   // ready to arm                 / ARM 可能
+    PairingMode = 6,   // pairing started (one-shot tone)/ ペアリング開始（単発音）
 };
 
 /// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)

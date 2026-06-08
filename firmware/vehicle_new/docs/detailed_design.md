@@ -188,8 +188,9 @@ FlightState とは別の独立状態機械。StateManager が所有する（[`ar
 **ガード:** Pairing 中は `requestArm` を拒否（StateManager）。突入は地上（IDLE_GROUND）のみ。
 
 **トピック:**
-- `pairing_state`（StateManager → comm / notify）: 現在の PairingState を周知。
-- `pairing_complete`（comm → StateManager）: Pairing 中に相手 ControlPacket を受信した事実（src MAC）。
+- `pairing_state`（Latest, StateManager → comm / notify）: 現在の PairingState を周知。
+- `pairing_complete`（Latest, comm → StateManager）: comm の現在のバインド状態（bound + 学習/復元した
+  送信機 MAC）。起動時の NVS 復元（restored=true）と Pairing 成立（restored=false）の両方を運ぶ。
 
 ## 4. 制御インターフェース定義
 
