@@ -38,6 +38,7 @@ Topic<FlowData,        Queue, 2>       sensor_flow;
 Topic<MagData,         Queue, 2>       sensor_mag;
 Topic<BaroData,        Queue, 2>       sensor_baro;
 Topic<PowerData,       Latest, 1>      sensor_power;
+Topic<SensorSnapshot,  Latest, 1>      sensor_snapshot;
 Topic<StateEstimate,   Latest, 1>      estimate_state;
 Topic<CommandSetpoint, Latest, 1>      command_setpoint;
 Topic<PilotRequest,    Latest, 1>      pilot_request;
@@ -64,6 +65,7 @@ void topics_init()
     sensor_mag.init();
     sensor_baro.init();
     sensor_power.init();
+    sensor_snapshot.init();
     estimate_state.init();
     command_setpoint.init();
     pilot_request.init();

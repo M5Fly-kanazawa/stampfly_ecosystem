@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>     // quaternion → euler for `status`/`sensor`
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -155,8 +156,32 @@ int cmd_param(int argc, char** argv)
     return 0;
 }
 
-/// `status` — flight state / mode / arm, battery, and sensor-health masks.
-/// `status` — フライト状態/モード/ARM、電池、センサ健全性マスク。
+/// Human-readable PairingState name (NotPaired/Pairing/Paired).
+/// PairingState の名前（NotPaired/Pairing/Paired）。
+const char* pairingStateName(uint8_t state)
+{
+    switch (static_cast<sf::PairingState>(state)) {
+        case sf::PairingState::Pairing: return "Pairing";
+        case sf::PairingState::Paired:  return "Paired";
+        default:                        return "NotPaired";
+    }
+}
+
+/// Convert an attitude quaternion [w,x,y,z] to roll/pitch/yaw in DEGREES (ZYX).
+/// 姿勢クォータニオン [w,x,y,z] を roll/pitch/yaw（度, ZYX）へ変換する。
+void quatToEulerDeg(const float q[4], float& roll, float& pitch, float& yaw)
+{
+    const float w = q[0], x = q[1], y = q[2], z = q[3];
+    const float kRad2Deg = 57.29578f;
+    roll  = std::atan2(2.0f * (w * x + y * z), 1.0f - 2.0f * (x * x + y * y)) * kRad2Deg;
+    float sinp = 2.0f * (w * y - z * x);
+    sinp = (sinp > 1.0f) ? 1.0f : (sinp < -1.0f ? -1.0f : sinp);  // clamp for asin
+    pitch = std::asin(sinp) * kRad2Deg;
+    yaw   = std::atan2(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z)) * kRad2Deg;
+}
+
+/// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors.
+/// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ。
 int cmd_status(int argc, char** argv)
 {
     (void)argc;
@@ -164,14 +189,92 @@ int cmd_status(int argc, char** argv)
     const sf::SystemMode mode = sf::system_mode.latest();
     const sf::PowerData power = sf::sensor_power.latest();
     const sf::SensorHealth health = sf::sensor_health.latest();
+    const sf::PairingStatus pairing = sf::pairing_state.latest();
+    const sf::StateEstimate est = sf::estimate_state.latest();
+    float roll, pitch, yaw;
+    quatToEulerDeg(est.attitude, roll, pitch, yaw);
     std::printf("state   : %s\n",
                 sf::flightStateName(static_cast<sf::FlightState>(mode.state)));
     std::printf("mode    : %s\n",
                 sf::flightModeName(static_cast<sf::FlightMode>(mode.sub_mode)));
     std::printf("armed   : %s\n", mode.armed ? "yes" : "no");
+    std::printf("pairing : %s\n", pairingStateName(pairing.state));
+    std::printf("attitude: roll %.1f  pitch %.1f  yaw %.1f  deg\n", roll, pitch, yaw);
+    std::printf("altitude: %.2f m (ESKF)\n", -est.position[2]);  // NED: up = -z
     std::printf("battery : %.2f V, %.0f mA\n", power.voltage, power.current);
     std::printf("sensors : present=0x%02X healthy=0x%02X\n",
                 health.present_mask, health.healthy_mask);
+    return 0;
+}
+
+/// `sensor [imu|mag|baro|tof|flow|power|all]` — print the latest reading of one (or all)
+/// sensors. Reads the sensor_* topics directly (read-only fact display, like status).
+/// `sensor [imu|mag|baro|tof|flow|power|all]` — 1つ（または全部）のセンサの最新値を表示。
+/// sensor_* トピックを直接読む（status と同じ読み取り専用の事実表示）。
+int cmd_sensor(int argc, char** argv)
+{
+    const char* which = (argc >= 2) ? argv[1] : "all";
+    const bool all = (std::strcmp(which, "all") == 0);
+
+    // IMU (RingBuffer) and power (Latest) expose a non-consuming latest(). The async
+    // sensors (mag/baro/tof/flow) are SPSC queues consumed by ImuTask, so we read their
+    // mirrored values from sensor_snapshot (Latest) instead of stealing from the queues.
+    // IMU(RingBuffer)と power(Latest)は非消費の latest() を持つ。非同期センサ(mag/baro/tof/
+    // flow)は ImuTask が消費する SPSC キューなので、奪わずに sensor_snapshot(Latest)のミラーを読む。
+    const sf::SensorSnapshot snap = sf::sensor_snapshot.latest();
+
+    if (all || std::strcmp(which, "imu") == 0) {
+        const sf::ImuData d = sf::sensor_imu.latest();
+        std::printf("imu  : accel[%.2f %.2f %.2f] m/s2  gyro[%.3f %.3f %.3f] rad/s  %.1fC\n",
+                    d.accel[0], d.accel[1], d.accel[2], d.gyro[0], d.gyro[1], d.gyro[2],
+                    d.temperature);
+    }
+    if (all || std::strcmp(which, "mag") == 0) {
+        std::printf("mag  : [%.1f %.1f %.1f] uT\n", snap.mag[0], snap.mag[1], snap.mag[2]);
+    }
+    if (all || std::strcmp(which, "baro") == 0) {
+        std::printf("baro : %.1f Pa  alt %.2f m\n", snap.baro_pressure, snap.baro_altitude);
+    }
+    if (all || std::strcmp(which, "tof") == 0) {
+        std::printf("tof  : %.3f m  status=%u valid=%s\n", snap.tof_distance, snap.tof_status,
+                    snap.tof_valid ? "yes" : "no");
+    }
+    if (all || std::strcmp(which, "flow") == 0) {
+        std::printf("flow : dx=%d dy=%d squal=%u\n", snap.flow_dx, snap.flow_dy, snap.flow_squal);
+    }
+    if (all || std::strcmp(which, "power") == 0) {
+        const sf::PowerData d = sf::sensor_power.latest();
+        std::printf("power: %.2f V  %.0f mA  %.0f mW\n", d.voltage, d.current, d.power);
+    }
+    return 0;
+}
+
+/// `version` — firmware name + build date/time.
+/// `version` — ファーム名＋ビルド日時。
+int cmd_version(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    std::printf("StampFly vehicle_new firmware\n");
+    std::printf("build : %s %s\n", __DATE__, __TIME__);
+    return 0;
+}
+
+/// `unpair` — clear the stored controller pairing and re-enter Pairing so a (new)
+/// transmitter can bind. Publishes a LongPress3s button gesture FACT — the same path
+/// as a 3 s button hold — so the StateManager decides (no cross-task coupling).
+/// `unpair` — 保存済みペアリングを破棄し Pairing に再突入して（新しい）送信機がバインドできる
+/// ようにする。LongPress3s ジェスチャの事実を発行（ボタン長押し3秒と同一経路）し、StateManager
+/// が判断する（タスク間結合なし）。
+int cmd_unpair(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    sf::ButtonEvent ev{};
+    ev.gesture   = static_cast<uint8_t>(sf::ButtonGesture::LongPress3s);
+    ev.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::button_event.publish(ev);
+    std::printf("unpair requested — clearing bind, re-entering pairing (on the ground)\n");
     return 0;
 }
 
@@ -247,10 +350,13 @@ struct CliCommand {
 };
 
 const CliCommand kCommands[] = {
-    {"param",  "param [list|get <name>|set <name> <value>|save]", &cmd_param},
-    {"status", "Show flight state, battery and sensor health",    &cmd_status},
-    {"pair",   "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
-    {"reboot", "Reboot the flight controller",                    &cmd_reboot},
+    {"param",   "param [list|get <name>|set <name> <value>|save]", &cmd_param},
+    {"status",  "Show flight state, pairing, attitude, battery, sensors", &cmd_status},
+    {"sensor",  "sensor [imu|mag|baro|tof|flow|power|all] — print readings", &cmd_sensor},
+    {"version", "Show firmware version / build date",            &cmd_version},
+    {"pair",    "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
+    {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
+    {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
 };
 
 void registerCommands()

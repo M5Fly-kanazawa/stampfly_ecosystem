@@ -41,6 +41,7 @@ extern Topic<FlowData,        Queue, 2>       sensor_flow;
 extern Topic<MagData,         Queue, 2>       sensor_mag;
 extern Topic<BaroData,        Queue, 2>       sensor_baro;
 extern Topic<PowerData,       Latest, 1>      sensor_power;
+extern Topic<SensorSnapshot,  Latest, 1>      sensor_snapshot;  // ImuTask mirror of async sensors (CLI/telemetry peek)
 
 // =============================================================================
 // Estimation Topics

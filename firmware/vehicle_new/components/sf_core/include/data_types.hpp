@@ -86,6 +86,25 @@ struct PowerData {
     uint32_t timestamp;   // [us]
 };
 
+/// Latest raw async-sensor readings, mirrored by ImuTask (the SPSC queue consumer)
+/// into a Latest topic so monitors (CLI `sensor`, telemetry) can peek WITHOUT stealing
+/// from the sensor_tof/flow/mag/baro queues (single-consumer SPSC). Updated each cycle.
+/// 非同期センサの最新生値。ImuTask（SPSC キューの単一 consumer）が Latest トピックへミラーし、
+/// 監視側（CLI `sensor`・テレメトリ）が sensor_tof/flow/mag/baro キューから奪わず覗けるように
+/// する。毎サイクル更新。
+struct SensorSnapshot {
+    float    mag[3];          // Magnetometer [uT]        / 地磁気
+    float    baro_pressure;   // Barometer pressure [Pa]  / 気圧
+    float    baro_altitude;   // Pressure altitude [m]    / 気圧高度
+    float    tof_distance;    // ToF distance [m]         / ToF 距離
+    uint8_t  tof_status;      // ToF status code          / ToF ステータス
+    bool     tof_valid;       // ToF validity             / ToF 有効
+    int16_t  flow_dx;         // Optical flow dx [counts] / フロー dx
+    int16_t  flow_dy;         // Optical flow dy [counts] / フロー dy
+    uint8_t  flow_squal;      // Flow surface quality     / フロー品質
+    uint32_t timestamp;       // [us]
+};
+
 // =============================================================================
 // Estimation Data Types
 // 推定データ型

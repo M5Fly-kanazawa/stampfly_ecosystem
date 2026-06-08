@@ -177,6 +177,14 @@ static void processAsyncSensors()
     const sf::SystemMode mode = sf::system_mode.latest();
     const bool armed = sf::isArmed(static_cast<sf::FlightState>(mode.state));
 
+    // Mirror the latest consumed async-sensor values into sensor_snapshot (Latest) so
+    // monitors (CLI `sensor`, telemetry) can peek without stealing from these SPSC
+    // queues. Persisted across cycles so a slow sensor keeps its last value visible.
+    // 消費した非同期センサの最新値を sensor_snapshot(Latest) にミラーし、監視側（CLI/テレ）が
+    // SPSC キューから奪わず覗けるようにする。低レートセンサの最終値を保つよう周期跨ぎで保持。
+    static sf::SensorSnapshot snap{};
+    bool snap_dirty = false;
+
     sf::TofData tof;
     while (sf::sensor_tof.read(tof)) {
         g_estimator->updateTof(tof);
@@ -188,21 +196,36 @@ static void processAsyncSensors()
         // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
         // 関数に保つ（マネージャ内でトピックを読まない）。
         g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2]);
+        snap.tof_distance = tof.distance;
+        snap.tof_status   = tof.status;
+        snap.tof_valid    = tof.valid;
+        snap_dirty = true;
     }
 
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
         g_estimator->updateFlow(flow);
+        snap.flow_dx = flow.dx; snap.flow_dy = flow.dy; snap.flow_squal = flow.squal;
+        snap_dirty = true;
     }
 
     sf::MagData mag;
     while (sf::sensor_mag.read(mag)) {
         g_estimator->updateMag(mag);
+        snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
+        snap_dirty = true;
     }
 
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
         g_estimator->updateBaro(baro);
+        snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
+        snap_dirty = true;
+    }
+
+    if (snap_dirty) {
+        snap.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        sf::sensor_snapshot.publish(snap);
     }
 }
 
