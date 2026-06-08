@@ -160,7 +160,8 @@ Level 3: Optional sensors
   - BMP280 Baro → 高度推定の補助、失敗時は flag-only
 
 Level 4: Communication infrastructure
-  - WiFi STA netif の生成（実体は sf_comm が後で esp_wifi_init を呼ぶ）
+  - WiFi STA netif の生成（sf_board が所有・生成。R1: esp_netif の唯一の所有者は
+    sf_board。sf_comm は board::sta_netif() を借用し esp_wifi_init/start のみ行う）
 
 Level 5: Health publish
   - sensor_health Topic に初期 snapshot を publish
@@ -173,8 +174,9 @@ Level 5: Health publish
 nvs_flash_init  ──→  esp_event_loop  ──→  esp_netif_init
                                                 │
                                                 ▼
-                                         (sf_comm が後で
-                                          WiFi STA を作成)
+                                    esp_netif_create_default_wifi_sta
+                                    (sf_board が生成・所有; sf_comm は
+                                     後で esp_wifi_init/start のみ)
 
 i2c_master_bus  ─┬─→  BMP280  ─┐
                  ├─→  BMM150   │
