@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Kouhei Ito — StampFly Ecosystem SIL GUI.
+  Single-page app: scenario builder + parameter panel + interactive graphs + live 3D.
+  Served by simulator/sil/gui/server.py via `sf sil gui`.
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>StampFly SIL GUI</title>
+<link rel="stylesheet" href="/style.css" />
+<!-- Plotly (interactive graphs) + three.js (live 3D). CDN, like the project landing page. -->
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.30.0/plotly.min.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">StampFly <span class="grad">SIL</span> GUI</div>
+  <div class="run-controls">
+    <label>シナリオ
+      <select id="scnSelect" title="保存済みシナリオ"></select>
+    </label>
+    <label>時間[s]
+      <input id="durSec" type="number" min="1" max="120" step="1" value="25" />
+    </label>
+    <label>ノイズ
+      <select id="noiseSel">
+        <option value="off">off</option>
+        <option value="n0">n0</option>
+        <option value="n1">n1</option>
+        <option value="n2">n2</option>
+      </select>
+    </label>
+    <label class="chk"><input id="battChk" type="checkbox" checked /> 電池モデル</label>
+    <button id="runBtn" class="primary">▶ 実行</button>
+    <span id="verdict" class="verdict"></span>
+  </div>
+</header>
+
+<main id="layout">
+  <!-- LEFT: tabs (scenario builder / parameters) -->
+  <section id="left">
+    <div class="tabs">
+      <button class="tab active" data-tab="builder">シナリオ作成</button>
+      <button class="tab" data-tab="params">パラメータ</button>
+    </div>
+
+    <div id="tab-builder" class="tabpane active">
+      <div class="hint">タイムラインにイベントを足して機体の動きを作ります。<code>+</code>＝直前イベントの後。</div>
+      <div id="eventList"></div>
+      <div class="addrow">
+        <select id="addType">
+          <option value="rc">rc（スティック）</option>
+          <option value="rc_ramp">rc_ramp（掃引）</option>
+          <option value="wind">wind（外乱風）</option>
+          <option value="fault">fault（モータ故障）</option>
+          <option value="bias">bias（IMUバイアス）</option>
+          <option value="handle">handle（拾い上げ）</option>
+        </select>
+        <button id="addEventBtn">＋ イベント追加</button>
+      </div>
+      <div class="saverow">
+        <input id="saveName" type="text" placeholder="保存名 (例 my_test)" />
+        <button id="saveBtn">💾 .scn 保存</button>
+        <button id="showScnBtn" class="ghost">.scn を表示</button>
+      </div>
+      <pre id="scnPreview" class="scn-preview" hidden></pre>
+    </div>
+
+    <div id="tab-params" class="tabpane">
+      <div class="hint">変更したパラメータだけが走行に反映されます（再ビルド不要）。
+        <button id="resetParamsBtn" class="ghost small">変更をクリア</button></div>
+      <input id="paramSearch" type="text" placeholder="🔍 パラメータ名で絞り込み" />
+      <div id="paramList"></div>
+    </div>
+  </section>
+
+  <!-- CENTER/RIGHT: 3D + graphs + results -->
+  <section id="right">
+    <div id="viz3d" class="panel">
+      <div class="panel-h">飛行アニメーション <span class="muted">（ドラッグで視点回転 / ホイールでズーム）</span></div>
+      <div id="canvasWrap"><canvas id="scene"></canvas>
+        <div id="scene-msg" class="scene-msg">シナリオを選んで「▶ 実行」を押すと再生されます</div>
+      </div>
+      <div class="player">
+        <button id="playBtn">▶</button>
+        <input id="timeline" type="range" min="0" max="100" value="0" step="1" />
+        <span id="clock" class="clock">0.00 s</span>
+        <label class="chk small"><input id="trailChk" type="checkbox" checked /> 軌跡</label>
+      </div>
+    </div>
+
+    <div id="graphs" class="panel">
+      <div class="panel-h">グラフ <span class="muted">（拡大縮小・ホバーで値表示・時刻カーソル同期）</span></div>
+      <div id="graphAlt" class="graph"></div>
+      <div id="graphAtt" class="graph"></div>
+      <div id="graphMotor" class="graph"></div>
+    </div>
+
+    <div id="results" class="panel">
+      <div class="panel-h">合否ゲート <span id="gateSummary" class="muted"></span></div>
+      <div id="checks"></div>
+      <details id="cliBox"><summary>実行ログ（末尾）</summary><pre id="cliTail"></pre></details>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

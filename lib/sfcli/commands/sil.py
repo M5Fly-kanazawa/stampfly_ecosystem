@@ -116,6 +116,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--fps", type=int, default=50)
     p.set_defaults(func=run_compare)
 
+    # Web GUI: scenario authoring + runs + interactive graphs + live 3D playback.
+    # Web GUI: シナリオ作成＋実行＋インタラクティブグラフ＋ライブ 3D 再生。
+    p = sub.add_parser("gui", help="Launch the SIL Web GUI (scenarios, graphs, 3D playback)")
+    p.add_argument("--port", type=int, default=8765, help="HTTP port (default 8765)")
+    p.add_argument("--no-browser", action="store_true",
+                   help="do not auto-open the browser")
+    p.set_defaults(func=run_gui)
+
     p = sub.add_parser("milestone", help="build → run → video → gate in one shot")
     p.add_argument("-m", "--milestone", default="P1")
     p.add_argument("-e", "--estimator", choices=list(ESTIMATORS), default="eskf")
@@ -446,6 +454,27 @@ def run_scenario(args: argparse.Namespace) -> int:
             else:
                 console.error("render_video.py failed")
     return 0 if verdict else 2
+
+
+def run_gui(args: argparse.Namespace) -> int:
+    """Launch the SIL Web GUI (simulator/sil/gui/server.py). Serves the single-page app and
+    a small JSON API that drives `sf sil scenario` runs and reads the bundles back for the
+    browser (graphs + live 3D). Localhost only. SIL Web GUI を起動。localhost のみ。"""
+    gui_dir = _sil_dir() / "gui"
+    server = gui_dir / "server.py"
+    if not server.exists():
+        console.error(f"GUI server not found: {server}")
+        return 1
+    sys.path.insert(0, str(gui_dir))
+    import importlib
+    mod = importlib.import_module("server")
+    try:
+        mod.serve(port=args.port, open_browser=not args.no_browser)
+    except OSError as e:
+        console.error(f"could not bind port {args.port}: {e} "
+                      f"(try `sf sil gui --port <other>`)")
+        return 1
+    return 0
 
 
 def run_video(args: argparse.Namespace) -> int:
