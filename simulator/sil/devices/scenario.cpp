@@ -32,7 +32,7 @@
 
 namespace {
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle };
 
 struct Event {
     int64_t at_us = 0;        // absolute virtual time (frozen) / 絶対仮想時刻
@@ -70,6 +70,17 @@ struct Event {
     // bias (P2-3): 決定論的な生 IMU バイアス（機体 FRD）、accel[m/s²] + gyro[rad/s]。
     float bias_ax = 0.0f, bias_ay = 0.0f, bias_az = 0.0f;
     float bias_gx = 0.0f, bias_gy = 0.0f, bias_gz = 0.0f;
+
+    // handle (P8): physical handling maneuver — carry altitude [m up], placement
+    // x/y [NED m], and lift/carry/place phase durations [ms]. Instantaneous on the
+    // timeline (triggers the Plant trajectory; surrounding disarmed rc holds keep the
+    // link alive and occupy the maneuver's wall-clock).
+    // handle (P8): 物理ハンドリング動作 — carry 高度[上方m]、設置 x/y[NED m]、lift/carry/
+    // place 各相の所要時間[ms]。タイムライン上は瞬時（Plant 軌道を起動。周囲の disarmed rc
+    // ホールドがリンクを維持し動作の実時間を占有する）。
+    float handle_carry_alt = 0.40f;
+    float handle_place_x = 0.0f, handle_place_y = 0.0f;
+    int   handle_lift_ms = 1500, handle_carry_ms = 1500, handle_place_ms = 1500;
 
     // btn (still deferred): keep raw args for the warn note.
     // btn（未実装）: warn 用に生引数を保持。
@@ -356,6 +367,27 @@ int sil_scenario_load(const char* path)
                 err(path, lineno, "bias needs <ax> <ay> <az> <gx> <gy> <gz>"); return -1;
             }
 
+        } else if (ch == "handle") {
+            // handle <carry_alt_m> <place_x_ned> <place_y_ned> <lift_ms> <carry_ms> <place_ms>
+            // Trigger a physical handling maneuver (lift→right→carry→place). Instantaneous
+            // on the timeline; the maneuver runs in Plant time while the next disarmed rc
+            // hold provides the link + wall-clock.
+            // handle … — 物理ハンドリング動作を起動。タイムライン上は瞬時、動作は Plant 時間で
+            // 進み、次の disarmed rc ホールドがリンクと実時間を与える。
+            e.ch = Channel::Handle;
+            if (!(iss >> e.handle_carry_alt >> e.handle_place_x >> e.handle_place_y
+                      >> e.handle_lift_ms >> e.handle_carry_ms >> e.handle_place_ms)) {
+                err(path, lineno,
+                    "handle needs <carry_alt_m> <place_x> <place_y> <lift_ms> <carry_ms> <place_ms>");
+                return -1;
+            }
+            if (e.handle_carry_alt <= 0.0f) {
+                err(path, lineno, "handle <carry_alt_m> must be > 0"); return -1;
+            }
+            if (e.handle_lift_ms <= 0 || e.handle_carry_ms <= 0 || e.handle_place_ms <= 0) {
+                err(path, lineno, "handle lift/carry/place durations must be > 0 ms"); return -1;
+            }
+
         } else if (ch == "btn") {
             std::string rest; std::getline(iss, rest);
             e.ch = Channel::Btn;
@@ -479,6 +511,25 @@ void sil_scenario_driver_task(void* /*arg*/)
                               e.bias_ax, e.bias_ay, e.bias_az,
                               e.bias_gx, e.bias_gy, e.bias_gz);
                 sil_emu_record_note("bias", note);
+                break;
+            }
+            case Channel::Handle: {
+                // P8: trigger the physical handling maneuver on the Plant (lift→right→
+                // carry→place). Instantaneous here; the maneuver advances in Plant time
+                // while the following disarmed rc holds keep the link alive and provide the
+                // wall-clock. Durations ms → s for the Plant API.
+                // P8: 物理ハンドリング動作を Plant に起動。ここでは瞬時、動作は Plant 時間で
+                // 進み、続く disarmed rc ホールドがリンクを維持し実時間を与える。
+                sil_board_handle_place(e.handle_carry_alt, e.handle_place_x, e.handle_place_y,
+                                       e.handle_lift_ms  * 1e-3f,
+                                       e.handle_carry_ms * 1e-3f,
+                                       e.handle_place_ms * 1e-3f);
+                char note[112];
+                std::snprintf(note, sizeof(note),
+                              "handle carry=%.2fm place=(%.2f,%.2f) lift=%dms carry=%dms place=%dms",
+                              e.handle_carry_alt, e.handle_place_x, e.handle_place_y,
+                              e.handle_lift_ms, e.handle_carry_ms, e.handle_place_ms);
+                sil_emu_record_note("handle", note);
                 break;
             }
             case Channel::Btn:

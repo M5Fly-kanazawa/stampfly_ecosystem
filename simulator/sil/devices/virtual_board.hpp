@@ -85,6 +85,18 @@ void sil_board_set_motor_health(int motor, float gain);
 // オフセットを模擬し、ファーム起動校正に除去対象を与える（P2-3 対照試験）。Plant 未接続なら no-op。
 void sil_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, float gz);
 
+// P8 handling hook (scenario `handle` event → Plant). Begin a physical handling maneuver:
+// the hand lifts the (crashed) craft to carry_alt [m up], rights it to level, carries it to
+// place_x/place_y [NED m] and sets it back on the ground, over lift/carry/place seconds.
+// The Plant prescribes a continuous kinematic trajectory and synthesizes the IMU/ToF/gyro
+// (no teleport). No-op until a Plant is attached. RESET_PLAN §13 P8.
+// P8 ハンドリングフック（シナリオ `handle` → Plant）。物理ハンドリング動作を開始: 手が（墜落
+// した）機体を carry_alt[上方m]へ持上げ、水平へ起こし、place_x/place_y[NED m]へ運び地面に戻す
+// （lift/carry/place 秒）。Plant が連続キネマティック軌道を規定し IMU/ToF/gyro を合成（teleport
+// なし）。Plant 未接続なら no-op。
+void sil_board_handle_place(float carry_alt_m, float place_x_ned, float place_y_ned,
+                            float lift_s, float carry_s, float place_s);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

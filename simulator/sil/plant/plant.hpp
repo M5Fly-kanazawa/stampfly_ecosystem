@@ -181,6 +181,44 @@ public:
     /// デモのため、地上スタート（z ≈ 箱の半分の高さ）に使う。
     void setStartHeight(float z);
 
+    /// Begin a PHYSICAL HANDLING maneuver: a hand lifts the (crashed) craft, rights it
+    /// to level, carries it to a placement spot and sets it back down on the ground —
+    /// the SIL stand-in for "pick the drone up and put it back" of the re-fly workflow.
+    /// While it runs the Plant PRESCRIBES a smooth kinematic trajectory (NO dynamics, NO
+    /// teleport): the body pose moves continuously through three smootherstep phases —
+    ///   lift  (rise straight up from the crash pose to carry_alt, start righting),
+    ///   carry (translate to place_x/place_y at carry_alt, finish righting to level),
+    ///   place (lower straight down onto the ground at place_x/place_y, stay level).
+    /// The synthetic IMU specific force is computed ANALYTICALLY from the trajectory's
+    /// acceleration (frames::accel_body_frd) and the gyro from its angular velocity, so
+    /// the firmware sees a physically consistent lift/right/carry/place — the ToF rises
+    /// above the airborne threshold (→ IDLE_HELD) and drops back on placement (→
+    /// IDLE_GROUND → re-calibration). Smootherstep gives zero velocity AND acceleration
+    /// at every phase boundary (C²), so the path — and the IMU — has no discontinuity.
+    /// place_x/place_y are NED [m]; carry_alt is height [m] up; the three durations [s]
+    /// each must be > 0. Capturing the start pose from truth() means an inverted/tilted
+    /// crash is righted by the same SLERP-to-level.
+    ///
+    /// 物理ハンドリング動作を開始: 手が（墜落した）機体を持上げ→正立へ起こし→設置点へ運搬→
+    /// 地面に戻す ― 再飛行ワークフローの「ドローンを拾って置き直す」の SIL 代理。実行中は Plant が
+    /// 滑らかなキネマティック軌道を規定する（動力学なし・teleport なし）: 機体姿勢が3つの
+    /// smootherstep 相を連続に動く ― lift（墜落姿勢から carry_alt まで真上に上げ、起こし開始）、
+    /// carry（carry_alt で place_x/place_y へ並進、水平へ起こし完了）、place（place_x/place_y で
+    /// 真下に地面へ降ろし、水平維持）。合成 IMU 比力は軌道の加速度から解析的に（frames::
+    /// accel_body_frd）、ジャイロは角速度から計算するので、ファームは物理的に整合した
+    /// 持上げ/正立/運搬/設置を見る ― ToF が空中閾値を超え（→IDLE_HELD）、設置で戻る（→IDLE_GROUND
+    /// →再校正）。smootherstep は各相境界で速度と加速度が共にゼロ（C²）ゆえ軌道（と IMU）に
+    /// 不連続が無い。place_x/place_y は NED[m]、carry_alt は高さ[m]、3つの所要時間[s]は各 >0。
+    /// 開始姿勢を truth() から捕える＝反転/傾いた墜落も同じ「水平への SLERP」で起こされる。
+    void startHandling(float carry_alt_m, float place_x_ned, float place_y_ned,
+                       float lift_s, float carry_s, float place_s);
+
+    /// True while a handling maneuver is in progress (the kinematic override is active
+    /// and the synthetic IMU is the analytic handling value, not the MuJoCo dynamics).
+    /// ハンドリング動作の実行中に true（キネマティック上書きが有効で、合成 IMU は MuJoCo
+    /// 動力学でなく解析ハンドリング値）。
+    bool handlingActive() const { return handling_active_; }
+
     /// Per-motor duty [0,1] that produces hover thrust (mg/4) via the motor curve.
     /// Inverts the model: T = mg/4 → ω = √(T/Ct) → V = Am·ω²+Bm·ω+Cm → duty = V/v_batt.
     /// モータ曲線でホバー推力（mg/4）を出す各モータ duty[0,1]。モデルを逆算する。
@@ -233,6 +271,16 @@ private:
     /// mj_step → ノイズ前進。h はモデル timestep。
     void substep(float h);
 
+    /// One fixed-timestep step of the PRESCRIBED handling trajectory (length h [s]):
+    /// advance the handling clock, evaluate the smootherstep pose/velocity/acceleration,
+    /// write qpos/qvel into MuJoCo, mj_forward to refresh the position sensors, and store
+    /// the analytic IMU specific force + gyro. Replaces substep() while handling is active
+    /// (no dynamics integration). 規定ハンドリング軌道の固定刻み 1 ステップ（長さ h[s]）:
+    /// ハンドリング時計を進め、smootherstep の姿勢/速度/加速度を評価し、qpos/qvel を MuJoCo に
+    /// 書込み、mj_forward で位置センサを更新、解析 IMU 比力＋ジャイロを保存。ハンドリング中は
+    /// substep() を置き換える（動力学積分なし）。
+    void handlingSubstep(float h);
+
     /// Motor curve inverse: terminal motor voltage V → steady-state prop speed ω
     /// (positive root of Am·ω² + Bm·ω + (Cm − V) = 0; 0 if V ≤ Cm).
     /// モータ曲線の逆: 端子電圧 V → 定常回転 ω（Am·ω²+Bm·ω+(Cm−V)=0 の正根、V≤Cm なら0）。
@@ -265,6 +313,24 @@ private:
 
     float v_batt_ = 3.7f;          ///< current supply (terminal) voltage [V]
     float batt_charge_mah_ = 0.0f; ///< remaining battery charge [mAh] (model on)
+
+    // --- Physical handling maneuver (kinematic override) state ---
+    // 物理ハンドリング動作（キネマティック上書き）の状態。
+    bool  handling_active_ = false;     ///< kinematic override in progress
+    float ground_rest_z_enu_ = 0.013f;  ///< body rest height [m] ENU (set by setStartHeight)
+    float handle_t_ = 0.0f;             ///< elapsed handling time [s]
+    float handle_lift_s_  = 0.0f;       ///< lift  phase duration [s]
+    float handle_carry_s_ = 0.0f;       ///< carry phase duration [s]
+    float handle_place_s_ = 0.0f;       ///< place phase duration [s]
+    sf::math::Vec3 handle_p0_ned_{};    ///< captured crash position NED [m]
+    float handle_carry_z_ned_ = 0.0f;   ///< carry altitude as NED z [m] (= −carry_alt)
+    float handle_place_x_ned_ = 0.0f;   ///< placement target x NED [m]
+    float handle_place_y_ned_ = 0.0f;   ///< placement target y NED [m]
+    float handle_ground_z_ned_ = 0.0f;  ///< ground placement NED z [m] (= −ground_rest)
+    sf::math::Quat  handle_q0_nb_{};     ///< captured crash attitude (body→NED)
+    sf::math::Vec3  handle_rv_flip_frd_{};  ///< right-to-level rot-vec (FRD, θ·n̂)
+    sf::math::Vec3  handle_accel_frd_{0.0f, 0.0f, -9.81f};  ///< analytic specific force FRD
+    sf::math::Vec3  handle_gyro_frd_{};  ///< analytic body angular rate FRD
 
     int body_id_  = -1;
     int accel_sid_ = -1, gyro_sid_ = -1, quat_sid_ = -1, pos_sid_ = -1, vel_sid_ = -1;

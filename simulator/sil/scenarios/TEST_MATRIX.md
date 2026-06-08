@@ -49,9 +49,15 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | シナリオ | 目的 | ターゲット |
 |----------|------|-----------|
 | `disturb` | P7 外乱回復（横風＋モータ故障） | vehicle / vehicle_new |
+| `modeswitch` | P8 飛行中モード切替（ALT↔POS）で姿勢/高度有界 | vehicle_new |
+| `crash_refly` | P8 ★ロバスト再飛行（墜落→自動DISARM→物理ハンドリング→再校正→再飛行）。`--duration 33000000` 必須 | vehicle_new |
 | `hover_alt` / `hover_long` | 高度保持ホバー（短/長時間） | vehicle（旧） |
 | `hover_espnow` | ESP-NOW ホバー（仮想 pilot） | vehicle（旧） |
 | `console_cli` | シリアル CLI 決定論検証（非飛行） | vehicle_new |
+
+**P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
+1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² ゲートが補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。
+2. **モード未伝播**: 接地時の飛行モード STABILIZE リセットが `StateManager::mode_` を変えるだけで制御器に伝わらず（制御器は `ControllerCmd::ModeChange` 経由でのみモードを知る）、ALT/POS 飛行後の再離陸が古いホバー推力モードのまま上昇しない。リセット時に onModeChange を発火させて解決。
 
 ## 3. 実行方法
 

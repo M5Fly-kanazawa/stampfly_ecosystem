@@ -1,0 +1,36 @@
+# crash_refly.expect — Phase-8 ★robust re-flight capstone gate.
+# G1 state-machine chain (logs + order) + G3 physical-truth milestones (numbers from
+# trajectory.csv). Proves the full re-fly readiness chain: hover → crash + auto-DISARM →
+# physical handling (lift/right/carry/place) → re-calibrate → re-ARM → re-takeoff →
+# recovered LEVEL hover.
+#
+# Timeline (absolute s): hover D 8.5–11.5, crash 11.5, on-ground 13.5–16, handle K 16–19.6
+# (carry alt 0.40), re-calib dwell to ~24, re-takeoff N 25–27.5, recovered hover O 27.5–32.5.
+#
+# crash_refly.expect — Phase-8 ★ロバスト再飛行キャップストーンゲート。G1 状態機械の連鎖
+# （ログ＋順序）＋ G3 物理真値マイルストーン（trajectory.csv の数値）。再飛行 readiness の
+# 全鎖を実証: ホバー→墜落＋自動DISARM→物理ハンドリング（持上げ/正立/運搬/設置）→再校正→
+# 再ARM→再離陸→水平回復ホバー。
+exit 0
+# --- G1: state-machine chain (logs) ---
+log_contains any "Takeoff complete"                # take-off reached FLYING
+log_contains any "Impact detected"                 # crash → impact failsafe fired (>3 G ×2)
+log_contains any "emergency IDLE"                  # impact → auto-DISARM
+log_contains any "Drone held in hand"              # physical handling: picked up → IDLE_HELD
+log_contains any "Drone placed on ground"          # placed back down → IDLE_GROUND
+log_contains any "Calibration complete"            # re-calibration on placement
+log_contains any "DISARM accepted"                 # final pilot DISARM (after recovered hover)
+# --- G1: ordering of the chain ---
+order "Takeoff complete" "Impact detected"         # crashed WHILE flying
+order "Impact detected" "Drone held in hand"       # handled AFTER the crash
+order "Drone held in hand" "Drone placed on ground" # lifted, then placed
+order "Drone placed on ground" "DISARM accepted"   # re-fly DISARM is after the re-placement
+# --- G3: physical-truth milestones (trajectory.csv) ---
+metric alt_max > 0.40  in 9.0 11.3     # hovered before the crash
+metric alt_max < 0.10  in 14.0 16.0    # crashed: down on the ground (motors cut)
+metric alt_max > 0.30  in 16.8 18.4    # PHYSICALLY LIFTED by the hand (ToF rose → IDLE_HELD)
+metric alt_max > 0.50  in 27.0 32.4    # RE-TOOK OFF and climbed after re-calibration
+metric alt_min > 0.30  in 30.0 32.4    # recovered hover holds (no second crash)
+metric tilt_max < 15.0 in 29.0 32.4    # recovered hover is LEVEL — inverted crash righted + ESKF recovered
+metric att_rmse < 5.0  in 30.0 32.4    # ESKF attitude tracks truth in the recovered hover (latch cleared)
+metric duty_max < 0.95 in 28.0 32.4    # motors not saturated in the recovered hover

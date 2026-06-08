@@ -28,6 +28,35 @@ namespace sil {
 using sf::math::Vec3;
 using sf::math::Quat;
 
+namespace {
+
+// Quintic smootherstep S(u)=6u⁵−15u⁴+10u³ on u∈[0,1] and its first/second derivatives
+// (w.r.t. u). It is C²: S=S'=S''=0 at u=0 and S=1,S'=S''=0 at u=1, so chaining phases at
+// these endpoints keeps position, velocity AND acceleration continuous — the handling
+// trajectory (and therefore the analytic IMU specific force) has no jump.
+// 五次 smootherstep S(u)=6u⁵−15u⁴+10u³（u∈[0,1]）と一階・二階微分（u について）。C²:
+// u=0 で S=S'=S''=0、u=1 で S=1,S'=S''=0 ゆえ、この端点で相を連結すると位置・速度・加速度が
+// 連続 ― ハンドリング軌道（と解析 IMU 比力）に飛びが無い。
+inline float smoothstep(float u)   { return ((6.0f * u - 15.0f) * u + 10.0f) * u * u * u; }
+inline float smoothstep_d1(float u){ return 30.0f * u * u * (u - 1.0f) * (u - 1.0f); }
+inline float smoothstep_d2(float u){ return 60.0f * u * (2.0f * u - 3.0f) * u + 60.0f * u; }
+
+// Rotation vector (axis·angle, [rad]) of a unit quaternion — the inverse of
+// Quat::from_rotvec. Shortest-path: a negative scalar part is flipped so the angle is in
+// [0,π]. Returns 0 for the identity. 単位クォータニオンの回転ベクトル（axis·angle[rad]）—
+// Quat::from_rotvec の逆。最短経路（負のスカラー部は反転し角を[0,π]に）。恒等は 0。
+inline Vec3 rotvec_of(Quat q)
+{
+    if (q.w < 0.0f) { q.w = -q.w; q.x = -q.x; q.y = -q.y; q.z = -q.z; }  // shortest path
+    const float vn = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z);
+    if (vn < 1e-9f) return {0.0f, 0.0f, 0.0f};                           // ~identity
+    const float angle = 2.0f * std::atan2(vn, q.w);                      // ∈ [0,π]
+    const float s = angle / vn;
+    return {q.x * s, q.y * s, q.z * s};
+}
+
+}  // namespace
+
 Plant::~Plant()
 {
     if (d_) mj_deleteData(d_);
@@ -119,7 +148,145 @@ void Plant::setStartHeight(float z)
     d_->qpos[0] = 0.0; d_->qpos[1] = 0.0; d_->qpos[2] = z;
     d_->qpos[3] = 1.0; d_->qpos[4] = 0.0; d_->qpos[5] = 0.0; d_->qpos[6] = 0.0;
     for (int i = 0; i < 6; ++i) d_->qvel[i] = 0.0;
+    ground_rest_z_enu_ = z;   // remember the ground rest height for handling placement
     mj_forward(m_, d_);
+}
+
+// -----------------------------------------------------------------------------
+// startHandling — capture the (crashed) pose and arm the kinematic lift→right→
+// carry→place trajectory. See plant.hpp for the maneuver description.
+// startHandling — （墜落した）姿勢を捕え、持上げ→正立→運搬→設置のキネマティック軌道を
+// 起動する。動作の説明は plant.hpp。
+// -----------------------------------------------------------------------------
+void Plant::startHandling(float carry_alt_m, float place_x_ned, float place_y_ned,
+                          float lift_s, float carry_s, float place_s)
+{
+    Truth t = truth();                              // capture the current (crash) pose
+    handle_p0_ned_      = t.pos_ned;
+    handle_q0_nb_       = t.q_nb;
+    // Right-to-level rotation vector (FRD): r such that q0 ⊗ from_rotvec(r) = identity,
+    // i.e. r = rotvec(q0⁻¹) — the same SLERP levels a tilted OR inverted crash.
+    // 水平へ起こす回転ベクトル（FRD）: q0 ⊗ from_rotvec(r)=恒等 となる r、すなわち
+    // r=rotvec(q0⁻¹) ― 同じ SLERP が傾いた墜落も反転した墜落も水平へ起こす。
+    handle_rv_flip_frd_ = rotvec_of(handle_q0_nb_.conj());
+
+    handle_carry_z_ned_  = -carry_alt_m;            // NED z (up = −z)
+    handle_place_x_ned_  = place_x_ned;
+    handle_place_y_ned_  = place_y_ned;
+    handle_ground_z_ned_ = -ground_rest_z_enu_;     // place back on the ground rest height
+    handle_lift_s_  = lift_s  > 1e-3f ? lift_s  : 1e-3f;
+    handle_carry_s_ = carry_s > 1e-3f ? carry_s : 1e-3f;
+    handle_place_s_ = place_s > 1e-3f ? place_s : 1e-3f;
+    handle_t_ = 0.0f;
+    handling_active_ = true;
+}
+
+// -----------------------------------------------------------------------------
+// handlingSubstep — advance the prescribed handling trajectory by h [s]. Evaluates the
+// three smootherstep phases (lift / carry / place) for position + a SLERP-to-level for
+// attitude, writes qpos/qvel to MuJoCo (mj_forward refreshes the position sensors), and
+// stores the analytic IMU specific force + gyro. NO mj_step — the body follows the hand,
+// not the dynamics.
+// handlingSubstep — 規定ハンドリング軌道を h[s] 進める。3つの smootherstep 相（lift/carry/
+// place）の位置と水平への SLERP 姿勢を評価し、qpos/qvel を MuJoCo に書込み（mj_forward が位置
+// センサを更新）、解析 IMU 比力＋ジャイロを保存。mj_step なし ― 機体は動力学でなく手に従う。
+// -----------------------------------------------------------------------------
+void Plant::handlingSubstep(float h)
+{
+    const float t      = handle_t_;
+    const float total  = handle_lift_s_ + handle_carry_s_ + handle_place_s_;
+    const float t_flip = handle_lift_s_ + handle_carry_s_;   // righting spans lift+carry
+
+    // --- Position / velocity / acceleration in NED via the active phase's smootherstep -
+    // --- 有効相の smootherstep で NED の位置/速度/加速度 ---
+    Vec3 pos = handle_p0_ned_, vel{}, acc{};
+    if (t < handle_lift_s_) {
+        // LIFT: rise straight up from the crash z to the carry altitude.
+        // LIFT: 墜落 z から carry 高度へ真上に上げる。
+        const float T = handle_lift_s_, u = t / T;
+        const float dz = handle_carry_z_ned_ - handle_p0_ned_.z;
+        pos.z = handle_p0_ned_.z + dz * smoothstep(u);
+        vel.z = dz * smoothstep_d1(u) / T;
+        acc.z = dz * smoothstep_d2(u) / (T * T);
+    } else if (t < t_flip) {
+        // CARRY: translate horizontally to the placement spot, hold the carry altitude.
+        // CARRY: 設置点へ水平並進、carry 高度を保持。
+        const float T = handle_carry_s_, u = (t - handle_lift_s_) / T;
+        const float dx = handle_place_x_ned_ - handle_p0_ned_.x;
+        const float dy = handle_place_y_ned_ - handle_p0_ned_.y;
+        pos.x = handle_p0_ned_.x + dx * smoothstep(u);
+        pos.y = handle_p0_ned_.y + dy * smoothstep(u);
+        pos.z = handle_carry_z_ned_;
+        vel.x = dx * smoothstep_d1(u) / T;
+        vel.y = dy * smoothstep_d1(u) / T;
+        acc.x = dx * smoothstep_d2(u) / (T * T);
+        acc.y = dy * smoothstep_d2(u) / (T * T);
+    } else {
+        // PLACE: lower straight down onto the ground at the placement spot.
+        // PLACE: 設置点で真下に地面へ降ろす。
+        const float T = handle_place_s_;
+        float u = (t - t_flip) / T;
+        if (u > 1.0f) u = 1.0f;
+        const float dz = handle_ground_z_ned_ - handle_carry_z_ned_;
+        pos.x = handle_place_x_ned_;
+        pos.y = handle_place_y_ned_;
+        pos.z = handle_carry_z_ned_ + dz * smoothstep(u);
+        vel.z = dz * smoothstep_d1(u) / T;
+        acc.z = dz * smoothstep_d2(u) / (T * T);
+    }
+
+    // --- Attitude: SLERP from the crash pose to level over [0, t_flip] -----------------
+    // q_nb(σ) = q0 ⊗ from_rotvec(σ·rv); body-frame (FRD) angular rate ω = σ̇·rv.
+    // --- 姿勢: [0,t_flip] で墜落姿勢から水平へ SLERP。機体(FRD)角速度 ω=σ̇·rv。 ---
+    float sigma = 1.0f, sigma_dot = 0.0f;
+    if (t < t_flip) {
+        const float u = t / t_flip;
+        sigma     = smoothstep(u);
+        sigma_dot = smoothstep_d1(u) / t_flip;
+    }
+    Quat q_nb = handle_q0_nb_ * Quat::from_rotvec(handle_rv_flip_frd_ * sigma);
+    q_nb.normalize();
+    Vec3 omega_frd = handle_rv_flip_frd_ * sigma_dot;
+
+    // --- Write the prescribed kinematic state into MuJoCo, refresh the sensors ----------
+    // --- 規定キネマティック状態を MuJoCo に書込み、センサを更新 ---
+    Vec3 pos_enu = frames::ned_to_enu(pos);
+    Vec3 vel_enu = frames::ned_to_enu(vel);
+    Vec3 omega_flu = frames::frd_to_flu(omega_frd);   // MuJoCo free-joint ω is body FLU
+    Quat q_mj = frames::qnb_to_mujoco_quat(q_nb);
+    d_->qpos[0] = pos_enu.x; d_->qpos[1] = pos_enu.y; d_->qpos[2] = pos_enu.z;
+    d_->qpos[3] = q_mj.w;    d_->qpos[4] = q_mj.x;    d_->qpos[5] = q_mj.y; d_->qpos[6] = q_mj.z;
+    d_->qvel[0] = vel_enu.x; d_->qvel[1] = vel_enu.y; d_->qvel[2] = vel_enu.z;
+    d_->qvel[3] = omega_flu.x; d_->qvel[4] = omega_flu.y; d_->qvel[5] = omega_flu.z;
+    mj_forward(m_, d_);
+
+    // --- Analytic IMU: specific force from the trajectory's acceleration + gyro ----------
+    // accel_body_frd(a,q) = q.inv_rotate(a − g_ned): at rest (a=0, level) → [0,0,−9.81].
+    // --- 解析 IMU: 軌道の加速度から比力＋ジャイロ ---
+    handle_accel_frd_ = frames::accel_body_frd(acc, q_nb);
+    handle_gyro_frd_  = omega_frd;
+
+    // Advance the noise clock (motors off while handled) so the seeded model stays in
+    // step; no-op when noise is disabled. ノイズ時計を進める（手持ち中モータ停止）。無効時 no-op。
+    noise_.setThrottle(0.0f);
+    noise_.advance(h);
+
+    handle_t_ += h;
+    if (handle_t_ >= total) {
+        // Done: snap to the exact placed-level-rest pose with zero velocity so the handoff
+        // back to dynamics is seamless (the craft sits still on the ground, ready to re-arm).
+        // 完了: 設置・水平・静止の正確な姿勢へスナップし速度ゼロ ― 動力学への引継ぎが滑らか
+        //（機体は地面に静止、再 ARM 可能）。
+        Vec3 rest_enu = frames::ned_to_enu(
+            {handle_place_x_ned_, handle_place_y_ned_, handle_ground_z_ned_});
+        d_->qpos[0] = rest_enu.x; d_->qpos[1] = rest_enu.y; d_->qpos[2] = rest_enu.z;
+        d_->qpos[3] = 1.0; d_->qpos[4] = 0.0; d_->qpos[5] = 0.0; d_->qpos[6] = 0.0;
+        for (int i = 0; i < 6; ++i) d_->qvel[i] = 0.0;
+        mj_forward(m_, d_);
+        handle_accel_frd_ = {0.0f, 0.0f, -9.81f};
+        handle_gyro_frd_  = {0.0f, 0.0f, 0.0f};
+        handling_active_ = false;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -234,7 +401,12 @@ void Plant::step(float dt)
     const double h = m_->opt.timestep;
     step_accum_ += (double)dt;
     while (step_accum_ >= h) {
-        substep((float)h);
+        // While a handling maneuver runs, the body follows the PRESCRIBED kinematic
+        // trajectory (handlingSubstep) instead of the motor/contact dynamics (substep).
+        // ハンドリング動作中は機体が規定キネマティック軌道（handlingSubstep）に従い、
+        // モータ/接触の動力学（substep）に従わない。
+        if (handling_active_) handlingSubstep((float)h);
+        else                  substep((float)h);
         step_accum_ -= h;
     }
 }
@@ -357,11 +529,21 @@ Plant::Truth Plant::truth() const
 // -----------------------------------------------------------------------------
 sf::ImuData Plant::imu() const
 {
-    const double* a = sensor(accel_sid_);  // FLU specific force (a − g)
-    const double* w = sensor(gyro_sid_);   // FLU body angular rate
-
-    Vec3 accel_frd = frames::flu_to_frd({(float)a[0], (float)a[1], (float)a[2]});
-    Vec3 gyro_frd  = frames::gyro_body_frd({(float)w[0], (float)w[1], (float)w[2]});
+    Vec3 accel_frd, gyro_frd;
+    if (handling_active_) {
+        // Handling: the body is kinematically prescribed (not integrated), so MuJoCo's
+        // accelerometer would read the free-dynamics acceleration, not the hand's. Use the
+        // specific force / gyro computed analytically from the prescribed trajectory.
+        // ハンドリング中: 機体はキネマティックに規定（積分でない）ゆえ MuJoCo 加速度計は
+        // 手でなく自由動力学の加速度を読む。規定軌道から解析した比力/ジャイロを使う。
+        accel_frd = handle_accel_frd_;
+        gyro_frd  = handle_gyro_frd_;
+    } else {
+        const double* a = sensor(accel_sid_);  // FLU specific force (a − g)
+        const double* w = sensor(gyro_sid_);   // FLU body angular rate
+        accel_frd = frames::flu_to_frd({(float)a[0], (float)a[1], (float)a[2]});
+        gyro_frd  = frames::gyro_body_frd({(float)w[0], (float)w[1], (float)w[2]});
+    }
 
     sf::ImuData out{};
     out.accel[0] = accel_frd.x; out.accel[1] = accel_frd.y; out.accel[2] = accel_frd.z;

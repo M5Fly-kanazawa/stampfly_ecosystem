@@ -432,6 +432,13 @@ void sil_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, fl
     g_plant->setImuBias(sf::math::Vec3{ax, ay, az}, sf::math::Vec3{gx, gy, gz});
 }
 
+void sil_board_handle_place(float carry_alt_m, float place_x_ned, float place_y_ned,
+                            float lift_s, float carry_s, float place_s)
+{
+    if (g_plant == nullptr) return;
+    g_plant->startHandling(carry_alt_m, place_x_ned, place_y_ned, lift_s, carry_s, place_s);
+}
+
 int sil_board_spi_transfer(int cs, const uint8_t* tx, uint8_t* rx, size_t nbytes)
 {
     // BMI270 is on CS GPIO46 (sf_board); PMW3901 optical flow is on CS GPIO12.

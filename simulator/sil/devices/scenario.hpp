@@ -30,8 +30,12 @@
  *   <t> rc_ramp <throttle|roll|pitch|yaw> <from> <to> <step> <rate_hz> <arm>
  *   <t> key     "<text with \n \t \r \\ \" escapes>"
  *   <t> btn     <down|up|click|hold_ms>            (deferred -> warn+skip)
- *   <t> wind    <fx> <fy> <fz> [dur_ms]            (deferred -> warn+skip)
- *   <t> fault   <surface>                          (deferred -> warn+skip)
+ *   <t> wind    <fx> <fy> <fz> [dur_ms]            external force NED [N]
+ *   <t> fault   <motor 0-3> <gain 0-1>             degrade one motor's thrust health
+ *   <t> bias    <ax> <ay> <az> <gx> <gy> <gz>      deterministic raw IMU bias (FRD)
+ *   <t> handle  <carry_alt> <px> <py> <lift_ms> <carry_ms> <place_ms>
+ *                                                  physical handling: lift→right→carry→place
+ *                                                  (instantaneous trigger; Plant kinematic)
  * where <t> is either an absolute millisecond time, or '+<ms>' / '+' meaning
  * "<ms> after the previous event ends" (bare '+' = +0, i.e. immediately after).
  *

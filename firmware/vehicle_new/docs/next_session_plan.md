@@ -1,6 +1,21 @@
-# 次セッション指示書 — Phase 0〜7 完了 ＋ χ²過剰棄却根治。次は Phase 8（ロバスト再飛行 SIL 検証）
+# 次セッション指示書 — Phase 0〜8 完了（valiant-frolicking-sun.md 全フェーズ完了）。次は実機ブリングアップ or データ駆動ノイズ
 
-最終更新: 2026-06-08（**Phase 7 品質仕上げ ＋ χ²過剰棄却根治 完了。次は Phase 8**）
+最終更新: 2026-06-08（**Phase 8 ★ロバスト再飛行 SIL 検証 完了 ＝ リファクタ計画の全フェーズ完了**）
+
+> **✅ Phase 8 完了（★ロバスト再飛行 SIL 検証）＝今セッションの成果:**
+> - **物理ハンドリング機構を Plant に実装（plant.cpp/hpp）**: 墜落機を持上げ→正立（反転も水平へ SLERP）→運搬→設置する連続キネマティック軌道。teleport なし（全相 smootherstep で C² 連続）。IMU 比力を解析合成（`frames::accel_body_frd`）、gyro は SLERP 角速度 ω=σ̇·rv_flip、ToF/baro/flow は qpos 書込み＋mj_forward。`handlingActive()` 中は mj_step を回さず imu() が解析値を返す。
+> - **scenario DSL に `handle` チャネル配線**（scenario.cpp/hpp・virtual_board・`sil_board_handle_place`）。瞬時イベント、後続 disarmed rc ホールドがリンク維持＋実時間を与える。
+> - **`crash_refly.scn`（21/21 PASS, `--duration 33000000`）**: hover→墜落(モータ故障で反転＋下向き2N風で叩きつけ)→impact 5.2G で自動DISARM→物理ハンドリング(持上げ→-180°から起こし→設置)→再校正→再ARM→再離陸→**level ホバー回復(0.7m)**。
+> - **`modeswitch.scn`（17/17 PASS）**: 飛行中 ALT↔POS 切替で姿勢/高度有界（ロールステップで実ドリフトを作り POS_HOLD が arrest）。
+> - **crash_refly が炙り出した2つのファーム欠陥を修正:**
+>   1. **ESKF 姿勢 latch（state_task.cpp）**: 墜落で姿勢推定が大きく外れると χ² ゲートが補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、level・静止と既知）に ESKF Reset で姿勢を level 再初期化。χ²根治(accel_att_noise 0.8)でも墜落級の大誤差は救えないことが判明。
+>   2. **モード未伝播（state_manager.cpp）**: 接地時の STABILIZE リセットが `mode_` を変えるだけで制御器に伝わらず（制御器は `ControllerCmd::ModeChange` 経由でのみモードを知る）、ALT/POS 飛行後の再離陸が古いホバー推力モードのまま上昇しない。リセット時に onModeChange 発火で解決。5819a38 のコメント「control_task が system_mode を毎周期読む」は誤りだった。
+> - 検証: 11シナリオ＋modeswitch＋crash_refly＋legacy hover_espnow＋hover_smoke G2/G3＋plant_smoke 全PASS、ESP-IDF 実機ビルド 1055.0KB。
+>
+> **次にやること（リファクタ計画は完了。新しい軸）:**
+> - **実機ブリングアップ（development_roadmap Phase 4: HW 所有）**: SIL を全通過したので実機で ACRO レート制御からプラント同定を開始。3原則（Code/Param/Model Identity）。
+> - **データ駆動ノイズ（[[project_sil_noise_data_driven]]）**: 実機ログ解析→ノイズプロファイル注入の仕組み（教育/研究教材）。
+> - **任意・低優先（Phase 7 残り）**: 相補フィルタゲイン params化、pid 飛行リミット config化。
 
 > **✅ χ²過剰棄却根治（commit 90093c1）＝今セッションの最重要成果:**
 > - **真因**: `eskf.obs.accel_att_noise=0.06`（R=0.0036）が過小。飛行中の普通の運動加速度イノベーション(~1 m/s²=17σ)が χ²(3)ゲートを越え**マニューバ中66%棄却**→姿勢がジャイロ積分のみでドリフト→毎軸 POS_HOLD が限界安定。「数百度ラッチ」でなく「慢性的過剰棄却」だった。
@@ -60,15 +75,14 @@
 
 **Phase 0〜7 完了 ＋ χ²過剰棄却根治済み。次は Phase 8（★ロバスト再飛行 SIL 検証）。**
 
-**Phase 8（計画 `valiant-frolicking-sun.md` の最終フェーズ）:**
-- **emu に物理ハンドリング機構**: 墜落後の機体を「持上げ→反転（正立へ）→運搬→設置」する連続キネマティック軌道を Plant に実装。Plant が IMU比力/ToF/gyro を解析合成（**teleport 厳禁** — 物理的に連続な姿勢/位置遷移）。
-- **`crash_refly.scn`**: 飛行→衝撃で自動DISARM/墜落→物理handleで設置→IDLE_HELD→再校正完了→再ARM→再離陸→ホバー回復をゲート化。
-- **`modeswitch.scn`**: 飛行中モード切替（ALT↔POS）で姿勢/高度が有界。
-- **申し送り（§6.5）**: 接地復帰reset後すぐ再離陸すると共分散再膨張で発散しうる → 地上再収束の時間確保 or soft-freeze が要る見込み。χ²根治で POS_HOLD の余裕が大きくなったので状況は改善しているはず（要検証）。
+**✅ Phase 8 完了（計画 `valiant-frolicking-sun.md` の最終フェーズ＝全フェーズ完了）。** 詳細は本書冒頭の callout 参照。物理ハンドリング機構（Plant）・`crash_refly.scn`（21/21）・`modeswitch.scn`（17/17）を実装し、crash_refly が炙り出した2つのファーム欠陥（ESKF 姿勢 latch・モード未伝播）を修正。
 
-**Phase 7 の残り（任意・低優先、安定性影響小）:** 相補フィルタゲイン params化、pid 飛行リミット config化。
+- **申し送り（§6.5）の検証結果**: 「接地復帰reset後すぐ再離陸すると共分散再膨張で発散しうる」は crash_refly では顕在化せず（χ²根治＋設置時 ESKF Reset で姿勢が level に戻り、姿勢共分散のみ膨張で再離陸安定）。soft-freeze は不要だった。
 
-**保留なし。** χ²過剰棄却は根治済み（accel_att_noise 0.8）。当座の電池サグディザに依存していない。
+**次の軸（リファクタ計画は完了）:**
+- **実機ブリングアップ（development_roadmap Phase 4: HW 所有）**: SIL 全通過したので実機で ACRO レート制御からプラント同定。3原則（Code/Param/Model Identity）。
+- **データ駆動ノイズ（auto-memory `project_sil_noise_data_driven`）**: 実機ログ解析→ノイズプロファイル注入。
+- **任意・低優先（Phase 7 残り）**: 相補フィルタゲイン params化、pid 飛行リミット config化。
 
 ---
 

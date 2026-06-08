@@ -1,0 +1,29 @@
+# modeswitch.expect — Phase-8 in-flight mode-switch gate. G1 state-machine (the three
+# mode changes fire in order) + G2 estimate tracking + G3 bounded attitude/altitude
+# across both switches + G4 actuator health (numerical, from trajectory.csv).
+#
+# Timeline (absolute): A disarmed 0-4, B ARM 4-5, C take-off 5-7, D ALT_HOLD 7-10,
+# D2 roll step 10-10.6, E POS_HOLD 10.6-16.6, F ALT_HOLD 16.6-21.6, G DISARM 21.6-22.6.
+# The roll step builds a real lateral drift so POS_HOLD has something to arrest and the
+# switches are non-trivial.
+#
+# modeswitch.expect — Phase-8 飛行中モード切替ゲート。G1 状態機械（3つのモード変更が順に
+# 発火）+ G2 推定追従 + G3 両切替を跨いで姿勢/高度が有界 + G4 アクチュエータ健全（数値、
+# trajectory.csv から）。ロールステップで実横ドリフトを作り、POS_HOLD に止める仕事を与え、
+# 切替を非自明にする。
+exit 0
+log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
+log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING
+log_contains any "Mode change: STABILIZE → ALT_HOLD"  # G1: take-off → ALT_HOLD
+log_contains any "Mode change: ALT_HOLD → POS_HOLD"   # G1: ALT → POS (cascade engages)
+log_contains any "Mode change: POS_HOLD → ALT_HOLD"   # G1: POS → ALT (cascade releases)
+log_contains any "DISARM accepted"                    # G1: FLYING → IDLE_GROUND
+order "Mode change: STABILIZE → ALT_HOLD" "Mode change: ALT_HOLD → POS_HOLD"
+order "Mode change: ALT_HOLD → POS_HOLD" "Mode change: POS_HOLD → ALT_HOLD"
+order "Mode change: POS_HOLD → ALT_HOLD" "DISARM accepted"
+metric horizontal_drift_max < 2.0  in 11.0 16.6   # G3: POS_HOLD arrests the drift + holds (bounded, no fly-away)
+metric tilt_max            < 18.0  in 10.0 21.6   # G3: attitude bounded across BOTH switches (no tumble)
+metric alt_min             > 0.25  in 10.0 21.6   # G3: never sinks/crashes through the switches
+metric alt_max             < 0.95  in 10.0 21.6   # G3: never balloons through the switches (POS→ALT held)
+metric duty_max            < 0.92  in 8.0 21.6    # G4: motors not saturated
+metric att_rmse            < 5.0   in 13.0 16.6   # G2: ESKF roll/pitch tracks truth (steady POS_HOLD)
