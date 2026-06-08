@@ -94,6 +94,16 @@
         <input id="timeline" type="range" min="0" max="100" value="0" step="1" />
         <span id="clock" class="clock">0.00 s</span>
         <label class="chk small"><input id="trailChk" type="checkbox" checked /> 軌跡</label>
+        <label class="chk small" title="機体は実寸82mm。飛行に対し小さいので拡大表示も選べます">
+          機体
+          <select id="exagSel">
+            <option value="1">実寸</option>
+            <option value="3">×3</option>
+            <option value="5">×5</option>
+            <option value="10">×10</option>
+            <option value="20">×20</option>
+          </select>
+        </label>
       </div>
     </div>
 

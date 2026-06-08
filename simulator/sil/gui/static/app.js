@@ -244,10 +244,12 @@ function updateCursor(tsec) {
 
 // ============================================================================ three.js live 3D
 let renderer, scene, camera, controls, worldGroup, drone, props = [], trailLine, trailGeo;
-// Visual exaggeration of the drone ONLY (its flight position stays in real metres). The real
-// StampFly is ~9 cm — at real scale it is a speck against a metre-scale flight, so we enlarge
-// the model so its attitude/props are clearly readable. 機体の見た目だけ拡大（飛行位置は実寸）。
-const MODEL_SCALE = 8.5;
+// Drone display scale. DEFAULT = 1.0 = TRUE SCALE: the StampFly is drawn at its real ~82 mm
+// size relative to the flight, so altitudes/drifts read honestly (the chase cam + zoom keep
+// the small craft in view). The toolbar "機体" selector can EXAGGERATE it (×3…×20) to make
+// attitude/props easier to read — that is an optional aid, not the default. 既定は実寸(×1)。
+// 飛行に対し正直なスケール。ツールバーの選択で拡大は任意に。
+let modelScale = 1.0;
 
 // Dolly the camera toward/away from the orbit target by `factor` (<1 = zoom in), clamped to
 // a sensible distance for the metre-scale flight volume. OrbitControls.update() recomputes
@@ -320,7 +322,10 @@ function init3D() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200);
-  camera.position.set(1.15, 0.85, 1.15);
+  // Close default so the true-scale (~82 mm) craft is clearly visible at the origin; the
+  // chase target follows it in flight and the user can zoom out to see the whole path.
+  // 実寸機体が原点で見える近距離。飛行中はチェイス追従、ズームで全体も見られる。
+  camera.position.set(0.34, 0.26, 0.34);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   // We zoom ourselves (below) instead of OrbitControls' built-in wheel zoom: on a Mac
@@ -351,8 +356,9 @@ function init3D() {
   // it into x-y. 地面グリッドを ENU 水平面(z=0)に。
   const grid = new THREE.GridHelper(8, 32, 0x2a3a55, 0x182336); grid.rotation.x = Math.PI / 2;
   worldGroup.add(grid);
-  // ENU axes helper (E=red, N=green, U=blue). 座標軸(東赤/北緑/上青)。小さめにして機体を主役に。
-  worldGroup.add(new THREE.AxesHelper(0.2));
+  // ENU axes helper (E=red, N=green, U=blue), ~5 cm so it does not dwarf the true-scale craft.
+  // 座標軸(東赤/北緑/上青)。実寸機体を圧迫しないよう約5cm。
+  worldGroup.add(new THREE.AxesHelper(0.05));
 
   drone = buildDrone(); worldGroup.add(drone);
   trailGeo = new THREE.BufferGeometry();
@@ -453,7 +459,7 @@ const BODY_PARTS = ['frame', 'pcb', 'm5stamps3', 'battery', 'battery_adapter',
                     'motor_fl', 'motor_fr', 'motor_rl', 'motor_rr'];
 
 function buildDrone() {
-  const g = new THREE.Group(); g.scale.setScalar(MODEL_SCALE);
+  const g = new THREE.Group(); g.scale.setScalar(modelScale);
   // `model` holds the StampFly in the landing/STL native frame (mm); the scale+quat put it
   // into the body FLU frame at real metric. model に landing native(mm)で作り FLU へ変換。
   const model = new THREE.Group();
@@ -578,6 +584,15 @@ function wireUI() {
   };
   $('timeline').oninput = (e) => { S.playing = false; $('playBtn').textContent = '▶'; setFrame(+e.target.value); };
   $('trailChk').onchange = () => setFrame(S.frame);
+  // Drone display scale (default ×1 = true scale). Rescale the model live and dolly the
+  // camera by the same ratio so the craft keeps its apparent size when you switch. 機体の
+  // 表示倍率（既定×1=実寸）。倍率変更時はカメラも同率ドリーして見た目の大きさを保つ。
+  $('exagSel').onchange = (e) => {
+    const next = parseFloat(e.target.value) || 1;
+    if (drone) drone.scale.setScalar(next);
+    dolly(next / modelScale);
+    modelScale = next;
+  };
 }
 function filterParams(q) {
   document.querySelectorAll('.pgroup').forEach(det => {
