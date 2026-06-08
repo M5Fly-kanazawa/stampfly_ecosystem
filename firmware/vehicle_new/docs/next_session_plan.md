@@ -25,8 +25,11 @@
 2. **データ駆動ノイズ** （auto-memory `project_sil_noise_data_driven`）: 実機ログ解析→SIL ノイズ
    プロファイル注入。実機で飛ばした後（Model Fidelity, development_roadmap Phase 5）の軸。
 
-3. **ペアリング P4（per-drone channel, 30機スケール）** ← 30機ワークショップ運用の直前。
-   詳細 `docs/pairing_plan.md` P4。
+3. **ペアリング P4（per-drone channel + 同時マスペアリング堅牢化, 30機スケール）** ← 30機ワーク
+   ショップ運用の直前。**既知の弱点**: ペア成立は両側「先着＝採用」で、複数の未ペア機を**同時に**
+   ペアリングすると取り違え（クロスペアリング）が起こり得る（ペア成立後の混信は src MAC フィルタで
+   対策済み）。**現状の運用＝1ペアずつ**で回避（ユーザー判断 B, 2026-06-09）。堅牢化は P4 で
+   per-drone channel + RSSI/ボタン確認（RSSI 等はコントローラ改修要）。詳細 `docs/pairing_plan.md` P4。
 
 4. **任意・低優先（リファクタ Phase 7 残り、安定性影響小）**: 相補フィルタゲイン params 化、
    pid 飛行リミット config 化。
