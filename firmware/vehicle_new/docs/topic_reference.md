@@ -112,6 +112,8 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 16 | `controller_command` | `ControllerCommand` | Queue | 4 | StateManager callbacks | ControlTask | event | 制御器 reset 指令（onEnter/onExit 集約） |
 | 17 | `notify_command` | `NotifyCommand` | Queue | 8 | StateManager / Failsafe | NotifyTask | event | LED/ブザー通知指令（arm/disarm 音等。配線は Phase 6） |
 | 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6） |
+| 19 | `pairing_state` | `PairingStatus` | Latest | 1 | StateTask (StateManager) | CommTask, NotifyTask | event | 現在の PairingState（NotPaired/Pairing/Paired）。comm が送出制御、notify が LED/ブザー表示 |
+| 20 | `pairing_complete` | `PairingComplete` | Queue | 2 | CommTask (ESP-NOW recv) | StateTask | event | Pairing 中に相手 ControlPacket を受信した事実（学習した送信機 src MAC） |
 
 ### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 
@@ -119,9 +121,9 @@ vehicle_new v3 設計で予約した将来 Topic。`command_target` / `nav_path`
 
 | # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 | 状態 |
 |---|---------|---------|--------|------|-----------|-----------|------|------|------|
-| 19 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
-| 20 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
-| 21 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
+| 21 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
+| 22 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
+| 23 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
 
 **新規 Topic の根拠（横断ルール対応）:**
 - `sensor_imu_raw` — L2 学習者が「キャリブ前の生 IMU を見たい」「自分でキャリブを学びたい」シナリオに対応

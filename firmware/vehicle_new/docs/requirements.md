@@ -68,6 +68,32 @@ IDLE_GROUND
 | FLYING → IDLE_GROUND | 衝突検知 or パイロットDISARM |
 | ARMED_GROUND → IDLE_GROUND | DISARMアクション |
 
+### ペアリング状態（PairingState）
+
+FlightState とは**独立した並行状態機械**。送信機（コントローラ）と機体を1対1に束ね、複数機・複数
+送信機を同一空間で運用したときの**混信**（他人の送信機で自分の機体が動く）を防ぐ。1教室で最大30機
+が同時に飛ぶ運用を前提とする。状態管理（StateManager）が**単一所有**する。
+
+```
+PairingState（FlightState と並行）
+  NotPaired — 相手コントローラ未確定（NVSに保存なし）
+  Pairing   — 相手探索中。PairingPacket を 500ms 周期で broadcast 送出
+  Paired    — 相手 MAC 確定（NVS保存済み）。相手以外の ControlPacket は破棄
+```
+
+| 遷移 | トリガー |
+|------|---------|
+| 起動（NVSに相手なし）→ Pairing | 自動（未ペア起動で自動的にペアリング待機）|
+| 起動（NVSに相手あり）→ Paired | 自動（保存済み相手 MAC を復元）|
+| Pairing → Paired | Pairing 中に相手から ControlPacket を受信し src MAC を学習 |
+| 任意 → Pairing（再ペアリング）| ボタン長押し3秒（IDLE_GROUND のみ）。既存ペアを破棄して再探索 |
+
+**制約:**
+- PAIRING 突入は地上（IDLE_GROUND）でのみ可能。**Pairing 中は ARM 要求を拒否**する。
+- ハンドシェイクは**相互 MAC 学習**: 機体が自 MAC を PairingPacket で広告 → コントローラが学習して
+  機体 MAC 宛に ControlPacket をユニキャスト送信 → 機体が受信パケットの src MAC を相手として確定。
+- 旧 vehicle のペアリングシーケンスを踏襲する（プロトコル・署名・周期を同一に保ち相互運用）。
+
 ## 3. パラメータ管理
 
 | 項目 | 方針 |
@@ -144,6 +170,21 @@ IDLE_GROUND
 - 機体側からWebSocketは撤去（UDP統一、ブロッキングリスク排除）
 - ブラウザ表示は `sf monitor web`（UDP→WebSocket変換プロキシ）で対応
 - スマホ対応は専用アプリ or WebApp
+
+### ペアリング（混信対策）
+
+送信機と機体を1対1に束ねる。SSOT は `protocol/spec/messages.yaml`。詳細は状態モデル §2 の
+PairingState を参照。
+
+| 項目 | 仕様 |
+|------|------|
+| 目的 | 複数機・複数送信機の同一空間運用での混信防止（1教室30機前提）|
+| プロトコル | PairingPacket（11B: channel 1B + 機体MAC 6B + 署名 `0xAA 0x55 0x16 0x88` 4B）|
+| 送出 | Pairing 中、機体が 500ms 周期で broadcast。コントローラが CH1-13 スキャンで発見 |
+| アドレッシング | ControlPacket 先頭3バイト `drone_mac` ＝ 機体 MAC 下位3バイト（SSOT既存フィールド）|
+| 永続化 | 相手コントローラ MAC を NVS 保存し起動時に復元 |
+| フィルタ | 通常運用時、受信 ControlPacket の src MAC が相手と不一致なら破棄 |
+| UI | Pairing 中: LED 青速点滅 ＋ ブザー通知。成立で解除 |
 
 ### 対応プロトコル
 
@@ -276,6 +317,34 @@ IDLE_GROUND
 | FLYING → IDLE_GROUND | Crash detection or pilot DISARM |
 | ARMED_GROUND → IDLE_GROUND | DISARM action |
 
+### Pairing State (PairingState)
+
+A **separate, parallel state machine** independent of FlightState. It binds one transmitter
+(controller) to one vehicle to prevent **crosstalk** (someone else's transmitter moving your
+vehicle) when multiple vehicles/transmitters operate in the same space — assuming up to 30
+vehicles flying simultaneously in one classroom. **Single-owned** by State Management.
+
+```
+PairingState (parallel to FlightState)
+  NotPaired — No bound controller yet (nothing saved in NVS)
+  Pairing   — Searching for a peer; broadcasts a PairingPacket every 500ms
+  Paired    — Peer MAC fixed (saved in NVS); ControlPackets from others are dropped
+```
+
+| Transition | Trigger |
+|------------|---------|
+| Boot (no peer in NVS) → Pairing | Automatic (unpaired boot auto-enters pairing) |
+| Boot (peer in NVS) → Paired | Automatic (restore saved peer MAC) |
+| Pairing → Paired | Receive a ControlPacket from the peer during Pairing, learning its src MAC |
+| Any → Pairing (re-pair) | Button long-press 3s (IDLE_GROUND only); discard existing pair and re-search |
+
+**Constraints:**
+- Pairing can be entered only on the ground (IDLE_GROUND). **ARM requests are rejected while Pairing.**
+- The handshake is **mutual MAC learning**: the vehicle advertises its own MAC via PairingPacket →
+  the controller learns it and unicasts ControlPackets to the vehicle MAC → the vehicle fixes the
+  received packet's src MAC as its peer.
+- Follows the legacy vehicle's pairing sequence (same protocol, signature, and period for interop).
+
 ## 3. Parameter Management
 
 | Item | Policy |
@@ -352,6 +421,21 @@ All sensors retained (important for IoT educational material to have full sensor
 - WebSocket removed from vehicle (UDP unified, eliminates blocking risk)
 - Browser display via `sf monitor web` (UDP→WebSocket conversion proxy)
 - Smartphone support via dedicated app or WebApp
+
+### Pairing (Crosstalk Prevention)
+
+Binds one transmitter to one vehicle. SSOT is `protocol/spec/messages.yaml`. See PairingState in
+the §2 State Model for details.
+
+| Item | Specification |
+|------|---------------|
+| Purpose | Prevent crosstalk when multiple vehicles/transmitters share a space (30/classroom) |
+| Protocol | PairingPacket (11B: channel 1B + vehicle MAC 6B + signature `0xAA 0x55 0x16 0x88` 4B) |
+| Broadcast | While Pairing, the vehicle broadcasts every 500ms; the controller scans CH1-13 to find it |
+| Addressing | ControlPacket's first 3 bytes `drone_mac` = vehicle MAC lower 3 bytes (existing SSOT field) |
+| Persistence | Save the peer controller MAC to NVS and restore it at boot |
+| Filter | In normal operation, drop received ControlPackets whose src MAC differs from the peer |
+| UI | While Pairing: LED fast blue blink + buzzer notification; cleared on completion |
 
 ### Supported Protocols
 

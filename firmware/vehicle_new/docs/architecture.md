@@ -360,6 +360,31 @@ FAILSAFEは**状態ではなくイベント**として設計する。
 | USB給電 | `alert: USB_POWER` | ARM禁止 | — |
 | ESKF発散 | `alert: ESKF_DIVERGED` | 変化なし | ESKFリセット |
 
+### ペアリング状態の位置づけ（PairingState — FlightState と並行）
+
+ペアリングは**飛行状態（FlightState）とは独立した並行状態機械** `PairingState{NotPaired, Pairing,
+Paired}` として設計する。FAILSAFE と同様、状態管理（StateManager）が**単一所有**し、通信
+コンポーネントは「事実」を publish、状態管理が「判断」、通知が LED/ブザーで表示する（R5 Pub-Sub）。
+
+```
+通信コンポーネント: PairingPacket送出 / ControlPacket受信(src MAC) を扱い pairing_complete を発行
+                                              ↓
+状態管理コンポーネント: pairing_complete を購読 → PairingState を Paired へ。pairing_state を発行
+                                              ↓
+通知コンポーネント: pairing_state を購読 → Pairing中は LED青点滅+ブザー、成立で解除
+```
+
+| 役割 | コンポーネント | 内容 |
+|------|--------------|------|
+| 事実の報告 | 通信（sf_comm） | 自MAC広告（PairingPacket 500ms）、Pairing 中の ControlPacket 受信で src MAC 学習・NVS保存・`pairing_complete` 発行 |
+| 判断 | 状態管理（StateManager） | PairingState 遷移の唯一の実行者。Pairing 中は ARM を拒否。未ペア起動で自動 Pairing |
+| 表示 | 通知（sf_notify） | `pairing_state` 購読 → `LED.showPairing` / `Buzzer.pairingTone` |
+
+**設計原則との整合:**
+- 「検出」と「判断」の分離（R5）: 通信は src MAC という事実を報告、状態管理が Paired を判断する。
+- StateManager 単一所有: FlightState と同じく PairingState の遷移実行者は状態管理のみ。
+- ボタン長押し3秒は通信ではなく状態管理が解釈する（`button_event` を購読し再ペアリングを判断）。
+
 ### 状態遷移の実装方針
 
 - 状態管理コンポーネントが唯一の遷移実行者

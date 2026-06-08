@@ -173,6 +173,24 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 
 **注3（バイアスフリーズ/解除 = 見送り）:** ESKF の凍結機構（`active_mask`＋`enforceCovarianceConstraints`）は「センサ恒久不在」用の隔離（凍結状態の共分散を毎周期 init 値へ戻す）で、地上↔飛行でトグルする用途とは非互換。トグルすると解除時に巨大な共分散が復活し、注1と同じ離陸発散を起こす（SIL で実証）。よってバイアス推定は飛行中も常時アクティブとし、フリーズ/解除は配線しない。地上振動からの校正バイアス保護が必要になった場合は、共分散を init に戻さない「ソフト凍結」を別途設計する（将来課題）。
 
+### ペアリング状態遷移（PairingState — FlightState と並行）
+
+FlightState とは別の独立状態機械。StateManager が所有する（[`architecture.md`](architecture.md) §4
+「ペアリング状態の位置づけ」参照）。上の FlightState onExit/onEnter テーブルとは別物。
+
+| 遷移 | トリガー | アクション |
+|------|---------|-----------|
+| 起動 → Paired / NotPaired | NVS load | 相手 MAC あり→Paired・相手をユニキャスト peer 登録 ／ なし→NotPaired |
+| NotPaired → Pairing | 自動（未ペア起動） | comm: PairingPacket を 500ms 周期で broadcast 開始、notify: LED青速点滅+ブザー |
+| 任意 → Pairing（再ペア） | `button_event`=LongPress3s（IDLE_GROUND のみ） | 既存ペア破棄（NVS clear）→ 上記 Pairing 開始 |
+| Pairing → Paired | comm 発行の `pairing_complete`（src MAC 学習） | comm: NVS保存・broadcast peer 削除・相手をユニキャスト peer 登録、notify: 点滅解除 |
+
+**ガード:** Pairing 中は `requestArm` を拒否（StateManager）。突入は地上（IDLE_GROUND）のみ。
+
+**トピック:**
+- `pairing_state`（StateManager → comm / notify）: 現在の PairingState を周知。
+- `pairing_complete`（comm → StateManager）: Pairing 中に相手 ControlPacket を受信した事実（src MAC）。
+
 ## 4. 制御インターフェース定義
 
 PID/MPC/LQRを差替可能にするための統一インターフェース。
@@ -450,6 +468,11 @@ firmware/vehicle_new/
     ├── tof_altitude/
     └── espnow_pair/
 ```
+
+> **注（`examples/espnow_pair/` と本体ペアリング機能の区別）:** `examples/espnow_pair/` は ESP-NOW
+> ペアリングの**最小教育例**（単独ビルド可能・PairingPacket の送受信を学ぶ短いコード）。本体の
+> ペアリング機能（混信対策・状態統合・NVS 永続化）は `sf_comm` ＋ `sf_state` が担い、本書 §3
+> 「ペアリング状態遷移」が正典。両者は別物として扱う。
 
 ## 8. メモリ配置
 

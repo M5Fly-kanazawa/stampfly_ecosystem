@@ -263,6 +263,12 @@ Topic API を初めて使う段階。`sf::api::*` で Pub-Sub に触れつつ、
 | `12_complementary_filter` | L1 | `sensor_imu` を読み、相補フィルタで姿勢推定 | ~80行 |
 | `13_parameter_tuning` | L1 | パラメータシステム、WiFi 経由で PID ゲイン変更 | ~100行 |
 
+> **`09_espnow_pair` の内容（教育例 — 本体ペアリング機能とは別物）:** PairingPacket（11B: channel +
+> 自 MAC 6B + 署名 `0xAA 0x55 0x16 0x88`）を broadcast 送出し、相手から ControlPacket を受けて
+> src MAC を学習する**相互 MAC 学習ハンドシェイク**の最小例。混信対策・状態統合・NVS 永続化は
+> 含めず、ESP-NOW の送受信とペアリングの考え方だけを学ぶ。本体のペアリング機能（`sf_comm` ＋
+> `sf_state`、[`detailed_design.md`](detailed_design.md) §3「ペアリング状態遷移」）とは別系統。
+
 ### Level 3: フライトシステム — Tier L1 中心
 
 Topic API でフライト制御パイプラインを構築する段階。`IEstimator` / `IController` インターフェースの理解が深まる。
