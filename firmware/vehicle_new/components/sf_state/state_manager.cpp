@@ -410,16 +410,29 @@ void StateManager::transition(FlightState new_state)
     // takeoff always starts in the direct-throttle mode that lifts off. Without this a
     // mode selected in flight (e.g. ALT_HOLD) PERSISTS across DISARM/emergency-IDLE, and
     // a re-takeoff in that mode never produces takeoff thrust from the ground — a real
-    // crash→re-fly robustness bug found by crash_refly.scn. The controller follows the
-    // published sub_mode (control_task reads system_mode each cycle), so no callback fire.
-    // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す
-    // 直接スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
+    // crash→re-fly robustness bug found by crash_refly.scn. The controller learns its mode
+    // ONLY via ControllerCmd::ModeChange (ControlTask does NOT read system_mode.sub_mode),
+    // so we must FIRE the onModeChange callbacks here — not just set mode_. They publish the
+    // mode change, which reconfigures the controller to STABILIZE and clears the stale
+    // ALT/POS cascade + hover-thrust state; without the fire the controller keeps holding
+    // hover on the re-takeoff and never climbs.
+    // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す直接
+    // スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
     // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
-    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器は発行 sub_mode に追従する
-    // （control_task が毎周期 system_mode を読む）ので callback 発火は不要。
+    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器はモードを ControllerCmd::
+    // ModeChange 経由でのみ知る（ControlTask は system_mode.sub_mode を読まない）ため、ここで
+    // onModeChange コールバックを発火する必要がある（mode_ を変えるだけでは不十分）。発火で
+    // モード変更が発行され、制御器が STABILIZE へ再構成され古い ALT/POS カスケード＋ホバー推力
+    // 状態がクリアされる。発火しないと制御器は再離陸でホバーを保持し続け上昇しない。
     if (new_state == FlightState::IDLE_GROUND && mode_ != FlightMode::STABILIZE) {
         ESP_LOGI(TAG, "Flight mode reset to STABILIZE (on ground)");
+        FlightMode old_mode = mode_;
         mode_ = FlightMode::STABILIZE;
+        for (int i = 0; i < mode_callback_count_; i++) {
+            if (mode_callbacks_[i]) {
+                mode_callbacks_[i](old_mode, mode_);
+            }
+        }
     }
 
     // Fire onEnter callbacks for new state

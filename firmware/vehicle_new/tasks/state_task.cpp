@@ -105,6 +105,26 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 // INIT→IDLE_GROUND: 起動校正。IDLE_HELD→IDLE_GROUND（置き直し）: 再飛行
                 // readiness のための再校正 — ARM前チェックが完了までARMを拒否（要件②③）。
                 // どちらもコールバック駆動（architecture §6）。
+                if (from == FlightState::IDLE_HELD) {
+                    // Placed back down after handling a crashed craft: the estimator may carry
+                    // a LATCHED gross attitude error from the crash — a tumble/inversion drives
+                    // the attitude estimate far from truth, and the accel-attitude χ² gate then
+                    // rejects the very correction that would fix it (the residual exceeds the
+                    // gate forever), so it never self-rights. The craft is now KNOWN level and
+                    // stationary on the ground, so a full ESKF reset re-seeds the attitude to
+                    // level (identity) and re-inflates the covariance, clearing the latch — the
+                    // missing half of re-fly readiness (SIL crash_refly surfaced this). INIT
+                    // boots from a clean estimator (constructor reset), so it skips this.
+                    // 墜落機を扱って置き直した直後: 推定器が墜落由来の大姿勢誤差を latch しうる ―
+                    // タンブル/反転で姿勢推定が真値から大きく外れ、accel-attitude の χ² ゲートが
+                    // それを直す補正自体を棄却し（残差がゲートを超え続ける）自己復帰しない。機体は
+                    // 今 level・静止と既知ゆえ、ESKF 全リセットで姿勢を level（identity）へ再シード・
+                    // 共分散を再膨張し latch を解除する ― 再飛行 readiness の欠けていた半分
+                    // （SIL crash_refly が炙り出した）。INIT は構築時 reset のクリーンな推定器
+                    // から起動するため不要。
+                    sf::estimator_command.publish(
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
+                }
                 sf::estimator_command.publish(
                     {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now});
             } else {
