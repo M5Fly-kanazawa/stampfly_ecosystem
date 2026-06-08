@@ -419,6 +419,10 @@ void Comm::forwardRawInput(const ControlPacket& pkt)
 // -----------------------------------------------------------------------------
 void Comm::servicePairing()
 {
+    // Finalize any bind the RX callback captured (heavy NVS/peer work in task context).
+    // 受信コールバックが控えたバインドを確定する（重い NVS/peer 処理をタスク文脈で）。
+    finalizePendingBind();
+
     // Read the StateManager's decision. Default-init is NotPaired (state 0), so
     // before the StateManager ever publishes we stay inert (no broadcast).
     // StateManager の決定を読む。既定値は NotPaired(state 0) ゆえ、StateManager が
@@ -484,36 +488,58 @@ void Comm::sendPairingPacket()
 // -----------------------------------------------------------------------------
 void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
 {
-    // Pairing in progress: the first ControlPacket from a controller fixes it as
-    // our peer (mutual MAC learning). The binding packet is NOT fed to control.
-    // ペアリング中: コントローラからの最初の ControlPacket で相手を確定（相互 MAC 学習）。
-    // バインド用パケットは制御へ渡さない。
-    if (pairing_active_.load(std::memory_order_acquire)) {
-        if (src_mac == nullptr) {
-            return;  // no sender MAC -> cannot bind / 送信元MACなし
+    const bool pairing = pairing_active_.load(std::memory_order_acquire);
+    const bool bound   = paired_.load(std::memory_order_acquire);
+
+    // Pairing and not yet bound: RECORD the first controller's MAC as a pending bind.
+    // We do NOT save to NVS or add a peer here — this runs in the WiFi RX callback and a
+    // flash write here can trip the WiFi task watchdog (→ reset). CommTask's
+    // finalizePendingBind() does the heavy work. The binding packet is not forwarded.
+    // ペアリング中かつ未バインド: 最初のコントローラの MAC を「保留バインド」として控える。
+    // ここでは NVS 保存も peer 登録もしない — 本処理は WiFi 受信コールバックで走り、フラッシュ
+    // 書込は WiFi タスクのウォッチドッグ発火(→リセット)を招く。重い処理は CommTask の
+    // finalizePendingBind() が行う。バインド用パケットは転送しない。
+    if (pairing && !bound) {
+        if (src_mac != nullptr && !pending_bind_.load(std::memory_order_acquire)) {
+            std::memcpy(pending_mac_, src_mac, 6);
+            pending_bind_.store(true, std::memory_order_release);
         }
-        const bool already_bound = paired_.load(std::memory_order_acquire);
-        if (!already_bound || std::memcmp(src_mac, controller_mac_, 6) != 0) {
-            std::memcpy(controller_mac_, src_mac, 6);
-            paired_.store(true, std::memory_order_release);
-            savePairingToNvs(controller_mac_);
-            addUnicastPeer(controller_mac_);
-            publishBindStatus(true, /*restored=*/false);
-            ESP_LOGI(TAG, "Paired with %02X:%02X:%02X:%02X:%02X:%02X",
-                     controller_mac_[0], controller_mac_[1], controller_mac_[2],
-                     controller_mac_[3], controller_mac_[4], controller_mac_[5]);
-        }
-        return;  // do not forward during pairing / ペアリング中は転送しない
+        return;
     }
 
     // Paired: drop ControlPackets from any controller other than our peer.
     // ペア済み: 相手以外のコントローラからの ControlPacket は破棄する。
-    if (paired_.load(std::memory_order_acquire) && src_mac != nullptr &&
+    if (bound && src_mac != nullptr &&
         std::memcmp(src_mac, controller_mac_, 6) != 0) {
         return;  // crosstalk from another transmitter / 他送信機の混信
     }
 
     forwardRawInput(pkt);
+}
+
+// -----------------------------------------------------------------------------
+// finalizePendingBind — complete a bind captured by the RX callback (CommTask ctx).
+// finalizePendingBind — 受信コールバックが控えたバインドを確定する（CommTask 文脈）。
+//
+// The NVS write and peer registration run HERE (in CommTask), never in the WiFi RX
+// callback, so a multi-millisecond flash write cannot stall the WiFi task.
+// NVS 書込と peer 登録をここ(CommTask)で行い、WiFi 受信コールバックでは行わない。数ms の
+// フラッシュ書込が WiFi タスクを止めないようにするため。
+// -----------------------------------------------------------------------------
+void Comm::finalizePendingBind()
+{
+    if (!pending_bind_.load(std::memory_order_acquire)) {
+        return;
+    }
+    std::memcpy(controller_mac_, pending_mac_, 6);  // pending_mac_ published before flag
+    savePairingToNvs(controller_mac_);
+    addUnicastPeer(controller_mac_);
+    paired_.store(true, std::memory_order_release);  // after mac is in place
+    publishBindStatus(true, /*restored=*/false);
+    pending_bind_.store(false, std::memory_order_release);
+    ESP_LOGI(TAG, "Paired with %02X:%02X:%02X:%02X:%02X:%02X",
+             controller_mac_[0], controller_mac_[1], controller_mac_[2],
+             controller_mac_[3], controller_mac_[4], controller_mac_[5]);
 }
 
 // -----------------------------------------------------------------------------

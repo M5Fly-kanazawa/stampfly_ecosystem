@@ -132,11 +132,22 @@ private:
     /// PairingPacket {channel, 自MAC, 署名} を1通 broadcast する。
     void sendPairingPacket();
 
-    /// Handle a checksum-valid ControlPacket: bind during Pairing, else filter by
-    /// peer MAC (drop crosstalk) and forward. src_mac is the ESP-NOW sender MAC.
-    /// チェックサム検証済み ControlPacket を処理: Pairing 中はバインド、それ以外は相手 MAC で
-    /// フィルタ（混信を破棄）して転送。src_mac は ESP-NOW 送信元 MAC。
+    /// Handle a checksum-valid ControlPacket (runs in the ESP-NOW RX callback / WiFi
+    /// task). Stays LIGHT: during Pairing it only RECORDS the controller's MAC as a
+    /// pending bind (CommTask finalizes it); when paired it filters by peer MAC (drops
+    /// crosstalk) and forwards. src_mac is the ESP-NOW sender MAC.
+    /// チェックサム検証済み ControlPacket を処理（ESP-NOW 受信コールバック=WiFiタスク文脈で
+    /// 実行）。軽量に保つ: Pairing 中は相手 MAC を「保留バインド」として控えるだけ（確定は
+    /// CommTask）、ペア済みは相手 MAC でフィルタ（混信破棄）して転送。src_mac は送信元 MAC。
     void handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac);
+
+    /// Finalize a bind captured by the RX callback: do the NVS save + unicast peer
+    /// registration HERE in CommTask — NOT in the WiFi RX callback (a flash write there
+    /// can trip the WiFi task watchdog → reset). Called from servicePairing().
+    /// 受信コールバックが控えたバインドを確定する: NVS保存＋ユニキャスト peer 登録をここ
+    /// CommTask で行う — WiFi 受信コールバック内ではしない（コールバック内のフラッシュ書込は
+    /// WiFi タスクのウォッチドッグ発火→リセットを招く）。servicePairing() から呼ぶ。
+    void finalizePendingBind();
 
     /// Register the controller as a unicast peer (so we can also send to it).
     /// コントローラをユニキャスト peer として登録する（こちらからも送れるように）。
@@ -205,6 +216,16 @@ private:
     std::atomic<bool> pairing_active_{false};// StateMgr has us searching / 探索中
     bool prev_pairing_active_ = false;       // for rising-edge detect  / 立ち上がり検出用
     int64_t last_pairing_bcast_us_ = 0;      // last PairingPacket send / 最終送出時刻
+
+    // Pending bind: the RX callback (WiFi task) records the controller MAC + sets the
+    // flag; CommTask (finalizePendingBind) does the heavy NVS/peer work. pending_mac_ is
+    // written BEFORE the flag (release) and read AFTER it (acquire) — the flag is the
+    // synchronization barrier.
+    // 保留バインド: 受信コールバック(WiFiタスク)が相手 MAC を控えフラグを立て、CommTask
+    // (finalizePendingBind)が重い NVS/peer 処理を行う。pending_mac_ はフラグより前に書き
+    // (release)・後に読む(acquire)。フラグが同期バリア。
+    std::atomic<bool> pending_bind_{false};  // a captured MAC awaits finalize / 確定待ち
+    uint8_t pending_mac_[6] = {0};            // captured controller src MAC    / 控えた送信元MAC
 
     /// Sink injected by CommTask; called with each validated raw input fact at
     /// packet time. Set once before init(), then only read by the recv path.
