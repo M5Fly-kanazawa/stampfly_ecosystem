@@ -26,6 +26,19 @@ namespace sf {
 namespace math {
 
 // =============================================================================
+// Physical constants
+// 物理定数
+// =============================================================================
+
+/// Standard gravitational acceleration [m/s²] (CODATA / ISO 80000-3 standard value).
+/// Single source of truth for every gravity reference (ESKF, complementary filter, PID
+/// hover thrust, calibration, failsafe) so the value cannot drift apart between modules.
+/// 標準重力加速度 [m/s²]（CODATA / ISO 80000-3 標準値）。全ての重力参照（ESKF・相補
+/// フィルタ・PID ホバー推力・キャリブレーション・フェイルセーフ）の単一の真実源で、
+/// モジュール間で値がばらつかないようにする。
+constexpr float kGravity = 9.80665f;
+
+// =============================================================================
 // Vector3 — 3D vector
 // 3次元ベクトル
 // =============================================================================

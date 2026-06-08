@@ -24,8 +24,10 @@
 
 static const char* TAG = "failsafe";
 
-// Gravity constant for impact detection
-// 衝撃検出用の重力定数
+// Gravity constant for impact detection (matches the SSOT sf::math::kGravity; kept as a
+// local literal to avoid an sf_math dependency in this leaf component)
+// 衝撃検出用の重力定数（SSOT sf::math::kGravity と同値。leaf コンポーネントの sf_math 依存を
+// 避けるためローカルリテラルで保持）
 static constexpr float G = 9.80665f;
 
 namespace sf {

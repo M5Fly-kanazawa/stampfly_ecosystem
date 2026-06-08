@@ -30,8 +30,10 @@ static const char* TAG = "calibration";
 static const char* NVS_NAMESPACE = "sf_cal";
 static const char* NVS_KEY       = "cal_data";
 
-// Gravity constant
-// 重力定数
+// Gravity constant (matches the SSOT sf::math::kGravity; kept as a local literal here
+// to avoid an sf_math dependency in this leaf component)
+// 重力定数（SSOT sf::math::kGravity と同値。leaf コンポーネントの sf_math 依存を避けるため
+// ここではローカルリテラルで保持）
 static constexpr float G = 9.80665f;
 
 namespace sf {

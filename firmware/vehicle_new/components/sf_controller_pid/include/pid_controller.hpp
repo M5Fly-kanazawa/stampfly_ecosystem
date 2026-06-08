@@ -68,16 +68,16 @@ private:
     // Thrust output is PHYSICAL total thrust [N]: the B^-1 mixer (actuator.cpp)
     // allocates it across the motors and converts to duty via the motor curve.
     // max_thrust_ = 4 × max-per-motor (0.168 N) = 0.672 N (T/W ≈ 1.85); hover
-    // is mg = 0.037 × 9.81 = 0.363 N (throttle ≈ 0.54 in STABILIZE).
+    // is mg = 0.037 × 9.80665 ≈ 0.363 N (throttle ≈ 0.54 in STABILIZE).
     // スラスト出力は物理の総推力 [N]: B^-1 ミキサーが各モータに配分しモータ曲線で duty に。
-    // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）、ホバーは mg=0.363N。
+    // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）、ホバーは mg≈0.363N。
     float max_thrust_     = 0.672f;  // [N] total (4 × 0.168 N per motor)
-    float hover_thrust_   = 0.363f;  // [N] mg = 0.037 × 9.81
+    float hover_thrust_   = 0.363f;  // [N] mg = 0.037 × 9.80665 ≈ 0.363
     float max_climb_rate_ = 0.5f;    // [m/s]
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
-    float gravity_        = 9.81f;   // [m/s²] for the accel→tilt mapping in POS_HOLD
+    float gravity_        = math::kGravity;  // [m/s²] accel→tilt mapping in POS_HOLD (SSOT: sf::math)
     float max_pos_tilt_   = 0.1745f; // [rad] POS_HOLD tilt limit (10 deg; matches the
                                      // proven firmware/vehicle margin so altitude holds
                                      // without 1/cosθ thrust compensation, and the small

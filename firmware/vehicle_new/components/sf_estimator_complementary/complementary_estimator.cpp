@@ -26,7 +26,7 @@ using math::Quat;
 // 鉛直チャネル定数。重力で加速度計→加速度を閉じ、気圧ゲインは気圧更新ごとの相補ブレンド
 // （高度に強く・速度に弱く — 速い動きは加速度積分、遅いドリフトは気圧で固定）。
 namespace {
-constexpr float kGravity     = 9.81f;   ///< [m/s²] NED down-positive
+constexpr float kGravity     = math::kGravity;  ///< [m/s²] NED down-positive (SSOT: sf::math)
 constexpr float kBaroAltGain = 0.30f;   ///< altitude correction per baro update
 constexpr float kBaroVelGain = 0.05f;   ///< velocity correction per baro update
 }  // namespace

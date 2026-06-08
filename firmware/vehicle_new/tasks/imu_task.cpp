@@ -46,9 +46,9 @@
 
 static const char* TAG = "ImuTask";
 
-/// Conversion factor: 1 g to m/s² (standard gravity)
-/// 換算係数: 1 g → m/s²（標準重力）
-static constexpr float G_TO_MPS2 = 9.80665f;
+/// Conversion factor: 1 g to m/s² (standard gravity, SSOT: sf::math::kGravity)
+/// 換算係数: 1 g → m/s²（標準重力, SSOT: sf::math::kGravity）
+static constexpr float G_TO_MPS2 = sf::math::kGravity;
 
 /// Temperature is read every N IMU cycles (400Hz / 100 = 4Hz)
 /// 温度は N サイクルごとに読み取る（400Hz / 100 = 4Hz）

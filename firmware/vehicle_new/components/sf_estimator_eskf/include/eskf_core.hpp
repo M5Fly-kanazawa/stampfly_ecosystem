@@ -63,7 +63,7 @@ struct EskfConfig {
     float init_ba_std      = 0.1f;        // [m/s²]
 
     // Constants / 定数
-    float gravity          = 9.81f;       // [m/s²]
+    float gravity          = math::kGravity;  // [m/s²] (SSOT: sf::math)
     Vec3 mag_ref           = {20.0f, 0.0f, 40.0f};  // NED [uT]
 
     // Gates / ゲート閾値
