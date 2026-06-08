@@ -235,6 +235,13 @@ void StateTask(void* pvParameters)
     bool prev_arm = false;
     bool init_done = false;   // INIT → IDLE_GROUND done once / 初期化完了遷移を1回
 
+    // Previous comm bind flag (pairing_complete.bound), for false→true edge detection.
+    // We react to the EDGE (comm became bound) once, robustly to the SIL virtual clock
+    // reading 0 (a timestamp-based sentinel would be unreliable there).
+    // 前回の comm バインドフラグ（pairing_complete.bound）。false→true エッジ検出用。
+    // SIL 仮想クロックが 0 を返しても頑健なよう、エッジ（comm がバインドした瞬間）に1回反応する。
+    bool prev_bound = false;
+
     while (true) {
         // =====================================================================
         // Wake on a failsafe notification OR every 20 ms to poll the pilot's RC
@@ -320,13 +327,22 @@ void StateTask(void* pvParameters)
         // =====================================================================
         sf::ButtonEvent button;
         while (sf::button_event.read(button)) {
-            if (button.gesture != static_cast<uint8_t>(sf::ButtonGesture::Click)) {
-                continue;
-            }
-            switch (g_state_manager.getState()) {
-            case sf::FlightState::IDLE_GROUND:  g_state_manager.requestArm();    break;
-            case sf::FlightState::ARMED_GROUND: g_state_manager.requestDisarm(); break;
-            default: break;  // airborne / INIT / held: ignore a click (see note above)
+            const auto gesture = static_cast<sf::ButtonGesture>(button.gesture);
+            if (gesture == sf::ButtonGesture::Click) {
+                switch (g_state_manager.getState()) {
+                case sf::FlightState::IDLE_GROUND:  g_state_manager.requestArm();    break;
+                case sf::FlightState::ARMED_GROUND: g_state_manager.requestDisarm(); break;
+                default: break;  // airborne / INIT / held: ignore a click (see note above)
+                }
+            } else if (gesture == sf::ButtonGesture::LongPress3s) {
+                // Long-press 3 s = (re-)pair: discard the existing bind and re-enter
+                // Pairing so a new transmitter can take over. requestPairing() is
+                // internally gated to the ground and is idempotent, so this is safe
+                // to call regardless of the current state.
+                // 長押し3秒 = （再）ペア: 既存バインドを破棄し Pairing に再突入して新しい
+                // 送信機が引き継げるようにする。requestPairing() は内部で地上に限定され
+                // 冪等なので、現在状態に関わらず安全に呼べる。
+                g_state_manager.requestPairing();
             }
         }
 
@@ -379,6 +395,41 @@ void StateTask(void* pvParameters)
             g_state_manager.notifyIdleGroundHeld(status.held);
         } else if (fs == sf::FlightState::LANDING && status.landing) {
             g_state_manager.notifyLandingComplete();
+        }
+
+        // =====================================================================
+        // Pairing: reflect sf_comm's bind status and auto-enter pairing when unpaired.
+        // sf_comm publishes its bind status on pairing_complete (bound + learned MAC);
+        // the StateManager owns the PairingState. A FRESH bound=true report → Paired.
+        // While still NotPaired and on the ground we (auto-)enter Pairing so a
+        // transmitter can discover us (mutual MAC learning). requestPairing() is gated
+        // to ground states and idempotent, so calling it each cycle is safe. We process
+        // the bind report BEFORE the auto-enter so a boot-restored bind wins.
+        // ペアリング: sf_comm のバインド状態を反映し、未ペアなら自動で Pairing に入る。
+        // sf_comm は pairing_complete にバインド状態（bound + 学習MAC）を発行し、PairingState は
+        // StateManager が所有する。新しい bound=true 報告 → Paired。まだ NotPaired かつ地上なら
+        // 自動で Pairing に入り、送信機が我々を発見できるようにする（相互 MAC 学習）。
+        // requestPairing() は地上限定で冪等ゆえ毎周期呼んで安全。起動時の復元バインドが勝つよう
+        // バインド報告を自動突入より先に処理する。
+        //
+        // @subscriber pairing_complete
+        // @design requirements.md §2 — PairingState (auto-enter on unpaired) [OK]
+        // @design architecture.md §4 — StateManager owns PairingState        [OK]
+        // =====================================================================
+        const sf::PairingComplete bind = sf::pairing_complete.latest();
+        if (bind.timestamp != 0) {                         // comm has reported its bind status
+            const bool bound = bind.bound;
+            if (bound && !prev_bound) {
+                g_state_manager.notifyPairingComplete();   // false→true edge → Paired
+            }
+            prev_bound = bound;
+            const sf::FlightState fs_now = g_state_manager.getState();
+            if (!bound &&
+                g_state_manager.getPairingState() == sf::PairingState::NotPaired &&
+                (fs_now == sf::FlightState::IDLE_GROUND ||
+                 fs_now == sf::FlightState::IDLE_HELD)) {
+                g_state_manager.requestPairing();          // unpaired on the ground → Pairing
+            }
         }
 
         // =====================================================================

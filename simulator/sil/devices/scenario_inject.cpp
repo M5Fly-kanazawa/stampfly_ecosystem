@@ -14,6 +14,9 @@
 
 #include "scenario_inject.hpp"
 
+#include <cstdlib>  // getenv (SIL_EMU_UNPAIRED)
+#include "nvs.h"    // host NVS shim — seed the firmware's pairing store
+
 // ESP-NOW delivery seam (espnow_hub.cpp); records the frame as it delivers.
 // ESP-NOW 配信口（espnow_hub.cpp）。配信時にフレームを記録する。
 extern "C" void sil_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int len);
@@ -49,6 +52,26 @@ void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
     uint8_t pkt[14];
     build_control_packet(pkt, throttle, roll, pitch, yaw, flags);
     sil_espnow_deliver(kPilotMac, pkt, (int)sizeof(pkt));
+}
+
+void seed_pairing_nvs()
+{
+    // Pairing scenario opts out (tests the real unpaired→Pairing→bind handshake).
+    // ペアリングシナリオはオプトアウト（実際の未ペア→Pairing→bind を試験する）。
+    if (std::getenv("SIL_EMU_UNPAIRED") != nullptr) {
+        return;
+    }
+    // Write kPilotMac under the SAME namespace/key comm uses (sf_pair / ctrl_mac), so
+    // comm::loadPairingFromNvs() restores it → the vehicle boots Paired to the injector.
+    // comm が使う namespace/key（sf_pair / ctrl_mac）と同じ場所に kPilotMac を書く。
+    // comm::loadPairingFromNvs() が復元し、機体はインジェクタにペア済みで起動する。
+    nvs_handle_t handle;
+    if (nvs_open("sf_pair", NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    nvs_set_blob(handle, "ctrl_mac", kPilotMac, sizeof(kPilotMac));
+    nvs_commit(handle);
+    nvs_close(handle);
 }
 
 }  // namespace sil

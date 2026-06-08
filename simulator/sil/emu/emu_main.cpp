@@ -40,6 +40,7 @@
 #include "data_types.hpp"
 #include "params.hpp"           // P2-3 contrast: toggle calibration.enable via env
 #include "scenario.hpp"          // P8: deterministic *.scn scripted-input driver
+#include "scenario_inject.hpp"   // pairing NVS seed (boot Paired unless SIL_EMU_UNPAIRED)
 #include "console_feeder.hpp"    // P8: scripted console bytes → firmware stdin
 #include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
 #include "emu_trajectory.hpp"    // P8: review-video trajectory recorder (SIL_EMU_TRAJ)
@@ -166,6 +167,17 @@ int main(int argc, char** argv)
     sil_board_attach_plant(&g_plant);
 
     sil::rtos::Scheduler::instance().set_on_advance(on_advance);
+
+    // Seed the pairing NVS BEFORE app_main() so comm::init() boots the vehicle PAIRED
+    // to the injector's transmitter MAC. Real hardware boots unpaired and auto-enters
+    // Pairing (which blocks ARM); the flight scenarios inject RC without a pairing
+    // handshake, so we pre-bind them (a vehicle that "was paired before"). The pairing
+    // scenario sets SIL_EMU_UNPAIRED to skip this and exercise the real handshake.
+    // ペアリング NVS を app_main() の前に seed し、comm::init() が機体をインジェクタの送信機
+    // MAC にペア済みで起動させる。実機は未ペア起動→自動 Pairing（ARM を阻む）だが、飛行
+    // シナリオはペアリングなしで RC を注入するため事前バインドする。ペアリングシナリオは
+    // SIL_EMU_UNPAIRED を設定してこれをスキップし実ハンドシェイクを試験する。
+    sil::seed_pairing_nvs();
 
     // BSP init + create all 14 tasks (the real firmware startup, unmodified).
     // BSP 初期化＋14タスク生成（実ファーム起動、無改変）。

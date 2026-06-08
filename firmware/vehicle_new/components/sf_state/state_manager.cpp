@@ -54,9 +54,16 @@ void StateManager::init()
 {
     state_ = FlightState::INIT;
     mode_ = FlightMode::STABILIZE;
+    pairing_state_ = PairingState::NotPaired;
     exit_callback_count_ = 0;
     enter_callback_count_ = 0;
     mode_callback_count_ = 0;
+
+    // Publish the initial PairingState so comm/notify start from a known value
+    // (the topic default is also NotPaired; this stamps a timestamp).
+    // 初期 PairingState を発行し comm/notify を既知値から開始させる（トピック既定も
+    // NotPaired だが、これで timestamp を刻む）。
+    publishPairingState();
 
     ESP_LOGI(TAG, "StateManager initialized (state=%s)",
              flightStateName(state_));
@@ -85,6 +92,19 @@ bool StateManager::requestArm()
     if (state_ != FlightState::IDLE_GROUND) {
         ESP_LOGD(TAG, "ARM rejected: not in IDLE_GROUND (state=%s)",
                  flightStateName(state_));
+        return false;
+    }
+
+    // --- Pre-arm gate 0: not actively pairing -----------------------------------------
+    // While searching for a transmitter (PairingState::Pairing) the link is not yet
+    // bound, so ARM is refused. A vehicle that boots unpaired auto-enters Pairing; it
+    // must complete pairing (→ Paired) before it can be armed. Paired and (the transient)
+    // NotPaired do not block — only the active search does.
+    // ARM 前ゲート0: 探索中でないこと。送信機を探索中（PairingState::Pairing）はリンクが
+    // 未バインドゆえ ARM を拒否する。未ペア起動は自動で Pairing に入り、ペア成立（→Paired）
+    // するまで ARM できない。Paired と（過渡的な）NotPaired は阻まない — 探索中のみ阻む。
+    if (pairing_state_ == PairingState::Pairing) {
+        ESP_LOGW(TAG, "ARM rejected: pairing in progress");
         return false;
     }
 
@@ -311,6 +331,49 @@ void StateManager::handleAlert(const SystemAlert& alert)
     }
 }
 
+// =============================================================================
+// Pairing — parallel state machine (NotPaired / Pairing / Paired)
+//
+// @design requirements.md §2 — PairingState                            [OK]
+// @design architecture.md §4 — Pairing positioning (StateManager owns) [OK]
+// @design detailed_design.md §3 — Pairing state transitions            [OK]
+// =============================================================================
+
+void StateManager::requestPairing()
+{
+    // Pairing is a ground-only activity: a disarmed vehicle advertising itself so a
+    // transmitter can bind. Reject from INIT / armed / airborne (we never re-pair in
+    // flight). Idempotent: if already searching, do nothing (avoids re-publish churn).
+    // ペアリングは地上限定の活動: disarmed の機体が自分を広告して送信機がバインドできる
+    // ようにする。INIT/武装/空中からは拒否（飛行中に再ペアしない）。冪等: 既に探索中なら
+    // 何もしない（再発行のばたつき回避）。
+    if (state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD) {
+        ESP_LOGD(TAG, "Pairing rejected: not on the ground (state=%s)",
+                 flightStateName(state_));
+        return;
+    }
+    if (pairing_state_ == PairingState::Pairing) {
+        return;   // already searching / 既に探索中
+    }
+    ESP_LOGI(TAG, "Pairing started (broadcasting; awaiting a transmitter)");
+    pairing_state_ = PairingState::Pairing;
+    publishPairingState();
+}
+
+void StateManager::notifyPairingComplete()
+{
+    // sf_comm reports it has bound to a controller (live pairing or NVS restore at
+    // boot). Reflect Paired. Idempotent — repeated bind-status reports are common.
+    // sf_comm が相手にバインドした事実を報告（生のペアリング or 起動時の NVS 復元）。
+    // Paired を反映する。冪等 — バインド状態の繰り返し報告は普通に起こる。
+    if (pairing_state_ == PairingState::Paired) {
+        return;
+    }
+    ESP_LOGI(TAG, "Pairing complete (bound to transmitter)");
+    pairing_state_ = PairingState::Paired;
+    publishPairingState();
+}
+
 void StateManager::update(uint32_t now_us)
 {
     // Comm-loss failsafe: deferred FLYING → LANDING (requirements §9). Nothing pending
@@ -457,6 +520,14 @@ void StateManager::publishMode()
     mode_msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
     system_mode.publish(mode_msg);
+}
+
+void StateManager::publishPairingState()
+{
+    PairingStatus msg = {};
+    msg.state = static_cast<uint8_t>(pairing_state_);
+    msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    pairing_state.publish(msg);
 }
 
 }  // namespace sf

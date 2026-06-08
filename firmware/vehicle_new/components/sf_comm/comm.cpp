@@ -544,7 +544,15 @@ void Comm::publishBindStatus(bool bound, bool restored)
     std::memcpy(pc.controller_mac, controller_mac_, 6);
     pc.bound     = bound;
     pc.restored  = restored;
-    pc.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    // Stamp a NON-ZERO timestamp so a subscriber can use timestamp!=0 to mean
+    // "comm has reported its bind status". On the SIL the virtual clock can read 0
+    // at init (before the scheduler advances), which would otherwise collide with
+    // the "never reported" sentinel and make StateManager miss a boot-restored bind.
+    // 非ゼロの timestamp を刻み、購読側が timestamp!=0 で「comm が報告済み」と判定できる
+    // ようにする。SIL の仮想クロックは init 時（スケジューラ進行前）に 0 を返しうるため、
+    // そのままだと「未報告」番兵と衝突し StateManager が起動時復元バインドを取りこぼす。
+    const uint32_t ts = static_cast<uint32_t>(esp_timer_get_time());
+    pc.timestamp = (ts != 0) ? ts : 1;
     pairing_complete.publish(pc);
 }
 

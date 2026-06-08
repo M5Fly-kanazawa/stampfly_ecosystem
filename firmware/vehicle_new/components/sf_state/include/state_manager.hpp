@@ -88,6 +88,10 @@ public:
     /// 機体がARMされているか確認する
     bool isArmed() const { return sf::isArmed(state_); }
 
+    /// Get the current pairing state (parallel state machine, see requestPairing).
+    /// 現在のペアリング状態を取得する（並行状態機械、requestPairing 参照）。
+    PairingState getPairingState() const { return pairing_state_; }
+
     // =========================================================================
     // Transition Requests
     // 遷移リクエスト
@@ -163,6 +167,33 @@ public:
     /// @design requirements.md §9 — Safety requirements               [OK]
     void handleAlert(const SystemAlert& alert);
 
+    // =========================================================================
+    // Pairing — parallel state machine (NotPaired / Pairing / Paired)
+    // ペアリング — 並行状態機械（NotPaired / Pairing / Paired）
+    //
+    // Independent of FlightState; this manager is its single owner (architecture
+    // §4). sf_comm EXECUTES the radio side (broadcast/learn/filter) and reports
+    // the bind status fact; this manager DECIDES the PairingState and publishes it.
+    // FlightState とは独立。本マネージャが単一所有する（architecture §4）。sf_comm が
+    // 無線側（送出/学習/フィルタ）を実行しバインド状態の事実を報告、本マネージャが
+    // PairingState を判断して発行する。
+    // =========================================================================
+
+    /// Request entering Pairing (search). Valid only on the ground (IDLE_GROUND /
+    /// IDLE_HELD) — used for auto-enter when unpaired and for button re-pairing.
+    /// Rejected while INIT / armed / airborne. Idempotent if already Pairing.
+    /// Pairing（探索）への突入要求。地上（IDLE_GROUND / IDLE_HELD）でのみ有効 — 未ペア時の
+    /// 自動突入とボタン再ペアに使う。INIT/武装/空中では拒否。既に Pairing なら冪等。
+    ///
+    /// @design requirements.md §2 — Pairing on the ground only          [OK]
+    void requestPairing();
+
+    /// Reflect that sf_comm has bound to a controller → Paired. Idempotent.
+    /// sf_comm が相手にバインドした事実を反映する → Paired。冪等。
+    ///
+    /// @design requirements.md §2 — Pairing → Paired on bind            [OK]
+    void notifyPairingComplete();
+
     /// Periodic update for TIME-DEFERRED transitions (call once per StateTask cycle).
     /// Today this drives the comm-loss failsafe: a COMM_LOST while FLYING does not land
     /// immediately — it arms a timer (handleAlert) and this method commands the
@@ -217,10 +248,18 @@ private:
     /// 現在の状態をsystem.modeトピックに発行する
     void publishMode();
 
+    /// Publish current PairingState to the pairing_state topic (comm/notify read it)
+    /// 現在の PairingState を pairing_state トピックに発行する（comm/notify が読む）
+    void publishPairingState();
+
     // Current state
     // 現在の状態
     FlightState state_ = FlightState::INIT;
     FlightMode mode_ = FlightMode::STABILIZE;
+
+    // Pairing state (parallel to FlightState). Owned here; comm reflects it.
+    // ペアリング状態（FlightState と並行）。ここが所有し comm が反映する。
+    PairingState pairing_state_ = PairingState::NotPaired;
 
     // Comm-loss failsafe timer (requirements §9: hover hold 3 s → auto landing).
     // Armed by handleAlert(COMM_LOST) while FLYING; update() lands once the grace

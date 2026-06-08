@@ -68,4 +68,17 @@ void build_control_packet(uint8_t* out, uint16_t throttle, uint16_t roll,
 void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                uint8_t flags);
 
+// Seed the firmware's pairing NVS so the emulated vehicle boots PAIRED to the
+// injector's transmitter MAC (kPilotMac). Real hardware boots unpaired and auto-
+// enters Pairing, which would block ARM; the flight scenarios inject RC without a
+// pairing handshake, so we pre-bind them here (a vehicle that "was paired before").
+// Call BEFORE app_main() (so comm::init() loads it). No-op when the SIL_EMU_UNPAIRED
+// environment variable is set — used by the pairing scenario to test the handshake.
+// 本体のペアリング NVS を seed し、エミュ機体がインジェクタの送信機 MAC（kPilotMac）に
+// ペア済みで起動するようにする。実機は未ペア起動→自動 Pairing で ARM が阻まれるが、飛行
+// シナリオはペアリングなしで RC を注入するため、ここで事前バインドする（「以前ペアした」機体）。
+// app_main() の前に呼ぶこと（comm::init() が読むため）。環境変数 SIL_EMU_UNPAIRED が設定
+// されていれば no-op — ペアリングシナリオがハンドシェイクを試験するために使う。
+void seed_pairing_nvs();
+
 }  // namespace sil
