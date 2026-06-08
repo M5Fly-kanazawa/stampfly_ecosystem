@@ -152,7 +152,14 @@ namespace param_vars {
     float eskf_flow_noise     = 0.30f;
     float eskf_baro_noise     = 0.1f;
     float eskf_mag_noise      = 1.0f;
-    float eskf_accel_att      = 0.06f;
+    // Accel-attitude observation noise σ [m/s²]. Raised 0.06→0.8 to cure the χ² latch-up
+    // (chi2_latchup_finding): at 0.06 (R=0.0036) a normal in-flight innovation of ~1 m/s²
+    // — un-modeled motion accel that the norm-based adaptive R does not catch — is ~17σ, so
+    // the χ²(3) gate rejected ~66 % of accel updates during any maneuver; the attitude then
+    // coasted on gyro-only and POS_HOLD drifted (pos_yaw 7.4 m, att_rmse 8.8°). 0.8 reflects
+    // the realistic specific-force uncertainty in flight: rejection drops to ~0 %, the cliff
+    // disappears (all POS hold with att_rmse 0.5–1.1°), and no scenario regresses.
+    float eskf_accel_att      = 0.8f;
 
     // ESKF sensor enable
     bool eskf_use_tof   = true;
@@ -263,7 +270,7 @@ static const ParamEntry table[] = {
     {"eskf.obs.flow_noise",      ParamType::FLOAT, &eskf_flow_noise,    0.30f, 0.01f,  5.0f,  nullptr},
     {"eskf.obs.baro_noise",      ParamType::FLOAT, &eskf_baro_noise,    0.1f,  0.01f,  5.0f,  nullptr},
     {"eskf.obs.mag_noise",       ParamType::FLOAT, &eskf_mag_noise,     1.0f,  0.01f,  10.0f, nullptr},
-    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     0.06f, 0.001f, 1.0f,  nullptr},
+    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     0.8f,  0.001f, 2.0f,  nullptr},
 
     // ESKF sensor enable
     {"eskf.use_tof",  ParamType::BOOL, &eskf_use_tof,  1.0f, 0.0f, 1.0f, nullptr},

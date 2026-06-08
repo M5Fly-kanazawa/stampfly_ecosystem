@@ -194,6 +194,24 @@ int main(int argc, char** argv)
         std::printf("[emu] SIL_EMU_NO_CALIB set — boot calibration DISABLED\n");
     }
 
+    // χ² latch-up investigation sweep hooks: override the accel-attitude robustness
+    // params before the estimator reads them (same timing window as NO_CALIB above).
+    // SIL_EMU_CHI2_GATE = accel χ² gate, SIL_EMU_KADAPT = adaptive-R k, SIL_EMU_ACCEL_ATT
+    // = accel-attitude noise. Unset → table defaults, path unchanged (byte-identical).
+    // χ²ラッチアップ調査の掃引フック: 推定器が読む前に accel 姿勢ロバスト性 param を上書き。
+    if (const char* v = std::getenv("SIL_EMU_CHI2_GATE")) {
+        sf::params::set_float("eskf.att.chi2_gate", std::atof(v));
+        std::printf("[emu] SIL_EMU_CHI2_GATE=%s — accel χ² gate overridden\n", v);
+    }
+    if (const char* v = std::getenv("SIL_EMU_KADAPT")) {
+        sf::params::set_float("eskf.att.k_adaptive", std::atof(v));
+        std::printf("[emu] SIL_EMU_KADAPT=%s — adaptive-R k overridden\n", v);
+    }
+    if (const char* v = std::getenv("SIL_EMU_ACCEL_ATT")) {
+        sf::params::set_float("eskf.obs.accel_att_noise", std::atof(v));
+        std::printf("[emu] SIL_EMU_ACCEL_ATT=%s — accel-att noise overridden\n", v);
+    }
+
     sil::rtos::Scheduler::instance().run(duration_us);
 
     sil_emu_record_close();   // flush/close the events log
