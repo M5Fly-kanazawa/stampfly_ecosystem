@@ -1,37 +1,48 @@
-# 次セッション指示書 — リファクタ計画(Phase0〜8)完了。本道＝実機ブリングアップへ
+# 次セッション指示書 — ペアリング実装完了。本道＝実機ブリングアップへ
 
-最終更新: 2026-06-08（**`valiant-frolicking-sun.md` 全フェーズ完了。SIL GUI も完成（寄り道）。次は本道＝実機**）
+最終更新: 2026-06-09（**ペアリング P1〜P3 実装＋SIL 検証完了。次は実機ブリングアップ（飛ばすにはペアリングが前提）**）
 
 ---
 
 ## ★最初にやること（優先順）
 
-リファクタ計画（場当たりコード全廃〜ロバスト再飛行 SIL 検証）は**全フェーズ完了**。SIL は
-ALT/POS/外乱/ロバスト再飛行まで物理真値で通っている。本道は **SIL→実機**（development_roadmap）。
+リファクタ計画（Phase0〜8）に続き、**ペアリング機能（P1〜P3）を実装・SIL 検証完了**。これで実機を
+飛ばす前提（コントローラが機体の実 MAC を学習して ControlPacket を届ける）が整った。本道は
+**SIL→実機**（development_roadmap）。
 
 1. **本道：実機ブリングアップ（development_roadmap Phase 2 → Phase 3）** ← メイン
    - **Phase 2「HAL 接続（実機が動く）」**: 実機センサ値が推定器へ、制御出力がモータへ届く経路を確認。
      合格基準＝機体を手で持って ARM→スロットル中立で全モータ等速、スティックで1軸ずつ duty 変化、
      テレメトリで全センサ表示。**まだ飛ばさない。** （詳細 `development_roadmap.md §4 Phase 2`）
+   - **ペアリング実機検証（Phase 2 の一部）**: 電源ON→LED 青速点滅＋ブザー（自動 Pairing）→
+     コントローラ側でペアリング（`peering_process` が CH スキャンで PairingPacket を発見）→ 成立で
+     点滅停止 → ARM 可能に。コントローラ・protocol・旧 vehicle は不変、vehicle_new のみ実装済み。
    - **Phase 3「実機初飛行 — ACRO で同定」（最重要マイルストーン）**: SIL で確定したレート PID＋
      プラントモデルが実機で成立するか。ACRO 手動ホバー → 実機ログを SIL に注入して差分診断
      （gyro RMS が SIL 予測 ±50%、ステップ立上り時定数 ±20% 以内）。
    - まず `sf doctor` → `sf build vehicle_new` → `sf flash vehicle_new -m` で実機が起動するか。
 
-2. **ペアリング（コントローラ⇄機体）** ← 今回調査・計画済み（`docs/pairing_plan.md`）
-   - 調査結論: **vehicle_new は未実装**（部品のみ）。コントローラ/protocol/旧vehicle には実装/定義あり。
-   - **まず P1「自分宛フィルタ」だけでも入れる**（低コスト・即効・SSOT 準拠）。ControlPacket は既に
-     `drone_mac`(0-2) を持つので、受信時に自 MAC 下位3Bと照合して不一致を捨てるだけで混信を断てる。
-   - 実機で複数機を飛ばす前に P1 を入れておくのが安全。詳細は **`docs/pairing_plan.md`**。
-
-3. **データ駆動ノイズ** （auto-memory `project_sil_noise_data_driven`）: 実機ログ解析→SIL ノイズ
+2. **データ駆動ノイズ** （auto-memory `project_sil_noise_data_driven`）: 実機ログ解析→SIL ノイズ
    プロファイル注入。実機で飛ばした後（Model Fidelity, development_roadmap Phase 5）の軸。
+
+3. **ペアリング P4（per-drone channel, 30機スケール）** ← 30機ワークショップ運用の直前。
+   詳細 `docs/pairing_plan.md` P4。
 
 4. **任意・低優先（リファクタ Phase 7 残り、安定性影響小）**: 相補フィルタゲイン params 化、
    pid 飛行リミット config 化。
 
-> **着手前に「設計矛盾は実装前に報告」（CLAUDE.md）**。特にペアリングは requirements/architecture/
-> detailed_design に PAIRING 状態が無いので、状態モデルへの位置づけをユーザーと確認してから実装する。
+## ★ペアリング実装の要点（2026-06-09 完了, `docs/pairing_plan.md` 参照）
+
+- **状態モデル**: `PairingState{NotPaired, Pairing, Paired}` を FlightState と並行の独立状態機械として
+  StateManager が単一所有（旧 vehicle 踏襲・ユーザー承認）。未ペア起動で自動 Pairing、Pairing 中は
+  ARM 拒否、ボタン長押し3s で再ペア。
+- **ハンドシェイク**: 機体が PairingPacket（11B: ch+自MAC+署名 AA5516 88）を 500ms 周期 broadcast →
+  コントローラが学習し機体 MAC へ ControlPacket をユニキャスト → 機体が src MAC を相手として確定・
+  NVS 保存（namespace sf_pair）。以降、相手以外の src MAC を破棄（混信対策）。
+- **配線**: comm=事実 publish（pairing_complete）/ state=判断（pairing_state）/ notify=LED青速点滅+
+  pairingTone（R5 Pub-Sub）。CLI `pair [start|status]` 追加。
+- **SIL 検証**: `sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired`。
+  飛行系シナリオは起動時に NVS へペア済み MAC を seed（`--unpaired` でスキップ）。
 
 ---
 
@@ -77,6 +88,7 @@ for s in pos_roll pos_pitch pos_flight pos_yaw alt_flight stab_flight acro_fligh
          disturb commloss calib prearm modeswitch; do
   sf sil scenario simulator/sil/scenarios/$s.scn --target vehicle_new
 done
+sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired   # ペアリング＋混信拒否
 sf sil scenario simulator/sil/scenarios/crash_refly.scn --target vehicle_new --duration 33000000
 sf sil scenario simulator/sil/scenarios/hover_espnow.scn --target vehicle   # legacy 無回帰
 simulator/sil/build/hover_smoke simulator/sil/models/stampfly.xml           # G2+G3 物理真値

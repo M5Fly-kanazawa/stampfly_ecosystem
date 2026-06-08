@@ -1,6 +1,18 @@
 # vehicle_new ⇄ コントローラ ペアリング — 調査結果と実装計画
 
-最終更新: 2026-06-08（調査のみ。実装は未着手）
+最終更新: 2026-06-09（**P1〜P3 実装完了・SIL 検証済み。残=実機検証・P4(per-drone ch)**）
+
+> **【実装完了 2026-06-09】P1（自分宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
+> P3（状態機械統合＋NVS 永続化）を実装し SIL で検証済み。** 旧 vehicle のシーケンスを踏襲し
+> vehicle_new アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
+> architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
+> コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SIL検証)。
+> **SIL ゲート**: `sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired`
+> = 未ペア起動→自動Pairing→bind（相互MAC学習）＋誤MAC送信機のARM/離陸を破棄（混信拒否, duty=0）。
+> **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
+> ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
+
+---
 
 > **結論（調査）: vehicle_new のペアリングは「部品のみ存在・未配線（実質未実装）」。**
 > 一方で **コントローラ側・プロトコル仕様（SSOT）・旧 vehicle には実装/定義が揃っており**、
