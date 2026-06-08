@@ -29,6 +29,9 @@
 #include <cstring>    // strcmp — parse the SIL_EMU_NOISE level
 #include <fcntl.h>    // fcntl, O_NONBLOCK — non-blocking host stdin for the CLI
 #include <unistd.h>   // STDIN_FILENO
+#include <fstream>    // SIL_EMU_PARAMS_FILE — general param overrides (GUI)
+#include <string>
+#include <sstream>
 
 #include "scheduler.hpp"
 #include "plant.hpp"
@@ -210,6 +213,56 @@ int main(int argc, char** argv)
     if (const char* v = std::getenv("SIL_EMU_ACCEL_ATT")) {
         sf::params::set_float("eskf.obs.accel_att_noise", std::atof(v));
         std::printf("[emu] SIL_EMU_ACCEL_ATT=%s — accel-att noise overridden\n", v);
+    }
+
+    // General parameter overrides for the SIL GUI: SIL_EMU_PARAMS_FILE points to a text
+    // file of "<param.name> <value>" lines (one per line, '#' comments allowed). Each line
+    // is applied through the type-correct setter — the param's type is looked up in the
+    // SSOT table (params::entry), so a float/bool/int param is set with the right call and
+    // range-validated. Same timing window as the env overrides above (after app_main loads
+    // the table defaults, before the scheduler reads them). Unset → table defaults, path
+    // unchanged. This is how the GUI's parameter panel feeds a run without a rebuild.
+    // SIL GUI 用の汎用パラメータ上書き: SIL_EMU_PARAMS_FILE は "<param名> <値>" 行のテキスト
+    // ファイル（1行1個、'#' コメント可）。各行を型に正しいセッタで適用（型は SSOT テーブル
+    // params::entry で引く）→ float/bool/int を正しい呼び出しで範囲検証付き設定。上の env
+    // 上書きと同じタイミング窓。未設定なら既定のまま。GUI のパラメータパネルが再ビルド無しで
+    // 走行に値を渡す経路。
+    if (const char* path = std::getenv("SIL_EMU_PARAMS_FILE")) {
+        std::ifstream pf(path);
+        if (!pf) {
+            std::printf("[emu] SIL_EMU_PARAMS_FILE=%s — cannot open, skipped\n", path);
+        } else {
+            std::string line;
+            int applied = 0;
+            while (std::getline(pf, line)) {
+                size_t hash = line.find('#');
+                if (hash != std::string::npos) line.erase(hash);   // strip comment
+                std::istringstream ls(line);
+                std::string name; double value;
+                if (!(ls >> name >> value)) continue;              // blank / malformed
+                // Look up the param's type in the SSOT table.
+                // パラメータの型を SSOT テーブルで引く。
+                bool found = false;
+                sf::params::ParamType type = sf::params::ParamType::FLOAT;
+                for (int i = 0; i < sf::params::count(); ++i) {
+                    const sf::params::ParamEntry* e = sf::params::entry(i);
+                    if (e && name == e->name) { type = e->type; found = true; break; }
+                }
+                if (!found) {
+                    std::printf("[emu] PARAMS_FILE: unknown param '%s' — skipped\n", name.c_str());
+                    continue;
+                }
+                bool ok = false;
+                switch (type) {
+                    case sf::params::ParamType::FLOAT: ok = sf::params::set_float(name.c_str(), (float)value); break;
+                    case sf::params::ParamType::BOOL:  ok = sf::params::set_bool(name.c_str(), value != 0.0);  break;
+                    case sf::params::ParamType::INT:   ok = sf::params::set_int(name.c_str(), (int32_t)value); break;
+                }
+                if (ok) ++applied;
+                else std::printf("[emu] PARAMS_FILE: '%s'=%g rejected (out of range?)\n", name.c_str(), value);
+            }
+            std::printf("[emu] SIL_EMU_PARAMS_FILE=%s — %d param(s) overridden\n", path, applied);
+        }
     }
 
     sil::rtos::Scheduler::instance().run(duration_us);
