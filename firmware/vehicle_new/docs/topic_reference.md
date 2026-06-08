@@ -114,6 +114,9 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6） |
 | 19 | `pairing_state` | `PairingStatus` | Latest | 1 | StateTask (StateManager) | CommTask, NotifyTask | event | 現在の PairingState（NotPaired/Pairing/Paired）。comm が送出制御、notify が LED/ブザー表示 |
 | 20 | `pairing_complete` | `PairingComplete` | Latest | 1 | CommTask (ESP-NOW recv / NVS load) | StateTask | event | comm の現在のバインド状態（bound + 学習/復元した送信機 MAC）。起動時の NVS 復元と Pairing 成立の両方を運ぶ |
+| 21 | `sensor_snapshot` | `SensorSnapshot` | Latest | 1 | ImuTask (processAsyncSensors) | CLI (`sensor`), Telemetry | 400Hz | mag/baro/tof/flow の最新生値ミラー（SPSC キューを奪わず監視できるよう ImuTask が複製）|
+| 22 | `ui_command` | `UiCommand` | Queue | 4 | CLI (`sound`/`led`) | NotifyTask | event | UI 設定指令（ブザー mute / LED 輝度）。将来 WiFi/UDP からも注入可 |
+| 23 | `motor_test` | `MotorTest` | Latest | 1 | CLI (`motor`) | ControlTask | event | ベンチ用モータ単体テスト（**disarmed 限定**、active/motor_id/duty/expiry_us、既定 inactive）|
 
 ### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 
@@ -121,9 +124,9 @@ vehicle_new v3 設計で予約した将来 Topic。`command_target` / `nav_path`
 
 | # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 | 状態 |
 |---|---------|---------|--------|------|-----------|-----------|------|------|------|
-| 21 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
-| 22 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
-| 23 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
+| 24 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
+| 25 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
+| 26 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
 
 **新規 Topic の根拠（横断ルール対応）:**
 - `sensor_imu_raw` — L2 学習者が「キャリブ前の生 IMU を見たい」「自分でキャリブを学びたい」シナリオに対応
