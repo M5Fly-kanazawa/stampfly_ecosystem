@@ -239,6 +239,37 @@ function updateCursor(tsec) {
 let renderer, scene, camera, controls, worldGroup, drone, props = [], trailLine, trailGeo;
 const MODEL_SCALE = 3.0;   // visual only — positions stay in real metres / 見やすさのため見た目だけ拡大
 
+// Dolly the camera toward/away from the orbit target by `factor` (<1 = zoom in), clamped to
+// a sensible distance for the metre-scale flight volume. OrbitControls.update() recomputes
+// the spherical radius from the live camera offset, so a direct position change persists.
+// カメラを target に対し factor 倍ドリー（<1で寄る）。距離はクランプ。
+function dolly(factor) {
+  const dir = camera.position.clone().sub(controls.target);
+  const dist = Math.max(0.15, Math.min(50, dir.length() * factor));
+  camera.position.copy(controls.target).add(dir.setLength(dist));
+}
+
+// Reliable Mac-trackpad zoom: two-finger scroll AND pinch both arrive here as `wheel`
+// (pinch = ctrlKey, finer steps); Safari pinch also fires gesture* events. We preventDefault
+// so the browser neither page-zooms nor scrolls the parent panel. Mac トラックパッドの
+// 2本指スクロール/ピンチ両方を wheel で受け、Safari は gesture* も拾う。
+function installTrackpadZoom(canvas) {
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const k = e.ctrlKey ? 0.012 : 0.0018;   // pinch (ctrl+wheel) is finer-grained than scroll
+    dolly(Math.exp(e.deltaY * k));           // deltaY>0 → zoom out, <0 → zoom in
+  }, { passive: false });
+  // Safari: pinch comes as gesture events (e.scale is cumulative since gesturestart).
+  let gscale = 1;
+  canvas.addEventListener('gesturestart', (e) => { e.preventDefault(); gscale = e.scale; },
+    { passive: false });
+  canvas.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    dolly(gscale / e.scale);                 // scale grows (pinch out) → zoom in
+    gscale = e.scale;
+  }, { passive: false });
+}
+
 function init3D() {
   const canvas = $('scene');
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -247,6 +278,14 @@ function init3D() {
   camera.position.set(2.2, 1.6, 2.2);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
+  // We zoom ourselves (below) instead of OrbitControls' built-in wheel zoom: on a Mac
+  // trackpad the built-in handling is unreliable — a pinch arrives as ctrl+wheel that the
+  // browser eats for PAGE zoom, and a two-finger scroll gets stolen by the surrounding
+  // scrollable panel. Our handler preventDefault()s both and dollies the camera directly.
+  // Mac トラックパッドのため自前ズーム。ピンチ(ctrl+wheel)のページズーム化と親パネルへの
+  // スクロール奪取を preventDefault で止め、カメラを直接ドリーする。
+  controls.enableZoom = false;
+  installTrackpadZoom(canvas);
   scene.add(new THREE.AmbientLight(0xffffff, 0.7));
   const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(3, 6, 4); scene.add(dl);
 
