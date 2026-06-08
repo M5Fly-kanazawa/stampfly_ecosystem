@@ -195,6 +195,25 @@ void Notify::update()
     while (notify_command.read(cmd)) {
         playEvent(static_cast<NotifyEvent>(cmd.event));
     }
+
+    // UI commands (CLI → here): apply buzzer mute / LED brightness and persist to NVS.
+    // Topic-based so a future WiFi/UDP path can inject the same commands.
+    // UI コマンド（CLI → ここ）: ブザー mute / LED 輝度を適用し NVS に保存。トピック経由ゆえ
+    // 将来 WiFi/UDP からも同じコマンドを注入できる。
+    UiCommand uic;
+    while (ui_command.read(uic)) {
+        switch (static_cast<UiCmd>(uic.command)) {
+            case UiCmd::SoundMute:
+                buzzer_.setMuted(uic.value != 0, /*save_to_nvs=*/true);
+                break;
+            case UiCmd::LedBrightness:
+                led_.setBrightness(uic.value, /*save_to_nvs=*/true);
+                break;
+            case UiCmd::None:
+            default:
+                break;
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

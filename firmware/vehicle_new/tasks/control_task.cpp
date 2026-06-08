@@ -31,6 +31,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"   // motor_test expiry check
 
 #include "topics.hpp"
 #include "tasks.hpp"
@@ -162,7 +163,26 @@ void ControlTask(void* pvParameters)
         // =====================================================================
 
         if (!sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
-            actuator.disarm();
+            // Bench motor test (DISARMED ONLY): spin the requested motor(s) at a fixed
+            // duty until the command expires, otherwise keep the motors off. This branch
+            // is NEVER reached while armed, so the test cannot interfere with flight. The
+            // command is a CLI fact on motor_test (default inactive → normal disarm).
+            // ベンチ用モータテスト（disarmed 限定）: 要求された motor を固定 duty で失効まで回し、
+            // それ以外はモータ停止。armed 中は本分岐に来ないので飛行に干渉しない。コマンドは
+            // motor_test トピックの CLI 事実（既定 inactive → 通常の disarm）。
+            const sf::MotorTest mt = sf::motor_test.latest();
+            const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
+            if (mt.active && static_cast<int32_t>(mt.expiry_us - now_us) > 0) {
+                float duties[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                if (mt.motor_id == 0xFF) {
+                    for (int i = 0; i < 4; ++i) duties[i] = mt.duty;
+                } else if (mt.motor_id < 4) {
+                    duties[mt.motor_id] = mt.duty;
+                }
+                actuator.applyTestDuties(duties);
+            } else {
+                actuator.disarm();
+            }
             continue;
         }
 

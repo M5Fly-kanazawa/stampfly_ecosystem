@@ -91,6 +91,14 @@ extern Topic<PairingStatus,   Latest, 1>      pairing_state;     // decided Pair
 extern Topic<PairingComplete, Latest, 1>      pairing_complete;  // comm bind status fact (comm → StateMgr)
 
 // =============================================================================
+// Bench / UI command Topics — CLI → owning task (future WiFi/UDP can inject too)
+// ベンチ/UI コマンドトピック — CLI → 所有タスク（将来 WiFi/UDP からも注入可）
+// =============================================================================
+
+extern Topic<UiCommand,       Queue, 4>       ui_command;        // CLI → NotifyTask (sound/led)
+extern Topic<MotorTest,       Latest, 1>      motor_test;        // CLI → ControlTask (motor test, disarmed only)
+
+// =============================================================================
 // Transition Command Topics — reset commands (StateManager callbacks → owning task)
 // 遷移コマンドトピック — リセット指令（StateManager コールバック → 所有タスク）
 //

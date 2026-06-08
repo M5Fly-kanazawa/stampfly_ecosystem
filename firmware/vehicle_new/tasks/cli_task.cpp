@@ -326,6 +326,98 @@ int cmd_pair(int argc, char** argv)
     return 0;
 }
 
+/// `sound [on|off]` — enable/disable the buzzer (mute), persisted to NVS. Publishes a
+/// UiCommand FACT; NotifyTask (which owns the buzzer) applies it.
+/// `sound [on|off]` — ブザー有効/無効（ミュート, NVS 保存）。UiCommand を発行し、ブザーを所有
+/// する NotifyTask が適用する。
+int cmd_sound(int argc, char** argv)
+{
+    const bool on  = (argc >= 2 && std::strcmp(argv[1], "on") == 0);
+    const bool off = (argc >= 2 && std::strcmp(argv[1], "off") == 0);
+    if (!on && !off) {
+        std::printf("usage: sound [on|off]\n");
+        return 0;
+    }
+    sf::UiCommand c{};
+    c.command   = static_cast<uint8_t>(sf::UiCmd::SoundMute);
+    c.value     = off ? 1 : 0;   // off → mute / off=ミュート
+    c.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::ui_command.publish(c);
+    std::printf("sound %s\n", on ? "on" : "off");
+    return 0;
+}
+
+/// `led <0-255>` — set body-LED brightness, persisted to NVS (UiCommand → NotifyTask).
+/// `led <0-255>` — 本体 LED 輝度を設定（NVS 保存, UiCommand → NotifyTask）。
+int cmd_led(int argc, char** argv)
+{
+    if (argc < 2) {
+        std::printf("usage: led <0-255>\n");
+        return 0;
+    }
+    int b = std::atoi(argv[1]);
+    if (b < 0)   b = 0;
+    if (b > 255) b = 255;
+    sf::UiCommand c{};
+    c.command   = static_cast<uint8_t>(sf::UiCmd::LedBrightness);
+    c.value     = static_cast<uint8_t>(b);
+    c.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::ui_command.publish(c);
+    std::printf("led brightness = %d\n", b);
+    return 0;
+}
+
+/// `motor [test <1-4> <0-100> | all <0-100> | stop]` — bench motor wiring/direction check.
+/// Spins the motor(s) at a fixed duty for ~2 s, DISARMED ONLY (ControlTask ignores it when
+/// armed). Publishes a MotorTest FACT. IDs: M1=FR M2=RR M3=RL M4=FL. KEEP PROPS OFF / hold
+/// the craft. `motor stop` ends it early.
+/// `motor [test <1-4> <0-100> | all <0-100> | stop]` — ベンチのモータ配線/回転方向確認。
+/// 約2秒、**disarmed 限定**で固定 duty 回転（armed 時 ControlTask は無視）。MotorTest を発行。
+/// ID: M1=FR M2=RR M3=RL M4=FL。**プロペラを外すか機体を保持**。`motor stop` で即停止。
+int cmd_motor(int argc, char** argv)
+{
+    const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+    const uint32_t kTestDurationUs = 2000000;  // 2 s auto-stop / 2秒自動停止
+
+    if (argc >= 2 && std::strcmp(argv[1], "stop") == 0) {
+        sf::MotorTest t{};
+        t.active = false;
+        t.timestamp = now;
+        sf::motor_test.publish(t);
+        std::printf("motor test stopped\n");
+        return 0;
+    }
+
+    bool all = (argc >= 2 && std::strcmp(argv[1], "all") == 0);
+    bool test = (argc >= 2 && std::strcmp(argv[1], "test") == 0);
+    if ((test && argc >= 4) || (all && argc >= 3)) {
+        int pct = std::atoi(all ? argv[2] : argv[3]);
+        if (pct < 0)   pct = 0;
+        if (pct > 100) pct = 100;
+        sf::MotorTest t{};
+        t.active    = true;
+        t.duty      = pct / 100.0f;
+        t.expiry_us = now + kTestDurationUs;
+        t.timestamp = now;
+        if (all) {
+            t.motor_id = 0xFF;
+            std::printf("motor ALL test @ %d%% for 2s (DISARMED only — props off!)\n", pct);
+        } else {
+            int id = std::atoi(argv[2]);   // M1..M4
+            if (id < 1 || id > 4) {
+                std::printf("usage: motor test <1-4> <0-100>\n");
+                return 0;
+            }
+            t.motor_id = static_cast<uint8_t>(id - 1);   // M1→FR(0) … M4→FL(3)
+            std::printf("motor M%d test @ %d%% for 2s (DISARMED only — props off!)\n", id, pct);
+        }
+        sf::motor_test.publish(t);
+        return 0;
+    }
+    std::printf("usage: motor [test <1-4> <0-100> | all <0-100> | stop]\n");
+    return 0;
+}
+
 /// `reboot` — restart the flight controller.
 /// `reboot` — フライトコントローラを再起動する。
 int cmd_reboot(int argc, char** argv)
@@ -356,6 +448,9 @@ const CliCommand kCommands[] = {
     {"version", "Show firmware version / build date",            &cmd_version},
     {"pair",    "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
     {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
+    {"sound",   "sound [on|off] — enable/disable the buzzer",    &cmd_sound},
+    {"led",     "led <0-255> — body LED brightness",             &cmd_led},
+    {"motor",   "motor [test <1-4> <0-100>|all <0-100>|stop] — bench test (disarmed)", &cmd_motor},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
 };
 

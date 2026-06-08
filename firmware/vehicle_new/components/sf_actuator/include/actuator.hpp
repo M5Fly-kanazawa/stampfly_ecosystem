@@ -81,6 +81,15 @@ public:
     /// 0 にし HAL の arm ゲートを下げる。
     void disarm();
 
+    /// BENCH MOTOR TEST: drive the 4 motors to the given raw duties [0,1], bypassing the
+    /// mixer. Arms the HAL and publishes actuator_motor for telemetry/SIL. The CALLER
+    /// (ControlTask) must gate this to the DISARMED state only — it exists for the
+    /// wiring/direction check (development_roadmap Phase 2). Not used in flight.
+    /// ベンチ用モータテスト: ミキサーを介さず 4 モータを生 duty [0,1] で駆動。HAL を arm し
+    /// テレメトリ用に actuator_motor を発行。呼び出し側（ControlTask）が **disarmed 限定**に
+    /// gate すること — 配線/回転方向確認用（development_roadmap Phase 2）。飛行では使わない。
+    void applyTestDuties(const float duties[4]);
+
 private:
     /// Actuator-level arm state, mirrors the motor HAL gate so arm()/disarm()
     /// can be called every control cycle without re-arming or log spam.

@@ -32,6 +32,7 @@
 #include "topics.hpp"
 #include "motor_driver.hpp"
 #include "esp_log.h"
+#include "esp_timer.h"   // applyTestDuties timestamp
 
 static const char* TAG = "actuator";
 
@@ -346,6 +347,26 @@ void Actuator::disarm()
     }
 
     ESP_LOGI(TAG, "Actuator disarmed (all duties = 0)");
+}
+
+// -----------------------------------------------------------------------------
+// applyTestDuties — bench motor test: drive raw per-motor duties, bypassing the mixer.
+// applyTestDuties — ベンチ用モータテスト: ミキサーを介さず生 duty で各モータを駆動。
+//
+// SAFETY: the caller (ControlTask) gates this to the DISARMED state only; it is never
+// reached while armed. We arm the HAL (idempotent) so it accepts the duty write, set the
+// duties, and publish for telemetry/SIL. ControlTask calls disarm() to stop the test.
+// 安全: 呼び出し側（ControlTask）が disarmed 限定に gate し、armed 中は到達しない。HAL を arm
+// （冪等）して duty 書き込みを受理させ、duty を設定し、テレメトリ/SIL 用に発行する。テスト停止は
+// ControlTask が disarm() を呼ぶ。
+// -----------------------------------------------------------------------------
+void Actuator::applyTestDuties(const float duties[4])
+{
+    arm();   // idempotent: ensure the motor HAL accepts duty writes
+    if (g_motor.isInitialized()) {
+        g_motor.setMotorDuties(duties);
+    }
+    publishMotorOutput(duties, static_cast<uint32_t>(esp_timer_get_time()));
 }
 
 }  // namespace sf

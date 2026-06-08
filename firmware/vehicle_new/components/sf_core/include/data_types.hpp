@@ -421,6 +421,42 @@ struct NotifyCommand {
 };
 
 // =============================================================================
+// Bench / UI commands — CLI → owning task (topic-based, so a future WiFi/UDP path
+// can inject the same commands). 将来 WiFi/UDP からも同じコマンドを注入できるよう
+// トピック経由にする（CLI が直接 HAL/状態に触れない）。
+// =============================================================================
+
+/// UI command verbs — CLI → NotifyTask (applies to the buzzer/LED HAL, with NVS save).
+/// UI コマンドの種別 — CLI → NotifyTask（buzzer/LED HAL に適用、NVS 保存）。
+enum class UiCmd : uint8_t {
+    None          = 0,
+    SoundMute     = 1,   // value: 1 = mute, 0 = unmute   / 1=ミュート, 0=解除
+    LedBrightness = 2,   // value: 0..255 brightness       / LED 輝度
+};
+
+/// UI command — NotifyTask consumes and applies to the buzzer/LED HAL (+ NVS).
+/// UI コマンド — NotifyTask が消費し buzzer/LED HAL に適用（+ NVS）。
+struct UiCommand {
+    uint8_t  command;     // UiCmd value                   / UiCmd の値
+    uint8_t  value;       // argument (mute flag / brightness) / 引数
+    uint32_t timestamp;   // [us]
+};
+
+/// Motor test command — CLI → ControlTask. Spins one/all motors at a fixed duty WHILE
+/// DISARMED ONLY (bench wiring/direction check). Auto-expires at expiry_us; default
+/// inactive. ControlTask ignores it entirely when the vehicle is armed (safety).
+/// モータテストコマンド — CLI → ControlTask。**disarmed のときのみ**1/全モータを固定 duty で
+/// 回す（配線/回転方向確認）。expiry_us で自動失効、既定 inactive。armed 時は ControlTask が
+/// 完全に無視する（安全）。
+struct MotorTest {
+    bool     active;      // test running                  / テスト実行中
+    uint8_t  motor_id;    // 0..3 = one motor, 0xFF = all  / 0..3=単体, 0xFF=全部
+    float    duty;        // [0,1] PWM duty                / PWM duty
+    uint32_t expiry_us;   // auto-stop time [us]; ignored after / 自動停止時刻
+    uint32_t timestamp;   // [us]
+};
+
+// =============================================================================
 // Sensor Health (R15) — published ~1Hz by sf_board
 // センサ健全性（R15）— sf_board が約1Hz発行
 // =============================================================================
