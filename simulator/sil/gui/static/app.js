@@ -247,7 +247,7 @@ let renderer, scene, camera, controls, worldGroup, drone, props = [], trailLine,
 // Visual exaggeration of the drone ONLY (its flight position stays in real metres). The real
 // StampFly is ~9 cm — at real scale it is a speck against a metre-scale flight, so we enlarge
 // the model so its attitude/props are clearly readable. 機体の見た目だけ拡大（飛行位置は実寸）。
-const MODEL_SCALE = 7.0;
+const MODEL_SCALE = 8.5;
 
 // Dolly the camera toward/away from the orbit target by `factor` (<1 = zoom in), clamped to
 // a sensible distance for the metre-scale flight volume. OrbitControls.update() recomputes
@@ -320,7 +320,7 @@ function init3D() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200);
-  camera.position.set(1.4, 1.0, 1.4);
+  camera.position.set(1.15, 0.85, 1.15);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   // We zoom ourselves (below) instead of OrbitControls' built-in wheel zoom: on a Mac
@@ -331,9 +331,16 @@ function init3D() {
   // スクロール奪取を preventDefault で止め、カメラを直接ドリーする。
   controls.enableZoom = false;
   installTrackpadZoom(canvas);
-  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-  const dl = new THREE.DirectionalLight(0xffffff, 1.1); dl.position.set(3, 6, 4); scene.add(dl);
-  const dl2 = new THREE.DirectionalLight(0xc9d4ff, 0.5); dl2.position.set(-3, 2, -4); scene.add(dl2);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // Lighting ported from the landing page so the StampFly materials read the same way.
+  // landing page と同じライティングで StampFly の材質を同じ見え方に。
+  scene.add(new THREE.AmbientLight(0x8895b5, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 8, 5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xc9d4ff, 0.6); fill.position.set(-4, 3, -4); scene.add(fill);
+  // Subtle cyan/violet accents (kept low so the frame still reads near its true light-grey).
+  // フレームが本来の薄灰に見えるようアクセント光は控えめに。
+  const cyan = new THREE.PointLight(0x22d3ee, 12, 14); cyan.position.set(-2, 1.5, 2); scene.add(cyan);
+  const violet = new THREE.PointLight(0xa855f7, 12, 14); violet.position.set(2, 1, -2); scene.add(violet);
 
   // worldGroup maps ENU local coords (x=East, y=North, z=Up) to three.js Y-up display:
   // rotating -90° about X sends a local (x,y,z) to world (x, z, -y) = (E, U, -N). Inside it
@@ -362,80 +369,111 @@ function resize3D() {
   camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 
-// The drone is the REAL StampFly: the same STL meshes the MuJoCo model uses, loaded in the
-// BODY FLU frame (x=forward, y=left, z=up). The MJCF imports each STL with scale 0.001
-// (mm→m) and quat (0.5,0.5,0.5,0.5), which rotates the STL frame (X=left,Y=up,Z=fwd) onto
-// FLU — we apply the identical transform so the model sits in the body frame and the
-// per-frame attitude quaternion orients it correctly (props point down when it flips).
-// 機体は本物の StampFly（MuJoCo と同じ STL）。MJCF と同じ scale 0.001 + quat(0.5,0.5,0.5,0.5)
-// で STL(X左/Y上/Z前)を FLU に向け、毎フレームの姿勢 quat が正しく回す（反転でプロペラが下向き）。
-const STL_PARTS = ['frame', 'pcb', 'm5stamps3', 'battery', 'battery_adapter',
-                   'motor_fl', 'motor_fr', 'motor_rl', 'motor_rr'];
-const PART_COLOR = { frame: 0x2b3442, pcb: 0x176f4f, m5stamps3: 0xe06a2a, battery: 0x8a6a3a,
-  battery_adapter: 0x394150, motor_fl: 0x6b7480, motor_fr: 0x6b7480, motor_rl: 0x6b7480, motor_rr: 0x6b7480 };
-// Rotor sites (FLU) + spin direction (CCW=+1 about +Z up) + which motor duty drives it.
-// MJCF: M1 FR CCW, M2 RR CW, M3 RL CCW, M4 FL CW. ロータFLU位置＋回転方向＋対応モータ。
-const ROTORS = [
-  { pos: [0.023, -0.023, 0.006], dir: +1, motor: 0 },   // M1 FR CCW
-  { pos: [-0.023, -0.023, 0.006], dir: -1, motor: 1 },  // M2 RR CW
-  { pos: [-0.023, 0.023, 0.006], dir: +1, motor: 2 },   // M3 RL CCW
-  { pos: [0.023, 0.023, 0.006], dir: -1, motor: 3 },    // M4 FL CW
-];
+// =============================================================================
+// StampFly model — ported from the landing page (landing/index.html), which was built
+// from photos of the real aircraft: the actual STL body parts + true-to-life 3-blade
+// propellers (paddle outline + linear twist). Everything is authored in the landing/STL
+// NATIVE frame (millimetres, X=left, Y=up, Z=fwd); we then drop the whole model into the
+// BODY FLU group with scale 0.001 (mm→m) + quat (0.5,0.5,0.5,0.5), the identical transform
+// the MuJoCo MJCF uses, so it sits in the body frame and the per-frame attitude quaternion
+// orients it (props point down when it flips). landing page と同一の実機準拠モデルを移植
+// （実STLパーツ＋実機そっくりの3枚羽根）。landing/STL native(mm,X左/Y上/Z前)で作り、MJCF と
+// 同じ scale0.001+quat(0.5,0.5,0.5,0.5)で機体FLUへ。姿勢quatが正しく回す。
+// -----------------------------------------------------------------------------
+const PART_MAT = {
+  frame:           new THREE.MeshStandardMaterial({ color: 0xccd2db, roughness: 0.5,  metalness: 0.1 }),
+  pcb:             new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.55, metalness: 0.2 }),
+  m5stamps3:       new THREE.MeshStandardMaterial({ color: 0xff6a00, roughness: 0.4,  metalness: 0.1 }),
+  battery:         new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.6,  metalness: 0.1 }),
+  battery_adapter: new THREE.MeshStandardMaterial({ color: 0x33312d, roughness: 0.6,  metalness: 0.1 }),
+  motor_fl:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_fr:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_rl:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_rr:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+};
+const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2b3d, transparent: true, opacity: 0.62,
+  roughness: 0.18, metalness: 0.0, emissive: 0x4a0008, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e0512, roughness: 0.3, metalness: 0.15 });
 
-// A 3-blade prop in the FLU frame, spinning about body +Z (up). Blades lie flat in the
-// body x-y plane (wide chord, thin vertically). 機体FLUで3枚羽根、z軸回り。羽根は水平面に平ら。
-function makeProp(color) {
+// makeBlade: paddle outline with a linear twist root→tip (landing page, verbatim).
+// パドル形状＋線形ねじれの羽根（landing page と同一）。
+function makeBlade(L, Wm, thick, twistRoot, twistTip) {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0.20 * Wm);
+  s.bezierCurveTo(0.40 * L, 0.50 * Wm, 0.65 * L, 0.50 * Wm, 0.86 * L, 0.30 * Wm);
+  s.quadraticCurveTo(L, 0.16 * Wm, L, 0.0);
+  s.quadraticCurveTo(L, -0.12 * Wm, 0.86 * L, -0.20 * Wm);
+  s.bezierCurveTo(0.65 * L, -0.58 * Wm, 0.40 * L, -0.58 * Wm, 0, -0.24 * Wm);
+  s.closePath();
+  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
+  geo.translate(0, 0, -thick / 2);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const a = twistRoot + (twistTip - twistRoot) * Math.min(1, Math.max(0, x / L));
+    const c = Math.cos(a), sn = Math.sin(a);
+    p.setXYZ(i, x, y * c - z * sn, y * sn + z * c);
+  }
+  geo.rotateX(Math.PI / 2);     // lay the blade flat → the prop spins about its local Y
+  geo.computeVertexNormals();
+  return geo;
+}
+const PROP_RADIUS = 14.99;      // mm (landing page)
+const HUB_R = PROP_RADIUS * 0.22;
+const bladeGeo = makeBlade(PROP_RADIUS - HUB_R * 0.6, (PROP_RADIUS - HUB_R * 0.6) / 2.7, 0.6, 0.38, 0.10);
+const hubGeo = new THREE.CylinderGeometry(HUB_R, HUB_R * 0.9, 2.6, 24);
+const domeGeo = new THREE.SphereGeometry(HUB_R * 0.85, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+
+// A true-to-life 3-blade prop (landing page makeProp). Spins about its local Y (= body up
+// once the model is rotated into FLU). 実機準拠の3枚羽根（local Y 軸回りに回転）。
+function makeProp() {
   const prop = new THREE.Group();
-  const r = 0.019;   // ~prop radius [m]
-  // hub — a short cylinder whose axis (CylinderGeometry's local Y) is turned to body +Z (up)
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.005, 12),
-    new THREE.MeshStandardMaterial({ color: 0x2a313c }));
-  hub.rotation.x = Math.PI / 2;
-  prop.add(hub);
-  // 3 flat blades at 120°, radial in the x-y plane. Made chunky enough to read at the model
-  // scale (a few mm thick → a few px). 羽根は視認できる厚みに。
-  const bladeMat = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide,
-    metalness: 0.1, roughness: 0.6, emissive: color, emissiveIntensity: 0.15 });
+  prop.add(new THREE.Mesh(hubGeo, hubMat));
+  const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
   for (let i = 0; i < 3; i++) {
-    const a = i * 2 * Math.PI / 3;
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(r, 0.006, 0.0016), bladeMat);  // len × chord × thick
-    blade.position.set(Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0.002);
-    blade.rotation.z = a;
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    blade.rotation.y = i * (Math.PI * 2 / 3);
+    blade.translateX(HUB_R * 0.6);
     prop.add(blade);
   }
-  // translucent swept-area disk (flat in x-y) so a fast prop reads as a disk
-  const disk = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0008, 24),
-    new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
-  disk.rotation.x = Math.PI / 2;
-  prop.add(disk);
   return prop;
 }
 
+// Prop hubs in the landing/STL NATIVE frame (mm, X=left, Y=up, Z=fwd) + the motor duty
+// (m0..m3 = M1 FR/M2 RR/M3 RL/M4 FL) that drives each, in its real turn direction
+// (CCW=+1 / CW=-1 about body up; MJCF: M1 FR & M3 RL CCW, M2 RR & M4 FL CW).
+// プロペラハブ（landing native mm）＋駆動モータ＋実回転方向。
+const PROP_HUBS = [
+  { pos: [ 22.80, 7.81,  22.80], motor: 3, dir: -1 },  // FL = M4  CW
+  { pos: [-22.80, 7.81,  22.80], motor: 0, dir: +1 },  // FR = M1  CCW
+  { pos: [ 22.80, 7.81, -22.81], motor: 2, dir: +1 },  // RL = M3  CCW
+  { pos: [-22.80, 7.81, -22.81], motor: 1, dir: -1 },  // RR = M2  CW
+];
+const BODY_PARTS = ['frame', 'pcb', 'm5stamps3', 'battery', 'battery_adapter',
+                    'motor_fl', 'motor_fr', 'motor_rl', 'motor_rr'];
+
 function buildDrone() {
   const g = new THREE.Group(); g.scale.setScalar(MODEL_SCALE);
-  // small center marker so something shows before/if the STL parts load (fallback)
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.006),
-    new THREE.MeshStandardMaterial({ color: 0x9fb3c8 })));
-  // Load the StampFly STL parts (async) into the FLU body frame.
+  // `model` holds the StampFly in the landing/STL native frame (mm); the scale+quat put it
+  // into the body FLU frame at real metric. model に landing native(mm)で作り FLU へ変換。
+  const model = new THREE.Group();
+  model.scale.setScalar(0.001);                  // mm → m (MJCF mesh scale)
+  model.quaternion.set(0.5, 0.5, 0.5, 0.5);      // native (X左/Y上/Z前) → body FLU (MJCF geom quat)
+  g.add(model);
+  // Propellers (procedural, synchronous). Spin about local Y (= body up after the transform).
+  PROP_HUBS.forEach(h => {
+    const prop = makeProp();
+    prop.position.set(h.pos[0], h.pos[1] - 1.4, h.pos[2]);
+    model.add(prop);
+    props.push({ pivot: prop, dir: h.dir, motor: h.motor });
+  });
+  // STL body parts (async — pop in as they arrive). geo.computeVertexNormals so the lit
+  // material is not black. STL本体（非同期）。法線生成で黒化を防ぐ。
   const loader = new STLLoader();
-  const qStlToFlu = new THREE.Quaternion(0.5, 0.5, 0.5, 0.5);   // (x,y,z,w) = MJCF geom quat
-  STL_PARTS.forEach(name => {
-    loader.load(`/mesh/${name}.stl`, (geo) => {
-      geo.computeVertexNormals();        // STL has no normals → MeshStandardMaterial would be black
-      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-        color: PART_COLOR[name] || 0x6b7480, metalness: 0.25, roughness: 0.65 }));
-      m.scale.setScalar(0.001);          // mm → m (MJCF mesh scale)
-      m.quaternion.copy(qStlToFlu);      // STL frame → body FLU (MJCF geom quat)
-      g.add(m);
-    }, undefined, (err) => console.warn('[3D] STL load failed:', name, err));
-  });
-  // Props at the rotor sites; front cyan, rear violet for heading readability.
-  ROTORS.forEach((rt, i) => {
-    const prop = makeProp(rt.motor === 0 || rt.motor === 3 ? 0x22d3ee : 0xa78bfa);
-    prop.position.set(rt.pos[0], rt.pos[1], rt.pos[2]);
-    g.add(prop);
-    props.push({ pivot: prop, dir: rt.dir, motor: rt.motor });
-  });
+  BODY_PARTS.forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
+    geo.computeVertexNormals();
+    model.add(new THREE.Mesh(geo, PART_MAT[name] || PART_MAT.frame));
+  }, undefined, (err) => console.warn('[3D] STL load failed:', name, err)));
   return g;
 }
 
@@ -503,7 +541,7 @@ function animate() {
   const d = S.traj && S.traj.data;
   props.forEach(p => {
     const duty = d ? (d['m' + p.motor][S.frame] || 0) : 0;
-    p.pivot.rotation.z += p.dir * (0.05 + duty * 1.6);   // idle creep + duty-proportional spin
+    p.pivot.rotation.y += p.dir * (0.05 + duty * 1.6);   // spin about local Y (=body up); idle creep + duty
   });
   controls.update();
   renderer.render(scene, camera);
