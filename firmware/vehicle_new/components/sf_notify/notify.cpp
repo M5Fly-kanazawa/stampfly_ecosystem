@@ -48,6 +48,13 @@ static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
     { {255, 128, 0},  300, 300 },
 };
 
+// PAIRING LED pattern — blue FAST blink, overriding the FlightState pattern while
+// the parallel PairingState is Pairing. Distinct from INIT (blue SLOW blink) so a
+// searching-for-transmitter vehicle is obvious. (requirements §2/§7: pairing UI.)
+// ペアリング LED パターン — 青の高速点滅。並行する PairingState が Pairing の間 FlightState
+// パターンを上書きする。INIT（青の低速点滅）と区別し、送信機を探索中の機体が一目で分かる。
+static const LedPattern kPairingPattern = { {0, 0, 255}, 150, 150 };
+
 // -----------------------------------------------------------------------------
 // init — initialize LED and buzzer HAL
 // 初期化 — LEDとブザーHALを初期化
@@ -83,15 +90,19 @@ void Notify::init(const NotifyConfig& config)
 // -----------------------------------------------------------------------------
 void Notify::update()
 {
-    // Read current system mode from topic
-    // トピックから現在のシステムモードを読み取る
-    SystemMode mode = system_mode.latest();
-    FlightState state = static_cast<FlightState>(mode.state);
-
-    // Get and apply LED pattern for current state
-    // 現在の状態のLEDパターンを取得して適用
-    const LedPattern& pattern = getPattern(state);
-    applyLedPattern(pattern);
+    // Pairing (a parallel state machine, owned by StateManager) overrides the
+    // FlightState LED pattern: while searching for a transmitter the LED blinks blue
+    // fast. Otherwise show the per-FlightState pattern. (requirements §2/§7: pairing UI.)
+    // ペアリング（StateManager 所有の並行状態機械）は FlightState の LED パターンを上書き
+    // する: 送信機を探索中は LED が青く高速点滅。それ以外は FlightState 毎のパターン。
+    const PairingStatus pairing = pairing_state.latest();
+    if (pairing.state == static_cast<uint8_t>(PairingState::Pairing)) {
+        applyLedPattern(kPairingPattern);
+    } else {
+        SystemMode mode = system_mode.latest();
+        FlightState state = static_cast<FlightState>(mode.state);
+        applyLedPattern(getPattern(state));
+    }
 
     // Discrete notify events (ARM/DISARM tones, low-battery warning) arrive on the
     // notify_command queue. Notify is its ONLY consumer, so draining it here is
@@ -118,6 +129,7 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::LowBattery:  buzzer_.lowBatteryWarning(); break;
         case NotifyEvent::Calibrating: buzzer_.beep();              break;
         case NotifyEvent::Ready:       buzzer_.beep();              break;
+        case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
         case NotifyEvent::None:
         default:                                                    break;
     }

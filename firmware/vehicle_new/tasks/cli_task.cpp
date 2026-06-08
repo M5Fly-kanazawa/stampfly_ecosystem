@@ -24,7 +24,8 @@
  * ループで登録する（R6: レジストリパターン、extern グローバルのコンソールポインタを作らない）。
  * CLI は地上/ブリングアップ用ツールで、飛行クリティカル経路には載らない。
  *
- * @subscriber system_mode, sensor_power, sensor_health
+ * @subscriber system_mode, sensor_power, sensor_health, pairing_state, pairing_complete
+ * @publisher button_event (CLI `pair` injects a LongPress3s gesture fact)
  * @design architecture.md §6 — CLITask: CLI + Parameters              [OK]
  * @design architecture.md §3 — R6 CLI command registry pattern         [OK]
  * @design detailed_design.md §8 — CLITask                            [OK]
@@ -40,6 +41,7 @@
 #include "esp_err.h"
 #include "esp_system.h"
 #include "esp_console.h"
+#include "esp_timer.h"
 
 #include "topics.hpp"
 #include "params.hpp"
@@ -173,6 +175,54 @@ int cmd_status(int argc, char** argv)
     return 0;
 }
 
+/// `pair` — pairing control. `pair` / `pair start` re-enters Pairing (discards the
+/// current bind and searches for a transmitter, like a 3 s button long-press);
+/// `pair status` prints the PairingState and the bound transmitter MAC. The start
+/// path publishes a button_event FACT (LongPress3s) so the StateManager — the sole
+/// authority — decides, exactly as for the physical button (no cross-task coupling).
+/// `pair` — ペアリング操作。`pair`/`pair start` は Pairing に再突入（現在のバインドを破棄し
+/// 送信機を探索、ボタン長押し3秒と同じ）、`pair status` は PairingState とバインド済み送信機
+/// MAC を表示。start は button_event の事実（LongPress3s）を発行し、唯一の権限者である
+/// StateManager が判断する（物理ボタンと同一経路、タスク間結合なし）。
+int cmd_pair(int argc, char** argv)
+{
+    if (argc >= 2 && std::strcmp(argv[1], "status") == 0) {
+        const sf::PairingStatus ps = sf::pairing_state.latest();
+        const sf::PairingComplete bind = sf::pairing_complete.latest();
+        const char* name = "NotPaired";
+        switch (static_cast<sf::PairingState>(ps.state)) {
+            case sf::PairingState::Pairing: name = "Pairing"; break;
+            case sf::PairingState::Paired:  name = "Paired";  break;
+            default:                        break;
+        }
+        std::printf("pairing : %s\n", name);
+        if (bind.bound) {
+            std::printf("bound   : %02X:%02X:%02X:%02X:%02X:%02X%s\n",
+                        bind.controller_mac[0], bind.controller_mac[1],
+                        bind.controller_mac[2], bind.controller_mac[3],
+                        bind.controller_mac[4], bind.controller_mac[5],
+                        bind.restored ? " (restored)" : "");
+        } else {
+            std::printf("bound   : none\n");
+        }
+        return 0;
+    }
+    if (argc < 2 || std::strcmp(argv[1], "start") == 0) {
+        // Inject a LongPress3s gesture fact; the StateManager re-enters Pairing
+        // (it gates this to the ground / disarmed and clears the existing bind).
+        // LongPress3s ジェスチャの事実を注入。StateManager が Pairing に再突入する
+        // （地上/disarmed に限定し既存バインドを破棄する）。
+        sf::ButtonEvent ev{};
+        ev.gesture   = static_cast<uint8_t>(sf::ButtonGesture::LongPress3s);
+        ev.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        sf::button_event.publish(ev);
+        std::printf("pairing requested (takes effect on the ground / disarmed)\n");
+        return 0;
+    }
+    std::printf("usage: pair [start | status]\n");
+    return 0;
+}
+
 /// `reboot` — restart the flight controller.
 /// `reboot` — フライトコントローラを再起動する。
 int cmd_reboot(int argc, char** argv)
@@ -199,6 +249,7 @@ struct CliCommand {
 const CliCommand kCommands[] = {
     {"param",  "param [list|get <name>|set <name> <value>|save]", &cmd_param},
     {"status", "Show flight state, battery and sensor health",    &cmd_status},
+    {"pair",   "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
     {"reboot", "Reboot the flight controller",                    &cmd_reboot},
 };
 

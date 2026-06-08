@@ -358,6 +358,13 @@ void StateManager::requestPairing()
     ESP_LOGI(TAG, "Pairing started (broadcasting; awaiting a transmitter)");
     pairing_state_ = PairingState::Pairing;
     publishPairingState();
+
+    // One-shot pairing tone (NotifyTask plays it). The pairing LED (blue fast blink)
+    // is driven continuously by NotifyTask reading pairing_state, so it needs no event.
+    // ペアリング開始の単発音（NotifyTask が鳴らす）。ペアリング LED（青の高速点滅）は
+    // NotifyTask が pairing_state を読んで連続駆動するためイベント不要。
+    notify_command.publish({static_cast<uint8_t>(NotifyEvent::PairingMode),
+                            static_cast<uint32_t>(esp_timer_get_time())});
 }
 
 void StateManager::notifyPairingComplete()
