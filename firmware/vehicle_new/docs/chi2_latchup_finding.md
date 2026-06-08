@@ -20,7 +20,7 @@
 | 同 3.696V（推力 **+0.1%**） | **7.40 m** | FAIL（発散） |
 | デッドバンド 0.05 付与（指令 −14%） | 3.80 m | FAIL |
 
-- **0.1% の推力変化**で 1.08 m → 7.40 m に発散。連続的な感度ではなく**質的な崖**。
+- **0.1% の推力変化**で 1.08 m → 7.40 m に発散。連続的な感度ではなく**質的な臨界**。
 - **符号依存**: 推力わずか過剰のみ発散、不足側は無害。
 
 ## 2. 真因（χ² ゲートのラッチアップ）
@@ -64,7 +64,7 @@ PASS ケースは att_rmse 2〜3°（推定健全）。**棄却率は PASS/FAIL 
   （ゲートが回復補正を弾く）→ 実機では墜落に直結。
 - **ただし顕在化は限定的**: 激しい毎軸 POS_HOLD「ステップで流して捕捉」ストレステストのみ。
   `disturb`（横風＋モータ25%故障）・N1/N2 ノイズ・通常ホバー/各モードは全 PASS。
-  「普通の飛行＋現実的外乱」には耐えている。崖は最悪ケースの捕捉マニューバでだけ顔を出す。
+  「普通の飛行＋現実的外乱」には耐えている。臨界は最悪ケースの捕捉マニューバでだけ顔を出す。
 
 ## 4. 当座の回避（Phase 3+, commit b8fd27e）— 根治ではない
 
@@ -92,7 +92,7 @@ SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sens
 
 ### 検証方法（合格基準）
 
-- **崖の消失を直接確認**: actuator を fixed 3.7→3.696（推力+0.1%）にしても pos_yaw が
+- **臨界の消失を直接確認**: actuator を fixed 3.7→3.696（推力+0.1%）にしても pos_yaw が
   発散しないこと（`SIL_EMU_BATTERY=off` で電池サグを切り、量子化バイアスを再現できる）。
   または electric デッドバンド 0.05 を有効化して全 POS_HOLD/STABILIZE が PASS すること。
 - **退行なし**: vehicle_new 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
@@ -104,7 +104,7 @@ SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sens
 ```bash
 source setup_env.sh
 sf sil build
-# 量子化バイアスで崖を再現（電池サグOFF＝固定電圧に量子化を載せる）:
+# 量子化バイアスで臨界を再現（電池サグOFF＝固定電圧に量子化を載せる）:
 #   actuator batteryVoltage() を一時的に 3.696f 固定 にして以下が FAIL することを確認
 SIL_EMU_BATTERY=off sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle_new
 # χ² 棄却率ログは emu の stderr（console.log）に "chi2: d2=... reject=.../..." で出る
@@ -136,7 +136,7 @@ STABILIZE を崩す。**χ² を根治すればデッドバンド 0.05 もその
 
 ### 真因（計測で特定）
 
-`SIL_EMU_BATTERY=off pos_yaw` で崖を確実再現（drift 7.40m, att_rmse 8.84°）し、
+`SIL_EMU_BATTERY=off pos_yaw` で臨界を確実再現（drift 7.40m, att_rmse 8.84°）し、
 `updateAccelAttitude` の動態を計測した結果、**当初の「推定が数百度ズレて固着」説は誤り**で、
 実際は次のメカニズムだった：
 
@@ -152,17 +152,17 @@ STABILIZE を崩す。**χ² を根治すればデッドバンド 0.05 もその
 
 **`eskf.obs.accel_att_noise` を 0.06 → 0.8 m/s²**（params.cpp、max も 1.0→2.0）。
 飛行中の比力測定の現実的不確かさ（運動加速度込み 〜1 m/s²）を反映。struct 既定の 2.0
-（"matches vibration noise at hover"）に近い側。掃引で 0.8/1.0 が安定、0.06/0.3 は崖、>1.0 は
+（"matches vibration noise at hover"）に近い側。掃引で 0.8/1.0 が安定、0.06/0.3 は臨界、>1.0 は
 param 範囲超で旧来拒否されていた。
 
-- 棄却率 66%→**~0%**、崖消失：電池OFF の POS 全 PASS（att_rmse **0.52〜1.13°**＝健全値より良い）。
+- 棄却率 66%→**~0%**、臨界消失：電池OFF の POS 全 PASS（att_rmse **0.52〜1.13°**＝健全値より良い）。
 - **退行なし**: 11シナリオ（電池ON）全PASS、hover_smoke G2+G3（物理真値）PASS、N1 現実ノイズ
   PASS、legacy hover_espnow PASS、ESP-IDF 実機ビルド OK。
 
 ### 試したが捨てた案（記録）
 
 - **ゲート緩和（7.81→11.3/16/25/50/100）**: 非単調（11.3/16 は PASS、25/50/100 は FAIL）。
-  崖を動かすだけで根治でない（高すぎると運動加速度を通し姿勢が崩れる）。
+  臨界を動かすだけで根治でない（高すぎると運動加速度を通し姿勢が崩れる）。
 - **ノルム判別（‖a‖≈g なら回復のためゲートを開く）**: 逆効果（band=2.0 で att_rmse=202 に爆発）。
   ヨー主体のマニューバでは汚染時もノルムが≈g に留まり判別不能。
 
@@ -172,8 +172,8 @@ param 範囲超で旧来拒否されていた。
 
 ### SIL 掃引ツール（emu_main.cpp）
 `SIL_EMU_CHI2_GATE` / `SIL_EMU_KADAPT` / `SIL_EMU_ACCEL_ATT` で各 param を再ビルド無しに上書き
-（app_main 後・scheduler 前に set。NO_CALIB と同じ窓）。`SIL_EMU_BATTERY=off` で崖を再現。
+（app_main 後・scheduler 前に set。NO_CALIB と同じ窓）。`SIL_EMU_BATTERY=off` で臨界を再現。
 
 ### 申し送り
 - **デッドバンド 0.05** と **重力統一 9.80665**（χ²未修正時に pos_flight を崩した）は、本根治後に
-  再適用して検証する（崖が消えたので通る見込み）。
+  再適用して検証する（臨界が消えたので通る見込み）。
