@@ -1,8 +1,8 @@
-# 次セッション指示書 — Phase 0〜7 完了 ＋ χ²ラッチアップ根治。次は Phase 8（ロバスト再飛行 SIL 検証）
+# 次セッション指示書 — Phase 0〜7 完了 ＋ χ²過剰棄却根治。次は Phase 8（ロバスト再飛行 SIL 検証）
 
-最終更新: 2026-06-08（**Phase 7 品質仕上げ ＋ χ²ラッチアップ根治 完了。次は Phase 8**）
+最終更新: 2026-06-08（**Phase 7 品質仕上げ ＋ χ²過剰棄却根治 完了。次は Phase 8**）
 
-> **✅ χ²ラッチアップ根治（commit 90093c1）＝今セッションの最重要成果:**
+> **✅ χ²過剰棄却根治（commit 90093c1）＝今セッションの最重要成果:**
 > - **真因**: `eskf.obs.accel_att_noise=0.06`（R=0.0036）が過小。飛行中の普通の運動加速度イノベーション(~1 m/s²=17σ)が χ²(3)ゲートを越え**マニューバ中66%棄却**→姿勢がジャイロ積分のみでドリフト→毎軸 POS_HOLD が限界安定。「数百度ラッチ」でなく「慢性的過剰棄却」だった。
 > - **根治**: accel_att_noise 0.06→**0.8**（params.cpp、max 1.0→2.0）。崖消失（電池OFF POS 全PASS att_rmse 0.52〜1.13°）、退行なし（11シナリオ・hover_smoke G2+G3・N1・legacy・ESP-IDF 全PASS）。
 > - **計測手法**: `SIL_EMU_BATTERY=off pos_yaw` で崖再現＋ d²/innov/R 時系列ログで真因特定。掃引ツール `SIL_EMU_CHI2_GATE/KADAPT/ACCEL_ATT`（emu_main、再ビルド無し掃引）。詳細 `docs/chi2_latchup_finding.md §8`。
@@ -46,9 +46,9 @@
 > **Phase 3 の重大発見（必読）:** sf_command への正規化集約は完全に挙動保存。しかし副次の
 > 「V_BATT 実電圧化」と「デッドバンド復活」が、限界安定の毎軸 POSITION_HOLD/STABILIZE を
 > 崩すことが SIL で判明。真因は **ESKF accel-attitude の χ² ゲート(7.8)がマニューバ中 66% 棄却し、
-> 推定が一度発散すると回復補正も棄却して固着する「ラッチアップ」**。0.1% の推力変化や
+> 推定が一度発散すると回復補正も棄却して固着する「過剰棄却」**。0.1% の推力変化や
 > デッドバンドがこの崖を越えさせる。→ **SIL に 1S LiPo 電池サグモデルを実装し、実電圧を live で
-> 追従させることで Model Identity を保ち χ² ラッチアップを非発火にして V_BATT 実電圧化を解除**
+> 追従させることで Model Identity を保ち χ² 過剰棄却を非発火にして V_BATT 実電圧化を解除**
 > （commit b8fd27e）。デッドバンドは機構配線・既定0 で保留。詳細は本書 §6。
 >
 > **Phase 2b の発見（参考）:** 「ARM時 ESKF 全リセット」「bias freeze/unfreeze」は POS_HOLD を
@@ -58,7 +58,7 @@
 
 ## ★最初にやること
 
-**Phase 0〜7 完了 ＋ χ²ラッチアップ根治済み。次は Phase 8（★ロバスト再飛行 SIL 検証）。**
+**Phase 0〜7 完了 ＋ χ²過剰棄却根治済み。次は Phase 8（★ロバスト再飛行 SIL 検証）。**
 
 **Phase 8（計画 `valiant-frolicking-sun.md` の最終フェーズ）:**
 - **emu に物理ハンドリング機構**: 墜落後の機体を「持上げ→反転（正立へ）→運搬→設置」する連続キネマティック軌道を Plant に実装。Plant が IMU比力/ToF/gyro を解析合成（**teleport 厳禁** — 物理的に連続な姿勢/位置遷移）。
@@ -68,7 +68,7 @@
 
 **Phase 7 の残り（任意・低優先、安定性影響小）:** 相補フィルタゲイン params化、pid 飛行リミット config化。
 
-**保留なし。** χ²ラッチアップは根治済み（accel_att_noise 0.8）。当座の電池サグディザに依存していない。
+**保留なし。** χ²過剰棄却は根治済み（accel_att_noise 0.8）。当座の電池サグディザに依存していない。
 
 ---
 
@@ -102,7 +102,7 @@
 | 2a | **IDLE_HELD検出・着陸完了の状態モデル配線**。TakeoffLandingMgr に isHeld()、detectLanding を velocity 注入の純粋関数化（estimate_state 直読み撤廃）＋レベルフラグ化。held/landing を system_status 経由で state_task が消費し notify 駆動。IDLE_HELD→IDLE_GROUND onEnter で再校正。 | `21a7727` |
 | 2b | **ロバスト再飛行 order2-3 ＋ COMM_LOST ＋ 地上→飛行 共分散ハンドオフ**。①接地復帰reset。②COMM_LOST 3秒ホバー遅延。③**ARM時=姿勢共分散のみ膨張**（`InflateCov(Attitude)`）。 | `00468d0` |
 | 3 | **責務分離の是正（コア）**。sf_command に正規化・デッドバンド・flags デコードを集約（死蔵コード解消）。正規化を実証パス（2048中央, throttle clamp[0,1]）に統一。sf_comm は生パケットを RawControlInput として渡すだけ＋RawInputSink 注入で comm_task が配線（層逆転回避）。motor_driver 旧HAL残骸（setMixerOutput=二重ミキサー/testMotor/stats）削除。挙動完全保存（ドリフト値ベースライン一致）。 | `95f9418` |
-| 3+ | **SIL 1S LiPo 電池サグモデル＋V_BATT 実電圧化**。plant に動的端子電圧 v_batt=OCV(SoC)−I·R_int（電流=モータ電気モデル＋アビオ、クーロンカウント、vpython OCV曲線移植）。emu で有効化、actuator を live(sensor_power)へ。χ²ラッチアップ非発火で全PASS。 | `b8fd27e` |
+| 3+ | **SIL 1S LiPo 電池サグモデル＋V_BATT 実電圧化**。plant に動的端子電圧 v_batt=OCV(SoC)−I·R_int（電流=モータ電気モデル＋アビオ、クーロンカウント、vpython OCV曲線移植）。emu で有効化、actuator を live(sensor_power)へ。χ²過剰棄却非発火で全PASS。 | `b8fd27e` |
 | 4 | **HW所有の一元化（R1/R2/R4）**。BMI270/PMW3901 SPI を `skip_bus_init`、motor LEDC を `skip_timer_init` で sf_board 借用に統一（二重init握り潰し→所有明示の省略、board::flow_spi() 追加）。`sensor_present()` 実装（atomic, Mag/Flow/Baro/Power の init 成否を board へ報告）。Critical 失敗を halt 統一（board::fatal＋imu_task/actuator、esp_restart せず §5）。**LED 表示は Phase 6 繰延**（LED 所有未確立）。共有タスクは smoke 非リンク制約で board 直呼びせず plain bool で借用。 | `(Phase4)` |
 | 5 | **起動シーケンス R3 ＋ params SSOT**。main.cpp を宣言的 Phase 0-4 に・start_all() 集約・extern TaskHandle 排除・params::init() 配線（未呼出だった）。params.def 撤去し params.cpp を SSOT 文書化。 | `0246dd2` 他 |
 | 6 | **未実装機能の全配線**。Logger・mag χ²・Notify・Button(button_event 地上トグル)・sensor_health 1Hz(R15)・CLI(esp_console R6 レジストリ)・Critical-fail LED(board::fatal 高速赤点滅)。 | `c773bac`〜`8483b8a` |
@@ -111,14 +111,14 @@
 
 ---
 
-## 3. 次にやること: Phase 7（品質仕上げ）or χ²ラッチアップ調査 — 要ユーザー判断
+## 3. 次にやること: Phase 7（品質仕上げ）or χ²過剰棄却調査 — 要ユーザー判断
 
-**Phase 6 完了**。次は計画 `valiant-frolicking-sun.md` の **Phase 7（品質仕上げ）** が本来の次フェーズ。ただし χ²ラッチアップ調査（研究的に重要・実機にも関わる根治）を先に攻める選択もある。**順序をユーザーに確認してから着手（§★最初にやること 参照）。**
+**Phase 6 完了**。次は計画 `valiant-frolicking-sun.md` の **Phase 7（品質仕上げ）** が本来の次フェーズ。ただし χ²過剰棄却調査（研究的に重要・実機にも関わる根治）を先に攻める選択もある。**順序をユーザーに確認してから着手（§★最初にやること 参照）。**
 
 **Phase 7（品質仕上げ）の作業:** 全 `@design` タグを実装照合し [OK]/[NG] 化（リリースは全[OK]）／全タスクヘッダに `@publisher`/`@subscriber`（R13）／残 TODO 解消／マジックナンバー集約（重力 9.80665 統一・相補ゲイン params 化・pid 飛行リミット config 化）／コメントドリフト修正／esp_netif STA 所有の設計文書矛盾（architecture §7 vs hardware_init §4）解決。
 
 **χ²/Phase 6 の参考（旧・割り込み候補メモ）:**
-- **χ² ラッチアップ調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
+- **χ² 過剰棄却調査（推定器ロバスト性、実機にも関わる）**: `eskf_core.cpp` の accel χ²ゲート(7.8≒χ²3自由度95%点)がマニューバ中66%棄却し、推定が発散すると回復補正も棄却して固着する。電池モデルの動的ディザで今は非発火だが潜在。ゲート緩和(11.3≒99%点)/回復ロジック/適応Rを SIL で数値検証。**これを直せばデッドバンド復活も通る見込み。**
 - **デッドバンド復活**: χ² 改善後に 0.05 を有効化（現状は機構配線・既定0）。
 - **Phase 4 LED 繰延分**: Critical 失敗時の LED エラーパターン表示。Phase 6（notify/LED 所有確立）でやるのが本来＝Phase 6 と一緒に片付くはず。board::fatal にフック有り。
 
@@ -199,7 +199,7 @@ sf build vehicle_new   # ESP-IDF 実機ビルド（ファーム変更時は必�
    - **ESKF 凍結機構の限界**: `active_mask`＋`enforceCovarianceConstraints` は「センサ恒久不在」隔離用で、凍結状態の共分散を毎周期 init へ戻す。地上↔飛行トグルには非互換（解除で巨大共分散復活）。トグル運用には「共分散を init に戻さない soft-freeze」の別設計が要る（将来課題）。
    - **Phase 8（crash_refly）への申し送り**: 接地復帰reset後すぐ再離陸すると同じ共分散再膨張で発散しうる。地上再収束の時間確保 or soft-freeze が要る見込み。
 
-6. **χ² ゲートのラッチアップ＝過敏性の真因（Phase 3, データで特定）**:
+6. **χ² ゲートの過剰棄却＝過敏性の真因（Phase 3, データで特定）**:
    - 毎軸 POSITION_HOLD/STABILIZE は限界安定。0.1% の推力変化やデッドバンドで pos_yaw が 1.08m→7.40m に発散する「崖」があった。
    - **真因**: ESKF の accel-attitude 3次元更新の χ² ゲート（`eskf_core.cpp::vectorUpdate3`, `accel_chi2_gate=7.8`≒χ²3自由度95%点）。マニューバ中は運動加速度で innovation が大きく **常時66%が棄却**。さらにゲートは**ハードカットオフ**（d²>7.8 で更新を全 return）なので、推定が一度発散すると正しい補正も外れ値に見えて棄却され、d² が 100〜900 に跳ね永久に固着（**latch-up**）。回復補正をゲート自身が弾く。
    - **計測**: FAIL時 roll_est が真値から数百度ズレて固着・att_rmse 巨大。PASS時は att_rmse 2〜3°で推定健全。棄却率は PASS/FAIL でほぼ同じ(66%)＝平均でなく臨界の瞬間に閾値を跨ぐか否か。

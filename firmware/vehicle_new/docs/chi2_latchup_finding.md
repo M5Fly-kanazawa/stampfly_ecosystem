@@ -1,11 +1,13 @@
-# ESKF accel-attitude χ² ゲートのラッチアップ — 調査ノート
+# ESKF accel-attitude χ² ゲートの過剰棄却 — 調査ノート
 
-最終更新: 2026-06-07（Phase 3 で発見・データ特定。根治は別タスク）
+最終更新: 2026-06-08（✅ §8 で根治。真因＝過剰棄却）
 
-> このノートは Phase 3 で炙り出した **ESKF の構造的ロバスト性課題**の調査起点。
-> 実機にも関わる（突風・センサノイズでも臨界に当たれば発火しうる）ため、独立タスクとして
-> 取り組む。当座は SIL 電池サグモデル（commit b8fd27e）の動的ディザで非発火にしてあるだけで
-> **根治していない**。関連: `next_session_plan.md` §6.6、auto-memory `project_estimator_attitude_comparison`。
+> **用語と読み方**：この現象を当初「**ラッチアップ**」（電子回路 latch-up の借用＝固着）と呼び、
+> ファイル名にも残っているが、計測の結果「推定が固着して回復不能」ではなく「**χ²ゲートが加速度
+> 補正を過剰に棄却して姿勢がドリフトする**」現象と判明した。正確な呼び名は **「過剰棄却」**。
+> **§1〜§7 は Phase 3 の初期仮説（『固着ラッチ』説。一部は §8 で訂正）、§8 が解決（2026-06-08）。**
+> 平易な読み物版は [`chi2_latchup_explained.md`](chi2_latchup_explained.md)。
+> 関連: `next_session_plan.md`、auto-memory `project_estimator_attitude_comparison`。
 
 ---
 
@@ -23,7 +25,7 @@
 - **0.1% の推力変化**で 1.08 m → 7.40 m に発散。連続的な感度ではなく**質的な臨界**。
 - **符号依存**: 推力わずか過剰のみ発散、不足側は無害。
 
-## 2. 真因（χ² ゲートのラッチアップ）
+## 2. 初期仮説（χ² ゲートの「固着ラッチ」説 — §8 で過剰棄却に訂正）
 
 `components/sf_estimator_eskf/eskf_core.cpp` の加速度ベース姿勢更新 `updateAccelAttitude()` →
 `vectorUpdate3()` 内の **χ² 外れ値ゲート**。
@@ -126,7 +128,7 @@ grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail
 
 ## 7. デッドバンドとの関係
 
-デッドバンド 0.05 復活（`sf_command` は機構配線・既定0）も同じラッチアップで POS_HOLD/
+デッドバンド 0.05 復活（`sf_command` は機構配線・既定0）も同じ過剰棄却で POS_HOLD/
 STABILIZE を崩す。**χ² を根治すればデッドバンド 0.05 もそのまま通る見込み** → 本タスクの後に
 デッドバンドを有効化して検証する。
 
