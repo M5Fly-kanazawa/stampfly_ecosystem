@@ -81,7 +81,12 @@ struct PID {
         // クランプするだけは不十分: 出力が飽和している間も積分が出力全幅まで巻き上がり、
         // 誤差反転後にゆっくり戻る→オーバーシュート。よって、飽和中の出力をさらに飽和方向へ
         // 押す場合は積分を更新しない（条件付き積分）。ハードクランプは保険として残す。
-        if (ti > 0.01f) {
+        // Integrate when Ti is meaningful. Inclusive bound: the parameter system
+        // allows ti down to exactly 0.01, which must still integrate (a strict
+        // ">" silently disabled the integrator at the minimum allowed value).
+        // Ti が有意なら積分する。境界は含む: パラメータは ti=0.01 ちょうどまで許容され、
+        // その値でも積分すべき（">" だと許容最小値で積分が黙って無効化されていた）。
+        if (ti >= 0.01f) {
             float i_next = integral + (kp / ti) * (error + prev_error) * (dt * 0.5f);
             float out_test = p_term + i_next + d_term;
             bool push_high = (out_test >  output_limit) && (error > 0);

@@ -121,15 +121,41 @@ void ControlTask(void* pvParameters)
     controller.init();
     actuator.init();
 
+    // Rate limiter for the IMU-stall warning (once per second at 400Hz)
+    // IMU 停止警告のレート制限（400Hz で毎秒1回）
+    uint32_t stall_count = 0;
+
     while (true) {
         // =====================================================================
-        // Wait for IMU task notification (400Hz sync)
-        // IMUタスクからの通知を待つ（400Hz同期）
+        // Wait for IMU task notification (400Hz sync) — WITH TIMEOUT.
+        // ControlTask is the only entity that can zero the motors, but it only
+        // runs when ImuTask notifies it. If the IMU dies mid-flight (SPI fault,
+        // connector), ImuTask skips the notify and ControlTask would block
+        // forever while LEDC holds the last duty → flyaway. The timeout is the
+        // safety net: no notification within CONTROL_NOTIFY_TIMEOUT_MS → force
+        // the motors to zero and keep waiting. Recovery is automatic — the next
+        // successful IMU cycle re-arms the actuator below (idempotent arm()).
+        // IMUタスクからの通知を待つ（400Hz同期）— タイムアウト付き。
+        // モータをゼロにできる唯一の主体は ControlTask だが、起床は ImuTask の通知
+        // 頼み。飛行中に IMU が死ぬ（SPI 故障・コネクタ）と ImuTask は通知をスキップし、
+        // ControlTask は永久ブロック、LEDC は最後の duty を保持 → フライアウェイ。
+        // タイムアウトが安全網: CONTROL_NOTIFY_TIMEOUT_MS 内に通知が無ければモータを
+        // 強制ゼロにして待ち続ける。復帰は自動 — 次の正常 IMU 周期で下の arm()（冪等）
+        // が再アームする。
         //
         // @design architecture.md §5 — IMU-synced control pipeline    [OK]
         // =====================================================================
 
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (ulTaskNotifyTake(pdTRUE,
+                             pdMS_TO_TICKS(config::CONTROL_NOTIFY_TIMEOUT_MS)) == 0) {
+            actuator.disarm();   // unconditional motor zero / 無条件モータゼロ
+            if ((stall_count++ % 100) == 0) {
+                ESP_LOGE(TAG, "No IMU notification for %ums — motors forced to zero",
+                         static_cast<unsigned>(config::CONTROL_NOTIFY_TIMEOUT_MS));
+            }
+            continue;
+        }
+        stall_count = 0;
 
         // Consume controller reset/mode commands from the StateManager transition
         // callbacks (architecture §4). Done first so a reset / mode change applies
@@ -181,6 +207,18 @@ void ControlTask(void* pvParameters)
                 }
                 actuator.applyTestDuties(duties);
             } else {
+                // One-shot consume on expiry: clear the latched fact so the uint32
+                // microsecond clock wrap (~71.6 min) cannot make the stale expiry
+                // compare "in the future" again and silently respin the motors.
+                // 失効時のワンショット消化: ラッチされた事実をクリアし、uint32 マイクロ秒
+                // 時計のラップ（約71.6分）で古い失効時刻が再び「未来」と判定されて
+                // モータが勝手に回り出すのを防ぐ。
+                if (mt.active) {
+                    sf::MotorTest off = {};
+                    off.active = false;
+                    off.timestamp = now_us;
+                    sf::motor_test.publish(off);
+                }
                 actuator.disarm();
             }
             continue;

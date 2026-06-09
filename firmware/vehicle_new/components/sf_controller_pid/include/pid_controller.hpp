@@ -85,6 +85,21 @@ private:
     float pos_setpoint_x_ = 0;       // [m] captured position N (POS_HOLD target, NED)
     float pos_setpoint_y_ = 0;       // [m] captured position E (POS_HOLD target, NED)
     bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute
+    float max_pos_vel_    = 1.0f;    // [m/s] POS_HOLD horizontal velocity setpoint limit
+
+    // Physical output limits for the PID anti-windup (see loadParams). Each PID
+    // clamps its output and gates its integrator at ±output_limit, so the limit
+    // must match what the plant can actually deliver — with the default 1.0 the
+    // rate integrators could wind up to ~130× the available torque.
+    // Roll/pitch: max differential thrust 2×0.168 N on one side × arm 0.023 m.
+    // Yaw: same differential × torque/thrust ratio κ = 0.00971 m (actuator.cpp).
+    // PID アンチワインドアップ用の物理出力上限（loadParams 参照）。各 PID は出力と
+    // 積分器を ±output_limit でゲートするため、上限はプラントが実際に出せる量と一致
+    // させる必要がある — 既定 1.0 のままだとレート積分器は実トルクの約130倍まで巻き上がる。
+    // ロール/ピッチ: 片側 2×0.168 N の差動推力 × アーム長 0.023 m。
+    // ヨー: 同じ差動 × トルク/推力比 κ = 0.00971 m（actuator.cpp）。
+    float max_roll_pitch_torque_ = 0.0077f;  // [Nm] = 2·0.168 N · 0.023 m
+    float max_yaw_torque_        = 0.0033f;  // [Nm] = 2·0.168 N · 0.00971 m
 };
 
 }  // namespace sf

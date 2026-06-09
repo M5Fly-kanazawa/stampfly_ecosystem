@@ -301,8 +301,13 @@ TEST(pid_integral)
         pid.compute(1.0f, 0.1f);
     }
 
-    // integral ≈ kp/ti * error * dt * 10 = 1.0/1.0 * 1.0 * 0.1 * 10 = 1.0
-    ASSERT_NEAR(pid.integral, 1.0f, 0.01f);
+    // Trapezoidal (Tustin) integration: each step adds kp/ti·(e+e_prev)·dt/2.
+    // The first step sees prev_error=0 and adds only 0.05; steps 2..10 add 0.1
+    // each → 0.05 + 9×0.1 = 0.95 (rectangular integration would give 1.0).
+    // 台形（Tustin）積分: 各ステップで kp/ti·(e+e_prev)·dt/2 を加算。初回は
+    // prev_error=0 で 0.05 のみ、2〜10 回目は各 0.1 → 0.05 + 9×0.1 = 0.95
+    // （矩形積分なら 1.0）。
+    ASSERT_NEAR(pid.integral, 0.95f, 0.01f);
 }
 
 TEST(pid_reset)

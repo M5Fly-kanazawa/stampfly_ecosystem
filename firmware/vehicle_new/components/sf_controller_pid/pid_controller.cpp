@@ -75,6 +75,23 @@ void PidController::loadParams()
     params::get_float("position.vel.ti", vel_x_.ti);
     pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     vel_y_ = vel_x_;
+
+    // Output limits — each loop is clamped to what its downstream stage can
+    // physically deliver, so the conditional-integration anti-windup (pid.hpp)
+    // sees the REAL saturation instead of the meaningless default 1.0.
+    // 出力上限 — 各ループを下流段が物理的に出せる量でクランプし、条件付き積分の
+    // アンチワインドアップ（pid.hpp）が無意味な既定 1.0 でなく実際の飽和を見るようにする。
+    rate_roll_.output_limit  = max_roll_pitch_torque_;          // [Nm]
+    rate_pitch_.output_limit = max_roll_pitch_torque_;          // [Nm]
+    rate_yaw_.output_limit   = max_yaw_torque_;                 // [Nm]
+    att_roll_.output_limit   = max_rate_;                       // [rad/s]
+    att_pitch_.output_limit  = max_rate_;                       // [rad/s]
+    alt_pos_.output_limit    = max_climb_rate_;                 // [m/s]
+    alt_vel_.output_limit    = max_thrust_ - hover_thrust_;     // [N] thrust headroom
+    pos_x_.output_limit      = max_pos_vel_;                    // [m/s]
+    pos_y_.output_limit      = max_pos_vel_;                    // [m/s]
+    vel_x_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²] = g·tilt limit
+    vel_y_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²]
 }
 
 ControlOutput PidController::compute(
@@ -153,8 +170,14 @@ ControlOutput PidController::compute(
 
         float thrust_correction = alt_vel_.compute(vel_sp_z - vel_up, dt);
 
-        // Hover thrust + correction / ホバー推力 + 補正
+        // Hover thrust + correction, clamped to the physical thrust range. The
+        // mixer would silently clip negative/excess thrust at the duty stage
+        // anyway; clamping here keeps the published control_output honest.
+        // ホバー推力 + 補正。物理推力範囲にクランプする。ミキサーは duty 段で負/過大
+        // 推力を黙ってクリップするが、ここでクランプして control_output を正直に保つ。
         thrust = hover_thrust_ + thrust_correction;
+        if (thrust < 0.0f)         thrust = 0.0f;
+        if (thrust > max_thrust_)  thrust = max_thrust_;
     }
 
     // Position control (POS_HOLD) is applied inside the attitude block above —
