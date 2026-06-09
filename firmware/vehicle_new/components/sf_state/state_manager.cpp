@@ -20,6 +20,7 @@
 #include "params.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include <cstdio>   // ROOT-CAUSE DIAG: raw printf markers (temporary)
 
 static const char* TAG = "StateManager";
 
@@ -80,8 +81,11 @@ void StateManager::notifyInitComplete()
     if (state_ != FlightState::INIT) {
         return;   // already past INIT — nothing to do / INIT を過ぎていれば無操作
     }
+    std::printf("  ROOT: NIC-1 pre-esplog\n");
     ESP_LOGI(TAG, "Init complete → IDLE_GROUND");
+    std::printf("  ROOT: NIC-2 post-esplog pre-transition\n");
     transition(FlightState::IDLE_GROUND);
+    std::printf("  ROOT: NIC-3 post-transition\n");
 }
 
 /// @design requirements.md §2 — ARM from GROUND only                  [OK]
@@ -461,20 +465,26 @@ void StateManager::transition(FlightState new_state)
         return;
     }
 
+    std::printf("  ROOT: TR-1 enter (%d->%d) pre-esplog\n",
+                (int)old_state, (int)new_state);
     ESP_LOGI(TAG, "Transition: %s → %s",
              flightStateName(old_state), flightStateName(new_state));
+    std::printf("  ROOT: TR-2 post-esplog, exit_cb_cnt=%d\n", exit_callback_count_);
 
     // Fire onExit callbacks for old state
     // 旧状態のonExitコールバックを発火
     for (int i = 0; i < exit_callback_count_; i++) {
+        std::printf("  ROOT: TR-3 exit_cb[%d] pre\n", i);
         if (exit_callbacks_[i]) {
             exit_callbacks_[i](old_state, new_state);
         }
+        std::printf("  ROOT: TR-3 exit_cb[%d] post\n", i);
     }
 
     // Update state
     // 状態を更新
     state_ = new_state;
+    std::printf("  ROOT: TR-4 state set, enter_cb_cnt=%d\n", enter_callback_count_);
 
     // On returning to the ground, reset the flight mode to STABILIZE so the NEXT
     // takeoff always starts in the direct-throttle mode that lifts off. Without this a
@@ -508,14 +518,18 @@ void StateManager::transition(FlightState new_state)
     // Fire onEnter callbacks for new state
     // 新状態のonEnterコールバックを発火
     for (int i = 0; i < enter_callback_count_; i++) {
+        std::printf("  ROOT: TR-5 enter_cb[%d] pre\n", i);
         if (enter_callbacks_[i]) {
             enter_callbacks_[i](old_state, new_state);
         }
+        std::printf("  ROOT: TR-5 enter_cb[%d] post\n", i);
     }
 
     // Publish to system.mode topic
     // system.modeトピックに発行
+    std::printf("  ROOT: TR-6 pre-publishMode\n");
     publishMode();
+    std::printf("  ROOT: TR-7 post-publishMode (transition done)\n");
 }
 
 void StateManager::publishMode()

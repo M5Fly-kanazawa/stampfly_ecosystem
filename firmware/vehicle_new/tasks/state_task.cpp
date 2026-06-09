@@ -22,6 +22,7 @@
  * @design detailed_design.md §8 — StateTask                          [OK]
  */
 
+#include <cstdio>   // ROOT-CAUSE DIAG: raw printf markers (temporary)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -279,7 +280,9 @@ void StateTask(void* pvParameters)
         // INIT → IDLE_GROUND。それまで ARM は正しく拒否される（IDLE_GROUND でない）。
         // =====================================================================
         if (!init_done && sf::sensor_imu.latest().timestamp != 0) {
+            std::printf("  ROOT: ST pre-notifyInitComplete\n");
             g_state_manager.notifyInitComplete();
+            std::printf("  ROOT: ST post-notifyInitComplete\n");
             init_done = true;
         }
 
