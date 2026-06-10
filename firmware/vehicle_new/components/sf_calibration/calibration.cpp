@@ -63,7 +63,17 @@ void CalibrationMgr::init()
         ESP_LOGI(TAG, "  gyro_bias: [%.6f, %.6f, %.6f]",
                  data_.gyro_bias[0], data_.gyro_bias[1], data_.gyro_bias[2]);
     } else {
-        ESP_LOGW(TAG, "No calibration in NVS, using zeros");
+        // Normal on every boot today: saveToNvs() is deliberately not wired yet
+        // (an NVS commit's flash erase stalls the 400Hz loop >10ms — persistence
+        // waits for the flash auto-suspend investigation). The boot calibration
+        // measures fresh values right after this and gates ARM until done, so
+        // the zeros only cover the first ~4 s while disarmed.
+        // 現状は毎起動で正常: saveToNvs() は意図的に未配線（NVS commit のフラッシュ
+        // 消去が 400Hz ループを 10ms 超ストールさせるため、永続化は flash auto-suspend
+        // の調査とセットで保留）。直後に起動校正がフレッシュに測定し、完了まで ARM を
+        // ゲートするので、ゼロが使われるのは disarmed の最初の約4秒だけ。
+        ESP_LOGI(TAG, "No saved calibration (normal: persistence not wired) — "
+                      "boot calibration measures fresh");
         memset(&data_, 0, sizeof(data_));
     }
 }
