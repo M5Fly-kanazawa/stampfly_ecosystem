@@ -826,16 +826,34 @@ void ImuTask(void* pvParameters)
         //   state=0 + state_loops rising → StateTask runs but INIT check never fires
         //   state_loops STUCK at stage=N → StateTask blocked right after stage N
         //   notify_upd STUCK → NotifyTask starved (LED frozen) on core 0
+        //   busy_avg/max [µs] → this task's per-cycle CPU time vs the 2500µs budget
+        //     (busy_avg near 2500 = core 1 saturated = starvation confirmed)
         // 一時診断: 1秒毎に StateTask/NotifyTask の生存と状態を raw printf で出す。
-        if ((cycle_count % 400u) == 0u) {
-            const sf::SystemMode sm = sf::system_mode.latest();
-            std::printf("  DIAG: state=%u armed=%d imu_ts=%lu | state_loops=%lu stage=%u | "
-                        "notify_upd=%lu\n",
-                        sm.state, static_cast<int>(sm.armed),
-                        static_cast<unsigned long>(sf::sensor_imu.latest().timestamp),
-                        static_cast<unsigned long>(g_diag_state_loops),
-                        static_cast<unsigned>(g_diag_state_stage),
-                        static_cast<unsigned long>(g_diag_notify_updates));
+        //   busy_avg/max [µs] = 本タスクの周期あたり CPU 時間 vs 予算 2500µs
+        //   （busy_avg が 2500 近傍 = コア1 飽和 = 飢餓の確証）。
+        {
+            static uint32_t s_busy_sum_us = 0;
+            static uint32_t s_busy_max_us = 0;
+            const uint32_t busy_us =
+                static_cast<uint32_t>(esp_timer_get_time()) - now;
+            s_busy_sum_us += busy_us;
+            if (busy_us > s_busy_max_us) {
+                s_busy_max_us = busy_us;
+            }
+            if ((cycle_count % 400u) == 0u) {
+                const sf::SystemMode sm = sf::system_mode.latest();
+                std::printf("  DIAG: state=%u armed=%d imu_ts=%lu | state_loops=%lu stage=%u | "
+                            "notify_upd=%lu | busy_avg=%luus max=%luus\n",
+                            sm.state, static_cast<int>(sm.armed),
+                            static_cast<unsigned long>(sf::sensor_imu.latest().timestamp),
+                            static_cast<unsigned long>(g_diag_state_loops),
+                            static_cast<unsigned>(g_diag_state_stage),
+                            static_cast<unsigned long>(g_diag_notify_updates),
+                            static_cast<unsigned long>(s_busy_sum_us / 400u),
+                            static_cast<unsigned long>(s_busy_max_us));
+                s_busy_sum_us = 0;
+                s_busy_max_us = 0;
+            }
         }
 
         // =====================================================================

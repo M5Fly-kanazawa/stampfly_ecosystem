@@ -76,3 +76,11 @@ CONFIG_RMT_ISR_IRAM_SAFE=y
 # C++ exceptions (required by some sensor drivers)
 # C++例外（一部センサドライバで必要）
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
+
+# Compiler optimization: -O2 (PERF). The default -Og leaves the ESKF's dense
+# 15x15 covariance math (~10k MAC/cycle at 400Hz) unoptimized — measured on
+# hardware it saturates core 1 and starves StateTask (INIT-stuck bug).
+# コンパイラ最適化: -O2 (PERF)。既定の -Og は ESKF の密 15x15 共分散演算
+# （400Hz で ~1万積和/周期）を未最適化のまま残し、実機計測でコア1を飽和させ
+# StateTask を飢餓させた（INIT 停止バグ）。
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
