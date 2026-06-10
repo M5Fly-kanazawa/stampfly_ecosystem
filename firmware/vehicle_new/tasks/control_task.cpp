@@ -179,6 +179,17 @@ void ControlTask(void* pvParameters)
     // IMU 停止警告のレート制限（400Hz で毎秒1回）
     uint32_t stall_count = 0;
 
+    // True after the FIRST IMU notification ever arrives. During boot the
+    // BMI270 init takes ~200ms, so the watchdog below fires before the 400Hz
+    // pipeline exists — expected, not an error. The forced motor zero still
+    // runs (harmless while disarmed); only the ERROR log is gated, so a real
+    // mid-flight IMU stall is still reported loudly.
+    // 「最初の」IMU 通知が来たら true。起動時は BMI270 init に約200msかかり、
+    // 400Hz パイプラインが存在する前に下のウォッチドッグが発火する — これは想定で
+    // エラーではない。モータ強制ゼロは実行したまま（disarmed 中は無害）、ERROR
+    // ログだけをゲートする。飛行中の本物の IMU 停止は従来どおり大きく報告される。
+    bool imu_pipeline_seen = false;
+
     while (true) {
         // =====================================================================
         // Wait for IMU task notification (400Hz sync) — WITH TIMEOUT.
@@ -203,12 +214,13 @@ void ControlTask(void* pvParameters)
         if (ulTaskNotifyTake(pdTRUE,
                              pdMS_TO_TICKS(config::CONTROL_NOTIFY_TIMEOUT_MS)) == 0) {
             actuator.disarm();   // unconditional motor zero / 無条件モータゼロ
-            if ((stall_count++ % 100) == 0) {
+            if (imu_pipeline_seen && (stall_count++ % 100) == 0) {
                 ESP_LOGE(TAG, "No IMU notification for %ums — motors forced to zero",
                          static_cast<unsigned>(config::CONTROL_NOTIFY_TIMEOUT_MS));
             }
             continue;
         }
+        imu_pipeline_seen = true;
         stall_count = 0;
 
         // Consume controller reset/mode commands from the StateManager transition
