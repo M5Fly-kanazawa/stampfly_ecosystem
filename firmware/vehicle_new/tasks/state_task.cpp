@@ -298,10 +298,23 @@ void StateTask(void* pvParameters)
 
         sf::PilotRequest req = sf::pilot_request.latest();
         if (req.timestamp != 0) {                          // skip until a packet arrives
+            // ARM is a TOGGLE on the rising edge — the controller's ARM control
+            // is a momentary stick-press button, so the wire flag is 1 only
+            // while held. Each PRESS toggles arm/disarm; the release does
+            // nothing. (Level-follow semantics armed the craft only while the
+            // button was held — ~100ms — verified wrong on hardware. The
+            // proven firmware/vehicle uses this same press-toggle.)
+            // ARM は立ち上がりエッジの「トグル」 — コントローラの ARM はスティック
+            // 押し込みのモーメンタリボタンで、電文フラグは押している間だけ 1。
+            // 「押すたび」に arm/disarm が切り替わり、離しても何も起きない。
+            // （レベル追従だと押している間（~100ms）しか ARM されない — 実機で
+            // 確認済みの誤り。実証済み firmware/vehicle も同じ押下トグル。）
             if (req.arm && !prev_arm) {
-                g_state_manager.requestArm();              // rising edge: request ARM
-            } else if (!req.arm && prev_arm) {
-                g_state_manager.requestDisarm();           // falling edge: request DISARM
+                if (sf::isArmed(g_state_manager.getState())) {
+                    g_state_manager.requestDisarm();       // press while armed → DISARM
+                } else {
+                    g_state_manager.requestArm();          // press while idle → ARM
+                }
             }
             prev_arm = req.arm;
 

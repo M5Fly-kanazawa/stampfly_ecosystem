@@ -47,4 +47,6 @@
    +    rc   3072  2600   2048    2048  1     600       50        1              # D2: roll-right step (~+8°) 0.6 s → lateral drift
    +    rc   3072  2048   2048    2048  1     6000      50        1     0     1  # E: → POSITION_HOLD 6 s — arrest drift + hold
    +    rc   3072  2048   2048    2048  1     5000      50        1              # F: → ALT_HOLD 5 s (alt held, pos free — coast level)
-   +    rc   2048  2048   2048    2048  0     1000      50                       # G: DISARM (motors cut)
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

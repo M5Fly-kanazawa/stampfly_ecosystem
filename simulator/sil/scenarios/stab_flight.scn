@@ -29,7 +29,9 @@
    +    rc   3290  1496   2048    2048  1     1500      50       # E: roll-left step (~-8°)
    +    rc   3290  2048   2600    2048  1     1500      50       # F: pitch-forward step (~+8°)
    +    rc   3290  2048   2048    2048  1     1500      50       # G: centre → self-level back toward 0°
-   +    rc   2048  2048   2048    2048  0     1000      50       # H: DISARM (FLYING → IDLE_GROUND, motors cut)
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
 #
 # Expectation: log shows "Transition: ARMED_GROUND → TAKEOFF" then "TAKEOFF → FLYING";
 # trajectory roll/pitch track the commanded ±8° steps and return to ~0° on centre,

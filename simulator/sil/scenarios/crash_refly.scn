@@ -49,4 +49,6 @@
    +    rc     2048  2048   2048    2048  1     1000      50              # M: RE-ARM (rising edge — gated until re-calibration done)
    +    rc     3330  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s
    +    rc     3072  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
-   +    rc     2048  2048   2048    2048  0     1000      50              # P: DISARM (end on the ground, recovered)
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

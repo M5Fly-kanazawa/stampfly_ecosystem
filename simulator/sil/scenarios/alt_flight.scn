@@ -32,7 +32,9 @@
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
    +    rc   3330  2048   2048    2048  1     2500      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground
    +    rc   3072  2048   2048    2048  1     12000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE; throttle raw 3072 = climb-rate 0 → captureAltitude + HOLD 12 s. WATCH truth alt for runaway vs hold.
-   +    rc   2048  2048   2048    2048  0     1000      50              # E: DISARM (FLYING → IDLE_GROUND, motors cut) 1 s
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
 #
 # Expectation (MEASURED, P8 Phase B fix — tune from trajectory.csv `alt`/`alt_est`):
 #   Ground (t<6.5): ESKF est_alt held at ~0 (no drift) while truth ~0.01 m.

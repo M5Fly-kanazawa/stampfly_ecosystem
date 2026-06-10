@@ -30,7 +30,9 @@
    +    rc   3290  2048   1096    2048  1     300       50        0    1   # G: pitch-rate -
    +    rc   3290  2048   2048    3000  1     500       50        0    1   # H: yaw-rate + (0.5 s)
    +    rc   3290  2048   2048    2048  1     1000      50        0    1   # I: centre, settle
-   +    rc   2048  2048   2048    2048  0     1000      50        0    0   # J: DISARM (motors cut)
+   +      rc    2048 2048 2048 2048  0     200       50        0              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50        0              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50        0              # settle disarmed / disarm 後整定
 #
 # Expectation: log shows ARMED_GROUND→TAKEOFF→FLYING then "Mode change: STABILIZE → ACRO";
 # trajectory shows roll/pitch/yawrate responding to each doublet and returning toward
