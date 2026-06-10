@@ -110,6 +110,23 @@ int cmd_param(int argc, char** argv)
         return 0;
     }
     if (std::strcmp(argv[1], "save") == 0) {
+        // Flash sector erase during the NVS commit disables the cache and
+        // stalls the 400Hz IMU loop >10ms (verified on hardware: the ControlTask
+        // watchdog fired during a bench save). Harmless disarmed; in flight it
+        // would zero the motors for the stall — so refuse while armed. Live
+        // tuning (param set → ReloadParams) works in flight; persist on the
+        // ground afterwards.
+        // NVS commit のフラッシュセクタ消去中はキャッシュが止まり 400Hz IMU ループが
+        // 10ms 超ストールする（実機検証: ベンチ save 中に ControlTask ウォッチドッグ
+        // 発火）。disarmed では無害だが飛行中はストール分モータがゼロになる — armed 中は
+        // 拒否する。ライブチューニング（param set → ReloadParams）は飛行中も使え、
+        // 永続化は着陸後に行えばよい。
+        const sf::SystemMode mode = sf::system_mode.latest();
+        if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
+            std::printf("refused: param save stalls the 400Hz loop (flash erase) — "
+                        "land/disarm first\n");
+            return 1;
+        }
         sf::params::save();
         std::printf("params saved to NVS\n");
         return 0;
