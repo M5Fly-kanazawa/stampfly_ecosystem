@@ -22,7 +22,6 @@
  * @design detailed_design.md §8 — StateTask                          [OK]
  */
 
-#include <cstdio>   // ROOT-CAUSE DIAG: raw printf markers (temporary)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -41,17 +40,6 @@ static const char* TAG = "StateTask";
 /// 所有し、遷移は全てトピック経由（R5/R6）。static が無いと他の翻訳単位から extern で
 /// 触れてしまい、この防壁を迂回できてしまう。
 static sf::StateManager g_state_manager;
-
-// -----------------------------------------------------------------------------
-// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09).
-// StateTask increments g_diag_state_loops at the top of each loop and sets
-// g_diag_state_stage through the loop; ImuTask prints them (raw printf) so we can
-// see whether StateTask's loop runs and, if blocked, WHERE. Remove once root-caused.
-// 一時診断（実機 INIT 停止調査）。StateTask がループ先頭で g_diag_state_loops を増やし
-// ステージを更新、ImuTask が raw printf で報告。StateTask が回っているか/どこで止まるかを見る。
-// -----------------------------------------------------------------------------
-extern "C" volatile uint32_t g_diag_state_loops = 0;   // loop iterations / ループ回数
-extern "C" volatile uint8_t  g_diag_state_stage = 0;   // last reached stage / 到達ステージ
 
 // =============================================================================
 // Ground→flight covariance handoff at ARM — why ATTITUDE-only, not a full reset
@@ -284,8 +272,6 @@ void StateTask(void* pvParameters)
 
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
 
-        g_diag_state_loops = g_diag_state_loops + 1;  // DIAG: loop is running / ループ稼働
-        g_diag_state_stage = 1;      // DIAG: top of loop
 
         // =====================================================================
         // INIT → IDLE_GROUND once the estimator is producing valid output, i.e.
@@ -295,9 +281,7 @@ void StateTask(void* pvParameters)
         // INIT → IDLE_GROUND。それまで ARM は正しく拒否される（IDLE_GROUND でない）。
         // =====================================================================
         if (!init_done && sf::sensor_imu.latest().timestamp != 0) {
-            std::printf("  ROOT: ST pre-notifyInitComplete\n");
             g_state_manager.notifyInitComplete();
-            std::printf("  ROOT: ST post-notifyInitComplete\n");
             init_done = true;
         }
 
@@ -312,7 +296,6 @@ void StateTask(void* pvParameters)
         // @design architecture.md §2 — detection reports, state management decides [OK]
         // =====================================================================
 
-        g_diag_state_stage = 2;      // DIAG: about to read pilot_request (mutex)
         sf::PilotRequest req = sf::pilot_request.latest();
         if (req.timestamp != 0) {                          // skip until a packet arrives
             if (req.arm && !prev_arm) {
@@ -400,7 +383,6 @@ void StateTask(void* pvParameters)
         // @design development_roadmap.md §3 Layer 3 — ToF takeoff detect  [OK]
         // =====================================================================
 
-        g_diag_state_stage = 4;      // DIAG: about to read command_setpoint (mutex)
         const sf::FlightState fs = g_state_manager.getState();
         const float throttle = sf::command_setpoint.latest().throttle;
 
@@ -450,7 +432,6 @@ void StateTask(void* pvParameters)
         // @design requirements.md §2 — PairingState (auto-enter on unpaired) [OK]
         // @design architecture.md §4 — StateManager owns PairingState        [OK]
         // =====================================================================
-        g_diag_state_stage = 6;      // DIAG: about to read pairing_complete (mutex)
         const sf::PairingComplete bind = sf::pairing_complete.latest();
         if (bind.timestamp != 0) {                         // comm has reported its bind status
             const bool bound = bind.bound;
@@ -503,7 +484,6 @@ void StateTask(void* pvParameters)
         //
         // @design requirements.md §9 — comm loss: hover 3 s → LANDING   [OK]
         // =====================================================================
-        g_diag_state_stage = 9;      // DIAG: about to call update() (end of loop)
         g_state_manager.update(static_cast<uint32_t>(esp_timer_get_time()));
     }
 }

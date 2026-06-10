@@ -33,13 +33,6 @@
 
 static const char* TAG = "NotifyTask";
 
-// TEMPORARY DIAGNOSTIC (real-hardware INIT-stuck investigation). Incremented each
-// NotifyTask update so ImuTask can report whether NotifyTask (core 0) is being
-// starved (LED frozen) while the state machine (core 1) may have progressed.
-// 一時診断: NotifyTask が更新の度に増やす。NotifyTask(core0)が飢餓して LED が固まって
-// いるか（状態は core1 で進んでいるか）を ImuTask が報告できるように。
-extern "C" volatile uint32_t g_diag_notify_updates = 0;
-
 void NotifyTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "NotifyTask started");
@@ -65,7 +58,6 @@ void NotifyTask(void* pvParameters)
 
     while (true) {
         notify.update();
-        g_diag_notify_updates = g_diag_notify_updates + 1;  // DIAG: NotifyTask running
         vTaskDelayUntil(&last_wake, period);
     }
 }

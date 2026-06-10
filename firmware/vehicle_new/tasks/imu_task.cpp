@@ -28,7 +28,6 @@
  * @design architecture.md §3 — R13 @publisher/@subscriber annotation  [OK]
  */
 
-#include <cstdio>     // DIAG printf (temporary)
 #include <atomic>     // s_imu_spi_init_done (FlowTask SPI-init serialization)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -165,19 +164,6 @@ static float cached_temperature_c = 0.0f;
 /// BMI270 C ドライバがクラッシュダンプ解析用にチェックポイント値（40..44）を書き込む。
 /// HAL の extern 宣言を解決するため C リンケージで定義する。
 extern "C" volatile uint8_t g_imu_checkpoint = 0;
-
-// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09). The
-// strong definitions live in state_task.cpp / notify_task.cpp; ImuTask prints them with
-// raw printf (bypasses the ESP_LOG console, which may be blocked) so we can see if
-// StateTask/NotifyTask are alive. WEAK fallback definitions here keep partial link
-// targets buildable (rtos_smoke links imu_task but not notify_task) — the linker picks
-// the strong definition whenever the owning task is present.
-// 一時診断: 強定義は state_task/notify_task にあり、ImuTask が raw printf で報告。ここでの
-// weak フォールバック定義は部分リンク対象（rtos_smoke は imu_task をリンクするが
-// notify_task はリンクしない）をビルド可能に保つ — 所有タスクが居ればリンカは強定義を選ぶ。
-extern "C" __attribute__((weak)) volatile uint32_t g_diag_state_loops = 0;    // StateTask loop count
-extern "C" __attribute__((weak)) volatile uint8_t  g_diag_state_stage = 0;    // StateTask last stage
-extern "C" __attribute__((weak)) volatile uint32_t g_diag_notify_updates = 0; // NotifyTask update count
 
 /// Convert the BMI270 driver's body-frame reading into ImuData (unit conversion only).
 /// The axis remap (chip → body FRD) is done in the BMI270 driver (bmi270_wrapper) per
@@ -819,38 +805,27 @@ void ImuTask(void* pvParameters)
         }
         s_prev_calibrated = g_calibrated;
 
-        // TEMPORARY DIAGNOSTIC (real-hardware INIT-stuck): every ~400 cycles (~1 s) print
-        // StateTask/NotifyTask liveness + the state machine's view, via raw printf so it
-        // shows even if the ESP_LOG console is blocked. Interpretation:
-        //   state>0 + state_loops rising → StateTask transitioned (LED issue = NotifyTask)
-        //   state=0 + state_loops rising → StateTask runs but INIT check never fires
-        //   state_loops STUCK at stage=N → StateTask blocked right after stage N
-        //   notify_upd STUCK → NotifyTask starved (LED frozen) on core 0
-        //   busy_avg/max [µs] → this task's per-cycle CPU time vs the 2500µs budget
-        //     (busy_avg near 2500 = core 1 saturated = starvation confirmed)
-        // 一時診断: 1秒毎に StateTask/NotifyTask の生存と状態を raw printf で出す。
-        //   busy_avg/max [µs] = 本タスクの周期あたり CPU 時間 vs 予算 2500µs
-        //   （busy_avg が 2500 近傍 = コア1 飽和 = 飢餓の確証）。
+        // CPU-load watermark: per-cycle busy time vs the 2500µs budget, logged
+        // once a minute. KEPT (not a temporary diag): core-1 saturation at -Og
+        // starved StateTask into the INIT-stuck bug, and this number is the
+        // early warning if estimator/control cost ever creeps back up.
+        // CPU 負荷ウォーターマーク: 周期あたり busy 時間 vs 予算 2500µs を毎分ログ。
+        // 恒久採用（一時診断ではない）: -Og 時のコア1 飽和が StateTask を飢餓させ
+        // INIT 停止バグになった。推定・制御のコストが再び肥大したときの早期警報。
         {
             static uint32_t s_busy_sum_us = 0;
             static uint32_t s_busy_max_us = 0;
+            constexpr uint32_t kLoadLogEveryCycles = 24000;   // 60 s at 400Hz
             const uint32_t busy_us =
                 static_cast<uint32_t>(esp_timer_get_time()) - now;
             s_busy_sum_us += busy_us;
             if (busy_us > s_busy_max_us) {
                 s_busy_max_us = busy_us;
             }
-            if ((cycle_count % 400u) == 0u) {
-                const sf::SystemMode sm = sf::system_mode.latest();
-                std::printf("  DIAG: state=%u armed=%d imu_ts=%lu | state_loops=%lu stage=%u | "
-                            "notify_upd=%lu | busy_avg=%luus max=%luus\n",
-                            sm.state, static_cast<int>(sm.armed),
-                            static_cast<unsigned long>(sf::sensor_imu.latest().timestamp),
-                            static_cast<unsigned long>(g_diag_state_loops),
-                            static_cast<unsigned>(g_diag_state_stage),
-                            static_cast<unsigned long>(g_diag_notify_updates),
-                            static_cast<unsigned long>(s_busy_sum_us / 400u),
-                            static_cast<unsigned long>(s_busy_max_us));
+            if ((cycle_count % kLoadLogEveryCycles) == 0u) {
+                ESP_LOGI(TAG, "400Hz load: busy_avg=%luus max=%luus (budget 2500us)",
+                         static_cast<unsigned long>(s_busy_sum_us / kLoadLogEveryCycles),
+                         static_cast<unsigned long>(s_busy_max_us));
                 s_busy_sum_us = 0;
                 s_busy_max_us = 0;
             }

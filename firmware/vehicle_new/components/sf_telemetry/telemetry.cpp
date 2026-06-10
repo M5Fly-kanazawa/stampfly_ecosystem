@@ -69,9 +69,15 @@ constexpr uint32_t kErrorLogEveryN = 50;             // ~1 per second at 50Hz
 // -----------------------------------------------------------------------------
 void Telemetry::init()
 {
-    // Block until sf_comm has WiFi up — we don't own WiFi.
-    // sf_comm が WiFi を起動するまでブロックする（WiFi所有はsf_comm）。
-    waitForWifi();
+    // Block until sf_comm has WiFi up — we don't own WiFi. In ESP-NOW-only
+    // operation (STA mode without credentials) the network never comes up:
+    // remember that and keep update() silent instead of failing a broadcast
+    // sendto 50 times a second (EHOSTUNREACH log spam).
+    // sf_comm が WiFi を起動するまでブロックする（WiFi所有はsf_comm）。ESP-NOW のみ
+    // の運用（資格情報なしの STA モード）ではネットワークは上がらない: それを記憶し、
+    // 毎秒50回ブロードキャスト sendto を失敗させる（EHOSTUNREACH ログ氾濫）代わりに
+    // update() を沈黙させる。
+    network_up_ = waitForWifi();
 
     // Create a UDP datagram socket on IPv4.
     // IPv4 の UDP データグラムソケットを生成。
@@ -131,7 +137,7 @@ void Telemetry::init()
 // UDP ソケット自体は開かれるが、ブロードキャスト送信が機能するかは
 // 実ネットワーク状態に依存する。
 // -----------------------------------------------------------------------------
-void Telemetry::waitForWifi()
+bool Telemetry::waitForWifi()
 {
     constexpr uint32_t kReadyTimeoutMs = 30000;  // 30s: previous polling cap
     if (waitForWifiReady(kReadyTimeoutMs)) {
@@ -144,10 +150,12 @@ void Telemetry::waitForWifi()
         } else {
             ESP_LOGI(TAG, "WiFi ready (IP info unavailable)");
         }
-        return;
+        return true;
     }
-    ESP_LOGW(TAG, "WiFi readiness timeout (%lu ms) — proceeding anyway",
+    ESP_LOGW(TAG, "No network after %lu ms — telemetry idle until WiFi comes up "
+                  "(ESP-NOW control unaffected)",
              static_cast<unsigned long>(kReadyTimeoutMs));
+    return false;
 }
 
 // -----------------------------------------------------------------------------
@@ -157,6 +165,19 @@ void Telemetry::waitForWifi()
 void Telemetry::update()
 {
     if (!ready_) return;
+
+    // No network yet (ESP-NOW-only boot, or STA still associating): poll the
+    // readiness bit without blocking so a late STA connection enables sends,
+    // and stay silent meanwhile.
+    // まだネットワークなし（ESP-NOW のみ起動、または STA 接続中）: 非ブロッキングで
+    // 準備ビットをポーリングし、遅れて STA が繋がれば送信を開始。それまでは沈黙。
+    if (!network_up_) {
+        network_up_ = waitForWifiReady(0);
+        if (!network_up_) {
+            return;
+        }
+        ESP_LOGI(TAG, "Network up — telemetry broadcast enabled");
+    }
 
     TelemetryPacket pkt{};
     buildPacket(pkt);

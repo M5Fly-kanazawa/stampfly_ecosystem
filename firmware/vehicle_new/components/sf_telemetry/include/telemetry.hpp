@@ -111,7 +111,8 @@ public:
 private:
     /// Wait until WiFi STA has an IP address (poll-with-backoff)
     /// WiFi STA がIPを取得するまで待機（ポーリング＋バックオフ）
-    void waitForWifi();
+    /// @return true if the network became ready / ネットワーク準備完了なら true
+    bool waitForWifi();
 
     /// Build the binary packet from current topic latest()
     /// 現在のトピック latest() からバイナリパケットを組み立てる
@@ -126,6 +127,7 @@ private:
     uint16_t dest_port_   = 0;      // Destination port (host order)
     uint32_t err_count_   = 0;      // sendto failure counter / 送信失敗カウンタ
     bool     ready_       = false;  // True after socket bound / ソケット準備完了
+    bool     network_up_  = false;  // WiFi ready (sends gated on this) / WiFi準備完了（送信ゲート）
 };
 
 }  // namespace sf
