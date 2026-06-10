@@ -100,11 +100,36 @@ void MagTask(void* /*pvParameters*/)
     uint32_t cycle_count = 0;
     uint32_t last_fail_log_cycle = 0;
 
+    // Outcome counters, reported every ~10s: distinguishes "no new sample yet"
+    // (DRDY low — expected some of the time) from NaN overflow drops and I2C
+    // errors. Diagnoses the mag delivery rate directly on hardware.
+    // 結果カウンタ（約10秒毎に報告）: 「新サンプル未着」（DRDY low — ある程度は
+    // 想定内）と NaN（オーバーフロー）破棄・I2C エラーを区別する。実機で mag の
+    // 取得レートを直接診断できる。
+    uint32_t diag_ok = 0, diag_nodata = 0, diag_nan = 0, diag_err = 0;
+
     while (true) {
         ++cycle_count;
 
         stampfly::MagData reading{};
         err = g_mag.read(reading);
+        if (err == ESP_OK && reading.data_ready) {
+            ++diag_ok;
+        } else if (err == ESP_OK) {
+            ++diag_nodata;
+        } else if (err == ESP_ERR_INVALID_RESPONSE) {
+            ++diag_nan;
+        } else {
+            ++diag_err;
+        }
+        if ((cycle_count % 250u) == 0u) {   // ~10 s at 25Hz
+            ESP_LOGI(TAG, "mag 10s: ok=%lu nodata=%lu nan=%lu err=%lu",
+                     static_cast<unsigned long>(diag_ok),
+                     static_cast<unsigned long>(diag_nodata),
+                     static_cast<unsigned long>(diag_nan),
+                     static_cast<unsigned long>(diag_err));
+            diag_ok = diag_nodata = diag_nan = diag_err = 0;
+        }
         if (err == ESP_OK && reading.data_ready) {
             const sf::MagData topic = toTopic(reading);
             sf::sensor_mag.publish(topic);

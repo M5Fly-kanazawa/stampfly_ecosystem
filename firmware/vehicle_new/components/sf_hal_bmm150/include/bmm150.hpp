@@ -117,6 +117,8 @@ struct MagRawData {
     int16_t y;
     int16_t z;
     uint16_t rhall;
+    bool drdy;     // DRDY bit (0x48 bit0) captured in the SAME burst read
+                   // データと同一バースト読みで取得した DRDY ビット
 };
 
 class BMM150 {

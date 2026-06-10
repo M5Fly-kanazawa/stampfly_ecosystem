@@ -135,26 +135,24 @@ esp_err_t BMM150::read(MagData& data)
         return ESP_ERR_INVALID_STATE;
     }
 
-    // Gate on DRDY: reading the data registers while a conversion is in flight
-    // returns invalid values (rhall=0 → NaN from the compensation), which the
-    // NaN guard then drops. Without this gate the delivered rate collapses when
-    // the ODR and the polling rate run at the same frequency (measured on
-    // hardware: ODR 25Hz polled at 25Hz delivered ~1Hz). DRDY marks a finished
-    // conversion, so reads here always see consistent data.
-    // DRDY でゲートする: 変換中にデータレジスタを読むと無効値が返り
-    // （rhall=0 → 補償が NaN）、NaN ガードが弾く。このゲートが無いと ODR と
-    // ポーリングが同周期のとき取得レートが崩壊する（実機計測: ODR 25Hz を 25Hz
-    // ポーリングで ~1Hz）。DRDY は変換完了の印なので、ここでの読みは常に一貫した
-    // データになる。
-    if (!isDataReady()) {
-        data.data_ready = false;
-        return ESP_OK;   // no new sample yet — silent skip / 新サンプルなし
-    }
-
     MagRawData raw;
     esp_err_t ret = readRaw(raw);
     if (ret != ESP_OK) {
         return ret;
+    }
+
+    // Gate on the burst-embedded DRDY (0x48 bit0, read in the same transaction
+    // as the data): only a finished conversion sets it, so accepted samples are
+    // always consistent. A SEPARATE status pre-read proved unreliable on
+    // hardware (mag died entirely); the in-burst bit cannot disagree with the
+    // data it arrived with.
+    // バースト内 DRDY（0x48 bit0、データと同一トランザクションで読む）でゲート:
+    // 変換完了時のみ立つので、受理サンプルは常に一貫している。「別読み」の
+    // ステータス事前確認は実機で不安定（mag が全滅）だった。バースト内ビットは
+    // 一緒に届いたデータと矛盾し得ない。
+    if (!raw.drdy) {
+        data.data_ready = false;
+        return ESP_OK;   // no new sample yet — silent skip / 新サンプルなし
     }
 
     // Apply compensation, then remap chip axes → body frame (FRD) here, in the driver,
@@ -217,6 +215,14 @@ esp_err_t BMM150::readRaw(MagRawData& raw)
 
     // RHALL: 14-bit unsigned
     raw.rhall = (uint16_t)((((uint16_t)buf[7]) << 8) | (buf[6] & 0xFC)) >> 2;
+
+    // DRDY status (0x48 bit0), captured in the SAME transaction as the data —
+    // a separate status read raced the conversion and proved unreliable on
+    // hardware; this bit is by definition consistent with the bytes above.
+    // DRDY ステータス（0x48 bit0）。データと「同一トランザクション」で取得 —
+    // 別読みのステータスは変換と競合して実機で不安定だった。このビットは定義上
+    // 上のバイト列と一貫している。
+    raw.drdy = (buf[6] & 0x01) != 0;
 
     return ESP_OK;
 }
