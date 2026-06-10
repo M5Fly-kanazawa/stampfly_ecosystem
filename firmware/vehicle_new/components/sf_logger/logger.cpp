@@ -53,6 +53,12 @@ static constexpr const char* kSessionFmt = "/spiffs/log_%03u.bin";
 // セッション当たり最大レコード数。50Hz で 8000 件 ≈ 約 2.7 分に相当。
 static constexpr uint32_t kMaxRecordsPerSession = 8000;
 
+// Number of rotating log_NNN.bin slots. One session ≈ 608 KB max
+// (8000 × 76 B); 3 slots fit the 2 MB SPIFFS partition with headroom.
+// ローテーションする log_NNN.bin スロット数。1 セッション最大 ≈ 608KB
+// （8000 × 76B）。3 スロットで 2MB の SPIFFS パーティションに余裕を持って収まる。
+static constexpr uint32_t kMaxSessionSlots = 3;
+
 // File-scope state shared by Logger methods (logger.hpp only declares
 // log_fd_ for tracking open-state; the FILE* itself stays here so that
 // the public header does not need to include <cstdio>).
@@ -131,13 +137,37 @@ void Logger::startSession()
         return;
     }
 
-    // Find an unused log_NNN.bin slot (rolling, simple modulo strategy).
-    // 未使用の log_NNN.bin スロットを探す (modulo によるシンプル方式)。
+    // Find an unused log_NNN.bin slot by probing the filesystem. The counter
+    // alone is NOT enough: it resets to 0 on every boot, so after a crash and
+    // power cycle the next ARM would overwrite log_000.bin — the very flight
+    // record a blackbox exists to preserve. Probe from the remembered position;
+    // if all kMaxSessionSlots are taken, fall back to overwriting the next slot
+    // (oldest-by-rotation) and say so.
+    // 未使用の log_NNN.bin スロットをファイルシステムを探索して決める。カウンタ
+    // だけでは不十分: 起動毎に 0 へ戻るため、墜落→電源再投入後の次の ARM が
+    // log_000.bin を上書きする — ブラックボックスが守るべき当の飛行記録を消す。
+    // 記憶位置から探索し、kMaxSessionSlots が全て埋まっていれば次スロット
+    // （ローテーション上の最古）を上書きし、その旨をログする。
     char path[64];
     static uint32_t s_session_counter = 0;
-    std::snprintf(path, sizeof(path), kSessionFmt,
-                  static_cast<unsigned>(s_session_counter % 1000));
-    s_session_counter = (s_session_counter + 1) % 1000;
+    bool found_free = false;
+    for (uint32_t probe = 0; probe < kMaxSessionSlots; ++probe) {
+        const uint32_t slot = (s_session_counter + probe) % kMaxSessionSlots;
+        std::snprintf(path, sizeof(path), kSessionFmt, static_cast<unsigned>(slot));
+        struct stat st;
+        if (stat(path, &st) != 0) {        // slot free / 空きスロット
+            s_session_counter = slot;
+            found_free = true;
+            break;
+        }
+    }
+    if (!found_free) {
+        std::snprintf(path, sizeof(path), kSessionFmt,
+                      static_cast<unsigned>(s_session_counter % kMaxSessionSlots));
+        ESP_LOGW(TAG, "All %u log slots used — overwriting %s",
+                 static_cast<unsigned>(kMaxSessionSlots), path);
+    }
+    s_session_counter = (s_session_counter + 1) % kMaxSessionSlots;
 
     FILE* fp = std::fopen(path, "wb");
     if (fp == nullptr) {
@@ -270,11 +300,30 @@ void Logger::writeBlackbox()
     rec.motor_duty[2] = motor.duty[2]; rec.motor_duty[3] = motor.duty[3];
 
     if (std::fwrite(&rec, sizeof(rec), 1, g_log_fp) != 1) {
-        // Treat as recoverable; rate-limited error log handled by caller.
-        // Recoverable 扱い、レート制限ログは呼び出し側で対応。
+        // Recoverable, but NOT silent: when SPIFFS fills, every write fails at the
+        // logging rate and the blackbox quietly stops recording. Count and warn
+        // (rate-limited to ~once per 10 s at 50 Hz).
+        // Recoverable だが「無言」にしない: SPIFFS 満杯時はロギングレートで書き込みが
+        // 失敗し続け、ブラックボックスが黙って記録を止める。カウントして警告する
+        // （50Hz で約10秒に1回へレート制限）。
+        ++write_fail_count_;
+        if ((write_fail_count_ % 500) == 1) {
+            ESP_LOGW(TAG, "Blackbox write failed (x%lu) — SPIFFS full?",
+                     static_cast<unsigned long>(write_fail_count_));
+        }
         return;
     }
     ++record_count_;
+
+    // Periodic flush so a power cut (crash) loses at most ~2 s of records —
+    // libc buffering would otherwise hold several KB of the most interesting
+    // data (the moments before the crash) in RAM.
+    // 周期 fflush で電源断（墜落）時の損失を約2秒分に抑える — libc バッファのままだと
+    // 最も重要なデータ（墜落直前）が数KB分 RAM に滞留したまま消える。
+    constexpr uint32_t kFlushEveryRecords = 100;   // 2 s at 50 Hz
+    if ((record_count_ % kFlushEveryRecords) == 0) {
+        std::fflush(g_log_fp);
+    }
 }
 
 // -----------------------------------------------------------------------------

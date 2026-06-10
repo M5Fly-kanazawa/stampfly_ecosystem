@@ -88,6 +88,8 @@ private:
                                       // 毎周期の再試行/ログ氾濫を止める。
     int      log_fd_      = -1;       // Current log file fd / 現在のログファイルfd
     uint32_t record_count_ = 0;       // Records written     / 書き込みレコード数
+    uint32_t write_fail_count_ = 0;   // Failed record writes (SPIFFS full etc.)
+                                      // 書き込み失敗数（SPIFFS満杯等）
 };
 
 }  // namespace sf

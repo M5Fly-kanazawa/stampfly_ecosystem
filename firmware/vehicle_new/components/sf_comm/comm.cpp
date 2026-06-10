@@ -345,6 +345,20 @@ void Comm::onEspNowRecv(const esp_now_recv_info_t* info,
         return;  // bad checksum / チェックサム不一致
     }
 
+    // Reject the all-zero frame: it passes the sum checksum (0 == 0) but no real
+    // controller emits it (axes raw 0 decodes to full −1.0 deflection on every
+    // axis). A zeroed buffer from a buggy sender must not become a command.
+    // 全ゼロフレームを拒否: 総和チェックサムは通る（0 == 0）が実コントローラは送らない
+    // （axes raw 0 は全軸フル舵 −1.0 にデコードされる）。バグった送信元のゼロバッファを
+    // 指令にしてはならない。
+    bool all_zero = true;
+    for (int i = 0; i < len; ++i) {
+        if (data[i] != 0) { all_zero = false; break; }
+    }
+    if (all_zero) {
+        return;
+    }
+
     // Route by the ESP-NOW sender MAC: bind during pairing, else filter crosstalk.
     // ESP-NOW 送信元 MAC で振り分ける: ペアリング中はバインド、それ以外は混信をフィルタ。
     const uint8_t* src_mac = (info != nullptr) ? info->src_addr : nullptr;
@@ -507,9 +521,24 @@ void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
         return;
     }
 
-    // Paired: drop ControlPackets from any controller other than our peer.
-    // ペア済み: 相手以外のコントローラからの ControlPacket は破棄する。
-    if (bound && src_mac != nullptr &&
+    // Not bound (and not pairing): drop. Being bound to a transmitter is the
+    // precondition for accepting flight commands — an unpaired vehicle must not
+    // obey an arbitrary broadcast 14-byte packet (which carries the ARM bit).
+    // Boot restores the bind from NVS; a fresh vehicle auto-enters Pairing on
+    // the ground (StateTask) and binds there.
+    // 未バインド（かつ非ペアリング中）: 破棄。送信機へのバインドは操縦コマンド受理の
+    // 前提条件 — 未ペアの機体が任意のブロードキャスト 14 バイトパケット（ARM ビット
+    // 入り）に従ってはならない。起動時は NVS からバインドを復元し、新品の機体は地上で
+    // 自動的に Pairing へ入り（StateTask）そこでバインドする。
+    if (!bound) {
+        return;
+    }
+
+    // Bound: drop ControlPackets from any controller other than our peer. A null
+    // src_mac (defensive: ESP-IDF always supplies one) must NOT bypass the filter.
+    // バインド済み: 相手以外のコントローラからの ControlPacket は破棄する。src_mac が
+    // null の場合（防御的: ESP-IDF は常に供給する）もフィルタを素通りさせない。
+    if (src_mac == nullptr ||
         std::memcmp(src_mac, controller_mac_, 6) != 0) {
         return;  // crosstalk from another transmitter / 他送信機の混信
     }
@@ -596,10 +625,29 @@ void Comm::loadPairingFromNvs()
     size_t len = sizeof(mac);
     const esp_err_t ret = nvs_get_blob(handle, kPairingNvsKey, mac, &len);
     nvs_close(handle);
-    if (ret == ESP_OK && len == 6) {
-        std::memcpy(controller_mac_, mac, 6);
-        paired_.store(true, std::memory_order_release);
+    if (ret != ESP_OK || len != 6) {
+        return;
     }
+
+    // Sanity-check the stored MAC: all-zero / broadcast can only come from a
+    // corrupted blob. Treating it as "bound" would make the crosstalk filter
+    // discard every legitimate packet — vehicle unflyable until a re-pair.
+    // 保存 MAC の妥当性検査: 全ゼロ/ブロードキャストは壊れた blob からしか生じない。
+    // それを「バインド済み」と扱うと混信フィルタが正規パケットを全て破棄し、
+    // 再ペアまで操縦不能になる。
+    bool all_zero = true, all_ff = true;
+    for (int i = 0; i < 6; ++i) {
+        if (mac[i] != 0x00) all_zero = false;
+        if (mac[i] != 0xFF) all_ff = false;
+    }
+    if (all_zero || all_ff) {
+        ESP_LOGW(TAG, "Stored pairing MAC invalid (all-%s) — treating as unpaired",
+                 all_zero ? "00" : "FF");
+        return;
+    }
+
+    std::memcpy(controller_mac_, mac, 6);
+    paired_.store(true, std::memory_order_release);
 }
 
 void Comm::savePairingToNvs(const uint8_t mac[6])
@@ -609,9 +657,18 @@ void Comm::savePairingToNvs(const uint8_t mac[6])
         ESP_LOGW(TAG, "NVS open (save pairing) failed");
         return;
     }
-    nvs_set_blob(handle, kPairingNvsKey, mac, 6);
-    nvs_commit(handle);
+    // Check both steps: a failed save still flies this session (the bind is in
+    // RAM) but silently comes back UNPAIRED after reboot — warn the pilot that
+    // persistence did not happen.
+    // 両ステップを検査: 保存に失敗しても今セッションは飛べる（バインドは RAM 上）が、
+    // 再起動後に黙って未ペアに戻る — 永続化されなかったことを警告する。
+    const esp_err_t set_err    = nvs_set_blob(handle, kPairingNvsKey, mac, 6);
+    const esp_err_t commit_err = nvs_commit(handle);
     nvs_close(handle);
+    if (set_err != ESP_OK || commit_err != ESP_OK) {
+        ESP_LOGW(TAG, "Pairing NVS save failed (%s/%s) — bind will NOT survive reboot",
+                 esp_err_to_name(set_err), esp_err_to_name(commit_err));
+    }
 }
 
 void Comm::clearPairingFromNvs()
