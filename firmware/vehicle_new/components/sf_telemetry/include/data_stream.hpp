@@ -73,6 +73,7 @@ private:
     void appendEntries(datastream::UnifiedPacketBuilder& builder);
     void sendStatus();
     void sendDatagram(const uint8_t* data, size_t length);
+    void countDrop(bool added);   // entry-overflow accounting / エントリ溢れの計数
 
     int  socket_fd_ = -1;
     bool active_    = false;
@@ -96,6 +97,7 @@ private:
     uint32_t last_mag_ts_  = 0;
 
     uint32_t send_drops_ = 0;          // sendto failures (counted, not fatal) / 送信失敗数
+    uint32_t entry_drops_ = 0;         // packet-full entry rejections / パケット満杯による棄却数
 };
 
 }  // namespace sf

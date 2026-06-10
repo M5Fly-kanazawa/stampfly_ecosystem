@@ -181,6 +181,7 @@ void DataStream::startStream(const sockaddr_in& client)
     last_heartbeat_us_ = esp_timer_get_time();
     batch_count_       = 0;
     send_drops_        = 0;
+    entry_drops_       = 0;
 
     // Reset-on-start (loss-prevention #2): discard the ring backlog so the
     // capture starts at "now", not with however many stale samples piled up.
@@ -202,8 +203,9 @@ void DataStream::stopStream(const char* reason)
         return;
     }
     active_ = false;
-    ESP_LOGI(TAG, "Capture STOP (%s) — %lu sendto drops",
-             reason, static_cast<unsigned long>(send_drops_));
+    ESP_LOGI(TAG, "Capture STOP (%s) — %lu sendto drops, %lu entry drops",
+             reason, static_cast<unsigned long>(send_drops_),
+             static_cast<unsigned long>(entry_drops_));
 }
 
 // -----------------------------------------------------------------------------
@@ -217,6 +219,31 @@ void DataStream::emitUnified()
     appendEntries(builder);
     const size_t length = builder.finish();
     sendDatagram(builder.buffer(), length);
+}
+
+// -----------------------------------------------------------------------------
+// countDrop — make entry overflow LOUD. addEntry() rejects an entry when the
+// packet would exceed kUnifiedMaxSize; silently losing it cost us the mag
+// channel once already (found only by a hardware capture). Every rejection is
+// counted and warned about, so adding future entries (front ToF, ESKF P-diag)
+// can never silently shrink the log again ("no silent caps").
+// countDrop — エントリ溢れを「大声」にする。addEntry() はパケットが
+// kUnifiedMaxSize を超えるとエントリを拒否する。黙って失うと mag チャネルを
+// 丸ごと失った実績がある（実機キャプチャで偶然発見）。拒否は全て計数・警告し、
+// 将来のエントリ追加（前方 ToF・ESKF P対角）で二度と黙ってログが痩せないようにする
+// （silent caps 禁止）。
+// -----------------------------------------------------------------------------
+void DataStream::countDrop(bool added)
+{
+    if (added) {
+        return;
+    }
+    if ((++entry_drops_ % 50) == 1) {   // ~once per second at 50Hz when dropping
+        ESP_LOGW(TAG, "unified packet FULL — entry dropped (x%lu): raise "
+                      "kUnifiedMaxSize (%u B)",
+                 static_cast<unsigned long>(entry_drops_),
+                 static_cast<unsigned>(datastream::kUnifiedMaxSize));
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -234,7 +261,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     control.roll         = setpoint.roll;
     control.pitch        = setpoint.pitch;
     control.yaw          = setpoint.yaw;
-    builder.addEntry(datastream::kPktControl, &control, sizeof(control));
+    countDrop(builder.addEntry(datastream::kPktControl, &control, sizeof(control)));
 
     // Control references + motor duty, taken from the batch's LAST sample
     // (v3 wire layout: data_size 30 selects the version on the PC side).
@@ -252,7 +279,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     for (int i = 0; i < 4; ++i) {
         ctrl_ref.motor_duty[i] = last.duty[i];   // FR, RR, RL, FL
     }
-    builder.addEntry(datastream::kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref));
+    countDrop(builder.addEntry(datastream::kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref)));
 
     // Flow: drain EVERY sample from the log_flow ring (typically 2 per packet
     // at 100Hz). Flow dx/dy are INCREMENTAL — displacement since the previous
@@ -270,7 +297,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         flow.dx           = flow_sample.dx;
         flow.dy           = flow_sample.dy;
         flow.quality      = flow_sample.squal;
-        builder.addEntry(datastream::kPktFlow, &flow, sizeof(flow));
+        countDrop(builder.addEntry(datastream::kPktFlow, &flow, sizeof(flow)));
     }
 
     // Low-rate ABSOLUTE sensors: append only when the per-sensor stamp advanced.
@@ -282,7 +309,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         tof.timestamp_us = snap.tof_timestamp;
         tof.distance     = snap.tof_distance;
         tof.status       = snap.tof_status;
-        builder.addEntry(datastream::kPktTofBottom, &tof, sizeof(tof));
+        countDrop(builder.addEntry(datastream::kPktTofBottom, &tof, sizeof(tof)));
     }
     if (snap.baro_timestamp != last_baro_ts_) {
         last_baro_ts_ = snap.baro_timestamp;
@@ -290,7 +317,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         baro.timestamp_us = snap.baro_timestamp;
         baro.altitude     = snap.baro_altitude;
         baro.pressure     = snap.baro_pressure * 0.01f;   // Pa → hPa (wire unit)
-        builder.addEntry(datastream::kPktBaro, &baro, sizeof(baro));
+        countDrop(builder.addEntry(datastream::kPktBaro, &baro, sizeof(baro)));
     }
     if (snap.mag_timestamp != last_mag_ts_) {
         last_mag_ts_ = snap.mag_timestamp;
@@ -299,7 +326,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         for (int i = 0; i < 3; ++i) {
             mag.mag[i] = snap.mag[i];
         }
-        builder.addEntry(datastream::kPktMag, &mag, sizeof(mag));
+        countDrop(builder.addEntry(datastream::kPktMag, &mag, sizeof(mag)));
     }
 }
 
