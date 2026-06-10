@@ -284,7 +284,7 @@ TEST(pid_proportional)
     pid.td = 0;
     pid.output_limit = 100.0f;
 
-    float out = pid.compute(1.0f, 0.01f);
+    float out = pid.compute(1.0f, 0.0f, 0.01f);
     ASSERT_NEAR(out, 2.0f, 0.01f);
 }
 
@@ -299,7 +299,7 @@ TEST(pid_integral)
     // Accumulate integral over 10 steps
     // 10ステップで積分を蓄積
     for (int i = 0; i < 10; i++) {
-        pid.compute(1.0f, 0.1f);
+        pid.compute(1.0f, 0.0f, 0.1f);
     }
 
     // Trapezoidal (Tustin) integration: each step adds kp/ti·(e+e_prev)·dt/2.
@@ -318,7 +318,7 @@ TEST(pid_reset)
     pid.ti = 1.0f;
     pid.output_limit = 100.0f;
 
-    pid.compute(1.0f, 0.1f);
+    pid.compute(1.0f, 0.0f, 0.1f);
     ASSERT_TRUE(pid.integral != 0.0f);
 
     pid.reset();
@@ -334,8 +334,36 @@ TEST(pid_output_limit)
     pid.td = 0;
     pid.output_limit = 5.0f;
 
-    float out = pid.compute(1.0f, 0.01f);
+    float out = pid.compute(1.0f, 0.0f, 0.01f);
     ASSERT_NEAR(out, 5.0f, 1e-6f);  // Clamped to limit
+}
+
+TEST(pid_derivative_on_measurement)
+{
+    // D-on-M: a setpoint step must NOT kick the derivative; a measurement step
+    // must produce a negative (opposing) derivative response.
+    // 測定値微分: 目標値ステップは微分を蹴らない。測定値ステップには負（抑制方向）の
+    // 微分応答が出る。
+    sf::PID pid;
+    pid.kp = 1.0f;
+    pid.ti = 1000.0f;   // effectively no integral / 実質積分なし
+    pid.td = 0.1f;
+    pid.output_limit = 100.0f;
+
+    // Settle at sp=0, meas=0 (first call only primes the D input).
+    // sp=0, meas=0 で慣らす（初回は微分入力の初期化のみ）。
+    pid.compute(0.0f, 0.0f, 0.01f);
+    pid.compute(0.0f, 0.0f, 0.01f);
+
+    // Setpoint step: output = P only (no derivative kick).
+    // 目標値ステップ: 出力は P のみ（微分キックなし）。
+    float out_sp_step = pid.compute(1.0f, 0.0f, 0.01f);
+    ASSERT_NEAR(out_sp_step, 1.0f, 1e-4f);
+
+    // Measurement step: derivative opposes the rise → output < pure P (= 0.5).
+    // 測定値ステップ: 微分が上昇に抗う → 出力は純粋な P（0.5）より小さい。
+    float out_meas_step = pid.compute(1.0f, 0.5f, 0.01f);
+    ASSERT_TRUE(out_meas_step < 0.5f);
 }
 
 // =============================================================================
@@ -502,6 +530,7 @@ int main()
     run_pid_integral();
     run_pid_reset();
     run_pid_output_limit();
+    run_pid_derivative_on_measurement();
 
     printf("\n[DataStream wire]\n");
     run_wire_unified_layout();

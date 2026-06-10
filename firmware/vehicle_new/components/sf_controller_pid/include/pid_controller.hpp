@@ -68,18 +68,42 @@ private:
     PID vel_x_, vel_y_;
 
     // Constants / 定数
-    float max_rate_       = 1.0f;    // [rad/s] max rate setpoint
-    float max_yaw_rate_   = 5.0f;    // [rad/s] max yaw rate
+    float max_rate_       = 1.0f;    // [rad/s] ACRO stick → rate sp scale (legacy ROLL/PITCH_RATE_MAX)
+    float max_yaw_rate_   = 5.0f;    // [rad/s] max yaw rate (legacy YAW_RATE_MAX)
     float max_angle_      = 0.5236f; // [rad] max tilt (30 deg)
+    // Attitude-loop output limit: how hard the angle loop may command the rate
+    // loop. Distinct from max_rate_ (the ACRO stick scale): a 30° tilt error with
+    // kp=5 wants 2.6 rad/s, so clamping at the 1.0 rad/s stick scale would cripple
+    // STABILIZE recovery. Legacy vehicle/ MAX_RATE_SETPOINT = 3.0 rad/s.
+    // 姿勢ループ出力上限: 角度ループがレートループに指令できる上限。max_rate_
+    // （ACRO スティックスケール）とは別物 — 30° 誤差×kp=5 は 2.6 rad/s を要求するため
+    // 1.0 rad/s で切ると STABILIZE の復元が利かない。旧 vehicle/ の
+    // MAX_RATE_SETPOINT = 3.0 rad/s を踏襲。
+    float max_att_rate_sp_ = 3.0f;   // [rad/s] attitude-loop output limit
     // Thrust output is PHYSICAL total thrust [N]: the B^-1 mixer (actuator.cpp)
     // allocates it across the motors and converts to duty via the motor curve.
-    // max_thrust_ = 4 × max-per-motor (0.168 N) = 0.672 N (T/W ≈ 1.85); hover
-    // is mg = 0.037 × 9.80665 ≈ 0.363 N (throttle ≈ 0.54 in STABILIZE).
+    // max_thrust_ = 4 × max-per-motor (0.168 N) = 0.672 N (T/W ≈ 1.85).
+    // hover_thrust_ = mg × 1.12: the 1.12 is the legacy vehicle/'s FLIGHT-MEASURED
+    // correction (HOVER_THRUST_CORRECTION, stable 1.11–1.13 across logs) — the
+    // motor curve over-promises thrust by ~12% on real hardware, and both
+    // firmwares share that curve. In SIL the plant inverts the curve exactly, so
+    // the +12% bias is absorbed by the velocity-loop integrator (within its
+    // ±0.15 N limit).
     // スラスト出力は物理の総推力 [N]: B^-1 ミキサーが各モータに配分しモータ曲線で duty に。
-    // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）、ホバーは mg≈0.363N。
+    // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）。
+    // hover_thrust_ = mg×1.12: 1.12 は旧 vehicle/ の「飛行実測」補正
+    // （HOVER_THRUST_CORRECTION、ログ全体で 1.11–1.13 と安定）— モータ曲線は実機で
+    // 推力を約12%過大に見積もり、曲線は両ファーム共通。SIL ではプラントが曲線を厳密に
+    // 逆変換するため +12% の偏りは速度ループ積分（±0.15N 上限内）が吸収する。
     float max_thrust_     = 0.672f;  // [N] total (4 × 0.168 N per motor)
-    float hover_thrust_   = 0.363f;  // [N] mg = 0.037 × 9.80665 ≈ 0.363
-    float max_climb_rate_ = 0.5f;    // [m/s]
+    float hover_thrust_   = 0.407f;  // [N] mg × 1.12 = 0.037·9.80665·1.12
+    float max_climb_rate_ = 0.5f;    // [m/s] (= legacy ALT_OUTPUT_MAX)
+    // Vertical-velocity-loop output limit [N]. Legacy vehicle/ VEL_OUTPUT_MAX:
+    // the proven alt gains were tuned against this saturation, and it also bounds
+    // how far the hover-thrust bias can pull the integrator.
+    // 鉛直速度ループ出力上限 [N]。旧 vehicle/ の VEL_OUTPUT_MAX。実績高度ゲインは
+    // この飽和と組で調整されており、ホバー推力偏りによる積分の引き込みも抑える。
+    float max_thrust_correction_ = 0.15f;  // [N] (= legacy VEL_OUTPUT_MAX)
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
@@ -93,19 +117,24 @@ private:
     bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute
     float max_pos_vel_    = 1.0f;    // [m/s] POS_HOLD horizontal velocity setpoint limit
 
-    // Physical output limits for the PID anti-windup (see loadParams). Each PID
+    // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit
-    // must match what the plant can actually deliver — with the default 1.0 the
-    // rate integrators could wind up to ~130× the available torque.
-    // Roll/pitch: max differential thrust 2×0.168 N on one side × arm 0.023 m.
-    // Yaw: same differential × torque/thrust ratio κ = 0.00971 m (actuator.cpp).
-    // PID アンチワインドアップ用の物理出力上限（loadParams 参照）。各 PID は出力と
-    // 積分器を ±output_limit でゲートするため、上限はプラントが実際に出せる量と一致
-    // させる必要がある — 既定 1.0 のままだとレート積分器は実トルクの約130倍まで巻き上がる。
-    // ロール/ピッチ: 片側 2×0.168 N の差動推力 × アーム長 0.023 m。
-    // ヨー: 同じ差動 × トルク/推力比 κ = 0.00971 m（actuator.cpp）。
-    float max_roll_pitch_torque_ = 0.0077f;  // [Nm] = 2·0.168 N · 0.023 m
-    float max_yaw_torque_        = 0.0033f;  // [Nm] = 2·0.168 N · 0.00971 m
+    // must be on the order of what the plant can deliver — with the default 1.0
+    // the rate integrators could wind up to ~130× the available torque.
+    // Values are the legacy vehicle/'s FLIGHT-PROVEN limits (ROLL/PITCH/YAW
+    // _OUTPUT_LIMIT): the proven rate gains were tuned against these saturations.
+    // They sit below the geometric maxima (roll/pitch 2·0.168 N·0.023 m ≈
+    // 7.7e-3 Nm, yaw 2·0.168 N·κ ≈ 3.3e-3 Nm), leaving thrust headroom — full
+    // differential torque would starve the collective.
+    // レートループ出力上限（PID アンチワインドアップ用、loadParams 参照）。各 PID は
+    // 出力と積分器を ±output_limit でゲートするため、上限はプラントが出せる量の
+    // オーダーと一致させる必要がある — 既定 1.0 のままだと積分器は実トルクの約130倍
+    // まで巻き上がる。値は旧 vehicle/ の「飛行実績」上限（*_OUTPUT_LIMIT）: 実績
+    // レートゲインはこの飽和と組で調整されている。幾何最大値（ロール/ピッチ
+    // 2·0.168N·0.023m≈7.7e-3 Nm、ヨー 2·0.168N·κ≈3.3e-3 Nm）より低く、総推力の
+    // 余裕を残す — 差動トルクを使い切ると総推力が枯渇するため。
+    float max_roll_pitch_torque_ = 5.2e-3f;  // [Nm] legacy ROLL/PITCH_OUTPUT_LIMIT
+    float max_yaw_torque_        = 2.2e-3f;  // [Nm] legacy YAW_OUTPUT_LIMIT
 
     // Autonomous landing (ControllerCmd::Landing). While landing_ is set the
     // controller ignores the pilot setpoint entirely — the trigger conditions

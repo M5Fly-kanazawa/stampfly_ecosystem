@@ -133,6 +133,19 @@ int cmd_param(int argc, char** argv)
         std::printf("params saved to NVS\n");
         return 0;
     }
+    if (std::strcmp(argv[1], "reset") == 0) {
+        // Restore compiled-in defaults (RAM + live reload via the change
+        // callbacks). NVS is untouched until `param save`, so a reboot before
+        // saving undoes the reset. Needed after a firmware update changes the
+        // defaults: saved NVS values would otherwise keep overriding them.
+        // コンパイル時既定値へ復元（RAM＋変更コールバックでライブ反映）。`param save`
+        // までは NVS は変わらず、保存前に再起動すれば元に戻る。ファーム更新で既定値が
+        // 変わった後に必要 — NVS の保存値が新既定値を覆い隠し続けるため。
+        sf::params::reset_all();
+        std::printf("all params reset to compiled defaults (RAM only). "
+                    "run 'param save' (disarmed) to persist\n");
+        return 0;
+    }
     if (std::strcmp(argv[1], "get") == 0 && argc >= 3) {
         const sf::params::ParamEntry* entry = findParam(argv[2]);
         if (entry == nullptr) {
@@ -172,7 +185,7 @@ int cmd_param(int argc, char** argv)
         }
         return ok ? 0 : 1;
     }
-    std::printf("usage: param [list | get <name> | set <name> <value> | save]\n");
+    std::printf("usage: param [list | get <name> | set <name> <value> | save | reset]\n");
     return 0;
 }
 

@@ -106,22 +106,26 @@ void topics_init()
 // 明示的なパラメータ変数定義
 namespace param_vars {
     // Rate control
-    // Rate gains are PHYSICAL [Nm/(rad/s)] now that the mixer is a B^-1 allocation
-    // (actuator.cpp): the rate loop is ω̇ = u/I, so kp = I / τ_resp with the rate
-    // time constant τ_resp = 0.05 s. They differ only by the body inertia
-    // (Ixx/Iyy/Izz = 9.16/13.3/20.4 e-6), not by the old ad-hoc mixer scaling.
-    // SIL-derived/verified (rate_tune). ti large = near-P inner loop (the outer
-    // attitude loop carries the integral action, standard cascade design).
-    // ミキサーが B^-1 配分になったのでレートゲインは物理 [Nm/(rad/s)]。レートループは
-    // ω̇ = u/I なので kp = 慣性/応答時定数（τ_resp=0.05s）。各軸は慣性比だけで異なる。
-    float rate_roll_kp    = 1.83e-4f;  // Ixx/τ_resp
-    float rate_roll_ti    = 20.0f;     // near-P (outer attitude loop integrates)
+    // Rate gains are PHYSICAL [Nm/(rad/s)] (the mixer is a B^-1 allocation,
+    // actuator.cpp). Values are the FLIGHT-PROVEN legacy vehicle/ gains
+    // (config.hpp rate_control, physical-units mode) — directly transferable
+    // because both firmwares share the same loop structure (Tustin PID with
+    // D-on-M, η=0.125), the same B^-1 mixer geometry (d=0.023 m, κ=0.00971)
+    // and the same motor curve, so the plant seen by the rate loop is identical.
+    // Earlier SIL-derived near-P values (kp = I/τ_resp, ti=20) are superseded.
+    // レートゲインは物理 [Nm/(rad/s)]（ミキサーは B^-1 配分）。値は旧 vehicle/ の
+    // 「飛行実績ゲイン」（config.hpp rate_control 物理単位モード）— 両ファームは
+    // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m,
+    // κ=0.00971）、モータ曲線が同一で、レートループから見たプラントが同じため
+    // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
+    float rate_roll_kp    = 1.365e-3f; // legacy ROLL_RATE_KP
+    float rate_roll_ti    = 0.7f;      // legacy ROLL_RATE_TI
     float rate_roll_td    = 0.01f;
-    float rate_pitch_kp   = 2.66e-4f;  // Iyy/τ_resp
-    float rate_pitch_ti   = 20.0f;
+    float rate_pitch_kp   = 1.995e-3f; // legacy PITCH_RATE_KP
+    float rate_pitch_ti   = 0.7f;      // legacy PITCH_RATE_TI
     float rate_pitch_td   = 0.01f;
-    float rate_yaw_kp     = 4.08e-4f;  // Izz/τ_resp
-    float rate_yaw_ti     = 20.0f;
+    float rate_yaw_kp     = 5.31e-3f;  // legacy YAW_RATE_KP (3x: yaw authority)
+    float rate_yaw_ti     = 1.6f;      // legacy YAW_RATE_TI
     float rate_yaw_td     = 0.01f;
 
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
@@ -150,17 +154,19 @@ namespace param_vars {
     float att_pitch_td    = 0.04f;
 
     // Altitude control — cascade alt → vertical-velocity → thrust [N].
-    // SIL-validated (hover_smoke ALT_HOLD: holds within ~2 cm through a yaw spin;
-    // see RESET_PLAN P1). Stronger than the legacy vehicle/ values (0.6/7/0.1/2.5)
-    // because vehicle_new's loop outputs PHYSICAL thrust [N], not normalized
-    // throttle — to re-validate on hardware (ToF altitude) before flight.
-    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。SIL検証済み（hover_smoke ALT_HOLD:
-    // ヨー旋回中も約2cm以内で保持、RESET_PLAN P1）。旧 vehicle/ 値（0.6/7/0.1/2.5）より
-    // 強い。vehicle_new は物理推力[N]を出力するため。実機（ToF高度）で再検証要。
-    float alt_alt_kp      = 1.5f;
-    float alt_alt_ti      = 8.0f;
-    float alt_vel_kp      = 0.3f;
-    float alt_vel_ti      = 2.0f;
+    // Values are the FLIGHT-PROVEN legacy vehicle/ gains (config.hpp
+    // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). The legacy velocity
+    // loop also output physical thrust [N] (VEL_OUTPUT_MAX 0.15 N), so the units
+    // match and the gains transfer 1:1. The earlier, stronger SIL-tuned values
+    // (1.5/8 → 0.3/2) are superseded by the hardware-proven set.
+    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。値は旧 vehicle/ の飛行実績ゲイン
+    // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。旧の速度
+    // ループも物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植
+    // できる。以前の強めの SIL 調整値（1.5/8 → 0.3/2）は実機実績値で置換。
+    float alt_alt_kp      = 0.6f;
+    float alt_alt_ti      = 7.0f;
+    float alt_vel_kp      = 0.1f;
+    float alt_vel_ti      = 2.5f;
 
     // Position control
     float pos_pos_kp      = 1.0f;
@@ -280,14 +286,14 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.83e-4f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.365e-3f, 0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  2.66e-4f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.995e-3f, 0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    4.08e-4f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
@@ -308,10 +314,10 @@ static const ParamEntry table[] = {
     {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   &notifyControllerReload},
 
     // Altitude control (SIL-validated; see the variable defaults above)
-    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  1.5f,  0.0f, 10.0f,  &notifyControllerReload},
-    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  8.0f,  0.1f, 100.0f, &notifyControllerReload},
-    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.3f,  0.0f, 10.0f,  &notifyControllerReload},
-    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.6f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
 
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},
@@ -649,6 +655,22 @@ void reset_all()
             *static_cast<int32_t*>(e.value_ptr) = static_cast<int32_t>(e.default_val);
         }
     }
+
+    // Fire each DISTINCT change callback once so the owning tasks re-read the
+    // restored defaults live (same path as `param set`). Firing per-row would
+    // flood the small command queues with dozens of identical ReloadParams verbs.
+    // 「異なる」変更コールバックを1回ずつ発火し、所有タスクに復元後の既定値を
+    // ライブで読み直させる（`param set` と同じ経路）。行ごとに発火すると小さな
+    // コマンドキューが同一の ReloadParams で溢れる。
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        if (table[i].callback == nullptr) continue;
+        bool seen = false;
+        for (int j = 0; j < i; j++) {
+            if (table[j].callback == table[i].callback) { seen = true; break; }
+        }
+        if (!seen) table[i].callback();
+    }
+
     ESP_LOGI(TAG, "All %d parameters reset to defaults", TABLE_SIZE);
 }
 

@@ -88,18 +88,20 @@ void PidController::loadParams()
     pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     vel_y_ = vel_x_;
 
-    // Output limits — each loop is clamped to what its downstream stage can
-    // physically deliver, so the conditional-integration anti-windup (pid.hpp)
-    // sees the REAL saturation instead of the meaningless default 1.0.
-    // 出力上限 — 各ループを下流段が物理的に出せる量でクランプし、条件付き積分の
-    // アンチワインドアップ（pid.hpp）が無意味な既定 1.0 でなく実際の飽和を見るようにする。
+    // Output limits — each loop is clamped to what its downstream stage may
+    // deliver, so the conditional-integration anti-windup (pid.hpp) sees the
+    // REAL saturation instead of the meaningless default 1.0. The values follow
+    // the flight-proven legacy vehicle/ limits (see pid_controller.hpp).
+    // 出力上限 — 各ループを下流段に渡してよい量でクランプし、条件付き積分の
+    // アンチワインドアップ（pid.hpp）が無意味な既定 1.0 でなく実際の飽和を見るように
+    // する。値は旧 vehicle/ の飛行実績リミットに従う（pid_controller.hpp 参照）。
     rate_roll_.output_limit  = max_roll_pitch_torque_;          // [Nm]
     rate_pitch_.output_limit = max_roll_pitch_torque_;          // [Nm]
     rate_yaw_.output_limit   = max_yaw_torque_;                 // [Nm]
-    att_roll_.output_limit   = max_rate_;                       // [rad/s]
-    att_pitch_.output_limit  = max_rate_;                       // [rad/s]
+    att_roll_.output_limit   = max_att_rate_sp_;                // [rad/s]
+    att_pitch_.output_limit  = max_att_rate_sp_;                // [rad/s]
     alt_pos_.output_limit    = max_climb_rate_;                 // [m/s]
-    alt_vel_.output_limit    = max_thrust_ - hover_thrust_;     // [N] thrust headroom
+    alt_vel_.output_limit    = max_thrust_correction_;          // [N]
     pos_x_.output_limit      = max_pos_vel_;                    // [m/s]
     pos_y_.output_limit      = max_pos_vel_;                    // [m/s]
     vel_x_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²] = g·tilt limit
@@ -162,8 +164,8 @@ ControlOutput PidController::compute(
             computePositionHold(state, euler.z, dt, roll_sp, pitch_sp);
         }
 
-        rate_sp_roll  = att_roll_.compute(roll_sp - euler.x, dt);
-        rate_sp_pitch = att_pitch_.compute(pitch_sp - euler.y, dt);
+        rate_sp_roll  = att_roll_.compute(roll_sp, euler.x, dt);
+        rate_sp_pitch = att_pitch_.compute(pitch_sp, euler.y, dt);
     }
 
     // =========================================================================
@@ -192,10 +194,10 @@ ControlOutput PidController::compute(
         // stick centered, the position loop holds alt_setpoint (closed-loop).
         // カスケード: 高度誤差 → 速度目標 → 推力補正。中央では位置ループが alt_setpoint
         // を閉ループで保持する。
-        float vel_sp_z = alt_pos_.compute(alt_setpoint_ - altitude, dt);
+        float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
         if (climb_rate_sp != 0) vel_sp_z = climb_rate_sp;
 
-        float thrust_correction = alt_vel_.compute(vel_sp_z - vel_up, dt);
+        float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
 
         // Hover thrust + correction, clamped to the physical thrust range. The
         // mixer would silently clip negative/excess thrust at the duty stage
@@ -229,9 +231,9 @@ ControlOutput PidController::compute(
     gyro_rate.y = state.angular_rate[1];
     gyro_rate.z = state.angular_rate[2];
 
-    output.torque[0] = rate_roll_.compute(rate_sp_roll - gyro_rate.x, dt);
-    output.torque[1] = rate_pitch_.compute(rate_sp_pitch - gyro_rate.y, dt);
-    output.torque[2] = rate_yaw_.compute(rate_sp_yaw - gyro_rate.z, dt);
+    output.torque[0] = rate_roll_.compute(rate_sp_roll, gyro_rate.x, dt);
+    output.torque[1] = rate_pitch_.compute(rate_sp_pitch, gyro_rate.y, dt);
+    output.torque[2] = rate_yaw_.compute(rate_sp_yaw, gyro_rate.z, dt);
     output.thrust = thrust;
 
     // Export the cascade setpoints for the Data Stream (rate-loop reference at
@@ -260,13 +262,13 @@ void PidController::computePositionHold(const StateEstimate& state, float yaw,
 
     // Outer loop (NED): position error → desired horizontal velocity.
     // 外ループ（NED）: 位置誤差 → 目標水平速度。
-    const float vx_sp = pos_x_.compute(pos_setpoint_x_ - state.position[0], dt);
-    const float vy_sp = pos_y_.compute(pos_setpoint_y_ - state.position[1], dt);
+    const float vx_sp = pos_x_.compute(pos_setpoint_x_, state.position[0], dt);
+    const float vy_sp = pos_y_.compute(pos_setpoint_y_, state.position[1], dt);
 
     // Inner loop (NED): velocity error → desired horizontal acceleration.
     // 内ループ（NED）: 速度誤差 → 目標水平加速度。
-    const float ax_ned = vel_x_.compute(vx_sp - state.velocity[0], dt);
-    const float ay_ned = vel_y_.compute(vy_sp - state.velocity[1], dt);
+    const float ax_ned = vel_x_.compute(vx_sp, state.velocity[0], dt);
+    const float ay_ned = vel_y_.compute(vy_sp, state.velocity[1], dt);
 
     // Rotate the desired NED acceleration into the body frame (yaw only).
     // 目標 NED 加速度を機体座標へ回転（ヨーのみ）。
@@ -309,24 +311,24 @@ ControlOutput PidController::computeLanding(const StateEstimate& state, float dt
     math::Quat q(state.attitude[0], state.attitude[1],
                  state.attitude[2], state.attitude[3]);
     math::Vec3 euler = q.to_euler();
-    const float rate_sp_roll  = att_roll_.compute(0.0f - euler.x, dt);
-    const float rate_sp_pitch = att_pitch_.compute(0.0f - euler.y, dt);
+    const float rate_sp_roll  = att_roll_.compute(0.0f, euler.x, dt);
+    const float rate_sp_pitch = att_pitch_.compute(0.0f, euler.y, dt);
     const float rate_sp_yaw   = 0.0f;   // hold heading / 方位保持
 
     // Vertical: track a constant descent (up-positive velocity = −descent rate).
     // 鉛直: 一定降下を追従（上正の速度 = −降下率）。
     const float vel_up = -state.velocity[2];            // NED z-down → up-positive
     const float thrust_correction =
-        alt_vel_.compute(-landing_descent_rate_ - vel_up, dt);
+        alt_vel_.compute(-landing_descent_rate_, vel_up, dt);
     float thrust = hover_thrust_ + thrust_correction;
     if (thrust < 0.0f)        thrust = 0.0f;
     if (thrust > max_thrust_) thrust = max_thrust_;
 
     // Innermost rate loop (same as the normal path).
     // 最内レートループ（通常経路と同じ）。
-    output.torque[0] = rate_roll_.compute(rate_sp_roll - state.angular_rate[0], dt);
-    output.torque[1] = rate_pitch_.compute(rate_sp_pitch - state.angular_rate[1], dt);
-    output.torque[2] = rate_yaw_.compute(rate_sp_yaw - state.angular_rate[2], dt);
+    output.torque[0] = rate_roll_.compute(rate_sp_roll, state.angular_rate[0], dt);
+    output.torque[1] = rate_pitch_.compute(rate_sp_pitch, state.angular_rate[1], dt);
+    output.torque[2] = rate_yaw_.compute(rate_sp_yaw, state.angular_rate[2], dt);
     output.thrust = thrust;
 
     // Data Stream export (landing: level attitude target, attitude-loop rates).
