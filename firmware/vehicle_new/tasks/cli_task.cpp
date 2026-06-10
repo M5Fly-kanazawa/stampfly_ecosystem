@@ -43,6 +43,7 @@
 #include "esp_system.h"
 #include "esp_console.h"
 #include "esp_timer.h"
+#include "nvs.h"       // wifi credentials (CLI writes, sf_comm reads at boot)
 
 #include "topics.hpp"
 #include "params.hpp"
@@ -418,6 +419,72 @@ int cmd_motor(int argc, char** argv)
     return 0;
 }
 
+/// `wifi` — telemetry WiFi configuration. Mode lives in the wifi.mode parameter
+/// (boot-time; `param save` + reboot to apply); the STA credentials live in the
+/// NVS namespace "sf_wifi" that sf_comm reads at boot (keys "ssid"/"pass" — the
+/// CLI is the writer, sf_comm the reader; plain config storage, not state).
+/// `wifi` — テレメトリ WiFi 設定。モードは wifi.mode パラメータ（起動時反映;
+/// `param save`＋再起動で適用）、STA 資格情報は sf_comm が起動時に読む NVS
+/// namespace "sf_wifi"（キー "ssid"/"pass" — CLI が書き手・sf_comm が読み手。
+/// 状態でなく単なる設定ストレージ）。
+int cmd_wifi(int argc, char** argv)
+{
+    constexpr const char* kNvsNamespace = "sf_wifi";   // matches sf_comm / sf_comm と一致
+
+    if (argc >= 2 && std::strcmp(argv[1], "mode") == 0 && argc >= 3) {
+        int32_t mode = -1;
+        if (std::strcmp(argv[2], "sta") == 0) mode = 0;
+        if (std::strcmp(argv[2], "ap")  == 0) mode = 1;
+        if (mode < 0) {
+            std::printf("usage: wifi mode <sta|ap>\n");
+            return 0;
+        }
+        sf::params::set_int("wifi.mode", mode);
+        std::printf("wifi.mode = %s — run `param save` and reboot to apply\n",
+                    mode == 0 ? "sta" : "ap");
+        return 0;
+    }
+
+    if (argc >= 2 && (std::strcmp(argv[1], "ssid") == 0 ||
+                      std::strcmp(argv[1], "pass") == 0) && argc >= 3) {
+        nvs_handle_t handle;
+        if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+            std::printf("NVS open failed\n");
+            return 0;
+        }
+        const esp_err_t set_err    = nvs_set_str(handle, argv[1], argv[2]);
+        const esp_err_t commit_err = nvs_commit(handle);
+        nvs_close(handle);
+        if (set_err != ESP_OK || commit_err != ESP_OK) {
+            std::printf("NVS write failed (%s/%s)\n",
+                        esp_err_to_name(set_err), esp_err_to_name(commit_err));
+        } else {
+            std::printf("wifi %s saved — reboot to apply\n", argv[1]);
+        }
+        return 0;
+    }
+
+    if (argc == 1 || std::strcmp(argv[1], "show") == 0) {
+        int32_t mode = 0;
+        sf::params::get_int("wifi.mode", mode);
+        char ssid[33] = {};
+        size_t len = sizeof(ssid);
+        nvs_handle_t handle;
+        if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) == ESP_OK) {
+            nvs_get_str(handle, "ssid", ssid, &len);
+            nvs_close(handle);
+        }
+        // The password is deliberately never printed.
+        // パスワードは意図的に表示しない。
+        std::printf("mode : %s\n", mode == 0 ? "sta" : "ap");
+        std::printf("ssid : %s\n", ssid[0] ? ssid : "(unset)");
+        return 0;
+    }
+
+    std::printf("usage: wifi [show | mode <sta|ap> | ssid <name> | pass <secret>]\n");
+    return 0;
+}
+
 /// `reboot` — restart the flight controller.
 /// `reboot` — フライトコントローラを再起動する。
 int cmd_reboot(int argc, char** argv)
@@ -451,6 +518,7 @@ const CliCommand kCommands[] = {
     {"sound",   "sound [on|off] — enable/disable the buzzer",    &cmd_sound},
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
     {"motor",   "motor [test <1-4> <0-100>|all <0-100>|stop] — bench test (disarmed)", &cmd_motor},
+    {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
 };
 

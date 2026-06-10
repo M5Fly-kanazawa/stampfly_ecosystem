@@ -128,6 +128,7 @@ constexpr int kStatusLedCount = 1;
 
 i2c_master_bus_handle_t g_i2c_bus = nullptr;
 esp_netif_t*            g_sta_netif = nullptr;  // default WiFi STA netif (R1: board-owned)
+esp_netif_t*            g_ap_netif  = nullptr;  // default WiFi AP netif (R1: board-owned; used in wifi.mode=AP)
 bool                    g_initialized = false;
 
 // Optional-sensor presence flags, indexed by SensorId. Written once per sensor
@@ -212,6 +213,18 @@ esp_err_t init_netif()
     g_sta_netif = esp_netif_create_default_wifi_sta();
     if (g_sta_netif == nullptr) {
         ESP_LOGE(TAG, "Failed to create default WiFi STA netif");
+        return ESP_FAIL;
+    }
+
+    // Also create the default AP netif. Creating it is side-effect free (no AP
+    // beacons until esp_wifi starts in AP/APSTA mode); sf_comm selects the mode
+    // at runtime via the wifi.mode parameter and borrows this handle (R1).
+    // デフォルト AP netif も生成する。生成自体は副作用なし（esp_wifi が AP/APSTA
+    // モードで start するまでビーコンは出ない）。sf_comm が wifi.mode パラメータで
+    // 実行時にモードを選び、このハンドルを借用する（R1）。
+    g_ap_netif = esp_netif_create_default_wifi_ap();
+    if (g_ap_netif == nullptr) {
+        ESP_LOGE(TAG, "Failed to create default WiFi AP netif");
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -441,6 +454,11 @@ i2c_master_bus_handle_t i2c_bus()
 esp_netif_t* sta_netif()
 {
     return g_sta_netif;
+}
+
+esp_netif_t* ap_netif()
+{
+    return g_ap_netif;
 }
 
 spi_host_device_t imu_spi()

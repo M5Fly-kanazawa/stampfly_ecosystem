@@ -97,6 +97,16 @@ i2c_master_bus_handle_t i2c_bus();
 esp_netif_t* sta_netif();
 
 /**
+ * @brief Get the board-owned default WiFi AP netif (R1). Used by sf_comm when
+ *        the wifi.mode parameter selects SoftAP telemetry. nullptr before init().
+ *        board 所有のデフォルト WiFi AP netif を取得する（R1）。wifi.mode パラメータ
+ *        が SoftAP テレメトリを選んだとき sf_comm が使う。init() 前は nullptr。
+ *
+ * @return AP netif handle, or nullptr if uninitialized.
+ */
+esp_netif_t* ap_netif();
+
+/**
  * @brief Get the SPI host used by the IMU (and shared with OptFlow).
  *        IMU が使う SPI ホスト (OptFlow と共有) を取得する。
  *

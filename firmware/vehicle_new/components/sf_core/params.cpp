@@ -126,6 +126,17 @@ namespace param_vars {
     // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補。
     int32_t estimator_type = 0;
 
+    // Telemetry WiFi mode (boot-time, sf_comm initWifi): 0 = STA — join the
+    // router whose SSID/password are stored in NVS via the CLI `wifi` command
+    // (unconfigured → ESP-NOW-only, telemetry inert); 1 = SoftAP — the vehicle
+    // serves "StampFly-XXXX" on the ESP-NOW channel (no infrastructure needed).
+    // ESP-NOW control works in every mode.
+    // テレメトリ WiFi モード（起動時, sf_comm initWifi）: 0 = STA — CLI `wifi`
+    // コマンドで NVS に保存した SSID/パスワードのルータへ接続（未設定なら
+    // ESP-NOW のみ・テレメトリ無効）; 1 = SoftAP — 機体が ESP-NOW チャネル上で
+    // "StampFly-XXXX" を提供（インフラ不要）。ESP-NOW 操縦は全モードで動く。
+    int32_t wifi_mode = 0;
+
     // Attitude control
     float att_roll_kp     = 5.0f;
     float att_roll_ti     = 4.0f;
@@ -277,6 +288,12 @@ static const ParamEntry table[] = {
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},
+
+    // Telemetry WiFi mode (0 = STA, 1 = SoftAP) — boot-time, no live reload
+    // (the radio cannot be re-homed mid-flight).
+    // テレメトリ WiFi モード（0=STA, 1=SoftAP）— 起動時のみ。ライブ再読込なし
+    // （無線は飛行中に載せ替えられない）。
+    {"wifi.mode",       ParamType::INT,   &wifi_mode,      0.0f,      0.0f,  1.0f,   nullptr},
 
     // Attitude control
     {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  &notifyControllerReload},

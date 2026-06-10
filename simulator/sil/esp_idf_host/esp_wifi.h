@@ -359,6 +359,7 @@ enum {
     WIFI_EVENT_WIFI_READY = 0, WIFI_EVENT_SCAN_DONE = 1,
     WIFI_EVENT_STA_START = 2, WIFI_EVENT_STA_STOP = 3,
     WIFI_EVENT_STA_CONNECTED = 4, WIFI_EVENT_STA_DISCONNECTED = 5,
+    WIFI_EVENT_AP_START = 12, WIFI_EVENT_AP_STOP = 13,   /* SoftAP lifecycle (values match ESP-IDF) */
 };
 typedef struct {
     uint8_t ssid[33]; uint8_t ssid_len; uint8_t bssid[6];

@@ -179,9 +179,31 @@ private:
     /// （ここでは正規化しない）。新鮮度タイムスタンプも更新する。
     void forwardRawInput(const ControlPacket& pkt);
 
-    /// Bring up netif + event loop + WiFi STA on the ESP-NOW channel.
-    /// netif + イベントループ + ESP-NOW チャンネルの WiFi STA を起動する。
+    /// Bring up the WiFi driver and the telemetry network per the wifi.mode
+    /// parameter (0 = STA, 1 = SoftAP). ESP-NOW control works in every mode.
+    /// WiFi ドライバとテレメトリ網を wifi.mode パラメータに従って起動する
+    /// （0 = STA, 1 = SoftAP）。ESP-NOW 操縦は全モードで動く。
     void initWifi();
+
+    /// STA mode: join the router from NVS credentials, or ESP-NOW-only when
+    /// unconfigured (legacy behavior, radio pinned to the fixed channel).
+    /// STA モード: NVS 資格情報のルータへ接続。未設定なら ESP-NOW のみ
+    /// （従来挙動、固定チャネル）。
+    void startSta();
+
+    /// SoftAP mode (APSTA): "StampFly-XXYY" on the ESP-NOW channel; the STA
+    /// interface keeps carrying ESP-NOW unchanged.
+    /// SoftAP モード（APSTA）: ESP-NOW チャネル上の "StampFly-XXYY"。STA
+    /// インターフェースは従来どおり ESP-NOW を運ぶ。
+    void startSoftAp();
+
+    /// Read the telemetry WiFi credentials from NVS (namespace "sf_wifi",
+    /// keys "ssid"/"pass", written by the CLI `wifi` command).
+    /// テレメトリ WiFi 資格情報を NVS から読む（namespace "sf_wifi"、キー
+    /// "ssid"/"pass"。CLI `wifi` コマンドが書き込む）。
+    /// @return true if a non-empty SSID was found / 空でない SSID があれば true
+    bool loadWifiCredsFromNvs(char* ssid, size_t ssid_len,
+                              char* pass, size_t pass_len);
 
     /// Initialize ESP-NOW and register the receive callback.
     /// ESP-NOW を初期化し、受信コールバックを登録する。
@@ -204,6 +226,16 @@ private:
     /// ペア済みコントローラ MAC の NVS 保存先（sf_params とは別 namespace）。
     static constexpr const char* kPairingNvsNamespace = "sf_pair";
     static constexpr const char* kPairingNvsKey       = "ctrl_mac";
+
+    /// NVS location for the telemetry WiFi credentials (CLI `wifi` command).
+    /// テレメトリ WiFi 資格情報の NVS 保存先（CLI `wifi` コマンド）。
+    static constexpr const char* kWifiNvsNamespace = "sf_wifi";
+    static constexpr const char* kWifiNvsKeySsid   = "ssid";
+    static constexpr const char* kWifiNvsKeyPass   = "pass";
+
+    /// Default SoftAP WPA2 password (>= 8 chars), overridable via NVS "pass".
+    /// SoftAP の既定 WPA2 パスワード（8文字以上）。NVS "pass" で上書き可。
+    static constexpr const char* kApDefaultPassword = "stampfly";
 
     bool espnow_connected_ = false;          // Link status / リンク状態
     std::atomic<int64_t> last_packet_us_{0}; // esp_timer_get_time() at last

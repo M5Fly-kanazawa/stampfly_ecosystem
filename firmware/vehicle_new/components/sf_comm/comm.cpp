@@ -40,7 +40,9 @@
 #include "sf_board.hpp"  // borrow the BSP-owned default STA netif (R1)
 
 #include <cstring>
+#include <cstdio>        // snprintf (SoftAP SSID) / snprintf（SoftAP SSID 生成）
 
+#include "params.hpp"    // wifi.mode (boot-time telemetry network mode)
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -171,6 +173,22 @@ void onIpEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
 {
     if (event_id == IP_EVENT_STA_GOT_IP && g_wifi_event_group != nullptr) {
         xEventGroupSetBits(g_wifi_event_group, kWifiGotIpBit);
+    }
+}
+
+// WIFI_EVENT handler: SoftAP start = network ready (the AP owns its address
+// immediately, no DHCP wait); STA disconnect = auto-reconnect (router reboot,
+// range drop — telemetry resumes by itself; ESP-NOW is unaffected either way).
+// WIFI_EVENT ハンドラ: SoftAP 開始 = ネットワーク準備完了（AP は即時に自分の
+// アドレスを持ち DHCP 待ちなし）。STA 切断 = 自動再接続（ルータ再起動・距離切れ —
+// テレメトリは自力で復帰。ESP-NOW はいずれでも無影響）。
+void onWifiEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
+                 int32_t event_id, void* /*event_data*/)
+{
+    if (event_id == WIFI_EVENT_AP_START && g_wifi_event_group != nullptr) {
+        xEventGroupSetBits(g_wifi_event_group, kWifiGotIpBit);
+    } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        esp_wifi_connect();   // retry; paced by the WiFi stack / 再試行（ペースは WiFi スタック任せ）
     }
 }
 
@@ -485,7 +503,16 @@ void Comm::servicePairing()
 void Comm::sendPairingPacket()
 {
     uint8_t packet[kPairingPacketSize];
-    packet[0] = kWifiChannel;                                   // byte 0   : channel
+    // Advertise the ACTUAL radio channel, not the compile-time constant: in STA
+    // mode joined to a router the channel follows the router, and the scanning
+    // transmitter must lock onto where we really are.
+    // 「実際の」無線チャネルを広告する（コンパイル時定数でなく）: ルータ接続の STA
+    // モードではチャネルはルータに従うため、スキャン中の送信機は実在チャネルへ
+    // ロックしなければならない。
+    uint8_t primary = kWifiChannel;
+    wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+    esp_wifi_get_channel(&primary, &second);
+    packet[0] = primary;                                        // byte 0   : channel
     std::memcpy(&packet[1], own_mac_, 6);                       // bytes 1-6: our MAC
     std::memcpy(&packet[7], kPairingSignature,                  // bytes 7-10: signature
                 sizeof(kPairingSignature));
@@ -579,7 +606,11 @@ void Comm::addUnicastPeer(const uint8_t mac[6])
 {
     esp_now_peer_info_t peer{};
     std::memcpy(peer.peer_addr, mac, 6);
-    peer.channel = kWifiChannel;
+    // channel 0 = "use the radio's current channel" (esp_now API): correct on
+    // the fixed channel AND when STA mode follows a router's channel.
+    // channel 0 = 「無線の現在チャネルを使う」（esp_now API）: 固定チャネルでも、
+    // STA モードでルータのチャネルに従う場合でも正しい。
+    peer.channel = 0;
     peer.encrypt = false;
     peer.ifidx   = WIFI_IF_STA;
     esp_now_del_peer(mac);  // remove a stale entry first (ignore "not found")
@@ -682,6 +713,31 @@ void Comm::clearPairingFromNvs()
     nvs_close(handle);
 }
 
+// -----------------------------------------------------------------------------
+// loadWifiCredsFromNvs — telemetry WiFi credentials, namespace "sf_wifi"
+// (written by the CLI `wifi ssid/pass` commands).
+// loadWifiCredsFromNvs — テレメトリ WiFi 資格情報、namespace "sf_wifi"
+// （CLI `wifi ssid/pass` コマンドが書き込む）。
+// -----------------------------------------------------------------------------
+bool Comm::loadWifiCredsFromNvs(char* ssid, size_t ssid_len,
+                                char* pass, size_t pass_len)
+{
+    ssid[0] = '\0';
+    pass[0] = '\0';
+
+    nvs_handle_t handle;
+    if (nvs_open(kWifiNvsNamespace, NVS_READONLY, &handle) != ESP_OK) {
+        return false;   // never configured / 未設定
+    }
+    size_t len = ssid_len;
+    const esp_err_t ssid_err = nvs_get_str(handle, kWifiNvsKeySsid, ssid, &len);
+    len = pass_len;
+    nvs_get_str(handle, kWifiNvsKeyPass, pass, &len);   // optional (open AP) / 任意
+    nvs_close(handle);
+
+    return ssid_err == ESP_OK && ssid[0] != '\0';
+}
+
 // =============================================================================
 // Initialization Helpers
 // 初期化ヘルパ
@@ -729,30 +785,128 @@ void Comm::initWifi()
     // Avoid writing transient state to flash on every config change.
     // 設定変更のたびに Flash へ書き込まないようにする。
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
     // Disable power save for low ESP-NOW latency.
     // ESP-NOW のレイテンシを下げるため省電力を無効化する。
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    // Pin radio to the ESP-NOW channel. Must be after esp_wifi_start().
-    // ラジオを ESP-NOW チャンネルに固定する。esp_wifi_start() より後に呼ぶ。
-    ESP_ERROR_CHECK(esp_wifi_set_channel(kWifiChannel, WIFI_SECOND_CHAN_NONE));
-
-    // Register IP event handler so sf_telemetry can wait on WiFi readiness
-    // without polling. Bit is set on IP_EVENT_STA_GOT_IP (R16).
-    // sf_telemetry が polling せずに WiFi 準備を待てるよう IP イベント
-    // ハンドラを登録する。IP_EVENT_STA_GOT_IP 受信時にビットをセット (R16)。
+    // WiFi readiness EventGroup + handlers (R16: sf_telemetry blocks on the bit
+    // instead of polling). STA: IP_EVENT_STA_GOT_IP. AP: WIFI_EVENT_AP_START
+    // (the SoftAP has its address immediately). STA disconnect → auto-reconnect.
+    // WiFi 準備完了 EventGroup とハンドラ（R16: sf_telemetry はポーリングせずビットで
+    // ブロック）。STA: IP_EVENT_STA_GOT_IP。AP: WIFI_EVENT_AP_START（SoftAP は即時に
+    // アドレスを持つ）。STA 切断時は自動再接続。
     if (g_wifi_event_group == nullptr) {
         g_wifi_event_group = xEventGroupCreate();
     }
     ESP_ERROR_CHECK(esp_event_handler_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &onIpEvent, nullptr));
+    ESP_ERROR_CHECK(esp_event_handler_register(
+        WIFI_EVENT, ESP_EVENT_ANY_ID, &onWifiEvent, nullptr));
 
-    ESP_LOGI(TAG, "WiFi STA up on channel %u (hostname '%s')",
-             kWifiChannel, kHostname);
+    // Telemetry network mode (boot-time parameter; ESP-NOW control works in
+    // every mode). 0 = STA, 1 = SoftAP.
+    // テレメトリのネットワークモード（起動時パラメータ。ESP-NOW 操縦は全モードで
+    // 動く）。0 = STA、1 = SoftAP。
+    int32_t wifi_mode = 0;
+    sf::params::get_int("wifi.mode", wifi_mode);
+
+    if (wifi_mode == 1) {
+        startSoftAp();
+    } else {
+        startSta();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// startSta — STA mode. With NVS credentials (CLI `wifi ssid/pass`), join the
+// router: the radio then FOLLOWS the router's channel, and the pairing
+// broadcast advertises the ACTUAL channel so the scanning transmitter locks to
+// it (PairingPacket byte 0). Without credentials, behave as before: ESP-NOW
+// only, radio pinned to the fixed channel, telemetry inert.
+// startSta — STA モード。NVS 資格情報（CLI `wifi ssid/pass`）があればルータへ接続:
+// 以後ラジオはルータのチャネルに「従い」、ペアリング broadcast は「実際の」チャネルを
+// 広告するためスキャン中の送信機はそこへロックする（PairingPacket byte 0）。資格情報が
+// 無ければ従来どおり: ESP-NOW のみ、固定チャネルに固定、テレメトリは無効。
+// -----------------------------------------------------------------------------
+void Comm::startSta()
+{
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+    char ssid[33] = {};
+    char pass[65] = {};
+    const bool have_creds = loadWifiCredsFromNvs(ssid, sizeof(ssid),
+                                                 pass, sizeof(pass));
+    if (have_creds) {
+        wifi_config_t sta_cfg = {};
+        std::strncpy(reinterpret_cast<char*>(sta_cfg.sta.ssid), ssid,
+                     sizeof(sta_cfg.sta.ssid) - 1);
+        std::strncpy(reinterpret_cast<char*>(sta_cfg.sta.password), pass,
+                     sizeof(sta_cfg.sta.password) - 1);
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_cfg));
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    if (have_creds) {
+        // Join the router — do NOT pin the channel; the AP decides it and the
+        // pairing broadcast advertises the resulting channel to the transmitter.
+        // ルータへ接続 — チャネルは固定しない。チャネルは AP が決め、ペアリング
+        // broadcast がその結果を送信機へ広告する。
+        esp_wifi_connect();
+        ESP_LOGI(TAG, "WiFi STA joining '%s' (telemetry; ESP-NOW follows the AP channel)",
+                 ssid);
+    } else {
+        // ESP-NOW-only: pin the radio to the fixed channel (legacy behavior).
+        // ESP-NOW のみ: ラジオを固定チャネルに固定（従来挙動）。
+        ESP_ERROR_CHECK(esp_wifi_set_channel(kWifiChannel, WIFI_SECOND_CHAN_NONE));
+        ESP_LOGI(TAG, "WiFi STA up on channel %u (no credentials — ESP-NOW only; "
+                      "set via CLI `wifi ssid/pass` for telemetry)", kWifiChannel);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// startSoftAp — SoftAP mode (APSTA): the AP serves telemetry clients on the
+// ESP-NOW channel, the STA interface keeps carrying ESP-NOW exactly as before
+// (peers are registered on WIFI_IF_STA) — zero impact on the control link, no
+// infrastructure needed. SSID "StampFly-XXYY" from the MAC tail; default WPA2
+// password (8+ chars) overridable via the same NVS `pass` slot.
+// startSoftAp — SoftAP モード（APSTA）: AP が ESP-NOW チャネル上でテレメトリ
+// クライアントに給仕し、STA インターフェースは従来どおり ESP-NOW を運ぶ（peer は
+// WIFI_IF_STA に登録）— 操縦リンクへの影響ゼロ、インフラ不要。SSID は MAC 末尾から
+// "StampFly-XXYY"。既定 WPA2 パスワード（8文字以上）は NVS の `pass` で上書き可。
+// -----------------------------------------------------------------------------
+void Comm::startSoftAp()
+{
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+
+    wifi_config_t ap_cfg = {};
+    std::snprintf(reinterpret_cast<char*>(ap_cfg.ap.ssid), sizeof(ap_cfg.ap.ssid),
+                  "StampFly-%02X%02X", mac[4], mac[5]);
+    ap_cfg.ap.ssid_len = static_cast<uint8_t>(
+        std::strlen(reinterpret_cast<char*>(ap_cfg.ap.ssid)));
+
+    char ssid_unused[33] = {};
+    char pass[65] = {};
+    if (!loadWifiCredsFromNvs(ssid_unused, sizeof(ssid_unused),
+                              pass, sizeof(pass)) ||
+        std::strlen(pass) < 8) {
+        std::strncpy(pass, kApDefaultPassword, sizeof(pass) - 1);
+    }
+    std::strncpy(reinterpret_cast<char*>(ap_cfg.ap.password), pass,
+                 sizeof(ap_cfg.ap.password) - 1);
+    ap_cfg.ap.authmode       = WIFI_AUTH_WPA2_PSK;
+    ap_cfg.ap.channel        = kWifiChannel;   // AP on the ESP-NOW channel / ESP-NOW チャネル上
+    ap_cfg.ap.max_connection = 2;
+
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "WiFi SoftAP '%s' up on channel %u (telemetry; ESP-NOW unchanged)",
+             reinterpret_cast<char*>(ap_cfg.ap.ssid), kWifiChannel);
 }
 
 // -----------------------------------------------------------------------------
@@ -803,7 +957,7 @@ void Comm::initEspNow()
     // 将来の双方向通信のためブロードキャストピアを追加する。
     esp_now_peer_info_t peer{};
     std::memset(peer.peer_addr, 0xFF, sizeof(peer.peer_addr));
-    peer.channel = kWifiChannel;
+    peer.channel = 0;   // current radio channel (see addUnicastPeer) / 現在のチャネル
     peer.encrypt = false;
     peer.ifidx   = WIFI_IF_STA;
     if (!esp_now_is_peer_exist(peer.peer_addr)) {
