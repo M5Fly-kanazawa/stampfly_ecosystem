@@ -184,72 +184,100 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
     q_.normalize();
 
     // =========================================================================
-    // Covariance propagation: P' = F*P*F^T + Q
-    // 共分散伝搬: P' = F*P*F^T + Q
+    // Covariance propagation P' = F·P·Fᵀ + Q, EXPLOITING F's SPARSITY.
+    // 共分散伝搬 P' = F·P·Fᵀ + Q — F の「疎」構造を利用する。
     //
-    // Full 15x15 matrix implementation for correctness.
-    // 正確性のためフル15x15行列実装。
-    //
-    // F = I + dF where dF has non-zero blocks:
-    //   dF[pos][vel]  = I*dt
-    //   dF[vel][att]  = D_va = -R*[a_c×]*dt
-    //   dF[vel][ba]   = D_vb = -R*dt
-    //   dF[att][bg]   = -I*dt
+    // F = I + A, and A has ONLY these nonzero blocks (24 entries out of 225):
+    //   A[pos][vel] = I·dt            A[vel][att] = D_va = −R[a_c×]·dt
+    //   A[vel][ba]  = D_vb = −R·dt    A[att][bg]  = −I·dt
+    // so (I+A)·P·(I+A)ᵀ reduces to two sparse in-place passes:
+    //   pass 1 (rows):    FP = P + A·P     — only rows pos/vel/att change
+    //   pass 2 (columns): P' = FP + FP·Aᵀ  — only cols pos/vel/att change
+    // The in-place order pos → vel → att is EXACT because each updated
+    // row/column reads only rows/columns that are modified later (vel, ba, bg)
+    // — never one already modified in the same pass.
+    // ~720 multiply-adds instead of the dense 2×15³ ≈ 6750: at 400Hz this is
+    // the difference between saturating a core and a few percent of it
+    // (a dense triple loop at -Og starved StateTask on hardware — INIT-stuck).
+    // F = I + A で、A の非ゼロは 225 要素中わずか 24（上記4ブロック）。よって
+    // (I+A)·P·(I+A)ᵀ は2回の疎なインプレースパスに帰着する:
+    //   パス1（行）: FP = P + A·P — pos/vel/att 行だけが変わる
+    //   パス2（列）: P' = FP + FP·Aᵀ — pos/vel/att 列だけが変わる
+    // pos → vel → att のインプレース順は「厳密」: 更新する行/列が読むのは後で
+    // 変更される行/列（vel, ba, bg）だけで、同一パス内で変更済みのものは読まない。
+    // 密な三重ループの 2×15³ ≈ 6750 積和が ~720 積和に — 400Hz ではコア飽和と
+    // 数%負荷の分かれ目（-Og の密ループは実機で StateTask を飢餓させた）。
     // =========================================================================
 
-    // Build F matrix explicitly / F行列を明示的に構築
-    float F[N][N] = {};
-    for (int i = 0; i < N; i++) F[i][i] = 1.0f;  // Identity
-
-    // dF[pos][vel] = I*dt
-    for (int i = 0; i < 3; i++) F[POS_X+i][VEL_X+i] = dt;
-
-    // dF[vel][att] = D_va = -R*[a_c×]*dt
-    //
-    // Right-perturbation convention (q = q̂⊗δq, see applyMaskedErrorState):
-    // R = R̂(I+[δθ×]) → δv̇ = R̂[δθ×]f = −R̂[f×]δθ, so the block is MINUS R[a×].
-    // Component check: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay, hence the negated
-    // form below. (The sign was previously flipped, inverting the vel↔att
-    // cross-covariance so flow-velocity updates corrected attitude backwards.)
-    // 右側摂動規約（q = q̂⊗δq、applyMaskedErrorState 参照）:
-    // R = R̂(I+[δθ×]) → δv̇ = R̂[δθ×]f = −R̂[f×]δθ なので、このブロックは −R[a×]。
-    // 成分確認: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay、よって下は符号反転形。
-    // （従来は符号が逆で、vel↔att 交差共分散が反転しフロー速度観測が姿勢を逆補正していた。）
+    // D_va = −R[a_c×]·dt — right-perturbation convention (q = q̂⊗δq, see
+    // applyMaskedErrorState): R = R̂(I+[δθ×]) → δv̇ = −R̂[f×]δθ, MINUS R[a×].
+    // Component check: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay → negated below.
+    // D_va = −R[a_c×]·dt — 右側摂動規約（q = q̂⊗δq、applyMaskedErrorState 参照）:
+    // R = R̂(I+[δθ×]) → δv̇ = −R̂[f×]δθ、つまり −R[a×]。
+    // 成分確認: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay → 下は符号反転形。
+    float Dva[3][3];
+    float Dvb[3][3];
     for (int i = 0; i < 3; i++) {
-        F[VEL_X+i][ATT_X+0] = (R[i][2]*accel.y - R[i][1]*accel.z) * dt;
-        F[VEL_X+i][ATT_X+1] = (R[i][0]*accel.z - R[i][2]*accel.x) * dt;
-        F[VEL_X+i][ATT_X+2] = (R[i][1]*accel.x - R[i][0]*accel.y) * dt;
+        Dva[i][0] = (R[i][2]*accel.y - R[i][1]*accel.z) * dt;
+        Dva[i][1] = (R[i][0]*accel.z - R[i][2]*accel.x) * dt;
+        Dva[i][2] = (R[i][1]*accel.x - R[i][0]*accel.y) * dt;
+        for (int j = 0; j < 3; j++) {
+            Dvb[i][j] = -R[i][j] * dt;
+        }
     }
 
-    // dF[vel][ba] = -R*dt
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
-            F[VEL_X+i][BA_X+j] = -R[i][j] * dt;
-
-    // dF[att][bg] = -I*dt
-    for (int i = 0; i < 3; i++) F[ATT_X+i][BG_X+i] = -dt;
-
-    // Compute FP = F * P (15x15 matrix multiply)
-    // FP = F * P を計算
-    float FP[N][N];
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++) {
-            float sum = 0;
-            for (int k = 0; k < N; k++)
-                sum += F[i][k] * P_(k, j);
-            FP[i][j] = sum;
+    // Pass 1 (rows): FP = P + A·P — every read row (vel, att, ba, bg) is still
+    // the ORIGINAL P at the moment it is read (see ordering note above).
+    // パス1（行）: FP = P + A·P — 読む行（vel, att, ba, bg）は読む時点で全て
+    // 「元の」P（上の順序の注を参照）。
+    for (int j = 0; j < N; j++) {
+        for (int i = 0; i < 3; i++) {
+            P_(POS_X + i, j) += dt * P_(VEL_X + i, j);
         }
-
-    // Compute P' = FP * F^T (15x15 matrix multiply)
-    // P' = FP * F^T を計算
-    for (int i = 0; i < N; i++)
-        for (int j = i; j < N; j++) {
-            float sum = 0;
-            for (int k = 0; k < N; k++)
-                sum += FP[i][k] * F[j][k];  // F^T[k][j] = F[j][k]
-            P_(i, j) = sum;
-            P_(j, i) = sum;  // Symmetric
+    }
+    for (int j = 0; j < N; j++) {
+        for (int i = 0; i < 3; i++) {
+            float acc = 0;
+            for (int k = 0; k < 3; k++) {
+                acc += Dva[i][k] * P_(ATT_X + k, j)
+                     + Dvb[i][k] * P_(BA_X + k, j);
+            }
+            P_(VEL_X + i, j) += acc;
         }
+    }
+    for (int j = 0; j < N; j++) {
+        for (int i = 0; i < 3; i++) {
+            P_(ATT_X + i, j) -= dt * P_(BG_X + i, j);
+        }
+    }
+
+    // Pass 2 (columns): P' = FP + FP·Aᵀ — same ordering argument on columns.
+    // パス2（列）: P' = FP + FP·Aᵀ — 列について同じ順序論法。
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < 3; j++) {
+            P_(i, POS_X + j) += dt * P_(i, VEL_X + j);
+        }
+    }
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < 3; j++) {
+            float acc = 0;
+            for (int k = 0; k < 3; k++) {
+                acc += P_(i, ATT_X + k) * Dva[j][k]
+                     + P_(i, BA_X + k) * Dvb[j][k];
+            }
+            P_(i, VEL_X + j) += acc;
+        }
+    }
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < 3; j++) {
+            P_(i, ATT_X + j) -= dt * P_(i, BG_X + j);
+        }
+    }
+
+    // Numerical-symmetry repair (the two passes are exact, but float rounding
+    // differs between (i,j) and (j,i) paths).
+    // 数値対称性の補修（2パスは厳密だが、(i,j) と (j,i) で丸めが異なる）。
+    P_.symmetrize();
 
     // Step 5: Add process noise Q (with active_mask gating)
     // ステップ5: プロセスノイズQを加算（active_maskゲーティング付き）
@@ -275,22 +303,26 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
 
 void EskfCore::scalarUpdate(const float H[N], float innovation, float R_val)
 {
-    // S = H*P*H^T + R
+    // w = P·hᵀ — one O(N²) pass; everything below is rank-1 algebra on w.
+    // w = P·hᵀ — O(N²) は1回だけ。以降は w のランク1代数。
+    float w[N];
+    for (int i = 0; i < N; i++) {
+        w[i] = 0;
+        for (int j = 0; j < N; j++)
+            w[i] += P_(i, j) * H[j];
+    }
+
+    // S = h·P·hᵀ + R = h·w + R
     float S = R_val;
     for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            S += H[i] * P_(i, j) * H[j];
+        S += H[i] * w[i];
 
     if (S < 1e-10f) return;  // Singular / 特異
 
-    // K = P*H^T / S
+    // K = w / S
     float K[N];
-    for (int i = 0; i < N; i++) {
-        K[i] = 0;
-        for (int j = 0; j < N; j++)
-            K[i] += P_(i, j) * H[j];
-        K[i] /= S;
-    }
+    for (int i = 0; i < N; i++)
+        K[i] = w[i] / S;
 
     // Error state: dx = K * innovation
     // 誤差状態: dx = K * innovation
@@ -301,25 +333,27 @@ void EskfCore::scalarUpdate(const float H[N], float innovation, float R_val)
     // Apply masked error state / マスク付き誤差状態を適用
     applyMaskedErrorState(dx);
 
-    // Joseph form covariance update / Joseph形式で共分散更新
-    // P' = (I-KH)*P*(I-KH)^T + K*R*K^T
-    float IKH[N][N];
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            IKH[i][j] = (i == j ? 1.0f : 0.0f) - K[i] * H[j];
-
-    SymMat15 P_new;
+    // Joseph covariance update, expanded into its RANK-1 form. With h a row
+    // vector, (I−Khᵀ)P(I−Khᵀ)ᵀ + R·KKᵀ expands (using hᵀP = wᵀ by symmetry and
+    // hᵀPh + R = S) to exactly:
+    //   P' = P − K wᵀ − w Kᵀ + S·K Kᵀ
+    // — three rank-1 terms, ~4·N²/2 multiply-adds. The previous literal
+    // (I−KH)P(I−KH)ᵀ double-contraction was O(N⁴) ≈ 54 000 multiply-adds per
+    // scalar observation (flow alone calls this 200×/s).
+    // Joseph 共分散更新の「ランク1」展開形。h が行ベクトルのとき
+    // (I−Khᵀ)P(I−Khᵀ)ᵀ + R·KKᵀ は（対称性より hᵀP = wᵀ、hᵀPh + R = S を使い）
+    // 厳密に P' = P − K wᵀ − w Kᵀ + S·K Kᵀ の3つのランク1項に展開できる
+    // （~4·N²/2 積和）。従来の (I−KH)P(I−KH)ᵀ の逐語的二重縮約は O(N⁴) ≈
+    // 1観測あたり5.4万積和だった（フローだけで毎秒200回呼ぶ）。
     for (int i = 0; i < N; i++) {
         for (int j = i; j < N; j++) {
-            float sum = K[i] * R_val * K[j];
-            for (int k = 0; k < N; k++)
-                for (int l = 0; l < N; l++)
-                    sum += IKH[i][k] * P_(k, l) * IKH[j][l];
-            P_new(i, j) = sum;
-            P_new(j, i) = sum;
+            const float val = P_(i, j)
+                            - K[i] * w[j] - w[i] * K[j]
+                            + S * K[i] * K[j];
+            P_(i, j) = val;
+            P_(j, i) = val;
         }
     }
-    P_ = P_new;
 
     enforceCovarianceConstraints();
 }
@@ -331,14 +365,50 @@ void EskfCore::scalarUpdate(const float H[N], float innovation, float R_val)
 void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_val,
                              float chi2_gate)
 {
-    // S = H*P*H^T + R*I (3x3)
+    // =========================================================================
+    // Exploit H's COLUMN SPARSITY. The 3×N observation Jacobians used here have
+    // at most a handful of nonzero columns (accel-attitude: att + ba = 6 of 15;
+    // mag: att = 3 of 15). Every contraction below runs over that support
+    // instead of all N columns — at 400Hz (accel-attitude every predict) this
+    // is the difference between ~14 000 and ~2 000 multiply-adds per call.
+    // H の「列疎性」を利用する。ここで使う 3×N 観測ヤコビアンの非ゼロ列はごく少数
+    // （accel-attitude: att+ba の 6/15、mag: att の 3/15）。以降の縮約は全 N 列で
+    // なくこのサポート上だけを走る — 400Hz（accel-attitude は predict 毎）では
+    // 1 回あたり ~14,000 積和と ~2,000 積和の分かれ目。
+    // =========================================================================
+
+    int cols[N];
+    int n_cols = 0;
+    for (int c = 0; c < N; c++) {
+        if (H[0][c] != 0.0f || H[1][c] != 0.0f || H[2][c] != 0.0f) {
+            cols[n_cols++] = c;
+        }
+    }
+    if (n_cols == 0) {
+        return;   // empty Jacobian — nothing to update / 空ヤコビアン
+    }
+
+    // PHt = P·Hᵀ (N×3), contracted over the support only.
+    // PHt = P·Hᵀ（N×3）。縮約はサポート上のみ。
+    float PHt[N][3];
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < 3; k++) {
+            float acc = 0;
+            for (int m = 0; m < n_cols; m++) {
+                acc += P_(i, cols[m]) * H[k][cols[m]];
+            }
+            PHt[i][k] = acc;
+        }
+    }
+
+    // S = H·(P·Hᵀ) + R·I (3x3)
     float S[3][3];
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             S[i][j] = (i == j) ? R_val : 0.0f;
-            for (int k = 0; k < N; k++)
-                for (int l = 0; l < N; l++)
-                    S[i][j] += H[i][k] * P_(k, l) * H[j][l];
+            for (int m = 0; m < n_cols; m++) {
+                S[i][j] += H[i][cols[m]] * PHt[cols[m]][j];
+            }
         }
     }
 
@@ -376,17 +446,14 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
         return;
     }
 
-    // K = P*H^T*S^-1 (Nx3)
+    // K = (P·Hᵀ)·S⁻¹ (N×3) — PHt is already in hand.
+    // K = (P·Hᵀ)·S⁻¹（N×3）— PHt は計算済み。
     float K[N][3];
     for (int i = 0; i < N; i++) {
-        float PHt[3] = {0, 0, 0};
-        for (int j = 0; j < 3; j++)
-            for (int k = 0; k < N; k++)
-                PHt[j] += P_(i, k) * H[j][k];
         for (int j = 0; j < 3; j++) {
             K[i][j] = 0;
             for (int k = 0; k < 3; k++)
-                K[i][j] += PHt[k] * Si[k][j];
+                K[i][j] += PHt[i][k] * Si[k][j];
         }
     }
 
@@ -400,27 +467,43 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
 
     applyMaskedErrorState(dx);
 
-    // Simplified covariance update: P' = (I - K*H)*P
-    // 簡易共分散更新: P' = (I - K*H)*P
-    SymMat15 P_new;
-    for (int i = 0; i < N; i++) {
+    // Covariance update P' = (I − K·H)·P = P − (K·H)·P, exploiting H's column
+    // sparsity twice: M = K·H is nonzero ONLY in the support columns, so
+    // (M·P)(i,j) needs only the support ROWS of P. Those rows are snapshotted
+    // first because the in-place update overwrites them. Cost: N·M·3 (build M)
+    // + N·N·M (apply) ≈ 1 600 multiply-adds for M = 6 — the previous literal
+    // expansion of (I−KH) was ~14 000 per call, at 400Hz.
+    // 共分散更新 P' = (I − K·H)·P = P − (K·H)·P。H の列疎性を二重に利用する:
+    // M = K·H の非ゼロはサポート列のみ → (M·P)(i,j) は P のサポート「行」しか
+    // 要らない。その行はインプレース更新で上書きされるため先にスナップショット
+    // する。コスト: N·M·3（M 構築）+ N·N·M（適用）≈ M=6 で 1,600 積和 — 従来の
+    // (I−KH) の逐語展開は 1 回あたり ~14,000 積和を 400Hz で回していた。
+    // Sized for the worst case n_cols = N (~900B each on the 16KB ImuTask
+    // stack); the practical Jacobians here use 3–6 columns.
+    // 最悪 n_cols = N でも収まるサイズ（各 ~900B、ImuTask スタックは 16KB）。
+    // 実際のヤコビアンは 3〜6 列。
+    float M[N][N];                  // K·H, support columns only / サポート列のみ
+    float P_rows[N][N];             // snapshot of P's support rows / サポート行の写し
+    for (int m = 0; m < n_cols; m++) {
+        const int c = cols[m];
         for (int j = 0; j < N; j++) {
-            float kh = 0;
+            P_rows[m][j] = P_(c, j);
+        }
+        for (int i = 0; i < N; i++) {
+            float acc = 0;
             for (int k = 0; k < 3; k++)
-                kh += K[i][k] * H[k][j];
-            float val = P_(i, j) - kh * P_(i, j);
-            // Actually: sum over l of (I-KH)[i][l] * P[l][j]
-            val = 0;
-            for (int l = 0; l < N; l++) {
-                float ikhl = (i == l ? 1.0f : 0.0f);
-                for (int k = 0; k < 3; k++)
-                    ikhl -= K[i][k] * H[k][l];
-                val += ikhl * P_(l, j);
-            }
-            P_new(i, j) = val;
+                acc += K[i][k] * H[k][c];
+            M[i][m] = acc;
         }
     }
-    P_ = P_new;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            float acc = 0;
+            for (int m = 0; m < n_cols; m++)
+                acc += M[i][m] * P_rows[m][j];
+            P_(i, j) -= acc;
+        }
+    }
     P_.symmetrize();
     enforceCovarianceConstraints();
 }
