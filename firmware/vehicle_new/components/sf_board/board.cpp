@@ -136,7 +136,7 @@ bool                    g_initialized = false;
 // Optional センサの存在フラグ。SensorId で索引。各センサの setup が1回書き込み
 // (set_sensor_present)、Failsafe / Telemetry が読む。クロスタスク読み取りを
 // ロック無しにするため atomic。サイズは SensorId enum に追従。
-constexpr size_t kSensorSlots = 5;  // Mag, FrontToF, Flow, Baro, Power
+constexpr size_t kSensorSlots = 5;  // Mag, BottomToF, Flow, Baro, Power
 std::atomic<bool> g_sensor_present[kSensorSlots] = {};
 
 // Optional-sensor last-publish timestamp [us], indexed by SensorId. Each sensor task

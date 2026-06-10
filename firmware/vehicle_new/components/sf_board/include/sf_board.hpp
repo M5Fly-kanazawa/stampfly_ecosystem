@@ -169,7 +169,7 @@ ledc_mode_t motor_speed_mode();
  */
 enum class SensorId : uint8_t {
     Mag,        ///< BMM150 magnetometer
-    FrontToF,   ///< VL53L3CX front-facing ToF
+    BottomToF,  ///< VL53L3CX bottom-facing ToF (altitude source; managed by TofTask)
     Flow,       ///< PMW3901 optical flow
     Baro,       ///< BMP280 barometer
     Power,      ///< INA3221 power monitor

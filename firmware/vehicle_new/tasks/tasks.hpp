@@ -49,6 +49,19 @@ void start_all();
 /// nullptr。旧 extern グローバル g_control_task_handle を置き換える（R3: extern 排除）。
 TaskHandle_t control_handle();
 
+/// True once ImuTask has finished initializing the BMI270 on the shared SPI bus
+/// (success or terminal failure). FlowTask waits on this before initializing the
+/// PMW3901: both init sequences manipulate chip-select lines at GPIO level on the
+/// SAME bus from different cores, and a PMW3901 CS pulse landing inside a BMI270
+/// init transaction makes both slaves drive MISO (electrical contention, corrupted
+/// reads). Serializing the two inits removes the race by construction.
+/// ImuTask が共有 SPI バス上の BMI270 初期化を終えたら true（成功・確定失敗とも）。
+/// FlowTask はこれを待ってから PMW3901 を初期化する: 両者の init は同一バスの CS を
+/// 別コアから GPIO レベルで操作し、BMI270 の init トランザクション中に PMW3901 の
+/// CS パルスが重なると両スレーブが MISO を駆動（電気的競合・読み値化け）する。
+/// 初期化の直列化で競合を構造的に排除する。
+bool imu_spi_init_done();
+
 }  // namespace tasks
 }  // namespace sf
 

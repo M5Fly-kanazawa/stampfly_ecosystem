@@ -124,14 +124,30 @@ esp_err_t MotorDriver::disarm()
     ESP_LOGI(TAG, "Motors disarmed");
     armed_ = false;
 
-    // Set all motors to 0
+    // Set all motors to 0. This is the SAFETY path — check every LEDC write and
+    // retry once on failure, then report the aggregate result instead of
+    // assuming the zero landed (a silently failed write here means a motor
+    // keeps spinning while the system believes it is stopped).
+    // 全モータを 0 に。ここは「安全」経路 — LEDC 書き込みを毎回検査し、失敗時は
+    // 1回リトライした上で集約結果を返す（ここで黙って失敗すると、システムは停止した
+    // つもりなのにモータが回り続ける）。
+    esp_err_t result = ESP_OK;
     for (int i = 0; i < NUM_MOTORS; i++) {
         motor_output_[i] = 0.0f;
-        ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
-        ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        esp_err_t e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
+        esp_err_t e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        if (e1 != ESP_OK || e2 != ESP_OK) {
+            e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
+            e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        }
+        if (e1 != ESP_OK || e2 != ESP_OK) {
+            ESP_LOGE(TAG, "disarm: motor %d duty-zero write FAILED (%s/%s)",
+                     i, esp_err_to_name(e1), esp_err_to_name(e2));
+            result = (e1 != ESP_OK) ? e1 : e2;
+        }
     }
 
-    return ESP_OK;
+    return result;
 }
 
 void MotorDriver::setMotor(int motor, float value)
@@ -147,8 +163,16 @@ void MotorDriver::setMotor(int motor, float value)
     uint32_t max_duty = (1U << config_.pwm_resolution_bits) - 1;
     uint32_t duty = static_cast<uint32_t>(motor_output_[motor] * max_duty);
 
-    ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
-    ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
+    // Log (rate-limited by rarity — these calls only fail on bad arguments) so a
+    // wiring/config regression is not silently swallowed at 400Hz.
+    // 失敗時はログする（これらは引数不正時のみ失敗するため実質まれ）。配線/設定の
+    // 退行が 400Hz で黙って握り潰されないようにする。
+    esp_err_t e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
+    esp_err_t e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
+    if (e1 != ESP_OK || e2 != ESP_OK) {
+        ESP_LOGW(TAG, "setMotor(%d): LEDC write failed (%s/%s)",
+                 motor, esp_err_to_name(e1), esp_err_to_name(e2));
+    }
 }
 
 void MotorDriver::setMotorDuties(const float duties[4])

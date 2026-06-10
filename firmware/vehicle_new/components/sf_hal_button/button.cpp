@@ -64,25 +64,24 @@ void Button::tick()
     // Read GPIO state (active low with pull-up)
     bool raw_pressed = (gpio_get_level(static_cast<gpio_num_t>(config_.gpio)) == 0);
 
-    // Simple debounce - only consider stable readings
-    static bool last_raw_state = false;
-    static uint32_t debounce_start = 0;
-    static bool debounced_state = false;
-
+    // Simple debounce - only consider stable readings (state lives in members,
+    // see button.hpp — function-local statics would be shared across instances)
+    // 単純デバウンス - 安定した読みのみ採用（状態はメンバ。button.hpp 参照 —
+    // 関数ローカル static はインスタンス間で共有されてしまう）
     uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     // If raw state changed, start debounce timer
-    if (raw_pressed != last_raw_state) {
-        debounce_start = now;
-        last_raw_state = raw_pressed;
+    if (raw_pressed != debounce_last_raw_) {
+        debounce_start_ms_ = now;
+        debounce_last_raw_ = raw_pressed;
     }
 
     // Only update debounced state after debounce period
-    if ((now - debounce_start) >= config_.debounce_ms) {
-        debounced_state = raw_pressed;
+    if ((now - debounce_start_ms_) >= config_.debounce_ms) {
+        debounced_state_ = raw_pressed;
     }
 
-    bool pressed = debounced_state;
+    bool pressed = debounced_state_;
 
     if (pressed && !was_pressed_) {
         // Button just pressed

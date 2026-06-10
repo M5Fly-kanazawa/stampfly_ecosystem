@@ -29,6 +29,7 @@
  */
 
 #include <cstdio>     // DIAG printf (temporary)
+#include <atomic>     // s_imu_spi_init_done (FlowTask SPI-init serialization)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -125,6 +126,23 @@ static sf::IEstimator* createEstimator()
 /// @design architecture.md §6 — Component encapsulation, no globals    [OK]
 /// @design coding_and_education.md §3 — No global singletons            [OK]
 static stampfly::BMI270Wrapper imu_wrapper;
+
+/// Set once the BMI270 init on the shared SPI bus has finished (success OR
+/// terminal failure). FlowTask polls this via sf::tasks::imu_spi_init_done()
+/// before touching the bus — see tasks.hpp for the CS/MISO race rationale.
+/// Plain atomic (no board dependency) because this source is shared with the
+/// partial SIL test programs that do not link sf_board.
+/// 共有 SPI バス上の BMI270 初期化が終わったら set（成功・確定失敗とも）。FlowTask は
+/// バスに触れる前に sf::tasks::imu_spi_init_done() でこれをポーリングする — CS/MISO
+/// 競合の理由は tasks.hpp 参照。sf_board をリンクしない部分 SIL 試験プログラムと
+/// ソース共有のため、board 依存のない素の atomic で表現する。
+static std::atomic<bool> s_imu_spi_init_done{false};
+
+namespace sf {
+namespace tasks {
+bool imu_spi_init_done() { return s_imu_spi_init_done.load(std::memory_order_acquire); }
+}  // namespace tasks
+}  // namespace sf
 
 /// Last cached temperature [°C], updated every TEMPERATURE_READ_INTERVAL cycles
 /// 最後にキャッシュした温度 [°C]、TEMPERATURE_READ_INTERVAL サイクルごとに更新
@@ -563,6 +581,13 @@ void ImuTask(void* pvParameters)
     auto imu_cfg = stampfly::BMI270Wrapper::Config::defaultStampFly();
     imu_cfg.skip_bus_init = true;
     esp_err_t imu_init_result = imu_wrapper.init(imu_cfg);
+
+    // Release FlowTask: the shared SPI bus is no longer mid-init (success or
+    // failure alike — what matters is that BMI270 transactions are not in flight).
+    // FlowTask を解放: 共有 SPI バスは初期化中ではなくなった（成功・失敗を問わず、
+    // BMI270 のトランザクションが飛んでいないことが重要）。
+    s_imu_spi_init_done.store(true, std::memory_order_release);
+
     if (imu_init_result != ESP_OK) {
         // IMU is Critical (R4, hardware_init.md §5): no attitude estimation means
         // no flight. Do NOT vTaskDelete and let the rest of the system limp —

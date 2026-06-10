@@ -41,6 +41,7 @@
 #include "esp_timer.h"
 
 #include "topics.hpp"
+#include "tasks.hpp"
 #include "config.hpp"
 #include "sf_board.hpp"
 #include "pmw3901_wrapper.hpp"
@@ -78,6 +79,31 @@ static std::unique_ptr<stampfly::PMW3901> g_flow;
 void FlowTask(void* /*pvParameters*/)
 {
     ESP_LOGI(TAG, "FlowTask started");
+
+    // -------------------------------------------------------------------
+    // Wait for the BMI270 init to finish before touching the shared SPI bus.
+    // Both init sequences manipulate chip-select lines at GPIO level from
+    // different cores; a PMW3901 CS pulse inside a BMI270 init transaction
+    // makes both slaves drive MISO (corrupted reads, intermittent IMU init
+    // failure). Serializing removes the race by construction. The timeout is
+    // a liveness guard: if ImuTask halted (Critical IMU failure), proceed —
+    // the bus is quiet in that case anyway.
+    // 共有 SPI バスに触れる前に BMI270 の初期化完了を待つ。両者の init は別コアから
+    // CS を GPIO レベルで操作し、BMI270 の init トランザクション中に PMW3901 の CS
+    // パルスが重なると両スレーブが MISO を駆動（読み値化け・IMU init の間欠失敗）。
+    // 直列化で競合を構造的に排除する。タイムアウトは生存性の保険: ImuTask が停止
+    // （IMU の Critical 失敗）した場合は先へ進む — その場合バスは静かである。
+    // -------------------------------------------------------------------
+    constexpr TickType_t kImuWaitPollTicks  = pdMS_TO_TICKS(10);
+    constexpr int        kImuWaitMaxPolls   = 500;   // 5 s liveness guard
+    for (int polls = 0;
+         !sf::tasks::imu_spi_init_done() && polls < kImuWaitMaxPolls;
+         ++polls) {
+        vTaskDelay(kImuWaitPollTicks);
+    }
+    if (!sf::tasks::imu_spi_init_done()) {
+        ESP_LOGW(TAG, "IMU init wait timed out — proceeding (bus assumed quiet)");
+    }
 
     // -------------------------------------------------------------------
     // Setup: construct PMW3901 (skip_bus_init=true, sf_board owns the bus)

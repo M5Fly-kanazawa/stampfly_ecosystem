@@ -87,6 +87,15 @@ private:
     uint32_t press_start_time_ = 0;
     bool long_press_3s_triggered_ = false;
     bool long_press_5s_triggered_ = false;
+
+    // Debounce state — per-instance members, NOT function-local statics in
+    // tick(): statics would be shared across all Button instances, cross-wiring
+    // their debounce histories.
+    // デバウンス状態 — インスタンスごとのメンバ（tick() 内の関数ローカル static に
+    // しない）: static だと全 Button インスタンスで共有され、デバウンス履歴が混線する。
+    bool     debounce_last_raw_  = false;
+    uint32_t debounce_start_ms_  = 0;
+    bool     debounced_state_    = false;
 };
 
 }  // namespace stampfly

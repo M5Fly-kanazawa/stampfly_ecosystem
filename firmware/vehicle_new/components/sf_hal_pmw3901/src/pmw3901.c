@@ -388,7 +388,15 @@ esp_err_t pmw3901_init(pmw3901_t *dev, const pmw3901_config_t *config)
     ret = spi_bus_add_device(config->spi_host, &dev_cfg, &dev->spi_handle);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add SPI device: %s", esp_err_to_name(ret));
-        spi_bus_free(config->spi_host);
+        // Free the bus only if WE initialized it (R1 ownership): with
+        // skip_bus_init the bus belongs to sf_board and is shared with the
+        // BMI270 — freeing it here would tear it down under the IMU.
+        // バスを free するのは「自分が init した場合」のみ（R1 所有権）:
+        // skip_bus_init のときバスは sf_board 所有で BMI270 と共有 — ここで
+        // free すると IMU の足元からバスを破壊してしまう。
+        if (!config->skip_bus_init) {
+            spi_bus_free(config->spi_host);
+        }
         return ret;
     }
     ESP_LOGI(TAG, "  SPI device: OK");

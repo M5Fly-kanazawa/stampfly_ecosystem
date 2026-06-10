@@ -39,6 +39,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "driver/gpio.h"   // front-ToF XSHUT hold-low / 前方ToF XSHUT固定
 
 #include "topics.hpp"
 #include "config.hpp"
@@ -82,6 +83,24 @@ void TofTask(void* /*pvParameters*/)
     ESP_LOGI(TAG, "TofTask started");
 
     // -------------------------------------------------------------------
+    // Hold the (unsupported) FRONT ToF in reset before touching the bottom
+    // sensor. Both VL53L3CX parts power up at the same I2C address 0x29; if
+    // the front sensor is awake, the SetDeviceAddress below reaches BOTH and
+    // the two sensors alias — ranging data becomes an interleaved mix. The
+    // dual-sensor bring-up sequence (XSHUT-staggered re-addressing) belongs
+    // here when front-ToF support lands.
+    // 底面センサに触れる前に（未サポートの）前方 ToF をリセット保持する。VL53L3CX は
+    // 2 個とも同じ I2C アドレス 0x29 で起動するため、前方が生きていると下の
+    // SetDeviceAddress が両方に届いて 2 センサが混線し、測距データが交互に混ざる。
+    // 前方 ToF 対応時は XSHUT を時差解除する 2 センサ起動手順をここに実装する。
+    // -------------------------------------------------------------------
+    gpio_config_t xshut_front = {};
+    xshut_front.pin_bit_mask = 1ULL << config::GPIO_TOF_XSHUT_FRONT;
+    xshut_front.mode         = GPIO_MODE_OUTPUT;
+    gpio_config(&xshut_front);
+    gpio_set_level(static_cast<gpio_num_t>(config::GPIO_TOF_XSHUT_FRONT), 0);
+
+    // -------------------------------------------------------------------
     // Setup: borrow I2C bus from BSP and initialise the VL53L3CX driver
     // セットアップ: BSP から I2C バスを借用し VL53L3CX ドライバを初期化
     // -------------------------------------------------------------------
@@ -94,7 +113,7 @@ void TofTask(void* /*pvParameters*/)
         ESP_LOGE(TAG, "VL53L3CX bottom init failed: %s — task aborting",
                  esp_err_to_name(init_result));
         sf::internal::board::set_sensor_present(
-            sf::internal::board::SensorId::FrontToF, false);
+            sf::internal::board::SensorId::BottomToF, false);
         vTaskDelete(NULL);
         return;
     }
@@ -106,14 +125,14 @@ void TofTask(void* /*pvParameters*/)
         ESP_LOGE(TAG, "VL53L3CX startRanging failed: %s — task aborting",
                  esp_err_to_name(range_result));
         sf::internal::board::set_sensor_present(
-            sf::internal::board::SensorId::FrontToF, false);
+            sf::internal::board::SensorId::BottomToF, false);
         vTaskDelete(NULL);
         return;
     }
     // ToF up and ranging — report presence for the sensor_health snapshot (R15).
     // ToF 起動・測距開始 — sensor_health 用に presence を報告 (R15)。
     sf::internal::board::set_sensor_present(
-        sf::internal::board::SensorId::FrontToF, true);
+        sf::internal::board::SensorId::BottomToF, true);
     ESP_LOGI(TAG, "VL53L3CX bottom ready (continuous ranging at ~30Hz)");
 
     TickType_t last_wake = xTaskGetTickCount();
@@ -153,7 +172,7 @@ void TofTask(void* /*pvParameters*/)
             // Report freshness to the BSP for the 1 Hz sensor_health snapshot (R15).
             // 1Hz の sensor_health 用に鮮度を BSP へ報告する (R15)。
             sf::internal::board::set_sensor_update(
-                sf::internal::board::SensorId::FrontToF, now_us);
+                sf::internal::board::SensorId::BottomToF, now_us);
         } else if (cycle_count - last_fail_log_cycle >= kReadFailLogIntervalCycles) {
             ESP_LOGW(TAG, "getDistance failed: %s", esp_err_to_name(err));
             last_fail_log_cycle = cycle_count;

@@ -44,6 +44,13 @@ BMM150::~BMM150()
 
 esp_err_t BMM150::init(const Config& config)
 {
+    // Re-init guard: a second init would add a duplicate device handle to the
+    // I2C bus and leak the old one (same convention as the VL53/LED HALs).
+    // 再init ガード: 2回目の init は I2C バスへ重複ハンドルを追加し旧ハンドルが
+    // リークする（VL53/LED HAL と同じ流儀）。
+    if (initialized_) {
+        return ESP_ERR_INVALID_STATE;
+    }
     config_ = config;
     esp_err_t ret;
 
@@ -146,6 +153,20 @@ esp_err_t BMM150::read(MagData& data)
     const float chip_x = compensateX(raw.x, raw.rhall);
     const float chip_y = compensateY(raw.y, raw.rhall);
     const float chip_z = compensateZ(raw.z, raw.rhall);
+
+    // Saturation guard: the Bosch compensation returns NaN on sensor overflow
+    // (magnetic saturation — realistic near high motor currents). A NaN must
+    // never leave the driver: one NaN entering a Kalman update poisons the
+    // whole state/covariance irrecoverably. Report "no data" instead.
+    // 飽和ガード: Bosch の補償はセンサオーバーフロー時に NaN を返す（磁気飽和 —
+    // モータ大電流の近傍で現実に起こる）。NaN をドライバの外に出してはならない:
+    // Kalman 更新に NaN が1つ入ると状態・共分散全体が回復不能に汚染される。
+    // 代わりに「データなし」として報告する。
+    if (!std::isfinite(chip_x) || !std::isfinite(chip_y) || !std::isfinite(chip_z)) {
+        data.data_ready = false;
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
     data.x = -chip_y;   // body forward (FRD X)
     data.y =  chip_x;   // body right   (FRD Y)
     data.z =  chip_z;   // body down    (FRD Z)

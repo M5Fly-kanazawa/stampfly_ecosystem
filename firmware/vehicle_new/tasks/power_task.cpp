@@ -87,7 +87,7 @@ sf::SensorHealth buildSensorHealth(uint32_t now_us)
         {SensorId::Imu,   sf::sensor_imu.latest().timestamp,        true},
         {SensorId::Mag,   board::sensor_last_update_us(BoardId::Mag),      board::sensor_present(BoardId::Mag)},
         {SensorId::Baro,  board::sensor_last_update_us(BoardId::Baro),     board::sensor_present(BoardId::Baro)},
-        {SensorId::Tof,   board::sensor_last_update_us(BoardId::FrontToF), board::sensor_present(BoardId::FrontToF)},
+        {SensorId::Tof,   board::sensor_last_update_us(BoardId::BottomToF), board::sensor_present(BoardId::BottomToF)},
         {SensorId::Flow,  board::sensor_last_update_us(BoardId::Flow),     board::sensor_present(BoardId::Flow)},
         {SensorId::Power, board::sensor_last_update_us(BoardId::Power),    board::sensor_present(BoardId::Power)},
     };
