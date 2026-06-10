@@ -100,12 +100,13 @@ void MagTask(void* /*pvParameters*/)
     uint32_t cycle_count = 0;
     uint32_t last_fail_log_cycle = 0;
 
-    // Outcome counters, reported every ~10s: distinguishes "no new sample yet"
-    // (DRDY low — expected some of the time) from NaN overflow drops and I2C
-    // errors. Diagnoses the mag delivery rate directly on hardware.
-    // 結果カウンタ（約10秒毎に報告）: 「新サンプル未着」（DRDY low — ある程度は
-    // 想定内）と NaN（オーバーフロー）破棄・I2C エラーを区別する。実機で mag の
-    // 取得レートを直接診断できる。
+    // Outcome counters, reported once a minute (permanent health watermark,
+    // same philosophy as the ImuTask load line): distinguishes "no new sample
+    // yet" (DRDY low) from NaN overflow drops and I2C errors. This counter
+    // found two real hardware bugs (ODR mismatch, missing DRDY gate).
+    // 結果カウンタ（毎分1回の恒久健全性ログ。ImuTask の負荷ログと同じ思想）:
+    // 「新サンプル未着」（DRDY low）と NaN（オーバーフロー）破棄・I2C エラーを
+    // 区別する。このカウンタが実機バグを2件（ODR不整合・DRDYゲート欠落）発見した。
     uint32_t diag_ok = 0, diag_nodata = 0, diag_nan = 0, diag_err = 0;
 
     while (true) {
@@ -122,8 +123,8 @@ void MagTask(void* /*pvParameters*/)
         } else {
             ++diag_err;
         }
-        if ((cycle_count % 250u) == 0u) {   // ~10 s at 25Hz
-            ESP_LOGI(TAG, "mag 10s: ok=%lu nodata=%lu nan=%lu err=%lu",
+        if ((cycle_count % 1500u) == 0u) {   // ~60 s at 25Hz
+            ESP_LOGI(TAG, "mag 60s: ok=%lu nodata=%lu nan=%lu err=%lu",
                      static_cast<unsigned long>(diag_ok),
                      static_cast<unsigned long>(diag_nodata),
                      static_cast<unsigned long>(diag_nan),
