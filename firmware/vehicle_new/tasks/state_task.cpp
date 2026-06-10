@@ -203,6 +203,17 @@ static void registerStateCallbacks(sf::StateManager& manager)
                     {static_cast<uint8_t>(sf::NotifyEvent::ArmTone), now});
             }
             break;
+        case FlightState::LANDING:
+            // Autonomous landing: tell the controller to take over (level attitude
+            // + fixed descent, sticks ignored). Same "WHEN = state machine, HOW =
+            // controller" split as the reset consolidation (architecture §4). The
+            // landing override is cleared by the controller Reset at the next ARM.
+            // 自動着陸: 制御器に引き継ぎを指示（水平姿勢＋固定降下、スティック無視）。
+            // reset 集約と同じ「いつ=状態機械、どう=制御器」の分担（architecture §4）。
+            // 着陸上書きは次の ARM の controller Reset で解除される。
+            sf::controller_command.publish(
+                {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now});
+            break;
         // TAKEOFF → FLYING needs no class-A reset here. The "ESKF position/velocity reset"
         // of detailed_design §3 is the timing-critical ToF-synced vertical handoff (class B,
         // ImuTask::applyVerticalGroundHandoff) — a ~20 ms-late reset via this callback

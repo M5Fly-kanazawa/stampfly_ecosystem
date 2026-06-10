@@ -114,6 +114,22 @@ public:
     ///
     /// @param new_mode The new flight mode / 新しいフライトモード
     virtual void onModeChange(FlightMode new_mode) = 0;
+
+    // =========================================================================
+    // Autonomous Landing
+    // 自動着陸
+    // =========================================================================
+
+    /// Enter autonomous landing: level attitude + fixed descent rate, pilot
+    /// sticks ignored. Issued via ControllerCmd::Landing when the StateManager
+    /// enters LANDING (comm loss, battery emergency). The landing override is
+    /// cleared by the next reset() (the ARM of the next flight). Default no-op
+    /// so simple teaching controllers are not forced to implement it.
+    /// 自動着陸開始: 水平姿勢＋固定降下率でパイロットスティックは無視。StateManager
+    /// が LANDING に入ると ControllerCmd::Landing 経由で呼ばれる（通信断・電池緊急）。
+    /// 着陸オーバーライドは次の reset()（次飛行の ARM）で解除される。教育用の単純な
+    /// 制御器に実装を強制しないよう既定は no-op。
+    virtual void onLanding() {}
 };
 
 }  // namespace sf

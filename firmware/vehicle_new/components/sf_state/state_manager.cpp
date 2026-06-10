@@ -319,9 +319,21 @@ void StateManager::handleAlert(const SystemAlert& alert)
             break;
 
         case AlertType::LOW_BATTERY:
-            // Low battery → warning only (buzzer handled by notification)
-            // 低電圧 → 警告のみ（ブザーは通知コンポーネントが処理）
-            ESP_LOGW(TAG, "Low battery warning");
+            // WARNING (3.4V): notification only (buzzer via NotifyTask).
+            // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
+            // NOW. Same Landing-verb path as the comm-loss auto-land (the
+            // onEnter(LANDING) callback engages the controller's descent).
+            // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
+            // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
+            // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
+            // 制御器の降下を発動する）。
+            if (static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY &&
+                isAirborne(state_) && state_ != FlightState::LANDING) {
+                ESP_LOGE(TAG, "Battery emergency → LANDING");
+                transition(FlightState::LANDING);
+            } else {
+                ESP_LOGW(TAG, "Low battery warning");
+            }
             break;
 
         case AlertType::USB_POWER:

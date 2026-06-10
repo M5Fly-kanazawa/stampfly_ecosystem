@@ -99,6 +99,15 @@ ControlOutput PidController::compute(
     const CommandSetpoint& setpoint,
     float dt)
 {
+    // Autonomous landing overrides the whole pipeline: the trigger conditions
+    // (comm loss, battery emergency) mean the pilot setpoint is stale or must
+    // be ignored. See computeLanding().
+    // 自動着陸はパイプライン全体を上書きする: 発動条件（通信断・電池緊急）では
+    // パイロット setpoint は stale か無視すべきもの。computeLanding() 参照。
+    if (landing_) {
+        return computeLanding(state, dt);
+    }
+
     ControlOutput output = {};
     output.timestamp = state.timestamp;
 
@@ -251,6 +260,68 @@ void PidController::computePositionHold(const StateEstimate& state, float yaw,
     roll_sp  = clampTilt( ay_body / gravity_);
 }
 
+// -----------------------------------------------------------------------------
+// computeLanding — autonomous landing: level attitude + fixed descent rate.
+// Structure: STABILIZE attitude loop with zero tilt setpoints and zero yaw rate
+// (no dependence on the stale sticks), plus the ALT_HOLD velocity loop tracking
+// a constant downward velocity. Touchdown is detected by the ToF landing
+// detector (TakeoffLandingMgr) which drives LANDING → IDLE_GROUND → disarm.
+// computeLanding — 自動着陸: 水平姿勢＋固定降下率。
+// 構成: 傾き指令ゼロ・ヨーレートゼロの STABILIZE 姿勢ループ（stale なスティックに
+// 依存しない）＋ 一定の下向き速度を追従する ALT_HOLD の速度ループ。接地は ToF の
+// 着陸検出（TakeoffLandingMgr）が捉え、LANDING → IDLE_GROUND → disarm が進む。
+// -----------------------------------------------------------------------------
+ControlOutput PidController::computeLanding(const StateEstimate& state, float dt)
+{
+    ControlOutput output = {};
+    output.timestamp = state.timestamp;
+
+    // Level-attitude cascade: tilt setpoints = 0 → rate setpoints.
+    // 水平姿勢カスケード: 傾き指令 0 → レート指令。
+    math::Quat q(state.attitude[0], state.attitude[1],
+                 state.attitude[2], state.attitude[3]);
+    math::Vec3 euler = q.to_euler();
+    const float rate_sp_roll  = att_roll_.compute(0.0f - euler.x, dt);
+    const float rate_sp_pitch = att_pitch_.compute(0.0f - euler.y, dt);
+    const float rate_sp_yaw   = 0.0f;   // hold heading / 方位保持
+
+    // Vertical: track a constant descent (up-positive velocity = −descent rate).
+    // 鉛直: 一定降下を追従（上正の速度 = −降下率）。
+    const float vel_up = -state.velocity[2];            // NED z-down → up-positive
+    const float thrust_correction =
+        alt_vel_.compute(-landing_descent_rate_ - vel_up, dt);
+    float thrust = hover_thrust_ + thrust_correction;
+    if (thrust < 0.0f)        thrust = 0.0f;
+    if (thrust > max_thrust_) thrust = max_thrust_;
+
+    // Innermost rate loop (same as the normal path).
+    // 最内レートループ（通常経路と同じ）。
+    output.torque[0] = rate_roll_.compute(rate_sp_roll - state.angular_rate[0], dt);
+    output.torque[1] = rate_pitch_.compute(rate_sp_pitch - state.angular_rate[1], dt);
+    output.torque[2] = rate_yaw_.compute(rate_sp_yaw - state.angular_rate[2], dt);
+    output.thrust = thrust;
+    return output;
+}
+
+void PidController::onLanding()
+{
+    if (landing_) {
+        return;   // already landing (idempotent) / 既に着陸中（冪等）
+    }
+    ESP_LOGW(TAG, "Autonomous landing engaged (%.1f m/s descent)",
+             static_cast<double>(landing_descent_rate_));
+    landing_ = true;
+
+    // Fresh start for the loops the landing path uses: the attitude loops may
+    // carry integrator state from a different mode, and the vertical loop may
+    // have wound up against a saturated climb.
+    // 着陸経路が使うループを仕切り直す: 姿勢ループは別モードの積分状態を、鉛直ループは
+    // 飽和上昇に対する巻き上がりを抱えている可能性がある。
+    att_roll_.reset();
+    att_pitch_.reset();
+    alt_vel_.reset();
+}
+
 void PidController::reset()
 {
     rate_roll_.reset();  rate_pitch_.reset();  rate_yaw_.reset();
@@ -258,6 +329,7 @@ void PidController::reset()
     alt_pos_.reset();    alt_vel_.reset();
     pos_x_.reset();      pos_y_.reset();
     vel_x_.reset();      vel_y_.reset();
+    landing_ = false;    // landing override ends with the flight / 着陸上書きは飛行と共に終了
     ESP_LOGI(TAG, "PID controller reset");
 }
 

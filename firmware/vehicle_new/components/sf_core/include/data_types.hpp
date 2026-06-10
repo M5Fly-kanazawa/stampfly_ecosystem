@@ -391,6 +391,11 @@ enum class ControllerCmd : uint8_t {
     Reset       = 1,   // reset all integrators/filters (ARM)          / 全積分器・フィルタリセット
     ResetAltPos = 2,   // reset altitude/position loops (mode exit)    / 高度・位置ループのみリセット
     ModeChange  = 3,   // flight-mode switch: reconfigure + reset loops / モード切替: 再構成+ループreset
+    Landing     = 4,   // autonomous landing: level attitude + fixed descent,
+                       // sticks ignored (comm loss / battery emergency);
+                       // cleared by the next Reset (ARM)
+                       // 自動着陸: 水平姿勢+固定降下率でスティック無視
+                       // （通信断/電池緊急）。次の Reset（ARM）で解除
 };
 
 /// Controller command — ControlTask consumes and applies to the active IController

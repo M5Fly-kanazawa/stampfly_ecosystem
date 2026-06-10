@@ -100,6 +100,13 @@ static void processControllerCommands(sf::IController& controller)
             // Phase 2: 高度/位置のみリセット（soft landing/FLYING退出）。現状 no-op
             // （後続 ARM が full Reset を出す）。soft-landing と共に配線。
             break;
+        case sf::ControllerCmd::Landing:
+            // Autonomous landing (comm loss / battery emergency): the controller
+            // switches to level-attitude + fixed-descent and ignores the sticks.
+            // 自動着陸（通信断/電池緊急）: 制御器は水平姿勢＋固定降下に切り替わり
+            // スティックを無視する。
+            controller.onLanding();
+            break;
         default:
             break;
         }

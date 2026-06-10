@@ -34,10 +34,15 @@ public:
 
     void reset() override;
     void onModeChange(FlightMode new_mode) override;
+    void onLanding() override;
 
 private:
     /// Load PID gains from parameter system / パラメータからゲインを読み込み
     void loadParams();
+
+    /// Autonomous-landing control: level attitude + fixed descent rate.
+    /// 自動着陸制御: 水平姿勢＋固定降下率。
+    ControlOutput computeLanding(const StateEstimate& state, float dt);
 
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
@@ -100,6 +105,18 @@ private:
     // ヨー: 同じ差動 × トルク/推力比 κ = 0.00971 m（actuator.cpp）。
     float max_roll_pitch_torque_ = 0.0077f;  // [Nm] = 2·0.168 N · 0.023 m
     float max_yaw_torque_        = 0.0033f;  // [Nm] = 2·0.168 N · 0.00971 m
+
+    // Autonomous landing (ControllerCmd::Landing). While landing_ is set the
+    // controller ignores the pilot setpoint entirely — the trigger conditions
+    // (comm loss, battery emergency) mean the sticks are stale or unreliable.
+    // Cleared by reset() (the next ARM). 0.3 m/s ≈ gentle indoor descent; the
+    // ToF landing detector (TakeoffLandingMgr) ends the state at touchdown.
+    // 自動着陸（ControllerCmd::Landing）。landing_ 中はパイロット setpoint を完全に
+    // 無視する — 発動条件（通信断・電池緊急）はスティックが stale か信頼できない状況。
+    // reset()（次の ARM）で解除。0.3 m/s は屋内の穏やかな降下率で、接地は ToF の
+    // 着陸検出（TakeoffLandingMgr）が状態を終わらせる。
+    bool  landing_              = false;
+    float landing_descent_rate_ = 0.3f;   // [m/s] downward / 下向き降下率
 };
 
 }  // namespace sf
