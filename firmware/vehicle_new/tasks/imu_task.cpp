@@ -237,9 +237,10 @@ static void processAsyncSensors()
         // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
         // 関数に保つ（マネージャ内でトピックを読まない）。
         g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2]);
-        snap.tof_distance = tof.distance;
-        snap.tof_status   = tof.status;
-        snap.tof_valid    = tof.valid;
+        snap.tof_distance  = tof.distance;
+        snap.tof_status    = tof.status;
+        snap.tof_valid     = tof.valid;
+        snap.tof_timestamp = tof.timestamp;   // per-sensor stamp for the Data Stream / Data Stream 用センサ別時刻
         snap_dirty = true;
     }
 
@@ -247,6 +248,7 @@ static void processAsyncSensors()
     while (sf::sensor_flow.read(flow)) {
         g_estimator->updateFlow(flow);
         snap.flow_dx = flow.dx; snap.flow_dy = flow.dy; snap.flow_squal = flow.squal;
+        snap.flow_timestamp = flow.timestamp;
         snap_dirty = true;
     }
 
@@ -254,6 +256,7 @@ static void processAsyncSensors()
     while (sf::sensor_mag.read(mag)) {
         g_estimator->updateMag(mag);
         snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
+        snap.mag_timestamp = mag.timestamp;
         snap_dirty = true;
     }
 
@@ -261,6 +264,7 @@ static void processAsyncSensors()
     while (sf::sensor_baro.read(baro)) {
         g_estimator->updateBaro(baro);
         snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
+        snap.baro_timestamp = baro.timestamp;
         snap_dirty = true;
     }
 

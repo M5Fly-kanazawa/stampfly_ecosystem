@@ -34,6 +34,7 @@
 #include "sf_math.hpp"
 #include "eskf_core.hpp"
 #include "pid.hpp"
+#include "data_stream_wire.hpp"   // Data Stream wire layout (vs udp_capture.py)
 
 // =============================================================================
 // Test framework (minimal)
@@ -341,6 +342,139 @@ TEST(pid_output_limit)
 // Main
 // =============================================================================
 
+// =============================================================================
+// Data Stream wire-format tests — the byte layout is the contract with the PC
+// parser (tools/log_analyzer/udp_capture.py); these assert the exact offsets
+// and the XOR checksum the parser verifies.
+// Data Stream 電文テスト — バイトレイアウトは PC 側パーサ（udp_capture.py）との
+// 契約。パーサが検証するオフセットと XOR チェックサムを正確に assert する。
+// =============================================================================
+
+TEST(wire_unified_layout)
+{
+    using namespace sf::datastream;
+
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    for (int i = 0; i < kSamplesPerPacket; ++i) {
+        samples[i].timestamp    = 1000u + static_cast<uint32_t>(i);
+        samples[i].gyro[0]      = 0.5f;
+        samples[i].accel[2]     = -9.8f;
+        samples[i].quat[0]      = 1.0f;
+        samples[i].gyro_bias[1] = 0.0123f;     // → int16 123
+        samples[i].pos[2]       = -0.8f;
+        samples[i].vel[0]       = 0.25f;
+        samples[i].rate_ref[2]  = -1.234f;     // → int16 -1234
+    }
+
+    UnifiedPacketBuilder builder;
+    builder.begin(7, samples);
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+
+    // Fixed part: header 4 + 8*80 + 8*28 + 8*6 + entry_count 1 + checksum 1 = 918.
+    // 固定部: ヘッダ4 + 8*80 + 8*28 + 8*6 + entry_count 1 + checksum 1 = 918。
+    ASSERT_TRUE(length == 4 + 8 * 80 + 8 * 28 + 8 * 6 + 1 + 1);
+
+    // Header: pkt_id 0x50, seq=7 (LE u16), count=8 — udp_capture FMT_HEADER '<B H B'.
+    ASSERT_TRUE(buf[0] == 0x50);
+    ASSERT_TRUE(buf[1] == 7 && buf[2] == 0);
+    ASSERT_TRUE(buf[3] == 8);
+
+    // ImuEskf block starts at 4; sample 0 timestamp little-endian = 1000.
+    uint32_t ts;
+    memcpy(&ts, &buf[4], 4);
+    ASSERT_TRUE(ts == 1000u);
+
+    // PosVel block starts at 4 + 640 = 644 (udp_capture offset arithmetic).
+    memcpy(&ts, &buf[644], 4);
+    ASSERT_TRUE(ts == 1000u);
+    float pos_z;
+    memcpy(&pos_z, &buf[644 + 4 + 8], 4);
+    ASSERT_NEAR(pos_z, -0.8f, 1e-6f);
+
+    // RateRef block starts at 644 + 224 = 868; yaw int16 = −1234 (×1000).
+    int16_t rate_yaw;
+    memcpy(&rate_yaw, &buf[868 + 4], 2);
+    ASSERT_TRUE(rate_yaw == -1234);
+
+    // entry_count at 868 + 48 = 916; zero entries in this build.
+    ASSERT_TRUE(buf[916] == 0);
+
+    // Gyro bias quantization: 0.0123 × 10000 = 123 (int16 at imu offset 68+2).
+    int16_t bias;
+    memcpy(&bias, &buf[4 + 68 + 2], 2);
+    ASSERT_TRUE(bias == 123);
+
+    // XOR checksum: parser computes xor(buf[0..len-2]) == buf[len-1].
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+}
+
+TEST(wire_unified_entries)
+{
+    using namespace sf::datastream;
+
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    UnifiedPacketBuilder builder;
+    builder.begin(0, samples);
+
+    WireControl control = {};
+    control.timestamp_us = 42;
+    control.throttle     = 0.5f;
+    ASSERT_TRUE(builder.addEntry(kPktControl, &control, sizeof(control)));
+
+    WireCtrlRef ctrl_ref = {};
+    ctrl_ref.flight_mode = 2;   // ALT_HOLD
+    ASSERT_TRUE(builder.addEntry(kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref)));
+
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+
+    // entry_count = 2; first entry [id][size][payload] right after it.
+    ASSERT_TRUE(buf[916] == 2);
+    ASSERT_TRUE(buf[917] == kPktControl && buf[918] == sizeof(WireControl));
+    uint32_t ts;
+    memcpy(&ts, &buf[919], 4);
+    ASSERT_TRUE(ts == 42u);
+
+    // Second entry follows the first; CtrlRef data_size 30 selects v3 on the PC.
+    const size_t second = 919 + sizeof(WireControl);
+    ASSERT_TRUE(buf[second] == kPktCtrlRef && buf[second + 1] == 30);
+
+    ASSERT_TRUE(length == 917 + 2 + sizeof(WireControl) + 2 + sizeof(WireCtrlRef) + 1);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+}
+
+TEST(wire_status_packet)
+{
+    using namespace sf::datastream;
+
+    WireStatusPayload payload = {};
+    payload.uptime_ms    = 5000;
+    payload.voltage      = 4.1f;
+    payload.flight_state = 1;
+    payload.pid_gains[0] = 1.83e-4f;
+
+    uint8_t buf[64];
+    const size_t length = buildStatusPacket(buf, 3, payload);
+
+    // 53 bytes total — the size udp_capture.py expects for 0x4F with gains.
+    ASSERT_TRUE(length == 53);
+    ASSERT_TRUE(buf[0] == kPktStatus);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+
+    float volt;
+    memcpy(&volt, &buf[4 + 4], 4);
+    ASSERT_NEAR(volt, 4.1f, 1e-6f);
+}
+
+TEST(wire_quantize_saturation)
+{
+    using namespace sf::datastream;
+    ASSERT_TRUE(quantize(10.0f, 10000.0f) == 32767);     // saturate high
+    ASSERT_TRUE(quantize(-10.0f, 10000.0f) == -32767);   // saturate low
+    ASSERT_TRUE(quantize(0.5f, 1000.0f) == 500);
+}
+
 int main()
 {
     printf("=== vehicle_new Unit Tests ===\n\n");
@@ -368,6 +502,12 @@ int main()
     run_pid_integral();
     run_pid_reset();
     run_pid_output_limit();
+
+    printf("\n[DataStream wire]\n");
+    run_wire_unified_layout();
+    run_wire_unified_entries();
+    run_wire_status_packet();
+    run_wire_quantize_saturation();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

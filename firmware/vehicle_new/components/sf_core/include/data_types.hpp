@@ -102,7 +102,17 @@ struct SensorSnapshot {
     int16_t  flow_dx;         // Optical flow dx [counts] / フロー dx
     int16_t  flow_dy;         // Optical flow dy [counts] / フロー dy
     uint8_t  flow_squal;      // Flow surface quality     / フロー品質
-    uint32_t timestamp;       // [us]
+    // Per-sensor sample timestamps (the producing sensor's own stamp). The Data
+    // Stream uses a CHANGE in these to detect "new sample" per sensor — the
+    // shared snapshot timestamp below cannot tell which sensor updated.
+    // センサ別サンプル時刻（各センサ自身の刻印）。Data Stream はこの「変化」で
+    // センサ毎の新サンプルを検出する — 下の共有時刻ではどのセンサが更新したか
+    // 分からない。
+    uint32_t mag_timestamp;   // [us] last mag sample   / 最終 mag サンプル時刻
+    uint32_t baro_timestamp;  // [us] last baro sample  / 最終 baro サンプル時刻
+    uint32_t tof_timestamp;   // [us] last ToF sample   / 最終 ToF サンプル時刻
+    uint32_t flow_timestamp;  // [us] last flow sample  / 最終 flow サンプル時刻
+    uint32_t timestamp;       // [us] snapshot publish time / スナップショット発行時刻
 };
 
 // =============================================================================
@@ -214,7 +224,45 @@ struct ButtonEvent {
 struct ControlOutput {
     float thrust;         // Total thrust [N]      / 全推力
     float torque[3];      // Torque [Nm] R,P,Y     / トルク
+    // Cascade setpoints, exported for the Data Stream (analysis/identification:
+    // the rate-loop reference at the control rate is what closes the loop on paper).
+    // カスケードの目標値。Data Stream 用に公開（解析・同定では制御周期のレート目標が
+    // ループを机上で閉じるのに必要）。
+    float rate_ref[3];    // Inner-loop rate setpoint [rad/s] R,P,Y / 内側ループ角速度目標
+    float angle_ref[2];   // Outer-loop tilt setpoint [rad] R,P (0 in ACRO) / 外側ループ傾き目標
     uint32_t timestamp;   // [us]
+};
+
+// =============================================================================
+// Data Stream (requirements §7: analysis log at the CONTROL RATE)
+// データストリーム（要件§7: 制御周期の解析用ログ）
+// =============================================================================
+
+/// One consolidated 400Hz record for the Data Stream. ControlTask builds and
+/// publishes one per control cycle (it is the only place where the same cycle's
+/// IMU sample, estimate, and control setpoints are all in hand); the
+/// TelemetryTask drains the ring at 50Hz and batches 8 records per UDP packet
+/// (same wire format and bandwidth design as the proven firmware/vehicle:
+/// 50 sendto/s ≈ 48 KB/s).
+/// Data Stream 用の 400Hz 統合レコード。ControlTask が制御周期毎に 1 件組んで発行
+/// する（同一周期の IMU サンプル・推定値・制御目標が全て手元に揃う唯一の場所）。
+/// TelemetryTask が 50Hz でリングを排出し UDP 1 パケットに 8 件をバッチする
+/// （実証済み firmware/vehicle と同じ電文・帯域設計: 50 sendto/s ≈ 48KB/s）。
+struct LogStreamSample {
+    uint32_t timestamp;     // [us] IMU sample time          / IMU サンプル時刻
+    float gyro[3];          // [rad/s] raw gyro, body FRD    / 生ジャイロ
+    float accel[3];         // [m/s²] raw accel, body FRD    / 生加速度
+    float quat[4];          // estimator attitude [w,x,y,z]  / 推定姿勢
+    float gyro_bias[3];     // [rad/s] estimator gyro bias   / ジャイロバイアス推定
+    float accel_bias[3];    // [m/s²] estimator accel bias   / 加速度バイアス推定
+    float pos[3];           // [m] NED position estimate     / 位置推定
+    float vel[3];           // [m/s] NED velocity estimate   / 速度推定
+    float rate_ref[3];      // [rad/s] inner-loop setpoint   / 内側ループ角速度目標
+    float angle_ref[2];     // [rad] tilt setpoint R,P       / 傾き目標
+    float thrust;           // [N] commanded total thrust    / 指令総推力
+    float duty[4];          // motor duty FR,RR,RL,FL        / モータ duty
+    uint8_t flight_mode;    // FlightMode value              / フライトモード
+    uint8_t flight_state;   // FlightState value             / フライト状態
 };
 
 // =============================================================================

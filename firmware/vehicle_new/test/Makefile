@@ -10,7 +10,8 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -O2 \
     -I../components/sf_core/include \
     -I../components/sf_estimator/include \
     -I../components/sf_controller/include \
-    -I../components/sf_state/include
+    -I../components/sf_state/include \
+    -I../components/sf_telemetry/include
 
 SRCS = test_main.cpp \
        ../components/sf_estimator_eskf/eskf_core.cpp

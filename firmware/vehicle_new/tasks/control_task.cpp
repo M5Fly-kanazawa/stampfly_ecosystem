@@ -20,7 +20,7 @@
  * 制御出力を計算し、モーターdutyを発行する。
  *
  * @subscriber estimate_state, command_setpoint, controller_command, system_mode
- * @publisher control_output, actuator_motor
+ * @publisher control_output, actuator_motor, log_stream
  * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
  * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
  * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [OK]
@@ -61,6 +61,46 @@ TaskHandle_t control_handle() { return s_control_handle; }
 /// Controller instance
 /// コントローラインスタンス
 static sf::PidController controller;
+
+/// Build and publish the 400Hz Data Stream record. ControlTask is the one place
+/// where the SAME cycle's IMU sample, state estimate, control setpoints and motor
+/// duties are all in hand (ImuTask published them just before notifying us).
+/// Published every cycle, armed or not — ground data matters for analysis too.
+/// 400Hz Data Stream レコードを組んで発行する。ControlTask は「同一周期」の IMU
+/// サンプル・状態推定・制御目標・モータ duty が全部手元に揃う唯一の場所（ImuTask が
+/// 通知直前に発行済み）。armed/disarmed を問わず毎周期発行 — 地上データも解析に必要。
+///
+/// @design requirements.md §7 — Data Stream（解析用・全レート）          [OK]
+/// @design architecture.md §5 — ログフロー: Data Stream                  [OK]
+static void publishLogStream(const sf::ControlOutput& control, uint8_t state,
+                             uint8_t sub_mode)
+{
+    const sf::ImuData       imu   = sf::sensor_imu.latest();
+    const sf::StateEstimate est   = sf::estimate_state.latest();
+    const sf::MotorOutput   motor = sf::actuator_motor.latest();
+
+    sf::LogStreamSample sample = {};
+    sample.timestamp = imu.timestamp;
+    for (int i = 0; i < 3; ++i) {
+        sample.gyro[i]       = imu.gyro[i];
+        sample.accel[i]      = imu.accel[i];
+        sample.gyro_bias[i]  = est.gyro_bias[i];
+        sample.accel_bias[i] = est.accel_bias[i];
+        sample.pos[i]        = est.position[i];
+        sample.vel[i]        = est.velocity[i];
+        sample.rate_ref[i]   = control.rate_ref[i];
+    }
+    for (int i = 0; i < 4; ++i) {
+        sample.quat[i] = est.attitude[i];
+        sample.duty[i] = motor.duty[i];
+    }
+    sample.angle_ref[0]  = control.angle_ref[0];
+    sample.angle_ref[1]  = control.angle_ref[1];
+    sample.thrust        = control.thrust;
+    sample.flight_mode   = sub_mode;
+    sample.flight_state  = state;
+    sf::log_stream.publish(sample);
+}
 
 /// Actuator: X-quad mixer + motor output. Reads control_output and publishes
 /// per-motor duty on actuator_motor. The real mixer lives in sf_actuator;
@@ -235,6 +275,11 @@ void ControlTask(void* pvParameters)
                 }
                 actuator.disarm();
             }
+            // Data Stream keeps recording while disarmed (zero control record):
+            // ground data — at-rest sensor noise, handling — matters for analysis.
+            // disarm 中も Data Stream は記録を続ける（制御ゼロのレコード）:
+            // 静止時センサノイズやハンドリング等の地上データも解析に必要。
+            publishLogStream({}, mode.state, mode.sub_mode);
             continue;
         }
 
@@ -273,5 +318,14 @@ void ControlTask(void* pvParameters)
         // =====================================================================
 
         actuator.update();
+
+        // =====================================================================
+        // Step 5: Publish the 400Hz Data Stream record (after actuator.update()
+        // so actuator_motor.latest() carries THIS cycle's duties).
+        // Step 5: 400Hz Data Stream レコードを発行（actuator.update() の後に行い、
+        // actuator_motor.latest() が「この周期」の duty を持つようにする）。
+        // =====================================================================
+
+        publishLogStream(control, mode.state, mode.sub_mode);
     }
 }

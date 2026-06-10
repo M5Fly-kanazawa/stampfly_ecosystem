@@ -143,11 +143,17 @@ ControlOutput PidController::compute(
     // Attitude control (STABILIZE and above)
     // 姿勢制御（STABILIZE以上）
     // =========================================================================
+    // Tilt setpoints, kept in scope for the Data Stream export below (in
+    // POS_HOLD they are the position-cascade output, not the sticks).
+    // 傾き目標。下の Data Stream 出力用にスコープを広げて保持（POS_HOLD では
+    // スティックでなく位置カスケードの出力になる）。
+    float roll_sp  = 0.0f;
+    float pitch_sp = 0.0f;
     if (current_mode_ >= FlightMode::STABILIZE) {
         // Default: sticks command the tilt angle directly (STABILIZE).
         // 既定: スティックが傾き角を直接指令する（STABILIZE）。
-        float roll_sp  = setpoint.roll * max_angle_;
-        float pitch_sp = setpoint.pitch * max_angle_;
+        roll_sp  = setpoint.roll * max_angle_;
+        pitch_sp = setpoint.pitch * max_angle_;
 
         // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
         // craft holds its captured horizontal position instead of following sticks.
@@ -227,6 +233,16 @@ ControlOutput PidController::compute(
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch - gyro_rate.y, dt);
     output.torque[2] = rate_yaw_.compute(rate_sp_yaw - gyro_rate.z, dt);
     output.thrust = thrust;
+
+    // Export the cascade setpoints for the Data Stream (rate-loop reference at
+    // the control rate is required for identification/tuning analysis).
+    // カスケード目標値を Data Stream 用に出力（制御周期のレート目標は同定・
+    // チューニング解析に必須）。
+    output.rate_ref[0] = rate_sp_roll;
+    output.rate_ref[1] = rate_sp_pitch;
+    output.rate_ref[2] = rate_sp_yaw;
+    output.angle_ref[0] = roll_sp;    // POS_HOLD: cascade output / ACRO: 0
+    output.angle_ref[1] = pitch_sp;
 
     return output;
 }
@@ -312,6 +328,14 @@ ControlOutput PidController::computeLanding(const StateEstimate& state, float dt
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch - state.angular_rate[1], dt);
     output.torque[2] = rate_yaw_.compute(rate_sp_yaw - state.angular_rate[2], dt);
     output.thrust = thrust;
+
+    // Data Stream export (landing: level attitude target, attitude-loop rates).
+    // Data Stream 出力（着陸中: 水平姿勢目標、姿勢ループ由来のレート）。
+    output.rate_ref[0] = rate_sp_roll;
+    output.rate_ref[1] = rate_sp_pitch;
+    output.rate_ref[2] = rate_sp_yaw;
+    output.angle_ref[0] = 0.0f;
+    output.angle_ref[1] = 0.0f;
     return output;
 }
 

@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "telemetry.cpp"
+    SRCS "telemetry.cpp" "data_stream.cpp"
     INCLUDE_DIRS "include"
     # sf_core: topics + data types / トピックとデータ型
     # sf_math: quaternion-to-Euler / クォータニオン→オイラー角変換

@@ -72,6 +72,8 @@ extern Topic<ControlOutput,   Latest, 1>      control_output;
 // =============================================================================
 
 extern Topic<MotorOutput,     Latest, 1>      actuator_motor;
+extern Topic<LogStreamSample, RingBuffer, 32> log_stream;        // ControlTask 400Hz → TelemetryTask (Data Stream)
+                                                                 // Ring 32 = 80ms 分のバッファ（50Hz 排出のジッタ余裕）
 
 // =============================================================================
 // System Topics

@@ -47,6 +47,7 @@ Topic<PilotRequest,    Latest, 1>      pilot_request;
 Topic<ButtonEvent,     Queue, 4>       button_event;
 Topic<ControlOutput,   Latest, 1>      control_output;
 Topic<MotorOutput,     Latest, 1>      actuator_motor;
+Topic<LogStreamSample, RingBuffer, 32> log_stream;
 Topic<SystemMode,      Latest, 1>      system_mode;
 Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
@@ -76,6 +77,7 @@ void topics_init()
     button_event.init();
     control_output.init();
     actuator_motor.init();
+    log_stream.init();
     system_mode.init();
     system_alert.init();
     system_status.init();
