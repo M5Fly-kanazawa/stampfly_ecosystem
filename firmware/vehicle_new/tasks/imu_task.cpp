@@ -233,6 +233,13 @@ static void processAsyncSensors()
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
         g_estimator->updateFlow(flow);
+        // Mirror EVERY flow sample for the Data Stream: dx/dy are incremental
+        // (displacement since the previous read), so a latest()-style 50Hz peek
+        // would silently drop half the displacement — offline replay needs all.
+        // Data Stream 用に「全」フローサンプルをミラー: dx/dy は差分量（前回読み
+        // 出しからの変位）ゆえ、50Hz の latest() 覗き見では変位の半分が黙って
+        // 失われる — オフライン再生には全量が要る。
+        sf::log_flow.publish(flow);
         snap.flow_dx = flow.dx; snap.flow_dy = flow.dy; snap.flow_squal = flow.squal;
         snap.flow_timestamp = flow.timestamp;
         snap_dirty = true;

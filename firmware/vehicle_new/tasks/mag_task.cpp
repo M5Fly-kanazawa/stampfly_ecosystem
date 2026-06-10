@@ -75,12 +75,13 @@ void MagTask(void* /*pvParameters*/)
     // -------------------------------------------------------------------
     stampfly::BMM150::Config cfg{};
     cfg.i2c_bus = sf::internal::board::i2c_bus();
-    // data_rate / preset は Config の既定値 (ODR_10HZ, REGULAR) を使う。
-    // タスク周期 25Hz に対しセンサ ODR が遅いため、data_ready=false が
-    // 返るサイクルでは publish しない設計とする。
-    //
-    // Default data_rate=ODR_10HZ + preset=REGULAR. Sensor ODR is slower
-    // than task period, so cycles with data_ready=false skip publish.
+    // ODR 25Hz to MATCH the 25Hz task period and config::MAG_DT (0.04s): the
+    // driver default ODR_10HZ silently undersampled the 25Hz design rate
+    // (surfaced by the Data Stream showing mag at ~10Hz on hardware).
+    // ODR 25Hz — タスク周期 25Hz と config::MAG_DT(0.04s) に一致させる。ドライバ
+    // 既定の ODR_10HZ は設計レート 25Hz を黙って下回っていた（Data Stream の実機
+    // 計測で mag が ~10Hz と判明して発覚）。
+    cfg.data_rate = stampfly::BMM150DataRate::ODR_25HZ;
 
     esp_err_t err = g_mag.init(cfg);
     if (err != ESP_OK) {

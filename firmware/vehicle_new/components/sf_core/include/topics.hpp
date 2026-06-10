@@ -73,6 +73,8 @@ extern Topic<ControlOutput,   Latest, 1>      control_output;
 
 extern Topic<MotorOutput,     Latest, 1>      actuator_motor;
 extern Topic<LogStreamSample, RingBuffer, 32> log_stream;        // ControlTask 400Hz → TelemetryTask (Data Stream)
+extern Topic<FlowData,        RingBuffer, 8>  log_flow;          // ImuTask flow mirror → Data Stream。flow は差分量
+                                                                 // （前回読み出しからの累積変位）ゆえ全サンプル配送が必須
                                                                  // Ring 32 = 80ms 分のバッファ（50Hz 排出のジッタ余裕）
 
 // =============================================================================

@@ -189,6 +189,9 @@ void DataStream::startStream(const sockaddr_in& client)
     LogStreamSample discard;
     while (log_stream.read(discard)) {
     }
+    FlowData flow_discard;
+    while (log_flow.read(flow_discard)) {
+    }
 
     ESP_LOGI(TAG, "Capture START → client registered (50 pkt/s, ~48 KB/s)");
 }
@@ -251,19 +254,28 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     }
     builder.addEntry(datastream::kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref));
 
-    // Low-rate sensors: append only when the per-sensor stamp advanced.
-    // 低レートセンサ: センサ別時刻が進んだときだけ追加する。
-    const SensorSnapshot snap = sensor_snapshot.latest();
-
-    if (snap.flow_timestamp != last_flow_ts_) {
-        last_flow_ts_ = snap.flow_timestamp;
+    // Flow: drain EVERY sample from the log_flow ring (typically 2 per packet
+    // at 100Hz). Flow dx/dy are INCREMENTAL — displacement since the previous
+    // read — so a latest()-snapshot peek would silently drop half the
+    // displacement and corrupt any offline integration/replay. Absolute
+    // sensors (ToF/baro/mag) below can use the snapshot safely.
+    // フロー: log_flow リングから「全」サンプルを排出（100Hz なら 1 パケットに
+    // 通常 2 件）。フローの dx/dy は「差分量」— 前回読み出しからの変位 — なので、
+    // latest() スナップショット方式では変位の半分が黙って失われ、オフラインの
+    // 積分・再生が壊れる。下の絶対量センサ（ToF/気圧/磁気）はスナップショットで安全。
+    FlowData flow_sample;
+    while (log_flow.read(flow_sample)) {
         datastream::WireFlow flow = {};
-        flow.timestamp_us = snap.flow_timestamp;
-        flow.dx           = snap.flow_dx;
-        flow.dy           = snap.flow_dy;
-        flow.quality      = snap.flow_squal;
+        flow.timestamp_us = flow_sample.timestamp;
+        flow.dx           = flow_sample.dx;
+        flow.dy           = flow_sample.dy;
+        flow.quality      = flow_sample.squal;
         builder.addEntry(datastream::kPktFlow, &flow, sizeof(flow));
     }
+
+    // Low-rate ABSOLUTE sensors: append only when the per-sensor stamp advanced.
+    // 低レートの「絶対量」センサ: センサ別時刻が進んだときだけ追加する。
+    const SensorSnapshot snap = sensor_snapshot.latest();
     if (snap.tof_timestamp != last_tof_ts_) {
         last_tof_ts_ = snap.tof_timestamp;
         datastream::WireTof tof = {};
