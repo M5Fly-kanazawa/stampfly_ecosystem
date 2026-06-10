@@ -135,6 +135,22 @@ esp_err_t BMM150::read(MagData& data)
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Gate on DRDY: reading the data registers while a conversion is in flight
+    // returns invalid values (rhall=0 → NaN from the compensation), which the
+    // NaN guard then drops. Without this gate the delivered rate collapses when
+    // the ODR and the polling rate run at the same frequency (measured on
+    // hardware: ODR 25Hz polled at 25Hz delivered ~1Hz). DRDY marks a finished
+    // conversion, so reads here always see consistent data.
+    // DRDY でゲートする: 変換中にデータレジスタを読むと無効値が返り
+    // （rhall=0 → 補償が NaN）、NaN ガードが弾く。このゲートが無いと ODR と
+    // ポーリングが同周期のとき取得レートが崩壊する（実機計測: ODR 25Hz を 25Hz
+    // ポーリングで ~1Hz）。DRDY は変換完了の印なので、ここでの読みは常に一貫した
+    // データになる。
+    if (!isDataReady()) {
+        data.data_ready = false;
+        return ESP_OK;   // no new sample yet — silent skip / 新サンプルなし
+    }
+
     MagRawData raw;
     esp_err_t ret = readRaw(raw);
     if (ret != ESP_OK) {
