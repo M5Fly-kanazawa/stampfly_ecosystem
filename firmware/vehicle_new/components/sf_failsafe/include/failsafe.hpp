@@ -52,14 +52,14 @@ public:
     /// カスタム閾値で初期化する
     void init(const FailsafeConfig& config);
 
-    /// Run all safety checks (call at ~50Hz)
-    /// 全安全チェックを実行する（約50Hzで呼ぶ）
+    /// Run all safety checks. Called from PowerTask at 10 Hz.
+    /// 全安全チェックを実行する。PowerTask から 10Hz で呼ばれる。
     void update();
 
 private:
-    /// Check for impact (high-G event)
-    /// 衝撃をチェックする（高G検出）
-    void checkImpact();
+    /// Check for impact (high-G event); armed flights only
+    /// 衝撃をチェックする（高G検出）; armed 飛行中のみ
+    void checkImpact(bool armed);
 
     /// Check communication timeout
     /// 通信タイムアウトをチェックする
@@ -79,10 +79,18 @@ private:
 
     FailsafeConfig config_;
     bool comm_lost_        = false;   // Comm lost flag / 通信途絶フラグ
-    bool low_battery_      = false;   // Low battery flag / 低電圧フラグ
-    bool impact_detected_  = false;   // Impact flag / 衝撃検出フラグ
+    // Separate warning/emergency battery latches: a shared latch meant that once
+    // the 3.4V warning fired, the 3.0V emergency could never escalate. Both clear
+    // on voltage recovery (with hysteresis) so a later sag re-raises.
+    // 電池の警告/危険ラッチを分離: 共有ラッチだと 3.4V 警告発報後に 3.0V 危険へ
+    // エスカレーションできなかった。電圧回復（ヒステリシス付き）で両方クリアし、
+    // 後のサグで再発報できるようにする。
+    bool batt_warning_     = false;   // 3.4V warning latched / 低電圧警告ラッチ
+    bool batt_emergency_   = false;   // 3.0V emergency latched / 危険電圧ラッチ
+    bool impact_detected_  = false;   // Impact flag (cleared while disarmed) / 衝撃検出フラグ（disarm中クリア）
     uint8_t impact_count_  = 0;       // consecutive over-threshold impact cycles / 連続衝撃回数
     uint8_t gyro_count_    = 0;       // consecutive over-threshold gyro cycles / 連続ジャイロ異常回数
+    uint8_t comm_reraise_count_ = 0;  // re-raise divider while comm stays lost / 喪失継続中の再発報分周
 };
 
 }  // namespace sf

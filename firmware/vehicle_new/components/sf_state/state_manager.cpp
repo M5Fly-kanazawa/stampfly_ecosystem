@@ -278,7 +278,6 @@ bool StateManager::requestModeChange(FlightMode new_mode)
 void StateManager::handleAlert(const SystemAlert& alert)
 {
     auto type = static_cast<AlertType>(alert.type);
-    auto severity = static_cast<AlertSeverity>(alert.severity);
 
     ESP_LOGW(TAG, "Alert received: type=%d severity=%d", alert.type, alert.severity);
 
@@ -296,16 +295,22 @@ void StateManager::handleAlert(const SystemAlert& alert)
         case AlertType::COMM_LOST:
             // Communication lost → keep hovering, then auto-land after the grace period
             // (requirements §9: hover hold 3 s → auto landing). We do NOT land here:
-            // arm a timer (idempotent — only the first loss while FLYING arms it) and let
-            // update() command FLYING → LANDING once kCommLossHoverUs elapses. The
-            // failsafe raises COMM_LOST only on the rising edge, so the deferred landing
-            // cannot rely on a repeat alert. The alert timestamp is the loss instant.
+            // arm a timer (idempotent — only the first loss while airborne arms it) and
+            // let update() command FLYING → LANDING once kCommLossHoverUs elapses.
+            // Gate on isAirborne (TAKEOFF/FLYING/LANDING), NOT on FLYING only: a link
+            // lost during TAKEOFF used to be consumed here and never re-evaluated, so
+            // the craft kept climbing on the stale setpoint with no failsafe at all.
+            // The failsafe also re-raises COMM_LOST periodically while the link stays
+            // lost (level, not edge), so a missed alert is not fatal either way.
             // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
-            // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — FLYING 中の最初の喪失
+            // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
             // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
-            // failsafe は COMM_LOST を立ち上がりエッジで1回しか出さないので、遅延着陸を
-            // アラート再来に頼れない。アラートの timestamp が喪失時刻。
-            if (state_ == FlightState::FLYING && !comm_lost_pending_) {
+            // ゲートは FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING）: 従来は
+            // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
+            // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
+            // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷
+            // にならない。
+            if (isAirborne(state_) && !comm_lost_pending_) {
                 ESP_LOGW(TAG, "Comm lost → hover %lu ms then LANDING",
                          static_cast<unsigned long>(kCommLossHoverUs / 1000));
                 comm_lost_pending_ = true;
@@ -325,9 +330,16 @@ void StateManager::handleAlert(const SystemAlert& alert)
             break;
 
         case AlertType::ESKF_DIVERGED:
-            // ESKF diverged → reset estimator (not a state change)
-            // ESKF発散 → 推定器リセット（状態変更なし）
-            ESP_LOGW(TAG, "ESKF diverged → reset requested");
+            // ESKF diverged → command an estimator reset (not a state change).
+            // ImuTask consumes estimator_command and applies it to the active
+            // IEstimator (architecture §4: ESKF divergence → ESKF reset).
+            // ESKF発散 → 推定器リセットを指令（状態変更なし）。ImuTask が
+            // estimator_command を消費しアクティブな IEstimator に適用する
+            // （architecture §4: ESKF発散 → ESKFリセット）。
+            ESP_LOGW(TAG, "ESKF diverged → estimator reset commanded");
+            estimator_command.publish({static_cast<uint8_t>(EstimatorCmd::Reset),
+                                       static_cast<uint32_t>(esp_timer_get_time()),
+                                       0});
             break;
 
         default:
@@ -394,20 +406,27 @@ void StateManager::update(uint32_t now_us)
         return;
     }
 
-    // Cancel if we are no longer FLYING: a pilot DISARM, impact-IDLE, or any other
-    // transition already took us out of flight, so the auto-land is moot. (Recovery of
-    // the link does NOT cancel — the requirement is an unconditional hover-then-land.)
-    // FLYING を外れていたらキャンセル: パイロット DISARM・衝撃 IDLE 等で既に飛行を抜けて
-    // いれば自動着陸は不要。（リンク復帰ではキャンセルしない — 要件は無条件のホバー→着陸。）
-    if (state_ != FlightState::FLYING) {
+    // Cancel only once we are back on the ground: a pilot DISARM, impact-IDLE, or a
+    // completed landing already ended the flight, so the auto-land is moot. While
+    // still airborne the pending flag survives — a loss during TAKEOFF lands after
+    // the craft reaches FLYING. (Recovery of the link does NOT cancel — the
+    // requirement is an unconditional hover-then-land.)
+    // 地上に戻ったらキャンセル: パイロット DISARM・衝撃 IDLE・着陸完了で飛行が終わって
+    // いれば自動着陸は不要。空中にいる間は保留フラグを維持する — TAKEOFF 中の喪失は
+    // FLYING 到達後に着陸する。（リンク復帰ではキャンセルしない — 要件は無条件のホバー→着陸。）
+    if (!isAirborne(state_)) {
         comm_lost_pending_ = false;
         return;
     }
 
-    // Grace period elapsed → land. Modular uint32_t subtraction is correct for any age
-    // far below the ~71 min wrap, which 3 s is.
-    // 猶予経過 → 着陸。uint32_t の剰余差分は ~71分の巻き戻りより遥かに小さい経過（3秒）で正しい。
-    if (now_us - comm_lost_time_us_ >= kCommLossHoverUs) {
+    // Grace period elapsed and we are FLYING → land. During TAKEOFF/LANDING keep the
+    // flag pending (LANDING is already what we want; TAKEOFF transitions to FLYING).
+    // Modular uint32_t subtraction is correct for any age far below the ~71 min wrap.
+    // 猶予経過かつ FLYING → 着陸。TAKEOFF/LANDING 中はフラグを保留のまま維持
+    // （LANDING なら既に目的の状態、TAKEOFF はやがて FLYING へ遷移）。
+    // uint32_t の剰余差分は ~71分の巻き戻りより遥かに小さい経過（3秒）で正しい。
+    if (state_ == FlightState::FLYING &&
+        now_us - comm_lost_time_us_ >= kCommLossHoverUs) {
         ESP_LOGW(TAG, "Comm lost → LANDING (hover grace elapsed)");
         comm_lost_pending_ = false;
         transition(FlightState::LANDING);

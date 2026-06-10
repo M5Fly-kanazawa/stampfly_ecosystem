@@ -60,7 +60,16 @@ void Failsafe::init(const FailsafeConfig& config)
 // -----------------------------------------------------------------------------
 void Failsafe::update()
 {
-    checkImpact();
+    // Impact detection only matters while armed: disarmed ground handling (pickup,
+    // transport after a crash) produces benign high-G that must not alert, and the
+    // latch must clear before the next flight so re-fly keeps impact protection.
+    // 衝撃検出は armed 中のみ意味を持つ: disarm 中の地上ハンドリング（拾い上げ・運搬）は
+    // 無害な高Gを生むので発報してはならず、ラッチも次の飛行前にクリアして再飛行でも
+    // 衝撃保護が効くようにする。
+    const SystemMode mode = system_mode.latest();
+    const bool armed = isArmed(static_cast<FlightState>(mode.state));
+
+    checkImpact(armed);
     checkCommTimeout();
     checkBattery();
     checkGyroAnomaly();
@@ -70,8 +79,20 @@ void Failsafe::update()
 // checkImpact — detect high-G acceleration event
 // 衝撃チェック — 高G加速度イベントを検出
 // -----------------------------------------------------------------------------
-void Failsafe::checkImpact()
+void Failsafe::checkImpact(bool armed)
 {
+    // Disarmed → motors are already off; skip detection and clear the latch so the
+    // next armed flight is protected again (the old permanent latch disabled impact
+    // protection for every flight after the first alert — crash_refly regression).
+    // disarm 中 → モータは既に停止。検出をスキップしラッチをクリアして、次の armed 飛行
+    // で再び保護が効くようにする（旧実装の永久ラッチは初回発報後の全飛行で衝撃保護を
+    // 無効化していた — crash_refly の退行）。
+    if (!armed) {
+        impact_count_ = 0;
+        impact_detected_ = false;
+        return;
+    }
+
     // Read latest IMU data from topic
     // トピックから最新のIMUデータを読み取る
     ImuData imu = sensor_imu.latest();
@@ -133,15 +154,28 @@ void Failsafe::checkCommTimeout()
     uint32_t age_ms = (now - cmd.timestamp) / 1000;
 
     if (age_ms > config_.comm_timeout_ms) {
-        // Rising edge only: raise once, let StateManager decide (FLYING → LANDING).
-        // 立ち上がりエッジのみ: 1回だけ発報し、判断は StateManager（FLYING→LANDING）。
+        // Raise on the rising edge, then RE-RAISE periodically while the link stays
+        // lost (level semantics). A pure edge could be consumed by the StateManager
+        // in a state that ignores it (e.g. during TAKEOFF) and never re-evaluated;
+        // the periodic re-raise guarantees the failsafe eventually lands the craft.
+        // At the 10 Hz update rate, 10 cycles = re-raise every ~1 s.
+        // 立ち上がりエッジで発報し、リンク喪失が続く間は周期的に「再発報」する（レベル
+        // 意味論）。純粋なエッジだと StateManager が無視する状態（例: TAKEOFF 中）で
+        // 消費されたきり再評価されない。周期再発報でフェイルセーフが最終的に必ず着陸
+        // させる。10Hz 更新で 10 サイクル = 約1秒毎。
+        constexpr uint8_t kReraiseEveryNUpdates = 10;
         if (!comm_lost_) {
             raiseAlert(AlertType::COMM_LOST, AlertSeverity::CRITICAL);
             ESP_LOGW(TAG, "Comm lost: %lu ms since last packet", (unsigned long)age_ms);
+            comm_reraise_count_ = 0;
+        } else if (++comm_reraise_count_ >= kReraiseEveryNUpdates) {
+            raiseAlert(AlertType::COMM_LOST, AlertSeverity::CRITICAL);
+            comm_reraise_count_ = 0;
         }
         comm_lost_ = true;
     } else {
         comm_lost_ = false;   // link recovered / リンク復帰
+        comm_reraise_count_ = 0;
     }
 }
 
@@ -155,22 +189,40 @@ void Failsafe::checkBattery()
     // トピックから電源データを読み取る
     PowerData power = sensor_power.latest();
 
-    if (power.voltage > 0.1f && power.voltage < config_.critical_battery_v) {
-        // Critical voltage — emergency landing
-        // 危険電圧 — 緊急着陸
-        if (!low_battery_) {
+    // No reading yet (boot) — nothing to judge.
+    // まだ読み値なし（起動直後）— 判定しない。
+    if (power.voltage <= 0.1f) {
+        return;
+    }
+
+    // Recovery hysteresis: clear both latches only when the voltage rises clearly
+    // above the warning threshold, so load-transient sag does not chatter alerts.
+    // 回復ヒステリシス: 警告閾値を明確に上回ったときだけ両ラッチをクリアし、負荷過渡の
+    // サグでアラートがばたつかないようにする。
+    constexpr float kRecoveryHysteresisV = 0.1f;
+
+    if (power.voltage < config_.critical_battery_v) {
+        // Critical voltage — emergency. Independent latch: escalates even after the
+        // warning already fired (the old shared latch swallowed the escalation).
+        // 危険電圧 — 緊急。独立ラッチ: 警告発報済みでもエスカレーションする
+        // （旧共有ラッチはエスカレーションを握り潰していた）。
+        if (!batt_emergency_) {
+            batt_emergency_ = true;
+            batt_warning_   = true;
             raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
             ESP_LOGE(TAG, "Critical battery: %.2fV", power.voltage);
         }
-        low_battery_ = true;
-    } else if (power.voltage > 0.1f && power.voltage < config_.low_battery_v) {
+    } else if (power.voltage < config_.low_battery_v) {
         // Low voltage — warning
         // 低電圧 — 警告
-        if (!low_battery_) {
+        if (!batt_warning_) {
+            batt_warning_ = true;
             raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::WARNING);
             ESP_LOGW(TAG, "Low battery: %.2fV", power.voltage);
         }
-        low_battery_ = true;
+    } else if (power.voltage > config_.low_battery_v + kRecoveryHysteresisV) {
+        batt_warning_   = false;
+        batt_emergency_ = false;
     }
 }
 

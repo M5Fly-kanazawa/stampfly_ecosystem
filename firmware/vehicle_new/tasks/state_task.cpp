@@ -34,9 +34,13 @@
 
 static const char* TAG = "StateTask";
 
-/// Global state manager instance
-/// グローバル状態管理インスタンス
-sf::StateManager g_state_manager;
+/// State manager instance — file-local (static): the StateManager is owned by
+/// StateTask alone and all transitions arrive via topics (R5/R6). Without static
+/// the symbol could be extern'd from another translation unit, bypassing that wall.
+/// 状態管理インスタンス — ファイルローカル（static）: StateManager は StateTask が単独
+/// 所有し、遷移は全てトピック経由（R5/R6）。static が無いと他の翻訳単位から extern で
+/// 触れてしまい、この防壁を迂回できてしまう。
+static sf::StateManager g_state_manager;
 
 // -----------------------------------------------------------------------------
 // TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09).
