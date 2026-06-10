@@ -1,0 +1,38 @@
+# boot_motion.scn — boot calibration must survive being carried (stillness gate)
+#                   起動校正は運搬に耐えること（静止ゲート検証）
+#
+# Real-hardware failure this locks in: plug the battery, then CARRY the craft to
+# the bench. The boot gyro/accel calibration used to average straight through the
+# carry motion — a garbage bias and a wrong level reference made the craft flip
+# right after takeoff ("sometimes flies, sometimes flips" = whatever the human
+# happened to be doing in the first 4 s). With the stillness gate the partial
+# window is discarded on motion and ARM stays rejected until a verified-still
+# average exists, no matter when the craft is set down.
+#
+# 実機で起きた故障の固定化: 電池を挿してから機体を机へ「運ぶ」。起動ジャイロ/加速度
+# 校正は運搬の動きをそのまま平均していた — ゴミバイアスと誤った水平基準で離陸直後に
+# 反転（「飛べたり反転したり」= 最初の4秒間に人間が何をしていたか次第）。静止ゲートは
+# 動き検出で部分蓄積を破棄し、静止確認済みの平均ができるまで ARM を拒否し続けるため、
+# いつ置いても結果は決定的になる。
+#
+# Timeline: boot → picked up at 0.5 s and handled for 5.5 s (lift 0.6 m, carry
+# 1.0 m — accelerations well above the gate) with an ARM attempt while airborne
+# in the hand (must be rejected) → placed at 6.0 s → re-calibration completes on
+# the ground → ARM accepted → takeoff → ALT_HOLD hover → DISARM.
+# 時系列: 起動 → 0.5 s で持ち上げ 5.5 s ハンドリング（持上げ 0.6 m・運搬 1.0 m —
+# ゲートを大きく超える加速度）、手中で ARM 試行（拒否されること）→ 6.0 s 設置 →
+# 地上で再校正完了 → ARM 受理 → 離陸 → ALT_HOLD ホバー → DISARM。
+#
+# Run: sf sil scenario simulator/sil/scenarios/boot_motion.scn --target vehicle_new
+#
+#  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc     2048  2048   2048    2048  0     500       50              # A: boot on ground 0.5 s
+   +    handle 0.60  1.0    0.0     1500  2500  1500                      # B: picked up & carried (instantaneous trigger; motion 0.5→6.0 s)
+   +    rc     2048  2048   2048    2048  1     1000      50              # C: ARM attempt in the hand → REJECTED (calibration incomplete)
+   +    rc     2048  2048   2048    2048  0     10000     50              # D: released; placed at 6.0 s — recalibration (settle 1 s + 2.5 s avg + margin)
+   +    rc     2048  2048   2048    2048  1     1000      50              # E: ARM (now accepted — still calibration done)
+   +    rc     3330  2048   2048    2048  1     2500      50              # F: STABILIZE take-off climb 2.5 s
+   +    rc     3072  2048   2048    2048  1     3000      50        1     # G: ALT_HOLD hover 3 s
+   +    rc     2048  2048   2048    2048  0     200       50              # H: release ARM button
+   +    rc     2048  2048   2048    2048  1     200       50              # I: press again → DISARM (toggle)
+   +    rc     2048  2048   2048    2048  0     600       50              # J: settle disarmed

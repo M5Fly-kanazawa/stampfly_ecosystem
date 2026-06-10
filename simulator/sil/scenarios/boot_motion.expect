@@ -1,0 +1,20 @@
+# boot_motion.expect — stillness-gated boot calibration under handling
+# 静止ゲート付き起動校正のハンドリング耐性検証
+#
+# The chain that must hold: ARM is rejected while the craft is in the hand
+# (calibration cannot complete in motion) → after placement the calibration
+# completes with a VERIFIED-still window → only then is ARM accepted → normal
+# takeoff/hover follows (proving the calibration that resulted is flyable).
+# 成立すべき連鎖: 手中では ARM 拒否（動いている間は校正が完了し得ない）→ 設置後に
+# 「静止確認済み」窓で校正完了 → その後にのみ ARM 受理 → 通常の離陸/ホバー
+# （得られた校正で飛べることの証明）。
+exit 0
+log_contains any "ARM rejected: boot calibration not complete"
+log_contains any "Calibration complete (still window verified"
+log_contains any "ARM accepted"
+log_contains any "Vertical handoff: takeoff"
+order "ARM rejected: boot calibration not complete" "Calibration complete (still window verified"
+order "Calibration complete (still window verified" "ARM accepted"
+order "ARM accepted" "Vertical handoff: takeoff"
+metric tilt_max < 18.0 in [15.5,17.8]
+metric duty_max < 0.92 in [15.5,17.8]

@@ -394,7 +394,19 @@ static void startBootCalibration()
     // Load any persisted NVS calibration first (overwritten by the fresh measure).
     // まず保存済み NVS 校正を読む（新規測定で上書きされる）。
     g_calib.init();
-    g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES);
+
+    // Stillness gate (config.hpp is the SSOT; sf_calibration is a leaf component
+    // that cannot include it, so the thresholds are passed in here).
+    // 静止ゲート（SSOT は config.hpp。sf_calibration は leaf コンポーネントで include
+    // できないため、ここで閾値を渡す）。
+    sf::StillnessConfig still{};
+    still.gyro_max       = config::CALIB_STILL_GYRO_MAX;
+    still.gyro_var_max   = config::CALIB_STILL_GYRO_VAR_MAX;
+    still.accel_norm_min = config::CALIB_STILL_ACCEL_NORM_MIN;
+    still.accel_norm_max = config::CALIB_STILL_ACCEL_NORM_MAX;
+    still.accel_var_max  = config::CALIB_STILL_ACCEL_VAR_MAX;
+    still.ema_alpha      = config::CALIB_STILL_EMA_ALPHA;
+    g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES, still);
     g_calib_active        = true;
     g_calib_settle_cycles = config::CALIB_SETTLE_MS * 1000u / config::IMU_PERIOD_US;
     g_calibrated          = false;  // calibration pending → pre-arm check rejects ARM

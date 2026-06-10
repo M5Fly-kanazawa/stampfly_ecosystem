@@ -165,6 +165,27 @@ inline constexpr uint32_t CALIB_GYRO_SAMPLES = 1000;
 // 減衰し、平均が重力＋真のバイアスのみを反映する。
 inline constexpr uint32_t CALIB_SETTLE_MS = 1000;
 
+// Stillness gate for calibration sample accumulation (sf_calibration
+// StillnessConfig — see its header for the rationale). The boot/recalibration
+// average is only valid at rest; motion (carrying the craft after battery
+// plug-in, picking it up after a crash) discards the partial window and
+// restarts it, so ARM stays blocked until a verified-still average exists.
+// Thresholds follow the legacy vehicle/ StationaryDetector (proven in flight);
+// the accel-norm window is widened for RAW (bias-uncorrected) boot readings.
+// 校正サンプル蓄積の静止ゲート（sf_calibration StillnessConfig — 根拠はヘッダ参照）。
+// 起動/再校正の平均は静止時のみ有効: 動き（電池接続後の運搬・墜落後の拾い上げ）は
+// 部分蓄積を破棄してやり直すため、静止確認済みの平均ができるまで ARM は拒否され続ける。
+// 閾値は旧 vehicle/ StationaryDetector（飛行実績あり）に従う。加速度ノルム窓は起動時の
+// 生（バイアス未補正）読み向けに拡幅。
+inline constexpr float CALIB_STILL_GYRO_MAX       = 0.05f;  // [rad/s] EMA RAW |gyro| max
+                                                            // (raw-bias tolerant; see StillnessConfig)
+inline constexpr float CALIB_STILL_GYRO_VAR_MAX   = 1.0e-3f;// [(rad/s)²] window variance max
+                                                            // (bias-insensitive precise judge)
+inline constexpr float CALIB_STILL_ACCEL_NORM_MIN = 9.3f;   // [m/s²] EMA |accel| min
+inline constexpr float CALIB_STILL_ACCEL_NORM_MAX = 10.3f;  // [m/s²] EMA |accel| max
+inline constexpr float CALIB_STILL_ACCEL_VAR_MAX  = 0.05f;  // [(m/s²)²] window variance max
+inline constexpr float CALIB_STILL_EMA_ALPHA      = 0.05f;  // EMA factor (~3Hz @400Hz)
+
 // Bias deadband: if the measured boot bias is below these magnitudes it is treated as
 // negligible and NOT seeded into the estimator — the calibration stays a true no-op
 // instead of overwriting the filter's own (already ~zero) online bias estimate. This

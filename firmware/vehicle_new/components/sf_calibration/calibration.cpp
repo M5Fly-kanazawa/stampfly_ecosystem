@@ -82,20 +82,104 @@ void CalibrationMgr::init()
 // startGyroCal — begin gyro bias calibration
 // ジャイロキャリブレーション開始 — ジャイロバイアスキャリブレーションを開始
 // -----------------------------------------------------------------------------
-void CalibrationMgr::startGyroCal(uint32_t num_samples)
+void CalibrationMgr::startGyroCal(uint32_t num_samples,
+                                  const StillnessConfig& stillness)
 {
     calibrating_    = true;
     target_samples_ = num_samples;
     sample_count_   = 0;
-    memset(gyro_sum_,  0, sizeof(gyro_sum_));
-    memset(accel_sum_, 0, sizeof(accel_sum_));
+    memset(gyro_sum_,     0, sizeof(gyro_sum_));
+    memset(accel_sum_,    0, sizeof(accel_sum_));
+    memset(gyro_sq_sum_,  0, sizeof(gyro_sq_sum_));
+    memset(accel_sq_sum_, 0, sizeof(accel_sq_sum_));
 
-    ESP_LOGI(TAG, "Gyro calibration started (%lu samples)", num_samples);
+    still_          = stillness;
+    ema_primed_     = false;
+    restart_count_  = 0;
+
+    ESP_LOGI(TAG, "Gyro calibration started (%lu still samples, gate: gyro<%.3f rad/s)",
+             num_samples, static_cast<double>(still_.gyro_max));
 }
 
 // -----------------------------------------------------------------------------
-// feedSample — accumulate one IMU sample
-// サンプル入力 — IMUサンプルを1つ蓄積
+// updateStillness — EMA the |gyro| and |accel| and judge rest (see StillnessConfig)
+// 静止判定 — |gyro|・|accel| をEMAして静止を判定（StillnessConfig 参照）
+// -----------------------------------------------------------------------------
+bool CalibrationMgr::updateStillness(const float gyro[3], const float accel[3])
+{
+    const float gyro_mag = std::sqrt(gyro[0] * gyro[0] + gyro[1] * gyro[1]
+                                     + gyro[2] * gyro[2]);
+    const float accel_norm = std::sqrt(accel[0] * accel[0] + accel[1] * accel[1]
+                                       + accel[2] * accel[2]);
+
+    // Prime the EMAs with the first sample so the gate has no artificial
+    // zero-start transient (a zero start would fake "still" at boot).
+    // 初サンプルでEMAを初期化し、ゼロ始まりの偽過渡を作らない（ゼロ始まりは起動時に
+    // 偽の「静止」を見せてしまう）。
+    if (!ema_primed_) {
+        gyro_mag_ema_   = gyro_mag;
+        accel_norm_ema_ = accel_norm;
+        ema_primed_     = true;
+    }
+    gyro_mag_ema_   += still_.ema_alpha * (gyro_mag - gyro_mag_ema_);
+    accel_norm_ema_ += still_.ema_alpha * (accel_norm - accel_norm_ema_);
+
+    return gyro_mag_ema_ < still_.gyro_max
+        && accel_norm_ema_ > still_.accel_norm_min
+        && accel_norm_ema_ < still_.accel_norm_max;
+}
+
+// -----------------------------------------------------------------------------
+// restartAccumulation — motion detected: discard the partial window, start over
+// やり直し — 動き検出: 部分蓄積を破棄して最初から
+// -----------------------------------------------------------------------------
+void CalibrationMgr::restartAccumulation()
+{
+    // Log only when real progress is lost (once per still→moving edge in
+    // practice: after the discard the count stays 0 while motion continues).
+    // 実際に進捗を失った時だけログする（事実上、静止→動きのエッジ毎に1回:
+    // 破棄後は動きが続く間 count が 0 のまま）。
+    if (sample_count_ > 0) {
+        ++restart_count_;
+        ESP_LOGW(TAG, "Motion during calibration — discarded %lu samples, "
+                      "restarting (keep the craft still)",
+                 static_cast<unsigned long>(sample_count_));
+    }
+    sample_count_ = 0;
+    memset(gyro_sum_,     0, sizeof(gyro_sum_));
+    memset(accel_sum_,    0, sizeof(accel_sum_));
+    memset(gyro_sq_sum_,  0, sizeof(gyro_sq_sum_));
+    memset(accel_sq_sum_, 0, sizeof(accel_sq_sum_));
+}
+
+// -----------------------------------------------------------------------------
+// windowVariance — total variance of a 3-axis window (Σ per-axis variance).
+// Variance is measured around the window's OWN mean, so it is insensitive to a
+// constant sensor bias — exactly what is needed before the bias is known.
+// 窓内分散 — 3軸窓の分散合計（軸ごとの分散の和）。窓「自身」の平均まわりの分散
+// なので定数センサバイアスに不感 — バイアス既知前にまさに必要な性質。
+// -----------------------------------------------------------------------------
+float CalibrationMgr::windowVariance(const double sum[3], const double sq_sum[3],
+                                     uint32_t count)
+{
+    if (count < 2) {
+        return 0.0f;
+    }
+    const double n = static_cast<double>(count);
+    double total = 0.0;
+    for (int i = 0; i < 3; ++i) {
+        const double mean = sum[i] / n;
+        const double var  = sq_sum[i] / n - mean * mean;
+        if (var > 0.0) {
+            total += var;
+        }
+    }
+    return static_cast<float>(total);
+}
+
+// -----------------------------------------------------------------------------
+// feedSample — accumulate one verified-still IMU sample
+// サンプル入力 — 静止確認済みIMUサンプルを1つ蓄積
 // -----------------------------------------------------------------------------
 bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
 {
@@ -103,30 +187,63 @@ bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
         return false;
     }
 
-    // Accumulate gyro and accel values
-    // ジャイロと加速度の値を蓄積
+    // Stillness gate (see StillnessConfig): motion discards the partial window.
+    // The EMA keeps updating through motion so the gate re-opens only after the
+    // craft has genuinely settled.
+    // 静止ゲート（StillnessConfig 参照）: 動きは部分蓄積を破棄する。EMA は動いている間も
+    // 更新し続けるため、本当に静定してからゲートが再び開く。
+    if (!updateStillness(gyro, accel)) {
+        restartAccumulation();
+        return false;
+    }
+
+    // Accumulate gyro and accel values (and accel squares for the variance check)
+    // ジャイロと加速度の値を蓄積（分散チェック用に加速度の二乗も）
     for (int i = 0; i < 3; ++i) {
-        gyro_sum_[i]  += static_cast<double>(gyro[i]);
-        accel_sum_[i] += static_cast<double>(accel[i]);
+        gyro_sum_[i]     += static_cast<double>(gyro[i]);
+        accel_sum_[i]    += static_cast<double>(accel[i]);
+        gyro_sq_sum_[i]  += static_cast<double>(gyro[i]) * gyro[i];
+        accel_sq_sum_[i] += static_cast<double>(accel[i]) * accel[i];
     }
 
     sample_count_++;
 
-    // Check if target reached
-    // 目標に達したか確認
-    if (sample_count_ >= target_samples_) {
-        computeAverages();
-        computeLevelOffset();
-        data_.valid  = true;
-        calibrating_ = false;
-
-        ESP_LOGI(TAG, "Calibration complete");
-        ESP_LOGI(TAG, "  gyro_bias: [%.6f, %.6f, %.6f]",
-                 data_.gyro_bias[0], data_.gyro_bias[1], data_.gyro_bias[2]);
-        return true;
+    if (sample_count_ < target_samples_) {
+        return false;   // still accumulating / まだ蓄積中
     }
 
-    return false;
+    // Window complete — final validity check: the EMA gate can miss slow,
+    // smooth motion (e.g. a gentle hand sway), but that motion leaves a
+    // variance fingerprint over the whole window. Variance is bias-insensitive
+    // (computed around the window's own mean), so it judges precisely even
+    // though the sensor offsets are not yet known. Reject and start over.
+    // 窓完了 — 最終妥当性チェック: EMA ゲートはゆっくり滑らかな動き（手のゆったり
+    // した揺れ等）を見逃しうるが、その動きは窓全体の分散に痕跡を残す。分散は窓自身の
+    // 平均まわりで計算されバイアス不感のため、センサオフセット未知でも精密に判定
+    // できる。検出したら破棄してやり直す。
+    const float gyro_var  = windowVariance(gyro_sum_,  gyro_sq_sum_,  sample_count_);
+    const float accel_var = windowVariance(accel_sum_, accel_sq_sum_, sample_count_);
+    if (gyro_var > still_.gyro_var_max || accel_var > still_.accel_var_max) {
+        ESP_LOGW(TAG, "Calibration window rejected: gyro var %.5f (max %.5f), "
+                      "accel var %.4f (max %.4f) — slow motion? restarting",
+                 static_cast<double>(gyro_var),
+                 static_cast<double>(still_.gyro_var_max),
+                 static_cast<double>(accel_var),
+                 static_cast<double>(still_.accel_var_max));
+        restartAccumulation();
+        return false;
+    }
+
+    computeAverages();
+    computeLevelOffset();
+    data_.valid  = true;
+    calibrating_ = false;
+
+    ESP_LOGI(TAG, "Calibration complete (still window verified, %lu restarts)",
+             static_cast<unsigned long>(restart_count_));
+    ESP_LOGI(TAG, "  gyro_bias: [%.6f, %.6f, %.6f]",
+             data_.gyro_bias[0], data_.gyro_bias[1], data_.gyro_bias[2]);
+    return true;
 }
 
 // -----------------------------------------------------------------------------
