@@ -85,6 +85,7 @@ private:
     void computeLevelOffset();
 
     CalibrationData data_ = {};
+    bool     nvs_loaded_once_ = false; // NVS read happens once per boot (see init) / NVS読みは起動1回（init参照）
     bool     calibrating_    = false;
     uint32_t target_samples_ = 0;     // Target sample count  / 目標サンプル数
     uint32_t sample_count_   = 0;     // Current sample count / 現在のサンプル数

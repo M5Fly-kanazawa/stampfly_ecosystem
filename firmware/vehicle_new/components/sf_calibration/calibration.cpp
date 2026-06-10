@@ -44,6 +44,20 @@ namespace sf {
 // -----------------------------------------------------------------------------
 void CalibrationMgr::init()
 {
+    // NVS is touched ONCE per boot. init() is also reached from the 400Hz ImuTask
+    // loop via the Recalibrate command (startBootCalibration), and an NVS read
+    // there can block behind another task's flash commit (pairing save, param
+    // save) for milliseconds — breaking the IMU period. On re-init just keep the
+    // in-memory data; the fresh measurement overwrites it anyway.
+    // NVS は起動につき1回だけ読む。init() は Recalibrate コマンド経由で 400Hz の
+    // ImuTask ループからも呼ばれ（startBootCalibration）、そこで NVS を読むと他タスク
+    // のフラッシュ commit（ペアリング保存・param 保存）の後ろで数msブロックし、IMU
+    // 周期が崩れる。再 init ではメモリ上のデータを維持（どうせ新規測定が上書きする）。
+    if (nvs_loaded_once_) {
+        return;
+    }
+    nvs_loaded_once_ = true;
+
     if (loadFromNvs()) {
         ESP_LOGI(TAG, "Calibration loaded from NVS");
         ESP_LOGI(TAG, "  gyro_bias: [%.6f, %.6f, %.6f]",

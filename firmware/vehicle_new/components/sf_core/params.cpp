@@ -21,6 +21,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <cstring>
+#include <cstdio>   // snprintf (NVS key derivation) / snprintf（NVSキー導出）
 #include <cmath>
 
 static const char* TAG = "Params";
@@ -320,6 +321,39 @@ static constexpr int TABLE_SIZE = sizeof(table) / sizeof(table[0]);
 static const char* NVS_NAMESPACE = "sf_params";
 
 // =============================================================================
+// NVS key derivation
+// NVS キー導出
+//
+// NVS limits key names to 15 characters; 31 of the 54 parameter names exceed
+// that (e.g. "eskf.process.accel_noise" = 24), so storing under the raw name
+// fails with ESP_ERR_NVS_KEY_TOO_LONG. We derive a fixed-length 9-character
+// key "p" + 8-hex FNV-1a hash of the name. Hash keys are stable across table
+// reordering (unlike index-based keys, which would silently load the wrong
+// value after an insertion). init() verifies there are no hash collisions.
+// NVS のキー名は15文字まで。54個中31個のパラメータ名がこれを超え（例:
+// "eskf.process.accel_noise" は24文字）、生の名前では ESP_ERR_NVS_KEY_TOO_LONG で
+// 保存に失敗する。そこで名前の FNV-1a ハッシュから固定長9文字のキー
+// "p"+16進8桁 を導出する。ハッシュキーはテーブルの並べ替えに不変（インデックス
+// ベースだと行挿入後に黙って別の値を読んでしまう）。init() で衝突がないことを検証。
+// =============================================================================
+
+static uint32_t fnv1aHash(const char* s)
+{
+    uint32_t hash = 2166136261u;            // FNV offset basis
+    while (*s) {
+        hash ^= static_cast<uint8_t>(*s++);
+        hash *= 16777619u;                  // FNV prime
+    }
+    return hash;
+}
+
+static void nvsKeyFor(const char* name, char out[16])
+{
+    snprintf(out, 16, "p%08lx",
+             static_cast<unsigned long>(fnv1aHash(name)));
+}
+
+// =============================================================================
 // Find parameter by name
 // 名前でパラメータを検索する
 // =============================================================================
@@ -341,6 +375,22 @@ static const ParamEntry* find(const char* name)
 
 void init()
 {
+    // One-time NVS-key collision check: two names hashing to the same key would
+    // silently alias their stored values. With 54 names on a 32-bit hash the
+    // probability is ~3e-7, but verify anyway — this is the kind of failure that
+    // is invisible until a parameter "mysteriously" loads someone else's value.
+    // NVS キー衝突の一回限り検査: 2つの名前が同じキーにハッシュされると保存値が
+    // 黙って混線する。54名×32bitハッシュで確率は ~3e-7 だが念のため検証 — これは
+    // パラメータが「謎に」他人の値を読むまで見えない種類の故障。
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        for (int j = i + 1; j < TABLE_SIZE; j++) {
+            if (fnv1aHash(table[i].name) == fnv1aHash(table[j].name)) {
+                ESP_LOGE(TAG, "NVS key collision: '%s' vs '%s' — rename one!",
+                         table[i].name, table[j].name);
+            }
+        }
+    }
+
     load();
     ESP_LOGI(TAG, "Parameter system initialized (%d params)", TABLE_SIZE);
 }
@@ -441,26 +491,50 @@ void save()
     }
 
     int saved = 0;
+    int failed = 0;
     for (int i = 0; i < TABLE_SIZE; i++) {
         const ParamEntry& e = table[i];
+        char key[16];
+        nvsKeyFor(e.name, key);
+        esp_err_t set_err = ESP_OK;
+
         if (e.type == ParamType::FLOAT) {
             float val = *static_cast<float*>(e.value_ptr);
-            // Store float as uint32_t blob
-            // floatをuint32_tとして保存
+            // Store float as uint32_t bit pattern
+            // floatをuint32_tビットパターンとして保存
             uint32_t raw;
             memcpy(&raw, &val, sizeof(float));
-            nvs_set_u32(handle, e.name, raw);
-            saved++;
+            set_err = nvs_set_u32(handle, key, raw);
         } else if (e.type == ParamType::BOOL) {
             bool val = *static_cast<bool*>(e.value_ptr);
-            nvs_set_u8(handle, e.name, val ? 1 : 0);
+            set_err = nvs_set_u8(handle, key, val ? 1 : 0);
+        } else if (e.type == ParamType::INT) {
+            set_err = nvs_set_i32(handle, key,
+                                  *static_cast<int32_t*>(e.value_ptr));
+        }
+
+        // Count failures instead of silently claiming success — the old code
+        // ignored every nvs_set_* error and logged a bogus "Saved N parameters".
+        // 失敗を数える（黙って成功を装わない）— 旧実装は nvs_set_* のエラーを全て
+        // 無視し、偽の「Saved N parameters」を出していた。
+        if (set_err == ESP_OK) {
             saved++;
+        } else {
+            failed++;
+            ESP_LOGE(TAG, "save: '%s' (key %s) failed: %s",
+                     e.name, key, esp_err_to_name(set_err));
         }
     }
 
-    nvs_commit(handle);
+    esp_err_t commit_err = nvs_commit(handle);
     nvs_close(handle);
-    ESP_LOGI(TAG, "Saved %d parameters to NVS", saved);
+    if (commit_err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS commit failed: %s", esp_err_to_name(commit_err));
+    } else if (failed > 0) {
+        ESP_LOGW(TAG, "Saved %d parameters to NVS (%d FAILED)", saved, failed);
+    } else {
+        ESP_LOGI(TAG, "Saved %d parameters to NVS", saved);
+    }
 }
 
 void load()
@@ -477,9 +551,12 @@ void load()
     int loaded = 0;
     for (int i = 0; i < TABLE_SIZE; i++) {
         const ParamEntry& e = table[i];
+        char key[16];
+        nvsKeyFor(e.name, key);
+
         if (e.type == ParamType::FLOAT) {
             uint32_t raw;
-            if (nvs_get_u32(handle, e.name, &raw) == ESP_OK) {
+            if (nvs_get_u32(handle, key, &raw) == ESP_OK) {
                 float val;
                 memcpy(&val, &raw, sizeof(float));
                 // Validate range before applying
@@ -491,9 +568,18 @@ void load()
             }
         } else if (e.type == ParamType::BOOL) {
             uint8_t raw;
-            if (nvs_get_u8(handle, e.name, &raw) == ESP_OK) {
+            if (nvs_get_u8(handle, key, &raw) == ESP_OK) {
                 *static_cast<bool*>(e.value_ptr) = (raw != 0);
                 loaded++;
+            }
+        } else if (e.type == ParamType::INT) {
+            int32_t raw;
+            if (nvs_get_i32(handle, key, &raw) == ESP_OK) {
+                if (raw >= static_cast<int32_t>(e.min_val) &&
+                    raw <= static_cast<int32_t>(e.max_val)) {
+                    *static_cast<int32_t*>(e.value_ptr) = raw;
+                    loaded++;
+                }
             }
         }
     }
@@ -529,6 +615,10 @@ void list()
         } else if (e.type == ParamType::BOOL) {
             ESP_LOGI(TAG, "  %-30s = %s",
                      e.name, *static_cast<bool*>(e.value_ptr) ? "true" : "false");
+        } else if (e.type == ParamType::INT) {
+            ESP_LOGI(TAG, "  %-30s = %ld  [%ld, %ld]",
+                     e.name, (long)*static_cast<int32_t*>(e.value_ptr),
+                     (long)e.min_val, (long)e.max_val);
         }
     }
 }
