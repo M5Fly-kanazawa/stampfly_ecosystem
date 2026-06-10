@@ -53,7 +53,7 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | `crash_refly` | P8 ★ロバスト再飛行（墜落→自動DISARM→物理ハンドリング→再校正→再飛行）。`--duration 33000000` 必須 | vehicle_new |
 | `hover_alt` / `hover_long` | 高度保持ホバー（短/長時間） | vehicle（旧） |
 | `hover_espnow` | ESP-NOW ホバー（仮想 pilot） | vehicle（旧） |
-| `console_cli` | シリアル CLI 決定論検証（非飛行） | vehicle_new |
+| `console_cli` | シリアル CLI 決定論検証（非飛行）。expect は旧 vehicle の CLI 出力（`StampFly RTOS` 等）にアンカーしており、emu の key 入力チャネルも vehicle_new の esp_console シムに未配線（2026-06-10 確認）。vehicle_new 対応は CLI フィーダ配線＋expect 更新が必要 | vehicle（旧） |
 | `pairing` | ペアリングハンドシェイク（未ペア起動→自動Pairing→bind）＋混信拒否（誤MAC送信機のARM/離陸をフィルタが破棄）。`--unpaired` 必須 | vehicle_new |
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**

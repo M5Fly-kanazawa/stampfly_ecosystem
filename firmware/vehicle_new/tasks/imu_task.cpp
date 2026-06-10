@@ -157,13 +157,18 @@ static float cached_temperature_c = 0.0f;
 /// HAL の extern 宣言を解決するため C リンケージで定義する。
 extern "C" volatile uint8_t g_imu_checkpoint = 0;
 
-// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09). Defined
-// in state_task.cpp / notify_task.cpp; ImuTask prints them with raw printf (bypasses the
-// ESP_LOG console, which may be blocked) so we can see if StateTask/NotifyTask are alive.
-// 一時診断: state_task/notify_task で定義。ImuTask が raw printf で報告。
-extern "C" volatile uint32_t g_diag_state_loops;    // StateTask loop count
-extern "C" volatile uint8_t  g_diag_state_stage;    // StateTask last stage
-extern "C" volatile uint32_t g_diag_notify_updates; // NotifyTask update count
+// TEMPORARY DIAGNOSTICS (real-hardware INIT-stuck investigation, 2026-06-09). The
+// strong definitions live in state_task.cpp / notify_task.cpp; ImuTask prints them with
+// raw printf (bypasses the ESP_LOG console, which may be blocked) so we can see if
+// StateTask/NotifyTask are alive. WEAK fallback definitions here keep partial link
+// targets buildable (rtos_smoke links imu_task but not notify_task) — the linker picks
+// the strong definition whenever the owning task is present.
+// 一時診断: 強定義は state_task/notify_task にあり、ImuTask が raw printf で報告。ここでの
+// weak フォールバック定義は部分リンク対象（rtos_smoke は imu_task をリンクするが
+// notify_task はリンクしない）をビルド可能に保つ — 所有タスクが居ればリンカは強定義を選ぶ。
+extern "C" __attribute__((weak)) volatile uint32_t g_diag_state_loops = 0;    // StateTask loop count
+extern "C" __attribute__((weak)) volatile uint8_t  g_diag_state_stage = 0;    // StateTask last stage
+extern "C" __attribute__((weak)) volatile uint32_t g_diag_notify_updates = 0; // NotifyTask update count
 
 /// Convert the BMI270 driver's body-frame reading into ImuData (unit conversion only).
 /// The axis remap (chip → body FRD) is done in the BMI270 driver (bmi270_wrapper) per

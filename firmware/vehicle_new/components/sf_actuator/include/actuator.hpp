@@ -34,13 +34,17 @@
  *      M3(CCW)  M2(CW)
  *           Rear
  *
- * Mixer formula (kappa applied to yaw inside the implementation):
- * ミキサー式（kappa は実装内でヨーに適用）:
+ * Mixer formula — B⁻¹ control allocation in PHYSICAL units. Inputs are total
+ * thrust T [N] and torques τ [Nm]; per-motor thrust divides by the moment arm d
+ * and the torque/thrust ratio κ (matches the implementation in actuator.cpp):
+ * ミキサー式 — 物理単位の B⁻¹ 制御配分。入力は総推力 T [N] とトルク τ [Nm]。
+ * 各モータ推力はモーメントアーム d とトルク/推力比 κ で「割る」
+ * （actuator.cpp の実装と一致）:
  *
- *     d_FR (CCW) =  thrust − roll + pitch + yaw·κ
- *     d_RR (CW)  =  thrust − roll − pitch − yaw·κ
- *     d_RL (CCW) =  thrust + roll − pitch + yaw·κ
- *     d_FL (CW)  =  thrust + roll + pitch − yaw·κ
+ *     T_FR (CCW) =  ¼·(T − τφ/d + τθ/d + τψ/κ)
+ *     T_RR (CW)  =  ¼·(T − τφ/d − τθ/d − τψ/κ)
+ *     T_RL (CCW) =  ¼·(T + τφ/d − τθ/d + τψ/κ)
+ *     T_FL (CW)  =  ¼·(T + τφ/d + τθ/d − τψ/κ)
  *
  * @design architecture.md §5 — Actuator subsystem                       [OK]
  * @design detailed_design.md §5 — X-quad mixer                          [OK]

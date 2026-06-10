@@ -54,8 +54,8 @@ namespace sf::internal::board {
  * Internal init order:
  *   Level 0: default event loop (esp_event_loop_create_default)
  *   Level 1: I2C master bus (GPIO3=SDA, GPIO4=SCL, glitch filter)
- *   Level 2: (future) SPI host for IMU / Flow
- *   Level 3: (future) LEDC timer for motor / LED / buzzer
+ *   Level 2: SPI host shared by IMU / Flow (spi_bus_initialize)
+ *   Level 3: LEDC timer for motor PWM (+ netif/STA for telemetry)
  *
  * @return ESP_OK on success.
  * @return ESP_FAIL or driver error code on Critical failure (caller

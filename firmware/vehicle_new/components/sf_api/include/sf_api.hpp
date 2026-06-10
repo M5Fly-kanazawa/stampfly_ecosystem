@@ -87,8 +87,11 @@ inline StateEstimate estimate_latest()
 }
 
 /**
- * @brief Latest pilot command setpoint (throttle / roll / pitch / yaw / flags).
- *        最新のパイロット指令セットポイントを取得する。
+ * @brief Latest pilot command setpoint (throttle / roll / pitch / yaw — the
+ *        continuous stick stream; the discrete ARM/mode flags travel separately
+ *        on the pilot_request topic).
+ *        最新のパイロット指令セットポイント（throttle / roll / pitch / yaw — 連続的
+ *        なスティック値。離散的な ARM/モードフラグは pilot_request トピックで別送）。
  */
 inline CommandSetpoint command_latest()
 {
@@ -132,8 +135,9 @@ inline PowerData power_latest()
  *        現在のシステムモード (ARM 状態 + フライトモード) を取得する。
  *
  * SystemMode のフィールド (data_types.hpp で定義):
- *   - state:    FlightState enum (INIT / IDLE_GROUND / IDLE_HELD / ARMED /
- *               TAKEOFF / FLYING / LANDING / EMERGENCY) を uint8_t で保持
+ *   - state:    FlightState enum (INIT / IDLE_GROUND / IDLE_HELD /
+ *               ARMED_GROUND / TAKEOFF / FLYING / LANDING の 7 状態) を
+ *               uint8_t で保持 (flight_state.hpp が SSOT)
  *   - sub_mode: FlightMode enum (ACRO / STABILIZE / ALTITUDE_HOLD /
  *               POSITION_HOLD) を uint8_t で保持
  *   - armed:    便宜上の bool フラグ (StateManager が更新)

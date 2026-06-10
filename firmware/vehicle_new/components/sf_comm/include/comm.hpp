@@ -16,7 +16,12 @@
  * - Owns WiFi initialization (netif + event loop + STA on fixed channel).
  * - Receives ESP-NOW control packets, validates them, and forwards the raw
  *   wire fields as a RawControlInput fact to an injected sink (no normalization).
- * - Tracks freshness; failsafe components poll msSinceLastPacket().
+ * - Tracks freshness (msSinceLastPacket(), CLI/diagnostics use). The failsafe
+ *   judges link loss from the command_setpoint timestamp age instead (R16) —
+ *   it does not reach into this object across tasks.
+ * - 鮮度の追跡（msSinceLastPacket()、CLI/診断用）。failsafe のリンク断判定は
+ *   command_setpoint の timestamp 経過時間で行い（R16）、タスクをまたいで本
+ *   オブジェクトには触れない。
  *
  * The Service-layer normalization/deadband/arbitration lives in sf_command
  * (responsibility #8). CommTask owns the CommandProcessor and INJECTS it as a

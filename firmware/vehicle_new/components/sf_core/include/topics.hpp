@@ -115,7 +115,9 @@ extern Topic<NotifyCommand,     Queue, 8>     notify_command;      // StateMgr/F
 // 健全性トピック（R15）
 // =============================================================================
 
-extern Topic<SensorHealth,      Latest, 1>    sensor_health;       // sf_board ~1Hz → failsafe/telemetry
+extern Topic<SensorHealth,      Latest, 1>    sensor_health;       // PowerTask ~1Hz → failsafe/telemetry
+                                                                   // (PowerTask が sf_board の presence/freshness
+                                                                   //  を集約して publish — 層逆転回避, power_task.cpp 参照)
 
 // =============================================================================
 // Reserved Topics — Guidance / Navigation (R11, not yet produced)

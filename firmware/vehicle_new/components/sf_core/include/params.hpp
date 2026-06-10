@@ -96,8 +96,12 @@ bool get_int(const char* name, int32_t& out);
 /// Set parameter value by name
 /// 名前でパラメータ値を設定する
 ///
-/// Validates range, updates value, calls callback, saves to NVS.
-/// 範囲を検証し、値を更新し、コールバックを呼び、NVSに保存する。
+/// Validates range, updates the RAM value, calls the callback. NOT persisted —
+/// NVS write happens only on an explicit save() (CLI `param save`); per-set
+/// flash writes would wear the flash during interactive tuning.
+/// 範囲を検証し、RAM 上の値を更新し、コールバックを呼ぶ。永続化はしない —
+/// NVS 書き込みは明示的な save()（CLI `param save`）のみ。set のたびに書くと
+/// 対話チューニング中にフラッシュを磨耗させるため。
 ///
 /// @return true if set succeeded / 設定成功ならtrue
 bool set_float(const char* name, float value);
