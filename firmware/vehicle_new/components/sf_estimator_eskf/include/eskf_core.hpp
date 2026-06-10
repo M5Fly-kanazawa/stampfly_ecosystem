@@ -227,6 +227,13 @@ private:
     Vec3  a_kin_ned_     = {0, 0, 0};   // α-β acceleration state (a_kin, NED) / α-β 加速度状態
     bool  have_flow_vel_ = false;
 
+    // ToF-velocity differentiation history (updateToFVelocity). Member, not a
+    // function-local static, so reset() discards it (no spike on re-takeoff).
+    // ToF 速度微分の履歴（updateToFVelocity）。関数ローカル static でなくメンバとし、
+    // reset() で破棄する（再離陸時のスパイク防止）。
+    float tof_prev_height_      = 0;
+    bool  tof_have_prev_height_ = false;
+
     // Internal / 内部
     void recomputeActiveMask();
     void enforceCovarianceConstraints();

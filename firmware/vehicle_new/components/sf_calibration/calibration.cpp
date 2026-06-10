@@ -133,19 +133,24 @@ void CalibrationMgr::computeAverages()
 // -----------------------------------------------------------------------------
 void CalibrationMgr::computeLevelOffset()
 {
-    // Gravity vector at rest: [ax, ay, az]
-    // 静止時の重力ベクトル: [ax, ay, az]
+    // Rest SPECIFIC FORCE vector [ax, ay, az]: the raw rest mean, i.e. the bias
+    // with the G that computeAverages added removed again (az ≈ −G·cosφ·cosθ).
+    // The old "+ G" double-added gravity and produced az ≈ +G — the gravity
+    // vector upside down, flipping both offset signs.
+    // 静止時の「比力」ベクトル [ax, ay, az]: 生の静止平均、すなわち computeAverages が
+    // 足した G を再び引いたもの（az ≈ −G·cosφ·cosθ）。旧 "+ G" は重力を二重加算して
+    // az ≈ +G（重力ベクトルが上下逆）となり、両オフセットの符号が反転していた。
     float ax = data_.accel_bias[0];
     float ay = data_.accel_bias[1];
-    float az = data_.accel_bias[2] + G;  // Add back gravity / 重力を戻す
+    float az = data_.accel_bias[2] - G;  // back to the raw rest mean / 生の静止平均へ戻す
 
-    // Roll offset = atan2(ay, az)
-    // ロールオフセット = atan2(ay, az)
-    data_.level_offset[0] = std::atan2(ay, az);
-
-    // Pitch offset = atan2(-ax, sqrt(ay² + az²))
-    // ピッチオフセット = atan2(-ax, sqrt(ay² + az²))
-    data_.level_offset[1] = std::atan2(-ax, std::sqrt(ay * ay + az * az));
+    // Same convention as EskfCore::setAttitudeFromGravity: for true roll +φ the
+    // rest specific force is [0, −g·sinφ, −g·cosφ], for true pitch +θ it is
+    // [+g·sinθ, 0, −g·cosθ].
+    // EskfCore::setAttitudeFromGravity と同一規約: 真のロール +φ で比力は
+    // [0, −g·sinφ, −g·cosφ]、真のピッチ +θ で [+g·sinθ, 0, −g·cosθ]。
+    data_.level_offset[0] = std::atan2(-ay, -az);                              // roll  = φ
+    data_.level_offset[1] = std::atan2(ax, std::sqrt(ay * ay + az * az));      // pitch = θ
 
     ESP_LOGI(TAG, "  level_offset: [%.4f, %.4f] rad",
              data_.level_offset[0], data_.level_offset[1]);

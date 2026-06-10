@@ -90,9 +90,17 @@ void EskfEstimator::updateTof(const TofData& tof)
 
 void EskfEstimator::updateFlow(const FlowData& flow)
 {
-    float dt = (last_flow_time_ > 0)
-        ? (flow.timestamp - last_flow_time_) * 1e-6f
-        : 0.01f;
+    // Wrap-safe dt: unsigned subtraction yields the true elapsed µs even across
+    // the uint32 wrap (~71.6 min). Absurd gaps (>1 s) re-seed with the nominal dt.
+    // ラップ安全な dt: 符号なし減算は uint32 ラップ（約71.6分）を跨いでも正しい経過 µs を
+    // 返す。異常な間隔（>1秒）は公称 dt で再シード。
+    float dt = 0.01f;
+    if (last_flow_time_ != 0) {
+        const uint32_t elapsed_us = flow.timestamp - last_flow_time_;
+        if (elapsed_us > 0 && elapsed_us < 1000000) {
+            dt = static_cast<float>(elapsed_us) * 1e-6f;
+        }
+    }
     last_flow_time_ = flow.timestamp;
 
     float height = -core_.getPosition().z;

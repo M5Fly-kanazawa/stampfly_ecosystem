@@ -71,16 +71,23 @@ void ComplementaryEstimator::predict(const ImuData& imu, float dt)
 
     // Accelerometer (driver-normalized) ≈ −gravity_body at low acceleration, so
     // the measured gravity-down direction in body is −accel/|accel|. The estimate
-    // is q⁻¹·[0,0,1] (NED down rotated into body). The cross product is the small
-    // rotation that aligns the estimate with the measurement.
+    // is q⁻¹·[0,0,1] (NED down rotated into body). The Mahony error is
+    // measured × estimated: with the right-multiply integration below,
+    // est_down' ≈ est_down + (est_down × ω)·dt, and ω = meas×est gives
+    // est_down × (meas×est) ≈ meas − est, i.e. the estimate moves TOWARD the
+    // measurement (negative feedback). The reversed order est×meas would push
+    // it away (positive feedback → divergence to the inverted equilibrium).
     // 加速度計（ドライバ正規化）は低加速度で ≈ −重力(機体) なので、測定の重力下方向は
-    // −accel/|accel|。推定は q⁻¹·[0,0,1]。外積が両者を合わせる微小回転。
+    // −accel/|accel|。推定は q⁻¹·[0,0,1]。Mahony 誤差は「測定 × 推定」: 下の右乗算積分では
+    // est_down' ≈ est_down + (est_down × ω)·dt となり、ω = meas×est なら
+    // est_down × (meas×est) ≈ meas − est、つまり推定が測定へ向かう（負帰還）。
+    // 逆順 est×meas は離れていく（正帰還 → 上下反転平衡点へ発散）。
     Vec3 gyro_corrected = gyro;
     const float a_norm = accel.norm();
     if (a_norm > 1e-3f) {
         const Vec3 meas_down = accel * (-1.0f / a_norm);     // measured gravity-down
         const Vec3 est_down = q_.inv_rotate(Vec3{0.0f, 0.0f, 1.0f});
-        const Vec3 error = est_down.cross(meas_down);        // drives estimate → measurement
+        const Vec3 error = meas_down.cross(est_down);        // drives estimate → measurement
         gyro_corrected = gyro + error * mahony_kp_;
     }
 

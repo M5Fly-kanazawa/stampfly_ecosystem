@@ -78,6 +78,10 @@ void EskfCore::reset()
     have_flow_vel_ = false;
     flow_vel_lpf_  = {0, 0, 0};
     a_kin_ned_     = {0, 0, 0};
+
+    // Drop the ToF differentiation history as well / ToF 微分履歴も破棄
+    tof_have_prev_height_ = false;
+    tof_prev_height_ = 0;
 }
 
 void EskfCore::resetPositionVelocity()
@@ -201,10 +205,20 @@ void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
     for (int i = 0; i < 3; i++) F[POS_X+i][VEL_X+i] = dt;
 
     // dF[vel][att] = D_va = -R*[a_c×]*dt
+    //
+    // Right-perturbation convention (q = q̂⊗δq, see applyMaskedErrorState):
+    // R = R̂(I+[δθ×]) → δv̇ = R̂[δθ×]f = −R̂[f×]δθ, so the block is MINUS R[a×].
+    // Component check: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay, hence the negated
+    // form below. (The sign was previously flipped, inverting the vel↔att
+    // cross-covariance so flow-velocity updates corrected attitude backwards.)
+    // 右側摂動規約（q = q̂⊗δq、applyMaskedErrorState 参照）:
+    // R = R̂(I+[δθ×]) → δv̇ = R̂[δθ×]f = −R̂[f×]δθ なので、このブロックは −R[a×]。
+    // 成分確認: (R[a×])_{i,0} = R[i][1]·az − R[i][2]·ay、よって下は符号反転形。
+    // （従来は符号が逆で、vel↔att 交差共分散が反転しフロー速度観測が姿勢を逆補正していた。）
     for (int i = 0; i < 3; i++) {
-        F[VEL_X+i][ATT_X+0] = (R[i][1]*accel.z - R[i][2]*accel.y) * dt;
-        F[VEL_X+i][ATT_X+1] = (R[i][2]*accel.x - R[i][0]*accel.z) * dt;
-        F[VEL_X+i][ATT_X+2] = (R[i][0]*accel.y - R[i][1]*accel.x) * dt;
+        F[VEL_X+i][ATT_X+0] = (R[i][2]*accel.y - R[i][1]*accel.z) * dt;
+        F[VEL_X+i][ATT_X+1] = (R[i][0]*accel.z - R[i][2]*accel.x) * dt;
+        F[VEL_X+i][ATT_X+2] = (R[i][1]*accel.x - R[i][0]*accel.y) * dt;
     }
 
     // dF[vel][ba] = -R*dt
@@ -358,21 +372,8 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     // rather than sharing one constant.
     // χ²ゲート。閾値は呼び出し側が渡す。各ベクトル観測が自分のゲートを使う
     // (accel→accel_chi2_gate, mag→mag_chi2_gate)。1 定数を共有しない。
-    static int gate_total = 0, gate_reject = 0;
-    gate_total++;
     if (d2 > chi2_gate) {
-        gate_reject++;
-        if (gate_total % 400 == 0) {
-            fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%)\n",
-                    d2, chi2_gate, gate_reject, gate_total,
-                    100.0f * gate_reject / gate_total);
-        }
         return;
-    }
-    if (gate_total % 400 == 0) {
-        fprintf(stderr, "  chi2: d2=%.1f gate=%.1f reject=%d/%d (%.0f%%) R=%.4f\n",
-                d2, chi2_gate, gate_reject, gate_total,
-                100.0f * gate_reject / gate_total, R_val);
     }
 
     // K = P*H^T*S^-1 (Nx3)
@@ -470,10 +471,19 @@ void EskfCore::updateToFVelocity(float distance, float dt)
     // Velocity from ToF difference: v_z ≈ d(pos_z)/dt
     // ToF微分からの速度: v_z ≈ d(pos_z)/dt
     // Since pos_z = -height in NED: v_z = -d(height)/dt
-    // Previous height stored internally
-    static float prev_height = height;
-    float vel_z_observed = -(height - prev_height) / dt;
-    prev_height = height;
+    // Previous height is a member (NOT a function-local static): a static would
+    // survive reset()/landing handoff and be shared between instances, injecting
+    // a spurious velocity spike on the first sample after re-takeoff.
+    // 前回高度はメンバ変数で保持（関数ローカル static は不可）: static だと reset()/
+    // 着陸ハンドオフ後も履歴が残り、複数インスタンス間で共有され、再離陸後の初回
+    // サンプルで偽の速度スパイクを注入してしまう。
+    if (!tof_have_prev_height_) {
+        tof_prev_height_ = height;
+        tof_have_prev_height_ = true;
+        return;
+    }
+    float vel_z_observed = -(height - tof_prev_height_) / dt;
+    tof_prev_height_ = height;
 
     // H = [0,0,0, 0,0,1, 0...0] (observes VEL_Z)
     float H[N] = {};
@@ -745,15 +755,22 @@ void EskfCore::holdPositionVelocity()
 
 void EskfCore::setAttitudeFromGravity(const Vec3& accel_avg)
 {
-    // Compute roll/pitch from gravity vector direction
-    // 重力ベクトルの方向からroll/pitchを計算
-    // accel_avg at rest ≈ [0, 0, -g] in NED body (level)
-    // Non-level: gravity projects onto x,y axes
-    //
-    // roll  = atan2(ay, -az)  (rotation around x to align gravity with -z)
-    // pitch = atan2(-ax, sqrt(ay² + az²))
-    float roll  = atan2f(accel_avg.y, -accel_avg.z);
-    float pitch = atan2f(-accel_avg.x,
+    // Compute roll/pitch from the SPECIFIC FORCE direction (f = −gravity_body at
+    // rest). accel_avg at rest ≈ [0, 0, −g] when level. For true roll +φ the rest
+    // reading is f = [0, −g·sinφ, −g·cosφ]; for true pitch +θ it is
+    // f = [+g·sinθ, 0, −g·cosθ]. Hence:
+    //   roll  = atan2(−ay, −az)   (= φ)
+    //   pitch = atan2(+ax, sqrt(ay² + az²))   (= θ)
+    // (The previous atan2(ay, −az) / atan2(−ax, …) returned −φ/−θ — the sign
+    // confusion between specific force f and gravity g.)
+    // 「比力」の方向から roll/pitch を計算（静止時 f = −重力(機体)）。水平静止で
+    // accel_avg ≈ [0,0,−g]。真のロール +φ では f = [0, −g·sinφ, −g·cosφ]、
+    // 真のピッチ +θ では f = [+g·sinθ, 0, −g·cosθ]。よって:
+    //   roll  = atan2(−ay, −az)（= φ）、pitch = atan2(+ax, √(ay²+az²))（= θ）。
+    // （従来の atan2(ay,−az)/atan2(−ax,…) は −φ/−θ を返していた — 比力 f と重力 g の
+    // 符号取り違え。）
+    float roll  = atan2f(-accel_avg.y, -accel_avg.z);
+    float pitch = atan2f(accel_avg.x,
                          sqrtf(accel_avg.y * accel_avg.y
                              + accel_avg.z * accel_avg.z));
     float yaw = 0;  // No heading reference from accel alone
