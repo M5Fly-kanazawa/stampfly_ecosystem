@@ -117,6 +117,11 @@ private:
     bool     led_on_         = false; // Current LED state    / 現在のLED状態
     float    low_v_threshold_ = 3.4f; // Low-battery LED threshold [V] (from params)
                                       // 低電圧 LED 閾値 [V]（params から）
+    uint8_t  start_tone_countdown_ = 60; // Power-on chime delay: 60 cycles ≈ 2s at
+                                         // 30Hz, keeps the melody clear of esptool's
+                                         // download-mode entry window (see init)
+                                         // 起動音遅延: 30Hz×60周期≈2秒。esptool の
+                                         // ダウンロードモード突入窓を回避（init 参照）
 };
 
 }  // namespace sf

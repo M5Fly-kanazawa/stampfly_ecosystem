@@ -102,15 +102,22 @@ void Notify::init(const NotifyConfig& config)
     // ほぼ変わらないので一度読めば十分。
     params::get_float("safety.battery.low_v", low_v_threshold_);
 
-    // Restore the buzzer mute setting, then play the power-on chime (startTone, the
-    // legacy vehicle's C5→E5→G5 melody). NotifyTask runs in Phase 4, so this is the
-    // "powering up" sound; the "ready to arm" chime (readyTone) follows once the boot
-    // calibration completes (NotifyEvent::Ready from ImuTask). Both respect the mute.
-    // ブザーの mute 設定を復元してから起動音（startTone, 旧 vehicle の C5→E5→G5）を鳴らす。
-    // NotifyTask は Phase 4 起動ゆえ「電源 ON」音。「ARM 可能」音（readyTone）は起動校正完了で
-    // 続く（ImuTask の NotifyEvent::Ready）。どちらも mute を尊重する。
+    // Restore the buzzer mute setting. The power-on chime (startTone, the
+    // legacy vehicle's C5→E5→G5 melody) is NOT played here but DEFERRED ~2s
+    // into update(): `sf flash` resets the chip and esptool enters download
+    // mode within ~1s of the reboot — if that lands mid-melody, the LEDC PWM
+    // state survives the download-mode entry and the buzzer drones for the
+    // whole write. Playing at ~3s keeps the chime clear of that window (a
+    // flash-bound reboot never reaches it). The "ready to arm" chime
+    // (readyTone) still follows the boot calibration (NotifyEvent::Ready).
+    // ブザーの mute 設定を復元する。起動音（startTone, 旧 vehicle の C5→E5→G5）は
+    // ここでは鳴らさず update() 側で約2秒「遅延」させる: `sf flash` はチップを
+    // リセットし、再起動から約1秒以内に esptool がダウンロードモードへ突入する —
+    // それがメロディ再生中に重なると LEDC の PWM 状態がダウンロードモード突入後も
+    // 残り、書き込み中ずっとブザーが鳴り続ける。約3秒時点での再生ならその窓に
+    // 入らない（フラッシュ目的の再起動はそこまで到達しない）。「ARM 可能」音
+    // （readyTone）は従来どおり起動校正完了に続く（NotifyEvent::Ready）。
     buzzer_.loadFromNVS();
-    buzzer_.startTone();
 
     ESP_LOGI(TAG, "Notify initialized (LED gpio=%d x%d, buzzer gpio=%d)",
              config.led_gpio, config.led_count, config.buzzer_gpio);
@@ -178,6 +185,13 @@ LedPattern Notify::flyingPattern(FlightMode mode) const
 // -----------------------------------------------------------------------------
 void Notify::update()
 {
+    // Deferred power-on chime (see init() for the flash-window rationale):
+    // play once, ~2s after the task started (60 cycles at 30Hz).
+    // 遅延起動音（理由は init() 参照）: タスク開始から約2秒（30Hz×60周期）で1回再生。
+    if (start_tone_countdown_ > 0 && --start_tone_countdown_ == 0) {
+        buzzer_.startTone();
+    }
+
     // Apply the priority-resolved LED pattern (low-battery > pairing > calibrating >
     // flight state; FLYING shows the flight-mode colour). See computeActivePattern.
     // 優先度解決した LED パターンを適用（低電圧 > ペアリング > 校正中 > 飛行状態; FLYING は
