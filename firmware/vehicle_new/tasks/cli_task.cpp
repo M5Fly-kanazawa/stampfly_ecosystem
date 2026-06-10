@@ -44,6 +44,8 @@
 #include "esp_console.h"
 #include "esp_timer.h"
 #include "nvs.h"       // wifi credentials (CLI writes, sf_comm reads at boot)
+#include "lwip/sockets.h"   // TCP CLI server (requirements §7: CLI over TCP)
+#include <cerrno>
 
 #include "topics.hpp"
 #include "params.hpp"
@@ -515,6 +517,144 @@ int cmd_reboot(int argc, char** argv)
 }
 
 // =============================================================================
+// TCP CLI server (requirements §7: CLI = USB Serial / TCP)
+// TCP CLI サーバ（要件§7: CLI = USB Serial / TCP）
+//
+// Bench operations (motor test, tuning) run on battery with the USB cable off,
+// so the same registered commands must be reachable over WiFi. One client at a
+// time; commands are dispatched with esp_console_run() in THIS task, and since
+// stdout is task-local in ESP-IDF, swapping it to the socket FILE routes every
+// command's printf output to the TCP client without touching any handler.
+// ベンチ作業（モータテスト・チューニング）は USB を外した電池駆動で行うため、同じ
+// 登録済みコマンドが WiFi 経由で届く必要がある。クライアントは同時1接続。コマンドは
+// 「本タスク内」で esp_console_run() により実行され、ESP-IDF の stdout はタスク
+// ローカルなので、ソケットの FILE に差し替えるだけで全コマンドの printf 出力が
+// ハンドラ無改変のまま TCP クライアントへ流れる。
+// =============================================================================
+
+/// TCP CLI port — telnet's, so `nc <ip> 23` and telnet clients both work.
+/// TCP CLI ポート — telnet と同じにして `nc <ip> 23` でも telnet でも繋がる。
+constexpr uint16_t kTcpCliPort = 23;
+
+/// Serve one connected client until it disconnects (or the link dies).
+/// 接続中のクライアント 1 つを切断（またはリンク死亡）まで担当する。
+void serveTcpClient(const int client_fd)
+{
+    // Route printf to the socket via the task-local stdout (see block comment).
+    // タスクローカル stdout 経由で printf をソケットへ（上のブロックコメント参照）。
+    FILE* client = fdopen(client_fd, "w");
+    if (client == nullptr) {
+        ::close(client_fd);
+        return;
+    }
+    FILE* saved_stdout = stdout;
+    stdout = client;
+
+    std::printf("StampFly vehicle_new TCP CLI — type 'help' for commands\n");
+    std::printf("stampfly> ");
+    std::fflush(client);
+
+    char line[256];
+    size_t length = 0;
+    while (true) {
+        uint8_t byte = 0;
+        const ssize_t received = ::recv(client_fd, &byte, 1, 0);
+        if (received == 0) {
+            break;   // orderly close / 正常切断
+        }
+        if (received < 0) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                continue;
+            }
+            break;   // link error (keepalive timeout etc.) / リンク異常
+        }
+        if (byte == '\r') {
+            continue;   // tolerate CRLF clients (telnet) / CRLF クライアント許容
+        }
+        if (byte != '\n') {
+            if (length < sizeof(line) - 1) {
+                line[length++] = static_cast<char>(byte);
+            }
+            continue;
+        }
+        line[length] = '\0';
+        length = 0;
+        if (line[0] != '\0') {
+            int command_ret = 0;
+            const esp_err_t err = esp_console_run(line, &command_ret);
+            if (err == ESP_ERR_NOT_FOUND) {
+                std::printf("unknown command (try 'help')\n");
+            } else if (err != ESP_OK) {
+                std::printf("error: %s\n", esp_err_to_name(err));
+            }
+        }
+        std::printf("stampfly> ");
+        std::fflush(client);
+    }
+
+    stdout = saved_stdout;
+    std::fclose(client);   // also closes client_fd / client_fd も閉じる
+}
+
+/// Accept loop — runs forever in CLITask after the USB REPL has started.
+/// accept ループ — USB REPL 起動後、CLITask 内で永続的に走る。
+void runTcpCliServer()
+{
+    const int listen_fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listen_fd < 0) {
+        ESP_LOGW(TAG, "TCP CLI disabled: socket() errno=%d", errno);
+        while (true) {
+            vTaskDelay(portMAX_DELAY);
+        }
+    }
+    int yes = 1;
+    ::setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+
+    sockaddr_in addr = {};
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port        = htons(kTcpCliPort);
+    if (::bind(listen_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0 ||
+        ::listen(listen_fd, 1) < 0) {
+        ESP_LOGW(TAG, "TCP CLI disabled: bind/listen errno=%d", errno);
+        ::close(listen_fd);
+        while (true) {
+            vTaskDelay(portMAX_DELAY);
+        }
+    }
+    ESP_LOGI(TAG, "TCP CLI listening on port %u (nc <vehicle-ip> %u)",
+             static_cast<unsigned>(kTcpCliPort),
+             static_cast<unsigned>(kTcpCliPort));
+
+    while (true) {
+        sockaddr_in peer = {};
+        socklen_t peer_len = sizeof(peer);
+        const int client_fd =
+            ::accept(listen_fd, reinterpret_cast<sockaddr*>(&peer), &peer_len);
+        if (client_fd < 0) {
+            vTaskDelay(pdMS_TO_TICKS(500));   // no client yet / クライアント未着
+            continue;
+        }
+
+        // TCP keepalive: a client that vanishes without FIN (WiFi drop, sleep)
+        // would otherwise hold the single CLI slot forever. ~60s detection.
+        // TCP keepalive: FIN なしで消えたクライアント（WiFi 断・スリープ）が唯一の
+        // CLI 枠を永久に塞ぐのを防ぐ。検出は約60秒。
+        ::setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+#ifdef TCP_KEEPIDLE
+        int idle = 30, interval = 10, count = 3;
+        ::setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+        ::setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+        ::setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+#endif
+
+        ESP_LOGI(TAG, "TCP CLI client connected");
+        serveTcpClient(client_fd);
+        ESP_LOGI(TAG, "TCP CLI client disconnected");
+    }
+}
+
+// =============================================================================
 // Command registry (R6) — static {name, help, func} table registered in a loop.
 // コマンドレジストリ（R6）— 静的な {name, help, func} テーブルをループ登録。
 // =============================================================================
@@ -592,11 +732,16 @@ void CLITask(void* pvParameters)
     // では inert（コマンドは登録済みのままで、シナリオのコンソールフィーダから dispatch 可）。
     esp_console_start_repl(repl);
 
-    // The REPL task now owns interactive input; CLITask parks. It is the single owner
-    // of the console (R6) and the hook point for a future TCP CLI.
-    // 以降は REPL タスクが対話入力を所有し、CLITask は待機する。コンソールの唯一の所有者
-    // （R6）であり、将来の TCP CLI の配線ポイント。
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    // The REPL task now owns USB interactive input. This task serves the TCP
+    // CLI (requirements §7: CLI = USB Serial / TCP): bench operations like the
+    // motor test run on battery with the USB cable OFF, so commands must be
+    // reachable over WiFi. Connect with `nc <vehicle-ip> 23` (SoftAP:
+    // 192.168.4.1). On the SIL host the inert socket shim never accepts, so
+    // this loop just idles.
+    // 以降は REPL タスクが USB の対話入力を所有する。本タスクは TCP CLI を提供する
+    // （要件§7: CLI = USB Serial / TCP）: モータテスト等のベンチ作業は USB ケーブルを
+    // 外した電池駆動で行うため、コマンドは WiFi 経由で届く必要がある。接続は
+    // `nc <機体IP> 23`（SoftAP なら 192.168.4.1）。SIL ホストでは inert ソケットシムが
+    // accept しないため、このループは待機するだけ。
+    runTcpCliServer();
 }
