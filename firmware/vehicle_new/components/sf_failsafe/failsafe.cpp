@@ -33,6 +33,22 @@ static constexpr float G = 9.80665f;
 namespace sf {
 
 // -----------------------------------------------------------------------------
+// raiseAlert — publish an alert to the system_alert topic. File-scope helper
+// shared by Failsafe (10 Hz checks) and ImuAnomalyDetector (400 Hz checks).
+// raiseAlert — system_alert トピックにアラートを発行する。Failsafe（10Hz 監視）と
+// ImuAnomalyDetector（400Hz 監視）が共用するファイルスコープのヘルパ。
+// -----------------------------------------------------------------------------
+static void raiseAlert(AlertType type, AlertSeverity severity)
+{
+    SystemAlert alert = {};
+    alert.type      = static_cast<uint8_t>(type);
+    alert.severity  = static_cast<uint8_t>(severity);
+    alert.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+
+    system_alert.publish(alert);
+}
+
+// -----------------------------------------------------------------------------
 // init — initialize with default thresholds
 // 初期化 — デフォルト閾値で初期化
 // -----------------------------------------------------------------------------
@@ -60,70 +76,8 @@ void Failsafe::init(const FailsafeConfig& config)
 // -----------------------------------------------------------------------------
 void Failsafe::update()
 {
-    // Impact detection only matters while armed: disarmed ground handling (pickup,
-    // transport after a crash) produces benign high-G that must not alert, and the
-    // latch must clear before the next flight so re-fly keeps impact protection.
-    // 衝撃検出は armed 中のみ意味を持つ: disarm 中の地上ハンドリング（拾い上げ・運搬）は
-    // 無害な高Gを生むので発報してはならず、ラッチも次の飛行前にクリアして再飛行でも
-    // 衝撃保護が効くようにする。
-    const SystemMode mode = system_mode.latest();
-    const bool armed = isArmed(static_cast<FlightState>(mode.state));
-
-    checkImpact(armed);
     checkCommTimeout();
     checkBattery();
-    checkGyroAnomaly();
-}
-
-// -----------------------------------------------------------------------------
-// checkImpact — detect high-G acceleration event
-// 衝撃チェック — 高G加速度イベントを検出
-// -----------------------------------------------------------------------------
-void Failsafe::checkImpact(bool armed)
-{
-    // Disarmed → motors are already off; skip detection and clear the latch so the
-    // next armed flight is protected again (the old permanent latch disabled impact
-    // protection for every flight after the first alert — crash_refly regression).
-    // disarm 中 → モータは既に停止。検出をスキップしラッチをクリアして、次の armed 飛行
-    // で再び保護が効くようにする（旧実装の永久ラッチは初回発報後の全飛行で衝撃保護を
-    // 無効化していた — crash_refly の退行）。
-    if (!armed) {
-        impact_count_ = 0;
-        impact_detected_ = false;
-        return;
-    }
-
-    // Read latest IMU data from topic
-    // トピックから最新のIMUデータを読み取る
-    ImuData imu = sensor_imu.latest();
-
-    // Calculate total acceleration magnitude
-    // 合成加速度の大きさを計算
-    float mag = std::sqrt(imu.accel[0] * imu.accel[0] +
-                          imu.accel[1] * imu.accel[1] +
-                          imu.accel[2] * imu.accel[2]);
-
-    float mag_g = mag / G;
-
-    // requirements §9: impact = threshold G "× 連続2回" → auto DISARM. Require
-    // consecutive_count over-threshold cycles before raising, so a single noisy
-    // sample does not trip the failsafe; latch once raised. NOTE: update() runs at
-    // the PowerTask rate (10 Hz), so "2 consecutive" is ~200 ms sustained — this
-    // debounces noise but a very brief impact spike may be missed; revisit the
-    // failsafe rate if sharper impact sensitivity is needed.
-    // 要件§9: 衝撃 = 閾値G「× 連続2回」→ 自動DISARM。発報前に連続 consecutive_count 回の
-    // 閾値超を要求し、単発ノイズで誤発報しない。発報後は latch。注: update() は PowerTask
-    // レート(10Hz)で走るため「連続2回」は約200ms継続 — ノイズは除けるが極短の衝撃スパイクは
-    // 取りこぼし得る。鋭敏化が必要なら failsafe レートの見直しを。
-    if (mag_g > config_.impact_accel_g) {
-        if (++impact_count_ >= config_.consecutive_count && !impact_detected_) {
-            impact_detected_ = true;
-            raiseAlert(AlertType::IMPACT, AlertSeverity::EMERGENCY);
-            ESP_LOGW(TAG, "Impact detected: %.1fG (x%u)", mag_g, impact_count_);
-        }
-    } else {
-        impact_count_ = 0;  // below threshold → reset the consecutive counter
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -226,54 +180,94 @@ void Failsafe::checkBattery()
     }
 }
 
-// -----------------------------------------------------------------------------
-// checkGyroAnomaly — detect abnormal angular rates
-// ジャイロ異常チェック — 異常角速度を検出
-// -----------------------------------------------------------------------------
-void Failsafe::checkGyroAnomaly()
+// =============================================================================
+// ImuAnomalyDetector — IMU-rate impact / gyro-anomaly checks (400 Hz, ImuTask)
+// ImuAnomalyDetector — IMU レートの衝撃/ジャイロ異常監視（400Hz, ImuTask）
+//
+// @design requirements.md §9 — threshold × 連続2回 → auto DISARM            [OK]
+// =============================================================================
+
+void ImuAnomalyDetector::init()
 {
-    ImuData imu = sensor_imu.latest();
+    config_ = FailsafeConfig{};
+    ESP_LOGI(TAG, "IMU anomaly detector initialized (impact=%.1fG, gyro=%.0fdps, x%u @400Hz)",
+             config_.impact_accel_g, config_.gyro_anomaly_dps,
+             config_.consecutive_count);
+}
 
-    // Convert rad/s to deg/s for threshold comparison
-    // 閾値比較のためrad/sをdeg/sに変換
-    static constexpr float RAD2DEG = 57.2957795f;
+void ImuAnomalyDetector::init(const FailsafeConfig& config)
+{
+    config_ = config;
+    ESP_LOGI(TAG, "IMU anomaly detector initialized (custom config)");
+}
 
-    // requirements §9: abnormal angular rate = threshold deg/s "× 連続2回" → auto
-    // DISARM. An uncontrolled tumble sustains a high rate, so the consecutive-count
-    // debounce rejects single-sample spikes while still catching a real anomaly.
-    // 要件§9: 異常角速度 = 閾値deg/s「× 連続2回」→ 自動DISARM。制御不能のタンブルは高い
-    // レートが継続するため、連続回数デバウンスで単発スパイクを除きつつ実異常を検出する。
+void ImuAnomalyDetector::feedSample(const float accel[3], const float gyro[3],
+                                    bool armed)
+{
+    // Disarmed → motors are already off; skip detection and clear the latches so
+    // the next armed flight is protected again. Ground handling (pickup/transport
+    // after a crash) produces benign high-G that must not alert.
+    // disarm 中 → モータは既に停止。検出をスキップしラッチをクリアして、次の armed
+    // 飛行で再び保護が効くようにする。地上ハンドリング（墜落後の拾い上げ・運搬）の
+    // 無害な高Gで発報してはならない。
+    if (!armed) {
+        impact_count_    = 0;
+        impact_detected_ = false;
+        gyro_count_      = 0;
+        gyro_suppress_   = 0;
+        return;
+    }
+
+    // --- Impact: |a| over threshold for consecutive_count SAMPLES (= 5 ms at
+    // 400 Hz — fast enough for a real crash spike, debounced against noise).
+    // Latched until disarm so one crash raises exactly one alert.
+    // --- 衝撃: |a| が連続 consecutive_count「サンプル」閾値超（400Hz で 5ms —
+    // 実墜落スパイクに十分速く、ノイズはデバウンス）。disarm までラッチし、
+    // 1回の墜落でアラートは1回だけ。
+    const float mag_g = std::sqrt(accel[0] * accel[0] +
+                                  accel[1] * accel[1] +
+                                  accel[2] * accel[2]) / G;
+    if (mag_g > config_.impact_accel_g) {
+        if (++impact_count_ >= config_.consecutive_count && !impact_detected_) {
+            impact_detected_ = true;
+            raiseAlert(AlertType::IMPACT, AlertSeverity::EMERGENCY);
+            ESP_LOGW(TAG, "Impact detected: %.1fG (x%u @400Hz)",
+                     mag_g, impact_count_);
+        }
+    } else {
+        impact_count_ = 0;
+    }
+
+    // --- Gyro anomaly: any axis over threshold for consecutive_count samples.
+    // Re-raise while the anomaly persists, but at most once per second (the old
+    // 10 Hz version re-raised every 200 ms; at 400 Hz an unsuppressed re-raise
+    // would flood the alert queue and the log).
+    // --- ジャイロ異常: いずれかの軸が連続 consecutive_count サンプル閾値超。
+    // 異常継続中は再発報するが最大毎秒1回（旧 10Hz 版は 200ms 毎。400Hz で
+    // 無抑制に再発報するとアラートキューとログが氾濫する）。
+    static constexpr float    kRadToDeg          = 57.2957795f;
+    static constexpr uint16_t kReraiseSuppressSamples = 400;   // 1 s at 400 Hz
     float max_dps = 0.0f;
-    int max_axis = 0;
+    int   max_axis = 0;
     for (int i = 0; i < 3; ++i) {
-        float dps = std::fabs(imu.gyro[i]) * RAD2DEG;
+        const float dps = std::fabs(gyro[i]) * kRadToDeg;
         if (dps > max_dps) { max_dps = dps; max_axis = i; }
     }
 
+    if (gyro_suppress_ > 0) {
+        --gyro_suppress_;
+    }
     if (max_dps > config_.gyro_anomaly_dps) {
-        if (++gyro_count_ >= config_.consecutive_count) {
+        if (++gyro_count_ >= config_.consecutive_count && gyro_suppress_ == 0) {
             raiseAlert(AlertType::GYRO_ANOMALY, AlertSeverity::CRITICAL);
-            ESP_LOGW(TAG, "Gyro anomaly: axis=%d, %.0f deg/s (x%u)",
+            ESP_LOGW(TAG, "Gyro anomaly: axis=%d, %.0f deg/s (x%u @400Hz)",
                      max_axis, max_dps, gyro_count_);
-            gyro_count_ = 0;  // re-arm so a sustained anomaly re-raises periodically
+            gyro_count_    = 0;
+            gyro_suppress_ = kReraiseSuppressSamples;
         }
     } else {
-        gyro_count_ = 0;  // below threshold → reset the consecutive counter
+        gyro_count_ = 0;
     }
-}
-
-// -----------------------------------------------------------------------------
-// raiseAlert — publish alert to system_alert topic
-// アラート発報 — system_alertトピックにアラートを発行
-// -----------------------------------------------------------------------------
-void Failsafe::raiseAlert(AlertType type, AlertSeverity severity)
-{
-    SystemAlert alert = {};
-    alert.type      = static_cast<uint8_t>(type);
-    alert.severity  = static_cast<uint8_t>(severity);
-    alert.timestamp = static_cast<uint32_t>(esp_timer_get_time());
-
-    system_alert.publish(alert);
 }
 
 }  // namespace sf

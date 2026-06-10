@@ -54,6 +54,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_controller_pid/pid_controller.cpp
     ${VN}/components/sf_takeoff_landing/takeoff_landing.cpp   # ToF ground/airborne detect (imu_task)
     ${VN}/components/sf_calibration/calibration.cpp           # boot gyro/accel bias calib (imu_task)
+    ${VN}/components/sf_failsafe/failsafe.cpp                 # ImuAnomalyDetector (imu_task, 400Hz impact/gyro)
     ${VN}/components/sf_core/params.cpp
     ${SIL_COMPAT}/nvs_shim.cpp
     ${SIL_COMPAT}/clock_shim.cpp
@@ -71,6 +72,7 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_state/include
     ${VN}/components/sf_takeoff_landing/include
     ${VN}/components/sf_calibration/include
+    ${VN}/components/sf_failsafe/include
   )
 endif()
 

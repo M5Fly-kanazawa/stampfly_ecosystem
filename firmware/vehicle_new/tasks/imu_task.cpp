@@ -42,6 +42,7 @@
 #include "complementary_estimator.hpp"
 #include "takeoff_landing.hpp"
 #include "calibration.hpp"
+#include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "params.hpp"
@@ -78,6 +79,14 @@ static sf::IEstimator* g_estimator = nullptr;
 /// 渡すか）なので imu_task が所有する。実証済みの firmware/vehicle（landing handler を
 /// imu_task で回す）と同じ構造。
 static sf::TakeoffLandingMgr g_takeoff_landing;
+
+/// IMU-rate anomaly detector (impact / gyro anomaly, requirements §9). Owned by
+/// this task and fed per-sample at 400Hz — the previous 10Hz latest() peek in
+/// PowerTask missed millisecond-scale crash spikes almost certainly.
+/// IMU レート異常検出器（衝撃/ジャイロ異常、要件§9）。本タスクが所有し 400Hz で
+/// サンプル毎に与える — 従来の PowerTask での 10Hz latest() 覗き見はミリ秒オーダーの
+/// 墜落スパイクをほぼ確実に取りこぼしていた。
+static sf::ImuAnomalyDetector g_imu_anomaly;
 
 /// CalibrationMgr — boot gyro/accel bias calibration, owned by ImuTask because it has
 /// the IMU samples. Measures the at-rest bias on the ground and seeds the estimator
@@ -616,6 +625,10 @@ void ImuTask(void* pvParameters)
     // 離着陸マネージャを初期化（ToF 高度で接地/空中を判定）。
     g_takeoff_landing.init();
 
+    // Initialize the IMU-rate anomaly detector (impact / gyro anomaly).
+    // IMU レート異常検出器を初期化（衝撃/ジャイロ異常）。
+    g_imu_anomaly.init();
+
     // The vertical ground-hold applies only when ToF is the vertical sensor (a
     // barometer would anchor altitude from the ground, making the hold unnecessary
     // and its ToF-driven release impossible). Read eskf.use_tof once.
@@ -717,6 +730,16 @@ void ImuTask(void* pvParameters)
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
         sf::sensor_imu.publish(imu);
+
+        // IMU-rate safety checks (requirements §9): impact / gyro anomaly at the
+        // sample rate, so "2 consecutive" means 5 ms — fast enough for a real
+        // crash spike. Alerts go to system_alert; the StateManager decides.
+        // IMU レートの安全監視（要件§9）: 衝撃/ジャイロ異常をサンプルレートで判定。
+        // 「連続2回」= 5ms で実墜落スパイクに十分速い。アラートは system_alert へ、
+        // 判断は StateManager。
+        g_imu_anomaly.feedSample(
+            imu.accel, imu.gyro,
+            sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state)));
 
         // Process estimator commands from the StateManager transition callbacks
         // (reset / pos-vel reset / bias freeze / recalibrate). Done before predict so a

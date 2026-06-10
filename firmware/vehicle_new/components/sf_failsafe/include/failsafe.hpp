@@ -40,8 +40,14 @@ struct FailsafeConfig {
     uint8_t consecutive_count = 2;       // §9 "× 連続2回" debounce for impact/gyro / 連続検出回数
 };
 
-/// Failsafe monitor: detect unsafe conditions and raise alerts
-/// フェイルセーフモニター: 危険な状態を検出しアラートを発報
+/// Failsafe monitor: comm-timeout and battery checks (10 Hz, PowerTask).
+/// The IMU-rate checks (impact / gyro anomaly) live in ImuAnomalyDetector
+/// below, fed per-sample by ImuTask at 400 Hz — a 10 Hz latest() peek missed
+/// millisecond-scale crash spikes almost certainly.
+/// フェイルセーフモニター: 通信タイムアウトと電池の監視（10Hz, PowerTask）。
+/// IMU レートの監視（衝撃/ジャイロ異常）は下の ImuAnomalyDetector が担い、
+/// ImuTask が 400Hz でサンプル毎に与える — 10Hz の latest() 覗き見では
+/// ミリ秒オーダーの墜落スパイクをほぼ確実に取りこぼしていた。
 class Failsafe {
 public:
     /// Initialize failsafe with default thresholds
@@ -52,15 +58,11 @@ public:
     /// カスタム閾値で初期化する
     void init(const FailsafeConfig& config);
 
-    /// Run all safety checks. Called from PowerTask at 10 Hz.
-    /// 全安全チェックを実行する。PowerTask から 10Hz で呼ばれる。
+    /// Run the 10 Hz checks (comm timeout, battery). Called from PowerTask.
+    /// 10Hz の監視（通信タイムアウト・電池）を実行する。PowerTask から呼ぶ。
     void update();
 
 private:
-    /// Check for impact (high-G event); armed flights only
-    /// 衝撃をチェックする（高G検出）; armed 飛行中のみ
-    void checkImpact(bool armed);
-
     /// Check communication timeout
     /// 通信タイムアウトをチェックする
     void checkCommTimeout();
@@ -68,14 +70,6 @@ private:
     /// Check battery voltage
     /// バッテリー電圧をチェックする
     void checkBattery();
-
-    /// Check gyro angular rate anomaly
-    /// ジャイロ角速度の異常をチェックする
-    void checkGyroAnomaly();
-
-    /// Publish alert to system_alert topic
-    /// system_alertトピックにアラートを発行する
-    void raiseAlert(AlertType type, AlertSeverity severity);
 
     FailsafeConfig config_;
     bool comm_lost_        = false;   // Comm lost flag / 通信途絶フラグ
@@ -87,10 +81,40 @@ private:
     // 後のサグで再発報できるようにする。
     bool batt_warning_     = false;   // 3.4V warning latched / 低電圧警告ラッチ
     bool batt_emergency_   = false;   // 3.0V emergency latched / 危険電圧ラッチ
-    bool impact_detected_  = false;   // Impact flag (cleared while disarmed) / 衝撃検出フラグ（disarm中クリア）
-    uint8_t impact_count_  = 0;       // consecutive over-threshold impact cycles / 連続衝撃回数
-    uint8_t gyro_count_    = 0;       // consecutive over-threshold gyro cycles / 連続ジャイロ異常回数
     uint8_t comm_reraise_count_ = 0;  // re-raise divider while comm stays lost / 喪失継続中の再発報分周
+};
+
+/// IMU-rate anomaly detector: impact (high-G) and gyro-anomaly (tumble) checks,
+/// fed per-sample by ImuTask at 400 Hz. requirements §9 "threshold × 連続2回"
+/// is interpreted at the sample rate: 2 consecutive samples = 5 ms — fast enough
+/// for a real crash spike, debounced against single-sample noise. Owned by
+/// ImuTask (its own instance; thresholds shared via FailsafeConfig).
+/// IMU レート異常検出器: 衝撃（高G）とジャイロ異常（タンブル）の監視。ImuTask が
+/// 400Hz でサンプル毎に与える。要件§9「閾値 × 連続2回」をサンプルレートで解釈し、
+/// 連続2サンプル = 5ms — 実際の墜落スパイクに十分速く、単発ノイズは除く。
+/// ImuTask が所有（独自インスタンス。閾値は FailsafeConfig を共用）。
+class ImuAnomalyDetector {
+public:
+    /// Initialize with default thresholds / デフォルト閾値で初期化する
+    void init();
+
+    /// Initialize with custom thresholds / カスタム閾値で初期化する
+    void init(const FailsafeConfig& config);
+
+    /// Feed one IMU sample (400 Hz). accel [m/s²], gyro [rad/s], body frame.
+    /// While disarmed, detection is skipped and the latches clear (ground
+    /// handling produces benign high-G; re-fly regains protection).
+    /// IMU サンプルを1つ与える（400Hz）。accel [m/s²]・gyro [rad/s]・機体座標。
+    /// disarm 中は検出をスキップしラッチをクリア（地上ハンドリングは無害な高Gを
+    /// 生む。再飛行で保護が復活する）。
+    void feedSample(const float accel[3], const float gyro[3], bool armed);
+
+private:
+    FailsafeConfig config_;
+    bool     impact_detected_ = false;  // latched while armed / armed 中ラッチ
+    uint16_t impact_count_    = 0;      // consecutive over-threshold samples / 連続閾値超サンプル
+    uint16_t gyro_count_      = 0;      // consecutive over-threshold samples / 連続閾値超サンプル
+    uint16_t gyro_suppress_   = 0;      // re-raise suppression countdown / 再発報抑制カウントダウン
 };
 
 }  // namespace sf
