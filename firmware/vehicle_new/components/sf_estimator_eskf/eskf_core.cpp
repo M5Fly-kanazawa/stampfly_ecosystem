@@ -699,6 +699,18 @@ void EskfCore::updateFlowRaw(int16_t dx, int16_t dy, float height,
 // Active Mask / 有効マスク
 // =============================================================================
 
+void EskfCore::setConfig(const EskfConfig& cfg)
+{
+    // State x and covariance P stay untouched — this is live tuning, not a
+    // re-initialization. The active mask is recomputed because the use_*
+    // switches may have changed (P isolation follows the mask).
+    // 状態 x と共分散 P には触れない — これは再初期化でなくライブチューニング。
+    // use_* スイッチが変わった可能性があるため active mask を再計算する
+    // （P の隔離はマスクに従う）。
+    cfg_ = cfg;
+    recomputeActiveMask();
+}
+
 void EskfCore::setSensorEnabled(int group, bool enabled)
 {
     // group: 0=TOF, 1=BARO, 2=MAG, 3=FLOW

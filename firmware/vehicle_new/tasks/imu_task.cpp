@@ -556,6 +556,13 @@ static void processEstimatorCommands()
         case sf::EstimatorCmd::Recalibrate:
             startBootCalibration();
             break;
+        case sf::EstimatorCmd::ReloadParams:
+            // Live tuning: re-read eskf.* in THIS task's context (the params
+            // callback only publishes the verb — no cross-task touching).
+            // ライブチューニング: 本タスクの文脈で eskf.* を読み直す（params
+            // コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
+            g_estimator->reloadParams();
+            break;
         default:
             break;
         }
@@ -625,9 +632,11 @@ void ImuTask(void* pvParameters)
     // 離着陸マネージャを初期化（ToF 高度で接地/空中を判定）。
     g_takeoff_landing.init();
 
-    // Initialize the IMU-rate anomaly detector (impact / gyro anomaly).
-    // IMU レート異常検出器を初期化（衝撃/ジャイロ異常）。
-    g_imu_anomaly.init();
+    // Initialize the IMU-rate anomaly detector (impact / gyro anomaly) with the
+    // thresholds from the safety.* parameters (params SSOT, not struct defaults).
+    // IMU レート異常検出器を初期化（衝撃/ジャイロ異常）。閾値は safety.* パラメータ
+    // （params SSOT）から取得し、struct 既定値の暗黙使用にしない。
+    g_imu_anomaly.init(sf::loadFailsafeConfigFromParams());
 
     // The vertical ground-hold applies only when ToF is the vertical sensor (a
     // barometer would anchor altitude from the ground, making the hold unnecessary

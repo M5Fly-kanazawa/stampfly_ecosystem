@@ -35,6 +35,7 @@ public:
     void reset() override;
     void onModeChange(FlightMode new_mode) override;
     void onLanding() override;
+    void reloadParams() override;
 
 private:
     /// Load PID gains from parameter system / パラメータからゲインを読み込み

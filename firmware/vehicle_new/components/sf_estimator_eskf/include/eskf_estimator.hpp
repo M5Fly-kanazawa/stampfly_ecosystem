@@ -40,6 +40,7 @@ public:
     void freezeBias() override;
     void unfreezeBias() override;
     void inflateCovariance(uint16_t state_mask) override;
+    void reloadParams() override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;

@@ -17,6 +17,7 @@
 
 #include "failsafe.hpp"
 #include "topics.hpp"
+#include "params.hpp"    // safety.* → FailsafeConfig
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -46,6 +47,26 @@ static void raiseAlert(AlertType type, AlertSeverity severity)
     alert.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
     system_alert.publish(alert);
+}
+
+// -----------------------------------------------------------------------------
+// loadFailsafeConfigFromParams — safety.* parameters → FailsafeConfig.
+// Missing parameters keep the struct defaults (get_* leaves the value untouched).
+// loadFailsafeConfigFromParams — safety.* パラメータ → FailsafeConfig。
+// 存在しないパラメータは struct 既定値のまま（get_* は値を変更しない）。
+// -----------------------------------------------------------------------------
+FailsafeConfig loadFailsafeConfigFromParams()
+{
+    FailsafeConfig config;
+    params::get_float("safety.impact.accel_g",  config.impact_accel_g);
+    params::get_float("safety.impact.gyro_dps", config.gyro_anomaly_dps);
+    params::get_float("safety.battery.low_v",   config.low_battery_v);
+
+    float comm_timeout_ms = static_cast<float>(config.comm_timeout_ms);
+    if (params::get_float("safety.comm.timeout_ms", comm_timeout_ms)) {
+        config.comm_timeout_ms = static_cast<uint32_t>(comm_timeout_ms);
+    }
+    return config;
 }
 
 // -----------------------------------------------------------------------------

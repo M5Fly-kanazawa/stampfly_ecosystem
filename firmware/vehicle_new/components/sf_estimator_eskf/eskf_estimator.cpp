@@ -23,7 +23,13 @@ static const char* TAG = "ESKF";
 
 namespace sf {
 
-void EskfEstimator::init()
+// -----------------------------------------------------------------------------
+// loadConfigFromParams — build an EskfConfig from the parameter system. Shared
+// by init() (boot) and reloadParams() (live tuning via ReloadParams verb).
+// loadConfigFromParams — パラメータシステムから EskfConfig を構築する。init()
+// （起動時）と reloadParams()（ReloadParams verb によるライブチューニング）が共用。
+// -----------------------------------------------------------------------------
+static EskfConfig loadConfigFromParams()
 {
     EskfConfig cfg;
 
@@ -59,6 +65,13 @@ void EskfEstimator::init()
     params::get_float("eskf.accel_comp.beta",  cfg.accel_comp_beta);
     params::get_float("eskf.accel_comp.max",   cfg.accel_comp_max);
 
+    return cfg;
+}
+
+void EskfEstimator::init()
+{
+    const EskfConfig cfg = loadConfigFromParams();
+
     core_.init(cfg);
     cached_state_ = {};
     cached_state_.attitude[0] = 1.0f;
@@ -66,6 +79,18 @@ void EskfEstimator::init()
     ESP_LOGI(TAG, "ESKF initialized (tof=%d flow=%d baro=%d mag=%d accel_comp=%d a=%.2f b=%.3f)",
              cfg.use_tof, cfg.use_flow, cfg.use_baro, cfg.use_mag,
              cfg.accel_comp_enable, cfg.accel_comp_alpha, cfg.accel_comp_beta);
+}
+
+void EskfEstimator::reloadParams()
+{
+    // Live tuning: re-read every eskf.* parameter and apply WITHOUT resetting
+    // the filter state (setConfig keeps x and P). Issued via
+    // EstimatorCmd::ReloadParams from the params-change callback.
+    // ライブチューニング: 全 eskf.* パラメータを読み直し、フィルタ状態をリセット
+    // せずに適用する（setConfig は x と P を保持）。パラメータ変更コールバックの
+    // EstimatorCmd::ReloadParams 経由で実行される。
+    core_.setConfig(loadConfigFromParams());
+    ESP_LOGI(TAG, "ESKF parameters reloaded (live)");
 }
 
 void EskfEstimator::predict(const ImuData& imu, float dt)

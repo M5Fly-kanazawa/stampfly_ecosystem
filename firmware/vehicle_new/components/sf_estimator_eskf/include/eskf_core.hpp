@@ -116,6 +116,14 @@ public:
     /// Initialize with config / 設定で初期化
     void init(const EskfConfig& cfg);
 
+    /// Apply a new config WITHOUT touching the state/covariance — live tuning
+    /// (param set → ReloadParams). Recomputes the active mask in case use_*
+    /// sensor switches changed.
+    /// 状態・共分散に触れずに新しい設定を適用する — ライブチューニング
+    /// （param set → ReloadParams）。use_* センサスイッチの変化に備えて
+    /// active mask を再計算する。
+    void setConfig(const EskfConfig& cfg);
+
     /// Reset all state / 全状態リセット
     void reset();
 

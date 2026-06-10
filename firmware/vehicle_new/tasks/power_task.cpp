@@ -141,9 +141,13 @@ void PowerTask(void* pvParameters)
         ESP_LOGW(TAG, "INA3221 init failed — power monitoring disabled (Optional)");
     }
 
-    // Failsafe needs no hardware — it reads topics and publishes alerts.
-    // Failsafe はハードウェア不要 — トピックを読みアラートを発行する。
-    g_failsafe.init();
+    // Failsafe needs no hardware — it reads topics and publishes alerts. The
+    // thresholds come from the safety.* parameters (params SSOT) — the old bare
+    // init() silently used the struct defaults.
+    // Failsafe はハードウェア不要 — トピックを読みアラートを発行する。閾値は
+    // safety.* パラメータ（params SSOT）から取得 — 旧来の素の init() は struct
+    // 既定値を暗黙使用していた。
+    g_failsafe.init(sf::loadFailsafeConfigFromParams());
 
     TickType_t last_wake = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(100);  // 10Hz

@@ -355,6 +355,9 @@ enum class EstimatorCmd : uint8_t {
     UnfreezeBias = 4,   // unfreeze bias estimation (takeoff) / バイアス凍結を解除
     Recalibrate  = 5,   // restart boot bias calibration      / 起動バイアス校正を再実行
     InflateCov   = 6,   // inflate covariance, keep state x   / 共分散だけ膨張（推定値は保持）
+    ReloadParams = 7,   // re-read eskf.* params, keep x and P / eskf.* を読み直す（x・P は保持）
+                        // (live tuning via the param-set callback)
+                        // （param set コールバック経由のライブチューニング）
 };
 
 /// Covariance-inflation scope for EstimatorCmd::InflateCov. "Inflate" means re-set the
@@ -396,6 +399,10 @@ enum class ControllerCmd : uint8_t {
                        // cleared by the next Reset (ARM)
                        // 自動着陸: 水平姿勢+固定降下率でスティック無視
                        // （通信断/電池緊急）。次の Reset（ARM）で解除
+    ReloadParams = 5,  // re-read gains/limits from params, keep integrators
+                       // (live tuning via the param-set callback)
+                       // ゲイン/リミットを params から読み直す。積分器は維持
+                       // （param set コールバック経由のライブチューニング）
 };
 
 /// Controller command — ControlTask consumes and applies to the active IController

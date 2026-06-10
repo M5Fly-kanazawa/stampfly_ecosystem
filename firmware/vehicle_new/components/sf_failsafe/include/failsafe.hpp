@@ -40,6 +40,15 @@ struct FailsafeConfig {
     uint8_t consecutive_count = 2;       // §9 "× 連続2回" debounce for impact/gyro / 連続検出回数
 };
 
+/// Build a FailsafeConfig from the safety.* parameters (params SSOT). Used by
+/// PowerTask (Failsafe) and ImuTask (ImuAnomalyDetector) at init so the
+/// thresholds actually come from the parameter system instead of silently
+/// using the struct defaults.
+/// safety.* パラメータ（params SSOT）から FailsafeConfig を構築する。PowerTask
+/// （Failsafe）と ImuTask（ImuAnomalyDetector）が init 時に使い、閾値が struct
+/// 既定値の暗黙使用でなく実際にパラメータシステム由来になるようにする。
+FailsafeConfig loadFailsafeConfigFromParams();
+
 /// Failsafe monitor: comm-timeout and battery checks (10 Hz, PowerTask).
 /// The IMU-rate checks (impact / gyro anomaly) live in ImuAnomalyDetector
 /// below, fed per-sample by ImuTask at 400 Hz — a 10 Hz latest() peek missed

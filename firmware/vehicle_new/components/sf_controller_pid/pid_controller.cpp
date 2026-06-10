@@ -41,6 +41,18 @@ void PidController::init()
     ESP_LOGI(TAG, "PID cascade controller initialized");
 }
 
+void PidController::reloadParams()
+{
+    // Live tuning (ControllerCmd::ReloadParams): re-read gains and output
+    // limits, KEEP the integrator state — a mid-flight gain change must not
+    // kick the loops the way a full reset would.
+    // ライブチューニング（ControllerCmd::ReloadParams）: ゲインと出力リミットを
+    // 読み直し、積分器状態は「維持」する — 飛行中のゲイン変更が full reset の
+    // ようにループを蹴ってはならない。
+    loadParams();
+    ESP_LOGI(TAG, "PID parameters reloaded (live)");
+}
+
 void PidController::loadParams()
 {
     // Rate control / レート制御

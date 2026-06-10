@@ -107,6 +107,13 @@ static void processControllerCommands(sf::IController& controller)
             // スティックを無視する。
             controller.onLanding();
             break;
+        case sf::ControllerCmd::ReloadParams:
+            // Live tuning: re-read gains/limits in THIS task's context (the
+            // params callback only publishes the verb — no cross-task touching).
+            // ライブチューニング: 本タスクの文脈でゲイン/リミットを読み直す
+            // （params コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
+            controller.reloadParams();
+            break;
         default:
             break;
         }

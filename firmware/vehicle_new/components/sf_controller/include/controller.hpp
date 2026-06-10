@@ -130,6 +130,19 @@ public:
     /// 着陸オーバーライドは次の reset()（次飛行の ARM）で解除される。教育用の単純な
     /// 制御器に実装を強制しないよう既定は no-op。
     virtual void onLanding() {}
+
+    // =========================================================================
+    // Live Parameter Reload
+    // ライブパラメータ再読込
+    // =========================================================================
+
+    /// Re-read the controller's gains/limits from the parameter system, keeping
+    /// the integrator state — live tuning. Issued via ControllerCmd::ReloadParams
+    /// when a parameter changes (param set callback). Default no-op.
+    /// 制御器のゲイン/リミットをパラメータシステムから読み直す。積分器状態は維持 —
+    /// ライブチューニング。パラメータ変更時（param set コールバック）に
+    /// ControllerCmd::ReloadParams 経由で実行。既定 no-op。
+    virtual void reloadParams() {}
 };
 
 }  // namespace sf

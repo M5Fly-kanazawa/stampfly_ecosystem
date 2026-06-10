@@ -222,6 +222,16 @@ public:
     ///
     /// @design architecture.md §4 — ground→flight covariance handoff (sweep)  [OK]
     virtual void inflateCovariance(uint16_t state_mask) { (void)state_mask; }
+
+    /// Re-read the estimator's parameters from the parameter system and apply
+    /// them WITHOUT resetting the filter state — live tuning. Issued via
+    /// EstimatorCmd::ReloadParams when a parameter changes (param set callback).
+    /// Default no-op for estimators without parameters (complementary filter).
+    /// 推定器のパラメータをパラメータシステムから読み直し、フィルタ状態をリセット
+    /// せずに適用する — ライブチューニング。パラメータ変更時（param set コールバック）
+    /// に EstimatorCmd::ReloadParams 経由で実行。パラメータを持たない推定器
+    /// （相補フィルタ）は既定 no-op。
+    virtual void reloadParams() {}
 };
 
 }  // namespace sf

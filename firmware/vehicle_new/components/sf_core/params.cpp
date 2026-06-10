@@ -18,6 +18,7 @@
 #include "topics.hpp"
 #include "params.hpp"
 #include "esp_log.h"
+#include "esp_timer.h"   // reload-callback timestamps / 再読込コールバックの時刻印
 #include "nvs_flash.h"
 #include "nvs.h"
 #include <cstring>
@@ -227,6 +228,33 @@ namespace params {
 
 using namespace param_vars;
 
+// -----------------------------------------------------------------------------
+// Live-reload callbacks — set on the table rows below. A param set publishes a
+// ReloadParams verb on the owning task's command topic; the OWNER re-reads its
+// parameters in its own context (thread-safe immediate application; the
+// callback itself never touches another task's objects).
+// ライブ再読込コールバック — 下のテーブル行に設定。param set が所有タスクの
+// コマンドトピックへ ReloadParams verb を発行し、「所有者」が自分の文脈で
+// パラメータを読み直す（スレッド安全な即時反映。コールバック自身は他タスクの
+// オブジェクトに決して触らない）。
+//
+// @design detailed_design.md §5 — parameter change → immediate apply     [OK]
+// -----------------------------------------------------------------------------
+
+static void notifyControllerReload()
+{
+    controller_command.publish(
+        {static_cast<uint8_t>(ControllerCmd::ReloadParams), 0,
+         static_cast<uint32_t>(esp_timer_get_time())});
+}
+
+static void notifyEstimatorReload()
+{
+    estimator_command.publish(
+        {static_cast<uint8_t>(EstimatorCmd::ReloadParams),
+         static_cast<uint32_t>(esp_timer_get_time()), 0});
+}
+
 /// Parameter table — the single source of truth (SSOT). Each row binds a name to
 /// a param_vars variable with its default/min/max/callback. To add a parameter,
 /// add a variable to param_vars (above) and a row here.
@@ -237,74 +265,74 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.83e-4f,  0.0f,  0.01f,  nullptr},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   20.0f,     0.01f, 100.0f, nullptr},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   nullptr},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  2.66e-4f,  0.0f,  0.01f,  nullptr},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  20.0f,     0.01f, 100.0f, nullptr},
-    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   nullptr},
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    4.08e-4f,  0.0f,  0.01f,  nullptr},
-    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, nullptr},
-    {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   nullptr},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.83e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  2.66e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    4.08e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    20.0f,     0.01f, 100.0f, &notifyControllerReload},
+    {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},
 
     // Attitude control
-    {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  nullptr},
-    {"attitude.roll.ti",  ParamType::FLOAT, &att_roll_ti,  4.0f,  0.01f, 100.0f, nullptr},
-    {"attitude.roll.td",  ParamType::FLOAT, &att_roll_td,  0.04f, 0.0f,  1.0f,   nullptr},
-    {"attitude.pitch.kp", ParamType::FLOAT, &att_pitch_kp, 5.0f,  0.0f,  50.0f,  nullptr},
-    {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, nullptr},
-    {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   nullptr},
+    {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  &notifyControllerReload},
+    {"attitude.roll.ti",  ParamType::FLOAT, &att_roll_ti,  4.0f,  0.01f, 100.0f, &notifyControllerReload},
+    {"attitude.roll.td",  ParamType::FLOAT, &att_roll_td,  0.04f, 0.0f,  1.0f,   &notifyControllerReload},
+    {"attitude.pitch.kp", ParamType::FLOAT, &att_pitch_kp, 5.0f,  0.0f,  50.0f,  &notifyControllerReload},
+    {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, &notifyControllerReload},
+    {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   &notifyControllerReload},
 
     // Altitude control (SIL-validated; see the variable defaults above)
-    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  1.5f,  0.0f, 10.0f,  nullptr},
-    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  8.0f,  0.1f, 100.0f, nullptr},
-    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.3f,  0.0f, 10.0f,  nullptr},
-    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.0f,  0.1f, 100.0f, nullptr},
+    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  1.5f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  8.0f,  0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.3f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
 
     // Position control
-    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  nullptr},
-    {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, nullptr},
-    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  0.8f,  0.0f, 10.0f,  nullptr},
-    {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, nullptr},
+    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, &notifyControllerReload},
+    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  0.8f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
 
     // ESKF process noise
-    {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  nullptr},
-    {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, nullptr},
-    {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, nullptr},
-    {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, nullptr},
+    {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  &notifyEstimatorReload},
+    {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, &notifyEstimatorReload},
+    {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, &notifyEstimatorReload},
+    {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, &notifyEstimatorReload},
 
     // ESKF observation noise
-    {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.03f, 0.001f, 1.0f,  nullptr},
-    {"eskf.obs.flow_noise",      ParamType::FLOAT, &eskf_flow_noise,    0.30f, 0.01f,  5.0f,  nullptr},
-    {"eskf.obs.baro_noise",      ParamType::FLOAT, &eskf_baro_noise,    0.1f,  0.01f,  5.0f,  nullptr},
-    {"eskf.obs.mag_noise",       ParamType::FLOAT, &eskf_mag_noise,     1.0f,  0.01f,  10.0f, nullptr},
-    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     0.8f,  0.001f, 2.0f,  nullptr},
+    {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.03f, 0.001f, 1.0f,  &notifyEstimatorReload},
+    {"eskf.obs.flow_noise",      ParamType::FLOAT, &eskf_flow_noise,    0.30f, 0.01f,  5.0f,  &notifyEstimatorReload},
+    {"eskf.obs.baro_noise",      ParamType::FLOAT, &eskf_baro_noise,    0.1f,  0.01f,  5.0f,  &notifyEstimatorReload},
+    {"eskf.obs.mag_noise",       ParamType::FLOAT, &eskf_mag_noise,     1.0f,  0.01f,  10.0f, &notifyEstimatorReload},
+    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     0.8f,  0.001f, 2.0f,  &notifyEstimatorReload},
 
     // ESKF sensor enable
-    {"eskf.use_tof",  ParamType::BOOL, &eskf_use_tof,  1.0f, 0.0f, 1.0f, nullptr},
-    {"eskf.use_flow", ParamType::BOOL, &eskf_use_flow, 1.0f, 0.0f, 1.0f, nullptr},
-    {"eskf.use_baro", ParamType::BOOL, &eskf_use_baro, 0.0f, 0.0f, 1.0f, nullptr},
-    {"eskf.use_mag",  ParamType::BOOL, &eskf_use_mag,  0.0f, 0.0f, 1.0f, nullptr},
+    {"eskf.use_tof",  ParamType::BOOL, &eskf_use_tof,  1.0f, 0.0f, 1.0f, &notifyEstimatorReload},
+    {"eskf.use_flow", ParamType::BOOL, &eskf_use_flow, 1.0f, 0.0f, 1.0f, &notifyEstimatorReload},
+    {"eskf.use_baro", ParamType::BOOL, &eskf_use_baro, 0.0f, 0.0f, 1.0f, &notifyEstimatorReload},
+    {"eskf.use_mag",  ParamType::BOOL, &eskf_use_mag,  0.0f, 0.0f, 1.0f, &notifyEstimatorReload},
 
     // ESKF gates
-    {"eskf.gate.mahalanobis", ParamType::FLOAT, &eskf_mahalanobis, 15.0f, 1.0f,  100.0f, nullptr},
-    {"eskf.gate.tof_innov",   ParamType::FLOAT, &eskf_tof_innov,   0.5f,  0.01f, 5.0f,   nullptr},
-    {"eskf.gate.baro_innov",  ParamType::FLOAT, &eskf_baro_innov,  0.5f,  0.01f, 5.0f,   nullptr},
-    {"eskf.gate.flow_clamp",  ParamType::FLOAT, &eskf_flow_clamp,  0.3f,  0.01f, 5.0f,   nullptr},
+    {"eskf.gate.mahalanobis", ParamType::FLOAT, &eskf_mahalanobis, 15.0f, 1.0f,  100.0f, &notifyEstimatorReload},
+    {"eskf.gate.tof_innov",   ParamType::FLOAT, &eskf_tof_innov,   0.5f,  0.01f, 5.0f,   &notifyEstimatorReload},
+    {"eskf.gate.baro_innov",  ParamType::FLOAT, &eskf_baro_innov,  0.5f,  0.01f, 5.0f,   &notifyEstimatorReload},
+    {"eskf.gate.flow_clamp",  ParamType::FLOAT, &eskf_flow_clamp,  0.3f,  0.01f, 5.0f,   &notifyEstimatorReload},
 
     // ESKF accel-attitude (SSOT — proven firmware/vehicle values)
-    {"eskf.att.k_adaptive",   ParamType::FLOAT, &eskf_att_k_adaptive, 10.0f, 0.0f,  100.0f, nullptr},
-    {"eskf.att.chi2_gate",    ParamType::FLOAT, &eskf_att_chi2_gate,  7.81f, 0.0f,  100.0f, nullptr},
-    {"eskf.att.corr_clamp",   ParamType::FLOAT, &eskf_att_corr_clamp, 0.05f, 0.001f, 1.0f,  nullptr},
+    {"eskf.att.k_adaptive",   ParamType::FLOAT, &eskf_att_k_adaptive, 10.0f, 0.0f,  100.0f, &notifyEstimatorReload},
+    {"eskf.att.chi2_gate",    ParamType::FLOAT, &eskf_att_chi2_gate,  7.81f, 0.0f,  100.0f, &notifyEstimatorReload},
+    {"eskf.att.corr_clamp",   ParamType::FLOAT, &eskf_att_corr_clamp, 0.05f, 0.001f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF acceleration-compensated accel-attitude (POS_HOLD; α-β flow-acceleration tracker)
-    {"eskf.accel_comp.enable", ParamType::BOOL,  &eskf_accel_comp_enable, 1.0f,  0.0f,  1.0f,  nullptr},
-    {"eskf.accel_comp.alpha",  ParamType::FLOAT, &eskf_accel_comp_alpha,  0.2f,  0.01f, 1.0f,  nullptr},
-    {"eskf.accel_comp.beta",   ParamType::FLOAT, &eskf_accel_comp_beta,   0.02f, 0.0f,  1.0f,  nullptr},
-    {"eskf.accel_comp.max",    ParamType::FLOAT, &eskf_accel_comp_max,    5.0f,  0.5f,  20.0f, nullptr},
+    {"eskf.accel_comp.enable", ParamType::BOOL,  &eskf_accel_comp_enable, 1.0f,  0.0f,  1.0f,  &notifyEstimatorReload},
+    {"eskf.accel_comp.alpha",  ParamType::FLOAT, &eskf_accel_comp_alpha,  0.2f,  0.01f, 1.0f,  &notifyEstimatorReload},
+    {"eskf.accel_comp.beta",   ParamType::FLOAT, &eskf_accel_comp_beta,   0.02f, 0.0f,  1.0f,  &notifyEstimatorReload},
+    {"eskf.accel_comp.max",    ParamType::FLOAT, &eskf_accel_comp_max,    5.0f,  0.5f,  20.0f, &notifyEstimatorReload},
 
     // Safety
     {"safety.impact.accel_g",  ParamType::FLOAT, &safety_accel_g,     3.0f,   1.0f,   10.0f,   nullptr},
