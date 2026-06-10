@@ -75,7 +75,17 @@ inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 /// コストはサンプルレートでなく「パケットレート」— firmware/vehicle で実証済みの
 /// 帯域設計。
 inline constexpr int    kSamplesPerPacket = 8;
-inline constexpr size_t kUnifiedMaxSize   = 1024;
+
+/// Datagram size cap. The legacy firmware used 1024, but delivering EVERY flow
+/// sample (2 entries/packet at 100Hz) pushed the typical payload to ~1040B and
+/// the LAST entry (mag, 18B) was silently rejected on every packet — measured
+/// on hardware as "Mag: 0 samples". 1200 leaves ~160B of entry headroom and
+/// stays well inside the WiFi MTU (1472) and the PC capture buffer (2048).
+/// データグラム上限。旧ファームは 1024 だったが、フロー全量配送（100Hz で 1 パケット
+/// 2 エントリ）で典型ペイロードが ~1040B となり、最後に積む mag（18B）が毎パケット
+/// 黙って弾かれた — 実機計測で「Mag: 0 サンプル」。1200 ならエントリ余白 ~160B を
+/// 確保しつつ WiFi MTU（1472）と PC 受信バッファ（2048）に余裕で収まる。
+inline constexpr size_t kUnifiedMaxSize   = 1200;
 
 // Quantization scales (PC side divides by these to restore physical units)
 // 量子化スケール（PC 側はこれで割って物理量に復元する）
