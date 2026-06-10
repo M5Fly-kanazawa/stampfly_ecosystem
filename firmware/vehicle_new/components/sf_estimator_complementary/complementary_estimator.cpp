@@ -14,21 +14,29 @@
 
 #include "complementary_estimator.hpp"
 
+#include <cmath>   // std::sqrt / std::cos (ToF tilt compensation)
+
 namespace sf {
 
 using math::Vec3;
 using math::Quat;
 
 // Vertical-channel constants. Gravity closes the accelerometer→acceleration loop;
-// the baro gains are the complementary blend applied once per barometer update
-// (strong on altitude, gentle on velocity — the accel integral carries the fast
-// motion, the baro anchors the slow drift).
-// 鉛直チャネル定数。重力で加速度計→加速度を閉じ、気圧ゲインは気圧更新ごとの相補ブレンド
-// （高度に強く・速度に弱く — 速い動きは加速度積分、遅いドリフトは気圧で固定）。
+// the per-update gains are the complementary blend (strong on altitude, gentle on
+// velocity — the accel integral carries the fast motion, the slow drift is
+// anchored by the absolute sensor). The ToF is the primary vertical anchor (same
+// sensor set as the ESKF, project policy); the baro blends in only when fitted.
+// 鉛直チャネル定数。重力で加速度計→加速度を閉じ、更新ごとのゲインが相補ブレンド
+// （高度に強く・速度に弱く — 速い動きは加速度積分、遅いドリフトは絶対センサで固定）。
+// 鉛直アンカーの主役は ToF（ESKF と同一センサ構成、プロジェクト方針）。気圧計は搭載
+// 構成でのみブレンド。
 namespace {
 constexpr float kGravity     = math::kGravity;  ///< [m/s²] NED down-positive (SSOT: sf::math)
+constexpr float kTofAltGain  = 0.30f;   ///< altitude correction per ToF update
+constexpr float kTofVelGain  = 0.05f;   ///< velocity correction per ToF update
 constexpr float kBaroAltGain = 0.30f;   ///< altitude correction per baro update
 constexpr float kBaroVelGain = 0.05f;   ///< velocity correction per baro update
+constexpr float kTofMaxTiltRad = 0.5f;  ///< skip ToF beyond ~29° tilt (beam off-ground)
 }  // namespace
 
 void ComplementaryEstimator::init()
@@ -42,6 +50,12 @@ void ComplementaryEstimator::reset()
     rate_ = Vec3{0.0f, 0.0f, 0.0f};
     altitude_ = 0.0f;
     vz_up_ = 0.0f;
+    // Same contract as the ESKF: reset zeroes the biases; ImuTask re-applies the
+    // boot calibration right after (reseedCalibration).
+    // ESKF と同じ契約: reset はバイアスをゼロ化し、直後に ImuTask が起動校正を
+    // 再適用する（reseedCalibration）。
+    gyro_bias_  = Vec3{0.0f, 0.0f, 0.0f};
+    accel_bias_ = Vec3{0.0f, 0.0f, 0.0f};
     timestamp_ = 0;
 }
 
@@ -49,6 +63,24 @@ void ComplementaryEstimator::resetPositionVelocity()
 {
     altitude_ = 0.0f;
     vz_up_ = 0.0f;
+}
+
+void ComplementaryEstimator::holdPositionVelocity()
+{
+    // On-ground anchor (called every cycle while grounded, same contract as the
+    // ESKF): pin the vertical channel so predict-only drift cannot accumulate
+    // before takeoff.
+    // 接地アンカー（接地中毎周期呼ばれる。ESKF と同じ契約）: 鉛直チャネルを固定し、
+    // 離陸前に予測のみのドリフトが溜まらないようにする。
+    altitude_ = 0.0f;
+    vz_up_ = 0.0f;
+}
+
+void ComplementaryEstimator::applyCalibration(const float gyro_bias[3],
+                                              const float accel_bias[3])
+{
+    gyro_bias_  = Vec3{gyro_bias[0], gyro_bias[1], gyro_bias[2]};
+    accel_bias_ = Vec3{accel_bias[0], accel_bias[1], accel_bias[2]};
 }
 
 // -----------------------------------------------------------------------------
@@ -64,8 +96,17 @@ void ComplementaryEstimator::resetPositionVelocity()
 // -----------------------------------------------------------------------------
 void ComplementaryEstimator::predict(const ImuData& imu, float dt)
 {
-    const Vec3 gyro{imu.gyro[0], imu.gyro[1], imu.gyro[2]};
-    const Vec3 accel{imu.accel[0], imu.accel[1], imu.accel[2]};
+    // Subtract the boot-calibration biases first: the rate controller closes its
+    // loop on rate_, and the vertical integral below amplifies any accel bias
+    // into a velocity ramp.
+    // まず起動校正バイアスを減算する: レート制御器は rate_ で閉ループし、下の鉛直積分は
+    // 加速度バイアスを速度ランプに増幅してしまう。
+    const Vec3 gyro{imu.gyro[0] - gyro_bias_.x,
+                    imu.gyro[1] - gyro_bias_.y,
+                    imu.gyro[2] - gyro_bias_.z};
+    const Vec3 accel{imu.accel[0] - accel_bias_.x,
+                     imu.accel[1] - accel_bias_.y,
+                     imu.accel[2] - accel_bias_.z};
 
     rate_ = gyro;  // body angular rate for the rate controller / レート制御器用
 
@@ -110,6 +151,30 @@ void ComplementaryEstimator::predict(const ImuData& imu, float dt)
     altitude_ += vz_up_ * dt;
 
     timestamp_ = imu.timestamp;
+}
+
+void ComplementaryEstimator::updateTof(const TofData& tof)
+{
+    // ToF is the primary vertical anchor (project policy: ToF-only vertical, the
+    // same sensor set the ESKF uses). Tilt-compensate the slant range to height,
+    // then blend like the baro: strong on altitude, gentle on velocity. Skip
+    // invalid readings and large tilts (the beam leaves the ground footprint).
+    // ToF が鉛直アンカーの主役（方針: 鉛直は ToF のみ — ESKF と同一センサ構成）。
+    // 斜距離を傾き補正で高度に直し、気圧と同じく高度に強く・速度に弱くブレンドする。
+    // 無効読みと大傾斜（ビームが接地footprintを外れる）はスキップ。
+    if (!tof.valid) {
+        return;
+    }
+    const Vec3 euler = q_.to_euler();
+    const float tilt = std::sqrt(euler.x * euler.x + euler.y * euler.y);
+    if (tilt > kTofMaxTiltRad) {
+        return;
+    }
+    const float height = tof.distance * std::cos(euler.x) * std::cos(euler.y);
+
+    const float err = height - altitude_;
+    altitude_ += kTofAltGain * err;
+    vz_up_    += kTofVelGain * err;
 }
 
 void ComplementaryEstimator::updateBaro(const BaroData& baro)
