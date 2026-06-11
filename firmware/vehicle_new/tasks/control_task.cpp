@@ -140,6 +140,16 @@ static void processControllerCommands(sf::IController& controller)
             // Phase 2: 高度/位置のみリセット（soft landing/FLYING退出）。現状 no-op
             // （後続 ARM が full Reset を出す）。soft-landing と共に配線。
             break;
+        case sf::ControllerCmd::Takeoff:
+            // Auto-takeoff (ALT/POS mode): fixed climb + level attitude until
+            // TakeoffComplete. WHEN = state machine, HOW = controller.
+            // 自動離陸（ALT/POS モード）: TakeoffComplete まで固定上昇＋水平姿勢。
+            // いつ=状態機械、どう=制御器。
+            controller.onTakeoff();
+            break;
+        case sf::ControllerCmd::TakeoffComplete:
+            controller.onTakeoffComplete();
+            break;
         case sf::ControllerCmd::Landing:
             // Autonomous landing (comm loss / battery emergency): the controller
             // switches to level-attitude + fixed-descent and ignores the sticks.

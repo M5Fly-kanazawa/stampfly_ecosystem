@@ -176,20 +176,18 @@ LedPattern Notify::computeStatePattern() const
 
 // -----------------------------------------------------------------------------
 // computeModePattern — flight-mode channel (body LEDs).
-// On the ground the pilot's mode-SWITCH position is previewed (the state machine
-// keeps the ACTIVE mode at STABILIZE until FLYING — re-fly safety — so the
-// preview reads the pilot_request switches with the same precedence the state
-// task applies once airborne: pos > alt > acro > stabilize). In the air the
-// ACTIVE mode (sub_mode) is shown. Slow blink = disarmed preview, solid = armed.
-// Low battery overrides with cyan fast blink — the body LEDs are what the pilot
-// sees in flight, so the urgent overlay must live here too.
+// Shows the ACTIVE flight mode (sub_mode) everywhere: the state machine accepts
+// mode changes on the ground (IDLE_GROUND/ARMED_GROUND), so flipping the
+// transmitter switch while parked changes the actual mode — and this LED —
+// immediately. Slow blink = disarmed, solid = armed/airborne. Low battery
+// overrides with cyan fast blink — the body LEDs are what the pilot sees in
+// flight, so the urgent overlay must live here too.
 // computeModePattern — フライトモードチャネル（本体 LED）。
-// 地上ではモード「スイッチ位置」をプレビューする（状態機械は再飛行安全のため FLYING
-// まで実モードを STABILIZE に保つので、プレビューは pilot_request のスイッチを
-// state task が空中で適用するのと同じ優先順位 pos > alt > acro > stabilize で読む）。
-// 空中では「実モード」（sub_mode）を表示。低速点滅=DISARM プレビュー、常灯=ARM。
-// 低電圧はシアン高速点滅で上書き — 飛行中にパイロットが見るのは本体 LED のため、
-// 緊急表示はこちらにも必要。
+// 常に「実モード」（sub_mode）を表示する: 状態機械が地上（IDLE_GROUND/ARMED_GROUND）
+// でのモード変更を受理するため、設置中にスイッチを切り替えると実モードも —
+// この LED も — 即座に変わる。低速点滅=DISARM、常灯=ARM/空中。低電圧はシアン
+// 高速点滅で上書き — 飛行中にパイロットが見るのは本体 LED のため、緊急表示は
+// こちらにも必要。
 // -----------------------------------------------------------------------------
 LedPattern Notify::computeModePattern() const
 {
@@ -209,21 +207,17 @@ LedPattern Notify::computeModePattern() const
         return getPattern(state);
     }
 
-    // Airborne (incl. armed on ground): ACTIVE mode, solid.
-    // 空中（地上 ARM 含む）: 実モードの常灯。
+    // Armed or airborne: ACTIVE mode, solid.
+    // ARM 中または空中: 実モードの常灯。
     if (state == FlightState::ARMED_GROUND || isAirborne(state)) {
         return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
                  kSolidOn, kSolidOff };
     }
 
-    // Disarmed on the ground: preview the mode-switch position, slow blink.
-    // 地上 DISARM: モードスイッチ位置のプレビュー、低速点滅。
-    const PilotRequest req = pilot_request.latest();
-    FlightMode preview = FlightMode::STABILIZE;
-    if (req.pos_hold)      preview = FlightMode::POS_HOLD;
-    else if (req.alt_hold) preview = FlightMode::ALT_HOLD;
-    else if (req.acro)     preview = FlightMode::ACRO;
-    return { modeColor(preview), kSlowOn, kSlowOff };
+    // Disarmed on the ground: ACTIVE mode (follows the switch), slow blink.
+    // 地上 DISARM: 実モード（スイッチに追従）、低速点滅。
+    return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
+             kSlowOn, kSlowOff };
 }
 
 // -----------------------------------------------------------------------------

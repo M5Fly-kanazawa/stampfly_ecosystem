@@ -16,5 +16,5 @@ log_contains any "Vertical handoff: takeoff"
 order "ARM rejected: boot calibration not complete" "Calibration complete (still window verified"
 order "Calibration complete (still window verified" "ARM accepted"
 order "ARM accepted" "Vertical handoff: takeoff"
-metric tilt_max < 18.0 in [15.5,17.8]
-metric duty_max < 0.92 in [15.5,17.8]
+metric tilt_max < 18.0 in 15.5 17.8
+metric duty_max < 0.92 in 15.5 17.8

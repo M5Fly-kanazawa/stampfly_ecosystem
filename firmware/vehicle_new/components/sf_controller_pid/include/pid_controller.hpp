@@ -35,6 +35,8 @@ public:
     void reset() override;
     void onModeChange(FlightMode new_mode) override;
     void onLanding() override;
+    void onTakeoff() override;
+    void onTakeoffComplete() override;
     void reloadParams() override;
 
 private:
@@ -53,6 +55,25 @@ private:
                              float& roll_sp, float& pitch_sp);
 
     FlightMode current_mode_ = FlightMode::STABILIZE;
+
+    // Vertical flight phase for the ALT_HOLD/POS_HOLD laws. Raw throttle→thrust
+    // makes no sense in these modes, so the phase gates the vertical loop:
+    //   Grounded     — armed on the ground: thrust forced to ZERO (props stopped;
+    //                  without this gate ALT_HOLD would command hover thrust at ARM)
+    //   TakeoffClimb — auto-takeoff (ControllerCmd::Takeoff): fixed climb rate +
+    //                  level attitude (POS: hold the launch point) until airborne
+    //   Airborne     — normal mode law (ALT_HOLD captures the current altitude on
+    //                  entry). STABILIZE/ACRO ignore the phase (manual throttle).
+    // ALT_HOLD/POS_HOLD 則のための鉛直飛行フェーズ。これらのモードでは生スロットル→
+    // 推力は意味を持たないため、フェーズが鉛直ループをゲートする:
+    //   Grounded     — 地上で ARM 中: 推力を強制ゼロ（プロペラ停止。このゲートが
+    //                  ないと ALT_HOLD は ARM した瞬間にホバー推力を指令してしまう）
+    //   TakeoffClimb — 自動離陸（ControllerCmd::Takeoff）: 空中検知まで固定上昇率＋
+    //                  水平姿勢（POS は発進点保持）
+    //   Airborne     — 通常のモード則（ALT_HOLD は突入時に現在高度を捕捉）。
+    //                  STABILIZE/ACRO はフェーズを無視（手動スロットル）。
+    enum class VerticalPhase : uint8_t { Grounded, TakeoffClimb, Airborne };
+    VerticalPhase phase_ = VerticalPhase::Grounded;
 
     // Rate control PIDs (innermost loop) / レート制御PID（最内ループ）
     PID rate_roll_, rate_pitch_, rate_yaw_;
@@ -147,6 +168,14 @@ private:
     // 着陸検出（TakeoffLandingMgr）が状態を終わらせる。
     bool  landing_              = false;
     float landing_descent_rate_ = 0.3f;   // [m/s] downward / 下向き降下率
+
+    // Auto-takeoff climb rate (TakeoffClimb phase). Mirror of the landing descent
+    // rate: gentle, vertical-velocity-loop tracked, indoor-safe. The phase ends at
+    // the ToF airborne detection (TakeoffLandingMgr), typically well under 1 s.
+    // 自動離陸の上昇率（TakeoffClimb フェーズ）。着陸降下率の鏡像: 穏やかで、鉛直速度
+    // ループが追従し屋内でも安全。フェーズは ToF の空中検知（TakeoffLandingMgr）で
+    // 終わり、通常 1 秒未満。
+    float takeoff_climb_rate_ = 0.3f;     // [m/s] upward / 上向き上昇率
 };
 
 }  // namespace sf

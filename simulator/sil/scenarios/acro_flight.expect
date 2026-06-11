@@ -7,9 +7,16 @@ exit 0
 log_contains any "ARM accepted"                       # IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff detected"                   # ARMED_GROUND → TAKEOFF
 log_contains any "Takeoff complete"                   # TAKEOFF → FLYING
-log_contains any "Mode change: STABILIZE"             # FLYING: STABILIZE → ACRO (requestModeChange accepted)
+log_contains any "Mode change: STABILIZE"             # STABILIZE → ACRO (requestModeChange accepted)
 log_contains any "DISARM accepted"                    # FLYING → IDLE_GROUND (pilot DISARM)
-order "Takeoff complete" "Mode change: STABILIZE"     # mode change only after reaching FLYING
+# Spec 2026-06-11: mode changes are accepted on the GROUND too (IDLE/ARMED_GROUND).
+# The acro switch is already on when the throttle-up row starts, so the mode now
+# changes in ARMED_GROUND — BEFORE takeoff (it used to be deferred to FLYING).
+# 仕様 2026-06-11: モード変更は地上（IDLE/ARMED_GROUND）でも受理される。acro スイッチは
+# スロットル上げの行で既に ON のため、モード変更は ARMED_GROUND で — 離陸「前」に起こる
+# （以前は FLYING まで保留されていた）。
+order "ARM accepted" "Mode change: STABILIZE"         # ground mode change after ARM
+order "Mode change: STABILIZE" "Takeoff complete"     # ...and before the takeoff completes
 order "Mode change: STABILIZE" "DISARM accepted"      # flies in ACRO before disarm
 # Numerical gates over the rate-doublet flight window (G2/G3). 飛行窓 [7.0,9.7]s。
 metric att_rmse < 3.0  in 7.0 9.7    # G2: ESKF roll/pitch tracks truth through the doublets

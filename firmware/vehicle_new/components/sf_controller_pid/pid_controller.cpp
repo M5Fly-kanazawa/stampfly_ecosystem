@@ -157,10 +157,25 @@ ControlOutput PidController::compute(
         roll_sp  = setpoint.roll * max_angle_;
         pitch_sp = setpoint.pitch * max_angle_;
 
+        // Auto-takeoff (ALT/POS modes): sticks are ignored — level attitude and
+        // heading hold, exactly like the landing path's mirror image. POS_HOLD
+        // additionally holds the launch point via the cascade below.
+        // 自動離陸（ALT/POS モード）: スティック無視 — 水平姿勢＋方位保持（着陸経路の
+        // 鏡像）。POS_HOLD はさらに下のカスケードで発進点を保持する。
+        if (current_mode_ >= FlightMode::ALT_HOLD &&
+            phase_ == VerticalPhase::TakeoffClimb) {
+            roll_sp  = 0.0f;
+            pitch_sp = 0.0f;
+            rate_sp_yaw = 0.0f;
+        }
+
         // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
         // craft holds its captured horizontal position instead of following sticks.
+        // Not while Grounded — the hold target is captured at (auto-)takeoff.
         // POS_HOLD: 位置カスケードがスティック傾き指令を上書きし、捕捉した水平位置を保持する。
-        if (current_mode_ >= FlightMode::POS_HOLD) {
+        // Grounded 中は走らせない — 保持目標は（自動）離陸時に捕捉する。
+        if (current_mode_ >= FlightMode::POS_HOLD &&
+            phase_ != VerticalPhase::Grounded) {
             computePositionHold(state, euler.z, dt, roll_sp, pitch_sp);
         }
 
@@ -176,37 +191,59 @@ ControlOutput PidController::compute(
         const float altitude = -state.position[2];   // NED z-down → altitude up
         const float vel_up   = -state.velocity[2];   // vertical velocity, up positive
 
-        // Capture the altitude target when entering ALT_HOLD, and keep tracking it
-        // while the throttle stick is off-center (climb/descend), so releasing the
-        // stick holds the altitude actually reached.
-        // ALT_HOLD 進入時に高度目標を捕捉し、スロットルが中央外（上昇/下降）の間は追従。
-        // スティックを戻すと到達した高度を保持する。
-        if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
+        if (phase_ == VerticalPhase::Grounded) {
+            // Armed on the ground: props stopped. Without this gate the vertical
+            // loop would command hover thrust the instant the craft ARMs in
+            // ALT/POS mode. Flight starts via the auto-takeoff verb (onTakeoff).
+            // 地上 ARM 中: プロペラ停止。このゲートがないと ALT/POS で ARM した瞬間に
+            // 鉛直ループがホバー推力を指令してしまう。飛行開始は自動離陸 verb から。
+            thrust = 0.0f;
+        } else if (phase_ == VerticalPhase::TakeoffClimb) {
+            // Auto-takeoff: track a fixed climb rate (altitude loop bypassed —
+            // there is no meaningful altitude target yet). The ToF airborne
+            // detection ends this phase via TakeoffComplete.
+            // 自動離陸: 固定上昇率を追従（高度ループはバイパス — まだ意味のある高度
+            // 目標がない）。ToF の空中検知が TakeoffComplete でこのフェーズを終える。
+            float thrust_correction =
+                alt_vel_.compute(takeoff_climb_rate_, vel_up, dt);
+            thrust = hover_thrust_ + thrust_correction;
+            if (thrust < 0.0f)         thrust = 0.0f;
+            if (thrust > max_thrust_)  thrust = max_thrust_;
+        } else {
+            // Airborne: normal ALT_HOLD law.
+            // 空中: 通常の ALT_HOLD 則。
+            // Capture the altitude target when entering ALT_HOLD, and keep tracking
+            // it while the throttle stick is off-center (climb/descend), so releasing
+            // the stick holds the altitude actually reached.
+            // ALT_HOLD 進入時に高度目標を捕捉し、スロットルが中央外（上昇/下降）の間は
+            // 追従。スティックを戻すと到達した高度を保持する。
+            if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
 
-        // Stick → climb rate / スティック → 上昇率
-        float climb_rate_sp = 0;
-        if (fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
-            climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
-            alt_setpoint_ = altitude;   // track while moving / 移動中は追従
+            // Stick → climb rate / スティック → 上昇率
+            float climb_rate_sp = 0;
+            if (fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
+                climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
+                alt_setpoint_ = altitude;   // track while moving / 移動中は追従
+            }
+
+            // Cascade: altitude error → velocity sp → thrust correction. With the
+            // stick centered, the position loop holds alt_setpoint (closed-loop).
+            // カスケード: 高度誤差 → 速度目標 → 推力補正。中央では位置ループが
+            // alt_setpoint を閉ループで保持する。
+            float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
+            if (climb_rate_sp != 0) vel_sp_z = climb_rate_sp;
+
+            float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
+
+            // Hover thrust + correction, clamped to the physical thrust range. The
+            // mixer would silently clip negative/excess thrust at the duty stage
+            // anyway; clamping here keeps the published control_output honest.
+            // ホバー推力 + 補正。物理推力範囲にクランプする。ミキサーは duty 段で負/
+            // 過大推力を黙ってクリップするが、ここでクランプして出力を正直に保つ。
+            thrust = hover_thrust_ + thrust_correction;
+            if (thrust < 0.0f)         thrust = 0.0f;
+            if (thrust > max_thrust_)  thrust = max_thrust_;
         }
-
-        // Cascade: altitude error → velocity sp → thrust correction. With the
-        // stick centered, the position loop holds alt_setpoint (closed-loop).
-        // カスケード: 高度誤差 → 速度目標 → 推力補正。中央では位置ループが alt_setpoint
-        // を閉ループで保持する。
-        float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
-        if (climb_rate_sp != 0) vel_sp_z = climb_rate_sp;
-
-        float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
-
-        // Hover thrust + correction, clamped to the physical thrust range. The
-        // mixer would silently clip negative/excess thrust at the duty stage
-        // anyway; clamping here keeps the published control_output honest.
-        // ホバー推力 + 補正。物理推力範囲にクランプする。ミキサーは duty 段で負/過大
-        // 推力を黙ってクリップするが、ここでクランプして control_output を正直に保つ。
-        thrust = hover_thrust_ + thrust_correction;
-        if (thrust < 0.0f)         thrust = 0.0f;
-        if (thrust > max_thrust_)  thrust = max_thrust_;
     }
 
     // Position control (POS_HOLD) is applied inside the attitude block above —
@@ -360,6 +397,40 @@ void PidController::onLanding()
     alt_vel_.reset();
 }
 
+void PidController::onTakeoff()
+{
+    if (phase_ != VerticalPhase::Grounded) {
+        return;   // already airborne or climbing (idempotent) / 既に上昇中か空中（冪等）
+    }
+    ESP_LOGI(TAG, "Auto-takeoff engaged (%.1f m/s climb)",
+             static_cast<double>(takeoff_climb_rate_));
+    phase_ = VerticalPhase::TakeoffClimb;
+
+    // Fresh vertical loop (it may hold a Grounded-phase zero-output history) and a
+    // launch-point capture for POS_HOLD (the cascade starts at the next compute).
+    // 鉛直ループを仕切り直し（Grounded フェーズのゼロ出力履歴を持ちうる）、POS_HOLD 用に
+    // 発進点を捕捉（カスケードは次の compute から動く）。
+    alt_vel_.reset();
+    capture_pos_ = true;
+}
+
+void PidController::onTakeoffComplete()
+{
+    if (phase_ == VerticalPhase::Airborne) {
+        return;   // idempotent / 冪等
+    }
+    if (phase_ == VerticalPhase::TakeoffClimb) {
+        ESP_LOGI(TAG, "Auto-takeoff complete — normal mode law engaged");
+    }
+    phase_ = VerticalPhase::Airborne;
+
+    // ALT_HOLD captures the altitude actually reached; the vertical-loop integral
+    // is kept (it has spooled to near-hover thrust — a smooth handoff).
+    // ALT_HOLD は実際に到達した高度を捕捉。鉛直ループの積分は維持（ほぼホバー推力まで
+    // 巻き上がっており、滑らかな引き継ぎになる）。
+    capture_alt_ = true;
+}
+
 void PidController::reset()
 {
     rate_roll_.reset();  rate_pitch_.reset();  rate_yaw_.reset();
@@ -368,6 +439,7 @@ void PidController::reset()
     pos_x_.reset();      pos_y_.reset();
     vel_x_.reset();      vel_y_.reset();
     landing_ = false;    // landing override ends with the flight / 着陸上書きは飛行と共に終了
+    phase_   = VerticalPhase::Grounded;  // next flight starts grounded / 次の飛行は接地から
     ESP_LOGI(TAG, "PID controller reset");
 }
 

@@ -59,9 +59,9 @@ IDLE_GROUND
 | INIT → IDLE_GROUND | 初期化完了 |
 | IDLE_GROUND ↔ IDLE_HELD | ToF距離による自動判定 |
 | IDLE_GROUND → ARMED_GROUND | ARMアクション（ボタン or コントローラ） |
-| ARMED_GROUND → TAKEOFF | スロットル入力 |
+| ARMED_GROUND → TAKEOFF | スロットル入力（ALT_HOLD/POS_HOLD 選択時は自動離陸シーケンスを開始: 固定上昇率＋水平姿勢で高度閾値まで） |
 | TAKEOFF → FLYING | 離陸完了（高度閾値到達） |
-| FLYING内サブモード切替 | コントローラからのモード切替コマンド |
+| サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
 | FLYING → LANDING | パイロット指示 or 自動判定 |
 | LANDING → IDLE_GROUND | 着陸完了 |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |

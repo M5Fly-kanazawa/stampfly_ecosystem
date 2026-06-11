@@ -202,6 +202,37 @@ static void registerStateCallbacks(sf::StateManager& manager)
             sf::controller_command.publish(
                 {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now});
             break;
+        case FlightState::TAKEOFF:
+            // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff (user spec,
+            // 2026-06-11): the throttle-up trigger enters TAKEOFF as usual, but in
+            // these modes raw throttle→thrust makes no sense — the controller
+            // climbs at a fixed rate with level attitude (POS: holds the launch
+            // point) until the ToF airborne detection completes the takeoff.
+            // STABILIZE/ACRO keep the manual throttle takeoff (no verb).
+            // ALT_HOLD/POS_HOLD の飛行開始は「自動離陸」（ユーザー仕様, 2026-06-11）:
+            // スロットル上げのトリガで通常どおり TAKEOFF に入るが、これらのモードでは
+            // 生スロットル→推力は意味を持たない — 制御器が固定上昇率＋水平姿勢
+            // （POS は発進点保持）で上昇し、ToF の空中検知が離陸を完了させる。
+            // STABILIZE/ACRO は従来の手動スロットル離陸（verb なし）。
+            if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
+                sf::controller_command.publish(
+                    {static_cast<uint8_t>(sf::ControllerCmd::Takeoff),
+                     static_cast<uint8_t>(g_state_manager.getMode()), now});
+            }
+            break;
+        case FlightState::FLYING:
+            // Takeoff finished: the controller leaves the auto-takeoff climb and
+            // engages the normal mode law (ALT_HOLD captures the current altitude).
+            // Published for every mode — a manual STABILIZE takeoff also marks the
+            // controller airborne, so a later in-flight switch to ALT/POS behaves
+            // identically regardless of how the craft got airborne.
+            // 離陸完了: 制御器は自動離陸の上昇を抜け、通常のモード則を係合する
+            // （ALT_HOLD は現在高度を捕捉）。全モードで発行 — 手動 STABILIZE 離陸でも
+            // 制御器を「空中」と記録し、以後の飛行中 ALT/POS 切替が離陸方法に
+            // よらず同一挙動になる。
+            sf::controller_command.publish(
+                {static_cast<uint8_t>(sf::ControllerCmd::TakeoffComplete), 0, now});
+            break;
         // TAKEOFF → FLYING needs no class-A reset here. The "ESKF position/velocity reset"
         // of detailed_design §3 is the timing-critical ToF-synced vertical handoff (class B,
         // ImuTask::applyVerticalGroundHandoff) — a ~20 ms-late reset via this callback

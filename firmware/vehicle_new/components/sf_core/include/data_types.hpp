@@ -451,6 +451,14 @@ enum class ControllerCmd : uint8_t {
                        // (live tuning via the param-set callback)
                        // ゲイン/リミットを params から読み直す。積分器は維持
                        // （param set コールバック経由のライブチューニング）
+    Takeoff      = 6,  // auto-takeoff start (TAKEOFF entry in ALT/POS mode):
+                       // level attitude + fixed climb rate until airborne
+                       // 自動離陸開始（ALT/POS モードの TAKEOFF 突入）:
+                       // 水平姿勢＋固定上昇率で空中検知まで
+    TakeoffComplete = 7, // takeoff finished (FLYING entry): engage the normal
+                       // mode law (ALT_HOLD captures the current altitude)
+                       // 離陸完了（FLYING 突入）: 通常のモード則を係合
+                       // （ALT_HOLD は現在高度を捕捉）
 };
 
 /// Controller command — ControlTask consumes and applies to the active IController

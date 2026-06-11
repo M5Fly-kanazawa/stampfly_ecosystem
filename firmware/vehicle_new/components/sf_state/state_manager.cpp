@@ -236,8 +236,23 @@ void StateManager::notifyIdleGroundHeld(bool is_held)
 
 bool StateManager::requestModeChange(FlightMode new_mode)
 {
-    if (state_ != FlightState::FLYING) {
-        ESP_LOGD(TAG, "Mode change rejected: not FLYING");
+    // Mode changes are accepted on the GROUND (disarmed or armed) and in FLYING.
+    // Changing the mode while parked is the SAFEST time to do it (user spec,
+    // 2026-06-11) — the controller stays gated (zero thrust in ALT/POS until the
+    // auto-takeoff verb), and the body LEDs show the selected mode. Rejected
+    // only mid-transition (INIT/TAKEOFF/LANDING — a switch flip mid-sequence
+    // is applied on reaching FLYING/IDLE by the state task's per-cycle check)
+    // and while held in the hand (IDLE_HELD).
+    // モード変更は「地上」（DISARM/ARM とも）と FLYING で受理する。設置時の変更が
+    // 最も安全（ユーザー仕様, 2026-06-11）— 制御器はゲートされ（ALT/POS は自動離陸
+    // verb まで推力ゼロ）、本体 LED が選択モードを表示する。拒否は遷移中のみ
+    // （INIT/TAKEOFF/LANDING — シーケンス途中のスイッチは FLYING/IDLE 到達時に
+    // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。
+    const bool mode_change_allowed = (state_ == FlightState::IDLE_GROUND ||
+                                      state_ == FlightState::ARMED_GROUND ||
+                                      state_ == FlightState::FLYING);
+    if (!mode_change_allowed) {
+        ESP_LOGD(TAG, "Mode change rejected: state %s", flightStateName(state_));
         return false;
     }
 

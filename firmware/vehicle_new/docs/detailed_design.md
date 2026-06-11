@@ -158,7 +158,9 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | IDLE_GROUND → ARMED_GROUND | （リザーブ） | 全PIDリセット、ESKF**姿勢共分散の膨張**（注1）、ブザー(arm音) |
 | ARMED_GROUND → TAKEOFF | （リザーブ） | 離着陸MGR: 離陸シーケンス開始、高度目標セット |
 | TAKEOFF → FLYING | 離着陸MGR: シーケンス終了 | ESKF位置/速度リセット（注2: クラスB, ImuTask）、~~バイアスフリーズ解除~~（注3で見送り） |
-| FLYING(サブモード切替) | 旧サブモードのコントローラリセット | 新サブモードの初期化（高度キャプチャ等） |
+| サブモード切替（地上/FLYING） | 旧サブモードのコントローラリセット | 新サブモードの初期化（高度キャプチャ等）。地上では制御器の鉛直フェーズゲート（Grounded=推力ゼロ）により ALT/POS 選択でもモータは回らない |
+| ARMED_GROUND → TAKEOFF（ALT/POS 選択時） | — | ControllerCmd::Takeoff 発行 → 制御器が自動離陸（固定上昇率＋水平姿勢、POS は発進点保持） |
+| TAKEOFF → FLYING | — | ControllerCmd::TakeoffComplete 発行 → 通常モード則を係合（ALT_HOLD は現在高度を捕捉） |
 | FLYING → LANDING | （リザーブ） | 離着陸MGR: 着陸シーケンス開始 |
 | FLYING → ARMED_GROUND | 高度/位置コントローラリセット | ESKFホールド |
 | FLYING → IDLE_GROUND | 高度/位置コントローラリセット | モーター停止、ESKFリセット、ブザー(disarm音) |

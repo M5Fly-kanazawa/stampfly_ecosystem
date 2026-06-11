@@ -131,6 +131,20 @@ public:
     /// 制御器に実装を強制しないよう既定は no-op。
     virtual void onLanding() {}
 
+    /// Auto-takeoff start (ControllerCmd::Takeoff, TAKEOFF entry in ALT/POS mode):
+    /// climb at a fixed rate with level attitude until onTakeoffComplete().
+    /// Default no-op for controllers without an altitude loop.
+    /// 自動離陸開始（ControllerCmd::Takeoff, ALT/POS モードの TAKEOFF 突入）:
+    /// onTakeoffComplete() まで固定上昇率＋水平姿勢で上昇する。
+    /// 高度ループを持たない制御器では既定 no-op。
+    virtual void onTakeoff() {}
+
+    /// Takeoff finished (ControllerCmd::TakeoffComplete, FLYING entry): engage the
+    /// normal mode law. Default no-op.
+    /// 離陸完了（ControllerCmd::TakeoffComplete, FLYING 突入）: 通常のモード則を係合。
+    /// 既定 no-op。
+    virtual void onTakeoffComplete() {}
+
     // =========================================================================
     // Live Parameter Reload
     // ライブパラメータ再読込

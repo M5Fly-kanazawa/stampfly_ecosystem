@@ -1,0 +1,23 @@
+# pos_auto_takeoff.expect — ground mode change + POS_HOLD auto-takeoff gates
+# 地上モード変更＋POS_HOLD 自動離陸のゲート
+#
+# Same chain as alt_auto_takeoff plus the horizontal contract: the craft must
+# stay over the launch point through the auto-climb and the hold (drift bound).
+# alt_auto_takeoff と同じ連鎖＋水平の契約: 自動上昇とホールドの間、機体は発進点の
+# 真上に留まること（ドリフト上限）。
+exit 0
+log_contains any "Mode change: STABILIZE → POS_HOLD"
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Vertical handoff: takeoff"
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+order "Mode change: STABILIZE → POS_HOLD" "ARM accepted"
+order "ARM accepted" "Auto-takeoff engaged"
+order "Auto-takeoff engaged" "Vertical handoff: takeoff"
+order "Auto-takeoff engaged" "Auto-takeoff complete — normal mode law engaged"
+metric duty_max < 0.05 in 7.8 8.4
+metric alt_rmse < 0.08 in 11.5 16.0
+metric alt_band < 0.35 in 11.5 16.0
+metric horizontal_drift_max < 0.5 in 8.5 16.0
+metric duty_max < 0.92 in 11.5 16.0
+metric tilt_max < 10.0 in 8.5 16.0
