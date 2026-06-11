@@ -49,21 +49,23 @@ LED は**2 チャネル**に分かれる:
 
 | チャネル | LED | 役割 |
 |---------|-----|------|
-| **モード色** | 本体 LED（基板の表裏 ×2、常に同一表示） | フライトモードの色。**常に実モード**を表示: 地上 DISARM＝低速点滅、ARM 後・飛行中＝常灯 |
+| **モード色** | 本体 LED（基板の表裏 ×2、常に同一表示） | フライトモードの色。**常に実モード**を表示: 地上（DISARM/ARM とも）＝常灯、飛行中＝低速点滅 |
 | **システム状態** | StampS3 内蔵 LED（GPIO21 ×1） | INIT/校正/ペアリング/IDLE/ARMED/離陸/着陸などの状態表示 |
 
 基板の表裏は機体姿勢でどちらかが見えなくなるため同一表示とし、StampS3 LED を独立した状態表示に使う。
 
 ### モード色（本体 LED, GPIO39×2）
 
-| モード | 色 | 地上（DISARM） | ARM 後・飛行中 |
-|--------|-----|---------------|---------------|
-| ACRO | 青 | 低速点滅 | 常灯 |
-| STABILIZE | 黄緑 | 低速点滅 | 常灯 |
-| ALT_HOLD | オレンジ | 低速点滅 | 常灯 |
-| POS_HOLD | マゼンタ | 低速点滅 | 常灯 |
+| モード | 色 | 地上（DISARM/ARM とも） | 飛行中 |
+|--------|-----|------------------------|--------|
+| ACRO | 青 | 常灯 | 低速点滅 |
+| STABILIZE | 黄緑 | 常灯 | 低速点滅 |
+| ALT_HOLD | オレンジ | 常灯 | 低速点滅 |
+| POS_HOLD | マゼンタ | 常灯 | 低速点滅 |
 | （INIT 中）| 白 | 常灯 | — |
 | **低電圧**（最優先）| シアン | 高速点滅 | 高速点滅 |
+
+地上での ARM/DISARM の区別は StampS3 LED（下記: ARMED_GROUND＝緑低速点滅、IDLE_GROUND＝緑常灯）が担う。
 
 - **モード変更は地上（DISARM/ARM 中）でも受理される**（仕様 2026-06-11）。スイッチを切り替えると実モードと LED が即座に変わる。
 - ALT_HOLD/POS_HOLD で ARM してもプロペラは回らない（制御器が接地中の推力をゼロにゲート）。これらのモードの飛行開始は**自動離陸**（下記 §4）。
@@ -163,9 +165,9 @@ ALT/POS の自動離陸中はスティック入力を無視する（着陸シー
 電源ON →（自動ペアリング待機: 青点滅）
   → コントローラをペアリングモードに → 成立（緑常灯）
   → 校正完了（ピッ×3, 緑常灯）
-  → モードスイッチで飛行モード選択（本体LED が選択モード色で点滅）
-  → ARM（armTone, 本体LED モード色常灯）
-  → スロットルUP → 離陸（STAB/ACRO=手動、ALT/POS=自動 0.3 m/s 上昇）
+  → モードスイッチで飛行モード選択（本体LED が選択モード色で常灯）
+  → ARM（armTone, 本体LED モード色常灯のまま / StampS3 が緑点滅に）
+  → スロットルUP → 離陸（STAB/ACRO=手動、ALT/POS=自動 0.3 m/s 上昇。飛行中は本体LED 点滅）
   → 飛行中もモードスイッチで切替可（ACRO/STAB/ALT/POS）
   → スロットルDOWN / DISARM → 着陸 → IDLE_GROUND（緑常灯）
 ```
@@ -334,7 +336,7 @@ The LEDs form **two channels**:
 
 | Channel | LED | Role |
 |---------|-----|------|
-| **Mode colour** | Body LEDs (board top+bottom ×2, always identical) | Flight-mode colour. **Always the ACTIVE mode**: disarmed on ground = slow blink; armed/airborne = solid |
+| **Mode colour** | Body LEDs (board top+bottom ×2, always identical) | Flight-mode colour. **Always the ACTIVE mode**: on the ground (disarmed or armed) = solid; airborne = slow blink |
 | **System state** | StampS3 built-in LED (GPIO21 ×1) | INIT/calibrating/pairing/idle/armed/takeoff/landing status |
 
 The board's top/bottom LEDs show the same content (one of them is hidden depending on the
@@ -342,14 +344,16 @@ craft's pose); the StampS3 LED serves as the independent status display.
 
 ### Mode colour (body LEDs, GPIO39×2)
 
-| Mode | Colour | On ground (disarmed) | Armed / airborne |
-|------|--------|---------------------|------------------|
-| ACRO | blue | slow blink | solid |
-| STABILIZE | yellow-green | slow blink | solid |
-| ALT_HOLD | orange | slow blink | solid |
-| POS_HOLD | magenta | slow blink | solid |
+| Mode | Colour | On ground (disarmed or armed) | Airborne |
+|------|--------|-------------------------------|----------|
+| ACRO | blue | solid | slow blink |
+| STABILIZE | yellow-green | solid | slow blink |
+| ALT_HOLD | orange | solid | slow blink |
+| POS_HOLD | magenta | solid | slow blink |
 | (during INIT) | white | solid | — |
 | **Low battery** (top priority) | cyan | fast blink | fast blink |
+
+The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND = green slow blink, IDLE_GROUND = green solid).
 
 - **Mode changes are accepted on the ground** (disarmed or armed; spec 2026-06-11). Flipping
   the switch changes the actual mode — and the LED — immediately.

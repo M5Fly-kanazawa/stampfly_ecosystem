@@ -179,13 +179,13 @@ LedPattern Notify::computeStatePattern() const
 // Shows the ACTIVE flight mode (sub_mode) everywhere: the state machine accepts
 // mode changes on the ground (IDLE_GROUND/ARMED_GROUND), so flipping the
 // transmitter switch while parked changes the actual mode — and this LED —
-// immediately. Slow blink = disarmed, solid = armed/airborne. Low battery
-// overrides with cyan fast blink — the body LEDs are what the pilot sees in
-// flight, so the urgent overlay must live here too.
+// immediately. Solid = stationary on the ground, slow blink = airborne. Low
+// battery overrides with cyan fast blink — the body LEDs are what the pilot
+// sees in flight, so the urgent overlay must live here too.
 // computeModePattern — フライトモードチャネル（本体 LED）。
 // 常に「実モード」（sub_mode）を表示する: 状態機械が地上（IDLE_GROUND/ARMED_GROUND）
 // でのモード変更を受理するため、設置中にスイッチを切り替えると実モードも —
-// この LED も — 即座に変わる。低速点滅=DISARM、常灯=ARM/空中。低電圧はシアン
+// この LED も — 即座に変わる。常灯=地上静止、低速点滅=空中。低電圧はシアン
 // 高速点滅で上書き — 飛行中にパイロットが見るのは本体 LED のため、緊急表示は
 // こちらにも必要。
 // -----------------------------------------------------------------------------
@@ -207,17 +207,22 @@ LedPattern Notify::computeModePattern() const
         return getPattern(state);
     }
 
-    // Armed or airborne: ACTIVE mode, solid.
-    // ARM 中または空中: 実モードの常灯。
-    if (state == FlightState::ARMED_GROUND || isAirborne(state)) {
+    // Airborne: ACTIVE mode, slow blink — motion is signalled by blinking
+    // (pilot request 2026-06-12; ARM state on the ground stays visible on the
+    // MCU LED's state channel, which blinks green for ARMED_GROUND).
+    // 空中: 実モードの低速点滅 — 「動いている」ことを点滅で示す（2026-06-12 の
+    // パイロット要望。地上での ARM 状態は MCU LED の状態チャネルが緑点滅で表示）。
+    if (isAirborne(state)) {
         return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
-                 kSolidOn, kSolidOff };
+                 kSlowOn, kSlowOff };
     }
 
-    // Disarmed on the ground: ACTIVE mode (follows the switch), slow blink.
-    // 地上 DISARM: 実モード（スイッチに追従）、低速点滅。
+    // On the ground (idle, held, or armed): ACTIVE mode (follows the switch),
+    // solid — the craft is stationary, so the light is steady.
+    // 地上（IDLE/手持ち/ARM 中）: 実モード（スイッチに追従）の常灯 — 機体が
+    // 静止しているので灯りも静止。
     return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
-             kSlowOn, kSlowOff };
+             kSolidOn, kSolidOff };
 }
 
 // -----------------------------------------------------------------------------
