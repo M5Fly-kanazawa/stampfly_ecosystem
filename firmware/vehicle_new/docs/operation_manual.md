@@ -214,9 +214,9 @@ TAB で補完。
 **テレメトリの受信**: 機体は 50Hz のモニタ用テレメトリ（104B バイナリ、UDP ブロードキャスト :5005）を常時放送している。機体と同一ネットワークの PC で:
 
 ```bash
-sf telemetry              # ライブダッシュボード（状態/姿勢/角速度/高度/モータduty）
-sf telemetry --csv f.csv  # 同時に CSV 記録
-sf monitor web            # ブラウザ表示（http://localhost:5006、グラフ付き）
+sf telemetry              # ターミナルのライブダッシュボード
+sf telemetry --web        # ブラウザ表示（http://localhost:5006、グラフ付き）
+sf telemetry --csv f.csv  # CSV 記録（ターミナル/--web どちらでも併用可）
 ```
 
 グラフ・解析には Data Stream（400Hz・全センサ）を使う: `sf log wifi` → `sf log viz`。

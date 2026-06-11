@@ -1,5 +1,5 @@
 """
-sf monitor web — browser telemetry view (UDP -> SSE proxy)
+sf telemetry --web — browser telemetry view (UDP -> SSE proxy)
 
 Receives the vehicle_new 50Hz monitoring telemetry (UDP broadcast :5005,
 104-byte binary packet — decoder shared with `sf telemetry`) and serves a
@@ -34,8 +34,9 @@ from ..utils import console
 _latest = {"pkt": None, "rx_monotonic": 0.0, "count": 0, "rate_hz": 0.0}
 
 
-def _udp_listener(port: int) -> None:
-    """Background thread: UDP :port -> _latest. / 背景スレッド: UDP受信→_latest更新"""
+def _udp_listener(port: int, csv_path=None) -> None:
+    """Background thread: UDP :port -> _latest (+ optional CSV).
+    背景スレッド: UDP受信→_latest更新（＋任意で CSV 記録）"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     # Allow `sf telemetry` and `sf monitor web` to listen simultaneously:
@@ -47,6 +48,11 @@ def _udp_listener(port: int) -> None:
     if hasattr(socket, "SO_REUSEPORT"):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     sock.bind(("", port))
+    csv_file = None
+    if csv_path:
+        csv_file = open(csv_path, "a", buffering=1)
+        if csv_file.tell() == 0:
+            csv_file.write("t_us,mode," + ",".join(telem.FLOAT_NAMES) + "\n")
     window = []
     while True:
         data, _addr = sock.recvfrom(2048)
@@ -61,6 +67,9 @@ def _udp_listener(port: int) -> None:
         _latest["rx_monotonic"] = now
         _latest["count"] += 1
         _latest["rate_hz"] = len(window) / 2.0
+        if csv_file:
+            csv_file.write(f"{pkt['t_us']},{pkt['mode']},"
+                           + ",".join(f"{pkt[k]:.6g}" for k in telem.FLOAT_NAMES) + "\n")
 
 
 _PAGE = """<!DOCTYPE html>
@@ -217,10 +226,11 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
-def serve(http_port: int, telemetry_port: int, open_browser: bool) -> int:
+def serve(http_port: int, telemetry_port: int, open_browser: bool,
+          csv_path=None) -> int:
     """Run the UDP->SSE proxy + page server (blocks until Ctrl-C).
     UDP→SSE プロキシ＋ページサーバを起動（Ctrl-C まで実行）。"""
-    threading.Thread(target=_udp_listener, args=(telemetry_port,),
+    threading.Thread(target=_udp_listener, args=(telemetry_port, csv_path),
                      daemon=True).start()
     httpd = ThreadingHTTPServer(("", http_port), _Handler)
     url = f"http://localhost:{http_port}/"

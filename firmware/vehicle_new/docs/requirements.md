@@ -168,7 +168,7 @@ PairingState（FlightState と並行）
 | コマンド受信 | RC入力、API | ESP-NOW / UDP | Yes |
 
 - 機体側からWebSocketは撤去（UDP統一、ブロッキングリスク排除）
-- ブラウザ表示は `sf monitor web`（UDP→WebSocket変換プロキシ）で対応
+- ブラウザ表示は `sf telemetry --web`（UDP→SSE 変換プロキシ。WebSocket の stdlib 等価）で対応
 - スマホ対応は専用アプリ or WebApp
 
 ### ペアリング（混信対策）
@@ -419,7 +419,7 @@ All sensors retained (important for IoT educational material to have full sensor
 | Command Receive | RC input, API | ESP-NOW / UDP | Yes |
 
 - WebSocket removed from vehicle (UDP unified, eliminates blocking risk)
-- Browser display via `sf monitor web` (UDP→WebSocket conversion proxy)
+- Browser display via `sf telemetry --web` (UDP→SSE conversion proxy, stdlib equivalent of WebSocket)
 - Smartphone support via dedicated app or WebApp
 
 ### Pairing (Crosstalk Prevention)

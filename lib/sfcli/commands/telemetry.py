@@ -22,7 +22,7 @@ import time
 from ..utils import console
 
 COMMAND_NAME = "telemetry"
-COMMAND_HELP = "Live 50Hz telemetry dashboard (vehicle_new, UDP :5005)"
+COMMAND_HELP = "Live 50Hz telemetry — terminal dashboard, or browser with --web"
 
 # Wire format — MUST match firmware/vehicle_new/components/sf_telemetry/
 # include/telemetry.hpp TelemetryPacket (static_assert 104 bytes).
@@ -70,6 +70,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--timeout", type=float, default=10.0,
         help="Give up if no packet arrives for this many seconds (default: 10)",
+    )
+    parser.add_argument(
+        "--web", action="store_true",
+        help="Browser view instead of the terminal (UDP -> SSE proxy + charts)",
+    )
+    parser.add_argument(
+        "--http-port", type=int, default=5006,
+        help="HTTP port for --web (default: 5006)",
+    )
+    parser.add_argument(
+        "--no-browser", action="store_true",
+        help="Do not auto-open the browser (--web only)",
     )
     parser.set_defaults(func=run)
 
@@ -128,6 +140,17 @@ def _dashboard(pkt: dict, rate_hz: float, n_packets: int) -> str:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.web:
+        # Browser view (requirements §7 browser display) — UDP -> SSE proxy.
+        # Same decoder, same --csv; only the front-end differs.
+        # ブラウザ表示（requirements §7）— UDP → SSE プロキシ。デコーダも --csv も
+        # 共通で、フロントエンドだけが異なる。
+        from . import telemetry_web
+        return telemetry_web.serve(http_port=args.http_port,
+                                   telemetry_port=args.port,
+                                   open_browser=not args.no_browser,
+                                   csv_path=args.csv)
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     # Allow `sf telemetry` and `sf monitor web` to listen simultaneously:
