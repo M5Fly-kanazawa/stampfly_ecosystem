@@ -32,7 +32,18 @@
 
 namespace {
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle };
+// API-injection hook, registered by the TARGET-specific glue (only vehicle_new
+// has an ApiTask; referencing its symbol directly would break the legacy-vehicle
+// emu link). Unregistered targets record the line as unsupported.
+// API 注入フック。ターゲット別グルーが登録する（ApiTask を持つのは vehicle_new のみ。
+// シンボル直参照は旧 vehicle emu のリンクを壊す）。未登録ターゲットでは未対応として記録。
+static void (*g_api_inject_fn)(const char*) = nullptr;
+extern "C" void sil_scenario_register_api_inject(void (*fn)(const char*))
+{
+    g_api_inject_fn = fn;
+}
+
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api };
 
 struct Event {
     int64_t at_us = 0;        // absolute virtual time (frozen) / 絶対仮想時刻
@@ -340,6 +351,18 @@ int sil_scenario_load(const char* path)
             if (!parse_quoted(rest, e.text)) { err(path, lineno, "key needs a quoted \"...\" string"); return -1; }
             e.ch = Channel::Key;
 
+        } else if (ch == "api") {
+            // api "<command line>" — inject one Tello-style API command into the
+            // firmware's ApiTask parser (sf_api_inject_line). The UDP transport is
+            // inert on the SIL host; the parser/executor is the REAL firmware code.
+            // api "<コマンド行>" — Tello 風 API コマンドをファームの ApiTask パーサへ
+            // 注入（sf_api_inject_line）。SIL ホストでは UDP 輸送が inert なため、
+            // パーサ/実行系の「実ファームコード」だけを駆動する。
+            std::string rest;
+            std::getline(iss, rest);
+            if (!parse_quoted(rest, e.text)) { err(path, lineno, "api needs a quoted \"...\" string"); return -1; }
+            e.ch = Channel::Api;
+
         } else if (ch == "wind") {
             // wind <fx> <fy> <fz> [dur_ms] — external force NED [N]; dur_ms>0 = gust.
             // wind <fx> <fy> <fz> [dur_ms] — NED 外乱力 [N]、dur_ms>0 で突風。
@@ -482,6 +505,15 @@ void sil_scenario_driver_task(void* /*arg*/)
             case Channel::Key:
                 sil_console_write(e.text.data(), (int)e.text.size());
                 break;
+            case Channel::Api: {
+                if (g_api_inject_fn) {
+                    g_api_inject_fn(e.text.c_str());
+                    sil_emu_record_note("api", e.text.c_str());
+                } else {
+                    sil_emu_record_note("api", "(unsupported on this target)");
+                }
+                break;
+            }
             case Channel::Wind: {
                 // P7: apply the external wind force to the Plant. A gust pulse
                 // (dur_ms>0) holds the force, then reverts to zero so the controller

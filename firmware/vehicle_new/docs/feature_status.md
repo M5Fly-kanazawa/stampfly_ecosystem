@@ -80,7 +80,7 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 
 | 機能 | 計画箇所 | 状態 | 備考 |
 |------|---------|------|------|
-| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **未実装** | 旧 vehicle の flight_command 系の移植が前提 |
+| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SIL api_flight で全鎖検証 | 残: Tello 互換の拡張コマンド（flip/curve 等）、実機飛行検証 |
 | Data Stream の USB 経路 | requirements §7（UDP/USB 選択） | UDP のみ | WiFi 不要環境向けの変種 |
 | 校正の NVS 永続化 | calibration.cpp に保存系あり | **意図的保留** | NVS commit のフラッシュ消去が 400Hz ループを >10ms 停止させる。CONFIG_SPI_FLASH_AUTO_SUSPEND 調査とセットで再開 |
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
@@ -169,7 +169,7 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 
 | Feature | Status |
 |---------|--------|
-| Tello API / UDP command receive | Not implemented (depends on porting the legacy flight_command set) |
+| Tello API / UDP command receive | CORE DONE (ApiTask: command/takeoff/land/emergency/stop/moves/rotate/queries + Python SDK, SIL-verified end-to-end); extended Tello verbs + hardware flights remain |
 | Data Stream over USB | UDP only today |
 | Calibration NVS persistence | Deliberately deferred — NVS flash erase stalls the 400 Hz loop >10 ms; revisit with CONFIG_SPI_FLASH_AUTO_SUSPEND |
 | Front ToF | HAL present, not brought up |

@@ -93,6 +93,7 @@ inline constexpr UBaseType_t PRIORITY_BUTTON    = 10;
 inline constexpr UBaseType_t PRIORITY_NOTIFY    = 8;
 inline constexpr UBaseType_t PRIORITY_CLI       = 5;
 inline constexpr UBaseType_t PRIORITY_LOG       = 5;
+inline constexpr UBaseType_t PRIORITY_API       = 6;   // Tello-style network API
 
 // =============================================================================
 // Task Stack Sizes [bytes]
@@ -115,6 +116,7 @@ inline constexpr uint32_t STACK_BUTTON    = 4096;
 inline constexpr uint32_t STACK_NOTIFY    = 4096;
 inline constexpr uint32_t STACK_CLI       = 8192;
 inline constexpr uint32_t STACK_LOG       = 4096;
+inline constexpr uint32_t STACK_API       = 6144;   // Tello-style network API
 
 // =============================================================================
 // Timing Constants

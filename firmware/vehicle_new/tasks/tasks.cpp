@@ -89,8 +89,10 @@ void start_all()
         config::STACK_CLI, nullptr, config::PRIORITY_CLI, nullptr, 0);
     xTaskCreatePinnedToCore(LogTask, "LogTask",
         config::STACK_LOG, nullptr, config::PRIORITY_LOG, nullptr, 0);
+    xTaskCreatePinnedToCore(ApiTask, "ApiTask",
+        config::STACK_API, nullptr, config::PRIORITY_API, nullptr, 0);
 
-    ESP_LOGI(TAG, "All 14 tasks started");
+    ESP_LOGI(TAG, "All 15 tasks started");
 }
 
 }  // namespace tasks

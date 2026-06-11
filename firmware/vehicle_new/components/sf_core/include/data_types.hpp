@@ -588,12 +588,43 @@ struct SensorHealth {
 // 置き場所と入出力契約を今のうちに確定するためのプレースホルダ（R11）。
 // =============================================================================
 
-/// command_target — RESERVED (M4+). Guidance/Navigator → Controller position+yaw target.
-/// 予約（M4+）。Guidance/Navigator → 制御器への位置+yaw目標。
+/// Discrete flight verbs from the network API (ApiTask → StateTask). The API
+/// publishes FACTS ("the user asked to take off"); the StateManager — the sole
+/// transition authority — validates and executes, exactly like pilot/button
+/// input (architecture §2: detection reports, state management decides).
+/// ネットワーク API の離散飛行 verb（ApiTask → StateTask）。API は「事実」を発行
+/// （「離陸が要求された」）し、唯一の遷移権限である StateManager が検証・実行する。
+/// パイロット/ボタン入力と同一の構図（architecture §2）。
+enum class ApiCmd : uint8_t {
+    None      = 0,
+    Arm       = 1,   // arm motors (pre-arm gates still apply) / ARM（事前ゲートは有効）
+    Disarm    = 2,   // disarm (ground)                        / DISARM（地上）
+    Takeoff   = 3,   // mode→POS_HOLD + arm + auto-takeoff      / モード設定+ARM+自動離陸
+    Land      = 4,   // autonomous landing                      / 自動着陸
+    Emergency = 5,   // immediate motor cut (any state)         / 即時モータ停止
+};
+
+/// ApiTask → StateTask command / ApiTask → StateTask コマンド
+struct ApiCommand {
+    uint8_t  command;     // ApiCmd value / ApiCmd の値
+    uint8_t  mode;        // FlightMode for Takeoff / Takeoff 用 FlightMode
+    uint32_t timestamp;   // [us]
+};
+
+/// command_target — Guidance/API → Controller position+yaw target (R11 contract).
+/// The controller SEEKS the position at `speed` (the setpoint walks toward the
+/// target, the POS_HOLD cascade tracks the walking setpoint) and turns to `yaw`
+/// with a rate-limited P loop. Published by the Tello-style API (ApiTask) and,
+/// in the future, the Navigator.
+/// command_target — Guidance/API → 制御器への位置+yaw目標（R11 契約）。制御器は
+/// `speed` で位置目標へシーク（設定点が目標へ歩き、POS_HOLD カスケードが歩く設定点を
+/// 追従）し、yaw はレート制限付き P ループで向く。Tello 風 API（ApiTask）と将来の
+/// Navigator が発行する。
 struct GuidanceTarget {
     float    position[3];   // target position [m] NED / 目標位置
     float    yaw;           // target yaw [rad]        / 目標ヨー
-    uint8_t  mode;          // guidance mode           / ガイダンスモード
+    float    speed;         // approach speed [m/s]    / 接近速度
+    uint8_t  mode;          // 0=none, 1=track position+yaw / 0=なし, 1=位置+yaw追従
     uint32_t timestamp;     // [us]
 };
 

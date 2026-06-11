@@ -1,0 +1,39 @@
+# api_flight.scn — Tello-style API flight: command → takeoff → moves → land
+#                  Tello 風 API 飛行: command → takeoff → 移動 → land
+#
+# Drives the REAL ApiTask parser (scenario `api` channel → sf_api_inject_line;
+# the UDP transport is inert on the SIL host). The full programmatic-flight
+# chain under test:
+#   1. "command" enters SDK mode.
+#   2. "takeoff": API verb → StateTask → ground mode change to POS_HOLD →
+#      requestArm (still-calibration gate) → auto-takeoff climb → FLYING →
+#      guidance raises the craft to the 0.8 m Tello-like hover height.
+#   3. "forward 50" / "cw 90" / "up 30": moves COMPOSE on the guidance target;
+#      the POS_HOLD cascade tracks the walking setpoint; each replies "ok" only
+#      after the estimate enters the tolerance sphere.
+#   4. "land": Landing verb → 0.3 m/s descent → touchdown → IDLE_GROUND.
+# The RC stays paired with neutral sticks throughout (real-world configuration:
+# a safety pilot holding a centered transmitter) — proving the stick-MOVEMENT
+# cancel rule does not trip on a parked stick (throttle resting at the bottom).
+#
+# 実 ApiTask パーサを駆動（`api` チャネル → sf_api_inject_line。SIL ホストでは
+# UDP 輸送は inert）。プログラム飛行の全鎖: SDK モード → 自動離陸＋0.8m 上昇 →
+# 目標合成の移動（到達後に "ok"）→ 自動着陸。全行程 RC は中立のままペアリング済み
+# （安全要員が中立送信機を保持する実運用構成）— 「置いたままのスティック」（下端の
+# スロットル含む）が解除則を誤発火させないことの証明。
+#
+# Run: sf sil scenario simulator/sil/scenarios/api_flight.scn --target vehicle_new --duration 40000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.8 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "forward 50"                                                        # E: +50 cm forward (north at yaw 0) (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC during the move
+   +    api  "cw 90"                                                             # G: turn 90 deg clockwise (t=23)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # H: neutral RC during the turn
+   +    api  "up 30"                                                             # I: climb +30 cm (t=27)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # J: neutral RC during the climb
+   +    api  "land"                                                              # K: autonomous landing (t=31)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # L: neutral RC through touchdown (t=31-39)

@@ -76,6 +76,7 @@ extern "C" {
 #define F_GETFL        3
 #define F_SETFL        4
 #define O_NONBLOCK     0x0004
+#define MSG_DONTWAIT   0x08      /* lwip value; per-call non-blocking receive */
 
 typedef uint32_t socklen_t;
 typedef uint16_t sa_family_t;
@@ -156,10 +157,18 @@ static inline int lwip_close(int s) { (void)s; return 0; }
 // 接続もデータも来ないので「ブロック」を忠実に再現（長時間 yield）。各タスクは
 // セットアップ＋初回受信まで走って以後パークする（ビジーループも EAGAIN 連発もなし）。
 #define SIL_SOCK_BLOCK_TICKS ((uint32_t)0x40000000)   // ~12 virtual days (1 tick = 1 ms)
+// MSG_DONTWAIT callers poll (their loop has other work — e.g. the ApiTask
+// drains scenario injections); report "no data" after a 1-tick yield instead
+// of parking. Blocking callers park as before.
+// MSG_DONTWAIT の呼び出し側はポーリング（ループに他の仕事がある — 例: ApiTask の
+// シナリオ注入 drain）。パークせず 1 tick yield して「データなし」を返す。
+// ブロッキング呼び出しは従来どおりパーク。
 static inline long recvfrom(int s, void* buf, size_t len, int flags, struct sockaddr* from, socklen_t* fl)
-{ (void)s; (void)buf; (void)len; (void)flags; (void)from; (void)fl; vTaskDelay(SIL_SOCK_BLOCK_TICKS); errno = EAGAIN; return -1; }
+{ (void)s; (void)buf; (void)len; (void)from; (void)fl;
+  vTaskDelay((flags & MSG_DONTWAIT) ? 1 : SIL_SOCK_BLOCK_TICKS); errno = EAGAIN; return -1; }
 static inline long recv(int s, void* buf, size_t len, int flags)
-{ (void)s; (void)buf; (void)len; (void)flags; vTaskDelay(SIL_SOCK_BLOCK_TICKS); errno = EAGAIN; return -1; }
+{ (void)s; (void)buf; (void)len;
+  vTaskDelay((flags & MSG_DONTWAIT) ? 1 : SIL_SOCK_BLOCK_TICKS); errno = EAGAIN; return -1; }
 static inline int accept(int s, struct sockaddr* a, socklen_t* l)
 { (void)s; (void)a; (void)l; vTaskDelay(SIL_SOCK_BLOCK_TICKS); errno = EAGAIN; return -1; }
 

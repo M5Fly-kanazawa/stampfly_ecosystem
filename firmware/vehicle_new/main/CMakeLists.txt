@@ -16,6 +16,7 @@ idf_component_register(
         "../tasks/notify_task.cpp"
         "../tasks/cli_task.cpp"
         "../tasks/log_task.cpp"
+         "../tasks/api_task.cpp"
     INCLUDE_DIRS "." "../tasks"
     REQUIRES
         esp_timer

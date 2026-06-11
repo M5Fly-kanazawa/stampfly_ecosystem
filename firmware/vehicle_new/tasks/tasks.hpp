@@ -129,3 +129,4 @@ void CLITask(void* pvParameters);
 /// Data logger + Blackbox (async, priority 5)
 /// データロガー + Blackbox（非同期、優先度5）
 void LogTask(void* pvParameters);
+void ApiTask(void* pvParameters);

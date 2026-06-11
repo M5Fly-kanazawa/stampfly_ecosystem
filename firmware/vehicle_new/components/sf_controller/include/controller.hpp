@@ -145,6 +145,15 @@ public:
     /// 既定 no-op。
     virtual void onTakeoffComplete() {}
 
+    /// Guidance/API position+yaw target (R11). Only meaningful in POS_HOLD —
+    /// implementations may ignore it in other modes. Pilot stick MOVEMENT
+    /// cancels guidance (the pilot always wins). Default no-op.
+    /// Guidance/API の位置+yaw 目標（R11）。POS_HOLD でのみ意味を持ち、他モードでは
+    /// 無視してよい。スティックを「動かす」と誘導は解除される（パイロット優先）。
+    /// 既定 no-op。
+    virtual void setGuidanceTarget(const GuidanceTarget& target,
+                                   const CommandSetpoint& current_sticks) {}
+
     // =========================================================================
     // Live Parameter Reload
     // ライブパラメータ再読込

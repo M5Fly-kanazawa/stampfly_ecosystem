@@ -131,6 +131,24 @@ ControlOutput PidController::compute(
                  state.attitude[2], state.attitude[3]);
     math::Vec3 euler = q.to_euler();
 
+    // Guidance cancel-on-stick-movement: any stick departing from its engage
+    // snapshot hands control back to the pilot instantly (the pilot always wins).
+    // 誘導のスティック動作解除: どれかのスティックが設定時スナップショットから動いたら
+    // 即座にパイロットへ返す（パイロット優先）。
+    if (guidance_active_) {
+        const float dr = fabsf(setpoint.roll     - stick_snapshot_[0]);
+        const float dp = fabsf(setpoint.pitch    - stick_snapshot_[1]);
+        const float dy = fabsf(setpoint.yaw      - stick_snapshot_[2]);
+        const float dt_ = fabsf(setpoint.throttle - stick_snapshot_[3]);
+        if (dr > stick_move_cancel_ || dp > stick_move_cancel_ ||
+            dy > stick_move_cancel_ || dt_ > stick_move_cancel_) {
+            guidance_active_ = false;
+            capture_pos_ = true;   // hold where we are now / いまの位置で保持し直す
+            capture_alt_ = true;
+            ESP_LOGW(TAG, "Guidance cancelled by pilot stick");
+        }
+    }
+
     // Rate setpoints (default: direct from stick for ACRO)
     // レートセットポイント（デフォルト: ACRO用にスティックから直接）
     float rate_sp_roll  = setpoint.roll * max_rate_;
@@ -167,6 +185,38 @@ ControlOutput PidController::compute(
             roll_sp  = 0.0f;
             pitch_sp = 0.0f;
             rate_sp_yaw = 0.0f;
+        }
+
+        // Guidance: walk the POS_HOLD setpoints toward the target and steer yaw
+        // with a rate-limited P loop. The cascade below then tracks the walking
+        // setpoint — the proven hold loops are untouched, only their target moves.
+        // 誘導: POS_HOLD 設定点を目標へ歩かせ、yaw はレート制限付き P で向ける。
+        // 下のカスケードは歩く設定点を追従する — 実績の保持ループは無改変で、
+        // 目標だけが動く。
+        if (guidance_active_ && current_mode_ >= FlightMode::POS_HOLD &&
+            phase_ == VerticalPhase::Airborne) {
+            const float step = guide_speed_ * dt;
+            auto seek = [step](float current, float target) {
+                const float d = target - current;
+                if (d >  step) return current + step;
+                if (d < -step) return current - step;
+                return target;
+            };
+            pos_setpoint_x_ = seek(pos_setpoint_x_, guide_pos_[0]);
+            pos_setpoint_y_ = seek(pos_setpoint_y_, guide_pos_[1]);
+            alt_setpoint_   = seek(alt_setpoint_, -guide_pos_[2]);  // NED z → alt
+            capture_pos_ = false;   // setpoints are guidance-owned now / 設定点は誘導所有
+            capture_alt_ = false;
+
+            // Yaw: shortest-path error, P with a turn-rate limit.
+            // ヨー: 最短経路誤差の P、回頭率制限付き。
+            float yaw_err = guide_yaw_ - euler.z;
+            while (yaw_err >  3.14159265f) yaw_err -= 6.2831853f;
+            while (yaw_err < -3.14159265f) yaw_err += 6.2831853f;
+            float yaw_cmd = guide_yaw_kp_ * yaw_err;
+            if (yaw_cmd >  guide_yaw_rate_max_) yaw_cmd =  guide_yaw_rate_max_;
+            if (yaw_cmd < -guide_yaw_rate_max_) yaw_cmd = -guide_yaw_rate_max_;
+            rate_sp_yaw = yaw_cmd;
         }
 
         // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
@@ -219,9 +269,15 @@ ControlOutput PidController::compute(
             // 追従。スティックを戻すと到達した高度を保持する。
             if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
 
-            // Stick → climb rate / スティック → 上昇率
+            // Stick → climb rate. Suppressed while guidance owns the altitude
+            // target: in an API flight the throttle stick rests at the BOTTOM,
+            // which must not read as a permanent descend command.
+            // スティック → 上昇率。誘導が高度目標を所有する間は無効化: API 飛行では
+            // スロットルスティックは下端のままで、それが恒常的な降下指令になっては
+            // ならない。
             float climb_rate_sp = 0;
-            if (fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
+            if (!guidance_active_ &&
+                fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
                 climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
                 alt_setpoint_ = altitude;   // track while moving / 移動中は追従
             }
@@ -431,6 +487,42 @@ void PidController::onTakeoffComplete()
     capture_alt_ = true;
 }
 
+void PidController::setGuidanceTarget(const GuidanceTarget& target,
+                                      const CommandSetpoint& current_sticks)
+{
+    // Guidance is a POS_HOLD-only feature (the position cascade is what tracks
+    // the walking setpoint). Reject elsewhere so a stray API target cannot
+    // disturb a manual mode.
+    // 誘導は POS_HOLD 専用（歩く設定点を追うのは位置カスケード）。他モードでは拒否し、
+    // 迷い込んだ API 目標が手動モードを乱さないようにする。
+    if (current_mode_ < FlightMode::POS_HOLD || target.mode == 0) {
+        ESP_LOGW(TAG, "Guidance target ignored (mode=%s)",
+                 flightModeName(current_mode_));
+        return;
+    }
+    guide_pos_[0] = target.position[0];
+    guide_pos_[1] = target.position[1];
+    guide_pos_[2] = target.position[2];
+    guide_yaw_    = target.yaw;
+    if (target.speed > 0.05f && target.speed <= 2.0f) {
+        guide_speed_ = target.speed;
+    }
+    // Stick snapshot: guidance is cancelled by stick MOVEMENT, not position —
+    // in an API flight the throttle stick rests at the bottom, which must not
+    // read as a descend command or an instant cancel.
+    // スティックスナップショット: 解除は「位置」でなく「動き」で判定 — API 飛行では
+    // スロットルスティックは下端のままであり、それが降下指令や即時解除になってはならない。
+    stick_snapshot_[0] = current_sticks.roll;
+    stick_snapshot_[1] = current_sticks.pitch;
+    stick_snapshot_[2] = current_sticks.yaw;
+    stick_snapshot_[3] = current_sticks.throttle;
+    guidance_active_ = true;
+    ESP_LOGI(TAG, "Guidance target: NED [%.2f %.2f %.2f] yaw %.2f speed %.2f",
+             static_cast<double>(guide_pos_[0]), static_cast<double>(guide_pos_[1]),
+             static_cast<double>(guide_pos_[2]), static_cast<double>(guide_yaw_),
+             static_cast<double>(guide_speed_));
+}
+
 void PidController::reset()
 {
     rate_roll_.reset();  rate_pitch_.reset();  rate_yaw_.reset();
@@ -440,6 +532,7 @@ void PidController::reset()
     vel_x_.reset();      vel_y_.reset();
     landing_ = false;    // landing override ends with the flight / 着陸上書きは飛行と共に終了
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded / 次の飛行は接地から
+    guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     ESP_LOGI(TAG, "PID controller reset");
 }
 
@@ -467,6 +560,7 @@ void PidController::onModeChange(FlightMode new_mode)
         if (current_mode_ >= FlightMode::POS_HOLD || new_mode >= FlightMode::POS_HOLD) {
             pos_x_.reset(); pos_y_.reset();
             vel_x_.reset(); vel_y_.reset();
+            guidance_active_ = false;   // mode change revokes guidance / モード切替で誘導解除
         }
         // Capture the current horizontal position as the hold target on entry.
         // POS_HOLD 進入時、現在の水平位置を保持目標として捕捉する。

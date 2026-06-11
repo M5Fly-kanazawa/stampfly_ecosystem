@@ -57,6 +57,7 @@ Topic<PairingComplete, Latest, 1>      pairing_complete;
 Topic<UiCommand,       Queue, 4>       ui_command;
 Topic<MotorTest,       Latest, 1>      motor_test;
 Topic<MagCalCommand,   Queue,  2>      mag_command;
+Topic<ApiCommand,      Queue,  4>      api_command;
 Topic<MagCalStatus,    Latest, 1>      mag_cal_status;
 Topic<EstimatorCommand,  Queue, 4>     estimator_command;
 Topic<ControllerCommand, Queue, 4>     controller_command;
@@ -90,6 +91,7 @@ void topics_init()
     ui_command.init();
     motor_test.init();
     mag_command.init();
+    api_command.init();
     mag_cal_status.init();
     estimator_command.init();
     controller_command.init();

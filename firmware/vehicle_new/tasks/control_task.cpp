@@ -324,6 +324,21 @@ void ControlTask(void* pvParameters)
         // ここでは制御器が現在の sub_mode 用に構成済み。
         // =====================================================================
 
+        // Guidance target (Tello-style API / Navigator, R11): hand a NEW
+        // command_target to the controller exactly once (edge on timestamp).
+        // The controller validates the mode and owns the cancel-on-stick rule.
+        // 誘導目標（Tello 風 API / Navigator, R11）: 新しい command_target を
+        // タイムスタンプのエッジで一度だけ制御器へ渡す。モード検証とスティック
+        // 解除則は制御器が所有する。
+        {
+            static uint32_t last_guidance_ts = 0;
+            const sf::GuidanceTarget target = sf::command_target.latest();
+            if (target.timestamp != 0 && target.timestamp != last_guidance_ts) {
+                last_guidance_ts = target.timestamp;
+                controller.setGuidanceTarget(target, setpoint);
+            }
+        }
+
         sf::ControlOutput control = controller.compute(state, setpoint, config::IMU_DT);
 
         // Publish control output for logging

@@ -37,6 +37,8 @@ public:
     void onLanding() override;
     void onTakeoff() override;
     void onTakeoffComplete() override;
+    void setGuidanceTarget(const GuidanceTarget& target,
+                           const CommandSetpoint& current_sticks) override;
     void reloadParams() override;
 
 private:
@@ -136,6 +138,26 @@ private:
     float pos_setpoint_x_ = 0;       // [m] captured position N (POS_HOLD target, NED)
     float pos_setpoint_y_ = 0;       // [m] captured position E (POS_HOLD target, NED)
     bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute
+
+    // Guidance (Tello-style API / future Navigator, R11). While active the
+    // POS_HOLD setpoints WALK toward guide_pos_ at guide_speed_ (the cascade
+    // tracks the walking setpoint — same proven loops, just a moving target),
+    // the altitude target follows guide_pos_[2], and yaw turns to guide_yaw_
+    // with a rate-limited P loop. Pilot stick MOVEMENT (departure from the
+    // snapshot taken when the target was set) cancels guidance instantly.
+    // 誘導（Tello 風 API / 将来の Navigator, R11）。アクティブ中は POS_HOLD の設定点が
+    // guide_pos_ へ guide_speed_ で「歩き」（カスケードは歩く設定点を追従 — 実績ループ
+    // のまま目標だけ動く）、高度目標は guide_pos_[2] に従い、yaw はレート制限付き P で
+    // guide_yaw_ に向く。スティックの「動き」（目標設定時のスナップショットからの逸脱）
+    // で誘導は即時解除される。
+    bool  guidance_active_   = false;
+    float guide_pos_[3]      = {0, 0, 0};  // [m] NED target / NED 目標
+    float guide_yaw_         = 0;          // [rad] target yaw / 目標ヨー
+    float guide_speed_       = 0.3f;       // [m/s] setpoint walk speed / 設定点速度
+    float stick_snapshot_[4] = {0, 0, 0, 0};  // r,p,y,thr at engage / 設定時スティック
+    float guide_yaw_kp_      = 2.0f;       // [1/s] yaw P gain / ヨー P ゲイン
+    float guide_yaw_rate_max_ = 1.0f;      // [rad/s] yaw turn rate limit / ヨー回頭率上限
+    float stick_move_cancel_ = 0.15f;      // stick departure to cancel / 解除閾値
     float max_pos_vel_    = 1.0f;    // [m/s] POS_HOLD horizontal velocity setpoint limit
 
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID

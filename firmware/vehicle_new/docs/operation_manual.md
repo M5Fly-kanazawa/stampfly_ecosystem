@@ -161,6 +161,28 @@ ALT/POS の自動離陸中はスティック入力を無視する（着陸シー
   → スロットルDOWN / DISARM → 着陸 → IDLE_GROUND（緑常灯）
 ```
 
+### Python からのプログラム飛行（Tello 風 API）
+
+機体は UDP :8889 で Tello SDK 互換のテキストコマンドを受け付ける（`tools/stampfly_py/`）:
+
+```python
+from stampfly import StampFly
+with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
+    fly.takeoff()                       # POS_HOLD 自動離陸 → 0.8 m ホバー
+    fly.forward(50); fly.cw(90)         # 各コマンドは「到達後」に返る
+    print(fly.battery(), fly.height(), fly.attitude())
+    fly.land()
+```
+
+| コマンド | 動作 |
+|---------|------|
+| `command` | SDK モード（これが全ての前提）|
+| `takeoff` / `land` / `emergency` / `stop` | 自動離陸（POS_HOLD・0.8m）/ 自動着陸 / 即時モータ停止 / その場停止 |
+| `up/down/left/right/forward/back <cm>`、`cw/ccw <deg>`、`go <x> <y> <z> <speed>` | 相対移動（10〜300cm、目標合成・到達後 ok）|
+| `battery?` `height?` `attitude?` `speed?` | クエリ |
+
+**安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
+
 ## 5. ペアリング手順
 
 機体とコントローラを1対1に束ね、複数機・複数送信機の混信を防ぐ。詳細は

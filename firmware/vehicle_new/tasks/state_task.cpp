@@ -350,15 +350,31 @@ void StateTask(void* pvParameters)
             prev_arm = req.arm;
 
             // Derive the requested FlightMode from the mode switches (priority:
-            // POS_HOLD > ALT_HOLD > ACRO > STABILIZE default).
-            // モードスイッチから要求 FlightMode を導出（優先: POS>ALT>ACRO>STABILIZE）。
+            // POS_HOLD > ALT_HOLD > ACRO > STABILIZE default), and apply it on
+            // the switch EDGE only — a switch position is the pilot's intent at
+            // the moment it was flipped, not a standing override. Level-apply
+            // would let a parked transmitter revert a mode set by another
+            // authority every 20 ms (found by SIL api_flight: the API set
+            // POS_HOLD, the neutral RC reverted it to STABILIZE the instant
+            // FLYING was reached → zero thrust → impact). Flipping the switch
+            // mid-flight still changes the mode immediately — the pilot wins —
+            // mirroring the controller's guidance cancel-on-stick-MOVEMENT rule.
+            // モードスイッチから要求 FlightMode を導出（優先: POS>ALT>ACRO>STAB）し、
+            // 「スイッチのエッジでのみ」適用する — スイッチ位置は倒した瞬間の意図で
+            // あり、常時上書きではない。レベル適用だと放置された送信機が他権限の設定
+            // モードを 20ms 毎に引き戻す（SIL api_flight が発見: API の POS_HOLD を
+            // 中立 RC が FLYING 到達直後に STABILIZE へ戻し → 推力ゼロ → 墜落）。
+            // 飛行中にスイッチを倒せば即座にモードが変わる — パイロット優先 — で、
+            // 制御器の「スティックを動かしたら誘導解除」則と同じ思想。
             sf::FlightMode want = sf::FlightMode::STABILIZE;
             if (req.pos_hold)      want = sf::FlightMode::POS_HOLD;
             else if (req.alt_hold) want = sf::FlightMode::ALT_HOLD;
             else if (req.acro)     want = sf::FlightMode::ACRO;
-            if (want != g_state_manager.getMode()) {
+            static sf::FlightMode prev_want = sf::FlightMode::STABILIZE;
+            if (want != prev_want) {
                 g_state_manager.requestModeChange(want);
             }
+            prev_want = want;
         }
 
         // =====================================================================
@@ -386,6 +402,58 @@ void StateTask(void* pvParameters)
         // @design architecture.md §2 — detection reports, state decides     [OK]
         // =====================================================================
         sf::ButtonEvent button;
+        // =====================================================================
+        // Network-API flight verbs (ApiTask → api_command, requirements §7
+        // command receive). Same authority split as button/pilot input: the API
+        // reports facts, this task — through the StateManager — decides.
+        // Takeoff composes the EXISTING proven chain: ground mode change →
+        // requestArm (pre-arm gates incl. still-calibration apply) → the
+        // auto-takeoff trigger (mode >= ALT_HOLD publishes ControllerCmd::Takeoff
+        // on TAKEOFF entry). Emergency is an unconditional disarm — the same
+        // motor-cut a pilot DISARM performs.
+        // ネットワーク API の飛行 verb（ApiTask → api_command, requirements §7）。
+        // ボタン/パイロット入力と同じ権限分担: API は事実を報告し、本タスクが
+        // StateManager を通して判断する。Takeoff は「実績のある既存の鎖」の合成:
+        // 地上モード変更 → requestArm（静止校正含む事前ゲート有効）→ 自動離陸
+        // トリガ（mode≥ALT_HOLD の TAKEOFF 突入で ControllerCmd::Takeoff 発行）。
+        // Emergency は無条件 DISARM — パイロット DISARM と同じモータ停止。
+        sf::ApiCommand api_cmd;
+        while (sf::api_command.read(api_cmd)) {
+            switch (static_cast<sf::ApiCmd>(api_cmd.command)) {
+            case sf::ApiCmd::Arm:
+                g_state_manager.requestArm();
+                break;
+            case sf::ApiCmd::Disarm:
+            case sf::ApiCmd::Emergency:
+                g_state_manager.requestDisarm();
+                break;
+            case sf::ApiCmd::Takeoff: {
+                const auto want = static_cast<sf::FlightMode>(api_cmd.mode);
+                if (g_state_manager.getMode() != want) {
+                    g_state_manager.requestModeChange(want);
+                }
+                if (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) {
+                    g_state_manager.requestArm();
+                }
+                if (g_state_manager.getState() == sf::FlightState::ARMED_GROUND &&
+                    g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
+                    g_state_manager.notifyTakeoff();   // → TAKEOFF (auto-takeoff verb)
+                } else {
+                    ESP_LOGW(TAG, "API takeoff rejected (state=%d mode=%d)",
+                             static_cast<int>(g_state_manager.getState()),
+                             static_cast<int>(g_state_manager.getMode()));
+                }
+                break;
+            }
+            case sf::ApiCmd::Land:
+                g_state_manager.notifyLandingRequest();
+                break;
+            case sf::ApiCmd::None:
+            default:
+                break;
+            }
+        }
+
         while (sf::button_event.read(button)) {
             const auto gesture = static_cast<sf::ButtonGesture>(button.gesture);
             if (gesture == sf::ButtonGesture::Click) {

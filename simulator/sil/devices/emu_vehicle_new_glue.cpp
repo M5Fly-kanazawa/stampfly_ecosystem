@@ -79,6 +79,25 @@ std::FILE* diag_file()
     return g_diag;
 }
 
+// --- Scenario "api" channel registration -----------------------------------
+// vehicle_new is the only target with an ApiTask; register its injection entry
+// with the scenario engine at process start (a direct symbol reference inside
+// scenario.cpp would break the legacy-vehicle emu link).
+// vehicle_new だけが ApiTask を持つ。プロセス開始時に注入入口をシナリオエンジンへ
+// 登録する（scenario.cpp からの直接参照は旧 vehicle emu のリンクを壊す）。
+}  // namespace
+
+extern "C" void sil_scenario_register_api_inject(void (*fn)(const char*));
+extern "C" void sf_api_inject_line(const char* line);
+
+namespace {
+struct ApiInjectRegistrar {
+    ApiInjectRegistrar()
+    {
+        sil_scenario_register_api_inject(&sf_api_inject_line);
+    }
+};
+ApiInjectRegistrar g_api_inject_registrar;
 }  // namespace
 
 extern "C" void sil_emu_estimate(float* alt_est, float* roll_est,
