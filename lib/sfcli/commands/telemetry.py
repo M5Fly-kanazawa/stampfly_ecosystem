@@ -14,6 +14,7 @@ UDP ブロードキャスト :5005、50Hz）を受信し、ターミナルにラ
 
 import argparse
 import math
+import os
 import socket
 import struct
 import sys
@@ -129,6 +130,14 @@ def _dashboard(pkt: dict, rate_hz: float, n_packets: int) -> str:
 def run(args: argparse.Namespace) -> int:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # Allow `sf telemetry` and `sf monitor web` to listen simultaneously:
+    # broadcast reception by multiple processes needs SO_REUSEPORT on
+    # macOS/Linux (Windows: SO_REUSEADDR alone suffices; the attr is absent).
+    # `sf telemetry` と `sf monitor web` の同時リッスンを許可: 複数プロセスでの
+    # ブロードキャスト受信は macOS/Linux では SO_REUSEPORT が必要
+    # （Windows は SO_REUSEADDR のみで足り、属性自体が存在しない）。
+    if hasattr(socket, "SO_REUSEPORT"):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     try:
         # The vehicle broadcasts to 255.255.255.255:5005 — bind the port on
         # all interfaces; no vehicle IP needed.
@@ -145,6 +154,15 @@ def run(args: argparse.Namespace) -> int:
         csv_file = open(args.csv, "a", buffering=1)
         if csv_file.tell() == 0:
             csv_file.write("t_us,mode," + ",".join(FLOAT_NAMES) + "\n")
+
+    # The dashboard redraw uses ANSI escapes. Legacy Windows consoles need VT
+    # processing enabled first — the empty system() call is the documented
+    # stdlib-only trick (Windows Terminal / macOS / Linux need nothing).
+    # ダッシュボード再描画は ANSI エスケープを使う。旧来の Windows コンソールは
+    # VT 処理の有効化が必要 — 空 system() は stdlib のみでそれを行う既知の手法
+    # （Windows Terminal / macOS / Linux では不要）。
+    if os.name == "nt":
+        os.system("")
 
     console.info(f"Listening for telemetry on UDP :{args.port} "
                  f"(timeout {args.timeout:.0f}s)...")

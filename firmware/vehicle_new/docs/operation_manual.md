@@ -216,6 +216,7 @@ TAB で補完。
 ```bash
 sf telemetry              # ライブダッシュボード（状態/姿勢/角速度/高度/モータduty）
 sf telemetry --csv f.csv  # 同時に CSV 記録
+sf monitor web            # ブラウザ表示（http://localhost:5006、グラフ付き）
 ```
 
 グラフ・解析には Data Stream（400Hz・全センサ）を使う: `sf log wifi` → `sf log viz`。

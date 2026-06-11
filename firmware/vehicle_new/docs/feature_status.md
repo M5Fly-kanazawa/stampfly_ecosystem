@@ -61,7 +61,7 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | SSOT プロトコル準拠 | ControlPacket 14B（protocol/spec 準拠、コントローラ無改変） | 実機 |
-| Telemetry | UDP 50Hz 状態モニタ | 実機 |
+| Telemetry | UDP 50Hz 状態モニタ。受信は `sf telemetry`（ターミナル）/ `sf monitor web`（ブラウザ、UDP→SSE プロキシ。requirements §7 の WebSocket は stdlib 等価の SSE で実現） | 実機＋ループバック E2E |
 | Data Stream | 制御周期 400Hz の解析ログ。**旧 vehicle 電文完全互換**（UDP 8890 / 0x50 統合パケット）で `sf log wifi` → `sf log viz` が無改造で動く | 実機 E2E（全センサ設計レート、欠損ゼロ） |
 | Blackbox | SPIFFS バイナリ記録、ARM→DISARM で1セッション | 実装済（SPIFFS 無しはグレースフル無効） |
 | CLI（USB＋TCP） | esp_console レジストリ（R6）。USB-CDC REPL＋**TCP ポート23**（電池駆動ベンチ用） | 実機（モータテストで使用） |
@@ -86,7 +86,6 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
 | POS_HOLD 実機検証 | roadmap Phase 4 | SIL のみ PASS | 地面付近のフロー品質が実機の未知数 |
 | 磁気ヨー融合の常用化 | ESKF に観測枠あり | `eskf.use_mag` 既定 off | 校正機能は §4 で整備済み。実機ログで磁気健全性を見て判断 |
-| `sf monitor web`（ブラウザ表示） | requirements §7 | 未整備 | ホスト側プロキシ（UDP→WebSocket）。ターミナル表示は `sf telemetry` で対応済み（2026-06-11） |
 
 ## 4. 後から追加されたもの（実機・設計議論が駆動）
 
@@ -163,7 +162,7 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 | Estimation | 15-state ESKF (chi2 gates, active_mask P isolation, sparse predict), swappable IEstimator (ESKF/complementary), ToF-only vertical + ground anchoring + takeoff handoff | SIL G2 + hardware |
 | Control | Swappable IController, cascade PID (ACRO/STAB/ALT/POS), B^-1 mixer in physical units + motor curve + live battery compensation | SIL 16 scenarios |
 | State machine & safety | Full flight state machine, comm-loss/battery auto-landing (Landing verb, −0.3 m/s), impact DISARM, crash→re-fly readiness chain, pairing (anti-cross-talk, 30 craft/classroom) | SIL + hardware |
-| Comms & logging | SSOT ControlPacket 14B, Telemetry UDP 50 Hz, **Data Stream 400 Hz wire-compatible with legacy** (`sf log wifi`/`viz` unmodified), Blackbox on SPIFFS, CLI over USB + TCP:23, WiFi STA/AP dual | Hardware E2E |
+| Comms & logging | SSOT ControlPacket 14B, Telemetry UDP 50 Hz (receivers: `sf telemetry` terminal / `sf monitor web` browser via UDP→SSE), **Data Stream 400 Hz wire-compatible with legacy** (`sf log wifi`/`viz` unmodified), Blackbox on SPIFFS, CLI over USB + TCP:23, WiFi STA/AP dual | Hardware E2E |
 | SIL | Real app_main/tasks/drivers run UNMODIFIED on the host (Code Identity), scenario DSL + expect gates G1–G4, Code/Param/Model Identity principles | 16/16 regression |
 
 ## 3. Planned, Not Yet Done
@@ -176,7 +175,6 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 | Front ToF | HAL present, not brought up |
 | POS_HOLD hardware validation | SIL-only PASS; near-ground flow quality is the unknown |
 | Mag yaw fusion as default | `eskf.use_mag` off; calibration tooling now exists (§4) — decide after flight-log review |
-| `sf monitor web` proxy | Host-side, not built (terminal dashboard now exists: `sf telemetry`) |
 
 ## 4. Added Later (driven by hardware & design discussions)
 

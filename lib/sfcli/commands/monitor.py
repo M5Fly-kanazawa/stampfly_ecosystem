@@ -25,8 +25,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "target",
         nargs="?",
         default="vehicle",
-        choices=["vehicle", "controller"],
-        help="Target project (for ELF file, default: vehicle)",
+        choices=["vehicle", "controller", "web"],
+        help="Target project for the serial monitor (vehicle/controller), or "
+             "'web' for the browser telemetry view (UDP :5005 -> SSE proxy)",
+    )
+    parser.add_argument(
+        "--http-port", type=int, default=5006,
+        help="HTTP port for 'web' (default: 5006)",
+    )
+    parser.add_argument(
+        "--telemetry-port", type=int, default=5005,
+        help="UDP telemetry port for 'web' (default: 5005)",
+    )
+    parser.add_argument(
+        "--no-browser", action="store_true",
+        help="Do not auto-open the browser ('web' only)",
     )
     parser.add_argument(
         "-p", "--port",
@@ -44,6 +57,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def run(args: argparse.Namespace) -> int:
     """Execute monitor command"""
+    if args.target == "web":
+        # Browser telemetry view (requirements §7) — UDP -> SSE proxy.
+        # ブラウザテレメトリ表示（requirements §7）— UDP → SSE プロキシ。
+        from . import monitor_web
+        return monitor_web.serve(http_port=args.http_port,
+                                 telemetry_port=args.telemetry_port,
+                                 open_browser=not args.no_browser)
+
     # Determine target directory
     if args.target == "vehicle":
         target_dir = paths.vehicle()

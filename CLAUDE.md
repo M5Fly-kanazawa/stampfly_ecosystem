@@ -64,6 +64,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf flash [target]` | 書き込み（-m でモニタ付き）|
 | `sf monitor` | シリアルモニタ |
 | `sf telemetry` | 50Hzテレメトリのライブ表示（vehicle_new, UDP:5005）|
+| `sf monitor web` | テレメトリのブラウザ表示（UDP→SSEプロキシ, http://localhost:5006）|
 | `sf log list` | ログファイル一覧 |
 | `sf log capture` | USB経由バイナリログ取得 |
 | `sf log wifi` | WiFi経由400Hzテレメトリ取得 |
