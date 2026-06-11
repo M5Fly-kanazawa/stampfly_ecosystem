@@ -266,4 +266,20 @@ inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
 // 検出する。PowerTask が 1Hz で publish（sensor_health トピック）。
 inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 
+// =============================================================================
+// Power Monitor (INA3221) Wiring
+// 電源モニタ（INA3221）配線
+// =============================================================================
+
+// The StampFly board wires the 1S LiPo to INA3221 channel index 1 (= chip
+// channel 2). The driver default (index 0) is an UNCONNECTED rail and reads
+// 0.00 V — this exact porting omission disabled the battery failsafe and the
+// thrust→duty sag compensation on every flight until 2026-06-11. Value is the
+// legacy vehicle/'s flight-proven POWER_BATTERY_CHANNEL.
+// StampFly 基板は 1S LiPo を INA3221 のチャネル index 1（=チップのチャネル 2）に
+// 配線している。ドライバ既定値（index 0）は未接続レールで 0.00 V を読む — この
+// 移植漏れにより 2026-06-11 まで全フライトで電池フェイルセーフとサグ補償が無効
+// だった。値は旧 vehicle/ の飛行実績 POWER_BATTERY_CHANNEL。
+inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
+
 }  // namespace config

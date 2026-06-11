@@ -132,6 +132,11 @@ void PowerTask(void* pvParameters)
     // -------------------------------------------------------------------
     stampfly::PowerMonitor::Config cfg{};
     cfg.i2c_bus = sf::internal::board::i2c_bus();
+    // Battery rail is on channel index 1 on the StampFly board — the driver
+    // default (0) is unconnected and reads 0.00 V (see config.hpp).
+    // 電池レールは StampFly 基板ではチャネル index 1 — ドライバ既定値(0)は未接続で
+    // 0.00 V を読む（config.hpp 参照）。
+    cfg.battery_channel = config::POWER_BATTERY_CHANNEL;
     const bool present = (g_power.init(cfg) == ESP_OK);
     sf::internal::board::set_sensor_present(
         sf::internal::board::SensorId::Power, present);
