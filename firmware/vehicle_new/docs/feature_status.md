@@ -86,7 +86,7 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
 | POS_HOLD 実機検証 | roadmap Phase 4 | SIL のみ PASS | 地面付近のフロー品質が実機の未知数 |
 | 磁気ヨー融合の常用化 | ESKF に観測枠あり | `eskf.use_mag` 既定 off | 校正機能は §4 で整備済み。実機ログで磁気健全性を見て判断 |
-| `sf monitor web`（ブラウザ表示） | requirements §7 | 未整備 | ホスト側プロキシ（UDP→WebSocket） |
+| `sf monitor web`（ブラウザ表示） | requirements §7 | 未整備 | ホスト側プロキシ（UDP→WebSocket）。ターミナル表示は `sf telemetry` で対応済み（2026-06-11） |
 
 ## 4. 後から追加されたもの（実機・設計議論が駆動）
 
@@ -176,7 +176,7 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 | Front ToF | HAL present, not brought up |
 | POS_HOLD hardware validation | SIL-only PASS; near-ground flow quality is the unknown |
 | Mag yaw fusion as default | `eskf.use_mag` off; calibration tooling now exists (§4) — decide after flight-log review |
-| `sf monitor web` proxy | Host-side, not built |
+| `sf monitor web` proxy | Host-side, not built (terminal dashboard now exists: `sf telemetry`) |
 
 ## 4. Added Later (driven by hardware & design discussions)
 
