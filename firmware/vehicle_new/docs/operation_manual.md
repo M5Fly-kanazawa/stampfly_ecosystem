@@ -24,28 +24,51 @@ CLI コマンド**をまとめた実機運用マニュアル。UI（LED/ブザ�
 
 ### 起動フェーズと LED/音
 
-| 段階 | 内容 | LED（本体, GPIO39×2） | 音 |
-|------|------|----------------------|-----|
+| 段階 | 内容 | StampS3 LED（状態, GPIO21） | 音 |
+|------|------|---------------------------|-----|
 | Phase 0 | NVS 初期化 | — | — |
 | Phase 1 | BSP（sf_board）: I2C/SPI/LEDC バス | — | — |
 | Phase 2 | Pub-Sub トピック初期化 | — | — |
 | Phase 3 | パラメータ読込（NVS or 既定） | — | — |
 | Phase 4 | 14 タスク起動 → NotifyTask 起動 | **白 常灯**（INIT） | **startTone**（ドミソ: C5→E5→G5）|
 | — | INIT → IDLE_GROUND（IMU が有効値を出す）| 白 → 緑/マゼンタへ | — |
-| 校正 | 起動バイアス校正（地上 約3.5秒, 静止厳守）| **マゼンタ 低速点滅** | （無音）|
+| 校正 | 起動バイアス校正（静止確認済 2.5 秒分を平均。動かすとやり直し）| **マゼンタ 低速点滅** | （無音）|
 | 完了 | 校正完了 → ARM 可能 | **緑 常灯** | **readyTone**（ピッ×3）|
 | ペア | 未ペアなら自動ペアリング待機 | **青 高速点滅** | **pairingTone**（C5→G5）|
 
 **ポイント:**
 - 起動音（ドミソ）が鳴り**白点灯**＝電源 ON・初期化開始。
-- **マゼンタ点滅中は静止**（バイアス校正中）。動かすと校正がやり直しになる。
+- **マゼンタ点滅中は静止**（バイアス校正中）。動きを検出すると蓄積を破棄してやり直すため、機体を置いて LED が緑になる（＋ピッ×3）まで待つ。
 - **緑常灯＋ピッ×3**＝校正完了・ARM 可能。
 - **青高速点滅**＝送信機を探索中（ペアリング待ち、§5 参照）。
-- Critical なハード故障時のみ MCU 内蔵 LED（GPIO21）が**赤 高速点滅**して停止する（sf_board）。
+- Critical なハード故障時は同じ StampS3 LED が**赤 高速点滅**して停止する（sf_board の致命停止経路）。
 
 ## 3. LED / 音 リファレンス
 
-### 状態 → LED（本体 LED, GPIO39×2）
+LED は**2 チャネル**に分かれる:
+
+| チャネル | LED | 役割 |
+|---------|-----|------|
+| **モード色** | 本体 LED（基板の表裏 ×2、常に同一表示） | フライトモードの色。地上＝モードスイッチ位置の**プレビュー（低速点滅）**、ARM 後・飛行中＝**実モード（常灯）** |
+| **システム状態** | StampS3 内蔵 LED（GPIO21 ×1） | INIT/校正/ペアリング/IDLE/ARMED/離陸/着陸などの状態表示 |
+
+基板の表裏は機体姿勢でどちらかが見えなくなるため同一表示とし、StampS3 LED を独立した状態表示に使う。
+
+### モード色（本体 LED, GPIO39×2）
+
+| モード | 色 | 地上（DISARM） | ARM 後・飛行中 |
+|--------|-----|---------------|---------------|
+| ACRO | 青 | 低速点滅 | 常灯 |
+| STABILIZE | 黄緑 | 低速点滅 | 常灯 |
+| ALT_HOLD | オレンジ | 低速点滅 | 常灯 |
+| POS_HOLD | マゼンタ | 低速点滅 | 常灯 |
+| （INIT 中）| 白 | 常灯 | — |
+| **低電圧**（最優先）| シアン | 高速点滅 | 高速点滅 |
+
+- 地上のプレビューは**送信機のモードスイッチ位置**を表示する（離陸後に有効になるモード）。DISARM 中にスイッチを切り替えると即座に色が変わる。
+- 実モードは安全設計上、接地中は STABILIZE に戻り、離陸完了（FLYING）後にスイッチ位置が適用される。
+
+### システム状態（StampS3 内蔵 LED, GPIO21）
 
 優先度は上から（上位が下位を上書き）: 低電圧 > ペアリング > 校正中 > 飛行状態。
 
@@ -53,17 +76,15 @@ CLI コマンド**をまとめた実機運用マニュアル。UI（LED/ブザ�
 |------|-----|---------|
 | 低電圧（電池電圧が `safety.battery.low_v` 以下）| シアン | 低速点滅 |
 | ペアリング中（探索中）| 青 | 高速点滅 |
-| 校正中（地上・校正未完了）| マゼンタ | 低速点滅 |
+| 校正中（地上・校正未完了。**静止するまで完了しない**）| マゼンタ | 低速点滅 |
 | INIT（初期化中）| 白 | 常灯 |
 | IDLE_GROUND（校正済・ARM 可）| 緑 | 常灯 |
 | IDLE_HELD（手持ち検出）| シアン | 高速点滅 |
 | ARMED_GROUND（ARM 済・地上）| 緑 | 低速点滅 |
 | TAKEOFF（離陸シーケンス）| 白 | 高速点滅 |
-| FLYING / ACRO | 青 | 常灯 |
-| FLYING / STABILIZE | 黄緑 | 常灯 |
-| FLYING / ALT_HOLD | オレンジ | 常灯 |
-| FLYING / POS_HOLD | マゼンタ | 常灯 |
+| FLYING（飛行中）| 緑 | 常灯 |
 | LANDING（着陸シーケンス）| オレンジ | 低速点滅 |
+| Critical ハード故障（停止）| 赤 | 高速点滅 |
 
 ### イベント → 音（ブザー）
 
@@ -233,39 +254,63 @@ legacy vehicle firmware.
 
 After power-on the firmware runs Phase 0–4 in order, signalling state via LED and sound.
 
-| Stage | Action | LED (body, GPIO39×2) | Sound |
-|-------|--------|----------------------|-------|
+| Stage | Action | StampS3 LED (state, GPIO21) | Sound |
+|-------|--------|------------------------------|-------|
 | Phase 0 | NVS init | — | — |
 | Phase 1 | BSP (sf_board): I2C/SPI/LEDC buses | — | — |
 | Phase 2 | Pub-Sub topics | — | — |
 | Phase 3 | Parameters (NVS or defaults) | — | — |
 | Phase 4 | 14 tasks start → NotifyTask | **white solid** (INIT) | **startTone** (C5→E5→G5) |
 | — | INIT → IDLE_GROUND (IMU valid) | white → green/magenta | — |
-| Calib | Boot bias calibration (~3.5 s on ground, keep still) | **magenta slow blink** | (silent) |
+| Calib | Boot bias calibration (averages 2.5 s of VERIFIED-still samples; motion restarts it) | **magenta slow blink** | (silent) |
 | Ready | Calibration done → can ARM | **green solid** | **readyTone** (beep ×3) |
 | Pair | Auto-pairing if unpaired | **blue fast blink** | **pairingTone** (C5→G5) |
 
-Only a Critical hardware failure lights the MCU LED (GPIO21) **red fast blink** and halts (sf_board).
+A Critical hardware failure lights the same StampS3 LED **red fast blink** and halts (sf_board).
 
 ## 3. LED / Sound Reference
 
-### State → LED (body LEDs), priority: low-battery > pairing > calibrating > flight state
+The LEDs form **two channels**:
+
+| Channel | LED | Role |
+|---------|-----|------|
+| **Mode colour** | Body LEDs (board top+bottom ×2, always identical) | Flight-mode colour. On the ground = mode-switch position **preview (slow blink)**; armed/airborne = **active mode (solid)** |
+| **System state** | StampS3 built-in LED (GPIO21 ×1) | INIT/calibrating/pairing/idle/armed/takeoff/landing status |
+
+The board's top/bottom LEDs show the same content (one of them is hidden depending on the
+craft's pose); the StampS3 LED serves as the independent status display.
+
+### Mode colour (body LEDs, GPIO39×2)
+
+| Mode | Colour | On ground (disarmed) | Armed / airborne |
+|------|--------|---------------------|------------------|
+| ACRO | blue | slow blink | solid |
+| STABILIZE | yellow-green | slow blink | solid |
+| ALT_HOLD | orange | slow blink | solid |
+| POS_HOLD | magenta | slow blink | solid |
+| (during INIT) | white | solid | — |
+| **Low battery** (top priority) | cyan | fast blink | fast blink |
+
+- The ground preview shows the **transmitter's mode-switch position** (the mode that engages
+  after takeoff). Flipping the switch while disarmed changes the colour immediately.
+- By design the ACTIVE mode resets to STABILIZE on the ground and the switch position is
+  applied once FLYING is reached.
+
+### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > calibrating > flight state
 
 | State | Colour | Pattern |
 |-------|--------|---------|
 | Low battery (≤ `safety.battery.low_v`) | cyan | slow blink |
 | Pairing (searching) | blue | fast blink |
-| Calibrating (ground, not done) | magenta | slow blink |
+| Calibrating (ground, not done; **never completes while moving**) | magenta | slow blink |
 | INIT | white | solid |
 | IDLE_GROUND (ready) | green | solid |
 | IDLE_HELD | cyan | fast blink |
 | ARMED_GROUND | green | slow blink |
 | TAKEOFF | white | fast blink |
-| FLYING / ACRO | blue | solid |
-| FLYING / STABILIZE | yellow-green | solid |
-| FLYING / ALT_HOLD | orange | solid |
-| FLYING / POS_HOLD | magenta | solid |
+| FLYING | green | solid |
 | LANDING | orange | slow blink |
+| Critical hardware failure (halt) | red | fast blink |
 
 ### Event → Sound
 

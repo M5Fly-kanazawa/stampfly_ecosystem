@@ -59,13 +59,39 @@ struct LedPattern {
 struct NotifyConfig {
     int led_gpio;             // WS2812 body LED GPIO        / ボディ LED GPIO
     int led_count;            // Number of body LEDs         / ボディ LED 数
+    int mcu_led_gpio;         // M5Stamp S3 built-in LED GPIO / StampS3 内蔵 LED GPIO
+    int mcu_led_count;        // Number of MCU LEDs (1)       / MCU LED 数（1）
     int buzzer_gpio;          // Buzzer GPIO                 / ブザー GPIO
     int buzzer_ledc_channel;  // Buzzer LEDC channel         / ブザー LEDC チャンネル
     int buzzer_ledc_timer;    // Buzzer LEDC timer           / ブザー LEDC タイマー
 };
 
-/// Notification manager: LED + buzzer
-/// 通知マネージャー: LED＋ブザー
+/// Per-LED-channel blink bookkeeping (body and MCU LEDs blink independently)
+/// LED チャネルごとの点滅状態（本体と MCU の LED は独立に点滅する）
+struct LedChannelState {
+    uint32_t last_toggle_ms = 0;  // Last toggle time [ms] / 最終切替時刻
+    bool     on             = false;  // Currently lit?    / 現在点灯中か
+};
+
+/// Notification manager: LED + buzzer.
+///
+/// Two independent LED channels (UI design):
+/// - BODY LEDs (board top+bottom, always identical — one of them is hidden
+///   depending on the craft's pose): FLIGHT-MODE colour channel. On the ground
+///   it previews the pilot's mode-switch position (slow blink = disarmed,
+///   solid = armed); in the air it shows the ACTIVE mode (solid). Low battery
+///   overrides with cyan fast blink (must be visible in flight).
+/// - MCU LED (M5Stamp S3 built-in, visible on the bench): SYSTEM-STATE channel.
+///   INIT/calibrating/pairing/idle/armed/takeoff/flying/landing + overlays.
+///
+/// 通知マネージャー: LED＋ブザー。
+/// 独立した 2 つの LED チャネル（UI 設計）:
+/// - 本体 LED（基板の表裏、常に同一 — 機体姿勢によりどちらかは見えないため）:
+///   「フライトモード色」チャネル。地上ではモードスイッチ位置のプレビュー
+///   （低速点滅=DISARM、常灯=ARM）、空中では実際のモード（常灯）。低電圧は
+///   シアン高速点滅で上書き（飛行中に見える必要があるため）。
+/// - MCU LED（M5Stamp S3 内蔵、ベンチで見える）: 「システム状態」チャネル。
+///   INIT/校正中/ペアリング/IDLE/ARMED/離陸/飛行/着陸＋オーバーレイ。
 class Notify {
 public:
     /// Initialize notification subsystem with the caller-supplied HW config
@@ -85,36 +111,42 @@ public:
     void playEvent(NotifyEvent event);
 
 private:
-    /// Compute the LED pattern to show NOW, by priority overlay (mirrors the legacy
-    /// vehicle's LEDManager priority): low-battery > pairing > calibrating > flight
-    /// state. FLYING shows the flight-mode colour (see flyingPattern).
-    /// いま表示する LED パターンを優先度オーバーレイで決める（旧 vehicle の LEDManager
-    /// 優先度を踏襲）: 低電圧 > ペアリング > 校正中 > 飛行状態。FLYING はモード色。
-    LedPattern computeActivePattern() const;
+    /// System-state channel pattern (MCU LED), by priority overlay (mirrors the
+    /// legacy vehicle's LEDManager priority): low-battery > pairing > calibrating
+    /// > flight state.
+    /// システム状態チャネルのパターン（MCU LED）。優先度オーバーレイ（旧 vehicle の
+    /// LEDManager 優先度を踏襲）: 低電圧 > ペアリング > 校正中 > 飛行状態。
+    LedPattern computeStatePattern() const;
 
-    /// Get LED pattern for a given flight state (non-FLYING table lookup)
-    /// 指定フライト状態のLEDパターンを取得する（FLYING以外のテーブル参照）
+    /// Flight-mode channel pattern (body LEDs): mode colour preview/active.
+    /// フライトモードチャネルのパターン（本体 LED）: モード色のプレビュー/実モード。
+    LedPattern computeModePattern() const;
+
+    /// Get LED pattern for a given flight state (table lookup)
+    /// 指定フライト状態のLEDパターンを取得する（テーブル参照）
     const LedPattern& getPattern(FlightState state) const;
 
-    /// FLYING LED pattern = solid flight-mode colour (ACRO blue / STABILIZE yellow-green
-    /// / ALT_HOLD orange / POS_HOLD magenta), matching the legacy vehicle's mode colours.
-    /// FLYING の LED = モード色の常灯（ACRO青/STABILIZE黄緑/ALT_HOLD橙/POS_HOLDマゼンタ）、
-    /// 旧 vehicle のモード色に合わせる。
-    LedPattern flyingPattern(FlightMode mode) const;
+    /// Flight-mode colour (ACRO blue / STABILIZE yellow-green / ALT_HOLD orange /
+    /// POS_HOLD magenta), matching the legacy vehicle's mode colours.
+    /// モード色（ACRO青/STABILIZE黄緑/ALT_HOLD橙/POS_HOLDマゼンタ）、旧 vehicle 準拠。
+    LedColor modeColor(FlightMode mode) const;
 
-    /// Apply LED pattern (toggle on/off based on timing)
-    /// LEDパターンを適用する（タイミングに基づきON/OFFを切り替え）
-    void applyLedPattern(const LedPattern& pattern);
+    /// Apply an LED pattern to one channel (toggle on/off based on timing)
+    /// LEDパターンを1チャネルに適用する（タイミングに基づきON/OFFを切り替え）
+    void applyPattern(const LedPattern& pattern, LedChannelState& channel,
+                      stampfly::LED& led, int count);
 
-    /// Set every body LED to one color (off = {0,0,0})
-    /// 全ボディ LED を 1 色に設定する（消灯 = {0,0,0}）
-    void setBodyLeds(const LedColor& color);
+    /// Set every LED of one strip to one color (off = {0,0,0})
+    /// 1 ストリップの全 LED を 1 色に設定する（消灯 = {0,0,0}）
+    void setLeds(stampfly::LED& led, int count, const LedColor& color);
 
-    stampfly::LED    led_;            // WS2812 body LED HAL  / WS2812 ボディ LED HAL
+    stampfly::LED    body_led_;       // WS2812 body LEDs (board top+bottom) / 本体 LED（表裏）
+    stampfly::LED    mcu_led_;        // M5Stamp S3 built-in LED / StampS3 内蔵 LED
     stampfly::Buzzer buzzer_;         // LEDC buzzer HAL      / LEDC ブザー HAL
-    int      led_count_      = 0;     // Body LED count       / ボディ LED 数
-    uint32_t last_toggle_ms_ = 0;    // Last LED toggle time / 最終LED切替時刻
-    bool     led_on_         = false; // Current LED state    / 現在のLED状態
+    int      body_led_count_ = 0;     // Body LED count       / 本体 LED 数
+    int      mcu_led_count_  = 0;     // MCU LED count        / MCU LED 数
+    LedChannelState body_channel_;    // Body blink state     / 本体の点滅状態
+    LedChannelState mcu_channel_;     // MCU blink state      / MCU の点滅状態
     float    low_v_threshold_ = 3.4f; // Low-battery LED threshold [V] (from params)
                                       // 低電圧 LED 閾値 [V]（params から）
     uint8_t  start_tone_countdown_ = 60; // Power-on chime delay: 60 cycles ≈ 2s at

@@ -46,6 +46,8 @@ void NotifyTask(void* pvParameters)
     sf::NotifyConfig cfg{};
     cfg.led_gpio            = config::GPIO_LED_BODY;
     cfg.led_count           = config::LED_NUM_BODY;
+    cfg.mcu_led_gpio        = config::GPIO_LED_MCU;
+    cfg.mcu_led_count       = config::LED_NUM_MCU;
     cfg.buzzer_gpio         = config::GPIO_BUZZER;
     cfg.buzzer_ledc_channel = config::BUZZER_LEDC_CHANNEL;
     cfg.buzzer_ledc_timer   = config::BUZZER_LEDC_TIMER;

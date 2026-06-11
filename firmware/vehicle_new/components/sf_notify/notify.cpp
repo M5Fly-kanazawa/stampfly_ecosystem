@@ -77,16 +77,27 @@ static constexpr float kVoltageValidMin = 0.1f;
 // -----------------------------------------------------------------------------
 void Notify::init(const NotifyConfig& config)
 {
-    led_count_ = config.led_count;
+    body_led_count_ = config.led_count;
+    mcu_led_count_  = config.mcu_led_count;
 
-    // WS2812 body LED. HAL guards its own calls, so a failed init simply makes
-    // setColor() a no-op.
-    // WS2812 ボディ LED。HAL が自前でガードするので init 失敗時は setColor() が
-    // no-op になるだけ。
+    // Two independent WS2812 strips (see the class comment for the UI design):
+    // body LEDs = flight-mode channel, MCU LED = system-state channel. The HAL
+    // guards its own calls, so a failed init simply makes setColor() a no-op.
+    // The MCU LED GPIO is also used by sf_board's FATAL halt path (fast red
+    // blink) — that path never returns, so there is no runtime conflict.
+    // 独立した 2 つの WS2812（UI 設計はクラスコメント参照）: 本体 LED=モード色
+    // チャネル、MCU LED=システム状態チャネル。HAL が自前でガードするので init
+    // 失敗時は setColor() が no-op になるだけ。MCU LED の GPIO は sf_board の
+    // 致命停止経路（赤高速点滅）も使うが、あちらは戻らないため実行時競合はない。
     stampfly::LED::Config led_cfg{};
     led_cfg.gpio     = config.led_gpio;
     led_cfg.num_leds = config.led_count;
-    led_.init(led_cfg);
+    body_led_.init(led_cfg);
+
+    stampfly::LED::Config mcu_cfg{};
+    mcu_cfg.gpio     = config.mcu_led_gpio;
+    mcu_cfg.num_leds = config.mcu_led_count;
+    mcu_led_.init(mcu_cfg);
 
     // LEDC buzzer (timer separate from the motor's timer 0).
     // LEDC ブザー (モータのタイマ0とは別タイマ)。
@@ -119,19 +130,21 @@ void Notify::init(const NotifyConfig& config)
     // （readyTone）は従来どおり起動校正完了に続く（NotifyEvent::Ready）。
     buzzer_.loadFromNVS();
 
-    ESP_LOGI(TAG, "Notify initialized (LED gpio=%d x%d, buzzer gpio=%d)",
-             config.led_gpio, config.led_count, config.buzzer_gpio);
+    ESP_LOGI(TAG, "Notify initialized (body LED gpio=%d x%d, MCU LED gpio=%d, "
+                  "buzzer gpio=%d)",
+             config.led_gpio, config.led_count, config.mcu_led_gpio,
+             config.buzzer_gpio);
 }
 
 // -----------------------------------------------------------------------------
-// computeActivePattern — pick the LED pattern to show NOW by priority overlay.
-// computeActivePattern — 優先度オーバーレイでいま表示する LED パターンを決める。
+// computeStatePattern — system-state channel (MCU LED) by priority overlay.
+// computeStatePattern — システム状態チャネル（MCU LED）。優先度オーバーレイ。
 //
 // Mirrors the legacy vehicle's LEDManager priority order:
 //   low-battery > pairing > calibrating > flight state.
 // 旧 vehicle の LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
 // -----------------------------------------------------------------------------
-LedPattern Notify::computeActivePattern() const
+LedPattern Notify::computeStatePattern() const
 {
     // 1. Low battery (cyan slow blink) — a VALID reading at/below the threshold.
     // 1. 低電圧（シアン低速点滅）— 有効な読みが閾値以下。
@@ -154,29 +167,78 @@ LedPattern Notify::computeActivePattern() const
         return kCalibratingPattern;
     }
 
-    // 4. Flight state. FLYING shows the flight-mode colour.
-    // 4. 飛行状態。FLYING はモード色。
-    if (state == FlightState::FLYING) {
-        return flyingPattern(static_cast<FlightMode>(mode.sub_mode));
-    }
+    // 4. Flight state (table). The flight-mode colour lives on the BODY LEDs
+    // (computeModePattern) — here FLYING is plain green solid.
+    // 4. 飛行状態（テーブル）。モード色は本体 LED（computeModePattern）が担当 —
+    // ここでは FLYING は緑の常灯。
     return getPattern(state);
 }
 
 // -----------------------------------------------------------------------------
-// flyingPattern — FLYING LED = solid flight-mode colour (legacy mode colours).
-// flyingPattern — FLYING の LED = モード色の常灯（旧のモード色）。
+// computeModePattern — flight-mode channel (body LEDs).
+// On the ground the pilot's mode-SWITCH position is previewed (the state machine
+// keeps the ACTIVE mode at STABILIZE until FLYING — re-fly safety — so the
+// preview reads the pilot_request switches with the same precedence the state
+// task applies once airborne: pos > alt > acro > stabilize). In the air the
+// ACTIVE mode (sub_mode) is shown. Slow blink = disarmed preview, solid = armed.
+// Low battery overrides with cyan fast blink — the body LEDs are what the pilot
+// sees in flight, so the urgent overlay must live here too.
+// computeModePattern — フライトモードチャネル（本体 LED）。
+// 地上ではモード「スイッチ位置」をプレビューする（状態機械は再飛行安全のため FLYING
+// まで実モードを STABILIZE に保つので、プレビューは pilot_request のスイッチを
+// state task が空中で適用するのと同じ優先順位 pos > alt > acro > stabilize で読む）。
+// 空中では「実モード」（sub_mode）を表示。低速点滅=DISARM プレビュー、常灯=ARM。
+// 低電圧はシアン高速点滅で上書き — 飛行中にパイロットが見るのは本体 LED のため、
+// 緊急表示はこちらにも必要。
 // -----------------------------------------------------------------------------
-LedPattern Notify::flyingPattern(FlightMode mode) const
+LedPattern Notify::computeModePattern() const
 {
-    LedColor color;
-    switch (mode) {
-        case FlightMode::ACRO:      color = kBlue;        break;  // 青
-        case FlightMode::STABILIZE: color = kYellowGreen; break;  // 黄緑
-        case FlightMode::ALT_HOLD:  color = kOrange;      break;  // オレンジ
-        case FlightMode::POS_HOLD:  color = kMagenta;     break;  // マゼンタ
-        default:                    color = kGreen;       break;
+    // Urgent overlay: low battery (valid reading at/below threshold).
+    // 緊急オーバーレイ: 低電圧（有効な読みが閾値以下）。
+    const float voltage = sensor_power.latest().voltage;
+    if (voltage > kVoltageValidMin && voltage <= low_v_threshold_) {
+        return { kCyan, kFastOn, kFastOff };
     }
-    return { color, kSolidOn, kSolidOff };
+
+    const SystemMode mode = system_mode.latest();
+    const FlightState state = static_cast<FlightState>(mode.state);
+
+    // Booting: mirror INIT white until the system is up.
+    // 起動中: システムが立ち上がるまで INIT の白をそのまま。
+    if (state == FlightState::INIT) {
+        return getPattern(state);
+    }
+
+    // Airborne (incl. armed on ground): ACTIVE mode, solid.
+    // 空中（地上 ARM 含む）: 実モードの常灯。
+    if (state == FlightState::ARMED_GROUND || isAirborne(state)) {
+        return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
+                 kSolidOn, kSolidOff };
+    }
+
+    // Disarmed on the ground: preview the mode-switch position, slow blink.
+    // 地上 DISARM: モードスイッチ位置のプレビュー、低速点滅。
+    const PilotRequest req = pilot_request.latest();
+    FlightMode preview = FlightMode::STABILIZE;
+    if (req.pos_hold)      preview = FlightMode::POS_HOLD;
+    else if (req.alt_hold) preview = FlightMode::ALT_HOLD;
+    else if (req.acro)     preview = FlightMode::ACRO;
+    return { modeColor(preview), kSlowOn, kSlowOff };
+}
+
+// -----------------------------------------------------------------------------
+// modeColor — flight-mode colour (legacy vehicle mode colours).
+// modeColor — モード色（旧 vehicle のモード色）。
+// -----------------------------------------------------------------------------
+LedColor Notify::modeColor(FlightMode mode) const
+{
+    switch (mode) {
+        case FlightMode::ACRO:      return kBlue;         // 青
+        case FlightMode::STABILIZE: return kYellowGreen;  // 黄緑
+        case FlightMode::ALT_HOLD:  return kOrange;       // オレンジ
+        case FlightMode::POS_HOLD:  return kMagenta;      // マゼンタ
+        default:                    return kGreen;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -192,11 +254,12 @@ void Notify::update()
         buzzer_.startTone();
     }
 
-    // Apply the priority-resolved LED pattern (low-battery > pairing > calibrating >
-    // flight state; FLYING shows the flight-mode colour). See computeActivePattern.
-    // 優先度解決した LED パターンを適用（低電圧 > ペアリング > 校正中 > 飛行状態; FLYING は
-    // モード色）。computeActivePattern 参照。
-    applyLedPattern(computeActivePattern());
+    // Two independent LED channels (class comment): MCU LED = system state,
+    // body LEDs = flight-mode colour (preview on the ground, active in the air).
+    // 独立した 2 チャネル（クラスコメント参照）: MCU LED=システム状態、
+    // 本体 LED=モード色（地上はプレビュー、空中は実モード）。
+    applyPattern(computeStatePattern(), mcu_channel_, mcu_led_, mcu_led_count_);
+    applyPattern(computeModePattern(), body_channel_, body_led_, body_led_count_);
 
     // Discrete notify events (ARM/DISARM tones, low-battery warning) arrive on the
     // notify_command queue. Notify is its ONLY consumer, so draining it here is
@@ -221,7 +284,10 @@ void Notify::update()
                 buzzer_.setMuted(uic.value != 0, /*save_to_nvs=*/true);
                 break;
             case UiCmd::LedBrightness:
-                led_.setBrightness(uic.value, /*save_to_nvs=*/true);
+                // Same brightness for both channels; persist once (shared NVS key).
+                // 両チャネル同輝度。保存は1回（NVS キーは共有）。
+                body_led_.setBrightness(uic.value, /*save_to_nvs=*/true);
+                mcu_led_.setBrightness(uic.value, /*save_to_nvs=*/false);
                 break;
             case UiCmd::None:
             default:
@@ -286,41 +352,42 @@ const LedPattern& Notify::getPattern(FlightState state) const
 }
 
 // -----------------------------------------------------------------------------
-// applyLedPattern — toggle LED based on on/off timing
-// LEDパターン適用 — ON/OFFタイミングに基づきLEDを切り替え
+// applyPattern — toggle one LED channel based on on/off timing
+// applyPattern — ON/OFFタイミングに基づき1チャネルのLEDを切り替え
 // -----------------------------------------------------------------------------
-void Notify::applyLedPattern(const LedPattern& pattern)
+void Notify::applyPattern(const LedPattern& pattern, LedChannelState& channel,
+                          stampfly::LED& led, int count)
 {
     uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
 
     // Solid mode (off_ms == 0): always on
     // 常灯モード (off_ms == 0): 常にON
     if (pattern.off_ms == 0) {
-        setBodyLeds(pattern.color);
+        setLeds(led, count, pattern.color);
         return;
     }
 
     // Blink mode: toggle based on timing
     // 点滅モード: タイミングに基づき切り替え
-    uint32_t period = led_on_ ? pattern.on_ms : pattern.off_ms;
-    if (now_ms - last_toggle_ms_ >= period) {
-        led_on_ = !led_on_;
-        last_toggle_ms_ = now_ms;
-        setBodyLeds(led_on_ ? pattern.color : LedColor{0, 0, 0});
+    uint32_t period = channel.on ? pattern.on_ms : pattern.off_ms;
+    if (now_ms - channel.last_toggle_ms >= period) {
+        channel.on = !channel.on;
+        channel.last_toggle_ms = now_ms;
+        setLeds(led, count, channel.on ? pattern.color : LedColor{0, 0, 0});
     }
 }
 
 // -----------------------------------------------------------------------------
-// setBodyLeds — set every body LED to one color (0xRRGGBB packed for the HAL)
-// setBodyLeds — 全ボディ LED を 1 色に（HAL 用に 0xRRGGBB へパック）
+// setLeds — set every LED of one strip to one color (0xRRGGBB packed for the HAL)
+// setLeds — 1 ストリップの全 LED を 1 色に（HAL 用に 0xRRGGBB へパック）
 // -----------------------------------------------------------------------------
-void Notify::setBodyLeds(const LedColor& color)
+void Notify::setLeds(stampfly::LED& led, int count, const LedColor& color)
 {
     const uint32_t packed = (static_cast<uint32_t>(color.r) << 16) |
                             (static_cast<uint32_t>(color.g) << 8)  |
                              static_cast<uint32_t>(color.b);
-    for (int i = 0; i < led_count_; ++i) {
-        led_.setColor(static_cast<uint8_t>(i), packed);
+    for (int i = 0; i < count; ++i) {
+        led.setColor(static_cast<uint8_t>(i), packed);
     }
 }
 
