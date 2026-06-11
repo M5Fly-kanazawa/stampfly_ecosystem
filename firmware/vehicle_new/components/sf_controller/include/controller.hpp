@@ -160,6 +160,11 @@ public:
     /// ダブレットを加算する。既定 no-op。
     virtual void startExcitation(const SysidCommand& cmd) {}
 
+    /// One-shot fetch of a completed stepped-sine point (see startExcitation).
+    /// The task layer publishes it. Default: none.
+    /// 完了ステップドサイン点の一回限り取得。publish はタスク層。既定: なし。
+    virtual bool fetchSysidResult(SysidFreqResult& out) { return false; }
+
     // =========================================================================
     // Live Parameter Reload
     // ライブパラメータ再読込

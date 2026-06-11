@@ -40,6 +40,15 @@ public:
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
     void startExcitation(const SysidCommand& cmd) override;
+
+    /// One-shot fetch of a completed stepped-sine point (autotune). Returns
+    /// true once per completed excitation; the TASK layer publishes it (core
+    /// components must not touch topics — they also build in the smoke tests
+    /// without FreeRTOS).
+    /// 完了したステップドサイン点の一回限り取得（自動チューン）。励振完了ごとに
+    /// 一度だけ true。publish は「タスク層」が行う（コア部品はトピックに触れない —
+    /// FreeRTOS なしの smoke テストでもビルドされるため）。
+    bool fetchSysidResult(SysidFreqResult& out);
     void reloadParams() override;
 
 private:
@@ -174,6 +183,8 @@ private:
     float   iq_ur_ = 0, iq_ui_ = 0, iq_yr_ = 0, iq_yi_ = 0;
     uint32_t iq_n_ = 0;
     uint32_t sysid_seq_ = 0;           // result sequence / 結果シーケンス
+    SysidFreqResult sysid_pending_{};  // completed point awaiting fetch / 取得待ちの完了点
+    bool     sysid_pending_valid_ = false;
     static constexpr float kExciteAmpMax = 1.5f;   // [rad/s]
     static constexpr float kExciteDurMax = 10.0f;  // [s]
     static constexpr float kChirpF0      = 1.0f;   // [Hz] chirp start

@@ -350,6 +350,18 @@ void ControlTask(void* pvParameters)
 
         sf::ControlOutput control = controller.compute(state, setpoint, config::IMU_DT);
 
+        // Publish a completed stepped-sine point (autotune): the controller is a
+        // core component (no topic access — smoke builds lack FreeRTOS), so the
+        // task layer carries its result to the topic.
+        // 完了ステップドサイン点の発行（自動チューン）: 制御器はコア部品（トピック
+        // 禁制 — smoke ビルドは FreeRTOS なし）のため、タスク層が結果を運ぶ。
+        {
+            sf::SysidFreqResult sysid_res;
+            if (controller.fetchSysidResult(sysid_res)) {
+                sf::sysid_result.publish(sysid_res);
+            }
+        }
+
         // Publish control output for logging
         // ログ用に制御出力を発行
         sf::control_output.publish(control);

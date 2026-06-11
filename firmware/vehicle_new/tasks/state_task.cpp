@@ -371,7 +371,31 @@ void StateTask(void* pvParameters)
             else if (req.alt_hold) want = sf::FlightMode::ALT_HOLD;
             else if (req.acro)     want = sf::FlightMode::ACRO;
             static sf::FlightMode prev_want = sf::FlightMode::STABILIZE;
-            if (want != prev_want) {
+            // RE-LEVEL in IDLE_GROUND: parked and disarmed, the switch position
+            // IS the truth. Without this, the crash-return mode reset (ground →
+            // STABILIZE, a re-fly-safety rule) leaves the actual mode disagreeing
+            // with a switch that never moved — no edge ever comes, the LED shows
+            // STABILIZE while the pilot's switch says ACRO (hardware bug report,
+            // 2026-06-11). Armed/flying states stay edge-only so a parked
+            // transmitter can never override the API mid-flight.
+            // IDLE_GROUND では「レベル合わせ」: 設置・非 ARM ならスイッチ位置こそが
+            // 真。これが無いと墜落復帰のモードリセット（接地→STABILIZE、再飛行安全則）
+            // の後、動いていないスイッチと実モードの不一致が固定化する — エッジは
+            // 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま（実機バグ報告,
+            // 2026-06-11）。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
+            // モードを覆せない性質は不変。
+            const bool relevel =
+                (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) &&
+                (want != g_state_manager.getMode());
+            if (want != prev_want || relevel) {
+                if (relevel && want == prev_want) {
+                    // Distinguishable marker: the mode followed the PARKED switch
+                    // (no edge) — explains the change in flight logs and lets the
+                    // SIL expect target this exact event.
+                    // 識別可能なマーカー: エッジなしで「置かれたスイッチ」にモードを
+                    // 合わせた — 実機ログでの説明と SIL expect の照準のため。
+                    ESP_LOGI(TAG, "Mode re-leveled to switch position");
+                }
                 g_state_manager.requestModeChange(want);
             }
             prev_want = want;

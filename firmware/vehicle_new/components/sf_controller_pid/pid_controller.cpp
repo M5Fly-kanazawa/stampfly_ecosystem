@@ -25,7 +25,6 @@
 
 #include "pid_controller.hpp"
 #include "params.hpp"
-#include "topics.hpp"   // sysid_result (stepped-sine I/Q publish)
 #include "esp_log.h"
 #include <cmath>
 
@@ -350,16 +349,18 @@ ControlOutput PidController::compute(
             if (excite_t_ >= excite_dur_) {
                 excite_active_ = false;
                 if (excite_waveform_ == 2) {
-                    // Publish the I/Q sums for this frequency point (autotune).
-                    // この周波数点の I/Q 和を発行（自動チューン）。
-                    SysidFreqResult res{};
-                    res.w  = 2.0f * 3.14159265f * excite_freq_;
-                    res.ur = iq_ur_; res.ui = iq_ui_;
-                    res.yr = iq_yr_; res.yi = iq_yi_;
-                    res.samples = iq_n_;
-                    res.seq = ++sysid_seq_;
-                    res.timestamp = state.timestamp;
-                    sysid_result.publish(res);
+                    // Stash the I/Q sums for this frequency point; ControlTask
+                    // fetches and publishes (core components must not touch
+                    // topics — smoke-test builds have no FreeRTOS).
+                    // この周波数点の I/Q 和を保持。取得・発行は ControlTask
+                    // （コア部品はトピック禁制 — smoke ビルドは FreeRTOS なし）。
+                    sysid_pending_.w  = 2.0f * 3.14159265f * excite_freq_;
+                    sysid_pending_.ur = iq_ur_; sysid_pending_.ui = iq_ui_;
+                    sysid_pending_.yr = iq_yr_; sysid_pending_.yi = iq_yi_;
+                    sysid_pending_.samples = iq_n_;
+                    sysid_pending_.seq = ++sysid_seq_;
+                    sysid_pending_.timestamp = state.timestamp;
+                    sysid_pending_valid_ = true;
                 }
                 ESP_LOGI(TAG, "Sysid excitation done");
             }
@@ -630,6 +631,16 @@ void PidController::startExcitation(const SysidCommand& cmd)
              excite_waveform_ == 2 ? "sine" :
              (excite_waveform_ == 1 ? "chirp" : "doublet"),
              static_cast<double>(excite_amp_), static_cast<double>(excite_dur_));
+}
+
+bool PidController::fetchSysidResult(SysidFreqResult& out)
+{
+    if (!sysid_pending_valid_) {
+        return false;
+    }
+    out = sysid_pending_;
+    sysid_pending_valid_ = false;
+    return true;
 }
 
 void PidController::reset()

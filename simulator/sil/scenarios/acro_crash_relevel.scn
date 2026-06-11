@@ -1,0 +1,26 @@
+# acro_crash_relevel.scn — mode switch re-levels after a crash-return reset
+#                          墜落復帰リセット後のモードスイッチ再適用
+#
+# Hardware bug (2026-06-11): crash → ground reset forces the mode to STABILIZE
+# (re-fly safety), but the ACRO switch never moved — with edge-only switch
+# semantics no edge ever comes, so the mode (and the body LED) stayed STABILIZE
+# while the pilot's switch said ACRO. The fix RE-LEVELS the switch in
+# IDLE_GROUND (parked & disarmed = the switch is the truth); armed/flying
+# states remain edge-only (a parked transmitter must not override the API).
+# 実機バグ（2026-06-11）: 墜落 → 接地リセットがモードを STABILIZE に強制（再飛行
+# 安全則）。しかし ACRO スイッチは動いていない — エッジ適用のみだとエッジが永遠に
+# 来ず、スイッチが ACRO のままなのにモード（と本体 LED）は STABILIZE に固定される。
+# 修正は IDLE_GROUND での「レベル合わせ」（設置・非 ARM ならスイッチが真）。
+# ARM 後・飛行中はエッジのみ＝放置送信機が API を覆せない性質は不変。
+#
+# Run: sf sil scenario simulator/sil/scenarios/acro_crash_relevel.scn --target vehicle_new
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     5000      50                       # A: boot at rest — calibration
+   +    rc   2048  2048   2048    2048  0     1000      50        0     1        # B: ACRO switch ON (edge) while disarmed
+   +    rc   2048  2048   2048    2048  1     1000      50        0     1        # C: ARM (ACRO held)
+   +    rc   3330  2048   2048    2048  1     2500      50        0     1        # D: ACRO take-off climb
+   +    rc   3290  2048   2048    2048  1     2000      50        0     1        # E: ACRO hover-ish 2 s
+   +    rc   3290  2048   2048    2048  0     200       50        0     1        # F: release ARM button (ACRO held)
+   +    rc   3290  2048   2048    2048  1     200       50        0     1        # G: press → DISARM mid-air = crash drop
+   +    rc   2048  2048   2048    2048  0     6000      50        0     1        # H: fall + ground reset; ACRO SWITCH STILL ON

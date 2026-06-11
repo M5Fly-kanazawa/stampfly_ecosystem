@@ -1,0 +1,15 @@
+# acro_crash_relevel.expect — the held ACRO switch re-applies after the reset
+# 保持された ACRO スイッチがリセット後に再適用されること
+exit 0
+log_contains any "Mode change: STABILIZE → ACRO"
+log_contains any "Flight mode reset to STABILIZE (on ground)"
+log_contains any "Mode re-leveled to switch position"
+log_contains any "DISARM accepted"
+# The crash-return reset happens, and THEN the held (un-moved) switch re-levels
+# the mode back to ACRO — the dedicated marker pins the post-reset event (the
+# generic mode-change line also fires pre-takeoff, which `order` cannot skip).
+# 墜落復帰リセットの「後に」動いていないスイッチがモードを ACRO へ戻す — 専用
+# マーカーがリセット後の事象を特定する（汎用のモード変更行は離陸前にも出るため
+# `order` では狙えない）。
+order "DISARM accepted" "Flight mode reset to STABILIZE (on ground)"
+order "Flight mode reset to STABILIZE (on ground)" "Mode re-leveled to switch position"
