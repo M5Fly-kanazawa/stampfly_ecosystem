@@ -18,14 +18,16 @@ WebSocket プロキシの stdlib 等価（モニタに必要なのは一方向�
 """
 
 import json
+import re
 import socket
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from . import telemetry as telem
-from ..utils import console
+from ..utils import console, paths
 
 # Latest decoded packet + arrival bookkeeping, shared between the UDP thread
 # and the HTTP handler threads (GIL-atomic reference swap; no lock needed).
@@ -72,206 +74,20 @@ def _udp_listener(port: int, csv_path=None) -> None:
                            + ",".join(f"{pkt[k]:.6g}" for k in telem.FLOAT_NAMES) + "\n")
 
 
-_PAGE = """<!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8">
-<title>StampFly telemetry</title>
-<style>
- body{background:#10141a;color:#dde3ea;font-family:ui-monospace,Menlo,monospace;margin:18px}
- h1{font-size:16px;margin:0 0 10px} .muted{color:#7a8694}
- .row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
- .card{background:#1a212b;border:1px solid #2a3442;border-radius:8px;padding:10px 14px}
- .big{font-size:22px;font-weight:bold}
- .state{padding:2px 10px;border-radius:6px;background:#2a3442}
- .state.FLYING{background:#15803d}.state.ARMED_GROUND{background:#a16207}
- .state.LANDING{background:#c2410c}.state.INIT{background:#475569}
- canvas{background:#0c1015;border:1px solid #2a3442;border-radius:6px}
- .bar{height:14px;background:#2a3442;border-radius:4px;overflow:hidden;width:160px;display:inline-block;vertical-align:middle}
- .bar>div{height:100%;background:#3b82f6}
- table{border-collapse:collapse} td{padding:2px 10px 2px 0}
-</style></head><body>
-<h1>StampFly telemetry
- <span id="state" class="state">--</span>
- <span class="muted" id="meta">waiting for packets...</span></h1>
-<div class="row">
- <div class="card"><div class="muted">attitude indicator</div>
-  <canvas id="attitudeIndicator" width="240" height="240" style="width:240px;height:240px"></canvas></div>
- <div class="card"><div class="muted">attitude [deg]</div>
-  <table><tr><td>roll</td><td class="big" id="roll">--</td></tr>
-   <tr><td>pitch</td><td class="big" id="pitch">--</td></tr>
-   <tr><td>yaw</td><td class="big" id="yaw">--</td></tr></table></div>
- <div class="card"><div class="muted">altitude / velocity</div>
-  <table><tr><td>alt [m]</td><td class="big" id="alt">--</td></tr>
-   <tr><td>vN vE vD [m/s]</td><td id="vel">--</td></tr>
-   <tr><td>pos N E [m]</td><td id="pos">--</td></tr></table></div>
- <div class="card"><div class="muted">control</div>
-  <table><tr><td>thrust [N]</td><td class="big" id="thrust">--</td></tr>
-   <tr><td>&tau; r/p/y [mNm]</td><td id="tau">--</td></tr></table></div>
- <div class="card"><div class="muted">motors (duty)</div>
-  <table>
-   <tr><td>M1 FR</td><td><span class="bar"><div id="m1b"></div></span> <span id="m1">--</span></td></tr>
-   <tr><td>M2 RR</td><td><span class="bar"><div id="m2b"></div></span> <span id="m2">--</span></td></tr>
-   <tr><td>M3 RL</td><td><span class="bar"><div id="m3b"></div></span> <span id="m3">--</span></td></tr>
-   <tr><td>M4 FL</td><td><span class="bar"><div id="m4b"></div></span> <span id="m4">--</span></td></tr>
-  </table></div>
-</div>
-<div class="row">
- <div class="card"><div class="muted">attitude [deg] (30 s)</div><canvas id="c_att" width="560" height="160"></canvas></div>
- <div class="card"><div class="muted">altitude [m] (30 s)</div><canvas id="c_alt" width="560" height="160"></canvas></div>
-</div>
-<div class="row">
- <div class="card"><div class="muted">gyro [deg/s] (30 s)</div><canvas id="c_gyro" width="560" height="160"></canvas></div>
- <div class="card"><div class="muted">motor duty (30 s)</div><canvas id="c_duty" width="560" height="160"></canvas></div>
-</div>
-<script>
-const R2D = 180/Math.PI, SPAN = 30;            // chart span [s]
-const hist = [];                                // [{t, ...} ...]
-const STATE = ["INIT","IDLE_GROUND","IDLE_HELD","ARMED_GROUND","TAKEOFF","FLYING","LANDING"];
-function $(id){return document.getElementById(id);}
-function fmt(x,d=2){return (x>=0?"+":"")+x.toFixed(d);}
+# The dashboard page lives as a sibling asset (it grew a full SIL-GUI-ported 3D
+# view); the STL body parts are the SAME files the SIL GUI and MuJoCo use.
+# ダッシュボードページは隣接アセット（SIL GUI 移植の 3D ビューを含み大きい）。
+# STL 本体パーツは SIL GUI・MuJoCo と「同一ファイル」。
+_PAGE_PATH = Path(__file__).resolve().parent.parent / "assets" / "telemetry_web.html"
+_MESH_DIR = None   # resolved lazily (repo root lookup) / 遅延解決（リポジトリルート探索）
 
-// Minimal scrolling strip chart (no external libs — offline-friendly).
-// 最小のスクロール式ストリップチャート（外部ライブラリなし — オフライン可）。
-function drawChart(cv, series, colors, names){
-  const ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
-  ctx.clearRect(0,0,W,H);
-  if(hist.length < 2) return;
-  const t1 = hist[hist.length-1].t, t0 = t1 - SPAN;
-  let lo = Infinity, hi = -Infinity;
-  for(const h of hist) for(const f of series){ lo = Math.min(lo,h[f]); hi = Math.max(hi,h[f]); }
-  if(!isFinite(lo)) return;
-  const pad = Math.max(0.1*(hi-lo), 0.5); lo -= pad; hi += pad;
-  ctx.strokeStyle = "#2a3442"; ctx.beginPath();                  // zero line / ゼロ線
-  const y0 = H - (0-lo)/(hi-lo)*H;
-  if(y0 > 0 && y0 < H){ ctx.moveTo(0,y0); ctx.lineTo(W,y0); ctx.stroke(); }
-  series.forEach((f,i)=>{
-    ctx.strokeStyle = colors[i]; ctx.beginPath();
-    let started = false;
-    for(const h of hist){
-      if(h.t < t0) continue;
-      const x = (h.t-t0)/SPAN*W, y = H-(h[f]-lo)/(hi-lo)*H;
-      if(!started){ ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
-    ctx.fillStyle = colors[i]; ctx.fillText(names[i]+" "+hi.toFixed(1)+"/"+lo.toFixed(1), 6+i*120, 12);
-  });
-}
 
-// ============================================================================
-// Attitude Indicator (Artificial Horizon) — ported VERBATIM from the legacy
-// vehicle web page (sf_svc_telemetry/www/index.html): same sky/ground colours,
-// pitch ladder, roll arc/ticks/pointer and aircraft symbol.
-// 姿勢表示器（人工水平儀）— 旧 vehicle の Web 画面から「そのまま」移植: 空/地面の
-// 配色・ピッチラダー・ロール目盛/ポインタ・機体シンボルまで同一。
-// ============================================================================
-let currentState = { roll: 0, pitch: 0 };
-function drawAttitudeIndicator() {
-  const canvas = document.getElementById("attitudeIndicator");
-  const ctx = canvas.getContext("2d");
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * window.devicePixelRatio;
-  canvas.height = rect.height * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  const w = rect.width, h = rect.height;
-  const cx = w / 2, cy = h / 2;
-  const radius = Math.min(w, h) / 2 - 10;
-  const roll = currentState.roll, pitch = currentState.pitch;
-  const pitchPixels = pitch * R2D * 2;   // 2 pixels per degree
+def _mesh_dir() -> Path:
+    global _MESH_DIR
+    if _MESH_DIR is None:
+        _MESH_DIR = paths.root() / "simulator" / "shared" / "assets" / "meshes" / "parts"
+    return _MESH_DIR
 
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.clip();
-  ctx.translate(cx, cy);
-  ctx.rotate(-roll);   // rotate the horizon, not the aircraft / 回すのは水平線
-  const horizonY = pitchPixels;
-  ctx.fillStyle = "#4a90d9";                                        // sky / 空
-  ctx.fillRect(-radius * 2, -radius * 2 + horizonY, radius * 4, radius * 2);
-  ctx.fillStyle = "#8B6914";                                        // ground / 地面
-  ctx.fillRect(-radius * 2, horizonY, radius * 4, radius * 2);
-  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;                      // horizon / 水平線
-  ctx.beginPath(); ctx.moveTo(-radius, horizonY); ctx.lineTo(radius, horizonY); ctx.stroke();
-  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1;     // pitch ladder
-  ctx.font = "10px sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-  for (let deg = -30; deg <= 30; deg += 10) {
-    if (deg === 0) continue;
-    const y = horizonY - deg * 2;
-    const lineW = deg % 20 === 0 ? 40 : 20;
-    ctx.beginPath(); ctx.moveTo(-lineW, y); ctx.lineTo(lineW, y); ctx.stroke();
-    if (deg % 20 === 0) {
-      ctx.fillText(Math.abs(deg).toString(), lineW + 12, y + 3);
-      ctx.fillText(Math.abs(deg).toString(), -lineW - 12, y + 3);
-    }
-  }
-  ctx.restore();
-
-  ctx.strokeStyle = "#ffaa00"; ctx.lineWidth = 3;                   // aircraft symbol
-  ctx.beginPath();
-  ctx.moveTo(cx - 50, cy); ctx.lineTo(cx - 20, cy);
-  ctx.moveTo(cx - 5, cy);  ctx.lineTo(cx + 5, cy);
-  ctx.moveTo(cx + 20, cy); ctx.lineTo(cx + 50, cy);
-  ctx.stroke();
-  ctx.fillStyle = "#ffaa00";
-  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
-
-  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;                      // roll arc
-  ctx.beginPath(); ctx.arc(cx, cy, radius - 5, -Math.PI * 5 / 6, -Math.PI / 6); ctx.stroke();
-  const rollTicks = [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60];
-  rollTicks.forEach(deg => {
-    const angle = -Math.PI / 2 + deg * Math.PI / 180;
-    const r1 = radius - 5, r2 = deg % 30 === 0 ? radius - 15 : radius - 10;
-    ctx.beginPath();
-    ctx.moveTo(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle));
-    ctx.lineTo(cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
-    ctx.stroke();
-  });
-  ctx.save();                                                       // roll pointer
-  ctx.translate(cx, cy); ctx.rotate(-roll);
-  ctx.fillStyle = "#ffaa00";
-  ctx.beginPath();
-  ctx.moveTo(0, -radius + 5); ctx.lineTo(-6, -radius + 15); ctx.lineTo(6, -radius + 15);
-  ctx.closePath(); ctx.fill();
-  ctx.restore();
-
-  ctx.strokeStyle = "#444"; ctx.lineWidth = 3;                      // outer ring
-  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
-
-  ctx.fillStyle = "#fff"; ctx.font = "11px monospace"; ctx.textAlign = "left";
-  ctx.fillText("R: " + (roll * R2D).toFixed(1) + "\u00b0", 8, h - 20);
-  ctx.fillText("P: " + (pitch * R2D).toFixed(1) + "\u00b0", 8, h - 6);
-}
-
-const es = new EventSource("/events");
-es.onmessage = (ev)=>{
-  const d = JSON.parse(ev.data);
-  if(!d.pkt) return;
-  const p = d.pkt, t = p.t_us/1e6;
-  $("state").textContent = STATE[p.mode] || ("?"+p.mode);
-  $("state").className = "state " + (STATE[p.mode]||"");
-  $("meta").textContent = d.rate_hz.toFixed(1)+" Hz  t="+t.toFixed(1)+"s  pkts "+d.count;
-  $("roll").textContent  = fmt(p.roll*R2D);
-  $("pitch").textContent = fmt(p.pitch*R2D);
-  $("yaw").textContent   = fmt(p.yaw*R2D);
-  $("alt").textContent   = fmt(-p.pos_z);
-  $("vel").textContent   = fmt(p.vel_x)+" "+fmt(p.vel_y)+" "+fmt(p.vel_z);
-  $("pos").textContent   = fmt(p.pos_x)+" "+fmt(p.pos_y);
-  $("thrust").textContent= p.thrust.toFixed(3);
-  $("tau").textContent   = fmt(p.tau_roll*1e3)+" "+fmt(p.tau_pitch*1e3)+" "+fmt(p.tau_yaw*1e3);
-  for(const m of ["m1","m2","m3","m4"]){
-    $(m).textContent = p[m].toFixed(2);
-    $(m+"b").style.width = Math.min(100, p[m]*100)+"%";
-  }
-  currentState.roll = p.roll; currentState.pitch = p.pitch;
-  drawAttitudeIndicator();
-  hist.push({t:t, roll:p.roll*R2D, pitch:p.pitch*R2D, yaw:p.yaw*R2D,
-             alt:-p.pos_z, gx:p.gyro_x*R2D, gy:p.gyro_y*R2D, gz:p.gyro_z*R2D,
-             m1:p.m1, m2:p.m2, m3:p.m3, m4:p.m4});
-  while(hist.length && hist[hist.length-1].t - hist[0].t > SPAN) hist.shift();
-  drawChart($("c_att"),  ["roll","pitch","yaw"], ["#3b82f6","#22c55e","#eab308"], ["roll","pitch","yaw"]);
-  drawChart($("c_alt"),  ["alt"],                ["#22d3ee"],                     ["alt"]);
-  drawChart($("c_gyro"), ["gx","gy","gz"],       ["#3b82f6","#22c55e","#eab308"], ["p","q","r"]);
-  drawChart($("c_duty"), ["m1","m2","m3","m4"],  ["#3b82f6","#22c55e","#eab308","#ef4444"], ["M1","M2","M3","M4"]);
-};
-es.onerror = ()=>{ $("meta").textContent = "connection lost — retrying..."; };
-</script></body></html>
-"""
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -280,9 +96,27 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/" or self.path.startswith("/index"):
-            body = _PAGE.encode()
+            body = _PAGE_PATH.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path.startswith("/mesh/"):
+            # StampFly STL part for the 3D view — whitelisted name, no traversal
+            # (same rule as the SIL GUI server).
+            # 3D 用 STL パーツ — 名前を制限しトラバーサル防止（SIL GUI と同じ規則）。
+            name = self.path[len("/mesh/"):]
+            if not re.fullmatch(r"[a-z0-9_]+\.stl", name):
+                self.send_error(400, "bad mesh name")
+                return
+            mesh = _mesh_dir() / name
+            if not mesh.exists():
+                self.send_error(404)
+                return
+            body = mesh.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "model/stl")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

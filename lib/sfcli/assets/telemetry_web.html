@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<!--
+  sf telemetry - -web — live telemetry dashboard with the SIL-GUI 3D view.
+  The 3D scene (StampFly model, lighting, OrbitControls + per-OS trackpad zoom,
+  prop spin driven by per-motor duty) is PORTED from simulator/sil/gui/static/
+  app.js so the look and the controls are identical to the SIL GUI. STL body
+  parts are served at /mesh/ from the same simulator/shared assets. If three.js
+  cannot load (offline field use — CDN unreachable), the page falls back to the
+  legacy 2D attitude indicator.
+  sf telemetry - -web — SIL GUI と同一の 3D ビュー付きライブテレメトリ。3D シーン
+  （StampFly モデル・照明・OrbitControls＋OS別ズーム・モータ duty 比例のプロペラ
+  回転）は simulator/sil/gui/static/app.js から移植し、見た目も操作も SIL GUI と
+  同一。STL は同じ simulator/shared アセットを /mesh/ で配信。three.js が読めない
+  場合（現場のオフライン運用で CDN 不達）は旧 2D 姿勢表示器にフォールバックする。
+-->
+<html lang="ja"><head><meta charset="utf-8">
+<title>StampFly telemetry</title>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+ body{background:#10141a;color:#dde3ea;font-family:ui-monospace,Menlo,monospace;margin:18px}
+ h1{font-size:16px;margin:0 0 10px} .muted{color:#7a8694}
+ .row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+ .card{background:#1a212b;border:1px solid #2a3442;border-radius:8px;padding:10px 14px}
+ .big{font-size:22px;font-weight:bold}
+ .state{padding:2px 10px;border-radius:6px;background:#2a3442}
+ .state.FLYING{background:#15803d}.state.ARMED_GROUND{background:#a16207}
+ .state.LANDING{background:#c2410c}.state.INIT{background:#475569}
+ canvas{background:#0c1015;border:1px solid #2a3442;border-radius:6px}
+ #scene{border:none;border-radius:6px}
+ #canvasWrap{width:560px;height:420px;position:relative;background:#0c1015;border:1px solid #2a3442;border-radius:6px;overflow:hidden}
+ .bar{height:14px;background:#2a3442;border-radius:4px;overflow:hidden;width:160px;display:inline-block;vertical-align:middle}
+ .bar>div{height:100%;background:#3b82f6}
+ table{border-collapse:collapse} td{padding:2px 10px 2px 0}
+ select,label{background:#1a212b;color:#dde3ea;border:1px solid #2a3442;border-radius:4px;font:inherit}
+ .hint{font-size:11px;color:#7a8694;margin-top:4px}
+</style></head><body>
+<h1>StampFly telemetry
+ <span id="state" class="state">--</span>
+ <span class="muted" id="meta">waiting for packets...</span></h1>
+<div class="row">
+ <div class="card">
+  <div class="muted">3D view — SIL GUI と同一
+   <select id="scaleSel" title="機体表示スケール">
+    <option value="1">機体 ×1（実寸）</option>
+    <option value="3" selected>機体 ×3</option>
+    <option value="10">機体 ×10</option>
+   </select>
+   <label><input type="checkbox" id="trailChk" checked> 軌跡</label>
+  </div>
+  <div id="canvasWrap"><canvas id="scene"></canvas></div>
+  <canvas id="attitudeIndicator" width="240" height="240"
+          style="width:240px;height:240px;display:none"></canvas>
+  <div class="hint">ドラッグ=回転 / ホイール・ピンチ=ズーム / 右ドラッグ=パン（SIL GUI と同じ操作）</div>
+ </div>
+ <div>
+  <div class="row">
+   <div class="card"><div class="muted">attitude [deg]</div>
+    <table><tr><td>roll</td><td class="big" id="roll">--</td></tr>
+     <tr><td>pitch</td><td class="big" id="pitch">--</td></tr>
+     <tr><td>yaw</td><td class="big" id="yaw">--</td></tr></table></div>
+   <div class="card"><div class="muted">altitude / velocity</div>
+    <table><tr><td>alt [m]</td><td class="big" id="alt">--</td></tr>
+     <tr><td>vN vE vD [m/s]</td><td id="vel">--</td></tr>
+     <tr><td>pos N E [m]</td><td id="pos">--</td></tr></table></div>
+  </div>
+  <div class="row">
+   <div class="card"><div class="muted">control</div>
+    <table><tr><td>thrust [N]</td><td class="big" id="thrust">--</td></tr>
+     <tr><td>&tau; r/p/y [mNm]</td><td id="tau">--</td></tr></table></div>
+   <div class="card"><div class="muted">motors (duty)</div>
+    <table>
+     <tr><td>M1 FR</td><td><span class="bar"><div id="m1b"></div></span> <span id="m1">--</span></td></tr>
+     <tr><td>M2 RR</td><td><span class="bar"><div id="m2b"></div></span> <span id="m2">--</span></td></tr>
+     <tr><td>M3 RL</td><td><span class="bar"><div id="m3b"></div></span> <span id="m3">--</span></td></tr>
+     <tr><td>M4 FL</td><td><span class="bar"><div id="m4b"></div></span> <span id="m4">--</span></td></tr>
+    </table></div>
+  </div>
+  <div class="row">
+   <div class="card"><div class="muted">attitude [deg] (30 s)</div><canvas id="c_att" width="560" height="140"></canvas></div>
+  </div>
+ </div>
+</div>
+<div class="row">
+ <div class="card"><div class="muted">altitude [m] (30 s)</div><canvas id="c_alt" width="560" height="140"></canvas></div>
+ <div class="card"><div class="muted">gyro [deg/s] (30 s)</div><canvas id="c_gyro" width="560" height="140"></canvas></div>
+ <div class="card"><div class="muted">motor duty (30 s)</div><canvas id="c_duty" width="560" height="140"></canvas></div>
+</div>
+
+<script>
+// ============================================================================
+// Shared live state + 2D dashboard (plain script — works without three.js).
+// 共有ライブ状態＋2Dダッシュボード（素のスクリプト — three.js なしでも動く）。
+// ============================================================================
+const R2D = 180/Math.PI, SPAN = 30;
+const hist = [];
+const STATE = ["INIT","IDLE_GROUND","IDLE_HELD","ARMED_GROUND","TAKEOFF","FLYING","LANDING"];
+let latestPkt = null;            // for the 3D loop / 3D ループ用
+let use2DFallback = false;
+function $(id){return document.getElementById(id);}
+function fmt(x,d=2){return (x>=0?"+":"")+x.toFixed(d);}
+
+function drawChart(cv, series, colors, names){
+  const ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.clearRect(0,0,W,H);
+  if(hist.length < 2) return;
+  const t1 = hist[hist.length-1].t, t0 = t1 - SPAN;
+  let lo = Infinity, hi = -Infinity;
+  for(const h of hist) for(const f of series){ lo = Math.min(lo,h[f]); hi = Math.max(hi,h[f]); }
+  if(!isFinite(lo)) return;
+  const pad = Math.max(0.1*(hi-lo), 0.5); lo -= pad; hi += pad;
+  ctx.strokeStyle = "#2a3442"; ctx.beginPath();
+  const y0 = H - (0-lo)/(hi-lo)*H;
+  if(y0 > 0 && y0 < H){ ctx.moveTo(0,y0); ctx.lineTo(W,y0); ctx.stroke(); }
+  series.forEach((f,i)=>{
+    ctx.strokeStyle = colors[i]; ctx.beginPath();
+    let started = false;
+    for(const h of hist){
+      if(h.t < t0) continue;
+      const x = (h.t-t0)/SPAN*W, y = H-(h[f]-lo)/(hi-lo)*H;
+      if(!started){ ctx.moveTo(x,y); started = true; } else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = colors[i]; ctx.fillText(names[i]+" "+hi.toFixed(1)+"/"+lo.toFixed(1), 6+i*120, 12);
+  });
+}
+
+// Legacy 2D attitude indicator — OFFLINE FALLBACK when three.js cannot load.
+// 旧 2D 姿勢表示器 — three.js 不達時のオフライン用フォールバック。
+let currentState = { roll: 0, pitch: 0 };
+function drawAttitudeIndicator() {
+  const canvas = $("attitudeIndicator");
+  const ctx = canvas.getContext("2d");
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const w = rect.width, h = rect.height;
+  const cx = w / 2, cy = h / 2;
+  const radius = Math.min(w, h) / 2 - 10;
+  const roll = currentState.roll, pitch = currentState.pitch;
+  const pitchPixels = pitch * R2D * 2;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.clip();
+  ctx.translate(cx, cy); ctx.rotate(-roll);
+  const horizonY = pitchPixels;
+  ctx.fillStyle = "#4a90d9";
+  ctx.fillRect(-radius * 2, -radius * 2 + horizonY, radius * 4, radius * 2);
+  ctx.fillStyle = "#8B6914";
+  ctx.fillRect(-radius * 2, horizonY, radius * 4, radius * 2);
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-radius, horizonY); ctx.lineTo(radius, horizonY); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1;
+  ctx.font = "10px sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+  for (let deg = -30; deg <= 30; deg += 10) {
+    if (deg === 0) continue;
+    const y = horizonY - deg * 2;
+    const lineW = deg % 20 === 0 ? 40 : 20;
+    ctx.beginPath(); ctx.moveTo(-lineW, y); ctx.lineTo(lineW, y); ctx.stroke();
+    if (deg % 20 === 0) {
+      ctx.fillText(Math.abs(deg).toString(), lineW + 12, y + 3);
+      ctx.fillText(Math.abs(deg).toString(), -lineW - 12, y + 3);
+    }
+  }
+  ctx.restore();
+  ctx.strokeStyle = "#ffaa00"; ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx - 50, cy); ctx.lineTo(cx - 20, cy);
+  ctx.moveTo(cx - 5, cy);  ctx.lineTo(cx + 5, cy);
+  ctx.moveTo(cx + 20, cy); ctx.lineTo(cx + 50, cy);
+  ctx.stroke();
+  ctx.fillStyle = "#ffaa00";
+  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, radius - 5, -Math.PI * 5 / 6, -Math.PI / 6); ctx.stroke();
+  const rollTicks = [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60];
+  rollTicks.forEach(deg => {
+    const angle = -Math.PI / 2 + deg * Math.PI / 180;
+    const r1 = radius - 5, r2 = deg % 30 === 0 ? radius - 15 : radius - 10;
+    ctx.beginPath();
+    ctx.moveTo(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle));
+    ctx.lineTo(cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
+    ctx.stroke();
+  });
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(-roll);
+  ctx.fillStyle = "#ffaa00";
+  ctx.beginPath();
+  ctx.moveTo(0, -radius + 5); ctx.lineTo(-6, -radius + 15); ctx.lineTo(6, -radius + 15);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = "#444"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "11px monospace"; ctx.textAlign = "left";
+  ctx.fillText("R: " + (roll * R2D).toFixed(1) + "°", 8, h - 20);
+  ctx.fillText("P: " + (pitch * R2D).toFixed(1) + "°", 8, h - 6);
+}
+
+const es = new EventSource("/events");
+es.onmessage = (ev)=>{
+  const d = JSON.parse(ev.data);
+  if(!d.pkt) return;
+  const p = d.pkt, t = p.t_us/1e6;
+  latestPkt = p;
+  $("state").textContent = STATE[p.mode] || ("?"+p.mode);
+  $("state").className = "state " + (STATE[p.mode]||"");
+  $("meta").textContent = d.rate_hz.toFixed(1)+" Hz  t="+t.toFixed(1)+"s  pkts "+d.count;
+  $("roll").textContent  = fmt(p.roll*R2D);
+  $("pitch").textContent = fmt(p.pitch*R2D);
+  $("yaw").textContent   = fmt(p.yaw*R2D);
+  $("alt").textContent   = fmt(-p.pos_z);
+  $("vel").textContent   = fmt(p.vel_x)+" "+fmt(p.vel_y)+" "+fmt(p.vel_z);
+  $("pos").textContent   = fmt(p.pos_x)+" "+fmt(p.pos_y);
+  $("thrust").textContent= p.thrust.toFixed(3);
+  $("tau").textContent   = fmt(p.tau_roll*1e3)+" "+fmt(p.tau_pitch*1e3)+" "+fmt(p.tau_yaw*1e3);
+  for(const m of ["m1","m2","m3","m4"]){
+    $(m).textContent = p[m].toFixed(2);
+    $(m+"b").style.width = Math.min(100, p[m]*100)+"%";
+  }
+  if (use2DFallback) {
+    currentState.roll = p.roll; currentState.pitch = p.pitch;
+    drawAttitudeIndicator();
+  }
+  hist.push({t:t, roll:p.roll*R2D, pitch:p.pitch*R2D, yaw:p.yaw*R2D,
+             alt:-p.pos_z, gx:p.gyro_x*R2D, gy:p.gyro_y*R2D, gz:p.gyro_z*R2D,
+             m1:p.m1, m2:p.m2, m3:p.m3, m4:p.m4});
+  while(hist.length && hist[hist.length-1].t - hist[0].t > SPAN) hist.shift();
+  drawChart($("c_att"),  ["roll","pitch","yaw"], ["#3b82f6","#22c55e","#eab308"], ["roll","pitch","yaw"]);
+  drawChart($("c_alt"),  ["alt"],                ["#22d3ee"],                     ["alt"]);
+  drawChart($("c_gyro"), ["gx","gy","gz"],       ["#3b82f6","#22c55e","#eab308"], ["p","q","r"]);
+  drawChart($("c_duty"), ["m1","m2","m3","m4"],  ["#3b82f6","#22c55e","#eab308","#ef4444"], ["M1","M2","M3","M4"]);
+};
+es.onerror = ()=>{ $("meta").textContent = "connection lost — retrying..."; };
+
+function activate2DFallback(){
+  use2DFallback = true;
+  $("canvasWrap").style.display = "none";
+  $("scaleSel").style.display = "none";
+  $("trailChk").parentElement.style.display = "none";
+  $("attitudeIndicator").style.display = "block";
+  document.querySelector(".hint").textContent =
+    "3D ライブラリ未到達（オフライン）— 2D 姿勢表示器で表示中";
+}
+window.addEventListener("error", (e)=>{   // importmap/CDN failure surfaces here
+  if (String(e.message||"").includes("three") && !use2DFallback) activate2DFallback();
+}, true);
+</script>
+
+<script type="module">
+// ============================================================================
+// 3D view — PORTED from the SIL GUI (simulator/sil/gui/static/app.js): same
+// StampFly model (landing-page geometry + real STL parts), same lighting, same
+// OrbitControls with the per-OS trackpad/wheel zoom, same duty-driven prop
+// spin. Live data replaces the trajectory playback.
+// 3D ビュー — SIL GUI から移植: 同じ StampFly モデル（landing 形状＋実 STL）、
+// 同じ照明、同じ OrbitControls＋OS別ズーム、同じ duty 駆動プロペラ回転。
+// 軌跡再生の代わりにライブデータで駆動する。
+// ============================================================================
+let THREE, OrbitControls, STLLoader;
+try {
+  THREE = await import("three");
+  ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js"));
+  ({ STLLoader } = await import("three/addons/loaders/STLLoader.js"));
+} catch (e) {
+  activate2DFallback();
+  throw e;
+}
+
+let renderer, scene, camera, controls, worldGroup, drone, props = [], trailLine, trailGeo;
+let modelScale = 3.0;            // telemetry default ×3 (attitude readability) / 既定×3
+const trailPts = [];             // live trail (ENU) / ライブ軌跡
+const TRAIL_MAX = 1500;          // ~30 s at 50Hz
+
+function dolly(factor) {
+  const dir = camera.position.clone().sub(controls.target);
+  const dist = Math.max(0.15, Math.min(50, dir.length() * factor));
+  camera.position.copy(controls.target).add(dir.setLength(dist));
+}
+const OS = (() => {
+  const p = ((navigator.userAgentData && navigator.userAgentData.platform) ||
+             navigator.platform || "").toLowerCase();
+  if (p.includes("mac")) return "mac";
+  if (p.includes("win")) return "win";
+  if (p.includes("linux")) return "linux";
+  return "other";
+})();
+const ZOOM_TUNE = {
+  mac:   { scroll: 0.0020, pinch: 0.013 },
+  win:   { scroll: 0.0016, pinch: 0.012 },
+  linux: { scroll: 0.0018, pinch: 0.012 },
+  other: { scroll: 0.0018, pinch: 0.012 },
+};
+function installTrackpadZoom(canvas) {
+  const tune = ZOOM_TUNE[OS] || ZOOM_TUNE.other;
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    let px = e.deltaY;
+    if (e.deltaMode === 1) px *= 16;
+    else if (e.deltaMode === 2) px *= 100;
+    const gain = e.ctrlKey ? tune.pinch : tune.scroll;
+    let f = Math.exp(px * gain);
+    f = Math.min(2.0, Math.max(0.5, f));
+    dolly(f);
+  }, { passive: false });
+  let gscale = 1;
+  canvas.addEventListener("gesturestart", (e) => { e.preventDefault(); gscale = e.scale; },
+    { passive: false });
+  canvas.addEventListener("gesturechange", (e) => {
+    e.preventDefault();
+    dolly(gscale / e.scale);
+    gscale = e.scale;
+  }, { passive: false });
+}
+
+// --- StampFly model (SIL GUI / landing page, verbatim) ----------------------
+const PART_MAT = {
+  frame:           new THREE.MeshStandardMaterial({ color: 0xccd2db, roughness: 0.5,  metalness: 0.1 }),
+  pcb:             new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.55, metalness: 0.2 }),
+  m5stamps3:       new THREE.MeshStandardMaterial({ color: 0xff6a00, roughness: 0.4,  metalness: 0.1 }),
+  battery:         new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.6,  metalness: 0.1 }),
+  battery_adapter: new THREE.MeshStandardMaterial({ color: 0x33312d, roughness: 0.6,  metalness: 0.1 }),
+  motor_fl:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_fr:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_rl:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+  motor_rr:        new THREE.MeshStandardMaterial({ color: 0xb9c1cb, roughness: 0.35, metalness: 0.85 }),
+};
+const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2b3d, transparent: true, opacity: 0.62,
+  roughness: 0.18, metalness: 0.0, emissive: 0x4a0008, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e0512, roughness: 0.3, metalness: 0.15 });
+
+function makeBlade(L, Wm, thick, twistRoot, twistTip) {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0.20 * Wm);
+  s.bezierCurveTo(0.40 * L, 0.50 * Wm, 0.65 * L, 0.50 * Wm, 0.86 * L, 0.30 * Wm);
+  s.quadraticCurveTo(L, 0.16 * Wm, L, 0.0);
+  s.quadraticCurveTo(L, -0.12 * Wm, 0.86 * L, -0.20 * Wm);
+  s.bezierCurveTo(0.65 * L, -0.58 * Wm, 0.40 * L, -0.58 * Wm, 0, -0.24 * Wm);
+  s.closePath();
+  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
+  geo.translate(0, 0, -thick / 2);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const a = twistRoot + (twistTip - twistRoot) * Math.min(1, Math.max(0, x / L));
+    const c = Math.cos(a), sn = Math.sin(a);
+    p.setXYZ(i, x, y * c - z * sn, y * sn + z * c);
+  }
+  geo.rotateX(Math.PI / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+const PROP_RADIUS = 14.99;
+const HUB_R = PROP_RADIUS * 0.22;
+const bladeGeo = makeBlade(PROP_RADIUS - HUB_R * 0.6, (PROP_RADIUS - HUB_R * 0.6) / 2.7, 0.6, 0.38, 0.10);
+const hubGeo = new THREE.CylinderGeometry(HUB_R, HUB_R * 0.9, 2.6, 24);
+const domeGeo = new THREE.SphereGeometry(HUB_R * 0.85, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+function makeProp() {
+  const prop = new THREE.Group();
+  prop.add(new THREE.Mesh(hubGeo, hubMat));
+  const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
+  for (let i = 0; i < 3; i++) {
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    blade.rotation.y = i * (Math.PI * 2 / 3);
+    blade.translateX(HUB_R * 0.6);
+    prop.add(blade);
+  }
+  return prop;
+}
+// m1..m4 (packet) = M1 FR / M2 RR / M3 RL / M4 FL; CCW=+1 / CW=-1 (real turn direction).
+// パケットの m1..m4 と実回転方向の対応（MJCF と同一）。
+const PROP_HUBS = [
+  { pos: [ 22.80, 7.81,  22.80], motor: "m4", dir: -1 },  // FL = M4  CW
+  { pos: [-22.80, 7.81,  22.80], motor: "m1", dir: +1 },  // FR = M1  CCW
+  { pos: [ 22.80, 7.81, -22.81], motor: "m3", dir: +1 },  // RL = M3  CCW
+  { pos: [-22.80, 7.81, -22.81], motor: "m2", dir: -1 },  // RR = M2  CW
+];
+const BODY_PARTS = ["frame", "pcb", "m5stamps3", "battery", "battery_adapter",
+                    "motor_fl", "motor_fr", "motor_rl", "motor_rr"];
+function buildDrone() {
+  const g = new THREE.Group(); g.scale.setScalar(modelScale);
+  const model = new THREE.Group();
+  model.scale.setScalar(0.001);
+  model.quaternion.set(0.5, 0.5, 0.5, 0.5);
+  g.add(model);
+  PROP_HUBS.forEach(h => {
+    const prop = makeProp();
+    prop.position.set(h.pos[0], h.pos[1] - 1.4, h.pos[2]);
+    model.add(prop);
+    props.push({ pivot: prop, dir: h.dir, motor: h.motor });
+  });
+  const loader = new STLLoader();
+  BODY_PARTS.forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
+    geo.computeVertexNormals();
+    model.add(new THREE.Mesh(geo, PART_MAT[name] || PART_MAT.frame));
+  }, undefined, (err) => console.warn("[3D] STL load failed:", name, err)));
+  return g;
+}
+
+// NED euler (FRD body) -> three.js quaternion for the FLU drone group inside the
+// ENU worldGroup. q_nb from ZYX euler; the NED->ENU / FRD->FLU change of basis
+// C (x<->y swap, z negate, det=+1) maps the quaternion as v' = C v, w' = w.
+// NED オイラー角（FRD 機体）→ ENU worldGroup 内 FLU 機体の three.js クォータニオン。
+// ZYX オイラーから q_nb を作り、基底変換 C（x↔y 入替・z 反転、det=+1）で
+// ベクトル部のみ v' = C v と写す（スカラー部は不変）。
+function quatFromNedEuler(roll, pitch, yaw) {
+  const cr = Math.cos(roll/2),  sr = Math.sin(roll/2);
+  const cp = Math.cos(pitch/2), sp = Math.sin(pitch/2);
+  const cy = Math.cos(yaw/2),   sy = Math.sin(yaw/2);
+  const qw = cr*cp*cy + sr*sp*sy;
+  const qx = sr*cp*cy - cr*sp*sy;
+  const qy = cr*sp*cy + sr*cp*sy;
+  const qz = cr*cp*sy - sr*sp*cy;
+  return [qy, qx, -qz, qw];   // (x,y,z,w) for three / three 用 (x,y,z,w)
+}
+
+// --- scene (SIL GUI init3D, verbatim apart from live-data wiring) ------------
+const canvas = $("scene");
+renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(45, 1, 0.01, 200);
+camera.position.set(0.6, 0.45, 0.6);
+controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.enableZoom = false;
+installTrackpadZoom(canvas);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+scene.add(new THREE.AmbientLight(0x8895b5, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 8, 5); scene.add(key);
+const fill = new THREE.DirectionalLight(0xc9d4ff, 0.6); fill.position.set(-4, 3, -4); scene.add(fill);
+const cyan = new THREE.PointLight(0x22d3ee, 12, 14); cyan.position.set(-2, 1.5, 2); scene.add(cyan);
+const violet = new THREE.PointLight(0xa855f7, 12, 14); violet.position.set(2, 1, -2); scene.add(violet);
+worldGroup = new THREE.Group(); worldGroup.rotation.x = -Math.PI / 2; scene.add(worldGroup);
+const grid = new THREE.GridHelper(8, 32, 0x2a3a55, 0x182336); grid.rotation.x = Math.PI / 2;
+worldGroup.add(grid);
+worldGroup.add(new THREE.AxesHelper(0.05));
+drone = buildDrone(); worldGroup.add(drone);
+trailGeo = new THREE.BufferGeometry();
+trailLine = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x22d3ee }));
+worldGroup.add(trailLine);
+
+$("scaleSel").onchange = () => {
+  modelScale = parseFloat($("scaleSel").value);
+  drone.scale.setScalar(modelScale);
+};
+
+let _lastW = 0, _lastH = 0;
+function resize3D() {
+  const w = $("canvasWrap").clientWidth, h = $("canvasWrap").clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize3D);
+
+let lastTrailPush = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const w = $("canvasWrap").clientWidth, h = $("canvasWrap").clientHeight;
+  if (w && h && (w !== _lastW || h !== _lastH)) { _lastW = w; _lastH = h; resize3D(); }
+  const p = latestPkt;
+  if (p) {
+    // Live pose: ENU position (E,N,U)=(pos_y,pos_x,-pos_z), attitude from euler.
+    // ライブ姿勢: ENU 位置と オイラー角由来のクォータニオン。
+    drone.position.set(p.pos_y, p.pos_x, -p.pos_z);
+    const q = quatFromNedEuler(p.roll, p.pitch, p.yaw);
+    drone.quaternion.set(q[0], q[1], q[2], q[3]);
+    // chase target (ENU -> three: (E,U,-N)) / チェイス注視点
+    const tgt = new THREE.Vector3(p.pos_y, -p.pos_z, -p.pos_x);
+    controls.target.lerp(tgt, 0.12);
+    // live trail at ~10Hz / ライブ軌跡（約10Hz で追加）
+    const now = performance.now();
+    if (now - lastTrailPush > 100) {
+      lastTrailPush = now;
+      trailPts.push(p.pos_y, p.pos_x, -p.pos_z);
+      while (trailPts.length > TRAIL_MAX * 3) trailPts.splice(0, 3);
+      trailGeo.setAttribute("position",
+        new THREE.BufferAttribute(new Float32Array(trailPts), 3));
+      trailGeo.setDrawRange(0, $("trailChk").checked ? trailPts.length / 3 : 0);
+    }
+    // Prop spin: per-motor duty, real turn direction (same visual law as the
+    // SIL GUI: idle creep + duty-proportional rate).
+    // プロペラ回転: モータ別 duty・実回転方向（SIL GUI と同じ視覚則）。
+    props.forEach(pr => {
+      const duty = p[pr.motor] || 0;
+      pr.pivot.rotation.y += pr.dir * (0.05 + duty * 1.6);
+    });
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+resize3D();
+animate();
+</script>
+</body></html>
