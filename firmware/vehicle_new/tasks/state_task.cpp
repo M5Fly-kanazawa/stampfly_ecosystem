@@ -384,21 +384,45 @@ void StateTask(void* pvParameters)
             // 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま（実機バグ報告,
             // 2026-06-11）。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
             // モードを覆せない性質は不変。
+            // Mode arbitration — implements the NORMATIVE event×state table in
+            // detailed_design.md §3.1 (モード調停表). Two rules:
+            //  EDGE:    a switch flip requests the mode; if the current state
+            //           rejects it (INIT/TAKEOFF/LANDING/IDLE_HELD), prev_want is
+            //           NOT updated, so the edge PERSISTS and retries until a
+            //           state accepts it (e.g. a flip during the ~1 s TAKEOFF
+            //           window applies on reaching FLYING — hole #2 found while
+            //           writing the table).
+            //  RELEVEL: in IDLE_GROUND (parked + disarmed) the switch position
+            //           IS the truth — any mismatch re-applies it (covers the
+            //           crash-return STABILIZE reset under an un-moved switch —
+            //           hole #1, hardware LED bug).
+            // Armed/flying states stay edge-only: a parked transmitter can never
+            // override the API mode mid-flight.
+            // モード調停 — detailed_design.md §3.1 の「規範」遷移表を写す。2 規則:
+            //  エッジ:   スイッチ反転で要求。現状態が拒否（INIT/TAKEOFF/LANDING/
+            //            IDLE_HELD）なら prev_want を更新せず、エッジは「持続」して
+            //            受理される状態まで再試行（例: 約1秒の TAKEOFF 窓中の反転は
+            //            FLYING 到達時に適用 — 表の作成中に発見した抜け②）。
+            //  再適用:   IDLE_GROUND（設置・非 ARM）ではスイッチ位置が真 — 不一致は
+            //            再適用（墜落復帰の STABILIZE リセット×不動スイッチ＝抜け①、
+            //            実機 LED バグ）。
+            // ARM 後・飛行中はエッジのみ: 放置送信機は API モードを覆せない。
+            const bool edge = (want != prev_want);
             const bool relevel =
                 (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) &&
                 (want != g_state_manager.getMode());
-            if (want != prev_want || relevel) {
-                if (relevel && want == prev_want) {
-                    // Distinguishable marker: the mode followed the PARKED switch
-                    // (no edge) — explains the change in flight logs and lets the
-                    // SIL expect target this exact event.
-                    // 識別可能なマーカー: エッジなしで「置かれたスイッチ」にモードを
-                    // 合わせた — 実機ログでの説明と SIL expect の照準のため。
-                    ESP_LOGI(TAG, "Mode re-leveled to switch position");
+            if (edge || relevel) {
+                if (g_state_manager.requestModeChange(want)) {
+                    if (relevel && !edge) {
+                        ESP_LOGI(TAG, "Mode re-leveled to switch position");
+                    }
+                    prev_want = want;
                 }
-                g_state_manager.requestModeChange(want);
+                // Rejected: prev_want unchanged — the edge persists (see above).
+                // 拒否時: prev_want 不変 — エッジは持続（上記参照）。
+            } else {
+                prev_want = want;
             }
-            prev_want = want;
         }
 
         // =====================================================================

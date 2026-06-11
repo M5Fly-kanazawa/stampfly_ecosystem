@@ -159,6 +159,31 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | ARMED_GROUND → TAKEOFF | （リザーブ） | 離着陸MGR: 離陸シーケンス開始、高度目標セット |
 | TAKEOFF → FLYING | 離着陸MGR: シーケンス終了 | ESKF位置/速度リセット（注2: クラスB, ImuTask）、~~バイアスフリーズ解除~~（注3で見送り） |
 | サブモード切替（地上/FLYING） | 旧サブモードのコントローラリセット | 新サブモードの初期化（高度キャプチャ等）。地上では制御器の鉛直フェーズゲート（Grounded=推力ゼロ）により ALT/POS 選択でもモータは回らない |
+
+### 3.1 モード調停表（規範 / Normative）
+
+**この表が唯一の正であり、コード（state_task のモード調停・StateManager::requestModeChange）は本表を写す。**
+表に無い (状態, 事象) の組合せを実装してはならず、表の全セルが実装されていなければならない
+（抜けのない設計 — 実機 LED バグ①と TAKEOFF 窓の適用漏れ②は本表の作成によって発見・修正された）。
+
+事象の定義:
+- **エッジ**: モードスイッチの位置変化（want ≠ prev_want）。拒否された場合 prev_want を更新せず**持続**（受理される状態に達した時点で適用）
+- **不一致**: スイッチ位置と実モードの不一致（want ≠ mode、エッジなし）。接地リセット等で発生
+- **API設定**: ApiCmd::Takeoff によるモード設定（同一周期で ARM まで進む）
+- **接地リセット**: 空中状態→IDLE_GROUND 突入時の STABILIZE 強制（再飛行安全則）
+
+| 状態 \ 事象 | エッジ | 不一致（レベル） | API設定 | 接地リセット |
+|------------|--------|----------------|---------|------------|
+| INIT | 拒否（エッジ持続） | 無視 | 拒否 | — |
+| IDLE_GROUND | **適用** | **適用（再適用・マーカーログ）** | **適用** | （突入時に発火し、直後に不一致則が再適用） |
+| IDLE_HELD | 拒否（持続→設置時に適用） | 無視 | 拒否 | — |
+| ARMED_GROUND | **適用** | 無視（エッジのみ） | **適用** | — |
+| TAKEOFF | 拒否（持続→FLYING で適用） | 無視 | 拒否 | — |
+| FLYING | **適用** | 無視（放置送信機が API を覆せない） | （誘導目標のみ） | — |
+| LANDING | 拒否（持続→接地後に適用） | 無視 | 拒否 | — |
+
+検証: SIL `acro_crash_relevel`（①の固定）、`api_flight`（FLYING 不一致の無視＝API保護）、
+`modeswitch`/`alt_flight`（FLYING エッジ適用）、`alt_auto_takeoff`（IDLE_GROUND API設定）。
 | ARMED_GROUND → TAKEOFF（ALT/POS 選択時） | — | ControllerCmd::Takeoff 発行 → 制御器が自動離陸（固定上昇率＋水平姿勢、POS は発進点保持） |
 | TAKEOFF → FLYING | — | ControllerCmd::TakeoffComplete 発行 → 通常モード則を係合（ALT_HOLD は現在高度を捕捉） |
 | FLYING → LANDING | （リザーブ） | 離着陸MGR: 着陸シーケンス開始 |
