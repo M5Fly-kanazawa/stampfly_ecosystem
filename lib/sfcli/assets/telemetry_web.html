@@ -31,7 +31,8 @@
  .state.FLYING{background:#15803d}.state.ARMED_GROUND{background:#a16207}
  .state.LANDING{background:#c2410c}.state.INIT{background:#475569}
  canvas{background:#0c1015;border:1px solid #2a3442;border-radius:6px}
- #scene{border:none;border-radius:6px}
+ #scene{width:100%;height:100%;display:block;border:none;border-radius:6px;cursor:grab}
+ #scene:active{cursor:grabbing}
  #canvasWrap{width:560px;height:420px;position:relative;background:#0c1015;border:1px solid #2a3442;border-radius:6px;overflow:hidden}
  .bar{height:14px;background:#2a3442;border-radius:4px;overflow:hidden;width:160px;display:inline-block;vertical-align:middle}
  .bar>div{height:100%;background:#3b82f6}
