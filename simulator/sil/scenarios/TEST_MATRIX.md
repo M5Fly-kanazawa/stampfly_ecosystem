@@ -62,6 +62,7 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | `acro_crash_relevel` | 墜落復帰リセット後、保持されたモードスイッチが IDLE_GROUND で再適用される（実機 LED バグの固定） | vehicle_new |
 | `autotune` | オンボード自動チューン全鎖（API `autotune roll 60 50`: 9点ステップドサイン掃引→同定→PID設計→ライブ適用→新ゲインでホバー・着陸）。`--duration 55000000` 必須 | vehicle_new |
 | `pairing` | ペアリングハンドシェイク（未ペア起動→自動Pairing→bind）＋混信拒否（誤MAC送信機のARM/離陸をフィルタが破棄）。`--unpaired` 必須 | vehicle_new |
+| `yaw_hold` | 定在ヨー外乱（M1 80% 故障）下のヘディングホールド: 8 秒手放しで方位有界（yaw_band<1.5°、無効化対照は 3.1° で単調流出）。実機の「勝手に回る」現象（2026-06-11）の固定 | vehicle_new |
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
 1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² ゲートが補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。

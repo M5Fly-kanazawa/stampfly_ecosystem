@@ -228,6 +228,27 @@ def _traj_metric(traj_path: Path, name: str, t0=None, t1=None):
     if name == "alt_max":  return max(col("alt"))
     if name == "duty_max":               # G4: peak motor duty (saturation guard)
         return max(max(fv(r, "m0"), fv(r, "m1"), fv(r, "m2"), fv(r, "m3")) for r in rows)
+    if name == "yaw_band":               # G3: peak-to-peak true heading [deg] over the
+        # window (heading-hold gate). Yaw from the truth quaternion, unwrapped so a
+        # continuous rotation is not hidden by the ±180° seam.
+        # 窓内の真値方位 p-p [deg]（ヘディングホールド用ゲート）。真値クォータニオン
+        # から方位を取り、連続回転が ±180° の継ぎ目で隠れないようアンラップする。
+        yaws = []
+        prev = None
+        off = 0.0
+        for r in rows:
+            qw, qx, qy, qz = fv(r, "qw"), fv(r, "qx"), fv(r, "qy"), fv(r, "qz")
+            y = math.degrees(math.atan2(2 * (qw * qz + qx * qy),
+                                        1 - 2 * (qy * qy + qz * qz)))
+            if prev is not None:
+                d = y - prev
+                if d > 180.0:
+                    off -= 360.0
+                elif d < -180.0:
+                    off += 360.0
+            prev = y
+            yaws.append(y + off)
+        return max(yaws) - min(yaws)
     return None  # unknown metric name / 未知のメトリクス名
 
 
@@ -257,7 +278,8 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               optional "in t0 t1" restricts to a phase.
                                               names: horizontal_drift_max, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
-                                              alt_band, alt_mean, alt_min, alt_max, duty_max
+                                              alt_band, alt_mean, alt_min, alt_max,
+                                              duty_max, yaw_band
     """
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}

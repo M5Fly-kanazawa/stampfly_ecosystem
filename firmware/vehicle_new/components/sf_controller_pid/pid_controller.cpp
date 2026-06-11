@@ -74,6 +74,10 @@ void PidController::loadParams()
     params::get_float("attitude.pitch.ti", att_pitch_.ti);
     params::get_float("attitude.pitch.td", att_pitch_.td);
 
+    // Heading hold / ヘディングホールド
+    params::get_float("attitude.yawhold.kp", yaw_hold_kp_);
+    params::get_float("attitude.yawhold.rate_max", yaw_hold_rate_max_);
+
     // Altitude control / 高度制御
     params::get_float("altitude.alt.kp", alt_pos_.kp);
     params::get_float("altitude.alt.ti", alt_pos_.ti);
@@ -217,6 +221,46 @@ ControlOutput PidController::compute(
             if (yaw_cmd >  guide_yaw_rate_max_) yaw_cmd =  guide_yaw_rate_max_;
             if (yaw_cmd < -guide_yaw_rate_max_) yaw_cmd = -guide_yaw_rate_max_;
             rate_sp_yaw = yaw_cmd;
+        }
+
+        // Heading hold: yaw stick neutral → hold the heading captured at stick
+        // release (rate-limited P on the estimator yaw; see pid_controller.hpp).
+        // Skipped while guidance owns yaw, during auto-takeoff (its own law
+        // already commands zero yaw rate), and on the ground — in STABILIZE the
+        // throttle floor is the airborne test, in ALT_HOLD+ the vertical phase.
+        // Any yaw stick input releases the hold instantly (pilot always wins);
+        // the target re-captures at the next stick release.
+        // ヘディングホールド: ヨースティック中立 → 離した瞬間に捕捉した方位を保持
+        // （推定ヨー角のレート制限付き P。pid_controller.hpp 参照）。誘導がヨーを所有
+        // している間・自動離陸中（その則が既にヨーレート 0 を指令）・地上ではスキップ —
+        // STABILIZE ではスロットル床値が、ALT_HOLD 以上では鉛直フェーズが空中判定。
+        // ヨースティック入力で即解除（パイロット優先）し、次の中立で目標を再捕捉する。
+        if (yaw_hold_kp_ > 0.0f && !guidance_active_ &&
+            !(current_mode_ >= FlightMode::ALT_HOLD &&
+              phase_ != VerticalPhase::Airborne)) {
+            const bool stick_neutral =
+                fabsf(setpoint.yaw) < kYawHoldStickDeadband;
+            const bool airborne =
+                (current_mode_ >= FlightMode::ALT_HOLD) ||
+                (setpoint.throttle > kYawHoldThrottleFloor);
+            if (stick_neutral && airborne) {
+                if (!yaw_hold_active_) {
+                    yaw_hold_target_ = euler.z;   // capture on engage edge / 係合エッジで捕捉
+                    yaw_hold_active_ = true;
+                }
+                // Shortest-path heading error, P with a turn-rate limit (the
+                // same shape as the guidance yaw law above).
+                // 最短経路の方位誤差、回頭率制限付き P（上の誘導ヨー則と同形）。
+                float hold_err = yaw_hold_target_ - euler.z;
+                while (hold_err >  3.14159265f) hold_err -= 6.2831853f;
+                while (hold_err < -3.14159265f) hold_err += 6.2831853f;
+                float hold_cmd = yaw_hold_kp_ * hold_err;
+                if (hold_cmd >  yaw_hold_rate_max_) hold_cmd =  yaw_hold_rate_max_;
+                if (hold_cmd < -yaw_hold_rate_max_) hold_cmd = -yaw_hold_rate_max_;
+                rate_sp_yaw = hold_cmd;
+            } else {
+                yaw_hold_active_ = false;
+            }
         }
 
         // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
@@ -654,6 +698,7 @@ void PidController::reset()
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded / 次の飛行は接地から
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     excite_active_   = false;            // so does the excitation / 励振も同様
+    yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
     ESP_LOGI(TAG, "PID controller reset");
 }
 
@@ -669,6 +714,9 @@ void PidController::onModeChange(FlightMode new_mode)
             att_roll_.reset();
             att_pitch_.reset();
         }
+        // Heading-hold target is mode-local: re-capture under the new mode's law.
+        // ヘディングホールド目標はモード局所 — 新モードの則で再捕捉する。
+        yaw_hold_active_ = false;
         if (current_mode_ >= FlightMode::ALT_HOLD || new_mode >= FlightMode::ALT_HOLD) {
             alt_pos_.reset();
             alt_vel_.reset();

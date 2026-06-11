@@ -1,0 +1,26 @@
+# yaw_hold.expect — heading-hold gate under a standing yaw disturbance.
+# G1 state machine + G3 bounded heading/attitude/altitude + G4 actuator health.
+#
+# Timeline (absolute): A disarmed 0-4, B ARM 4-5, C take-off 5-7, D ALT_HOLD 7-11,
+# E fault@11 (M1 at 80%), F hands-off hover under fault 11-19, G restore@19,
+# H recover 19-21, I-K disarm 21-22.
+#
+# THE gate is yaw_band over the fault window: measured 0.60° with the hold
+# (kp=3, returns to target) vs 3.06° AND MONOTONICALLY WALKING with the hold
+# disabled (attitude.yawhold.kp=0 control run, 2026-06-11) — the 1.5° bound
+# separates the two by ~2.5× in both directions.
+#
+# yaw_hold.expect — 定在ヨー外乱下のヘディングホールドゲート。本命は故障窓の
+# yaw_band: ホールド有り実測 0.60°（目標へ戻る）に対し、無効化対照実験
+# （attitude.yawhold.kp=0）では 3.06° かつ単調に流れ続ける。1.5° の境界は両側に
+# 約 2.5 倍の判別幅を持つ。
+exit 0
+log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
+log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING
+log_contains any "Mode change: STABILIZE → ALT_HOLD"  # G1: hover law engaged
+log_contains any "DISARM accepted"                    # G1: clean end of flight
+metric yaw_band  < 1.5   in 11.5 19.0   # G3: heading BOUNDED through the fault (the heading-hold gate)
+metric tilt_max  < 10.0  in 11.0 19.0   # G3: attitude bounded under the asymmetric fault
+metric alt_min   > 0.10  in 11.0 19.0   # G3: the fault dip stays shallow, no touchdown
+metric alt_max   < 0.85  in  7.0 20.5   # G3: no balloon through fault entry/recovery
+metric duty_max  < 0.96  in 11.0 19.0   # G4: motors keep margin while compensating M1

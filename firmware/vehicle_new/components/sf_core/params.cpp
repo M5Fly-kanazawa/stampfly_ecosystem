@@ -163,6 +163,15 @@ namespace param_vars {
     float att_pitch_ti    = 4.0f;
     float att_pitch_td    = 0.04f;
 
+    // Heading hold (STABILIZE+, yaw stick neutral): P gain [1/s] on the estimator
+    // yaw and the correction turn-rate limit [rad/s]. kp=0 disables the hold.
+    // Defaults from the 2026-06-11 flight-log replay (excursion 12.3°→5.7° mean).
+    // ヘディングホールド（STABILIZE 以上・ヨースティック中立時）: 推定ヨー角への
+    // P ゲイン [1/s] と補正回頭率上限 [rad/s]。kp=0 で無効。既定値は 2026-06-11 の
+    // フライトログ再生で決定（方位ずれ平均 12.3°→5.7°）。
+    float att_yawhold_kp       = 3.0f;
+    float att_yawhold_rate_max = 2.0f;
+
     // Altitude control — cascade alt → vertical-velocity → thrust [N].
     // Values are the FLIGHT-PROVEN legacy vehicle/ gains (config.hpp
     // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). The legacy velocity
@@ -330,6 +339,10 @@ static const ParamEntry table[] = {
     {"attitude.pitch.kp", ParamType::FLOAT, &att_pitch_kp, 5.0f,  0.0f,  50.0f,  &notifyControllerReload},
     {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, &notifyControllerReload},
     {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   &notifyControllerReload},
+
+    // Heading hold (kp=0 disables / kp=0 で無効)
+    {"attitude.yawhold.kp",       ParamType::FLOAT, &att_yawhold_kp,       3.0f, 0.0f, 10.0f, &notifyControllerReload},
+    {"attitude.yawhold.rate_max", ParamType::FLOAT, &att_yawhold_rate_max, 2.0f, 0.1f, 5.0f,  &notifyControllerReload},
 
     // Altitude control (SIL-validated; see the variable defaults above)
     {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.6f,  0.0f, 10.0f,  &notifyControllerReload},

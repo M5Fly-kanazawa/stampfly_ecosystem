@@ -1,0 +1,38 @@
+# yaw_hold.scn — heading hold under a standing yaw disturbance (vehicle_new)
+# 定在ヨー外乱下のヘディングホールド（vehicle_new）
+#
+# Reproduces the 2026-06-11 hardware finding: a thrust-proportional yaw moment
+# (there: airframe asymmetry; here: M1 at 80% thrust+drag) makes the heading
+# random-walk between pilot corrections, because the rate loop nulls yaw RATE,
+# not angle. The heading-hold P loop (attitude.yawhold.*) must keep the heading
+# BOUNDED through an 8 s hands-off hover under the fault — without it the yaw
+# integrator alone needs seconds per re-learn and the heading walks away.
+# The craft hovers in ALT_HOLD so altitude is regulated and the airborne gate
+# (phase == Airborne, set by the ToF takeoff detection) enables the hold.
+#
+# 2026-06-11 の実機知見の再現: 推力比例ヨーモーメント（実機: 機体非対称、ここでは
+# M1 を推力・ドラグ 80% に劣化）は、レートループが「角速度」しか戻さないため操縦修正の
+# 合間に方位をランダムウォークさせる。ヘディングホールド P ループ（attitude.yawhold.*）は
+# 故障下の 8 秒手放しホバーで方位を有界に保たねばならない — 無しではヨー積分器の再学習に
+# 数秒/回かかり方位は流れる。ALT_HOLD ホバーで高度は閉ループ、空中ゲート
+# （phase == Airborne、ToF 離陸検知が設定）がホールドを有効化する。
+#
+# Run: sf sil scenario simulator/sil/scenarios/yaw_hold.scn --target vehicle_new
+#
+#  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc    2048  2048   2048    2048  0     4000      50              # A: boot → IDLE_GROUND 4 s
+   +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM edge, idle 1 s
+   +    rc    3330  2048   2048    2048  1     2000      50              # C: STABILIZE take-off climb 2 s
+   +    rc    3072  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD settle 4 s (baseline, hold engaged)
+   +    fault 0     0.80                                                 # E: M1 (FR) at 80% — standing yaw+tilt disturbance
+   +    rc    3072  2048   2048    2048  1     8000      50        1     # F: hands-off hover UNDER the fault 8 s — heading must stay bounded
+   +    fault 0     1.0                                                  # G: motor restored
+   +    rc    3072  2048   2048    2048  1     2000      50        1     # H: recover 2 s
+   +    rc    2048  2048   2048    2048  0     200       50              # I: release ARM button
+   +    rc    2048  2048   2048    2048  1     200       50              # J: press again → DISARM (toggle)
+   +    rc    2048  2048   2048    2048  0     600       50              # K: settle disarmed
+#
+# Timeline (absolute): A 0-4, B 4-5, C 5-7, D 7-11, E fault@11, F 11-19,
+# G restore@19, H 19-21, I-K disarm 21-22.
+# Gates in yaw_hold.expect: yaw_band bounded through F (THE heading-hold gate),
+# attitude/altitude bounded, motors unsaturated.

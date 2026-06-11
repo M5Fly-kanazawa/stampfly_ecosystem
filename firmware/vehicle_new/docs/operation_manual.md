@@ -138,6 +138,15 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 
 **優先順位: POS_HOLD > ALT_HOLD > ACRO > STABILIZE**（複数立っていれば上位を採用）。
 
+#### ヘディングホールド（STABILIZE 以上）
+
+ヨースティックが中立の間、離した瞬間の機首方位を自動保持する（推定ヨー角への P ループ。地磁気不要）。ヨー外乱があっても向きが流れず、振られても元の方位へ戻る。ヨースティックを動かすと即解除（パイロット優先）、次に中立へ戻した方位を再捕捉する。ACRO では無効（純レート制御）。
+
+| パラメータ | 既定値 | 意味 |
+|-----------|--------|------|
+| `attitude.yawhold.kp` | 3.0 | 方位 P ゲイン [1/s]。**0 で機能無効** |
+| `attitude.yawhold.rate_max` | 2.0 | 補正回頭率の上限 [rad/s] |
+
 ### 離陸・着陸
 
 | 操作 | 動作 |
@@ -389,6 +398,10 @@ identical to the legacy vehicle.**
   falling = DISARM. On-board button click (on ground) toggles ARM/DISARM.
 - **Flight modes** (flags): bit2 = ACRO, bit3 = ALT_HOLD, bit4 = POS_HOLD; default STABILIZE.
   Priority **POS_HOLD > ALT_HOLD > ACRO > STABILIZE**.
+- **Heading hold** (STABILIZE and above): while the yaw stick is neutral the heading captured at
+  stick release is held (P loop on the estimator yaw — no magnetometer). Any yaw input releases it
+  instantly. Params: `attitude.yawhold.kp` (3.0, 0 disables), `attitude.yawhold.rate_max` (2.0 rad/s).
+  Disabled in ACRO (pure rate control).
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). **Landing**: throttle
   down / DISARM.
 

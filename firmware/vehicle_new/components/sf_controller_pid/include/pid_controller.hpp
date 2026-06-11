@@ -201,6 +201,34 @@ private:
     float stick_move_cancel_ = 0.15f;      // stick departure to cancel / 解除閾値
     float max_pos_vel_    = 1.0f;    // [m/s] POS_HOLD horizontal velocity setpoint limit
 
+    // Heading hold (STABILIZE and above). While the yaw stick is neutral, hold
+    // the heading captured at stick release with a rate-limited P loop on the
+    // estimator yaw (= bias-corrected gyro integral — no magnetometer needed).
+    // Rationale: the rate loop nulls yaw RATE, not angle, so a yaw disturbance
+    // torque random-walks the heading between pilot corrections. Flight-log
+    // replay (2026-06-11, kp=3): hands-off heading excursion 12.3°→5.7° mean,
+    // and the heading RETURNS to target instead of drifting. Pilot yaw input
+    // wins instantly; guidance owns yaw in API flights; kp=0 disables.
+    // ヘディングホールド（STABILIZE 以上）。ヨースティック中立の間、離した瞬間に捕捉
+    // した方位を推定ヨー角（=バイアス補正済みジャイロ積分 — 地磁気不要）のレート制限
+    // 付き P ループで保持する。理由: レートループはヨー「角速度」しか戻さないため、
+    // ヨー外乱トルクで方位は操縦修正の合間にランダムウォークする。フライトログ再生
+    // （2026-06-11, kp=3）: 手放し方位ずれ平均 12.3°→5.7°、かつ方位は流れず目標へ
+    // 戻る。パイロットのヨー入力が常に優先。API 飛行では誘導がヨーを所有。kp=0 で無効。
+    bool  yaw_hold_active_ = false;
+    float yaw_hold_target_ = 0;        // [rad] captured heading / 捕捉方位
+    float yaw_hold_kp_     = 3.0f;     // [1/s] P gain (param attitude.yawhold.kp)
+    float yaw_hold_rate_max_ = 2.0f;   // [rad/s] correction rate limit (param attitude.yawhold.rate_max)
+    // Engage gates: the stick deadband mirrors guidance's cancel threshold scale,
+    // and the throttle floor keeps the hold OFF on the ground in STABILIZE
+    // (ALT_HOLD+ gates on phase_ == Airborne instead — throttle is a climb
+    // command there, not thrust).
+    // 係合ゲート: スティック不感帯と、STABILIZE で地上では保持しないためのスロットル
+    // 床値（ALT_HOLD 以上は phase_ == Airborne でゲート — そこではスロットルは上昇
+    // 指令であり推力ではない）。
+    static constexpr float kYawHoldStickDeadband = 0.03f;
+    static constexpr float kYawHoldThrottleFloor = 0.25f;
+
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit
     // must be on the order of what the plant can deliver — with the default 1.0
