@@ -101,6 +101,8 @@ extern Topic<PairingComplete, Latest, 1>      pairing_complete;  // comm bind st
 
 extern Topic<UiCommand,       Queue, 4>       ui_command;        // CLI → NotifyTask (sound/led)
 extern Topic<MotorTest,       Latest, 1>      motor_test;        // CLI → ControlTask (motor test, disarmed only)
+extern Topic<MagCalCommand,   Queue,  2>      mag_command;       // CLI → MagTask (magcal verbs)
+extern Topic<MagCalStatus,    Latest, 1>      mag_cal_status;    // MagTask → CLI (magcal progress/result)
 
 // =============================================================================
 // Transition Command Topics — reset commands (StateManager callbacks → owning task)

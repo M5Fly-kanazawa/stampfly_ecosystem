@@ -174,6 +174,19 @@ public:
     /// @param accel_bias  Measured accel bias [m/s²], body frame (gravity removed) / 加速度バイアス
     virtual void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) {}
 
+    /// Set the magnetometer NED reference vector [uT] (captured at boot from the
+    /// calibrated mag + converged attitude — defines "yaw 0 = boot heading").
+    /// Default no-op for estimators without a mag observation.
+    /// 地磁気の NED 参照ベクトル [uT] を設定（起動時に校正済み磁気と収束済み姿勢から
+    /// 捕捉 — 「ヨー0 = 起動方位」を定義する）。磁気観測を持たない推定器では no-op。
+    virtual void setMagReference(const float ned[3]) {}
+
+    /// Enable/disable one observation group at runtime (0=ToF,1=Baro,2=Mag,3=Flow).
+    /// Used to keep an UNCALIBRATED mag out of the fusion. Default no-op.
+    /// 観測グループの実行時有効/無効（0=ToF,1=Baro,2=Mag,3=Flow）。未校正の磁気を
+    /// 融合に入れないために使う。既定 no-op。
+    virtual void setSensorEnabled(int group, bool enabled) {}
+
     // =========================================================================
     // Bias freeze (ground / flight regimes)
     // バイアス凍結（地上 / 飛行レジーム）

@@ -65,6 +65,7 @@ struct FlowData {
 /// 地磁気データ — BMM150（25Hz）
 struct MagData {
     float mag[3];         // Magnetic field [uT]   / 磁場
+    bool  calibrated;     // Hard/soft-iron correction applied (MagTask) / 校正適用済み
     uint32_t timestamp;   // [us]
 };
 
@@ -516,6 +517,42 @@ struct UiCommand {
 /// モータテストコマンド — CLI → ControlTask。**disarmed のときのみ**1/全モータを固定 duty で
 /// 回す（配線/回転方向確認）。expiry_us で自動失効、既定 inactive。armed 時は ControlTask が
 /// 完全に無視する（安全）。
+/// Magnetometer-calibration verb (CLI `magcal` → MagTask, the calibrator owner).
+/// Same WHEN/HOW split as the controller verbs: the CLI decides WHEN, MagTask
+/// (which owns the BMM150 and the sample stream) executes HOW.
+/// 地磁気校正 verb（CLI `magcal` → 校正器を所有する MagTask）。コントローラ verb と
+/// 同じ「いつ/どう」分担: CLI が「いつ」を決め、BMM150 とサンプル列を所有する
+/// MagTask が「どう」を実行する。
+enum class MagCalCmd : uint8_t {
+    None  = 0,
+    Start = 1,   // begin sample collection (rotate the craft) / 収集開始（機体を回す）
+    Stop  = 2,   // stop collection and COMPUTE the fit         / 収集終了し計算
+    Save  = 3,   // persist to NVS (disarmed only)              / NVS 保存（disarmed のみ）
+    Clear = 4,   // clear NVS + revert to uncalibrated          / NVS 消去・未校正へ
+};
+
+/// CLI → MagTask command / CLI → MagTask コマンド
+struct MagCalCommand {
+    uint8_t  command;     // MagCalCmd value / MagCalCmd の値
+    uint32_t timestamp;   // [us]
+};
+
+/// MagTask → CLI calibration status (Latest; CLI polls while the user rotates
+/// the craft). Mirrors MagCalibrator state + result so the CLI never touches
+/// the calibrator object across tasks (R5).
+/// MagTask → CLI 校正状態（Latest。ユーザーが機体を回す間 CLI がポーリング）。
+/// MagCalibrator の状態と結果を写し、CLI がタスク跨ぎで校正器オブジェクトに
+/// 触れないようにする（R5）。
+struct MagCalStatus {
+    uint8_t  state;          // MagCalibrator::State value / 校正器状態
+    uint16_t sample_count;   // collected samples           / 収集サンプル数
+    bool     valid;          // current calibration valid   / 現校正の有効性
+    float    offset[3];      // hard-iron offset [uT]       / ハードアイアン
+    float    scale[3];       // soft-iron scale             / ソフトアイアン
+    float    fitness;        // sphere-fit quality 0-1      / 球面フィット品質
+    uint32_t timestamp;      // [us]
+};
+
 struct MotorTest {
     bool     active;      // test running                  / テスト実行中
     uint8_t  motor_id;    // 0..3 = one motor, 0xFF = all  / 0..3=単体, 0xFF=全部

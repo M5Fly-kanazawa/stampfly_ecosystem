@@ -192,6 +192,46 @@ static void applyImuTransform(const stampfly::AccelData& accel_body,
     imu_out.gyro[2] = gyro_body.z;   // body Z (yaw rate)
 }
 
+// Mag boot policy — one-shot at boot-calibration completion (and after every
+// ground recalibration): the craft is still and the attitude has converged.
+// CALIBRATED mag → capture the NED reference (ref = R(q̂)·m_body, defining
+// "yaw 0 = boot heading") so the ESKF mag update is meaningful. UNCALIBRATED
+// mag → force the mag OUT of the fusion regardless of eskf.use_mag: hard-iron
+// offsets are commonly as large as the field itself, and fusing them would
+// inject exactly the slow yaw-reference contamination the gyro-bias clamp
+// guards against. Run `magcal`, then reboot (or recalibrate) to enable.
+// 磁気の起動ポリシー — 起動校正完了時（と接地再校正のたび）の one-shot: 機体は静止し
+// 姿勢は収束済み。「校正済み」磁気 → NED 参照を捕捉（ref = R(q̂)·m_body、
+// 「ヨー0 = 起動方位」を定義）し ESKF 磁気更新を意味のあるものにする。「未校正」
+// 磁気 → eskf.use_mag に関わらず融合から強制除外: ハードアイアンオフセットは磁場
+// 自体と同程度の大きさになることが多く、融合すればジャイロバイアスクランプが守って
+// いる「遅いヨー参照汚染」をまさに注入してしまう。`magcal` 実行後、再起動（または
+// 再校正）で有効化される。
+static bool g_mag_ref_pending = false;
+
+static void applyMagBootPolicy(const sf::MagData& mag)
+{
+    if (!g_mag_ref_pending) {
+        return;
+    }
+    g_mag_ref_pending = false;
+
+    if (!mag.calibrated) {
+        g_estimator->setSensorEnabled(2 /*MAG*/, false);
+        ESP_LOGW(TAG, "Mag uncalibrated — yaw aiding disabled (run 'magcal')");
+        return;
+    }
+
+    // ref_ned = R(q) · m_body, with q the converged boot attitude.
+    // ref_ned = R(q)·m_body。q は収束済みの起動姿勢。
+    const sf::StateEstimate st = g_estimator->getState();
+    sf::math::Quat q(st.attitude[0], st.attitude[1], st.attitude[2], st.attitude[3]);
+    sf::math::Vec3 m_body(mag.mag[0], mag.mag[1], mag.mag[2]);
+    sf::math::Vec3 ref = q.rotate(m_body);
+    const float ned[3] = {ref.x, ref.y, ref.z};
+    g_estimator->setMagReference(ned);
+}
+
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
 static void processAsyncSensors()
@@ -247,6 +287,7 @@ static void processAsyncSensors()
 
     sf::MagData mag;
     while (sf::sensor_mag.read(mag)) {
+        applyMagBootPolicy(mag);
         g_estimator->updateMag(mag);
         snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
         snap.mag_timestamp = mag.timestamp;
@@ -457,6 +498,13 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // 完了を通知する — 校正はもう保留中でない。
     g_calib_active = false;
     g_calibrated   = true;
+
+    // The craft is verified-still and the attitude converged: (re-)capture the
+    // mag NED reference from the next mag sample (see applyMagBootPolicy).
+    // 機体は静止確認済みで姿勢は収束済み: 次の磁気サンプルで NED 参照を（再）捕捉
+    // する（applyMagBootPolicy 参照）。
+    g_mag_ref_pending = true;
+
     const sf::CalibrationData& d = g_calib.data();
 
     // Largest per-axis absolute bias (|x| inline, no <cmath> dependency).

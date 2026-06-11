@@ -211,6 +211,10 @@ public:
     /// Set accel bias (from calibration) / 加速度バイアスを設定（キャリブレーションから）
     void setAccelBias(const Vec3& bias) { ba_ = bias; }
 
+    /// Set the magnetometer NED reference [uT] (boot capture; see EskfEstimator)
+    /// 地磁気 NED 参照 [uT] を設定（起動時捕捉。EskfEstimator 参照）
+    void setMagReference(const Vec3& ned) { cfg_.mag_ref = ned; }
+
     /// Set initial attitude from gravity vector (roll/pitch from accel)
     /// 重力ベクトルから初期姿勢を設定（加速度からroll/pitch）
     void setAttitudeFromGravity(const Vec3& accel_avg);

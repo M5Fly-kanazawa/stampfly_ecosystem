@@ -145,6 +145,23 @@ void EskfEstimator::updateFlow(const FlowData& flow)
                         cached_state_.angular_rate[1]);  // body pitch rate (gyro_y, FRD)
 }
 
+void EskfEstimator::setMagReference(const float ned[3])
+{
+    // Captured at boot by ImuTask (calibrated mag rotated into NED by the
+    // converged attitude). Live config change — state and P untouched.
+    // 起動時に ImuTask が捕捉（校正済み磁気を収束済み姿勢で NED へ回転）。
+    // ライブ設定変更 — 状態と P には触れない。
+    core_.setMagReference(math::Vec3(ned[0], ned[1], ned[2]));
+    ESP_LOGI(TAG, "Mag NED reference set: [%.1f %.1f %.1f] uT",
+             static_cast<double>(ned[0]), static_cast<double>(ned[1]),
+             static_cast<double>(ned[2]));
+}
+
+void EskfEstimator::setSensorEnabled(int group, bool enabled)
+{
+    core_.setSensorEnabled(group, enabled);
+}
+
 void EskfEstimator::updateMag(const MagData& mag)
 {
     math::Vec3 m(mag.mag[0], mag.mag[1], mag.mag[2]);

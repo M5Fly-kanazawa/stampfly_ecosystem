@@ -208,7 +208,17 @@ TAB で補完。
 | `sound` | `[on\|off]` | ブザー有効/無効（NVS 保存）|
 | `led` | `<0-255>` | 本体 LED 輝度（NVS 保存）|
 | `motor` | `[test <1-4> <0-100>\|all <0-100>\|stop]` | **モータ単体テスト（disarmed 限定・要プロペラ除去）**。M1=FR M2=RR M3=RL M4=FL、2秒自動停止 |
+| `magcal` | `[start\|stop\|status\|save\|clear]` | 地磁気のハード/ソフトアイアン校正（下記手順）|
 | `reboot` | — | 再起動 |
+
+**地磁気校正の手順**（初回・搭載機器変更時・移設時に実施）:
+1. disarmed のまま `magcal start`
+2. 機体を手に持ち**全方位にゆっくり回す**（8の字、各軸一回転ずつ、20〜30秒。`magcal status` でサンプル数確認、100以上を目安）
+3. `magcal stop` — 球面フィットを計算し offset/scale/fitness を表示
+4. `magcal save` — NVS に永続化
+5. 補正は即時有効。**ESKF のヨー補助は次回起動時**（静止校正完了時の磁気参照捕捉）に係合。融合に使うには `param set eskf.use_mag 1`（既定 off）
+
+未校正のままだと: 磁気サンプルは生値（`calibrated=false`）で配信され、**ImuTask が磁気を融合から自動除外**する（ハードアイアンオフセットは磁場と同程度の大きさになり得るため、未校正で融合するとヨー参照が汚染される）。
 
 **実装方針:** 各コマンドは状態/HAL に直接触れず、トピックへ「事実」を publish して所有タスクが
 適用する（例: `motor` → `motor_test` トピック → ControlTask、`sound`/`led` → `ui_command` → NotifyTask、
@@ -225,7 +235,7 @@ WiFi 経由の制御を追加できる**（§7）。
 | 移動 | `up/down/forward/back/left/right <cm>` / `cw/ccw <deg>` | 相対移動（Tello 風）|
 | クエリ | `battery?` / `height?` / `tof?` / `attitude?` | 値問い合わせ（Tello 互換）|
 | 制御 | `trim` / `gain <axis> <param> <val>` | トリム・PID ゲイン調整 |
-| キャリブ | `magcal start/stop/save` | 地磁気キャリブ（Figure-8）|
+| キャリブ | `magcal start/stop/save` | **→ 移植済み**（上の現行コマンド表参照）|
 | 通信 | `comm [espnow\|udp]` / `wifi ...` | 通信モード・WiFi 設定 |
 
 これらは「自律飛行・WiFi 制御・Tello 互換」用。コントローラ手動飛行には不要で、必要に応じて
@@ -382,6 +392,7 @@ completes.
 | `sound` | `[on\|off]` | Enable/disable the buzzer (NVS) |
 | `led` | `<0-255>` | Body LED brightness (NVS) |
 | `motor` | `[test <1-4> <0-100>\|all <0-100>\|stop]` | **Bench motor test (DISARMED only — props off!)**. M1=FR M2=RR M3=RL M4=FL, 2 s auto-stop |
+| `magcal` | `[start\|stop\|status\|save\|clear]` | Magnetometer hard/soft-iron calibration: `start` → rotate the craft in all orientations (figure-8, ~100+ samples) → `stop` (sphere fit) → `save` (NVS). Yaw aiding engages at the next boot; enable fusion with `param set eskf.use_mag 1`. Uncalibrated mag is automatically kept OUT of the fusion |
 | `reboot` | — | Restart the flight controller |
 
 Every command publishes a FACT on a topic and the owning task applies it (e.g. `motor` → `motor_test`

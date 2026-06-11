@@ -41,6 +41,8 @@ public:
     void unfreezeBias() override;
     void inflateCovariance(uint16_t state_mask) override;
     void reloadParams() override;
+    void setMagReference(const float ned[3]) override;
+    void setSensorEnabled(int group, bool enabled) override;
 
 private:
     StateEstimate convertState(uint32_t timestamp) const;

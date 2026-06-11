@@ -517,6 +517,86 @@ int cmd_wifi(int argc, char** argv)
     return 0;
 }
 
+/// `magcal [start|stop|status|save|clear]` — magnetometer hard/soft-iron
+/// calibration. The calibrator is OWNED by MagTask; this command only publishes
+/// verbs (mag_command) and reads the status topic (mag_cal_status) — R5.
+/// Flow: `magcal start` → rotate the craft in all orientations (figure-8) →
+/// `magcal stop` (computes the sphere fit) → `magcal save` (NVS). The new
+/// calibration takes effect immediately; the ESKF yaw aiding engages at the
+/// next boot/recalibration (mag reference capture).
+/// `magcal [start|stop|status|save|clear]` — 地磁気のハード/ソフトアイアン校正。
+/// 校正器は MagTask が所有し、本コマンドは verb の発行（mag_command）と状態トピック
+/// （mag_cal_status）の読み出しのみ行う（R5）。
+/// 手順: `magcal start` → 機体を全方位に回す（8の字）→ `magcal stop`（球面フィット
+/// 計算）→ `magcal save`（NVS）。補正は即時有効。ESKF のヨー補助は次回起動/再校正
+/// 時（磁気参照捕捉）に係合する。
+const char* magCalStateName(uint8_t state)
+{
+    // Mirrors stampfly::MagCalibrator::State order (sf_hal_bmm150).
+    // stampfly::MagCalibrator::State の順序を写す（sf_hal_bmm150）。
+    static const char* kNames[] = {"IDLE", "COLLECTING", "COMPUTING", "DONE", "ERROR"};
+    return (state < 5) ? kNames[state] : "?";
+}
+
+void printMagCalStatus(const sf::MagCalStatus& st)
+{
+    std::printf("state: %s  samples: %u  calibrated: %s\n",
+                magCalStateName(st.state), st.sample_count, st.valid ? "yes" : "no");
+    if (st.valid) {
+        std::printf("offset: [%.1f %.1f %.1f] uT  scale: [%.2f %.2f %.2f]  fitness: %.2f\n",
+                    st.offset[0], st.offset[1], st.offset[2],
+                    st.scale[0], st.scale[1], st.scale[2], st.fitness);
+    }
+}
+
+int cmd_magcal(int argc, char** argv)
+{
+    if (argc < 2 || std::strcmp(argv[1], "status") == 0) {
+        printMagCalStatus(sf::mag_cal_status.latest());
+        if (argc < 2) {
+            std::printf("usage: magcal [start|stop|status|save|clear]\n"
+                        "  start  - begin collection, then rotate the craft (figure-8)\n"
+                        "  stop   - finish collection and compute the fit\n"
+                        "  save   - persist to NVS (disarmed only)\n"
+                        "  clear  - erase the saved calibration\n");
+        }
+        return 0;
+    }
+
+    sf::MagCalCmd verb = sf::MagCalCmd::None;
+    if      (std::strcmp(argv[1], "start") == 0) verb = sf::MagCalCmd::Start;
+    else if (std::strcmp(argv[1], "stop")  == 0) verb = sf::MagCalCmd::Stop;
+    else if (std::strcmp(argv[1], "save")  == 0) verb = sf::MagCalCmd::Save;
+    else if (std::strcmp(argv[1], "clear") == 0) verb = sf::MagCalCmd::Clear;
+    else {
+        std::printf("unknown subcommand: %s\n", argv[1]);
+        return 1;
+    }
+
+    if (verb == sf::MagCalCmd::Start &&
+        sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state))) {
+        std::printf("refused: magcal needs the craft disarmed in your hands\n");
+        return 1;
+    }
+
+    sf::mag_command.publish(
+        {static_cast<uint8_t>(verb), static_cast<uint32_t>(esp_timer_get_time())});
+
+    // Give MagTask one cycle (25Hz = 40ms) to execute, then report the outcome.
+    // MagTask の 1 周期（25Hz = 40ms）待って結果を報告する。
+    vTaskDelay(pdMS_TO_TICKS(100));
+    printMagCalStatus(sf::mag_cal_status.latest());
+
+    if (verb == sf::MagCalCmd::Start) {
+        std::printf("rotate the craft in ALL orientations (figure-8), then run "
+                    "'magcal stop'\n('magcal status' shows the sample count)\n");
+    } else if (verb == sf::MagCalCmd::Save) {
+        std::printf("saved. yaw aiding engages at the next boot "
+                    "(set 'param set eskf.use_mag 1' to enable fusion)\n");
+    }
+    return 0;
+}
+
 /// `reboot` — restart the flight controller.
 /// `reboot` — フライトコントローラを再起動する。
 int cmd_reboot(int argc, char** argv)
@@ -689,6 +769,7 @@ const CliCommand kCommands[] = {
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
     {"motor",   "motor [test <1-4> <0-100>|all <0-100>|stop] — bench test (disarmed)", &cmd_motor},
     {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
+    {"magcal",  "magcal [start|stop|status|save|clear] — magnetometer calibration", &cmd_magcal},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
 };
 
