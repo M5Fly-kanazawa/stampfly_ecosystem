@@ -93,6 +93,8 @@ _PAGE = """<!DOCTYPE html>
  <span id="state" class="state">--</span>
  <span class="muted" id="meta">waiting for packets...</span></h1>
 <div class="row">
+ <div class="card"><div class="muted">attitude indicator</div>
+  <canvas id="attitudeIndicator" width="240" height="240" style="width:240px;height:240px"></canvas></div>
  <div class="card"><div class="muted">attitude [deg]</div>
   <table><tr><td>roll</td><td class="big" id="roll">--</td></tr>
    <tr><td>pitch</td><td class="big" id="pitch">--</td></tr>
@@ -154,6 +156,88 @@ function drawChart(cv, series, colors, names){
   });
 }
 
+// ============================================================================
+// Attitude Indicator (Artificial Horizon) — ported VERBATIM from the legacy
+// vehicle web page (sf_svc_telemetry/www/index.html): same sky/ground colours,
+// pitch ladder, roll arc/ticks/pointer and aircraft symbol.
+// 姿勢表示器（人工水平儀）— 旧 vehicle の Web 画面から「そのまま」移植: 空/地面の
+// 配色・ピッチラダー・ロール目盛/ポインタ・機体シンボルまで同一。
+// ============================================================================
+let currentState = { roll: 0, pitch: 0 };
+function drawAttitudeIndicator() {
+  const canvas = document.getElementById("attitudeIndicator");
+  const ctx = canvas.getContext("2d");
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const w = rect.width, h = rect.height;
+  const cx = w / 2, cy = h / 2;
+  const radius = Math.min(w, h) / 2 - 10;
+  const roll = currentState.roll, pitch = currentState.pitch;
+  const pitchPixels = pitch * R2D * 2;   // 2 pixels per degree
+
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.clip();
+  ctx.translate(cx, cy);
+  ctx.rotate(-roll);   // rotate the horizon, not the aircraft / 回すのは水平線
+  const horizonY = pitchPixels;
+  ctx.fillStyle = "#4a90d9";                                        // sky / 空
+  ctx.fillRect(-radius * 2, -radius * 2 + horizonY, radius * 4, radius * 2);
+  ctx.fillStyle = "#8B6914";                                        // ground / 地面
+  ctx.fillRect(-radius * 2, horizonY, radius * 4, radius * 2);
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;                      // horizon / 水平線
+  ctx.beginPath(); ctx.moveTo(-radius, horizonY); ctx.lineTo(radius, horizonY); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1;     // pitch ladder
+  ctx.font = "10px sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+  for (let deg = -30; deg <= 30; deg += 10) {
+    if (deg === 0) continue;
+    const y = horizonY - deg * 2;
+    const lineW = deg % 20 === 0 ? 40 : 20;
+    ctx.beginPath(); ctx.moveTo(-lineW, y); ctx.lineTo(lineW, y); ctx.stroke();
+    if (deg % 20 === 0) {
+      ctx.fillText(Math.abs(deg).toString(), lineW + 12, y + 3);
+      ctx.fillText(Math.abs(deg).toString(), -lineW - 12, y + 3);
+    }
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = "#ffaa00"; ctx.lineWidth = 3;                   // aircraft symbol
+  ctx.beginPath();
+  ctx.moveTo(cx - 50, cy); ctx.lineTo(cx - 20, cy);
+  ctx.moveTo(cx - 5, cy);  ctx.lineTo(cx + 5, cy);
+  ctx.moveTo(cx + 20, cy); ctx.lineTo(cx + 50, cy);
+  ctx.stroke();
+  ctx.fillStyle = "#ffaa00";
+  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;                      // roll arc
+  ctx.beginPath(); ctx.arc(cx, cy, radius - 5, -Math.PI * 5 / 6, -Math.PI / 6); ctx.stroke();
+  const rollTicks = [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60];
+  rollTicks.forEach(deg => {
+    const angle = -Math.PI / 2 + deg * Math.PI / 180;
+    const r1 = radius - 5, r2 = deg % 30 === 0 ? radius - 15 : radius - 10;
+    ctx.beginPath();
+    ctx.moveTo(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle));
+    ctx.lineTo(cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
+    ctx.stroke();
+  });
+  ctx.save();                                                       // roll pointer
+  ctx.translate(cx, cy); ctx.rotate(-roll);
+  ctx.fillStyle = "#ffaa00";
+  ctx.beginPath();
+  ctx.moveTo(0, -radius + 5); ctx.lineTo(-6, -radius + 15); ctx.lineTo(6, -radius + 15);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = "#444"; ctx.lineWidth = 3;                      // outer ring
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+
+  ctx.fillStyle = "#fff"; ctx.font = "11px monospace"; ctx.textAlign = "left";
+  ctx.fillText("R: " + (roll * R2D).toFixed(1) + "\u00b0", 8, h - 20);
+  ctx.fillText("P: " + (pitch * R2D).toFixed(1) + "\u00b0", 8, h - 6);
+}
+
 const es = new EventSource("/events");
 es.onmessage = (ev)=>{
   const d = JSON.parse(ev.data);
@@ -174,6 +258,8 @@ es.onmessage = (ev)=>{
     $(m).textContent = p[m].toFixed(2);
     $(m+"b").style.width = Math.min(100, p[m]*100)+"%";
   }
+  currentState.roll = p.roll; currentState.pitch = p.pitch;
+  drawAttitudeIndicator();
   hist.push({t:t, roll:p.roll*R2D, pitch:p.pitch*R2D, yaw:p.yaw*R2D,
              alt:-p.pos_z, gx:p.gyro_x*R2D, gy:p.gyro_y*R2D, gz:p.gyro_z*R2D,
              m1:p.m1, m2:p.m2, m3:p.m3, m4:p.m4});
