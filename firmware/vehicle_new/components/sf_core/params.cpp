@@ -180,6 +180,14 @@ namespace param_vars {
     float eskf_gyro_bias    = 0.000013f;
     float eskf_accel_bias   = 0.0001f;
 
+    // Gyro-bias deviation limit around the boot-calibration nominal [rad/s]
+    // (PX4-style bias limiting — bounds how far any sensor anomaly can drag the
+    // bias that feeds the rate loop; see EskfConfig::bg_deviation_max).
+    // 起動校正ノミナルまわりのジャイロバイアス偏差上限 [rad/s]（PX4 流バイアス制限 —
+    // センサ異常がレートループ用バイアスを引きずれる距離を有界化。
+    // EskfConfig::bg_deviation_max 参照）。
+    float eskf_bg_dev_max   = 0.03f;
+
     // ESKF observation noise
     float eskf_tof_noise      = 0.03f;
     float eskf_flow_noise     = 0.30f;
@@ -330,6 +338,7 @@ static const ParamEntry table[] = {
     {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, &notifyEstimatorReload},
     {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, &notifyEstimatorReload},
     {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, &notifyEstimatorReload},
+    {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.001f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF observation noise
     {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.03f, 0.001f, 1.0f,  &notifyEstimatorReload},

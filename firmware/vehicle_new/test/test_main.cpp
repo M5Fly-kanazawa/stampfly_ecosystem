@@ -367,6 +367,75 @@ TEST(pid_derivative_on_measurement)
 }
 
 // =============================================================================
+// Gyro-bias deviation clamp (EskfConfig::bg_deviation_max)
+// ジャイロバイアス偏差クランプ
+// =============================================================================
+
+TEST(eskf_gyro_bias_deviation_clamp)
+{
+    // A persistent yaw-rotated mag (a magnetic disturbance below the chi2 gate)
+    // drags bg_z through the ATT-BG cross-covariance. The clamp must stop it at
+    // nominal + bg_deviation_max — the bounded-damage contract for the rate loop.
+    // 持続的にヨー回転した磁気（χ²ゲート以下の磁気外乱）はATT-BGクロス共分散経由で
+    // bg_z を引きずる。クランプは nominal + bg_deviation_max で止めること —
+    // レートループへの被害有界化の契約。
+    sf::EskfConfig cfg;
+    cfg.use_mag = true;
+    cfg.use_tof = false;
+    cfg.use_baro = false;
+    cfg.use_flow = false;
+    cfg.bg_deviation_max = 0.02f;
+    sf::EskfCore eskf;
+    eskf.init(cfg);
+
+    // Boot calibration seeds the nominal.
+    // 起動校正がノミナルを種付けする。
+    const sf::math::Vec3 nominal(0.005f, -0.003f, 0.004f);
+    eskf.setGyroBias(nominal);
+
+    // Level rest with a SLOWLY ROTATING mag field (0.05 rad/s — e.g. a drifting
+    // magnetic disturbance): the gyro says "not rotating", the mag says
+    // "rotating" — the only consistent explanation the filter has is a gyro-bias
+    // error, so bg_z gets dragged toward the rotation rate. (A CONSTANT mag
+    // offset would NOT do this: with no other yaw reference the yaw state simply
+    // absorbs it and the bias barely moves.) 0.05 rad/s exceeds the 0.02 clamp,
+    // so the clamp must be what stops the drag.
+    // 水平静止＋「ゆっくり回転し続ける」磁気（0.05 rad/s — 漂う磁気外乱を模擬）:
+    // ジャイロは「回転していない」、磁気は「回転中」と言う — フィルタに残る整合的な
+    // 説明はジャイロバイアス誤差のみで、bg_z が回転レートへ引きずられる。
+    // （「一定の」磁気オフセットではこうならない: 他にヨー参照が無ければヨー状態が
+    // 吸収しバイアスはほぼ動かない。）0.05 rad/s はクランプ 0.02 を超えるため、
+    // 引きずりを止めるのはクランプでなければならない。
+    const float disturb_rate = 0.05f;               // [rad/s] mag-field rotation
+    const sf::math::Vec3 gyro(nominal);             // rest: raw gyro = true bias
+    const sf::math::Vec3 accel(0, 0, -9.80665f);    // level rest specific force
+
+    for (int i = 0; i < 40000; i++) {               // 100 s at 400 Hz
+        eskf.predict(accel, gyro, 0.0025f);
+        if (i % 16 == 0) {                          // mag at 25 Hz
+            const float th = disturb_rate * static_cast<float>(i) * 0.0025f;
+            const sf::math::Vec3 mag_rot(
+                cosf(th) * cfg.mag_ref.x - sinf(th) * cfg.mag_ref.y,
+                sinf(th) * cfg.mag_ref.x + cosf(th) * cfg.mag_ref.y,
+                cfg.mag_ref.z);
+            eskf.updateMag(mag_rot);
+        }
+    }
+
+    const sf::math::Vec3 bg = eskf.getGyroBias();
+    // The disturbance must have dragged the bias to the clamp boundary
+    // (the coupling is real, and only the clamp stops it)...
+    // 外乱はバイアスをクランプ境界まで引きずっているはず
+    // （結合は実在し、止めるのはクランプのみ）…
+    ASSERT_TRUE(fabsf(bg.z - nominal.z) > 0.015f);
+    // ...but never past the deviation limit (+ float-rounding epsilon).
+    // …しかし偏差上限（＋浮動小数の丸め分）を超えてはならない。
+    ASSERT_TRUE(fabsf(bg.x - nominal.x) <= cfg.bg_deviation_max + 1e-5f);
+    ASSERT_TRUE(fabsf(bg.y - nominal.y) <= cfg.bg_deviation_max + 1e-5f);
+    ASSERT_TRUE(fabsf(bg.z - nominal.z) <= cfg.bg_deviation_max + 1e-5f);
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -524,6 +593,7 @@ int main()
     run_eskf_predict_freefall();
     run_eskf_tof_update();
     run_eskf_reset_position();
+    run_eskf_gyro_bias_deviation_clamp();
 
     printf("\n[PID]\n");
     run_pid_proportional();

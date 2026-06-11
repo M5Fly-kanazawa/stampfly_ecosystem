@@ -79,6 +79,26 @@ struct EskfConfig {
     float flow_min_height    = 0.02f;
     float flow_innov_clamp   = 0.3f;
 
+    // Gyro-bias deviation limit around the boot-calibration nominal [rad/s].
+    // The Kalman gain routes EVERY observation into the bias states through the
+    // cross-covariances — that coupling is what makes the bias observable, but it
+    // also lets a misbehaving "irrelevant" sensor (mag disturbance, bad-surface
+    // flow) drag the bias that feeds the rate loop. The clamp bounds the damage:
+    // the in-flight estimate may refine the bias only within ± this value of the
+    // verified-still boot measurement. Budget: BMI270 temperature drift is
+    // ~0.02 dps/K → a 30 K warm-up shifts ~0.6 dps ≈ 0.01 rad/s; 0.03 rad/s
+    // (~1.7 dps) leaves 3x headroom while capping a contaminated rate feedback
+    // offset at 0.03 rad/s (PX4-style bias limiting).
+    // 起動校正ノミナルまわりのジャイロバイアス偏差上限 [rad/s]。カルマンゲインは
+    // 全観測をクロス共分散経由でバイアス状態へ流す — この結合がバイアスを可観測に
+    // する一方、レート制御に無関係なセンサの異常（磁気外乱・質の悪い床のフロー）が
+    // レートループに使うバイアスを引きずる経路にもなる。クランプは被害を有界化する:
+    // 飛行中の推定は静止確認済み起動測定値の ± この値の範囲でのみバイアスを更新
+    // できる。予算: BMI270 の温度ドリフトは ~0.02 dps/K → 30 K の昇温で ~0.6 dps ≈
+    // 0.01 rad/s。0.03 rad/s（~1.7 dps）は 3 倍の余裕を残しつつ、汚染時のレート
+    // フィードバックのオフセットを 0.03 rad/s に制限する（PX4 流バイアス制限）。
+    float bg_deviation_max   = 0.03f;
+
     // Attitude correction / 姿勢補正 (proven firmware/vehicle values; no norm gate —
     // the accel-attitude update downweights via k_adaptive + χ², never hard-gates).
     // 実証済み firmware/vehicle 値。norm gate は持たない（k_adaptive＋χ² で弱める）。
@@ -180,8 +200,13 @@ public:
     /// Get P-matrix diagonal element / P行列対角要素を取得
     float getPDiag(int idx) const { return P_(idx, idx); }
 
-    /// Set gyro bias (from calibration) / ジャイロバイアスを設定（キャリブレーションから）
-    void setGyroBias(const Vec3& bias) { bg_ = bias; }
+    /// Set gyro bias from calibration. Also anchors the NOMINAL for the
+    /// deviation clamp (cfg_.bg_deviation_max): in-flight Kalman corrections may
+    /// move the bias only within ± the limit of this verified-still measurement.
+    /// キャリブレーションからジャイロバイアスを設定。偏差クランプ
+    /// （cfg_.bg_deviation_max）の「ノミナル」もここで固定する: 飛行中のカルマン
+    /// 補正は、この静止確認済み測定値の ± 上限の範囲でのみバイアスを動かせる。
+    void setGyroBias(const Vec3& bias) { bg_ = bias; bg_nominal_ = bias; }
 
     /// Set accel bias (from calibration) / 加速度バイアスを設定（キャリブレーションから）
     void setAccelBias(const Vec3& bias) { ba_ = bias; }
@@ -221,6 +246,12 @@ private:
 
     // Config / 設定
     EskfConfig cfg_;
+
+    // Gyro-bias nominal for the deviation clamp (= boot calibration measurement;
+    // {0,0,0} until seeded). See EskfConfig::bg_deviation_max.
+    // 偏差クランプ用ジャイロバイアスノミナル（= 起動校正測定値。種付けまで {0,0,0}）。
+    // EskfConfig::bg_deviation_max 参照。
+    Vec3 bg_nominal_{};
 
     // Active mask (bit i = state i is active) / 有効マスク
     uint16_t active_mask_ = 0x7FFF;  // All 15 states active

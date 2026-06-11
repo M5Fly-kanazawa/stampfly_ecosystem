@@ -57,6 +57,7 @@ void EskfCore::reset()
     q_ = {1, 0, 0, 0};  // Identity / 単位クォータニオン
     bg_ = {0, 0, 0};
     ba_ = {0, 0, 0};
+    bg_nominal_ = {0, 0, 0};   // re-anchored by the next calibration seed / 次の校正種付けで再固定
     ang_rate_ = {0, 0, 0};
 
     // Initialize P with config standard deviations
@@ -975,6 +976,22 @@ void EskfCore::applyMaskedErrorState(float dx[N])
     ba_.x += dx[BA_X];
     ba_.y += dx[BA_Y];
     ba_.z += dx[BA_Z];
+
+    // Gyro-bias deviation clamp around the boot-calibration nominal (see
+    // EskfConfig::bg_deviation_max). Every observation reaches the bias states
+    // through the cross-covariances; this bounds how far a misbehaving sensor
+    // can drag the bias that feeds the rate loop. The accel bias is NOT clamped:
+    // it does not feed any control loop directly and its physical range
+    // (offset + temperature drift) is far wider.
+    // 起動校正ノミナルまわりのジャイロバイアス偏差クランプ（EskfConfig::
+    // bg_deviation_max 参照）。全観測はクロス共分散経由でバイアス状態に届くため、
+    // 異常センサがレートループに使うバイアスを引きずれる距離をここで有界化する。
+    // 加速度バイアスはクランプしない: 制御ループに直接入らず、物理範囲
+    // （オフセット＋温度ドリフト）もずっと広い。
+    const float dev = cfg_.bg_deviation_max;
+    bg_.x = fmaxf(bg_nominal_.x - dev, fminf(bg_nominal_.x + dev, bg_.x));
+    bg_.y = fmaxf(bg_nominal_.y - dev, fminf(bg_nominal_.y + dev, bg_.y));
+    bg_.z = fmaxf(bg_nominal_.z - dev, fminf(bg_nominal_.z + dev, bg_.z));
 }
 
 }  // namespace sf
