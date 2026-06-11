@@ -444,6 +444,41 @@ void processLine(char* line)
         if (std::strcmp(verb, "cw") == 0)      { cmdRotate( a * deg2rad, 0); return; }
         if (std::strcmp(verb, "ccw") == 0)     { cmdRotate(-a * deg2rad, 0); return; }
     }
+    // sysid <roll|pitch|yaw> <doublet|chirp> <amp_dps> <dur_s> — rate-loop
+    // identification excitation while hovering (see SysidCommand). Blocks for
+    // the duration so the calling script naturally brackets its log capture.
+    // sysid … — ホバー中のレートループ同定励振（SysidCommand 参照）。継続時間
+    // ブロックするため、呼び出しスクリプトのログ取得区間と自然に揃う。
+    char wave[16] = {};
+    if (std::sscanf(line, "sysid %15s %15s %f %f", verb, wave, &a, &b) == 4) {
+        if (currentState() != sf::FlightState::FLYING) {
+            reply("error not flying");
+            return;
+        }
+        uint8_t axis;
+        if      (std::strcmp(verb, "roll") == 0)  axis = 0;
+        else if (std::strcmp(verb, "pitch") == 0) axis = 1;
+        else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
+        else { reply("error bad axis"); return; }
+        uint8_t waveform;
+        if      (std::strcmp(wave, "doublet") == 0) waveform = 0;
+        else if (std::strcmp(wave, "chirp") == 0)   waveform = 1;
+        else { reply("error bad waveform"); return; }
+
+        sf::SysidCommand cmd{};
+        cmd.axis      = axis;
+        cmd.waveform  = waveform;
+        cmd.amplitude = a * 0.017453293f;   // dps → rad/s
+        cmd.duration  = b;
+        cmd.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        sf::sysid_command.publish(cmd);
+
+        const uint32_t wait_ms = static_cast<uint32_t>(b * 1000.0f) + 1000;
+        vTaskDelay(pdMS_TO_TICKS(wait_ms));
+        reply("ok");
+        return;
+    }
+
     if (got == 5 && std::strcmp(verb, "go") == 0) {
         // go x y z speed — x fwd, y left, z up [cm], speed [cm/s] (Tello frame)
         float speed = d * 0.01f;

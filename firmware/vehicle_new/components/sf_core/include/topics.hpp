@@ -103,6 +103,7 @@ extern Topic<UiCommand,       Queue, 4>       ui_command;        // CLI → Noti
 extern Topic<MotorTest,       Latest, 1>      motor_test;        // CLI → ControlTask (motor test, disarmed only)
 extern Topic<MagCalCommand,   Queue,  2>      mag_command;       // CLI → MagTask (magcal verbs)
 extern Topic<ApiCommand,      Queue,  4>      api_command;       // ApiTask → StateTask (flight verbs)
+extern Topic<SysidCommand,    Queue,  2>      sysid_command;     // ApiTask → ControlTask (rate excitation)
 extern Topic<MagCalStatus,    Latest, 1>      mag_cal_status;    // MagTask → CLI (magcal progress/result)
 
 // =============================================================================

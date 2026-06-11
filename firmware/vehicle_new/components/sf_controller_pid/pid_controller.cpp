@@ -309,6 +309,46 @@ ControlOutput PidController::compute(
     // 位置/速度誤差を姿勢ループが追従する傾き指令に変換）。下のヘルパ参照。
 
     // =========================================================================
+    // Sysid excitation: add the identification signal to ONE axis' rate
+    // setpoint, after every outer loop has produced its setpoint and before
+    // the rate loop consumes it — so the Data Stream's rate_ref (exported
+    // below) carries the excitation exactly as the rate loop saw it.
+    // 同定励振: 全外側ループが目標を作った後・レートループが消費する前に、1軸の
+    // レート目標へ信号を加算する — Data Stream の rate_ref（下で出力）には
+    // レートループが見たとおりの励振が乗る。
+    // =========================================================================
+    if (excite_active_) {
+        if (phase_ != VerticalPhase::Airborne || landing_) {
+            excite_active_ = false;   // safety: flight phase ended / 飛行終了で停止
+        } else {
+            float sig = 0.0f;
+            if (excite_waveform_ == 1) {
+                // Log chirp f0→f1 over the duration: phase(t) = 2π·f0·(k^t−1)/ln(k).
+                // 対数チャープ: f0→f1。
+                const float k = powf(kChirpF1 / kChirpF0, 1.0f / excite_dur_);
+                const float lnk = logf(k);
+                const float ph = 2.0f * 3.14159265f * kChirpF0 *
+                                 (powf(k, excite_t_) - 1.0f) / lnk;
+                sig = excite_amp_ * sinf(ph);
+            } else {
+                // Doublet train: alternating ± with a fixed half period.
+                // ダブレット列: 固定半周期の交互±。
+                const int half = static_cast<int>(excite_t_ / kDoubletHalfS);
+                sig = ((half % 2) == 0) ? excite_amp_ : -excite_amp_;
+            }
+            if      (excite_axis_ == 0) rate_sp_roll  += sig;
+            else if (excite_axis_ == 1) rate_sp_pitch += sig;
+            else                        rate_sp_yaw   += sig;
+
+            excite_t_ += dt;
+            if (excite_t_ >= excite_dur_) {
+                excite_active_ = false;
+                ESP_LOGI(TAG, "Sysid excitation done");
+            }
+        }
+    }
+
+    // =========================================================================
     // Rate control (always active, innermost loop)
     // レート制御（常にアクティブ、最内ループ）
     //
@@ -523,6 +563,28 @@ void PidController::setGuidanceTarget(const GuidanceTarget& target,
              static_cast<double>(guide_speed_));
 }
 
+void PidController::startExcitation(const SysidCommand& cmd)
+{
+    if (phase_ != VerticalPhase::Airborne || landing_) {
+        ESP_LOGW(TAG, "Sysid excitation rejected: not airborne");
+        return;
+    }
+    excite_axis_     = (cmd.axis <= 2) ? cmd.axis : 0;
+    excite_waveform_ = (cmd.waveform <= 1) ? cmd.waveform : 1;
+    excite_amp_ = cmd.amplitude;
+    if (excite_amp_ < 0.0f)           excite_amp_ = 0.0f;
+    if (excite_amp_ > kExciteAmpMax)  excite_amp_ = kExciteAmpMax;
+    excite_dur_ = cmd.duration;
+    if (excite_dur_ <= 0.0f)          excite_dur_ = 1.0f;
+    if (excite_dur_ > kExciteDurMax)  excite_dur_ = kExciteDurMax;
+    excite_t_      = 0.0f;
+    excite_active_ = true;
+    ESP_LOGI(TAG, "Sysid excitation start: axis=%u %s amp=%.2f rad/s dur=%.1f s",
+             static_cast<unsigned>(excite_axis_),
+             excite_waveform_ == 1 ? "chirp" : "doublet",
+             static_cast<double>(excite_amp_), static_cast<double>(excite_dur_));
+}
+
 void PidController::reset()
 {
     rate_roll_.reset();  rate_pitch_.reset();  rate_yaw_.reset();
@@ -533,6 +595,7 @@ void PidController::reset()
     landing_ = false;    // landing override ends with the flight / 着陸上書きは飛行と共に終了
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded / 次の飛行は接地から
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
+    excite_active_   = false;            // so does the excitation / 励振も同様
     ESP_LOGI(TAG, "PID controller reset");
 }
 

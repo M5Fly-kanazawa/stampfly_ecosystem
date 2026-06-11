@@ -1,0 +1,18 @@
+# sysid_rate.expect — excitation activity + bounded flight + clean end
+# 励振の活動＋有界飛行＋正常終了
+exit 0
+log_contains any "cmd: sysid roll chirp 25 4"
+log_contains any "Sysid excitation start: axis=0 chirp"
+log_contains any "Sysid excitation done"
+log_contains any "Autonomous landing engaged"
+log_absent  any "Sysid excitation rejected"
+log_absent  any "Guidance cancelled by pilot stick"
+order "Sysid excitation start: axis=0 chirp" "Sysid excitation done"
+order "Sysid excitation done" "cmd: land"
+# The chirp moves the craft (rate loop tracks)... / チャープは機体を動かす…
+metric tilt_max > 0.8 in 18.5 22.0
+# ...but the flight stays bounded and the hover survives. / …が飛行は有界。
+metric tilt_max < 10.0 in 18.5 22.0
+metric alt_band < 0.35 in 18.0 23.0
+metric duty_max < 0.92 in 18.0 23.0
+metric alt_max < 0.10 in 30.0 31.5

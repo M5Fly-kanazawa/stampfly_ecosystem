@@ -181,6 +181,8 @@ with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
 | `up/down/left/right/forward/back <cm>`、`cw/ccw <deg>`、`go <x> <y> <z> <speed>` | 相対移動（10〜300cm、目標合成・到達後 ok）|
 | `battery?` `height?` `attitude?` `speed?` | クエリ |
 
+**システム同定（レートループ）:** ホバー中に `sysid <roll|pitch|yaw> <chirp|doublet> <amp_dps> <dur_s>` で1軸のレート目標に励振を加算できる（振幅≤86dps・10s にクランプ、Airborne 限定）。ホスト側は `sf log wifi` でキャプチャ → `sf sysid rate-fit` でプラント同定（b,T,L）→ `sf sysid rate-tune --wc <rad/s> --pm <deg>` で位相余裕・交差周波数仕様を満たす PID を自動算出（`param set` 行を出力）。励振飛行は `sf sysid rate-excite --takeoff --land` で自動化可。
+
 **安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
 
 ## 5. ペアリング手順

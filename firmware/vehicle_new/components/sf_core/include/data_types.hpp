@@ -611,6 +611,25 @@ struct ApiCommand {
     uint32_t timestamp;   // [us]
 };
 
+/// Rate-loop system-identification excitation (API `sysid` → controller). The
+/// signal is ADDED to one axis' rate setpoint while the hover loops keep
+/// flying (PX4-autotune style): the chirp/doublet band sits above the outer
+/// loops' bandwidth, so the rate loop sees broadband excitation and the craft
+/// stays in place. Logged in the Data Stream as rate_ref (post-injection) +
+/// gyro at 400 Hz — exactly the u/y pair `sf sysid rate-fit` needs.
+/// レートループのシステム同定励振（API `sysid` → 制御器）。ホバーループが飛行を
+/// 維持したまま、1軸のレート目標に信号を「加算」する（PX4 autotune 流）: チャープ/
+/// ダブレットの帯域は外側ループ帯域より上にあり、レートループだけが広帯域励振を
+/// 受けて機体はその場に留まる。Data Stream に rate_ref（注入後）＋ジャイロが 400Hz
+/// で記録される — `sf sysid rate-fit` が必要とする u/y 対そのもの。
+struct SysidCommand {
+    uint8_t  axis;        // 0=roll, 1=pitch, 2=yaw
+    uint8_t  waveform;    // 0=doublet train, 1=log chirp / 0=ダブレット列, 1=対数チャープ
+    float    amplitude;   // [rad/s] (clamped by the controller) / 振幅（制御器でクランプ）
+    float    duration;    // [s]
+    uint32_t timestamp;   // [us]
+};
+
 /// command_target — Guidance/API → Controller position+yaw target (R11 contract).
 /// The controller SEEKS the position at `speed` (the setpoint walks toward the
 /// target, the POS_HOLD cascade tracks the walking setpoint) and turns to `yaw`

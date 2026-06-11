@@ -154,6 +154,12 @@ public:
     virtual void setGuidanceTarget(const GuidanceTarget& target,
                                    const CommandSetpoint& current_sticks) {}
 
+    /// Rate-loop sysid excitation (API `sysid`): add a chirp/doublet to one
+    /// axis' rate setpoint while flying. Default no-op.
+    /// レートループ同定励振（API `sysid`）: 飛行中に1軸のレート目標へチャープ/
+    /// ダブレットを加算する。既定 no-op。
+    virtual void startExcitation(const SysidCommand& cmd) {}
+
     // =========================================================================
     // Live Parameter Reload
     // ライブパラメータ再読込

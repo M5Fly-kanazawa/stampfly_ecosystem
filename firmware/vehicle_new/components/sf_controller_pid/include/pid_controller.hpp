@@ -39,6 +39,7 @@ public:
     void onTakeoffComplete() override;
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
+    void startExcitation(const SysidCommand& cmd) override;
     void reloadParams() override;
 
 private:
@@ -150,6 +151,25 @@ private:
     // のまま目標だけ動く）、高度目標は guide_pos_[2] に従い、yaw はレート制限付き P で
     // guide_yaw_ に向く。スティックの「動き」（目標設定時のスナップショットからの逸脱）
     // で誘導は即時解除される。
+    // Rate-loop sysid excitation (see IController::startExcitation). The signal
+    // adds to ONE axis' rate setpoint; everything else flies normally. Safety:
+    // amplitude clamped to ±1.5 rad/s, duration to 10 s, active only Airborne,
+    // killed by reset()/mode change/landing.
+    // レートループ同定励振。1軸のレート目標にのみ加算し、他は通常飛行。安全:
+    // 振幅±1.5 rad/s・時間10 s にクランプ、Airborne 中のみ、reset()/モード切替/
+    // 着陸で停止。
+    bool    excite_active_   = false;
+    uint8_t excite_axis_     = 0;
+    uint8_t excite_waveform_ = 0;
+    float   excite_amp_      = 0;      // [rad/s]
+    float   excite_dur_      = 0;      // [s]
+    float   excite_t_        = 0;      // [s] elapsed / 経過
+    static constexpr float kExciteAmpMax = 1.5f;   // [rad/s]
+    static constexpr float kExciteDurMax = 10.0f;  // [s]
+    static constexpr float kChirpF0      = 1.0f;   // [Hz] chirp start
+    static constexpr float kChirpF1      = 25.0f;  // [Hz] chirp end
+    static constexpr float kDoubletHalfS = 0.3f;   // [s] doublet half period
+
     bool  guidance_active_   = false;
     float guide_pos_[3]      = {0, 0, 0};  // [m] NED target / NED 目標
     float guide_yaw_         = 0;          // [rad] target yaw / 目標ヨー

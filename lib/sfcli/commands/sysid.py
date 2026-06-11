@@ -68,6 +68,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # --- plan ---
     _register_plan(sysid_subparsers)
 
+    # --- rate-loop identification + auto-tuning (rate_sysid.py backend) ---
+    _register_rate_fit(sysid_subparsers)
+    _register_rate_tune(sysid_subparsers)
+    _register_rate_excite(sysid_subparsers)
+
     parser.set_defaults(func=run_help)
 
 
@@ -1124,3 +1129,189 @@ Estimate translational and rotational drag coefficients.
         console.success(f"Saved: {args.output}")
 
     return 0
+
+
+# =============================================================================
+# Rate-loop identification + PID auto-tuning (backend: tools/log_analyzer/
+# rate_sysid.py). Workflow on hardware:
+#   1. sf log wifi -o sysid01           (start the 400Hz capture)
+#   2. sf sysid rate-excite --axis roll (API: takeoff -> chirp -> land)
+#   3. sf log convert sysid01 ...       (-> CSV with rate_ref/gyro)
+#   4. sf sysid rate-fit sysid01.csv --axis roll      (-> plant b, T, L)
+#   5. sf sysid rate-tune --fit fit.json --wc 25 --pm 60   (-> param set lines)
+# レートループ同定＋PID自動チューニング（バックエンド: rate_sysid.py）。
+# 実機手順: 400Hzキャプチャ → API励振飛行 → CSV変換 → rate-fit → rate-tune。
+# =============================================================================
+
+def _rate_backend():
+    import sys as _sys
+    backend = paths.root() / "tools" / "log_analyzer"
+    if str(backend) not in _sys.path:
+        _sys.path.insert(0, str(backend))
+    import rate_sysid
+    return rate_sysid
+
+
+def _register_rate_fit(subparsers):
+    parser = subparsers.add_parser(
+        "rate-fit",
+        help="Identify the rate-loop plant G(s)=b·e^(-Ls)/(s(Ts+1)) from a Data Stream CSV",
+        description=(
+            "Reconstructs the rate-PID output (exact firmware replay on "
+            "rate_ref/gyro), computes the ETFE over the excited band and fits "
+            "b (1/inertia), T (motor lag), L (dead time). Run --selftest to "
+            "verify the whole pipeline against a synthetic known plant."),
+    )
+    parser.add_argument("input", nargs="?", help="Data Stream CSV (sf log convert output)")
+    parser.add_argument("--axis", choices=["roll", "pitch", "yaw"], default="roll")
+    parser.add_argument("--kp", type=float, help="rate Kp that flew (default: firmware default)")
+    parser.add_argument("--ti", type=float, help="rate Ti that flew")
+    parser.add_argument("--td", type=float, help="rate Td that flew")
+    parser.add_argument("--f-lo", type=float, default=0.8, help="fit band low [Hz]")
+    parser.add_argument("--f-hi", type=float, default=30.0, help="fit band high [Hz]")
+    parser.add_argument("-o", "--output", help="write the fit result JSON here")
+    parser.add_argument("--selftest", action="store_true",
+                        help="run the synthetic-plant pipeline self-test and exit")
+    parser.set_defaults(func=run_rate_fit)
+
+
+def run_rate_fit(args) -> int:
+    rs = _rate_backend()
+    if args.selftest:
+        return 0 if rs.selftest() else 1
+    if not args.input:
+        console.error("input CSV required (or --selftest)")
+        return 1
+    gains = {k: v for k, v in
+             (("kp", args.kp), ("ti", args.ti), ("td", args.td)) if v is not None}
+    result = rs.fit_from_csv(args.input, args.axis, gains=gains,
+                             f_lo=args.f_lo, f_hi=args.f_hi)
+    console.info(f"axis {result['axis']}: "
+                 f"b={result['b']:.0f} 1/(kg m^2)  (J_eff={result['inertia_eff']:.3e})")
+    console.info(f"T={result['T'] * 1e3:.1f} ms (motor lag)   "
+                 f"L={result['L'] * 1e3:.2f} ms (dead time)   "
+                 f"coherence={result['coherence_mean']:.2f}")
+    if result["coherence_mean"] < 0.6:
+        console.warn("coherence < 0.6 — weak excitation or noisy data; "
+                     "re-fly with larger amplitude / longer chirp")
+    if args.output:
+        import json as _json
+        Path(args.output).write_text(_json.dumps(result, indent=2))
+        console.info(f"fit JSON: {args.output}")
+    return 0
+
+
+def _register_rate_tune(subparsers):
+    parser = subparsers.add_parser(
+        "rate-tune",
+        help="Auto-tune the firmware rate PID for a gain-crossover + phase-margin spec",
+        description=(
+            "Solves the firmware's exact PID form C(s)=Kp(1+1/(Ti s)+"
+            "Td s/(0.125 Td s+1)) so that |C G(jwc)|=1 and PM is met, then "
+            "verifies the margins numerically. Plant from --fit JSON, "
+            "explicit --plant b,T,L, or --from-specs (mechanical parameters)."),
+    )
+    parser.add_argument("--fit", help="fit JSON from rate-fit")
+    parser.add_argument("--plant", help="explicit b,T,L (e.g. 109000,0.02,0.005)")
+    parser.add_argument("--from-specs", choices=["roll", "pitch", "yaw"],
+                        help="use the mechanical-spec plant for this axis")
+    parser.add_argument("--wc", type=float, default=25.0,
+                        help="gain-crossover target [rad/s] (default 25)")
+    parser.add_argument("--pm", type=float, default=60.0,
+                        help="phase-margin target [deg] (default 60)")
+    parser.add_argument("--ti-factor", type=float, default=10.0,
+                        help="Ti = ti_factor/wc (default 10 — integral well below crossover)")
+    parser.set_defaults(func=run_rate_tune)
+
+
+def run_rate_tune(args) -> int:
+    rs = _rate_backend()
+    axis = None
+    if args.fit:
+        import json as _json
+        fit = _json.loads(Path(args.fit).read_text())
+        b, T, L = fit["b"], fit["T"], fit["L"]
+        axis = fit.get("axis")
+        console.info(f"plant from fit ({axis}): b={b:.0f} T={T * 1e3:.1f}ms L={L * 1e3:.2f}ms")
+    elif args.plant:
+        b, T, L = (float(x) for x in args.plant.split(","))
+    elif args.from_specs:
+        axis = args.from_specs
+        b = 1.0 / rs.SPEC_INERTIA[axis]
+        T, L = rs.SPEC_MOTOR_T, rs.SPEC_DELAY_L
+        console.info(f"mechanical-spec plant ({axis}): b={b:.0f} "
+                     f"T={T * 1e3:.0f}ms L={L * 1e3:.1f}ms")
+    else:
+        console.error("need --fit, --plant or --from-specs")
+        return 1
+
+    try:
+        tune = rs.tune_pid(b, T, L, wc=args.wc, pm_deg=args.pm,
+                           ti_factor=args.ti_factor)
+    except ValueError as exc:
+        console.error(str(exc))
+        return 1
+
+    ach = tune["achieved"]
+    console.info(f"PID: kp={tune['kp']:.4e}  ti={tune['ti']:.4f}  td={tune['td']:.5f}")
+    console.info(f"verified: wc={ach['wc']:.1f} rad/s  PM={ach['pm_deg']:.1f} deg  "
+                 f"GM={ach['gm_db']:.1f} dB (w180={ach['w180']:.0f} rad/s)")
+    if axis:
+        print()
+        print("# apply on the vehicle (CLI / TCP) — live, then persist when landed:")
+        print(f"param set rate.{axis}.kp {tune['kp']:.6e}")
+        print(f"param set rate.{axis}.ti {tune['ti']:.4f}")
+        print(f"param set rate.{axis}.td {tune['td']:.5f}")
+        print("param save")
+    return 0
+
+
+def _register_rate_excite(subparsers):
+    parser = subparsers.add_parser(
+        "rate-excite",
+        help="Fly the identification excitation via the Tello-style API",
+        description=(
+            "Connects to the vehicle API (UDP :8889), optionally takes off "
+            "(POS_HOLD hover), runs the rate-loop chirp on one axis, and "
+            "optionally lands. Start `sf log wifi` in another terminal FIRST "
+            "to capture the 400Hz rate_ref/gyro data the fit needs."),
+    )
+    parser.add_argument("--ip", default="192.168.4.1", help="vehicle IP")
+    parser.add_argument("--axis", choices=["roll", "pitch", "yaw"], default="roll")
+    parser.add_argument("--waveform", choices=["chirp", "doublet"], default="chirp")
+    parser.add_argument("--amp", type=float, default=25.0, help="amplitude [deg/s] (default 25)")
+    parser.add_argument("--dur", type=float, default=5.0, help="duration [s] (default 5)")
+    parser.add_argument("--takeoff", action="store_true", help="take off first (POS_HOLD)")
+    parser.add_argument("--land", action="store_true", help="land afterwards")
+    parser.set_defaults(func=run_rate_excite)
+
+
+def run_rate_excite(args) -> int:
+    import sys as _sys
+    sdk_dir = paths.root() / "tools" / "stampfly_py"
+    if str(sdk_dir) not in _sys.path:
+        _sys.path.insert(0, str(sdk_dir))
+    from stampfly import StampFly, StampFlyError
+
+    console.info(f"connecting to {args.ip} ... (keep the RC neutral; "
+                 "start `sf log wifi` first to capture)")
+    fly = StampFly(args.ip)
+    try:
+        fly.connect()
+        if args.takeoff:
+            console.info("takeoff (POS_HOLD, 0.8 m) ...")
+            fly.takeoff()
+        console.info(f"excitation: {args.axis} {args.waveform} "
+                     f"±{args.amp:.0f} deg/s for {args.dur:.0f}s ...")
+        fly.send(f"sysid {args.axis} {args.waveform} {args.amp} {args.dur}",
+                 timeout=args.dur + 10.0)
+        console.info("excitation done")
+        if args.land:
+            console.info("landing ...")
+            fly.land()
+        return 0
+    except StampFlyError as exc:
+        console.error(str(exc))
+        return 1
+    finally:
+        fly.close()

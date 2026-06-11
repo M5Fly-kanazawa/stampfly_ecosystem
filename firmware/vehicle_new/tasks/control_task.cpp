@@ -339,6 +339,15 @@ void ControlTask(void* pvParameters)
             }
         }
 
+        // Sysid excitation verbs (API `sysid` → rate-loop identification).
+        // 同定励振 verb（API `sysid` → レートループ同定）。
+        {
+            sf::SysidCommand sysid;
+            while (sf::sysid_command.read(sysid)) {
+                controller.startExcitation(sysid);
+            }
+        }
+
         sf::ControlOutput control = controller.compute(state, setpoint, config::IMU_DT);
 
         // Publish control output for logging
