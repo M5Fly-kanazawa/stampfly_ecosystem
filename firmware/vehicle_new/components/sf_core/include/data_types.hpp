@@ -624,9 +624,27 @@ struct ApiCommand {
 /// で記録される — `sf sysid rate-fit` が必要とする u/y 対そのもの。
 struct SysidCommand {
     uint8_t  axis;        // 0=roll, 1=pitch, 2=yaw
-    uint8_t  waveform;    // 0=doublet train, 1=log chirp / 0=ダブレット列, 1=対数チャープ
+    uint8_t  waveform;    // 0=doublet, 1=log chirp, 2=stepped sine (autotune)
+                          // 0=ダブレット, 1=対数チャープ, 2=ステップドサイン（自動チューン）
     float    amplitude;   // [rad/s] (clamped by the controller) / 振幅（制御器でクランプ）
     float    duration;    // [s]
+    float    frequency;   // [Hz] for waveform=2 / waveform=2 用周波数
+    uint32_t timestamp;   // [us]
+};
+
+/// One stepped-sine measurement result (controller → autotune orchestrator).
+/// I/Q correlation sums of the ACTUAL rate-loop output torque u and the gyro y
+/// against the excitation phase: G(jω) = (yr+j·yi)/(ur+j·ui). The settle
+/// transient is excluded by the controller before accumulation starts.
+/// ステップドサイン測定結果1点（制御器 → 自動チューン編成側）。励振位相に対する
+/// 「実際の」レートループ出力トルク u とジャイロ y の I/Q 相関和。整定過渡は
+/// 制御器が蓄積開始前に除外する。
+struct SysidFreqResult {
+    float    w;           // [rad/s]
+    float    ur, ui;      // U(jw) I/Q sums / U の I/Q 和
+    float    yr, yi;      // Y(jw) I/Q sums / Y の I/Q 和
+    uint32_t samples;     // accumulated samples / 蓄積サンプル数
+    uint32_t seq;         // increments per completed point / 完了毎に増加
     uint32_t timestamp;   // [us]
 };
 

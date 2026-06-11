@@ -164,6 +164,16 @@ private:
     float   excite_amp_      = 0;      // [rad/s]
     float   excite_dur_      = 0;      // [s]
     float   excite_t_        = 0;      // [s] elapsed / 経過
+    // Stepped-sine (waveform=2, autotune) state: excitation phase, settle gate
+    // and the I/Q correlation sums of (u = actual axis torque, y = gyro).
+    // ステップドサイン（waveform=2, 自動チューン）状態: 励振位相・整定ゲート・
+    // （u=実トルク, y=ジャイロ）の I/Q 相関和。
+    float   excite_freq_     = 0;      // [Hz]
+    float   excite_phase_    = 0;      // [rad] accumulated / 積算位相
+    float   excite_settle_s_ = 0;      // [s] transient to skip / 捨てる整定時間
+    float   iq_ur_ = 0, iq_ui_ = 0, iq_yr_ = 0, iq_yi_ = 0;
+    uint32_t iq_n_ = 0;
+    uint32_t sysid_seq_ = 0;           // result sequence / 結果シーケンス
     static constexpr float kExciteAmpMax = 1.5f;   // [rad/s]
     static constexpr float kExciteDurMax = 10.0f;  // [s]
     static constexpr float kChirpF0      = 1.0f;   // [Hz] chirp start

@@ -32,6 +32,7 @@ idf_component_register(
         sf_estimator_complementary
         sf_controller
         sf_controller_pid
+        sf_autotune
         sf_actuator
         sf_comm
         sf_command

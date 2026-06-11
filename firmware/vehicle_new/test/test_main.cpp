@@ -34,6 +34,7 @@
 #include "sf_math.hpp"
 #include "eskf_core.hpp"
 #include "pid.hpp"
+#include "autotune.hpp"
 #include "data_stream_wire.hpp"   // Data Stream wire layout (vs udp_capture.py)
 
 // =============================================================================
@@ -367,6 +368,53 @@ TEST(pid_derivative_on_measurement)
 }
 
 // =============================================================================
+// Onboard autotune (sf_autotune) — mirror of the Python rate_sysid self-test:
+// synthesize frequency points from a KNOWN plant, recover it, tune it, verify
+// the margins. The numbers must match tools/log_analyzer/rate_sysid.py.
+// オンボード自動チューニング — Python 自己テストの鏡像: 既知プラントから周波数点を
+// 合成→復元→チューニング→余裕検証。数値は rate_sysid.py と一致すること。
+// =============================================================================
+
+TEST(autotune_fit_and_tune)
+{
+    // True plant: roll-axis spec inertia, 25 ms lag, 6 ms delay.
+    // 真のプラント: ロール軸仕様慣性、遅れ25ms、むだ時間6ms。
+    const float b_true = 1.0f / 9.16e-6f;
+    const float T_true = 0.025f, L_true = 0.006f;
+
+    // Synthetic stepped-sine measurement points (G = Y/U with U = 1).
+    // 合成ステップドサイン測定点（U=1 で G=Y/U）。
+    const float freqs_hz[] = {2, 3, 4.5f, 7, 10, 14, 20, 27, 35};
+    sf::autotune::FreqPoint pts[9];
+    for (int i = 0; i < 9; i++) {
+        const float w = 2.0f * 3.14159265f * freqs_hz[i];
+        // G(jw) = b e^{-jwL} / (jw(jwT+1)) computed inline / 直接計算
+        const float nr = b_true * cosf(-w * L_true);
+        const float ni = b_true * sinf(-w * L_true);
+        const float dr = -w * w * T_true;     // jw(jwT+1) = -w^2 T + jw
+        const float di = w;
+        const float dd = dr * dr + di * di;
+        pts[i].w  = w;
+        pts[i].ur = 1.0f;  pts[i].ui = 0.0f;
+        pts[i].yr = (nr * dr + ni * di) / dd;
+        pts[i].yi = (ni * dr - nr * di) / dd;
+    }
+
+    sf::autotune::Plant plant{};
+    ASSERT_TRUE(sf::autotune::fitPlant(pts, 9, 1.0f / 9.16e-6f, plant));
+    ASSERT_NEAR(plant.b / b_true, 1.0f, 0.05f);
+    ASSERT_NEAR(plant.T, T_true, 0.005f);
+    ASSERT_NEAR(plant.L, L_true, 0.002f);
+
+    sf::autotune::TuneResult tune{};
+    ASSERT_TRUE(sf::autotune::tunePid(plant, 20.0f, 60.0f, 10.0f, tune));
+    ASSERT_NEAR(tune.wc, 20.0f, 1.0f);        // crossover met / 交差達成
+    ASSERT_NEAR(tune.pm_deg, 60.0f, 2.0f);    // phase margin met / 余裕達成
+    ASSERT_TRUE(tune.gm_db > 6.0f);           // healthy gain margin / 健全GM
+    ASSERT_TRUE(tune.kp > 0 && tune.ti > 0);
+}
+
+// =============================================================================
 // Gyro-bias deviation clamp (EskfConfig::bg_deviation_max)
 // ジャイロバイアス偏差クランプ
 // =============================================================================
@@ -594,6 +642,7 @@ int main()
     run_eskf_tof_update();
     run_eskf_reset_position();
     run_eskf_gyro_bias_deviation_clamp();
+    run_autotune_fit_and_tune();
 
     printf("\n[PID]\n");
     run_pid_proportional();

@@ -65,6 +65,8 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "flight_state.hpp"
+#include "params.hpp"      // autotune applies gains live / 自動チューンのライブ適用
+#include "autotune.hpp"    // onboard fit + tune / オンボード同定＋設計
 
 static const char* TAG = "ApiTask";
 
@@ -391,6 +393,136 @@ void cmdQuery(const char* what)
 }
 
 // -----------------------------------------------------------------------------
+// cmdAutotune — onboard rate-loop autotune: stepped-sine sweep → plant fit →
+// phase-margin PID design → LIVE application (params, not persisted).
+// cmdAutotune — オンボード自動チューン: ステップドサイン掃引 → プラントフィット →
+// 位相余裕 PID 設計 → ライブ適用（params。NVS には保存しない）。
+//
+// Safety gates / 安全ゲート:
+//  - FLYING hover only; each frequency point is a bounded, clamped excitation.
+//  - The result is applied ONLY if: the fit residual is small, the verified
+//    margins meet the spec, every gain passes the param-table range check, and
+//    Kp stays within [1/4, 4]x the flying gain (no wild jumps). Otherwise the
+//    OLD gains remain untouched and the reply says why.
+//  - Nothing is written to NVS — land and `param save` after a check flight.
+// -----------------------------------------------------------------------------
+void cmdAutotune(uint8_t axis, float wc, float pm_deg)
+{
+    if (currentState() != sf::FlightState::FLYING) {
+        reply("error not flying");
+        return;
+    }
+    static const char* kAxisName[3] = {"roll", "pitch", "yaw"};
+    static const float kSpecInertia[3] = {9.16e-6f, 13.3e-6f, 20.4e-6f};
+    static const float kFreqsHz[] = {2.0f, 3.0f, 4.5f, 7.0f, 10.0f,
+                                     14.0f, 20.0f, 27.0f, 35.0f};
+    constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);
+    constexpr float kAmpRadps = 0.35f;   // ~20 dps per point / 点あたり約20dps
+
+    sf::autotune::FreqPoint points[kNumFreqs];
+    int collected = 0;
+    uint32_t last_seq = sf::sysid_result.latest().seq;
+
+    ESP_LOGI(TAG, "Autotune %s: sweeping %d frequencies...",
+             kAxisName[axis], kNumFreqs);
+    for (int i = 0; i < kNumFreqs; i++) {
+        const float f = kFreqsHz[i];
+        // settle 2 cycles + measure ~8 cycles, clamped to [0.8, 2.5] s
+        // 整定2周期＋測定約8周期、[0.8, 2.5]s にクランプ
+        float dur = 10.0f / f;
+        if (dur < 0.8f) dur = 0.8f;
+        if (dur > 2.5f) dur = 2.5f;
+
+        sf::SysidCommand cmd{};
+        cmd.axis      = axis;
+        cmd.waveform  = 2;          // stepped sine / ステップドサイン
+        cmd.amplitude = kAmpRadps;
+        cmd.duration  = dur;
+        cmd.frequency = f;
+        cmd.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        sf::sysid_command.publish(cmd);
+
+        // Wait for this point's result (seq edge), with a margin.
+        // この点の結果（seq エッジ）を余裕付きで待つ。
+        const bool got = waitUntil(
+            static_cast<uint32_t>(dur * 1000.0f) + 1500,
+            [last_seq] { return sf::sysid_result.latest().seq != last_seq; });
+        if (!got || currentState() != sf::FlightState::FLYING) {
+            reply("error autotune aborted (excitation failed or not flying)");
+            return;
+        }
+        const sf::SysidFreqResult res = sf::sysid_result.latest();
+        last_seq = res.seq;
+        points[collected].w  = res.w;
+        points[collected].ur = res.ur;
+        points[collected].ui = res.ui;
+        points[collected].yr = res.yr;
+        points[collected].yi = res.yi;
+        collected++;
+    }
+
+    // Fit + tune (pure math, sf_autotune — host-tested).
+    // フィット＋設計（純数学, sf_autotune — ホストテスト済み）。
+    sf::autotune::Plant plant{};
+    if (!sf::autotune::fitPlant(points, collected,
+                                1.0f / kSpecInertia[axis], plant) ||
+        plant.residual > 0.3f) {
+        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f",
+                 static_cast<double>(plant.residual));
+        reply("error fit failed (weak excitation?) - gains unchanged");
+        return;
+    }
+    ESP_LOGI(TAG, "Autotune fit: b=%.0f T=%.1fms L=%.2fms residual=%.3f",
+             static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
+             static_cast<double>(plant.L * 1e3),
+             static_cast<double>(plant.residual));
+
+    sf::autotune::TuneResult tune{};
+    if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune) ||
+        fabsf(tune.pm_deg - pm_deg) > 5.0f) {
+        reply("error tune infeasible (lower wc/pm) - gains unchanged");
+        return;
+    }
+
+    // Sanity vs the flying gain: no wild jumps. / 飛行中ゲイン比の暴れ防止。
+    char key_kp[32], key_ti[32], key_td[32];
+    std::snprintf(key_kp, sizeof(key_kp), "rate.%s.kp", kAxisName[axis]);
+    std::snprintf(key_ti, sizeof(key_ti), "rate.%s.ti", kAxisName[axis]);
+    std::snprintf(key_td, sizeof(key_td), "rate.%s.td", kAxisName[axis]);
+    float kp_now = 0;
+    sf::params::get_float(key_kp, kp_now);
+    if (kp_now > 0 && (tune.kp < 0.25f * kp_now || tune.kp > 4.0f * kp_now)) {
+        ESP_LOGW(TAG, "Autotune kp %.3e outside [0.25,4]x current %.3e",
+                 static_cast<double>(tune.kp), static_cast<double>(kp_now));
+        reply("error gains out of safe range - gains unchanged");
+        return;
+    }
+
+    // Apply LIVE (set_float validates the table ranges and fires ReloadParams).
+    // ライブ適用（set_float がテーブル範囲を検証し ReloadParams を発火）。
+    if (!sf::params::set_float(key_kp, tune.kp) ||
+        !sf::params::set_float(key_ti, tune.ti) ||
+        !sf::params::set_float(key_td, tune.td)) {
+        reply("error param range rejected - check param table");
+        return;
+    }
+    ESP_LOGI(TAG, "Autotune applied: %s kp=%.4e ti=%.3f td=%.4f "
+                  "(wc=%.1f pm=%.1f gm=%.1fdB)",
+             kAxisName[axis], static_cast<double>(tune.kp),
+             static_cast<double>(tune.ti), static_cast<double>(tune.td),
+             static_cast<double>(tune.wc), static_cast<double>(tune.pm_deg),
+             static_cast<double>(tune.gm_db));
+    char buf[120];
+    std::snprintf(buf, sizeof(buf),
+                  "ok kp=%.4e ti=%.3f td=%.4f wc=%.1f pm=%.1f gm=%.1f",
+                  static_cast<double>(tune.kp), static_cast<double>(tune.ti),
+                  static_cast<double>(tune.td), static_cast<double>(tune.wc),
+                  static_cast<double>(tune.pm_deg),
+                  static_cast<double>(tune.gm_db));
+    reply(buf);
+}
+
+// -----------------------------------------------------------------------------
 // processLine — parse + execute one command line (shared HW / SIL path).
 // processLine — 1 コマンド行の解析＋実行（実機 / SIL 共通経路）。
 // -----------------------------------------------------------------------------
@@ -444,6 +576,21 @@ void processLine(char* line)
         if (std::strcmp(verb, "cw") == 0)      { cmdRotate( a * deg2rad, 0); return; }
         if (std::strcmp(verb, "ccw") == 0)     { cmdRotate(-a * deg2rad, 0); return; }
     }
+    // autotune <roll|pitch|yaw> [wc_radps] [pm_deg] — onboard autotune.
+    // autotune <軸> [ωc] [PM] — オンボード自動チューン。
+    if (std::sscanf(line, "autotune %15s %f %f", verb, &a, &b) >= 1 &&
+        std::strncmp(line, "autotune", 8) == 0) {
+        uint8_t axis;
+        if      (std::strcmp(verb, "roll") == 0)  axis = 0;
+        else if (std::strcmp(verb, "pitch") == 0) axis = 1;
+        else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
+        else { reply("error bad axis"); return; }
+        const float wc = (a > 1.0f && a < 100.0f) ? a : 25.0f;
+        const float pm = (b > 20.0f && b < 80.0f) ? b : 60.0f;
+        cmdAutotune(axis, wc, pm);
+        return;
+    }
+
     // sysid <roll|pitch|yaw> <doublet|chirp> <amp_dps> <dur_s> — rate-loop
     // identification excitation while hovering (see SysidCommand). Blocks for
     // the duration so the calling script naturally brackets its log capture.

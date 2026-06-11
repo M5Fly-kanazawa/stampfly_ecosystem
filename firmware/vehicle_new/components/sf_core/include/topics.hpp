@@ -104,6 +104,7 @@ extern Topic<MotorTest,       Latest, 1>      motor_test;        // CLI → Cont
 extern Topic<MagCalCommand,   Queue,  2>      mag_command;       // CLI → MagTask (magcal verbs)
 extern Topic<ApiCommand,      Queue,  4>      api_command;       // ApiTask → StateTask (flight verbs)
 extern Topic<SysidCommand,    Queue,  2>      sysid_command;     // ApiTask → ControlTask (rate excitation)
+extern Topic<SysidFreqResult, Latest, 1>      sysid_result;      // controller → ApiTask (stepped-sine I/Q)
 extern Topic<MagCalStatus,    Latest, 1>      mag_cal_status;    // MagTask → CLI (magcal progress/result)
 
 // =============================================================================

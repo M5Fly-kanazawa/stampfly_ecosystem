@@ -238,15 +238,23 @@ def tune_pid(b, T, L, wc, pm_deg, ti_factor=10.0, eta=ETA):
         c = pid_freq(np.array([wc]), 1.0, ti, td, eta)[0]
         return math.degrees(math.atan2(c.imag, c.real))
 
-    lo, hi = 0.0, 1.0 / (eta * wc) * 4.0          # beyond max-lead Td / 最大リード超まで
-    if phi_needed <= c_phase(lo):
+    # C's phase is NOT monotonic in Td (the lead peak moves past wc): find the
+    # peak first, then bisect on the ASCENDING segment [0, Td_peak] only.
+    # C の位相は Td に単調でない（リードのピークが wc を跨ぐ）: まずピークを探し、
+    # 単調上昇区間 [0, Td_peak] でのみ二分する。
+    td_grid = np.logspace(-4, math.log10(4.0 / (eta * wc)), 200)
+    phases = [c_phase(td_k) for td_k in td_grid]
+    i_peak = int(np.argmax(phases))
+    td_peak, phase_max = td_grid[i_peak], phases[i_peak]
+    if phi_needed <= c_phase(0.0):
         td = 0.0                                   # integral lag alone suffices
-    elif phi_needed >= c_phase(hi):
+    elif phi_needed > phase_max:
         raise ValueError(
-            f"required lead {phi_needed:.1f} deg exceeds the PID maximum at "
-            f"wc={wc:.1f} rad/s — lower --wc or --pm "
+            f"required lead {phi_needed:.1f} deg exceeds the PID maximum "
+            f"{phase_max:.1f} deg at wc={wc:.1f} rad/s — lower --wc or --pm "
             f"(plant phase {phi_g:.1f} deg there)")
     else:
+        lo, hi = 0.0, td_peak
         for _ in range(60):                        # bisection / 二分法
             mid = 0.5 * (lo + hi)
             if c_phase(mid) < phi_needed:

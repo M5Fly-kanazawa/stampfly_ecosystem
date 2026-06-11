@@ -1,0 +1,21 @@
+# autotune.expect — onboard autotune chain + post-tune flight health
+# オンボード自動チューンの連鎖＋適用後の飛行健全性
+exit 0
+log_contains any "cmd: autotune roll"
+log_contains any "Autotune roll: sweeping"
+log_contains any "Sysid excitation start: axis=0 sine"
+log_contains any "Autotune fit: b="
+log_contains any "Autotune applied: roll"
+log_contains any "PID parameters reloaded (live)"
+log_contains any "Autonomous landing engaged"
+log_absent  any "gains unchanged"
+log_absent  any "out of safe range"
+order "Autotune roll: sweeping" "Autotune fit: b="
+order "Autotune fit: b=" "Autotune applied: roll"
+order "Autotune applied: roll" "cmd: land"
+# Bounded flight through the sweep; stable hover ON THE NEW GAINS before landing.
+# 掃引中の有界性と、「新ゲインでの」着陸前ホバー安定。
+metric tilt_max < 15.0 in 18.0 44.0
+metric duty_max < 0.92 in 18.0 44.0
+metric alt_band < 0.40 in 18.0 44.0
+metric alt_max < 0.10 in 52.0 54.5

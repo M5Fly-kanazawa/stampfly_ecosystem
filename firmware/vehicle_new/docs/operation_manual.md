@@ -183,6 +183,8 @@ with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
 
 **システム同定（レートループ）:** ホバー中に `sysid <roll|pitch|yaw> <chirp|doublet> <amp_dps> <dur_s>` で1軸のレート目標に励振を加算できる（振幅≤86dps・10s にクランプ、Airborne 限定）。ホスト側は `sf log wifi` でキャプチャ → `sf sysid rate-fit` でプラント同定（b,T,L）→ `sf sysid rate-tune --wc <rad/s> --pm <deg>` で位相余裕・交差周波数仕様を満たす PID を自動算出（`param set` 行を出力）。励振飛行は `sf sysid rate-excite --takeoff --land` で自動化可。
 
+**オンボード自動チューン:** ホバー中に `autotune <roll|pitch|yaw> [ωc rad/s] [PM deg]`（既定 25/60）で、機体が単独で ①ステップドサイン9点掃引（2〜35Hz）②プラント同定 G(s)=b·e^{-Ls}/(s(Ts+1)) ③仕様を満たす PID 設計＋余裕の数値検証 ④**ライブ適用**（NVS 非保存 — 着陸後に確認飛行してから `param save`）を行う。安全ゲート: フィット残差・余裕誤差±5°・param 範囲・ゲイン跳躍 [1/4,4]× — どれかに掛かると**旧ゲインのまま** "error … gains unchanged" を返す。応答例: `ok kp=9.3e-04 ti=0.167 td=0.0056 wc=60.0 pm=50.0 gm=27.8`。
+
 **安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
 
 ## 5. ペアリング手順

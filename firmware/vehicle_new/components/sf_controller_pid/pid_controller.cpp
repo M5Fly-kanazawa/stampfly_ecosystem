@@ -25,6 +25,7 @@
 
 #include "pid_controller.hpp"
 #include "params.hpp"
+#include "topics.hpp"   // sysid_result (stepped-sine I/Q publish)
 #include "esp_log.h"
 #include <cmath>
 
@@ -322,7 +323,12 @@ ControlOutput PidController::compute(
             excite_active_ = false;   // safety: flight phase ended / 飛行終了で停止
         } else {
             float sig = 0.0f;
-            if (excite_waveform_ == 1) {
+            if (excite_waveform_ == 2) {
+                // Stepped sine at a fixed frequency (autotune measurement point).
+                // 固定周波数のステップドサイン（自動チューンの測定点）。
+                excite_phase_ += 2.0f * 3.14159265f * excite_freq_ * dt;
+                sig = excite_amp_ * sinf(excite_phase_);
+            } else if (excite_waveform_ == 1) {
                 // Log chirp f0→f1 over the duration: phase(t) = 2π·f0·(k^t−1)/ln(k).
                 // 対数チャープ: f0→f1。
                 const float k = powf(kChirpF1 / kChirpF0, 1.0f / excite_dur_);
@@ -343,6 +349,18 @@ ControlOutput PidController::compute(
             excite_t_ += dt;
             if (excite_t_ >= excite_dur_) {
                 excite_active_ = false;
+                if (excite_waveform_ == 2) {
+                    // Publish the I/Q sums for this frequency point (autotune).
+                    // この周波数点の I/Q 和を発行（自動チューン）。
+                    SysidFreqResult res{};
+                    res.w  = 2.0f * 3.14159265f * excite_freq_;
+                    res.ur = iq_ur_; res.ui = iq_ui_;
+                    res.yr = iq_yr_; res.yi = iq_yi_;
+                    res.samples = iq_n_;
+                    res.seq = ++sysid_seq_;
+                    res.timestamp = state.timestamp;
+                    sysid_result.publish(res);
+                }
                 ESP_LOGI(TAG, "Sysid excitation done");
             }
         }
@@ -368,6 +386,21 @@ ControlOutput PidController::compute(
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch, gyro_rate.y, dt);
     output.torque[2] = rate_yaw_.compute(rate_sp_yaw, gyro_rate.z, dt);
     output.thrust = thrust;
+
+    // Stepped-sine I/Q accumulation (after the settle transient): correlate the
+    // ACTUAL rate-loop output torque u and the gyro y with the excitation phase.
+    // ステップドサインの I/Q 蓄積（整定過渡後）: 「実際の」レートループ出力トルク u と
+    // ジャイロ y を励振位相と相関する。
+    if (excite_active_ && excite_waveform_ == 2 && excite_t_ > excite_settle_s_) {
+        const float u_ax = output.torque[excite_axis_];
+        const float y_ax = (excite_axis_ == 0) ? gyro_rate.x
+                         : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
+        const float c = cosf(excite_phase_);
+        const float sn = sinf(excite_phase_);
+        iq_ur_ += u_ax * c;  iq_ui_ -= u_ax * sn;
+        iq_yr_ += y_ax * c;  iq_yi_ -= y_ax * sn;
+        iq_n_++;
+    }
 
     // Export the cascade setpoints for the Data Stream (rate-loop reference at
     // the control rate is required for identification/tuning analysis).
@@ -570,7 +603,20 @@ void PidController::startExcitation(const SysidCommand& cmd)
         return;
     }
     excite_axis_     = (cmd.axis <= 2) ? cmd.axis : 0;
-    excite_waveform_ = (cmd.waveform <= 1) ? cmd.waveform : 1;
+    excite_waveform_ = (cmd.waveform <= 2) ? cmd.waveform : 1;
+    excite_freq_     = cmd.frequency;
+    if (excite_waveform_ == 2 &&
+        (excite_freq_ < 0.5f || excite_freq_ > 50.0f)) {
+        ESP_LOGW(TAG, "Sysid sine rejected: bad frequency %.1f Hz",
+                 static_cast<double>(excite_freq_));
+        return;
+    }
+    // Stepped sine: skip 2 excitation cycles of transient, then accumulate.
+    // ステップドサイン: 2 周期分の過渡を捨ててから蓄積。
+    excite_phase_    = 0.0f;
+    excite_settle_s_ = (excite_waveform_ == 2) ? (2.0f / excite_freq_) : 0.0f;
+    iq_ur_ = iq_ui_ = iq_yr_ = iq_yi_ = 0.0f;
+    iq_n_  = 0;
     excite_amp_ = cmd.amplitude;
     if (excite_amp_ < 0.0f)           excite_amp_ = 0.0f;
     if (excite_amp_ > kExciteAmpMax)  excite_amp_ = kExciteAmpMax;
@@ -581,7 +627,8 @@ void PidController::startExcitation(const SysidCommand& cmd)
     excite_active_ = true;
     ESP_LOGI(TAG, "Sysid excitation start: axis=%u %s amp=%.2f rad/s dur=%.1f s",
              static_cast<unsigned>(excite_axis_),
-             excite_waveform_ == 1 ? "chirp" : "doublet",
+             excite_waveform_ == 2 ? "sine" :
+             (excite_waveform_ == 1 ? "chirp" : "doublet"),
              static_cast<double>(excite_amp_), static_cast<double>(excite_dur_));
 }
 
