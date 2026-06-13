@@ -49,8 +49,11 @@ static constexpr size_t      kMaxFiles         = 5;
 static constexpr const char* kSessionFmt = "/spiffs/log_%03u.bin";
 
 // Maximum records before forcibly rotating to a new session file.
-// At 50Hz × 76 bytes ≈ 3.8 KB/s, 8000 records ≈ 160 s ≈ 2.7 minutes.
-// セッション当たり最大レコード数。50Hz で 8000 件 ≈ 約 2.7 分に相当。
+// LogTask runs at 100Hz (log_task.cpp): 100Hz × 76 bytes ≈ 7.6 KB/s, so
+// 8000 records ≈ 80 s ≈ 1.3 minutes per session (code_review L-12). The byte
+// capacity below is rate-independent and unchanged.
+// セッション当たり最大レコード数。LogTask は 100Hz（log_task.cpp）: 100Hz で
+// 8000 件 ≈ 80 s ≈ 約 1.3 分/セッション (L-12)。下のバイト容量はレート非依存で不変。
 static constexpr uint32_t kMaxRecordsPerSession = 8000;
 
 // Number of rotating log_NNN.bin slots. One session ≈ 608 KB max
@@ -302,10 +305,10 @@ void Logger::writeBlackbox()
     if (std::fwrite(&rec, sizeof(rec), 1, g_log_fp) != 1) {
         // Recoverable, but NOT silent: when SPIFFS fills, every write fails at the
         // logging rate and the blackbox quietly stops recording. Count and warn
-        // (rate-limited to ~once per 10 s at 50 Hz).
+        // (rate-limited to ~once per 5 s at 100 Hz).
         // Recoverable だが「無言」にしない: SPIFFS 満杯時はロギングレートで書き込みが
         // 失敗し続け、ブラックボックスが黙って記録を止める。カウントして警告する
-        // （50Hz で約10秒に1回へレート制限）。
+        // （100Hz で約5秒に1回へレート制限）。
         ++write_fail_count_;
         if ((write_fail_count_ % 500) == 1) {
             ESP_LOGW(TAG, "Blackbox write failed (x%lu) — SPIFFS full?",
@@ -315,12 +318,12 @@ void Logger::writeBlackbox()
     }
     ++record_count_;
 
-    // Periodic flush so a power cut (crash) loses at most ~2 s of records —
+    // Periodic flush so a power cut (crash) loses at most ~1 s of records —
     // libc buffering would otherwise hold several KB of the most interesting
     // data (the moments before the crash) in RAM.
-    // 周期 fflush で電源断（墜落）時の損失を約2秒分に抑える — libc バッファのままだと
+    // 周期 fflush で電源断（墜落）時の損失を約1秒分に抑える — libc バッファのままだと
     // 最も重要なデータ（墜落直前）が数KB分 RAM に滞留したまま消える。
-    constexpr uint32_t kFlushEveryRecords = 100;   // 2 s at 50 Hz
+    constexpr uint32_t kFlushEveryRecords = 100;   // 1 s at 100 Hz
     if ((record_count_ % kFlushEveryRecords) == 0) {
         std::fflush(g_log_fp);
     }

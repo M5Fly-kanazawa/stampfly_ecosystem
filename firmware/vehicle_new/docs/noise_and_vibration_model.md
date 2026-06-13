@@ -156,27 +156,30 @@ MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロ�
 
 ### 加速度計が測る加速度（specific force）の正しい計算 ← 合成加速度計
 
-加速度計は、重力への反作用を含んだ加速度（＝加速度計が実際に測る量。慣性航法でいう specific force）を出力する。**符号と回転行列はファーム本体の規約に厳密に合わせること**（裏取り済み、`eskf_core.cpp` / `calibration.cpp`）:
+加速度計は、重力への反作用を含んだ加速度（＝加速度計が実際に測る量。慣性航法でいう specific force）を出力する。**符号と回転行列はファーム本体の規約に厳密に合わせること**（正典＝`eskf_core.cpp:172,854` / `calibration.cpp:262` / `simulator/sil/plant/plant.cpp:520`・`frames.hpp`。`coordinate_frames.md` と一致）:
 
-- **StampFly の生加速度計は水平静止で `[0,0,+9.81]`（反作用＝proper-acceleration 規約、+g）を読む。** これは標準的な定義 `f = R_bn(a_world − g_ned)`（水平静止で −g）の**符号を反転**したもの。
+- **StampFly の生加速度計は水平静止で `[0,0,−9.81]`（−g 規約）を読む。** これは標準的な specific-force 定義 `f = R_bn(a_world − g_ned)` そのもの（水平静止で −g）。HAL ドライバ段で `body.z = −chip.z` の軸変換を行い、この −g 規約で機体 FRD へ供給する。
 - 回転は **`R_bn = R_nb^T`（NED→body）**。`q`（`attitude`）は `q_nb`（body→NED）なので、NED 量を body へ移すには `inv_rotate`（=`R_bn`）を使う。`g_ned = [0,0,+9.81]`（+Z 下）。
 
 ```
-合成加速度計（生・body・+g 規約）
-  raw_body = R_bn × (g_ned − a_world)
-           = R_bn × (g_ned − (thrust_ned + drag) / mass)
+合成加速度計（生・body・−g 規約）
+  raw_body = R_bn × (a_world − g_ned)
+           = R_bn × ((thrust_ned + drag) / mass − g_ned)
   ただし R_bn = inv_rotate(by q_nb) = R_nb^T,  g_ned = [0,0,+9.81]
-  水平静止: a_world=0, R_bn=I → raw_body = [0,0,+9.81]
+  水平静止: a_world=0, R_bn=I → raw_body = −g_ned = [0,0,−9.81]
 ```
 
-ファームはこの生値（+g）を受け、起動時の `ba_z ≈ +2g` バイアス（次項）で内部的に −g（標準の符号）へ変換する。**SIL はこのバイアス初期化も再現すること**（さもないと重力を誤符号で積分）。
+ファームはこの生値（−g）をそのまま使う。起動校正は `accel_bias[2] += G`（重力除去）で純センサオフセットのみを推定する — `ba_z ≈ 0`。**`ba_z ≈ +2g` の起動バイアス機構は旧 vehicle 由来で新ファームには存在しない**（旧版の `−= G` は −2G を生む符号バグだった、`calibration.cpp:262` 参照）。**SIL の合成加速度計も静止で `[0,0,−9.81]` を出力する**（`plant.cpp` は既に −g）。
 
 旧 SIL の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>`（site=body 系で加速度計が測る加速度を返す）と突き合わせて検算する。
 
 ### バイアス初期化 ← 起動キャリブレーションの再現
 
-vehicle ファームは起動時に `setAttitudeReference()` で `ba_z ≈ 2g` をセットする。
-SIL でも起動キャリブレーションフローを再現し、推定器が実機と同じ初期化を踏むようにする。
+vehicle_new は **−g 規約**（前項）ゆえ `ba_z ≈ +2g` のセットは**しない**。起動校正は
+静止平均から純センサオフセットのみを推定し（`calibration.cpp`、`accel_bias[2] += G` で
+重力を除去）、`ba_z ≈ 0` で種付けする。`ba_z ≈ 2g` の `setAttitudeReference()` は旧
+vehicle（+g 規約）の手当てであり、新ファームでは不要・未使用。SIL は起動校正フロー
+（静止ゲート → バイアス平均 → 推定器種付け）を再現すればよく、+2g 初期化は再現しない。
 
 ### 推力の二乗則 ← 自作モータモデル
 

@@ -524,7 +524,16 @@ ControlOutput PidController::computeLanding(const StateEstimate& state, float dt
     math::Vec3 euler = q.to_euler();
     const float rate_sp_roll  = att_roll_.compute(0.0f, euler.x, dt);
     const float rate_sp_pitch = att_pitch_.compute(0.0f, euler.y, dt);
-    const float rate_sp_yaw   = 0.0f;   // hold heading / 方位保持
+    // Yaw rate constrained to 0 — heading is FREE, not held: nulling the yaw RATE
+    // is not heading-hold (yaw drifts under a standing disturbance, see the
+    // heading-hold rationale in pid_controller.hpp). The short auto-landing
+    // descent tolerates that drift, so the real outer-P heading-hold loop is
+    // intentionally not engaged here (code_review L-10).
+    // ヨーレートを0に拘束 — 方位は保持でなくフリー: ヨー「レート」を0にしても方位保持
+    // ではない（定在外乱下で方位はドリフトする。根拠は pid_controller.hpp のヘディング
+    // ホールド説明）。短時間の自動着陸降下はそのドリフトを許容するため、本物の外側P
+    // ヘディングホールドループはここでは意図的に係合しない (L-10)。
+    const float rate_sp_yaw   = 0.0f;
 
     // Vertical: track a constant descent (up-positive velocity = −descent rate).
     // 鉛直: 一定降下を追従（上正の速度 = −降下率）。

@@ -419,6 +419,15 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
     static const char* kAxisName[3] = {"roll", "pitch", "yaw"};
+    // X-quad spec inertia Ixx/Iyy/Izz [kg·m²] — used ONLY as the Nelder-Mead seed
+    // (1/J) for fitPlant; the final plant is fit to measured data, so this is a
+    // starting guess, not a flight parameter. The flight rate gains are
+    // flight-measured (params.cpp), not inertia-derived, so there is no inertia
+    // SSOT to alias here (code_review L-13).
+    // X-quad 仕様慣性 Ixx/Iyy/Izz [kg·m²] — fitPlant の Nelder-Mead 初期種(1/J)としてのみ
+    // 使用。最終プラントは実測データにフィットするため、これは初期推定であり飛行パラメータ
+    // ではない。飛行レートゲインは実測移植値(params.cpp)で慣性導出ではないため、ここで別名に
+    // すべき慣性 SSOT は存在しない (L-13)。
     static const float kSpecInertia[3] = {9.16e-6f, 13.3e-6f, 20.4e-6f};
     static const float kFreqsHz[] = {2.0f, 3.0f, 4.5f, 7.0f, 10.0f,
                                      14.0f, 20.0f, 27.0f, 35.0f};
