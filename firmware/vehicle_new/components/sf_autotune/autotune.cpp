@@ -221,8 +221,17 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
         const float ph = cPhase(td_k);
         if (ph > phase_max) { phase_max = ph; td_peak = td_k; }
     }
+    // Use phi_needed directly (do NOT wrap): the realizable PID lead is < 90°
+    // (capped by eta), so phase_max gates the feasible range and an out-of-range
+    // requirement returns false here — same as the host rate_sysid.py, which the
+    // header pledges to mirror. Wrapping diverged from the host and could fold a
+    // >180° requirement into a spurious td=0 "success" (code_review M-8).
+    // phi_needed をそのまま使う（wrap しない）: 実現可能な PID リードは < 90°（eta で
+    // 上限）ゆえ phase_max が可否を仕切り、範囲外は false を返す — ヘッダが「同一」と
+    // 約束するホスト rate_sysid.py と一致。wrap はホストと乖離し、>180° の要求を誤って
+    // td=0 の偽「成功」に畳み込みうる (M-8)。
     float td;
-    const float needed = wrapAngle(phi_needed);
+    const float needed = phi_needed;
     if (needed <= cPhase(0.0f)) {
         td = 0.0f;
     } else if (needed > phase_max) {

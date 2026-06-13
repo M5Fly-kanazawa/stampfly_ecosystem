@@ -382,9 +382,21 @@ void Notify::applyPattern(const LedPattern& pattern, LedChannelState& channel,
 // -----------------------------------------------------------------------------
 void Notify::setLeds(stampfly::LED& led, int count, const LedColor& color)
 {
-    const uint32_t packed = (static_cast<uint32_t>(color.r) << 16) |
-                            (static_cast<uint32_t>(color.g) << 8)  |
-                             static_cast<uint32_t>(color.b);
+    // Apply the strip's brightness HERE: the HAL's brightness_ scaling lives in
+    // LED::update(), but Notify drives the strips via setColor() (it never calls
+    // update()), so without this the CLI `led <n>` brightness command — and the
+    // ~12% default — would be a silent no-op and the LEDs would blaze at full
+    // brightness (code_review M-4).
+    // 輝度をここで適用する: HAL の brightness_ スケーリングは LED::update() にあるが、
+    // Notify は setColor() 経路で駆動し update() を呼ばないため、これが無いと CLI
+    // `led <n>` 輝度コマンド（と既定 ~12%）が無効化され LED が常時フル輝度になる (M-4)。
+    const uint8_t bri = led.getBrightness();
+    const uint8_t r = static_cast<uint8_t>(color.r * bri / 255);
+    const uint8_t g = static_cast<uint8_t>(color.g * bri / 255);
+    const uint8_t b = static_cast<uint8_t>(color.b * bri / 255);
+    const uint32_t packed = (static_cast<uint32_t>(r) << 16) |
+                            (static_cast<uint32_t>(g) << 8)  |
+                             static_cast<uint32_t>(b);
     for (int i = 0; i < count; ++i) {
         led.setColor(static_cast<uint8_t>(i), packed);
     }

@@ -24,18 +24,19 @@ using math::Quat;
 // Vertical-channel constants. Gravity closes the accelerometer→acceleration loop;
 // the per-update gains are the complementary blend (strong on altitude, gentle on
 // velocity — the accel integral carries the fast motion, the slow drift is
-// anchored by the absolute sensor). The ToF is the primary vertical anchor (same
-// sensor set as the ESKF, project policy); the baro blends in only when fitted.
+// anchored by the absolute sensor). The ToF is the SOLE vertical anchor (same
+// sensor set as the ESKF, project policy: ToF-only vertical). The baro is read
+// but NOT fused — see updateBaro for why (absolute-vs-ground basis mismatch, M-7).
 // 鉛直チャネル定数。重力で加速度計→加速度を閉じ、更新ごとのゲインが相補ブレンド
 // （高度に強く・速度に弱く — 速い動きは加速度積分、遅いドリフトは絶対センサで固定）。
-// 鉛直アンカーの主役は ToF（ESKF と同一センサ構成、プロジェクト方針）。気圧計は搭載
-// 構成でのみブレンド。
+// 鉛直アンカーは ToF のみ（ESKF と同一センサ構成、プロジェクト方針: ToF-only 鉛直）。
+// 気圧計は読むが融合しない — 理由は updateBaro 参照（絶対 vs 対地 基準の不一致, M-7）。
 namespace {
 constexpr float kGravity     = math::kGravity;  ///< [m/s²] NED down-positive (SSOT: sf::math)
 constexpr float kTofAltGain  = 0.30f;   ///< altitude correction per ToF update
 constexpr float kTofVelGain  = 0.05f;   ///< velocity correction per ToF update
-constexpr float kBaroAltGain = 0.30f;   ///< altitude correction per baro update
-constexpr float kBaroVelGain = 0.05f;   ///< velocity correction per baro update
+// No baro gains: vertical is ToF-only by design (see updateBaro, M-7).
+// baro ゲインは持たない: 鉛直は設計上 ToF-only（updateBaro 参照, M-7）。
 constexpr float kTofMaxTiltRad = 0.5f;  ///< skip ToF beyond ~29° tilt (beam off-ground)
 }  // namespace
 
@@ -179,14 +180,23 @@ void ComplementaryEstimator::updateTof(const TofData& tof)
 
 void ComplementaryEstimator::updateBaro(const BaroData& baro)
 {
-    // Complementary correction toward the barometer: nudge altitude (strongly) and
-    // velocity (gently) by the same measured error. This anchors the accelerometer
-    // integral so altitude-hold gets a non-drifting altitude AND vertical velocity.
-    // 気圧への相補補正: 同じ観測誤差で高度を強く・速度を弱く引き寄せる。加速度積分を固定し、
-    // 高度保持にドリフトのない高度と鉛直速度を供給する。
-    const float err = baro.altitude - altitude_;
-    altitude_ += kBaroAltGain * err;
-    vz_up_    += kBaroVelGain * err;
+    // ToF-only vertical policy (design): NOT fused. The bottom ToF anchors
+    // altitude to the GROUND (≈0 m at takeoff), while BMP280 reports ABSOLUTE
+    // altitude (MSL, fixed 101325 Pa reference — never zeroed to the launch
+    // point). Blending both into the single altitude_ state makes them fight and
+    // biases the hold by the site elevation, so altitude-hold would fail when the
+    // complementary estimator is selected. This matches the ESKF default
+    // (eskf.use_baro = false) so swapping estimators keeps the same behaviour
+    // (RESET_PLAN P2). To use baro, first zero it to the launch point
+    // (BMP280::setSeaLevelPressure on a still ground sample), THEN blend — see
+    // code_review_2026-06-13.md M-7.
+    // ToF-only 鉛直方針（設計）: 融合しない。底面 ToF は高度を「対地」(離陸時≈0m)に錨付け
+    // するが、BMP280 は「絶対標高」(MSL, 101325Pa 固定基準で離陸点ゼロ点合わせなし)を返す。
+    // 両者を同一 altitude_ に融合すると引っ張り合い、標高分だけ保持がバイアスして、相補
+    // 推定器選択時に高度保持が破綻する。ESKF 既定(eskf.use_baro=false)と一致させ、推定器
+    // 差し替えで挙動が変わらないようにする(RESET_PLAN P2)。baro を使うなら先に離陸点へ
+    // ゼロ点合わせ(静止地上で setSeaLevelPressure)してから融合する — M-7。
+    (void)baro;
 }
 
 StateEstimate ComplementaryEstimator::getState() const
