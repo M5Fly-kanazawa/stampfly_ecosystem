@@ -479,6 +479,20 @@ int cmd_wifi(int argc, char** argv)
 
     if (argc >= 2 && (std::strcmp(argv[1], "ssid") == 0 ||
                       std::strcmp(argv[1], "pass") == 0) && argc >= 3) {
+        // ssid/pass write commits to NVS; the flash sector erase stalls the 400Hz
+        // loop >10ms exactly like `param save` / `magcal save`, which both refuse
+        // while armed. Mirror that guard here (in flight the stall would zero the
+        // motors). `wifi mode` above only touches RAM, so it needs no guard.
+        // ssid/pass の書込みは NVS commit を伴い、フラッシュセクタ消去が `param save` /
+        // `magcal save`（いずれも armed 中拒否）と同様に 400Hz ループを 10ms 超ストール
+        // させる。同じガードをここにも置く（飛行中はストール分モータがゼロになる）。
+        // 上の `wifi mode` は RAM のみ変更ゆえガード不要。
+        const sf::SystemMode mode = sf::system_mode.latest();
+        if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
+            std::printf("refused: wifi config writes NVS (flash erase stalls the "
+                        "400Hz loop) — land/disarm first\n");
+            return 1;
+        }
         nvs_handle_t handle;
         if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
             std::printf("NVS open failed\n");

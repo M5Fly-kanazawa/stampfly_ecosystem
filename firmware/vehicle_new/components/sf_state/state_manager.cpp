@@ -295,10 +295,21 @@ void StateManager::handleAlert(const SystemAlert& alert)
     switch (type) {
         case AlertType::IMPACT:
         case AlertType::GYRO_ANOMALY:
-            // Crash → immediate DISARM
-            // 衝突 → 即時DISARM
-            if (isAirborne(state_)) {
-                ESP_LOGE(TAG, "Impact/anomaly → emergency IDLE");
+            // Crash / abnormal rate → immediate DISARM, unconditional on armed state
+            // (requirements §9: no airborne-only exception). Gate on isArmed, NOT
+            // isAirborne: ARMED_GROUND has idling props, and the detection layer
+            // (failsafe.cpp / imu_task.cpp) already feeds samples whenever isArmed,
+            // so a craft knocked over right after ARM on the ground must also DISARM.
+            // transition(IDLE_GROUND) from ARMED_GROUND zeroes the motors via the
+            // same DISARM path as from the air.
+            // 衝突 / 異常角速度 → 状態に依らず即時DISARM（要件§9: 空中限定の例外なし）。
+            // ゲートは isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
+            // しており、検出層（failsafe.cpp / imu_task.cpp）も isArmed の間は常にサンプル
+            // を供給するため、ARM 直後に地上で倒した機体も DISARM する必要がある。
+            // ARMED_GROUND からの transition(IDLE_GROUND) は空中と同じ DISARM 経路で
+            // モータをゼロにする。
+            if (sf::isArmed(state_)) {
+                ESP_LOGE(TAG, "Impact/anomaly → emergency DISARM");
                 transition(FlightState::IDLE_GROUND);
             }
             break;

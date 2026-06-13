@@ -15,7 +15,7 @@ exit 0
 # --- G1: state-machine chain (logs) ---
 log_contains any "Takeoff complete"                # take-off reached FLYING
 log_contains any "Impact detected"                 # crash → impact failsafe fired (>3 G ×2)
-log_contains any "emergency IDLE"                  # impact → auto-DISARM
+log_contains any "emergency DISARM"                # impact → auto-DISARM (M-1: isArmed gate, fires on ground too)
 log_contains any "Drone held in hand"              # physical handling: picked up → IDLE_HELD
 log_contains any "Drone placed on ground"          # placed back down → IDLE_GROUND
 log_contains any "Calibration complete"            # re-calibration on placement
