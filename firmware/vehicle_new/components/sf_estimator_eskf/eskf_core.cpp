@@ -83,6 +83,16 @@ void EskfCore::reset()
     // Drop the ToF differentiation history as well / ToF 微分履歴も破棄
     tof_have_prev_height_ = false;
     tof_prev_height_ = 0;
+
+    // Recompute the active mask so it reflects the just-cleared freeze flag and the
+    // current sensor/mag-gate state. init() does this after reset(), but the
+    // standalone EskfEstimator::reset() path would otherwise leave the mask stale
+    // (e.g. accel-bias bits frozen after a future freeze→reset) (code_review L-16).
+    // freeze フラグのクリアと現在のセンサ/mag ゲート状態を反映するよう active_mask を
+    // 再計算する。init() は reset() 後にこれを行うが、単独の EskfEstimator::reset()
+    // 経路ではマスクが古いまま残りうる（将来 freeze→reset 後に加速度バイアスビットが
+    // 凍結のまま等）(L-16)。
+    recomputeActiveMask();
 }
 
 void EskfCore::resetPositionVelocity()

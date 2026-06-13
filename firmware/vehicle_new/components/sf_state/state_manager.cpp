@@ -394,11 +394,16 @@ void StateManager::requestPairing()
     // Pairing is a ground-only activity: a disarmed vehicle advertising itself so a
     // transmitter can bind. Reject from INIT / armed / airborne (we never re-pair in
     // flight). Idempotent: if already searching, do nothing (avoids re-publish churn).
+    // IDLE_GROUND only — NOT IDLE_HELD: the normative spec scopes pairing entry to
+    // IDLE_GROUND (requirements §2, detailed_design §3.1), and IDLE_HELD (hand-held)
+    // also forbids ARM, so it should not start advertising either (code_review L-7).
     // ペアリングは地上限定の活動: disarmed の機体が自分を広告して送信機がバインドできる
     // ようにする。INIT/武装/空中からは拒否（飛行中に再ペアしない）。冪等: 既に探索中なら
-    // 何もしない（再発行のばたつき回避）。
-    if (state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD) {
-        ESP_LOGD(TAG, "Pairing rejected: not on the ground (state=%s)",
+    // 何もしない。IDLE_GROUND 限定 — IDLE_HELD は不可: 規範（requirements §2 /
+    // detailed_design §3.1）はペアリング突入を IDLE_GROUND に限定しており、IDLE_HELD
+    // （手持ち）は ARM 同様に広告開始もさせない (L-7)。
+    if (state_ != FlightState::IDLE_GROUND) {
+        ESP_LOGD(TAG, "Pairing rejected: not in IDLE_GROUND (state=%s)",
                  flightStateName(state_));
         return;
     }

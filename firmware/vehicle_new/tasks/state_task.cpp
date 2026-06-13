@@ -602,8 +602,7 @@ void StateTask(void* pvParameters)
             const sf::FlightState fs_now = g_state_manager.getState();
             if (!bound &&
                 g_state_manager.getPairingState() == sf::PairingState::NotPaired &&
-                (fs_now == sf::FlightState::IDLE_GROUND ||
-                 fs_now == sf::FlightState::IDLE_HELD)) {
+                fs_now == sf::FlightState::IDLE_GROUND) {   // IDLE_GROUND only (L-7)
                 g_state_manager.requestPairing();          // unpaired on the ground → Pairing
             }
         }

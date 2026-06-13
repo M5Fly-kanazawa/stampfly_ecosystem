@@ -469,10 +469,22 @@ void Comm::servicePairing()
     // し、即時送出させる。
     if (now_active && !prev_pairing_active_) {
         if (paired_.load(std::memory_order_acquire)) {
+            // Mark unbound FIRST (release), THEN tear down the MAC. The RX callback
+            // (WiFi-task context) reads paired_ (acquire) before memcmp'ing src
+            // against controller_mac_; clearing paired_ before the memset means an
+            // RX that still observed bound==true read a COMPLETE MAC, while one that
+            // sees the store bails at its `if (!bound) return` gate — no torn read
+            // of a half-cleared MAC (code_review L-18). del_peer runs before the
+            // memset so it still removes the correct peer.
+            // 先に unbound にし（release）、その後 MAC を破棄する。RX コールバック（WiFi
+            // タスク文脈）は memcmp 前に paired_ を読む（acquire）。memset 前に paired_ を
+            // 落とすことで、bound==true をまだ観測した RX は完全な MAC を読み、store を見た
+            // RX は `if (!bound) return` で抜ける — 半クリアの MAC の破断読みが起きない
+            // (L-18)。del_peer は memset 前ゆえ正しい peer を削除する。
+            paired_.store(false, std::memory_order_release);
             clearPairingFromNvs();
             esp_now_del_peer(controller_mac_);
             std::memset(controller_mac_, 0, sizeof(controller_mac_));
-            paired_.store(false, std::memory_order_release);
             publishBindStatus(false, /*restored=*/false);
             ESP_LOGI(TAG, "Re-pairing: cleared existing bind");
         }
