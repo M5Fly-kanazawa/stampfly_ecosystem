@@ -59,7 +59,15 @@ struct TuneResult {
     float kp, ti, td;
     float wc;        // achieved gain crossover [rad/s] / 達成ゲイン交差
     float pm_deg;    // achieved phase margin [deg]     / 達成位相余裕
-    float gm_db;     // gain margin [dB]                / ゲイン余裕
+    float gm_db;     // gain margin [dB] (valid only if gm_valid) / ゲイン余裕
+    // True when a real −180° phase crossing was found and gm_db is a finite,
+    // meaningful gain margin. False means the open loop never reaches −180° in
+    // the sweep (gm_db is NOT 0 dB — the margin is effectively infinite/safe),
+    // so a GM lower-bound gate must PASS this case rather than reject it (L-15).
+    // −180° 位相交差が見つかり gm_db が有限で意味のあるゲイン余裕のとき true。
+    // false は掃引中に開ループが −180° に達しないこと（gm_db は 0dB ではなく余裕は
+    // 実質無限大＝安全）を意味し、GM 下限ゲートはこのケースを棄却でなく PASS させる (L-15)。
+    bool  gm_valid;
 };
 
 /// Fit the plant to K measured points. b0 seeds the search (1/J from specs).

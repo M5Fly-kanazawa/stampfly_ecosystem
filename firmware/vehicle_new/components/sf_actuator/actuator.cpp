@@ -30,6 +30,7 @@
 #include "freertos/task.h"
 #include "actuator.hpp"
 #include "topics.hpp"
+#include "motor_hw.hpp"   // sf::hw motor PWM numerics — SSOT shared with sf_board (M-5)
 #include "motor_driver.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"   // applyTestDuties timestamp
@@ -61,10 +62,14 @@ static constexpr int GPIO_MOTOR_M2 = 41;  // RR, CW
 static constexpr int GPIO_MOTOR_M3 = 10;  // RL, CCW
 static constexpr int GPIO_MOTOR_M4 = 5;   // FL, CW
 
-// LEDC PWM settings
-// LEDC PWM 設定
-static constexpr int MOTOR_PWM_FREQ_HZ        = 150000;
-static constexpr int MOTOR_PWM_RESOLUTION_BIT = 8;
+// LEDC PWM settings — sourced from the shared SSOT (sf::hw, motor_hw.hpp) so the
+// duty resolution fed to the motor HAL can never diverge from the LEDC timer
+// resolution sf_board configures (M-5). Do NOT redefine these literally here.
+// LEDC PWM 設定 — 共有 SSOT (sf::hw, motor_hw.hpp) から取得。モータ HAL に渡す
+// duty 分解能が sf_board の構成するタイマ分解能と乖離し得ないようにする (M-5)。
+// ここで数値を再定義しないこと。
+static constexpr int MOTOR_PWM_FREQ_HZ        = sf::hw::kMotorPwmFreqHz;
+static constexpr int MOTOR_PWM_RESOLUTION_BIT = sf::hw::kMotorPwmResolutionBit;
 
 // Duty range — final clamp before writing to PWM
 // duty 範囲 — PWM 書き込み前の最終クランプ値

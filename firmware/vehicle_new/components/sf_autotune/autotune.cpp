@@ -240,7 +240,7 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
     // Numerical margin verification: sweep ω, find |L|=1 and arg L = −180°.
     // 数値検証: ω掃引で |L|=1 と位相 −180° を探す。
     out.kp = kp; out.ti = ti; out.td = td;
-    out.wc = 0; out.pm_deg = 0; out.gm_db = 0;
+    out.wc = 0; out.pm_deg = 0; out.gm_db = 0; out.gm_valid = false;
     float prev_mag = 0, prev_ph = 0, prev_w = 0, prev_raw = 0;
     bool got_wc = false, got_gm = false;
     for (int i = 0; i <= 400; i++) {
@@ -267,7 +267,12 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
                 const float m180 = prev_mag + f * (mag - prev_mag);
                 if (m180 > 1e-9f) {
                     out.gm_db = -20.0f * log10f(m180);
+                    out.gm_valid = true;   // finite, meaningful GM (L-15)
                 }
+                // m180 ≈ 0 → |L| vanishes at −180°, GM effectively infinite:
+                // leave gm_valid=false so a GM gate treats it as safe, not 0 dB.
+                // m180≈0 → −180° で |L| が消失しGM実質無限大: gm_valid=false のままにし
+                // GM ゲートが 0dB でなく安全側として扱えるようにする。
                 got_gm = true;
             }
         }

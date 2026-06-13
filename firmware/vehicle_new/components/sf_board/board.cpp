@@ -32,6 +32,7 @@
 #include "driver/gpio.h"
 
 #include "led.hpp"  // board-owned emergency status LED (Critical-fail pattern)
+#include "motor_hw.hpp"  // sf::hw motor PWM numerics — SSOT shared with sf_actuator (M-5)
 
 namespace sf::internal::board {
 
@@ -92,8 +93,21 @@ constexpr int kSpiMaxTransferSize = 12288;
 // ESP32-S3 (high-speed mode does not exist on S3).
 constexpr ledc_timer_t      kMotorTimer        = LEDC_TIMER_0;
 constexpr ledc_mode_t       kMotorSpeedMode    = LEDC_LOW_SPEED_MODE;
-constexpr int               kMotorPwmFreqHz    = 150000;
-constexpr ledc_timer_bit_t  kMotorPwmResolution = LEDC_TIMER_8_BIT;
+// Frequency and resolution come from the shared SSOT (sf::hw, motor_hw.hpp) so
+// the timer this configures and the duty resolution sf_actuator feeds the motor
+// HAL can never diverge (M-5). The LEDC timer-bit enum value equals the bit
+// count, so the static_cast + static_assert pins the mapping at compile time:
+// bump kMotorPwmResolutionBit and the assert forces you to confirm the enum.
+// 周波数・分解能は共有 SSOT (sf::hw, motor_hw.hpp) から導出する。これにより、
+// ここで構成するタイマと sf_actuator がモータ HAL に渡す duty 分解能が乖離し得
+// ない (M-5)。LEDC の timer-bit enum 値はビット数に等しいので、static_cast +
+// static_assert でマッピングをコンパイル時に固定する。
+constexpr int               kMotorPwmFreqHz    = sf::hw::kMotorPwmFreqHz;
+constexpr ledc_timer_bit_t  kMotorPwmResolution =
+    static_cast<ledc_timer_bit_t>(sf::hw::kMotorPwmResolutionBit);
+static_assert(kMotorPwmResolution == LEDC_TIMER_8_BIT,
+              "sf::hw::kMotorPwmResolutionBit changed: confirm the LEDC timer-bit "
+              "enum mapping and that the motor HAL duty math still matches (M-5).");
 
 // ---------------------------------------------------------------------------
 // Emergency status LED (Critical-fail error pattern)

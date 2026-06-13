@@ -31,6 +31,7 @@
 #pragma once
 
 #include "freertos/FreeRTOS.h"
+#include "motor_hw.hpp"  // sf::hw motor PWM SSOT (aliased below; see Motor Configuration)
 
 namespace config {
 
@@ -209,8 +210,13 @@ inline constexpr float CALIB_ACCEL_DEADBAND = 0.010f;  // [m/s²]
 // モーター設定
 // =============================================================================
 
-inline constexpr int MOTOR_PWM_FREQ_HZ       = 150000;
-inline constexpr int MOTOR_PWM_RESOLUTION_BIT = 8;
+// Catalogued here for readability, but the authoritative values live in
+// sf_core/motor_hw.hpp (sf::hw) — the single source shared by sf_board and
+// sf_actuator. Alias rather than redefine so this catalog cannot drift (M-5).
+// 可読性のためここにも載せるが、正の値は sf_core/motor_hw.hpp (sf::hw) — sf_board
+// と sf_actuator が共有する単一情報源 — にある。再定義でなく別名にして乖離を防ぐ (M-5)。
+inline constexpr int MOTOR_PWM_FREQ_HZ        = sf::hw::kMotorPwmFreqHz;
+inline constexpr int MOTOR_PWM_RESOLUTION_BIT = sf::hw::kMotorPwmResolutionBit;
 
 // =============================================================================
 // LED Configuration

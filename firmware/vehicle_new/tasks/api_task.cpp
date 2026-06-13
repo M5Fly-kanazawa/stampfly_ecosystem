@@ -484,6 +484,25 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
 
+    // Gain-margin floor: a design that meets the phase margin can still be too
+    // close to gain-side instability (thin GM), and model error / nonlinear
+    // torque effectiveness then drives oscillation. Reject thin-GM designs
+    // before LIVE apply (H-1). gm_valid=false means no −180° crossing in the
+    // sweep → GM effectively infinite → SAFE, so do not reject that (L-15).
+    // yaw historically runs the thinnest margin, so it gets a higher floor.
+    // ゲイン余裕の下限: PM を満たしてもゲイン側不安定に近い（GM が薄い）設計はあり、
+    // モデル誤差やトルク効きの非線形で発振しうる。薄GM設計はライブ適用前に弾く(H-1)。
+    // gm_valid=false は掃引中に −180° 交差なし→GM実質無限大→安全 ゆえ弾かない(L-15)。
+    // ヨーは歴来もっとも余裕が薄いので下限を厳しくする。
+    static const float kMinGmDb[3] = {6.0f, 6.0f, 8.0f};   // roll, pitch, yaw [dB]
+    if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
+        ESP_LOGW(TAG, "Autotune %s gain margin %.1f dB < floor %.1f dB",
+                 kAxisName[axis], static_cast<double>(tune.gm_db),
+                 static_cast<double>(kMinGmDb[axis]));
+        reply("error gain margin too low - gains unchanged");
+        return;
+    }
+
     // Sanity vs the flying gain: no wild jumps. / 飛行中ゲイン比の暴れ防止。
     char key_kp[32], key_ti[32], key_td[32];
     std::snprintf(key_kp, sizeof(key_kp), "rate.%s.kp", kAxisName[axis]);
@@ -506,19 +525,27 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         reply("error param range rejected - check param table");
         return;
     }
+    // Show "inf" for an undetected (effectively infinite) GM rather than the
+    // misleading 0.0 the raw field carries when gm_valid is false (L-15).
+    // GM 未検出（実質無限大）は raw フィールドの紛らわしい 0.0 でなく "inf" と表示する(L-15)。
+    char gm_str[16];
+    if (tune.gm_valid) {
+        std::snprintf(gm_str, sizeof(gm_str), "%.1f", static_cast<double>(tune.gm_db));
+    } else {
+        std::snprintf(gm_str, sizeof(gm_str), "inf");
+    }
     ESP_LOGI(TAG, "Autotune applied: %s kp=%.4e ti=%.3f td=%.4f "
-                  "(wc=%.1f pm=%.1f gm=%.1fdB)",
+                  "(wc=%.1f pm=%.1f gm=%sdB)",
              kAxisName[axis], static_cast<double>(tune.kp),
              static_cast<double>(tune.ti), static_cast<double>(tune.td),
              static_cast<double>(tune.wc), static_cast<double>(tune.pm_deg),
-             static_cast<double>(tune.gm_db));
+             gm_str);
     char buf[120];
     std::snprintf(buf, sizeof(buf),
-                  "ok kp=%.4e ti=%.3f td=%.4f wc=%.1f pm=%.1f gm=%.1f",
+                  "ok kp=%.4e ti=%.3f td=%.4f wc=%.1f pm=%.1f gm=%s",
                   static_cast<double>(tune.kp), static_cast<double>(tune.ti),
                   static_cast<double>(tune.td), static_cast<double>(tune.wc),
-                  static_cast<double>(tune.pm_deg),
-                  static_cast<double>(tune.gm_db));
+                  static_cast<double>(tune.pm_deg), gm_str);
     reply(buf);
 }
 
