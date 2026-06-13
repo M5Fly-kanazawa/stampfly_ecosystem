@@ -154,6 +154,16 @@ public:
     virtual void setGuidanceTarget(const GuidanceTarget& target,
                                    const CommandSetpoint& current_sticks) {}
 
+    /// Whether a guidance target is currently engaged. Goes false when the
+    /// controller self-cancels guidance (pilot stick movement or a mode change).
+    /// The task layer publishes this on controller_status so the API source can
+    /// release its target on the falling edge — keeping "the pilot always wins"
+    /// observable to the API (M-3). Default false (controllers without guidance).
+    /// 誘導目標が現在係合中か。制御器がスティック動作やモード変更で誘導を自発解除すると
+    /// false。タスク層がこれを controller_status で publish し、API ソースが立下りで自分の
+    /// 目標を解放できる — 「パイロット優先」を API から観測可能にする (M-3)。既定 false。
+    virtual bool isGuidanceActive() const { return false; }
+
     /// Rate-loop sysid excitation (API `sysid`): add a chirp/doublet to one
     /// axis' rate setpoint while flying. Default no-op.
     /// レートループ同定励振（API `sysid`）: 飛行中に1軸のレート目標へチャープ/

@@ -39,6 +39,7 @@ public:
     void onTakeoffComplete() override;
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
+    bool isGuidanceActive() const override { return guidance_active_; }
     void startExcitation(const SysidCommand& cmd) override;
 
     /// One-shot fetch of a completed stepped-sine point (autotune). Returns

@@ -20,7 +20,7 @@
  * 制御出力を計算し、モーターdutyを発行する。
  *
  * @subscriber estimate_state, command_setpoint, controller_command, system_mode
- * @publisher control_output, actuator_motor, log_stream
+ * @publisher control_output, controller_status, actuator_motor, log_stream
  * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
  * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
  * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [OK]
@@ -365,6 +365,19 @@ void ControlTask(void* pvParameters)
         // Publish control output for logging
         // ログ用に制御出力を発行
         sf::control_output.publish(control);
+
+        // Publish the controller's guidance-engaged fact so the API source can
+        // release its target when the controller self-cancels guidance (pilot
+        // stick movement / mode change) — "the pilot always wins" stays
+        // observable to ApiTask (M-3). The controller is a core component with
+        // no topic access, so the task layer carries the fact to the topic.
+        // 制御器の誘導係合の事実を発行し、制御器がスティック動作/モード変更で誘導を
+        // 自発解除したとき API ソースが目標を解放できるようにする —「パイロット優先」を
+        // ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品ゆえ、タスク層
+        // が事実をトピックへ運ぶ。
+        sf::controller_status.publish(
+            sf::ControllerStatus{controller.isGuidanceActive(),
+                                 static_cast<uint32_t>(esp_timer_get_time())});
 
         // =====================================================================
         // Step 4: Run the X-quad mixer. It reads the control_output published

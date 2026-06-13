@@ -320,6 +320,20 @@ struct SystemStatus {
     uint32_t timestamp;   // [us]
 };
 
+/// Controller state fact for the API/guidance source (ControlTask → ApiTask).
+/// guidance_active is whether an API/Navigator position+yaw target is engaged in
+/// the controller. It goes false when the controller self-cancels guidance (pilot
+/// stick movement or a mode change), so the API releases its target on the falling
+/// edge — "the pilot always wins" stays observable to the API source (M-3).
+/// 制御器状態の事実を API/誘導ソースへ（ControlTask → ApiTask）。guidance_active は
+/// API/Navigator の位置+yaw 目標が制御器で係合中か。制御器がスティック動作やモード変更で
+/// 誘導を自発解除すると false になり、API は立下りで自分の目標を解放する —「パイロット
+/// 優先」が API ソースから観測可能になる (M-3)。
+struct ControllerStatus {
+    bool     guidance_active;  // an API/Navigator guidance target is engaged / 誘導目標係合中
+    uint32_t timestamp;        // [us]
+};
+
 // =============================================================================
 // Pairing — transmitter↔vehicle binding (crosstalk prevention)
 // ペアリング — 送信機↔機体のバインド（混信対策）

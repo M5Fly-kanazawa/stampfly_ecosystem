@@ -37,15 +37,21 @@ struct TakeoffLandingConfig {
     float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
     uint32_t landing_hold_ms = 1000;    // Landing confirm [ms]    / 着陸確認時間
-    // Consecutive same-side ToF samples required to FLIP on_ground_ (debounce).
-    // A single glitch/ghost reflection can no longer flip the ground/air flag,
-    // which also gates TAKEOFF→FLYING and the ESKF vertical handoff (M-6). At
-    // 30 Hz, 3 samples ≈ 100 ms — short enough not to delay a real transition.
-    // on_ground_ を反転させるのに必要な同側連続 ToF サンプル数（デバウンス）。
-    // 単発グリッチ/ゴースト反射では接地/空中フラグを反転できなくなる。このフラグは
-    // TAKEOFF→FLYING と ESKF 鉛直ハンドオフも駆動する (M-6)。30Hz で3サンプル≈100ms
-    // — 実際の遷移を遅らせない範囲。
-    uint8_t flip_confirm_samples = 3;
+    // Consecutive ground-side ToF samples required to flip on_ground_ false→true
+    // (air→ground debounce). A single near-reflection ghost mid-flight can no
+    // longer assert "on ground"; landing already needs landing_hold_ms downstream
+    // so the 2-sample (~66ms at 30Hz) delay is negligible (M-6).
+    // NOTE: the ground→air flip (takeoff) is INTENTIONALLY immediate — the ESKF
+    // vertical handoff keys off that edge and is a sample-precision class-B reset
+    // (architecture.md §4); debouncing it delays the handoff and degrades the
+    // take-off transient (measured: duty_max 0.80 → 1.0 with a 2-sample delay).
+    // on_ground_ を false→true に反転させるのに必要な地上側連続 ToF サンプル数
+    // （air→ground デバウンス）。飛行中の単発近距離ゴーストで「接地」を主張できなくする。
+    // 着陸は下流に landing_hold_ms があるので2サンプル(≈66ms)の遅延は無視できる (M-6)。
+    // 注: ground→air（離陸）の反転は意図的に即時 — ESKF 鉛直ハンドオフがこのエッジを
+    // 起点とするサンプル精度のクラスB reset（architecture.md §4）であり、デバウンスすると
+    // ハンドオフが遅れ離陸過渡が劣化する（実測: 2サンプル遅延で duty_max 0.80→1.0）。
+    uint8_t flip_confirm_samples = 2;
 };
 
 /// Takeoff/landing manager
@@ -116,8 +122,7 @@ private:
     bool     held_             = false;  // Held-in-hand flag    / 手持ちフラグ
     bool     landing_detected_ = false;  // Landing detected flag (level) / 着陸検出フラグ
     uint32_t landing_start_ms_ = 0;      // Landing timer start  / 着陸タイマー開始
-    uint8_t  airborne_streak_  = 0;      // Consecutive airborne-side ToF samples / 空中側連続数
-    uint8_t  ground_streak_    = 0;      // Consecutive ground-side ToF samples   / 地上側連続数
+    uint8_t  ground_streak_    = 0;      // Consecutive ground-side ToF samples (air→ground debounce) / 地上側連続数
 };
 
 }  // namespace sf

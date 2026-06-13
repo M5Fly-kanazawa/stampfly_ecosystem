@@ -65,6 +65,7 @@ extern Topic<ButtonEvent,     Queue, 4>       button_event;    // gesture fact (
 // =============================================================================
 
 extern Topic<ControlOutput,   Latest, 1>      control_output;
+extern Topic<ControllerStatus, Latest, 1>     controller_status; // guidance_active fact (ControlTask → ApiTask, M-3)
 
 // =============================================================================
 // Actuation Topics

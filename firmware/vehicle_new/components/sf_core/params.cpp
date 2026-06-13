@@ -46,6 +46,7 @@ Topic<CommandSetpoint, Latest, 1>      command_setpoint;
 Topic<PilotRequest,    Latest, 1>      pilot_request;
 Topic<ButtonEvent,     Queue, 4>       button_event;
 Topic<ControlOutput,   Latest, 1>      control_output;
+Topic<ControllerStatus, Latest, 1>     controller_status;
 Topic<MotorOutput,     Latest, 1>      actuator_motor;
 Topic<LogStreamSample, RingBuffer, 32> log_stream;
 Topic<FlowData,        RingBuffer, 8>  log_flow;
@@ -82,6 +83,7 @@ void topics_init()
     pilot_request.init();
     button_event.init();
     control_output.init();
+    controller_status.init();
     actuator_motor.init();
     log_stream.init();
     log_flow.init();

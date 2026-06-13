@@ -103,6 +103,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 7 | `estimate_state` | `StateEstimate` | Latest | 1 | ImuTask | ControlTask, TelemetryTask | 400Hz | 姿勢・位置・速度 |
 | 8 | `command_setpoint` | `CommandSetpoint` | Latest | 1 | CommTask (ESP-NOW recv) | ControlTask | 50Hz | パイロット指令 |
 | 9 | `control_output` | `ControlOutput` | Latest | 1 | ControlTask | TelemetryTask | 400Hz | 推力・トルク出力 |
+| 9b | `controller_status` | `ControllerStatus` | Latest | 1 | ControlTask | ApiTask | 400Hz | guidance_active の事実（誘導解除を API へ同期, M-3） |
 | 10 | `actuator_motor` | `MotorOutput` | Latest | 1 | ControlTask | (motor driver) | 400Hz | モータ duty |
 | 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask | event | ARM 状態・フライトモード |
 | 12 | `system_alert` | `SystemAlert` | Queue | 4 | FailsafeTask | TelemetryTask, NotifyTask | event | 警告・エラー |
@@ -359,6 +360,7 @@ struct SensorHealth {
 | 2026-06-07 | 同期 | pilot_request, system_status | 既存だが §3.1 表に未記載だったため追記（R9 同期） |
 | 2026-06-07 | 実体定義 | sensor_health（予約→実体, publish は Phase 6）, command_target, nav_path | 予約 Topic の実体を定義（producer は将来配線） |
 | 2026-06-07 | 全 Topic | overflow_count 内蔵（R14） | TopicRing/TopicQueue に overflow_count_ + getter を追加 |
+| 2026-06-14 | 追加 | controller_status | 誘導解除（パイロット介入/モード変更）を API へ同期する guidance_active 事実（ControlTask → ApiTask, code-review M-3） |
 
 ---
 

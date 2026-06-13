@@ -43,7 +43,7 @@
  * バイト輸送だけを迂回する。応答は常にログにも出す（expect ゲートと実機デバッグ用）。
  *
  * @publisher  api_command (flight verbs), command_target (guidance)
- * @subscriber system_mode, system_status, estimate_state, sensor_power
+ * @subscriber system_mode, system_status, estimate_state, sensor_power, controller_status
  * @design requirements.md §7 — コマンド受信 (RC入力、API) / TelloAPI      [OK]
  * @design architecture.md §5 — コマンドフロー UDP/API                    [OK]
  * @design architecture.md §3 — R11 Guidance topic 契約 (command_target)  [OK]
@@ -335,8 +335,14 @@ void cmdRotate(float delta_yaw_rad, float speed_unused)
 
 void cmdStop()
 {
-    if (currentState() != sf::FlightState::FLYING) {
-        reply("error not flying");
+    // Require an active API target, like move/rotate: once the pilot cancels
+    // guidance (or a mode change does), the API must NOT silently re-grab control
+    // with a stop/hover — the operator re-engages explicitly via takeoff/go (M-3).
+    // move/rotate と同様に有効な API 目標を要求する: パイロットが誘導を解除（またはモード
+    // 変更で解除）した後、API が stop/hover で黙って制御を奪い返してはならない — 操縦者が
+    // takeoff/go で明示的に再係合する (M-3)。
+    if (currentState() != sf::FlightState::FLYING || !g_target_valid) {
+        reply("error not flying or guidance released - takeoff/go to re-engage");
         return;
     }
     // Halt: re-target the spot we are at right now (the cascade brakes for us).
@@ -710,7 +716,35 @@ void ApiTask(void* /*pvParameters*/)
     }
 
     char line[kInjectLen];
+    // Tracks whether we have OBSERVED the controller engage our guidance target.
+    // Only after seeing it active can a later inactive reading mean the controller
+    // CANCELLED guidance (pilot stick / mode change) — this avoids a false release
+    // in the window between setting a target and the controller engaging it (M-3).
+    // 制御器が誘導目標を係合したのを「観測済み」かを追跡する。active を見た後に inactive を
+    // 読んで初めて制御器が誘導を解除した（スティック/モード変更）と判断できる — 目標設定から
+    // 制御器係合までの窓での誤解放を防ぐ (M-3)。
+    bool guidance_seen_active = false;
     while (true) {
+        // 0. Guidance-cancel sync (M-3): the controller self-cancels guidance on
+        // pilot stick movement or a mode change. Release our API target on the
+        // FALLING edge so a subsequent move/stop/rotate is rejected until the
+        // operator re-engages with takeoff/go — keeps "the pilot always wins".
+        // 0. 誘導解除の同期 (M-3): 制御器はスティック動作やモード変更で誘導を自発解除する。
+        // 立下りエッジで API 目標を解放し、operator が takeoff/go で再係合するまで後続の
+        // move/stop/rotate を拒否する —「パイロット優先」を保つ。
+        const bool ctrl_guidance = sf::controller_status.latest().guidance_active;
+        if (ctrl_guidance) {
+            guidance_seen_active = true;
+        } else if (guidance_seen_active && g_target_valid) {
+            g_target_valid = false;
+            guidance_seen_active = false;
+            ESP_LOGI(TAG, "Guidance released (pilot override / mode change) — "
+                          "API target dropped; takeoff/go to re-engage");
+        }
+        if (!g_target_valid) {
+            guidance_seen_active = false;
+        }
+
         // 1. SIL/test injections / SIL・テスト注入
         while (popInjected(line, sizeof(line))) {
             processLine(line);
