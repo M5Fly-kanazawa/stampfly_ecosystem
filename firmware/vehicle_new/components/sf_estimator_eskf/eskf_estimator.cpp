@@ -47,6 +47,16 @@ static EskfConfig loadConfigFromParams()
     params::get_float("eskf.gate.tof_innov", cfg.tof_innov_gate);
     params::get_float("eskf.gate.baro_innov", cfg.baro_innov_gate);
     params::get_float("eskf.gate.flow_clamp", cfg.flow_innov_clamp);
+    {
+        // Flow surface-quality gate (uint8 SQUAL stored as INT param). Clamp into
+        // the byte range before narrowing (L-1). / フロー表面品質ゲート（uint8 SQUAL を
+        // INT param で保持）。バイト範囲にクランプしてから縮小 (L-1)。
+        int32_t squal = cfg.flow_min_squal;
+        params::get_int("eskf.gate.flow_squal", squal);
+        if (squal < 0)   squal = 0;
+        if (squal > 255) squal = 255;
+        cfg.flow_min_squal = static_cast<uint8_t>(squal);
+    }
 
     // Accel-attitude (SSOT — these used to silently take the struct defaults).
     // 加速度-姿勢（SSOT — 以前は struct 既定値を暗黙使用していた）。
@@ -142,7 +152,8 @@ void EskfEstimator::updateFlow(const FlowData& flow)
     // 除去する。バイアス(≈0)を渡すと補償が実質無効になり、回転中に偽の水平速度が入る。
     core_.updateFlowRaw(flow.dx, flow.dy, height, dt,
                         cached_state_.angular_rate[0],   // body roll rate (gyro_x, FRD)
-                        cached_state_.angular_rate[1]);  // body pitch rate (gyro_y, FRD)
+                        cached_state_.angular_rate[1],   // body pitch rate (gyro_y, FRD)
+                        flow.squal);                     // surface quality gate (L-1)
 }
 
 void EskfEstimator::setMagReference(const float ned[3])

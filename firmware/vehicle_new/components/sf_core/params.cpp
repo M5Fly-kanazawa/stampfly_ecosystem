@@ -234,6 +234,7 @@ namespace param_vars {
     float eskf_tof_innov    = 0.5f;
     float eskf_baro_innov   = 0.5f;
     float eskf_flow_clamp   = 0.3f;
+    int32_t eskf_flow_squal = 10;   // min PMW3901 SQUAL to fuse flow (L-1)
 
     // ESKF accel-attitude (proven firmware/vehicle values). Registered here as the
     // single source of truth so they are NOT silently taken from the struct defaults.
@@ -383,6 +384,7 @@ static const ParamEntry table[] = {
     {"eskf.gate.tof_innov",   ParamType::FLOAT, &eskf_tof_innov,   0.5f,  0.01f, 5.0f,   &notifyEstimatorReload},
     {"eskf.gate.baro_innov",  ParamType::FLOAT, &eskf_baro_innov,  0.5f,  0.01f, 5.0f,   &notifyEstimatorReload},
     {"eskf.gate.flow_clamp",  ParamType::FLOAT, &eskf_flow_clamp,  0.3f,  0.01f, 5.0f,   &notifyEstimatorReload},
+    {"eskf.gate.flow_squal",  ParamType::INT,   &eskf_flow_squal,  10.0f, 0.0f,  255.0f, &notifyEstimatorReload},
 
     // ESKF accel-attitude (SSOT — proven firmware/vehicle values)
     {"eskf.att.k_adaptive",   ParamType::FLOAT, &eskf_att_k_adaptive, 10.0f, 0.0f,  100.0f, &notifyEstimatorReload},

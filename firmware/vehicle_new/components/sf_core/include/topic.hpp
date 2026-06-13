@@ -170,10 +170,20 @@ public:
             // （喪失ではない）で空きもできている。（旧実装は head==tail にしてリングが
             // 「空」に見え、未読 Size−1 件を一括喪失した上、consumer がコピー中かも
             // しれないスロットを上書きしていた。）
-            tail_.compare_exchange_strong(tail, tail + 1,
-                                          std::memory_order_acq_rel,
-                                          std::memory_order_relaxed);
-            overflow_count_.fetch_add(1, std::memory_order_relaxed);
+            if (tail_.compare_exchange_strong(tail, tail + 1,
+                                              std::memory_order_acq_rel,
+                                              std::memory_order_relaxed)) {
+                // We won the race: the oldest unread slot really was dropped — a
+                // genuine R14 loss. If the CAS FAILS the consumer advanced tail
+                // first (it consumed that slot), so nothing was lost and we must
+                // NOT count it, or overflow_count over-reports on healthy runs
+                // with a competing consumer (code_review L-20).
+                // 自分が勝った: 最古の未読を実際にドロップ＝真の R14 喪失。CAS が失敗した
+                // 場合は consumer が先に tail を進めた（そのスロットを消費した）ので喪失ゼロ。
+                // ここでカウントすると、consumer と競合する健全運用でも overflow_count が
+                // 過大計上される (L-20)。
+                overflow_count_.fetch_add(1, std::memory_order_relaxed);
+            }
         }
         buf_[head & mask_] = data;
         head_.store(head + 1, std::memory_order_release);

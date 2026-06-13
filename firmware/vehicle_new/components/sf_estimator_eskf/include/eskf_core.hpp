@@ -78,6 +78,16 @@ struct EskfConfig {
     float flow_gyro_scale    = 1.0f;
     float flow_min_height    = 0.02f;
     float flow_innov_clamp   = 0.3f;
+    // Minimum PMW3901 surface quality (SQUAL) to fuse a flow sample. Low-quality
+    // surfaces (poor texture, dark, high altitude) give noisy displacement that
+    // would corrupt POS_HOLD; reject below this. Default 10 only drops near-no-lock
+    // flow (real usable flow has SQUAL well above this; the SIL plant reports 100).
+    // Tune up from real POS_HOLD SQUAL logs during bring-up (code_review L-1).
+    // フローを融合する PMW3901 表面品質(SQUAL)の下限。低品質面（特徴乏しい/暗い/高高度）は
+    // ノイズだらけの変位を出し POS_HOLD を汚すため、これ未満は棄却。既定 10 はほぼ no-lock の
+    // フローのみ落とす（実用フローの SQUAL はこれより十分高い。SIL プラントは 100 を報告）。
+    // 実機 POS_HOLD の SQUAL ログから引き上げて調整する (L-1)。
+    uint8_t flow_min_squal   = 10;
 
     // Gyro-bias deviation limit around the boot-calibration nominal [rad/s].
     // The Kalman gain routes EVERY observation into the bias states through the
@@ -182,7 +192,7 @@ public:
     void updateMag(const Vec3& mag);
     void updateAccelAttitude(const Vec3& accel);
     void updateFlowRaw(int16_t dx, int16_t dy, float height,
-                       float dt, float gyro_x, float gyro_y);
+                       float dt, float gyro_x, float gyro_y, uint8_t squal);
 
     // =========================================================================
     // State access / 状態アクセス
@@ -260,6 +270,19 @@ private:
     // Active mask (bit i = state i is active) / 有効マスク
     uint16_t active_mask_ = 0x7FFF;  // All 15 states active
     bool freeze_accel_bias_ = false;
+
+    // Mag calibration gate, INDEPENDENT of the param-derived cfg_.use_mag. The
+    // boot-mag policy (ImuTask) clears this when the magnetometer is uncalibrated
+    // so hard-iron offsets cannot contaminate yaw, regardless of eskf.use_mag.
+    // It is NOT touched by setConfig()/reloadParams(), so live tuning or
+    // re-calibration cannot silently re-admit an uncalibrated mag (code_review
+    // L-5). updateMag fuses only when (cfg_.use_mag && mag_calib_gate_).
+    // 磁気校正ゲート。param 由来の cfg_.use_mag とは独立。起動磁気ポリシー(ImuTask)が
+    // 未校正時にこれを下ろし、eskf.use_mag に関わらずハードアイアンがヨーを汚染しない
+    // ようにする。setConfig()/reloadParams() では触らないので、ライブチューニングや再校正で
+    // 未校正磁気が黙って復帰しない (L-5)。updateMag は (cfg_.use_mag && mag_calib_gate_)
+    // のときのみ融合する。
+    bool mag_calib_gate_ = true;
 
     // Acceleration-compensated accel-attitude state (α-β tracker on the flow velocity).
     // flow_vel_lpf_ = filtered velocity state, a_kin_ned_ = the horizontal NED kinematic

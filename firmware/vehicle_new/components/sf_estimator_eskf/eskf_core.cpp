@@ -597,7 +597,11 @@ void EskfCore::updateBaro(float altitude)
 
 void EskfCore::updateMag(const Vec3& mag)
 {
-    if (!cfg_.use_mag) return;
+    // Two independent gates: the param enable (cfg_.use_mag) AND the calibration
+    // gate (mag_calib_gate_, survives reloadParams) — see eskf_core.hpp (L-5).
+    // 2つの独立ゲート: param 有効化 (cfg_.use_mag) と校正ゲート (mag_calib_gate_,
+    // reloadParams を生き延びる) — eskf_core.hpp 参照 (L-5)。
+    if (!cfg_.use_mag || !mag_calib_gate_) return;
 
     // Expected measurement: h = R^T * mag_ref (NED→body)
     // 期待値: h = R^T * mag_ref（NED→body）
@@ -692,9 +696,17 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
 }
 
 void EskfCore::updateFlowRaw(int16_t dx, int16_t dy, float height,
-                              float dt, float gyro_x, float gyro_y)
+                              float dt, float gyro_x, float gyro_y, uint8_t squal)
 {
     if (!cfg_.use_flow) return;
+    // Reject low-quality flow before it reaches the filter: a poor surface gives
+    // noisy displacement that would inject spurious horizontal velocity into
+    // POS_HOLD (code_review L-1). Gate FIRST so neither the Kalman update nor the
+    // accel-comp α-β tracker downstream ever sees a bad sample.
+    // 低品質フローはフィルタ前に棄却: 品質の悪い面はノイズ変位を出し POS_HOLD へ偽の
+    // 水平速度を注入する (L-1)。先にゲートし、Kalman 更新も下流の accel-comp α-β
+    // トラッカも不良サンプルを見ないようにする。
+    if (squal < cfg_.flow_min_squal) return;
     if (height < cfg_.flow_min_height) return;
     if (dt < 1e-6f) return;
 
@@ -797,12 +809,22 @@ void EskfCore::setConfig(const EskfConfig& cfg)
 
 void EskfCore::setSensorEnabled(int group, bool enabled)
 {
-    // group: 0=TOF, 1=BARO, 2=MAG, 3=FLOW
+    // group: 0=TOF, 1=BARO, 2=MAG calibration gate, 3=FLOW.
+    // Group 2 drives the calibration gate (mag_calib_gate_), NOT cfg_.use_mag:
+    // the param enable comes from setConfig()/reloadParams(), and writing
+    // cfg_.use_mag here would be undone by the next reload — exactly the bug L-5
+    // fixes. The mag's param enable and calibration gate are separate; mag fuses
+    // only when both hold. (TOF/BARO/FLOW have a single gate, so they map to cfg_.)
+    // group: 0=TOF, 1=BARO, 2=MAG 校正ゲート, 3=FLOW。group 2 は校正ゲート
+    // (mag_calib_gate_) を駆動し cfg_.use_mag は触らない: param 有効化は
+    // setConfig()/reloadParams() 由来で、ここで cfg_.use_mag を書くと次の reload で
+    // 取り消される（L-5 が直すバグそのもの）。mag の param 有効化と校正ゲートは別物で、
+    // 両方成立時のみ融合する。（TOF/BARO/FLOW は単一ゲートゆえ cfg_ に対応。）
     switch (group) {
-        case 0: cfg_.use_tof  = enabled; break;
-        case 1: cfg_.use_baro = enabled; break;
-        case 2: cfg_.use_mag  = enabled; break;
-        case 3: cfg_.use_flow = enabled; break;
+        case 0: cfg_.use_tof   = enabled; break;
+        case 1: cfg_.use_baro  = enabled; break;
+        case 2: mag_calib_gate_ = enabled; break;
+        case 3: cfg_.use_flow  = enabled; break;
     }
     recomputeActiveMask();
 }
@@ -824,9 +846,12 @@ void EskfCore::recomputeActiveMask()
                           (1 << VEL_X) | (1 << VEL_Y));
     }
 
-    // If no MAG: freeze ATT_Z, BG_Z
-    // MAGなければ: ATT_Z, BG_Zをフリーズ
-    if (!cfg_.use_mag) {
+    // If no MAG aiding (param disabled OR uncalibrated gate down): freeze ATT_Z,
+    // BG_Z — same condition as updateMag, so the yaw states are isolated whenever
+    // mag is not actually fused (L-5).
+    // MAG 補正なし（param 無効 or 未校正ゲート降下）: ATT_Z, BG_Z をフリーズ。
+    // updateMag と同条件にし、mag が実際に融合されない間はヨー状態を隔離する (L-5)。
+    if (!cfg_.use_mag || !mag_calib_gate_) {
         active_mask_ &= ~((1 << ATT_Z) | (1 << BG_Z));
     }
 

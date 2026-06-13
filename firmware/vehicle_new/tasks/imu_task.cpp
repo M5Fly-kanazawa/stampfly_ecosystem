@@ -217,10 +217,21 @@ static void applyMagBootPolicy(const sf::MagData& mag)
     g_mag_ref_pending = false;
 
     if (!mag.calibrated) {
-        g_estimator->setSensorEnabled(2 /*MAG*/, false);
+        // Drop the calibration gate (group 2). It is independent of eskf.use_mag
+        // and survives reloadParams, so live tuning/recalibration cannot silently
+        // re-admit an uncalibrated mag (L-5).
+        // 校正ゲート(group 2)を下ろす。eskf.use_mag と独立で reloadParams を生き延びる
+        // ため、ライブチューニング/再校正で未校正磁気が黙って復帰しない (L-5)。
+        g_estimator->setSensorEnabled(2 /*MAG calib gate*/, false);
         ESP_LOGW(TAG, "Mag uncalibrated — yaw aiding disabled (run 'magcal')");
         return;
     }
+
+    // Calibrated: raise the calibration gate (it may have been dropped on a prior
+    // boot/recal when the mag was still uncalibrated). Mag still fuses only when
+    // eskf.use_mag is also set. / 校正済み: 校正ゲートを上げる（以前の起動/再校正で
+    // 未校正だったとき下りている可能性）。融合は eskf.use_mag も成立時のみ。
+    g_estimator->setSensorEnabled(2 /*MAG calib gate*/, true);
 
     // ref_ned = R(q) · m_body, with q the converged boot attitude.
     // ref_ned = R(q)·m_body。q は収束済みの起動姿勢。
