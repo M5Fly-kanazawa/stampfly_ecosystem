@@ -14,7 +14,7 @@ vehicle_new ファームの ApiTask（UDP :8889）と Tello SDK テキストプ�
 
     fly = StampFly()              # AP mode default 192.168.4.1 / AP モード既定
     fly.connect()                 # SDK mode ("command")
-    fly.takeoff()                 # POS_HOLD auto-takeoff -> hover at 0.8 m
+    fly.takeoff()                 # POS_HOLD auto-takeoff -> hover at 0.5 m
     fly.forward(50)               # move 50 cm forward (blocks until reached)
     fly.cw(90)                    # turn 90 deg clockwise
     fly.up(30)
@@ -72,8 +72,9 @@ class StampFly:
     # -- flight verbs / 飛行 verb ---------------------------------------------
 
     def takeoff(self) -> None:
-        """POS_HOLD auto-takeoff -> hover at 0.8 m (blocks until reached).
-        POS_HOLD 自動離陸 → 0.8 m ホバー（到達までブロック）。"""
+        """POS_HOLD auto-takeoff -> hover at 0.5 m (blocks until reached).
+        Unified with the manual RC takeoff height (redesign 2026-06-14).
+        POS_HOLD 自動離陸 → 0.5 m ホバー（手動 RC と統一、到達までブロック）。"""
         self.send("takeoff", timeout=20.0)
 
     def land(self) -> None:

@@ -375,8 +375,15 @@ void ControlTask(void* pvParameters)
         // 自発解除したとき API ソースが目標を解放できるようにする —「パイロット優先」を
         // ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品ゆえ、タスク層
         // が事実をトピックへ運ぶ。
+        // takeoff_reached carries the auto-takeoff capture event to StateTask, which
+        // uses it to drive TAKEOFF→FLYING for ALT/POS (decoupled from the ToF 0.15m
+        // airborne edge). Same task-layer carries-the-fact pattern as guidance_active.
+        // takeoff_reached は自動離陸の捕捉イベントを StateTask へ運び、ALT/POS の
+        // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
+        // 同じ「タスク層が事実を運ぶ」パターン。
         sf::controller_status.publish(
             sf::ControllerStatus{controller.isGuidanceActive(),
+                                 controller.isTakeoffComplete(),
                                  static_cast<uint32_t>(esp_timer_get_time())});
 
         // =====================================================================

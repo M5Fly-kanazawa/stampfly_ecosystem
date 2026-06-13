@@ -248,13 +248,33 @@ inline constexpr int BUZZER_LEDC_TIMER   = 1;
 // @design requirements.md §2 — ARMED_GROUND → TAKEOFF → FLYING        [OK]
 // =============================================================================
 
+// Manual-takeoff throttle threshold for ACRO/STABILIZE ONLY (mode < ALT_HOLD).
 // Normalized throttle (0=stick centre/idle .. 1=full up) above which an
-// ARMED_GROUND craft begins takeoff (requirements §2: "throttle input").
-// Hover throttle is ≈0.54 (mg / max_thrust), so 0.5 means the pilot has
-// advanced the stick toward/above hover — a deliberate intent to lift off.
-// 正規化スロットル(0=中央/アイドル..1=全上げ)。ARMED_GROUND でこれを超えると離陸
-// 開始(要件§2「スロットル入力」)。ホバーは≈0.54 ゆえ 0.5 は意図的な上げ＝離陸意思。
+// ARMED_GROUND craft begins takeoff. Hover throttle is ≈0.54 (mg / max_thrust),
+// so 0.5 means the pilot has advanced the stick toward/above hover — a deliberate
+// intent to lift off. ALT_HOLD/POS_HOLD do NOT use this: there ARM itself triggers
+// the auto-takeoff (see ARMED_GROUND_SPOOL_US below), so the pilot need not time
+// the stick (Tello-like). 2026-06-14 redesign.
+// 手動離陸スロットル閾値（ACRO/STABILIZE 専用, mode < ALT_HOLD）。正規化スロットル
+// (0=中央/アイドル..1=全上げ)。ARMED_GROUND でこれを超えると離陸開始。ホバーは≈0.54
+// ゆえ 0.5 は意図的な上げ＝離陸意思。ALT_HOLD/POS_HOLD はこれを使わない: そこでは ARM
+// 自体が自動離陸をトリガする（下の ARMED_GROUND_SPOOL_US 参照）ため、パイロットは
+// スティックのタイミングを計る必要がない（Tello 風）。2026-06-14 再設計。
 inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
+
+// Auto-takeoff spool/settle dwell for ALT_HOLD/POS_HOLD [us]. On ARM the craft
+// enters ARMED_GROUND with the motors held at zero (the controller's Grounded
+// phase) and the ESKF attitude covariance freshly inflated (onEnter(ARMED_GROUND)).
+// We wait this long before issuing the auto-takeoff so (a) the attitude estimate
+// re-converges from gravity on the ground (no climb on a momentarily-uncertain
+// attitude) and (b) ARM cannot launch the craft instantaneously (anti-runaway
+// pause). 0.3 s ≈ a deliberate beat; the motors do not spin until the climb begins.
+// ALT_HOLD/POS_HOLD の自動離陸スプール/整定ドウェル [us]。ARM すると機体はモータ
+// ゼロ（制御器の Grounded フェーズ）かつ ESKF 姿勢共分散が膨張直後（onEnter(ARMED_GROUND)）
+// で ARMED_GROUND に入る。自動離陸を出す前にこの時間だけ待つことで、(a) 姿勢推定が地上で
+// 重力から再収束し（瞬間的に不確かな姿勢のまま上昇しない）、(b) ARM が機体を即座に
+// 打ち上げない（暴発防止の小休止）。0.3秒は意図的な一拍で、モータは上昇開始まで回らない。
+inline constexpr uint32_t ARMED_GROUND_SPOOL_US = 300000;  // 0.3 s
 
 // =============================================================================
 // Sensor Health Monitoring (R15)

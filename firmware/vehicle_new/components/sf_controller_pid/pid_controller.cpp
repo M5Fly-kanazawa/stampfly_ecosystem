@@ -293,16 +293,48 @@ ControlOutput PidController::compute(
             // 鉛直ループがホバー推力を指令してしまう。飛行開始は自動離陸 verb から。
             thrust = 0.0f;
         } else if (phase_ == VerticalPhase::TakeoffClimb) {
-            // Auto-takeoff: track a fixed climb rate (altitude loop bypassed —
-            // there is no meaningful altitude target yet). The ToF airborne
-            // detection ends this phase via TakeoffComplete.
-            // 自動離陸: 固定上昇率を追従（高度ループはバイパス — まだ意味のある高度
-            // 目標がない）。ToF の空中検知が TakeoffComplete でこのフェーズを終える。
-            float thrust_correction =
-                alt_vel_.compute(takeoff_climb_rate_, vel_up, dt);
+            // Auto-takeoff: the altitude cascade climbs toward alt_setpoint_ (the
+            // target set at onTakeoff), velocity-limited to takeoff_climb_rate_ so the
+            // ascent is gentle and the position loop DECELERATES near the target —
+            // the craft captures the target altitude with no overshoot. When it settles
+            // there (takeoff_reached_), the controller reports completion and the state
+            // machine moves TAKEOFF→FLYING. The ToF 0.15m airborne edge is the ESKF
+            // vertical handoff only (ImuTask), independent of this.
+            // 自動離陸: 高度カスケードが alt_setpoint_（onTakeoff で設定した目標）へ上昇し、
+            // 速度を takeoff_climb_rate_ に制限する — 上昇は穏やかで、目標近傍で位置ループが
+            // 減速し、機体はオーバーシュートなく目標高度を捕捉する。そこに整定したら
+            // （takeoff_reached_）制御器が完了を報告し、状態機械が TAKEOFF→FLYING を進める。
+            // ToF 0.15m 空中エッジは ESKF 鉛直ハンドオフ専用（ImuTask）でこれとは独立。
+            float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
+            // Clamp the climb/correction to the gentle takeoff rate (both directions):
+            // the position loop decelerates as the target nears and corrects a small
+            // overshoot DOWN to the target — capturing 0.5m exactly, not the peak. The
+            // overshoot comes from the brief blind window below the ToF handoff (the
+            // ESKF holds vertical velocity at 0 until ~0.15m), so we must let the loop
+            // settle back, not clamp descent to zero.
+            // 上昇/補正を穏やかな離陸率（両方向）にクランプ: 位置ループが目標近傍で減速し、
+            // 小さな行き過ぎを目標まで下方修正する — ピークでなく 0.5m を正確に捕捉する。
+            // 行き過ぎは ToF ハンドオフ未満の短いブラインド窓（ESKF は ~0.15m まで鉛直速度を
+            // 0 に保持）に由来するため、降下を 0 にクランプせずループを戻らせる必要がある。
+            if (vel_sp_z >  takeoff_climb_rate_) vel_sp_z =  takeoff_climb_rate_;
+            if (vel_sp_z < -takeoff_climb_rate_) vel_sp_z = -takeoff_climb_rate_;
+            float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
             thrust = hover_thrust_ + thrust_correction;
             if (thrust < 0.0f)         thrust = 0.0f;
             if (thrust > max_thrust_)  thrust = max_thrust_;
+
+            // Capture detection: settled within the band of the target at low vertical
+            // speed, sustained briefly → report takeoff complete (rejects a transient).
+            // 捕捉検出: 目標の band 内・低鉛直速度に整定し短時間持続 → 離陸完了を報告
+            // （一過性の near-miss を弾く）。
+            if (fabsf(alt_setpoint_ - altitude) < kTakeoffCaptureBandM &&
+                fabsf(vel_up) < kTakeoffCaptureVelMps) {
+                if (++takeoff_settle_cycles_ >= kTakeoffSettleCycles) {
+                    takeoff_reached_ = true;
+                }
+            } else {
+                takeoff_settle_cycles_ = 0;
+            }
         } else {
             // Airborne: normal ALT_HOLD law.
             // 空中: 通常の ALT_HOLD 則。
@@ -313,14 +345,29 @@ ControlOutput PidController::compute(
             // 追従。スティックを戻すと到達した高度を保持する。
             if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
 
-            // Stick → climb rate. Suppressed while guidance owns the altitude
-            // target: in an API flight the throttle stick rests at the BOTTOM,
-            // which must not read as a permanent descend command.
-            // スティック → 上昇率。誘導が高度目標を所有する間は無効化: API 飛行では
-            // スロットルスティックは下端のままで、それが恒常的な降下指令になっては
-            // ならない。
+            // Throttle re-center gate (2026-06-14 redesign): after an (auto-)takeoff
+            // or an in-flight switch INTO ALT/POS the stick may rest off-center, which
+            // would jump the altitude if read as a climb command. The gate keeps the
+            // stick from commanding altitude until it is first seen within the center
+            // deadzone, then opens. Guidance flights are unaffected (they own the
+            // altitude target and never reach the stick path below).
+            // スロットル再センターゲート（2026-06-14 再設計）: （自動）離陸後や飛行中の
+            // ALT/POS 進入直後はスティックが中央から外れていることがあり、それを上昇指令と
+            // 読むと高度がジャンプする。ゲートはスティックが初めて中央デッドゾーン内に入る
+            // まで高度指令を抑え、その後開く。誘導飛行は影響を受けない（高度目標を所有し、
+            // 下のスティック経路に達しない）。
+            if (!throttle_recentered_ &&
+                fabsf(setpoint.throttle - 0.5f) < stick_deadzone_) {
+                throttle_recentered_ = true;
+            }
+
+            // Stick → climb rate. Suppressed while guidance owns the altitude target
+            // (in an API flight the throttle rests at the BOTTOM — not a descend
+            // command) and until the re-center gate has opened.
+            // スティック → 上昇率。誘導が高度目標を所有する間（API 飛行ではスロットルは
+            // 下端のまま＝降下指令ではない）と、再センターゲートが開くまでは無効化。
             float climb_rate_sp = 0;
-            if (!guidance_active_ &&
+            if (throttle_recentered_ && !guidance_active_ &&
                 fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
                 climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
                 alt_setpoint_ = altitude;   // track while moving / 移動中は追従
@@ -585,16 +632,27 @@ void PidController::onTakeoff()
     if (phase_ != VerticalPhase::Grounded) {
         return;   // already airborne or climbing (idempotent) / 既に上昇中か空中（冪等）
     }
-    ESP_LOGI(TAG, "Auto-takeoff engaged (%.1f m/s climb)",
-             static_cast<double>(takeoff_climb_rate_));
+    ESP_LOGI(TAG, "Auto-takeoff engaged (%.1f m/s climb → %.2f m)",
+             static_cast<double>(takeoff_climb_rate_),
+             static_cast<double>(takeoff_target_alt_));
     phase_ = VerticalPhase::TakeoffClimb;
 
-    // Fresh vertical loop (it may hold a Grounded-phase zero-output history) and a
-    // launch-point capture for POS_HOLD (the cascade starts at the next compute).
-    // 鉛直ループを仕切り直し（Grounded フェーズのゼロ出力履歴を持ちうる）、POS_HOLD 用に
-    // 発進点を捕捉（カスケードは次の compute から動く）。
+    // Fresh vertical loops (they may hold a Grounded-phase zero-output history), set
+    // the climb target, and capture the launch point for POS_HOLD (the cascade starts
+    // at the next compute). The throttle re-center gate is closed: the pilot must pass
+    // the stick through center before it commands altitude (Case A — anti-jump).
+    // The takeoff-complete signal starts fresh.
+    // 鉛直ループを仕切り直し（Grounded フェーズのゼロ出力履歴を持ちうる）、上昇目標を設定し、
+    // POS_HOLD 用に発進点を捕捉（カスケードは次の compute から動く）。スロットル再センター
+    // ゲートは閉: パイロットがスティックを中央に通すまで高度を指令しない（Case A — ジャンプ
+    // 防止）。離陸完了信号は初期化する。
+    alt_pos_.reset();
     alt_vel_.reset();
-    capture_pos_ = true;
+    alt_setpoint_ = takeoff_target_alt_;   // climb toward the target / 目標へ上昇
+    capture_pos_  = true;
+    throttle_recentered_   = false;
+    takeoff_reached_       = false;
+    takeoff_settle_cycles_ = 0;
 }
 
 void PidController::onTakeoffComplete()
@@ -607,11 +665,19 @@ void PidController::onTakeoffComplete()
     }
     phase_ = VerticalPhase::Airborne;
 
-    // ALT_HOLD captures the altitude actually reached; the vertical-loop integral
-    // is kept (it has spooled to near-hover thrust — a smooth handoff).
-    // ALT_HOLD は実際に到達した高度を捕捉。鉛直ループの積分は維持（ほぼホバー推力まで
-    // 巻き上がっており、滑らかな引き継ぎになる）。
-    capture_alt_ = true;
+    // ALT_HOLD holds the TARGET altitude that TakeoffClimb already captured
+    // (alt_setpoint_ == takeoff_target_alt_) — NOT the instantaneous altitude, so any
+    // residual climb momentum cannot bias the hold height (decision ②: capture at the
+    // target value, not the overshoot). The vertical-loop integral is kept (it spooled
+    // to near-hover thrust — a smooth handoff). The takeoff-complete signal is cleared
+    // now that the state machine has consumed it.
+    // ALT_HOLD は TakeoffClimb が既に捕捉した「目標」高度（alt_setpoint_ ==
+    // takeoff_target_alt_）を保持する — 瞬時高度ではない。残留する上昇運動量が保持高度を
+    // バイアスしない（確定②: 行き過ぎでなく目標値で捕捉）。鉛直ループの積分は維持
+    // （ほぼホバー推力まで巻き上がり、滑らかな引き継ぎ）。状態機械が消費済みの離陸完了
+    // 信号はここでクリアする。
+    takeoff_reached_       = false;
+    takeoff_settle_cycles_ = 0;
 }
 
 void PidController::setGuidanceTarget(const GuidanceTarget& target,
@@ -708,6 +774,9 @@ void PidController::reset()
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
+    throttle_recentered_   = false;      // re-center gate re-arms for the next takeoff / 次の離陸用にゲート再武装
+    takeoff_reached_       = false;      // takeoff-complete signal clears / 離陸完了信号クリア
+    takeoff_settle_cycles_ = 0;
     ESP_LOGI(TAG, "PID controller reset");
 }
 
@@ -730,10 +799,16 @@ void PidController::onModeChange(FlightMode new_mode)
             alt_pos_.reset();
             alt_vel_.reset();
         }
-        // Capture the current altitude as the hold target when entering ALT_HOLD.
-        // ALT_HOLD 進入時、現在高度を保持目標として捕捉する。
+        // Entering ALT_HOLD/POS_HOLD in flight (Case B): capture the current altitude
+        // as the hold target, and close the throttle re-center gate so the stick must
+        // pass through center before it commands climb/descent — the stick is at an
+        // arbitrary position at the switch and must not jump the altitude (decision ②).
+        // 飛行中の ALT_HOLD/POS_HOLD 進入（Case B）: 現在高度を保持目標として捕捉し、
+        // スロットル再センターゲートを閉じる — スティックは切替時に任意位置にあり、
+        // 高度をジャンプさせないため中央を通すまで上昇/下降を指令させない（確定②）。
         if (new_mode >= FlightMode::ALT_HOLD && current_mode_ < FlightMode::ALT_HOLD) {
-            capture_alt_ = true;
+            capture_alt_         = true;
+            throttle_recentered_ = false;
         }
         if (current_mode_ >= FlightMode::POS_HOLD || new_mode >= FlightMode::POS_HOLD) {
             pos_x_.reset(); pos_y_.reset();

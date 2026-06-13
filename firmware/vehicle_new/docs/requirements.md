@@ -59,8 +59,8 @@ IDLE_GROUND
 | INIT → IDLE_GROUND | 初期化完了 |
 | IDLE_GROUND ↔ IDLE_HELD | ToF距離による自動判定 |
 | IDLE_GROUND → ARMED_GROUND | ARMアクション（ボタン or コントローラ） |
-| ARMED_GROUND → TAKEOFF | スロットル入力（ALT_HOLD/POS_HOLD 選択時は自動離陸シーケンスを開始: 固定上昇率＋水平姿勢で高度閾値まで） |
-| TAKEOFF → FLYING | 離陸完了（高度閾値到達） |
+| ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし） |
+| TAKEOFF → FLYING | 離陸完了。**ALT/POS: 制御器が目標高度 0.5m を捕捉して通知**（運動量による行き過ぎでなく目標値を捕捉）。**ACRO/STABILIZE: ToF 空中検知（0.15m）**。なお ToF 空中検知 0.15m は ESKF 鉛直ハンドオフ（ImuTask, クラスB）に役割分離され、ALT/POS の離陸完了判定には用いない |
 | サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
 | FLYING → LANDING | パイロット指示 or 自動判定 |
 | LANDING → IDLE_GROUND | 着陸完了 |

@@ -37,6 +37,7 @@ public:
     void onLanding() override;
     void onTakeoff() override;
     void onTakeoffComplete() override;
+    bool isTakeoffComplete() const override { return takeoff_reached_; }
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
     bool isGuidanceActive() const override { return guidance_active_; }
@@ -73,18 +74,30 @@ private:
     // makes no sense in these modes, so the phase gates the vertical loop:
     //   Grounded     — armed on the ground: thrust forced to ZERO (props stopped;
     //                  without this gate ALT_HOLD would command hover thrust at ARM)
-    //   TakeoffClimb — auto-takeoff (ControllerCmd::Takeoff): fixed climb rate +
-    //                  level attitude (POS: hold the launch point) until airborne
-    //   Airborne     — normal mode law (ALT_HOLD captures the current altitude on
-    //                  entry). STABILIZE/ACRO ignore the phase (manual throttle).
+    //   TakeoffClimb — auto-takeoff (ControllerCmd::Takeoff): the altitude cascade
+    //                  climbs toward takeoff_target_alt_ (0.5m), velocity-limited to
+    //                  takeoff_climb_rate_, with level attitude (POS: hold the launch
+    //                  point). The cascade decelerates near the target, so the craft
+    //                  CAPTURES the target altitude (no overshoot); isTakeoffComplete()
+    //                  reports it and the state machine moves TAKEOFF→FLYING. The ToF
+    //                  0.15m airborne edge is the ESKF vertical handoff only (ImuTask),
+    //                  independent of this.
+    //   Airborne     — normal mode law. ALT_HOLD holds the target captured at takeoff,
+    //                  or the current altitude on an in-flight switch into ALT/POS
+    //                  (onModeChange). STABILIZE/ACRO ignore the phase (manual throttle).
     // ALT_HOLD/POS_HOLD 則のための鉛直飛行フェーズ。これらのモードでは生スロットル→
     // 推力は意味を持たないため、フェーズが鉛直ループをゲートする:
     //   Grounded     — 地上で ARM 中: 推力を強制ゼロ（プロペラ停止。このゲートが
     //                  ないと ALT_HOLD は ARM した瞬間にホバー推力を指令してしまう）
-    //   TakeoffClimb — 自動離陸（ControllerCmd::Takeoff）: 空中検知まで固定上昇率＋
-    //                  水平姿勢（POS は発進点保持）
-    //   Airborne     — 通常のモード則（ALT_HOLD は突入時に現在高度を捕捉）。
-    //                  STABILIZE/ACRO はフェーズを無視（手動スロットル）。
+    //   TakeoffClimb — 自動離陸（ControllerCmd::Takeoff）: 高度カスケードが
+    //                  takeoff_target_alt_(0.5m) へ向かい、速度は takeoff_climb_rate_ に
+    //                  制限、水平姿勢（POS は発進点保持）。目標近傍で減速するため機体は
+    //                  目標高度を「捕捉」（オーバーシュートなし）。isTakeoffComplete() が
+    //                  報告し、状態機械が TAKEOFF→FLYING を進める。ToF 0.15m 空中エッジは
+    //                  ESKF 鉛直ハンドオフ専用（ImuTask）でこれとは独立。
+    //   Airborne     — 通常のモード則。ALT_HOLD は離陸で捕捉した目標、または飛行中の
+    //                  ALT/POS 切替では現在高度（onModeChange）を保持。STABILIZE/ACRO は
+    //                  フェーズを無視（手動スロットル）。
     enum class VerticalPhase : uint8_t { Grounded, TakeoffClimb, Airborne };
     VerticalPhase phase_ = VerticalPhase::Grounded;
 
@@ -141,6 +154,25 @@ private:
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
+
+    // Throttle re-center gate (2026-06-14 redesign). After an (auto-)takeoff or an
+    // in-flight switch INTO ALT/POS, the throttle stick may rest off-center; treating
+    // it immediately as a climb/descend command would jump the altitude. The gate
+    // stays CLOSED (throttle ignored for altitude) until the stick is first seen within
+    // the center deadzone, then OPENS so the stick commands climb/descent normally.
+    // Closed by onTakeoff (Case A: ground ARM) and onModeChange into ALT/POS (Case B:
+    // in-flight switch) and reset(). RC-only: guidance/API drives altitude via the
+    // walking setpoint, not the throttle path, so the gate never blocks an API flight.
+    // No timeout — re-centering the throttle is the pilot's natural next action.
+    // スロットル再センターゲート（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
+    // 進入直後はスロットルが中央から外れていることがあり、それを即座に上昇/下降指令と
+    // みなすと高度がジャンプする。ゲートはスティックが初めて中央デッドゾーン内に入るまで
+    // 「閉」（高度に対しスロットル無視）で、その後「開」いて通常どおり上昇/下降を指令する。
+    // onTakeoff（Case A: 地上 ARM）・ALT/POS への onModeChange（Case B: 飛行中切替）・
+    // reset() で閉じる。RC 限定: 誘導/API は歩く設定点で高度を動かしスロットル経路を使わない
+    // ため、API 飛行をゲートが妨げることはない。タイムアウトなし — スロットルを中央へ戻すのは
+    // パイロットの自然な次動作。
+    bool  throttle_recentered_ = false;
     float gravity_        = math::kGravity;  // [m/s²] accel→tilt mapping in POS_HOLD (SSOT: sf::math)
     float max_pos_tilt_   = 0.1745f; // [rad] POS_HOLD tilt limit (10 deg; matches the
                                      // proven firmware/vehicle margin so altitude holds
@@ -262,12 +294,39 @@ private:
     float landing_descent_rate_ = 0.3f;   // [m/s] downward / 下向き降下率
 
     // Auto-takeoff climb rate (TakeoffClimb phase). Mirror of the landing descent
-    // rate: gentle, vertical-velocity-loop tracked, indoor-safe. The phase ends at
-    // the ToF airborne detection (TakeoffLandingMgr), typically well under 1 s.
+    // rate: gentle, vertical-velocity-loop tracked, indoor-safe. It is the velocity
+    // CLAMP on the altitude cascade's climb toward takeoff_target_alt_ — the position
+    // loop decelerates below this rate as the target nears, capturing it smoothly.
     // 自動離陸の上昇率（TakeoffClimb フェーズ）。着陸降下率の鏡像: 穏やかで、鉛直速度
-    // ループが追従し屋内でも安全。フェーズは ToF の空中検知（TakeoffLandingMgr）で
-    // 終わり、通常 1 秒未満。
+    // ループが追従し屋内でも安全。高度カスケードが takeoff_target_alt_ へ上昇する際の
+    // 速度クランプで、目標が近づくと位置ループがこの率以下に減速し滑らかに捕捉する。
     float takeoff_climb_rate_ = 0.3f;     // [m/s] upward / 上向き上昇率
+
+    // Auto-takeoff target altitude (TakeoffClimb phase, ALT/POS). The default hover
+    // height after an ARM-triggered auto-takeoff — high enough to clear ground effect
+    // (0.15m ToF airborne is the ESKF handoff, NOT this control target). SSOT for the
+    // takeoff height: a core component cannot depend on main/config.hpp, so it lives
+    // here alongside the other vertical constants (hover_thrust_, takeoff_climb_rate_);
+    // the network-API takeoff inherits it by holding the post-takeoff altitude.
+    // 自動離陸の目標高度（TakeoffClimb フェーズ, ALT/POS）。ARM 起動の自動離陸後の既定
+    // ホバー高度 — 地面効果を抜ける高さ（0.15m ToF 空中検知は ESKF ハンドオフであって
+    // この制御目標ではない）。離陸高度の SSOT: コア部品は main/config.hpp に依存できないため、
+    // 他の鉛直定数（hover_thrust_, takeoff_climb_rate_）と並べてここに置く。ネットワーク
+    // API の離陸は離陸後の高度を保持することでこれを継承する。
+    float takeoff_target_alt_ = 0.5f;     // [m] / 目標高度
+
+    // Auto-takeoff capture: TakeoffClimb → "reached" when the altitude settles within
+    // kTakeoffCaptureBandM of the target at under kTakeoffCaptureVelMps vertical speed,
+    // sustained kTakeoffSettleCycles control cycles (rejects a transient near-miss).
+    // takeoff_reached_ is the controller-side TAKEOFF→FLYING signal (isTakeoffComplete).
+    // 自動離陸の捕捉: TakeoffClimb は、高度が目標の kTakeoffCaptureBandM 以内・鉛直速度
+    // kTakeoffCaptureVelMps 未満に整定し kTakeoffSettleCycles 周期持続したとき「到達」。
+    // takeoff_reached_ が制御器側の TAKEOFF→FLYING 信号（isTakeoffComplete）。
+    static constexpr float    kTakeoffCaptureBandM  = 0.05f;  // [m] ±5 cm of target
+    static constexpr float    kTakeoffCaptureVelMps = 0.10f;  // [m/s] near-hover
+    static constexpr uint16_t kTakeoffSettleCycles  = 20;     // 20 × 2.5ms = 50 ms
+    bool     takeoff_reached_       = false;
+    uint16_t takeoff_settle_cycles_ = 0;
 };
 
 }  // namespace sf

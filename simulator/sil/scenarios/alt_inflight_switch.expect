@@ -1,0 +1,25 @@
+# alt_inflight_switch.expect — in-flight STABILIZE → ALT_HOLD switch, re-center gate (Case B)
+# 飛行中 STABILIZE→ALT_HOLD 切替、再センターゲート（Case B）
+#
+# The craft auto-takes-off in ALT_HOLD (0.5 m), drops to STABILIZE and climbs a little,
+# then flips BACK to ALT_HOLD while still CLIMBING with the throttle OFF-CENTER (3330,
+# norm 0.63). The STABILIZE→ALT_HOLD switch captures the altitude AND closes the
+# re-center gate (Case B), so the off-center throttle is IGNORED — the climb is arrested
+# and the altitude HOLDS (~0.9 m). Were the gate absent, the 0.13 m/s climb command would
+# carry it past 1.4 m. Re-centering at G opens the gate; full-up (4095) at H then climbs.
+# 機体は ALT_HOLD で 0.5 m へ自動離陸 → STABILIZE で少し上昇 → スロットルを中央外(3330,
+# norm 0.63)に上げたまま ALT_HOLD へ戻す。STABILIZE→ALT_HOLD 切替で高度を捕捉し再センター
+# ゲートを閉じる（Case B）ため中央外スロットルは無視され、上昇が止まり高度を保持(~0.9 m)。
+# ゲートが無ければ 0.13 m/s の上昇指令で 1.4 m を超える。G で再センターしゲートが開き、H の
+# 全上げ(4095)で上昇する。
+exit 0
+log_contains any "Mode: ALT_HOLD → STABILIZE"
+log_contains any "Mode: STABILIZE → ALT_HOLD"
+# Gate CLOSED by the in-flight switch: the off-center throttle (3330) is blocked — the
+# climb is arrested and the altitude stays bounded (< 1.1 m; an open gate would reach ~1.5 m).
+metric alt_max  < 1.10 in 15.0 19.0
+metric alt_band < 0.25 in 15.0 19.0
+# Gate OPEN (after re-centering at G): full-up throttle now climbs well past the hold.
+metric alt_mean > 1.40 in 22.5 23.5
+metric tilt_max < 12.0 in 9.0 23.5
+metric duty_max < 0.95 in 12.0 23.5

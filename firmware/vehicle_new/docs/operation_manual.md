@@ -154,10 +154,10 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | 操作 | 動作 |
 |------|------|
 | ARMED_GROUND でスロットルを上げる（>0.5）— STABILIZE/ACRO | **手動離陸**: スロットル＝推力。TAKEOFF → FLYING（ToF が空中検出で確定）|
-| ARMED_GROUND でスロットルを上げる（>0.5）— ALT_HOLD/POS_HOLD | **自動離陸**: 固定 0.3 m/s 上昇・水平姿勢（POS は発進点保持）。空中検知で完了し、ALT_HOLD が現在高度を捕捉。スティックを中央（raw 3072）に戻すとその高度を保持 |
+| **ALT_HOLD/POS_HOLD で ARM する**（スロットル操作不要）| **自動離陸**（再設計 2026-06-14）: ARM 自体がトリガ。短いスプール（0.3秒, プロペラはまだ回らない）の後、**目標高度 0.5m まで**固定 0.3 m/s で上昇・水平姿勢（POS は発進点保持）。**0.5m 到達で完了**（行き過ぎでなく目標値 0.5m を保持）。**スロットルを一度中央（raw 3072）に通すまで**スティックで高度を動かせない（再センターゲート＝暴発防止）。以降は 上=上昇/中央=保持/下=降下 |
 | スロットルを下げる / DISARM | 降下・着陸（FLYING → LANDING/IDLE_GROUND）|
 
-ALT/POS の自動離陸中はスティック入力を無視する（着陸シーケンスの鏡像）。中断は DISARM。
+ALT/POS の自動離陸中はスティック入力を無視する（着陸シーケンスの鏡像）。中断は DISARM。**飛行中に STABILIZE/ACRO から ALT_HOLD/POS_HOLD へ切り替えた場合も**、切替時の高度を捕捉し、再センターゲートが閉じる（スロットルを中央に通すまで高度ジャンプしない）。
 
 ### 操作フロー全体
 
@@ -167,7 +167,7 @@ ALT/POS の自動離陸中はスティック入力を無視する（着陸シー
   → 校正完了（ピッ×3, 緑常灯）
   → モードスイッチで飛行モード選択（本体LED が選択モード色で常灯）
   → ARM（armTone, 本体LED モード色常灯のまま / StampS3 が緑点滅に）
-  → スロットルUP → 離陸（STAB/ACRO=手動、ALT/POS=自動 0.3 m/s 上昇。飛行中は本体LED 点滅）
+  → 離陸: STAB/ACRO=スロットルUP（手動）、ALT/POS=ARM で自動離陸（0.3 m/s で 0.5m まで。飛行中は本体LED 点滅）
   → 飛行中もモードスイッチで切替可（ACRO/STAB/ALT/POS）
   → スロットルDOWN / DISARM → 着陸 → IDLE_GROUND（緑常灯）
 ```
@@ -179,7 +179,7 @@ ALT/POS の自動離陸中はスティック入力を無視する（着陸シー
 ```python
 from stampfly import StampFly
 with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
-    fly.takeoff()                       # POS_HOLD 自動離陸 → 0.8 m ホバー
+    fly.takeoff()                       # POS_HOLD 自動離陸 → 0.5 m ホバー（手動離陸と統一）
     fly.forward(50); fly.cw(90)         # 各コマンドは「到達後」に返る
     print(fly.battery(), fly.height(), fly.attitude())
     fly.land()
@@ -188,7 +188,7 @@ with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
 | コマンド | 動作 |
 |---------|------|
 | `command` | SDK モード（これが全ての前提）|
-| `takeoff` / `land` / `emergency` / `stop` | 自動離陸（POS_HOLD・0.8m）/ 自動着陸 / 即時モータ停止 / その場停止 |
+| `takeoff` / `land` / `emergency` / `stop` | 自動離陸（POS_HOLD・0.5m、手動 RC と統一）/ 自動着陸 / 即時モータ停止 / その場停止 |
 | `up/down/left/right/forward/back <cm>`、`cw/ccw <deg>`、`go <x> <y> <z> <speed>` | 相対移動（10〜300cm、目標合成・到達後 ok）|
 | `battery?` `height?` `attitude?` `speed?` | クエリ |
 
@@ -358,8 +358,12 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
 - **Mode changes are accepted on the ground** (disarmed or armed; spec 2026-06-11). Flipping
   the switch changes the actual mode — and the LED — immediately.
 - ARMing in ALT_HOLD/POS_HOLD keeps the props stopped (the controller gates thrust to zero on
-  the ground). Flight in these modes starts with an **auto-takeoff** (fixed 0.3 m/s climb,
-  level attitude; POS holds the launch point) triggered by raising the throttle.
+  the ground). In these modes **ARM ITSELF triggers an auto-takeoff** (redesign 2026-06-14, no
+  throttle input): after a short spool dwell (0.3 s, props still stopped) the craft climbs at
+  0.3 m/s to the **0.5 m target altitude** and holds the target (not the climb overshoot). The
+  throttle stick does not command altitude until it is first passed through center (raw 3072) —
+  a re-center gate that prevents an off-center stick from jumping the altitude after takeoff or
+  an in-flight switch into ALT/POS. STABILIZE/ACRO keep the manual throttle takeoff.
 
 ### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > calibrating > flight state
 

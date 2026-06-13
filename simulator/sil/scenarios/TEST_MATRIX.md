@@ -55,9 +55,11 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | `hover_espnow` | ESP-NOW ホバー（仮想 pilot） | vehicle（旧） |
 | `console_cli` | シリアル CLI 決定論検証（非飛行）。expect は旧 vehicle の CLI 出力（`StampFly RTOS` 等）にアンカーしており、emu の key 入力チャネルも vehicle_new の esp_console シムに未配線（2026-06-10 確認）。vehicle_new 対応は CLI フィーダ配線＋expect 更新が必要 | vehicle（旧） |
 | `boot_motion` | 静止ゲート付き起動校正（運搬中は校正完了せず ARM 拒否、設置後に完了→飛行） | vehicle_new |
-| `alt_auto_takeoff` | 地上モード変更＋ALT_HOLD 自動離陸（ARM 中 duty=0 ゲート、固定 0.3 m/s 上昇、高度捕捉） | vehicle_new |
-| `pos_auto_takeoff` | 地上モード変更＋POS_HOLD 自動離陸（上昇中の発進点保持を含む） | vehicle_new |
-| `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤発火させない）。`--duration 40000000` 必須 | vehicle_new |
+| `alt_auto_takeoff` | **ARM トリガ** ALT_HOLD 自動離陸（再設計 2026-06-14）: スプール中 duty=0、固定 0.3 m/s 上昇、**目標 0.5m を捕捉**（行き過ぎでなく目標値） | vehicle_new |
+| `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle_new |
+| `alt_recenter_gate` | **スロットル再センターゲート Case A**（離陸後）: 上げスティックを保持しても捕捉 0.5m を保持（ゲート閉）、中央 3072 を通すとゲート開→上昇 | vehicle_new |
+| `alt_inflight_switch` | **スロットル再センターゲート Case B**（飛行中切替）: STABILIZE→ALT_HOLD 切替で高度ジャンプなし（捕捉＋ゲート閉）、中央通過でゲート開 | vehicle_new |
+| `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤発火させない）。離陸高度は **0.5m に統一**（手動 RC と同一ルーチン、2026-06-14）。`--duration 40000000` 必須 | vehicle_new |
 | `sysid_rate` | 飛行中レートループ同定励振（API `sysid roll chirp 25 4`: POS_HOLD ホバーで ±25dps 対数チャープ、有界・定点維持・正常終了）。`--duration 32000000` 必須 | vehicle_new |
 | `acro_crash_relevel` | 墜落復帰リセット後、保持されたモードスイッチが IDLE_GROUND で再適用される（実機 LED バグの固定） | vehicle_new |
 | `autotune` | オンボード自動チューン全鎖（API `autotune roll 60 50`: 9点ステップドサイン掃引→同定→PID設計→ライブ適用→新ゲインでホバー・着陸）。`--duration 55000000` 必須 | vehicle_new |

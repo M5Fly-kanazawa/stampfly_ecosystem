@@ -6,8 +6,9 @@
 # chain under test:
 #   1. "command" enters SDK mode.
 #   2. "takeoff": API verb → StateTask → ground mode change to POS_HOLD →
-#      requestArm (still-calibration gate) → auto-takeoff climb → FLYING →
-#      guidance raises the craft to the 0.8 m Tello-like hover height.
+#      requestArm (still-calibration gate) → ARM-triggered auto-takeoff climb to the
+#      0.5 m TARGET → FLYING → guidance HOLDS that altitude (unified with manual RC
+#      takeoff; the API no longer commands its own height — decision ④, 2026-06-14).
 #   3. "forward 50" / "cw 90" / "up 30": moves COMPOSE on the guidance target;
 #      the POS_HOLD cascade tracks the walking setpoint; each replies "ok" only
 #      after the estimate enters the tolerance sphere.
@@ -17,8 +18,8 @@
 # cancel rule does not trip on a parked stick (throttle resting at the bottom).
 #
 # 実 ApiTask パーサを駆動（`api` チャネル → sf_api_inject_line。SIL ホストでは
-# UDP 輸送は inert）。プログラム飛行の全鎖: SDK モード → 自動離陸＋0.8m 上昇 →
-# 目標合成の移動（到達後に "ok"）→ 自動着陸。全行程 RC は中立のままペアリング済み
+# UDP 輸送は inert）。プログラム飛行の全鎖: SDK モード → ARM トリガ自動離陸（0.5m 目標）→
+# その高度を誘導が保持 → 目標合成の移動（到達後に "ok"）→ 自動着陸。全行程 RC は中立のまま
 # （安全要員が中立送信機を保持する実運用構成）— 「置いたままのスティック」（下端の
 # スロットル含む）が解除則を誤発火させないことの証明。
 #
@@ -27,7 +28,7 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
    +    api  "command"                                                           # B: enter SDK mode (t=6)
-   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.8 m
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m (unified)
    +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
    +    api  "forward 50"                                                        # E: +50 cm forward (north at yaw 0) (t=18)
    +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC during the move

@@ -408,11 +408,17 @@ static float    g_applied_accel_bias[3] = {0, 0, 0};
 
 /// Publish the boot/system readiness status so other tasks can gate on it via the topic
 /// (R16-style, not a cross-task object): StateManager::requestArm() reads `calibrated`,
-/// StateTask reads `airborne` (ToF takeoff detection) to drive TAKEOFF → FLYING. Called
-/// every cycle from the loop so `airborne` tracks continuously.
+/// StateTask reads `airborne` (ToF takeoff detection) to drive TAKEOFF → FLYING for the
+/// MANUAL takeoff (ACRO/STABILIZE) only — the ALT/POS auto-takeoff completes on the
+/// controller capturing its target altitude (controller_status.takeoff_reached), so the
+/// ToF airborne edge there serves the ESKF vertical handoff alone (applyVerticalGroundHandoff,
+/// above). Called every cycle from the loop so `airborne` tracks continuously.
 /// 起動/システム準備状態をトピックで発行し、他タスクがゲートできるようにする（R16 流、
-/// クロスタスクのオブジェクトでなく）: requestArm() は calibrated を、StateTask は airborne
-/// （ToF 離陸検出）を読み TAKEOFF→FLYING を駆動。airborne が連続追従するよう毎周期発行。
+/// クロスタスクのオブジェクトでなく）: requestArm() は calibrated を読む。StateTask は
+/// airborne（ToF 離陸検出）を読み「手動」離陸（ACRO/STABILIZE）の TAKEOFF→FLYING を駆動する
+/// — ALT/POS 自動離陸は制御器の目標高度捕捉（controller_status.takeoff_reached）で完了するため、
+/// そこでの ToF 空中エッジは ESKF 鉛直ハンドオフ（上の applyVerticalGroundHandoff）専用。
+/// airborne が連続追従するよう毎周期発行。
 static void publishSystemStatus(uint32_t now_us)
 {
     sf::SystemStatus st{};

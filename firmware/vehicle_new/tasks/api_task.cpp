@@ -83,7 +83,11 @@ constexpr float    kMoveMaxCm      = 300.0f;  // single-move clamp [cm] / 1回�
 constexpr float    kAltMinM        = 0.2f;    // target altitude floor / 目標高度下限
 constexpr float    kAltMaxM        = 2.0f;    // target altitude ceiling (indoor) / 上限
 constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既定接近速度
-constexpr float    kTakeoffAltM    = 0.8f;    // Tello-like takeoff hover height / 離陸後高度
+// Takeoff altitude is no longer an API constant: the auto-takeoff (controller-owned,
+// unified with manual RC) climbs to its target, and cmdTakeoff holds whatever altitude
+// FLYING was reached at (decision ④, 2026-06-14).
+// 離陸高度はもう API 定数ではない: 自動離陸（制御器所有・手動 RC と統一）が目標まで
+// 上昇し、cmdTakeoff は FLYING 到達時の高度を保持する（確定④, 2026-06-14）。
 constexpr float    kReachRadiusM   = 0.15f;   // move "reached" tolerance / 到達判定半径
 constexpr float    kReachYawRad    = 0.17f;   // ~10 deg yaw tolerance / ヨー到達判定
 constexpr uint32_t kTakeoffTimeoutMs = 12000;
@@ -222,14 +226,19 @@ void cmdTakeoff()
         return;
     }
 
-    // Seed the guidance target at the hover point, then rise to the Tello-like
-    // takeoff height. Composing from the TARGET starts here.
-    // 誘導目標をホバー点で初期化し、Tello 風の離陸高度へ上げる。以降の合成は
-    // この「目標」から始まる。
+    // Seed the guidance target at the CURRENT pose — FLYING means the auto-takeoff
+    // has already climbed to and captured its target altitude, so we simply hold it.
+    // The climb routine and target altitude are now UNIFIED with manual RC takeoff
+    // (the controller owns both, decision ④); the API no longer commands its own
+    // takeoff height. Composing subsequent moves from the TARGET starts here.
+    // 誘導目標を「現在」の姿勢で初期化する — FLYING は自動離陸が既に目標高度まで上昇・
+    // 捕捉したことを意味するので、そのまま保持する。上昇ルーチンと目標高度は手動 RC 離陸と
+    // 統一された（制御器が両方を所有, 確定④）。API は自前の離陸高度を指令しない。以降の
+    // 移動合成はこの「目標」から始まる。
     const sf::StateEstimate est = sf::estimate_state.latest();
     g_target_ned[0] = est.position[0];
     g_target_ned[1] = est.position[1];
-    g_target_ned[2] = -kTakeoffAltM;
+    g_target_ned[2] = est.position[2];   // hold the auto-takeoff altitude / 離陸後高度を保持
     {
         const float w = est.attitude[0], x = est.attitude[1];
         const float y = est.attitude[2], z = est.attitude[3];
@@ -238,11 +247,6 @@ void cmdTakeoff()
     }
     g_target_valid = true;
     publishGuidance(kDefaultSpeed);
-
-    waitUntil(kTakeoffTimeoutMs, [] {
-        const sf::StateEstimate e = sf::estimate_state.latest();
-        return fabsf(-e.position[2] - kTakeoffAltM) < kReachRadiusM;
-    });
     reply("ok");
 }
 

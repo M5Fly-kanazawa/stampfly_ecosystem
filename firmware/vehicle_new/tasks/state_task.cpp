@@ -203,16 +203,16 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now});
             break;
         case FlightState::TAKEOFF:
-            // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff (user spec,
-            // 2026-06-11): the throttle-up trigger enters TAKEOFF as usual, but in
-            // these modes raw throttle→thrust makes no sense — the controller
-            // climbs at a fixed rate with level attitude (POS: holds the launch
-            // point) until the ToF airborne detection completes the takeoff.
-            // STABILIZE/ACRO keep the manual throttle takeoff (no verb).
-            // ALT_HOLD/POS_HOLD の飛行開始は「自動離陸」（ユーザー仕様, 2026-06-11）:
-            // スロットル上げのトリガで通常どおり TAKEOFF に入るが、これらのモードでは
-            // 生スロットル→推力は意味を持たない — 制御器が固定上昇率＋水平姿勢
-            // （POS は発進点保持）で上昇し、ToF の空中検知が離陸を完了させる。
+            // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff (2026-06-14 redesign):
+            // ARM ITSELF enters TAKEOFF (no throttle input) after the spool dwell — in
+            // these modes raw throttle→thrust makes no sense, so the controller climbs
+            // the altitude cascade to the target (0.5m) with level attitude (POS: holds
+            // the launch point) and reports capture to complete the takeoff. STABILIZE/
+            // ACRO keep the manual throttle takeoff (no verb).
+            // ALT_HOLD/POS_HOLD の飛行開始は「自動離陸」（2026-06-14 再設計）: ARM 自体が
+            // （スロットル入力なしで）スプールドウェル後 TAKEOFF に入る — これらのモードでは
+            // 生スロットル→推力は意味を持たないため、制御器が高度カスケードで目標（0.5m）まで
+            // 水平姿勢（POS は発進点保持）で上昇し、捕捉を報告して離陸を完了させる。
             // STABILIZE/ACRO は従来の手動スロットル離陸（verb なし）。
             if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
                 sf::controller_command.publish(
@@ -287,6 +287,13 @@ void StateTask(void* pvParameters)
     // 前回の comm バインドフラグ（pairing_complete.bound）。false→true エッジ検出用。
     // SIL 仮想クロックが 0 を返しても頑健なよう、エッジ（comm がバインドした瞬間）に1回反応する。
     bool prev_bound = false;
+
+    // ARMED_GROUND entry time, for the ALT/POS auto-takeoff spool/settle dwell
+    // (config::ARMED_GROUND_SPOOL_US). prev_fs detects the entry edge.
+    // ARMED_GROUND 突入時刻（ALT/POS 自動離陸のスプール/整定ドウェル用,
+    // config::ARMED_GROUND_SPOOL_US）。prev_fs で突入エッジを検出する。
+    uint32_t armed_ground_since_us = 0;
+    sf::FlightState prev_fs = sf::FlightState::INIT;
 
     while (true) {
         // =====================================================================
@@ -476,20 +483,21 @@ void StateTask(void* pvParameters)
                 g_state_manager.requestDisarm();
                 break;
             case sf::ApiCmd::Takeoff: {
+                // Set the (ALT/POS) mode and ARM; the auto-takeoff is then triggered by
+                // the SAME path as a manual ARM — the takeoff sequencing below issues
+                // notifyTakeoff() once ARMED_GROUND + mode>=ALT_HOLD have settled through
+                // the spool dwell. Unifying here (rather than calling notifyTakeoff()
+                // directly) means API and RC takeoff share one trigger and one dwell.
+                // （ALT/POS）モードを設定して ARM する。自動離陸はその後、手動 ARM と「同じ」
+                // 経路でトリガされる — 下の離陸シーケンスが ARMED_GROUND + mode>=ALT_HOLD が
+                // スプールドウェルを経た時点で notifyTakeoff() を出す。ここで直接 notifyTakeoff()
+                // を呼ばず統一することで、API と RC の離陸が1つのトリガ・1つのドウェルを共有する。
                 const auto want = static_cast<sf::FlightMode>(api_cmd.mode);
                 if (g_state_manager.getMode() != want) {
                     g_state_manager.requestModeChange(want);
                 }
                 if (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) {
                     g_state_manager.requestArm();
-                }
-                if (g_state_manager.getState() == sf::FlightState::ARMED_GROUND &&
-                    g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
-                    g_state_manager.notifyTakeoff();   // → TAKEOFF (auto-takeoff verb)
-                } else {
-                    ESP_LOGW(TAG, "API takeoff rejected (state=%d mode=%d)",
-                             static_cast<int>(g_state_manager.getState()),
-                             static_cast<int>(g_state_manager.getMode()));
                 }
                 break;
             }
@@ -523,35 +531,74 @@ void StateTask(void* pvParameters)
         }
 
         // =====================================================================
-        // Takeoff sequencing: ARMED_GROUND → TAKEOFF → FLYING.
-        // 離陸シーケンス: ARMED_GROUND → TAKEOFF → FLYING。
+        // Takeoff sequencing: ARMED_GROUND → TAKEOFF → FLYING (2026-06-14 redesign).
+        // 離陸シーケンス: ARMED_GROUND → TAKEOFF → FLYING（2026-06-14 再設計）。
         //
-        // Requirements §2: ARMED_GROUND→TAKEOFF on "throttle input";
-        // TAKEOFF→FLYING on "takeoff complete (altitude threshold reached)".
-        // The altitude-threshold detector is the ToF-based TakeoffLandingMgr, owned by
-        // ImuTask (it has the ToF and the vertical estimate); it publishes its airborne
-        // state on system_status. With the vertical estimate now trustworthy (ALT/POS
-        // hold, development_roadmap Phase B), this replaces the earlier estimator-
-        // independent dwell. Reaching FLYING unlocks requestModeChange.
-        // 要件§2: スロットル入力で離陸、高度閾値到達で離陸完了。高度検出は ImuTask 所有の
-        // ToF ベース TakeoffLandingMgr（ToF と鉛直推定を持つ）で、airborne 状態を
-        // system_status に発行する。鉛直推定が信頼できる今（ALT/POS 保持, ロードマップ
-        // Phase B）、これが旧 estimator 非依存 dwell を置き換える。FLYING 到達で
-        // requestModeChange が解放される。
+        // ARMED_GROUND → TAKEOFF — split by mode:
+        //   ALT_HOLD/POS_HOLD: ARM ITSELF triggers the auto-takeoff (no throttle input),
+        //     after a short spool/settle dwell (ARMED_GROUND_SPOOL_US) so the ARM-time
+        //     attitude-covariance inflation re-converges from gravity and the launch is
+        //     not instantaneous. The pilot need not time the throttle stick (Tello-like).
+        //   ACRO/STABILIZE: manual takeoff — throttle past TAKEOFF_THROTTLE_THRESH
+        //     (raw throttle is thrust in these modes; no auto-takeoff).
+        // TAKEOFF → FLYING — also split:
+        //   ALT/POS auto-takeoff: completes when the CONTROLLER captures its target
+        //     altitude (controller_status.takeoff_reached) — decoupled from the ToF
+        //     0.15m airborne edge, which is the ESKF vertical handoff only (ImuTask).
+        //   ACRO/STABILIZE manual: completes on the ToF airborne detection
+        //     (system_status.airborne), as before.
+        // Reaching FLYING unlocks requestModeChange.
         //
-        // @design requirements.md §2 — ARMED_GROUND→TAKEOFF→FLYING        [OK]
-        // @design development_roadmap.md §3 Layer 3 — ToF takeoff detect  [OK]
+        // ARMED_GROUND → TAKEOFF — モード別:
+        //   ALT_HOLD/POS_HOLD: ARM 自体が自動離陸をトリガ（スロットル入力不要）、短い
+        //     スプール/整定ドウェル（ARMED_GROUND_SPOOL_US）後に。ARM 時の姿勢共分散膨張が
+        //     重力から再収束し、打ち上げが即座にならないようにする。パイロットはスロットルの
+        //     タイミングを計る必要がない（Tello 風）。
+        //   ACRO/STABILIZE: 手動離陸 — スロットルが TAKEOFF_THROTTLE_THRESH 超
+        //     （これらのモードでは生スロットルが推力。自動離陸なし）。
+        // TAKEOFF → FLYING — これもモード別:
+        //   ALT/POS 自動離陸: 制御器が目標高度を捕捉したとき完了
+        //     （controller_status.takeoff_reached）— ToF 0.15m 空中エッジとは分離。後者は
+        //     ESKF 鉛直ハンドオフ専用（ImuTask）。
+        //   ACRO/STABILIZE 手動: 従来どおり ToF 空中検知（system_status.airborne）で完了。
+        // FLYING 到達で requestModeChange が解放される。
+        //
+        // @design requirements.md §2 — ARMED_GROUND→TAKEOFF→FLYING              [OK]
+        // @design detailed_design.md §3 — ALT/POS auto-takeoff (ARM-triggered)  [OK]
         // =====================================================================
 
         const sf::FlightState fs = g_state_manager.getState();
-        const float throttle = sf::command_setpoint.latest().throttle;
+        const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
 
-        if (fs == sf::FlightState::ARMED_GROUND &&
-            throttle > config::TAKEOFF_THROTTLE_THRESH) {
-            g_state_manager.notifyTakeoff();              // → TAKEOFF
-        } else if (fs == sf::FlightState::TAKEOFF &&
-                   sf::system_status.latest().airborne) {
-            g_state_manager.notifyTakeoffComplete();      // → FLYING (ToF: off the ground)
+        // Mark the ARMED_GROUND entry edge for the spool dwell timer.
+        // スプールドウェル用に ARMED_GROUND 突入エッジを記録する。
+        if (fs == sf::FlightState::ARMED_GROUND && prev_fs != sf::FlightState::ARMED_GROUND) {
+            armed_ground_since_us = now_us;
+        }
+        prev_fs = fs;
+
+        if (fs == sf::FlightState::ARMED_GROUND) {
+            if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
+                // ALT/POS: ARM triggers the auto-takeoff after the spool/settle dwell.
+                // ALT/POS: スプール/整定ドウェル後に ARM が自動離陸をトリガ。
+                if (static_cast<int32_t>(now_us - armed_ground_since_us) >=
+                    static_cast<int32_t>(config::ARMED_GROUND_SPOOL_US)) {
+                    g_state_manager.notifyTakeoff();      // → TAKEOFF (auto-takeoff)
+                }
+            } else if (sf::command_setpoint.latest().throttle >
+                       config::TAKEOFF_THROTTLE_THRESH) {
+                // ACRO/STABILIZE: manual throttle takeoff.
+                // ACRO/STABILIZE: 手動スロットル離陸。
+                g_state_manager.notifyTakeoff();          // → TAKEOFF (manual)
+            }
+        } else if (fs == sf::FlightState::TAKEOFF) {
+            const bool complete =
+                (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD)
+                    ? sf::controller_status.latest().takeoff_reached  // 0.5m captured
+                    : sf::system_status.latest().airborne;            // ToF off the ground
+            if (complete) {
+                g_state_manager.notifyTakeoffComplete();  // → FLYING
+            }
         }
 
         // =====================================================================

@@ -1,13 +1,15 @@
-# alt_auto_takeoff.expect — ground mode change + ALT_HOLD auto-takeoff gates
-# 地上モード変更＋ALT_HOLD 自動離陸のゲート
+# alt_auto_takeoff.expect — ALT_HOLD ARM-triggered auto-takeoff gates (redesign 2026-06-14)
+# ALT_HOLD の ARM トリガ自動離陸ゲート
 #
 # Chain: mode change accepted while DISARMED on the ground (BEFORE "ARM accepted")
-# → armed in ALT_HOLD with props stopped (duty ≈ 0 in the armed-ground window)
-# → throttle-up engages the auto-takeoff → airborne detection completes it →
-# ALT_HOLD holds the captured altitude (normal G2/G3/G4 gates).
-# 連鎖: 地上 DISARM 中のモード変更受理（"ARM accepted" より前）→ ALT_HOLD で ARM
-# してもプロペラ停止（armed-ground 窓で duty ≈ 0）→ スロットル上げで自動離陸 →
-# 空中検知で完了 → ALT_HOLD が捕捉高度を保持（通常の G2/G3/G4 ゲート）。
+# → ARM in ALT_HOLD: props STOPPED through the spool dwell (duty ≈ 0 in [7.55,7.78])
+# → ARM triggers the auto-takeoff (NO throttle) → climb to the 0.5 m TARGET → controller
+# CAPTURES the target (Auto-takeoff complete) → holds ~0.5 m (decision ②: the target
+# value, not the climb-overshoot peak). The ToF 0.15 m airborne edge is the ESKF handoff.
+# 連鎖: 地上 DISARM 中のモード変更受理（"ARM accepted" 前）→ ALT_HOLD で ARM: スプール
+# ドウェル中プロペラ停止（[7.55,7.78] で duty ≈ 0）→ ARM が自動離陸をトリガ（スロットルなし）
+# → 0.5 m 目標へ上昇 → 制御器が目標を捕捉（Auto-takeoff complete）→ ~0.5 m 保持（確定②:
+# 行き過ぎピークでなく目標値）。ToF 0.15 m 空中エッジは ESKF ハンドオフ。
 exit 0
 log_contains any "Mode change: STABILIZE → ALT_HOLD"
 log_contains any "ARM accepted"
@@ -18,8 +20,10 @@ order "Mode change: STABILIZE → ALT_HOLD" "ARM accepted"
 order "ARM accepted" "Auto-takeoff engaged"
 order "Auto-takeoff engaged" "Vertical handoff: takeoff"
 order "Auto-takeoff engaged" "Auto-takeoff complete — normal mode law engaged"
-metric duty_max < 0.05 in 7.8 8.4
-metric alt_rmse < 0.08 in 11.5 16.0
-metric alt_band < 0.35 in 11.5 16.0
-metric duty_max < 0.92 in 11.5 16.0
-metric tilt_max < 10.0 in 8.5 16.0
+metric duty_max < 0.05 in 7.55 7.78
+metric alt_mean > 0.42 in 12.0 16.0
+metric alt_mean < 0.62 in 12.0 16.0
+metric alt_rmse < 0.08 in 12.0 16.0
+metric alt_band < 0.20 in 12.0 16.0
+metric duty_max < 0.92 in 12.0 16.0
+metric tilt_max < 10.0 in 9.0 16.0

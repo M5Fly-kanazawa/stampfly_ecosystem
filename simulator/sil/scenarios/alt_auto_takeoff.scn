@@ -1,31 +1,33 @@
-# alt_auto_takeoff.scn — ground mode change + ALT_HOLD auto-takeoff (spec 2026-06-11)
-#                        地上モード変更＋ALT_HOLD 自動離陸（仕様変更 2026-06-11）
+# alt_auto_takeoff.scn — ALT_HOLD ARM-triggered auto-takeoff to the target altitude
+#                        ALT_HOLD の ARM トリガ自動離陸（目標高度まで）   (redesign 2026-06-14)
 #
-# Spec under test:
-#  1. Mode changes are accepted ON THE GROUND (IDLE_GROUND/ARMED_GROUND) — flipping
-#     the ALT switch while parked changes the actual mode before ARM.
-#  2. ARMing in ALT_HOLD keeps the props STOPPED (controller Grounded phase gates
-#     thrust to zero — without the gate the vertical loop would command hover
-#     thrust at ARM).
-#  3. Throttle-up then starts an AUTO-takeoff: fixed 0.3 m/s climb, level attitude,
-#     until the ToF airborne detection completes it; ALT_HOLD captures the altitude.
+# Spec under test (2026-06-14 redesign):
+#  1. Mode changes are accepted ON THE GROUND (IDLE_GROUND) — flipping the ALT switch
+#     while parked changes the actual mode before ARM.
+#  2. In ALT/POS, ARM ITSELF triggers the auto-takeoff (no throttle input). On ARM the
+#     props stay STOPPED through a short spool/settle dwell (ARMED_GROUND_SPOOL_US =
+#     0.3 s; the controller's Grounded phase gates thrust to zero), THEN the climb begins.
+#  3. The auto-takeoff climbs the altitude cascade toward the TARGET (0.5 m), velocity-
+#     limited, and CAPTURES the target value — not the climb-overshoot peak (decision ②).
+#     The controller reports capture (Auto-takeoff complete) and the state machine moves
+#     TAKEOFF→FLYING; the ToF 0.15 m airborne edge is the ESKF vertical handoff only.
 #
-# 検証する仕様:
-#  1. モード変更は「地上」（IDLE_GROUND/ARMED_GROUND）で受理される — 設置中に ALT
-#     スイッチを切り替えると ARM 前に実モードが変わる。
-#  2. ALT_HOLD で ARM してもプロペラは「停止のまま」（制御器 Grounded フェーズが推力を
-#     ゼロにゲート — ゲートがないと鉛直ループが ARM 直後にホバー推力を指令する）。
-#  3. スロットル上げで「自動離陸」開始: 固定 0.3 m/s 上昇・水平姿勢、ToF 空中検知で
-#     完了し ALT_HOLD が高度を捕捉する。
+# 検証する仕様（2026-06-14 再設計）:
+#  1. モード変更は「地上」（IDLE_GROUND）で受理 — 設置中の ALT スイッチ切替で ARM 前に実モードが変わる。
+#  2. ALT/POS では ARM 自体が自動離陸をトリガ（スロットル入力不要）。ARM 直後はプロペラ「停止のまま」
+#     短いスプール/整定ドウェル（ARMED_GROUND_SPOOL_US = 0.3 秒、制御器 Grounded フェーズが推力ゼロ）を
+#     経てから上昇開始。
+#  3. 自動離陸は高度カスケードで「目標」（0.5 m）へ速度制限つき上昇し、目標値を捕捉する — 上昇の
+#     行き過ぎピークでなく（確定②）。制御器が捕捉を報告（Auto-takeoff complete）し状態機械が
+#     TAKEOFF→FLYING へ。ToF 0.15 m 空中エッジは ESKF 鉛直ハンドオフ専用。
 #
 # Run: sf sil scenario simulator/sil/scenarios/alt_auto_takeoff.scn --target vehicle_new
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
-   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props must stay stopped
-   +    rc   3330  2048   2048    2048  1     1500      50        1              # D: throttle up → AUTO-takeoff (0.3 m/s, level)
-   +    rc   3072  2048   2048    2048  1     6000      50        1              # E: stick to center → hold captured altitude 6 s
-   +    rc   2048  2048   2048    2048  0     200       50                       # F: release ARM button
-   +    rc   2048  2048   2048    2048  1     200       50                       # G: press again → DISARM (toggle)
-   +    rc   2048  2048   2048    2048  0     600       50                       # H: settle disarmed
+   +    rc   3072  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props stop, spool, AUTO-takeoff fires (throttle ignored)
+   +    rc   3072  2048   2048    2048  1     8000      50        1              # D: throttle at CENTER (3072 = norm 0.5) → climb to 0.5 m and hold
+   +    rc   2048  2048   2048    2048  0     200       50                       # E: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # F: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle disarmed

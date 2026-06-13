@@ -310,7 +310,11 @@ struct SystemStatus {
     bool calibrated;      // boot gyro/accel bias calibration is no longer pending
                           // 起動バイアス校正が保留中でない（完了/スキップ/無効/中止）
     bool airborne;        // ToF-based airborne detection (TakeoffLandingMgr): off the
-                          // ground. Drives TAKEOFF → FLYING. / ToF 離陸検出: 空中。
+                          // ground. Drives TAKEOFF → FLYING for the MANUAL takeoff
+                          // (ACRO/STABILIZE) only; ALT/POS auto-takeoff completes on the
+                          // controller reaching its target altitude (ControllerStatus
+                          // .takeoff_reached). / ToF 離陸検出: 空中。手動離陸(ACRO/STABILIZE)
+                          // の TAKEOFF→FLYING を駆動。ALT/POS 自動離陸は制御器の目標高度到達で完了。
     bool held;            // ToF-based held-in-hand detection (disarmed + ToF valid above
                           // the airborne threshold). Drives IDLE_GROUND ↔ IDLE_HELD.
                           // ToF 手持ち検出（disarmed＋ToF有効＋空中閾値超）。IDLE地上↔手持ち。
@@ -331,6 +335,11 @@ struct SystemStatus {
 /// 優先」が API ソースから観測可能になる (M-3)。
 struct ControllerStatus {
     bool     guidance_active;  // an API/Navigator guidance target is engaged / 誘導目標係合中
+    bool     takeoff_reached;  // auto-takeoff (ALT/POS) has captured its target altitude —
+                               // the controller-driven TAKEOFF → FLYING trigger (decoupled
+                               // from the ToF 0.15m airborne edge, which is ESKF-handoff only).
+                               // 自動離陸(ALT/POS)が目標高度を捕捉した — 制御器駆動の
+                               // TAKEOFF→FLYING トリガ（ToF 0.15m 空中エッジ=ESKFハンドオフ専用とは分離）。
     uint32_t timestamp;        // [us]
 };
 
