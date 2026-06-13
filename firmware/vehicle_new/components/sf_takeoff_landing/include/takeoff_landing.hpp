@@ -36,8 +36,16 @@ struct TakeoffLandingConfig {
     float ground_tof_m       = 0.05f;   // Ground threshold [m]    / 地上閾値
     float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
-    uint32_t takeoff_hold_ms = 500;     // Takeoff confirm [ms]    / 離陸確認時間
     uint32_t landing_hold_ms = 1000;    // Landing confirm [ms]    / 着陸確認時間
+    // Consecutive same-side ToF samples required to FLIP on_ground_ (debounce).
+    // A single glitch/ghost reflection can no longer flip the ground/air flag,
+    // which also gates TAKEOFF→FLYING and the ESKF vertical handoff (M-6). At
+    // 30 Hz, 3 samples ≈ 100 ms — short enough not to delay a real transition.
+    // on_ground_ を反転させるのに必要な同側連続 ToF サンプル数（デバウンス）。
+    // 単発グリッチ/ゴースト反射では接地/空中フラグを反転できなくなる。このフラグは
+    // TAKEOFF→FLYING と ESKF 鉛直ハンドオフも駆動する (M-6)。30Hz で3サンプル≈100ms
+    // — 実際の遷移を遅らせない範囲。
+    uint8_t flip_confirm_samples = 3;
 };
 
 /// Takeoff/landing manager
@@ -77,10 +85,6 @@ public:
     /// 機体が地上にあるか確認する
     bool isOnGround() const { return on_ground_; }
 
-    /// Check if takeoff is detected
-    /// 離陸を検出したか確認する
-    bool isTakeoffDetected() const { return takeoff_detected_; }
-
     /// Check if landing is detected (sustained low altitude + low vertical velocity).
     /// A LEVEL flag (true while the landing condition holds), not a one-shot pulse, so a
     /// slower consumer (StateTask at 50 Hz) cannot miss it through a Latest topic.
@@ -99,10 +103,6 @@ private:
     /// ToF距離で地面接地を評価する
     void evaluateToF(const TofData& tof);
 
-    /// Detect takeoff: sustained altitude above threshold
-    /// 離陸検出: 閾値以上の高度を持続
-    void detectTakeoff();
-
     /// Detect landing: low altitude + low velocity sustained (level flag, see getter)
     /// 着陸検出: 低高度＋低速度の持続（レベルフラグ、getter 参照）
     void detectLanding(float vertical_velocity);
@@ -114,10 +114,10 @@ private:
     TakeoffLandingConfig config_;
     bool     on_ground_        = true;   // Ground contact flag  / 地面接地フラグ
     bool     held_             = false;  // Held-in-hand flag    / 手持ちフラグ
-    bool     takeoff_detected_ = false;  // Takeoff event flag   / 離陸イベントフラグ
     bool     landing_detected_ = false;  // Landing detected flag (level) / 着陸検出フラグ
-    uint32_t takeoff_start_ms_ = 0;      // Takeoff timer start  / 離陸タイマー開始
     uint32_t landing_start_ms_ = 0;      // Landing timer start  / 着陸タイマー開始
+    uint8_t  airborne_streak_  = 0;      // Consecutive airborne-side ToF samples / 空中側連続数
+    uint8_t  ground_streak_    = 0;      // Consecutive ground-side ToF samples   / 地上側連続数
 };
 
 }  // namespace sf

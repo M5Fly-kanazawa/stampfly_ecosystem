@@ -52,82 +52,75 @@ void TakeoffLandingMgr::init(const TakeoffLandingConfig& config)
 // -----------------------------------------------------------------------------
 void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_velocity)
 {
-    // Clear the one-shot takeoff event flag (landing_detected_ is a level flag managed by
-    // detectLanding / cleared on disarm below).
-    // ワンショットの離陸イベントフラグをクリア（landing_detected_ はレベルフラグで
-    // detectLanding が管理／下の disarm でクリア）。
-    takeoff_detected_ = false;
-
     // Disarmed → definitively on the ground (proven firmware/vehicle pattern). While
     // disarmed the only motion signal is the ToF, so evaluate held-in-hand here; clear the
-    // landing latch and the takeoff timer for the next flight.
+    // landing latch and the debounce streaks for the next flight.
     // disarmed → 確実に接地（実証済みの firmware/vehicle パターン）。disarmed 中の唯一の動き信号は
-    // ToF ゆえここで手持ちを判定する。着陸ラッチと離陸タイマーを次飛行のためクリア。
+    // ToF ゆえここで手持ちを判定する。着陸ラッチとデバウンス連続数を次飛行のためクリア。
     if (!armed) {
         on_ground_ = true;
         landing_detected_ = false;
-        takeoff_start_ms_ = 0;
         landing_start_ms_ = 0;
+        airborne_streak_ = 0;
+        ground_streak_   = 0;
         evaluateHeld(tof);
         return;
     }
 
     held_ = false;   // armed: by definition not hand-held / armed 中は定義上手持ちでない
     evaluateToF(tof);
-    detectTakeoff();
     detectLanding(vertical_velocity);
 }
 
 // -----------------------------------------------------------------------------
 // evaluateToF — determine ground contact from the injected ToF distance
 // ToF評価 — 注入された ToF 距離から地面接地を判定
+//
+// TAKEOFF→FLYING (state_task, via the published airborne flag) and the ESKF
+// vertical handoff (imu_task, on the ground↔air edge) both key off on_ground_,
+// so a flip here must be glitch-proof: require flip_confirm_samples consecutive
+// same-side readings before flipping. A single ghost/furniture reflection can
+// no longer cross the craft into "airborne" (or vice versa) (M-6).
+// TAKEOFF→FLYING（state_task、発行された airborne フラグ経由）と ESKF 鉛直ハンドオフ
+// （imu_task、接地↔空中エッジ）は共に on_ground_ を起点にするため、ここの反転は
+// グリッチ耐性が要る: flip_confirm_samples 回連続の同側読みで初めて反転する。単発の
+// ゴースト/家具反射では「空中」へ（逆も）渡れなくなる (M-6)。
 // -----------------------------------------------------------------------------
 void TakeoffLandingMgr::evaluateToF(const TofData& tof)
 {
     // Skip invalid readings — on the ground the ToF sits below its minimum range
-    // and returns invalid, so on_ground_ holds its last value (true at boot).
+    // and returns invalid, so on_ground_ holds its last value (true at boot). An
+    // invalid sample also breaks a building streak (a flip needs clean, consecutive
+    // valid confirmations); it can only DELAY a flip, never cause a spurious one.
     // 無効な読み取りをスキップ — 接地中は ToF が最小レンジ未満で無効を返すため、
-    // on_ground_ は直前値を保持（起動時 true）。
+    // on_ground_ は直前値を保持（起動時 true）。無効サンプルは連続数も途切れさせる
+    // （反転には連続した有効確認が要る）。反転を遅らせるだけで誤反転は起こさない。
     if (!tof.valid) {
+        airborne_streak_ = 0;
+        ground_streak_   = 0;
         return;
     }
 
-    // Determine ground contact based on distance threshold (hysteresis band
-    // between ground and airborne thresholds prevents chatter).
-    // 距離閾値に基づき地面接地を判定（地上閾値と空中閾値の間はヒステリシス）。
-    if (tof.distance < config_.ground_tof_m) {
-        on_ground_ = true;
-    } else if (tof.distance > config_.airborne_tof_m) {
-        on_ground_ = false;
-    }
-}
-
-// -----------------------------------------------------------------------------
-// detectTakeoff — sustained altitude above threshold → takeoff event
-// 離陸検出 — 閾値以上の高度持続 → 離陸イベント
-// -----------------------------------------------------------------------------
-void TakeoffLandingMgr::detectTakeoff()
-{
-    uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
-
-    if (!on_ground_) {
-        // Start or continue takeoff timer
-        // 離陸タイマーを開始または継続
-        if (takeoff_start_ms_ == 0) {
-            takeoff_start_ms_ = now_ms;
+    // Count consecutive same-side samples; flip only after flip_confirm_samples.
+    // The hysteresis band (between the two thresholds) breaks both streaks so a
+    // flip requires N consecutive readings fully past the SAME threshold.
+    // 同側連続をカウントし flip_confirm_samples 到達で初めて反転。2閾値間の
+    // ヒステリシス帯では両連続数を切り、反転には同一閾値を完全に越えた N 連続が要る。
+    if (tof.distance > config_.airborne_tof_m) {
+        ground_streak_ = 0;
+        if (airborne_streak_ < 255) ++airborne_streak_;
+        if (airborne_streak_ >= config_.flip_confirm_samples) {
+            on_ground_ = false;
         }
-
-        // Confirm takeoff after hold duration
-        // 保持時間経過後に離陸を確認
-        if (now_ms - takeoff_start_ms_ >= config_.takeoff_hold_ms) {
-            takeoff_detected_ = true;
-            takeoff_start_ms_ = 0;
-            ESP_LOGI(TAG, "Takeoff detected");
+    } else if (tof.distance < config_.ground_tof_m) {
+        airborne_streak_ = 0;
+        if (ground_streak_ < 255) ++ground_streak_;
+        if (ground_streak_ >= config_.flip_confirm_samples) {
+            on_ground_ = true;
         }
     } else {
-        // Reset timer when on ground
-        // 地上ではタイマーをリセット
-        takeoff_start_ms_ = 0;
+        airborne_streak_ = 0;
+        ground_streak_   = 0;
     }
 }
 
