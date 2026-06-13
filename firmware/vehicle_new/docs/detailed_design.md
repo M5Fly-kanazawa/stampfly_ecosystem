@@ -207,6 +207,7 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 - **スロットル再センターゲート（`throttle_recentered_`）:** 離陸後（Case A）・飛行中の ALT/POS 進入（Case B, onModeChange）でゲートを閉じ、スロットルが一度中央（±`stick_deadzone_`）を通って初めて高度操作を有効化する（暴発・高度ジャンプ防止）。タイムアウトなし（中央へ戻すのは自然動作）。誘導/API は高度を歩く設定点で動かしスロットル経路を使わないためゲート対象外。
 - **⑥ ARM 後モードロックは見送り:** 飛行中モード変更は従来どおり可能（§3.1 モード調停表は現状維持）。コントローラ↔機体の双方向モード同期の改修が前提のため将来再検討。
 - **検証:** SIL `alt_auto_takeoff`/`pos_auto_takeoff`（ARM 起動・スプール中 duty=0・0.5m 捕捉）、`alt_recenter_gate`（離陸後 Case A: 上げスティック無視→中央通過で有効）、`alt_inflight_switch`（飛行中 Case B: STABILIZE→ALT_HOLD 切替でジャンプなし）、`api_flight`（0.5m 統一）。**実機未検証。**
+- **実装中の落とし穴2件（実測図つき解説）:** スロットルの中央は raw 3072（norm 0.5）で 2048 でない／TakeoffClimb の速度クランプは対称（±0.3m/s）でないと地上ブラインド窓の行き過ぎを捕捉できない。詳細・実 SIL トラジェクトリ図は [`alt_hold_takeoff_findings.md`](alt_hold_takeoff_findings.md) を参照。
 
 ### ペアリング状態遷移（PairingState — FlightState と並行）
 
