@@ -309,6 +309,24 @@ private:
     // Landing は別経路でなく compute() の鉛直フェーズ（INV-1）、姿勢はリンク生存中パイロット（INV-2）。
     float landing_descent_rate_ = 0.3f;   // [m/s] downward / 下向き降下率
 
+    // Near-ground settle assist (Landing). A constant-velocity descent is balanced by
+    // ground effect near the floor (more rotor lift on reduced thrust), so the craft
+    // lingers and stalls. Below kLandingSettleAltM the thrust CEILING ramps from hover
+    // toward kLandingSettleThrustFrac·hover over kLandingSettleRampS, so a craft still
+    // floating is positively settled within a bounded time — gentle (the velocity loop
+    // works under the ceiling) yet decisive (the ceiling falls below ground-effect lift).
+    // landing_settle_t_ accumulates time spent below the altitude trigger (reset by
+    // onLanding / reset()). See pid_controller.cpp Landing branch + detailed_design §3 注8.
+    // 近地面の着地アシスト（Landing）。定速降下は接地近傍で地面効果と釣り合い機体が粘る。
+    // kLandingSettleAltM 未満で推力上限を hover→kLandingSettleThrustFrac·hover へ
+    // kLandingSettleRampS かけて絞り、まだ浮く機体を有界時間で確実に沈める（速度ループは上限内
+    // で動くので穏やか、上限が地面効果揚力を下回るので確実）。landing_settle_t_ は高度トリガ未満で
+    // 過ごした時間を積算（onLanding / reset() でクリア）。
+    static constexpr float kLandingSettleAltM      = 0.15f;  // [m] altitude to start the settle ramp / アシスト開始高度
+    static constexpr float kLandingSettleThrustFrac = 0.70f; // [-] ceiling floor = frac·hover / 上限の床
+    static constexpr float kLandingSettleRampS     = 1.0f;   // [s] ramp duration hover→floor / ランプ時間
+    float landing_settle_t_ = 0.0f;       // [s] time below the settle altitude / アシスト高度未満の経過時間
+
     // Landing steerability gate: the pilot keeps roll/pitch/yaw during a landing
     // ONLY while the command link is live. Link-liveness = setpoint freshness
     // (R16): if (state.timestamp − setpoint.timestamp) exceeds this, the link is

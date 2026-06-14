@@ -38,7 +38,7 @@ struct TakeoffLandingConfig {
     float ground_tof_m       = 0.05f;   // Ground threshold [m]    / 地上閾値
     float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
-    uint32_t landing_hold_ms = 1000;    // Landing confirm [ms]    / 着陸確認時間
+    uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] (was 1000: faster disarm once settled) / 接地確認時間
     // Stalled-descent touchdown ("ground-effect float"). During a commanded landing
     // descent, near the ground the rotors make MORE lift (ground effect), so the craft
     // holds altitude on reduced thrust and the constant-velocity descent STALLS above the
@@ -54,8 +54,8 @@ struct TakeoffLandingConfig {
     // キネマティクスから宣言: 着陸降下が指令されており ∧ ToF が near_ground_tof_m 以内 ∧
     // 鉛直速度が停滞（< landing_vel_mps）＝降下しようとしているのに地面に止められている。脆い
     // （ホバー感度の高い）推力閾値は不要で、降下停滞そのものが地面支持の証拠。
-    float near_ground_tof_m  = 0.12f;   // Near-ground band for stalled-descent touchdown [m] / 停滞接地の近傍帯
-    uint32_t stall_hold_ms   = 600;     // Stalled-descent confirm [ms] (< firm-ground confirm) / 停滞確認時間
+    float near_ground_tof_m  = 0.15f;   // Near-ground band for stalled-descent touchdown [m] (was 0.12: engage the settle a touch earlier) / 停滞接地の近傍帯
+    uint32_t stall_hold_ms   = 400;     // Stalled-descent confirm [ms] (was 600: with the settle assist the descent reaches rest quickly) / 停滞確認時間
     // Consecutive ground-side ToF samples required to flip on_ground_ false→true
     // (air→ground debounce). A single near-reflection ghost mid-flight can no
     // longer assert "on ground"; landing already needs landing_hold_ms downstream

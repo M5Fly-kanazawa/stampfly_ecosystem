@@ -330,12 +330,38 @@ ControlOutput PidController::compute(
         // 自動着陸の降下 — モード非依存（ACRO/STABILIZE からの通信途絶着陸は高度ループを持た
         // ない）。一定の下向き速度を追従し、接地は TakeoffLandingMgr が検出（INV-3）して LANDING
         // を終える。姿勢は上の単一パイプライン（パイロット or 水平ゲート）で処理済み。
-        const float vel_up = -state.velocity[2];   // up-positive / 上正
+        const float altitude = -state.position[2];   // NED z-down → altitude up
+        const float vel_up   = -state.velocity[2];   // up-positive / 上正
         const float thrust_correction =
             alt_vel_.compute(-landing_descent_rate_, vel_up, dt);
         thrust = hover_thrust_ + thrust_correction;
-        if (thrust < 0.0f)         thrust = 0.0f;
-        if (thrust > max_thrust_)  thrust = max_thrust_;
+
+        // Near-ground settle assist: a constant-velocity descent is BALANCED by ground
+        // effect near the floor (more rotor lift on reduced thrust), so the craft lingers
+        // and the descent stalls (pilot report 2026-06-14). Once the altitude estimate is
+        // near the ground, ramp the thrust CEILING down from hover toward
+        // kLandingSettleThrustFrac·hover over kLandingSettleRampS. The velocity loop still
+        // modulates within the ceiling (so a normal descent touches down gently before the
+        // ceiling bites), but if the craft is STILL floating the falling ceiling drops below
+        // what ground effect can support and the craft positively SETTLES — bounded linger,
+        // no thrust-threshold guesswork, and no free-fall (the floor is a fraction of hover,
+        // not 0). This only shapes the vertical channel (INV-1); attitude is untouched.
+        // 近地面の着地アシスト: 定速降下は接地近傍で地面効果（低推力でローター揚力増）と釣り合い、
+        // 機体が粘って降下停滞する（パイロット報告）。高度推定が接地近傍に来たら、推力の上限を
+        // hover から kLandingSettleThrustFrac·hover へ kLandingSettleRampS かけて絞る。速度ループ
+        // は上限内で調整（通常降下は上限が効く前に穏やかに接地）だが、まだ浮いていれば下がる上限が
+        // 地面効果の支えを下回り機体は確実に沈む — 粘りは有界、推力閾値の当て推量も自由落下もない
+        // （床は hover の一定割合で 0 でない）。鉛直チャネルのみ整形（INV-1）、姿勢は不変。
+        float thrust_ceiling = max_thrust_;
+        if (altitude < kLandingSettleAltM) {
+            landing_settle_t_ += dt;
+            const float r = (landing_settle_t_ < kLandingSettleRampS)
+                                ? (landing_settle_t_ / kLandingSettleRampS) : 1.0f;
+            const float frac = 1.0f - (1.0f - kLandingSettleThrustFrac) * r;  // hover→frac·hover
+            thrust_ceiling = hover_thrust_ * frac;
+        }
+        if (thrust < 0.0f)            thrust = 0.0f;
+        if (thrust > thrust_ceiling)  thrust = thrust_ceiling;
     } else if (current_mode_ >= FlightMode::ALT_HOLD) {
         const float altitude = -state.position[2];   // NED z-down → altitude up
         const float vel_up   = -state.velocity[2];   // vertical velocity, up positive
@@ -635,6 +661,7 @@ void PidController::onLanding()
     // Landing は VerticalPhase（INV-1）— 以後 compute() が降下しつつ姿勢を保つ（リンク
     // 途絶なら水平化）。別の制御経路ではない。
     phase_ = VerticalPhase::Landing;
+    landing_settle_t_ = 0.0f;   // near-ground settle ramp starts fresh / 着地アシストのランプを初期化
 
     // Fresh start for the loops the landing law uses: the attitude loops may carry
     // integrator state from a different mode, and the vertical loop may have wound up
@@ -791,6 +818,7 @@ void PidController::reset()
     pos_x_.reset();      pos_y_.reset();
     vel_x_.reset();      vel_y_.reset();
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded; clears Landing too / 次の飛行は接地から（Landing も解除）
+    landing_settle_t_ = 0.0f;            // near-ground settle ramp / 着地アシストのランプ
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
