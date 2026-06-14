@@ -50,17 +50,19 @@ void TakeoffLandingMgr::init(const TakeoffLandingConfig& config)
 // update — run takeoff/landing detection
 // 更新 — 離陸/着陸検出を実行
 // -----------------------------------------------------------------------------
-void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_velocity)
+void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_velocity,
+                               bool in_landing_descent)
 {
     // Disarmed → definitively on the ground (proven firmware/vehicle pattern). While
     // disarmed the only motion signal is the ToF, so evaluate held-in-hand here; clear the
-    // landing latch and the debounce streaks for the next flight.
+    // landing latch and the debounce streaks/timers for the next flight.
     // disarmed → 確実に接地（実証済みの firmware/vehicle パターン）。disarmed 中の唯一の動き信号は
-    // ToF ゆえここで手持ちを判定する。着陸ラッチとデバウンス連続数を次飛行のためクリア。
+    // ToF ゆえここで手持ちを判定する。着陸ラッチ・デバウンス連続数・タイマーを次飛行のためクリア。
     if (!armed) {
         on_ground_ = true;
         landing_detected_ = false;
         landing_start_ms_ = 0;
+        stall_start_ms_   = 0;
         ground_streak_   = 0;
         evaluateHeld(tof);
         return;
@@ -68,7 +70,7 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
 
     held_ = false;   // armed: by definition not hand-held / armed 中は定義上手持ちでない
     evaluateToF(tof);
-    detectLanding(vertical_velocity);
+    detectLanding(vertical_velocity, in_landing_descent);
 }
 
 // -----------------------------------------------------------------------------
@@ -104,8 +106,13 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
     // on_ground_ は直前値を保持（起動時 true）。無効サンプルは地上連続数も途切れさせる。
     if (!tof.valid) {
         ground_streak_ = 0;
-        return;
+        return;   // near_ground_ holds its last value across a brief invalid dropout
     }
+
+    // Near-ground band for the stalled-descent touchdown (a wider zone than the 5cm
+    // ground threshold, so the ground-effect float at ~5-12cm is covered).
+    // 降下停滞接地用の近傍帯（5cm 地上閾値より広く、~5-12cm の地面効果フロートを覆う）。
+    near_ground_ = (tof.distance < config_.near_ground_tof_m);
 
     if (tof.distance > config_.airborne_tof_m) {
         // Airborne: flip immediately (prompt class-B handoff at takeoff).
@@ -132,32 +139,49 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
 // detectLanding — low altitude + low velocity sustained → landing event
 // 着陸検出 — 低高度＋低速度の持続 → 着陸イベント
 // -----------------------------------------------------------------------------
-void TakeoffLandingMgr::detectLanding(float vertical_velocity)
+void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_descent)
 {
     uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     float vz = std::fabs(vertical_velocity);  // injected, not a topic read / 注入値
+    const bool at_rest = (vz < config_.landing_vel_mps);
 
-    // Landing condition: on the ground + low vertical velocity sustained for
-    // landing_hold_ms. landing_detected_ is a LEVEL flag — true while the condition holds,
-    // cleared when it breaks — so a 50 Hz consumer (StateTask) cannot miss it through a
-    // Latest topic (unlike a one-shot pulse).
-    // 着陸条件: 接地＋低鉛直速度が landing_hold_ms 持続。landing_detected_ はレベルフラグ
-    // （条件成立中 true、崩れたらクリア）— ワンショットと違い 50Hz の消費者（StateTask）が
-    // Latest トピック越しに取りこぼさない。
-    if (on_ground_ && vz < config_.landing_vel_mps) {
-        if (landing_start_ms_ == 0) {
-            landing_start_ms_ = now_ms;
-        }
-        if (now_ms - landing_start_ms_ >= config_.landing_hold_ms) {
-            if (!landing_detected_) {
-                ESP_LOGI(TAG, "Landing detected");   // log once on the rising edge / 立上りで1回
-            }
-            landing_detected_ = true;
-        }
+    // Two independent touchdown paths, each a sustained level condition. landing_detected_
+    // is a LEVEL flag (true while the condition holds, cleared when it breaks) so a 50 Hz
+    // consumer (StateTask) cannot miss it through a Latest topic.
+    //   (1) FIRM GROUND: ToF confirms <5cm (on_ground_) + at rest, held landing_hold_ms.
+    //       The clean touchdown when the craft reaches the ground.
+    //   (2) STALLED DESCENT: a landing descent is commanded + the ToF is within
+    //       near_ground_tof_m + at rest, held stall_hold_ms. Catches the ground-effect
+    //       float, where the craft holds altitude on reduced thrust and never reaches 5cm
+    //       (so (1) never fires). Gated on in_landing_descent so a deliberate low hover is
+    //       NOT a landing — only a STALLED descent is.
+    // 2つの独立した接地経路。各々が持続レベル条件。landing_detected_ はレベルフラグ。
+    //   (1) 確実な接地: ToF が <5cm を確認（on_ground_）＋静止を landing_hold_ms 持続。
+    //   (2) 降下停滞: 着陸降下が指令＋ToF が near_ground_tof_m 以内＋静止を stall_hold_ms 持続。
+    //       地面効果フロート（低推力で高度保持、5cm に届かず (1) が発火しない）を捕捉。
+    //       in_landing_descent でゲートし、意図的な低ホバーは着陸でない（停滞降下のみ着陸）。
+    bool firm = false;
+    if (on_ground_ && at_rest) {
+        if (landing_start_ms_ == 0) landing_start_ms_ = now_ms;
+        firm = (now_ms - landing_start_ms_ >= config_.landing_hold_ms);
     } else {
         landing_start_ms_ = 0;
-        landing_detected_ = false;
     }
+
+    bool stalled = false;
+    if (in_landing_descent && near_ground_ && at_rest) {
+        if (stall_start_ms_ == 0) stall_start_ms_ = now_ms;
+        stalled = (now_ms - stall_start_ms_ >= config_.stall_hold_ms);
+    } else {
+        stall_start_ms_ = 0;
+    }
+
+    const bool detected = firm || stalled;
+    if (detected && !landing_detected_) {
+        ESP_LOGI(TAG, "Landing detected (%s)",   // log once on the rising edge / 立上りで1回
+                 firm ? "ground" : "stalled descent / ground effect");
+    }
+    landing_detected_ = detected;
 }
 
 // -----------------------------------------------------------------------------

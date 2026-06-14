@@ -11,10 +11,12 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -O2 \
     -I../components/sf_estimator/include \
     -I../components/sf_controller/include \
     -I../components/sf_state/include \
+    -I../components/sf_takeoff_landing/include \
     -I../components/sf_telemetry/include
 
 SRCS = test_main.cpp \
-       ../components/sf_estimator_eskf/eskf_core.cpp ../components/sf_autotune/autotune.cpp
+       ../components/sf_estimator_eskf/eskf_core.cpp ../components/sf_autotune/autotune.cpp \
+       ../components/sf_takeoff_landing/takeoff_landing.cpp
 
 TARGET = test_vehicle_new
 

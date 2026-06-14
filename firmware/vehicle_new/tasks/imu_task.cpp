@@ -254,6 +254,12 @@ static void processAsyncSensors()
     // （Latest, 非消費）から毎サイクル1回読む。
     const sf::SystemMode mode = sf::system_mode.latest();
     const bool armed = sf::isArmed(static_cast<sf::FlightState>(mode.state));
+    // True while the autonomous landing descent is commanded — enables the stalled-descent
+    // touchdown branch (a stall near the ground means "landed" only when we are descending).
+    // 自動着陸降下の指令中に true — 降下停滞による接地判定を有効化（接地近傍の停滞が「着陸」を
+    // 意味するのは降下中のみ）。
+    const bool in_landing_descent =
+        (static_cast<sf::FlightState>(mode.state) == sf::FlightState::LANDING);
 
     // Mirror the latest consumed async-sensor values into sensor_snapshot (Latest) so
     // monitors (CLI `sensor`, telemetry) can peek without stealing from these SPSC
@@ -273,7 +279,8 @@ static void processAsyncSensors()
         // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と奪い合わない
         // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
         // 関数に保つ（マネージャ内でトピックを読まない）。
-        g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2]);
+        g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2],
+                                 in_landing_descent);
         snap.tof_distance  = tof.distance;
         snap.tof_status    = tof.status;
         snap.tof_valid     = tof.valid;

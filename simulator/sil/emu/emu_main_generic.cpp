@@ -87,6 +87,27 @@ sil::Plant::Config plant_config_from_env()
     return cfg;
 }
 
+// Apply the SIL_EMU_GROUND_EFFECT knob on top of the noise config. "1"/"on" enables a
+// default-strength ground effect; a numeric value sets the gain directly. OFF by default
+// (clean path byte-identical). Models the near-floor lift boost so the touchdown "float"
+// is reproduced and the firmware's stalled-descent land detector can be verified.
+// SIL_EMU_GROUND_EFFECT ノブをノイズ設定に重ねて適用。"1"/"on" で既定強度、数値で gain 直接指定。
+// 既定 OFF（クリーン経路バイト一致）。接地近傍の揚力ブーストを模し着陸「フロート」を再現して、
+// ファームの降下停滞接地検出器を検証可能にする。
+void apply_ground_effect_from_env(sil::Plant::Config& cfg)
+{
+    const char* ge = std::getenv("SIL_EMU_GROUND_EFFECT");
+    if (!ge) return;
+    float gain = 0.30f;   // default strength when just enabled / 有効化時の既定強度
+    if (std::strcmp(ge, "1") != 0 && std::strcmp(ge, "on") != 0) {
+        gain = static_cast<float>(std::atof(ge));   // explicit numeric gain / 明示 gain
+    }
+    if (gain <= 0.0f) return;
+    cfg.ge_gain = gain;
+    std::printf("[emu] ground effect ON (gain=%.2f, height=%.3fm)\n",
+                cfg.ge_gain, cfg.ge_height);
+}
+
 void on_advance(int64_t now_us)
 {
     if (now_us > g_last_step_us) {
@@ -183,7 +204,9 @@ int main(int argc, char** argv)
     }
 
     std::printf("[emu] (1) plant.init ...\n");
-    if (!g_plant.init(model_path, plant_config_from_env())) {
+    sil::Plant::Config plant_cfg = plant_config_from_env();
+    apply_ground_effect_from_env(plant_cfg);   // opt-in ground effect (default OFF)
+    if (!g_plant.init(model_path, plant_cfg)) {
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;
     }

@@ -435,13 +435,19 @@ void Plant::substep(float h)
     // substep の v_batt_ で計算し、その後 v_batt_ を更新＝4kHz で陽的に1 substep 遅れ）。
     const float alpha = 1.0f - std::exp(-h / cfg_.motor_tau);
     const float v_supply = v_batt_;          // this substep's supply voltage
+    // Ground-effect lift gain at the current body height (ENU z = qpos[2]). Computed once
+    // per substep and applied to every motor's thrust — near the floor the rotors make more
+    // lift for the same ω, so the craft holds altitude on reduced thrust (the touchdown float).
+    // 現在の機体高さ（ENU z = qpos[2]）での地面効果揚力ゲイン。substep ごとに1回計算し全モータ
+    // 推力へ適用 — 床近傍では同じ ω でも揚力が増し、機体は低推力で高度を保つ（着陸フロート）。
+    const float ge_mult = groundEffectMultiplier(static_cast<float>(d_->qpos[2]));
     float thrust[4];
     float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
     for (int i = 0; i < 4; ++i) {
         motor_duty_[i] += (motor_target_[i] - motor_duty_[i]) * alpha;
         const float v_motor = motor_duty_[i] * v_supply;
         const float omega   = solveOmega(v_motor);
-        thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega * omega * cfg_.health[i];
+        thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega * omega * cfg_.health[i] * ge_mult;
         if (i < m_->nu) d_->ctrl[i] = thrust[i];
 
         // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.

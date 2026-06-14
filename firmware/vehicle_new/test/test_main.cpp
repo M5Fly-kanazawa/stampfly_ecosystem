@@ -31,11 +31,20 @@
 #define ESP_LOGE(tag, fmt, ...) printf("[ERR]  %s: " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGD(tag, fmt, ...) // silent
 
+#include <cstdint>
+
 #include "sf_math.hpp"
 #include "eskf_core.hpp"
 #include "pid.hpp"
 #include "autotune.hpp"
 #include "data_stream_wire.hpp"   // Data Stream wire layout (vs udp_capture.py)
+#include "takeoff_landing.hpp"    // ground/airborne + touchdown detection
+
+// Mock monotonic clock for esp_timer.h (TakeoffLandingMgr time-based detection). Start at
+// a large non-zero value so now_ms is never 0 (0 is the "timer unset" sentinel).
+// esp_timer.h 用のモック単調クロック（TakeoffLandingMgr の時間ベース検出）。now_ms が 0 に
+// ならないよう大きな非ゼロから開始（0 は「タイマ未設定」のセンチネル）。
+int64_t g_mock_esp_time_us = 1'000'000'000;
 
 // =============================================================================
 // Test framework (minimal)
@@ -620,6 +629,81 @@ TEST(wire_quantize_saturation)
     ASSERT_TRUE(quantize(0.5f, 1000.0f) == 500);
 }
 
+// =============================================================================
+// TakeoffLandingMgr tests — touchdown detection (firm ground + stalled descent)
+// 離着陸マネージャ — 接地検出（確実な接地＋降下停滞）
+// =============================================================================
+
+// Feed n update() cycles to the manager, advancing the mock clock dt_ms each cycle.
+// マネージャに n 回 update() を与え、毎回モッククロックを dt_ms 進める。
+static void feed(sf::TakeoffLandingMgr& mgr, float tof_m, bool tof_valid, bool armed,
+                 float vz, bool in_landing_descent, int n, int dt_ms)
+{
+    sf::TofData tof{};
+    tof.distance = tof_m;
+    tof.valid    = tof_valid;
+    for (int i = 0; i < n; ++i) {
+        g_mock_esp_time_us += static_cast<int64_t>(dt_ms) * 1000;
+        mgr.update(tof, armed, vz, in_landing_descent);
+    }
+}
+
+// Firm-ground touchdown: ToF confirms <5cm + at rest, held landing_hold_ms → detected.
+// 確実な接地: ToF<5cm 確認＋静止を landing_hold_ms 持続 → 検出。
+TEST(land_firm_ground)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feed(mgr, 0.30f, true, true, 0.30f, false, 5, 30);   // airborne first → on_ground=false
+    ASSERT_TRUE(!mgr.isOnGround());
+    feed(mgr, 0.03f, true, true, 0.02f, false, 40, 30);  // <5cm + at rest > 1000ms
+    ASSERT_TRUE(mgr.isOnGround());
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+// Stalled-descent touchdown (ground-effect float): ToF stuck at ~8cm (never <5cm, so the
+// firm-ground path can NOT fire), in a commanded landing descent, vz stalled → detected
+// via the stalled-descent branch within stall_hold_ms.
+// 降下停滞による接地（地面効果フロート）: ToF が ~8cm で停滞（<5cm に届かず firm-ground は
+// 発火不可）、着陸降下の指令中、vz 停滞 → stall_hold_ms 以内に降下停滞経路で検出。
+TEST(land_stalled_descent_ground_effect)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feed(mgr, 0.30f, true, true, 0.30f, true, 5, 30);    // airborne, descending
+    ASSERT_TRUE(!mgr.isOnGround());
+    feed(mgr, 0.08f, true, true, 0.02f, true, 30, 30);   // float at 8cm, stalled, > stall_hold_ms
+    ASSERT_TRUE(!mgr.isOnGround());                       // never reached <5cm
+    ASSERT_TRUE(mgr.isLandingDetected());                // caught by the stalled-descent path
+}
+
+// A deliberate LOW HOVER is NOT a landing: same near-ground + stalled, but NOT in a landing
+// descent (in_landing_descent=false) → the stalled-descent branch is gated off, and the
+// firm-ground branch needs <5cm (here 8cm) → no false touchdown.
+// 意図的な低ホバーは着陸でない: 同じ接地近傍＋停滞でも着陸降下でない（in_landing_descent=false）
+// → 降下停滞経路はゲート遮断、firm-ground は <5cm 必須（ここは 8cm）→ 誤接地なし。
+TEST(land_low_hover_not_landing)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feed(mgr, 0.30f, true, true, 0.30f, false, 5, 30);   // airborne
+    feed(mgr, 0.08f, true, true, 0.02f, false, 40, 30);  // hover at 8cm, NOT a landing descent
+    ASSERT_TRUE(!mgr.isLandingDetected());               // must not false-trigger
+}
+
+// Disarmed clears the landing latch (ready for the next flight).
+// disarmed で着陸ラッチをクリア（次飛行に備える）。
+TEST(land_disarm_clears)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feed(mgr, 0.30f, true, true, 0.30f, true, 5, 30);
+    feed(mgr, 0.08f, true, true, 0.02f, true, 30, 30);
+    ASSERT_TRUE(mgr.isLandingDetected());
+    feed(mgr, 0.01f, false, false, 0.0f, false, 2, 30);  // disarmed
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
 int main()
 {
     printf("=== vehicle_new Unit Tests ===\n\n");
@@ -656,6 +740,12 @@ int main()
     run_wire_unified_entries();
     run_wire_status_packet();
     run_wire_quantize_saturation();
+
+    printf("\n[TakeoffLanding]\n");
+    run_land_firm_ground();
+    run_land_stalled_descent_ground_effect();
+    run_land_low_hover_not_landing();
+    run_land_disarm_clears();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

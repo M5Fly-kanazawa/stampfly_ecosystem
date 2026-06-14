@@ -105,6 +105,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="noise RNG seed (determinism: same seed → byte-identical run)")
     p.add_argument("--video", action="store_true",
                    help="on PASS, render a review MP4 (MuJoCo 3D + state graphs) from the run")
+    p.add_argument("--ground-effect", nargs="?", const="1", default=None, metavar="GAIN",
+                   help="enable the plant ground-effect model (near-floor lift boost) so the "
+                        "touchdown 'float' is reproduced. Bare flag = default strength; pass a "
+                        "number to set the gain (e.g. --ground-effect 0.4). Default OFF "
+                        "(byte-identical clean path).")
     p.add_argument("--unpaired", action="store_true",
                    help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
@@ -400,6 +405,15 @@ def run_scenario(args: argparse.Namespace) -> int:
     seed = getattr(args, "seed", 12345)
     env["SIL_EMU_NOISE"] = noise
     env["SIL_EMU_SEED"] = str(seed)
+
+    # --ground-effect enables the plant's near-floor lift boost (default OFF → clean path
+    # byte-identical) so the touchdown "float" is reproduced and the firmware stalled-descent
+    # land detector can be verified. Bare flag = default strength; a number sets the gain.
+    # --ground-effect でプラントの接地近傍揚力ブーストを有効化（既定 OFF→クリーン経路バイト一致）。
+    # 着陸「フロート」を再現しファームの降下停滞接地検出器を検証。素のフラグ=既定強度、数値で gain 指定。
+    ge = getattr(args, "ground_effect", None)
+    if ge is not None:
+        env["SIL_EMU_GROUND_EFFECT"] = str(ge)
 
     # --unpaired: skip the pairing NVS seed so the vehicle boots unpaired and runs the
     # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps

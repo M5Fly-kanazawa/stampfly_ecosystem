@@ -18,7 +18,9 @@
  * 離陸/着陸シーケンスを管理し、状態遷移をトリガーする。
  *
  * @design architecture.md §4 — State machine transitions               [OK]
+ * @design architecture.md INV-3 — detection here, decision in StateTask [OK]
  * @design detailed_design.md §3 — State transition table (TAKEOFF/LANDING) [OK]
+ * @design detailed_design.md §3 注7 — stalled-descent touchdown detector [OK]
  * @design coding_and_education.md §2 — Bilingual comments               [OK]
  */
 
@@ -37,6 +39,23 @@ struct TakeoffLandingConfig {
     float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
     uint32_t landing_hold_ms = 1000;    // Landing confirm [ms]    / 着陸確認時間
+    // Stalled-descent touchdown ("ground-effect float"). During a commanded landing
+    // descent, near the ground the rotors make MORE lift (ground effect), so the craft
+    // holds altitude on reduced thrust and the constant-velocity descent STALLS above the
+    // 5cm ground threshold — a ToF-only detector never triggers and the craft floats
+    // (pilot report 2026-06-14). Touchdown is then declared from KINEMATICS: while a
+    // landing descent is commanded AND the ToF reads within near_ground_tof_m AND the
+    // vertical velocity has stalled (< landing_vel_mps) — we are trying to descend but the
+    // ground has stopped us. No thrust threshold (a fragile, hover-sensitive signal) is
+    // needed; the stalled descent IS the weight-on-ground evidence.
+    // 降下停滞による接地（「地面効果フロート」）。着陸降下の指令中、接地近傍ではローター揚力が
+    // 増す（地面効果）ため機体は低推力で高度を保ち、一定速度降下が 5cm 地上閾値の上で停滞する
+    // — ToF のみの検出器は発火せず機体は浮く（パイロット報告 2026-06-14）。そこで接地を
+    // キネマティクスから宣言: 着陸降下が指令されており ∧ ToF が near_ground_tof_m 以内 ∧
+    // 鉛直速度が停滞（< landing_vel_mps）＝降下しようとしているのに地面に止められている。脆い
+    // （ホバー感度の高い）推力閾値は不要で、降下停滞そのものが地面支持の証拠。
+    float near_ground_tof_m  = 0.12f;   // Near-ground band for stalled-descent touchdown [m] / 停滞接地の近傍帯
+    uint32_t stall_hold_ms   = 600;     // Stalled-descent confirm [ms] (< firm-ground confirm) / 停滞確認時間
     // Consecutive ground-side ToF samples required to flip on_ground_ false→true
     // (air→ground debounce). A single near-reflection ghost mid-flight can no
     // longer assert "on ground"; landing already needs landing_hold_ms downstream
@@ -83,9 +102,17 @@ public:
     /// `vertical_velocity` [m/s, NED down] is injected (not read from a topic) so the
     /// landing detector stays a pure function of its inputs — detection here, the
     /// transition decision in StateTask (architecture §2: separate detection from decision).
+    /// `in_landing_descent` is true while the autonomous landing descent is commanded
+    /// (FlightState::LANDING). It is a STATE-derived INPUT (like `armed`), not a decision —
+    /// it enables the stalled-descent touchdown branch (a stall near the ground only means
+    /// "landed" when we are actually trying to descend; a deliberate low hover is not).
     /// `vertical_velocity`[m/s, NED down] を注入する（トピックから読まない）。着陸検出器を入力の
     /// 純粋な関数に保ち、検出はここ・遷移判断は StateTask（architecture §2: 検出と判断の分離）。
-    void update(const TofData& tof, bool armed, float vertical_velocity);
+    /// `in_landing_descent` は自動着陸降下の指令中（FlightState::LANDING）に true。`armed` と同じ
+    /// 状態由来の「入力」（判断ではない）で、降下停滞による接地判定を有効にする（接地近傍の停滞が
+    /// 「着陸」を意味するのは実際に降下しようとしている時のみ。意図的な低ホバーは着陸でない）。
+    void update(const TofData& tof, bool armed, float vertical_velocity,
+                bool in_landing_descent);
 
     /// Check if vehicle is on the ground
     /// 機体が地上にあるか確認する
@@ -109,19 +136,22 @@ private:
     /// ToF距離で地面接地を評価する
     void evaluateToF(const TofData& tof);
 
-    /// Detect landing: low altitude + low velocity sustained (level flag, see getter)
-    /// 着陸検出: 低高度＋低速度の持続（レベルフラグ、getter 参照）
-    void detectLanding(float vertical_velocity);
+    /// Detect landing: firm ground (ToF<5cm) OR a stalled landing descent near the ground,
+    /// each with low vertical velocity sustained (level flag, see getter).
+    /// 着陸検出: 確実な接地（ToF<5cm）or 接地近傍で着陸降下が停滞、いずれも低鉛直速度の持続。
+    void detectLanding(float vertical_velocity, bool in_landing_descent);
 
     /// Evaluate held-in-hand from the ToF distance (disarmed only, hysteresis)
     /// ToF 距離から手持ちを評価する（disarmed 時のみ、ヒステリシス）
     void evaluateHeld(const TofData& tof);
 
     TakeoffLandingConfig config_;
-    bool     on_ground_        = true;   // Ground contact flag  / 地面接地フラグ
+    bool     on_ground_        = true;   // Ground contact flag (ToF<5cm) / 地面接地フラグ
+    bool     near_ground_      = false;  // ToF within near_ground_tof_m  / 接地近傍フラグ
     bool     held_             = false;  // Held-in-hand flag    / 手持ちフラグ
     bool     landing_detected_ = false;  // Landing detected flag (level) / 着陸検出フラグ
-    uint32_t landing_start_ms_ = 0;      // Landing timer start  / 着陸タイマー開始
+    uint32_t landing_start_ms_ = 0;      // Firm-ground landing timer start / 接地着陸タイマー開始
+    uint32_t stall_start_ms_   = 0;      // Stalled-descent timer start  / 降下停滞タイマー開始
     uint8_t  ground_streak_    = 0;      // Consecutive ground-side ToF samples (air→ground debounce) / 地上側連続数
 };
 

@@ -36,6 +36,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 
 #include <mujoco/mujoco.h>
 
@@ -86,6 +87,33 @@ public:
         float thrust_efficiency = 1.0f / 1.12f;  ///< ≈0.893 (matches firmware HOVER_THRUST_CORRECTION)
         float kappa    = 9.71e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T)
         float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
+
+        // --- Ground effect — Model fidelity ---
+        // Extra rotor lift near the floor: each motor's thrust is scaled by
+        //   1 + ge_gain·exp(−z / ge_height),  z = body height above the floor [m].
+        // Negligible a few ge_height up (≈0 at flight altitude), strong in the last few
+        // cm. This is the physics behind the touchdown "float" the pilot reports — near
+        // the ground the craft holds altitude on REDUCED thrust, so a constant-velocity
+        // descent stalls and a ToF-only landing detector (needs <5cm) never triggers. The
+        // armed touchdown detector (TakeoffLandingMgr) keys off exactly this: near-ground +
+        // descent-stalled + thrust-below-hover. 0 disables it (byte-identical to pre-GE).
+        // 地面効果: 接地近傍の余剰ローター揚力。各モータ推力を 1 + ge_gain·exp(−z/ge_height)
+        // 倍する（z=床上の機体高さ[m]）。数 ge_height 以上で無視でき（飛行高度で≈0）、最後の
+        // 数 cm で強く効く。これがパイロット報告の着陸「フロート」の物理 — 接地近傍で機体は
+        // 低推力で高度を保つため、一定速度降下が停滞し、ToF のみ（<5cm 必須）の着陸検出器が
+        // 発火しない。armed 接地検出器はまさにこれ（接地近傍＋降下停滞＋推力ホバー以下）を
+        // 起点にする。0 で無効（GE 導入前とバイト一致）。
+        // DEFAULT OFF (0) so the clean path stays byte-identical and the existing scenarios
+        // (tuned without GE) are unaffected — enable per-scenario via SIL_EMU_GROUND_EFFECT
+        // (sf sil scenario --ground-effect), exactly like the sensor-noise knob. GE is real
+        // physics but, like noise, it is opt-in for determinism; the firmware touchdown
+        // detector is always active, so on HARDWARE (GE always present) it works regardless.
+        // 既定 OFF(0): クリーン経路をバイト一致に保ち、GE 無しで調整済みの既存シナリオを乱さない —
+        // SIL_EMU_GROUND_EFFECT（sf sil scenario --ground-effect）でシナリオ毎に有効化（ノイズノブ
+        // と同様）。GE は実在物理だがノイズ同様に決定論のためオプトイン。ファーム接地検出器は常時有効ゆえ
+        // 実機（GE 常在）では常に効く。
+        float ge_gain   = 0.0f;     ///< extra lift fraction as z→0 (0 = OFF) / z→0 での余剰揚力率（0=OFF）
+        float ge_height = 0.045f;   ///< [m] ground-effect e-folding height / 減衰高さ
 
         // --- Battery (1S LiPo) sag/discharge model — Model fidelity ---
         // When enabled, the supply voltage is DYNAMIC: v_batt(t) = OCV(SoC) − I·R_int,
@@ -265,6 +293,14 @@ public:
     mjData*        data()        { return d_; }   ///< for the optional viewer / ビューア用
 
 private:
+    /// Ground-effect lift multiplier at body height z [m] (ENU): 1 + ge_gain·exp(−z/ge_height).
+    /// 1 (no effect) when ge_gain ≤ 0 or far from the floor. See Config::ge_gain.
+    /// 機体高さ z[m] での地面効果揚力倍率。ge_gain≤0 / 床から遠いと 1。Config::ge_gain 参照。
+    float groundEffectMultiplier(float z_body_m) const {
+        if (cfg_.ge_gain <= 0.0f) return 1.0f;
+        return 1.0f + cfg_.ge_gain * std::exp(-z_body_m / cfg_.ge_height);
+    }
+
     /// One fixed-timestep physics substep of length h [s]: motor lag → thrust →
     /// reaction torque + wind → mj_step → advance noise. h is the model timestep.
     /// 長さ h [s] の固定刻み物理 substep 1回: モータ遅れ → 推力 → 反トルク＋風 →
