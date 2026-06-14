@@ -479,8 +479,10 @@ void StateTask(void* pvParameters)
                 g_state_manager.requestArm();
                 break;
             case sf::ApiCmd::Disarm:
+                g_state_manager.requestDisarm();        // ALT/POS in flight → auto-land
+                break;
             case sf::ApiCmd::Emergency:
-                g_state_manager.requestDisarm();
+                g_state_manager.requestEmergencyStop(); // unconditional immediate cut
                 break;
             case sf::ApiCmd::Takeoff: {
                 // Set the (ALT/POS) mode and ARM; the auto-takeoff is then triggered by

@@ -1,0 +1,30 @@
+# alt_disarm_land.expect — pilot DISARM in ALT_HOLD ⇒ AUTO-LANDING gate (new 2026-06-14)
+# ALT_HOLD でのパイロット DISARM ⇒ 自動着陸ゲート
+#
+# Asserts the full chain requested by the user (2026-06-14): a DISARM pressed while
+# FLYING in ALT_HOLD does NOT cut the motors (drop) — it starts an AUTO-LANDING that
+# descends GRADUALLY (~0.3 m/s, motors running) and DISARMs only at touchdown.
+#   • log chain: DISARM-in-ALT_HOLD → auto-land verb → FLYING→LANDING → LANDING→IDLE_GROUND
+#   • duty_max > 0.5 through the descent window  ⇒ motors RUN (a cut/drop would be ≈ 0)
+#   • alt_min > 0.20 at 13.5–13.9 s             ⇒ still aloft 0.4 s after DISARM (a free-fall
+#                                                  drop from 0.5 m hits ground in ~0.32 s)
+#   • alt_max < 0.05 at the end                 ⇒ the craft actually landed
+#   • tilt_max < 15°                            ⇒ attitude stays bounded through the descent
+# 仕様（ユーザー要望 2026-06-14）: ALT_HOLD の FLYING 中 DISARM はモータを切らず（落下せず）、
+# 緩降下（~0.3 m/s, モータ稼働）の自動着陸を開始し、接地で初めて DISARM。
+exit 0
+log_contains any "Mode change: STABILIZE → ALT_HOLD"
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Takeoff complete"                     # TAKEOFF → FLYING (airborne)
+log_contains any "DISARM in ALT_HOLD → auto-land"       # pilot DISARM routed to auto-land
+log_contains any "Autonomous landing engaged"           # controller descent law took over
+log_contains any "Transition: FLYING → LANDING"         # FLYING → LANDING (not → IDLE_GROUND)
+log_contains any "Transition: LANDING → IDLE_GROUND"    # touchdown then real DISARM
+order "Takeoff complete" "DISARM in ALT_HOLD → auto-land"           # DISARM happens while airborne
+order "DISARM in ALT_HOLD → auto-land" "Autonomous landing engaged" # routing precedes the descent law
+order "Autonomous landing engaged" "Transition: LANDING → IDLE_GROUND"  # descent completes the chain
+metric duty_max > 0.50 in 13.5 14.5     # motors RUN through the descent — controlled, not a cut
+metric alt_min  > 0.20 in 13.5 13.9     # still aloft 0.4 s after DISARM — gradual, not a free-fall drop
+metric tilt_max < 15.0 in 13.3 14.8     # attitude bounded through the auto-land
+metric alt_max  < 0.05 in 16.0 19.0     # landed and settled on the ground

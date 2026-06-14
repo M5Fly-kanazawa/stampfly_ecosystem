@@ -62,11 +62,11 @@ IDLE_GROUND
 | ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし） |
 | TAKEOFF → FLYING | 離陸完了。**ALT/POS: 制御器が目標高度 0.5m を捕捉して通知**（運動量による行き過ぎでなく目標値を捕捉）。**ACRO/STABILIZE: ToF 空中検知（0.15m）**。なお ToF 空中検知 0.15m は ESKF 鉛直ハンドオフ（ImuTask, クラスB）に役割分離され、ALT/POS の離陸完了判定には用いない |
 | サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
-| FLYING → LANDING | パイロット指示 or 自動判定 |
-| LANDING → IDLE_GROUND | 着陸完了 |
+| FLYING → LANDING | 自動着陸の起動。**(a) ALT_HOLD/POS_HOLD でのパイロット DISARM**（高度制御モードは自力で着陸できるため、空中でモータを切らず緩降下する。空中での即カットは機体を落とすだけ）、**(b) 通信途絶のホバー猶予経過**（§安全要件）。緩降下（固定降下率, config）で接地まで |
+| LANDING → IDLE_GROUND | 着陸完了（ToF 接地検出 → 本当の DISARM、モータゼロ） |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |
-| FLYING → IDLE_GROUND | 衝突検知 or パイロットDISARM |
-| ARMED_GROUND → IDLE_GROUND | DISARMアクション |
+| FLYING → IDLE_GROUND | **衝突検知**（緊急 DISARM）or **ACRO/STABILIZE でのパイロット DISARM**（手動推力モードは自動着陸を持たないため即カット）or **緊急停止**（API `emergency`／着陸中の再 DISARM＝中断）|
+| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット） |
 
 ### ペアリング状態（PairingState）
 
@@ -311,11 +311,11 @@ IDLE_GROUND
 | ARMED_GROUND → TAKEOFF | Throttle input |
 | TAKEOFF → FLYING | Takeoff complete (altitude threshold reached) |
 | FLYING sub-mode switch | Mode switch command from controller |
-| FLYING → LANDING | Pilot command or automatic detection |
-| LANDING → IDLE_GROUND | Landing complete |
+| FLYING → LANDING | Starts an auto-landing: **(a) pilot DISARM in ALT_HOLD/POS_HOLD** (altitude-controlled modes can land themselves, so the craft descends gradually instead of cutting motors mid-air — a mid-air cut would just drop it); **(b) comm-loss hover grace elapsed** (see Safety). Gradual descent (fixed rate, config) to touchdown |
+| LANDING → IDLE_GROUND | Landing complete (ToF touchdown detection → the real DISARM, motors zero) |
 | FLYING → ARMED_GROUND | Soft landing / touch-and-go |
-| FLYING → IDLE_GROUND | Crash detection or pilot DISARM |
-| ARMED_GROUND → IDLE_GROUND | DISARM action |
+| FLYING → IDLE_GROUND | **Crash detection** (emergency DISARM) or **pilot DISARM in ACRO/STABILIZE** (manual-thrust modes have no auto-landing, so cut immediately) or **emergency stop** (API `emergency` / a second DISARM while landing = abort) |
+| ARMED_GROUND → IDLE_GROUND | DISARM action (on the ground always an immediate cut) |
 
 ### Pairing State (PairingState)
 

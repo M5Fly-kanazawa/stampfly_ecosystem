@@ -171,7 +171,38 @@ bool StateManager::requestDisarm()
         return false;
     }
 
+    // ALT_HOLD/POS_HOLD while FLYING: a pilot DISARM starts an AUTO-LANDING (gradual
+    // descent) instead of an immediate motor cut — these altitude-controlled modes can
+    // land themselves, and cutting motors mid-air would just drop the craft (user
+    // request, 2026-06-14). Touchdown then disarms (LANDING → IDLE_GROUND via the ToF
+    // landing detector). A DISARM AGAIN while already LANDING falls through to the
+    // immediate cut below (state_ != FLYING) — pressing twice is the abort/emergency.
+    // ALT_HOLD/POS_HOLD の FLYING 中: パイロット DISARM は即モータ停止でなく自動着陸
+    // （緩降下）を開始する — 高度制御モードは自力で着陸でき、空中でモータを切ると機体が
+    // 落ちるだけ（ユーザー要望 2026-06-14）。接地で DISARM（LANDING→IDLE_GROUND, ToF 着陸
+    // 検出）。LANDING 中の再 DISARM は下の即カットに落ちる（state_ != FLYING）— 2回押しが中断/緊急。
+    if (state_ == FlightState::FLYING && mode_ >= FlightMode::ALT_HOLD) {
+        ESP_LOGI(TAG, "DISARM in %s → auto-land (LANDING)", flightModeName(mode_));
+        transition(FlightState::LANDING);
+        return true;
+    }
+
     ESP_LOGI(TAG, "DISARM accepted (%s → IDLE_GROUND)", flightStateName(state_));
+    transition(FlightState::IDLE_GROUND);
+    return true;
+}
+
+bool StateManager::requestEmergencyStop()
+{
+    if (!sf::isArmed(state_)) {
+        ESP_LOGD(TAG, "Emergency stop rejected: not armed (state=%s)",
+                 flightStateName(state_));
+        return false;
+    }
+    // Unconditional immediate motor cut — bypasses the ALT/POS auto-landing (API
+    // `emergency`, or aborting an in-progress auto-land). Motors zero once isArmed() is false.
+    // 無条件の即モータ停止 — ALT/POS 自動着陸を迂回（API `emergency` / 自動着陸の中断）。
+    ESP_LOGW(TAG, "EMERGENCY STOP (%s → IDLE_GROUND)", flightStateName(state_));
     transition(FlightState::IDLE_GROUND);
     return true;
 }

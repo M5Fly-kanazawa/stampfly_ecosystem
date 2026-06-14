@@ -120,11 +120,25 @@ public:
     /// @design requirements.md §9 — USB power: ARM prohibited         [OK]
     bool requestArm();
 
-    /// Request DISARM (ARMED_GROUND → IDLE_GROUND)
-    /// DISARMリクエスト（ARMED_GROUND → IDLE_GROUND）
+    /// Request DISARM. On the ground / in ACRO·STABILIZE it is an immediate motor cut
+    /// (→ IDLE_GROUND). In ALT_HOLD/POS_HOLD while FLYING it starts an AUTO-LANDING
+    /// (→ LANDING, gradual descent) instead of dropping the craft; touchdown then disarms.
+    /// A DISARM pressed again while already LANDING is the emergency cut (see below).
+    /// DISARM リクエスト。地上 / ACRO・STABILIZE では即モータ停止（→IDLE_GROUND）。
+    /// ALT_HOLD/POS_HOLD の FLYING 中は機体を落とさず自動着陸を開始（→LANDING, 緩降下）し、
+    /// 接地で DISARM する。LANDING 中の再 DISARM は緊急カット（下記）。
     ///
     /// @return true if transition succeeded
     bool requestDisarm();
+
+    /// Emergency stop: unconditional immediate motor cut from any armed state
+    /// (→ IDLE_GROUND), bypassing the ALT/POS auto-landing. For the API `emergency`
+    /// verb and for aborting an in-progress auto-landing.
+    /// 緊急停止: 任意の armed 状態から無条件で即モータ停止（→IDLE_GROUND）。ALT/POS の
+    /// 自動着陸を迂回する。API `emergency` verb と自動着陸の中断用。
+    ///
+    /// @return true if transition succeeded
+    bool requestEmergencyStop();
 
     /// Notify takeoff detected (ARMED_GROUND → TAKEOFF)
     /// 離陸検出通知（ARMED_GROUND → TAKEOFF）
