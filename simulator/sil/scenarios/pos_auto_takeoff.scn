@@ -14,8 +14,8 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
    +    rc   2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED → ground mode change
-   +    rc   3072  2048   2048    2048  1     1000      50        0     0     1  # C: ARM in POS_HOLD — props stop, spool, AUTO-takeoff fires (throttle ignored)
-   +    rc   3072  2048   2048    2048  1     8000      50        0     0     1  # D: throttle at CENTER (3072 = norm 0.5) → climb to 0.5 m, hold altitude + launch point
+   +    rc   2048  2048   2048    2048  1     1000      50        0     0     1  # C: ARM in POS_HOLD — props stop, spool, AUTO-takeoff fires (throttle ignored)
+   +    rc   2048  2048   2048    2048  1     8000      50        0     0     1  # D: throttle at CENTER (2048 = spring rest = HOLD) → climb to 0.5 m, hold altitude + launch point
    +    rc   2048  2048   2048    2048  0     200       50                       # E: release ARM button
    +    rc   2048  2048   2048    2048  1     200       50                       # F: press again → DISARM (toggle)
    +    rc   2048  2048   2048    2048  0     600       50                       # G: settle disarmed

@@ -144,7 +144,15 @@ private:
     // 逆変換するため +12% の偏りは速度ループ積分（±0.15N 上限内）が吸収する。
     float max_thrust_     = 0.672f;  // [N] total (4 × 0.168 N per motor)
     float hover_thrust_   = 0.407f;  // [N] mg × 1.12 = 0.037·9.80665·1.12
-    float max_climb_rate_ = 0.5f;    // [m/s] (= legacy ALT_OUTPUT_MAX)
+    // ALT_HOLD manual stick rates (param altitude.climb_rate / .descent_rate, separately
+    // tunable). Throttle stick is spring-centred (centre=hold); up commands a climb up to
+    // max_climb_rate_, down a descent up to max_descent_rate_. Distinct from the AUTO rates
+    // (takeoff_climb_rate_ / landing_descent_rate_). Legacy vehicle's MAX_CLIMB/DESCENT_RATE.
+    // ALT_HOLD の手動スティック速度（param altitude.climb_rate / .descent_rate、別々に調整可）。
+    // スロットルはバネ中央（中央=ホールド）、上=max_climb_rate_ まで上昇・下=max_descent_rate_
+    // まで降下。自動レート（takeoff_climb_rate_ / landing_descent_rate_）とは別物。
+    float max_climb_rate_   = 0.5f;  // [m/s] up   (= legacy MAX_CLIMB_RATE / ALT_OUTPUT_MAX)
+    float max_descent_rate_ = 0.5f;  // [m/s] down (= legacy MAX_DESCENT_RATE)
     // Vertical-velocity-loop output limit [N]. Legacy vehicle/ VEL_OUTPUT_MAX:
     // the proven alt gains were tuned against this saturation, and it also bounds
     // how far the hover-thrust bias can pull the integrator.

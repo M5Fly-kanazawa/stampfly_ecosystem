@@ -188,6 +188,15 @@ namespace param_vars {
     float alt_alt_ti      = 7.0f;
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
+    // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
+    // spring-centred (centre = hold); push up → climb at climb_rate, push down →
+    // descend at descent_rate. Mirrors the flight-proven legacy vehicle's
+    // MAX_CLIMB_RATE / MAX_DESCENT_RATE (separate constants).
+    // ALT_HOLD の手動スティック速度（別々にチューニング可）。スロットルはバネ中央
+    // （中央=ホールド）、上=climb_rate で上昇・下=descent_rate で降下。旧 vehicle の
+    // MAX_CLIMB_RATE / MAX_DESCENT_RATE（別定数）を踏襲。
+    float alt_climb_rate   = 0.5f;   // [m/s]
+    float alt_descent_rate = 0.5f;   // [m/s]
 
     // Position control
     float pos_pos_kp      = 1.0f;
@@ -352,6 +361,8 @@ static const ParamEntry table[] = {
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
+    {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
 
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},

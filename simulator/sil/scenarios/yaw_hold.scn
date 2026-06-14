@@ -23,11 +23,11 @@
    0    rc    2048  2048   2048    2048  0     4000      50              # A: boot → IDLE_GROUND 4 s
    +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM edge, idle 1 s
    +    rc    3330  2048   2048    2048  1     2000      50              # C: STABILIZE take-off climb 2 s
-   +    rc    3072  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD settle 4 s (baseline, hold engaged)
+   +    rc    2048  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD settle 4 s (baseline, hold engaged)
    +    fault 0     0.80                                                 # E: M1 (FR) at 80% — standing yaw+tilt disturbance
-   +    rc    3072  2048   2048    2048  1     8000      50        1     # F: hands-off hover UNDER the fault 8 s — heading must stay bounded
+   +    rc    2048  2048   2048    2048  1     8000      50        1     # F: hands-off hover UNDER the fault 8 s — heading must stay bounded
    +    fault 0     1.0                                                  # G: motor restored
-   +    rc    3072  2048   2048    2048  1     2000      50        1     # H: recover 2 s
+   +    rc    2048  2048   2048    2048  1     2000      50        1     # H: recover 2 s
    +    rc    2048  2048   2048    2048  0     200       50              # I: release ARM button
    +    rc    2048  2048   2048    2048  1     200       50              # J: press again → DISARM (toggle)
    +    rc    2048  2048   2048    2048  0     600       50              # K: settle disarmed

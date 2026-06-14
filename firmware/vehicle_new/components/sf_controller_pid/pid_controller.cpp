@@ -83,6 +83,9 @@ void PidController::loadParams()
     params::get_float("altitude.alt.ti", alt_pos_.ti);
     params::get_float("altitude.vel.kp", alt_vel_.kp);
     params::get_float("altitude.vel.ti", alt_vel_.ti);
+    // Manual ALT_HOLD stick rates (separately tunable) / 手動 ALT_HOLD スティック速度（別々に調整可）
+    params::get_float("altitude.climb_rate",   max_climb_rate_);
+    params::get_float("altitude.descent_rate", max_descent_rate_);
 
     // Position control / 位置制御
     params::get_float("position.pos.kp", pos_x_.kp);
@@ -345,31 +348,40 @@ ControlOutput PidController::compute(
             // 追従。スティックを戻すと到達した高度を保持する。
             if (capture_alt_) { alt_setpoint_ = altitude; capture_alt_ = false; }
 
-            // Throttle re-center gate (2026-06-14 redesign): after an (auto-)takeoff
-            // or an in-flight switch INTO ALT/POS the stick may rest off-center, which
-            // would jump the altitude if read as a climb command. The gate keeps the
-            // stick from commanding altitude until it is first seen within the center
-            // deadzone, then opens. Guidance flights are unaffected (they own the
-            // altitude target and never reach the stick path below).
-            // スロットル再センターゲート（2026-06-14 再設計）: （自動）離陸後や飛行中の
-            // ALT/POS 進入直後はスティックが中央から外れていることがあり、それを上昇指令と
-            // 読むと高度がジャンプする。ゲートはスティックが初めて中央デッドゾーン内に入る
-            // まで高度指令を抑え、その後開く。誘導飛行は影響を受けない（高度目標を所有し、
-            // 下のスティック経路に達しない）。
-            if (!throttle_recentered_ &&
-                fabsf(setpoint.throttle - 0.5f) < stick_deadzone_) {
+            // Throttle stick → vertical command (symmetric, spring-centred throttle).
+            // throttle_axis ∈ [-1,+1] with centre(2048)=0: centre = HOLD, up = climb (up
+            // to max_climb_rate_), down = descend (up to max_descent_rate_) — the stick
+            // raises/lowers the TARGET altitude (flight-proven legacy vehicle scheme).
+            // スロットルスティック → 鉛直指令（対称、バネ中央スロットル）。throttle_axis ∈
+            // [-1,+1]、中央(2048)=0: 中央=ホールド、上=上昇（max_climb_rate_ まで）、
+            // 下=降下（max_descent_rate_ まで）— スティックで目標高度を上下する（旧 vehicle
+            // 実績方式）。
+            const float ta = setpoint.throttle_axis;
+
+            // Re-center gate: after an (auto-)takeoff or an in-flight switch INTO ALT/POS
+            // the stick may rest off-center (e.g. STABILIZE hover throttle is up), which
+            // would jump the altitude. The gate suppresses the command until the stick
+            // first returns to the center deadzone (= the spring rest), then opens — the
+            // legacy "release the spring stick to unlock" behavior. Guidance/API own the
+            // target via the walking setpoint and never reach this stick path.
+            // 再センターゲート: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央
+            // から外れていることがあり（例: STABILIZE のホバースロットルは上）、高度がジャンプ
+            // する。ゲートはスティックが初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、
+            // その後開く — 旧来の「バネ式は離せば解除」。誘導/API は歩く設定点で目標を所有し、
+            // このスティック経路に達しない。
+            if (!throttle_recentered_ && fabsf(ta) < stick_deadzone_) {
                 throttle_recentered_ = true;
             }
 
-            // Stick → climb rate. Suppressed while guidance owns the altitude target
-            // (in an API flight the throttle rests at the BOTTOM — not a descend
-            // command) and until the re-center gate has opened.
-            // スティック → 上昇率。誘導が高度目標を所有する間（API 飛行ではスロットルは
-            // 下端のまま＝降下指令ではない）と、再センターゲートが開くまでは無効化。
             float climb_rate_sp = 0;
             if (throttle_recentered_ && !guidance_active_ &&
-                fabsf(setpoint.throttle - 0.5f) > stick_deadzone_) {
-                climb_rate_sp = (setpoint.throttle - 0.5f) * 2.0f * max_climb_rate_;
+                fabsf(ta) > stick_deadzone_) {
+                // Rescale beyond the deadzone to [0..1], then to the climb or descent
+                // rate (separate limits). / デッドゾーン外を [0..1] に再スケールし上昇/降下
+                // 速度（別リミット）へ。
+                const float mag = (fabsf(ta) - stick_deadzone_) / (1.0f - stick_deadzone_);
+                climb_rate_sp = (ta > 0.0f) ? (mag * max_climb_rate_)
+                                            : (-mag * max_descent_rate_);
                 alt_setpoint_ = altitude;   // track while moving / 移動中は追従
             }
 

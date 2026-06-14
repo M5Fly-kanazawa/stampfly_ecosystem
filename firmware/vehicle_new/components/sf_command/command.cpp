@@ -114,7 +114,14 @@ float CommandProcessor::applyDeadband(float value) const
 void CommandProcessor::publishSetpoint(const RawControlInput& raw)
 {
     CommandSetpoint sp = {};
-    sp.throttle  = normalizeThrottle(raw.throttle);                  // no deadband
+    sp.throttle      = normalizeThrottle(raw.throttle);              // [0..1] STABILIZE thrust
+    // Symmetric throttle axis for ALT_HOLD/POS_HOLD vertical: centre(2048)=0=hold,
+    // up=climb, down=descend. No deadband here — the controller owns the centre
+    // deadzone and the re-center gate (so it can see the raw centre crossing).
+    // ALT_HOLD/POS_HOLD 鉛直用の対称スロットル軸: 中央(2048)=0=ホールド、上=上昇、
+    // 下=降下。ここではデッドバンドを掛けない — 中央デッドゾーンと再センターゲートは
+    // 制御器が所有する（中央通過を生で見られるように）。
+    sp.throttle_axis = normalizeAxis(raw.throttle);                  // [-1..1] ALT_HOLD vertical
     sp.roll      = applyDeadband(normalizeAxis(raw.roll));
     sp.pitch     = applyDeadband(normalizeAxis(raw.pitch));
     sp.yaw       = applyDeadband(normalizeAxis(raw.yaw));

@@ -32,7 +32,7 @@
    +    rc     2048  2048   2048    2048  0     10000     50              # D: released; placed at 6.0 s — recalibration (settle 1 s + 2.5 s avg + margin)
    +    rc     2048  2048   2048    2048  1     1000      50              # E: ARM (now accepted — still calibration done)
    +    rc     3330  2048   2048    2048  1     2500      50              # F: STABILIZE take-off climb 2.5 s
-   +    rc     3072  2048   2048    2048  1     3000      50        1     # G: ALT_HOLD hover 3 s
+   +    rc     2048  2048   2048    2048  1     3000      50        1     # G: ALT_HOLD hover 3 s
    +    rc     2048  2048   2048    2048  0     200       50              # H: release ARM button
    +    rc     2048  2048   2048    2048  1     200       50              # I: press again → DISARM (toggle)
    +    rc     2048  2048   2048    2048  0     600       50              # J: settle disarmed

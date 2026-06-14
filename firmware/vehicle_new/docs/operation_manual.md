@@ -109,9 +109,12 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 
 ### スティック割当
 
+スロットルは**バネ復帰式**（離すと中央 raw 2048 に戻る）。**モードで解釈が変わる**:
+
 | スティック | 役割 | 値（12bit ADC, 中央2048）|
 |-----------|------|------------------------|
-| スロットル | 上昇/下降・推力 | 0..4095（下半分は0クリップ）|
+| スロットル（STABILIZE/ACRO）| 推力 | 中央2048=推力0（離すと降下）、上端4095=最大。上半分のみ使用（下半分は0クリップ）|
+| スロットル（ALT_HOLD/POS_HOLD）| 目標高度を上下 | **中央2048=現在高度ホールド**、上=上昇（`altitude.climb_rate`）、下=降下（`altitude.descent_rate`）。対称。|
 | ロール | 左右傾斜 | 中央2048、±でロール |
 | ピッチ | 前後傾斜 | 中央2048、±でピッチ |
 | ヨー | 旋回 | 中央2048、±でヨーレート |
@@ -154,7 +157,7 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | 操作 | 動作 |
 |------|------|
 | ARMED_GROUND でスロットルを上げる（>0.5）— STABILIZE/ACRO | **手動離陸**: スロットル＝推力。TAKEOFF → FLYING（ToF が空中検出で確定）|
-| **ALT_HOLD/POS_HOLD で ARM する**（スロットル操作不要）| **自動離陸**（再設計 2026-06-14）: ARM 自体がトリガ。短いスプール（0.3秒, プロペラはまだ回らない）の後、**目標高度 0.5m まで**固定 0.3 m/s で上昇・水平姿勢（POS は発進点保持）。**0.5m 到達で完了**（行き過ぎでなく目標値 0.5m を保持）。**スロットルを一度中央（raw 3072）に通すまで**スティックで高度を動かせない（再センターゲート＝暴発防止）。以降は 上=上昇/中央=保持/下=降下 |
+| **ALT_HOLD/POS_HOLD で ARM する**（スロットル操作不要）| **自動離陸**（再設計 2026-06-14）: ARM 自体がトリガ。短いスプール（0.3秒, プロペラはまだ回らない）の後、**目標高度 0.5m まで**固定 0.3 m/s で上昇・水平姿勢（POS は発進点保持）。**0.5m 到達で完了**（行き過ぎでなく目標値 0.5m を保持）。**スロットルを一度中央（raw 2048=バネ静止）に戻すまで**スティックで高度を動かせない（再センターゲート＝暴発防止。バネ式は離せば中央に戻り解除）。以降は 中央=保持/上=上昇/下=降下 |
 | スロットルを下げる / DISARM | 降下・着陸（FLYING → LANDING/IDLE_GROUND）|
 
 ALT/POS の自動離陸中はスティック入力を無視する（着陸シーケンスの鏡像）。中断は DISARM。**飛行中に STABILIZE/ACRO から ALT_HOLD/POS_HOLD へ切り替えた場合も**、切替時の高度を捕捉し、再センターゲートが閉じる（スロットルを中央に通すまで高度ジャンプしない）。
@@ -360,10 +363,12 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
 - ARMing in ALT_HOLD/POS_HOLD keeps the props stopped (the controller gates thrust to zero on
   the ground). In these modes **ARM ITSELF triggers an auto-takeoff** (redesign 2026-06-14, no
   throttle input): after a short spool dwell (0.3 s, props still stopped) the craft climbs at
-  0.3 m/s to the **0.5 m target altitude** and holds the target (not the climb overshoot). The
-  throttle stick does not command altitude until it is first passed through center (raw 3072) —
-  a re-center gate that prevents an off-center stick from jumping the altitude after takeoff or
-  an in-flight switch into ALT/POS. STABILIZE/ACRO keep the manual throttle takeoff.
+  0.3 m/s to the **0.5 m target altitude** and holds the target (not the climb overshoot). In
+  ALT_HOLD/POS_HOLD the throttle is a SYMMETRIC altitude command: **centre (raw 2048, the spring
+  rest) = hold**, up = climb (`altitude.climb_rate`), down = descend (`altitude.descent_rate`).
+  A re-center gate keeps an off-center stick from jumping the altitude until it returns to centre
+  (release the spring stick to unlock) after takeoff or an in-flight switch into ALT/POS.
+  STABILIZE/ACRO keep the manual throttle takeoff (throttle = thrust, centre = off).
 
 ### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > calibrating > flight state
 

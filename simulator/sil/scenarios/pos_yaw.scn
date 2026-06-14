@@ -24,7 +24,7 @@
    +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
    +    rc   3290  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command)
    +    rc   3290  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading
-   +    rc   3072  2048   2048    2048  1     13000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 13 s
+   +    rc   2048  2048   2048    2048  1     13000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 13 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

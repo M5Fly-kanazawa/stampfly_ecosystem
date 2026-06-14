@@ -38,40 +38,43 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 
 ポイントは、**最終的な保持高度が「行き過ぎたピーク 0.66m」ではなく「目標値 0.5m（実測 ~0.54m）」になる**こと。旧仕様は ToF 0.15m で運動量任せに高度を捕捉していたが、新仕様は目標値で捕捉するため決定論的に 0.5m へ収束する。
 
-## 3. 落とし穴 1 — スロットルの「中央」は raw 3072 であって 2048 ではない
+## 3. 落とし穴 1 — スロットルの「中央」は raw 2048（バネ静止）。実は規約自体がバグだった
 
-### 正規化規約
+この落とし穴は **2 層構造**だった。表面のテストミスを直したら「通った」が、その下に**実機で操縦不能になる規約バグ**が隠れていた。
 
-スロットルの生 ADC（0〜4095）はファーム（`sf_command/command.cpp`）で次のように正規化される：
+### 第1層（表面）— テストの中央取り違え
 
-```
-norm = (raw − 2048) / 2048      （負側は 0 にクリップ）
-```
+実装当初のファームは ALT_HOLD のスロットル→上昇率を `climb = (norm − 0.5)·2·max_climb`（norm は STABILIZE 用の `[0,1]`）で計算しており、**ホールド（climb=0）は norm 0.5 = raw 3072** だった。SIL シナリオで「中央へ戻す」を raw 2048 と書いたら、2048 は norm 0.0 ゆえ `|0.0 − 0.5| = 0.5 > deadzone` で**再センターゲートが一度も開かず**テストが空振りした。シナリオを 3072 に直したら通った——が、これは**バグに合わせてテストを歪めた**だけだった。
 
-つまり**スティックの上半分（2048〜4095）だけ**を [0,1] に写し、下半分は 0 に潰す。`2048` は norm **0.0（最下端）**であって 0.5 ではない。
+### 第2層（本当のバグ）— 規約がハードウェアと真逆
 
-### ALT_HOLD のホールド点と再センターゲート
+コントローラのスロットルは**バネ復帰式で raw 2048 が静止位置**（`protocol/spec/messages.yaml`・コントローラのキャリブが中央2048基準）。ところが当時のファームは静止 2048 を「全力降下 −0.5 m/s」と解釈していた：
 
-ALT_HOLD のスロットル→上昇率の制御則は `climb = (norm − 0.5)·2·max_climb` なので、**ホールド（climb=0）は norm 0.5 = raw 3072**。下図がその写像で、各点が ADC・正規化・上昇率指令にどう対応するかを示す。
+| 生 ADC | 当時のファーム（バグ）| 飛行実績の旧 vehicle |
+|------|------|------|
+| **2048（離した静止）** | **−0.5 m/s 降下** | **ホールド** |
+| 3072 | ホールド | 上昇 |
+| 4095（全上げ）| +0.5 m/s | 最大上昇 |
 
-![スロットル写像](figures/fig1_throttle_mapping.png)
+旧 vehicle `altitude_controller.hpp` は明示的に「**Stick center (2048) = hold altitude**」「バネ復帰式なら離すだけでロック解除」と書いており、`(raw−2048)/2048 ∈ [-1,+1]`（中央2048=hold）を使う。当時の vehicle_new は STABILIZE 用 `[0,1]` を `(throttle−0.5)` で流用したため中立が raw 3072 にズレ、**スロットルを離す（バネで2048に戻る）と降下＝離せばホバーできない**。SIL が通ったのは「ファーム自身の（誤った）規約」をテストに注入したからで、バネ物理を模擬しないため見抜けなかった（ALT_HOLD 実機未検証ゆえ未発覚）。
 
-| 生 ADC | norm | climb 指令 | 意味 |
-|------|------|------|------|
-| 2048 | 0.0 | −0.5 m/s | 全力降下（最下端） |
-| 3072 | 0.5 | 0 | **ホールド（中央）** |
-| 3500 | 0.71 | +0.21 m/s | 上昇 |
-| 4095 | 1.0 | +0.5 m/s | 最大上昇 |
+### 是正 — 対称方式（中央2048=ホールド・上=上昇・下=降下）
 
-### なぜテストが空振りしたか
+ユーザー確定で、ALT_HOLD/POS_HOLD を旧 vehicle と同型の**対称スロットル**に直した（`CommandSetpoint.throttle_axis = (raw−2048)/2048 ∈ [-1,+1]`）。**中央 2048 = 0 = ホールド**、上=上昇（`altitude.climb_rate`）、下=降下（`altitude.descent_rate`、上昇/降下は別パラメータ）。STABILIZE/ACRO は従来どおり `throttle [0,1]`（中央=推力0）。下図に両解釈を示す。
 
-再センターゲートの「開く」判定は `|norm − 0.5| < deadzone(0.1)`（＝中央を通った）。SIL シナリオで「中央へ戻す」を **raw 2048** で書いたところ、2048 は norm 0.0 なので `|0.0 − 0.5| = 0.5 > 0.1` となり**ゲートは一度も開かなかった**。ファームは正しく、テスト定数（中央＝3072）の取り違えだった。シナリオを 3072 に直したらゲートは期待どおり開いた。
+![スロットル写像（是正後・対称）](figures/fig1_throttle_mapping.png)
 
-### ゲートの実動作
+| 生 ADC | STABILIZE 推力 [0,1] | ALT_HOLD 指令（対称）|
+|------|------|------|
+| 1024 | 0（クリップ）| **−降下** |
+| **2048（バネ静止）** | **0 = OFF** | **0 = ホールド** |
+| 4095（全上げ）| 1 = 最大推力 | **+上昇** |
 
-下図は実 SIL ラン（`alt_recenter_gate` シナリオ）。左軸が高度、右軸がスロットル正規化値。離陸後にスロットルを上げたまま保持しても（ゲート閉）高度は 0.5m に留まり、スロットルを一度中央（3072）に通すとゲートが開き、同じ上げスティックで初めて上昇する。
+### ゲートの実動作（是正後）
 
-![再センターゲートの実動作](figures/fig4_recenter_gate.png)
+下図は実 SIL ラン（`alt_recenter_gate`）。左軸=高度、右軸=throttle_axis。ゲート閉中はスロットルを上げたまま保持しても 0.5m に留まり（上げ無視）、**中央(2048)に戻すとゲート開**→上げで上昇→**下げで降下**（対称の新機能）→中央で保持、と一連で動く。再センターゲートは「バネを離せば中央に戻って解除」＝旧 vehicle stick-lock と同型。
+
+![再センターゲート＋対称な上昇/降下（是正後）](figures/fig4_recenter_gate.png)
 
 ## 4. 落とし穴 2 — TakeoffClimb の速度クランプは対称でなければならない
 
@@ -114,10 +117,10 @@ if (vel_sp < -takeoff_climb_rate) vel_sp = -takeoff_climb_rate;   // ← 緩降�
 
 | # | 落とし穴 | 真因 | 教訓 |
 |---|---------|------|------|
-| 1 | ゲートが開かない | テストで「中央＝2048」と取り違え（実際は 3072） | ファームの正規化規約を確認してからテスト値を決める。`(raw−2048)/2048` で中央は 3072 |
+| 1 | ゲートが開かない→**実は規約バグ** | ①テストの中央取り違え（バグに合わせて歪めた）→ ②規約自体が誤り（中立 raw 3072 がバネ静止 2048 と真逆＝離せば降下） | **SIL が通っても規約が正しいとは限らない**。ハードの物理（バネ静止2048）と飛行実績（旧 vehicle=中央2048ホールド）に照合する。対称 throttle_axis へ是正 |
 | 2 | 目標を捕捉できない | 速度クランプを片側（上昇のみ）にした | 捕捉は片道でなく**双方向の整定問題**。観測不能窓の行き過ぎを下げて戻す自由度が要る |
 
-どちらも制御則自体は正しく、**SIL が前提ミスを的確に炙り出した**。数値で裏付けてから実装・コミットする（CLAUDE.md 規約）プロセスが機能した例である。
+落とし穴2は制御則自体は正しく前提ミスを SIL が炙り出した例。落とし穴1は逆に、**SIL の偽合格が規約バグを覆い隠していた**例で、実機ハードの物理と飛行実績コードへの照合が決め手になった。いずれも「数値で裏付けてから実装・コミット」（CLAUDE.md 規約）に加え、**模擬が物理を写しているか**を問う重要性を示す。
 
 ---
 
@@ -153,23 +156,37 @@ The figure below is a real SIL run (`alt_auto_takeoff`, noise off, deterministic
 
 The key point: the final hold altitude is the **0.5 m target value (≈0.54 m measured), not the 0.66 m overshoot peak**. The old spec captured whatever altitude momentum carried it to at ToF 0.15 m; the new spec captures the target value deterministically.
 
-## 3. Pitfall 1 — Throttle "center" is raw 3072, not 2048
+## 3. Pitfall 1 — Throttle "center" is raw 2048 (spring rest); the convention itself was a bug
 
-### Normalization
+This was a **two-layer** pitfall. Fixing the surface-level test mistake made it "pass", but underneath was a **convention bug that would make ALT_HOLD unflyable on real hardware**.
 
-`norm = (raw − 2048) / 2048`, lower half clipped to 0. Only the upper stick half (2048–4095) maps to [0,1]; `2048` is norm **0.0 (bottom)**, not 0.5.
+### Layer 1 (surface) — wrong center in the test
 
-### Hold point and the re-center gate
+The initial firmware computed ALT_HOLD climb as `climb = (norm − 0.5)·2·max_climb` (norm is the STABILIZE `[0,1]`), so **hold (climb=0) was at norm 0.5 = raw 3072**. The SIL scenario used raw 2048 for "center"; since 2048 is norm 0.0, `|0.0 − 0.5| = 0.5 > deadzone` and the re-center gate never opened. Changing the scenario to 3072 made it pass — but that just **bent the test to match the bug**.
 
-The ALT_HOLD law is `climb = (norm − 0.5)·2·max_climb`, so **hold (climb=0) is at norm 0.5 = raw 3072**.
+### Layer 2 (the real bug) — the convention was inverted vs the hardware
 
-![Throttle mapping](figures/fig1_throttle_mapping.png)
+The controller's throttle is **spring-centred at raw 2048** (`protocol/spec/messages.yaml`; the controller calibration is centred at 2048). Yet the firmware read the rest position (2048) as a full −0.5 m/s descent:
 
-### Why the test silently failed
+| raw ADC | firmware then (bug) | flight-proven legacy vehicle |
+|------|------|------|
+| **2048 (release / rest)** | **−0.5 m/s descend** | **hold** |
+| 3072 | hold | climb |
+| 4095 (full up) | +0.5 m/s | max climb |
 
-The gate-open test is `|norm − 0.5| < deadzone(0.1)`. The SIL scenario used raw 2048 for "center", which is norm 0.0 → `|0.0 − 0.5| = 0.5 > 0.1` → the gate never opened. The firmware was correct; the test constant was wrong. Using 3072 fixed it.
+The legacy `altitude_controller.hpp` explicitly says "**Stick center (2048) = hold altitude**" / "release the spring stick to unlock", using `(raw−2048)/2048 ∈ [-1,+1]` (centre 2048 = hold). vehicle_new reused the STABILIZE `[0,1]` with a `(throttle−0.5)` shift, moving the neutral to 3072 — so **releasing the throttle (spring → 2048) would descend, you could not hover by releasing**. SIL passed because it injected the firmware's *own* (wrong) convention and does not model the spring; ALT_HOLD was never hardware-tested, so it went unnoticed.
 
-![Re-center gate in action](figures/fig4_recenter_gate.png)
+### Fix — symmetric scheme (centre 2048 = hold, up = climb, down = descend)
+
+ALT_HOLD/POS_HOLD now use a **symmetric throttle** like the legacy vehicle (`CommandSetpoint.throttle_axis = (raw−2048)/2048 ∈ [-1,+1]`): **centre 2048 = 0 = hold**, up = climb (`altitude.climb_rate`), down = descend (`altitude.descent_rate`, separate params). STABILIZE/ACRO keep `throttle [0,1]` (centre = off).
+
+![Throttle mapping (corrected, symmetric)](figures/fig1_throttle_mapping.png)
+
+### Re-center gate in action (corrected)
+
+A real SIL run (`alt_recenter_gate`): with the gate CLOSED, holding the throttle UP still holds 0.5 m; returning to **centre (2048) OPENS the gate**; then up = climb, **down = descend** (the new symmetric capability), centre = hold. The gate = the legacy "release the spring stick to unlock".
+
+![Re-center gate + symmetric climb/descend (corrected)](figures/fig4_recenter_gate.png)
 
 ## 4. Pitfall 2 — The TakeoffClimb velocity clamp must be symmetric
 
@@ -195,7 +212,7 @@ Clamp symmetrically (±takeoff_climb_rate) so the cascade can gently descend bac
 
 | # | Pitfall | Root cause | Lesson |
 |---|---------|------------|--------|
-| 1 | Gate never opens | test treated 2048 as "center" (actually 3072) | Check the firmware normalization before choosing test values: `(raw−2048)/2048`, center = 3072 |
+| 1 | Gate never opens → **really a convention bug** | (1) wrong center in the test (bent to match the bug); (2) the convention itself was inverted — neutral raw 3072 vs the spring rest 2048 (release → descend) | **A passing SIL run does not prove the convention is right.** Cross-check against the hardware physics (spring rest 2048) and the flight-proven code (legacy = centre 2048 hold). Fixed to a symmetric throttle_axis |
 | 2 | Target not captured | velocity clamp was one-sided (climb only) | Capture is a bidirectional settle, not a one-way climb; allow correcting the unobservable-window overshoot back down |
 
-In both cases the control law was correct and **SIL surfaced the wrong assumption** — the "back it with simulation before implementing" process (CLAUDE.md) working as intended.
+Pitfall 2 is a case where the control law was correct and SIL surfaced a wrong assumption. Pitfall 1 is the opposite — a **false SIL pass masked a convention bug**, and cross-checking against the real hardware physics and the flight-proven code was decisive. Both underscore "back it with simulation before committing" (CLAUDE.md) AND asking **whether the simulation actually mirrors the physics**.

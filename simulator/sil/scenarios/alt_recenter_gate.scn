@@ -1,26 +1,29 @@
-# alt_recenter_gate.scn — throttle re-center gate after an ALT_HOLD auto-takeoff (Case A)
-#                         ALT_HOLD 自動離陸後のスロットル再センターゲート（Case A）  (new 2026-06-14)
+# alt_recenter_gate.scn — throttle re-center gate + symmetric climb/descend (Case A)
+#                         スロットル再センターゲート＋対称な上昇/降下（Case A）  (redesign 2026-06-14)
 #
-# Spec under test (2026-06-14 redesign — the throttle re-center gate):
-#   After the ARM-triggered auto-takeoff captures 0.5 m, the throttle stick must pass
-#   THROUGH CENTER once before it commands climb/descent. So if the pilot is holding the
-#   throttle UP when the takeoff completes, the altitude must NOT jump — the gate keeps
-#   the craft at the captured 0.5 m until the stick is re-centered, THEN the stick works.
+# Spec under test (2026-06-14 redesign — symmetric ALT_HOLD throttle):
+#   The throttle stick is spring-centred: CENTER (raw 2048) = HOLD, UP (>2048) = climb,
+#   DOWN (<2048) = descend — the stick moves the TARGET altitude (legacy-vehicle scheme).
+#   After the ARM-triggered auto-takeoff captures 0.5 m, a re-center gate keeps the stick
+#   from commanding altitude until it first returns to the center deadzone (= the spring
+#   rest), so an off-center stick at takeoff cannot jump the altitude.
+#     D: throttle held UP (4095) across the takeoff → gate CLOSED → HOLD 0.5 m (no jump).
+#     E: throttle to CENTER (2048 = spring rest) → gate OPENS.
+#     F: throttle UP (3500) → CLIMB above 0.5 m.
+#     G: throttle DOWN (1024) → DESCEND (target altitude lowered) — passes through center.
+#     H: throttle CENTER (2048) → HOLD the new (lower) altitude.
+#   (Throttle for ALT_HOLD is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]; center 2048=0.)
 #
-#   Phase D: throttle held UP (3500) across the whole auto-takeoff → after capture the
-#            craft HOLDS ~0.5 m (gate CLOSED — the up-stick is ignored, no jump).
-#   Phase E: throttle returned to CENTER (3072 = norm 0.5) → the gate OPENS.
-#   Phase F: throttle UP (3500) again → NOW the craft climbs (gate OPEN — stick works).
-#   (Throttle normalization: (raw-2048)/2048, so 2048=0.0 bottom, 3072=0.5 hover/hold,
-#    4095=1.0 full up — see sf_command. Center/hold is 3072, NOT 2048.)
-#
-# 検証する仕様（2026-06-14 再設計 — スロットル再センターゲート）:
-#   ARM トリガ自動離陸が 0.5 m を捕捉した後、スロットルが一度「中央を通る」まで上昇/下降を
-#   指令できない。よって離陸完了時にパイロットがスロットルを上げたままでも高度はジャンプしない —
-#   ゲートはスティックが再センターされるまで機体を捕捉 0.5 m に保ち、その後スティックが効く。
-#   D: 自動離陸の全行程でスロットルを上げたまま(3500) → 捕捉後 ~0.5 m を保持（ゲート閉=上げ無視・無ジャンプ）。
-#   E: スロットルを中央(3072 = norm 0.5)へ戻す → ゲートが開く。
-#   F: 再びスロットル上げ(3500) → 今度は上昇する（ゲート開=スティックが効く）。
+# 検証する仕様（2026-06-14 再設計 — ALT_HOLD の対称スロットル）:
+#   スロットルはバネ中央: 中央(raw 2048)=ホールド、上(>2048)=上昇、下(<2048)=降下 —
+#   スティックで目標高度を動かす（旧 vehicle 方式）。ARM トリガ自動離陸が 0.5 m を捕捉した後、
+#   再センターゲートがスティックを「中央デッドゾーン（=バネ静止）に戻るまで」無効化し、離陸時に
+#   中央外のスティックが高度をジャンプさせないようにする。
+#     D: 離陸の全行程でスロットルを上げたまま(4095) → ゲート閉 → 0.5 m 保持（無ジャンプ）。
+#     E: スロットルを中央(2048=バネ静止)へ → ゲート開。
+#     F: スロットル上げ(3500) → 0.5 m より上昇。
+#     G: スロットル下げ(1024) → 降下（目標高度を下げる、中央を通過）。
+#     H: スロットル中央(2048) → 下げた高度を保持。
 #
 # Run: sf sil scenario simulator/sil/scenarios/alt_recenter_gate.scn --target vehicle_new
 #
@@ -28,9 +31,11 @@
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
    +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props stop, spool, AUTO-takeoff fires
-   +    rc   3500  2048   2048    2048  1     7000      50        1              # D: throttle held UP (norm 0.71) across takeoff → gate CLOSED → hold 0.5 m (no jump)
-   +    rc   3072  2048   2048    2048  1     1500      50        1              # E: throttle to CENTER (3072 = norm 0.5) → gate OPENS
-   +    rc   3500  2048   2048    2048  1     3500      50        1              # F: throttle UP again → gate OPEN → climb
-   +    rc   2048  2048   2048    2048  0     200       50                       # G: release ARM button
-   +    rc   2048  2048   2048    2048  1     200       50                       # H: press again → DISARM (toggle)
-   +    rc   2048  2048   2048    2048  0     600       50                       # I: settle disarmed
+   +    rc   4095  2048   2048    2048  1     5500      50        1              # D: throttle held UP across takeoff → gate CLOSED → hold 0.5 m (no jump)
+   +    rc   2048  2048   2048    2048  1     1500      50        1              # E: throttle to CENTER (2048 = spring rest) → gate OPENS
+   +    rc   3500  2048   2048    2048  1     2500      50        1              # F: throttle UP → CLIMB above 0.5 m
+   +    rc   1024  2048   2048    2048  1     3000      50        1              # G: throttle DOWN → DESCEND (lower the target altitude)
+   +    rc   2048  2048   2048    2048  1     2000      50        1              # H: throttle CENTER → HOLD the new lower altitude
+   +    rc   2048  2048   2048    2048  0     200       50                       # I: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # J: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # K: settle disarmed

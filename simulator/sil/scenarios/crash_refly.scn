@@ -31,12 +31,12 @@
    0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration
    +    rc     2048  2048   2048    2048  1     1000      50              # B: ARM (rising edge)
    +    rc     3330  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s
-   +    rc     3072  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s (clean baseline)
+   +    rc     2048  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s (clean baseline)
 #  --- CRASH: asymmetric motor fault (tips the craft) + downward wind slams it down ---
 #  --- 墜落: 非対称モータ故障（機体を傾ける）＋下向き風で叩きつけ ---
    +    fault  0     0.30                                                 # E: motor 0 (M1 FR) → 30% — roll/pitch torque tips it
    +    wind   0.0   0.0     2.0                                          # F: 2 N downward shove (NED +z down) — overpowers thrust
-   +    rc     3072  2048   2048    2048  1     2000      50        1     # G: armed slam 2 s → impact (>3 G ×2) → auto-DISARM
+   +    rc     2048  2048   2048    2048  1     2000      50        1     # G: armed slam 2 s → impact (>3 G ×2) → auto-DISARM
 #  --- Clear the disturbances, settle on the ground (disarmed), then handle ---
 #  --- 外乱を解除し地上で静止（disarmed）、その後ハンドリング ---
    +    wind   0.0   0.0     0.0                                          # H: wind off
@@ -48,7 +48,7 @@
 #  --- 再飛行: 再ARM・再離陸・ホバー回復 ---
    +    rc     2048  2048   2048    2048  1     1000      50              # M: RE-ARM (rising edge — gated until re-calibration done)
    +    rc     3330  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s
-   +    rc     3072  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
+   +    rc     2048  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

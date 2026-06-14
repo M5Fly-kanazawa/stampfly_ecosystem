@@ -18,10 +18,12 @@
 #
 # Sticks are raw 12-bit ADC, centre 2048. STABILIZE thrust = clamp((raw-2048)/2048,0,1)
 # * max_thrust; with the Plant's 1/1.12 efficiency, hover sits near raw 3290 (norm 0.61).
-# In ALT_HOLD the throttle stick is the CLIMB-RATE command (controller convention:
-# centre = norm 0.5 = raw 3072 → climb_rate 0 → hold). roll/pitch angle = norm * 30°.
+# In ALT_HOLD the throttle stick is the SYMMETRIC climb/descend command (controller
+# convention: raw 2048 = centre = 0 = HOLD, up>2048 = climb, down<2048 = descend).
+# roll/pitch angle = norm * 30°.
 # スティックは raw 12bit ADC（中央2048）。STABILIZE 推力は norm×max_thrust、Plant 効率
-# 1/1.12 でホバーは raw≈3290。ALT_HOLD ではスロットルは上昇率指令（中央=norm0.5=raw3072）。
+# 1/1.12 でホバーは raw≈3290。ALT_HOLD ではスロットルは対称な上昇/降下指令
+# （raw 2048=中央=0=ホールド、上>2048=上昇、下<2048=降下）。
 #
 # vehicle_new reaches IDLE_GROUND within ~1 s of boot, so a 4 s disarmed lead lands
 # the single ARM edge well inside IDLE_GROUND.
@@ -31,7 +33,7 @@
    0    rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s — boot reaches IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
    +    rc   3330  2048   2048    2048  1     2500      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground
-   +    rc   3072  2048   2048    2048  1     12000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE; throttle raw 3072 = climb-rate 0 → captureAltitude + HOLD 12 s. WATCH truth alt for runaway vs hold.
+   +    rc   2048  2048   2048    2048  1     12000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE; throttle raw 2048 = climb-rate 0 → captureAltitude + HOLD 12 s. WATCH truth alt for runaway vs hold.
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

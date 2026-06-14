@@ -1,26 +1,25 @@
-# alt_recenter_gate.expect — throttle re-center gate after ALT_HOLD auto-takeoff (Case A)
-# ALT_HOLD 自動離陸後のスロットル再センターゲート（Case A）
+# alt_recenter_gate.expect — re-center gate + symmetric climb/descend (Case A)
+# 再センターゲート＋対称な上昇/降下（Case A）
 #
-# The decisive contrast: with the throttle held UP (3500) the WHOLE time,
-#   D [13.0,15.5]: gate CLOSED → altitude stays ~0.5 m (alt_max < 0.72). Were the gate
-#     absent, the 0.355 m/s climb command would carry the craft past 1.5 m by 15.5 s.
-#   F [19.5,20.5]: after re-centering at E the gate OPENS, so the SAME up-stick now
-#     climbs (alt_mean > 0.85) — proving the stick works once re-centered.
-# 決定的な対比: スロットルを終始 UP(3500) のまま、
-#   D [13.0,15.5]: ゲート閉 → 高度は ~0.5 m に留まる(alt_max < 0.72)。ゲートが無ければ
-#     0.355 m/s の上昇指令で 15.5 s までに 1.5 m を超える。
-#   F [19.5,20.5]: E で再センター後ゲートが開き、同じ上げスティックで今度は上昇(alt_mean > 0.85)
-#     — 再センター後はスティックが効くことの証明。
+# D [12.0,14.0]: gate CLOSED — throttle held UP (4095) is IGNORED, altitude holds ~0.5 m
+#   (alt_max < 0.72). Without the gate, full-up would carry it away.
+# F [17.5,18.5]: after re-centering at E the gate OPENS; throttle UP now CLIMBs (> 1.1 m).
+# G [20.5,21.0]: throttle DOWN now DESCENDs — the new symmetric scheme lowers the target
+#   altitude back below 0.9 m (the stick controls both directions, centre = hold).
+# D [12.0,14.0]: ゲート閉 — 上げっぱなし(4095)は無視され ~0.5 m 保持(alt_max < 0.72)。
+# F [17.5,18.5]: E で再センター後ゲート開、上げで上昇(> 1.1 m)。
+# G [20.5,21.0]: 下げで降下 — 対称方式で目標高度を 0.9 m 未満へ下げる（中央=ホールド）。
 exit 0
 log_contains any "ARM accepted"
 log_contains any "Auto-takeoff engaged"
 log_contains any "Auto-takeoff complete — normal mode law engaged"
 order "Auto-takeoff engaged" "Auto-takeoff complete — normal mode law engaged"
-# Gate CLOSED: throttle up is IGNORED — altitude holds the captured 0.5 m, no jump.
-metric alt_mean > 0.42 in 13.0 15.5
-metric alt_max  < 0.72 in 13.0 15.5
-metric alt_band < 0.20 in 13.0 15.5
-# Gate OPEN (after re-centering at E): the SAME up-stick now climbs well past 0.5 m.
-metric alt_mean > 0.85 in 19.5 20.5
-metric tilt_max < 10.0 in 9.0 20.5
-metric duty_max < 0.92 in 12.0 20.5
+# Gate CLOSED: throttle UP ignored → hold the captured 0.5 m.
+metric alt_max  < 0.72 in 12.0 14.0
+metric alt_band < 0.20 in 12.0 14.0
+# Gate OPEN + UP: climb well above 0.5 m.
+metric alt_max  > 1.10 in 17.5 18.5
+# DOWN: descend back below 0.9 m (symmetric stick — new descend capability).
+metric alt_mean < 0.90 in 20.5 21.0
+metric tilt_max < 10.0 in 9.0 23.0
+metric duty_max < 0.92 in 12.0 23.0

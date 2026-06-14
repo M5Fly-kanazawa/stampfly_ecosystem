@@ -161,7 +161,14 @@ struct RawControlInput {
 /// Pilot/API command setpoint
 /// パイロット/APIコマンドセットポイント
 struct CommandSetpoint {
-    float throttle;       // Throttle [0..1]       / スロットル
+    float throttle;       // Throttle [0..1], centre(2048)=0=off, top=1=max thrust —
+                          // STABILIZE/ACRO direct thrust (upper half only, lower clipped).
+                          // スロットル [0..1]、中央(2048)=0=OFF、上端=1=最大推力（STABILIZE/ACRO の
+                          // 直接推力。上半分のみ、下半分はクリップ）
+    float throttle_axis;  // Symmetric throttle [-1..1], centre(2048)=0 — ALT_HOLD/POS_HOLD
+                          // vertical: 0=hold, up=climb, down=descend (target altitude up/down).
+                          // 対称スロットル [-1..1]、中央(2048)=0 — ALT_HOLD/POS_HOLD の鉛直:
+                          // 0=ホールド、上=上昇、下=降下（目標高度を上下）
     float roll;           // Roll command [-1..1]  / ロール指令
     float pitch;          // Pitch command [-1..1] / ピッチ指令
     float yaw;            // Yaw command [-1..1]   / ヨー指令
