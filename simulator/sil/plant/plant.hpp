@@ -141,6 +141,12 @@ public:
         float g        = 9.81f;     ///< gravity [m/s²]
         float health[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< per-motor thrust gain (1=healthy)
         sf::math::Vec3 wind_force_ned = {0.0f, 0.0f, 0.0f}; ///< external wind force NED [N]
+        // Deterministic band-limited TURBULENCE (horizontal NED force, 1–3 Hz sinusoid sum)
+        // to excite the attitude-wobble band for the wobble-minimization study. Repeatable
+        // (no RNG), 0 = off. Added on top of wind_force_ned each substep. See plant.cpp.
+        // 決定論的な帯域制限乱流（水平NED力, 1–3Hz正弦和）。姿勢ふらつき帯域を励起して
+        // ふらつき最小化研究の外乱とする。再現可能（RNG不使用）、0=off。
+        float turbulence_n = 0.0f;  ///< turbulence force amplitude [N] (0 = off)
         /// Deterministic RAW IMU bias (body FRD), modeling the pre-calibration MEMS
         /// offset. Added as a constant to the synthetic IMU output. Default zero. The
         /// firmware boot calibration measures and removes it (P2-3 contrast test).
@@ -345,6 +351,7 @@ private:
     float motor_duty_[4]   = {0.0f, 0.0f, 0.0f, 0.0f}; ///< actual (lagged) duty
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty
     float last_dt_ = 0.0025f;  ///< last step dt (for flow count integration)
+    float turb_t_  = 0.0f;     ///< accumulated time for the deterministic turbulence force [s]
     double step_accum_ = 0.0;  ///< virtual-time accumulator [s] for fixed substeps
 
     float v_batt_ = 3.7f;          ///< current supply (terminal) voltage [V]

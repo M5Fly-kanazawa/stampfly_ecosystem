@@ -475,9 +475,20 @@ void Plant::substep(float h)
     Quat q_mj{(float)q[0], (float)q[1], (float)q[2], (float)q[3]};
     Vec3 torque_world = q_mj.rotate({0.0f, 0.0f, tau_yaw_flu_z});
 
-    // Wind force NED → world ENU.
-    // 風力 NED → 世界 ENU。
-    Vec3 wind_enu = frames::ned_to_enu(cfg_.wind_force_ned);
+    // Wind force NED → world ENU, plus deterministic band-limited turbulence (1–3 Hz
+    // horizontal sinusoid sum) to excite the attitude-wobble band for the wobble study.
+    // Incommensurate frequencies → non-repeating-ish but fully repeatable; 0 = off.
+    // 風力 NED→世界 ENU ＋ 決定論的帯域制限乱流（1–3Hz水平正弦和）でふらつき帯域を励起。
+    Vec3 wind_ned = cfg_.wind_force_ned;
+    if (cfg_.turbulence_n > 0.0f) {
+        turb_t_ += h;
+        const float t = turb_t_, k = 2.0f * 3.14159265f, A = cfg_.turbulence_n;
+        wind_ned.x += A * (std::sin(k * 1.3f * t) + 0.7f * std::sin(k * 2.1f * t + 1.0f)
+                                                   + 0.5f * std::sin(k * 3.3f * t + 2.0f));
+        wind_ned.y += A * (0.8f * std::sin(k * 0.9f * t + 0.3f) + std::sin(k * 1.7f * t + 1.5f)
+                                                                + 0.6f * std::sin(k * 2.6f * t + 0.7f));
+    }
+    Vec3 wind_enu = frames::ned_to_enu(wind_ned);
 
     // xfrc_applied[6·body + 0..5] = [Fx,Fy,Fz, Tx,Ty,Tz] in the world frame.
     // MuJoCo does NOT auto-clear it, so overwrite every step.

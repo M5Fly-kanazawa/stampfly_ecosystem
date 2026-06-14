@@ -94,6 +94,22 @@ sil::Plant::Config plant_config_from_env()
         if (std::strcmp(batt, "off") == 0) cfg.batt_model_enable = false;
     }
 
+    // Opt-in physics knobs (default OFF). SIL_EMU_GROUND_EFFECT = near-floor lift gain;
+    // SIL_EMU_TURBULENCE = 1-3 Hz lateral turbulence force [N] (wobble-minimization study).
+    // These must be read BEFORE the noise early-return below so they apply with or without noise.
+    // オプトイン物理ノブ（既定OFF）。noise の早期 return より前に読む（ノイズ有無に依らず適用）。
+    if (const char* ge = std::getenv("SIL_EMU_GROUND_EFFECT")) {
+        float gain = (std::strcmp(ge, "1") == 0 || std::strcmp(ge, "on") == 0) ? 0.30f
+                                                                               : (float)std::atof(ge);
+        if (gain > 0.0f) { cfg.ge_gain = gain;
+            std::printf("[emu] ground effect ON (gain=%.2f)\n", cfg.ge_gain); }
+    }
+    if (const char* tb = std::getenv("SIL_EMU_TURBULENCE")) {
+        float amp = (float)std::atof(tb);
+        if (amp > 0.0f) { cfg.turbulence_n = amp;
+            std::printf("[emu] turbulence ON (amplitude=%.3f N, 1-3 Hz)\n", cfg.turbulence_n); }
+    }
+
     const char* noise = std::getenv("SIL_EMU_NOISE");
     if (!noise) return cfg;
     const bool n0 = (std::strcmp(noise, "n0") == 0);
