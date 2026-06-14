@@ -219,18 +219,33 @@ namespace param_vars {
     float eskf_bg_dev_max   = 0.03f;
 
     // ESKF observation noise
-    float eskf_tof_noise      = 0.03f;
+    // tof_noise lowered 0.03→0.01: the flight-log offline replay showed the ToF innovation
+    // NIS ≪ 1 at 0.03 (over-conservative — ToF tracks within <1 cm), so 0.01 trusts ToF more
+    // for tighter vertical tracking (altlog REPORT §4).
+    // tof_noise を 0.03→0.01: 実機ログ再生で ToF イノベ NIS≪1（0.03 は保守的すぎ、ToF は
+    // <1cm で追従）→ 0.01 で ToF を信用し鉛直追従を締める。
+    float eskf_tof_noise      = 0.01f;
     float eskf_flow_noise     = 0.30f;
     float eskf_baro_noise     = 0.1f;
     float eskf_mag_noise      = 1.0f;
-    // Accel-attitude observation noise σ [m/s²]. Raised 0.06→0.8 to cure the χ² latch-up
-    // (chi2_latchup_finding): at 0.06 (R=0.0036) a normal in-flight innovation of ~1 m/s²
-    // — un-modeled motion accel that the norm-based adaptive R does not catch — is ~17σ, so
-    // the χ²(3) gate rejected ~66 % of accel updates during any maneuver; the attitude then
-    // coasted on gyro-only and POS_HOLD drifted (pos_yaw 7.4 m, att_rmse 8.8°). 0.8 reflects
-    // the realistic specific-force uncertainty in flight: rejection drops to ~0 %, the cliff
-    // disappears (all POS hold with att_rmse 0.5–1.1°), and no scenario regresses.
-    float eskf_accel_att      = 0.8f;
+    // Accel-attitude observation noise σ [m/s²]. History: 0.06→0.8 cured the χ² latch-up
+    // (chi2_latchup_finding). Then 0.8→1.2 from the flight-log offline replay: at 0.8 the
+    // χ² REJECTION on real data is ~10 % (over-rejecting the x-axis 11.9 Hz airframe
+    // vibration), it hits the ideal ~5 % at 1.2, and over-rejects-the-other-way (1.3 %, more
+    // accel-bias drift) at 2.0. 1.2 is the data-optimum; pair it with eskf_accel_att_lpf
+    // (the SIL n2 vibration is isotropic and could not show this — the real x-axis mode is
+    // the driver; see altlog REPORT §3–4).
+    // 0.06→0.8 で χ² ラッチアップ解消、さらに 0.8→1.2 を実機ログ再生で確定: 0.8 は実データで
+    // χ² 棄却 ~10%（x軸 11.9Hz 機体振動を過剰棄却）、1.2 で理想 ~5%、2.0 で過小棄却＋バイアス
+    // ドリフト増。1.2 がデータ最適。eskf_accel_att_lpf と併用（SIL の n2 振動は等方的で実機の
+    // x軸モードを欠くため SIL では出ない）。
+    float eskf_accel_att      = 1.2f;
+    // Accel-attitude LPF cutoff [Hz] (0 = off). 30 Hz cleans the airframe vibration from the
+    // gravity reference; the offline sweep cut accel-bias drift 0.28→0.18 (12 Hz notch did
+    // NOT help — broadband). Applied to the attitude update only, NOT predict.
+    // accel 姿勢 LPF カットオフ[Hz]（0=無効）。30Hz で重力基準から機体振動を清浄化、掃引で
+    // バイアスドリフト 0.28→0.18（12Hz ノッチは広帯域ゆえ無効）。姿勢更新のみ、predict には不適用。
+    float eskf_accel_att_lpf  = 30.0f;
 
     // ESKF sensor enable
     bool eskf_use_tof   = true;
@@ -378,11 +393,12 @@ static const ParamEntry table[] = {
     {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.001f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF observation noise
-    {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.03f, 0.001f, 1.0f,  &notifyEstimatorReload},
+    {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.01f, 0.001f, 1.0f,  &notifyEstimatorReload},
     {"eskf.obs.flow_noise",      ParamType::FLOAT, &eskf_flow_noise,    0.30f, 0.01f,  5.0f,  &notifyEstimatorReload},
     {"eskf.obs.baro_noise",      ParamType::FLOAT, &eskf_baro_noise,    0.1f,  0.01f,  5.0f,  &notifyEstimatorReload},
     {"eskf.obs.mag_noise",       ParamType::FLOAT, &eskf_mag_noise,     1.0f,  0.01f,  10.0f, &notifyEstimatorReload},
-    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     0.8f,  0.001f, 2.0f,  &notifyEstimatorReload},
+    {"eskf.obs.accel_att_noise", ParamType::FLOAT, &eskf_accel_att,     1.2f,  0.001f, 2.0f,  &notifyEstimatorReload},
+    {"eskf.obs.accel_att_lpf",   ParamType::FLOAT, &eskf_accel_att_lpf, 30.0f, 0.0f,   200.0f,&notifyEstimatorReload},
 
     // ESKF sensor enable
     {"eskf.use_tof",  ParamType::BOOL, &eskf_use_tof,  1.0f, 0.0f, 1.0f, &notifyEstimatorReload},

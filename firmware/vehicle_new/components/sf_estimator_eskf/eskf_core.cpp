@@ -72,6 +72,8 @@ void EskfCore::reset()
     }
 
     freeze_accel_bias_ = false;
+    accel_att_lpf_ = {0, 0, 0};   // accel-attitude LPF re-seeds on the next sample
+    accel_lpf_init_ = false;
 
     // Drop the accel-compensation flow history so the first post-reset flow sample
     // re-seeds the α-β tracker without a spurious large difference.
@@ -166,6 +168,8 @@ void EskfCore::inflateCovariance(uint16_t state_mask)
 
 void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
 {
+    accel_lpf_dt_ = dt;   // for the accel-attitude LPF (same IMU cycle) / accel 姿勢 LPF 用
+
     // Bias-corrected IMU / バイアス補正済みIMU
     Vec3 accel = accel_raw - ba_;
     Vec3 gyro  = gyro_raw - bg_;
@@ -640,8 +644,25 @@ void EskfCore::updateMag(const Vec3& mag)
 
 void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
 {
+    // Optional 1-pole LPF on the accel BEFORE the gravity comparison (cfg_.accel_att_lpf_hz).
+    // Cleans airframe vibration from the gravity reference so the bias is pulled less and
+    // fewer updates are χ²-rejected (flight-log sweep). Filters accel_raw (pre-bias), exactly
+    // as the offline harness did — predict()'s velocity integration is left UNfiltered.
+    // 重力比較の前に accel へ任意の1次 LPF（cfg_.accel_att_lpf_hz）。重力基準から機体振動を
+    // 除き、バイアスの引きずりと χ² 棄却を減らす（実機ログ掃引）。accel_raw（バイアス前）を
+    // 濾波＝オフラインハーネスと同一。predict() の速度積分は濾波しない。
+    Vec3 accel_src = accel_raw;
+    if (cfg_.accel_att_lpf_hz > 0.0f && accel_lpf_dt_ > 0.0f) {
+        if (!accel_lpf_init_) { accel_att_lpf_ = accel_raw; accel_lpf_init_ = true; }
+        const float a = 1.0f - expf(-2.0f * 3.14159265f * cfg_.accel_att_lpf_hz * accel_lpf_dt_);
+        accel_att_lpf_.x += a * (accel_raw.x - accel_att_lpf_.x);
+        accel_att_lpf_.y += a * (accel_raw.y - accel_att_lpf_.y);
+        accel_att_lpf_.z += a * (accel_raw.z - accel_att_lpf_.z);
+        accel_src = accel_att_lpf_;
+    }
+
     // Bias-corrected accel / バイアス補正済み加速度
-    Vec3 accel = accel_raw - ba_;
+    Vec3 accel = accel_src - ba_;
 
     // Adaptive R scaling — DOWNWEIGHT (do not hard-gate) when |a| deviates from g.
     // R = R_base² * (1 + k * |‖a‖ - g|²). During thrust/maneuver transients the

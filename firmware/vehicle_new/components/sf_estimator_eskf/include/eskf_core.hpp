@@ -54,6 +54,16 @@ struct EskfConfig {
     float baro_noise       = 0.1f;        // [m]
     float mag_noise        = 1.0f;        // [uT]
     float accel_att_noise  = 2.0f;        // [m/s²] — matches vibration noise at hover
+    // Low-pass (1-pole, Hz) on the accel used for the ATTITUDE update only (NOT predict's
+    // velocity integration). The gravity reference is corrupted by airframe vibration
+    // (broadband prop + a structural mode); a ~30 Hz LPF cleans it so the accel-bias is
+    // pulled less and fewer updates are χ²-rejected — the flight-log offline sweep cut the
+    // accel-bias drift 0.28→0.18 m/s² at 30 Hz (a 12 Hz notch did NOT help: broadband).
+    // 0 = off. 姿勢更新「のみ」に使う accel の1次ローパス[Hz]（predict の速度積分には掛けない）。
+    // 重力基準が機体振動（広帯域プロペラ＋構造モード）で汚れるのを ~30Hz で清浄化 → accel
+    // バイアスが引きずられにくく χ² 棄却も減る（実機ログ掃引で 30Hz がドリフト 0.28→0.18。
+    // 12Hz ノッチは広帯域ゆえ無効）。0=無効。
+    float accel_att_lpf_hz = 0.0f;        // [Hz] 0 = off
 
     // Initial covariance / 初期共分散
     float init_pos_std     = 0.1f;        // [m]
@@ -292,6 +302,14 @@ private:
     Vec3  flow_vel_lpf_  = {0, 0, 0};   // α-β velocity state / α-β 速度状態
     Vec3  a_kin_ned_     = {0, 0, 0};   // α-β acceleration state (a_kin, NED) / α-β 加速度状態
     bool  have_flow_vel_ = false;
+
+    // Accel-attitude LPF state (cfg_.accel_att_lpf_hz). dt comes from predict() (same
+    // IMU cycle as the attitude update). NED-frame-agnostic: it filters the body accel.
+    // accel 姿勢 LPF の状態（cfg_.accel_att_lpf_hz）。dt は predict() から（姿勢更新と同一
+    // IMU サイクル）。body accel を濾波する。
+    Vec3  accel_att_lpf_ = {0, 0, 0};   // filtered body accel for the attitude update
+    float accel_lpf_dt_  = 0.0f;        // [s] last predict dt (for the LPF coefficient)
+    bool  accel_lpf_init_ = false;      // seed the filter to the first sample (no ramp)
 
     // ToF-velocity differentiation history (updateToFVelocity). Member, not a
     // function-local static, so reset() discards it (no spike on re-takeoff).

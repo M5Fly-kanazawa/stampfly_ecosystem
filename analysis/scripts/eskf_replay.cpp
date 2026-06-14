@@ -69,6 +69,7 @@ int main(int argc, char** argv) {
     sf::EskfConfig cfg;                     // struct defaults ≈ flight; override the sweep knobs
     cfg.accel_att_noise = accel_att;
     cfg.tof_noise = tof_noise;
+    cfg.accel_att_lpf_hz = lpf_hz;          // use the CORE's LPF (Code Identity with firmware)
     cfg.accel_comp_enable = true;           // match the flown params.cpp
     cfg.use_flow = true; cfg.use_tof = true; cfg.use_mag = false; cfg.use_baro = false;
 
@@ -106,10 +107,10 @@ int main(int argc, char** argv) {
             if (notch_hz > 0 && !notch.on) notch.set(notch_hz, 375.0f, 4.0f);
             core.predict(a, g, dt);
 
-            // accel for the attitude update, optionally pre-filtered
+            // accel for the attitude update: optional harness-side notch (the core has no
+            // notch); the LPF is applied INSIDE eskf_core (cfg.accel_att_lpf_hz) = Code Identity.
             Vec3 af = a;
             if (notch_hz > 0) { af.x = notch.step(0, a.x); af.y = notch.step(1, a.y); af.z = notch.step(2, a.z); }
-            if (lpf_hz > 0)  af = lpf.step(af);
 
             // external innovation (R-only NIS proxy; P unavailable offline) + χ² reject
             if (t > 6.0f) {

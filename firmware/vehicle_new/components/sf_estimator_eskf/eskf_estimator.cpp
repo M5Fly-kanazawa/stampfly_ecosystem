@@ -43,6 +43,7 @@ static EskfConfig loadConfigFromParams()
     params::get_float("eskf.obs.baro_noise", cfg.baro_noise);
     params::get_float("eskf.obs.mag_noise", cfg.mag_noise);
     params::get_float("eskf.obs.accel_att_noise", cfg.accel_att_noise);
+    params::get_float("eskf.obs.accel_att_lpf", cfg.accel_att_lpf_hz);
     params::get_float("eskf.bias.gyro_dev_max", cfg.bg_deviation_max);
     params::get_float("eskf.gate.tof_innov", cfg.tof_innov_gate);
     params::get_float("eskf.gate.baro_innov", cfg.baro_innov_gate);
