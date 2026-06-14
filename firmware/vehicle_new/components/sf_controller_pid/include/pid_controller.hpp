@@ -323,18 +323,33 @@ private:
     // API の離陸は離陸後の高度を保持することでこれを継承する。
     float takeoff_target_alt_ = 0.5f;     // [m] / 目標高度
 
-    // Auto-takeoff capture: TakeoffClimb → "reached" when the altitude settles within
-    // kTakeoffCaptureBandM of the target at under kTakeoffCaptureVelMps vertical speed,
-    // sustained kTakeoffSettleCycles control cycles (rejects a transient near-miss).
-    // takeoff_reached_ is the controller-side TAKEOFF→FLYING signal (isTakeoffComplete).
-    // 自動離陸の捕捉: TakeoffClimb は、高度が目標の kTakeoffCaptureBandM 以内・鉛直速度
-    // kTakeoffCaptureVelMps 未満に整定し kTakeoffSettleCycles 周期持続したとき「到達」。
-    // takeoff_reached_ が制御器側の TAKEOFF→FLYING 信号（isTakeoffComplete）。
-    static constexpr float    kTakeoffCaptureBandM  = 0.05f;  // [m] ±5 cm of target
-    static constexpr float    kTakeoffCaptureVelMps = 0.10f;  // [m/s] near-hover
-    static constexpr uint16_t kTakeoffSettleCycles  = 20;     // 20 × 2.5ms = 50 ms
-    bool     takeoff_reached_       = false;
-    uint16_t takeoff_settle_cycles_ = 0;
+    // Auto-takeoff complete (TakeoffClimb → Airborne, the controller-side TAKEOFF→FLYING
+    // signal isTakeoffComplete). ROBUST one-sided "reached" + timeout backstop:
+    //   reached  = altitude has climbed to within kTakeoffCaptureBandM of the target
+    //              (one-sided, altitude >= target - band) sustained kTakeoffSettleCycles.
+    //   backstop = after kTakeoffMaxCycles in TakeoffClimb, complete unconditionally.
+    // The earlier two-sided band (|target-alt|<band) + low-velocity-settle never fired on
+    // hardware: a steady-state offset (real hover altitude ≠ setpoint) or vertical-velocity
+    // noise kept it out of the tight window, so the craft stayed in TakeoffClimb with the
+    // roll/pitch sticks dead-sticked level (pid_controller.cpp lines ~190). The one-sided
+    // reach is offset-immune (it fires on the way UP), and the timeout guarantees we always
+    // leave TakeoffClimb so the pilot regains attitude control. Airborne ALT_HOLD then holds
+    // alt_setpoint_ = target (decision ②) and arrests any climb overshoot.
+    // 自動離陸完了（TakeoffClimb→Airborne、制御器側 TAKEOFF→FLYING 信号 isTakeoffComplete）。
+    // ロバストな「片側到達」＋タイムアウト・バックストップ:
+    //   到達 = 高度が目標の kTakeoffCaptureBandM 以内まで上昇（片側, altitude>=target-band）を
+    //          kTakeoffSettleCycles 持続。backstop = TakeoffClimb で kTakeoffMaxCycles 経過で無条件完了。
+    // 旧来の両側バンド+低速整定は実機で発火しなかった: 定常偏差（実保持高度≠setpoint）や鉛直速度
+    // ノイズで窓に入らず、機体が TakeoffClimb に留まりロール/ピッチが0固定された（compute 行~190）。
+    // 片側到達は偏差非依存（上昇途中で発火）、タイムアウトは必ず TakeoffClimb を抜けることを保証し
+    // パイロットが姿勢制御を取り戻す。Airborne ALT_HOLD は alt_setpoint_=target を保持（決定②）し
+    // 行き過ぎを吸収する。
+    static constexpr float    kTakeoffCaptureBandM = 0.05f;  // [m] reach within 5 cm below target
+    static constexpr uint16_t kTakeoffSettleCycles = 20;     // 20 × 2.5ms = 50 ms sustained
+    static constexpr uint16_t kTakeoffMaxCycles    = 1200;   // 3 s @ 400Hz timeout backstop
+    bool     takeoff_reached_        = false;
+    uint16_t takeoff_settle_cycles_  = 0;
+    uint16_t takeoff_elapsed_cycles_ = 0;   // time in TakeoffClimb, for the timeout backstop
 };
 
 }  // namespace sf

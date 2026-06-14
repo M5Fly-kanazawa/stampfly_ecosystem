@@ -59,6 +59,7 @@ vehicle_new の飛行を SIL（物理真値）で検証するシナリオスイ�
 | `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle_new |
 | `alt_recenter_gate` | **スロットル再センターゲート Case A**（離陸後）: 上げスティックを保持しても捕捉 0.5m を保持（ゲート閉）、中央 3072 を通すとゲート開→上昇 | vehicle_new |
 | `alt_inflight_switch` | **スロットル再センターゲート Case B**（飛行中切替）: STABILIZE→ALT_HOLD 切替で高度ジャンプなし（捕捉＋ゲート閉）、中央通過でゲート開 | vehicle_new |
+| `alt_arm_rollpitch` | **ARM トリガ ALT_HOLD 離陸後にロール/ピッチが効く回帰ガード**（実機バグ 2026-06-14）: TakeoffClimb で止まると roll_sp=0 でスティック死。離陸完了の片側到達＋タイムアウトで Airborne へ抜け、ロール指令で機体が傾く（tilt_max>6°）ことを assert | vehicle_new |
 | `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤発火させない）。離陸高度は **0.5m に統一**（手動 RC と同一ルーチン、2026-06-14）。`--duration 40000000` 必須 | vehicle_new |
 | `sysid_rate` | 飛行中レートループ同定励振（API `sysid roll chirp 25 4`: POS_HOLD ホバーで ±25dps 対数チャープ、有界・定点維持・正常終了）。`--duration 32000000` 必須 | vehicle_new |
 | `acro_crash_relevel` | 墜落復帰リセット後、保持されたモードスイッチが IDLE_GROUND で再適用される（実機 LED バグの固定） | vehicle_new |

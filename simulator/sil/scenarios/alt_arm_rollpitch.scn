@@ -1,0 +1,35 @@
+# alt_arm_rollpitch.scn — roll/pitch stick works after an ARM-triggered ALT_HOLD takeoff
+#                        ARM トリガ ALT_HOLD 離陸後にロール/ピッチが効く（回帰ガード）  (new 2026-06-14)
+#
+# Guards the hardware bug found in flight test (2026-06-14): in ALT_HOLD the roll/pitch
+# sticks "barely worked" while STABILIZE was fine. Root cause: the craft was stuck in the
+# TakeoffClimb phase (the auto-takeoff zeroes roll_sp/pitch_sp for level attitude), because
+# the takeoff-complete capture never fired (the old tight two-sided altitude band + low-
+# velocity settle failed under the hardware steady-state offset / velocity noise). Fix: a
+# one-sided "reached the target" test + a timeout backstop always leaves TakeoffClimb →
+# Airborne, where the sticks command tilt.
+#   D: ARM-triggered auto-takeoff to 0.5 m, reach Airborne ("Auto-takeoff complete").
+#   E: roll RIGHT → the craft must TILT (tilt_max > 6°). If stuck in TakeoffClimb it stays level.
+#   F: roll LEFT → tilt the other way.
+#
+# 実機飛行テスト(2026-06-14)で見つけたバグのガード: ALT_HOLD でロール/ピッチが「ほぼ効かない」
+# （STABILIZE は正常）。真因 = 機体が TakeoffClimb フェーズで停止（自動離陸は水平姿勢のため
+# roll_sp/pitch_sp を0固定）。離陸完了の捕捉が実機の定常偏差/速度ノイズで発火しなかったため。
+# 修正 = 片側「目標到達」+ タイムアウトで必ず Airborne へ抜け、スティックが傾きを指令できる。
+#   D: ARM トリガ自動離陸で 0.5 m へ、Airborne 到達（"Auto-takeoff complete"）。
+#   E: ロール右 → 機体が傾く必要（tilt_max > 6°）。TakeoffClimb で止まれば水平のまま。
+#   F: ロール左 → 反対へ傾く。
+#
+# Run: sf sil scenario simulator/sil/scenarios/alt_arm_rollpitch.scn --target vehicle_new
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props stop, spool, AUTO-takeoff fires
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, reach Airborne, hold
+   +    rc   2048  2700   2048    2048  1     2000      50        1              # E: roll RIGHT (~+9°) → craft must TILT (roll stick works in ALT_HOLD)
+   +    rc   2048  1396   2048    2048  1     2000      50        1              # F: roll LEFT (~-9°)
+   +    rc   2048  2048   2048    2048  1     1500      50        1              # G: centre → self-level
+   +    rc   2048  2048   2048    2048  0     200       50                       # H: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # I: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # J: settle disarmed

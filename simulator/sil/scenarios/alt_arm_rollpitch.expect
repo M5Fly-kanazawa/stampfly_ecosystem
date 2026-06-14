@@ -1,0 +1,5 @@
+exit 0
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+metric tilt_max > 6.0 in 13.0 16.0
+metric tilt_max < 25.0 in 13.0 16.0
+metric duty_max < 0.92 in 9.0 16.5

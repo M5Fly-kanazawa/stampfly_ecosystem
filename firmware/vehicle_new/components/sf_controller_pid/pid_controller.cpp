@@ -326,17 +326,28 @@ ControlOutput PidController::compute(
             if (thrust < 0.0f)         thrust = 0.0f;
             if (thrust > max_thrust_)  thrust = max_thrust_;
 
-            // Capture detection: settled within the band of the target at low vertical
-            // speed, sustained briefly → report takeoff complete (rejects a transient).
-            // 捕捉検出: 目標の band 内・低鉛直速度に整定し短時間持続 → 離陸完了を報告
-            // （一過性の near-miss を弾く）。
-            if (fabsf(alt_setpoint_ - altitude) < kTakeoffCaptureBandM &&
-                fabsf(vel_up) < kTakeoffCaptureVelMps) {
+            // Takeoff-complete detection — robust ONE-SIDED reach + timeout backstop.
+            // reached: the craft has CLIMBED to within kTakeoffCaptureBandM of the target
+            // (altitude >= target - band), sustained briefly → fires on the way UP, immune
+            // to a steady-state hover offset and to vertical-velocity noise (the old
+            // two-sided band + low-velocity settle never fired on hardware, dead-sticking
+            // roll/pitch — see pid_controller.hpp). The timeout guarantees we always leave
+            // TakeoffClimb so the pilot regains attitude control even if "reached" never trips.
+            // 離陸完了検出 — ロバストな片側到達＋タイムアウト・バックストップ。到達: 機体が目標の
+            // kTakeoffCaptureBandM 以内まで上昇（altitude>=target-band）を短時間持続 → 上昇途中で
+            // 発火し、定常ホバー偏差・鉛直速度ノイズに非依存（旧両側バンド+低速整定は実機で発火せず
+            // ロール/ピッチを0固定した。pid_controller.hpp 参照）。タイムアウトは、到達が発火しなく
+            // ても必ず TakeoffClimb を抜けてパイロットが姿勢制御を取り戻すことを保証する。
+            ++takeoff_elapsed_cycles_;
+            if (altitude >= takeoff_target_alt_ - kTakeoffCaptureBandM) {
                 if (++takeoff_settle_cycles_ >= kTakeoffSettleCycles) {
                     takeoff_reached_ = true;
                 }
             } else {
                 takeoff_settle_cycles_ = 0;
+            }
+            if (takeoff_elapsed_cycles_ >= kTakeoffMaxCycles) {
+                takeoff_reached_ = true;   // timeout backstop — never stay dead-sticked
             }
         } else {
             // Airborne: normal ALT_HOLD law.
@@ -662,9 +673,10 @@ void PidController::onTakeoff()
     alt_vel_.reset();
     alt_setpoint_ = takeoff_target_alt_;   // climb toward the target / 目標へ上昇
     capture_pos_  = true;
-    throttle_recentered_   = false;
-    takeoff_reached_       = false;
-    takeoff_settle_cycles_ = 0;
+    throttle_recentered_    = false;
+    takeoff_reached_        = false;
+    takeoff_settle_cycles_  = 0;
+    takeoff_elapsed_cycles_ = 0;
 }
 
 void PidController::onTakeoffComplete()
@@ -688,8 +700,9 @@ void PidController::onTakeoffComplete()
     // バイアスしない（確定②: 行き過ぎでなく目標値で捕捉）。鉛直ループの積分は維持
     // （ほぼホバー推力まで巻き上がり、滑らかな引き継ぎ）。状態機械が消費済みの離陸完了
     // 信号はここでクリアする。
-    takeoff_reached_       = false;
-    takeoff_settle_cycles_ = 0;
+    takeoff_reached_        = false;
+    takeoff_settle_cycles_  = 0;
+    takeoff_elapsed_cycles_ = 0;
 }
 
 void PidController::setGuidanceTarget(const GuidanceTarget& target,
@@ -786,9 +799,10 @@ void PidController::reset()
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
-    throttle_recentered_   = false;      // re-center gate re-arms for the next takeoff / 次の離陸用にゲート再武装
-    takeoff_reached_       = false;      // takeoff-complete signal clears / 離陸完了信号クリア
-    takeoff_settle_cycles_ = 0;
+    throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用にゲート再武装
+    takeoff_reached_        = false;      // takeoff-complete signal clears / 離陸完了信号クリア
+    takeoff_settle_cycles_  = 0;
+    takeoff_elapsed_cycles_ = 0;
     ESP_LOGI(TAG, "PID controller reset");
 }
 
