@@ -282,9 +282,85 @@ def main(path, out):
     ax[2].set_title("Specific accel time series\n(x-axis anisotropy = vibration)"); ax[2].set_xlabel("t [s]"); ax[2].set_ylim(-15, 15); ax[2].legend(fontsize=8); ax[2].grid(alpha=.3)
     fig.tight_layout(); fig.savefig(f"{out}/04_accel_innov.png", dpi=110); plt.close(fig)
 
+    # =====================================================================
+    # 5. Flow / position / velocity quality (toward POS_HOLD)
+    #    フロー / 位置 / 速度の品質（POS_HOLD に向けて）
+    #
+    # ALT_HOLD holds altitude only — horizontal pos/vel are DEAD-RECKONED from accel +
+    # optical flow. Their quality here predicts whether POS_HOLD can hold. We look at:
+    #  - flow SQUAL (quality) — is the flow usable?
+    #  - ESKF horizontal velocity noise at "hover" (drives POS_HOLD's inner loop)
+    #  - horizontal position drift over the flight (no pos aiding in ALT_HOLD ⇒ the drift
+    #    IS the dead-reckoning error; accel-bias x,y integrates straight into it)
+    #  - flow-rate vs ESKF horizontal velocity (does flow track the motion?)
+    # ALT_HOLD は高度のみ保持 — 水平 pos/vel は accel＋フローのデッドレコニング。その品質が
+    # POS_HOLD 成立可否を予告する。
+    # =====================================================================
+    flow = S["flow"]
+    t_fl = np.array([(d["ts"] - t0) / 1e6 for d in flow])
+    dxdy = np.array([[d["dx"], d["dy"]] for d in flow], dtype=float)
+    squal = np.array([d["quality"] for d in flow], dtype=float)
+    flyv = t_pv > 6.0
+    vh = np.linalg.norm(vel[:, :2], axis=1)          # ESKF horizontal speed
+    ph = pos[:, :2] - pos[flyv][0, :2]               # horizontal position vs start-of-flight
+    drift = np.linalg.norm(ph, axis=1)
+    flyf = t_fl > 6.0
+    M["posvel"] = {
+        "flow_squal_mean": float(squal[flyf].mean()), "flow_squal_p10": float(np.percentile(squal[flyf], 10)),
+        "flow_squal_below_30_frac": float(np.mean(squal[flyf] < 30)),
+        "eskf_hvel_std_mps": float(vh[flyv].std()), "eskf_hvel_p90_mps": float(np.percentile(vh[flyv], 90)),
+        "horiz_drift_end_m": float(drift[flyv][-1]),
+        "horiz_drift_rate_mps": float(drift[flyv][-1] / (t_pv[flyv][-1] - t_pv[flyv][0])),
+        "accel_bias_xy_end": [float(abias[-1, 0]), float(abias[-1, 1])],
+    }
+    fig, ax = plt.subplots(2, 2, figsize=(13, 9))
+    ax[0, 0].plot(t_fl, squal, lw=.6); ax[0, 0].axhline(30, color='r', ls='--', label="SQUAL=30 (typical floor)")
+    ax[0, 0].set_title(f"Optical-flow quality (SQUAL)  mean={squal[flyf].mean():.0f}"); ax[0, 0].legend(fontsize=8); ax[0, 0].grid(alpha=.3)
+    ax[0, 1].plot(t_pv, vel[:, 0], lw=.6, label="vx"); ax[0, 1].plot(t_pv, vel[:, 1], lw=.6, label="vy")
+    ax[0, 1].set_title(f"ESKF horizontal velocity [m/s]  (σ={vh[flyv].std():.3f}, p90={np.percentile(vh[flyv],90):.2f})"); ax[0, 1].legend(fontsize=8); ax[0, 1].grid(alpha=.3)
+    ax[1, 0].plot(ph[flyv, 0], ph[flyv, 1], lw=.7); ax[1, 0].plot(0, 0, 'go', label="start"); ax[1, 0].plot(ph[flyv, 0][-1], ph[flyv, 1][-1], 'rs', label=f"end ({drift[flyv][-1]:.1f}m)")
+    ax[1, 0].set_aspect("equal"); ax[1, 0].set_title("Horizontal position (dead-reckoned, ALT_HOLD)"); ax[1, 0].set_xlabel("x [m]"); ax[1, 0].set_ylabel("y [m]"); ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.3)
+    # flow rate (px/s) vs ESKF horizontal speed — correlation = flow tracks motion
+    dt_fl = np.diff(t_fl, prepend=t_fl[0] - 1.0 / 98)
+    flow_rate = np.linalg.norm(dxdy, axis=1) / np.maximum(dt_fl, 1e-3)
+    vh_at_fl = np.interp(t_fl, t_pv, vh)
+    ax[1, 1].scatter(vh_at_fl[flyf], flow_rate[flyf], s=3, alpha=.3)
+    ax[1, 1].set_xlabel("ESKF horiz speed [m/s]"); ax[1, 1].set_ylabel("flow rate [px/s]")
+    ax[1, 1].set_title("Flow rate vs ESKF speed (correlation ⇒ flow tracks motion)"); ax[1, 1].grid(alpha=.3)
+    for a in (ax[0, 0], ax[0, 1]):
+        a.set_xlabel("t [s]")
+    fig.tight_layout(); fig.savefig(f"{out}/05_posvel_flow.png", dpi=110); plt.close(fig)
+
+    # =====================================================================
+    # 6. Vibration spectrum (x-axis anisotropy source) — high-freq accel FFT
+    #    振動スペクトル（x軸異方性の源）— 高周波 accel FFT
+    # =====================================================================
+    acc_u = np.vstack([np.interp(tg, t_imu, accel[:, k]) for k in range(3)]).T
+    from numpy.fft import rfft, rfftfreq
+    fig, ax = plt.subplots(1, 1, figsize=(11, 5))
+    M["vib_peak_hz"] = {}
+    nper = 2048
+    win = np.hanning(nper)
+    fr = rfftfreq(nper, 1.0 / fs)
+    for k, nm in enumerate(["accel x→pitch", "accel y→roll", "accel z→vert"]):
+        sig = acc_u[:, k] - acc_u[:, k].mean()
+        acc = None
+        cnt = 0
+        for s0 in range(0, len(sig) - nper, nper // 2):
+            P = np.abs(rfft(sig[s0:s0 + nper] * win)) ** 2
+            acc = P if acc is None else acc + P
+            cnt += 1
+        psd = acc / cnt
+        ax.semilogy(fr, psd, lw=.8, label=nm)
+        band = (fr > 8) & (fr < fs / 2)
+        M["vib_peak_hz"][nm] = float(fr[band][np.argmax(psd[band])])
+    ax.set_xlim(0, fs / 2); ax.set_title("Accel PSD (vibration) — x-axis carries the energy; peak ⇒ prop/motor source")
+    ax.set_xlabel("f [Hz]"); ax.set_ylabel("PSD [(m/s²)²/Hz]"); ax.legend(); ax.grid(alpha=.3, which="both")
+    fig.tight_layout(); fig.savefig(f"{out}/06_vibration.png", dpi=110); plt.close(fig)
+
     with open(f"{out}/metrics.json", "w") as fp:
         json.dump(M, fp, indent=2)
-    print(json.dumps(M["accel_innov"], indent=2))
+    print(json.dumps({"accel_innov": M["accel_innov"], "posvel": M["posvel"], "vib_peak_hz": M["vib_peak_hz"]}, indent=2))
 
 
 if __name__ == "__main__":
