@@ -1,0 +1,19 @@
+# alt_takeoff_steer.expect — pilot attitude control DURING the ALT_HOLD auto-takeoff climb
+# ALT_HOLD 自動離陸の上昇中のパイロット姿勢制御
+#
+# The roll stick is held RIGHT from ARM. [8.4,9.2] is the TakeoffClimb window (altitude
+# still climbing 0.05→0.41 m). The craft MUST tilt there (tilt_max > 6°) — proving attitude
+# is never locked out during auto-takeoff (the old level-attitude hold gave tilt ≈ 0). The
+# auto-vertical still carries it to 0.5 m and reaches Airborne, then centering self-levels.
+# ロールを ARM から右に保持。[8.4,9.2] は TakeoffClimb 窓（高度 0.05→0.41 m 上昇中）。そこで
+# 機体は傾く必要（tilt_max > 6°）— 自動離陸中も姿勢を奪わない証明（旧水平保持では tilt≈0）。
+# 鉛直は自動で 0.5 m へ到達し Airborne、中央復帰で水平化。
+exit 0
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+# Roll RESPONDS during the takeoff climb (the key behaviour — old code held it level).
+metric tilt_max > 6.0  in 8.4 9.2
+metric tilt_max < 25.0 in 8.0 11.0
+# Auto-vertical still reached the target and holds ~0.5 m after self-leveling.
+metric alt_mean > 0.42 in 12.5 13.5
+metric alt_mean < 0.70 in 12.5 13.5
+metric duty_max < 0.95 in 8.0 13.0

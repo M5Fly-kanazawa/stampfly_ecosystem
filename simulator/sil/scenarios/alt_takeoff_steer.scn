@@ -1,0 +1,28 @@
+# alt_takeoff_steer.scn — the pilot can ROLL/PITCH DURING the ALT_HOLD auto-takeoff climb
+#                        ALT_HOLD 自動離陸の「上昇中」にロール/ピッチを操縦できる  (new 2026-06-14)
+#
+# Design (user decision 2026-06-14): the auto-takeoff is auto-VERTICAL ONLY — the controller
+# climbs to 0.5 m, but the PILOT keeps full attitude control in every phase, exactly as in
+# flight. Earlier TakeoffClimb forced level attitude (roll/pitch dead), which dead-sticked
+# the sticks if the craft stayed in that phase (flight-test bug). Now attitude is never
+# locked out: roll the stick DURING the climb and the craft tilts (and still climbs to 0.5 m).
+#   C: ARM in ALT_HOLD with the roll stick held RIGHT → during the auto-takeoff CLIMB the
+#      craft must TILT (tilt_max > 6° in [8.4,9.2], the TakeoffClimb window), while the
+#      auto-vertical still carries it up to 0.5 m and reaches Airborne ("Auto-takeoff complete").
+#   D: centre → self-level + hold.
+#
+# 設計（ユーザー判断 2026-06-14）: 自動離陸は「鉛直のみ自動」— 制御器は 0.5 m へ上昇するが、
+# パイロットは全フェーズで姿勢を完全に操れる（飛行と同じ）。旧来は TakeoffClimb で水平強制し、
+# そのフェーズに留まるとスティックが死んだ。今は姿勢を奪わない: 上昇中にロールを倒せば傾く
+# （かつ 0.5 m まで上昇する）。
+#
+# Run: sf sil scenario simulator/sil/scenarios/alt_takeoff_steer.scn --target vehicle_new
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2700   2048    2048  1     3000      50        1              # C: ARM in ALT_HOLD + roll RIGHT → tilt DURING the auto-takeoff climb
+   +    rc   2048  2048   2048    2048  1     3000      50        1              # D: centre → self-level + hold 0.5 m
+   +    rc   2048  2048   2048    2048  0     200       50                       # E: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # F: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle disarmed

@@ -182,17 +182,24 @@ ControlOutput PidController::compute(
         roll_sp  = setpoint.roll * max_angle_;
         pitch_sp = setpoint.pitch * max_angle_;
 
-        // Auto-takeoff (ALT/POS modes): sticks are ignored — level attitude and
-        // heading hold, exactly like the landing path's mirror image. POS_HOLD
-        // additionally holds the launch point via the cascade below.
-        // 自動離陸（ALT/POS モード）: スティック無視 — 水平姿勢＋方位保持（着陸経路の
-        // 鏡像）。POS_HOLD はさらに下のカスケードで発進点を保持する。
-        if (current_mode_ >= FlightMode::ALT_HOLD &&
-            phase_ == VerticalPhase::TakeoffClimb) {
-            roll_sp  = 0.0f;
-            pitch_sp = 0.0f;
-            rate_sp_yaw = 0.0f;
-        }
+        // Auto-takeoff is auto-VERTICAL ONLY: the controller climbs to the target
+        // altitude (the altitude block below owns thrust), but the PILOT keeps FULL
+        // attitude control throughout — roll/pitch tilt the craft and yaw turns it,
+        // exactly as in normal flight (centered sticks → level → straight-up climb;
+        // hands-on → the pilot steers while climbing; tilting only costs ~cosθ of lift,
+        // which the altitude loop compensates). Earlier TakeoffClimb forced level attitude
+        // (roll_sp=pitch_sp=yaw=0), which DEAD-STICKED roll/pitch whenever the craft stayed
+        // in that phase — the flight-test bug (2026-06-14). Never lock out attitude: the
+        // pilot must be able to steer in any state (user decision). POS_HOLD still holds the
+        // launch point via the position cascade below (that override is by design, and
+        // pilot intent in POS_HOLD is "hold", not "tilt").
+        // 自動離陸は「鉛直のみ自動」: 制御器は目標高度まで上昇する（推力は下の高度ブロックが
+        // 所有）が、パイロットは終始「完全な姿勢制御」を保つ — roll/pitch で傾け yaw で回頭、
+        // 通常飛行と全く同じ（中立→水平→真上に上昇／倒せば上昇中も操縦／傾きは ~cosθ の揚力損
+        // のみで高度ループが補償）。旧来は TakeoffClimb で水平強制（roll_sp=pitch_sp=yaw=0）し、
+        // そのフェーズに留まるとロール/ピッチが死んだ（実機バグ 2026-06-14）。どの状態でも姿勢を
+        // 奪わない（ユーザー判断）。POS_HOLD は下の位置カスケードで発進点を保持する（設計どおり。
+        // POS_HOLD のパイロット意図は「保持」であって「傾ける」ではない）。
 
         // Guidance: walk the POS_HOLD setpoints toward the target and steer yaw
         // with a rate-limited P loop. The cascade below then tracks the walking
@@ -228,19 +235,19 @@ ControlOutput PidController::compute(
 
         // Heading hold: yaw stick neutral → hold the heading captured at stick
         // release (rate-limited P on the estimator yaw; see pid_controller.hpp).
-        // Skipped while guidance owns yaw, during auto-takeoff (its own law
-        // already commands zero yaw rate), and on the ground — in STABILIZE the
-        // throttle floor is the airborne test, in ALT_HOLD+ the vertical phase.
-        // Any yaw stick input releases the hold instantly (pilot always wins);
-        // the target re-captures at the next stick release.
+        // Active in flight AND during the auto-takeoff climb (attitude is the pilot's in
+        // every airborne phase) — skipped only while guidance owns yaw and while Grounded.
+        // In STABILIZE the throttle floor is the airborne test; in ALT_HOLD+ being off the
+        // Grounded phase is. Any yaw stick input releases the hold instantly (pilot always
+        // wins); the target re-captures at the next stick release.
         // ヘディングホールド: ヨースティック中立 → 離した瞬間に捕捉した方位を保持
-        // （推定ヨー角のレート制限付き P。pid_controller.hpp 参照）。誘導がヨーを所有
-        // している間・自動離陸中（その則が既にヨーレート 0 を指令）・地上ではスキップ —
-        // STABILIZE ではスロットル床値が、ALT_HOLD 以上では鉛直フェーズが空中判定。
-        // ヨースティック入力で即解除（パイロット優先）し、次の中立で目標を再捕捉する。
+        // （推定ヨー角のレート制限付き P。pid_controller.hpp 参照）。飛行中＋自動離陸の上昇中も
+        // 有効（空中の全フェーズで姿勢はパイロットのもの）— 誘導がヨーを所有している間・地上では
+        // スキップ。STABILIZE ではスロットル床値が、ALT_HOLD 以上では Grounded でないことが
+        // 空中判定。ヨースティック入力で即解除（パイロット優先）し、次の中立で再捕捉する。
         if (yaw_hold_kp_ > 0.0f && !guidance_active_ &&
             !(current_mode_ >= FlightMode::ALT_HOLD &&
-              phase_ != VerticalPhase::Airborne)) {
+              phase_ == VerticalPhase::Grounded)) {
             const bool stick_neutral =
                 fabsf(setpoint.yaw) < kYawHoldStickDeadband;
             const bool airborne =

@@ -184,7 +184,7 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 
 検証: SIL `acro_crash_relevel`（①の固定）、`api_flight`（FLYING 不一致の無視＝API保護）、
 `modeswitch`/`alt_flight`（FLYING エッジ適用）、`alt_auto_takeoff`（IDLE_GROUND API設定）。
-| ARMED_GROUND → TAKEOFF（ALT/POS 選択時） | — | **ARM 自体がトリガ**（スプールドウェル後, 注4）→ ControllerCmd::Takeoff 発行 → 制御器が自動離陸（高度カスケードで目標 0.5m へ速度制限上昇＋水平姿勢、POS は発進点保持） |
+| ARMED_GROUND → TAKEOFF（ALT/POS 選択時） | — | **ARM 自体がトリガ**（スプールドウェル後, 注4）→ ControllerCmd::Takeoff 発行 → 制御器が自動離陸（高度カスケードで目標 0.5m へ速度制限上昇＝**鉛直のみ自動**。姿勢はパイロット操縦可、ALT_HOLD は roll/pitch=スティック、POS は発進点保持） |
 | TAKEOFF → FLYING（ALT/POS） | — | **制御器が目標高度 0.5m を捕捉**（`isTakeoffComplete`→`controller_status.takeoff_reached`）→ StateTask が ControllerCmd::TakeoffComplete 発行 → 通常モード則を係合（**目標値 0.5m を保持**、行き過ぎ瞬時高度でなく。注4） |
 | FLYING → LANDING | （リザーブ） | 離着陸MGR: 着陸シーケンス開始 |
 | FLYING → ARMED_GROUND | 高度/位置コントローラリセット | ESKFホールド |
