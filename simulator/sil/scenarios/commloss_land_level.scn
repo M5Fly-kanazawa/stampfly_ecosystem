@@ -1,0 +1,25 @@
+# commloss_land_level.scn — a FAILSAFE (comm-loss) landing stays LEVEL despite stale sticks
+#                          通信途絶のフェイルセーフ着陸は古いスティックを無視して水平を保つ (new 2026-06-14)
+#
+# Adversarial guard for INV-2 ("attitude is the pilot's — level ONLY on a dead link"):
+# the pilot is holding ROLL RIGHT when the link drops, so the last setpoint is a non-zero
+# tilt. During the comm-loss hover grace the craft still follows that stale roll (FLYING),
+# but once it enters LANDING the controller sees the setpoint is STALE (link dead) and the
+# single level gate forces roll/pitch/yaw to ZERO — the descent is level, NOT a stale-stick
+# tilt. Contrast alt_disarm_land_steer.scn (live link → pilot STEERS the descent).
+#
+# INV-2 の敵対的ガード（姿勢はパイロットのもの — 水平化はリンク途絶時のみ）: リンク途絶の瞬間に
+# パイロットがロール右を保持＝最後の設定点が非ゼロ傾き。通信途絶ホバー猶予中（FLYING）は機体は
+# その古いロールに従うが、LANDING に入ると制御器は設定点が stale（リンク途絶）と判定し、単一の
+# 水平ゲートで roll/pitch/yaw を 0 に強制 — 降下は水平で、古いスティックの傾きにならない。
+# 対照: alt_disarm_land_steer.scn（リンク生存→パイロットが降下を操縦）。
+#
+# Run: sf sil scenario simulator/sil/scenarios/commloss_land_level.scn --target vehicle_new
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0      rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND
+   +      rc   2048  2048   2048    2048  1     1000      50              # B: ARM
+   +      rc   3330  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → FLYING
+   +      rc   2048  2048   2048    2048  1     2500      50        1     # D: ALT_HOLD capture + hover (settle, FLYING)
+   +      rc   2048  2800   2048    2048  1     800       50        1     # E: hold ROLL RIGHT (link live → tilts, FLYING) — this is the LAST setpoint before the gap
+   +8000  rc   2048  2048   2048    2048  0     1000      50              # F: 8 s SILENCE → COMM_LOST (>500ms) → 3 s grace (stale roll) → LANDING (LEVEL gate) → touchdown

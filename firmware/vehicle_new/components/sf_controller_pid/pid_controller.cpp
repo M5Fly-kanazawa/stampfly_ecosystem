@@ -21,6 +21,9 @@
  *
  * @design requirements.md §4 — Component #6: replaceable control      [OK]
  * @design detailed_design.md §4 — IController                        [OK]
+ * @design detailed_design.md §3 注4/注5/注6 — takeoff/landing law    [OK]
+ * @design architecture.md INV-1/INV-2 — one attitude pipeline; pilot [OK]
+ *         keeps attitude (level only on a dead link)
  */
 
 #include "pid_controller.hpp"
@@ -120,15 +123,11 @@ ControlOutput PidController::compute(
     const CommandSetpoint& setpoint,
     float dt)
 {
-    // Autonomous landing overrides the whole pipeline: the trigger conditions
-    // (comm loss, battery emergency) mean the pilot setpoint is stale or must
-    // be ignored. See computeLanding().
-    // 自動着陸はパイプライン全体を上書きする: 発動条件（通信断・電池緊急）では
-    // パイロット setpoint は stale か無視すべきもの。computeLanding() 参照。
-    if (landing_) {
-        return computeLanding(state, dt);
-    }
-
+    // NOTE: autonomous landing is NOT a separate path — it is VerticalPhase::Landing,
+    // handled inline in the attitude and vertical blocks below so it shares the ONE
+    // pipeline (INV-1) and keeps pilot attitude while the link is live (INV-2).
+    // 注: 自動着陸は別経路でない — VerticalPhase::Landing として下の姿勢/鉛直ブロックで
+    // インライン処理し、単一パイプライン（INV-1）を共有し、リンク生存中は姿勢を保つ（INV-2）。
     ControlOutput output = {};
     output.timestamp = state.timestamp;
 
@@ -176,7 +175,13 @@ ControlOutput PidController::compute(
     // スティックでなく位置カスケードの出力になる）。
     float roll_sp  = 0.0f;
     float pitch_sp = 0.0f;
-    if (current_mode_ >= FlightMode::STABILIZE) {
+    // Run the attitude cascade for STABILIZE and above, AND during Landing in any
+    // mode — an autonomous landing must be attitude-stabilized even if it started
+    // from ACRO (a comm-loss landing). INV-1: one attitude path for every phase.
+    // 姿勢カスケードは STABILIZE 以上、加えて任意モードの Landing 中も走らせる — 自動着陸は
+    // ACRO から始まっても（通信途絶着陸）姿勢安定化が必要。INV-1: 全フェーズ単一姿勢経路。
+    if (current_mode_ >= FlightMode::STABILIZE ||
+        phase_ == VerticalPhase::Landing) {
         // Default: sticks command the tilt angle directly (STABILIZE).
         // 既定: スティックが傾き角を直接指令する（STABILIZE）。
         roll_sp  = setpoint.roll * max_angle_;
@@ -278,9 +283,35 @@ ControlOutput PidController::compute(
         // Not while Grounded — the hold target is captured at (auto-)takeoff.
         // POS_HOLD: 位置カスケードがスティック傾き指令を上書きし、捕捉した水平位置を保持する。
         // Grounded 中は走らせない — 保持目標は（自動）離陸時に捕捉する。
+        // Not during Landing: the autonomous descent uses direct stick tilt (or the
+        // level gate below), not the position cascade — keep the landing law uniform
+        // across modes (a POS_HOLD landing steers like STABILIZE).
+        // Landing 中は走らせない: 自動降下は位置カスケードでなく直接スティック傾き（下の
+        // 水平ゲート）を使い、着陸則をモード間で統一する（POS_HOLD 着陸も STABILIZE 同様に操縦）。
         if (current_mode_ >= FlightMode::POS_HOLD &&
-            phase_ != VerticalPhase::Grounded) {
+            phase_ != VerticalPhase::Grounded &&
+            phase_ != VerticalPhase::Landing) {
             computePositionHold(state, euler.z, dt, roll_sp, pitch_sp);
+        }
+
+        // Landing — the SINGLE level gate (INV-2). The pilot keeps roll/pitch/yaw while
+        // the command link is LIVE (a pilot-commanded landing is steerable, same vertical-
+        // only-auto principle as takeoff). If the link is STALE (comm-loss failsafe — no
+        // pilot), force LEVEL: stale sticks must not steer. Link-liveness = setpoint
+        // freshness, so no failsafe flag is threaded and it self-levels if the link drops
+        // mid-descent. roll_sp/pitch_sp already hold the stick tilt; zero them when stale.
+        // Landing — 単一の水平ゲート（INV-2）。リンク生存中はパイロットが roll/pitch/yaw を保つ
+        // （パイロット指令の着陸は操縦可、離陸と同じ鉛直のみ自動の思想）。リンク途絶（通信途絶
+        // フェイルセーフ＝パイロット不在）なら水平に強制: stale なスティックで操縦させない。生存
+        // 判定は設定点の新鮮さゆえフラグ配線不要、降下中にリンクが切れても自動で水平化する。
+        if (phase_ == VerticalPhase::Landing) {
+            const bool link_live =
+                (state.timestamp - setpoint.timestamp) < kLandingLinkStaleUs;
+            if (!link_live) {
+                roll_sp = 0.0f;
+                pitch_sp = 0.0f;
+                rate_sp_yaw = 0.0f;
+            }
         }
 
         rate_sp_roll  = att_roll_.compute(roll_sp, euler.x, dt);
@@ -288,10 +319,24 @@ ControlOutput PidController::compute(
     }
 
     // =========================================================================
-    // Altitude control (ALT_HOLD and above)
-    // 高度制御（ALT_HOLD以上）
+    // Vertical channel — phase-switched (INV-1: the phase changes ONLY this channel)
+    // 鉛直チャネル — フェーズで分岐（INV-1: フェーズが変えるのはこのチャネルのみ）
     // =========================================================================
-    if (current_mode_ >= FlightMode::ALT_HOLD) {
+    if (phase_ == VerticalPhase::Landing) {
+        // Autonomous landing descent — mode-INDEPENDENT (a comm-loss landing can start
+        // from ACRO/STABILIZE, which have no altitude loop). Track a constant downward
+        // velocity; the touchdown detector (TakeoffLandingMgr, INV-3) ends LANDING at the
+        // ground. Attitude was handled by the one pipeline above (pilot or level gate).
+        // 自動着陸の降下 — モード非依存（ACRO/STABILIZE からの通信途絶着陸は高度ループを持た
+        // ない）。一定の下向き速度を追従し、接地は TakeoffLandingMgr が検出（INV-3）して LANDING
+        // を終える。姿勢は上の単一パイプライン（パイロット or 水平ゲート）で処理済み。
+        const float vel_up = -state.velocity[2];   // up-positive / 上正
+        const float thrust_correction =
+            alt_vel_.compute(-landing_descent_rate_, vel_up, dt);
+        thrust = hover_thrust_ + thrust_correction;
+        if (thrust < 0.0f)         thrust = 0.0f;
+        if (thrust > max_thrust_)  thrust = max_thrust_;
+    } else if (current_mode_ >= FlightMode::ALT_HOLD) {
         const float altitude = -state.position[2];   // NED z-down → altitude up
         const float vel_up   = -state.velocity[2];   // vertical velocity, up positive
 
@@ -439,7 +484,7 @@ ControlOutput PidController::compute(
     // レートループが見たとおりの励振が乗る。
     // =========================================================================
     if (excite_active_) {
-        if (phase_ != VerticalPhase::Airborne || landing_) {
+        if (phase_ != VerticalPhase::Airborne) {   // Landing is a phase, so this catches it too
             excite_active_ = false;   // safety: flight phase ended / 飛行終了で停止
         } else {
             float sig = 0.0f;
@@ -578,79 +623,23 @@ void PidController::computePositionHold(const StateEstimate& state, float yaw,
     roll_sp  = clampTilt( ay_body / gravity_);
 }
 
-// -----------------------------------------------------------------------------
-// computeLanding — autonomous landing: level attitude + fixed descent rate.
-// Structure: STABILIZE attitude loop with zero tilt setpoints and zero yaw rate
-// (no dependence on the stale sticks), plus the ALT_HOLD velocity loop tracking
-// a constant downward velocity. Touchdown is detected by the ToF landing
-// detector (TakeoffLandingMgr) which drives LANDING → IDLE_GROUND → disarm.
-// computeLanding — 自動着陸: 水平姿勢＋固定降下率。
-// 構成: 傾き指令ゼロ・ヨーレートゼロの STABILIZE 姿勢ループ（stale なスティックに
-// 依存しない）＋ 一定の下向き速度を追従する ALT_HOLD の速度ループ。接地は ToF の
-// 着陸検出（TakeoffLandingMgr）が捉え、LANDING → IDLE_GROUND → disarm が進む。
-// -----------------------------------------------------------------------------
-ControlOutput PidController::computeLanding(const StateEstimate& state, float dt)
-{
-    ControlOutput output = {};
-    output.timestamp = state.timestamp;
-
-    // Level-attitude cascade: tilt setpoints = 0 → rate setpoints.
-    // 水平姿勢カスケード: 傾き指令 0 → レート指令。
-    math::Quat q(state.attitude[0], state.attitude[1],
-                 state.attitude[2], state.attitude[3]);
-    math::Vec3 euler = q.to_euler();
-    const float rate_sp_roll  = att_roll_.compute(0.0f, euler.x, dt);
-    const float rate_sp_pitch = att_pitch_.compute(0.0f, euler.y, dt);
-    // Yaw rate constrained to 0 — heading is FREE, not held: nulling the yaw RATE
-    // is not heading-hold (yaw drifts under a standing disturbance, see the
-    // heading-hold rationale in pid_controller.hpp). The short auto-landing
-    // descent tolerates that drift, so the real outer-P heading-hold loop is
-    // intentionally not engaged here (code_review L-10).
-    // ヨーレートを0に拘束 — 方位は保持でなくフリー: ヨー「レート」を0にしても方位保持
-    // ではない（定在外乱下で方位はドリフトする。根拠は pid_controller.hpp のヘディング
-    // ホールド説明）。短時間の自動着陸降下はそのドリフトを許容するため、本物の外側P
-    // ヘディングホールドループはここでは意図的に係合しない (L-10)。
-    const float rate_sp_yaw   = 0.0f;
-
-    // Vertical: track a constant descent (up-positive velocity = −descent rate).
-    // 鉛直: 一定降下を追従（上正の速度 = −降下率）。
-    const float vel_up = -state.velocity[2];            // NED z-down → up-positive
-    const float thrust_correction =
-        alt_vel_.compute(-landing_descent_rate_, vel_up, dt);
-    float thrust = hover_thrust_ + thrust_correction;
-    if (thrust < 0.0f)        thrust = 0.0f;
-    if (thrust > max_thrust_) thrust = max_thrust_;
-
-    // Innermost rate loop (same as the normal path).
-    // 最内レートループ（通常経路と同じ）。
-    output.torque[0] = rate_roll_.compute(rate_sp_roll, state.angular_rate[0], dt);
-    output.torque[1] = rate_pitch_.compute(rate_sp_pitch, state.angular_rate[1], dt);
-    output.torque[2] = rate_yaw_.compute(rate_sp_yaw, state.angular_rate[2], dt);
-    output.thrust = thrust;
-
-    // Data Stream export (landing: level attitude target, attitude-loop rates).
-    // Data Stream 出力（着陸中: 水平姿勢目標、姿勢ループ由来のレート）。
-    output.rate_ref[0] = rate_sp_roll;
-    output.rate_ref[1] = rate_sp_pitch;
-    output.rate_ref[2] = rate_sp_yaw;
-    output.angle_ref[0] = 0.0f;
-    output.angle_ref[1] = 0.0f;
-    return output;
-}
-
 void PidController::onLanding()
 {
-    if (landing_) {
+    if (phase_ == VerticalPhase::Landing) {
         return;   // already landing (idempotent) / 既に着陸中（冪等）
     }
     ESP_LOGW(TAG, "Autonomous landing engaged (%.1f m/s descent)",
              static_cast<double>(landing_descent_rate_));
-    landing_ = true;
+    // Landing is a VerticalPhase (INV-1) — compute() then descends and keeps pilot
+    // attitude (or levels on a stale link). NOT a separate control path.
+    // Landing は VerticalPhase（INV-1）— 以後 compute() が降下しつつ姿勢を保つ（リンク
+    // 途絶なら水平化）。別の制御経路ではない。
+    phase_ = VerticalPhase::Landing;
 
-    // Fresh start for the loops the landing path uses: the attitude loops may
-    // carry integrator state from a different mode, and the vertical loop may
-    // have wound up against a saturated climb.
-    // 着陸経路が使うループを仕切り直す: 姿勢ループは別モードの積分状態を、鉛直ループは
+    // Fresh start for the loops the landing law uses: the attitude loops may carry
+    // integrator state from a different mode, and the vertical loop may have wound up
+    // against a saturated climb.
+    // 着陸則が使うループを仕切り直す: 姿勢ループは別モードの積分状態を、鉛直ループは
     // 飽和上昇に対する巻き上がりを抱えている可能性がある。
     att_roll_.reset();
     att_pitch_.reset();
@@ -750,7 +739,7 @@ void PidController::setGuidanceTarget(const GuidanceTarget& target,
 
 void PidController::startExcitation(const SysidCommand& cmd)
 {
-    if (phase_ != VerticalPhase::Airborne || landing_) {
+    if (phase_ != VerticalPhase::Airborne) {   // Landing/Takeoff/Grounded are not Airborne
         ESP_LOGW(TAG, "Sysid excitation rejected: not airborne");
         return;
     }
@@ -801,8 +790,7 @@ void PidController::reset()
     alt_pos_.reset();    alt_vel_.reset();
     pos_x_.reset();      pos_y_.reset();
     vel_x_.reset();      vel_y_.reset();
-    landing_ = false;    // landing override ends with the flight / 着陸上書きは飛行と共に終了
-    phase_   = VerticalPhase::Grounded;  // next flight starts grounded / 次の飛行は接地から
+    phase_   = VerticalPhase::Grounded;  // next flight starts grounded; clears Landing too / 次の飛行は接地から（Landing も解除）
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様

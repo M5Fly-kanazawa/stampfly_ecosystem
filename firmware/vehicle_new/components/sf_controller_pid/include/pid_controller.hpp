@@ -13,6 +13,10 @@
  *
  * @design requirements.md §4 — Component #6: replaceable control      [OK]
  * @design detailed_design.md §4 — IController                        [OK]
+ * @design detailed_design.md §3 注4/注5/注6 — takeoff/landing law    [OK]
+ * @design architecture.md INV-1 — one attitude pipeline, all phases  [OK]
+ * @design architecture.md INV-2 — pilot keeps attitude; level only   [OK]
+ *         on a dead link (setpoint staleness, R16)
  */
 
 #pragma once
@@ -57,10 +61,6 @@ private:
     /// Load PID gains from parameter system / パラメータからゲインを読み込み
     void loadParams();
 
-    /// Autonomous-landing control: level attitude + fixed descent rate.
-    /// 自動着陸制御: 水平姿勢＋固定降下率。
-    ControlOutput computeLanding(const StateEstimate& state, float dt);
-
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
     /// POS_HOLD カスケード: 位置/速度誤差 → 傾き指令（roll/pitch）。roll_sp/pitch_sp[rad]
@@ -70,35 +70,45 @@ private:
 
     FlightMode current_mode_ = FlightMode::STABILIZE;
 
-    // Vertical flight phase for the ALT_HOLD/POS_HOLD laws. Raw throttle→thrust
-    // makes no sense in these modes, so the phase gates the vertical loop:
+    // Vertical flight phase. INV-1 (architecture.md): ALL phases share the ONE
+    // attitude+rate pipeline in compute() — a phase may change ONLY the vertical
+    // channel (thrust / climb / descent) and its own exit condition, never the
+    // attitude law. There is deliberately NO separate per-phase control function.
+    // The phase gates the vertical loop (raw throttle→thrust makes no sense in
+    // ALT/POS, and Landing must descend regardless of mode):
     //   Grounded     — armed on the ground: thrust forced to ZERO (props stopped;
     //                  without this gate ALT_HOLD would command hover thrust at ARM)
     //   TakeoffClimb — auto-takeoff (ControllerCmd::Takeoff): the altitude cascade
     //                  climbs toward takeoff_target_alt_ (0.5m), velocity-limited to
-    //                  takeoff_climb_rate_, with level attitude (POS: hold the launch
-    //                  point). The cascade decelerates near the target, so the craft
-    //                  CAPTURES the target altitude (no overshoot); isTakeoffComplete()
+    //                  takeoff_climb_rate_. Attitude is the PILOT's (INV-2) — only the
+    //                  vertical channel is automated. The cascade decelerates near the
+    //                  target, so the craft CAPTURES it (no overshoot); isTakeoffComplete()
     //                  reports it and the state machine moves TAKEOFF→FLYING. The ToF
-    //                  0.15m airborne edge is the ESKF vertical handoff only (ImuTask),
-    //                  independent of this.
+    //                  0.15m airborne edge is the ESKF vertical handoff only (ImuTask).
     //   Airborne     — normal mode law. ALT_HOLD holds the target captured at takeoff,
     //                  or the current altitude on an in-flight switch into ALT/POS
     //                  (onModeChange). STABILIZE/ACRO ignore the phase (manual throttle).
-    // ALT_HOLD/POS_HOLD 則のための鉛直飛行フェーズ。これらのモードでは生スロットル→
-    // 推力は意味を持たないため、フェーズが鉛直ループをゲートする:
-    //   Grounded     — 地上で ARM 中: 推力を強制ゼロ（プロペラ停止。このゲートが
-    //                  ないと ALT_HOLD は ARM した瞬間にホバー推力を指令してしまう）
-    //   TakeoffClimb — 自動離陸（ControllerCmd::Takeoff）: 高度カスケードが
-    //                  takeoff_target_alt_(0.5m) へ向かい、速度は takeoff_climb_rate_ に
-    //                  制限、水平姿勢（POS は発進点保持）。目標近傍で減速するため機体は
-    //                  目標高度を「捕捉」（オーバーシュートなし）。isTakeoffComplete() が
-    //                  報告し、状態機械が TAKEOFF→FLYING を進める。ToF 0.15m 空中エッジは
-    //                  ESKF 鉛直ハンドオフ専用（ImuTask）でこれとは独立。
-    //   Airborne     — 通常のモード則。ALT_HOLD は離陸で捕捉した目標、または飛行中の
-    //                  ALT/POS 切替では現在高度（onModeChange）を保持。STABILIZE/ACRO は
-    //                  フェーズを無視（手動スロットル）。
-    enum class VerticalPhase : uint8_t { Grounded, TakeoffClimb, Airborne };
+    //   Landing      — autonomous landing (ControllerCmd::Landing): the vertical channel
+    //                  descends at landing_descent_rate_ regardless of flight mode (a
+    //                  comm-loss landing can start from ACRO/STABILIZE, which have no
+    //                  altitude loop). Attitude stays the PILOT's WHILE THE LINK IS LIVE
+    //                  (a pilot-commanded landing is steerable, INV-2); on a stale link
+    //                  (comm-loss failsafe, no pilot) the single level gate forces
+    //                  roll/pitch/yaw to zero. Touchdown is detected by TakeoffLandingMgr
+    //                  (INV-3), which drives LANDING → IDLE_GROUND → disarm.
+    // 鉛直飛行フェーズ。INV-1: 全フェーズが compute() の単一姿勢+レートパイプラインを共有
+    // し、フェーズが変えてよいのは鉛直チャネル（推力/上昇/降下）と自身の脱出条件のみ。姿勢則は
+    // 変えない。フェーズ別の制御関数は意図的に持たない。フェーズは鉛直ループをゲートする:
+    //   Grounded     — 地上 ARM 中: 推力を強制ゼロ（プロペラ停止）
+    //   TakeoffClimb — 自動離陸: 高度カスケードが目標(0.5m)へ速度制限上昇。姿勢はパイロット
+    //                  （INV-2, 鉛直のみ自動）。目標近傍で減速し捕捉、isTakeoffComplete() が報告。
+    //   Airborne     — 通常のモード則（捕捉した目標 or 飛行中切替で現在高度を保持）。
+    //   Landing      — 自動着陸: 鉛直チャネルが landing_descent_rate_ で降下（モード非依存=
+    //                  ACRO/STABILIZE からの通信途絶着陸にも対応）。リンク生存中は姿勢は
+    //                  パイロット（操縦可, INV-2）、リンク途絶（パイロット不在）時のみ単一の
+    //                  水平ゲートで roll/pitch/yaw を 0 にする。接地は TakeoffLandingMgr が検出
+    //                  （INV-3）し LANDING→IDLE_GROUND→disarm へ。
+    enum class VerticalPhase : uint8_t { Grounded, TakeoffClimb, Airborne, Landing };
     VerticalPhase phase_ = VerticalPhase::Grounded;
 
     // Rate control PIDs (innermost loop) / レート制御PID（最内ループ）
@@ -289,17 +299,29 @@ private:
     float max_roll_pitch_torque_ = 5.2e-3f;  // [Nm] legacy ROLL/PITCH_OUTPUT_LIMIT
     float max_yaw_torque_        = 2.2e-3f;  // [Nm] legacy YAW_OUTPUT_LIMIT
 
-    // Autonomous landing (ControllerCmd::Landing). While landing_ is set the
-    // controller ignores the pilot setpoint entirely — the trigger conditions
-    // (comm loss, battery emergency) mean the sticks are stale or unreliable.
-    // Cleared by reset() (the next ARM). 0.3 m/s ≈ gentle indoor descent; the
-    // ToF landing detector (TakeoffLandingMgr) ends the state at touchdown.
-    // 自動着陸（ControllerCmd::Landing）。landing_ 中はパイロット setpoint を完全に
-    // 無視する — 発動条件（通信断・電池緊急）はスティックが stale か信頼できない状況。
-    // reset()（次の ARM）で解除。0.3 m/s は屋内の穏やかな降下率で、接地は ToF の
-    // 着陸検出（TakeoffLandingMgr）が状態を終わらせる。
-    bool  landing_              = false;
+    // Autonomous landing descent rate (VerticalPhase::Landing — set by onLanding,
+    // cleared by reset() at the next ARM). 0.3 m/s ≈ gentle indoor descent; the
+    // touchdown detector (TakeoffLandingMgr) ends the state at the ground (INV-3).
+    // Landing is NOT a separate control path — it is a vertical phase in compute()
+    // (INV-1); attitude stays the pilot's while the link is live (INV-2).
+    // 自動着陸の降下率（VerticalPhase::Landing — onLanding で設定、reset()=次の ARM で
+    // 解除）。0.3 m/s は屋内の穏やかな降下率で、接地は TakeoffLandingMgr が検出（INV-3）。
+    // Landing は別経路でなく compute() の鉛直フェーズ（INV-1）、姿勢はリンク生存中パイロット（INV-2）。
     float landing_descent_rate_ = 0.3f;   // [m/s] downward / 下向き降下率
+
+    // Landing steerability gate: the pilot keeps roll/pitch/yaw during a landing
+    // ONLY while the command link is live. Link-liveness = setpoint freshness
+    // (R16): if (state.timestamp − setpoint.timestamp) exceeds this, the link is
+    // assumed lost (comm-loss failsafe, no pilot) and the descent is forced LEVEL.
+    // Matches the Failsafe comm-loss timeout so the two agree. No separate flag is
+    // threaded from the StateManager — freshness alone tells us if the pilot is there,
+    // and it also self-levels if the link drops mid-descent.
+    // 着陸の操縦ゲート: リンク生存中のみパイロットが roll/pitch/yaw を保つ。生存判定は設定点
+    // の新鮮さ（R16）: (state.timestamp − setpoint.timestamp) がこれを超えたらリンク途絶
+    // （通信途絶フェイルセーフ＝パイロット不在）とみなし水平降下に強制。Failsafe の通信途絶
+    // タイムアウトと一致させ両者を整合。StateManager からフラグを配線しない — 新鮮さだけで
+    // パイロットの在否が分かり、降下中にリンクが切れても自動で水平化する。
+    static constexpr uint32_t kLandingLinkStaleUs = 500000;  // 500 ms / R16 timeout
 
     // Auto-takeoff climb rate (TakeoffClimb phase). Mirror of the landing descent
     // rate: gentle, vertical-velocity-loop tracked, indoor-safe. It is the velocity

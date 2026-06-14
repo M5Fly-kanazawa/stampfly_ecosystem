@@ -1,0 +1,18 @@
+# alt_disarm_land_steer.expect — pilot STEERS the auto-landing descent (INV-1/INV-2 guard)
+# パイロットが自動着陸の降下を操縦できる（INV-1/INV-2 ガード）
+#
+# Proves the landing-law unification (refactor A 2026-06-14): a pilot-commanded landing
+# (DISARM in ALT_HOLD, link live) keeps pilot attitude. Roll held through the descent →
+# the craft TILTS. The OLD computeLanding() level-forced this to ≈ 0 → would FAIL here.
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Takeoff complete"
+log_contains any "DISARM in ALT_HOLD → auto-land"
+log_contains any "Autonomous landing engaged"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "DISARM in ALT_HOLD → auto-land" "Autonomous landing engaged"
+metric tilt_max > 6.0  in 13.5 14.5    # KEY: roll stick TILTS the craft during the descent (steerable)
+metric duty_max > 0.50 in 13.5 14.3    # motors RUN through the descent (controlled, not a cut)
+metric alt_max  < 0.12 in 17.0 19.0    # landed and settled (small margin for the roll-induced drift)

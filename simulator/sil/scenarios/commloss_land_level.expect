@@ -1,0 +1,19 @@
+# commloss_land_level.expect — failsafe landing LEVELS despite stale sticks (INV-2 guard)
+# 通信途絶のフェイルセーフ着陸は古いスティックを無視して水平化（INV-2 ガード）
+#
+# Self-contained contrast within one run:
+#   • grace (FLYING, link dead, stale ROLL-RIGHT held): the craft follows the stale roll
+#     → tilt_max > 8° in [11.5,13.5]. (Pre-existing comm-loss hover-on-last-stick behavior.)
+#   • descent (LANDING): the single level gate sees the stale link and forces roll=0 → the
+#     craft LEVELS → tilt_max < 6° in [15.0,15.6] (down from ~11°). A pilot landing on a LIVE
+#     link instead HOLDS the 11° (alt_disarm_land_steer) — that is the INV-2 distinction.
+exit 0
+log_contains any "Comm lost:"
+log_contains any "Comm lost → LANDING"
+log_contains any "Autonomous landing engaged"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "Comm lost → LANDING" "Autonomous landing engaged"
+metric tilt_max > 8.0  in 11.5 13.5    # grace (FLYING, dead link): stale roll-right IS applied (~11°)
+metric tilt_max < 6.0  in 15.0 15.6    # LANDING: level gate zeroed the stale roll → leveled (~3.6°)
+metric alt_max  < 0.10 in 17.5 18.5    # the craft actually landed (touchdown → IDLE_GROUND)
