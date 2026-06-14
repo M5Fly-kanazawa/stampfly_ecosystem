@@ -237,9 +237,54 @@ def main(path, out):
         a.set_xlabel("t [s]")
     fig.tight_layout(); fig.savefig(f"{out}/03_eskf.png", dpi=110); plt.close(fig)
 
+    # =====================================================================
+    # 4. Specific-acceleration / accel-attitude innovation (grounds accel_att_noise)
+    #    比力 / accel 姿勢イノベーション（accel_att_noise の接地）
+    #
+    # The accel-attitude update assumes accel = gravity. The deviation (specific
+    # acceleration = measured accel − predicted gravity reaction) is what R must cover.
+    # Measured FROM the dynamic flight (a still flight is impossible AND would under-
+    # estimate this). For near-1g samples the adaptive R term ~1, so their spread is the
+    # BASELINE that accel_att_noise should match.
+    # accel 姿勢更新は accel=重力を仮定。そのズレ（比力＝accel−予測重力反力）こそ R が覆う量。
+    # 動的飛行から実測する（静止飛行は不可能でかつ過小評価になる）。near-1g サンプルは適応R≈1 ゆえ
+    # その広がりが accel_att_noise を合わせるべきベースライン。
+    g = 9.80665
+    def g_expected(q):
+        w, x, y, z = q
+        return np.array([2 * (x * z - w * y) * -g, 2 * (y * z + w * x) * -g, (1 - 2 * (x * x + y * y)) * -g])
+    aspec = np.array([accel[i] - g_expected(quat[i]) for i in range(len(quat))])
+    amag = np.linalg.norm(accel, axis=1)
+    gdiff = np.abs(amag - g)
+    flyi = t_imu > 6.0
+    near1g = flyi & (gdiff < 0.3)            # adaptive-R term ≈ 1 here
+    base = aspec[near1g]
+    M["accel_innov"] = {
+        "accel_att_noise_current": 0.8,
+        "near1g_frac": float(np.mean(near1g[flyi])),
+        "baseline_std_xyz": [float(base[:, k].std()) for k in range(3)],
+        "baseline_horiz_std": float(np.linalg.norm(base[:, :2], axis=1).std()),
+        "gdiff_p50": float(np.percentile(gdiff[flyi], 50)),
+        "gdiff_p90": float(np.percentile(gdiff[flyi], 90)),
+        "x_over_y_anisotropy": float(base[:, 0].std() / max(base[:, 1].std(), 1e-6)),
+    }
+    fig, ax = plt.subplots(1, 3, figsize=(15, 4.2))
+    for k, nm in enumerate(["x→pitch", "y→roll", "z→vert"]):
+        ax[0].hist(base[:, k], bins=80, alpha=.5, label=f"{nm} σ={base[:,k].std():.2f}", density=True)
+    for s in (0.8, 1.5, 2.0):
+        ax[0].axvline(s, color='k', ls=':', lw=.7); ax[0].axvline(-s, color='k', ls=':', lw=.7)
+    ax[0].set_title("Specific accel, near-1g [m/s²]\n(dotted = accel_att_noise candidates 0.8/1.5/2.0)")
+    ax[0].set_xlim(-8, 8); ax[0].legend(fontsize=8); ax[0].grid(alpha=.3)
+    ax[1].hist(gdiff[flyi], bins=80, density=True)
+    ax[1].axvline(np.percentile(gdiff[flyi], 90), color='r', ls='--', label=f"p90={np.percentile(gdiff[flyi],90):.1f}")
+    ax[1].set_title("|accel|−g [m/s²] (drives adaptive R)\nlarge ⇒ R inflates, χ² may reject"); ax[1].legend(fontsize=8); ax[1].grid(alpha=.3)
+    ax[2].plot(t_imu, aspec[:, 0], lw=.4, label="x→pitch"); ax[2].plot(t_imu, aspec[:, 1], lw=.4, label="y→roll")
+    ax[2].set_title("Specific accel time series\n(x-axis anisotropy = vibration)"); ax[2].set_xlabel("t [s]"); ax[2].set_ylim(-15, 15); ax[2].legend(fontsize=8); ax[2].grid(alpha=.3)
+    fig.tight_layout(); fig.savefig(f"{out}/04_accel_innov.png", dpi=110); plt.close(fig)
+
     with open(f"{out}/metrics.json", "w") as fp:
         json.dump(M, fp, indent=2)
-    print(json.dumps(M, indent=2))
+    print(json.dumps(M["accel_innov"], indent=2))
 
 
 if __name__ == "__main__":
