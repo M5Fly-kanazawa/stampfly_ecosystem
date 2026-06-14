@@ -1,0 +1,29 @@
+# alt_double_takeoff.scn — first takeoff vs land+re-takeoff overshoot A/B (investigation C)
+#                        初回離陸 vs 着陸→再離陸 のオーバーシュート比較（調査C, 2026-06-14）
+#
+# Pilot report: the FIRST takeoff overshoots the 0.5m target more than a takeoff after one
+# landing. The controller path (ARM → Reset → onTakeoff) is identical for both, so the
+# suspect is the ESTIMATOR: at boot the ESKF bias / vertical estimate has not converged,
+# while after a flight it has. This deterministic A/B captures both takeoffs in one run so
+# their climb peaks can be compared directly (GE off, noise off — isolate boot-vs-reset).
+#
+# パイロット報告: 初回離陸は 0.5m 目標を、1回着陸後の離陸より大きく行き過ぎる。制御器経路
+# （ARM→Reset→onTakeoff）は両者同一ゆえ、疑いは推定器: ブート時 ESKF バイアス/鉛直推定が未収束、
+# 飛行後は収束済み。本 A/B は両離陸を1ランで捉え climb ピークを直接比較（GE/noise off で
+# ブート対リセットを分離）。
+#
+# Run: sf sil scenario simulator/sil/scenarios/alt_double_takeoff.scn --target vehicle_new --duration 33000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON (disarmed)
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM #1 → auto-takeoff #1
+   +    rc   2048  2048   2048    2048  1     5000      50        1              # D: climb to 0.5 m, settle (TAKEOFF #1 — measure overshoot)
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release ARM button
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # F: DISARM → auto-land → touchdown → IDLE_GROUND
+   +    rc   2048  2048   2048    2048  0     1000      50        1              # G: release button (disarmed on the ground)
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # H: ARM #2 → auto-takeoff #2 (re-takeoff after landing)
+   +    rc   2048  2048   2048    2048  1     5000      50        1              # I: climb to 0.5 m, settle (TAKEOFF #2 — measure overshoot)
+   +    rc   2048  2048   2048    2048  0     500       50        1              # J: release ARM button
+   +    rc   2048  2048   2048    2048  1     3000      50        1              # K: DISARM → auto-land
+   +    rc   2048  2048   2048    2048  0     1000      50                       # L: settle
