@@ -151,6 +151,23 @@ namespace param_vars {
     int32_t autotune_sched_axis  = -1;     // -1=off, 0=roll, 1=pitch, 2=yaw
     float   autotune_sched_delay = 20.0f;  // [s] FLYING dwell before firing
 
+    // Autotune system-identification result, per axis. Written by the onboard autotune
+    // whenever the plant FIT succeeds (even if the gain design is then rejected, e.g.
+    // a thin-margin yaw) — so the identified model is retained for analysis. NOT applied
+    // to control (read-back only). Persisted with `param save`. Identified plant per axis:
+    //   G(s) = b * e^{-L s} / (s (T s + 1));  b = gain, tau = T [s], delay = L [s],
+    //   resid = fit residual (lower = better). 0 = not yet identified.
+    // autotune システム同定結果（軸ごと）。プラントのフィット成功時に必ず記録（ゲイン設計が
+    // 棄却される軸=余裕の薄い yaw 等でも同定結果は残す）。制御には未使用（読み出し専用）。
+    // `param save` で永続。同定プラント: G(s)=b·e^{-Ls}/(s(Ts+1))、tau=T[s]、delay=L[s]、
+    // resid=フィット残差（小さいほど良）。0=未同定。
+    float autotune_roll_b    = 0.0f, autotune_roll_tau    = 0.0f,
+          autotune_roll_delay  = 0.0f, autotune_roll_resid  = 0.0f;
+    float autotune_pitch_b   = 0.0f, autotune_pitch_tau   = 0.0f,
+          autotune_pitch_delay = 0.0f, autotune_pitch_resid = 0.0f;
+    float autotune_yaw_b     = 0.0f, autotune_yaw_tau     = 0.0f,
+          autotune_yaw_delay   = 0.0f, autotune_yaw_resid   = 0.0f;
+
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
     // bench swaps estimators via this parameter alone — no code change.
@@ -385,6 +402,19 @@ static const ParamEntry table[] = {
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
     {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
     {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
+    // Autotune sysid results (written by autotune, read-back only). Wide ranges = result store.
+    {"autotune.roll.b",      ParamType::FLOAT, &autotune_roll_b,      0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.roll.tau",    ParamType::FLOAT, &autotune_roll_tau,    0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.roll.delay",  ParamType::FLOAT, &autotune_roll_delay,  0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.roll.resid",  ParamType::FLOAT, &autotune_roll_resid,  0.0f,  0.0f, 1.0e6f, nullptr},
+    {"autotune.pitch.b",     ParamType::FLOAT, &autotune_pitch_b,     0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.pitch.tau",   ParamType::FLOAT, &autotune_pitch_tau,   0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.pitch.delay", ParamType::FLOAT, &autotune_pitch_delay, 0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.pitch.resid", ParamType::FLOAT, &autotune_pitch_resid, 0.0f,  0.0f, 1.0e6f, nullptr},
+    {"autotune.yaw.b",       ParamType::FLOAT, &autotune_yaw_b,       0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.yaw.tau",     ParamType::FLOAT, &autotune_yaw_tau,     0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.yaw.delay",   ParamType::FLOAT, &autotune_yaw_delay,   0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.yaw.resid",   ParamType::FLOAT, &autotune_yaw_resid,   0.0f,  0.0f, 1.0e6f, nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},

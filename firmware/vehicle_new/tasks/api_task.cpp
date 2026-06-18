@@ -528,6 +528,19 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
              static_cast<double>(plant.L * 1e3),
              static_cast<double>(plant.residual));
 
+    // Persist the identified plant model per axis (read-back/analysis; survives
+    // `param save`). Written on FIT success — BEFORE the design gates below — so the
+    // model is retained even when the gain design is rejected (e.g. a thin-margin yaw).
+    // 同定したプラントモデルを軸ごとに記録（読み出し/解析用・`param save` で永続）。フィット
+    // 成功時=下の設計ゲートより前に書くため、ゲイン設計が棄却される軸(余裕の薄い yaw 等)でも残る。
+    {
+        char pk[40];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.b",     kAxisName[axis]); sf::params::set_float(pk, plant.b);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.tau",   kAxisName[axis]); sf::params::set_float(pk, plant.T);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
+    }
+
     sf::autotune::TuneResult tune{};
     if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune) ||
         fabsf(tune.pm_deg - pm_deg) > 5.0f) {
