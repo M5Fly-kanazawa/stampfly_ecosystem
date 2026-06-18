@@ -541,6 +541,28 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
     }
 
+    // Save the margins of the CURRENT (active) gains scored against the freshly
+    // identified plant — so the stored wc/pm/gm ALWAYS reflect what is ACTUALLY flying.
+    // If the design below is APPLIED, these are overwritten with the new gains' margins;
+    // if it is REJECTED, the current gains' margins remain (answers "how safe are the
+    // gains I am still flying, really?" — exactly what a rejected axis needs).
+    // 現（実効）ゲインの余裕を新同定プラントで採点して保存 — 保存 wc/pm/gm は常に「実際に
+    // 飛んでいる」ゲインを反映。下の設計が適用されれば新ゲインの余裕で上書き、棄却されれば
+    // 据置ゲインの余裕が残る（棄却軸が知りたい「今飛んでいるゲインの本当の安全余裕」）。
+    {
+        float cur_kp = 0, cur_ti = 0, cur_td = 0;
+        char rk[32];
+        std::snprintf(rk, sizeof(rk), "rate.%s.kp", kAxisName[axis]); sf::params::get_float(rk, cur_kp);
+        std::snprintf(rk, sizeof(rk), "rate.%s.ti", kAxisName[axis]); sf::params::get_float(rk, cur_ti);
+        std::snprintf(rk, sizeof(rk), "rate.%s.td", kAxisName[axis]); sf::params::get_float(rk, cur_td);
+        sf::autotune::TuneResult cur{};
+        sf::autotune::evalMargins(plant, cur_kp, cur_ti, cur_td, cur);
+        char pk[32];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, cur.wc);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, cur.pm_deg);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]); sf::params::set_float(pk, cur.gm_valid ? cur.gm_db : 99.0f);
+    }
+
     sf::autotune::TuneResult tune{};
     if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune) ||
         fabsf(tune.pm_deg - pm_deg) > 5.0f) {
@@ -548,20 +570,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
 
-    // Persist the design margins per axis (read-back/analysis; survives `param save`).
-    // Written here — AFTER the design succeeded but BEFORE the GM-floor / range gates —
-    // so the margins are kept even when the gain is then rejected (e.g. thin-margin yaw):
-    // the stored gm then shows WHY. gm = 99 means no −180° crossing (effectively infinite).
-    // 設計余裕を軸ごとに記録（読み出し/解析用・`param save` で永続）。設計成功後・GM下限/範囲
-    // ゲートより前に書くため、棄却される軸(余裕の薄い yaw 等)でも残り、保存された gm が理由を示す。
-    // gm=99 は −180°交差なし（実質無限大）。
-    {
-        char pk[40];
-        const float gm_store = tune.gm_valid ? tune.gm_db : 99.0f;
-        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, tune.wc);
-        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, tune.pm_deg);
-        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]); sf::params::set_float(pk, gm_store);
-    }
+    // (Design margins are saved as the CURRENT gains' margins above, and overwritten
+    // with these NEW gains' margins ONLY if the design passes the gates and is applied
+    // below — so a rejected axis keeps the margins of the gains it is still flying.)
+    // （設計余裕は上で現ゲインの余裕として保存済み。下のゲートを通過し適用された場合のみ
+    // この新ゲインの余裕で上書き — 棄却軸は据置ゲインの余裕を保持する。）
 
     // Gain-margin floor: a design that meets the phase margin can still be too
     // close to gain-side instability (thin GM), and model error / nonlinear
@@ -603,6 +616,16 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         !sf::params::set_float(key_td, tune.td)) {
         reply("error param range rejected - check param table");
         return;
+    }
+    // Applied: the NEW gains are now the active gains, so overwrite the saved margins
+    // (which held the OLD gains' margins) with this design's margins.
+    // 適用済み: 新ゲインが実効ゲインになったので、保存余裕（旧ゲイン分）を本設計の余裕で上書き。
+    {
+        char pk[32];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, tune.wc);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, tune.pm_deg);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]);
+        sf::params::set_float(pk, tune.gm_valid ? tune.gm_db : 99.0f);
     }
     // Show "inf" for an undetected (effectively infinite) GM rather than the
     // misleading 0.0 the raw field carries when gm_valid is false (L-15).

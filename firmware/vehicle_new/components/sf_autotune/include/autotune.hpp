@@ -82,4 +82,13 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out);
 bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
              TuneResult& out);
 
+/// Evaluate the open-loop margins of a GIVEN PID (kp,ti,td) against a plant by an
+/// ω-sweep of L = kp·C(jω)·G(jω): fills out.{kp,ti,td,wc,pm_deg,gm_db,gm_valid}.
+/// Returns true if a gain crossover (|L|=1) was found. Same routine tunePid uses
+/// to verify its design — exposed so a caller can also score the CURRENT (e.g.
+/// rejected/unchanged) gains against the freshly identified plant.
+/// 与えられた PID(kp,ti,td)の開ループ余裕をプラントに対し ω 掃引で評価する。tunePid が
+/// 設計検証に使うのと同じ計算 — 現（棄却/据置）ゲインを新同定プラントで採点するため公開。
+bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& out);
+
 }  // namespace sf::autotune

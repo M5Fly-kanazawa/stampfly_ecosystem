@@ -246,8 +246,19 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
     }
     const float kp = 1.0f / (pidUnit(wc, ti, td).mag() * g_c.mag());
 
-    // Numerical margin verification: sweep ω, find |L|=1 and arg L = −180°.
-    // 数値検証: ω掃引で |L|=1 と位相 −180° を探す。
+    // Verify the DESIGNED gains' margins with the shared ω-sweep (same routine a
+    // caller can reuse to score the CURRENT gains).
+    // 設計ゲインの余裕を共有 ω 掃引で検証（呼び出し側が現ゲインの採点に再利用する同じ計算）。
+    return evalMargins(plant, kp, ti, td, out);
+}
+
+// evalMargins — open-loop margins of L = kp·C(jω)·G(jω) by an ω-sweep. Factored from
+// tunePid so the SAME verification scores either the designed gains or the current
+// (e.g. rejected/unchanged) gains against the identified plant. See header.
+// evalMargins — L=kp·C(jω)·G(jω) の開ループ余裕を ω 掃引で求める。tunePid から切り出し、
+// 設計ゲインでも現（棄却/据置）ゲインでも同一計算で採点できるようにした。
+bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& out)
+{
     out.kp = kp; out.ti = ti; out.td = td;
     out.wc = 0; out.pm_deg = 0; out.gm_db = 0; out.gm_valid = false;
     float prev_mag = 0, prev_ph = 0, prev_w = 0, prev_raw = 0;
