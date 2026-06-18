@@ -402,7 +402,12 @@ static const ParamEntry table[] = {
     {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, &notifyEstimatorReload},
     {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, &notifyEstimatorReload},
     {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, &notifyEstimatorReload},
-    {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.001f, 1.0f,  &notifyEstimatorReload},
+    // Min lowered to 0 so eskf.bias.gyro_dev_max=0 FREEZES the gyro bias at the boot
+    // still-calibration nominal (no in-flight ESKF update reaches the rate loop) — a
+    // diagnostic toggle. Restore 0.03 for normal random-walk tracking.
+    // 最小を0に下げ、=0 で起動静止校正値にジャイロバイアスを凍結（飛行中ESKF更新を
+    // レートループへ反映しない）。診断用トグル。通常は0.03へ戻す。
+    {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.0f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF observation noise
     {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.01f, 0.001f, 1.0f,  &notifyEstimatorReload},
