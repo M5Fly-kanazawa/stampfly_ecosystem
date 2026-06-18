@@ -498,12 +498,18 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         points[collected].yr = res.yr;
         points[collected].yi = res.yi;
         collected++;
-        // Re-cue after each point (~every 1-2 s): a single start warble at t0 is lost
-        // over motor noise in flight, so REPEAT it through the ~15-20 s sweep — the
-        // pilot keeps hearing "still tuning" and the LED running-state stays armed.
-        // 各点ごとに再合図（約1〜2秒毎）: t0 の単発ワーブルは飛行中の騒音で埋もれるため、掃引中
-        // 反復する — 操縦者は「調整中」を鳴り続けで把握でき、LED の掃引中状態も維持される。
-        autotuneCue(sf::NotifyEvent::AutotuneStart);
+        // NOTE: do NOT re-cue here. An earlier version re-published AutotuneStart after
+        // every point to keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING
+        // warble in NotifyTask, and the high-freq points (~0.8 s) out-paced it, FILLING
+        // the depth-8 notify_command queue (which drops on overflow) — so the final
+        // AutotuneOk/Fail cue was silently dropped and yaw showed white-then-nothing.
+        // The white LED already persists for the whole sweep via its 30 s safety
+        // timeout, so the end cue (green/red) just needs the queue clear here.
+        // ここで再合図しない。旧版は各点で AutotuneStart を再発行したが、各合図は NotifyTask で
+        // 約0.9秒のブロッキング・ワーブルを鳴らし、高周波点(約0.8秒)が追い越して深さ8の
+        // notify_command キューを満杯化(満杯時ドロップ)→ 最後の Ok/Fail 合図が落ち、yaw が
+        // 「白→無」になっていた。白LEDは開始時の30秒タイマで掃引中ずっと維持されるため、
+        // 終了の緑/赤はキューを空けておけば確実に出る。
     }
 
     // Fit + tune (pure math, sf_autotune — host-tested).
