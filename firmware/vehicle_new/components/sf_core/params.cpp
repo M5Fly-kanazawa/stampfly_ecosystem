@@ -198,6 +198,17 @@ namespace param_vars {
     float alt_climb_rate   = 0.5f;   // [m/s]
     float alt_descent_rate = 0.5f;   // [m/s]
 
+    // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
+    // The idealized motor curve over-promises thrust, so worn hardware needs corr
+    // ≈ 1.12 (flight-measured) to actually hover. FRESH/stronger motors produce
+    // MORE thrust per duty → corr must DROP (else auto-takeoff over-climbs and the
+    // rate loop runs hot). Tune from a hover log: corr_new = 1.12 × (duty_new/duty_old).
+    // ホバー推力補正: hover_thrust = mg × corr。理想モータ曲線は推力を過大評価するため、
+    // 摩耗ハードは corr≈1.12（飛行実測）でホバー。新品/強いモータは同 duty で推力が大きい
+    // → corr を下げる（さもないと自動離陸が過上昇しレートループが過敏化）。ホバーログから
+    // corr_new = 1.12 ×（新duty/旧duty）で調整。
+    float hover_thrust_corr = 1.12f;
+
     // Position control
     float pos_pos_kp      = 1.0f;
     float pos_pos_ti      = 5.0f;
@@ -378,6 +389,7 @@ static const ParamEntry table[] = {
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
+    {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
 
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},

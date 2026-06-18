@@ -90,6 +90,16 @@ void PidController::loadParams()
     params::get_float("altitude.climb_rate",   max_climb_rate_);
     params::get_float("altitude.descent_rate", max_descent_rate_);
 
+    // Hover thrust correction: hover_thrust = mg × corr. Tunable so a motor/prop
+    // change (e.g. fresh, stronger motors) can be matched WITHOUT a rebuild — drop
+    // corr when the craft over-climbs on auto-takeoff. mg = 0.037 kg · 9.80665.
+    // ホバー推力補正: hover_thrust = mg × corr。モータ/プロペラ交換（新品=強い等）に
+    // 再ビルドなしで合わせられる — 自動離陸で過上昇するなら corr を下げる。
+    constexpr float kMassG = 0.037f * 9.80665f;   // mg [N]
+    float hover_corr = 1.12f;
+    params::get_float("hover.thrust_corr", hover_corr);
+    hover_thrust_ = kMassG * hover_corr;
+
     // Position control / 位置制御
     params::get_float("position.pos.kp", pos_x_.kp);
     params::get_float("position.pos.ti", pos_x_.ti);

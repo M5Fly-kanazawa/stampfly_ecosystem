@@ -109,6 +109,19 @@ sil::Plant::Config plant_config_from_env()
         if (amp > 0.0f) { cfg.turbulence_n = amp;
             std::printf("[emu] turbulence ON (amplitude=%.3f N, 1-3 Hz)\n", cfg.turbulence_n); }
     }
+    // SIL_EMU_THRUST_EFF overrides the plant real-vs-ideal thrust efficiency (default
+    // 0.893 = 1/1.12, the worn-motor baseline matching the firmware hover correction).
+    // Raise it to model FRESH/stronger motors (e.g. 1.196 ≈ 0.893×1.34 → 1.34× thrust
+    // per duty), reproducing a fresh-airframe over-thrust (lower hover duty + auto-
+    // takeoff over-climb). OFF by default.
+    // SIL_EMU_THRUST_EFF はプラント実/理想推力効率（既定0.893=1/1.12）を上書き。値を上げて
+    // 新品/強いモータ（例 1.196≈0.893×1.34 で同 duty 1.34 倍推力）を模擬し、新機体の過剰推力
+    // （低ホバー duty＋自動離陸過上昇）を再現。既定 OFF。
+    if (const char* te = std::getenv("SIL_EMU_THRUST_EFF")) {
+        float eff = (float)std::atof(te);
+        if (eff > 0.0f) { cfg.thrust_efficiency = eff;
+            std::printf("[emu] thrust efficiency override = %.3f (default 0.893)\n", cfg.thrust_efficiency); }
+    }
 
     const char* noise = std::getenv("SIL_EMU_NOISE");
     if (!noise) return cfg;
