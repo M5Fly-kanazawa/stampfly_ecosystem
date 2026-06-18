@@ -198,7 +198,11 @@ struct WireStatusPayload {
     uint8_t  flight_state;     // FlightState
     uint8_t  sensor_health;    // healthy_mask bits
     uint8_t  eskf_status;      // bit0 = estimator initialized
-    uint8_t  padding;
+    uint8_t  reset_reason;     // esp_reset_reason() at boot: 1=POWERON, 3=SW, 4=PANIC,
+                               // 5=INT_WDT, 6=TASK_WDT, 9=BROWNOUT (was `padding`, so
+                               // the 48B wire size is unchanged). Lets a crash cause be
+                               // read over WiFi (no serial); it is constant per boot.
+                               // 起動時リセット理由。墜落→再起動後に無線で原因を読める。
     float    pid_gains[9];     // roll kp/ti/td, pitch kp/ti/td, yaw kp/ti/td
 };
 static_assert(sizeof(WireStatusPayload) == 48, "wire drift");

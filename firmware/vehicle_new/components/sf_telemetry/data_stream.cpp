@@ -44,6 +44,7 @@
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"   // esp_reset_reason() — boot crash cause for telemetry
 
 #include "topics.hpp"
 #include "params.hpp"
@@ -346,6 +347,12 @@ void DataStream::sendStatus()
     payload.flight_state  = mode.state;
     payload.sensor_health = health.healthy_mask;
     payload.eskf_status   = 0x01;   // estimator running / 推定器稼働中
+    // Why the chip last reset — readable over WiFi so a crash cause (e.g. BROWNOUT
+    // from motor-current sag during an oscillation) can be diagnosed without a serial
+    // monitor. Constant per boot; sent every 1Hz status so any post-crash reboot shows it.
+    // 直近のリセット理由。シリアル無しでも無線で墜落原因（発振時のモータ電流降下による
+    // BROWNOUT 等）を診断できる。起動毎に一定で、再起動後の status に必ず乗る。
+    payload.reset_reason  = static_cast<uint8_t>(esp_reset_reason());
 
     // Rate-PID gains for PC-side motor-command reconstruction tools.
     // PC 側のモータ指令再構成ツール用レート PID ゲイン。
