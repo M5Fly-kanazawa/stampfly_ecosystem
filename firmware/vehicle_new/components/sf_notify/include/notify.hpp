@@ -162,6 +162,15 @@ private:
     // 入ったため、起動音だけの遅延では不十分になった — 本窓で全音（beep/ready 等）を覆う。
     // 30Hz×90周期≈3秒。起動音は 0 で再生、ready 音（校正≈4秒）は窓の後に自然に鳴る。
     uint8_t  boot_mute_countdown_ = 90;
+
+    // Autotune LED cue (the buzzer is unreliable over motor noise in flight): 0 = none,
+    // 1 = sweeping (white blink), 2 = applied OK (green), 3 = failed (red). ticks counts
+    // the overlay down in update() (~30Hz). Driven by NotifyEvent::Autotune* in playEvent.
+    // autotune LED 合図（飛行中はモータ騒音でブザーが不確実）: 0=なし/1=掃引中(白)/2=成功(緑)/
+    // 3=失敗(赤)。ticks は update() で減算。NotifyEvent::Autotune* が playEvent で駆動。
+    uint8_t  autotune_led_       = 0;
+    uint16_t autotune_led_ticks_ = 0;
+    bool autotuneOverlay(LedPattern& out) const;
 };
 
 }  // namespace sf
