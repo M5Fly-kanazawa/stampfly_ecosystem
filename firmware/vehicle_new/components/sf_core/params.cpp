@@ -130,12 +130,18 @@ namespace param_vars {
     // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m,
     // κ=0.00971）、モータ曲線が同一で、レートループから見たプラントが同じため
     // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
-    float rate_roll_kp    = 1.365e-3f; // legacy ROLL_RATE_KP
-    float rate_roll_ti    = 0.7f;      // legacy ROLL_RATE_TI
-    float rate_roll_td    = 0.01f;
-    float rate_pitch_kp   = 1.995e-3f; // legacy PITCH_RATE_KP
-    float rate_pitch_ti   = 0.7f;      // legacy PITCH_RATE_TI
-    float rate_pitch_td   = 0.01f;
+    // roll/pitch: on-board autotune real-plant values (2026-06-19, all-axes tune →
+    // near-zero hover wobble). Less P + more D than the old legacy gains — the real
+    // plant wanted damping, not stiffness. yaw kept (its tune was safely rejected:
+    // thin GM). See autotune.* result params for the identified plant/margins.
+    // roll/pitch: オンボード autotune 実機実測値（2026-06-19 全軸チューンでホバーふらつきほぼ消失）。
+    // 旧 legacy より P 小・D 大（実機はゲインでなく制動を要した）。yaw は据置（薄GMで安全棄却）。
+    float rate_roll_kp    = 3.40e-4f;  // autotune real-plant (was legacy 1.365e-3)
+    float rate_roll_ti    = 0.4f;
+    float rate_roll_td    = 0.017658f;
+    float rate_pitch_kp   = 5.16e-4f;  // autotune real-plant (was legacy 1.995e-3)
+    float rate_pitch_ti   = 0.4f;
+    float rate_pitch_td   = 0.017155f;
     float rate_yaw_kp     = 5.31e-3f;  // legacy YAW_RATE_KP (3x: yaw authority)
     float rate_yaw_ti     = 1.6f;      // legacy YAW_RATE_TI
     float rate_yaw_td     = 0.01f;
@@ -406,12 +412,12 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.365e-3f, 0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.995e-3f, 0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   3.40e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.4f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.017658f, 0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  5.16e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.4f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.017155f, 0.0f,  1.0f,   &notifyControllerReload},
     {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.01f,  &notifyControllerReload},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
