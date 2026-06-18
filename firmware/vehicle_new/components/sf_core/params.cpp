@@ -140,6 +140,17 @@ namespace param_vars {
     float rate_yaw_ti     = 1.6f;      // legacy YAW_RATE_TI
     float rate_yaw_td     = 0.01f;
 
+    // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
+    // `autotune` mid-flight, so SET these on the GROUND, then arm and fly. After the
+    // craft has been FLYING for sched_delay seconds, the rate-loop autotune runs
+    // automatically on sched_axis (a beep cues the pilot to hold a steady hover).
+    // One-shot per flight; -1 = OFF. Disable by setting axis back to -1.
+    // スケジュール autotune（ソロ操縦・ハンズフリー）: 飛行中に `autotune` を打てないため、
+    // 地上で設定→離陸。FLYING 到達から sched_delay 秒後に sched_axis のレート autotune が
+    // 自動起動（ブザーで合図、定位置ホバー保持を促す）。1飛行1回・-1=OFF。
+    int32_t autotune_sched_axis  = -1;     // -1=off, 0=roll, 1=pitch, 2=yaw
+    float   autotune_sched_delay = 20.0f;  // [s] FLYING dwell before firing
+
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
     // bench swaps estimators via this parameter alone — no code change.
@@ -372,6 +383,8 @@ static const ParamEntry table[] = {
     {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.01f,  &notifyControllerReload},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
+    {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},

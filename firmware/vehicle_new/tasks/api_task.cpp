@@ -758,6 +758,41 @@ void ApiTask(void* /*pvParameters*/)
             guidance_seen_active = false;
         }
 
+        // 0b. Scheduled autotune (solo pilot, hands-free): a single operator cannot
+        // type `autotune` mid-flight. They set autotune.sched.axis/.delay on the
+        // GROUND; here, once the craft has been FLYING for sched_delay seconds, fire
+        // the SAME rate-loop autotune automatically. One-shot per flight; a beep cues
+        // the pilot to hold a steady hover. The sweep blocks this task (~15-20 s) — the
+        // control loop (control_task) keeps flying throughout; the operator just holds.
+        // 0b. スケジュール autotune（ソロ操縦・ハンズフリー）: 地上で軸/遅延を設定し、FLYING
+        // 到達から sched_delay 秒後に同じ autotune を自動起動。1飛行1回・ブザーで合図。掃引中は
+        // 本タスクをブロックするが制御は control_task で継続、操縦者は定位置を保持するだけ。
+        {
+            static int64_t flying_since_us = 0;
+            static bool    sched_fired     = false;
+            if (currentState() != sf::FlightState::FLYING) {
+                flying_since_us = 0;
+                sched_fired     = false;
+            } else {
+                const int64_t now_us = esp_timer_get_time();
+                if (flying_since_us == 0) flying_since_us = now_us;
+                if (!sched_fired) {
+                    int32_t ax    = -1;    sf::params::get_int("autotune.sched.axis", ax);
+                    float   delay = 20.0f; sf::params::get_float("autotune.sched.delay", delay);
+                    if (ax >= 0 && ax <= 2 &&
+                        (now_us - flying_since_us) >= static_cast<int64_t>(delay * 1.0e6f)) {
+                        sched_fired = true;   // one-shot BEFORE the blocking sweep
+                        sf::notify_command.publish(
+                            {static_cast<uint8_t>(sf::NotifyEvent::Calibrating),
+                             static_cast<uint32_t>(esp_timer_get_time())});  // beep: hold steady
+                        ESP_LOGI(TAG, "Scheduled autotune firing: axis=%ld after %.0fs FLYING",
+                                 static_cast<long>(ax), static_cast<double>(delay));
+                        cmdAutotune(static_cast<uint8_t>(ax), 25.0f, 60.0f);
+                    }
+                }
+            }
+        }
+
         // 1. SIL/test injections / SIL・テスト注入
         while (popInjected(line, sizeof(line))) {
             processLine(line);
