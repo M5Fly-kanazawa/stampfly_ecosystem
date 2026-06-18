@@ -10,7 +10,7 @@ Subcommands:
     wifi     - Capture telemetry via WiFi WebSocket
     convert  - Convert binary log to CSV
     info     - Show log file information
-    analyze  - Analyze flight log data
+    analyze  - Analyze flight log data (--health: motor-fault report)
     viz      - Visualize log data
 """
 
@@ -198,6 +198,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--no-plot",
         action="store_true",
         help="Skip visualization",
+    )
+    analyze_parser.add_argument(
+        "--health",
+        action="store_true",
+        help="Motor health report: detect a degraded rotor from hover trim (JSONL)",
+    )
+    analyze_parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="With --health: analyze all JSONL logs for the CG-removed corner test",
+    )
+    analyze_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="With --health: emit a machine-readable JSON verdict",
     )
     analyze_parser.set_defaults(func=run_analyze)
 
@@ -494,6 +509,11 @@ def run_info(args: argparse.Namespace) -> int:
 
 def run_analyze(args: argparse.Namespace) -> int:
     """Analyze flight log"""
+    # Motor health report path (JSONL-based, detects a degraded rotor).
+    # モータ健全性レポート（JSONL ベース、劣化ロータを検出）。
+    if getattr(args, "health", False):
+        return _run_motor_health(args)
+
     file_path = args.file
 
     # Find latest CSV if not specified
@@ -531,6 +551,66 @@ def run_analyze(args: argparse.Namespace) -> int:
         return 1
     except Exception as e:
         console.error(f"Analysis failed: {e}")
+        return 1
+
+
+def _run_motor_health(args: argparse.Namespace) -> int:
+    """Run the motor health report (sf log analyze --health).
+    モータ健全性レポートを実行する。
+
+    Detects a degraded rotor from the steady hover trim. One log identifies
+    the spin-direction group; --batch adds the CG-removed cross-log corner test.
+    1ログで回転グループを判定、--batch でCG除去のクロスログ隅特定を追加。"""
+    log_dir = get_log_dir()
+
+    # The cross-log corner test assumes ONE airframe (constant CG). Default the
+    # batch to the most-recent logs so an old/other airframe is not mixed in;
+    # pass a glob to scope a specific session/airframe explicitly.
+    # クロスログ隅特定は同一機体（CG一定）が前提。既定は最新ログに限定し、
+    # 別機体の混入を避ける。特定セッションはグロブで明示する。
+    MAX_BATCH = 12
+    if args.batch:
+        if args.file:
+            # Explicit glob (scope to one airframe/session).
+            jsonl_paths = sorted(str(p) for p in log_dir.glob(Path(args.file).name))
+            if not jsonl_paths:
+                from glob import glob as _glob
+                jsonl_paths = sorted(_glob(args.file))
+            if not jsonl_paths:
+                console.error(f"No JSONL logs match: {args.file}")
+                return 1
+            console.info(f"Health report over {len(jsonl_paths)} JSONL logs (glob)")
+        else:
+            # Default: the most-recent JSONL logs (by mtime), capped.
+            all_jsonl = sorted(log_dir.glob("*.jsonl"),
+                               key=lambda f: f.stat().st_mtime, reverse=True)
+            if not all_jsonl:
+                console.error("No JSONL logs found for --batch.")
+                return 1
+            recent = all_jsonl[:MAX_BATCH]
+            jsonl_paths = sorted(str(p) for p in recent)
+            console.info(f"Health report over the {len(jsonl_paths)} most recent "
+                         f"JSONL logs (assumes one airframe; pass a glob to scope)")
+    else:
+        file_path = args.file or _find_latest_log(extension=".jsonl")
+        if not file_path:
+            console.error("No JSONL log found. Capture one with 'sf log wifi'.")
+            return 1
+        if Path(file_path).suffix != ".jsonl":
+            console.error("Health report requires a .jsonl log (per-motor duty). "
+                          "Use 'sf log wifi' to capture, or --batch over the log dir.")
+            return 1
+        jsonl_paths = [str(file_path)]
+        console.info(f"Health report: {Path(file_path).name}")
+
+    try:
+        sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+        import motor_health
+        sys.path.pop(0)
+        result = motor_health.analyze_health(jsonl_paths, json_out=args.json)
+        return 0 if "error" not in result else 1
+    except Exception as e:  # noqa: BLE001
+        console.error(f"Health report failed: {e}")
         return 1
 
 
