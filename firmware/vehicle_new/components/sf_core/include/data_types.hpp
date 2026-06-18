@@ -510,6 +510,9 @@ enum class NotifyEvent : uint8_t {
     Calibrating = 4,   // calibration in progress      / 校正中
     Ready       = 5,   // ready to arm                 / ARM 可能
     PairingMode = 6,   // pairing started (one-shot tone)/ ペアリング開始（単発音）
+    AutotuneStart = 7, // autotune starting (hold steady)/ autotune 開始（定位置保持）
+    AutotuneOk    = 8, // autotune succeeded             / autotune 成功
+    AutotuneFail  = 9, // autotune failed (gains kept)   / autotune 失敗（ゲイン据え置き）
 };
 
 /// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)

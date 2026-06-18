@@ -319,6 +319,9 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::Calibrating: buzzer_.beep();              break;
         case NotifyEvent::Ready:       buzzer_.readyTone();         break;
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
+        case NotifyEvent::AutotuneStart: buzzer_.autotuneStartTone(); break;
+        case NotifyEvent::AutotuneOk:    buzzer_.autotuneOkTone();    break;
+        case NotifyEvent::AutotuneFail:  buzzer_.autotuneFailTone();  break;
         case NotifyEvent::None:
         default:                                                    break;
     }

@@ -202,6 +202,39 @@ void Buzzer::pairingTone()
     playTone(NOTE_G5, 100);
 }
 
+// autotuneStartTone — loud, distinct, repeated high warble so it is unmissable over
+// motor noise: "autotune is starting now — hold a steady hover". 3× (A5→C6).
+// autotuneStartTone — モータ音に埋もれない高音の3連ワーブルで「autotune 開始・定位置保持」を
+// 明確に知らせる。A5→C6 を3回。
+void Buzzer::autotuneStartTone()
+{
+    for (int i = 0; i < 3; ++i) {
+        playTone(NOTE_A5, 130);
+        playTone(NOTE_C6, 130);
+        if (i < 2) playTone(0, 60);   // short rest between warbles / ワーブル間の休符
+    }
+}
+
+// autotuneOkTone — ascending fanfare ending high+long: "succeeded" (new gains applied).
+// autotuneOkTone — 上昇ファンファーレ（最後を高く長く）: 「成功」（新ゲイン適用）。
+void Buzzer::autotuneOkTone()
+{
+    playTone(NOTE_C5, 120);
+    playTone(NOTE_E5, 120);
+    playTone(NOTE_G5, 120);
+    playTone(NOTE_C6, 320);
+}
+
+// autotuneFailTone — descending to a long low note: "failed" (gains unchanged).
+// autotuneFailTone — 下降して低音を長く: 「失敗」（ゲイン据え置き）。
+void Buzzer::autotuneFailTone()
+{
+    playTone(NOTE_G5, 150);
+    playTone(NOTE_E5, 150);
+    playTone(NOTE_C5, 150);
+    playTone(NOTE_C4, 450);
+}
+
 void Buzzer::setMuted(bool muted, bool save_to_nvs)
 {
     muted_ = muted;

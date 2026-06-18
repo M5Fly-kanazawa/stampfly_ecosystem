@@ -416,12 +416,32 @@ void cmdQuery(const char* what)
 //    OLD gains remain untouched and the reply says why.
 //  - Nothing is written to NVS — land and `param save` after a check flight.
 // -----------------------------------------------------------------------------
+// autotuneCue — publish a buzzer tone (audible over WiFi-only/solo use; the pilot
+// can't watch the serial log). Played by NotifyTask, so it never blocks the sweep.
+// autotuneCue — ブザー音を発行（無線/ソロ運用で耳で分かる）。NotifyTask が鳴らすので掃引を阻害しない。
+void autotuneCue(sf::NotifyEvent ev)
+{
+    sf::notify_command.publish({static_cast<uint8_t>(ev),
+                                static_cast<uint32_t>(esp_timer_get_time())});
+}
+
 void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 {
     if (currentState() != sf::FlightState::FLYING) {
         reply("error not flying");
         return;
     }
+    // Audible start cue + a scope guard that fires the FAIL tone on ANY early return;
+    // the success path sets tune_ok and plays the OK tone explicitly. So the pilot
+    // hears "starting", then "ok" or "fail" without reading any log.
+    // 開始音＋スコープガード: どの早期 return でも FAIL 音を鳴らす。成功時は tune_ok を立て OK 音を
+    // 明示再生。ログを読まずに「開始→成功/失敗」が耳で分かる。
+    autotuneCue(sf::NotifyEvent::AutotuneStart);
+    bool tune_ok = false;
+    struct EndCue {
+        bool& ok;
+        ~EndCue() { if (!ok) autotuneCue(sf::NotifyEvent::AutotuneFail); }
+    } end_cue{tune_ok};
     static const char* kAxisName[3] = {"roll", "pitch", "yaw"};
     // X-quad spec inertia Ixx/Iyy/Izz [kg·m²] — used ONLY as the Nelder-Mead seed
     // (1/J) for fitPlant; the final plant is fit to measured data, so this is a
@@ -565,6 +585,8 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
                   static_cast<double>(tune.kp), static_cast<double>(tune.ti),
                   static_cast<double>(tune.td), static_cast<double>(tune.wc),
                   static_cast<double>(tune.pm_deg), gm_str);
+    tune_ok = true;                                 // suppress the guard's FAIL tone
+    autotuneCue(sf::NotifyEvent::AutotuneOk);       // success chime
     reply(buf);
 }
 
@@ -782,12 +804,9 @@ void ApiTask(void* /*pvParameters*/)
                     if (ax >= 0 && ax <= 2 &&
                         (now_us - flying_since_us) >= static_cast<int64_t>(delay * 1.0e6f)) {
                         sched_fired = true;   // one-shot BEFORE the blocking sweep
-                        sf::notify_command.publish(
-                            {static_cast<uint8_t>(sf::NotifyEvent::Calibrating),
-                             static_cast<uint32_t>(esp_timer_get_time())});  // beep: hold steady
                         ESP_LOGI(TAG, "Scheduled autotune firing: axis=%ld after %.0fs FLYING",
                                  static_cast<long>(ax), static_cast<double>(delay));
-                        cmdAutotune(static_cast<uint8_t>(ax), 25.0f, 60.0f);
+                        cmdAutotune(static_cast<uint8_t>(ax), 25.0f, 60.0f);  // plays start/end tones
                     }
                 }
             }
