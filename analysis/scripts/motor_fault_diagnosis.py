@@ -184,6 +184,12 @@ def main():
         if r is None:
             print(f".. {p}: no hover window")
             continue
+        # Reject too-short windows (e.g. crash-aborts like 185501 that only powered ~2s):
+        # they are not clean hovers and corrupt the trim statistics.
+        # 短すぎる窓（墜落アボート等）はクリーンなホバーでなく統計を汚すため除外。
+        if r["dur_s"] < 10.0:
+            print(f".. {p}: hover window too short ({r['dur_s']:.1f}s) -> excluded (crash/abort)")
+            continue
         results.append(r)
 
     print("\n========== PER-LOG HOVER TRIM ==========")
@@ -235,6 +241,34 @@ def main():
     print(f"    mean ctrl.yaw   = {st.mean([r['c_yaw'] for r in results]):+.4f}  sign {sign(st.mean([r['c_yaw'] for r in results]))}")
     print(f"    mean ctrl.roll  = {st.mean([r['c_roll'] for r in results]):+.4f}")
     print(f"    mean ctrl.pitch = {st.mean([r['c_pitch'] for r in results]):+.4f}")
+
+    # CG-removal: the corner is ambiguous from absolute roll/pitch trim because the airframe
+    # CG offset contaminates exactly those axes (yaw is CG-immune). But CG is constant per
+    # airframe, while the fault scales with severity. So correlate roll/pitch trim against the
+    # yaw deficit across logs: the FAULT-driven axis tracks ur; the CG-driven part does not.
+    #   raise-M2 moves (ur,up,uq) all NEGATIVE  -> corr(ur,up)>0 and corr(ur,uq)>0
+    #   raise-M4 moves up,uq POSITIVE as ur goes negative -> corr<0
+    print("\n========== CG-REMOVED CORNER TEST (trim vs yaw-deficit across logs) ==========")
+    if len(results) >= 4:
+        UR = [r["ur_duty"] for r in results]
+        UP = [r["up_duty"] for r in results]
+        UQ = [r["uq_duty"] for r in results]
+
+        def corr(a, b):
+            ma, mb = st.mean(a), st.mean(b)
+            num = sum((a[i] - ma) * (b[i] - mb) for i in range(len(a)))
+            da = math.sqrt(sum((x - ma) ** 2 for x in a))
+            db = math.sqrt(sum((x - mb) ** 2 for x in b))
+            return num / (da * db) if da * db else 0.0
+
+        cup, cuq = corr(UR, UP), corr(UR, UQ)
+        print(f"  corr(ur, up-roll)  = {cup:+.3f}")
+        print(f"  corr(ur, uq-pitch) = {cuq:+.3f}")
+        print("  both > 0  => fault corner is M2/RR (rear-right, CW)")
+        print("  both < 0  => fault corner is M4/FL (front-left, CW)")
+        verdict = "M2/RR (rear-right)" if (cup + cuq) > 0 else "M4/FL (front-left)"
+        print(f"  => CW group is certain (ur<0); corner favored: {verdict}")
+        print("  NOTE: definitive confirmation requires a bench swap test (M2<->M4 prop/motor).")
 
 
 if __name__ == "__main__":
