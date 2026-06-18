@@ -99,9 +99,16 @@ void Buzzer::playTone(uint16_t frequency, uint32_t duration_ms)
         ledc_set_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel), 0);
         ledc_update_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel));
     } else {
-        // Set frequency
-        ledc_set_freq(BUZZER_LEDC_MODE, static_cast<ledc_timer_t>(config_.ledc_timer), frequency);
-
+        // Set frequency. Capture the return so an LEDC failure (e.g. suspected clock
+        // contention while motors drive LEDC at 400Hz armed) is OBSERVABLE instead of
+        // silent — historically discarded, which would hide any in-flight buzzer fault.
+        // 周波数設定。戻り値を捕捉し、LEDC 失敗（armed 中にモータが 400Hz で LEDC を叩くクロック
+        // 競合疑い等）を無音でなくログ化する — 従来は破棄され飛行中の不具合を隠していた。
+        const esp_err_t fe = ledc_set_freq(BUZZER_LEDC_MODE,
+                                           static_cast<ledc_timer_t>(config_.ledc_timer), frequency);
+        if (fe != ESP_OK) {
+            ESP_LOGW(TAG, "ledc_set_freq(%u Hz) failed: %s", frequency, esp_err_to_name(fe));
+        }
         // Set 50% duty cycle for square wave tone
         uint32_t duty = (1 << 10) / 2;  // 50% of 10-bit resolution
         ledc_set_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel), duty);

@@ -498,6 +498,12 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         points[collected].yr = res.yr;
         points[collected].yi = res.yi;
         collected++;
+        // Re-cue after each point (~every 1-2 s): a single start warble at t0 is lost
+        // over motor noise in flight, so REPEAT it through the ~15-20 s sweep — the
+        // pilot keeps hearing "still tuning" and the LED running-state stays armed.
+        // 各点ごとに再合図（約1〜2秒毎）: t0 の単発ワーブルは飛行中の騒音で埋もれるため、掃引中
+        // 反復する — 操縦者は「調整中」を鳴り続けで把握でき、LED の掃引中状態も維持される。
+        autotuneCue(sf::NotifyEvent::AutotuneStart);
     }
 
     // Fit + tune (pure math, sf_autotune — host-tested).

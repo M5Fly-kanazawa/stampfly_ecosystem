@@ -91,6 +91,7 @@ private:
     bool batt_warning_     = false;   // 3.4V warning latched / 低電圧警告ラッチ
     bool batt_emergency_   = false;   // 3.0V emergency latched / 危険電圧ラッチ
     uint8_t comm_reraise_count_ = 0;  // re-raise divider while comm stays lost / 喪失継続中の再発報分周
+    uint8_t batt_reraise_count_ = 0;  // re-raise divider for the in-flight low-battery warble / 低電圧警告の再発報分周
 };
 
 /// IMU-rate anomaly detector: impact (high-G) and gyro-anomaly (tumble) checks,
