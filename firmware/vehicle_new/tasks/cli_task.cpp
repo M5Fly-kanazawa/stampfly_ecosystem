@@ -365,10 +365,26 @@ int cmd_pair(int argc, char** argv)
 /// する NotifyTask が適用する。
 int cmd_sound(int argc, char** argv)
 {
+    // `sound test [start|ok|fail]` — play an autotune cue NOW (disarmed, on the
+    // ground) to verify the buzzer is working/audible without flying. Respects mute,
+    // so `sound on` first if you hear nothing. Goes via notify_command (NotifyTask
+    // owns the buzzer); default = the loud start warble.
+    // `sound test [start|ok|fail]` — autotune 合図音を今すぐ鳴らして地上で可聴性を確認。
+    // mute を尊重するので無音なら先に `sound on`。
+    if (argc >= 2 && std::strcmp(argv[1], "test") == 0) {
+        sf::NotifyEvent ev = sf::NotifyEvent::AutotuneStart;
+        if (argc >= 3 && std::strcmp(argv[2], "ok")   == 0) ev = sf::NotifyEvent::AutotuneOk;
+        if (argc >= 3 && std::strcmp(argv[2], "fail") == 0) ev = sf::NotifyEvent::AutotuneFail;
+        sf::notify_command.publish({static_cast<uint8_t>(ev),
+                                    static_cast<uint32_t>(esp_timer_get_time())});
+        std::printf("sound test: playing %s tone (mute on = silent; `sound on` first)\n",
+                    argc >= 3 ? argv[2] : "start");
+        return 0;
+    }
     const bool on  = (argc >= 2 && std::strcmp(argv[1], "on") == 0);
     const bool off = (argc >= 2 && std::strcmp(argv[1], "off") == 0);
     if (!on && !off) {
-        std::printf("usage: sound [on|off]\n");
+        std::printf("usage: sound [on|off|test [start|ok|fail]]\n");
         return 0;
     }
     sf::UiCommand c{};
@@ -779,7 +795,7 @@ const CliCommand kCommands[] = {
     {"version", "Show firmware version / build date",            &cmd_version},
     {"pair",    "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
     {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
-    {"sound",   "sound [on|off] — enable/disable the buzzer",    &cmd_sound},
+    {"sound",   "sound [on|off|test [start|ok|fail]] — buzzer mute / play a cue", &cmd_sound},
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
     {"motor",   "motor [test <1-4> <0-100>|all <0-100>|stop] — bench test (disarmed)", &cmd_motor},
     {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
