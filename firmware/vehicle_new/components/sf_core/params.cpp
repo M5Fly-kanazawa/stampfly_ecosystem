@@ -168,6 +168,21 @@ namespace param_vars {
     float autotune_yaw_b     = 0.0f, autotune_yaw_tau     = 0.0f,
           autotune_yaw_delay   = 0.0f, autotune_yaw_resid   = 0.0f;
 
+    // Autotune design-margin result, per axis. Written by the onboard autotune right
+    // after the loop-shaping design (tunePid) succeeds — BEFORE the GM-floor / gain-range
+    // gates — so the margins are kept even when the design is then REJECTED (e.g. a thin
+    // yaw GM): you can read WHY it was rejected. Read-back only, persisted with `param save`.
+    //   wc = achieved crossover [rad/s], pm = phase margin [deg], gm = gain margin [dB]
+    //   (gm = 99 means no −180° crossing in the sweep, i.e. effectively infinite/safe).
+    //   0 = not yet designed.
+    // autotune 設計余裕結果（軸ごと）。ループ整形設計(tunePid)成功直後＝GM下限/ゲイン範囲ゲートの
+    // 前に記録するため、設計が棄却される軸(余裕の薄い yaw 等)でも余裕が残り「なぜ棄却されたか」が
+    // 読める。読み出し専用・`param save` で永続。wc=交差[rad/s]、pm=位相余裕[deg]、gm=ゲイン余裕[dB]
+    // （gm=99 は掃引中に −180°交差なし＝実質無限大/安全）。0=未設計。
+    float autotune_roll_wc  = 0.0f, autotune_roll_pm  = 0.0f, autotune_roll_gm  = 0.0f;
+    float autotune_pitch_wc = 0.0f, autotune_pitch_pm = 0.0f, autotune_pitch_gm = 0.0f;
+    float autotune_yaw_wc   = 0.0f, autotune_yaw_pm   = 0.0f, autotune_yaw_gm   = 0.0f;
+
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
     // bench swaps estimators via this parameter alone — no code change.
@@ -415,6 +430,16 @@ static const ParamEntry table[] = {
     {"autotune.yaw.tau",     ParamType::FLOAT, &autotune_yaw_tau,     0.0f,  0.0f, 10.0f,  nullptr},
     {"autotune.yaw.delay",   ParamType::FLOAT, &autotune_yaw_delay,   0.0f,  0.0f, 1.0f,   nullptr},
     {"autotune.yaw.resid",   ParamType::FLOAT, &autotune_yaw_resid,   0.0f,  0.0f, 1.0e6f, nullptr},
+    // Autotune design margins (written by autotune, read-back only). wc[rad/s] pm[deg] gm[dB].
+    {"autotune.roll.wc",     ParamType::FLOAT, &autotune_roll_wc,     0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.roll.pm",     ParamType::FLOAT, &autotune_roll_pm,     0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.roll.gm",     ParamType::FLOAT, &autotune_roll_gm,     0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.pitch.wc",    ParamType::FLOAT, &autotune_pitch_wc,    0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.pitch.pm",    ParamType::FLOAT, &autotune_pitch_pm,    0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.pitch.gm",    ParamType::FLOAT, &autotune_pitch_gm,    0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.yaw.wc",      ParamType::FLOAT, &autotune_yaw_wc,      0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.yaw.pm",      ParamType::FLOAT, &autotune_yaw_pm,      0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.yaw.gm",      ParamType::FLOAT, &autotune_yaw_gm,      0.0f, -200.0f, 200.0f, nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},

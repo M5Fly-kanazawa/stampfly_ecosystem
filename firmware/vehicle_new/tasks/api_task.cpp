@@ -548,6 +548,21 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
 
+    // Persist the design margins per axis (read-back/analysis; survives `param save`).
+    // Written here — AFTER the design succeeded but BEFORE the GM-floor / range gates —
+    // so the margins are kept even when the gain is then rejected (e.g. thin-margin yaw):
+    // the stored gm then shows WHY. gm = 99 means no −180° crossing (effectively infinite).
+    // 設計余裕を軸ごとに記録（読み出し/解析用・`param save` で永続）。設計成功後・GM下限/範囲
+    // ゲートより前に書くため、棄却される軸(余裕の薄い yaw 等)でも残り、保存された gm が理由を示す。
+    // gm=99 は −180°交差なし（実質無限大）。
+    {
+        char pk[40];
+        const float gm_store = tune.gm_valid ? tune.gm_db : 99.0f;
+        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, tune.wc);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, tune.pm_deg);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]); sf::params::set_float(pk, gm_store);
+    }
+
     // Gain-margin floor: a design that meets the phase margin can still be too
     // close to gain-side instability (thin GM), and model error / nonlinear
     // torque effectiveness then drives oscillation. Reject thin-GM designs
