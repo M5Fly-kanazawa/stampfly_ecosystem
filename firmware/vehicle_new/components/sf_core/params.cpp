@@ -157,6 +157,18 @@ namespace param_vars {
     // "StampFly-XXXX" を提供（インフラ不要）。ESP-NOW 操縦は全モードで動く。
     int32_t wifi_mode = 0;
 
+    // Blackbox SPIFFS logger enable (0 = OFF default, 1 = ON). DEFAULT OFF because the
+    // SPIFFS write done while ARMED triggers a flash erase that disables the flash
+    // cache and STALLS BOTH CORES ~37ms every ~0.5s — the control loop freezes and the
+    // craft drifts (a periodic yaw "kick"). WiFi telemetry (sf log wifi) already covers
+    // analysis. Enable only when the onboard log is truly needed and the periodic stall
+    // is acceptable. Proper fix (future): buffer in RAM, write on DISARM only.
+    // Blackbox SPIFFS ロガー有効化（0=既定OFF, 1=ON）。既定OFF — ARM 中の SPIFFS 書き込みは
+    // フラッシュ消去でフラッシュキャッシュを無効化し両コアを ~0.5 秒ごとに ~37ms 停止させる
+    // （制御ループ凍結→機体ドリフト＝周期的ヨーキック）。解析は WiFi テレメトリで足りる。
+    // 本当に必要かつ周期ストールを許容できる時のみ ON。恒久対策(将来)=RAM 緩衝し DISARM で書込。
+    int32_t log_blackbox_enable = 0;
+
     // Attitude control
     float att_roll_kp     = 5.0f;
     float att_roll_ti     = 4.0f;
@@ -369,6 +381,7 @@ static const ParamEntry table[] = {
     // テレメトリ WiFi モード（0=STA, 1=SoftAP）— 起動時のみ。ライブ再読込なし
     // （無線は飛行中に載せ替えられない）。
     {"wifi.mode",       ParamType::INT,   &wifi_mode,      0.0f,      0.0f,  1.0f,   nullptr},
+    {"log.blackbox.enable", ParamType::INT, &log_blackbox_enable, 0.0f, 0.0f, 1.0f, nullptr},
 
     // Attitude control
     {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  &notifyControllerReload},

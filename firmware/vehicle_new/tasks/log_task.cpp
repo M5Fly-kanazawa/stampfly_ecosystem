@@ -36,6 +36,7 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "params.hpp"   // log.blackbox.enable gate / Blackbox 有効化ゲート
 
 static const char* TAG = "LogTask";
 
@@ -62,7 +63,17 @@ void LogTask(void* pvParameters)
         // ちょうど 1 飛行（ARM→DISARM）になる。
         const sf::SystemMode mode = sf::system_mode.latest();
 
-        if (mode.armed) {
+        // Blackbox is gated on log.blackbox.enable (DEFAULT OFF): each in-flight SPIFFS
+        // write erases flash, which disables the flash cache and STALLS BOTH CORES for
+        // ~37ms — the 400Hz control loop freezes ~every 0.5s and the craft kicks (yaw).
+        // Off by default so flight is stall-free; analysis uses WiFi telemetry instead.
+        // Blackbox は log.blackbox.enable でゲート（既定 OFF）: 飛行中の SPIFFS 書込は
+        // フラッシュ消去でキャッシュ無効化し両コアを ~37ms 停止 → 400Hz 制御が約0.5秒毎に
+        // 凍結し機体がキック（ヨー）。既定 OFF で飛行をストールなしに。解析は WiFi で行う。
+        int32_t blackbox_enable = 0;
+        sf::params::get_int("log.blackbox.enable", blackbox_enable);
+
+        if (mode.armed && blackbox_enable != 0) {
             logger.update();
         } else if (was_armed) {
             logger.stopSession();
