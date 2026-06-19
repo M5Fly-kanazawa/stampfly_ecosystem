@@ -498,6 +498,24 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         points[collected].yr = res.yr;
         points[collected].yi = res.yi;
         collected++;
+        // Diagnostic: log the RAW measured open-loop point G(jw)=Y/U (|G| in dB + phase).
+        // The fitted model can hide a structural mismatch; the raw Bode is the ground
+        // truth. Visible over wired `sf monitor`. |G|=|Y|/|U|, arg G = argY − argU.
+        // 診断: 実測の開ループ点 G(jw)=Y/U（|G| dB＋位相）をログ。フィットは構造不一致を隠すが
+        // 生 Bode は真値。有線 sf monitor で見える。
+        {
+            const float um = sqrtf(res.ur * res.ur + res.ui * res.ui);
+            const float ym = sqrtf(res.yr * res.yr + res.yi * res.yi);
+            const float gmag = (um > 1e-9f) ? ym / um : 0.0f;
+            float gph = atan2f(res.yi, res.yr) - atan2f(res.ui, res.ur);
+            while (gph >  3.14159265f) gph -= 6.2831853f;
+            while (gph < -3.14159265f) gph += 6.2831853f;
+            ESP_LOGI(TAG, "  bode %s f=%5.1fHz |G|=%9.1f (%+6.1fdB) ph=%+6.1fdeg",
+                     kAxisName[axis], static_cast<double>(res.w / 6.2831853f),
+                     static_cast<double>(gmag),
+                     static_cast<double>(20.0f * log10f(gmag + 1e-12f)),
+                     static_cast<double>(gph * 57.29578f));
+        }
         // NOTE: do NOT re-cue here. An earlier version re-published AutotuneStart after
         // every point to keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING
         // warble in NotifyTask, and the high-freq points (~0.8 s) out-paced it, FILLING
@@ -522,29 +540,30 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     const bool fit_ok = (axis == 2)
         ? sf::autotune::fitPlantYaw(points, collected, 1.0f / kSpecInertia[axis], plant)
         : sf::autotune::fitPlant(points, collected, 1.0f / kSpecInertia[axis], plant);
-    if (!fit_ok || plant.residual > 0.3f) {
-        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f",
-                 static_cast<double>(plant.residual));
-        reply("error fit failed (weak excitation?) - gains unchanged");
-        return;
-    }
     ESP_LOGI(TAG, "Autotune fit: b=%.0f T=%.1fms L=%.2fms tau_z=%.1fms residual=%.3f",
              static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
              static_cast<double>(plant.L * 1e3), static_cast<double>(plant.tau_z * 1e3),
              static_cast<double>(plant.residual));
 
-    // Persist the identified plant model per axis (read-back/analysis; survives
-    // `param save`). Written on FIT success — BEFORE the design gates below — so the
-    // model is retained even when the gain design is rejected (e.g. a thin-margin yaw).
-    // 同定したプラントモデルを軸ごとに記録（読み出し/解析用・`param save` で永続）。フィット
-    // 成功時=下の設計ゲートより前に書くため、ゲイン設計が棄却される軸(余裕の薄い yaw 等)でも残る。
-    {
+    // Persist the identified plant ALWAYS (even a poor/rejected fit) so the result is
+    // readable over WiFi via `param get` for diagnosis. The fit-reject path used to
+    // RETURN before saving, leaving stale params — so a rejected yaw looked unchanged.
+    // Only the DESIGN below is gated on the residual.
+    // 同定プラントを常に保存（粗い/棄却フィットも）— 棄却経路が保存前に return して古い値が
+    // 残り、yaw が変化なしに見えていた。設計のみ残差でゲートする。
+    if (plant.b > 0.0f) {
         char pk[40];
         std::snprintf(pk, sizeof(pk), "autotune.%s.b",     kAxisName[axis]); sf::params::set_float(pk, plant.b);
         std::snprintf(pk, sizeof(pk), "autotune.%s.tau",   kAxisName[axis]); sf::params::set_float(pk, plant.T);
         std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
         std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
         std::snprintf(pk, sizeof(pk), "autotune.%s.tauz",  kAxisName[axis]); sf::params::set_float(pk, plant.tau_z);
+    }
+    if (!fit_ok || plant.residual > 0.3f) {
+        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f (saved for diagnosis)",
+                 static_cast<double>(plant.residual));
+        reply("error fit residual too high - gains unchanged (read autotune.* params)");
+        return;
     }
 
     // Yaw non-minimum-phase bandwidth limit: the reaction-torque RHP zero at 1/tau_z
