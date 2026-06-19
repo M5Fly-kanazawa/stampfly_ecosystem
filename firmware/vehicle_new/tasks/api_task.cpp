@@ -453,43 +453,24 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // ではない。飛行レートゲインは実測移植値(params.cpp)で慣性導出ではないため、ここで別名に
     // すべき慣性 SSOT は存在しない (L-13)。
     static const float kSpecInertia[3] = {9.16e-6f, 13.3e-6f, 20.4e-6f};
-    // Axis-specific excitation. Yaw torque (motor reaction/drag) is ~5x WEAKER than
-    // roll/pitch (thrust differential) AND fights a structured, amplitude-independent
-    // in-flight disturbance (CW/CCW trim imbalance, yaw drift). With the roll/pitch
-    // settings that disturbance buries the high-freq points and collapses the fitted
-    // time constant to ~0 (tau pinned, resid ~5x worse). Fix (multi-agent sysid study,
-    // 2026-06-19): for YAW use (a) a band CONCENTRATED around the ~5 Hz motor-pole
-    // corner with the buried 20-35 Hz points DROPPED — the load-bearing change — plus
-    // (b) 3x amplitude to lift the signal over the fixed disturbance, and (c) longer
-    // dwell. Roll/pitch are byte-identical. SIL's clean yaw plant cannot reproduce the
-    // degeneracy, so this is validated on hardware (expect tau 15-40 ms, resid < 0.05).
-    // 軸別励振。yaw トルク(モータ反トルク)は roll/pitch(推力差動)の約1/5 で弱く、構造的で振幅非
-    // 依存の飛行中外乱(CW/CCWトリム不均衡・yawドリフト)と競合 → roll/pitch 設定では高域が埋もれ
-    // 時定数が≈0へ崩れる。修正: yaw は (a)~5Hz のモータ極コーナー周辺に集中し埋没する 20-35Hz を
-    // 捨てた帯域(本質)＋(b)振幅3倍(固定外乱に対し信号を持上げ)＋(c)長め測定。roll/pitch 不変。
-    static const float kAmpPerAxis[3]       = {0.35f, 0.35f, 1.0f};   // [rad/s] (yaw 3x: ~57 dps)
-    static const float kDurFactorPerAxis[3] = {10.0f, 10.0f, 12.0f};  // cycles ÷ f for the dwell
-    static const float kFreqsRP[]  = {2.0f, 3.0f, 4.5f, 7.0f, 10.0f, 14.0f, 20.0f, 27.0f, 35.0f};
-    static const float kFreqsYaw[] = {1.5f, 2.0f, 3.0f, 4.5f, 6.0f,  8.0f,  11.0f, 15.0f, 18.0f};
-    const float* kFreqs     = (axis == 2) ? kFreqsYaw : kFreqsRP;
-    const float  kAmpRadps  = kAmpPerAxis[axis];
-    const float  kDurFactor = kDurFactorPerAxis[axis];
-    const float  kDurMax    = (axis == 2) ? 3.0f : 2.5f;   // yaw dwells longer at low f
-    constexpr int kNumFreqs = 9;   // both bands have exactly 9 points
+    static const float kFreqsHz[] = {2.0f, 3.0f, 4.5f, 7.0f, 10.0f,
+                                     14.0f, 20.0f, 27.0f, 35.0f};
+    constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);
+    constexpr float kAmpRadps = 0.35f;   // ~20 dps per point / 点あたり約20dps
 
     sf::autotune::FreqPoint points[kNumFreqs];
     int collected = 0;
     uint32_t last_seq = sf::sysid_result.latest().seq;
 
-    ESP_LOGI(TAG, "Autotune %s: sweeping %d frequencies (amp=%.2f rad/s)...",
-             kAxisName[axis], kNumFreqs, static_cast<double>(kAmpRadps));
+    ESP_LOGI(TAG, "Autotune %s: sweeping %d frequencies...",
+             kAxisName[axis], kNumFreqs);
     for (int i = 0; i < kNumFreqs; i++) {
-        const float f = kFreqs[i];
-        // settle 2 cycles + measure ~(kDurFactor-2) cycles, clamped to [0.8, kDurMax] s
-        // 整定2周期＋測定約(kDurFactor-2)周期、[0.8, kDurMax]s にクランプ
-        float dur = kDurFactor / f;
+        const float f = kFreqsHz[i];
+        // settle 2 cycles + measure ~8 cycles, clamped to [0.8, 2.5] s
+        // 整定2周期＋測定約8周期、[0.8, 2.5]s にクランプ
+        float dur = 10.0f / f;
         if (dur < 0.8f) dur = 0.8f;
-        if (dur > kDurMax) dur = kDurMax;
+        if (dur > 2.5f) dur = 2.5f;
 
         sf::SysidCommand cmd{};
         cmd.axis      = axis;
