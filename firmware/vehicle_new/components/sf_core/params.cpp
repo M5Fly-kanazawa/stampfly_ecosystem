@@ -173,6 +173,10 @@ namespace param_vars {
           autotune_pitch_delay = 0.0f, autotune_pitch_resid = 0.0f;
     float autotune_yaw_b     = 0.0f, autotune_yaw_tau     = 0.0f,
           autotune_yaw_delay   = 0.0f, autotune_yaw_resid   = 0.0f;
+    // Reaction-torque RHP zero time constant tau_z [s] (yaw 4-param fit; roll/pitch=0).
+    // Distinct from .tau (the motor pole T): .tauz is the non-minimum-phase zero 1/tau_z.
+    // 反トルク RHP 零点の時定数 tau_z [s]（yaw 4パラ同定。roll/pitch=0）。.tau(モータ極T)とは別物。
+    float autotune_roll_tauz = 0.0f, autotune_pitch_tauz = 0.0f, autotune_yaw_tauz = 0.0f;
 
     // Autotune design-margin result, per axis. Written by the onboard autotune right
     // after the loop-shaping design (tunePid) succeeds — BEFORE the GM-floor / gain-range
@@ -436,6 +440,10 @@ static const ParamEntry table[] = {
     {"autotune.yaw.tau",     ParamType::FLOAT, &autotune_yaw_tau,     0.0f,  0.0f, 10.0f,  nullptr},
     {"autotune.yaw.delay",   ParamType::FLOAT, &autotune_yaw_delay,   0.0f,  0.0f, 1.0f,   nullptr},
     {"autotune.yaw.resid",   ParamType::FLOAT, &autotune_yaw_resid,   0.0f,  0.0f, 1.0e6f, nullptr},
+    // Reaction-torque RHP zero tau_z [s] (yaw 4-param fit; roll/pitch stay 0).
+    {"autotune.roll.tauz",   ParamType::FLOAT, &autotune_roll_tauz,   0.0f,  0.0f, 0.05f,  nullptr},
+    {"autotune.pitch.tauz",  ParamType::FLOAT, &autotune_pitch_tauz,  0.0f,  0.0f, 0.05f,  nullptr},
+    {"autotune.yaw.tauz",    ParamType::FLOAT, &autotune_yaw_tauz,    0.0f,  0.0f, 0.05f,  nullptr},
     // Autotune design margins (written by autotune, read-back only). wc[rad/s] pm[deg] gm[dB].
     {"autotune.roll.wc",     ParamType::FLOAT, &autotune_roll_wc,     0.0f,  0.0f, 5000.0f, nullptr},
     {"autotune.roll.pm",     ParamType::FLOAT, &autotune_roll_pm,     0.0f, -360.0f, 360.0f, nullptr},

@@ -423,6 +423,60 @@ TEST(autotune_fit_and_tune)
     ASSERT_TRUE(tune.kp > 0 && tune.ti > 0);
 }
 
+// 4-param yaw fit: a plant WITH a reaction-torque RHP zero degenerates the 3-param fit
+// (the hardware symptom) but is recovered cleanly by fitPlantYaw.
+// 4パラ yaw 同定: 反トルク RHP 零点を持つプラントは3パラ同定が退化（実機の症状）するが、
+// fitPlantYaw はきれいに復元する。
+TEST(autotune_fit_yaw_rhp_zero)
+{
+    // True YAW plant: yaw spec inertia, 25 ms motor lag, 5 ms transport delay, and a
+    // reaction-torque RHP zero tau_z = 14 ms (zero at ≈71 rad/s ≈ 11 Hz, inside the band).
+    // 真の yaw プラント: 反トルク RHP 零点 tau_z=14ms（零点≈11Hz・帯域内）。
+    const float b_true = 1.0f / 20.4e-6f;
+    const float T_true = 0.025f, L_true = 0.005f, tauz_true = 0.014f;
+
+    const float freqs_hz[] = {2, 3, 4.5f, 7, 10, 14, 20, 27, 35};
+    sf::autotune::FreqPoint pts[9];
+    for (int i = 0; i < 9; i++) {
+        const float w = 2.0f * 3.14159265f * freqs_hz[i];
+        // numerator b·(1 − tau_z·jw)·e^{-jwL}: (1,−tau_z·w) × (b·cos(−wL), b·sin(−wL))
+        const float nr0 = b_true * cosf(-w * L_true);
+        const float ni0 = b_true * sinf(-w * L_true);
+        const float nr = nr0 + tauz_true * w * ni0;
+        const float ni = ni0 - tauz_true * w * nr0;
+        const float dr = -w * w * T_true;     // jw(jwT+1) = -w^2 T + jw
+        const float di = w;
+        const float dd = dr * dr + di * di;
+        pts[i].w  = w;
+        pts[i].ur = 1.0f;  pts[i].ui = 0.0f;
+        pts[i].yr = (nr * dr + ni * di) / dd;
+        pts[i].yi = (ni * dr - nr * di) / dd;
+    }
+
+    // (a) the no-zero 3-param fit DEGENERATES on this data (matches the HW residual ~0.17).
+    // (a) 零点なし3パラ同定はこのデータで退化（実機残差~0.17と一致）。
+    sf::autotune::Plant p3{};
+    sf::autotune::fitPlant(pts, 9, b_true, p3);
+    ASSERT_TRUE(p3.residual > 0.08f);
+
+    // (b) the 4-param yaw fit RECOVERS the plant cleanly (L is fixed, not fit).
+    // (b) 4パラ yaw 同定はプラントをきれいに復元（L は固定）。
+    sf::autotune::Plant p4{};
+    ASSERT_TRUE(sf::autotune::fitPlantYaw(pts, 9, b_true, p4));
+    ASSERT_NEAR(p4.b / b_true, 1.0f, 0.05f);
+    ASSERT_NEAR(p4.T, T_true, 0.005f);
+    ASSERT_NEAR(p4.tau_z, tauz_true, 0.002f);
+    ASSERT_NEAR(p4.L, 0.005f, 1e-6f);
+    ASSERT_TRUE(p4.residual < 0.05f);
+
+    // (c) the PID design is feasible on the RHP-zero plant at a sane yaw wc.
+    // (c) RHP 零点プラントでも妥当な yaw wc なら PID 設計可能。
+    sf::autotune::TuneResult tune{};
+    ASSERT_TRUE(sf::autotune::tunePid(p4, 15.0f, 60.0f, 10.0f, tune));
+    ASSERT_NEAR(tune.pm_deg, 60.0f, 3.0f);
+    ASSERT_TRUE(tune.gm_db > 6.0f || !tune.gm_valid);
+}
+
 // =============================================================================
 // Gyro-bias deviation clamp (EskfConfig::bg_deviation_max)
 // ジャイロバイアス偏差クランプ
@@ -727,6 +781,7 @@ int main()
     run_eskf_reset_position();
     run_eskf_gyro_bias_deviation_clamp();
     run_autotune_fit_and_tune();
+    run_autotune_fit_yaw_rhp_zero();
 
     printf("\n[PID]\n");
     run_pid_proportional();

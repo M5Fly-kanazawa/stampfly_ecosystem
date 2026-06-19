@@ -514,18 +514,23 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 
     // Fit + tune (pure math, sf_autotune — host-tested).
     // フィット＋設計（純数学, sf_autotune — ホストテスト済み）。
+    // Yaw uses the 4-param fit (b, T, tau_z; L fixed) to capture the reaction-torque RHP
+    // zero its torque has but roll/pitch (thrust-differential) do not. roll/pitch keep the
+    // proven 3-param fit byte-identical.
+    // ヨーは反トルクの RHP 零点を捉える4パラ同定。roll/pitch は3パラ同定を不変に使う。
     sf::autotune::Plant plant{};
-    if (!sf::autotune::fitPlant(points, collected,
-                                1.0f / kSpecInertia[axis], plant) ||
-        plant.residual > 0.3f) {
+    const bool fit_ok = (axis == 2)
+        ? sf::autotune::fitPlantYaw(points, collected, 1.0f / kSpecInertia[axis], plant)
+        : sf::autotune::fitPlant(points, collected, 1.0f / kSpecInertia[axis], plant);
+    if (!fit_ok || plant.residual > 0.3f) {
         ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f",
                  static_cast<double>(plant.residual));
         reply("error fit failed (weak excitation?) - gains unchanged");
         return;
     }
-    ESP_LOGI(TAG, "Autotune fit: b=%.0f T=%.1fms L=%.2fms residual=%.3f",
+    ESP_LOGI(TAG, "Autotune fit: b=%.0f T=%.1fms L=%.2fms tau_z=%.1fms residual=%.3f",
              static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
-             static_cast<double>(plant.L * 1e3),
+             static_cast<double>(plant.L * 1e3), static_cast<double>(plant.tau_z * 1e3),
              static_cast<double>(plant.residual));
 
     // Persist the identified plant model per axis (read-back/analysis; survives
@@ -539,6 +544,23 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         std::snprintf(pk, sizeof(pk), "autotune.%s.tau",   kAxisName[axis]); sf::params::set_float(pk, plant.T);
         std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
         std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.tauz",  kAxisName[axis]); sf::params::set_float(pk, plant.tau_z);
+    }
+
+    // Yaw non-minimum-phase bandwidth limit: the reaction-torque RHP zero at 1/tau_z
+    // fundamentally caps the achievable crossover. Pull the design wc down to k_z/tau_z
+    // (k_z=0.3 → ~7 dB GM at the cap) so the loop-shaping stays feasible with healthy
+    // margins instead of fighting the zero. Yaw-only; no cap when tau_z≈0 (no zero).
+    // ヨーの非最小位相帯域制限: 反トルク RHP 零点 1/tau_z が交差周波数を構造的に制限。設計 wc を
+    // k_z/tau_z (k_z=0.3) に抑え、零点と戦わず実現可能かつ健全余裕に保つ。yaw のみ・tau_z≈0 なら無制限。
+    if (axis == 2 && plant.tau_z > 1e-4f) {
+        const float wc_cap = 0.3f / plant.tau_z;
+        if (wc > wc_cap) {
+            ESP_LOGI(TAG, "Yaw wc capped %.1f -> %.1f rad/s (RHP zero 1/tau_z=%.0f rad/s)",
+                     static_cast<double>(wc), static_cast<double>(wc_cap),
+                     static_cast<double>(1.0f / plant.tau_z));
+            wc = wc_cap;
+        }
     }
 
     // Save the margins of the CURRENT (active) gains scored against the freshly
@@ -716,7 +738,12 @@ void processLine(char* line)
         else if (std::strcmp(verb, "pitch") == 0) axis = 1;
         else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
         else { reply("error bad axis"); return; }
-        const float wc = (a > 1.0f && a < 100.0f) ? a : 25.0f;
+        // Default wc: 25 rad/s for roll/pitch; 18 for yaw — yaw's reaction-torque RHP
+        // zero limits its bandwidth, so a lower default keeps the design predictable
+        // (the in-fit wc cap rarely has to bind). An explicit wc arg overrides either.
+        // 既定 wc: roll/pitch=25、yaw=18（反トルク RHP 零点が帯域制限。低めの既定で予測的）。
+        const float wc_def = (axis == 2) ? 18.0f : 25.0f;
+        const float wc = (a > 1.0f && a < 100.0f) ? a : wc_def;
         const float pm = (b > 20.0f && b < 80.0f) ? b : 60.0f;
         cmdAutotune(axis, wc, pm);
         return;
@@ -869,7 +896,8 @@ void ApiTask(void* /*pvParameters*/)
                         sched_fired = true;   // one-shot BEFORE the blocking sweep
                         ESP_LOGI(TAG, "Scheduled autotune firing: axis=%ld after %.0fs FLYING",
                                  static_cast<long>(ax), static_cast<double>(delay));
-                        cmdAutotune(static_cast<uint8_t>(ax), 25.0f, 60.0f);  // plays start/end tones
+                        cmdAutotune(static_cast<uint8_t>(ax),
+                                    (ax == 2) ? 18.0f : 25.0f, 60.0f);  // yaw lower wc (RHP zero); plays tones
                     }
                 }
             }
