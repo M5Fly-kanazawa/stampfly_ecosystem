@@ -73,7 +73,15 @@ float wrapAngle(float a)
 float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
 {
     const float b = p[0], T = p[1], L = p[2];
-    if (b <= 0.0f || T <= 1e-4f || L < 0.0f || L > 0.05f) {
+    // T floor = 5 ms physical minimum motor/thrust lag (same motors on every axis,
+    // ~20-34 ms identified on roll/pitch). DISPLAY/safety guard only — it stops a
+    // degenerate yaw from saving a non-physical tau≈0.1 ms; the real remedy is the yaw
+    // EXCITATION change in cmdAutotune. Verified INERT on the clean roll/pitch fits
+    // (their interior minimum is well above 5 ms — SIL fit byte-identical with/without).
+    // T 下限=5ms（物理的な最小モータ遅れ。全軸同一モータ、roll/pitch で~20-34ms 同定）。表示/安全
+    // ガードのみ — 退化 yaw が非物理な tau≈0.1ms を保存するのを止める。実際の治療は cmdAutotune の
+    // yaw 励振変更。clean な roll/pitch には不活性（SILで有無同一を確認）。
+    if (b <= 0.0f || T <= 5e-3f || L < 0.0f || L > 0.05f) {
         return 1e12f;
     }
     float cost = 0.0f;
@@ -117,13 +125,17 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
         return false;
     }
 
-    // Nelder-Mead (3 params — same shape as the host tool's).
-    // Nelder-Mead（3 パラメータ — ホストツールと同形）。
+    // Nelder-Mead (3 params — same shape as the host tool's). T seeded near the
+    // motor-common ~30 ms (same motors on every axis → same lag) so the search starts
+    // in the physical basin, not the T→0 one. INERT on the clean roll/pitch fits (their
+    // sharp interior minimum wins regardless — SIL fit byte-identical with/without).
+    // Nelder-Mead（3パラメータ）。T はモータ共通の~30ms 近傍で種付け（全軸同一モータ）し、T→0 でなく
+    // 物理的 basin から探索開始。clean な roll/pitch には不活性（SILで有無同一を確認）。
     float simplex[4][3] = {
-        {b0,        0.020f, 0.005f},
-        {b0 * 1.5f, 0.020f, 0.005f},
-        {b0,        0.040f, 0.005f},
-        {b0,        0.020f, 0.009f},
+        {b0,        0.030f, 0.005f},
+        {b0 * 1.5f, 0.030f, 0.005f},
+        {b0,        0.050f, 0.005f},
+        {b0,        0.030f, 0.009f},
     };
     float vals[4];
     for (int i = 0; i < 4; i++) {
