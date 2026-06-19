@@ -141,7 +141,7 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 | `tunePid` / `evalMargins` | **アルゴリズム不変**。零点は `plantResponse` の位相として自動的に効く。RHP零点を打ち消す経路は存在しない（不正相殺は起きない）。 |
 | ヨー $\omega_c$ 上限 | **$\omega_{c,cap} = k_z/\tau_z$（$k_z=0.3$）**。上限で PM=60°/GM≈7 dB。$0.5/\tau_z$ で PM が負になり既存ゲートが自動棄却。 |
 | ヨー既定 $\omega_c$ | **25 → 18 rad/s**（上限が滅多に効かず予測的）。 |
-| ヨー GM下限 | 8 dB 据置（安全側）。 |
+| ヨー GM下限 | **8 → 6 dB**（全軸6dBに統一）。8dBは未モデル零点を補う保守値だった。零点をモデル化し $\omega_c$ 上限で帯域限界を避けた今、GMは信頼でき、8dBは健全な設計（上限で~7-8dB）を弾くだけ。 |
 
 ## 8. パラメータと実装
 
@@ -190,7 +190,9 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 | `autotune.yaw.resid` | 0.03〜0.06 | 0.15〜0.21 |
 | `autotune.yaw.tauz` | (0, 30) ms 内・**境界に張り付かない** | （無）|
 | `autotune.yaw.tau`（$T$）| 20〜34 ms・**ロール/ピッチと一致** | 退化 |
-| `autotune.yaw.gm` | ≥ 8 dB | 0.92 |
+| `autotune.yaw.gm` | ≥ 6 dB（適用条件・期待 ~7-8 dB） | 0.92 |
+
+適用に成功すれば**緑LED＋ゲイン変化**（着陸後 `param save`）、棄却なら赤。零点モデル化＋GM下限6dB＋$\omega_c$上限で、**健全な設計は適用されるようになった**（従来は8dB下限が~7-8dBの設計を弾いていた）。
 
 **最重要**：ヨーの $T$ がロール/ピッチの $T$ と数 ms 以内で一致すれば「$L=5$ ms固定が正しい・$\tau_z$ が本物の零点」の確証。大きくズレたら $L_0$ が誤り。$\tau_z$ が境界に張り付いていたら励振不足/モデル不足のサイン。
 
@@ -268,6 +270,8 @@ Hardware acceptance (`autotune yaw`, default $\omega_c=18$, then `param save`):
 | `autotune.yaw.resid` | 0.03–0.06 | 0.15–0.21 |
 | `autotune.yaw.tauz` | inside (0, 30) ms, NOT pinned | — |
 | `autotune.yaw.tau` ($T$) | 20–34 ms, matching roll/pitch | degenerate |
-| `autotune.yaw.gm` | ≥ 8 dB | 0.92 |
+| `autotune.yaw.gm` | ≥ 6 dB (apply floor; expect ~7-8 dB) | 0.92 |
+
+The yaw GM floor was lowered 8→6 dB: the old 8 dB compensated for the unmodelled zero (unreliable margin); with the zero now modelled + the wc cap, a sound yaw design (~7-8 dB GM) applies instead of being blocked.
 
 **Key check:** yaw $T$ matching roll/pitch $T$ (within a few ms) confirms $L_0=5$ ms is the right common delay and $\tau_z$ is a real zero; a large mismatch means $L_0$ is wrong; $\tau_z$ pinned at a bound signals weak excitation / model gaps.

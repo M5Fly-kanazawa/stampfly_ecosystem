@@ -603,12 +603,16 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // torque effectiveness then drives oscillation. Reject thin-GM designs
     // before LIVE apply (H-1). gm_valid=false means no −180° crossing in the
     // sweep → GM effectively infinite → SAFE, so do not reject that (L-15).
-    // yaw historically runs the thinnest margin, so it gets a higher floor.
-    // ゲイン余裕の下限: PM を満たしてもゲイン側不安定に近い（GM が薄い）設計はあり、
-    // モデル誤差やトルク効きの非線形で発振しうる。薄GM設計はライブ適用前に弾く(H-1)。
-    // gm_valid=false は掃引中に −180° 交差なし→GM実質無限大→安全 ゆえ弾かない(L-15)。
-    // ヨーは歴来もっとも余裕が薄いので下限を厳しくする。
-    static const float kMinGmDb[3] = {6.0f, 6.0f, 8.0f};   // roll, pitch, yaw [dB]
+    // ALL axes use 6 dB. Yaw previously used 8 dB to compensate for its UNMODELLED
+    // reaction-torque RHP zero (the margin was unreliable, so be extra conservative).
+    // The zero is now modelled (fitPlantYaw + plantResponse) and the wc cap (0.3/tau_z)
+    // keeps the design clear of the non-minimum-phase bandwidth limit, so the GM is
+    // trustworthy and yaw needs no special floor — the old 8 dB only blocked a sound
+    // design (the wc-capped yaw design lands ~7-8 dB).
+    // 全軸 6dB。yaw は以前、未モデルの反トルク RHP 零点を補うため 8dB にしていた（余裕が当てに
+    // ならず保守的に）。今は零点をモデル化し wc 上限(0.3/tau_z)で非最小位相の帯域限界を避けるため
+    // GM は信頼でき、特別な下限は不要 — 旧 8dB は健全な設計(wc上限で~7-8dB)を弾くだけだった。
+    static const float kMinGmDb[3] = {6.0f, 6.0f, 6.0f};   // roll, pitch, yaw [dB]
     if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
         ESP_LOGW(TAG, "Autotune %s gain margin %.1f dB < floor %.1f dB",
                  kAxisName[axis], static_cast<double>(tune.gm_db),
