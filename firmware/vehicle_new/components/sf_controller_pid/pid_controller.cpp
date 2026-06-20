@@ -559,6 +559,10 @@ ControlOutput PidController::compute(
                     sysid_pending_.w  = 2.0f * 3.14159265f * excite_freq_;
                     sysid_pending_.ur = iq_ur_; sysid_pending_.ui = iq_ui_;
                     sysid_pending_.yr = iq_yr_; sysid_pending_.yi = iq_yi_;
+                    // off-tone gyro power = the disturbance/noise floor at this frequency
+                    // オフ音ジャイロ電力 = この周波数の外乱/雑音床
+                    sysid_pending_.off_power = iq_yr_off_ * iq_yr_off_
+                                             + iq_yi_off_ * iq_yi_off_;
                     sysid_pending_.samples = iq_n_;
                     sysid_pending_.seq = ++sysid_seq_;
                     sysid_pending_.timestamp = state.timestamp;
@@ -596,12 +600,28 @@ ControlOutput PidController::compute(
     // ジャイロ y を励振位相と相関する。
     if (excite_active_ && excite_waveform_ == 2 && excite_t_ > excite_settle_s_) {
         const float u_ax = output.torque[excite_axis_];
-        const float y_ax = (excite_axis_ == 0) ? gyro_rate.x
-                         : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
+        float y_ax = (excite_axis_ == 0) ? gyro_rate.x
+                   : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
+        // Detrend: subtract a slow running mean of the rate so the near-DC disturbance
+        // (CW/CCW trim) does not leak into the low-frequency lock-in. The LPF cutoff
+        // (~0.5 Hz) is below the lowest tone (1.5 Hz), so only drift is removed.
+        // 除トレンド: レートの遅い走査平均を引き、近DC外乱が低周波ロックインに漏れないようにする。
+        constexpr float kDetrendAlpha = 0.008f;   // ~0.5 Hz cutoff at 400 Hz
+        y_dc_ += kDetrendAlpha * (y_ax - y_dc_);
+        y_ax -= y_dc_;
         const float c = cosf(excite_phase_);
         const float sn = sinf(excite_phase_);
         iq_ur_ += u_ax * c;  iq_ui_ -= u_ax * sn;
         iq_yr_ += y_ax * c;  iq_yi_ -= y_ax * sn;
+        // Off-tone lock-in at a nearby UNexcited frequency (1.27× the tone) = the
+        // disturbance/noise FLOOR at this frequency. coh = on/(on+off) (computed by the
+        // autotune) then down-weights disturbance-dominated tones — the onboard SNR gate.
+        // オフ音(非励振の近傍周波数, 音の1.27倍)のロックイン = 雑音床。coh=on/(on+off) で外乱支配を軽視。
+        constexpr float kOffToneRatio = 1.27f;
+        excite_phase_off_ += 2.0f * 3.14159265f * (excite_freq_ * kOffToneRatio) * dt;
+        const float co = cosf(excite_phase_off_);
+        const float sno = sinf(excite_phase_off_);
+        iq_yr_off_ += y_ax * co;  iq_yi_off_ -= y_ax * sno;
         iq_n_++;
     }
 
@@ -795,6 +815,11 @@ void PidController::startExcitation(const SysidCommand& cmd)
     excite_settle_s_ = (excite_waveform_ == 2) ? (2.0f / excite_freq_) : 0.0f;
     iq_ur_ = iq_ui_ = iq_yr_ = iq_yi_ = 0.0f;
     iq_n_  = 0;
+    // Reset the off-tone accumulator/phase per point; y_dc_ persists across the sweep so
+    // the detrend stays converged (resetting it would leave high-freq points untracked).
+    // オフ音蓄積/位相は点ごとにリセット。y_dc_ は掃引中持続（リセットすると高周波点で未収束）。
+    excite_phase_off_ = 0.0f;
+    iq_yr_off_ = iq_yi_off_ = 0.0f;
     excite_amp_ = cmd.amplitude;
     if (excite_amp_ < 0.0f)           excite_amp_ = 0.0f;
     if (excite_amp_ > kExciteAmpMax)  excite_amp_ = kExciteAmpMax;

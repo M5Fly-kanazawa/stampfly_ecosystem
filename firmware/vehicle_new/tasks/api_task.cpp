@@ -497,6 +497,14 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         points[collected].ui = res.ui;
         points[collected].yr = res.yr;
         points[collected].yi = res.yi;
+        // Coherence/SNR proxy: on-tone gyro power / (on-tone + off-tone noise floor).
+        // coh→1 = clean, coh→0 = disturbance-dominated. The coherence-weighted fit uses
+        // this per-point weight to ignore tones a disturbance corrupts (e.g. low-freq yaw).
+        // コヒーレンス/SNR代理: オン音電力/(オン音+オフ音雑音床)。coh→1清浄, coh→0外乱支配。
+        const float on_pow = res.yr * res.yr + res.yi * res.yi;
+        const float coh = (on_pow + res.off_power > 1e-20f)
+                        ? on_pow / (on_pow + res.off_power) : 1.0f;
+        points[collected].coh = coh;
         collected++;
         // Diagnostic: log the RAW measured open-loop point G(jw)=Y/U (|G| in dB + phase).
         // The fitted model can hide a structural mismatch; the raw Bode is the ground
@@ -510,11 +518,12 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
             float gph = atan2f(res.yi, res.yr) - atan2f(res.ui, res.ur);
             while (gph >  3.14159265f) gph -= 6.2831853f;
             while (gph < -3.14159265f) gph += 6.2831853f;
-            ESP_LOGI(TAG, "  bode %s f=%5.1fHz |G|=%9.1f (%+6.1fdB) ph=%+6.1fdeg",
+            ESP_LOGI(TAG, "  bode %s f=%5.1fHz |G|=%9.1f (%+6.1fdB) ph=%+6.1fdeg coh=%.2f",
                      kAxisName[axis], static_cast<double>(res.w / 6.2831853f),
                      static_cast<double>(gmag),
                      static_cast<double>(20.0f * log10f(gmag + 1e-12f)),
-                     static_cast<double>(gph * 57.29578f));
+                     static_cast<double>(gph * 57.29578f),
+                     static_cast<double>(coh));
         }
         // NOTE: do NOT re-cue here. An earlier version re-published AutotuneStart after
         // every point to keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING

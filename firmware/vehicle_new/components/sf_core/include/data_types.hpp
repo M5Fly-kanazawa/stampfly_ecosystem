@@ -676,6 +676,7 @@ struct SysidFreqResult {
     float    w;           // [rad/s]
     float    ur, ui;      // U(jw) I/Q sums / U の I/Q 和
     float    yr, yi;      // Y(jw) I/Q sums / Y の I/Q 和
+    float    off_power;   // off-tone gyro power (disturbance/noise floor) / オフ音雑音床
     uint32_t samples;     // accumulated samples / 蓄積サンプル数
     uint32_t seq;         // increments per completed point / 完了毎に増加
     uint32_t timestamp;   // [us]
