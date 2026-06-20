@@ -58,6 +58,7 @@ struct Plant {
     float T;         // [s] motor/prop lag                    / モータ遅れ
     float L;         // [s] dead time                          / むだ時間
     float residual;  // coherence-weighted mean fit cost (quality) / コヒーレンス重み残差
+    float coh_sum;   // Σcoh² = effective coherent-point count (data sufficiency) / 有効点数
 };
 
 /// Tuned PID + numerically verified margins / 設計 PID＋数値検証済み余裕

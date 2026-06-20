@@ -473,6 +473,43 @@ TEST(autotune_fit_coherence_weighting)
     ASSERT_TRUE(fabsf(p_w.T - T_true) < fabsf(p_uw.T - T_true));
 }
 
+// Safety gate: an all-noise / failed-excitation sweep (every point low-coherence) must be
+// REJECTED (fitPlant returns false), so the hands-free scheduled autotune never applies a
+// garbage gain. The coh²-weighted residual alone would be misleadingly tiny here.
+// 安全ゲート: 全点低コヒーレンス（励振失敗）の掃引は棄却（fitPlant=false）。ハンズフリー予約で
+// ゴミゲインを適用しないため。coh²重み残差だけでは偽の小ささになる。
+TEST(autotune_fit_rejects_all_noise)
+{
+    const float b_true = 1.0f / 9.16e-6f, T_true = 0.025f, L_true = 0.006f;
+    const float freqs_hz[] = {2, 3, 4.5f, 7, 10, 14, 20, 27, 35};
+    sf::autotune::FreqPoint pts[9];
+    for (int i = 0; i < 9; i++) {
+        const float w = 2.0f * 3.14159265f * freqs_hz[i];
+        const float nr = b_true * cosf(-w * L_true);
+        const float ni = b_true * sinf(-w * L_true);
+        const float dr = -w * w * T_true, di = w, dd = dr * dr + di * di;
+        pts[i].w  = w;  pts[i].ur = 1.0f;  pts[i].ui = 0.0f;
+        pts[i].yr = (nr * dr + ni * di) / dd;
+        pts[i].yi = (ni * dr - nr * di) / dd;
+        pts[i].coh = 0.02f;        // every tone disturbance-dominated (failed excitation)
+    }
+    sf::autotune::Plant p{};
+    // Even though the data is geometrically perfect, near-zero coh ⇒ too few effective
+    // points ⇒ REJECT (must NOT pass with a tiny weighted residual).
+    ASSERT_TRUE(!sf::autotune::fitPlant(pts, 9, b_true, p));
+
+    // And a sweep with only 3 trusted points (< the 3-param over-determination floor) is
+    // also rejected, while 5 trusted points pass.
+    // 信頼点3つ（3パラの優決定下限未満）も棄却、5つなら通過。
+    for (int i = 0; i < 3; i++) pts[i].coh = 1.0f;       // 3 trusted
+    sf::autotune::Plant p3{};
+    ASSERT_TRUE(!sf::autotune::fitPlant(pts, 9, b_true, p3));
+    for (int i = 3; i < 5; i++) pts[i].coh = 1.0f;       // now 5 trusted
+    sf::autotune::Plant p5{};
+    ASSERT_TRUE(sf::autotune::fitPlant(pts, 9, b_true, p5));
+    ASSERT_NEAR(p5.b / b_true, 1.0f, 0.10f);
+}
+
 // =============================================================================
 // Gyro-bias deviation clamp (EskfConfig::bg_deviation_max)
 // ジャイロバイアス偏差クランプ
@@ -778,6 +815,7 @@ int main()
     run_eskf_gyro_bias_deviation_clamp();
     run_autotune_fit_and_tune();
     run_autotune_fit_coherence_weighting();
+    run_autotune_fit_rejects_all_noise();
 
     printf("\n[PID]\n");
     run_pid_proportional();

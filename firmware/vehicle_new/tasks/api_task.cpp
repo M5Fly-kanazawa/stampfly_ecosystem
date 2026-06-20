@@ -457,6 +457,9 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
                                      14.0f, 20.0f, 27.0f, 35.0f};
     constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);
     constexpr float kAmpRadps = 0.35f;   // ~20 dps per point / 点あたり約20dps
+    // A lock-in response below this amplitude [rad/s] is a dead/untrusted tone (coh=0).
+    // この振幅未満のロックイン応答は死んだ音とみなす（coh=0）。約0.57 dps。
+    constexpr float kMinOnAmp = 0.01f;
 
     sf::autotune::FreqPoint points[kNumFreqs];
     int collected = 0;
@@ -500,10 +503,18 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         // Coherence/SNR proxy: on-tone gyro power / (on-tone + off-tone noise floor).
         // coh→1 = clean, coh→0 = disturbance-dominated. The coherence-weighted fit uses
         // this per-point weight to ignore tones a disturbance corrupts (e.g. low-freq yaw).
-        // コヒーレンス/SNR代理: オン音電力/(オン音+オフ音雑音床)。coh→1清浄, coh→0外乱支配。
+        // A DEAD tone (excitation never reached the loop / saturation / disarm-edge) is the
+        // LEAST trustworthy case ⇒ coh=0 (NOT 1, else it would inflate the fit's sufficiency
+        // guard). Floor on the absolute lock-in AMPLITUDE (N-independent), clamp, NaN→0.
+        // コヒーレンス/SNR代理: オン音電力/(オン音+オフ音雑音床)。死んだ音は最も信用できない→coh=0。
         const float on_pow = res.yr * res.yr + res.yi * res.yi;
-        const float coh = (on_pow + res.off_power > 1e-20f)
-                        ? on_pow / (on_pow + res.off_power) : 1.0f;
+        const float on_amp = (res.samples > 0)
+                           ? 2.0f * sqrtf(on_pow) / static_cast<float>(res.samples) : 0.0f;
+        float coh = (on_pow + res.off_power > 1e-20f)
+                  ? on_pow / (on_pow + res.off_power) : 0.0f;
+        if (on_amp < kMinOnAmp) coh = 0.0f;   // weak/dead tone ⇒ untrusted regardless of ratio
+        if (!(coh >= 0.0f))     coh = 0.0f;   // NaN ⇒ 0
+        if (coh > 1.0f)         coh = 1.0f;
         points[collected].coh = coh;
         collected++;
         // Diagnostic: log the RAW measured open-loop point G(jw)=Y/U (|G| in dB + phase).
@@ -567,10 +578,22 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
         std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
     }
-    if (!fit_ok || plant.residual > 0.3f) {
-        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f (saved for diagnosis)",
-                 static_cast<double>(plant.residual));
-        reply("error fit residual too high - gains unchanged (read autotune.* params)");
+    // Defense-in-depth before the hands-free LIVE apply: the residual is coherence-WEIGHTED
+    // and thus spoofable by a degenerate coh distribution, so gate ALSO on a residual-
+    // INDEPENDENT physical-bounds check — a noise fit usually lands outside [0.25,4]×b_seed
+    // or a sane motor lag. (fitPlant already rejects too-few-effective-points via fit_ok.)
+    // A solo pilot cannot abort, so a bad gain must never reach set_float.
+    // ハンズフリー適用前の多重防御: 残差はコヒーレンス重みゆえ偽装可 → 残差非依存の物理境界でも防御。
+    const float b_lo = 0.25f / kSpecInertia[axis];
+    const float b_hi = 4.0f  / kSpecInertia[axis];
+    const bool phys_ok = plant.b >= b_lo && plant.b <= b_hi
+                       && plant.T >= 0.002f && plant.T <= 0.080f;
+    if (!fit_ok || !(plant.residual <= 0.3f) || !phys_ok) {   // !(<=) also rejects NaN
+        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f coh_sum=%.1f b=%.0f T=%.1fms phys=%d (saved)",
+                 static_cast<double>(plant.residual), static_cast<double>(plant.coh_sum),
+                 static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
+                 static_cast<int>(phys_ok));
+        reply("error fit rejected - gains unchanged (read autotune.* params)");
         return;
     }
 
@@ -615,15 +638,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // torque effectiveness then drives oscillation. Reject thin-GM designs
     // before LIVE apply (H-1). gm_valid=false means no −180° crossing in the
     // sweep → GM effectively infinite → SAFE, so do not reject that (L-15).
-    // ALL axes use 6 dB. Yaw previously used 8 dB to compensate for its UNMODELLED
-    // reaction-torque RHP zero (the margin was unreliable, so be extra conservative).
-    // The zero is now modelled (fitPlantYaw + plantResponse) and the wc cap (0.3/tau_z)
-    // keeps the design clear of the non-minimum-phase bandwidth limit, so the GM is
-    // trustworthy and yaw needs no special floor — the old 8 dB only blocked a sound
-    // design (the wc-capped yaw design lands ~7-8 dB).
-    // 全軸 6dB。yaw は以前、未モデルの反トルク RHP 零点を補うため 8dB にしていた（余裕が当てに
-    // ならず保守的に）。今は零点をモデル化し wc 上限(0.3/tau_z)で非最小位相の帯域限界を避けるため
-    // GM は信頼でき、特別な下限は不要 — 旧 8dB は健全な設計(wc上限で~7-8dB)を弾くだけだった。
+    // ALL axes use 6 dB. (Yaw once used 8 dB to hedge a hypothesised reaction-torque RHP
+    // zero — refuted on hardware, tau_z≈0; the yaw plant is the same uniform 3-param model
+    // and its GM is trustworthy, so it needs no special floor.)
+    // 全軸 6dB。（yaw は以前、反トルク RHP 零点を見込んで 8dB にしていたが実機で反証(tau_z≈0)。
+    // yaw も同じ3パラモデルで GM は信頼でき、特別な下限は不要。）
     static const float kMinGmDb[3] = {6.0f, 6.0f, 6.0f};   // roll, pitch, yaw [dB]
     if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
         ESP_LOGW(TAG, "Autotune %s gain margin %.1f dB < floor %.1f dB",
@@ -754,10 +773,10 @@ void processLine(char* line)
         else if (std::strcmp(verb, "pitch") == 0) axis = 1;
         else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
         else { reply("error bad axis"); return; }
-        // Default wc: 25 rad/s for roll/pitch; 18 for yaw — yaw's reaction-torque RHP
-        // zero limits its bandwidth, so a lower default keeps the design predictable
-        // (the in-fit wc cap rarely has to bind). An explicit wc arg overrides either.
-        // 既定 wc: roll/pitch=25、yaw=18（反トルク RHP 零点が帯域制限。低めの既定で予測的）。
+        // Default wc: 25 rad/s for roll/pitch; 18 for yaw. Yaw's empirically low control
+        // authority + low-SNR identification make a conservative crossover the safe choice
+        // (NOT a reaction-zero limit — that was refuted). An explicit wc arg overrides.
+        // 既定 wc: roll/pitch=25、yaw=18（yaw は操縦権限が低く同定SNRも低いため保守的に。零点制限ではない）。
         const float wc_def = (axis == 2) ? 18.0f : 25.0f;
         const float wc = (a > 1.0f && a < 100.0f) ? a : wc_def;
         const float pm = (b > 20.0f && b < 80.0f) ? b : 60.0f;
@@ -913,7 +932,7 @@ void ApiTask(void* /*pvParameters*/)
                         ESP_LOGI(TAG, "Scheduled autotune firing: axis=%ld after %.0fs FLYING",
                                  static_cast<long>(ax), static_cast<double>(delay));
                         cmdAutotune(static_cast<uint8_t>(ax),
-                                    (ax == 2) ? 18.0f : 25.0f, 60.0f);  // yaw lower wc (RHP zero); plays tones
+                                    (ax == 2) ? 18.0f : 25.0f, 60.0f);  // yaw lower wc (low authority/SNR); plays tones
                     }
                 }
             }

@@ -198,14 +198,36 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
     out.b = simplex[best][0];
     out.T = simplex[best][1];
     out.L = simplex[best][2];
-    // Normalize by the coherence-weight sum (Σ coh²), not the point count, so the residual
-    // is the weighted-mean cost per EFFECTIVE point. Clean axes (all coh=1) ⇒ Σcoh²=n ⇒
-    // identical to before; a disturbed axis ⇒ down-weighted bad points don't inflate it.
-    // 残差は点数でなくコヒーレンス重み和 Σcoh² で正規化（実効点あたり）。全 coh=1 なら従来と同一。
+    // Coherence-weighted residual + SAFETY GATES that do NOT depend on the residual
+    // magnitude. A coh²-weighted cost → 0 as all coh → 0, so on all-noise / failed
+    // excitation the residual would be misleadingly tiny and FALSE-PASS the <0.3 gate,
+    // applying a garbage gain (worst on the hands-free SCHEDULED route). So: reject unless
+    // there are enough EFFECTIVE coherent points, and reject if any TRUSTED tone is badly
+    // mis-fit (the weighted mean can hide a large error at a high-coherence frequency).
+    // 残差に依存しない安全ゲート: 全 coh→0 で残差が偽小→ゴミゲイン誤適用を防ぐ（特にハンズフリー予約）。
+    // 有効コヒーレンス点が不足／信頼できる音が大きく外れる場合は棄却（既定ゲイン維持）。
     float wsum = 0.0f;
-    for (int i = 0; i < n; i++) wsum += pts[i].coh * pts[i].coh;
-    out.residual = vals[best] / (wsum > 1e-6f ? wsum : static_cast<float>(n));
-    return out.b > 0.0f && out.residual < 1.0f;
+    int   n_eff = 0;          // points with coh>0.5 (TRUSTED) / 信頼できる点数
+    float worst_trusted = 0.0f;
+    for (int i = 0; i < n; i++) {
+        wsum += pts[i].coh * pts[i].coh;
+        if (pts[i].coh > 0.5f) {
+            n_eff++;
+            const Cplx gm = plantResponse(pts[i].w, out.b, out.T, out.L);
+            const float dmag = logf(G_hat[i].mag() + 1e-12f) - logf(gm.mag() + 1e-12f);
+            const float dph  = wrapAngle(G_hat[i].arg() - gm.arg());
+            const float e = dmag * dmag + dph * dph;
+            if (e > worst_trusted) worst_trusted = e;
+        }
+    }
+    out.coh_sum  = wsum;
+    out.residual = (wsum > 1e-6f) ? vals[best] / wsum : 1e3f;
+    // Need ≥4 trusted points (over-determined for the 3 params) and enough effective
+    // coherent energy; reject a single badly-mis-fit trusted tone; reject NaN (>=0 test).
+    if (n_eff < 4 || wsum < 2.5f || worst_trusted > 0.9f) {
+        return false;
+    }
+    return out.b > 0.0f && out.residual >= 0.0f && out.residual < 1.0f;
 }
 
 // =============================================================================

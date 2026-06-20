@@ -604,21 +604,31 @@ ControlOutput PidController::compute(
                    : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
         // Detrend: subtract a slow running mean of the rate so the near-DC disturbance
         // (CW/CCW trim) does not leak into the low-frequency lock-in. The LPF cutoff
-        // (~0.5 Hz) is below the lowest tone (1.5 Hz), so only drift is removed.
-        // 除トレンド: レートの遅い走査平均を引き、近DC外乱が低周波ロックインに漏れないようにする。
+        // (~0.5 Hz) is below the lowest tone (1.5 Hz), so only drift is removed. SEED the
+        // mean to the current rate on the FIRST accumulated sample of each point (iq_n_==0)
+        // so it starts converged — otherwise y_dc_ carries a STALE DC from the previous
+        // tone/axis/run and biases this point's low-freq lock-in for ~0.3 s.
+        // 除トレンド: 近DC外乱の低周波漏れを防ぐ。各点の最初の蓄積サンプルで現在のDCに再シードし収束済で
+        // 開始（前の音/軸/実行の古いDCの持ち越しで低周波が偏るのを防ぐ）。
         constexpr float kDetrendAlpha = 0.008f;   // ~0.5 Hz cutoff at 400 Hz
+        if (iq_n_ == 0) y_dc_ = y_ax;             // re-seed per point (no cross-tone/axis carry)
         y_dc_ += kDetrendAlpha * (y_ax - y_dc_);
         y_ax -= y_dc_;
         const float c = cosf(excite_phase_);
         const float sn = sinf(excite_phase_);
         iq_ur_ += u_ax * c;  iq_ui_ -= u_ax * sn;
         iq_yr_ += y_ax * c;  iq_yi_ -= y_ax * sn;
-        // Off-tone lock-in at a nearby UNexcited frequency (1.27× the tone) = the
-        // disturbance/noise FLOOR at this frequency. coh = on/(on+off) (computed by the
-        // autotune) then down-weights disturbance-dominated tones — the onboard SNR gate.
-        // オフ音(非励振の近傍周波数, 音の1.27倍)のロックイン = 雑音床。coh=on/(on+off) で外乱支配を軽視。
-        constexpr float kOffToneRatio = 1.27f;
-        excite_phase_off_ += 2.0f * 3.14159265f * (excite_freq_ * kOffToneRatio) * dt;
+        // Off-tone lock-in at a nearby UNexcited frequency = the disturbance/noise FLOOR at
+        // this frequency. coh = on/(on+off) (computed by the autotune) then down-weights
+        // disturbance-dominated tones — the onboard SNR gate. The off-tone is f + max(27%,
+        // 2 Hz) so it stays WELL-separated even at the lowest tones (2 Hz → 4 Hz, not 2.5);
+        // otherwise on-tone energy leaks into off_power and wrongly DEPRESSES coh on clean
+        // low-freq points (which would needlessly reject good roll/pitch data). Top tone
+        // 35→44.5 Hz stays well below the 200 Hz Nyquist (no aliasing).
+        // オフ音は f+max(27%,2Hz)で最低音でも十分離す（2Hz→4Hz）。漏れで clean 点の coh を誤って
+        // 下げ、良好な roll/pitch を不要に棄却するのを防ぐ。最高音 44.5Hz は Nyquist 200Hz 未満。
+        const float f_off = excite_freq_ + fmaxf(0.27f * excite_freq_, 2.0f);
+        excite_phase_off_ += 2.0f * 3.14159265f * f_off * dt;
         const float co = cosf(excite_phase_off_);
         const float sno = sinf(excite_phase_off_);
         iq_yr_off_ += y_ax * co;  iq_yi_off_ -= y_ax * sno;
@@ -815,9 +825,10 @@ void PidController::startExcitation(const SysidCommand& cmd)
     excite_settle_s_ = (excite_waveform_ == 2) ? (2.0f / excite_freq_) : 0.0f;
     iq_ur_ = iq_ui_ = iq_yr_ = iq_yi_ = 0.0f;
     iq_n_  = 0;
-    // Reset the off-tone accumulator/phase per point; y_dc_ persists across the sweep so
-    // the detrend stays converged (resetting it would leave high-freq points untracked).
-    // オフ音蓄積/位相は点ごとにリセット。y_dc_ は掃引中持続（リセットすると高周波点で未収束）。
+    // Reset the off-tone accumulator/phase per point. (y_dc_ for the detrend is re-seeded
+    // to the current rate on the first accumulated sample — see the I/Q block — so it
+    // never carries a stale DC across tones/axes/runs.)
+    // オフ音蓄積/位相は点ごとにリセット。（除トレンドの y_dc_ は最初の蓄積サンプルで現DCに再シード。）
     excite_phase_off_ = 0.0f;
     iq_yr_off_ = iq_yi_off_ = 0.0f;
     excite_amp_ = cmd.amplitude;
