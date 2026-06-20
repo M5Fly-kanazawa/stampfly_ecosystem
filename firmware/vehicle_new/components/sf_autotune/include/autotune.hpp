@@ -44,18 +44,20 @@ struct FreqPoint {
     float w;     // [rad/s]
     float ur, ui;   // U(jw) I/Q sums  / U の I/Q 和
     float yr, yi;   // Y(jw) I/Q sums  / Y の I/Q 和
+    float coh = 1.0f;  // coherence/SNR weight in [0,1] (1 = fully trusted) / コヒーレンス重み
 };
 
-/// Fitted plant G(s) = b·(1−tau_z·s)·e^{-Ls} / (s(Ts+1)) / フィット済みプラント
-/// tau_z = 0 reduces to the roll/pitch model b·e^{-Ls}/(s(Ts+1)); a nonzero tau_z>0
-/// is a right-half-plane (non-minimum-phase) zero — the yaw reaction-torque kick.
-/// tau_z=0 で roll/pitch モデルに退化。tau_z>0 は右半平面零点（反トルクの蹴り返し）。
+/// Fitted plant G(s) = b·e^{-Ls} / (s(Ts+1)) / フィット済みプラント
+/// Uniform 3-parameter model for ALL axes. (A yaw reaction-torque RHP zero was tried
+/// and refuted: hardware showed tau_z≈0 — see yaw_axis_model.md. The yaw degeneracy is
+/// a structured low-frequency disturbance, handled by coherence weighting, not a zero.)
+/// 全軸共通の3パラモデル。yaw の反トルク RHP 零点は実機で反証(tau_z≈0)。yaw の退化は構造的
+/// 低周波外乱でありコヒーレンス重みで対処する（零点ではない）。
 struct Plant {
     float b;         // [1/(kg m²)] effective inverse inertia / 有効慣性逆数
     float T;         // [s] motor/prop lag                    / モータ遅れ
     float L;         // [s] dead time                          / むだ時間
-    float tau_z = 0.0f;  // [s] reaction-torque RHP zero; 0 = none (roll/pitch) / 反トルクRHP零点
-    float residual;  // mean fit cost per point (quality)      / 点あたり残差
+    float residual;  // coherence-weighted mean fit cost (quality) / コヒーレンス重み残差
 };
 
 /// Tuned PID + numerically verified margins / 設計 PID＋数値検証済み余裕
@@ -79,14 +81,6 @@ struct TuneResult {
 /// K 個の実測点にプラントをフィット。b0 は探索の種（仕様の 1/J）。データ不良
 /// （U が退化・発散）では false。
 bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out);
-
-/// Yaw variant: fit (b, T, tau_z) with the dead time L fixed at the common transport
-/// delay (~5 ms). Adds the reaction-torque RHP zero (1−tau_z·s) the 3-param fit lacks,
-/// which otherwise makes the yaw fit degenerate (T pinned, residual ~5x worse). L is
-/// fixed because a free L and tau_z both shape phase and are confounded; magnitude
-/// (the |1−tau_z jw| high-freq rise) separates tau_z once L is held to its known value.
-/// ヨー用: むだ時間 L を共通遅れ(~5ms)に固定し (b,T,tau_z) を同定。反トルク RHP 零点を加える。
-bool fitPlantYaw(const FreqPoint* points, int count, float b0, Plant& out);
 
 /// Solve Kp/Ti/Td for the spec (wc [rad/s], pm [deg]); Ti = ti_factor/wc.
 /// Returns false when the required phase lead exceeds the PID's maximum.

@@ -423,27 +423,20 @@ TEST(autotune_fit_and_tune)
     ASSERT_TRUE(tune.kp > 0 && tune.ti > 0);
 }
 
-// 4-param yaw fit: a plant WITH a reaction-torque RHP zero degenerates the 3-param fit
-// (the hardware symptom) but is recovered cleanly by fitPlantYaw.
-// 4パラ yaw 同定: 反トルク RHP 零点を持つプラントは3パラ同定が退化（実機の症状）するが、
-// fitPlantYaw はきれいに復元する。
-TEST(autotune_fit_yaw_rhp_zero)
+// Coherence-weighted fit: a clean plant with several DISTURBANCE-corrupted points is
+// recovered by down-weighting the low-coherence points (the onboard ETFE-style robustness
+// that fixes the disturbed-yaw degeneracy). With coh=1 everywhere the fit is unchanged.
+// コヒーレンス重みフィット: 外乱で汚れた点を低 coh で軽視し真のプラントを復元（yaw 退化の対処）。
+TEST(autotune_fit_coherence_weighting)
 {
-    // True YAW plant: yaw spec inertia, 25 ms motor lag, 5 ms transport delay, and a
-    // reaction-torque RHP zero tau_z = 14 ms (zero at ≈71 rad/s ≈ 11 Hz, inside the band).
-    // 真の yaw プラント: 反トルク RHP 零点 tau_z=14ms（零点≈11Hz・帯域内）。
-    const float b_true = 1.0f / 20.4e-6f;
-    const float T_true = 0.025f, L_true = 0.005f, tauz_true = 0.014f;
-
+    const float b_true = 1.0f / 9.16e-6f;
+    const float T_true = 0.025f, L_true = 0.006f;
     const float freqs_hz[] = {2, 3, 4.5f, 7, 10, 14, 20, 27, 35};
     sf::autotune::FreqPoint pts[9];
     for (int i = 0; i < 9; i++) {
         const float w = 2.0f * 3.14159265f * freqs_hz[i];
-        // numerator b·(1 − tau_z·jw)·e^{-jwL}: (1,−tau_z·w) × (b·cos(−wL), b·sin(−wL))
-        const float nr0 = b_true * cosf(-w * L_true);
-        const float ni0 = b_true * sinf(-w * L_true);
-        const float nr = nr0 + tauz_true * w * ni0;
-        const float ni = ni0 - tauz_true * w * nr0;
+        const float nr = b_true * cosf(-w * L_true);
+        const float ni = b_true * sinf(-w * L_true);
         const float dr = -w * w * T_true;     // jw(jwT+1) = -w^2 T + jw
         const float di = w;
         const float dd = dr * dr + di * di;
@@ -451,30 +444,33 @@ TEST(autotune_fit_yaw_rhp_zero)
         pts[i].ur = 1.0f;  pts[i].ui = 0.0f;
         pts[i].yr = (nr * dr + ni * di) / dd;
         pts[i].yi = (ni * dr - nr * di) / dd;
+        pts[i].coh = 1.0f;
+    }
+    // Corrupt the 3 lowest-freq points (the band a real yaw trim disturbance hits) with
+    // gross errors, and flag them with LOW coherence (γ²≈0.05) — the off-tone SNR gate output.
+    // 低周波3点をひどく汚し、低コヒーレンス(γ²≈0.05)を付与（オフ音SNRゲートの出力相当）。
+    for (int i = 0; i < 3; i++) {
+        pts[i].yr *= 4.0f; pts[i].yi += 8.0f;
+        pts[i].coh = 0.05f;
     }
 
-    // (a) the no-zero 3-param fit DEGENERATES on this data (matches the HW residual ~0.17).
-    // (a) 零点なし3パラ同定はこのデータで退化（実機残差~0.17と一致）。
-    sf::autotune::Plant p3{};
-    sf::autotune::fitPlant(pts, 9, b_true, p3);
-    ASSERT_TRUE(p3.residual > 0.08f);
+    // (a) WITHOUT the weight (force coh=1): the corrupted points pull the fit off truth.
+    // (a) 重みなし(coh=1強制): 汚れた点がフィットを真値から引き離す。
+    sf::autotune::FreqPoint pts_uw[9];
+    for (int i = 0; i < 9; i++) { pts_uw[i] = pts[i]; pts_uw[i].coh = 1.0f; }
+    sf::autotune::Plant p_uw{};
+    sf::autotune::fitPlant(pts_uw, 9, b_true, p_uw);
 
-    // (b) the 4-param yaw fit RECOVERS the plant cleanly (L is fixed, not fit).
-    // (b) 4パラ yaw 同定はプラントをきれいに復元（L は固定）。
-    sf::autotune::Plant p4{};
-    ASSERT_TRUE(sf::autotune::fitPlantYaw(pts, 9, b_true, p4));
-    ASSERT_NEAR(p4.b / b_true, 1.0f, 0.05f);
-    ASSERT_NEAR(p4.T, T_true, 0.005f);
-    ASSERT_NEAR(p4.tau_z, tauz_true, 0.002f);
-    ASSERT_NEAR(p4.L, 0.005f, 1e-6f);
-    ASSERT_TRUE(p4.residual < 0.05f);
-
-    // (c) the PID design is feasible on the RHP-zero plant at a sane yaw wc.
-    // (c) RHP 零点プラントでも妥当な yaw wc なら PID 設計可能。
-    sf::autotune::TuneResult tune{};
-    ASSERT_TRUE(sf::autotune::tunePid(p4, 15.0f, 60.0f, 10.0f, tune));
-    ASSERT_NEAR(tune.pm_deg, 60.0f, 3.0f);
-    ASSERT_TRUE(tune.gm_db > 6.0f || !tune.gm_valid);
+    // (b) WITH the coherence weight: the fit RECOVERS the true plant from the clean points.
+    // (b) 重みあり: clean な点から真のプラントを復元。
+    sf::autotune::Plant p_w{};
+    ASSERT_TRUE(sf::autotune::fitPlant(pts, 9, b_true, p_w));
+    ASSERT_NEAR(p_w.b / b_true, 1.0f, 0.10f);
+    ASSERT_NEAR(p_w.T, T_true, 0.008f);
+    ASSERT_NEAR(p_w.L, L_true, 0.004f);
+    // The weighted fit is strictly closer to the truth than the unweighted one.
+    // 重み付きは重みなしより真値に近い。
+    ASSERT_TRUE(fabsf(p_w.T - T_true) < fabsf(p_uw.T - T_true));
 }
 
 // =============================================================================
@@ -781,7 +777,7 @@ int main()
     run_eskf_reset_position();
     run_eskf_gyro_bias_deviation_clamp();
     run_autotune_fit_and_tune();
-    run_autotune_fit_yaw_rhp_zero();
+    run_autotune_fit_coherence_weighting();
 
     printf("\n[PID]\n");
     run_pid_proportional();
