@@ -7,12 +7,16 @@ ground: it depends on CG offset, thrust/airframe asymmetry, and the estimator's
 gravity reference — none observable at rest, and the floor is never perfectly
 level. This tool identifies it from a STABILIZE/ALT_HOLD hover FLIGHT log, so the
 pilot can iterate trim.roll/trim.pitch to zero out steady horizontal drift
-("bita-hover" — a rock-steady hover that does not creep).
+("bita-hover" — a rock-steady hover that does not creep). In a tight room you
+need NOT stay hands-off: pilot to keep off the walls and the estimate folds your
+average correction into the trim (it uses the MEAN HELD ATTITUDE, not just drift).
 
 機体がその場でホバリングする真の「水平」は地上で測れない: CG オフセット・推力/機体の
 非対称・推定器の重力基準に依存し、いずれも静止では観測できず、床も完全水平ではない。
 本ツールは STABILIZE/ALT_HOLD のホバリング「飛行」ログから同定し、trim.roll/trim.pitch
-を反復調整して定常水平ドリフト（ビタホバ）を消せるようにする。
+を反復調整して定常水平ドリフト（ビタホバ）を消せるようにする。狭い室内では手放しを保つ
+必要はない: 壁を避けるため操縦してよく、推定は機体が保った「平均姿勢」を使うのでパイロット
+の平均修正をトリムに織り込む（ドリフトだけに頼らない）。
 
 Subcommands:
     analyze - Compute the trim correction from a hover log
@@ -84,8 +88,8 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("Subcommands:")
     console.print("  analyze   Compute the trim correction from a hover log")
     console.print()
-    console.print("First pass (no trim applied yet):")
-    console.print("  sf trim analyze hover.jsonl")
+    console.print("Pilot a hover (you may correct to stay off the walls), then:")
+    console.print("  sf trim analyze            # uses the latest log in logs/")
     console.print()
     console.print("Iteration (pass the trim you already applied):")
     console.print("  sf trim analyze hover2.jsonl --current-roll 0.012 --current-pitch -0.004")
@@ -210,8 +214,10 @@ def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
     a_north = float(np.polyfit(t_f, vel_f[:, 0], 1)[0])
     a_east = float(np.polyfit(t_f, vel_f[:, 1], 1)[0])
 
-    # Circular mean yaw; mean roll/pitch for reporting only.
-    # ヨーの円周平均。roll/pitch 平均は報告用。
+    # Circular mean yaw; mean roll/pitch = the attitude the craft actually held
+    # (the pilot's hand corrections are baked in) — used by the trim estimate below.
+    # ヨーの円周平均。roll/pitch 平均 = 機体が実際に保った姿勢（パイロットの手修正が
+    # 織り込まれる）— 下のトリム推定で使う。
     eul = np.array([_q2eul(q) for q in quat_f])
     yaw_mean = math.atan2(float(np.mean(np.sin(eul[:, 2]))),
                           float(np.mean(np.cos(eul[:, 2]))))
@@ -227,28 +233,31 @@ def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
     ax_body = cy * a_north + sy * a_east     # forward (FRD X) / 前方
     ay_body = -sy * a_north + cy * a_east    # right   (FRD Y) / 右
 
-    # --- Trim deltas -------------------------------------------------------
-    # Derived from the STABILIZE steady-state CLOSED loop, NOT the POS_HOLD forward
-    # model (which would FLIP the sign: it maps the DESIRED accel that arrests drift,
-    # the opposite of the OBSERVED drift measured here).
-    #   STABILIZE steady state: the angle loop drives euler -> roll_sp, so the true
-    #   tilt phi = roll_sp - bias_est. With right-roll => right-accel (a_y=+g*phi,
-    #   pid L698) and roll_sp=0: a_y_obs = -g*bias_est. Bita-hover needs phi=0, i.e.
-    #   roll_trim = bias_est = -a_y_obs/g.
-    #   Pitch sign flips: nose-down => forward-accel (a_x=-g*theta) => pitch_trim=+a_x_obs/g.
-    # トリム差分は STABILIZE 定常「閉ループ」から導出（POS_HOLD 順モデルは符号反転：
-    # あちらはドリフトを戻す「指令」加速度で、ここの「観測」ドリフトと逆向き）。
-    #   roll: a_y=+g*phi  -> roll_trim = -a_y_obs/g
-    #   pitch: a_x=-g*theta -> pitch_trim = +a_x_obs/g
-    # NOTE: sign verified on the SIL wind bench (attitude_trim_test.scn): under a
-    # steady head wind, trim>0 cuts the downwind drift ~87% (15.4 m -> 1.9 m).
-    # 注: 符号は SIL 風ベンチ(attitude_trim_test.scn)で検証済み: 定常向かい風下で
-    # trim>0 が風下ドリフトを約87%削減(15.4 m -> 1.9 m)。
-    delta_roll = -ay_body / G
-    delta_pitch = ax_body / G
-
-    new_roll = current_roll + delta_roll
-    new_pitch = current_pitch + delta_pitch
+    # --- Equilibrium trim (works hands-off OR while actively piloting) ------
+    # The trim that makes the craft bita-hover is the ATTITUDE it must hold at
+    # stick-neutral, so:
+    #     trim = (mean attitude the craft held) - (residual drift accel)/g
+    # In a tight room you cannot stay hands-off; you nudge the sticks to keep off
+    # the walls. Those corrections are baked into the held attitude (euler), so
+    # averaging the attitude already captures the trim the pilot supplied by hand.
+    # Two limits, both correct:
+    #   - hands-off: euler ~= current trim, drift large -> trim = euler - drift/g
+    #     (reduces to the old accel-only formula: new = current + (-a_y/g))
+    #   - active piloting that holds position: euler ~= equilibrium, drift ~= 0
+    #     -> trim = mean(euler)  (the pilot's average correction IS the trim)
+    # Signs: roll a_y=+g*phi -> roll_trim = mean_roll - a_y/g; pitch a_x=-g*theta
+    # -> pitch_trim = mean_pitch + a_x/g. (Accel term verified on the SIL wind
+    # bench attitude_trim_test.scn: trim>0 cuts downwind drift ~87%.)
+    # 平衡トリム（手放しでも、操縦中でも成立）。ビタホバさせるトリム = スティック中立で
+    # 機体が保つべき姿勢。よって trim =（機体が保った平均姿勢）−（残留ドリフト加速度）/g。
+    # 狭い室内では手放しを続けられず壁を避けるため微修正する。その修正は保った姿勢(euler)
+    # に織り込まれるので、姿勢を平均すればパイロットが手で与えたトリム分を捉えられる。両極限:
+    #   手放し: euler≈現トリム・ドリフト大 → trim=euler-drift/g（旧加速度式 new=current-a_y/g に一致）
+    #   位置保持の操縦: euler≈平衡・ドリフト≈0 → trim=mean(euler)（平均修正がトリムそのもの）
+    new_roll = roll_mean - ay_body / G
+    new_pitch = pitch_mean + ax_body / G
+    delta_roll = new_roll - current_roll
+    delta_pitch = new_pitch - current_pitch
 
     # Drift summary for the report. / 報告用ドリフト要約。
     horiz_disp = pos_f[-1, :2] - pos_f[0, :2]
@@ -306,14 +315,17 @@ def _print_report(r: dict) -> None:
                   f"({w['duration_s']:.1f} s clean hover)")
     console.print(f"  Yaw:     {r['attitude_mean_deg']['yaw']:+.1f} deg (mean)")
     console.print("-" * 66)
-    console.print("  MEASURED DRIFT")
+    console.print("  MEASURED  (held attitude + residual drift)")
+    am = r["attitude_mean_deg"]
+    console.print(f"    Mean attitude held      : roll {am['roll']:+.2f}, "
+                  f"pitch {am['pitch']:+.2f}  deg  (your corrections are in here)")
     console.print(f"    Horizontal displacement : {d['horiz_displacement_m']:.2f} m  "
                   f"({d['horiz_displacement_ned_m'][0]:+.2f} N, "
                   f"{d['horiz_displacement_ned_m'][1]:+.2f} E)")
     squal_str = (f"   (flow SQUAL {d['flow_squal_mean']:.0f})"
                  if d["flow_squal_mean"] else "")
     console.print(f"    Velocity std            : {d['velocity_std_mps']:.3f} m/s{squal_str}")
-    console.print(f"    Mean accel (body)       : fwd {d['accel_body_mps2'][0]:+.3f}, "
+    console.print(f"    Residual accel (body)   : fwd {d['accel_body_mps2'][0]:+.3f}, "
                   f"right {d['accel_body_mps2'][1]:+.3f}  m/s^2")
     console.print("-" * 66)
     console.print("  TRIM CORRECTION")
@@ -327,13 +339,16 @@ def _print_report(r: dict) -> None:
     console.print(f"    param set attitude.pitch.trim {st['pitch']:.5f}")
     console.print("    param save")
     console.print("    then re-fly ~30 s and:")
-    console.print(f"    sf trim analyze <new.jsonl> "
-                  f"--current-roll {st['roll']:.5f} --current-pitch {st['pitch']:.5f}")
+    console.print(f"    sf trim analyze --current-roll {st['roll']:.5f} "
+                  f"--current-pitch {st['pitch']:.5f}")
     console.print("    repeat until |delta| < 0.001 rad.")
     console.print("-" * 66)
     console.print("  CAVEATS")
-    console.print("    - Assumes NO WIND (indoor). Wind adds to the measured drift; if")
-    console.print("      unsure, apply HALF the delta first and re-test.")
-    console.print("    - Sign derived from the STABILIZE loop; verified on the SIL wind bench.")
+    console.print("    - You MAY pilot to stay off the walls: the trim uses the average")
+    console.print("      attitude you held, so your corrections are captured. Just keep")
+    console.print("      TRYING to hold position - do not deliberately translate or turn.")
+    console.print("    - Assumes NO WIND (indoor). Wind adds to the drift; if unsure,")
+    console.print("      apply HALF the delta first and re-test.")
+    console.print("    - Sign verified on the SIL wind bench (attitude_trim_test.scn).")
     console.print("=" * 66)
     console.print()
