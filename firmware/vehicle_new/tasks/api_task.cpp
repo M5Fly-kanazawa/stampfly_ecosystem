@@ -410,10 +410,14 @@ void cmdQuery(const char* what)
 //
 // Safety gates / 安全ゲート:
 //  - FLYING hover only; each frequency point is a bounded, clamped excitation.
-//  - The result is applied ONLY if: the fit residual is small, the verified
-//    margins meet the spec, every gain passes the param-table range check, and
-//    Kp stays within [1/4, 4]x the flying gain (no wild jumps). Otherwise the
-//    OLD gains remain untouched and the reply says why.
+//  - The result is applied ONLY if: enough effective-coherent points, the fit
+//    residual is small, the plant lands in PHYSICAL bounds (b vs the spec inertia;
+//    motor lag — yaw allows T→0), and the verified margins meet the spec (GM floor,
+//    PM) + the param-table range check. Otherwise the OLD gains remain untouched and
+//    the reply says why. (A Kp-vs-CURRENT-gain "no wild jumps" gate was REMOVED — its
+//    reference was circular for an untuned axis; kp≈wc/b is already physically bounded
+//    by the b-range gate. All gates are axis-uniform except yaw's T→0 allowance.)
+//    適用条件は物理/絶対基準のみ（残差・b 物理境界・余裕仕様・param範囲）。現ゲイン比ゲートは削除。
 //  - Nothing is written to NVS — land and `param save` after a check flight.
 // -----------------------------------------------------------------------------
 // autotuneCue — publish a buzzer tone (audible over WiFi-only/solo use; the pilot
@@ -663,19 +667,20 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
 
-    // Sanity vs the flying gain: no wild jumps. / 飛行中ゲイン比の暴れ防止。
+    // (REMOVED) the "no wild jumps vs the flying gain" kp-range gate [tune.kp must lie in
+    // 0.25..4× the CURRENT gain]. Its reference was the current flying gain, which has no
+    // claim to validity for an UNTUNED axis — it blocked the legitimate ~5× yaw kp
+    // reduction exactly when autotuning mattered most (a circular reference: it assumed
+    // the gain the autotune is trying to determine). The designed kp ≈ wc/b is ALREADY
+    // physically bounded by the b-range gate above (b ∈ [0.25,4]× 1/Ispec ⇒ kp ∈
+    // [0.25,4]× wc/Ispec), and the GM-floor + residual + coherence gates validate the
+    // design — those are the real, physically-grounded safety. See the gate audit.
+    // （削除）「現飛行ゲイン比4倍以内」ゲート: 基準が現ゲインで循環・未調整軸(yaw)で正当な補正を阻害。
+    // 設計 kp≈wc/b は上の b 物理境界＋GM下限＋残差で既に物理的に束縛済み。
     char key_kp[32], key_ti[32], key_td[32];
     std::snprintf(key_kp, sizeof(key_kp), "rate.%s.kp", kAxisName[axis]);
     std::snprintf(key_ti, sizeof(key_ti), "rate.%s.ti", kAxisName[axis]);
     std::snprintf(key_td, sizeof(key_td), "rate.%s.td", kAxisName[axis]);
-    float kp_now = 0;
-    sf::params::get_float(key_kp, kp_now);
-    if (kp_now > 0 && (tune.kp < 0.25f * kp_now || tune.kp > 4.0f * kp_now)) {
-        ESP_LOGW(TAG, "Autotune kp %.3e outside [0.25,4]x current %.3e",
-                 static_cast<double>(tune.kp), static_cast<double>(kp_now));
-        reply("error gains out of safe range - gains unchanged");
-        return;
-    }
 
     // Apply LIVE (set_float validates the table ranges and fires ReloadParams).
     // ライブ適用（set_float がテーブル範囲を検証し ReloadParams を発火）。
