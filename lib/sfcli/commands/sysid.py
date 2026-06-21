@@ -1172,6 +1172,9 @@ def _register_rate_fit(subparsers):
     parser.add_argument("-o", "--output", help="write the fit result JSON here")
     parser.add_argument("--selftest", action="store_true",
                         help="run the synthetic-plant pipeline self-test and exit")
+    parser.add_argument("--plot", action="store_true",
+                        help="save a Bode (measured vs fit) + coherence figure next to the CSV")
+    parser.add_argument("--plot-output", help="path for the Bode+coherence PNG (implies --plot)")
     parser.set_defaults(func=run_rate_fit)
 
 
@@ -1184,8 +1187,13 @@ def run_rate_fit(args) -> int:
         return 1
     gains = {k: v for k, v in
              (("kp", args.kp), ("ti", args.ti), ("td", args.td)) if v is not None}
+    plot_path = None
+    if args.plot_output:
+        plot_path = args.plot_output
+    elif args.plot:
+        plot_path = str(Path(args.input).with_suffix("")) + f"_bode_{args.axis}.png"
     result = rs.fit_from_csv(args.input, args.axis, gains=gains,
-                             f_lo=args.f_lo, f_hi=args.f_hi)
+                             f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path)
     console.info(f"axis {result['axis']}: "
                  f"b={result['b']:.0f} 1/(kg m^2)  (J_eff={result['inertia_eff']:.3e})")
     console.info(f"T={result['T'] * 1e3:.1f} ms (motor lag)   "
@@ -1194,6 +1202,8 @@ def run_rate_fit(args) -> int:
     if result["coherence_mean"] < 0.6:
         console.warn("coherence < 0.6 — weak excitation or noisy data; "
                      "re-fly with larger amplitude / longer chirp")
+    if result.get("plot_path"):
+        console.success(f"Bode + coherence figure: {result['plot_path']}")
     if args.output:
         import json as _json
         Path(args.output).write_text(_json.dumps(result, indent=2))

@@ -90,6 +90,16 @@ void PidController::loadParams()
     params::get_float("altitude.climb_rate",   max_climb_rate_);
     params::get_float("altitude.descent_rate", max_descent_rate_);
 
+    // Hover thrust correction: hover_thrust = mg × corr. Tunable so a motor/prop
+    // change (e.g. fresh, stronger motors) can be matched WITHOUT a rebuild — drop
+    // corr when the craft over-climbs on auto-takeoff. mg = 0.037 kg · 9.80665.
+    // ホバー推力補正: hover_thrust = mg × corr。モータ/プロペラ交換（新品=強い等）に
+    // 再ビルドなしで合わせられる — 自動離陸で過上昇するなら corr を下げる。
+    constexpr float kMassG = 0.037f * 9.80665f;   // mg [N]
+    float hover_corr = 1.12f;
+    params::get_float("hover.thrust_corr", hover_corr);
+    hover_thrust_ = kMassG * hover_corr;
+
     // Position control / 位置制御
     params::get_float("position.pos.kp", pos_x_.kp);
     params::get_float("position.pos.ti", pos_x_.ti);
@@ -549,6 +559,10 @@ ControlOutput PidController::compute(
                     sysid_pending_.w  = 2.0f * 3.14159265f * excite_freq_;
                     sysid_pending_.ur = iq_ur_; sysid_pending_.ui = iq_ui_;
                     sysid_pending_.yr = iq_yr_; sysid_pending_.yi = iq_yi_;
+                    // off-tone gyro power = the disturbance/noise floor at this frequency
+                    // オフ音ジャイロ電力 = この周波数の外乱/雑音床
+                    sysid_pending_.off_power = iq_yr_off_ * iq_yr_off_
+                                             + iq_yi_off_ * iq_yi_off_;
                     sysid_pending_.samples = iq_n_;
                     sysid_pending_.seq = ++sysid_seq_;
                     sysid_pending_.timestamp = state.timestamp;
@@ -586,12 +600,38 @@ ControlOutput PidController::compute(
     // ジャイロ y を励振位相と相関する。
     if (excite_active_ && excite_waveform_ == 2 && excite_t_ > excite_settle_s_) {
         const float u_ax = output.torque[excite_axis_];
-        const float y_ax = (excite_axis_ == 0) ? gyro_rate.x
-                         : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
+        float y_ax = (excite_axis_ == 0) ? gyro_rate.x
+                   : (excite_axis_ == 1) ? gyro_rate.y : gyro_rate.z;
+        // Detrend: subtract a slow running mean of the rate so the near-DC disturbance
+        // (CW/CCW trim) does not leak into the low-frequency lock-in. The LPF cutoff
+        // (~0.5 Hz) is below the lowest tone (1.5 Hz), so only drift is removed. SEED the
+        // mean to the current rate on the FIRST accumulated sample of each point (iq_n_==0)
+        // so it starts converged — otherwise y_dc_ carries a STALE DC from the previous
+        // tone/axis/run and biases this point's low-freq lock-in for ~0.3 s.
+        // 除トレンド: 近DC外乱の低周波漏れを防ぐ。各点の最初の蓄積サンプルで現在のDCに再シードし収束済で
+        // 開始（前の音/軸/実行の古いDCの持ち越しで低周波が偏るのを防ぐ）。
+        constexpr float kDetrendAlpha = 0.008f;   // ~0.5 Hz cutoff at 400 Hz
+        if (iq_n_ == 0) y_dc_ = y_ax;             // re-seed per point (no cross-tone/axis carry)
+        y_dc_ += kDetrendAlpha * (y_ax - y_dc_);
+        y_ax -= y_dc_;
         const float c = cosf(excite_phase_);
         const float sn = sinf(excite_phase_);
         iq_ur_ += u_ax * c;  iq_ui_ -= u_ax * sn;
         iq_yr_ += y_ax * c;  iq_yi_ -= y_ax * sn;
+        // Off-tone lock-in at a nearby UNexcited frequency = the disturbance/noise FLOOR at
+        // this frequency. coh = on/(on+off) (computed by the autotune) then down-weights
+        // disturbance-dominated tones — the onboard SNR gate. The off-tone is f + max(27%,
+        // 2 Hz) so it stays WELL-separated even at the lowest tones (2 Hz → 4 Hz, not 2.5);
+        // otherwise on-tone energy leaks into off_power and wrongly DEPRESSES coh on clean
+        // low-freq points (which would needlessly reject good roll/pitch data). Top tone
+        // 35→44.5 Hz stays well below the 200 Hz Nyquist (no aliasing).
+        // オフ音は f+max(27%,2Hz)で最低音でも十分離す（2Hz→4Hz）。漏れで clean 点の coh を誤って
+        // 下げ、良好な roll/pitch を不要に棄却するのを防ぐ。最高音 44.5Hz は Nyquist 200Hz 未満。
+        const float f_off = excite_freq_ + fmaxf(0.27f * excite_freq_, 2.0f);
+        excite_phase_off_ += 2.0f * 3.14159265f * f_off * dt;
+        const float co = cosf(excite_phase_off_);
+        const float sno = sinf(excite_phase_off_);
+        iq_yr_off_ += y_ax * co;  iq_yi_off_ -= y_ax * sno;
         iq_n_++;
     }
 
@@ -785,6 +825,12 @@ void PidController::startExcitation(const SysidCommand& cmd)
     excite_settle_s_ = (excite_waveform_ == 2) ? (2.0f / excite_freq_) : 0.0f;
     iq_ur_ = iq_ui_ = iq_yr_ = iq_yi_ = 0.0f;
     iq_n_  = 0;
+    // Reset the off-tone accumulator/phase per point. (y_dc_ for the detrend is re-seeded
+    // to the current rate on the first accumulated sample — see the I/Q block — so it
+    // never carries a stale DC across tones/axes/runs.)
+    // オフ音蓄積/位相は点ごとにリセット。（除トレンドの y_dc_ は最初の蓄積サンプルで現DCに再シード。）
+    excite_phase_off_ = 0.0f;
+    iq_yr_off_ = iq_yi_off_ = 0.0f;
     excite_amp_ = cmd.amplitude;
     if (excite_amp_ < 0.0f)           excite_amp_ = 0.0f;
     if (excite_amp_ > kExciteAmpMax)  excite_amp_ = kExciteAmpMax;

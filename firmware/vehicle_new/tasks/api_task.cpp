@@ -410,18 +410,42 @@ void cmdQuery(const char* what)
 //
 // Safety gates / 安全ゲート:
 //  - FLYING hover only; each frequency point is a bounded, clamped excitation.
-//  - The result is applied ONLY if: the fit residual is small, the verified
-//    margins meet the spec, every gain passes the param-table range check, and
-//    Kp stays within [1/4, 4]x the flying gain (no wild jumps). Otherwise the
-//    OLD gains remain untouched and the reply says why.
+//  - The result is applied ONLY if: enough effective-coherent points, the fit
+//    residual is small, the plant lands in PHYSICAL bounds (b vs the spec inertia;
+//    motor lag — yaw allows T→0), and the verified margins meet the spec (GM floor,
+//    PM) + the param-table range check. Otherwise the OLD gains remain untouched and
+//    the reply says why. (A Kp-vs-CURRENT-gain "no wild jumps" gate was REMOVED — its
+//    reference was circular for an untuned axis; kp≈wc/b is already physically bounded
+//    by the b-range gate. All gates are axis-uniform except yaw's T→0 allowance.)
+//    適用条件は物理/絶対基準のみ（残差・b 物理境界・余裕仕様・param範囲）。現ゲイン比ゲートは削除。
 //  - Nothing is written to NVS — land and `param save` after a check flight.
 // -----------------------------------------------------------------------------
+// autotuneCue — publish a buzzer tone (audible over WiFi-only/solo use; the pilot
+// can't watch the serial log). Played by NotifyTask, so it never blocks the sweep.
+// autotuneCue — ブザー音を発行（無線/ソロ運用で耳で分かる）。NotifyTask が鳴らすので掃引を阻害しない。
+void autotuneCue(sf::NotifyEvent ev)
+{
+    sf::notify_command.publish({static_cast<uint8_t>(ev),
+                                static_cast<uint32_t>(esp_timer_get_time())});
+}
+
 void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 {
     if (currentState() != sf::FlightState::FLYING) {
         reply("error not flying");
         return;
     }
+    // Audible start cue + a scope guard that fires the FAIL tone on ANY early return;
+    // the success path sets tune_ok and plays the OK tone explicitly. So the pilot
+    // hears "starting", then "ok" or "fail" without reading any log.
+    // 開始音＋スコープガード: どの早期 return でも FAIL 音を鳴らす。成功時は tune_ok を立て OK 音を
+    // 明示再生。ログを読まずに「開始→成功/失敗」が耳で分かる。
+    autotuneCue(sf::NotifyEvent::AutotuneStart);
+    bool tune_ok = false;
+    struct EndCue {
+        bool& ok;
+        ~EndCue() { if (!ok) autotuneCue(sf::NotifyEvent::AutotuneFail); }
+    } end_cue{tune_ok};
     static const char* kAxisName[3] = {"roll", "pitch", "yaw"};
     // X-quad spec inertia Ixx/Iyy/Izz [kg·m²] — used ONLY as the Nelder-Mead seed
     // (1/J) for fitPlant; the final plant is fit to measured data, so this is a
@@ -437,6 +461,9 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
                                      14.0f, 20.0f, 27.0f, 35.0f};
     constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);
     constexpr float kAmpRadps = 0.35f;   // ~20 dps per point / 点あたり約20dps
+    // A lock-in response below this amplitude [rad/s] is a dead/untrusted tone (coh=0).
+    // この振幅未満のロックイン応答は死んだ音とみなす（coh=0）。約0.57 dps。
+    constexpr float kMinOnAmp = 0.01f;
 
     sf::autotune::FreqPoint points[kNumFreqs];
     int collected = 0;
@@ -477,44 +504,187 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         points[collected].ui = res.ui;
         points[collected].yr = res.yr;
         points[collected].yi = res.yi;
+        // Coherence/SNR proxy: on-tone gyro power / (on-tone + off-tone noise floor).
+        // coh→1 = clean, coh→0 = disturbance-dominated. The coherence-weighted fit uses
+        // this per-point weight to ignore tones a disturbance corrupts (e.g. low-freq yaw).
+        // A DEAD tone (excitation never reached the loop / saturation / disarm-edge) is the
+        // LEAST trustworthy case ⇒ coh=0 (NOT 1, else it would inflate the fit's sufficiency
+        // guard). Floor on the absolute lock-in AMPLITUDE (N-independent), clamp, NaN→0.
+        // コヒーレンス/SNR代理: オン音電力/(オン音+オフ音雑音床)。死んだ音は最も信用できない→coh=0。
+        const float on_pow = res.yr * res.yr + res.yi * res.yi;
+        const float on_amp = (res.samples > 0)
+                           ? 2.0f * sqrtf(on_pow) / static_cast<float>(res.samples) : 0.0f;
+        float coh = (on_pow + res.off_power > 1e-20f)
+                  ? on_pow / (on_pow + res.off_power) : 0.0f;
+        if (on_amp < kMinOnAmp) coh = 0.0f;   // weak/dead tone ⇒ untrusted regardless of ratio
+        if (!(coh >= 0.0f))     coh = 0.0f;   // NaN ⇒ 0
+        if (coh > 1.0f)         coh = 1.0f;
+        points[collected].coh = coh;
         collected++;
+        // Diagnostic: log the RAW measured open-loop point G(jw)=Y/U (|G| in dB + phase).
+        // The fitted model can hide a structural mismatch; the raw Bode is the ground
+        // truth. Visible over wired `sf monitor`. |G|=|Y|/|U|, arg G = argY − argU.
+        // 診断: 実測の開ループ点 G(jw)=Y/U（|G| dB＋位相）をログ。フィットは構造不一致を隠すが
+        // 生 Bode は真値。有線 sf monitor で見える。
+        {
+            const float um = sqrtf(res.ur * res.ur + res.ui * res.ui);
+            const float ym = sqrtf(res.yr * res.yr + res.yi * res.yi);
+            const float gmag = (um > 1e-9f) ? ym / um : 0.0f;
+            float gph = atan2f(res.yi, res.yr) - atan2f(res.ui, res.ur);
+            while (gph >  3.14159265f) gph -= 6.2831853f;
+            while (gph < -3.14159265f) gph += 6.2831853f;
+            ESP_LOGI(TAG, "  bode %s f=%5.1fHz |G|=%9.1f (%+6.1fdB) ph=%+6.1fdeg coh=%.2f",
+                     kAxisName[axis], static_cast<double>(res.w / 6.2831853f),
+                     static_cast<double>(gmag),
+                     static_cast<double>(20.0f * log10f(gmag + 1e-12f)),
+                     static_cast<double>(gph * 57.29578f),
+                     static_cast<double>(coh));
+        }
+        // NOTE: do NOT re-cue here. An earlier version re-published AutotuneStart after
+        // every point to keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING
+        // warble in NotifyTask, and the high-freq points (~0.8 s) out-paced it, FILLING
+        // the depth-8 notify_command queue (which drops on overflow) — so the final
+        // AutotuneOk/Fail cue was silently dropped and yaw showed white-then-nothing.
+        // The white LED already persists for the whole sweep via its 30 s safety
+        // timeout, so the end cue (green/red) just needs the queue clear here.
+        // ここで再合図しない。旧版は各点で AutotuneStart を再発行したが、各合図は NotifyTask で
+        // 約0.9秒のブロッキング・ワーブルを鳴らし、高周波点(約0.8秒)が追い越して深さ8の
+        // notify_command キューを満杯化(満杯時ドロップ)→ 最後の Ok/Fail 合図が落ち、yaw が
+        // 「白→無」になっていた。白LEDは開始時の30秒タイマで掃引中ずっと維持されるため、
+        // 終了の緑/赤はキューを空けておけば確実に出る。
     }
 
     // Fit + tune (pure math, sf_autotune — host-tested).
     // フィット＋設計（純数学, sf_autotune — ホストテスト済み）。
+    // Uniform 3-param fit for ALL axes. The fit is coherence-WEIGHTED (each point carries
+    // a coh weight set in the sweep loop above), so a structured disturbance on one axis
+    // (e.g. yaw) is down-weighted rather than corrupting the fit — the onboard mirror of
+    // the offline coherence-weighted ETFE. (A yaw reaction-torque RHP zero was tried and
+    // refuted on hardware: tau_z≈0; see yaw_axis_model.md.)
+    // 全軸共通の3パラ同定（コヒーレンス重み付き）。構造的外乱は軽視され、フィットを汚さない。
     sf::autotune::Plant plant{};
-    if (!sf::autotune::fitPlant(points, collected,
-                                1.0f / kSpecInertia[axis], plant) ||
-        plant.residual > 0.3f) {
-        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f",
-                 static_cast<double>(plant.residual));
-        reply("error fit failed (weak excitation?) - gains unchanged");
-        return;
-    }
+    const bool fit_ok =
+        sf::autotune::fitPlant(points, collected, 1.0f / kSpecInertia[axis], plant);
     ESP_LOGI(TAG, "Autotune fit: b=%.0f T=%.1fms L=%.2fms residual=%.3f",
              static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
-             static_cast<double>(plant.L * 1e3),
-             static_cast<double>(plant.residual));
+             static_cast<double>(plant.L * 1e3), static_cast<double>(plant.residual));
 
-    sf::autotune::TuneResult tune{};
-    if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune) ||
-        fabsf(tune.pm_deg - pm_deg) > 5.0f) {
-        reply("error tune infeasible (lower wc/pm) - gains unchanged");
+    // Persist the identified plant ALWAYS (even a poor/rejected fit) so the result is
+    // readable over WiFi via `param get` for diagnosis. The fit-reject path used to
+    // RETURN before saving, leaving stale params — so a rejected yaw looked unchanged.
+    // Only the DESIGN below is gated on the residual.
+    // 同定プラントを常に保存（粗い/棄却フィットも）— 棄却経路が保存前に return して古い値が
+    // 残り、yaw が変化なしに見えていた。設計のみ残差でゲートする。
+    if (plant.b > 0.0f) {
+        char pk[40];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.b",     kAxisName[axis]); sf::params::set_float(pk, plant.b);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.tau",   kAxisName[axis]); sf::params::set_float(pk, plant.T);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
+    }
+    // Reject-reason code, saved at EVERY exit so `param get autotune.<axis>.reject` shows
+    // WHY a hands-free (scheduled) tune was rejected — there is no serial log in flight.
+    // 0=applied, 1=insufficient coherent data, 2=bad/NaN fit, 3=residual>0.3, 4=out of
+    // physical bounds, 5=design infeasible (wc too high), 6=phase margin below target,
+    // 7=gain margin below floor.
+    // 棄却理由コード（飛行中はシリアル無し→`param get autotune.<axis>.reject` で確認）。
+    char rk_rej[40];
+    std::snprintf(rk_rej, sizeof(rk_rej), "autotune.%s.reject", kAxisName[axis]);
+
+    // Defense-in-depth before the hands-free LIVE apply: the residual is coherence-WEIGHTED
+    // and thus spoofable by a degenerate coh distribution, so gate ALSO on a residual-
+    // INDEPENDENT physical-bounds check — a noise fit usually lands outside [0.25,4]×b_seed
+    // or a sane motor lag. (fitPlant already rejects too-few-effective-points via fit_ok.)
+    // A solo pilot cannot abort, so a bad gain must never reach set_float.
+    // ハンズフリー適用前の多重防御: 残差はコヒーレンス重みゆえ偽装可 → 残差非依存の物理境界でも防御。
+    //
+    // YAW EXCEPTION on the motor-lag bound: roll/pitch (thrust differential) show a real
+    // ~31 ms motor pole, so T→0 there means a bad fit → require T≥2 ms. YAW does NOT: its
+    // torque carries a reaction term (I_r·dω/dt) whose minimum-phase (LHP) zero
+    // near-cancels the motor pole, leaving an integrator+delay with NO identifiable pole in
+    // band (flight data: T→0; the individual zero/pole sit below the 2 Hz lowest tone and
+    // are unidentifiable — and irrelevant, the wc≈2.9 Hz crossover is above them). So for
+    // yaw, T→0 is the VALID design model, not a degenerate fit; allow T from 0.
+    // ヨー例外: roll/pitch は実モータ極(~31ms)があり T→0 は不良フィット → T≥2ms 要求。ヨーは反トルク
+    // の最小位相零点がモータ極を相殺し、帯域内に同定可能な極が無い積分器+遅れ(T→0が正しい設計モデル)。
+    const float b_lo = 0.25f / kSpecInertia[axis];
+    const float b_hi = 4.0f  / kSpecInertia[axis];
+    const float t_lo = (axis == 2) ? 0.0f : 0.002f;   // yaw: integrator+delay, T→0 valid
+    const bool phys_ok = plant.b >= b_lo && plant.b <= b_hi
+                       && plant.T >= t_lo && plant.T <= 0.080f;
+    if (!fit_ok || !(plant.residual <= 0.3f) || !phys_ok) {   // !(<=) also rejects NaN
+        const int rej = !fit_ok ? plant.fit_reject                  // 1 or 2
+                      : !(plant.residual <= 0.3f) ? 3 : 4;
+        sf::params::set_float(rk_rej, static_cast<float>(rej));
+        ESP_LOGW(TAG, "Autotune fit rejected (code %d): residual=%.3f coh_sum=%.1f b=%.0f T=%.1fms phys=%d",
+                 rej, static_cast<double>(plant.residual), static_cast<double>(plant.coh_sum),
+                 static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
+                 static_cast<int>(phys_ok));
+        reply("error fit rejected - gains unchanged (read autotune.* params)");
         return;
     }
+
+
+    // Save the margins of the CURRENT (active) gains scored against the freshly
+    // identified plant — so the stored wc/pm/gm ALWAYS reflect what is ACTUALLY flying.
+    // If the design below is APPLIED, these are overwritten with the new gains' margins;
+    // if it is REJECTED, the current gains' margins remain (answers "how safe are the
+    // gains I am still flying, really?" — exactly what a rejected axis needs).
+    // 現（実効）ゲインの余裕を新同定プラントで採点して保存 — 保存 wc/pm/gm は常に「実際に
+    // 飛んでいる」ゲインを反映。下の設計が適用されれば新ゲインの余裕で上書き、棄却されれば
+    // 据置ゲインの余裕が残る（棄却軸が知りたい「今飛んでいるゲインの本当の安全余裕」）。
+    {
+        float cur_kp = 0, cur_ti = 0, cur_td = 0;
+        char rk[32];
+        std::snprintf(rk, sizeof(rk), "rate.%s.kp", kAxisName[axis]); sf::params::get_float(rk, cur_kp);
+        std::snprintf(rk, sizeof(rk), "rate.%s.ti", kAxisName[axis]); sf::params::get_float(rk, cur_ti);
+        std::snprintf(rk, sizeof(rk), "rate.%s.td", kAxisName[axis]); sf::params::get_float(rk, cur_td);
+        sf::autotune::TuneResult cur{};
+        sf::autotune::evalMargins(plant, cur_kp, cur_ti, cur_td, cur);
+        char pk[32];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, cur.wc);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, cur.pm_deg);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]); sf::params::set_float(pk, cur.gm_valid ? cur.gm_db : 99.0f);
+    }
+
+    sf::autotune::TuneResult tune{};
+    if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune)) {
+        // Required controller lead exceeds the PID's maximum ⇒ wc is too high for this plant.
+        sf::params::set_float(rk_rej, 5.0f);
+        reply("error tune infeasible (lower wc) - gains unchanged");
+        return;
+    }
+    // Accept the achieved PM if it MEETS-OR-EXCEEDS the target (a higher PM is more damped =
+    // SAFER). Reject only an UNDER-margin design (PM below target). This was an equality gate
+    // |PM-target|>5, which wrongly rejected an over-damped design — yaw at wc=18 lands at
+    // PM~80 (PI-only already exceeds 60, so td clips to 0), which is safe, not a failure.
+    // 達成PMが目標以上なら採用（高PM=より減衰=安全）。目標未満だけ棄却。等値ゲートは過減衰設計を
+    // 誤棄却していた（yaw wc=18 は PM~80 で安全）。
+    if (tune.pm_deg < pm_deg - 5.0f) {
+        sf::params::set_float(rk_rej, 6.0f);
+        reply("error phase margin below target - gains unchanged");
+        return;
+    }
+
+    // (Design margins are saved as the CURRENT gains' margins above, and overwritten
+    // with these NEW gains' margins ONLY if the design passes the gates and is applied
+    // below — so a rejected axis keeps the margins of the gains it is still flying.)
+    // （設計余裕は上で現ゲインの余裕として保存済み。下のゲートを通過し適用された場合のみ
+    // この新ゲインの余裕で上書き — 棄却軸は据置ゲインの余裕を保持する。）
 
     // Gain-margin floor: a design that meets the phase margin can still be too
     // close to gain-side instability (thin GM), and model error / nonlinear
     // torque effectiveness then drives oscillation. Reject thin-GM designs
     // before LIVE apply (H-1). gm_valid=false means no −180° crossing in the
     // sweep → GM effectively infinite → SAFE, so do not reject that (L-15).
-    // yaw historically runs the thinnest margin, so it gets a higher floor.
-    // ゲイン余裕の下限: PM を満たしてもゲイン側不安定に近い（GM が薄い）設計はあり、
-    // モデル誤差やトルク効きの非線形で発振しうる。薄GM設計はライブ適用前に弾く(H-1)。
-    // gm_valid=false は掃引中に −180° 交差なし→GM実質無限大→安全 ゆえ弾かない(L-15)。
-    // ヨーは歴来もっとも余裕が薄いので下限を厳しくする。
-    static const float kMinGmDb[3] = {6.0f, 6.0f, 8.0f};   // roll, pitch, yaw [dB]
+    // ALL axes use 6 dB. (Yaw once used 8 dB to hedge a hypothesised reaction-torque RHP
+    // zero — refuted on hardware, tau_z≈0; the yaw plant is the same uniform 3-param model
+    // and its GM is trustworthy, so it needs no special floor.)
+    // 全軸 6dB。（yaw は以前、反トルク RHP 零点を見込んで 8dB にしていたが実機で反証(tau_z≈0)。
+    // yaw も同じ3パラモデルで GM は信頼でき、特別な下限は不要。）
+    static const float kMinGmDb[3] = {6.0f, 6.0f, 6.0f};   // roll, pitch, yaw [dB]
     if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
+        sf::params::set_float(rk_rej, 7.0f);
         ESP_LOGW(TAG, "Autotune %s gain margin %.1f dB < floor %.1f dB",
                  kAxisName[axis], static_cast<double>(tune.gm_db),
                  static_cast<double>(kMinGmDb[axis]));
@@ -522,27 +692,40 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
 
-    // Sanity vs the flying gain: no wild jumps. / 飛行中ゲイン比の暴れ防止。
+    // (REMOVED) the "no wild jumps vs the flying gain" kp-range gate [tune.kp must lie in
+    // 0.25..4× the CURRENT gain]. Its reference was the current flying gain, which has no
+    // claim to validity for an UNTUNED axis — it blocked the legitimate ~5× yaw kp
+    // reduction exactly when autotuning mattered most (a circular reference: it assumed
+    // the gain the autotune is trying to determine). The designed kp ≈ wc/b is ALREADY
+    // physically bounded by the b-range gate above (b ∈ [0.25,4]× 1/Ispec ⇒ kp ∈
+    // [0.25,4]× wc/Ispec), and the GM-floor + residual + coherence gates validate the
+    // design — those are the real, physically-grounded safety. See the gate audit.
+    // （削除）「現飛行ゲイン比4倍以内」ゲート: 基準が現ゲインで循環・未調整軸(yaw)で正当な補正を阻害。
+    // 設計 kp≈wc/b は上の b 物理境界＋GM下限＋残差で既に物理的に束縛済み。
     char key_kp[32], key_ti[32], key_td[32];
     std::snprintf(key_kp, sizeof(key_kp), "rate.%s.kp", kAxisName[axis]);
     std::snprintf(key_ti, sizeof(key_ti), "rate.%s.ti", kAxisName[axis]);
     std::snprintf(key_td, sizeof(key_td), "rate.%s.td", kAxisName[axis]);
-    float kp_now = 0;
-    sf::params::get_float(key_kp, kp_now);
-    if (kp_now > 0 && (tune.kp < 0.25f * kp_now || tune.kp > 4.0f * kp_now)) {
-        ESP_LOGW(TAG, "Autotune kp %.3e outside [0.25,4]x current %.3e",
-                 static_cast<double>(tune.kp), static_cast<double>(kp_now));
-        reply("error gains out of safe range - gains unchanged");
-        return;
-    }
 
     // Apply LIVE (set_float validates the table ranges and fires ReloadParams).
     // ライブ適用（set_float がテーブル範囲を検証し ReloadParams を発火）。
     if (!sf::params::set_float(key_kp, tune.kp) ||
         !sf::params::set_float(key_ti, tune.ti) ||
         !sf::params::set_float(key_td, tune.td)) {
+        sf::params::set_float(rk_rej, 8.0f);   // param-table range rejected the gain
         reply("error param range rejected - check param table");
         return;
+    }
+    sf::params::set_float(rk_rej, 0.0f);   // 0 = APPLIED / 適用成功
+    // Applied: the NEW gains are now the active gains, so overwrite the saved margins
+    // (which held the OLD gains' margins) with this design's margins.
+    // 適用済み: 新ゲインが実効ゲインになったので、保存余裕（旧ゲイン分）を本設計の余裕で上書き。
+    {
+        char pk[32];
+        std::snprintf(pk, sizeof(pk), "autotune.%s.wc", kAxisName[axis]); sf::params::set_float(pk, tune.wc);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.pm", kAxisName[axis]); sf::params::set_float(pk, tune.pm_deg);
+        std::snprintf(pk, sizeof(pk), "autotune.%s.gm", kAxisName[axis]);
+        sf::params::set_float(pk, tune.gm_valid ? tune.gm_db : 99.0f);
     }
     // Show "inf" for an undetected (effectively infinite) GM rather than the
     // misleading 0.0 the raw field carries when gm_valid is false (L-15).
@@ -565,6 +748,8 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
                   static_cast<double>(tune.kp), static_cast<double>(tune.ti),
                   static_cast<double>(tune.td), static_cast<double>(tune.wc),
                   static_cast<double>(tune.pm_deg), gm_str);
+    tune_ok = true;                                 // suppress the guard's FAIL tone
+    autotuneCue(sf::NotifyEvent::AutotuneOk);       // success chime
     reply(buf);
 }
 
@@ -631,7 +816,12 @@ void processLine(char* line)
         else if (std::strcmp(verb, "pitch") == 0) axis = 1;
         else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
         else { reply("error bad axis"); return; }
-        const float wc = (a > 1.0f && a < 100.0f) ? a : 25.0f;
+        // Default wc: 25 rad/s for roll/pitch; 18 for yaw. Yaw's empirically low control
+        // authority + low-SNR identification make a conservative crossover the safe choice
+        // (NOT a reaction-zero limit — that was refuted). An explicit wc arg overrides.
+        // 既定 wc: roll/pitch=25、yaw=18（yaw は操縦権限が低く同定SNRも低いため保守的に。零点制限ではない）。
+        const float wc_def = (axis == 2) ? 18.0f : 25.0f;
+        const float wc = (a > 1.0f && a < 100.0f) ? a : wc_def;
         const float pm = (b > 20.0f && b < 80.0f) ? b : 60.0f;
         cmdAutotune(axis, wc, pm);
         return;
@@ -756,6 +946,39 @@ void ApiTask(void* /*pvParameters*/)
         }
         if (!g_target_valid) {
             guidance_seen_active = false;
+        }
+
+        // 0b. Scheduled autotune (solo pilot, hands-free): a single operator cannot
+        // type `autotune` mid-flight. They set autotune.sched.axis/.delay on the
+        // GROUND; here, once the craft has been FLYING for sched_delay seconds, fire
+        // the SAME rate-loop autotune automatically. One-shot per flight; a beep cues
+        // the pilot to hold a steady hover. The sweep blocks this task (~15-20 s) — the
+        // control loop (control_task) keeps flying throughout; the operator just holds.
+        // 0b. スケジュール autotune（ソロ操縦・ハンズフリー）: 地上で軸/遅延を設定し、FLYING
+        // 到達から sched_delay 秒後に同じ autotune を自動起動。1飛行1回・ブザーで合図。掃引中は
+        // 本タスクをブロックするが制御は control_task で継続、操縦者は定位置を保持するだけ。
+        {
+            static int64_t flying_since_us = 0;
+            static bool    sched_fired     = false;
+            if (currentState() != sf::FlightState::FLYING) {
+                flying_since_us = 0;
+                sched_fired     = false;
+            } else {
+                const int64_t now_us = esp_timer_get_time();
+                if (flying_since_us == 0) flying_since_us = now_us;
+                if (!sched_fired) {
+                    int32_t ax    = -1;    sf::params::get_int("autotune.sched.axis", ax);
+                    float   delay = 20.0f; sf::params::get_float("autotune.sched.delay", delay);
+                    if (ax >= 0 && ax <= 2 &&
+                        (now_us - flying_since_us) >= static_cast<int64_t>(delay * 1.0e6f)) {
+                        sched_fired = true;   // one-shot BEFORE the blocking sweep
+                        ESP_LOGI(TAG, "Scheduled autotune firing: axis=%ld after %.0fs FLYING",
+                                 static_cast<long>(ax), static_cast<double>(delay));
+                        cmdAutotune(static_cast<uint8_t>(ax),
+                                    (ax == 2) ? 18.0f : 25.0f, 60.0f);  // yaw lower wc (low authority/SNR); plays tones
+                    }
+                }
+            }
         }
 
         // 1. SIL/test injections / SIL・テスト注入

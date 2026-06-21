@@ -233,6 +233,15 @@ private:
     float   excite_settle_s_ = 0;      // [s] transient to skip / 捨てる整定時間
     float   iq_ur_ = 0, iq_ui_ = 0, iq_yr_ = 0, iq_yi_ = 0;
     uint32_t iq_n_ = 0;
+    // Coherence/SNR gate: accumulate the gyro I/Q at an OFF-tone (a nearby UNexcited
+    // frequency) to measure the disturbance/noise FLOOR, and a slow running mean of the
+    // rate to DETREND the near-DC disturbance (CW/CCW trim) before the lock-in. The
+    // per-point coh = on/(on+off) then down-weights disturbed frequencies in the fit.
+    // コヒーレンス/SNRゲート: オフ音(非励振の近傍周波数)でジャイロI/Qを積算し雑音床を測る＋レートの
+    // 遅い走査平均で近DC外乱(CW/CCWトリム)を除トレンドしてからロックインする。
+    float   excite_phase_off_ = 0;     // [rad] off-tone phase / オフ音位相
+    float   iq_yr_off_ = 0, iq_yi_off_ = 0;   // off-tone gyro I/Q (noise floor)
+    float   y_dc_ = 0;                  // slow running mean of the rate (detrend) / レートの遅い平均
     uint32_t sysid_seq_ = 0;           // result sequence / 結果シーケンス
     SysidFreqResult sysid_pending_{};  // completed point awaiting fetch / 取得待ちの完了点
     bool     sysid_pending_valid_ = false;

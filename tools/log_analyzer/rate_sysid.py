@@ -324,9 +324,35 @@ def load_csv(path, axis):
     return np.array(t), np.array(r), np.array(y)
 
 
-def fit_from_csv(path, axis, gains=None, f_lo=0.8, f_hi=30.0):
+def plot_fit(omega, G_hat, coh, b, T, L, axis, path):
+    """Bode (measured ETFE vs fitted model) + coherence, saved to `path` (PNG).
+    Bode（実測 ETFE vs フィット）＋コヒーレンスを path に保存。コヒーレンスが低い帯域＝外乱支配で
+    フィットが信用できない箇所が一目で分かる（γ²=0.6 は CIFER 流の採否しきい線）。"""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    f = omega / (2.0 * np.pi)
+    G_fit = plant_response(omega, b, T, L)
+    fig, ax = plt.subplots(3, 1, figsize=(8, 9), sharex=True)
+    ax[0].semilogx(f, 20 * np.log10(np.abs(G_hat) + 1e-12), ".", color="tab:blue",
+                   label="measured (ETFE)")
+    ax[0].semilogx(f, 20 * np.log10(np.abs(G_fit) + 1e-12), "-", color="tab:red",
+                   label=f"fit  b={b:.0f}  T={T*1e3:.1f}ms  L={L*1e3:.2f}ms")
+    ax[0].set_ylabel("|G|  [dB]"); ax[0].grid(True, which="both", alpha=0.3)
+    ax[0].legend(fontsize=8); ax[0].set_title(f"{axis} rate-loop plant — Bode + coherence")
+    ax[1].semilogx(f, np.unwrap(np.angle(G_hat)) * 180 / np.pi, ".", color="tab:blue")
+    ax[1].semilogx(f, np.unwrap(np.angle(G_fit)) * 180 / np.pi, "-", color="tab:red")
+    ax[1].set_ylabel("phase  [deg]"); ax[1].grid(True, which="both", alpha=0.3)
+    ax[2].semilogx(f, np.clip(coh, 0, 1), "-", color="tab:green")
+    ax[2].axhline(0.6, color="gray", ls="--", lw=1, label="γ²=0.6 (CIFER gate)")
+    ax[2].set_ylabel("coherence γ²"); ax[2].set_xlabel("frequency  [Hz]")
+    ax[2].set_ylim(0, 1.05); ax[2].grid(True, which="both", alpha=0.3); ax[2].legend(fontsize=8)
+    fig.tight_layout(); fig.savefig(path, dpi=110); plt.close(fig)
+
+
+def fit_from_csv(path, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None):
     """Full pipeline: CSV → replay u → ETFE → parametric (b, T, L).
-    全手順: CSV → u 再生 → ETFE → (b,T,L)。"""
+    全手順: CSV → u 再生 → ETFE → (b,T,L)。plot_path 指定で Bode＋コヒーレンス図を保存。"""
     g = dict(DEFAULT_GAINS[axis])
     if gains:
         g.update(gains)
@@ -336,6 +362,9 @@ def fit_from_csv(path, axis, gains=None, f_lo=0.8, f_hi=30.0):
     result = fit_plant(omega, G_hat, coh, axis)
     result["axis"] = axis
     result["gains_used"] = g
+    if plot_path:
+        plot_fit(omega, G_hat, coh, result["b"], result["T"], result["L"], axis, plot_path)
+        result["plot_path"] = str(plot_path)
     return result
 
 

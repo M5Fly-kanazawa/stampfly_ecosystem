@@ -44,14 +44,22 @@ struct FreqPoint {
     float w;     // [rad/s]
     float ur, ui;   // U(jw) I/Q sums  / U の I/Q 和
     float yr, yi;   // Y(jw) I/Q sums  / Y の I/Q 和
+    float coh = 1.0f;  // coherence/SNR weight in [0,1] (1 = fully trusted) / コヒーレンス重み
 };
 
 /// Fitted plant G(s) = b·e^{-Ls} / (s(Ts+1)) / フィット済みプラント
+/// Uniform 3-parameter model for ALL axes. (A yaw reaction-torque RHP zero was tried
+/// and refuted: hardware showed tau_z≈0 — see yaw_axis_model.md. The yaw degeneracy is
+/// a structured low-frequency disturbance, handled by coherence weighting, not a zero.)
+/// 全軸共通の3パラモデル。yaw の反トルク RHP 零点は実機で反証(tau_z≈0)。yaw の退化は構造的
+/// 低周波外乱でありコヒーレンス重みで対処する（零点ではない）。
 struct Plant {
     float b;         // [1/(kg m²)] effective inverse inertia / 有効慣性逆数
     float T;         // [s] motor/prop lag                    / モータ遅れ
     float L;         // [s] dead time                          / むだ時間
-    float residual;  // mean fit cost per point (quality)      / 点あたり残差
+    float residual;  // coherence-weighted mean fit cost (quality) / コヒーレンス重み残差
+    float coh_sum;   // Σcoh² = effective coherent-point count (data sufficiency) / 有効点数
+    int   fit_reject;// 0=ok, 1=insufficient coherent data, 2=bad/NaN fit / フィット棄却コード
 };
 
 /// Tuned PID + numerically verified margins / 設計 PID＋数値検証済み余裕
@@ -81,5 +89,14 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out);
 /// 仕様（ωc, PM）に対する Kp/Ti/Td を解く。必要リードが PID の上限を超えるなら false。
 bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
              TuneResult& out);
+
+/// Evaluate the open-loop margins of a GIVEN PID (kp,ti,td) against a plant by an
+/// ω-sweep of L = kp·C(jω)·G(jω): fills out.{kp,ti,td,wc,pm_deg,gm_db,gm_valid}.
+/// Returns true if a gain crossover (|L|=1) was found. Same routine tunePid uses
+/// to verify its design — exposed so a caller can also score the CURRENT (e.g.
+/// rejected/unchanged) gains against the freshly identified plant.
+/// 与えられた PID(kp,ti,td)の開ループ余裕をプラントに対し ω 掃引で評価する。tunePid が
+/// 設計検証に使うのと同じ計算 — 現（棄却/据置）ゲインを新同定プラントで採点するため公開。
+bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& out);
 
 }  // namespace sf::autotune

@@ -473,11 +473,35 @@ void Plant::substep(float h)
     // 水平なら世界 +Z（上）になる。
     const double* q = sensor(quat_sid_);
     Quat q_mj{(float)q[0], (float)q[1], (float)q[2], (float)q[3]};
-    Vec3 torque_world = q_mj.rotate({0.0f, 0.0f, tau_yaw_flu_z});
+    // Turbulence body TORQUE (roll/pitch/yaw, 3–6 Hz) — excites the RATE loop directly so the
+    // rate-loop methods (D-term, notch, retune) can be evaluated. The 1–3 Hz horizontal FORCE
+    // (below) is position/attitude-loop territory; the rate-loop wobble (3–6 Hz peaking) needs
+    // this torque. Amplitude scales with turbulence_n (× a 0.03 m effective arm). 0 = off.
+    // 乱流ボディトルク（3–6Hz）— レートループを直接励起し、レート手法（D項/ノッチ/再整形）を
+    // 評価可能にする。1–3Hz水平力は位置/姿勢ループ域、レートふらつき（3–6Hzピーキング）には本トルク。
+    Vec3 tau_body = {0.0f, 0.0f, tau_yaw_flu_z};
+    if (cfg_.turbulence_n > 0.0f) {
+        const float t = turb_t_, k = 2.0f * 3.14159265f, Q = cfg_.turbulence_n * 0.03f;
+        tau_body.x += Q * (std::sin(k * 3.7f * t) + 0.6f * std::sin(k * 5.3f * t + 1.2f));
+        tau_body.y += Q * (0.8f * std::sin(k * 4.1f * t + 0.6f) + std::sin(k * 5.9f * t + 2.1f));
+        tau_body.z += 0.5f * Q * std::sin(k * 2.9f * t + 0.4f);
+    }
+    Vec3 torque_world = q_mj.rotate(tau_body);
 
-    // Wind force NED → world ENU.
-    // 風力 NED → 世界 ENU。
-    Vec3 wind_enu = frames::ned_to_enu(cfg_.wind_force_ned);
+    // Wind force NED → world ENU, plus deterministic band-limited turbulence (1–3 Hz
+    // horizontal sinusoid sum) to excite the attitude-wobble band for the wobble study.
+    // Incommensurate frequencies → non-repeating-ish but fully repeatable; 0 = off.
+    // 風力 NED→世界 ENU ＋ 決定論的帯域制限乱流（1–3Hz水平正弦和）でふらつき帯域を励起。
+    Vec3 wind_ned = cfg_.wind_force_ned;
+    if (cfg_.turbulence_n > 0.0f) {
+        turb_t_ += h;
+        const float t = turb_t_, k = 2.0f * 3.14159265f, A = cfg_.turbulence_n;
+        wind_ned.x += A * (std::sin(k * 1.3f * t) + 0.7f * std::sin(k * 2.1f * t + 1.0f)
+                                                   + 0.5f * std::sin(k * 3.3f * t + 2.0f));
+        wind_ned.y += A * (0.8f * std::sin(k * 0.9f * t + 0.3f) + std::sin(k * 1.7f * t + 1.5f)
+                                                                + 0.6f * std::sin(k * 2.6f * t + 0.7f));
+    }
+    Vec3 wind_enu = frames::ned_to_enu(wind_ned);
 
     // xfrc_applied[6·body + 0..5] = [Fx,Fy,Fz, Tx,Ty,Tz] in the world frame.
     // MuJoCo does NOT auto-clear it, so overwrite every step.

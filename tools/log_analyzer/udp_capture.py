@@ -310,8 +310,12 @@ def parse_packet(data: bytes) -> list:
         #   [checksum 1B] = 53B
         # Legacy (17B) also supported for backward compatibility
         if pkt_id == PKT_STATUS and len(data) in (17, 53):
-            uptime_ms, voltage, flight_state, sensor_health, eskf_status = \
-                struct.unpack_from('<IfBBB', data, 4)
+            uptime_ms, voltage, flight_state, sensor_health, eskf_status, reset_reason = \
+                struct.unpack_from('<IfBBBB', data, 4)
+            # esp_reset_reason() names — read a crash cause over WiFi (no serial).
+            _RST = {0: 'UNKNOWN', 1: 'POWERON', 2: 'EXT', 3: 'SW', 4: 'PANIC',
+                    5: 'INT_WDT', 6: 'TASK_WDT', 7: 'WDT', 8: 'DEEPSLEEP',
+                    9: 'BROWNOUT', 10: 'SDIO', 11: 'USB', 12: 'JTAG'}
             sample = {
                 'timestamp_us': uptime_ms * 1000,
                 'uptime_ms': uptime_ms,
@@ -319,6 +323,8 @@ def parse_packet(data: bytes) -> list:
                 'flight_state': flight_state,
                 'sensor_health': sensor_health,
                 'eskf_status': eskf_status,
+                'reset_reason': reset_reason,
+                'reset_reason_name': _RST.get(reset_reason, str(reset_reason)),
             }
             # Parse PID gains if present (v2, 53B)
             if len(data) == 53:

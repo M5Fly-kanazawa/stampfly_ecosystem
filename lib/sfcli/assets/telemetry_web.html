@@ -402,11 +402,19 @@ function buildDrone() {
 }
 
 // NED euler (FRD body) -> three.js quaternion for the FLU drone group inside the
-// ENU worldGroup. q_nb from ZYX euler; the NED->ENU / FRD->FLU change of basis
-// C (x<->y swap, z negate, det=+1) maps the quaternion as v' = C v, w' = w.
+// ENU worldGroup. q_nb from ZYX euler. The rotation R_nb (FRD->NED) is re-expressed
+// in the display frames as R' = C · R_nb · D^T, where the WORLD basis changes by
+// C: NED->ENU (x<->y swap, z negate) and the BODY basis changes by the DIFFERENT
+// D: FRD->FLU = diag(1,-1,-1). Because C != D this is NOT a similarity, so the old
+// "v'=C·v, w'=w" (which is C·R·C^T) was wrong: it left a constant 90° body-yaw
+// offset that made ROLL and PITCH (the X and Y axes) appear SWAPPED. The closed
+// form of the quaternion of C·R·D^T (verified numerically vs the SIL GUI's direct
+// FLU-in-ENU quaternion) is below.
 // NED オイラー角（FRD 機体）→ ENU worldGroup 内 FLU 機体の three.js クォータニオン。
-// ZYX オイラーから q_nb を作り、基底変換 C（x↔y 入替・z 反転、det=+1）で
-// ベクトル部のみ v' = C v と写す（スカラー部は不変）。
+// 回転 R_nb を表示系で R' = C·R_nb·D^T と表す。世界基底は C（NED→ENU, x↔y入替・z反転）、
+// 機体基底は「別の」D（FRD→FLU = diag(1,-1,-1)）で変わる。C≠D ゆえ相似変換でなく、
+// 旧 "v'=C·v"（= C·R·C^T）は誤り — 機体ヨーに一定 90° のずれが残り、ロールとピッチ
+// （X 軸と Y 軸）が入れ替わって見えていた。C·R·D^T のクォータニオン閉形式が下記。
 function quatFromNedEuler(roll, pitch, yaw) {
   const cr = Math.cos(roll/2),  sr = Math.sin(roll/2);
   const cp = Math.cos(pitch/2), sp = Math.sin(pitch/2);
@@ -415,7 +423,8 @@ function quatFromNedEuler(roll, pitch, yaw) {
   const qx = sr*cp*cy - cr*sp*sy;
   const qy = cr*sp*cy + sr*cp*sy;
   const qz = cr*cp*sy - sr*sp*cy;
-  return [qy, qx, -qz, qw];   // (x,y,z,w) for three / three 用 (x,y,z,w)
+  const s = Math.SQRT1_2;   // 1/√2
+  return [s*(qx+qy), s*(qx-qy), s*(qw-qz), s*(qw+qz)];   // (x,y,z,w) for three / three 用
 }
 
 // --- scene (SIL GUI init3D, verbatim apart from live-data wiring) ------------

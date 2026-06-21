@@ -188,16 +188,28 @@ void Failsafe::checkBattery()
             ESP_LOGE(TAG, "Critical battery: %.2fV", power.voltage);
         }
     } else if (power.voltage < config_.low_battery_v) {
-        // Low voltage — warning
-        // 低電圧 — 警告
+        // Low voltage — warning. RE-RAISE periodically while latched, mirroring the
+        // COMM_LOST divider above and the OLD firmware's PowerTask (which re-warbled
+        // lowBatteryWarning() every ~10 s in flight). vehicle_new funnels every tone
+        // through one notify_command consumer, so a SINGLE in-flight beep is missed
+        // over motor noise — the warble must REPEAT to be heard while armed.
+        // 低電圧 — 警告。ラッチ中は周期的に再発報する（上の COMM_LOST 分周・旧 PowerTask の
+        // 10秒ごと再生に倣う）。新ファームは全音を単一の notify_command 消費に集約するため、
+        // 飛行中の単発はモータ騒音で埋もれる — armed 中に聞こえるよう警告を反復する。
+        constexpr uint8_t kBattReraiseEveryNUpdates = 50;  // ~5 s at the 10 Hz failsafe rate
         if (!batt_warning_) {
             batt_warning_ = true;
             raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::WARNING);
+            batt_reraise_count_ = 0;
             ESP_LOGW(TAG, "Low battery: %.2fV", power.voltage);
+        } else if (++batt_reraise_count_ >= kBattReraiseEveryNUpdates) {
+            raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::WARNING);
+            batt_reraise_count_ = 0;
         }
     } else if (power.voltage > config_.low_battery_v + kRecoveryHysteresisV) {
-        batt_warning_   = false;
-        batt_emergency_ = false;
+        batt_warning_       = false;
+        batt_emergency_     = false;
+        batt_reraise_count_ = 0;
     }
 }
 

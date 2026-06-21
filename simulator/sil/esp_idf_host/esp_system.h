@@ -35,6 +35,25 @@ typedef struct {
 // 再起動。ホストではクリーンに終了するだけ。
 static inline void esp_restart(void) { exit(0); }
 
+// Reset reason (ESP-IDF enum subset). On the host a run is always a clean
+// power-on, so esp_reset_reason() returns ESP_RST_POWERON.
+// リセット理由（ESP-IDF enum の部分集合）。ホストでは常にクリーン起動を返す。
+typedef enum {
+    ESP_RST_UNKNOWN   = 0,
+    ESP_RST_POWERON   = 1,
+    ESP_RST_EXT       = 2,
+    ESP_RST_SW        = 3,
+    ESP_RST_PANIC     = 4,
+    ESP_RST_INT_WDT   = 5,
+    ESP_RST_TASK_WDT  = 6,
+    ESP_RST_WDT       = 7,
+    ESP_RST_DEEPSLEEP = 8,
+    ESP_RST_BROWNOUT  = 9,
+    ESP_RST_SDIO      = 10,
+} esp_reset_reason_t;
+
+static inline esp_reset_reason_t esp_reset_reason(void) { return ESP_RST_POWERON; }
+
 static inline void esp_chip_info(esp_chip_info_t* out)
 {
     if (out) { out->model = CHIP_ESP32S3; out->features = 0; out->revision = 0; out->cores = 2; }

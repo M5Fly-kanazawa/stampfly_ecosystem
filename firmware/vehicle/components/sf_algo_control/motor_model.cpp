@@ -16,7 +16,7 @@ const MotorParams DEFAULT_MOTOR_PARAMS = {
     .Km = 6.125e-4f,      // Motor constant [V·s/rad]
     .Dm = 3.69e-8f,       // Viscous damping [Nm·s/rad]
     .Qf = 2.76e-5f,       // Friction torque [Nm]
-    .Jm = 1.0e-9f,        // Motor+propeller inertia [kg·m²]
+    .Jmp = 2.01e-8f,      // Rotor+propeller COMBINED inertia [kg·m²] (Jmp; matches sims+spec)
     .Vbat = 3.7f,         // Battery voltage [V]
 };
 

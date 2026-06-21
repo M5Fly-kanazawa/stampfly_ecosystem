@@ -94,6 +94,35 @@ sil::Plant::Config plant_config_from_env()
         if (std::strcmp(batt, "off") == 0) cfg.batt_model_enable = false;
     }
 
+    // Opt-in physics knobs (default OFF). SIL_EMU_GROUND_EFFECT = near-floor lift gain;
+    // SIL_EMU_TURBULENCE = 1-3 Hz lateral turbulence force [N] (wobble-minimization study).
+    // These must be read BEFORE the noise early-return below so they apply with or without noise.
+    // オプトイン物理ノブ（既定OFF）。noise の早期 return より前に読む（ノイズ有無に依らず適用）。
+    if (const char* ge = std::getenv("SIL_EMU_GROUND_EFFECT")) {
+        float gain = (std::strcmp(ge, "1") == 0 || std::strcmp(ge, "on") == 0) ? 0.30f
+                                                                               : (float)std::atof(ge);
+        if (gain > 0.0f) { cfg.ge_gain = gain;
+            std::printf("[emu] ground effect ON (gain=%.2f)\n", cfg.ge_gain); }
+    }
+    if (const char* tb = std::getenv("SIL_EMU_TURBULENCE")) {
+        float amp = (float)std::atof(tb);
+        if (amp > 0.0f) { cfg.turbulence_n = amp;
+            std::printf("[emu] turbulence ON (amplitude=%.3f N, 1-3 Hz)\n", cfg.turbulence_n); }
+    }
+    // SIL_EMU_THRUST_EFF overrides the plant real-vs-ideal thrust efficiency (default
+    // 0.893 = 1/1.12, the worn-motor baseline matching the firmware hover correction).
+    // Raise it to model FRESH/stronger motors (e.g. 1.196 ≈ 0.893×1.34 → 1.34× thrust
+    // per duty), reproducing a fresh-airframe over-thrust (lower hover duty + auto-
+    // takeoff over-climb). OFF by default.
+    // SIL_EMU_THRUST_EFF はプラント実/理想推力効率（既定0.893=1/1.12）を上書き。値を上げて
+    // 新品/強いモータ（例 1.196≈0.893×1.34 で同 duty 1.34 倍推力）を模擬し、新機体の過剰推力
+    // （低ホバー duty＋自動離陸過上昇）を再現。既定 OFF。
+    if (const char* te = std::getenv("SIL_EMU_THRUST_EFF")) {
+        float eff = (float)std::atof(te);
+        if (eff > 0.0f) { cfg.thrust_efficiency = eff;
+            std::printf("[emu] thrust efficiency override = %.3f (default 0.893)\n", cfg.thrust_efficiency); }
+    }
+
     const char* noise = std::getenv("SIL_EMU_NOISE");
     if (!noise) return cfg;
     const bool n0 = (std::strcmp(noise, "n0") == 0);

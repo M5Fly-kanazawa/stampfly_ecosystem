@@ -41,6 +41,7 @@ static constexpr LedColor kCyan        = {0, 255, 255};
 static constexpr LedColor kMagenta     = {255, 0, 255};
 static constexpr LedColor kOrange      = {255, 128, 0};   // ALT_HOLD mode / 高度保持
 static constexpr LedColor kYellowGreen = {128, 255, 0};   // STABILIZE mode / 姿勢安定
+static constexpr LedColor kRed         = {255, 0, 0};     // autotune failed / autotune 失敗
 
 // Blink timings [ms]. SOLID = always on (off_ms 0). / 点滅タイミング。SOLID は常灯。
 static constexpr uint16_t kSolidOn = 1000, kSolidOff = 0;
@@ -144,8 +145,28 @@ void Notify::init(const NotifyConfig& config)
 //   low-battery > pairing > calibrating > flight state.
 // 旧 vehicle の LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
 // -----------------------------------------------------------------------------
+// autotuneOverlay — highest-priority LED cue while an autotune is running/finishing.
+// The buzzer is unreliable over motor noise in flight, so a solo pilot reads the
+// autotune state on the LED: white fast blink = sweeping, green = applied OK, red =
+// failed (gains kept). Shown on BOTH channels so it is unmissable on the craft.
+// autotuneOverlay — autotune 中/終了直後の最優先 LED 合図。飛行中はモータ騒音でブザーが
+// 当てにならないため、ソロ操縦者は LED で状態を読む: 白高速点滅=掃引中、緑=適用成功、
+// 赤=失敗（ゲイン据え置き）。両チャネルに出して機体上で見逃さない。
+bool Notify::autotuneOverlay(LedPattern& out) const
+{
+    switch (autotune_led_) {
+        case 1: out = { kWhite, kFastOn, kFastOff }; return true;  // sweeping
+        case 2: out = { kGreen, kFastOn, kFastOff }; return true;  // applied OK
+        case 3: out = { kRed,   kFastOn, kFastOff }; return true;  // failed
+        default: return false;
+    }
+}
+
 LedPattern Notify::computeStatePattern() const
 {
+    LedPattern at;
+    if (autotuneOverlay(at)) return at;   // 0. autotune cue (highest priority)
+
     // 1. Low battery (cyan slow blink) — a VALID reading at/below the threshold.
     // 1. 低電圧（シアン低速点滅）— 有効な読みが閾値以下。
     const float voltage = sensor_power.latest().voltage;
@@ -191,6 +212,9 @@ LedPattern Notify::computeStatePattern() const
 // -----------------------------------------------------------------------------
 LedPattern Notify::computeModePattern() const
 {
+    LedPattern at;
+    if (autotuneOverlay(at)) return at;   // autotune cue (body LED = seen in flight)
+
     // Urgent overlay: low battery (valid reading at/below threshold).
     // 緊急オーバーレイ: 低電圧（有効な読みが閾値以下）。
     const float voltage = sensor_power.latest().voltage;
@@ -246,11 +270,22 @@ LedColor Notify::modeColor(FlightMode mode) const
 // -----------------------------------------------------------------------------
 void Notify::update()
 {
-    // Deferred power-on chime (see init() for the flash-window rationale):
-    // play once, ~2s after the task started (60 cycles at 30Hz).
-    // 遅延起動音（理由は init() 参照）: タスク開始から約2秒（30Hz×60周期）で1回再生。
-    if (start_tone_countdown_ > 0 && --start_tone_countdown_ == 0) {
+    // Boot mute window (flash-safety, see notify.hpp): while it counts down, ALL
+    // buzzer tones are suppressed (playEvent/playTone). When it reaches 0, play the
+    // deferred power-on chime once. A flash-bound reboot enters download mode within
+    // the window, so no LEDC tone is ever active when esptool resets the chip.
+    // 起動ミュート窓（フラッシュ安全、notify.hpp 参照）: カウントダウン中は全ブザー音を
+    // 抑止（playEvent/playTone）。0 で遅延起動音を1回再生する。フラッシュ目的の再起動は
+    // 窓内にダウンロードモードへ入るため、esptool リセット時に鳴っている LEDC 音は無い。
+    if (boot_mute_countdown_ > 0 && --boot_mute_countdown_ == 0) {
         buzzer_.startTone();
+    }
+
+    // Autotune LED cue countdown (~30Hz): clear the overlay when it elapses. Running
+    // (1) has a long safety timeout; the ok/fail flash (2/3) lasts ~4s.
+    // autotune LED 合図のカウントダウン: 経過で解除。掃引中(1)は安全タイムアウト、終了(2/3)は約4s。
+    if (autotune_led_ != 0 && autotune_led_ticks_ > 0 && --autotune_led_ticks_ == 0) {
+        autotune_led_ = 0;
     }
 
     // Two independent LED channels (class comment): MCU LED = system state,
@@ -301,6 +336,13 @@ void Notify::update()
 // -----------------------------------------------------------------------------
 void Notify::playEvent(NotifyEvent event)
 {
+    // Boot mute window (flash-safety): drop every tone so none is mid-play when
+    // esptool enters download mode. The calibration-start beep falls here; the
+    // ready chime fires after calibration (~4s), past the window.
+    // 起動ミュート窓（フラッシュ安全）: esptool のダウンロードモード突入時に音が鳴って
+    // いないよう全音を捨てる。校正開始 beep はここに入る。ready 音は校正後（≈4秒）で窓外。
+    if (boot_mute_countdown_ > 0) return;
+
     switch (event) {
         case NotifyEvent::ArmTone:     buzzer_.armTone();           break;
         case NotifyEvent::DisarmTone:  buzzer_.disarmTone();        break;
@@ -308,6 +350,15 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::Calibrating: buzzer_.beep();              break;
         case NotifyEvent::Ready:       buzzer_.readyTone();         break;
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
+        // Buzzer + a parallel LED cue (LED is reliable over motor noise): white blink
+        // while sweeping (safety timeout 30s), then green/red for ~4s. update() clears it.
+        // ブザー＋並行 LED 合図（騒音に強い）: 掃引中は白点滅（安全 30s）、終了で緑/赤 約4s。
+        case NotifyEvent::AutotuneStart: buzzer_.autotuneStartTone();
+                                         autotune_led_ = 1; autotune_led_ticks_ = 900; break;
+        case NotifyEvent::AutotuneOk:    buzzer_.autotuneOkTone();
+                                         autotune_led_ = 2; autotune_led_ticks_ = 120; break;
+        case NotifyEvent::AutotuneFail:  buzzer_.autotuneFailTone();
+                                         autotune_led_ = 3; autotune_led_ticks_ = 120; break;
         case NotifyEvent::None:
         default:                                                    break;
     }
@@ -325,6 +376,9 @@ void Notify::playTone(AlertType type)
     // failsafe の AlertType をブザー音に対応づける公開ヘルパ。アラートを直接持つ
     // 呼び出し側用。周期 update() は notify_command/playEvent を使い、state_task が
     // 所有する system_alert キューを消費しない。
+    // Boot mute window (flash-safety): no tone during esptool's download-mode entry.
+    // 起動ミュート窓（フラッシュ安全）: esptool のダウンロードモード突入中は鳴らさない。
+    if (boot_mute_countdown_ > 0) return;
     switch (type) {
         case AlertType::LOW_BATTERY:
         case AlertType::USB_POWER:     buzzer_.lowBatteryWarning(); break;

@@ -40,7 +40,7 @@ Cplx cdiv(Cplx a, Cplx b)
     return {(a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d};
 }
 
-/// G(jw) = b e^{-jwL} / (jw (jwT + 1)) / プラント周波数応答
+/// G(jw) = b·e^{-jwL} / (jw (jwT + 1)) / プラント周波数応答
 Cplx plantResponse(float w, float b, float T, float L)
 {
     const Cplx num = {b * cosf(-w * L), b * sinf(-w * L)};
@@ -68,8 +68,14 @@ float wrapAngle(float a)
     return a;
 }
 
-/// Fit cost: Σ (Δlog|G|)² + (wrapped Δarg G)² over the points.
-/// フィットコスト: 対数振幅差²＋折返し位相差² の総和。
+/// Fit cost: Σ coh² · [(Δlog|G|)² + (wrapped Δarg G)²] over the points.
+/// The per-point coherence weight (FreqPoint.coh, the on/off-tone SNR proxy; 1 = fully
+/// trusted, 0 = disturbance-dominated) DOWN-WEIGHTS frequencies corrupted by a
+/// disturbance — the onboard mirror of the offline coherence-weighted ETFE (CIFER /
+/// Pintelon-Schoukens). With coh=1 for every point this is the plain unweighted cost, so
+/// clean axes (roll/pitch) are unaffected.
+/// フィットコスト: コヒーレンス重み coh² 付き。外乱で汚れた周波数を軽視（offline ETFE の移植）。
+/// 全点 coh=1 なら従来と同一 — clean な roll/pitch は不変。
 float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
 {
     const float b = p[0], T = p[1], L = p[2];
@@ -81,7 +87,8 @@ float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
         const Cplx gm = plantResponse(pts[i].w, b, T, L);
         const float dmag = logf(G_hat[i].mag() + 1e-12f) - logf(gm.mag() + 1e-12f);
         const float dph  = wrapAngle(G_hat[i].arg() - gm.arg());
-        cost += dmag * dmag + dph * dph;
+        const float wgt  = pts[i].coh * pts[i].coh;   // coherence² weight (γ⁴ overall vs |G|)
+        cost += wgt * (dmag * dmag + dph * dph);
     }
     return cost;
 }
@@ -94,6 +101,7 @@ float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
 // =============================================================================
 bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
 {
+    out.fit_reject = 1;          // insufficient data unless we reach the end / 既定は不足
     if (count < 4) {
         return false;
     }
@@ -191,8 +199,37 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
     out.b = simplex[best][0];
     out.T = simplex[best][1];
     out.L = simplex[best][2];
-    out.residual = vals[best] / static_cast<float>(n);
-    return out.b > 0.0f && out.residual < 1.0f;
+    // Coherence-weighted residual + a DATA-SUFFICIENCY gate that does NOT depend on the
+    // residual magnitude (a coh²-weighted cost → 0 as all coh → 0 would FALSE-PASS the
+    // <0.3 residual gate on all-noise data). Require enough EFFECTIVE coherent points.
+    //
+    // (A "worst trusted-tone error > 0.9" gate was tried and REMOVED: it rejected the
+    // DELIBERATE yaw integrator+delay simplification. Yaw's unmodeled minimum-phase LHP
+    // reaction zero gives a large per-tone PHASE LEAD at the low tones (e.g. 2 Hz at -41°
+    // vs the model's -95°), so a TRUSTED low tone hit ~1.0 > 0.9 and the fit was rejected
+    // — even though that mismatch is the SAFE lead that only ADDS phase margin (designing
+    // as integrator+delay is conservative). The residual<0.3 + GM-floor + physical-bounds
+    // gates carry the real safety. See the gate audit / yaw_axis_model.md.)
+    // 残差非依存のデータ充足ゲート。「最悪信頼音」ゲートは削除: ヨーの意図的な簡略化(積分器+遅れ)の
+    // 安全な LHP リード不一致(低域で大きな位相リード)を棄却していたため。残差<0.3＋GM下限＋物理境界が安全を担保。
+    float wsum = 0.0f;
+    int   n_eff = 0;          // points with coh>0.5 (TRUSTED) / 信頼できる点数
+    for (int i = 0; i < n; i++) {
+        wsum += pts[i].coh * pts[i].coh;
+        if (pts[i].coh > 0.5f) n_eff++;
+    }
+    out.coh_sum  = wsum;
+    out.residual = (wsum > 1e-6f) ? vals[best] / wsum : 1e3f;
+    if (n_eff < 4 || wsum < 2.5f) {        // insufficient coherent data
+        out.fit_reject = 1;
+        return false;
+    }
+    if (!(out.b > 0.0f && out.residual >= 0.0f && out.residual < 1.0f)) {  // bad/NaN fit
+        out.fit_reject = 2;
+        return false;
+    }
+    out.fit_reject = 0;
+    return true;
 }
 
 // =============================================================================
@@ -246,8 +283,19 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
     }
     const float kp = 1.0f / (pidUnit(wc, ti, td).mag() * g_c.mag());
 
-    // Numerical margin verification: sweep ω, find |L|=1 and arg L = −180°.
-    // 数値検証: ω掃引で |L|=1 と位相 −180° を探す。
+    // Verify the DESIGNED gains' margins with the shared ω-sweep (same routine a
+    // caller can reuse to score the CURRENT gains).
+    // 設計ゲインの余裕を共有 ω 掃引で検証（呼び出し側が現ゲインの採点に再利用する同じ計算）。
+    return evalMargins(plant, kp, ti, td, out);
+}
+
+// evalMargins — open-loop margins of L = kp·C(jω)·G(jω) by an ω-sweep. Factored from
+// tunePid so the SAME verification scores either the designed gains or the current
+// (e.g. rejected/unchanged) gains against the identified plant. See header.
+// evalMargins — L=kp·C(jω)·G(jω) の開ループ余裕を ω 掃引で求める。tunePid から切り出し、
+// 設計ゲインでも現（棄却/据置）ゲインでも同一計算で採点できるようにした。
+bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& out)
+{
     out.kp = kp; out.ti = ti; out.td = td;
     out.wc = 0; out.pm_deg = 0; out.gm_db = 0; out.gm_valid = false;
     float prev_mag = 0, prev_ph = 0, prev_w = 0, prev_raw = 0;

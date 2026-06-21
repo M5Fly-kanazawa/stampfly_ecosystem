@@ -110,6 +110,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "touchdown 'float' is reproduced. Bare flag = default strength; pass a "
                         "number to set the gain (e.g. --ground-effect 0.4). Default OFF "
                         "(byte-identical clean path).")
+    p.add_argument("--turbulence", nargs="?", const="0.03", default=None, metavar="AMP_N",
+                   help="enable a deterministic 1-3 Hz lateral turbulence force [N] to excite "
+                        "the attitude-wobble band (wobble-minimization study). Bare flag = 0.03 N. "
+                        "Default OFF.")
     p.add_argument("--unpaired", action="store_true",
                    help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
@@ -414,6 +418,12 @@ def run_scenario(args: argparse.Namespace) -> int:
     ge = getattr(args, "ground_effect", None)
     if ge is not None:
         env["SIL_EMU_GROUND_EFFECT"] = str(ge)
+
+    # --turbulence enables a deterministic 1-3 Hz lateral disturbance (force [N]) to excite
+    # the attitude-wobble band for the wobble-minimization study. Default OFF.
+    tb = getattr(args, "turbulence", None)
+    if tb is not None:
+        env["SIL_EMU_TURBULENCE"] = str(tb)
 
     # --unpaired: skip the pairing NVS seed so the vehicle boots unpaired and runs the
     # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps

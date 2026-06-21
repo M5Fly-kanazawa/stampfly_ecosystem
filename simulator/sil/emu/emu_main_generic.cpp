@@ -108,6 +108,19 @@ void apply_ground_effect_from_env(sil::Plant::Config& cfg)
                 cfg.ge_gain, cfg.ge_height);
 }
 
+// SIL_EMU_TURBULENCE = the turbulence force amplitude [N] (deterministic 1–3 Hz lateral
+// disturbance) for the wobble-minimization benchmark. OFF by default. e.g. 0.03.
+// SIL_EMU_TURBULENCE = 乱流力振幅[N]（決定論的1–3Hz横外乱）。既定 OFF。
+void apply_turbulence_from_env(sil::Plant::Config& cfg)
+{
+    const char* tb = std::getenv("SIL_EMU_TURBULENCE");
+    if (!tb) return;
+    float amp = static_cast<float>(std::atof(tb));
+    if (amp <= 0.0f) return;
+    cfg.turbulence_n = amp;
+    std::printf("[emu] turbulence ON (amplitude=%.3f N, 1-3 Hz)\n", cfg.turbulence_n);
+}
+
 void on_advance(int64_t now_us)
 {
     if (now_us > g_last_step_us) {
@@ -206,6 +219,7 @@ int main(int argc, char** argv)
     std::printf("[emu] (1) plant.init ...\n");
     sil::Plant::Config plant_cfg = plant_config_from_env();
     apply_ground_effect_from_env(plant_cfg);   // opt-in ground effect (default OFF)
+    apply_turbulence_from_env(plant_cfg);       // opt-in turbulence disturbance (default OFF)
     if (!g_plant.init(model_path, plant_cfg)) {
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;

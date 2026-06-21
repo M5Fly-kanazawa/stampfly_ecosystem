@@ -149,11 +149,28 @@ private:
     LedChannelState mcu_channel_;     // MCU blink state      / MCU の点滅状態
     float    low_v_threshold_ = 3.4f; // Low-battery LED threshold [V] (from params)
                                       // 低電圧 LED 閾値 [V]（params から）
-    uint8_t  start_tone_countdown_ = 60; // Power-on chime delay: 60 cycles ≈ 2s at
-                                         // 30Hz, keeps the melody clear of esptool's
-                                         // download-mode entry window (see init)
-                                         // 起動音遅延: 30Hz×60周期≈2秒。esptool の
-                                         // ダウンロードモード突入窓を回避（init 参照）
+    // Boot mute window: while > 0, EVERY buzzer tone is suppressed and the power-on
+    // chime is held. esptool enters download mode ~1-2 s after the reset `sf flash`
+    // triggers; ANY LEDC tone active at that instant survives the entry and drones
+    // for the whole write. Faster boot (-O2) moved the calibration-start beep into
+    // that window, so deferring only the power-on chime was no longer enough — this
+    // covers all of them (beep, ready, etc.). 90 cycles ≈ 3 s at 30 Hz. The power-on
+    // chime plays as this hits 0; the ready chime (calibration ≈ 4 s) lands after it.
+    // 起動ミュート窓: > 0 の間、全ブザー音を抑止し起動音を保留する。esptool は `sf flash`
+    // のリセットから約1〜2秒でダウンロードモードに入り、その瞬間に鳴っている LEDC 音は
+    // 突入後も残り書き込み中ずっと鳴り続ける。-O2 で起動が速くなり校正開始 beep がこの窓に
+    // 入ったため、起動音だけの遅延では不十分になった — 本窓で全音（beep/ready 等）を覆う。
+    // 30Hz×90周期≈3秒。起動音は 0 で再生、ready 音（校正≈4秒）は窓の後に自然に鳴る。
+    uint8_t  boot_mute_countdown_ = 90;
+
+    // Autotune LED cue (the buzzer is unreliable over motor noise in flight): 0 = none,
+    // 1 = sweeping (white blink), 2 = applied OK (green), 3 = failed (red). ticks counts
+    // the overlay down in update() (~30Hz). Driven by NotifyEvent::Autotune* in playEvent.
+    // autotune LED 合図（飛行中はモータ騒音でブザーが不確実）: 0=なし/1=掃引中(白)/2=成功(緑)/
+    // 3=失敗(赤)。ticks は update() で減算。NotifyEvent::Autotune* が playEvent で駆動。
+    uint8_t  autotune_led_       = 0;
+    uint16_t autotune_led_ticks_ = 0;
+    bool autotuneOverlay(LedPattern& out) const;
 };
 
 }  // namespace sf

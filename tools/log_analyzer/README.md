@@ -33,7 +33,32 @@ sf log wifi -d 30 && sf log viz
 | `sf log convert` | バイナリ→CSV変換 | `sf log convert log.bin` |
 | `sf log info` | ログ情報表示 | `sf log info log.csv` |
 | `sf log analyze` | フライト解析 | `sf log analyze log.csv` |
+| `sf log analyze --health` | モータ故障診断 | `sf log analyze --health --batch` |
 | `sf log viz` | ログ可視化 | `sf log viz log.csv --mode all` |
+
+## sf log analyze --health - モータ健全性レポート
+
+ホバー飛行ログから、劣化したロータ（同じ duty で推力・反トルクが低下したモータ）を
+定常ホバートリムで検出する。バックエンドは `motor_health.py`。
+
+```bash
+# 最新の JSONL ログ1本で診断（回転方向グループを確定、隅は傾向）
+sf log analyze --health
+
+# 同一機体の複数ログでクロスログ隅特定（CG除去）。既定は最新ログ群
+sf log analyze --health --batch
+
+# セッション/機体をグロブで明示（CG一定の前提を守るため推奨）
+sf log analyze --health --batch "stampfly_udp_2026061*.jsonl"
+
+# AI/スクリプト連携用の機械可読 JSON
+sf log analyze --health --batch --json
+```
+
+- ヨートリム `ur=(M1+M3)-(M2+M4)` は CG非依存で、弱い回転方向グループ（CW/CCW）を確定する。
+- 隅（M1〜M4）は単一ホバーだと CG オフセットと交絡するため、`--batch` で重症度の異なる
+  複数ログを使い、`corr(ur, up)` / `corr(ur, uq)` のスケーリングで分離する。
+- 確定にはベンチでの入れ替え試験（疑い隅 ↔ 対角）を推奨。
 
 ## sf log wifi - 400Hzテレメトリキャプチャ
 

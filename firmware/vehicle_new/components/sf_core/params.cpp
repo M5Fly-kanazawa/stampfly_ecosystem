@@ -130,15 +130,70 @@ namespace param_vars {
     // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m,
     // κ=0.00971）、モータ曲線が同一で、レートループから見たプラントが同じため
     // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
-    float rate_roll_kp    = 1.365e-3f; // legacy ROLL_RATE_KP
-    float rate_roll_ti    = 0.7f;      // legacy ROLL_RATE_TI
-    float rate_roll_td    = 0.01f;
-    float rate_pitch_kp   = 1.995e-3f; // legacy PITCH_RATE_KP
-    float rate_pitch_ti   = 0.7f;      // legacy PITCH_RATE_TI
-    float rate_pitch_td   = 0.01f;
+    // roll/pitch: on-board autotune real-plant values (2026-06-19, all-axes tune →
+    // near-zero hover wobble). Less P + more D than the old legacy gains — the real
+    // plant wanted damping, not stiffness. yaw kept (its tune was safely rejected:
+    // thin GM). See autotune.* result params for the identified plant/margins.
+    // roll/pitch: オンボード autotune 実機実測値（2026-06-19 全軸チューンでホバーふらつきほぼ消失）。
+    // 旧 legacy より P 小・D 大（実機はゲインでなく制動を要した）。yaw は据置（薄GMで安全棄却）。
+    float rate_roll_kp    = 3.40e-4f;  // autotune real-plant (was legacy 1.365e-3)
+    float rate_roll_ti    = 0.4f;
+    float rate_roll_td    = 0.017658f;
+    float rate_pitch_kp   = 5.16e-4f;  // autotune real-plant (was legacy 1.995e-3)
+    float rate_pitch_ti   = 0.4f;
+    float rate_pitch_td   = 0.017155f;
     float rate_yaw_kp     = 5.31e-3f;  // legacy YAW_RATE_KP (3x: yaw authority)
     float rate_yaw_ti     = 1.6f;      // legacy YAW_RATE_TI
     float rate_yaw_td     = 0.01f;
+
+    // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
+    // `autotune` mid-flight, so SET these on the GROUND, then arm and fly. After the
+    // craft has been FLYING for sched_delay seconds, the rate-loop autotune runs
+    // automatically on sched_axis (a beep cues the pilot to hold a steady hover).
+    // One-shot per flight; -1 = OFF. Disable by setting axis back to -1.
+    // スケジュール autotune（ソロ操縦・ハンズフリー）: 飛行中に `autotune` を打てないため、
+    // 地上で設定→離陸。FLYING 到達から sched_delay 秒後に sched_axis のレート autotune が
+    // 自動起動（ブザーで合図、定位置ホバー保持を促す）。1飛行1回・-1=OFF。
+    int32_t autotune_sched_axis  = -1;     // -1=off, 0=roll, 1=pitch, 2=yaw
+    float   autotune_sched_delay = 20.0f;  // [s] FLYING dwell before firing
+
+    // Autotune system-identification result, per axis. Written by the onboard autotune
+    // whenever the plant FIT succeeds (even if the gain design is then rejected, e.g.
+    // a thin-margin yaw) — so the identified model is retained for analysis. NOT applied
+    // to control (read-back only). Persisted with `param save`. Identified plant per axis:
+    //   G(s) = b * e^{-L s} / (s (T s + 1));  b = gain, tau = T [s], delay = L [s],
+    //   resid = fit residual (lower = better). 0 = not yet identified.
+    // autotune システム同定結果（軸ごと）。プラントのフィット成功時に必ず記録（ゲイン設計が
+    // 棄却される軸=余裕の薄い yaw 等でも同定結果は残す）。制御には未使用（読み出し専用）。
+    // `param save` で永続。同定プラント: G(s)=b·e^{-Ls}/(s(Ts+1))、tau=T[s]、delay=L[s]、
+    // resid=フィット残差（小さいほど良）。0=未同定。
+    float autotune_roll_b    = 0.0f, autotune_roll_tau    = 0.0f,
+          autotune_roll_delay  = 0.0f, autotune_roll_resid  = 0.0f;
+    float autotune_pitch_b   = 0.0f, autotune_pitch_tau   = 0.0f,
+          autotune_pitch_delay = 0.0f, autotune_pitch_resid = 0.0f;
+    float autotune_yaw_b     = 0.0f, autotune_yaw_tau     = 0.0f,
+          autotune_yaw_delay   = 0.0f, autotune_yaw_resid   = 0.0f;
+
+    // Autotune design-margin result, per axis. Written by the onboard autotune right
+    // after the loop-shaping design (tunePid) succeeds — BEFORE the GM-floor / gain-range
+    // gates — so the margins are kept even when the design is then REJECTED (e.g. a thin
+    // yaw GM): you can read WHY it was rejected. Read-back only, persisted with `param save`.
+    //   wc = achieved crossover [rad/s], pm = phase margin [deg], gm = gain margin [dB]
+    //   (gm = 99 means no −180° crossing in the sweep, i.e. effectively infinite/safe).
+    //   0 = not yet designed.
+    // autotune 設計余裕結果（軸ごと）。ループ整形設計(tunePid)成功直後＝GM下限/ゲイン範囲ゲートの
+    // 前に記録するため、設計が棄却される軸(余裕の薄い yaw 等)でも余裕が残り「なぜ棄却されたか」が
+    // 読める。読み出し専用・`param save` で永続。wc=交差[rad/s]、pm=位相余裕[deg]、gm=ゲイン余裕[dB]
+    // （gm=99 は掃引中に −180°交差なし＝実質無限大/安全）。0=未設計。
+    float autotune_roll_wc  = 0.0f, autotune_roll_pm  = 0.0f, autotune_roll_gm  = 0.0f;
+    float autotune_pitch_wc = 0.0f, autotune_pitch_pm = 0.0f, autotune_pitch_gm = 0.0f;
+    float autotune_yaw_wc   = 0.0f, autotune_yaw_pm   = 0.0f, autotune_yaw_gm   = 0.0f;
+
+    // Autotune reject-reason code per axis (read-only diagnostic): 0=applied, 1=insufficient
+    // coherent data, 2=bad/NaN fit, 3=residual>0.3, 4=out of physical bounds, 5=design
+    // infeasible (wc too high), 6=phase margin below target, 7=gain margin below floor,
+    // 8=param-table range. / 自動チューン棄却理由コード（軸別・読出専用）。
+    float autotune_roll_reject = 0.0f, autotune_pitch_reject = 0.0f, autotune_yaw_reject = 0.0f;
 
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
@@ -156,6 +211,18 @@ namespace param_vars {
     // ESP-NOW のみ・テレメトリ無効）; 1 = SoftAP — 機体が ESP-NOW チャネル上で
     // "StampFly-XXXX" を提供（インフラ不要）。ESP-NOW 操縦は全モードで動く。
     int32_t wifi_mode = 0;
+
+    // Blackbox SPIFFS logger enable (0 = OFF default, 1 = ON). DEFAULT OFF because the
+    // SPIFFS write done while ARMED triggers a flash erase that disables the flash
+    // cache and STALLS BOTH CORES ~37ms every ~0.5s — the control loop freezes and the
+    // craft drifts (a periodic yaw "kick"). WiFi telemetry (sf log wifi) already covers
+    // analysis. Enable only when the onboard log is truly needed and the periodic stall
+    // is acceptable. Proper fix (future): buffer in RAM, write on DISARM only.
+    // Blackbox SPIFFS ロガー有効化（0=既定OFF, 1=ON）。既定OFF — ARM 中の SPIFFS 書き込みは
+    // フラッシュ消去でフラッシュキャッシュを無効化し両コアを ~0.5 秒ごとに ~37ms 停止させる
+    // （制御ループ凍結→機体ドリフト＝周期的ヨーキック）。解析は WiFi テレメトリで足りる。
+    // 本当に必要かつ周期ストールを許容できる時のみ ON。恒久対策(将来)=RAM 緩衝し DISARM で書込。
+    int32_t log_blackbox_enable = 0;
 
     // Attitude control
     float att_roll_kp     = 5.0f;
@@ -197,6 +264,17 @@ namespace param_vars {
     // MAX_CLIMB_RATE / MAX_DESCENT_RATE（別定数）を踏襲。
     float alt_climb_rate   = 0.5f;   // [m/s]
     float alt_descent_rate = 0.5f;   // [m/s]
+
+    // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
+    // The idealized motor curve over-promises thrust, so worn hardware needs corr
+    // ≈ 1.12 (flight-measured) to actually hover. FRESH/stronger motors produce
+    // MORE thrust per duty → corr must DROP (else auto-takeoff over-climbs and the
+    // rate loop runs hot). Tune from a hover log: corr_new = 1.12 × (duty_new/duty_old).
+    // ホバー推力補正: hover_thrust = mg × corr。理想モータ曲線は推力を過大評価するため、
+    // 摩耗ハードは corr≈1.12（飛行実測）でホバー。新品/強いモータは同 duty で推力が大きい
+    // → corr を下げる（さもないと自動離陸が過上昇しレートループが過敏化）。ホバーログから
+    // corr_new = 1.12 ×（新duty/旧duty）で調整。
+    float hover_thrust_corr = 1.12f;
 
     // Position control
     float pos_pos_kp      = 1.0f;
@@ -340,15 +418,43 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.365e-3f, 0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.995e-3f, 0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   3.40e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.4f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.017658f, 0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  5.16e-4f,  0.0f,  0.01f,  &notifyControllerReload},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.4f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.017155f, 0.0f,  1.0f,   &notifyControllerReload},
     {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.01f,  &notifyControllerReload},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
+    {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
+    // Autotune sysid results (written by autotune, read-back only). Wide ranges = result store.
+    {"autotune.roll.b",      ParamType::FLOAT, &autotune_roll_b,      0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.roll.tau",    ParamType::FLOAT, &autotune_roll_tau,    0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.roll.delay",  ParamType::FLOAT, &autotune_roll_delay,  0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.roll.resid",  ParamType::FLOAT, &autotune_roll_resid,  0.0f,  0.0f, 1.0e6f, nullptr},
+    {"autotune.pitch.b",     ParamType::FLOAT, &autotune_pitch_b,     0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.pitch.tau",   ParamType::FLOAT, &autotune_pitch_tau,   0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.pitch.delay", ParamType::FLOAT, &autotune_pitch_delay, 0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.pitch.resid", ParamType::FLOAT, &autotune_pitch_resid, 0.0f,  0.0f, 1.0e6f, nullptr},
+    {"autotune.yaw.b",       ParamType::FLOAT, &autotune_yaw_b,       0.0f,  0.0f, 1.0e9f, nullptr},
+    {"autotune.yaw.tau",     ParamType::FLOAT, &autotune_yaw_tau,     0.0f,  0.0f, 10.0f,  nullptr},
+    {"autotune.yaw.delay",   ParamType::FLOAT, &autotune_yaw_delay,   0.0f,  0.0f, 1.0f,   nullptr},
+    {"autotune.yaw.resid",   ParamType::FLOAT, &autotune_yaw_resid,   0.0f,  0.0f, 1.0e6f, nullptr},
+    // Autotune design margins (written by autotune, read-back only). wc[rad/s] pm[deg] gm[dB].
+    {"autotune.roll.wc",     ParamType::FLOAT, &autotune_roll_wc,     0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.roll.pm",     ParamType::FLOAT, &autotune_roll_pm,     0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.roll.gm",     ParamType::FLOAT, &autotune_roll_gm,     0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.pitch.wc",    ParamType::FLOAT, &autotune_pitch_wc,    0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.pitch.pm",    ParamType::FLOAT, &autotune_pitch_pm,    0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.pitch.gm",    ParamType::FLOAT, &autotune_pitch_gm,    0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.yaw.wc",      ParamType::FLOAT, &autotune_yaw_wc,      0.0f,  0.0f, 5000.0f, nullptr},
+    {"autotune.yaw.pm",      ParamType::FLOAT, &autotune_yaw_pm,      0.0f, -360.0f, 360.0f, nullptr},
+    {"autotune.yaw.gm",      ParamType::FLOAT, &autotune_yaw_gm,      0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.roll.reject", ParamType::FLOAT, &autotune_roll_reject, 0.0f, 0.0f, 10.0f, nullptr},
+    {"autotune.pitch.reject",ParamType::FLOAT, &autotune_pitch_reject,0.0f, 0.0f, 10.0f, nullptr},
+    {"autotune.yaw.reject",  ParamType::FLOAT, &autotune_yaw_reject,  0.0f, 0.0f, 10.0f, nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},
@@ -358,6 +464,7 @@ static const ParamEntry table[] = {
     // テレメトリ WiFi モード（0=STA, 1=SoftAP）— 起動時のみ。ライブ再読込なし
     // （無線は飛行中に載せ替えられない）。
     {"wifi.mode",       ParamType::INT,   &wifi_mode,      0.0f,      0.0f,  1.0f,   nullptr},
+    {"log.blackbox.enable", ParamType::INT, &log_blackbox_enable, 0.0f, 0.0f, 1.0f, nullptr},
 
     // Attitude control
     {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  &notifyControllerReload},
@@ -378,6 +485,7 @@ static const ParamEntry table[] = {
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
+    {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
 
     // Position control
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},
@@ -390,7 +498,12 @@ static const ParamEntry table[] = {
     {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, &notifyEstimatorReload},
     {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, &notifyEstimatorReload},
     {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, &notifyEstimatorReload},
-    {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.001f, 1.0f,  &notifyEstimatorReload},
+    // Min lowered to 0 so eskf.bias.gyro_dev_max=0 FREEZES the gyro bias at the boot
+    // still-calibration nominal (no in-flight ESKF update reaches the rate loop) — a
+    // diagnostic toggle. Restore 0.03 for normal random-walk tracking.
+    // 最小を0に下げ、=0 で起動静止校正値にジャイロバイアスを凍結（飛行中ESKF更新を
+    // レートループへ反映しない）。診断用トグル。通常は0.03へ戻す。
+    {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.0f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF observation noise
     {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.01f, 0.001f, 1.0f,  &notifyEstimatorReload},
