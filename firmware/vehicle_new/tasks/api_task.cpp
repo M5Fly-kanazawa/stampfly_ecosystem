@@ -584,10 +584,21 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // or a sane motor lag. (fitPlant already rejects too-few-effective-points via fit_ok.)
     // A solo pilot cannot abort, so a bad gain must never reach set_float.
     // ハンズフリー適用前の多重防御: 残差はコヒーレンス重みゆえ偽装可 → 残差非依存の物理境界でも防御。
+    //
+    // YAW EXCEPTION on the motor-lag bound: roll/pitch (thrust differential) show a real
+    // ~31 ms motor pole, so T→0 there means a bad fit → require T≥2 ms. YAW does NOT: its
+    // torque carries a reaction term (I_r·dω/dt) whose minimum-phase (LHP) zero
+    // near-cancels the motor pole, leaving an integrator+delay with NO identifiable pole in
+    // band (flight data: T→0; the individual zero/pole sit below the 2 Hz lowest tone and
+    // are unidentifiable — and irrelevant, the wc≈2.9 Hz crossover is above them). So for
+    // yaw, T→0 is the VALID design model, not a degenerate fit; allow T from 0.
+    // ヨー例外: roll/pitch は実モータ極(~31ms)があり T→0 は不良フィット → T≥2ms 要求。ヨーは反トルク
+    // の最小位相零点がモータ極を相殺し、帯域内に同定可能な極が無い積分器+遅れ(T→0が正しい設計モデル)。
     const float b_lo = 0.25f / kSpecInertia[axis];
     const float b_hi = 4.0f  / kSpecInertia[axis];
+    const float t_lo = (axis == 2) ? 0.0f : 0.002f;   // yaw: integrator+delay, T→0 valid
     const bool phys_ok = plant.b >= b_lo && plant.b <= b_hi
-                       && plant.T >= 0.002f && plant.T <= 0.080f;
+                       && plant.T >= t_lo && plant.T <= 0.080f;
     if (!fit_ok || !(plant.residual <= 0.3f) || !phys_ok) {   // !(<=) also rejects NaN
         ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f coh_sum=%.1f b=%.0f T=%.1fms phys=%d (saved)",
                  static_cast<double>(plant.residual), static_cast<double>(plant.coh_sum),
