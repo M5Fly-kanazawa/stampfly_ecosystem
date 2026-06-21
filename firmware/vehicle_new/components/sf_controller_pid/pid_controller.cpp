@@ -81,6 +81,10 @@ void PidController::loadParams()
     params::get_float("attitude.yawhold.kp", yaw_hold_kp_);
     params::get_float("attitude.yawhold.rate_max", yaw_hold_rate_max_);
 
+    // Attitude trim (equilibrium tilt, all modes) / 姿勢トリム（平衡傾き・全モード）
+    params::get_float("attitude.roll.trim",  roll_trim_);
+    params::get_float("attitude.pitch.trim", pitch_trim_);
+
     // Altitude control / 高度制御
     params::get_float("altitude.alt.kp", alt_pos_.kp);
     params::get_float("altitude.alt.ti", alt_pos_.ti);
@@ -323,6 +327,24 @@ ControlOutput PidController::compute(
                 rate_sp_yaw = 0.0f;
             }
         }
+
+        // @design architecture.md INV-1 — attitude trim at the single cascade
+        //        confluence: equilibrium tilt added to the angle SETPOINT for EVERY
+        //        mode (after the POS_HOLD override and the Landing level gate, before
+        //        the angle→rate loop). The angle loop then holds this tilt, cancelling
+        //        steady horizontal drift with no extra thrust, and POS_HOLD's position
+        //        loop no longer has to carry the equilibrium tilt. On a stale-link
+        //        landing the level gate zeros the pilot tilt but trim still applies,
+        //        so the descent holds the equilibrium-level (stable) not a false
+        //        geometric zero (which would drift by the trim amount). Flight-identified. [OK]
+        // @design architecture.md INV-1 — 単一合流点での姿勢トリム: 平衡傾きを全モードの
+        //        角度「目標」に加算（POS_HOLD 上書きと Landing 水平ゲートの後、角度→レート
+        //        ループの前）。角度ループがこの傾きを保ち、定常水平ドリフトを推力を余分に
+        //        食わず打ち消す。POS_HOLD の位置ループは平衡傾きを担わずに済む。リンク途絶
+        //        着陸では水平ゲートがパイロット傾きを 0 にするがトリムは残るため、降下は
+        //        平衡水平（安定）を保ち見かけの幾何ゼロ（トリム分ドリフトする）にしない。飛行で同定。
+        roll_sp  += roll_trim_;
+        pitch_sp += pitch_trim_;
 
         rate_sp_roll  = att_roll_.compute(roll_sp, euler.x, dt);
         rate_sp_pitch = att_pitch_.compute(pitch_sp, euler.y, dt);

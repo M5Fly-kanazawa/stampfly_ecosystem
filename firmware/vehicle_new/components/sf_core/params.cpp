@@ -232,6 +232,24 @@ namespace param_vars {
     float att_pitch_ti    = 4.0f;
     float att_pitch_td    = 0.04f;
 
+    // Attitude trim (STABILIZE and above): equilibrium roll/pitch tilt [rad] added
+    // to the angle-loop SETPOINT (not the rate). The craft holds this small tilt to
+    // cancel steady horizontal drift from CG offset / sensor-level bias; the angle
+    // loop drives the craft there and the inner rate loop costs no extra thrust.
+    // The true equilibrium tilt is unknowable on the ground (it depends on CG and
+    // thrust asymmetry), so it is identified by FLYING (sf trim analyze). Applies at
+    // the attitude confluence for EVERY mode (STABILIZE / ALT_HOLD / POS_HOLD), so
+    // POS_HOLD's position loop is relieved of carrying the equilibrium tilt.
+    // Default 0.0; limited to ±0.1 rad (±5.7°).
+    // 姿勢トリム（STABILIZE 以上）: 角度ループの「目標」に加算する平衡 roll/pitch 傾き [rad]
+    // （レートでなく）。CG オフセットやセンサ水平バイアス由来の定常水平ドリフトを打ち消す
+    // 小さな傾きを保つ。角度ループが機体をこの傾きへ駆動し、内側レートループは推力を余分に
+    // 食わない。真の平衡傾きは地上で知り得ない（CG と推力非対称に依存）ため飛行で同定する
+    // （sf trim analyze）。姿勢合流点で全モードに効く（STABILIZE / ALT_HOLD / POS_HOLD）ので、
+    // POS_HOLD の位置ループは平衡傾きを担う負担から解放される。既定 0.0、範囲 ±0.1 rad（±5.7°）。
+    float trim_roll  = 0.0f;
+    float trim_pitch = 0.0f;
+
     // Heading hold (STABILIZE+, yaw stick neutral): P gain [1/s] on the estimator
     // yaw and the correction turn-rate limit [rad/s]. kp=0 disables the hold.
     // Defaults from the 2026-06-11 flight-log replay (excursion 12.3°→5.7° mean).
@@ -473,6 +491,12 @@ static const ParamEntry table[] = {
     {"attitude.pitch.kp", ParamType::FLOAT, &att_pitch_kp, 5.0f,  0.0f,  50.0f,  &notifyControllerReload},
     {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, &notifyControllerReload},
     {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   &notifyControllerReload},
+
+    // Attitude trim — equilibrium tilt [rad] added to the angle SETPOINT, all modes
+    // (flight-identified by sf trim analyze). Limited to ±0.1 rad (±5.7°).
+    // 姿勢トリム — 角度「目標」に加算する平衡傾き [rad]、全モード（sf trim analyze で飛行同定）。
+    {"attitude.roll.trim",  ParamType::FLOAT, &trim_roll,  0.0f, -0.1f, 0.1f, &notifyControllerReload},
+    {"attitude.pitch.trim", ParamType::FLOAT, &trim_pitch, 0.0f, -0.1f, 0.1f, &notifyControllerReload},
 
     // Heading hold (kp=0 disables / kp=0 で無効)
     {"attitude.yawhold.kp",       ParamType::FLOAT, &att_yawhold_kp,       3.0f, 0.0f, 10.0f, &notifyControllerReload},

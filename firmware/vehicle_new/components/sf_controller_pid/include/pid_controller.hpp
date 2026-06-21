@@ -289,6 +289,20 @@ private:
     static constexpr float kYawHoldStickDeadband = 0.03f;
     static constexpr float kYawHoldThrottleFloor = 0.25f;
 
+    // Attitude trim (equilibrium tilt) applied to the angle-loop SETPOINT at the
+    // attitude confluence — one injection for every mode (STABILIZE / ALT_HOLD /
+    // POS_HOLD / Landing), after the POS_HOLD override and the Landing level gate.
+    // The angle loop drives the craft to this tilt, cancelling steady horizontal
+    // drift (CG offset / sensor-level bias) with no extra thrust. Flight-identified
+    // (sf trim analyze); the true equilibrium tilt is unknowable on the ground.
+    // 姿勢トリム（平衡傾き）。姿勢合流点で角度ループの「目標」に加算 — 全モード
+    // （STABILIZE / ALT_HOLD / POS_HOLD / Landing）で1点、POS_HOLD 上書きと Landing
+    // 水平ゲートの後。角度ループが機体をこの傾きへ駆動し、CG オフセットやセンサ水平
+    // バイアス由来の定常水平ドリフトを推力を余分に食わず打ち消す。飛行で同定（sf trim
+    // analyze）— 真の平衡傾きは地上で知り得ない。
+    float roll_trim_  = 0.0f;  // [rad] roll equilibrium tilt (param attitude.roll.trim)
+    float pitch_trim_ = 0.0f;  // [rad] pitch equilibrium tilt (param attitude.pitch.trim)
+
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit
     // must be on the order of what the plant can deliver — with the default 1.0
