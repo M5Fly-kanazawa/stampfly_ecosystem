@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..utils import console
+from ..utils import console, paths
 
 COMMAND_NAME = "trim"
 COMMAND_HELP = "Identify equilibrium attitude trim from hover logs"
@@ -51,7 +51,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         description="Analyze a STABILIZE/ALT_HOLD hover log and suggest "
                     "attitude.roll.trim / attitude.pitch.trim.",
     )
-    analyze.add_argument("input", help="Input JSON-Lines hover flight log (.jsonl)")
+    analyze.add_argument(
+        "input", nargs="?",
+        help="JSON-Lines hover log (.jsonl). Omit to use the latest log in logs/",
+    )
     analyze.add_argument("-o", "--output", help="Save the JSON report to this file")
     analyze.add_argument(
         "--hover-start", type=float, default=6.0,
@@ -91,16 +94,24 @@ def run_help(args: argparse.Namespace) -> int:
 
 def run_analyze(args: argparse.Namespace) -> int:
     """Run the trim analysis and print the report / トリム解析を実行し報告"""
+    # No file given -> use the most recent log in logs/ (like sf cal / sf log).
+    # ファイル無指定なら logs/ の最新ログを使う（sf cal / sf log と同様）。
+    log_path = args.input or _find_latest_log()
+    if not log_path:
+        console.error("No log given and no .jsonl found in logs/ - specify a file.")
+        return 1
+    if not args.input:
+        console.info(f"Using latest log: {Path(log_path).name}")
     try:
         result = analyze_trim(
-            args.input,
+            log_path,
             hover_start_s=args.hover_start,
             hover_duration_s=args.hover_duration,
             current_roll=args.current_roll,
             current_pitch=args.current_pitch,
         )
     except FileNotFoundError:
-        console.error(f"Log not found: {args.input}")
+        console.error(f"Log not found: {log_path}")
         return 1
     except Exception as e:  # noqa: BLE001 - surface any analysis error to the user
         console.error(f"Trim analysis failed: {e}")
@@ -117,6 +128,17 @@ def run_analyze(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # Core analysis
 # ---------------------------------------------------------------------------
+
+def _find_latest_log():
+    """The most-recent *.jsonl in the repo logs/ dir, or None.
+    リポジトリ logs/ の最新 *.jsonl（無ければ None）。"""
+    logs_dir = paths.root() / "logs"
+    if not logs_dir.exists():
+        return None
+    files = sorted(logs_dir.glob("*.jsonl"),
+                   key=lambda f: f.stat().st_mtime, reverse=True)
+    return str(files[0]) if files else None
+
 
 def _load_jsonl(path: str) -> dict:
     """Load a JSON-Lines log grouped by record id / レコード id 別に読み込み"""
