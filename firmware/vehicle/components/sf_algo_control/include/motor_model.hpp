@@ -58,7 +58,11 @@ struct MotorParams {
     // 機械パラメータ
     float Dm = 3.69e-8f;      ///< Viscous damping [Nm·s/rad]
     float Qf = 2.76e-5f;      ///< Friction torque [Nm]
-    float Jm = 1.0e-9f;       ///< Motor+propeller inertia [kg·m²] (for dynamics)
+    float Jmp = 2.01e-8f;     ///< Rotor+propeller COMBINED inertia Jmp [kg·m²] (for spin-up
+                              ///< dynamics & the yaw reaction torque). Matches the Python sims
+                              ///< (simulator/genesis, vpython) and the spec (estimated from
+                              ///< geometry). NOTE: Jm (MOTOR-ONLY inertia, ≈1e-9) is a smaller,
+                              ///< DIFFERENT quantity — the spinning prop dominates Jmp.
 
     // Power supply
     // 電源
