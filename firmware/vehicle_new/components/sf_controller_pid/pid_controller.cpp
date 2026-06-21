@@ -343,6 +343,11 @@ ControlOutput PidController::compute(
         //        食わず打ち消す。POS_HOLD の位置ループは平衡傾きを担わずに済む。リンク途絶
         //        着陸では水平ゲートがパイロット傾きを 0 にするがトリムは残るため、降下は
         //        平衡水平（安定）を保ち見かけの幾何ゼロ（トリム分ドリフトする）にしない。飛行で同定。
+        // Always-on learning: nudge roll_trim_/pitch_trim_ toward the equilibrium from
+        // the hover drift (hover-gated) BEFORE applying them, so the craft self-trims
+        // while flying. / 常時学習: 適用前にホバードリフトから roll_trim_/pitch_trim_ を
+        // 平衡へ寄せる（ホバー限定）→ 飛行中に自己トリム。
+        learnTrim(state, setpoint, euler.z, dt);
         roll_sp  += roll_trim_;
         pitch_sp += pitch_trim_;
 
@@ -670,6 +675,108 @@ ControlOutput PidController::compute(
     return output;
 }
 
+// -----------------------------------------------------------------------------
+// learnTrim — always-on onboard attitude-trim learning (hover-gated)
+// learnTrim — 常時オンボード姿勢トリム学習（ホバー限定）
+//
+// @design architecture.md INV-1/INV-2 — slow bias on the single trim, no parallel
+//         path; pilot keeps full attitude authority                       [OK]
+// -----------------------------------------------------------------------------
+void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint& setpoint,
+                             float yaw, float dt)
+{
+    // Persist the learned trim to NVS on the landing edge (Airborne OR Landing ->
+    // Grounded — the autonomous descent passes through the Landing phase, so accept it
+    // too, else a landing that goes Airborne->Landing->Grounded never persists).
+    // Touchdown (Grounded) is the safe moment: thrust is gated, so the one-shot flash
+    // write cannot disturb flight. NOTE: this set_float+save runs in ControlTask; it is
+    // a single event at touchdown (not per-cycle), so the ~37ms flash stall lands after
+    // touchdown and is harmless. A stricter R5/R7-clean design would route it via a
+    // DISARM topic to a dedicated persister (future TODO).
+    // 学習トリムを着陸エッジ（Airborne または Landing -> Grounded。自動降下は Landing
+    // フェーズを通るので両方受理。さもないと Airborne->Landing->Grounded の着陸が永続
+    // しない）で NVS 保存。接地（Grounded）は安全な瞬間: 推力はゲート済みゆえ単発フラッシュ
+    // 書込が飛行を乱さない。注: この set_float+save は ControlTask で走るが接地時の単発
+    // （毎サイクルでない）ゆえ ~37ms フラッシュ停止は接地後で無害。厳密な R5/R7 準拠は
+    // DISARM トピック経由で専用永続化タスクに回す（将来 TODO）。
+    if ((trim_prev_phase_ == VerticalPhase::Airborne ||
+         trim_prev_phase_ == VerticalPhase::Landing) &&
+        phase_ == VerticalPhase::Grounded) {
+        params::set_float("attitude.roll.trim",  roll_trim_);
+        params::set_float("attitude.pitch.trim", pitch_trim_);
+        params::save();
+    }
+    trim_prev_phase_ = phase_;
+
+    // Gate: learn only in a hands-near-neutral hover in STABILIZE/ALT_HOLD (NOT
+    // POS_HOLD — its position loop already cancels drift) while airborne and not under
+    // guidance. Deliberate translation/turn (a stick out of the deadband) pauses
+    // learning so a commanded move is not mistaken for trim error.
+    // ゲート: STABILIZE/ALT_HOLD のスティックほぼ中立ホバーでのみ学習（POS_HOLD 除外＝
+    // 位置ループが既にドリフトを打ち消す）、空中かつ誘導なし。意図的な移動/旋回
+    // （スティックが不感帯外）は学習を止め、指令移動をトリム誤差と誤認しない。
+    // ALT_HOLD also requires a NEUTRAL vertical stick: an active climb/descent
+    // (throttle_axis off-centre) tilts the craft to track the rate against wind and
+    // would corrupt the horizontal-drift observation. (STABILIZE uses direct throttle,
+    // which does not couple into the horizontal axes the same way — left ungated.)
+    // ALT_HOLD は鉛直スティックも中立を要求: 上昇/下降中（throttle_axis が中央外）は風に
+    // 抗してレート追従するため機体が傾き、水平ドリフト観測を汚す。（STABILIZE は直接
+    // スロットルで水平軸へのカップリングが異なるためゲートしない。）
+    const bool hovering =
+        (current_mode_ == FlightMode::STABILIZE || current_mode_ == FlightMode::ALT_HOLD) &&
+        phase_ == VerticalPhase::Airborne &&
+        !guidance_active_ &&
+        fabsf(setpoint.roll)  < kTrimLearnStickDead &&
+        fabsf(setpoint.pitch) < kTrimLearnStickDead &&
+        fabsf(setpoint.yaw)   < kYawHoldStickDeadband &&
+        (current_mode_ != FlightMode::ALT_HOLD ||
+         fabsf(setpoint.throttle_axis) < kTrimLearnStickDead);
+    if (!hovering) { trim_learn_init_ = false; return; }
+
+    // First hover sample: seed the velocity reference and skip one step (no accel yet).
+    // 初回ホバーサンプル: 速度基準を仕込み 1 ステップ飛ばす（加速度未確定）。
+    if (!trim_learn_init_) {
+        trim_vel_prev_[0] = state.velocity[0];
+        trim_vel_prev_[1] = state.velocity[1];
+        trim_accel_lpf_[0] = 0.0f;
+        trim_accel_lpf_[1] = 0.0f;
+        trim_learn_init_ = true;
+        return;
+    }
+    if (dt <= 0.0f) return;
+
+    // Horizontal accel = d/dt of the ESKF NED velocity (no accel state in
+    // StateEstimate), rotated to the body FRD frame by yaw (same rotation as
+    // computePositionHold), then EMA-smoothed to reject differentiation noise.
+    // 水平加速度 = ESKF NED 速度の微分（StateEstimate に加速度状態なし）を yaw で機体
+    // FRD へ回転（computePositionHold と同一）、微分ノイズ除去に EMA 平滑。
+    const float a_north = (state.velocity[0] - trim_vel_prev_[0]) / dt;
+    const float a_east  = (state.velocity[1] - trim_vel_prev_[1]) / dt;
+    trim_vel_prev_[0] = state.velocity[0];
+    trim_vel_prev_[1] = state.velocity[1];
+
+    const float cy = cosf(yaw), sy = sinf(yaw);
+    const float ax_body =  cy * a_north + sy * a_east;   // forward (FRD X) / 前方
+    const float ay_body = -sy * a_north + cy * a_east;   // right   (FRD Y) / 右
+
+    const float alpha = 1.0f - expf(-2.0f * 3.14159265f * kTrimLearnAccelHz * dt);
+    trim_accel_lpf_[0] += alpha * (ax_body - trim_accel_lpf_[0]);
+    trim_accel_lpf_[1] += alpha * (ay_body - trim_accel_lpf_[1]);
+
+    // Integrate the smoothed drift into the trim with time constant kTrimLearnTau.
+    // Signs match sf trim analyze (SIL-verified): forward drift -> +pitch (nose up
+    // brakes it), right drift -> -roll. First-order: trim -> equilibrium as 1/tau.
+    // 平滑ドリフトを時定数 kTrimLearnTau でトリムに積分。符号は sf trim analyze（SIL
+    // 検証済み）と一致: 前方ドリフト -> +pitch（機首上げで制動）、右 -> -roll。1次系。
+    const float k = dt / kTrimLearnTau;
+    pitch_trim_ += k * (trim_accel_lpf_[0] / gravity_);
+    roll_trim_  -= k * (trim_accel_lpf_[1] / gravity_);
+
+    // Clamp to the param range (+/-kTrimMax). / param 範囲（±kTrimMax）にクランプ。
+    roll_trim_  = fminf(fmaxf(roll_trim_,  -kTrimMax), kTrimMax);
+    pitch_trim_ = fminf(fmaxf(pitch_trim_, -kTrimMax), kTrimMax);
+}
+
 void PidController::computePositionHold(const StateEstimate& state, float yaw,
                                         float dt, float& roll_sp, float& pitch_sp)
 {
@@ -894,6 +1001,11 @@ void PidController::reset()
     takeoff_reached_        = false;      // takeoff-complete signal clears / 離陸完了信号クリア
     takeoff_settle_cycles_  = 0;
     takeoff_elapsed_cycles_ = 0;
+    trim_learn_init_ = false;                    // re-seed the trim-learner filter / トリム学習フィルタ再初期化
+    trim_prev_phase_ = VerticalPhase::Grounded;  // landing-edge sync / 着陸エッジ整合
+    // NOTE: roll_trim_/pitch_trim_ are NOT cleared — the learned/loaded trim persists
+    // across resets (config, not integrator state). / roll_trim_/pitch_trim_ はクリア
+    // しない — 学習/読込トリムは reset を跨いで保持（積分器状態でなく構成値）。
     ESP_LOGI(TAG, "PID controller reset");
 }
 

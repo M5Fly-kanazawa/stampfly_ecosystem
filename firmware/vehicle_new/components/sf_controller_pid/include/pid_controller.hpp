@@ -303,6 +303,29 @@ private:
     float roll_trim_  = 0.0f;  // [rad] roll equilibrium tilt (param attitude.roll.trim)
     float pitch_trim_ = 0.0f;  // [rad] pitch equilibrium tilt (param attitude.pitch.trim)
 
+    // --- Always-on onboard trim learning (hover-gated) ---
+    // Slowly drives roll_trim_/pitch_trim_ to cancel steady horizontal drift while
+    // hovering, so the pilot need not run sf trim analyze by hand. StateEstimate has
+    // NO acceleration state, so the observation is the ESKF velocity differentiated to
+    // a body-frame accel and EMA-smoothed; integrated with time constant kTrimLearnTau;
+    // clamped to kTrimMax (= the param range); persisted to NVS on the landing edge.
+    // See learnTrim(). Signs match sf trim analyze (SIL-verified).
+    // 常時オンボード・トリム学習（ホバー限定）。ホバー中に roll_trim_/pitch_trim_ を
+    // ゆっくり動かし定常水平ドリフトを打ち消す（手動 sf trim analyze 不要）。StateEstimate
+    // に加速度状態が無いので、観測は ESKF 速度の微分による機体加速度を EMA 平滑、時定数
+    // kTrimLearnTau で積分、kTrimMax（=param 範囲）にクランプ、着陸エッジで NVS 保存。
+    // learnTrim() 参照。符号は sf trim analyze（SIL 検証済み）と一致。
+    static constexpr float kTrimMax            = 0.1f;   // [rad] trim clamp (= param range)
+    static constexpr float kTrimLearnTau       = 20.0f;  // [s] learning time constant
+    static constexpr float kTrimLearnAccelHz   = 0.3f;   // [Hz] accel EMA cutoff (rejects ~99% of the 400Hz differentiation noise, passes <0.1Hz drift)
+    static constexpr float kTrimLearnStickDead = 0.08f;  // [-] roll/pitch neutral band
+    bool  trim_learn_init_   = false;            // first-hover-sample guard
+    float trim_vel_prev_[2]  = {0.0f, 0.0f};     // [m/s] prev NED horiz velocity (N,E)
+    float trim_accel_lpf_[2] = {0.0f, 0.0f};     // [m/s^2] EMA body accel (fwd,right)
+    VerticalPhase trim_prev_phase_ = VerticalPhase::Grounded;  // landing-edge detect
+    void learnTrim(const StateEstimate& state, const CommandSetpoint& setpoint,
+                   float yaw, float dt);
+
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit
     // must be on the order of what the plant can deliver — with the default 1.0
