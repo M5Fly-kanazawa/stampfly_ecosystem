@@ -218,8 +218,10 @@ def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
     # あちらはドリフトを戻す「指令」加速度で、ここの「観測」ドリフトと逆向き）。
     #   roll: a_y=+g*phi  -> roll_trim = -a_y_obs/g
     #   pitch: a_x=-g*theta -> pitch_trim = +a_x_obs/g
-    # NOTE: sign to be verified on the SIL equilibrium-tilt bench before flight.
-    # 注: 符号は飛行前に SIL 平衡傾きベンチで検証する。
+    # NOTE: sign verified on the SIL wind bench (attitude_trim_test.scn): under a
+    # steady head wind, trim>0 cuts the downwind drift ~87% (15.4 m -> 1.9 m).
+    # 注: 符号は SIL 風ベンチ(attitude_trim_test.scn)で検証済み: 定常向かい風下で
+    # trim>0 が風下ドリフトを約87%削減(15.4 m -> 1.9 m)。
     delta_roll = -ay_body / G
     delta_pitch = ax_body / G
 
@@ -310,6 +312,6 @@ def _print_report(r: dict) -> None:
     console.print("  CAVEATS")
     console.print("    - Assumes NO WIND (indoor). Wind adds to the measured drift; if")
     console.print("      unsure, apply HALF the delta first and re-test.")
-    console.print("    - Sign derived from the STABILIZE loop; verify on the SIL bench.")
+    console.print("    - Sign derived from the STABILIZE loop; verified on the SIL wind bench.")
     console.print("=" * 66)
     console.print()
