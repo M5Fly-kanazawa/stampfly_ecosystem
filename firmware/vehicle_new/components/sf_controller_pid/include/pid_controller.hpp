@@ -319,6 +319,7 @@ private:
     static constexpr float kTrimLearnTau       = 20.0f;  // [s] learning time constant
     static constexpr float kTrimLearnAccelHz   = 0.3f;   // [Hz] accel EMA cutoff (rejects ~99% of the 400Hz differentiation noise, passes <0.1Hz drift)
     static constexpr float kTrimLearnStickDead = 0.08f;  // [-] roll/pitch neutral band
+    bool  trim_learn_enable_ = true;             // param attitude.trim.learn (0 = off, manual only)
     bool  trim_learn_init_   = false;            // first-hover-sample guard
     float trim_vel_prev_[2]  = {0.0f, 0.0f};     // [m/s] prev NED horiz velocity (N,E)
     float trim_accel_lpf_[2] = {0.0f, 0.0f};     // [m/s^2] EMA body accel (fwd,right)

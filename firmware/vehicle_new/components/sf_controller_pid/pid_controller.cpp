@@ -84,6 +84,9 @@ void PidController::loadParams()
     // Attitude trim (equilibrium tilt, all modes) / 姿勢トリム（平衡傾き・全モード）
     params::get_float("attitude.roll.trim",  roll_trim_);
     params::get_float("attitude.pitch.trim", pitch_trim_);
+    int32_t trim_learn = 1;  // onboard trim-learning enable / オンボード学習の有効化
+    params::get_int("attitude.trim.learn", trim_learn);
+    trim_learn_enable_ = (trim_learn != 0);
 
     // Altitude control / 高度制御
     params::get_float("altitude.alt.kp", alt_pos_.kp);
@@ -685,6 +688,12 @@ ControlOutput PidController::compute(
 void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint& setpoint,
                              float yaw, float dt)
 {
+    // Disabled by param (attitude.trim.learn = 0): no observation, no persist — use
+    // when the optical flow is unreliable, or to tune the trim by hand only.
+    // param (attitude.trim.learn = 0) で無効化: 観測も保存もしない — オプティカルフローが
+    // 不安定なとき、または手動のみでトリムを詰めるときに使う。
+    if (!trim_learn_enable_) return;
+
     // Persist the learned trim to NVS on the landing edge (Airborne OR Landing ->
     // Grounded — the autonomous descent passes through the Landing phase, so accept it
     // too, else a landing that goes Airborne->Landing->Grounded never persists).

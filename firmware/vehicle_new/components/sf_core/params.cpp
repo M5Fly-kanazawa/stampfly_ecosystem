@@ -249,6 +249,14 @@ namespace param_vars {
     // POS_HOLD の位置ループは平衡傾きを担う負担から解放される。既定 0.0、範囲 ±0.1 rad（±5.7°）。
     float trim_roll  = 0.0f;
     float trim_pitch = 0.0f;
+    // Onboard trim-learning enable (1 = learn in hover, 0 = off / manual only). The
+    // learner relies on the ESKF horizontal velocity (= optical flow); turn it OFF
+    // when the flow is unreliable (low-texture/dark floor, too high) so a bad velocity
+    // does not mis-learn the trim, or to tune by hand only. Default 1.
+    // オンボード・トリム学習の有効化(1=ホバー中に学習, 0=オフ/手動のみ)。学習器は ESKF
+    // 水平速度(=オプティカルフロー)に依存するので、フローが不安定(低テクスチャ/暗い床・
+    // 高すぎ)なときはオフにし悪い速度で誤学習させない。手動のみで詰めるときも。既定 1。
+    int32_t trim_learn = 1;
 
     // Heading hold (STABILIZE+, yaw stick neutral): P gain [1/s] on the estimator
     // yaw and the correction turn-rate limit [rad/s]. kp=0 disables the hold.
@@ -497,6 +505,7 @@ static const ParamEntry table[] = {
     // 姿勢トリム — 角度「目標」に加算する平衡傾き [rad]、全モード（sf trim analyze で飛行同定）。
     {"attitude.roll.trim",  ParamType::FLOAT, &trim_roll,  0.0f, -0.1f, 0.1f, &notifyControllerReload},
     {"attitude.pitch.trim", ParamType::FLOAT, &trim_pitch, 0.0f, -0.1f, 0.1f, &notifyControllerReload},
+    {"attitude.trim.learn", ParamType::INT,   &trim_learn, 1.0f,  0.0f, 1.0f, &notifyControllerReload},
 
     // Heading hold (kp=0 disables / kp=0 で無効)
     {"attitude.yawhold.kp",       ParamType::FLOAT, &att_yawhold_kp,       3.0f, 0.0f, 10.0f, &notifyControllerReload},
