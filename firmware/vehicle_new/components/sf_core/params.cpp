@@ -189,6 +189,12 @@ namespace param_vars {
     float autotune_pitch_wc = 0.0f, autotune_pitch_pm = 0.0f, autotune_pitch_gm = 0.0f;
     float autotune_yaw_wc   = 0.0f, autotune_yaw_pm   = 0.0f, autotune_yaw_gm   = 0.0f;
 
+    // Autotune reject-reason code per axis (read-only diagnostic): 0=applied, 1=insufficient
+    // coherent data, 2=bad/NaN fit, 3=residual>0.3, 4=out of physical bounds, 5=design
+    // infeasible (wc too high), 6=phase margin below target, 7=gain margin below floor,
+    // 8=param-table range. / 自動チューン棄却理由コード（軸別・読出専用）。
+    float autotune_roll_reject = 0.0f, autotune_pitch_reject = 0.0f, autotune_yaw_reject = 0.0f;
+
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
     // bench swaps estimators via this parameter alone — no code change.
@@ -446,6 +452,9 @@ static const ParamEntry table[] = {
     {"autotune.yaw.wc",      ParamType::FLOAT, &autotune_yaw_wc,      0.0f,  0.0f, 5000.0f, nullptr},
     {"autotune.yaw.pm",      ParamType::FLOAT, &autotune_yaw_pm,      0.0f, -360.0f, 360.0f, nullptr},
     {"autotune.yaw.gm",      ParamType::FLOAT, &autotune_yaw_gm,      0.0f, -200.0f, 200.0f, nullptr},
+    {"autotune.roll.reject", ParamType::FLOAT, &autotune_roll_reject, 0.0f, 0.0f, 10.0f, nullptr},
+    {"autotune.pitch.reject",ParamType::FLOAT, &autotune_pitch_reject,0.0f, 0.0f, 10.0f, nullptr},
+    {"autotune.yaw.reject",  ParamType::FLOAT, &autotune_yaw_reject,  0.0f, 0.0f, 10.0f, nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},

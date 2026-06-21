@@ -101,6 +101,7 @@ float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
 // =============================================================================
 bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
 {
+    out.fit_reject = 1;          // insufficient data unless we reach the end / 既定は不足
     if (count < 4) {
         return false;
     }
@@ -198,36 +199,37 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
     out.b = simplex[best][0];
     out.T = simplex[best][1];
     out.L = simplex[best][2];
-    // Coherence-weighted residual + SAFETY GATES that do NOT depend on the residual
-    // magnitude. A coh²-weighted cost → 0 as all coh → 0, so on all-noise / failed
-    // excitation the residual would be misleadingly tiny and FALSE-PASS the <0.3 gate,
-    // applying a garbage gain (worst on the hands-free SCHEDULED route). So: reject unless
-    // there are enough EFFECTIVE coherent points, and reject if any TRUSTED tone is badly
-    // mis-fit (the weighted mean can hide a large error at a high-coherence frequency).
-    // 残差に依存しない安全ゲート: 全 coh→0 で残差が偽小→ゴミゲイン誤適用を防ぐ（特にハンズフリー予約）。
-    // 有効コヒーレンス点が不足／信頼できる音が大きく外れる場合は棄却（既定ゲイン維持）。
+    // Coherence-weighted residual + a DATA-SUFFICIENCY gate that does NOT depend on the
+    // residual magnitude (a coh²-weighted cost → 0 as all coh → 0 would FALSE-PASS the
+    // <0.3 residual gate on all-noise data). Require enough EFFECTIVE coherent points.
+    //
+    // (A "worst trusted-tone error > 0.9" gate was tried and REMOVED: it rejected the
+    // DELIBERATE yaw integrator+delay simplification. Yaw's unmodeled minimum-phase LHP
+    // reaction zero gives a large per-tone PHASE LEAD at the low tones (e.g. 2 Hz at -41°
+    // vs the model's -95°), so a TRUSTED low tone hit ~1.0 > 0.9 and the fit was rejected
+    // — even though that mismatch is the SAFE lead that only ADDS phase margin (designing
+    // as integrator+delay is conservative). The residual<0.3 + GM-floor + physical-bounds
+    // gates carry the real safety. See the gate audit / yaw_axis_model.md.)
+    // 残差非依存のデータ充足ゲート。「最悪信頼音」ゲートは削除: ヨーの意図的な簡略化(積分器+遅れ)の
+    // 安全な LHP リード不一致(低域で大きな位相リード)を棄却していたため。残差<0.3＋GM下限＋物理境界が安全を担保。
     float wsum = 0.0f;
     int   n_eff = 0;          // points with coh>0.5 (TRUSTED) / 信頼できる点数
-    float worst_trusted = 0.0f;
     for (int i = 0; i < n; i++) {
         wsum += pts[i].coh * pts[i].coh;
-        if (pts[i].coh > 0.5f) {
-            n_eff++;
-            const Cplx gm = plantResponse(pts[i].w, out.b, out.T, out.L);
-            const float dmag = logf(G_hat[i].mag() + 1e-12f) - logf(gm.mag() + 1e-12f);
-            const float dph  = wrapAngle(G_hat[i].arg() - gm.arg());
-            const float e = dmag * dmag + dph * dph;
-            if (e > worst_trusted) worst_trusted = e;
-        }
+        if (pts[i].coh > 0.5f) n_eff++;
     }
     out.coh_sum  = wsum;
     out.residual = (wsum > 1e-6f) ? vals[best] / wsum : 1e3f;
-    // Need ≥4 trusted points (over-determined for the 3 params) and enough effective
-    // coherent energy; reject a single badly-mis-fit trusted tone; reject NaN (>=0 test).
-    if (n_eff < 4 || wsum < 2.5f || worst_trusted > 0.9f) {
+    if (n_eff < 4 || wsum < 2.5f) {        // insufficient coherent data
+        out.fit_reject = 1;
         return false;
     }
-    return out.b > 0.0f && out.residual >= 0.0f && out.residual < 1.0f;
+    if (!(out.b > 0.0f && out.residual >= 0.0f && out.residual < 1.0f)) {  // bad/NaN fit
+        out.fit_reject = 2;
+        return false;
+    }
+    out.fit_reject = 0;
+    return true;
 }
 
 // =============================================================================

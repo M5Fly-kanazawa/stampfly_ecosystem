@@ -59,6 +59,7 @@ struct Plant {
     float L;         // [s] dead time                          / むだ時間
     float residual;  // coherence-weighted mean fit cost (quality) / コヒーレンス重み残差
     float coh_sum;   // Σcoh² = effective coherent-point count (data sufficiency) / 有効点数
+    int   fit_reject;// 0=ok, 1=insufficient coherent data, 2=bad/NaN fit / フィット棄却コード
 };
 
 /// Tuned PID + numerically verified margins / 設計 PID＋数値検証済み余裕

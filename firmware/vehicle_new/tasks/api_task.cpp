@@ -582,6 +582,15 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         std::snprintf(pk, sizeof(pk), "autotune.%s.delay", kAxisName[axis]); sf::params::set_float(pk, plant.L);
         std::snprintf(pk, sizeof(pk), "autotune.%s.resid", kAxisName[axis]); sf::params::set_float(pk, plant.residual);
     }
+    // Reject-reason code, saved at EVERY exit so `param get autotune.<axis>.reject` shows
+    // WHY a hands-free (scheduled) tune was rejected — there is no serial log in flight.
+    // 0=applied, 1=insufficient coherent data, 2=bad/NaN fit, 3=residual>0.3, 4=out of
+    // physical bounds, 5=design infeasible (wc too high), 6=phase margin below target,
+    // 7=gain margin below floor.
+    // 棄却理由コード（飛行中はシリアル無し→`param get autotune.<axis>.reject` で確認）。
+    char rk_rej[40];
+    std::snprintf(rk_rej, sizeof(rk_rej), "autotune.%s.reject", kAxisName[axis]);
+
     // Defense-in-depth before the hands-free LIVE apply: the residual is coherence-WEIGHTED
     // and thus spoofable by a degenerate coh distribution, so gate ALSO on a residual-
     // INDEPENDENT physical-bounds check — a noise fit usually lands outside [0.25,4]×b_seed
@@ -604,8 +613,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     const bool phys_ok = plant.b >= b_lo && plant.b <= b_hi
                        && plant.T >= t_lo && plant.T <= 0.080f;
     if (!fit_ok || !(plant.residual <= 0.3f) || !phys_ok) {   // !(<=) also rejects NaN
-        ESP_LOGW(TAG, "Autotune fit rejected: residual=%.3f coh_sum=%.1f b=%.0f T=%.1fms phys=%d (saved)",
-                 static_cast<double>(plant.residual), static_cast<double>(plant.coh_sum),
+        const int rej = !fit_ok ? plant.fit_reject                  // 1 or 2
+                      : !(plant.residual <= 0.3f) ? 3 : 4;
+        sf::params::set_float(rk_rej, static_cast<float>(rej));
+        ESP_LOGW(TAG, "Autotune fit rejected (code %d): residual=%.3f coh_sum=%.1f b=%.0f T=%.1fms phys=%d",
+                 rej, static_cast<double>(plant.residual), static_cast<double>(plant.coh_sum),
                  static_cast<double>(plant.b), static_cast<double>(plant.T * 1e3),
                  static_cast<int>(phys_ok));
         reply("error fit rejected - gains unchanged (read autotune.* params)");
@@ -636,9 +648,21 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     }
 
     sf::autotune::TuneResult tune{};
-    if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune) ||
-        fabsf(tune.pm_deg - pm_deg) > 5.0f) {
-        reply("error tune infeasible (lower wc/pm) - gains unchanged");
+    if (!sf::autotune::tunePid(plant, wc, pm_deg, 10.0f, tune)) {
+        // Required controller lead exceeds the PID's maximum ⇒ wc is too high for this plant.
+        sf::params::set_float(rk_rej, 5.0f);
+        reply("error tune infeasible (lower wc) - gains unchanged");
+        return;
+    }
+    // Accept the achieved PM if it MEETS-OR-EXCEEDS the target (a higher PM is more damped =
+    // SAFER). Reject only an UNDER-margin design (PM below target). This was an equality gate
+    // |PM-target|>5, which wrongly rejected an over-damped design — yaw at wc=18 lands at
+    // PM~80 (PI-only already exceeds 60, so td clips to 0), which is safe, not a failure.
+    // 達成PMが目標以上なら採用（高PM=より減衰=安全）。目標未満だけ棄却。等値ゲートは過減衰設計を
+    // 誤棄却していた（yaw wc=18 は PM~80 で安全）。
+    if (tune.pm_deg < pm_deg - 5.0f) {
+        sf::params::set_float(rk_rej, 6.0f);
+        reply("error phase margin below target - gains unchanged");
         return;
     }
 
@@ -660,6 +684,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // yaw も同じ3パラモデルで GM は信頼でき、特別な下限は不要。）
     static const float kMinGmDb[3] = {6.0f, 6.0f, 6.0f};   // roll, pitch, yaw [dB]
     if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
+        sf::params::set_float(rk_rej, 7.0f);
         ESP_LOGW(TAG, "Autotune %s gain margin %.1f dB < floor %.1f dB",
                  kAxisName[axis], static_cast<double>(tune.gm_db),
                  static_cast<double>(kMinGmDb[axis]));
@@ -687,9 +712,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     if (!sf::params::set_float(key_kp, tune.kp) ||
         !sf::params::set_float(key_ti, tune.ti) ||
         !sf::params::set_float(key_td, tune.td)) {
+        sf::params::set_float(rk_rej, 8.0f);   // param-table range rejected the gain
         reply("error param range rejected - check param table");
         return;
     }
+    sf::params::set_float(rk_rej, 0.0f);   // 0 = APPLIED / 適用成功
     // Applied: the NEW gains are now the active gains, so overwrite the saved margins
     // (which held the OLD gains' margins) with this design's margins.
     // 適用済み: 新ゲインが実効ゲインになったので、保存余裕（旧ゲイン分）を本設計の余裕で上書き。
