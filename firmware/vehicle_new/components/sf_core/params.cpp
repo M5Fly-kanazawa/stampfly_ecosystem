@@ -287,7 +287,24 @@ namespace param_vars {
     // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。旧の速度
     // ループも物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植
     // できる。以前の強めの SIL 調整値（1.5/8 → 0.3/2）は実機実績値で置換。
-    float alt_alt_kp      = 0.6f;
+    // alt.kp 0.6->0.45 (2026-06-22): real-flight tuned to damp a slow altitude bob.
+    // The bob is the altitude loop being marginally under-damped against the ~110 ms
+    // MOTOR/PROP ACTUATION lag (thrust cmd -> actual vertical accel, MEASURED from a
+    // hover log; the ToF at 30 Hz and the ESKF vertical velocity are both clean/un-lagged,
+    // so the lag is in the thrust path, not sensing). Lowering alt.kp drops the loop
+    // crossover -> more phase margin against the lag -> the bob damps. Sweet spot: a sim
+    // sweep + flight both put the best damping at 0.45 (0.4/0.35 are worse; raising
+    // alt.vel.kp HURTS because the damping path sees the same actuation lag). Real flight:
+    // altitude RMS 53->33 mm (-38%), period 5->11.5 s. Residual ~±6 cm long-period bob is
+    // the actuation-lag limit (hardware). KEEP EQUAL to the table default. See
+    // poshold_accel_compensation.md remaining issue #7.
+    // alt.kp 0.6→0.45（2026-06-22）: 遅い高度上下動を減衰させる実機調整。上下動は高度ループが
+    // モータ/プロペラの応答遅れ ~110ms（推力指令→実鉛直加速度、ホバーログで実測。ToF 30Hz も
+    // ESKF 鉛直速度も健全・無遅れゆえ遅れは推力経路）に対し減衰不足なため。alt.kp を下げると
+    // ループのクロスオーバーが下がり位相余裕が増えて上下動が減衰。最適点は sim+実機とも 0.45
+    // （0.4/0.35 は悪化、alt.vel.kp を上げるのは逆効果＝減衰経路が同じ遅れを見るため）。実機:
+    // 高度 RMS 53→33mm(−38%)、周期 5→11.5s。残る±6cm 長周期はアクチュエーション遅れの限界（ハード）。
+    float alt_alt_kp      = 0.45f;
     float alt_alt_ti      = 7.0f;
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
@@ -548,7 +565,7 @@ static const ParamEntry table[] = {
     {"attitude.yawhold.rate_max", ParamType::FLOAT, &att_yawhold_rate_max, 2.0f, 0.1f, 5.0f,  &notifyControllerReload},
 
     // Altitude control (SIL-validated; see the variable defaults above)
-    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.6f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.45f, 0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
