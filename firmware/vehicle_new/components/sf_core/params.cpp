@@ -224,12 +224,22 @@ namespace param_vars {
     // 本当に必要かつ周期ストールを許容できる時のみ ON。恒久対策(将来)=RAM 緩衝し DISARM で書込。
     int32_t log_blackbox_enable = 0;
 
-    // Attitude control
+    // Attitude control. att.ti 4.0->2.0 (2026-06-22): pilot-preferred on hardware — a
+    // faster attitude integral firms up the tilt-hold feel. (A wobble-flight ID showed
+    // the loop-relevant tilt achievement is ~0.58 at the POS_HOLD band, capped by the
+    // real motor torque effectiveness ~0.4-0.7x; ti=2 lifts the low-frequency end. The
+    // measured POS_HOLD drift RMS was marginally looser (16->20 mm, within flight-to-
+    // flight scatter) but the pilot prefers the firmer ti=2 response.) Keep initializer
+    // == table default below.
+    // 姿勢制御。att.ti 4.0→2.0（2026-06-22）: 実機でパイロットが好む — 速い姿勢積分で傾き保持の
+    // 手応えが締まる。（ウォブル同定で POS_HOLD 帯の傾き達成度 ~0.58、実機トルク効き ~0.4-0.7倍で
+    // 頭打ち。ti=2 は低域を持ち上げる。POS_HOLD ドリフト RMS は僅かに緩む計測（16→20mm、飛行間
+    // ばらつき内）だが、締まった ti=2 の応答をパイロットが好む。）下の table 既定と一致させる。
     float att_roll_kp     = 5.0f;
-    float att_roll_ti     = 4.0f;
+    float att_roll_ti     = 2.0f;
     float att_roll_td     = 0.04f;
     float att_pitch_kp    = 5.0f;
-    float att_pitch_ti    = 4.0f;
+    float att_pitch_ti    = 2.0f;
     float att_pitch_td    = 0.04f;
 
     // Attitude trim (STABILIZE and above): equilibrium roll/pitch tilt [rad] added
@@ -520,10 +530,10 @@ static const ParamEntry table[] = {
 
     // Attitude control
     {"attitude.roll.kp",  ParamType::FLOAT, &att_roll_kp,  5.0f,  0.0f,  50.0f,  &notifyControllerReload},
-    {"attitude.roll.ti",  ParamType::FLOAT, &att_roll_ti,  4.0f,  0.01f, 100.0f, &notifyControllerReload},
+    {"attitude.roll.ti",  ParamType::FLOAT, &att_roll_ti,  2.0f,  0.01f, 100.0f, &notifyControllerReload},
     {"attitude.roll.td",  ParamType::FLOAT, &att_roll_td,  0.04f, 0.0f,  1.0f,   &notifyControllerReload},
     {"attitude.pitch.kp", ParamType::FLOAT, &att_pitch_kp, 5.0f,  0.0f,  50.0f,  &notifyControllerReload},
-    {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 4.0f,  0.01f, 100.0f, &notifyControllerReload},
+    {"attitude.pitch.ti", ParamType::FLOAT, &att_pitch_ti, 2.0f,  0.01f, 100.0f, &notifyControllerReload},
     {"attitude.pitch.td", ParamType::FLOAT, &att_pitch_td, 0.04f, 0.0f,  1.0f,   &notifyControllerReload},
 
     // Attitude trim — equilibrium tilt [rad] added to the angle SETPOINT, all modes
