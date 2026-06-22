@@ -355,10 +355,10 @@ namespace param_vars {
     float pos_vel_kp      = 3.0f;
     float pos_vel_ti      = 2.0f;
     // POS_HOLD stick reposition speed [m/s]: deflecting roll/pitch in POS_HOLD drives the
-    // craft at up to this speed (PX4 Position-mode style); centre = hold. Gentle default
+    // craft at up to this speed (deflect to move, release to hold); centre = hold. Gentle default
     // for an indoor room; tune live with `param set position.stick_vel`.
     // POS_HOLD スティック再配置速度 [m/s]: POS_HOLD で roll/pitch を倒すとこの速度まで機体が
-    // 動く（PX4 Position モード方式）、中立=保持。屋内向けに穏やかな既定値。
+    // 動く（倒して動かし、離して保持）、中立=保持。屋内向けに穏やかな既定値。
     float pos_stick_vel   = 0.4f;
 
     // ESKF process noise

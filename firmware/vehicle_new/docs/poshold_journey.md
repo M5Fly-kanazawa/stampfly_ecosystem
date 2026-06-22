@@ -185,7 +185,7 @@ K∈[2.8,7]・τ∈[50,300ms] でロバスト安定。実機検証：
 
 ## 5. 仕上げ — スティックで動かせる POS モード
 
-定点保持が完成したので、**PX4 Position モード方式** のスティック操作を実装（commit `ef3f854`）：
+定点保持が完成したので、**スティック速度リポジショニング**（roll/pitch を倒すと水平速度を指令し、中立に戻すと現在位置を再捕捉して止まる方式 ＝「倒して動かし、離して保持」）のスティック操作を実装（commit `ef3f854`）：
 
 - roll/pitch スティック → 水平速度指令（機体座標、STABILIZE の傾き方向と一致）を速度ループへ注入
 - **中立に戻すと、離した位置で停止して再捕捉**（位置目標を更新して止まる）
@@ -340,7 +340,7 @@ Robustly stable over K∈[2.8,7], τ∈[50,300 ms]. On hardware: divergence gone
 
 ## 5. The finishing touch — a stick-movable POS mode
 
-With fixed-point hold complete, a **PX4 Position-mode style** stick scheme was added (commit `ef3f854`): roll/pitch sticks inject a horizontal velocity command (body frame, matching the STABILIZE tilt direction) into the velocity loop; returning to neutral re-captures the stopped position as the new target. `position.stick_vel` (default 0.4 m/s) is live-tunable. SIL `pos_reposition` (move 0.70 m east → hold the new spot within 6 cm) passes 19/19; good on hardware; INV-1 (single attitude pipeline for all vertical phases) preserved.
+With fixed-point hold complete, a **velocity-command repositioning** stick scheme was added (commit `ef3f854`) — deflect to move, release to hold: roll/pitch sticks inject a horizontal velocity command (body frame, matching the STABILIZE tilt direction) into the velocity loop; returning to neutral re-captures the stopped position as the new target. `position.stick_vel` (default 0.4 m/s) is live-tunable. SIL `pos_reposition` (move 0.70 m east → hold the new spot within 6 cm) passes 19/19; good on hardware; INV-1 (single attitude pipeline for all vertical phases) preserved.
 
 ## 6. What's impressive
 

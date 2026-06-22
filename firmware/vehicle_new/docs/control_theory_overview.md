@@ -198,7 +198,7 @@ $$
 | **鉛直速度** | PI → 推力補正 | 出力を `±0.15N` にクランプ（実績ゲインがこの飽和と組で調整・ホバー推力偏りの積分引き込みも抑制） |
 | **高度** | P → 鉛直速度目標 | 離陸時は速度を `±takeoff_climb_rate` にクランプし**目標近傍で減速→捕捉**（オーバーシュート無し） |
 | **水平速度** | PID → 水平加速度 | POS_HOLD の内ループ。トルク効き不足を補うため `vel.kp` を高めに（§5・代償はフラフラ） |
-| **位置（最外）** | P → 水平速度目標 | POS_HOLD の外ループ。**スティックを倒すと速度指令に切替（位置ループ迂回）し、離すと現在位置を再捕捉**（PX4 Position 方式） |
+| **位置（最外）** | P → 水平速度目標 | POS_HOLD の外ループ。**スティックを倒すと速度指令に切替（位置ループ迂回）し、離すと現在位置を再捕捉**（スティック速度リポジショニング＝倒して動かし、離して保持） |
 
 ### 4.3 加速度↔傾きの写像
 
@@ -406,7 +406,7 @@ Vertical is a parallel chain `[altitude]→[vertical-velocity]→thrust_correcti
 | **Vertical velocity** | PI → thrust correction | output clamped to `±0.15 N` (the proven gains were tuned against this saturation; also bounds the hover-bias integrator pull) |
 | **Altitude** | P → vertical-velocity sp | on takeoff, velocity clamped to `±takeoff_climb_rate` so it DECELERATES near the target and CAPTURES it (no overshoot) |
 | **Horizontal velocity** | PID → horizontal accel | POS_HOLD inner loop; `vel.kp` raised to offset weak torque (§5; the cost is the wobble) |
-| **Position (outermost)** | P → horizontal-velocity sp | POS_HOLD outer loop; a deflected stick switches to a velocity command (bypassing the position loop) and releasing re-captures the current position (PX4 Position mode) |
+| **Position (outermost)** | P → horizontal-velocity sp | POS_HOLD outer loop; a deflected stick switches to a velocity command (bypassing the position loop) and releasing re-captures the current position (velocity-command repositioning — deflect to move, release to hold) |
 
 ### 4.3 The acceleration↔tilt mapping
 

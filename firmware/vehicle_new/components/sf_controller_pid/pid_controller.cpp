@@ -114,7 +114,7 @@ void PidController::loadParams()
     params::get_float("position.vel.ti", vel_x_.ti);
     pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     vel_y_ = vel_x_;
-    // POS_HOLD stick reposition speed (PX4 Position-mode style) / POS_HOLD スティック再配置速度
+    // POS_HOLD stick reposition speed (deflect to move, release to hold) / POS_HOLD スティック再配置速度
     params::get_float("position.stick_vel", stick_reposition_vel_);
 
     // Output limits — each loop is clamped to what its downstream stage may
@@ -797,12 +797,12 @@ void PidController::computePositionHold(const StateEstimate& state,
 {
     const float cy = cosf(yaw), sy = sinf(yaw);
 
-    // Stick repositioning (PX4 Position-mode style). Roll/pitch sticks command a
+    // Stick repositioning (deflect to move, release to hold). Roll/pitch sticks command a
     // horizontal velocity in the BODY frame; the sign matches STABILIZE tilt (roll
     // right → move right, pitch forward → move forward), so the craft moves the way
     // the same stick would tilt it by hand. Sticks are deadbanded upstream, so a
     // centred stick is exactly 0 = "hold".
-    // スティック再配置（PX4 Position モード方式）。roll/pitch スティックが機体座標の水平
+    // スティック再配置（倒して動かし、離して保持）。roll/pitch スティックが機体座標の水平
     // 速度を指令。符号は STABILIZE の傾き方向と一致（右ロール→右、前ピッチ→前）させ、手で
     // 傾けるのと同じ向きに動く。スティックは上流で不感帯処理済ゆえ中央は厳密に 0 =「保持」。
     const float v_fwd   = -setpoint.pitch * stick_reposition_vel_;   // forward (FRD x) [m/s]
