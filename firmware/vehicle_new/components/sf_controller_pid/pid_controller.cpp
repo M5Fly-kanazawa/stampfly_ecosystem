@@ -114,6 +114,8 @@ void PidController::loadParams()
     params::get_float("position.vel.ti", vel_x_.ti);
     pos_y_ = pos_x_;  // Same gains for X and Y / XとY同じゲイン
     vel_y_ = vel_x_;
+    // POS_HOLD stick reposition speed (PX4 Position-mode style) / POS_HOLD スティック再配置速度
+    params::get_float("position.stick_vel", stick_reposition_vel_);
 
     // Output limits — each loop is clamped to what its downstream stage may
     // deliver, so the conditional-integration anti-windup (pid.hpp) sees the
@@ -295,11 +297,14 @@ ControlOutput PidController::compute(
             }
         }
 
-        // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints so the
-        // craft holds its captured horizontal position instead of following sticks.
-        // Not while Grounded — the hold target is captured at (auto-)takeoff.
-        // POS_HOLD: 位置カスケードがスティック傾き指令を上書きし、捕捉した水平位置を保持する。
-        // Grounded 中は走らせない — 保持目標は（自動）離陸時に捕捉する。
+        // POS_HOLD: the position cascade OVERRIDES the stick tilt setpoints — a centred
+        // stick HOLDS the captured position, and a deflected roll/pitch stick REPOSITIONS
+        // it (commands a horizontal velocity; releasing re-captures the new position).
+        // See computePositionHold. Not while Grounded — the hold target is captured at
+        // (auto-)takeoff.
+        // POS_HOLD: 位置カスケードがスティック傾き指令を上書きする — 中立は捕捉位置を保持し、
+        // roll/pitch を倒すと「再配置」する（水平速度を指令、離すと新位置を再捕捉）。
+        // computePositionHold 参照。Grounded 中は走らせない — 保持目標は（自動）離陸時に捕捉。
         // Not during Landing: the autonomous descent uses direct stick tilt (or the
         // level gate below), not the position cascade — keep the landing law uniform
         // across modes (a POS_HOLD landing steers like STABILIZE).
@@ -308,7 +313,7 @@ ControlOutput PidController::compute(
         if (current_mode_ >= FlightMode::POS_HOLD &&
             phase_ != VerticalPhase::Grounded &&
             phase_ != VerticalPhase::Landing) {
-            computePositionHold(state, euler.z, dt, roll_sp, pitch_sp);
+            computePositionHold(state, setpoint, euler.z, dt, roll_sp, pitch_sp);
         }
 
         // Landing — the SINGLE level gate (INV-2). The pilot keeps roll/pitch/yaw while
@@ -786,21 +791,62 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     pitch_trim_ = fminf(fmaxf(pitch_trim_, -kTrimMax), kTrimMax);
 }
 
-void PidController::computePositionHold(const StateEstimate& state, float yaw,
+void PidController::computePositionHold(const StateEstimate& state,
+                                        const CommandSetpoint& setpoint, float yaw,
                                         float dt, float& roll_sp, float& pitch_sp)
 {
-    // Capture the hold target (NED north/east) when entering POS_HOLD.
-    // POS_HOLD 進入時に保持目標（NED 北/東）を捕捉する。
-    if (capture_pos_) {
+    const float cy = cosf(yaw), sy = sinf(yaw);
+
+    // Stick repositioning (PX4 Position-mode style). Roll/pitch sticks command a
+    // horizontal velocity in the BODY frame; the sign matches STABILIZE tilt (roll
+    // right → move right, pitch forward → move forward), so the craft moves the way
+    // the same stick would tilt it by hand. Sticks are deadbanded upstream, so a
+    // centred stick is exactly 0 = "hold".
+    // スティック再配置（PX4 Position モード方式）。roll/pitch スティックが機体座標の水平
+    // 速度を指令。符号は STABILIZE の傾き方向と一致（右ロール→右、前ピッチ→前）させ、手で
+    // 傾けるのと同じ向きに動く。スティックは上流で不感帯処理済ゆえ中央は厳密に 0 =「保持」。
+    const float v_fwd   = -setpoint.pitch * stick_reposition_vel_;   // forward (FRD x) [m/s]
+    const float v_right =  setpoint.roll  * stick_reposition_vel_;   // right   (FRD y) [m/s]
+    const bool  repositioning = (v_fwd != 0.0f || v_right != 0.0f);
+
+    float vx_sp, vy_sp;   // desired NED velocity (N, E) fed to the velocity loop
+    if (repositioning) {
+        // The pilot drives: bypass the position loop and feed the stick velocity
+        // (body FRD → NED) straight to the velocity loop. Reset the position-loop
+        // integrators (unused here, must not wind up) and keep the hold target pinned
+        // to the current position, so it "sticks" wherever the craft is when released.
+        // パイロットが操縦: 位置ループを迂回し、スティック速度（機体 FRD→NED）を速度ループへ
+        // 直接渡す。位置ループ積分はリセット（未使用・巻き上がり防止）し、保持目標は現在位置に
+        // 固定し続ける → 離した瞬間の位置で止まる。
+        vx_sp = cy * v_fwd - sy * v_right;   // NED N
+        vy_sp = sy * v_fwd + cy * v_right;   // NED E
+        pos_x_.reset();
+        pos_y_.reset();
         pos_setpoint_x_ = state.position[0];
         pos_setpoint_y_ = state.position[1];
-        capture_pos_ = false;
+        reposition_active_ = true;
+    } else {
+        // Hold. On the repositioning→neutral edge, capture where we stopped as the new
+        // target (the craft's momentum may carry it slightly past — the position loop
+        // pulls it back). capture_pos_ is also set on POS_HOLD entry (onModeChange /
+        // onTakeoff) and after a guidance cancel.
+        // 保持。再配置→中立のエッジで、止まった位置を新目標として捕捉する（慣性で少し行き過ぎ
+        // ても位置ループが引き戻す）。capture_pos_ は POS_HOLD 進入（onModeChange / onTakeoff）
+        // と誘導解除後にも立つ。
+        if (reposition_active_) {
+            capture_pos_ = true;
+            reposition_active_ = false;
+        }
+        if (capture_pos_) {
+            pos_setpoint_x_ = state.position[0];
+            pos_setpoint_y_ = state.position[1];
+            capture_pos_ = false;
+        }
+        // Outer loop (NED): position error → desired horizontal velocity.
+        // 外ループ（NED）: 位置誤差 → 目標水平速度。
+        vx_sp = pos_x_.compute(pos_setpoint_x_, state.position[0], dt);
+        vy_sp = pos_y_.compute(pos_setpoint_y_, state.position[1], dt);
     }
-
-    // Outer loop (NED): position error → desired horizontal velocity.
-    // 外ループ（NED）: 位置誤差 → 目標水平速度。
-    const float vx_sp = pos_x_.compute(pos_setpoint_x_, state.position[0], dt);
-    const float vy_sp = pos_y_.compute(pos_setpoint_y_, state.position[1], dt);
 
     // Inner loop (NED): velocity error → desired horizontal acceleration.
     // 内ループ（NED）: 速度誤差 → 目標水平加速度。
@@ -809,7 +855,6 @@ void PidController::computePositionHold(const StateEstimate& state, float yaw,
 
     // Rotate the desired NED acceleration into the body frame (yaw only).
     // 目標 NED 加速度を機体座標へ回転（ヨーのみ）。
-    const float cy = cosf(yaw), sy = sinf(yaw);
     const float ax_body =  cy * ax_ned + sy * ay_ned;   // forward (FRD X) / 前方
     const float ay_body = -sy * ax_ned + cy * ay_ned;   // right   (FRD Y) / 右
 
@@ -1004,6 +1049,7 @@ void PidController::reset()
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded; clears Landing too / 次の飛行は接地から（Landing も解除）
     landing_settle_t_ = 0.0f;            // near-ground settle ramp / 着地アシストのランプ
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
+    reposition_active_ = false;          // stick repositioning state clears / スティック再配置状態クリア
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
     throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用にゲート再武装

@@ -1,0 +1,31 @@
+# pos_reposition.scn — POS_HOLD STICK REPOSITION (PX4 Position-mode style, 2026-06-22)
+# POS_HOLD スティック再配置（PX4 Position モード方式）
+#
+# New feature: in POS_HOLD a deflected roll/pitch stick commands a horizontal VELOCITY
+# (the position cascade feeds the stick velocity into the velocity loop), and releasing
+# the stick re-captures the current position as the new hold target. This scenario:
+# ARM-triggered auto-takeoff in POS_HOLD (holds the launch point), then a ROLL-RIGHT
+# stick drives the craft EAST for 4 s, then the stick centres and the craft HOLDS the
+# new position. Verifies (a) it MOVED in response to the stick and (b) it HOLDS where the
+# pilot let go.
+# 新機能: POS_HOLD で roll/pitch を倒すと水平「速度」を指令し（位置カスケードがスティック
+# 速度を速度ループに渡す）、離すと現在位置を新しい保持目標として再捕捉する。本シナリオ:
+# POS_HOLD で ARM 起動の自動離陸（発進点保持）→ ロール右で 4 秒間 東へ移動 → 中立で
+# 新位置を保持。検証: (a) スティックに応じて移動した (b) 離した位置で保持する。
+#
+# roll 3000 = (3000-2048)/2048 = 0.465 norm, deadband 0.05 -> 0.44, x stick_vel 0.4 =
+# ~0.175 m/s east; ~0.5-0.7 m over the 4 s reposition window.
+# roll 3000 は正規化 0.465、不感帯 0.05 で 0.44、stick_vel 0.4 倍で東へ約 0.175 m/s。
+#
+# Run: sf sil scenario simulator/sil/scenarios/pos_reposition.scn --target vehicle_new
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        0     0     1  # C: ARM in POS_HOLD — props spool, AUTO-takeoff fires (throttle ignored)
+   +    rc   2048  2048   2048    2048  1     4000      50        0     0     1  # D: climb to 0.5 m, settle + HOLD launch point
+   +    rc   2048  3000   2048    2048  1     4000      50        0     0     1  # E: ROLL-RIGHT stick → REPOSITION east ~0.175 m/s for 4 s
+   +    rc   2048  2048   2048    2048  1     6000      50        0     0     1  # F: stick CENTER → re-capture + HOLD the new position 6 s
+   +    rc   2048  2048   2048    2048  0     200       50                       # G: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # H: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # I: settle disarmed

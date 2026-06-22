@@ -63,10 +63,15 @@ private:
 
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
+    /// Roll/pitch sticks REPOSITION the hold point (PX4 Position-mode style): a
+    /// deflected stick commands a horizontal velocity; releasing it re-captures the
+    /// current position as the new hold target.
     /// POS_HOLD カスケード: 位置/速度誤差 → 傾き指令（roll/pitch）。roll_sp/pitch_sp[rad]
-    /// を書き込み、呼び出し側のスティック値を上書きする。
-    void computePositionHold(const StateEstimate& state, float yaw, float dt,
-                             float& roll_sp, float& pitch_sp);
+    /// を書き込み、呼び出し側のスティック値を上書きする。roll/pitch スティックは保持点を
+    /// 「再配置」する（PX4 Position モード方式）: 倒すと水平速度を指令、離すと現在位置を
+    /// 新しい保持目標として再捕捉する。
+    void computePositionHold(const StateEstimate& state, const CommandSetpoint& setpoint,
+                             float yaw, float dt, float& roll_sp, float& pitch_sp);
 
     FlightMode current_mode_ = FlightMode::STABILIZE;
 
@@ -199,6 +204,21 @@ private:
     float pos_setpoint_x_ = 0;       // [m] captured position N (POS_HOLD target, NED)
     float pos_setpoint_y_ = 0;       // [m] captured position E (POS_HOLD target, NED)
     bool  capture_pos_    = false;   // capture pos_setpoint on the next POS_HOLD compute
+
+    // POS_HOLD stick repositioning (PX4 Position-mode style). A deflected roll/pitch
+    // stick commands a horizontal velocity (body frame) into the velocity loop instead
+    // of the position-hold output; releasing the stick re-captures the current position
+    // as the new hold target, so the craft stops where the pilot let go. Velocity scale
+    // is param position.stick_vel. Sticks are deadbanded upstream (command.cpp), so a
+    // centred stick reads exactly 0 = "hold". reposition_active_ tracks the moving state
+    // so the falling edge (stick → neutral) triggers the re-capture.
+    // POS_HOLD スティック再配置（PX4 Position モード方式）。roll/pitch スティックを倒すと
+    // 位置保持出力でなく水平速度（機体座標）を速度ループに指令し、離すと現在位置を新しい
+    // 保持目標として再捕捉する → パイロットが離した位置で止まる。速度スケールは param
+    // position.stick_vel。スティックは上流（command.cpp）で不感帯処理済ゆえ中央は厳密に
+    // 0 =「保持」。reposition_active_ は移動状態を追跡し、立下りエッジ（中立復帰）で再捕捉する。
+    float stick_reposition_vel_ = 0.4f;  // [m/s] max stick reposition speed (param position.stick_vel)
+    bool  reposition_active_    = false; // pilot is repositioning via stick
 
     // Guidance (Tello-style API / future Navigator, R11). While active the
     // POS_HOLD setpoints WALK toward guide_pos_ at guide_speed_ (the cascade

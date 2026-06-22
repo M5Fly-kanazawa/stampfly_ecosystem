@@ -327,6 +327,12 @@ namespace param_vars {
     float pos_pos_ti      = 5.0f;
     float pos_vel_kp      = 3.0f;
     float pos_vel_ti      = 2.0f;
+    // POS_HOLD stick reposition speed [m/s]: deflecting roll/pitch in POS_HOLD drives the
+    // craft at up to this speed (PX4 Position-mode style); centre = hold. Gentle default
+    // for an indoor room; tune live with `param set position.stick_vel`.
+    // POS_HOLD スティック再配置速度 [m/s]: POS_HOLD で roll/pitch を倒すとこの速度まで機体が
+    // 動く（PX4 Position モード方式）、中立=保持。屋内向けに穏やかな既定値。
+    float pos_stick_vel   = 0.4f;
 
     // ESKF process noise
     float eskf_gyro_noise   = 0.009655f;
@@ -566,6 +572,7 @@ static const ParamEntry table[] = {
     {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  3.0f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
+    {"position.stick_vel", ParamType::FLOAT, &pos_stick_vel, 0.4f, 0.05f, 2.0f, &notifyControllerReload},
 
     // ESKF process noise
     {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  &notifyEstimatorReload},

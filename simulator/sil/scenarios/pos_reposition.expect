@@ -1,0 +1,42 @@
+# pos_reposition.expect — POS_HOLD stick-reposition gate (PX4 Position-mode style)
+# G1 state machine (log) + G3 moved-then-held (true position) + G4 actuator health.
+# The craft auto-takes-off in POS_HOLD (holds launch), a roll-right stick drives it EAST,
+# then centering re-captures and HOLDS the new position.
+# POS_HOLD スティック再配置ゲート。自動離陸（発進点保持）→ ロール右で東へ移動 → 中立で
+# 新位置を再捕捉して保持。G1 状態遷移 + G3 移動して保持 + G4 アクチュエータ健全。
+exit 0
+
+# --- G1: state machine ---
+log_contains any "Mode change: STABILIZE → POS_HOLD"
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+log_contains any "DISARM accepted"
+order "Mode change: STABILIZE → POS_HOLD" "ARM accepted"
+order "ARM accepted" "Auto-takeoff engaged"
+order "Auto-takeoff engaged" "DISARM accepted"
+
+# --- G3a: holds the LAUNCH point after takeoff, before repositioning (10.5-12.5 s) ---
+metric horizontal_drift_max < 0.40 in 10.5 12.5
+
+# --- G3b: ROLL-RIGHT stick MOVES the craft (reposition window 12.5-16.5 s) ---
+# true planar displacement from the window start must exceed 0.30 m (it moved) and
+# stay bounded below 1.2 m (no runaway). 真値変位 >0.30 m（移動）かつ <1.2 m（暴走なし）。
+metric horizontal_drift_max > 0.30 in 12.5 16.5
+metric horizontal_drift_max < 1.20 in 12.5 16.5
+
+# --- G3c: stick CENTER → HOLDS the new position (settled hold 18.5-22.0 s) ---
+# drift from the window start stays tight: the craft parked where the pilot let go.
+# 窓開始からのドリフトがタイト: パイロットが離した位置で停止。
+metric horizontal_drift_max < 0.25 in 18.5 22.0
+
+# --- altitude held through the horizontal reposition (tilt costs cosθ lift) ---
+metric alt_mean > 0.40 in 18.5 22.0
+metric alt_mean < 0.65 in 18.5 22.0
+
+# --- G3: bounded attitude (reposition tilt + trim, no tumble) ---
+metric tilt_max < 14.0 in 8.5 22.0
+# --- G2: ESKF tracks truth in the settled hold ---
+metric att_rmse < 5.0 in 18.5 22.0
+# --- G4: motors not saturated ---
+metric duty_max < 0.92 in 10.0 22.0
