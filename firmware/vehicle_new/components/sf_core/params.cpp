@@ -302,11 +302,24 @@ namespace param_vars {
     // corr_new = 1.12 ×（新duty/旧duty）で調整。
     float hover_thrust_corr = 1.12f;
 
-    // Position control
-    float pos_pos_kp      = 1.0f;
+    // Position control. Runtime defaults (these initializers are the boot value
+    // when NVS has no saved entry; keep them EQUAL to the table[] default below).
+    // Re-tuned from the first real POS_HOLD flight (2026-06-22): the loop-relevant
+    // tilt->measured-velocity gain on hardware is only ~0.4 g, which collapses the
+    // inner velocity loop below the outer position loop and the closed loop slowly
+    // diverges into the wall. vel.kp 0.8->2.0 (~0.8*g/K) restores the velocity loop's
+    // authority; pos.kp 1.0->0.3 slows the outer loop -> cascade separation restored.
+    // Robust over K in [2.4,9.8] / tau in [50,300] ms; SIL pos_* still pass.
+    // See params.cpp table[] below + analysis/scripts/poshold_loop_design.py.
+    // 位置制御。実行時の既定（NVS に保存がなければこの初期化子が起動値。下の table[] 既定と
+    // 必ず一致させる）。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の実効
+    // 「傾き→速度」ゲインが約 0.4 g しかなく内/外ループの分離が崩れ閉ループが緩やかに発散
+    // して壁へ。vel.kp 0.8→2.0（≈0.8·g/K）で速度ループの権限を回復、pos.kp 1.0→0.3 で外ループを
+    // 遅く → カスケード分離を回復。K∈[2.4,9.8]/τ∈[50,300]ms でロバスト、SIL pos_* も全 PASS。
+    float pos_pos_kp      = 0.3f;
     float pos_pos_ti      = 5.0f;
-    float pos_vel_kp      = 0.8f;   // tight hold: enabled by the accel-comp estimator fix
-    float pos_vel_ti      = 2.0f;   // (the old 0.3 was the limit with the contaminated est)
+    float pos_vel_kp      = 2.0f;
+    float pos_vel_ti      = 2.0f;
 
     // ESKF process noise
     float eskf_gyro_noise   = 0.009655f;
@@ -520,10 +533,29 @@ static const ParamEntry table[] = {
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
 
-    // Position control
-    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  1.0f,  0.0f, 10.0f,  &notifyControllerReload},
+    // Position control. Gains re-tuned from the first real POS_HOLD flight
+    // (2026-06-22, log 20260622T161055): on hardware the loop-relevant
+    // tilt->measured-velocity gain is only ~0.4 g (vs the g the cascade assumes),
+    // because the commanded tilt is not fully achieved/measured and the optical
+    // flow under-reads velocity. That collapses the inner (velocity) loop bandwidth
+    // below the outer (position) loop and the closed loop slowly diverges
+    // (observed: growing ~0.1 Hz oscillation, +/-0.37->0.62 m, wall strike). Fix
+    // restores cascade timescale separation on the IDENTIFIED plant: raise vel.kp
+    // (0.8->2.0 ~= 0.8*g/K, recovering the velocity loop's intended authority) and
+    // lower pos.kp (1.0->0.3, slowing the outer loop). Robustly stable over
+    // K in [2.4,9.8], tau in [50,300] ms (worst sigma -0.05); SIL pos_* still pass
+    // (drift <=0.5 m, tighter than the old 0.85 m even on the ideal K=g plant).
+    // See analysis/scripts/poshold_loop_design.py + docs/poshold_accel_compensation.md.
+    // 位置制御。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の「指令傾き→実測
+    // 水平速度」の実効ゲインは約 0.4 g しかなく（傾き未達＋フロー速度の過小読み）、内側
+    // (速度) ループ帯域が外側 (位置) ループより下がってカスケードの時間スケール分離が崩れ、
+    // 閉ループが緩やかに発散（~0.1Hz 振動が ±0.37→0.62m に成長し壁に激突）。修正は同定
+    // プラント上で分離を回復: vel.kp を上げ（0.8→2.0≈0.8·g/K、速度ループ本来の権限を回復）
+    // pos.kp を下げる（1.0→0.3、外ループを遅く）。K∈[2.4,9.8]・τ∈[50,300]ms でロバスト安定
+    // （worst σ−0.05）、SIL pos_* も全 PASS（drift≤0.5m、理想 K=g でも旧 0.85m より tighter）。
+    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  0.3f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, &notifyControllerReload},
-    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  0.8f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  2.0f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
 
     // ESKF process noise
