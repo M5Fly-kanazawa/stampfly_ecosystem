@@ -656,12 +656,10 @@ void ControllerComm::tick()
 
 void ControllerComm::onControlPacketReceived(const ControlPacket& packet, const uint8_t* mac)
 {
-    // ペアリング済みの場合、MACアドレス確認
-    if (paired_) {
-        if (memcmp(mac, controller_mac_, 6) != 0) {
-            // 別のコントローラからのパケットは無視
-            return;
-        }
+    // MACアドレス確認 - ペアリング済みコントローラのみ受け入れる
+    if (!paired_ || memcmp(mac, controller_mac_, 6) != 0) {
+        // 未ペアリングまたは未知のコントローラからのパケットは無視
+        return;
     }
 
     last_recv_time_ = xTaskGetTickCount() * portTICK_PERIOD_MS;

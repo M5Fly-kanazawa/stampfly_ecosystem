@@ -339,6 +339,12 @@ void onControlPacket(const stampfly::ControlPacket& packet)
         return;  // Ignore ESP-NOW packets in UDP mode
     }
 
+    // Reject packets if not paired to a known controller (MAC whitelist enforcement)
+    // ペアリング済みでない場合は不正な制御を防ぐため拒否
+    if (!g_comm.isPaired()) {
+        return;
+    }
+
     // Feed control data to ControlArbiter for the control loop
     // 制御ループ用にControlArbiterへデータを供給
     arbiter.updateFromESPNOW(packet.throttle, packet.roll, packet.pitch,
