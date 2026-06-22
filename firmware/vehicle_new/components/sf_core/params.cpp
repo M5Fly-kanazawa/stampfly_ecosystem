@@ -307,18 +307,25 @@ namespace param_vars {
     // Re-tuned from the first real POS_HOLD flight (2026-06-22): the loop-relevant
     // tilt->measured-velocity gain on hardware is only ~0.4 g, which collapses the
     // inner velocity loop below the outer position loop and the closed loop slowly
-    // diverges into the wall. vel.kp 0.8->2.0 (~0.8*g/K) restores the velocity loop's
-    // authority; pos.kp 1.0->0.3 slows the outer loop -> cascade separation restored.
-    // Robust over K in [2.4,9.8] / tau in [50,300] ms; SIL pos_* still pass.
-    // See params.cpp table[] below + analysis/scripts/poshold_loop_design.py.
+    // diverges into the wall. vel.kp 0.8->3.0 restores the inner velocity loop's
+    // authority (it had collapsed below the outer loop); pos.kp 1.0->0.4 slows the
+    // outer loop -> cascade separation restored. Robust over K in [2.8,7] / tau in
+    // [50,300] ms; SIL pos_* still pass. Tuned over TWO real flights: 0.3/2.0 first
+    // stopped the divergence (held ~13 cm), then 0.4/3.0 tightened it (steady-hold
+    // drift RMS 31->16 mm, max 126->83 mm) with no extra tilt buzz. The residual
+    // wander is set by the ~0.4 g effective tilt->velocity gain (root cause, separate
+    // task: attitude-loop tilt achievement / flow scale). See poshold_loop_design.py.
     // 位置制御。実行時の既定（NVS に保存がなければこの初期化子が起動値。下の table[] 既定と
     // 必ず一致させる）。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の実効
     // 「傾き→速度」ゲインが約 0.4 g しかなく内/外ループの分離が崩れ閉ループが緩やかに発散
-    // して壁へ。vel.kp 0.8→2.0（≈0.8·g/K）で速度ループの権限を回復、pos.kp 1.0→0.3 で外ループを
-    // 遅く → カスケード分離を回復。K∈[2.4,9.8]/τ∈[50,300]ms でロバスト、SIL pos_* も全 PASS。
-    float pos_pos_kp      = 0.3f;
+    // して壁へ。vel.kp 0.8→3.0 で内側(速度)ループの権限を回復、pos.kp 1.0→0.4 で外ループを
+    // 遅く → カスケード分離を回復。K∈[2.8,7]/τ∈[50,300]ms でロバスト、SIL pos_* 全 PASS。
+    // 実機2飛行で調整: 0.3/2.0 でまず発散を止め（~13cm 保持）、0.4/3.0 で締めた（定常保持の
+    // ドリフト RMS 31→16mm・最大 126→83mm、傾きのビビり増なし）。残る揺らぎは ~0.4 g の
+    // 実効ゲインが律速（根治は別タスク: 姿勢ループの傾き達成度／フロー速度スケール）。
+    float pos_pos_kp      = 0.4f;
     float pos_pos_ti      = 5.0f;
-    float pos_vel_kp      = 2.0f;
+    float pos_vel_kp      = 3.0f;
     float pos_vel_ti      = 2.0f;
 
     // ESKF process noise
@@ -541,21 +548,23 @@ static const ParamEntry table[] = {
     // below the outer (position) loop and the closed loop slowly diverges
     // (observed: growing ~0.1 Hz oscillation, +/-0.37->0.62 m, wall strike). Fix
     // restores cascade timescale separation on the IDENTIFIED plant: raise vel.kp
-    // (0.8->2.0 ~= 0.8*g/K, recovering the velocity loop's intended authority) and
-    // lower pos.kp (1.0->0.3, slowing the outer loop). Robustly stable over
-    // K in [2.4,9.8], tau in [50,300] ms (worst sigma -0.05); SIL pos_* still pass
-    // (drift <=0.5 m, tighter than the old 0.85 m even on the ideal K=g plant).
-    // See analysis/scripts/poshold_loop_design.py + docs/poshold_accel_compensation.md.
+    // (0.8->3.0, recovering the inner velocity loop's authority) and lower pos.kp
+    // (1.0->0.4, slowing the outer loop). Robustly stable over K in [2.8,7],
+    // tau in [50,300] ms; SIL pos_* still pass. Real-flight tuned over 2 flights:
+    // 0.3/2.0 first stopped the divergence (~13 cm hold), 0.4/3.0 tightened it
+    // (steady-hold drift RMS 31->16 mm, max 126->83 mm). KEEP EQUAL to the
+    // initializers above. See analysis/scripts/poshold_loop_design.py + the doc.
     // 位置制御。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の「指令傾き→実測
     // 水平速度」の実効ゲインは約 0.4 g しかなく（傾き未達＋フロー速度の過小読み）、内側
     // (速度) ループ帯域が外側 (位置) ループより下がってカスケードの時間スケール分離が崩れ、
     // 閉ループが緩やかに発散（~0.1Hz 振動が ±0.37→0.62m に成長し壁に激突）。修正は同定
-    // プラント上で分離を回復: vel.kp を上げ（0.8→2.0≈0.8·g/K、速度ループ本来の権限を回復）
-    // pos.kp を下げる（1.0→0.3、外ループを遅く）。K∈[2.4,9.8]・τ∈[50,300]ms でロバスト安定
-    // （worst σ−0.05）、SIL pos_* も全 PASS（drift≤0.5m、理想 K=g でも旧 0.85m より tighter）。
-    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  0.3f,  0.0f, 10.0f,  &notifyControllerReload},
+    // プラント上で分離を回復: vel.kp を上げ（0.8→3.0、内側ループの権限回復）、pos.kp を下げ
+    // （1.0→0.4、外ループを遅く）。K∈[2.8,7]・τ∈[50,300]ms でロバスト、SIL pos_* 全 PASS。
+    // 実機2飛行で調整: 0.3/2.0 で発散停止（~13cm）、0.4/3.0 で締め（ドリフト RMS 31→16mm・
+    // 最大 126→83mm）。上の初期化子と必ず一致させる。
+    {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  0.4f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, &notifyControllerReload},
-    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  2.0f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  3.0f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
 
     // ESKF process noise
