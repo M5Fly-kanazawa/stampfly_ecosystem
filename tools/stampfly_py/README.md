@@ -60,7 +60,7 @@ tello = Tello(host="192.168.1.42")   # 機体の LAN IP を渡す
 | 移動 | `up` `down` `left` `right` `forward` `back`（cm）| ✅ ブロック（到達まで）|
 | 回転 | `cw` `ccw`（度）| ✅ ブロック（到達まで）|
 | 絶対移動 | `go x y z speed` | ✅ |
-| マニュアル | `rc a b c d`（連続操作 = `send_rc_control`）| 🚧 Phase 2 実装予定（POS_HOLD 速度指令へ橋渡し）|
+| マニュアル | `rc a b c d`（連続操作 = `send_rc_control`）| ✅ POS_HOLD 速度指令へ橋渡し（送信停止で保持・スティックで即解除）|
 | 読み取り | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | 状態ストリーム | UDP:8890（`get_battery`/`get_height`/`get_distance_tof` 等が読む）| ✅ ~10Hz |
 | カメラ | `streamon` `streamoff` | ⚠️ ok を返すが映像は出ない（カメラ無し）|
@@ -121,7 +121,7 @@ For STA mode: `Tello(host="<vehicle-LAN-ip>")`.
 | Move | `up` `down` `left` `right` `forward` `back` (cm) | ✅ blocks until reached |
 | Rotate | `cw` `ccw` (deg) | ✅ blocks until reached |
 | Absolute | `go x y z speed` | ✅ |
-| Manual | `rc a b c d` (continuous = `send_rc_control`) | 🚧 Phase 2 (will bridge to POS_HOLD velocity) |
+| Manual | `rc a b c d` (continuous = `send_rc_control`) | ✅ bridged to POS_HOLD velocity (holds when the stream stops; pilot stick cancels instantly) |
 | Read | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | State stream | UDP:8890 (read by `get_battery`/`get_height`/`get_distance_tof`...) | ✅ ~10 Hz |
 | Camera | `streamon` `streamoff` | ⚠️ returns ok, no video (no camera) |

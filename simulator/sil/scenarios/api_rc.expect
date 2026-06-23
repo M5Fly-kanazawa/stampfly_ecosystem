@@ -1,0 +1,48 @@
+# api_rc.expect — Tello `rc a b c d` continuous manual control gates (Phase 2)
+# Tello `rc a b c d` 連続マニュアル操作のゲート（Phase 2）
+#
+# Chain: command + takeoff → POS_HOLD hover at 0.5 m → FORWARD via repeated
+# "rc 0 60 0 0" (transmitter neutral throughout) → CLIMB via "rc 0 0 50 0" →
+# R16 auto-release to HOLD once the rc stream stops → PILOT OVERRIDE (transmitter
+# pitch deflected) cancels guidance instantly → land. Metrics pin the physics:
+# the craft moves north under rc with NO stick input, climbs above the hover, and
+# stays bounded (no runaway when rc stops).
+# 連鎖: command+takeoff → 0.5m ホバー → rc で前進（送信機中立のまま）→ rc で上昇 →
+# rc 停止で R16 保持復帰 → 送信機ピッチ操作で即解除 → 着陸。送信機入力なしに北へ移動・
+# ホバー上へ上昇・rc 停止後も有界（暴走なし）であることをメトリクスで固定。
+exit 0
+log_contains any "cmd: command"
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "cmd: rc 0 60 0 0"
+log_contains any "cmd: rc 0 0 50 0"
+log_contains any "Guidance cancelled by pilot stick"
+log_contains any "cmd: land"
+log_contains any "Autonomous landing engaged"
+log_absent  any "error move timeout"
+log_absent  any "error rotate timeout"
+order "cmd: takeoff" "Auto-takeoff engaged"
+order "Auto-takeoff engaged" "cmd: rc 0 60 0 0"
+order "cmd: rc 0 60 0 0" "cmd: rc 0 0 50 0"
+order "cmd: rc 0 0 50 0" "Guidance cancelled by pilot stick"
+order "Guidance cancelled by pilot stick" "cmd: land"
+# Hover at the unified 0.5 m takeoff height before the rc bursts.
+# rc バースト前に 0.5 m ホバー。
+metric alt_mean > 0.40 in 16.0 18.0
+metric alt_mean < 0.75 in 16.0 18.0
+# FORWARD: repeated "rc 0 60 0 0" (0.6 × 0.4 m/s ≈ 0.24 m/s body-forward) drives the
+# craft north with the transmitter NEUTRAL — horizontal drift grows, bounded (no
+# runaway when the stream stops; R16 staleness decays velocity to 0 → hold).
+# rc 前進（≈0.24 m/s）で送信機中立のまま北へ移動 — 水平ドリフト増・有界。
+metric horizontal_drift_max > 0.20 in 19.0 22.0
+metric horizontal_drift_max < 2.00 in 19.0 22.0
+# CLIMB: repeated "rc 0 0 50 0" (0.5 × 0.5 m/s ≈ 0.25 m/s up) raises the hover above
+# 0.5 m, then HOLDS once the stream stops. / rc 上昇でホバーを 0.5m 上へ → 停止で保持。
+metric alt_mean > 0.65 in 25.0 26.3
+metric alt_mean < 1.80 in 25.0 26.3
+# Bounded attitude + healthy motors across the rc flight (step velocity commands
+# cause only modest tilt). / rc 飛行全体で姿勢有界・モータ健全（ステップ速度指令でも傾きは小）。
+metric tilt_max < 20.0 in 8.0 29.0
+metric duty_max < 0.95 in 8.0 29.0
+# Landed at the end. / 最後は接地。
+metric alt_max < 0.15 in 36.0 38.0

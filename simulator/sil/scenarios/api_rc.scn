@@ -1,0 +1,66 @@
+# api_rc.scn — Tello `rc a b c d` continuous manual control (send_rc_control)
+#              Tello `rc a b c d` 連続マニュアル操作（send_rc_control）
+#
+# Drives the REAL ApiTask parser (scenario `api` channel → sf_api_inject_line; the
+# UDP transport is inert on the SIL host). NOTE: the scenario `rc` channel below is
+# the RC TRANSMITTER (12-bit sticks); the Tello `rc` COMMAND is injected as an `api`
+# text line "rc a b c d" (a=roll/right+, b=pitch/forward+, c=throttle/up+, d=yaw/cw+).
+#
+# Under test (Phase 2):
+#   1. command + takeoff → POS_HOLD hover at 0.5 m.
+#   2. FORWARD burst: "rc 0 60 0 0" re-injected every 400 ms (< the 500 ms R16
+#      staleness window) drives a sustained body-forward velocity → the craft moves
+#      north (horizontal drift grows) WITHOUT any transmitter stick input.
+#   3. CLIMB burst: "rc 0 0 50 0" re-injected → the craft climbs above 0.5 m.
+#   4. R16 auto-release: once the rc stream STOPS, the velocity decays to 0 and the
+#      craft HOLDS (no runaway) — verified by a bounded, settled altitude after.
+#   5. PILOT OVERRIDE: deflecting the transmitter pitch stick while velocity guidance
+#      is engaged cancels it instantly ("Guidance cancelled by pilot stick", INV-2).
+#   6. land.
+#
+# 実 ApiTask パーサを駆動。`rc` チャネルは送信機スティック、Tello `rc` コマンドは `api` の
+# テキスト行 "rc a b c d" で注入。検証: 送信機中立のまま rc で前進/上昇 → 送信停止で保持
+# （R16 暴走防止）→ 送信機スティックで即解除（INV-2）→ 着陸。
+#
+# Run: sf sil scenario simulator/sil/scenarios/api_rc.scn --target vehicle_new --duration 40000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50        # boot at rest — still calibration
+   +    api  "command"                                           # enter SDK mode (t=6)
+   +    api  "takeoff"                                           # POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50        # neutral TX while takeoff settles (t=6-18)
+   # --- FORWARD burst: rc 0 60 0 0 every 400 ms (t≈18-20) ---
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 60 0 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   # --- stop: R16 staleness decays velocity to 0 → HOLD (t≈20.4-22) ---
+   +    rc   2048  2048   2048    2048  0     1600      50
+   # --- CLIMB burst: rc 0 0 50 0 every 400 ms (t≈22-24.4) ---
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   +    api  "rc 0 0 50 0"
+   +    rc   2048  2048   2048    2048  0     400       50
+   # --- hold: stop rc → R16 decay → settle (t≈24.4-26.4) ---
+   +    rc   2048  2048   2048    2048  0     2000      50
+   # --- PILOT OVERRIDE: deflect TX pitch while guidance engaged → cancel (t≈26.4-29) ---
+   +    rc   2048  2048   2700    2048  0     2600      50
+   # --- land (t≈29) ---
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     9000      50        # neutral TX through touchdown

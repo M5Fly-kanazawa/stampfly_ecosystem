@@ -272,9 +272,23 @@ private:
     static constexpr float kDoubletHalfS = 0.3f;   // [s] doublet half period
 
     bool  guidance_active_   = false;
-    float guide_pos_[3]      = {0, 0, 0};  // [m] NED target / NED 目標
-    float guide_yaw_         = 0;          // [rad] target yaw / 目標ヨー
-    float guide_speed_       = 0.3f;       // [m/s] setpoint walk speed / 設定点速度
+    uint8_t guide_mode_      = 0;          // 1=position seek, 2=velocity(rc) / 1=位置シーク,2=速度
+    float guide_pos_[3]      = {0, 0, 0};  // [m] NED target (mode 1) / NED 目標
+    float guide_yaw_         = 0;          // [rad] target yaw (mode 1) / 目標ヨー
+    float guide_speed_       = 0.3f;       // [m/s] setpoint walk speed (mode 1) / 設定点速度
+    // Velocity command (mode 2 — Tello `rc`). Body frame: x fwd, y right, z up;
+    // yaw cw+. Injected into the SAME reposition path the pilot sticks use
+    // (computePositionHold) and the ALT_HOLD climb-rate path — no parallel law (INV-1).
+    // guide_stamp_ is the last rc timestamp; if it goes stale (>kLandingLinkStaleUs)
+    // the velocities decay to 0 so a stopped client cannot run away (R16).
+    // 速度指令（mode 2 — Tello `rc`）。機体系 x前/y右/z上, yaw cw+。パイロットスティックと
+    // 同じ再配置経路（computePositionHold）＋ALT_HOLD 上昇率経路に注入 — 並列制御則なし（INV-1）。
+    // guide_stamp_ は最終 rc 時刻。古く（>kLandingLinkStaleUs）なれば速度を 0 に減衰し暴走防止（R16）。
+    float guide_vx_          = 0;          // [m/s] body forward (mode 2) / 機体前後
+    float guide_vy_          = 0;          // [m/s] body right   (mode 2) / 機体左右
+    float guide_vz_          = 0;          // [m/s] climb rate up+ (mode 2) / 上昇率
+    float guide_vyaw_        = 0;          // [rad/s] yaw rate cw+ (mode 2) / ヨーレート
+    uint32_t guide_stamp_    = 0;          // [us] last velocity-target stamp / 最終速度目標時刻
     float stick_snapshot_[4] = {0, 0, 0, 0};  // r,p,y,thr at engage / 設定時スティック
     float guide_yaw_kp_      = 2.0f;       // [1/s] yaw P gain / ヨー P ゲイン
     float guide_yaw_rate_max_ = 1.0f;      // [rad/s] yaw turn rate limit / ヨー回頭率上限

@@ -692,10 +692,21 @@ struct SysidFreqResult {
 /// 追従）し、yaw はレート制限付き P ループで向く。Tello 風 API（ApiTask）と将来の
 /// Navigator が発行する。
 struct GuidanceTarget {
-    float    position[3];   // target position [m] NED / 目標位置
-    float    yaw;           // target yaw [rad]        / 目標ヨー
-    float    speed;         // approach speed [m/s]    / 接近速度
-    uint8_t  mode;          // 0=none, 1=track position+yaw / 0=なし, 1=位置+yaw追従
+    float    position[3];   // target position [m] NED (mode 1) / 目標位置
+    float    yaw;           // target yaw [rad]        (mode 1)  / 目標ヨー
+    float    speed;         // approach speed [m/s]    (mode 1)  / 接近速度
+    uint8_t  mode;          // 0=none, 1=position+yaw, 2=velocity(rc) / 0=なし,1=位置+yaw,2=速度(rc)
+    // Velocity command (mode 2 — the Tello `rc a b c d` continuous control). The
+    // controller reuses POS_HOLD's stick-velocity reposition path with these instead
+    // of the pilot sticks; pilot stick movement still cancels guidance instantly
+    // (INV-2). Body frame: x forward, y right, z up; yaw cw+.
+    // 速度指令（mode 2 — Tello `rc a b c d` 連続操作）。制御器は POS_HOLD のスティック速度
+    // 再配置経路を、パイロットスティックの代わりにこれで駆動する。パイロットのスティック動作で
+    // 誘導は即解除（INV-2）。機体系: x前/y右/z上、yaw は cw+。
+    float    vx;            // body forward velocity [m/s] (mode 2) / 機体前後速度
+    float    vy;            // body right velocity   [m/s] (mode 2) / 機体左右速度
+    float    vz;            // climb rate, up+       [m/s] (mode 2) / 上昇率
+    float    vyaw;          // yaw rate, cw+       [rad/s] (mode 2) / ヨーレート
     uint32_t timestamp;     // [us]
 };
 

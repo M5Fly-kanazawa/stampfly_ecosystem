@@ -233,28 +233,47 @@ ControlOutput PidController::compute(
         // 目標だけが動く。
         if (guidance_active_ && current_mode_ >= FlightMode::POS_HOLD &&
             phase_ == VerticalPhase::Airborne) {
-            const float step = guide_speed_ * dt;
-            auto seek = [step](float current, float target) {
-                const float d = target - current;
-                if (d >  step) return current + step;
-                if (d < -step) return current - step;
-                return target;
-            };
-            pos_setpoint_x_ = seek(pos_setpoint_x_, guide_pos_[0]);
-            pos_setpoint_y_ = seek(pos_setpoint_y_, guide_pos_[1]);
-            alt_setpoint_   = seek(alt_setpoint_, -guide_pos_[2]);  // NED z → alt
-            capture_pos_ = false;   // setpoints are guidance-owned now / 設定点は誘導所有
-            capture_alt_ = false;
+            if (guide_mode_ == 2) {
+                // Velocity guidance (Tello `rc`). R16 staleness auto-release: if the
+                // client stopped sending, decay the velocities to 0 so the craft
+                // re-captures and HOLDS (a stopped rc must not run away). The
+                // horizontal velocity is injected in computePositionHold (it reuses
+                // the stick-reposition path) and the climb rate in the vertical block;
+                // here we only drive yaw RATE directly (cw+).
+                // 速度誘導（Tello `rc`）。R16 鮮度オートリリース: クライアントが送信を止めたら
+                // 速度を 0 に減衰し再捕捉・保持（止まった rc が暴走してはならない）。水平速度は
+                // computePositionHold（スティック再配置経路の再利用）、上昇率は鉛直ブロックで注入。
+                // ここでは yaw レート（cw+）のみ直接駆動する。
+                if (state.timestamp - guide_stamp_ > kLandingLinkStaleUs) {
+                    guide_vx_ = guide_vy_ = guide_vz_ = guide_vyaw_ = 0.0f;
+                }
+                rate_sp_yaw = guide_vyaw_;
+            } else {
+                // Position guidance (mode 1): walk the setpoints toward the target.
+                // 位置誘導（mode 1）: 設定点を目標へ歩かせる。
+                const float step = guide_speed_ * dt;
+                auto seek = [step](float current, float target) {
+                    const float d = target - current;
+                    if (d >  step) return current + step;
+                    if (d < -step) return current - step;
+                    return target;
+                };
+                pos_setpoint_x_ = seek(pos_setpoint_x_, guide_pos_[0]);
+                pos_setpoint_y_ = seek(pos_setpoint_y_, guide_pos_[1]);
+                alt_setpoint_   = seek(alt_setpoint_, -guide_pos_[2]);  // NED z → alt
+                capture_pos_ = false;   // setpoints are guidance-owned now / 設定点は誘導所有
+                capture_alt_ = false;
 
-            // Yaw: shortest-path error, P with a turn-rate limit.
-            // ヨー: 最短経路誤差の P、回頭率制限付き。
-            float yaw_err = guide_yaw_ - euler.z;
-            while (yaw_err >  3.14159265f) yaw_err -= 6.2831853f;
-            while (yaw_err < -3.14159265f) yaw_err += 6.2831853f;
-            float yaw_cmd = guide_yaw_kp_ * yaw_err;
-            if (yaw_cmd >  guide_yaw_rate_max_) yaw_cmd =  guide_yaw_rate_max_;
-            if (yaw_cmd < -guide_yaw_rate_max_) yaw_cmd = -guide_yaw_rate_max_;
-            rate_sp_yaw = yaw_cmd;
+                // Yaw: shortest-path error, P with a turn-rate limit.
+                // ヨー: 最短経路誤差の P、回頭率制限付き。
+                float yaw_err = guide_yaw_ - euler.z;
+                while (yaw_err >  3.14159265f) yaw_err -= 6.2831853f;
+                while (yaw_err < -3.14159265f) yaw_err += 6.2831853f;
+                float yaw_cmd = guide_yaw_kp_ * yaw_err;
+                if (yaw_cmd >  guide_yaw_rate_max_) yaw_cmd =  guide_yaw_rate_max_;
+                if (yaw_cmd < -guide_yaw_rate_max_) yaw_cmd = -guide_yaw_rate_max_;
+                rate_sp_yaw = yaw_cmd;
+            }
         }
 
         // Heading hold: yaw stick neutral → hold the heading captured at stick
@@ -508,7 +527,16 @@ ControlOutput PidController::compute(
             }
 
             float climb_rate_sp = 0;
-            if (throttle_recentered_ && !guidance_active_ &&
+            if (guidance_active_ && guide_mode_ == 2) {
+                // Velocity guidance (Tello `rc` channel c): command the climb rate
+                // directly; track the altitude while moving so releasing (vz→0, or the
+                // R16 staleness decay) HOLDS the altitude reached. Same shape as the
+                // stick path below — one vertical law (INV-1).
+                // 速度誘導（Tello `rc` ch c）: 上昇率を直接指令し、移動中は高度を追従 → 離す
+                // （vz→0 or R16 鮮度減衰）と到達高度を保持。下のスティック経路と同形 — 単一鉛直則（INV-1）。
+                climb_rate_sp = guide_vz_;
+                if (climb_rate_sp != 0.0f) alt_setpoint_ = altitude;
+            } else if (throttle_recentered_ && !guidance_active_ &&
                 fabsf(ta) > stick_deadzone_) {
                 // Rescale beyond the deadzone to [0..1], then to the climb or descent
                 // rate (separate limits). / デッドゾーン外を [0..1] に再スケールし上昇/降下
@@ -805,8 +833,21 @@ void PidController::computePositionHold(const StateEstimate& state,
     // スティック再配置（倒して動かし、離して保持）。roll/pitch スティックが機体座標の水平
     // 速度を指令。符号は STABILIZE の傾き方向と一致（右ロール→右、前ピッチ→前）させ、手で
     // 傾けるのと同じ向きに動く。スティックは上流で不感帯処理済ゆえ中央は厳密に 0 =「保持」。
-    const float v_fwd   = -setpoint.pitch * stick_reposition_vel_;   // forward (FRD x) [m/s]
-    const float v_right =  setpoint.roll  * stick_reposition_vel_;   // right   (FRD y) [m/s]
+    // Velocity source: the Tello `rc` velocity guidance (mode 2) when engaged, else
+    // the pilot stick. If the pilot moves a stick, the cancel-on-stick test upstream
+    // (compute()) has already cleared guidance_active_, so reaching here with velocity
+    // guidance active means the pilot is hands-off — one path, pilot always wins (INV-2).
+    // 速度源: 係合中は Tello `rc` 速度誘導（mode 2）、それ以外はパイロットスティック。パイロットが
+    // スティックを動かせば上流（compute()）のスティック解除判定が既に guidance_active_ を落として
+    // いるため、ここに速度誘導 active で来る＝パイロットは手放し — 単一経路・パイロット優先（INV-2）。
+    float v_fwd, v_right;
+    if (guidance_active_ && guide_mode_ == 2) {
+        v_fwd   = guide_vx_;   // body forward (FRD x) [m/s] — Tello rc b / 機体前後
+        v_right = guide_vy_;   // body right   (FRD y) [m/s] — Tello rc a / 機体左右
+    } else {
+        v_fwd   = -setpoint.pitch * stick_reposition_vel_;   // forward (FRD x) [m/s]
+        v_right =  setpoint.roll  * stick_reposition_vel_;   // right   (FRD y) [m/s]
+    }
     const bool  repositioning = (v_fwd != 0.0f || v_right != 0.0f);
 
     float vx_sp, vy_sp;   // desired NED velocity (N, E) fed to the velocity loop
@@ -964,27 +1005,66 @@ void PidController::setGuidanceTarget(const GuidanceTarget& target,
                  flightModeName(current_mode_));
         return;
     }
-    guide_pos_[0] = target.position[0];
-    guide_pos_[1] = target.position[1];
-    guide_pos_[2] = target.position[2];
-    guide_yaw_    = target.yaw;
-    if (target.speed > 0.05f && target.speed <= 2.0f) {
-        guide_speed_ = target.speed;
+
+    // Were we ALREADY engaged in velocity (rc) mode before this call? Capture it
+    // BEFORE overwriting guide_mode_ — it decides whether to re-snapshot the sticks.
+    // 本呼び出し前に既に速度（rc）モードで係合していたか? guide_mode_ を上書きする前に捕捉
+    // — スティックを取り直すかの判定に使う。
+    const bool velocity_refresh =
+        (target.mode == 2) && guidance_active_ && (guide_mode_ == 2);
+
+    if (target.mode == 2) {
+        // Velocity guidance (Tello `rc`): store the body-frame velocity command;
+        // it is injected into computePositionHold / the climb-rate path. The
+        // timestamp drives the R16 staleness auto-release (see compute()).
+        // 速度誘導（Tello `rc`）: 機体系速度指令を保持し computePositionHold / 上昇率経路へ注入。
+        // 時刻は R16 鮮度オートリリース（compute() 参照）を駆動する。
+        guide_mode_  = 2;
+        guide_vx_    = target.vx;
+        guide_vy_    = target.vy;
+        guide_vz_    = target.vz;
+        guide_vyaw_  = target.vyaw;
+        guide_stamp_ = target.timestamp;
+    } else {
+        guide_mode_   = 1;
+        guide_pos_[0] = target.position[0];
+        guide_pos_[1] = target.position[1];
+        guide_pos_[2] = target.position[2];
+        guide_yaw_    = target.yaw;
+        if (target.speed > 0.05f && target.speed <= 2.0f) {
+            guide_speed_ = target.speed;
+        }
     }
+
     // Stick snapshot: guidance is cancelled by stick MOVEMENT, not position —
     // in an API flight the throttle stick rests at the bottom, which must not
-    // read as a descend command or an instant cancel.
+    // read as a descend command or an instant cancel. Take it only on the INITIAL
+    // engage (or a mode switch): a continuous rc stream refreshes the target every
+    // datagram, and re-snapshotting each time would mask a slow pilot stick creep
+    // below the cancel threshold (the absolute-departure test must compare against
+    // the original engage pose).
     // スティックスナップショット: 解除は「位置」でなく「動き」で判定 — API 飛行では
     // スロットルスティックは下端のままであり、それが降下指令や即時解除になってはならない。
-    stick_snapshot_[0] = current_sticks.roll;
-    stick_snapshot_[1] = current_sticks.pitch;
-    stick_snapshot_[2] = current_sticks.yaw;
-    stick_snapshot_[3] = current_sticks.throttle;
+    // 取得は「最初の係合」（またはモード切替）時のみ: rc は毎データグラムで目標を更新するため、
+    // 毎回取り直すとパイロットのゆっくりしたスティック・クリープを解除閾値以下でマスクしてしまう
+    // （絶対変位の判定は元の係合姿勢と比較する必要がある）。
+    if (!velocity_refresh) {
+        stick_snapshot_[0] = current_sticks.roll;
+        stick_snapshot_[1] = current_sticks.pitch;
+        stick_snapshot_[2] = current_sticks.yaw;
+        stick_snapshot_[3] = current_sticks.throttle;
+    }
     guidance_active_ = true;
-    ESP_LOGI(TAG, "Guidance target: NED [%.2f %.2f %.2f] yaw %.2f speed %.2f",
-             static_cast<double>(guide_pos_[0]), static_cast<double>(guide_pos_[1]),
-             static_cast<double>(guide_pos_[2]), static_cast<double>(guide_yaw_),
-             static_cast<double>(guide_speed_));
+    if (target.mode == 2) {
+        ESP_LOGD(TAG, "Guidance velocity: body [%.2f %.2f %.2f] yawrate %.2f",
+                 static_cast<double>(guide_vx_), static_cast<double>(guide_vy_),
+                 static_cast<double>(guide_vz_), static_cast<double>(guide_vyaw_));
+    } else {
+        ESP_LOGI(TAG, "Guidance target: NED [%.2f %.2f %.2f] yaw %.2f speed %.2f",
+                 static_cast<double>(guide_pos_[0]), static_cast<double>(guide_pos_[1]),
+                 static_cast<double>(guide_pos_[2]), static_cast<double>(guide_yaw_),
+                 static_cast<double>(guide_speed_));
+    }
 }
 
 void PidController::startExcitation(const SysidCommand& cmd)

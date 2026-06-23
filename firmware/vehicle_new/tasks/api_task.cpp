@@ -97,6 +97,16 @@ constexpr uint32_t kLandTimeoutMs    = 20000;
 constexpr float    kBattEmptyV     = 3.3f;    // 0% / 100% mapping for battery?
 constexpr float    kBattFullV      = 4.2f;
 
+// Tello `rc a b c d` full-scale (±100) → velocity command. Horizontal and vertical
+// reuse the SAME params the POS_HOLD stick path uses (single source — read live in
+// cmdRc); the yaw turn-rate matches the controller's guidance yaw limit.
+// Tello `rc a b c d` の満舵（±100）→ 速度指令。水平/鉛直は POS_HOLD スティック経路と同じ
+// param を再利用（単一源 — cmdRc でライブ取得）。ヨー回頭率は制御器の誘導ヨー上限に合わせる。
+constexpr float    kRcHorizVelDef  = 0.4f;    // [m/s] fallback if param missing / param 既定
+constexpr float    kRcClimbRateDef = 0.5f;    // [m/s] up   fallback / 上昇 既定
+constexpr float    kRcDescentRateDef = 0.5f;  // [m/s] down fallback / 降下 既定
+constexpr float    kRcYawRateMax   = 1.0f;    // [rad/s] at ±100 (= guide_yaw_rate_max_)
+
 // =============================================================================
 // SIL / test injection — a tiny critical-section FIFO of command lines.
 // The scenario engine calls sf_api_inject_line() from outside this task.
@@ -387,6 +397,49 @@ void cmdStop()
     g_target_valid  = true;
     publishGuidance(kDefaultSpeed);
     reply("ok");
+}
+
+// -----------------------------------------------------------------------------
+// cmdRc — Tello `rc a b c d` continuous manual control (a=roll/right+, b=pitch/
+// forward+, c=throttle/up+, d=yaw/cw+, each -100..100). FIRE-AND-FORGET: no reply,
+// no blocking (djitellopy blasts rc at high rate and never reads a response). It
+// publishes a VELOCITY guidance target (mode 2) that rides POS_HOLD's stick-velocity
+// reposition path; moving the pilot's RC stick still cancels it instantly (INV-2).
+// Ignored unless FLYING with an active API session (re-engage via takeoff/go after
+// a pilot override — M-3). A stopped stream auto-releases to hold (R16, controller).
+// cmdRc — Tello `rc a b c d` 連続マニュアル操作（a=右ロール+, b=前ピッチ+, c=上スロットル+,
+// d=cwヨー+、各 -100..100）。撃ちっぱなし: 応答なし・ブロックなし（djitellopy は高レートで
+// 送り続け応答を読まない）。速度誘導目標（mode 2）を publish し POS_HOLD のスティック速度
+// 再配置経路に乗る。パイロットの RC スティック操作で即解除（INV-2）。FLYING かつ API セッション
+// 有効時のみ有効（パイロット介入後は takeoff/go で再係合 — M-3）。送信停止時は保持へ自動復帰（R16）。
+void cmdRc(float a, float b, float c, float d)
+{
+    if (currentState() != sf::FlightState::FLYING || !g_target_valid) {
+        return;   // fire-and-forget: silently ignore off-state / 状態外は黙って無視
+    }
+    auto clamp100 = [](float v) {
+        if (v >  100.0f) return  100.0f;
+        if (v < -100.0f) return -100.0f;
+        return v;
+    };
+    a = clamp100(a); b = clamp100(b); c = clamp100(c); d = clamp100(d);
+
+    // Full-scale velocities from the live POS_HOLD params (single source).
+    // 満舵速度は POS_HOLD の param からライブ取得（単一源）。
+    float vmax = kRcHorizVelDef;    sf::params::get_float("position.stick_vel", vmax);
+    float vup  = kRcClimbRateDef;   sf::params::get_float("altitude.climb_rate", vup);
+    float vdn  = kRcDescentRateDef; sf::params::get_float("altitude.descent_rate", vdn);
+
+    sf::GuidanceTarget t{};
+    t.mode = 2;                                   // velocity guidance / 速度誘導
+    t.vx   = (b / 100.0f) * vmax;                 // body forward [m/s] / 機体前後
+    t.vy   = (a / 100.0f) * vmax;                 // body right   [m/s] / 機体左右
+    t.vz   = (c >= 0.0f) ? (c / 100.0f) * vup     // up   [m/s] / 上昇
+                         : (c / 100.0f) * vdn;    // down [m/s] / 降下
+    t.vyaw = (d / 100.0f) * kRcYawRateMax;        // yaw rate cw+ [rad/s] / ヨーレート
+    t.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::command_target.publish(t);
+    // No reply — Tello rc is fire-and-forget. / 応答なし（rc は撃ちっぱなし）。
 }
 
 // -----------------------------------------------------------------------------
@@ -928,6 +981,16 @@ void processLine(char* line)
         std::strncmp(line, "mdirection", 10) == 0) {
         reply("error mission pads not supported");
         return;
+    }
+
+    // rc a b c d — continuous manual control (fire-and-forget). Parse early since it
+    // arrives at a high rate. / 連続マニュアル操作（撃ちっぱなし）。高レートで来るため先に解析。
+    {
+        float ra = 0, rb = 0, rc_ = 0, rd = 0;
+        if (std::sscanf(line, "rc %f %f %f %f", &ra, &rb, &rc_, &rd) == 4) {
+            cmdRc(ra, rb, rc_, rd);
+            return;
+        }
     }
 
     // Moves: <verb> <cm> / 移動: <verb> <cm>
