@@ -17,7 +17,7 @@ Usage:
 Options:
     -o, --output FILE   Output CSV filename (default: auto-generated)
     -d, --duration SEC  Capture duration in seconds (default: 30)
-    -i, --ip IP         StampFly IP address (default: 192.168.4.1)
+    -i, --ip IP         StampFly IP address (default: 192.168.10.1)
     -p, --port PORT     WebSocket port (default: 80)
     --fft               Run FFT analysis after capture
     --no-save           Don't save to file, just display stats
@@ -570,7 +570,7 @@ def parse_packet(data: bytes) -> tuple:
 class TelemetryCapture:
     """Capture telemetry data from WebSocket"""
 
-    def __init__(self, ip: str = '192.168.4.1', port: int = 80):
+    def __init__(self, ip: str = '192.168.10.1', port: int = 80):
         self.uri = f'ws://{ip}:{port}/ws'
         self.raw_frames = collections.deque()  # Raw WebSocket frames (bytes, GC-invisible)
         self.packets = []   # Parsed sample dicts (populated by _parse_all_frames)
@@ -925,8 +925,8 @@ async def main():
     parser.add_argument('-o', '--output', help='Output CSV filename')
     parser.add_argument('-d', '--duration', type=float, default=30,
                        help='Capture duration in seconds (default: 30)')
-    parser.add_argument('-i', '--ip', default='192.168.4.1',
-                       help='StampFly IP address (default: 192.168.4.1)')
+    parser.add_argument('-i', '--ip', default='192.168.10.1',
+                       help='StampFly IP address (default: 192.168.10.1)')
     parser.add_argument('-p', '--port', type=int, default=80,
                        help='WebSocket port (default: 80)')
     parser.add_argument('--fft', action='store_true',

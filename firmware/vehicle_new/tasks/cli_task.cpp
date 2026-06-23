@@ -860,12 +860,12 @@ void CLITask(void* pvParameters)
     // CLI (requirements §7: CLI = USB Serial / TCP): bench operations like the
     // motor test run on battery with the USB cable OFF, so commands must be
     // reachable over WiFi. Connect with `nc <vehicle-ip> 23` (SoftAP:
-    // 192.168.4.1). On the SIL host the inert socket shim never accepts, so
+    // 192.168.10.1). On the SIL host the inert socket shim never accepts, so
     // this loop just idles.
     // 以降は REPL タスクが USB の対話入力を所有する。本タスクは TCP CLI を提供する
     // （要件§7: CLI = USB Serial / TCP）: モータテスト等のベンチ作業は USB ケーブルを
     // 外した電池駆動で行うため、コマンドは WiFi 経由で届く必要がある。接続は
-    // `nc <機体IP> 23`（SoftAP なら 192.168.4.1）。SIL ホストでは inert ソケットシムが
+    // `nc <機体IP> 23`（SoftAP なら 192.168.10.1）。SIL ホストでは inert ソケットシムが
     // accept しないため、このループは待機するだけ。
     runTcpCliServer();
 }

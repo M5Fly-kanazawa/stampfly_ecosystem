@@ -12,7 +12,7 @@ vehicle_new ファームの ApiTask（UDP :8889）と Tello SDK テキストプ�
 
     from stampfly import StampFly
 
-    fly = StampFly()              # AP mode default 192.168.4.1 / AP モード既定
+    fly = StampFly()              # AP mode default 192.168.10.1 / AP モード既定
     fly.connect()                 # SDK mode ("command")
     fly.takeoff()                 # POS_HOLD auto-takeoff -> hover at 0.5 m
     fly.forward(50)               # move 50 cm forward (blocks until reached)
@@ -43,7 +43,7 @@ class StampFly:
     """Tello-style client for the StampFly vehicle_new API (UDP :8889).
     StampFly vehicle_new API（UDP :8889）の Tello 風クライアント。"""
 
-    def __init__(self, ip: str = "192.168.4.1", port: int = 8889):
+    def __init__(self, ip: str = "192.168.10.1", port: int = 8889):
         self.addr = (ip, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("", 0))   # ephemeral local port; replies come back here

@@ -60,13 +60,15 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_mac.h"        // esp_read_mac for `sn?` serial / シリアル用 MAC 読み
 #include "lwip/sockets.h"
 
 #include "topics.hpp"
 #include "config.hpp"
 #include "flight_state.hpp"
-#include "params.hpp"      // autotune applies gains live / 自動チューンのライブ適用
-#include "autotune.hpp"    // onboard fit + tune / オンボード同定＋設計
+#include "params.hpp"        // autotune applies gains live / 自動チューンのライブ適用
+#include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
+#include "tello_state.hpp"   // UDP:8890 state-string builder / 状態文字列ビルダ
 
 static const char* TAG = "ApiTask";
 
@@ -142,6 +144,33 @@ bool        g_have_client = false;
 float g_target_ned[3] = {0, 0, 0};
 float g_target_yaw    = 0;
 bool  g_target_valid  = false;
+
+// Client address for the UDP:8890 state stream, shared with TelloStateTask.
+// g_client (the sockaddr_in above) is read ONLY by ApiTask; TelloStateTask runs in
+// its own context, so the client IPv4 is mirrored into an atomic (a 32-bit IP fits
+// one word — no torn read), matching the lock-free style of g_inject_head/tail.
+// The state stream targets <client-ip>:8890, NOT g_client.sin_port (= the 8889
+// source port). flight_time_s is maintained by TelloStateTask and read by `time?`.
+// UDP:8890 状態ストリーム用のクライアントアドレス（TelloStateTask と共有）。上の g_client は
+// ApiTask 専用なので、クライアント IPv4 を 1 ワードのアトミックにミラーする（32bit IP は
+// トーン無し、g_inject_head/tail と同じロックフリー流儀）。送出先は <client-ip>:8890 で、
+// g_client.sin_port（= 8889 の送信元ポート）ではない。flight_time_s は TelloStateTask が
+// 維持し `time?` が読む。
+std::atomic<uint32_t> g_client_ip{0};       // network byte order / ネットワークバイト順
+std::atomic<bool>     g_client_known{false};
+std::atomic<int>      g_flight_time_s{0};
+
+// batteryPercent — 1S LiPo voltage → 0..100% (shared by `battery?` and the state
+// stream so the two never drift). 3.3V = 0%, 4.2V = 100%, clamped.
+// batteryPercent — 1S LiPo 電圧 → 0..100%（`battery?` と状態ストリームで共有しドリフト防止）。
+int batteryPercent()
+{
+    const float v = sf::sensor_power.latest().voltage;
+    int pct = static_cast<int>((v - kBattEmptyV) / (kBattFullV - kBattEmptyV) * 100.0f);
+    if (pct < 0)   pct = 0;
+    if (pct > 100) pct = 100;
+    return pct;
+}
 
 // -----------------------------------------------------------------------------
 // reply — send the answer to the UDP client AND log it (SIL gates / debugging).
@@ -368,11 +397,7 @@ void cmdQuery(const char* what)
 {
     char buf[96];
     if (std::strcmp(what, "battery?") == 0) {
-        const float v = sf::sensor_power.latest().voltage;
-        int pct = static_cast<int>((v - kBattEmptyV) / (kBattFullV - kBattEmptyV) * 100.0f);
-        if (pct < 0) pct = 0;
-        if (pct > 100) pct = 100;
-        std::snprintf(buf, sizeof(buf), "%d", pct);
+        std::snprintf(buf, sizeof(buf), "%d", batteryPercent());
     } else if (std::strcmp(what, "height?") == 0) {
         const float alt_cm = -sf::estimate_state.latest().position[2] * 100.0f;
         std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(alt_cm));
@@ -396,10 +421,102 @@ void cmdQuery(const char* what)
                                e.velocity[1]*e.velocity[1] +
                                e.velocity[2]*e.velocity[2]) * 100.0f;
         std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(sp));
+    } else if (std::strcmp(what, "sdk?") == 0) {
+        // Report SDK 2.0 — the version djitellopy targets for the broadest set.
+        // SDK 2.0 を返す — djitellopy が最大互換で前提にするバージョン。
+        std::snprintf(buf, sizeof(buf), "20");
+    } else if (std::strcmp(what, "sn?") == 0) {
+        // Serial number from the WiFi MAC tail (stable per board).
+        // WiFi MAC 末尾由来のシリアル（ボード毎に一定）。
+        uint8_t mac[6] = {};
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        std::snprintf(buf, sizeof(buf), "STAMPFLY-%02X%02X%02X",
+                      mac[3], mac[4], mac[5]);
+    } else if (std::strcmp(what, "time?") == 0) {
+        std::snprintf(buf, sizeof(buf), "%d", g_flight_time_s.load());
+    } else if (std::strcmp(what, "wifi?") == 0) {
+        // No live SNR source on the AP side — report a strong constant so programs
+        // that gate on signal quality proceed. / AP 側に SNR 源がないため強信号定数を返す。
+        std::snprintf(buf, sizeof(buf), "90");
+    } else if (std::strcmp(what, "tof?") == 0) {
+        const float tof_cm = sf::sensor_snapshot.latest().tof_distance * 100.0f;
+        std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(tof_cm));
+    } else if (std::strcmp(what, "temp?") == 0) {
+        const int t = static_cast<int>(sf::sensor_imu.latest().temperature);
+        std::snprintf(buf, sizeof(buf), "%dC", t);
+    } else if (std::strcmp(what, "baro?") == 0) {
+        std::snprintf(buf, sizeof(buf), "%.2f",
+                      static_cast<double>(sf::sensor_snapshot.latest().baro_altitude));
+    } else if (std::strcmp(what, "acceleration?") == 0) {
+        // Tello 1.3 `acceleration?` → "agx:.. agy:.. agz:.." in 0.001 g (mg).
+        const sf::ImuData d = sf::sensor_imu.latest();
+        const float mg = 1000.0f / 9.80665f;   // m/s² → 0.001 g
+        std::snprintf(buf, sizeof(buf), "agx:%.2f;agy:%.2f;agz:%.2f;",
+                      static_cast<double>(d.accel[0] * mg),
+                      static_cast<double>(d.accel[1] * mg),
+                      static_cast<double>(d.accel[2] * mg));
     } else {
         std::snprintf(buf, sizeof(buf), "error unknown query");
     }
     reply(buf);
+}
+
+// -----------------------------------------------------------------------------
+// gatherTelloState — snapshot the firmware topics into the Tello state fields.
+// All physical-unit conversions live here (rad→deg, NED m/s→body cm/s, m→cm,
+// accel→milli-g) so the builder (tello_state.hpp) stays pure formatting. Reads
+// only Latest/RingBuffer topics (no Queue) so it never steals sensor samples.
+// gatherTelloState — ファームのトピックを Tello 状態フィールドへスナップショット。物理単位
+// 変換（rad→deg, NED m/s→機体系 cm/s, m→cm, 加速度→ミリ g）はここに集約し、ビルダ
+// （tello_state.hpp）は純粋整形に保つ。Latest/RingBuffer のみ読み（Queue 不可）でサンプルを奪わない。
+sf::tello::TelloStateInputs gatherTelloState()
+{
+    sf::tello::TelloStateInputs in{};
+    const sf::StateEstimate e = sf::estimate_state.latest();
+
+    // Attitude (quaternion → Euler, deg). Same extraction as `attitude?`.
+    // 姿勢（四元数 → オイラー, deg）。`attitude?` と同じ抽出。
+    const float w = e.attitude[0], x = e.attitude[1];
+    const float y = e.attitude[2], z = e.attitude[3];
+    const float r2d = 57.29578f;
+    in.roll = static_cast<int>(atan2f(2*(w*x + y*z), 1 - 2*(x*x + y*y)) * r2d);
+    float sinp = 2*(w*y - z*x);
+    if (sinp >  1) sinp =  1;
+    if (sinp < -1) sinp = -1;
+    in.pitch = static_cast<int>(asinf(sinp) * r2d);
+    const float yaw = atan2f(2*(w*z + x*y), 1 - 2*(y*y + z*z));
+    in.yaw = static_cast<int>(yaw * r2d);
+
+    // Ground speed: NED velocity rotated into the body frame (x fwd, y right, z up).
+    // NOTE: sign/frame vs djitellopy needs an empirical check on hardware.
+    // 対地速度: NED 速度を機体系（x前/y右/z上）へ回転。符号/系は実機で djitellopy と要照合。
+    const float cy = cosf(yaw), sy = sinf(yaw);
+    in.vgx = static_cast<int>(( cy*e.velocity[0] + sy*e.velocity[1]) * 100.0f);
+    in.vgy = static_cast<int>((-sy*e.velocity[0] + cy*e.velocity[1]) * 100.0f);
+    in.vgz = static_cast<int>(-e.velocity[2] * 100.0f);   // up positive / 上を正
+
+    // Height [cm] (= −Down). ToF [cm] from the async-sensor snapshot.
+    // 高度 [cm]（= −Down）。ToF [cm] は非同期センサのスナップショットから。
+    in.h   = static_cast<int>(-e.position[2] * 100.0f);
+    in.tof = static_cast<int>(sf::sensor_snapshot.latest().tof_distance * 100.0f);
+
+    // Barometer altitude in METERS — djitellopy get_barometer() multiplies by 100
+    // to report cm, so the wire value is meters (matches the real Tello).
+    // 気圧高度は「メートル」— djitellopy get_barometer() が ×100 して cm にするので電文は m。
+    in.baro = sf::sensor_snapshot.latest().baro_altitude;
+
+    // IMU temperature (one sensor → templ == temph). Acceleration in milli-g.
+    // IMU 温度（1センサ → templ==temph）。加速度はミリ g。
+    const sf::ImuData imu = sf::sensor_imu.latest();
+    in.templ = in.temph = static_cast<int>(imu.temperature);
+    const float mg = 1000.0f / 9.80665f;   // m/s² → 0.001 g
+    in.agx = imu.accel[0] * mg;
+    in.agy = imu.accel[1] * mg;
+    in.agz = imu.accel[2] * mg;
+
+    in.bat    = batteryPercent();
+    in.time_s = g_flight_time_s.load(std::memory_order_relaxed);
+    return in;
 }
 
 // -----------------------------------------------------------------------------
@@ -790,6 +907,29 @@ void processLine(char* line)
     if (std::strcmp(line, "stop") == 0)    { cmdStop();    return; }
     if (std::strchr(line, '?') != nullptr) { cmdQuery(line); return; }
 
+    // Camera commands — StampFly has no camera, but reply "ok" so video-aware Tello
+    // programs that merely toggle the stream (without reading frames) keep running.
+    // The 11111 video port is never opened; get_frame_read() would just see nothing.
+    // カメラ系 — StampFly にカメラは無いが、ストリームを切り替えるだけ（フレームを読まない）の
+    // Tello プログラムが止まらないよう "ok" を返す。映像ポート 11111 は開かない。
+    if (std::strcmp(line, "streamon") == 0 || std::strcmp(line, "streamoff") == 0) {
+        reply("ok");
+        return;
+    }
+    // flip — refused honestly: a flip is an aggressive acro maneuver, unsafe for this
+    // small indoor craft. (User decision 2026-06-23.) / 宙返りは正直に拒否（小型機で高リスク）。
+    if (std::strncmp(line, "flip", 4) == 0) {
+        reply("error flip not supported on StampFly");
+        return;
+    }
+    // Mission pads — a Tello EDU/RoboMaster-TT-only feature we do not implement.
+    // ミッションパッドは EDU/RoboMaster TT 専用機能で未対応。
+    if (std::strcmp(line, "mon") == 0 || std::strcmp(line, "moff") == 0 ||
+        std::strncmp(line, "mdirection", 10) == 0) {
+        reply("error mission pads not supported");
+        return;
+    }
+
     // Moves: <verb> <cm> / 移動: <verb> <cm>
     char verb[16] = {};
     float a = 0, b = 0, c = 0, d = 0;
@@ -1002,11 +1142,78 @@ void ApiTask(void* /*pvParameters*/)
                 line[r] = '\0';
                 g_client = from;          // reply to the latest sender / 最新送信者へ返信
                 g_have_client = true;
+                // Mirror the client IP for TelloStateTask (UDP:8890 state stream).
+                // Publishing it here means the stream starts the moment a client
+                // sends anything — exactly when djitellopy connect() waits for state.
+                // TelloStateTask 用にクライアント IP をミラー（UDP:8890 状態ストリーム）。
+                // ここで公開することで、クライアントが何か送った瞬間＝djitellopy connect() が
+                // 状態を待つ瞬間にストリームが始まる。
+                g_client_ip.store(from.sin_addr.s_addr, std::memory_order_relaxed);
+                g_client_known.store(true, std::memory_order_release);
                 processLine(line);
                 continue;                 // drain quickly when commands queue up
             }
         }
 
         vTaskDelay(pdMS_TO_TICKS(kPollMs));
+    }
+}
+
+// =============================================================================
+// TelloStateTask — push the Tello state string to the connected client on
+// UDP:8890 at 10 Hz. djitellopy's connect() REQUIRES at least one such packet,
+// and every get_*() getter reads this stream. It runs in its OWN task so the
+// stream keeps flowing while ApiTask BLOCKS in a move/autotune (ApiTask owns no
+// control-path deadline). The send socket is the vehicle's OWN ephemeral socket
+// (sending to <client>:8890 needs no local bind) so it never collides with the
+// 8889 API server or the 8890 Data Stream server (`sf log wifi`).
+// TelloStateTask — UDP:8890 で接続中クライアントへ Tello 状態文字列を 10Hz 送出。djitellopy
+// の connect() はこのパケットが最低1個届くことを必須とし、全 get_*() がこれを読む。ApiTask が
+// 移動/autotune でブロックしてもストリームを止めないよう独立タスクにする。送信は自前のエフェメラル
+// ソケット（<client>:8890 への送信に bind 不要）ゆえ 8889 API サーバや 8890 データストリーム
+// サーバ（`sf log wifi`）と衝突しない。
+// =============================================================================
+void TelloStateTask(void* /*pvParameters*/)
+{
+    ESP_LOGI(TAG, "TelloStateTask started");
+
+    int sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        ESP_LOGW(TAG, "Tello state socket() failed (errno=%d) — 8890 stream off", errno);
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    int64_t    flying_since_us = 0;
+    TickType_t last_wake = xTaskGetTickCount();
+    char       buf[256];
+    while (true) {
+        // Flight time = whole seconds since FLYING began (0 while not flying).
+        // 飛行時間 = FLYING 開始からの整数秒（非飛行中は 0）。
+        if (currentState() == sf::FlightState::FLYING) {
+            const int64_t now_us = esp_timer_get_time();
+            if (flying_since_us == 0) flying_since_us = now_us;
+            g_flight_time_s.store(static_cast<int>((now_us - flying_since_us) / 1000000),
+                                  std::memory_order_relaxed);
+        } else {
+            flying_since_us = 0;
+            g_flight_time_s.store(0, std::memory_order_relaxed);
+        }
+
+        // Push state once a client is known (it has sent ≥1 datagram on :8889).
+        // クライアントが判明したら（:8889 へ ≥1 データグラム送信済み）状態を送出。
+        if (g_client_known.load(std::memory_order_acquire)) {
+            const sf::tello::TelloStateInputs in = gatherTelloState();
+            const int len = sf::tello::buildTelloState(buf, sizeof(buf), in);
+            if (len > 0 && len < static_cast<int>(sizeof(buf))) {
+                sockaddr_in dst = {};
+                dst.sin_family      = AF_INET;
+                dst.sin_addr.s_addr = g_client_ip.load(std::memory_order_relaxed);
+                dst.sin_port        = htons(sf::tello::kStatePort);
+                ::sendto(sock, buf, static_cast<size_t>(len), 0,
+                         reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+            }
+        }
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(100));   // 10 Hz
     }
 }

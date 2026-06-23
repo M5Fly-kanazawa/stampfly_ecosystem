@@ -11,12 +11,17 @@ Run / 実行:
   2. Join the vehicle's WiFi (AP mode: StampFly-XXXX) or the shared router.
      機体の WiFi（AP: StampFly-XXXX）または共有ルータに接続。
   3. python3 example_square.py [vehicle_ip]
+
+The SoftAP is addressed at 192.168.10.1 (the DJI Tello subnet), so the default
+below matches a real Tello. In STA mode pass the vehicle's LAN IP as an argument.
+SoftAP は 192.168.10.1（DJI Tello のサブネット）で動くため、下の既定は実機 Tello と
+同じ。STA モードでは機体の LAN IP を引数で渡す。
 """
 
 import sys
 from stampfly import StampFly
 
-ip = sys.argv[1] if len(sys.argv) > 1 else "192.168.4.1"
+ip = sys.argv[1] if len(sys.argv) > 1 else "192.168.10.1"
 
 # The context manager enters SDK mode and auto-lands on any exception.
 # コンテキストマネージャが SDK モードに入り、例外時は自動着陸する。

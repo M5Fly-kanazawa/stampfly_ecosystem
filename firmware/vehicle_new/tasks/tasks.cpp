@@ -91,8 +91,16 @@ void start_all()
         config::STACK_LOG, nullptr, config::PRIORITY_LOG, nullptr, 0);
     xTaskCreatePinnedToCore(ApiTask, "ApiTask",
         config::STACK_API, nullptr, config::PRIORITY_API, nullptr, 0);
+    // TelloStateTask is independent of ApiTask so the UDP:8890 state stream keeps
+    // flowing while ApiTask blocks in a move/autotune (djitellopy reads state from
+    // a background thread throughout a blocking command).
+    // TelloStateTask は ApiTask から独立 — ApiTask が移動/autotune でブロック中も
+    // UDP:8890 状態ストリームを流し続ける（djitellopy はブロッキングコマンド中も背景
+    // スレッドで状態を読む）。
+    xTaskCreatePinnedToCore(TelloStateTask, "TelloStateTask",
+        config::STACK_TELLO_STATE, nullptr, config::PRIORITY_TELLO_STATE, nullptr, 0);
 
-    ESP_LOGI(TAG, "All 15 tasks started");
+    ESP_LOGI(TAG, "All 16 tasks started");
 }
 
 }  // namespace tasks

@@ -915,6 +915,37 @@ void Comm::startSoftAp()
     ap_cfg.ap.max_connection = 2;
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
+
+    // Re-address the SoftAP to the DJI Tello subnet (192.168.10.1) BEFORE start, so
+    // existing Tello Python programs run unchanged: djitellopy defaults to
+    // host=192.168.10.1, so `Tello()` connects with no edit. Canonical ESP-IDF order
+    // for a static AP IP: stop the DHCP server → set IP/gw/mask → restart it (it then
+    // leases 192.168.10.x). The AP netif is board-owned (R1); we borrow the handle.
+    // 起動前に SoftAP を DJI Tello サブネット（192.168.10.1）へ振り直し、既存 Tello Python
+    // プログラムを無改変で動かす: djitellopy は host=192.168.10.1 が既定なので `Tello()` が
+    // そのまま繋がる。静的 AP IP の定石: DHCP サーバ停止 → IP/gw/mask 設定 → 再開
+    // （以後 192.168.10.x をリース）。AP netif は board 所有（R1）でハンドルを借用する。
+    esp_netif_t* ap_netif = sf::internal::board::ap_netif();
+    if (ap_netif != nullptr) {
+        // Pack octets a.b.c.d into esp_ip4_addr_t (memory order = a,b,c,d; valid on
+        // the little-endian ESP32 and the LE SIL host). Avoids the lwip IP4_ADDR macro
+        // (absent from the SIL shim). / オクテットを LE バイト順で詰める（lwip IP4_ADDR 不使用）。
+        auto make_ip4 = [](uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+            esp_ip4_addr_t r{};
+            r.addr = static_cast<uint32_t>(a) | (static_cast<uint32_t>(b) << 8) |
+                     (static_cast<uint32_t>(c) << 16) | (static_cast<uint32_t>(d) << 24);
+            return r;
+        };
+        esp_netif_ip_info_t ip{};
+        ip.ip      = make_ip4(192, 168, 10, 1);
+        ip.gw      = make_ip4(192, 168, 10, 1);
+        ip.netmask = make_ip4(255, 255, 255, 0);
+        esp_netif_dhcps_stop(ap_netif);   // ignore "already stopped" / 「停止済み」は無視
+        ESP_ERROR_CHECK(esp_netif_set_ip_info(ap_netif, &ip));
+        ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
+        ESP_LOGI(TAG, "SoftAP addressed at 192.168.10.1 (Tello-compatible)");
+    }
+
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "WiFi SoftAP '%s' up on channel %u (telemetry; ESP-NOW unchanged)",

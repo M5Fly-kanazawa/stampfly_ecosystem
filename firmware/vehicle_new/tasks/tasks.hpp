@@ -129,4 +129,11 @@ void CLITask(void* pvParameters);
 /// Data logger + Blackbox (async, priority 5)
 /// データロガー + Blackbox（非同期、優先度5）
 void LogTask(void* pvParameters);
+
+/// Tello-style network API — UDP:8889 text commands (priority 6)
+/// Tello 風ネットワーク API — UDP:8889 テキストコマンド（優先度6）
 void ApiTask(void* pvParameters);
+
+/// Tello state stream — UDP:8890 ~10Hz state string for djitellopy (priority 6)
+/// Tello 状態ストリーム — UDP:8890 で djitellopy 用状態文字列を ~10Hz 送出（優先度6）
+void TelloStateTask(void* pvParameters);

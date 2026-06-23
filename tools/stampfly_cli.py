@@ -14,7 +14,7 @@ Commands:
     flight cancel                - Cancel current flight command
 
 Options:
-    --ip IP    StampFly IP address (default: 192.168.4.1 for AP mode)
+    --ip IP    StampFly IP address (default: 192.168.10.1 for AP mode)
                Use STAMPFLY_IP environment variable or --ip for STA mode
 
 Examples:
@@ -38,7 +38,7 @@ import time
 import os
 
 # StampFly default settings
-DEFAULT_IP = "192.168.4.1"  # AP mode default
+DEFAULT_IP = "192.168.10.1"  # AP mode default (Tello-compatible subnet)
 STAMPFLY_PORT = 23  # Telnet port for WiFi CLI
 TIMEOUT = 2.0
 

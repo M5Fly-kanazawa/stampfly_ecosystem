@@ -375,7 +375,7 @@ def parse_packet(data: bytes) -> list:
 class UDPTelemetryCapture:
     """Captures UDP telemetry from StampFly and saves to CSV."""
 
-    def __init__(self, vehicle_ip: str = '192.168.4.1', port: int = UDP_LOG_PORT):
+    def __init__(self, vehicle_ip: str = '192.168.10.1', port: int = UDP_LOG_PORT):
         self.vehicle_ip = vehicle_ip
         self.port = port
         self.sock = None
@@ -767,7 +767,7 @@ def main():
     )
     parser.add_argument('-o', '--output', help="Output CSV filename (auto-generated if not specified)")
     parser.add_argument('-d', '--duration', type=float, default=30.0, help="Capture duration in seconds (default: 30)")
-    parser.add_argument('-i', '--ip', default='192.168.4.1', help="StampFly IP address (default: 192.168.4.1)")
+    parser.add_argument('-i', '--ip', default='192.168.10.1', help="StampFly IP address (default: 192.168.10.1)")
     parser.add_argument('-p', '--port', type=int, default=UDP_LOG_PORT, help=f"UDP port (default: {UDP_LOG_PORT})")
     parser.add_argument('--no-save', action='store_true', help="Don't save to file, just display stats")
     args = parser.parse_args()

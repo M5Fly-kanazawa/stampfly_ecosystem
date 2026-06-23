@@ -38,7 +38,9 @@
 #include "pid.hpp"
 #include "autotune.hpp"
 #include "data_stream_wire.hpp"   // Data Stream wire layout (vs udp_capture.py)
+#include "tello_state.hpp"        // Tello UDP:8890 state-string builder
 #include "takeoff_landing.hpp"    // ground/airborne + touchdown detection
+#include <cstring>                // strstr for the Tello-state key check
 
 // Mock monotonic clock for esp_timer.h (TakeoffLandingMgr time-based detection). Start at
 // a large non-zero value so now_ms is never 0 (0 is the "timer unset" sentinel).
@@ -737,6 +739,52 @@ static void feed(sf::TakeoffLandingMgr& mgr, float tof_m, bool tof_valid, bool a
 
 // Firm-ground touchdown: ToF confirms <5cm + at rest, held landing_hold_ms → detected.
 // 確実な接地: ToF<5cm 確認＋静止を landing_hold_ms 持続 → 検出。
+// =============================================================================
+// Tello state-string tests (UDP:8890 — what djitellopy connect()/get_*() parse)
+// Tello 状態文字列テスト（UDP:8890 — djitellopy connect()/get_*() がパースする）
+// =============================================================================
+
+TEST(tello_state_all_keys_present)
+{
+    sf::tello::TelloStateInputs in{};
+    in.pitch = 1;  in.roll = -2;  in.yaw = 3;
+    in.vgx  = 4;   in.vgy = -5;   in.vgz = 6;
+    in.templ = 30; in.temph = 31;
+    in.tof = 120;  in.h = 118;    in.bat = 75;
+    in.baro = 1.23f; in.time_s = 42;
+    in.agx = 0.0f; in.agy = 0.0f; in.agz = -1000.0f;
+
+    char buf[256];
+    int len = sf::tello::buildTelloState(buf, sizeof(buf), in);
+    ASSERT_TRUE(len > 0);
+    ASSERT_TRUE(len < static_cast<int>(sizeof(buf)));   // not truncated / 切り詰め無し
+
+    // djitellopy splits on ';' then ':' and casts a fixed key set to int/float —
+    // a MISSING key throws in its parser. Assert every required "key:" is present.
+    // djitellopy は ';'→':' で分割し固定キー集合を int/float に変換 — キー欠落は例外。
+    const char* keys[] = {
+        "pitch:", "roll:", "yaw:",
+        "vgx:", "vgy:", "vgz:",
+        "templ:", "temph:",
+        "tof:", "h:", "bat:", "baro:", "time:",
+        "agx:", "agy:", "agz:",
+    };
+    for (const char* k : keys) {
+        ASSERT_TRUE(std::strstr(buf, k) != nullptr);
+    }
+    // Mission-pad prefix block must be exact (mid:-2 = detection disabled).
+    // ミッションパッド前置ブロックは厳密一致（mid:-2 = 検出無効）。
+    ASSERT_TRUE(std::strstr(buf, "mid:-2;x:0;y:0;z:0;mpry:0,0,0;") != nullptr);
+    // Trailing CRLF — each Tello state datagram ends with \r\n.
+    // 末尾 CRLF — Tello の状態データグラムは \r\n で終わる。
+    ASSERT_TRUE(len >= 2 && buf[len-2] == '\r' && buf[len-1] == '\n');
+    // Spot-check a few values round-trip into the wire form.
+    // いくつかの値が電文形にそのまま載ることを確認。
+    ASSERT_TRUE(std::strstr(buf, "bat:75;")   != nullptr);
+    ASSERT_TRUE(std::strstr(buf, "h:118;")    != nullptr);
+    ASSERT_TRUE(std::strstr(buf, "baro:1.23;") != nullptr);
+}
+
 TEST(land_firm_ground)
 {
     sf::TakeoffLandingMgr mgr;
@@ -829,6 +877,9 @@ int main()
     run_wire_unified_entries();
     run_wire_status_packet();
     run_wire_quantize_saturation();
+
+    printf("\n[Tello state]\n");
+    run_tello_state_all_keys_present();
 
     printf("\n[TakeoffLanding]\n");
     run_land_firm_ground();

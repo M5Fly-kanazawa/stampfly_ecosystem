@@ -243,6 +243,34 @@ static inline esp_err_t esp_netif_get_ip_info(esp_netif_t* esp_netif,
     return ESP_OK;
 }
 
+// Set the static IPv4 configuration of the interface (inert on host).
+// Used by sf_comm to re-address the SoftAP to the Tello subnet (192.168.10.1).
+// インターフェースの静的 IPv4 構成を設定（ホストでは無効動作）。sf_comm が SoftAP を
+// Tello サブネット（192.168.10.1）へ振り直すために使う。
+static inline esp_err_t esp_netif_set_ip_info(esp_netif_t* esp_netif,
+                                              const esp_netif_ip_info_t* ip_info)
+{
+    (void)esp_netif;
+    (void)ip_info;
+    return ESP_OK;
+}
+
+// Stop / start the DHCP server on the interface (inert on host). The real device
+// must stop the server before set_ip_info and restart it afterwards.
+// インターフェースの DHCP サーバを停止 / 開始（ホストでは無効動作）。実機は set_ip_info の
+// 前に停止し、後で再開する必要がある。
+static inline esp_err_t esp_netif_dhcps_stop(esp_netif_t* esp_netif)
+{
+    (void)esp_netif;
+    return ESP_OK;
+}
+
+static inline esp_err_t esp_netif_dhcps_start(esp_netif_t* esp_netif)
+{
+    (void)esp_netif;
+    return ESP_OK;
+}
+
 #ifdef __cplusplus
 }
 #endif
