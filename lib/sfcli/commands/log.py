@@ -133,8 +133,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     wifi_parser.add_argument(
         "-i", "--ip",
-        default="192.168.4.1",
-        help="StampFly IP address (default: 192.168.4.1)",
+        default="192.168.10.1",
+        help="StampFly IP address (default: 192.168.10.1)",
     )
     wifi_parser.add_argument(
         "--port",

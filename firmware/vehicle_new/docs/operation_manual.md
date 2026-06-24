@@ -183,7 +183,7 @@ ALT/POS の自動離陸は**鉛直（高度）だけが自動**で、上昇中�
 
 ```python
 from stampfly import StampFly
-with StampFly("192.168.4.1") as fly:   # connect() = SDK モード
+with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は Tello 互換の 192.168.10.1）
     fly.takeoff()                       # POS_HOLD 自動離陸 → 0.5 m ホバー（手動離陸と統一）
     fly.forward(50); fly.cw(90)         # 各コマンドは「到達後」に返る
     print(fly.battery(), fly.height(), fly.attitude())

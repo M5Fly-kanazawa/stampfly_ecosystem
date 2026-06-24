@@ -1286,7 +1286,7 @@ def _register_rate_excite(subparsers):
             "optionally lands. Start `sf log wifi` in another terminal FIRST "
             "to capture the 400Hz rate_ref/gyro data the fit needs."),
     )
-    parser.add_argument("--ip", default="192.168.4.1", help="vehicle IP")
+    parser.add_argument("--ip", default="192.168.10.1", help="vehicle IP")
     parser.add_argument("--axis", choices=["roll", "pitch", "yaw"], default="roll")
     parser.add_argument("--waveform", choices=["chirp", "doublet"], default="chirp")
     parser.add_argument("--amp", type=float, default=25.0, help="amplitude [deg/s] (default 25)")

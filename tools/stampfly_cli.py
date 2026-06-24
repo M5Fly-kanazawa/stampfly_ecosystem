@@ -122,7 +122,7 @@ def main():
         print("  flight cancel                - Cancel current flight command")
         print("")
         print("Options:")
-        print("  --ip IP    StampFly IP address (default: 192.168.4.1 for AP mode)")
+        print("  --ip IP    StampFly IP address (default: 192.168.10.1 for AP mode)")
         print("")
         print("Examples:")
         print("  # AP mode (default) - Jump to 15cm and descend")

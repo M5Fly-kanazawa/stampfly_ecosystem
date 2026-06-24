@@ -13,9 +13,11 @@ from typing import Optional, Callable, Any
 
 from .packet_parser import parse_packet
 
-# Default vehicle IP (StampFly WiFi AP)
-# StampFly WiFi APのデフォルトIP
-DEFAULT_HOST = "192.168.4.1"
+# Default vehicle IP (StampFly WiFi AP). The SoftAP is addressed at 192.168.10.1
+# (the DJI Tello subnet) so stock Tello/djitellopy programs connect unchanged.
+# StampFly WiFi APのデフォルトIP。SoftAP は 192.168.10.1（DJI Tello のサブネット）で、
+# 純正 Tello/djitellopy プログラムが無改変で繋がる。
+DEFAULT_HOST = "192.168.10.1"
 CLI_PORT = 23
 WS_PORT = 80
 

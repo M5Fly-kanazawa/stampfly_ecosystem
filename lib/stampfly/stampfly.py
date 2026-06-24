@@ -45,7 +45,7 @@ class StampFly:
     RC_MIN = -100
     RC_MAX = 100
 
-    def __init__(self, host: str = "192.168.4.1"):
+    def __init__(self, host: str = "192.168.10.1"):
         self._host = host
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None

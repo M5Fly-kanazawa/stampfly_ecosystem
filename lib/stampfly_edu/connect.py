@@ -209,7 +209,7 @@ class SimulatedStampFly:
 
 
 def connect_or_simulate(
-    host: str = "192.168.4.1",
+    host: str = "192.168.10.1",
     timeout: float = 3.0,
     force_sim: bool = False,
 ) -> "StampFly | SimulatedStampFly":
