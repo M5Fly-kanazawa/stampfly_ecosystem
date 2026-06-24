@@ -155,6 +155,12 @@ float g_target_ned[3] = {0, 0, 0};
 float g_target_yaw    = 0;
 bool  g_target_valid  = false;
 
+// Session cruise speed [m/s] for the verb moves (up/down/forward/...), set by the
+// Tello `speed x` command (x in cm/s). `go x y z speed` carries its own speed.
+// セッションの巡航速度 [m/s]（up/down/forward… の verb 移動用）。Tello `speed x`（cm/s）で
+// 設定。`go x y z speed` は自前の速度を持つ。
+float g_default_speed = kDefaultSpeed;
+
 // Client address for the UDP:8890 state stream, shared with TelloStateTask.
 // g_client (the sockaddr_in above) is read ONLY by ApiTask; TelloStateTask runs in
 // its own context, so the client IPv4 is mirrored into an atomic (a 32-bit IP fits
@@ -285,7 +291,7 @@ void cmdTakeoff()
                               1.0f - 2.0f * (y * y + z * z));
     }
     g_target_valid = true;
-    publishGuidance(kDefaultSpeed);
+    publishGuidance(g_default_speed);
     reply("ok");
 }
 
@@ -315,10 +321,22 @@ void cmdMove(float fwd_cm, float left_cm, float up_cm, float speed_mps)
         reply("error not flying");
         return;
     }
-    const float dist = sqrtf(fwd_cm * fwd_cm + left_cm * left_cm + up_cm * up_cm);
-    if (dist < kMoveMinCm || dist > kMoveMaxCm) {
+    float dist = sqrtf(fwd_cm * fwd_cm + left_cm * left_cm + up_cm * up_cm);
+    if (dist < kMoveMinCm) {
         reply("error out of range");
         return;
+    }
+    // Tello accepts moves up to 500 cm; we clamp the ACTUAL travel to the indoor-safe
+    // ceiling (kMoveMaxCm) but still reply "ok" so a program asking for a longer move
+    // keeps running (it just travels less). The direction is preserved.
+    // Tello は 500cm まで受理。実移動は屋内安全の上限（kMoveMaxCm）へクランプするが "ok" を返し、
+    // 長距離を要求するプログラムも止めない（移動量が減るだけ）。方向は保つ。
+    if (dist > kMoveMaxCm) {
+        const float s = kMoveMaxCm / dist;
+        fwd_cm *= s; left_cm *= s; up_cm *= s;
+        dist = kMoveMaxCm;
+        ESP_LOGW(TAG, "move clamped to %.0f cm (indoor ceiling)",
+                 static_cast<double>(kMoveMaxCm));
     }
     const float fwd_m  = fwd_cm * 0.01f;
     const float left_m = left_cm * 0.01f;
@@ -361,7 +379,7 @@ void cmdRotate(float delta_yaw_rad, float speed_unused)
     g_target_yaw += delta_yaw_rad;
     while (g_target_yaw >  3.14159265f) g_target_yaw -= 6.2831853f;
     while (g_target_yaw < -3.14159265f) g_target_yaw += 6.2831853f;
-    publishGuidance(kDefaultSpeed);
+    publishGuidance(g_default_speed);
 
     const bool reached = waitUntil(8000, [] {
         const sf::StateEstimate e = sf::estimate_state.latest();
@@ -395,7 +413,7 @@ void cmdStop()
     g_target_ned[1] = est.position[1];
     g_target_ned[2] = est.position[2];
     g_target_valid  = true;
-    publishGuidance(kDefaultSpeed);
+    publishGuidance(g_default_speed);
     reply("ok");
 }
 
@@ -469,11 +487,10 @@ void cmdQuery(const char* what)
                       static_cast<int>(pitch), static_cast<int>(roll),
                       static_cast<int>(yaw));
     } else if (std::strcmp(what, "speed?") == 0) {
-        const sf::StateEstimate e = sf::estimate_state.latest();
-        const float sp = sqrtf(e.velocity[0]*e.velocity[0] +
-                               e.velocity[1]*e.velocity[1] +
-                               e.velocity[2]*e.velocity[2]) * 100.0f;
-        std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(sp));
+        // Tello `speed?` returns the SET cruise speed [cm/s] (not the live ground
+        // speed — that is the state stream's vgx/vgy/vgz / get_speed_x()).
+        // Tello `speed?` は設定した巡航速度 [cm/s] を返す（実速度は状態ストリームの vgx/y/z）。
+        std::snprintf(buf, sizeof(buf), "%d", static_cast<int>(g_default_speed * 100.0f));
     } else if (std::strcmp(what, "sdk?") == 0) {
         // Report SDK 2.0 — the version djitellopy targets for the broadest set.
         // SDK 2.0 を返す — djitellopy が最大互換で前提にするバージョン。
@@ -983,6 +1000,19 @@ void processLine(char* line)
         return;
     }
 
+    // speed x — set the session cruise speed for the verb moves (Tello: 10–100 cm/s).
+    // `speed?` is a query and was already routed above. / verb 移動の巡航速度を設定。
+    {
+        float sx = 0;
+        if (std::sscanf(line, "speed %f", &sx) == 1) {
+            if (sx < 10.0f)  sx = 10.0f;
+            if (sx > 100.0f) sx = 100.0f;
+            g_default_speed = sx * 0.01f;   // cm/s → m/s
+            reply("ok");
+            return;
+        }
+    }
+
     // rc a b c d — continuous manual control (fire-and-forget). Parse early since it
     // arrives at a high rate. / 連続マニュアル操作（撃ちっぱなし）。高レートで来るため先に解析。
     {
@@ -999,12 +1029,12 @@ void processLine(char* line)
     const int got = std::sscanf(line, "%15s %f %f %f %f", verb, &a, &b, &c, &d);
     const float deg2rad = 0.017453293f;
     if (got == 2) {
-        if (std::strcmp(verb, "up") == 0)      { cmdMove(0, 0,  a, kDefaultSpeed); return; }
-        if (std::strcmp(verb, "down") == 0)    { cmdMove(0, 0, -a, kDefaultSpeed); return; }
-        if (std::strcmp(verb, "left") == 0)    { cmdMove(0,  a, 0, kDefaultSpeed); return; }
-        if (std::strcmp(verb, "right") == 0)   { cmdMove(0, -a, 0, kDefaultSpeed); return; }
-        if (std::strcmp(verb, "forward") == 0) { cmdMove( a, 0, 0, kDefaultSpeed); return; }
-        if (std::strcmp(verb, "back") == 0)    { cmdMove(-a, 0, 0, kDefaultSpeed); return; }
+        if (std::strcmp(verb, "up") == 0)      { cmdMove(0, 0,  a, g_default_speed); return; }
+        if (std::strcmp(verb, "down") == 0)    { cmdMove(0, 0, -a, g_default_speed); return; }
+        if (std::strcmp(verb, "left") == 0)    { cmdMove(0,  a, 0, g_default_speed); return; }
+        if (std::strcmp(verb, "right") == 0)   { cmdMove(0, -a, 0, g_default_speed); return; }
+        if (std::strcmp(verb, "forward") == 0) { cmdMove( a, 0, 0, g_default_speed); return; }
+        if (std::strcmp(verb, "back") == 0)    { cmdMove(-a, 0, 0, g_default_speed); return; }
         // Tello: cw = clockwise (viewed from above) = +yaw in NED.
         // Tello: cw = 上から見て時計回り = NED では +yaw。
         if (std::strcmp(verb, "cw") == 0)      { cmdRotate( a * deg2rad, 0); return; }

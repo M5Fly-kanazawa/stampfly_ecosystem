@@ -60,11 +60,13 @@ tello = Tello(host="192.168.1.42")   # 機体の LAN IP を渡す
 | 移動 | `up` `down` `left` `right` `forward` `back`（cm）| ✅ ブロック（到達まで）|
 | 回転 | `cw` `ccw`（度）| ✅ ブロック（到達まで）|
 | 絶対移動 | `go x y z speed` | ✅ |
+| 設定 | `speed x`（巡航速度 cm/s, set_speed）| ✅ verb 移動の既定速度に反映 |
 | マニュアル | `rc a b c d`（連続操作 = `send_rc_control`）| ✅ POS_HOLD 速度指令へ橋渡し（送信停止で保持・スティックで即解除）|
 | 読み取り | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | 状態ストリーム | UDP:8890（`get_battery`/`get_height`/`get_distance_tof` 等が読む）| ✅ ~10Hz |
 | カメラ | `streamon` `streamoff` | ⚠️ ok を返すが映像は出ない（カメラ無し）|
 | 宙返り | `flip` | ❌ `error`（小型機で高リスクのため非対応）|
+| 円弧 | `curve` | ❌ `error`（未実装）|
 | ミッションパッド | `mon` `moff` `mdirection` | ❌ `error`（EDU 専用機能）|
 
 ## 4. 安全・注意
@@ -73,7 +75,8 @@ tello = Tello(host="192.168.1.42")   # 機体の LAN IP を渡す
   プログラムで飛ばすが、**スティックを動かせばいつでもパイロットが即介入・停止できる**（パイロット優先）。
 - `emergency()` はどの状態でも即時モータ停止。
 - **`sf log wifi` と同時に実行しない。** どちらも PC 側で UDP:8890 を使う。
-- 移動は屋内安全のため上限へクランプされることがある（応答は `ok`）。
+- 屋内安全の上限（≈3m）を超える移動はその上限へクランプされ、応答は `ok`（プログラムは
+  止まらず移動量が減るだけ）。巡航速度は `speed x` で変えられる。
 
 ---
 
@@ -121,11 +124,13 @@ For STA mode: `Tello(host="<vehicle-LAN-ip>")`.
 | Move | `up` `down` `left` `right` `forward` `back` (cm) | ✅ blocks until reached |
 | Rotate | `cw` `ccw` (deg) | ✅ blocks until reached |
 | Absolute | `go x y z speed` | ✅ |
+| Set | `speed x` (cruise speed cm/s, set_speed) | ✅ applies to the verb moves' default speed |
 | Manual | `rc a b c d` (continuous = `send_rc_control`) | ✅ bridged to POS_HOLD velocity (holds when the stream stops; pilot stick cancels instantly) |
 | Read | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | State stream | UDP:8890 (read by `get_battery`/`get_height`/`get_distance_tof`...) | ✅ ~10 Hz |
 | Camera | `streamon` `streamoff` | ⚠️ returns ok, no video (no camera) |
 | Flip | `flip` | ❌ `error` (unsafe on this small craft) |
+| Curve | `curve` | ❌ `error` (not implemented) |
 | Mission pads | `mon` `moff` `mdirection` | ❌ `error` (EDU-only feature) |
 
 ## 4. Safety & Notes
@@ -135,4 +140,5 @@ For STA mode: `Tello(host="<vehicle-LAN-ip>")`.
   intervene/stop instantly** (the pilot always wins).
 - `emergency()` cuts the motors immediately in any state.
 - **Do not run `sf log wifi` at the same time** — both use UDP:8890 on the PC.
-- Moves may be clamped to an indoor-safe limit (the reply is still `ok`).
+- A move longer than the indoor-safe ceiling (≈3 m) is clamped to that ceiling and
+  still replies `ok` (the program keeps running; the craft just travels less).
