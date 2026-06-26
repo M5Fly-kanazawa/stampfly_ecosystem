@@ -224,6 +224,18 @@ namespace param_vars {
     // "StampFly-XXXX" を提供（インフラ不要）。ESP-NOW 操縦は全モードで動く。
     int32_t wifi_mode = 0;
 
+    // WiFi/ESP-NOW channel (boot-time, sf_comm initWifi): 1-13. Used by the SoftAP and
+    // the fixed-channel STA/ESP-NOW radio. Reboot to apply (the radio is not re-channeled
+    // in flight). Must match the transmitter, but the controller auto-scans 1-13 on
+    // pairing and locks onto the channel our pairing packet advertises — so changing this
+    // and re-pairing is enough; no controller reflash. Use 6 or 11 to avoid a busy CH 1.
+    // WiFi/ESP-NOW チャンネル（起動時, sf_comm initWifi）: 1-13。SoftAP と固定チャネル
+    // STA/ESP-NOW 無線が使う。反映には再起動（無線は飛行中に載せ替えない）。送信機と一致が
+    // 必要だが、コントローラはペアリング時に 1-13 をスキャンし、ペアリングパケットが広告する
+    // チャンネルにロックする — 変更後に再ペアリングするだけでよい（送信機の再書込み不要）。
+    // 混雑する CH 1 を避けるなら 6 か 11。
+    int32_t wifi_channel = 1;
+
     // Blackbox SPIFFS logger enable (0 = OFF default, 1 = ON). DEFAULT OFF because the
     // SPIFFS write done while ARMED triggers a flash erase that disables the flash
     // cache and STALLS BOTH CORES ~37ms every ~0.5s — the control loop freezes and the
@@ -555,6 +567,7 @@ static const ParamEntry table[] = {
     // テレメトリ WiFi モード（0=STA, 1=SoftAP）— 起動時のみ。ライブ再読込なし
     // （無線は飛行中に載せ替えられない）。
     {"wifi.mode",       ParamType::INT,   &wifi_mode,      0.0f,      0.0f,  1.0f,   nullptr},
+    {"wifi.channel",    ParamType::INT,   &wifi_channel,   1.0f,      1.0f,  13.0f,  nullptr},
     {"log.blackbox.enable", ParamType::INT, &log_blackbox_enable, 0.0f, 0.0f, 1.0f, nullptr},
 
     // Attitude control

@@ -136,9 +136,10 @@ static constexpr uint8_t kBroadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
 // 正規化およびリンク設定の定数
 // -----------------------------------------------------------------------------
 
-/// WiFi channel used by ESP-NOW. Must match the transmitter.
-/// ESP-NOW で使う WiFi チャンネル。送信機と一致させる必要がある。
-static constexpr uint8_t kWifiChannel = 1;
+// WiFi/ESP-NOW channel is the Comm::wifi_channel_ member, read once at init from the
+// wifi.channel parameter (default 1, range 1-13). See comm.hpp / initWifi().
+// WiFi/ESP-NOW チャンネルは Comm::wifi_channel_ メンバ（init で wifi.channel パラメータから
+// 読む、既定 1, 範囲 1-13）。comm.hpp / initWifi() 参照。
 
 /// Hostname advertised on the WiFi interface.
 /// WiFi インターフェースに通知するホスト名。
@@ -284,7 +285,7 @@ void Comm::init()
     last_packet_us_ = 0;  // 0 = "no packet ever received" / 未受信
     espnow_connected_ = false;
 
-    ESP_LOGI(TAG, "Comm initialized (channel %u)", kWifiChannel);
+    ESP_LOGI(TAG, "Comm initialized (channel %u)", wifi_channel_);
 }
 
 // -----------------------------------------------------------------------------
@@ -521,7 +522,7 @@ void Comm::sendPairingPacket()
     // 「実際の」無線チャネルを広告する（コンパイル時定数でなく）: ルータ接続の STA
     // モードではチャネルはルータに従うため、スキャン中の送信機は実在チャネルへ
     // ロックしなければならない。
-    uint8_t primary = kWifiChannel;
+    uint8_t primary = wifi_channel_;
     wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
     esp_wifi_get_channel(&primary, &second);
     packet[0] = primary;                                        // byte 0   : channel
@@ -823,6 +824,18 @@ void Comm::initWifi()
     int32_t wifi_mode = 0;
     sf::params::get_int("wifi.mode", wifi_mode);
 
+    // WiFi/ESP-NOW channel (boot-time parameter, 1-13). Read once here, before the
+    // SoftAP/STA bring-up below uses wifi_channel_. Reboot to apply (the radio is not
+    // re-channeled in flight). The transmitter scans 1-13 on pairing and locks onto the
+    // channel our pairing packet advertises, so re-pairing after a change is enough.
+    // WiFi/ESP-NOW チャンネル（起動時パラメータ, 1-13）。下の SoftAP/STA 起動が wifi_channel_
+    // を使う前にここで一度読む。反映には再起動（無線は飛行中に載せ替えない）。送信機は
+    // ペアリング時に 1-13 をスキャンし、こちらのペアリングパケットが広告するチャンネルへ
+    // ロックするため、変更後は再ペアリングするだけでよい。
+    int32_t wifi_channel = 1;
+    sf::params::get_int("wifi.channel", wifi_channel);
+    wifi_channel_ = static_cast<uint8_t>(wifi_channel);
+
     if (wifi_mode == 1) {
         startSoftAp();
     } else {
@@ -871,9 +884,9 @@ void Comm::startSta()
     } else {
         // ESP-NOW-only: pin the radio to the fixed channel (legacy behavior).
         // ESP-NOW のみ: ラジオを固定チャネルに固定（従来挙動）。
-        ESP_ERROR_CHECK(esp_wifi_set_channel(kWifiChannel, WIFI_SECOND_CHAN_NONE));
+        ESP_ERROR_CHECK(esp_wifi_set_channel(wifi_channel_, WIFI_SECOND_CHAN_NONE));
         ESP_LOGI(TAG, "WiFi STA up on channel %u (no credentials — ESP-NOW only; "
-                      "set via CLI `wifi ssid/pass` for telemetry)", kWifiChannel);
+                      "set via CLI `wifi ssid/pass` for telemetry)", wifi_channel_);
     }
 }
 
@@ -911,7 +924,7 @@ void Comm::startSoftAp()
     std::strncpy(reinterpret_cast<char*>(ap_cfg.ap.password), pass,
                  sizeof(ap_cfg.ap.password) - 1);
     ap_cfg.ap.authmode       = WIFI_AUTH_WPA2_PSK;
-    ap_cfg.ap.channel        = kWifiChannel;   // AP on the ESP-NOW channel / ESP-NOW チャネル上
+    ap_cfg.ap.channel        = wifi_channel_;   // AP on the ESP-NOW channel / ESP-NOW チャネル上
     ap_cfg.ap.max_connection = 2;
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
@@ -949,7 +962,7 @@ void Comm::startSoftAp()
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "WiFi SoftAP '%s' up on channel %u (telemetry; ESP-NOW unchanged)",
-             reinterpret_cast<char*>(ap_cfg.ap.ssid), kWifiChannel);
+             reinterpret_cast<char*>(ap_cfg.ap.ssid), wifi_channel_);
 }
 
 // -----------------------------------------------------------------------------

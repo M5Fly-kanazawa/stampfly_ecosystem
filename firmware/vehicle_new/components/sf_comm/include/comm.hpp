@@ -237,6 +237,16 @@ private:
     /// SoftAP の既定 WPA2 パスワード（8文字以上）。NVS "pass" で上書き可。
     static constexpr const char* kApDefaultPassword = "stampfly";
 
+    /// WiFi/ESP-NOW channel (1-13), read once at init from the wifi.channel param
+    /// (default 1; reboot to apply — the radio is not re-channeled in flight). Must
+    /// match the transmitter, but the controller auto-scans 1-13 on pairing and locks
+    /// onto the channel our pairing packet advertises.
+    /// WiFi/ESP-NOW チャンネル（1-13）。init で wifi.channel パラメータから一度読む
+    /// （既定 1; 反映には再起動 — 無線は飛行中に載せ替えない）。送信機と一致が必要だが、
+    /// コントローラはペアリング時に 1-13 を自動スキャンし、ペアリングパケットが広告する
+    /// チャンネルにロックする。
+    uint8_t wifi_channel_ = 1;
+
     bool espnow_connected_ = false;          // Link status / リンク状態
     std::atomic<int64_t> last_packet_us_{0}; // esp_timer_get_time() at last
                                              //   valid recv / 最終有効受信時刻
