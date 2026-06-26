@@ -130,20 +130,32 @@ namespace param_vars {
     // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m,
     // κ=0.00971）、モータ曲線が同一で、レートループから見たプラントが同じため
     // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
-    // roll/pitch: on-board autotune real-plant values (2026-06-19, all-axes tune →
-    // near-zero hover wobble). Less P + more D than the old legacy gains — the real
-    // plant wanted damping, not stiffness. yaw kept (its tune was safely rejected:
-    // thin GM). See autotune.* result params for the identified plant/margins.
-    // roll/pitch: オンボード autotune 実機実測値（2026-06-19 全軸チューンでホバーふらつきほぼ消失）。
-    // 旧 legacy より P 小・D 大（実機はゲインでなく制動を要した）。yaw は据置（薄GMで安全棄却）。
-    float rate_roll_kp    = 3.40e-4f;  // autotune real-plant (was legacy 1.365e-3)
-    float rate_roll_ti    = 0.4f;
-    float rate_roll_td    = 0.017658f;
-    float rate_pitch_kp   = 5.16e-4f;  // autotune real-plant (was legacy 1.995e-3)
-    float rate_pitch_ti   = 0.4f;
-    float rate_pitch_td   = 0.017155f;
-    float rate_yaw_kp     = 5.31e-3f;  // legacy YAW_RATE_KP (3x: yaw authority)
-    float rate_yaw_ti     = 1.6f;      // legacy YAW_RATE_TI
+    // Values are the original M5StampFly (M5Fly-kanazawa) hand-tuned ACRO rate gains,
+    // CONVERTED into this firmware's torque[Nm] form, then VALIDATED in real flight
+    // (2026-06-27, converted gains flew well → adopted as default). Conversion bridges
+    // the two firmwares' output representations: original output is a motor "voltage"
+    // (linear duty = V/V_batt mixer); here the PID output is body torque [Nm] (B^-1 +
+    // omega^2 motor curve). Same rate-error input (rad/s), same loop form (Tustin PID,
+    // D-on-M, eta=0.125, 400Hz), so Ti/Td transfer 1:1 and only Kp is rescaled by
+    // d*g_VT (roll/pitch) or kappa*g_VT (yaw), g_VT=dT/dV@hover=0.0653 N/V. Supersedes
+    // the 2026-06-19 on-board autotune values (roll 3.40e-4/ti0.4, pitch 5.16e-4/ti0.4,
+    // yaw 5.31e-3/ti1.6): vs those, roll/pitch P is ~2.8x with a longer Ti (more low-freq
+    // phase margin in the ~0.9 Hz band), yaw is gentler. See analysis/scripts/
+    // acro_gain_conversion.py + the SIL/linear-margin validation report.
+    // 値はオリジナル M5StampFly（M5Fly-kanazawa）のハンドチューン ACRO レートゲインを本ファームの
+    // トルク[Nm]形へ換算し、実機飛行で検証（2026-06-27 良好→既定採用）。換算は両ファームの出力
+    // 表現の橋渡し（オリジナル＝モータ「電圧」線形ミキサ、本機＝トルク[Nm] の B^-1＋ω²曲線）。
+    // レート誤差入力（rad/s）・ループ形式（Tustin PID・測定値微分・η=0.125・400Hz）が同一ゆえ
+    // Ti/Td はそのまま、Kp のみ d*g_VT（roll/pitch）/ κ*g_VT（yaw）で再尺度（g_VT=0.0653 N/V）。
+    // 2026-06-19 autotune 値を置換: roll/pitch は P が約2.8倍＋Ti 長め（~0.9Hz帯の低周波余裕増）、yaw は穏やか。
+    float rate_roll_kp    = 9.759795e-4f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 3.40e-4)
+    float rate_roll_ti    = 0.7f;
+    float rate_roll_td    = 0.01f;
+    float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
+    float rate_pitch_ti   = 0.7f;
+    float rate_pitch_td   = 0.025f;
+    float rate_yaw_kp     = 1.901691e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was legacy 5.31e-3)
+    float rate_yaw_ti     = 0.8f;
     float rate_yaw_td     = 0.01f;
 
     // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
@@ -497,14 +509,14 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   3.40e-4f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.4f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.017658f, 0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  5.16e-4f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.4f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.017155f, 0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    5.31e-3f,  0.0f,  0.01f,  &notifyControllerReload},
-    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    1.6f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   9.759795e-4f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
+    {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    1.901691e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    0.8f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
     {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
     {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
