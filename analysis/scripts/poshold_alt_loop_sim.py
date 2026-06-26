@@ -101,16 +101,22 @@ if __name__ == '__main__':
     print(f"[validation] measured alt std = {meas:.0f} mm   replay(current gains) = {np.std(al)*1000:.0f} mm\n")
     print(f"  {'candidate':34} {'alt std':>8}  {'vs meas':>7}")
     # (akp, ati, vkp, vti, tilt_ff, a_td, v_td)
-    for name, g in [("current PI-PI alt0.45 vel0.1", (0.45, 7.0, 0.1, 2.5, False, 0.0, 0.0)),
-                    ("alt.kp 0.70",                  (0.70, 7.0, 0.1, 2.5, False, 0.0, 0.0)),
-                    ("vel.kp 0.20",                  (0.45, 7.0, 0.2, 2.5, False, 0.0, 0.0)),
-                    ("vel.kp 0.40",                  (0.45, 7.0, 0.4, 2.5, False, 0.0, 0.0)),
+    for name, g in [("current PI-PI alt0.45 vel0.1",  (0.45, 7.0, 0.1, 2.5, False, 0.0, 0.0)),
+                    ("vel.ti 2.5->1.5 (INTEGRAL up)", (0.45, 7.0, 0.1, 1.5, False, 0.0, 0.0)),
+                    ("vel.ti 2.5->1.0 (INTEGRAL up)", (0.45, 7.0, 0.1, 1.0, False, 0.0, 0.0)),
+                    ("alt.ti 7->3 (outer integral)",  (0.45, 3.0, 0.1, 2.5, False, 0.0, 0.0)),
+                    ("vel.kp 0.20 (proportional up)", (0.45, 7.0, 0.2, 2.5, False, 0.0, 0.0)),
                     ("D on velocity loop vel.td=0.1", (0.45, 7.0, 0.1, 2.5, False, 0.0, 0.10)),
                     ("D on position loop alt.td=0.5", (0.45, 7.0, 0.1, 2.5, False, 0.50, 0.0)),
-                    ("tilt FF thrust/cos",           (0.45, 7.0, 0.1, 2.5, True,  0.0, 0.0))]:
+                    ("tilt FF thrust/cos",            (0.45, 7.0, 0.1, 2.5, True,  0.0, 0.0))]:
         s = np.std(replay(*g)[0])*1000
         print(f"  {name:34} {s:>6.0f}mm {s/meas*100:>6.0f}%")
-    print("\nD notes: velocity-loop D differentiates the NOISY vz estimate -> no help (why")
-    print("the cascade keeps the velocity loop PI). Position-loop D differentiates the CLEAN")
-    print("ToF altitude -> modest help, but largely redundant with the inner velocity loop.")
-    print("High-gain rows are OPTIMISTIC (model under-represents lag); validate via sysid+SIL.")
+    print("\nLever notes:")
+    print("- INTEGRAL (vel.ti down): textbook disturbance-rejection lever. Raises LOW-freq")
+    print("  loop gain WITHOUT raising the crossover -> does NOT push into the actuation lag")
+    print("  (so it is NOT contradicted by the firmware 'do not raise vel.kp' note). SAFEST")
+    print("  tuning lever here; keep it moderate (corner << crossover) to preserve phase margin.")
+    print("- alt.ti (outer integral): no help — the disturbance enters at the INNER loop (thrust).")
+    print("- velocity-loop D: hurts (differentiates noisy vz). position-loop D: modest, redundant.")
+    print("- vel.kp (proportional): effective in sim but raises crossover into the lag -> OPTIMISTIC")
+    print("  and conflicts with real-flight tuning. Validate any change via vertical sysid + SIL.")
