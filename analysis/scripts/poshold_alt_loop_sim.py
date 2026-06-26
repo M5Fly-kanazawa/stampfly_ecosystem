@@ -58,18 +58,30 @@ az = smooth(np.gradient(smooth(vzg, 30), 1/FS), 30)
 d_ext = M*az - (lpf(thrg, TAU, FS)*cosg - M*G)
 noise = vzg - smooth(vzg, int(FS/1.5))   # ESKF vz estimation noise (>1.5 Hz)
 
-class PI:
-    def __init__(s, kp, ti, lim): s.kp, s.ti, s.lim, s.I, s.pe = kp, ti, lim, 0.0, 0.0
+class PID:
+    """pid.hpp-equivalent: standard form, incomplete derivative ON MEASUREMENT
+    (Tustin, eta=0.125), trapezoidal integral with conditional anti-windup.
+    td=0 → pure PI (the firmware altitude default)."""
+    def __init__(s, kp, ti, lim, td=0.0, eta=0.125):
+        s.kp, s.ti, s.td, s.lim, s.eta = kp, ti, td, lim, eta
+        s.I = 0.0; s.pe = 0.0; s.df = 0.0; s.pm = 0.0; s.first = True
     def step(s, sp, meas, dt):
-        e = sp-meas; P = s.kp*e
+        e = sp-meas; P = s.kp*e; D = 0.0
+        if s.td > 0:                                   # D on measurement (clean ALT / noisy vz)
+            if s.first: s.pm = meas
+            else:
+                al = 2*s.eta*s.td/dt; a = (al-1)/(al+1); b = 2*s.td/((al+1)*dt)
+                s.df = a*s.df - b*(meas - s.pm); D = s.kp*s.df
+        s.pm = meas; s.first = False
         if s.ti >= 0.01:
-            inext = s.I + (s.kp/s.ti)*(e+s.pe)*dt*0.5; ot = P+inext
+            inext = s.I + (s.kp/s.ti)*(e+s.pe)*dt*0.5; ot = P+inext+D
             if not ((ot > s.lim and e > 0) or (ot < -s.lim and e < 0)): s.I = inext
             s.I = float(np.clip(s.I, -s.lim, s.lim))
-        s.pe = e; return float(np.clip(P+s.I, -s.lim, s.lim))
+        s.pe = e; return float(np.clip(P+s.I+D, -s.lim, s.lim))
 
-def replay(akp, ati, vkp, vti, tilt_ff=False):
-    dt = 1/FS; n = len(tg); a_ = PI(akp, ati, 0.5); v_ = PI(vkp, vti, 0.15)
+def replay(akp, ati, vkp, vti, tilt_ff=False, a_td=0.0, v_td=0.0):
+    dt = 1/FS; n = len(tg)
+    a_ = PID(akp, ati, 0.5, td=a_td); v_ = PID(vkp, vti, 0.15, td=v_td)
     al = np.zeros(n); vc = np.zeros(n); al[0] = altg[0]; vc[0] = vzg[0]
     sp = float(np.median(altg)); thr_state = HOVER; ac = np.exp(-1/(TAU*FS))
     for i in range(1, n):
@@ -87,13 +99,18 @@ if __name__ == '__main__':
     al, _ = replay(0.45, 7.0, 0.1, 2.5)
     print(f"d_ext (bob-driving net force) std = {np.std(d_ext)*1000:.1f} mN   vz-noise std = {np.std(noise)*1000:.0f} mm/s")
     print(f"[validation] measured alt std = {meas:.0f} mm   replay(current gains) = {np.std(al)*1000:.0f} mm\n")
-    print(f"  {'candidate':30} {'alt std':>8}  {'vs meas':>7}")
-    for name, g in [("current alt0.45 vel0.1", (0.45, 7.0, 0.1, 2.5, False)),
-                    ("alt.kp 0.70", (0.70, 7.0, 0.1, 2.5, False)),
-                    ("vel.kp 0.20", (0.45, 7.0, 0.2, 2.5, False)),
-                    ("vel.kp 0.40", (0.45, 7.0, 0.4, 2.5, False)),
-                    ("tilt FF thrust/cos", (0.45, 7.0, 0.1, 2.5, True))]:
+    print(f"  {'candidate':34} {'alt std':>8}  {'vs meas':>7}")
+    # (akp, ati, vkp, vti, tilt_ff, a_td, v_td)
+    for name, g in [("current PI-PI alt0.45 vel0.1", (0.45, 7.0, 0.1, 2.5, False, 0.0, 0.0)),
+                    ("alt.kp 0.70",                  (0.70, 7.0, 0.1, 2.5, False, 0.0, 0.0)),
+                    ("vel.kp 0.20",                  (0.45, 7.0, 0.2, 2.5, False, 0.0, 0.0)),
+                    ("vel.kp 0.40",                  (0.45, 7.0, 0.4, 2.5, False, 0.0, 0.0)),
+                    ("D on velocity loop vel.td=0.1", (0.45, 7.0, 0.1, 2.5, False, 0.0, 0.10)),
+                    ("D on position loop alt.td=0.5", (0.45, 7.0, 0.1, 2.5, False, 0.50, 0.0)),
+                    ("tilt FF thrust/cos",           (0.45, 7.0, 0.1, 2.5, True,  0.0, 0.0))]:
         s = np.std(replay(*g)[0])*1000
-        print(f"  {name:30} {s:>6.0f}mm {s/meas*100:>6.0f}%")
-    print("\nNOTE: high-gain rows are OPTIMISTIC (model under-represents lag at higher")
-    print("crossover; conflicts with real-flight tuning). Do not adopt without sysid+SIL.")
+        print(f"  {name:34} {s:>6.0f}mm {s/meas*100:>6.0f}%")
+    print("\nD notes: velocity-loop D differentiates the NOISY vz estimate -> no help (why")
+    print("the cascade keeps the velocity loop PI). Position-loop D differentiates the CLEAN")
+    print("ToF altitude -> modest help, but largely redundant with the inner velocity loop.")
+    print("High-gain rows are OPTIMISTIC (model under-represents lag); validate via sysid+SIL.")
