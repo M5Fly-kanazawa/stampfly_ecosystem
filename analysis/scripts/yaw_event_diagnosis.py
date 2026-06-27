@@ -36,6 +36,18 @@ def analyze(LOG):
 
     print(f"\n=== {LOG.split('/')[-1]}  ({ti[-1]:.0f}s) ===")
     if py: print(f"yaw PID kp/ti/td = {py[0]:.3e}/{py[1]:.2f}/{py[2]:.3f}")
+    # Telemetry-loss / control-stall check. Bursty large gaps (>100ms) are UDP packet
+    # loss (degrades analysis, not flight); periodic ~37ms gaps are SPIFFS blackbox stalls
+    # (a real control freeze — set log.blackbox.enable=0). High loss → trust only the
+    # flight-AVERAGED trim and instantaneous peaks, not the cumulative yaw angle.
+    dt = np.diff(ti) * 1000.0
+    gw = dt[dt > 20]
+    if len(gw):
+        loss = (gw.sum() / 1000.0) / (ti[-1] - ti[0]) * 100   # gw is ms, flight time is s
+        kind = "UDP packet loss (network — degrades analysis, not flight)" \
+            if np.mean(gw > 100) > 0.3 else "SPIFFS stall? check log.blackbox.enable"
+        print(f"telemetry gaps: {loss:.0f}% time lost, {len(gw)} gaps "
+              f"(median {np.median(gw):.0f}ms, max {gw.max():.0f}ms) -> {kind}")
     print(f"yaw stick |max| = {yst:.3f}   (≈0 → spontaneous, not commanded)")
     fly = (tcr > 10) & (tcr < ti[-1] - 5)
     ccw, cw = duty[fly, 0] + duty[fly, 2], duty[fly, 1] + duty[fly, 3]
