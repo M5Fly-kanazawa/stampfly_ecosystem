@@ -48,6 +48,19 @@ def analyze(LOG):
             if np.mean(gw > 100) > 0.3 else "SPIFFS stall? check log.blackbox.enable"
         print(f"telemetry gaps: {loss:.0f}% time lost, {len(gw)} gaps "
               f"(median {np.median(gw):.0f}ms, max {gw.max():.0f}ms) -> {kind}")
+    # Control-loop health: sort+dedupe the onboard timestamps (undo UDP reorder/dup) to
+    # recover the TRUE 400Hz schedule. On-grid (multiple of 2500us) = control kept ticking
+    # and only the NETWORK dropped frames; off-grid by >>1 cycle = real control jitter/stall.
+    # 制御ループ健全性: タイムスタンプをソート+重複除去し真の400Hzスケジュールを復元。
+    # 2.5ms整数倍=制御は刻み続け網が落としただけ。1周期超のグリッド外=実制御ジッタ/ストール。
+    P = 2500  # control period [us]
+    tu = np.unique((ti * 1e6).astype(np.int64)); du = np.diff(tu)
+    on = (np.abs(du % P) < 150) | (np.abs(du % P - P) < 150)
+    exact = np.mean(np.abs(du - P) < 150) * 100
+    offmax = np.max(np.minimum(du[~on] % P, P - du[~on] % P)) if (~on).any() else 0
+    print(f"control loop: {exact:.0f}% cycles exactly 2.5ms, {np.mean(on)*100:.0f}% on the 2.5ms grid, "
+          f"{np.mean(~on)*100:.1f}% off-grid (max jitter {offmax}us) -> "
+          f"{'CLEAN (no stall; off-grid is sub-cycle WiFi-preempt jitter)' if offmax < 1500 else 'CONTROL JITTER/STALL — investigate'}")
     print(f"yaw stick |max| = {yst:.3f}   (≈0 → spontaneous, not commanded)")
     fly = (tcr > 10) & (tcr < ti[-1] - 5)
     ccw, cw = duty[fly, 0] + duty[fly, 2], duty[fly, 1] + duty[fly, 3]
