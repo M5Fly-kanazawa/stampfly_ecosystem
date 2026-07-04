@@ -89,86 +89,75 @@ docs/
 
 ```
 firmware/
-├── vehicle/
+├── vehicle/       # 主力ファームウェア（旧 vehicle_new を昇格）
+├── vehicle_old/    # レガシーファームウェア（凍結、実飛行87回）
 ├── controller/
 └── common/
 ```
 
 ### firmware/vehicle/
-StampFly 機体上で動作するファームウェア。
+StampFly 機体上で動作する主力ファームウェア。
 制御工学的には **plant（制御対象）** に相当する。
+
+`vehicle_new` として開発され、POS_HOLD（位置制御）の実機検証まで到達した時点で
+`firmware/vehicle/` に昇格した（旧実装は `firmware/vehicle_old/` へ）。
 
 ```
 vehicle/
 ├── components/
+├── tasks/
 ├── main/
+├── docs/
+├── examples/
 ├── sdkconfig.defaults
 └── README.md
 ```
 
-#### vehicle/README.md
-- 機体ファームの責務と全体構成
-- ビルド方法・ターゲット MCU
-- 制御系の階層構造の説明
-
-#### vehicle/main/
-- アプリケーションのエントリポイント
-- タスク生成・初期化・依存関係の定義
-
-#### vehicle/sdkconfig.defaults
-- ESP-IDF 用の推奨設定
-- 再現性のあるビルド環境を確保する
+作業開始前に必ず読むべき設計文書（`firmware/vehicle/docs/`）:
+1. `requirements.md` — 要件定義書
+2. `architecture.md` — アーキテクチャ設計書（4階層アクセス + 横断ルール R1〜R16 + BSP 層）
+3. `detailed_design.md` — 詳細設計書
+4. `coding_and_education.md` — コーディング方針・教育計画
+5. `development_roadmap.md` — 開発ロードマップ・SIL→実機ワークフロー
+6. `hardware_init.md` — BSP・ハードウェア初期化設計
 
 #### vehicle/components/
-ESP-IDF component 単位での機能分割。命名規則: `sf_<layer>_<name>`
+ESP-IDF component 単位での機能分割。命名規則: フラットな `sf_<name>`
+（旧 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分けは廃止し、コンポーネント間は
+Pub-Sub トピック経由で疎結合）。
 
-- sf_hal_* （センサ・アクチュエータ HAL）
-  - sf_hal_bmi270: IMU（加速度・ジャイロ）
-  - sf_hal_bmm150: 地磁気
-  - sf_hal_bmp280: 気圧
-  - sf_hal_vl53l3cx: ToF 距離
-  - sf_hal_pmw3901: 光学フロー
-  - sf_hal_motor: モータドライバ
-  - sf_hal_led, sf_hal_buzzer, sf_hal_button, sf_hal_power: 周辺機器
+- HAL: sf_hal_bmi270, sf_hal_bmm150, sf_hal_bmp280, sf_hal_vl53l3cx,
+  sf_hal_pmw3901, sf_hal_motor, sf_hal_led, sf_hal_buzzer, sf_hal_button,
+  sf_hal_power
+- コア基盤: sf_core（データ型・パラメータテーブル）, sf_board（BSP・起動シーケンス）,
+  sf_math（ベクトル・行列・クォータニオン、ヘッダオンリー）
+- 推定: sf_estimator（IEstimator抽象）, sf_estimator_eskf, sf_estimator_complementary
+- 制御: sf_controller（IController抽象）, sf_controller_pid, sf_actuator（ミキサ）
+- 状態・離着陸: sf_state, sf_takeoff_landing, sf_failsafe, sf_calibration
+- 通信: sf_comm（ESP-NOW受信）, sf_command（正規化・調停）, sf_api（Tello風API）,
+  sf_telemetry（400Hz統一テレメトリ）
+- その他: sf_logger, sf_notify, sf_autotune
 
-- sf_algo_* （アルゴリズム、FreeRTOS 非依存）
-  - sf_algo_eskf: ESKF 状態推定（active_mask による P 行列隔離、χ²ゲート外れ値棄却）
-  - sf_algo_fusion: センサフュージョン管理（ESKF ラッパー、品質閾値ゲート）
-  - sf_algo_math: ベクトル・行列・クォータニオン演算（ヘッダオンリー）
-  - sf_algo_pid: PID 制御器
-  - sf_algo_control: 制御配分（ミキサ）・モータモデル
-  - sf_algo_filter: LPF・ノッチフィルタ
+- vehicle/tasks/ — タスク定義（imu_task, control_task, state_task 等）
+- vehicle/main/ — config.hpp（全パラメータの一元管理）、アプリエントリポイント
 
-- sf_svc_* （サービス層、FreeRTOS 依存可）
-  - sf_svc_comm: ESP-NOW 通信
-  - sf_svc_telemetry: バイナリテレメトリ
-  - sf_svc_udp: UDP テレメトリ・コマンド
-  - sf_svc_logger: SD カードロギング
-  - sf_svc_console: シリアル CLI
-  - sf_svc_state: システム状態管理
-  - sf_svc_control_arbiter: 制御ソース調停
-  - sf_svc_flight_command: 高レベル飛行コマンド
-  - sf_svc_health: センサヘルスモニタ
-  - sf_svc_led: LED パターン管理
-  - sf_svc_wifi_cli: WiFi CLI
+#### 通信プロトコル
+- ESP-NOW `ControlPacket`(14B)/`PairingPacket`(11B) は `firmware/common/protocol/`
+  に共有実装（`firmware/vehicle`・`firmware/vehicle_old`・`firmware/controller` の
+  3ファームで共通、protocol/spec/messages.yaml が SSOT）
+- vehicle 自体は `firmware/common/` の他部分（math/utils）には依存しない自己完結設計
 
-- vehicle/main/
-  - タスク定義（imu_task, control_task, baro_task, tof_task 等）
-  - config.hpp: 全パラメータの一元管理
-  - landing_handler.hpp: 着陸検出・キャリブレーション統合管理
-  - 各種コントローラ（rate, attitude, altitude, position）
+#### 推定・制御
+- `IEstimator`/`IController` 抽象インターフェース経由（ESKF・相補フィルタ・PIDは
+  その一実装）。詳細は `firmware/vehicle/docs/architecture.md` を参照
 
-#### ESKF 設計
-- 15 状態 Error-State Kalman Filter（位置・速度・姿勢・ジャイロバイアス・加速度バイアス）
-- active_mask: センサ ON/OFF に連動した状態凍結（P 行列隔離・Q ゲーティング・dx マスキング・名目状態スキップ）
-- χ²ゲート: 全観測更新で外れ値棄却（Baro, ToF, Mag, Flow, AccelAttitude）
-- config.hpp の sensor_enabled[] が唯一のセンサ ON/OFF 制御元
-- 飛行モードガード: 必要なセンサが無効な場合 ALT_HOLD/POS_HOLD を STABILIZE に自動降格
+---
 
-#### 着陸検出
-- LandingHandler が唯一の着陸状態管理者
-- armed 中は isLanded()=false を保証（飛行中のリセット・キャリブレーション誤発火を防止）
-- Disarm 後に ToF 高度 + 静止検出で着陸判定 → 自動キャリブレーション
+### firmware/vehicle_old/
+旧世代の機体ファームウェア（実飛行87回、**凍結・新規開発なし**）。
+`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名（旧 `firmware/vehicle/` 時代の構成）。
+sf CLI・SIL回帰から `--target vehicle_old` として引き続きビルド・テスト可能。
+`firmware/common/` を controller と共有する。
 
 ---
 
@@ -197,27 +186,30 @@ controller/
 ---
 
 ### firmware/common/
-vehicle / controller で共有される **組込み向け共通実装**。
+vehicle / vehicle_old / controller で共有される **組込み向け共通実装**。
 
 ```
 common/
 ├── protocol/
-├── math/
-└── utils/
+├── math/    # (未実装プレースホルダ)
+└── utils/   # (未実装プレースホルダ)
 ```
 
 - protocol/
-  - protocol/spec に基づく組込み側実装
-  - エンコード・デコード、CRC 等
+  - `espnow_protocol.hpp`: ESP-NOW `ControlPacket`/`PairingPacket`（主系統、
+    3ファーム全てが共有）
+  - `udp_protocol.hpp`: WiFi 代替 UDP モードのパケット定義（`vehicle_old` の
+    `sf_svc_udp` + `controller` の `sf_udp_client` のみが使用）
+  - protocol/spec に基づく組込み側実装、エンコード・デコード、チェックサム等
 
-- math/
-  - 組込み向け数値演算ユーティリティ
-  - 行列・ベクトル・フィルタ補助
+- math/, utils/
+  - 当初想定されていた共有数値演算・汎用ヘルパの置き場だが、これまで
+    実装されたことがない（`.gitkeep` のみ）。`vehicle` は自前の `sf_math`
+    コンポーネントを持ち、このディレクトリには依存しない
 
-- utils/
-  - ログ、リングバッファ、汎用ヘルパ
-
-※ 仕様の単一の真実は protocol/ に置く。
+※ 仕様の単一の真実は protocol/ に置く。共有される**コード実装**は現状
+`protocol/` の ESP-NOW 構造体定義のみ（ESP-NOW 主系統は元々 `vehicle_old` の
+ESP-NOW 側もここを経由していなかったが、リファクタリングで統合した）。
 
 ---
 

@@ -379,7 +379,7 @@ TikZ 図を埋め込んだスライドや資料のレイアウト・構造を検
 
 StampFly Ecosystem is an educational/research platform for drone control engineering. It covers the complete workflow: **design → implementation → experimentation → analysis → education**.
 
-**Current Status:** Vehicle firmware (ACRO mode skeleton) and controller firmware are implemented and buildable.
+**Current Status:** Vehicle firmware supports ACRO/STABILIZE/ALT_HOLD/POS_HOLD, with POS_HOLD validated on real hardware (±6-7cm hold accuracy). Controller firmware is implemented and buildable.
 
 **保留案件: プラットフォームレイヤー分離リファクタリング**
 - ブランチ `refactor/platform-layer` で Phase 1〜3 まで進めていたが、mainの大幅改修と衝突するため一時保留（2026-04-07）
@@ -394,9 +394,11 @@ The project uses a **responsibility-based directory structure**:
 stampfly-ecosystem/
 ├── docs/              # Human-readable documentation
 ├── firmware/
-│   ├── vehicle/       # Vehicle firmware
+│   ├── vehicle/       # Vehicle firmware (primary, promoted from vehicle_new)
+│   ├── vehicle_old/   # Legacy vehicle firmware (frozen, 87 real flights — see below)
 │   ├── controller/    # Transmitter firmware
-│   └── common/        # Shared embedded code (protocol impl, math, utils)
+│   └── common/        # Shared embedded code (ESP-NOW protocol structs); used by
+│                      # controller + vehicle_old + vehicle (protocol only — see below)
 ├── protocol/          # Communication spec - Single Source of Truth (SSOT)
 │   ├── spec/          # Machine-readable protocol definition (YAML/proto)
 │   ├── generated/     # Auto-generated code from spec
@@ -411,64 +413,20 @@ stampfly-ecosystem/
 
 ### Key Design Principles
 
-1. **Protocol as Foundation**: All communication implementations derive from `protocol/spec/`. This is the Single Source of Truth.
+1. **Protocol as Foundation**: All communication implementations derive from `protocol/spec/`. This is the Single Source of Truth. The core ESP-NOW `ControlPacket`/`PairingPacket` structs are implemented once in `firmware/common/protocol/include/espnow_protocol.hpp` and shared by `firmware/vehicle`, `firmware/vehicle_old`, and `firmware/controller`.
 2. **Responsibility Separation**: Each directory has a clear role. Don't mix concerns across boundaries.
 3. **Educational Focus**: Code quality and documentation matter as much as functionality. This is built for students and researchers.
 
 ### Firmware Structure (ESP-IDF)
 
-The `firmware/vehicle/` follows ESP-IDF component structure with `sf_<layer>_<name>` naming:
-- `components/sf_hal_*` - Sensor/actuator HAL (bmi270, bmp280, vl53l3cx, pmw3901, motor, led, etc.)
-- `components/sf_algo_eskf/` - ESKF state estimation (active_mask P-matrix isolation, χ² outlier rejection)
-- `components/sf_algo_fusion/` - Sensor fusion orchestration (ESKF wrapper, quality thresholds)
-- `components/sf_algo_pid/` - PID controller
-- `components/sf_algo_control/` - Control allocation (mixer), motor model
-- `components/sf_algo_filter/` - LPF, notch filter
-- `components/sf_algo_math/` - Vector, matrix, quaternion (header-only)
-- `components/sf_svc_*` - Services (comm, telemetry, logger, console, state, control_arbiter, etc.)
-- `main/` - Tasks, config.hpp (single source of truth for all parameters), landing_handler
+`firmware/vehicle/`（主力・旧 vehicle_new）は次世代アーキテクチャで書かれている: フラットな `sf_<name>` コンポーネント命名（`sf_algo_*`/`sf_svc_*` の層分けなし）、Pub-Sub トピック経由の疎結合、4階層アクセス制御。**実装・修正を行う場合は、作業開始前に必ず以下の6文書を読むこと:**
 
-## Build System
-
-ESP-IDF for embedded firmware (ESP32 target)。**sf CLI を優先して使用する:**
-```bash
-# 推奨: sf CLI を使用
-source setup_env.sh
-sf build vehicle
-sf flash vehicle -m
-
-# 代替: idf.py を直接使用（sf で問題がある場合のみ）
-cd firmware/vehicle
-idf.py build
-idf.py flash monitor
-```
-
-## Implementation Priority
-
-When developing this codebase, follow this order:
-1. **protocol/spec/** - Define communication specification first
-2. **firmware/common/protocol/** - Implement protocol encode/decode
-3. **firmware/vehicle/** - Basic task structure and sensor integration
-4. **examples/** - Minimal working demonstrations
-5. **tools/** - Development utilities
-6. **control/** and **analysis/** - Design and analysis tooling
-
-## Language Notes
-
-- **Firmware**: C/C++ (ESP-IDF framework)
-- **Analysis/Tools**: Python (Jupyter notebooks, scripts)
-- **Protocol Spec**: YAML or Protocol Buffers
-
-## vehicle_new（次世代機体ファームウェア）
-
-`firmware/vehicle_new/` の実装・修正を行う場合は、**作業開始前に必ず以下の6文書を読むこと:**
-
-1. `firmware/vehicle_new/docs/requirements.md` — 要件定義書
-2. `firmware/vehicle_new/docs/architecture.md` — アーキテクチャ設計書（v3: 4階層アクセス + 横断ルール R1〜R16 + BSP 層）
-3. `firmware/vehicle_new/docs/detailed_design.md` — 詳細設計書
-4. `firmware/vehicle_new/docs/coding_and_education.md` — **コーディング方針・教育計画（必読）**
-5. `firmware/vehicle_new/docs/development_roadmap.md` — **開発ロードマップ・SIL→実機ワークフロー（必読）** — 3原則（Code/Param/Model Identity）、ACROレート制御を起点とする層別プラント同定戦略、Phase 0〜6 の合格基準
-6. `firmware/vehicle_new/docs/hardware_init.md` — **BSP・ハードウェア初期化設計** — sf_board 責務、起動シーケンス、Critical/Optional/Recoverable 分類、HAL 接続規約、namespace 規約（sf::api / sf::internal）
+1. `firmware/vehicle/docs/requirements.md` — 要件定義書
+2. `firmware/vehicle/docs/architecture.md` — アーキテクチャ設計書（v3: 4階層アクセス + 横断ルール R1〜R16 + BSP 層）
+3. `firmware/vehicle/docs/detailed_design.md` — 詳細設計書
+4. `firmware/vehicle/docs/coding_and_education.md` — **コーディング方針・教育計画（必読）**
+5. `firmware/vehicle/docs/development_roadmap.md` — **開発ロードマップ・SIL→実機ワークフロー（必読）** — 3原則（Code/Param/Model Identity）、ACROレート制御を起点とする層別プラント同定戦略、Phase 0〜6 の合格基準
+6. `firmware/vehicle/docs/hardware_init.md` — **BSP・ハードウェア初期化設計** — sf_board 責務、起動シーケンス、Critical/Optional/Recoverable 分類、HAL 接続規約、namespace 規約（sf::api / sf::internal）
 
 **特に重要な原則:**
 - コードは**ドローンファームを作ろうとする人が参考にできる模範的なソースコード**であること
@@ -480,6 +438,42 @@ When developing this codebase, follow this order:
 - **設計矛盾は即時報告** — 実装中に設計文書との矛盾・不都合を発見したら実装を止めて報告・議論する
 - **アーキテクチャ不変条件（INV）への照合を必須とする（場当たりパッチ再発防止, 2026-06-14）** — 制御則・状態機械・離着陸/飛行フェーズに関わる変更は、コミット前に `architecture.md` の「アーキテクチャ不変条件（INV）」節に照合すること。**新機能の追加・要件変更で、ある機能の前提が変わるときは、その前提を埋め込んでいる既存コンポーネントを必ず列挙し（リップル確認）、古い前提のまま並列経路・独自実装が残っていないか確認する。** 「最小変更で動かし SIL を通す」だけで満足しない（SIL が通っても INV 違反は退行）。機能追加時は常に**あるべき姿（INV準拠の統一構造）**で実装し、既存の局所形に引きずられて並列パッチを足さない。
 - Exampleは**単独ビルド可能**、**コメントは本体より多くてもいい**
+
+`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SIL回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sil scenario --target vehicle_old`）。
+
+## Build System
+
+ESP-IDF for embedded firmware (ESP32 target)。**sf CLI を優先して使用する:**
+```bash
+# 推奨: sf CLI を使用
+source setup_env.sh
+sf build vehicle
+sf flash vehicle -m
+
+# レガシーファームのビルド
+sf build vehicle_old
+
+# 代替: idf.py を直接使用（sf で問題がある場合のみ）
+cd firmware/vehicle
+idf.py build
+idf.py flash monitor
+```
+
+## Implementation Priority
+
+When developing this codebase, follow this order:
+1. **protocol/spec/** - Define communication specification first
+2. **firmware/common/protocol/** - Shared ESP-NOW protocol structs (encode/decode)
+3. **firmware/vehicle/** - Basic task structure and sensor integration
+4. **examples/** - Minimal working demonstrations
+5. **tools/** - Development utilities
+6. **control/** and **analysis/** - Design and analysis tooling
+
+## Language Notes
+
+- **Firmware**: C/C++ (ESP-IDF framework)
+- **Analysis/Tools**: Python (Jupyter notebooks, scripts)
+- **Protocol Spec**: YAML or Protocol Buffers
 
 ## SCI26 原稿
 

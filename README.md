@@ -124,9 +124,10 @@ sf flash controller --legacy
 stampfly_ecosystem/
 ├── docs/           # ドキュメント
 ├── firmware/       # 組込みファームウェア
-│   ├── vehicle/    # 機体ファームウェア
-│   ├── controller/ # 送信機ファームウェア
-│   └── common/     # 共有コード（構築中）
+│   ├── vehicle/     # 機体ファームウェア（主力）
+│   ├── vehicle_old/ # レガシー機体ファームウェア（凍結）
+│   ├── controller/  # 送信機ファームウェア
+│   └── common/      # 共有コード（ESP-NOW プロトコル構造体）
 ├── protocol/       # 通信プロトコル仕様（構築中）
 ├── control/        # 制御設計資産（構築中）
 ├── analysis/       # 実験データ解析（構築中）
@@ -314,9 +315,10 @@ sf flash controller --legacy
 stampfly_ecosystem/
 ├── docs/           # Documentation
 ├── firmware/       # Embedded firmware
-│   ├── vehicle/    # Vehicle firmware
-│   ├── controller/ # Transmitter firmware
-│   └── common/     # Shared code (WIP)
+│   ├── vehicle/     # Vehicle firmware (primary)
+│   ├── vehicle_old/ # Legacy vehicle firmware (frozen)
+│   ├── controller/  # Transmitter firmware
+│   └── common/      # Shared code (ESP-NOW protocol structs)
 ├── protocol/       # Communication protocol spec (WIP)
 ├── control/        # Control design assets (WIP)
 ├── analysis/       # Experiment data analysis (WIP)
