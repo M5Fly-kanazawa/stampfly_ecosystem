@@ -11,7 +11,7 @@
 # (pid_controller::learnTrim)が風下ドリフトを時定数~20sで pitch_trim_ に積分→ドリフト
 # 速度がホバー中に減衰し自己トリムする(param上書きなし)。px ドリフト速度を前半/後半で比較。
 #
-# Run: sf sil scenario simulator/sil/scenarios/autotrim_learn.scn --target vehicle_new --duration 110000000
+# Run: sf sil scenario simulator/sil/scenarios/autotrim_learn.scn --target vehicle --duration 110000000
 #
 #  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    wind  0.0   0.008  0.0                                          # steady NED-east wind (body forward at yaw=0)

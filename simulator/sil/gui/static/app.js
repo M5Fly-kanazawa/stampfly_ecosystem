@@ -170,7 +170,7 @@ async function run() {
   const mode = (S.currentMode === 'saved' && sel) ? 'saved' : 'custom';
   const req = {
     mode, name: sel || null, events: S.events,
-    target: 'vehicle_new',
+    target: 'vehicle',
     duration_us: Math.round(parseFloat($('durSec').value) * 1e6),
     noise: $('noiseSel').value, seed: 12345, battery: $('battChk').checked,
     params: S.paramOverrides,

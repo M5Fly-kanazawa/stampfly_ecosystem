@@ -1,5 +1,5 @@
-# pos_roll.scn — POSITION_HOLD, ISOLATED ROLL axis (vehicle_new, Layer 4, P8)
-# 位置保持・ロール軸単独（vehicle_new, Layer 4, P8）
+# pos_roll.scn — POSITION_HOLD, ISOLATED ROLL axis (vehicle, Layer 4, P8)
+# 位置保持・ロール軸単独（vehicle, Layer 4, P8）
 #
 # Layer-4 per-axis test #1 of 4 (roll → pitch → diagonal → yaw). Take off in STABILIZE,
 # perturb with a brief ROLL-right step so the craft gains lateral velocity on ONE

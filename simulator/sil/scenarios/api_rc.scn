@@ -22,7 +22,7 @@
 # テキスト行 "rc a b c d" で注入。検証: 送信機中立のまま rc で前進/上昇 → 送信停止で保持
 # （R16 暴走防止）→ 送信機スティックで即解除（INV-2）→ 着陸。
 #
-# Run: sf sil scenario simulator/sil/scenarios/api_rc.scn --target vehicle_new --duration 40000000
+# Run: sf sil scenario simulator/sil/scenarios/api_rc.scn --target vehicle --duration 40000000
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    rc   2048  2048   2048    2048  0     6000      50        # boot at rest — still calibration

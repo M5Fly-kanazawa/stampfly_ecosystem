@@ -13,7 +13,7 @@
 **合格基準（RESET_PLAN §10）= G2（推定誤差有界）＋決定論＋統計テスト＋レビュー動画 — 全て達成。**
 
 - **配線**: ノイズモデルは実装済みだったが emu が既定 off で `Plant::init` を呼んでいた。両 emu 入口
-  （`emu/emu_main_generic.cpp`=emu_vehicle, `emu/emu_main.cpp`=emu_vehicle_new）に
+  （`emu/emu_main_generic.cpp`=emu_vehicle_old, `emu/emu_main.cpp`=emu_vehicle）に
   `SIL_EMU_NOISE=n0`/`SIL_EMU_SEED` env を配線し、`sf sil scenario --noise n0 --seed N` から制御可能に。
   既定 off は従来と **byte-identical**（クリーン経路不変・回帰確認済み）。
 - **白色σの substep 非依存化**: 時間基準修正で物理が 4kHz substep ＝ `advance()` が 4kHz 呼びになり、
@@ -47,7 +47,7 @@
 | ノイズモデル `simulator/sil/plant/sensor_noise.hpp` | **完成**。N0 = 白色ガウス（gyro 0.000122 rad/s/√Hz, accel 0.00157 m/s²/√Hz）＋起動時バイアス1σ（gyro 0.005, accel 0.02 = **起動校正「後」の残留**）＋バイアスRW（gyro 1e-4, accel 1e-3 /√s）。シード付き決定論。 |
 | 単体テスト `simulator/sil/smoke/noise_test.cpp` | あり |
 | Plant が適用 `plant.cpp` | `noise_.init(cfg_.noise)`(L62)、`imu()` で `applyAccel/applyGyro`(L277-278)、`substep` で `noise_.advance(h)`(L230)。**時間基準修正後は substep(0.25ms)ごとに advance** |
-| 仕様書 | `firmware/vehicle_new/docs/noise_and_vibration_model.md` §2-3 |
+| 仕様書 | `firmware/vehicle/docs/noise_and_vibration_model.md` §2-3 |
 
 ---
 
@@ -111,7 +111,7 @@ diff <trajectory or console>  # 完全一致なら決定論OK
 - メモリ: `project_sil_architecture`(P5はN0)、`project_stampfly_emulator`、`project_eskf_vertical_divergence`
   (時間基準修正・ホバー成立)、`project_estimator_attitude_comparison`(相補 vs ESKF 姿勢の宿題=P6で追求)。
 - 文書: `RESET_PLAN.md` §10(ロードマップ)/§13(P5-P10 検証能力)、`plant_timebase_bug.md`、
-  `firmware/vehicle_new/docs/noise_and_vibration_model.md`。
+  `firmware/vehicle/docs/noise_and_vibration_model.md`。
 - 主要ファイル: `plant/sensor_noise.hpp`(モデル)、`plant/plant.cpp`(適用)、`emu/emu_main_generic.cpp`(配線先)、
   `lib/sfcli/commands/sil.py`(CLI配線先)、`smoke/noise_test.cpp`(単体テスト)、
   `scenarios/hover_long.scn`/`hover_alt.scn`(試験飛行)。
@@ -153,9 +153,9 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   ~100–177Hz をどれだけ落とすか ②K の duty 整合 ③段階3 比較。
 
 ### 段階3/3 ✅ ESKF vs 相補の比較・P6 ゲート（2026-06-04 達成）
-- **ハーネス裏取り結果**: emu_vehicle_new は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
+- **ハーネス裏取り結果**: emu_vehicle は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
   estimator 切替 env 無し**＝arm/離陸できず、忠実比較には数日（データ駆動フェーズと重複）。一方 hover_smoke は
-  **実 vehicle_new の推定器を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp:72` createEstimator）
+  **実 vehicle の推定器を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp:72` createEstimator）
   で走らせる**＝推定器比較には忠実（フル firmware 非実行の欠陥は推定器比較自体に無関係）。→ **hover_smoke 採用**。
 - hover_smoke に N1/N2 を配線（`smoke/hover_smoke.cpp` の noise_lvl→vib_enable/vib_bandlimit/obs_enable、
   emu と同じ対応）。hover_smoke は baro 融合（use_baro=true/use_tof=false）ゆえ n2 の baro 観測ノイズが効く。
@@ -164,7 +164,7 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   **＝低ノイズ(N0)は単純な相補が優位、現実ノイズ(N1振動)では ESKF が明確優位（相補姿勢が 4.26°±3.05 で不安定化）、
   N2 は高度で ESKF 優位**。「中身が違うと結果も違う」＋「ノイズ下で ESKF 優位」を定量実証。
 - 比較動画 `viz/out_p6/p6_compare.mp4`（`sf sil compare -m P6 --noise n2`、ゲート承認 pass=true）。
-- **将来課題**: emu_vehicle_new 上の完全忠実比較（airborne シナリオ＋estimator 切替 env）はデータ駆動フェーズと統合。
+- **将来課題**: emu_vehicle 上の完全忠実比較（airborne シナリオ＋estimator 切替 env）はデータ駆動フェーズと統合。
 
 - **P5 が炙り出した宿題（P6 で追う）**: N0 残留 accel バイアスで ESKF 姿勢が~4°チルト→水平ドリフト。
   **起動校正（水平静止 ba_z≈2g, `noise_and_vibration_model.md` §3）を再現**して全オフセットを捕え、

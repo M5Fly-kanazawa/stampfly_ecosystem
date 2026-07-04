@@ -9,7 +9,7 @@
 # 上昇中は「発進点の水平保持」も行い（上昇中も位置カスケードが発進点捕捉で動く）、離陸地点の
 # 真上で停止する。上昇は 0.5 m 目標を捕捉する（確定②、行き過ぎピークでなく）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/pos_auto_takeoff.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/pos_auto_takeoff.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)

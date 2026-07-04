@@ -41,7 +41,7 @@ SIL_DIR = GUI_DIR.parent                       # simulator/sil
 ROOT = SIL_DIR.parents[1]                       # repo root
 SCN_DIR = SIL_DIR / "scenarios"
 VIZ_DIR = SIL_DIR / "viz"
-PARAMS_CPP = ROOT / "firmware/vehicle_new/components/sf_core/params.cpp"
+PARAMS_CPP = ROOT / "firmware/vehicle/components/sf_core/params.cpp"
 # The 3D view renders the SAME STL meshes the MuJoCo model uses (the sim's authoritative
 # StampFly geometry). 3D は MuJoCo モデルと同じ STL（sim 権威の StampFly 形状）を描く。
 MESH_DIR = ROOT / "simulator/shared/assets/meshes/parts"
@@ -135,7 +135,7 @@ def read_event_timeline(path: Path):
 def run_scenario(req: dict):
     """req: {mode:'saved'|'custom', name?, events?, target, duration_us, noise, seed,
              battery, params:{name:value}}. Returns the run result dict."""
-    target = req.get("target", "vehicle_new")
+    target = req.get("target", "vehicle")
     duration_us = int(req.get("duration_us") or 25_000_000)
     noise = req.get("noise", "off") or "off"
     seed = int(req.get("seed", 12345))

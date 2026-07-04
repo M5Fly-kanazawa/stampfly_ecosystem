@@ -1,5 +1,5 @@
-# pos_yaw.scn — POSITION_HOLD at a NON-ZERO heading (vehicle_new, Layer 4, P8)
-# 非ゼロ機首方位での位置保持（vehicle_new, Layer 4, P8）
+# pos_yaw.scn — POSITION_HOLD at a NON-ZERO heading (vehicle, Layer 4, P8)
+# 非ゼロ機首方位での位置保持（vehicle, Layer 4, P8）
 #
 # Layer-4 test #4 of 4 (roll → pitch → diagonal → YAW). pos_roll/pitch/flight all keep
 # yaw ≈ 0, so a body-axis disturbance maps to a single world axis. Here we first ROTATE

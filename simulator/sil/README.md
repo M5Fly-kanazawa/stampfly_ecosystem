@@ -6,7 +6,7 @@
 
 ## 1. 概要
 
-物理ベース・MuJoCo・アルゴリズム非依存の SIL（Software-in-the-Loop）。まだ飛んでいない vehicle_new を、ハードを壊さず PC 上で検証する。本体ファームを無改変でコンパイルし、決定論的な疑似 RTOS 上で走らせる（忠実案）。
+物理ベース・MuJoCo・アルゴリズム非依存の SIL（Software-in-the-Loop）。vehicle（機体ファーム）を、ハードを壊さず PC 上で検証する。本体ファームを無改変でコンパイルし、決定論的な疑似 RTOS 上で走らせる（忠実案）。
 
 ### ディレクトリ
 
@@ -50,7 +50,7 @@ P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証
 
 ## 1. Overview
 
-A physics-based, MuJoCo, algorithm-independent SIL (Software-in-the-Loop) bench. It verifies the not-yet-flown vehicle_new on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`RESET_PLAN.md`](RESET_PLAN.md).
+A physics-based, MuJoCo, algorithm-independent SIL (Software-in-the-Loop) bench. It verifies the vehicle firmware on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`RESET_PLAN.md`](RESET_PLAN.md).
 
 ### Build (P1.0 smoke tests)
 

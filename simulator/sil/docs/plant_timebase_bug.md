@@ -4,13 +4,13 @@
 > Self-contained root-cause note.
 
 最終更新: 2026-06-03 / 状態: **✅ 修正済・検証済**（物理4000Hz化＋固定timestep累積器）。
-**前提**: 全数値は実コード裏取り・実測（emu_vehicle / hover_alt.scn）。
+**前提**: 全数値は実コード裏取り・実測（emu_vehicle_old / hover_alt.scn）。
 
 ---
 
 ## 1. 結論（一文）
 
-**SIL のフル emu（emu_vehicle / emu_vehicle_new）は、MuJoCo 物理をスケジューラ仮想時間の
+**SIL のフル emu（emu_vehicle / emu_vehicle_old）は、MuJoCo 物理をスケジューラ仮想時間の
 約3倍の速さで進めている。** これは推力やセンサの問題ではなく、Plant ステップの**時間基準
 （タイムベース）バグ**。過去に「過推力による climb 1.75 m/s²」「ESKF 鉛直発散」「ToF 凍結」と
 記録した現象は、いずれもこのバグの二次症状である可能性が高い。
@@ -38,7 +38,7 @@
 
 ---
 
-## 3. 実測の裏付け（emu_vehicle / hover_alt.scn）
+## 3. 実測の裏付け（emu_vehicle_old / hover_alt.scn）
 
 **STEPDBG**（`on_advance` に一時計装→revert 済）: 物理時間 / スケジューラ時間 の比
 
@@ -74,7 +74,7 @@
 
 | 対象 | 影響 |
 |------|------|
-| **フル emu の飛行ダイナミクス全般** | emu_vehicle / emu_vehicle_new とも物理が3倍速。climb 率・速度・ToF 変化率・ESKF 挙動の**定量結論はすべて要再評価**。 |
+| **フル emu の飛行ダイナミクス全般** | emu_vehicle / emu_vehicle_old とも物理が3倍速。climb 率・速度・ToF 変化率・ESKF 挙動の**定量結論はすべて要再評価**。 |
 | **ESKF 鉛直発散 / 離陸ハンドオフ lock-out**（memory `project_eskf_vertical_divergence` §2） | **二次症状の可能性大**。物理3倍速 → firmware は dt=2.5ms で予測するが ToF は3倍動く位置を返す → イノベーション過大 → accel-bias が辻褄合わせで発散。jump filter（5 m/s）も真 1.7 m/s 上昇が見かけ 5 m/s 超で誤発火。**firmware の構造的欠陥ではなく、時間歪みが firmware に不可能なセンサ整合性を強いている**疑い。 |
 | **Plant 推力効率 1/1.12（commit 66752df）** | **修正自体は独立に正当**（plant_smoke は固定 dt 直接駆動でバグ無し、hover_duty 0.698 が firmware ALT_HOLD hover duty と一致＝Model Identity）。ただし当時の動機「過推力 climb」は時間基準バグの誤帰属だった。 |
 | **固定 dt で直接 step する smoke 群** | plant_smoke / hover_smoke / rate_tune / physics_smoke / noise_test / frames_test は `step(0.0025)` をループで呼ぶ＝物理時間=ループ時間。**影響なし**。 |
@@ -141,7 +141,7 @@ sf sil scenario simulator/sil/scenarios/hover_alt.scn --duration 38000000
 
 ## 1. Conclusion (one line)
 
-**The full SIL emulator (emu_vehicle / emu_vehicle_new) advances the MuJoCo physics at ~3× the
+**The full SIL emulator (emu_vehicle / emu_vehicle_old) advances the MuJoCo physics at ~3× the
 scheduler's virtual-time rate.** This is a Plant-stepping **time-base bug**, not a thrust or sensor
 issue. The previously logged "over-thrust climb 1.75 m/s²", "ESKF vertical divergence" and "ToF
 freeze" are very likely secondary symptoms of this single bug.

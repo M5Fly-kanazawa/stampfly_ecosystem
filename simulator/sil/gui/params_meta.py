@@ -6,7 +6,7 @@
 ファームのパラメータテーブル（SSOT）を GUI 用メタデータにパースする。
 
 The single source of truth for parameters is the hand-written ``table[]`` in
-``firmware/vehicle_new/components/sf_core/params.cpp`` (see auto-memory
+``firmware/vehicle/components/sf_core/params.cpp`` (see auto-memory
 ``reference_params_ssot``). Each row looks like::
 
     {"rate.roll.kp", ParamType::FLOAT, &rate_roll_kp, 1.83e-4f, 0.0f, 0.01f, nullptr},
@@ -72,7 +72,7 @@ if __name__ == "__main__":  # quick manual check / 手動確認
     import json
     import sys
     root = Path(__file__).resolve().parents[3]
-    p = root / "firmware/vehicle_new/components/sf_core/params.cpp"
+    p = root / "firmware/vehicle/components/sf_core/params.cpp"
     params = parse_params(p)
     print(f"{len(params)} params", file=sys.stderr)
     print(json.dumps(params[:5], indent=2, ensure_ascii=False))

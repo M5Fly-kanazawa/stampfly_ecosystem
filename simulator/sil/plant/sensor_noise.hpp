@@ -15,7 +15,7 @@
  * so it unit-tests without MuJoCo, and SEEDED so the SIL stays deterministic
  * (same seed → same noise → same flight → same video; a comparison runs both
  * estimators on the same seed for a fair contrast). RESET_PLAN §13 (P5),
- * spec: firmware/vehicle_new/docs/noise_and_vibration_model.md §2-3.
+ * spec: firmware/vehicle/docs/noise_and_vibration_model.md §2-3.
  *
  * クリーンな合成IMU（Plant）に載せる N0 ノイズ。物理から切り離して MuJoCo 無しで
  * 単体テスト可能にし、シード付きで決定論を保つ（同じシード→同じノイズ→同じ飛行→同じ動画）。

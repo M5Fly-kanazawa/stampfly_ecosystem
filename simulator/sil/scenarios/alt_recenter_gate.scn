@@ -25,7 +25,7 @@
 #     G: スロットル下げ(1024) → 降下（目標高度を下げる、中央を通過）。
 #     H: スロットル中央(2048) → 下げた高度を保持。
 #
-# Run: sf sil scenario simulator/sil/scenarios/alt_recenter_gate.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/alt_recenter_gate.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)

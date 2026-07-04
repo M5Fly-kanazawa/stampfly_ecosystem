@@ -1,5 +1,5 @@
-# stab_flight.scn — STABILIZE attitude-loop flight (vehicle_new, Layer 2)
-# STABILIZE 姿勢ループ飛行（vehicle_new, Layer 2）
+# stab_flight.scn — STABILIZE attitude-loop flight (vehicle, Layer 2)
+# STABILIZE 姿勢ループ飛行（vehicle, Layer 2）
 #
 # Goal: exercise the full state machine ARMED_GROUND → TAKEOFF → FLYING and the
 # STABILIZE attitude loop (ESKF roll/pitch + attitude PID + rate PID). STABILIZE
@@ -17,9 +17,9 @@
 # roll/pitch angle_sp = norm * 30°. raw 2600 → ≈8° tilt.
 # スティックは raw 12bit ADC（中央2048）。ホバー≈0.54、離陸閾値0.5。角度=norm×30°。
 #
-# vehicle_new reaches IDLE_GROUND within ~1 s of boot (estimator first valid output),
+# vehicle reaches IDLE_GROUND within ~1 s of boot (estimator first valid output),
 # so a 4 s disarmed lead is ample for the single ARM edge to land in IDLE_GROUND.
-# vehicle_new は起動後 ~1s で IDLE_GROUND。4s の無装着で ARM エッジは確実に IDLE_GROUND に届く。
+# vehicle は起動後 ~1s で IDLE_GROUND。4s の無装着で ARM エッジは確実に IDLE_GROUND に届く。
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    rc   2048  2048   2048    2048  0     4000      50       # A: disarmed 4 s → boot reaches IDLE_GROUND

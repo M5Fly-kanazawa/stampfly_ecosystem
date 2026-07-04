@@ -154,7 +154,7 @@ int main(int argc, char** argv)
 
     std::setvbuf(stdout, nullptr, _IONBF, 0);   // unbuffered: keep logs across _Exit
     std::setvbuf(stderr, nullptr, _IONBF, 0);
-    std::printf("[emu] === StampFly emulator: vehicle_new app_main on host ===\n");
+    std::printf("[emu] === StampFly emulator: vehicle app_main on host ===\n");
 
     // Non-blocking, never-written pipe as stdin so the firmware's CLI read() gets
     // EAGAIN (not block, not EOF). A scenario "key" event writes scripted bytes here

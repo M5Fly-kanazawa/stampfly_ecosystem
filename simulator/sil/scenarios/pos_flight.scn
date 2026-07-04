@@ -1,5 +1,5 @@
-# pos_flight.scn — POSITION_HOLD, COMBINED diagonal (vehicle_new, Layer 4, P8 capstone)
-# 位置保持・複合（斜め）（vehicle_new, Layer 4, P8 キャップストーン）
+# pos_flight.scn — POSITION_HOLD, COMBINED diagonal (vehicle, Layer 4, P8 capstone)
+# 位置保持・複合（斜め）（vehicle, Layer 4, P8 キャップストーン）
 #
 # Layer-4 capstone test #3 of 4 (roll → pitch → DIAGONAL → yaw). After the per-axis
 # pos_roll / pos_pitch isolate each channel, this exercises BOTH at once: a simultaneous

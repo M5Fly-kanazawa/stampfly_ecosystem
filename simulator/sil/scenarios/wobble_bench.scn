@@ -1,7 +1,7 @@
 # wobble_bench.scn — wobble-minimization benchmark: POS_HOLD hover under turbulence
 #                    ふらつき最小化ベンチマーク: 乱流下の POS_HOLD ホバー  (experiment/wobble-min)
 #
-# Run with: sf sil scenario simulator/sil/scenarios/wobble_bench.scn --target vehicle_new \
+# Run with: sf sil scenario simulator/sil/scenarios/wobble_bench.scn --target vehicle \
 #           --turbulence 0.03 --noise n2 --seed 7 --duration 30000000
 #
 # The position loop fights the 1-3 Hz turbulence force → commands tilt → the attitude/rate

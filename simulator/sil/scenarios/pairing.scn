@@ -2,7 +2,7 @@
 # 送信機↔機体のペアリングハンドシェイク + 混信拒否
 #
 # RUN WITH --unpaired so the vehicle boots UNPAIRED (skips the SIL pairing NVS seed):
-#   sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired
+#   sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle --unpaired
 #
 # This exercises the FULL pairing flow on the real firmware:
 #   1. Unpaired boot → StateManager auto-enters Pairing (comm broadcasts a PairingPacket).

@@ -14,7 +14,7 @@
 # 切ってはならない（落下する）。代わりに自動着陸（緩降下 ~0.3 m/s）を起動し、接地で本当の
 # DISARM（LANDING→IDLE_GROUND）。ACRO/STABILIZE・地上は即停止のまま、着陸中の再 DISARM は緊急カット。
 #
-# Run: sf sil scenario simulator/sil/scenarios/alt_disarm_land.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/alt_disarm_land.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)

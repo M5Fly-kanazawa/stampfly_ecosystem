@@ -19,8 +19,8 @@
 # 意図的に ALTITUDE_HOLD を使う（POSITION_HOLD でなく）: marginal な POS_HOLD 入口から
 # 遠く、対照が入口感度でなく校正そのものを反映する。
 #
-# Run (calibration ON, gated):   sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle_new
-# Run (calibration OFF, contrast): SIL_EMU_NO_CALIB=1 sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle_new
+# Run (calibration ON, gated):   sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle
+# Run (calibration OFF, contrast): SIL_EMU_NO_CALIB=1 sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle
 #
 #  <t>  ch    args
    0    bias  0.12  0.0  0.0   0.0  0.0  0.02         # raw IMU bias: accel +0.12 m/s² (body X), gyro +0.02 rad/s (body Z / yaw)

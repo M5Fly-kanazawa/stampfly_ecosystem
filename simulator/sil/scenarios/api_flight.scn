@@ -23,7 +23,7 @@
 # （安全要員が中立送信機を保持する実運用構成）— 「置いたままのスティック」（下端の
 # スロットル含む）が解除則を誤発火させないことの証明。
 #
-# Run: sf sil scenario simulator/sil/scenarios/api_flight.scn --target vehicle_new --duration 40000000
+# Run: sf sil scenario simulator/sil/scenarios/api_flight.scn --target vehicle --duration 40000000
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes

@@ -147,7 +147,7 @@ done
    肩 skew 較正後は数 mm。
 2. `SIL_VL53_TEST_MM` を外して `vl53_target_mm()` が `g_plant->tof()×1000` を返す本番経路で、
    Plant 距離追従を確認（craft を非接地高度に置く手段が要る — テスト override か、後述の ALT_HOLD）。
-3. 回帰なし: 全 SIL ビルド緑 / emu_vehicle・emu_vehicle_new 決定論 / hover_espnow(14)・console_cli(8) PASS。
+3. 回帰なし: 全 SIL ビルド緑 / emu_vehicle_old・emu_vehicle 決定論 / hover_espnow(14)・console_cli(8) PASS。
 4. 敵対的レビュー（実コード裏取り。サブエージェントは [[feedback_checklist_discipline]] の通り過信しない）。
 
 ---

@@ -1,5 +1,5 @@
-# pos_pitch.scn — POSITION_HOLD, ISOLATED PITCH axis (vehicle_new, Layer 4, P8)
-# 位置保持・ピッチ軸単独（vehicle_new, Layer 4, P8）
+# pos_pitch.scn — POSITION_HOLD, ISOLATED PITCH axis (vehicle, Layer 4, P8)
+# 位置保持・ピッチ軸単独（vehicle, Layer 4, P8）
 #
 # Layer-4 per-axis test #2 of 4 (roll → pitch → diagonal → yaw). Same as pos_roll but
 # the disturbance is a brief PITCH-forward step, exciting only the body-x (fore-aft)

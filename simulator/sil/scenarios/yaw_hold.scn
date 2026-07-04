@@ -1,5 +1,5 @@
-# yaw_hold.scn — heading hold under a standing yaw disturbance (vehicle_new)
-# 定在ヨー外乱下のヘディングホールド（vehicle_new）
+# yaw_hold.scn — heading hold under a standing yaw disturbance (vehicle)
+# 定在ヨー外乱下のヘディングホールド（vehicle）
 #
 # Reproduces the 2026-06-11 hardware finding: a thrust-proportional yaw moment
 # (there: airframe asymmetry; here: M1 at 80% thrust+drag) makes the heading
@@ -17,7 +17,7 @@
 # 数秒/回かかり方位は流れる。ALT_HOLD ホバーで高度は閉ループ、空中ゲート
 # （phase == Airborne、ToF 離陸検知が設定）がホールドを有効化する。
 #
-# Run: sf sil scenario simulator/sil/scenarios/yaw_hold.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/yaw_hold.scn --target vehicle
 #
 #  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc    2048  2048   2048    2048  0     4000      50              # A: boot → IDLE_GROUND 4 s

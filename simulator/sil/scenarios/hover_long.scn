@@ -1,5 +1,5 @@
-# hover_long.scn — LONG-duration airborne ALTITUDE_HOLD hover (legacy / emu_vehicle)
-# 長時間 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle）
+# hover_long.scn — LONG-duration airborne ALTITUDE_HOLD hover (legacy / emu_vehicle_old)
+# 長時間 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle_old）
 #
 # Same take-off as hover_alt.scn, but holds ALTITUDE_HOLD for 90 s to probe the
 # ESKF vertical channel's LONG-term stability (slow accel-bias drift, setpoint

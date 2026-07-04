@@ -121,7 +121,7 @@ public:
         // I_i = (V_motor,i − Km·ω_i)/Rm (motor electrical model, params doc §3) plus a
         // quiescent avionics draw. SoC is depleted by Coulomb counting. DISABLED by
         // default → constant v_batt (the physics/smoke tests probe the motor curve at a
-        // fixed nominal voltage). The closed-loop emulator (emu_vehicle_new) enables it
+        // fixed nominal voltage). The closed-loop emulator (emu_vehicle) enables it
         // so the firmware's live-voltage thrust→duty compensation has a real sag to track.
         // 電池(1S LiPo)サグ/放電モデル。有効時は電源電圧が動的: v_batt=OCV(SoC)−I·R_int。
         // 電池電流 I は各モータ電気電流 I_i=(V_motor,i−Km·ω_i)/Rm（params文書§3）＋アビオ静止

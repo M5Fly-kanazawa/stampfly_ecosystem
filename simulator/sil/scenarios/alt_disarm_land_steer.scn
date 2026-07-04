@@ -17,7 +17,7 @@
 # すると機体が傾く（tilt_max>6°）。中立版 alt_disarm_land は tilt≈0。フェイルセーフ着陸は水平
 # （commloss_land_level.scn）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/alt_disarm_land_steer.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/alt_disarm_land_steer.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest

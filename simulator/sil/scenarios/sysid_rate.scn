@@ -13,7 +13,7 @@
 # （外側ループ無傷）。実機では Data Stream の rate_ref/gyro 対（400Hz）を
 # `sf sysid rate-fit` が消費する。
 #
-# Run: sf sil scenario simulator/sil/scenarios/sysid_rate.scn --target vehicle_new --duration 32000000
+# Run: sf sil scenario simulator/sil/scenarios/sysid_rate.scn --target vehicle --duration 32000000
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration

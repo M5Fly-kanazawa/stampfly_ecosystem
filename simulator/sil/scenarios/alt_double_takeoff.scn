@@ -12,7 +12,7 @@
 # 飛行後は収束済み。本 A/B は両離陸を1ランで捉え climb ピークを直接比較（GE/noise off で
 # ブート対リセットを分離）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/alt_double_takeoff.scn --target vehicle_new --duration 33000000
+# Run: sf sil scenario simulator/sil/scenarios/alt_double_takeoff.scn --target vehicle --duration 33000000
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot → IDLE_GROUND

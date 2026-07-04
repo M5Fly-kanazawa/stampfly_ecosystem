@@ -16,7 +16,7 @@
 # Model Identity により真値は既知: b=1/Ixx≈109170, T=motor_tau=20ms。期待設計は
 # kp≈7.2e-4（実績比 0.53 倍）で全ゲート内。
 #
-# Run: sf sil scenario simulator/sil/scenarios/autotune.scn --target vehicle_new --duration 55000000
+# Run: sf sil scenario simulator/sil/scenarios/autotune.scn --target vehicle --duration 55000000
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration

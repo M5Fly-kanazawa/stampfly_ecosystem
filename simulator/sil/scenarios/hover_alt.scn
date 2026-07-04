@@ -1,5 +1,5 @@
-# hover_alt.scn — airborne ALTITUDE_HOLD hover (legacy firmware / emu_vehicle)
-# 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle）
+# hover_alt.scn — airborne ALTITUDE_HOLD hover (legacy firmware / emu_vehicle_old)
+# 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle_old）
 #
 # Sticks are raw 12-bit ADC, 0..4095, centre 2048 (firmware treats them as ADC;
 # the "0..1000" comment in controller_comm.hpp is stale).

@@ -13,14 +13,14 @@
  *        ファーム非依存のエミュレータ入口 — Plant＋仮想ボードを起こし、任意の
  *        ファームの app_main() をホストスケジューラで走らせる。
  *
- * Unlike emu_main.cpp (which prints a vehicle_new-specific estimator check via
+ * Unlike emu_main.cpp (which prints a vehicle-specific estimator check via
  * that firmware's topics), this entry references NO firmware types — it only
  * touches the SIL infrastructure (Plant, virtual board, scheduler). Used by the
- * old firmware (firmware/vehicle) target to prove the emulator is firmware-
+ * old firmware (firmware/vehicle_old) target to prove the emulator is firmware-
  * agnostic: a second, independent firmware runs on the same libsf_emu.
  *
  * emu_main.cpp と違いファーム型を一切参照せず、SIL基盤のみに触れる。旧ファーム
- * （firmware/vehicle）ターゲットが使い、同じ基盤で2本目が走る＝ファーム非依存を実証。
+ * （firmware/vehicle_old）ターゲットが使い、同じ基盤で2本目が走る＝ファーム非依存を実証。
  */
 
 #include <cmath>

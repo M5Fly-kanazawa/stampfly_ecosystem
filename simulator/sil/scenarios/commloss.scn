@@ -22,7 +22,7 @@
 # ドライバはパケットを出さないのでリンクは実際に古くなる（disturb.scn が警告する機構と
 # 同じ）。隙間の後は再開するが、機体は既に LANDING（通信復帰で着陸は取り消されない）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/commloss.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/commloss.scn --target vehicle
 #
 #  <t>    ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0      rc    2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND before ARM edge

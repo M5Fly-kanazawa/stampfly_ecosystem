@@ -1,5 +1,5 @@
 # crash_refly.scn — crash → auto-DISARM → physical handling → re-calibrate → re-fly
-#                    墜落 → 自動DISARM → 物理ハンドリング → 再校正 → 再飛行 (vehicle_new, Phase 8)
+#                    墜落 → 自動DISARM → 物理ハンドリング → 再校正 → 再飛行 (vehicle, Phase 8)
 #
 # Phase-8 ★robust re-flight capstone. The whole re-fly readiness chain in one run:
 #   1. take off, hover in ALTITUDE_HOLD.
@@ -25,7 +25,7 @@
 # Longer than the 25 s default — run with --duration 33000000 (33 s).
 # 既定 25s より長い — --duration 33000000（33s）で実行する。
 #
-# Run: sf sil scenario simulator/sil/scenarios/crash_refly.scn --target vehicle_new --duration 33000000
+# Run: sf sil scenario simulator/sil/scenarios/crash_refly.scn --target vehicle --duration 33000000
 #
 #  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration

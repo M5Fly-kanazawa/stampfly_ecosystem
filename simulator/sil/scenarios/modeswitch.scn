@@ -1,5 +1,5 @@
-# modeswitch.scn — in-flight flight-mode switching under a real drift (vehicle_new, Phase 8)
-# 実ドリフト下での飛行中モード切替（vehicle_new, Phase 8）
+# modeswitch.scn — in-flight flight-mode switching under a real drift (vehicle, Phase 8)
+# 実ドリフト下での飛行中モード切替（vehicle, Phase 8）
 #
 # Phase-8 robustness test: switch the flight mode WHILE AIRBORNE and verify the
 # craft stays bounded across every switch (requirement: in-flight ALT↔POS mode
@@ -37,7 +37,7 @@
 # 0 に戻す（alt=1）と ALT_HOLD へ戻る。POS_HOLD は roll/pitch スティックを上書き（カスケード）
 # するので、E 相の中央スティックは姿勢指令でなく位置保持になる。
 #
-# Run: sf sil scenario simulator/sil/scenarios/modeswitch.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/modeswitch.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND

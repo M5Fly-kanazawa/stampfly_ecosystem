@@ -14,7 +14,7 @@
 # 水平ゲートで roll/pitch/yaw を 0 に強制 — 降下は水平で、古いスティックの傾きにならない。
 # 対照: alt_disarm_land_steer.scn（リンク生存→パイロットが降下を操縦）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/commloss_land_level.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/commloss_land_level.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0      rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND

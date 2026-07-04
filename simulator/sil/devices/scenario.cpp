@@ -32,11 +32,11 @@
 
 namespace {
 
-// API-injection hook, registered by the TARGET-specific glue (only vehicle_new
-// has an ApiTask; referencing its symbol directly would break the legacy-vehicle
+// API-injection hook, registered by the TARGET-specific glue (only vehicle
+// has an ApiTask; referencing its symbol directly would break the vehicle_old
 // emu link). Unregistered targets record the line as unsupported.
-// API 注入フック。ターゲット別グルーが登録する（ApiTask を持つのは vehicle_new のみ。
-// シンボル直参照は旧 vehicle emu のリンクを壊す）。未登録ターゲットでは未対応として記録。
+// API 注入フック。ターゲット別グルーが登録する（ApiTask を持つのは vehicle のみ。
+// シンボル直参照は vehicle_old emu のリンクを壊す）。未登録ターゲットでは未対応として記録。
 static void (*g_api_inject_fn)(const char*) = nullptr;
 extern "C" void sil_scenario_register_api_inject(void (*fn)(const char*))
 {

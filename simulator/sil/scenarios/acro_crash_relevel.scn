@@ -13,7 +13,7 @@
 # 修正は IDLE_GROUND での「レベル合わせ」（設置・非 ARM ならスイッチが真）。
 # ARM 後・飛行中はエッジのみ＝放置送信機が API を覆せない性質は不変。
 #
-# Run: sf sil scenario simulator/sil/scenarios/acro_crash_relevel.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/acro_crash_relevel.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     5000      50                       # A: boot at rest — calibration

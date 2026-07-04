@@ -23,7 +23,7 @@
 # ゲートを大きく超える加速度）、手中で ARM 試行（拒否されること）→ 6.0 s 設置 →
 # 地上で再校正完了 → ARM 受理 → 離陸 → ALT_HOLD ホバー → DISARM。
 #
-# Run: sf sil scenario simulator/sil/scenarios/boot_motion.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/boot_motion.scn --target vehicle
 #
 #  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc     2048  2048   2048    2048  0     500       50              # A: boot on ground 0.5 s

@@ -1,5 +1,5 @@
-# acro_flight.scn — ACRO rate-loop flight (vehicle_new, Layer 1)
-# ACRO レートループ飛行（vehicle_new, Layer 1）
+# acro_flight.scn — ACRO rate-loop flight (vehicle, Layer 1)
+# ACRO レートループ飛行（vehicle, Layer 1）
 #
 # Goal: reach FLYING, switch to ACRO (rate control), and exercise the inner rate
 # PID with short rate doublets on roll/pitch/yaw. ACRO is the plant-identification

@@ -12,7 +12,7 @@
 # complete"）を期待する。校正完了後に再度 ARM（新しい立ち上がりエッジ）し、受理される
 # ことを期待する。ARM 前キャリブゲートが実際にゲートすることを実証。
 #
-# Run: sf sil scenario simulator/sil/scenarios/prearm.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/prearm.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    rc  2048  2048   2048    2048  0     1500      50         # A: disarmed 1.5 s (calibration still collecting)

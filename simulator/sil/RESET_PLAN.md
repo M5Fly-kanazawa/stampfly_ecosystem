@@ -21,7 +21,7 @@
 
 ### 想定する読者
 
-- vehicle_new の開発者（人間・AI）
+- vehicle の開発者（人間・AI）
 - SIL を使って制御系・状態遷移・推定器を設計／検証する研究者・学生
 - 自分で書いた推定器・制御器を SIL で試したい学習者
 
@@ -33,7 +33,7 @@
 
 SIL のいちばんの目的は、**まだ一度も飛んでいないファームを、ハードを壊さずに PC 上で検証する**ことです。
 
-- vehicle_new はまだ飛んでいません。つまり**実機データは存在しません**。だから、SIL が実機データを必要とする設計は、目的と矛盾します。
+- vehicle はまだ飛んでいません。つまり**実機データは存在しません**。だから、SIL が実機データを必要とする設計は、目的と矛盾します。
 - **真値（正解の状態）は物理モデルから得ます。** シミュレーションしている以上、真の姿勢・位置・速度は常に分かっているからです。実機ログを物差しにする必要はありません。
 - 旧 M7／M8（実機ログの再生・差分診断）のように実機データに頼る作り方は**やめます**。実機データの正当な使い道は、§3 の Model Fidelity（実機で飛ばした後にモデルの精度を上げる、後追いの作業）だけです。
 
@@ -43,7 +43,7 @@ SIL は、**「中身（ESKF という具体的な実装）」ではなく「境
 
 - 未来のファームが ESKF とは限りません。推定器は相補フィルタや Madgwick かもしれず、制御は PID か状態フィードバックか MPC か分かりません。
 - センサとモータの境界は「ソフトの選び方」ではなく「物理」で決まるので、**どんなアルゴリズムを中に入れても変わりません**（IMU は、あとでどの推定器を使うかを知りませんし、ESC は、その指令値がどの制御器から出たかを知りません）。
-- **vehicle_new は、すでにこの形に設計されています。** `IEstimator`（`components/sf_estimator/include/estimator.hpp`）と `IController`（`components/sf_controller/include/controller.hpp`）という抽象インターフェースがあり、ESKF や PID はその一実装にすぎません。SIL はこのインターフェースを通して接続し、**ESKF という名前を一度も書きません**。
+- **vehicle は、すでにこの形に設計されています。** `IEstimator`（`components/sf_estimator/include/estimator.hpp`）と `IController`（`components/sf_controller/include/controller.hpp`）という抽象インターフェースがあり、ESKF や PID はその一実装にすぎません。SIL はこのインターフェースを通して接続し、**ESKF という名前を一度も書きません**。
 
 ### 1機種専用だからアルゴリズム非依存が成り立つ
 
@@ -141,7 +141,7 @@ SIL は単発の検証ではなく、**ハードを壊さずに回す開発ル�
 
 ### 接続は深いところで行う — ファーム本物のループをホストで走らせる
 
-旧 SIL の失敗は、制御ループを自前で作り直し、推定器に物理の真値姿勢を渡して動かしていたことでした。新しい SIL は、**vehicle_new の実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を、そのままホスト上で走らせます**。推定器・制御器の差し替えは、実機とまったく同じ `IEstimator`／`IController` を経由します。これが**ループ全体での Code Identity** です。
+旧 SIL の失敗は、制御ループを自前で作り直し、推定器に物理の真値姿勢を渡して動かしていたことでした。新しい SIL は、**vehicle の実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を、そのままホスト上で走らせます**。推定器・制御器の差し替えは、実機とまったく同じ `IEstimator`／`IController` を経由します。これが**ループ全体での Code Identity** です。
 
 ### 状態の持ち方（階層的に・拡張できるように）
 
@@ -359,7 +359,7 @@ SIL の検証結果を、そのまま**外部に見せられる動画**として
 
 ### この計画の承認後にやること
 
-- ✅ **完了（2026-05-31）— 設計文書のリライト:** `firmware/vehicle_new/docs/development_roadmap.md` をこの計画に合わせて書き直した（旧「SIL Control Level L1〜L4」を廃止＝物理真値のゲート G1〜G4 に、Code Identity をループ全体／アルゴリズム非依存に、Model Fidelity を実機飛行後の後追いに、Phase 1 を物理ベース SIL の再構築＝本計画 P1〜P4 として前置）。`noise_and_vibration_model.md` を MuJoCo 上に自作する合成センサ・モータモデルの仕様として再構成（剛体運動は MuJoCo が担当、削除済みファイル参照を除去）。`control/validation/sil_control_validation.md`（旧 SIL の検証レポート）は**完全削除**した（図リンク切れ・再現不能・ESKF 専用診断で方針6と不整合。知見はメモリと git 履歴に保存済み）。`implementation_log.md` に削除の前方注記を追加（履歴は改竄せず保持）。
+- ✅ **完了（2026-05-31）— 設計文書のリライト:** `firmware/vehicle/docs/development_roadmap.md` をこの計画に合わせて書き直した（旧「SIL Control Level L1〜L4」を廃止＝物理真値のゲート G1〜G4 に、Code Identity をループ全体／アルゴリズム非依存に、Model Fidelity を実機飛行後の後追いに、Phase 1 を物理ベース SIL の再構築＝本計画 P1〜P4 として前置）。`noise_and_vibration_model.md` を MuJoCo 上に自作する合成センサ・モータモデルの仕様として再構成（剛体運動は MuJoCo が担当、削除済みファイル参照を除去）。`control/validation/sil_control_validation.md`（旧 SIL の検証レポート）は**完全削除**した（図リンク切れ・再現不能・ESKF 専用診断で方針6と不整合。知見はメモリと git 履歴に保存済み）。`implementation_log.md` に削除の前方注記を追加（履歴は改竄せず保持）。
 - 旧 SIL の削除で動かなくなったコードの始末: `tools/log_analyzer/visualize_{optimization,pose_3d}.py`、`lib/stampfly_edu/eskf/__init__.py`（P1 着手時に対応）。
 - `sysid` は新ファーム完成後に、汎用のシステム同定ツールとして全面的に作り直す予定（いまは残す）。
 
@@ -370,7 +370,7 @@ SIL の検証結果を、そのまま**外部に見せられる動画**として
 | コミット | 内容 |
 |---------|------|
 | `f799415` | 旧 SIL `simulator/sil/` を削除（45ファイル） |
-| `40cbdd2` | 2つ目の旧 SIL `firmware/vehicle_new/sim/` を削除（29ファイル） |
+| `40cbdd2` | 2つ目の旧 SIL `firmware/vehicle/sim/` を削除（29ファイル） |
 | `55074ad` | 散らばっていた旧 SIL ツール（`tools/eskf_sim`／`sim`／`tuning` など）と `sf eskf`／`sf tune` を削除 |
 | `ee6e773` | 古くなったドキュメントを整備（参照の除去・図の再生成） |
 
@@ -394,11 +394,11 @@ P1〜P4 は**理想 SIL**（クリーンなセンサ・無風・健全なモー�
 
 ### P5 — センサノイズ N0（白色ガウス＋バイアス）
 
-- **実装**: Plant に `NoiseConfig`（IMU ノイズ密度・起動バイアス・バイアス RW 密度・シード・enable）を追加。Plant が RNG とバイアス状態を持ち、`imu()` に per-sample ガウスノイズ＋バイアスを載せ、`step()` でバイアスのランダムウォークを進める。離散ノイズ σ_d = σ_c/√dt（σ_c=ノイズ密度 [unit/√Hz]）。仕様は `firmware/vehicle_new/docs/noise_and_vibration_model.md` §2-3。
+- **実装**: Plant に `NoiseConfig`（IMU ノイズ密度・起動バイアス・バイアス RW 密度・シード・enable）を追加。Plant が RNG とバイアス状態を持ち、`imu()` に per-sample ガウスノイズ＋バイアスを載せ、`step()` でバイアスのランダムウォークを進める。離散ノイズ σ_d = σ_c/√dt（σ_c=ノイズ密度 [unit/√Hz]）。仕様は `firmware/vehicle/docs/noise_and_vibration_model.md` §2-3。
 - **テスト（ユニット）**: ①測定 σ ≈ 設定 σ（統計）②固定シードで完全再現（同シード→同列、異シード→別列）③enable=false で従来のクリーン経路と完全一致 ④バイアス RW が √t で成長。
 - **ゲート**: G2（ノイズ下で ESKF・相補とも姿勢推定 RMSE が閾値内・有界）＋既存 G3（ホバー維持）。起動バイアスにより**ESKF（BG/BA を推定）が相補（バイアス非推定）より追従が良い**差が出始める。
 - **成果物**: ノイズ下ホバー動画＋results（noise メトリクス・G2 チェック）。
-- **✅達成（2026-06-03）**: ノイズモデルは `plant/sensor_noise.hpp` に実装済みだったが、エミュレータ（`emu_vehicle`/`emu_vehicle_new`）は既定 Config（noise off）で `Plant::init` を呼んでおりノイズを有効化する経路が無かった。`SIL_EMU_NOISE=n0`/`SIL_EMU_SEED` env を両 emu 入口に配線し、`sf sil scenario --noise n0 --seed N` から制御できるようにした（既定 off は従来と byte-identical＝クリーン経路不変）。検証:
+- **✅達成（2026-06-03）**: ノイズモデルは `plant/sensor_noise.hpp` に実装済みだったが、エミュレータ（`emu_vehicle`/`emu_vehicle`）は既定 Config（noise off）で `Plant::init` を呼んでおりノイズを有効化する経路が無かった。`SIL_EMU_NOISE=n0`/`SIL_EMU_SEED` env を両 emu 入口に配線し、`sf sil scenario --noise n0 --seed N` から制御できるようにした（既定 off は従来と byte-identical＝クリーン経路不変）。検証:
   - **G2（有界）**: `hover_alt`（16s保持）を 7 シードで実行し全て有界（保持窓 alt 帯 ~0.13m、std 1.3–3.9cm）。`hover_long`（90s保持）で長期も alt std~2.7cm・緩い有界ドリフト（−35mm/75s）、姿勢チルト平均~4°（max 10°）で発散なし。
   - **決定論**: 同シードで trajectory・stdout・stderr が完全一致（byte-identical）。異シードは別実現。
   - **白色σの substep 非依存化（時間基準修正の副作用を是正）**: 物理は 4kHz substep で `advance()` するが、ファームは IMU を 400Hz で読む。白色を substep（0.25ms）で離散化すると σ が √10 倍に膨らむため、`SensorNoise::Config::white_dt`（=400Hz 読み取り周期）で白色を離散化するよう分離。`noise_test` に substep 分離テストを追加して数値確認（4kHz substep でもファームが見る σ は 400Hz 相当）。バイアス RW は √dt 累積ゆえ substep のままで正しい。
@@ -415,7 +415,7 @@ P1〜P4 は**理想 SIL**（クリーンなセンサ・無風・健全なモー�
   - **N2（段階2）**: 振動を 2次帯域通過（中心 √(500·667)≈577Hz）で**物理 4kHz substep で生成 → ファーム 400Hz 読みで ~100–177Hz にエイリアシング**（白色は read レート、振動は substep レートで色付け＝別経路）。エネルギー保存（1サンプル rms=K·duty²、自己相関 0.553＝有色）。＋ToF/Baro 観測ノイズ（プラントの真ノイズ ToF σ=0.01m＝R 表 0.03 は ESKF の膨張 R で別物・baro 0.1m はテレメトリのみ）。ToF ノイズは VL53 信頼下限 >5cm でのみ付与（静止高 13mm では負/無効になり起動を壊すため）。`SIL_EMU_NOISE=n2`。`noise_test` に帯域制限（rms＋自己相関＋デシメート分散保存）＋観測ノイズ検証を追加。
   - 検証: 単体全 PASS、N0/N1/off byte-identical（不変）、n2 決定論、既存ゲート（8/14）PASS。
   - **所見（重要・正直に記録）**: N1/N2 とも hover_alt の離陸が揚力不足で機体が沈下（有界・非発散だが品質劣化、peak~0.3m vs n0 0.57m）。**帯域制限（N2）は N1 より劇的には改善しない**（複数シードで n1≈n2）。理由＝振動の**1サンプルあたりの大きさ**（duty 0.7 で σ_accel≈1.9 m/s²・σ_gyro≈30°/s）は帯域制限でも不変で、ESKF の accel→傾き補正はこの瞬時値に敏感（ジャイロ積分は高周波を均すが accel-tilt 経路は均さない）。加えて SIL の hover duty(~0.7)は legacy hover02 のフィット点より高く K·duty² が高スロットル域の振動を出す（Model Identity 注記）。**→ フォロー**: ①ファームの IMU フィルタ（LPF/notch）設定が ~100–177Hz の振動をどれだけ落とすか確認 ②K の hover-duty 整合（同定点との duty 差） ③段階3 の比較で「中身が違うと結果も違う」を見せる。
-  - **段階3/3（P6 ゲート）✅ ESKF vs 相補の比較・定量化（2026-06-04）**: ハーネスは `hover_smoke`（`sf sil compare`）を採用。理由＝hover_smoke は**実 vehicle_new の推定器（ESKF/相補）を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp` createEstimator）で走らせる**ので、推定器比較という目的には忠実（フル firmware を走らせない欠陥は推定器比較自体には無関係）。emu_vehicle_new での完全忠実比較は airborne シナリオ＋estimator 切替 env が未実装ゆえ将来課題（データ駆動フェーズと統合）。hover_smoke に N1/N2 を配線（baro 融合ベンチゆえ n2 の baro 観測ノイズが効く）。**定量結果（5シード平均、g2_att_rmse 厳密指標）**: 姿勢 comp/ESKF＝N0 0.33x／N1 **2.20x**／N2 0.93x、高度 comp/ESKF＝N0 0.41x／N1 1.60x／N2 1.32x（>1=ESKF優位）。**＝低ノイズ(N0)は単純な相補が優位、現実的ノイズ(N1振動)では ESKF が明確優位（相補の姿勢が 4.26°±3.05 で不安定化）、N2 は高度で ESKF 優位**。「中身が違うと結果も違う」＋「ノイズ下で ESKF 優位」を定量的に実証。比較動画 `viz/out_p6/p6_compare.mp4`。**所見**: N1/N2 では両推定器とも振動で離陸が劣化（took_off は閾値付近で不安定）＝振動の大きさ自体が支配的（段階2 の所見と一致、duty 0.7 で K·duty² 過大）。
+  - **段階3/3（P6 ゲート）✅ ESKF vs 相補の比較・定量化（2026-06-04）**: ハーネスは `hover_smoke`（`sf sil compare`）を採用。理由＝hover_smoke は**実 vehicle の推定器（ESKF/相補）を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp` createEstimator）で走らせる**ので、推定器比較という目的には忠実（フル firmware を走らせない欠陥は推定器比較自体には無関係）。emu_vehicle での完全忠実比較は airborne シナリオ＋estimator 切替 env が未実装ゆえ将来課題（データ駆動フェーズと統合）。hover_smoke に N1/N2 を配線（baro 融合ベンチゆえ n2 の baro 観測ノイズが効く）。**定量結果（5シード平均、g2_att_rmse 厳密指標）**: 姿勢 comp/ESKF＝N0 0.33x／N1 **2.20x**／N2 0.93x、高度 comp/ESKF＝N0 0.41x／N1 1.60x／N2 1.32x（>1=ESKF優位）。**＝低ノイズ(N0)は単純な相補が優位、現実的ノイズ(N1振動)では ESKF が明確優位（相補の姿勢が 4.26°±3.05 で不安定化）、N2 は高度で ESKF 優位**。「中身が違うと結果も違う」＋「ノイズ下で ESKF 優位」を定量的に実証。比較動画 `viz/out_p6/p6_compare.mp4`。**所見**: N1/N2 では両推定器とも振動で離陸が劣化（took_off は閾値付近で不安定）＝振動の大きさ自体が支配的（段階2 の所見と一致、duty 0.7 で K·duty² 過大）。
 
 ### P7 — 外乱（風・モータ劣化）と回復
 
@@ -446,4 +446,4 @@ P1〜P4 は**理想 SIL**（クリーンなセンサ・無風・健全なモー�
 
 ### この章での `@design` タグの扱い
 
-各段で検証した本体の設計要素は `@design ... [--]` を `[OK]` に更新する（P10 ①の母数）。リリース時に全 `[OK]` を目指す（CLAUDE.md vehicle_new ルール）。
+各段で検証した本体の設計要素は `@design ... [--]` を `[OK]` に更新する（P10 ①の母数）。リリース時に全 `[OK]` を目指す（CLAUDE.md vehicle ルール）。

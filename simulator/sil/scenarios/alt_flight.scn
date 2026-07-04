@@ -1,7 +1,7 @@
-# alt_flight.scn — airborne ALTITUDE_HOLD hover (vehicle_new, Layer 3, P8 Phase B)
-# 空中 ALTITUDE_HOLD ホバー（vehicle_new, Layer 3, P8 Phase B）
+# alt_flight.scn — airborne ALTITUDE_HOLD hover (vehicle, Layer 3, P8 Phase B)
+# 空中 ALTITUDE_HOLD ホバー（vehicle, Layer 3, P8 Phase B）
 #
-# Goal (Layer 3 gate): drive vehicle_new through ARMED_GROUND → TAKEOFF → FLYING,
+# Goal (Layer 3 gate): drive vehicle through ARMED_GROUND → TAKEOFF → FLYING,
 # climb a little in STABILIZE, then hand to ALTITUDE_HOLD WHILE AIRBORNE and verify
 # the closed loop HOLDS the altitude. ALT_HOLD tracks the ESKF vertical estimate
 # (altitude = -pos_z, vel_up = -vel_z). This gates the ToF-only vertical handoff
@@ -9,7 +9,7 @@
 # reset at the ground→airborne edge for a clean ToF lock. Without the handoff the
 # ground-phase vertical drift exceeds the ToF innovation gate at takeoff and the
 # estimate diverges (ALT_HOLD then chases a bad altitude). See the P8 Phase B fix.
-# 目的（Layer 3 ゲート）: vehicle_new を ARMED_GROUND→TAKEOFF→FLYING と進め、STABILIZE で
+# 目的（Layer 3 ゲート）: vehicle を ARMED_GROUND→TAKEOFF→FLYING と進め、STABILIZE で
 # 少し上昇後、空中で ALTITUDE_HOLD に渡し、閉ループが高度を保持することを検証する。
 # ALT_HOLD は ESKF 鉛直推定（altitude=-pos_z, vel_up=-vel_z）を追う。ToF のみの鉛直
 # ハンドオフ（imu_task）を検証: 接地中は pos/vel をゼロ保持（最小レンジ未満で ToF 無効）、
@@ -25,9 +25,9 @@
 # 1/1.12 でホバーは raw≈3290。ALT_HOLD ではスロットルは対称な上昇/降下指令
 # （raw 2048=中央=0=ホールド、上>2048=上昇、下<2048=降下）。
 #
-# vehicle_new reaches IDLE_GROUND within ~1 s of boot, so a 4 s disarmed lead lands
+# vehicle reaches IDLE_GROUND within ~1 s of boot, so a 4 s disarmed lead lands
 # the single ARM edge well inside IDLE_GROUND.
-# vehicle_new は起動後 ~1s で IDLE_GROUND。4s の無装着で ARM エッジは確実に届く。
+# vehicle は起動後 ~1s で IDLE_GROUND。4s の無装着で ARM エッジは確実に届く。
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s — boot reaches IDLE_GROUND before ARM edge

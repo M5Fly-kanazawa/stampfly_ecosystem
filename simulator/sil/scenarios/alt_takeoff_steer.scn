@@ -16,7 +16,7 @@
 # そのフェーズに留まるとスティックが死んだ。今は姿勢を奪わない: 上昇中にロールを倒せば傾く
 # （かつ 0.5 m まで上昇する）。
 #
-# Run: sf sil scenario simulator/sil/scenarios/alt_takeoff_steer.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/alt_takeoff_steer.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)

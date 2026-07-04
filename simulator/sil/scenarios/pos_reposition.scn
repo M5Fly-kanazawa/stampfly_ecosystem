@@ -17,7 +17,7 @@
 # ~0.175 m/s east; ~0.5-0.7 m over the 4 s reposition window.
 # roll 3000 は正規化 0.465、不感帯 0.05 で 0.44、stick_vel 0.4 倍で東へ約 0.175 m/s。
 #
-# Run: sf sil scenario simulator/sil/scenarios/pos_reposition.scn --target vehicle_new
+# Run: sf sil scenario simulator/sil/scenarios/pos_reposition.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes (~4 s)
