@@ -500,11 +500,11 @@ void ControllerComm::enterPairingMode()
 
 void ControllerComm::sendPairingPacket()
 {
-    // Pairing packet format for Simple_StampFly_Joy controller:
+    // Pairing packet format (shared SSOT: protocol::kPairingPacketSize/kPairingSignature):
     // Byte 0: Channel
     // Byte 1-6: Drone MAC address
-    // Byte 7-10: Signature 0xAA 0x55 0x16 0x88
-    uint8_t pairing_packet[11];
+    // Byte 7-10: Signature
+    uint8_t pairing_packet[protocol::kPairingPacketSize];
 
     // Get own MAC address
     uint8_t my_mac[6];
@@ -513,10 +513,7 @@ void ControllerComm::sendPairingPacket()
     // Build pairing packet
     pairing_packet[0] = static_cast<uint8_t>(config_.wifi_channel);
     memcpy(&pairing_packet[1], my_mac, 6);
-    pairing_packet[7] = 0xAA;
-    pairing_packet[8] = 0x55;
-    pairing_packet[9] = 0x16;
-    pairing_packet[10] = 0x88;
+    memcpy(&pairing_packet[7], protocol::kPairingSignature, sizeof(protocol::kPairingSignature));
 
     ESP_LOGI(TAG, "Broadcasting pairing packet: MAC=%02X:%02X:%02X:%02X:%02X:%02X CH=%d",
              my_mac[0], my_mac[1], my_mac[2], my_mac[3], my_mac[4], my_mac[5],
@@ -623,11 +620,7 @@ esp_err_t ControllerComm::clearPairingFromNVS()
 bool ControllerComm::validateChecksum(const uint8_t* data, size_t len)
 {
     if (len < 2) return false;
-    uint8_t sum = 0;
-    for (size_t i = 0; i < len - 1; i++) {
-        sum += data[i];
-    }
-    return sum == data[len - 1];
+    return protocol::checksum8(data, len - 1) == data[len - 1];
 }
 
 void ControllerComm::tick()

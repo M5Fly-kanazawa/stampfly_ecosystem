@@ -11,32 +11,22 @@
 #include <cstdint>
 #include <functional>
 #include "esp_err.h"
+#include "espnow_protocol.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 namespace stampfly {
 
-/**
- * @brief Control packet from controller (14 bytes)
- * Compatible with for_tdma branch
- */
-struct ControlPacket {
-    uint8_t drone_mac[3];   // byte 0-2: Destination MAC lower 3 bytes
-    uint16_t throttle;      // byte 3-4: 0-1000
-    uint16_t roll;          // byte 5-6: 0-1000 (500=center)
-    uint16_t pitch;         // byte 7-8: 0-1000 (500=center)
-    uint16_t yaw;           // byte 9-10: 0-1000 (500=center)
-    uint8_t flags;          // byte 11: bit0:Arm, bit1:Flip, bit2:Mode, bit3:AltMode, bit4:PosMode
-    uint8_t reserved;       // byte 12: Reserved (proactive_flag, ignored)
-    uint8_t checksum;       // byte 13: Sum of bytes 0-12
-} __attribute__((packed));
-
-// Control packet flags
-constexpr uint8_t CTRL_FLAG_ARM      = 0x01;
-constexpr uint8_t CTRL_FLAG_FLIP     = 0x02;
-constexpr uint8_t CTRL_FLAG_MODE     = 0x04;
-constexpr uint8_t CTRL_FLAG_ALT_MODE = 0x08;
-constexpr uint8_t CTRL_FLAG_POS_MODE = 0x10;  // bit 4: Position hold mode
+// ControlPacket (14 bytes) and its flag bits are the shared ESP-NOW protocol
+// SSOT — see firmware/common/protocol/include/espnow_protocol.hpp.
+// ControlPacket(14バイト)とそのフラグビットは共有ESP-NOWプロトコルSSOT —
+// firmware/common/protocol/include/espnow_protocol.hpp 参照。
+using protocol::ControlPacket;
+using protocol::CTRL_FLAG_ARM;
+using protocol::CTRL_FLAG_FLIP;
+using protocol::CTRL_FLAG_MODE;
+using protocol::CTRL_FLAG_ALT_MODE;
+using protocol::CTRL_FLAG_POS_MODE;
 
 /**
  * @brief Telemetry packet to controller (22 bytes)

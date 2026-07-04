@@ -36,6 +36,7 @@
 
 #include "comm.hpp"
 #include "data_types.hpp"
+#include "espnow_protocol.hpp"  // shared ControlPacket/PairingPacket SSOT (firmware/common/protocol)
 #include "topics.hpp"    // pairing_state / pairing_complete topics
 #include "sf_board.hpp"  // borrow the BSP-owned default STA netif (R1)
 
@@ -61,71 +62,30 @@ static const char* TAG = "comm";
 namespace sf {
 
 // =============================================================================
-// Protocol — ESP-NOW ControlPacket (14 bytes, packed, little-endian) — the SSOT
-// プロトコル — ESP-NOW ControlPacket（14バイト、パック、リトルエンディアン）= SSOT
+// Protocol — ESP-NOW ControlPacket/PairingPacket — the SSOT
+// プロトコル — ESP-NOW ControlPacket/PairingPacket = SSOT
 //
-// Layout / レイアウト (matches the struct below and protocol/spec/messages.yaml):
-//   [0..2]  drone_mac  uint8×3  destination MAC lower 3 (match-any here)
-//   [3..4]  throttle   uint16   12-bit ADC, 2048 = zero (spring-centred)
-//   [5..6]  roll       uint16   12-bit ADC, 2048 = center
-//   [7..8]  pitch      uint16   12-bit ADC, 2048 = center
-//   [9..10] yaw        uint16   12-bit ADC, 2048 = center
-//   [11]    flags      uint8    bit0=ARM,1=FLIP,2=MODE,3=ALT_MODE,4=POS_MODE
-//   [12]    reserved   uint8    proactive_flag (ignored)
-//   [13]    checksum   uint8    low 8 bits of the sum of bytes [0..12]
-//
-// The transmitter (firmware/controller, FIXED) sends THIS layout — the protocol
-// Single Source of Truth. An earlier 12-byte CommanderPacket here had diverged from
-// the SSOT (wrong size/scale/checksum) and rejected every controller packet
-// (len != 14); it was removed. On-air stick values are 12-bit ADC (2048-centred),
+// ControlPacket (14 bytes) and the PairingPacket constants are defined once in
+// firmware/common/protocol/include/espnow_protocol.hpp (shared with
+// firmware/vehicle_old and firmware/controller) and documented in
+// protocol/spec/messages.yaml. The transmitter (firmware/controller) sends the
+// ControlPacket layout below; on-air stick values are 12-bit ADC (2048-centred),
 // NOT 0..1000. Listening on the broadcast peer (FF:FF:FF:FF:FF:FF) is used.
-// 送信機(firmware/controller, 固定)はこのレイアウト＝プロトコル SSOT を送る。以前の
-// 12バイト CommanderPacket は SSOT から逸脱（サイズ/スケール/検査が違い）し全パケットを
-// len!=14 で弾いていたため削除した。on-air は 12bit ADC(中央2048)、0..1000 ではない。
-// ブロードキャストピア (FF:FF:FF:FF:FF:FF) でリスンする。
+// ControlPacket(14バイト)とPairingPacket定数は
+// firmware/common/protocol/include/espnow_protocol.hpp で1箇所だけ定義され
+// (firmware/vehicle_old・firmware/controllerと共有)、protocol/spec/messages.yaml
+// に記載。送信機(firmware/controller)は下記のControlPacketレイアウトを送る。
+// on-air は 12bit ADC(中央2048)、0..1000 ではない。ブロードキャストピア
+// (FF:FF:FF:FF:FF:FF) でリスンする。
 //
 // @design protocol/spec/messages.yaml — ControlPacket (SSOT, 14 bytes)  [OK]
-// =============================================================================
-
-struct ControlPacket {
-    uint8_t  drone_mac[3];  // bytes 0-2 : destination MAC lower 3 (match-any here)
-    uint16_t throttle;      // bytes 3-4 : 12-bit ADC, 2048=zero (spring-centred)
-    uint16_t roll;          // bytes 5-6 : 12-bit ADC, 2048=center
-    uint16_t pitch;         // bytes 7-8 : 12-bit ADC, 2048=center
-    uint16_t yaw;           // bytes 9-10: 12-bit ADC, 2048=center
-    uint8_t  flags;         // byte  11  : bit0=ARM,1=FLIP,2=MODE,3=ALT_MODE,4=POS_MODE
-    uint8_t  reserved;      // byte  12  : proactive_flag (ignored)
-    uint8_t  checksum;      // byte  13  : low 8 bits of the sum of bytes 0-12
-} __attribute__((packed));
-
-static_assert(sizeof(ControlPacket) == 14,
-              "ControlPacket must match the protocol SSOT (14 bytes)");
-
-// =============================================================================
-// Protocol — PairingPacket (11 bytes) — the SSOT (protocol/spec/messages.yaml)
-// プロトコル — PairingPacket（11バイト）= SSOT
-//
-// Broadcast by the vehicle while in PairingState::Pairing to advertise its own
-// MAC + channel. The controller scans CH1-13 for the signature, learns the MAC,
-// and then unicasts ControlPackets back. Layout / レイアウト:
-//   [0]     channel    uint8     WiFi channel (this vehicle's)
-//   [1..6]  drone_mac  uint8×6   this vehicle's full STA MAC
-//   [7..10] signature  uint8×4   0xAA 0x55 0x16 0x88 (identifies a StampFly)
-//
-// 機体が PairingState::Pairing の間 broadcast し、自 MAC + チャンネルを広告する。
-// コントローラは CH1-13 を署名で走査して MAC を学習し、以降 ControlPacket をユニキャスト
-// で返す。署名はコントローラ（固定）と一致させること（espnow_tdma.c on_data_recv）。
-//
 // @design protocol/spec/messages.yaml — PairingPacket (SSOT, 11 bytes)  [OK]
 // =============================================================================
 
-/// PairingPacket signature bytes (must match the controller, FIXED firmware).
-/// PairingPacket 署名バイト（固定ファームのコントローラと一致させる）。
-static constexpr uint8_t kPairingSignature[4] = {0xAA, 0x55, 0x16, 0x88};
-
-/// PairingPacket wire size (1 channel + 6 MAC + 4 signature).
-/// PairingPacket の電文長（channel 1 + MAC 6 + 署名 4）。
-static constexpr size_t kPairingPacketSize = 11;
+// ControlPacket is aliased in comm.hpp (using ControlPacket = stampfly::protocol::ControlPacket).
+// ControlPacket は comm.hpp でエイリアス済み。
+using stampfly::protocol::kPairingPacketSize;
+using stampfly::protocol::kPairingSignature;
 
 /// Broadcast MAC (FF:FF:FF:FF:FF:FF) — destination for the PairingPacket.
 /// ブロードキャスト MAC（FF:FF:FF:FF:FF:FF）= PairingPacket の宛先。
@@ -203,22 +163,12 @@ void onWifiEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
 
 static Comm* g_comm_instance = nullptr;
 
-// -----------------------------------------------------------------------------
-// checksum8 — low 8 bits of the byte sum (protocol SSOT checksum, byte 13).
-// checksum8 — バイト総和の下位8ビット（プロトコル SSOT のチェックサム、byte 13）。
-//
-// The transmitter computes byte[13] = (sum of bytes[0..12]) & 0xFF. We recompute
+// checksum8 (byte 13 validation) is protocol::checksum8 (espnow_protocol.hpp) —
+// the transmitter computes byte[13] = (sum of bytes[0..12]) & 0xFF; we recompute
 // over the same span and compare. Matches firmware/controller and the SSOT.
-// 送信機は byte[13]=(bytes[0..12]の総和)&0xFF を計算する。同じ範囲で再計算して照合。
-// -----------------------------------------------------------------------------
-static uint8_t checksum8(const uint8_t* data, size_t len)
-{
-    uint32_t sum = 0;
-    for (size_t i = 0; i < len; ++i) {
-        sum += data[i];
-    }
-    return static_cast<uint8_t>(sum & 0xFF);
-}
+// checksum8(byte 13検証)は protocol::checksum8 (espnow_protocol.hpp) — 送信機は
+// byte[13]=(bytes[0..12]の総和)&0xFF を計算する。同じ範囲で再計算して照合。
+using stampfly::protocol::checksum8;
 
 // =============================================================================
 // Public API

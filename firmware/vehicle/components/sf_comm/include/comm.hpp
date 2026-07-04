@@ -55,6 +55,7 @@
 #include <cstdint>
 
 #include "esp_now.h"
+#include "espnow_protocol.hpp"  // shared ControlPacket SSOT (firmware/common/protocol)
 
 #include "data_types.hpp"
 
@@ -67,11 +68,13 @@ namespace sf {
 /// sf_comm は中身を知らずに呼ぶ（依存性注入 — HAL をコマンド層依存から切り離す）。
 using RawInputSink = void (*)(const RawControlInput&);
 
-// Forward declaration of the ESP-NOW packet type (definition in comm.cpp).
-// The on-air layout is the protocol SSOT ControlPacket (14 bytes).
-// ESP-NOW パケット型の前方宣言（定義は comm.cpp）。on-air はプロトコル SSOT の
-// ControlPacket（14バイト）。
-struct ControlPacket;
+// The ESP-NOW packet type — alias of the shared protocol SSOT (definition in
+// firmware/common/protocol/include/espnow_protocol.hpp). The on-air layout is
+// the protocol SSOT ControlPacket (14 bytes).
+// ESP-NOW パケット型 — 共有プロトコルSSOTのエイリアス(定義は
+// firmware/common/protocol/include/espnow_protocol.hpp)。on-air はプロトコル
+// SSOT の ControlPacket（14バイト）。
+using ControlPacket = stampfly::protocol::ControlPacket;
 
 /// Communication manager
 /// 通信マネージャー
