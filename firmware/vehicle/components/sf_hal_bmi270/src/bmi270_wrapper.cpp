@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file bmi270_wrapper.cpp
  * @brief C++ wrapper implementation for BMI270 IMU Sensor
@@ -10,6 +18,24 @@
 static const char* TAG = "BMI270Wrapper";
 
 namespace stampfly {
+
+// Absorb the BMI270 mounting orientation here, in the driver, so callers receive
+// body-frame (FRD: X forward, Y right, Z down) quantities and never deal with chip
+// axes (project policy: drivers return body-axis quantities). Mapping verified on the
+// proven firmware/vehicle hardware (imu_task): body.x = chip.y, body.y = chip.x,
+// body.z = -chip.z — applied identically to accel [g] and gyro [rad/s].
+// BMI270 の搭載向きはここ（ドライバ）で吸収し、呼び出し側は機体(FRD)量だけを受け取り
+// チップ軸を意識しない（方針: ドライバは機体軸の量を返す）。対応は実証済みハード
+// (firmware/vehicle imu_task)で確認: body.x=chip.y, body.y=chip.x, body.z=-chip.z。
+// 加速度[g]・ジャイロ[rad/s]に同一適用。
+static AccelData toBodyFrame(const bmi270_accel_t& c)
+{
+    return AccelData{c.y, c.x, -c.z};
+}
+static GyroData toBodyFrame(const bmi270_gyro_t& c)
+{
+    return GyroData{c.y, c.x, -c.z};
+}
 
 BMI270Wrapper::~BMI270Wrapper()
 {
@@ -58,7 +84,8 @@ esp_err_t BMI270Wrapper::init(const Config& config)
         .gpio_cs = static_cast<uint8_t>(config.pin_cs),
         .spi_clock_hz = config.spi_clock_hz,
         .spi_host = config.spi_host,
-        .gpio_other_cs = static_cast<int8_t>(config.other_cs)
+        .gpio_other_cs = static_cast<int8_t>(config.other_cs),
+        .skip_bus_init = config.skip_bus_init
     };
 
     // Initialize SPI
@@ -120,13 +147,10 @@ esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
         return ret;
     }
 
-    accel.x = c_accel.x;
-    accel.y = c_accel.y;
-    accel.z = c_accel.z;
-
-    gyro.x = c_gyro.x;
-    gyro.y = c_gyro.y;
-    gyro.z = c_gyro.z;
+    // Chip → body frame (FRD). See toBodyFrame() above.
+    // チップ → 機体(FRD)。上の toBodyFrame() 参照。
+    accel = toBodyFrame(c_accel);
+    gyro  = toBodyFrame(c_gyro);
 
     return ESP_OK;
 }
@@ -143,10 +167,7 @@ esp_err_t BMI270Wrapper::readAccel(AccelData& accel)
         return ret;
     }
 
-    accel.x = c_accel.x;
-    accel.y = c_accel.y;
-    accel.z = c_accel.z;
-
+    accel = toBodyFrame(c_accel);   // chip → body (FRD)
     return ESP_OK;
 }
 
@@ -162,10 +183,7 @@ esp_err_t BMI270Wrapper::readGyro(GyroData& gyro)
         return ret;
     }
 
-    gyro.x = c_gyro.x;
-    gyro.y = c_gyro.y;
-    gyro.z = c_gyro.z;
-
+    gyro = toBodyFrame(c_gyro);   // chip → body (FRD)
     return ESP_OK;
 }
 
@@ -307,12 +325,8 @@ bool BMI270Wrapper::parseFIFOFrame(const uint8_t* data, size_t& offset, size_t m
         bmi270_convert_accel_raw(&device_, &raw_accel, &accel);
         bmi270_convert_gyro_raw(&device_, &raw_gyro, &gyro);
 
-        frame.accel.x = accel.x;
-        frame.accel.y = accel.y;
-        frame.accel.z = accel.z;
-        frame.gyro.x = gyro.x;
-        frame.gyro.y = gyro.y;
-        frame.gyro.z = gyro.z;
+        frame.accel = toBodyFrame(accel);   // chip → body (FRD)
+        frame.gyro  = toBodyFrame(gyro);
 
         frame.has_accel = true;
         frame.has_gyro = true;
@@ -334,9 +348,7 @@ bool BMI270Wrapper::parseFIFOFrame(const uint8_t* data, size_t& offset, size_t m
         bmi270_accel_t accel;
         bmi270_convert_accel_raw(&device_, &raw_accel, &accel);
 
-        frame.accel.x = accel.x;
-        frame.accel.y = accel.y;
-        frame.accel.z = accel.z;
+        frame.accel = toBodyFrame(accel);   // chip → body (FRD)
         frame.has_accel = true;
 
         return true;
@@ -356,9 +368,7 @@ bool BMI270Wrapper::parseFIFOFrame(const uint8_t* data, size_t& offset, size_t m
         bmi270_gyro_t gyro;
         bmi270_convert_gyro_raw(&device_, &raw_gyro, &gyro);
 
-        frame.gyro.x = gyro.x;
-        frame.gyro.y = gyro.y;
-        frame.gyro.z = gyro.z;
+        frame.gyro = toBodyFrame(gyro);   // chip → body (FRD)
         frame.has_gyro = true;
 
         return true;

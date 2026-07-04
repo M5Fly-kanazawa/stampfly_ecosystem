@@ -1,9 +1,21 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file motor_driver.hpp
- * @brief Motor Driver (LEDC PWM)
+ * @brief Motor Driver (LEDC PWM) — per-motor duty output for the X-quad.
+ *        モータードライバ（LEDC PWM）— X-quad の各モータ duty 出力。
  *
- * X-quad configuration, 150kHz PWM, 8-bit resolution
- * Mixer: M1=T-R+P+Y, M2=T-R-P-Y, M3=T+R-P+Y, M4=T+R+P-Y
+ * X-quad configuration, 150kHz PWM, 8-bit resolution. This is a pure HAL: it
+ * takes ready-made per-motor duties [0,1] and writes them to LEDC. The mixer
+ * (control allocation) lives in sf_actuator — this driver does NOT mix.
+ * X-quad 配置、150kHz PWM、8bit 分解能。純粋な HAL: 出来上がった各モータ duty[0,1] を
+ * 受け取り LEDC に書く。ミキサー（制御配分）は sf_actuator にあり、本ドライバは混合しない。
  */
 
 #pragma once
@@ -26,6 +38,13 @@ public:
         int gpio[NUM_MOTORS];     // GPIO pins for each motor
         int pwm_freq_hz;          // PWM frequency (default: 150000)
         int pwm_resolution_bits;  // PWM resolution (default: 8)
+        // Skip ledc_timer_config() when sf_board already configured the shared
+        // LEDC timer (R1). The driver then only does ledc_channel_config().
+        // A plain bool (no driver/ledc.h here) keeps this header host-buildable
+        // for the SIL motor stub. / sf_board が共有 LEDC タイマを構成済み(R1)の
+        // とき ledc_timer_config() を省く。本ドライバは channel 設定のみ行う。
+        // ここを bool にして driver/ledc.h を持ち込まず SIL スタブのビルドを保つ。
+        bool skip_timer_init = false;
     };
 
     MotorDriver() = default;
@@ -51,30 +70,6 @@ public:
     esp_err_t disarm();
 
     /**
-     * @brief Check if motors are armed
-     * @return true if armed
-     */
-    bool isArmed() const { return armed_; }
-
-    /**
-     * @brief Set individual motor output
-     * @param motor Motor index (0-3)
-     * @param value Output value (0.0-1.0)
-     */
-    void setMotor(int motor, float value);
-
-    /**
-     * @brief Set mixer output (legacy voltage-scale mode)
-     * レガシーミキサー出力（電圧スケールモード）
-     *
-     * @param thrust Thrust (0.0-1.0)
-     * @param roll Roll output from PID [V] (-3.7 to 3.7)
-     * @param pitch Pitch output from PID [V] (-3.7 to 3.7)
-     * @param yaw Yaw output from PID [V] (-3.7 to 3.7)
-     */
-    void setMixerOutput(float thrust, float roll, float pitch, float yaw);
-
-    /**
      * @brief Set motor duties directly (physical units mode)
      * モーターDutyを直接設定（物理単位モード）
      *
@@ -82,62 +77,21 @@ public:
      */
     void setMotorDuties(const float duties[4]);
 
-    /**
-     * @brief Test single motor
-     * @param motor Motor index (0-3)
-     * @param throttle_percent Throttle (0-100)
-     */
-    void testMotor(int motor, int throttle_percent);
-
     bool isInitialized() const { return initialized_; }
 
-    // Motor duty statistics
-    struct MotorStats {
-        float sum;
-        float min;
-        float max;
-        uint32_t count;
-    };
-
-    /**
-     * @brief Get motor duty statistics
-     * @param motor Motor index (0-3)
-     * @return Statistics for the motor
-     */
-    MotorStats getStats(int motor) const;
-
-    /**
-     * @brief Reset all motor statistics
-     */
-    void resetStats();
-
-    /**
-     * @brief Save statistics to NVS
-     */
-    void saveStatsToNVS();
-
-    /**
-     * @brief Load statistics from NVS
-     * @return true if loaded successfully
-     */
-    bool loadStatsFromNVS();
-
-    /**
-     * @brief Get last flight statistics (from NVS)
-     */
-    MotorStats getLastFlightStats(int motor) const { return last_flight_stats_[motor]; }
-
 private:
+    /**
+     * @brief Write one motor's duty to LEDC (internal; clamped to [0,1]).
+     *        1モータの duty を LEDC に書く（内部用・[0,1] にクランプ）。
+     * @param motor Motor index (0-3)
+     * @param value Output value (0.0-1.0)
+     */
+    void setMotor(int motor, float value);
+
     bool initialized_ = false;
     bool armed_ = false;
     Config config_;
     float motor_output_[NUM_MOTORS] = {0};
-
-    // Statistics (current flight)
-    MotorStats stats_[NUM_MOTORS] = {};
-
-    // Last flight statistics (loaded from NVS)
-    MotorStats last_flight_stats_[NUM_MOTORS] = {};
 };
 
 }  // namespace stampfly

@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file buzzer.cpp
  * @brief Buzzer Driver Implementation (LEDC PWM)
@@ -91,9 +99,16 @@ void Buzzer::playTone(uint16_t frequency, uint32_t duration_ms)
         ledc_set_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel), 0);
         ledc_update_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel));
     } else {
-        // Set frequency
-        ledc_set_freq(BUZZER_LEDC_MODE, static_cast<ledc_timer_t>(config_.ledc_timer), frequency);
-
+        // Set frequency. Capture the return so an LEDC failure (e.g. suspected clock
+        // contention while motors drive LEDC at 400Hz armed) is OBSERVABLE instead of
+        // silent — historically discarded, which would hide any in-flight buzzer fault.
+        // 周波数設定。戻り値を捕捉し、LEDC 失敗（armed 中にモータが 400Hz で LEDC を叩くクロック
+        // 競合疑い等）を無音でなくログ化する — 従来は破棄され飛行中の不具合を隠していた。
+        const esp_err_t fe = ledc_set_freq(BUZZER_LEDC_MODE,
+                                           static_cast<ledc_timer_t>(config_.ledc_timer), frequency);
+        if (fe != ESP_OK) {
+            ESP_LOGW(TAG, "ledc_set_freq(%u Hz) failed: %s", frequency, esp_err_to_name(fe));
+        }
         // Set 50% duty cycle for square wave tone
         uint32_t duty = (1 << 10) / 2;  // 50% of 10-bit resolution
         ledc_set_duty(BUZZER_LEDC_MODE, static_cast<ledc_channel_t>(config_.ledc_channel), duty);
@@ -151,6 +166,19 @@ void Buzzer::startTone()
     playTone(NOTE_G5, 200);
 }
 
+void Buzzer::readyTone()
+{
+    // 3 short beeps with a brief rest between — "system ready to arm" (matches the
+    // legacy vehicle's boot-complete chime). frequency 0 = rest (silence).
+    // 3連の短いビープ（間に休符）— 「ARM 可能（起動完了）」。旧 vehicle の起動完了音に合わせる。
+    for (int i = 0; i < 3; ++i) {
+        playTone(NOTE_C5, 100);
+        if (i < 2) {
+            playTone(0, 80);   // short rest / 短い休符
+        }
+    }
+}
+
 void Buzzer::armTone()
 {
     playTone(NOTE_E5, 100);
@@ -179,6 +207,39 @@ void Buzzer::pairingTone()
 {
     playTone(NOTE_C5, 100);
     playTone(NOTE_G5, 100);
+}
+
+// autotuneStartTone — loud, distinct, repeated high warble so it is unmissable over
+// motor noise: "autotune is starting now — hold a steady hover". 3× (A5→C6).
+// autotuneStartTone — モータ音に埋もれない高音の3連ワーブルで「autotune 開始・定位置保持」を
+// 明確に知らせる。A5→C6 を3回。
+void Buzzer::autotuneStartTone()
+{
+    for (int i = 0; i < 3; ++i) {
+        playTone(NOTE_A5, 130);
+        playTone(NOTE_C6, 130);
+        if (i < 2) playTone(0, 60);   // short rest between warbles / ワーブル間の休符
+    }
+}
+
+// autotuneOkTone — ascending fanfare ending high+long: "succeeded" (new gains applied).
+// autotuneOkTone — 上昇ファンファーレ（最後を高く長く）: 「成功」（新ゲイン適用）。
+void Buzzer::autotuneOkTone()
+{
+    playTone(NOTE_C5, 120);
+    playTone(NOTE_E5, 120);
+    playTone(NOTE_G5, 120);
+    playTone(NOTE_C6, 320);
+}
+
+// autotuneFailTone — descending to a long low note: "failed" (gains unchanged).
+// autotuneFailTone — 下降して低音を長く: 「失敗」（ゲイン据え置き）。
+void Buzzer::autotuneFailTone()
+{
+    playTone(NOTE_G5, 150);
+    playTone(NOTE_E5, 150);
+    playTone(NOTE_C5, 150);
+    playTone(NOTE_C4, 450);
 }
 
 void Buzzer::setMuted(bool muted, bool save_to_nvs)

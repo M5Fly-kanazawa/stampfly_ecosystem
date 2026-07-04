@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file bmm150.cpp
  * @brief BMM150 Magnetometer Driver Implementation
@@ -36,6 +44,13 @@ BMM150::~BMM150()
 
 esp_err_t BMM150::init(const Config& config)
 {
+    // Re-init guard: a second init would add a duplicate device handle to the
+    // I2C bus and leak the old one (same convention as the VL53/LED HALs).
+    // 再init ガード: 2回目の init は I2C バスへ重複ハンドルを追加し旧ハンドルが
+    // リークする（VL53/LED HAL と同じ流儀）。
+    if (initialized_) {
+        return ESP_ERR_INVALID_STATE;
+    }
     config_ = config;
     esp_err_t ret;
 
@@ -126,10 +141,49 @@ esp_err_t BMM150::read(MagData& data)
         return ret;
     }
 
-    // Apply compensation
-    data.x = compensateX(raw.x, raw.rhall);
-    data.y = compensateY(raw.y, raw.rhall);
-    data.z = compensateZ(raw.z, raw.rhall);
+    // Gate on the burst-embedded DRDY (0x48 bit0, read in the same transaction
+    // as the data): only a finished conversion sets it, so accepted samples are
+    // always consistent. A SEPARATE status pre-read proved unreliable on
+    // hardware (mag died entirely); the in-burst bit cannot disagree with the
+    // data it arrived with.
+    // バースト内 DRDY（0x48 bit0、データと同一トランザクションで読む）でゲート:
+    // 変換完了時のみ立つので、受理サンプルは常に一貫している。「別読み」の
+    // ステータス事前確認は実機で不安定（mag が全滅）だった。バースト内ビットは
+    // 一緒に届いたデータと矛盾し得ない。
+    if (!raw.drdy) {
+        data.data_ready = false;
+        return ESP_OK;   // no new sample yet — silent skip / 新サンプルなし
+    }
+
+    // Apply compensation, then remap chip axes → body frame (FRD) here, in the driver,
+    // so callers receive body-axis field and never deal with the sensor mounting
+    // (project policy: drivers return body-axis quantities). Mapping verified on the
+    // proven firmware/vehicle hardware (mag_task): body.x = -chip.y, body.y = chip.x,
+    // body.z = chip.z (note: differs from the IMU/flow mounting).
+    // 補償後、チップ軸→機体(FRD)へここ（ドライバ）で remap し、呼び出し側は機体軸の磁場を
+    // 受け取り搭載向きを意識しない（方針: ドライバは機体軸の量を返す）。対応は実証済みハード
+    // (firmware/vehicle mag_task)で確認: body.x=-chip.y, body.y=chip.x, body.z=chip.z
+    // （IMU/flow とは異なる搭載向き）。
+    const float chip_x = compensateX(raw.x, raw.rhall);
+    const float chip_y = compensateY(raw.y, raw.rhall);
+    const float chip_z = compensateZ(raw.z, raw.rhall);
+
+    // Saturation guard: the Bosch compensation returns NaN on sensor overflow
+    // (magnetic saturation — realistic near high motor currents). A NaN must
+    // never leave the driver: one NaN entering a Kalman update poisons the
+    // whole state/covariance irrecoverably. Report "no data" instead.
+    // 飽和ガード: Bosch の補償はセンサオーバーフロー時に NaN を返す（磁気飽和 —
+    // モータ大電流の近傍で現実に起こる）。NaN をドライバの外に出してはならない:
+    // Kalman 更新に NaN が1つ入ると状態・共分散全体が回復不能に汚染される。
+    // 代わりに「データなし」として報告する。
+    if (!std::isfinite(chip_x) || !std::isfinite(chip_y) || !std::isfinite(chip_z)) {
+        data.data_ready = false;
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    data.x = -chip_y;   // body forward (FRD X)
+    data.y =  chip_x;   // body right   (FRD Y)
+    data.z =  chip_z;   // body down    (FRD Z)
     data.timestamp_us = esp_timer_get_time();
     data.data_ready = true;
 
@@ -161,6 +215,14 @@ esp_err_t BMM150::readRaw(MagRawData& raw)
 
     // RHALL: 14-bit unsigned
     raw.rhall = (uint16_t)((((uint16_t)buf[7]) << 8) | (buf[6] & 0xFC)) >> 2;
+
+    // DRDY status (0x48 bit0), captured in the SAME transaction as the data —
+    // a separate status read raced the conversion and proved unreliable on
+    // hardware; this bit is by definition consistent with the bytes above.
+    // DRDY ステータス（0x48 bit0）。データと「同一トランザクション」で取得 —
+    // 別読みのステータスは変換と競合して実機で不安定だった。このビットは定義上
+    // 上のバイト列と一貫している。
+    raw.drdy = (buf[6] & 0x01) != 0;
 
     return ESP_OK;
 }

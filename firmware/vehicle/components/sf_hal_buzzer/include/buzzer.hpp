@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file buzzer.hpp
  * @brief Buzzer Driver (LEDC PWM)
@@ -69,11 +77,17 @@ public:
     // Preset sounds
     void beep();
     void startTone();
+    void readyTone();      // 3 short beeps — "system ready to arm" (boot complete)
+                           // 3連ビープ — 「ARM 可能（起動完了）」
     void armTone();
     void disarmTone();
     void lowBatteryWarning();
     void errorTone();
     void pairingTone();
+    void autotuneStartTone();  // loud high triple-warble — "autotune starting, hold steady"
+                               // 高音の3連ワーブル — 「autotune 開始・定位置保持」
+    void autotuneOkTone();     // ascending fanfare — autotune succeeded / 上昇音 — 成功
+    void autotuneFailTone();   // descending to low — autotune failed   / 下降低音 — 失敗
 
     bool isInitialized() const { return initialized_; }
 

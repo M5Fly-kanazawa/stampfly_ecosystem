@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file motor_driver.cpp
  * @brief Motor Driver Implementation (LEDC PWM)
@@ -6,15 +14,19 @@
 #include "motor_driver.hpp"
 #include "esp_log.h"
 #include "driver/ledc.h"
-#include "nvs_flash.h"
-#include "nvs.h"
 #include <algorithm>
 
 static const char* TAG = "MotorDriver";
 
 namespace stampfly {
 
-// LEDC configuration constants
+// LEDC configuration constants. These mirror sf_board's kMotorTimer /
+// kMotorSpeedMode (the timer's owner under R1). When skip_timer_init is set,
+// sf_board has configured this timer and we bind channels to it without
+// re-config; the two definitions must stay in agreement.
+// これらは sf_board の kMotorTimer / kMotorSpeedMode (R1 のタイマ所有者) と一致
+// させる。skip_timer_init のとき sf_board が構成済みなので、再構成せずチャンネル
+// を紐付ける。両定義は常に一致させること。
 static constexpr ledc_timer_t LEDC_TIMER = LEDC_TIMER_0;
 static constexpr ledc_mode_t LEDC_MODE = LEDC_LOW_SPEED_MODE;
 
@@ -40,20 +52,29 @@ esp_err_t MotorDriver::init(const Config& config)
     ESP_LOGI(TAG, "  PWM Freq: %d Hz, Resolution: %d bits",
              config.pwm_freq_hz, config.pwm_resolution_bits);
 
-    // Configure LEDC timer
-    ledc_timer_config_t timer_config = {
-        .speed_mode = LEDC_MODE,
-        .duty_resolution = static_cast<ledc_timer_bit_t>(config.pwm_resolution_bits),
-        .timer_num = LEDC_TIMER,
-        .freq_hz = static_cast<uint32_t>(config.pwm_freq_hz),
-        .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false,
-    };
+    esp_err_t ret = ESP_OK;
 
-    esp_err_t ret = ledc_timer_config(&timer_config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure LEDC timer: %s", esp_err_to_name(ret));
-        return ret;
+    // Configure the LEDC timer unless sf_board already owns it (R1). When the
+    // BSP configured LEDC_TIMER_0 in Phase 1, we skip re-config and only bind
+    // our channels to it below — sf_board is the single timer owner.
+    // sf_board が LEDC タイマを所有(R1)していなければ構成する。BSP が Phase 1 で
+    // LEDC_TIMER_0 を構成済みのときは再構成せず、下のチャンネルを紐付けるだけ。
+    if (config.skip_timer_init) {
+        ESP_LOGI(TAG, "LEDC timer config skipped (owned by sf_board)");
+    } else {
+        ledc_timer_config_t timer_config = {
+            .speed_mode = LEDC_MODE,
+            .duty_resolution = static_cast<ledc_timer_bit_t>(config.pwm_resolution_bits),
+            .timer_num = LEDC_TIMER,
+            .freq_hz = static_cast<uint32_t>(config.pwm_freq_hz),
+            .clk_cfg = LEDC_AUTO_CLK,
+            .deconfigure = false,
+        };
+        ret = ledc_timer_config(&timer_config);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to configure LEDC timer: %s", esp_err_to_name(ret));
+            return ret;
+        }
     }
 
     // Configure LEDC channels for each motor
@@ -103,14 +124,30 @@ esp_err_t MotorDriver::disarm()
     ESP_LOGI(TAG, "Motors disarmed");
     armed_ = false;
 
-    // Set all motors to 0
+    // Set all motors to 0. This is the SAFETY path — check every LEDC write and
+    // retry once on failure, then report the aggregate result instead of
+    // assuming the zero landed (a silently failed write here means a motor
+    // keeps spinning while the system believes it is stopped).
+    // 全モータを 0 に。ここは「安全」経路 — LEDC 書き込みを毎回検査し、失敗時は
+    // 1回リトライした上で集約結果を返す（ここで黙って失敗すると、システムは停止した
+    // つもりなのにモータが回り続ける）。
+    esp_err_t result = ESP_OK;
     for (int i = 0; i < NUM_MOTORS; i++) {
         motor_output_[i] = 0.0f;
-        ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
-        ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        esp_err_t e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
+        esp_err_t e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        if (e1 != ESP_OK || e2 != ESP_OK) {
+            e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[i], 0);
+            e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[i]);
+        }
+        if (e1 != ESP_OK || e2 != ESP_OK) {
+            ESP_LOGE(TAG, "disarm: motor %d duty-zero write FAILED (%s/%s)",
+                     i, esp_err_to_name(e1), esp_err_to_name(e2));
+            result = (e1 != ESP_OK) ? e1 : e2;
+        }
     }
 
-    return ESP_OK;
+    return result;
 }
 
 void MotorDriver::setMotor(int motor, float value)
@@ -121,47 +158,21 @@ void MotorDriver::setMotor(int motor, float value)
 
     motor_output_[motor] = std::clamp(value, 0.0f, 1.0f);
 
-    // Update statistics
-    float v = motor_output_[motor];
-    stats_[motor].sum += v;
-    stats_[motor].count++;
-    if (stats_[motor].count == 1) {
-        stats_[motor].min = v;
-        stats_[motor].max = v;
-    } else {
-        if (v < stats_[motor].min) stats_[motor].min = v;
-        if (v > stats_[motor].max) stats_[motor].max = v;
-    }
-
     // Calculate duty cycle based on resolution
+    // 分解能に基づき duty を計算
     uint32_t max_duty = (1U << config_.pwm_resolution_bits) - 1;
     uint32_t duty = static_cast<uint32_t>(motor_output_[motor] * max_duty);
 
-    ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
-    ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
-}
-
-void MotorDriver::setMixerOutput(float thrust, float roll, float pitch, float yaw)
-{
-    if (!initialized_ || !armed_) {
-        return;
+    // Log (rate-limited by rarity — these calls only fail on bad arguments) so a
+    // wiring/config regression is not silently swallowed at 400Hz.
+    // 失敗時はログする（これらは引数不正時のみ失敗するため実質まれ）。配線/設定の
+    // 退行が 400Hz で黙って握り潰されないようにする。
+    esp_err_t e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
+    esp_err_t e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
+    if (e1 != ESP_OK || e2 != ESP_OK) {
+        ESP_LOGW(TAG, "setMotor(%d): LEDC write failed (%s/%s)",
+                 motor, esp_err_to_name(e1), esp_err_to_name(e2));
     }
-
-    // X-quad mixer (legacy voltage-scale mode)
-    // レガシー電圧スケールミキサー
-    // M1 (FR, CCW): T - R + P + Y
-    // M2 (RR, CW):  T - R - P - Y
-    // M3 (RL, CCW): T + R - P + Y
-    // M4 (FL, CW):  T + R + P - Y
-    float m1 = thrust + 0.25f * (- roll + pitch + yaw) / 3.7f;
-    float m2 = thrust + 0.25f * (- roll - pitch - yaw) / 3.7f;
-    float m3 = thrust + 0.25f * (  roll - pitch + yaw) / 3.7f;
-    float m4 = thrust + 0.25f * (  roll + pitch - yaw) / 3.7f;
-
-    setMotor(MOTOR_FR, m1);
-    setMotor(MOTOR_RR, m2);
-    setMotor(MOTOR_RL, m3);
-    setMotor(MOTOR_FL, m4);
 }
 
 void MotorDriver::setMotorDuties(const float duties[4])
@@ -170,89 +181,15 @@ void MotorDriver::setMotorDuties(const float duties[4])
         return;
     }
 
-    // Direct duty assignment (physical units mode)
-    // 直接Duty設定（物理単位モード）
+    // Direct duty assignment (physical units mode). The mixer (control
+    // allocation) already ran in sf_actuator; this driver only writes.
+    // 直接 Duty 設定（物理単位モード）。ミキサー（制御配分）は sf_actuator で実行済み。
+    // 本ドライバは書き込むだけ。
     // Order: M1(FR), M2(RR), M3(RL), M4(FL)
     setMotor(MOTOR_FR, duties[0]);
     setMotor(MOTOR_RR, duties[1]);
     setMotor(MOTOR_RL, duties[2]);
     setMotor(MOTOR_FL, duties[3]);
-}
-
-void MotorDriver::testMotor(int motor, int throttle_percent)
-{
-    if (!initialized_ || motor < 0 || motor >= NUM_MOTORS) {
-        return;
-    }
-
-    float value = std::clamp(throttle_percent, 0, 100) / 100.0f;
-    ESP_LOGI(TAG, "Testing motor %d at %d%%", motor + 1, throttle_percent);
-
-    // Calculate duty cycle based on resolution
-    uint32_t max_duty = (1U << config_.pwm_resolution_bits) - 1;
-    uint32_t duty = static_cast<uint32_t>(value * max_duty);
-
-    // Directly set PWM for testing (bypasses arm check)
-    ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
-    ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
-}
-
-MotorDriver::MotorStats MotorDriver::getStats(int motor) const
-{
-    if (motor < 0 || motor >= NUM_MOTORS) {
-        return {};
-    }
-    return stats_[motor];
-}
-
-void MotorDriver::resetStats()
-{
-    for (int i = 0; i < NUM_MOTORS; i++) {
-        stats_[i] = {};
-    }
-}
-
-void MotorDriver::saveStatsToNVS()
-{
-    nvs_handle_t handle;
-    esp_err_t ret = nvs_open("motor", NVS_READWRITE, &handle);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to open NVS for motor stats: %s", esp_err_to_name(ret));
-        return;
-    }
-
-    // Save as blob
-    ret = nvs_set_blob(handle, "stats", stats_, sizeof(stats_));
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to save motor stats: %s", esp_err_to_name(ret));
-    } else {
-        nvs_commit(handle);
-        ESP_LOGI(TAG, "Motor stats saved to NVS");
-    }
-
-    nvs_close(handle);
-}
-
-bool MotorDriver::loadStatsFromNVS()
-{
-    nvs_handle_t handle;
-    esp_err_t ret = nvs_open("motor", NVS_READONLY, &handle);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "No motor stats in NVS");
-        return false;
-    }
-
-    size_t size = sizeof(last_flight_stats_);
-    ret = nvs_get_blob(handle, "stats", last_flight_stats_, &size);
-    nvs_close(handle);
-
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to load motor stats: %s", esp_err_to_name(ret));
-        return false;
-    }
-
-    ESP_LOGI(TAG, "Motor stats loaded from NVS");
-    return true;
 }
 
 }  // namespace stampfly

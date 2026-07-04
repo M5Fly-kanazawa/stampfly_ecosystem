@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file power_monitor.cpp
  * @brief INA3221 Power Monitor Driver Implementation
@@ -35,6 +43,13 @@ PowerMonitor::~PowerMonitor()
 
 esp_err_t PowerMonitor::init(const Config& config)
 {
+    // Re-init guard: a second init would add a duplicate device handle to the
+    // I2C bus and leak the old one (same convention as the VL53/LED HALs).
+    // 再init ガード: 2回目の init は I2C バスへ重複ハンドルを追加し旧ハンドルが
+    // リークする（VL53/LED HAL と同じ流儀）。
+    if (initialized_) {
+        return ESP_ERR_INVALID_STATE;
+    }
     config_ = config;
     esp_err_t ret;
 

@@ -1,45 +1,55 @@
 idf_component_register(
     SRCS
         "main.cpp"
-        "globals.cpp"
-        "init.cpp"
-        "tasks/imu_task.cpp"
-        "tasks/control_task.cpp"
-        "tasks/optflow_task.cpp"
-        "tasks/mag_task.cpp"
-        "tasks/baro_task.cpp"
-        "tasks/tof_task.cpp"
-        "tasks/power_task.cpp"
-        "tasks/led_task.cpp"
-        "tasks/button_task.cpp"
-        "tasks/comm_task.cpp"
-        "tasks/cli_task.cpp"
-        "tasks/telemetry_task.cpp"
-    INCLUDE_DIRS "." "tasks"
+        "../tasks/tasks.cpp"
+        "../tasks/imu_task.cpp"
+        "../tasks/control_task.cpp"
+        "../tasks/state_task.cpp"
+        "../tasks/flow_task.cpp"
+        "../tasks/mag_task.cpp"
+        "../tasks/baro_task.cpp"
+        "../tasks/tof_task.cpp"
+        "../tasks/power_task.cpp"
+        "../tasks/comm_task.cpp"
+        "../tasks/telemetry_task.cpp"
+        "../tasks/button_task.cpp"
+        "../tasks/notify_task.cpp"
+        "../tasks/cli_task.cpp"
+        "../tasks/log_task.cpp"
+         "../tasks/api_task.cpp"
+    INCLUDE_DIRS "." "../tasks"
     REQUIRES
         esp_timer
+        nvs_flash
+        console
+        sf_board
+        sf_core
+        sf_api
+        sf_math
+        sf_state
+        sf_estimator
+        sf_estimator_eskf
+        sf_estimator_complementary
+        sf_controller
+        sf_controller_pid
+        sf_autotune
+        sf_actuator
+        sf_comm
+        sf_command
+        sf_telemetry
+        sf_logger
+        sf_notify
+        sf_failsafe
+        sf_takeoff_landing
+        sf_calibration
         sf_hal_bmi270
-        sf_hal_vl53l3cx
-        sf_hal_pmw3901
         sf_hal_bmm150
         sf_hal_bmp280
-        sf_hal_power
+        sf_hal_vl53l3cx
+        sf_hal_pmw3901
         sf_hal_motor
         sf_hal_led
         sf_hal_buzzer
         sf_hal_button
-        sf_algo_filter
-        sf_algo_eskf
-        sf_algo_fusion
-        sf_algo_pid
-        sf_algo_control
-        sf_svc_health
-        sf_svc_state
-        sf_svc_comm
-        sf_svc_console
-        sf_svc_telemetry
-        sf_svc_wifi_cli
-        sf_svc_serial_cli
-        sf_svc_led
-        sf_svc_flight_command
+        sf_hal_power
 )

@@ -1,4 +1,4 @@
-# StampFly Vehicle Firmware
+# vehicle_new — Next-Generation StampFly Vehicle Firmware
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -6,1336 +6,156 @@
 
 ### このプロジェクトについて
 
-StampFly Vehicle Firmware は、StampFly ドローン機体用のフライトコントローラファームウェアです。
-このファームウェアは**スケルトン（骨格）**として設計されており、飛行制御を実装したいエンジニアや学生のために、
-センサー読み取り、状態推定、通信などの基盤機能をすべて提供します。
+vehicle_new は、StampFly 教育プラットフォームのための次世代機体ファームウェアです。設計は **関心の分離・可読性・教育的価値** を最優先に据え、Workshop 受講者から研究者・ファーム実装者まで、それぞれが自分のテーマに集中できるよう **4 階層アクセス（L0〜L3）** を提供します。
 
-**スケルトンとは：**
-- センサーの読み込み、キャリブレーション
-- StampFly の各状態の一元管理
-- コントローラとの通信
-- CLI によるセンサ値取得・ゲイン調整
-- 位置姿勢推定（ESKF: Error-State Kalman Filter）
+### 対象読者
 
-これらが実装済みで、ユーザーは `control_task.cpp` の制御ループに自分の制御則を実装するだけで飛行させることができます。
+| 層 | 入口 | 典型ユーザー |
+|----|-----|------------|
+| **L0: Sketch API** | `ws::*` | Workshop 受講者・初学者 — `setup()` / `loop_400Hz(dt)` で完結 |
+| **L1: Topic API** | `sf::api::*` | 推定・制御・ガイダンス学習者 — 自分の ESKF / PID / Navigator を実装 |
+| **L2: HAL Direct** | `stampfly::*Wrapper` | HW 学習者 — SPI / I2C / RMT / LEDC を理解 |
+| **L3: BSP Internal** | `sf::internal::board` | ファーム実装者・拡張者 — 起動順序や HW 資源管理を変更 |
 
-### 対象ハードウェア
+各層は **並列に共存し**、学習者は自分のレベルに応じて入口を選びます。
 
-- **MCU**: M5Stamp S3（ESP32-S3）
-- **フレームワーク**: ESP-IDF v5.5.2 + FreeRTOS
-- **機体**: StampFly
+### 設計文書
 
-### 主な機能
+実装・修正の前に、以下を必ず読んでください（`docs/` 配下）。
 
-| 機能 | 説明 |
-|------|------|
-| 6軸IMU | BMI270（加速度・ジャイロ）400Hz |
-| 地磁気センサー | BMM150 100Hz |
-| 気圧センサー | BMP280 50Hz |
-| ToFセンサー | VL53L3CX（底面・前方）30Hz |
-| オプティカルフロー | PMW3901 100Hz |
-| 電源監視 | INA3221 10Hz |
-| 位置姿勢推定 | ESKF（Error-State Kalman Filter） |
-| 通信 | ESP-NOW（コントローラ）+ WebSocket（テレメトリ） |
-| CLI | USBシリアル経由のコマンドライン |
-| LED | WS2812 RGB LED（状態表示） |
-| ブザー | 状態通知用 |
-
----
-
-## 2. 開発環境のセットアップ
-
-### 必要なソフトウェア
-
-1. **ESP-IDF v5.5.2**
-   - [公式インストールガイド](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/get-started/index.html)
-   - Windows の場合は ESP-IDF Tools Installer を推奨
-   - macOS/Linux の場合は `install.sh` を使用
-
-2. **USB ドライバ**
-   - M5Stamp S3 は USB Serial/JTAG を使用
-   - macOS/Linux では通常不要
-   - Windows では CP210x ドライバが必要な場合あり
-
-### ESP-IDF のセットアップ（macOS/Linux）
-
-```bash
-# ESP-IDF をクローン
-mkdir -p ~/esp
-cd ~/esp
-git clone -b v5.5.2 --recursive https://github.com/espressif/esp-idf.git
-
-# インストールスクリプトを実行
-cd esp-idf
-./install.sh esp32s3
-
-# 環境変数を設定（毎回実行するか、.bashrc/.zshrc に追加）
-. ~/esp/esp-idf/export.sh
-```
-
-### プロジェクトのビルド
-
-```bash
-# プロジェクトディレクトリに移動
-cd firmware/vehicle
-
-# ビルド
-idf.py build
-
-# フラッシュ（書き込み）
-idf.py flash
-
-# シリアルモニター（ログ表示）
-idf.py monitor
-
-# ビルド・フラッシュ・モニターを一度に実行
-idf.py build flash monitor
-```
-
-### シリアルポートの指定
-
-デバイスが自動検出されない場合：
-
-```bash
-# ポートを指定してフラッシュ
-idf.py -p /dev/tty.usbmodem* flash monitor
-
-# Windows の場合
-idf.py -p COM3 flash monitor
-```
-
----
-
-## 3. ソフトウェアアーキテクチャ
-
-### ディレクトリ構造
-
-```
-firmware/vehicle/
-├── main/                      # メインアプリケーション
-│   ├── main.cpp               # エントリポイント・初期化シーケンス
-│   ├── config.hpp             # 全ての設定パラメータ（GPIO、タスク優先度、ESKF等）
-│   ├── globals.hpp/.cpp       # グローバル変数の宣言・定義
-│   ├── init.hpp/.cpp          # 初期化関数
-│   ├── rate_controller.hpp    # 角速度制御器の定義
-│   ├── attitude_controller.hpp # 姿勢制御器（STABILIZEモード）
-│   ├── altitude_controller.hpp # 高度制御器（ALTITUDE_HOLDモード）
-│   ├── position_controller.hpp # 位置制御器（POSITION_HOLDモード）
-│   ├── landing_handler.hpp    # 着陸検出・処理
-│   ├── stationary_detector.hpp # 静止状態検出
-│   ├── level_calibrator.hpp   # レベルキャリブレーション
-│   └── tasks/                 # FreeRTOS タスク
-│       ├── tasks.hpp          # タスク関数プロトタイプ
-│       ├── imu_task.cpp       # IMU読み取り・センサーフュージョン (400Hz)
-│       ├── control_task.cpp   # 制御ループ (400Hz) ★ユーザー実装箇所
-│       ├── mag_task.cpp       # 地磁気センサー (100Hz)
-│       ├── baro_task.cpp      # 気圧センサー (50Hz)
-│       ├── tof_task.cpp       # ToFセンサー (30Hz)
-│       ├── optflow_task.cpp   # オプティカルフロー (100Hz)
-│       ├── comm_task.cpp      # ESP-NOW通信 (50Hz)
-│       ├── power_task.cpp     # 電源監視 (10Hz)
-│       ├── led_task.cpp       # LED制御 (50Hz)
-│       ├── button_task.cpp    # ボタン監視 (50Hz)
-│       ├── cli_task.cpp       # CLIコマンド処理
-│       └── telemetry_task.cpp # WebSocketテレメトリ (50Hz)
-├── components/                # ESP-IDF コンポーネント
-│   ├── sf_hal_*/              # ハードウェア抽象化レイヤー（センサードライバ）
-│   ├── sf_algo_*/             # アルゴリズム（ESKF、PID、フィルタ）
-│   └── sf_svc_*/              # サービス（状態管理、通信、CLI）
-├── tools/                     # 開発支援ツール
-│   └── scripts/               # Python解析スクリプト
-├── logs/                      # フライトログ保存先
-├── CMakeLists.txt             # ビルド設定
-├── sdkconfig.defaults         # SDK デフォルト設定
-└── partitions.csv             # パーティションテーブル
-```
-
-### コンポーネント一覧
-
-#### HAL（Hardware Abstraction Layer）
-
-| コンポーネント | 説明 |
-|---------------|------|
-| `sf_hal_bmi270` | IMU（加速度・ジャイロ）ドライバ |
-| `sf_hal_bmm150` | 地磁気センサードライバ |
-| `sf_hal_bmp280` | 気圧センサードライバ |
-| `sf_hal_vl53l3cx` | ToFセンサードライバ |
-| `sf_hal_pmw3901` | オプティカルフロードライバ |
-| `sf_hal_motor` | モータードライバ（PWM制御） |
-| `sf_hal_led` | WS2812 LEDドライバ |
-| `sf_hal_buzzer` | ブザードライバ |
-| `sf_hal_button` | ボタン入力ドライバ |
-| `sf_hal_power` | 電源監視（INA3221） |
-
-#### Algorithm
-
-| コンポーネント | 説明 |
-|---------------|------|
-| `sf_algo_eskf` | Error-State Kalman Filter（位置姿勢推定） |
-| `sf_algo_fusion` | センサーフュージョン管理 |
-| `sf_algo_pid` | PID制御器（不完全微分付き） |
-| `sf_algo_filter` | LPFなどのフィルタ |
-| `sf_algo_math` | 数学ユーティリティ（ベクトル、クォータニオン） |
-| `sf_algo_control` | 制御配分・モーターモデル |
-
-#### Service
-
-| コンポーネント | 説明 |
-|---------------|------|
-| `sf_svc_state` | StampFlyState（状態管理シングルトン） |
-| `sf_svc_comm` | ESP-NOW コントローラ通信 |
-| `sf_svc_cli` | CLIコマンド処理 |
-| `sf_svc_led` | LEDManager（優先度付きLED制御） |
-| `sf_svc_logger` | バイナリログ記録 |
-| `sf_svc_telemetry` | WebSocketテレメトリ |
-| `sf_svc_health` | センサーヘルス監視 |
-| `sf_svc_serial_cli` | USBシリアルCLI |
-| `sf_svc_console` | コンソールコマンド管理 |
-| `sf_svc_wifi_cli` | WiFi経由CLI |
-| `sf_svc_control_arbiter` | 制御ソース調停（ESP-NOW/UDP） |
-| `sf_svc_flight_command` | 高レベルフライトコマンド |
-| `sf_svc_udp` | UDP通信 |
-| `sf_lib_line_editor` | ラインエディタライブラリ |
-
-### タスク構成
-
-FreeRTOS のデュアルコア構成を活用しています。
-
-#### Core 1（高速リアルタイムタスク）
-
-| タスク | 周期 | 優先度 | 説明 |
-|--------|------|--------|------|
-| IMUTask | 400Hz | 24 | IMU読み取り、ESKF更新 |
-| ControlTask | 400Hz | 23 | 角速度制御、モーター出力 |
-| OptFlowTask | 100Hz | 20 | オプティカルフロー読み取り |
-
-#### Core 0（周辺・通信タスク）
-
-| タスク | 周期 | 優先度 | 説明 |
-|--------|------|--------|------|
-| MagTask | 100Hz | 18 | 地磁気センサー |
-| BaroTask | 50Hz | 16 | 気圧センサー |
-| CommTask | 50Hz | 15 | ESP-NOW通信 |
-| ToFTask | 30Hz | 14 | ToFセンサー |
-| TelemetryTask | 50Hz | 13 | WebSocket送信 |
-| PowerTask | 10Hz | 12 | 電源監視 |
-| ButtonTask | 50Hz | 10 | ボタン入力 |
-| LEDTask | 50Hz | 8 | LED更新 |
-| CLITask | - | 5 | コマンド処理 |
-
-### 起動シーケンス
-
-```
-app_main()
-    │
-    ├─ Phase 1: 機体を地面に置く (StampS3: 白色LED・5秒)
-    │
-    ├─ Phase 2: センサー初期化
-    │   ├─ I2C初期化
-    │   ├─ アクチュエータ初期化（モーター、LED、ブザー）
-    │   ├─ センサー初期化（IMU、Mag、Baro、ToF、OptFlow）
-    │   ├─ 推定器初期化（ESKF、LPF）
-    │   ├─ 通信初期化（ESP-NOW）
-    │   ├─ CLI初期化
-    │   ├─ Logger初期化
-    │   └─ Telemetry初期化
-    │
-    ├─ タスク開始
-    │
-    ├─ Phase 3: センサー安定化待機 (StampS3: マゼンタ点滅)
-    │   └─ 全センサーの標準偏差が閾値以下になるまで待機
-    │
-    └─ Phase 4: 準備完了 (BODY: 緑点灯, StampS3: モード色・ビープ音)
-        └─ IDLE状態へ遷移
-```
-
----
-
-## 4. 状態管理
-
-### フライト状態
-
-StampFlyState クラスが機体の状態を一元管理します。
-
-```
-INIT ─────────┐
-              │ 初期化完了
-              ▼
-IDLE ◄────── ARMED
- │            │ ▲
- │            │ │
- │ ARM要求    │ │ DISARM要求
- │            │ │
- └──────────► │ │
-              ▼ │
-           FLYING
-              │
-              │ エラー検出
-              ▼
-           ERROR
-```
-
-| 状態 | 説明 | BODY LED（上面＋下面） | StampS3 LED |
-|------|------|----------------------|-------------|
-| INIT | 初期化中 | - | 白点灯→マゼンタ点滅 |
-| IDLE | 待機中（ARM可能） | 緑点灯 | モード色 |
-| ARMED | アーム済み（モーター有効） | 緑ゆっくり点滅 | モード色 |
-| FLYING | 飛行中 | 黄点灯 | モード色 |
-| ERROR | エラー | 赤高速点滅 | - |
-
-**StampS3 LED モード色:**
-ACRO=青 / STABILIZE=緑 / ALTITUDE_HOLD=オレンジ / POSITION_HOLD=マゼンタ
-
-**StampS3 LED キャリブレーション表示（DISARM中）:**
-赤ゆっくり点滅=着陸待ち / 黄橙ゆっくり点滅=キャリブ中 / 緑点灯=完了
-
-**BODY LED 警告（重畳）:**
-シアンゆっくり点滅=低電圧 / 赤高速点滅=衝撃検出・センサ異常
-
-### ARM/DISARM 操作
-
-**ボタンによる操作：**
-- IDLE状態でクリック → ARM
-- ARMED状態でクリック → DISARM
-
-**コントローラによる操作：**
-- ARM フラグの立ち上がりエッジで状態遷移
-
-**自動DISARM：**
-- 衝撃検出時（加速度 > 3G または 角速度 > 800°/s）
-
-### ペアリングモード
-
-ボタン長押し（3秒）でペアリングモードに入ります。
-- 青色高速点滅
-- コントローラからのペアリング要求を受け付け
-
----
-
-## 5. センサーフュージョン（ESKF）
-
-### ESKF の概要
-
-Error-State Kalman Filter を使用して、複数のセンサー情報を統合し、
-機体の位置・速度・姿勢を高精度に推定します。
-
-**推定状態（15次元）：**
-- 位置 (x, y, z) - 3次元
-- 速度 (vx, vy, vz) - 3次元
-- 姿勢 (クォータニオン誤差) - 3次元
-- ジャイロバイアス (bx, by, bz) - 3次元
-- 加速度バイアス (ax, ay, az) - 3次元
-
-### センサー入力
-
-| センサー | 用途 | 更新レート |
-|----------|------|------------|
-| IMU（加速度・ジャイロ） | 予測ステップ | 400Hz |
-| 地磁気 | ヨー補正 | 100Hz |
-| 気圧 | 高度補正 | 50Hz |
-| ToF | 高度補正（低高度） | 30Hz |
-| オプティカルフロー | 水平速度補正 | 100Hz |
-
-### パラメータ調整
-
-すべてのパラメータは `config.hpp` の `namespace config::eskf` に集約されています。
-
-```cpp
-namespace eskf {
-    // プロセスノイズ（値が大きい = センサーを信頼）
-    inline constexpr float GYRO_NOISE = 0.009655f;
-    inline constexpr float ACCEL_NOISE = 0.062885f;
-
-    // 観測ノイズ（値が大きい = 観測を信頼しない）
-    inline constexpr float BARO_NOISE = 0.1f;
-    inline constexpr float TOF_NOISE = 0.03f;
-    inline constexpr float MAG_NOISE = 1.0f;
-    inline constexpr float FLOW_NOISE = 0.01f;
-}
-```
-
----
-
-## 6. 制御系の実装
-
-### 制御タスクの構造
-
-制御は `control_task.cpp` で実装されています。
-カスケード制御アーキテクチャにより、4つのフライトモードをサポートしています。
-
-### フライトモード
-
-| モード | 説明 | 制御構造 |
-|-------|------|---------|
-| ACRO | 角速度制御 | スティック → 目標角速度 → Rate PID → モーター |
-| STABILIZE | 姿勢制御 | スティック → 目標角度 → Attitude PID → Rate PID → モーター |
-| ALTITUDE_HOLD | 高度維持 | 高度PID → 速度PID → 推力補正 + STABILIZE |
-| POSITION_HOLD | 位置保持 | 位置PID → 速度PID → 角度補正 + ALTITUDE_HOLD |
-
-```
-コントローラ入力（スティック）
-        │
-        ▼
-  目標角速度計算
-        │
-        ▼
-   PID制御器        ◄─── 現在の角速度（IMUから）
-        │
-        ▼
-  モーターミキサー
-        │
-        ▼
-   モーター出力
-```
-
-### モーター配置
-
-```
-               Front
-          FL (M4)   FR (M1)
-             ╲   ▲   ╱
-              ╲  │  ╱
-               ╲ │ ╱
-                ╲│╱
-                 ╳         ← 機体中心
-                ╱│╲
-               ╱ │ ╲
-              ╱  │  ╲
-             ╱   │   ╲
-          RL (M3)    RR (M2)
-                Rear
-
-モーター回転方向:
-  M1 (FR): CCW（反時計回り）
-  M2 (RR): CW（時計回り）
-  M3 (RL): CCW（反時計回り）
-  M4 (FL): CW（時計回り）
-```
-
-### PIDゲインの調整
-
-`config.hpp` の `namespace config::rate_control` で設定します。
-
-```cpp
-namespace rate_control {
-    // Roll rate PID
-    inline constexpr float ROLL_RATE_KP = 0.65f;
-    inline constexpr float ROLL_RATE_TI = 0.7f;   // 積分時間 [s]
-    inline constexpr float ROLL_RATE_TD = 0.01f;  // 微分時間 [s]
-
-    // Pitch rate PID
-    inline constexpr float PITCH_RATE_KP = 0.95f;
-    inline constexpr float PITCH_RATE_TI = 0.7f;
-    inline constexpr float PITCH_RATE_TD = 0.025f;
-
-    // Yaw rate PID
-    inline constexpr float YAW_RATE_KP = 3.0f;
-    inline constexpr float YAW_RATE_TI = 0.8f;
-    inline constexpr float YAW_RATE_TD = 0.01f;
-}
-```
-
-### 独自の制御を実装する場合
-
-`control_task.cpp` を編集して、独自の制御則を実装できます。
-
-```cpp
-// 例：姿勢制御（アングル制御）を追加する場合
-
-// 1. 目標姿勢を計算
-float roll_angle_target = roll_cmd * MAX_ROLL_ANGLE;
-float pitch_angle_target = pitch_cmd * MAX_PITCH_ANGLE;
-
-// 2. 現在の姿勢を取得（ESKFから）
-auto state = g_fusion.getState();
-float roll_current = state.roll;
-float pitch_current = state.pitch;
-float yaw_current = state.yaw;
-
-// 3. 姿勢制御PIDで目標角速度を計算
-float roll_rate_target = attitude_pid.update(roll_angle_target, roll_current, dt);
-
-// 4. 角速度制御（既存コード）
-float roll_out = g_rate_controller.roll_pid.update(roll_rate_target, roll_rate_current, dt);
-```
-
----
-
-## 7. CLI コマンド
-
-USBシリアル経由でCLIコマンドが使用できます。
-
-### 基本コマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `help` | コマンド一覧を表示 |
-| `status` | システム状態を表示 |
-| `version` | バージョン情報を表示 |
-| `reboot` | システムを再起動 |
-
-### センサーコマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `sensor` | センサーデータ表示 |
-| `attitude?` | 現在の姿勢を表示 |
-| `baro?` | 気圧センサーの現在値を表示 |
-| `tof?` | ToFセンサーの現在値を表示 |
-| `acceleration?` | 加速度の現在値を表示 |
-| `battery?` | バッテリー状態を表示 |
-| `speed?` | 速度を表示 |
-| `height?` | 高度を表示 |
-| `pos` | 位置情報を表示 |
-
-### 制御コマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `motor <n> <duty>` | モーター n (1-4) を duty% で回転 |
-| `gain` | PIDゲイン表示・設定 |
-| `trim` | トリム設定 |
-| `ctrl` | 制御状態モニタ |
-| `attitude` | 姿勢制御状態表示 |
-
-### フライトコマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `takeoff` | 自動離陸 |
-| `land` | 自動着陸 |
-| `hover` | ホバリング |
-| `jump` | ジャンプ |
-| `emergency` | 緊急停止 |
-| `stop` | 停止 |
-| `up` / `down` | 上昇 / 下降 |
-| `left` / `right` | 左 / 右移動 |
-| `forward` / `back` | 前進 / 後退 |
-| `cw` / `ccw` | 時計回り / 反時計回り旋回 |
-
-### 通信コマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `comm` | 通信モード表示・設定 |
-| `pair` | ペアリング開始 |
-| `unpair` | ペアリング解除 |
-| `wifi` | WiFi設定 |
-
-### ログコマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `binlog` | バイナリログ記録の制御 |
-| `loglevel <level>` | ログレベルを設定（none/error/warn/info/debug） |
-
-### キャリブレーションコマンド
-
-| コマンド | 説明 |
-|----------|------|
-| `calib` | キャリブレーション |
-| `magcal` | 地磁気キャリブレーション |
-
-### その他
-
-| コマンド | 説明 |
-|----------|------|
-| `led` | LED制御 |
-| `sound` | ブザー制御 |
-| `debug` | デバッグ情報 |
-| `rc` | RC入力モニタ |
-| `flight` | フライト情報表示 |
-
----
-
-## 8. テレメトリとログ
-
-### WebSocket テレメトリ
-
-ESP-NOWと同時にWiFiアクセスポイントを起動し、WebSocketでテレメトリデータを配信します。
-
-| 項目 | 値 |
+| 文書 | 内容 |
 |------|-----|
-| SSID | `StampFly` |
-| パスワード | なし（オープン） |
-| URL | `http://192.168.4.1/` |
-| 更新レート | 50Hz |
-| パケットサイズ | 116 bytes |
-
-**テレメトリパケット構造：**
-
-現在2種類のパケット形式をサポートしています。
-
-#### レガシーパケット（v2, 116バイト）
-
-WebSocket経由の基本テレメトリ。header=0xAA, packet_type=0x20。
-
-#### 拡張バッチパケット（552バイト、現在使用中）
-
-高速テレメトリ用。4サンプルをバッチ送信。header=0xBD, packet_type=0x32。
-
-| フィールド | サイズ | 説明 |
-|-----------|--------|------|
-| header | 1B | 0xBD固定 |
-| packet_type | 1B | 0x32 |
-| batch_seq | 2B | バッチシーケンス番号 |
-| num_samples | 1B | サンプル数（4） |
-| samples[4] | 544B | ExtendedSample × 4 |
-| checksum | 1B | XORチェックサム |
-| padding | 3B | アライメント |
-
-各ExtendedSample（136バイト）にはタイムスタンプ（μs精度）、姿勢（クォータニオン）、
-位置・速度、IMUデータ、バイアス推定値、気圧高度、オプティカルフロー、
-ToF距離、飛行状態等が含まれます。
-
-**Web UI機能：**
-- 姿勢インジケータ（人工水平儀）
-- 上面ビュー・側面ビュー
-- 各種センサーデータカード（姿勢、位置、速度、IMU、地磁気、ToF距離など）
-- 時系列グラフ
-- CSVログ記録・ダウンロード
-
-### バイナリログ
-
-400Hz でセンサーデータとESKF状態をバイナリ形式で記録します。
-
-```bash
-# ログ取得（Python）
-python tools/scripts/log_capture.py
-
-# ログ可視化
-python tools/scripts/viz_all.py logs/flight_001.bin
-```
+| [`docs/requirements.md`](docs/requirements.md) | 要件定義書 |
+| [`docs/architecture.md`](docs/architecture.md) | アーキテクチャ設計（v3: 4階層 + R1〜R16） |
+| [`docs/detailed_design.md`](docs/detailed_design.md) | Topic / インターフェース / 状態遷移 |
+| [`docs/coding_and_education.md`](docs/coding_and_education.md) | コーディング規約・教育計画 |
+| [`docs/development_roadmap.md`](docs/development_roadmap.md) | 開発ロードマップ・SIL→実機ワークフロー |
+| [`docs/hardware_init.md`](docs/hardware_init.md) | BSP・HW 初期化設計 |
 
 ---
 
-## 9. GPIO 割り当て
+## 2. ライセンス
 
-### SPI バス
+### 本プロジェクトのライセンス
 
-| GPIO | 機能 |
-|------|------|
-| 14 | MOSI |
-| 43 | MISO |
-| 44 | SCK |
-| 46 | IMU CS |
-| 12 | OptFlow CS |
+vehicle_new ファームウェア本体（StampFly Ecosystem の一部として開発された原コード）は **MIT License** で配布されます。プロジェクトルートの [`LICENSE`](../../LICENSE) を参照してください。
 
-### I2C バス
+```
+SPDX-License-Identifier: MIT
+Copyright (c) 2026 Kouhei Ito
+```
 
-| GPIO | 機能 |
-|------|------|
-| 3 | SDA |
-| 4 | SCL |
+全 .cpp / .hpp ファイルの先頭にも上記 SPDX ヘッダを付与しています。
 
-### モーター（PWM）
+### 第三者コンポーネントのライセンス
 
-| GPIO | モーター | 位置 | 回転 |
-|------|---------|------|------|
-| 42 | M1 | FR (右前) | CCW |
-| 41 | M2 | RR (右後) | CW |
-| 10 | M3 | RL (左後) | CCW |
-| 5 | M4 | FL (左前) | CW |
+vehicle_new は複数の第三者ドライバ・フレームワークを利用しています。詳細は [`NOTICE.md`](NOTICE.md) を参照してください。
 
-### その他
+| 主要な第三者要素 | ライセンス | 備考 |
+|-----------------|-----------|-----|
+| Bosch Sensortec BMI270/BMM150/BMP280 C driver | BSD-3-Clause | センサ HAL の core |
+| STMicroelectronics VL53L3CX driver | GPL-2.0+ OR BSD-3-Clause（**BSD-3-Clause を選択**） | ToF センサ |
+| Espressif ESP-IDF + led_strip managed component | Apache 2.0 | フレームワーク |
 
-| GPIO | 機能 |
-|------|------|
-| 21 | MCU内蔵LED |
-| 39 | ボード上LED（2個直列） |
-| 40 | ブザー |
-| 0 | ボタン |
-| 7 | ToF XSHUT (底面) |
-| 9 | ToF XSHUT (前方) |
+→ vehicle_new バイナリ全体は **MIT + BSD-3-Clause + Apache 2.0** の互換ライセンスのみで構成され、GPL コードを含みません。
 
 ---
 
-## 10. トラブルシューティング
+## 3. Credits / Influences
 
-### ビルドエラー
+### 起点ファームウェア
 
-**ESP-IDF が見つからない：**
+vehicle_new は **M5Stack 社公開の M5StampFly 公式ファームウェア** を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものです。
+
+- M5StampFly 公式: https://github.com/m5stack/M5StampFly
+- ライセンス: MIT
+- Copyright: Kouhei Ito
+
+本プロジェクトの著作者と M5StampFly 公式ファームウェアの主たる著作者は同一（Kouhei Ito）です。
+
+### アーキテクチャ思想の借用元
+
+本プロジェクトは以下の業界標準フレームワークから **アイデア・思想** を借用していますが、コードの直接借用はしていません（idea/expression dichotomy）。
+
+| 借用元 | 借用した思想 | 本プロジェクトでの実装 |
+|-------|-----------|------------------|
+| **PX4 Autopilot** ([px4.io](https://px4.io/), BSD-3-Clause) | uORB Pub-Sub の思想 | 同一 MCU 内特化のテンプレート + 3 ポリシー (Latest / RingBuffer / Queue) として独自実装 |
+| **Zephyr RTOS** ([zephyrproject.org](https://www.zephyrproject.org/), Apache 2.0) | parent-child バス所有モデル、init level による順序明示 | `sf_board` BSP として ESP-IDF ネイティブ機構で実装（devicetree なし） |
+| **Crazyflie firmware** ([bitcraze.io](https://www.bitcraze.io/), GPLv3) | 教育プラットフォームとしての枠組み | 同じ「ナノドローン教育」ニッチで、ESP32 ベースの代替として位置づけ |
+| **Arduino** ([arduino.cc](https://www.arduino.cc/), LGPL/GPL) | `setup()` / `loop()` の簡潔さ | L0 Sketch API（`ws::*`）として再現、HW 詳細を完全に隠蔽 |
+
+### 学術的位置づけ
+
+本プロジェクトは室内ナノドローン教育プラットフォームのオープンソース系譜に連なります。引用する先行研究：
+
+- Giernacki et al., "Crazyflie 2.0 quadrotor as a platform for research and education in robotics and control engineering" (2017)
+- Preiss et al., "Crazyswarm: A large nano-quadcopter swarm" (IROS 2017)
+- Silano et al., "CrazyS: a Software-In-The-Loop platform for the Crazyflie 2.0 nano-quadcopter" (MED 2018)
+
+vehicle_new の独自貢献：
+1. **4 階層アクセス（L0〜L3）** — 単一ファームで Workshop 受講者から FC 実装者まで階段的に降りられる構造
+2. **`@design` タグ + 判定ステータス [OK]/[NG]/[--]** — 設計→実装のトレーサビリティを inline で保持
+3. **横断ルール R1〜R16** — 教育性 + 業界標準 + スパゲッティ対策の組合せ
+4. **ACRO 起点の Layer-by-Layer Identification** — 段階的プラント同定戦略
+
+---
+
+## 4. ビルドと実行
+
 ```bash
-# 環境変数を設定
-. ~/esp/esp-idf/export.sh
-```
+# 環境セットアップ (ESP-IDF + sf CLI)
+source setup_env.sh
 
-**コンポーネントが見つからない：**
-```bash
-# managed_components を削除して再ビルド
-rm -rf managed_components
+# vehicle_new をビルド
+cd firmware/vehicle_new
 idf.py build
+
+# 書き込み + シリアルモニタ
+idf.py flash monitor
 ```
 
-### 書き込みエラー
-
-**ポートが見つからない：**
-```bash
-# デバイスを確認
-ls /dev/tty.usb*  # macOS
-ls /dev/ttyUSB*   # Linux
-```
-
-**書き込みモードに入れない：**
-1. ボタンを押しながらUSBを接続
-2. `idf.py flash` を実行
-
-### センサーが初期化されない
-
-- I2C接続を確認（SDA/SCL）
-- センサーの電源を確認
-- `status` コマンドでセンサー状態を確認
+詳細は [`docs/development_roadmap.md`](docs/development_roadmap.md) を参照。
 
 ---
 
-## 11. 参考資料
+## 5. 開発状況
 
-### 関連リポジトリ
+現在の開発フェーズ・実装状況は [`docs/implementation_log.md`](docs/implementation_log.md) で時系列に記録されています。
 
-| リポジトリ | 説明 |
-|-----------|------|
-| [StampFly技術仕様](https://github.com/M5Fly-kanazawa/StampFly_technical_specification) | ハードウェア仕様書 |
-| [IMUドライバ](https://github.com/kouhei1970/stampfly_imu) | BMI270 ドライバ |
-| [ToFドライバ](https://github.com/kouhei1970/stampfly_tof) | VL53L3CX ドライバ |
-| [OptFlowドライバ](https://github.com/kouhei1970/stampfly_opticalflow) | PMW3901 ドライバ |
-| [ESKF推定器](https://github.com/kouhei1970/stampfly-eskf-estimator) | 位置姿勢推定ライブラリ |
-| [コントローラ](https://github.com/M5Fly-kanazawa/Simple_StampFly_Joy) | 送信機ファームウェア（for_tdmaブランチ） |
-
-### 設計ドキュメント
-
-- `PLAN.md` - 本プロジェクトの設計方針
+進行中: Phase 2 (HAL 接続) — IMU / Motor / ESP-NOW / UDP 完了、ToF / Baro / Mag / Power / NVS / Logger 残
 
 ---
 
 <a id="english"></a>
 
-## 1. Overview
+## 1. About This Project
 
-### About This Project
+vehicle_new is a next-generation flight controller firmware for the StampFly educational platform. It prioritizes **separation of concerns, readability, and educational value**, providing a **4-tier access model (L0–L3)** so that Workshop students, control-engineering learners, hardware-engineering students, and firmware implementers can each focus on their own theme.
 
-StampFly Vehicle Firmware is a flight controller firmware for the StampFly drone.
-This firmware is designed as a **skeleton**, providing all the foundation features
-such as sensor reading, state estimation, and communication for engineers and students
-who want to implement their own flight control.
+### Target Audiences
 
-**Skeleton includes:**
-- Sensor reading and calibration
-- Centralized StampFly state management
-- Controller communication
-- CLI for sensor value retrieval and gain adjustment
-- Pose estimation (ESKF: Error-State Kalman Filter)
+| Tier | Entry Point | Typical User |
+|------|------------|------------|
+| **L0: Sketch API** | `ws::*` | Workshop students — write `setup()` / `loop_400Hz(dt)` |
+| **L1: Topic API** | `sf::api::*` | Estimation / control / guidance learners — implement own ESKF / PID / Navigator |
+| **L2: HAL Direct** | `stampfly::*Wrapper` | Hardware learners — understand SPI / I2C / RMT / LEDC |
+| **L3: BSP Internal** | `sf::internal::board` | Firmware implementers — modify boot sequence or HW resource management |
 
-With these already implemented, users only need to implement their control logic in `control_task.cpp` to fly.
+The four tiers coexist; learners pick their entry point based on the level they want to engage at.
 
-### Target Hardware
+## 2. License
 
-- **MCU**: M5Stamp S3 (ESP32-S3)
-- **Framework**: ESP-IDF v5.5.2 + FreeRTOS
-- **Airframe**: StampFly
-
-### Main Features
-
-| Feature | Description |
-|---------|-------------|
-| 6-axis IMU | BMI270 (accel/gyro) 400Hz |
-| Magnetometer | BMM150 100Hz |
-| Barometer | BMP280 50Hz |
-| ToF Sensor | VL53L3CX (bottom/front) 30Hz |
-| Optical Flow | PMW3901 100Hz |
-| Power Monitor | INA3221 10Hz |
-| Pose Estimation | ESKF (Error-State Kalman Filter) |
-| Communication | ESP-NOW (controller) + WebSocket (telemetry) |
-| CLI | Command line via USB serial |
-| LED | WS2812 RGB LED (status indication) |
-| Buzzer | Status notification |
-
----
-
-## 2. Development Environment Setup
-
-### Required Software
-
-1. **ESP-IDF v5.5.2**
-   - [Official Installation Guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/get-started/index.html)
-   - ESP-IDF Tools Installer recommended for Windows
-   - Use `install.sh` for macOS/Linux
-
-2. **USB Driver**
-   - M5Stamp S3 uses USB Serial/JTAG
-   - Usually not required on macOS/Linux
-   - CP210x driver may be needed on Windows
-
-### ESP-IDF Setup (macOS/Linux)
-
-```bash
-# Clone ESP-IDF
-mkdir -p ~/esp
-cd ~/esp
-git clone -b v5.5.2 --recursive https://github.com/espressif/esp-idf.git
-
-# Run install script
-cd esp-idf
-./install.sh esp32s3
-
-# Set environment variables (run each time or add to .bashrc/.zshrc)
-. ~/esp/esp-idf/export.sh
-```
-
-### Building the Project
-
-```bash
-# Navigate to project directory
-cd firmware/vehicle
-
-# Build
-idf.py build
-
-# Flash
-idf.py flash
-
-# Monitor (view logs)
-idf.py monitor
-
-# Build, flash, and monitor in one command
-idf.py build flash monitor
-```
-
-### Specifying Serial Port
-
-If device is not auto-detected:
-
-```bash
-# Specify port for flashing
-idf.py -p /dev/tty.usbmodem* flash monitor
-
-# For Windows
-idf.py -p COM3 flash monitor
-```
-
----
-
-## 3. Software Architecture
-
-### Directory Structure
+vehicle_new firmware (original code as part of StampFly Ecosystem) is distributed under the **MIT License**. See the project root [`LICENSE`](../../LICENSE).
 
 ```
-firmware/vehicle/
-├── main/                      # Main application
-│   ├── main.cpp               # Entry point, initialization sequence
-│   ├── config.hpp             # All config parameters (GPIO, task priority, ESKF, etc.)
-│   ├── globals.hpp/.cpp       # Global variable declarations/definitions
-│   ├── init.hpp/.cpp          # Initialization functions
-│   ├── rate_controller.hpp    # Rate controller definition
-│   ├── attitude_controller.hpp # Attitude controller (STABILIZE mode)
-│   ├── altitude_controller.hpp # Altitude controller (ALTITUDE_HOLD mode)
-│   ├── position_controller.hpp # Position controller (POSITION_HOLD mode)
-│   ├── landing_handler.hpp    # Landing detection and handling
-│   ├── stationary_detector.hpp # Stationary state detector
-│   ├── level_calibrator.hpp   # Level calibration utility
-│   └── tasks/                 # FreeRTOS tasks
-│       ├── tasks.hpp          # Task function prototypes
-│       ├── imu_task.cpp       # IMU reading, sensor fusion (400Hz)
-│       ├── control_task.cpp   # Control loop (400Hz) ★User implementation
-│       ├── mag_task.cpp       # Magnetometer (100Hz)
-│       ├── baro_task.cpp      # Barometer (50Hz)
-│       ├── tof_task.cpp       # ToF sensor (30Hz)
-│       ├── optflow_task.cpp   # Optical flow (100Hz)
-│       ├── comm_task.cpp      # ESP-NOW communication (50Hz)
-│       ├── power_task.cpp     # Power monitoring (10Hz)
-│       ├── led_task.cpp       # LED control (50Hz)
-│       ├── button_task.cpp    # Button monitoring (50Hz)
-│       ├── cli_task.cpp       # CLI command processing
-│       └── telemetry_task.cpp # WebSocket telemetry (50Hz)
-├── components/                # ESP-IDF components
-│   ├── sf_hal_*/              # Hardware abstraction layer (sensor drivers)
-│   ├── sf_algo_*/             # Algorithms (ESKF, PID, filters)
-│   └── sf_svc_*/              # Services (state management, communication, CLI)
-├── tools/                     # Development tools
-│   └── scripts/               # Python analysis scripts
-├── logs/                      # Flight log storage
-├── CMakeLists.txt             # Build configuration
-├── sdkconfig.defaults         # SDK default settings
-└── partitions.csv             # Partition table
+SPDX-License-Identifier: MIT
+Copyright (c) 2026 Kouhei Ito
 ```
 
-### Task Configuration
+For third-party components and their licenses, see [`NOTICE.md`](NOTICE.md). The combined binary contains only **MIT + BSD-3-Clause + Apache 2.0** compatible licenses (no GPL code).
 
-Utilizes FreeRTOS dual-core configuration.
+## 3. Credits / Influences
 
-### Core 1 (High-speed Real-time Tasks)
+vehicle_new is a redesign of the **M5StampFly official firmware** (https://github.com/m5stack/M5StampFly, MIT, Copyright (c) Kouhei Ito) — same author. Architectural ideas are borrowed from PX4 (uORB Pub-Sub), Zephyr RTOS (parent-child bus ownership, init levels), Crazyflie firmware (educational nano-drone niche), and Arduino (sketch-style L0 simplicity). No code is copied from these projects.
 
-| Task | Rate | Priority | Description |
-|------|------|----------|-------------|
-| IMUTask | 400Hz | 24 | IMU reading, ESKF update |
-| ControlTask | 400Hz | 23 | Rate control, motor output |
-| OptFlowTask | 100Hz | 20 | Optical flow reading |
-
-### Core 0 (Peripheral/Communication Tasks)
-
-| Task | Rate | Priority | Description |
-|------|------|----------|-------------|
-| MagTask | 100Hz | 18 | Magnetometer |
-| BaroTask | 50Hz | 16 | Barometer |
-| CommTask | 50Hz | 15 | ESP-NOW communication |
-| ToFTask | 30Hz | 14 | ToF sensor |
-| TelemetryTask | 50Hz | 13 | WebSocket transmission |
-| PowerTask | 10Hz | 12 | Power monitoring |
-| ButtonTask | 50Hz | 10 | Button input |
-| LEDTask | 50Hz | 8 | LED update |
-| CLITask | - | 5 | Command processing |
-
----
-
-## 4. State Management
-
-### Flight States
-
-The StampFlyState class centrally manages the vehicle state.
-
-```
-INIT ─────────┐
-              │ Initialization complete
-              ▼
-IDLE ◄────── ARMED
- │            │ ▲
- │            │ │
- │ ARM req    │ │ DISARM req
- │            │ │
- └──────────► │ │
-              ▼ │
-           FLYING
-              │
-              │ Error detected
-              ▼
-           ERROR
-```
-
-| State | Description | BODY LED (top+bottom) | StampS3 LED |
-|-------|-------------|----------------------|-------------|
-| INIT | Initializing | - | White solid → Magenta blink |
-| IDLE | Standby (ARM ready) | Green solid | Mode color |
-| ARMED | Armed (motors enabled) | Green slow blink | Mode color |
-| FLYING | In flight | Yellow solid | Mode color |
-| ERROR | Error | Red fast blink | - |
-
-**StampS3 LED mode colors:**
-ACRO=Blue / STABILIZE=Green / ALTITUDE_HOLD=Orange / POSITION_HOLD=Magenta
-
-**StampS3 LED calibration (disarmed):**
-Red slow blink=waiting for landing / Amber slow blink=calibrating / Green solid=complete
-
-**BODY LED warnings (overlay):**
-Cyan slow blink=low battery / Red fast blink=crash/sensor error
-
-### ARM/DISARM Operation
-
-**Button operation:**
-- Click in IDLE → ARM
-- Click in ARMED → DISARM
-
-**Controller operation:**
-- State transitions on ARM flag rising edge
-
-**Auto-DISARM:**
-- On impact detection (acceleration > 3G or angular rate > 800°/s)
-
-### Pairing Mode
-
-Long-press button (3 seconds) to enter pairing mode.
-- Fast blue blinking
-- Accepts pairing requests from controller
-
----
-
-## 5. Sensor Fusion (ESKF)
-
-### ESKF Overview
-
-Uses Error-State Kalman Filter to fuse multiple sensor inputs and estimate
-the vehicle's position, velocity, and attitude with high accuracy.
-
-**Estimated state (15 dimensions):**
-- Position (x, y, z) - 3D
-- Velocity (vx, vy, vz) - 3D
-- Attitude (quaternion error) - 3D
-- Gyro bias (bx, by, bz) - 3D
-- Accelerometer bias (ax, ay, az) - 3D
-
-### Sensor Inputs
-
-| Sensor | Purpose | Update Rate |
-|--------|---------|-------------|
-| IMU (accel/gyro) | Prediction step | 400Hz |
-| Magnetometer | Yaw correction | 100Hz |
-| Barometer | Altitude correction | 50Hz |
-| ToF | Altitude correction (low altitude) | 30Hz |
-| Optical Flow | Horizontal velocity correction | 100Hz |
-
-### Parameter Tuning
-
-All parameters are in `config.hpp` under `namespace config::eskf`.
-
-```cpp
-namespace eskf {
-    // Process noise (larger = trust sensor more)
-    inline constexpr float GYRO_NOISE = 0.009655f;
-    inline constexpr float ACCEL_NOISE = 0.062885f;
-
-    // Observation noise (larger = trust observation less)
-    inline constexpr float BARO_NOISE = 0.1f;
-    inline constexpr float TOF_NOISE = 0.03f;
-    inline constexpr float MAG_NOISE = 1.0f;
-    inline constexpr float FLOW_NOISE = 0.01f;
-}
-```
-
----
-
-## 6. Control System Implementation
-
-### Control Task Structure
-
-Control is implemented in `control_task.cpp`.
-The cascade control architecture supports four flight modes.
-
-### Flight Modes
-
-| Mode | Description | Control Structure |
-|------|-------------|-------------------|
-| ACRO | Rate control | Stick → target rate → Rate PID → motors |
-| STABILIZE | Attitude control | Stick → target angle → Attitude PID → Rate PID → motors |
-| ALTITUDE_HOLD | Altitude hold | Altitude PID → Velocity PID → thrust correction + STABILIZE |
-| POSITION_HOLD | Position hold | Position PID → Velocity PID → angle correction + ALTITUDE_HOLD |
-
-```
-Controller Input (sticks)
-        │
-        ▼
-  Target Rate Calculation
-        │
-        ▼
-   PID Controller      ◄─── Current Rate (from IMU)
-        │
-        ▼
-  Motor Mixer
-        │
-        ▼
-   Motor Output
-```
-
-### Motor Layout
-
-```
-               Front
-          FL (M4)   FR (M1)
-             ╲   ▲   ╱
-              ╲  │  ╱
-               ╲ │ ╱
-                ╲│╱
-                 ╳         ← Center
-                ╱│╲
-               ╱ │ ╲
-              ╱  │  ╲
-             ╱   │   ╲
-          RL (M3)    RR (M2)
-                Rear
-
-Motor Rotation:
-  M1 (FR): CCW (Counter-Clockwise)
-  M2 (RR): CW (Clockwise)
-  M3 (RL): CCW (Counter-Clockwise)
-  M4 (FL): CW (Clockwise)
-```
-
-### PID Gain Tuning
-
-Configure in `config.hpp` under `namespace config::rate_control`.
-
-```cpp
-namespace rate_control {
-    // Roll rate PID
-    inline constexpr float ROLL_RATE_KP = 0.65f;
-    inline constexpr float ROLL_RATE_TI = 0.7f;   // Integral time [s]
-    inline constexpr float ROLL_RATE_TD = 0.01f;  // Derivative time [s]
-
-    // Pitch rate PID
-    inline constexpr float PITCH_RATE_KP = 0.95f;
-    inline constexpr float PITCH_RATE_TI = 0.7f;
-    inline constexpr float PITCH_RATE_TD = 0.025f;
-
-    // Yaw rate PID
-    inline constexpr float YAW_RATE_KP = 3.0f;
-    inline constexpr float YAW_RATE_TI = 0.8f;
-    inline constexpr float YAW_RATE_TD = 0.01f;
-}
-```
-
-### Implementing Custom Control
-
-Edit `control_task.cpp` to implement your own control logic.
-
-```cpp
-// Example: Adding attitude control (angle control)
-
-// 1. Calculate target attitude
-float roll_angle_target = roll_cmd * MAX_ROLL_ANGLE;
-float pitch_angle_target = pitch_cmd * MAX_PITCH_ANGLE;
-
-// 2. Get current attitude (from ESKF)
-auto state = g_fusion.getState();
-float roll_current = state.roll;
-float pitch_current = state.pitch;
-float yaw_current = state.yaw;
-
-// 3. Calculate target rate with attitude PID
-float roll_rate_target = attitude_pid.update(roll_angle_target, roll_current, dt);
-
-// 4. Rate control (existing code)
-float roll_out = g_rate_controller.roll_pid.update(roll_rate_target, roll_rate_current, dt);
-```
-
----
-
-## 7. CLI Commands
-
-CLI commands are available via USB serial.
-
-### Basic Commands
-
-| Command | Description |
-|---------|-------------|
-| `help` | Show command list |
-| `status` | Show system status |
-| `version` | Show version info |
-| `reboot` | Restart system |
-
-### Sensor Commands
-
-| Command | Description |
-|---------|-------------|
-| `sensor` | Show sensor data |
-| `attitude?` | Show current attitude |
-| `baro?` | Show barometer values |
-| `tof?` | Show ToF values |
-| `acceleration?` | Show acceleration values |
-| `battery?` | Show battery status |
-| `speed?` | Show velocity |
-| `height?` | Show altitude |
-| `pos` | Show position info |
-
-### Control Commands
-
-| Command | Description |
-|---------|-------------|
-| `motor <n> <duty>` | Run motor n (1-4) at duty% |
-| `gain` | Show/set PID gains |
-| `trim` | Trim settings |
-| `ctrl` | Control state monitor |
-| `attitude` | Attitude control status |
-
-### Flight Commands
-
-| Command | Description |
-|---------|-------------|
-| `takeoff` | Auto takeoff |
-| `land` | Auto landing |
-| `hover` | Hover |
-| `jump` | Jump |
-| `emergency` | Emergency stop |
-| `stop` | Stop |
-| `up` / `down` | Ascend / descend |
-| `left` / `right` | Move left / right |
-| `forward` / `back` | Move forward / backward |
-| `cw` / `ccw` | Rotate clockwise / counter-clockwise |
-
-### Communication Commands
-
-| Command | Description |
-|---------|-------------|
-| `comm` | Show/set communication mode |
-| `pair` | Start pairing |
-| `unpair` | Remove pairing |
-| `wifi` | WiFi settings |
-
-### Log Commands
-
-| Command | Description |
-|---------|-------------|
-| `binlog` | Control binary log recording |
-| `loglevel <level>` | Set log level (none/error/warn/info/debug) |
-
-### Calibration Commands
-
-| Command | Description |
-|---------|-------------|
-| `calib` | Calibration |
-| `magcal` | Magnetometer calibration |
-
-### Others
-
-| Command | Description |
-|---------|-------------|
-| `led` | LED control |
-| `sound` | Buzzer control |
-| `debug` | Debug info |
-| `rc` | RC input monitor |
-| `flight` | Flight info |
-
----
-
-## 8. Telemetry and Logging
-
-### WebSocket Telemetry
-
-WiFi access point runs simultaneously with ESP-NOW, distributing telemetry data via WebSocket.
-
-| Item | Value |
-|------|-------|
-| SSID | `StampFly` |
-| Password | None (open) |
-| URL | `http://192.168.4.1/` |
-| Update Rate | 50Hz |
-| Packet Size | 116 bytes |
-
-**Telemetry Packet Structure:**
-
-Two packet formats are currently supported.
-
-#### Legacy Packet (v2, 116 bytes)
-
-Basic telemetry via WebSocket. header=0xAA, packet_type=0x20.
-
-#### Extended Batch Packet (552 bytes, currently in use)
-
-High-speed telemetry. Sends 4 samples per batch. header=0xBD, packet_type=0x32.
-
-| Field | Size | Description |
-|-------|------|-------------|
-| header | 1B | 0xBD fixed |
-| packet_type | 1B | 0x32 |
-| batch_seq | 2B | Batch sequence number |
-| num_samples | 1B | Number of samples (4) |
-| samples[4] | 544B | ExtendedSample × 4 |
-| checksum | 1B | XOR checksum |
-| padding | 3B | Alignment |
-
-Each ExtendedSample (136 bytes) contains timestamp (μs precision), attitude (quaternion),
-position/velocity, IMU data, bias estimates, barometric altitude, optical flow,
-ToF distance, flight state, etc. |
-
-**Web UI Features:**
-- Attitude indicator (artificial horizon)
-- Top view / side view
-- Sensor data cards (attitude, position, velocity, IMU, magnetometer, ToF, etc.)
-- Time series graphs
-- CSV log recording and download
-
-### Binary Log
-
-Records sensor data and ESKF state in binary format at 400Hz.
-
-```bash
-# Capture log (Python)
-python tools/scripts/log_capture.py
-
-# Visualize log
-python tools/scripts/viz_all.py logs/flight_001.bin
-```
-
----
-
-## 9. GPIO Assignment
-
-### SPI Bus
-
-| GPIO | Function |
-|------|----------|
-| 14 | MOSI |
-| 43 | MISO |
-| 44 | SCK |
-| 46 | IMU CS |
-| 12 | OptFlow CS |
-
-### I2C Bus
-
-| GPIO | Function |
-|------|----------|
-| 3 | SDA |
-| 4 | SCL |
-
-### Motors (PWM)
-
-| GPIO | Motor | Position | Rotation |
-|------|-------|----------|----------|
-| 42 | M1 | FR (Front Right) | CCW |
-| 41 | M2 | RR (Rear Right) | CW |
-| 10 | M3 | RL (Rear Left) | CCW |
-| 5 | M4 | FL (Front Left) | CW |
-
-### Others
-
-| GPIO | Function |
-|------|----------|
-| 21 | MCU built-in LED |
-| 39 | Board LED (2 in series) |
-| 40 | Buzzer |
-| 0 | Button |
-| 7 | ToF XSHUT (bottom) |
-| 9 | ToF XSHUT (front) |
-
----
-
-## 10. Troubleshooting
-
-### Build Errors
-
-**ESP-IDF not found:**
-```bash
-# Set environment variables
-. ~/esp/esp-idf/export.sh
-```
-
-**Component not found:**
-```bash
-# Delete managed_components and rebuild
-rm -rf managed_components
-idf.py build
-```
-
-### Flash Errors
-
-**Port not found:**
-```bash
-# Check devices
-ls /dev/tty.usb*  # macOS
-ls /dev/ttyUSB*   # Linux
-```
-
-**Cannot enter flash mode:**
-1. Hold button while connecting USB
-2. Run `idf.py flash`
-
-### Sensor Not Initializing
-
-- Check I2C connections (SDA/SCL)
-- Check sensor power supply
-- Use `status` command to check sensor state
-
----
-
-## 11. References
-
-### Related Repositories
-
-| Repository | Description |
-|-----------|-------------|
-| [StampFly Technical Spec](https://github.com/M5Fly-kanazawa/StampFly_technical_specification) | Hardware specifications |
-| [IMU Driver](https://github.com/kouhei1970/stampfly_imu) | BMI270 driver |
-| [ToF Driver](https://github.com/kouhei1970/stampfly_tof) | VL53L3CX driver |
-| [OptFlow Driver](https://github.com/kouhei1970/stampfly_opticalflow) | PMW3901 driver |
-| [ESKF Estimator](https://github.com/kouhei1970/stampfly-eskf-estimator) | Pose estimation library |
-| [Controller](https://github.com/M5Fly-kanazawa/Simple_StampFly_Joy) | Transmitter firmware (for_tdma branch) |
-
-### Design Documents
-
-- `PLAN.md` - Design policy for this project
+See the Japanese section for details on academic positioning and prior work.

@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (vehicle_new firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file pmw3901_wrapper.cpp
  * @brief Implementation of C++ wrapper for PMW3901 Optical Flow Sensor
@@ -152,9 +160,19 @@ PMW3901::MotionBurst PMW3901::readMotionBurst()
         );
     }
 
+    // Absorb the sensor mounting here, in the driver: the PMW3901 is mounted rotated,
+    // so the raw chip axes are NOT the body frame. Return body-frame (FRD) displacement
+    // so callers (flow_task / ESKF) never deal with chip orientation (project policy:
+    // drivers return body-axis quantities). Mapping verified on the proven hardware
+    // (firmware/vehicle optflow_task): body forward (X) = -raw delta_y, body right (Y)
+    // = +raw delta_x.
+    // センサ搭載向きはここ（ドライバ）で吸収する: PMW3901 は回転搭載で生チップ軸は機体軸
+    // でない。機体(FRD)変位を返し、呼び出し側(flow_task/ESKF)は搭載向きを意識しない
+    // （方針: ドライバは機体軸の量を返す）。対応は実証済みハード(firmware/vehicle
+    // optflow_task)で確認: body前方(X)=-生delta_y, body右(Y)=+生delta_x。
     MotionBurst result;
-    result.delta_x = c_burst.delta_x;
-    result.delta_y = c_burst.delta_y;
+    result.delta_x = -c_burst.delta_y;   // body forward (FRD X)
+    result.delta_y =  c_burst.delta_x;   // body right   (FRD Y)
     result.squal = c_burst.squal;
     result.shutter = c_burst.shutter;
     result.raw_data_sum = c_burst.raw_data_sum;
