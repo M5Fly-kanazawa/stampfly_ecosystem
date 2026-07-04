@@ -25,7 +25,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "target",
         nargs="?",
         default="vehicle",
-        choices=["vehicle", "controller"],
+        choices=["vehicle", "vehicle_old", "controller"],
         help="Target project (for ELF file, default: vehicle)",
     )
     parser.add_argument(
@@ -47,6 +47,8 @@ def run(args: argparse.Namespace) -> int:
     # Determine target directory
     if args.target == "vehicle":
         target_dir = paths.vehicle()
+    elif args.target == "vehicle_old":
+        target_dir = paths.vehicle_old()
     else:
         target_dir = paths.controller()
 

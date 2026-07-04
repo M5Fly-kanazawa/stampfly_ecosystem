@@ -1,12 +1,12 @@
 """
-sf telemetry - Live 50Hz telemetry monitor (vehicle_new)
+sf telemetry - Live 50Hz telemetry monitor (vehicle)
 
-Receives the vehicle_new monitoring telemetry (104-byte binary packet,
+Receives the vehicle monitoring telemetry (104-byte binary packet,
 magic 0xCAFE, UDP broadcast :5005, 50Hz) and shows a live terminal
 dashboard. Optionally records to CSV. For graphs/offline analysis use the
 Data Stream instead: `sf log wifi` -> `sf log viz` (400Hz, full sensors).
 
-vehicle_new のモニタ用テレメトリ（104バイト固定バイナリ、magic 0xCAFE、
+vehicle のモニタ用テレメトリ（104バイト固定バイナリ、magic 0xCAFE、
 UDP ブロードキャスト :5005、50Hz）を受信し、ターミナルにライブ表示します。
 --csv で記録も可能。グラフ・オフライン解析には Data Stream
 （`sf log wifi` → `sf log viz`、400Hz・全センサ）を使ってください。
@@ -24,7 +24,7 @@ from ..utils import console
 COMMAND_NAME = "telemetry"
 COMMAND_HELP = "Live 50Hz telemetry — terminal dashboard, or browser with --web"
 
-# Wire format — MUST match firmware/vehicle_new/components/sf_telemetry/
+# Wire format — MUST match firmware/vehicle/components/sf_telemetry/
 # include/telemetry.hpp TelemetryPacket (static_assert 104 bytes).
 # 電文形式 — ファームの TelemetryPacket（104B static_assert）と一致必須。
 TELEM_PORT = 5005
@@ -42,7 +42,7 @@ FLOAT_NAMES = [
     "m1", "m2", "m3", "m4",
 ]
 
-# FlightState enum order (firmware/vehicle_new/components/sf_state flight_state.hpp)
+# FlightState enum order (firmware/vehicle/components/sf_state flight_state.hpp)
 # FlightState の列挙順（ファーム側と一致必須）
 STATE_NAMES = ["INIT", "IDLE_GROUND", "IDLE_HELD", "ARMED_GROUND",
                "TAKEOFF", "FLYING", "LANDING"]

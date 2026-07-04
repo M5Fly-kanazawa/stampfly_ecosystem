@@ -149,6 +149,12 @@ def run(args: argparse.Namespace) -> int:
             issues.append(f"Missing directory: {dir_name}")
             console.error(f"  {description}: NOT FOUND")
 
+    # Legacy firmware (optional, not a hard requirement)
+    # レガシーファーム（任意、必須ではない）
+    vehicle_old_path = root / "firmware" / "vehicle_old"
+    if vehicle_old_path.exists():
+        console.success(f"  Legacy vehicle firmware: {vehicle_old_path}")
+
     # Check ESP-IDF
     console.print()
     console.info("Checking ESP-IDF...")

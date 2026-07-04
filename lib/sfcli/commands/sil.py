@@ -93,8 +93,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # E6: 決定論的な *.scn 入力シナリオを走らせ、ファーム出力をアサートする。
     p = sub.add_parser("scenario", help="Run a *.scn input scenario and assert outputs (E6)")
     p.add_argument("scenario", help="path to the .scn scenario file")
-    p.add_argument("--target", choices=["vehicle", "vehicle_new"], default="vehicle",
-                   help="emulator binary (default: vehicle = old firmware)")
+    p.add_argument("--target", choices=["vehicle", "vehicle_old"], default="vehicle",
+                   help="emulator binary (default: vehicle = current firmware; "
+                        "vehicle_old = legacy firmware)")
     p.add_argument("--expect", default=None,
                    help="assertions file (default: <scenario>.expect if it exists)")
     p.add_argument("--duration", type=int, default=25_000_000,
@@ -382,7 +383,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
 
 def run_scenario(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "vehicle")
-    exe = _build_dir() / ("emu_vehicle" if target == "vehicle" else "emu_vehicle_new")
+    exe = _build_dir() / ("emu_vehicle" if target == "vehicle" else "emu_vehicle_old")
     if not exe.exists():
         console.error(f"{exe.name} not built — run 'sf sil build' first"); return 1
     scn = Path(args.scenario)

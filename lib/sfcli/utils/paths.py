@@ -65,6 +65,10 @@ class Paths:
         """Get firmware/vehicle/ directory"""
         return self.firmware() / "vehicle"
 
+    def vehicle_old(self) -> Path:
+        """Get firmware/vehicle_old/ directory (legacy firmware)"""
+        return self.firmware() / "vehicle_old"
+
     def controller(self) -> Path:
         """Get firmware/controller/ directory"""
         return self.firmware() / "controller"

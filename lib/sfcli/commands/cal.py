@@ -349,6 +349,7 @@ def _find_latest_binlog() -> Optional[str]:
         paths.root() / "logs",
         paths.root() / "tools" / "log_analyzer",
         paths.root() / "firmware" / "vehicle" / "logs",
+        paths.root() / "firmware" / "vehicle_old" / "logs",
     ]
 
     files = []

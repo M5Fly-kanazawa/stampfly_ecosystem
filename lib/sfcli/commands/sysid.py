@@ -5,13 +5,17 @@ sf sysid - システム同定コマンド
 Unix philosophy: Small tools that do one thing well and work together via pipes.
 
 Subcommands:
-    noise     - Sensor noise characterization (Allan variance)
-    inertia   - Moment of inertia estimation (step response)
-    motor     - Motor dynamics identification (Ct, Cq, τm)
-    drag      - Aerodynamic drag coefficient estimation
-    params    - Parameter management (show, diff, export)
-    validate  - Validation and consistency checks
-    plan      - Flight test plan generation
+    noise      - Sensor noise characterization (Allan variance)
+    inertia    - Moment of inertia estimation (step response)
+    motor      - Motor dynamics identification (Ct, Cq, τm)
+    drag       - Aerodynamic drag coefficient estimation
+    params     - Parameter management (show, diff, export)
+    validate   - Validation and consistency checks
+    fit        - Rate-loop transfer function fit from flight log
+    plan       - Flight test plan generation
+    rate-fit   - Rate controller closed-loop identification (ETFE + fit)
+    rate-tune  - PID gain design from an identified rate-loop model
+    rate-excite - Rate-loop excitation signal generation (chirp/doublet)
 """
 
 import argparse

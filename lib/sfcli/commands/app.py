@@ -14,7 +14,7 @@ COMMAND_HELP = "Manage custom firmware applications"
 
 # Reserved names that cannot be used for custom apps
 # カスタムアプリに使用できない予約名
-RESERVED_NAMES = {"vehicle", "controller", "workshop", "common"}
+RESERVED_NAMES = {"vehicle", "vehicle_old", "controller", "workshop", "common"}
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
