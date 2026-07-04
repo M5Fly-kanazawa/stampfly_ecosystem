@@ -24,6 +24,7 @@
 #include <buzzer.h>
 #include <atoms3joy.h>
 #include <espnow_tdma.h>
+#include <espnow_protocol.hpp>  // shared ControlPacket SSOT (firmware/common/protocol)
 #include <menu_system.h>
 #include <usb_hid.hpp>
 #include <udp_client.hpp>
@@ -2037,45 +2038,36 @@ static void main_loop(void)
     Theta = _theta;
     Psi = _psi;
 
-    // 送信データ作成
-    uint8_t senddata[CONTROL_PACKET_SIZE];
+    // 送信データ作成（共有 ControlPacket SSOT: espnow_protocol.hpp）
+    // Build the control packet (shared ControlPacket SSOT: espnow_protocol.hpp)
+    stampfly::protocol::ControlPacket pkt{};
     const uint8_t* drone_mac = get_drone_peer_addr();
 
-    senddata[0] = drone_mac[3];
-    senddata[1] = drone_mac[4];
-    senddata[2] = drone_mac[5];
+    pkt.drone_mac[0] = drone_mac[3];
+    pkt.drone_mac[1] = drone_mac[4];
+    pkt.drone_mac[2] = drone_mac[5];
 
-    uint8_t* d_int = (uint8_t*)&Throttle;
-    senddata[3] = d_int[0];
-    senddata[4] = d_int[1];
+    pkt.throttle = Throttle;
+    pkt.roll     = Phi;
+    pkt.pitch    = Theta;
+    pkt.yaw      = Psi;
 
-    d_int = (uint8_t*)&Phi;
-    senddata[5] = d_int[0];
-    senddata[6] = d_int[1];
-
-    d_int = (uint8_t*)&Theta;
-    senddata[7] = d_int[0];
-    senddata[8] = d_int[1];
-
-    d_int = (uint8_t*)&Psi;
-    senddata[9] = d_int[0];
-    senddata[10] = d_int[1];
-
-    senddata[11] = (0x01 & PosMode) << 4 |
-                   (0x01 & AltMode) << 3 |
-                   (0x01 & Mode) << 2 |
-                   (0x01 & joy_get_flip_button()) << 1 |
-                   (0x01 & joy_get_arm_button());
-    senddata[12] = proactive_flag;
+    pkt.flags = (0x01 & PosMode) << 4 |
+                (0x01 & AltMode) << 3 |
+                (0x01 & Mode) << 2 |
+                (0x01 & joy_get_flip_button()) << 1 |
+                (0x01 & joy_get_arm_button());
+    pkt.reserved = proactive_flag;
 
     // チェックサム
-    senddata[13] = 0;
-    for (int i = 0; i < 13; i++) {
-        senddata[13] += senddata[i];
-    }
+    pkt.checksum = stampfly::protocol::checksum8(
+        reinterpret_cast<const uint8_t*>(&pkt), sizeof(pkt) - 1);
+
+    static_assert(sizeof(pkt) == CONTROL_PACKET_SIZE,
+                  "ControlPacket size must match CONTROL_PACKET_SIZE");
 
     // TDMAタスクに送信データを渡す
-    tdma_update_senddata(senddata);
+    tdma_update_senddata(reinterpret_cast<const uint8_t*>(&pkt));
 
     // ビーコンロストチェック (スレーブのみ)
     static uint32_t last_beep_time = 0;

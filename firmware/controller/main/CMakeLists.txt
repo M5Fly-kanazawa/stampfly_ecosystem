@@ -2,6 +2,7 @@ idf_component_register(
     SRCS "main.cpp"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
+        protocol
         esp_wifi
         esp_timer
         driver
