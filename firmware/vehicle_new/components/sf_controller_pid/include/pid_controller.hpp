@@ -361,6 +361,35 @@ private:
     void learnTrim(const StateEstimate& state, const CommandSetpoint& setpoint,
                    float yaw, float dt);
 
+    // --- Always-on onboard hover-thrust learning (steady-hover-gated) ---
+    // Robustness to thrust variation (motor wear over flight time, battery sag): hover
+    // thrust is otherwise a FIXED feed-forward (mg·corr) and only the bounded velocity-loop
+    // correction (±max_thrust_correction_) adapts, so a motor that weakens beyond the
+    // correction's reach makes the craft sink / under-climb — then hover.thrust_corr must be
+    // hand-tuned per flight (a band-aid). This learner slowly transfers the STEADY velocity-
+    // loop output into hover_thrust_, so the feed-forward tracks the TRUE hover thrust and
+    // the correction re-centres (full ±limit authority restored for climb/disturbance). The
+    // vertical analogue of learnTrim() — a "hover thrust estimator" (cf. PX4/ArduPilot).
+    // Persisted to hover.thrust_corr on the landing edge, so degradation self-compensates
+    // across flights WITHOUT per-flight tuning. See learnHoverThrust().
+    // 常時オンボード・ホバー推力学習（定常ホバー限定）。推力変動（飛行時間によるモータ劣化・
+    // 電圧サグ）へのロバスト化: ホバー推力は固定FF（mg·corr）で適応するのは制限付き補正
+    // （±max_thrust_correction_）のみゆえ、補正の届く範囲を超えてモータが弱ると機体が沈む／
+    // 上昇不足（→ hover.thrust_corr のフライト毎手調整＝場当たり）。本学習は定常ホバーの速度
+    // ループ定常出力をゆっくり hover_thrust_ に移し、FF を真のホバー推力へ追従させ補正を
+    // 中心化（離陸／外乱に ±上限の全権限が復活）。learnTrim() の鉛直版（"hover thrust
+    // estimator"）。着陸エッジで hover.thrust_corr に保存し、劣化を手調整なしで自己補償。
+    // @design architecture.md INV-1 — vertical channel only; one pipeline  [OK]
+    static constexpr float kMassG            = 0.037f * 9.80665f;  // mg [N]
+    static constexpr float kHoverLearnTau    = 20.0f;   // [s] learning time constant
+    static constexpr float kHoverLearnVzDead = 0.30f;   // [m/s] reject only FAST transients; the slow tau averages the bob, and a gentle sink (FF too low) MUST be learnable
+    static constexpr float kHoverCorrMin     = 0.5f;    // hover.thrust_corr clamp (= params.cpp range)
+    static constexpr float kHoverCorrMax     = 2.0f;
+    bool  hover_learn_enable_ = true;            // param hover.thrust.learn (0 = off, manual corr only)
+    VerticalPhase hover_prev_phase_ = VerticalPhase::Grounded;  // landing-edge detect for NVS persist
+    void learnHoverThrust(float thrust_correction, float vz_up, float climb_rate_sp, float dt);
+    void persistHoverThrust();   // NVS save on the landing edge (called every cycle)
+
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit
     // must be on the order of what the plant can deliver — with the default 1.0

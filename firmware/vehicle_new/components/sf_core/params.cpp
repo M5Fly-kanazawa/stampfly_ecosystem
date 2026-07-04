@@ -353,6 +353,15 @@ namespace param_vars {
     // corr_new = 1.12 ×（新duty/旧duty）で調整。
     float hover_thrust_corr = 1.12f;
 
+    // Onboard hover-thrust learning enable (1 = learn the true hover thrust in flight and
+    // persist into hover.thrust_corr at touchdown, 0 = manual hover.thrust_corr only). Makes
+    // altitude hold robust to thrust degradation (motor wear, battery sag) without per-flight
+    // corr tuning. See pid_controller learnHoverThrust().
+    // オンボード・ホバー推力学習の有効化（1 = 飛行中に真のホバー推力を学習し着地時 hover.thrust_corr
+    // へ永続, 0 = 手動 corr のみ）。推力劣化（モータ劣化・電圧サグ）に高度保持をロバスト化し、corr の
+    // フライト毎手調整を不要にする。learnHoverThrust() 参照。
+    int32_t hover_thrust_learn = 1;
+
     // Position control. Runtime defaults (these initializers are the boot value
     // when NVS has no saved entry; keep them EQUAL to the table[] default below).
     // Re-tuned from the first real POS_HOLD flight (2026-06-22): the loop-relevant
@@ -597,6 +606,7 @@ static const ParamEntry table[] = {
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
+    {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 
     // Position control. Gains re-tuned from the first real POS_HOLD flight
     // (2026-06-22, log 20260622T161055): on hardware the loop-relevant

@@ -102,10 +102,15 @@ void PidController::loadParams()
     // corr when the craft over-climbs on auto-takeoff. mg = 0.037 kg · 9.80665.
     // ホバー推力補正: hover_thrust = mg × corr。モータ/プロペラ交換（新品=強い等）に
     // 再ビルドなしで合わせられる — 自動離陸で過上昇するなら corr を下げる。
-    constexpr float kMassG = 0.037f * 9.80665f;   // mg [N]
     float hover_corr = 1.12f;
     params::get_float("hover.thrust_corr", hover_corr);
-    hover_thrust_ = kMassG * hover_corr;
+    hover_thrust_ = kMassG * hover_corr;   // kMassG is a class constant (see header)
+    // Onboard hover-thrust learning enable (1 = learn the true hover thrust in flight, 0 =
+    // manual hover.thrust_corr only). See learnHoverThrust().
+    // オンボード・ホバー推力学習の有効化（1 = 飛行中に真のホバー推力を学習, 0 = 手動 corr のみ）。
+    int32_t hover_learn = 1;
+    params::get_int("hover.thrust.learn", hover_learn);
+    hover_learn_enable_ = (hover_learn != 0);
 
     // Position control / 位置制御
     params::get_float("position.pos.kp", pos_x_.kp);
@@ -564,6 +569,15 @@ ControlOutput PidController::compute(
             thrust = hover_thrust_ + thrust_correction;
             if (thrust < 0.0f)         thrust = 0.0f;
             if (thrust > max_thrust_)  thrust = max_thrust_;
+
+            // Always-on hover-thrust learning: slowly fold the steady velocity-loop output
+            // into hover_thrust_ so the feed-forward tracks the true hover thrust (robust to
+            // motor wear / battery sag). Runs AFTER the thrust output above, so it has zero
+            // same-cycle effect — purely a slow background adapter. INV-1: vertical only.
+            // 常時ホバー推力学習: 速度ループ定常出力をゆっくり hover_thrust_ に畳み込み FF を
+            // 真のホバー推力へ追従（モータ劣化/電圧サグにロバスト）。上の推力出力の後に呼ぶので
+            // 同サイクル影響ゼロ（純粋な低速バックグラウンド適応）。INV-1: 鉛直のみ。
+            learnHoverThrust(thrust_correction, vel_up, climb_rate_sp, dt);
         }
     }
 
@@ -708,6 +722,12 @@ ControlOutput PidController::compute(
     output.angle_ref[0] = roll_sp;    // POS_HOLD: cascade output / ACRO: 0
     output.angle_ref[1] = pitch_sp;
 
+    // Persist the learned hover thrust on the landing edge (every cycle, all phases — the
+    // learn step above runs only in Airborne, but touchdown is seen as Grounded here).
+    // 学習したホバー推力を着陸エッジで保存（毎サイクル全フェーズ。上の学習は Airborne のみだが
+    // 接地はここで Grounded として検出される）。
+    persistHoverThrust();
+
     return output;
 }
 
@@ -817,6 +837,83 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // Clamp to the param range (+/-kTrimMax). / param 範囲（±kTrimMax）にクランプ。
     roll_trim_  = fminf(fmaxf(roll_trim_,  -kTrimMax), kTrimMax);
     pitch_trim_ = fminf(fmaxf(pitch_trim_, -kTrimMax), kTrimMax);
+}
+
+// -----------------------------------------------------------------------------
+// learnHoverThrust — always-on onboard hover-thrust learning (steady-hover-gated)
+// learnHoverThrust — 常時オンボード・ホバー推力学習（定常ホバー限定）
+//
+// Makes altitude hold ROBUST to thrust degradation (motor wear over flight time, battery
+// sag) WITHOUT hand-tuning hover.thrust_corr per flight: at a true steady hover the velocity
+// loop's output is the residual (true_hover_thrust − hover_thrust_ feed-forward). Folding
+// that residual slowly into hover_thrust_ makes the feed-forward track the true hover thrust;
+// the velocity integral then unwinds and the correction re-centres near 0, restoring the full
+// ±max_thrust_correction_ authority for the climb and disturbances. Total thrust is unchanged
+// at the moment of transfer (no altitude bump): hover_thrust_ rises by δ while the loop drops
+// the correction by δ. The vertical analogue of learnTrim().
+//
+// 高度保持を推力劣化（飛行時間によるモータ劣化・電圧サグ）にロバスト化し、hover.thrust_corr の
+// フライト毎手調整を不要にする: 真の定常ホバーでは速度ループ出力が残差（真のホバー推力 −
+// hover_thrust_ FF）。これをゆっくり hover_thrust_ に畳み込むと FF が真のホバー推力へ追従し、
+// 速度積分が解け補正が0付近へ戻り、±max_thrust_correction_ の全権限が離陸・外乱に復活する。
+// 移し替えの瞬間は総推力不変（高度に段差なし）: hover_thrust_ が δ 増え補正が δ 減る。
+//
+// @design architecture.md INV-1 — vertical channel only; one pipeline    [OK]
+// -----------------------------------------------------------------------------
+void PidController::learnHoverThrust(float thrust_correction, float vz_up,
+                                    float climb_rate_sp, float dt)
+{
+    // Disabled by param (hover.thrust.learn = 0): no learning — use the manual
+    // hover.thrust_corr only (e.g. while diagnosing the vertical loop). The landing-edge
+    // NVS persist is a separate every-cycle step (persistHoverThrust), since touchdown is
+    // seen in the Grounded phase where THIS function is not called.
+    // param (hover.thrust.learn = 0) で無効化: 学習せず手動 corr のみ。着陸エッジの NVS 保存は
+    // 別の毎サイクル処理（persistHoverThrust）— 接地は Grounded フェーズで起き本関数は呼ばれない。
+    if (!hover_learn_enable_ || dt <= 0.0f) return;
+
+    // Gate: learn ONLY in a true steady hover with the altitude loop active — Airborne,
+    // ALT_HOLD/POS_HOLD, throttle neutral (no commanded climb/descent), and the craft
+    // actually still (|vz| small). The |vz| gate pauses learning through the altitude bob so
+    // a transient correction is not mistaken for a hover-thrust error.
+    // ゲート: 高度ループが動く真の定常ホバーでのみ学習 — Airborne・ALT/POS・スロットル中立
+    // （上昇/下降指令なし）・実際に静止（|vz| 小）。|vz| ゲートが上下動中の学習を止め、過渡の
+    // 補正をホバー推力誤差と誤認しない。
+    const bool steady_hover =
+        phase_ == VerticalPhase::Airborne &&
+        (current_mode_ == FlightMode::ALT_HOLD || current_mode_ == FlightMode::POS_HOLD) &&
+        climb_rate_sp == 0.0f &&
+        fabsf(vz_up) < kHoverLearnVzDead;
+    if (!steady_hover) return;
+
+    // First-order transfer of the steady velocity-loop output into the feed-forward with
+    // time constant kHoverLearnTau. Clamp to the hover.thrust_corr range so a bad observation
+    // cannot run the feed-forward away.
+    // 速度ループ定常出力を時定数 kHoverLearnTau で1次系的に FF へ移す。誤観測で FF が暴走
+    // しないよう hover.thrust_corr 範囲にクランプ。
+    hover_thrust_ += (dt / kHoverLearnTau) * thrust_correction;
+    hover_thrust_ = fminf(fmaxf(hover_thrust_, kHoverCorrMin * kMassG), kHoverCorrMax * kMassG);
+}
+
+// -----------------------------------------------------------------------------
+// persistHoverThrust — save the learned hover thrust to NVS on the landing edge.
+// Called EVERY cycle (not from learnHoverThrust, which only runs in Airborne) because
+// touchdown is seen in the Grounded phase. Mirrors learnTrim's landing-edge persist:
+// touchdown (Grounded) is the safe one-shot flash window — thrust is gated, so the ~37ms
+// flash stall lands after touchdown and cannot disturb flight.
+// persistHoverThrust — 学習したホバー推力を着陸エッジで NVS 保存。毎サイクル呼ぶ
+// （learnHoverThrust は Airborne のみゆえ）。接地は Grounded フェーズで起きる。learnTrim の
+// 着陸エッジ保存と同じ安全な接地時単発窓（推力ゲート済み）。
+// -----------------------------------------------------------------------------
+void PidController::persistHoverThrust()
+{
+    if (hover_learn_enable_ &&
+        (hover_prev_phase_ == VerticalPhase::Airborne ||
+         hover_prev_phase_ == VerticalPhase::Landing) &&
+        phase_ == VerticalPhase::Grounded) {
+        params::set_float("hover.thrust_corr", hover_thrust_ / kMassG);
+        params::save();
+    }
+    hover_prev_phase_ = phase_;
 }
 
 void PidController::computePositionHold(const StateEstimate& state,
