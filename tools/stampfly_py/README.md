@@ -6,7 +6,7 @@
 
 ### このディレクトリについて
 
-StampFly の `vehicle_new` ファームは **DJI Tello SDK プロトコル**を話します。これにより、
+StampFly の `vehicle` ファームは **DJI Tello SDK プロトコル**を話します。これにより、
 **既存の Tello 用 Python プログラム（特に `djitellopy` ライブラリ）をほとんどそのまま** StampFly で
 動かせます。カメラが無いため映像系だけは動きませんが、それ以外（離陸・着陸・移動・回転・連続
 マニュアル操作・各種状態取得）は動きます。
@@ -86,7 +86,7 @@ tello = Tello(host="192.168.1.42")   # 機体の LAN IP を渡す
 
 ### About This Directory
 
-StampFly's `vehicle_new` firmware speaks the **DJI Tello SDK protocol**, so existing
+StampFly's `vehicle` firmware speaks the **DJI Tello SDK protocol**, so existing
 Tello Python programs (especially the `djitellopy` library) run on StampFly **nearly
 as-is**. There is no camera, so video is the one unsupported feature; everything else
 (takeoff, land, moves, rotation, continuous manual control, telemetry getters) works.

@@ -20,15 +20,15 @@ BIN = "/tmp/eskf_replay"
 
 
 def build():
-    inc = ["firmware/vehicle_new/test",
-           "firmware/vehicle_new/components/sf_math/include",
-           "firmware/vehicle_new/components/sf_estimator_eskf/include",
-           "firmware/vehicle_new/components/sf_core/include"]
+    inc = ["firmware/vehicle/test",
+           "firmware/vehicle/components/sf_math/include",
+           "firmware/vehicle/components/sf_estimator_eskf/include",
+           "firmware/vehicle/components/sf_core/include"]
     cmd = ["g++", "-std=c++17", "-O2"]
     for i in inc:
         cmd += ["-I", os.path.join(ROOT, i)]
     cmd += [os.path.join(HERE, "eskf_replay.cpp"),
-            os.path.join(ROOT, "firmware/vehicle_new/components/sf_estimator_eskf/eskf_core.cpp"),
+            os.path.join(ROOT, "firmware/vehicle/components/sf_estimator_eskf/eskf_core.cpp"),
             "-lm", "-o", BIN]
     subprocess.run(cmd, check=True)
 

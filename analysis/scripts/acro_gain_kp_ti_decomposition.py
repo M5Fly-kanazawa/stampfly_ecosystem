@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ACRO rate-loop stability-margin decomposition: current vs original-converted gains.
 
-Splits the original->vehicle_new gain conversion into its Kp-increase and Ti-lengthening
+Splits the original->vehicle gain conversion into its Kp-increase and Ti-lengthening
 parts and computes phase/gain margins on a physically-grounded rate-loop plant, under
 both a small-lag and a large-lag assumption. Self-contained (stdlib only).
 
@@ -10,7 +10,7 @@ both a small-lag and a large-lag assumption. Self-contained (stdlib only).
 """
 import math, cmath
 
-ETA = 0.125  # derivative-filter coefficient (vehicle_new pid.hpp) / 微分フィルタ係数
+ETA = 0.125  # derivative-filter coefficient (vehicle pid.hpp) / 微分フィルタ係数
 
 # ---- rate PID (standard form) and rate-loop plant frequency responses ----
 def Cjw(w, kp, ti, td):
@@ -47,7 +47,7 @@ def margins(g, I, tau_m, L, eta_t):
 
 # ---- physical constants ----
 I = {'roll': 9.16e-6, 'pitch': 13.3e-6, 'yaw': 20.4e-6}   # URDF stampfly.urdf [kg m^2]
-CUR = (3.40e-4, 0.4, 0.017658)                            # current vehicle_new roll
+CUR = (3.40e-4, 0.4, 0.017658)                            # current vehicle roll
 
 def cal_eta(g_roll, tau_m, L, target=55.0):
     # calibrate effective torque so current-roll PM matches the real ~55 deg (flight-id)

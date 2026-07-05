@@ -36,7 +36,7 @@ orig = {
     'pitch': dict(kp=0.95, ti=0.7, td=0.025, br=br_rp),
     'yaw'  : dict(kp=3.0,  ti=0.8, td=0.01,  br=br_yaw),
 }
-# ---- 現行 vehicle_new (params.cpp) ----
+# ---- 現行 vehicle (params.cpp) ----
 cur = {
     'roll' : dict(kp=3.40e-4, ti=0.4, td=0.017658),
     'pitch': dict(kp=5.16e-4, ti=0.4, td=0.017155),

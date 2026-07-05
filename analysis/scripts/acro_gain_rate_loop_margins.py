@@ -3,7 +3,7 @@ import math, cmath
 # ---- レートループ プラント: torque[Nm] -> angular rate[rad/s] ----
 #   G(s) = eta_t * e^{-L s} / ( I * s * (tau_m s + 1) )
 #   I=慣性(URDF), tau_m=モータ1次遅れ, L=純むだ時間(計算/通信), eta_t=実トルク効き
-# ---- レートPID(vehicle_new標準形, η=0.125) ----
+# ---- レートPID(vehicle標準形, η=0.125) ----
 #   C(s) = Kp ( 1 + 1/(Ti s) + Td s/(0.125 Td s + 1) )
 ETA = 0.125
 def Cjw(w, kp, ti, td):

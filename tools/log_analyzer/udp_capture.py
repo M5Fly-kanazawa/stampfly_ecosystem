@@ -466,14 +466,14 @@ class UDPTelemetryCapture:
                 self.packet_count[pkt_id] += 1
 
                 # Sequence gap detection. Also applied to the unified packet
-                # (0x50): vehicle_new implements its sequence counter, so a lost
+                # (0x50): vehicle implements its sequence counter, so a lost
                 # unified packet (= 8 lost 400Hz samples) is now detectable.
-                # Guard: the legacy vehicle firmware sends seq=0 on every unified
+                # Guard: the legacy vehicle_old firmware sends seq=0 on every unified
                 # packet (unimplemented TODO) — skip while seq stays 0 so old
                 # captures do not report bogus gaps.
-                # シーケンスギャップ検出。統合パケット(0x50)にも適用: vehicle_new は
+                # シーケンスギャップ検出。統合パケット(0x50)にも適用: vehicle は
                 # シーケンスカウンタを実装済みで、統合パケット1個の欠落(=400Hzサンプル
-                # 8個の欠落)を検出できる。ガード: 旧 vehicle ファームは統合パケットの
+                # 8個の欠落)を検出できる。ガード: 旧 vehicle_old ファームは統合パケットの
                 # seq が常に0(未実装TODO)のため、seq が0のままの間は検出をスキップし
                 # 旧キャプチャで偽ギャップを報告しない。
                 if pkt_id in SAMPLE_INFO or pkt_id == 0x50:

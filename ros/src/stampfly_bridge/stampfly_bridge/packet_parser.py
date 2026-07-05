@@ -9,8 +9,25 @@ Packet structure:
 - Samples: 4 × 136 bytes (ExtendedSample)
 - Footer: 4 bytes (checksum + padding)
 
+NOTE (post vehicle_new->vehicle promotion): this WebSocket-based
+ExtendedBatchPacket format is implemented only by the legacy firmware,
+firmware/vehicle_old/components/sf_svc_telemetry/include/telemetry.hpp.
+The current primary firmware (firmware/vehicle/) deliberately dropped
+WebSocket telemetry in favor of a UDP-only unified packet (0x50, variable
+length, see firmware/vehicle/components/sf_telemetry/include/data_stream_wire.hpp
+and docs/telemetry/UDP_TELEMETRY_DESIGN.md) — this parser (and the
+WebSocket client that uses it) is therefore only compatible with
+firmware/vehicle_old, not the promoted firmware/vehicle.
+注記(vehicle_new→vehicle昇格後): このWebSocketベースのExtendedBatchPacket
+形式はレガシーファーム firmware/vehicle_old/components/sf_svc_telemetry/
+include/telemetry.hpp のみが実装する。現行の主力ファーム
+(firmware/vehicle/)はWebSocketテレメトリを設計上廃止し、UDP専用の統一
+パケット(0x50、可変長)に一本化済み。本パーサ(およびこれを使う
+WebSocketクライアント)は firmware/vehicle_old 専用であり、昇格後の
+firmware/vehicle には対応していない。
+
 References:
-- firmware/vehicle/components/sf_svc_telemetry/include/telemetry.hpp
+- firmware/vehicle_old/components/sf_svc_telemetry/include/telemetry.hpp
 - tools/log_analyzer/wifi_capture.py
 """
 

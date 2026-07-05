@@ -2,11 +2,11 @@
 StampFly Python SDK — Tello-style programmatic flight
 StampFly Python SDK — Tello 風プログラム飛行
 
-Talks the Tello SDK text protocol to the vehicle_new firmware's ApiTask
+Talks the Tello SDK text protocol to the vehicle firmware's ApiTask
 (UDP :8889). Every command blocks until the vehicle replies ("ok" after the
 move is REACHED, Tello-style), so a script reads like a flight plan:
 
-vehicle_new ファームの ApiTask（UDP :8889）と Tello SDK テキストプロトコルで
+vehicle ファームの ApiTask（UDP :8889）と Tello SDK テキストプロトコルで
 通信する。各コマンドは機体の応答（移動は「到達後」に ok — Tello 流）まで
 ブロックするので、スクリプトがそのまま飛行計画として読める:
 
@@ -40,8 +40,8 @@ class StampFlyError(RuntimeError):
 
 
 class StampFly:
-    """Tello-style client for the StampFly vehicle_new API (UDP :8889).
-    StampFly vehicle_new API（UDP :8889）の Tello 風クライアント。"""
+    """Tello-style client for the StampFly vehicle API (UDP :8889).
+    StampFly vehicle API（UDP :8889）の Tello 風クライアント。"""
 
     def __init__(self, ip: str = "192.168.10.1", port: int = 8889):
         self.addr = (ip, port)
