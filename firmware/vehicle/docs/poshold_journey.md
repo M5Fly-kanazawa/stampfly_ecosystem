@@ -8,7 +8,7 @@
 
 ### このドキュメントについて
 
-vehicle_new の **POS_HOLD（位置保持）** を成立させるまでに越えた2つの大きな壁 ──「加速度センサの比力の罠」と「SIL と実機の乖離」── を、物理・制御工学の言葉で順に説明する。なぜ難しいのか、何を試して何が効かなかったのか、最終的にどう成立させたのか、そして何が残っているのかを俯瞰する。
+vehicle の **POS_HOLD（位置保持）** を成立させるまでに越えた2つの大きな壁 ──「加速度センサの比力の罠」と「SIL と実機の乖離」── を、物理・制御工学の言葉で順に説明する。なぜ難しいのか、何を試して何が効かなかったのか、最終的にどう成立させたのか、そして何が残っているのかを俯瞰する。
 
 ### 対象読者
 
@@ -246,7 +246,7 @@ POS_HOLD 成立後も残る2つの微小振動。**どちらもハードが律�
 
 ### About this document
 
-It walks through the two big walls crossed on the way to vehicle_new **POS_HOLD** — the "accelerometer specific-force trap" and the "SIL-vs-hardware gap" — in physics and control-engineering terms: why it is hard, what was tried and failed, how it was finally made to work, and what remains.
+It walks through the two big walls crossed on the way to vehicle **POS_HOLD** — the "accelerometer specific-force trap" and the "SIL-vs-hardware gap" — in physics and control-engineering terms: why it is hard, what was tried and failed, how it was finally made to work, and what remains.
 
 ### In one sentence
 

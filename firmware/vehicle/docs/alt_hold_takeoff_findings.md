@@ -12,7 +12,7 @@
 
 ### 対象読者
 
-vehicle_new の制御・状態機械を読む人、および同種のドローン離陸ロジックを設計する人。
+vehicle の制御・状態機械を読む人、および同種のドローン離陸ロジックを設計する人。
 
 ### 全体シーケンス
 
@@ -56,7 +56,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 | 3072 | ホールド | 上昇 |
 | 4095（全上げ）| +0.5 m/s | 最大上昇 |
 
-旧 vehicle `altitude_controller.hpp` は明示的に「**Stick center (2048) = hold altitude**」「バネ復帰式なら離すだけでロック解除」と書いており、`(raw−2048)/2048 ∈ [-1,+1]`（中央2048=hold）を使う。当時の vehicle_new は STABILIZE 用 `[0,1]` を `(throttle−0.5)` で流用したため中立が raw 3072 にズレ、**スロットルを離す（バネで2048に戻る）と降下＝離せばホバーできない**。SIL が通ったのは「ファーム自身の（誤った）規約」をテストに注入したからで、バネ物理を模擬しないため見抜けなかった（ALT_HOLD 実機未検証ゆえ未発覚）。
+旧 vehicle `altitude_controller.hpp` は明示的に「**Stick center (2048) = hold altitude**」「バネ復帰式なら離すだけでロック解除」と書いており、`(raw−2048)/2048 ∈ [-1,+1]`（中央2048=hold）を使う。当時の vehicle は STABILIZE 用 `[0,1]` を `(throttle−0.5)` で流用したため中立が raw 3072 にズレ、**スロットルを離す（バネで2048に戻る）と降下＝離せばホバーできない**。SIL が通ったのは「ファーム自身の（誤った）規約」をテストに注入したからで、バネ物理を模擬しないため見抜けなかった（ALT_HOLD 実機未検証ゆえ未発覚）。
 
 ### 是正 — 対称方式（中央2048=ホールド・上=上昇・下=降下）
 
@@ -174,7 +174,7 @@ The controller's throttle is **spring-centred at raw 2048** (`protocol/spec/mess
 | 3072 | hold | climb |
 | 4095 (full up) | +0.5 m/s | max climb |
 
-The legacy `altitude_controller.hpp` explicitly says "**Stick center (2048) = hold altitude**" / "release the spring stick to unlock", using `(raw−2048)/2048 ∈ [-1,+1]` (centre 2048 = hold). vehicle_new reused the STABILIZE `[0,1]` with a `(throttle−0.5)` shift, moving the neutral to 3072 — so **releasing the throttle (spring → 2048) would descend, you could not hover by releasing**. SIL passed because it injected the firmware's *own* (wrong) convention and does not model the spring; ALT_HOLD was never hardware-tested, so it went unnoticed.
+The legacy `altitude_controller.hpp` explicitly says "**Stick center (2048) = hold altitude**" / "release the spring stick to unlock", using `(raw−2048)/2048 ∈ [-1,+1]` (centre 2048 = hold). vehicle reused the STABILIZE `[0,1]` with a `(throttle−0.5)` shift, moving the neutral to 3072 — so **releasing the throttle (spring → 2048) would descend, you could not hover by releasing**. SIL passed because it injected the firmware's *own* (wrong) convention and does not model the spring; ALT_HOLD was never hardware-tested, so it went unnoticed.
 
 ### Fix — symmetric scheme (centre 2048 = hold, up = climb, down = descend)
 

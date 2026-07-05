@@ -1,15 +1,15 @@
-# vehicle_new Development Roadmap and SIL→Real Workflow
-# vehicle_new 開発ロードマップ・SIL→実機ワークフロー
+# vehicle Development Roadmap and SIL→Real Workflow
+# vehicle 開発ロードマップ・SIL→実機ワークフロー
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 >
-> **SIL ベンチの詳細は `simulator/sil/RESET_PLAN.md` を正とする。** 本書は vehicle_new 開発**全体**（設計→SIL→実機→教材化）の流れを定義し、SIL ベンチそのものの作り方は RESET_PLAN に委ねる。両者が食い違うときは、まず RESET_PLAN を更新してから本書を直す。
+> **SIL ベンチの詳細は `simulator/sil/RESET_PLAN.md` を正とする。** 本書は vehicle 開発**全体**（設計→SIL→実機→教材化）の流れを定義し、SIL ベンチそのものの作り方は RESET_PLAN に委ねる。両者が食い違うときは、まず RESET_PLAN を更新してから本書を直す。
 
 ## 1. 本文書の位置づけ
 
 ### このドキュメントについて
 
-vehicle_new の **開発の進め方**（=どの順番で何を作り、何を持って各段階の合格とするか）と、**SIL シミュレーションと実機の関係性** を明文化する。
+vehicle の **開発の進め方**（=どの順番で何を作り、何を持って各段階の合格とするか）と、**SIL シミュレーションと実機の関係性** を明文化する。
 
 - 設計文書（requirements/architecture/detailed_design/hardware_init）は「**何を**作るか」を定義する
 - コーディング教育文書は「**どう書くか**」を定義する
@@ -18,12 +18,12 @@ vehicle_new の **開発の進め方**（=どの順番で何を作り、何を�
 
 ### 対象読者
 
-- vehicle_new の実装に関わる開発者（人間 + AI）
+- vehicle の実装に関わる開発者（人間 + AI）
 - 既存実装をベースに研究・教育を行う学生・研究者
 
 ### 用語の使い分け（重要）
 
-本書および vehicle_new プロジェクト全体で、複数の番号付き概念が併存する。混同しないこと。
+本書および vehicle プロジェクト全体で、複数の番号付き概念が併存する。混同しないこと。
 
 | 用語 | 意味 | 出典 |
 |------|------|------|
@@ -38,11 +38,11 @@ vehicle_new の **開発の進め方**（=どの順番で何を作り、何を�
 
 ## 2. 開発方針の3原則
 
-vehicle_new の SIL → 実機ワークフローは次の3原則に基づく。RESET_PLAN の「2つの基本方針」と同じ思想を、開発工程の言葉で言い直したものである。
+vehicle の SIL → 実機ワークフローは次の3原則に基づく。RESET_PLAN の「2つの基本方針」と同じ思想を、開発工程の言葉で言い直したものである。
 
 ### 原則1: Code Identity（コード一致 — ループ全体で）
 
-**SIL は vehicle_new の本体ソースを書き換えず、そのままコンパイルして走らせる。**
+**SIL は vehicle の本体ソースを書き換えず、そのままコンパイルして走らせる。**
 
 旧 SIL の失敗は、制御ループを自前で組み直し、推定器に物理の真値姿勢を渡していたことだった。新しい SIL は、**実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を丸ごとホストで走らせる**。一致するのは ESKF の数式だけではなく、**ループ全体**である。
 
@@ -121,12 +121,12 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 ## 4. フェーズ計画
 
-> vehicle 開発全体の順序は **① SIL を作る → ② vehicle_new 開発を再開 → ③ SIL 上で飛ばす → ④ 実機テスト**。Phase 0 は更地化（達成済み）、Phase 1 が物理ベース SIL の再構築（最優先）、Phase 2 以降が実機ブリングアップと飛行・教材化である。
+> vehicle 開発全体の順序は **① SIL を作る → ② vehicle 開発を再開 → ③ SIL 上で飛ばす → ④ 実機テスト**。Phase 0 は更地化（達成済み）、Phase 1 が物理ベース SIL の再構築（最優先）、Phase 2 以降が実機ブリングアップと飛行・教材化である。
 
 ### Phase 0: クリーンスレート（達成済みの確認）
 
 - 設計6文書完成（requirements / architecture / detailed_design / coding_and_education / hardware_init / 本書）
-- vehicle_new スケルトン + 全14タスク + 全コンポーネントスタブ + ESKF/PID 新規実装
+- vehicle スケルトン + 全14タスク + 全コンポーネントスタブ + ESKF/PID 新規実装
 - **旧 SIL を完全削除（RESET_PLAN §12 / P0）。** M1〜M11 で肥大化した旧 SIL（`quad_physics`／`sil_main.cpp`／`flight_scenario_test.cpp` 等）と、それに紐づく旧実績（L1〜L4 検証、姿勢2.27°／高度44mm など）は、削除した旧 SIL のものなので**現在の実績からは外す**。経緯は git 履歴と `implementation_log.md` に保存。
 
 **合格基準:** 達成済み（更地・workshop 無傷・sf CLI 健全・ビルド可）。
@@ -135,9 +135,9 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 ### Phase 1: 物理ベース SIL の再構築（最優先）
 
-**本フェーズの作り方の詳細は `simulator/sil/RESET_PLAN.md`（P1〜P4）が正。** ここでは vehicle_new 開発全体の中での位置づけと合格基準だけを示す。
+**本フェーズの作り方の詳細は `simulator/sil/RESET_PLAN.md`（P1〜P4）が正。** ここでは vehicle 開発全体の中での位置づけと合格基準だけを示す。
 
-**目的:** まだ一度も飛んでいない vehicle_new を、ハードを壊さず PC 上で検証できる、**物理ベース・アルゴリズム非依存**の SIL ベンチを更地から作る。
+**目的:** まだ一度も飛んでいない vehicle を、ハードを壊さず PC 上で検証できる、**物理ベース・アルゴリズム非依存**の SIL ベンチを更地から作る。
 
 | ID | 作業 | 対応（RESET_PLAN） |
 |----|------|------------------|
@@ -245,7 +245,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 ---
 
-### Phase 6: 教材化（vehicle_new の本来目的）
+### Phase 6: 教材化（vehicle の本来目的）
 
 | ID | 作業 |
 |----|------|
@@ -304,7 +304,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 ### Purpose
 
-This document defines **how vehicle_new is developed** — the order of work, the acceptance criteria for each stage, and the relationship between SIL simulation and real flight.
+This document defines **how vehicle is developed** — the order of work, the acceptance criteria for each stage, and the relationship between SIL simulation and real flight.
 
 - Design docs (requirements / architecture / detailed_design / hardware_init) define **what** to build
 - The coding/education doc defines **how** to write code
@@ -313,7 +313,7 @@ This document defines **how vehicle_new is developed** — the order of work, th
 
 ### Target Audience
 
-- Developers working on vehicle_new (humans + AI)
+- Developers working on vehicle (humans + AI)
 - Students and researchers building research/education on top of the existing implementation
 
 ### Terminology
@@ -337,7 +337,7 @@ The SIL → real-flight workflow rests on three principles — the same ideas as
 
 ### Principle 1: Code Identity (at the loop level)
 
-**SIL compiles and runs the unmodified vehicle_new source as-is.**
+**SIL compiles and runs the unmodified vehicle source as-is.**
 
 The old SIL's failure was rebuilding the control loop by hand and feeding the estimator the physics-truth attitude. The new SIL runs the **entire real Pub-Sub loop** (`imu_task → estimate_state → control_task → actuator_motor`) on the host. What matches is not just the ESKF math — it is the **whole loop**.
 
@@ -402,7 +402,7 @@ Each layer is first validated against the **physics-truth SIL** (RESET_PLAN) and
 
 (See the Japanese section above for the detailed phase tables — same structure applies.)
 
-Overall order: **① build the SIL → ② resume vehicle_new development → ③ fly in SIL → ④ real flight.**
+Overall order: **① build the SIL → ② resume vehicle development → ③ fly in SIL → ④ real flight.**
 
 - **Phase 0**: Clean slate (achieved) — design docs + skeleton + ESKF/PID done; **old SIL fully removed**. The old SIL's recorded results (L1–L4, 2.27°/44 mm) belonged to the deleted SIL and are dropped from current results.
 - **Phase 1**: Rebuild the physics-based SIL (highest priority) — per RESET_PLAN P1–P4: integrate MuJoCo, rebuild the ESP-IDF shim, run the real loop on the host, finish the firmware last mile (mixer, motor output, estimator/controller factory, `@design` → `[OK]`). Gate: current ESKF+PID hovers in SIL + a complementary filter swaps in with no bench change.

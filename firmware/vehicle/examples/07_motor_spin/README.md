@@ -32,7 +32,7 @@ LEDC PWMでブラシレスモーターを低速で駆動する方法と、安全
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/07_motor_spin
+cd firmware/vehicle/examples/07_motor_spin
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

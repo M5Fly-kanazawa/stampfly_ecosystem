@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-> StampFly `vehicle_new` の飛行制御を、**(1) 状態推定（ESKF）、(2) 制御対象モデルの導出、(3) カスケード制御の設計、(4) ゲイン調整の方法論** の4本柱で、制御工学の言葉で体系的にまとめた報告書。各節は実装（`sf_estimator_eskf`, `sf_controller_pid`, `sf_autotune`）と1対1に対応する。POS_HOLD 実現までの「物語」は [`poshold_journey.md`](poshold_journey.md)、ヨー軸の詳細は [`yaw_axis_model.md`](yaw_axis_model.md) を参照。
+> StampFly `vehicle` の飛行制御を、**(1) 状態推定（ESKF）、(2) 制御対象モデルの導出、(3) カスケード制御の設計、(4) ゲイン調整の方法論** の4本柱で、制御工学の言葉で体系的にまとめた報告書。各節は実装（`sf_estimator_eskf`, `sf_controller_pid`, `sf_autotune`）と1対1に対応する。POS_HOLD 実現までの「物語」は [`poshold_journey.md`](poshold_journey.md)、ヨー軸の詳細は [`yaw_axis_model.md`](yaw_axis_model.md) を参照。
 
 ## 1. 概要
 
@@ -277,7 +277,7 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 
 # Control-Theory Design Overview — Estimation, Modelling, Cascade Control, Tuning
 
-> A systematic, control-engineering account of the StampFly `vehicle_new` flight control across four pillars: **(1) state estimation (ESKF), (2) plant-model derivation, (3) cascade-control design, (4) gain-tuning methodology.** Each section maps 1:1 to the implementation (`sf_estimator_eskf`, `sf_controller_pid`, `sf_autotune`). For the POS_HOLD "story" see [`poshold_journey.md`](poshold_journey.md); for the yaw axis see [`yaw_axis_model.md`](yaw_axis_model.md).
+> A systematic, control-engineering account of the StampFly `vehicle` flight control across four pillars: **(1) state estimation (ESKF), (2) plant-model derivation, (3) cascade-control design, (4) gain-tuning methodology.** Each section maps 1:1 to the implementation (`sf_estimator_eskf`, `sf_controller_pid`, `sf_autotune`). For the POS_HOLD "story" see [`poshold_journey.md`](poshold_journey.md); for the yaw axis see [`yaw_axis_model.md`](yaw_axis_model.md).
 
 ## 1. Overview
 

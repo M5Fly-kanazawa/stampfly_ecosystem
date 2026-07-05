@@ -23,7 +23,7 @@ BMP280気圧センサからデータを取得し、気圧から高度を計算�
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/06_read_baro
+cd firmware/vehicle/examples/06_read_baro
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

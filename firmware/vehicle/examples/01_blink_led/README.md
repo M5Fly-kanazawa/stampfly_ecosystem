@@ -18,7 +18,7 @@ ESP-IDFの基本的なプロジェクト構造と、WS2812 RGB LEDの制御方�
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/01_blink_led
+cd firmware/vehicle/examples/01_blink_led
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

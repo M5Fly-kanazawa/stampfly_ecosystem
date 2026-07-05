@@ -1,4 +1,4 @@
-# StampFly vehicle_new 操作マニュアル / Operation Manual
+# StampFly vehicle 操作マニュアル / Operation Manual
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -6,7 +6,7 @@
 
 ### このドキュメントについて
 
-vehicle_new ファームウェアの**起動シーケンス・LED/音の意味・コントローラ操作・ペアリング手順・
+vehicle ファームウェアの**起動シーケンス・LED/音の意味・コントローラ操作・ペアリング手順・
 CLI コマンド**をまとめた実機運用マニュアル。UI（LED/ブザー）と操作系は旧 vehicle ファームを踏襲する。
 
 ### 対象読者
@@ -237,7 +237,7 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 USB シリアル（USB CDC）で接続し、`stampfly>` プロンプトにコマンドを入力する。`help` で一覧、
 TAB で補完。
 
-### vehicle_new の現行コマンド
+### vehicle の現行コマンド
 
 | コマンド | 引数 | 説明 |
 |---------|------|------|
@@ -292,7 +292,7 @@ WiFi 経由の制御を追加できる**（§7）。
 | 通信 | `comm [espnow\|udp]` / `wifi ...` | 通信モード・WiFi 設定 |
 
 これらは「自律飛行・WiFi 制御・Tello 互換」用。コントローラ手動飛行には不要で、必要に応じて
-vehicle_new に移植する。
+vehicle に移植する。
 
 ## 7. 将来の WiFi 制御（方針）
 
@@ -308,7 +308,7 @@ WiFi 制御を追加できる**。受信層（UDP サーバ）の追加が今後
 
 ### About This Document
 
-Operation manual for the vehicle_new firmware: **boot sequence, LED/sound meanings, controller
+Operation manual for the vehicle firmware: **boot sequence, LED/sound meanings, controller
 operation, pairing procedure, and CLI commands.** The UI (LED/buzzer) and controls follow the
 legacy vehicle firmware.
 
@@ -467,7 +467,7 @@ implementations** (§7).
 
 The legacy vehicle has ~50 commands (flight: `takeoff`/`hover`/`jump`; Tello-style moves and queries:
 `battery?`/`height?`; `trim`/`gain`/`magcal`/`comm`/`wifi`). These are for autonomous flight / WiFi /
-Tello compatibility and are ported to vehicle_new on demand.
+Tello compatibility and are ported to vehicle on demand.
 
 ## 7. Future WiFi Control (Direction)
 

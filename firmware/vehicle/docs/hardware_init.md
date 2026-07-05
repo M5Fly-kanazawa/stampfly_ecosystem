@@ -1,5 +1,5 @@
-# vehicle_new Hardware Initialization Design
-# vehicle_new ハードウェア初期化設計
+# vehicle Hardware Initialization Design
+# vehicle ハードウェア初期化設計
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -7,7 +7,7 @@
 
 ### このドキュメントについて
 
-vehicle_new における **共有ハードウェア資源の所有権・初期化フロー・失敗時の挙動・HAL との接続規約** を定義する。具体的には次の問いに答える。
+vehicle における **共有ハードウェア資源の所有権・初期化フロー・失敗時の挙動・HAL との接続規約** を定義する。具体的には次の問いに答える。
 
 - I2C バスや SPI バスのような共有 HW 資源を誰が所有するか
 - センサ・アクチュエータ・通信スタックの初期化はどの順序で行うか
@@ -18,7 +18,7 @@ vehicle_new における **共有ハードウェア資源の所有権・初期�
 
 ### 対象読者
 
-- vehicle_new ファームの実装者・拡張者
+- vehicle ファームの実装者・拡張者
 - 「StampFly のハードウェア層を学びたい」HW 学習者（L2/L3 アクセスを使う層）
 - Workshop API（L0）や Topic API（L1）の利用者は本文書を読む必要はない
 
@@ -62,7 +62,7 @@ vehicle_new における **共有ハードウェア資源の所有権・初期�
 
 ## 3. sf_board の責務
 
-`sf_board` は vehicle_new における Board Support Package（BSP）であり、**共有ハードウェア資源の唯一の所有者**。
+`sf_board` は vehicle における Board Support Package（BSP）であり、**共有ハードウェア資源の唯一の所有者**。
 
 ### 所有する資源
 
@@ -108,7 +108,7 @@ namespace sf::internal::board {
 
 ```cpp
 extern "C" void app_main() {
-  ESP_LOGI(TAG, "=== vehicle_new boot ===");
+  ESP_LOGI(TAG, "=== vehicle boot ===");
 
   // ===== Phase 0: pre-kernel resources =====
   // NVS 単独で先に初期化（WiFi 設定読み込み等で必要）
@@ -314,7 +314,7 @@ void TofTask(void*) {
 
 ## 8. 既存 Phase 2a 実装の手直し計画（M2 で実施）
 
-vehicle_new の Phase 2a で既に結合済みの IMU / Motor / ESP-NOW / UDP は、本文書の方針に合わせて以下を手直しする。M2 ブランチで実施。
+vehicle の Phase 2a で既に結合済みの IMU / Motor / ESP-NOW / UDP は、本文書の方針に合わせて以下を手直しする。M2 ブランチで実施。
 
 | ファイル | 現状 | M2 で実施する変更 |
 |---------|-----|----------------|
@@ -332,7 +332,7 @@ vehicle_new の Phase 2a で既に結合済みの IMU / Motor / ESP-NOW / UDP �
 
 ## 1. About This Document
 
-> **Status:** This document defines hardware initialization design for vehicle_new. The Japanese section above is the authoritative version. Full English translation is pending and will be completed in M1c (educational documentation milestone).
+> **Status:** This document defines hardware initialization design for vehicle. The Japanese section above is the authoritative version. Full English translation is pending and will be completed in M1c (educational documentation milestone).
 
 This document specifies:
 - Ownership of shared HW resources (I2C/SPI buses, esp_netif, event loop, NVS)

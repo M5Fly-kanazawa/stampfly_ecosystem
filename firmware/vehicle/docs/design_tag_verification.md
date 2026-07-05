@@ -1,13 +1,13 @@
 # @design タグ検証レポート（Phase 7）
 
-> 作成: 2026-06-08 / 対象: `firmware/vehicle_new/`（components + tasks + main）
+> 作成: 2026-06-08 / 対象: `firmware/vehicle/`（components + tasks + main）
 > 本レポートは、コードに付与された `@design` トレーサビリティ注釈のうち**未検証（`[--]`）**だったものを、設計文書と突き合わせて検証した結果の記録です。
 
 ---
 
 ## 1. 概要
 
-vehicle_new のソースには、各クラス・インターフェース・状態遷移・データ型に
+vehicle のソースには、各クラス・インターフェース・状態遷移・データ型に
 `@design <文書>.md §X — <説明> [判定]` 形式の注釈が付いている。判定は次の3値：
 
 | 記号 | 意味 |
@@ -127,7 +127,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 
 ## 5. 全判定結果（クラスタ別）
 
-> 凡例: 判定列の `OK` = 設計通り実装、`NG` = 不一致、`STALE` = 参照先ズレ。`ファイル:行` は `firmware/vehicle_new/` からの相対。
+> 凡例: 判定列の `OK` = 設計通り実装、`NG` = 不一致、`STALE` = 参照先ズレ。`ファイル:行` は `firmware/vehicle/` からの相対。
 
 ### 5-1. sf_state（31 OK / 0 NG / 0 STALE）
 
@@ -267,4 +267,4 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 - キャリブレーション手順（calibration）の詳細節
 - failsafe の「連続2回」は PowerTask レート(10Hz)で約200ms継続 — 極短の衝撃スパイク取りこぼしの可能性（failsafe.cpp にコメントで明記、レート見直しは将来課題）
 
-検証: 全フェーズで vehicle_new 11シナリオ＋legacy hover_espnow＋hover_smoke G2+G3＋ESP-IDF 実機ビルド 全PASS。@design タグ flip はコメントのみ（SIL ビルド OK で確認）。
+検証: 全フェーズで vehicle 11シナリオ＋legacy hover_espnow＋hover_smoke G2+G3＋ESP-IDF 実機ビルド 全PASS。@design タグ flip はコメントのみ（SIL ビルド OK で確認）。

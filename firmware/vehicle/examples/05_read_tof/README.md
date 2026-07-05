@@ -24,7 +24,7 @@ I2C通信でVL53L3CX Time-of-Flightセンサからレーザー距離計測を行
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/05_read_tof
+cd firmware/vehicle/examples/05_read_tof
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

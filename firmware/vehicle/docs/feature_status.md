@@ -6,7 +6,7 @@
 
 ### このドキュメントについて
 
-vehicle は、旧 vehicle_old（実機87フライトの旧世代ファーム）の設計思想を改め、**コードの守備範囲を明確にしてスパゲッティ化を防ぎ、保守・発展・更新を容易にする**ことを狙った、機能的には vehicle_old 互換でさらに発展させたファームウェアである（POS_HOLD 実機検証を機に vehicle_new から vehicle へ昇格済み）。本書はその開発状況を3つの観点で整理する:
+vehicle は、旧 vehicle_old（実機87フライトの旧世代ファーム）の設計思想を改め、**コードの守備範囲を明確にしてスパゲッティ化を防ぎ、保守・発展・更新を容易にする**ことを狙った、機能的には vehicle_old 互換でさらに発展させたファームウェアである（POS_HOLD 実機検証を機に vehicle から vehicle へ昇格済み）。本書はその開発状況を3つの観点で整理する:
 
 1. **計画当初（設計文書）にあって完了したもの**（§2）
 2. **計画当初にあって未完了のもの**（§3）
@@ -145,7 +145,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 ### About This Document
 
-vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed at **clear component responsibilities, no spaghetti, and easy maintenance/evolution** — functionally compatible with vehicle_old and extended beyond it (promoted from vehicle_new to vehicle after POS_HOLD was validated on real hardware). This document organizes the development status from three angles: originally-planned features that are done (§2), originally-planned features not yet done (§3), features added later driven by hardware testing and design discussions (§4), and legacy-vehicle features absent from vehicle (§5), distinguishing not-yet-ported / deliberately-dropped / replaced-by-equivalent.
+vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed at **clear component responsibilities, no spaghetti, and easy maintenance/evolution** — functionally compatible with vehicle_old and extended beyond it (promoted from vehicle to vehicle after POS_HOLD was validated on real hardware). This document organizes the development status from three angles: originally-planned features that are done (§2), originally-planned features not yet done (§3), features added later driven by hardware testing and design discussions (§4), and legacy-vehicle features absent from vehicle (§5), distinguishing not-yet-ported / deliberately-dropped / replaced-by-equivalent.
 
 ### Criteria
 

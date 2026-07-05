@@ -1,13 +1,13 @@
-# vehicle_new Coding Policy and Education Plan
-# vehicle_new コーディング方針・教育計画
+# vehicle Coding Policy and Education Plan
+# vehicle コーディング方針・教育計画
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 本文書の位置づけ
 
-**本文書はvehicle_newの全実装に適用される必須ルールである。**
+**本文書はvehicleの全実装に適用される必須ルールである。**
 
-vehicle_newのコードは単なるファームウェアではなく、ドローンのファームウェアを作ろうとする人が参考にできる**模範的なソースコード**であること、また**学習教材として機能する**ことを最重要目標とする。
+vehicleのコードは単なるファームウェアではなく、ドローンのファームウェアを作ろうとする人が参考にできる**模範的なソースコード**であること、また**学習教材として機能する**ことを最重要目標とする。
 
 ### 基本方針
 
@@ -164,7 +164,7 @@ void ControlTask(void* pvParameters)
 
 ### Namespace 規約（4 階層アクセス対応）
 
-vehicle_new は学習者・実装者がそれぞれのレベルで作業に集中できるよう、namespace を 4 階層に明確に分離する（[`architecture.md`](architecture.md) §2.5「学習者の入口」、横断ルール R8）。各 namespace は **公開先と所有資源** が異なる。
+vehicle は学習者・実装者がそれぞれのレベルで作業に集中できるよう、namespace を 4 階層に明確に分離する（[`architecture.md`](architecture.md) §2.5「学習者の入口」、横断ルール R8）。各 namespace は **公開先と所有資源** が異なる。
 
 | 層 | namespace | 公開ヘッダ | 何を提供するか | 学習者からの見え方 |
 |----|---------|---------|------------|------------------|
@@ -202,7 +202,7 @@ vehicle_new は学習者・実装者がそれぞれのレベルで作業に集�
 
 #### 既存 Workshop 移行への含意（R12）
 
-現在の `firmware/workshop/` は HAL コードを vehicle_new からコピーで持っているが、本規約に基づき **vehicle_new の HAL を直接共有する形** に統合する。`ws::*` API は `sf::api::*` を呼ぶ薄いラッパーとして再実装される。詳細は [`workshop_migration.md`](workshop_migration.md) を参照。
+現在の `firmware/workshop/` は HAL コードを vehicle からコピーで持っているが、本規約に基づき **vehicle の HAL を直接共有する形** に統合する。`ws::*` API は `sf::api::*` を呼ぶ薄いラッパーとして再実装される。詳細は [`workshop_migration.md`](workshop_migration.md) を参照。
 
 ## 3. Examples（サンプル集）計画
 
@@ -213,12 +213,12 @@ vehicle_new は学習者・実装者がそれぞれのレベルで作業に集�
 - **Examples Level 1〜4**: サンプル集の **学習難度の段階**（本節で定義）
 - **Access Tier L0〜L3**: ファームの **API アクセス階層**（§2「Namespace 規約」、[`architecture.md`](architecture.md) §2.5 で定義）
 
-両者は別軸であり、Example は「どの難度（Level）か」と「どの Tier の API を使うか」の 2 軸で分類される。Workshop 受講者向けの **Lesson 形式（L0 Tier 中心）** は本サンプル集とは別系統で `firmware/workshop/` 配下に置かれる（M5 で vehicle_new HAL に統合予定、[`workshop_migration.md`](workshop_migration.md) 参照）。
+両者は別軸であり、Example は「どの難度（Level）か」と「どの Tier の API を使うか」の 2 軸で分類される。Workshop 受講者向けの **Lesson 形式（L0 Tier 中心）** は本サンプル集とは別系統で `firmware/workshop/` 配下に置かれる（M5 で vehicle HAL に統合予定、[`workshop_migration.md`](workshop_migration.md) 参照）。
 
 ### 設計原則
 
 各Exampleは：
-- **単独でビルド・実行可能**（vehicle_new全体のビルド不要）
+- **単独でビルド・実行可能**（vehicle全体のビルド不要）
 - **README.mdに完全な説明**（目的、必要な知識、接続図、手順、コードの解説）
 - **段階的に複雑度が上がる**（前のExampleの知識を前提に）
 - **コメントは本体より多くてもいい**
@@ -300,7 +300,7 @@ Topic API でフライト制御パイプラインを構築する段階。`IEstim
 
 Workshop 向けの **Lesson 形式 Example** は別系統で、L0 Tier の `ws::*` API のみで完結する。設計上は本 Examples と独立しているが、最終的に同じ HAL / Topic を共有する（M5 で統合）。
 
-| Workshop Lesson | Tier | 対応する vehicle_new Example |
+| Workshop Lesson | Tier | 対応する vehicle Example |
 |---------------|-----|-------------------------|
 | Lesson 0 (Setup) | L0 | — |
 | Lesson 1 (Motor) | L0 | `07_motor_spin`（L2 で再学習）|
@@ -360,9 +360,9 @@ Workshop 向けの **Lesson 形式 Example** は別系統で、L0 Tier の `ws::
 
 ## 1. Purpose of This Document
 
-**This document applies as mandatory rules to all vehicle_new implementation.**
+**This document applies as mandatory rules to all vehicle implementation.**
 
-vehicle_new code is not just firmware — it must serve as **exemplary source code** that people building drone firmware can reference, and it must function as **educational material**.
+vehicle code is not just firmware — it must serve as **exemplary source code** that people building drone firmware can reference, and it must function as **educational material**.
 
 ### Core Policy
 
@@ -391,7 +391,7 @@ vehicle_new code is not just firmware — it must serve as **exemplary source co
 ### Design Principles
 
 Each Example must be:
-- **Independently buildable** (no need to build full vehicle_new)
+- **Independently buildable** (no need to build full vehicle)
 - **Fully documented with README.md** (purpose, wiring, steps, explanation)
 - **Progressive in complexity** (builds on previous Examples)
 - **More comments than code is OK**

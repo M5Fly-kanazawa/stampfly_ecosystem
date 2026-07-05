@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware — host unit tests).
+ * Part of StampFly Ecosystem (vehicle firmware — host unit tests).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 

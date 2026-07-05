@@ -1,22 +1,22 @@
-# vehicle_new ⇄ コントローラ ペアリング — 調査結果と実装計画
+# vehicle ⇄ コントローラ ペアリング — 調査結果と実装計画
 
 最終更新: 2026-06-09（**P1〜P3 実装完了・SIL 検証済み。残=実機検証・P4(per-drone ch)**）
 
 > **【実装完了 2026-06-09】P1（自分宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
 > P3（状態機械統合＋NVS 永続化）を実装し SIL で検証済み。** 旧 vehicle のシーケンスを踏襲し
-> vehicle_new アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
+> vehicle アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
 > architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
 > コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SIL検証)。
-> **SIL ゲート**: `sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle_new --unpaired`
+> **SIL ゲート**: `sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle --unpaired`
 > = 未ペア起動→自動Pairing→bind（相互MAC学習）＋誤MAC送信機のARM/離陸を破棄（混信拒否, duty=0）。
 > **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
 > ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
 
 ---
 
-> **結論（調査）: vehicle_new のペアリングは「部品のみ存在・未配線（実質未実装）」。**
+> **結論（調査）: vehicle のペアリングは「部品のみ存在・未配線（実質未実装）」。**
 > 一方で **コントローラ側・プロトコル仕様（SSOT）・旧 vehicle には実装/定義が揃っており**、
-> vehicle_new 側に「迎え撃つ」ロジックを足すのが本計画。
+> vehicle 側に「迎え撃つ」ロジックを足すのが本計画。
 
 ---
 
@@ -24,12 +24,12 @@
 
 landing page の売りは「**1教室で最大30機が同時に飛ぶ**」。同一空間で複数機・複数送信機が
 ESP-NOW を使うと、**混信**（他人の送信機のパケットで自分の機体が動く）が起きる。これを防ぐのが
-**ペアリング＝送信機と機体を1対1に束ねる**仕組み。現状の vehicle_new は誰のパケットでも受けて
+**ペアリング＝送信機と機体を1対1に束ねる**仕組み。現状の vehicle は誰のパケットでも受けて
 動くため、30機運用に耐えない。
 
 ---
 
-## 2. 現状の通信（vehicle_new）
+## 2. 現状の通信（vehicle）
 
 | 項目 | 現状 | 出典 |
 |------|------|------|
@@ -44,7 +44,7 @@ ESP-NOW を使うと、**混信**（他人の送信機のパケットで自分�
 `protocol/spec/messages.yaml` の **ControlPacket(14B)** は **offset 0-2 = `drone_mac`（宛先
 ドローン MAC の下位3バイト）**。コントローラはここに「送りたい機体の MAC」を入れて送っている
 （`firmware/controller/.../espnow_tdma.c` が `drone_mac[3:5]` を先頭3Bに格納）。
-**vehicle_new はこの3バイトを読まずに捨てている**。
+**vehicle はこの3バイトを読まずに捨てている**。
 
 ```
 ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)] [flags(11)] [reserved(12)] [checksum(13)]

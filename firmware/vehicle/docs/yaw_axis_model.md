@@ -23,7 +23,7 @@
 > - **安全ゲートは yaw のみ T→0 を許容**（`api_task.cpp` 物理境界で `t_lo=(axis==2)?0:0.002`）。roll/pitch は実モータ極~31ms ゆえ T≥2ms を維持。
 > - 低域同定は「今の制御には不要だが、物理モデル $\tau_z=I_r/(2k_Q\omega_0)$ を確証したい場合の将来実験」と位置づけ。**制御目的で零点を追ってはならない（同定不能＋不要）。**
 >
-> **§2–§3 の物理導出は有効（形は正しい）。§4 以降の「零点を同定して設計する」手順は無効**（同定不能）。コードに `fitPlantYaw`・`tau_z`・wc 上限は存在しない。経緯の詳細は auto-memory `project_vehicle_new_wobble_study` 参照。
+> **§2–§3 の物理導出は有効（形は正しい）。§4 以降の「零点を同定して設計する」手順は無効**（同定不能）。コードに `fitPlantYaw`・`tau_z`・wc 上限は存在しない。経緯の詳細は auto-memory `project_vehicle_wobble_study` 参照。
 
 ## 1. 概要
 
@@ -38,7 +38,7 @@
 
 ### 関連
 
-- 実装: `firmware/vehicle_new/components/sf_autotune/`（`fitPlantYaw`, `plantResponse`）, `firmware/vehicle_new/tasks/api_task.cpp`（`cmdAutotune`）
+- 実装: `firmware/vehicle/components/sf_autotune/`（`fitPlantYaw`, `plantResponse`）, `firmware/vehicle/tasks/api_task.cpp`（`cmdAutotune`）
 - 研究: `wobble_minimization_study.md`
 - 同定の3原則: `development_roadmap.md`（Model Identity）
 

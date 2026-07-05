@@ -14,7 +14,7 @@ POS_HOLD（位置保持）が成立した（±6〜7cm・RMS 16mm、commit `88063
 
 ### 対象読者
 
-vehicle_new の POS_HOLD カスケード・ESKF 速度推定・実機チューニングに関わる人。
+vehicle の POS_HOLD カスケード・ESKF 速度推定・実機チューニングに関わる人。
 
 ## 2. 観測と原因
 

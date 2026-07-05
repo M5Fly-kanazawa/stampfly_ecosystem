@@ -248,10 +248,10 @@ source setup_env.sh
 sf sil build
 
 # 破綻を再現（電池電圧のゆらぎを切る）— 元の値 0.06 では pos_yaw が 7.4m 流れる
-SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.06 sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle_new
+SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.06 sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
 
 # 直った値 0.8 では安定（att_rmse ~1.1°）
-SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.8  sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle_new
+SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.8  sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
 
 # 中の量を観察（d²・棄却率は emu の console.log に出る）
 grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail

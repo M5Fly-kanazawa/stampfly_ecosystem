@@ -5,7 +5,7 @@
 ## 0. 目的・条件・復帰方法
 
 - **目的:** 実機ホバーの「ふらつき」（1–6 Hz、ピーク1–3 Hz、gyro std roll≈11 / pitch≈6 / yaw≈25 dps）を**最小化**する制御則を、制御則レベルから見直して徹底比較する。
-- **条件（厳守）:** いつでも即座に現状へ復帰できること。→ 全作業を `experiment/wobble-min` ブランチで行い、`main`（commit c63de44）を一切変更しない。復帰 = `git checkout main`（+ 必要なら `sf flash vehicle_new` で main を再書込）。
+- **条件（厳守）:** いつでも即座に現状へ復帰できること。→ 全作業を `experiment/wobble-min` ブランチで行い、`main`（commit c63de44）を一切変更しない。復帰 = `git checkout main`（+ 必要なら `sf flash vehicle` で main を再書込）。
 - **対象でないもの:** 右前への定常ドリフトは別問題（加速度校正 `sf cal accel` ＋水平校正のトリム誤差）。本研究は**ランダムな1–6 Hz のふらつき**に限定。
 
 ## 1. ふらつきの実機診断（出発点）

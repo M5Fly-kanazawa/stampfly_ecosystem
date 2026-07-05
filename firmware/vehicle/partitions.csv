@@ -1,5 +1,5 @@
-# StampFly vehicle_new Partition Table
-# StampFly vehicle_new パーティションテーブル
+# StampFly vehicle Partition Table
+# StampFly vehicle パーティションテーブル
 #
 # @design detailed_design.md §8 — Memory layout                        [--]
 #

@@ -19,7 +19,7 @@ GPIO入力の読み取りとソフトウェアデバウンスの仕組みを学�
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/03_button_event
+cd firmware/vehicle/examples/03_button_event
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

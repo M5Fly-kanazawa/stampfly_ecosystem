@@ -1,14 +1,14 @@
-# vehicle_new Implementation Log
-# vehicle_new 実装ログ
+# vehicle Implementation Log
+# vehicle 実装ログ
 
-> 本文書はvehicle_newの実装過程を時系列で記録する。
+> 本文書はvehicleの実装過程を時系列で記録する。
 > AIと人間の協力によるドローンファームウェア開発の所要時間・工数を明らかにする資料。
 
 ## 概要
 
 | 項目 | 内容 |
 |------|------|
-| プロジェクト | StampFly vehicle_new — 次世代機体ファームウェア |
+| プロジェクト | StampFly vehicle — 次世代機体ファームウェア |
 | 開発体制 | 人間（設計判断・要件決定） + AI（Claude Code — 調査・実装・文書作成） |
 | 目的 | ドローンファームウェアをAIと協力してどの程度できるかを明らかにする |
 | 開始日 | 2026-04-11 |

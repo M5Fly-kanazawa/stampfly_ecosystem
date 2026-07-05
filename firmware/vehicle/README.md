@@ -1,4 +1,4 @@
-# vehicle_new — Next-Generation StampFly Vehicle Firmware
+# vehicle — Next-Generation StampFly Vehicle Firmware
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -6,7 +6,7 @@
 
 ### このプロジェクトについて
 
-vehicle_new は、StampFly 教育プラットフォームのための次世代機体ファームウェアです。設計は **関心の分離・可読性・教育的価値** を最優先に据え、Workshop 受講者から研究者・ファーム実装者まで、それぞれが自分のテーマに集中できるよう **4 階層アクセス（L0〜L3）** を提供します。
+vehicle は、StampFly 教育プラットフォームのための次世代機体ファームウェアです。設計は **関心の分離・可読性・教育的価値** を最優先に据え、Workshop 受講者から研究者・ファーム実装者まで、それぞれが自分のテーマに集中できるよう **4 階層アクセス（L0〜L3）** を提供します。
 
 ### 対象読者
 
@@ -38,7 +38,7 @@ vehicle_new は、StampFly 教育プラットフォームのための次世代�
 
 ### 本プロジェクトのライセンス
 
-vehicle_new ファームウェア本体（StampFly Ecosystem の一部として開発された原コード）は **MIT License** で配布されます。プロジェクトルートの [`LICENSE`](../../LICENSE) を参照してください。
+vehicle ファームウェア本体（StampFly Ecosystem の一部として開発された原コード）は **MIT License** で配布されます。プロジェクトルートの [`LICENSE`](../../LICENSE) を参照してください。
 
 ```
 SPDX-License-Identifier: MIT
@@ -49,7 +49,7 @@ Copyright (c) 2026 Kouhei Ito
 
 ### 第三者コンポーネントのライセンス
 
-vehicle_new は複数の第三者ドライバ・フレームワークを利用しています。詳細は [`NOTICE.md`](NOTICE.md) を参照してください。
+vehicle は複数の第三者ドライバ・フレームワークを利用しています。詳細は [`NOTICE.md`](NOTICE.md) を参照してください。
 
 | 主要な第三者要素 | ライセンス | 備考 |
 |-----------------|-----------|-----|
@@ -57,7 +57,7 @@ vehicle_new は複数の第三者ドライバ・フレームワークを利用�
 | STMicroelectronics VL53L3CX driver | GPL-2.0+ OR BSD-3-Clause（**BSD-3-Clause を選択**） | ToF センサ |
 | Espressif ESP-IDF + led_strip managed component | Apache 2.0 | フレームワーク |
 
-→ vehicle_new バイナリ全体は **MIT + BSD-3-Clause + Apache 2.0** の互換ライセンスのみで構成され、GPL コードを含みません。
+→ vehicle バイナリ全体は **MIT + BSD-3-Clause + Apache 2.0** の互換ライセンスのみで構成され、GPL コードを含みません。
 
 ---
 
@@ -65,7 +65,7 @@ vehicle_new は複数の第三者ドライバ・フレームワークを利用�
 
 ### 起点ファームウェア
 
-vehicle_new は **M5Stack 社公開の M5StampFly 公式ファームウェア** を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものです。
+vehicle は **M5Stack 社公開の M5StampFly 公式ファームウェア** を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものです。
 
 - M5StampFly 公式: https://github.com/m5stack/M5StampFly
 - ライセンス: MIT
@@ -92,7 +92,7 @@ vehicle_new は **M5Stack 社公開の M5StampFly 公式ファームウェア** 
 - Preiss et al., "Crazyswarm: A large nano-quadcopter swarm" (IROS 2017)
 - Silano et al., "CrazyS: a Software-In-The-Loop platform for the Crazyflie 2.0 nano-quadcopter" (MED 2018)
 
-vehicle_new の独自貢献：
+vehicle の独自貢献：
 1. **4 階層アクセス（L0〜L3）** — 単一ファームで Workshop 受講者から FC 実装者まで階段的に降りられる構造
 2. **`@design` タグ + 判定ステータス [OK]/[NG]/[--]** — 設計→実装のトレーサビリティを inline で保持
 3. **横断ルール R1〜R16** — 教育性 + 業界標準 + スパゲッティ対策の組合せ
@@ -106,8 +106,8 @@ vehicle_new の独自貢献：
 # 環境セットアップ (ESP-IDF + sf CLI)
 source setup_env.sh
 
-# vehicle_new をビルド
-cd firmware/vehicle_new
+# vehicle をビルド
+cd firmware/vehicle
 idf.py build
 
 # 書き込み + シリアルモニタ
@@ -130,7 +130,7 @@ idf.py flash monitor
 
 ## 1. About This Project
 
-vehicle_new is a next-generation flight controller firmware for the StampFly educational platform. It prioritizes **separation of concerns, readability, and educational value**, providing a **4-tier access model (L0–L3)** so that Workshop students, control-engineering learners, hardware-engineering students, and firmware implementers can each focus on their own theme.
+vehicle is a next-generation flight controller firmware for the StampFly educational platform. It prioritizes **separation of concerns, readability, and educational value**, providing a **4-tier access model (L0–L3)** so that Workshop students, control-engineering learners, hardware-engineering students, and firmware implementers can each focus on their own theme.
 
 ### Target Audiences
 
@@ -145,7 +145,7 @@ The four tiers coexist; learners pick their entry point based on the level they 
 
 ## 2. License
 
-vehicle_new firmware (original code as part of StampFly Ecosystem) is distributed under the **MIT License**. See the project root [`LICENSE`](../../LICENSE).
+vehicle firmware (original code as part of StampFly Ecosystem) is distributed under the **MIT License**. See the project root [`LICENSE`](../../LICENSE).
 
 ```
 SPDX-License-Identifier: MIT
@@ -156,6 +156,6 @@ For third-party components and their licenses, see [`NOTICE.md`](NOTICE.md). The
 
 ## 3. Credits / Influences
 
-vehicle_new is a redesign of the **M5StampFly official firmware** (https://github.com/m5stack/M5StampFly, MIT, Copyright (c) Kouhei Ito) — same author. Architectural ideas are borrowed from PX4 (uORB Pub-Sub), Zephyr RTOS (parent-child bus ownership, init levels), Crazyflie firmware (educational nano-drone niche), and Arduino (sketch-style L0 simplicity). No code is copied from these projects.
+vehicle is a redesign of the **M5StampFly official firmware** (https://github.com/m5stack/M5StampFly, MIT, Copyright (c) Kouhei Ito) — same author. Architectural ideas are borrowed from PX4 (uORB Pub-Sub), Zephyr RTOS (parent-child bus ownership, init levels), Crazyflie firmware (educational nano-drone niche), and Arduino (sketch-style L0 simplicity). No code is copied from these projects.
 
 See the Japanese section for details on academic positioning and prior work.

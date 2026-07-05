@@ -1,8 +1,8 @@
-# Third-Party Notices for vehicle_new
+# Third-Party Notices for vehicle
 
-vehicle_new ファームウェア本体は MIT License で配布されます（プロジェクトルートの [`LICENSE`](../../LICENSE) を参照）。本ファームウェアは以下の第三者コンポーネントを利用しており、それぞれ独自のライセンスが適用されます。
+vehicle ファームウェア本体は MIT License で配布されます（プロジェクトルートの [`LICENSE`](../../LICENSE) を参照）。本ファームウェアは以下の第三者コンポーネントを利用しており、それぞれ独自のライセンスが適用されます。
 
-The vehicle_new firmware itself is distributed under the MIT License (see project root [`LICENSE`](../../LICENSE)). It depends on the following third-party components, each governed by its own license.
+The vehicle firmware itself is distributed under the MIT License (see project root [`LICENSE`](../../LICENSE)). It depends on the following third-party components, each governed by its own license.
 
 ---
 
@@ -37,7 +37,7 @@ The vehicle_new firmware itself is distributed under the MIT License (see projec
 - C++ wrapper（`vl53l3cx_wrapper.cpp/hpp`）は MIT License
 
 ST 公式の dual license 条項により、利用者は GPL-2.0+ または BSD-3-Clause のいずれかを選択できる。本プロジェクトは **BSD-3-Clause** を選択する。これにより：
-- vehicle_new バイナリの再配布時に GPL ソース開示義務は発生しない
+- vehicle バイナリの再配布時に GPL ソース開示義務は発生しない
 - 派生作品も MIT または互換ライセンスで自由に配布可能
 
 VL53L3CX driver 自体の詳細ライセンス文は `components/sf_hal_vl53l3cx/LICENSE` を参照。
@@ -85,12 +85,12 @@ VL53L3CX driver 自体の詳細ライセンス文は `components/sf_hal_vl53l3cx
 | TI INA3221 | データシート参照のみ、独自実装 | MIT |
 | ESP-IDF / led_strip | Apache 2.0 | そのまま使用 |
 
-これらの組み合わせにより、vehicle_new バイナリ全体は **MIT + BSD-3-Clause + Apache 2.0** の互換ライセンスのみで構成され、GPL コードを含まない。
+これらの組み合わせにより、vehicle バイナリ全体は **MIT + BSD-3-Clause + Apache 2.0** の互換ライセンスのみで構成され、GPL コードを含まない。
 
 ---
 
 ## 7. 起点ファームウェアからの派生
 
-vehicle_new は M5Stack 社が公開する **M5StampFly 公式ファームウェア** (https://github.com/m5stack/M5StampFly, MIT License, Copyright (c) Kouhei Ito) を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものである。本プロジェクトの著作者と M5StampFly 公式ファームウェアの主たる著作者は同一（Kouhei Ito）であるため、ライセンス継承上の追加義務は発生しない。
+vehicle は M5Stack 社が公開する **M5StampFly 公式ファームウェア** (https://github.com/m5stack/M5StampFly, MIT License, Copyright (c) Kouhei Ito) を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものである。本プロジェクトの著作者と M5StampFly 公式ファームウェアの主たる著作者は同一（Kouhei Ito）であるため、ライセンス継承上の追加義務は発生しない。
 
 詳細は [`README.md`](README.md) の Credits / Influences 節を参照。

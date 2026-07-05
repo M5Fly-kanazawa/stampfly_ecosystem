@@ -7,12 +7,12 @@
 
 ### このドキュメントについて
 
-現行の `firmware/workshop/` は vehicle_new とは別ファームとして独立して動作しているが、HAL コードを vehicle_new からコピーで持っているため **二重メンテ** が発生している。本文書は、vehicle_new 完成後に Workshop を **vehicle_new + L0 (`ws::*`) ラッパー** として再構成するための移行計画を定義する（横断ルール R12）。
+現行の `firmware/workshop/` は vehicle とは別ファームとして独立して動作しているが、HAL コードを vehicle からコピーで持っているため **二重メンテ** が発生している。本文書は、vehicle 完成後に Workshop を **vehicle + L0 (`ws::*`) ラッパー** として再構成するための移行計画を定義する（横断ルール R12）。
 
 ### スコープ
 
 - 現行 Workshop の機能棚卸し（30+ API、13 Lesson）
-- vehicle_new で再現するために必要な機能リスト
+- vehicle で再現するために必要な機能リスト
 - L0 `ws::*` ラッパーの実装方針
 - 移行時の 5 大論点と解決方針
 - 実施フェーズ（M5 で実施予定）
@@ -110,15 +110,15 @@
 
 ```
 firmware/workshop/
-├── CMakeLists.txt           # vehicle_new component を依存として参照
+├── CMakeLists.txt           # vehicle component を依存として参照
 ├── main/
 │   ├── workshop_main.cpp    # 起動・ARM ロジック・400Hz 同期（既存維持）
 │   ├── user_code.cpp        # 学習者が書く setup() / loop_400Hz() （既存維持）
-│   ├── ws_api.hpp           # ws::* API 宣言（vehicle_new からの依存ラッパー）
+│   ├── ws_api.hpp           # ws::* API 宣言（vehicle からの依存ラッパー）
 │   └── ws_api.cpp           # ws::* 実装（sf::api::* と Topic に委譲）
 ├── lessons/                 # Lesson 教材（既存維持）
 └── components/              # ★ HAL コピーを削除
-                             # vehicle_new/components/sf_hal_* を直接参照する
+                             # vehicle/components/sf_hal_* を直接参照する
 ```
 
 ### 3.2 `ws::*` 実装方針（薄いラッパー）
@@ -176,9 +176,9 @@ bool is_armed() {
 | 利点 | 内容 |
 |-----|-----|
 | HAL コピー廃止 | 30+ ファイルの二重メンテ解消、バグ修正・新機能追加が片方だけで済む |
-| 同一 estimator | Workshop と vehicle_new で同じ ESKF を使うため、Lesson 9 の「相補フィルタ vs ESKF 比較」が常に最新の挙動と一致 |
+| 同一 estimator | Workshop と vehicle で同じ ESKF を使うため、Lesson 9 の「相補フィルタ vs ESKF 比較」が常に最新の挙動と一致 |
 | Examples からの階段 | Workshop で L0 を経験した学習者が、Examples Level 1〜4 で L1/L2 へ降りる導線が滑らか |
-| 設計改善の伝播 | vehicle_new の `@design`、横断ルール R1〜R16、Topic SSOT 等が Workshop にも適用される |
+| 設計改善の伝播 | vehicle の `@design`、横断ルール R1〜R16、Topic SSOT 等が Workshop にも適用される |
 
 ---
 
@@ -186,16 +186,16 @@ bool is_armed() {
 
 ### 論点 1: ESKF API 凍結
 
-**問題**: Workshop の `ws::estimated_*()` は vehicle 共有の ESKF に直結している。vehicle_new で ESKF が quaternion → Euler 変換の仕様を変えると、Lesson 9（相補フィルタ vs ESKF 比較）の比較が不整合になる。
+**問題**: Workshop の `ws::estimated_*()` は vehicle 共有の ESKF に直結している。vehicle で ESKF が quaternion → Euler 変換の仕様を変えると、Lesson 9（相補フィルタ vs ESKF 比較）の比較が不整合になる。
 
 **解決策**:
-- vehicle_new の `IEstimator` インターフェース（`getAttitudeEuler()` / `getPosition()` / `getVelocity()`）の **シグネチャ・単位・座標系を凍結** する
+- vehicle の `IEstimator` インターフェース（`getAttitudeEuler()` / `getPosition()` / `getVelocity()`）の **シグネチャ・単位・座標系を凍結** する
 - 凍結内容を [`detailed_design.md`](detailed_design.md) §5 に明記し、変更には ADR（Architecture Decision Record）を要求
 - `StateEstimate` データ型のフィールド追加は OK、フィールド変更は破壊的変更扱い
 
 ### 論点 2: ARM ロジックの状態遷移 guard
 
-**問題**: 現行 Workshop は `StampFlyState::requestArm()` と `g_motor.arm()` を両方呼ぶ。vehicle_new の StateManager が stateless だと、ARM 中に `requestArm()` を再呼び出しすると二重起動の危険。
+**問題**: 現行 Workshop は `StampFlyState::requestArm()` と `g_motor.arm()` を両方呼ぶ。vehicle の StateManager が stateless だと、ARM 中に `requestArm()` を再呼び出しすると二重起動の危険。
 
 **解決策**:
 - `sf_state::StateManager` に **ARM guard** を組み込む（`if (state != ARMED) state = ARMED`）
@@ -213,12 +213,12 @@ bool is_armed() {
 
 ### 論点 4: ControlPacket の互換性とバージョニング
 
-**問題**: 現行 Workshop は vehicle の `ControlPacket` 構造体 + `CTRL_FLAG_*` enum を直結している。vehicle_new で新フォーマットに変えると全 Lesson が壊れる。
+**問題**: 現行 Workshop は vehicle の `ControlPacket` 構造体 + `CTRL_FLAG_*` enum を直結している。vehicle で新フォーマットに変えると全 Lesson が壊れる。
 
 **解決策**:
 - `ControlPacket` 構造体に **`uint8_t version` フィールド**を先頭に追加
 - ESP-NOW 受信側（`sf_comm`）でバージョン判定し、複数バージョンをサポート
-- 既存 Workshop が使うバージョンを `v1`、vehicle_new 拡張版を `v2` として共存
+- 既存 Workshop が使うバージョンを `v1`、vehicle 拡張版を `v2` として共存
 - Workshop 統合時に Workshop 側を `v2` に揃える
 
 ### 論点 5: NVS namespace 分離
@@ -226,15 +226,15 @@ bool is_armed() {
 **問題**: 現行 Workshop の `ws::set_channel()` は `nvs_set_u8(handle, "wifi_ch")` で共有 NVS namespace を汚染する。Workshop と vehicle のデュアルビルド環境で値が迷走する。
 
 **解決策**:
-- vehicle_new は **`nvs_open("vehicle_new", ...)` namespace** を使う
-- Workshop は移行後 vehicle_new と同じ namespace を共有する（同一 firmware なので競合なし）
-- 旧 Workshop の `wifi_ch` キーは初回起動時にマイグレーション（既存 NVS 値があれば読み取って vehicle_new namespace に書き直す）
+- vehicle は **`nvs_open("vehicle", ...)` namespace** を使う
+- Workshop は移行後 vehicle と同じ namespace を共有する（同一 firmware なので競合なし）
+- 旧 Workshop の `wifi_ch` キーは初回起動時にマイグレーション（既存 NVS 値があれば読み取って vehicle namespace に書き直す）
 
 ---
 
-## 5. vehicle_new 側で必要な追加機能
+## 5. vehicle 側で必要な追加機能
 
-Workshop 移行を成立させるために、vehicle_new 側で実装する必要がある追加機能のリスト。M5 までに以下を完備する。
+Workshop 移行を成立させるために、vehicle 側で実装する必要がある追加機能のリスト。M5 までに以下を完備する。
 
 ### 5.1 sf::api 公開関数
 
@@ -258,7 +258,7 @@ RingBuffer は SPSC 制限があるため、Workshop の `ws::gyro_x()` のよ�
 
 ### 5.3 ControlPacket バージョニング
 
-`firmware/common/protocol/` に `ControlPacket v2` を定義し、vehicle_new と Workshop が共通で使う形を整備（M5 で実施）。
+`firmware/common/protocol/` に `ControlPacket v2` を定義し、vehicle と Workshop が共通で使う形を整備（M5 で実施）。
 
 ---
 
@@ -266,9 +266,9 @@ RingBuffer は SPSC 制限があるため、Workshop の `ws::gyro_x()` のよ�
 
 ### A. ハードウェア層対応
 
-- [ ] vehicle_new の `sf_actuator::set_motor_duty()` / `mix_and_publish()` が動作確認済み
-- [ ] vehicle_new の IMU / Mag / Baro / ToF / OptFlow / LED / Button / Power が全て Topic に publish できる状態
-- [ ] vehicle_new の ESKF が `getAttitudeEuler()` / `getPosition()` で値を返す
+- [ ] vehicle の `sf_actuator::set_motor_duty()` / `mix_and_publish()` が動作確認済み
+- [ ] vehicle の IMU / Mag / Baro / ToF / OptFlow / LED / Button / Power が全て Topic に publish できる状態
+- [ ] vehicle の ESKF が `getAttitudeEuler()` / `getPosition()` で値を返す
 
 ### B. 状態・通信層対応
 
@@ -318,7 +318,7 @@ RingBuffer は SPSC 制限があるため、Workshop の `ws::gyro_x()` のよ�
 - [ ] ARM ボタン = スロットル / ヨーボタン兼用（アーキテクチャ固定）
 - [ ] ペアリング時 LED はシステム優先度（PAIRING パターン）
 - [ ] IDLE 中 `loop_400Hz()` は LED タスク無効化で有効化
-- [ ] ESKF quaternion state: vehicle_new と同じ実装を使うため互換維持
+- [ ] ESKF quaternion state: vehicle と同じ実装を使うため互換維持
 
 ---
 
@@ -330,11 +330,11 @@ RingBuffer は SPSC 制限があるため、Workshop の `ws::gyro_x()` のよ�
 | **M3** | Phase 2.2 ToF 結合 | M2 |
 | **M3a-d** | Phase 2.3 Baro / 2.4 Flow / 2.5 Mag / 2.7 NVS 持続化 | M3 |
 | **M4** | sf_logger / sf_telemetry の実装、Phase 3 ACRO 同定の準備 | M3a-d |
-| **M5** | **本文書に従い Workshop を vehicle_new に統合** | M4 |
+| **M5** | **本文書に従い Workshop を vehicle に統合** | M4 |
 | **M5a** | 13 Lesson の動作確認、競技会要件の検証 | M5 |
 | **Phase 4 以降** | STABILIZE / ALT / POS の実機検証 | M5a |
 
-M5 完了後、`firmware/workshop/` は vehicle_new と同じファームウェアバイナリ（または同じ HAL を共有するバリアント）として運用される。
+M5 完了後、`firmware/workshop/` は vehicle と同じファームウェアバイナリ（または同じ HAL を共有するバリアント）として運用される。
 
 ---
 
@@ -342,11 +342,11 @@ M5 完了後、`firmware/workshop/` は vehicle_new と同じファームウェ�
 
 ## 1. About This Document
 
-> **Status:** Migration plan for integrating the existing `firmware/workshop/` (which currently has copied HAL code) into the vehicle_new firmware as a thin L0 (`ws::*`) wrapper layer. The Japanese section above is the authoritative version. Full English translation pending.
+> **Status:** Migration plan for integrating the existing `firmware/workshop/` (which currently has copied HAL code) into the vehicle firmware as a thin L0 (`ws::*`) wrapper layer. The Japanese section above is the authoritative version. Full English translation pending.
 
 This document defines:
 - Inventory of the current Workshop firmware (30+ APIs, 13 Lessons)
-- Required features in vehicle_new to support the migration
+- Required features in vehicle to support the migration
 - Implementation strategy for `ws::*` as a thin wrapper over `sf::api::*` and `stampfly::*Wrapper`
 - Five major points of contention and their resolution strategies (ESKF API freezing, ARM guard, 400Hz sync robustness, ControlPacket versioning, NVS namespace isolation)
 - Migration checklist for M5 milestone

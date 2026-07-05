@@ -18,7 +18,7 @@ ESP-IDFのLEDC PWMペリフェラルを使って、ブザーからトーンを�
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/02_buzzer_melody
+cd firmware/vehicle/examples/02_buzzer_melody
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

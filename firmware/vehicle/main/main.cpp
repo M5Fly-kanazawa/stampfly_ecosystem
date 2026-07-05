@@ -2,14 +2,14 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 
 /**
  * @file main.cpp
- * @brief StampFly vehicle_new — Main Entry Point
- *        StampFly vehicle_new — メインエントリポイント
+ * @brief StampFly vehicle — Main Entry Point
+ *        StampFly vehicle — メインエントリポイント
  *
  * Declarative boot: app_main only names the five boot phases (NVS → BSP →
  * topics → params → tasks). Each phase's "how" lives in its owning module
@@ -37,7 +37,7 @@ static const char* TAG = "main";
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "=== StampFly vehicle_new starting ===");
+    ESP_LOGI(TAG, "=== StampFly vehicle starting ===");
 
     // =========================================================================
     // Phase 0: NVS (required by WiFi and parameter persistence)

@@ -6,7 +6,7 @@
 
 ### このドキュメントについて
 
-vehicle_new の **POSITION_HOLD（位置保持）** が SIL で「飛び去る／タンブルする」問題を、原因究明から解決まで追った記録である。なぜ飛び去ったのか（物理）、何を試して何が効かなかったのか、最終的にどう直したのか、そして何が残っているのかを、制御工学の言葉で順に説明する。
+vehicle の **POSITION_HOLD（位置保持）** が SIL で「飛び去る／タンブルする」問題を、原因究明から解決まで追った記録である。なぜ飛び去ったのか（物理）、何を試して何が効かなかったのか、最終的にどう直したのか、そして何が残っているのかを、制御工学の言葉で順に説明する。
 
 ### 一文で言うと
 
@@ -14,7 +14,7 @@ vehicle_new の **POSITION_HOLD（位置保持）** が SIL で「飛び去る�
 
 ### 対象読者
 
-vehicle_new の推定（ESKF）・制御（PID カスケード）・SIL テストに関わる人。ドローンの姿勢推定がなぜ難しいかを学びたい人。
+vehicle の推定（ESKF）・制御（PID カスケード）・SIL テストに関わる人。ドローンの姿勢推定がなぜ難しいかを学びたい人。
 
 ## 2. 問題 — なぜ POSITION_HOLD が飛び去ったか
 
@@ -189,7 +189,7 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 |---|------|------|--------|
 | 1 | **入口過渡の振動** | 擾乱直後に水平 ~0.85m まで振れ、~10秒かけて減衰してから定点に収まる（「即収束」でなく「減衰しながら収束」） | 位置/速度ループの減衰を上げる（vel の微分項 td、または位置の積分 ti）。ただしゲインは脆弱な領域があるので SIL で慎重に |
 | 2 | **過酷振動（n1/n2）下の飛び去り** | スロットル依存振動 n1／帯域制限 n2 では baseline 同様に飛び去る。フロー速度がノイズで汚れ a_kin が劣化するため | 振動処理（ノッチフィルタ、フローノイズモデルの精緻化）が必要。clean + N0 が主検証レベルで、n1/n2 は別フェーズの課題 |
-| 3 | **実機 ESP-IDF ビルド未検証** | host SIL は全ソースを通すが、ESP32 ターゲットでのビルドは未確認 | `sf build vehicle_new` で確認 |
+| 3 | **実機 ESP-IDF ビルド未検証** | host SIL は全ソースを通すが、ESP32 ターゲットでのビルドは未確認 | `sf build vehicle` で確認 |
 | 4 | **実機飛行未検証** | SIL（物理真値）で成立したが、実機 POSITION_HOLD は未飛行 | development_roadmap Phase 4.3 の手順（SIL→実機 Code Identity）で進める |
 
 ### 残課題の優先度
@@ -216,7 +216,7 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 
 ## 1. Overview
 
-A record of diagnosing and fixing the vehicle_new **POSITION_HOLD** "fly-away / tumble"
+A record of diagnosing and fixing the vehicle **POSITION_HOLD** "fly-away / tumble"
 problem in SIL: why it flew away (the physics), what was tried and what failed, how it
 was finally fixed, and what remains — explained in control-engineering terms.
 
@@ -329,7 +329,7 @@ G2/G3/G4 — the DSL was log-only ≈ G1). See `simulator/sil/scenarios/TEST_MAT
 |---|-------|-------------|-----------|
 | 1 | **Entry transient** | a ~0.85 m swing that damps over ~10 s before settling (damped, not instant convergence) | add velocity-loop damping (td) or position integral (ti); tune carefully in SIL (fragile regions exist) |
 | 2 | **Fly-away under n1/n2** | severe vibration corrupts the flow velocity → a_kin degrades; flies away like the baseline | needs vibration handling (notch, better flow-noise model); clean + N0 are the primary levels |
-| 3 | **On-target ESP-IDF build unverified** | host SIL compiles all sources; the ESP32 build is unchecked | run `sf build vehicle_new` |
+| 3 | **On-target ESP-IDF build unverified** | host SIL compiles all sources; the ESP32 build is unchecked | run `sf build vehicle` |
 | 4 | **Real-flight unverified** | holds in SIL (physical truth); the real POSITION_HOLD is unflown | proceed via development_roadmap Phase 4.3 (SIL→hardware Code Identity) |
 
 Items 1 and 3 are short; 2 and 4 are separate phases. This fix resolves the ROOT CAUSE

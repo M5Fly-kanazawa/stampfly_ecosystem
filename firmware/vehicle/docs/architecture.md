@@ -1,11 +1,11 @@
-# vehicle_new Architecture Design
-# vehicle_new アーキテクチャ設計書
+# vehicle Architecture Design
+# vehicle アーキテクチャ設計書
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要
 
-本文書はvehicle_newのアーキテクチャ設計を定義する。要件定義書（requirements.md）に基づき、以下の5つのサブ工程を記述する。
+本文書はvehicleのアーキテクチャ設計を定義する。要件定義書（requirements.md）に基づき、以下の5つのサブ工程を記述する。
 
 | サブ工程 | 内容 |
 |---------|------|
@@ -94,7 +94,7 @@
 | R9 | `docs/topic_reference.md` を Topic SSOT 文書とする。Topic 追加時は同時に表を更新する PR 必須 |
 | R10 | 学習者バイパス機構を提供（`params::sim::use_true_*` 等で Estimator/Controller を素朴化、SIL/学習段階で各層を独立検証可能） |
 | R11 | Guidance / Navigation Topic を予約定義（`command_target`, `nav_path`）。実装は将来でも、置き場所と入出力契約を今決める |
-| R12 | `firmware/workshop/` の HAL コピーを廃止し、vehicle_new の HAL を共有する。Workshop API は L0 ラッパーとして再実装する |
+| R12 | `firmware/workshop/` の HAL コピーを廃止し、vehicle の HAL を共有する。Workshop API は L0 ラッパーとして再実装する |
 
 **Topic 運用**
 
@@ -146,7 +146,7 @@
 
 ### 学習者の入口（4 階層アクセス）
 
-vehicle_new は **学習者がレベルに応じて入口を選べる** 並列 API を提供する。Workshop 受講者から HW 学習者、ファーム実装者まで、全員が同じファームウェアを共有しつつ、自分のテーマに集中できる。
+vehicle は **学習者がレベルに応じて入口を選べる** 並列 API を提供する。Workshop 受講者から HW 学習者、ファーム実装者まで、全員が同じファームウェアを共有しつつ、自分のテーマに集中できる。
 
 | 層 | 名前空間 | 典型ユーザー | できること |
 |----|---------|------------|----------|
@@ -556,7 +556,7 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 - 「このグローバルは誰が所有しているか」がコードを読んで追えない
 - センサ init 失敗時の挙動が WARN + fail-through で、後続の null pointer リスクがあった
 
-vehicle_new では、これらを **`sf_board` という単一の BSP コンポーネントに集約** する。
+vehicle では、これらを **`sf_board` という単一の BSP コンポーネントに集約** する。
 
 ### sf_board の責務
 
@@ -612,7 +612,7 @@ extern "C" void app_main() {
 
 ## 1. Overview
 
-This document defines the architecture design of vehicle_new, based on the requirements definition (requirements.md). It covers five sub-phases:
+This document defines the architecture design of vehicle, based on the requirements definition (requirements.md). It covers five sub-phases:
 
 | Sub-phase | Content |
 |-----------|---------|

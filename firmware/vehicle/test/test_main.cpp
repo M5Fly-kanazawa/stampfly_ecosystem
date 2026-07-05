@@ -1,7 +1,7 @@
 /**
  * @file test_main.cpp
- * @brief Unit test runner for vehicle_new algorithm layer
- *        vehicle_newアルゴリズム層の単体テストランナー
+ * @brief Unit test runner for vehicle algorithm layer
+ *        vehicleアルゴリズム層の単体テストランナー
  *
  * Runs on host PC (not ESP32). Tests sf_math, ESKF core, PID.
  * ホストPC上で実行（ESP32ではない）。sf_math、ESKFコア、PIDをテスト。
@@ -14,7 +14,7 @@
  *            -I../components/sf_controller/include
  *            -I../components/sf_state/include
  *            test_main.cpp ../components/sf_estimator_eskf/eskf_core.cpp
- *            -o test_vehicle_new -lm
+ *            -o test_vehicle -lm
  *
  * @design requirements.md §10 — Unit testing on PC                    [--]
  * @design coding_and_education.md §2 — Bilingual comments             [--]
@@ -841,7 +841,7 @@ TEST(land_disarm_clears)
 
 int main()
 {
-    printf("=== vehicle_new Unit Tests ===\n\n");
+    printf("=== vehicle Unit Tests ===\n\n");
 
     printf("[sf_math]\n");
     run_vec3_add();

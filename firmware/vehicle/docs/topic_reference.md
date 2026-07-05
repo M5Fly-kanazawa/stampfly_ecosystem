@@ -1,5 +1,5 @@
-# vehicle_new Topic Reference
-# vehicle_new トピックリファレンス
+# vehicle Topic Reference
+# vehicle トピックリファレンス
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -7,7 +7,7 @@
 
 ### このドキュメントについて
 
-vehicle_new の **Pub-Sub Topic システムの Single Source of Truth (SSOT)** 文書である。学習者・利用者・拡張者が Topic を使うために必要な情報を **この 1 文書で完結** させる。
+vehicle の **Pub-Sub Topic システムの Single Source of Truth (SSOT)** 文書である。学習者・利用者・拡張者が Topic を使うために必要な情報を **この 1 文書で完結** させる。
 
 ### 対象読者
 
@@ -34,7 +34,7 @@ vehicle_new の **Pub-Sub Topic システムの Single Source of Truth (SSOT)** 
 
 ## 2. 3 つのバッファ方式
 
-vehicle_new の Topic はテンプレートで 3 つのバッファ方式から選ぶ。データの特性に合わせて使い分ける。
+vehicle の Topic はテンプレートで 3 つのバッファ方式から選ぶ。データの特性に合わせて使い分ける。
 
 ```cpp
 Topic<DataType, BufferPolicy, BufferSize>  topic_name;
@@ -121,7 +121,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 
 ### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 
-vehicle_new v3 設計で予約した将来 Topic。`command_target` / `nav_path` は実体を定義済み（producer は将来配線）、`sensor_imu_raw` は未定義（型 `ImuRawData` も未定義）。
+vehicle v3 設計で予約した将来 Topic。`command_target` / `nav_path` は実体を定義済み（producer は将来配線）、`sensor_imu_raw` は未定義（型 `ImuRawData` も未定義）。
 
 | # | Topic 名 | データ型 | バッファ | サイズ | Publisher | Subscriber | レート | 用途 | 状態 |
 |---|---------|---------|--------|------|-----------|-----------|------|------|------|
@@ -370,7 +370,7 @@ struct SensorHealth {
 
 > **Status:** Topic system Single Source of Truth (SSOT). The Japanese section above is the authoritative version. Full English translation pending in M1c.
 
-This document is the SSOT reference for the vehicle_new Pub-Sub Topic system. It covers:
+This document is the SSOT reference for the vehicle Pub-Sub Topic system. It covers:
 
 - The 3 buffer policies (Latest / RingBuffer / Queue) and selection criteria
 - Complete topic catalog (12 implemented + 4 reserved in v3)

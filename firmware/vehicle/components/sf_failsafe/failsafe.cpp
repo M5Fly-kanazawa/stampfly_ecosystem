@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 
@@ -190,7 +190,7 @@ void Failsafe::checkBattery()
     } else if (power.voltage < config_.low_battery_v) {
         // Low voltage — warning. RE-RAISE periodically while latched, mirroring the
         // COMM_LOST divider above and the OLD firmware's PowerTask (which re-warbled
-        // lowBatteryWarning() every ~10 s in flight). vehicle_new funnels every tone
+        // lowBatteryWarning() every ~10 s in flight). vehicle funnels every tone
         // through one notify_command consumer, so a SINGLE in-flight beep is missed
         // over motor noise — the warble must REPEAT to be heard while armed.
         // 低電圧 — 警告。ラッチ中は周期的に再発報する（上の COMM_LOST 分周・旧 PowerTask の

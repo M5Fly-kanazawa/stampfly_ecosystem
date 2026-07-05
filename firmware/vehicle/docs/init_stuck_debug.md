@@ -10,7 +10,7 @@
 
 ## 1. 事象（Symptom）
 
-- vehicle_new を実機（M5StampFly, ESP32-S3）にフラッシュ。**ペア済み復元起動（`Pairing restored: DC:54:75:EE:75:2C`）で 300 秒以上 LED 白＝INIT のまま**。`Init complete → IDLE_GROUND` が出ない＝INIT→IDLE_GROUND 遷移が起きない。
+- vehicle を実機（M5StampFly, ESP32-S3）にフラッシュ。**ペア済み復元起動（`Pairing restored: DC:54:75:EE:75:2C`）で 300 秒以上 LED 白＝INIT のまま**。`Init complete → IDLE_GROUND` が出ない＝INIT→IDLE_GROUND 遷移が起きない。
 - 一方 **ImuTask は 400Hz で回り続ける**（chi2 ログが 1 秒で 400 増）。`sensor_imu` は出力されている。
 - **コントローラは OFF**（受信割込みゼロ＝「コントローラ送信が core0 を飽和させる」説は否定済）。
 - **未ペア起動（ただし旧 UI 前ファーム）は ~2.2 秒で IDLE_GROUND 到達**。ペア済み＋UI 版で stuck。
@@ -81,7 +81,7 @@ transition(FlightState::IDLE_GROUND);            // (b)
 
 ```bash
 source setup_env.sh
-sf flash vehicle_new -m
+sf flash vehicle -m
 ```
 
 起動後に出る `ROOT:` 行を**全部**採取。正常なら以下が**全部**順に出る:

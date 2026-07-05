@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 
@@ -288,7 +288,7 @@ int cmd_version(int argc, char** argv)
 {
     (void)argc;
     (void)argv;
-    std::printf("StampFly vehicle_new firmware\n");
+    std::printf("StampFly vehicle firmware\n");
     std::printf("build : %s %s\n", __DATE__, __TIME__);
     return 0;
 }
@@ -673,7 +673,7 @@ void serveTcpClient(const int client_fd)
     FILE* saved_stdout = stdout;
     stdout = client;
 
-    std::printf("StampFly vehicle_new TCP CLI — type 'help' for commands\n");
+    std::printf("StampFly vehicle TCP CLI — type 'help' for commands\n");
     std::printf("stampfly> ");
     std::fflush(client);
 

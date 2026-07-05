@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 
@@ -109,8 +109,8 @@ public:
             config.spi_clock_hz = 10000000;  // 10MHz
             config.other_cs = GPIO_NUM_12;   // PMW3901 CS
             // Default: this driver owns the bus (standalone use). Under sf_board
-            // (vehicle_new), the caller sets skip_bus_init=true to borrow the bus.
-            // 既定: 本ドライバがバス所有(単体利用)。sf_board 下(vehicle_new)では
+            // (vehicle), the caller sets skip_bus_init=true to borrow the bus.
+            // 既定: 本ドライバがバス所有(単体利用)。sf_board 下(vehicle)では
             // 呼び出し側が skip_bus_init=true にしてバスを借用する。
             config.skip_bus_init = false;
 

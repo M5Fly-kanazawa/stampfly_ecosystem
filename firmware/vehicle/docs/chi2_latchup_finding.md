@@ -97,7 +97,7 @@ SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sens
 - **臨界の消失を直接確認**: actuator を fixed 3.7→3.696（推力+0.1%）にしても pos_yaw が
   発散しないこと（`SIL_EMU_BATTERY=off` で電池サグを切り、量子化バイアスを再現できる）。
   または electric デッドバンド 0.05 を有効化して全 POS_HOLD/STABILIZE が PASS すること。
-- **退行なし**: vehicle_new 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
+- **退行なし**: vehicle 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
   かつ att_rmse が悪化しないこと。
 - **掃引で数値選定**: ゲート値（7.8/11.3/16/…）× シナリオの表を作り、最良を選ぶ。
 
@@ -108,7 +108,7 @@ source setup_env.sh
 sf sil build
 # 量子化バイアスで臨界を再現（電池サグOFF＝固定電圧に量子化を載せる）:
 #   actuator batteryVoltage() を一時的に 3.696f 固定 にして以下が FAIL することを確認
-SIL_EMU_BATTERY=off sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle_new
+SIL_EMU_BATTERY=off sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
 # χ² 棄却率ログは emu の stderr（console.log）に "chi2: d2=... reject=.../..." で出る
 grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail
 ```

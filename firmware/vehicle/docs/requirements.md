@@ -1,5 +1,5 @@
-# vehicle_new Requirements Definition
-# vehicle_new 要件定義書
+# vehicle Requirements Definition
+# vehicle 要件定義書
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 

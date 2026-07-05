@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  */
 
@@ -11,10 +11,10 @@
  * @brief Data Stream wire format — WIRE-COMPATIBLE with the proven
  *        firmware/vehicle 400Hz UDP log protocol, so the existing PC tooling
  *        (`sf log wifi` → tools/log_analyzer/udp_capture.py → `sf log viz`)
- *        works unchanged on vehicle_new.
+ *        works unchanged on vehicle.
  *        Data Stream の電文定義 — 実証済み firmware/vehicle の 400Hz UDP ログ
  *        プロトコルと「電文互換」。既存の PC ツール（`sf log wifi` →
- *        udp_capture.py → `sf log viz`）が vehicle_new でも無改造で動く。
+ *        udp_capture.py → `sf log viz`）が vehicle でも無改造で動く。
  *
  * Protocol summary (SSOT shared with tools/log_analyzer/udp_capture.py):
  *   - vehicle binds UDP port 8890; the PC sends 1-byte commands:
@@ -113,9 +113,9 @@ struct WireImuEskf {
     uint32_t timestamp_us;
     float    gyro[3];        // [rad/s] estimator-input gyro    / 推定器入力ジャイロ
     float    accel[3];       // [m/s²]
-    float    gyro_raw[3];    // [rad/s] pre-filter raw (vehicle_new has no IMU LPF,
+    float    gyro_raw[3];    // [rad/s] pre-filter raw (vehicle has no IMU LPF,
                              // so raw == filtered — sent for wire compatibility)
-                             // フィルタ前生値（vehicle_new は IMU LPF なしのため
+                             // フィルタ前生値（vehicle は IMU LPF なしのため
                              // raw == filtered。電文互換のため両方送る）
     float    accel_raw[3];   // [m/s²]
     float    quat[4];        // [w,x,y,z]

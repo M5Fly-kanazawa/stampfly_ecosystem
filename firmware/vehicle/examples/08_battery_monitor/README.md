@@ -24,7 +24,7 @@ INA3221電力モニタICを使って、バッテリーの電圧・電流・電�
 ## 実行手順
 
 ```bash
-cd firmware/vehicle_new/examples/08_battery_monitor
+cd firmware/vehicle/examples/08_battery_monitor
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```

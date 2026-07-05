@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Kouhei Ito
  *
- * Part of StampFly Ecosystem (vehicle_new firmware).
+ * Part of StampFly Ecosystem (vehicle firmware).
  * https://github.com/M5Fly-kanazawa/getting-started-with-stampfly-ecosystem
  */
 
@@ -11,12 +11,12 @@
  * @brief BSP (Board Support Package) — sole owner of shared HW resources
  *        BSP（ボードサポートパッケージ）— 共有 HW 資源の唯一の所有者
  *
- * sf_board は vehicle_new における HW 資源の所有を一箇所に集約する。
+ * sf_board は vehicle における HW 資源の所有を一箇所に集約する。
  * 各 HAL コンポーネントは sf_board の getter から bus handle を借用し、
  * extern グローバル変数を使わない構造を保証する。
  *
  * sf_board centralizes ownership of shared hardware resources in
- * vehicle_new. Each HAL component borrows bus handles via sf_board
+ * vehicle. Each HAL component borrows bus handles via sf_board
  * getters, ensuring no extern global state is required.
  *
  * @design architecture.md §7 — ハードウェア初期化と所有権        [OK]

@@ -139,10 +139,10 @@ struct SensorNoiseModel {
 
 // Starting values seeded from a legacy-hardware flight log (firmware/vehicle,
 // hover02, 2026-04-13). They give a realistic initial noise model for the new
-// SIL; refining them against vehicle_new's own logs is Model Fidelity work,
-// done only after vehicle_new flies (development_roadmap.md Phase 5).
+// SIL; refining them against vehicle's own logs is Model Fidelity work,
+// done only after vehicle flies (development_roadmap.md Phase 5).
 // 旧機（firmware/vehicle, hover02, 2026-04-13）のログから採った初期値。
-// 新 SIL の現実的な初期ノイズモデルになる。vehicle_new 自身のログでの精緻化は
+// 新 SIL の現実的な初期ノイズモデルになる。vehicle 自身のログでの精緻化は
 // Model Fidelity（実機飛行後＝development_roadmap.md Phase 5）で行う。
 //   vib_accel_k = {3.96, 2.35, 5.64}  [m/s²]
 //   vib_gyro_k  = {1.08, 0.83, 0.15}  [rad/s]
@@ -175,7 +175,7 @@ MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロ�
 
 ### バイアス初期化 ← 起動キャリブレーションの再現
 
-vehicle_new は **−g 規約**（前項）ゆえ `ba_z ≈ +2g` のセットは**しない**。起動校正は
+vehicle は **−g 規約**（前項）ゆえ `ba_z ≈ +2g` のセットは**しない**。起動校正は
 静止平均から純センサオフセットのみを推定し（`calibration.cpp`、`accel_bias[2] += G` で
 重力を除去）、`ba_z ≈ 0` で種付けする。`ba_z ≈ 2g` の `setAttitudeReference()` は旧
 vehicle（+g 規約）の手当てであり、新ファームでは不要・未使用。SIL は起動校正フロー
@@ -209,7 +209,7 @@ I_zz × ω̇_z = τ_z - (I_yy - I_xx) × ω_x × ω_y
 | f_low, f_high | FFT PSDの-10dBポイント | 定常ホバリングのFFT |
 | バイアスドリフト | Allan分散解析 | 長時間静置データ |
 
-> **実機ログは SIL を作る・動かす前提ではない（RESET_PLAN §2 方針1）。** §4 のレガシー値は「現実的な初期値の**任意のシード**」にすぎず、SIL はデータシート値×経験的倍率のような妥当な初期値でも build/run してゲートまで到達できる。旧機（既に飛んだ**別の**機体）のログがたまたま存在するのでシードに使うだけで、vehicle_new 自身での同定は実機飛行後（Model Fidelity、Phase 5）に行う。
+> **実機ログは SIL を作る・動かす前提ではない（RESET_PLAN §2 方針1）。** §4 のレガシー値は「現実的な初期値の**任意のシード**」にすぎず、SIL はデータシート値×経験的倍率のような妥当な初期値でも build/run してゲートまで到達できる。旧機（既に飛んだ**別の**機体）のログがたまたま存在するのでシードに使うだけで、vehicle 自身での同定は実機飛行後（Model Fidelity、Phase 5）に行う。
 
 ## 7. 実装ロードマップ
 
