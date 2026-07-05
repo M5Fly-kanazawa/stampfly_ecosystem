@@ -1,4 +1,4 @@
-# vehicle_new 機能ステータス — 計画・追加・未移植の整理
+# vehicle 機能ステータス — 計画・追加・未移植の整理
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -6,22 +6,22 @@
 
 ### このドキュメントについて
 
-vehicle_new は、旧 vehicle の設計思想を改め、**コードの守備範囲を明確にしてスパゲッティ化を防ぎ、保守・発展・更新を容易にする**ことを狙った、機能的には vehicle 互換でさらに発展させたファームウェアである。本書はその開発状況を3つの観点で整理する:
+vehicle は、旧 vehicle_old（実機87フライトの旧世代ファーム）の設計思想を改め、**コードの守備範囲を明確にしてスパゲッティ化を防ぎ、保守・発展・更新を容易にする**ことを狙った、機能的には vehicle_old 互換でさらに発展させたファームウェアである（POS_HOLD 実機検証を機に vehicle_new から vehicle へ昇格済み）。本書はその開発状況を3つの観点で整理する:
 
 1. **計画当初（設計文書）にあって完了したもの**（§2）
 2. **計画当初にあって未完了のもの**（§3）
 3. **後から追加されたもの** — 実機検証・設計議論が駆動した設計外の追加・仕様変更（§4）
-4. **vehicle にあって vehicle_new にないもの** — 未移植・意図的廃止・等価置換の区別（§5）
+4. **vehicle_old にあって vehicle にないもの** — 未移植・意図的廃止・等価置換の区別（§5）
 
 ### 対象読者
 
-vehicle_new の開発状況を把握したい開発者・教材利用者。次に何を作るべきか／何が意図的に無いのかを判断する材料とする。
+vehicle の開発状況を把握したい開発者・教材利用者。次に何を作るべきか／何が意図的に無いのかを判断する材料とする。
 
 ### 判定基準と更新
 
 - 「計画当初」= 6設計文書（requirements / architecture / detailed_design / coding_and_education / development_roadmap / hardware_init）に記載があるもの
 - 「完了」= 実装済みかつ SIL 回帰または実機ベンチで検証済み
-- 最終更新: 2026-06-11。機能の出入りがあったら本書を更新すること
+- 最終更新: 2026-07-05。機能の出入りがあったら本書を更新すること
 
 ## 2. 計画当初にあって完了したもの
 
@@ -44,6 +44,7 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | 推定器差し替え | IEstimator、`estimator_type` パラメータで ESKF / 相補フィルタ切替 | SIL 比較検証（P6） |
 | 鉛直系 | ToF-only 鉛直＋接地アンカー＋離陸エッジの鉛直ハンドオフ | SIL alt_rmse 1.6cm＋実機 |
 | 制御器差し替え | IController、カスケード PID（ACRO/STABILIZE/ALT_HOLD/POS_HOLD） | SIL 16シナリオ |
+| POS_HOLD 実機検証 | roadmap Phase 4 | **実機検証済み**（保持精度 ±6-7cm, RMS 16mm） |
 | ミキサー | B⁻¹ 制御配分（物理単位 Nm/N）＋モータ曲線＋ライブ電池電圧補償 | SIL＋実機 |
 | 起動校正 | ジャイロ/加速度バイアス測定→推定器種付け、完了まで ARM ゲート | 実機（§4 の静止ゲートで強化） |
 
@@ -84,7 +85,6 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | Data Stream の USB 経路 | requirements §7（UDP/USB 選択） | UDP のみ | WiFi 不要環境向けの変種 |
 | 校正の NVS 永続化 | calibration.cpp に保存系あり | **意図的保留** | NVS commit のフラッシュ消去が 400Hz ループを >10ms 停止させる。CONFIG_SPI_FLASH_AUTO_SUSPEND 調査とセットで再開 |
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
-| POS_HOLD 実機検証 | roadmap Phase 4 | SIL のみ PASS | 地面付近のフロー品質が実機の未知数 |
 | 磁気ヨー融合の常用化 | ESKF に観測枠あり | `eskf.use_mag` 既定 off | 校正機能は §4 で整備済み。実機ログで磁気健全性を見て判断 |
 
 ## 4. 後から追加されたもの（実機・設計議論が駆動）
@@ -105,7 +105,7 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 | 運用安全の小品 | `param save` の armed 拒否（フラッシュ停止対策）／起動音の2秒遅延（esptool 窓回避）／ControlTask 通知ウォッチドッグ／`param reset` | — |
 | Data Stream 品質3点 | 差分量（flow）は全サンプル配送・DRDY はデータと同一バースト読み・容量上限棄却の計数可視化 — いずれも実機ベンチが摘出 | 7bd69db ほか |
 
-## 5. vehicle にあって vehicle_new にないもの
+## 5. vehicle_old にあって vehicle にないもの
 
 ### 未移植（将来の移植候補）
 
@@ -145,13 +145,13 @@ vehicle_new の開発状況を把握したい開発者・教材利用者。次�
 
 ### About This Document
 
-vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear component responsibilities, no spaghetti, and easy maintenance/evolution** — functionally compatible with vehicle and extended beyond it. This document organizes the development status from three angles: originally-planned features that are done (§2), originally-planned features not yet done (§3), features added later driven by hardware testing and design discussions (§4), and legacy-vehicle features absent from vehicle_new (§5), distinguishing not-yet-ported / deliberately-dropped / replaced-by-equivalent.
+vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed at **clear component responsibilities, no spaghetti, and easy maintenance/evolution** — functionally compatible with vehicle_old and extended beyond it (promoted from vehicle_new to vehicle after POS_HOLD was validated on real hardware). This document organizes the development status from three angles: originally-planned features that are done (§2), originally-planned features not yet done (§3), features added later driven by hardware testing and design discussions (§4), and legacy-vehicle features absent from vehicle (§5), distinguishing not-yet-ported / deliberately-dropped / replaced-by-equivalent.
 
 ### Criteria
 
 - "Originally planned" = written in the six design documents (requirements / architecture / detailed_design / coding_and_education / development_roadmap / hardware_init)
 - "Done" = implemented AND verified by the SIL regression or on hardware
-- Last updated 2026-06-11; update this document when features move.
+- Last updated 2026-07-05; update this document when features move.
 
 ## 2. Planned and Completed
 
@@ -161,6 +161,7 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 | Sensors | BMI270 (SPI 1600 Hz, OSR4) / PMW3901 / BMM150 (25 Hz, DRDY-gated) / BMP280 / VL53L3CX / INA3221 — all at design rates (confirmed via Data Stream) | Hardware E2E |
 | Estimation | 15-state ESKF (chi2 gates, active_mask P isolation, sparse predict), swappable IEstimator (ESKF/complementary), ToF-only vertical + ground anchoring + takeoff handoff | SIL G2 + hardware |
 | Control | Swappable IController, cascade PID (ACRO/STAB/ALT/POS), B^-1 mixer in physical units + motor curve + live battery compensation | SIL 16 scenarios |
+| POS_HOLD hardware validation | roadmap Phase 4 | **Validated on real hardware** (hold accuracy ±6-7cm, RMS 16mm) |
 | State machine & safety | Full flight state machine, comm-loss/battery auto-landing (Landing verb, −0.3 m/s), impact DISARM, crash→re-fly readiness chain, pairing (anti-cross-talk, 30 craft/classroom) | SIL + hardware |
 | Comms & logging | SSOT ControlPacket 14B, Telemetry UDP 50 Hz (receiver: `sf telemetry`, terminal or `--web` browser via UDP→SSE), **Data Stream 400 Hz wire-compatible with legacy** (`sf log wifi`/`viz` unmodified), Blackbox on SPIFFS, CLI over USB + TCP:23, WiFi STA/AP dual | Hardware E2E |
 | SIL | Real app_main/tasks/drivers run UNMODIFIED on the host (Code Identity), scenario DSL + expect gates G1–G4, Code/Param/Model Identity principles | 16/16 regression |
@@ -173,7 +174,6 @@ vehicle_new is a redesign of the legacy vehicle firmware aimed at **clear compon
 | Data Stream over USB | UDP only today |
 | Calibration NVS persistence | Deliberately deferred — NVS flash erase stalls the 400 Hz loop >10 ms; revisit with CONFIG_SPI_FLASH_AUTO_SUSPEND |
 | Front ToF | HAL present, not brought up |
-| POS_HOLD hardware validation | SIL-only PASS; near-ground flow quality is the unknown |
 | Mag yaw fusion as default | `eskf.use_mag` off; calibration tooling now exists (§4) — decide after flight-log review |
 
 ## 4. Added Later (driven by hardware & design discussions)
@@ -191,7 +191,7 @@ All retrofitted into the design documents.
 | INIT-stuck root fix (-O2 + sparse ESKF + StateTask on core 0) | Core-1 saturation starved StateTask on hardware; SIL cannot see CPU saturation | b4f4800 |
 | ARM press-toggle, A1–A6 decisions, param-save armed refusal, deferred boot chime, ControlTask watchdog, `param reset`, Data Stream delivery fixes (flow full-rate, DRDY-in-burst, capacity-drop accounting) | Various hardware findings | — |
 
-## 5. In vehicle but Not in vehicle_new
+## 5. In vehicle_old but Not in vehicle
 
 ### Not yet ported (candidates)
 
@@ -214,7 +214,7 @@ All retrofitted into the design documents.
 
 ### Replaced by equivalents
 
-| Legacy | vehicle_new |
+| Legacy (vehicle_old) | vehicle |
 |--------|-------------|
 | sf_svc_wifi_cli | TCP CLI (port 23, shared esp_console registry) |
 | StationaryDetector | StillnessConfig (calibration stillness gate, raw-bias-widened thresholds) |
