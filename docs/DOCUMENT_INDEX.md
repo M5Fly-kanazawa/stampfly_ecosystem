@@ -88,16 +88,16 @@
 
 | ファイル | 説明 |
 |---------|------|
-| [plans/ecosystem-migration-plan.md](plans/ecosystem-migration-plan.md) | エコシステムマイグレーション計画 |
+| [plans/ecosystem-migration.md](plans/ecosystem-migration.md) | エコシステムマイグレーション計画 |
 | [plans/installer-architecture.md](plans/installer-architecture.md) | インストーラ設計 |
-| [plans/CONTROLLER_MENU_USB_PLAN.md](plans/CONTROLLER_MENU_USB_PLAN.md) | コントローラメニュー・USB 計画 |
-| [plans/HARDWARE_TEST_PLAN.md](plans/HARDWARE_TEST_PLAN.md) | ハードウェアテスト計画 |
-| [plans/HIL_FIRMWARE_PLAN.md](plans/HIL_FIRMWARE_PLAN.md) | HIL ファームウェア計画 |
-| [plans/ROS2_INTEGRATION_PLAN.md](plans/ROS2_INTEGRATION_PLAN.md) | ROS2 統合計画 |
-| [plans/SERIAL_CLI_REBUILD_PLAN.md](plans/SERIAL_CLI_REBUILD_PLAN.md) | シリアル CLI 再構築計画 |
-| [plans/TELLO_COMPAT_PLAN.md](plans/TELLO_COMPAT_PLAN.md) | Tello 互換計画 |
-| [plans/WIFI_COMM_PLAN.md](plans/WIFI_COMM_PLAN.md) | WiFi 通信計画 |
-| [plans/wifi_command_implementation_plan.md](plans/wifi_command_implementation_plan.md) | WiFi コマンド実装計画 |
+| [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | コントローラメニュー・USB 計画（完了） |
+| [plans/hardware-test.md](plans/hardware-test.md) | 実機テスト計画 |
+| [plans/archive/hil-firmware.md](plans/archive/hil-firmware.md) | HIL ファームウェア計画 |
+| [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 統合計画 |
+| [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | シリアル CLI 再構築計画（完了） |
+| [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello 互換計画 |
+| [plans/archive/wifi-comm.md](plans/archive/wifi-comm.md) | WiFi 通信計画 |
+| [plans/archive/wifi-command-implementation.md](plans/archive/wifi-command-implementation.md) | WiFi コマンド実装計画 |
 
 ## 3. ファームウェアドキュメント
 
@@ -110,11 +110,25 @@
 | [plans/archive/vehicle-phase3-test.md](plans/archive/vehicle-phase3-test.md) | Phase3 テスト計画 |
 | [plans/archive/vehicle-phase3-test-guide.md](plans/archive/vehicle-phase3-test-guide.md) | Phase3 テストガイド |
 
+### Vehicle 設計文書 (`firmware/vehicle/docs/`)
+
+現行ファームウェアの設計文書一式。中核となる6文書：
+
+| ファイル | 説明 |
+|---------|------|
+| [firmware/vehicle/docs/requirements.md](../firmware/vehicle/docs/requirements.md) | 要件定義書 |
+| [firmware/vehicle/docs/architecture.md](../firmware/vehicle/docs/architecture.md) | アーキテクチャ設計書（4階層アクセス・横断ルール R1〜R16・BSP 層） |
+| [firmware/vehicle/docs/detailed_design.md](../firmware/vehicle/docs/detailed_design.md) | 詳細設計書 |
+| [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | コーディング方針・教育計画 |
+| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | 開発ロードマップ・SIL→実機ワークフロー |
+| [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | ハードウェア初期化設計（BSP・起動シーケンス） |
+
+上記6文書に加え、`firmware/vehicle/docs/` にはフライト調査・不具合診断ノート（`poshold_journey.md`、`feature_status.md`、`operation_manual.md`、`topic_reference.md`、`control_theory_overview.md`、`yaw_axis_model.md` 等、計約28ファイル）が格納されている。
+
 ### Vehicle コンポーネントドキュメント
 
 | ファイル | 説明 |
 |---------|------|
-| [firmware/vehicle/components/sf_algo_fusion/README.md](../firmware/vehicle/components/sf_algo_fusion/README.md) | センサーフュージョンアルゴリズム |
 | [firmware/vehicle/components/sf_hal_bmi270/README.md](../firmware/vehicle/components/sf_hal_bmi270/README.md) | BMI270 IMU ドライバ |
 | [firmware/vehicle/components/sf_hal_bmi270/docs/API.md](../firmware/vehicle/components/sf_hal_bmi270/docs/API.md) | BMI270 API リファレンス |
 | [firmware/vehicle/components/sf_hal_bmi270/docs/bmi270_doc_ja.md](../firmware/vehicle/components/sf_hal_bmi270/docs/bmi270_doc_ja.md) | BMI270 日本語ドキュメント |
@@ -136,6 +150,15 @@
 | [firmware/vehicle/components/sf_hal_bmi270/examples/](../firmware/vehicle/components/sf_hal_bmi270/examples/) | BMI270 使用例（polling, interrupt, FIFO, 開発ステージ） |
 | [firmware/vehicle/components/sf_hal_vl53l3cx/examples/](../firmware/vehicle/components/sf_hal_vl53l3cx/examples/) | VL53L3CX 使用例（polling, interrupt, 開発ステージ） |
 
+### Vehicle Old（レガシー機体ファームウェア）
+
+POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmware/vehicle` へ昇格し、旧世代ファームウェアは `firmware/vehicle_old` として凍結された（旧 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` 階層命名構成）。実機87フライトの実績があるが新規開発は行わない。
+
+| ファイル | 説明 |
+|---------|------|
+| [firmware/vehicle_old/README.md](../firmware/vehicle_old/README.md) | レガシー機体ファームウェア全体ガイド |
+| [firmware/vehicle_old/components/sf_algo_fusion/README.md](../firmware/vehicle_old/components/sf_algo_fusion/README.md) | センサーフュージョンアルゴリズム |
+
 ### Controller（コントローラ）
 
 | ファイル | 説明 |
@@ -148,7 +171,7 @@
 
 | ファイル | 説明 |
 |---------|------|
-| [firmware/common/README.md](../firmware/common/README.md) | 共有コード（構築中） |
+| [firmware/common/README.md](../firmware/common/README.md) | 共有コード（`protocol/` は ESP-NOW 通信プロトコル実装済み・vehicle/vehicle_old/controller が使用、`math/`・`utils/` は未実装のプレースホルダ） |
 
 ### Workshop（ワークショップ教材）
 
@@ -284,16 +307,16 @@
 
 | File | Description |
 |------|-------------|
-| [plans/ecosystem-migration-plan.md](plans/ecosystem-migration-plan.md) | Ecosystem migration plan |
+| [plans/ecosystem-migration.md](plans/ecosystem-migration.md) | Ecosystem migration plan |
 | [plans/installer-architecture.md](plans/installer-architecture.md) | Installer architecture |
-| [plans/CONTROLLER_MENU_USB_PLAN.md](plans/CONTROLLER_MENU_USB_PLAN.md) | Controller menu & USB plan |
-| [plans/HARDWARE_TEST_PLAN.md](plans/HARDWARE_TEST_PLAN.md) | Hardware test plan |
-| [plans/HIL_FIRMWARE_PLAN.md](plans/HIL_FIRMWARE_PLAN.md) | HIL firmware plan |
-| [plans/ROS2_INTEGRATION_PLAN.md](plans/ROS2_INTEGRATION_PLAN.md) | ROS2 integration plan |
-| [plans/SERIAL_CLI_REBUILD_PLAN.md](plans/SERIAL_CLI_REBUILD_PLAN.md) | Serial CLI rebuild plan |
-| [plans/TELLO_COMPAT_PLAN.md](plans/TELLO_COMPAT_PLAN.md) | Tello compatibility plan |
-| [plans/WIFI_COMM_PLAN.md](plans/WIFI_COMM_PLAN.md) | WiFi communication plan |
-| [plans/wifi_command_implementation_plan.md](plans/wifi_command_implementation_plan.md) | WiFi command implementation plan |
+| [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | Controller menu & USB plan (completed) |
+| [plans/hardware-test.md](plans/hardware-test.md) | Hardware test plan |
+| [plans/archive/hil-firmware.md](plans/archive/hil-firmware.md) | HIL firmware plan |
+| [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 integration plan |
+| [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | Serial CLI rebuild plan (completed) |
+| [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello compatibility plan |
+| [plans/archive/wifi-comm.md](plans/archive/wifi-comm.md) | WiFi communication plan |
+| [plans/archive/wifi-command-implementation.md](plans/archive/wifi-command-implementation.md) | WiFi command implementation plan |
 
 ## 3. Firmware Documentation
 
@@ -306,11 +329,25 @@
 | [plans/archive/vehicle-phase3-test.md](plans/archive/vehicle-phase3-test.md) | Phase3 test plan |
 | [plans/archive/vehicle-phase3-test-guide.md](plans/archive/vehicle-phase3-test-guide.md) | Phase3 test guide |
 
+### Vehicle Design Documents (`firmware/vehicle/docs/`)
+
+Full design document set for the current firmware. The six canonical documents:
+
+| File | Description |
+|------|-------------|
+| [firmware/vehicle/docs/requirements.md](../firmware/vehicle/docs/requirements.md) | Requirements definition |
+| [firmware/vehicle/docs/architecture.md](../firmware/vehicle/docs/architecture.md) | Architecture design (4-layer access, cross-cutting rules R1-R16, BSP layer) |
+| [firmware/vehicle/docs/detailed_design.md](../firmware/vehicle/docs/detailed_design.md) | Detailed design |
+| [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | Coding policy and education plan |
+| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | Development roadmap and SIL-to-real-hardware workflow |
+| [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | Hardware initialization design (BSP, boot sequence) |
+
+Beyond these six, `firmware/vehicle/docs/` also holds flight-investigation and debugging notes (`poshold_journey.md`, `feature_status.md`, `operation_manual.md`, `topic_reference.md`, `control_theory_overview.md`, `yaw_axis_model.md`, etc. — about 28 files total).
+
 ### Vehicle Component Documentation
 
 | File | Description |
 |------|-------------|
-| [firmware/vehicle/components/sf_algo_fusion/README.md](../firmware/vehicle/components/sf_algo_fusion/README.md) | Sensor fusion algorithm |
 | [firmware/vehicle/components/sf_hal_bmi270/README.md](../firmware/vehicle/components/sf_hal_bmi270/README.md) | BMI270 IMU driver |
 | [firmware/vehicle/components/sf_hal_bmi270/docs/API.md](../firmware/vehicle/components/sf_hal_bmi270/docs/API.md) | BMI270 API reference |
 | [firmware/vehicle/components/sf_hal_pmw3901/README.md](../firmware/vehicle/components/sf_hal_pmw3901/README.md) | PMW3901 optical flow driver |
@@ -324,6 +361,15 @@
 | [firmware/vehicle/components/sf_hal_bmi270/examples/](../firmware/vehicle/components/sf_hal_bmi270/examples/) | BMI270 examples (polling, interrupt, FIFO, dev stages) |
 | [firmware/vehicle/components/sf_hal_vl53l3cx/examples/](../firmware/vehicle/components/sf_hal_vl53l3cx/examples/) | VL53L3CX examples (polling, interrupt, dev stages) |
 
+### Vehicle Old (Legacy Vehicle Firmware)
+
+After POS_HOLD position control was validated on real hardware, `firmware/vehicle_new` was promoted to `firmware/vehicle`, and the previous-generation firmware was frozen as `firmware/vehicle_old` (the old `sf_hal_*`/`sf_algo_*`/`sf_svc_*` layered naming convention). It has flown 87 real flights but receives no new development.
+
+| File | Description |
+|------|-------------|
+| [firmware/vehicle_old/README.md](../firmware/vehicle_old/README.md) | Legacy vehicle firmware complete guide |
+| [firmware/vehicle_old/components/sf_algo_fusion/README.md](../firmware/vehicle_old/components/sf_algo_fusion/README.md) | Sensor fusion algorithm |
+
 ### Controller
 
 | File | Description |
@@ -336,7 +382,7 @@
 
 | File | Description |
 |------|-------------|
-| [firmware/common/README.md](../firmware/common/README.md) | Shared code (WIP) |
+| [firmware/common/README.md](../firmware/common/README.md) | Shared code (`protocol/` has a working ESP-NOW protocol implementation used by vehicle/vehicle_old/controller; `math/` and `utils/` remain empty placeholders) |
 
 ### Workshop (Educational Firmware)
 

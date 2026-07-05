@@ -93,11 +93,13 @@ ESP-NOW との共存品質を決めるのはデータ量ではなく **sendto() 
 
 ## 4. 関連ファイル
 
+> **注記:** 本設計は当初の旧 `firmware/vehicle`（現 `firmware/vehicle_old`、凍結・新規開発なし）で確立された。ファームウェア昇格リファクタ（`vehicle_new` → `vehicle`）後は、電文互換の「Data Stream」として `firmware/vehicle/components/sf_telemetry/` 配下に再実装されており、`sf log wifi` / `sf log viz` は無改造で動作する。
+
 | ファイル | 役割 |
 |---------|------|
-| `firmware/vehicle/components/sf_svc_telemetry/include/udp_telemetry.hpp` | パケット構造体定義 |
-| `firmware/vehicle/components/sf_svc_telemetry/udp_telemetry.cpp` | UDPLogServer 実装 |
-| `firmware/vehicle/main/tasks/telemetry_task.cpp` | 統合パケット構築・送信 |
+| `firmware/vehicle/components/sf_telemetry/include/data_stream_wire.hpp` | パケット構造体定義（`WireHeader`/`WireImuEskf`/`WirePosVel` 等、統合パケット 0x50） |
+| `firmware/vehicle/components/sf_telemetry/data_stream.cpp` | `sf::DataStream` 実装（UDPログサーバ相当） |
+| `firmware/vehicle/tasks/telemetry_task.cpp` | 統合パケット構築・送信（`TelemetryTask` が `sf::DataStream` を所有） |
 | `tools/log_analyzer/udp_capture.py` | Python UDP 受信・統計・JSONL保存 |
 | `tools/log_analyzer/visualize_jsonl.py` | 静的一覧ビューワー |
 | `tools/log_analyzer/visualize_interactive.py` | インタラクティブビューワー |

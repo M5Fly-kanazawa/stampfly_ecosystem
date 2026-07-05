@@ -151,7 +151,6 @@ nav:
     - Vehicle:
       - 概要: firmware/vehicle/README.md
       - コンポーネント:
-        - センサーフュージョン: firmware/vehicle/components/sf_algo_fusion/README.md
         - BMI270 IMU:
           - 概要: firmware/vehicle/components/sf_hal_bmi270/README.md
           - API: firmware/vehicle/components/sf_hal_bmi270/docs/API.md
@@ -199,6 +198,9 @@ nav:
               - Stage 6 Dual: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage6_dual_sensor/README.md
               - Stage 7 Teleplot: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage7_teleplot_streaming/README.md
               - Stage 8 Filter: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage8_filtered_streaming/README.md
+    - Vehicle（レガシー）:
+      - 概要: firmware/vehicle_old/README.md
+      - センサーフュージョン: firmware/vehicle_old/components/sf_algo_fusion/README.md
     - Controller:
       - 概要: firmware/controller/README.md
     - Common:
@@ -248,18 +250,18 @@ nav:
   # ==================== 計画 ====================
   - 計画:
     - 現行:
-      - エコシステム移行: docs/plans/ecosystem-migration.md
-      - インストーラ: docs/plans/installer-architecture.md
-      - Vehicle FW: docs/plans/vehicle-firmware.md
-      - HW テスト: docs/plans/hardware-test.md
       - ROS2 統合: docs/plans/ros2-integration.md
       - シミュレータ移行: docs/plans/simulator-migration.md
     - アーカイブ:
       - Controller ESP-IDF 移行: docs/plans/archive/controller-espidf-migration.md
       - Controller メニュー USB: docs/plans/archive/controller-menu-usb.md
+      - エコシステム移行: docs/plans/archive/ecosystem-migration.md
+      - HW テスト: docs/plans/archive/hardware-test.md
       - HIL FW: docs/plans/archive/hil-firmware.md
+      - インストーラ: docs/plans/archive/installer-architecture.md
       - Serial CLI: docs/plans/archive/serial-cli-rebuild.md
       - Tello 互換: docs/plans/archive/tello-compat.md
+      - Vehicle FW（旧設計方針）: docs/plans/archive/vehicle-firmware.md
       - Vehicle Phase3 テスト: docs/plans/archive/vehicle-phase3-test.md
       - Vehicle Phase3 ガイド: docs/plans/archive/vehicle-phase3-test-guide.md
       - WiFi 通信: docs/plans/archive/wifi-comm.md

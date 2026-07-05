@@ -8,7 +8,7 @@
 
 本ドキュメントは、StampFly のシミュレータおよびファームウェアで使用される物理定数・パラメータの一覧である。
 シミュレータのパラメータは実機の測定・同定結果に基づいており、各モジュールに散在している値を一箇所にまとめたものである。
-ファームウェアのパラメータは `config.hpp` を Single Source of Truth（SSOT）として記載している。
+ファームウェア（`firmware/vehicle`。旧 `vehicle_new`、実機POS_HOLD検証を機に2026年promotionで現行機に昇格。レイヤード構成の旧ファームは `firmware/vehicle_old` として凍結）のチューニング可能なパラメータ（PIDゲイン・ESKF設定等）は、`firmware/vehicle/components/sf_core/params.cpp` 内の `table[]`（名前・変数・既定値/最小/最大/変更コールバックを結ぶ明示テーブル）を Single Source of Truth（SSOT）として記載している。GPIOピン割当やタスク優先度等の**変更しない**固定定数は別途 `firmware/vehicle/main/config.hpp` にある（本ドキュメントでは扱わない）。
 
 ### 対象読者
 
@@ -61,15 +61,12 @@ C(s) = Kp × (1 + 1/(Ti·s) + Td·s / (η·Td·s + 1))
 
 | モジュール | ファイルパス |
 |-----------|-------------|
-| パラメータ設定（SSOT） | `firmware/vehicle/main/config.hpp` |
-| レート制御 | `firmware/vehicle/main/rate_controller.hpp` |
-| 姿勢制御 | `firmware/vehicle/main/attitude_controller.hpp` |
-| 高度制御 | `firmware/vehicle/main/altitude_controller.hpp` |
-| 位置制御 | `firmware/vehicle/main/position_controller.hpp` |
-| ESKF | `firmware/vehicle/components/sf_algo_eskf/include/eskf.hpp` |
-| PID | `firmware/vehicle/components/sf_algo_pid/include/pid.hpp` |
-| 制御割当 | `firmware/vehicle/components/sf_algo_control/include/control_allocation.hpp` |
-| モーターモデル | `firmware/vehicle/components/sf_algo_control/include/motor_model.hpp` |
+| パラメータ設定（SSOT、可変値） | `firmware/vehicle/components/sf_core/params.cpp` |
+| 固定定数（GPIO・タスク優先度等） | `firmware/vehicle/main/config.hpp` |
+| カスケードPID（レート/姿勢/高度/位置 全段） | `firmware/vehicle/components/sf_controller_pid/pid_controller.cpp` |
+| ESKF | `firmware/vehicle/components/sf_estimator_eskf/include/eskf_estimator.hpp` |
+| PIDコア | `firmware/vehicle/components/sf_controller_pid/include/pid.hpp` |
+| 制御割当（ミキサー＋モーター曲線） | `firmware/vehicle/components/sf_actuator/actuator.cpp` |
 
 ## 2. 機体パラメータ
 
@@ -82,7 +79,7 @@ C(s) = Kp × (1 + 1/(Ti·s) + Td·s / (η·Td·s + 1))
 | Pitch慣性モーメント | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
 | Yaw慣性モーメント | Izz | 20.4×10⁻⁶ | - | kg·m² | |
 
-> **注記:** ファームウェアの機体質量 0.037 kg は高度制御の重力補償（`altitude_control::MASS`）で使用される。シミュレータの 0.035 kg との差は個体差・バッテリー重量の違いによる。
+> **注記:** ファームウェアの機体質量 0.037 kg は高度制御の重力補償（`sf_controller_pid`, `PidController::kMassG` = 0.037×9.80665）で使用される。シミュレータの 0.035 kg との差は個体差・バッテリー重量の違いによる。
 
 ### 機体形状
 
@@ -277,146 +274,174 @@ m4 = throttle + scale × (+roll + pitch - yaw)   # FL (M4)
 
 ## 7. ファームウェア制御パラメータ
 
-ファームウェアの制御パラメータは `firmware/vehicle/main/config.hpp` で一元管理されている。
-PID は時定数形式（Kp/Ti/Td）を使用する（「PID 表記の違い」節参照）。
+ファームウェアのチューニング可能パラメータは `firmware/vehicle/components/sf_core/params.cpp` の `table[]`（SSOT）で一元管理されている。パラメータ名は `<カテゴリ>.<サブカテゴリ>.<項目>` のドット区切り（例: `rate.roll.kp`）で、CLI `param get/set/save` から参照・変更できる。GPIOピン割当やタスク優先度等の固定定数は別ファイル `firmware/vehicle/main/config.hpp` にあり、本節では扱わない。
+PID は時定数形式（Kp/Ti/Td）を使用する（「PID 表記の違い」節参照）。**物理単位（出力=トルク[Nm]・力[N]）が唯一のモードであり、コンパイルスイッチ（旧`USE_PHYSICAL_UNITS`のようなもの）や電圧出力のレガシーモードは存在しない。**
 
 ### レート制御
 
-`config.hpp` namespace: `rate_control`
-
-現在は物理単位モード（`USE_PHYSICAL_UNITS = 1`）がアクティブ。
-
-#### 物理単位モード（出力: トルク [Nm]）
+パラメータ名前空間: `rate.*`（`sf_controller_pid` のカスケードPID、出力は `sf_actuator` のB⁻¹ミキサー向け物理トルク [Nm]）
 
 | 軸 | Kp [Nm/(rad/s)] | Ti [s] | Td [s] |
 |----|-----------------|--------|--------|
-| Roll | 9.10×10⁻⁴ | 0.7 | 0.01 |
-| Pitch | 1.33×10⁻³ | 0.7 | 0.01 |
-| Yaw | 1.77×10⁻³ | 0.8 | 0.01 |
+| Roll | 9.76×10⁻⁴ | 0.7 | 0.01 |
+| Pitch | 1.43×10⁻³ | 0.7 | 0.025 |
+| Yaw | 1.90×10⁻³ | 0.8 | 0.01 |
 
-不完全微分フィルタ係数: η = 0.125
+不完全微分フィルタ係数: η = 0.125（`sf_controller_pid/include/pid.hpp` の固定値、パラメータ化されていない）
 
-#### レガシー電圧モード（出力: 電圧 [V]）
-
-| 軸 | Kp [V/(rad/s)] | Ti [s] | Td [s] |
-|----|----------------|--------|--------|
-| Roll | 0.65 | 0.7 | 0.01 |
-| Pitch | 0.95 | 0.7 | 0.025 |
-| Yaw | 3.0 | 0.8 | 0.01 |
+> **注記:** 上表は2026-06-27に実機検証の上で採用された値（実機ふらつき対策のゲイン再設計、Kpのみ変更・Ti/Tdは据置き）。
 
 ### 姿勢制御
 
-`config.hpp` namespace: `attitude_control`
+パラメータ名前空間: `attitude.*`
 
 | 軸 | Kp [(rad/s)/rad] | Ti [s] | Td [s] |
 |----|-----------------|--------|--------|
-| Roll | 5.0 | 4.0 | 0.04 |
-| Pitch | 5.0 | 4.0 | 0.04 |
+| Roll | 5.0 | 2.0 | 0.04 |
+| Pitch | 5.0 | 2.0 | 0.04 |
 
 | パラメータ | 値 | 単位 | 備考 |
 |-----------|-----|------|------|
-| MAX_RATE_SETPOINT | 3.0 | rad/s | 角速度指令の上限 |
-| η | 0.125 | - | 不完全微分フィルタ係数 |
+| 姿勢ループ出力上限 | 3.0 | rad/s | 角速度指令の上限（`max_att_rate_sp_`、固定値） |
+| η | 0.125 | - | 不完全微分フィルタ係数（固定値） |
+
+#### 姿勢トリム・ヘディングホールド（新規）
+
+| パラメータ | 既定値 | 範囲 | 備考 |
+|-----------|-------|------|------|
+| `attitude.roll.trim` | 0.0 rad | ±0.1 | 平衡傾き（`sf trim analyze` で飛行同定、オンボード自動学習あり） |
+| `attitude.pitch.trim` | 0.0 rad | ±0.1 | 同上 |
+| `attitude.trim.learn` | 1（有効） | 0/1 | オンボード自動トリム学習の有効/無効 |
+| `attitude.yawhold.kp` | 3.0 | 0〜10 | ヘディングホールドPゲイン（0で無効） |
+| `attitude.yawhold.rate_max` | 2.0 rad/s | 0.1〜5 | ヘディング補正レート上限 |
 
 ### 高度制御
 
-`config.hpp` namespace: `altitude_control`
+パラメータ名前空間: `altitude.*`（PIのみ、Tdなし）
 
 | パラメータ | 値 | 単位 |
 |-----------|-----|------|
-| MASS | 0.037 | kg |
-| GRAVITY | 9.81 | m/s² |
+| 機体質量（`kMassG` 計算用） | 0.037 | kg |
+| 重力加速度 | 9.80665 | m/s² |
 
 #### 高度 PID（位置→速度）
 
-| Kp | Ti [s] | Td [s] | OutputMax [m/s] |
-|-----|--------|--------|-----------------|
-| 2.0 | 3.0 | 0.1 | 1.0 |
+| Kp | Ti [s] | OutputMax [m/s] | 備考 |
+|-----|--------|-----------------|------|
+| 0.45 | 7.0 | 0.5（`altitude.climb_rate`） | 下降レート上限は別パラメータ `altitude.descent_rate`（既定 0.5 m/s） |
 
-#### 速度 PID（速度→力）
+#### 速度 PID（速度→推力補正）
 
-| Kp | Ti [s] | Td [s] | OutputMax [N] |
-|-----|--------|--------|---------------|
-| 0.3 | 1.0 | 0.02 | 0.2 |
+| Kp | Ti [s] | OutputMax [N] |
+|-----|--------|---------------|
+| 0.1 | 2.5 | 0.15 |
+
+#### ホバー推力フィードフォワード（新規）
+
+| パラメータ | 既定値 | 範囲 | 備考 |
+|-----------|-------|------|------|
+| `hover.thrust_corr` | 1.12 | 0.5〜2.0 | モータ曲線が実機推力を約12%過大に見積もる分の補正係数（飛行実測） |
+| `hover.thrust.learn` | 1（有効） | 0/1 | オンボード自動ホバー推力学習（着陸時にNVS保存） |
 
 ### 位置制御
 
-`config.hpp` namespace: `position_control`
+パラメータ名前空間: `position.*`（PIのみ、Tdなし）
 
 #### 位置 PID（位置→速度）
 
-| Kp | Ti [s] | Td [s] | OutputMax [m/s] |
-|-----|--------|--------|-----------------|
-| 1.0 | 5.0 | 0.1 | 0.5 |
+| Kp | Ti [s] | OutputMax [m/s] |
+|-----|--------|-----------------|
+| 0.4 | 5.0 | 1.0 |
 
-#### 速度 PID（速度→姿勢角）
+#### 速度 PID（速度→水平加速度）
 
-| Kp | Ti [s] | Td [s] | OutputMax [rad] |
-|-----|--------|--------|-----------------|
-| 0.3 | 2.0 | 0.02 | 0.20 |
+| Kp | Ti [s] | OutputMax [m/s²] | 備考 |
+|-----|--------|-------------------|------|
+| 3.0 | 2.0 | ≈1.71（= g × 傾き上限10°） | 出力は水平加速度。傾き角へは g で除算（POS_HOLD傾き上限10°でクランプ） |
+
+> **注記:** 上記は2026-06-22の実機POS_HOLD飛行を経て再調整された値（初期値 pos.kp=1.0/vel.kp=0.3 から変更）。実機では「傾き指令→実測水平速度」の実効ゲインが理論値の約0.4倍しかなく、内側（速度）ループの権限を引き上げ外側（位置）ループを遅くすることで、成長する発散振動を解消した。
+
+| パラメータ | 既定値 | 範囲 | 備考 |
+|-----------|-------|------|------|
+| `position.stick_vel` | 0.4 m/s | 0.05〜2.0 | POS_HOLDスティック再配置（倒して動かし、離して保持）の速度スケール |
 
 ### ESKF パラメータ
 
-`config.hpp` namespace: `eskf`
-
-| パラメータ | 値 | 単位 |
-|-----------|-----|------|
-| GRAVITY | 9.81 | m/s² |
+パラメータ名前空間: `eskf.*`
 
 #### プロセスノイズ
 
 | パラメータ | 値 | 備考 |
 |-----------|-----|------|
-| GYRO_NOISE | 0.009655 | ジャイロ測定ノイズ |
-| ACCEL_NOISE | 0.062885 | 加速度測定ノイズ |
-| GYRO_BIAS_NOISE | 0.000013 | ジャイロバイアスランダムウォーク |
-| ACCEL_BIAS_NOISE | 0.001 | 加速度バイアスランダムウォーク |
+| `eskf.process.gyro_noise` | 0.009655 | ジャイロ測定ノイズ |
+| `eskf.process.accel_noise` | 0.3 | 加速度測定ノイズ |
+| `eskf.process.gyro_bias` | 0.000013 | ジャイロバイアスランダムウォーク |
+| `eskf.process.accel_bias` | 0.0001 | 加速度バイアスランダムウォーク |
+| `eskf.bias.gyro_dev_max` | 0.03 rad/s | ジャイロバイアス偏差クランプ（起動校正値からの許容偏差） |
 
 #### 観測ノイズ
 
 | パラメータ | 値 | 備考 |
 |-----------|-----|------|
-| BARO_NOISE | 0.1 | 気圧高度 |
-| TOF_NOISE | 0.03 | ToF測距 |
-| MAG_NOISE | 1.0 | 地磁気 |
-| FLOW_NOISE | 0.01 | オプティカルフロー |
-| ACCEL_ATT_NOISE | 0.06 | 加速度ベース姿勢 |
+| `eskf.obs.baro_noise` | 0.1 | 気圧高度 |
+| `eskf.obs.tof_noise` | 0.01 | ToF測距 |
+| `eskf.obs.mag_noise` | 1.0 | 地磁気 |
+| `eskf.obs.flow_noise` | 0.30 | オプティカルフロー |
+| `eskf.obs.accel_att_noise` | 1.2 | 加速度ベース姿勢 |
+| `eskf.obs.accel_att_lpf` | 30.0 Hz | 加速度ベース姿勢の重力基準ローパス（機体振動除去） |
 
-#### χ² ゲート閾値
+> **注記:** 上記は複数回のチューニングを経た現在値であり、初期設計時の値（例: accel_noise=0.062885、accel_att_noise=0.06）から大きく変わっている。特に `accel_att_noise` はχ²ゲート過剰棄却の根治を経て 0.06 → 0.8 → 1.2 と改定された。
 
-| 観測 | 閾値 | 自由度 |
-|------|------|--------|
-| BARO | 3.84 | 1 |
-| TOF | 3.84 | 1 |
-| MAG | 7.81 | 3 |
-| FLOW | 5.99 | 2 |
-| ACCEL_ATT | 7.81 | 3 |
+#### センサ有効/無効
 
-### LPF 設定
+| パラメータ | 既定値 | 備考 |
+|-----------|-------|------|
+| `eskf.use_tof` | 1（有効） | |
+| `eskf.use_flow` | 1（有効） | |
+| `eskf.use_baro` | 0（無効） | 鉛直はToF専用（設計方針、気圧は不使用） |
+| `eskf.use_mag` | 0（無効） | |
 
-`config.hpp` namespace: `lpf`
+#### ゲート閾値
 
-| パラメータ | 値 | 単位 |
-|-----------|-----|------|
-| ACCEL_CUTOFF_HZ | 50.0 | Hz |
-| GYRO_CUTOFF_HZ | 100.0 | Hz |
-
-#### ジャイロノッチフィルタ
+観測ごとに自由度別のχ²閾値を持つ旧方式から、以下の方式へ再設計されている:
 
 | パラメータ | 値 | 備考 |
 |-----------|-----|------|
-| ENABLED | false | デフォルト無効 |
-| CENTER_FREQ | 12.0 | Hz |
-| Q | 5.0 | Q値 |
+| `eskf.gate.mahalanobis` | 15.0 | 汎用マハラノビス距離ゲート |
+| `eskf.gate.tof_innov` | 0.5 m | ToFイノベーションクランプ |
+| `eskf.gate.baro_innov` | 0.5 m | 気圧イノベーションクランプ |
+| `eskf.gate.flow_clamp` | 0.3 | オプティカルフローイノベーションクランプ |
+| `eskf.gate.flow_squal` | 10 | オプティカルフロー品質（SQUAL）最小閾値 |
+| `eskf.att.chi2_gate` | 7.81 | 加速度ベース姿勢更新専用のχ²閾値（自由度3、旧ACCEL_ATT閾値を継承） |
+| `eskf.att.k_adaptive` | 10.0 | 加速度ベース姿勢の適応ゲイン |
+| `eskf.att.corr_clamp` | 0.05 rad | 加速度ベース姿勢補正クランプ |
+
+#### 加速度補償姿勢推定（POS_HOLD向け、新規）
+
+α-βフロー加速度トラッカーで姿勢推定を補償する機構（旧設計にはない）:
+
+| パラメータ | 既定値 | 備考 |
+|-----------|-------|------|
+| `eskf.accel_comp.enable` | 1（有効） | |
+| `eskf.accel_comp.alpha` | 0.2 | |
+| `eskf.accel_comp.beta` | 0.02 | |
+| `eskf.accel_comp.max` | 5.0 | 補償クランプ |
+
+### LPF・ノッチフィルタ
+
+現行の `firmware/vehicle` には、旧設計にあった汎用IMU LPF（ACCEL_CUTOFF_HZ / GYRO_CUTOFF_HZ）やジャイロノッチフィルタに相当するコンポーネント・パラメータ（旧 `sf_algo_filter`）は存在しない。ESKF内の加速度ベース姿勢専用ローパス（上記 `eskf.obs.accel_att_lpf`）のみが現存する。
 
 ### 安全パラメータ
 
-`config.hpp` namespace: `safety`
+パラメータ名前空間: `safety.*`
 
 | パラメータ | 値 | 単位 | 備考 |
 |-----------|-----|------|------|
-| IMPACT_ACCEL_THRESHOLD | 3.0 | G | 衝撃検出閾値 |
-| IMPACT_GYRO_THRESHOLD | 800 | deg/s | 衝撃検出閾値 |
+| `safety.impact.accel_g` | 3.0 | G | 衝撃検出閾値 |
+| `safety.impact.gyro_dps` | 800 | deg/s | 衝撃検出閾値 |
+| `safety.comm.timeout_ms` | 500 | ms | 通信途絶（コムロス）タイムアウト |
+| `safety.battery.low_v` | 3.4 | V | バッテリー低電圧警告 |
+| `safety.battery.usb_v` | 3.3 | V | USB給電判定電圧 |
 
 ---
 
@@ -428,7 +453,7 @@ PID は時定数形式（Kp/Ti/Td）を使用する（「PID 表記の違い」�
 
 This document provides a comprehensive list of physical constants and parameters used in both the StampFly simulator and firmware.
 Simulator parameters are based on measurements and system identification from the actual aircraft, consolidated from various simulator modules.
-Firmware parameters are documented with `config.hpp` as the Single Source of Truth (SSOT).
+Firmware (`firmware/vehicle`, formerly `vehicle_new`; promoted to the primary firmware in 2026 after real-hardware POS_HOLD validation, with the earlier layered firmware frozen as `firmware/vehicle_old`) tunable parameters (PID gains, ESKF settings, etc.) are documented with the `table[]` in `firmware/vehicle/components/sf_core/params.cpp` (an explicit table binding name -> variable -> default/min/max/callback) as the Single Source of Truth (SSOT). Fixed constants that never change at runtime (GPIO assignments, task priorities, etc.) live separately in `firmware/vehicle/main/config.hpp` and are out of scope here.
 
 ### Target Audience
 
@@ -481,15 +506,12 @@ Conversion between forms:
 
 | Module | File Path |
 |--------|-----------|
-| Parameter Config (SSOT) | `firmware/vehicle/main/config.hpp` |
-| Rate Control | `firmware/vehicle/main/rate_controller.hpp` |
-| Attitude Control | `firmware/vehicle/main/attitude_controller.hpp` |
-| Altitude Control | `firmware/vehicle/main/altitude_controller.hpp` |
-| Position Control | `firmware/vehicle/main/position_controller.hpp` |
-| ESKF | `firmware/vehicle/components/sf_algo_eskf/include/eskf.hpp` |
-| PID | `firmware/vehicle/components/sf_algo_pid/include/pid.hpp` |
-| Control Allocation | `firmware/vehicle/components/sf_algo_control/include/control_allocation.hpp` |
-| Motor Model | `firmware/vehicle/components/sf_algo_control/include/motor_model.hpp` |
+| Parameter Config (SSOT, tunable values) | `firmware/vehicle/components/sf_core/params.cpp` |
+| Fixed constants (GPIO, task priorities, etc.) | `firmware/vehicle/main/config.hpp` |
+| Cascade PID (all stages: rate/attitude/altitude/position) | `firmware/vehicle/components/sf_controller_pid/pid_controller.cpp` |
+| ESKF | `firmware/vehicle/components/sf_estimator_eskf/include/eskf_estimator.hpp` |
+| PID core | `firmware/vehicle/components/sf_controller_pid/include/pid.hpp` |
+| Control Allocation (mixer + motor curve) | `firmware/vehicle/components/sf_actuator/actuator.cpp` |
 
 ## 2. Vehicle Parameters
 
@@ -502,7 +524,7 @@ Conversion between forms:
 | Pitch Moment of Inertia | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
 | Yaw Moment of Inertia | Izz | 20.4×10⁻⁶ | - | kg·m² | |
 
-> **Note:** The firmware mass of 0.037 kg is used for gravity compensation in altitude control (`altitude_control::MASS`). The difference from the simulator's 0.035 kg is due to unit variation and battery weight differences.
+> **Note:** The firmware mass of 0.037 kg is used for gravity compensation in altitude control (`sf_controller_pid`, `PidController::kMassG` = 0.037 × 9.80665). The difference from the simulator's 0.035 kg is due to unit variation and battery weight differences.
 
 ### Vehicle Geometry
 
@@ -695,143 +717,171 @@ The following disturbances can be added in simulation:
 
 ## 7. Firmware Control Parameters
 
-Firmware control parameters are centrally managed in `firmware/vehicle/main/config.hpp`.
-PID uses time-constant form (Kp/Ti/Td) — see "PID Notation Differences" for details.
+Firmware tunable parameters are centrally managed in the `table[]` (SSOT) inside `firmware/vehicle/components/sf_core/params.cpp`. Parameter names use dot notation `<category>.<subcategory>.<item>` (e.g. `rate.roll.kp`) and can be read/written via the `param get/set/save` CLI. Fixed constants (GPIO assignments, task priorities, etc.) live separately in `firmware/vehicle/main/config.hpp` and are not covered here.
+PID uses time-constant form (Kp/Ti/Td) — see "PID Notation Differences" for details. **Physical units (torque [Nm] / force [N] output) are the only mode — there is no compile-time switch (like the earlier `USE_PHYSICAL_UNITS`) and no legacy voltage-output mode.**
 
 ### Rate Control
 
-`config.hpp` namespace: `rate_control`
-
-Currently the physical-units mode (`USE_PHYSICAL_UNITS = 1`) is active.
-
-#### Physical-Units Mode (output: torque [Nm])
+Parameter namespace: `rate.*` (the `sf_controller_pid` cascade PID; output is the physical torque [Nm] fed to `sf_actuator`'s B⁻¹ mixer)
 
 | Axis | Kp [Nm/(rad/s)] | Ti [s] | Td [s] |
 |------|-----------------|--------|--------|
-| Roll | 9.10×10⁻⁴ | 0.7 | 0.01 |
-| Pitch | 1.33×10⁻³ | 0.7 | 0.01 |
-| Yaw | 1.77×10⁻³ | 0.8 | 0.01 |
+| Roll | 9.76×10⁻⁴ | 0.7 | 0.01 |
+| Pitch | 1.43×10⁻³ | 0.7 | 0.025 |
+| Yaw | 1.90×10⁻³ | 0.8 | 0.01 |
 
-Incomplete derivative filter coefficient: η = 0.125
+Incomplete derivative filter coefficient: η = 0.125 (a fixed constant in `sf_controller_pid/include/pid.hpp`, not a tunable parameter)
 
-#### Legacy Voltage Mode (output: voltage [V])
-
-| Axis | Kp [V/(rad/s)] | Ti [s] | Td [s] |
-|------|----------------|--------|--------|
-| Roll | 0.65 | 0.7 | 0.01 |
-| Pitch | 0.95 | 0.7 | 0.025 |
-| Yaw | 3.0 | 0.8 | 0.01 |
+> **Note:** The table above reflects values adopted after real-flight verification on 2026-06-27 (a gain redesign addressing hardware oscillation; only Kp changed, Ti/Td unchanged).
 
 ### Attitude Control
 
-`config.hpp` namespace: `attitude_control`
+Parameter namespace: `attitude.*`
 
 | Axis | Kp [(rad/s)/rad] | Ti [s] | Td [s] |
 |------|-----------------|--------|--------|
-| Roll | 5.0 | 4.0 | 0.04 |
-| Pitch | 5.0 | 4.0 | 0.04 |
+| Roll | 5.0 | 2.0 | 0.04 |
+| Pitch | 5.0 | 2.0 | 0.04 |
 
 | Parameter | Value | Unit | Notes |
 |-----------|-------|------|-------|
-| MAX_RATE_SETPOINT | 3.0 | rad/s | Rate command upper limit |
-| η | 0.125 | - | Incomplete derivative filter coefficient |
+| Attitude-loop output limit | 3.0 | rad/s | Rate command upper limit (`max_att_rate_sp_`, fixed constant) |
+| η | 0.125 | - | Incomplete derivative filter coefficient (fixed constant) |
+
+#### Attitude Trim / Heading Hold (new)
+
+| Parameter | Default | Range | Notes |
+|-----------|---------|-------|-------|
+| `attitude.roll.trim` | 0.0 rad | ±0.1 | Equilibrium tilt (flight-identified via `sf trim analyze`; also onboard auto-learned) |
+| `attitude.pitch.trim` | 0.0 rad | ±0.1 | Same |
+| `attitude.trim.learn` | 1 (on) | 0/1 | Enable/disable onboard automatic trim learning |
+| `attitude.yawhold.kp` | 3.0 | 0-10 | Heading-hold P gain (0 disables) |
+| `attitude.yawhold.rate_max` | 2.0 rad/s | 0.1-5 | Heading correction rate limit |
 
 ### Altitude Control
 
-`config.hpp` namespace: `altitude_control`
+Parameter namespace: `altitude.*` (PI only — no Td)
 
 | Parameter | Value | Unit |
 |-----------|-------|------|
-| MASS | 0.037 | kg |
-| GRAVITY | 9.81 | m/s² |
+| Vehicle mass (used for `kMassG`) | 0.037 | kg |
+| Gravity | 9.80665 | m/s² |
 
 #### Altitude PID (position → velocity)
 
-| Kp | Ti [s] | Td [s] | OutputMax [m/s] |
-|-----|--------|--------|-----------------|
-| 2.0 | 3.0 | 0.1 | 1.0 |
+| Kp | Ti [s] | OutputMax [m/s] | Notes |
+|-----|--------|-----------------|-------|
+| 0.45 | 7.0 | 0.5 (`altitude.climb_rate`) | Descent rate limit is a separate parameter, `altitude.descent_rate` (default 0.5 m/s) |
 
-#### Velocity PID (velocity → force)
+#### Velocity PID (velocity → thrust correction)
 
-| Kp | Ti [s] | Td [s] | OutputMax [N] |
-|-----|--------|--------|---------------|
-| 0.3 | 1.0 | 0.02 | 0.2 |
+| Kp | Ti [s] | OutputMax [N] |
+|-----|--------|---------------|
+| 0.1 | 2.5 | 0.15 |
+
+#### Hover-Thrust Feedforward (new)
+
+| Parameter | Default | Range | Notes |
+|-----------|---------|-------|-------|
+| `hover.thrust_corr` | 1.12 | 0.5-2.0 | Correction factor for the motor curve over-predicting real thrust by ~12% (flight-measured) |
+| `hover.thrust.learn` | 1 (on) | 0/1 | Onboard automatic hover-thrust learning (persisted to NVS on landing) |
 
 ### Position Control
 
-`config.hpp` namespace: `position_control`
+Parameter namespace: `position.*` (PI only — no Td)
 
 #### Position PID (position → velocity)
 
-| Kp | Ti [s] | Td [s] | OutputMax [m/s] |
-|-----|--------|--------|-----------------|
-| 1.0 | 5.0 | 0.1 | 0.5 |
+| Kp | Ti [s] | OutputMax [m/s] |
+|-----|--------|-----------------|
+| 0.4 | 5.0 | 1.0 |
 
-#### Velocity PID (velocity → attitude angle)
+#### Velocity PID (velocity → horizontal acceleration)
 
-| Kp | Ti [s] | Td [s] | OutputMax [rad] |
-|-----|--------|--------|-----------------|
-| 0.3 | 2.0 | 0.02 | 0.20 |
+| Kp | Ti [s] | OutputMax [m/s²] | Notes |
+|-----|--------|-------------------|-------|
+| 3.0 | 2.0 | ≈1.71 (= g × 10° tilt limit) | Output is horizontal acceleration; divided by g to get tilt angle (clamped to the 10° POS_HOLD tilt limit) |
+
+> **Note:** These gains were re-tuned after the first real POS_HOLD flight on 2026-06-22 (from the initial pos.kp=1.0/vel.kp=0.3). On real hardware, the tilt-command-to-measured-velocity gain was only ~0.4x the theoretical value; raising the inner (velocity) loop's authority and slowing the outer (position) loop resolved a growing divergent oscillation.
+
+| Parameter | Default | Range | Notes |
+|-----------|---------|-------|-------|
+| `position.stick_vel` | 0.4 m/s | 0.05-2.0 | Speed scale for POS_HOLD stick repositioning (deflect to move, release to hold) |
 
 ### ESKF Parameters
 
-`config.hpp` namespace: `eskf`
-
-| Parameter | Value | Unit |
-|-----------|-------|------|
-| GRAVITY | 9.81 | m/s² |
+Parameter namespace: `eskf.*`
 
 #### Process Noise
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| GYRO_NOISE | 0.009655 | Gyro measurement noise |
-| ACCEL_NOISE | 0.062885 | Accelerometer measurement noise |
-| GYRO_BIAS_NOISE | 0.000013 | Gyro bias random walk |
-| ACCEL_BIAS_NOISE | 0.001 | Accelerometer bias random walk |
+| `eskf.process.gyro_noise` | 0.009655 | Gyro measurement noise |
+| `eskf.process.accel_noise` | 0.3 | Accelerometer measurement noise |
+| `eskf.process.gyro_bias` | 0.000013 | Gyro bias random walk |
+| `eskf.process.accel_bias` | 0.0001 | Accelerometer bias random walk |
+| `eskf.bias.gyro_dev_max` | 0.03 rad/s | Gyro bias deviation clamp (allowed deviation from the boot-calibration nominal) |
 
 #### Observation Noise
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| BARO_NOISE | 0.1 | Barometric altitude |
-| TOF_NOISE | 0.03 | ToF ranging |
-| MAG_NOISE | 1.0 | Magnetometer |
-| FLOW_NOISE | 0.01 | Optical flow |
-| ACCEL_ATT_NOISE | 0.06 | Accelerometer-based attitude |
+| `eskf.obs.baro_noise` | 0.1 | Barometric altitude |
+| `eskf.obs.tof_noise` | 0.01 | ToF ranging |
+| `eskf.obs.mag_noise` | 1.0 | Magnetometer |
+| `eskf.obs.flow_noise` | 0.30 | Optical flow |
+| `eskf.obs.accel_att_noise` | 1.2 | Accelerometer-based attitude |
+| `eskf.obs.accel_att_lpf` | 30.0 Hz | Gravity-reference lowpass for accel-based attitude (rejects airframe vibration) |
 
-#### Chi-squared Gate Thresholds
+> **Note:** These are current values after several rounds of tuning, and differ substantially from the original design values (e.g. accel_noise=0.062885, accel_att_noise=0.06). In particular, `accel_att_noise` was revised 0.06 → 0.8 → 1.2 while fixing chi-squared gate over-rejection.
 
-| Observation | Threshold | Degrees of Freedom |
-|-------------|-----------|-------------------|
-| BARO | 3.84 | 1 |
-| TOF | 3.84 | 1 |
-| MAG | 7.81 | 3 |
-| FLOW | 5.99 | 2 |
-| ACCEL_ATT | 7.81 | 3 |
+#### Sensor Enable Flags
 
-### LPF Settings
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `eskf.use_tof` | 1 (on) | |
+| `eskf.use_flow` | 1 (on) | |
+| `eskf.use_baro` | 0 (off) | Vertical estimation is ToF-only by design; barometer unused |
+| `eskf.use_mag` | 0 (off) | |
 
-`config.hpp` namespace: `lpf`
+#### Gate Thresholds
 
-| Parameter | Value | Unit |
-|-----------|-------|------|
-| ACCEL_CUTOFF_HZ | 50.0 | Hz |
-| GYRO_CUTOFF_HZ | 100.0 | Hz |
-
-#### Gyro Notch Filter
+Redesigned from the earlier scheme of one chi-squared threshold per observation (by degrees of freedom) to:
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| ENABLED | false | Disabled by default |
-| CENTER_FREQ | 12.0 | Hz |
-| Q | 5.0 | Quality factor |
+| `eskf.gate.mahalanobis` | 15.0 | General-purpose Mahalanobis-distance gate |
+| `eskf.gate.tof_innov` | 0.5 m | ToF innovation clamp |
+| `eskf.gate.baro_innov` | 0.5 m | Barometer innovation clamp |
+| `eskf.gate.flow_clamp` | 0.3 | Optical-flow innovation clamp |
+| `eskf.gate.flow_squal` | 10 | Optical-flow quality (SQUAL) minimum threshold |
+| `eskf.att.chi2_gate` | 7.81 | Chi-squared threshold specific to the accel-based attitude update (3 DoF; carried over from the old ACCEL_ATT threshold) |
+| `eskf.att.k_adaptive` | 10.0 | Adaptive gain for accel-based attitude |
+| `eskf.att.corr_clamp` | 0.05 rad | Accel-based attitude correction clamp |
+
+#### Acceleration-Compensated Attitude (for POS_HOLD; new)
+
+An alpha-beta flow-acceleration tracker compensates the attitude estimate (not present in the original design):
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `eskf.accel_comp.enable` | 1 (on) | |
+| `eskf.accel_comp.alpha` | 0.2 | |
+| `eskf.accel_comp.beta` | 0.02 | |
+| `eskf.accel_comp.max` | 5.0 | Compensation clamp |
+
+### LPF / Notch Filter
+
+The current `firmware/vehicle` has no component or parameters equivalent to the original design's general-purpose IMU LPF (ACCEL_CUTOFF_HZ / GYRO_CUTOFF_HZ) or gyro notch filter (the old `sf_algo_filter`). Only the accel-based-attitude-specific lowpass inside the ESKF (`eskf.obs.accel_att_lpf`, above) remains.
 
 ### Safety Parameters
 
-`config.hpp` namespace: `safety`
+Parameter namespace: `safety.*`
 
 | Parameter | Value | Unit | Notes |
 |-----------|-------|------|-------|
-| IMPACT_ACCEL_THRESHOLD | 3.0 | G | Impact detection threshold |
-| IMPACT_GYRO_THRESHOLD | 800 | deg/s | Impact detection threshold |
+| `safety.impact.accel_g` | 3.0 | G | Impact detection threshold |
+| `safety.impact.gyro_dps` | 800 | deg/s | Impact detection threshold |
+| `safety.comm.timeout_ms` | 500 | ms | Communication-loss timeout |
+| `safety.battery.low_v` | 3.4 | V | Battery low-voltage warning |
+| `safety.battery.usb_v` | 3.3 | V | USB-power detection voltage |

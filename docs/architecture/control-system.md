@@ -1550,21 +1550,21 @@ rigidbody.quat2euler()   # クォータニオン→オイラー角
 
 ### 実装ファイル
 
+> **注記:** 本節はレイヤー分割済みファーム（`main/rate_controller.hpp` 等）を前提に書かれていたが、`firmware/vehicle`（旧 `vehicle_new`、2026年promotionで現行機に昇格）ではレート/姿勢/高度/位置の全カスケードが単一クラス `PidController`（`sf_controller_pid`）にまとまっている。以下は現行構成。
+
 | コンポーネント | ファイル |
 |--------------|---------|
-| レート制御（内ループ） | `firmware/vehicle/main/rate_controller.hpp` |
-| 姿勢制御（外ループ） | `firmware/vehicle/main/attitude_controller.hpp` |
-| 高度制御 | `firmware/vehicle/main/altitude_controller.hpp` |
-| 位置制御 | `firmware/vehicle/main/position_controller.hpp` |
-| PIDコントローラ | `firmware/vehicle/components/sf_algo_pid/include/pid.hpp` |
-| 制御割当 | `firmware/vehicle/components/sf_algo_control/include/control_allocation.hpp` |
-| モーターモデル | `firmware/vehicle/components/sf_algo_control/include/motor_model.hpp` |
-| 全パラメータ | `firmware/vehicle/main/config.hpp` |
-| 制御タスク | `firmware/vehicle/main/tasks/control_task.cpp` |
+| 制御インターフェース（IController） | `firmware/vehicle/components/sf_controller/include/controller.hpp` |
+| カスケードPID実装（レート/姿勢/高度/位置 全段） | `firmware/vehicle/components/sf_controller_pid/pid_controller.cpp` |
+| PIDコア（ISA形式） | `firmware/vehicle/components/sf_controller_pid/include/pid.hpp` |
+| ミキサー＋モーター出力（制御割当） | `firmware/vehicle/components/sf_actuator/actuator.cpp` |
+| パラメータSSOT（ゲイン・リミット等の可変値） | `firmware/vehicle/components/sf_core/params.cpp` |
+| 固定定数（GPIO・タスク優先度等） | `firmware/vehicle/main/config.hpp` |
+| 制御タスク | `firmware/vehicle/tasks/control_task.cpp` |
 
 ### PID実装の特徴
 
-ファームウェアのPIDコントローラ (`sf_algo_pid`) は以下の機能を持つ：
+ファームウェアのPIDコントローラ (`sf_controller_pid`) は以下の機能を持つ：
 
 | 機能 | 説明 |
 |------|------|
@@ -1582,30 +1582,31 @@ Kd = Kp × Td
 
 ### レート制御パラメータ（現在値）
 
-物理単位モード（デフォルト）での値。出力はトルク [Nm]。
+出力はトルク [Nm]（物理単位、コンパイルスイッチではなく常時この形式）。SSOTは `sf_core/params.cpp` の `table[]`（パラメータ名は `rate.roll.kp` 等、CLI `param get/set` で参照）。
 
 | 軸 | Kp [Nm/(rad/s)] | Ti [s] | Td [s] | η |
 |----|-----------------|--------|--------|---|
-| Roll | 9.1×10⁻⁴ | 0.7 | 0.01 | 0.125 |
-| Pitch | 1.33×10⁻³ | 0.7 | 0.01 | 0.125 |
-| Yaw | 1.77×10⁻³ | 0.8 | 0.01 | 0.125 |
+| Roll | 9.76×10⁻⁴ | 0.7 | 0.01 | 0.125 |
+| Pitch | 1.43×10⁻³ | 0.7 | 0.025 | 0.125 |
+| Yaw | 1.90×10⁻³ | 0.8 | 0.01 | 0.125 |
+
+> **注記:** 上記は2026-06-27に実機検証の上で採用された値（実機ふらつき対策のゲイン再設計）。旧値（roll 9.1×10⁻⁴ 等）より約1.05〜1.09倍大きい。η=0.125は`sf_controller_pid/include/pid.hpp`の固定値（パラメータ化されていない）。
 
 ### モーターパラメータ（ファームウェア実装値）
 
-`motor_model.hpp` の `DEFAULT_MOTOR_PARAMS`:
+`sf_actuator/actuator.cpp` 内の定数（ミキサー＋推力→duty変換）:
 
 | パラメータ | 記号 | 値 | 単位 |
 |-----------|------|-----|------|
-| 推力係数 | Ct | 1.0×10⁻⁸ | N/(rad/s)² |
-| トルク係数 | Cq | 9.71×10⁻¹¹ | N·m/(rad/s)² |
-| 巻線抵抗 | Rm | 0.34 | Ω |
-| 逆起電力定数 | Km | 6.125×10⁻⁴ | V/(rad/s) |
-| 粘性摩擦係数 | Dm | 3.69×10⁻⁸ | N·m/(rad/s) |
-| 静止摩擦トルク | Qf | 2.76×10⁻⁵ | N·m |
-| 回転子慣性 | Jm | 1.0×10⁻⁹ | kg·m² |
-| バッテリー電圧 | Vbat | 3.7 | V |
+| 推力係数 | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
+| トルク/推力比 | κ (=Cq/Ct) | 9.71×10⁻³ | m |
+| モーメントアーム | d | 0.023 | m |
+| 電圧-回転数 2次係数 | Am | 5.39×10⁻⁸ | V/(rad/s)² |
+| 電圧-回転数 1次係数 | Bm | 6.33×10⁻⁴ | V/(rad/s) |
+| 電圧-回転数 定数項 | Cm | 1.53×10⁻² | V |
+| バッテリー電圧（公称、フォールバック） | Vbat | 3.7 | V |
 
-> **注意:** 本セクション（8章）の理論式で使用するモーター抵抗 Rm=0.5Ω、慣性 Jm=1.0×10⁻⁷ はシミュレータの初期値であり、ファームウェアの実装値とは異なる。ファームウェアではチューニング済みの上記値を使用する。
+> **注記:** duty変換は `duty = V/Vbat` で行い、Vbatは`sensor_power`から得る実電圧（起動直後や異常値のときのみ上記の公称値3.7Vにフォールバック）。旧設計にあった巻線抵抗Rm・逆起電力定数Km・粘性摩擦Dm・静止摩擦Qf・回転子慣性Jmを介した電気回路モデルは、現行の `sf_actuator` では使用しない（V-ω特性 Am/Bm/Cm を直接使う簡略モデルに一本化）。本セクション（8章）の理論式に出てくるRm=0.5Ω、Jm=1.0×10⁻⁷等はシミュレータ初期値の理論値であり、上記の実装値とは別物。
 
 ---
 
@@ -2904,21 +2905,21 @@ Controller Input
 
 ### Implementation Files
 
+> **Note:** This section originally assumed a layered firmware (`main/rate_controller.hpp`, etc.). In `firmware/vehicle` (formerly `vehicle_new`, promoted to the primary firmware in 2026), the entire rate/attitude/altitude/position cascade lives in a single class, `PidController` (`sf_controller_pid`). The table below reflects the current layout.
+
 | Component | File |
 |-----------|------|
-| Rate control (inner loop) | `firmware/vehicle/main/rate_controller.hpp` |
-| Attitude control (outer loop) | `firmware/vehicle/main/attitude_controller.hpp` |
-| Altitude control | `firmware/vehicle/main/altitude_controller.hpp` |
-| Position control | `firmware/vehicle/main/position_controller.hpp` |
-| PID controller | `firmware/vehicle/components/sf_algo_pid/include/pid.hpp` |
-| Control allocation | `firmware/vehicle/components/sf_algo_control/include/control_allocation.hpp` |
-| Motor model | `firmware/vehicle/components/sf_algo_control/include/motor_model.hpp` |
-| All parameters | `firmware/vehicle/main/config.hpp` |
-| Control task | `firmware/vehicle/main/tasks/control_task.cpp` |
+| Control interface (IController) | `firmware/vehicle/components/sf_controller/include/controller.hpp` |
+| Cascade PID implementation (all stages: rate/attitude/altitude/position) | `firmware/vehicle/components/sf_controller_pid/pid_controller.cpp` |
+| PID core (ISA form) | `firmware/vehicle/components/sf_controller_pid/include/pid.hpp` |
+| Mixer + motor output (control allocation) | `firmware/vehicle/components/sf_actuator/actuator.cpp` |
+| Parameter SSOT (tunable gains/limits) | `firmware/vehicle/components/sf_core/params.cpp` |
+| Fixed constants (GPIO, task priorities, etc.) | `firmware/vehicle/main/config.hpp` |
+| Control task | `firmware/vehicle/tasks/control_task.cpp` |
 
 ### PID Implementation Features
 
-The firmware PID controller (`sf_algo_pid`) includes:
+The firmware PID controller (`sf_controller_pid`) includes:
 
 | Feature | Description |
 |---------|-------------|
@@ -2936,27 +2937,28 @@ Kd = Kp × Td
 
 ### Rate Control Parameters (Current Values)
 
-Physical units mode (default). Output is torque [Nm].
+Output is torque [Nm] (physical units — this is the only mode; there is no compile-time switch). SSOT is the `table[]` in `sf_core/params.cpp` (parameter names like `rate.roll.kp`, readable/writable via the `param get/set` CLI).
 
 | Axis | Kp [Nm/(rad/s)] | Ti [s] | Td [s] | η |
 |------|-----------------|--------|--------|---|
-| Roll | 9.1×10⁻⁴ | 0.7 | 0.01 | 0.125 |
-| Pitch | 1.33×10⁻³ | 0.7 | 0.01 | 0.125 |
-| Yaw | 1.77×10⁻³ | 0.8 | 0.01 | 0.125 |
+| Roll | 9.76×10⁻⁴ | 0.7 | 0.01 | 0.125 |
+| Pitch | 1.43×10⁻³ | 0.7 | 0.025 | 0.125 |
+| Yaw | 1.90×10⁻³ | 0.8 | 0.01 | 0.125 |
+
+> **Note:** These values were adopted after real-flight verification on 2026-06-27 (a gain redesign to address hardware oscillation), roughly 1.05-1.09x the earlier values (e.g. roll was 9.1×10⁻⁴). η=0.125 is a fixed constant in `sf_controller_pid/include/pid.hpp` (not a tunable parameter).
 
 ### Motor Parameters (Firmware Implementation)
 
-From `motor_model.hpp` `DEFAULT_MOTOR_PARAMS`:
+Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 
 | Parameter | Symbol | Value | Unit |
 |-----------|--------|-------|------|
-| Thrust coefficient | Ct | 1.0×10⁻⁸ | N/(rad/s)² |
-| Torque coefficient | Cq | 9.71×10⁻¹¹ | N·m/(rad/s)² |
-| Winding resistance | Rm | 0.34 | Ω |
-| Back-EMF constant | Km | 6.125×10⁻⁴ | V/(rad/s) |
-| Viscous friction | Dm | 3.69×10⁻⁸ | N·m/(rad/s) |
-| Static friction torque | Qf | 2.76×10⁻⁵ | N·m |
-| Rotor inertia | Jm | 1.0×10⁻⁹ | kg·m² |
-| Battery voltage | Vbat | 3.7 | V |
+| Thrust coefficient | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
+| Torque/thrust ratio | κ (=Cq/Ct) | 9.71×10⁻³ | m |
+| Moment arm | d | 0.023 | m |
+| Voltage-speed quadratic coeff. | Am | 5.39×10⁻⁸ | V/(rad/s)² |
+| Voltage-speed linear coeff. | Bm | 6.33×10⁻⁴ | V/(rad/s) |
+| Voltage-speed constant term | Cm | 1.53×10⁻² | V |
+| Battery voltage (nominal fallback) | Vbat | 3.7 | V |
 
-> **Note:** The motor resistance Rm=0.5Ω and inertia Jm=1.0×10⁻⁷ used in Section 8 are simulator initial values and differ from the firmware implementation. The firmware uses the tuned values above.
+> **Note:** Duty is computed as `duty = V/Vbat`, where Vbat is the LIVE voltage from `sensor_power` (falling back to the 3.7V nominal only during boot or on an implausible reading). The earlier design's electrical-circuit model (winding resistance Rm, back-EMF constant Km, viscous friction Dm, static friction Qf, rotor inertia Jm) is not used by the current `sf_actuator` — it is unified into the simpler V-ω curve (Am/Bm/Cm) used directly. The Rm=0.5Ω, Jm=1.0×10⁻⁷, etc. appearing in Section 8's theoretical derivation are simulator initial/theoretical values, distinct from the implementation values above.

@@ -18,6 +18,8 @@ sf build [target] [options]
 |------|------|-----------|
 | `target` | ビルド対象（vehicle または controller） | vehicle |
 
+`target` は `firmware/` 配下のディレクトリ名をそのまま指定する（動的解決、`sf app list` で一覧表示）。`vehicle` は現行（昇格済み）ファームウェア、`vehicle_old` はレガシーファームウェア（新規開発なし・凍結）を指す。
+
 ### オプション
 
 | オプション | 説明 |
@@ -34,6 +36,9 @@ sf build vehicle
 
 # controllerファームウェアをビルド
 sf build controller
+
+# レガシーファームウェア（旧vehicle、凍結・参照用）をビルド
+sf build vehicle_old
 
 # クリーンビルド
 sf build vehicle --clean
@@ -75,6 +80,8 @@ sf build [target] [options]
 |----------|-------------|---------|
 | `target` | Build target (vehicle or controller) | vehicle |
 
+`target` is resolved dynamically to a directory name under `firmware/` (see `sf app list` for the full list). `vehicle` is the current (promoted) firmware; `vehicle_old` is the legacy firmware (frozen, no new development).
+
 ### Options
 
 | Option | Description |
@@ -91,6 +98,9 @@ sf build vehicle
 
 # Build controller firmware
 sf build controller
+
+# Build legacy firmware (old vehicle, frozen/reference only)
+sf build vehicle_old
 
 # Clean build
 sf build vehicle --clean

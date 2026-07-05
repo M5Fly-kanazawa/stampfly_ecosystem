@@ -329,6 +329,7 @@ StampFlyは2つの通信モードをサポートしています。
 
 > **Tips:** コントローラの右ボタンで制御モード、左ボタンで高度モードを切り替えられます。
 > 必要なセンサが無効（config.hpp で OFF）の場合、自動的に STABILIZE に降格します。
+> POSITION_HOLD（POS_HOLD）は実機飛行での位置保持動作まで確認済みです。
 
 ## 8. 開発者向け機能
 
@@ -387,11 +388,26 @@ sf monitor
 | `motor test 1 30` | モーター1を30%で回転 |
 | `gain` | PIDゲイン設定 |
 
+### Tello SDK 互換 API（プログラムからの飛行制御）
+
+コントローラでの通常操作に加えて、Vehicle は **Tello SDK 互換の UDP コマンド**（`UDP:8889`）を受け付け、
+`djitellopy` など既存の Tello 用 Python プログラムがほぼ無改変で動作します。
+
+```bash
+# 例（tools/stampfly_py 配下）
+python3 tools/stampfly_py/example_djitellopy.py
+```
+
+対応コマンド一覧・安全上の注意は [`tools/stampfly_py/README.md`](../tools/stampfly_py/README.md) を
+参照してください。**送信機は安全装置として中立位置でONのまま保持してください**（スティックを動かせば
+いつでもパイロットが介入・停止できます）。
+
 ## 9. 次のステップ
 
 - [コマンドリファレンス](commands/README.md) - sf CLI の全コマンド
 - [firmware/vehicle/README.md](../firmware/vehicle/README.md) - 機体ファームウェア詳細
 - [firmware/controller/README.md](../firmware/controller/README.md) - コントローラ詳細
+- [tools/stampfly_py/README.md](../tools/stampfly_py/README.md) - Tello SDK 互換 API 詳細
 
 ---
 
@@ -702,6 +718,7 @@ For solo flights or development/debugging. Simple setup.
 
 > **Tips:** Use the right button on the controller to switch control modes, and the left button for altitude mode.
 > If required sensors are disabled (OFF in config.hpp), the mode automatically downgrades to STABILIZE.
+> POSITION_HOLD (POS_HOLD) has been validated on real hardware, including in-flight position hold.
 
 ## 8. Developer Features
 
@@ -736,8 +753,24 @@ sf cal mag save        # Save calibration
 sf monitor
 ```
 
+### Tello SDK-Compatible API (Programmatic Flight Control)
+
+In addition to normal controller operation, the Vehicle accepts **Tello SDK-compatible UDP
+commands** (`UDP:8889`), so existing Tello Python programs (e.g. `djitellopy`) run nearly
+unmodified.
+
+```bash
+# Example (under tools/stampfly_py)
+python3 tools/stampfly_py/example_djitellopy.py
+```
+
+See [`tools/stampfly_py/README.md`](../tools/stampfly_py/README.md) for the full command list
+and safety notes. **Keep the paired RC transmitter ON with neutral sticks as a safety device**
+— the pilot can intervene and stop the vehicle at any time by moving a stick.
+
 ## 9. Next Steps
 
 - [Command Reference](commands/README.md) - All sf CLI commands
 - [firmware/vehicle/README.md](../firmware/vehicle/README.md) - Vehicle firmware details
 - [firmware/controller/README.md](../firmware/controller/README.md) - Controller details
+- [tools/stampfly_py/README.md](../tools/stampfly_py/README.md) - Tello SDK-compatible API details

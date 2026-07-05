@@ -3,6 +3,10 @@
 > 作成日: 2026-01-21
 > ステータス: デバッグ中断 - ROS2ブリッジからのUDP送信が動作しない
 
+> **注記（2026年promotion後）:** 本メモが対象としていた機体側コンポーネント（`sf_svc_udp`・`sf_svc_control_arbiter`、および `main/init.cpp` でのControlArbiter初期化）は、レイヤード命名の旧ファーム（現在は `firmware/vehicle_old` として凍結、実機POS_HOLD検証を経て現行機は `firmware/vehicle`＝旧 `vehicle_new` にpromotion済み）にのみ存在し、現行の `firmware/vehicle` には存在しない。現行ファームには本メモのようなUDPベースのControlArbiter機構自体がなく、外部プログラムからの制御は Tello SDK 互換の `sf_api` コンポーネント（UDPポート8889でコマンド、8890でテレメトリ／状態ストリーム、`docs/architecture/tello-api-reference.md` 参照）が担う。ただし `sf_api` のパケット形式はTello準拠のテキストコマンドであり、本メモが示す独自バイナリ制御パケット（CRC16付き）とは別物 — ROS2ブリッジ作業を再開する場合は `firmware/vehicle_old` を対象に続けるか、`sf_api` 向けに設計し直す必要がある。以下は当時（`firmware/vehicle_old`）のデバッグ記録としてそのまま残す。
+>
+> なお、Controller-Vehicle間のESP-NOW制御パケット（本メモの独自UDPパケットとは別チャネル）は、旧vehicle・新vehicle・送信機で個別に重複定義されていたが、`firmware/common/protocol/include/espnow_protocol.hpp`（`stampfly::protocol::ControlPacket`）に一本化済み。本メモのUDPパケットはこの統合の対象外（別プロトコル）。
+
 ## 1. 現状サマリー
 
 ### 動作確認済み
@@ -141,9 +145,9 @@ bridge_node.py の `control_timer_callback()` が呼ばれているか確認（�
 | `ros/src/stampfly_bridge/stampfly_bridge/bridge_node.py` | ROS2ブリッジノード |
 | `ros/src/stampfly_bridge/stampfly_bridge/udp_client.py` | UDP送信クライアント |
 | `ros/src/stampfly_bridge/launch/bridge.launch.py` | ローンチファイル |
-| `firmware/vehicle/main/init.cpp` | ControlArbiter初期化（修正済み） |
-| `firmware/vehicle/components/sf_svc_udp/udp_server.cpp` | UDPサーバー実装 |
-| `firmware/vehicle/components/sf_svc_control_arbiter/control_arbiter.cpp` | 制御アービター |
+| `firmware/vehicle_old/main/init.cpp`（当時の記録では `firmware/vehicle/main/init.cpp`） | ControlArbiter初期化（修正済み）。現行 `firmware/vehicle` には存在しない |
+| `firmware/vehicle_old/components/sf_svc_udp/udp_server.cpp` | UDPサーバー実装。現行 `firmware/vehicle` には存在しない |
+| `firmware/vehicle_old/components/sf_svc_control_arbiter/control_arbiter.cpp` | 制御アービター。現行 `firmware/vehicle` には存在しない |
 
 ## 8. 疑わしい箇所
 

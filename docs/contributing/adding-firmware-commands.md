@@ -4,349 +4,139 @@
 
 ## 1. 概要
 
-StampFly の CLI システムは ESP-IDF Console を基盤としており、Serial CLI と WiFi CLI の両方で同じコマンドが使用できます。
+StampFly の CLI システムは ESP-IDF Console (`esp_console`) を基盤としており、USB-CDC の対話コンソール（シリアル REPL）と WiFi 経由の TCP CLI（`nc <機体IP> 23`）の両方から同じコマンド集合が使えます。
+
+実装は `firmware/vehicle/tasks/cli_task.cpp` の**単一ファイル**に集約されています。`cli_task.cpp` はコンポーネント（`components/sf_*`）ではなく `firmware/vehicle/tasks/` 配下のタスクソースで、`main/CMakeLists.txt` の `idf_component_register` に直接 SRCS として列挙され、`main` の一部としてビルドされます。
+
+> 旧ファーム（`firmware/vehicle_old/`）では `sf_svc_console` コンポーネント配下にカテゴリ別 `commands/cmd_system.cpp` / `cmd_sensor.cpp` / `cmd_motor.cpp` … というファイル分割と、`Console::getInstance()` シングルトンによる出力がありました。この構成は**現行の `firmware/vehicle/` には存在しません**。以降の説明は現行 `firmware/vehicle/` の構成に基づきます。旧ファームのコマンドを触る場合は `firmware/vehicle_old/components/sf_svc_console/` を参照してください（新規開発の対象外）。
 
 ### アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    sf_svc_console                           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │         コマンド実装（この層に追加）                    │   │
-│  │  commands/cmd_system.cpp   - システム系              │   │
-│  │  commands/cmd_sensor.cpp   - センサー系              │   │
-│  │  commands/cmd_motor.cpp    - モーター系              │   │
-│  │  commands/cmd_comm.cpp     - 通信系                  │   │
-│  │  commands/cmd_calib.cpp    - キャリブレーション系     │   │
-│  │  commands/cmd_control.cpp  - 制御系                  │   │
-│  │  commands/cmd_misc.cpp     - その他                  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          ↓                                  │
-│              esp_console_cmd_register()                     │
-└─────────────────────────────────────────────────────────────┘
-                    ↑                    ↑
-        ┌───────────┴───────┐    ┌───────┴───────┐
-        │    Serial CLI     │    │   WiFi CLI    │
-        └───────────────────┘    └───────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│              firmware/vehicle/tasks/cli_task.cpp               │
+│  ┌───────────────────────────────────────────────────────┐    │
+│  │   コマンドハンドラ（無名 namespace 内、この層に追加）      │    │
+│  │   int cmd_param(int argc, char** argv)                 │    │
+│  │   int cmd_status(...)                                  │    │
+│  │   int cmd_sensor(...)                                  │    │
+│  │   int cmd_motor(...)                                    │    │
+│  │   ...                                                    │    │
+│  └───────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│   const CliCommand kCommands[] = {{name, help, &cmd_x}, ...};  │
+│                          ↓ registerCommands() ループ            │
+│              esp_console_cmd_register()                        │
+└───────────────────────────────────────────────────────────────┘
+                    ↑                        ↑
+        ┌───────────┴───────┐    ┌───────────┴───────────┐
+        │  USB-CDC 対話REPL   │    │  TCP CLI (port 23)     │
+        └───────────────────┘    └───────────────────────┘
 ```
+
+この構成は architecture.md の横断ルール **R6**（CLI コマンドはレジストリパターン `{name, callback}` 配列で登録し、CLI 用の extern グローバルポインタを作らない）に対応します。
 
 ## 2. コマンド追加手順
 
-### ステップ 1: 適切なファイルを選択
+### ステップ1: ハンドラ関数を実装
 
-| カテゴリ | ファイル |
-|----------|----------|
-| システム（status, reboot等）| `cmd_system.cpp` |
-| センサー（sensor, loglevel等）| `cmd_sensor.cpp` |
-| モーター | `cmd_motor.cpp` |
-| 通信（comm, pair等）| `cmd_comm.cpp` |
-| キャリブレーション | `cmd_calib.cpp` |
-| 制御（trim, gain等）| `cmd_control.cpp` |
-| その他 | `cmd_misc.cpp` |
-| **新カテゴリ** | 新規ファイル `cmd_xxx.cpp` を作成 |
-
-ファイルパス: `firmware/vehicle/components/sf_svc_console/commands/`
-
-### ステップ 2: コマンドハンドラを実装
+`cli_task.cpp` の無名 namespace 内、既存ハンドラ（`cmd_version`、`cmd_led` など）の近くに追加します。シグネチャは ESP-IDF Console の規約どおり `int cmd_<name>(int argc, char** argv)`（無名 namespace 内なので `static` は不要、既存コードもつけていません）。
 
 ```cpp
-// cmd_misc.cpp に追加する例
-
-/**
- * @brief mycommand コマンドハンドラ
- * @param argc 引数の数
- * @param argv 引数配列
- * @return 0: 成功, 非0: エラー
- */
-static int cmd_mycommand(int argc, char** argv)
+/// `mycommand [status|set <value>]` — 一言で機能を説明（英語）。
+/// `mycommand [status|set <value>]` — 同じ説明（日本語）。
+int cmd_mycommand(int argc, char** argv)
 {
-    auto& console = Console::getInstance();
-
-    // 引数なしの場合
-    if (argc == 1) {
-        console.print("Usage: mycommand <subcommand>\r\n");
-        console.print("  mycommand status  - Show status\r\n");
-        console.print("  mycommand set <value>  - Set value\r\n");
+    if (argc < 2) {
+        std::printf("usage: mycommand [status|set <value>]\n");
         return 0;
     }
-
-    // サブコマンド処理
-    const char* subcmd = argv[1];
-
-    if (strcmp(subcmd, "status") == 0) {
-        console.print("Current status: OK\r\n");
+    if (std::strcmp(argv[1], "status") == 0) {
+        std::printf("status: OK\n");
         return 0;
     }
-
-    if (strcmp(subcmd, "set") == 0) {
-        if (argc < 3) {
-            console.print("Error: value required\r\n");
-            return 1;
-        }
-        int value = atoi(argv[2]);
-        console.printf("Value set to: %d\r\n", value);
+    if (std::strcmp(argv[1], "set") == 0 && argc >= 3) {
+        const int value = std::atoi(argv[2]);
+        std::printf("value set to: %d\n", value);
         return 0;
     }
-
-    console.printf("Unknown subcommand: %s\r\n", subcmd);
+    std::printf("unknown subcommand: %s\n", argv[1]);
     return 1;
 }
 ```
 
-### ステップ 3: コマンドを登録
+### ステップ2: コマンドテーブルへ登録
 
-同じファイル内の `register_xxx_commands()` 関数に追加:
-
-```cpp
-void register_misc_commands()
-{
-    // 既存のコマンド登録...
-
-    // 新しいコマンドを追加
-    const esp_console_cmd_t mycommand_cmd = {
-        .command = "mycommand",
-        .help = "My custom command [status|set <value>]",
-        .hint = NULL,
-        .func = &cmd_mycommand,
-        .argtable = NULL,
-    };
-    esp_console_cmd_register(&mycommand_cmd);
-}
-```
-
-### ステップ 4: help コマンドを更新
-
-`cmd_system.cpp` の `cmd_help()` 関数にエントリを追加:
+同ファイル内の `kCommands[]` 配列にエントリを1行追加するだけです。個別の `register_xxx_commands()` 関数やカテゴリ別ファイルへの追記は不要です — 単一の `registerCommands()` ループが `kCommands[]` を読んで `esp_console_cmd_register()` に登録します。
 
 ```cpp
-static int cmd_help(int argc, char** argv)
-{
-    auto& console = Console::getInstance();
-
-    console.print("\r\nAvailable commands:\r\n");
+const CliCommand kCommands[] = {
     // ... 既存のコマンド ...
-    console.print("  mycommand - My custom command [status|set <value>]\r\n");  // 追加
-    console.print("\r\n");
-
-    return 0;
-}
+    {"mycommand", "mycommand [status|set <value>] — my custom command", &cmd_mycommand},  // ★ 追加
+};
 ```
 
-### ステップ 5: Tab 補完を更新（任意）
+### ステップ3: help / Tab補完について
 
-WiFi CLI の補完リスト (`wifi_cli.cpp`) に追加:
-
-```cpp
-static void wifiCompletionCallback(const char* buf, LineCompletions* lc)
-{
-    static const char* commands[] = {
-        // ... 既存のコマンド ...
-        "mycommand",  // 追加
-        nullptr
-    };
-    // ...
-}
-```
+`help` コマンドは ESP-IDF 組み込みの `esp_console_register_help_command()` が `kCommands[]` の `help` 文字列から自動生成するため、手動更新は不要です。同様に、現行実装には旧ファームの `wifi_cli.cpp` のような独立した Tab 補完リストは存在しないため、保守すべき補完リストもありません。
 
 ## 3. コード例
 
-### シンプルなコマンド（引数なし）
+現行 `cli_task.cpp` の実例に基づく3パターンです。
+
+### 引数なしのコマンド（`cmd_version` 参考）
 
 ```cpp
-static int cmd_ping(int argc, char** argv)
+int cmd_version(int argc, char** argv)
 {
-    auto& console = Console::getInstance();
-    console.print("pong\r\n");
+    (void)argc;
+    (void)argv;
+    std::printf("StampFly vehicle firmware\n");
+    std::printf("build : %s %s\n", __DATE__, __TIME__);
     return 0;
 }
-
-// 登録
-const esp_console_cmd_t ping_cmd = {
-    .command = "ping",
-    .help = "Respond with pong",
-    .hint = NULL,
-    .func = &cmd_ping,
-    .argtable = NULL,
-};
-esp_console_cmd_register(&ping_cmd);
 ```
 
-### 数値引数を取るコマンド
+### 数値引数＋Pub-Sub発行のコマンド（`cmd_led` 参考）
+
+他コンポーネントの状態を変えるコマンドは、直接関数を呼ぶのではなく Topic を `publish()` します（後述「4. ベストプラクティス」参照）。
 
 ```cpp
-static int cmd_delay(int argc, char** argv)
+int cmd_led(int argc, char** argv)
 {
-    auto& console = Console::getInstance();
-
     if (argc < 2) {
-        console.print("Usage: delay <ms>\r\n");
-        return 1;
+        std::printf("usage: led <0-255>\n");
+        return 0;
     }
-
-    int ms = atoi(argv[1]);
-    if (ms <= 0 || ms > 10000) {
-        console.print("Error: ms must be 1-10000\r\n");
-        return 1;
-    }
-
-    console.printf("Waiting %d ms...\r\n", ms);
-    vTaskDelay(pdMS_TO_TICKS(ms));
-    console.print("Done\r\n");
+    int b = std::atoi(argv[1]);
+    if (b < 0)   b = 0;
+    if (b > 255) b = 255;
+    sf::UiCommand c{};
+    c.command   = static_cast<uint8_t>(sf::UiCmd::LedBrightness);
+    c.value     = static_cast<uint8_t>(b);
+    c.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::ui_command.publish(c);
+    std::printf("led brightness = %d\n", b);
     return 0;
 }
 ```
 
-### グローバル状態にアクセスするコマンド
+### Topic を読み取るコマンド（`cmd_sensor` の power 分岐 参考）
 
 ```cpp
-#include "globals.hpp"
-
-static int cmd_battery(int argc, char** argv)
-{
-    auto& console = Console::getInstance();
-
-    // グローバル変数から値を取得
-    float voltage = globals::g_power_data.voltage;
-    float current = globals::g_power_data.current;
-
-    console.printf("Battery: %.2fV, %.0fmA\r\n", voltage, current);
-    return 0;
+if (all || std::strcmp(which, "power") == 0) {
+    const sf::PowerData d = sf::sensor_power.latest();
+    std::printf("power: %.2f V  %.0f mA  %.0f mW\n", d.voltage, d.current, d.power);
 }
 ```
 
 ## 4. ベストプラクティス
 
-### 出力フォーマット
-
-```cpp
-// 改行は \r\n を使用（Telnet互換）
-console.print("Hello\r\n");
-
-// 数値出力
-console.printf("Value: %d\r\n", value);
-console.printf("Float: %.2f\r\n", fvalue);
-
-// テーブル形式
-console.print("=== Status ===\r\n");
-console.printf("  Item1: %d\r\n", val1);
-console.printf("  Item2: %d\r\n", val2);
-```
-
-### エラーハンドリング
-
-```cpp
-static int cmd_example(int argc, char** argv)
-{
-    auto& console = Console::getInstance();
-
-    // 引数チェック
-    if (argc < 2) {
-        console.print("Error: argument required\r\n");
-        return 1;  // エラーコードを返す
-    }
-
-    // 範囲チェック
-    int value = atoi(argv[1]);
-    if (value < 0 || value > 100) {
-        console.print("Error: value must be 0-100\r\n");
-        return 1;
-    }
-
-    // 成功
-    return 0;
-}
-```
-
-### 長時間処理
-
-```cpp
-static int cmd_longop(int argc, char** argv)
-{
-    auto& console = Console::getInstance();
-
-    console.print("Starting long operation...\r\n");
-
-    for (int i = 0; i < 10; i++) {
-        // 進捗表示
-        console.printf("Progress: %d%%\r\n", (i + 1) * 10);
-
-        // 処理
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
-    console.print("Complete\r\n");
-    return 0;
-}
-```
-
-## 5. 新規コマンドファイルの作成
-
-新しいカテゴリのコマンドを追加する場合:
-
-### ファイル作成: `cmd_newcat.cpp`
-
-```cpp
-/**
- * @file cmd_newcat.cpp
- * @brief New category commands
- */
-
-#include "console.hpp"
-#include "esp_console.h"
-#include <cstring>
-
-using namespace stampfly;
-
-// コマンドハンドラ
-static int cmd_newcmd(int argc, char** argv)
-{
-    auto& console = Console::getInstance();
-    console.print("New command executed\r\n");
-    return 0;
-}
-
-// 登録関数（ヘッダで宣言）
-void register_newcat_commands()
-{
-    const esp_console_cmd_t newcmd = {
-        .command = "newcmd",
-        .help = "New command description",
-        .hint = NULL,
-        .func = &cmd_newcmd,
-        .argtable = NULL,
-    };
-    esp_console_cmd_register(&newcmd);
-}
-```
-
-### ヘッダに宣言を追加: `commands.hpp`
-
-```cpp
-void register_newcat_commands();
-```
-
-### Console で呼び出し: `console.cpp`
-
-```cpp
-void Console::registerAllCommands()
-{
-    // ... 既存の登録 ...
-    register_newcat_commands();  // 追加
-}
-```
-
-### CMakeLists.txt に追加
-
-```cmake
-idf_component_register(
-    SRCS
-        "console.cpp"
-        "commands/cmd_system.cpp"
-        # ... 既存 ...
-        "commands/cmd_newcat.cpp"  # 追加
-    # ...
-)
-```
+- **改行は `\n`。** USB-CDC REPL・TCP CLI とも通常の行末で十分です（旧ファームの Telnet 互換 `\r\n` は不要）
+- **引数を検証してから処理する。** 不正な引数はエラーメッセージを表示し、`0` 以外の終了コードを返す
+- **他タスクの内部に直接アクセスしない。** architecture.md の横断ルール **R5**（コンポーネント間は Pub-Sub Topic 経由で通信し、直接依存しない）に従い、状態の読み取りは Topic の `.latest()`、状態の変更は Topic への `.publish()` のみで行う。パラメータの読み書きは `sf::params::get_*`/`set_*` を使う（`cmd_param` を参照）
+- **長時間処理は `vTaskDelay()` で他タスクを飢餓させない。** ブロッキング処理を書く場合も CLITask 以外のタスク（飛行制御系）を止めない
+- **全ハンドラにバイリンガルコメント（英語→日本語）を付ける。** 既存ハンドラ（`cmd_pair`、`cmd_motor` など）のスタイルに倣う
 
 ---
 
@@ -354,98 +144,138 @@ idf_component_register(
 
 ## 1. Overview
 
-StampFly's CLI system is built on ESP-IDF Console, allowing the same commands to be used from both Serial CLI and WiFi CLI.
+StampFly's CLI system is built on ESP-IDF Console (`esp_console`). The same command set is reachable from both the USB-CDC interactive console (serial REPL) and a WiFi-based TCP CLI (`nc <vehicle-ip> 23`).
+
+The implementation lives in a **single file**, `firmware/vehicle/tasks/cli_task.cpp`. It is not a component (`components/sf_*`) but a task source under `firmware/vehicle/tasks/`, listed directly as a SRCS entry in `main/CMakeLists.txt`'s `idf_component_register` and built as part of `main`.
+
+> The legacy firmware (`firmware/vehicle_old/`) had a `sf_svc_console` component with category-split files (`commands/cmd_system.cpp`, `cmd_sensor.cpp`, `cmd_motor.cpp`, …) and output through a `Console::getInstance()` singleton. **That structure no longer exists in current `firmware/vehicle/`.** Everything below describes the current `firmware/vehicle/` layout. To touch legacy commands, see `firmware/vehicle_old/components/sf_svc_console/` (not a target for new development).
 
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    sf_svc_console                           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │         Command Implementation (add here)           │   │
-│  │  commands/cmd_system.cpp   - System commands        │   │
-│  │  commands/cmd_sensor.cpp   - Sensor commands        │   │
-│  │  commands/cmd_motor.cpp    - Motor commands         │   │
-│  │  commands/cmd_comm.cpp     - Communication commands │   │
-│  │  commands/cmd_calib.cpp    - Calibration commands   │   │
-│  │  commands/cmd_control.cpp  - Control commands       │   │
-│  │  commands/cmd_misc.cpp     - Miscellaneous          │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          ↓                                  │
-│              esp_console_cmd_register()                     │
-└─────────────────────────────────────────────────────────────┘
-                    ↑                    ↑
-        ┌───────────┴───────┐    ┌───────┴───────┐
-        │    Serial CLI     │    │   WiFi CLI    │
-        └───────────────────┘    └───────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│              firmware/vehicle/tasks/cli_task.cpp               │
+│  ┌───────────────────────────────────────────────────────┐    │
+│  │   Command handlers (add here, inside the anon.        │    │
+│  │   namespace)                                            │    │
+│  │   int cmd_param(int argc, char** argv)                 │    │
+│  │   int cmd_status(...)                                  │    │
+│  │   int cmd_sensor(...)                                  │    │
+│  │   int cmd_motor(...)                                    │    │
+│  │   ...                                                    │    │
+│  └───────────────────────────────────────────────────────┘    │
+│                          ↓                                     │
+│   const CliCommand kCommands[] = {{name, help, &cmd_x}, ...};  │
+│                          ↓ registerCommands() loop              │
+│              esp_console_cmd_register()                        │
+└───────────────────────────────────────────────────────────────┘
+                    ↑                        ↑
+        ┌───────────┴───────┐    ┌───────────┴───────────┐
+        │ USB-CDC interactive│    │  TCP CLI (port 23)     │
+        │       REPL          │    │                        │
+        └───────────────────┘    └───────────────────────┘
 ```
+
+This matches architecture.md's cross-cutting rule **R6** (CLI commands use a registry pattern — a `{name, callback}` array — with no extern global pointer for CLI).
 
 ## 2. Adding a Command
 
-### Step 1: Choose the appropriate file
+### Step 1: Implement the handler
 
-| Category | File |
-|----------|------|
-| System (status, reboot, etc.) | `cmd_system.cpp` |
-| Sensors (sensor, loglevel, etc.) | `cmd_sensor.cpp` |
-| Motors | `cmd_motor.cpp` |
-| Communication (comm, pair, etc.) | `cmd_comm.cpp` |
-| Calibration | `cmd_calib.cpp` |
-| Control (trim, gain, etc.) | `cmd_control.cpp` |
-| Miscellaneous | `cmd_misc.cpp` |
-| **New category** | Create new file `cmd_xxx.cpp` |
-
-File path: `firmware/vehicle/components/sf_svc_console/commands/`
-
-### Step 2: Implement the command handler
+Add it inside the anonymous namespace in `cli_task.cpp`, near existing handlers (`cmd_version`, `cmd_led`, etc.). Signature follows the ESP-IDF Console convention: `int cmd_<name>(int argc, char** argv)` (no `static` needed — the anonymous namespace already gives internal linkage, and existing handlers omit it).
 
 ```cpp
-static int cmd_mycommand(int argc, char** argv)
+/// `mycommand [status|set <value>]` — one-line description.
+/// `mycommand [status|set <value>]` — same description in Japanese.
+int cmd_mycommand(int argc, char** argv)
 {
-    auto& console = Console::getInstance();
-
-    if (argc == 1) {
-        console.print("Usage: mycommand <subcommand>\r\n");
+    if (argc < 2) {
+        std::printf("usage: mycommand [status|set <value>]\n");
         return 0;
     }
-
-    const char* subcmd = argv[1];
-
-    if (strcmp(subcmd, "status") == 0) {
-        console.print("Current status: OK\r\n");
+    if (std::strcmp(argv[1], "status") == 0) {
+        std::printf("status: OK\n");
         return 0;
     }
-
-    console.printf("Unknown subcommand: %s\r\n", subcmd);
+    if (std::strcmp(argv[1], "set") == 0 && argc >= 3) {
+        const int value = std::atoi(argv[2]);
+        std::printf("value set to: %d\n", value);
+        return 0;
+    }
+    std::printf("unknown subcommand: %s\n", argv[1]);
     return 1;
 }
 ```
 
-### Step 3: Register the command
+### Step 2: Register it in the command table
+
+Add one entry to the `kCommands[]` array in the same file. There is no separate `register_xxx_commands()` function and no category file to edit — a single `registerCommands()` loop reads `kCommands[]` and calls `esp_console_cmd_register()` for each entry.
 
 ```cpp
-const esp_console_cmd_t mycommand_cmd = {
-    .command = "mycommand",
-    .help = "My custom command [status|set <value>]",
-    .hint = NULL,
-    .func = &cmd_mycommand,
-    .argtable = NULL,
+const CliCommand kCommands[] = {
+    // ... existing commands ...
+    {"mycommand", "mycommand [status|set <value>] — my custom command", &cmd_mycommand},  // ★ added
 };
-esp_console_cmd_register(&mycommand_cmd);
 ```
 
-### Step 4: Update help command
+### Step 3: help / tab completion
 
-Add entry in `cmd_help()` function in `cmd_system.cpp`.
+The built-in `help` command (`esp_console_register_help_command()`) generates its listing from each entry's `help` string in `kCommands[]`, so there is nothing to update by hand. Likewise, there is no separate tab-completion list to maintain in the current implementation (unlike the legacy firmware's `wifi_cli.cpp`).
 
-### Step 5: Update tab completion (optional)
+## 3. Code Examples
 
-Add to completion list in `wifi_cli.cpp`.
+Three patterns grounded in the current `cli_task.cpp`.
 
-## 3. Best Practices
+### No-argument command (cf. `cmd_version`)
 
-- Use `\r\n` for line endings (Telnet compatibility)
-- Return 0 for success, non-zero for errors
-- Validate arguments before processing
-- Use `Console::printf()` for formatted output
-- Access global state via `globals.hpp`
+```cpp
+int cmd_version(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    std::printf("StampFly vehicle firmware\n");
+    std::printf("build : %s %s\n", __DATE__, __TIME__);
+    return 0;
+}
+```
+
+### Numeric argument + Pub-Sub publish (cf. `cmd_led`)
+
+A command that changes another component's state publishes a Topic instead of calling a function directly (see "4. Best Practices" below).
+
+```cpp
+int cmd_led(int argc, char** argv)
+{
+    if (argc < 2) {
+        std::printf("usage: led <0-255>\n");
+        return 0;
+    }
+    int b = std::atoi(argv[1]);
+    if (b < 0)   b = 0;
+    if (b > 255) b = 255;
+    sf::UiCommand c{};
+    c.command   = static_cast<uint8_t>(sf::UiCmd::LedBrightness);
+    c.value     = static_cast<uint8_t>(b);
+    c.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::ui_command.publish(c);
+    std::printf("led brightness = %d\n", b);
+    return 0;
+}
+```
+
+### Reading a Topic (cf. the `power` branch of `cmd_sensor`)
+
+```cpp
+if (all || std::strcmp(which, "power") == 0) {
+    const sf::PowerData d = sf::sensor_power.latest();
+    std::printf("power: %.2f V  %.0f mA  %.0f mW\n", d.voltage, d.current, d.power);
+}
+```
+
+## 4. Best Practices
+
+- **Use `\n` for line endings.** Plain newlines are fine for both the USB-CDC REPL and the TCP CLI (the legacy firmware's Telnet-compatible `\r\n` is not needed)
+- **Validate arguments before processing.** Print an error message and return non-zero on invalid input
+- **Never reach into another task's internals.** Follow architecture.md's cross-cutting rule **R5** (components communicate only via Pub-Sub Topics, no direct dependencies): read state via a Topic's `.latest()`, change state via `.publish()`. Read/write parameters via `sf::params::get_*`/`set_*` (see `cmd_param`)
+- **Don't starve other tasks with long blocking operations.** Use `vTaskDelay()` if a command must wait, so the flight-control tasks are not starved
+- **Add bilingual comments (English then Japanese) to every handler**, following the style of existing handlers (`cmd_pair`, `cmd_motor`, etc.)

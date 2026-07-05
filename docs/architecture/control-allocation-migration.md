@@ -2,6 +2,8 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+> **現状について（2026年promotion後の注記）:** 本ドキュメントは、シミュレータの物理単位ベース制御アロケーションをファームウェアへ移行する計画として書かれた。この移行は完了しており、現行の主力ファーム `firmware/vehicle`（旧 `vehicle_new`。実機でのPOS_HOLD位置保持検証を機に2026年にpromotionされ、レイヤード構成の旧ファームは `firmware/vehicle_old` として凍結）では、物理単位（推力[N]・トルク[Nm]）ベースの制御アロケーションが**唯一の実装**であり、移行前の電圧スケール方式や `USE_PHYSICAL_UNITS` のようなコンパイルスイッチは存在しない。本ドキュメントの理論的背景（§2〜§5）は現在も有効だが、§6「移行計画」・§7「変更対象ファイル」に登場するファイルパス（`sf_algo_control` 等、旧レイヤード命名）は、当時の実装対象であった `firmware/vehicle_old` を指しており、現行の `firmware/vehicle` 側の実装は `sf_actuator/actuator.cpp`（ミキサー＋モータ曲線を1ファイルに統合、`ControlAllocator`/`motor_model.hpp`のような分離クラスはない）に相当する。詳細は各節の注記を参照。
+
 ## 1. 概要
 
 ### 目的
@@ -229,7 +231,7 @@ k_τ = 4 × (0.25 / 3.7) × (dT/dDuty)_hover × d
 
 ### ファームウェアPID形式の確認
 
-ファームウェア（`sf_algo_pid/pid.cpp`）は**標準形式（ISA形式）**を採用：
+ファームウェア（当時 `sf_algo_pid/pid.cpp`、現行 `firmware/vehicle` では `sf_controller_pid/include/pid.hpp` に相当。この点は現行でも同じ）は**標準形式（ISA形式）**を採用：
 
 ```cpp
 output = P_ + I_ + D_
@@ -339,9 +341,11 @@ k_τ_yaw        = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
 
 ## 6. 移行計画
 
-### Phase 1: 制御アロケーションモジュール作成 ✅ 完了
+> **注記:** 以下 Phase 1〜4 は `firmware/vehicle_old`（旧レイヤード命名の当時の `firmware/vehicle`）での実装記録。現行の `firmware/vehicle` では、この移行計画のゴールである「物理単位ベース制御アロケーション」がコンパイルスイッチなしの唯一の実装として `sf_actuator/actuator.cpp` に存在する（`ControlAllocator`/`motor_model.hpp`のような分離クラス構成ではなく、ミキサー式と推力→duty変換を1ファイル内の関数群で実装）。
 
-**実装ファイル:** `firmware/vehicle/components/sf_algo_control/`
+### Phase 1: 制御アロケーションモジュール作成 ✅ 完了（`firmware/vehicle_old` にて）
+
+**実装ファイル（`firmware/vehicle_old`）:** `components/sf_algo_control/`
 
 - `include/control_allocation.hpp` - QuadConfig, ControlAllocatorクラス
 - `control_allocation.cpp` - B行列、B⁻¹行列の構築とミキシング実装
@@ -380,9 +384,9 @@ private:
 } // namespace stampfly
 ```
 
-### Phase 2: モータモデル統合 ✅ 完了
+### Phase 2: モータモデル統合 ✅ 完了（`firmware/vehicle_old` にて）
 
-**実装ファイル:** `firmware/vehicle/components/sf_algo_control/`
+**実装ファイル（`firmware/vehicle_old`）:** `components/sf_algo_control/`
 
 - `include/motor_model.hpp` - MotorParams, スタンドアロン変換関数
 - `motor_model.cpp` - DEFAULT_MOTOR_PARAMS定義
@@ -412,11 +416,11 @@ extern const MotorParams DEFAULT_MOTOR_PARAMS;
 } // namespace stampfly
 ```
 
-### Phase 3: PIDゲイン再設計 ✅ 完了
+### Phase 3: PIDゲイン再設計 ✅ 完了（`firmware/vehicle_old` にて）
 
-**実装ファイル:** `firmware/vehicle/main/config.hpp`
+**実装ファイル（`firmware/vehicle_old`）:** `main/config.hpp`
 
-コンパイルスイッチ `USE_PHYSICAL_UNITS` による切り替え：
+コンパイルスイッチ `USE_PHYSICAL_UNITS` による切り替え（`firmware/vehicle_old` 当時の実装。現行 `firmware/vehicle` にこのスイッチはなく、常時物理単位。現行のゲインSSOTは `sf_core/params.cpp` の `table[]`、パラメータ名は `rate.roll.kp` 等 — 値は `docs/architecture/stampfly-parameters.md` 参照）：
 
 ```cpp
 namespace rate_control {
@@ -447,9 +451,9 @@ inline constexpr float ROLL_RATE_TD = 0.01f;
 } // namespace rate_control
 ```
 
-### Phase 4: 段階的移行 ✅ 完了（コード統合）
+### Phase 4: 段階的移行 ✅ 完了（コード統合、`firmware/vehicle_old` にて）
 
-**実装内容:**
+**実装内容（`firmware/vehicle_old`）:**
 
 1. `motor_driver.hpp/cpp` - `setMotorDuties()` 関数追加
 2. `control_task.cpp` - ControlAllocator統合、条件コンパイル対応
@@ -472,7 +476,7 @@ PID出力 [Nm] → ロール/ピッチ/ヨートルク
     setMotorDuties()
 ```
 
-| ステップ | 内容 | 状態 |
+| ステップ | 内容 | 状態（`firmware/vehicle_old` 時点） |
 |---------|------|------|
 | Step 1 | 新アロケーションモジュールを追加（既存と並存） | ✅ 完了 |
 | Step 2 | コンパイルスイッチで切り替え可能に | ✅ 完了 |
@@ -481,11 +485,15 @@ PID出力 [Nm] → ロール/ピッチ/ヨートルク
 | Step 5 | 実機テスト | 🔄 未実施 |
 | Step 6 | 旧コード削除（オプション） | 🔄 未実施 |
 
+> **その後の展開:** 実機テスト・移行完了は、`firmware/vehicle_old` 上でのStep 5/6としてではなく、並行して開発されていた新設計ファーム（`vehicle_new`）側で達成された。`vehicle_new` は実機でのPOS_HOLD位置保持検証を経て2026年に `firmware/vehicle`（主力機）へpromotionされ、物理単位ベースの制御アロケーションが `sf_actuator/actuator.cpp` として恒久実装になっている。`firmware/vehicle_old`（旧レイヤード構成）は87フライトの実績を持つ凍結版として保持され、新規開発の対象ではない。
+
 ---
 
 ## 7. 変更対象ファイル
 
-| ファイル | 変更内容 | 状態 |
+> **注記:** 以下は `firmware/vehicle_old`（当時の `firmware/vehicle`）における変更履歴。現行 `firmware/vehicle` の対応実装は `sf_actuator/actuator.cpp`（ミキサー＋モーター曲線）・`sf_core/params.cpp`（ゲインSSOT）・`sf_controller_pid/pid_controller.cpp`（PID統合）である。
+
+| ファイル（`firmware/vehicle_old`） | 変更内容 | 状態 |
 |---------|---------|------|
 | `components/sf_algo_control/include/control_allocation.hpp` | 新規作成 | ✅ |
 | `components/sf_algo_control/control_allocation.cpp` | 新規作成 | ✅ |
@@ -519,6 +527,8 @@ PID出力 [Nm] → ロール/ピッチ/ヨートルク
 ---
 
 <a id="english"></a>
+
+> **Note on current status (post-2026 promotion):** This document was written as a plan to migrate the simulator's physical-units-based control allocation into firmware. That migration is complete: the current primary firmware `firmware/vehicle` (formerly `vehicle_new`, promoted after real-hardware POS_HOLD validation in 2026; the earlier layered firmware is now frozen as `firmware/vehicle_old`) implements physical-units (thrust [N] / torque [Nm]) control allocation as the **only** implementation — there is no voltage-scale mode and no `USE_PHYSICAL_UNITS`-style compile switch. The theoretical background (§2-§5) remains valid, but the file paths in §6 "Migration Plan" / §7 "Files Changed" (`sf_algo_control`, etc., the old layered naming) refer to `firmware/vehicle_old`, where that work was actually done; the current `firmware/vehicle` equivalent is `sf_actuator/actuator.cpp` (mixer + motor curve merged into one file — no separate `ControlAllocator`/`motor_model.hpp` classes).
 
 ## 1. Overview
 
@@ -578,7 +588,7 @@ B⁻¹ = [1   -1/d   -1/d   -1/κ] × (1/4)
 
 ### Firmware PID Form
 
-The firmware (`sf_algo_pid/pid.cpp`) uses **Standard Form (ISA Form)**:
+The firmware (then `sf_algo_pid/pid.cpp`; the current `firmware/vehicle` equivalent is `sf_controller_pid/include/pid.hpp` — this point still holds today) uses **Standard Form (ISA Form)**:
 
 ```
 u = Kp × [e + (1/Ti)∫e dt + Td × de/dt]
@@ -631,19 +641,21 @@ k_τ_yaw        = 4 × (0.25/3.7) × 0.23 × 0.00971 ≈ 5.9×10⁻⁴ Nm/V
 
 ## 6. Migration Plan
 
-### Phase 1: Create Control Allocation Module
+> **Note:** Phases 1-4 below were carried out in `firmware/vehicle_old` (the layered firmware that was then called `firmware/vehicle`). In the current `firmware/vehicle`, the goal of this migration — physical-units control allocation with no compile switch — is the sole implementation, in `sf_actuator/actuator.cpp` (mixer formula and thrust-to-duty conversion as a set of functions in one file, not the separate `ControlAllocator`/`motor_model.hpp` classes below).
 
-**New file:** `firmware/vehicle/components/sf_algo_control/control_allocation.hpp`
+### Phase 1: Create Control Allocation Module (done in `firmware/vehicle_old`)
 
-### Phase 2: Integrate Motor Model
+**File (`firmware/vehicle_old`):** `components/sf_algo_control/control_allocation.hpp`
 
-**New file:** `firmware/vehicle/components/sf_algo_control/motor_model.hpp`
+### Phase 2: Integrate Motor Model (done in `firmware/vehicle_old`)
 
-### Phase 3: Redesign PID Gains
+**File (`firmware/vehicle_old`):** `components/sf_algo_control/motor_model.hpp`
 
-Design gains for physical unit output based on inertia and target bandwidth.
+### Phase 3: Redesign PID Gains (done in `firmware/vehicle_old`)
 
-### Phase 4: Gradual Migration
+Design gains for physical unit output based on inertia and target bandwidth. In the current `firmware/vehicle`, the gain SSOT is the `table[]` in `sf_core/params.cpp` (names like `rate.roll.kp`); see `docs/architecture/stampfly-parameters.md` for current values.
+
+### Phase 4: Gradual Migration (done in `firmware/vehicle_old`)
 
 1. Add new allocation module (coexist with existing)
 2. Enable compile-time switch
@@ -651,9 +663,13 @@ Design gains for physical unit output based on inertia and target bandwidth.
 4. Test on hardware
 5. Remove legacy code
 
+**What happened next:** Hardware testing and full migration were not completed as Steps 4-6 above in `firmware/vehicle_old`; instead they were achieved in the parallel clean-slate redesign (`vehicle_new`), which reached real-hardware POS_HOLD validation and was promoted to `firmware/vehicle` (the primary firmware) in 2026, with physical-units control allocation as its permanent `sf_actuator/actuator.cpp` implementation. `firmware/vehicle_old` (the earlier layered design) is retained as a frozen reference with 87 real flights, not a target for new development.
+
 ---
 
 ## 8. Verification
+
+> **Note:** This section describes the verification plan as originally written for `firmware/vehicle_old`. The physical-units approach itself has since been verified end-to-end (including real-hardware flight) via the separate `vehicle_new` → `firmware/vehicle` promotion path described above.
 
 ### Simulator Verification
 

@@ -409,7 +409,7 @@ BMI270 は StampFly 基板上で以下のように実装されている：
 
 ### センサー座標系 → NED 機体座標系の変換
 
-ファームウェア（`firmware/vehicle/main/tasks/imu_task.cpp`）で以下の変換を行う：
+軸変換自体は、`firmware/vehicle`（旧 `vehicle_new`。2026年のpromotionで現行機に昇格、レイヤードの旧ファームは `firmware/vehicle_old` として凍結）では、タスク層ではなくHALドライバ本体（`firmware/vehicle/components/sf_hal_bmi270/src/bmi270_wrapper.cpp`）で吸収する（方針: ドライバは呼び出し側に機体軸[FRD]の量を返し、チップ軸を意識させない）。加速度はここでは単位[g]のまま軸のみ変換され、[m/s²]への換算は呼び出し側（`firmware/vehicle/tasks/imu_task.cpp`）で行う：
 
 | NED機体軸 | = | BMI270軸 | 説明 |
 |-----------|---|----------|------|
@@ -418,16 +418,19 @@ BMI270 は StampFly 基板上で以下のように実装されている：
 | body_z（下方） | = | -sensor_z | BMI270 Z → NED -Z（符号反転） |
 
 ```cpp
-// imu_task.cpp での変換
-// BMI270座標系 → 機体座標系(NED) 変換
-float accel_body_x = accel.y * GRAVITY;   // 前方正 [m/s²]
-float accel_body_y = accel.x * GRAVITY;   // 右正 [m/s²]
-float accel_body_z = -accel.z * GRAVITY;  // 下正 (NED) [m/s²]
-
-float gyro_body_x = gyro.y;     // Roll rate [rad/s]
-float gyro_body_y = gyro.x;     // Pitch rate [rad/s]
-float gyro_body_z = -gyro.z;    // Yaw rate [rad/s]
+// bmi270_wrapper.cpp での変換（軸のみ。単位変換[g]→[m/s²]は呼び出し側imu_task.cppが行う）
+// BMI270チップ座標系 → 機体座標系(NED/FRD) 変換
+static AccelData toBodyFrame(const bmi270_accel_t& c)
+{
+    return AccelData{c.y, c.x, -c.z};
+}
+static GyroData toBodyFrame(const bmi270_gyro_t& c)
+{
+    return GyroData{c.y, c.x, -c.z};
+}
 ```
+
+**注:** この対応（body.x=chip.y, body.y=chip.x, body.z=-chip.z）は、飛行実績のある `firmware/vehicle_old`（旧 imu_task 実装）で確認済みの搭載向きをそのまま踏襲したもの。
 
 ### 変換行列
 
@@ -841,7 +844,7 @@ The BMI270 is mounted on the StampFly PCB with the following orientation:
 
 ### Sensor Frame → NED Body Frame Transformation
 
-The firmware (`firmware/vehicle/main/tasks/imu_task.cpp`) applies this transformation:
+In `firmware/vehicle` (formerly `vehicle_new`; promoted to the primary firmware in 2026, with the earlier layered firmware frozen at `firmware/vehicle_old`), the axis swap itself is absorbed inside the HAL driver rather than the task layer: `firmware/vehicle/components/sf_hal_bmi270/src/bmi270_wrapper.cpp` (policy: drivers return body-frame [FRD] quantities to callers, never chip axes). Acceleration stays in [g] here; conversion to [m/s²] happens separately in the caller (`firmware/vehicle/tasks/imu_task.cpp`):
 
 | NED Body Axis | = | BMI270 Axis | Description |
 |---------------|---|-------------|-------------|
@@ -850,16 +853,20 @@ The firmware (`firmware/vehicle/main/tasks/imu_task.cpp`) applies this transform
 | body_z (down) | = | -sensor_z | BMI270 Z → NED -Z (sign inverted) |
 
 ```cpp
-// Transformation in imu_task.cpp
-// BMI270 coordinate system → Body coordinate system (NED)
-float accel_body_x = accel.y * GRAVITY;   // Forward positive [m/s²]
-float accel_body_y = accel.x * GRAVITY;   // Right positive [m/s²]
-float accel_body_z = -accel.z * GRAVITY;  // Down positive (NED) [m/s²]
-
-float gyro_body_x = gyro.y;     // Roll rate [rad/s]
-float gyro_body_y = gyro.x;     // Pitch rate [rad/s]
-float gyro_body_z = -gyro.z;    // Yaw rate [rad/s]
+// Transformation in bmi270_wrapper.cpp (axis only; unit conversion [g]->[m/s^2]
+// happens in the caller, imu_task.cpp)
+// BMI270 chip coordinate system -> body coordinate system (NED/FRD)
+static AccelData toBodyFrame(const bmi270_accel_t& c)
+{
+    return AccelData{c.y, c.x, -c.z};
+}
+static GyroData toBodyFrame(const bmi270_gyro_t& c)
+{
+    return GyroData{c.y, c.x, -c.z};
+}
 ```
+
+**Note:** This mapping (body.x=chip.y, body.y=chip.x, body.z=-chip.z) simply carries over the mounting orientation verified on the flight-proven `firmware/vehicle_old` (the earlier imu_task implementation).
 
 ### Transformation Matrix
 
