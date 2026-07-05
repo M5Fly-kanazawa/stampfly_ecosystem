@@ -13,7 +13,8 @@ StampFly の `vehicle` ファームは **DJI Tello SDK プロトコル**を話�
 
 | ファイル | 説明 |
 |---------|------|
-| `example_djitellopy.py` | 純正 `djitellopy` を無改変で使う例（推奨の入口）|
+| `example_djitellopy.py` | 純正 `djitellopy` を無改変で使う例（推奨の入口）。50cm×4辺・90°ターンの正方形飛行 |
+| `example_djitellopy2.py` | 同上のバリエーション。離陸後20秒ホバー待機＋30cm×3辺・180°ターンのジグザグ飛行 |
 | `stampfly.py` | 依存ゼロの軽量 Tello 風クライアント（`djitellopy` を入れたくない場合）|
 | `example_square.py` | `stampfly.py` を使う 50cm 四方飛行の例 |
 
@@ -93,7 +94,8 @@ as-is**. There is no camera, so video is the one unsupported feature; everything
 
 | File | Description |
 |------|-------------|
-| `example_djitellopy.py` | Uses the stock `djitellopy` unchanged (recommended entry point) |
+| `example_djitellopy.py` | Uses the stock `djitellopy` unchanged (recommended entry point). 50cm x4 square, 90 deg turns |
+| `example_djitellopy2.py` | Variant of the above: 20s hover pause after takeoff, then a 30cm x3 zigzag with 180 deg turns |
 | `stampfly.py` | Dependency-free lightweight Tello-style client (if you'd rather not install `djitellopy`) |
 | `example_square.py` | 50 cm square flight using `stampfly.py` |
 
