@@ -190,7 +190,8 @@ class PhysicalUnitsPIDConfig:
 # =============================================================================
 # Main Simulation
 # =============================================================================
-def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate'):
+def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate',
+                      no_joystick=False):
     """
     Flight simulation with high-frequency physics and control
     高周波物理・制御によるフライトシミュレーション
@@ -251,9 +252,13 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate'):
     stampfly.body.set_position([[spawn_x], [spawn_y], [spawn_z]])
     print(f"Spawn position: ({spawn_x:.2f}, {spawn_y:.2f}, {spawn_z:.2f})")
 
-    # Initialize joystick
+    # Initialize joystick (skipped with --no-joystick; open() failure also
+    # leaves device=None and the sim keeps running without stick input)
+    # ジョイスティック初期化（--no-joystick 時はスキップ。open() 失敗時も
+    # device=None のままスティック入力なしでシミュレーションを継続する）
     joystick = Joystick()
-    joystick.open()
+    if not no_joystick:
+        joystick.open()
 
     # Initialize drone state
     stampfly.set_pqr([[0.0], [0.0], [0.0]])
@@ -301,24 +306,30 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate'):
     pitch_offset = 0.0
     yaw_offset = 0.0
 
-    i = 0
-    num = 100
-    while i < num:
-        joydata = joystick.read()
-        if joydata is not None:
-            thrust_offset += (joydata[0] - 127) / 127.0
-            roll_offset += (joydata[1] - 127) / 127.0
-            pitch_offset += (joydata[2] - 127) / 127.0
-            yaw_offset += (joydata[3] - 127) / 127.0
-            i += 1
-            print(i)
+    if joystick.device is None:
+        # No controller: keep zero offsets; the drone hovers with neutral input
+        # コントローラ無し: オフセット0のまま。中立入力で機体はホバーする
+        print("コントローラ未接続のためキャリブレーションをスキップ / "
+              "Skipping calibration (no controller)")
+    else:
+        i = 0
+        num = 100
+        while i < num:
+            joydata = joystick.read()
+            if joydata is not None:
+                thrust_offset += (joydata[0] - 127) / 127.0
+                roll_offset += (joydata[1] - 127) / 127.0
+                pitch_offset += (joydata[2] - 127) / 127.0
+                yaw_offset += (joydata[3] - 127) / 127.0
+                i += 1
+                print(i)
 
-    thrust_offset /= num
-    roll_offset /= num
-    pitch_offset /= num
-    yaw_offset /= num
-    print(f"Calibration done: thrust={thrust_offset:.4f}, roll={roll_offset:.4f}, "
-          f"pitch={pitch_offset:.4f}, yaw={yaw_offset:.4f}")
+        thrust_offset /= num
+        roll_offset /= num
+        pitch_offset /= num
+        yaw_offset /= num
+        print(f"Calibration done: thrust={thrust_offset:.4f}, roll={roll_offset:.4f}, "
+              f"pitch={pitch_offset:.4f}, yaw={yaw_offset:.4f}")
 
     # ===========================================
     # Simulation State
@@ -774,7 +785,11 @@ if __name__ == "__main__":
     parser.add_argument('--mode', '-m', type=str, default='rate',
                         choices=['rate', 'angle'],
                         help='Control mode: rate=ACRO, angle=STABILIZE (default: rate)')
+    parser.add_argument('--no-joystick', action='store_true',
+                        help='Run without a controller (sf CLI passes this '
+                             'when hidapi is unavailable)')
     args = parser.parse_args()
 
     print(f"Starting simulation: world={args.world}, mode={args.mode}")
-    flight_sim_2000hz(world_type=args.world, seed=args.seed, control_mode=args.mode)
+    flight_sim_2000hz(world_type=args.world, seed=args.seed, control_mode=args.mode,
+                      no_joystick=args.no_joystick)

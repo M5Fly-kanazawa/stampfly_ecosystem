@@ -1,4 +1,9 @@
-import hid
+# hid is optional: the simulator must start without a controller
+# hid はオプション扱い: コントローラ無しでもシミュレータを起動できるようにする
+try:
+    import hid
+except ImportError:
+    hid = None
 
 # StampFly Controller USB HID settings
 # StampFlyコントローラのUSB HID設定
@@ -8,8 +13,8 @@ PRODUCT_ID = 0x8001  # StampFly Controller PID (sdkconfig.defaults)
 # Detect which HID package is installed
 # hid パッケージ: hid.Device(vid, pid) — 大文字 Device, プロパティベース API
 # hidapi パッケージ: hid.device() — 小文字 device, メソッドベース API
-_USE_HID_PACKAGE = hasattr(hid, 'Device')
-_USE_HIDAPI_PACKAGE = hasattr(hid, 'device') and not _USE_HID_PACKAGE
+_USE_HID_PACKAGE = hid is not None and hasattr(hid, 'Device')
+_USE_HIDAPI_PACKAGE = hid is not None and hasattr(hid, 'device') and not _USE_HID_PACKAGE
 
 
 class Joystick:
@@ -19,6 +24,13 @@ class Joystick:
         self.device = None
 
     def open(self):
+        # No hid package installed: run without a controller
+        # hid パッケージ未インストール時はコントローラ無しで続行
+        if hid is None:
+            print("hid パッケージ未検出のためコントローラ無しで実行します / "
+                  "Running without controller (no 'hid'/'hidapi' package)")
+            self.device = None
+            return
         try:
             if _USE_HID_PACKAGE:
                 # 'hid' package (PyPI: hid>=1.0.0)
@@ -73,6 +85,9 @@ class Joystick:
     def list_hid_devices(self):
         """List connected HID devices
         接続されているHIDデバイスの情報を列挙する"""
+        if hid is None:
+            print("hid パッケージ未検出 / 'hid' package not installed")
+            return
         print("=== 接続されているHIDデバイス一覧 / Connected HID Devices ===")
         for d in hid.enumerate():
             info = {
