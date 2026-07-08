@@ -14,7 +14,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 |------|------|
 | 調査（内部棚卸し＋外部環境、計12テーマ） | ✅ 完了 (2026-07-08) |
 | 戦略策定 | ✅ 本文書 (2026-07-08) |
-| Horizon 1 実行 | ⏳ 未着手 |
+| Horizon 1 実行 | ▶ 実行中（〜4週前半完了: v2026.07.1+フラッシャ2系統。§7 を 2026-07-09 改訂） |
 
 ### 結論（要旨）
 
@@ -260,12 +260,38 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 
 ## 7. 直近アクション（90日）
 
-| 週 | アクション |
-|----|-----------|
-| 〜2週 | GitHub Releases整備（vehicle/controllerバイナリ+バージョニング規約）。mkdocsサイト公開（landing併載構成）。READMEから公開済みlandingへのリンク追加 |
-| 〜4週 | Webフラッシャ試作（ESP Web Tools）。教育機関向け導入ページ（クラスセット・見積もり導線）起草。所要時間実測（install→build→flash）とドキュメント反映 |
-| 〜8週 | 教材接続スプリント（シラバス⇔ノートブック01〜15リンク・README現状化・全ノートブック無機体通し確認）。安全・運用パック起草（前橋市/足立区様式の雛形化）。Tello SDK互換の実機検証 |
-| 〜12週 | 秋開催ワークショップ企画（アンケート実施込み）。SICEチュートリアル提案書。評価キット貸出プログラム設計（5校分）。書籍企画書 |
+### 改訂履歴
+
+| 日付 | 内容 |
+|------|------|
+| 2026-07-08 | 初版（週割りは本節末尾の「完了済み」参照） |
+| 2026-07-09 | 全面改訂: v2026.07.1 完了実績を反映し、(1) DXH高校教員向け体験講座（7/18-19）、(2) 「フラッシュだけユーザー」向け段階的ドキュメント体系の整備、の2軸で書き直し |
+
+### 方針転換の要点
+
+| # | 転換 | 理由 |
+|---|------|------|
+| 1 | 「フラッシュだけユーザー」（開発環境を持たない教員・生徒）を一級のユーザー像として位置づけ、ドキュメント体系を再構成する | v2026.07.1 でビルド不要の書き込み手段（Web/GUIフラッシャ）が完成し、導入の壁はツールからドキュメントへ移った。棚卸し（2026-07-09）の結論: パラメータ調整・ログ取得は開発環境なしで既に可能（`sf log wifi`・USBシリアル `param`）だが、その事実と手順を伝える非開発者向けドキュメントが存在しない |
+| 2 | 高校（DX・情報教育）向けカリキュラムを高専・大学と並ぶ柱に引き上げる | DXH（高等学校DX加速化推進事業）の高校教員向け体験講座（7/18-19）が確定し、教員直接支援の形で高校に接地する機会が前倒しで到来。当初プランでは K-12 は Horizon 2（パートナー前提）だったが、教員研修型はこの限りではない |
+| 3 | Windows実機検証はベータテスタ協力方式に変更 | 手元に Windows 実機がない。DXH 講座が Windows 11 環境のため、講座前の実機リハーサルが事実上の検証を兼ねる |
+
+### 週割り（2026-07-09 起点）
+
+| 期限 | アクション |
+|------|-----------|
+| 〜7/17（DXH準備・最優先） | ① 2時間カリキュラム確定（操縦体験→ビルド不要書き込み体験→開発環境の構築→プログラム書き換え・モータ制御。大学HP告知文に準拠、参加者PC=Windows 11/Core i5 前提）。② 当日教材の作成: 手順書（スクリーンショット付き書き込みガイドの初版を兼ねる）+ 進行スライド。③ Windows 11 実機リハーサル（GUIフラッシャ .exe と Webフラッシャの実機検証を兼ねる。並行してベータテスタにも協力依頼）。④ 機材・会場準備（実機セット数の確定=**要確認**、予備機・予備バッテリー、飛行スペースの安全確保）。⑤ 所要時間実測（リハーサルで install→flash→初飛行を計測し、ドキュメントへ還流） |
+| 7/18-19 | DXH 高校教員向け体験講座 本番（両日）。終了時アンケート実施（教員フィードバック第1号=データフライホイールの起点）。改善点を即日メモ化 |
+| 〜8/7（4週） | 「フラッシュだけユーザー」ドキュメント体系スプリント（次セッションから実装）: ① 入口ページ（読者ルーティング: 飛ばしたい/教えたい/開発したい） ② 初回体験ガイド（入手・組み立て初期チェック→書き込み→初飛行） ③ 操縦・UIリファレンス（operation_manual を非開発者向けに再構成） ④ パラメータ調整入門（何を・なぜ・どう変えるか） ⑤ ログ取得入門（`sf log wifi` は開発環境不要であることを明記） ⑥ 「離着陸ができたら次へ」ガイド（Tello互換API→教育ノートブック→ソースビルドの段階導線） ⑦ トラブルシューティング拡充（LED/ブザーの状態別・症状別）。DXH の実測値・フィードバックを反映する。教育機関向け導入ページ（クラスセット・見積もり導線）の起草 |
+| 〜9/3（8週） | SCI/SICE チュートリアル講座（9/10 大阪+Zoom）準備: 参加者事前準備手順書（DXH教材の発展版）+ 丸一日カリキュラム。教材接続スプリント（シラバス⇔ノートブック01〜15リンク、docsサイトのリンク切れ65件解消）。Windows ベータテスト結果の反映 |
+| 〜10/8（12週） | 高校向け授業パッケージ公開（DXH実施結果を反映した指導案+教材の一式化）。安全・運用パック起草（前橋市/足立区様式の雛形化）。Tello SDK互換の実機検証。評価キット貸出プログラム設計（5校分）。書籍企画書 |
+
+### 完了済み（初版の〜2週+〜4週前半、2026-07-08 時点）
+
+| 項目 | 実績 |
+|------|------|
+| GitHub Releases 整備 | ✅ v2026.07.0 / v2026.07.1 発行。CalVer 規約（docs/contributing/versioning.md）、vehicle/controller × full/app + SHA256SUMS |
+| ビルド不要の書き込み手段 | ✅ Webフラッシャ公開 LIVE（/flash/）+ デスクトップGUI「StampFly Flasher」3 OS 版をリリース添付（v2026.07.1）。リリース→サイト自動再デプロイの構造欠陥（GITHUB_TOKEN イベント抑止）も修正済み |
+| docsサイト・導線 | ✅ mkdocs サイト公開、README/landing からのリンク整備、/flash/ ページの動的ダウンロードボタン |
 
 ## 8. 参考：調査の出典
 
@@ -350,4 +376,6 @@ See the Japanese table in §6: browser-flash onboarding live and docs site publi
 
 ## 7. Next 90 Days
 
-Weeks 1–2: GitHub Releases + docs-site publication + README links to the already-live landing page. Weeks 3–4: browser-flasher prototype, institutional procurement page, measured setup times documented. Weeks 5–8: materials-connection sprint (syllabus↔notebook links, README refresh, hardware-free run-through of all notebooks), safety pack draft, Tello SDK on-hardware verification. Weeks 9–12: autumn workshop (with survey), SICE tutorial proposal, loaner-kit program design, book proposal.
+Revised 2026-07-09, after v2026.07.1 shipped no-build flashing (web flasher + desktop GUI flasher for 3 OSes): the adoption bottleneck has moved from tooling to documentation, so the plan now centers on two axes — (1) the DXH high-school teacher workshop (Jul 18–19, 2 hours, participants on Windows 11 / Core i5 PCs) and (2) a documentation track that treats the "flash-only user" (teachers and students with no dev environment) as a first-class audience. The 2026-07-09 docs inventory concluded that parameter tuning and log capture already work without a dev environment (`sf log wifi`, serial `param`), but no non-developer documentation says so.
+
+Through Jul 17 (top priority): finalize the 2-hour curriculum (pilot experience → no-build flashing → dev-environment setup → code-modify / motor control, per the university's published program description), produce the handout (doubling as the first screenshot-based flashing guide) and slides, rehearse on real Windows 11 hardware (doubling as the pending .exe verification; beta testers recruited in parallel; the number of StampFly sets still needs confirmation), and measure real setup times. Jul 18–19: run the workshop on both days and collect the first teacher survey (data-flywheel start). Weeks 3–4 (→Aug 7): flash-only-user documentation sprint (entry routing page, first-flight guide, controls/UI reference, beginner parameter tuning, log capture, "after your first landing" next steps, expanded LED/buzzer troubleshooting) plus the institutional procurement page. Weeks 5–8 (→Sep 3): SCI/SICE tutorial prep (Sep 10; participant pre-setup guide, full-day curriculum), materials-connection sprint (syllabus↔notebooks, fix the 65 broken links), fold in Windows beta-test results. Weeks 9–12 (→Oct 8): publish the high-school lesson package informed by the DXH results, safety-pack draft, Tello SDK on-hardware verification, loaner-kit program design, book proposal. Completed before this revision: GitHub Releases (v2026.07.0/.1, CalVer), web + desktop flashers with automatic post-release site redeploy, mkdocs site + landing links.
