@@ -216,6 +216,13 @@ section{position:relative}
 .compat-card li:last-child{border-bottom:none}
 .compat-card.no li{color:var(--muted)}
 .compat-note{margin-top:16px;color:var(--muted);font-size:.86rem}
+/* In-page anchor to the #desktop section otherwise inherits plain body
+   text color (a{color:inherit} above) and looks unclickable — tint +
+   underline it like other in-page links.
+   #desktop へのページ内リンクは a{color:inherit} によりそのままでは本文と
+   同色でクリック可能に見えないため、他のページ内リンクと同様に着色・
+   下線を付ける。 */
+.compat-note a{color:var(--cyan);text-decoration:underline}
 @media(max-width:700px){.compat-grid{grid-template-columns:1fr}}
 
 /* ============================================================
@@ -271,6 +278,19 @@ esp-web-install-button [slot="not-allowed"]{
    同色でクリック可能に見えないため、他のリンク（.fw-release-link）に
    合わせて着色・下線を付ける。 */
 .notice .mac-crash-links a{color:var(--cyan);text-decoration:underline}
+/* General case of the same problem: any in-page/external link placed
+   inside a notice <p> (e.g. the new #desktop anchor inside macCrashWarn)
+   needs the same tint + underline treatment.
+   同じ問題の一般形: 通知の <p> 内に置かれたリンク（例: macCrashWarn 内の
+   新しい #desktop アンカー）にも同様の着色・下線が必要。 */
+.notice p a{color:var(--cyan);text-decoration:underline}
+
+/* ============================================================
+   Desktop app section / デスクトップ版セクション
+   ============================================================ */
+.desktop-downloads{display:flex;flex-direction:column;gap:14px}
+.desktop-dl-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.desktop-fallback-note{color:var(--muted);font-size:.86rem;margin:4px 0 0}
 
 /* ============================================================
    Steps / 手順
@@ -304,6 +324,13 @@ esp-web-install-button [slot="not-allowed"]{
 .trouble details[open] summary::before{content:"▾ "}
 .trouble ul{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:.9rem}
 .trouble ul li{margin:4px 0}
+/* Same a{color:inherit} problem as the notice boxes above: the new
+   #desktop anchor inside troubleQ4c needs tint + underline to read as
+   clickable against the muted list text.
+   上の通知ボックスと同じ a{color:inherit} 問題: troubleQ4c 内の新しい
+   #desktop アンカーも、控えめなリスト文字色に対してクリック可能に
+   見えるよう着色・下線が必要。 */
+.trouble a{color:var(--cyan);text-decoration:underline}
 
 /* ============================================================
    Footer / フッター
@@ -380,6 +407,7 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
       </div>
     </div>
     <p class="compat-note" data-i18n="compatNote">スマートフォン・タブレットは非対応です。パソコン（Chromebook可）でお使いください。</p>
+    <p class="compat-note" data-i18n="compatDesktopAlt">ブラウザ非対応環境（Safari・Firefox・iPad等）での代替手段は<a href="#desktop">デスクトップ版 StampFly Flasher</a>です。</p>
   </div>
 </section>
 
@@ -399,7 +427,7 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
     <div class="notice notice-warn" id="macCrashNotice" hidden>
       <span class="ic">⚠️</span>
       <p>
-        <span data-i18n="macCrashWarn">既知の問題（macOS）: macOS の Chrome/Edge では、書き込み中にブラウザごとクラッシュする既知の不具合があります（Chromium の Web Serial 実装のバグ）。機体側のファームウェアが壊れることはありませんが、Mac では esptool / sf CLI での書き込みを推奨します。Windows・Chromebook・Linux では報告されていません。どのOSでも使えるデスクトップ版 StampFly Flasher（リリースページ）もあります。</span>
+        <span data-i18n="macCrashWarn">既知の問題（macOS）: macOS の Chrome/Edge では、書き込み中にブラウザごとクラッシュする既知の不具合があります（Chromium の Web Serial 実装のバグ）。機体側のファームウェアが壊れることはありませんが、Mac では esptool / sf CLI での書き込みを推奨します。Windows・Chromebook・Linux では報告されていません。どのOSでも使える<a href="#desktop">デスクトップ版 StampFly Flasher</a>もあります。</span>
         <!-- Issue links are language-independent, so they live outside the
              i18n-swapped span rather than being duplicated in all three
              dictionaries. / Issueリンクは言語に依存しないため、3言語分の
@@ -456,6 +484,54 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
         <a class="fw-release-link" href="#" target="_blank" rel="noopener" hidden data-i18n="releaseLinkText">GitHub リリースを見る →</a>
       </div>
 
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Desktop app ===================== -->
+<!-- StampFly Flasher: a desktop GUI flashing app (Windows .exe / macOS
+     .zip for Apple Silicon + Intel), built for two reasons: (1) the Web
+     Flasher above crashes Chrome on macOS (see macCrashNotice), and
+     (2) some classrooms need offline/no-browser flashing. CI attaches
+     the executables to every GitHub Release from tag v2026.07.1 onward
+     (v2026.07.0 predates them), so #desktopDownloads below is populated
+     dynamically by initDesktopDownloads() at the bottom of this file —
+     see that function's header comment for the fallback behavior.
+     StampFly Flasher: デスクトップGUI書き込みアプリ（Windows .exe /
+     macOS .zip・Apple Silicon+Intel両対応）。理由は2つ: (1) 上のWeb
+     フラッシャがmacOSでChromeをクラッシュさせる不具合がある（
+     macCrashNotice参照）、(2) 一部の教室ではオフライン・ブラウザ不要の
+     書き込みが必要。CIはタグ v2026.07.1 以降の全GitHub Releaseに実行
+     ファイルを添付する（v2026.07.0はそれより前）ため、下の
+     #desktopDownloads はこのファイル末尾の initDesktopDownloads() が
+     動的に描画する（フォールバック動作は同関数の冒頭コメント参照）。 -->
+<section class="block" id="desktop">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="desktopTitle">デスクトップ版 StampFly Flasher / Desktop App</h2>
+      <p class="section-lead" data-i18n="desktopLead">ブラウザが使えない環境・macOSでのChrome問題の回避・オフライン教室向けに、Python不要の単体アプリでも書き込めます。</p>
+    </div>
+
+    <!-- Download links container. The markup below is the FALLBACK and is
+         the default rendered state; initDesktopDownloads() replaces its
+         contents only on a successful GitHub API fetch that finds
+         matching assets. It must remain untouched (and therefore visible)
+         if the fetch fails, is rate-limited, or the latest release has no
+         matching assets yet (e.g. still v2026.07.0).
+         ダウンロードリンクの入れ物。以下のマークアップはフォールバックで
+         あり既定の表示状態。initDesktopDownloads() は GitHub API の
+         取得に成功し該当アセットが見つかった場合のみ中身を置き換える。
+         fetch失敗・レート制限・最新リリースに該当アセットがまだない場合
+         （例: まだ v2026.07.0）は、そのまま（＝表示されたまま）残す
+         必要がある。 -->
+    <div class="desktop-downloads" id="desktopDownloads">
+      <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" target="_blank" rel="noopener" data-i18n="desktopFallbackLink">リリースページからダウンロード / Download from the Releases page</a>
+      <p class="desktop-fallback-note" data-i18n="desktopFallbackNote">実行ファイルは v2026.07.1 以降のリリースに添付されています（それより前のリリースには含まれません）。</p>
+    </div>
+
+    <div class="notice notice-info" style="margin-top:18px">
+      <span class="ic">🔓</span>
+      <p data-i18n="desktopGatekeeper">macOS では初回起動時にセキュリティ警告が表示されます。アイコンをダブルクリックせず、右クリック（または control キーを押しながらクリック）→「開く」を選んでください（Apple の Gatekeeper 機能によるものです）。</p>
     </div>
   </div>
 </section>
@@ -567,7 +643,7 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
         <ul>
           <li data-i18n="troubleQ4a">既知の Chromium の不具合（Web Serial 実装のバグ）です。転送が始まるまで書き込みは行われないため機体側のファームウェアが壊れることはなく、途中で失敗しても復旧できます</li>
           <li data-i18n="troubleQ4b">再試行する場合は、上の「書き込みが何度も失敗する」と同じ手順（BOOT ボタンを押しながら USB を挿し直す）で Install をやり直してください</li>
-          <li data-i18n="troubleQ4c">Mac では esptool や sf CLI、またはどのOSでも使えるデスクトップ版 StampFly Flasher（リリースページ）での書き込みを推奨します（この不具合が再発する可能性があるため）</li>
+          <li data-i18n="troubleQ4c">Mac では esptool や sf CLI、またはどのOSでも使える<a href="#desktop">デスクトップ版 StampFly Flasher</a>での書き込みを推奨します（この不具合が再発する可能性があるため）</li>
         </ul>
       </details>
     </div>
@@ -613,9 +689,10 @@ const I18N = {
     compatOk3:'ChromeOS (school Chromebooks work too)',
     compatNoTitle:'Not supported', compatNo1:'Safari', compatNo2:'Firefox', compatNo3:'iPhone / iPad', compatNo4:'Android',
     compatNote:'Phones and tablets are not supported. Please use a computer (a Chromebook is fine).',
+    compatDesktopAlt:'If your browser is not supported (Safari, Firefox, iPad, etc.), the alternative is the <a href="#desktop">desktop StampFly Flasher app</a>.',
     flashTitle:'Flash the firmware',
     flashLead:'Connect the board to your computer with a USB cable, then pick the target to flash below.',
-    macCrashWarn:'Known issue (macOS): On macOS, Chrome/Edge may crash entirely while flashing (a Chromium Web Serial bug). The device firmware is not damaged, but on Mac we recommend flashing with esptool / the sf CLI. Not reported on Windows, Chromebook, or Linux. A desktop app, StampFly Flasher (on the Releases page), works on every OS.',
+    macCrashWarn:'Known issue (macOS): On macOS, Chrome/Edge may crash entirely while flashing (a Chromium Web Serial bug). The device firmware is not damaged, but on Mac we recommend flashing with esptool / the sf CLI. Not reported on Windows, Chromebook, or Linux. A desktop app, <a href="#desktop">StampFly Flasher</a>, works on every OS.',
     cardVehicleTitle:'StampFly (vehicle)',
     cardVehicleDesc:'The flight controller firmware for the aircraft itself. Includes ACRO, STABILIZE, ALT HOLD, and POS HOLD modes.',
     cardControllerTitle:'Controller',
@@ -625,6 +702,11 @@ const I18N = {
     unsupportedMsg:'Your browser does not support Web Serial. Please use Chrome or Edge on a computer.',
     notAllowedMsg:'Please open this page over HTTPS or localhost.',
     releaseLinkText:'View GitHub release →',
+    desktopTitle:'Desktop App',
+    desktopLead:'For environments without a usable browser, to sidestep the Chrome-on-macOS crash, or for offline classrooms, a standalone app (no Python required) can flash too.',
+    desktopFallbackLink:'Download from the Releases page',
+    desktopFallbackNote:'Executables are attached to releases from v2026.07.1 onward (not included in earlier releases).',
+    desktopGatekeeper:'On macOS the first launch shows a security warning. Instead of double-clicking, right-click (or Control-click) the app and choose "Open" — this is due to Apple\'s Gatekeeper.',
     stepsTitle:'Flashing steps',
     step1h:'Connect with a USB cable', step1p:'Use a USB-C cable that supports data (charge-only cables will not work).',
     step2h:'Click Install and pick the port', step2p:'Click the button above and choose a port such as "USB JTAG/serial debug unit" from the list.',
@@ -651,7 +733,7 @@ const I18N = {
     troubleQ4:'The whole browser crashed (macOS)',
     troubleQ4a:'This is a known Chromium bug (in its Web Serial implementation). No data is written until the transfer starts, so the device firmware is not damaged, and a failed partial write is recoverable.',
     troubleQ4b:'To retry, follow the same steps as "Flashing keeps failing" above (unplug and replug USB while holding BOOT), then try Install again.',
-    troubleQ4c:'On Mac we recommend flashing with esptool, the sf CLI, or the desktop StampFly Flasher app (on the Releases page) instead, since this bug can recur.',
+    troubleQ4c:'On Mac we recommend flashing with esptool, the sf CLI, or the <a href="#desktop">desktop StampFly Flasher app</a> instead, since this bug can recur.',
     footNote:'An education & research platform to learn, build, and experiment with drone control.',
     footHome:'Home', footDocs:'Docs',
   },
@@ -667,9 +749,10 @@ const I18N = {
     compatOk3:'ChromeOS（学校的 Chromebook 也可以）',
     compatNoTitle:'不支持', compatNo1:'Safari', compatNo2:'Firefox', compatNo3:'iPhone / iPad', compatNo4:'Android',
     compatNote:'不支持手机和平板电脑，请使用电脑（Chromebook 也可以）。',
+    compatDesktopAlt:'如果浏览器不受支持（Safari、Firefox、iPad 等），可以使用<a href="#desktop">桌面版 StampFly Flasher</a>作为替代方案。',
     flashTitle:'刷写固件',
     flashLead:'用 USB 数据线将主板连接到电脑，然后在下面选择要刷写的目标。',
-    macCrashWarn:'已知问题（macOS）：在 macOS 上，Chrome/Edge 在刷写过程中可能会整个浏览器崩溃（这是 Chromium Web Serial 实现的已知缺陷）。设备固件本身不会损坏，但在 Mac 上建议使用 esptool / sf CLI 进行刷写。Windows、Chromebook、Linux 上未见此类报告。也有一个可在任何操作系统上使用的桌面应用 StampFly Flasher（发布页面）。',
+    macCrashWarn:'已知问题（macOS）：在 macOS 上，Chrome/Edge 在刷写过程中可能会整个浏览器崩溃（这是 Chromium Web Serial 实现的已知缺陷）。设备固件本身不会损坏，但在 Mac 上建议使用 esptool / sf CLI 进行刷写。Windows、Chromebook、Linux 上未见此类报告。也有一个可在任何操作系统上使用的桌面应用<a href="#desktop">StampFly Flasher</a>。',
     cardVehicleTitle:'StampFly 机体',
     cardVehicleDesc:'机体侧的飞行控制固件，包含 ACRO、STABILIZE、ALT HOLD、POS HOLD 四种模式。',
     cardControllerTitle:'遥控器',
@@ -679,6 +762,11 @@ const I18N = {
     unsupportedMsg:'您的浏览器不支持 Web Serial，请在电脑上使用 Chrome 或 Edge。',
     notAllowedMsg:'请通过 HTTPS 或 localhost 打开此页面。',
     releaseLinkText:'查看 GitHub 发行版 →',
+    desktopTitle:'桌面版应用',
+    desktopLead:'针对无法使用浏览器的环境、想避开 macOS 上 Chrome 的崩溃问题、或需要离线使用的教室，也可以使用无需 Python 的独立应用进行刷写。',
+    desktopFallbackLink:'从 Releases 页面下载',
+    desktopFallbackNote:'可执行文件从 v2026.07.1 起的发行版开始附带（更早的发行版中不包含）。',
+    desktopGatekeeper:'在 macOS 上首次启动会出现安全警告。请不要双击，而是右键点击（或按住 Control 点击）应用后选择"打开"——这是 Apple 的 Gatekeeper 机制所致。',
     stepsTitle:'刷写步骤',
     step1h:'用 USB 数据线连接', step1p:'使用支持数据传输的 USB-C 数据线（纯充电线无法使用）。',
     step2h:'点击 Install 并选择端口', step2p:'点击上方按钮，在列表中选择类似 "USB JTAG/serial debug unit" 的端口。',
@@ -705,7 +793,7 @@ const I18N = {
     troubleQ4:'整个浏览器崩溃了（macOS）',
     troubleQ4a:'这是一个已知的 Chromium 缺陷（Web Serial 实现的问题）。由于传输开始之前不会写入任何数据，因此不会损坏机体固件，写入过程中失败也是可以恢复的。',
     troubleQ4b:'如需重试，请按照上方"刷写反复失败"相同的步骤（按住 BOOT 按钮重新插拔 USB），然后再次尝试 Install。',
-    troubleQ4c:'在 Mac 上建议改用 esptool、sf CLI，或可在任何操作系统上使用的桌面应用 StampFly Flasher（发布页面）进行刷写，因为该问题可能再次出现。',
+    troubleQ4c:'在 Mac 上建议改用 esptool、sf CLI，或可在任何操作系统上使用的<a href="#desktop">桌面版 StampFly Flasher</a>进行刷写，因为该问题可能再次出现。',
     footNote:'一个用于学习、实现和实验无人机控制的教育与研究平台。',
     footHome:'首页', footDocs:'文档',
   },
@@ -806,6 +894,96 @@ function initFirmwareCard(card){
     });
 }
 document.querySelectorAll('.flash-card').forEach(initFirmwareCard);
+
+/* ---------- Desktop app download links / デスクトップ版ダウンロードリンク ----------
+   Look up the latest GitHub Release via the REST API. Unlike a release
+   asset's binary download URL, this API endpoint sends CORS headers, so a
+   plain browser fetch() works here. From response.assets, pick out any
+   StampFlyFlasher_* build for Windows/macOS-arm64/macOS-x64 and render a
+   download button for each, plus the release tag as a small version chip.
+   If the fetch fails, is rate-limited (403), or no matching asset exists
+   yet (e.g. the latest release is still v2026.07.0, which predates the
+   attached executables), #desktopDownloads is left untouched and the
+   plain "go to Releases" fallback link already in the markup keeps
+   showing. No error is ever thrown to the console in any of those cases.
+   GitHub REST API から最新リリースを取得する。リリースアセットのバイナリ
+   ダウンロードURLと違い、このAPIエンドポイントはCORSヘッダーを返すため、
+   素のブラウザ fetch() がそのまま動く。response.assets から
+   Windows/macOS-arm64/macOS-x64 向けの StampFlyFlasher_* ビルドを探し、
+   見つかった分だけダウンロードボタンを描画し、併せてリリースタグを
+   小さなバージョンチップとして表示する。fetch失敗・レート制限(403)・
+   該当アセットがまだない場合（例: 最新リリースがまだ実行ファイル添付前の
+   v2026.07.0）は #desktopDownloads に手を加えず、マークアップに既にある
+   プレーンな「Releasesへ」フォールバックリンクを表示したままにする。
+   どの場合もコンソールへ未捕捉エラーを投げない。
+*/
+function initDesktopDownloads(){
+  const container = document.getElementById('desktopDownloads');
+  if (!container) return;
+
+  // Asset filename patterns → button label. Label suffixes stay in
+  // English across all three UI languages (English is the lingua franca
+  // for CPU-architecture names like "Apple Silicon").
+  // アセットのファイル名パターン→ボタンラベル。ラベルの接尾辞は3言語
+  // 共通で英語のまま（"Apple Silicon" 等のCPUアーキテクチャ名は英語が
+  // 共通語のため）。
+  const ASSET_KINDS = [
+    { re:/^StampFlyFlasher_.*_windows-x64\.exe$/, label:'Windows' },
+    { re:/^StampFlyFlasher_.*_macos-arm64\.zip$/, label:'macOS (Apple Silicon)' },
+    { re:/^StampFlyFlasher_.*_macos-x64\.zip$/, label:'macOS (Intel)' },
+  ];
+
+  fetch('https://api.github.com/repos/M5Fly-kanazawa/stampfly_ecosystem/releases/latest', {
+    headers: { Accept: 'application/vnd.github+json' },
+  })
+    .then(res => { if (!res.ok) throw new Error('releases API not ok'); return res.json(); })
+    .then(data => {
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      const found = ASSET_KINDS
+        .map(kind => {
+          const asset = assets.find(a => kind.re.test(a.name));
+          return asset ? { label: kind.label, url: asset.browser_download_url } : null;
+        })
+        .filter(Boolean);
+      // No matching asset (e.g. latest release predates v2026.07.1) —
+      // leave the fallback markup exactly as authored.
+      // 該当アセットなし（例: 最新リリースが v2026.07.1 より前）—
+      // フォールバックのマークアップをそのまま残す。
+      if (found.length === 0) return;
+
+      const row = document.createElement('div');
+      row.className = 'desktop-dl-row';
+      found.forEach(({ label, url }) => {
+        const a = document.createElement('a');
+        a.className = 'btn btn-primary';
+        a.href = url;
+        // Match the static fallback link's behavior (new tab + noopener).
+        // 静的フォールバックリンクと同じ挙動（新規タブ + noopener）に揃える。
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = '⬇ ' + label;
+        row.appendChild(a);
+      });
+      if (data.tag_name) {
+        const chip = document.createElement('span');
+        chip.className = 'fw-version-chip';
+        chip.textContent = data.tag_name;
+        row.appendChild(chip);
+      }
+
+      container.innerHTML = '';
+      container.appendChild(row);
+    })
+    .catch(() => {
+      // Network error, 403 rate limit, malformed response, etc. — the
+      // fallback markup already in the page is the correct state, so
+      // there is nothing to do here.
+      // ネットワークエラー・403レート制限・不正なレスポンス等 —
+      // ページに既にあるフォールバック表示が正しい状態なので、ここでは
+      // 何もしない。
+    });
+}
+initDesktopDownloads();
 </script>
 
 </body>

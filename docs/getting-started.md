@@ -105,7 +105,18 @@ sf sim run vpython --seed 12345       # シード指定
 | URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
 | 必要環境 | Chrome または Edge（Web Serial対応）＋ USB-Cケーブル（データ通信対応） |
 | できること | 最新の GitHub Release のフルイメージをブラウザから直接書き込み |
-| デスクトップ版 | どのOSでも使える「StampFly Flasher」も[リリースページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases)からダウンロード可 |
+
+#### デスクトップ版（StampFly Flasher）
+
+ブラウザ書き込み（Web Serial）は macOS の Chrome でクラッシュする既知の不具合があるほか、
+ブラウザなしでオフライン書き込みしたい教室にも便利なため、デスクトップ GUI アプリも用意されています。
+
+| 項目 | 内容 |
+|-----|------|
+| 入手先 | [リリースページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)（v2026.07.1 以降のリリースに添付） |
+| 対応 | Windows / macOS（Apple Silicon・Intel） |
+| 使い方 | ダウンロード → 起動 → 対象を選んで書き込み（macOS初回は右クリック→開く） |
+| ソースから | `python3 tools/flasher_gui/stampfly_flasher.py`（要 `pip install esptool`）または `sf flash --gui` |
 
 ソースからビルドしたい場合は、このまま以降の手順（ESP-IDF環境構築）に進んでください。
 
@@ -525,7 +536,18 @@ You can flash firmware to the real hardware straight from your browser — no bu
 | URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
 | Requirements | Chrome or Edge (Web Serial support) + a USB-C data cable |
 | What it does | Flashes the latest GitHub Release full firmware image directly from the browser |
-| Desktop app | A desktop app, "StampFly Flasher," works on any OS — download it from the [Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases) |
+
+#### Desktop App (StampFly Flasher)
+
+A desktop GUI app is also available — the browser flasher (Web Serial) has a known bug that
+crashes Chrome on macOS, and some classrooms need offline/no-browser flashing anyway.
+
+| Item | Details |
+|------|---------|
+| Get it | [Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) (attached to releases from v2026.07.1 onward) |
+| Supported | Windows / macOS (Apple Silicon and Intel) |
+| Usage | Download → launch → select target → flash (on macOS, right-click → Open the first time) |
+| From source | `python3 tools/flasher_gui/stampfly_flasher.py` (requires `pip install esptool`) or `sf flash --gui` |
 
 If you want to build from source, continue with the rest of this guide (ESP-IDF setup).
 
