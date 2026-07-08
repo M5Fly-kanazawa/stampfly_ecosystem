@@ -175,20 +175,23 @@ jobs:
             --name StampFlyFlasher tools/flasher_gui/stampfly_flasher.py
 
       - name: Smoke-test the frozen binary
-        # PyInstaller's --windowed apps detach stdio on Windows (the app
-        # guards against None stdout/stderr), so console output isn't
-        # visible here -- the exit code is the pass/fail signal. --selftest
-        # also reaches the network (GitHub API + a ~1.2MB download), which
-        # hosted runners allow. Use RUNNER_OS (a default env var, not ${{ }}
-        # interpolation) so shellcheck can analyze the comparison, matching
-        # the "Determine release identifier" step's convention above.
-        # PyInstallerの --windowed アプリはWindowsで標準入出力を切り離す
-        # （アプリ側はNoneのstdout/stderrに対して防御している）ため、ここでは
-        # コンソール出力が見えず、終了コードだけが合否の判定材料になる。
-        # --selftest はネットワーク（GitHub API + 約1.2MBのダウンロード）にも
-        # アクセスするが、ホスト型ランナーでは許可されている。RUNNER_OS
-        # （${{ }} 展開ではなく既定の環境変数）を使うことで、上の「Determine
-        # release identifier」ステップと同じ流儀で shellcheck が比較を解析できる
+        # The step's bash pipes are inherited by the app as std handles
+        # even in the --windowed build, so --version/--selftest output
+        # is visible in this log. timeout-minutes is a guard rail: if
+        # the frozen app ever hangs again (e.g. a stray modal dialog
+        # from PyInstaller's bootloader, as in the first v2026.07.1
+        # Windows run), the step fails within minutes instead of
+        # stalling until the 6-hour job limit. --selftest also reaches
+        # the network (GitHub API + a ~1.2MB download), which hosted
+        # runners allow.
+        # このステップの bash のパイプは --windowed ビルドでもアプリに
+        # 標準ハンドルとして継承されるため、--version/--selftest の出力は
+        # このログで見える。timeout-minutes は防護柵で、frozen アプリが
+        # 再びハングした場合(例: v2026.07.1 初回の Windows 実行で起きた
+        # PyInstaller bootloader のモーダルダイアログ)でも、6時間の
+        # ジョブ上限まで停滞せず数分で失敗させる。--selftest は
+        # ネットワーク(GitHub API + 約1.2MBのダウンロード)にもアクセス
+        # するが、ホスト型ランナーでは許可されている。
         #
         # GITHUB_TOKEN makes the app's GitHub API call authenticated: hosted
         # runners share egress IPs, so anonymous calls are frequently
@@ -196,6 +199,7 @@ jobs:
         # GITHUB_TOKEN によりアプリの GitHub API 呼び出しを認証付きにする。
         # ホスト型ランナーは送信元IPを共有するため匿名呼び出しはレート制限に
         # 掛かりやすい（v2026.07.1 初回実行で HTTP 403 を実際に観測）
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
