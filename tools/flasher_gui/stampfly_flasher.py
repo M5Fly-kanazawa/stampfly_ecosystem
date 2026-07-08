@@ -264,9 +264,21 @@ def fetch_latest_release_info():
     呼び出すこと。Tk のメインスレッドから呼ぶと、ネットワーク応答待ちの
     間 GUI 全体が固まってしまう。
     """
+    headers = {"User-Agent": HTTP_USER_AGENT, "Accept": HTTP_ACCEPT_HEADER}
+    # Use an authenticated request when a CI token is available. GitHub-hosted
+    # runners share egress IPs across many jobs, so ANONYMOUS API calls from CI
+    # are frequently rate-limited (HTTP 403); authenticated calls are not.
+    # End users normally have no token set and stay anonymous as before.
+    # CI トークンがあれば認証付きリクエストにする。GitHub ホステッドランナーは
+    # 多数のジョブで送信元IPを共有するため、CI からの匿名 API 呼び出しは
+    # レート制限(HTTP 403)になりやすい。認証付きなら制限に掛からない。
+    # 通常利用のエンドユーザーはトークン未設定のため従来どおり匿名で動く。
+    api_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if api_token:
+        headers["Authorization"] = "Bearer " + api_token
     request = urllib.request.Request(
         GITHUB_LATEST_RELEASE_URL,
-        headers={"User-Agent": HTTP_USER_AGENT, "Accept": HTTP_ACCEPT_HEADER},
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))

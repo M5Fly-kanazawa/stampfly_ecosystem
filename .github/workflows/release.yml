@@ -99,6 +99,11 @@ jobs:
   flasher_gui:
     runs-on: ${{ matrix.os }}
     strategy:
+      # Let every platform finish even if one fails, so a single flaky leg
+      # doesn't cancel the others and each run reports full per-OS signal.
+      # 1つのOSが失敗しても他のOSを最後まで走らせ、実行ごとに全OS分の
+      # 結果が得られるようにする（巻き添えキャンセルを防ぐ）
+      fail-fast: false
       matrix:
         # Each entry pairs a GitHub-hosted runner OS with the artifact suffix
         # used in the packaged filename; no cross product with another key
@@ -184,6 +189,15 @@ jobs:
         # アクセスするが、ホスト型ランナーでは許可されている。RUNNER_OS
         # （${{ }} 展開ではなく既定の環境変数）を使うことで、上の「Determine
         # release identifier」ステップと同じ流儀で shellcheck が比較を解析できる
+        #
+        # GITHUB_TOKEN makes the app's GitHub API call authenticated: hosted
+        # runners share egress IPs, so anonymous calls are frequently
+        # rate-limited (observed: HTTP 403 on the v2026.07.1 first run).
+        # GITHUB_TOKEN によりアプリの GitHub API 呼び出しを認証付きにする。
+        # ホスト型ランナーは送信元IPを共有するため匿名呼び出しはレート制限に
+        # 掛かりやすい（v2026.07.1 初回実行で HTTP 403 を実際に観測）
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             BIN="./dist/StampFlyFlasher.exe"
