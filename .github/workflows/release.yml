@@ -278,6 +278,13 @@ jobs:
     # ビルド確認に留める（冒頭コメントの方針どおり）
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    # Job-level permissions override the workflow-level ones, so
+    # contents: write must be repeated here alongside actions: write.
+    # ジョブレベルの permissions はワークフローレベルを上書きするため、
+    # actions: write と併せて contents: write もここに再掲する。
+    permissions:
+      contents: write # create the Release and upload assets / Release作成とアセット添付
+      actions: write # dispatch the Pages redeploy step below / 下のPages再デプロイ起動用
     steps:
       - name: Download all firmware artifacts
         uses: actions/download-artifact@v4
@@ -326,3 +333,30 @@ jobs:
             # または sf CLI でソースからビルド・書き込み
             sf build vehicle && sf flash vehicle
             ```
+
+      - name: Redeploy the site so the web flasher serves this release
+        # deploy-pages.yml has a `release: published` trigger, but events
+        # caused by GITHUB_TOKEN never fire other workflows (GitHub's
+        # recursion guard), and the release above IS created with
+        # GITHUB_TOKEN — so that trigger never fires for this job.
+        # Calling the workflow_dispatch API directly is the documented
+        # exception that does work with GITHUB_TOKEN (it needs the
+        # job-level `actions: write` permission above). Observed on
+        # v2026.07.1: the web flasher kept serving v2026.07.0 firmware
+        # until a manual redeploy.
+        # deploy-pages.yml には `release: published` トリガがあるが、
+        # GITHUB_TOKEN 起因のイベントは他のワークフローを発火させない
+        # （GitHub の再帰防止仕様）。上のリリースはまさに GITHUB_TOKEN で
+        # 作成されるため、このジョブではそのトリガは決して発火しない。
+        # workflow_dispatch API の直接呼び出しはこの抑止の例外として
+        # GITHUB_TOKEN でも機能する（上のジョブレベル `actions: write`
+        # 権限が必要）。v2026.07.1 で実際に観測: 手動で再デプロイする
+        # まで Web フラッシャは v2026.07.0 のファームを配信し続けた。
+        #
+        # This job has no checkout, so gh cannot infer the repo from git;
+        # pass it explicitly via the default GITHUB_REPOSITORY env var.
+        # このジョブは checkout していないため gh は git からリポジトリを
+        # 推定できない。既定の環境変数 GITHUB_REPOSITORY で明示する。
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pages.yml --ref main --repo "$GITHUB_REPOSITORY"

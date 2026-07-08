@@ -26,8 +26,16 @@ on:
     types: [published]
     # The web flasher page bundles the latest release's firmware binaries, so
     # publishing a release must redeploy the site even without a push to main.
+    # NOTE: this trigger only fires for releases published manually (UI/PAT).
+    # Releases created by release.yml use GITHUB_TOKEN, whose events never
+    # fire other workflows (GitHub's recursion guard) — release.yml therefore
+    # dispatches this workflow explicitly as its final step.
     # Webフラッシャページは最新リリースのファームウェアバイナリを同梱するため、
-    # mainへのpushがなくてもリリースを公開したらサイトを再デプロイする必要がある
+    # mainへのpushがなくてもリリースを公開したらサイトを再デプロイする必要がある。
+    # 注: このトリガが発火するのは手動（UI/PAT）で公開されたリリースのみ。
+    # release.yml が作るリリースは GITHUB_TOKEN 起因でありイベントが他の
+    # ワークフローを発火させない（GitHub の再帰防止仕様）ため、release.yml が
+    # 最終ステップで本ワークフローを明示的に起動する。
 
 permissions:
   contents: read
