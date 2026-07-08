@@ -114,6 +114,31 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | 自治体（大量導入） | 教育委員会・共同調達協議会 | 入札・年度予算 | GIGA型共同調達は端末向けでドローン補助教材には及ばない。長期戦 |
 | 社会人・ホビイスト | 本人 | なし | 価格1万円は衝動買い圏。コンテンツ量が決める |
 
+### 2.7 K-12のクライアント端末環境（GIGAスクール構想）
+
+児童生徒が使うのは学校管理下の1人1台端末であり、そのOS構成が小中向け提供物の技術方式を規定する。
+
+| 学校段階 | 端末環境（2025〜26年時点） | 出典 |
+|---------|--------------------------|------|
+| 小中学校 | **ChromeOS 60%・iPadOS 31%・Windows 10%**（NEXT GIGA更新後。第1期の40/29/30%からChromeOSが+18pt、Windowsが−19pt） | MM総研 2025-07調査 |
+| 高等学校 | 公費50.8%／BYOD49.2%（2024-05文科省）。OSは**Windows優勢**（2021年時点・都道府県数ベースで46%、ChromeOS 30%・iPad 8%） | 文科省・MM総研 |
+
+**管理下端末の技術的制約（裏取り済み）:**
+
+| 項目 | 事実 |
+|------|------|
+| ChromebookのWeb Serial（ブラウザからUSBシリアル書き込み） | Chrome 89+で技術的に可。ただし教育委員会の管理コンソール（`DefaultSerialGuardSetting`等）でブロックされ得る。MakeCodeのWebUSB書き込みは「USBストレージ禁止ポリシー下でも動作した」実践報告があり、教委への前例として提示可能 |
+| ChromebookのLinux環境（Crostini）・アプリ | 学校管理端末では一般に無効化・ホワイトリスト運用。**ローカルにPythonや開発環境を入れる前提は成立しない** |
+| iPad（31%） | SafariにWeb Serial/WebUSBは**存在しない**（WebKitが公式に実装拒否）。ブラウザからの書き込みは構造的に不可能。micro:bitは専用アプリ+Bluetooth経由のみ |
+| ブラウザとUDP | ブラウザは生のUDPを話せないため、**Tello互換API（UDP:8889）はChromebook/iPadのブラウザから使えない** |
+
+**戦略への含意:**
+
+1. **小中向け提供物は「ブラウザ完結」が絶対条件。** 端末の91%がChromeOS/iPadOSであり、インストール型（ESP-IDF・Python・sf CLI）は論外。この制約下で成立している唯一の自社資産がStampFly Edu（micro:bit + MakeCode = ブラウザ+WebUSB）であり、**アーキテクチャ選択の正しさが端末シェアで裏付けられた**
+2. **現状、小中の91%端末から機体へつながる経路が存在しない。** ブラウザはUDP不可・Python不可のため、現行vehicleファーム（ネットワーク面はUDPのみ）はChromebookから直接触れない。ただし旧`vehicle_old`にはWebSocketサーバ（ポート80、400HzテレメトリでROSブリッジが接続）の実装実績があり、**現行vehicleへの再移植で「ブラウザ・コックピット」（機体SoftAPにChromebookを接続→ブラウザだけで操縦・テレメトリ・Blockly実行）が開ける**。技術は社内実証済み（→H2-7）。なおROSブリッジは現在vehicle_oldのWebSocket前提のまま現行vehicleと非互換であり、再移植はこの整合性問題も同時に解消する
+3. **Webフラッシャ（P0-1）はChromebookで動くがiPadでは動かない。** iPad自治体（31%）では「書き込み済み機体を配る」運用（教員・パートナー・販売時書き込み）が必須。P0-1の導入手引きには教委向けの管理コンソール許可設定（Web Serial）の記載を含める
+4. **高校はWindows優勢+BYODのため、Python/Tello SDK互換の従来路線がそのまま通る。** 小中と高校で技術方式を分ける根拠が明確になった
+
 ## 3. 戦略の核
 
 ### 3.1 ポジショニング：「卒業しない教材」
@@ -134,8 +159,8 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 
 | 層 | 入口 | 提供物（既存→要整備） | チャネル | 時期 |
 |----|------|---------------------|---------|------|
-| 小中 | StampFly Edu（micro:bit + MakeCode） | プロトタイプ→**製品化・指導案・出前授業・保険/安全パック** | FAP factory等パートナー・金沢モデル横展開・校長直接ルート | Horizon 2 |
-| 高校（工業・SSH・探究） | Python（Tello SDK互換）+ 完成ファーム | 西脇工業の実績→**探究テーマ集・教員向け半日研修** | 工業高校ネットワーク・SSH課題研究・村田財団等の助成枠 | Horizon 1後半〜2 |
+| 小中 | StampFly Edu（micro:bit + MakeCode）——**ブラウザ完結必須**（端末はChromeOS 60%+iPad 31%、§2.7） | プロトタイプ→**製品化・指導案・出前授業・保険/安全パック**。将来はブラウザ・コックピット（H2-7） | FAP factory等パートナー・金沢モデル横展開・校長直接ルート | Horizon 2 |
+| 高校（工業・SSH・探究） | Python（Tello SDK互換）+ 完成ファーム——**Windows優勢+BYODのためインストール型が通る**（§2.7） | 西脇工業の実績→**探究テーマ集・教員向け半日研修** | 工業高校ネットワーク・SSH課題研究・村田財団等の助成枠 | Horizon 1後半〜2 |
 | **高専・大学学部（橋頭堡）** | ワークショップ+15回カリキュラム | 教材9割完成→**ノートブック完成・クラスセット導線・導入事例パック** | 学会（SICE等）・教員個人裁量予算・高専機構口座（開設済） | **Horizon 1** |
 | 大学院・研究者 | SIL・システム同定・ESKF・ソース全体 | 完成→**英語論文・比較ベンチマーク公開** | 国際会議・研究室間の口コミ（Crazyflie型） | Horizon 1〜2 |
 | 社会人・ホビイスト | 完成ファーム+ハンズオン+書籍 | ブログ/連載→**書籍化・M5Burner配布・定例ハンズオン** | M5Stackコミュニティ・connpass・技術書店/CQ系 | Horizon 1 |
@@ -170,7 +195,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 
 | # | 施策 | 内容 | 解消する欠落 |
 |---|------|------|-------------|
-| P0-1 | **ビルド不要化** | GitHub Releasesでvehicle/controllerのビルド済みバイナリ配布+ブラウザ書き込み（ESP Web Tools等のWebSerial方式）+M5Burner登録。「箱を開けて15分で飛ぶ」を実現し、所要時間をドキュメントに明記 | 欠落1 |
+| P0-1 | **ビルド不要化** | GitHub Releasesでvehicle/controllerのビルド済みバイナリ配布+ブラウザ書き込み（ESP Web Tools等のWebSerial方式）+M5Burner登録。「箱を開けて15分で飛ぶ」を実現し、所要時間をドキュメントに明記。WebSerialはChromebookでも動くが教委ポリシーで要許可設定（手引きに記載）、**iPadでは不可**のため書き込み済み機体の配布運用も用意（§2.7） | 欠落1 |
 | P0-2 | **オンライン可視化** | mkdocsサイトをGitHub Pagesへ公開・landingページのデプロイ・トップに「あなたはどの階層？」入口ルータ（小中/高校/高専大学/研究/ホビー別の最短経路） | 欠落6 |
 | P0-3 | **既存教材の接続と動作保証** | ノートブック01〜15は実装済み——残作業は (a) シラバス⇔ノートブックのリンク接続、(b) 古い「計画中」READMEの現状化、(c) 無機体経路の動作保証（`sf sim run` のコントローラ無し起動バグは2026-07-08修正済み。`sf sil gui`・全ノートブックの通し確認）、(d) 「機体を買う前にブラウザで試す」導線の明文化 | 欠落6・橋頭堡の弾薬 |
 | P0-4 | **クラスセット調達導線** | 「教育機関向け導入ページ」：10台/20台構成例・見積もりテンプレート・スイッチサイエンスB2B窓口への導線・教員裁量予算に収まる価格表 | 欠落3 |
@@ -196,6 +221,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | H2-4 | 英語化第一弾 | ワークショップスライドEN版（構成は既にバイリンガル規約準拠）・GitHub Discussions有効化・英語論文1本（IEEE EDUCON / IFAC教育シンポジウム等）・Elektor誌へ再レビュー働きかけ（2025-03レビューの指摘＝ホバリング/POS_HOLD未実装は解消済み） |
 | H2-5 | 競技会の確立 | 既存受け皿の活用（全日本学生室内飛行ロボコン：StampFlyは全部門の重量制限内）+自前の「StampFly Cup」（`competition_rules.md`のホバリング競技を学会・オープンキャンパス併設で定例化） |
 | H2-6 | 助成金の獲得 | 村田学術振興・教育財団（高校・高専STEAM）・パナソニック教育財団・ちゅうでん教育振興財団（高専）・経産省STEAMライブラリー・JSTジュニアドクター育成塾（高専経由の小中プログラム） |
+| H2-7 | **ブラウザ・コックピット** | `vehicle_old`実装実績のあるWebSocketサーバ（ポート80）を現行vehicleへ再移植し、機体SoftAP+ブラウザだけで操縦・テレメトリ表示・Blockly実行を可能に。ChromeOS/iPad 91%の小中端末から**インストールゼロ**で機体に触れる唯一の経路（§2.7）。ROSブリッジの現行vehicle非互換も同時に解消 |
 
 ### Horizon 3（2028年度〜）：スケールと制度化
 
@@ -254,6 +280,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | 意思決定構造 | mext.go.jp（補助教材の取扱い）、群馬大学会計ハンドブック（教員裁量枠）、switch-science.com（高専機構口座・B2B） |
 | 市場現状 | shop.m5stack.com・switch-science.com（価格/在庫）、GitHub API（Star/Fork）、connpass、kanazawa-it.ac.jp（JUIDA受賞） |
 | 海外 | elektormagazine.com（2025-03レビュー）、community.m5stack.com（英訳要望）、researchmap（英語発表歴） |
+| GIGA端末環境 | MM総研（2025-07 NEXT GIGA調査: ChromeOS 60%/iPadOS 31%/Windows 10%）、文科省（高校端末整備 2024-05: 公費50.8%/BYOD49.2%）、chromeenterprise.google（`DefaultSerialGuardSetting`）、WebKit standards-positions（Web Serial/WebUSB実装拒否）、micro:bit公式（ChromebookでのWebUSB動作要件） |
 
 ---
 
@@ -295,6 +322,8 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 
 **Decision structure:** K-12 supplementary materials are legally selected by the school principal; KOSEN/university adoption is an individual instructor's discretionary purchase — the fastest path.
 
+**K-12 client devices (GIGA program):** elementary/junior-high 1:1 devices are now **ChromeOS 60% + iPadOS 31% = 91% browser-centric** (MM Research, 2025-07), with Windows down to 10%; high schools remain Windows-dominant with ~50% BYOD. Consequences: K-12 offerings must be browser-complete (no local installs — Crostini and app installs are typically admin-disabled); browsers cannot speak raw UDP, so the Tello-compatible API is unreachable from these devices; Web Serial flashing works on Chromebooks (subject to admin policy) but is structurally impossible on iPads (WebKit rejects Web Serial/WebUSB). StampFly Edu's micro:bit + MakeCode architecture is validated by this device mix, and re-porting the WebSocket server that already existed in `vehicle_old` (port 80) to the current vehicle firmware would enable a zero-install "browser cockpit" from the drone's SoftAP — also restoring ROS-bridge compatibility (see H2-7).
+
 ## 3. Strategic Core
 
 **Positioning: "The platform students never outgrow."** Three pillars: **white-box** (all control/estimation source readable, MIT), **the ladder** (micro:bit → Python/Tello SDK → C++/4-tier API → ESKF/sysid/SIL on the same airframe), and **lightness** (sub-100g regulatory exemption, indoor classes, 1/5 the competitor price). The AI-personalized-curriculum vision (JUIDA award) targets tiers that design their own courses (KOSEN/university instructors, hobbyists); K-12 gets finished packages instead.
@@ -307,7 +336,7 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 
 **Horizon 1 (→2027-03): remove friction, secure the beachhead.** P0: prebuilt binaries + browser flashing (ESP Web Tools) + M5Burner; deploy the mkdocs site and landing page with a per-tier entry router; connect and verify the existing materials (link syllabus↔notebooks 01–15, refresh stale "planned" READMEs, guarantee the zero-hardware trial path — the `sf sim run` no-controller crash was fixed on 2026-07-08); publish a class-set procurement page (Switch Science already has accounts with the KOSEN organization); ship a safety & operations pack (insurance guidance, facility-permission templates modeled on Maebashi/Adachi forms). P1: regular workshops with mandatory surveys, 5 pilot institutions with loaner kits, a SICE tutorial proposal, a book proposal (30-part blog + magazine serial as manuscript base), and on-hardware verification of the Tello SDK compatibility layer.
 
-**Horizon 2 (FY2027): K-12 partner model + English.** Productize StampFly Edu; build a visiting-lecture/training partner network (HDL model); replicate the "Kanazawa model" (municipal curriculum slot + university partnership) in 2 more municipalities; English workshop slides, GitHub Discussions, one English paper (IEEE EDUCON / IFAC education), re-engage Elektor (their 2025-03 criticisms — no hover / no position hold — are now resolved); establish competitions (existing indoor flight robot contest + own "StampFly Cup"); apply for foundation grants (Murata, Panasonic, Chuden, METI STEAM Library, JST Junior Doctor).
+**Horizon 2 (FY2027): K-12 partner model + English.** Productize StampFly Edu; build a visiting-lecture/training partner network (HDL model); replicate the "Kanazawa model" (municipal curriculum slot + university partnership) in 2 more municipalities; English workshop slides, GitHub Discussions, one English paper (IEEE EDUCON / IFAC education), re-engage Elektor (their 2025-03 criticisms — no hover / no position hold — are now resolved); establish competitions (existing indoor flight robot contest + own "StampFly Cup"); apply for foundation grants (Murata, Panasonic, Chuden, METI STEAM Library, JST Junior Doctor); and build the zero-install "browser cockpit" by re-porting the `vehicle_old` WebSocket server to the current firmware (the only path from the 91% ChromeOS/iPad K-12 device base to the drone).
 
 **Horizon 3 (FY2028+): scale and institutionalize.** Educational distributor channels, organization-level certifications (JUIDA, KOSEN organization), overseas pilots at 2 universities (targeting tiers priced out of Crazyflie), and community self-sufficiency (maintainers, contribution guide) to resolve the bus-factor-of-one.
 
