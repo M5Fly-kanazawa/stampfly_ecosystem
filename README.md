@@ -15,6 +15,16 @@
 
 ---
 
+## 🔗 すぐに使えるリソース
+
+| リソース | 説明 |
+|---------|------|
+| [🌐 プロジェクト紹介](https://m5fly-kanazawa.github.io/stampfly_ecosystem/) | 実機3Dモデル付きランディングページ |
+| [📚 ドキュメント](https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/) | 全ドキュメントを検索・閲覧 |
+| [📦 ビルド済みファームウェア](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases) | GitHub Releases（vehicle / controller） |
+
+---
+
 ## 何ができるのか？
 
 | できること | 内容 |
@@ -203,6 +213,16 @@ MIT License
 "I need a flight experiment platform for my research."
 
 This ecosystem exists for you.
+
+---
+
+## 🔗 Quick Links
+
+| Resource | Description |
+|----------|-------------|
+| [🌐 Project Overview](https://m5fly-kanazawa.github.io/stampfly_ecosystem/) | Landing page with interactive 3D drone model |
+| [📚 Documentation](https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/) | Browse and search all documentation |
+| [📦 Pre-built Firmware](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases) | GitHub Releases (vehicle / controller binaries) |
 
 ---
 
