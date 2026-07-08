@@ -1,18 +1,25 @@
-# Deploy the landing page (landing/) to GitHub Pages.
-# 紹介ページ (landing/) を GitHub Pages へ配信するワークフロー。
+# Deploy the landing page (landing/) together with the mkdocs documentation site
+# to GitHub Pages as a single integrated site.
+# 紹介ページ (landing/) と mkdocs ドキュメントサイトを統合し、
+# GitHub Pages へ一体で配信するワークフロー。
 #
 # 有効化の手順 (1回だけ):
 #   リポジトリ Settings → Pages → Build and deployment → Source を
-#   「GitHub Actions」に設定する。以後 main の landing/ を変更して push すると自動公開。
-#   公開URL: https://m5fly-kanazawa.github.io/stampfly_ecosystem/
-name: Deploy landing page to GitHub Pages
+#   「GitHub Actions」に設定する。以後 main へ push すると自動公開。
+#   公開URL:
+#     - ルート (landing):        https://m5fly-kanazawa.github.io/stampfly_ecosystem/
+#     - ドキュメント (mkdocs):   https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/
+name: Deploy landing + docs site to GitHub Pages
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'landing/**'
-      - '.github/workflows/deploy-pages.yml'
+    # No paths filter: mkdocs documentation sources are scattered across the
+    # entire repository (docs/, firmware/, protocol/, control/, ...), so any
+    # push to main can affect the published site. Deploy unconditionally.
+    # paths フィルタは付けない: mkdocs のドキュメントソースは docs/ だけでなく
+    # firmware/・protocol/・control/ 等リポジトリ全域に散在するため、main への
+    # push は常にサイトへ反映しうる。よって条件を絞らず常時デプロイする。
   workflow_dispatch:   # 手動実行も可 / allow manual run
 
 permissions:
@@ -34,12 +41,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
-      - name: Upload landing/ as the Pages artifact
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install mkdocs and plugins
+        run: pip install -r .mkdocs/requirements.txt
+
+      - name: Build mkdocs documentation site
+        # Override site_dir for CI; the value in mkdocs.yml is for local preview only.
+        # CI 用に site_dir を上書きする。mkdocs.yml 内の値はローカルプレビュー専用。
+        run: mkdocs build -f .mkdocs/mkdocs.yml -d "$RUNNER_TEMP/docs-site"
+
+      - name: Assemble combined site (landing at root, mkdocs under /docs/)
+        # 統合サイトを組み立てる（ルート=landing、/docs/=mkdocsビルド成果物）
+        run: |
+          mkdir -p _site
+          cp -r landing/. _site/
+          cp -r "$RUNNER_TEMP/docs-site" _site/docs
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: landing
+          path: _site
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

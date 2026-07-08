@@ -1,0 +1,4 @@
+# mkdocs-material bundles mkdocs itself as a dependency, so it is not listed separately.
+# mkdocs-material が mkdocs 本体を依存関係として含むため、個別には記載しない。
+mkdocs-material>=9.5
+mkdocs-awesome-pages-plugin>=2.9

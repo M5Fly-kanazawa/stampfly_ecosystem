@@ -1,6 +1,10 @@
 site_name: StampFly Ecosystem
 site_description: Educational drone control engineering platform
-site_url: ""
+# Public URL on GitHub Pages: root path serves landing/, /docs/ serves this mkdocs site.
+# GitHub Pages 上の公開URL: ルートは landing/、/docs/ 配下がこの mkdocs サイト。
+site_url: https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/
+# docs_dir/site_dir below are for local preview only; CI overrides site_dir via -d.
+# 以下の docs_dir/site_dir はローカルプレビュー専用。CI では -d オプションで site_dir を上書きする。
 docs_dir: ..
 site_dir: /tmp/stampfly-docs-site
 
@@ -73,6 +77,13 @@ markdown_extensions:
 
 # Exclude non-documentation directories from processing
 # ドキュメント対象外のディレクトリを除外
+# logs/ is ~1.5GB of flight logs; docs/juida2026/ has a 28MB PDF plus an embedded
+# .git (40MB+); docs/sci26/ and docs/hikoki64/ are conference-manuscript working
+# directories not meant for the public site; landing/ is served separately at the
+# site root and must not also be copied under /docs/.
+# logs/ は約1.5GBのフライトログ、docs/juida2026/ は28MBのPDFと埋め込み .git（40MB超）を含む。
+# docs/sci26/・docs/hikoki64/ は学会原稿の作業ディレクトリで公開サイト対象外。
+# landing/ はサイトルートで別途配信するため /docs/ 配下に重複コピーしない。
 exclude_docs: |
   site/
   .claude/
@@ -85,6 +96,11 @@ exclude_docs: |
   **/venv/
   **/__pycache__/
   third_party/
+  logs/
+  landing/
+  docs/juida2026/
+  docs/sci26/
+  docs/hikoki64/
 
 nav:
   # ==================== Home ====================
@@ -142,6 +158,7 @@ nav:
     - 開発ガイドライン:
       - スタイルガイド: docs/contributing/style-guide.md
       - コミット規約: docs/contributing/commit-guidelines.md
+      - バージョニングとリリース: docs/contributing/versioning.md
       - コマンド追加: docs/contributing/adding-sf-commands.md
       - FW コマンド追加: docs/contributing/adding-firmware-commands.md
       - スキャフォールディング: docs/contributing/scaffolding-tool.md
