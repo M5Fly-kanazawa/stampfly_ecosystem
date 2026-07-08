@@ -83,6 +83,12 @@ markdown_extensions:
 # site root and must not also be copied under /docs/.
 # logs/ は約1.5GBのフライトログ、docs/juida2026/ は28MBのPDFと埋め込み .git（40MB超）を含む。
 # docs/sci26/・docs/hikoki64/ は学会原稿の作業ディレクトリで公開サイト対象外。
+# docs/sci_tutorial/ is the SCI/SICE tutorial-course event-material working
+# directory (ad PDF etc.) — the official application page at iscie.or.jp is
+# the public channel, so it is likewise excluded from the published site.
+# docs/sci_tutorial/ はチュートリアル講座のイベント資料作業ディレクトリ
+# （広告PDF等）。公開導線は iscie.or.jp の公式申込ページが担うため、
+# 同様に公開サイトからは除外する。
 # landing/ はサイトルートで別途配信するため /docs/ 配下に重複コピーしない。
 exclude_docs: |
   site/
@@ -100,6 +106,7 @@ exclude_docs: |
   landing/
   docs/juida2026/
   docs/sci26/
+  docs/sci_tutorial/
   docs/hikoki64/
 
 nav:
