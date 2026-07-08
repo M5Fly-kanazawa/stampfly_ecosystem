@@ -103,7 +103,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | 3 | **調達導線不在** | クラスセット・数量割引・見積もりページがない。競合は12台$3,999（研修込）・PO払い・月額RaaSまで用意 | 全層 |
 | 4 | **安全・保険の制度整備不在** | `docs/guides/safety.md` は運用手順のみ。保険・責任分担・施設許可書式・教員向け安全講習はカバー外。国レベルの統一基準も存在しない（＝先取りの機会） | 小中高・自治体 |
 | 5 | **英語化の遅れ** | 教材スライド・演習資料は日本語のみ。海外フォーラムで英訳の明示的要望あり。StampFlyに関する英語論文ゼロ。GitHub Discussions無効 | 海外 |
-| 6 | **可視性ゼロ** | 学校導入向け機体比較記事（2026年版）にStampFlyは不掲載。Qiita記事2件・Zenn記事0件。mkdocsサイト未公開・landingページ未デプロイ | 全層 |
+| 6 | **可視性ゼロ** | 学校導入向け機体比較記事（2026年版）にStampFlyは不掲載。Qiita記事2件・Zenn記事0件。mkdocsサイト未公開。landingページは公開済み（2026-06-07、https://m5fly-kanazawa.github.io/stampfly_ecosystem/ ）だが**README・docsから一切リンクされておらず発見不能**（「在るのに見えない」の実例） | 全層 |
 
 ### 2.6 意思決定構造（誰が採用を決めるか）
 
@@ -196,7 +196,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | # | 施策 | 内容 | 解消する欠落 |
 |---|------|------|-------------|
 | P0-1 | **ビルド不要化** | GitHub Releasesでvehicle/controllerのビルド済みバイナリ配布+ブラウザ書き込み（ESP Web Tools等のWebSerial方式）+M5Burner登録。「箱を開けて15分で飛ぶ」を実現し、所要時間をドキュメントに明記。WebSerialはChromebookでも動くが教委ポリシーで要許可設定（手引きに記載）、**iPadでは不可**のため書き込み済み機体の配布運用も用意（§2.7） | 欠落1 |
-| P0-2 | **オンライン可視化** | mkdocsサイトをGitHub Pagesへ公開・landingページのデプロイ・トップに「あなたはどの階層？」入口ルータ（小中/高校/高専大学/研究/ホビー別の最短経路） | 欠落6 |
+| P0-2 | **オンライン可視化** | mkdocsサイトの公開（PagesはlandingのみのためlandingとPagesアーティファクトを統合し `/docs/` 配下に併載するのが最短）・公開済みlanding（2026-06-07〜）へのREADME/SNS/検索導線の整備・トップに「あなたはどの階層？」入口ルータ（小中/高校/高専大学/研究/ホビー別の最短経路） | 欠落6 |
 | P0-3 | **既存教材の接続と動作保証** | ノートブック01〜15は実装済み——残作業は (a) シラバス⇔ノートブックのリンク接続、(b) 古い「計画中」READMEの現状化、(c) 無機体経路の動作保証（`sf sim run` のコントローラ無し起動バグは2026-07-08修正済み。`sf sil gui`・全ノートブックの通し確認）、(d) 「機体を買う前にブラウザで試す」導線の明文化 | 欠落6・橋頭堡の弾薬 |
 | P0-4 | **クラスセット調達導線** | 「教育機関向け導入ページ」：10台/20台構成例・見積もりテンプレート・スイッチサイエンスB2B窓口への導線・教員裁量予算に収まる価格表 | 欠落3 |
 | P0-5 | **安全・運用パック** | 保険の考え方（任意・施設側要求例）・施設許可申請書式（前橋市/足立区の様式を参考に雛形化）・責任分担の整理・教員向け安全チェックリスト。国の統一基準が不在の今、**デファクトを先取り** | 欠落4 |
@@ -262,7 +262,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 
 | 週 | アクション |
 |----|-----------|
-| 〜2週 | GitHub Releases整備（vehicle/controllerバイナリ+バージョニング規約）。mkdocsサイトをGitHub Pagesへ公開。landingデプロイ |
+| 〜2週 | GitHub Releases整備（vehicle/controllerバイナリ+バージョニング規約）。mkdocsサイト公開（landing併載構成）。READMEから公開済みlandingへのリンク追加 |
 | 〜4週 | Webフラッシャ試作（ESP Web Tools）。教育機関向け導入ページ（クラスセット・見積もり導線）起草。所要時間実測（install→build→flash）とドキュメント反映 |
 | 〜8週 | 教材接続スプリント（シラバス⇔ノートブック01〜15リンク・README現状化・全ノートブック無機体通し確認）。安全・運用パック起草（前橋市/足立区様式の雛形化）。Tello SDK互換の実機検証 |
 | 〜12週 | 秋開催ワークショップ企画（アンケート実施込み）。SICEチュートリアル提案書。評価キット貸出プログラム設計（5校分）。書籍企画書 |
@@ -334,7 +334,7 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 
 ## 4. Execution (3 Horizons)
 
-**Horizon 1 (→2027-03): remove friction, secure the beachhead.** P0: prebuilt binaries + browser flashing (ESP Web Tools) + M5Burner; deploy the mkdocs site and landing page with a per-tier entry router; connect and verify the existing materials (link syllabus↔notebooks 01–15, refresh stale "planned" READMEs, guarantee the zero-hardware trial path — the `sf sim run` no-controller crash was fixed on 2026-07-08); publish a class-set procurement page (Switch Science already has accounts with the KOSEN organization); ship a safety & operations pack (insurance guidance, facility-permission templates modeled on Maebashi/Adachi forms). P1: regular workshops with mandatory surveys, 5 pilot institutions with loaner kits, a SICE tutorial proposal, a book proposal (30-part blog + magazine serial as manuscript base), and on-hardware verification of the Tello SDK compatibility layer.
+**Horizon 1 (→2027-03): remove friction, secure the beachhead.** P0: prebuilt binaries + browser flashing (ESP Web Tools) + M5Burner; publish the mkdocs site (the landing page has been live since 2026-06-07 but is linked from nowhere — add README/SNS entry points) with a per-tier entry router; connect and verify the existing materials (link syllabus↔notebooks 01–15, refresh stale "planned" READMEs, guarantee the zero-hardware trial path — the `sf sim run` no-controller crash was fixed on 2026-07-08); publish a class-set procurement page (Switch Science already has accounts with the KOSEN organization); ship a safety & operations pack (insurance guidance, facility-permission templates modeled on Maebashi/Adachi forms). P1: regular workshops with mandatory surveys, 5 pilot institutions with loaner kits, a SICE tutorial proposal, a book proposal (30-part blog + magazine serial as manuscript base), and on-hardware verification of the Tello SDK compatibility layer.
 
 **Horizon 2 (FY2027): K-12 partner model + English.** Productize StampFly Edu; build a visiting-lecture/training partner network (HDL model); replicate the "Kanazawa model" (municipal curriculum slot + university partnership) in 2 more municipalities; English workshop slides, GitHub Discussions, one English paper (IEEE EDUCON / IFAC education), re-engage Elektor (their 2025-03 criticisms — no hover / no position hold — are now resolved); establish competitions (existing indoor flight robot contest + own "StampFly Cup"); apply for foundation grants (Murata, Panasonic, Chuden, METI STEAM Library, JST Junior Doctor); and build the zero-install "browser cockpit" by re-porting the `vehicle_old` WebSocket server to the current firmware (the only path from the 91% ChromeOS/iPad K-12 device base to the drone).
 
@@ -350,4 +350,4 @@ See the Japanese table in §6: browser-flash onboarding live and docs site publi
 
 ## 7. Next 90 Days
 
-Weeks 1–2: GitHub Releases + docs site + landing deploy. Weeks 3–4: browser-flasher prototype, institutional procurement page, measured setup times documented. Weeks 5–8: materials-connection sprint (syllabus↔notebook links, README refresh, hardware-free run-through of all notebooks), safety pack draft, Tello SDK on-hardware verification. Weeks 9–12: autumn workshop (with survey), SICE tutorial proposal, loaner-kit program design, book proposal.
+Weeks 1–2: GitHub Releases + docs-site publication + README links to the already-live landing page. Weeks 3–4: browser-flasher prototype, institutional procurement page, measured setup times documented. Weeks 5–8: materials-connection sprint (syllabus↔notebook links, README refresh, hardware-free run-through of all notebooks), safety pack draft, Tello SDK on-hardware verification. Weeks 9–12: autumn workshop (with survey), SICE tutorial proposal, loaner-kit program design, book proposal.
