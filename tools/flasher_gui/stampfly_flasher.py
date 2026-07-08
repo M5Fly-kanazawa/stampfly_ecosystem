@@ -64,6 +64,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import traceback
 import urllib.request
 
 # Tkinter is part of the Python standard library; importing it does not
@@ -1384,31 +1385,88 @@ def print_version_info():
 
 def _ensure_stdio_streams():
     """
-    Guard against sys.stdout / sys.stderr being None, which happens
-    when PyInstaller packages this app with --windowed (no console) on
-    Windows: there is no console to attach to, so Python leaves both
-    streams as None instead of a real file object. Any print() call —
-    including the ones in print_version_info() and run_selftest() —
-    would then raise AttributeError before ever printing anything.
-    Redirecting to os.devnull keeps those code paths from crashing;
-    the process exit code (which CI actually checks), not stdout
-    content, remains the pass/fail signal in that packaging scenario.
+    Make sys.stdout / sys.stderr safe for CLI output in every packaging
+    and console-encoding scenario. Two independent failure modes are
+    handled here:
 
-    sys.stdout / sys.stderr が None になるケースを防ぐ。これは
-    PyInstaller でこのアプリを Windows 上で --windowed(コンソール無し)
-    指定でパッケージした場合に起きる: 接続先のコンソールが無いため、
-    Python は両ストリームを実際のファイルオブジェクトではなく None の
-    ままにする。この状態では print() の呼び出し(print_version_info() や
-    run_selftest() 内のものを含む)が、何も表示する前に AttributeError で
-    落ちてしまう。os.devnull へリダイレクトすることでこれらの経路が
-    クラッシュしなくなる。このパッケージング状況では、標準出力の内容
-    ではなくプロセスの終了コード(CI が実際にチェックするもの)が
-    合否の判定材料であり続ける。
+    1. The streams may be None. PyInstaller's --windowed build on
+       Windows has no console to attach to, so Python leaves both
+       streams unset, and any print() call — including the ones in
+       print_version_info() and run_selftest() — would raise
+       AttributeError before printing anything.
+       -> Redirect to os.devnull.
+
+    2. The streams may use a non-UTF-8 encoding that cannot represent
+       this app's bilingual output (e.g. cp1252 on an English-locale
+       Windows cannot encode "セルフテスト"). print() would then raise
+       UnicodeEncodeError — and in the --windowed build the exception
+       escapes main(), which makes PyInstaller's bootloader show a
+       modal "unhandled exception" dialog and wait for a click that
+       never comes on CI (observed: the first v2026.07.1 Windows
+       release job hung this exact way for hours).
+       -> Reconfigure the streams with errors="replace" so that
+       unencodable characters degrade to "?" instead of crashing.
+       The encoding itself is left untouched: a Japanese cp932
+       console keeps displaying Japanese correctly.
+
+    Note: esptool imports colorama, which on Windows replaces
+    sys.stdout / sys.stderr with ANSI-translating wrappers that expose
+    no reconfigure(). The original streams stay reachable as
+    sys.__stdout__ / sys.__stderr__ and still perform the actual
+    character encoding inside those wrappers, so reconfiguring them
+    fixes the wrapped streams too.
+
+    sys.stdout / sys.stderr をあらゆるパッケージング・コンソール文字
+    コード環境で CLI 出力に対して安全な状態に整える。独立した2つの
+    故障モードをここで処理する:
+
+    1. ストリームが None の場合。Windows の PyInstaller --windowed
+       ビルドには接続先のコンソールが無く、Python は両ストリームを
+       未設定のままにするため、print() の呼び出し(print_version_info()
+       や run_selftest() 内のものを含む)は何かを表示する前に
+       AttributeError を送出してしまう。
+       -> os.devnull へリダイレクトする。
+
+    2. ストリームの文字コードが UTF-8 以外で、本アプリのバイリンガル
+       出力を表現できない場合(例: 英語ロケール Windows の cp1252 は
+       「セルフテスト」をエンコードできない)。print() は
+       UnicodeEncodeError を送出し、--windowed ビルドでは例外が
+       main() の外へ漏れて PyInstaller の bootloader がモーダルの
+       「unhandled exception」ダイアログを表示し、CI では誰も押せない
+       クリックを待ち続ける(v2026.07.1 の初回 Windows リリースジョブが
+       まさにこの形で数時間ハングするのを観測した)。
+       -> errors="replace" でストリームを再構成し、エンコード不能な
+       文字はクラッシュではなく「?」に置換して出力する。文字コード
+       自体は変更しないため、日本語 Windows の cp932 コンソールでは
+       従来どおり日本語が正しく表示される。
+
+    補足: esptool は colorama を import し、colorama は Windows で
+    sys.stdout / sys.stderr を ANSI 変換ラッパーに差し替える。この
+    ラッパーは reconfigure() を持たないが、元のストリームは
+    sys.__stdout__ / sys.__stderr__ として参照可能なまま残っており、
+    ラッパー内部の実際の文字エンコードも元のストリームが担うため、
+    そちらを再構成すればラップ後のストリームにも効く。
     """
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w")
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w")
+    for stream in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__):
+        # getattr covers both None streams and colorama's wrappers,
+        # neither of which offers reconfigure().
+        # getattr は None のストリームと colorama ラッパーの両方に対応
+        # する(どちらも reconfigure() を持たない)。
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            # A closed or otherwise exotic stream must never prevent
+            # the app from starting.
+            # 閉じられた/特殊なストリームが原因でアプリの起動が妨げ
+            # られてはならない。
+            pass
 
 
 def main(argv=None):
@@ -1427,12 +1485,28 @@ def main(argv=None):
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    if args.version:
-        print_version_info()
-        return 0
-
-    if args.selftest:
-        return run_selftest()
+    if args.version or args.selftest:
+        # CLI exception barrier: in the --windowed build an exception
+        # that escapes main() triggers a MODAL error dialog from
+        # PyInstaller's bootloader — on a headless CI runner nobody can
+        # click it, so any crash would turn into an infinite hang.
+        # Convert every unexpected exception into a printed traceback
+        # plus exit code 1, which is what a headless caller can
+        # actually consume.
+        # CLI 例外バリア: --windowed ビルドでは main() の外へ漏れた
+        # 例外が PyInstaller bootloader のモーダルなエラーダイアログを
+        # 表示させる。ヘッドレスな CI ランナーでは誰もそれを押せない
+        # ため、あらゆるクラッシュが無限ハングに化けてしまう。予期
+        # しない例外はすべて traceback の表示 + 終了コード 1 に変換し、
+        # ヘッドレスな呼び出し元が実際に扱える形にする。
+        try:
+            if args.version:
+                print_version_info()
+                return 0
+            return run_selftest()
+        except Exception:
+            traceback.print_exc()
+            return 1
 
     return launch_gui(args.port, args.target)
 
