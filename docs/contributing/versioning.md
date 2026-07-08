@@ -86,7 +86,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 
 | リリース | ワークショップ教材 | 大学カリキュラム | 状態 |
 |---------|-------------------|-----------------|------|
-| `v2026.07.0` | （未定） | （未定） | 予定 |
+| `v2026.07.0` | （未定） | （未定） | リリース済み (2026-07-08) |
 
 ## 7. 教育機関向け推奨
 
@@ -180,7 +180,7 @@ university curriculum). Add a row whenever a new release is cut.
 
 | Release | Workshop materials | University curriculum | Status |
 |---------|--------------------|-----------------------|--------|
-| `v2026.07.0` | TBD | TBD | planned |
+| `v2026.07.0` | TBD | TBD | released (2026-07-08) |
 
 ## 7. Recommendations for Educational Institutions
 
