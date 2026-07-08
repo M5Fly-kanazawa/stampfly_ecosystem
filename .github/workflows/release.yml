@@ -1,0 +1,141 @@
+# Build vehicle/controller firmware and attach flashable binaries to a
+# GitHub Release when a version tag is pushed.
+# vehicle・controllerファームウェアをビルドし、バージョンタグをpushしたときに
+# 書き込み可能なバイナリを GitHub Release へ添付するワークフロー。
+#
+# Trigger / 起動条件:
+#   - push tag 'v*' (e.g. v2026.07.0, see docs/contributing/versioning.md)
+#     -> build both targets AND create a GitHub Release
+#     'v*' 形式のタグをpushすると両ターゲットをビルドし、Releaseを作成する
+#   - workflow_dispatch
+#     -> build both targets only, no Release is created (build verification run)
+#     手動実行はビルド確認のみ。Releaseは作成しない
+#
+# Versioning policy / バージョニング規約: docs/contributing/versioning.md
+name: Release firmware binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # manual build-only run / 手動でのビルド確認実行
+
+permissions:
+  contents: write # required to create a Release and upload assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [vehicle, controller]
+        # Map each firmware target to its ESP-IDF app binary filename
+        # (derived from each project's CMake project name).
+        # 各ターゲットのアプリbin名（CMakeのproject名に由来）を対応付ける
+        include:
+          - target: vehicle
+            app_bin: stampfly_vehicle.bin
+          - target: controller
+            app_bin: firmware_controller.bin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # ESP-IDF embeds PROJECT_VER from `git describe`, so full history
+          # (including tags) must be available.
+          # ESP-IDF は git describe から PROJECT_VER を埋め込むため全履歴が必要
+          fetch-depth: 0
+
+      - name: Build ${{ matrix.target }} and merge into a single flashable image
+        # merge_bin combines bootloader + partition table + app (+ OTA data for
+        # controller) into one image starting at offset 0x0, so it can be
+        # written directly with M5Burner, a web flasher, or
+        # `esptool.py write_flash 0x0`.
+        # merge_bin は bootloader・パーティションテーブル・app(・controllerは
+        # OTAデータ) を 0x0 起点の単一binへ結合し、M5Burner・Webフラッシャ・
+        # `esptool.py write_flash 0x0` でそのまま書き込めるようにする
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.2
+          target: esp32s3
+          command: cd firmware/${{ matrix.target }} && idf.py build && cd build && esptool.py --chip esp32s3 merge_bin -o merged_full.bin @flash_args
+
+      - name: Determine release identifier
+        id: rel
+        # Tag push -> use the tag name. workflow_dispatch -> use the short SHA
+        # so build-verification artifacts still get a stable, unique name.
+        # タグpush時はタグ名、手動実行時は短縮SHAを識別子として使う
+        # Use default env vars (not ${{ }} interpolation) so shellcheck can
+        # analyze the comparison and no expression is injected into the script.
+        # ${{ }} 展開ではなく既定の環境変数を使う（shellcheck が比較を解析でき、
+        # 式のスクリプト注入も避けられる）
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "rel=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "rel=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect artifacts into dist/
+        # Build outputs are owned by root (produced inside the ESP-IDF
+        # container) but remain readable, so a plain `cp` is enough; avoid
+        # moving/deleting files under the build directory.
+        # ビルド成果物はコンテナ内で root 所有になるが読み取りは可能なため
+        # cp のみを使い、ビルドディレクトリの移動・削除は行わない
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          mkdir -p dist
+          cp firmware/${{ matrix.target }}/build/merged_full.bin \
+            "dist/stampfly_${{ matrix.target }}_${REL}_full.bin"
+          cp "firmware/${{ matrix.target }}/build/${{ matrix.app_bin }}" \
+            "dist/stampfly_${{ matrix.target }}_${REL}_app.bin"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.target }}
+          path: dist/
+
+  release:
+    needs: build
+    # Only tags arriving via `git push` create a Release; a workflow_dispatch
+    # run on a tag ref must stay build-only (see header comment).
+    # Release を作るのは push されたタグのみ。タグ ref 上での手動実行は
+    # ビルド確認に留める（冒頭コメントの方針どおり）
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.bin
+            dist/SHA256SUMS.txt
+          body: |
+            ## 書き込み方法 / How to flash
+
+            `full` は bootloader + パーティションテーブル + app（controllerはOTAデータも含む）を
+            結合した工場出荷相当のイメージで、0x0 から一括書き込みする。`app` はアプリ本体のみ。
+            `full` bundles bootloader + partition table + app (+ OTA data for controller) into a
+            factory-equivalent image flashed from offset 0x0. `app` contains only the application.
+
+            ```bash
+            # Flash everything from scratch / 工場出荷相当で全体を書き込む
+            esptool.py --chip esp32s3 write_flash 0x0 stampfly_vehicle_<tag>_full.bin
+
+            # Or build & flash the app from source with the sf CLI
+            # または sf CLI でソースからビルド・書き込み
+            sf build vehicle && sf flash vehicle
+            ```
