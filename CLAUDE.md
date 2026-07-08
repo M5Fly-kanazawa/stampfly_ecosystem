@@ -61,7 +61,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 |---------|------|
 | `sf doctor` | 環境診断 |
 | `sf build [target]` | ファームウェアビルド |
-| `sf flash [target]` | 書き込み（-m でモニタ付き）|
+| `sf flash [target]` | 書き込み（-m でモニタ付き、--gui でGUI書き込みアプリ起動）|
 | `sf monitor` | シリアルモニタ |
 | `sf telemetry` | 50Hzテレメトリのライブ表示。既定=ターミナル、`--web` でブラウザ表示（UDP:5005→SSE）|
 | `sf log list` | ログファイル一覧 |

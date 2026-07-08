@@ -105,6 +105,7 @@ sf sim run vpython --seed 12345       # シード指定
 | URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
 | 必要環境 | Chrome または Edge（Web Serial対応）＋ USB-Cケーブル（データ通信対応） |
 | できること | 最新の GitHub Release のフルイメージをブラウザから直接書き込み |
+| デスクトップ版 | どのOSでも使える「StampFly Flasher」も[リリースページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases)からダウンロード可 |
 
 ソースからビルドしたい場合は、このまま以降の手順（ESP-IDF環境構築）に進んでください。
 
@@ -524,6 +525,7 @@ You can flash firmware to the real hardware straight from your browser — no bu
 | URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
 | Requirements | Chrome or Edge (Web Serial support) + a USB-C data cable |
 | What it does | Flashes the latest GitHub Release full firmware image directly from the browser |
+| Desktop app | A desktop app, "StampFly Flasher," works on any OS — download it from the [Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases) |
 
 If you want to build from source, continue with the rest of this guide (ESP-IDF setup).
 

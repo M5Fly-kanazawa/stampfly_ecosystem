@@ -7,6 +7,7 @@ Flashes vehicle or controller firmware to connected device.
 
 import argparse
 import subprocess
+import sys
 from pathlib import Path
 from ..utils import console, paths, platform, espidf
 
@@ -52,6 +53,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "-m", "--monitor",
         action="store_true",
         help="Start monitor after flashing",
+    )
+    # Standalone Tkinter GUI flasher, for users without a build environment
+    # (also works around the Web Flasher's Chromium Web Serial crash on macOS)
+    # ビルド環境を持たないユーザー向けのスタンドアロン Tkinter GUI ライタ
+    # （macOS で Web Flasher が Chromium Web Serial のバグでクラッシュする問題の回避策でもある）
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the standalone GUI flasher (StampFly Flasher) instead of building/flashing here",
     )
     parser.set_defaults(func=run)
 
@@ -140,8 +150,36 @@ def _flash_legacy(args: argparse.Namespace) -> int:
         return result.returncode
 
 
+def _launch_gui(args: argparse.Namespace) -> int:
+    """Launch the standalone StampFly Flasher GUI (tools/flasher_gui/) and
+    return its exit code, instead of running the console build/flash flow.
+    スタンドアロンの StampFly Flasher GUI（tools/flasher_gui/）を起動し、
+    その終了コードを返す。コンソールのビルド/書き込みフローは実行しない。"""
+    gui_script = paths.tools() / "flasher_gui" / "stampfly_flasher.py"
+    if not gui_script.exists():
+        console.error(f"GUI script not found: {gui_script}")
+        return 1
+
+    # Forward the port (if specified) and target so the GUI starts pre-filled
+    # ポート（指定時）とターゲットを転送し、GUI 側を事前入力させる
+    cmd = [sys.executable, str(gui_script)]
+    if args.port:
+        cmd.extend(["--port", args.port])
+    if args.target:
+        cmd.extend(["--target", args.target])
+
+    console.info("Launching StampFly Flasher GUI...")
+    result = subprocess.run(cmd)
+    return result.returncode
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute flash command"""
+    # GUI shortcut: hand off to the standalone Tkinter flasher and stop here
+    # GUI 起動: スタンドアロン Tkinter ライタに処理を委譲しここで終了
+    if args.gui:
+        return _launch_gui(args)
+
     # Legacy firmware shortcut
     # レガシーファームウェアの書き込み
     if args.legacy:

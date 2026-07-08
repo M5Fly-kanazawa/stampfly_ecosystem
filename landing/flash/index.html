@@ -399,7 +399,7 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
     <div class="notice notice-warn" id="macCrashNotice" hidden>
       <span class="ic">⚠️</span>
       <p>
-        <span data-i18n="macCrashWarn">既知の問題（macOS）: macOS の Chrome/Edge では、書き込み中にブラウザごとクラッシュする既知の不具合があります（Chromium の Web Serial 実装のバグ）。機体側のファームウェアが壊れることはありませんが、Mac では esptool / sf CLI での書き込みを推奨します。Windows・Chromebook・Linux では報告されていません。</span>
+        <span data-i18n="macCrashWarn">既知の問題（macOS）: macOS の Chrome/Edge では、書き込み中にブラウザごとクラッシュする既知の不具合があります（Chromium の Web Serial 実装のバグ）。機体側のファームウェアが壊れることはありませんが、Mac では esptool / sf CLI での書き込みを推奨します。Windows・Chromebook・Linux では報告されていません。どのOSでも使えるデスクトップ版 StampFly Flasher（リリースページ）もあります。</span>
         <!-- Issue links are language-independent, so they live outside the
              i18n-swapped span rather than being duplicated in all three
              dictionaries. / Issueリンクは言語に依存しないため、3言語分の
@@ -567,7 +567,7 @@ footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:2
         <ul>
           <li data-i18n="troubleQ4a">既知の Chromium の不具合（Web Serial 実装のバグ）です。転送が始まるまで書き込みは行われないため機体側のファームウェアが壊れることはなく、途中で失敗しても復旧できます</li>
           <li data-i18n="troubleQ4b">再試行する場合は、上の「書き込みが何度も失敗する」と同じ手順（BOOT ボタンを押しながら USB を挿し直す）で Install をやり直してください</li>
-          <li data-i18n="troubleQ4c">Mac では esptool や sf CLI での書き込みを推奨します（この不具合が再発する可能性があるため）</li>
+          <li data-i18n="troubleQ4c">Mac では esptool や sf CLI、またはどのOSでも使えるデスクトップ版 StampFly Flasher（リリースページ）での書き込みを推奨します（この不具合が再発する可能性があるため）</li>
         </ul>
       </details>
     </div>
@@ -615,7 +615,7 @@ const I18N = {
     compatNote:'Phones and tablets are not supported. Please use a computer (a Chromebook is fine).',
     flashTitle:'Flash the firmware',
     flashLead:'Connect the board to your computer with a USB cable, then pick the target to flash below.',
-    macCrashWarn:'Known issue (macOS): On macOS, Chrome/Edge may crash entirely while flashing (a Chromium Web Serial bug). The device firmware is not damaged, but on Mac we recommend flashing with esptool / the sf CLI. Not reported on Windows, Chromebook, or Linux.',
+    macCrashWarn:'Known issue (macOS): On macOS, Chrome/Edge may crash entirely while flashing (a Chromium Web Serial bug). The device firmware is not damaged, but on Mac we recommend flashing with esptool / the sf CLI. Not reported on Windows, Chromebook, or Linux. A desktop app, StampFly Flasher (on the Releases page), works on every OS.',
     cardVehicleTitle:'StampFly (vehicle)',
     cardVehicleDesc:'The flight controller firmware for the aircraft itself. Includes ACRO, STABILIZE, ALT HOLD, and POS HOLD modes.',
     cardControllerTitle:'Controller',
@@ -651,7 +651,7 @@ const I18N = {
     troubleQ4:'The whole browser crashed (macOS)',
     troubleQ4a:'This is a known Chromium bug (in its Web Serial implementation). No data is written until the transfer starts, so the device firmware is not damaged, and a failed partial write is recoverable.',
     troubleQ4b:'To retry, follow the same steps as "Flashing keeps failing" above (unplug and replug USB while holding BOOT), then try Install again.',
-    troubleQ4c:'On Mac we recommend flashing with esptool or the sf CLI instead, since this bug can recur.',
+    troubleQ4c:'On Mac we recommend flashing with esptool, the sf CLI, or the desktop StampFly Flasher app (on the Releases page) instead, since this bug can recur.',
     footNote:'An education & research platform to learn, build, and experiment with drone control.',
     footHome:'Home', footDocs:'Docs',
   },
@@ -669,7 +669,7 @@ const I18N = {
     compatNote:'不支持手机和平板电脑，请使用电脑（Chromebook 也可以）。',
     flashTitle:'刷写固件',
     flashLead:'用 USB 数据线将主板连接到电脑，然后在下面选择要刷写的目标。',
-    macCrashWarn:'已知问题（macOS）：在 macOS 上，Chrome/Edge 在刷写过程中可能会整个浏览器崩溃（这是 Chromium Web Serial 实现的已知缺陷）。设备固件本身不会损坏，但在 Mac 上建议使用 esptool / sf CLI 进行刷写。Windows、Chromebook、Linux 上未见此类报告。',
+    macCrashWarn:'已知问题（macOS）：在 macOS 上，Chrome/Edge 在刷写过程中可能会整个浏览器崩溃（这是 Chromium Web Serial 实现的已知缺陷）。设备固件本身不会损坏，但在 Mac 上建议使用 esptool / sf CLI 进行刷写。Windows、Chromebook、Linux 上未见此类报告。也有一个可在任何操作系统上使用的桌面应用 StampFly Flasher（发布页面）。',
     cardVehicleTitle:'StampFly 机体',
     cardVehicleDesc:'机体侧的飞行控制固件，包含 ACRO、STABILIZE、ALT HOLD、POS HOLD 四种模式。',
     cardControllerTitle:'遥控器',
@@ -705,7 +705,7 @@ const I18N = {
     troubleQ4:'整个浏览器崩溃了（macOS）',
     troubleQ4a:'这是一个已知的 Chromium 缺陷（Web Serial 实现的问题）。由于传输开始之前不会写入任何数据，因此不会损坏机体固件，写入过程中失败也是可以恢复的。',
     troubleQ4b:'如需重试，请按照上方"刷写反复失败"相同的步骤（按住 BOOT 按钮重新插拔 USB），然后再次尝试 Install。',
-    troubleQ4c:'在 Mac 上建议改用 esptool 或 sf CLI 进行刷写，因为该问题可能再次出现。',
+    troubleQ4c:'在 Mac 上建议改用 esptool、sf CLI，或可在任何操作系统上使用的桌面应用 StampFly Flasher（发布页面）进行刷写，因为该问题可能再次出现。',
     footNote:'一个用于学习、实现和实验无人机控制的教育与研究平台。',
     footHome:'首页', footDocs:'文档',
   },

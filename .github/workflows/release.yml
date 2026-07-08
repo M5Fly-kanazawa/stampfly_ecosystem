@@ -96,8 +96,164 @@ jobs:
           name: firmware-${{ matrix.target }}
           path: dist/
 
+  flasher_gui:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Each entry pairs a GitHub-hosted runner OS with the artifact suffix
+        # used in the packaged filename; no cross product with another key
+        # is needed, so `include` alone defines the full matrix.
+        # 各エントリはGitHub提供ランナーのOSと、パッケージ名に使うsuffixを
+        # 対応付ける。他キーとの直積は不要なため include だけでマトリクス全体を
+        # 定義する
+        include:
+          - os: windows-latest
+            suffix: windows-x64
+          - os: macos-latest
+            suffix: macos-arm64
+          - os: macos-15-intel
+            suffix: macos-x64
+    defaults:
+      run:
+        # Force bash even on the Windows runner (whose default shell is
+        # pwsh) so the same script runs unmodified on every matrix OS.
+        # Windowsランナー（既定シェルはpwsh）でもbashを強制し、同一スクリプトを
+        # 全マトリクスOSでそのまま使い回せるようにする
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # Unlike the ESP-IDF build, the GUI app does not embed a
+        # `git describe` version string, so fetch-depth: 0 is not needed.
+        # ESP-IDFビルドと異なりGUIアプリはgit describeのバージョン文字列を
+        # 埋め込まないため、fetch-depth: 0 は不要
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        # PyInstaller 7 turns the --onefile + --windowed combination used
+        # below into a hard error on macOS (currently only a deprecation
+        # warning), so pin to the 6.x series until the macOS packaging is
+        # reworked.
+        # PyInstaller 7では下記で使う --onefile + --windowed の組み合わせが
+        # macOSでエラーになる（現状は非推奨警告のみ）ため、macOS向け
+        # パッケージングを作り直すまでは6.x系に固定する
+        run: pip install "esptool>=5,<6" "pyinstaller>=6,<7"
+
+      - name: Smoke-test the app entry point
+        # Cheap sanity check (no GUI, no hardware) before spending time on a
+        # PyInstaller build.
+        # PyInstallerビルドに時間をかける前の簡易確認（GUIもハードウェアも
+        # 使わない）
+        run: python tools/flasher_gui/stampfly_flasher.py --version
+
+      - name: Build with PyInstaller
+        # --windowed suppresses the console window on Windows and, on macOS,
+        # produces a StampFlyFlasher.app bundle instead of a bare binary.
+        # --collect-data esptool bundles esptool's flasher-stub JSON files
+        # (esptool/targets/stub_flasher/**.json). esptool loads them by a
+        # path relative to __file__ and ships no PyInstaller hook for them,
+        # so without this flag the frozen app fails with FileNotFoundError
+        # on esp32s3.json the moment a real flash starts.
+        # --windowed はWindowsでコンソールウィンドウを抑制し、macOSでは単体の
+        # バイナリではなく StampFlyFlasher.app バンドルを生成する
+        # --collect-data esptool は esptool のフラッシャースタブJSONファイル
+        # （esptool/targets/stub_flasher/**.json）を同梱する。esptoolは
+        # __file__相対パスでこれを読み込み、PyInstaller用フックを同梱して
+        # いないため、このフラグがないと実際の書き込み開始時に
+        # esp32s3.jsonでFileNotFoundErrorになる
+        run: |
+          pyinstaller --onefile --windowed --collect-data esptool \
+            --name StampFlyFlasher tools/flasher_gui/stampfly_flasher.py
+
+      - name: Smoke-test the frozen binary
+        # PyInstaller's --windowed apps detach stdio on Windows (the app
+        # guards against None stdout/stderr), so console output isn't
+        # visible here -- the exit code is the pass/fail signal. --selftest
+        # also reaches the network (GitHub API + a ~1.2MB download), which
+        # hosted runners allow. Use RUNNER_OS (a default env var, not ${{ }}
+        # interpolation) so shellcheck can analyze the comparison, matching
+        # the "Determine release identifier" step's convention above.
+        # PyInstallerの --windowed アプリはWindowsで標準入出力を切り離す
+        # （アプリ側はNoneのstdout/stderrに対して防御している）ため、ここでは
+        # コンソール出力が見えず、終了コードだけが合否の判定材料になる。
+        # --selftest はネットワーク（GitHub API + 約1.2MBのダウンロード）にも
+        # アクセスするが、ホスト型ランナーでは許可されている。RUNNER_OS
+        # （${{ }} 展開ではなく既定の環境変数）を使うことで、上の「Determine
+        # release identifier」ステップと同じ流儀で shellcheck が比較を解析できる
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            BIN="./dist/StampFlyFlasher.exe"
+          else
+            # macOS: the bare onefile binary, not the .app bundle that
+            # --windowed also produces (the bundle just wraps this same
+            # executable).
+            # macOS: --windowed が生成する .app バンドルではなく単体の
+            # onefileバイナリを使う（バンドルは同じ実行ファイルを包むだけ）
+            BIN="./dist/StampFlyFlasher"
+          fi
+          "$BIN" --version
+          "$BIN" --selftest
+
+      - name: Determine release identifier
+        id: rel
+        # Duplicated from the `build` job on purpose: this job runs in
+        # parallel with `build` (no `needs`), and jobs cannot share step
+        # outputs without explicit `needs` + output wiring. Keep this logic
+        # identical to the `build` job's so both agree on naming.
+        # `build` ジョブと意図的に重複させている。本ジョブは build と並列実行
+        # （needs なし）し、ジョブ間で step output を共有するには明示的な
+        # needs + output 配線が必要なため。命名を両ジョブで一致させるため
+        # ロジックは build ジョブと同一に保つこと
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "rel=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "rel=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          mv dist/StampFlyFlasher.exe "dist/StampFlyFlasher_${REL}_${{ matrix.suffix }}.exe"
+
+      - name: Package macOS app bundle
+        if: runner.os == 'macOS'
+        # ditto -c (create) -k (zip format) --keepParent preserves
+        # StampFlyFlasher.app as a single top-level bundle; a plain `zip`
+        # would mangle the bundle's symlinks and resource forks.
+        # ditto -c（作成）-k（zip形式）--keepParent は StampFlyFlasher.app を
+        # トップレベル単一バンドルのまま保持する。通常の zip だとバンドル内の
+        # シンボリックリンクやリソースフォークが壊れる
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          ditto -c -k --keepParent dist/StampFlyFlasher.app \
+            "dist/StampFlyFlasher_${REL}_${{ matrix.suffix }}.zip"
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flasher-gui-${{ matrix.suffix }}
+          path: dist/*.exe
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flasher-gui-${{ matrix.suffix }}
+          path: dist/*.zip
+
   release:
-    needs: build
+    # Wait for both matrix jobs so every artifact (firmware bins + the
+    # per-OS flasher GUI packages) exists before download-artifact runs.
+    # 両方のマトリクスジョブを待つ（download-artifact 実行前に、ファーム
+    # バイナリとOSごとのGUIフラッシャパッケージが両方揃っている必要がある）
+    needs: [build, flasher_gui]
     # Only tags arriving via `git push` create a Release; a workflow_dispatch
     # run on a tag ref must stay build-only (see header comment).
     # Release を作るのは push されたタグのみ。タグ ref 上での手動実行は
@@ -122,6 +278,8 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*.bin
+            dist/*.exe
+            dist/*.zip
             dist/SHA256SUMS.txt
           body: |
             ## 書き込み方法 / How to flash
@@ -130,6 +288,17 @@ jobs:
             結合した工場出荷相当のイメージで、0x0 から一括書き込みする。`app` はアプリ本体のみ。
             `full` bundles bootloader + partition table + app (+ OTA data for controller) into a
             factory-equivalent image flashed from offset 0x0. `app` contains only the application.
+
+            GUI派・ビルド不要な場合は、`StampFlyFlasher_<tag>_windows-x64.exe` /
+            `_macos-arm64.zip`（Apple Silicon）/ `_macos-x64.zip`（Intel）をダウンロードして
+            実行する（macOSは初回のみ右クリック→「開く」で起動。Gatekeeper対策）。
+            Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
+            （macOSのChromeには既知のクラッシュ問題があるため、デスクトップ版を推奨）。
+            Prefer a GUI with no build step? Download and run
+            `StampFlyFlasher_<tag>_windows-x64.exe` / `_macos-arm64.zip` (Apple Silicon) /
+            `_macos-x64.zip` (Intel) (on macOS, right-click -> Open the first time to bypass
+            Gatekeeper). Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
+            (a known crash issue affects Chrome on macOS -> the desktop app is recommended).
 
             ```bash
             # Flash everything from scratch / 工場出荷相当で全体を書き込む
