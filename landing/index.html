@@ -342,6 +342,7 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <a href="#features" data-i18n="navFeatures">特徴</a>
     <a href="#specs" data-i18n="navSpecs">仕様</a>
     <a href="#workshop" data-i18n="navWorkshop">ワークショップ</a>
+    <a href="./flash/" data-i18n="navFlash">Web書き込み</a>
     <a class="nav-cta" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub</a>
   </div>
   <div class="lang-switch" id="langSwitch" aria-label="language">
@@ -598,6 +599,7 @@ cd stampfly_ecosystem
         <div class="btns">
           <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener" data-i18n="ctaBtnRepo">GitHub リポジトリ</a>
           <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/docs/getting-started.md" target="_blank" rel="noopener">Getting Started</a>
+          <a class="btn btn-ghost" href="./flash/" data-i18n="ctaBtnFlash">Web書き込み</a>
         </div>
       </div>
     </div>
@@ -639,7 +641,7 @@ document.getElementById('navToggle').addEventListener('click', () => {
 /* ---------- i18n (JA default in DOM; EN/ZH in dictionary) / 多言語切替 ---------- */
 const I18N = {
   en: {
-    navWorkflow:'Workflow', navDemo:'Demo', navFeatures:'Features', navSpecs:'Specs', navWorkshop:'Workshop',
+    navWorkflow:'Workflow', navDemo:'Demo', navFeatures:'Features', navSpecs:'Specs', navWorkshop:'Workshop', navFlash:'Web Flasher',
     heroH1:'Build your own<br /><span class="grad-text">drone flight control</span>',
     heroSub:'An education &amp; research platform to <strong>learn</strong>, <strong>build</strong>, and <strong>experiment</strong> with control.',
     heroLead:'Turn textbook PID and attitude estimation into something that actually flies — from design to analysis to teaching, end to end.',
@@ -700,11 +702,12 @@ const I18N = {
     ctaTitle:'Ready to <span class="grad-text">take off</span>?',
     ctaP:'Just clone and run <code>install.sh</code> — it installs the sf CLI and simulator dependencies in one go.',
     ctaBtnRepo:'GitHub repository',
+    ctaBtnFlash:'Web Flasher',
     footNote:'An education &amp; research platform to learn, build, and experiment with drone control.<br />Made for students &amp; researchers · M5Fly / Ito Lab',
     footDocs:'Docs',
   },
   zh: {
-    navWorkflow:'工作流程', navDemo:'演示', navFeatures:'功能', navSpecs:'规格', navWorkshop:'工作坊',
+    navWorkflow:'工作流程', navDemo:'演示', navFeatures:'功能', navSpecs:'规格', navWorkshop:'工作坊', navFlash:'网页烧录',
     heroH1:'亲手打造<br /><span class="grad-text">无人机飞行控制</span>',
     heroSub:'用于<strong>学习</strong>、<strong>实现</strong>与<strong>实验</strong>控制的教育与研究平台。',
     heroLead:'把课本上的 PID 与姿态估计变成真正会飞的东西——从设计到分析再到教学，一以贯之。',
@@ -765,6 +768,7 @@ const I18N = {
     ctaTitle:'现在就<span class="grad-text">起飞吧</span>',
     ctaP:'只需克隆并运行 <code>install.sh</code>，即可一次性安装 sf CLI 与仿真器依赖。',
     ctaBtnRepo:'GitHub 仓库',
+    ctaBtnFlash:'网页烧录',
     footNote:'用于学习、实现与实验无人机控制的教育与研究平台。<br />Made for students &amp; researchers · M5Fly / 伊藤研究室',
     footDocs:'文档',
   }

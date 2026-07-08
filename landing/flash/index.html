@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<!--
+  StampFly Ecosystem — Web Flasher (single-file page, JA/EN/ZH i18n)
+  StampFly エコシステム — Webフラッシャ（1ファイル完結・日英中切替）
+
+  What this page does / このページの役割:
+  - Lets a visitor flash pre-built vehicle/controller firmware onto an
+    ESP32-S3 board straight from the browser via Web Serial (ESP Web Tools),
+    with no ESP-IDF / sf CLI install required.
+    ブラウザの Web Serial 経由（ESP Web Tools）で、ESP-IDF や sf CLI を
+    インストールせずにビルド済みファームウェアを ESP32-S3 基板へ書き込める。
+
+  How CI attaches firmware at deploy time / CIがデプロイ時にファームを添付する仕組み:
+  - This repo does NOT contain the .bin/.json files the install buttons
+    below reference (stampfly_vehicle_full.bin, stampfly_controller_full.bin,
+    manifest_vehicle.json, manifest_controller.json). The GitHub Pages
+    deploy workflow (.github/workflows/deploy-pages.yml) copies landing/
+    verbatim to the site root, and a release step is expected to place the
+    latest release's binaries + ESP Web Tools manifests into this same
+    directory (landing/flash/) before the Pages deploy runs. Until that
+    wiring exists, fetch() of the manifests below 404s and the page falls
+    back to a "local preview" mode (see initFirmwareCard()).
+    このリポジトリには、下のインストールボタンが参照する .bin/.json は
+    含まれていない（stampfly_vehicle_full.bin 等）。GitHub Pages への
+    デプロイワークフロー（.github/workflows/deploy-pages.yml）は landing/
+    をそのままサイトルートへコピーしており、リリースの最新バイナリと
+    ESP Web Tools 用マニフェストを同じディレクトリ（landing/flash/）へ
+    配置するステップが別途必要になる想定。その配線ができるまでは、下の
+    fetch() は404となり「ローカルプレビュー」表示に自動的に切り替わる
+    （initFirmwareCard() 参照）。
+  - Local preview / ローカルプレビュー:
+        cd landing/flash && python3 -m http.server 8000  →  http://localhost:8000
+    (fetch() of the manifest JSON needs http(s), not file://.)
+    （マニフェストJSONの fetch() には file:// ではなく http(s) が必要）
+  - Language: Japanese is the in-DOM default; English/Chinese live in the
+    I18N dict below, following the same pattern as ../index.html. The
+    language choice is shared with the landing page via the same
+    localStorage key ("sf_lang").
+    言語: 日本語がDOM既定、英語・中国語は下の I18N 辞書（../index.html と
+    同じ方式）。言語選択は同じ localStorage キー("sf_lang")でランディング
+    ページと共有される。
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Web Flasher — StampFly Ecosystem</title>
+<meta name="description" content="ブラウザとUSBケーブルだけでStampFly本体・コントローラのファームウェアを書き込めるWebフラッシャ。ビルド環境は不要です。" />
+
+<!-- Open Graph (minimal — this is a utility sub-page, not the main landing) -->
+<!-- OGP（最小限。このページは主要ランディングではなくユーティリティのサブページ） -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="StampFly Ecosystem" />
+<meta property="og:url" content="https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/" />
+<meta property="og:title" content="Web Flasher — StampFly Ecosystem" />
+<meta property="og:description" content="ブラウザとUSBケーブルだけでファームウェアを書き込めるWebフラッシャ。" />
+<meta property="og:image" content="https://m5fly-kanazawa.github.io/stampfly_ecosystem/assets/og-image.png" />
+
+<!-- Favicon: same stylized quad-rotor as the landing page (same site, same mark) -->
+<!-- ファビコン: ランディングページと同じクアッドローターの意匠（同一サイトのため統一） -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='8' cy='8' r='4.5' fill='%2322d3ee'/><circle cx='24' cy='8' r='4.5' fill='%23a855f7'/><circle cx='8' cy='24' r='4.5' fill='%23a855f7'/><circle cx='24' cy='24' r='4.5' fill='%2322d3ee'/><rect x='13' y='13' width='6' height='6' rx='1.5' fill='%23e5e7eb'/></svg>" />
+
+<!-- Web fonts — identical link to the landing page so both pages share type -->
+<!-- Webフォント — ランディングページと同一リンク（両ページで書体を統一） -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<!--
+  ESP Web Tools — pinned to the exact current 10.x release.
+  ESP Web Tools — 現行の10.x最新版に固定している。
+
+  Resolved on 2026-07-08 with:
+    curl -s https://unpkg.com/esp-web-tools@10/package.json | jq -r .version
+    → 10.2.1
+  上記コマンドで2026-07-08時点の最新版が 10.2.1 であることを確認して固定した。
+
+  To bump the version / バージョンを上げる手順:
+    1. Re-run the curl command above (or bump the major, e.g. @11) to see
+       the latest resolvable version.
+       上記コマンドを再実行する（メジャーを上げる場合は @11 等に変える）。
+    2. Replace "10.2.1" in the module-script src attribute below with the
+       new version.
+       下のモジュールスクリプトの src 属性内にある "10.2.1" を
+       新しいバージョンに置き換える。
+    3. Reload this page and click both install buttons once to confirm the
+       custom element still registers and the dialog opens correctly.
+       このページを再読み込みし、両方のインストールボタンを一度押して
+       カスタム要素の登録とダイアログ表示を確認する。
+-->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+
+<style>
+/* ============================================================
+   Design tokens / デザイントークン
+   (identical to ../index.html so this page reads as a sibling page)
+   （../index.html と同一。このページを姉妹ページとして見せるため）
+   ============================================================ */
+:root{
+  --bg:#06080f;
+  --bg-soft:#0b0f1c;
+  --panel:rgba(20,26,44,.55);
+  --panel-border:rgba(120,140,200,.18);
+  --text:#e7ecf5;
+  --muted:#9aa6c2;
+  --cyan:#22d3ee;
+  --violet:#a855f7;
+  --lime:#a3e635;
+  --amber:#facc15;
+  --grad:linear-gradient(110deg,#22d3ee 0%,#7c8cff 45%,#a855f7 100%);
+  --grad-soft:linear-gradient(110deg,rgba(34,211,238,.16),rgba(168,85,247,.16));
+  --maxw:1080px;
+  --radius:18px;
+  --shadow:0 20px 60px -20px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Noto Sans JP","Noto Sans SC","Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  line-height:1.7;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(60vw 60vw at 12% -5%,rgba(34,211,238,.14),transparent 60%),
+    radial-gradient(55vw 55vw at 95% 8%,rgba(168,85,247,.16),transparent 60%),
+    var(--bg);
+}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{font-family:"Space Grotesk","Noto Sans JP","Noto Sans SC",sans-serif;line-height:1.2;margin:0}
+section{position:relative}
+
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.eyebrow{
+  display:inline-block;font-family:"Space Grotesk",sans-serif;font-weight:600;
+  letter-spacing:.22em;text-transform:uppercase;font-size:.72rem;color:var(--cyan);
+  padding:6px 14px;border:1px solid var(--panel-border);border-radius:999px;
+  background:var(--grad-soft);margin-bottom:18px;
+}
+.section-title{font-size:clamp(1.5rem,3.2vw,2.2rem);font-weight:700;letter-spacing:-.01em}
+.section-lead{color:var(--muted);max-width:640px;margin:12px 0 0;font-size:1rem}
+.section-head{margin-bottom:36px}
+.block{padding:56px 0}
+.block-alt{background:linear-gradient(180deg,transparent,rgba(11,15,28,.6) 8%,rgba(11,15,28,.6) 92%,transparent)}
+.chip{font-size:.82rem;color:#cdd6ea;padding:6px 13px;border:1px solid var(--panel-border);
+  border-radius:999px;background:rgba(10,14,26,.5);display:inline-block}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:14px;
+  font-weight:700;font-size:.98rem;cursor:pointer;border:1px solid transparent;
+  transition:transform .15s,box-shadow .2s;
+}
+.btn:hover{transform:translateY(-2px)}
+.btn-primary{background:var(--grad);color:#06080f;box-shadow:0 14px 40px -12px rgba(124,140,255,.85)}
+.btn-ghost{background:rgba(15,20,36,.55);border-color:var(--panel-border);color:var(--text)}
+.btns{display:flex;flex-wrap:wrap;gap:14px}
+
+/* ============================================================
+   Navbar / ナビゲーションバー
+   Simpler than the landing page: this is a single utility page,
+   so nav links just wrap on narrow screens instead of a hamburger menu.
+   ランディングページより単純: 単一のユーティリティページなので、
+   ハンバーガーメニューではなく狭幅時は折り返しで対応する。
+   ============================================================ */
+.nav{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:14px 24px;background:rgba(6,8,15,.72);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--panel-border);
+}
+.brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.02rem;margin-right:auto}
+.brand .dot{width:20px;height:20px;border-radius:6px;background:var(--grad);box-shadow:0 0 18px rgba(124,140,255,.6)}
+.nav-links{display:flex;gap:22px;align-items:center}
+.nav-links a{color:var(--muted);font-size:.9rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{
+  padding:8px 16px;border-radius:999px;background:var(--grad);color:#06080f;
+  font-weight:700;font-size:.86rem;box-shadow:0 8px 26px -8px rgba(124,140,255,.8);
+}
+.lang-switch{display:flex;gap:2px;border:1px solid var(--panel-border);border-radius:999px;padding:3px;background:rgba(10,14,26,.55)}
+.lang-switch button{border:none;background:none;color:var(--muted);font:inherit;font-size:.78rem;font-weight:600;
+  padding:5px 10px;border-radius:999px;cursor:pointer;transition:background .2s,color .2s;white-space:nowrap}
+.lang-switch button.active{background:var(--grad);color:#06080f}
+.lang-switch button:hover:not(.active){color:var(--text)}
+@media(max-width:640px){
+  .nav{justify-content:center;text-align:center}
+  .brand{margin-right:0;flex:1 1 100%;justify-content:center}
+  .nav-links{flex:1 1 100%;justify-content:center}
+}
+
+/* ============================================================
+   Hero / ヒーロー（動画・3Dなしのシンプル版）
+   ============================================================ */
+.hero{padding:64px 0 20px}
+.hero h1{font-size:clamp(2rem,5.4vw,3.4rem);font-weight:700;letter-spacing:-.02em}
+.hero .pitch{font-size:clamp(1.02rem,2vw,1.2rem);color:#cdd6ea;margin:18px 0 0;max-width:660px}
+.hero-chips{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 30px}
+.hero .btns{margin-top:6px}
+
+/* ============================================================
+   Compatibility cards / 対応環境カード
+   ============================================================ */
+.compat-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.compat-card{padding:22px 24px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--panel-border)}
+.compat-card h3{font-size:1rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.compat-card.ok h3{color:var(--lime)}
+.compat-card.no h3{color:var(--muted)}
+.compat-card ul{list-style:none;margin:0;padding:0}
+.compat-card li{padding:7px 0;font-size:.94rem;border-bottom:1px solid var(--panel-border)}
+.compat-card li:last-child{border-bottom:none}
+.compat-card.no li{color:var(--muted)}
+.compat-note{margin-top:16px;color:var(--muted);font-size:.86rem}
+@media(max-width:700px){.compat-grid{grid-template-columns:1fr}}
+
+/* ============================================================
+   Flash cards (the install buttons) / 書き込みカード（インストールボタン）
+   ============================================================ */
+.flash-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.flash-card{padding:26px;border-radius:var(--radius);background:var(--panel);border:1px solid var(--panel-border);
+  display:flex;flex-direction:column;gap:14px;transition:opacity .2s,border-color .2s}
+.flash-card.muted{opacity:.6}
+.flash-card-head{display:flex;align-items:flex-start;gap:14px}
+.flash-ic{font-size:1.9rem;line-height:1}
+.flash-card-head h3{font-size:1.12rem}
+.flash-sub{color:var(--muted);font-size:.86rem;margin:2px 0 0;font-family:"Space Grotesk",sans-serif}
+.fw-version-chip{margin-left:auto;font-family:"Space Grotesk",sans-serif;font-size:.78rem;font-weight:700;
+  color:var(--cyan);border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.1);
+  padding:4px 10px;border-radius:999px;white-space:nowrap}
+.flash-card-desc{color:var(--muted);font-size:.92rem;margin:0}
+esp-web-install-button{display:block}
+.install-btn{width:100%;justify-content:center;font-size:.98rem}
+.install-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+esp-web-install-button [slot="unsupported"],
+esp-web-install-button [slot="not-allowed"]{
+  display:block;padding:12px 14px;border-radius:12px;font-size:.86rem;color:var(--muted);
+  background:rgba(154,166,194,.08);border:1px solid var(--panel-border);
+}
+.fw-release-link{font-size:.86rem;color:var(--cyan);align-self:flex-start}
+.fw-release-link:hover{text-decoration:underline}
+@media(max-width:760px){.flash-grid{grid-template-columns:1fr}}
+
+/* ============================================================
+   Notice boxes (calibration warning, preview mode, erase explainer)
+   お知らせボックス（校正警告・プレビューモード・消去の説明）
+   ============================================================ */
+.notice{border-radius:14px;border:1px solid var(--panel-border);background:var(--panel);
+  padding:16px 18px;display:flex;gap:12px;align-items:flex-start;font-size:.92rem}
+.notice .ic{font-size:1.2rem;flex:none;line-height:1.4}
+.notice-warn{border-color:rgba(250,204,21,.4);background:rgba(250,204,21,.08)}
+.notice-info{border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)}
+.notice-muted{border-color:var(--panel-border);background:rgba(154,166,194,.1);color:var(--muted)}
+.notice p{margin:0}
+.notice p+p{margin-top:6px}
+/* Reinforce the hidden attribute: any author "display" rule (like the
+   display:flex above) overrides the browser's built-in [hidden]{display:none},
+   so hidden notices would still render without this rule.
+   hidden 属性の効果を明示的に補強する。作者スタイルの display 指定
+   （上の display:flex）はブラウザ既定の [hidden]{display:none} に勝つため、
+   この規則がないと hidden な通知が表示されてしまう。 */
+.notice[hidden]{display:none}
+
+/* ============================================================
+   Steps / 手順
+   ============================================================ */
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.steps li{display:flex;gap:16px;align-items:flex-start;padding:18px 20px;border-radius:var(--radius);
+  background:var(--panel);border:1px solid var(--panel-border)}
+.stepnum{flex:none;width:32px;height:32px;border-radius:10px;background:var(--grad);color:#06080f;
+  font-family:"Space Grotesk",sans-serif;font-weight:700;display:grid;place-items:center;font-size:.95rem}
+.steps h3{font-size:1rem;margin-bottom:4px}
+.steps p{color:var(--muted);font-size:.92rem;margin:0}
+
+/* ============================================================
+   Erase device explainer / 「Erase device」の説明
+   ============================================================ */
+.erase-compare{display:flex;flex-wrap:wrap;gap:14px;margin-top:16px}
+.erase-item{flex:1 1 200px;padding:14px 16px;border-radius:12px;border:1px solid var(--panel-border);background:rgba(10,14,26,.4)}
+.erase-item .lbl{color:var(--muted);font-size:.8rem;margin-bottom:6px}
+.erase-item .val{font-weight:700;font-size:.98rem}
+.erase-item.on .val{color:var(--amber)}
+.erase-item.off .val{color:var(--lime)}
+
+/* ============================================================
+   Troubleshooting accordion / トラブルシューティング
+   ============================================================ */
+.trouble{display:flex;flex-direction:column;gap:10px}
+.trouble details{padding:14px 18px;border-radius:12px;background:var(--panel);border:1px solid var(--panel-border)}
+.trouble summary{cursor:pointer;font-weight:600;font-size:.96rem;list-style:none}
+.trouble summary::-webkit-details-marker{display:none}
+.trouble summary::before{content:"▸ ";color:var(--cyan)}
+.trouble details[open] summary::before{content:"▾ "}
+.trouble ul{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:.9rem}
+.trouble ul li{margin:4px 0}
+
+/* ============================================================
+   Footer / フッター
+   ============================================================ */
+footer{padding:44px 0 34px;border-top:1px solid var(--panel-border);margin-top:20px}
+.foot-grid{display:flex;justify-content:space-between;flex-wrap:wrap;gap:24px;margin-bottom:20px}
+.foot-note{color:var(--muted);font-size:.86rem;margin:10px 0 0}
+.foot-links{display:flex;flex-wrap:wrap;gap:20px;align-self:center}
+.foot-links a{color:var(--muted);font-size:.9rem}
+.foot-links a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- ===================== Navbar ===================== -->
+<nav class="nav">
+  <a class="brand" href="../"><span class="dot"></span>StampFly&nbsp;Ecosystem</a>
+  <div class="nav-links">
+    <a href="../" data-i18n="navHome">ホーム</a>
+    <a href="../docs/" data-i18n="navDocs">ドキュメント</a>
+    <a class="nav-cta" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <div class="lang-switch" id="langSwitch" aria-label="language">
+    <button data-lang="ja">日本語</button>
+    <button data-lang="en">EN</button>
+    <button data-lang="zh">中文</button>
+  </div>
+</nav>
+
+<!-- ===================== Hero ===================== -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Browser-based firmware flashing</span>
+    <h1 data-i18n="heroH1"><span class="grad-text">Web Flasher</span> / Web書き込み</h1>
+    <p class="pitch" data-i18n="heroPitch">ビルド環境不要 — ブラウザとUSBケーブルだけで最新ファームウェアを書き込み。</p>
+    <div class="hero-chips">
+      <span class="chip">Chrome / Edge</span>
+      <span class="chip">USB-C</span>
+      <span class="chip">ESP32-S3</span>
+      <span class="chip" data-i18n="badgeNoInstall">インストール不要</span>
+      <span class="chip" data-i18n="badgeMinutes">数分で完了</span>
+    </div>
+    <div class="btns">
+      <a class="btn btn-primary" href="#flash" data-i18n="btnGoFlash">書き込みへ進む</a>
+      <a class="btn btn-ghost" href="../docs/" data-i18n="btnGoDocs">ドキュメントを見る</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Compatibility ===================== -->
+<section class="block">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="compatTitle">対応環境</h2>
+      <p class="section-lead" data-i18n="compatLead">Web Serial API に対応したブラウザが必要です。以下の組み合わせで動作を確認しています。</p>
+    </div>
+    <div class="compat-grid">
+      <div class="compat-card ok">
+        <h3><span>✅</span><span data-i18n="compatOkTitle">対応</span></h3>
+        <ul>
+          <li data-i18n="compatOk1">Chrome ・ Edge（最新版）</li>
+          <li data-i18n="compatOk2">Windows ・ macOS ・ Linux</li>
+          <li data-i18n="compatOk3">ChromeOS（学校のChromebookでも利用可）</li>
+        </ul>
+      </div>
+      <div class="compat-card no">
+        <h3><span>🚫</span><span data-i18n="compatNoTitle">非対応</span></h3>
+        <ul>
+          <li data-i18n="compatNo1">Safari</li>
+          <li data-i18n="compatNo2">Firefox</li>
+          <li data-i18n="compatNo3">iPhone ・ iPad</li>
+          <li data-i18n="compatNo4">Android</li>
+        </ul>
+      </div>
+    </div>
+    <p class="compat-note" data-i18n="compatNote">スマートフォン・タブレットは非対応です。パソコン（Chromebook可）でお使いください。</p>
+  </div>
+</section>
+
+<!-- ===================== Flash cards ===================== -->
+<section class="block block-alt" id="flash">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="flashTitle">ファームウェアを書き込む</h2>
+      <p class="section-lead" data-i18n="flashLead">USBケーブルで基板をパソコンに接続し、下のボタンから書き込みたい機体を選んでください。</p>
+    </div>
+    <div class="flash-grid">
+
+      <!-- Vehicle card / StampFly本体カード -->
+      <div class="flash-card" data-manifest="manifest_vehicle.json" data-release-prefix="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/tag/">
+        <div class="flash-card-head">
+          <span class="flash-ic">🚁</span>
+          <div>
+            <h3 data-i18n="cardVehicleTitle">StampFly 本体</h3>
+            <p class="flash-sub">M5StampS3</p>
+          </div>
+          <span class="fw-version-chip" hidden></span>
+        </div>
+        <p class="flash-card-desc" data-i18n="cardVehicleDesc">機体側の飛行制御ファームウェア。ACRO・STABILIZE・ALT HOLD・POS HOLDの4モードを搭載。</p>
+        <div class="notice notice-muted fw-notice" hidden>
+          <span class="ic">ℹ️</span>
+          <p data-i18n="previewNotice">ファームウェアはデプロイ時に添付されます（ローカルプレビュー）。</p>
+        </div>
+        <esp-web-install-button manifest="manifest_vehicle.json">
+          <button slot="activate" class="btn btn-primary install-btn" data-i18n="installBtn">⚡ インストール</button>
+          <span slot="unsupported" data-i18n="unsupportedMsg">お使いのブラウザは Web Serial に対応していません。パソコンの Chrome または Edge をお使いください。</span>
+          <span slot="not-allowed" data-i18n="notAllowedMsg">このページを HTTPS または localhost で開いてください。</span>
+        </esp-web-install-button>
+        <a class="fw-release-link" href="#" target="_blank" rel="noopener" hidden data-i18n="releaseLinkText">GitHub リリースを見る →</a>
+      </div>
+
+      <!-- Controller card / コントローラカード -->
+      <div class="flash-card" data-manifest="manifest_controller.json" data-release-prefix="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/tag/">
+        <div class="flash-card-head">
+          <span class="flash-ic">🎮</span>
+          <div>
+            <h3 data-i18n="cardControllerTitle">コントローラー</h3>
+            <p class="flash-sub">Atom JoyStick (AtomS3)</p>
+          </div>
+          <span class="fw-version-chip" hidden></span>
+        </div>
+        <p class="flash-card-desc" data-i18n="cardControllerDesc">送信機側のファームウェア。スティック値をESP-NOWで機体へ送信します。</p>
+        <div class="notice notice-muted fw-notice" hidden>
+          <span class="ic">ℹ️</span>
+          <p data-i18n="previewNotice">ファームウェアはデプロイ時に添付されます（ローカルプレビュー）。</p>
+        </div>
+        <esp-web-install-button manifest="manifest_controller.json">
+          <button slot="activate" class="btn btn-primary install-btn" data-i18n="installBtn">⚡ インストール</button>
+          <span slot="unsupported" data-i18n="unsupportedMsg">お使いのブラウザは Web Serial に対応していません。パソコンの Chrome または Edge をお使いください。</span>
+          <span slot="not-allowed" data-i18n="notAllowedMsg">このページを HTTPS または localhost で開いてください。</span>
+        </esp-web-install-button>
+        <a class="fw-release-link" href="#" target="_blank" rel="noopener" hidden data-i18n="releaseLinkText">GitHub リリースを見る →</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Steps ===================== -->
+<section class="block">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="stepsTitle">書き込み手順</h2>
+    </div>
+    <ol class="steps">
+      <li>
+        <span class="stepnum">1</span>
+        <div>
+          <h3 data-i18n="step1h">USBケーブルで接続する</h3>
+          <p data-i18n="step1p">USB-C の「データ通信対応」ケーブルで基板をパソコンにつなぐ（充電専用ケーブルは不可）。</p>
+        </div>
+      </li>
+      <li>
+        <span class="stepnum">2</span>
+        <div>
+          <h3 data-i18n="step2h">Install をクリックしポートを選ぶ</h3>
+          <p data-i18n="step2p">上のボタンを押し、表示される一覧から「USB JTAG/serial debug unit」のようなポートを選択する。</p>
+        </div>
+      </li>
+      <li>
+        <span class="stepnum">3</span>
+        <div>
+          <h3 data-i18n="step3h">必要なら「Erase device」にチェック</h3>
+          <p data-i18n="step3p">初回インストールや不調時はチェックを入れる（詳しくは下の説明を参照）。</p>
+        </div>
+      </li>
+      <li>
+        <span class="stepnum">4</span>
+        <div>
+          <h3 data-i18n="step4h">完了を待つ（自動的に再起動する）</h3>
+          <p data-i18n="step4p">書き込みが終わると基板は自動的に再起動する。</p>
+        </div>
+      </li>
+    </ol>
+    <div class="notice notice-warn" style="margin-top:18px">
+      <span class="ic">⚠️</span>
+      <p data-i18n="calibWarn">再起動時にジャイロ校正が実行されます。起動メロディが鳴り終わるまで、機体を水平な場所に置いたまま動かさないでください。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Erase device explainer ===================== -->
+<section class="block block-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="eraseTitle">「Erase device」とは？</h2>
+      <p class="section-lead" data-i18n="eraseBody">チェックを入れると NVS（Non-Volatile Storage・不揮発性メモリ）に保存された校正値と設定パラメータが全て消去されます。</p>
+    </div>
+    <div class="erase-compare">
+      <div class="erase-item on">
+        <div class="lbl" data-i18n="eraseFirstLabel">初回インストール</div>
+        <div class="val" data-i18n="eraseFirstVal">ON 推奨</div>
+      </div>
+      <div class="erase-item off">
+        <div class="lbl" data-i18n="eraseUpdateLabel">アップデート（設定を維持したい場合）</div>
+        <div class="val" data-i18n="eraseUpdateVal">OFF 推奨</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== What gets flashed ===================== -->
+<section class="block">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="whatTitle">書き込まれる内容</h2>
+      <p class="section-lead" data-i18n="whatBody">GitHub Release の最新「full」イメージ（bootloader + パーティションテーブル + アプリ本体）をオフセット 0x0 から書き込みます。Releaseページと同じ成果物で、整合性は同梱の SHA256SUMS.txt で確認できます。</p>
+    </div>
+    <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases" target="_blank" rel="noopener" data-i18n="whatLink">📦 GitHub Releases を見る</a>
+  </div>
+</section>
+
+<!-- ===================== Troubleshooting ===================== -->
+<section class="block block-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="section-title" data-i18n="troubleTitle">うまくいかないときは</h2>
+    </div>
+    <div class="trouble">
+      <details>
+        <summary data-i18n="troubleQ1">ポートが一覧に出てこない</summary>
+        <ul>
+          <li data-i18n="troubleQ1a">別のUSBケーブルを試す（データ通信対応であることを確認）</li>
+          <li data-i18n="troubleQ1b">ポートを使用中の他アプリを閉じる（<code>sf monitor</code> やシリアルモニタ等）</li>
+          <li data-i18n="troubleQ1c">別のUSBポートを試す</li>
+        </ul>
+      </details>
+      <details>
+        <summary data-i18n="troubleQ2">書き込みが何度も失敗する</summary>
+        <ul>
+          <li data-i18n="troubleQ2a">一度ケーブルを抜き、基板の BOOT ボタンを押しながら USB を挿し直す（ROMブートローダーに入る）</li>
+          <li data-i18n="troubleQ2b">その状態のまま再度 Install を試す</li>
+        </ul>
+      </details>
+      <details>
+        <summary data-i18n="troubleQ3">Windows でドライバが必要？</summary>
+        <ul>
+          <li data-i18n="troubleQ3a">ESP32-S3 は内蔵 USB-JTAG/シリアル機能を使うため、通常は追加ドライバ不要です</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== Footer ===================== -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <div class="brand"><span class="dot"></span>StampFly&nbsp;Ecosystem</div>
+        <p class="foot-note" data-i18n="footNote">ドローン制御を学び、実装し、実験する教育・研究プラットフォーム。</p>
+      </div>
+      <div class="foot-links">
+        <a href="../" data-i18n="footHome">ホーム</a>
+        <a href="../docs/" data-i18n="footDocs">ドキュメント</a>
+        <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </div>
+    <p class="foot-note">© 2026 StampFly Ecosystem. Released under the MIT License.</p>
+  </div>
+</footer>
+
+<!-- ===================== Scripts ===================== -->
+<script>
+/* ---------- i18n (JA default in DOM; EN/ZH in dictionary) / 多言語切替 ----------
+   Same pattern as ../index.html: capture the in-DOM Japanese text once, then
+   swap innerHTML per data-i18n key when the language changes.
+   ../index.html と同じ方式: DOM内の日本語を一度キャプチャし、言語切替時に
+   data-i18n キーごとに innerHTML を差し替える。
+*/
+const I18N = {
+  en: {
+    navHome:'Home', navDocs:'Docs',
+    heroH1:'<span class="grad-text">Web Flasher</span>',
+    heroPitch:'No build environment needed — flash the latest firmware with just your browser and a USB cable.',
+    badgeNoInstall:'No install required', badgeMinutes:'Done in minutes',
+    btnGoFlash:'Go to flashing', btnGoDocs:'Read the docs',
+    compatTitle:'Supported Environments',
+    compatLead:'Requires a browser that supports the Web Serial API. Verified with the following combinations.',
+    compatOkTitle:'Supported', compatOk1:'Chrome / Edge (latest)', compatOk2:'Windows / macOS / Linux',
+    compatOk3:'ChromeOS (school Chromebooks work too)',
+    compatNoTitle:'Not supported', compatNo1:'Safari', compatNo2:'Firefox', compatNo3:'iPhone / iPad', compatNo4:'Android',
+    compatNote:'Phones and tablets are not supported. Please use a computer (a Chromebook is fine).',
+    flashTitle:'Flash the firmware',
+    flashLead:'Connect the board to your computer with a USB cable, then pick the target to flash below.',
+    cardVehicleTitle:'StampFly (vehicle)',
+    cardVehicleDesc:'The flight controller firmware for the aircraft itself. Includes ACRO, STABILIZE, ALT HOLD, and POS HOLD modes.',
+    cardControllerTitle:'Controller',
+    cardControllerDesc:'The transmitter firmware. Sends stick values to the vehicle over ESP-NOW.',
+    previewNotice:'Firmware is attached at deploy time (local preview).',
+    installBtn:'⚡ Install',
+    unsupportedMsg:'Your browser does not support Web Serial. Please use Chrome or Edge on a computer.',
+    notAllowedMsg:'Please open this page over HTTPS or localhost.',
+    releaseLinkText:'View GitHub release →',
+    stepsTitle:'Flashing steps',
+    step1h:'Connect with a USB cable', step1p:'Use a USB-C cable that supports data (charge-only cables will not work).',
+    step2h:'Click Install and pick the port', step2p:'Click the button above and choose a port such as "USB JTAG/serial debug unit" from the list.',
+    step3h:'Check "Erase device" if needed', step3p:'Recommended for a first-ever install or when troubleshooting (see below).',
+    step4h:'Wait for completion (it reboots automatically)', step4p:'The board reboots on its own once flashing finishes.',
+    calibWarn:'On reboot the vehicle runs gyro calibration. Keep it still on a level surface until the startup melody finishes.',
+    eraseTitle:'What does "Erase device" do?',
+    eraseBody:'Checking it wipes everything stored in NVS (Non-Volatile Storage) — saved calibration values and parameters.',
+    eraseFirstLabel:'First-ever install', eraseFirstVal:'ON recommended',
+    eraseUpdateLabel:'Update (to keep your settings)', eraseUpdateVal:'OFF recommended',
+    whatTitle:'What gets flashed',
+    whatBody:'The latest "full" image from the GitHub Release (bootloader + partition table + app), written from offset 0x0. It is the same artifact as on the release page; integrity can be checked against the release\'s SHA256SUMS.txt.',
+    whatLink:'📦 View GitHub Releases',
+    troubleTitle:'Troubleshooting',
+    troubleQ1:'The port does not show up',
+    troubleQ1a:'Try a different USB cable (make sure it supports data)',
+    troubleQ1b:'Close other apps holding the port (e.g. sf monitor or a serial monitor)',
+    troubleQ1c:'Try a different USB port',
+    troubleQ2:'Flashing keeps failing',
+    troubleQ2a:'Unplug the cable, then plug USB back in while holding the BOOT button (enters the ROM bootloader)',
+    troubleQ2b:'Try Install again while still in that state',
+    troubleQ3:'Do I need a driver on Windows?',
+    troubleQ3a:'ESP32-S3 uses its built-in USB-JTAG/serial function, so no extra driver is normally needed.',
+    footNote:'An education & research platform to learn, build, and experiment with drone control.',
+    footHome:'Home', footDocs:'Docs',
+  },
+  zh:{
+    navHome:'首页', navDocs:'文档',
+    heroH1:'<span class="grad-text">Web Flasher</span>',
+    heroPitch:'无需搭建编译环境——只需浏览器和 USB 数据线即可刷入最新固件。',
+    badgeNoInstall:'无需安装', badgeMinutes:'几分钟完成',
+    btnGoFlash:'前往刷机', btnGoDocs:'查看文档',
+    compatTitle:'支持的环境',
+    compatLead:'需要支持 Web Serial API 的浏览器。以下组合已验证可用。',
+    compatOkTitle:'支持', compatOk1:'Chrome / Edge（最新版）', compatOk2:'Windows / macOS / Linux',
+    compatOk3:'ChromeOS（学校的 Chromebook 也可以）',
+    compatNoTitle:'不支持', compatNo1:'Safari', compatNo2:'Firefox', compatNo3:'iPhone / iPad', compatNo4:'Android',
+    compatNote:'不支持手机和平板电脑，请使用电脑（Chromebook 也可以）。',
+    flashTitle:'刷写固件',
+    flashLead:'用 USB 数据线将主板连接到电脑，然后在下面选择要刷写的目标。',
+    cardVehicleTitle:'StampFly 机体',
+    cardVehicleDesc:'机体侧的飞行控制固件，包含 ACRO、STABILIZE、ALT HOLD、POS HOLD 四种模式。',
+    cardControllerTitle:'遥控器',
+    cardControllerDesc:'发射机侧固件，通过 ESP-NOW 将摇杆数值发送给机体。',
+    previewNotice:'固件将在部署时附加（本地预览模式）。',
+    installBtn:'⚡ 安装',
+    unsupportedMsg:'您的浏览器不支持 Web Serial，请在电脑上使用 Chrome 或 Edge。',
+    notAllowedMsg:'请通过 HTTPS 或 localhost 打开此页面。',
+    releaseLinkText:'查看 GitHub 发行版 →',
+    stepsTitle:'刷写步骤',
+    step1h:'用 USB 数据线连接', step1p:'使用支持数据传输的 USB-C 数据线（纯充电线无法使用）。',
+    step2h:'点击 Install 并选择端口', step2p:'点击上方按钮，在列表中选择类似 "USB JTAG/serial debug unit" 的端口。',
+    step3h:'如有需要请勾选 "Erase device"', step3p:'首次安装或排查故障时建议勾选（详见下方说明）。',
+    step4h:'等待完成（会自动重启）', step4p:'刷写完成后主板会自动重启。',
+    calibWarn:'重启时会执行陀螺仪校准。请将机体静置于水平面上，直到开机提示音结束为止。',
+    eraseTitle:'"Erase device" 是什么？',
+    eraseBody:'勾选后会清除 NVS（Non-Volatile Storage・非易失性存储）中保存的所有校准值和参数设置。',
+    eraseFirstLabel:'首次安装', eraseFirstVal:'建议开启',
+    eraseUpdateLabel:'更新（希望保留设置时）', eraseUpdateVal:'建议关闭',
+    whatTitle:'刷写的内容',
+    whatBody:'刷写 GitHub Release 中最新的 "full" 镜像（bootloader + 分区表 + 应用本体），从偏移地址 0x0 开始写入。与发行页面上的构件相同，可通过发行版附带的 SHA256SUMS.txt 校验完整性。',
+    whatLink:'📦 查看 GitHub Releases',
+    troubleTitle:'故障排除',
+    troubleQ1:'端口没有出现在列表中',
+    troubleQ1a:'尝试更换 USB 数据线（确认支持数据传输）',
+    troubleQ1b:'关闭占用该端口的其他应用（例如 sf monitor 或串口监视器）',
+    troubleQ1c:'尝试更换 USB 端口',
+    troubleQ2:'刷写反复失败',
+    troubleQ2a:'拔出数据线，按住 BOOT 按钮的同时重新插入 USB（进入 ROM 引导加载程序）',
+    troubleQ2b:'保持该状态再次尝试 Install',
+    troubleQ3:'Windows 上需要安装驱动吗？',
+    troubleQ3a:'ESP32-S3 使用内置的 USB-JTAG/串口功能，通常无需额外安装驱动。',
+    footNote:'一个用于学习、实现和实验无人机控制的教育与研究平台。',
+    footHome:'首页', footDocs:'文档',
+  },
+};
+const TITLES = {
+  ja:'Web Flasher — StampFly Ecosystem',
+  en:'Web Flasher — StampFly Ecosystem',
+  zh:'Web Flasher — StampFly Ecosystem',
+};
+
+// Capture the in-DOM Japanese as the JA source / DOM内の日本語をJAの元データとして保持
+const jaOrig = {};
+document.querySelectorAll('[data-i18n]').forEach(el => { jaOrig[el.dataset.i18n] = el.innerHTML; });
+
+function applyLang(lang){
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    const v = (lang === 'ja') ? jaOrig[k] : (I18N[lang] && I18N[lang][k]);
+    if (v != null) el.innerHTML = v;
+  });
+  document.documentElement.lang = lang;
+  document.title = TITLES[lang] || document.title;
+  document.querySelectorAll('#langSwitch button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  // Persist with the SAME key the landing page uses, so the choice carries
+  // across pages within the site.
+  // ランディングページと同じキーで保存し、サイト内で言語選択を引き継ぐ。
+  try { localStorage.setItem('sf_lang', lang); } catch(e){}
+}
+
+(function initLang(){
+  const param = new URLSearchParams(location.search).get('lang');   // ?lang=en/zh/ja override / 言語直指定
+  let saved = null; try { saved = localStorage.getItem('sf_lang'); } catch(e){}
+  const nav = (navigator.language || '').toLowerCase();
+  const guess = nav.startsWith('zh') ? 'zh' : nav.startsWith('en') ? 'en' : 'ja';
+  const pick = (['ja','en','zh'].includes(param)) ? param : (saved || guess);
+  applyLang(pick);
+  document.querySelectorAll('#langSwitch button').forEach(b =>
+    b.addEventListener('click', () => applyLang(b.dataset.lang)));
+})();
+
+/* ---------- Firmware manifest lookup / ファームウェアマニフェスト参照 ----------
+   Each .flash-card points at an ESP Web Tools manifest JSON. If it fetches
+   successfully we show its firmware version as a chip plus a link to the
+   matching GitHub Release tag. If it 404s (this repo doesn't ship the
+   binaries — see the file-header comment) we show a muted "local preview"
+   notice instead and disable the install button so it doesn't lead to a
+   confusing broken install flow.
+   各 .flash-card は ESP Web Tools 用マニフェストJSONを指す。fetchに成功すれば
+   バージョンをチップ表示し対応するGitHub Releaseタグへのリンクを出す。404の
+   場合（このリポジトリはバイナリを同梱しない。ファイル冒頭コメント参照）は
+   代わりに控えめな「ローカルプレビュー」通知を出し、紛らわしい書き込み失敗
+   フローに繋がらないようインストールボタンを無効化する。
+*/
+function initFirmwareCard(card){
+  const manifestPath = card.dataset.manifest;
+  const releasePrefix = card.dataset.releasePrefix;
+  const chip = card.querySelector('.fw-version-chip');
+  const notice = card.querySelector('.fw-notice');
+  const link = card.querySelector('.fw-release-link');
+  const installBtn = card.querySelector('button[slot="activate"]');
+
+  fetch(manifestPath, { cache:'no-store' })
+    .then(res => { if (!res.ok) throw new Error('manifest not found'); return res.json(); })
+    .then(data => {
+      const version = data && data.version ? data.version : '?';
+      chip.textContent = version;
+      chip.hidden = false;
+      link.href = releasePrefix + encodeURIComponent(version);
+      link.hidden = false;
+    })
+    .catch(() => {
+      notice.hidden = false;
+      card.classList.add('muted');
+      if (installBtn) installBtn.disabled = true;
+    });
+}
+document.querySelectorAll('.flash-card').forEach(initFirmwareCard);
+</script>
+
+</body>
+</html>

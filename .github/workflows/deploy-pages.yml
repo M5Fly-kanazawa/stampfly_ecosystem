@@ -9,6 +9,7 @@
 #   公開URL:
 #     - ルート (landing):        https://m5fly-kanazawa.github.io/stampfly_ecosystem/
 #     - ドキュメント (mkdocs):   https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/
+#     - Webフラッシャ:           https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
 name: Deploy landing + docs site to GitHub Pages
 
 on:
@@ -21,6 +22,12 @@ on:
     # firmware/・protocol/・control/ 等リポジトリ全域に散在するため、main への
     # push は常にサイトへ反映しうる。よって条件を絞らず常時デプロイする。
   workflow_dispatch:   # 手動実行も可 / allow manual run
+  release:
+    types: [published]
+    # The web flasher page bundles the latest release's firmware binaries, so
+    # publishing a release must redeploy the site even without a push to main.
+    # Webフラッシャページは最新リリースのファームウェアバイナリを同梱するため、
+    # mainへのpushがなくてもリリースを公開したらサイトを再デプロイする必要がある
 
 permissions:
   contents: read
@@ -41,6 +48,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Always build the site from the latest main. Without this, a
+          # release-published event would check out the release TAG commit,
+          # silently regressing landing/ and docs to older content (or even
+          # omitting the flasher page entirely if the tag predates it).
+          # サイトは常に main の最新から組み立てる。ref 指定がないと release
+          # 発行イベント時はリリースタグのコミットが checkout され、landing/ と
+          # ドキュメントが古い内容へ退行する（タグがフラッシャページ追加より
+          # 古い場合はページ自体が欠落する）。
+          ref: main
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -64,6 +81,85 @@ jobs:
           mkdir -p _site
           cp -r landing/. _site/
           cp -r "$RUNNER_TEMP/docs-site" _site/docs
+
+      - name: Attach web flasher firmware and manifests from the latest release
+        # Fetches the latest GitHub Release's merged "full" firmware images and
+        # generates ESP Web Tools manifests so landing/flash/index.html (copied
+        # into _site/flash/ by the previous step) can flash StampFly boards
+        # straight from the browser.
+        # 最新の GitHub Release から結合済み「full」ファームウェアイメージを取得し、
+        # ESP Web Tools 用マニフェストを生成する。これにより
+        # landing/flash/index.html（前ステップで _site/flash/ へコピー済み）が
+        # ブラウザから直接 StampFly 基板へ書き込めるようになる。
+        #
+        # NOTE: the source asset names below (stampfly_<target>_<tag>_full.bin)
+        # are coupled to the naming contract defined in release.yml. If that
+        # workflow's asset naming ever changes, this step must change too.
+        # 注意: 取得元アセット名 (stampfly_<target>_<tag>_full.bin) は
+        # release.yml が定める命名規約と結合している。release.yml 側の命名を
+        # 変更した場合は、このステップも合わせて変更すること。
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Resolve the latest published release tag. `gh release view` with no
+          # tag returns the latest STABLE release (drafts and prereleases are
+          # excluded) — intentional: the flasher always serves the latest
+          # stable firmware, even when a prerelease triggered this deploy.
+          # 最新に公開されたリリースのタグを解決する。タグ指定なしの
+          # `gh release view` は最新の「安定版」リリースを返す（ドラフト・
+          # プレリリースは除外）。これは意図した挙動: プレリリース発行で
+          # 再デプロイされた場合でも、フラッシャは常に最新安定版を配信する。
+          TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          if [[ -z "$TAG" ]]; then
+            echo "::error::No published GitHub Release found; cannot build the web flasher bundle." >&2
+            exit 1
+          fi
+
+          mkdir -p _site/flash
+
+          # Download only the merged "full" images (bootloader + partition
+          # table + app); the "_app.bin" images and SHA256SUMS.txt are not
+          # needed by the flasher page.
+          # 結合済み「full」イメージ（bootloader＋パーティションテーブル＋app）のみ
+          # 取得する。「_app.bin」や SHA256SUMS.txt はフラッシャページに不要
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_full.bin' --dir _site/flash
+
+          # For each target: rename to the version-stable filename the page
+          # references, then emit its ESP Web Tools manifest.
+          # 各ターゲットについて、ページが参照するバージョン非依存のファイル名へ
+          # 変更し、ESP Web Tools 用マニフェストを生成する
+          declare -A display_name=(
+            [vehicle]="StampFly Vehicle"
+            [controller]="StampFly Controller"
+          )
+          for target in vehicle controller; do
+            src="_site/flash/stampfly_${target}_${TAG}_full.bin"
+            dst="_site/flash/stampfly_${target}_full.bin"
+            if [[ ! -f "$src" ]]; then
+              echo "::error::Expected release asset not found: $src" >&2
+              exit 1
+            fi
+            mv "$src" "$dst"
+
+            jq -n \
+              --arg name "${display_name[$target]}" \
+              --arg version "$TAG" \
+              --arg path "stampfly_${target}_full.bin" \
+              '{
+                name: $name,
+                version: $version,
+                new_install_prompt_erase: true,
+                builds: [
+                  {
+                    chipFamily: "ESP32-S3",
+                    parts: [ { path: $path, offset: 0 } ]
+                  }
+                ]
+              }' > "_site/flash/manifest_${target}.json"
+          done
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

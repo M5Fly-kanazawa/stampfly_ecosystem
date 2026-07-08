@@ -96,6 +96,18 @@ sf sim run vpython --seed 12345       # シード指定
 
 シミュレータに慣れたら、実機での飛行に挑戦しましょう！
 
+### ビルド不要で試す（Web Flasher）
+
+開発環境を構築しなくても、ブラウザから実機にファームウェアを書き込めます。
+
+| 項目 | 内容 |
+|-----|------|
+| URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
+| 必要環境 | Chrome または Edge（Web Serial対応）＋ USB-Cケーブル（データ通信対応） |
+| できること | 最新の GitHub Release のフルイメージをブラウザから直接書き込み |
+
+ソースからビルドしたい場合は、このまま以降の手順（ESP-IDF環境構築）に進んでください。
+
 ---
 
 ## 1. 必要なもの
@@ -502,6 +514,18 @@ sf sim run vpython --seed 12345       # Specify seed
 | vpython not found | Run `sf setup sim` |
 
 Once comfortable with the simulator, try flying the real drone!
+
+### Try it without building (Web Flasher)
+
+You can flash firmware to the real hardware straight from your browser — no build environment needed.
+
+| Item | Details |
+|------|---------|
+| URL | https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/ |
+| Requirements | Chrome or Edge (Web Serial support) + a USB-C data cable |
+| What it does | Flashes the latest GitHub Release full firmware image directly from the browser |
+
+If you want to build from source, continue with the rest of this guide (ESP-IDF setup).
 
 ---
 
