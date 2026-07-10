@@ -3,10 +3,11 @@
 #   make all       — Build everything (tikz + slides)
 #   make tikz      — TikZ diagrams → PDF → PNG
 #   make slides    — Unified Beamer PDF (all lessons)
+#   make dxh       — DXH workshop deck (high-school teacher session)
 #   make chapter   — Single chapter: make chapter NAME=led_control
 #   make clean     — Remove build artifacts
 
-.PHONY: all tikz slides chapter clean
+.PHONY: all tikz slides dxh chapter clean
 
 # ---------------------------------------------------------------------------
 # TikZ diagrams
@@ -44,6 +45,19 @@ $(BEAMER_DIR)/$(SLIDES_PDF): $(BEAMER_DIR)/$(SLIDES_TEX) $(BEAMER_DIR)/preamble.
 	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode $(SLIDES_TEX) && lualatex -interaction=nonstopmode $(SLIDES_TEX)
 
 # ---------------------------------------------------------------------------
+# DXH workshop deck (high-school teacher hands-on session)
+# DXH講座（高校教員向け体験講座）進行スライド
+# ---------------------------------------------------------------------------
+
+DXH_TEX := dxh_workshop.tex
+DXH_PDF := dxh_workshop.pdf
+
+dxh: $(BEAMER_DIR)/$(DXH_PDF)
+
+$(BEAMER_DIR)/$(DXH_PDF): $(BEAMER_DIR)/$(DXH_TEX) $(BEAMER_DIR)/preamble.tex $(BEAMER_DIR)/stampfly_slides.sty $(CHAPTER_SOURCES)
+	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode $(DXH_TEX) && lualatex -interaction=nonstopmode $(DXH_TEX)
+
+# ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
 # Usage: make chapter NAME=led_control
 # ---------------------------------------------------------------------------
@@ -71,4 +85,5 @@ clean:
 	      $(BEAMER_DIR)/*.out $(BEAMER_DIR)/*.snm $(BEAMER_DIR)/*.toc \
 	      $(BEAMER_DIR)/*.vrb
 	rm -f $(BEAMER_DIR)/$(SLIDES_PDF)
+	rm -f $(BEAMER_DIR)/$(DXH_PDF)
 	rm -f $(IMAGES_DIR)/*.png

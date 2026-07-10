@@ -1,0 +1,153 @@
+% ==============================================================================
+% dxh_motor.tex — DXH workshop Part 3-4: rewriting code + motor control
+% DXH講座 ③④: プログラム書き換え・モータの制御
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{③④ モータ配置}
+  \begin{center}
+    \resizebox{0.34\textwidth}{!}{\input{../tikz/motor_layout}}
+  \end{center}
+  \begin{itemize}\small
+    \item モータ ID：1 = FR（右前） / 2 = RR（右後） / 3 = RL（左後） / 4 = FL（左前）
+    \item 対角のモータが同じ方向に回転（トルクバランス）：M1・M3 = CCW / M2・M4 = CW
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③④ PWM と Duty / ARM・DISARM とは}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \begin{center}
+        \resizebox{!}{0.6\textheight}{\input{../tikz/pwm_waveform}}
+      \end{center}
+    \end{column}
+    \begin{column}{0.53\textwidth}
+      \textbf{PWM とは}
+      \begin{itemize}\small
+        \item パルス幅変調 --- ON/OFF の比率でモータの回転数を調整
+        \item Duty 0\% = 停止 / Duty 100\% = 最大回転
+      \end{itemize}
+
+      \vspace{0.8em}
+
+      \textbf{ARM / DISARM とは}
+      \begin{itemize}\small
+        \item \textbf{ARM} = モータ出力を有効化（回転可能に）
+        \item \textbf{DISARM} = モータ出力を無効化（強制停止）
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{③④ 実習の手順（1）：ビルドと書き込み}
+  \begin{block}{PC 側の操作（コマンドプロンプト）}
+    \begin{lstlisting}[style=sfbash, numbers=none]
+cd stampfly_ecosystem
+setup_env.bat
+sf lesson edit    REM VSCodeが開く。コードを編集して保存
+sf lesson build
+sf lesson flash   REM 書き込み後シリアルモニタが自動起動
+    \end{lstlisting}
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{注意}
+    \footnotesize \code{sf lesson switch} は実行済みなので今日は不要（実行するとフルビルドになり時間がかかる）
+  \end{alertblock}
+
+  {\footnotesize シリアルモニタの終了は \code{Ctrl+]}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③④ 実習の手順（2）：機体側の動作確認}
+  \begin{block}{バッテリー駆動で確認する}
+    \begin{enumerate}\small
+      \item USB ケーブルを外す
+      \item バッテリーを接続して機体の電源を入れる
+      \item LED シーケンス（白 $\to$ マゼンタ $\to$ 緑 + ピッ×3）を待つ
+      \item 機体本体ボタンを\textbf{1回クリック} $\to$ ARM（設定した Duty で回転）
+      \item もう一度クリック $\to$ DISARM（停止）
+    \end{enumerate}
+  \end{block}
+
+  \vspace{0.4em}
+
+  \begin{alertblock}{安全}
+    プロペラは付けたまま --- 機体上部の基板を上から指で押さえて回す
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{③④ 実習コード}
+  \begin{adjustbox}{max width=\textwidth, max height=0.86\textheight, center}
+  \begin{sflisting}[basicstyle=\ttfamily\tiny, aboveskip=1pt, belowskip=0pt]{user\_code.cpp}
+#include "workshop_api.hpp"
+
+// =========================================================================
+// Motor duty test (hardcoded)
+// 各モータの Duty をハードコードする
+// =========================================================================
+//
+// Motor IDs / モータ ID:
+//   1 = FR (右前)   2 = RR (右後)
+//   3 = RL (左後)   4 = FL (左前)
+//
+// Duty range: 0.0 - 1.0
+//   0.0  = stop / 止める
+//   0.10 = spin at 10% / 10% で回す
+//   このチュートリアルでは 0.15 を上限とする
+
+void setup()
+{
+    ws::print("Motor duty test");
+
+    // Do NOT auto-arm in code. Arming is controlled by the controller's
+    // ARM button so motors never spin until you intentionally press it.
+    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタンで
+    // 行うので、意図的に押すまでモータは絶対に回らない
+}
+
+void loop_400Hz(float dt)
+{
+    // ----- Set each motor's duty here / 各モータの Duty をここで設定 -----
+    ws::motor_set_duty(1, 0.10f);   // FR (右前)
+    ws::motor_set_duty(2, 0.00f);   // RR (右後)
+    ws::motor_set_duty(3, 0.00f);   // RL (左後)
+    ws::motor_set_duty(4, 0.00f);   // FL (左前)
+    // -------------------------------------------------------------------
+}
+  \end{sflisting}
+  \end{adjustbox}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③④ 改造課題}
+  \begin{block}{時間があれば試してみよう}
+    \begin{itemize}
+      \item 別のモータを回してみる
+      \item 複数のモータを同時に回してみる
+      \item Duty を 0.05 / 0.10 / 0.15 で聞き比べる
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{発展課題}
+    \footnotesize 2秒ごとにモータを巡回させる（400\,Hz $\times$ 2秒 = 800\,tick、\\
+    \code{(motor\_timer / 800) \% 4} でモータ番号を切り替える）
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③④ チェックポイント}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] Duty を書き換えてビルド・書き込みができた
+      \item[$\square$] 機体本体ボタンで ARM $\to$ モータ回転 $\to$ DISARM $\to$ 停止を確認した
+      \item[$\square$] 指定したモータが指定の Duty で回ることを確認した
+    \end{itemize}
+  \end{alertblock}
+\end{frame}

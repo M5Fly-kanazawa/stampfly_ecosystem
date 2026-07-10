@@ -1,0 +1,92 @@
+% ==============================================================================
+% dxh_flashing.tex — DXH workshop Part 2: dev environment + firmware flashing
+% DXH講座 ②: 開発環境 + 書き込み体験
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{② 開発環境の全体像}
+  \begin{block}{今日は構築済み}
+    \footnotesize 貸出 PC には ESP-IDF（組み込み開発環境）と sf CLI をセットアップ済み。\\
+    実習は書き込みからスタートします
+  \end{block}
+
+  \begin{lstlisting}[style=sfbash, numbers=none]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+cd stampfly_ecosystem
+install.bat    # ESP-IDF + sf CLI を自動インストール
+setup_env.bat  # 開発環境をアクティベート
+  \end{lstlisting}
+
+  {\footnotesize 上記は「自分の PC でも試したい」ときの手順（今日は実施不要）}
+
+  \vspace{0.2em}
+
+  \begin{exampleblock}{このあと}
+    \footnotesize GUI フラッシャ（デスクトップアプリ）のデモも行います
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{② 書き込みの仕組み}
+  \begin{block}{ファームウェアとは}
+    機体を動かすプログラム一式のこと。「書き込み」＝新しいファームウェアを\\
+    StampFly の中に転送する作業を指す
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+       & \textbf{Web フラッシャ} & \textbf{GUI フラッシャ（.exe）} \\
+      \hline
+      起動方法   & ブラウザ（Edge/Chrome） & デスクトップアプリ \\
+      必要環境   & Web Serial API 対応ブラウザ & Windows / macOS \\
+      本日の用途 & 各自の実習で使用 & デモのみ \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{② Web フラッシャの手順}
+  \begin{enumerate}\small
+    \item 機体の電源を入れ USB-C で PC に接続
+    \item \footnotesize\url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/} を開く（Edge/Chrome）
+    \item 「StampFly 本体」カードの「インストール」をクリック
+    \item ポート選択ダイアログでポートを選び「接続」
+    \item INSTALL 実行 $\to$ 進捗\% $\to$ 完了
+    \item 機体が自動再起動。起動音が終わるまで水平静置（ジャイロ校正）
+  \end{enumerate}
+
+  \vspace{0.4em}
+
+  \begin{alertblock}{重要}
+    \footnotesize 書き込むと機体の設定保存領域（NVS）も工場出荷状態に戻り、ペアリング情報が消えます。\\
+    本講座はこの後に飛行しないため問題ありません（再ペアリングは講師が行います）
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{② よくある失敗と対処}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{症状} & \textbf{対処} \\
+      \hline
+      ポートが選べない/繋がらない & ケーブルを交換（充電専用ケーブルは不可） \\
+      書き込みが進まない/失敗する & ポートを使う他アプリを閉じる \\
+      それでも失敗する & 機体の BOOT ボタンを押しながら\\
+                       & USB を挿し直して再 Install \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{補足}
+    \footnotesize 「全消去（Erase device）」チェックは本講座では \textbf{OFF のまま}でよい
+  \end{exampleblock}
+\end{frame}

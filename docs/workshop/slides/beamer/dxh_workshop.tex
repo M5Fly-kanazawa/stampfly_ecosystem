@@ -1,0 +1,67 @@
+\documentclass[aspectratio=169, 14pt]{beamer}
+\usepackage{stampfly_slides}
+\input{preamble}
+
+% --- DXH part-divider macro -------------------------------------------------
+% \lessondivider (stampfly_slides.sty) hardcodes the word "Lesson N", which
+% does not fit this workshop's part numbering (①②③④). Define a local
+% divider macro instead so we don't touch the shared style file.
+% \lessondivider は "Lesson N" という文言を固定で表示するため、①②③④という
+% 本講座の区切りには合わない。共有スタイルファイルを変更せずに済むよう、
+% ローカルに専用の区切りマクロを定義する。
+\newcommand{\dxhpart}[2]{%
+  \begin{frame}[plain]
+    \centering
+    \vspace*{\fill}
+    \begin{tikzpicture}
+      \node[
+        rectangle, rounded corners=8pt,
+        draw=sfblue, line width=1.5pt,
+        fill=sflight,
+        inner xsep=20pt, inner ysep=16pt,
+        align=center,
+        text width=75mm,
+      ] {%
+        {\fontsize{34}{40}\selectfont\bfseries\textcolor{sfblue}{#1}}\\[8pt]
+        {\Large\bfseries\textcolor{sfdark}{#2}}%
+      };
+    \end{tikzpicture}
+    \vspace*{\fill}
+    \par
+    {\small\textcolor{sfgray}{StampFly DXH ワークショップ}}\par
+    \vspace{8mm}
+  \end{frame}
+}
+
+\title{StampFly で学ぶドローン制御}
+\subtitle{高校教員向け体験講座（DXH）}
+\author{伊藤 恒平}
+\date{2026年7月18日（土）・19日（日）}
+
+\begin{document}
+
+% === Title page ===
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% === Opening: overview, ecosystem, safety ===
+\input{chapters/dxh_intro}
+
+% === Part 1: piloting experience ===
+\dxhpart{①}{ドローン操縦体験}
+\input{chapters/dxh_pilot}
+
+% === Part 2: dev environment + flashing ===
+\dxhpart{②}{開発環境 + 書き込み体験}
+\input{chapters/dxh_flashing}
+
+% === Part 3-4: code rewriting + motor control ===
+\dxhpart{③④}{プログラム書き換え・モータの制御}
+\input{chapters/dxh_motor}
+
+% === Wrap-up ===
+\dxhpart{まとめ}{授業導入に向けて}
+\input{chapters/dxh_closing}
+
+\end{document}

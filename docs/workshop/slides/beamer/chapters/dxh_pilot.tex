@@ -1,0 +1,76 @@
+% ==============================================================================
+% dxh_pilot.tex — DXH workshop Part 1: piloting experience
+% DXH講座 ①: ドローン操縦体験
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{① 機体の起動と LED の見方}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{LED・音} & \textbf{状態} \\
+      \hline
+      白色点灯 + 起動音 & 起動中 \\
+      マゼンタ点滅 & ジャイロ校正中（機体に触らない） \\
+      緑色常灯 + ピッ×3 & 準備完了（約10秒） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{起動時の注意}
+    平らな床に置いて電源を入れる。校正が終わる（緑常灯）まで機体を動かさない
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{① コントローラのボタンとスティック}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{モード} & \textbf{機体 LED 色} \\
+      \hline
+      STABILIZE & 黄緑 \\
+      ACRO      & 青 \\
+      ALT\_HOLD & オレンジ \\
+      POS\_HOLD & マゼンタ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.2em}
+
+  \begin{block}{POS\_HOLD への切り替え}
+    \small コントローラの左ボタンを \textbf{2回} 押す（OFF $\to$ ALT\_HOLD $\to$ POS\_HOLD）\\
+    機体 LED が\textbf{マゼンタ}になったことを確認する
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{exampleblock}{スティックの動き}
+    \footnotesize 全軸バネ復帰式。少し倒すと移動、手を離すとその場で静止
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{① POS\_HOLD と自動離着陸}
+  \begin{block}{自動離着陸と ARM / DISARM}
+    \small \textbf{ARM}（スティックを押し込む）$\to$ 自動離陸・高度0.5\,m でホバリング\\
+    \textbf{DISARM}（もう一度押し込む）$\to$ 自動着陸 $\to$ 着陸中にもう一度で緊急停止
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{低電圧警告}
+    \footnotesize シアン点滅 + 警告音 $\to$ 着陸して電池交換（飛行時間 約4分）
+  \end{alertblock}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{交代制の案内}
+    \footnotesize 5名 $\times$ 2グループで交代（1グループ 約10分）。機体は事前ペアリング済みなので操縦だけに集中できます
+  \end{exampleblock}
+\end{frame}

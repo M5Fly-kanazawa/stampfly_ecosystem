@@ -1,0 +1,106 @@
+% ==============================================================================
+% dxh_intro.tex — DXH workshop: opening, overview, safety
+% DXH講座: オープニング・全体像・安全ルール
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{本日の流れ}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{時間} & \textbf{内容} \\
+      \hline
+      00:00 -- 00:10（10分） & オープニング \\
+      00:10 -- 00:35（25分） & ① ドローン操縦体験 \\
+      00:35 -- 01:00（25分） & ② 開発環境 + 書き込み体験 \\
+      01:00 -- 01:45（45分） & ③④ プログラム書き換え・モータの制御 \\
+      01:45 -- 02:00（15分） & まとめ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{講師}
+    伊藤 恒平 \\
+    {\footnotesize StampFly 開発者 / ドローン制御工学}
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{StampFly とは}
+  \begin{columns}[c]
+    \begin{column}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{Stampfly_onhand.jpg}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \begin{table}
+        \centering\small
+        \begin{tabular}{ll}
+          \hline
+          \textbf{項目} & \textbf{仕様} \\
+          \hline
+          MCU    & ESP32-S3 (M5Stamp S3) \\
+          IMU    & BMI270（6軸 400\,Hz） \\
+          気圧   & BMP280 \\
+          ToF    & VL53L3CX \\
+          質量   & 37\,g（バッテリ含む） \\
+          通信   & ESP-NOW + WiFi \\
+          バッテリ & LiPo 1S 3.7\,V \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{StampFly エコシステム全体像}
+  \centering
+  \vspace{2mm}
+  \resizebox{!}{0.78\textheight}{\input{../tikz/ecosystem_layers}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{安全ルール（1）：飛行の安全}
+  \begin{block}{飛行前の確認}
+    \begin{itemize}\small\setlength{\itemsep}{0pt}
+      \item 保護メガネを全員着用
+      \item 飛行エリアは区画・ネットで分離
+      \item プロペラガードの状態を確認
+      \item 長い髪はまとめる
+      \item 機体の真上に顔を出さない
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.15em}
+
+  \begin{alertblock}{緊急停止}
+    \footnotesize \warn{DISARM}（自動着陸が始まる）→ 着陸中にもう一度 \warn{DISARM}（即時モータ停止）
+  \end{alertblock}
+
+  \vspace{0.1em}
+
+  \begin{exampleblock}{バッテリー}
+    \footnotesize 満充電 4.2\,V／3.4\,V で低電圧警告。膨らんだ電池は使用しない。充電中は目を離さない
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{安全ルール（2）：モータ実習の安全}
+  \begin{block}{プロペラを回す実習ならではの注意}
+    \begin{itemize}\small
+      \item \warn{Duty は 0.15 以下}（ファームでは強制されないので数値を必ずダブルチェック）
+      \item プロペラは付けたまま --- 機体上部の基板を上から\textbf{指で押さえて}回す
+      \item バッテリーと USB の同時接続は避ける（動作確認はバッテリー駆動）
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{止め方}
+    \footnotesize 機体本体ボタンをもう一度クリック（DISARM）／完全に切るときはバッテリーを外す
+  \end{alertblock}
+\end{frame}
