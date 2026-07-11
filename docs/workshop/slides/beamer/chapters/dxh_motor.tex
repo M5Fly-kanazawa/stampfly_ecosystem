@@ -63,15 +63,35 @@ sf lesson flash   REM 書き込み後シリアルモニタが自動起動
 
 % ------------------------------------------------------------------
 \begin{frame}{③④ 実習の手順（2）：機体側の動作確認}
-  \begin{block}{バッテリー駆動で確認する}
-    \begin{enumerate}\small
-      \item USB ケーブルを外す
-      \item バッテリーを接続して機体の電源を入れる
-      \item LED シーケンス（白 $\to$ マゼンタ $\to$ 緑 + ピッ×3）を待つ
-      \item 機体本体ボタンを\textbf{1回クリック} $\to$ ARM（設定した Duty で回転）
-      \item もう一度クリック $\to$ DISARM（停止）
-    \end{enumerate}
-  \end{block}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \begin{block}{バッテリー駆動で確認する}
+        \begin{enumerate}\small
+          \item USB ケーブルを外す
+          \item バッテリーを接続して機体の電源を入れる
+          \item 起動 LED シーケンスを待つ（右表）
+          \item 機体本体ボタンを\textbf{1回クリック} $\to$ ARM（設定した Duty で回転）
+          \item もう一度クリック $\to$ DISARM（停止）
+        \end{enumerate}
+      \end{block}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{table}
+        \centering\scriptsize
+        \setlength{\tabcolsep}{2pt}
+        \begin{tabular}{@{}c p{19mm} p{20mm}@{}}
+          \hline
+          \# & LED & 状態 \\
+          \hline
+          1 & 白（明滅） & 置いて待つ（約3秒） \\
+          2 & 青（明滅） & センサ初期化中 \\
+          3 & マゼンタ（点滅） & 安定化待ち（約3秒・触らない） \\
+          4 & 緑点灯+ビープ$\times$3 & 操作可能 \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
 
   \vspace{0.4em}
 
@@ -105,9 +125,11 @@ void setup()
     ws::print("Motor duty test");
 
     // Do NOT auto-arm in code. Arming is controlled by the controller's
-    // ARM button so motors never spin until you intentionally press it.
-    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタンで
-    // 行うので、意図的に押すまでモータは絶対に回らない
+    // ARM button or a single click of the vehicle's onboard button, so
+    // motors never spin until you intentionally press it.
+    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタン
+    // または機体本体ボタンの単クリックで行うので、意図的に押すまで
+    // モータは絶対に回らない
 }
 
 void loop_400Hz(float dt)

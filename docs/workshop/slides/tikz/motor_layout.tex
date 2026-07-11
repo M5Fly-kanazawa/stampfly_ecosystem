@@ -1,6 +1,6 @@
 \documentclass[border=10pt]{standalone}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning}
+\usetikzlibrary{arrows.meta, positioning, calc}
 
 \begin{document}
 
@@ -29,21 +29,21 @@
 
   % M1 - Front Right (CCW)
   \node[ccw] (m1) at (2.5, 2.5) {M1};
-  \node[label, above right=-1mm] at (m1.north east) {FR};
+  \node[label] at ($(m1.center)+(45:1.75cm)$) {FR};
   \draw[arrow, ccwcolor] ([shift={(-45:1.3)}]m1.center)
     arc[start angle=-45, end angle=225, radius=1.3cm];
   \node[font=\scriptsize, ccwcolor] at (4.2, 2.5) {CCW};
 
   % M2 - Rear Right (CW)
   \node[cw] (m2) at (2.5, -2.5) {M2};
-  \node[label, below right=-1mm] at (m2.south east) {RR};
+  \node[label] at ($(m2.center)+(-45:1.75cm)$) {RR};
   \draw[arrow, cwcolor] ([shift={(45:1.3)}]m2.center)
     arc[start angle=45, end angle=-225, radius=1.3cm];
   \node[font=\scriptsize, cwcolor] at (4.2, -2.5) {CW};
 
   % M3 - Rear Left (CCW)
   \node[ccw] (m3) at (-2.5, -2.5) {M3};
-  \node[label, below left=-1mm] at (m3.south west) {RL};
+  \node[label] at ($(m3.center)+(225:1.75cm)$) {RL};
   \draw[arrow, ccwcolor] ([shift={(225:1.3)}]m3.center)
     arc[start angle=225, end angle=495, radius=1.3cm];
   \node[font=\scriptsize, ccwcolor] at (-4.2, -2.5) {CCW};
