@@ -89,6 +89,14 @@ markdown_extensions:
 # docs/sci_tutorial/ はチュートリアル講座のイベント資料作業ディレクトリ
 # （広告PDF等）。公開導線は iscie.or.jp の公式申込ページが担うため、
 # 同様に公開サイトからは除外する。
+# docs/workshop/dxh2026/ is the DXH high-school-teacher workshop (2026-07-18/19)
+# event-material working directory — internal curriculum/setup docs plus
+# unmeasured rehearsal placeholders, not ready for the public site. Promotion
+# to a published guide is planned for the August documentation sprint.
+# docs/workshop/dxh2026/ は DXH 高校教員向け体験講座（2026-07-18/19）の
+# イベント資料作業ディレクトリ（内部向けカリキュラム・セットアップ文書、
+# 未実測のリハーサル用プレースホルダを含む）。公開ガイドへの昇格は
+# 8月のドキュメントスプリントで行う予定のため、現時点ではサイト非公開とする。
 # landing/ はサイトルートで別途配信するため /docs/ 配下に重複コピーしない。
 exclude_docs: |
   site/
@@ -108,6 +116,7 @@ exclude_docs: |
   docs/sci26/
   docs/sci_tutorial/
   docs/hikoki64/
+  docs/workshop/dxh2026/
 
 nav:
   # ==================== Home ====================

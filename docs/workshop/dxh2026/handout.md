@@ -210,7 +210,7 @@ Webフラッシャが書き込む「full」イメージ（起動プログラム�
 
 ### 実習コード
 
-以下をそのまま `user_code.cpp` に貼り付けてください（モータIDと数値以外は変更不要です）。
+配布PCの `user_code.cpp` には以下のコードが最初から入っています（数値以外は変更不要です）。
 
 ```cpp
 #include "workshop_api.hpp"
@@ -234,9 +234,11 @@ void setup()
     ws::print("Motor duty test");
 
     // Do NOT auto-arm in code. Arming is controlled by the controller's
-    // ARM button so motors never spin until you intentionally press it.
-    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタンで
-    // 行うので、意図的に押すまでモータは絶対に回らない
+    // ARM button or a single click of the vehicle's onboard button, so
+    // motors never spin until you intentionally press it.
+    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタン
+    // または機体本体ボタンの単クリックで行うので、意図的に押すまで
+    // モータは絶対に回らない
 }
 
 void loop_400Hz(float dt)

@@ -97,10 +97,13 @@ sf doctor
 
 ```cmd
 sf lesson switch 1
+copy docs\workshop\dxh2026\user_code_dxh.cpp firmware\workshop\main\user_code.cpp
 sf lesson build
 ```
 
 - [ ] `sf lesson switch 1` は Lesson 1（モータ制御）に切り替える。**ビルドディレクトリを全削除しフルビルドになるため、当日この場では絶対に再実行しない**（当日は差分ビルドのみで時間内に収める）
+- [ ] DXH実習コードを導入: `copy docs\workshop\dxh2026\user_code_dxh.cpp firmware\workshop\main\user_code.cpp` （`sf lesson switch 1` はLesson 1の雛形で `user_code.cpp` を上書きするため、必ず switch の後に実行する。当日 switch を再実行するとこのテンプレートが消える点に注意）
+- [ ] `user_code.cpp` の内容がDXH版（冒頭コメントに「DXH workshop exercise template」）であることを確認
 - [ ] `sf lesson build` が成功することを確認し、所要時間を記録（§3）
 
 ### 1-10. 書き込みリハーサル（workshop ファーム）
