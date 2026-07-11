@@ -203,9 +203,11 @@ void setup()
     ws::print("Motor duty test");
 
     // Do NOT auto-arm in code. Arming is controlled by the controller's
-    // ARM button so motors never spin until you intentionally press it.
-    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタンで
-    // 行うので、意図的に押すまでモータは絶対に回らない
+    // ARM button or a single click of the vehicle's onboard button, so
+    // motors never spin until you intentionally press it.
+    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタン
+    // または機体本体ボタンの単クリックで行うので、意図的に押すまで
+    // モータは絶対に回らない
 }
 
 void loop_400Hz(float dt)
