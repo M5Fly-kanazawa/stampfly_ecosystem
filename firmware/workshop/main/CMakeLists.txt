@@ -1,8 +1,11 @@
 # Workshop main component
-# Compiles workshop-specific files and reuses vehicle sensor/peripheral tasks
+# Compiles workshop-specific files and reuses vehicle_old sensor/peripheral tasks
+# (vehicle_new -> vehicle promotion moved these layered tasks to vehicle_old)
+# ワークショップ固有ファイルをコンパイルし、vehicle_old のセンサ/周辺タスクを再利用する
+# （vehicle_new→vehicle 昇格でこれらの層分けタスクは vehicle_old に移動した）
 
-set(VEHICLE_TASKS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/main/tasks")
-set(VEHICLE_MAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/main")
+set(VEHICLE_TASKS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle_old/main/tasks")
+set(VEHICLE_MAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle_old/main")
 
 # Auto-bootstrap user_code.cpp from the Lesson 0 seed if absent.
 # This file is gitignored; `sf lesson switch` overwrites it on demand,
@@ -27,7 +30,8 @@ idf_component_register(
         "workshop_task.cpp"
         "workshop_api.cpp"
         "user_code.cpp"
-        # Reuse vehicle sensor/peripheral tasks (compiled from vehicle source)
+        # Reuse vehicle_old sensor/peripheral tasks (compiled from vehicle_old source)
+        # vehicle_old のセンサ/周辺タスクを再利用（vehicle_old のソースからコンパイル）
         "${VEHICLE_TASKS_DIR}/imu_task.cpp"
         "${VEHICLE_TASKS_DIR}/optflow_task.cpp"
         "${VEHICLE_TASKS_DIR}/mag_task.cpp"
@@ -39,7 +43,8 @@ idf_component_register(
         "${VEHICLE_TASKS_DIR}/comm_task.cpp"
         "${VEHICLE_TASKS_DIR}/cli_task.cpp"
         "${VEHICLE_TASKS_DIR}/telemetry_task.cpp"
-        # Reuse vehicle init (shared initialization code)
+        # Reuse vehicle_old init (shared initialization code)
+        # vehicle_old の初期化コード（共有の初期化処理）を再利用
         "${VEHICLE_MAIN_DIR}/init.cpp"
     INCLUDE_DIRS
         "."
