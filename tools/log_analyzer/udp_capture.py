@@ -308,8 +308,10 @@ def parse_packet(data: bytes) -> list:
         #   [sensor_health 1B][eskf_status 1B][padding 1B]
         #   [pid_roll Kp/Ti/Td 12B][pid_pitch Kp/Ti/Td 12B][pid_yaw Kp/Ti/Td 12B]
         #   [checksum 1B] = 53B
+        # StatusPacket v3: v2 + [current_ma 4B][checksum 1B] = 57B (battery current,
+        #   appended AFTER pid_gains — see data_stream_wire.hpp WireStatusPayload)
         # Legacy (17B) also supported for backward compatibility
-        if pkt_id == PKT_STATUS and len(data) in (17, 53):
+        if pkt_id == PKT_STATUS and len(data) in (17, 53, 57):
             uptime_ms, voltage, flight_state, sensor_health, eskf_status, reset_reason = \
                 struct.unpack_from('<IfBBBB', data, 4)
             # esp_reset_reason() names — read a crash cause over WiFi (no serial).
@@ -326,8 +328,8 @@ def parse_packet(data: bytes) -> list:
                 'reset_reason': reset_reason,
                 'reset_reason_name': _RST.get(reset_reason, str(reset_reason)),
             }
-            # Parse PID gains if present (v2, 53B)
-            if len(data) == 53:
+            # Parse PID gains if present (v2/v3, 53B or 57B)
+            if len(data) in (53, 57):
                 pid_vals = struct.unpack_from('<9f', data, 16)
                 sample['pid_roll_kp']  = pid_vals[0]
                 sample['pid_roll_ti']  = pid_vals[1]
@@ -338,6 +340,10 @@ def parse_packet(data: bytes) -> list:
                 sample['pid_yaw_kp']   = pid_vals[6]
                 sample['pid_yaw_ti']   = pid_vals[7]
                 sample['pid_yaw_td']   = pid_vals[8]
+            # Parse battery current if present (v3, 57B) — appended after pid_gains
+            # at payload offset 48 (buffer offset 4 + 48 = 52).
+            if len(data) == 57:
+                sample['current_ma'] = struct.unpack_from('<f', data, 52)[0]
             return [(PKT_STATUS, sample)]
         return []
 
@@ -706,6 +712,7 @@ class UDPTelemetryCapture:
                     'pid_pitch': [s['pid_pitch_kp'], s['pid_pitch_ti'], s['pid_pitch_td']],
                     'pid_yaw':   [s['pid_yaw_kp'],   s['pid_yaw_ti'],  s['pid_yaw_td']],
                 } if 'pid_roll_kp' in s else {}),
+                **({'current_ma': round(s['current_ma'], 1)} if 'current_ma' in s else {}),
             },
         }
 

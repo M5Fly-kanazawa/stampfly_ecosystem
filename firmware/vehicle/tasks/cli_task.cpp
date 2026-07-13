@@ -416,37 +416,370 @@ int cmd_led(int argc, char** argv)
     return 0;
 }
 
-/// `motor [test <1-4> <0-100> | all <0-100> | stop]` — bench motor wiring/direction check.
-/// Spins the motor(s) at a fixed duty for ~2 s, DISARMED ONLY (ControlTask ignores it when
-/// armed). Publishes a MotorTest FACT. IDs: M1=FR M2=RR M3=RL M4=FL. KEEP PROPS OFF / hold
-/// the craft. `motor stop` ends it early.
-/// `motor [test <1-4> <0-100> | all <0-100> | stop]` — ベンチのモータ配線/回転方向確認。
-/// 約2秒、**disarmed 限定**で固定 duty 回転（armed 時 ControlTask は無視）。MotorTest を発行。
-/// ID: M1=FR M2=RR M3=RL M4=FL。**プロペラを外すか機体を保持**。`motor stop` で即停止。
+// =============================================================================
+// `motor sweep` abort support — stop the motors and unblock the CLI as soon as
+// the operator asks, instead of running the up-to-~45s worst case to the end.
+// `motor sweep` 中断サポート — 操縦者が求めた瞬間にモータを止め CLI を解放する
+// （最悪 ~45秒の実行を最後まで待たせない）。
+// =============================================================================
+
+/// Publish a MotorTest FACT that stops every motor immediately (duty 0, active
+/// defaults to false). One definition of "off" shared by `motor stop`, the
+/// inter-motor rest in a sweep, the pre-baseline clear, and an aborted sweep
+/// (input received / low battery, both below in collectPower()).
+/// 全モータを即座に停止する MotorTest FACT を発行する（duty 0, active は既定
+/// false）。「停止」の定義1つを `motor stop`・スイープのモータ間休止・ベースライン
+/// 前のクリア・下記 collectPower() のスイープ中断（入力受信/低電圧）で共有する。
+void publishMotorStop()
+{
+    sf::MotorTest off{};
+    off.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::motor_test.publish(off);
+}
+
+/// TCP client socket currently dispatching a CLI command, or -1 when the CLI is
+/// idle or the running command came from the USB-CDC REPL. Set by
+/// serveTcpClient() around its esp_console_run() calls (§ TCP CLI server,
+/// below); read by tcpAbortRequested() so a blocking `motor sweep` can be
+/// aborted from the SAME TCP session that started it.
+/// 現在 CLI コマンドを実行中の TCP クライアントソケット。CLI が idle か、実行中の
+/// コマンドが USB-CDC REPL から来た場合は -1。serveTcpClient() が
+/// esp_console_run() 呼び出しの前後で設定する（下記「TCP CLI サーバ」節）。
+/// tcpAbortRequested() が読み、ブロッキングする `motor sweep` を起動したのと
+/// 同じ TCP セッションから中断できるようにする。
+int s_active_tcp_client_fd = -1;
+
+/// Non-blocking abort check for `motor sweep` (used by collectPower(), below):
+/// true if the TCP session that issued the command has sent anything (or hung
+/// up) since the last poll. Uses MSG_DONTWAIT — the same per-call-non-blocking
+/// idiom api_task.cpp uses for its UDP command socket — so it never stalls the
+/// 20ms sample loop.
+///
+/// Always false for a USB-REPL-issued sweep (s_active_tcp_client_fd == -1): the
+/// REPL task IS the one blocked running this command, so nothing else is free
+/// to read stdin concurrently, and ESP-IDF exposes no PUBLIC non-blocking
+/// "bytes waiting" query for the USB-CDC console (only a private one explicitly
+/// marked "not for applications" — esp_private/usb_console.h). A USB user
+/// currently has to wait out the (now bounded-by-abort-elsewhere) sweep or
+/// power-cycle; the WiFi/TCP path — the reported failure, `motor stop` sent
+/// over WiFi was never read — now aborts immediately.
+/// `motor sweep` の非ブロッキング中断チェック（下記 collectPower() が使用）:
+/// コマンドを発行した TCP セッションが前回ポーリング以降に何か送信（または切断）
+/// していれば true。MSG_DONTWAIT（api_task.cpp の UDP コマンドソケットと同じ
+/// 呼び出し単位の非ブロッキング流儀）を使うので 20ms サンプリングループを止めない。
+///
+/// USB REPL から起動したスイープでは常に false（s_active_tcp_client_fd == -1）—
+/// REPL タスク自身が本コマンドの実行でブロックしており並行して stdin を読める者が
+/// おらず、ESP-IDF は USB-CDC コンソールの「入力待ち」を問い合わせる公開の非ブロッキング
+/// API を持たない（非公開・「アプリから呼ぶな」明記の esp_private/usb_console.h の
+/// みが存在）。USB ユーザーは現状スイープを待つか電源断で対応するしかないが、
+/// WiFi/TCP 経路（報告された不具合 — WiFi 越しの `motor stop` が読まれない）は
+/// 今すぐ中断できるようになった。
+bool tcpAbortRequested()
+{
+    if (s_active_tcp_client_fd < 0) {
+        return false;   // USB REPL command — see block comment above / USB REPL コマンド
+    }
+    char buf[32];
+    const ssize_t received =
+        ::recv(s_active_tcp_client_fd, buf, sizeof(buf), MSG_DONTWAIT);
+    if (received < 0) {
+        return false;   // EAGAIN/EWOULDBLOCK — nothing queued yet / 未着（通常経路）
+    }
+    if (received > 0) {
+        // Drain any further immediately-available bytes (best effort, bounded)
+        // so the rest of the line / a queued follow-up command is not replayed
+        // once the TCP recv loop in serveTcpClient() resumes.
+        // 直後にすぐ読める分もあれば読み捨てる（ベストエフォート、回数上限あり）—
+        // serveTcpClient() の TCP recv ループ再開後にはぐれコマンドが再生されない
+        // ように。
+        for (int extra = 0; extra < 4; ++extra) {
+            if (::recv(s_active_tcp_client_fd, buf, sizeof(buf), MSG_DONTWAIT) <= 0) {
+                break;
+            }
+        }
+    }
+    return true;   // received > 0 (input) or == 0 (peer hung up) / 入力あり、または切断
+}
+
+/// Aggregated current/voltage statistics over a sweep sampling window (see
+/// `collectPower`): sample count, mean/std current [mA], mean voltage [V], and
+/// whether the poll loop was cut short by an abort (input on the issuing TCP
+/// session, or pack voltage at/under safety.battery.low_v).
+/// スイープの1サンプリング区間の集計結果（`collectPower` 参照）: サンプル数、
+/// 平均/標準偏差電流[mA]、平均電圧[V]、および中断（発行元 TCP セッションへの入力、
+/// または電圧が safety.battery.low_v 以下）でポーリングを打ち切ったか。
+struct SweepStat {
+    int   n       = 0;
+    float i_mean  = 0.0f;
+    float i_std   = 0.0f;
+    float v_mean  = 0.0f;
+    bool  aborted = false;
+};
+
+/// Poll `sensor_power` for `duration_us`, deduping repeated Latest-topic reads
+/// by timestamp (the 10Hz PowerTask publishes slower than our poll), and
+/// average current/voltage over the BACK part only — samples inside the first
+/// `skip_us` (start-up transient / not-yet-settled window) are polled but not
+/// counted. If `keepalive` is non-null, its MotorTest FACT is republished
+/// every MOTOR_SWEEP_KEEPALIVE_US in ONE continuous timer spanning both the
+/// skip and sample windows, so a call longer than MOTOR_TEST_DURATION_US never
+/// drops to zero duty mid-sample (splitting this into two separate polling
+/// calls would each reset the keepalive timer and could stack close to the
+/// 2s auto-expiry at the boundary — kept as one loop to avoid that).
+///
+/// Every 20ms tick also checks two abort conditions BEFORE sampling: input on
+/// the issuing TCP session (tcpAbortRequested()) and pack voltage at/under
+/// `low_v_threshold` (safety.battery.low_v, cached once by the caller — see
+/// cmd_motor_sweep). Either one stops the motor (publishMotorStop()) and
+/// breaks out of the poll loop immediately, with SweepStat::aborted set and the
+/// reason already printed — the caller just needs to check `.aborted` and
+/// return without printing its own summary line.
+/// `duration_us` の間 `sensor_power` をポーリングし、Latest トピックの重複読み
+/// （PowerTask の 10Hz publish はポーリングより遅い）をタイムスタンプで除きながら
+/// 後半のみ平均する — 先頭 `skip_us`（起動過渡・未整定区間）はポーリングするが
+/// 集計しない。`keepalive` が非 null なら MOTOR_SWEEP_KEEPALIVE_US 毎に MotorTest
+/// FACT を再発行する。このタイマーは skip・sample 両区間にまたがる単一ループで
+/// 動かす（2回のポーリング呼び出しに分けると各々でタイマーがリセットされ、境界で
+/// 2秒の自動失効に接近しうるため、1ループに保つ）。
+///
+/// 20ms ティック毎に、サンプリングの前に2つの中断条件もチェックする: 発行元 TCP
+/// セッションへの入力（tcpAbortRequested()）と、`low_v_threshold`
+/// （safety.battery.low_v、呼び出し元が1回キャッシュ — cmd_motor_sweep 参照）以下の
+/// パック電圧。どちらもモータを止め（publishMotorStop()）ポーリングループを即座に
+/// 抜ける — SweepStat::aborted を立て、理由は既に印字済みなので、呼び出し元は
+/// `.aborted` を見て自前のサマリ行を印字せず戻ればよい。
+SweepStat collectPower(uint32_t duration_us, uint32_t skip_us, const sf::MotorTest* keepalive,
+                        float low_v_threshold)
+{
+    const uint32_t start = static_cast<uint32_t>(esp_timer_get_time());
+    uint32_t last_ts = sf::sensor_power.latest().timestamp;  // seed: don't recount the stale sample
+    uint32_t last_keepalive = start;
+    double sum_i = 0.0, sum_i2 = 0.0, sum_v = 0.0;
+    int n = 0;
+    SweepStat stat{};
+
+    while (static_cast<uint32_t>(esp_timer_get_time()) - start < duration_us) {
+        vTaskDelay(pdMS_TO_TICKS(config::MOTOR_SWEEP_POLL_MS));
+        const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+
+        // Abort request: the channel that issued `motor sweep` has sent
+        // something (or hung up) — stop NOW rather than finishing the up to
+        // ~45s worst case run (MOTOR_SWEEP_MAX_SEC, config.hpp).
+        // 中断要求: `motor sweep` を発行したチャネルから入力があった（または
+        // 切断された）— 最悪 ~45秒（MOTOR_SWEEP_MAX_SEC, config.hpp）かかる実行を
+        // 最後まで待たず今すぐ止める。
+        if (tcpAbortRequested()) {
+            publishMotorStop();
+            stat.aborted = true;
+            std::printf("SWEEP ABORTED (input received)\n");
+            break;
+        }
+
+        // Low-battery auto-abort. MOTOR_SWEEP_VOLTAGE_VALID_MIN guards against a
+        // stale/zero reading before PowerTask's first publish (same idiom as
+        // sf_notify's low-battery LED guard, notify.cpp: kVoltageValidMin).
+        // 低電圧自動中止。MOTOR_SWEEP_VOLTAGE_VALID_MIN は PowerTask 初回 publish
+        // 前の未初期化/ゼロ読みに対するガード（sf_notify の低電圧 LED ガードと
+        // 同じ流儀, notify.cpp の kVoltageValidMin）。
+        const sf::PowerData d = sf::sensor_power.latest();
+        if (d.voltage > config::MOTOR_SWEEP_VOLTAGE_VALID_MIN && d.voltage <= low_v_threshold) {
+            publishMotorStop();
+            stat.aborted = true;
+            std::printf("SWEEP ABORTED (low battery %.2fV)\n", d.voltage);
+            break;
+        }
+
+        if (keepalive != nullptr && now - last_keepalive >= config::MOTOR_SWEEP_KEEPALIVE_US) {
+            sf::MotorTest t = *keepalive;
+            t.timestamp = now;
+            t.expiry_us = now + config::MOTOR_TEST_DURATION_US;
+            sf::motor_test.publish(t);
+            last_keepalive = now;
+        }
+        if (now - start < skip_us) {
+            continue;   // still settling — keepalive only, don't sample / 整定待ち
+        }
+        if (d.timestamp == last_ts) {
+            continue;   // no fresh sample yet / まだ新規サンプルなし
+        }
+        last_ts = d.timestamp;
+        sum_i  += d.current;
+        sum_i2 += static_cast<double>(d.current) * d.current;
+        sum_v  += d.voltage;
+        ++n;
+    }
+
+    stat.n = n;
+    if (n > 0) {
+        stat.i_mean = static_cast<float>(sum_i / n);
+        stat.v_mean = static_cast<float>(sum_v / n);
+        const double variance = (sum_i2 / n) - static_cast<double>(stat.i_mean) * stat.i_mean;
+        stat.i_std = static_cast<float>(variance > 0.0 ? std::sqrt(variance) : 0.0);
+    }
+    return stat;
+}
+
+/// Spin one motor at `duty` for `duration_us`, sampling only the back half
+/// (MOTOR_SWEEP_SETTLE_FRACTION skipped as start-up transient) via
+/// `collectPower`. Stops the motor and rests MOTOR_SWEEP_REST_US before
+/// returning so the next motor's baseline is not contaminated by this one's
+/// spin-down — unless collectPower() aborted (input / low battery), in which
+/// case the motor is already stopped and the rest is skipped so control
+/// returns to the operator immediately instead of eating one more second.
+/// 1モータを `duty` で `duration_us` の間回し、`collectPower` で後半のみ
+/// サンプルする（先頭 MOTOR_SWEEP_SETTLE_FRACTION は起動過渡としてスキップ）。
+/// モータ停止後 MOTOR_SWEEP_REST_US 休止してから戻り、次のモータの計測がこの
+/// モータの回転停止過渡で汚染されないようにする — ただし collectPower() が
+/// 中断（入力/低電圧）した場合はモータは既に停止済みなので休止をスキップし、
+/// 追加で1秒待たせず即座に操縦者へ制御を戻す。
+SweepStat runSingleMotor(uint8_t motor_id, float duty, uint32_t duration_us, float low_v_threshold)
+{
+    const uint32_t settle_us = static_cast<uint32_t>(duration_us * config::MOTOR_SWEEP_SETTLE_FRACTION);
+    const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+
+    sf::MotorTest t{};
+    t.active    = true;
+    t.motor_id  = motor_id;
+    t.duty      = duty;
+    t.expiry_us = now + config::MOTOR_TEST_DURATION_US;
+    t.timestamp = now;
+    sf::motor_test.publish(t);
+
+    const SweepStat stat = collectPower(duration_us, settle_us, &t, low_v_threshold);
+
+    publishMotorStop();
+    if (!stat.aborted) {
+        vTaskDelay(pdMS_TO_TICKS(config::MOTOR_SWEEP_REST_US / 1000));
+    }
+    return stat;
+}
+
+/// `motor sweep [duty% sec_per_motor]` — bench CW/CCW current-asymmetry sweep.
+/// Spins M1..M4 in turn at a fixed duty, measures an all-off baseline first,
+/// samples the back half of each motor's run (skipping the spin-up transient),
+/// and prints a per-motor current/voltage table plus one machine-readable
+/// summary line. DISARMED ONLY (explicit refusal — unlike `motor test`, this
+/// blocks the CLI task for many seconds, so silently doing nothing while armed
+/// would just waste that wait). Blocking is vTaskDelay-based, the same
+/// ground-tool-blocking precedent as `magcal start`. Abortable mid-run from the
+/// issuing TCP session (any input) or automatically on low battery — see
+/// collectPower()/tcpAbortRequested() above.
+/// `motor sweep [duty% sec_per_motor]` — ベンチの CW/CCW 電流非対称スイープ。
+/// M1..M4 を順に固定 duty で回し、まず全停止ベースラインを測定、各モータの回転
+/// 区間の後半（起動過渡を除く）をサンプルし、モータ毎の電流/電圧表と機械可読な
+/// サマリ行を1行印字する。**disarmed 限定**（明示拒否 — `motor test` と異なり
+/// 本コマンドは数秒間 CLI タスクをブロックするため、armed 中に無言で何もせず
+/// 待つだけになるのを避ける）。ブロックは vTaskDelay ベースで `magcal start` と
+/// 同じ地上ツール・ブロッキングの前例に倣う。発行元 TCP セッションへの入力で実行中
+/// 中断可能、低電圧では自動中断（上記 collectPower()/tcpAbortRequested() 参照）。
+int cmd_motor_sweep(int argc, char** argv)
+{
+    if (sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state))) {
+        std::printf("refused: motor sweep needs the craft disarmed\n");
+        return 1;
+    }
+
+    int duty_pct = config::MOTOR_SWEEP_DEFAULT_DUTY_PCT;
+    float sec    = config::MOTOR_SWEEP_DEFAULT_SEC;
+    if (argc >= 3) duty_pct = std::atoi(argv[2]);
+    if (argc >= 4) sec      = std::strtof(argv[3], nullptr);
+    if (duty_pct < config::MOTOR_SWEEP_MIN_DUTY_PCT) duty_pct = config::MOTOR_SWEEP_MIN_DUTY_PCT;
+    if (duty_pct > config::MOTOR_SWEEP_MAX_DUTY_PCT) duty_pct = config::MOTOR_SWEEP_MAX_DUTY_PCT;
+    if (sec < config::MOTOR_SWEEP_MIN_SEC) sec = config::MOTOR_SWEEP_MIN_SEC;
+    if (sec > config::MOTOR_SWEEP_MAX_SEC) sec = config::MOTOR_SWEEP_MAX_SEC;
+
+    // Cache the low-battery abort threshold once (safety.battery.low_v) — same
+    // one-shot-read rationale as sf_notify's low_v_threshold_ (notify.cpp): the
+    // value rarely changes mid-run, and collectPower() polls it every 20ms.
+    // 低電圧中断閾値（safety.battery.low_v）を1回だけ読みキャッシュ — sf_notify の
+    // low_v_threshold_（notify.cpp）と同じ一括読みの理由: 実行中はほぼ変わらず、
+    // collectPower() は 20ms 毎にポーリングする。
+    float low_v = 3.4f;   // matches params.cpp's compiled default / params.cpp のコンパイル時既定値
+    sf::params::get_float("safety.battery.low_v", low_v);
+
+    const float total_s = (config::MOTOR_SWEEP_BASELINE_US / 1.0e6f) +
+                           4.0f * (sec + config::MOTOR_SWEEP_REST_US / 1.0e6f);
+    std::printf("motor sweep: duty=%d%% sec/motor=%.1f (~%.0fs total) — "
+                "PROPS OFF or hold the craft, DISARMED only. Send anything "
+                "(or Enter) on this session to abort.\n", duty_pct, sec, total_s);
+
+    publishMotorStop();   // clear any leftover test before the baseline / ベースライン前のクリア
+    const SweepStat base = collectPower(config::MOTOR_SWEEP_BASELINE_US, 0, nullptr, low_v);
+    if (base.aborted) {
+        return 1;   // ABORTED message already printed by collectPower() / メッセージは collectPower() が印字済み
+    }
+    std::printf("baseline    : V=%.2fV I=%.0fmA (n=%d)\n", base.v_mean, base.i_mean, base.n);
+
+    static const char* kNames[4] = {"M1(FR,CCW)", "M2(RR,CW) ", "M3(RL,CCW)", "M4(FL,CW) "};
+    SweepStat results[4];
+    const uint32_t duration_us = static_cast<uint32_t>(sec * 1.0e6f);
+    for (int i = 0; i < 4; ++i) {
+        results[i] = runSingleMotor(static_cast<uint8_t>(i), duty_pct / 100.0f, duration_us, low_v);
+        if (results[i].aborted) {
+            return 1;   // ABORTED message already printed by collectPower() / 同上
+        }
+        std::printf("%s : V=%.2fV I=%.0fmA std=%.0f dI=%+.0fmA (n=%d)\n", kNames[i],
+                    results[i].v_mean, results[i].i_mean, results[i].i_std,
+                    results[i].i_mean - base.i_mean, results[i].n);
+    }
+
+    std::printf("SWEEP m1=%.1f m2=%.1f m3=%.1f m4=%.1f base=%.1f duty=%d vbat=%.2f\n",
+                results[0].i_mean, results[1].i_mean, results[2].i_mean, results[3].i_mean,
+                base.i_mean, duty_pct, base.v_mean);
+    return 0;
+}
+
+/// `motor [test <1-4> <0-100> | all <0-100> | sweep [duty% sec] | stop]` — bench motor
+/// wiring/direction check + CW/CCW current-asymmetry sweep. `test`/`all` spin at a fixed
+/// duty for MOTOR_TEST_DURATION_US, DISARMED ONLY — refused with a message, same as
+/// `sweep` (cmd_motor_sweep): ControlTask already ignores this FACT while armed, but a
+/// silent no-op that still prints a success-looking line is a UX trap, so we refuse
+/// up front instead. `sweep` is a longer, self-contained measurement — see
+/// `cmd_motor_sweep`. Publishes a MotorTest FACT. IDs: M1=FR M2=RR M3=RL M4=FL. KEEP
+/// PROPS OFF / hold the craft. `motor stop` ends it early (always allowed — it is the
+/// safety net, not a test).
+/// `motor [test <1-4> <0-100> | all <0-100> | sweep [duty% sec] | stop]` — ベンチのモータ
+/// 配線/回転方向確認＋CW/CCW 電流非対称スイープ。`test`/`all` は MOTOR_TEST_DURATION_US の
+/// 間固定 duty で回転、**disarmed 限定** — `sweep`（cmd_motor_sweep）と同様メッセージ付きで
+/// 拒否する: ControlTask は armed 中このFACTを元々無視するが、それでも成功風の行を印字する
+/// 無言の空振りは UX の罠なので、事前に拒否する。`sweep` はより長い自己完結型の計測
+/// （`cmd_motor_sweep` 参照）。MotorTest を発行。ID: M1=FR M2=RR M3=RL M4=FL。
+/// **プロペラを外すか機体を保持**。`motor stop` で即停止（常に許可 — テストではなく安全弁）。
 int cmd_motor(int argc, char** argv)
 {
     const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
-    const uint32_t kTestDurationUs = 2000000;  // 2 s auto-stop / 2秒自動停止
 
     if (argc >= 2 && std::strcmp(argv[1], "stop") == 0) {
-        sf::MotorTest t{};
-        t.active = false;
-        t.timestamp = now;
-        sf::motor_test.publish(t);
+        publishMotorStop();
         std::printf("motor test stopped\n");
         return 0;
+    }
+
+    if (argc >= 2 && std::strcmp(argv[1], "sweep") == 0) {
+        return cmd_motor_sweep(argc, argv);
     }
 
     bool all = (argc >= 2 && std::strcmp(argv[1], "all") == 0);
     bool test = (argc >= 2 && std::strcmp(argv[1], "test") == 0);
     if ((test && argc >= 4) || (all && argc >= 3)) {
+        // Same disarmed-only guard as `motor sweep` (cmd_motor_sweep) — see the
+        // function doc comment above for why this refuses rather than staying a
+        // silent, ControlTask-ignored no-op.
+        // `motor sweep`（cmd_motor_sweep）と同じ disarmed 限定ガード — 無言で
+        // ControlTask に無視される空振りのままにせず拒否する理由は上の関数
+        // ドキュメントコメント参照。
+        if (sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state))) {
+            std::printf("refused: motor test needs the craft disarmed\n");
+            return 1;
+        }
         int pct = std::atoi(all ? argv[2] : argv[3]);
         if (pct < 0)   pct = 0;
         if (pct > 100) pct = 100;
         sf::MotorTest t{};
         t.active    = true;
         t.duty      = pct / 100.0f;
-        t.expiry_us = now + kTestDurationUs;
+        t.expiry_us = now + config::MOTOR_TEST_DURATION_US;
         t.timestamp = now;
         if (all) {
             t.motor_id = 0xFF;
@@ -463,7 +796,7 @@ int cmd_motor(int argc, char** argv)
         sf::motor_test.publish(t);
         return 0;
     }
-    std::printf("usage: motor [test <1-4> <0-100> | all <0-100> | stop]\n");
+    std::printf("usage: motor [test <1-4> <0-100> | all <0-100> | sweep [duty%% sec] | stop]\n");
     return 0;
 }
 
@@ -673,6 +1006,15 @@ void serveTcpClient(const int client_fd)
     FILE* saved_stdout = stdout;
     stdout = client;
 
+    // This session now owns the CLI — route `motor sweep` abort polling to it
+    // (s_active_tcp_client_fd / tcpAbortRequested(), above collectPower()).
+    // Restored to -1 (no active TCP session) when this client disconnects,
+    // below.
+    // このセッションが CLI を保持する間、`motor sweep` の中断ポーリングをここへ
+    // 向ける（collectPower() 手前の s_active_tcp_client_fd / tcpAbortRequested()
+    // 参照）。このクライアントが切断したら下で -1（TCP セッション無し）へ戻す。
+    s_active_tcp_client_fd = client_fd;
+
     std::printf("StampFly vehicle TCP CLI — type 'help' for commands\n");
     std::printf("stampfly> ");
     std::fflush(client);
@@ -715,6 +1057,7 @@ void serveTcpClient(const int client_fd)
         std::fflush(client);
     }
 
+    s_active_tcp_client_fd = -1;
     stdout = saved_stdout;
     std::fclose(client);   // also closes client_fd / client_fd も閉じる
 }
@@ -797,7 +1140,7 @@ const CliCommand kCommands[] = {
     {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
     {"sound",   "sound [on|off|test [start|ok|fail]] — buzzer mute / play a cue", &cmd_sound},
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
-    {"motor",   "motor [test <1-4> <0-100>|all <0-100>|stop] — bench test (disarmed)", &cmd_motor},
+    {"motor",   "motor [test <1-4> <0-100>|all <0-100>|sweep [duty% sec]|stop] — bench test (disarmed)", &cmd_motor},
     {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
     {"magcal",  "magcal [start|stop|status|save|clear] — magnetometer calibration", &cmd_magcal},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},

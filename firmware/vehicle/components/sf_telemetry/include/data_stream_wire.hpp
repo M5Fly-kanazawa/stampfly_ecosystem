@@ -24,7 +24,7 @@
  *       [Header 4B][ImuEskf 80B x8][PosVel 28B x8][RateRef 6B x8]
  *       [entry_count 1B][SensorEntry...][XOR checksum 1B]
  *     SensorEntry = [sensor_id 1B][data_size 1B][payload data_size B].
- *   - Status packet 0x4F (53B) at 1 Hz: battery, state, rate-PID gains.
+ *   - Status packet 0x4F (57B) at 1 Hz: battery (V+mA), state, rate-PID gains.
  *   - XOR checksum over every preceding byte of the datagram.
  *
  * This header is dependency-free (cstdint/cstring + LogStreamSample) so the
@@ -188,10 +188,18 @@ struct WireMag {
 };
 static_assert(sizeof(WireMag) == 16, "wire drift");
 
-/// Standalone 1Hz status packet — 53B total (header + payload + checksum).
+/// Standalone 1Hz status packet — 57B total (header 4B + payload 52B + checksum 1B).
 /// The 9 rate-PID gains let the PC-side tools reconstruct motor commands.
-/// 単独 1Hz ステータスパケット（計 53B）。レート PID ゲイン 9 個は PC 側ツールの
-/// モータ指令再構成用。
+/// current_ma was appended AFTER pid_gains (not inserted) so udp_capture.py can
+/// keep decoding older firmware images by TOTAL packet length alone: v1=17B
+/// (12B payload, no gains, no current), v2=53B (48B payload, +9 gains), v3=57B
+/// (52B payload, +current_ma) — see udp_capture.py's PKT_STATUS length dispatch.
+/// 単独 1Hz ステータスパケット（計 57B = header 4B + payload 52B + checksum 1B）。
+/// レート PID ゲイン 9 個は PC 側ツールのモータ指令再構成用。current_ma は pid_gains
+/// の後ろに追記した（挿入ではない）ので、udp_capture.py はパケット全長だけで旧ファーム
+/// も読み続けられる: v1=17B（payload12B, ゲイン無し・電流無し）、v2=53B（payload48B,
+/// +ゲイン9個）、v3=57B（payload52B, +current_ma）— udp_capture.py の PKT_STATUS
+/// 長分岐を参照。
 struct WireStatusPayload {
     uint32_t uptime_ms;
     float    voltage;          // [V]
@@ -204,8 +212,13 @@ struct WireStatusPayload {
                                // read over WiFi (no serial); it is constant per boot.
                                // 起動時リセット理由。墜落→再起動後に無線で原因を読める。
     float    pid_gains[9];     // roll kp/ti/td, pitch kp/ti/td, yaw kp/ti/td
+    float    current_ma;       // [mA] battery current (PowerData.current) — CW/CCW motor
+                               // asymmetry diagnostics + in-flight current monitoring.
+                               // Appended last for wire compatibility (see struct comment).
+                               // バッテリ電流。CW/CCW モータ非対称診断＋飛行中電流監視用。
+                               // 電文互換のため末尾に追記（struct コメント参照）。
 };
-static_assert(sizeof(WireStatusPayload) == 48, "wire drift");
+static_assert(sizeof(WireStatusPayload) == 52, "wire drift");
 
 #pragma pack(pop)
 
@@ -332,8 +345,8 @@ private:
     size_t  entry_count_offset_ = 0;
 };
 
-/// Build the standalone 1Hz status packet into `buffer` (≥ 53B); returns length.
-/// 単独 1Hz ステータスパケットを buffer（53B 以上）へ構築し、長さを返す。
+/// Build the standalone 1Hz status packet into `buffer` (≥ 57B); returns length.
+/// 単独 1Hz ステータスパケットを buffer（57B 以上）へ構築し、長さを返す。
 inline size_t buildStatusPacket(uint8_t* buffer, uint16_t sequence,
                                 const WireStatusPayload& payload)
 {

@@ -696,18 +696,25 @@ TEST(wire_status_packet)
     payload.voltage      = 4.1f;
     payload.flight_state = 1;
     payload.pid_gains[0] = 1.83e-4f;
+    payload.current_ma   = 612.5f;
 
     uint8_t buf[64];
     const size_t length = buildStatusPacket(buf, 3, payload);
 
-    // 53 bytes total — the size udp_capture.py expects for 0x4F with gains.
-    ASSERT_TRUE(length == 53);
+    // 57 bytes total — the size udp_capture.py expects for 0x4F with gains + current.
+    ASSERT_TRUE(length == 57);
     ASSERT_TRUE(buf[0] == kPktStatus);
     ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
 
     float volt;
     memcpy(&volt, &buf[4 + 4], 4);
     ASSERT_NEAR(volt, 4.1f, 1e-6f);
+
+    // current_ma is the LAST field (offset: header 4B + payload up to pid_gains
+    // end = 4 + 48 = 52), so this assert also pins the wire-compat append point.
+    float current;
+    memcpy(&current, &buf[4 + 48], 4);
+    ASSERT_NEAR(current, 612.5f, 1e-3f);
 }
 
 TEST(wire_quantize_saturation)

@@ -344,6 +344,7 @@ void DataStream::sendStatus()
     datastream::WireStatusPayload payload = {};
     payload.uptime_ms     = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     payload.voltage       = power.voltage;
+    payload.current_ma    = power.current;   // CW/CCW asymmetry + in-flight monitoring
     payload.flight_state  = mode.state;
     payload.sensor_health = health.healthy_mask;
     payload.eskf_status   = 0x01;   // estimator running / 推定器稼働中

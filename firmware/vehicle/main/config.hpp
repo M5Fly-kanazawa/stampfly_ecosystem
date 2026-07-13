@@ -310,4 +310,101 @@ inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 // だった。値は旧 vehicle/ の飛行実績 POWER_BATTERY_CHANNEL。
 inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 
+// =============================================================================
+// Bench Motor Test (CLI `motor test|all|sweep|stop`)
+// ベンチモータテスト（CLI `motor test|all|sweep|stop`）
+// =============================================================================
+
+// Auto-stop window for a single MotorTest FACT (control_task.cpp): the test
+// duty is applied only while esp_timer_get_time() < expiry_us, so a CLI client
+// that dies (USB unplugged, TCP drop) cannot leave a motor spinning forever.
+// `motor sweep` republishes a fresh FACT before this window elapses (see
+// MOTOR_SWEEP_KEEPALIVE_US) to hold a duty for longer than 2s.
+// MotorTest FACT 1件の自動停止窓（control_task.cpp）: esp_timer_get_time() <
+// expiry_us の間だけ duty が適用されるため、CLI クライアントが死んでも
+// （USB切断・TCP切断）モータが回り続けない。`motor sweep` はこの窓が尽きる前に
+// 新しい FACT を再発行し（MOTOR_SWEEP_KEEPALIVE_US 参照）2秒を超えて duty を保持する。
+inline constexpr uint32_t MOTOR_TEST_DURATION_US = 2000000;  // 2 s
+
+// Default duty/duration for `motor sweep` (no args): 40% is high enough for a
+// CW/CCW current asymmetry to clear sensor/vibration noise while staying well
+// under MOTOR_SWEEP_MAX_DUTY_PCT; 3 s/motor leaves >1s of settled samples
+// after the transient-skip window (MOTOR_SWEEP_SETTLE_FRACTION).
+// `motor sweep`（引数無し）の既定 duty・持続時間。40% は CW/CCW の電流非対称が
+// センサ/振動ノイズを超えて現れるのに十分で、上限より十分低い。3秒/motor は
+// 過渡除外窓（MOTOR_SWEEP_SETTLE_FRACTION）の後に1秒超の安定サンプル区間を残す。
+inline constexpr int   MOTOR_SWEEP_DEFAULT_DUTY_PCT = 40;
+inline constexpr float MOTOR_SWEEP_DEFAULT_SEC      = 3.0f;
+
+// Duty range for `motor sweep`. Floor avoids a duty too low for some motors
+// to spin at all (a stalled-rotor reading would look like a false CW/CCW
+// asymmetry); ceiling keeps a safety margin under 100% with props mounted —
+// this is a bench diagnostic duty, not a flight duty.
+// `motor sweep` の duty 範囲。下限は一部モータが回転しない不動 duty を避ける
+// （失速電流を偽の CW/CCW 非対称と誤判定するため）。上限はプロペラ装着時の
+// 安全マージン — 飛行 duty ではなくベンチ診断用の duty。
+inline constexpr int MOTOR_SWEEP_MIN_DUTY_PCT = 5;
+inline constexpr int MOTOR_SWEEP_MAX_DUTY_PCT = 80;
+
+// Per-motor spin duration range [s] for `motor sweep`. Floor leaves enough
+// sampling time after the transient-skip half-window to average a handful of
+// 10Hz power samples; ceiling bounds the CLI command's total blocking time.
+// Worst case = MOTOR_SWEEP_BASELINE_US (1s) + 4 x (ceiling + MOTOR_SWEEP_REST_US
+// (1s)) = 1 + 4 x (10 + 1) = 45 s. That worst case is now abortable mid-run
+// (see collectPower()/tcpAbortRequested() in cli_task.cpp — any input on the
+// TCP session that issued the sweep stops it immediately), so this bound is a
+// hard cap, not a wait every operator eats in full.
+// `motor sweep` の1モータあたり回転時間の範囲[s]。下限は過渡除外の半窓の後、
+// 10Hz 電源サンプルを数点平均するのに十分な時間を残す。上限は CLI コマンドの
+// 合計ブロック時間を抑える。最悪ケース = MOTOR_SWEEP_BASELINE_US（1秒）+
+// 4×（上限 + MOTOR_SWEEP_REST_US（1秒））= 1 + 4×(10+1) = 45秒。この最悪ケースは
+// 実行中に中断可能（cli_task.cpp の collectPower()/tcpAbortRequested() 参照 —
+// スイープを発行した TCP セッションへの入力で即座に停止）になったので、この値は
+// 上限であって操縦者が毎回丸ごと待つ時間ではない。
+inline constexpr float MOTOR_SWEEP_MIN_SEC = 1.0f;
+inline constexpr float MOTOR_SWEEP_MAX_SEC = 10.0f;
+
+// All-off baseline sampling duration before the sweep starts, and the settle/
+// rest gap held between motors. Both are long enough for the INA3221 at 10Hz
+// (100ms period, see PowerTask) to yield several fresh samples, and for the
+// previous motor's spin-down transient to clear before the next motor starts.
+// スイープ開始前の全モータ停止時ベースライン取得時間、およびモータ間の休止時間。
+// いずれも INA3221 の 10Hz（周期100ms, PowerTask 参照）で複数の新規サンプルを
+// 得るのに十分な長さで、直前モータの回転停止過渡が収まってから次を開始する。
+inline constexpr uint32_t MOTOR_SWEEP_BASELINE_US = 1000000;  // 1.0 s
+inline constexpr uint32_t MOTOR_SWEEP_REST_US     = 1000000;  // 1.0 s
+
+// Fraction of each motor's spin duration treated as start-up transient and
+// excluded from the current/voltage average — only the back half is sampled.
+// 各モータの回転時間のうち起動過渡として除外し平均に含めない割合 — 後半のみ
+// サンプルする。
+inline constexpr float MOTOR_SWEEP_SETTLE_FRACTION = 0.5f;
+
+// Keep a MotorTest FACT alive well inside MOTOR_TEST_DURATION_US so a sweep
+// step longer than the auto-expiry does not silently drop to zero duty
+// mid-sample (must stay < MOTOR_TEST_DURATION_US).
+// MOTOR_TEST_DURATION_US の余裕を持って MotorTest FACT を再発行し、自動失効
+// より長いスイープ区間でサンプル中に duty がゼロへ落ちないようにする
+// （MOTOR_TEST_DURATION_US より短いこと）。
+inline constexpr uint32_t MOTOR_SWEEP_KEEPALIVE_US = 1000000;  // 1.0 s
+
+// Power-topic poll period while collecting sweep statistics: finer than the
+// 10Hz publish period (100ms, see PowerTask) so a fresh sample is never
+// missed between polls; duplicate reads are rejected by PowerData.timestamp.
+// スイープ統計収集中の power トピック・ポーリング周期。10Hz の publish 周期
+// （100ms, PowerTask 参照）より細かく、新規サンプルを取りこぼさない。重複読みは
+// PowerData.timestamp で除く。
+inline constexpr uint32_t MOTOR_SWEEP_POLL_MS = 20;  // 20 ms
+
+// Minimum plausible pack voltage for the low-battery sweep auto-abort
+// (collectPower() in cli_task.cpp): guards against a stale/zero PowerData
+// sample (e.g. polled before PowerTask's first publish) being misread as
+// "below threshold" and aborting a perfectly healthy sweep. Mirrors sf_notify's
+// own low-battery guard constant (kVoltageValidMin, notify.cpp) — same value.
+// 低電圧スイープ自動中止（cli_task.cpp の collectPower()）の下限妥当性ガード:
+// 未初期化/ゼロの PowerData サンプル（PowerTask 初回 publish 前のポーリング等）を
+// 「閾値未満」と誤判定し、健全なスイープを誤って中断しないため。sf_notify 自身の
+// 低電圧ガード定数（kVoltageValidMin, notify.cpp）と同じ値。
+inline constexpr float MOTOR_SWEEP_VOLTAGE_VALID_MIN = 0.1f;
+
 }  // namespace config
