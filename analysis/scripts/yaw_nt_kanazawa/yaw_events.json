@@ -1,0 +1,125 @@
+{
+ "events": [
+  {
+   "file": "stampfly_udp_20260627T020050.jsonl",
+   "t0": 32.902621,
+   "t1": 40.042621,
+   "dpsi_deg": -87.79537790214526,
+   "peak_rate_dps": 112.37805181051442,
+   "mode": "ALT_HOLD",
+   "voltage": 4.224,
+   "event_id": "E0"
+  },
+  {
+   "file": "stampfly_udp_20260627T164611.jsonl",
+   "t0": 114.141208,
+   "t1": 124.781208,
+   "dpsi_deg": 11.520560261650164,
+   "peak_rate_dps": 166.6463431437994,
+   "mode": "POS_HOLD",
+   "voltage": 3.816,
+   "event_id": "E2"
+  },
+  {
+   "file": "stampfly_udp_20260627T164611.jsonl",
+   "t0": 182.228707,
+   "t1": 194.861208,
+   "dpsi_deg": 9.370650813533569,
+   "peak_rate_dps": 117.43902391000795,
+   "mode": "POS_HOLD",
+   "voltage": 3.616,
+   "event_id": "E3"
+  },
+  {
+   "file": "stampfly_udp_20260627T165713.jsonl",
+   "t0": 28.99213,
+   "t1": 50.002099,
+   "dpsi_deg": -1.5300235580717123,
+   "peak_rate_dps": 189.0243924498357,
+   "mode": "POS_HOLD",
+   "voltage": 3.952,
+   "event_id": "E5"
+  },
+  {
+   "file": "stampfly_udp_20260627T165713.jsonl",
+   "t0": 92.204599,
+   "t1": 103.807093,
+   "dpsi_deg": 6.455797808597529,
+   "peak_rate_dps": 192.7439085661495,
+   "mode": "POS_HOLD",
+   "voltage": 3.736,
+   "event_id": "E4"
+  },
+  {
+   "file": "stampfly_udp_20260627T165713.jsonl",
+   "t0": 173.492101,
+   "t1": 185.517099,
+   "dpsi_deg": -16.062075881236808,
+   "peak_rate_dps": 238.2317253440055,
+   "mode": "POS_HOLD",
+   "voltage": 3.568,
+   "event_id": "E1"
+  }
+ ],
+ "flights": [
+  {
+   "file": "stampfly_udp_20260627T020050.jsonl",
+   "t0": 32.902621,
+   "t1": 47.350119,
+   "max_abs_dpsi_deg": 90.6516136164589,
+   "modes": "ALT_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260627T020137.jsonl",
+   "t0": 80.200117,
+   "t1": 258.335119,
+   "max_abs_dpsi_deg": 18.57961059025292,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260627T164611.jsonl",
+   "t0": 33.14121,
+   "t1": 199.556206,
+   "max_abs_dpsi_deg": 84.80670493662221,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260627T164611.jsonl",
+   "t0": 202.71895,
+   "t1": 208.796204,
+   "max_abs_dpsi_deg": 15.541985440596335,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260627T165713.jsonl",
+   "t0": 21.217095,
+   "t1": 54.849601,
+   "max_abs_dpsi_deg": 101.85473195282019,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260627T165713.jsonl",
+   "t0": 56.294599,
+   "t1": 196.519601,
+   "max_abs_dpsi_deg": 223.78209219373073,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260629T145357.jsonl",
+   "t0": 56.836759,
+   "t1": 59.45675,
+   "max_abs_dpsi_deg": 8.36403549205286,
+   "modes": "POS_HOLD"
+  },
+  {
+   "file": "stampfly_udp_20260629T145526.jsonl",
+   "t0": 35.023193,
+   "t1": 213.628191,
+   "max_abs_dpsi_deg": 13.732780686046887,
+   "modes": "POS_HOLD"
+  }
+ ],
+ "sign_check": "dpsi/dt(quatアンラップ由来)とgyro[2]の相関係数: 平均=0.9929, 最小=0.9840, 最大=0.9974 (8区間で計算)。 正の強い相関であり、gyro[2]とquat由来ヨーレートの符号は整合している。",
+ "notes": "stampfly_udp_20260627T020050.jsonl: imu.ts が重複（dt=0）する箇所 261 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260627T020137.jsonl: imu.ts が重複（dt=0）する箇所 4773 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260627T164536.jsonl: 飛行区間（motor_duty>0.05が2秒以上）が検出されなかった / stampfly_udp_20260627T164611.jsonl: imu.ts が重複（dt=0）する箇所 3778 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260627T165645.jsonl: imu.ts が重複（dt=0）する箇所 2 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260627T165645.jsonl: 飛行区間（motor_duty>0.05が2秒以上）が検出されなかった / stampfly_udp_20260627T165713.jsonl: imu.ts が重複（dt=0）する箇所 3888 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260629T145357.jsonl: imu.ts が重複（dt=0）する箇所 148 件（逆行ではなく同一tsの重複レコード。ラップは未検出） / stampfly_udp_20260629T145526.jsonl: imu.ts が重複（dt=0）する箇所 4741 件（逆行ではなく同一tsの重複レコード。ラップは未検出）",
+ "note": "mode/modes labels regenerated 2026-07-13: the original scan used a one-off enum map (2=STABILIZE,3=ALT_HOLD); corrected to firmware/vehicle flight_state.hpp enum (2=ALT_HOLD,3=POS_HOLD). event_id (E0..E5) assigned by descending |dpsi_deg| as used in the report. dpsi_deg is the net signed change over the event window; detection criterion is round-trip excursion >=45 deg within an 8 s sliding window (see scripts/yaw_event_scan.py)."
+}

@@ -1,0 +1,313 @@
+{
+  "params": {
+    "RATE_YAW_KP": 0.001901691,
+    "RATE_YAW_TI": 0.8,
+    "RATE_YAW_TD": 0.01,
+    "RATE_YAW_KP_OLD": 0.00531,
+    "PID_ETA": 0.125,
+    "YAW_HOLD_KP": 3.0,
+    "YAW_HOLD_RATE_MAX": 2.0,
+    "IZZ": 2.04e-05,
+    "HOVER_THRUST_CORR": 1.12,
+    "MAX_YAW_TORQUE_NOMINAL_S0": 0.0022,
+    "cap_S1_nominal": 0.0029,
+    "S4_envelope_real_Nm": 0.0032,
+    "DT_SIM": 0.0025
+  },
+  "openloop_validation": {
+    "E0": {
+      "name": "E0",
+      "grid_start": 30.945123,
+      "t0": 30.0,
+      "t1": 43.0,
+      "preroll_actual_s": -0.9451229999999988,
+      "rms_error_Nm": 0.00014498643762620158,
+      "ref_rms_Nm": 0.0009696781257497296,
+      "rms_error_frac_of_ref": 0.14952016940064713,
+      "correlation": 0.977852163049563,
+      "n_scored": 602,
+      "gap_fraction_r": 0.0,
+      "gap_fraction_rate_ref": 0.0,
+      "seed_state_at_t0": {
+        "integral": 4.879775249900259e-10,
+        "deriv_filter": 0.0,
+        "prev_error": 0.000164225216396153,
+        "prev_measurement": -0.000164225216396153,
+        "first_run": false
+      }
+    },
+    "E1": {
+      "name": "E1",
+      "grid_start": 160.0,
+      "t0": 170.0,
+      "t1": 188.0,
+      "preroll_actual_s": 10.0,
+      "rms_error_Nm": 0.00030612987367117814,
+      "ref_rms_Nm": 0.0010498061089899565,
+      "rms_error_frac_of_ref": 0.29160610807048265,
+      "correlation": 0.976607891826742,
+      "n_scored": 691,
+      "gap_fraction_r": 0.23427301763643937,
+      "gap_fraction_rate_ref": 0.23427301763643937,
+      "seed_state_at_t0": {
+        "integral": -0.0001487985332412603,
+        "deriv_filter": 0.024525188530195363,
+        "prev_error": -0.5665144494768817,
+        "prev_measurement": 0.3820693744870029,
+        "first_run": false
+      }
+    },
+    "E2": {
+      "name": "E2",
+      "grid_start": 100.0,
+      "t0": 110.0,
+      "t1": 127.0,
+      "preroll_actual_s": 10.0,
+      "rms_error_Nm": 0.0003042709510135944,
+      "ref_rms_Nm": 0.001161423918170482,
+      "rms_error_frac_of_ref": 0.26198095824726364,
+      "correlation": 0.9788260109174616,
+      "n_scored": 805,
+      "gap_fraction_r": 0.053521540949860315,
+      "gap_fraction_rate_ref": 0.053521540949860315,
+      "seed_state_at_t0": {
+        "integral": 0.0006338561090150801,
+        "deriv_filter": -0.02329183280631497,
+        "prev_error": 0.030064008242521582,
+        "prev_measurement": -0.05306400824252158,
+        "first_run": false
+      }
+    },
+    "E4": {
+      "name": "E4",
+      "grid_start": 79.0,
+      "t0": 89.0,
+      "t1": 106.0,
+      "preroll_actual_s": 10.0,
+      "rms_error_Nm": 0.00040496769722995894,
+      "ref_rms_Nm": 0.0013638934179099297,
+      "rms_error_frac_of_ref": 0.29692033989763167,
+      "correlation": 0.9155108601277597,
+      "n_scored": 591,
+      "gap_fraction_r": 0.308631083664167,
+      "gap_fraction_rate_ref": 0.308631083664167,
+      "seed_state_at_t0": {
+        "integral": -0.00012926020581714704,
+        "deriv_filter": 0.03046201437862095,
+        "prev_error": 0.4409243594329634,
+        "prev_measurement": -0.38344517608628464,
+        "first_run": false
+      }
+    }
+  },
+  "events": {
+    "E0": {
+      "name": "E0",
+      "file": "stampfly_udp_20260627T020050.jsonl",
+      "t0": 30.0,
+      "t1": 43.0,
+      "eff_t0": 30.945123,
+      "t0_clip_note": "log data starts at 30.945s, 0.945s after nominal t0=30.0s",
+      "envelope_real_mNm": 2.9419478117470788,
+      "tau_d_interpolated_fraction": 0.0,
+      "quiet_bias_mNm": 0.708711093278893,
+      "quiet_bias_is_fallback": true,
+      "real_max_dev_deg": 87.78339648076216,
+      "s0_sim_max_dev_deg": 65.85328380030721,
+      "repro_rms_deg": 35.06172439686981,
+      "scenarios": {
+        "S0": {
+          "max_dev_deg": 65.85328380030721,
+          "peak_t_rel_s": 8.852500000000003,
+          "recovery_time_s": 9.632500000000004
+        },
+        "S1": {
+          "max_dev_deg": 9.111042766206598,
+          "peak_t_rel_s": 8.157500000000002,
+          "recovery_time_s": 8.157500000000002
+        },
+        "S2": {
+          "max_dev_deg": 9.11047634358314,
+          "peak_t_rel_s": 8.157500000000002,
+          "recovery_time_s": 8.157500000000002
+        },
+        "S3": {
+          "max_dev_deg": 9.11047634358314,
+          "peak_t_rel_s": 8.157500000000002,
+          "recovery_time_s": 8.157500000000002
+        },
+        "S4": {
+          "max_dev_deg": 9.111042766206598,
+          "peak_t_rel_s": 8.157500000000002,
+          "recovery_time_s": 8.157500000000002
+        },
+        "S5": {
+          "max_dev_deg": 38.93739653781619,
+          "peak_t_rel_s": 8.764999999999997,
+          "recovery_time_s": 9.4025
+        },
+        "S6": {
+          "max_dev_deg": 65.85328380030721,
+          "peak_t_rel_s": 8.852500000000003,
+          "recovery_time_s": 9.607499999999998
+        }
+      }
+    },
+    "E1": {
+      "name": "E1",
+      "file": "stampfly_udp_20260627T165713.jsonl",
+      "t0": 170.0,
+      "t1": 188.0,
+      "eff_t0": 170.0,
+      "t0_clip_note": null,
+      "envelope_real_mNm": 2.2110637838998177,
+      "tau_d_interpolated_fraction": 0.056439942112879886,
+      "quiet_bias_mNm": 0.7619443324515065,
+      "quiet_bias_is_fallback": false,
+      "real_max_dev_deg": 96.61233086294087,
+      "s0_sim_max_dev_deg": 21.660722017437532,
+      "repro_rms_deg": 18.44171836346399,
+      "scenarios": {
+        "S0": {
+          "max_dev_deg": 21.660722017437532,
+          "peak_t_rel_s": 11.622500000000002,
+          "recovery_time_s": 12.155000000000001
+        },
+        "S1": {
+          "max_dev_deg": 12.580619221900962,
+          "peak_t_rel_s": 11.534999999999997,
+          "recovery_time_s": 11.762499999999989
+        },
+        "S2": {
+          "max_dev_deg": 1257.0740764462255,
+          "peak_t_rel_s": 14.504999999999995,
+          "recovery_time_s": null
+        },
+        "S3": {
+          "max_dev_deg": 798.4356519391882,
+          "peak_t_rel_s": 14.379999999999995,
+          "recovery_time_s": null
+        },
+        "S4": {
+          "max_dev_deg": 12.580619221900962,
+          "peak_t_rel_s": 11.534999999999997,
+          "recovery_time_s": 11.762499999999989
+        },
+        "S5": {
+          "max_dev_deg": 16.73077011600076,
+          "peak_t_rel_s": 11.602499999999992,
+          "recovery_time_s": 12.215000000000003
+        },
+        "S6": {
+          "max_dev_deg": 21.660722017437532,
+          "peak_t_rel_s": 11.622500000000002,
+          "recovery_time_s": 12.155000000000001
+        }
+      }
+    },
+    "E2": {
+      "name": "E2",
+      "file": "stampfly_udp_20260627T164611.jsonl",
+      "t0": 110.0,
+      "t1": 127.0,
+      "eff_t0": 110.0,
+      "t0_clip_note": null,
+      "envelope_real_mNm": 2.8397820081109346,
+      "tau_d_interpolated_fraction": 0.016149068322981366,
+      "quiet_bias_mNm": 0.6288612345199731,
+      "quiet_bias_is_fallback": false,
+      "real_max_dev_deg": 59.98082649747488,
+      "s0_sim_max_dev_deg": 59.516057237522446,
+      "repro_rms_deg": 0.8585714332765177,
+      "scenarios": {
+        "S0": {
+          "max_dev_deg": 59.516057237522446,
+          "peak_t_rel_s": 12.415000000000006,
+          "recovery_time_s": 13.2025
+        },
+        "S1": {
+          "max_dev_deg": 15.62004934731358,
+          "peak_t_rel_s": 14.762500000000003,
+          "recovery_time_s": 15.037499999999994
+        },
+        "S2": {
+          "max_dev_deg": 150.92952056560378,
+          "peak_t_rel_s": 15.040000000000006,
+          "recovery_time_s": 16.42
+        },
+        "S3": {
+          "max_dev_deg": 15.620049499150621,
+          "peak_t_rel_s": 14.762500000000003,
+          "recovery_time_s": 15.037499999999994
+        },
+        "S4": {
+          "max_dev_deg": 15.62004934731358,
+          "peak_t_rel_s": 14.762500000000003,
+          "recovery_time_s": 15.037499999999994
+        },
+        "S5": {
+          "max_dev_deg": 41.637053934513425,
+          "peak_t_rel_s": 12.385000000000005,
+          "recovery_time_s": 13.117500000000007
+        },
+        "S6": {
+          "max_dev_deg": 59.516057237522446,
+          "peak_t_rel_s": 12.415000000000006,
+          "recovery_time_s": 13.185000000000002
+        }
+      }
+    },
+    "E4": {
+      "name": "E4",
+      "file": "stampfly_udp_20260627T165713.jsonl",
+      "t0": 89.0,
+      "t1": 106.0,
+      "eff_t0": 89.0,
+      "t0_clip_note": null,
+      "envelope_real_mNm": 2.7295952092738416,
+      "tau_d_interpolated_fraction": 0.08460236886632826,
+      "quiet_bias_mNm": 0.7619443324515065,
+      "quiet_bias_is_fallback": false,
+      "real_max_dev_deg": 122.54182577460809,
+      "s0_sim_max_dev_deg": 126.01871672974335,
+      "repro_rms_deg": 2.379174483473936,
+      "scenarios": {
+        "S0": {
+          "max_dev_deg": 126.01871672974335,
+          "peak_t_rel_s": 11.842500000000001,
+          "recovery_time_s": 13.180000000000007
+        },
+        "S1": {
+          "max_dev_deg": 11.128197274437655,
+          "peak_t_rel_s": 14.760000000000005,
+          "recovery_time_s": 14.939999999999998
+        },
+        "S2": {
+          "max_dev_deg": 11.128197458972512,
+          "peak_t_rel_s": 14.760000000000005,
+          "recovery_time_s": 14.939999999999998
+        },
+        "S3": {
+          "max_dev_deg": 11.128197458972512,
+          "peak_t_rel_s": 14.760000000000005,
+          "recovery_time_s": 14.939999999999998
+        },
+        "S4": {
+          "max_dev_deg": 11.128197274437655,
+          "peak_t_rel_s": 14.760000000000005,
+          "recovery_time_s": 14.939999999999998
+        },
+        "S5": {
+          "max_dev_deg": 95.99862754295656,
+          "peak_t_rel_s": 11.792500000000004,
+          "recovery_time_s": 12.862499999999997
+        },
+        "S6": {
+          "max_dev_deg": 126.01871672974335,
+          "peak_t_rel_s": 11.842500000000001,
+          "recovery_time_s": 12.909999999999997
+        }
+      }
+    }
+  }
+}
