@@ -1,0 +1,8 @@
+[MOTOR] sweep: duty=40% sec/motor=3.0 (~17s on the vehicle) — props off or hold the craft
+motor sweep: duty=40% sec/motor=3.0 (~17s total) — PROPS OFF or hold the craft, DISARMED only. Send anything (or Enter) on this session to abort.
+baseline    : V=4.26V I=18mA (n=10)
+M1(FR,CCW) : V=4.22V I=72mA std=1 dI=+55mA (n=16)
+M2(RR,CW)  : V=4.22V I=70mA std=0 dI=+53mA (n=16)
+M3(RL,CCW) : V=4.21V I=70mA std=1 dI=+53mA (n=16)
+M4(FL,CW)  : V=4.21V I=71mA std=0 dI=+53mA (n=15)
+SWEEP m1=72.5 m2=70.3 m3=70.4 m4=70.5 base=17.6 duty=40 vbat=4.26
