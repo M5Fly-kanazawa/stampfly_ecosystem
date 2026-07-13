@@ -1,0 +1,63 @@
+Blockly vendored bundle for `sf blocks` (offline classroom use)
+`sf blocks` 用にベンダリングした Blockly バンドル（オフライン教室運用）
+
+Version   : 13.1.1 (latest stable on npm at download time)
+Downloaded: 2026-07-13
+
+Files and their source URLs:
+  blockly.min.js
+    https://cdn.jsdelivr.net/npm/blockly@13.1.1/blockly.min.js
+  msg/ja.js
+    https://cdn.jsdelivr.net/npm/blockly@13.1.1/msg/ja.js
+  LICENSE (Apache-2.0, blockly.min.js/msg/ja.js have no LICENSE file inside
+  the npm package itself, so it is taken from the matching GitHub tag)
+    https://raw.githubusercontent.com/google/blockly/blockly-v13.1.1/LICENSE
+
+Loading idiom verified by inspecting the downloaded files (do not guess from
+memory — this bundle's internal wiring changed across major Blockly
+versions):
+実際にダウンロードしたファイルを調べて確認したロード方法（記憶で推測しない —
+このバンドルの内部配線は Blockly のメジャーバージョンで変わる）：
+
+1. blockly.min.js is FOUR concatenated UMD modules (core, English messages,
+   built-in blocks library, JavaScript generator), each wrapped in its own
+   `;(function(root, factory){ ... }(this, function(){ ... }))`. Loaded as a
+   plain <script> tag (not a module), each module's "Script" branch runs in
+   order and wires itself onto the previous one:
+     - module 1 (core):        `root.Blockly = factory()`
+     - module 2 (en messages):  merges into `root.Blockly.Msg`
+     - module 3 (blocks lib):   `root.Blockly.libraryBlocks = factory(root.Blockly)`
+                                 (as a side effect of running, this also
+                                 registers every built-in block, e.g.
+                                 controls_repeat_ext / math_number, into
+                                 `Blockly.Blocks`)
+     - module 4 (JS generator): `root.javascript = factory(root.Blockly)`
+                                 `root.Blockly.JavaScript = root.javascript.javascriptGenerator`
+   So after a single <script src=".../blockly.min.js">, both `Blockly` and
+   `javascript` (with `javascript.javascriptGenerator`, `javascript.Order`)
+   are on `window`.
+   blockly.min.js は4つの UMD モジュールを連結したもの（コア／英語メッセージ／
+   組み込みブロック集／JavaScript ジェネレータ）。<script> タグ（module では
+   ない）として読み込むと "Script" 分岐が順に走り、上記の通り前段に配線される。
+   1本の <script> 読み込み後、`window.Blockly` と `window.javascript`
+   （`javascript.javascriptGenerator` / `javascript.Order`）の両方が使える。
+
+2. msg/ja.js MUST be loaded with a separate <script> tag AFTER blockly.min.js
+   (its "Script" branch does `for (key in messages) root.Blockly.Msg[key] =
+   messages[key]`, i.e. it patches the already-created `Blockly.Msg`
+   in place — loading order matters).
+   msg/ja.js は blockly.min.js の"後"に別 <script> で読み込むこと（既存の
+   `Blockly.Msg` に日本語訳を上書きするだけなので順序が重要）。
+
+3. The JS generator instance is `javascript.javascriptGenerator` (also
+   aliased as `Blockly.JavaScript`); custom block generators are added via
+   `javascript.javascriptGenerator.forBlock['drone_takeoff'] = (block, gen) => ...`.
+   JS ジェネレータの実体は `javascript.javascriptGenerator`
+   （`Blockly.JavaScript` としても参照可）。カスタムブロックの生成関数は
+   `javascript.javascriptGenerator.forBlock['drone_takeoff'] = ...` で登録する。
+
+4. Workspace persistence: `Blockly.serialization.workspaces.save(workspace)`
+   / `.load(state, workspace)` (JSON) — confirmed present at
+   `Blockly.serialization.workspaces`.
+   ワークスペースの保存・復元は `Blockly.serialization.workspaces.save/load`
+   （JSON 形式）が使える。

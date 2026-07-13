@@ -74,6 +74,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf cal list` | キャリブレーション一覧 |
 | `sf cal gyro/accel/mag` | 各種キャリブレーション |
 | `sf sim list/run` | シミュレータ操作 |
+| `sf blocks` | ブロックプログラミングWeb UI（Blockly、--demo でデモモード）|
 
 ### Genesis Simulator
 Genesis物理シミュレータはvenv仮想環境にインストールされている:

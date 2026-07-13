@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<!--
+  sf blocks — Blockly-based block-programming UI for StampFly.
+  Talks to the local bridge (`sf blocks`, 127.0.0.1 only) that forwards
+  /api/cmd etc. to the drone's Tello-compatible UDP API (see
+  firmware/vehicle/tasks/api_task.cpp). Fully offline: only /vendor/blockly/*
+  is loaded, no CDN / internet references anywhere on this page — classrooms
+  run with the PC joined to the drone's own WiFi AP and nothing else.
+  sf blocks — StampFly 用 Blockly ブロックプログラミング UI。
+  ローカルブリッジ（`sf blocks`、127.0.0.1 限定）経由で /api/cmd 等を叩き、
+  機体の Tello 互換 UDP API（firmware/vehicle/tasks/api_task.cpp）を操作する。
+  完全オフライン: 読み込むのは /vendor/blockly/* のみで CDN・インターネット参照は
+  一切なし — 教室では PC を機体自身の WiFi AP に接続するだけで動く。
+-->
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StampFly ブロックプログラミング</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --border:#d7dde5; --text:#1f2937; --muted:#6b7280;
+    --accent:#2563eb; --accent-dark:#1d4ed8;
+    --run:#16a34a; --run-dark:#15803d;
+    --stop:#eab308; --stop-dark:#ca8a04;
+    --danger:#dc2626; --danger-dark:#b91c1c;
+    --ok:#16a34a; --err:#dc2626; --warn:#b45309; --info:#374151;
+    --chip-bg:#eef2f7;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+    background:var(--bg); color:var(--text);
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,-apple-system,sans-serif;
+  }
+
+  /* ---- header --------------------------------------------------------- */
+  header{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--border);
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  header h1{font-size:17px; margin:0; font-weight:700; white-space:nowrap}
+  .host-field{display:flex; align-items:center; gap:6px}
+  .host-field label{font-size:12px; color:var(--muted)}
+  .host-field input{
+    width:150px; padding:5px 8px; border:1px solid var(--border); border-radius:6px;
+    font:inherit; font-size:13px;
+  }
+  button{
+    font:inherit; border:none; border-radius:8px; cursor:pointer;
+    transition:filter .1s, opacity .1s;
+  }
+  button:disabled{cursor:not-allowed; opacity:.45}
+  button:not(:disabled):hover{filter:brightness(1.06)}
+  button:not(:disabled):active{filter:brightness(.94)}
+  #connectBtn{
+    padding:7px 16px; font-size:13px; font-weight:600; color:#fff;
+    background:var(--accent);
+  }
+  #connectBtn.connected{background:var(--danger)}
+  .chip-row{display:flex; gap:8px; flex-wrap:wrap}
+  .chip{
+    display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px;
+    background:var(--chip-bg); font-size:12px; color:var(--info); white-space:nowrap;
+  }
+  .chip .dot{width:8px; height:8px; border-radius:50%; background:#9ca3af}
+  .chip.on .dot{background:var(--ok)}
+  .badge-demo{
+    display:none; padding:5px 10px; border-radius:999px; font-size:12px; font-weight:700;
+    background:#fef3c7; color:#92400e; border:1px solid #fcd34d; white-space:nowrap;
+  }
+  .badge-demo.show{display:inline-block}
+  .spacer{flex:1}
+  #clearBtn{
+    padding:6px 12px; font-size:12px; color:var(--muted);
+    background:transparent; border:1px solid var(--border);
+  }
+
+  /* ---- main layout ------------------------------------------------------ */
+  .main-row{flex:1; display:flex; min-height:0}
+  .workspace-wrap{flex:1 1 auto; position:relative; min-width:0; background:#fafbfc}
+  #blocklyDiv{position:absolute; inset:0}
+
+  .sidebar{
+    width:260px; flex:0 0 260px; display:flex; flex-direction:column; gap:10px;
+    padding:12px; background:var(--panel); border-left:1px solid var(--border);
+    overflow-y:auto;
+  }
+  .sidebar button{padding:12px 10px; font-size:15px; font-weight:700; color:#fff}
+  #runBtn{background:var(--run)}
+  #runBtn:not(:disabled):hover{background:var(--run-dark)}
+  #stopBtn{background:var(--stop); color:#3f2d02}
+  #stopBtn:not(:disabled):hover{background:var(--stop-dark)}
+  #emergencyBtn{
+    background:var(--danger); font-size:17px; padding:18px 10px;
+    letter-spacing:.05em;
+  }
+  #emergencyBtn:not(:disabled):hover{background:var(--danger-dark)}
+
+  .log-label{font-size:12px; color:var(--muted); margin-top:6px}
+  #log{
+    flex:1; min-height:160px; overflow-y:auto; background:#0f172a; color:#d1d5db;
+    border-radius:8px; padding:8px 10px; font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;
+  }
+  #log .t{color:#6b7280}
+  #log .ok{color:#4ade80}
+  #log .err{color:#f87171}
+  #log .warn{color:#fbbf24}
+  #log .info{color:#93c5fd}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>StampFly ブロックプログラミング</h1>
+  <div class="host-field">
+    <label for="hostInput">機体アドレス</label>
+    <input id="hostInput" type="text" value="192.168.10.1" spellcheck="false">
+  </div>
+  <button id="connectBtn">接続</button>
+  <div class="chip-row">
+    <span class="chip" id="chipConn"><span class="dot"></span><span>未接続</span></span>
+    <span class="chip"><span>バッテリー</span><b id="chipBat">--</b><span>%</span></span>
+    <span class="chip"><span>高度</span><b id="chipAlt">--</b><span>cm</span></span>
+  </div>
+  <span class="badge-demo" id="demoBadge">デモモード</span>
+  <div class="spacer"></div>
+  <button id="clearBtn" title="ワークスペースを空にする">クリア</button>
+</header>
+
+<div class="main-row">
+  <div class="workspace-wrap"><div id="blocklyDiv"></div></div>
+  <div class="sidebar">
+    <button id="runBtn">▶ 実行</button>
+    <button id="stopBtn" disabled>■ 停止</button>
+    <button id="emergencyBtn" disabled>緊急停止</button>
+    <div class="log-label">ログ</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<!-- Offline vendor Blockly only — see vendor/blockly/VERSION.txt for the
+     loading idiom this was verified against. No CDN / network scripts.
+     オフラインの vendor Blockly のみ — 読み込み方法は VERSION.txt で確認済み。
+     CDN・ネットワークスクリプトなし。 -->
+<script src="/vendor/blockly/blockly.min.js"></script>
+<script src="/vendor/blockly/msg/ja.js"></script>
+<script>
+"use strict";
+
+// ============================================================================
+// Custom block definitions (JSON) — one 'ドローン' category, Japanese labels.
+// カスタムブロック定義（JSON）— 'ドローン' カテゴリ、日本語ラベル。
+// ============================================================================
+const DRONE_BLOCK_COLOUR = 200; // hue, matches the toolbox category colour
+                                 // 色相。ツールボックスのカテゴリ色と一致させる
+
+const BLOCK_DEFS = [
+  {
+    type: "drone_takeoff",
+    message0: "離陸する",
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "ドローンを離陸させます",
+  },
+  {
+    type: "drone_land",
+    message0: "着陸する",
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "ドローンを着陸させます",
+  },
+  {
+    type: "drone_move",
+    message0: "%1 へ %2 cm 動く",
+    args0: [
+      {
+        type: "field_dropdown",
+        name: "DIR",
+        options: [
+          ["前", "forward"],
+          ["後ろ", "back"],
+          ["左", "left"],
+          ["右", "right"],
+          ["上", "up"],
+          ["下", "down"],
+        ],
+      },
+      { type: "field_number", name: "CM", value: 50, min: 10, max: 300, precision: 1 },
+    ],
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "指定した方向へ、指定した距離だけ動きます（10〜300cm）",
+  },
+  {
+    type: "drone_turn",
+    message0: "%1 に %2 度回る",
+    args0: [
+      {
+        type: "field_dropdown",
+        name: "DIR",
+        options: [
+          ["時計回り", "cw"],
+          ["反時計回り", "ccw"],
+        ],
+      },
+      { type: "field_number", name: "DEG", value: 90, min: 1, max: 360, precision: 1 },
+    ],
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "指定した向きへ、指定した角度だけ回頭します（1〜360度）",
+  },
+  {
+    type: "drone_wait",
+    message0: "%1 秒待つ",
+    args0: [
+      { type: "field_number", name: "SEC", value: 1, min: 0.1, max: 30, precision: 0.1 },
+    ],
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "指定した秒数だけ待ちます（0.1〜30秒）",
+  },
+  {
+    type: "drone_speed",
+    message0: "速度を %1 cm/s にする",
+    args0: [
+      { type: "field_number", name: "CMS", value: 50, min: 10, max: 100, precision: 1 },
+    ],
+    previousStatement: null,
+    nextStatement: null,
+    colour: DRONE_BLOCK_COLOUR,
+    tooltip: "移動速度を設定します（10〜100cm/s）",
+  },
+];
+Blockly.common.defineBlocksWithJsonArray(BLOCK_DEFS);
+
+// ============================================================================
+// JavaScript code generators — one line of `await sf.cmd(...)` /
+// `await sf.sleep(...)` per block, matching the /api/cmd whitelist exactly.
+// JavaScript コード生成 — ブロック1個につき `await sf.cmd(...)` /
+// `await sf.sleep(...)` を1行。/api/cmd のホワイトリストとそのまま対応する。
+// ============================================================================
+const { javascriptGenerator } = javascript;
+
+javascriptGenerator.forBlock["drone_takeoff"] = () => "await sf.cmd('takeoff');\n";
+javascriptGenerator.forBlock["drone_land"] = () => "await sf.cmd('land');\n";
+
+javascriptGenerator.forBlock["drone_move"] = (block) => {
+  const dir = block.getFieldValue("DIR");
+  const cm = Number(block.getFieldValue("CM"));
+  return `await sf.cmd(${JSON.stringify(dir + " " + cm)});\n`;
+};
+
+javascriptGenerator.forBlock["drone_turn"] = (block) => {
+  const dir = block.getFieldValue("DIR");
+  const deg = Number(block.getFieldValue("DEG"));
+  return `await sf.cmd(${JSON.stringify(dir + " " + deg)});\n`;
+};
+
+javascriptGenerator.forBlock["drone_wait"] = (block) => {
+  const sec = Number(block.getFieldValue("SEC"));
+  return `await sf.sleep(${sec});\n`;
+};
+
+javascriptGenerator.forBlock["drone_speed"] = (block) => {
+  const cms = Number(block.getFieldValue("CMS"));
+  return `await sf.cmd(${JSON.stringify("speed " + cms)});\n`;
+};
+
+// Block highlighting while running: emit `highlightBlock('<id>');` before every
+// statement (STATEMENT_PREFIX substitutes %1 -> the running block's id).
+// Runaway `くり返し` loops must still be abortable, so every loop iteration
+// also emits a check that throws once the user hits 停止/緊急停止.
+// 実行中のブロックをハイライト表示: 各文の前に `highlightBlock('<id>')` を挿入
+// （STATEMENT_PREFIX の %1 は実行中ブロックの id に置き換わる）。
+// 「くり返し」の暴走ループも中断できるよう、毎周回で 停止/緊急停止 後に例外を
+// 投げるチェックを挿入する。
+javascriptGenerator.STATEMENT_PREFIX = "highlightBlock(%1);\n";
+javascriptGenerator.addReservedWords("highlightBlock,sf");
+javascriptGenerator.INFINITE_LOOP_TRAP = "sf.checkAbort();\n";
+
+// ============================================================================
+// Toolbox — 'ドローン' (custom blocks), 'くり返し' (controls_repeat_ext),
+// '数' (math_number). Nothing else, per the Phase-0 scope.
+// ツールボックス — 'ドローン'（カスタムブロック）、'くり返し'
+// （controls_repeat_ext）、'数'（math_number）。Phase 0 の範囲外は含めない。
+// ============================================================================
+const TOOLBOX = {
+  kind: "categoryToolbox",
+  contents: [
+    {
+      kind: "category", name: "ドローン", colour: String(DRONE_BLOCK_COLOUR),
+      contents: [
+        { kind: "block", type: "drone_takeoff" },
+        { kind: "block", type: "drone_land" },
+        { kind: "block", type: "drone_move" },
+        { kind: "block", type: "drone_turn" },
+        { kind: "block", type: "drone_wait" },
+        { kind: "block", type: "drone_speed" },
+      ],
+    },
+    {
+      kind: "category", name: "くり返し", colour: "120",
+      contents: [
+        {
+          kind: "block", type: "controls_repeat_ext",
+          inputs: { TIMES: { shadow: { type: "math_number", fields: { NUM: 5 } } } },
+        },
+      ],
+    },
+    {
+      kind: "category", name: "数", colour: "230",
+      contents: [{ kind: "block", type: "math_number" }],
+    },
+  ],
+};
+
+// ============================================================================
+// Workspace
+// ============================================================================
+const workspace = Blockly.inject("blocklyDiv", {
+  toolbox: TOOLBOX,
+  renderer: "zelos",          // rounded, beginner-friendly blocks (Scratch-like)
+  trashcan: true,
+  grid: { spacing: 20, length: 3, colour: "#e2e6ec", snap: true },
+  zoom: { controls: true, wheel: true, startScale: 1.0, maxScale: 2.5, minScale: 0.4 },
+  move: { scrollbars: true, drag: true, wheel: false },
+});
+
+function highlightBlock(id) { workspace.highlightBlock(id); }
+
+window.addEventListener("resize", () => Blockly.svgResize(workspace));
+
+// -- autosave to localStorage --------------------------------------------
+// ワークスペースを localStorage へ自動保存・復元する。
+const STORAGE_KEY = "stampfly_blocks_workspace_v1";
+
+function saveWorkspace() {
+  try {
+    const state = Blockly.serialization.workspaces.save(workspace);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    // Storage full/unavailable — non-fatal, program can still run.
+    // 保存領域が満杯/利用不可 — 致命的ではない、実行自体は続けられる。
+    console.warn("autosave failed:", e);
+  }
+}
+
+function restoreWorkspace() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    Blockly.serialization.workspaces.load(JSON.parse(raw), workspace);
+  } catch (e) {
+    console.warn("restore failed:", e);
+  }
+}
+restoreWorkspace();
+
+let saveTimer = null;
+workspace.addChangeListener((ev) => {
+  if (ev.isUiEvent) return;               // ignore selection/scroll/zoom events
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveWorkspace, 400);
+});
+
+// ============================================================================
+// Log console
+// ============================================================================
+const logEl = document.getElementById("log");
+
+function nowStamp() {
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, "0");
+  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+}
+
+function logLine(text, kind = "info") {
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="t">[${nowStamp()}]</span> <span class="${kind}">${
+    text.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))
+  }</span>`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ============================================================================
+// Bridge client — talks to the local `sf blocks` HTTP server (127.0.0.1 only).
+// ブリッジクライアント — ローカルの `sf blocks` HTTP サーバ（127.0.0.1 限定）と通信。
+// ============================================================================
+class AbortError extends Error {}
+
+const CMD_TIMEOUT_MS = 25000;   // client-side safety net above the server's own
+                                 // 20s command timeout / サーバ側20sタイムアウトへの安全余裕
+
+// One instance per run(); `.aborted` is flipped by 停止/緊急停止/切断.
+// run() ごとに1個生成。`.aborted` は 停止/緊急停止/切断 で立てられる。
+function makeSfClient() {
+  return {
+    aborted: false,
+
+    checkAbort() {
+      if (this.aborted) throw new AbortError("中断されました");
+    },
+
+    async cmd(line) {
+      this.checkAbort();
+      logLine("送信: " + line, "info");
+      let res;
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), CMD_TIMEOUT_MS);
+        try {
+          res = await fetch("/api/cmd", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cmd: line }),
+            signal: ctl.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (e) {
+        logLine("通信エラー: " + e.message, "err");
+        throw e;
+      }
+      this.checkAbort();
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error("サーバ応答の解析に失敗しました");
+      }
+      if (data.ok) {
+        logLine("応答: " + data.response, "ok");
+        return data.response;
+      }
+      logLine("エラー: " + data.error, "err");
+      throw new Error(data.error || "unsupported command");
+    },
+
+    async sleep(sec) {
+      logLine(sec + " 秒待機", "info");
+      const totalMs = Math.max(0, sec) * 1000;
+      const stepMs = 50;              // poll granularity for abort responsiveness
+                                       // 中断応答のためのポーリング粒度
+      let waited = 0;
+      while (waited < totalMs) {
+        this.checkAbort();
+        await new Promise((r) => setTimeout(r, Math.min(stepMs, totalMs - waited)));
+        waited += stepMs;
+      }
+      this.checkAbort();
+    },
+  };
+}
+
+// ============================================================================
+// Connection state + status/telemetry chips
+// ============================================================================
+let connected = false;
+let demoMode = false;
+let running = false;
+let currentSf = null;     // the sf client of the run in progress, or null
+
+const $ = (id) => document.getElementById(id);
+const connectBtn = $("connectBtn");
+const hostInput = $("hostInput");
+const runBtn = $("runBtn");
+const stopBtn = $("stopBtn");
+const emergencyBtn = $("emergencyBtn");
+const chipConn = $("chipConn");
+const chipBat = $("chipBat");
+const chipAlt = $("chipAlt");
+const demoBadge = $("demoBadge");
+
+function updateButtons() {
+  connectBtn.textContent = connected ? "切断" : "接続";
+  connectBtn.classList.toggle("connected", connected);
+  runBtn.disabled = !connected || running;
+  stopBtn.disabled = !connected;
+  emergencyBtn.disabled = !connected;
+}
+
+function updateConnChip() {
+  chipConn.classList.toggle("on", connected);
+  chipConn.querySelector("span:last-child").textContent = connected ? "接続中" : "未接続";
+}
+
+function updateDemoBadge() {
+  demoBadge.classList.toggle("show", demoMode);
+}
+
+function resetTelemetryChips() {
+  chipBat.textContent = "--";
+  chipAlt.textContent = "--";
+}
+
+async function refreshStatus() {
+  try {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    connected = !!data.connected;
+    demoMode = !!data.demo;
+    if (data.host) hostInput.value = data.host;
+  } catch (e) {
+    connected = false;
+  }
+  updateConnChip();
+  updateDemoBadge();
+  updateButtons();
+  if (!connected) resetTelemetryChips();
+}
+
+// -- connect / disconnect --------------------------------------------------
+async function onConnectToggle() {
+  if (connected) {
+    try { await fetch("/api/disconnect", { method: "POST" }); } catch (e) { /* best effort */ }
+    connected = false;
+    logLine("切断しました", "warn");
+    updateConnChip(); updateButtons(); resetTelemetryChips();
+    return;
+  }
+  const host = hostInput.value.trim();
+  logLine("接続中... " + (host || "(既定アドレス)"), "info");
+  connectBtn.disabled = true;
+  try {
+    const res = await fetch("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(host ? { host } : {}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      logLine("接続しました", "ok");
+      await refreshStatus();
+    } else {
+      logLine("接続失敗: " + data.error, "err");
+    }
+  } catch (e) {
+    logLine("接続エラー: " + e.message, "err");
+  } finally {
+    connectBtn.disabled = false;
+    updateButtons();
+  }
+}
+connectBtn.addEventListener("click", onConnectToggle);
+
+// -- clear workspace --------------------------------------------------------
+document.getElementById("clearBtn").addEventListener("click", () => {
+  if (!confirm("ワークスペースを空にします。よろしいですか？")) return;
+  workspace.clear();
+  saveWorkspace();
+  logLine("ワークスペースをクリアしました", "warn");
+});
+
+// -- run / stop / emergency --------------------------------------------------
+async function onRun() {
+  if (running || !connected) return;
+
+  const hasTakeoff = workspace.getBlocksByType("drone_takeoff", false).length > 0;
+  if (hasTakeoff) {
+    const ok = confirm(
+      "プロペラが回転します。周囲の安全と、送信機を持った安全担当者がいることを確認しましたか？"
+    );
+    if (!ok) {
+      logLine("離陸ブロックが含まれるため実行を中止しました", "warn");
+      return;
+    }
+  }
+
+  let code;
+  try {
+    code = javascriptGenerator.workspaceToCode(workspace);
+  } catch (e) {
+    logLine("コード生成エラー: " + e.message, "err");
+    return;
+  }
+  if (!code.trim()) {
+    logLine("ブロックがありません", "warn");
+    return;
+  }
+
+  running = true;
+  updateButtons();
+  const sf = makeSfClient();
+  currentSf = sf;
+  logLine("プログラム開始", "info");
+  try {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const fn = new AsyncFunction("sf", "highlightBlock", code);
+    await fn(sf, highlightBlock);
+    logLine("プログラム終了", "ok");
+  } catch (e) {
+    if (e instanceof AbortError) {
+      logLine("プログラム終了: " + e.message, "warn");
+    } else {
+      logLine("プログラム終了: エラー — " + e.message, "err");
+    }
+  } finally {
+    running = false;
+    currentSf = null;
+    highlightBlock(null);
+    updateButtons();
+  }
+}
+runBtn.addEventListener("click", onRun);
+
+async function onStop() {
+  if (currentSf) currentSf.aborted = true;
+  logLine("停止を送信しました", "warn");
+  try { await fetch("/api/stop", { method: "POST" }); } catch (e) { /* best effort */ }
+}
+stopBtn.addEventListener("click", onStop);
+
+async function onEmergency() {
+  if (currentSf) currentSf.aborted = true;
+  logLine("緊急停止を送信しました", "err");
+  try { await fetch("/api/emergency", { method: "POST" }); } catch (e) { /* best effort */ }
+}
+emergencyBtn.addEventListener("click", onEmergency);
+
+// ============================================================================
+// Live status via Server-Sent Events (/events, ~200ms).
+// SSE によるライブ状態更新（/events、約200ms間隔）。
+// ============================================================================
+function connectEvents() {
+  const es = new EventSource("/events");
+  es.onmessage = (ev) => {
+    let d;
+    try { d = JSON.parse(ev.data); } catch (e) { return; }
+
+    const wasConnected = connected;
+    connected = !!d.connected;
+    if (wasConnected && !connected) {
+      // Lost the drone mid-run: abort whatever is running and say why.
+      // 実行中に機体との接続が切れた: 実行を中断し理由をログに出す。
+      if (currentSf) currentSf.aborted = true;
+      logLine("機体との接続が切れました。実行を中断します", "err");
+    }
+    updateConnChip();
+    updateButtons();
+
+    if (d.state) {
+      if ("bat" in d.state) chipBat.textContent = d.state.bat;
+      if ("h" in d.state) chipAlt.textContent = d.state.h;
+    } else {
+      resetTelemetryChips();
+    }
+  };
+  es.onerror = () => { /* EventSource auto-reconnects; nothing to do here */ };
+}
+
+// ============================================================================
+// Startup
+// ============================================================================
+updateButtons();
+resetTelemetryChips();
+logLine("StampFly ブロックプログラミングを起動しました", "info");
+refreshStatus();
+connectEvents();
+</script>
+</body></html>
