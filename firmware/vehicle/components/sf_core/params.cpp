@@ -332,6 +332,31 @@ namespace param_vars {
     float alt_alt_ti      = 7.0f;
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
+    // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne). Default
+    // equals alt_vel_ti — a structural no-op until a per-craft flight A/B opts in
+    // via `param set altitude.vel.ti_hover <value>`. Rationale: real hover shows
+    // low-freq (~0.1Hz) battery-sag thrust disturbance that a shorter Ti rejects
+    // (sim: −20% altitude std), but a uniformly shorter alt_vel_ti also worsens
+    // auto-takeoff capture overshoot (integrator windup, +60% in sim/flight).
+    // Splitting Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
+    // TakeoffClimb unchanged and lets only Airborne use the stronger integral.
+    // Scope: this lever targets the LOW-FREQUENCY (≲0.2Hz) disturbance only —
+    // venue-log replay (NT-Kanazawa 2026-06-27, broadband 0.24–0.96Hz, ~6x
+    // amplitude) showed no benefit and slight peak worsening, so do not opt in
+    // expecting it to fix venue-class bobbing.
+    // See PidController::applyAltVelTiForPhase() (architecture.md INV-1).
+    // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。既定は
+    // alt_vel_ti と同値 — 機体ごとの実飛行 A/B で `param set altitude.vel.ti_hover
+    // <値>` により opt-in するまでは構造的 no-op。根拠: 実ホバーでは低周波(~0.1Hz)の
+    // 電池サグ推力外乱があり短い Ti で除去できる（シム: 高度 std −20%）が、
+    // alt_vel_ti を一律短縮すると自動離陸の捕捉オーバーシュートも悪化する（積分
+    // 巻き上がり、シム/実機で+60%）。Ti をフェーズで分離（climb=alt_vel_ti,
+    // hover=alt_vel_ti_hover）すれば TakeoffClimb は不変のまま Airborne だけ強い
+    // 積分を使える。適用範囲: このレバーは低周波（≲0.2Hz）外乱専用 — 会場ログ再生
+    // （NT金沢 2026-06-27、0.24–0.96Hz 広帯域・振幅約6倍）では効果なし・ピーク微増
+    // のため、会場級の上下動対策として opt-in しないこと。
+    // PidController::applyAltVelTiForPhase() 参照（architecture.md INV-1）。
+    float alt_vel_ti_hover = 2.5f;
     // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
     // spring-centred (centre = hold); push up → climb at climb_rate, push down →
     // descend at descent_rate. Mirrors the flight-proven legacy vehicle's
@@ -603,6 +628,7 @@ static const ParamEntry table[] = {
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
@@ -750,11 +776,11 @@ static const ParamEntry* find(const char* name)
 void init()
 {
     // One-time NVS-key collision check: two names hashing to the same key would
-    // silently alias their stored values. With 54 names on a 32-bit hash the
-    // probability is ~3e-7, but verify anyway — this is the kind of failure that
+    // silently alias their stored values. With ~100 names on a 32-bit hash the
+    // probability is ~1e-6, but verify anyway — this is the kind of failure that
     // is invisible until a parameter "mysteriously" loads someone else's value.
     // NVS キー衝突の一回限り検査: 2つの名前が同じキーにハッシュされると保存値が
-    // 黙って混線する。54名×32bitハッシュで確率は ~3e-7 だが念のため検証 — これは
+    // 黙って混線する。約100名×32bitハッシュで確率は ~1e-6 だが念のため検証 — これは
     // パラメータが「謎に」他人の値を読むまで見えない種類の故障。
     for (int i = 0; i < TABLE_SIZE; i++) {
         for (int j = i + 1; j < TABLE_SIZE; j++) {

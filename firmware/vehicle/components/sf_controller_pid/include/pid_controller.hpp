@@ -61,6 +61,14 @@ private:
     /// Load PID gains from parameter system / パラメータからゲインを読み込み
     void loadParams();
 
+    /// Schedule alt_vel_.ti by vertical phase (INV-1: vertical channel only).
+    /// Called from loadParams() and every phase_ transition handler so ti never
+    /// desyncs from phase_, even across a mid-flight param reload.
+    /// フェーズ別に alt_vel_.ti を設定（INV-1: 鉛直チャネルのみ）。loadParams() と
+    /// 全ての phase_ 遷移ハンドラから呼び、飛行中の param 再読込でも ti が phase_ と
+    /// ずれないようにする。
+    void applyAltVelTiForPhase();
+
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
     /// Roll/pitch sticks REPOSITION the hold point (deflect to move, release to hold): a
@@ -124,6 +132,19 @@ private:
 
     // Altitude control PIDs / 高度制御PID
     PID alt_pos_, alt_vel_;
+
+    // Cached alt_vel_ integral times by vertical phase (param altitude.vel.ti /
+    // .ti_hover). climb applies in TakeoffClimb/Landing/Grounded (bounds windup
+    // and capture overshoot); hover applies only in Airborne (strong integral to
+    // reject the low-freq battery-sag disturbance). applyAltVelTiForPhase() is the
+    // single writer of alt_vel_.ti — see its definition in pid_controller.cpp.
+    // @design architecture.md INV-1 — phase changes the vertical channel only [OK]
+    // フェーズ別 alt_vel_ 積分時間キャッシュ（param altitude.vel.ti / .ti_hover）。
+    // climb は TakeoffClimb/Landing/Grounded に適用（巻き上がり・捕捉オーバーシュート
+    // 抑制）、hover は Airborne のみ（低周波の電池サグ外乱を除去する強い積分）。
+    // alt_vel_.ti の唯一の書き手は applyAltVelTiForPhase()（定義は pid_controller.cpp）。
+    float alt_vel_ti_climb_ = 2.5f;
+    float alt_vel_ti_hover_ = 2.5f;
 
     // Position control PIDs / 位置制御PID
     PID pos_x_, pos_y_;

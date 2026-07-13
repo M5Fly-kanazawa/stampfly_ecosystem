@@ -24,6 +24,8 @@
  * @design detailed_design.md §3 注4/注5/注6 — takeoff/landing law    [OK]
  * @design architecture.md INV-1/INV-2 — one attitude pipeline; pilot [OK]
  *         keeps attitude (level only on a dead link)
+ * @design architecture.md INV-1 — alt_vel_ integral time scheduled  [OK]
+ *         by vertical phase only (climb/hover); see applyAltVelTiForPhase()
  */
 
 #include "pid_controller.hpp"
@@ -92,7 +94,17 @@ void PidController::loadParams()
     params::get_float("altitude.alt.kp", alt_pos_.kp);
     params::get_float("altitude.alt.ti", alt_pos_.ti);
     params::get_float("altitude.vel.kp", alt_vel_.kp);
-    params::get_float("altitude.vel.ti", alt_vel_.ti);
+    // alt_vel_.ti is phase-scheduled (climb vs. hover), NOT set directly here —
+    // load both candidates into the cache and let applyAltVelTiForPhase() (below)
+    // pick per phase_. Position loop (alt_pos_) ti is not scheduled: the
+    // disturbance enters the inner (thrust) loop, so strengthening position
+    // integral does not help it (see plan doc, not repeated here).
+    // alt_vel_.ti はフェーズ別スケジュール（climb/hover）— ここでは直接設定せず、
+    // 両候補をキャッシュへロードし、下の applyAltVelTiForPhase() が phase_ に応じて
+    // 選択する。位置ループ(alt_pos_)の ti はスケジュールしない（外乱は内側の推力
+    // ループに入るため位置積分を強めても効かない）。
+    params::get_float("altitude.vel.ti", alt_vel_ti_climb_);
+    params::get_float("altitude.vel.ti_hover", alt_vel_ti_hover_);
     // Manual ALT_HOLD stick rates (separately tunable) / 手動 ALT_HOLD スティック速度（別々に調整可）
     params::get_float("altitude.climb_rate",   max_climb_rate_);
     params::get_float("altitude.descent_rate", max_descent_rate_);
@@ -140,6 +152,26 @@ void PidController::loadParams()
     pos_y_.output_limit      = max_pos_vel_;                    // [m/s]
     vel_x_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²] = g·tilt limit
     vel_y_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²]
+
+    // Re-apply the phase schedule so a mid-flight param reload cannot leave
+    // alt_vel_.ti stale relative to the (unchanged) phase_.
+    // 飛行中の param 再読込でも alt_vel_.ti が（不変の）phase_ に対して古いままに
+    // ならないよう、フェーズスケジュールを再適用する。
+    applyAltVelTiForPhase();
+}
+
+// Schedule the vertical-velocity loop integral time by phase: strong integral
+// (short Ti) only in Airborne hover to reject the low-freq battery-sag disturbance;
+// gentle Ti in TakeoffClimb/Landing/Grounded to bound windup and capture overshoot.
+// Output is continuous across the switch (PI out = P + integral; Ti changes only the
+// integral increment, td=0). @design architecture.md INV-1 — vertical channel only [OK]
+// 鉛直速度ループの積分時間をフェーズ別に適用。ホバーのみ強い積分で低周波外乱を除去、
+// 離陸/着陸は穏やかな積分で巻き上がり・捕捉オーバーシュートを抑える。Ti 切替は積分値を
+// 触らず増分のみ変えるため出力連続。
+void PidController::applyAltVelTiForPhase()
+{
+    alt_vel_.ti = (phase_ == VerticalPhase::Airborne)
+                      ? alt_vel_ti_hover_ : alt_vel_ti_climb_;
 }
 
 ControlOutput PidController::compute(
@@ -1022,6 +1054,7 @@ void PidController::onLanding()
     // Landing は VerticalPhase（INV-1）— 以後 compute() が降下しつつ姿勢を保つ（リンク
     // 途絶なら水平化）。別の制御経路ではない。
     phase_ = VerticalPhase::Landing;
+    applyAltVelTiForPhase();    // → climb ti (gentle, bounds windup) / climb ti へ（穏やか）
     landing_settle_t_ = 0.0f;   // near-ground settle ramp starts fresh / 着地アシストのランプを初期化
 
     // Fresh start for the loops the landing law uses: the attitude loops may carry
@@ -1043,6 +1076,7 @@ void PidController::onTakeoff()
              static_cast<double>(takeoff_climb_rate_),
              static_cast<double>(takeoff_target_alt_));
     phase_ = VerticalPhase::TakeoffClimb;
+    applyAltVelTiForPhase();    // → climb ti (gentle, bounds capture overshoot) / climb ti へ（穏やか）
 
     // Fresh vertical loops (they may hold a Grounded-phase zero-output history), set
     // the climb target, and capture the launch point for POS_HOLD (the cascade starts
@@ -1072,6 +1106,7 @@ void PidController::onTakeoffComplete()
         ESP_LOGI(TAG, "Auto-takeoff complete — normal mode law engaged");
     }
     phase_ = VerticalPhase::Airborne;
+    applyAltVelTiForPhase();    // → hover ti (strong, rejects battery-sag disturbance) / hover ti へ（強い積分）
 
     // ALT_HOLD holds the TARGET altitude that TakeoffClimb already captured
     // (alt_setpoint_ == takeoff_target_alt_) — NOT the instantaneous altitude, so any
@@ -1224,6 +1259,7 @@ void PidController::reset()
     pos_x_.reset();      pos_y_.reset();
     vel_x_.reset();      vel_y_.reset();
     phase_   = VerticalPhase::Grounded;  // next flight starts grounded; clears Landing too / 次の飛行は接地から（Landing も解除）
+    applyAltVelTiForPhase();             // → climb ti (Grounded uses the gentle schedule) / climb ti へ
     landing_settle_t_ = 0.0f;            // near-ground settle ramp / 着地アシストのランプ
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     reposition_active_ = false;          // stick repositioning state clears / スティック再配置状態クリア
