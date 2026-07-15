@@ -25,9 +25,9 @@ from .defaults import get_flat_defaults
 # =============================================================================
 
 # Motor/propeller coefficients
-CT = 1.0e-8            # Thrust coefficient [N/(rad/s)²]
-CQ = 9.71e-11          # Torque coefficient [Nm/(rad/s)²]
-KAPPA = 9.71e-3        # Torque/thrust ratio [m]
+CT = 6.7e-9            # Thrust coefficient [N/(rad/s)²] (2026-07-15実測・現行プロペラ)
+CQ = 4.10e-11          # Torque coefficient [Nm/(rad/s)²] (2026-07-15実測)
+KAPPA = 6.12e-3        # Torque/thrust ratio [m] (2026-07-15実測)
 
 # Geometry
 D = 0.023              # Moment arm [m]

@@ -64,9 +64,9 @@ class motor_prop():
         self.Rm = 0.63 #0.34
         #回転数と推力・トルク測定実験から求めたパラメータ
         self.Ct = 1.00e-8
-        self.Cq = 9.71e-11
+        self.Cq = 4.10e-11  # 2026-07-15実測
         #形状と重量から推定した慣性モーメント
-        self.Jmp = 2.01e-8 
+        self.Jmp = 1.375e-8  # 2026-07-15実測
 
         #推定値
         self.Km = self.Cq*self.Rm/self.Am

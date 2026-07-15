@@ -98,7 +98,7 @@ DEFAULT_PARAMS: Dict[str, Any] = {
             "description": "Static friction torque / 静止摩擦トルク",
         },
         "Jmp": {
-            "value": 2.01e-8,  # kg·m²
+            "value": 1.375e-8,  # kg·m² (2026-07-15実測: 写真法+諸元法)
             "unit": "kg·m²",
             "description": "Rotor inertia / 回転子慣性モーメント",
         },
@@ -231,9 +231,9 @@ def get_flat_defaults() -> Dict[str, float]:
         "arm_length": 0.023,
 
         # Motor
-        "Ct": 1.00e-8,
-        "Cq": 9.71e-11,
-        "kappa": 9.71e-3,
+        "Ct": 6.7e-9,      # 2026-07-15実測（現行プロペラ）
+        "Cq": 4.10e-11,    # 2026-07-15実測（コーストダウン）
+        "kappa": 6.12e-3,  # = Cq/Ct（2026-07-15実測）
         "Rm": 0.34,
         "Km": 6.125e-4,
         "tau_m": 0.02,

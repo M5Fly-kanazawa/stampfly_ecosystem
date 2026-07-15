@@ -1,6 +1,9 @@
 import math
 
 # ---- 物理定数 (SIL plant.hpp + actuator.cpp, = 実機StampFly同定値) ----
+# NOTE(2026-07-15): 実測の物理値は Ct=6.7e-9, Cq=4.10e-11, κ=6.12e-3, Jmp=1.375e-8
+#  （出所: multicopter_introduction/notes/qa_log.md Q4-9..13）。本ブロックはファームウェア/SIL
+#  実装の鏡写しが目的のため、ファームウェア側の更新まで旧値を維持する。
 Am   = 5.39e-8   # V = Am w^2 + Bm w + Cm
 Bm   = 6.33e-4
 Cm   = 1.53e-2

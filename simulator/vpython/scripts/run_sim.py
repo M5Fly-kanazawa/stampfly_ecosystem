@@ -63,8 +63,8 @@ from interfaces.joystick import Joystick
 # =============================================================================
 class MotorParams:
     """Motor parameters for thrust-to-voltage conversion"""
-    Ct = 1.0e-8       # Thrust coefficient [N/(rad/s)²]
-    Cq = 9.71e-11     # Torque coefficient [Nm/(rad/s)²]
+    Ct = 6.7e-9       # Thrust coefficient [N/(rad/s)²] (2026-07-15実測)
+    Cq = 4.10e-11     # Torque coefficient [Nm/(rad/s)²] (2026-07-15実測)
     Rm = 0.34         # Motor resistance [Ω]
     Km = 6.125e-4     # Motor constant [V·s/rad]
     Dm = 3.69e-8      # Viscous damping [Nm·s/rad]

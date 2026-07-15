@@ -37,8 +37,8 @@ from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time
 # Motor Model Parameters (matching firmware motor_model.hpp)
 # =============================================================================
 class MotorParams:
-    Ct = 1.0e-8
-    Cq = 9.71e-11
+    Ct = 6.7e-9    # 2026-07-15実測
+    Cq = 4.10e-11  # 2026-07-15実測
     Rm = 0.34
     Km = 6.125e-4
     Dm = 3.69e-8

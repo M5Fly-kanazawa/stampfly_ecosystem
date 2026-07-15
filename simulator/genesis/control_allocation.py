@@ -54,6 +54,8 @@ class QuadConfig:
 
     # Torque/Thrust ratio κ = Cq/Ct (m)
     # トルク推力比
+    # NOTE(2026-07-15): 実測物理は κ=6.12e-3 だがミキサはファームウェア(actuator.cpp)の
+    #  鏡写しのため旧値を維持（プラント側 motor_model.py は実測値に更新済み）
     kappa: float = 9.71e-3
 
     # Motor positions [x, y] in NED body frame (m)

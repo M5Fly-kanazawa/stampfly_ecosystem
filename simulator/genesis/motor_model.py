@@ -55,11 +55,11 @@ class MotorParams:
     # Aerodynamic coefficients (thrust/torque vs RPM measurement)
     # 空力係数（推力・トルク vs 回転数測定）
     Ct: float = 1.00e-8   # Thrust coefficient (N·s²/rad²) / 推力係数
-    Cq: float = 9.71e-11  # Torque coefficient (N·m·s²/rad²) / トルク係数
+    Cq: float = 4.10e-11  # Torque coefficient (N·m·s²/rad²) / トルク係数 (2026-07-15実測)
 
     # Rotor inertia (estimated from shape and weight)
     # ローター慣性（形状と重量から推定）
-    Jmp: float = 2.01e-8  # kg·m²
+    Jmp: float = 1.375e-8  # kg·m² (2026-07-15実測: 写真法プロペラ+諸元法回転子)
 
     # Battery voltage / バッテリー電圧
     Vbat: float = 3.7     # V

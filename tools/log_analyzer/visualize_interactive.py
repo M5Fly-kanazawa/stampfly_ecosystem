@@ -544,6 +544,9 @@ def load_jsonl(filepath: str) -> dict:
                 pid_out[axis][i] = out
             data[pid_names[axis]] = pid_out[axis]
 
+        # NOTE(2026-07-15): 実測物理値は Ct=6.7e-9, Cq=4.10e-11, κ=6.12e-3, Jmp=1.375e-8
+        #  （multicopter_introduction qa_log Q4-9..13）。以下はファームウェア実装の
+        #  鏡写しが目的のため、ファーム更新まで旧値を維持する。
         # Mixer matrix B⁻¹ (from ControlAllocator)
         # ミキサー行列 B⁻¹（ControlAllocatorと同一）
         d_arm = 0.023   # arm length [m]

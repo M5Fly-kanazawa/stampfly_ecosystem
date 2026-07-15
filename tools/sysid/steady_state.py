@@ -102,7 +102,7 @@ def fit_steady_state(voltage: np.ndarray, omega: np.ndarray) -> SteadyStateResul
 def derive_physical_params(
     result: SteadyStateResult,
     Rm: float,
-    Cq: float = 9.71e-11,
+    Cq: float = 4.10e-11,
 ) -> SteadyStateResult:
     """Derive physical parameters from A, B, C and known Rm, Cq
     A, B, C と既知の Rm, Cq から物理パラメータを導出
@@ -284,8 +284,8 @@ def main():
     parser.add_argument("csv", help="Path to voltage-omega CSV file")
     parser.add_argument("--Rm", type=float, default=None,
                         help="Motor resistance [Ω] (default: try both 0.34 and 0.63)")
-    parser.add_argument("--Cq", type=float, default=9.71e-11,
-                        help="Torque coefficient [N·m/(rad/s)²] (default: 9.71e-11)")
+    parser.add_argument("--Cq", type=float, default=4.10e-11,
+                        help="Torque coefficient [N·m/(rad/s)²] (default: 4.10e-11, 2026-07-15実測)")
     parser.add_argument("--plot", action="store_true", help="Show plot")
     parser.add_argument("--save-plot", type=str, default=None, help="Save plot to file")
     args = parser.parse_args()
