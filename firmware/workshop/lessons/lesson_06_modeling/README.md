@@ -219,11 +219,10 @@ Kp = 1 / (4·ζ²·K·τ_m)
 | Effective plant gain | K | ~102 | ~70 | ~19 | rad/s² |
 
 > **[Confirmed 2026-07-15]** τ_m = 0.02 s is now backed by measurement: the coast-down test
-> (direct J/C_Q = 335 s·rad), pixel-integration of the propeller photo (J_prop = 1.03e-8), and
-> measured rotor-cup dimensions (J_rotor = 3.45e-9) give a hover-point effective time constant
-> τ_eff = J/(KtKe/R + 2·C_Q·ω_hover) ≈ 0.018 s, consistent with 0.02 in this table.
-> (Ke = 6.82e-4 was measured 2026-07-15 via open-circuit back-EMF during coast-down; with γ=1 the
-> hover effective lag is ≈0.013 s, and the flight-identified 0.02–0.034 s corresponds to γ≈0.1–0.5.)
+> (direct J/C_Q = 335 s·rad), pixel-integration of the propeller photo (J_prop = 1.03e-8),
+> measured rotor-cup dimensions (J_rotor = 3.45e-9), and the open-circuit back-EMF measurement
+> Ke = 6.82e-4 give a hover-point effective time constant τ_eff ≈ 0.013 s at full conduction (γ=1);
+> the flight-identified 0.02–0.034 s corresponds to γ≈0.1–0.5, so 0.02 is inside the measured range.
 > (History: briefly mis-corrected to 0.05 based on the old J = 5.31e-8, which turned out to be
 > 2× too large for the prop and 10× for the rotor; the correct J is 1.375e-8. The gain design
 > tables below remain valid as computed with 0.02. See multicopter_introduction qa_log Q4-9..13.)
