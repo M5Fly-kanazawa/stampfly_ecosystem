@@ -59,8 +59,14 @@ Kp = 1 / (4·ζ²·K·τ_m)
 | パラメータ | 記号 | Roll | Pitch | Yaw | 単位 |
 |-----------|------|------|-------|-----|------|
 | 慣性モーメント | I | 9.16e-6 | 13.3e-6 | 20.4e-6 | kg·m² |
-| モータ時定数 | τ_m | 0.02 | 0.02 | 0.02 | s |
+| モータ時定数 | τ_m | ~0.05（暫定） | ~0.05（暫定） | ~0.05（暫定）† | s |
 | 実効プラントゲイン | K | ~102 | ~70 | ~19 | rad/s² |
+
+> **【訂正 2026-07-15】** 旧値 τ_m = 0.02 s は出所未確認（従来からの思い込みの可能性）のため上書き。
+> 新値はフォトインタラプタによる回転過渡実測（Duty10%、63%立ち上がり 0.20 s）と
+> モータドライバ論文の同定値（J=5.31e-8 kg·m²・暫定）から求めたホバ点の局所時定数 ≈ 0.05 s。
+> J はコーストダウン試験等での再確定待ちのため**暫定**。確定後、下のゲイン設計表も再計算すること。
+> † ヨーは加速反トルクの零点により実効的にさらに速い可能性がある（yaw_axis_model.md の零点符号は検証中）。
 
 ### ゲイン設計表
 
@@ -205,8 +211,15 @@ Kp = 1 / (4·ζ²·K·τ_m)
 | Parameter | Symbol | Roll | Pitch | Yaw | Unit |
 |-----------|--------|------|-------|-----|------|
 | Moment of inertia | I | 9.16e-6 | 13.3e-6 | 20.4e-6 | kg·m² |
-| Motor time constant | τ_m | 0.02 | 0.02 | 0.02 | s |
+| Motor time constant | τ_m | ~0.05 (prov.) | ~0.05 (prov.) | ~0.05 (prov.)† | s |
 | Effective plant gain | K | ~102 | ~70 | ~19 | rad/s² |
+
+> **[Correction 2026-07-15]** The old value τ_m = 0.02 s had no verified provenance and is
+> superseded. The new value is the hover-point local time constant ≈ 0.05 s derived from the
+> photointerrupter spin-up measurement (Duty 10%, 63% rise 0.20 s) and the motor-driver paper's
+> identified parameters (J = 5.31e-8 kg·m², provisional). J awaits confirmation (coast-down test);
+> recompute the gain design tables below once J is settled.
+> † Yaw may be effectively faster due to the acceleration-reaction zero (zero sign under review).
 
 ### Gain Design Table
 
