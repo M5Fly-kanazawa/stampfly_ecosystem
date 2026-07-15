@@ -59,14 +59,17 @@ Kp = 1 / (4·ζ²·K·τ_m)
 | パラメータ | 記号 | Roll | Pitch | Yaw | 単位 |
 |-----------|------|------|-------|-----|------|
 | 慣性モーメント | I | 9.16e-6 | 13.3e-6 | 20.4e-6 | kg·m² |
-| モータ時定数 | τ_m | ~0.05（暫定） | ~0.05（暫定） | ~0.05（暫定）† | s |
+| モータ時定数 | τ_m | 0.02 | 0.02 | 0.02† | s |
 | 実効プラントゲイン | K | ~102 | ~70 | ~19 | rad/s² |
 
-> **【訂正 2026-07-15】** 旧値 τ_m = 0.02 s は出所未確認（従来からの思い込みの可能性）のため上書き。
-> 新値はフォトインタラプタによる回転過渡実測（Duty10%、63%立ち上がり 0.20 s）と
-> モータドライバ論文の同定値（J=5.31e-8 kg·m²・暫定）から求めたホバ点の局所時定数 ≈ 0.05 s。
-> J はコーストダウン試験等での再確定待ちのため**暫定**。確定後、下のゲイン設計表も再計算すること。
-> † ヨーは加速反トルクの零点により実効的にさらに速い可能性がある（yaw_axis_model.md の零点符号は検証中）。
+> **【確定 2026-07-15】** τ_m = 0.02 s は一連の実測で**裏付けが取れた**。
+> コーストダウン試験（J/C_Q = 335 s·rad の直接測定）、プロペラ上面写真の画素直接積分
+> （J_prop = 1.03e-8）、回転子実測諸元（J_rotor = 3.45e-9）から、ホバ点の実効時定数は
+> τ_eff = J/(KtKe/R + 2C_Q·ω_hover) ≈ 0.018 s と計算され、本表の 0.02 と整合する。
+> （経緯: 一時 J の旧推定 5.31e-8 に基づき 0.05 と誤訂正した。J の旧値は
+> プロペラ2倍・回転子10倍の過大と判明し、正しくは J = 1.375e-8。ゲイン設計表は
+> 0.02 前提のまま有効。詳細は multicopter_introduction/notes/qa_log.md Q4-9〜Q4-13）
+> † ヨーは加速反トルクの零点（τ_z ≈ 46 ms）により実効的にさらに速い（零点符号は検証中）。
 
 ### ゲイン設計表
 
@@ -211,15 +214,17 @@ Kp = 1 / (4·ζ²·K·τ_m)
 | Parameter | Symbol | Roll | Pitch | Yaw | Unit |
 |-----------|--------|------|-------|-----|------|
 | Moment of inertia | I | 9.16e-6 | 13.3e-6 | 20.4e-6 | kg·m² |
-| Motor time constant | τ_m | ~0.05 (prov.) | ~0.05 (prov.) | ~0.05 (prov.)† | s |
+| Motor time constant | τ_m | 0.02 | 0.02 | 0.02† | s |
 | Effective plant gain | K | ~102 | ~70 | ~19 | rad/s² |
 
-> **[Correction 2026-07-15]** The old value τ_m = 0.02 s had no verified provenance and is
-> superseded. The new value is the hover-point local time constant ≈ 0.05 s derived from the
-> photointerrupter spin-up measurement (Duty 10%, 63% rise 0.20 s) and the motor-driver paper's
-> identified parameters (J = 5.31e-8 kg·m², provisional). J awaits confirmation (coast-down test);
-> recompute the gain design tables below once J is settled.
-> † Yaw may be effectively faster due to the acceleration-reaction zero (zero sign under review).
+> **[Confirmed 2026-07-15]** τ_m = 0.02 s is now backed by measurement: the coast-down test
+> (direct J/C_Q = 335 s·rad), pixel-integration of the propeller photo (J_prop = 1.03e-8), and
+> measured rotor-cup dimensions (J_rotor = 3.45e-9) give a hover-point effective time constant
+> τ_eff = J/(KtKe/R + 2·C_Q·ω_hover) ≈ 0.018 s, consistent with 0.02 in this table.
+> (History: briefly mis-corrected to 0.05 based on the old J = 5.31e-8, which turned out to be
+> 2× too large for the prop and 10× for the rotor; the correct J is 1.375e-8. The gain design
+> tables below remain valid as computed with 0.02. See multicopter_introduction qa_log Q4-9..13.)
+> † Yaw is effectively faster still, due to the acceleration-reaction zero (τ_z ≈ 46 ms; zero sign under review).
 
 ### Gain Design Table
 
