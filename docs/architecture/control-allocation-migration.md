@@ -1,5 +1,12 @@
 # 物理単位ベース制御アロケーションの理論と移行計画
 
+> **【実測値ノート 2026-07-15】** モータ+プロペラ系の物理パラメータが再測定で確定した:
+> $C_T$=6.7e-9, $C_Q$=4.10e-11（κ=6.12e-3 m）, $J_{mp}$=1.375e-8 kg·m², $\omega_{hover}$=3670 rad/s,
+> ホバ点実効時定数 ≈18 ms（詳細: multicopter_introduction/notes/qa_log.md Q4-9..13、
+> 影響一覧: analysis/reports/param_correction_impact_20260715.md）。
+> 本文書の数値例のうち旧値（$C_t$=1.0e-8, $C_q$=9.71e-11, $\omega_{m0}$=2930 等）に基づくものは
+> ファームウェア実装の記述としては正確だが、物理値としては上記が正。
+
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 > **現状について（2026年promotion後の注記）:** 本ドキュメントは、シミュレータの物理単位ベース制御アロケーションをファームウェアへ移行する計画として書かれた。この移行は完了しており、現行の主力ファーム `firmware/vehicle`（旧 `vehicle_new`。実機でのPOS_HOLD位置保持検証を機に2026年にpromotionされ、レイヤード構成の旧ファームは `firmware/vehicle_old` として凍結）では、物理単位（推力[N]・トルク[Nm]）ベースの制御アロケーションが**唯一の実装**であり、移行前の電圧スケール方式や `USE_PHYSICAL_UNITS` のようなコンパイルスイッチは存在しない。本ドキュメントの理論的背景（§2〜§5）は現在も有効だが、§6「移行計画」・§7「変更対象ファイル」に登場するファイルパス（`sf_algo_control` 等、旧レイヤード命名）は、当時の実装対象であった `firmware/vehicle_old` を指しており、現行の `firmware/vehicle` 側の実装は `sf_actuator/actuator.cpp`（ミキサー＋モータ曲線を1ファイルに統合、`ControlAllocator`/`motor_model.hpp`のような分離クラスはない）に相当する。詳細は各節の注記を参照。

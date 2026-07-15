@@ -1,5 +1,5 @@
-# Yaw-Axis Dynamics Model — Reaction-Torque RHP Zero
-# ヨー軸ダイナミクスモデル — 反トルクによる右半平面零点
+# Yaw-Axis Dynamics Model — Reaction-Torque Zero (LHP / Minimum-Phase, RESOLVED)
+# ヨー軸ダイナミクスモデル — 反トルク零点（LHP・最小位相＝決着済み）
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -12,6 +12,8 @@
 > ヨートルク＝抗力 $2k_Q\omega_0\,\delta\omega$ ＋反トルク $I_r\dot{\delta\omega}$。CW プロペラで両者**同符号**ゆえ $(1+\tau_z s)$ ＝**左半平面（LHP）＝最小位相零点＝位相リード**（RHP・非最小位相ではない）。roll/pitch は推力差動で反トルク項が無く $G=b e^{-Ls}/(s(T_m s+1))$（零点なし）。ここで $I_r$＝**回転子+プロペラの合成慣性 Jmp=2.01e-8 kg·m²**（モータ単体 Jm≈1e-9 ではない。プロペラが支配的）。
 >
 > **物理計算による独立検証**（2026-06-21）: 計測パラメータ($C_q$=9.71e-11, $K_m$=6.125e-4, $R_m$=0.34, $J_{mp}$=2.01e-8, $\omega_0$=2930 rad/s)から $T_m=J_{mp}/(K_m^2/R_m+D_m+2C_q\omega_0)=11.8$ms(13.5Hz)・$\tau_z=J_{mp}/(2C_q\omega_0)=35.3$ms(4.5Hz)。**比 $\tau_z/T_m=1+(K_m^2/R_m+D_m)/(2C_q\omega_0)=3.0$ は慣性に無関係**＝零点は常に極の3倍低域＝必ず低域リード。交差周波数(2.9Hz)で零点/極因子は **+20.5°リード**で、**フライトデータの +22〜32°リードと一致**。→ 反トルク零点は理論とデータが独立に確認。**設計を積分器+遅れで行うのは保守的（+20°リードはタダの位相余裕）。**
+>
+> **【追記 2026-07-15】パラメータ再測定による数値更新**: コーストダウン試験・プロペラ写真の画素直接積分・回転子実測諸元により $J_{mp}$=**1.375e-8**（旧2.01e-8）、$C_q$=**4.10e-11**（旧9.71e-11）、$\omega_0$=**3670 rad/s**（旧2930）と確定（multicopter_introduction/notes/qa_log.md Q4-9..13）。再計算: **$\tau_z = J_{mp}/(2C_q\omega_0) = 45.7$ ms (3.5 Hz)**。$T_m$ は電気系パラメータの2系統併存（$K_m$=6.125e-4/$R_m$=0.34 系→9.5 ms、論文 $K_e$=5.35e-4/$R$=0.593 系→17.5 ms）により幅があり要決着。交差 2.9 Hz のリードは 22〜30° となり、フライト実測 +22〜32° と**引き続き整合**。結論（LHP・設計は積分器+遅れ）は不変。
 >
 > ### 同定の限界（実データで証明）
 > - 実飛行 per-tone データは積分器+遅れより**LHP零点+極**で良く合う（resid 0.128→0.018）。低域位相リード（2Hz で −58°）がその証拠で、漏れでも積分初期化でもない**本物**。
@@ -29,7 +31,7 @@
 
 ### このドキュメントについて
 
-本文書は **StampFly のヨー（yaw）軸の制御対象（プラント）モデル**を定義する。ロール/ピッチ軸が単純な「積分器＋1次遅れ＋むだ時間」で表せるのに対し、ヨー軸は**モータの反トルク（反作用トルク）**により**右半平面（RHP）零点＝非最小位相**を持つ。この構造が、オンボード自動チューニング（autotune）でヨーの同定が退化（tau が下限に張り付き残差が悪化）した原因であり、本文書はその物理・伝達関数・同定法・PID設計への影響をまとめる。
+本文書は **StampFly のヨー（yaw）軸の制御対象（プラント）モデル**を定義する。ロール/ピッチ軸が単純な「積分器＋1次遅れ＋むだ時間」で表せるのに対し、ヨー軸は**モータの反トルク（反作用トルク）**により**零点**を持つ（当初 RHP＝非最小位相と考えられたが、冒頭注記の通り 2026-06-21 に **LHP＝最小位相・位相リード**と決着）。この零点が未モデルであることが、オンボード自動チューニング（autotune）でヨーの同定が退化（tau が下限に張り付き残差が悪化）した原因であり、本文書はその物理・伝達関数・同定法・PID設計への影響をまとめる。
 
 ### 対象読者
 
@@ -83,7 +85,9 @@ $$ \delta\omega(s) = \frac{\delta(s)}{\tau_m s + 1} $$
 ### 3.3 各トルク成分（ホバー線形化）
 
 $$ \tau_{aero}(s) = \frac{g_a\,\delta}{\tau_m s + 1}, \qquad
-   \tau_{react}(s) = \frac{-\,g_r\,s\,\delta}{\tau_m s + 1} $$
+   \tau_{react}(s) = \frac{+\,g_r\,s\,\delta}{\tau_m s + 1} $$
+
+【符号訂正 2026-06-21】反トルクは抗力と**同符号**（ヨーを助ける向き）。旧版の負号が RHP 誤りの源。
 
 - $g_a$：抗力ゲイン（$\propto k_Q\,\omega_0$）、$g_r$：反トルクゲイン（$\propto I_r$）
 
@@ -92,13 +96,13 @@ $$ \tau_{aero}(s) = \frac{g_a\,\delta}{\tau_m s + 1}, \qquad
 剛体の積分 $1/(I_z s)$ を込めて：
 
 $$ \boxed{\;G_{yaw}(s) = \frac{r(s)}{\delta(s)}
-   = K\,\frac{1 - \tau_z\,s}{s\,(\tau_m s + 1)}\;}
+   = K\,\frac{1 + \tau_z\,s}{s\,(\tau_m s + 1)}\;}
    \qquad K = \frac{g_a}{I_z},\;\; \tau_z = \frac{g_r}{g_a} = \frac{I_r}{2\,k_Q\,\omega_0} $$
 
-- **$\tau_z > 0$** ゆえ零点は **$s = +1/\tau_z$（右半平面＝非最小位相）**。
+- **$\tau_z > 0$** で零点は **$s = -1/\tau_z$（左半平面＝最小位相・位相リード）**【2026-06-21 訂正】。
 - 実機ではセンサ＋処理＋駆動の**むだ時間 $L$（〜5 ms、全軸共通）**も加わる：
 
-$$ G_{yaw}(s) = \frac{b\,(1 - \tau_z s)\,e^{-Ls}}{s\,(T s + 1)} $$
+$$ G_{yaw}(s) = \frac{b\,(1 + \tau_z s)\,e^{-Ls}}{s\,(T s + 1)} $$
 
 （$b=K$、$T=\tau_m$ と同一視。同定ではこの4パラメータ形を使う。）
 
@@ -106,33 +110,35 @@ $$ G_{yaw}(s) = \frac{b\,(1 - \tau_z s)\,e^{-Ls}}{s\,(T s + 1)} $$
 
 | | ロール/ピッチ | ヨー |
 |---|---|---|
-| モデル | $\dfrac{b\,e^{-Ls}}{s(Ts+1)}$ | $\dfrac{b\,(1-\tau_z s)\,e^{-Ls}}{s(Ts+1)}$ |
-| 構造 | 積分＋極＋むだ時間 | 積分＋極＋**RHP零点**＋むだ時間 |
+| モデル | $\dfrac{b\,e^{-Ls}}{s(Ts+1)}$ | $\dfrac{b\,(1+\tau_z s)\,e^{-Ls}}{s(Ts+1)}$ |
+| 構造 | 積分＋極＋むだ時間 | 積分＋極＋**LHP零点（リード）**＋むだ時間 |
 | ゲイン $b$ | 大（推力差動が強い） | **小（約1/4〜1/5）**（反トルクは弱い） |
 | 時定数 $T$ | 〜20〜34 ms | **同程度**（モータ共通） |
-| 零点 $\tau_z$ | なし（$=0$） | **あり（RHP）** |
+| 零点 $\tau_z$ | なし（$=0$） | **あり（LHP・リード）** |
 
-→ **「$T$ はモータ共通、$b$ はヨーで小、＋ヨーだけ反トルクのRHP零点」** が要点。
+→ **「$T$ はモータ共通、$b$ はヨーで小、＋ヨーだけ反トルクのLHPリード零点」** が要点。
 
-## 5. RHP零点（非最小位相）の意味
+## 5. リード零点（最小位相）の意味【2026-06-21 改稿 — 旧RHP記述を訂正】
 
-### 5.1 初期逆応答（蹴り返し）
+### 5.1 初期応答（蹴り返しは無い）
 
-ステップ応答のトルクは**初期に負**（反トルク）→ その後正（抗力）：
+ステップ応答のトルクは**初期から正**で、むしろ定常より大きい：
 
-$$ \tau_{yaw}(0^+) = -\,K\,\tau_z/\tau_m < 0, \qquad \tau_{yaw}(\infty) = K > 0 $$
+$$ \tau_{yaw}(0^+) = +\,K\,\tau_z/\tau_m > K = \tau_{yaw}(\infty) $$
 
-＝ヨー指令を入れた瞬間、機体は**一旦逆向きに振れてから**目標方向へ回る。
+＝加速反トルクが立ち上がりを先行して担い（定常比 $\tau_z/\tau_m$ 倍）、モータ回転数の
+収束とともに抗力トルクへ引き継ぐ。**逆向きの蹴り返しは起きない**。
 
-### 5.2 帯域の構造的制限
+### 5.2 帯域への影響（制限しない）
 
-RHP零点は**コントローラで打ち消せない**（不安定なRHP極が必要になるため）。さらに**達成可能な交差周波数を制限**する：交差 $\omega_c$ が $1/\tau_z$ に近づくと位相が $-180°$ を割り、安定化に必要なリードがPIDの上限を超える。
+LHPリード零点は位相を**進める**ため帯域を制限しない（交差 2.9 Hz で +20〜30° のリード＝タダの位相余裕）。
+ただし零点と極の**個別値**は現行の飛行励振帯域では同定不能（冒頭注記）。設計は積分器＋遅れで保守的に行う。
 
 ### 5.3 「ヨーは制御しやすい」と両立
 
 ヨーは**高帯域を要しない**（並進と非干渉・遅くてよい）ため、RHP零点で帯域が制限されても実用上困らない。＝**低めの $\omega_c$ で保守的に組む**のが正解。これが「ヨーは余裕が薄い軸」（実測 PM22°/GM3.8dB 等）の物理的背景でもある。
 
-## 6. システム同定（4パラメータ）
+## 6. システム同定（4パラメータ）【無効 — 冒頭注記参照: fitPlantYaw は不採用・コードに存在しない】
 
 ### 6.1 3パラメータ同定が退化する理由
 
@@ -156,7 +162,7 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 
 実装：`fitPlantYaw()`（`fitPlant` のNelder-Meadループを複製＝ロール/ピッチは一字一句不変）。
 
-## 7. PID設計への影響
+## 7. PID設計への影響【無効 — 冒頭注記参照: 採用された設計は積分器+遅れ（yaw のみ T→0 許容）】
 
 | 項目 | 扱い |
 |---|---|
@@ -221,6 +227,19 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 ---
 
 <a id="english"></a>
+
+> ## ⚠️ FINAL RESOLUTION (2026-06-21) — CLOSED. Do not reopen.
+>
+> Flight-log per-tone analysis settled this. The title's original "RHP zero" was **wrong** (sign error): drag and
+> reaction torque act with the **same sign**, so the true model is
+> $G_\text{yaw}=b\,(1+\tau_z s)\,e^{-Ls}/(s(T_m s+1))$ — a **left-half-plane (minimum-phase) zero = phase lead**.
+> There is no initial reverse kick and no bandwidth limit; the lead (+20–30° at the 2.9 Hz crossover, matching the
+> measured +22–32°) is free phase margin. Individual zero/pole values are **not identifiable** from the flight
+> excitation (residual profile flat); the adopted design model is **integrator + delay** (T→0 allowed for yaw only).
+> `fitPlantYaw`/`tau_z`/wc-cap described in §6–§9 below were **not adopted** and do not exist in the code — those
+> sections are retained as history. **Param update (2026-07-15):** re-measured $J_{mp}$=1.375e-8, $C_q$=4.10e-11,
+> $\omega_0$=3670 rad/s → $\tau_z$=45.7 ms (3.5 Hz); $T_m$=9.5–17.5 ms (two coexisting electrical parameter sets,
+> to be resolved). The Japanese body above has been corrected in place; the English body below is pre-resolution.
 
 ## 1. Overview
 
