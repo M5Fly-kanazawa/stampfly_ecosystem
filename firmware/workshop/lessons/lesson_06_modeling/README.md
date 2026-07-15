@@ -64,9 +64,10 @@ Kp = 1 / (4·ζ²·K·τ_m)
 
 > **【確定 2026-07-15】** τ_m = 0.02 s は一連の実測で**裏付けが取れた**。
 > コーストダウン試験（J/C_Q = 335 s·rad の直接測定）、プロペラ上面写真の画素直接積分
-> （J_prop = 1.03e-8）、回転子実測諸元（J_rotor = 3.45e-9）、開回路EMFによる
-> Ke = 6.82e-4 の直接測定から、ホバ点の実効時定数は完全導通（γ=1）で ≈0.013 s、
-> 飛行同定の 0.02〜0.034 s は実効導通率 γ≈0.1〜0.5 に相当し、本表の 0.02 は実測レンジ内。
+> （J_prop = 1.03e-8）、回転子実測諸元（J_rotor = 3.45e-9）、Ke = 5.5e-4（無負荷V-ω実測、
+> コーストダウン開回路EMFでも計器較正補正後に一致）から、ホバ点の実効時定数は
+> 完全導通（γ=1）で ≈0.017 s、飛行同定の 0.02〜0.034 s は γ≈0.2〜0.76 に相当し、
+> 本表の 0.02 は実測と整合する。
 > （経緯: 一時 J の旧推定 5.31e-8 に基づき 0.05 と誤訂正した。J の旧値は
 > プロペラ2倍・回転子10倍の過大と判明し、正しくは J = 1.375e-8。ゲイン設計表は
 > 0.02 前提のまま有効。詳細は multicopter_introduction/notes/qa_log.md Q4-9〜Q4-13）
@@ -220,9 +221,10 @@ Kp = 1 / (4·ζ²·K·τ_m)
 
 > **[Confirmed 2026-07-15]** τ_m = 0.02 s is now backed by measurement: the coast-down test
 > (direct J/C_Q = 335 s·rad), pixel-integration of the propeller photo (J_prop = 1.03e-8),
-> measured rotor-cup dimensions (J_rotor = 3.45e-9), and the open-circuit back-EMF measurement
-> Ke = 6.82e-4 give a hover-point effective time constant τ_eff ≈ 0.013 s at full conduction (γ=1);
-> the flight-identified 0.02–0.034 s corresponds to γ≈0.1–0.5, so 0.02 is inside the measured range.
+> measured rotor-cup dimensions (J_rotor = 3.45e-9), and Ke = 5.5e-4 (no-load V-ω; cross-checked by
+> open-circuit coast-down EMF after instrument-gain correction) give a hover-point effective time
+> constant τ_eff ≈ 0.017 s at full conduction (γ=1); the flight-identified 0.02–0.034 s corresponds
+> to γ≈0.2–0.76, consistent with 0.02 in this table.
 > (History: briefly mis-corrected to 0.05 based on the old J = 5.31e-8, which turned out to be
 > 2× too large for the prop and 10× for the rotor; the correct J is 1.375e-8. The gain design
 > tables below remain valid as computed with 0.02. See multicopter_introduction qa_log Q4-9..13.)
