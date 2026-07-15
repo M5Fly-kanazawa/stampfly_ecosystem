@@ -43,6 +43,9 @@ class MotorParams:
     """
     # Electrical parameters (LCR meter measurement)
     # 電気パラメータ（LCRメータ測定）
+    # NOTE(2026-07-15): 実測は Ke=6.82e-4（開回路EMF）, R=0.593（論文LCR採用）,
+    #  摩擦はコーストダウンで τ_c=9.5e-6, B≈0。本モデルの (Km,Rm,Dm,Qf) は
+    #  自己整合パッケージのため、個別差し替えでなく再フィットとセットで更新すること。
     Rm: float = 0.34      # Resistance (Ohm) / 巻線抵抗
     Lm: float = 1.0e-6    # Inductance (H) / インダクタンス
 
