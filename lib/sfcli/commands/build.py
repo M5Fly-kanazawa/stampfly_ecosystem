@@ -46,6 +46,38 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=run)
 
 
+def make_run_args(**overrides) -> argparse.Namespace:
+    """Build a Namespace with all attributes run() expects.
+
+    Single source of truth for the defaults consumed by run(), so callers
+    that delegate to this module (e.g. `sf lesson build`) do not need to
+    hand-assemble a Namespace and silently drift out of sync when run()
+    grows a new attribute. Defaults mirror register()'s argparse defaults.
+
+    run() が参照する全属性を備えた Namespace を生成する。
+
+    run() が読む属性のデフォルト値を一箇所にまとめたもの。このモジュールへ
+    委譲する呼び出し元（例: `sf lesson build`）が Namespace を手作りせずに
+    済み、run() に属性が増えても追従漏れが起きない構造にする。デフォルト値
+    は register() の argparse 定義と一致させること。
+    """
+    defaults = dict(
+        target="vehicle",
+        clean=False,
+        jobs=None,
+        verbose=False,
+    )
+    # Reject unknown keys so a typo fails loudly instead of silently
+    # leaving the real attribute at its default.
+    # 未知のキーは即エラーにする。タイポが黙って無視され、本来の属性が
+    # デフォルトのまま残る事故を防ぐ。
+    unknown = set(overrides) - set(defaults)
+    if unknown:
+        raise ValueError(f"Unknown build run() attribute(s): {sorted(unknown)}")
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute build command"""
     # Determine target directory

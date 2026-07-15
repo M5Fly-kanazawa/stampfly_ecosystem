@@ -725,10 +725,13 @@ def run_build(args: argparse.Namespace) -> int:
     """Build workshop firmware"""
     from . import build as build_cmd
 
-    build_args = argparse.Namespace(
+    # Delegate through build.py's factory so newly added run() attributes
+    # (e.g. a future --jobs default change) stay in sync automatically.
+    # build.py のファクトリ経由で委譲する。run() に属性が増えても
+    # (例: 将来の --jobs デフォルト変更) 自動的に追従する。
+    build_args = build_cmd.make_run_args(
         target="workshop",
         clean=args.clean,
-        jobs=None,
         verbose=args.verbose,
     )
     return build_cmd.run(build_args)
@@ -738,12 +741,16 @@ def run_flash(args: argparse.Namespace) -> int:
     """Flash workshop firmware"""
     from . import flash as flash_cmd
 
-    flash_args = argparse.Namespace(
+    # Delegate through flash.py's factory so newly added run() attributes
+    # (e.g. --gui, added in 7022efc) stay in sync automatically instead of
+    # causing an AttributeError at runtime.
+    # flash.py のファクトリ経由で委譲する。run() に属性が増えても
+    # (例: 7022efc で追加された --gui) 自動的に追従し、実行時の
+    # AttributeError を防ぐ。
+    flash_args = flash_cmd.make_run_args(
         target="workshop",
         port=args.port,
         baud=args.baud,
-        legacy=False,
-        build=False,
         monitor=not args.no_monitor,
     )
     return flash_cmd.run(flash_args)

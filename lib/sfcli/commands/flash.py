@@ -173,6 +173,53 @@ def _launch_gui(args: argparse.Namespace) -> int:
     return result.returncode
 
 
+def make_run_args(**overrides) -> argparse.Namespace:
+    """Build a Namespace with all attributes run() expects.
+
+    Single source of truth for the defaults consumed by run() (and the
+    helpers it dispatches to: _flash_legacy(), _launch_gui()), so callers
+    that delegate to this module (e.g. `sf lesson flash`) do not need to
+    hand-assemble a Namespace and silently drift out of sync when run()
+    grows a new attribute. Defaults mirror register()'s argparse defaults.
+
+    This replaces the previous pattern where each delegating command built
+    its own ad-hoc Namespace and forgot to add new attributes (e.g. --gui
+    added in 7022efc broke `sf lesson flash` because its hand-built
+    Namespace lacked a `gui` attribute).
+
+    run() が参照する全属性を備えた Namespace を生成する。
+
+    run()（および run() が呼ぶ _flash_legacy()・_launch_gui()）が読む属性の
+    デフォルト値を一箇所にまとめたもの。このモジュールへ委譲する呼び出し元
+    （例: `sf lesson flash`）が Namespace を手作りせずに済み、run() に属性
+    が増えても追従漏れが起きない構造にする。デフォルト値は register() の
+    argparse 定義と一致させること。
+
+    以前は委譲元コマンドがそれぞれ独自に Namespace を組み立てており、新規
+    属性の追加漏れが発生していた（例: 7022efc で --gui を追加した際、
+    `sf lesson flash` の手作り Namespace に gui 属性がなく実行時エラーに
+    なった）。
+    """
+    defaults = dict(
+        target="vehicle",
+        port=None,
+        baud=460800,
+        legacy=False,
+        build=False,
+        monitor=False,
+        gui=False,
+    )
+    # Reject unknown keys so a typo fails loudly instead of silently
+    # leaving the real attribute at its default.
+    # 未知のキーは即エラーにする。タイポが黙って無視され、本来の属性が
+    # デフォルトのまま残る事故を防ぐ。
+    unknown = set(overrides) - set(defaults)
+    if unknown:
+        raise ValueError(f"Unknown flash run() attribute(s): {sorted(unknown)}")
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute flash command"""
     # GUI shortcut: hand off to the standalone Tkinter flasher and stop here
@@ -217,12 +264,7 @@ def run(args: argparse.Namespace) -> int:
     if args.build:
         console.info("Building before flash...")
         from . import build as build_cmd
-        build_args = argparse.Namespace(
-            target=args.target,
-            clean=False,
-            jobs=None,
-            verbose=False,
-        )
+        build_args = build_cmd.make_run_args(target=args.target)
         result = build_cmd.run(build_args)
         if result != 0:
             console.error("Build failed, aborting flash")
