@@ -57,6 +57,37 @@
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}{StampFly と Tello の違い}
+  \begin{center}
+    \begin{tabular}{c@{\hspace{10mm}}c}
+      \includegraphics[height=22mm]{tello.jpg} &
+      \includegraphics[height=22mm]{stampfly_upside.jpg} \\
+      {\scriptsize Tello EDU（約87\,g・カメラ搭載）} &
+      {\scriptsize StampFly（37\,g）} \\
+    \end{tabular}
+  \end{center}
+
+  \vspace{0.2em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{lp{40mm}p{48mm}}
+      \hline
+       & \textbf{Tello} & \textbf{StampFly} \\
+      \hline
+      プログラミング & 飛行コマンドを外から送る（Scratch / Python） & 機体内部の制御プログラム自体を書き換える \\
+      ソフトの中身 & 非公開（変更できない） & 全ソースコード公開 \\
+      センサのデータ & SDK 経由の一部のみ & 生データに直接アクセス可 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.2em}
+
+  \centering {\small \textbf{今日の③④「モータの制御」は、中身を書き換えられる StampFly ならではの体験}}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{StampFly エコシステム全体像}
   \centering
   \vspace{2mm}

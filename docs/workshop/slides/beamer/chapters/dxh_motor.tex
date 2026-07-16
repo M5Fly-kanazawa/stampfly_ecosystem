@@ -5,9 +5,18 @@
 
 % ------------------------------------------------------------------
 \begin{frame}{③④ モータ配置}
-  \begin{center}
-    \resizebox{0.34\textwidth}{!}{\input{../tikz/motor_layout}}
-  \end{center}
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \includegraphics[width=0.82\columnwidth]{stampfly_upside.jpg}\\
+      {\scriptsize 実機（上から見た写真）}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \centering
+      \resizebox{0.62\columnwidth}{!}{\input{../tikz/motor_layout}}
+    \end{column}
+  \end{columns}
+  \vspace{0.2em}
   \begin{itemize}\small
     \item モータ ID：1 = FR（右前） / 2 = RR（右後） / 3 = RL（左後） / 4 = FL（左前）
     \item 対角のモータが同じ方向に回転（トルクバランス）：M1・M3 = CCW / M2・M4 = CW
