@@ -48,9 +48,11 @@
       \draw[signal] (\xstart, \height) -- (\xhigh, \height)
                      (\xhigh, \height) -- (\xhigh, 0)
                      (\xhigh, 0) -- (\xend, 0);
-      \ifnum\i=0
-        \draw[signal] (\xstart, 0) -- (\xstart, \height);
-      \fi
+      % Rising edge at the start of EVERY period (was i=0 only — the
+      % second pulse had no rising line)
+      % 立ち上がり線は全周期の先頭に描く（従来は i=0 のみで2周期目に
+      % 立ち上がり線が無かった）
+      \draw[signal] (\xstart, 0) -- (\xstart, \height);
       % Grid
       \draw[gridcolor, dashed] (\xstart, 0) -- (\xstart, \height);
     }
@@ -71,9 +73,8 @@
       \draw[signal] (\xstart, \height) -- (\xhigh, \height)
                      (\xhigh, \height) -- (\xhigh, 0)
                      (\xhigh, 0) -- (\xend, 0);
-      \ifnum\i=0
-        \draw[signal] (\xstart, 0) -- (\xstart, \height);
-      \fi
+      % Rising edge at the start of EVERY period / 立ち上がり線は全周期の先頭に
+      \draw[signal] (\xstart, 0) -- (\xstart, \height);
       \draw[gridcolor, dashed] (\xstart, 0) -- (\xstart, \height);
     }
     \draw[gridcolor, dashed] (2*\period, 0) -- (2*\period, \height);

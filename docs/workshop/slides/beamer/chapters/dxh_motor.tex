@@ -1,10 +1,10 @@
 % ==============================================================================
 % dxh_motor.tex — DXH workshop Part 3-4: rewriting code + motor control
-% DXH講座 ③④: プログラム書き換え・モータの制御
+% DXH講座 ③: プログラム書き換え・モータの制御
 % ==============================================================================
 
 % ------------------------------------------------------------------
-\begin{frame}{③④ モータ配置}
+\begin{frame}{③ モータ配置}
   \begin{columns}[c]
     \begin{column}{0.42\textwidth}
       \centering
@@ -24,7 +24,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{③④ PWM と Duty / ARM・DISARM とは}
+\begin{frame}{③ PWM と Duty / ARM・DISARM とは}
   \begin{columns}[T]
     \begin{column}{0.42\textwidth}
       \begin{center}
@@ -34,11 +34,12 @@
     \begin{column}{0.53\textwidth}
       \textbf{PWM とは}
       \begin{itemize}\small
-        \item パルス幅変調 --- ON/OFF の比率でモータの回転数を調整
-        \item Duty 0\% = 停止 / Duty 100\% = 最大回転
+        \item モータの力加減は、電源を\textbf{高速で ON/OFF} して調整する（PWM）
+        \item ON の時間の割合が \textbf{Duty} --- 0\% = 停止、50\% = 半分の力、100\% = 全力
+        \item 身近な例: LED 照明の明るさ調整も同じ仕組み
       \end{itemize}
 
-      \vspace{0.8em}
+      \vspace{0.4em}
 
       \textbf{ARM / DISARM とは}
       \begin{itemize}\small
@@ -50,7 +51,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{③④ 実習の手順（1）：ビルドと書き込み}
+\begin{frame}[fragile]{③ 実習の手順（1）：ビルドと書き込み}
   \begin{block}{PC 側の操作（コマンドプロンプト）}
     \begin{lstlisting}[style=sfbash, numbers=none]
 cd stampfly_ecosystem
@@ -71,7 +72,7 @@ sf lesson flash   REM 書き込み後シリアルモニタが自動起動
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{③④ 実習の手順（2）：機体側の動作確認}
+\begin{frame}{③ 実習の手順（2）：機体側の動作確認}
   \begin{columns}[T]
     \begin{column}{0.54\textwidth}
       \begin{block}{バッテリー駆動で確認する}
@@ -110,7 +111,7 @@ sf lesson flash   REM 書き込み後シリアルモニタが自動起動
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{③④ 実習コード}
+\begin{frame}[fragile]{③ 実習コード}
   \begin{adjustbox}{max width=\textwidth, max height=0.86\textheight, center}
   \begin{sflisting}[basicstyle=\ttfamily\tiny, aboveskip=1pt, belowskip=0pt]{user\_code.cpp}
 #include "workshop_api.hpp"
@@ -155,7 +156,7 @@ void loop_400Hz(float dt)
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{③④ 改造課題}
+\begin{frame}{③ 改造課題}
   \begin{block}{時間があれば試してみよう}
     \begin{itemize}
       \item 別のモータを回してみる
@@ -173,7 +174,7 @@ void loop_400Hz(float dt)
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{③④ チェックポイント}
+\begin{frame}{③ チェックポイント}
   \begin{alertblock}{確認事項}
     \begin{itemize}
       \item[$\square$] Duty を書き換えてビルド・書き込みができた

@@ -1,0 +1,83 @@
+% ==============================================================================
+% dxh_stick_mode3.tex — DXH workshop: stick assignment in Mode 3
+% DXH講座: スティックモード3の操作割当図
+%
+% Axis mapping verified against controller firmware (main.cpp:1545):
+%   Mode 3: Throttle=right-Y, Rudder(yaw)=right-X,
+%           Elevator(pitch)=left-Y, Aileron(roll)=left-X
+% 軸割当はコントローラファーム (main.cpp:1545) で裏取り済み:
+%   Mode 3: スロットル=右Y, ラダー(ヨー)=右X, エレベータ(ピッチ)=左Y,
+%           エルロン(ロール)=左X
+% ==============================================================================
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) → Yu Gothic (Windows) → Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+% Colors defined after \begin{document} (standalone compatibility, rule T9)
+% 色定義は \begin{document} の後（standalone 互換, ルール T9）
+\definecolor{cstick}{RGB}{60, 60, 60}
+\definecolor{cmove}{RGB}{0, 100, 180}
+\definecolor{cvert}{RGB}{180, 60, 40}
+
+\begin{tikzpicture}[
+    stickname/.style={font=\bfseries\large, text=black!70, align=center},
+    axislabel/.style={font=\normalsize, align=center},
+    arr/.style={-{Stealth[length=3mm]}, line width=1.8pt, #1},
+    note/.style={font=\small, text=black!55, align=center},
+  ]
+
+  % === Left stick: horizontal movement / 左スティック: 水平方向の移動 ===
+  \node[stickname] at (-6.0, 4.1) {左スティック};
+  \draw[cstick, line width=2pt, fill=black!25] (-6.0, 0) circle (1.4);
+  \draw[cstick, line width=1pt, fill=black!40] (-6.0, 0) circle (0.9);
+
+  \draw[arr=cmove] (-6.0, 1.6) -- (-6.0, 2.8)
+    node[axislabel, text=cmove, above=0.5mm] {前進};
+  \draw[arr=cmove] (-6.0, -1.6) -- (-6.0, -2.8)
+    node[axislabel, text=cmove, below=0.5mm] {後退};
+  \draw[arr=cmove] (-7.6, 0) -- (-8.8, 0)
+    node[axislabel, text=cmove, left=0.5mm] {左へ移動};
+  \draw[arr=cmove] (-4.4, 0) -- (-3.2, 0)
+    node[axislabel, text=cmove, right=0.5mm] {右へ移動};
+
+  % === Right stick: altitude + turning / 右スティック: 高度と旋回 ===
+  \node[stickname] at (6.0, 4.1) {右スティック};
+  \draw[cstick, line width=2pt, fill=black!25] (6.0, 0) circle (1.4);
+  \draw[cstick, line width=1pt, fill=black!40] (6.0, 0) circle (0.9);
+
+  \draw[arr=cvert] (6.0, 1.6) -- (6.0, 2.8)
+    node[axislabel, text=cvert, above=0.5mm] {上昇};
+  \draw[arr=cvert] (6.0, -1.6) -- (6.0, -2.8)
+    node[axislabel, text=cvert, below=0.5mm] {下降};
+  \draw[arr=cvert] (4.4, 0) -- (3.2, 0)
+    node[axislabel, text=cvert, left=0.5mm] {左に旋回};
+  \draw[arr=cvert] (7.6, 0) -- (8.8, 0)
+    node[axislabel, text=cvert, right=0.5mm] {右に旋回};
+
+  % === Notes / 補足 ===
+  \node[note] at (-6.0, -4.7) {（機体の水平移動）};
+  \node[note] at (6.0, -4.7) {（高度と機首の向き）\\ 押し込み = ARM／DISARM};
+
+\end{tikzpicture}
+
+\end{document}

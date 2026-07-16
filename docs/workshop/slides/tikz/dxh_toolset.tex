@@ -1,0 +1,83 @@
+% ==============================================================================
+% dxh_toolset.tex — DXH workshop: today's toolset (teacher-friendly ecosystem)
+% DXH講座: 今日つかう道具一式（高校教員向けに平易化したエコシステム図）
+%
+% The repo-directory ecosystem_layers diagram is developer-oriented and
+% meaningless to high-school teachers; this shows the same idea as the three
+% physical tools on the desk plus the freely published materials.
+% リポジトリ構成ベースの ecosystem_layers は開発者向けで高校教員には伝わらない
+% ため、机上の3つの道具＋無料公開教材という形で同じ趣旨を示す。
+% ==============================================================================
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) → Yu Gothic (Windows) → Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+% Colors defined after \begin{document} (standalone compatibility, rule T9)
+% 色定義は \begin{document} の後（standalone 互換, ルール T9）
+\definecolor{cpc}{RGB}{0, 100, 180}
+\definecolor{cfly}{RGB}{180, 60, 40}
+\definecolor{cjoy}{RGB}{40, 140, 60}
+\definecolor{copen}{RGB}{120, 80, 160}
+
+\begin{tikzpicture}[
+    tool/.style={
+      rectangle, rounded corners=5pt, draw=#1, line width=1.5pt,
+      fill=#1!10, minimum width=44mm, minimum height=20mm,
+      font=\bfseries\large, text=#1, align=center
+    },
+    desc/.style={
+      font=\small, text=black!60, align=center
+    },
+    arr/.style={
+      -{Stealth[length=3.5mm]}, line width=1.5pt, black!60
+    },
+    arrlabel/.style={
+      font=\small, text=black!55, align=center
+    },
+  ]
+
+  % === Three tools on the desk / 机の上の3つの道具 ===
+  \node[tool=cpc]  (pc)  at (-6.6, 0) {ノートPC\\[-1pt]{\normalsize プログラムを書く}};
+  \node[tool=cfly] (fly) at (0, 0)    {StampFly 機体\\[-1pt]{\normalsize プログラムで飛ぶ}};
+  \node[tool=cjoy] (joy) at (6.6, 0)  {コントローラ\\[-1pt]{\normalsize スティックで操縦}};
+
+  \node[desc, below=2mm of pc]  {開発環境はインストール済み};
+  \node[desc, below=2mm of fly] {センサ＋小型コンピュータ搭載};
+  \node[desc, below=2mm of joy] {Atom JoyStick};
+
+  % === Horizontal connections / 横方向の接続（直角ルーティング: 水平のみ） ===
+  \draw[arr] (pc.east) -- (fly.west)
+    node[arrlabel, midway, above=1mm] {USBで\\書き込み};
+  \draw[arr] (joy.west) -- (fly.east)
+    node[arrlabel, midway, above=1mm] {電波で\\操縦};
+
+  % === Everything is published for free / すべて無料公開 ===
+  \node[rectangle, rounded corners=5pt, draw=copen, line width=1.5pt,
+        fill=copen!8, minimum width=152mm, minimum height=15mm,
+        align=center, below=13mm of fly, text=copen]
+    {\bfseries\large ソースコード・教材・シミュレータはすべて Web で無料公開\\[0pt]
+     {\normalsize\mdseries\color{black!60} 学校でも今日と同じ環境をそのまま用意できる}};
+
+\end{tikzpicture}
+
+\end{document}

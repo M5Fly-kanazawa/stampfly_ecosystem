@@ -27,38 +27,57 @@
 
 % ------------------------------------------------------------------
 \begin{frame}{① コントローラのボタンとスティック}
-  \begin{table}
-    \centering\small
-    \begin{tabular}{ll}
-      \hline
-      \textbf{モード} & \textbf{機体 LED 色} \\
-      \hline
-      STABILIZE & 黄緑 \\
-      ACRO      & 青 \\
-      ALT\_HOLD & オレンジ \\
-      POS\_HOLD & マゼンタ \\
-      \hline
-    \end{tabular}
-  \end{table}
+  \begin{columns}[c]
+    \begin{column}{0.40\textwidth}
+      \centering
+      \includegraphics[width=0.95\columnwidth]{atom_joystick.jpg}\\
+      {\scriptsize Atom JoyStick（左上が L ボタン）}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \begin{table}
+        \centering\footnotesize
+        \begin{tabular}{ll}
+          \hline
+          \textbf{モード} & \textbf{機体 LED 色} \\
+          \hline
+          STABILIZE & 黄緑 \\
+          ACRO      & 青 \\
+          ALT\_HOLD & オレンジ \\
+          POS\_HOLD & マゼンタ \\
+          \hline
+        \end{tabular}
+      \end{table}
 
-  \vspace{0.2em}
-
-  \begin{block}{ALT\_HOLD への切り替え}
-    \small コントローラの左ボタンを \textbf{1回} 押す（OFF $\to$ ALT\_HOLD）\\
-    機体 LED が\textbf{オレンジ}になったことを確認する
-  \end{block}
+      \begin{block}{ALT\_HOLD への切り替え}
+        \small L ボタンを \textbf{1回} 押す（OFF $\to$ ALT\_HOLD）\\
+        機体 LED が\textbf{オレンジ}になったことを確認する
+      \end{block}
+    \end{column}
+  \end{columns}
 
   \vspace{0.2em}
 
   \begin{exampleblock}{スティックの動き}
-    \footnotesize 全軸バネ復帰式。倒すと傾いて移動、離すと水平に戻る（高度は自動維持。横に流れたらスティックで戻す）
+    \footnotesize 全軸バネ復帰式。倒すと傾いて移動、離すと水平に戻る（横流れはスティックで修正）
   \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{① 操縦のしかた（スティックモード3）}
+  \centering
+  \begin{adjustbox}{max width=0.88\textwidth, max height=0.72\textheight, center}
+    \input{../tikz/dxh_stick_mode3}
+  \end{adjustbox}
+
+  \vspace{0.2em}
+
+  {\small ALT\_HOLD では高度は自動維持 --- 操縦は主に\textbf{左スティック}を少しずつ倒す}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{① ALT\_HOLD と自動離着陸}
   \begin{block}{自動離着陸と ARM / DISARM}
-    \small \textbf{ARM}（スティックを押し込む）$\to$ 自動離陸・高度0.5\,m を自動維持\\
+    \small \textbf{ARM}（右スティックを押し込む）$\to$ 自動離陸・高度0.5\,m を自動維持\\
     \textbf{DISARM}（もう一度押し込む）$\to$ 自動着陸 $\to$ 着陸中にもう一度で緊急停止
   \end{block}
 
@@ -70,7 +89,7 @@
 
   \vspace{0.3em}
 
-  \begin{exampleblock}{交代制の案内}
-    \footnotesize 5名 $\times$ 2グループで交代（1グループ 約10分）。機体は事前ペアリング済みなので操縦だけに集中できます
+  \begin{exampleblock}{進め方}
+    \footnotesize 1人1セットで全員同時に飛行（交代なし）。機体は事前ペアリング済みなので操縦だけに集中できます。電池が切れたら（シアン点滅）交換して再開
   \end{exampleblock}
 \end{frame}

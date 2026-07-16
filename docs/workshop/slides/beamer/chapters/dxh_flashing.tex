@@ -27,26 +27,30 @@ setup_env.bat  # 開発環境をアクティベート
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{② 書き込みの仕組み}
+\begin{frame}{② 書き込みの仕組み --- 3つの方法}
   \begin{block}{ファームウェアとは}
     \footnotesize 機体を動かすプログラム一式のこと。「書き込み」とは、新しい\\
     ファームウェアを StampFly の中に転送する作業を指す
   \end{block}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{table}
-    \centering\small
-    \begin{tabular}{lll}
+    \centering\footnotesize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{34mm}}
       \hline
-       & \textbf{Web フラッシャ} & \textbf{GUI フラッシャ（.exe）} \\
+       & \textbf{Web フラッシャ} & \textbf{GUI フラッシャ} & \textbf{sf CLI（コマンド）} \\
       \hline
-      起動方法   & ブラウザ（Edge/Chrome） & デスクトップアプリ \\
-      必要環境   & Web Serial API 対応ブラウザ & Windows / macOS \\
-      本日の用途 & 各自の実習で使用 & デモのみ \\
+      起動方法     & ブラウザ（Edge/Chrome） & デスクトップアプリ & コマンドプロンプト \\
+      書き込むもの & 公開されている完成版 & 公開されている完成版 & \textbf{自分で書き換えたコード} \\
+      本日の用途   & ②の実習 & デモのみ & ③の実習（\code{sf lesson flash}） \\
       \hline
     \end{tabular}
   \end{table}
+
+  \vspace{0.3em}
+
+  {\footnotesize ② = 完成品を書き込む（開発環境いらず）／③ = \textbf{自分で書き換えたコード}をビルドして書き込む（開発環境つき PC が必要）}
 \end{frame}
 
 % ------------------------------------------------------------------
