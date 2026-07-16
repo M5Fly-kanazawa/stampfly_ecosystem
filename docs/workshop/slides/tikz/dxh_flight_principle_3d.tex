@@ -97,21 +97,21 @@
   % === Moment arrows around each axis / 各軸まわりのモーメント矢印 ===
   % Roll (around forward axis) / ロール（前後軸まわり）
   \begin{scope}[rotate around={143:(-2.85,2.15)}]
-    \draw[mom] ([shift={(-2.85,2.15)}] -40:0.38 and 0.5)
-      arc[x radius=0.38, y radius=0.5, start angle=-40, end angle=185];
+    \draw[mom] ([shift={(-2.85,2.15)}] 185:0.38 and 0.5)
+      arc[x radius=0.38, y radius=0.5, start angle=185, end angle=-40];
   \end{scope}
-  \node[lbl, text=cmom] at (-3.45,2.55) {ロール};
+  \node[lbl, text=cmom] at (-3.55,1.45) {ロール};
 
   % Pitch (around lateral axis) / ピッチ（左右軸まわり）
   \begin{scope}[rotate around={11:(2.95,0.60)}]
-    \draw[mom] ([shift={(2.95,0.60)}] -40:0.38 and 0.5)
-      arc[x radius=0.38, y radius=0.5, start angle=-40, end angle=185];
+    \draw[mom] ([shift={(2.95,0.60)}] 185:0.38 and 0.5)
+      arc[x radius=0.38, y radius=0.5, start angle=185, end angle=-40];
   \end{scope}
-  \node[lbl, text=cmom] at (3.55,1.15) {ピッチ};
+  \node[lbl, text=cmom] at (3.6,-0.05) {ピッチ};
 
   % Yaw (around vertical axis) / ヨー（上下軸まわり）
-  \draw[mom] ([shift={(0,-1.75)}] -30:0.6 and 0.24)
-    arc[x radius=0.6, y radius=0.24, start angle=-30, end angle=200];
+  \draw[mom] ([shift={(0,-1.75)}] 200:0.6 and 0.24)
+    arc[x radius=0.6, y radius=0.24, start angle=200, end angle=-30];
   \node[lbl, text=cmom] at (1.05,-1.85) {ヨー};
 
 \end{tikzpicture}
