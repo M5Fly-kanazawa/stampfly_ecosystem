@@ -56,17 +56,15 @@
     \begin{lstlisting}[style=sfbash, numbers=none]
 cd stampfly_ecosystem
 setup_env.bat
-sf lesson edit    REM VSCodeが開く。コードを編集して保存
+sf lesson edit    ← VSCodeが開く。コードを編集して保存
 sf lesson build
-sf lesson flash   REM 書き込み後シリアルモニタが自動起動
+sf lesson flash   ← 書き込み後シリアルモニタが自動起動
     \end{lstlisting}
   \end{block}
 
-  \vspace{0.3em}
+  {\footnotesize ※ 「←」以降は説明なので入力しません（打ち込むのはコマンドだけ）}
 
-  \begin{alertblock}{注意}
-    \footnotesize \code{sf lesson switch} は実行済みなので今日は不要（実行するとフルビルドになり時間がかかる）
-  \end{alertblock}
+  \vspace{0.2em}
 
   {\footnotesize シリアルモニタの終了は \code{Ctrl+]}}
 \end{frame}

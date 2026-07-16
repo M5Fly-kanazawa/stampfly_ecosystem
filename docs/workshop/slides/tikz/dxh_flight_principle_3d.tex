@@ -1,0 +1,119 @@
+% ==============================================================================
+% dxh_flight_principle_3d.tex — DXH workshop: quadcopter flight principle (3D)
+% DXH講座: クアッドコプタ飛行原理の3D図
+%
+% Isometric-style view of an X-quad: four rotor discs with thrust vectors,
+% spin-direction arcs (CW/CCW), and the three body axes with roll/pitch/yaw
+% moment arrows. Projection: forward = (-0.78, 0.59), right = (0.98, 0.20),
+% up = (0, 1); rotor arm length a = 1.55.
+% X型クアッドの斜視図: 4つのロータ円盤+推力ベクトル、回転方向の円弧
+% (CW/CCW)、機体3軸とロール/ピッチ/ヨーのモーメント矢印。
+% 投影: 前方=(-0.78,0.59), 右=(0.98,0.20), 上=(0,1)、アーム長 a=1.55。
+% ==============================================================================
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) → Yu Gothic (Windows) → Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+% Colors defined after \begin{document} (standalone compatibility, rule T9)
+% 色定義は \begin{document} の後（standalone 互換, ルール T9）
+\definecolor{cthrust}{RGB}{180, 60, 40}   % thrust vectors / 推力
+\definecolor{ccw}{RGB}{0, 100, 180}       % CW rotor spin / CW回転
+\definecolor{cccw}{RGB}{200, 90, 40}      % CCW rotor spin / CCW回転
+\definecolor{cmom}{RGB}{40, 140, 60}      % moment arrows / モーメント
+
+\begin{tikzpicture}[
+    lbl/.style={font=\small\bfseries, align=center},
+    axis/.style={dashed, black!45, line width=0.8pt},
+    thrust/.style={-{Stealth[length=3mm]}, cthrust, line width=1.6pt},
+    mom/.style={-{Stealth[length=2.6mm]}, cmom, line width=1.4pt},
+    spin/.style={-{Stealth[length=2mm]}, line width=1.1pt},
+  ]
+
+  % Rotor centers (isometric projection) / ロータ中心（斜視投影）
+  % FL=(-2.17,0.31)  FR=(0.62,0.87)  RL=(-0.62,-0.87)  RR=(2.17,-0.31)
+
+  % === Body axes (behind everything) / 機体3軸（最背面） ===
+  \draw[axis] (0,0) -- (-3.05,2.3);            % forward axis / 前後軸
+  \draw[axis] (0,0) -- (3.15,0.64);            % lateral axis / 左右軸
+  \draw[axis] (0,0) -- (0,-2.05);              % vertical axis / 上下軸
+
+  % === Arms / アーム ===
+  \draw[line width=2.4pt, black!65] (0,0) -- (-2.17,0.31);
+  \draw[line width=2.4pt, black!65] (0,0) -- (0.62,0.87);
+  \draw[line width=2.4pt, black!65] (0,0) -- (-0.62,-0.87);
+  \draw[line width=2.4pt, black!65] (0,0) -- (2.17,-0.31);
+
+  % === Rotor discs / ロータ円盤 ===
+  \draw[fill=black!12, black!60] (-0.62,-0.87) ellipse [x radius=0.62, y radius=0.24];
+  \draw[fill=black!12, black!60] (2.17,-0.31) ellipse [x radius=0.62, y radius=0.24];
+  \draw[fill=black!12, black!60] (-2.17,0.31) ellipse [x radius=0.62, y radius=0.24];
+  \draw[fill=black!12, black!60] (0.62,0.87) ellipse [x radius=0.62, y radius=0.24];
+
+  % === Center body + nose / 機体中心と機首 ===
+  \draw[fill=black!30, black!60] (0,0) ellipse [x radius=0.34, y radius=0.16];
+  \node[lbl, text=black!70] at (-1.35,1.42) {前};
+
+  % === Spin direction arcs / 回転方向の円弧 ===
+  % CW rotors: FL (M4), RR (M2) — blue / CWロータ: FL・RR（青）
+  \draw[spin, ccw] ([shift={(-2.17,0.31)}] 210:0.8 and 0.34)
+    arc[x radius=0.8, y radius=0.34, start angle=210, end angle=-30];
+  \draw[spin, ccw] ([shift={(2.17,-0.31)}] 210:0.8 and 0.34)
+    arc[x radius=0.8, y radius=0.34, start angle=210, end angle=-30];
+  % CCW rotors: FR (M1), RL (M3) — orange / CCWロータ: FR・RL（橙）
+  \draw[spin, cccw] ([shift={(0.62,0.87)}] -30:0.8 and 0.34)
+    arc[x radius=0.8, y radius=0.34, start angle=-30, end angle=210];
+  \draw[spin, cccw] ([shift={(-0.62,-0.87)}] -30:0.8 and 0.34)
+    arc[x radius=0.8, y radius=0.34, start angle=-30, end angle=210];
+  \node[font=\scriptsize\bfseries, text=ccw]  at (3.05,-0.75) {CW};
+  \node[font=\scriptsize\bfseries, text=cccw] at (-1.9,-1.35) {CCW};
+
+  % === Thrust vectors / 推力ベクトル ===
+  \draw[thrust] (-2.17,0.58) -- ++(0,1.15);
+  \draw[thrust] (0.62,1.14) -- ++(0,1.15);
+  \draw[thrust] (-0.62,-0.60) -- ++(0,1.15);
+  \draw[thrust] (2.17,-0.04) -- ++(0,1.15);
+  \node[lbl, text=cthrust] at (1.35,2.35) {推力};
+
+  % === Moment arrows around each axis / 各軸まわりのモーメント矢印 ===
+  % Roll (around forward axis) / ロール（前後軸まわり）
+  \begin{scope}[rotate around={143:(-2.85,2.15)}]
+    \draw[mom] ([shift={(-2.85,2.15)}] -40:0.38 and 0.5)
+      arc[x radius=0.38, y radius=0.5, start angle=-40, end angle=185];
+  \end{scope}
+  \node[lbl, text=cmom] at (-3.45,2.55) {ロール};
+
+  % Pitch (around lateral axis) / ピッチ（左右軸まわり）
+  \begin{scope}[rotate around={11:(2.95,0.60)}]
+    \draw[mom] ([shift={(2.95,0.60)}] -40:0.38 and 0.5)
+      arc[x radius=0.38, y radius=0.5, start angle=-40, end angle=185];
+  \end{scope}
+  \node[lbl, text=cmom] at (3.55,1.15) {ピッチ};
+
+  % Yaw (around vertical axis) / ヨー（上下軸まわり）
+  \draw[mom] ([shift={(0,-1.75)}] -30:0.6 and 0.24)
+    arc[x radius=0.6, y radius=0.24, start angle=-30, end angle=200];
+  \node[lbl, text=cmom] at (1.05,-1.85) {ヨー};
+
+\end{tikzpicture}
+
+\end{document}
