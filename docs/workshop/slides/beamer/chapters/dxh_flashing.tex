@@ -42,34 +42,58 @@ setup_env.bat  ← 開発環境をアクティベート
        & \textbf{Web フラッシャ} & \textbf{GUI フラッシャ} & \textbf{sf CLI（コマンド）} \\
       \hline
       起動方法     & ブラウザ（Edge/Chrome） & デスクトップアプリ & コマンドプロンプト \\
-      書き込むもの & 公開されている完成版 & 公開されている完成版 & \textbf{自分で書き換えたコード} \\
-      本日の用途   & ②の実習 & デモのみ & ③の実習（\code{sf lesson flash}） \\
+      書き込むもの & 公開されている完成版 & 公開されている完成版 & PC 内でビルドしたもの \\
+      本日の用途   & 紹介のみ & デモのみ & \textbf{②・③の実習} \\
       \hline
     \end{tabular}
   \end{table}
 
   \vspace{0.3em}
 
-  {\footnotesize ② = 完成品を書き込む（開発環境いらず）／③ = \textbf{自分で書き換えたコード}をビルドして書き込む（開発環境つき PC が必要）}
+  {\footnotesize 今日の実習は②・③とも sf CLI で書き込みます。Web / GUI フラッシャは\textbf{開発環境のない PC でも使える}方法（紹介のみ）}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{② Web フラッシャの手順}
+\begin{frame}{② StampFly の入り口 --- Landing ページ}
+  \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{landing_page.png}\\
+      {\scriptsize \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/}}
+    \end{column}
+    \begin{column}{0.43\textwidth}
+      \begin{itemize}\small
+        \item StampFly エコシステムの紹介ページ
+        \item ドキュメント・教材への入り口
+        \item \textbf{Web フラッシャ}もここから --- ブラウザだけで最新ファームウェアを書き込める（開発環境不要）
+      \end{itemize}
+
+      \vspace{0.3em}
+
+      {\footnotesize 学校の PC に開発環境がなくても、このページから書き込みは試せます（今日は紹介のみ）}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{② 実習：sf flash でファームウェアを書き込む}
+  \begin{block}{PC 側の操作（コマンドプロンプト）}
+    \begin{lstlisting}[style=sfbash, numbers=none]
+cd stampfly_ecosystem
+setup_env.bat
+sf flash vehicle   ← 機体をUSB接続してから実行
+    \end{lstlisting}
+  \end{block}
+
+  {\footnotesize ※ 「←」以降は説明なので入力しません}
+
+  \vspace{0.2em}
+
   \begin{enumerate}\small
-    \item 機体の電源を入れ USB-C で PC に接続
-    \item \footnotesize\url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/} を開く（Edge/Chrome）
-    \item 「StampFly 本体」カードの「インストール」をクリック
-    \item ポート選択ダイアログでポートを選び「接続」
-    \item INSTALL 実行 $\to$ 進捗\% $\to$ 完了
-    \item 機体が自動再起動。起動音が終わるまで水平静置（ジャイロ校正）
+    \item 機体の電源を入れ、USB-C ケーブルで PC に接続
+    \item 上のコマンドを実行（PC 内でビルド済みの標準ファームウェアを書き込み）
+    \item 完了後、機体が再起動 --- 起動音が終わり LED が緑常灯になるまで水平静置（ジャイロ校正）
   \end{enumerate}
-
-  \vspace{0.4em}
-
-  \begin{alertblock}{重要}
-    \footnotesize 書き込むと機体の設定保存領域（NVS）も工場出荷状態に戻り、ペアリング情報が消えます。\\
-    本講座はこの後に飛行しないため問題ありません（再ペアリングは講師が行います）
-  \end{alertblock}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -80,17 +104,17 @@ setup_env.bat  ← 開発環境をアクティベート
       \hline
       \textbf{症状} & \textbf{対処} \\
       \hline
-      ポートが選べない/繋がらない & ケーブルを交換（充電専用ケーブルは不可） \\
-      書き込みが進まない/失敗する & ポートを使う他アプリを閉じる \\
+      機体が認識されない/繋がらない & ケーブルを交換（充電専用ケーブルは不可） \\
+      書き込みが進まない/失敗する & ポートを使う他アプリ（シリアルモニタ等）を閉じる \\
       それでも失敗する & 機体の BOOT ボタンを押しながら\\
-                       & USB を挿し直して再 Install \\
+                       & USB を挿し直してもう一度 \code{sf flash} \\
       \hline
     \end{tabular}
   \end{table}
 
   \vspace{0.5em}
 
-  \begin{exampleblock}{補足}
-    \footnotesize 「全消去（Erase device）」チェックは本講座では \textbf{OFF のまま}でよい
+  \begin{exampleblock}{安心してください}
+    \footnotesize \code{sf flash} は機体の設定（ペアリング等）を消さない書き込みなので、何度失敗してもやり直せます
   \end{exampleblock}
 \end{frame}

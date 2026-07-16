@@ -16,6 +16,49 @@
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}[fragile]{これからの StampFly（1）：Python から操縦 --- Tello 互換}
+  \begin{columns}[T]
+    \begin{column}{0.50\textwidth}
+      \begin{itemize}\small
+        \item Tello SDK 互換の操縦 API を実装（開発中・実機検証中）
+        \item Tello 用の Python ライブラリ（djitellopy）のプログラムが\textbf{そのまま動く}ことを目標
+        \item Tello で作った授業教材・生徒のコードを StampFly に載せ替えられる
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{tello\_compat.py}
+from djitellopy import Tello
+
+drone = Tello()
+drone.connect()
+drone.takeoff()
+drone.move_forward(50)
+drone.rotate_clockwise(90)
+drone.land()
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{これからの StampFly（2）：ブロックプログラミング}
+  \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{sf_blocks_ui.png}\\
+      {\scriptsize \code{sf blocks} --- ブラウザのブロック編集画面（デモ版）}
+    \end{column}
+    \begin{column}{0.43\textwidth}
+      \begin{itemize}\small
+        \item Google の \textbf{Blockly} --- ブロックを組み合わせて書くビジュアルプログラミング言語
+        \item ブラウザでブロックを並べて飛行プログラムを作れる（開発中・デモ版が動作）
+        \item キーボード入力なしで、プログラミング未経験の生徒でも扱える
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{アンケートのお願い / リンク集}
   \begin{columns}[c]
     \begin{column}{0.42\textwidth}

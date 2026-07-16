@@ -55,7 +55,8 @@
 - [ ] アンケートQR掲示物を準備（配布資料の印刷は不要）
 - [ ] 全PCのデスクトップにスライドPDF（`docs\workshop\slides\beamer\dxh_workshop.pdf`）のショートカットがあり、開けることを確認
 - [ ] 救急セット・予備プロペラの在庫確認
-- [ ] C:\StampFly\ 配下のフラッシャ・binファイルが全PCに配置済みであることを再確認
+- [ ] 講師デモ機の C:\StampFly\（GUIフラッシャ.exe・full.bin）配置を確認（②実習は sf flash に変更のため全PC配置は必須でない）
+- [ ] 全PCで vehicle ファームが事前ビルド済みで、`sf flash vehicle` が即実行できる状態であることを抜き取り確認
 
 ## 3. 当日朝チェックリスト
 
