@@ -221,10 +221,10 @@ Kp = 1 / (4·ζ²·K·τ_m)
 
 > **[Confirmed 2026-07-15]** τ_m = 0.02 s is now backed by measurement: the coast-down test
 > (direct J/C_Q = 335 s·rad), pixel-integration of the propeller photo (J_prop = 1.03e-8),
-> measured rotor-cup dimensions (J_rotor = 3.45e-9), and Ke = 5.5e-4 (no-load V-ω; cross-checked by
-> open-circuit coast-down EMF after instrument-gain correction) give a hover-point effective time
-> constant τ_eff ≈ 0.017 s at full conduction (γ=1); the flight-identified 0.02–0.034 s corresponds
-> to γ≈0.2–0.76, consistent with 0.02 in this table.
+> measured rotor-cup dimensions (J_rotor = 3.45e-9), and Ke = 5.33e-4 (open-circuit coast-down EMF,
+> cross-validated to 0.5% by the independent no-load V-ω identification 5.35e-4) give a hover-point
+> effective time constant τ_eff ≈ 0.018 s at full conduction (γ=1); the flight-identified 0.02–0.034 s
+> corresponds to γ≈0.2–0.8, consistent with 0.02 in this table.
 > (History: briefly mis-corrected to 0.05 based on the old J = 5.31e-8, which turned out to be
 > 2× too large for the prop and 10× for the rotor; the correct J is 1.375e-8. The gain design
 > tables below remain valid as computed with 0.02. See multicopter_introduction qa_log Q4-9..13.)
