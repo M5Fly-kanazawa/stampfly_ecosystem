@@ -402,6 +402,13 @@ def _run_list_manifest(manifest: List[Dict[str, Any]]) -> int:
             )
             if desc_ja:
                 console.print(f"              {desc_ja}")
+        # Show the next free event number so new tutorials know where to start
+        # 次イベントの空き番号を表示（新規チュートリアル追加時の起点が一目で分かる）
+        next_event = max(e["number"] for e in event_entries) + 1
+        console.print(
+            f"    (next event number / 次のイベント番号: {next_event} — "
+            f"lesson_{next_event}_<name> + manifest 追記で追加)"
+        )
         console.print()
 
     console.print(f"  Total: {len(manifest)} lessons")
@@ -568,7 +575,13 @@ def run_info(args: argparse.Namespace) -> int:
     console.print(f"  ID:          {entry['id']}")
     console.print(f"  Description: {entry.get('description_ja', '-')}")
     console.print(f"               {entry.get('description_en', '-')}")
-    console.print(f"  Slide:       chapters/{entry.get('slide_file', '-')}.tex")
+    # Event templates have no slide chapter — show "none" instead of a bogus path
+    # イベント雛形にはスライド章がないため、偽パスでなく「なし」を表示する
+    slide_file = entry.get("slide_file")
+    if slide_file:
+        console.print(f"  Slide:       chapters/{slide_file}.tex")
+    else:
+        console.print("  Slide:       (none)")
 
     fw_dir = entry.get("firmware_dir")
     if fw_dir and fw_dir is not None:
