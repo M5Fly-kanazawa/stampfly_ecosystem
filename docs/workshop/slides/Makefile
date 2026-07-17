@@ -57,6 +57,17 @@ dxh: $(BEAMER_DIR)/$(DXH_PDF)
 $(BEAMER_DIR)/$(DXH_PDF): $(BEAMER_DIR)/$(DXH_TEX) $(BEAMER_DIR)/preamble.tex $(BEAMER_DIR)/stampfly_slides.sty $(CHAPTER_SOURCES)
 	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode $(DXH_TEX) && lualatex -interaction=nonstopmode $(DXH_TEX)
 
+# Docswell-upload variant: same deck without QR codes (title-page Docswell QR,
+# instructor-survey QR). Production deck = dxh_workshop.pdf (QR入り・本番投影用),
+# upload deck = dxh_workshop_docswell.pdf (QRなし・ドクセル公開用).
+# ドクセル公開用（QRなし）。本番投影用は dxh_workshop.pdf（QR入り）。
+DXH_DOCSWELL_PDF := dxh_workshop_docswell.pdf
+
+dxh-docswell: $(BEAMER_DIR)/$(DXH_DOCSWELL_PDF)
+
+$(BEAMER_DIR)/$(DXH_DOCSWELL_PDF): $(BEAMER_DIR)/$(DXH_TEX) $(BEAMER_DIR)/preamble.tex $(BEAMER_DIR)/stampfly_slides.sty $(CHAPTER_SOURCES)
+	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}" && lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}"
+
 # ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
 # Usage: make chapter NAME=led_control

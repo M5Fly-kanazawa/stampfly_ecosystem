@@ -33,6 +33,35 @@
   \end{frame}
 }
 
+% Build variants: production (make dxh) carries QR codes; the Docswell-upload
+% build (make dxh-docswell) defines \DocswellBuild and omits them. The choice
+% is resolved HERE in the preamble — keep TeX conditionals out of frame bodies
+% (they broke beamer/luatexja frame scanning).
+% ビルド2系統: 本番（make dxh）はQR入り、ドクセル公開用（make dxh-docswell、
+% \DocswellBuild 定義）はQRなし。分岐はプリアンブルで解決する — フレーム内に
+% TeX 条件分岐を書くと beamer/luatexja のフレーム走査が壊れるため。
+\ifdefined\DocswellBuild
+  \newcommand{\dxhTitleQR}{}
+  \newcommand{\dxhSurveyQR}{%
+    \node[rectangle, draw=sfgray, dashed, line width=1pt,
+          minimum width=2.8cm, minimum height=2.8cm,
+          align=center, font=\footnotesize\color{sfgray},
+    ] at (3.4,0) {講師アンケート\\（教材改善用）\\ QR（会場で掲示）};}
+\else
+  \newcommand{\dxhTitleQR}{%
+    \begin{tikzpicture}[remember picture, overlay]
+      \node[anchor=south east, inner sep=0] (docswellqr)
+        at ([xshift=-7mm, yshift=14mm]current page.south east)
+        {\includegraphics[width=22mm]{qr_docswell_dxh.png}};
+      \node[anchor=north, font=\tiny, text=black!60, yshift=-0.5mm]
+        at (docswellqr.south) {本日のスライド資料};
+    \end{tikzpicture}}
+  \newcommand{\dxhSurveyQR}{%
+    \node[inner sep=0] at (3.4,0.15)
+      {\includegraphics[width=2.5cm]{qr_survey_dxh.png}};
+    \node[font=\scriptsize, align=center] at (3.4,-1.65) {講師アンケート\\（教材改善用）};}
+\fi
+
 \title{StampFly で学ぶドローン制御}
 \subtitle{高校の先生向け体験講座（DXH）}
 \author{伊藤 恒平}
@@ -47,13 +76,7 @@
 % 閲覧できるように）。
 \begin{frame}
   \titlepage
-  \begin{tikzpicture}[remember picture, overlay]
-    \node[anchor=south east, inner sep=0] (docswellqr)
-      at ([xshift=-7mm, yshift=14mm]current page.south east)
-      {\includegraphics[width=22mm]{qr_docswell_dxh.png}};
-    \node[anchor=north, font=\tiny, text=black!60, yshift=-0.5mm]
-      at (docswellqr.south) {本日のスライド資料};
-  \end{tikzpicture}
+  \dxhTitleQR
 \end{frame}
 
 % === Opening: overview, ecosystem, safety ===
