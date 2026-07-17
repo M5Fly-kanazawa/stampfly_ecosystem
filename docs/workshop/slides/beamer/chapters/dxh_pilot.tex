@@ -4,6 +4,46 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
+\begin{frame}[fragile]{① まずはシミュレータで飛ばしてみる}
+  \begin{block}{PC 側の操作（コマンドプロンプト）}
+    \begin{lstlisting}[style=sfbash, numbers=none]
+sf sim run   ← 3Dシミュレータが起動
+    \end{lstlisting}
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{itemize}\small
+    \item コントローラを USB ケーブルで PC に接続（シミュレータ用の設定済み）
+    \item 起動直後の校正が終わるまでスティックに触らない
+    \item スティックの割り当ては\textbf{実機とまったく同じ} --- 画面の StampFly を操縦してみる
+  \end{itemize}
+
+  \vspace{0.2em}
+
+  \begin{exampleblock}{シミュレータの良いところ}
+    \footnotesize 落ちても壊れない・何度でもやり直せる。ここで操縦の感覚を掴んでから実機へ
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{① シミュレータ → 実機への切り替え}
+  \begin{block}{コントローラを実機用（ESP-NOW）に戻す}
+    \begin{enumerate}\small
+      \item コントローラの \textbf{M5 ボタン}（画面下）でメニューを開く
+      \item \textbf{「通信モード」を1回選ぶ} $\to$ USB HID から ESP-NOW に切り替わり、自動で再起動する
+      \item USB ケーブルを外す（実機とは電波でつながる）
+    \end{enumerate}
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{安心してください}
+    \footnotesize 切り替えてもペアリングなどの設定は消えません
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{① 機体の起動と LED の見方}
   \begin{table}
     \centering\small
