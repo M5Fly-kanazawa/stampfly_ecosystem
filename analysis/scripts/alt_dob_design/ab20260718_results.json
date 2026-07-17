@@ -1,354 +1,362 @@
 {
-  "section1_flight_conditions": {
-    "dob_flight": {
-      "label": "DOB (2026-07-18)",
-      "path": "/Users/kouhei/tmp/github/stampfly_ecosystem/logs/stampfly_udp_20260718T022929.jsonl",
-      "flight_window_raw_s": [
-        56.028416,
-        173.593418
-      ],
-      "flight_duration_s": 117.56500200000002,
-      "t_airborne_s": 57.591,
-      "modes_seen": [
-        3
-      ],
-      "mode_names": [
-        "POS_HOLD"
-      ],
-      "voltage_min_V": 3.736,
-      "voltage_max_V": 4.208,
-      "stick_std": {
-        "roll": 0.0,
-        "pitch": 0.0,
-        "yaw": 0.0,
-        "throttle": 0.0003957045662432018
-      },
-      "stick_maxabs": {
-        "roll": 0.0,
-        "pitch": 0.0,
-        "yaw": 0.0,
-        "throttle": 0.01513671875
-      }
-    },
-    "baseline_flight": {
-      "label": "baseline (2026-07-17, no DOB)",
-      "path": "/Users/kouhei/tmp/github/stampfly_ecosystem/logs/stampfly_udp_20260717T231940.jsonl",
-      "flight_window_raw_s": [
-        58.742436,
-        199.447425
-      ],
-      "flight_duration_s": 140.704989,
-      "t_airborne_s": 60.745,
-      "modes_seen": [
-        3
-      ],
-      "mode_names": [
-        "POS_HOLD"
-      ],
-      "voltage_min_V": 3.664,
-      "voltage_max_V": 4.328,
-      "stick_std": {
-        "roll": 0.010967823939719797,
-        "pitch": 0.026768730778006414,
-        "yaw": 0.0,
-        "throttle": 0.0020800588287671
-      },
-      "stick_maxabs": {
-        "roll": 0.14319489896297455,
-        "pitch": 0.3842516243457794,
-        "yaw": 0.0,
-        "throttle": 0.02001953125
-      }
-    },
-    "ac_changepoint_search_window_s": [
-      63.591,
-      160.593418
-    ],
-    "ac_changepoint_thrust_s": 125.435911,
-    "ac_changepoint_thrust_jump_ratio": 42.61638363763853,
-    "ac_changepoint_fup_s": 127.44091,
-    "ac_changepoint_fup_jump_ratio": 5.9464792854929485,
-    "local_test_at_70s_thrust": {
-      "t0": 70.0,
-      "power_before": 5.5755805016310805e-05,
-      "power_after": 1.1988801307740072e-05,
-      "ratio": 0.215023370018772
-    },
-    "local_test_at_70s_fup": {
-      "t0": 70.0,
-      "power_before": 0.013863308586732001,
-      "power_after": 0.013160313704389644,
-      "ratio": 0.9492909734430599
-    },
-    "analysis_window_s": [
-      60.591,
-      170.593418
-    ]
+ "section1_flight_conditions": {
+  "dob_flight": {
+   "label": "DOB (2026-07-18)",
+   "path": "/Users/kouhei/tmp/github/stampfly_ecosystem/logs/stampfly_udp_20260718T022929.jsonl",
+   "flight_window_raw_s": [
+    56.028416,
+    173.593418
+   ],
+   "flight_duration_s": 117.56500200000002,
+   "t_airborne_s": 57.591,
+   "modes_seen": [
+    3
+   ],
+   "mode_names": [
+    "POS_HOLD"
+   ],
+   "voltage_min_V": 3.736,
+   "voltage_max_V": 4.208,
+   "stick_std": {
+    "roll": 0.0,
+    "pitch": 0.0,
+    "yaw": 0.0,
+    "throttle": 0.0003957045662432018
+   },
+   "stick_maxabs": {
+    "roll": 0.0,
+    "pitch": 0.0,
+    "yaw": 0.0,
+    "throttle": 0.01513671875
+   }
   },
-  "section2_dhat": {
-    "d_hat_std_mN": 11.517603576249329,
-    "f_up_guard_frac_pct": 0.7204545454545455,
-    "saturation_overall": {
-      "saturation_frac_pct": 0.0,
-      "n_events": 0,
-      "duration_mean_s": 0.0,
-      "duration_median_s": 0.0,
-      "duration_p90_s": 0.0,
-      "duration_max_s": 0.0,
-      "events_sample": [],
-      "all_events": []
-    },
-    "saturation_ac_on": {
-      "saturation_frac_pct": 0.0,
-      "n_events": 0,
-      "duration_mean_s": 0.0,
-      "duration_median_s": 0.0,
-      "duration_p90_s": 0.0,
-      "duration_max_s": 0.0,
-      "events_sample": [],
-      "all_events": []
-    },
-    "saturation_ac_off": {
-      "saturation_frac_pct": 0.0,
-      "n_events": 0,
-      "duration_mean_s": 0.0,
-      "duration_median_s": 0.0,
-      "duration_p90_s": 0.0,
-      "duration_max_s": 0.0,
-      "events_sample": [],
-      "all_events": []
-    },
-    "time_binned_saturation": [
-      {
-        "t_lo": 60.591,
-        "t_hi": 80.59100000000001,
-        "sat_pct": 0.0,
-        "std_mN": 4.685741409790729
-      },
-      {
-        "t_lo": 80.59100000000001,
-        "t_hi": 100.59100000000001,
-        "sat_pct": 0.0,
-        "std_mN": 4.461084209945675
-      },
-      {
-        "t_lo": 100.59100000000001,
-        "t_hi": 120.59100000000001,
-        "sat_pct": 0.0,
-        "std_mN": 4.431818319709022
-      },
-      {
-        "t_lo": 120.59100000000002,
-        "t_hi": 140.591,
-        "sat_pct": 0.0,
-        "std_mN": 9.017034467662794
-      },
-      {
-        "t_lo": 140.59100000000004,
-        "t_hi": 160.59100000000004,
-        "sat_pct": 0.0,
-        "std_mN": 23.636038790332872
-      },
-      {
-        "t_lo": 160.59100000000004,
-        "t_hi": 170.593418,
-        "sat_pct": 0.0,
-        "std_mN": 6.914337799872574
-      }
-    ]
+  "baseline_flight": {
+   "label": "baseline (2026-07-17, no DOB)",
+   "path": "/Users/kouhei/tmp/github/stampfly_ecosystem/logs/stampfly_udp_20260717T231940.jsonl",
+   "flight_window_raw_s": [
+    58.742436,
+    199.447425
+   ],
+   "flight_duration_s": 140.704989,
+   "t_airborne_s": 60.745,
+   "modes_seen": [
+    3
+   ],
+   "mode_names": [
+    "POS_HOLD"
+   ],
+   "voltage_min_V": 3.664,
+   "voltage_max_V": 4.328,
+   "stick_std": {
+    "roll": 0.010967823939719797,
+    "pitch": 0.026768730778006414,
+    "yaw": 0.0,
+    "throttle": 0.0020800588287671
+   },
+   "stick_maxabs": {
+    "roll": 0.14319489896297455,
+    "pitch": 0.3842516243457794,
+    "yaw": 0.0,
+    "throttle": 0.02001953125
+   }
   },
-  "section2b_corr_and_duty": {
-    "corr_est_std_mN": 10.344424639072086,
-    "corr_sat_frac_pct": 0.0,
-    "motor_duty_saturation_dob": {
-      "any_motor_saturated_pct": 3.4930504754937823,
-      "per_motor_pct": [
-        1.0607168983174835,
-        0.32918800292611555,
-        1.8288222384784198,
-        0.2926115581565472
-      ],
-      "duty_max": 1.0
-    },
-    "motor_duty_saturation_baseline": {
-      "any_motor_saturated_pct": 6.152008361953113,
-      "per_motor_pct": [
-        0.08959235478572496,
-        3.0461400627146484,
-        0.37330147827385396,
-        2.6429744661788863
-      ],
-      "duty_max": 1.0
-    }
+  "ac_changepoint_search_window_s": [
+   63.591,
+   160.593418
+  ],
+  "ac_changepoint_thrust_s": 125.435911,
+  "ac_changepoint_thrust_jump_ratio": 42.61638363763853,
+  "ac_changepoint_fup_s": 127.44091,
+  "ac_changepoint_fup_jump_ratio": 5.9464792854929485,
+  "local_test_at_70s_thrust": {
+   "t0": 70.0,
+   "power_before": 5.5755805016310805e-05,
+   "power_after": 1.1988801307740072e-05,
+   "ratio": 0.215023370018772
   },
-  "section3_frequency": {
-    "psd_power_ratios": {
-      "total_thrust": {
-        "power_ratio_0p5_2Hz_dob_over_base": 0.17414108892660596,
-        "std_dob": 0.014997537009221363,
-        "std_base": 0.026797963875562672
-      },
-      "f_up": {
-        "power_ratio_0p5_2Hz_dob_over_base": 0.25855515990219746,
-        "std_dob": 2.090379730048092,
-        "std_base": 2.5865960531129844
-      },
-      "alt": {
-        "power_ratio_0p5_2Hz_dob_over_base": 0.17747001363196824,
-        "std_dob": 0.08510146727063998,
-        "std_base": 0.1583304653441457
-      },
-      "gyro_roll": {
-        "power_ratio_0p5_2Hz_dob_over_base": 0.5850360368539987,
-        "std_dob": 0.27268370050504587,
-        "std_base": 0.3902498978082343
-      },
-      "gyro_pitch": {
-        "power_ratio_0p5_2Hz_dob_over_base": 2.3537285430235095,
-        "std_dob": 0.14653274254700463,
-        "std_base": 0.11093258873415213
-      }
-    },
-    "dhat_thrust_coherence_0p5_2Hz": 0.5809756318305498,
-    "dhat_thrust_coherence_0p1_5Hz": 0.39416841007845127,
-    "clamp_thrust_jerk_correlation": {
-      "n_events_checked": 0,
-      "near_event_max_dthr_median_mN": NaN,
-      "baseline_dthr_median_mN": 0.5999999999999894,
-      "ratio": NaN
-    },
-    "controlled_thrust_0p5_5Hz_ratio_dob_over_nodob": 2.2697264751714
+  "local_test_at_70s_fup": {
+   "t0": 70.0,
+   "power_before": 0.013863308586732001,
+   "power_after": 0.013160313704389644,
+   "ratio": 0.9492909734430599
   },
-  "section4_performance": {
-    "alt_dob_full": {
-      "std_mm": 108.73927115540322,
-      "p2p_mm": 774.1442024707794,
-      "mean_m": 0.5010913653892557,
-      "n": 43742,
-      "band_low_mm": 46.931987323344,
-      "band_mid_mm": 57.79595445481284,
-      "band_high_mm": 9.107940393790736
-    },
-    "alt_dob_ac_on": {
-      "std_mm": 55.20454863011393,
-      "p2p_mm": 322.4819302558899,
-      "mean_m": 0.49282821774760444,
-      "n": 25755,
-      "band_low_mm": 29.100452947058205,
-      "band_mid_mm": 33.22179876418887,
-      "band_high_mm": 3.4636165682364237
-    },
-    "alt_dob_ac_off": {
-      "std_mm": 155.41404130197103,
-      "p2p_mm": 774.1442024707794,
-      "mean_m": 0.5129230976131246,
-      "n": 17987,
-      "band_low_mm": 109.67159672258536,
-      "band_mid_mm": 111.23327484902072,
-      "band_high_mm": 17.836778595317213
-    },
-    "alt_baseline": {
-      "std_mm": 167.18862521892402,
-      "p2p_mm": 814.8413822054863,
-      "mean_m": 0.4600870374716027,
-      "n": 53570,
-      "band_low_mm": 61.74459352788578,
-      "band_mid_mm": 138.8274265383064,
-      "band_high_mm": 22.318363844022052
-    },
-    "radial_dob": {
-      "radial_rms_mm": 55.160081505445675,
-      "radial_mean_mm": 48.57236003613219,
-      "pos_sp_is_static": true
-    },
-    "radial_baseline": {
-      "radial_rms_mm": 69.26887298195334,
-      "radial_mean_mm": 60.56535046517544,
-      "pos_sp_is_static": true
-    }
+  "analysis_window_s": [
+   60.591,
+   170.593418
+  ]
+ },
+ "section2_dhat": {
+  "d_hat_std_mN": 11.517603576249329,
+  "f_up_guard_frac_pct": 0.7204545454545455,
+  "saturation_overall": {
+   "saturation_frac_pct": 0.0,
+   "n_events": 0,
+   "duration_mean_s": 0.0,
+   "duration_median_s": 0.0,
+   "duration_p90_s": 0.0,
+   "duration_max_s": 0.0,
+   "events_sample": [],
+   "all_events": []
   },
-  "section5_sweep": {
-    "measured": {
-      "std_mm": 115.82864399542837,
-      "rms_mm": 115.95608398420538,
-      "p2p_mm": 875.9918277466904
-    },
-    "cases": {
-      "0_no_dob_counterfactual": {
-        "alt_std_mm": 133.0034102425885,
-        "alt_rms_mm": 133.01071769642795,
-        "band_low_mm": 33.00605464819548,
-        "band_mid_mm": 60.939331265439414,
-        "band_high_mm": 10.958572026473094,
-        "thrust_diff_std_mN": 0.9786363692980606,
-        "thrust_band_0p5_5Hz_rms_mN": 6.0838140632539695,
-        "dhat_std_mN": 0.0,
-        "dob_clamp_sat_pct": 0.0,
-        "pi_clamp_sat_pct": 0.0
-      },
-      "1_current_fc1.5_clamp0.10": {
-        "alt_std_mm": 113.65877472303964,
-        "alt_rms_mm": 113.66440731111605,
-        "band_low_mm": 34.73508306645923,
-        "band_mid_mm": 16.032524090032933,
-        "band_high_mm": 11.218644697082077,
-        "thrust_diff_std_mN": 1.1886771791814887,
-        "thrust_band_0p5_5Hz_rms_mN": 13.808593849387625,
-        "dhat_std_mN": 18.29580377807265,
-        "dob_clamp_sat_pct": 0.6239339258461262,
-        "pi_clamp_sat_pct": 0.0
-      },
-      "2_fc1.0_clamp0.10": {
-        "alt_std_mm": 117.96873962544778,
-        "alt_rms_mm": 117.97401338327718,
-        "band_low_mm": 34.75229750948,
-        "band_mid_mm": 21.60008277970123,
-        "band_high_mm": 13.56018956037767,
-        "thrust_diff_std_mN": 1.1004635383626853,
-        "thrust_band_0p5_5Hz_rms_mN": 12.696817807712984,
-        "dhat_std_mN": 17.456606039353648,
-        "dob_clamp_sat_pct": 0.47131699434419605,
-        "pi_clamp_sat_pct": 0.0
-      },
-      "3_fc0.7_clamp0.10": {
-        "alt_std_mm": 124.95556698000516,
-        "alt_rms_mm": 124.96067432316157,
-        "band_low_mm": 34.78114156450235,
-        "band_mid_mm": 29.390885680522075,
-        "band_high_mm": 15.100693696412348,
-        "thrust_diff_std_mN": 1.06609890694562,
-        "thrust_band_0p5_5Hz_rms_mN": 11.110275603918035,
-        "dhat_std_mN": 16.262287758025288,
-        "dob_clamp_sat_pct": 0.0,
-        "pi_clamp_sat_pct": 0.0
-      },
-      "4_fc1.5_clamp0.07": {
-        "alt_std_mm": 114.512673809903,
-        "alt_rms_mm": 114.5202730359395,
-        "band_low_mm": 34.74370137670076,
-        "band_mid_mm": 15.958726839576556,
-        "band_high_mm": 11.103375580832811,
-        "thrust_diff_std_mN": 1.1694141818315609,
-        "thrust_band_0p5_5Hz_rms_mN": 13.633149280154358,
-        "dhat_std_mN": 16.96082121718958,
-        "dob_clamp_sat_pct": 1.5575904479755813,
-        "pi_clamp_sat_pct": 0.0
-      },
-      "5_fc1.0_clamp0.07": {
-        "alt_std_mm": 118.26126570601704,
-        "alt_rms_mm": 118.26794443980613,
-        "band_low_mm": 34.753548176107344,
-        "band_mid_mm": 21.63036212778282,
-        "band_high_mm": 13.549593255006874,
-        "thrust_diff_std_mN": 1.098212709277901,
-        "thrust_band_0p5_5Hz_rms_mN": 12.683174848778656,
-        "dhat_std_mN": 16.410031922991447,
-        "dob_clamp_sat_pct": 1.0324086542777628,
-        "pi_clamp_sat_pct": 0.0
-      }
-    },
-    "n_segments": 3,
-    "coverage_s": 111.39,
-    "sp_m": 0.5003822431917875
+  "saturation_ac_on": {
+   "saturation_frac_pct": 0.0,
+   "n_events": 0,
+   "duration_mean_s": 0.0,
+   "duration_median_s": 0.0,
+   "duration_p90_s": 0.0,
+   "duration_max_s": 0.0,
+   "events_sample": [],
+   "all_events": []
+  },
+  "saturation_ac_off": {
+   "saturation_frac_pct": 0.0,
+   "n_events": 0,
+   "duration_mean_s": 0.0,
+   "duration_median_s": 0.0,
+   "duration_p90_s": 0.0,
+   "duration_max_s": 0.0,
+   "events_sample": [],
+   "all_events": []
+  },
+  "time_binned_saturation": [
+   {
+    "t_lo": 60.591,
+    "t_hi": 80.59100000000001,
+    "sat_pct": 0.0,
+    "std_mN": 4.685741409790729
+   },
+   {
+    "t_lo": 80.59100000000001,
+    "t_hi": 100.59100000000001,
+    "sat_pct": 0.0,
+    "std_mN": 4.461084209945675
+   },
+   {
+    "t_lo": 100.59100000000001,
+    "t_hi": 120.59100000000001,
+    "sat_pct": 0.0,
+    "std_mN": 4.431818319709022
+   },
+   {
+    "t_lo": 120.59100000000002,
+    "t_hi": 140.591,
+    "sat_pct": 0.0,
+    "std_mN": 9.017034467662794
+   },
+   {
+    "t_lo": 140.59100000000004,
+    "t_hi": 160.59100000000004,
+    "sat_pct": 0.0,
+    "std_mN": 23.636038790332872
+   },
+   {
+    "t_lo": 160.59100000000004,
+    "t_hi": 170.593418,
+    "sat_pct": 0.0,
+    "std_mN": 6.914337799872574
+   }
+  ]
+ },
+ "section2b_corr_and_duty": {
+  "corr_est_std_mN": 10.344424639072086,
+  "corr_sat_frac_pct": 0.0,
+  "motor_duty_saturation_dob": {
+   "any_motor_saturated_pct": 3.4930504754937823,
+   "per_motor_pct": [
+    1.0607168983174835,
+    0.32918800292611555,
+    1.8288222384784198,
+    0.2926115581565472
+   ],
+   "duty_max": 1.0
+  },
+  "motor_duty_saturation_baseline": {
+   "any_motor_saturated_pct": 6.152008361953113,
+   "per_motor_pct": [
+    0.08959235478572496,
+    3.0461400627146484,
+    0.37330147827385396,
+    2.6429744661788863
+   ],
+   "duty_max": 1.0
   }
+ },
+ "section3_frequency": {
+  "psd_power_ratios": {
+   "total_thrust": {
+    "power_ratio_0p5_2Hz_dob_over_base": 0.17414108892660596,
+    "std_dob": 0.014997537009221363,
+    "std_base": 0.026797963875562672
+   },
+   "f_up": {
+    "power_ratio_0p5_2Hz_dob_over_base": 0.25855515990219746,
+    "std_dob": 2.090379730048092,
+    "std_base": 2.5865960531129844
+   },
+   "alt": {
+    "power_ratio_0p5_2Hz_dob_over_base": 0.17747001363196824,
+    "std_dob": 0.08510146727063998,
+    "std_base": 0.1583304653441457
+   },
+   "gyro_roll": {
+    "power_ratio_0p5_2Hz_dob_over_base": 0.5850360368539987,
+    "std_dob": 0.27268370050504587,
+    "std_base": 0.3902498978082343
+   },
+   "gyro_pitch": {
+    "power_ratio_0p5_2Hz_dob_over_base": 2.3537285430235095,
+    "std_dob": 0.14653274254700463,
+    "std_base": 0.11093258873415213
+   }
+  },
+  "dhat_thrust_coherence_0p5_2Hz": 0.5809756318305498,
+  "dhat_thrust_coherence_0p1_5Hz": 0.39416841007845127,
+  "clamp_thrust_jerk_correlation": {
+   "n_events_checked": 0,
+   "near_event_max_dthr_median_mN": NaN,
+   "baseline_dthr_median_mN": 0.5999999999999894,
+   "ratio": NaN
+  },
+  "controlled_thrust_0p5_5Hz_ratio_dob_over_nodob": 2.2697264751714
+ },
+ "section4_performance": {
+  "alt_dob_full": {
+   "std_mm": 108.73927115540322,
+   "p2p_mm": 774.1442024707794,
+   "mean_m": 0.5010913653892557,
+   "n": 43742,
+   "band_low_mm": 46.931987323344,
+   "band_mid_mm": 57.79595445481284,
+   "band_high_mm": 9.107940393790736
+  },
+  "alt_dob_ac_on": {
+   "std_mm": 55.20454863011393,
+   "p2p_mm": 322.4819302558899,
+   "mean_m": 0.49282821774760444,
+   "n": 25755,
+   "band_low_mm": 29.100452947058205,
+   "band_mid_mm": 33.22179876418887,
+   "band_high_mm": 3.4636165682364237
+  },
+  "alt_dob_ac_off": {
+   "std_mm": 155.41404130197103,
+   "p2p_mm": 774.1442024707794,
+   "mean_m": 0.5129230976131246,
+   "n": 17987,
+   "band_low_mm": 109.67159672258536,
+   "band_mid_mm": 111.23327484902072,
+   "band_high_mm": 17.836778595317213
+  },
+  "alt_baseline": {
+   "std_mm": 167.18862521892402,
+   "p2p_mm": 814.8413822054863,
+   "mean_m": 0.4600870374716027,
+   "n": 53570,
+   "band_low_mm": 61.74459352788578,
+   "band_mid_mm": 138.8274265383064,
+   "band_high_mm": 22.318363844022052
+  },
+  "radial_dob": {
+   "radial_rms_mm": 55.160081505445675,
+   "radial_mean_mm": 48.57236003613219,
+   "pos_sp_is_static": true
+  },
+  "radial_baseline": {
+   "radial_rms_mm": 69.26887298195334,
+   "radial_mean_mm": 60.56535046517544,
+   "pos_sp_is_static": true
+  }
+ },
+ "section5_sweep": {
+  "measured": {
+   "std_mm": 115.82864399542837,
+   "rms_mm": 115.95608398420538,
+   "p2p_mm": 875.9918277466904
+  },
+  "cases": {
+   "0_no_dob_counterfactual": {
+    "alt_std_mm": 133.0034102425885,
+    "alt_rms_mm": 133.01071769642795,
+    "band_low_mm": 33.00605464819548,
+    "band_mid_mm": 60.939331265439414,
+    "band_high_mm": 10.958572026473094,
+    "thrust_diff_std_mN": 0.9786363692980606,
+    "thrust_band_0p5_5Hz_rms_mN": 6.0838140632539695,
+    "dhat_std_mN": 0.0,
+    "dob_clamp_sat_pct": 0.0,
+    "pi_clamp_sat_pct": 0.0
+   },
+   "1_current_fc1.5_clamp0.10": {
+    "alt_std_mm": 113.65877472303964,
+    "alt_rms_mm": 113.66440731111605,
+    "band_low_mm": 34.73508306645923,
+    "band_mid_mm": 16.032524090032933,
+    "band_high_mm": 11.218644697082077,
+    "thrust_diff_std_mN": 1.1886771791814887,
+    "thrust_band_0p5_5Hz_rms_mN": 13.808593849387625,
+    "dhat_std_mN": 18.29580377807265,
+    "dob_clamp_sat_pct": 0.6239339258461262,
+    "pi_clamp_sat_pct": 0.0
+   },
+   "2_fc1.0_clamp0.10": {
+    "alt_std_mm": 117.96873962544778,
+    "alt_rms_mm": 117.97401338327718,
+    "band_low_mm": 34.75229750948,
+    "band_mid_mm": 21.60008277970123,
+    "band_high_mm": 13.56018956037767,
+    "thrust_diff_std_mN": 1.1004635383626853,
+    "thrust_band_0p5_5Hz_rms_mN": 12.696817807712984,
+    "dhat_std_mN": 17.456606039353648,
+    "dob_clamp_sat_pct": 0.47131699434419605,
+    "pi_clamp_sat_pct": 0.0
+   },
+   "3_fc0.7_clamp0.10": {
+    "alt_std_mm": 124.95556698000516,
+    "alt_rms_mm": 124.96067432316157,
+    "band_low_mm": 34.78114156450235,
+    "band_mid_mm": 29.390885680522075,
+    "band_high_mm": 15.100693696412348,
+    "thrust_diff_std_mN": 1.06609890694562,
+    "thrust_band_0p5_5Hz_rms_mN": 11.110275603918035,
+    "dhat_std_mN": 16.262287758025288,
+    "dob_clamp_sat_pct": 0.0,
+    "pi_clamp_sat_pct": 0.0
+   },
+   "4_fc1.5_clamp0.07": {
+    "alt_std_mm": 114.512673809903,
+    "alt_rms_mm": 114.5202730359395,
+    "band_low_mm": 34.74370137670076,
+    "band_mid_mm": 15.958726839576556,
+    "band_high_mm": 11.103375580832811,
+    "thrust_diff_std_mN": 1.1694141818315609,
+    "thrust_band_0p5_5Hz_rms_mN": 13.633149280154358,
+    "dhat_std_mN": 16.96082121718958,
+    "dob_clamp_sat_pct": 1.5575904479755813,
+    "pi_clamp_sat_pct": 0.0
+   },
+   "5_fc1.0_clamp0.07": {
+    "alt_std_mm": 118.26126570601704,
+    "alt_rms_mm": 118.26794443980613,
+    "band_low_mm": 34.753548176107344,
+    "band_mid_mm": 21.63036212778282,
+    "band_high_mm": 13.549593255006874,
+    "thrust_diff_std_mN": 1.098212709277901,
+    "thrust_band_0p5_5Hz_rms_mN": 12.683174848778656,
+    "dhat_std_mN": 16.410031922991447,
+    "dob_clamp_sat_pct": 1.0324086542777628,
+    "pi_clamp_sat_pct": 0.0
+   }
+  },
+  "n_segments": 3,
+  "coverage_s": 111.39,
+  "sp_m": 0.5003822431917875
+ },
+ "timebase_correction_20260718": {
+  "note_ja": "重要訂正: 本JSONおよび初回報告の時刻は全て生ts(機体起動基準)。録画開始=生53.6s、飛行開始=生56.0s。変化点 生125.4s = 飛行開始から69.4s = パイロット申告の「70秒付近でエアコンOFF」と一致(申告は正しかった)。初回報告の「70sに変化なし」は生ts[60,70)を見た座標系取り違えで無効。訂正後の解釈: 0-69s(飛行時間)=エアコンON=alt std 55.2mm(基準便167.2mmと同条件比較で-67%)、69-109s=OFF直後の気流崩壊過渡=155.4mm(d̂最活動)、109s以降=静穏化。",
+  "flight_start_raw_s": 56.0,
+  "record_start_raw_s": 53.6,
+  "changepoint_raw_s": 125.4,
+  "changepoint_flight_time_s": 69.4,
+  "log_duration_s": 120.0
+ }
 }
