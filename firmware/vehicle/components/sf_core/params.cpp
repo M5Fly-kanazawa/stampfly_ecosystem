@@ -388,7 +388,11 @@ namespace param_vars {
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
     // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne).
-    // DEFAULT 1.5 (promoted 2026-07-18, was 2.5 = no-op). Rationale: real
+    // DEFAULT 2.5 = no-op (reverted 2026-07-18 by pilot operational decision,
+    // same day as the brief default-1.5 promotion; 1.5 remains the
+    // flight-validated opt-in, especially in combination with the DOB).
+    // 既定2.5=no-op（2026-07-18 パイロット運用判断で同日中の既定1.5昇格を取り消し。
+    // 1.5は実飛行検証済みのopt-in値のまま、特にDOB併用時に有効）。Rationale: real
     // hover shows low-freq battery-sag thrust disturbance that a shorter Ti
     // rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
     // capture overshoot (integrator windup, +60% in sim/flight). Splitting
@@ -414,7 +418,7 @@ namespace param_vars {
     // −67%の実飛行検証（ログ022929）も 1.5 の組合せで飛行。`param reset` が
     // 実飛行検証済みの組合せに戻るよう既定へ昇格。
     // PidController::applyAltVelTiForPhase() 参照（architecture.md INV-1）。
-    float alt_vel_ti_hover = 1.5f;
+    float alt_vel_ti_hover = 2.5f;
     // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
     // spring-centred (centre = hold); push up → climb at climb_rate, push down →
     // descend at descent_rate. Mirrors the flight-proven legacy vehicle's
@@ -426,8 +430,13 @@ namespace param_vars {
     float alt_descent_rate = 0.5f;   // [m/s]
 
     // Acceleration-based disturbance observer (DOB) cutoff for the Airborne
-    // altitude vel loop. DEFAULT 1.5 Hz = ENABLED (0 disables; in-flight
-    // `param set altitude.dob.fc 0` over WiFi disables without landing).
+    // altitude vel loop. DEFAULT 0 = DISABLED (reverted 2026-07-18 by pilot
+    // operational decision, same day as the brief default-1.5 promotion —
+    // back to the pre-DOB vertical behavior; opt in per craft with
+    // `param set altitude.dob.fc 1.5`, in-flight over WiFi works too).
+    // 既定0=無効（2026-07-18 パイロット運用判断で同日中の既定1.5昇格を取り消し、
+    // DOB導入前の鉛直挙動へ復帰。機体ごとに `param set altitude.dob.fc 1.5` で
+    // opt-in、飛行中のWiFi設定も可）。
     // Design: 2026-07-18 sim study (flight-log-driven closed-loop replay,
     // analysis/scripts/alt_dob_design/README.md §5) — clean-hover altitude
     // std -37..-56% predicted; cost is a 0.5-5Hz thrust-command RMS increase
@@ -458,7 +467,7 @@ namespace param_vars {
     // 全飛行ゲートPASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
     // 個体差をカバー。会場級環境は実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
     // が出たら0にすること。
-    float alt_dob_fc = 1.5f;
+    float alt_dob_fc = 0.0f;
 
     // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
     // The idealized motor curve over-promises thrust, so worn hardware needs corr
@@ -724,10 +733,10 @@ static const ParamEntry table[] = {
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
-    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 1.5f, 0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
-    {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       1.5f, 0.0f, 5.0f, &notifyControllerReload},
+    {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       0.0f, 0.0f, 5.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
     {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 
