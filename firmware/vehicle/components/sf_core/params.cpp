@@ -416,6 +416,26 @@ namespace param_vars {
     float alt_climb_rate   = 0.5f;   // [m/s]
     float alt_descent_rate = 0.5f;   // [m/s]
 
+    // Acceleration-based disturbance observer (DOB) cutoff for the Airborne
+    // altitude vel loop. 0 (default) = disabled — opt-in only, matching the
+    // hover.thrust_corr / ti_hover precedent (a design lever that must be A/B'd
+    // per craft before it becomes the compiled default). 2026-07-18 sim study
+    // (flight-log-driven closed-loop replay, analysis/scripts/alt_dob_design/
+    // README.md §5): fc=1.5Hz recommended once opted in — clean-hover altitude
+    // std -37..-56%, cost is a 0.5-5Hz thrust-command RMS increase (~8% of
+    // hover thrust). Range [0.2, 5.0] once enabled is enforced by
+    // PidController::loadParams() (WARN + clamp outside it), not by this
+    // param's [min,max] alone, so the design intent is documented once here.
+    // 高度速度ループ(Airborne)用の加速度ベース外乱オブザーバ(DOB)カットオフ。
+    // 既定0=無効 — opt-inのみ（hover.thrust_corr / ti_hoverと同じ前例: 機体ごとに
+    // 実飛行A/Bしてから既定化する設計レバー）。2026-07-18シム設計スタディ
+    // （フライトログ駆動閉ループ再生、analysis/scripts/alt_dob_design/README.md
+    // §5）: opt-in時の推奨値fc=1.5Hz — 清浄ホバーで高度std -37〜-56%、代償は
+    // 0.5-5Hz帯の推力指令RMS増加（ホバー推力の約8%）。有効時の範囲[0.2,5.0]は
+    // PidController::loadParams()が強制（範囲外はWARN+クランプ）— このparamの
+    // [min,max]だけでなく、設計意図をここに一度明記する。
+    float alt_dob_fc = 0.0f;
+
     // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
     // The idealized motor curve over-promises thrust, so worn hardware needs corr
     // ≈ 1.12 (flight-measured) to actually hover. FRESH/stronger motors produce
@@ -683,6 +703,7 @@ static const ParamEntry table[] = {
     {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
+    {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       0.0f, 0.0f, 5.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
     {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 

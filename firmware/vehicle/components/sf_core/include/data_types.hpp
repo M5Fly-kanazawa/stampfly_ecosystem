@@ -130,6 +130,7 @@ struct StateEstimate {
     float gyro_bias[3];   // Gyro bias [rad/s]     / ジャイロバイアス
     float accel_bias[3];  // Accel bias [m/s²]     / 加速度バイアス
     float angular_rate[3];// Body rate [rad/s] FRD / 機体角速度（バイアス補正済み, gyro−bias）
+    float specific_force[3]; // Bias-corrected specific force [m/s²] body FRD / バイアス補正済み比力（機体FRD）
     uint8_t sensor_mask;  // Active sensor bitmask / 有効センサマスク
     uint32_t timestamp;   // [us]
 };

@@ -17,6 +17,9 @@
  * @design architecture.md INV-1 — one attitude pipeline, all phases  [OK]
  * @design architecture.md INV-2 — pilot keeps attitude; level only   [OK]
  *         on a dead link (setpoint staleness, R16)
+ * @design analysis/scripts/alt_dob_design/README.md §5 — accel-based [OK]
+ *         altitude disturbance observer (DOB), opt-in (altitude.dob.fc),
+ *         Airborne-only, INV-1 vertical channel only
  */
 
 #pragma once
@@ -410,6 +413,159 @@ private:
     VerticalPhase hover_prev_phase_ = VerticalPhase::Grounded;  // landing-edge detect for NVS persist
     void learnHoverThrust(float thrust_correction, float vz_up, float climb_rate_sp, float dt);
     void persistHoverThrust();   // NVS save on the landing edge (called every cycle)
+
+    // --- Acceleration-based disturbance observer (DOB) for the altitude vel
+    // loop (opt-in, param altitude.dob.fc = 0 disables it — default OFF). ---
+    // Design: analysis/scripts/alt_dob_design/README.md §5 (2026-07-18,
+    // flight-log-driven closed-loop replay). Compares a nominal actuation
+    // model (pure delay + 1st-order lag) driven by the PAST thrust command
+    // against the measured vertical specific force; the residual (external
+    // disturbance the model does not explain) passes through a 2nd-order
+    // Butterworth low-pass (Q, tunable fc) then a fixed 0.03 Hz high-pass
+    // (washout) that hands DC ownership back to the vel-loop integrator and
+    // the hover-thrust learner (band separation — see README §3). Airborne
+    // only (INV-1: a phase may change only the vertical channel); see
+    // computeDobCorrection() / resetDobStates() in pid_controller.cpp.
+    // --- 高度速度ループ用の加速度ベース外乱オブザーバ（DOB, opt-in, param
+    // altitude.dob.fc=0 で無効=既定OFF）。---
+    // 設計: analysis/scripts/alt_dob_design/README.md §5（2026-07-18、フライト
+    // ログ駆動閉ループ再生）。過去の推力指令で駆動したノミナルアクチュエーション
+    // モデル（純遅れ+1次遅れ）と実測鉛直比力を比較し、残差（モデルで説明できない
+    // 外乱）を2次バターワースLPF（Q, 調整可fc）→固定0.03Hz HP（ウォッシュアウト、
+    // DC所有権を速度ループ積分器＋ホバー推力学習へ残す＝帯域分離。README §3）に
+    // 通す。Airborne限定（INV-1: フェーズが変えてよいのは鉛直チャネルのみ）。
+    // pid_controller.cpp の computeDobCorrection() / resetDobStates() 参照。
+    static constexpr float kDobWashoutHz   = 0.03f;    // [Hz] washout HP cutoff (fixed, not tunable)
+    static constexpr float kDobClampN      = 0.10f;    // [N] d_hat safety clamp
+    static constexpr float kDobModelDelayS = 0.0624f;  // [s] nominal pure delay L (flight-measured, README §2)
+    static constexpr float kDobModelLagS   = 0.02f;    // [s] nominal 1st-order lag T (motor time constant)
+    // Nominal control rate for filter-coefficient discretization. ControlTask
+    // runs IMU-synced at 400 Hz with small dt jitter, so the Q/washout
+    // coefficients are computed ONCE from this nominal rate (loadParams()) —
+    // NOT re-derived from the per-cycle dt. The per-cycle dt still drives the
+    // 1st-order actuation MODEL update (a continuous-time formula, exact for
+    // any dt), which is a different quantity from the fixed-rate Q/washout.
+    // フィルタ係数離散化用のノミナル制御レート。ControlTask はIMU同期400Hzで
+    // dtジッタが小さいため、Q/ウォッシュアウト係数はこのノミナルレートから
+    // loadParams() で一度だけ計算する — 毎サイクルのdtからは再計算しない。
+    // 毎サイクルのdtが動かすのは1次遅れアクチュエーションモデルの更新のみ
+    // （連続時間式で任意dtに厳密、固定レートのQ/ウォッシュアウトとは別物）。
+    static constexpr float kDobRateHz = 400.0f;   // [Hz]
+    static constexpr int   kDobDelaySamples =
+        static_cast<int>(kDobModelDelayS * kDobRateHz + 0.5f);  // round() → 25 samples
+    static constexpr float kDobFcMin = 0.2f;   // [Hz] sim-validated opt-in range floor
+    static constexpr float kDobFcMax = 5.0f;   // [Hz] sim-validated opt-in range ceiling
+    // Specific-force plausibility floor: in-flight f_up sits near +g (≈9.8 m/s²);
+    // below this the measurement is missing (estimator without specific_force
+    // support publishes zeros) or a free-fall-class transient — either way, do
+    // not feed it to the filters (see the guard in computeDobCorrection()).
+    // 比力の妥当性下限: 飛行中の f_up は +g（≈9.8 m/s²）近傍。これ未満は計測
+    // 欠如（specific_force 非対応の推定器はゼロを出す）か自由落下級の過渡 —
+    // いずれもフィルタへ入れない（computeDobCorrection() のガード参照）。
+    static constexpr float kDobMinFupMs2 = 2.0f;   // [m/s²]
+    // Airframe mass, derived from kMassG (SSOT above) so the DOB does not
+    // introduce a second copy of the 0.037 kg magic number.
+    // 機体質量。上の kMassG（SSOT）から導出し、0.037kg のマジックナンバーを
+    // 二重管理しない。
+    static constexpr float kMassKg = kMassG / math::kGravity;
+    // Washout coefficient (1st-order HP, backward-difference/DC-blocker form),
+    // fixed at compile time from kDobWashoutHz and the nominal kDobRateHz.
+    // ウォッシュアウト係数（1次HP, 後退差分/DCブロッカー形）。kDobWashoutHz と
+    // ノミナル kDobRateHz からコンパイル時に固定。
+    static constexpr float kDobWashoutTauS = 1.0f / (2.0f * 3.14159265f * kDobWashoutHz);
+    static constexpr float kDobDtNominalS  = 1.0f / kDobRateHz;
+    static constexpr float kDobWashoutAlpha =
+        kDobWashoutTauS / (kDobWashoutTauS + kDobDtNominalS);
+
+    bool  dob_enabled_ = false;   // param altitude.dob.fc > 0 (set by loadParams)
+    float dob_delay_ring_[kDobDelaySamples] = {};  // [N] commanded-thrust delay line
+    int   dob_delay_idx_   = 0;
+    float dob_model_state_ = 0.0f;   // [N] nominal actuation-model output
+    // Q-filter (2nd-order Butterworth LPF, Direct Form II — RBJ Audio EQ
+    // Cookbook recipe). Coefficients set by computeDobQCoeffs() (loadParams());
+    // states persist across a live param reload, reset only by resetDobStates().
+    // Qフィルタ（2次バターワースLPF, Direct Form II — RBJ Audio EQ Cookbook式）。
+    // 係数は computeDobQCoeffs()（loadParams()）が設定。状態はライブ param
+    // 再読込を跨いで保持、resetDobStates() でのみリセット。
+    float dob_q_b0_ = 0.0f, dob_q_b1_ = 0.0f, dob_q_b2_ = 0.0f;
+    float dob_q_a1_ = 0.0f, dob_q_a2_ = 0.0f;
+    float dob_q_w1_ = 0.0f, dob_q_w2_ = 0.0f;   // Direct Form II delay states
+    float dob_wo_x_prev_ = 0.0f;   // washout previous input
+    float dob_wo_y_prev_ = 0.0f;   // washout previous output
+    float dob_d_hat_     = 0.0f;   // [N] latest DOB correction (telemetry/debug)
+
+    // --- Engage conditioning (3 stages). The residual carries a standing DC
+    // (thrust-calibration deficit k_T≈0.95, README §2) AND the Airborne entry
+    // usually happens mid-transient (takeoff capture / in-flight switch while
+    // arresting a climb). Zero-init or instantaneous-sample priming turns
+    // either into a multi-second thrust bump — SIL flight test showed a full
+    // clamp-pinned collapse (alt_flight, DOB-enabled run, 2026-07-18). So:
+    //  1) PRIME: average the residual over kDobPrimeCycles (0.25 s — the same
+    //     window the sim's equilibrium init used), d_hat forced 0 meanwhile,
+    //     then preset Q+washout to that average's steady state.
+    //  2) FAST-SETTLE: for kDobEngageRampCycles after priming, run the washout
+    //     with the short kDobWashoutFastTauS so any prime error (transient
+    //     contamination) is forgotten in ~0.5 s instead of the normal ~5 s.
+    //  3) RAMP: scale the applied d_hat linearly 0→1 over the same window, so
+    //     whatever the filters do while settling cannot step the thrust.
+    // --- エンゲージ整形（3段）。残差には定在DC（推力較正欠損 k_T≈0.95、README
+    // §2）があり、さらに Airborne 進入はたいてい過渡の最中（離陸捕捉・上昇減速
+    // 中の飛行中切替）に起きる。ゼロ初期化や瞬時値プライミングはどちらも数秒
+    // スケールの推力バンプになる — DOB有効SIL飛行試験でクランプ張り付きの墜落を
+    // 実測（alt_flight, 2026-07-18）。よって:
+    //  1) プライム: kDobPrimeCycles（0.25s、シムの平衡初期化と同じ窓）の残差
+    //     平均を取り（その間 d_hat=0）、その定常状態へ Q+ウォッシュアウトを
+    //     プリセット。
+    //  2) 高速整定: プライム後 kDobEngageRampCycles の間、ウォッシュアウトを
+    //     短時定数 kDobWashoutFastTauS で走らせ、プライム誤差（過渡汚染）を
+    //     通常の約5秒でなく約0.5秒で忘れる。
+    //  3) ランプ: 適用する d_hat を同じ窓で 0→1 に線形で立ち上げ、整定中の
+    //     フィルタ挙動が推力にステップを入れないようにする。
+    static constexpr int   kDobPrimeCycles      = 100;   // 0.25 s @ 400 Hz
+    static constexpr int   kDobEngageRampCycles = 800;   // 2.0 s @ 400 Hz
+    static constexpr float kDobWashoutFastTauS  = 0.5f;  // [s] fast-settle washout
+    static constexpr float kDobWashoutFastAlpha =
+        kDobWashoutFastTauS / (kDobWashoutFastTauS + kDobDtNominalS);
+    int   dob_prime_count_  = 0;     // samples accumulated toward the prime
+    float dob_prime_accum_  = 0.0f;  // [N] residual sum over the prime window
+    int   dob_engage_count_ = 0;     // samples since priming (saturates at ramp end)
+
+    /// Recompute the Q-filter biquad coefficients for a new cutoff fc [Hz]
+    /// (loadParams(), from param altitude.dob.fc). States untouched.
+    /// 新しいカットオフ fc [Hz] で Qフィルタ biquad 係数を再計算
+    /// （loadParams()、param altitude.dob.fc から）。状態は変更しない。
+    void computeDobQCoeffs(float fc);
+
+    /// Compute this cycle's DOB thrust correction d_hat [N] (Airborne only,
+    /// caller-gated by dob_enabled_). See pid_controller.cpp for the algorithm.
+    /// 今サイクルのDOB推力補正 d_hat [N] を計算（Airborne限定、呼び出し側が
+    /// dob_enabled_ でゲート）。アルゴリズムは pid_controller.cpp 参照。
+    float computeDobCorrection(const StateEstimate& state, float dt);
+
+    /// Q-filter single-sample update (Direct Form II biquad).
+    /// Qフィルタ1サンプル更新（Direct Form II biquad）。
+    float dobBiquad(float x);
+
+    /// Washout single-sample update (1st-order high-pass). alpha selects the
+    /// time constant: kDobWashoutAlpha (normal) or kDobWashoutFastAlpha
+    /// (engage fast-settle) — switching alpha keeps state continuity.
+    /// ウォッシュアウト1サンプル更新（1次HP）。alpha で時定数を選ぶ:
+    /// kDobWashoutAlpha（通常）/ kDobWashoutFastAlpha（エンゲージ高速整定）。
+    /// alpha 切替でも状態は連続。
+    float dobWashout(float x, float alpha);
+
+    /// Equilibrium (steady-state) re-initialization of all DOB filter states to
+    /// current_thrust — sim-validated as necessary (README §4-1: a cold start
+    /// otherwise injects a multi-second thrust transient on every Airborne
+    /// (re-)entry). Called from loadParams() (fc change) and every phase_
+    /// transition helper that calls applyAltVelTiForPhase() (same INV-1
+    /// vertical-channel-only scope) — never a one-off inline assignment.
+    /// DOB全フィルタ状態を current_thrust へ平衡（定常）再初期化 — シム検証で
+    /// 必須と確定（README §4-1: 冷開始だとAirborne(再)進入毎に数秒スケールの
+    /// 推力過渡が注入される）。loadParams()（fc変更）と applyAltVelTiForPhase()
+    /// を呼ぶ全フェーズ遷移ヘルパから呼ぶ（同じINV-1鉛直チャネル限定スコープ）—
+    /// 場当たりの個別代入は行わない。
+    void resetDobStates(float current_thrust);
 
     // Rate-loop output limits for the PID anti-windup (see loadParams). Each PID
     // clamps its output and gates its integrator at ±output_limit, so the limit

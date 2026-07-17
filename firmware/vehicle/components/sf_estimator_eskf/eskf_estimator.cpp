@@ -13,6 +13,9 @@
  *
  * @design detailed_design.md §5 — IEstimator                         [OK]
  * @design detailed_design.md §5 — Sensor observation switch           [OK]
+ * @design analysis/scripts/alt_dob_design/README.md §5 — publish       [OK]
+ *         bias-corrected specific force (StateEstimate.specific_force)
+ *         as an estimation artifact for the altitude DOB consumer
  */
 
 #include "eskf_estimator.hpp"
@@ -116,7 +119,7 @@ void EskfEstimator::predict(const ImuData& imu, float dt)
     // 毎予測周期で加速度姿勢更新も実行
     core_.updateAccelAttitude(accel);
 
-    cached_state_ = convertState(imu.timestamp);
+    cached_state_ = convertState(imu.timestamp, accel);
 }
 
 void EskfEstimator::updateTof(const TofData& tof)
@@ -273,7 +276,7 @@ void EskfEstimator::inflateCovariance(uint16_t state_mask)
     core_.inflateCovariance(state_mask);
 }
 
-StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
+StateEstimate EskfEstimator::convertState(uint32_t timestamp, const math::Vec3& accel_raw) const
 {
     StateEstimate s = {};
 
@@ -295,6 +298,18 @@ StateEstimate EskfEstimator::convertState(uint32_t timestamp) const
 
     auto w = core_.getAngularRate();
     s.angular_rate[0] = w.x; s.angular_rate[1] = w.y; s.angular_rate[2] = w.z;
+
+    // Specific force = raw accel - bias (telemetry's imu.accel is UNCORRECTED,
+    // per analysis/scripts/alt_dob_design/README.md §1 "重要な訂正" — the
+    // altitude DOB consumer needs the corrected value, so publish it here as
+    // an estimation artifact rather than re-deriving it downstream).
+    // 比力 = 生加速度 - バイアス（テレメトリの imu.accel は未補正。
+    // README §1「重要な訂正」参照。高度DOB側で再導出させず、ここで推定
+    // 成果物として公開する）。
+    const math::Vec3 sf_body = accel_raw - ab;
+    s.specific_force[0] = sf_body.x;
+    s.specific_force[1] = sf_body.y;
+    s.specific_force[2] = sf_body.z;
 
     s.sensor_mask = static_cast<uint8_t>(core_.getActiveMask() & 0xFF);
     s.timestamp = timestamp;

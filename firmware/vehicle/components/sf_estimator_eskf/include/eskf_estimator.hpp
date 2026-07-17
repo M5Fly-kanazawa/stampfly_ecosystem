@@ -14,6 +14,9 @@
  * @design requirements.md §4 — Component #2: replaceable estimation   [OK]
  * @design detailed_design.md §5 — IEstimator implementation           [OK]
  * @design detailed_design.md §5 — Sensor observation switch           [OK]
+ * @design analysis/scripts/alt_dob_design/README.md §5 — publish       [OK]
+ *         bias-corrected specific force (StateEstimate.specific_force)
+ *         as an estimation artifact for the altitude DOB consumer
  */
 
 #pragma once
@@ -45,7 +48,15 @@ public:
     void setSensorEnabled(int group, bool enabled) override;
 
 private:
-    StateEstimate convertState(uint32_t timestamp) const;
+    /// Build the published StateEstimate from the ESKF core state plus the raw
+    /// accel sample of this cycle (needed only for specific_force — the core
+    /// state itself carries no raw accel). accel_raw is passed in rather than
+    /// cached as a member: convertState() is called exactly once per predict()
+    /// cycle, right where imu.accel is already in hand.
+    /// ESKFコア状態＋当該周期の生加速度から公開用 StateEstimate を組み立てる。
+    /// accel_raw を引数で渡す（メンバキャッシュにしない）: convertState() は
+    /// predict() サイクルごとに1回だけ、imu.accel が既に手元にある場所で呼ばれる。
+    StateEstimate convertState(uint32_t timestamp, const math::Vec3& accel_raw) const;
     EskfCore core_;
     StateEstimate cached_state_ = {};
     // Last flow timestamp [us], kept as uint32 (NOT float): a float loses µs
