@@ -50,7 +50,7 @@ setup_env.bat  ← 開発環境をアクティベート
 
   \vspace{0.3em}
 
-  {\footnotesize 今日の実習は②・③とも sf CLI で書き込みます。Web / GUI フラッシャは\textbf{開発環境のない PC でも使える}方法（紹介のみ）}
+  {\footnotesize 今日の実習は②・③とも sf CLI で書き込みます。Web / GUI フラッシャは\textbf{開発環境のない PC でも使える}方法（紹介のみ）。\\ ※ ビルド＝人が書いたコードを機体が実行できる形式に変換する作業}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -78,21 +78,19 @@ sf flash vehicle   ← 機体をUSB接続してから実行
 \begin{frame}{② よくある失敗と対処}
   \begin{table}
     \centering\small
-    \begin{tabular}{ll}
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{64mm}}
       \hline
       \textbf{症状} & \textbf{対処} \\
       \hline
       機体が認識されない/繋がらない & ケーブルを交換（充電専用ケーブルは不可） \\
       書き込みが進まない/失敗する & ポートを使う他アプリ（シリアルモニタ等）を閉じる \\
-      それでも失敗する & 機体の BOOT ボタンを押しながら\\
-                       & USB を挿し直してもう一度 \code{sf flash} \\
+      それでも失敗する & 機体の BOOT ボタンを押しながら USB を挿し直して、もう一度 \code{sf flash} \\
       \hline
     \end{tabular}
   \end{table}
 
   \vspace{0.5em}
 
-  \begin{exampleblock}{安心してください}
-    \footnotesize \code{sf flash} は機体の設定（ペアリング等）を消さない書き込みなので、何度失敗してもやり直せます
-  \end{exampleblock}
+  {\footnotesize ※ \code{sf flash} は機体の設定（ペアリング等）には触れません。失敗したら、そのままもう一度実行するだけです\\
+  ※ BOOT ボタン＝機体上面 M5StampS3 のボタン（③で ARM に使うものと同じ。起動時に押しながらだと書き込みモード）}
 \end{frame}

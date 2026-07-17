@@ -4,6 +4,28 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
+\begin{frame}{講師紹介}
+  \begin{block}{伊藤 恒平 --- 金沢工業大学 ロボティクス学科 教員}
+    \small StampFly 開発者 ／ 専門はドローン制御工学
+  \end{block}
+
+  \vspace{0.4em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{92mm}}
+      \hline
+      経歴 & 大学で航空宇宙工学を学ぶ \\
+           & 陸上自衛隊に入隊、飛翔体の研究開発に従事 \\
+           & 高専教員を経て、金沢工業大学 ロボティクス学科 教員 \\
+      \hline
+      趣味 & ロボット作り・読書・映画鑑賞 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{本日の流れ}
   \begin{table}
     \centering\small
@@ -20,12 +42,6 @@
     \end{tabular}
   \end{table}
 
-  \vspace{0.5em}
-
-  \begin{block}{講師}
-    伊藤 恒平 \\
-    {\footnotesize StampFly 開発者 / ドローン制御工学}
-  \end{block}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -157,7 +173,7 @@
           浮く・上下 & 4つの推力の合計を増やす／減らす \\
           ロール（左右に傾く） & 左右の推力の差 \\
           ピッチ（前後に傾く） & 前後の推力の差 \\
-          ヨー（機首を回す） & CW 組と CCW 組の回転数の差（反トルク） \\
+          ヨー（機首を回す） & CW 組と CCW 組の回転数の差\newline（反トルク） \\
           \hline
         \end{tabular}
       \end{table}
@@ -179,7 +195,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{安全ルール（1）：飛行の安全}
+\begin{frame}{安全ルール：飛行の安全}
   \begin{block}{飛行前の確認}
     \begin{itemize}\small\setlength{\itemsep}{0pt}
       \item 保護メガネを全員着用
@@ -193,7 +209,7 @@
   \vspace{0.15em}
 
   \begin{alertblock}{緊急停止}
-    \footnotesize \warn{DISARM}（自動着陸が始まる）→ 着陸中にもう一度 \warn{DISARM}（即時モータ停止）
+    \footnotesize \warn{DISARM} = モータを止める操作。飛行中は自動着陸 → もう一度で即時停止
   \end{alertblock}
 
   \vspace{0.1em}
@@ -203,19 +219,3 @@
   \end{exampleblock}
 \end{frame}
 
-% ------------------------------------------------------------------
-\begin{frame}{安全ルール（2）：モータ実習の安全}
-  \begin{block}{プロペラを回す実習ならではの注意}
-    \begin{itemize}\small
-      \item \warn{Duty は 0.15 以下}（ファームでは強制されないので数値を必ずダブルチェック）
-      \item プロペラは付けたまま --- 機体上部の基板を上から\textbf{指で押さえて}回す
-      \item バッテリーと USB の同時接続は避ける（動作確認はバッテリー駆動）
-    \end{itemize}
-  \end{block}
-
-  \vspace{0.3em}
-
-  \begin{alertblock}{止め方}
-    \footnotesize 機体本体ボタンをもう一度クリック（DISARM）／完全に切るときはバッテリーを外す
-  \end{alertblock}
-\end{frame}

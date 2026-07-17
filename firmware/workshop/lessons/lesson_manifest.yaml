@@ -139,7 +139,7 @@ lessons:
   # イベント用テンプレートは 90 番以降。今後のチュートリアルも lesson_9X で追加する。
   - number: 90
     id: dxh_workshop
-    title_ja: DXH高校教員向け体験講座
+    title_ja: DXH高校の先生向け体験講座
     title_en: DXH Teacher Workshop
     description_ja: モータDuty書き換え実習（機体ボタンARM・duty上限0.15）
     description_en: Motor duty exercise (onboard-button arm, duty cap 0.15)

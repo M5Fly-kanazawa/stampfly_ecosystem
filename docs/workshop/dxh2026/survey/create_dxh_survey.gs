@@ -1,6 +1,6 @@
 /**
  * DXH High-School Teacher Workshop Survey - Google Forms Auto-Generator
- * DXH 高校教員向け StampFly 体験講座 アンケート - Google Forms 自動生成スクリプト
+ * DXH 高校の先生向け StampFly 体験講座 アンケート - Google Forms 自動生成スクリプト
  *
  * Usage / 使い方:
  * 1. Open https://script.google.com
@@ -18,10 +18,10 @@
  */
 
 function createDxhSurvey() {
-  var form = FormApp.create('DXH 高校教員向け StampFly 体験講座 受講アンケート');
+  var form = FormApp.create('DXH 高校の先生向け StampFly 体験講座 受講アンケート');
 
   form.setDescription(
-    '本日はDXH（高等学校DX加速化推進事業）高校教員向けStampFly体験講座にご参加いただき\n' +
+    '本日はDXH（高等学校DX加速化推進事業）高校の先生向けStampFly体験講座にご参加いただき\n' +
     'ありがとうございました。\n' +
     '今後の教材・講座改善のため、アンケートにご協力ください（所要時間: 約5分）。\n' +
     'このアンケートは無記名で集計されます。メールアドレスの記入は任意で、今後の情報提供や\n' +

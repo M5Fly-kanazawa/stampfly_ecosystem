@@ -4,6 +4,23 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
+\begin{frame}{③ モータ実習の安全}
+  \begin{block}{プロペラを回す実習ならではの注意}
+    \begin{itemize}\small
+      \item \warn{Duty は 0.15 以下}（ファームでは強制されないので数値を必ずダブルチェック）
+      \item プロペラは付けたまま --- 機体上部の基板を上から\textbf{指で押さえて}回す
+      \item バッテリーと USB の同時接続は避ける（動作確認はバッテリー駆動）
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{止め方}
+    \footnotesize 機体本体ボタンをもう一度クリック（DISARM）／完全に切るときはバッテリーを外す
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{③ モータ配置}
   \begin{columns}[c]
     \begin{column}{0.42\textwidth}
@@ -98,6 +115,7 @@ sf lesson flash   ← 書き込み後シリアルモニタが自動起動
           \hline
         \end{tabular}
       \end{table}
+      {\tiny ※ 実習用ファームの表示です（①の機体とは異なります）}
     \end{column}
   \end{columns}
 
@@ -154,21 +172,31 @@ void loop_400Hz(float dt)
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{③ 改造課題}
-  \begin{block}{時間があれば試してみよう}
-    \begin{itemize}
-      \item 別のモータを回してみる
-      \item 複数のモータを同時に回してみる
-      \item Duty を 0.05 / 0.10 / 0.15 で聞き比べる
-    \end{itemize}
+\begin{frame}{③ 改造課題：推力の差で「動き」を作る}
+  \begin{block}{4つの Duty に差をつけて ARM してみる}
+    \small 飛行原理のページで見た「推力の差 → ロール・ピッチ・ヨー」を、机の上で手に感じる実習です
   \end{block}
 
-  \vspace{0.5em}
+  \vspace{0.2em}
 
-  \begin{exampleblock}{発展課題}
-    \footnotesize 2秒ごとにモータを巡回させる（400\,Hz $\times$ 2秒 = 800\,tick、\\
-    \code{(motor\_timer / 800) \% 4} でモータ番号を切り替える）
-  \end{exampleblock}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{52mm}}
+      \hline
+      \textbf{設定（Duty）} & \textbf{機体が「しようとする」動き} \\
+      \hline
+      右2つ（M1・M2）= 0.10、左2つ = 0.05 & 左に傾こうとする（ロール） \\
+      前2つ（M1・M4）= 0.10、後2つ = 0.05 & 後ろに傾こうとする（ピッチ） \\
+      CW 組（M2・M4）= 0.10、CCW 組 = 0.05 & 機首が回ろうとする（ヨー・反トルク） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.2em}
+
+  \begin{alertblock}{必ず守る}
+    \footnotesize 機体上部の基板を上から\textbf{指で押さえたまま} ARM する。傾く「力」を感じたら DISARM
+  \end{alertblock}
 \end{frame}
 
 % ------------------------------------------------------------------

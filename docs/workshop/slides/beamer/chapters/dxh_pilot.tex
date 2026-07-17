@@ -12,18 +12,18 @@
 
   \vspace{0.2em}
 
-  {\small ALT\_HOLD では高度は自動維持 --- 操縦は主に\textbf{左スティック}を少しずつ倒す}
+  {\small 今日つかう飛行モード \textbf{ALT\_HOLD}（高度維持）では高度は自動維持 --- 操縦は主に\textbf{左スティック}を少しずつ倒す}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{① まずはシミュレータで飛ばしてみる}
-  \begin{block}{PC 側の操作（コマンドプロンプト）}
+  \begin{block}{コマンドプロンプト（文字で PC を操作する画面）で実行}
     \begin{lstlisting}[style=sfbash, numbers=none]
 sf sim run   ← 3Dシミュレータが起動
     \end{lstlisting}
   \end{block}
 
-  {\footnotesize ※ 「←」以降は説明なので入力しません}
+  {\footnotesize ※ 「←」以降は説明なので入力しません（\code{sf} = StampFly 用コマンド）}
 
   \vspace{0.2em}
 
@@ -37,7 +37,7 @@ sf sim run   ← 3Dシミュレータが起動
     \end{column}
     \begin{column}{0.48\textwidth}
       \centering
-      \includegraphics[width=0.92\columnwidth]{simulator_demo.png}\\
+      \includegraphics[width=0.82\columnwidth]{simulator_demo.png}\\
       {\scriptsize シミュレータ画面 --- 画面の StampFly を操縦する}
     \end{column}
   \end{columns}
@@ -48,16 +48,14 @@ sf sim run   ← 3Dシミュレータが起動
   \begin{block}{コントローラを実機用（ESP-NOW）に戻す}
     \begin{enumerate}\small
       \item コントローラの \textbf{M5 ボタン}（画面下）でメニューを開く
-      \item \textbf{「通信モード」を1回選ぶ} $\to$ USB HID から ESP-NOW に切り替わり、自動で再起動する
+      \item \textbf{「通信モード」を1回選ぶ} $\to$ USB HID から ESP-NOW（ルーターなしで機体と直接つながる無線）に切り替わり、自動で再起動する
       \item USB ケーブルを外す（実機とは電波でつながる）
     \end{enumerate}
   \end{block}
 
   \vspace{0.3em}
 
-  \begin{exampleblock}{安心してください}
-    \footnotesize 切り替えてもペアリングなどの設定は消えません
-  \end{exampleblock}
+  {\footnotesize ※ 通信モードを切り替えても、ペアリングなどの設定はそのまま残ります}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -95,7 +93,7 @@ sf sim run   ← 3Dシミュレータが起動
         \centering\footnotesize
         \begin{tabular}{ll}
           \hline
-          \textbf{モード} & \textbf{機体 LED 色} \\
+          \textbf{飛行モード} & \textbf{機体 LED 色} \\
           \hline
           STABILIZE & 黄緑 \\
           ACRO      & 青 \\
@@ -129,6 +127,6 @@ sf sim run   ← 3Dシミュレータが起動
   \vspace{0.3em}
 
   \begin{exampleblock}{進め方}
-    \footnotesize 1人1セットで全員同時に飛行（交代なし）。機体は事前ペアリング済みなので操縦だけに集中できます。電池が切れたら（シアン点滅）交換して再開
+    \footnotesize 1人1セット・全員同時に飛行（交代なし）。ペアリングは1対1 --- 隣の機体は反応しません。電池が切れたら（シアン点滅）交換して再開
   \end{exampleblock}
 \end{frame}
