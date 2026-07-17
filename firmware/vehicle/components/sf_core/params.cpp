@@ -381,31 +381,34 @@ namespace param_vars {
     float alt_alt_ti      = 7.0f;
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
-    // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne). Default
-    // equals alt_vel_ti — a structural no-op until a per-craft flight A/B opts in
-    // via `param set altitude.vel.ti_hover <value>`. Rationale: real hover shows
-    // low-freq (~0.1Hz) battery-sag thrust disturbance that a shorter Ti rejects
-    // (sim: −20% altitude std), but a uniformly shorter alt_vel_ti also worsens
-    // auto-takeoff capture overshoot (integrator windup, +60% in sim/flight).
-    // Splitting Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
-    // TakeoffClimb unchanged and lets only Airborne use the stronger integral.
-    // Scope: this lever targets the LOW-FREQUENCY (≲0.2Hz) disturbance only —
-    // venue-log replay (NT-Kanazawa 2026-06-27, broadband 0.24–0.96Hz, ~6x
-    // amplitude) showed no benefit and slight peak worsening, so do not opt in
-    // expecting it to fix venue-class bobbing.
+    // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne).
+    // DEFAULT 1.5 (promoted 2026-07-18, was 2.5 = no-op). Rationale: real
+    // hover shows low-freq battery-sag thrust disturbance that a shorter Ti
+    // rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
+    // capture overshoot (integrator windup, +60% in sim/flight). Splitting
+    // Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
+    // TakeoffClimb unchanged (SIL isolation proof: takeoff overshoot
+    // unchanged 9.96→9.22 cm with ti_hover=1.5). Flight A/B 2026-07-17
+    // (logs 224906/231940): standalone effect is band reshaping (~neutral
+    // total std) — but WITH the altitude DOB (altitude.dob.fc, default-on
+    // since 2026-07-18) the 1.5/2.5 choice matters: same-log replay gives
+    // DOB+ti1.5 = 94.2 mm vs DOB+ti2.5 = 107.1 mm, and the -67% flight
+    // validation (log 022929) flew the 1.5 combination. Promoted so a
+    // `param reset` lands on the flight-validated combo.
     // See PidController::applyAltVelTiForPhase() (architecture.md INV-1).
-    // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。既定は
-    // alt_vel_ti と同値 — 機体ごとの実飛行 A/B で `param set altitude.vel.ti_hover
-    // <値>` により opt-in するまでは構造的 no-op。根拠: 実ホバーでは低周波(~0.1Hz)の
-    // 電池サグ推力外乱があり短い Ti で除去できる（シム: 高度 std −20%）が、
-    // alt_vel_ti を一律短縮すると自動離陸の捕捉オーバーシュートも悪化する（積分
-    // 巻き上がり、シム/実機で+60%）。Ti をフェーズで分離（climb=alt_vel_ti,
-    // hover=alt_vel_ti_hover）すれば TakeoffClimb は不変のまま Airborne だけ強い
-    // 積分を使える。適用範囲: このレバーは低周波（≲0.2Hz）外乱専用 — 会場ログ再生
-    // （NT金沢 2026-06-27、0.24–0.96Hz 広帯域・振幅約6倍）では効果なし・ピーク微増
-    // のため、会場級の上下動対策として opt-in しないこと。
+    // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。
+    // 既定1.5（2026-07-18 昇格。旧2.5=no-op）。根拠: 実ホバーの低周波電池サグ
+    // 外乱は短いTiで除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバー
+    // シュートを悪化させる（積分巻き上がり、シム/実機+60%）。フェーズ分離
+    // （climb=alt_vel_ti, hover=alt_vel_ti_hover）で TakeoffClimb は不変
+    // （SIL分離実証: ti_hover=1.5 で離陸OS不変 9.96→9.22cm）。実飛行A/B
+    // 2026-07-17（ログ224906/231940）: 単独では帯域再配分（合計stdほぼ中立）
+    // だが、高度DOB（altitude.dob.fc、2026-07-18から既定有効）併用では 1.5/2.5
+    // の差が効く: 同一ログ再生で DOB+ti1.5=94.2mm vs DOB+ti2.5=107.1mm。
+    // −67%の実飛行検証（ログ022929）も 1.5 の組合せで飛行。`param reset` が
+    // 実飛行検証済みの組合せに戻るよう既定へ昇格。
     // PidController::applyAltVelTiForPhase() 参照（architecture.md INV-1）。
-    float alt_vel_ti_hover = 2.5f;
+    float alt_vel_ti_hover = 1.5f;
     // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
     // spring-centred (centre = hold); push up → climb at climb_rate, push down →
     // descend at descent_rate. Mirrors the flight-proven legacy vehicle's
@@ -715,7 +718,7 @@ static const ParamEntry table[] = {
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
-    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 1.5f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       1.5f, 0.0f, 5.0f, &notifyControllerReload},
