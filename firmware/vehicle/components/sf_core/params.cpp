@@ -150,9 +150,22 @@ namespace param_vars {
     // レート誤差入力（rad/s）・ループ形式（Tustin PID・測定値微分・η=0.125・400Hz）が同一ゆえ
     // Ti/Td はそのまま、Kp のみ d*g_VT（roll/pitch）/ κ*g_VT（yaw）で再尺度（g_VT=0.0653 N/V）。
     // 2026-06-19 autotune 値を置換: roll/pitch は P が約2.8倍＋Ti 長め（~0.9Hz帯の低周波余裕増）、yaw は穏やか。
-    float rate_roll_kp    = 9.759795e-4f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 3.40e-4)
+    // 2026-07-17 roll retune (analysis/scripts/roll_tuning_20260717): the roll
+    // axis showed ~2x the pitch roughness in the 3-8 Hz rate band while its
+    // inertia-normalized P matched pitch and its Td was 2.5x SHORTER — a
+    // relative damping deficit. td 0.01→0.02 (flight A/B: 3-8 Hz rate −38..45%,
+    // control axes unchanged), then kp ×1.3 (log-replay closed-loop study; best
+    // config in stick-neutral flight windows; rate-loop margins PM 55°/GM 10.5 dB).
+    // Pilot feel accepted 2026-07-17. Base was the M5StampFly-converted
+    // 9.759795e-4 (real-flight validated 2026-06-27, was autotune 3.40e-4).
+    // 2026-07-17 ロール再調整（analysis/scripts/roll_tuning_20260717）: ロールは
+    // 3-8Hz帯レートがピッチの約2倍ざらつく一方、慣性正規化Pは同等で Td だけ2.5倍
+    // 短い＝相対ダンピング不足。td 0.01→0.02（実機A/B: 3-8Hz −38〜45%・対照軸不変）、
+    // 続いて kp ×1.3（ログ再生スタディ＋スティック中立区間A/Bで最良、余裕 PM55°/GM10.5dB）。
+    // 操縦感確認済み（2026-07-17）。基点は M5StampFly 換算値 9.759795e-4（2026-06-27 実機検証）。
+    float rate_roll_kp    = 1.268773e-3f;  // = 9.759795e-4 × 1.3 (2026-07-17 roll retune)
     float rate_roll_ti    = 0.7f;
-    float rate_roll_td    = 0.01f;
+    float rate_roll_td    = 0.02f;         // was 0.01; damping matched toward pitch (2026-07-17)
     float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.025f;
@@ -591,9 +604,9 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   9.759795e-4f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.268773e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.02f,     0.0f,  1.0f,   &notifyControllerReload},
     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
