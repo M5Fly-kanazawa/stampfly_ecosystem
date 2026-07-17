@@ -1,0 +1,345 @@
+{
+  "constants": {
+    "M": 0.037,
+    "G": 9.80665,
+    "HOVER": 0.40638757600000003,
+    "HOVER_CORR": 1.12,
+    "TAU_COMBINED_REF": 0.11,
+    "TAU_M_REF": 0.02
+  },
+  "step1_sanity": {
+    "ground_window_s": [
+      54.967412,
+      58.242428
+    ],
+    "ground_n": 1311,
+    "f_up_ground_mean_raw": 9.897708887916034,
+    "f_up_ground_std_raw": 0.018757374492834905,
+    "f_up_ground_mean_biascorr": 9.888747056054205,
+    "f_up_ground_std_biascorr": 0.0211146762111252,
+    "flight_lowdrift_window_s": [
+      142.742436,
+      167.742436
+    ],
+    "flight_lowdrift_vz_drift_mps2": 0.0002453862021589648,
+    "f_up_flight_mean_raw": 9.64820512849806,
+    "f_up_flight_mean_biascorr": 9.758617219455829,
+    "f_up_flight_mean_cos_tilt": 0.9988151387956934,
+    "g_reference": 9.80665,
+    "note": "wire 'accel' is RAW (not bias-corrected) despite the task-brief schema description; correct specific force = accel - accel_bias. See module docstring / firmware source citations."
+  },
+  "step2a_flight_windows": {
+    "A": [
+      58.742436,
+      199.447425
+    ],
+    "B": [
+      38.399776,
+      95.997276
+    ]
+  },
+  "step2b_model_fit_combined": {
+    "trusted_band_hz": [
+      0.74,
+      11.74
+    ],
+    "n_freq_bins_used": 66,
+    "full": {
+      "L": 0.01,
+      "T": 0.005,
+      "g": 3.209860293911551,
+      "resid": 1623.7895026450872,
+      "resid_frac": 0.8152231021020117
+    },
+    "delay_only": {
+      "L": 0.015,
+      "T": 0.0,
+      "g": 3.2599382174859985,
+      "resid": 1602.26105576335,
+      "resid_frac": 0.804414750882978
+    },
+    "lag_only": {
+      "L": 0.0,
+      "T": 0.01,
+      "g": 2.866584166548443,
+      "resid": 1716.1026712938951,
+      "resid_frac": 0.8615689046756573
+    },
+    "band_mask_threshold": 0.5
+  },
+  "step2b_model_fit_A_only": {
+    "trusted_band_hz": [
+      0.74,
+      13.3
+    ],
+    "n_freq_bins_used": 76,
+    "full": {
+      "L": 0.0075,
+      "T": 0.005,
+      "g": 5.806290378583188,
+      "resid": 2757.279656787236,
+      "resid_frac": 0.6628767209095177
+    },
+    "delay_only": {
+      "L": 0.0125,
+      "T": 0.0,
+      "g": 5.803719133726129,
+      "resid": 2688.2738649399416,
+      "resid_frac": 0.6462870605495679
+    },
+    "lag_only": {
+      "L": 0.0,
+      "T": 0.01,
+      "g": 5.696304976813222,
+      "resid": 2956.0442902571035,
+      "resid_frac": 0.7106616629058655
+    },
+    "band_mask_threshold": 0.5
+  },
+  "step2b_model_fit_B_only": {
+    "trusted_band_hz": [
+      0.08,
+      15.0
+    ],
+    "n_freq_bins_used": 505,
+    "full": {
+      "L": 0.0125,
+      "T": 0.005,
+      "g": 7.614156317345058,
+      "resid": 44092.24091739362,
+      "resid_frac": 0.6730064393562738
+    },
+    "delay_only": {
+      "L": 0.015,
+      "T": 0.0,
+      "g": 7.568391981270095,
+      "resid": 43464.14052475666,
+      "resid_frac": 0.6634193646235826
+    },
+    "lag_only": {
+      "L": 0.0,
+      "T": 0.015,
+      "g": 7.536787553736179,
+      "resid": 48579.19932055891,
+      "resid_frac": 0.7414935889232795
+    },
+    "band_mask_threshold": 0.5
+  },
+  "step2b_reliability": "UNRELIABLE -- see stdout reliability note; not used for step 4",
+  "step2b_dc_gain_check": {
+    "A": {
+      "u_eff_mean_N": 0.372982922325729,
+      "y_mean_N": 0.35520884895379207,
+      "dc_gain": 0.9523461469466029
+    },
+    "B": {
+      "u_eff_mean_N": 0.3696704530824074,
+      "y_mean_N": 0.3491565386586095,
+      "dc_gain": 0.944507562742038
+    }
+  },
+  "step2c_transients": [
+    {
+      "label": "A takeoff",
+      "t_event_approx": 58.742436,
+      "t_edge": 58.994945,
+      "edge_jump_N": 0.4106,
+      "fit_window_s": [
+        58.594945,
+        59.594945
+      ],
+      "t_u_cross": 58.99503543884466,
+      "t_y_cross": 59.058668761248335,
+      "delay_crossing_s": 0.0636333224036747,
+      "delay_xcorr_s": 0.0525,
+      "xcorr_peak": 0.35581913721534925
+    },
+    {
+      "label": "A landing",
+      "t_event_approx": 199.447425,
+      "t_edge": 199.4561765,
+      "edge_jump_N": -0.2778,
+      "fit_window_s": [
+        199.0561765,
+        199.7061765
+      ],
+      "t_u_cross": 199.45531672196765,
+      "t_y_cross": 199.47220171063665,
+      "delay_crossing_s": 0.016884988669005452,
+      "delay_xcorr_s": 0.13,
+      "xcorr_peak": 0.15491048243389255
+    },
+    {
+      "label": "B takeoff",
+      "t_event_approx": 38.399776,
+      "t_edge": 38.66977850000001,
+      "edge_jump_N": 0.4106,
+      "fit_window_s": [
+        38.26977850000001,
+        39.26977850000001
+      ],
+      "t_u_cross": 38.66986799337577,
+      "t_y_cross": 38.7310324757724,
+      "delay_crossing_s": 0.06116448239663441,
+      "delay_xcorr_s": 0.055,
+      "xcorr_peak": 0.29827776251722243
+    }
+  ],
+  "step2c_L_time_domain_mean_takeoff_s": 0.062398902400154554,
+  "step3_noise_budget": {
+    "window_s": [
+      61.742436,
+      196.447425
+    ],
+    "fs_native_hz": 400.0000000003638,
+    "gap_frac_over_10ms": 0.0001120050775635162,
+    "nperseg": 8000,
+    "Pxx_noise_floor_mps2_per_Hz": 0.015270547945745951,
+    "band_rms_mps2": {
+      "lt2Hz": 0.710764357309921,
+      "f2_20Hz": 0.7460689744346716,
+      "f20_200Hz": 2.3655251954778267
+    },
+    "noise_table": [
+      {
+        "fc_hz": 0.5,
+        "std_thrust_mN_upper_fullPSD": 18.953811563574437,
+        "pct_of_hover_upper": 4.663974167255161,
+        "std_thrust_mN_lower_noisefloor": 3.407347874338812,
+        "pct_of_hover_lower": 0.8384478452507641
+      },
+      {
+        "fc_hz": 1.0,
+        "std_thrust_mN_upper_fullPSD": 23.371761059175697,
+        "pct_of_hover_upper": 5.751101273621538,
+        "std_thrust_mN_lower_noisefloor": 4.818717496528207,
+        "pct_of_hover_lower": 1.1857442946356724
+      },
+      {
+        "fc_hz": 1.5,
+        "std_thrust_mN_upper_fullPSD": 25.60222420909111,
+        "pct_of_hover_upper": 6.299952488973508,
+        "std_thrust_mN_lower_noisefloor": 5.901699277655382,
+        "pct_of_hover_lower": 1.452234178944334
+      },
+      {
+        "fc_hz": 2.0,
+        "std_thrust_mN_upper_fullPSD": 26.845424376761187,
+        "pct_of_hover_upper": 6.605867394125549,
+        "std_thrust_mN_lower_noisefloor": 6.814694742091415,
+        "pct_of_hover_lower": 1.6768954428103418
+      },
+      {
+        "fc_hz": 3.0,
+        "std_thrust_mN_upper_fullPSD": 28.309721872401365,
+        "pct_of_hover_upper": 6.966187832573249,
+        "std_thrust_mN_lower_noisefloor": 8.34625946107315,
+        "pct_of_hover_lower": 2.0537683615291304
+      },
+      {
+        "fc_hz": 5.0,
+        "std_thrust_mN_upper_fullPSD": 30.304822950310353,
+        "pct_of_hover_upper": 7.457123381722268,
+        "std_thrust_mN_lower_noisefloor": 10.774954825944247,
+        "pct_of_hover_lower": 2.6513986800482914
+      }
+    ]
+  },
+  "step3_noise_budget_psd_summary": "full f_hz/Pxx arrays omitted from JSON for size; see figs/noise_psd.png",
+  "step4_model_used": {
+    "L": 0.062398902400154554,
+    "T": 0.02,
+    "g": 1.0,
+    "source": "time-domain takeoff delay (mean of A,B) + TAU_M_REF lag + g=1 (freq-domain fit not used, see step 2b reliability note)"
+  },
+  "step4_dext_cross_check": {
+    "A": {
+      "coverage_s": 140.63,
+      "window": [
+        58.742436,
+        199.447425
+      ],
+      "n_segments": 2,
+      "d_ext_kin_std_mN": 29.014990576088305,
+      "d_ext_acc_std_mN": 53.87770798843486,
+      "d_ext_kin_rms_mN": 30.223019837658047,
+      "d_ext_acc_rms_mN": 56.15915997486919,
+      "d_ext_kin_mean_mN": -8.459388274395423,
+      "d_ext_acc_mean_mN": -15.844362751335023,
+      "band_0p02_1Hz_rms_kin_mN": 19.935465519065975,
+      "band_0p02_1Hz_rms_acc_mN": 33.64123153867797,
+      "band_ratio_acc_over_kin": 1.687506695366808,
+      "coherence_0p02_1Hz": 0.6928090539271643,
+      "d_ext_acc_80pct_band_hz": [
+        0.1,
+        0.8
+      ]
+    },
+    "B": {
+      "coverage_s": 57.59,
+      "window": [
+        38.399776,
+        95.997276
+      ],
+      "n_segments": 1,
+      "d_ext_kin_std_mN": 33.89499416874614,
+      "d_ext_acc_std_mN": 58.69571480225324,
+      "d_ext_kin_rms_mN": 34.17878761488641,
+      "d_ext_acc_rms_mN": 61.152109996973664,
+      "d_ext_kin_mean_mN": -4.3953262818791545,
+      "d_ext_acc_mean_mN": -17.15790257970115,
+      "band_0p02_1Hz_rms_kin_mN": 17.65588607511548,
+      "band_0p02_1Hz_rms_acc_mN": 32.86194734636817,
+      "band_ratio_acc_over_kin": 1.8612460007138572,
+      "coherence_0p02_1Hz": 0.8351778823408518,
+      "d_ext_acc_80pct_band_hz": [
+        0.1,
+        1.0
+      ]
+    },
+    "C": {
+      "coverage_s": 114.14,
+      "window": [
+        33.1,
+        199.6
+      ],
+      "n_segments": 14,
+      "d_ext_kin_std_mN": 35.22722651155102,
+      "d_ext_acc_std_mN": 94.27034112940848,
+      "d_ext_kin_rms_mN": 51.80671047085183,
+      "d_ext_acc_rms_mN": 123.57548950533827,
+      "d_ext_kin_mean_mN": -37.98654712019173,
+      "d_ext_acc_mean_mN": -79.89996489253875,
+      "band_0p02_1Hz_rms_kin_mN": 30.20564097376,
+      "band_0p02_1Hz_rms_acc_mN": 67.34817932184149,
+      "band_ratio_acc_over_kin": 2.2296556918076216,
+      "coherence_0p02_1Hz": 1.0,
+      "d_ext_acc_80pct_band_hz": [
+        0.1,
+        0.9
+      ]
+    },
+    "D": {
+      "coverage_s": 48.41,
+      "window": [
+        56.3,
+        196.5
+      ],
+      "n_segments": 14,
+      "d_ext_kin_std_mN": 41.5664636369051,
+      "d_ext_acc_std_mN": 103.48966912410953,
+      "d_ext_kin_rms_mN": 57.30747890715602,
+      "d_ext_acc_rms_mN": 124.88238943160603,
+      "d_ext_kin_mean_mN": -39.45093458228814,
+      "d_ext_acc_mean_mN": -69.89634879397947,
+      "band_0p02_1Hz_rms_kin_mN": 36.09866959644701,
+      "band_0p02_1Hz_rms_acc_mN": 76.4884972822294,
+      "band_ratio_acc_over_kin": 2.1188730259953332,
+      "coherence_0p02_1Hz": 1.0,
+      "d_ext_acc_80pct_band_hz": [
+        0.24096385542168672,
+        0.9638554216867469
+      ]
+    }
+  }
+}
