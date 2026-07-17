@@ -81,22 +81,27 @@ drone.land()
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{アンケートのお願い / リンク集}
+\begin{frame}{アンケートのお願い（2種類）/ リンク集}
   \begin{columns}[c]
-    \begin{column}{0.42\textwidth}
+    \begin{column}{0.55\textwidth}
       \centering
       \begin{tikzpicture}
         \node[
           rectangle, draw=sfgray, dashed, line width=1pt,
-          minimum width=3cm, minimum height=3cm,
+          minimum width=2.8cm, minimum height=2.8cm,
           align=center, font=\footnotesize\color{sfgray},
-        ] {QR コード\\（当日配布）};
+        ] at (0,0) {大学アンケート\\（DXH事業）\\ QR（当日掲示）};
+        \node[
+          rectangle, draw=sfgray, dashed, line width=1pt,
+          minimum width=2.8cm, minimum height=2.8cm,
+          align=center, font=\footnotesize\color{sfgray},
+        ] at (3.4,0) {講師アンケート\\（教材改善用）\\ QR（当日掲示）};
       \end{tikzpicture}
       \vspace{0.3em}
 
-      {\footnotesize アンケートへのご協力をお願いします}
+      {\footnotesize \textbf{2種類}のアンケートにご協力をお願いします}
     \end{column}
-    \begin{column}{0.55\textwidth}
+    \begin{column}{0.42\textwidth}
       \begin{block}{GitHub リポジトリ}
         {\footnotesize\url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}}
       \end{block}
