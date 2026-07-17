@@ -1,0 +1,174 @@
+{
+  "constants": {
+    "KAPPA_TRUE": 0.00612,
+    "KAPPA_OLD": 0.00971,
+    "G_OLD": 0.56274827129616,
+    "G_NEW": 0.8928571428571428,
+    "IZZ": 2.04e-05,
+    "CORR": 1.12,
+    "RATE_YAW_TI": 0.8,
+    "RATE_YAW_TD": 0.01,
+    "YAW_HOLD_KP": 3.0,
+    "YAW_HOLD_RATE_MAX": 2.0
+  },
+  "configs": {
+    "T0": {
+      "kp": 0.001901691,
+      "cap": 0.0022,
+      "g": 0.56274827129616,
+      "label": "old FW flight (kp=1.902e-3, cap=2.2e-3)"
+    },
+    "T1": {
+      "kp": 0.001901691,
+      "cap": 0.0029,
+      "g": 0.56274827129616,
+      "label": "old FW treated (cap=2.9e-3)"
+    },
+    "T2": {
+      "kp": 0.001198594,
+      "cap": 0.00183,
+      "g": 0.8928571428571428,
+      "label": "NEW FW default (kp=1.199e-3, cap=1.83e-3)"
+    },
+    "T3": {
+      "kp": 0.001198594,
+      "cap": 0.001387,
+      "g": 0.8928571428571428,
+      "label": "NEW FW equiv-cap (cap=1.387e-3, isolates kappa fix)"
+    }
+  },
+  "events": {
+    "E0": {
+      "name": "E0",
+      "file": "stampfly_udp_20260627T020050.jsonl",
+      "eff_t0": 30.945123,
+      "t1": 43.0,
+      "envelope_true_mNm": 1.8542451707406922,
+      "tau_d_true_peak_mNm": 1.3584834409843223,
+      "openloop_corr_true": 0.9778521630495631,
+      "real_max_dev_deg": 87.78339648076216,
+      "repro_rms_deg": 34.164143450717674,
+      "scenarios": {
+        "T0": {
+          "max_dev_deg": 71.7799760736644,
+          "recovery_time_s": 9.732499999999998,
+          "sat_fraction": 0.09767731231854003
+        },
+        "T1": {
+          "max_dev_deg": 9.445999832837051,
+          "recovery_time_s": 8.16,
+          "sat_fraction": 0.0
+        },
+        "T2": {
+          "max_dev_deg": 9.446000810564001,
+          "recovery_time_s": 8.16,
+          "sat_fraction": 0.0
+        },
+        "T3": {
+          "max_dev_deg": 71.24257422930937,
+          "recovery_time_s": 9.7225,
+          "sat_fraction": 0.09767731231854003
+        }
+      }
+    },
+    "E1": {
+      "name": "E1",
+      "file": "stampfly_udp_20260627T165713.jsonl",
+      "eff_t0": 170.0,
+      "t1": 188.0,
+      "envelope_true_mNm": 1.3935850007689887,
+      "tau_d_true_peak_mNm": 1.4437451550457994,
+      "openloop_corr_true": 0.9766078918267427,
+      "real_max_dev_deg": 96.61233086294087,
+      "repro_rms_deg": 17.499332490773966,
+      "scenarios": {
+        "T0": {
+          "max_dev_deg": 28.66986196894735,
+          "recovery_time_s": 12.20750000000001,
+          "sat_fraction": 0.020555555555555556
+        },
+        "T1": {
+          "max_dev_deg": 14.337716819669517,
+          "recovery_time_s": 11.754999999999995,
+          "sat_fraction": 0.008333333333333333
+        },
+        "T2": {
+          "max_dev_deg": 14.337375431443986,
+          "recovery_time_s": 11.754999999999995,
+          "sat_fraction": 0.008333333333333333
+        },
+        "T3": {
+          "max_dev_deg": 28.6127568838342,
+          "recovery_time_s": 12.20750000000001,
+          "sat_fraction": 0.020555555555555556
+        }
+      }
+    },
+    "E2": {
+      "name": "E2",
+      "file": "stampfly_udp_20260627T164611.jsonl",
+      "eff_t0": 110.0,
+      "t1": 127.0,
+      "envelope_true_mNm": 1.7898523058330502,
+      "tau_d_true_peak_mNm": 1.5417405385074063,
+      "openloop_corr_true": 0.978826010917462,
+      "real_max_dev_deg": 59.98082649747488,
+      "repro_rms_deg": 0.8674649140109524,
+      "scenarios": {
+        "T0": {
+          "max_dev_deg": 59.21157706336168,
+          "recovery_time_s": 13.197500000000005,
+          "sat_fraction": 0.04161764705882353
+        },
+        "T1": {
+          "max_dev_deg": 15.58931954953283,
+          "recovery_time_s": 15.037499999999994,
+          "sat_fraction": 0.0
+        },
+        "T2": {
+          "max_dev_deg": 15.589321173602489,
+          "recovery_time_s": 15.037499999999994,
+          "sat_fraction": 0.0
+        },
+        "T3": {
+          "max_dev_deg": 59.04211886530726,
+          "recovery_time_s": 13.197500000000005,
+          "sat_fraction": 0.04161764705882353
+        }
+      }
+    },
+    "E4": {
+      "name": "E4",
+      "file": "stampfly_udp_20260627T165713.jsonl",
+      "eff_t0": 89.0,
+      "t1": 106.0,
+      "envelope_true_mNm": 1.7204039835999911,
+      "tau_d_true_peak_mNm": 1.5249949334362134,
+      "openloop_corr_true": 0.9155108601277595,
+      "real_max_dev_deg": 122.54182577460809,
+      "repro_rms_deg": 9.761805338616691,
+      "scenarios": {
+        "T0": {
+          "max_dev_deg": 156.62180935360178,
+          "recovery_time_s": 13.627499999999998,
+          "sat_fraction": 0.10308823529411765
+        },
+        "T1": {
+          "max_dev_deg": 11.220363682968218,
+          "recovery_time_s": 14.944999999999993,
+          "sat_fraction": 0.0
+        },
+        "T2": {
+          "max_dev_deg": 11.220364839378762,
+          "recovery_time_s": 14.944999999999993,
+          "sat_fraction": 0.0
+        },
+        "T3": {
+          "max_dev_deg": 155.9660782133477,
+          "recovery_time_s": 13.620000000000005,
+          "sat_fraction": 0.10294117647058823
+        }
+      }
+    }
+  }
+}

@@ -160,7 +160,7 @@ V = Am × ω² + Bm × ω + Cm
 |-----------|------|-----|------|------|
 | 推力係数 | Ct | 1.00×10⁻⁸ | N/(rad/s)² | T = Ct × ω² |
 | トルク係数 | Cq | 9.71×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω² |
-| トルク/推力比 | κ | 9.71×10⁻³ | m | κ = Cq/Ct |
+| トルク/推力比 | κ | 6.12×10⁻³ | m | κ = Cq/Ct。2026-07-15実測（コーストダウン Cq=4.10e-11 / 推力測定 Ct=6.7e-9）。2026-07-17 にファームウェア B⁻¹ ミキサー（actuator.cpp）・SILプラント（plant.hpp）へ反映。上の Ct/Cq 行はファームウェアのモータ曲線実装（較正済みチェーン）の記述として旧値のまま |
 
 ### 派生パラメータ
 
@@ -605,7 +605,7 @@ V = Am × ω² + Bm × ω + Cm
 |-----------|--------|-------|------|-------|
 | Thrust coefficient | Ct | 1.00×10⁻⁸ | N/(rad/s)² | T = Ct × ω² |
 | Torque coefficient | Cq | 9.71×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω² |
-| Torque/Thrust ratio | κ | 9.71×10⁻³ | m | κ = Cq/Ct |
+| Torque/Thrust ratio | κ | 6.12×10⁻³ | m | κ = Cq/Ct. Measured 2026-07-15 (coast-down Cq=4.10e-11 / thrust-stand Ct=6.7e-9). Applied to the firmware B⁻¹ mixer (actuator.cpp) and the SIL plant (plant.hpp) on 2026-07-17. The Ct/Cq rows above keep the legacy values as a description of the firmware's calibrated motor-curve chain |
 
 ### Derived Parameters
 

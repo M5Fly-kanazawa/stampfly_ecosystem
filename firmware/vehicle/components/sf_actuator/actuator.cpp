@@ -86,7 +86,17 @@ static constexpr float MAX_DUTY = 1.0f;
 // モータモデルに準拠。制御入力は物理量（推力 [N]・トルク [Nm]）で、ミキサーは配分を
 // 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SIL プラントの duty→推力 の逆）。
 static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
-static constexpr float KAPPA    = 0.00971f;  // torque/thrust ratio Cq/Ct [m]
+// Torque/thrust ratio κ = Cq/Ct, MEASURED 2026-07-15 (coast-down: Cq=4.10e-11,
+// thrust stand: Ct=6.7e-9; SSOT tools/sysid/defaults.py, multicopter_introduction
+// qa_log Q4-9..13). The former value 9.71e-3 was 1.59× too high, so the mixer's
+// τψ/κ under-drove yaw: physical yaw torque was only 0.63× the commanded value.
+// The yaw rate gain and torque cap were rescaled with this fix (params.cpp
+// rate.yaw.kp, rate.yaw.max_torque) to keep the flight-proven loop gain.
+// トルク/推力比 κ = Cq/Ct、2026-07-15 実測（コーストダウン Cq=4.10e-11、推力測定
+// Ct=6.7e-9。正典 tools/sysid/defaults.py）。旧値 9.71e-3 は 1.59 倍過大で、ミキサーの
+// τψ/κ がヨーを過小駆動（物理ヨートルク＝指令の 0.63 倍）だった。飛行実績ループゲイン
+// を保つため、ヨーレートゲインとトルク上限もこの修正と同時に再スケール（params.cpp）。
+static constexpr float KAPPA    = 6.12e-3f;  // torque/thrust ratio Cq/Ct [m], measured 2026-07-15
 static constexpr float MOTOR_AM = 5.39e-8f;  // V = Am·ω² + Bm·ω + Cm
 static constexpr float MOTOR_BM = 6.33e-4f;
 static constexpr float MOTOR_CM = 1.53e-2f;

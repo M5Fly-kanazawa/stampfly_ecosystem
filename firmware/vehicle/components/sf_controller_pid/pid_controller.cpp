@@ -70,6 +70,9 @@ void PidController::loadParams()
     params::get_float("rate.yaw.kp", rate_yaw_.kp);
     params::get_float("rate.yaw.ti", rate_yaw_.ti);
     params::get_float("rate.yaw.td", rate_yaw_.td);
+    // Yaw torque cap (NT-Kanazawa saturation treatment; see params.cpp)
+    // ヨートルク上限（NT金沢飽和の治療。params.cpp 参照）
+    params::get_float("rate.yaw.max_torque", max_yaw_torque_);
 
     // Attitude control / 姿勢制御
     params::get_float("attitude.roll.kp", att_roll_.kp);

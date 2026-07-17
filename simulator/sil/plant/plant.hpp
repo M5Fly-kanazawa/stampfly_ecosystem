@@ -70,11 +70,13 @@ public:
         float motor_Am = 5.39e-8f;  ///< V/(rad/s)²  (V = Am·ω² + Bm·ω + Cm)
         float motor_Bm = 6.33e-4f;  ///< V/(rad/s)
         float motor_Cm = 1.53e-2f;  ///< V (offset)
-        /// TODO(2026-07-15): 実測により物理値は Ct=6.7e-9, Cq=4.10e-11(κ=6.12e-3),
-        /// Jmp=1.375e-8 と確定（multicopter_introduction qa_log Q4-9..13）。ただし本 Plant の
-        /// Ct・Am(∝Cq)・thrust_efficiency は Model Identity（飛行ログ較正）で連動しており、
-        /// 単独差し替えはホバ推力を壊す。更新は3点セットの再導出＋シナリオ再検証とセットで:
+        /// TODO(2026-07-15): 実測により物理値は Ct=6.7e-9, Cq=4.10e-11, Jmp=1.375e-8 と
+        /// 確定（multicopter_introduction qa_log Q4-9..13）。ただし本 Plant の Ct・Am(∝Cq)・
+        /// thrust_efficiency は Model Identity（飛行ログ較正）で連動しており、単独差し替えは
+        /// ホバ推力を壊す。更新は3点セットの再導出＋シナリオ再検証とセットで:
         ///   Am_new = Rm·Cq_new/Km = 2.28e-8, Ct_new = 6.7e-9, thrust_efficiency 再フィット。
+        /// （κ=Cq/Ct はこの保留セットから独立 — 推力→反トルク変換のみに使われるため、
+        ///   2026-07-17 にファームミキサーの KAPPA と同時に実測値へ単独更新済み。下記 kappa 参照）
         float Ct       = 1.00e-8f;  ///< thrust coeff N/(rad/s)²  (T = Ct·ω²)
         /// Real-world thrust efficiency vs the IDEALIZED curve above (motor/prop losses
         /// + battery sag the firmware's vbat reading doesn't capture). The firmware's
@@ -90,7 +92,14 @@ public:
         /// mass·g·1.12 を指令する。この係数が無いと Plant は損失ゼロの理想曲線で 1.12 倍の
         /// 過推力を出し hover 指令が暴走上昇する。1/1.12 で実機同様に hover 指令＝mg となる。
         float thrust_efficiency = 1.0f / 1.12f;  ///< ≈0.893 (matches firmware HOVER_THRUST_CORRECTION)
-        float kappa    = 9.71e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T)
+        /// Measured 2026-07-15 (coast-down Cq / thrust-stand Ct); updated together
+        /// with the firmware mixer's KAPPA (actuator.cpp) on 2026-07-17 so the
+        /// plant's true reaction torque and the mixer's assumed κ agree (Model
+        /// Fidelity). Independent of the deferred Ct/Am/thrust_efficiency set above.
+        /// 2026-07-15 実測（コーストダウン Cq／推力測定 Ct）。2026-07-17 にファーム
+        /// ミキサーの KAPPA（actuator.cpp）と同時更新（Model Fidelity）。上の保留3点
+        /// セットとは独立。
+        float kappa    = 6.12e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T), measured 2026-07-15
         float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
 
         // --- Ground effect — Model fidelity ---

@@ -122,13 +122,15 @@ namespace param_vars {
     // actuator.cpp). Values are the FLIGHT-PROVEN legacy vehicle/ gains
     // (config.hpp rate_control, physical-units mode) — directly transferable
     // because both firmwares share the same loop structure (Tustin PID with
-    // D-on-M, η=0.125), the same B^-1 mixer geometry (d=0.023 m, κ=0.00971)
-    // and the same motor curve, so the plant seen by the rate loop is identical.
+    // D-on-M, η=0.125), the same B^-1 mixer geometry (d=0.023 m, and the mixer's
+    // then-assumed κ=0.00971 — see the 2026-07-17 κ-correction note below) and the
+    // same motor curve, so the plant seen by the rate loop is identical.
     // Earlier SIL-derived near-P values (kp = I/τ_resp, ti=20) are superseded.
     // レートゲインは物理 [Nm/(rad/s)]（ミキサーは B^-1 配分）。値は旧 vehicle/ の
     // 「飛行実績ゲイン」（config.hpp rate_control 物理単位モード）— 両ファームは
-    // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m,
-    // κ=0.00971）、モータ曲線が同一で、レートループから見たプラントが同じため
+    // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m と
+    // 当時のミキサー仮定 κ=0.00971 — 下の 2026-07-17 κ補正ノート参照）、
+    // モータ曲線が同一で、レートループから見たプラントが同じため
     // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
     // Values are the original M5StampFly (M5Fly-kanazawa) hand-tuned ACRO rate gains,
     // CONVERTED into this firmware's torque[Nm] form, then VALIDATED in real flight
@@ -154,9 +156,43 @@ namespace param_vars {
     float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.025f;
-    float rate_yaw_kp     = 1.901691e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was legacy 5.31e-3)
+    // 2026-07-17 κ correction: the mixer's torque/thrust ratio was fixed to the
+    // MEASURED κ=6.12e-3 m (was 9.71e-3; actuator.cpp KAPPA). With the old κ the
+    // mixer delivered only κ_true/κ_mixer = 0.6303 of the commanded yaw torque, so
+    // the flight-proven PHYSICAL yaw loop gain was 1.901691e-3 × 0.6303. To keep
+    // that exact loop gain with the corrected mixer, kp is rescaled by κ_new/κ_old:
+    //   1.901691e-3 × (6.12e-3 / 9.71e-3) = 1.198594e-3  [Nm/(rad/s)]
+    // Ti/Td are time constants — unaffected by the κ scale. Roll/pitch use the arm
+    // d (unchanged), so only yaw is rescaled. On REAL hardware `param reset` (or
+    // re-setting rate.yaw.* explicitly) is REQUIRED after flashing this change: an
+    // NVS-saved old kp would run 1.59× the proven loop gain on the corrected mixer.
+    // 2026-07-17 κ補正: ミキサーのトルク/推力比を実測 κ=6.12e-3 m へ修正（旧 9.71e-3、
+    // actuator.cpp KAPPA）。旧 κ ではミキサーは指令ヨートルクの 0.6303 倍しか物理トルクを
+    // 出せておらず、飛行実績の「物理」ヨーループゲインは 1.901691e-3 × 0.6303 だった。
+    // 修正後も同一ループゲインを保つため kp を κ_new/κ_old 倍へ再スケール。Ti/Td は
+    // 時定数なので不変、ロール/ピッチはアーム長 d（不変）基準なので対象外。実機は書き込み後
+    // `param reset`（または rate.yaw.* の明示再設定）必須 — NVS の旧 kp のままだと実績の
+    // 1.59 倍のループゲインで飛ぶことになる。
+    float rate_yaw_kp     = 1.198594e-3f;  // = 1.901691e-3 (flight-proven 2026-06-27) × κ_new/κ_old
     float rate_yaw_ti     = 0.8f;
     float rate_yaw_td     = 0.01f;
+
+    // Yaw torque cap [Nm] for the rate-PID output clamp / anti-windup (loaded by
+    // pid_controller loadParams). Runtime-tunable after the NT-Kanazawa yaw-
+    // saturation diagnosis (2026-06-27 logs): a constant CW/CCW trim asymmetry
+    // plus a few-second aerodynamic disturbance saturated the old cap and the
+    // craft was spun ~180° in yaw. Default 1.83e-3 is the treatment value = the
+    // old-unit relaxed cap 2.9e-3 × κ_new/κ_old (closed-loop replay of measured
+    // disturbances; see analysis/scripts/yaw_nt_kanazawa/). The flight-proven-
+    // equivalent cap is 1.387e-3 (= old 2.2e-3 × 0.6303) if a fallback is needed.
+    // Table max 2.1e-3 ≈ geometric full-scale 2·0.168 N·κ = 2.06e-3.
+    // ヨートルク上限 [Nm]（レートPID出力クランプ/アンチワインドアップ、pid_controller が
+    // 読む）。NT金沢のヨー飽和診断（2026-06-27 ログ）を受けてランタイム調整可能化:
+    // CW/CCW トリム非対称＋数秒持続の空力外乱で旧上限が飽和しヨーが約180°回された。
+    // 既定 1.83e-3 は治療値＝旧単位の緩和上限 2.9e-3 × κ_new/κ_old（実測外乱の閉ループ
+    // 再生シム: analysis/scripts/yaw_nt_kanazawa/）。飛行実績等価へ戻す場合は 1.387e-3
+    //（旧 2.2e-3 × 0.6303）。テーブル最大 2.1e-3 は幾何フルスケール 2·0.168N·κ≈2.06e-3 相当。
+    float rate_yaw_max_torque = 1.83e-3f;
 
     // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
     // `autotune` mid-flight, so SET these on the GROUND, then arm and fly. After the
@@ -561,9 +597,12 @@ static const ParamEntry table[] = {
     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    1.901691e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    1.198594e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    0.8f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    // Yaw torque cap — see the param_vars comment (NT-Kanazawa saturation treatment).
+    // ヨートルク上限 — param_vars のコメント参照（NT金沢飽和の治療）。
+    {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.83e-3f, 1.0e-4f, 2.1e-3f, &notifyControllerReload},
     {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
     {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
     // Autotune sysid results (written by autotune, read-back only). Wide ranges = result store.
