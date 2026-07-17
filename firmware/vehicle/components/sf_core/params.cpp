@@ -417,37 +417,39 @@ namespace param_vars {
     float alt_descent_rate = 0.5f;   // [m/s]
 
     // Acceleration-based disturbance observer (DOB) cutoff for the Airborne
-    // altitude vel loop. 0 (default) = disabled — opt-in only, matching the
-    // hover.thrust_corr / ti_hover precedent (a design lever that must be A/B'd
-    // per craft before it becomes the compiled default). 2026-07-18 sim study
-    // (flight-log-driven closed-loop replay, analysis/scripts/alt_dob_design/
-    // README.md §5): fc=1.5Hz recommended once opted in — clean-hover altitude
-    // std -37..-56%, cost is a 0.5-5Hz thrust-command RMS increase (~8% of
-    // hover thrust). Range [0.2, 5.0] once enabled is enforced by
-    // PidController::loadParams() (WARN + clamp outside it), not by this
-    // param's [min,max] alone, so the design intent is documented once here.
-    // FLIGHT-VALIDATED + ADOPTED per-craft 2026-07-18 (log 022929, hands-off
-    // POS_HOLD, fc=1.5 via NVS): alt std 55.2 mm under the same aircon
-    // disturbance the no-DOB baseline held at 167.2 mm (-67%, beats the sim
-    // prediction); d_hat clamp saturation 0%; jerkiness = the predicted
-    // thrust-modulation cost (2.27x vs 2.07x predicted), flight path itself
-    // SMOOTHER than baseline. fc/clamp detune sweep on the same log found no
-    // better point -> fc=1.5 stands. Default stays 0 until validated on more
-    // crafts/venue-class environments.
+    // altitude vel loop. DEFAULT 1.5 Hz = ENABLED (0 disables; in-flight
+    // `param set altitude.dob.fc 0` over WiFi disables without landing).
+    // Design: 2026-07-18 sim study (flight-log-driven closed-loop replay,
+    // analysis/scripts/alt_dob_design/README.md §5) — clean-hover altitude
+    // std -37..-56% predicted; cost is a 0.5-5Hz thrust-command RMS increase
+    // (~8% of hover thrust, audible as motor-tone modulation; the flight
+    // path itself is SMOOTHER than without DOB). Range [0.2, 5.0] when
+    // enabled is enforced by PidController::loadParams() (WARN + clamp).
+    // FLIGHT-VALIDATED 2026-07-18 (log 022929, hands-off POS_HOLD, fc=1.5):
+    // alt std 55.2 mm under the same aircon disturbance the no-DOB baseline
+    // held at 167.2 mm (-67%, beats the prediction); d_hat clamp saturation
+    // 0%; fc/clamp detune sweep found no better point. Promoted to the
+    // compiled default 2026-07-18 (pilot decision; precedent: roll retune /
+    // yaw kappa defaults after single-craft A/B): SIL passes ALL flight
+    // gates with the DOB enabled, and the inner-loop margins (thrust gain
+    // +/-30%, mass +/-10%, delay +50 ms) cover craft-to-craft variation.
+    // Venue-class environments not yet flight-validated — if misbehavior is
+    // seen there (0.5-3 Hz thrust oscillation, alt excursions), set 0.
     // 高度速度ループ(Airborne)用の加速度ベース外乱オブザーバ(DOB)カットオフ。
-    // 既定0=無効 — opt-inのみ（hover.thrust_corr / ti_hoverと同じ前例: 機体ごとに
-    // 実飛行A/Bしてから既定化する設計レバー）。2026-07-18シム設計スタディ
-    // （フライトログ駆動閉ループ再生、analysis/scripts/alt_dob_design/README.md
-    // §5）: opt-in時の推奨値fc=1.5Hz — 清浄ホバーで高度std -37〜-56%、代償は
-    // 0.5-5Hz帯の推力指令RMS増加（ホバー推力の約8%）。有効時の範囲[0.2,5.0]は
-    // PidController::loadParams()が強制（範囲外はWARN+クランプ）。
-    // 実飛行検証済み・機体別採用 2026-07-18（ログ022929、手放しPOS_HOLD、NVSで
-    // fc=1.5）: 同一エアコン外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝
-    // シム予測超え）、d̂クランプ飽和0%。カクカク感=予測どおりの推力変調コスト
-    // （2.27倍 vs 予測2.07倍）で、飛行経路自体は基準より滑らか。同ログの
-    // fc/クランプ再調整掃引に現行超えなし → fc=1.5 を維持。既定化は複数機体・
-    // 会場級環境での実績を待つ。
-    float alt_dob_fc = 0.0f;
+    // 既定1.5Hz=有効（0で無効。飛行中でもWiFi経由 `param set altitude.dob.fc 0`
+    // で着陸不要の無効化可）。設計: 2026-07-18シム設計スタディ（フライトログ駆動
+    // 閉ループ再生、analysis/scripts/alt_dob_design/README.md §5）— 清浄ホバーで
+    // 高度std -37〜-56%予測、代償は0.5-5Hz帯の推力指令RMS増加（ホバー推力の約8%、
+    // モータ音の変調として聞こえる。飛行経路自体はDOBなしより滑らか）。有効時の
+    // 範囲[0.2,5.0]はPidController::loadParams()が強制（範囲外WARN+クランプ）。
+    // 実飛行検証 2026-07-18（ログ022929、手放しPOS_HOLD、fc=1.5）: 同一エアコン
+    // 外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝予測超え）、d̂クランプ
+    // 飽和0%、fc/クランプ掃引に現行超えなし。同日コンパイル既定へ昇格（パイロット
+    // 判断。前例: ロール再調整・ヨーκ修正も単機A/B後に既定値化）: SILはDOB有効で
+    // 全飛行ゲートPASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
+    // 個体差をカバー。会場級環境は実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
+    // が出たら0にすること。
+    float alt_dob_fc = 1.5f;
 
     // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
     // The idealized motor curve over-promises thrust, so worn hardware needs corr
@@ -716,7 +718,7 @@ static const ParamEntry table[] = {
     {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
-    {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       0.0f, 0.0f, 5.0f, &notifyControllerReload},
+    {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       1.5f, 0.0f, 5.0f, &notifyControllerReload},
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
     {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 
