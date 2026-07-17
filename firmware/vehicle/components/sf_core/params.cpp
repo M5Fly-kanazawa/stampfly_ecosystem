@@ -426,14 +426,27 @@ namespace param_vars {
     // hover thrust). Range [0.2, 5.0] once enabled is enforced by
     // PidController::loadParams() (WARN + clamp outside it), not by this
     // param's [min,max] alone, so the design intent is documented once here.
+    // FLIGHT-VALIDATED + ADOPTED per-craft 2026-07-18 (log 022929, hands-off
+    // POS_HOLD, fc=1.5 via NVS): alt std 55.2 mm under the same aircon
+    // disturbance the no-DOB baseline held at 167.2 mm (-67%, beats the sim
+    // prediction); d_hat clamp saturation 0%; jerkiness = the predicted
+    // thrust-modulation cost (2.27x vs 2.07x predicted), flight path itself
+    // SMOOTHER than baseline. fc/clamp detune sweep on the same log found no
+    // better point -> fc=1.5 stands. Default stays 0 until validated on more
+    // crafts/venue-class environments.
     // 高度速度ループ(Airborne)用の加速度ベース外乱オブザーバ(DOB)カットオフ。
     // 既定0=無効 — opt-inのみ（hover.thrust_corr / ti_hoverと同じ前例: 機体ごとに
     // 実飛行A/Bしてから既定化する設計レバー）。2026-07-18シム設計スタディ
     // （フライトログ駆動閉ループ再生、analysis/scripts/alt_dob_design/README.md
     // §5）: opt-in時の推奨値fc=1.5Hz — 清浄ホバーで高度std -37〜-56%、代償は
     // 0.5-5Hz帯の推力指令RMS増加（ホバー推力の約8%）。有効時の範囲[0.2,5.0]は
-    // PidController::loadParams()が強制（範囲外はWARN+クランプ）— このparamの
-    // [min,max]だけでなく、設計意図をここに一度明記する。
+    // PidController::loadParams()が強制（範囲外はWARN+クランプ）。
+    // 実飛行検証済み・機体別採用 2026-07-18（ログ022929、手放しPOS_HOLD、NVSで
+    // fc=1.5）: 同一エアコン外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝
+    // シム予測超え）、d̂クランプ飽和0%。カクカク感=予測どおりの推力変調コスト
+    // （2.27倍 vs 予測2.07倍）で、飛行経路自体は基準より滑らか。同ログの
+    // fc/クランプ再調整掃引に現行超えなし → fc=1.5 を維持。既定化は複数機体・
+    // 会場級環境での実績を待つ。
     float alt_dob_fc = 0.0f;
 
     // Hover thrust correction (HOVER_THRUST_CORRECTION): hover_thrust = mg × corr.
