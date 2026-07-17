@@ -118,7 +118,7 @@
 | 項目 | 内容 |
 |------|------|
 | 目的 | モータ配置と Duty（PWMのオン時間比率）の関係を理解し、自分で書き換えたコードが実機のモータ回転として反映される体験を通じて「プログラム書き換え→ビルド→書き込み」の一連の流れを体感する |
-| 使用機材・スライド | モータ配置図（FR/RR/RL/FL）・PWM/Duty説明スライド、ARM/安全説明スライド、各PCの開発環境（事前に `sf lesson switch 1` / `sf lesson build` 実行済み、DXH実習コード（user_code_dxh.cpp）導入済み） |
+| 使用機材・スライド | モータ配置図（FR/RR/RL/FL）・PWM/Duty説明スライド、ARM/安全説明スライド、各PCの開発環境（事前に `sf lesson switch dxh_workshop` / `sf lesson build` 実行済み） |
 | 講師の動き | 内訳は下表参照 |
 | 参加者の動き | `cd` でリポジトリへ移動→ `setup_env.bat` →`sf lesson edit`（VSCodeが開く）→コード内のDuty数値を書き換え→ `sf lesson build` →`sf lesson flash`（書き込み後シリアルモニタが自動起動、終了は `Ctrl+]`）→USBを外しバッテリー駆動に切替→起動LEDシーケンス確認→機体上部のM5StampS3を指で押さえた状態で本体ボタンをクリックしてARM→モータ回転を確認→もう一度クリックしてDISARM |
 | チェックポイント | 全員が最低1回、指定したモータが指定Dutyで回転するのを確認できたか |

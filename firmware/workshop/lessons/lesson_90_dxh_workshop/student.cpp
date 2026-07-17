@@ -1,7 +1,7 @@
-// DXH workshop exercise template (copied into firmware/workshop/main/user_code.cpp
-// by the loaner-PC setup; participants only edit the duty values on the day).
-// DXH講座 実習コードテンプレート（貸出PCセットアップ時に
-// firmware/workshop/main/user_code.cpp へコピーする。当日参加者は Duty 値のみ書き換える）
+// DXH workshop exercise template (select with `sf lesson switch dxh_workshop`;
+// participants only edit the duty values on the day).
+// DXH講座 実習コードテンプレート（`sf lesson switch dxh_workshop` で選択する。
+// 当日参加者は Duty 値のみ書き換える）
 #include "workshop_api.hpp"
 
 // =========================================================================

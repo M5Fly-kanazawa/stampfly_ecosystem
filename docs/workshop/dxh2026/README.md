@@ -28,7 +28,7 @@
 | `equipment-checklist.md` | 機材数量一覧・前日/当日朝/終了後チェックリスト | 運営・講師（内部文書） | 作成済み |
 | `images/` | スクリーンショット・図版の置き場（`handout.md` 等から参照予定） | 運営・講師 | フォルダのみ作成（中身は未作成） |
 | `survey/` | 講座後アンケート（DXH版）。`dxh_survey.md`（設問設計書）と `create_dxh_survey.gs`（フォーム自動生成スクリプト） | 参加者（回答）／運営（集計） | 完成（設問設計書+Google Apps Script。フォームURL発行が残タスク） |
-| `user_code_dxh.cpp` | 実習コードテンプレート（貸出PCセットアップ時に `firmware/workshop/main/user_code.cpp` へコピー） | 運営・講師（内部文書） | 完成 |
+| （移設）実習コードテンプレート | `firmware/workshop/lessons/lesson_90_dxh_workshop/student.cpp` へ移設（2026-07-17）。`sf lesson switch dxh_workshop` で選択 | 運営・講師 | 移設済み |
 | 進行スライド | `../slides/beamer/dxh_workshop.tex`（チャプターは `../slides/beamer/chapters/dxh_*.tex`、ビルドは `make dxh`） | 講師 | 完成 |
 
 ## 3. 状態

@@ -370,6 +370,40 @@ def _run_list_manifest(manifest: List[Dict[str, Any]]) -> int:
                 console.print(f"              {desc_ja}")
         console.print()
 
+    # Event templates (number >= 90, outside the Day 1-5 sequence)
+    # イベント用テンプレート（90番以降、Day 1〜5 の通常レッスンとは別系統）
+    day_numbers = {n for _, numbers in DAY_GROUPS for n in numbers}
+    event_entries = [e for e in manifest if e["number"] not in day_numbers]
+    if event_entries:
+        console.print("  Events（教育イベント）:")
+        for entry in sorted(event_entries, key=lambda e: e["number"]):
+            fw_dir = entry.get("firmware_dir")
+            lesson_path = None
+            if fw_dir and fw_dir is not None:
+                lesson_path = _get_lessons_dir() / fw_dir
+                if not lesson_path.exists():
+                    lesson_path = None
+
+            is_current = False
+            if lesson_path and current_content:
+                for fname in ("student.cpp", "solution.cpp"):
+                    fpath = lesson_path / fname
+                    if fpath.exists() and fpath.read_text() == current_content:
+                        is_current = True
+                        break
+
+            marker = " >> " if is_current else "    "
+            title_ja = entry.get("title_ja", "")
+            title_en = entry.get("title_en", "")
+            desc_ja = entry.get("description_ja", "")
+            console.print(
+                f"{marker}Lesson {entry['number']:2d}: {title_ja} / {title_en}"
+                f"  (id: {entry.get('id', '')})"
+            )
+            if desc_ja:
+                console.print(f"              {desc_ja}")
+        console.print()
+
     console.print(f"  Total: {len(manifest)} lessons")
     console.print(f"  Switch: sf lesson switch <N or id>")
 

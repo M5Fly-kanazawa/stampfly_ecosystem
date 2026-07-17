@@ -132,3 +132,15 @@ lessons:
     description_en: Competition for hovering and landing precision
     firmware_dir: lesson_13_competition
     slide_file: precision_landing
+
+  # === Events / 教育イベント（通常レッスンとは別系統の実習テンプレート） ===
+  # Event templates live at number >= 90 so future tutorials (SCI/SICE etc.)
+  # can be added as lesson_9X without touching the Day 1-5 sequence.
+  # イベント用テンプレートは 90 番以降。今後のチュートリアルも lesson_9X で追加する。
+  - number: 90
+    id: dxh_workshop
+    title_ja: DXH高校教員向け体験講座
+    title_en: DXH Teacher Workshop
+    description_ja: モータDuty書き換え実習（機体ボタンARM・duty上限0.15）
+    description_en: Motor duty exercise (onboard-button arm, duty cap 0.15)
+    firmware_dir: lesson_90_dxh_workshop

@@ -109,13 +109,12 @@ sf build vehicle
 **③実習用の workshop ファーム:**
 
 ```cmd
-sf lesson switch 1
-copy docs\workshop\dxh2026\user_code_dxh.cpp firmware\workshop\main\user_code.cpp
+sf lesson switch dxh_workshop
 sf lesson build
 ```
 
-- [ ] `sf lesson switch 1` は Lesson 1（モータ制御）に切り替える。**ビルドディレクトリを全削除しフルビルドになるため、当日この場では絶対に再実行しない**（当日は差分ビルドのみで時間内に収める）
-- [ ] DXH実習コードを導入: `copy docs\workshop\dxh2026\user_code_dxh.cpp firmware\workshop\main\user_code.cpp` （`sf lesson switch 1` はLesson 1の雛形で `user_code.cpp` を上書きするため、必ず switch の後に実行する。当日 switch を再実行するとこのテンプレートが消える点に注意）
+- [ ] `sf lesson switch dxh_workshop` で DXH 実習テンプレート（Lesson 90）に切り替える（従来の「Lesson 1 に switch → user_code_dxh.cpp を手動コピー」は不要になった。2026-07-17、テンプレートは `firmware/workshop/lessons/lesson_90_dxh_workshop/student.cpp` に移設）
+- [ ] switch は**ビルドディレクトリを全削除しフルビルドになるため、当日この場では絶対に再実行しない**（当日は差分ビルドのみで時間内に収める）
 - [ ] `user_code.cpp` の内容がDXH版（冒頭コメントに「DXH workshop exercise template」）であることを確認
 - [ ] `sf lesson build` が成功することを確認し、所要時間を記録（§3）
 
