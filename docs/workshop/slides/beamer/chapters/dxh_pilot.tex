@@ -4,6 +4,18 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
+\begin{frame}{① 操縦のしかた（スティックモード3）}
+  \centering
+  \begin{adjustbox}{max width=0.88\textwidth, max height=0.72\textheight, center}
+    \input{../tikz/dxh_stick_mode3}
+  \end{adjustbox}
+
+  \vspace{0.2em}
+
+  {\small ALT\_HOLD では高度は自動維持 --- 操縦は主に\textbf{左スティック}を少しずつ倒す}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}[fragile]{① まずはシミュレータで飛ばしてみる}
   \begin{block}{PC 側の操作（コマンドプロンプト）}
     \begin{lstlisting}[style=sfbash, numbers=none]
@@ -11,19 +23,24 @@ sf sim run   ← 3Dシミュレータが起動
     \end{lstlisting}
   \end{block}
 
-  \vspace{0.2em}
-
-  \begin{itemize}\small
-    \item コントローラを USB ケーブルで PC に接続（シミュレータ用の設定済み）
-    \item 起動直後の校正が終わるまでスティックに触らない
-    \item スティックの割り当ては\textbf{実機とまったく同じ} --- 画面の StampFly を操縦してみる
-  \end{itemize}
+  {\footnotesize ※ 「←」以降は説明なので入力しません}
 
   \vspace{0.2em}
 
-  \begin{exampleblock}{シミュレータの良いところ}
-    \footnotesize 落ちても壊れない・何度でもやり直せる。ここで操縦の感覚を掴んでから実機へ
-  \end{exampleblock}
+  \begin{columns}[c]
+    \begin{column}{0.50\textwidth}
+      \begin{itemize}\small
+        \item コントローラを USB ケーブルで PC に接続（設定済み）
+        \item 起動直後の校正が終わるまでスティックに触らない
+        \item スティックの割り当ては\textbf{実機とまったく同じ}
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \centering
+      \includegraphics[width=0.92\columnwidth]{simulator_demo.png}\\
+      {\scriptsize シミュレータ画面 --- 画面の StampFly を操縦する}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -100,18 +117,6 @@ sf sim run   ← 3Dシミュレータが起動
   \begin{exampleblock}{スティックの動き}
     \footnotesize 全軸バネ復帰式。倒すと傾いて移動、離すと水平に戻る（横流れはスティックで修正）
   \end{exampleblock}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{① 操縦のしかた（スティックモード3）}
-  \centering
-  \begin{adjustbox}{max width=0.88\textwidth, max height=0.72\textheight, center}
-    \input{../tikz/dxh_stick_mode3}
-  \end{adjustbox}
-
-  \vspace{0.2em}
-
-  {\small ALT\_HOLD では高度は自動維持 --- 操縦は主に\textbf{左スティック}を少しずつ倒す}
 \end{frame}
 
 % ------------------------------------------------------------------
