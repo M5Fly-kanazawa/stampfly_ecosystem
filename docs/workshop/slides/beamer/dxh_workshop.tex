@@ -41,8 +41,19 @@
 \begin{document}
 
 % === Title page ===
+% QR bottom-right links to the published slides on Docswell so participants
+% can follow along on their own devices.
+% 右下の QR はドクセルで公開した本スライドへのリンク（参加者が手元でも
+% 閲覧できるように）。
 \begin{frame}
   \titlepage
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=south east, inner sep=0] (docswellqr)
+      at ([xshift=-7mm, yshift=14mm]current page.south east)
+      {\includegraphics[width=22mm]{qr_docswell_dxh.png}};
+    \node[anchor=north, font=\tiny, text=black!60, yshift=-0.5mm]
+      at (docswellqr.south) {本日のスライド資料};
+  \end{tikzpicture}
 \end{frame}
 
 % === Opening: overview, ecosystem, safety ===
