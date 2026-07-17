@@ -150,22 +150,28 @@ namespace param_vars {
     // レート誤差入力（rad/s）・ループ形式（Tustin PID・測定値微分・η=0.125・400Hz）が同一ゆえ
     // Ti/Td はそのまま、Kp のみ d*g_VT（roll/pitch）/ κ*g_VT（yaw）で再尺度（g_VT=0.0653 N/V）。
     // 2026-06-19 autotune 値を置換: roll/pitch は P が約2.8倍＋Ti 長め（~0.9Hz帯の低周波余裕増）、yaw は穏やか。
-    // 2026-07-17 roll retune (analysis/scripts/roll_tuning_20260717): the roll
-    // axis showed ~2x the pitch roughness in the 3-8 Hz rate band while its
-    // inertia-normalized P matched pitch and its Td was 2.5x SHORTER — a
-    // relative damping deficit. td 0.01→0.02 (flight A/B: 3-8 Hz rate −38..45%,
-    // control axes unchanged), then kp ×1.3 (log-replay closed-loop study; best
-    // config in stick-neutral flight windows; rate-loop margins PM 55°/GM 10.5 dB).
-    // Pilot feel accepted 2026-07-17. Base was the M5StampFly-converted
-    // 9.759795e-4 (real-flight validated 2026-06-27, was autotune 3.40e-4).
-    // 2026-07-17 ロール再調整（analysis/scripts/roll_tuning_20260717）: ロールは
-    // 3-8Hz帯レートがピッチの約2倍ざらつく一方、慣性正規化Pは同等で Td だけ2.5倍
-    // 短い＝相対ダンピング不足。td 0.01→0.02（実機A/B: 3-8Hz −38〜45%・対照軸不変）、
-    // 続いて kp ×1.3（ログ再生スタディ＋スティック中立区間A/Bで最良、余裕 PM55°/GM10.5dB）。
-    // 操縦感確認済み（2026-07-17）。基点は M5StampFly 換算値 9.759795e-4（2026-06-27 実機検証）。
-    float rate_roll_kp    = 1.268773e-3f;  // = 9.759795e-4 × 1.3 (2026-07-17 roll retune)
+    // 2026-07-18 roll MANUAL retune (pilot, in-flight hand tuning after the
+    // wall-crash session): kp=1.0e-3, td=0.001 — "extremely stable" by pilot
+    // assessment. This SUPERSEDES the 2026-07-17 study retune (kp 1.268773e-3,
+    // td 0.02) which had shown a 3-8 Hz roughness reduction at the time but
+    // whose flights later measured 2.4-2.7x the adoption-time reference even
+    // with identical gains (session-to-session drift — craft condition and/or
+    // environment; see the 2026-07-18 wall-crash diagnosis). td=0.001 at 400 Hz
+    // is effectively D-off (incomplete-derivative alpha≈0.1), i.e. the pilot's
+    // stable point is a near-PI roll rate loop. History: study retune 07-17 ←
+    // M5StampFly-converted 9.759795e-4 (real-flight validated 2026-06-27) ←
+    // autotune 3.40e-4.
+    // 2026-07-18 ロール手動再調整（パイロット、壁衝突セッション後の飛行中ハンド
+    // チューニング）: kp=1.0e-3, td=0.001 —「極めて安定」（パイロット評価）。
+    // 2026-07-17 のスタディ再調整（kp 1.268773e-3, td 0.02）を置換する。同再調整は
+    // 当時 3-8Hz ざらつき低減を示したが、その後同一ゲインのまま採用時参照の
+    // 2.4-2.7倍へ悪化（セッション間ドリフト=機体コンディション/環境差。2026-07-18
+    // 壁衝突診断参照）。td=0.001 は 400Hz では実質 D オフ（不完全微分 α≈0.1）＝
+    // パイロットの安定点はほぼ PI のレートループ。履歴: スタディ再調整 07-17 ←
+    // M5StampFly 換算 9.759795e-4（2026-06-27 実機検証）← autotune 3.40e-4。
+    float rate_roll_kp    = 1.0e-3f;   // pilot manual retune 2026-07-18
     float rate_roll_ti    = 0.7f;
-    float rate_roll_td    = 0.02f;         // was 0.01; damping matched toward pitch (2026-07-17)
+    float rate_roll_td    = 0.001f;    // pilot manual retune 2026-07-18 (≈ D off)
     float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.025f;
@@ -642,9 +648,9 @@ static const ParamEntry table[] = {
     // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
     // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
-    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.268773e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+    {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.0e-3f,   0.0f,  0.01f,  &notifyControllerReload},
     {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.02f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.001f,    0.0f,  1.0f,   &notifyControllerReload},
     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
