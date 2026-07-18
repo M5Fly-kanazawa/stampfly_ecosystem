@@ -13,6 +13,16 @@ source setup_env.sh   # sf コマンドを使えるようにする
 sf upgrade
 ```
 
+> **初回だけの注意（ブートストラップ）:** `sf upgrade` コマンド自体が 2026-07-19 の更新
+> （v2026.07.2 系）で追加されたものです。それ**より古いチェックアウト**には
+> まだ `sf upgrade` が存在しないため、最初の1回だけは素の Git で更新してください:
+> `git pull` （リポジトリのフォルダで実行）。それ以降はこのガイドのとおり
+> `sf upgrade` が使えます。
+> **One-time bootstrap note:** `sf upgrade` itself was added in the 2026-07-19
+> update (the v2026.07.2 line). A checkout older than that does not have the
+> command yet — run a plain `git pull` once (inside the repository folder);
+> from then on, use `sf upgrade` as described in this guide.
+
 ## 2. 前提知識（Git初心者向け）
 
 このガイドは **ソフトウェア開発が専門ではない教員・学生** を対象にしています。専門用語は都度かみ砕いて説明します。
