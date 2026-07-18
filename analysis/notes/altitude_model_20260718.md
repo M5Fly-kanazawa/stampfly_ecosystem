@@ -46,7 +46,13 @@ J_mp=1.375e-8, I=(9.16,13.3,20.4)e-6, d=0.023 m）。
 - alt_vel には**外乱オブザーバ（DOB）**がオプトイン実装あり（`altitude.dob.fc`、0=無効）。
 - PID 形は姿勢系と同じ `pid.hpp`（PI-D・不完全微分 η=0.125・条件付き積分＋クランプ）。
 
-## 4. 計測系（`sf_estimator_complementary/complementary_estimator.cpp`）
+## 4. 計測系
+
+**訂正（2026-07-19）**: 実機の既定推定器は**15状態 ESKF**（`params.cpp` の
+`estimator.type` 既定値 0。1=相補フィルタに差し替え可能、IMU タスクのファクトリが読む）。
+以下の相補フィルタ定数は estimator.type=1 のオプション側の記述
+（`sf_estimator_complementary/complementary_estimator.cpp`）。
+ToF-only 鉛直・baro 非融合の方針は両推定器で共通。
 
 - **鉛直の絶対アンカーは ToF のみ**（気圧計は読むが融合しない設計。M-7 参照。傾き >29° で ToF 棄却）
 - ToF VL53L3CX: タイミングバジェット 33 ms = **30 Hz**（`sf_hal_vl53l3cx/include/vl53l3cx_wrapper.hpp`）
