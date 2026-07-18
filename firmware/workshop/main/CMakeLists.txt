@@ -1,11 +1,15 @@
 # Workshop main component
-# Compiles workshop-specific files and reuses vehicle_old sensor/peripheral tasks
-# (vehicle_new -> vehicle promotion moved these layered tasks to vehicle_old)
-# ワークショップ固有ファイルをコンパイルし、vehicle_old のセンサ/周辺タスクを再利用する
-# （vehicle_new→vehicle 昇格でこれらの層分けタスクは vehicle_old に移動した）
+# Builds workshop-specific files on top of the SAME vehicle sensor/peripheral
+# tasks used by firmware/vehicle (R12, workshop_migration.md M5). Only
+# ControlTask is replaced (workshop_control_task.cpp calls the learner's
+# setup()/loop_400Hz() instead of running sf::PidController).
+# ワークショップ固有ファイルを、firmware/vehicle と同一のセンサ/周辺タスクの上に
+# ビルドする（R12、workshop_migration.md M5）。ControlTask だけを差し替え
+# （workshop_control_task.cpp が sf::PidController の代わりに学習者の
+# setup()/loop_400Hz() を呼ぶ）。
 
-set(VEHICLE_TASKS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle_old/main/tasks")
-set(VEHICLE_MAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle_old/main")
+set(VEHICLE_MAIN_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/main")
+set(VEHICLE_TASKS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../vehicle/tasks")
 
 # Auto-bootstrap user_code.cpp from the Lesson 0 seed if absent.
 # This file is gitignored; `sf lesson switch` overwrites it on demand,
@@ -26,54 +30,63 @@ endif()
 idf_component_register(
     SRCS
         "workshop_main.cpp"
-        "workshop_globals.cpp"
-        "workshop_task.cpp"
+        "workshop_tasks.cpp"
+        "workshop_control_task.cpp"
         "workshop_api.cpp"
         "user_code.cpp"
-        # Reuse vehicle_old sensor/peripheral tasks (compiled from vehicle_old source)
-        # vehicle_old のセンサ/周辺タスクを再利用（vehicle_old のソースからコンパイル）
+        # Reuse vehicle's sensor/service tasks verbatim (compiled from vehicle
+        # source). control_task.cpp and tasks.cpp are EXCLUDED — this component
+        # provides its own workshop_control_task.cpp / workshop_tasks.cpp instead.
+        # vehicle のセンサ/サービスタスクをそのまま再利用（vehicle のソースから
+        # コンパイル）。control_task.cpp と tasks.cpp は除外 — 本コンポーネントが
+        # 独自の workshop_control_task.cpp / workshop_tasks.cpp を提供する。
         "${VEHICLE_TASKS_DIR}/imu_task.cpp"
-        "${VEHICLE_TASKS_DIR}/optflow_task.cpp"
+        "${VEHICLE_TASKS_DIR}/state_task.cpp"
+        "${VEHICLE_TASKS_DIR}/flow_task.cpp"
         "${VEHICLE_TASKS_DIR}/mag_task.cpp"
         "${VEHICLE_TASKS_DIR}/baro_task.cpp"
         "${VEHICLE_TASKS_DIR}/tof_task.cpp"
         "${VEHICLE_TASKS_DIR}/power_task.cpp"
-        "${VEHICLE_TASKS_DIR}/led_task.cpp"
-        "${VEHICLE_TASKS_DIR}/button_task.cpp"
         "${VEHICLE_TASKS_DIR}/comm_task.cpp"
-        "${VEHICLE_TASKS_DIR}/cli_task.cpp"
         "${VEHICLE_TASKS_DIR}/telemetry_task.cpp"
-        # Reuse vehicle_old init (shared initialization code)
-        # vehicle_old の初期化コード（共有の初期化処理）を再利用
-        "${VEHICLE_MAIN_DIR}/init.cpp"
-    INCLUDE_DIRS
-        "."
-        "${VEHICLE_MAIN_DIR}"
-        "${VEHICLE_MAIN_DIR}/tasks"
+        "${VEHICLE_TASKS_DIR}/button_task.cpp"
+        "${VEHICLE_TASKS_DIR}/notify_task.cpp"
+        "${VEHICLE_TASKS_DIR}/cli_task.cpp"
+        "${VEHICLE_TASKS_DIR}/log_task.cpp"
+        "${VEHICLE_TASKS_DIR}/api_task.cpp"
+    INCLUDE_DIRS "." "${VEHICLE_MAIN_DIR}" "${VEHICLE_TASKS_DIR}"
     REQUIRES
         esp_timer
+        nvs_flash
+        console
+        sf_board
+        sf_core
+        sf_api
+        sf_math
+        sf_state
+        sf_estimator
+        sf_estimator_eskf
+        sf_estimator_complementary
+        sf_controller
+        sf_controller_pid
+        sf_autotune
+        sf_actuator
+        sf_comm
+        sf_command
+        sf_telemetry
+        sf_logger
+        sf_notify
+        sf_failsafe
+        sf_takeoff_landing
+        sf_calibration
         sf_hal_bmi270
-        sf_hal_vl53l3cx
-        sf_hal_pmw3901
         sf_hal_bmm150
         sf_hal_bmp280
-        sf_hal_power
+        sf_hal_vl53l3cx
+        sf_hal_pmw3901
         sf_hal_motor
         sf_hal_led
         sf_hal_buzzer
         sf_hal_button
-        sf_algo_filter
-        sf_algo_eskf
-        sf_algo_fusion
-        sf_algo_pid
-        sf_algo_control
-        sf_svc_health
-        sf_svc_state
-        sf_svc_comm
-        sf_svc_console
-        sf_svc_telemetry
-        sf_svc_wifi_cli
-        sf_svc_serial_cli
-        sf_svc_led
-        sf_svc_flight_command
+        sf_hal_power
 )

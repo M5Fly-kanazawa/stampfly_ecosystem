@@ -1,19 +1,21 @@
-# StampFly Workshop Skeleton
-# ESP-IDF v5.4 Project
+# StampFly Workshop — ESP-IDF v5.4 Project
+# StampFly ワークショップ — ESP-IDF v5.4 プロジェクト
 #
-# Reuses vehicle_old components via EXTRA_COMPONENT_DIRS
-# (vehicle_new -> vehicle promotion moved the layered sf_hal_*/sf_algo_*/sf_svc_*
-#  components to vehicle_old; workshop still depends on that layered API)
-# vehicle_old コンポーネントを再利用
-# （vehicle_new→vehicle 昇格で層分けコンポーネント sf_hal_*/sf_algo_*/sf_svc_* は
-#  vehicle_old に移動した。workshop は引き続きその層分けAPIに依存する）
+# Rebuilt on top of the current firmware/vehicle component base (cross-cutting
+# rule R12, workshop_migration.md M5). The workshop main/ links the SAME
+# sf_* components as vehicle/ (flat naming, Pub-Sub topics, 4-tier access) —
+# there is no separate "workshop component set" to drift from vehicle.
+# 現行 firmware/vehicle のコンポーネント群の上に再構築（横断ルール R12、
+# workshop_migration.md M5）。workshop の main/ は vehicle/ と同じ sf_*
+# コンポーネント（フラット命名・Pub-Subトピック・4階層アクセス）にリンクする —
+# vehicle から乖離する「workshop 専用コンポーネント集合」は存在しない。
 
 cmake_minimum_required(VERSION 3.16)
 
-# Include vehicle_old components and common shared components
-# vehicle_old コンポーネントと共通コンポーネントの両方を含める
+# Reuse vehicle's components + the shared protocol definitions.
+# vehicle のコンポーネントと共有プロトコル定義を再利用する。
 set(EXTRA_COMPONENT_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/../vehicle_old/components
+    ${CMAKE_CURRENT_SOURCE_DIR}/../vehicle/components
     ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 

@@ -1,9 +1,9 @@
 # Lesson 10: API Overview & App Development
 
 ## Goal / 目標
-Understand the full ws:: API, access all sensors via StampFlyState, and create a custom firmware project.
+Understand the full ws:: API, learn about the L1 sf_api layer it sits on, and create a custom firmware project.
 
-ws:: API の全体像を理解し、StampFlyState で全センサにアクセスし、独自ファームウェアプロジェクトを作成する。
+ws:: API の全体像を理解し、その土台となる L1 sf_api 層について学び、独自ファームウェアプロジェクトを作成する。
 
 ## API / 使用するAPI
 
@@ -14,22 +14,39 @@ ws:: API の全体像を理解し、StampFlyState で全センサにアクセス
 | `ws::accel_x/y/z()` | Linear acceleration | m/s^2 |
 | `ws::estimated_roll/pitch/yaw()` | ESKF attitude estimate | rad |
 | `ws::estimated_altitude()` | ESKF altitude estimate | m |
+| `ws::baro_altitude()/baro_pressure()` | Barometric altitude/pressure | m / Pa |
+| `ws::mag_x/y/z()` | Magnetic field | uT |
+| `ws::tof_bottom()` | Ground distance (downward ToF) | m |
+| `ws::flow_vx/vy()` | Optical flow raw counts (see note below) | count |
 | `ws::battery_voltage()` | Battery voltage | V |
 | `ws::print(fmt, ...)` | Serial print (Teleplot compatible) | - |
 
-### StampFlyState (Direct sensor + estimation access)
-| Method | Source | Data |
-|--------|--------|------|
-| `getBaroData()` | BMP280 Barometer | altitude [m], pressure [Pa] |
-| `getMagData()` | BMM150 Magnetometer | x, y, z [uT] |
-| `getToFData(pos)` | VL53L3CX ToF | distance [m] |
-| `getFlowData()` | PMW3901 Optical Flow | vx, vy [m/s] |
-| `getFlowRawData()` | PMW3901 Raw | delta_x, delta_y, squal |
-| `getPowerData()` | Power monitor | voltage [V], current [A] |
-| `getAttitude()` | ESKF estimation | roll, pitch, yaw [rad] |
-| `getPosition()` | ESKF estimation | x, y, z [m] |
-| `getVelocity()` | ESKF estimation | vx, vy, vz [m/s] |
-| `getAltitude()` | ESKF estimation | altitude [m] |
+Note: `ws::flow_vx/vy()` return the raw optical-flow counts, not a
+converted velocity (unlike the old vehicle_old API). For a physical
+velocity estimate, use the ESKF-fused values instead.
+
+注: `ws::flow_vx/vy()` は（旧vehicle_old APIと異なり）変換済みの速度ではなく
+光学フローの生カウント値を返す。物理的な速度が必要な場合はESKF推定値を使うこと。
+
+### L1: sf_api layer (what ws:: is built on) / L1: sf_api層（ws::の土台）
+
+`ws::` functions are a thin, Arduino-like wrapper around the vehicle
+firmware's own public API layer, `sf::api`, defined in
+`firmware/vehicle/components/sf_api`. That layer exposes the same
+sensor/estimate/command data (via Pub-Sub topics) to any component in
+the vehicle firmware, not just workshop lessons. Reading `sf_api`'s
+headers is a good next step once you outgrow the simplified `ws::`
+surface — for example when writing a custom project with `sf app new`
+(see below) that needs finer control than `ws::` offers.
+
+`ws::` 関数は、vehicle ファームウェア自身の公開APIレイヤーである
+`sf::api`（`firmware/vehicle/components/sf_api` に定義）を薄くラップした、
+Arduinoライクなインターフェース。そのレイヤーはPub-Subトピック経由で
+センサ・推定値・コマンドのデータを、ワークショップのレッスンに限らず
+vehicleファームウェアの任意のコンポーネントに公開している。簡易な `ws::`
+では足りなくなったら（例: 下記の `sf app new` で `ws::` より細かい制御が
+必要なカスタムプロジェクトを書くとき）、`sf_api` のヘッダを読むのが
+次のステップになる。
 
 ## Hardware Sensors / ハードウェアセンサ
 
@@ -39,8 +56,13 @@ ws:: API の全体像を理解し、StampFlyState で全センサにアクセス
 | Barometer | BMP280 | 50 Hz | Pressure → Altitude |
 | Magnetometer | BMM150 | 10-30 Hz | Magnetic vector |
 | ToF (bottom) | VL53L3CX | 30 Hz | Ground distance (0-2 m) |
-| ToF (front) | VL53L3CX | 30 Hz | Front distance (0-2 m) |
-| Optical Flow | PMW3901 | 100 Hz | Ground-relative velocity |
+| Optical Flow | PMW3901 | 100 Hz | Ground-relative motion (raw counts via ws::) |
+
+Note: the vehicle sensing pipeline does not read the front ToF sensor,
+so `ws::tof_front()` always returns -1.0 and is not used in this lesson.
+
+注: vehicleのセンシングでは前方ToFセンサを読まないため、`ws::tof_front()`は
+常に-1.0を返し、本レッスンでは使用しない。
 
 ## Custom Firmware Project / カスタムファームウェアプロジェクト
 
@@ -72,7 +94,7 @@ firmware/my_sensor_app/
 
 ### Workshop version (sf lesson switch 10) / ワークショップ版
 1. `sf lesson switch 10`
-2. Uncomment the StampFlyState sensor access code in `user_code.cpp`
+2. Uncomment the `ws::` sensor access code in `user_code.cpp`
 3. Build and flash: `sf lesson build` → `sf lesson flash`
 4. Open Teleplot in VSCode to visualize all sensor data
 5. Compare barometric altitude vs ToF vs ESKF altitude
@@ -95,16 +117,15 @@ firmware/my_sensor_app/
 |---------|-------------|
 | `>baro_alt` | Barometric altitude [m] |
 | `>tof_bottom` | ToF ground distance [m] |
-| `>tof_front` | ToF front distance [m] |
 | `>eskf_alt` | ESKF estimated altitude [m] |
 | `>mag_x/y/z` | Magnetic field [uT] |
 | `>heading` | Magnetic heading [deg] |
-| `>flow_vx/vy` | Optical flow velocity [m/s] |
+| `>flow_vx/vy` | Optical flow raw counts |
 | `>voltage` | Battery voltage [V] |
 
 ## Key Concepts / キーコンセプト
-- ws:: API is a simplified workshop wrapper around StampFlyState
-- StampFlyState provides direct access to all sensors and estimation data
+- ws:: API is a simplified workshop wrapper around the vehicle firmware's L1 sf_api layer
+- sf_api (`firmware/vehicle/components/sf_api`) exposes the same sensor/estimation data to any vehicle component
 - `sf app new` creates a custom firmware project that reuses vehicle components
 - Teleplot enables real-time visualization of any sensor data
 - Multiple altitude sources (baro, ToF, ESKF) can be compared for understanding sensor fusion

@@ -1,6 +1,8 @@
 ## IDF Component Manager Manifest File
-## Workshop reuses vehicle components, so it needs the same managed dependencies.
-## vehicle コンポーネントを再利用するため、同じ外部依存が必要
+## Workshop reuses vehicle components (sf_hal_led -> led_strip), so it needs
+## the same managed dependency as firmware/vehicle/main/idf_component.yml.
+## workshop は vehicle のコンポーネント（sf_hal_led -> led_strip）を再利用するため、
+## firmware/vehicle/main/idf_component.yml と同じ外部依存が必要。
 dependencies:
   idf:
     version: '>=4.1.0'

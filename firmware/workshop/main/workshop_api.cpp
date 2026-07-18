@@ -1,31 +1,65 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ *
+ * Part of StampFly Ecosystem (workshop firmware).
+ * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+ */
+
 /**
  * @file workshop_api.cpp
- * @brief Workshop API implementation - bridges ws:: calls to hardware globals
- *        ワークショップAPI実装 - ws:: 呼び出しをハードウェアグローバルにブリッジ
+ * @brief Workshop API implementation — bridges ws:: calls to sf:: Pub-Sub
+ *        topics / L1 API on the vehicle component base
+ *        ワークショップAPI実装 — ws:: 呼び出しを vehicle コンポーネント基盤の
+ *        sf:: Pub-Subトピック / L1 API へブリッジする
+ *
+ * Every function here is a thin wrapper: read/write exactly one topic (or the
+ * L1 sf::api convenience accessor), no logic of its own beyond unit/clamp
+ * conversion. Motor functions are the one exception — they only RECORD a
+ * request into ws_internal::motor_request(); WorkshopControlTask resolves and
+ * applies it once per 400Hz cycle (see ws_internal.hpp for why no lock is
+ * needed).
+ *
+ * 本ファイルの各関数は薄いラッパー: 1つのトピック（または L1 の sf::api 便利
+ * 関数）を読み書きするだけで、単位変換/クランプ以外のロジックを持たない。
+ * モータ関数だけは例外 — ws_internal::motor_request() へ要求を「記録」する
+ * だけで、WorkshopControlTask が 400Hz 周期に一度解決・適用する（ロック不要な
+ * 理由は ws_internal.hpp 参照）。
+ *
+ * @design W1_SPEC.md §3 — ws:: API 実装対応表                         [OK]
  */
 
 #include "workshop_api.hpp"
-#include "workshop_globals.hpp"
+#include "ws_internal.hpp"
 
-#include "stampfly_state.hpp"
-#include "led_manager.hpp"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "esp_system.h"
-#include "nvs.h"
+#include "topics.hpp"
+#include "data_types.hpp"
+#include "sf_api.hpp"
+#include "params.hpp"
+#include "sf_math.hpp"
+
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "controller_comm.hpp"
+#include "freertos/task.h"   // vTaskDelay (set_channel reboot grace)
+#include "esp_timer.h"
+#include "esp_system.h"      // esp_restart (set_channel reboot)
 
+#include <algorithm>   // std::clamp
 #include <cstdarg>
 #include <cstdio>
-#include <cstring>
-#include <algorithm>
+#include <cstdint>
 
-using namespace globals;
+namespace {
+/// Current time in microseconds, as the uint32_t every topic timestamp uses.
+/// 現在時刻[us]。全トピックの timestamp が使う uint32_t で返す。
+inline uint32_t nowUs()
+{
+    return static_cast<uint32_t>(esp_timer_get_time());
+}
+}  // namespace
 
 // =============================================================================
 // Communication Setup
+// 通信設定
 // =============================================================================
 
 void ws::set_channel(int channel)
@@ -35,39 +69,27 @@ void ws::set_channel(int channel)
         return;
     }
 
-    // Check both NVS and actual running channel
-    // NVS と実際のチャンネルの両方を確認
-    int saved = stampfly::ControllerComm::loadChannelFromNVS();
-    int actual = g_comm.getChannel();
-    if (saved == channel && actual == channel) {
+    int32_t current = 0;
+    sf::params::get_int("wifi.channel", current);
+    if (current == channel) {
         ws::print("WiFi channel: %d", channel);
         return;
     }
 
-    // Write channel to NVS
-    // チャンネルを NVS に書き込む
-    nvs_handle_t handle;
-    esp_err_t ret = nvs_open("stampfly", NVS_READWRITE, &handle);
-    if (ret != ESP_OK) {
-        ws::print("ERROR: NVS open failed (%d)", ret);
-        return;
-    }
-    nvs_set_u8(handle, "wifi_ch", static_cast<uint8_t>(channel));
+    // Same "set + save_one + reboot" shape as the CLI `param set` + `param
+    // save` + reboot flow: the radio only reads wifi.channel once at boot
+    // (sf_comm::comm.cpp), so a live channel change needs a restart to apply.
+    // CLI の `param set` + `param save` + 再起動と同じ形: 無線は wifi.channel を
+    // 起動時に一度だけ読む（sf_comm::comm.cpp）ため、変更を反映するには再起動が要る。
+    sf::params::set_int("wifi.channel", channel);
+    sf::params::save_one("wifi.channel");
 
-    // Disable STA auto-connect to prevent channel override
-    // STA 自動接続を無効化してチャンネル上書きを防止
-    nvs_set_u8(handle, "sta_auto", 0);
-
-    ret = nvs_commit(handle);
-    nvs_close(handle);
-    if (ret != ESP_OK) {
-        ws::print("ERROR: NVS commit failed (%d)", ret);
-        return;
-    }
-
-    // Reboot - init::communication() will start on the new channel without STA override
-    // 再起動 - STA 上書きなしで新チャンネルで起動する
     ws::print("WiFi channel -> %d, rebooting...", channel);
+    std::fflush(stdout);
+    // Give USB-CDC time to actually push the message out before the reset
+    // (same 500ms grace the legacy implementation used).
+    // リセット前に USB-CDC がメッセージを送出し切る猶予を与える
+    // （旧実装と同じ 500ms）。
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
 }
@@ -79,128 +101,86 @@ void ws::set_channel(int channel)
 void ws::motor_set_duty(int id, float duty)
 {
     duty = std::clamp(duty, 0.0f, 1.0f);
-    switch (id) {
-        case 1: g_motor.setMotor(stampfly::MotorDriver::MOTOR_FR, duty); break;
-        case 2: g_motor.setMotor(stampfly::MotorDriver::MOTOR_RR, duty); break;
-        case 3: g_motor.setMotor(stampfly::MotorDriver::MOTOR_RL, duty); break;
-        case 4: g_motor.setMotor(stampfly::MotorDriver::MOTOR_FL, duty); break;
-        default: break;
+    ws_internal::MotorRequest& req = ws_internal::motor_request();
+    req.mode = ws_internal::MotorMode::Direct;
+    // Motor ID 1..4 = FR, RR, RL, FL, matching sf::Actuator::applyTestDuties'
+    // duties[0..3] order — see actuator.hpp motor layout diagram.
+    // モータ ID 1..4 = FR, RR, RL, FL。sf::Actuator::applyTestDuties の
+    // duties[0..3] 順と一致（配置図は actuator.hpp 参照）。
+    if (id >= 1 && id <= 4) {
+        req.duties[id - 1] = duty;
     }
 }
 
 void ws::motor_set_all(float duty)
 {
     duty = std::clamp(duty, 0.0f, 1.0f);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_FR, duty);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_RR, duty);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_RL, duty);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_FL, duty);
+    ws_internal::MotorRequest& req = ws_internal::motor_request();
+    req.mode = ws_internal::MotorMode::Direct;
+    for (float& d : req.duties) d = duty;
 }
 
 void ws::motor_stop_all()
 {
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_FR, 0);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_RR, 0);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_RL, 0);
-    g_motor.setMotor(stampfly::MotorDriver::MOTOR_FL, 0);
+    ws_internal::MotorRequest& req = ws_internal::motor_request();
+    req.mode = ws_internal::MotorMode::Direct;
+    for (float& d : req.duties) d = 0.0f;
 }
 
 void ws::motor_mixer(float thrust, float roll, float pitch, float yaw)
 {
-    g_motor.setMixerOutput(thrust, roll, pitch, yaw);
+    ws_internal::MotorRequest& req = ws_internal::motor_request();
+    req.mode   = ws_internal::MotorMode::Mixer;
+    req.thrust = thrust;
+    req.roll   = roll;
+    req.pitch  = pitch;
+    req.yaw    = yaw;
 }
 
 // =============================================================================
 // Controller Input
 // =============================================================================
 
-float ws::rc_throttle()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    float t, r, p, y;
-    state.getControlInput(t, r, p, y);
-    return t;
-}
-
-float ws::rc_roll()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    float t, r, p, y;
-    state.getControlInput(t, r, p, y);
-    return r;
-}
-
-float ws::rc_pitch()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    float t, r, p, y;
-    state.getControlInput(t, r, p, y);
-    return p;
-}
-
-float ws::rc_yaw()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    float t, r, p, y;
-    state.getControlInput(t, r, p, y);
-    return y;
-}
+float ws::rc_throttle() { return sf::api::command_latest().throttle; }
+float ws::rc_roll()     { return sf::api::command_latest().roll; }
+float ws::rc_pitch()    { return sf::api::command_latest().pitch; }
+float ws::rc_yaw()      { return sf::api::command_latest().yaw; }
 
 void ws::arm()
 {
-    auto& state = stampfly::StampFlyState::getInstance();
-    state.requestArm();
-    g_motor.arm();
+    sf::api_command.publish(sf::ApiCommand{
+        static_cast<uint8_t>(sf::ApiCmd::Arm), 0, nowUs()});
 }
 
 void ws::disarm()
 {
-    auto& state = stampfly::StampFlyState::getInstance();
-    state.requestDisarm();
-    g_motor.disarm();
+    sf::api_command.publish(sf::ApiCommand{
+        static_cast<uint8_t>(sf::ApiCmd::Disarm), 0, nowUs()});
 }
 
-bool ws::is_armed()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    auto fs = state.getFlightState();
-    return (fs == stampfly::FlightState::ARMED ||
-            fs == stampfly::FlightState::FLYING);
-}
+bool ws::is_armed() { return sf::api::is_armed(); }
 
 // =============================================================================
 // Controller Buttons / Modes
 // =============================================================================
 
-bool ws::rc_throttle_yaw_button()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    return (state.getControlFlags() & stampfly::CTRL_FLAG_ARM) != 0;
-}
+bool ws::rc_throttle_yaw_button() { return sf::pilot_request.latest().arm; }
 
 bool ws::rc_roll_pitch_button()
 {
-    auto& state = stampfly::StampFlyState::getInstance();
-    return (state.getControlFlags() & stampfly::CTRL_FLAG_FLIP) != 0;
+    // The current vehicle protocol carries no FLIP flag (only ARM/ACRO/
+    // ALT/POS switches — see sf::PilotRequest). No lesson reads this
+    // function's return value, so a fixed false is a safe, honest stand-in
+    // rather than guessing at a bit that no longer exists.
+    // 現行 vehicle プロトコルには FLIP フラグが無い（ARM/ACRO/ALT/POS のみ —
+    // sf::PilotRequest 参照）。この戻り値を使うレッスンは無いため、もう存在しない
+    // ビットを推測するより固定 false のほうが安全で正直。
+    return false;
 }
 
-bool ws::rc_stabilize_acro_mode()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    return (state.getControlFlags() & stampfly::CTRL_FLAG_MODE) != 0;
-}
-
-bool ws::rc_alt_mode()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    return (state.getControlFlags() & stampfly::CTRL_FLAG_ALT_MODE) != 0;
-}
-
-bool ws::rc_pos_mode()
-{
-    auto& state = stampfly::StampFlyState::getInstance();
-    return (state.getControlFlags() & stampfly::CTRL_FLAG_POS_MODE) != 0;
-}
+bool ws::rc_stabilize_acro_mode() { return sf::pilot_request.latest().acro; }
+bool ws::rc_alt_mode()            { return sf::pilot_request.latest().alt_hold; }
+bool ws::rc_pos_mode()            { return sf::pilot_request.latest().pos_hold; }
 
 // =============================================================================
 // LED Control
@@ -210,15 +190,15 @@ static bool s_led_task_disabled = false;
 
 void ws::disable_led_task()
 {
-    auto& led_mgr = stampfly::LEDManager::getInstance();
-    led_mgr.setSystemEventsEnabled(false);
+    sf::ui_command.publish(sf::UiCommand{
+        static_cast<uint8_t>(sf::UiCmd::LedUserOverride), 1, 0, 0, 0, nowUs()});
     s_led_task_disabled = true;
 }
 
 void ws::enable_led_task()
 {
-    auto& led_mgr = stampfly::LEDManager::getInstance();
-    led_mgr.setSystemEventsEnabled(true);
+    sf::ui_command.publish(sf::UiCommand{
+        static_cast<uint8_t>(sf::UiCmd::LedUserOverride), 0, 0, 0, 0, nowUs()});
     s_led_task_disabled = false;
 }
 
@@ -226,142 +206,81 @@ bool ws::is_led_task_disabled() { return s_led_task_disabled; }
 
 void ws::led_color(uint8_t r, uint8_t g, uint8_t b)
 {
-    uint32_t color = (static_cast<uint32_t>(r) << 16) |
-                     (static_cast<uint32_t>(g) << 8) |
-                     static_cast<uint32_t>(b);
-    auto& led_mgr = stampfly::LEDManager::getInstance();
-    if (s_led_task_disabled) {
-        led_mgr.setDirect(stampfly::LEDIndex::ALL, stampfly::LEDPattern::SOLID, color);
-        led_mgr.update();
-    } else {
-        led_mgr.requestChannel(
-            stampfly::LEDChannel::SYSTEM,
-            stampfly::LEDPriority::DEFAULT,
-            stampfly::LEDPattern::SOLID,
-            color);
+    // Publish only on change: ui_command is a Queue(4) drained at NotifyTask's
+    // 30Hz, but loop_400Hz() can call this every cycle (400Hz) — without this
+    // guard a student holding a fixed color would flood/overflow the queue.
+    // 変化時のみ publish: ui_command は NotifyTask の 30Hz で排出される
+    // Queue(4) だが、loop_400Hz() は毎周期（400Hz）呼びうる — このガードが無いと
+    // 固定色を保持するだけの学生コードでもキューを溢れさせる。
+    static uint8_t s_last_r = 0, s_last_g = 0, s_last_b = 0;
+    static bool s_first_call = true;
+
+    if (!s_first_call && r == s_last_r && g == s_last_g && b == s_last_b) {
+        return;
     }
+    s_first_call = false;
+    s_last_r = r; s_last_g = g; s_last_b = b;
+
+    sf::ui_command.publish(sf::UiCommand{
+        static_cast<uint8_t>(sf::UiCmd::LedUserColor), 0, r, g, b, nowUs()});
 }
 
 // =============================================================================
 // IMU Sensor
 // =============================================================================
 
-float ws::gyro_x()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return g.x;
-}
+float ws::gyro_x() { return sf::api::estimate_latest().angular_rate[0]; }
+float ws::gyro_y() { return sf::api::estimate_latest().angular_rate[1]; }
+float ws::gyro_z() { return sf::api::estimate_latest().angular_rate[2]; }
 
-float ws::gyro_y()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return g.y;
-}
-
-float ws::gyro_z()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return g.z;
-}
-
-float ws::accel_x()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return a.x;
-}
-
-float ws::accel_y()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return a.y;
-}
-
-float ws::accel_z()
-{
-    stampfly::Vec3 a, g;
-    stampfly::StampFlyState::getInstance().getIMUCorrected(a, g);
-    return a.z;
-}
+float ws::accel_x() { return sf::api::estimate_latest().specific_force[0]; }
+float ws::accel_y() { return sf::api::estimate_latest().specific_force[1]; }
+float ws::accel_z() { return sf::api::estimate_latest().specific_force[2]; }
 
 // =============================================================================
 // Environmental / Distance Sensors
 // =============================================================================
 
-float ws::baro_altitude()
-{
-    float alt, p;
-    stampfly::StampFlyState::getInstance().getBaroData(alt, p);
-    return alt;
-}
+float ws::baro_altitude() { return sf::sensor_snapshot.latest().baro_altitude; }
+float ws::baro_pressure() { return sf::sensor_snapshot.latest().baro_pressure; }
 
-float ws::baro_pressure()
-{
-    float alt, p;
-    stampfly::StampFlyState::getInstance().getBaroData(alt, p);
-    return p;
-}
+float ws::mag_x() { return sf::sensor_snapshot.latest().mag[0]; }
+float ws::mag_y() { return sf::sensor_snapshot.latest().mag[1]; }
+float ws::mag_z() { return sf::sensor_snapshot.latest().mag[2]; }
 
-float ws::mag_x()
-{
-    stampfly::Vec3 m;
-    stampfly::StampFlyState::getInstance().getMagData(m);
-    return m.x;
-}
-
-float ws::mag_y()
-{
-    stampfly::Vec3 m;
-    stampfly::StampFlyState::getInstance().getMagData(m);
-    return m.y;
-}
-
-float ws::mag_z()
-{
-    stampfly::Vec3 m;
-    stampfly::StampFlyState::getInstance().getMagData(m);
-    return m.z;
-}
-
-float ws::tof_bottom()
-{
-    float bottom, front;
-    stampfly::StampFlyState::getInstance().getToFData(bottom, front);
-    return bottom;
-}
+float ws::tof_bottom() { return sf::sensor_snapshot.latest().tof_distance; }
 
 float ws::tof_front()
 {
-    float bottom, front;
-    stampfly::StampFlyState::getInstance().getToFData(bottom, front);
-    return front;
+    // The current vehicle sensor pipeline has no front ToF (SensorSnapshot
+    // carries a single bottom-facing tof_distance only). -1 matches the
+    // "unavailable" convention documented in workshop_api.hpp.
+    // 現行 vehicle のセンサパイプラインには前方 ToF が無い（SensorSnapshot は
+    // 下向き tof_distance のみを運ぶ）。-1 は workshop_api.hpp に文書化された
+    // 「利用不可」の慣例と一致する。
+    return -1.0f;
 }
 
 float ws::flow_vx()
 {
-    float vx, vy;
-    stampfly::StampFlyState::getInstance().getFlowData(vx, vy);
-    return vx;
+    // Unit change vs. the legacy workshop API: this now returns the RAW
+    // optical-flow displacement count (SensorSnapshot.flow_dx), not an
+    // estimated velocity in m/s. Only Lesson 10's print() reads this value,
+    // so the change is documented here rather than reconstructing a velocity
+    // estimate the current pipeline does not compute at this layer.
+    // 旧 workshop API との単位変更: 推定速度 [m/s] ではなく、生のオプティカル
+    // フロー変位カウント（SensorSnapshot.flow_dx）を返すようになった。この値を
+    // 読むのは Lesson 10 の print() のみのため、この層では計算しない速度推定を
+    // 再構成するのではなく、ここに変更を明記する。
+    return static_cast<float>(sf::sensor_snapshot.latest().flow_dx);
 }
 
 float ws::flow_vy()
 {
-    float vx, vy;
-    stampfly::StampFlyState::getInstance().getFlowData(vx, vy);
-    return vy;
+    return static_cast<float>(sf::sensor_snapshot.latest().flow_dy);
 }
 
-uint8_t ws::flow_quality()
-{
-    int16_t dx, dy;
-    uint8_t sq;
-    stampfly::StampFlyState::getInstance().getFlowRawData(dx, dy, sq);
-    return sq;
-}
+uint8_t ws::flow_quality() { return sf::sensor_snapshot.latest().flow_squal; }
 
 // =============================================================================
 // Estimation
@@ -369,29 +288,30 @@ uint8_t ws::flow_quality()
 
 float ws::estimated_roll()
 {
-    float r, p, y;
-    stampfly::StampFlyState::getInstance().getAttitudeEuler(r, p, y);
-    return r;
+    const sf::StateEstimate est = sf::api::estimate_latest();
+    const sf::math::Quat q{est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]};
+    return q.to_euler().x;
 }
 
 float ws::estimated_pitch()
 {
-    float r, p, y;
-    stampfly::StampFlyState::getInstance().getAttitudeEuler(r, p, y);
-    return p;
+    const sf::StateEstimate est = sf::api::estimate_latest();
+    const sf::math::Quat q{est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]};
+    return q.to_euler().y;
 }
 
 float ws::estimated_yaw()
 {
-    float r, p, y;
-    stampfly::StampFlyState::getInstance().getAttitudeEuler(r, p, y);
-    return y;
+    const sf::StateEstimate est = sf::api::estimate_latest();
+    const sf::math::Quat q{est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]};
+    return q.to_euler().z;
 }
 
 float ws::estimated_altitude()
 {
-    auto fused = g_fusion.getState();
-    return -fused.position.z;  // NED -> altitude (positive up)
+    // NED -> altitude (positive up)
+    // NED -> 高度（上向き正）
+    return -sf::api::estimate_latest().position[2];
 }
 
 // =============================================================================
@@ -400,13 +320,15 @@ float ws::estimated_altitude()
 
 uint32_t ws::millis()
 {
+    // Divide in 64-bit FIRST, then truncate: wraps at ~49.7 days. Routing
+    // through the uint32 microsecond clock (nowUs()/1000) would wrap every
+    // ~71.6 minutes — inside a single workshop session.
+    // 64bit のまま除算してから丸める: ラップは約49.7日。uint32 のマイクロ秒時計
+    // 経由（nowUs()/1000）だと約71.6分で巻き戻り、講座1回の中で起きてしまう。
     return static_cast<uint32_t>(esp_timer_get_time() / 1000);
 }
 
-float ws::battery_voltage()
-{
-    return stampfly::StampFlyState::getInstance().getVoltage();
-}
+float ws::battery_voltage() { return sf::api::power_latest().voltage; }
 
 void ws::print(const char* fmt, ...)
 {

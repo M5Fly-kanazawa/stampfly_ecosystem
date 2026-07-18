@@ -1,5 +1,4 @@
 #include "workshop_api.hpp"
-#include "stampfly_state.hpp"
 #include <cmath>
 
 // Tick counter for decimation
@@ -23,19 +22,14 @@ void loop_400Hz(float dt)
     // デシメーション: 50Hz出力（400Hzの8tick毎）
     if (tick % 8 != 0) return;
 
-    // Get StampFlyState singleton
-    // StampFlyStateシングルトンを取得
-    auto& state = StampFlyState::getInstance();
-
     // TODO: Get barometric data and output as Teleplot
     // TODO: 気圧データを取得してTeleplot形式で出力
-    // auto baro = state.getBaroData();
-    // ws::print(">baro_alt:%.2f", baro.altitude);
+    // ws::print(">baro_alt:%.2f", ws::baro_altitude());
 
-    // TODO: Get ToF (Time-of-Flight) distance
-    // TODO: ToF距離を取得
-    // auto tof = state.getToFData(ToFPosition::BOTTOM);
-    // ws::print(">tof_bottom:%.3f", tof.distance);
+    // TODO: Get ToF (Time-of-Flight) bottom distance
+    // TODO: ToF下向き距離を取得
+    // (Note: front ToF is not used by the vehicle sensing pipeline / 前方ToFはvehicleのセンシングでは未使用)
+    // ws::print(">tof_bottom:%.3f", ws::tof_bottom());
 
     // TODO: Get ESKF estimation values (roll/pitch/yaw/altitude)
     // TODO: ESKF推定値を取得（ロール/ピッチ/ヨー/高度）
@@ -44,15 +38,13 @@ void loop_400Hz(float dt)
 
     // TODO: Get magnetic data and compute heading
     // TODO: 磁気データを取得して方位角を計算
-    // auto mag = state.getMagData();
-    // float heading = atan2f(-mag.y, mag.x) * 57.3f;
+    // float heading = atan2f(-ws::mag_y(), ws::mag_x()) * 57.3f;
     // ws::print(">heading:%.1f", heading);
 
     // TODO: Get optical flow velocity
     // TODO: 光学フロー速度を取得
-    // auto flow = state.getFlowData();
-    // ws::print(">flow_vx:%.3f", flow.vx);
-    // ws::print(">flow_vy:%.3f", flow.vy);
+    // ws::print(">flow_vx:%.3f", ws::flow_vx());
+    // ws::print(">flow_vy:%.3f", ws::flow_vy());
 
     // TODO: Get battery voltage
     // TODO: バッテリ電圧を取得
