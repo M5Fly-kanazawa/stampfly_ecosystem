@@ -118,6 +118,8 @@ jobs:
             suffix: macos-arm64
           - os: macos-15-intel
             suffix: macos-x64
+          - os: ubuntu-latest
+            suffix: linux-x64
     defaults:
       run:
         # Force bash even on the Windows runner (whose default shell is
@@ -150,28 +152,56 @@ jobs:
 
       - name: Smoke-test the app entry point
         # Cheap sanity check (no GUI, no hardware) before spending time on a
-        # PyInstaller build.
+        # PyInstaller build. Also the first place a missing Tk/tkinter on
+        # the ubuntu-latest runner would surface: actions/setup-python's
+        # CPython builds bundle tcl/tk, so this is expected to pass as-is;
+        # if it ever fails with a Tkinter import error on Linux, the fix is
+        # `sudo apt-get install -y python3-tk` as an extra step before this
+        # one (not currently needed).
         # PyInstallerビルドに時間をかける前の簡易確認（GUIもハードウェアも
-        # 使わない）
+        # 使わない）。ubuntu-latestランナーでTk/tkinterが欠けている場合も
+        # まずここで顕在化する: actions/setup-pythonのCPythonビルドは
+        # tcl/tkを同梱しているため現状は素通りする想定。もしLinuxで
+        # Tkinterのimportエラーが出た場合は、このステップの前に
+        # `sudo apt-get install -y python3-tk` を追加するのが対処法
+        # （現時点では不要）
         run: python tools/flasher_gui/stampfly_flasher.py --version
 
       - name: Build with PyInstaller
         # --windowed suppresses the console window on Windows and, on macOS,
         # produces a StampFlyFlasher.app bundle instead of a bare binary.
+        # On Linux, --windowed is a documented no-op (PyInstaller has no
+        # windowed/console distinction there), so the same command line
+        # still produces a single-file binary.
         # --collect-data esptool bundles esptool's flasher-stub JSON files
         # (esptool/targets/stub_flasher/**.json). esptool loads them by a
         # path relative to __file__ and ships no PyInstaller hook for them,
         # so without this flag the frozen app fails with FileNotFoundError
         # on esp32s3.json the moment a real flash starts.
+        # --icon embeds the app icon; PyInstaller ignores --icon on Linux
+        # onefile ELF binaries (no icon resource format to embed into), so
+        # it is only passed for Windows/macOS.
         # --windowed はWindowsでコンソールウィンドウを抑制し、macOSでは単体の
-        # バイナリではなく StampFlyFlasher.app バンドルを生成する
+        # バイナリではなく StampFlyFlasher.app バンドルを生成する。
+        # Linuxでは --windowed は仕様上no-op（windowed/consoleの区別が
+        # 存在しない）で、同じコマンド行のまま単一ファイルのバイナリになる
         # --collect-data esptool は esptool のフラッシャースタブJSONファイル
         # （esptool/targets/stub_flasher/**.json）を同梱する。esptoolは
         # __file__相対パスでこれを読み込み、PyInstaller用フックを同梱して
         # いないため、このフラグがないと実際の書き込み開始時に
         # esp32s3.jsonでFileNotFoundErrorになる
+        # --icon はアプリアイコンを埋め込む。PyInstallerはLinuxのonefile
+        # ELFバイナリでは --icon を無視する（埋め込み先のアイコンリソース
+        # 形式が存在しないため）ため、Windows/macOSのみに付与する
         run: |
+          ICON_ARGS=()
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ICON_ARGS=(--icon tools/flasher_gui/assets/icon.ico)
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            ICON_ARGS=(--icon tools/flasher_gui/assets/icon.icns)
+          fi
           pyinstaller --onefile --windowed --collect-data esptool \
+            "${ICON_ARGS[@]}" \
             --name StampFlyFlasher tools/flasher_gui/stampfly_flasher.py
 
       - name: Smoke-test the frozen binary
@@ -208,9 +238,13 @@ jobs:
           else
             # macOS: the bare onefile binary, not the .app bundle that
             # --windowed also produces (the bundle just wraps this same
-            # executable).
+            # executable). Linux: --windowed is a no-op there (see the
+            # PyInstaller build step above), so it is likewise the plain
+            # onefile binary with no bundle wrapper to begin with.
             # macOS: --windowed が生成する .app バンドルではなく単体の
-            # onefileバイナリを使う（バンドルは同じ実行ファイルを包むだけ）
+            # onefileバイナリを使う（バンドルは同じ実行ファイルを包むだけ）。
+            # Linux: --windowed はno-op（上のPyInstallerビルドステップ参照）
+            # のため、そもそもバンドルで包まれない単体のonefileバイナリになる
             BIN="./dist/StampFlyFlasher"
           fi
           "$BIN" --version
@@ -252,6 +286,21 @@ jobs:
           ditto -c -k --keepParent dist/StampFlyFlasher.app \
             "dist/StampFlyFlasher_${REL}_${{ matrix.suffix }}.zip"
 
+      - name: Package Linux executable
+        if: runner.os == 'Linux'
+        # No zip/bundle step needed: the PyInstaller --onefile output is
+        # already a single self-contained ELF binary. chmod +x because the
+        # bit is not guaranteed to survive upload-artifact -> download
+        # unpacking on the consuming side (e.g. a user's `curl` download).
+        # zip/バンドル化は不要: PyInstaller --onefile の出力は既に単一の
+        # 自己完結ELFバイナリ。chmod +x するのは、実行ビットが
+        # upload-artifact -> ダウンロード側の展開（例: ユーザーのcurl
+        # ダウンロード）で保持される保証がないため
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          mv dist/StampFlyFlasher "dist/StampFlyFlasher_${REL}_${{ matrix.suffix }}"
+          chmod +x "dist/StampFlyFlasher_${REL}_${{ matrix.suffix }}"
+
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -265,6 +314,157 @@ jobs:
         with:
           name: flasher-gui-${{ matrix.suffix }}
           path: dist/*.zip
+
+      - name: Upload Linux artifact
+        if: runner.os == 'Linux'
+        # No extension on this asset (see "Package Linux executable"
+        # above), so the glob is prefix-based instead of extension-based
+        # like the Windows/macOS uploads.
+        # このアセットには拡張子がない（上の"Package Linux executable"
+        # 参照）ため、Windows/macOSのアップロードのような拡張子ベースでは
+        # なくプレフィックスベースのglobにする
+        uses: actions/upload-artifact@v4
+        with:
+          name: flasher-gui-${{ matrix.suffix }}
+          path: dist/StampFlyFlasher_*_linux-x64
+
+      # --- GUI Flasher native-install smoke test (Windows/macOS/Linux) ---
+      # This exercises lib/sfcli/utils/flasher_install/ end-to-end against
+      # the artifact just built above, on every OS that ships one — not
+      # a separate job, so it reuses this job's already-built `dist/`
+      # artifact and Python environment instead of re-downloading/rebuilding.
+      # --- GUIフラッシャ ネイティブインストールのスモークテスト
+      #     (Windows/macOS/Linux) ---
+      # 上でビルドしたばかりの成果物に対し、それを配布する全OS上で
+      # lib/sfcli/utils/flasher_install/ をエンドツーエンドで検証する。
+      # 別ジョブにはせず、本ジョブが既にビルド済みの `dist/` 成果物と
+      # Python環境をそのまま再利用する（再ダウンロード・再ビルドしない）
+
+      - name: Install sfcli (for the flasher install smoke test)
+        # Installs sfcli into the same Python environment already used to
+        # build the frozen app (actions/setup-python's 3.12), mirroring
+        # scripts/installer.py's Step 3/4 (`pip install -e .`). This is a
+        # plain venv-less runner environment, so no ESP-IDF venv resolution
+        # is needed here (unlike installer.py's _run_in_idf_env()).
+        # フローズンアプリのビルドに使ったのと同じPython環境
+        # (actions/setup-pythonの3.12)にsfcliをインストールする。
+        # scripts/installer.py のStep3/4 (`pip install -e .`)を模す。
+        # ここはvenvなしの素のランナー環境のため、installer.pyの
+        # _run_in_idf_env()のようなESP-IDF venv解決は不要
+        timeout-minutes: 10
+        run: |
+          pip install -e .
+          sf --help >/dev/null
+
+      - name: Run flasher-install pure-logic tests
+        # Agent A's dependency-free, network-free logic test script (spec
+        # §3-5): platform_key detection, asset-name matching, SHA256
+        # verification, manifest read/write/uninstall-target enumeration.
+        # 担当Aの依存なし・ネットワークなしのロジックテストスクリプト
+        # （仕様3-5）: platform_key判定・資産名マッチング・SHA256照合・
+        # manifest読み書き/アンインストール対象列挙
+        run: python tools/ci/check_flasher_install.py
+
+      - name: Install GUI Flasher from the just-built artifact (install smoke test)
+        # --from-file bypasses the GitHub Releases API lookup entirely
+        # (there is no release yet on a workflow_dispatch/build-verification
+        # run), installing directly from this job's own dist/ output.
+        # --from-file は GitHub Releases API の参照を完全に迂回する
+        # （workflow_dispatch/ビルド確認実行時点ではまだReleaseが存在
+        # しない）。本ジョブ自身のdist/出力から直接インストールする
+        timeout-minutes: 5
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ARTIFACT=$(ls dist/*.exe)
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            ARTIFACT="dist/StampFlyFlasher.app"
+          else
+            ARTIFACT=$(ls dist/StampFlyFlasher_*_linux-x64)
+          fi
+          echo "Installing from: $ARTIFACT"
+          sf flasher install --from-file "$ARTIFACT" --yes
+
+      - name: Assert flasher install artifacts exist (install smoke test)
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            test -e "$LOCALAPPDATA/Programs/StampFly/StampFlyFlasher.exe" \
+              || { echo "FAIL: installed exe missing"; exit 1; }
+            test -e "$APPDATA/Microsoft/Windows/Start Menu/Programs/StampFly/StampFly Flasher.lnk" \
+              || { echo "FAIL: Start Menu shortcut missing"; exit 1; }
+            test -e "$LOCALAPPDATA/Programs/StampFly/uninstall.cmd" \
+              || { echo "FAIL: uninstall.cmd missing"; exit 1; }
+            reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\StampFlyFlasher" \
+              || { echo "FAIL: Apps & features (Uninstall) registry entry missing"; exit 1; }
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            test -x "$HOME/Applications/StampFlyFlasher.app/Contents/MacOS/StampFlyFlasher" \
+              || { echo "FAIL: installed app executable missing"; exit 1; }
+          else
+            test -x "$HOME/.local/opt/stampfly/StampFlyFlasher" \
+              || { echo "FAIL: installed binary missing"; exit 1; }
+            test -e "$HOME/.local/share/applications/stampfly-flasher.desktop" \
+              || { echo "FAIL: .desktop entry missing"; exit 1; }
+            test -e "$HOME/.local/share/icons/hicolor/256x256/apps/stampfly-flasher.png" \
+              || { echo "FAIL: installed icon missing"; exit 1; }
+          fi
+          echo "OK: install artifacts verified"
+
+      - name: Uninstall GUI Flasher (install smoke test)
+        timeout-minutes: 5
+        run: sf flasher uninstall --yes
+
+      - name: Assert flasher uninstall removed all artifacts (install smoke test)
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            test ! -e "$LOCALAPPDATA/Programs/StampFly/StampFlyFlasher.exe" \
+              || { echo "FAIL: exe still present after uninstall"; exit 1; }
+            test ! -e "$APPDATA/Microsoft/Windows/Start Menu/Programs/StampFly/StampFly Flasher.lnk" \
+              || { echo "FAIL: Start Menu shortcut still present after uninstall"; exit 1; }
+            if reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\StampFlyFlasher" >/dev/null 2>&1; then
+              echo "FAIL: Apps & features registry entry still present after uninstall"
+              exit 1
+            fi
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            test ! -e "$HOME/Applications/StampFlyFlasher.app" \
+              || { echo "FAIL: app bundle still present after uninstall"; exit 1; }
+          else
+            test ! -e "$HOME/.local/opt/stampfly/StampFlyFlasher" \
+              || { echo "FAIL: binary still present after uninstall"; exit 1; }
+            test ! -e "$HOME/.local/share/applications/stampfly-flasher.desktop" \
+              || { echo "FAIL: .desktop entry still present after uninstall"; exit 1; }
+          fi
+          echo "OK: uninstall verified clean"
+
+      - name: Exercise uninstall.cmd (Windows Apps-and-features path)
+        if: runner.os == 'Windows'
+        # The registry's UninstallString points at uninstall.cmd — the path
+        # Windows "Apps & features" actually runs, and the only piece of the
+        # installer that `sf flasher uninstall` (tested above) does NOT
+        # exercise. Re-install, run the .cmd the way Windows would, wait out
+        # its delayed self-delete (2s + margin), then assert everything is
+        # gone — including the install directory the script removes last.
+        # レジストリの UninstallString は uninstall.cmd を指す — Windows の
+        # 「アプリと機能」が実際に実行する経路で、上でテスト済みの
+        # `sf flasher uninstall` が通らない唯一のコード。再インストールし、
+        # Windows と同じ方法で .cmd を実行、遅延自己削除(2秒+余裕)を待って
+        # から、スクリプトが最後に消すインストールディレクトリまで含めて
+        # 全て消えたことをアサートする。
+        timeout-minutes: 5
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ARTIFACT=$(ls dist/*.exe)
+            sf flasher install --from-file "$ARTIFACT" --yes
+            cmd //c "$LOCALAPPDATA\\Programs\\StampFly\\uninstall.cmd"
+            sleep 8
+            test ! -e "$LOCALAPPDATA/Programs/StampFly" \
+              || { echo "FAIL: install dir still present after uninstall.cmd"; exit 1; }
+            test ! -e "$APPDATA/Microsoft/Windows/Start Menu/Programs/StampFly/StampFly Flasher.lnk" \
+              || { echo "FAIL: Start Menu shortcut still present after uninstall.cmd"; exit 1; }
+            if reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\StampFlyFlasher" >/dev/null 2>&1; then
+              echo "FAIL: registry entry still present after uninstall.cmd"
+              exit 1
+            fi
+            echo "OK: uninstall.cmd verified clean"
+          fi
 
   release:
     # Wait for both matrix jobs so every artifact (firmware bins + the
@@ -305,6 +505,7 @@ jobs:
             dist/*.bin
             dist/*.exe
             dist/*.zip
+            dist/StampFlyFlasher_*_linux-x64
             dist/SHA256SUMS.txt
           body: |
             ## 書き込み方法 / How to flash
@@ -315,14 +516,21 @@ jobs:
             factory-equivalent image flashed from offset 0x0. `app` contains only the application.
 
             GUI派・ビルド不要な場合は、`StampFlyFlasher_<tag>_windows-x64.exe` /
-            `_macos-arm64.zip`（Apple Silicon）/ `_macos-x64.zip`（Intel）をダウンロードして
-            実行する（macOSは初回のみ右クリック→「開く」で起動。Gatekeeper対策）。
+            `_macos-arm64.zip`（Apple Silicon）/ `_macos-x64.zip`（Intel）/
+            `_linux-x64`（`chmod +x` してから実行）をダウンロードして実行する
+            （macOSは初回のみ右クリック→「開く」で起動。Gatekeeper対策）。
+            すでに `sf` が使える環境では `sf flasher install` でアプリとして
+            インストールし、ショートカット/ランチャー登録まで自動で行うことも
+            できる。
             Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
             （macOSのChromeには既知のクラッシュ問題があるため、デスクトップ版を推奨）。
             Prefer a GUI with no build step? Download and run
             `StampFlyFlasher_<tag>_windows-x64.exe` / `_macos-arm64.zip` (Apple Silicon) /
-            `_macos-x64.zip` (Intel) (on macOS, right-click -> Open the first time to bypass
-            Gatekeeper). Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
+            `_macos-x64.zip` (Intel) / `_linux-x64` (run `chmod +x` first) (on macOS,
+            right-click -> Open the first time to bypass Gatekeeper). If `sf` is already
+            set up, `sf flasher install` installs it as a native app (with shortcuts /
+            launcher registration) instead.
+            Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
             (a known crash issue affects Chrome on macOS -> the desktop app is recommended).
 
             ```bash
