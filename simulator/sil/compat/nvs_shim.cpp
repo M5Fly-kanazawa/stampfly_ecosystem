@@ -73,6 +73,15 @@ esp_err_t nvs_commit(nvs_handle_t) { return ESP_OK; }
 esp_err_t nvs_erase_all(nvs_handle_t) { g_store.clear(); return ESP_OK; }
 esp_err_t nvs_erase_key(nvs_handle_t, const char* key) { g_store.erase(key); return ESP_OK; }
 
+// Existence check — used by sf::params::has_saved(). The shim has no per-value
+// type tag, so out_type (if requested) is left untouched; callers pass nullptr.
+// 存在確認 — sf::params::has_saved() が使用。シムは値ごとの型タグを持たないため
+// out_type（要求時）はそのまま。呼び出し側は nullptr を渡す。
+esp_err_t nvs_find_key(nvs_handle_t, const char* key, nvs_type_t*)
+{
+    return g_store.count(key) ? ESP_OK : ESP_ERR_NVS_NOT_FOUND;
+}
+
 esp_err_t nvs_set_u8(nvs_handle_t, const char* key, uint8_t value)   { return store_value(key, value); }
 esp_err_t nvs_set_u32(nvs_handle_t, const char* key, uint32_t value) { return store_value(key, value); }
 esp_err_t nvs_set_i32(nvs_handle_t, const char* key, int32_t value)  { return store_value(key, value); }

@@ -987,6 +987,32 @@ bool set_int(const char* name, int32_t value)
     return true;
 }
 
+// Write a single entry's current RAM value into an already-open NVS handle,
+// under its hashed key. Shared by save() (all entries) and save_one()
+// (single entry) so the type-dispatch logic lives in one place.
+// 開いている NVS ハンドルへ、1エントリの現在の RAM 値をハッシュキーで書き込む。
+// save()（全件）と save_one()（1件）で共用し、型分岐ロジックを一箇所にまとめる。
+static esp_err_t saveEntryToNvs(nvs_handle_t handle, const ParamEntry& e)
+{
+    char key[16];
+    nvsKeyFor(e.name, key);
+
+    if (e.type == ParamType::FLOAT) {
+        float val = *static_cast<float*>(e.value_ptr);
+        // Store float as uint32_t bit pattern
+        // floatをuint32_tビットパターンとして保存
+        uint32_t raw;
+        memcpy(&raw, &val, sizeof(float));
+        return nvs_set_u32(handle, key, raw);
+    } else if (e.type == ParamType::BOOL) {
+        bool val = *static_cast<bool*>(e.value_ptr);
+        return nvs_set_u8(handle, key, val ? 1 : 0);
+    } else if (e.type == ParamType::INT) {
+        return nvs_set_i32(handle, key, *static_cast<int32_t*>(e.value_ptr));
+    }
+    return ESP_ERR_INVALID_ARG;
+}
+
 void save()
 {
     nvs_handle_t handle;
@@ -1000,24 +1026,7 @@ void save()
     int failed = 0;
     for (int i = 0; i < TABLE_SIZE; i++) {
         const ParamEntry& e = table[i];
-        char key[16];
-        nvsKeyFor(e.name, key);
-        esp_err_t set_err = ESP_OK;
-
-        if (e.type == ParamType::FLOAT) {
-            float val = *static_cast<float*>(e.value_ptr);
-            // Store float as uint32_t bit pattern
-            // floatをuint32_tビットパターンとして保存
-            uint32_t raw;
-            memcpy(&raw, &val, sizeof(float));
-            set_err = nvs_set_u32(handle, key, raw);
-        } else if (e.type == ParamType::BOOL) {
-            bool val = *static_cast<bool*>(e.value_ptr);
-            set_err = nvs_set_u8(handle, key, val ? 1 : 0);
-        } else if (e.type == ParamType::INT) {
-            set_err = nvs_set_i32(handle, key,
-                                  *static_cast<int32_t*>(e.value_ptr));
-        }
+        esp_err_t set_err = saveEntryToNvs(handle, e);
 
         // Count failures instead of silently claiming success — the old code
         // ignored every nvs_set_* error and logged a bogus "Saved N parameters".
@@ -1027,8 +1036,7 @@ void save()
             saved++;
         } else {
             failed++;
-            ESP_LOGE(TAG, "save: '%s' (key %s) failed: %s",
-                     e.name, key, esp_err_to_name(set_err));
+            ESP_LOGE(TAG, "save: '%s' failed: %s", e.name, esp_err_to_name(set_err));
         }
     }
 
@@ -1041,6 +1049,63 @@ void save()
     } else {
         ESP_LOGI(TAG, "Saved %d parameters to NVS", saved);
     }
+}
+
+bool has_saved(const char* name)
+{
+    // Return true if this parameter has a value saved in NVS.
+    // このパラメータが NVS に保存済みなら true を返す。
+    const ParamEntry* e = find(name);
+    if (!e) return false;
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        // Namespace not created yet — nothing has ever been saved.
+        // namespace が未作成 — まだ何も保存されていない。
+        return false;
+    }
+
+    char key[16];
+    nvsKeyFor(e->name, key);
+    bool found = (nvs_find_key(handle, key, nullptr) == ESP_OK);
+    nvs_close(handle);
+    return found;
+}
+
+bool save_one(const char* name)
+{
+    // Save ONLY this parameter to NVS (unlike save(), which writes all).
+    // このパラメータ1件だけを NVS へ保存する（save() は全件書くのと対照）。
+    const ParamEntry* e = find(name);
+    if (!e) {
+        ESP_LOGW(TAG, "save_one: '%s' not found", name);
+        return false;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    esp_err_t set_err = saveEntryToNvs(handle, *e);
+    esp_err_t commit_err = ESP_OK;
+    if (set_err == ESP_OK) {
+        commit_err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+
+    if (set_err != ESP_OK) {
+        ESP_LOGE(TAG, "save_one: '%s' failed: %s", name, esp_err_to_name(set_err));
+        return false;
+    }
+    if (commit_err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS commit failed: %s", esp_err_to_name(commit_err));
+        return false;
+    }
+    return true;
 }
 
 void load()

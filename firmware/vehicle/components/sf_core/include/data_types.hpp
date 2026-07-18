@@ -532,9 +532,11 @@ struct NotifyCommand {
 /// UI command verbs — CLI → NotifyTask (applies to the buzzer/LED HAL, with NVS save).
 /// UI コマンドの種別 — CLI → NotifyTask（buzzer/LED HAL に適用、NVS 保存）。
 enum class UiCmd : uint8_t {
-    None          = 0,
-    SoundMute     = 1,   // value: 1 = mute, 0 = unmute   / 1=ミュート, 0=解除
-    LedBrightness = 2,   // value: 0..255 brightness       / LED 輝度
+    None            = 0,
+    SoundMute       = 1,   // value: 1 = mute, 0 = unmute   / 1=ミュート, 0=解除
+    LedBrightness   = 2,   // value: 0..255 brightness       / LED 輝度
+    LedUserOverride = 3,   // value: 1 = user override on, 0 = off / ユーザー LED 制御 on/off
+    LedUserColor    = 4,   // r,g,b: user color (implies override on) / ユーザー色（override も on になる）
 };
 
 /// UI command — NotifyTask consumes and applies to the buzzer/LED HAL (+ NVS).
@@ -542,6 +544,7 @@ enum class UiCmd : uint8_t {
 struct UiCommand {
     uint8_t  command;     // UiCmd value                   / UiCmd の値
     uint8_t  value;       // argument (mute flag / brightness) / 引数
+    uint8_t  r, g, b;     // LedUserColor argument          / LedUserColor 用
     uint32_t timestamp;   // [us]
 };
 

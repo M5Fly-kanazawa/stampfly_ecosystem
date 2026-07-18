@@ -32,6 +32,12 @@
 // 不透明ハンドル（インメモリ保存への id）
 typedef uint32_t nvs_handle_t;
 
+// Value type tag (mirrors ESP-IDF nvs_type_t); the SIL shim only needs the
+// type to exist for nvs_find_key()'s signature, not its enumerators.
+// 値型タグ（ESP-IDF nvs_type_t 相当）。SIL シムは nvs_find_key() のシグネチャに
+// 型が存在すればよく、列挙子までは使わない。
+typedef uint8_t nvs_type_t;
+
 // Open modes (mirror ESP-IDF)
 // オープンモード（ESP-IDF に合わせる）
 typedef enum {
@@ -48,6 +54,10 @@ void      nvs_close(nvs_handle_t handle);
 esp_err_t nvs_commit(nvs_handle_t handle);
 esp_err_t nvs_erase_all(nvs_handle_t handle);
 esp_err_t nvs_erase_key(nvs_handle_t handle, const char* key);
+
+// Existence check (mirrors ESP-IDF nvs_find_key). Needed by sf::params::has_saved().
+// 存在確認（ESP-IDF nvs_find_key 相当）。sf::params::has_saved() が使用する。
+esp_err_t nvs_find_key(nvs_handle_t handle, const char* key, nvs_type_t* out_type);
 
 esp_err_t nvs_set_u8(nvs_handle_t handle, const char* key, uint8_t value);
 esp_err_t nvs_set_u32(nvs_handle_t handle, const char* key, uint32_t value);

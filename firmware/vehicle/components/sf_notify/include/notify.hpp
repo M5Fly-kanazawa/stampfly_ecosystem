@@ -171,6 +171,18 @@ private:
     uint8_t  autotune_led_       = 0;
     uint16_t autotune_led_ticks_ = 0;
     bool autotuneOverlay(LedPattern& out) const;
+
+    // User LED override (ws::disable_led_task / ws::led_color, W1 §1-2): while
+    // active, update() skips the state/mode pattern drawing for BOTH channels
+    // and shows this solid color instead (brightness scaling still applies via
+    // setLeds()/LED::setColor()). Off (default) restores normal pattern drawing.
+    // Buzzer behaviour is untouched.
+    // ユーザー LED オーバーライド（ws::disable_led_task / ws::led_color, W1 §1-2）:
+    // 有効な間、update() は両チャネルの状態/モードパターン描画をスキップし、この単色を
+    // 表示する（輝度スケーリングは setLeds()/LED::setColor() 経由で引き続き適用）。
+    // off（既定）で通常のパターン描画に復帰する。ブザー挙動は変更しない。
+    bool     user_override_ = false;
+    LedColor user_color_    = {0, 0, 0};
 };
 
 }  // namespace sf

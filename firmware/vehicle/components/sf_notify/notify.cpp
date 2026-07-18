@@ -290,10 +290,19 @@ void Notify::update()
 
     // Two independent LED channels (class comment): MCU LED = system state,
     // body LEDs = flight-mode colour (preview on the ground, active in the air).
+    // Skipped entirely while a user override (ws::disable_led_task/led_color) is
+    // active — the user has taken both channels over for a lesson demo.
     // 独立した 2 チャネル（クラスコメント参照）: MCU LED=システム状態、
-    // 本体 LED=モード色（地上はプレビュー、空中は実モード）。
-    applyPattern(computeStatePattern(), mcu_channel_, mcu_led_, mcu_led_count_);
-    applyPattern(computeModePattern(), body_channel_, body_led_, body_led_count_);
+    // 本体 LED=モード色（地上はプレビュー、空中は実モード）。ユーザーオーバーライド
+    // （ws::disable_led_task/led_color）が有効な間は両チャネルとも描画をスキップする
+    // — レッスンデモのためユーザーが両チャネルを占有している状態。
+    if (user_override_) {
+        setLeds(mcu_led_, mcu_led_count_, user_color_);
+        setLeds(body_led_, body_led_count_, user_color_);
+    } else {
+        applyPattern(computeStatePattern(), mcu_channel_, mcu_led_, mcu_led_count_);
+        applyPattern(computeModePattern(), body_channel_, body_led_, body_led_count_);
+    }
 
     // Discrete notify events (ARM/DISARM tones, low-battery warning) arrive on the
     // notify_command queue. Notify is its ONLY consumer, so draining it here is
@@ -322,6 +331,21 @@ void Notify::update()
                 // 両チャネル同輝度。保存は1回（NVS キーは共有）。
                 body_led_.setBrightness(uic.value, /*save_to_nvs=*/true);
                 mcu_led_.setBrightness(uic.value, /*save_to_nvs=*/false);
+                break;
+            case UiCmd::LedUserOverride:
+                // value: 1 = user takes over both LED channels, 0 = release back
+                // to normal state/mode pattern drawing (next update() cycle).
+                // value: 1=ユーザーが両 LED チャネルを占有、0=通常の状態/モード
+                // パターン描画へ復帰（次の update() 周期から）。
+                user_override_ = (uic.value != 0);
+                break;
+            case UiCmd::LedUserColor:
+                // Setting a color implies override on, matching the legacy
+                // workshop's ws::led_color() semantics (spec §1-2).
+                // 色の指定は override も on にする（旧 workshop ws::led_color() と
+                // 同じ意味付け、仕様 §1-2）。
+                user_color_    = {uic.r, uic.g, uic.b};
+                user_override_ = true;
                 break;
             case UiCmd::None:
             default:

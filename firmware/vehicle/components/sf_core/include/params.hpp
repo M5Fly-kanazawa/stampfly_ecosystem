@@ -112,6 +112,14 @@ bool set_int(const char* name, int32_t value);
 /// 全パラメータをNVSに保存する
 void save();
 
+/// Return true if this parameter has a value saved in NVS.
+/// このパラメータが NVS に保存済みなら true。
+bool has_saved(const char* name);
+
+/// Save ONLY this parameter to NVS (unlike save(), which writes all).
+/// このパラメータ1件だけを NVS へ保存する（save() は全件書くのと対照）。
+bool save_one(const char* name);
+
 /// Load all parameters from NVS
 /// 全パラメータをNVSから読み込む
 void load();
