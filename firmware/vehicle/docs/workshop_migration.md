@@ -338,6 +338,62 @@ M5 完了後、`firmware/workshop/` は vehicle と同じファームウェア�
 
 ---
 
+## 8. 実施記録（2026-07-18 実施済み）
+
+**本計画（M5）は 2026-07-18 に実施した。** `firmware/workshop/` は現行 `firmware/vehicle/`
+のコンポーネント基盤上に再構築され、vehicle_old への依存は解消された。DXH 講座
+（2026-07-18）で発生した「workshop 課題を書き込むとチャンネルが変わりペアリングが崩れる」
+事象（＝本文書 論点5 が予言していた NVS 保存場所の分裂）が実施の直接の契機である。
+
+### 実施時に確定した設計判断（本文からの更新点）
+
+| 論点 | 計画時 | 実施時の確定 |
+|------|--------|------------|
+| §4 論点1（ESKF API 凍結） | ADR 要求 | 変更なし（同一コンポーネント共有で自然に一致。凍結ルールは引き続き有効） |
+| §4 論点2（ARM guard） | StateManager に guard 追加 | **既存実装で充足**。`StateManager::requestArm()` は状態ゲート（IDLE_GROUND のみ受理）で冪等。`ws::arm()` は `api_command` トピックに ApiCmd::Arm を発行するだけ |
+| §4 論点3（400Hz 同期） | xTaskNotify 化 | **既存実装で充足**。vehicle の ImuTask→ControlTask 通知（タイムアウト安全網付き）をそのまま流用。WorkshopControlTask が `sf::tasks::control_handle()` を提供 |
+| §4 論点4（ControlPacket バージョニング） | v1/v2 共存 | **不要になり廃止**。workshop が vehicle と同じ sf_comm/sf_command を共有するため乖離が構造的に発生しない |
+| §4 論点5（NVS namespace） | vehicle 専用 namespace | `sf_params`/`wifi.channel`（param 系）に一本化。旧キー `stampfly`/`wifi_ch` は**初回起動時に一度だけ取り込み**（workshop_main.cpp の importLegacyWifiChannel、param 系未保存の場合のみ） |
+| §5.2（最新値取得 A案/B案） | M2 で決定 | **B 案相当が既に実装済み**: `sf::api::imu_latest()`（RingBuffer の latest() peek、任意タスクから安全） |
+| §5.1（sf::api::actuator / state 公開関数） | M2 で整備 | **今回は導入せず**。vehicle の ControlTask と同じく「タスク層が sf::Actuator を直接所有」する形を WorkshopControlTask が踏襲（precedent 準拠）。sf::api への正式昇格は将来課題 |
+
+### 実装の骨子
+
+- **ControlTask 置換のみ**: タスク表は vehicle と同一で、`WorkshopControlTask`
+  （workshop_control_task.cpp）だけが差し替わる。学習者の `setup()`/`loop_400Hz(dt)` を
+  呼び、モータ要求（ws_internal::MotorRequest）を ARM ゲート内で `Actuator::applyTestDuties()`
+  に解決する。**INV-1 との関係**: workshop ビルドでは学習者ループが唯一の制御パイプライン
+  （置換であって並列ではない）。
+- **旧ミキサー式の完全再現**: `ws::motor_mixer()` は vehicle_old `setMixerOutput` の
+  電圧スケール式（`T + 0.25·(±R±P±Y)/3.7`）を桁まで再現（ws_internal.hpp）。旧ファームで
+  調整した学習者ゲインの互換性を保証する。
+- **LED**: `ws::led_color()`/`disable_led_task()` は `ui_command` トピックの
+  `LedUserOverride`/`LedUserColor` verb（sf_notify に追加）で実現。色は変化時のみ publish。
+- **RC 正規化の互換**: 旧 `getControlInput`（throttle=上半分のみ 0..1、他 ±1）と
+  vehicle `CommandSetpoint` は同一意味論であることをソースで確認済み。
+- **チャンネル/ペアリングの一本化**: チャンネルは `wifi.channel`、ペアリング MAC は
+  `sf_pair`/`ctrl_mac` — vehicle と workshop でどちらをフラッシュしても保持される。
+
+### 既知の制約（実施時点）
+
+| 項目 | 内容 |
+|------|------|
+| `ws::tof_front()` | 常に -1.0（vehicle パイプラインに前方 ToF が無い）。Lesson 10 から使用を除去済み |
+| `ws::flow_vx/vy()` | 速度 [m/s] → 生カウントに単位変更（使用は Lesson 10 の表示のみ） |
+| `ws::rc_roll_pitch_button()` | 常に false（現行プロトコルに FLIP フラグ無し。使用レッスン無し） |
+| Data Stream の rate_ref/angle_ref | 常に 0（学習者ループはカスケード目標を持たない）。Lesson 7 の sysid 手順は SCI チュートリアル（2026-09）前に要再検証 |
+| Lesson 12（Python SDK） | ビルドは PASS。vehicle の Tello API 経由の飛行検証は実機確認待ち |
+
+### 検証記録（2026-07-18）
+
+- `sf build vehicle` 緑（1118.8 KB）／`sf build workshop` 緑（1104.4 KB）
+- SIL 全39シナリオ: 31 PASS / 8 FAIL — **8 件は変更前ベースラインと完全一致の既存失敗**
+  （変更ファイルのみ stash した前後比較で退行ゼロを確認。既存失敗は本移行と無関係）
+- 全レッスン×(student|solution) 27通りのビルド: 全 PASS
+- 実機ベンチ・飛行レッスン（L5-8, 13）の実機検証は未実施（翌朝ベンチ確認から）
+
+---
+
 <a id="english"></a>
 
 ## 1. About This Document
