@@ -357,13 +357,26 @@ jobs:
           sf --help >/dev/null
 
       - name: Run flasher-install pure-logic tests
-        # Agent A's dependency-free, network-free logic test script (spec
-        # §3-5): platform_key detection, asset-name matching, SHA256
-        # verification, manifest read/write/uninstall-target enumeration.
-        # 担当Aの依存なし・ネットワークなしのロジックテストスクリプト
-        # （仕様3-5）: platform_key判定・資産名マッチング・SHA256照合・
-        # manifest読み書き/アンインストール対象列挙
+        # Dependency-free, network-free logic tests: platform_key
+        # detection, asset-name matching, SHA256 verification, manifest
+        # read/write/uninstall-target enumeration.
+        # 依存なし・ネットワークなしのロジックテスト: platform_key判定・
+        # 資産名マッチング・SHA256照合・manifest読み書き/アンインストール
+        # 対象列挙
         run: python tools/ci/check_flasher_install.py
+
+      - name: Run sf-upgrade logic tests
+        # Offline 6-case harness for `sf upgrade` (bare-remote + clone
+        # fixtures, pip stubbed): clean ff, stash preserve, stash-pop
+        # conflict guidance, dependency-resync reach, sdkconfig staleness
+        # backup, --discard-local. Runs on every leg so the git-invoking
+        # code is exercised on Windows shells too.
+        # `sf upgrade` のオフライン6ケーステスト（bareリモート+クローンの
+        # fixture、pipはスタブ）: クリーンff・stash保全・stash pop衝突案内・
+        # 依存同期到達・sdkconfig陳腐化退避・--discard-local。git呼び出しを
+        # Windowsシェルでも検証するため全レッグで実行する
+        timeout-minutes: 10
+        run: python tools/ci/check_upgrade.py
 
       - name: Install GUI Flasher from the just-built artifact (install smoke test)
         # --from-file bypasses the GitHub Releases API lookup entirely
