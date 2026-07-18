@@ -28,6 +28,9 @@ install.bat
 `install.bat` が以下を自動的に行います:
 - ESP-IDF のダウンロードとインストール
 - sf CLI のセットアップ
+- （Step 4/4・任意、既定 Yes）GUIフラッシャ「StampFly Flasher」のネイティブアプリ
+  インストール。承諾するとスタートメニューとデスクトップ（任意）にショートカットが
+  作成される（`install.bat --no-flasher` でスキップ可能。詳細: [sf flasher](../commands/sf-flasher.md)）
 
 ## 4. 開発環境のアクティベート
 
@@ -98,6 +101,9 @@ install.bat
 `install.bat` automatically:
 - Downloads and installs ESP-IDF
 - Sets up sf CLI
+- (Step 4/4, optional, default Yes) Installs the GUI flasher "StampFly Flasher" as a
+  native app. Accepting adds shortcuts to the Start Menu and Desktop (optional)
+  (skip with `install.bat --no-flasher`; details: [sf flasher](../commands/sf-flasher.md))
 
 ## 4. Activate Development Environment
 

@@ -29,6 +29,7 @@ sf <command> [subcommand] [options]
 | `sf setup` | 依存パッケージインストール | [sf-setup.md](sf-setup.md) |
 | `sf build` | ファームウェアビルド | [sf-build.md](sf-build.md) |
 | `sf flash` | ファームウェア書き込み | [sf-flash.md](sf-flash.md) |
+| `sf flasher` | GUIフラッシャのネイティブアプリ導入 | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | シリアルモニタ | [sf-monitor.md](sf-monitor.md) |
 | `sf log` | ログキャプチャ・解析 | [sf-log.md](sf-log.md) |
 | `sf sim` | シミュレータ | [sf-sim.md](sf-sim.md) |
@@ -130,6 +131,7 @@ sf <command> [subcommand] [options]
 | `sf setup` | Install dependencies | [sf-setup.md](sf-setup.md) |
 | `sf build` | Build firmware | [sf-build.md](sf-build.md) |
 | `sf flash` | Flash firmware | [sf-flash.md](sf-flash.md) |
+| `sf flasher` | Install the GUI flasher as a native app | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | Serial monitor | [sf-monitor.md](sf-monitor.md) |
 | `sf log` | Log capture & analysis | [sf-log.md](sf-log.md) |
 | `sf sim` | Simulator | [sf-sim.md](sf-sim.md) |

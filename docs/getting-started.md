@@ -113,10 +113,11 @@ sf sim run vpython --seed 12345       # シード指定
 
 | 項目 | 内容 |
 |-----|------|
-| 入手先 | [リリースページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)（v2026.07.1 以降のリリースに添付） |
-| 対応 | Windows / macOS（Apple Silicon・Intel） |
+| 入手先 | [リリースページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)（v2026.07.1 以降のリリースに添付。Linux版は v2026.07.2 以降） |
+| 対応 | Windows / macOS（Apple Silicon・Intel）/ Linux（x64） |
 | 使い方 | ダウンロード → 起動 → 対象を選んで書き込み（macOS初回は右クリック→開く） |
 | ソースから | `python3 tools/flasher_gui/stampfly_flasher.py`（要 `pip install esptool`）または `sf flash --gui` |
+| `sf` 導入済みなら | `sf flasher install` でダウンロード〜SHA256検証〜ネイティブアプリ導入を自動化（詳細: [sf flasher](commands/sf-flasher.md)） |
 
 ソースからビルドしたい場合は、このまま以降の手順（ESP-IDF環境構築）に進んでください。
 
@@ -544,10 +545,11 @@ crashes Chrome on macOS, and some classrooms need offline/no-browser flashing an
 
 | Item | Details |
 |------|---------|
-| Get it | [Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) (attached to releases from v2026.07.1 onward) |
-| Supported | Windows / macOS (Apple Silicon and Intel) |
+| Get it | [Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) (attached to releases from v2026.07.1 onward; Linux build from v2026.07.2 onward) |
+| Supported | Windows / macOS (Apple Silicon and Intel) / Linux (x64) |
 | Usage | Download → launch → select target → flash (on macOS, right-click → Open the first time) |
 | From source | `python3 tools/flasher_gui/stampfly_flasher.py` (requires `pip install esptool`) or `sf flash --gui` |
+| If `sf` is set up | `sf flasher install` automates download, SHA256 verification, and native-app install (details: [sf flasher](commands/sf-flasher.md)) |
 
 If you want to build from source, continue with the rest of this guide (ESP-IDF setup).
 

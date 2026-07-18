@@ -81,6 +81,11 @@ sf doctor
 ls /dev/ttyUSB* /dev/ttyACM*
 ```
 
+> **Tip**: `./install.sh`（[セットアップガイド](README.md)参照）で sf CLI を導入した場合、
+> 末尾の「Step 4/4: GUI Flasher」で GUIフラッシャ「StampFly Flasher」をネイティブアプリ
+> としてインストールするか尋ねられます（既定 Yes）。インストールすると
+> `~/.local/opt/stampfly/` に置かれ、アプリケーションメニューから起動できます。
+
 ## 8. トラブルシューティング
 
 ### シリアルポートが見つからない
@@ -181,6 +186,11 @@ sf doctor
 # Check serial ports
 ls /dev/ttyUSB* /dev/ttyACM*
 ```
+
+> **Tip**: If you installed via `./install.sh` (see the [setup guide](README.md)), the
+> final "Step 4/4: GUI Flasher" prompt offers to install the GUI flasher "StampFly
+> Flasher" as a native app (default Yes). Once installed, it lands at
+> `~/.local/opt/stampfly/` and appears in your applications menu.
 
 ## 8. Troubleshooting
 
