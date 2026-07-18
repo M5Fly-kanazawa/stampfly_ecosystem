@@ -446,7 +446,17 @@ CHECKS = [
 def main() -> int:
     failures = []
     with tempfile.TemporaryDirectory(prefix="check_upgrade_") as tmp_root_str:
-        tmp_root = Path(tmp_root_str)
+        # .resolve() matters on Windows: GitHub runners hand out %TEMP% in
+        # 8.3 short form (C:\Users\RUNNERA~1\...), while the code under
+        # test resolves its repo root to the LONG form — a raw-string
+        # substring assertion (case (d)) then never matches. Resolving here
+        # makes every fixture path long-form on all platforms.
+        # Windows では .resolve() が重要: GitHub ランナーの %TEMP% は 8.3
+        # 短縮形（C:\Users\RUNNERA~1\...）で渡される一方、テスト対象の
+        # コードはリポジトリルートを「長い形式」に解決するため、生文字列の
+        # 部分一致アサーション（ケース(d)）が一致しなくなる。ここで resolve
+        # しておけば全プラットフォームで fixture パスが長い形式に揃う。
+        tmp_root = Path(tmp_root_str).resolve()
         for name, check_fn in CHECKS:
             try:
                 check_fn(tmp_root)
