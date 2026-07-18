@@ -176,6 +176,16 @@ sf doctor
 
 すべて `[OK]` と表示されれば成功です。
 
+### Step 5: 最新版に更新したいとき
+
+インストール後、新しい機能や修正を取り込みたくなったら `sf upgrade` を実行してください。編集中のファイルは自動的に保護されます。
+
+```bash
+sf upgrade
+```
+
+詳しい仕組みや、うまくいかない場合のトラブルシューティングは **[アップグレードガイド](guides/upgrading.md)** を参照してください。
+
 ## 3. 機体ファームウェアのビルドと書き込み
 
 ### ビルド
@@ -600,6 +610,16 @@ source setup_env.sh
 ```bash
 sf doctor
 ```
+
+### Step 5: Keeping It Up to Date
+
+Once installed, run `sf upgrade` whenever you want to pull in new features or fixes. Any files you were editing are protected automatically.
+
+```bash
+sf upgrade
+```
+
+For the full walkthrough and troubleshooting, see the **[Upgrading Guide](guides/upgrading.md)**.
 
 ## 3. Build and Flash Vehicle Firmware
 

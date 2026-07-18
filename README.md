@@ -53,6 +53,9 @@ ESP-IDFが未インストールの場合は、インストーラが案内しま�
 
 **→ [セットアップガイド（詳細）](docs/setup/README.md)**
 
+最新版に更新したいときは `sf upgrade` を実行するだけです（編集中のファイルは自動保護）。
+**→ [アップグレードガイド](docs/guides/upgrading.md)**
+
 ---
 
 ## 🎮 まずはシミュレータで飛ばしてみよう！
@@ -255,6 +258,9 @@ This installs sf CLI and simulator dependencies.
 If ESP-IDF is not installed, the installer will guide you.
 
 **→ [Setup Guide (Details)](docs/setup/README.md)**
+
+To update to the latest version later, just run `sf upgrade` (files you're editing are protected automatically).
+**→ [Upgrading Guide](docs/guides/upgrading.md)**
 
 ---
 
