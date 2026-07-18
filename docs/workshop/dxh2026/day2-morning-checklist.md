@@ -19,6 +19,7 @@
 
 - [ ] 講師 PC で `git pull` → `sf lesson switch dxh_workshop` → `sf build workshop`（フルビルド）
 - [ ] `sf lesson flash` → 起動 → 起動音・緑常灯まで到達すること（vehicle と同じ起動シーケンスになる）
+- [ ] 起動音が**授業チャイム**（キーンコーンカーンコーン、起動約3秒後）であること — workshop 版の識別音。`sf flash vehicle` に戻すと標準音（ピポパ）に戻る
 - [ ] シリアルログに `Imported legacy wifi channel N` が出るか、または `param get wifi.channel` が機体割当と一致（#01-04=1 / #05-07=6 / #08-10=11）
 - [ ] **USB 接続中はボタン ARM が拒否される**こと（安全仕様。旧 workshop との差分）
 - [ ] USB を抜きバッテリ駆動 → 機体上部を指で押さえ本体ボタンをクリック → ARM（緑ゆっくり点滅）→ Duty 0.15 以下でモータ回転 → 再クリックで DISARM
