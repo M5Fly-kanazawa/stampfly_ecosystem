@@ -6,8 +6,10 @@ Checks the development environment for common issues.
 """
 
 import argparse
+import re
 import subprocess
 import sys
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from ..utils import console, paths, platform
 
@@ -15,6 +17,82 @@ COMMAND_NAME = "doctor"
 COMMAND_HELP = "Diagnose environment issues"
 
 MANIFEST_FILE = "lesson_manifest.yaml"
+
+# Distribution name as declared in pyproject.toml's [project].name --
+# the key importlib.metadata looks packages up by.
+# pyproject.tomlの[project].nameに宣言された配布名 --
+# importlib.metadataがパッケージを引く際のキー。
+DISTRIBUTION_NAME = "stampfly-ecosystem"
+
+# A requirement string's distribution name is everything before the first
+# version specifier / environment marker character.
+# 要件文字列の配布名は、最初のバージョン指定子／環境マーカー文字の
+# 手前までの部分。
+_REQUIREMENT_NAME_SPLIT_RE = re.compile(r"[<>=!~; \[]")
+
+# Some distribution names don't match their import name; keep this list
+# only for the (rare) exceptions -- everything else falls back to
+# `dist_name.replace("-", "_")`.
+# 配布名とimport名が一致しない例外だけをここに列挙する。それ以外は
+# `dist_name.replace("-", "_")` にフォールバックする。
+_IMPORT_NAME_OVERRIDES = {
+    "pyyaml": "yaml",
+    "pyserial": "serial",
+}
+
+# Fallback list, used only if package metadata cannot be read at all
+# (e.g. sfcli was added to PYTHONPATH rather than `pip install`ed, so
+# there is no installed-distribution metadata to introspect).
+# パッケージメタデータが全く読めない場合（pip install されず
+# PYTHONPATHに追加されただけ等、参照できるメタデータが無い場合）専用の
+# フォールバックリスト。
+_FALLBACK_REQUIRED_PACKAGES = [
+    ("numpy", "numpy"),
+    ("scipy", "scipy"),
+    ("matplotlib", "matplotlib"),
+    ("pandas", "pandas"),
+    ("serial", "pyserial"),
+    ("yaml", "PyYAML"),
+]
+
+
+def _base_dependency_import_names() -> list:
+    """(import_name, distribution_name) pairs for stampfly-ecosystem's
+    base runtime dependencies (no extras), read from installed package
+    metadata so this list can never drift out of sync with pyproject.toml.
+
+    Falls back to _FALLBACK_REQUIRED_PACKAGES if the metadata cannot be
+    read at all.
+    stampfly-ecosystem のベース実行時依存関係（extra指定なし）を、
+    インストール済みパッケージのメタデータから
+    (import名, 配布名) のタプル一覧として動的に生成する。これにより
+    pyproject.tomlとの乖離が起こらない。メタデータが全く読めない場合は
+    _FALLBACK_REQUIRED_PACKAGES へフォールバックする。
+    """
+    try:
+        requirements = importlib_metadata.requires(DISTRIBUTION_NAME) or []
+    except importlib_metadata.PackageNotFoundError:
+        return _FALLBACK_REQUIRED_PACKAGES
+
+    packages = []
+    for requirement in requirements:
+        # A requirement with an "extra ==" marker belongs to an
+        # optional-dependencies group (sim/full/edu/dev) -- doctor only
+        # checks the base dependencies that are always installed.
+        # "extra ==" マーカー付きはoptional-dependenciesグループ
+        # (sim/full/edu/dev)のもの -- doctorは常時インストールされる
+        # ベース依存のみを確認する。
+        if "extra ==" in requirement:
+            continue
+        dist_name = _REQUIREMENT_NAME_SPLIT_RE.split(requirement, maxsplit=1)[0].strip()
+        if not dist_name:
+            continue
+        import_name = _IMPORT_NAME_OVERRIDES.get(
+            dist_name.lower(), dist_name.replace("-", "_")
+        )
+        packages.append((import_name, dist_name))
+
+    return packages or _FALLBACK_REQUIRED_PACKAGES
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -177,13 +255,7 @@ def run(args: argparse.Namespace) -> int:
     # Check Python packages
     console.print()
     console.info("Checking Python packages...")
-    required_packages = [
-        ("numpy", "numpy"),
-        ("scipy", "scipy"),
-        ("matplotlib", "matplotlib"),
-        ("pandas", "pandas"),
-        ("serial", "pyserial"),
-    ]
+    required_packages = _base_dependency_import_names()
 
     for import_name, package_name in required_packages:
         try:

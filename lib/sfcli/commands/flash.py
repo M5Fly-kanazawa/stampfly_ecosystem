@@ -9,7 +9,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from ..utils import console, paths, platform, espidf
+from ..utils import console, paths, platform, espidf, flasher_install
 
 COMMAND_NAME = "flash"
 COMMAND_HELP = "Flash firmware to device"
@@ -151,24 +151,43 @@ def _flash_legacy(args: argparse.Namespace) -> int:
 
 
 def _launch_gui(args: argparse.Namespace) -> int:
-    """Launch the standalone StampFly Flasher GUI (tools/flasher_gui/) and
-    return its exit code, instead of running the console build/flash flow.
-    スタンドアロンの StampFly Flasher GUI（tools/flasher_gui/）を起動し、
-    その終了コードを返す。コンソールのビルド/書き込みフローは実行しない。"""
-    gui_script = paths.tools() / "flasher_gui" / "stampfly_flasher.py"
-    if not gui_script.exists():
-        console.error(f"GUI script not found: {gui_script}")
-        return 1
+    """Launch the StampFly Flasher GUI and return its exit code, instead
+    of running the console build/flash flow.
+
+    Prefers the native app installed via `sf flasher install` (starts
+    faster, needs no Python/deps on the machine); falls back to running
+    tools/flasher_gui/stampfly_flasher.py directly with this process's
+    Python interpreter when nothing is installed.
+
+    StampFly Flasher GUI を起動し、その終了コードを返す。コンソールの
+    ビルド/書き込みフローは実行しない。
+
+    `sf flasher install` でインストール済みのネイティブアプリを優先する
+    （起動が速く、実行マシンに Python/依存関係が不要）。未インストールの
+    場合は tools/flasher_gui/stampfly_flasher.py をこのプロセスの Python
+    インタプリタで直接起動するフォールバックに回る。"""
+    installed_executable = flasher_install.installed_app_executable()
+    if installed_executable is not None:
+        console.info(f"Launching installed StampFly Flasher app: {installed_executable}")
+        cmd = [str(installed_executable)]
+    else:
+        gui_script = paths.tools() / "flasher_gui" / "stampfly_flasher.py"
+        if not gui_script.exists():
+            console.error(f"GUI script not found: {gui_script}")
+            return 1
+        console.info(
+            "Launching StampFly Flasher GUI (script fallback; "
+            "run 'sf flasher install' to install it as a native app)..."
+        )
+        cmd = [sys.executable, str(gui_script)]
 
     # Forward the port (if specified) and target so the GUI starts pre-filled
     # ポート（指定時）とターゲットを転送し、GUI 側を事前入力させる
-    cmd = [sys.executable, str(gui_script)]
     if args.port:
         cmd.extend(["--port", args.port])
     if args.target:
         cmd.extend(["--target", args.target])
 
-    console.info("Launching StampFly Flasher GUI...")
     result = subprocess.run(cmd)
     return result.returncode
 

@@ -27,8 +27,10 @@ sf <command> [subcommand] [options]
 | `sf version` | バージョン情報表示 | [sf-version.md](sf-version.md) |
 | `sf doctor` | 環境診断 | [sf-doctor.md](sf-doctor.md) |
 | `sf setup` | 依存パッケージインストール | [sf-setup.md](sf-setup.md) |
+| `sf upgrade` | 最新版への更新（依存同期・sdkconfig退避を含む） | [sf-upgrade.md](sf-upgrade.md) |
 | `sf build` | ファームウェアビルド | [sf-build.md](sf-build.md) |
 | `sf flash` | ファームウェア書き込み | [sf-flash.md](sf-flash.md) |
+| `sf flasher` | GUIフラッシャのネイティブアプリ導入 | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | シリアルモニタ | [sf-monitor.md](sf-monitor.md) |
 | `sf log` | ログキャプチャ・解析 | [sf-log.md](sf-log.md) |
 | `sf sim` | シミュレータ | [sf-sim.md](sf-sim.md) |
@@ -89,6 +91,7 @@ sf cal plot                # 磁気XYプロット
 ```bash
 sf doctor                  # 環境チェック
 sf version                 # バージョン情報
+sf upgrade                 # 最新版に更新
 ```
 
 ## 4. グローバルオプション
@@ -128,8 +131,10 @@ sf <command> [subcommand] [options]
 | `sf version` | Show version info | [sf-version.md](sf-version.md) |
 | `sf doctor` | Environment diagnostics | [sf-doctor.md](sf-doctor.md) |
 | `sf setup` | Install dependencies | [sf-setup.md](sf-setup.md) |
+| `sf upgrade` | Update to the latest version (incl. dependency resync, sdkconfig backup) | [sf-upgrade.md](sf-upgrade.md) |
 | `sf build` | Build firmware | [sf-build.md](sf-build.md) |
 | `sf flash` | Flash firmware | [sf-flash.md](sf-flash.md) |
+| `sf flasher` | Install the GUI flasher as a native app | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | Serial monitor | [sf-monitor.md](sf-monitor.md) |
 | `sf log` | Log capture & analysis | [sf-log.md](sf-log.md) |
 | `sf sim` | Simulator | [sf-sim.md](sf-sim.md) |
@@ -190,6 +195,7 @@ sf cal plot                # Plot mag XY
 ```bash
 sf doctor                  # Environment check
 sf version                 # Version info
+sf upgrade                 # Update to the latest version
 ```
 
 ## 4. Global Options

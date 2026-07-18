@@ -151,13 +151,16 @@ nav:
       - sf version: docs/commands/sf-version.md
       - sf doctor: docs/commands/sf-doctor.md
       - sf setup: docs/commands/sf-setup.md
+      - sf upgrade: docs/commands/sf-upgrade.md
       - sf build: docs/commands/sf-build.md
       - sf flash: docs/commands/sf-flash.md
+      - sf flasher: docs/commands/sf-flasher.md
       - sf monitor: docs/commands/sf-monitor.md
       - sf log: docs/commands/sf-log.md
       - sf sim: docs/commands/sf-sim.md
       - sf cal: docs/commands/sf-cal.md
     - ガイド:
+      - アップグレードガイド: docs/guides/upgrading.md
       - 安全ガイド: docs/guides/safety.md
       - トラブルシューティング: docs/guides/troubleshooting.md
       - 用語集: docs/guides/glossary.md

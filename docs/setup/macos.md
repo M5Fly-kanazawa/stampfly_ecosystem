@@ -77,6 +77,11 @@ sf doctor
 sf version
 ```
 
+> **Tip**: `./install.sh`（[セットアップガイド](README.md)参照）で sf CLI を導入した場合、
+> 末尾の「Step 4/4: GUI Flasher」で GUIフラッシャ「StampFly Flasher」をネイティブアプリ
+> としてインストールするか尋ねられます（既定 Yes）。インストールすると
+> `~/Applications/StampFlyFlasher.app` に置かれ、Launchpad から起動できます。
+
 ## 9. トラブルシューティング
 
 ### Python関連エラー
@@ -168,6 +173,11 @@ sf doctor
 # Check version
 sf version
 ```
+
+> **Tip**: If you installed via `./install.sh` (see the [setup guide](README.md)), the
+> final "Step 4/4: GUI Flasher" prompt offers to install the GUI flasher "StampFly
+> Flasher" as a native app (default Yes). Once installed, it lands at
+> `~/Applications/StampFlyFlasher.app` and appears in Launchpad.
 
 ## 9. Troubleshooting
 

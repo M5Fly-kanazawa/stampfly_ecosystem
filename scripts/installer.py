@@ -15,6 +15,7 @@ Options:
     --uninstall        Remove sfcli from ESP-IDF environment
     --clean            Clean install (remove config and sfcli, then reinstall)
     --force            Force reinstall all steps (skip probe checks)
+    --no-flasher       Skip the optional Step 4/4 GUI Flasher app install
 """
 
 import os
@@ -29,6 +30,34 @@ from typing import Optional, List, Tuple
 if sys.version_info < (3, 8):
     print(f"Error: Python 3.8+ required, found {sys.version_info.major}.{sys.version_info.minor}")
     sys.exit(1)
+
+
+def version_sort_key(version: str) -> Tuple[int, int, int]:
+    """Convert an ESP-IDF version string (e.g. "v5.10.0") into a numeric
+    tuple so it sorts correctly against other versions.
+    ESP-IDFのバージョン文字列(例: "v5.10.0")を数値タプルに変換し、
+    他のバージョンと正しく比較できるようにする
+
+    Plain string comparison is wrong here: "v5.10.0" < "v5.5.2" lexically
+    (the character '1' sorts before '5'), which made find_all() rank an
+    older v5.5.2 ahead of a newer v5.10.0. Comparing (5, 10, 0) against
+    (5, 5, 2) as tuples of ints sorts them correctly.
+    単純な文字列比較では "v5.10.0" < "v5.5.2" になってしまう(文字'1'が
+    '5'より前にソートされるため)。これによりfind_all()が新しいv5.10.0を
+    古いv5.5.2より下位にランク付けしていた。(5, 10, 0)と(5, 5, 2)を
+    整数タプルとして比較すれば正しい順序になる。
+
+    Unrecognized strings (e.g. "unknown") sort lowest so they never shadow
+    a real version in the "newest first" ordering.
+    認識できない文字列(例: "unknown")は最下位にソートし、"newest first"
+    の並びで実バージョンより上に来ないようにする。
+    """
+    import re
+    match = re.match(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
+    if not match:
+        return (-1, -1, -1)
+    major, minor, patch = match.groups()
+    return (int(major), int(minor or 0), int(patch or 0))
 
 
 def is_wsl() -> bool:
@@ -344,6 +373,55 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
         return subprocess.run(["bash", "-c", inner]).returncode
 
 
+def _run_sf_in_idf_env(idf_path: Path, sf_args: list[str]) -> int:
+    """Run `sf <sf_args>` inside the ESP-IDF Python environment (Step 4/4:
+    GUI Flasher install).
+    ESP-IDFのPython環境で `sf <sf_args>` を実行（Step4/4: GUIフラッシャの導入）
+
+    Reuses the same "call the venv python by absolute path, no shell, no
+    PATH" strategy as _run_in_idf_env() (see its docstring for why sourcing
+    export.sh is unreliable). sfcli is invoked as `python -m sfcli.cli`
+    rather than the installed `sf` console-script shim: the shim's location
+    depends on the venv's Scripts/bin layout and PATH, both of which this
+    function deliberately avoids depending on. This works because sfcli's
+    editable install puts `lib/` (where the `sfcli` package lives) directly
+    on the venv's sys.path (pyproject.toml: package-dir "" = "lib"), so
+    `-m sfcli.cli` needs no extra PYTHONPATH wiring.
+    _run_in_idf_env() と同じ「venvのpythonを絶対パスで、シェルもPATHも
+    介さず直接呼ぶ」戦略を使う（export.sh の source が信頼できない理由は
+    _run_in_idf_env の docstring 参照）。sfcli はインストール済み `sf`
+    コンソールスクリプトシムではなく `python -m sfcli.cli` として起動する。
+    シムの場所は venv の Scripts/bin レイアウトと PATH に依存し、本関数は
+    そのいずれにも意図的に依存しないため。sfcli の editable インストールは
+    `lib/`（`sfcli` パッケージの実体があるディレクトリ）を venv の
+    sys.path に直接乗せる（pyproject.toml: package-dir "" = "lib"）ため、
+    `-m sfcli.cli` に追加の PYTHONPATH 配線は不要。
+
+    Returns 1 (rather than raising) when no matching venv exists yet, since
+    this is Step 4/4 and Step 2/3 already validated venv discovery earlier
+    in the same run — reaching here without a venv would be an unexpected
+    internal inconsistency, not a normal Step 4 failure mode, and the
+    caller treats any non-zero return the same way (warn + continue).
+    対応する venv が見つからない場合は例外を投げず 1 を返す。Step2/3で
+    既に同じ実行内で venv 探索を検証済みのため、ここに到達して venv が
+    無いのは通常の Step4 失敗モードではなく想定外の内部不整合だが、
+    呼び出し側はどちらの非ゼロ戻り値も同じ扱い(warn + 続行)にする。
+    """
+    venv_python = _find_idf_python(idf_path)
+    if not venv_python:
+        return 1
+    cmd = [str(venv_python), "-m", "sfcli.cli"] + sf_args
+    # Same env sanitization as _run_in_idf_env(): strip vars that could
+    # steer sfcli's own path resolution toward a pre-activated user venv.
+    # _run_in_idf_env() と同じ環境変数サニタイズ: 事前activate済みの
+    # user venv へ sfcli 自身のパス解決が誤誘導されないようにする
+    env = os.environ.copy()
+    for var in ("VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
+                "CONDA_SHLVL", "PYTHONHOME", "PYTHONPATH"):
+        env.pop(var, None)
+    return subprocess.run(cmd, env=env).returncode
+
+
 class ESPIDFDetector:
     """Detect ESP-IDF installations.
     All platforms use ~/esp/esp-idf as the standard location.
@@ -392,8 +470,11 @@ class ESPIDFDetector:
                         installations.append((child, version))
                         seen_paths.add(child)
 
-        # Sort by version (newest first)
-        installations.sort(key=lambda x: x[1], reverse=True)
+        # Sort by version (newest first). Use the numeric key, not the raw
+        # string, so "v5.10.0" correctly outranks "v5.5.2".
+        # 新しい順にソート。生の文字列ではなく数値キーを使うことで
+        # "v5.10.0" が "v5.5.2" より正しく上位になる
+        installations.sort(key=lambda x: version_sort_key(x[1]), reverse=True)
         return installations
 
     @classmethod
@@ -605,8 +686,27 @@ class Installer:
         if not venv_python:
             return False
         try:
+            # `import sfcli` alone is not enough: __init__.py does not read
+            # any third-party dependency, so a venv with sfcli's *package*
+            # present but a dependency missing (e.g. after a `pip install -e`
+            # that partially failed) would still report "installed" here.
+            # We import sfcli.cli (which imports every command module) and
+            # call assert_all_commands_loadable() (added in cli.py under the
+            # C2 dependency-resilience work) so a missing dependency makes
+            # this probe correctly report "not installed" and Step 3 reruns.
+            # `import sfcli` だけでは不十分: __init__.py はサードパーティ
+            # 依存を一切読まないため、sfcliパッケージ自体はあるが依存が
+            # 欠けている venv (`pip install -e` が部分失敗した後など) でも
+            # ここは「インストール済み」と誤診断してしまう。sfcli.cli を
+            # import し（全コマンドモジュールをimportする）、
+            # assert_all_commands_loadable()（C2の依存耐性対応でcli.pyに
+            # 追加）を呼ぶことで、依存欠落時はこのプローブが正しく
+            # 「未インストール」と判定し、Step3が再実行されるようにする。
             result = subprocess.run(
-                [str(venv_python), "-c", "import sfcli"],
+                [
+                    str(venv_python), "-c",
+                    "import sfcli.cli; sfcli.cli.assert_all_commands_loadable()",
+                ],
                 capture_output=True, text=True,
             )
             return result.returncode == 0
@@ -763,6 +863,7 @@ class Installer:
         skip_deps: bool = False,
         minimal: bool = False,
         force: bool = False,
+        no_flasher: bool = False,
     ) -> int:
         """Run installation"""
 
@@ -773,7 +874,7 @@ class Installer:
         self._warn_if_env_preactivated()
 
         # Step 1: Find or install ESP-IDF
-        header("Step 1/3: ESP-IDF")
+        header("Step 1/4: ESP-IDF")
 
         if idf_path:
             # User specified path
@@ -847,7 +948,7 @@ class Installer:
         print()
 
         # Step 2: Get ESP-IDF Python environment
-        header("Step 2/3: Python Environment")
+        header("Step 2/4: Python Environment")
 
         info("Getting ESP-IDF Python environment...")
         idf_python = ESPIDFDetector.get_python_env(idf_path)
@@ -867,13 +968,15 @@ class Installer:
         print()
 
         # Step 3: Install sfcli
-        header("Step 3/3: StampFly CLI")
+        header("Step 3/4: StampFly CLI")
 
         if not skip_deps:
             # Probe: check if already installed (skip if not --force)
             # プローブ: インストール済みか確認（--forceでなければスキップ）
             if not force and self._is_sfcli_installed(idf_path):
                 success("sfcli is already installed, skipping (use --force to reinstall)")
+                info("(after `git pull`, use `sf upgrade` or --force instead)")
+                info("(git pull後は `sf upgrade` か --force を使うこと)")
             else:
                 if force:
                     info("Force reinstalling...")
@@ -951,6 +1054,18 @@ class Installer:
         # Save configuration
         self._save_config(idf_path)
 
+        # Step 4: GUI Flasher (optional). Deliberately best-effort: its own
+        # failure never turns the overall installer result into a failure
+        # (return value is not checked), unlike Steps 1-3 which `return 1`
+        # on error. `sf flash --gui` (the pre-existing script-launch path)
+        # remains available either way.
+        # Step4: GUIフラッシャ（任意）。意図的にベストエフォートとし、失敗しても
+        # インストーラー全体の結果を失敗にしない（戻り値を確認しない）。
+        # Step1-3はエラー時に`return 1`するが、これとは異なる扱い。どちらに
+        # せよ既存のスクリプト起動経路`sf flash --gui`は引き続き使える。
+        header("Step 4/4: GUI Flasher (optional)")
+        self._install_flasher_gui(idf_path, no_flasher=no_flasher)
+
         # Show completion message
         header("Installation Complete!")
 
@@ -982,7 +1097,7 @@ class Installer:
 
         return 0
 
-    def clean(self, idf_path: Optional[Path] = None) -> int:
+    def clean(self, idf_path: Optional[Path] = None, no_flasher: bool = False) -> int:
         """Clean install: remove config and sfcli, then reinstall.
         クリーンインストール: 設定とsfcliを削除後、再インストール"""
         header("Cleaning StampFly installation...")
@@ -995,6 +1110,13 @@ class Installer:
                 if line.startswith('path = "'):
                     resolved_idf_path = Path(line.split('"')[1])
                     break
+
+        # Uninstall the GUI Flasher desktop app first, while sfcli is still
+        # importable in the venv (flasher uninstall shells out to sfcli).
+        # sfcliがまだvenvでimportできるうちに、先にGUIフラッシャの
+        # デスクトップアプリをアンインストールする（flasher uninstallは
+        # sfcli経由で動くため）
+        self._uninstall_flasher_gui(resolved_idf_path)
 
         # Uninstall sfcli from ESP-IDF Python environment
         # ESP-IDFのPython環境からsfcliをアンインストール
@@ -1009,10 +1131,143 @@ class Installer:
             info("Removed configuration file")
 
         success("Clean complete. Re-running installer...")
-        print()
+        self._print_uninstall_leftovers_table()
 
         # Re-run installation
-        return self.run(idf_path=idf_path, force=True)
+        return self.run(idf_path=idf_path, force=True, no_flasher=no_flasher)
+
+    def _uninstall_flasher_gui(self, idf_path: Optional[Path]) -> None:
+        """Uninstall the GUI Flasher desktop app before removing sfcli.
+        sfcliを削除する前にGUIフラッシャのデスクトップアプリをアンインストール
+
+        Best-effort: if no ESP-IDF venv matching `idf_path` can be found
+        (e.g. sfcli's install is already half-removed, or no ESP-IDF was
+        ever configured), skip silently rather than error — there is
+        nothing to uninstall the flasher *from*. Any other failure (the
+        flasher was never installed, or its own uninstall logic errors) is
+        a warning only: it must never block the surrounding
+        `--uninstall` / `--clean` flow.
+        ベストエフォート: `idf_path` に対応するESP-IDF venvが見つからない
+        場合(sfcliのインストールが既に半分消えている、あるいはESP-IDFが
+        一度も設定されていない等)は、エラーにせず黙ってスキップする —
+        アンインストールする対象のフラッシャ自体が存在しない。それ以外の
+        失敗(フラッシャが未インストールだった、アンインストール処理自体が
+        エラーになった等)は警告に留め、周囲の`--uninstall`/`--clean`の
+        流れを絶対にブロックしない。
+        """
+        if not idf_path or not ESPIDFDetector._is_valid_idf(idf_path):
+            return
+        if not _find_idf_python(idf_path):
+            return
+        info("Uninstalling GUI Flasher (if installed)...")
+        rc = _run_sf_in_idf_env(idf_path, ["flasher", "uninstall", "--yes"])
+        if rc != 0:
+            warn("GUI Flasher uninstall skipped or failed (continuing; "
+                 "this is not fatal to the rest of the uninstall).")
+
+    def _print_uninstall_leftovers_table(self) -> None:
+        """Show what `--uninstall` / `--clean` deliberately do NOT remove.
+        `--uninstall`/`--clean` が意図的に削除しないものの一覧を表示する
+
+        sfcli only owns its own package (+ its config file + the GUI
+        Flasher app it installed). ESP-IDF itself, its toolchain download
+        cache, the rest of the venv's dependencies, the udev rules, and the
+        repository checkout are left untouched: they may be shared with
+        other tools (a different project's ESP-IDF setup, another venv) or
+        the user may simply want to keep them. Each row gives the manual
+        command to remove it if desired. Mirrors
+        docs/guides/upgrading.md §アンインストール (same table, aimed at
+        end users rather than this CLI's stdout).
+        sfcliが所有するのは自身のパッケージ(+ configファイル + 自身が
+        導入したGUIフラッシャアプリ)のみ。ESP-IDF本体・そのツールチェーン
+        ダウンロードキャッシュ・venvの他の依存関係・udevルール・
+        リポジトリ本体は、他のツール(別プロジェクトのESP-IDF環境や別の
+        venv)と共有されていたり、ユーザが単に残しておきたい場合があるため
+        あえて削除しない。各行に手動削除コマンドを添える。
+        docs/guides/upgrading.md §アンインストール(同じ表をエンドユーザ
+        向けに整理したもの)と対応する。
+        """
+        header("Not removed (manual cleanup if you want it gone)")
+        # (what, where, how to remove it manually)
+        # (対象, 場所, 手動削除コマンド)
+        rows = [
+            ("ESP-IDF checkout", "~/esp/esp-idf (or your --idf-path)",
+             "rm -rf ~/esp/esp-idf"),
+            ("IDF_TOOLS_PATH", "~/.espressif (or C:\\Espressif on Windows)",
+             "rm -rf ~/.espressif"),
+            ("venv dependencies", "<IDF_TOOLS_PATH>/python_env/idf<ver>_py*_env",
+             "rm -rf <that venv dir>"),
+            ("udev rules (Linux)", "/etc/udev/rules.d/99-stampfly.rules",
+             "sudo rm /etc/udev/rules.d/99-stampfly.rules"),
+            ("repository checkout", str(self.root),
+             f"rm -rf {self.root}"),
+        ]
+        what_w = max(len(r[0]) for r in rows)
+        where_w = max(len(r[1]) for r in rows)
+        print(f"  {'What':{what_w}}  {'Where':{where_w}}  Manual removal")
+        print(f"  {'-' * what_w}  {'-' * where_w}  {'-' * 30}")
+        for what, where, cmd in rows:
+            print(f"  {what:{what_w}}  {where:{where_w}}  {cmd}")
+        print()
+        print("  See docs/guides/upgrading.md (§アンイン"
+              "ストール) for more detail.")
+        print()
+
+    def _install_flasher_gui(self, idf_path: Path, no_flasher: bool) -> None:
+        """Offer to install the GUI Flasher as a native desktop app (Step 4/4).
+        GUIフラッシャをネイティブデスクトップアプリとしてインストールする案内（Step4/4）
+
+        Deliberately best-effort and strictly optional: unlike Steps 1-3,
+        failure here is never propagated as an installer failure — callers
+        do not check a return value. `sf flash --gui` (the pre-existing
+        script-launch fallback in flash.py) remains available regardless of
+        whether this step succeeds, is declined, or fails, so skipping or
+        failing this step never blocks the rest of the ecosystem install.
+        意図的にベストエフォート・完全に任意とする: Step1-3と異なり、ここでの
+        失敗はインストーラーの失敗として伝播しない（呼び出し側は戻り値を
+        確認しない）。このステップが成功・辞退・失敗のいずれであっても、
+        既存のスクリプト起動フォールバック `sf flash --gui`（flash.py）は
+        引き続き使えるため、本ステップのスキップ・失敗がエコシステム全体の
+        インストールを妨げることはない。
+        """
+        if no_flasher:
+            info("Skipping GUI Flasher install (--no-flasher).")
+            return
+
+        response = prompt("Install the GUI Flasher as a desktop app? [Y/n]", "Y")
+        if response.lower() not in ("y", "yes", ""):
+            info("Skipping GUI Flasher install.")
+            info("You can install it later with: sf flasher install")
+            return
+
+        # The desktop-shortcut question only changes behavior on Windows
+        # (Start Menu shortcut is always created there regardless; macOS
+        # copies to ~/Applications and Linux registers a .desktop launcher,
+        # neither of which has a separate "desktop icon" concept in this
+        # design). It is still asked on every OS for one uniform installer
+        # flow — non-Windows backends simply ignore --no-desktop-shortcut.
+        # デスクトップショートカットの質問が意味を持つのはWindowsのみ
+        # （スタートメニューショートカットは常に作成される。macOSは
+        # ~/Applicationsへコピー、Linuxは.desktopランチャーを登録し、
+        # どちらもこの設計では別個の「デスクトップアイコン」概念を持たない）。
+        # インストーラーの流れを全OSで統一するため質問自体は毎回行う。
+        # Windows以外のバックエンドは --no-desktop-shortcut を単に無視する。
+        shortcut_response = prompt(
+            "Also create a desktop shortcut? (Windows only) [Y/n]", "Y"
+        )
+        desktop_shortcut = shortcut_response.lower() in ("y", "yes", "")
+
+        sf_args = ["flasher", "install", "--yes"]
+        if not desktop_shortcut:
+            sf_args.append("--no-desktop-shortcut")
+
+        info("Installing GUI Flasher (StampFly Flasher)...")
+        rc = _run_sf_in_idf_env(idf_path, sf_args)
+        if rc == 0:
+            success("GUI Flasher installed!")
+        else:
+            warn("GUI Flasher install failed (this does not affect the rest of the install).")
+            warn("You can install it manually later with: sf flasher install")
 
     def _install_udev_rules(self) -> None:
         """Install udev rules for StampFly USB devices on Linux.
@@ -1139,6 +1394,12 @@ default_target = "vehicle"
 
         info(f"ESP-IDF path: {idf_path}")
 
+        # Uninstall the GUI Flasher desktop app first (needs sfcli, which
+        # we are about to remove).
+        # GUIフラッシャのデスクトップアプリを先にアンインストール
+        # (これから削除するsfcliに依存するため)
+        self._uninstall_flasher_gui(idf_path)
+
         # Uninstall sfcli
         info("Uninstalling sfcli...")
         _run_in_idf_env(idf_path, ["uninstall", "-y", "stampfly-ecosystem"])
@@ -1149,6 +1410,7 @@ default_target = "vehicle"
             info("Removed configuration file")
 
         success("Uninstall complete!")
+        self._print_uninstall_leftovers_table()
         return 0
 
 
@@ -1195,6 +1457,11 @@ def main() -> int:
         action="store_true",
         help="Force reinstall all steps (skip probe checks)",
     )
+    parser.add_argument(
+        "--no-flasher",
+        action="store_true",
+        help="Skip the optional Step 4/4 GUI Flasher app install (sf flasher install)",
+    )
 
     args = parser.parse_args()
 
@@ -1207,13 +1474,14 @@ def main() -> int:
     if args.uninstall:
         return installer.uninstall()
     elif args.clean:
-        return installer.clean(idf_path=args.idf_path)
+        return installer.clean(idf_path=args.idf_path, no_flasher=args.no_flasher)
     else:
         return installer.run(
             idf_path=args.idf_path,
             skip_deps=args.skip_deps,
             minimal=args.minimal,
             force=args.force,
+            no_flasher=args.no_flasher,
         )
 
 

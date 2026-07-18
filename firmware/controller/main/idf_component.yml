@@ -1,7 +1,20 @@
 ## IDF Component Manager マニフェストファイル
 dependencies:
   # M5Unified: M5Stack シリーズ統合ライブラリ (LCD, ボタン, IMU等)
-  m5stack/m5unified: "^0.2.11"
+  # Pinned exactly: 0.2.18 (released upstream after v2026.07.1) fails to
+  # resolve its m5gfx dependency in CI ("Failed to resolve component
+  # 'm5gfx'", observed 2026-07-19 run 29661871100 — CI has no
+  # dependencies.lock, so a caret range re-resolves to the latest and
+  # broke the release build). 0.2.11 is the locally-proven version
+  # (dependencies.lock, 87+ flights). Upgrades should be deliberate:
+  # bump the pin and verify `sf build controller` + a CI dispatch run.
+  # 完全固定にする: 0.2.18（v2026.07.1 以降に上流リリース）は CI で
+  # m5gfx 依存の解決に失敗する（2026-07-19 の run 29661871100 で観測。
+  # CI には dependencies.lock が無く、キャレット範囲だと毎回最新を
+  # 再解決するためリリースビルドが壊れた）。0.2.11 はローカル実績
+  # バージョン（dependencies.lock、実飛行87回超）。更新は意図的に行う:
+  # ピンを上げて `sf build controller` と CI dispatch 実行で検証すること。
+  m5stack/m5unified: "==0.2.11"
 
   # TinyUSB: USB HID デバイスサポート
   # TinyUSB: USB HID device support
