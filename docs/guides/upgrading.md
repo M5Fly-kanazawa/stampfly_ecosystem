@@ -148,6 +148,32 @@ git stash drop
 
 ## 5. インストール／アンインストールのライフサイクル
 
+### 場面別 早見表 — どういう時にどうすればいいか
+
+対象は2つあります: **①エコシステム本体**（リポジトリ + ESP-IDF + `sf`）と
+**②書き込みアプリ**（StampFly Flasher）。迷ったら次の1行判定:
+「最新にしたい → `sf upgrade`」「アプリを入れたい/消したい → `sf flasher install / uninstall`」
+「環境ごと直したい → `install.bat --force`（Mac/Linux は `./install.sh --force`）」。
+
+| 場面 | やること |
+|------|---------|
+| 新しい PC に何も無い（初インストール） | `git clone` → `install.bat` / `./install.sh`（Step 1〜4 一括。書き込みアプリは Y/n） |
+| 機体に書き込みたいだけ（開発環境は不要） | リリースページから書き込みアプリをダウンロード（または Web フラッシャ）。本体のインストール不要 |
+| 開発環境はあるが書き込みアプリが未導入 | `sf flasher install` |
+| 通常の更新 | `sf upgrade` |
+| 古いチェックアウト（2026-07-19 の更新前で `sf upgrade` が無い） | 初回のみ `git pull` → 以後 `sf upgrade` |
+| 自分の編集を残したまま更新 | そのまま `sf upgrade`（自動退避・復元。衝突時は §4 へ） |
+| ローカル変更を捨てて公式最新へ（貸出 PC 整備等） | `sf upgrade --discard-local`（対象一覧を確認してから破棄） |
+| `sf` が「command(s) unavailable」警告 / `ModuleNotFoundError` | `sf upgrade`（依存を入れ直す。upgrade 自体は依存欠落でも動く設計） |
+| 環境が怪しいので確実に入れ直す | `install.bat --force` / `./install.sh --force` |
+| 書き込みアプリだけ最新化 | `sf flasher update` |
+| 書き込みアプリだけ削除 | `sf flasher uninstall`（Windows は「設定 > アプリ」からも可） |
+| `sf` を環境から外す | `install.bat --uninstall`（書き込みアプリも一緒に削除。残るものは下表参照） |
+| 完全撤去 | `--uninstall` 後、下表の「手動で消す場合」を実行 |
+| 壊れた環境のリセット | `install.bat --clean`（設定+`sf` を消して入れ直し） |
+
+### 何が置かれ、何が消えるか
+
 `sf` エコシステムのインストーラ（`./install.sh` / `install.bat`）が何を・どこに置くか、`--uninstall` / `--clean` が何を削除し何を削除しないかの一覧です。
 
 | 対象 | 場所 | `--uninstall` / `--clean` で削除されるか | 手動で消す場合 |
@@ -337,6 +363,32 @@ git stash drop
 ```
 
 ## 5. Install / Uninstall Lifecycle
+
+### Quick reference — which situation calls for which command
+
+Two things are managed: the **ecosystem itself** (repository + ESP-IDF + `sf`) and the
+**flashing app** (StampFly Flasher). One-line rule of thumb: "want the latest → `sf upgrade`",
+"want the app in/out → `sf flasher install / uninstall`", "want the environment repaired →
+`install.bat --force` (`./install.sh --force` on Mac/Linux)".
+
+| Situation | What to do |
+|-----------|------------|
+| Brand-new PC (first install) | `git clone` → `install.bat` / `./install.sh` (Steps 1–4; flashing app offered as Y/n) |
+| Just want to flash a craft (no dev environment) | Download the flashing app from the Releases page (or use the Web flasher); no ecosystem install needed |
+| Dev environment present, flashing app missing | `sf flasher install` |
+| Regular update | `sf upgrade` |
+| Checkout older than the 2026-07-19 update (no `sf upgrade` yet) | One-time plain `git pull`, then `sf upgrade` from there on |
+| Update while keeping your local edits | Just run `sf upgrade` (auto-stash and restore; conflicts → §4) |
+| Discard local changes and take the official latest (loaner-PC maintenance) | `sf upgrade --discard-local` (lists the files, then confirms) |
+| `sf` warns "command(s) unavailable" / `ModuleNotFoundError` | `sf upgrade` (reinstalls dependencies; upgrade itself runs even with them missing) |
+| Environment feels broken — reinstall for sure | `install.bat --force` / `./install.sh --force` |
+| Update only the flashing app | `sf flasher update` |
+| Remove only the flashing app | `sf flasher uninstall` (Windows: also possible from Settings > Apps) |
+| Remove `sf` from the environment | `install.bat --uninstall` (also removes the flashing app; leftovers listed below) |
+| Complete removal | After `--uninstall`, run the "Manual removal" commands in the table below |
+| Reset a broken setup | `install.bat --clean` (removes config + `sf`, then reinstalls) |
+
+### What is placed where, and what gets removed
 
 What the ecosystem installer (`./install.sh` / `install.bat`) places where, and what `--uninstall` / `--clean` do and do not remove.
 
