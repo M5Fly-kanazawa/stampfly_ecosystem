@@ -8,6 +8,7 @@ from . import version
 from . import doctor
 from . import build
 from . import flash
+from . import flasher
 from . import monitor
 from . import telemetry
 from . import log
@@ -30,6 +31,7 @@ __all__ = [
     "doctor",
     "build",
     "flash",
+    "flasher",
     "monitor",
     "telemetry",
     "log",
