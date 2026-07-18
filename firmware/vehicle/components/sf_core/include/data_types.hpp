@@ -537,6 +537,7 @@ enum class UiCmd : uint8_t {
     LedBrightness   = 2,   // value: 0..255 brightness       / LED 輝度
     LedUserOverride = 3,   // value: 1 = user override on, 0 = off / ユーザー LED 制御 on/off
     LedUserColor    = 4,   // r,g,b: user color (implies override on) / ユーザー色（override も on になる）
+    BootMelody      = 5,   // value: 0 = standard (C5-E5-G5), 1 = school chime / 起動音選択: 0=標準, 1=授業チャイム
 };
 
 /// UI command — NotifyTask consumes and applies to the buzzer/LED HAL (+ NVS).

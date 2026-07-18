@@ -163,6 +163,22 @@ private:
     // 30Hz×90周期≈3秒。起動音は 0 で再生、ready 音（校正≈4秒）は窓の後に自然に鳴る。
     uint8_t  boot_mute_countdown_ = 90;
 
+    // Boot melody selection (workshop-only; default vehicle boot is unaffected): 0 =
+    // standard startTone (C5→E5→G5), 1 = school chime (schoolChimeTone). Set via
+    // UiCmd::BootMelody, which the workshop firmware publishes exactly once, right
+    // after topics_init() and before any task runs (workshop_main.cpp Phase 2). Since
+    // update() drains ui_command every 30Hz cycle, the selection lands on this task's
+    // very first cycle — well within the ~3s / 90-cycle boot-mute window above, so it
+    // is set long before boot_mute_countdown_ reaches 0 and the deferred chime plays.
+    // 起動音選択（workshop 専用。vehicle の既定起動は不変）: 0=標準 startTone
+    // （C5→E5→G5）、1=授業チャイム（schoolChimeTone）。UiCmd::BootMelody 経由で
+    // 設定され、workshop ファームが topics_init() 直後・タスク起動前（workshop_main.cpp
+    // Phase 2）に一度だけ publish する。update() は 30Hz 毎周期 ui_command を drain
+    // するため、選択は本タスクの最初の周期で反映される — 上記の約3秒/90周期の起動
+    // ミュート窓に十分間に合い、boot_mute_countdown_ が 0 になり遅延起動音が鳴るより
+    // 遥かに前に設定済みとなる。
+    uint8_t  boot_melody_ = 0;
+
     // Autotune LED cue (the buzzer is unreliable over motor noise in flight): 0 = none,
     // 1 = sweeping (white blink), 2 = applied OK (green), 3 = failed (red). ticks counts
     // the overlay down in update() (~30Hz). Driven by NotifyEvent::Autotune* in playEvent.

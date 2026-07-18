@@ -31,6 +31,7 @@
  */
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 
@@ -116,6 +117,27 @@ extern "C" void app_main(void)
     // =========================================================================
     sf::topics_init();
     ESP_LOGI(TAG, "Phase 2: Topics initialized");
+
+    // Workshop identity sound: select the school-chime boot melody (授業開始チャイム,
+    // Buzzer::schoolChimeTone) instead of the vehicle's standard power-on chime
+    // (C5→E5→G5, Buzzer::startTone). Published exactly once, right here — the
+    // ui_command topic buffer now exists (topics_init() above) and no task has
+    // started yet (Phase 4 below), so this sits in the queue when NotifyTask's very
+    // first ~30Hz update() cycle drains ui_command (see notify.cpp/notify.hpp) —
+    // long before the ~3s / 90-cycle deferred boot-tone actually fires. The vehicle
+    // firmware never publishes UiCmd::BootMelody, so its boot sound (and every other
+    // Notify::update() behaviour) is byte-for-byte unchanged.
+    // workshop の識別音: vehicle の標準起動音（C5→E5→G5, Buzzer::startTone）の代わりに
+    // 授業チャイム（授業開始チャイム, Buzzer::schoolChimeTone）を選択する。ここで一度
+    // だけ publish する — ui_command トピックのバッファは（上の topics_init() で）
+    // 既に存在し、まだどのタスクも起動していない（下の Phase 4 より前）ため、
+    // NotifyTask の最初の約30Hz update() サイクルが ui_command を drain する時点で
+    // 既にキューに入っている（notify.cpp/notify.hpp 参照）— 遅延起動音が実際に鳴る
+    // 約3秒/90周期より十分前。vehicle は UiCmd::BootMelody を一切 publish しないため、
+    // その起動音（および Notify::update() の他の挙動）はバイト単位で不変のまま。
+    sf::ui_command.publish(sf::UiCommand{
+        static_cast<uint8_t>(sf::UiCmd::BootMelody), 1, 0, 0, 0,
+        static_cast<uint32_t>(esp_timer_get_time())});
 
     // =========================================================================
     // Phase 3: Parameters — restore tuned values from NVS, else compile-time

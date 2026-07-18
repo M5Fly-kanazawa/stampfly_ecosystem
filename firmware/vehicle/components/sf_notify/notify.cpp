@@ -272,13 +272,36 @@ void Notify::update()
 {
     // Boot mute window (flash-safety, see notify.hpp): while it counts down, ALL
     // buzzer tones are suppressed (playEvent/playTone). When it reaches 0, play the
-    // deferred power-on chime once. A flash-bound reboot enters download mode within
-    // the window, so no LEDC tone is ever active when esptool resets the chip.
+    // deferred power-on chime once: standard (startTone) unless boot_melody_ selects
+    // the workshop-only school chime (schoolChimeTone) — see notify.hpp for how that
+    // selection is set. A flash-bound reboot enters download mode within the window,
+    // so no LEDC tone is ever active when esptool resets the chip.
+    //
+    // ORDERING NOTE: this block runs BEFORE the ui_command drain later in update()
+    // (below), so on any given cycle a UiCmd::BootMelody arriving THIS cycle would be
+    // consumed one cycle too late to affect a countdown-zero firing on the SAME cycle.
+    // That is harmless here: the workshop firmware publishes UiCmd::BootMelody exactly
+    // once, right after topics_init() and before any task starts, so it is already
+    // queued when this task's very first update() runs — boot_melody_ is set on cycle
+    // 1, ~89 cycles before this countdown can reach 0 (~cycle 90). The vehicle firmware
+    // never publishes UiCmd::BootMelody, so boot_melody_ stays 0 and this branch is
+    // byte-for-byte the pre-existing vehicle behaviour.
     // 起動ミュート窓（フラッシュ安全、notify.hpp 参照）: カウントダウン中は全ブザー音を
-    // 抑止（playEvent/playTone）。0 で遅延起動音を1回再生する。フラッシュ目的の再起動は
-    // 窓内にダウンロードモードへ入るため、esptool リセット時に鳴っている LEDC 音は無い。
+    // 抑止（playEvent/playTone）。0 で遅延起動音を1回再生する: 標準（startTone）、ただし
+    // boot_melody_ が workshop 専用の授業チャイム（schoolChimeTone）を選択している場合は
+    // それを再生する — 選択の設定方法は notify.hpp 参照。フラッシュ目的の再起動は窓内に
+    // ダウンロードモードへ入るため、esptool リセット時に鳴っている LEDC 音は無い。
+    //
+    // 順序についての注記: 本ブロックは後方の ui_command drain（下記）より先に走るため、
+    // 「同じ周期に届いた」UiCmd::BootMelody は1周期遅れて反映され、同一周期のカウント
+    // ダウン0発火には間に合わない。ここでは無害: workshop ファームは topics_init() 直後・
+    // タスク起動前に一度だけ publish するため、本タスクの最初の update() が走る時点で
+    // 既にキュー投入済み — boot_melody_ は cycle 1 で設定され、本カウントダウンが 0 に
+    // なり得る（≈cycle 90）約89周期前に間に合う。vehicle は UiCmd::BootMelody を publish
+    // しないため boot_melody_ は 0 のままで、この分岐は vehicle の既存動作とバイト単位で
+    // 同一のまま。
     if (boot_mute_countdown_ > 0 && --boot_mute_countdown_ == 0) {
-        buzzer_.startTone();
+        boot_melody_ == 1 ? buzzer_.schoolChimeTone() : buzzer_.startTone();
     }
 
     // Autotune LED cue countdown (~30Hz): clear the overlay when it elapses. Running
@@ -346,6 +369,16 @@ void Notify::update()
                 // 同じ意味付け、仕様 §1-2）。
                 user_color_    = {uic.r, uic.g, uic.b};
                 user_override_ = true;
+                break;
+            case UiCmd::BootMelody:
+                // Workshop-only boot chime selection (0 = standard, 1 = school
+                // chime), consumed by the boot-mute countdown block above on
+                // this task's next cycle. See notify.hpp for the ordering
+                // argument (selection lands well before the countdown fires).
+                // workshop 専用の起動音選択（0=標準、1=授業チャイム）。上の起動
+                // ミュートカウントダウンが次周期で参照する。順序の根拠は
+                // notify.hpp 参照（カウントダウン発火より十分前に反映される）。
+                boot_melody_ = uic.value;
                 break;
             case UiCmd::None:
             default:

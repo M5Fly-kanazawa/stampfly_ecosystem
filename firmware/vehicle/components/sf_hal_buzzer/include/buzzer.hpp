@@ -77,6 +77,13 @@ public:
     // Preset sounds
     void beep();
     void startTone();
+    void schoolChimeTone();  // Workshop-only boot melody: Westminster Quarters, first
+                             // phrase (see buzzer.cpp for the full rationale). Selected
+                             // via UiCmd::BootMelody=1; the vehicle firmware never
+                             // selects it, so its boot sound is unaffected.
+                             // workshop 専用の起動メロディ: ウェストミンスターの鐘 第1
+                             // フレーズ（詳細は buzzer.cpp）。UiCmd::BootMelody=1 で選択。
+                             // vehicle は選択しないため起動音は不変。
     void readyTone();      // 3 short beeps — "system ready to arm" (boot complete)
                            // 3連ビープ — 「ARM 可能（起動完了）」
     void armTone();

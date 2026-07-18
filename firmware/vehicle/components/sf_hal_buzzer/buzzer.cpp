@@ -166,6 +166,34 @@ void Buzzer::startTone()
     playTone(NOTE_G5, 200);
 }
 
+// schoolChimeTone — Westminster Quarters, FIRST PHRASE ONLY: the four-note
+// "キーンコーンカーンコーン" bell Japanese schools use for class start/end.
+// E5→C5→D5→G4, 550ms each with a 60ms rest between notes, final G4 held
+// 850ms (550*3 + 60*3 + 850 = 2680ms ≈ 2.6s total). Deliberately ONE phrase,
+// not the full four-phrase chime (~4x longer, ≈6s): playTone() busy-waits, so
+// Notify::update() blocks for the whole melody, and a 6s stall would freeze
+// the 30Hz LED loop (mode/state/battery patterns) for that long. Workshop-only
+// (selected via UiCmd::BootMelody=1, notify.cpp); the vehicle firmware never
+// calls this.
+// schoolChimeTone — ウェストミンスターの鐘、第1フレーズのみ:「キーンコーンカーン
+// コーン」の4音、日本の学校で授業開始/終了に使われる。E5→C5→D5→G4、各550ms
+// （音間60ms休符）、最後のG4は850ms保持（550×3+60×3+850=2680ms≈2.6秒）。
+// あえて1フレーズのみとし全4フレーズ（約4倍、≈6秒）にしない理由: playTone()は
+// ビジーウェイトのため Notify::update() はメロディ再生中ずっとブロックし、6秒の
+// 停止は30HzのLEDループ（モード/状態/低電圧パターン）をその間まるごと止めて
+// しまう。workshop 専用（UiCmd::BootMelody=1 で選択、notify.cpp）。vehicle は
+// 本関数を呼ばない。
+void Buzzer::schoolChimeTone()
+{
+    playTone(NOTE_E5, 550);
+    playTone(0, 60);          // rest between notes / 音間の休符
+    playTone(NOTE_C5, 550);
+    playTone(0, 60);
+    playTone(NOTE_D5, 550);
+    playTone(0, 60);
+    playTone(NOTE_G4, 850);   // final note held longer / 最後の音は長めに保持
+}
+
 void Buzzer::readyTone()
 {
     // 3 short beeps with a brief rest between — "system ready to arm" (matches the
