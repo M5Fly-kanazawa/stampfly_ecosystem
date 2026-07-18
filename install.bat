@@ -1,6 +1,20 @@
 @echo off
 REM StampFly Ecosystem Installer (Windows)
 REM Usage: install.bat [options]
+REM
+REM Options (forwarded to scripts\installer.py; see that file's docstring
+REM for the full list):
+REM   --help           Show installer.py's full option list and exit
+REM   --force          Force reinstall all steps (skip probe checks)
+REM   --uninstall      Remove sfcli from the ESP-IDF environment
+REM   --clean          Clean install (remove config and sfcli, then reinstall)
+REM   --no-flasher     Skip the optional GUI Flasher app install
+REM   --minimal        Install minimal dependencies (skip simulator)
+REM
+REM Unlike install.sh, this script does not skip its git/Python checks for
+REM --uninstall/--clean: both are required just to launch installer.py.
+REM install.shと異なり、--uninstall/--clean でもgit/Pythonチェックは
+REM スキップしない(installer.py起動自体に必須のため)。
 
 setlocal enabledelayedexpansion
 

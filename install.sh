@@ -2,7 +2,22 @@
 # StampFly Ecosystem Installer
 # Usage: ./install.sh [options]
 #
+# Options (forwarded to scripts/installer.py; see that file's docstring
+# for the full list):
+#   --help           Show installer.py's full option list and exit
+#   --force          Force reinstall all steps (skip probe checks)
+#   --uninstall      Remove sfcli from the ESP-IDF environment
+#   --clean          Clean install (remove config and sfcli, then reinstall)
+#   --no-flasher     Skip the optional GUI Flasher app install
+#   --minimal        Install minimal dependencies (skip simulator)
+#
 # This script checks for Python 3.8+ and then runs the Python installer.
+# --help/--uninstall/--clean skip the system prerequisite checks below
+# (cmake/ninja/etc. are only needed to actually build firmware, not to
+# print help or remove an existing install).
+# --help/--uninstall/--clean はシステム前提条件チェック(cmake/ninja等)を
+# スキップする(ファームウェアのビルドに使うものであり、ヘルプ表示や
+# アンインストールには不要なため)。
 
 # Detect if script is being sourced (must be BEFORE set -e)
 # sourceで実行された場合を検出（set -eより前に行うこと）
@@ -230,6 +245,25 @@ install_python_guidance() {
     echo
 }
 
+# Skip the build-toolchain prerequisite checks (cmake/ninja/etc.) for
+# argument combinations that never build firmware. E.g. `--uninstall` only
+# needs to run pip uninstall + delete files -- ninja is irrelevant there
+# (and requiring it would block uninstalling on a machine where the
+# prerequisite install itself failed).
+# ファームウェアをビルドしない引数の組み合わせでは、ビルドツールチェーン
+# の前提条件チェック(cmake/ninja等)をスキップする。例えば`--uninstall`は
+# pip uninstall + ファイル削除しか行わずninjaは無関係(前提条件インストール
+# 自体が失敗した環境でアンインストールができなくなるのを防ぐ)。
+SKIP_PREREQUISITE_CHECKS=false
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h|--uninstall|--clean)
+            SKIP_PREREQUISITE_CHECKS=true
+            break
+            ;;
+    esac
+done
+
 # Main
 header "StampFly Ecosystem Installer"
 
@@ -245,18 +279,23 @@ fi
 
 # Check system prerequisites
 # システム前提条件チェック
-case "$(uname -s)" in
-    Linux)
-        info "Checking system prerequisites..."
-        check_prerequisites_linux
-        echo
-        ;;
-    Darwin)
-        info "Checking system prerequisites..."
-        check_prerequisites_macos
-        echo
-        ;;
-esac
+if [ "$SKIP_PREREQUISITE_CHECKS" = true ]; then
+    info "Skipping build-toolchain prerequisite checks (--help/--uninstall/--clean)"
+    echo
+else
+    case "$(uname -s)" in
+        Linux)
+            info "Checking system prerequisites..."
+            check_prerequisites_linux
+            echo
+            ;;
+        Darwin)
+            info "Checking system prerequisites..."
+            check_prerequisites_macos
+            echo
+            ;;
+    esac
+fi
 
 info "Checking Python..."
 
