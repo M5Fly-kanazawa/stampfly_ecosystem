@@ -148,7 +148,13 @@ jobs:
         # PyInstaller 7では下記で使う --onefile + --windowed の組み合わせが
         # macOSでエラーになる（現状は非推奨警告のみ）ため、macOS向け
         # パッケージングを作り直すまでは6.x系に固定する
-        run: pip install "esptool>=5,<6" "pyinstaller>=6,<7"
+        # certifi: the frozen app's HTTPS calls verify against certifi's CA
+        # bundle (macOS frozen Pythons have no usable default verify paths —
+        # CERTIFICATE_VERIFY_FAILED on real Macs, observed 2026-07-20).
+        # certifi: 凍結アプリの HTTPS は certifi の CA バンドルで検証する
+        # （macOS の凍結 Python は既定の検証パスが使えず、実機 Mac で
+        # CERTIFICATE_VERIFY_FAILED になる。2026-07-20 観測）。
+        run: pip install "esptool>=5,<6" "pyinstaller>=6,<7" certifi
 
       - name: Smoke-test the app entry point
         # Cheap sanity check (no GUI, no hardware) before spending time on a
@@ -200,7 +206,7 @@ jobs:
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             ICON_ARGS=(--icon tools/flasher_gui/assets/icon.icns)
           fi
-          pyinstaller --onefile --windowed --collect-data esptool \
+          pyinstaller --onefile --windowed --collect-data esptool --collect-data certifi \
             "${ICON_ARGS[@]}" \
             --name StampFlyFlasher tools/flasher_gui/stampfly_flasher.py
 

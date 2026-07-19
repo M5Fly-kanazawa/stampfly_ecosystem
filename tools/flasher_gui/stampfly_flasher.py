@@ -61,11 +61,49 @@ import os
 import queue
 import re
 import shutil
+import ssl
 import sys
 import tempfile
 import threading
 import traceback
 import urllib.request
+
+
+def _create_https_context() -> ssl.SSLContext:
+    """SSL context for every HTTPS call in this app, preferring certifi's
+    CA bundle over the interpreter's default verify paths.
+
+    Why: a PyInstaller-frozen Python on macOS does not use the system
+    Keychain, and the bundled OpenSSL's default cert path usually does
+    not exist on end-user machines — every HTTPS request then fails with
+    CERTIFICATE_VERIFY_FAILED (observed on a real Mac, 2026-07-20; the
+    CI runners passed only because their filesystems happen to have the
+    build-time cert path). certifi ships a self-contained CA bundle that
+    PyInstaller packages into the app. Falling back to the default
+    context keeps the script fully functional without certifi (e.g. run
+    from a venv whose Python already has working verify paths — Windows
+    always does, via the OS cert store).
+
+    なぜ必要か: PyInstaller で凍結した macOS の Python はシステムの
+    キーチェーンを使わず、同梱 OpenSSL の既定証明書パスはエンドユーザーの
+    マシンには通常存在しない — その結果すべての HTTPS リクエストが
+    CERTIFICATE_VERIFY_FAILED で失敗する（2026-07-20 に実機 Mac で確認。
+    CI ランナーはビルド時の証明書パスがたまたま存在したため通っていた）。
+    certifi は自己完結の CA バンドルを持ち、PyInstaller がアプリに同梱する。
+    certifi が無い場合は既定コンテキストへフォールバックし、検証パスが
+    生きている Python（venv 実行や、OS の証明書ストアを使う Windows）では
+    従来どおり動作する。
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+# One shared context for the process (certifi lookup done once).
+# プロセスで1つ共有（certifi の解決は一度だけ）。
+_HTTPS_CONTEXT = _create_https_context()
 
 # Tkinter is part of the Python standard library; importing it does not
 # require a display connection, only instantiating Tk() does. Importing
@@ -281,7 +319,7 @@ def fetch_latest_release_info():
         GITHUB_LATEST_RELEASE_URL,
         headers=headers,
     )
-    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS, context=_HTTPS_CONTEXT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -369,7 +407,7 @@ def download_to_file(url, destination_path, progress_callback=None):
     報告できる。
     """
     request = urllib.request.Request(url, headers={"User-Agent": HTTP_USER_AGENT})
-    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS, context=_HTTPS_CONTEXT) as response:
         content_length = response.headers.get("Content-Length")
         total_bytes = int(content_length) if content_length else None
         downloaded_bytes = 0

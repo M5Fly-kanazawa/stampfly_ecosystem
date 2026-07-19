@@ -36,6 +36,11 @@ dependencies = [
     "jinja2>=3.1.0",
     "websockets>=12.0",
     "PyYAML>=6.0",
+    # HTTPS certificate bundle for sf flasher / the GUI flasher's GitHub
+    # calls: macOS Pythons often lack usable OpenSSL default verify paths.
+    # sf flasher / GUIフラッシャの GitHub 通信用 CA バンドル: macOS の
+    # Python は OpenSSL の既定検証パスが使えないことが多い。
+    "certifi>=2024.0.0",
 ]
 
 [project.optional-dependencies]

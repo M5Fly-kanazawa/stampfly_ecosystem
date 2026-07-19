@@ -37,6 +37,7 @@ import os
 import platform
 import re
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -117,6 +118,38 @@ BYTES_PER_KIB = 1024.0
 SIZE_UNITS = ("B", "KB", "MB", "GB", "TB")
 
 
+def _create_https_context() -> ssl.SSLContext:
+    """SSL context for the GitHub API / asset downloads, preferring
+    certifi's CA bundle when available.
+
+    macOS Pythons frequently lack usable OpenSSL default verify paths
+    (they do not use the system Keychain), which makes every HTTPS call
+    fail with CERTIFICATE_VERIFY_FAILED — observed on a real Mac
+    (2026-07-20) in the frozen flasher app; the same failure mode can
+    hit any venv here. certifi is imported lazily inside this function:
+    this module's import-time stdlib-only contract (it is part of the
+    broken-environment recovery path) stays intact, and environments
+    without certifi simply fall back to the default context (Windows
+    always works there via the OS cert store).
+
+    GitHub API / 資産ダウンロード用の SSL コンテキスト。certifi の CA
+    バンドルがあれば優先して使う。macOS の Python は OpenSSL の既定検証
+    パスが使えないことが多く（システムのキーチェーンを参照しない）、
+    全 HTTPS 呼び出しが CERTIFICATE_VERIFY_FAILED で失敗する — 凍結
+    フラッシャアプリの実機 Mac（2026-07-20）で確認済みで、venv でも同じ
+    故障モードがあり得る。certifi はこの関数内で遅延 import する:
+    本モジュールの「import 時は標準ライブラリのみ」という契約（壊れた
+    環境の復旧経路の一部であるため）を保ちつつ、certifi が無い環境では
+    既定コンテキストにフォールバックする（Windows は OS の証明書ストア
+    経由で常に動く）。
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 class FlasherInstallError(Exception):
     """Raised for any expected failure in the install/uninstall flow
     (unsupported platform, network failure, checksum mismatch, missing
@@ -188,7 +221,7 @@ def fetch_latest_release() -> dict:
 
     request = urllib.request.Request(GITHUB_API_LATEST_RELEASE_URL, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS, context=_create_https_context()) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         raise FlasherInstallError(
@@ -293,7 +326,7 @@ def _download_to_file(url: str, destination: Path) -> None:
     url を destination へ固定サイズのチャンクでストリーミングダウンロード
     する(ファイルサイズに関わらずメモリ使用量が一定)。"""
     request = urllib.request.Request(url, headers={"User-Agent": HTTP_USER_AGENT})
-    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+    with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS, context=_create_https_context()) as response:
         with open(destination, "wb") as out_file:
             while True:
                 chunk = response.read(DOWNLOAD_CHUNK_SIZE_BYTES)
