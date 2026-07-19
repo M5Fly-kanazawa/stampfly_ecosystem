@@ -498,6 +498,8 @@ def _run_version_probe(executable: Path) -> str:
             [str(executable), "--version"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=VERSION_PROBE_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired):

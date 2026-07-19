@@ -140,6 +140,8 @@ def _git(cwd: Optional[Path], git_args: List[str]) -> subprocess.CompletedProces
         cwd=str(cwd) if cwd else None,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=GIT_TIMEOUT_SEC,
     )
     if result.returncode != 0:
@@ -274,6 +276,8 @@ def _run_upgrade(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         input=stdin_text,
         timeout=UPGRADE_SUBPROCESS_TIMEOUT_SEC,
     )
@@ -292,7 +296,18 @@ def check_clean_fast_forward(tmp_root: Path) -> None:
     def mutate(seed_dir: Path) -> None:
         (seed_dir / "README.md").write_text(BASELINE_README + "upstream v2 line\n", encoding="utf-8")
 
-    _push_upstream_change(seed_dir, mutate, "v2: upstream readme update")
+    # The commit title deliberately contains an em-dash and Japanese: the
+    # update preview captures `git log` output, and decoding it with the
+    # console locale instead of UTF-8 crashed on exactly these bytes on a
+    # Japanese-Windows machine (cp932, 2026-07-19). This keeps the fix
+    # (explicit encoding="utf-8" in _run_git) regression-tested on every
+    # platform, including the Windows CI leg.
+    # コミットタイトルに意図的に全角ダッシュと日本語を含める: 更新プレビューは
+    # `git log` の出力を捕捉するが、UTF-8 でなくコンソールロケールでデコード
+    # すると日本語 Windows（cp932、2026-07-19）でまさにこのバイト列で落ちた。
+    # これにより修正（_run_git の encoding="utf-8" 明示）が Windows CI レッグを
+    # 含む全プラットフォームで退行テストされ続ける。
+    _push_upstream_change(seed_dir, mutate, "v2: upstream readme update — 日本語コミット題名の退行テスト")
 
     result = _run_upgrade(clone_dir, ["--yes"])
     assert result.returncode == 0, (

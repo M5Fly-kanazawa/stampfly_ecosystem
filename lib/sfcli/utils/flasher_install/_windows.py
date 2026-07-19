@@ -165,6 +165,8 @@ def _create_shortcut(link_path: Path, target_exe: Path) -> None:
                 "-ExecutionPolicy", "Bypass", "-File", str(ps1_path),
             ],
             capture_output=True, text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             raise FlasherInstallError(

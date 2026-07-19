@@ -160,13 +160,40 @@ def _run_git(
     （例えば `git merge --ff-only` の失敗は想定内で呼び出し元が処理する）。
     """
     try:
-        return subprocess.run(
+        # encoding is EXPLICIT: git emits UTF-8 (commit messages are stored
+        # as UTF-8), but text=True alone decodes with the console's locale
+        # encoding -- cp932 on Japanese Windows -- which crashes the
+        # subprocess reader thread on any non-cp932 byte (observed
+        # 2026-07-19 on a DXH loaner PC: an em-dash in a commit title threw
+        # UnicodeDecodeError inside _readerthread, stdout came back None,
+        # and `sf upgrade` aborted before pulling). errors="replace" keeps
+        # even malformed bytes from ever raising.
+        # encoding を明示する: git は UTF-8 を出力する（コミットメッセージは
+        # UTF-8 で保存される）が、text=True だけではコンソールのロケール
+        # エンコーディング -- 日本語 Windows では cp932 -- でデコードされ、
+        # cp932 に無いバイトで subprocess の読み取りスレッドが落ちる
+        # （2026-07-19 に DXH 貸出PCで実際に発生: コミットタイトルの全角
+        # ダッシュが _readerthread 内で UnicodeDecodeError を起こし、stdout
+        # が None になり `sf upgrade` が pull 前に中断した）。errors="replace"
+        # により不正バイトでも決して例外にならない。
+        result = subprocess.run(
             ["git", *git_args],
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
+        # Belt and braces: normalize captured streams to "" so no caller
+        # can ever trip over a None (the pre-fix failure mode).
+        # 念のため捕捉ストリームを "" に正規化し、呼び出し側が None を踏む
+        # （修正前の故障モード）余地を残さない。
+        if result.stdout is None:
+            result.stdout = ""
+        if result.stderr is None:
+            result.stderr = ""
+        return result
     except FileNotFoundError:
         console.error("git executable not found. Install git and retry.")
         return None

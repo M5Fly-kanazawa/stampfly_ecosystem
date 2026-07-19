@@ -209,6 +209,8 @@ def _ditto_extract(zip_path: Path, dest_dir: Path) -> None:
         ["ditto", "-x", "-k", str(zip_path), str(dest_dir)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         raise FlasherInstallError(f"ditto extraction failed: {result.stderr.strip()}")
@@ -223,6 +225,8 @@ def _ditto_copy(src: Path, dst: Path) -> None:
         ["ditto", str(src), str(dst)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         raise FlasherInstallError(f"ditto copy failed: {result.stderr.strip()}")
@@ -245,6 +249,8 @@ def _remove_quarantine_attribute(app_path: Path) -> None:
         ["xattr", "-dr", "com.apple.quarantine", str(app_path)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         console.warning(
