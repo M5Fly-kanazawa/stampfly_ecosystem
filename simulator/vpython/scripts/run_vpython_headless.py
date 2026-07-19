@@ -29,21 +29,33 @@ if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
 from core import dynamics as mc
+from core import motors as motor_model
 from control.pid import PID
 from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time
 
 
 # =============================================================================
-# Motor Model Parameters (matching firmware motor_model.hpp)
+# Motor Model Parameters — derived from the PLANT (core/motors.py).
+# The inverse model must use the exact parameters of the plant it inverts,
+# or the hover equilibrium drifts (a hand-copied set here diverged after the
+# 2026-07-15 sysid update and the sim climbed at neutral stick). See the
+# matching comment in run_sim.py.
+# モータモデルのパラメータ — プラント（core/motors.py）から導出。逆モデルは
+# 反転対象のプラントと厳密に同じパラメータを使わないとホバー平衡がずれる
+# （手書き複製が 2026-07-15 の同定更新後に乖離し、スティック中立でも上昇
+# し続けた）。run_sim.py の同趣旨コメントも参照。
 # =============================================================================
+_PLANT_MOTOR = motor_model.motor_prop(1)
+
+
 class MotorParams:
-    Ct = 6.7e-9    # 2026-07-15実測
-    Cq = 4.10e-11  # 2026-07-15実測
-    Rm = 0.34
-    Km = 6.125e-4
-    Dm = 3.69e-8
-    Qf = 2.76e-5
-    Vbat = 3.7
+    Ct = _PLANT_MOTOR.Ct
+    Cq = _PLANT_MOTOR.Cq
+    Rm = _PLANT_MOTOR.Rm
+    Km = _PLANT_MOTOR.Km
+    Dm = _PLANT_MOTOR.Dm
+    Qf = _PLANT_MOTOR.Qf
+    Vbat = 3.7  # Battery voltage [V] (supply, not a motor param)
 
 
 def thrust_to_omega(thrust):
@@ -77,7 +89,11 @@ def thrust_to_voltage(thrust):
 class ControlAllocator:
     def __init__(self):
         self.d = 0.023
-        self.kappa = 9.71e-3
+        # Derived from the plant (Cq/Ct = 6.12e-3, 2026-07-15 measurements);
+        # matches the firmware mixer KAPPA (0ae4dea). Was stale 9.71e-3.
+        # プラントから導出（Cq/Ct = 6.12e-3、2026-07-15実測）。ファームの
+        # ミキサー KAPPA（0ae4dea）と一致。旧値 9.71e-3 は陳腐化していた。
+        self.kappa = MotorParams.Cq / MotorParams.Ct
         self.max_thrust = 0.15
 
         inv_d = 1.0 / self.d

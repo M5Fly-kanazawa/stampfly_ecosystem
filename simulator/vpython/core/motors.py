@@ -63,7 +63,18 @@ class motor_prop():
         self.Lm = 7.5e-6 #1.0e-6
         self.Rm = 0.63 #0.34
         #回転数と推力・トルク測定実験から求めたパラメータ
-        self.Ct = 1.00e-8
+        # Ct updated to the 2026-07-15 bench measurement (was 1.00e-8). This makes
+        # the plant's kappa = Cq/Ct = 4.10e-11/6.7e-9 = 6.12e-3 — identical to the
+        # flight-validated mixer KAPPA adopted in firmware commit 0ae4dea. The old
+        # 1.00e-8 made the plant produce ~18% more thrust than the controller's
+        # inverse model demanded at hover -> the sim climbed at neutral stick
+        # (found on the DXH loaner PCs, 2026-07-19).
+        # Ct を 2026-07-15 のベンチ実測値へ更新（旧 1.00e-8）。これによりプラントの
+        # kappa = Cq/Ct = 6.12e-3 となり、ファーム側で飛行検証済みのミキサー KAPPA
+        # （コミット 0ae4dea）と一致する。旧値ではホバー時に制御側逆モデルの要求より
+        # 約18%大きい推力をプラントが発生し、スティック中立でも上昇し続けていた
+        # （2026-07-19、DXH貸出PCで発見）。
+        self.Ct = 6.7e-9
         # NOTE(2026-07-15): 実測は Ke=5.5e-4, R=0.593, τ_c=9.5e-6, B≈0。
         #  (Km,Rm,Dm,Qf)は自己整合パッケージ — 再フィットとセットで更新のこと。
         self.Cq = 4.10e-11  # 2026-07-15実測

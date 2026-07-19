@@ -52,6 +52,7 @@ if _VPYTHON_DIR not in sys.path:
     sys.path.insert(0, _VPYTHON_DIR)
 
 from core import dynamics as mc
+from core import motors as motor_model
 from visualization.vpython_backend import render
 from vpython import *
 from control.pid import PID
@@ -61,15 +62,35 @@ from interfaces.joystick import Joystick
 # =============================================================================
 # Motor Model Parameters (matching firmware motor_model.hpp)
 # =============================================================================
+# Single source of truth: the PLANT's own motor model (core/motors.py). The
+# inverse model below (thrust -> voltage) must use the exact same parameters
+# as the plant it is inverting, or the hover equilibrium drifts — a hand-
+# copied parameter set here silently diverged after the 2026-07-15 sysid
+# update (plant kept old Ct/electrical package, this copy got new Ct) and
+# the sim climbed continuously at neutral stick. Deriving from the plant
+# instance makes controller∘plant self-consistent BY CONSTRUCTION: future
+# sysid updates to core/motors.py can never reintroduce a trim offset.
+# 単一の真実はプラント自身のモータモデル（core/motors.py）。下の逆モデル
+# （推力→電圧）は反転対象のプラントと厳密に同じパラメータを使わなければ
+# ホバー平衡がずれる — ここに手書き複製されたパラメータは 2026-07-15 の
+# 同定更新後に黙って乖離し（プラントは旧 Ct/電気系パッケージのまま、複製側
+# だけ新 Ct）、スティック中立でも上昇し続けた。プラントのインスタンスから
+# 導出することで controller∘plant は「構造的に」自己整合になり、今後
+# core/motors.py の同定更新でトリムずれが再発することはない。
+_PLANT_MOTOR = motor_model.motor_prop(1)
+
+
 class MotorParams:
-    """Motor parameters for thrust-to-voltage conversion"""
-    Ct = 6.7e-9       # Thrust coefficient [N/(rad/s)²] (2026-07-15実測)
-    Cq = 4.10e-11     # Torque coefficient [Nm/(rad/s)²] (2026-07-15実測)
-    Rm = 0.34         # Motor resistance [Ω]
-    Km = 6.125e-4     # Motor constant [V·s/rad]
-    Dm = 3.69e-8      # Viscous damping [Nm·s/rad]
-    Qf = 2.76e-5      # Friction torque [Nm]
-    Vbat = 3.7        # Battery voltage [V]
+    """Motor parameters for thrust-to-voltage conversion.
+    Derived from the plant model — do NOT hand-copy numbers here.
+    プラントモデルから導出 — 数値を手書き複製しないこと。"""
+    Ct = _PLANT_MOTOR.Ct      # Thrust coefficient [N/(rad/s)²]
+    Cq = _PLANT_MOTOR.Cq      # Torque coefficient [Nm/(rad/s)²]
+    Rm = _PLANT_MOTOR.Rm      # Motor resistance [Ω]
+    Km = _PLANT_MOTOR.Km      # Motor constant [V·s/rad]
+    Dm = _PLANT_MOTOR.Dm      # Viscous damping [Nm·s/rad]
+    Qf = _PLANT_MOTOR.Qf      # Friction torque [Nm]
+    Vbat = 3.7                # Battery voltage [V] (supply, not a motor param)
 
 
 def thrust_to_omega(thrust: float) -> float:
@@ -111,7 +132,13 @@ class ControlAllocator:
     def __init__(self):
         # Quad parameters
         self.d = 0.023          # Moment arm [m]
-        self.kappa = 9.71e-3    # Cq/Ct ratio [m]
+        # kappa derived from the plant (Cq/Ct = 6.12e-3 with the 2026-07-15
+        # measurements) — matches the firmware mixer KAPPA (commit 0ae4dea).
+        # Was a stale hand-copied 9.71e-3.
+        # kappa はプラントから導出（2026-07-15 実測で Cq/Ct = 6.12e-3）—
+        # ファームのミキサー KAPPA（コミット 0ae4dea）と一致。旧値は手書き
+        # 複製の 9.71e-3 のまま陳腐化していた。
+        self.kappa = MotorParams.Cq / MotorParams.Ct
         self.max_thrust = 0.15  # Max thrust per motor [N]
 
         # Build B⁻¹ matrix
