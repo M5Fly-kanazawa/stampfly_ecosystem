@@ -45,6 +45,7 @@
 | ESP-IDFバージョン比較の修正 | `find_all()` の文字列ソートを数値タプル比較（`version_sort_key()`）に変更。`"v5.10.0"` が `"v5.5.2"` より古いと誤判定されていたバグを修正 |
 | `--uninstall` / `--clean` の改善 | 先に `sfcli.cli flasher uninstall --yes` を実行してからsfcli本体を削除するよう順序を修正。削除しないもの（ESP-IDF本体・`IDF_TOOLS_PATH`・venv依存・udevルール・リポジトリ本体）の一覧表をコンソールに表示するようにした |
 | `install.sh` / `install.bat` | `--help` / `--uninstall` / `--clean` 実行時は Linux/macOS の前提条件チェック（cmake/ninja等）をスキップし直接 `installer.py` へ委譲。ヘッダのUsageコメントに主要フラグを列挙 |
+| 日本語Windows（cp932/cp1252）耐性 | `6abbbe2`/`378bc60a`: DXH貸出PC（日本語Windows）実機で `sf upgrade` がコミット題名の全角ダッシュでクラッシュ。①subprocess捕捉のデコードを UTF-8 明示+`errors="replace"` に統一（git は UTF-8 を出力する）②`sf` 起動時に stdout/stderr を `errors="replace"` 化し、コンソールに表示できない文字は `?` 表示に（全コマンド共通の恒久保護）。退行テストとして日本語+全角ダッシュのコミット題名フィクスチャを CI 4脚で常時実行 |
 
 **ドキュメント（本コミット）:** `docs/guides/upgrading.md` 新設（Git初心者向けの `sf upgrade`
 解説・衝突解決walkthrough・インストール/アンインストールのライフサイクル表・FAQ）、
