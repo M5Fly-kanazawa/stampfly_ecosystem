@@ -49,7 +49,7 @@ sf upgrade
 | 4 | ローカル変更の取り込み | 下記4.1参照 | 下記参照 |
 | 5 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる | `pip install -e .` |
 | 6 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | （手動での再現は複雑なため `sf upgrade` 推奨） |
-| 7 | GUIフラッシャの更新 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら、更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾） | `sf flasher install --yes` |
+| 7 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
 | 8 | サマリ表示 | 更新前後のコミットハッシュ、実施した処置、次にやるべきこと（例: `sf build vehicle`）を表示 | — |
 
 ### 3.1 ステップ4: ローカル変更の取り込み
@@ -159,8 +159,8 @@ git stash drop
 |------|---------|
 | 新しい PC に何も無い（初インストール） | `git clone` → `install.bat` / `./install.sh`（Step 1〜4 一括。書き込みアプリは Y/n） |
 | 機体に書き込みたいだけ（開発環境は不要） | リリースページから書き込みアプリをダウンロード（または Web フラッシャ）。本体のインストール不要 |
-| 開発環境はあるが書き込みアプリが未導入 | `sf flasher install` |
-| 通常の更新 | `sf upgrade` |
+| 開発環境はあるが書き込みアプリが未導入 | `sf flasher install`（または `sf upgrade` 実行時にチェックアウトにつき一回だけ尋ねられる） |
+| 通常の更新 | `sf upgrade`（書き込みアプリが未導入なら初回のみ入れるか尋ねられる。既定は入れない＝`n`。`--yes`/`--no-flasher` は尋ねずスキップ） |
 | 古いチェックアウト（2026-07-19 の更新前で `sf upgrade` が無い） | 初回のみ `git pull` → 以後 `sf upgrade` |
 | 自分の編集を残したまま更新 | そのまま `sf upgrade`（自動退避・復元。衝突時は §4 へ） |
 | ローカル変更を捨てて公式最新へ（貸出 PC 整備等） | `sf upgrade --discard-local`（対象一覧を確認してから破棄） |
@@ -267,7 +267,7 @@ This guide targets **teachers and students who are not software-development spec
 | 4 | Local change handling | See 3.1 below | See below |
 | 5 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds | `pip install -e .` |
 | 6 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
-| 7 | Native GUI Flasher update | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`) | `sf flasher install --yes` |
+| 7 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
 | 8 | Summary | Shows the before/after commit hash, actions taken, and the recommended next step (e.g. `sf build vehicle`) | — |
 
 ### 3.1 Step 4: Handling Local Changes
@@ -375,8 +375,8 @@ Two things are managed: the **ecosystem itself** (repository + ESP-IDF + `sf`) a
 |-----------|------------|
 | Brand-new PC (first install) | `git clone` → `install.bat` / `./install.sh` (Steps 1–4; flashing app offered as Y/n) |
 | Just want to flash a craft (no dev environment) | Download the flashing app from the Releases page (or use the Web flasher); no ecosystem install needed |
-| Dev environment present, flashing app missing | `sf flasher install` |
-| Regular update | `sf upgrade` |
+| Dev environment present, flashing app missing | `sf flasher install` (or wait — `sf upgrade` also asks once per checkout) |
+| Regular update | `sf upgrade` (asks once, the first time, whether to install the flashing app if it's missing; default No. `--yes`/`--no-flasher` skip the ask) |
 | Checkout older than the 2026-07-19 update (no `sf upgrade` yet) | One-time plain `git pull`, then `sf upgrade` from there on |
 | Update while keeping your local edits | Just run `sf upgrade` (auto-stash and restore; conflicts → §4) |
 | Discard local changes and take the official latest (loaner-PC maintenance) | `sf upgrade --discard-local` (lists the files, then confirms) |

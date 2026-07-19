@@ -81,6 +81,18 @@ EXIT_NEEDS_ATTENTION = 2
 
 UPGRADING_DOC_PATH = "docs/guides/upgrading.md"
 
+# Marker file recording that the one-time "install the Flasher?" offer
+# (Step 7, when no native app is installed yet) has already been shown --
+# accepted or declined -- for this checkout, so it is asked at most once.
+# Lives in the same repo-local config directory as the installer's other
+# .sf/ state (scripts/installer.py:670), which is already gitignored.
+# 「フラッシャを入れますか？」という一回限りの提案（Step 7、ネイティブ
+# アプリが未導入の場合）を、このチェックアウトで既に表示済み
+# （承諾/辞退いずれか）であることを記録するマーカーファイル。インストーラの
+# 他の .sf/ 状態と同じリポジトリローカル設定ディレクトリに置く
+# （scripts/installer.py:670、既にgitignore済み）。
+FLASHER_OFFER_MARKER_FILENAME = "flasher_install_offered"
+
 # Test-only escape hatch (spec C1 test item (d)): when set, dependency
 # resync prints what it *would* run instead of invoking pip, so
 # tools/ci/check_upgrade.py can verify the step is reached without a real
@@ -485,27 +497,91 @@ def _backup_stale_sdkconfigs(root: Path, old_head: str, new_head: str) -> List[s
 
 
 def _offer_flasher_update(args: argparse.Namespace, actions_taken: List[str]) -> None:
-    """Offer to update the native GUI Flasher app if one is installed
-    (spec C1#7).
-    ネイティブGUIフラッシャがインストール済みなら更新を提案する
-    （仕様C1項目7）。
+    """Native GUI Flasher app: offer to update it if installed, or offer
+    a one-time install if it is not (spec C1#7).
+
+    Two branches:
+      - Installed: ask to update it (auto-accepted with --yes), same as
+        before this one-time-offer feature was added.
+      - Not installed: ask ONCE per checkout whether to install it. Never
+        asked with --yes (an unattended `sf upgrade` should not pull down
+        a whole new desktop app) or --no-flasher. A marker file records
+        the answer (accepted or declined) so the offer is never repeated
+        on subsequent `sf upgrade` runs -- declining just prints a
+        pointer to `sf flasher install` for later.
+
+    ネイティブGUIフラッシャ: 導入済みなら更新を提案し、未導入なら一回限り
+    のインストール提案を行う（仕様C1項目7）。
+
+    2つの分岐:
+      - 導入済み: 更新するか確認する（--yesなら自動承諾）。この一回限り
+        提案機能を追加する前と同じ挙動。
+      - 未導入: このチェックアウトで一回だけインストールするか尋ねる。
+        --yes（無人実行の`sf upgrade`が新しいデスクトップアプリを勝手に
+        入れるべきではないため）または --no-flasher では絶対に尋ねない。
+        マーカーファイルに回答（承諾/辞退）を記録し、以後の`sf upgrade`
+        では二度と提案しない -- 辞退した場合は後で使える
+        `sf flasher install` への案内だけを表示する。
     """
     if args.no_flasher:
         return
 
     installed_executable = flasher_install.installed_app_executable()
-    if installed_executable is None:
+    if installed_executable is not None:
+        # Already installed: existing update-offer behavior, unchanged.
+        # 導入済み: 既存の更新提案の挙動（変更なし）。
+        console.print()
+        if not (args.yes or _confirm("Update the native GUI Flasher too?", default_yes=True)):
+            return
+
+        flasher_exit_code = flasher_install.install(assume_yes=True)
+        if flasher_exit_code == 0:
+            actions_taken.append("Updated the native GUI Flasher app")
+        else:
+            actions_taken.append("GUI Flasher update FAILED -- see the output above")
+        return
+
+    # Not installed: one-time interactive install offer only. --yes never
+    # triggers it (see docstring) -- an unattended upgrade must not
+    # install a new app the user never asked for.
+    # 未導入: 一回限りの対話的インストール提案のみ。--yesでは絶対に発生
+    # しない（docstring参照）-- 無人実行のupgradeがユーザーが求めていない
+    # 新規アプリを勝手に入れてはならない。
+    if args.yes:
+        return
+
+    marker_path = paths.config_dir() / FLASHER_OFFER_MARKER_FILENAME
+    if marker_path.exists():
+        # Already offered once (accepted or declined) -- stay silent.
+        # 既に一度提案済み（承諾/辞退いずれか）-- 何も表示しない。
         return
 
     console.print()
-    if not (args.yes or _confirm("Update the native GUI Flasher too?", default_yes=True)):
+    accepted = _confirm(
+        "Install the StampFly Flasher desktop app? (one-time offer)",
+        default_yes=False,
+    )
+
+    # Write the marker regardless of the answer -- this is a ONE-TIME
+    # offer, so "declined" must suppress future prompts just as much as
+    # "accepted" does.
+    # 回答に関わらずマーカーを書き込む -- 一回限りの提案なので、「辞退」も
+    # 「承諾」と同様に以後のプロンプトを抑止しなければならない。
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+    marker_path.write_text(
+        f"{timestamp} {'accepted' if accepted else 'declined'}\n", encoding="utf-8"
+    )
+
+    if not accepted:
+        console.print("You can install it anytime with: sf flasher install")
         return
 
     flasher_exit_code = flasher_install.install(assume_yes=True)
     if flasher_exit_code == 0:
-        actions_taken.append("Updated the native GUI Flasher app")
+        actions_taken.append("Installed the native GUI Flasher app")
     else:
-        actions_taken.append("GUI Flasher update FAILED -- see the output above")
+        actions_taken.append("GUI Flasher install FAILED -- see the output above")
 
 
 def _print_summary(old_head: str, new_head: str, actions_taken: List[str]) -> None:

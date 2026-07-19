@@ -18,9 +18,9 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 
 | オプション | 説明 |
 |-----------|------|
-| `--yes`, `-y` | 更新内容のプレビュー確認を省略する（`--discard-local` の確認は省略されない — 破壊的操作のため常に確認） |
+| `--yes`, `-y` | 更新内容のプレビュー確認を省略する（`--discard-local` の確認は省略されない — 破壊的操作のため常に確認）。フラッシャが未導入の場合の一回限りのインストール提案も尋ねない（機会は消費しない） |
 | `--discard-local` | ローカルの変更をstashせず破棄してから更新する（破壊的操作。ファイル一覧を表示した上で必ず確認） |
-| `--no-flasher` | ネイティブGUIフラッシャの更新提案をスキップする |
+| `--no-flasher` | ネイティブGUIフラッシャの更新提案、および未導入時の一回限りのインストール提案をスキップする（機会は消費しない） |
 | `--skip-deps` | Python依存関係の再同期ステップをスキップする |
 
 ## 4. やること（ステップ概要）
@@ -31,7 +31,7 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 4. ローカル変更を安全に取り込む（既定=stash→マージ→復元、`--discard-local`=確認の上で破棄）
 5. Python依存関係を再同期（`pip install -e .`）
 6. `sdkconfig.defaults` / `partitions.csv` が変わっていれば、既存 `sdkconfig` を `*.pre-upgrade-backup` へ退避
-7. ネイティブGUIフラッシャが導入済みなら更新を提案
+7. ネイティブGUIフラッシャ: 導入済みなら更新を提案。**未導入なら、チェックアウトにつき一回だけ**インストールを提案（`--yes` または `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップ。一度尋ねたら `.sf/flasher_install_offered` に記録し、以後は二度と尋ねない）
 8. サマリ表示（更新前後のコミットハッシュ・実施した処置・推奨次アクション）
 
 詳細な各ステップの解説と、Gitコマンドとの対応表は [アップグレードガイド §3](../guides/upgrading.md) を参照してください。
@@ -82,9 +82,9 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 
 | Option | Description |
 |--------|-------------|
-| `--yes`, `-y` | Skip the update-preview confirmation (the `--discard-local` confirmation is never skipped -- it is destructive) |
+| `--yes`, `-y` | Skip the update-preview confirmation (the `--discard-local` confirmation is never skipped -- it is destructive). Also skips the one-time "install the Flasher?" offer when it is not installed, without consuming that one-time chance |
 | `--discard-local` | Discard local changes instead of stashing them before updating (destructive; the changed-file list is shown and always confirmed) |
-| `--no-flasher` | Skip the offer to also update the native GUI Flasher app |
+| `--no-flasher` | Skip the offer to update the native GUI Flasher app, and the one-time install offer if it is not installed (without consuming that one-time chance) |
 | `--skip-deps` | Skip the Python dependency resync step |
 
 ## 4. What It Does (Step Overview)
@@ -95,7 +95,7 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 4. Safely fold in local changes (default = stash -> merge -> restore, `--discard-local` = discard after confirmation)
 5. Resync Python dependencies (`pip install -e .`)
 6. If `sdkconfig.defaults` / `partitions.csv` changed, back up any existing `sdkconfig` to `*.pre-upgrade-backup`
-7. Offer to update the native GUI Flasher app if installed
+7. Native GUI Flasher: offer to update it if installed. If **not** installed, offer to install it **once per checkout** (`--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again)
 8. Print a summary (before/after commit hash, actions taken, recommended next step)
 
 See [Upgrading Guide §3](../guides/upgrading.md#3-what-sf-upgrade-does-internally) for a detailed walkthrough of each step and its manual Git-command equivalent.

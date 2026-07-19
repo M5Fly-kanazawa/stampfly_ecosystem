@@ -25,7 +25,7 @@ cwd=<clone> のサブプロセスとして呼び出す -- これにより
 paths.root()（自分自身の__file__から上に辿る）はメインリポジトリでは
 なく必ずこのフィクスチャのクローンに解決される。
 
-Covers / 対象（仕様C1テスト項目 (a)〜(f)）:
+Covers / 対象（仕様C1テスト項目 (a)〜(g)）:
     (a) Clean local state -> successful fast-forward update.
         クリーン時のff更新成功。
     (b) Non-conflicting local edit is preserved via stash push/pop.
@@ -44,14 +44,27 @@ Covers / 対象（仕様C1テスト項目 (a)〜(f)）:
     (f) --discard-local discards tracked local edits (after an explicit
         confirmation) instead of stashing them.
         --discard-localでローカル変更が破棄される。
+    (g) When the native GUI Flasher is NOT installed, `sf upgrade` offers
+        to install it exactly once per checkout: shown on the first run
+        (declined via stdin EOF, falling back to the default No), then
+        suppressed on a second run because the marker file was written.
+        SKIPped (not failed) if this runner machine actually has the
+        native flasher installed, since the branch under test could
+        never trigger for real.
+        フラッシャ未導入時、`sf upgrade`はチェックアウトにつき一回だけ
+        インストールを提案する: 初回は表示（stdin EOFで辞退＝既定Noに
+        フォールバック）、2回目はマーカーファイルにより抑止される。
+        このマシンに実際にネイティブフラッシャが導入済みの場合はSKIP
+        （失敗ではない）-- 未導入分岐が実際には発生し得ないため。
 
 Usage / 使い方:
     python3 tools/ci/check_upgrade.py
 
-Exit code 0 = all checks passed, 1 = at least one failed (a summary is
-printed either way; no external test framework required).
-終了コード 0=全チェック合格、1=1つ以上失敗（結果に関わらずサマリを
-表示、外部テストフレームワーク不要）。
+Exit code 0 = all checks passed or intentionally skipped, 1 = at least
+one failed (a summary is printed either way; no external test framework
+required).
+終了コード 0=全チェック合格または意図的スキップ、1=1つ以上失敗
+（結果に関わらずサマリを表示、外部テストフレームワーク不要）。
 """
 
 import os
@@ -87,6 +100,27 @@ BASELINE_REQUIREMENTS = "# minimal fixture requirements\n"
 BASELINE_SDKCONFIG_DEFAULTS = "CONFIG_A=y\n"
 BASELINE_PARTITIONS = "# partitions v1\n"
 BASELINE_SDKCONFIG = "CONFIG_A=y\n# generated (baseline)\n"
+
+# Marker file lib/sfcli/commands/upgrade.py writes under <repo>/.sf/ after
+# the one-time "install the Flasher?" offer (case (g)). Must match
+# FLASHER_OFFER_MARKER_FILENAME there exactly.
+# lib/sfcli/commands/upgrade.py が一回限りの「フラッシャを入れますか？」
+# 提案後に <repo>/.sf/ 配下へ書き込むマーカーファイル（ケース(g)）。
+# 同ファイルの FLASHER_OFFER_MARKER_FILENAME と厳密に一致させる。
+FLASHER_OFFER_MARKER_FILENAME = "flasher_install_offered"
+
+
+class CheckSkipped(Exception):
+    """Raised by a check function to mean "intentionally not run" rather
+    than "failed" -- e.g. case (g) when this runner machine already has
+    the native Flasher installed, so the not-installed branch under test
+    could never trigger for real. main() reports these separately and
+    does not count them toward the failure total.
+    チェック関数が「失敗」ではなく「意図的に未実行」であることを示すために
+    送出する -- 例: このマシンに既にネイティブフラッシャが導入済みで、
+    テスト対象の未導入分岐が実際には発生し得ない場合のケース(g)。main()は
+    これを個別に報告し、失敗数には数えない。
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +462,130 @@ def check_discard_local(tmp_root: Path) -> None:
     assert "upstream v2 for discard case" in readme, "upstream content should be present after ff-merge"
 
 
+def _native_flasher_skip_reason() -> Optional[str]:
+    """Reason to SKIP case (g), or None if it is safe to run on this
+    machine.
+
+    Case (g) exercises the "native GUI Flasher is NOT installed" branch,
+    so it needs THIS runner machine (not the fixture) to genuinely have
+    no flasher installed. We check that by importing
+    sfcli.utils.flasher_install from the MAIN repo's lib/ (not the
+    fixture clone's copy -- the two are identical at this point in the
+    script, but the main repo's is simpler to reach without first
+    building a fixture). The module is stdlib-only and
+    installed_app_executable() is a pure, read-only per-OS path check (no
+    network, see lib/sfcli/utils/flasher_install/_macos.py etc.), so
+    calling it directly here is safe and cheap.
+
+    ケース(g)のSKIP理由を返す。このマシンで実行して問題なければNone。
+
+    ケース(g)は「ネイティブGUIフラッシャが未導入」の分岐を検証するため、
+    フィクスチャではなく実行マシン自体が本当に未導入である必要がある。
+    これを確認するため、フィクスチャクローンのコピーではなく、メイン
+    リポジトリの lib/ から sfcli.utils.flasher_install を import する
+    （この時点では両者は同一内容だが、メインリポジトリの方はフィクスチャ
+    構築なしに到達できるぶん単純）。同モジュールは標準ライブラリのみで
+    実装され、installed_app_executable() は読み取り専用のOS別パス確認
+    のみ（ネットワーク無し、lib/sfcli/utils/flasher_install/_macos.py 等
+    を参照）のため、ここで直接呼んでも安全かつ軽量。
+    """
+    main_lib_dir = str(REPO_ROOT / "lib")
+    sys.path.insert(0, main_lib_dir)
+    try:
+        from sfcli.utils import flasher_install  # noqa: PLC0415 - deliberately deferred, see docstring
+
+        if flasher_install.installed_app_executable() is not None:
+            return "native flasher present on this machine"
+        return None
+    except Exception as exc:  # noqa: BLE001 - any failure means "cannot confirm it's absent"
+        return f"could not determine native flasher status ({type(exc).__name__}: {exc})"
+    finally:
+        sys.path.remove(main_lib_dir)
+
+
+def check_flasher_first_time_offer(tmp_root: Path) -> None:
+    """(g) When the native GUI Flasher is NOT installed, `sf upgrade`
+    offers to install it exactly once per checkout.
+
+    First run (no --yes): the update-preview prompt ("Proceed with
+    upgrade?") consumes "y" from stdin; the flasher offer prompt that
+    follows then hits EOF on stdin and falls back to its default (No) --
+    declined, so `flasher_install.install()` (and therefore the network)
+    is never reached. Asserts the offer text and the "sf flasher install"
+    pointer are shown, and that the marker file was written.
+
+    Second run (another upstream commit, same stdin): asserts the offer
+    text does NOT appear again, because the marker from the first run
+    suppresses it.
+
+    (g) ネイティブGUIフラッシャが未導入の場合、`sf upgrade`はチェック
+    アウトにつき一回だけインストールを提案することを検証する。
+
+    初回実行（--yes無し）: 更新プレビューの確認プロンプト
+    （"Proceed with upgrade?"）がstdinの"y"を消費し、続くフラッシャ提案の
+    プロンプトはstdinのEOFに達して既定値（No）にフォールバックする --
+    辞退となるため`flasher_install.install()`（＝ネットワーク）には
+    到達しない。提案文言と"sf flasher install"への案内が表示されること、
+    マーカーファイルが書かれることを確認する。
+
+    2回目実行（さらに1コミットpush、同じstdin）: 1回目のマーカーにより
+    提案文言が再表示されないことを確認する。
+    """
+    skip_reason = _native_flasher_skip_reason()
+    if skip_reason is not None:
+        raise CheckSkipped(skip_reason)
+
+    seed_dir, _, clone_dir = _build_fixture(tmp_root, "case_g_flasher_offer")
+
+    def mutate(seed_dir: Path) -> None:
+        (seed_dir / "README.md").write_text(
+            BASELINE_README + "upstream v2 for flasher offer case\n", encoding="utf-8"
+        )
+
+    _push_upstream_change(seed_dir, mutate, "v2: upstream readme for flasher offer case")
+
+    # No --yes: the proceed-prompt consumes "y"; the flasher offer prompt
+    # then hits EOF -> declined -> no network is ever touched.
+    # --yes無し: proceedプロンプトが"y"を消費し、続くフラッシャ提案は
+    # EOFに達する -> 辞退 -> ネットワークには一切触れない。
+    result = _run_upgrade(clone_dir, [], stdin_text="y\n")
+    assert result.returncode == 0, (
+        f"expected exit 0, got {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert "one-time offer" in combined_output, (
+        f"first run should show the one-time install offer; full output:\n{combined_output}"
+    )
+    assert "sf flasher install" in combined_output, (
+        f"declined offer should point at 'sf flasher install'; full output:\n{combined_output}"
+    )
+
+    marker_path = clone_dir / ".sf" / FLASHER_OFFER_MARKER_FILENAME
+    assert marker_path.exists(), f"marker file should exist at {marker_path} after the one-time offer"
+
+    # --- Second run: another upstream commit; the marker must suppress the offer. ---
+    # --- 2回目実行: 別のupstreamコミット。マーカーが提案を抑止するはず ---
+    def mutate2(seed_dir: Path) -> None:
+        (seed_dir / "README.md").write_text(
+            BASELINE_README + "upstream v2 for flasher offer case\nupstream v3 line\n",
+            encoding="utf-8",
+        )
+
+    _push_upstream_change(seed_dir, mutate2, "v3: second upstream commit")
+
+    result2 = _run_upgrade(clone_dir, [], stdin_text="y\n")
+    assert result2.returncode == 0, (
+        f"expected exit 0, got {result2.returncode}\nSTDOUT:\n{result2.stdout}\nSTDERR:\n{result2.stderr}"
+    )
+
+    combined_output2 = result2.stdout + result2.stderr
+    assert "one-time offer" not in combined_output2, (
+        f"second run should NOT show the offer again (marker should suppress it); "
+        f"full output:\n{combined_output2}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # 実行部
@@ -440,11 +598,13 @@ CHECKS = [
     ("(d) dependency resync reached", check_pip_sync_invoked),
     ("(e) sdkconfig staleness backup", check_sdkconfig_backup),
     ("(f) --discard-local", check_discard_local),
+    ("(g) one-time flasher install offer", check_flasher_first_time_offer),
 ]
 
 
 def main() -> int:
     failures = []
+    skipped = []
     with tempfile.TemporaryDirectory(prefix="check_upgrade_") as tmp_root_str:
         # .resolve() matters on Windows: GitHub runners hand out %TEMP% in
         # 8.3 short form (C:\Users\RUNNERA~1\...), while the code under
@@ -460,6 +620,13 @@ def main() -> int:
         for name, check_fn in CHECKS:
             try:
                 check_fn(tmp_root)
+            except CheckSkipped as exc:
+                # Intentional, not a failure -- e.g. case (g) on a machine
+                # that already has the native flasher installed.
+                # 意図的なもので失敗ではない -- 例: ネイティブフラッシャが
+                # 既に導入済みのマシンでのケース(g)。
+                skipped.append((name, str(exc)))
+                print(f"SKIPPED {name}: {exc}")
             except AssertionError as exc:
                 failures.append((name, str(exc)))
                 print(f"FAIL {name}: {exc}")
@@ -473,7 +640,11 @@ def main() -> int:
     if failures:
         print(f"{len(failures)}/{len(CHECKS)} check(s) FAILED")
         return 1
-    print(f"All {len(CHECKS)} checks PASSED")
+    ran_count = len(CHECKS) - len(skipped)
+    if skipped:
+        print(f"All {ran_count}/{len(CHECKS)} checks PASSED ({len(skipped)} SKIPPED)")
+    else:
+        print(f"All {len(CHECKS)} checks PASSED")
     return 0
 
 
