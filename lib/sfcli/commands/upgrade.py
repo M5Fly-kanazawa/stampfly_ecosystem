@@ -496,7 +496,11 @@ def _backup_stale_sdkconfigs(root: Path, old_head: str, new_head: str) -> List[s
     return backed_up_targets
 
 
-def _offer_flasher_update(args: argparse.Namespace, actions_taken: List[str]) -> None:
+def _offer_flasher_update(
+    args: argparse.Namespace,
+    actions_taken: List[str],
+    update_offer: bool = True,
+) -> None:
     """Native GUI Flasher app: offer to update it if installed, or offer
     a one-time install if it is not (spec C1#7).
 
@@ -529,7 +533,15 @@ def _offer_flasher_update(args: argparse.Namespace, actions_taken: List[str]) ->
     installed_executable = flasher_install.installed_app_executable()
     if installed_executable is not None:
         # Already installed: existing update-offer behavior, unchanged.
-        # 導入済み: 既存の更新提案の挙動（変更なし）。
+        # The up-to-date caller passes update_offer=False: nothing was
+        # pulled, so re-offering (and with --yes, re-downloading ~14MB of)
+        # an app update on every no-op run would be pure nagging/waste.
+        # 導入済み: 既存の更新提案の挙動（変更なし）。up-to-date 経路の
+        # 呼び出し元は update_offer=False を渡す: 何も pull していないのに
+        # 毎回更新を提案（--yes なら毎回 約14MB を再ダウンロード）するのは
+        # ただの煩わしさ/浪費のため。
+        if not update_offer:
+            return
         console.print()
         if not (args.yes or _confirm("Update the native GUI Flasher too?", default_yes=True)):
             return
@@ -661,11 +673,25 @@ def run(args: argparse.Namespace) -> int:
 
     if behind_count == 0:
         console.success("Already up to date.")
+        deps_ok = True
         if args.skip_deps:
             console.print("(--skip-deps: dependency resync skipped)")
-            return EXIT_OK
-        console.print()
-        return EXIT_OK if _sync_dependencies(root) else EXIT_GENERAL_ERROR
+        else:
+            console.print()
+            deps_ok = _sync_dependencies(root)
+        # The one-time flasher offer must ALSO run on the up-to-date path:
+        # the very audience it exists for — users of an old checkout who
+        # bootstrapped with a plain `git pull` and then run `sf upgrade` —
+        # arrives here already up to date, and would otherwise never see
+        # the offer at all.
+        # 一回限りのフラッシャ提案は「最新です」経路でも必ず実行する:
+        # この提案の主対象 — 素の `git pull` でブートストラップしてから
+        # `sf upgrade` を実行する旧チェックアウトのユーザー — はまさに
+        # 最新状態でここへ到達するため、ここで出さなければ提案が一度も
+        # 表示されないままになる。
+        offer_actions: List[str] = []
+        _offer_flasher_update(args, offer_actions, update_offer=False)
+        return EXIT_OK if deps_ok else EXIT_GENERAL_ERROR
 
     console.info(f"{behind_count} new commit(s) available on {remote_ref}.")
 

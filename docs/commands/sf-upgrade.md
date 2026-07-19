@@ -26,7 +26,7 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 ## 4. やること（ステップ概要）
 
 1. リポジトリ確認（gitクローンか、`origin` リモートが設定済みか）・現在ブランチ表示
-2. `git fetch` して遅れているコミット数を確認（0件なら依存同期のみ実行して終了）
+2. `git fetch` して遅れているコミット数を確認（0件なら依存同期と、書き込みアプリ未導入時の一回限り提案＝下記7だけ実行して終了）
 3. 取り込まれるコミットの一覧をプレビュー表示し、`Y/n` で確認
 4. ローカル変更を安全に取り込む（既定=stash→マージ→復元、`--discard-local`=確認の上で破棄）
 5. Python依存関係を再同期（`pip install -e .`）
@@ -90,7 +90,7 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 ## 4. What It Does (Step Overview)
 
 1. Repository check (git clone with an `origin` remote?) and current-branch display
-2. `git fetch`, then check how many commits behind (0 -> only dependency resync runs, then exits)
+2. `git fetch`, then check how many commits behind (0 -> dependency resync plus the one-time flasher-install offer (step 7) run, then it exits)
 3. Show a preview of incoming commits and ask `Y/n`
 4. Safely fold in local changes (default = stash -> merge -> restore, `--discard-local` = discard after confirmation)
 5. Resync Python dependencies (`pip install -e .`)

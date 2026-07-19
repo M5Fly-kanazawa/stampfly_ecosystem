@@ -585,6 +585,30 @@ def check_flasher_first_time_offer(tmp_root: Path) -> None:
         f"full output:\n{combined_output2}"
     )
 
+    # --- Third run: ALREADY-UP-TO-DATE path must also fire the offer. This is
+    # the bootstrap audience's actual arrival path (plain `git pull` first,
+    # then `sf upgrade` -> "Already up to date"), so the offer must not be
+    # gated behind an actual pull. Delete the marker to re-arm the offer,
+    # run with no new upstream commits, and expect the offer text.
+    # --- 3回目実行: 「最新です」経路でも提案が出ること。ブートストラップ組の
+    # 実際の到達経路（先に素の `git pull` → `sf upgrade` → "Already up to
+    # date"）なので、提案が「実際に pull が起きた時」に閉じ込められていては
+    # ならない。マーカーを削除して提案を再度有効化し、upstream に新コミットが
+    # 無い状態で実行して提案文言が出ることを確認する。 ---
+    marker_path.unlink()
+    result3 = _run_upgrade(clone_dir, [], stdin_text="")
+    assert result3.returncode == 0, (
+        f"expected exit 0, got {result3.returncode}\nSTDOUT:\n{result3.stdout}\nSTDERR:\n{result3.stderr}"
+    )
+    combined_output3 = result3.stdout + result3.stderr
+    assert "Already up to date" in combined_output3, (
+        f"third run should hit the up-to-date path; full output:\n{combined_output3}"
+    )
+    assert "one-time offer" in combined_output3, (
+        f"the up-to-date path must also show the one-time offer; full output:\n{combined_output3}"
+    )
+    assert marker_path.exists(), "the up-to-date offer must also write the marker"
+
 
 # ---------------------------------------------------------------------------
 # Runner
