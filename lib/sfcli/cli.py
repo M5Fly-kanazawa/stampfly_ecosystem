@@ -133,6 +133,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         Exit code (0 = success, non-zero = error)
     """
+    # Console-encoding hardening: never let an unencodable character kill a
+    # command. Windows consoles decode/encode with a code page (cp932 on
+    # Japanese Windows, cp1252 on English) that cannot represent every
+    # character UTF-8 content may carry -- printing a git commit title with
+    # an em-dash / Japanese raised UnicodeEncodeError and aborted
+    # `sf upgrade` (observed 2026-07-19: cp932 on a DXH loaner PC, then
+    # cp1252 on the windows-latest CI leg via the regression fixture).
+    # errors="replace" renders such characters as '?' instead of crashing —
+    # the same remedy the v2026.07.1 flasher adopted for its CLI paths.
+    # コンソールエンコーディングの防御: エンコードできない文字でコマンドを
+    # 死なせない。Windows のコンソールはコードページ（日本語 Windows は
+    # cp932、英語は cp1252）で入出力し、UTF-8 コンテンツの全文字は表現でき
+    # ない -- 全角ダッシュ/日本語を含む git コミット題名の表示が
+    # UnicodeEncodeError を起こし `sf upgrade` を中断させた（2026-07-19 に
+    # 実測: DXH 貸出PCの cp932、続いて退行フィクスチャ経由で windows-latest
+    # CI レッグの cp1252）。errors="replace" はそうした文字を '?' として
+    # 表示し、クラッシュさせない — v2026.07.1 のフラッシャが CLI 経路に
+    # 採用したのと同じ対処。
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # Non-reconfigurable stream (exotic redirection): leave as-is.
+            # 再構成できないストリーム（特殊なリダイレクト）: そのまま。
+            pass
+
     # See _warn_if_commands_unavailable()'s docstring for why this runs
     # before parser creation / argument parsing.
     # このタイミングで実行する理由は _warn_if_commands_unavailable() の
