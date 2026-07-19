@@ -52,6 +52,12 @@ sf upgrade
 | 7 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
 | 8 | サマリ表示 | 更新前後のコミットハッシュ、実施した処置、次にやるべきこと（例: `sf build vehicle`）を表示 | — |
 
+> **注（ステップ2→3の間・自己ブートストラップ）:** 取得した更新に `sf` 自身（`lib/sfcli`）への
+> 変更が含まれる場合、ステップ3のプレビューへ進む前に、取得したばかりの最新版の `upgrade`
+> ロジックへ自動的に処理を引き継ぎます。これにより、`sf upgrade` 自体のバグ修正は
+> **1回の実行だけで**その場で反映されます（更新前の実装で取り込んでから改めて実行し直す、
+> という2手を踏む必要がありません）。
+
 ### 3.1 ステップ4: ローカル変更の取り込み
 
 `git status --porcelain` で確認した「追跡ファイルの変更」（`??` で始まる **未追跡ファイルは対象外** = 無視されます）を、次のいずれかで処理します。
@@ -269,6 +275,12 @@ This guide targets **teachers and students who are not software-development spec
 | 6 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
 | 7 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
 | 8 | Summary | Shows the before/after commit hash, actions taken, and the recommended next step (e.g. `sf build vehicle`) | — |
+
+> **Note (between steps 2 and 3 — self-bootstrap):** if the fetched update includes changes
+> to `sf` itself (`lib/sfcli`), execution automatically hands off to the just-fetched, updated
+> `upgrade` logic before step 3's preview runs. This means bug fixes to `sf upgrade` itself take
+> effect in **a single run** — there is no need to pull with the pre-update implementation and
+> then run it a second time.
 
 ### 3.1 Step 4: Handling Local Changes
 

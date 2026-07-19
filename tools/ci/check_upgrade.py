@@ -56,6 +56,18 @@ Covers / 対象（仕様C1テスト項目 (a)〜(g)）:
         フォールバック）、2回目はマーカーファイルにより抑止される。
         このマシンに実際にネイティブフラッシャが導入済みの場合はSKIP
         （失敗ではない）-- 未導入分岐が実際には発生し得ないため。
+    (h) When the upstream update touches `sf` itself (lib/sfcli), `sf
+        upgrade` hands execution off to the just-fetched copy of the
+        command instead of finishing with the (possibly outdated) local
+        one -- so a bug fix to `upgrade.py` lands in a single `sf
+        upgrade`, not two. Also confirms case (a)'s README-only change
+        does NOT trigger the hand-over (no false positives).
+        上流の更新がsf自身（lib/sfcli）に触れている場合、`sf upgrade`は
+        （古いかもしれない）ローカルの実装ではなく、取得したばかりの
+        コピーへ処理を引き継ぐことを検証する -- これによりupgrade.py
+        自身へのバグ修正が2回ではなく1回の`sf upgrade`で反映される。
+        併せて、ケース(a)のREADMEのみの変更では引き継ぎが発生しない
+        （誤検出が無い）ことも確認する。
 
 Usage / 使い方:
     python3 tools/ci/check_upgrade.py
@@ -320,6 +332,17 @@ def check_clean_fast_forward(tmp_root: Path) -> None:
     head = _git(clone_dir, ["rev-parse", "HEAD"]).stdout.strip()
     origin_head = _git(clone_dir, ["rev-parse", f"origin/{MAIN_BRANCH}"]).stdout.strip()
     assert head == origin_head, "HEAD should have fast-forwarded to origin/main"
+
+    # This case's upstream commit does not touch lib/sfcli (README only),
+    # so the case (h) self-bootstrap hop must NOT fire -- confirms the
+    # hop's trigger check has no false positives.
+    # このケースのupstreamコミットはlib/sfcliに触れない（READMEのみ）ため、
+    # ケース(h)の自己ブートストラップ・ホップは発火してはならない --
+    # ホップの発火判定に誤検出が無いことを確認する。
+    assert "handing over" not in (result.stdout + result.stderr), (
+        f"a README-only upstream change should not trigger the self-bootstrap hop; "
+        f"full output:\n{result.stdout}{result.stderr}"
+    )
 
 
 def check_noconflict_stash(tmp_root: Path) -> None:
@@ -625,6 +648,75 @@ def check_flasher_first_time_offer(tmp_root: Path) -> None:
     assert marker_path.exists(), "the up-to-date offer must also write the marker"
 
 
+def check_bootstrap_hop(tmp_root: Path) -> None:
+    """(h) Self-bootstrap hop: when the upstream update touches `sf`
+    itself (lib/sfcli), `sf upgrade` hands execution off to the just
+    -fetched copy of the command instead of finishing with the (possibly
+    outdated) local one.
+
+    Mutates BOTH lib/sfcli/commands/upgrade.py (append a harmless
+    trailing comment -- just enough to make `git diff -- lib/sfcli`
+    non-empty, the hop's trigger condition) and README.md (so the
+    eventual fast-forward merge is externally observable without diffing
+    sfcli's own source, which the hop mutates on purpose). Asserts the
+    hand-over info line is printed and the merge genuinely completed
+    (proof the hopped-to process actually ran the upgrade, not just that
+    the hop was attempted).
+
+    (h) 自己ブートストラップ・ホップ: 上流の更新がsf自身（lib/sfcli）に
+    触れている場合、`sf upgrade`は（古いかもしれない）ローカルの実装を
+    完走させる代わりに、取得したばかりのコピーへ処理を引き継ぐことを
+    検証する。
+
+    lib/sfcli/commands/upgrade.py（無害な末尾コメントを追記 -- ホップの
+    発火条件である`git diff -- lib/sfcli`を非空にするのに十分）と
+    README.md（ホップが意図的に変更するsfcli自身のソース差分を見ずとも、
+    最終的なff-onlyマージの完了を外部から観測できるように）の両方を
+    変更する。引き継ぎの案内文言が表示されること、マージが実際に完了した
+    こと（ホップが試みられただけでなく、引き継ぎ先プロセスが本当に
+    アップグレードを実行した証拠）を確認する。
+    """
+    seed_dir, _, clone_dir = _build_fixture(tmp_root, "case_h_bootstrap_hop")
+
+    def mutate(seed_dir: Path) -> None:
+        upgrade_py_path = seed_dir / "lib" / "sfcli" / "commands" / "upgrade.py"
+        with upgrade_py_path.open("a", encoding="utf-8") as f:
+            # Harmless trailing comment: enough to make `git diff -- lib/sfcli`
+            # non-empty without changing upgrade.py's behavior.
+            # 無害な末尾コメント: upgrade.pyの挙動を変えずに
+            # `git diff -- lib/sfcli` を非空にするのに十分な変更。
+            f.write(
+                "\n# v2 fixture-only marker comment / v2 フィクスチャ専用マーカーコメント\n"
+            )
+        (seed_dir / "README.md").write_text(
+            BASELINE_README + "upstream v2 line for bootstrap hop case\n", encoding="utf-8"
+        )
+
+    _push_upstream_change(
+        seed_dir, mutate, "v2: sf itself changed upstream (bootstrap hop trigger)"
+    )
+
+    result = _run_upgrade(clone_dir, ["--yes"])
+    assert result.returncode == 0, (
+        f"expected exit 0, got {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert "handing over" in combined_output, (
+        f"a change under lib/sfcli should trigger the self-bootstrap hand-over line; "
+        f"full output:\n{combined_output}"
+    )
+
+    readme = (clone_dir / "README.md").read_text(encoding="utf-8")
+    assert "upstream v2 line for bootstrap hop case" in readme, (
+        "the merge should have actually happened, performed by the hopped-to process"
+    )
+
+    head = _git(clone_dir, ["rev-parse", "HEAD"]).stdout.strip()
+    origin_head = _git(clone_dir, ["rev-parse", f"origin/{MAIN_BRANCH}"]).stdout.strip()
+    assert head == origin_head, "HEAD should have fast-forwarded to origin/main"
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # 実行部
@@ -638,6 +730,7 @@ CHECKS = [
     ("(e) sdkconfig staleness backup", check_sdkconfig_backup),
     ("(f) --discard-local", check_discard_local),
     ("(g) one-time flasher install offer", check_flasher_first_time_offer),
+    ("(h) self-bootstrap hop", check_bootstrap_hop),
 ]
 
 

@@ -28,9 +28,13 @@ probe, which relies on this contract).
 
 import argparse
 import datetime
+import io
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -102,6 +106,29 @@ FLASHER_OFFER_MARKER_FILENAME = "flasher_install_offered"
 # tools/ci/check_upgrade.py がネットワーク/pip呼び出し無しでこの手順に
 # 到達したことを検証できるようにするため。
 SKIP_PIP_ENV_VAR = "SF_UPGRADE_SKIP_PIP"
+
+# Self-bootstrap hop (see _bootstrap_hop_to_updated_upgrade): when the
+# fetched upstream changed `sf` itself (lib/sfcli), this LOCAL copy of
+# upgrade.py hands off to the just-fetched one instead of finishing the
+# upgrade with (possibly buggy/outdated) code. BOOTSTRAP_ENV_FLAG is the
+# recursion guard set on the re-exec'd process; ROOT_OVERRIDE_ENV is how
+# that process -- running from a temp extraction dir with no .git of its
+# own -- is told where the real checkout is. Its value MUST match
+# lib/sfcli/utils/paths.py's internal `_ROOT_OVERRIDE_ENV_VAR` (see that
+# module's root() docstring); the two cannot share a definition because
+# paths.py must not import a command module.
+# 自己ブートストラップ・ホップ（_bootstrap_hop_to_updated_upgrade参照）:
+# 取得した上流が sf 自身（lib/sfcli）を変更していた場合、この「ローカルの」
+# upgrade.py は（古いかもしれない）コードで処理を終わらせず、取得したばかりの
+# コピーへ引き継ぐ。BOOTSTRAP_ENV_FLAG は再実行されたプロセスに設定される
+# 再帰防止フラグ。ROOT_OVERRIDE_ENV は、自前の .git を持たない一時展開
+# ディレクトリから実行される再実行プロセスへ、本来のチェックアウトの場所を
+# 伝える手段。値は lib/sfcli/utils/paths.py の内部定数
+# `_ROOT_OVERRIDE_ENV_VAR`（同モジュールの root() docstring参照）と必ず
+# 一致させること -- paths.py がコマンドモジュールを import できないため、
+# 2つの定数は定義を共有できない。
+BOOTSTRAP_ENV_FLAG = "SF_UPGRADE_BOOTSTRAPPED"
+ROOT_OVERRIDE_ENV = "SF_ROOT_OVERRIDE"
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -655,6 +682,155 @@ def _print_summary(old_head: str, new_head: str, actions_taken: List[str]) -> No
         )
 
 
+def _reconstruct_cli_flags(args: argparse.Namespace) -> List[str]:
+    """Rebuild the `sf upgrade` flags actually in effect, for re-exec by
+    the self-bootstrap hop.
+
+    Reconstructs from the already-parsed Namespace rather than replaying
+    the original argv -- simpler, and immune to spelling variants (`-y`
+    vs `--yes`).
+    自己ブートストラップ・ホップの再実行のために、実際に有効な
+    `sf upgrade` フラグを組み立て直す。元のargvを再生するのではなく、
+    パース済みのNamespaceから再構築する -- そのほうが単純で、
+    綴りの違い（`-y` と `--yes`）の影響も受けない。
+    """
+    flags = []
+    if args.yes:
+        flags.append("--yes")
+    if args.discard_local:
+        flags.append("--discard-local")
+    if args.no_flasher:
+        flags.append("--no-flasher")
+    if args.skip_deps:
+        flags.append("--skip-deps")
+    return flags
+
+
+def _bootstrap_hop_to_updated_upgrade(
+    root: Path,
+    remote_ref: str,
+    args: argparse.Namespace,
+) -> Optional[int]:
+    """If the fetched upstream changed `sf` itself (lib/sfcli), hand
+    execution over to the just-fetched copy of this very command instead
+    of finishing the upgrade with the (possibly buggy/outdated) local
+    code.
+
+    Why this exists: `sf upgrade` is the recovery path users run when
+    told "there's an update". If a bug in upgrade.py is itself one of
+    the things being fixed upstream, running the OLD upgrade.py to pull
+    that fix only takes effect on the *next* invocation -- the user is
+    stuck one extra round-trip away from the fix that would have helped
+    them right now. This hop collapses that to a single `sf upgrade`.
+
+    Returns the re-exec'd process's exit code if a hop happened -- the
+    caller MUST return this directly, since the hop's own execution *is*
+    the upgrade (it performs its own preview/merge/etc). Returns None if
+    no hop was needed or possible, in which case the caller falls
+    through to the normal local flow, completely unaffected.
+
+    フェッチした上流が sf 自身（lib/sfcli）を変更していた場合、
+    （古いかもしれない）ローカルのコードでアップグレードを完了させる
+    代わりに、取得したばかりのこのコマンド自身のコピーへ処理を
+    引き継ぐ。
+
+    存在理由: `sf upgrade` は「アップデートがあります」と言われた
+    ユーザーが実行する復旧経路そのもの。upgrade.py自身のバグが上流で
+    修正されている対象の1つだった場合、その古いupgrade.pyで修正を
+    取り込んでも効果が出るのは「次回」の実行からになってしまい、
+    今まさに欲しい修正まであと1往復かかってしまう。このホップにより
+    それを`sf upgrade`1回に圧縮する。
+
+    ホップが発生した場合は再実行したプロセスの終了コードを返す --
+    呼び出し元はこれをそのままreturnすること（ホップの実行自体が
+    アップグレードそのもの・プレビュー/マージ等を自前で行うため）。
+    ホップが不要／不可能だった場合はNoneを返し、呼び出し元は影響を
+    受けず通常のローカル処理へそのまま進む。
+    """
+    # Recursion guard: set on the re-exec'd process below, so a
+    # bootstrapped copy landing here again just runs normally instead of
+    # hopping forever.
+    # 再帰防止: 下記の再実行プロセスに設定される。ブートストラップ済みの
+    # コピーが再びここへ来た場合は無限ホップせず通常どおり実行するだけ。
+    if os.environ.get(BOOTSTRAP_ENV_FLAG):
+        return None
+
+    sfcli_diff_result = _run_git(
+        root, ["diff", "--name-only", f"HEAD..{remote_ref}", "--", "lib/sfcli"]
+    )
+    if sfcli_diff_result is None or sfcli_diff_result.returncode != 0:
+        return None
+    if not sfcli_diff_result.stdout.strip():
+        # sf itself is unchanged upstream: hopping would land on
+        # identical code, so there is nothing to gain.
+        # sf自身は上流で変化していない: ホップしても同一のコードに
+        # 着地するだけで得るものがない。
+        return None
+
+    console.info(
+        "sf itself was updated upstream -- handing over to the updated "
+        "upgrade logic... / sf 自身の更新が含まれるため、取得した最新版の "
+        "upgrade に処理を引き継ぎます..."
+    )
+
+    tmp_dir: Optional[str] = None
+    try:
+        # Binary output (a tar stream) -- deliberately NOT text=True, see
+        # spec: decoding it as text would corrupt the archive.
+        # バイナリ出力（tarストリーム）-- text=Trueにしない。テキストとして
+        # デコードするとアーカイブが壊れる。
+        archive_result = subprocess.run(
+            ["git", "archive", remote_ref, "lib/sfcli"],
+            cwd=str(root),
+            capture_output=True,
+            timeout=GIT_LOCAL_TIMEOUT_SEC,
+        )
+        if archive_result.returncode != 0:
+            raise RuntimeError(
+                f"git archive failed: {archive_result.stderr.decode('utf-8', 'replace')}"
+            )
+
+        tmp_dir = tempfile.mkdtemp(prefix="sf_upgrade_boot_")
+        with tarfile.open(fileobj=io.BytesIO(archive_result.stdout)) as archive:
+            # Trusted content: extracted from `origin`, the same remote
+            # this checkout already trusts enough to merge from.
+            # 信頼済みの内容: このチェックアウトが既にマージ元として
+            # 信頼している`origin`から取得したもの。
+            archive.extractall(tmp_dir)
+        bootstrapped_lib_dir = str(Path(tmp_dir) / "lib")
+
+        hop_env = dict(os.environ)
+        hop_env[BOOTSTRAP_ENV_FLAG] = "1"
+        hop_env[ROOT_OVERRIDE_ENV] = str(root)
+        existing_pythonpath = hop_env.get("PYTHONPATH", "")
+        hop_env["PYTHONPATH"] = (
+            bootstrapped_lib_dir if not existing_pythonpath
+            else bootstrapped_lib_dir + os.pathsep + existing_pythonpath
+        )
+
+        hop_result = subprocess.run(
+            [sys.executable, "-m", "sfcli.cli", "upgrade", *_reconstruct_cli_flags(args)],
+            env=hop_env,
+            # Inherit stdio (no capture): the hopped-to process owns the
+            # rest of this interactive upgrade (preview confirm, stash
+            # conflict guidance, ...) -- capturing here would swallow
+            # prompts the user needs to see and answer.
+            # 標準入出力を継承する（捕捉しない）: ホップ先プロセスが
+            # 以後の対話的処理（プレビュー確認・stash衝突案内等）を
+            # 引き継ぐため、ここで捕捉するとユーザーが見て応答すべき
+            # プロンプトを飲み込んでしまう。
+        )
+        return hop_result.returncode
+    except Exception as exc:  # noqa: BLE001 - any hop failure must fall back, never abort the upgrade
+        console.warning(
+            f"Self-bootstrap hop failed ({exc}); continuing with the local upgrade logic."
+        )
+        return None
+    finally:
+        if tmp_dir is not None:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute `sf upgrade` / `sf upgrade` を実行する"""
     console.header("StampFly Ecosystem Upgrade")
@@ -721,6 +897,29 @@ def run(args: argparse.Namespace) -> int:
         return EXIT_OK if deps_ok else EXIT_GENERAL_ERROR
 
     console.info(f"{behind_count} new commit(s) available on {remote_ref}.")
+
+    # =======================================================================
+    # FROZEN MINIMAL CORE -- everything from Step 1 (repository check) above
+    # down through the self-bootstrap hop immediately below must stay
+    # backward-bulletproof. This is the exact code path an OLD, already
+    # -installed copy of `sf upgrade` runs before it gets a chance to hand
+    # off to a fixed/updated copy of itself; if this segment breaks, users
+    # stuck on a buggy old `sf upgrade` have no way to ever reach the fix.
+    # Treat edits to this segment with extra scrutiny. Logic AFTER the hop
+    # (Step 3 onward) is comparatively self-healing: a bug there ships once,
+    # and from then on the hop keeps every future run on the current code.
+    # =======================================================================
+    # 凍結された最小コア -- 上記のStep1（リポジトリ確認）から、直下の
+    # 自己ブートストラップ・ホップまでは、後方互換性を絶対に壊さないこと。
+    # ここは、既にインストール済みの「古い」`sf upgrade` が、修正/更新
+    # された自分自身へ処理を引き継げるようになる前に実行する経路そのもの。
+    # この区間が壊れると、バグのある古い`sf upgrade`に留まったユーザーは
+    # 修正へ辿り着く手段が無くなる。この区間の編集は特に慎重に扱うこと。
+    # ホップより後（Step3以降）のロジックは相対的に自己治癒する -- バグが
+    # あっても一度取り込めば、以後はホップが自動的に最新版へ導く。
+    hop_exit_code = _bootstrap_hop_to_updated_upgrade(root, remote_ref, args)
+    if hop_exit_code is not None:
+        return hop_exit_code
 
     # --- Step 3: preview + confirm ----------------------------------------
     console.print()

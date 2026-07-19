@@ -36,6 +36,12 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 
 詳細な各ステップの解説と、Gitコマンドとの対応表は [アップグレードガイド §3](../guides/upgrading.md) を参照してください。
 
+> **自己ブートストラップ:** ステップ2で取得した更新に `sf` 自身（`lib/sfcli`）への変更が
+> 含まれる場合、ステップ3のプレビューに進む前に、取得したばかりの最新版の `upgrade` ロジックへ
+> 自動的に処理を引き継ぎます（`sf itself was updated upstream -- handing over...` と表示）。
+> つまり `sf upgrade` 自体のバグ修正は、**1回の `sf upgrade` 実行だけで**その場で反映されます
+> （古い実装で更新を取り込んでから改めて実行し直す、という2手を踏む必要がありません）。
+
 ## 5. 終了コード
 
 | コード | 意味 |
@@ -99,6 +105,13 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 8. Print a summary (before/after commit hash, actions taken, recommended next step)
 
 See [Upgrading Guide §3](../guides/upgrading.md#3-what-sf-upgrade-does-internally) for a detailed walkthrough of each step and its manual Git-command equivalent.
+
+> **Self-bootstrap:** if the update fetched in step 2 includes changes to `sf` itself
+> (`lib/sfcli`), execution automatically hands off to the just-fetched, updated `upgrade`
+> logic before step 3's preview runs (printed as `sf itself was updated upstream --
+> handing over...`). In other words, bug fixes to `sf upgrade` itself take effect in
+> **a single `sf upgrade` run** -- there is no need to pull with the old implementation
+> and then run it a second time.
 
 ## 5. Exit Codes
 

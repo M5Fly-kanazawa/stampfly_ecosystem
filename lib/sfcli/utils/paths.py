@@ -9,6 +9,20 @@ import os
 from pathlib import Path
 from typing import Optional
 
+# Env var an externally re-exec'd copy of `sf` can set to force root() to a
+# specific checkout instead of walking up from this file's location. See
+# root()'s docstring for why this exists. The string value must be kept in
+# sync by hand with lib/sfcli/commands/upgrade.py's ROOT_OVERRIDE_ENV --
+# paths.py must not import a command module (that would invert the
+# dependency direction), so the two constants cannot share a definition.
+# 外部から再実行された `sf` のコピーが、__file__ から上へ辿る通常のロジック
+# の代わりにルートを特定のチェックアウトへ強制するための環境変数。存在理由は
+# root() の docstring を参照。値は lib/sfcli/commands/upgrade.py の
+# ROOT_OVERRIDE_ENV と手動で一致させ続ける必要がある -- paths.py がコマンド
+# モジュールを import することは依存方向が逆転するため許されず、2つの定数は
+# 定義を共有できない。
+_ROOT_OVERRIDE_ENV_VAR = "SF_ROOT_OVERRIDE"
+
 
 class Paths:
     """Path manager for StampFly Ecosystem"""
@@ -42,7 +56,41 @@ class Paths:
         return self._root
 
     def root(self) -> Path:
-        """Get repository root directory"""
+        """Get repository root directory.
+        リポジトリルートディレクトリを取得する
+
+        Internal mechanism: if the SF_ROOT_OVERRIDE environment variable is
+        set to a path that exists and contains a `.git` entry, that path is
+        returned directly (resolved) instead of walking up from this
+        file's location. Any other value (unset, missing path, no `.git`)
+        is ignored silently and falls through to the normal logic below.
+
+        This exists for `sf upgrade`'s self-bootstrap
+        (lib/sfcli/commands/upgrade.py): when it detects that `sf` itself
+        changed upstream, it re-execs the freshly fetched code from a
+        temporary extraction directory that has no `.git` of its own, so
+        it cannot self-locate the real checkout by walking up from
+        __file__ -- the re-exec sets SF_ROOT_OVERRIDE so it can still find
+        it.
+        内部機構: 環境変数 SF_ROOT_OVERRIDE が、存在し `.git` を含むパスに
+        設定されている場合、__file__ から上へ辿る通常のロジックの代わりに
+        そのパスをそのまま（resolve済みで）返す。それ以外の値（未設定・
+        パス不在・`.git` 無し）は黙って無視し、下記の通常ロジックへ
+        フォールバックする。
+
+        これは `sf upgrade` の自己ブートストラップ
+        （lib/sfcli/commands/upgrade.py）のために存在する: `sf` 自身が
+        上流で更新されたと検知すると、`.git` を持たない一時展開
+        ディレクトリから取得したばかりのコードを再実行するため、
+        __file__ から上へ辿って本来のチェックアウトを自力で特定できない
+        -- 再実行時に SF_ROOT_OVERRIDE を設定することで、それでも実体を
+        見つけられるようにする。
+        """
+        override = os.environ.get(_ROOT_OVERRIDE_ENV_VAR)
+        if override:
+            override_path = Path(override)
+            if override_path.exists() and (override_path / ".git").exists():
+                return override_path.resolve()
         return self._find_root()
 
     def lib(self) -> Path:
