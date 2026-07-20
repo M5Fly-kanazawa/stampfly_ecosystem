@@ -117,10 +117,10 @@
 | `StampFlyFlasher_<tag>_windows-x64.exe` | 既存 |
 | `StampFlyFlasher_<tag>_macos-arm64.zip` / `_macos-x64.zip` | 既存 |
 | `StampFlyFlasher_<tag>_linux-x64` | **新規**（拡張子なし、`chmod +x` 必要） |
-| `StampFlySetup_<tag>_windows-x64.exe` | **新規** |
-| `StampFlySetup_<tag>_macos-arm64.zip` | **新規** |
-| `StampFlySetup_<tag>_macos-x64.zip` | **新規** |
-| `StampFlySetup_<tag>_linux-x64` | **新規**（拡張子なし、`chmod +x` 必要） |
+| `StampFlySetup_windows-x64.exe` | **新規** |
+| `StampFlySetup_macos-arm64.zip` | **新規** |
+| `StampFlySetup_macos-x64.zip` | **新規** |
+| `StampFlySetup_linux-x64` | **新規**（拡張子なし、`chmod +x` 必要） |
 | `SHA256SUMS.txt` | 既存（全アセット対象） |
 
 リリース本文のテンプレートは `.github/workflows/release.yml` の

@@ -644,28 +644,24 @@ jobs:
           fi
           "$BIN" --selftest
 
-      - name: Determine release identifier
-        id: rel
-        # Duplicated from the `build`/`flasher_gui` jobs on purpose -- see
-        # flasher_gui's identical step for why (no cross-job step-output
-        # sharing without explicit needs + output wiring). Keep this logic
-        # identical so all three jobs agree on naming.
-        # `build`/`flasher_gui` ジョブと意図的に重複させている -- 理由は
-        # flasher_gui の同一ステップ参照(needs + output配線なしでは
-        # ジョブ間でstep outputを共有できないため)。命名を3ジョブで
-        # 一致させるためロジックは同一に保つ
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "rel=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-          else
-            echo "rel=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          fi
-
+      # StampFlySetup assets deliberately carry NO release tag in their
+      # filenames (unlike firmware bins and the flasher): a stable name is
+      # what makes GitHub's permalink
+      #   releases/latest/download/StampFlySetup_<suffix>[.ext]
+      # work, which the landing page's OS-detected download button and the
+      # README's one-click links rely on. The release itself provides the
+      # version context. (The flasher keeps tagged names — sf flasher's
+      # installer matches assets by tag pattern.)
+      # StampFlySetup のアセット名には(ファームやフラッシャと異なり)意図的に
+      # リリースタグを入れない。固定名にすることで GitHub の恒久リンク
+      #   releases/latest/download/StampFlySetup_<suffix>[.ext]
+      # が成立し、Landing ページの OS 自動判定ダウンロードボタンと README の
+      # 1クリックリンクがこれに依存する。バージョンはリリース自体が示す。
+      # (フラッシャは sf flasher のインストーラがタグパターンでアセットを
+      # 照合するため、タグ入り命名を維持する。)
       - name: Package Windows executable
         if: runner.os == 'Windows'
-        run: |
-          REL="${{ steps.rel.outputs.rel }}"
-          mv dist/StampFlySetup.exe "dist/StampFlySetup_${REL}_${{ matrix.suffix }}.exe"
+        run: mv dist/StampFlySetup.exe "dist/StampFlySetup_${{ matrix.suffix }}.exe"
 
       - name: Package macOS app bundle
         if: runner.os == 'macOS'
@@ -674,9 +670,8 @@ jobs:
         # flasher_gui の同等ステップと同じ ditto フラグ -- 通常の zip が
         # バンドルを壊す理由は同ステップのコメント参照
         run: |
-          REL="${{ steps.rel.outputs.rel }}"
           ditto -c -k --keepParent dist/StampFlySetup.app \
-            "dist/StampFlySetup_${REL}_${{ matrix.suffix }}.zip"
+            "dist/StampFlySetup_${{ matrix.suffix }}.zip"
 
       - name: Package Linux executable
         if: runner.os == 'Linux'
@@ -685,12 +680,11 @@ jobs:
         # chmod +x because the bit is not guaranteed to survive
         # upload-artifact -> download unpacking on the consuming side.
         # flasher_gui の同等ステップと同じ理由: PyInstaller --onefile の
-        # 出力は既に単一の自己完結ELFバイナリ。chmod +x するのは実行ビットが
+        # 出力は既に単一の自己完結ELFバイナリ。chmod +x するのはビットが
         # upload-artifact -> ダウンロード側の展開で保持される保証がないため
         run: |
-          REL="${{ steps.rel.outputs.rel }}"
-          mv dist/StampFlySetup "dist/StampFlySetup_${REL}_${{ matrix.suffix }}"
-          chmod +x "dist/StampFlySetup_${REL}_${{ matrix.suffix }}"
+          mv dist/StampFlySetup "dist/StampFlySetup_${{ matrix.suffix }}"
+          chmod +x "dist/StampFlySetup_${{ matrix.suffix }}"
 
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
@@ -715,7 +709,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: installer-gui-${{ matrix.suffix }}
-          path: dist/StampFlySetup_*_linux-x64
+          path: dist/StampFlySetup_linux-x64
 
       - name: Run installer GUI CI logic tests
         # Dependency-free checks for this job's own contracts: the
@@ -771,7 +765,7 @@ jobs:
             dist/*.exe
             dist/*.zip
             dist/StampFlyFlasher_*_linux-x64
-            dist/StampFlySetup_*_linux-x64
+            dist/StampFlySetup_linux-x64
             dist/SHA256SUMS.txt
           body: |
             ## 書き込み方法 / How to flash
@@ -805,18 +799,18 @@ jobs:
             導入したい場合は「StampFly Setup」を使う。ウィザードでリポジトリを
             クローンし、`scripts/installer.py` を呼び出して既存の
             `python scripts/installer.py` と同じ手順を GUI で進める。
-            `StampFlySetup_<tag>_windows-x64.exe` / `StampFlySetup_<tag>_macos-arm64.zip`
-            （Apple Silicon）/ `StampFlySetup_<tag>_macos-x64.zip`（Intel）/
-            `StampFlySetup_<tag>_linux-x64`（`chmod +x` してから実行）を
-            ダウンロードして実行する（macOSは初回のみ右クリック→「開く」で起動）。
+            お使いのOSの1つをダウンロードして実行するだけ
+            （macOSは初回のみ右クリック→「開く」で起動）:
+            [Windows](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_windows-x64.exe) /
+            [macOS Apple Silicon](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-arm64.zip) /
+            [macOS Intel](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-x64.zip) /
+            [Linux](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_linux-x64)（`chmod +x` してから実行）
             Want to set up the whole build environment (sf CLI + ESP-IDF), not just
             flash a pre-built binary? Use "StampFly Setup": the wizard clones the
             repository and runs `scripts/installer.py` under the hood, walking through
-            the same steps as `python scripts/installer.py` in a GUI. Download and run
-            `StampFlySetup_<tag>_windows-x64.exe` / `StampFlySetup_<tag>_macos-arm64.zip`
-            (Apple Silicon) / `StampFlySetup_<tag>_macos-x64.zip` (Intel) /
-            `StampFlySetup_<tag>_linux-x64` (run `chmod +x` first) (on macOS,
-            right-click -> Open the first time to bypass Gatekeeper).
+            the same steps as `python scripts/installer.py` in a GUI. Download the one
+            for your OS above and run it (on macOS, right-click -> Open the first
+            time to bypass Gatekeeper; on Linux, `chmod +x` first).
 
             ```bash
             # Flash everything from scratch / 工場出荷相当で全体を書き込む

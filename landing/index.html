@@ -310,6 +310,9 @@ section{position:relative}
 .copy-btn{flex:none;background:var(--grad);color:#06080f;border:none;border-radius:10px;
   padding:9px 14px;font-weight:700;cursor:pointer;font-size:.82rem}
 .cta .btns{justify-content:center;margin-top:26px}
+.setup-os-links{margin-top:10px;font-size:.82rem;color:var(--muted)}
+.setup-os-links a{color:var(--muted);text-decoration:underline}
+.setup-os-links a:hover{color:var(--text)}
 
 /* Footer */
 footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:30px}
@@ -591,9 +594,15 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
         <h2 data-i18n="ctaTitle">さあ、<span class="grad-text">飛ばしてみよう</span></h2>
         <p data-i18n="ctaP">GUI インストーラ「StampFly Setup」をダウンロードして実行するだけ。sf CLI・ESP-IDF・書き込みアプリを一括で導入します（ターミナル不要）。</p>
         <div class="btns">
-          <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" target="_blank" rel="noopener" data-i18n="ctaBtnSetup">⬇ StampFly Setup をダウンロード</a>
+          <a class="btn btn-primary" id="setupDownloadBtn" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" rel="noopener" data-i18n="ctaBtnSetup">⬇ StampFly Setup をダウンロード</a>
           <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/docs/guides/gui-installer.md" target="_blank" rel="noopener" data-i18n="ctaBtnSetupGuide">使い方ガイド</a>
         </div>
+        <p class="setup-os-links"><span data-i18n="ctaOtherOs">他のOS:</span>
+          <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" data-setup-asset="StampFlySetup_windows-x64.exe" rel="noopener">Windows</a> ·
+          <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" data-setup-asset="StampFlySetup_macos-arm64.zip" rel="noopener">macOS (Apple&nbsp;Silicon)</a> ·
+          <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" data-setup-asset="StampFlySetup_macos-x64.zip" rel="noopener">macOS (Intel)</a> ·
+          <a href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" data-setup-asset="StampFlySetup_linux-x64" rel="noopener">Linux</a>
+        </p>
         <p data-i18n="ctaCliLabel">コマンドラインで導入する場合:</p>
         <div class="code">
           <pre id="installCmd">git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
@@ -709,6 +718,7 @@ const I18N = {
     ctaP:'Download and run the "StampFly Setup" wizard — it installs the sf CLI, ESP-IDF, and the flashing app in one go. No terminal needed.',
     ctaBtnSetup:'⬇ Download StampFly Setup',
     ctaBtnSetupGuide:'Setup guide',
+    ctaOtherOs:'Other OS:',
     ctaCliLabel:'Prefer the command line?',
     ctaBtnRepo:'GitHub repository',
     ctaBtnFlash:'Web Flasher',
@@ -779,6 +789,7 @@ const I18N = {
     ctaP:'下载并运行图形安装向导「StampFly Setup」，即可一键安装 sf CLI、ESP-IDF 与烧录应用，无需终端。',
     ctaBtnSetup:'⬇ 下载 StampFly Setup',
     ctaBtnSetupGuide:'安装指南',
+    ctaOtherOs:'其他操作系统：',
     ctaCliLabel:'使用命令行安装：',
     ctaBtnRepo:'GitHub 仓库',
     ctaBtnFlash:'网页烧录',
@@ -824,6 +835,49 @@ function applyLang(lang){
   applyLang(pick);
   document.querySelectorAll('#langSwitch button').forEach(b =>
     b.addEventListener('click', () => applyLang(b.dataset.lang)));
+})();
+
+/* OS-detected direct download for StampFly Setup. Design: every setup link
+   DEFAULTS to the Releases page (always safe), and is upgraded to a
+   stable-name direct-download URL (releases/latest/download/<asset> — valid
+   because Setup asset filenames carry no tag) only after one GitHub API call
+   confirms the asset actually exists in the latest release. This avoids two
+   failure modes: (a) before the first release that ships Setup assets, a
+   hard-coded direct link would land on a bare 404; (b) if the API is
+   unreachable or rate-limited, everything simply stays on the Releases page.
+   On macOS the browser cannot reliably tell Apple Silicon from Intel, so the
+   primary button defaults to arm64 (all current Macs) and the "other OS"
+   links cover Intel.
+   StampFly Setup の OS 自動判定ダウンロード。設計: 全ての Setup リンクは
+   既定で Releases ページ(常に安全)を指し、GitHub API への1回の問い合わせで
+   最新リリースにアセットの実在を確認できたときだけ、固定名の直接ダウンロード
+   URL(releases/latest/download/<asset> — Setup のアセット名はタグを含まない
+   ため成立)へ昇格させる。これにより2つの故障モードを避ける: (a) Setup
+   アセットを含む最初のリリースが出る前に、直リンク直書きだと素の404に着地
+   する。(b) API が不達・レート制限のときは、単に Releases ページのままに
+   なる。macOS はブラウザから Apple Silicon / Intel を確実に判別できない
+   ため、主ボタンは arm64(現行の全 Mac)を既定とし、Intel は「他のOS」
+   リンクで補う。 */
+(function initSetupDownload(){
+  const btn = document.getElementById('setupDownloadBtn');
+  if (!btn) return;
+  const dlBase = 'https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/';
+  const ua = navigator.userAgent;
+  let btnAsset = null;
+  if (/Windows/i.test(ua))    btnAsset = 'StampFlySetup_windows-x64.exe';
+  else if (/Mac/i.test(ua))   btnAsset = 'StampFlySetup_macos-arm64.zip';
+  else if (/Linux/i.test(ua)) btnAsset = 'StampFlySetup_linux-x64';
+  fetch('https://api.github.com/repos/M5Fly-kanazawa/stampfly_ecosystem/releases/latest')
+    .then(r => r.ok ? r.json() : null)
+    .then(rel => {
+      if (!rel || !Array.isArray(rel.assets)) return;
+      const names = new Set(rel.assets.map(a => a.name));
+      if (btnAsset && names.has(btnAsset)) btn.href = dlBase + btnAsset;
+      document.querySelectorAll('.setup-os-links a[data-setup-asset]').forEach(a => {
+        if (names.has(a.dataset.setupAsset)) a.href = dlBase + a.dataset.setupAsset;
+      });
+    })
+    .catch(() => {});   // API unreachable: keep the safe Releases-page links / API不達時は安全な既定のまま
 })();
 
 /* Scroll reveal via IntersectionObserver / スクロール出現アニメ（?reveal=all で即時表示） */

@@ -55,10 +55,10 @@ MAJORが上がると後方互換性が壊れる、というのがSemVerの約束
 | `StampFlyFlasher_<tag>_macos-arm64.zip` | GUI フラッシャ: macOS (Apple Silicon) 版 .app |
 | `StampFlyFlasher_<tag>_macos-x64.zip` | GUI フラッシャ: macOS (Intel) 版 .app |
 | `StampFlyFlasher_<tag>_linux-x64` | GUI フラッシャ: Linux 版実行ファイル（拡張子なし、`chmod +x` が必要） |
-| `StampFlySetup_<tag>_windows-x64.exe` | GUI インストーラ: Windows 版実行ファイル |
-| `StampFlySetup_<tag>_macos-arm64.zip` | GUI インストーラ: macOS (Apple Silicon) 版 .app |
-| `StampFlySetup_<tag>_macos-x64.zip` | GUI インストーラ: macOS (Intel) 版 .app |
-| `StampFlySetup_<tag>_linux-x64` | GUI インストーラ: Linux 版実行ファイル（拡張子なし、`chmod +x` が必要） |
+| `StampFlySetup_windows-x64.exe` | GUI インストーラ: Windows 版実行ファイル |
+| `StampFlySetup_macos-arm64.zip` | GUI インストーラ: macOS (Apple Silicon) 版 .app |
+| `StampFlySetup_macos-x64.zip` | GUI インストーラ: macOS (Intel) 版 .app |
+| `StampFlySetup_linux-x64` | GUI インストーラ: Linux 版実行ファイル（拡張子なし、`chmod +x` が必要） |
 | `SHA256SUMS.txt` | 上記全ファイルのSHA256チェックサム一覧 |
 
 ## 4. コンポーネント個別バージョンとの関係
@@ -159,10 +159,10 @@ Artifact naming convention (`<tag>` is the Git tag name, e.g. `v2026.07.0`):
 | `StampFlyFlasher_<tag>_macos-arm64.zip` | GUI flasher: macOS (Apple Silicon) .app |
 | `StampFlyFlasher_<tag>_macos-x64.zip` | GUI flasher: macOS (Intel) .app |
 | `StampFlyFlasher_<tag>_linux-x64` | GUI flasher: Linux executable (no extension; needs `chmod +x`) |
-| `StampFlySetup_<tag>_windows-x64.exe` | GUI installer: Windows executable |
-| `StampFlySetup_<tag>_macos-arm64.zip` | GUI installer: macOS (Apple Silicon) .app |
-| `StampFlySetup_<tag>_macos-x64.zip` | GUI installer: macOS (Intel) .app |
-| `StampFlySetup_<tag>_linux-x64` | GUI installer: Linux executable (no extension; needs `chmod +x`) |
+| `StampFlySetup_windows-x64.exe` | GUI installer: Windows executable |
+| `StampFlySetup_macos-arm64.zip` | GUI installer: macOS (Apple Silicon) .app |
+| `StampFlySetup_macos-x64.zip` | GUI installer: macOS (Intel) .app |
+| `StampFlySetup_linux-x64` | GUI installer: Linux executable (no extension; needs `chmod +x`) |
 | `SHA256SUMS.txt` | SHA256 checksums for all files above |
 
 ## 4. Relationship to Individual Component Versions

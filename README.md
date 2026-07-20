@@ -42,10 +42,18 @@
 
 ## 📦 インストール
 
-**ターミナルを使わない方法（推奨・初心者向け）:** [Releases](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) から
-お使いのOSの **StampFly Setup**（`StampFlySetup_<バージョン>_<OS>`）をダウンロードして実行するだけで、
-ウィザードが一式（sf CLI + ESP-IDF + 書き込みアプリ）を導入します。
-**→ [GUI インストーラガイド](docs/guides/gui-installer.md)**
+**ターミナルを使わない方法（推奨・初心者向け）:** お使いのOSの **StampFly Setup** を
+クリックするとダウンロードが始まります。実行するだけで、ウィザードが一式
+（sf CLI + ESP-IDF + 書き込みアプリ）を導入します。
+
+| OS | ダウンロード |
+|----|-------------|
+| Windows | [**StampFlySetup_windows-x64.exe**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_windows-x64.exe) |
+| macOS (Apple Silicon) | [**StampFlySetup_macos-arm64.zip**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-arm64.zip) |
+| macOS (Intel) | [**StampFlySetup_macos-x64.zip**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-x64.zip) |
+| Linux | [**StampFlySetup_linux-x64**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_linux-x64)（`chmod +x` してから実行） |
+
+**→ [GUI インストーラガイド](docs/guides/gui-installer.md)**（macOS の初回起動・Windows SmartScreen の注意もこちら）
 
 コマンドラインで導入する場合:
 
@@ -255,11 +263,18 @@ This ecosystem exists for you.
 
 ## 📦 Installation
 
-**No-terminal path (recommended for beginners):** download **StampFly Setup**
-(`StampFlySetup_<version>_<OS>`) for your OS from
-[Releases](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)
-and run it — the wizard installs everything (sf CLI + ESP-IDF + the flashing app).
-**→ [GUI Installer Guide](docs/guides/gui-installer.md)**
+**No-terminal path (recommended for beginners):** click the **StampFly Setup**
+for your OS — the download starts immediately. Run it and the wizard installs
+everything (sf CLI + ESP-IDF + the flashing app).
+
+| OS | Download |
+|----|----------|
+| Windows | [**StampFlySetup_windows-x64.exe**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_windows-x64.exe) |
+| macOS (Apple Silicon) | [**StampFlySetup_macos-arm64.zip**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-arm64.zip) |
+| macOS (Intel) | [**StampFlySetup_macos-x64.zip**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-x64.zip) |
+| Linux | [**StampFlySetup_linux-x64**](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_linux-x64) (run `chmod +x` first) |
+
+**→ [GUI Installer Guide](docs/guides/gui-installer.md)** (first-launch notes for macOS Gatekeeper / Windows SmartScreen)
 
 Command-line alternative:
 

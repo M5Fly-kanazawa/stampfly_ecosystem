@@ -16,17 +16,19 @@
 
 ## 3. ダウンロード
 
-[Releases ページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)の Assets 一覧から、お使いの環境に対応するファイルをダウンロードします。
+下の表のリンクをクリックすると、最新リリースの該当ファイルのダウンロードがそのまま始まります
+（[Releases ページ](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)の
+Assets 一覧から選んでも同じものです）。
 
-| OS / アーキテクチャ | ダウンロードするファイル |
+| OS / アーキテクチャ | ダウンロード（クリックで開始） |
 |---------------------|--------------------------|
-| Windows | `StampFlySetup_<tag>_windows-x64.exe` |
-| macOS（Apple Silicon: M1/M2/M3/M4） | `StampFlySetup_<tag>_macos-arm64.zip` |
-| macOS（Intel） | `StampFlySetup_<tag>_macos-x64.zip` |
-| Linux（x64） | `StampFlySetup_<tag>_linux-x64` |
+| Windows | [`StampFlySetup_windows-x64.exe`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_windows-x64.exe) |
+| macOS（Apple Silicon: M1/M2/M3/M4） | [`StampFlySetup_macos-arm64.zip`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-arm64.zip) |
+| macOS（Intel） | [`StampFlySetup_macos-x64.zip`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-x64.zip) |
+| Linux（x64） | [`StampFlySetup_linux-x64`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_linux-x64) |
 
-`<tag>` はリリースタグ名（例 `v2026.07.2`）です。Windows / macOS（Apple Silicon・Intel）/ Linux 版は
-v2026.07.2 以降のリリースから提供されます。
+ファイル名にバージョンは含まれません（常に最新リリースのものが取得されます）。
+Windows / macOS（Apple Silicon・Intel）/ Linux 版は v2026.07.2 以降のリリースから提供されます。
 
 > **Tip（Macのチップ種別の確認方法）:** 画面左上の Apple メニュー →「この Mac について」で
 > 「チップ」欄に表示される名称が `Apple M1/M2/M3/M4` なら Apple Silicon 版
@@ -40,7 +42,7 @@ v2026.07.2 以降のリリースから提供されます。
 
 ### Windows
 
-1. ダウンロードした `StampFlySetup_<tag>_windows-x64.exe` をダブルクリックして起動します。
+1. ダウンロードした `StampFlySetup_windows-x64.exe` をダブルクリックして起動します。
 2. 初回起動時、Windows SmartScreen が「Windows によって PC が保護されました」という警告を
    表示することがあります（署名されていない実行ファイルであるため。書き込みアプリ
    「StampFly Flasher」と同じ注意点です）。「**詳細情報**」をクリックし、続けて表示される
@@ -65,15 +67,15 @@ v2026.07.2 以降のリリースから提供されます。
 
 ### Linux
 
-1. ダウンロードした `StampFlySetup_<tag>_linux-x64`（拡張子なしの実行ファイル）に実行権限を
+1. ダウンロードした `StampFlySetup_linux-x64`（拡張子なしの実行ファイル）に実行権限を
    付与します。ファイルマネージャからなら、右クリック→「プロパティ」→「アクセス権」タブで
    「プログラムとして実行可能」にチェックします。ターミナルを使う場合は次の1行です:
    ```bash
-   chmod +x StampFlySetup_<tag>_linux-x64
+   chmod +x StampFlySetup_linux-x64
    ```
 2. ダブルクリック、またはターミナルで次のように実行します:
    ```bash
-   ./StampFlySetup_<tag>_linux-x64
+   ./StampFlySetup_linux-x64
    ```
 
 <a id="wizard-screens-ja"></a>
@@ -203,18 +205,20 @@ instead.
 
 ## 3. Download
 
-Grab the file matching your platform from the Assets list on the
-[Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest).
+Clicking a link below starts the download of the latest release's file directly
+(the same files are also listed under Assets on the
+[Releases page](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)).
 
-| OS / Architecture | File to download |
+| OS / Architecture | Download (starts on click) |
 |--------------------|-------------------|
-| Windows | `StampFlySetup_<tag>_windows-x64.exe` |
-| macOS (Apple Silicon: M1/M2/M3/M4) | `StampFlySetup_<tag>_macos-arm64.zip` |
-| macOS (Intel) | `StampFlySetup_<tag>_macos-x64.zip` |
-| Linux (x64) | `StampFlySetup_<tag>_linux-x64` |
+| Windows | [`StampFlySetup_windows-x64.exe`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_windows-x64.exe) |
+| macOS (Apple Silicon: M1/M2/M3/M4) | [`StampFlySetup_macos-arm64.zip`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-arm64.zip) |
+| macOS (Intel) | [`StampFlySetup_macos-x64.zip`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_macos-x64.zip) |
+| Linux (x64) | [`StampFlySetup_linux-x64`](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest/download/StampFlySetup_linux-x64) |
 
-`<tag>` is the release tag name (e.g. `v2026.07.2`). Windows / macOS (Apple Silicon and Intel) /
-Linux builds are available starting with release v2026.07.2.
+The filenames carry no version (the links always fetch the latest release).
+Windows / macOS (Apple Silicon and Intel) / Linux builds are available starting
+with release v2026.07.2.
 
 > **Tip (checking your Mac's chip):** Apple menu (top-left) → "About This Mac." If "Chip" shows
 > `Apple M1/M2/M3/M4`, use the Apple Silicon build (`_macos-arm64.zip`); if it shows `Intel`, use
@@ -229,7 +233,7 @@ connection is recommended.
 
 ### Windows
 
-1. Double-click the downloaded `StampFlySetup_<tag>_windows-x64.exe` to launch it.
+1. Double-click the downloaded `StampFlySetup_windows-x64.exe` to launch it.
 2. On first launch, Windows SmartScreen may show "Windows protected your PC" (because the
    executable is unsigned — the same caveat applies to the "StampFly Flasher" flashing app).
    Click "**More info**," then click the "**Run anyway**" button that appears.
@@ -252,15 +256,15 @@ connection is recommended.
 
 ### Linux
 
-1. Mark the downloaded `StampFlySetup_<tag>_linux-x64` (an extension-less executable) as
+1. Mark the downloaded `StampFlySetup_linux-x64` (an extension-less executable) as
    executable. From a file manager: right-click → Properties → Permissions tab → check "Allow
    executing file as program." From a terminal:
    ```bash
-   chmod +x StampFlySetup_<tag>_linux-x64
+   chmod +x StampFlySetup_linux-x64
    ```
 2. Double-click it, or run it from a terminal:
    ```bash
-   ./StampFlySetup_<tag>_linux-x64
+   ./StampFlySetup_linux-x64
    ```
 
 <a id="wizard-screens-en"></a>

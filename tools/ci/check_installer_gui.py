@@ -44,12 +44,13 @@ Covers / 対象:
        importされるため、stampfly_installer.py自身のソースが各stdlib
        依存を明記して初めてPyInstallerがそれを検出できる。
     3. .github/workflows/release.yml contains the literal
-       `StampFlySetup_<tag>_<suffix>` asset-name strings for all four
+       `StampFlySetup_<suffix>` asset-name strings (tag-less stable
+       names) for all four
        platforms (windows-x64.exe / macos-arm64.zip / macos-x64.zip /
        linux-x64), so the release body actually documents every asset the
        installer_gui job publishes.
        .github/workflows/release.yml に、4プラットフォーム分の
-       `StampFlySetup_<tag>_<suffix>` アセット名文字列
+       `StampFlySetup_<suffix>` アセット名文字列(タグ無し固定名)
        (windows-x64.exe / macos-arm64.zip / macos-x64.zip / linux-x64)が
        全て含まれることを検証する。installer_gui ジョブが公開する全アセットを
        リリース本文が実際に案内していることを保証する。
@@ -85,11 +86,18 @@ RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 # テンプレートから組み立てず直書きにすることで、本リストか release.yml の
 # 文面のどちらかに誤字があっても、YAML/テンプレート解析なしの単純な文字列
 # 検索で検出できるようにする。
+# Tag-less stable names: GitHub's releases/latest/download/<asset>
+# permalink (used by the landing page's OS-detected download button and
+# the README's one-click links) requires the filename to stay identical
+# across releases.
+# タグ無し固定名: GitHub の releases/latest/download/<asset> 恒久リンク
+# (Landing ページの OS 自動判定ダウンロードボタンと README の1クリック
+# リンクが使用)は、リリースを跨いでファイル名が同一であることを要求する。
 EXPECTED_ASSET_NAME_SUBSTRINGS = [
-    "StampFlySetup_<tag>_windows-x64.exe",
-    "StampFlySetup_<tag>_macos-arm64.zip",
-    "StampFlySetup_<tag>_macos-x64.zip",
-    "StampFlySetup_<tag>_linux-x64",
+    "StampFlySetup_windows-x64.exe",
+    "StampFlySetup_macos-arm64.zip",
+    "StampFlySetup_macos-x64.zip",
+    "StampFlySetup_linux-x64",
 ]
 
 # Deadline for the --selftest subprocess. installer.py's own prerequisite
