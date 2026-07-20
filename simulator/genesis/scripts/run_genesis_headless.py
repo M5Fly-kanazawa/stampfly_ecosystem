@@ -142,13 +142,24 @@ def run_headless(input_file, output_file, duration=10.0):
 
     print(f"\nPhysics: {PHYSICS_HZ}Hz, Control: {CONTROL_HZ}Hz, Log: {LOG_HZ}Hz")
 
-    # URDF path
-    # Resolve symlink stored as text file (Windows without symlink support)
-    # シンボリックリンクがテキストファイルの場合を解決
-    _assets_path = script_dir.parent / "assets"
-    if _assets_path.is_file():
-        _symlink_target = _assets_path.read_text().strip()
-        _assets_path = (script_dir.parent / _symlink_target).resolve()
+    # URDF path.
+    # Assets physically live in simulator/shared/assets; simulator/genesis/assets
+    # is a git symlink to it, which is unreliable on Windows (text file, or a
+    # reparse point that can't be traversed -- observed 2026-07-20). Resolve the
+    # real shared directory directly and never traverse the symlink; keep the
+    # text-file form as a last-resort fallback only. Same as vpython_backend.py.
+    # アセット実体は simulator/shared/assets。simulator/genesis/assets はそれへの
+    # git シンボリックリンクで Windows では不安定(テキストファイル化、または辿れない
+    # reparse point。2026-07-20観測)。実体の shared を直接解決し symlink は辿らない。
+    # テキストファイル形式は最終手段のみ。vpython_backend.py と同じ。
+    _shared_assets = (script_dir.parent.parent / "shared" / "assets").resolve()
+    if _shared_assets.is_dir():
+        _assets_path = _shared_assets
+    else:
+        _assets_path = script_dir.parent / "assets"
+        if _assets_path.is_file():
+            _symlink_target = _assets_path.read_text().strip()
+            _assets_path = (script_dir.parent / _symlink_target).resolve()
     assets_dir = _assets_path / "meshes" / "parts"
     urdf_file = assets_dir / "stampfly_fixed.urdf"
     if not urdf_file.exists():
