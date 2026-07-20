@@ -243,22 +243,153 @@ def prompt_choice(message: str, choices: List[str], default: int = 1) -> int:
         print(f"Please enter a number between 1 and {len(choices)}")
 
 
+def _windows_python_dir_candidates() -> list[Path]:
+    """Windows: likely directories containing a system python.exe, in the
+    same priority order as install.bat's discovery block.
+    Windows: システム python.exe を含むと思われるディレクトリ一覧。
+    install.bat の発見ブロックと同じ優先順で返す。
+
+    Kept in sync with install.bat (pyenv-win, per-user Programs\\Python,
+    machine-wide C:\\Python*, scoop, conda). Duplicated here — not shared —
+    because installer.py is a standalone stdlib-only script AND because the
+    GUI (StampFly Setup) never runs install.bat at all: the frozen app
+    imports installer.py in-process, so this discovery must live here for
+    the GUI path to find Python for ESP-IDF's own install.bat.
+    install.bat と同期を保つ(pyenv-win、ユーザー毎の Programs\\Python、
+    マシン全体の C:\\Python*、scoop、conda)。共有せず複製する理由: 本
+    ファイルは stdlib のみの独立スクリプトであり、かつ GUI(StampFly Setup)
+    は install.bat を一切実行しない — 凍結アプリが installer.py をプロセス内
+    import するため、GUI 経路が ESP-IDF の install.bat 用に Python を
+    見つけられるよう、この発見ロジックはここに置く必要がある。
+    """
+    candidates: list[Path] = []
+    userprofile = os.environ.get("USERPROFILE", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+
+    # 1. pyenv-win: the version selected in its `version` file.
+    # 1. pyenv-win: `version` ファイルで選択中のバージョン。
+    if userprofile:
+        pyenv_root = Path(userprofile) / ".pyenv" / "pyenv-win"
+        version_file = pyenv_root / "version"
+        try:
+            if version_file.is_file():
+                pyenv_ver = version_file.read_text(encoding="utf-8", errors="replace").strip()
+                if pyenv_ver:
+                    candidates.append(pyenv_root / "versions" / pyenv_ver)
+        except OSError:
+            pass
+
+    # 2. Common install locations (newest first).
+    # 2. 一般的なインストール先(新しい順)。
+    for ver in ("313", "312", "311", "310", "39", "38"):
+        if localappdata:
+            candidates.append(Path(localappdata) / "Programs" / "Python" / f"Python{ver}")
+        candidates.append(Path(f"C:/Python{ver}"))
+    if userprofile:
+        candidates.append(Path(userprofile) / "scoop" / "apps" / "python" / "current")
+        candidates.append(Path(userprofile) / "anaconda3")
+        candidates.append(Path(userprofile) / "miniconda3")
+    return candidates
+
+
+def _python_is_3_8_plus(python_exe: Path) -> bool:
+    """Return whether python_exe runs and reports Python >= 3.8.
+    python_exe が起動し、Python 3.8 以上を報告するか。"""
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c",
+             "import sys; sys.exit(0 if sys.version_info[:2] >= (3, 8) else 1)"],
+            capture_output=True, timeout=15,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _find_system_python_dir() -> Optional[Path]:
+    """Windows: directory of a usable system python.exe (3.8+), or None.
+    Windows: 使用可能なシステム python.exe(3.8+) のディレクトリ、無ければ None。
+
+    Why this exists (the 9009 bug): ESP-IDF's own install.bat calls
+    `python` by name, so a real python.exe must be on PATH for it. Under
+    the CLI, install.bat already put one there; under the GUI, the frozen
+    StampFly Setup app is `sys.executable` (no python.exe beside it), so we
+    must discover a system Python separately -- otherwise ESP-IDF tool
+    install fails with exit code 9009 ("command not found"), observed on a
+    workshop Windows laptop 2026-07-20.
+    存在理由(9009 バグ): ESP-IDF の install.bat は `python` を名前で呼ぶため、
+    本物の python.exe が PATH 上に必要。CLI では install.bat が既に配置済み
+    だが、GUI では凍結された StampFly Setup アプリが `sys.executable`
+    (隣に python.exe は無い)のため、システム Python を別途発見しないと
+    ESP-IDF ツール導入が exit 9009("コマンドが見つからない")で失敗する
+    (2026-07-20 に講習用 Windows ノートで観測)。
+    """
+    if sys.platform != "win32":
+        return None
+    # 1. Already resolvable on PATH? Skip the WindowsApps stub, which is a
+    # non-functional placeholder that only opens the Store.
+    # 1. 既に PATH で解決できるか? Store を開くだけの機能しないプレース
+    # ホルダである WindowsApps スタブは除外する。
+    for name in ("python", "python3"):
+        found = shutil.which(name)
+        if not found:
+            continue
+        exe = Path(found)
+        if "windowsapps" in str(exe).lower():
+            continue
+        if _python_is_3_8_plus(exe):
+            return exe.parent
+    # 2. Known install locations (same as install.bat).
+    # 2. 既知のインストール先(install.bat と同一)。
+    for candidate_dir in _windows_python_dir_candidates():
+        exe = candidate_dir / "python.exe"
+        if exe.is_file() and _python_is_3_8_plus(exe):
+            return candidate_dir
+    return None
+
+
 def _clean_env_for_cmd() -> dict:
     """Return environment suitable for running .bat scripts via cmd.exe.
     cmd.exe 経由で .bat を実行するための環境を構築
 
     - Strips MSYSTEM (ESP-IDF .bat refuses to run under MINGW/Git Bash)
-    - Appends current Python's directory to PATH as fallback so ESP-IDF
-      install.bat can pass its python.exe prerequisite check.
+    - Ensures a REAL system python.exe directory is on PATH so ESP-IDF's
+      install.bat (which calls `python` by name) can find it. Under the CLI
+      that is `sys.executable`'s own directory; under the frozen GUI
+      `sys.executable` is StampFly Setup itself (no python.exe there), so we
+      fall back to discovering a system Python -- see _find_system_python_dir().
+    - MSYSTEM を除去(ESP-IDF の .bat は MINGW/Git Bash 下での実行を拒否)
+    - 本物のシステム python.exe のディレクトリを PATH に載せ、ESP-IDF の
+      install.bat(`python` を名前で呼ぶ)が見つけられるようにする。CLI では
+      `sys.executable` の隣がそれだが、凍結 GUI では `sys.executable` が
+      StampFly Setup 自身(python.exe は無い)なので、システム Python の
+      発見にフォールバックする -- _find_system_python_dir() 参照。
     """
     env = os.environ.copy()
     env.pop("MSYSTEM", None)
-    # Append Python as fallback for install.bat prerequisite check
-    # install.batの前提条件チェック用フォールバックとしてPythonを末尾に追加
-    python_dir = str(Path(sys.executable).parent)
-    current_path = env.get("PATH", "")
-    if python_dir.lower() not in current_path.lower():
-        env["PATH"] = current_path + os.pathsep + python_dir
+
+    # Prefer sys.executable's directory when it actually holds a python
+    # interpreter (the CLI case); otherwise discover a system Python (the
+    # frozen-GUI case).
+    # sys.executable の隣に実際に python インタプリタがある場合(CLIの場合)は
+    # それを優先し、無ければシステム Python を発見する(凍結GUIの場合)。
+    python_dir: Optional[Path] = None
+    exe_dir = Path(sys.executable).parent
+    exe_python = exe_dir / ("python.exe" if sys.platform == "win32" else "python")
+    if not getattr(sys, "frozen", False) and exe_python.exists():
+        python_dir = exe_dir
+    elif sys.platform == "win32":
+        python_dir = _find_system_python_dir()
+
+    if python_dir is not None:
+        python_dir_str = str(python_dir)
+        current_path = env.get("PATH", "")
+        if python_dir_str.lower() not in current_path.lower():
+            # Prepend (not append): a WindowsApps python stub already on
+            # PATH must not win over the real interpreter we found.
+            # 先頭に付ける(末尾ではない): PATH 上に既にある WindowsApps の
+            # python スタブが、発見した本物のインタプリタに勝たないように。
+            env["PATH"] = python_dir_str + os.pathsep + current_path
     return env
 
 
@@ -741,6 +872,28 @@ class ESPIDFInstaller:
     def _run_install_script(cls, target_dir: Path, version: str) -> Optional[Path]:
         """Run ESP-IDF install script (idempotent).
         ESP-IDFのinstall.shを実行（冪等）"""
+        # ESP-IDF's install.bat calls `python` by name; without a real
+        # system python.exe on PATH it fails with the cryptic exit code
+        # 9009 ("command not found"). Detect that up front and print an
+        # actionable message instead -- especially important for the GUI
+        # (StampFly Setup), whose bundled Python is NOT usable here (see
+        # _find_system_python_dir()). Observed on a workshop laptop
+        # 2026-07-20.
+        # ESP-IDF の install.bat は `python` を名前で呼ぶため、本物の
+        # システム python.exe が PATH に無いと難解な exit 9009
+        # ("コマンドが見つからない")で失敗する。先に検出して対処可能な
+        # メッセージを出す -- 特に GUI(StampFly Setup)で重要で、同梱 Python
+        # はここでは使えない(_find_system_python_dir() 参照)。
+        # 2026-07-20 に講習用ノートで観測。
+        if sys.platform == "win32" and _find_system_python_dir() is None:
+            error("ESP-IDF tool installation needs a system Python 3.8+ on this PC,")
+            error("but none was found. ESP-IDF's own install.bat requires it.")
+            error("Install Python (make sure to keep 'Add python.exe to PATH' checked):")
+            error("    winget install Python.Python.3.12")
+            error("  or download from https://www.python.org/downloads/windows/")
+            error("Then run this installer again.")
+            return None
+
         info("Installing ESP-IDF tools (this may take a while)...")
         try:
             if sys.platform == "win32":

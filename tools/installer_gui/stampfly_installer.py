@@ -786,18 +786,68 @@ def check_git_available() -> bool:
     return shutil.which("git") is not None
 
 
+def _windows_python_exe_candidates() -> List[Path]:
+    """Windows: likely python.exe paths NOT necessarily on PATH, in the
+    same priority order installer.py's _find_system_python_dir() uses.
+    Windows: 必ずしも PATH 上に無い python.exe の候補。installer.py の
+    _find_system_python_dir() と同じ優先順で返す。
+
+    Kept in sync with installer.py's discovery (which in turn mirrors
+    install.bat). Needed here because the environment-check page runs
+    BEFORE the repo is cloned, so it cannot call installer.py's copy --
+    without this, Python installed but not on PATH (the common Windows
+    case, when "Add to PATH" was left unchecked) would show a misleading
+    "NG" even though the install would actually succeed.
+    installer.py の発見(さらに install.bat を反映)と同期を保つ。環境チェック
+    画面はリポジトリの clone より前に走るため installer.py の複製を呼べず、
+    ここに必要 -- これが無いと、PATH 外に入った Python("Add to PATH" 未
+    チェックの一般的な Windows ケース)が、実際には導入成功するのに
+    誤って「NG」表示されてしまう。
+    """
+    candidates: List[Path] = []
+    userprofile = os.environ.get("USERPROFILE", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    if userprofile:
+        pyenv_root = Path(userprofile) / ".pyenv" / "pyenv-win"
+        version_file = pyenv_root / "version"
+        try:
+            if version_file.is_file():
+                pyenv_ver = version_file.read_text(encoding="utf-8", errors="replace").strip()
+                if pyenv_ver:
+                    candidates.append(pyenv_root / "versions" / pyenv_ver / "python.exe")
+        except OSError:
+            pass
+    for ver in ("313", "312", "311", "310", "39", "38"):
+        if localappdata:
+            candidates.append(Path(localappdata) / "Programs" / "Python" / f"Python{ver}" / "python.exe")
+        candidates.append(Path(f"C:/Python{ver}") / "python.exe")
+    if userprofile:
+        candidates.append(Path(userprofile) / "scoop" / "apps" / "python" / "current" / "python.exe")
+    return candidates
+
+
 def _find_system_python() -> Optional[str]:
     """
     Locate a system Python interpreter -- deliberately NOT this frozen
     app's own bundled interpreter -- for the "system Python 3.8+"
     prerequisite check. Prefers "python3" over "python" since some
-    systems still alias "python" to a Python 2 install.
+    systems still alias "python" to a Python 2 install. On Windows, also
+    scans common install locations off PATH so an installed-but-not-on-PATH
+    Python is still detected (matching installer.py's discovery).
     「システム Python 3.8+」前提チェックのため、システムの Python
     インタプリタを探す(このアプリ自身に同梱された凍結インタプリタでは
     意図的にない)。一部の環境では "python" が今も Python 2 を指すため、
-    "python3" を優先する。
+    "python3" を優先する。Windows では PATH 外の一般的なインストール先も
+    走査し、PATH に載っていない Python も検出する(installer.py の発見と一致)。
     """
-    return shutil.which("python3") or shutil.which("python")
+    on_path = shutil.which("python3") or shutil.which("python")
+    if on_path and "windowsapps" not in on_path.lower():
+        return on_path
+    if sys.platform == "win32":
+        for exe in _windows_python_exe_candidates():
+            if exe.is_file():
+                return str(exe)
+    return on_path
 
 
 def get_system_python_version_string() -> str:
