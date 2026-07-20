@@ -9,13 +9,57 @@ Usage:
     python scripts/installer.py [options]
 
 Options:
-    --idf-path PATH    Specify ESP-IDF path
-    --skip-deps        Skip dependency installation
-    --minimal          Install minimal dependencies (skip simulator)
-    --uninstall        Remove sfcli from ESP-IDF environment
-    --clean            Clean install (remove config and sfcli, then reinstall)
-    --force            Force reinstall all steps (skip probe checks)
-    --no-flasher       Skip the optional Step 4/4 GUI Flasher app install
+    --idf-path PATH     Specify ESP-IDF path
+    --skip-deps         Skip dependency installation
+    --minimal           Install minimal dependencies (skip simulator)
+    --uninstall         Remove sfcli from ESP-IDF environment
+    --clean             Clean install (remove config and sfcli, then reinstall)
+    --force             Force reinstall all steps (skip probe checks)
+    --no-flasher        Skip the optional Step 4/4 GUI Flasher app install
+    --non-interactive   Never call input(); return defaults instead
+
+Stability contract / 安定契約
+------------------------------
+This file is executed both as a standalone CLI and, in-process, by the GUI
+installer (tools/installer_gui/stampfly_installer.py, see
+docs/plans/gui-installer-plan.md). The GUI imports this module with
+importlib and drives it directly, so the following are a contract with
+that caller and must not change without updating it too:
+本ファイルはスタンドアロンCLIとしてだけでなく、GUIインストーラ
+（tools/installer_gui/stampfly_installer.py、docs/plans/gui-installer-plan.md
+参照）からもプロセス内 import されて実行される。GUIは本モジュールを
+importlib でimportして直接操作するため、以下はその呼び出し元との契約で
+あり、変更する場合はGUI側も合わせて更新すること:
+
+1. The `Installer` class and the signatures of its `run()` / `uninstall()`
+   / `clean()` methods must stay backward compatible — the GUI calls them
+   directly (no subprocess, no CLI parsing).
+   `Installer` クラス、および `run()`/`uninstall()`/`clean()` メソッドの
+   シグネチャは後方互換を保つこと — GUIはこれらをsubprocessもCLI引数
+   解析も経由せず直接呼び出す。
+2. The progress header format `Step N/4: <title>` (see header(), used by
+   Steps 1-4 in Installer.run()) must not change: the GUI parses these
+   lines from captured stdout to advance its step indicator.
+   進捗ヘッダの書式 `Step N/4: <タイトル>`（header() 参照、
+   Installer.run() のStep1〜4で使用）は変更しないこと — GUIはキャプチャ
+   したstdoutからこの行をパースしてステップインジケータを進める。
+3. This file must keep using only the Python standard library. If a new
+   stdlib import is added here, also add it to the hidden-import list in
+   tools/installer_gui/stampfly_installer.py (the GUI runs under a frozen
+   PyInstaller build, so undeclared stdlib modules silently fail to import
+   there even though they work fine when run as a normal script).
+   本ファイルはstdlibのみを使い続けること。新しいstdlib importを追加
+   する場合は tools/installer_gui/stampfly_installer.py の
+   hidden-import一覧にも追記する（GUIはPyInstallerで凍結された環境で
+   動くため、通常のスクリプト実行では問題なくても、宣言されていない
+   stdlibモジュールはそこで暗黙にimport失敗しうる）。
+
+Also see the SF_INSTALLER_NONINTERACTIVE contract on prompt() /
+prompt_choice() below, and --non-interactive in main(): the GUI relies on
+both to drive this script with no TTY attached.
+prompt()/prompt_choice() の SF_INSTALLER_NONINTERACTIVE 契約（下記）と
+main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを駆動する
+ためにこの両方に依存する。
 """
 
 import os
@@ -112,7 +156,29 @@ def header(title: str) -> None:
 
 
 def prompt(message: str, default: str = "") -> str:
-    """Prompt user for input"""
+    """Prompt user for input.
+    ユーザーに入力を促す
+
+    Non-interactive contract: when SF_INSTALLER_NONINTERACTIVE=1 is set in
+    the environment (e.g. by --non-interactive, see main()), returns
+    `default` immediately without calling input(). This lets a GUI
+    frontend drive this script with no TTY attached (see the module
+    docstring's "Stability contract" section).
+    非対話化契約: 環境変数 SF_INSTALLER_NONINTERACTIVE=1 が設定されている
+    場合（--non-interactive 経由、main() 参照）、input() を呼ばず即座に
+    default を返す。これにより GUI フロントエンドが TTY 無しで本スクリプト
+    を駆動できる（モジュールdocstringの「安定契約」節を参照）。
+
+    Also EOF-safe regardless of the flag above: if stdin is closed or
+    absent, input() raises EOFError, which is caught here and treated the
+    same as an empty response (return `default`) rather than propagating.
+    上記フラグの有無によらず EOF セーフ: stdin が閉じている／存在しない
+    環境では input() が EOFError を送出するが、ここで捕捉して空応答と
+    同様に扱い（default を返す）、例外を外へ伝播させない。
+    """
+    if os.environ.get("SF_INSTALLER_NONINTERACTIVE") == "1":
+        return default
+
     if default:
         message = f"{message} [{default}]: "
     else:
@@ -127,7 +193,32 @@ def prompt(message: str, default: str = "") -> str:
 
 
 def prompt_choice(message: str, choices: List[str], default: int = 1) -> int:
-    """Prompt user to select from choices"""
+    """Prompt user to select from choices.
+    選択肢から選ぶようユーザーに促す
+
+    Non-interactive contract: when SF_INSTALLER_NONINTERACTIVE=1 is set,
+    returns the `default` choice number immediately without calling
+    input() (see prompt() above and the module docstring's "Stability
+    contract" section).
+    非対話化契約: SF_INSTALLER_NONINTERACTIVE=1 のとき、input() を呼ばず
+    即座に default の選択番号を返す（prompt() およびモジュールdocstring
+    の「安定契約」節を参照）。
+
+    Also EOF-safe: previously, an EOFError from input() (closed/absent
+    stdin) fell into the same except branch as an invalid number and the
+    loop retried input() forever, printing "Please enter a number..."
+    indefinitely. EOFError/KeyboardInterrupt are now handled separately
+    from a bad number (ValueError) so EOF returns `default` instead of
+    looping.
+    EOF セーフ: 以前は input() の EOFError（stdin が閉じている／無い）が
+    不正な数値入力と同じ except 節に落ち、ループが input() を永久に
+    再試行して "Please enter a number..." を出し続けていた。現在は
+    EOFError/KeyboardInterrupt を不正な数値（ValueError）と分けて処理し、
+    EOF 時は default を返してループを抜ける。
+    """
+    if os.environ.get("SF_INSTALLER_NONINTERACTIVE") == "1":
+        return default
+
     print(f"\n{message}\n")
     for i, choice in enumerate(choices, 1):
         marker = " <- recommended" if i == default else ""
@@ -137,12 +228,16 @@ def prompt_choice(message: str, choices: List[str], default: int = 1) -> int:
     while True:
         try:
             response = input(f"Select [{default}]: ").strip()
-            if not response:
-                return default
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return default
+        if not response:
+            return default
+        try:
             idx = int(response)
             if 1 <= idx <= len(choices):
                 return idx
-        except (ValueError, EOFError, KeyboardInterrupt):
+        except ValueError:
             pass
         print(f"Please enter a number between 1 and {len(choices)}")
 
@@ -498,6 +593,8 @@ class ESPIDFDetector:
                 cwd=path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -533,6 +630,8 @@ class ESPIDFDetector:
                     ["bash", "-c", inner],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode == 0:
                     python_path = result.stdout.strip().split('\n')[0]
@@ -708,6 +807,7 @@ class Installer:
                     "import sfcli.cli; sfcli.cli.assert_all_commands_loadable()",
                 ],
                 capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
             )
             return result.returncode == 0
         except Exception:
@@ -1462,8 +1562,25 @@ def main() -> int:
         action="store_true",
         help="Skip the optional Step 4/4 GUI Flasher app install (sf flasher install)",
     )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Never call input(); prompt()/prompt_choice() return their default "
+             "immediately (sets SF_INSTALLER_NONINTERACTIVE=1 for this process "
+             "and any subprocesses it spawns)",
+    )
 
     args = parser.parse_args()
+
+    # Set this before anything else runs so both this process' own
+    # prompt()/prompt_choice() calls and any child processes that inherit
+    # os.environ see it (e.g. a GUI frontend importing this module in-process).
+    # 他の処理より先に設定することで、この process 自身の prompt()/
+    # prompt_choice() だけでなく os.environ を継承する子プロセス
+    # （例: 本モジュールをプロセス内 import する GUI フロントエンド）
+    # からも見えるようにする
+    if args.non_interactive:
+        os.environ["SF_INSTALLER_NONINTERACTIVE"] = "1"
 
     # Disable colors if requested or not a TTY
     if args.no_color or not sys.stdout.isatty():
