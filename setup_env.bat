@@ -2,10 +2,14 @@
 REM StampFly Ecosystem - Development Environment Setup (Windows)
 REM Usage: setup_env.bat
 REM
-REM NOTE: this file must be checked out with CRLF line endings. cmd.exe
-REM misparses LF-only .bat files. Enforced via .gitattributes (eol=crlf).
-REM 注記: このファイルは CRLF 改行でチェックアウトされる必要がある。
-REM cmd.exe は LF のみの .bat を誤解釈する。.gitattributes(eol=crlf)で強制。
+REM ASCII-ONLY comments in this file, and CRLF line endings (enforced via
+REM .gitattributes). Two cmd.exe constraints, both learned the hard way:
+REM  (1) cmd misparses LF-only .bat files (drops the first char of each
+REM      line), and
+REM  (2) under a cp932 console (Japanese Windows) it reads UTF-8 Japanese
+REM      bytes as raw bytes -- some decode to command separators (& | < >),
+REM      so a REM line with Japanese text can execute part of itself.
+REM Same ASCII-only rule the generated uninstall.cmd follows (spec 4-1).
 
 setlocal enabledelayedexpansion
 
@@ -58,7 +62,6 @@ if errorlevel 1 (
 )
 
 REM --- Determine IDF_PATH: .sf/config.toml > default ---
-REM IDF_PATHの決定: 設定ファイル > デフォルトパス
 set "SF_IDF_PATH="
 set "SF_CONFIG=%~dp0.sf\config.toml"
 if exist "%SF_CONFIG%" (

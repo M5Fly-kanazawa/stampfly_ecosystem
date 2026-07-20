@@ -2,10 +2,11 @@
 REM StampFly Ecosystem Installer (Windows)
 REM Usage: install.bat [options]
 REM
-REM NOTE: this file must be checked out with CRLF line endings (cmd.exe
-REM misparses LF-only .bat files). Enforced via .gitattributes (eol=crlf).
-REM 注記: CRLF 改行でチェックアウトされる必要がある(cmd.exe は LF のみの
-REM .bat を誤解釈する)。.gitattributes(eol=crlf)で強制。
+REM ASCII-ONLY comments in this file, and CRLF line endings (enforced via
+REM .gitattributes). cmd.exe misparses LF-only .bat files, and under a
+REM cp932 console it reads UTF-8 Japanese bytes as command separators
+REM (& | < >), so a REM line with Japanese can execute part of itself.
+REM Same ASCII-only rule the generated uninstall.cmd follows (spec 4-1).
 REM
 REM Options (forwarded to scripts\installer.py; see that file's docstring
 REM for the full list):
@@ -18,8 +19,6 @@ REM   --minimal        Install minimal dependencies (skip simulator)
 REM
 REM Unlike install.sh, this script does not skip its git/Python checks for
 REM --uninstall/--clean: both are required just to launch installer.py.
-REM install.shと異なり、--uninstall/--clean でもgit/Pythonチェックは
-REM スキップしない(installer.py起動自体に必須のため)。
 
 setlocal enabledelayedexpansion
 

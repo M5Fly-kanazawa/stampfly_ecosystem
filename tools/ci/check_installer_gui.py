@@ -233,6 +233,42 @@ def check_release_yml_has_assets() -> None:
     )
 
 
+def check_windows_scripts_are_ascii() -> None:
+    """Every committed .bat / .cmd / .ps1 is pure ASCII.
+
+    cmd.exe running under a cp932 console (Japanese Windows) reads a .bat
+    file's UTF-8 Japanese bytes as raw bytes; some decode to command
+    separators (& | < >), so a REM line with Japanese text can execute
+    part of itself -- observed 2026-07-20 when setup_env.bat printed
+    "'<mojibake>' is not recognized". These scripts are therefore an
+    ASCII-only exception to the repo's bilingual-comment rule (the same
+    exception the generated uninstall.cmd already documents, spec 4-1).
+    This guard stops the exception from being reintroduced.
+    cp932 コンソール(日本語 Windows)の cmd.exe は .bat の UTF-8 日本語
+    バイトを生バイトとして読み、一部がコマンド区切り(& | < >)にデコード
+    されるため、日本語入りの REM 行が自分の一部を実行してしまう
+    (2026-07-20 に setup_env.bat が "'<文字化け>' は認識されていません" を
+    出したのを観測)。よってこれらのスクリプトはリポジトリのバイリンガル
+    コメント規則の ASCII 限定例外(生成される uninstall.cmd が既に明記する
+    のと同じ例外、spec 4-1)。本ガードで例外の再混入を防ぐ。
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "*.bat", "*.cmd", "*.ps1"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    ).stdout.split()
+    offenders = []
+    for rel in tracked:
+        path = REPO_ROOT / rel
+        try:
+            (path.read_bytes()).decode("ascii")
+        except UnicodeDecodeError as exc:
+            offenders.append(f"{rel} ({exc})")
+    assert not offenders, (
+        "These Windows scripts must be ASCII-only (cmd.exe cp932 hazard); "
+        "found non-ASCII bytes in: " + ", ".join(offenders)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # 実行部
@@ -242,6 +278,7 @@ CHECKS = [
     ("release.yml asset names", check_release_yml_has_assets),
     ("stdlib hidden-import coverage", check_stdlib_imports_covered),
     ("--selftest exit code", check_selftest_exit_zero),
+    ("windows scripts are ASCII", check_windows_scripts_are_ascii),
 ]
 
 
