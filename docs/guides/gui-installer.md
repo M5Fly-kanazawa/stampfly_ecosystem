@@ -110,7 +110,7 @@ StampFly Setup は既定でエコシステムを `~/stampfly_ecosystem`（変更
 
 | 選択肢 | 内容 | CLI 版での相当コマンド |
 |--------|------|------------------------|
-| そのまま使う（修復） | 既存のチェックアウトに対してインストール処理をやり直す。環境が壊れているかもしれないときの入れ直しに使う | `install.bat --force` / `./install.sh --force` |
+| そのまま使う（修復） | 既存のチェックアウトを**まず自動で最新化**（`git pull --ff-only`。ローカル変更等で更新できない場合はそのまま続行）してから、インストール処理をやり直す。環境が壊れているかもしれないときの入れ直しに使う | `git pull` + `install.bat` / `./install.sh` |
 | アンインストール | エコシステムを削除する | `install.bat --uninstall` / `./install.sh --uninstall` |
 
 何が削除され、何が残るか（ESP-IDF本体やツールチェーンなど、他プロジェクトと共有され得る
@@ -323,7 +323,7 @@ detects the ecosystem is already installed there, the "Options" screen
 
 | Option | What it does | CLI equivalent |
 |--------|---------------|-----------------|
-| Use as-is (repair) | Re-runs the install process against the existing checkout — useful when the environment might be broken and you want a clean reinstall | `install.bat --force` / `./install.sh --force` |
+| Use as-is (repair) | First **auto-updates the existing checkout** (`git pull --ff-only`; continues as-is if it cannot fast-forward), then re-runs the install process — useful when the environment might be broken and you want a clean reinstall | `git pull` + `install.bat` / `./install.sh` |
 | Uninstall | Removes the ecosystem | `install.bat --uninstall` / `./install.sh --uninstall` |
 
 For the full list of what gets removed versus what's left alone (ESP-IDF itself, its toolchain,

@@ -105,6 +105,7 @@ import argparse
 import contextlib
 import ctypes.util  # noqa: F401  -- hidden-import only, see the contract block below
 import importlib.util
+import inspect
 import io
 import locale
 import os
@@ -118,6 +119,7 @@ import sys
 import tempfile  # noqa: F401  -- hidden-import only, see the contract block below
 import threading
 import traceback
+import types
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -417,6 +419,22 @@ STRINGS: Dict[str, Dict[str, str]] = {
     "clone_reuse_existing": {
         "ja": "既存のクローンを再利用します: {0}",
         "en": "Reusing existing checkout at {0}",
+    },
+    "repair_updating": {
+        "ja": "既存クローンを最新化しています...",
+        "en": "Updating the existing checkout...",
+    },
+    "repair_update_error": {
+        "ja": "更新できませんでした（このまま続行します）: {0}",
+        "en": "Could not update (continuing): {0}",
+    },
+    "repair_update_not_ff": {
+        "ja": "既存クローンを更新できませんでした。現状のコードのまま修復を続行します",
+        "en": "Existing checkout could not be fast-forwarded; repairing with the code as-is.",
+    },
+    "old_installer_options_ignored": {
+        "ja": "この installer.py は古く、次のオプションを解釈できないため無視します: {0}",
+        "en": "This installer.py predates these options; ignoring: {0}",
     },
     "git_clone_start_failed": {
         "ja": "git clone を開始できません: {0}",
@@ -1153,6 +1171,36 @@ def run_git_clone(
     return process.wait()
 
 
+def run_git_update(install_dir: Path, output_queue: "queue.Queue") -> None:
+    """
+    Best-effort `git pull --ff-only` of an existing checkout before repair
+    (see the caller in perform_setup_workflow() for the rationale). Output
+    is streamed to the log; any failure is reported as a warning line and
+    swallowed -- an un-updatable clone must not block the repair attempt.
+    修復前に既存チェックアウトを `git pull --ff-only` でベストエフォート
+    更新する(理由は呼び出し元 perform_setup_workflow() を参照)。出力は
+    ログへ流し、失敗は警告行として報告した上で握りつぶす -- 更新できない
+    クローンであっても修復の試行自体は妨げない。
+    """
+    output_queue.put(("log", tr("repair_updating")))
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(install_dir), "pull", "--ff-only"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        output_queue.put(("log", tr("repair_update_error", exc)))
+        return
+    for line in (result.stdout + result.stderr).splitlines():
+        if line.strip():
+            output_queue.put(("log", line))
+    if result.returncode != 0:
+        output_queue.put(("log", tr("repair_update_not_ff")))
+
+
 def run_installer_in_process(module, output_queue: "queue.Queue", action_fn) -> int:
     """
     Run action_fn() (a zero-argument callable that invokes something on
@@ -1213,27 +1261,75 @@ def run_installer_in_process(module, output_queue: "queue.Queue", action_fn) -> 
         writer.flush_remaining()
 
 
+def build_supported_run_kwargs(module, options: SetupOptions,
+                               output_queue: "queue.Queue") -> Dict[str, object]:
+    """
+    Build the Installer.run() keyword arguments, dropping any that the
+    loaded installer.py's signature does not accept.
+
+    Why: repair mode executes the TARGET checkout's installer.py, which
+    can predate newer run() parameters -- observed in the wild on
+    2026-07-20 (Windows, v2026.07.2 Setup + a pre-workshop clone):
+    `TypeError: Installer.run() got an unexpected keyword argument
+    'no_flasher'`. The pull-first step in perform_setup_workflow()
+    normally prevents this by updating the clone, but when that pull is
+    impossible (local changes, detached state) this filter keeps the old
+    installer callable instead of crashing; dropped options are logged so
+    the user knows they were ignored.
+
+    Installer.run() のキーワード引数を組み立て、読み込んだ installer.py の
+    シグネチャが受け付けないものは落とす。
+
+    理由: 修復モードは対象チェックアウトの installer.py を実行するため、
+    新しい run() 引数の追加より古い版でありうる -- 2026-07-20 に実地で
+    観測(Windows、v2026.07.2 Setup + 講習前のクローン):
+    `TypeError: Installer.run() got an unexpected keyword argument
+    'no_flasher'`。通常は perform_setup_workflow() の pull 先行ステップが
+    クローンを最新化してこれを防ぐが、pull できない場合(ローカル変更・
+    detached 状態)でも、クラッシュせず旧 installer を呼べるようにする。
+    落とした引数はログに出し、無視されたことをユーザーに知らせる。
+    """
+    desired: Dict[str, object] = {
+        "idf_path": None,
+        "skip_deps": False,
+        "minimal": options.minimal,
+        "force": False,
+        "no_flasher": not options.include_flasher,
+    }
+    try:
+        supported_names = set(inspect.signature(module.Installer.run).parameters)
+    except (TypeError, ValueError):
+        # Unintrospectable signature (should not happen for plain Python):
+        # pass everything and let any mismatch surface as before.
+        # イントロスペクション不能(素のPythonでは起きないはず): 全て渡し、
+        # 不一致は従来どおり表面化させる。
+        return desired
+    kwargs = {name: value for name, value in desired.items() if name in supported_names}
+    dropped = sorted(set(desired) - set(kwargs))
+    if dropped:
+        output_queue.put(("log", tr("old_installer_options_ignored", ", ".join(dropped))))
+    return kwargs
+
+
 def run_installer_setup(module, options: SetupOptions, output_queue: "queue.Queue") -> int:
     """
     Call module.Installer().run(...) with the fixed, non-interactive
     argument shape mandated by docs/plans/gui-installer-plan.md §2:
     idf_path is always None (ESP-IDF discovery/confirmation is handled
     entirely by installer.py itself under the non-interactive contract).
+    Arguments unknown to an older installer.py are dropped -- see
+    build_supported_run_kwargs().
     docs/plans/gui-installer-plan.md §2 が定める固定・非対話の引数形で
     module.Installer().run(...) を呼ぶ: idf_path は常に None
     (ESP-IDF の検出/確認は、非対話化契約の下で installer.py 自身が
-    完結して処理する)。
+    完結して処理する)。古い installer.py が知らない引数は落とす --
+    build_supported_run_kwargs() 参照。
     """
+    run_kwargs = build_supported_run_kwargs(module, options, output_queue)
     return run_installer_in_process(
         module,
         output_queue,
-        lambda: module.Installer().run(
-            idf_path=None,
-            skip_deps=False,
-            minimal=options.minimal,
-            force=False,
-            no_flasher=not options.include_flasher,
-        ),
+        lambda: module.Installer().run(**run_kwargs),
     )
 
 
@@ -1279,6 +1375,21 @@ def perform_setup_workflow(output_queue: "queue.Queue", options: SetupOptions, c
                 return clone_return_code
         else:
             output_queue.put(("log", tr("clone_reuse_existing", options.install_dir)))
+            # Repair runs the TARGET checkout's installer.py, so bring that
+            # checkout up to date first -- a stale clone may predate the
+            # non-interactive contract or the current run() signature (the
+            # 2026-07-20 Windows failure: TypeError on no_flasher). ff-only,
+            # never destructive; failure (local changes, diverged history,
+            # remote unreachable) is logged and repair continues with the
+            # code that is there, protected by build_supported_run_kwargs().
+            # 修復は対象チェックアウトの installer.py を実行するため、先に
+            # そのチェックアウトを最新化する -- 古いクローンは非対話契約や
+            # 現行 run() シグネチャより前でありうる(2026-07-20 の Windows
+            # での TypeError 失敗)。ff-only で破壊的操作はしない。失敗
+            # (ローカル変更・履歴分岐・リモート不達)はログに残して既存
+            # コードのまま続行し、build_supported_run_kwargs() が保護する。
+            output_queue.put(("phase", PHASE_CLONE))
+            run_git_update(options.install_dir, output_queue)
 
         output_queue.put(("phase", PHASE_INSTALL))
         module = load_installer_module(options.install_dir)
@@ -1430,6 +1541,37 @@ def run_selftest() -> int:
     for probe_name, probe_fn in probe_calls:
         result = probe_fn()
         report("{0}() returns bool (got {1!r})".format(probe_name, result), isinstance(result, bool))
+
+    # (5b) Signature-tolerant run() kwargs: an older installer.py whose
+    # Installer.run() predates newer parameters must not crash repair mode
+    # with a TypeError -- regression check for the 2026-07-20 Windows
+    # failure ("unexpected keyword argument 'no_flasher'" from a
+    # pre-workshop clone). A synthetic old-style class is used so this
+    # check needs no git history (CI checkouts are shallow).
+    # (5b) シグネチャ耐性のある run() 引数: 新しい引数の追加より古い
+    # installer.py の Installer.run() が、修復モードを TypeError で
+    # 落とさないこと -- 2026-07-20 の Windows での失敗(講習前クローンでの
+    # "unexpected keyword argument 'no_flasher'")の退行チェック。git 履歴に
+    # 依存しないよう(CI のチェックアウトは shallow)、合成の旧式クラスを使う。
+    class _OldStyleInstaller:
+        def run(self, idf_path=None, skip_deps=False, minimal=False, force=False):
+            return 0
+
+    _old_module = types.SimpleNamespace(Installer=_OldStyleInstaller)
+    _probe_options = SetupOptions(
+        install_dir=Path("."), action=ACTION_INSTALL, skip_clone=True,
+        include_flasher=True, minimal=False,
+    )
+    _old_kwargs = build_supported_run_kwargs(_old_module, _probe_options, queue.Queue())
+    report(
+        "old-signature Installer.run(): unsupported kwargs dropped (got {0})".format(sorted(_old_kwargs)),
+        "no_flasher" not in _old_kwargs and "minimal" in _old_kwargs,
+    )
+    _current_kwargs = build_supported_run_kwargs(module, _probe_options, queue.Queue())
+    report(
+        "current Installer.run(): all kwargs supported",
+        set(_current_kwargs) == {"idf_path", "skip_deps", "minimal", "force", "no_flasher"},
+    )
 
     # (6) i18n completeness: every STRINGS key has both a ja and an en
     # entry, so tr() can never KeyError partway through a language switch.

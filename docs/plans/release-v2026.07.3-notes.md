@@ -8,6 +8,18 @@
 
 対象範囲: `v2026.07.2..main`。
 
+## 0. 修正: Setup 修復モードが古いクローンで失敗する問題
+
+v2026.07.2 の StampFly Setup で、既存の古いクローン（例: 講習前に導入した環境）に対して
+「修復」を実行すると、その古い installer.py が現行の呼び出し
+（`Installer.run(no_flasher=...)`）を解釈できず `TypeError` で失敗した
+（2026-07-20、講習用 Windows 実機で発生）。2段構えで根治:
+
+| 対策 | 内容 |
+|------|------|
+| pull 先行 | 修復開始時に対象クローンを `git pull --ff-only` で自動最新化（ローカル変更等で更新不能なら警告してそのまま続行。破壊的操作なし） |
+| シグネチャ耐性 | `inspect.signature` で対象 installer.py の `Installer.run()` が受け付ける引数だけを渡す（未対応引数は警告ログを出して無視）。v2026.07.1 実物の installer.py で TypeError 解消を確認済み。selftest に退行チェック2件を追加 |
+
 ## 1. StampFly Setup / インストーラに「StampFly Terminal」ランチャー機能を追加
 
 これまでエコシステムを使い始めるには、ターミナルを開いて `cd` した上で `source setup_env.sh`
