@@ -422,8 +422,14 @@ jobs:
               || { echo "FAIL: installed binary missing"; exit 1; }
             test -e "$HOME/.local/share/applications/stampfly-flasher.desktop" \
               || { echo "FAIL: .desktop entry missing"; exit 1; }
-            test -e "$HOME/.local/share/icons/hicolor/256x256/apps/stampfly-flasher.png" \
-              || { echo "FAIL: installed icon missing"; exit 1; }
+            # 256 = full 3D art, 96 = GNOME app-grid size, 16 = smallest
+            # (simplified variant) — one probe per artwork family.
+            # 256=フル3Dアート、96=GNOMEアプリ一覧サイズ、16=最小（簡略版）
+            # ── アートワーク系統ごとに1つずつ検査する。
+            for size in 256 96 16; do
+              test -e "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/stampfly-flasher.png" \
+                || { echo "FAIL: installed ${size}px icon missing"; exit 1; }
+            done
           fi
           echo "OK: install artifacts verified"
 
@@ -450,6 +456,10 @@ jobs:
               || { echo "FAIL: binary still present after uninstall"; exit 1; }
             test ! -e "$HOME/.local/share/applications/stampfly-flasher.desktop" \
               || { echo "FAIL: .desktop entry still present after uninstall"; exit 1; }
+            for size in 256 96 16; do
+              test ! -e "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/stampfly-flasher.png" \
+                || { echo "FAIL: ${size}px icon still present after uninstall"; exit 1; }
+            done
           fi
           echo "OK: uninstall verified clean"
 

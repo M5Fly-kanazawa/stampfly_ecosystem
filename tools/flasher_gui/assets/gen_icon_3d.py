@@ -7,14 +7,16 @@ from landing/index.html makeBlade/makeProp), through a numpy z-buffer
 rasterizer (true hidden-surface removal; translucent blades blended in
 a depth-tested second pass), then composes the approved "Navy Classic"
 icon: front-45 aerial view, lightning striking down into the glowing
-M5 unit. Outputs into this directory: icon_1024.png, icon_256.png,
-icon.ico and (macOS only, via iconutil) icon.icns.
+M5 unit. Outputs into this directory: icon_1024.png, per-size PNGs
+(icon_16.png ... icon_512.png; <=32 px use a simplified large-bolt
+variant), icon.ico and (macOS only, via iconutil) icon.icns.
 
 landing ページの実機9パーツSTLモデル+手続き生成プロペラ
 （landing/index.html の makeBlade/makeProp 移植）を numpy Zバッファ
 ラスタライザ（真の隠面消去。半透明ブレードは深度テスト付き後段合成）で
 描画し、承認済み「Navy Classic」構図（前方45°俯瞰・稲妻が発光する M5 へ
-注ぐ）に合成する。出力（本ディレクトリ）: icon_1024.png / icon_256.png /
+注ぐ）に合成する。出力（本ディレクトリ）: icon_1024.png / サイズ別PNG
+（icon_16.png〜icon_512.png。32px以下は稲妻を大きくした簡略版）/
 icon.ico /（macOSのみ、iconutil 経由で）icon.icns。
 
 Usage: python3 gen_icon_3d.py
@@ -389,19 +391,90 @@ def compose_icon(hero_path, out_path):
     return icon
 
 
+def compose_small_variant(render_px=256):
+    """Simplified artwork for tiny sizes (16-32 px): the same navy gradient
+    with one large lightning bolt. At these sizes the full 3D craft
+    collapses into noise, so color + bolt alone carry the icon identity
+    (standard small-size icon practice on Windows/macOS).
+    小サイズ(16〜32px)用の簡略アートワーク: 同じ紺グラデーションに大きな
+    稲妻1本。このサイズでは3D機体が潰れてノイズになるため、配色+稲妻
+    だけでアイコンの同一性を担う（Windows/macOSの小サイズ定石）。"""
+    s = render_px
+    bg = radial_gradient(s, (46, 88, 164), (10, 22, 52), cy=0.30).convert("RGBA")
+    b = bolt(int(s * 0.94), YELLOW + (255,))
+    # The bolt polygon spans x 0.24-0.78 of its sprite, so its visual
+    # center sits at 0.51 of the sprite width (y spans 0.02-0.98 -> 0.50).
+    # 稲妻ポリゴンはスプライト幅の0.24〜0.78を占めるため、見た目の中心は
+    # 幅の0.51にある（yは0.02〜0.98なので0.50）。
+    bx = int(s / 2 - 0.51 * b.width)
+    by = int(s / 2 - 0.50 * b.height)
+    bg.alpha_composite(glow(b, YELLOW, max(2, s // 20)), (bx, by))
+    bg.alpha_composite(b, (bx, by))
+    icon = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    icon.paste(bg, (0, 0))
+    icon.putalpha(rounded_mask(s, max(2, round(CORNER_R * s / S))))
+    return icon
+
+
+# Per-size artwork policy: >=48 px keeps the full 3D art, <=32 px switches
+# to the simplified bolt variant. The size list covers every standard
+# on-screen size: macOS Launchpad 128pt (256 px on Retina), GNOME app grid
+# 96 px / dash 64 px, Windows desktop 48 px / taskbar 32-24 px / lists 16 px.
+# サイズ別アートワーク方針: 48px以上はフル3Dアート、32px以下は簡略版。
+# サイズ一覧は各OSの標準表示サイズを網羅する: macOS Launchpad 128pt
+# （Retina実256px）、GNOMEアプリ一覧96px/ドック64px、Windowsデスクトップ
+# 48px/タスクバー32〜24px/一覧16px。
+FULL_ART_SIZES = (512, 256, 128, 96, 64, 48)
+SMALL_ART_SIZES = (32, 24, 16)
+
+
 def export_all(icon):
-    """icon_256 / .ico / .icns を icon_1024 から生成 / derive all assets"""
-    icon.resize((256, 256), Image.LANCZOS).save(OUT / "icon_256.png")
-    icon.save(OUT / "icon.ico",
-              sizes=[(16, 16), (24, 24), (32, 32), (48, 48),
-                     (64, 64), (128, 128), (256, 256)])
+    """Derive every asset from the 1024 px master: per-size PNGs
+    (icon_<N>.png, installed into the Linux hicolor theme), icon.ico with
+    per-size artwork embedded, and icon.icns (macOS iconutil).
+    1024pxマスターから全資産を派生: サイズ別PNG（icon_<N>.png、Linuxの
+    hicolorテーマへ設置される）、サイズ別アートワーク埋め込みのicon.ico、
+    icon.icns（macOSのiconutil）。"""
+    small = compose_small_variant()
+
+    def art(size):
+        base = icon if size >= 48 else small
+        return base.resize((size, size), Image.LANCZOS)
+
+    for s_ in FULL_ART_SIZES + SMALL_ART_SIZES:
+        art(s_).save(OUT / f"icon_{s_}.png")
+
+    # .ico: Pillow matches append_images frames to `sizes` by pixel size,
+    # so each size gets its own artwork instead of one scaled master.
+    # .ico: Pillowはappend_imagesの各フレームをピクセルサイズでsizesに
+    # 対応付けるため、1枚のマスター縮小ではなくサイズ別アートが入る。
+    ico_sizes = (256, 128, 64, 48, 32, 24, 16)
+    art(ico_sizes[0]).save(OUT / "icon.ico",
+                           sizes=[(s_, s_) for s_ in ico_sizes],
+                           append_images=[art(s_) for s_ in ico_sizes[1:]])
+
     if sys.platform == "darwin" and shutil.which("iconutil"):
+        # 16pt/32pt slots (16-32 px renders) carry the small variant; from
+        # 32x32@2x (64 px) up the full art is legible again.
+        # 16pt/32ptスロット（実16〜32px）は簡略版、32x32@2x(実64px)以上は
+        # フルアートが判読できるので切り替える。
+        slots = [
+            ("icon_16x16.png", art(16)),
+            ("icon_16x16@2x.png", art(32)),
+            ("icon_32x32.png", art(32)),
+            ("icon_32x32@2x.png", art(64)),
+            ("icon_128x128.png", art(128)),
+            ("icon_128x128@2x.png", art(256)),
+            ("icon_256x256.png", art(256)),
+            ("icon_256x256@2x.png", art(512)),
+            ("icon_512x512.png", art(512)),
+            ("icon_512x512@2x.png", icon),
+        ]
         with tempfile.TemporaryDirectory() as td:
             iset = Path(td) / "icon.iconset"
             iset.mkdir()
-            for s_ in (16, 32, 64, 128, 256, 512):
-                icon.resize((s_, s_), Image.LANCZOS).save(iset / f"icon_{s_}x{s_}.png")
-                icon.resize((s_*2, s_*2), Image.LANCZOS).save(iset / f"icon_{s_}x{s_}@2x.png")
+            for name, im in slots:
+                im.save(iset / name)
             subprocess.run(["iconutil", "-c", "icns", str(iset),
                             "-o", str(OUT / "icon.icns")], check=True)
         print("icon.icns generated")

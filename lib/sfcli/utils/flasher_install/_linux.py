@@ -12,7 +12,8 @@ lib/sfcli/utils/flasher_install/__init__.py (see FLASHER_SPEC.md section 2):
 
 Layout on disk / 配置 (XDG base-directory conventions, no root required):
     ~/.local/opt/stampfly/StampFlyFlasher                (the app, chmod 0o755)
-    ~/.local/share/icons/hicolor/256x256/apps/stampfly-flasher.png
+    ~/.local/share/icons/hicolor/<N>x<N>/apps/stampfly-flasher.png
+                                          (N = 16..512, see ICON_SIZES)
     ~/.local/share/applications/stampfly-flasher.desktop
 """
 
@@ -32,6 +33,18 @@ ICON_FILE_NAME = "stampfly-flasher.png"
 DESKTOP_ENTRY_NAME = "stampfly-flasher.desktop"
 MANIFEST_FILE_NAME = "stampfly_flasher_manifest.json"
 
+# hicolor theme sizes installed from the repo's pre-generated icon set
+# (tools/flasher_gui/assets/icon_<N>.png). Installing the real sizes lets
+# GNOME pick an exact match for its standard renditions (app grid 96 px,
+# dash 64 px) instead of downscaling a single 256 px image; 32/24/16 are
+# a simplified large-bolt variant generated for small-size legibility.
+# hicolorテーマへ設置するサイズ一覧（リポジトリ同梱の生成済み
+# tools/flasher_gui/assets/icon_<N>.png から）。実サイズを設置することで
+# GNOME が標準表示（アプリ一覧96px・ドック64px）に正確なサイズを選べる
+# （256px 1枚の縮小より鮮明）。32/24/16 は小サイズ視認性のために生成した
+# 稲妻拡大の簡略版。
+ICON_SIZES = (16, 24, 32, 48, 64, 96, 128, 256, 512)
+
 # File permission for the installed binary: owner rwx, group/other rx (no
 # write) — a normal executable, not world-writable.
 # インストールする実行体の権限: 所有者rwx、グループ/その他rx（書き込み不可）
@@ -49,10 +62,11 @@ def _binary_path() -> Path:
     return _install_dir() / BINARY_NAME
 
 
-def _icon_dest_path() -> Path:
-    """XDG hicolor icon theme path for a 256x256 app icon.
-    XDG hicolorアイコンテーマの256x256アプリアイコンパス"""
-    return Path.home() / ".local" / "share" / "icons" / "hicolor" / "256x256" / "apps" / ICON_FILE_NAME
+def _icon_dest_path(size: int) -> Path:
+    """XDG hicolor icon theme path for a <size>x<size> app icon.
+    XDG hicolorアイコンテーマの <size>x<size> アプリアイコンパス"""
+    return (Path.home() / ".local" / "share" / "icons" / "hicolor"
+            / f"{size}x{size}" / "apps" / ICON_FILE_NAME)
 
 
 def _desktop_entry_path() -> Path:
@@ -61,9 +75,9 @@ def _desktop_entry_path() -> Path:
     return Path.home() / ".local" / "share" / "applications" / DESKTOP_ENTRY_NAME
 
 
-def _repo_icon_source() -> Path | None:
-    """Locate the repo's pre-generated 256px icon, if available.
-    リポジトリに同梱された生成済み256pxアイコンがあれば、その場所を返す
+def _repo_icon_source(size: int) -> Path | None:
+    """Locate the repo's pre-generated <size>px icon, if available.
+    リポジトリに同梱された生成済み <size>px アイコンがあれば、その場所を返す
 
     Returns None (rather than raising) when the repo checkout is not
     reachable from here — e.g. an artifact installed via `--from-file` from
@@ -76,7 +90,7 @@ def _repo_icon_source() -> Path | None:
     呼び出し側は None を「アイコンを諦めて続行」として扱うこと。
     アイコン欠落だけでインストール全体を失敗させてはならない（仕様4-2）。
     """
-    candidate = paths.tools() / "flasher_gui" / "assets" / "icon_256.png"
+    candidate = paths.tools() / "flasher_gui" / "assets" / f"icon_{size}.png"
     return candidate if candidate.is_file() else None
 
 
@@ -159,15 +173,19 @@ def install(artifact: Path, version: str, opts: dict) -> list[str]:
 
     created: list[str] = [str(binary_path)]
 
-    icon_src = _repo_icon_source()
-    if icon_src is not None:
-        icon_dest = _icon_dest_path()
+    icons_installed = 0
+    for size in ICON_SIZES:
+        icon_src = _repo_icon_source(size)
+        if icon_src is None:
+            continue
+        icon_dest = _icon_dest_path(size)
         icon_dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(icon_src, icon_dest)
         created.append(str(icon_dest))
-    else:
+        icons_installed += 1
+    if icons_installed == 0:
         console.warning(
-            f"Icon asset not found ({paths.tools() / 'flasher_gui' / 'assets' / 'icon_256.png'}); "
+            f"Icon assets not found ({paths.tools() / 'flasher_gui' / 'assets' / 'icon_<size>.png'}); "
             "installing without a desktop icon (the app itself is unaffected)."
         )
 
@@ -214,7 +232,8 @@ def uninstall(manifest: dict | None) -> None:
         # manifest なし（消失・破損）: 既知の既定パスへフォールバックし、
         # それでもアンインストールできるようにする
         _remove_path(_binary_path())
-        _remove_path(_icon_dest_path())
+        for size in ICON_SIZES:
+            _remove_path(_icon_dest_path(size))
         _remove_path(_desktop_entry_path())
 
     install_dir = _install_dir()

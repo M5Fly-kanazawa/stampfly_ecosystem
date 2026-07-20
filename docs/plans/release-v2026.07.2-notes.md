@@ -23,7 +23,8 @@
 | controller CI修復 | `9304b7d` | `m5unified` を `^0.2.11` → `==0.2.11` に固定（0.2.18が公開されCI解決が壊れていたため）。挙動変化なし、CI安定化のみ |
 | `sf flash --gui` の優先順位変更 | `e834558`（flash.py） | インストール済みのネイティブアプリを優先して起動し、未インストール時のみ従来のスクリプト起動にフォールバック |
 | macOS の SSL 証明書検証失敗を修正 | `d77c595` | 凍結アプリの macOS Python は既定の証明書検証パスを持たず、GitHub への全通信が `CERTIFICATE_VERIFY_FAILED` になっていた（2026-07-20 実機で発見。**v2026.07.1 の macOS 版アプリはこの不具合の影響下にある**）。certifi の CA バンドルで検証するよう変更（アプリ・`sf flasher` 双方。certifi 無しの環境は従来動作へフォールバック） |
-| アプリアイコンを実機3Dモデルから刷新 | 本コミット | 従来の平面プレースホルダを廃し、landing ページの実機9パーツ STL＋手続き生成プロペラを numpy 製 Zバッファレンダラで描画した「Navy Classic」アイコン（前方45°俯瞰・稲妻が M5 へ注ぐ構図）に全面差し替え。`icon.ico` / `icon.icns` / PNG 各サイズを `tools/flasher_gui/assets/gen_icon_3d.py`（自己完結・再現可能）で生成。Windows/macOS のアプリ本体・ショートカットに v2026.07.2 ビルドから反映される |
+| アプリアイコンを実機3Dモデルから刷新 | `8bfedf55` ほか | 従来の平面プレースホルダを廃し、landing ページの実機9パーツ STL＋手続き生成プロペラを numpy 製 Zバッファレンダラで描画した「Navy Classic」アイコン（前方45°俯瞰・稲妻が M5 へ注ぐ構図）に全面差し替え。`icon.ico` / `icon.icns` / PNG 各サイズを `tools/flasher_gui/assets/gen_icon_3d.py`（自己完結・再現可能）で生成。Windows/macOS のアプリ本体・ショートカットに v2026.07.2 ビルドから反映される |
+| アイコンの各OS標準サイズ最適化 | 本コミット | 各OSの実表示サイズ（macOS Launchpad 128pt=Retina実256px、GNOMEアプリ一覧96px/ドック64px、Windowsデスクトップ48px/タスクバー32〜24px/一覧16px）を全て実サイズで収録。**32px以下は3D機体が判読不能になるため、稲妻を大きくした簡略版アートワーク**を `.ico`/`.icns` の該当枠に埋め込み（小サイズアイコンの定石）。Linux は従来の256px 1枚から **hicolor テーマ9サイズ（16〜512px）設置**に変更し、GNOME が縮小せず正確なサイズを選べるようにした（`_linux.py`）。CIスモークテストに 256/96/16px の設置・削除検査を追加 |
 
 **ドキュメント（本コミット、P4）:** `docs/commands/sf-flasher.md` 新設、
 `tools/flasher_gui/README.md` / `docs/setup/windows.md` / `docs/setup/macos.md` /
