@@ -38,6 +38,11 @@ Windows / macOS（Apple Silicon・Intel）/ Linux 版は v2026.07.2 以降のリ
 （[5. ウィザードの画面構成](#wizard-screens-ja)）に表示されます。おおむね数GB程度の
 ダウンロードになるため、ネットワーク環境の良い場所での実行を推奨します。
 
+インストール完了後は、OSごとに用意される「**StampFly Terminal**」ランチャー（Windows:
+スタートメニュー、macOS: `~/Applications`、Linux: アプリ一覧）をダブルクリックすると、
+`setup_env.sh`（Windows は `setup_env.bat`）を読み込み済みの端末がその場で開きます。
+`cd` や `source` のコマンドを覚えなくても `sf` コマンドをすぐに使い始められます。
+
 ## 4. OS別の起動手順
 
 ### Windows
@@ -172,6 +177,13 @@ StampFly Setup は初回導入専用です。導入後にエコシステムを�
 StampFly Setup をもう一度起動すると、既存インストールを検出して「アンインストール」を選べます。
 詳細は [6. 既存インストールがある場合](#repair-uninstall-ja)を参照してください。
 
+### ターミナルを開かずに `sf` を使うには？
+
+インストール完了後に作成される「StampFly Terminal」ランチャー（Windows: スタートメニュー、
+macOS: `~/Applications`、Linux: アプリ一覧）から起動してください。`setup_env.sh`
+（Windows は `setup_env.bat`）を読み込み済みの端末がすぐに開くので、`cd` や `source` を
+自分で打たなくても `sf` コマンドをそのまま使い始められます。
+
 ## 9. 関連
 
 | ページ | 内容 |
@@ -228,6 +240,11 @@ What gets installed, and the approximate size/time (including ESP-IDF), is shown
 "Welcome" screen right after launch (see
 [5. Wizard Screens](#wizard-screens-en)). The download totals a few GB, so a good network
 connection is recommended.
+
+After the install finishes, double-clicking the OS-specific "**StampFly Terminal**" launcher
+(Windows: Start Menu, macOS: `~/Applications`, Linux: your app launcher) opens a terminal with
+`setup_env.sh` (`setup_env.bat` on Windows) already sourced. You can start typing `sf` commands
+right away, without ever learning `cd` or `source`.
 
 ## 4. Launching on Each OS
 
@@ -362,6 +379,13 @@ StampFly Setup is a one-time install tool. Once installed, use `sf upgrade` — 
 Launch StampFly Setup again; it will detect the existing install and offer "Uninstall." See
 [6. If an Existing Install Is Found](#repair-uninstall-en) for
 details.
+
+### How do I use `sf` without opening a terminal manually?
+
+Launch the "StampFly Terminal" entry created for your OS after install finishes (Windows: Start
+Menu, macOS: `~/Applications`, Linux: your app launcher). It opens a terminal with
+`setup_env.sh` (`setup_env.bat` on Windows) already sourced, so you can start typing `sf`
+commands immediately — no need to type `cd` or `source` yourself.
 
 ## 9. Related
 

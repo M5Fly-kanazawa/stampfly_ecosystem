@@ -67,6 +67,7 @@ import shlex
 import sys
 import subprocess
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional, List, Tuple
 
@@ -761,6 +762,75 @@ class ESPIDFInstaller:
         return target_dir
 
 
+# StampFly Terminal launcher (Installer._create_terminal_launcher() /
+# Installer._remove_terminal_launcher(), called from uninstall()). Fixed
+# names shared by creation and removal so the two never drift apart,
+# mirroring the BINARY_NAME/EXE_NAME pattern in
+# lib/sfcli/utils/flasher_install/_linux.py / _windows.py.
+# StampFly Terminal ランチャー(Installer._create_terminal_launcher() /
+# Installer._remove_terminal_launcher()、uninstall() から呼ばれる)。作成と
+# 削除の間で名称がずれないよう固定値として共有する
+# (lib/sfcli/utils/flasher_install/_linux.py / _windows.py の
+# BINARY_NAME/EXE_NAME と同じパターン)。
+TERMINAL_LAUNCHER_NAME = "StampFly Terminal"
+TERMINAL_LAUNCHER_MACOS_FILENAME = f"{TERMINAL_LAUNCHER_NAME}.command"
+TERMINAL_LAUNCHER_MACOS_MODE = 0o755  # owner rwx, group/other rx (no write) / 所有者rwx、グループ/その他rx
+TERMINAL_LAUNCHER_LINUX_DESKTOP_ID = "stampfly-terminal.desktop"
+# Reuses the same Start Menu folder name as the GUI Flasher
+# (lib/sfcli/utils/flasher_install/_windows.py START_MENU_FOLDER_NAME) so
+# both shortcuts live side by side under one "StampFly" group.
+# GUIフラッシャ(lib/sfcli/utils/flasher_install/_windows.py の
+# START_MENU_FOLDER_NAME)と同じスタートメニューフォルダ名を再利用し、
+# 両方のショートカットが1つの「StampFly」グループにまとまるようにする。
+TERMINAL_LAUNCHER_WINDOWS_START_MENU_FOLDER = "StampFly"
+TERMINAL_LAUNCHER_WINDOWS_LNK_NAME = f"{TERMINAL_LAUNCHER_NAME}.lnk"
+
+
+def _ps_escape(value: str) -> str:
+    """Escape a string for embedding inside a PowerShell single-quoted literal.
+    PowerShell のシングルクォート文字列に埋め込むための文字列エスケープ
+
+    A single quote is escaped by doubling it (`''`), the same rule as
+    classic Pascal/SQL string literals. Duplicated from
+    lib/sfcli/utils/flasher_install/_windows.py's identical helper (not
+    imported) because this file must stay a fully standalone, stdlib-only
+    script per its Stability contract (see the module docstring) -- it
+    cannot depend on the sfcli package it exists to install.
+    シングルクォートの二重化(`''`)でエスケープする(Pascal/SQL の文字列
+    リテラルと同じ規則)。lib/sfcli/utils/flasher_install/_windows.py の
+    同名ヘルパーと同一処理だが import はしない -- 本ファイルは(自身が
+    導入するsfcliパッケージに依存できない)完全に独立したstdlib限定
+    スクリプトであるべきため(モジュールdocstringの安定契約を参照)。
+    """
+    return value.replace("'", "''")
+
+
+def _refresh_linux_desktop_database(applications_dir: Path) -> None:
+    """Run `update-desktop-database` if available, so a new/removed .desktop
+    entry is picked up by application launchers without a logout/login.
+    `update-desktop-database` が利用可能なら実行し、.desktop エントリの
+    追加/削除をログアウト/ログイン無しでアプリランチャーに反映させる
+
+    Mirrors lib/sfcli/utils/flasher_install/_linux.py's
+    _refresh_desktop_database(); duplicated here (not imported) for the
+    same stdlib-only-standalone-script reason as _ps_escape() above.
+    Failure (tool absent, or a minimal desktop environment without it) is
+    ignored -- this is a convenience refresh, not a correctness requirement.
+    lib/sfcli/utils/flasher_install/_linux.py の
+    _refresh_desktop_database() と同じ処理。_ps_escape() と同じ理由で
+    import せず複製する。失敗(ツール未導入、あるいは持たない最小構成
+    デスクトップ環境)は無視する -- あくまで利便性のための更新であり、
+    必須要件ではない。
+    """
+    tool = shutil.which("update-desktop-database")
+    if not tool:
+        return
+    try:
+        subprocess.run([tool, str(applications_dir)], capture_output=True, check=False)
+    except OSError:
+        pass
+
+
 class Installer:
     """Main installer"""
 
@@ -1154,6 +1224,20 @@ class Installer:
         # Save configuration
         self._save_config(idf_path)
 
+        # Create the "StampFly Terminal" double-click launcher (setup_env
+        # pre-loaded) right after Step 3/4 (StampFly CLI) succeeds, and
+        # before the Step 4/4 header below. Deliberately NOT its own
+        # "Step N/4": the Stability contract at the top of this file says
+        # the GUI parses "Step N/4:" header lines to advance its step
+        # indicator, and that count must stay at 4.
+        # Step3/4（StampFly CLI）成功直後・下のStep4/4ヘッダの前に、
+        # 「StampFly Terminal」ダブルクリックランチャー（setup_env読み込み
+        # 済み）を作成する。意図的に独立した「Step N/4」にはしない —
+        # 本ファイル冒頭の安定契約のとおり、GUIは"Step N/4:"ヘッダ行を
+        # パースしてステップインジケータを進めるため、その数は4のまま
+        # 維持しなければならない。
+        self._create_terminal_launcher()
+
         # Step 4: GUI Flasher (optional). Deliberately best-effort: its own
         # failure never turns the overall installer result into a failure
         # (return value is not checked), unlike Steps 1-3 which `return 1`
@@ -1369,6 +1453,260 @@ class Installer:
             warn("GUI Flasher install failed (this does not affect the rest of the install).")
             warn("You can install it manually later with: sf flasher install")
 
+    def _create_terminal_launcher(self) -> None:
+        """Create a double-click launcher that opens a terminal with
+        setup_env already sourced, so a newcomer can start using `sf`
+        without learning "open a terminal, cd, source setup_env.sh" first.
+        ダブルクリックすると setup_env 読み込み済みの端末が開くランチャーを
+        作成する。初心者が「ターミナルを開いて cd して source する」を
+        覚えずに `sf` を使い始められるようにするため
+
+        Deliberately best-effort, same mindset as _install_flasher_gui()
+        (Step 4/4, spec §4-2): failure here must never fail the overall
+        installer -- a newcomer who does not get the launcher can still
+        fall back to sourcing setup_env.sh by hand, exactly as before this
+        feature existed.
+        _install_flasher_gui()（Step4/4、仕様4-2）と同じくベストエフォート:
+        ここでの失敗はインストーラー全体を失敗にしない -- ランチャーが
+        作れなくても、この機能が無かった頃と同じく手動の
+        `source setup_env.sh` に頼れる。
+        """
+        info(f'Creating "{TERMINAL_LAUNCHER_NAME}" launcher...')
+        try:
+            if sys.platform == "darwin":
+                self._create_terminal_launcher_macos()
+            elif sys.platform == "linux":
+                self._create_terminal_launcher_linux()
+            elif sys.platform == "win32":
+                self._create_terminal_launcher_windows()
+            else:
+                # Unknown platform: no well-defined "double-click launcher"
+                # concept here, so skip quietly rather than guess.
+                # 未知プラットフォーム: 「ダブルクリックランチャー」の概念が
+                # 定まらないため、推測せず黙ってスキップする
+                info(f'Skipping "{TERMINAL_LAUNCHER_NAME}" launcher (unsupported platform: {sys.platform}).')
+                return
+        except Exception as e:
+            warn(f'Failed to create "{TERMINAL_LAUNCHER_NAME}" launcher: {e}')
+            warn(f"You can still start manually: source {self.root / 'setup_env.sh'}")
+            return
+
+        success(f'"{TERMINAL_LAUNCHER_NAME}" launcher created')
+
+    def _create_terminal_launcher_macos(self) -> None:
+        """macOS: ~/Applications/StampFly Terminal.command
+        macOS: ~/Applications/StampFly Terminal.command
+
+        A .command file is a plain shell script that Finder runs in
+        Terminal.app when double-clicked (as long as it is executable).
+        `exec "${SHELL:-/bin/zsh}" -i` hands off to an interactive shell
+        after sourcing setup_env.sh so the variables exported there (PATH,
+        IDF_PATH, ...) survive into the shell the user actually types into
+        -- a bare `source` with no `exec` would leave the user back at a
+        dead script once it reaches the end.
+        .command ファイルは、実行権限があればダブルクリック時に Finder が
+        Terminal.app で実行する素のシェルスクリプト。setup_env.sh を
+        source した後 `exec "${SHELL:-/bin/zsh}" -i` で対話シェルへ
+        引き継ぐことで、そこでexportされた変数(PATH, IDF_PATH等)が
+        ユーザーが実際に入力するシェルへ残る -- `exec` 無しの `source` だけ
+        では、スクリプトの終端に達した時点で操作不能になってしまう。
+        """
+        apps_dir = Path.home() / "Applications"
+        apps_dir.mkdir(parents=True, exist_ok=True)
+        launcher_path = apps_dir / TERMINAL_LAUNCHER_MACOS_FILENAME
+
+        content = (
+            "#!/bin/zsh\n"
+            "# Double-click entry point: open a terminal with the StampFly dev\n"
+            "# environment pre-loaded (setup_env.sh already sourced).\n"
+            "# ダブルクリック用エントリポイント: StampFly 開発環境\n"
+            "# (setup_env.sh 読み込み済み) の端末を開く\n"
+            f'cd "{self.root}"\n'
+            "source setup_env.sh\n"
+            "# Hand off to an interactive shell so the environment exported\n"
+            "# above survives into the shell the user actually types into.\n"
+            "# 上でexportされた環境が、ユーザーが実際に入力する対話シェルへ\n"
+            "# 引き継がれるようにする\n"
+            'exec "${SHELL:-/bin/zsh}" -i\n'
+        )
+        launcher_path.write_text(content)
+        launcher_path.chmod(TERMINAL_LAUNCHER_MACOS_MODE)
+
+    def _create_terminal_launcher_linux(self) -> None:
+        """Linux: ~/.local/share/applications/stampfly-terminal.desktop
+        Linux: ~/.local/share/applications/stampfly-terminal.desktop
+
+        The whole Exec= value must parse as ONE shell word (freedesktop.org
+        Desktop Entry spec), so the entire `bash -c '...'` invocation is
+        wrapped in single quotes. If the install path itself contains a
+        single quote, that quoting cannot be expressed safely -- skip
+        creation and warn rather than emit a broken/misinterpreted .desktop
+        entry.
+        Exec= の値全体が(freedesktop.org の Desktop Entry 仕様上)1つの
+        シェル単語として解釈される必要があるため、`bash -c '...'` 全体を
+        シングルクォートで囲む。インストール先パス自体にシングルクォートが
+        含まれる場合はこの引用を安全に表現できないため、壊れた/誤解釈される
+        .desktop エントリを作るのではなく、作成をスキップして警告する。
+        """
+        root_str = str(self.root)
+        if "'" in root_str:
+            warn(
+                f'"{TERMINAL_LAUNCHER_NAME}" launcher skipped: install path contains '
+                f"a single quote, which cannot be safely embedded in a .desktop "
+                f"Exec= line: {root_str}"
+            )
+            return
+
+        applications_dir = Path.home() / ".local" / "share" / "applications"
+        applications_dir.mkdir(parents=True, exist_ok=True)
+        desktop_path = applications_dir / TERMINAL_LAUNCHER_LINUX_DESKTOP_ID
+
+        exec_line = f'bash -c \'cd "{root_str}" && source setup_env.sh && exec bash -i\''
+        content = (
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            f"Name={TERMINAL_LAUNCHER_NAME}\n"
+            "Comment=Open a terminal with the StampFly dev environment pre-loaded / "
+            "StampFly開発環境を読み込み済みの端末を開く\n"
+            f"Exec={exec_line}\n"
+            "Terminal=true\n"
+            "Icon=utilities-terminal\n"
+            "Categories=Development;\n"
+        )
+        desktop_path.write_text(content, encoding="utf-8")
+        desktop_path.chmod(0o644)
+
+        _refresh_linux_desktop_database(applications_dir)
+
+    def _create_terminal_launcher_windows(self) -> None:
+        """Windows: Start Menu shortcut launching cmd.exe with setup_env.bat.
+        Windows: setup_env.bat を実行する cmd.exe のスタートメニューショートカット
+
+        %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\StampFly\\StampFly Terminal.lnk
+
+        Creates the .lnk via PowerShell's WScript.Shell COM object, the same
+        approach lib/sfcli/utils/flasher_install/_windows.py's
+        _create_shortcut() uses for the GUI Flasher's shortcuts (avoids a
+        pywin32 dependency, which installer.py cannot take on -- see the
+        Stability contract at the top of this file). The .ps1 is written as
+        utf-8-sig so a non-ASCII user profile path (e.g. C:\\Users\\山田)
+        round-trips correctly, for the same reason documented there.
+        PowerShell の WScript.Shell COM オブジェクト経由で .lnk を作成する。
+        lib/sfcli/utils/flasher_install/_windows.py の _create_shortcut() が
+        GUIフラッシャのショートカット作成に使うのと同じ手法(pywin32依存を
+        避ける -- installer.pyはそれを持てない。本ファイル冒頭の安定契約
+        参照)。.ps1 は utf-8-sig で書き出し、非ASCIIなユーザープロファイル
+        パス(例: C:\\Users\\山田)でも正しく往復させる(同ファイルに記載の
+        理由と同じ)。
+        """
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            warn(f'"{TERMINAL_LAUNCHER_NAME}" launcher skipped: APPDATA is not set.')
+            return
+
+        start_menu_dir = (
+            Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+            / TERMINAL_LAUNCHER_WINDOWS_START_MENU_FOLDER
+        )
+        start_menu_dir.mkdir(parents=True, exist_ok=True)
+        link_path = start_menu_dir / TERMINAL_LAUNCHER_WINDOWS_LNK_NAME
+
+        # TargetPath=%ComSpec% (cmd.exe); Arguments keep the shell open
+        # after running setup_env.bat (/k, not /c) so the user lands in an
+        # interactive prompt with the environment already loaded. The batch
+        # path is double-quoted within Arguments so a root path containing
+        # spaces still parses as one argument.
+        # TargetPath=%ComSpec%(cmd.exe)。Arguments は setup_env.bat 実行後も
+        # シェルを閉じない(/c ではなく /k)ことで、環境読み込み済みの対話
+        # プロンプトにそのまま入れるようにする。root パスに空白が含まれても
+        # 1引数として解釈されるよう、Arguments 内でバッチパスを二重引用する。
+        comspec = os.environ.get("ComSpec", "cmd.exe")
+        setup_env_bat = self.root / "setup_env.bat"
+        arguments = f'/k "{setup_env_bat}"'
+
+        ps_script = (
+            "$ws = New-Object -ComObject WScript.Shell\n"
+            f"$sc = $ws.CreateShortcut('{_ps_escape(str(link_path))}')\n"
+            f"$sc.TargetPath = '{_ps_escape(comspec)}'\n"
+            f"$sc.Arguments = '{_ps_escape(arguments)}'\n"
+            f"$sc.WorkingDirectory = '{_ps_escape(str(self.root))}'\n"
+            "$sc.Save()\n"
+        )
+
+        # Written as a temp .ps1 (rather than passed via -Command) so
+        # quoting is handled once here instead of twice (Python -> shell ->
+        # PowerShell), mirroring _windows.py's _create_shortcut().
+        # -Command 経由だと引用符がPython→シェル→PowerShellと二重に解釈
+        # されるため、_windows.py の _create_shortcut() に倣い一時 .ps1
+        # ファイルに書き出して -File で実行する。
+        fd, tmp_name = tempfile.mkstemp(suffix=".ps1", prefix="stampfly_terminal_launcher_")
+        ps1_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+                f.write(ps_script)
+            result = subprocess.run(
+                [
+                    "powershell", "-NoProfile", "-NonInteractive",
+                    "-ExecutionPolicy", "Bypass", "-File", str(ps1_path),
+                ],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"powershell exited {result.returncode}: {result.stderr.strip()}")
+        finally:
+            ps1_path.unlink(missing_ok=True)
+
+    def _remove_terminal_launcher(self) -> None:
+        """Remove the "StampFly Terminal" launcher created by
+        _create_terminal_launcher() (best-effort, called from uninstall()).
+        _create_terminal_launcher() が作成した「StampFly Terminal」
+        ランチャーを削除する（ベストエフォート、uninstall() から呼ばれる）
+
+        Missing paths are not an error -- uninstall must stay idempotent,
+        mirroring _remove_path() in
+        lib/sfcli/utils/flasher_install/_linux.py / _windows.py. On
+        Windows, the shared "StampFly" Start Menu folder (see
+        TERMINAL_LAUNCHER_WINDOWS_START_MENU_FOLDER) is removed only if it
+        is now empty: it may still hold the GUI Flasher's own shortcut,
+        which _uninstall_flasher_gui() owns and removes separately.
+        存在しなくてもエラーにしない -- アンインストールは冪等でなければ
+        ならない(lib/sfcli/utils/flasher_install/_linux.py / _windows.py の
+        _remove_path() と同じ考え方)。Windowsでは、共有の「StampFly」
+        スタートメニューフォルダ(TERMINAL_LAUNCHER_WINDOWS_START_MENU_FOLDER
+        参照)は空になった場合のみ削除する -- GUIフラッシャ自身の
+        ショートカットも同じフォルダに残っている可能性があり、そちらは
+        _uninstall_flasher_gui() が別途所有・削除するため。
+        """
+        try:
+            if sys.platform == "darwin":
+                launcher = Path.home() / "Applications" / TERMINAL_LAUNCHER_MACOS_FILENAME
+                if launcher.exists():
+                    launcher.unlink()
+            elif sys.platform == "linux":
+                applications_dir = Path.home() / ".local" / "share" / "applications"
+                desktop_path = applications_dir / TERMINAL_LAUNCHER_LINUX_DESKTOP_ID
+                if desktop_path.exists():
+                    desktop_path.unlink()
+                    _refresh_linux_desktop_database(applications_dir)
+            elif sys.platform == "win32":
+                appdata = os.environ.get("APPDATA")
+                if not appdata:
+                    return
+                start_menu_dir = (
+                    Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+                    / TERMINAL_LAUNCHER_WINDOWS_START_MENU_FOLDER
+                )
+                link_path = start_menu_dir / TERMINAL_LAUNCHER_WINDOWS_LNK_NAME
+                if link_path.exists():
+                    link_path.unlink()
+                # Only remove the shared folder if now empty (see docstring).
+                # 共有フォルダは空になった場合のみ削除(docstring参照)
+                if start_menu_dir.exists() and not any(start_menu_dir.iterdir()):
+                    start_menu_dir.rmdir()
+        except Exception as e:
+            warn(f'Failed to remove "{TERMINAL_LAUNCHER_NAME}" launcher: {e}')
+
     def _install_udev_rules(self) -> None:
         """Install udev rules for StampFly USB devices on Linux.
         Linux用のudevルールをインストール"""
@@ -1499,6 +1837,14 @@ default_target = "vehicle"
         # GUIフラッシャのデスクトップアプリを先にアンインストール
         # (これから削除するsfcliに依存するため)
         self._uninstall_flasher_gui(idf_path)
+
+        # Remove the "StampFly Terminal" launcher. Independent of sfcli/the
+        # ESP-IDF venv (unlike the GUI Flasher uninstall above), so its
+        # position relative to the sfcli uninstall below does not matter.
+        # 「StampFly Terminal」ランチャーを削除する。(上のGUIフラッシャ
+        # アンインストールと異なり)sfcli/ESP-IDF venvに依存しないため、
+        # 下のsfcliアンインストールとの前後関係は問わない。
+        self._remove_terminal_launcher()
 
         # Uninstall sfcli
         info("Uninstalling sfcli...")

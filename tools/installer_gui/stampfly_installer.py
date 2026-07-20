@@ -115,6 +115,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile  # noqa: F401  -- hidden-import only, see the contract block below
 import threading
 import traceback
 from pathlib import Path
@@ -143,14 +144,17 @@ from typing import Dict, List, Optional, Tuple
 # ここでも import しておく必要がある。
 #
 # Verified against scripts/installer.py's actual `import`/`from ... import`
-# statements on 2026-07-20 (`grep -n "^import \|^from " scripts/installer.py`):
-#   os, shlex, sys, subprocess, shutil, pathlib.Path,
+# statements on 2026-07-20 (`grep -n "^import \|^from " scripts/installer.py`),
+# re-verified same day after the StampFly Terminal launcher feature added
+# `tempfile`:
+#   os, shlex, sys, subprocess, shutil, tempfile, pathlib.Path,
 #   typing.{Optional,List,Tuple}, re (used inline in two functions),
-#   ctypes.util (used inline, Linux-only branch), argparse (used inline
-#   in main()).
+#   ctypes.util (used inline, Linux-only branch), tempfile (used inline,
+#   Windows-only branch: Installer._create_terminal_launcher_windows()'s
+#   .ps1 temp file), argparse (used inline in main()).
 # All of these are already imported above for this GUI's own use, EXCEPT
-# shlex and ctypes.util, which are imported for this contract alone (see
-# the `# noqa: F401` markers). urllib.request/ssl/json/tempfile/venv were
+# shlex, ctypes.util, and tempfile, which are imported for this contract
+# alone (see the `# noqa: F401` markers). urllib.request/ssl/json/venv were
 # considered as generic examples during planning but are NOT currently
 # imported by scripts/installer.py -- do not add them speculatively.
 #
@@ -158,14 +162,18 @@ from typing import Dict, List, Optional, Tuple
 # module, add the same import here (docs/plans/gui-installer-plan.md §5).
 #
 # 2026-07-20 時点で scripts/installer.py の実際の import 文
-# (`grep -n "^import \|^from " scripts/installer.py`)を確認して網羅した:
-#   os, shlex, sys, subprocess, shutil, pathlib.Path,
+# (`grep -n "^import \|^from " scripts/installer.py`)を確認して網羅し、
+# 同日 StampFly Terminal ランチャー機能追加による `tempfile` 追加後に
+# 再確認した:
+#   os, shlex, sys, subprocess, shutil, tempfile, pathlib.Path,
 #   typing.{Optional,List,Tuple}, re(2関数内でインライン import)、
 #   ctypes.util(インライン import、Linux限定分岐)、
+#   tempfile(インライン import、Windows限定分岐:
+#   Installer._create_terminal_launcher_windows() の .ps1 一時ファイル用)、
 #   argparse(main() 内でインライン import)。
-# これらは shlex と ctypes.util を除き、既にこのGUI自身の用途で import
-# 済み(shlex/ctypes.util は本契約のためだけに import している。
-# `# noqa: F401` の箇所)。urllib.request/ssl/json/tempfile/venv は計画時に
+# これらは shlex・ctypes.util・tempfile を除き、既にこのGUI自身の用途で
+# import 済み(shlex/ctypes.util/tempfile は本契約のためだけに import
+# している。`# noqa: F401` の箇所)。urllib.request/ssl/json/venv は計画時に
 # 一般例として挙がったが、現時点の scripts/installer.py は import して
 # いない -- 推測で足さないこと。
 #
@@ -390,8 +398,12 @@ STRINGS: Dict[str, Dict[str, str]] = {
     },
     "done_install_title": {"ja": "インストール完了", "en": "Setup complete"},
     "done_install_body": {
-        "ja": "次の一歩 -- ターミナルを開いて実行してください:\n\n  {0}\n  sf doctor",
-        "en": "Next steps -- open a terminal and run:\n\n  {0}\n  sf doctor",
+        "ja": "次の一歩 -- ターミナルを開いて実行してください:\n\n  {0}\n  sf doctor"
+              "\n\nまたは『StampFly Terminal』（スタートメニュー / ~/Applications / "
+              "アプリ一覧）から始められます。",
+        "en": "Next steps -- open a terminal and run:\n\n  {0}\n  sf doctor"
+              "\n\nOr get started from \"StampFly Terminal\" (Start Menu / "
+              "~/Applications / your app launcher).",
     },
     "save_log_saved": {"ja": "ログを保存しました: {0}", "en": "Log saved to: {0}"},
 
