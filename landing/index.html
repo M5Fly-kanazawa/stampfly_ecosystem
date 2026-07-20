@@ -589,7 +589,12 @@ footer{padding:56px 0 40px;border-top:1px solid var(--panel-border);margin-top:3
     <div class="cta reveal">
       <div class="cta-inner">
         <h2 data-i18n="ctaTitle">さあ、<span class="grad-text">飛ばしてみよう</span></h2>
-        <p data-i18n="ctaP">クローンして <code>install.sh</code> を実行するだけ。sf CLI とシミュレータ依存が一括で入ります。</p>
+        <p data-i18n="ctaP">GUI インストーラ「StampFly Setup」をダウンロードして実行するだけ。sf CLI・ESP-IDF・書き込みアプリを一括で導入します（ターミナル不要）。</p>
+        <div class="btns">
+          <a class="btn btn-primary" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" target="_blank" rel="noopener" data-i18n="ctaBtnSetup">⬇ StampFly Setup をダウンロード</a>
+          <a class="btn btn-ghost" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/blob/main/docs/guides/gui-installer.md" target="_blank" rel="noopener" data-i18n="ctaBtnSetupGuide">使い方ガイド</a>
+        </div>
+        <p data-i18n="ctaCliLabel">コマンドラインで導入する場合:</p>
         <div class="code">
           <pre id="installCmd">git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
 cd stampfly_ecosystem
@@ -701,7 +706,10 @@ const I18N = {
     l8h:'PID control', l8p:'PID attitude control and flight',
     wsBtn:'📑 Open all 156 workshop slides',
     ctaTitle:'Ready to <span class="grad-text">take off</span>?',
-    ctaP:'Just clone and run <code>install.sh</code> — it installs the sf CLI and simulator dependencies in one go.',
+    ctaP:'Download and run the "StampFly Setup" wizard — it installs the sf CLI, ESP-IDF, and the flashing app in one go. No terminal needed.',
+    ctaBtnSetup:'⬇ Download StampFly Setup',
+    ctaBtnSetupGuide:'Setup guide',
+    ctaCliLabel:'Prefer the command line?',
     ctaBtnRepo:'GitHub repository',
     ctaBtnFlash:'Web Flasher',
     ctaBtnDesktop:'Desktop Flasher',
@@ -768,7 +776,10 @@ const I18N = {
     l8h:'PID 控制', l8p:'姿态角 PID 控制与飞行',
     wsBtn:'📑 打开全部 156 页工作坊幻灯片',
     ctaTitle:'现在就<span class="grad-text">起飞吧</span>',
-    ctaP:'只需克隆并运行 <code>install.sh</code>，即可一次性安装 sf CLI 与仿真器依赖。',
+    ctaP:'下载并运行图形安装向导「StampFly Setup」，即可一键安装 sf CLI、ESP-IDF 与烧录应用，无需终端。',
+    ctaBtnSetup:'⬇ 下载 StampFly Setup',
+    ctaBtnSetupGuide:'安装指南',
+    ctaCliLabel:'使用命令行安装：',
     ctaBtnRepo:'GitHub 仓库',
     ctaBtnFlash:'网页烧录',
     ctaBtnDesktop:'桌面烧录应用',
