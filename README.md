@@ -42,6 +42,13 @@
 
 ## 📦 インストール
 
+**ターミナルを使わない方法（推奨・初心者向け）:** [Releases](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) から
+お使いのOSの **StampFly Setup**（`StampFlySetup_<バージョン>_<OS>`）をダウンロードして実行するだけで、
+ウィザードが一式（sf CLI + ESP-IDF + 書き込みアプリ）を導入します。
+**→ [GUI インストーラガイド](docs/guides/gui-installer.md)**
+
+コマンドラインで導入する場合:
+
 ```bash
 git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
 cd stampfly_ecosystem
@@ -247,6 +254,14 @@ This ecosystem exists for you.
 ---
 
 ## 📦 Installation
+
+**No-terminal path (recommended for beginners):** download **StampFly Setup**
+(`StampFlySetup_<version>_<OS>`) for your OS from
+[Releases](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest)
+and run it — the wizard installs everything (sf CLI + ESP-IDF + the flashing app).
+**→ [GUI Installer Guide](docs/guides/gui-installer.md)**
+
+Command-line alternative:
 
 ```bash
 git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
