@@ -102,9 +102,11 @@ void printParam(const sf::params::ParamEntry* entry)
 }
 
 /// `param [list | get <name> | set <name> <value> | save]` — read/write parameters.
-/// set_*() validates the range, runs the change callback and persists to NVS.
+/// set_*() validates the range and runs the change callback (RAM only —
+/// persistence is `param save`).
 /// `param [list | get <name> | set <name> <value> | save]` — パラメータ読み書き。
-/// set_*() は範囲検証・変更コールバック・NVS 保存を行う。
+/// set_*() は範囲検証・変更コールバックのみ（RAM 反映のみ — 永続化は
+/// `param save`）。
 int cmd_param(int argc, char** argv)
 {
     if (argc < 2 || std::strcmp(argv[1], "list") == 0) {
