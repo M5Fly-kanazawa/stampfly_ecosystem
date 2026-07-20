@@ -169,9 +169,15 @@ namespace param_vars {
     // 壁衝突診断参照）。td=0.001 は 400Hz では実質 D オフ（不完全微分 α≈0.1）＝
     // パイロットの安定点はほぼ PI のレートループ。履歴: スタディ再調整 07-17 ←
     // M5StampFly 換算 9.759795e-4（2026-06-27 実機検証）← autotune 3.40e-4。
+    // 2026-07-20 pilot direction for the v2026.07.2 release default:
+    // td 0.001 -> 0.002 (kp/ti unchanged). Still near-D-off at 400 Hz,
+    // with twice the derivative time of the 07-18 hand-tune.
+    // 2026-07-20 パイロット指示（v2026.07.2 リリース既定値）: td 0.001→0.002
+    // （kp/ti は変更なし）。400Hz では依然ほぼ D オフだが、07-18 ハンド
+    // チューニングの2倍の微分時間。
     float rate_roll_kp    = 1.0e-3f;   // pilot manual retune 2026-07-18
     float rate_roll_ti    = 0.7f;
-    float rate_roll_td    = 0.001f;    // pilot manual retune 2026-07-18 (≈ D off)
+    float rate_roll_td    = 0.002f;    // pilot direction 2026-07-20 (release default)
     float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.025f;
@@ -659,7 +665,7 @@ static const ParamEntry table[] = {
     // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
     {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.0e-3f,   0.0f,  0.01f,  &notifyControllerReload},
     {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.001f,    0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.002f,    0.0f,  1.0f,   &notifyControllerReload},
     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
