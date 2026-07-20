@@ -6,6 +6,21 @@
 
 Linux（Ubuntu/Debian）でのStampFly開発環境セットアップ手順です。
 
+### 方法A: GUI インストーラ（推奨・ターミナル不要）
+
+ターミナル操作に不慣れな場合は、GUI 版「StampFly Setup」がおすすめです。
+
+- Linux 用の実行ファイル（拡張子なし）をダウンロードし、実行権限を付与して起動するだけ
+- 5画面のウィザードでインストール先やオプションを選択
+- 中身は本ガイドの CLI インストーラ（`./install.sh`）と同じロジックなので、機能差はない
+
+詳細手順は **[GUI インストーラガイド](../guides/gui-installer.md)** を参照してください。
+
+### 方法B: CLI（このガイドの手順）
+
+ターミナル操作に抵抗がなければ、以下の手順で依存パッケージのインストールから進めることも
+できます。
+
 ## 2. 前提条件
 
 | 項目 | 要件 |
@@ -111,6 +126,23 @@ pip3 install pyserial
 ## 1. Overview
 
 Setup instructions for StampFly development environment on Linux (Ubuntu/Debian).
+
+### Method A: GUI Installer (Recommended — No Terminal Needed)
+
+If you're not comfortable with the terminal, the GUI version "StampFly Setup" is the easier
+path.
+
+- Download the extension-less Linux executable, mark it executable, and launch it
+- A 5-screen wizard walks you through the install location and options
+- Runs the exact same logic as this guide's CLI installer (`./install.sh`) internally — no
+  feature difference
+
+See the **[GUI Installer Guide](../guides/gui-installer.md)** for details.
+
+### Method B: CLI (This Guide's Steps)
+
+If you're comfortable with the terminal, you can also start from installing the dependency
+packages below.
 
 ## 2. Prerequisites
 

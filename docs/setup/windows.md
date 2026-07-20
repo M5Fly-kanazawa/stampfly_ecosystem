@@ -6,6 +6,21 @@
 
 WindowsでのStampFly開発環境セットアップ手順です。`install.bat` を実行するだけで ESP-IDF と sf CLI が自動的にインストールされます。
 
+### 方法A: GUI インストーラ（推奨・ターミナル不要）
+
+ターミナル（CMD）操作に不慣れな場合は、ダブルクリックだけで導入できる GUI 版
+「StampFly Setup」がおすすめです。
+
+- Windows 用の実行ファイル（`.exe`）をダウンロードして起動するだけ
+- 5画面のウィザードでインストール先やオプションを選択
+- 中身は本ガイドの CLI インストーラ（`install.bat`）と同じロジックなので、機能差はない
+
+詳細手順は **[GUI インストーラガイド](../guides/gui-installer.md)** を参照してください。
+
+### 方法B: CLI（このガイドの手順）
+
+ターミナル操作に抵抗がなければ、以下の手順で `install.bat` を直接実行することもできます。
+
 ## 2. 前提条件
 
 CMD を開いて以下を確認してください:
@@ -78,6 +93,23 @@ CH9102F ドライバがインストールされているか確認してくださ
 ## 1. Overview
 
 Setup instructions for StampFly development environment on Windows. Just run `install.bat` to automatically install ESP-IDF and sf CLI.
+
+### Method A: GUI Installer (Recommended — No Terminal Needed)
+
+If you're not comfortable with the terminal (CMD), the GUI version "StampFly Setup" lets you
+install with just a few clicks.
+
+- Download and launch a single Windows executable (`.exe`)
+- A 5-screen wizard walks you through the install location and options
+- Runs the exact same logic as this guide's CLI installer (`install.bat`) internally — no
+  feature difference
+
+See the **[GUI Installer Guide](../guides/gui-installer.md)** for details.
+
+### Method B: CLI (This Guide's Steps)
+
+If you're comfortable with the terminal, you can also run `install.bat` directly by following
+the steps below.
 
 ## 2. Prerequisites
 

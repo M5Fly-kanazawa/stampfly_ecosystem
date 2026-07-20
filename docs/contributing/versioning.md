@@ -55,6 +55,10 @@ MAJORが上がると後方互換性が壊れる、というのがSemVerの約束
 | `StampFlyFlasher_<tag>_macos-arm64.zip` | GUI フラッシャ: macOS (Apple Silicon) 版 .app |
 | `StampFlyFlasher_<tag>_macos-x64.zip` | GUI フラッシャ: macOS (Intel) 版 .app |
 | `StampFlyFlasher_<tag>_linux-x64` | GUI フラッシャ: Linux 版実行ファイル（拡張子なし、`chmod +x` が必要） |
+| `StampFlySetup_<tag>_windows-x64.exe` | GUI インストーラ: Windows 版実行ファイル |
+| `StampFlySetup_<tag>_macos-arm64.zip` | GUI インストーラ: macOS (Apple Silicon) 版 .app |
+| `StampFlySetup_<tag>_macos-x64.zip` | GUI インストーラ: macOS (Intel) 版 .app |
+| `StampFlySetup_<tag>_linux-x64` | GUI インストーラ: Linux 版実行ファイル（拡張子なし、`chmod +x` が必要） |
 | `SHA256SUMS.txt` | 上記全ファイルのSHA256チェックサム一覧 |
 
 ## 4. コンポーネント個別バージョンとの関係
@@ -82,7 +86,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 | 3 | 前回リリースからの変更点を整理すること | CHANGELOG的に、主要な `feat`/`fix` コミットを箇条書きで洗い出す |
 | 4 | バージョンタグを作成すること | `git tag vYYYY.MM.P`（例: `git tag v2026.07.0`） |
 | 5 | タグをリモートへpushすること | `git push origin vYYYY.MM.P` |
-| 6 | Actions の Release workflow が成功し、アセット一式が揃っていることを確認すること | GitHub の Actions タブで `Release firmware binaries` の完走を確認し、Release ページに §3 の全アセット（ファーム4 + フラッシャ4 + `SHA256SUMS.txt` の9点）が添付されていることを確認 |
+| 6 | Actions の Release workflow が成功し、アセット一式が揃っていることを確認すること | GitHub の Actions タブで `Release firmware binaries` の完走を確認し、Release ページに §3 の全アセット（ファーム4 + フラッシャ4 + セットアップ4 + `SHA256SUMS.txt` の13点）が添付されていることを確認 |
 | 7 | Release notes を加筆すること | 自動生成された release notes（`generate_release_notes: true`）に、手順3で整理した要点や既知の制約を追記 |
 
 ## 6. カリキュラム互換表
@@ -155,6 +159,10 @@ Artifact naming convention (`<tag>` is the Git tag name, e.g. `v2026.07.0`):
 | `StampFlyFlasher_<tag>_macos-arm64.zip` | GUI flasher: macOS (Apple Silicon) .app |
 | `StampFlyFlasher_<tag>_macos-x64.zip` | GUI flasher: macOS (Intel) .app |
 | `StampFlyFlasher_<tag>_linux-x64` | GUI flasher: Linux executable (no extension; needs `chmod +x`) |
+| `StampFlySetup_<tag>_windows-x64.exe` | GUI installer: Windows executable |
+| `StampFlySetup_<tag>_macos-arm64.zip` | GUI installer: macOS (Apple Silicon) .app |
+| `StampFlySetup_<tag>_macos-x64.zip` | GUI installer: macOS (Intel) .app |
+| `StampFlySetup_<tag>_linux-x64` | GUI installer: Linux executable (no extension; needs `chmod +x`) |
 | `SHA256SUMS.txt` | SHA256 checksums for all files above |
 
 ## 4. Relationship to Individual Component Versions
@@ -180,7 +188,7 @@ Before cutting a tag, work through the following checklist in order.
 | 3 | Summarize changes since the last release | Draft a CHANGELOG-style bullet list of the key `feat`/`fix` commits |
 | 4 | Create the version tag | `git tag vYYYY.MM.P` (e.g. `git tag v2026.07.0`) |
 | 5 | Push the tag to the remote | `git push origin vYYYY.MM.P` |
-| 6 | Confirm the Release workflow succeeds and the full asset set is attached | Check the Actions tab for a green `Release firmware binaries` run, then confirm the Release page carries all §3 assets (4 firmware + 4 flasher + `SHA256SUMS.txt` = 9 files) |
+| 6 | Confirm the Release workflow succeeds and the full asset set is attached | Check the Actions tab for a green `Release firmware binaries` run, then confirm the Release page carries all §3 assets (4 firmware + 4 flasher + 4 setup + `SHA256SUMS.txt` = 13 files) |
 | 7 | Fill in the Release notes | Add the highlights from step 3 and any known limitations on top of the auto-generated notes (`generate_release_notes: true`) |
 
 ## 6. Curriculum Compatibility Table

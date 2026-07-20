@@ -161,6 +161,7 @@ nav:
       - sf cal: docs/commands/sf-cal.md
     - ガイド:
       - アップグレードガイド: docs/guides/upgrading.md
+      - GUI インストーラガイド: docs/guides/gui-installer.md
       - 安全ガイド: docs/guides/safety.md
       - トラブルシューティング: docs/guides/troubleshooting.md
       - 用語集: docs/guides/glossary.md

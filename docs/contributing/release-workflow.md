@@ -138,7 +138,7 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 | 2 | SIL 退行テストを main の最終状態で一括実行 | `simulator/sil/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
 | 3 | ローカルビルド確認 | `sf build vehicle` / `sf build controller` |
 | 4 | CI の事前検証 | GitHub リポジトリの **Actions タブ → `Release firmware binaries` を選択 → Run workflow → ブランチ `main` を指定して実行**。全ジョブ（ファームビルド2 = vehicle/controller + フラッシャ 4OS）が緑であることを確認。タグ無し実行では Release 発行ジョブだけがスキップされる |
-| 5 | タグ作成〜リリース発行 | [versioning.md §5](versioning.md#5-リリース手順) のチェックリストに従う: `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → Release workflow 完走 → アセット9点（ファーム4 = vehicle/controller × full/app、フラッシャ4 = Windows/macOS ARM/macOS Intel/Linux、`SHA256SUMS.txt`）の添付を確認 |
+| 5 | タグ作成〜リリース発行 | [versioning.md §5](versioning.md#5-リリース手順) のチェックリストに従う: `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → Release workflow 完走 → アセット13点（ファーム4 = vehicle/controller × full/app、フラッシャ4 = Windows/macOS ARM/macOS Intel/Linux、セットアップ4 = Windows/macOS ARM/macOS Intel/Linux、`SHA256SUMS.txt`）の添付を確認 |
 | 6 | リリースノート加筆 | 自動生成ノートに原稿（#1）の要点を追記 |
 | 7 | 互換表更新 | [versioning.md §6](versioning.md#6-カリキュラム互換表) に新リリースの行を追加 |
 
@@ -298,7 +298,7 @@ Once all changes are on main, proceed in this order. Choose the tag name per
 | 2 | One consolidated SIL run on final main | Every scenario in `simulator/sil/scenarios/*.scn`, once, right before tagging — even if each commit passed individually |
 | 3 | Local builds | `sf build vehicle` / `sf build controller` |
 | 4 | CI pre-verification | On GitHub: **Actions tab → select `Release firmware binaries` → Run workflow → choose branch `main`**. All jobs must be green (2 firmware builds = vehicle/controller + 4-OS flasher). Without a tag, only the Release-publish job is skipped |
-| 5 | Tag and publish | Follow [versioning.md §5](versioning.md#5-release-procedure): `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → workflow completes → confirm all 9 assets are attached (4 firmware = vehicle/controller × full/app, 4 flasher = Windows / macOS ARM / macOS Intel / Linux, plus `SHA256SUMS.txt`) |
+| 5 | Tag and publish | Follow [versioning.md §5](versioning.md#5-release-procedure): `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → workflow completes → confirm all 13 assets are attached (4 firmware = vehicle/controller × full/app, 4 flasher = Windows / macOS ARM / macOS Intel / Linux, 4 setup = Windows / macOS ARM / macOS Intel / Linux, plus `SHA256SUMS.txt`) |
 | 6 | Amend release notes | Add the draft's key points to the auto-generated notes |
 | 7 | Compatibility table | Add the release's row to [versioning.md §6](versioning.md#6-curriculum-compatibility-table) |
 

@@ -144,6 +144,11 @@ sf sim run vpython --seed 12345       # シード指定
 
 ## 2. インストール
 
+> **ターミナルを使わずに導入したい場合**: GUI インストーラ「StampFly Setup」を使うと、
+> ダウンロードして起動するだけで以下の手順を自動化できます。詳細は
+> [GUI インストーラガイド](guides/gui-installer.md)を参照してください。以下は
+> ターミナル（CLI）での手順です。
+
 ### Step 1: リポジトリをクローン
 
 ```bash
@@ -585,6 +590,10 @@ If you want to build from source, continue with the rest of this guide (ESP-IDF 
 | Python | 3.8+ | - |
 
 ## 2. Installation
+
+> **Want to skip the terminal?** The GUI installer "StampFly Setup" automates the steps below —
+> just download it and launch it. See the [GUI Installer Guide](guides/gui-installer.md) for
+> details. The steps below use the terminal (CLI).
 
 ### Step 1: Clone Repository
 

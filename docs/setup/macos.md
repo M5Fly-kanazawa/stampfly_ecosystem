@@ -6,6 +6,22 @@
 
 macOSでのStampFly開発環境セットアップ手順です。
 
+### 方法A: GUI インストーラ（推奨・ターミナル不要）
+
+ターミナル操作に不慣れな場合は、ダブルクリックだけで導入できる GUI 版
+「StampFly Setup」がおすすめです。
+
+- macOS 用の `.zip`（Apple Silicon / Intel を選択）をダウンロードして展開・起動するだけ
+- 5画面のウィザードでインストール先やオプションを選択
+- 中身は本ガイドの CLI インストーラ（`./install.sh`）と同じロジックなので、機能差はない
+
+詳細手順は **[GUI インストーラガイド](../guides/gui-installer.md)** を参照してください。
+
+### 方法B: CLI（このガイドの手順）
+
+ターミナル操作に抵抗がなければ、以下の手順で Xcode Command Line Tools のインストールから
+進めることもできます。
+
 ## 2. 前提条件
 
 | 項目 | 要件 |
@@ -102,6 +118,23 @@ macOSでは通常不要ですが、問題がある場合はシステム環境設
 ## 1. Overview
 
 Setup instructions for StampFly development environment on macOS.
+
+### Method A: GUI Installer (Recommended — No Terminal Needed)
+
+If you're not comfortable with the terminal, the GUI version "StampFly Setup" lets you install
+with just a few clicks.
+
+- Download and unzip a `.zip` for macOS (choose Apple Silicon or Intel), then launch it
+- A 5-screen wizard walks you through the install location and options
+- Runs the exact same logic as this guide's CLI installer (`./install.sh`) internally — no
+  feature difference
+
+See the **[GUI Installer Guide](../guides/gui-installer.md)** for details.
+
+### Method B: CLI (This Guide's Steps)
+
+If you're comfortable with the terminal, you can also start from installing the Xcode Command
+Line Tools below.
 
 ## 2. Prerequisites
 
