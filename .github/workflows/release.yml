@@ -495,12 +495,248 @@ jobs:
             echo "OK: uninstall.cmd verified clean"
           fi
 
+  installer_gui:
+    # Builds "StampFly Setup" -- the full-ecosystem installer GUI (sf CLI +
+    # ESP-IDF + flasher), distinct from the sibling flasher_gui job above
+    # (flasher-only). See docs/plans/gui-installer-plan.md for the
+    # design: the GUI is a thin wizard that process-in-imports
+    # scripts/installer.py from a repo it clones at runtime, so this job's
+    # only real job is packaging + verifying the frozen binary can still
+    # reach that contract.
+    # 「StampFly Setup」(エコシステム全体 = sf CLI + ESP-IDF + フラッシャ の
+    # インストーラGUI)をビルドする。上のflasher_guiジョブ(フラッシャ単体)
+    # とは別物。設計は docs/plans/gui-installer-plan.md 参照: GUIは実行時に
+    # 自身でクローンしたリポジトリの scripts/installer.py をプロセス内import
+    # する薄いウィザードなので、本ジョブの本質的な役割はパッケージングと、
+    # 凍結後もその契約に到達できることの検証
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Same fail-fast: false rationale as flasher_gui above (see its
+      # comment): let every platform finish so one flaky leg doesn't hide
+      # the other three OSes' results.
+      # 上の flasher_gui と同じ理由(そのコメント参照): 1つのOSが失敗しても
+      # 他の3OSの結果を隠さないよう、全て最後まで走らせる
+      fail-fast: false
+      matrix:
+        # Identical OS/suffix pairing to flasher_gui -- StampFly Setup ships
+        # the same 4-platform matrix.
+        # flasher_gui と同一のOS/suffix対応。StampFly Setupも同じ
+        # 4プラットフォームで配布する
+        include:
+          - os: windows-latest
+            suffix: windows-x64
+          - os: macos-latest
+            suffix: macos-arm64
+          - os: macos-15-intel
+            suffix: macos-x64
+          - os: ubuntu-latest
+            suffix: linux-x64
+    defaults:
+      run:
+        # Same reason as flasher_gui: force bash even on the Windows
+        # runner so the same script runs unmodified on every matrix OS.
+        # flasher_gui と同じ理由: Windowsランナーでもbashを強制し、
+        # 全マトリクスOSで同一スクリプトをそのまま使い回す
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # Like the GUI Flasher, StampFly Setup embeds no `git describe`
+        # version string, so fetch-depth: 0 is not needed.
+        # GUIフラッシャと同様、StampFly Setup も git describe のバージョン
+        # 文字列を埋め込まないため fetch-depth: 0 は不要
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        # StampFly Setup is stdlib + tkinter only (docs/plans/gui-installer-plan.md
+        # §3): unlike the flasher it never imports esptool or certifi
+        # itself (no HTTPS calls, no direct flashing), so only PyInstaller
+        # is needed here. Same version pin as flasher_gui's equivalent step
+        # -- PyInstaller 7 turns the --onefile + --windowed combination
+        # into a hard error on macOS, so stay on the 6.x series until that
+        # packaging is reworked.
+        # StampFly Setup は stdlib + tkinter のみ(docs/plans/gui-installer-plan.md
+        # §3): フラッシャと異なり esptool や certifi 自体は import しない
+        # (HTTPS通信も直接の書き込みも行わない)ため、ここでは PyInstaller の
+        # みが必要。バージョン固定は flasher_gui の同等ステップと同じ理由
+        # -- PyInstaller 7 は --onefile + --windowed の組み合わせを macOS で
+        # 必ずエラーにするため、パッケージングを作り直すまでは6.x系に固定する
+        run: pip install "pyinstaller>=6,<7"
+
+      - name: Smoke-test the app entry point
+        # Cheap sanity check with the system Python before spending time on
+        # a PyInstaller build (same rationale as flasher_gui's equivalent
+        # step). Uses --selftest (not --version, which this tool does not
+        # document) with SF_SETUP_REPO pointed at this checkout, so the
+        # process-in-import contract with scripts/installer.py
+        # (docs/plans/gui-installer-plan.md §1) is exercised even before
+        # the binary is frozen.
+        # PyInstallerビルドに時間をかける前の簡易確認(flasher_guiの同等
+        # ステップと同じ理由)。--version(本ツールでは未文書化)ではなく
+        # --selftest を使い、SF_SETUP_REPO をこのチェックアウトに向ける
+        # ことで、凍結前の時点でも scripts/installer.py とのプロセス内
+        # import契約(docs/plans/gui-installer-plan.md §1)を検証する
+        env:
+          SF_SETUP_REPO: ${{ github.workspace }}
+        run: python tools/installer_gui/stampfly_installer.py --selftest
+
+      - name: Build with PyInstaller
+        # --windowed: same Windows console-suppression / macOS .app-bundle
+        # behavior as flasher_gui's equivalent step (see its comment for
+        # the Linux no-op detail). No --collect-data flags are needed here:
+        # unlike the flasher, StampFly Setup bundles no esptool stub data
+        # or certifi CA bundle (it never touches HTTPS or flashes hardware
+        # itself; its only network access is `git clone`, run as a
+        # subprocess by the cloned scripts/installer.py).
+        # --icon: same Windows/macOS-only embedding as flasher_gui.
+        # --windowed: flasher_guiの同等ステップと同じWindowsコンソール抑制/
+        # macOS .appバンドル化(Linuxのno-op詳細は同ステップのコメント参照)。
+        # --collect-data は不要: フラッシャと異なり StampFly Setup は
+        # esptoolのスタブデータもcertifiのCAバンドルも同梱しない(HTTPS通信も
+        # 実機書き込みも行わない。ネットワークアクセスはクローンした
+        # scripts/installer.py がサブプロセスとして起動する `git clone` のみ)。
+        # --icon: flasher_gui と同じくWindows/macOSのみに付与
+        run: |
+          ICON_ARGS=()
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ICON_ARGS=(--icon tools/installer_gui/assets/icon.ico)
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            ICON_ARGS=(--icon tools/installer_gui/assets/icon.icns)
+          fi
+          pyinstaller --onefile --windowed \
+            "${ICON_ARGS[@]}" \
+            --name StampFlySetup tools/installer_gui/stampfly_installer.py
+
+      - name: Smoke-test the frozen binary
+        # Exercises the actual deliverable, not just the source script --
+        # this is the check that would catch a missing hidden import (the
+        # "stdlib同梱漏れ" contract in docs/plans/gui-installer-plan.md §5).
+        # SF_SETUP_REPO points the frozen binary's --selftest at this
+        # checkout (there is no adjacent repo clone next to a frozen
+        # onefile binary, unlike running the bare script above). Same
+        # timeout-minutes guard rail and bash-pipe-inheritance behavior as
+        # flasher_gui's equivalent step.
+        # 実際の成果物(ソーススクリプトではなく)を検証する -- hidden import
+        # の欠落(docs/plans/gui-installer-plan.md §5の「stdlib同梱漏れ」契約)
+        # を検出できるのはこのチェックだけ。SF_SETUP_REPO で凍結バイナリの
+        # --selftest をこのチェックアウトに向ける(素のスクリプト実行と異なり、
+        # 凍結onefileバイナリの隣にリポジトリのクローンは存在しないため)。
+        # timeout-minutes のガードレールと bash パイプ継承の挙動は
+        # flasher_gui の同等ステップと同じ
+        timeout-minutes: 10
+        env:
+          SF_SETUP_REPO: ${{ github.workspace }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            BIN="./dist/StampFlySetup.exe"
+          else
+            # macOS: the bare onefile binary, not the .app bundle (see
+            # flasher_gui's equivalent step for why). Linux: --windowed is
+            # a no-op there, so this is already the plain onefile binary.
+            # macOS: .appバンドルではなく単体のonefileバイナリを使う
+            # (理由はflasher_guiの同等ステップ参照)。Linux: --windowed は
+            # no-opのため、そもそも単体のonefileバイナリ
+            BIN="./dist/StampFlySetup"
+          fi
+          "$BIN" --selftest
+
+      - name: Determine release identifier
+        id: rel
+        # Duplicated from the `build`/`flasher_gui` jobs on purpose -- see
+        # flasher_gui's identical step for why (no cross-job step-output
+        # sharing without explicit needs + output wiring). Keep this logic
+        # identical so all three jobs agree on naming.
+        # `build`/`flasher_gui` ジョブと意図的に重複させている -- 理由は
+        # flasher_gui の同一ステップ参照(needs + output配線なしでは
+        # ジョブ間でstep outputを共有できないため)。命名を3ジョブで
+        # 一致させるためロジックは同一に保つ
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "rel=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "rel=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          mv dist/StampFlySetup.exe "dist/StampFlySetup_${REL}_${{ matrix.suffix }}.exe"
+
+      - name: Package macOS app bundle
+        if: runner.os == 'macOS'
+        # Same ditto flags as flasher_gui's equivalent step -- see its
+        # comment for why a plain `zip` would corrupt the bundle.
+        # flasher_gui の同等ステップと同じ ditto フラグ -- 通常の zip が
+        # バンドルを壊す理由は同ステップのコメント参照
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          ditto -c -k --keepParent dist/StampFlySetup.app \
+            "dist/StampFlySetup_${REL}_${{ matrix.suffix }}.zip"
+
+      - name: Package Linux executable
+        if: runner.os == 'Linux'
+        # Same reasoning as flasher_gui's equivalent step: the PyInstaller
+        # --onefile output is already a single self-contained ELF binary;
+        # chmod +x because the bit is not guaranteed to survive
+        # upload-artifact -> download unpacking on the consuming side.
+        # flasher_gui の同等ステップと同じ理由: PyInstaller --onefile の
+        # 出力は既に単一の自己完結ELFバイナリ。chmod +x するのは実行ビットが
+        # upload-artifact -> ダウンロード側の展開で保持される保証がないため
+        run: |
+          REL="${{ steps.rel.outputs.rel }}"
+          mv dist/StampFlySetup "dist/StampFlySetup_${REL}_${{ matrix.suffix }}"
+          chmod +x "dist/StampFlySetup_${REL}_${{ matrix.suffix }}"
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-gui-${{ matrix.suffix }}
+          path: dist/*.exe
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-gui-${{ matrix.suffix }}
+          path: dist/*.zip
+
+      - name: Upload Linux artifact
+        if: runner.os == 'Linux'
+        # No extension on this asset, same as flasher_gui's Linux binary --
+        # prefix-based glob instead of extension-based.
+        # このアセットには拡張子がない(flasher_guiのLinuxバイナリと同じ) --
+        # 拡張子ベースではなくプレフィックスベースのglob
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-gui-${{ matrix.suffix }}
+          path: dist/StampFlySetup_*_linux-x64
+
+      - name: Run installer GUI CI logic tests
+        # Dependency-free checks for this job's own contracts: the
+        # system-Python --selftest exit code, the stdlib hidden-import
+        # coverage guard against scripts/installer.py, and the release.yml
+        # asset-name guard. See tools/ci/check_installer_gui.py's
+        # docstring for what each check covers.
+        # 本ジョブ自身の契約を検証する依存ゼロのチェック: システムPythonでの
+        # --selftest終了コード・scripts/installer.pyに対するstdlib
+        # hidden-import網羅のガード・release.ymlのアセット名ガード。各
+        # チェックの内容は tools/ci/check_installer_gui.py の docstring 参照
+        run: python tools/ci/check_installer_gui.py
+
   release:
-    # Wait for both matrix jobs so every artifact (firmware bins + the
-    # per-OS flasher GUI packages) exists before download-artifact runs.
-    # 両方のマトリクスジョブを待つ（download-artifact 実行前に、ファーム
-    # バイナリとOSごとのGUIフラッシャパッケージが両方揃っている必要がある）
-    needs: [build, flasher_gui]
+    # Wait for all three matrix jobs so every artifact (firmware bins + the
+    # per-OS flasher GUI packages + the per-OS installer GUI packages)
+    # exists before download-artifact runs.
+    # 3つのマトリクスジョブを全て待つ（download-artifact 実行前に、ファーム
+    # バイナリ・OSごとのGUIフラッシャパッケージ・OSごとのGUIインストーラ
+    # パッケージが全て揃っている必要がある）
+    needs: [build, flasher_gui, installer_gui]
     # Only tags arriving via `git push` create a Release; a workflow_dispatch
     # run on a tag ref must stay build-only (see header comment).
     # Release を作るのは push されたタグのみ。タグ ref 上での手動実行は
@@ -535,6 +771,7 @@ jobs:
             dist/*.exe
             dist/*.zip
             dist/StampFlyFlasher_*_linux-x64
+            dist/StampFlySetup_*_linux-x64
             dist/SHA256SUMS.txt
           body: |
             ## 書き込み方法 / How to flash
@@ -561,6 +798,25 @@ jobs:
             launcher registration) instead.
             Web flasher: https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/
             (a known crash issue affects Chrome on macOS -> the desktop app is recommended).
+
+            ## 導入方法 / How to set up the development environment
+
+            機体・送信機の書き込みだけでなく、ビルド環境（sf CLI + ESP-IDF）ごと
+            導入したい場合は「StampFly Setup」を使う。ウィザードでリポジトリを
+            クローンし、`scripts/installer.py` を呼び出して既存の
+            `python scripts/installer.py` と同じ手順を GUI で進める。
+            `StampFlySetup_<tag>_windows-x64.exe` / `StampFlySetup_<tag>_macos-arm64.zip`
+            （Apple Silicon）/ `StampFlySetup_<tag>_macos-x64.zip`（Intel）/
+            `StampFlySetup_<tag>_linux-x64`（`chmod +x` してから実行）を
+            ダウンロードして実行する（macOSは初回のみ右クリック→「開く」で起動）。
+            Want to set up the whole build environment (sf CLI + ESP-IDF), not just
+            flash a pre-built binary? Use "StampFly Setup": the wizard clones the
+            repository and runs `scripts/installer.py` under the hood, walking through
+            the same steps as `python scripts/installer.py` in a GUI. Download and run
+            `StampFlySetup_<tag>_windows-x64.exe` / `StampFlySetup_<tag>_macos-arm64.zip`
+            (Apple Silicon) / `StampFlySetup_<tag>_macos-x64.zip` (Intel) /
+            `StampFlySetup_<tag>_linux-x64` (run `chmod +x` first) (on macOS,
+            right-click -> Open the first time to bypass Gatekeeper).
 
             ```bash
             # Flash everything from scratch / 工場出荷相当で全体を書き込む
