@@ -2163,13 +2163,64 @@ def build_arg_parser():
     return parser
 
 
+def _ensure_stdio_streams() -> None:
+    """
+    Make sys.stdout / sys.stderr safe for printing in every packaging and
+    console-encoding environment (same two failure modes, and the same
+    remedy, as tools/flasher_gui/stampfly_flasher.py's
+    _ensure_stdio_streams -- see its docstring for the full rationale):
+
+    1. None streams: a Windows PyInstaller --windowed build has no
+       attached console, so both streams are None and any print() would
+       raise. Point them at os.devnull.
+    2. Legacy console code pages (cp1252/cp932): --selftest prints
+       Japanese, which a cp1252 stdout cannot encode -- the exact
+       UnicodeEncodeError that took down the first Windows CI run of
+       this tool (run 29715534777, 2026-07-20). reconfigure(errors=
+       "replace") turns unencodable characters into "?" instead of a
+       crash.
+
+    sys.stdout / sys.stderr をあらゆるパッケージング・コンソール文字
+    コード環境で安全に print できる状態に整える(故障モード2つと対処は
+    tools/flasher_gui/stampfly_flasher.py の _ensure_stdio_streams と
+    同じ -- 詳細な理由付けはそちらの docstring 参照):
+
+    1. ストリームが None の場合: Windows の PyInstaller --windowed
+       ビルドは接続先コンソールを持たず両ストリームが None になり、
+       print() が例外になる。os.devnull へ向ける。
+    2. レガシーなコンソールコードページ(cp1252/cp932): --selftest は
+       日本語を print するが、cp1252 の stdout はこれをエンコード
+       できない -- 本ツールの Windows CI 初回実行(run 29715534777、
+       2026-07-20)を落とした、まさにその UnicodeEncodeError。
+       reconfigure(errors="replace") でエンコード不能文字をクラッシュ
+       ではなく "?" 表示にする。
+    """
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+    for stream in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            # Non-reconfigurable stream (exotic redirection): leave as-is.
+            # 再構成できないストリーム(特殊なリダイレクト): そのまま。
+            pass
+
+
 def main(argv=None) -> int:
     """
-    CLI entry point. Argument parsing happens before any Tk code runs,
-    so --selftest works in fully headless environments.
-    CLI エントリポイント。引数解析は Tk 関連のコードより前に行うため、
+    CLI entry point. Stream hardening runs first (see
+    _ensure_stdio_streams), then argument parsing -- both before any Tk
+    code runs, so --selftest works in fully headless environments.
+    CLI エントリポイント。最初にストリーム防御(_ensure_stdio_streams
+    参照)、次に引数解析を行う -- どちらも Tk 関連のコードより前のため、
     --selftest は完全にヘッドレスな環境でも動作する。
     """
+    _ensure_stdio_streams()
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
