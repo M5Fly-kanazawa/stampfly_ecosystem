@@ -23,6 +23,7 @@
 | controller CI修復 | `9304b7d` | `m5unified` を `^0.2.11` → `==0.2.11` に固定（0.2.18が公開されCI解決が壊れていたため）。挙動変化なし、CI安定化のみ |
 | `sf flash --gui` の優先順位変更 | `e834558`（flash.py） | インストール済みのネイティブアプリを優先して起動し、未インストール時のみ従来のスクリプト起動にフォールバック |
 | macOS の SSL 証明書検証失敗を修正 | `d77c595` | 凍結アプリの macOS Python は既定の証明書検証パスを持たず、GitHub への全通信が `CERTIFICATE_VERIFY_FAILED` になっていた（2026-07-20 実機で発見。**v2026.07.1 の macOS 版アプリはこの不具合の影響下にある**）。certifi の CA バンドルで検証するよう変更（アプリ・`sf flasher` 双方。certifi 無しの環境は従来動作へフォールバック） |
+| アプリアイコンを実機3Dモデルから刷新 | 本コミット | 従来の平面プレースホルダを廃し、landing ページの実機9パーツ STL＋手続き生成プロペラを numpy 製 Zバッファレンダラで描画した「Navy Classic」アイコン（前方45°俯瞰・稲妻が M5 へ注ぐ構図）に全面差し替え。`icon.ico` / `icon.icns` / PNG 各サイズを `tools/flasher_gui/assets/gen_icon_3d.py`（自己完結・再現可能）で生成。Windows/macOS のアプリ本体・ショートカットに v2026.07.2 ビルドから反映される |
 
 **ドキュメント（本コミット、P4）:** `docs/commands/sf-flasher.md` 新設、
 `tools/flasher_gui/README.md` / `docs/setup/windows.md` / `docs/setup/macos.md` /
