@@ -178,6 +178,7 @@ nav:
       - スタイルガイド: docs/contributing/style-guide.md
       - コミット規約: docs/contributing/commit-guidelines.md
       - バージョニングとリリース: docs/contributing/versioning.md
+      - 更新からリリースまでの手順: docs/contributing/release-workflow.md
       - コマンド追加: docs/contributing/adding-sf-commands.md
       - FW コマンド追加: docs/contributing/adding-firmware-commands.md
       - スキャフォールディング: docs/contributing/scaffolding-tool.md
