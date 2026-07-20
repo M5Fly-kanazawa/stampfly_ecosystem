@@ -21,10 +21,11 @@ Step 3/4（StampFly CLI）成功後に自動作成する。GUI インストー�
 | 変更 | 内容 |
 |------|------|
 | `Installer._create_terminal_launcher()` 新設（`scripts/installer.py`） | `run()` の Step 3/4 成功後・Step 4/4（GUIフラッシャ）ヘッダの前に呼ぶ。独立した `Step N/4` は増やさない（GUI が `header("Step N/4: ...")` をパースしてステップインジケータを進める契約を維持するため）。GUIフラッシャの Step 4/4 と同じくベストエフォート — 失敗しても `warn()` に留め、インストーラ全体を失敗にしない |
-| macOS: `~/Applications/StampFly Terminal.command` | `cd "<root>" && source setup_env.sh && exec "${SHELL:-/bin/zsh}" -i`（chmod 0o755）。ダブルクリックで Terminal.app が開き、export された環境がそのまま対話シェルへ引き継がれる |
+| macOS: `~/Applications/StampFly Terminal.app`（正式バンドル） | Launchpad/Spotlight に専用アイコン付きで表示。実処理は Contents/Resources 内の `.command`（`cd "<root>" && source setup_env.sh && exec "${SHELL:-/bin/zsh}" -i`）が担い、どのターミナルで開くかは `.command` の関連付け（既定 Terminal.app、iTerm2 等に変更可）に従う。初期実装の素の `.command` は作成時/アンインストール時に自動移行（削除） |
 | Linux: `~/.local/share/applications/stampfly-terminal.desktop` | `Exec=bash -c 'cd "<root>" && source setup_env.sh && exec bash -i'`。インストール先パスに `'`（シングルクォート）が含まれる場合は安全に埋め込めないため作成をスキップし警告する。`update-desktop-database` をベストエフォートで実行 |
 | Windows: スタートメニュー `...\Start Menu\Programs\StampFly\StampFly Terminal.lnk` | PowerShell の `WScript.Shell` COM 経由で作成（`lib/sfcli/utils/flasher_install/_windows.py` の手法を踏襲、pywin32 非依存）。`TargetPath=%ComSpec%`、`Arguments=/k "<root>\setup_env.bat"`。GUIフラッシャと同じ `StampFly` スタートメニューフォルダを共有する |
 | `Installer.uninstall()` に対応する削除を追加 | 3OSの既知パスをベストエフォートで削除。Windows は共有の `StampFly` スタートメニューフォルダを、GUIフラッシャのショートカットが残っていなければ削除する |
+| 専用アイコン（3OS） | `tools/terminal_launcher/assets/gen_icon_3d.py`（フラッシャのレンダラを共用）で生成した「ダークスレート+緑のシェルプロンプト `>_`」アイコンを、macOS は .app バンドル、Windows はショートカットの IconLocation、Linux は .desktop の Icon= に設定（資産欠如時は OS 既定アイコンへ劣化） |
 | GUI（`tools/installer_gui/stampfly_installer.py`） | 完了画面の文言（`STRINGS["done_install_body"]`、ja/en）に「StampFly Terminal」からも始められる旨を1文追記。新規 stdlib import `tempfile` を hidden-import 契約（Windows版 `.ps1` 生成に使用）に追加 |
 | ドキュメント | `docs/guides/gui-installer.md`（§3・FAQ に日英で追記） |
 
