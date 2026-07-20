@@ -1,6 +1,11 @@
 @echo off
 REM StampFly Ecosystem - Development Environment Setup (Windows)
 REM Usage: setup_env.bat
+REM
+REM NOTE: this file must be checked out with CRLF line endings. cmd.exe
+REM misparses LF-only .bat files. Enforced via .gitattributes (eol=crlf).
+REM 注記: このファイルは CRLF 改行でチェックアウトされる必要がある。
+REM cmd.exe は LF のみの .bat を誤解釈する。.gitattributes(eol=crlf)で強制。
 
 setlocal enabledelayedexpansion
 

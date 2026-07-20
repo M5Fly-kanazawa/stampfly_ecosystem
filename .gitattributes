@@ -1,0 +1,26 @@
+# Line-ending normalization / 改行コードの正規化
+#
+# Windows batch and PowerShell scripts MUST be checked out with CRLF.
+# cmd.exe misparses LF-only .bat files — it drops the first character of
+# each line, so `REM` becomes `EM`, `setlocal enabledelayedexpansion`
+# becomes fragments, etc. (observed 2026-07-20 on a workshop Windows PC
+# when StampFly Terminal ran setup_env.bat). Forcing eol=crlf here makes
+# git materialize them correctly on every platform, regardless of the
+# committer's OS.
+# Windows のバッチ/PowerShell スクリプトは CRLF でチェックアウトする必要が
+# ある。cmd.exe は LF のみの .bat を誤解釈し、各行の先頭文字を落とす
+# （`REM`→`EM`、`setlocal enabledelayedexpansion` が断片化する等。
+# 2026-07-20 に講習用 Windows PC で StampFly Terminal が setup_env.bat を
+# 実行した際に観測）。ここで eol=crlf を強制し、コミット者の OS に依らず
+# 全プラットフォームで正しく展開されるようにする。
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# POSIX shell scripts MUST stay LF, even when edited on Windows.
+# POSIX シェルスクリプトは Windows 上で編集しても LF を保つ必要がある。
+*.sh   text eol=lf
+
+# Everything else: normalize to LF in the repo, auto on checkout.
+# その他: リポジトリ内は LF に正規化し、チェックアウト時は自動。
+* text=auto

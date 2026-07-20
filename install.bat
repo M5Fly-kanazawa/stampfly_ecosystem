@@ -2,6 +2,11 @@
 REM StampFly Ecosystem Installer (Windows)
 REM Usage: install.bat [options]
 REM
+REM NOTE: this file must be checked out with CRLF line endings (cmd.exe
+REM misparses LF-only .bat files). Enforced via .gitattributes (eol=crlf).
+REM 注記: CRLF 改行でチェックアウトされる必要がある(cmd.exe は LF のみの
+REM .bat を誤解釈する)。.gitattributes(eol=crlf)で強制。
+REM
 REM Options (forwarded to scripts\installer.py; see that file's docstring
 REM for the full list):
 REM   --help           Show installer.py's full option list and exit
