@@ -98,6 +98,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 |---------|-------------------|-----------------|------|
 | `v2026.07.0` | （未定） | （未定） | リリース済み (2026-07-08) |
 | `v2026.07.2` | DXH 2026-07 版（vehicle 基盤 workshop ファーム） | （未定） | リリース済み (2026-07-20)。StampFly Setup 初出・`rate.roll.td=0.002` |
+| `v2026.07.3` | 同上（ファーム無変更） | （未定） | リリース済み (2026-07-20)。StampFly Terminal ランチャー・Setup 修復モード修正 |
 
 ## 7. 教育機関向け推奨
 
@@ -201,6 +202,7 @@ university curriculum). Add a row whenever a new release is cut.
 |---------|--------------------|-----------------------|--------|
 | `v2026.07.0` | TBD | TBD | released (2026-07-08) |
 | `v2026.07.2` | DXH 2026-07 edition (vehicle-based workshop firmware) | TBD | released (2026-07-20); first StampFly Setup, `rate.roll.td=0.002` |
+| `v2026.07.3` | same (firmware unchanged) | TBD | released (2026-07-20); StampFly Terminal launcher, Setup repair-mode fix |
 
 ## 7. Recommendations for Educational Institutions
 
