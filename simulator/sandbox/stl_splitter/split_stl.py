@@ -23,9 +23,14 @@ from collections import defaultdict
 
 # Paths
 # パス設定
+# Assets live in simulator/shared/assets, referenced directly (the
+# simulator/sandbox/assets git symlink was removed 2026-07-20 because git
+# symlinks are unreliable on Windows).
+# アセット実体は simulator/shared/assets を直接参照する（git symlink は Windows
+# で不安定なため simulator/sandbox/assets を 2026-07-20 に撤去）。
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SIMULATOR_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-ASSETS_DIR = os.path.join(SIMULATOR_DIR, 'assets', 'meshes')
+ASSETS_DIR = os.path.join(SIMULATOR_DIR, 'shared', 'assets', 'meshes')
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, 'parts')
 
 # Source STL file

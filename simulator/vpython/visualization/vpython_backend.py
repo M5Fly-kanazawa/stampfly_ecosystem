@@ -32,42 +32,20 @@ import math as _math
 # Get the path to the assets directory.
 # アセットディレクトリへのパスを取得。
 #
-# Assets physically live in simulator/shared/assets. simulator/vpython/assets
-# is a git symlink to it, but symlinks are unreliable on Windows: depending
-# on the machine's git config / Developer Mode, git may check the link out
-# as a plain text file (containing "../shared/assets"), OR as a reparse point
-# that raises "[Errno 22] Invalid argument" the moment a path is opened
-# THROUGH it. The latter happened 2026-07-20 on a Windows PC: `sf sim run`
-# crashed opening ...\vpython\assets\meshes\stampfly_v1.stl, and Explorer
-# could not open that folder either. So resolve the real shared directory
-# directly and never traverse the symlink; keep the text-file form only as a
-# last-resort fallback for an unusual layout.
-# アセットの実体は simulator/shared/assets にある。simulator/vpython/assets は
-# それへの git シンボリックリンクだが、Windows では symlink が不安定で、マシンの
-# git 設定 / 開発者モード次第で、git はリンクをテキストファイル
-# （"../shared/assets" を含む）としてチェックアウトする場合と、辿った瞬間に
-# "[Errno 22] Invalid argument" を出す reparse point にする場合がある。後者が
-# 2026-07-20 に Windows PC で発生し、`sf sim run` が
-# ...\vpython\assets\meshes\stampfly_v1.stl を開けずクラッシュ、エクスプローラ
-# でもそのフォルダを開けなかった。よって実体の shared ディレクトリを直接解決し
-# symlink は一切辿らない。テキストファイル形式は特殊構成向けの最終手段として残す。
+# Assets live in simulator/shared/assets, referenced directly. Until
+# 2026-07-20 each sim had a simulator/<sim>/assets git symlink pointing here,
+# but git symlinks are unreliable on Windows (checked out as a text file, or
+# as a reparse point that raises "[Errno 22] Invalid argument" when traversed
+# -- which crashed `sf sim run` on a Windows PC), so the symlinks were removed
+# and every sim now points at the shared directory itself.
+# アセットの実体は simulator/shared/assets にあり、直接参照する。2026-07-20 まで
+# 各 sim に simulator/<sim>/assets という git シンボリックリンクがあったが、git
+# symlink は Windows で不安定（テキストファイル化、または辿ると "[Errno 22]
+# Invalid argument" を出す reparse point 化 -- Windows PC で `sf sim run` が
+# クラッシュ）なため symlink を撤去し、各 sim は shared ディレクトリを直接指す。
 _VISUALIZATION_DIR = os.path.dirname(os.path.abspath(__file__))
 _SIMULATOR_DIR = os.path.dirname(_VISUALIZATION_DIR)  # simulator/vpython
-
-_SHARED_ASSETS_DIR = os.path.normpath(
-    os.path.join(_SIMULATOR_DIR, '..', 'shared', 'assets')
-)
-if os.path.isdir(_SHARED_ASSETS_DIR):
-    _ASSETS_DIR = _SHARED_ASSETS_DIR
-else:
-    _ASSETS_DIR = os.path.join(_SIMULATOR_DIR, 'assets')
-    if os.path.isfile(_ASSETS_DIR):
-        # Symlink stored as a text file (Windows without symlink support).
-        # シンボリックリンクがテキストファイルとして保存されている場合。
-        with open(_ASSETS_DIR, 'r') as f:
-            _symlink_target = f.read().strip()
-        _ASSETS_DIR = os.path.normpath(os.path.join(_SIMULATOR_DIR, _symlink_target))
-
+_ASSETS_DIR = os.path.normpath(os.path.join(_SIMULATOR_DIR, '..', 'shared', 'assets'))
 _MESHES_DIR = os.path.join(_ASSETS_DIR, 'meshes')
 _TEXTURES_DIR = os.path.join(_ASSETS_DIR, 'textures')
 

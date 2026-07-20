@@ -543,26 +543,14 @@ def main():
     print("Option button (Button 3) / Q: Exit")
     print("=" * 60)
 
-    # Path setup.
-    # Assets physically live in simulator/shared/assets; simulator/genesis/assets
-    # is a git symlink to it. Symlinks are unreliable on Windows (git may check
-    # them out as a text file, or as a reparse point that can't be traversed --
-    # observed 2026-07-20), so resolve the real shared directory directly and
-    # never traverse the symlink; keep the text-file form as a last-resort
-    # fallback only. Same approach as vpython_backend.py.
-    # アセットの実体は simulator/shared/assets にあり、simulator/genesis/assets は
-    # それへの git シンボリックリンク。symlink は Windows で不安定(テキストファイル化、
-    # または辿れない reparse point。2026-07-20観測)のため、実体の shared を直接解決し
-    # symlink は辿らない。テキストファイル形式は最終手段のフォールバックのみ。
-    # vpython_backend.py と同じ方式。
-    _shared_assets = (script_dir.parent.parent / "shared" / "assets").resolve()
-    if _shared_assets.is_dir():
-        _assets_path = _shared_assets
-    else:
-        _assets_path = script_dir.parent / "assets"
-        if _assets_path.is_file():
-            _symlink_target = _assets_path.read_text().strip()
-            _assets_path = (script_dir.parent / _symlink_target).resolve()
+    # Path setup. Assets live in simulator/shared/assets, referenced directly.
+    # Until 2026-07-20 simulator/genesis/assets was a git symlink here, but git
+    # symlinks are unreliable on Windows (text file, or an untraversable reparse
+    # point), so the symlinks were removed and every sim points at shared.
+    # アセット実体は simulator/shared/assets で直接参照する。2026-07-20 まで
+    # simulator/genesis/assets は git シンボリックリンクだったが、Windows で
+    # 不安定なため撤去し、各 sim は shared を直接指す。
+    _assets_path = (script_dir.parent.parent / "shared" / "assets").resolve()
     assets_dir = _assets_path / "meshes" / "parts"
     urdf_file = assets_dir / "stampfly_fixed.urdf"
 
