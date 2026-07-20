@@ -184,6 +184,14 @@ macOS: `~/Applications`、Linux: アプリ一覧）から起動してくださ�
 （Windows は `setup_env.bat`）を読み込み済みの端末がすぐに開くので、`cd` や `source` を
 自分で打たなくても `sf` コマンドをそのまま使い始められます。
 
+### StampFly Terminal を Terminal.app 以外（iTerm2 等）で開きたい
+
+macOS の `.command` ファイルは「どのアプリで開くか」の関連付けで開くターミナルが決まります。
+Finder で `~/Applications/StampFly Terminal.command` を選択 →「情報を見る」（⌘I）→
+「このアプリケーションで開く」で iTerm 等を選んでください（「すべてを変更…」を押すと
+全 `.command` ファイルに適用されます）。中身は対話シェルへ引き継ぐだけなので、どの
+ターミナルで開いても普段のシェル設定がそのまま効きます。
+
 ## 9. 関連
 
 | ページ | 内容 |
@@ -386,6 +394,15 @@ Launch the "StampFly Terminal" entry created for your OS after install finishes 
 Menu, macOS: `~/Applications`, Linux: your app launcher). It opens a terminal with
 `setup_env.sh` (`setup_env.bat` on Windows) already sourced, so you can start typing `sf`
 commands immediately — no need to type `cd` or `source` yourself.
+
+### Can StampFly Terminal open in something other than Terminal.app (e.g. iTerm2)?
+
+Yes. On macOS, which app opens a `.command` file is decided by the file
+association: select `~/Applications/StampFly Terminal.command` in Finder,
+Get Info (Cmd+I), then under "Open with" choose iTerm etc. ("Change All..."
+applies it to every `.command` file). The script simply hands off to your
+interactive shell, so your usual shell configuration applies in whichever
+terminal opens it.
 
 ## 9. Related
 
