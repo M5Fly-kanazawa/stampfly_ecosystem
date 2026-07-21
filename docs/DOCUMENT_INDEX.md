@@ -47,6 +47,7 @@
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | 座標系の定義 |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | 物理パラメータリファレンス |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis シミュレータ統合 |
+| [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致ゲート・SILプラント改修バックログ |
 
 ### ガイド・リファレンス (`guides/`)
 
@@ -268,6 +269,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | Coordinate system definitions |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | Physical parameters reference |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis simulator integration |
+| [architecture/simulation-policy.md](architecture/simulation-policy.md) | Authoritative simulation policy — three-layer structure, model-identity gate, SIL plant retrofit backlog |
 
 ### Guides & Reference (`guides/`)
 

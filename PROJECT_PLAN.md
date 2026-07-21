@@ -318,19 +318,22 @@ tools/
 
 ## 9. simulator/ : 仮想実験環境
 
+> **【2026-07-22 実態更新】** 以下のディレクトリツリーは実態（`ls simulator/`）に合わせて更新した。旧記載の `assets/`・`environments/` は現存しない。
+
 ```
 simulator/
-├── assets/
-└── environments/
+├── genesis/    # Genesis物理エンジン版シミュレータ（高精度物理演算・物理量ベース制御）
+├── sandbox/    # STL分割・WebGLビューア等の実験用フォルダ
+├── shared/     # 機体モデル・設定・シナリオ（assets/configs/scenarios）— 各シミュレータが共有
+├── sil/        # Software-in-the-Loop 本体（決定論的・ESP-IDFホストビルド、設計の正は sil/RESET_PLAN.md）
+├── tests/      # シミュレータ横断のテスト（例: 制御アロケーション互換性検証）
+├── tools/      # シミュレータ間比較などの補助ツール（compare_simulators）
+└── vpython/    # VPython版シミュレータ（軽量・ブラウザ3D表示・SIL/HIL向け）
 ```
 
-- assets/
-  - 機体モデル、メッシュ、設定
-
-- environments/
-  - SIL/HIL/3D 環境定義
-
-protocol を介した I/O により、実機との一貫性を保つ。
+- SIL 本体の設計・構築経緯は `simulator/sil/RESET_PLAN.md` を正とする。
+- シミュレーション全体の方針（3層構造: 設計用線形モデル / 実ログ駆動再生 / SIL、Model Fidelity 期の忠実度目標）は `docs/architecture/simulation-policy.md` を正とする。
+- protocol を介した I/O により、実機との一貫性を保つ。
 
 ---
 

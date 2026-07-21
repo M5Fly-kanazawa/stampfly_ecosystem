@@ -483,3 +483,4 @@ When developing this codebase, follow this order:
 ## Reference
 
 All architectural decisions are documented in `PROJECT_PLAN.md`. Consult this document before making structural changes.
+シミュレーション方針（3層構造・Model Fidelity 期の SIL 忠実度目標・改修バックログ）は `docs/architecture/simulation-policy.md` を正とする。

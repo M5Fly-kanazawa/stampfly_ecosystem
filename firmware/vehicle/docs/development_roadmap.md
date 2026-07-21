@@ -72,6 +72,8 @@ vehicle の SIL → 実機ワークフローは次の3原則に基づく。RESET
 
 Model Fidelity（物理モデルが現実とどれだけ合っているか）を上げる作業は、**実機で初めて飛ばした後**に始まる、後追いの精度向上である（RESET_PLAN §3 の流れ [5]→[2]）。実機ログを使うのはこの場面**だけ**で、SIL の前提ではない。SIL モデルの信頼できる範囲が広がるほど「SIL で詰めた → 実機で飛ぶ」確実性が上がる。
 
+> **【2026-07-22 更新】** vehicle は実機飛行済みで実ログが蓄積したため、本原則の「後追い」フェーズ（Phase 5）が**現在進行中**である。SIL プラントの忠実度目標・モデル一致ゲート・改修バックログは `docs/architecture/simulation-policy.md`（シミュレーション方針の正）に定める。
+
 ---
 
 ## 3. プラント同定の戦略 — ACROレート制御を起点とする
@@ -243,6 +245,8 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 **合格基準（継続的）:** Phase 4.1〜4.3 の許容差規定が複数機体・複数ログにわたって維持される。
 
+具体的な改修バックログ（むだ時間・モータ ODE 化・係数再較正・フロー品質・入力リプレイ等）と合否判定（モデル一致ゲート）は `docs/architecture/simulation-policy.md` §6 を正とする。
+
 ---
 
 ### Phase 6: 教材化（vehicle の本来目的）
@@ -358,6 +362,8 @@ So "passes in SIL" **means the same behavior on hardware** (loop-level Code Iden
 
 Raising Model Fidelity (how well the physics matches reality) begins **only after the first real flight** — an after-the-fact refinement (the `[5]→[2]` path in RESET_PLAN §3). Real logs are used **only** there, never as a prerequisite for SIL. The wider the SIL model's trustworthy envelope, the higher the certainty of "tuned in SIL → flies on hardware."
 
+> **[Updated 2026-07-22]** vehicle has flown and real flight logs have accumulated, so the "post-flight" phase of this principle (Phase 5) is **now in progress**. SIL plant fidelity targets, the model-identity gate, and the retrofit backlog are defined in `docs/architecture/simulation-policy.md` (the authoritative simulation policy).
+
 ---
 
 ## 3. Plant Identification Strategy — ACRO Rate Control as Foundation
@@ -409,7 +415,7 @@ Overall order: **① build the SIL → ② resume vehicle development → ③ fl
 - **Phase 2**: HAL connection (hardware comes alive)
 - **Phase 3**: First real flight — ACRO identification (key milestone)
 - **Phase 4**: Stack higher layers (STABILIZE → ALT_HOLD → POS_HOLD), each SIL-gated then hardware
-- **Phase 5**: Continuous model-fidelity calibration loop (post-flight)
+- **Phase 5**: Continuous model-fidelity calibration loop (post-flight). The concrete retrofit backlog (dead time, motor ODE, coefficient recalibration, flow-quality model, input replay) and the acceptance criterion (model-identity gate) are governed by `docs/architecture/simulation-policy.md` §6.
 - **Phase 6**: Educational productization
 
 ---

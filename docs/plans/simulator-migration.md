@@ -1,5 +1,7 @@
 # StampFly Simulator 移植計画
 
+> **【2026-07-22 注記】** 本書は 2026-03 時点の旧シミュレータ（VPython/Genesis）移植計画の記録である。現行のシミュレーション方針は `docs/architecture/simulation-policy.md`、SIL の設計は `simulator/sil/RESET_PLAN.md` を正とする。
+
 既存の [stampfly_sim](https://github.com/kouhei1970/stampfly_sim) を本リポジトリに移植し、
 現在の `firmware/vehicle/` 実装と互換性のあるシミュレータに再設計する計画です。
 
