@@ -8,7 +8,7 @@
 
 | 項目 | 要件 |
 |------|------|
-| PC | Python 3.8+ が動作する Windows/macOS/Linux |
+| PC | Python 3.10以上（推奨3.12）が動作する Windows/macOS/Linux |
 | StampFly | 組み立て済み、バッテリー充電済み |
 | WiFi | StampFly の WiFi AP に接続可能 |
 
@@ -16,7 +16,7 @@
 
 | ツール | バージョン | 用途 |
 |--------|---------|------|
-| Python | 3.8 以上 | 開発言語 |
+| Python | 3.10以上（推奨3.12） | 開発言語 |
 | pip | 最新版 | パッケージ管理 |
 | Git | 最新版 | コード管理 |
 | ブラウザ | Chrome/Firefox | Jupyter Notebook |
@@ -96,7 +96,7 @@ drone.end()
 
 | Item | Requirement |
 |------|------------|
-| PC | Windows/macOS/Linux with Python 3.8+ |
+| PC | Windows/macOS/Linux with Python 3.10 or later (3.12 recommended) |
 | StampFly | Assembled with charged battery |
 | WiFi | Able to connect to StampFly WiFi AP |
 
@@ -104,7 +104,7 @@ drone.end()
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Python | 3.8+ | Development language |
+| Python | 3.10 or later (3.12 recommended) | Development language |
 | pip | Latest | Package management |
 | Git | Latest | Code management |
 | Browser | Chrome/Firefox | Jupyter Notebook |

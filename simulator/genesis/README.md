@@ -19,7 +19,7 @@ Genesis物理エンジンを使用したStampFlyシミュレータ環境です�
 ### 仮想環境の作成
 
 ```bash
-cd simulator/sandbox/genesis_sim
+cd simulator/genesis
 python3 -m venv venv
 source venv/bin/activate
 ```
@@ -115,7 +115,7 @@ StampFly simulator environment using Genesis physics engine. Implements physical
 ### Create virtual environment
 
 ```bash
-cd simulator/sandbox/genesis_sim
+cd simulator/genesis
 python3 -m venv venv
 source venv/bin/activate
 ```

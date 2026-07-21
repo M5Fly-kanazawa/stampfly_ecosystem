@@ -101,6 +101,32 @@ CI は各OS向けに Python 不要のスタンドアロン実行ファイルを�
 残るようにする(tools/flasher_gui/stampfly_flasher.py のジョブと同じ)。
 """
 
+# Purely a PyInstaller hidden-import-coverage marker, not a real behavior
+# change: scripts/installer.py now has `from __future__ import annotations`
+# as its own first statement (see that file's comment for why -- a Python
+# 3.8/3.9 TypeError-at-import-time fix), and tools/ci/check_installer_gui.py
+# requires every module scripts/installer.py imports to also appear as an
+# import somewhere in THIS file's source (see that check's own docstring).
+# `from __future__ import ...` is technically a compiler directive rather
+# than a module needing to be bundled, but the AST-based checker cannot
+# tell the difference, so this satisfies it. Also applying the same
+# future import to this file's own annotations is harmless here (nothing
+# in this module inspects annotations at runtime via
+# typing.get_type_hints()/__annotations__).
+# 単なるPyInstallerの隠れimportカバレッジ用マーカーであり、実際の挙動
+# 変更ではない: scripts/installer.py が(Python 3.8/3.9でのimport時
+# TypeError修正のため)自身の最初の文として
+# `from __future__ import annotations` を持つようになった(理由は同ファイル
+# のコメント参照)。tools/ci/check_installer_gui.py は、scripts/installer.py
+# がimportする全モジュールがこのファイルのソースにもimportとして
+# 現れることを要求する(同チェックのdocstring参照)。`from __future__
+# import ...` は技術的にはバンドルが必要なモジュールではなくコンパイラ
+# 指示だが、AST ベースのチェッカーはその違いを判別できないため、これで
+# 満たす。このファイル自身の注釈にも同じfuture importを適用することは
+# 無害(このモジュール内でtyping.get_type_hints()/__annotations__経由で
+# 実行時に注釈を検査する箇所は無い)。
+from __future__ import annotations
+
 import argparse
 import contextlib
 import ctypes.util  # noqa: F401  -- hidden-import only, see the contract block below
@@ -236,7 +262,19 @@ INSTALLER_NONINTERACTIVE_ENV_VAR = "SF_INSTALLER_NONINTERACTIVE"
 
 # Prerequisite-check tuning.
 # 前提条件チェックの調整値。
-PYTHON_MIN_VERSION = (3, 8)
+# The ecosystem's actually-tested Python range (mirrors
+# scripts/installer.py's PYTHON_PREFERRED_MIN/MAX -- duplicated, not
+# imported, for the same "this check runs before the repo is cloned"
+# reason as _windows_python_exe_candidates() below). A Python inside this
+# range is preferred; anything newer is accepted with a warning; anything
+# older fails the check.
+# エコシステムが実際に検証済みのPython範囲(scripts/installer.py の
+# PYTHON_PREFERRED_MIN/MAX と同じ値。_windows_python_exe_candidates() と
+# 同じ「このチェックはリポジトリのcloneより前に走る」理由で複製し、
+# importしない)。この範囲内のPythonを優先し、より新しいものは警告付きで
+# 受理し、より古いものはチェック失敗とする。
+PYTHON_PREFERRED_MIN = (3, 10)
+PYTHON_PREFERRED_MAX = (3, 12)
 DISK_SPACE_MINIMUM_GB = 5.0
 BYTES_PER_GIB = 1024 ** 3
 NETWORK_CHECK_HOST = "github.com"
@@ -316,7 +354,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
 
     # -- page 2: environment check (see _build_page_env_check() etc.) -------
     "env_check_title": {"ja": "環境チェック", "en": "Environment check"},
-    "env_check_label_python": {"ja": "システム Python 3.8+", "en": "System Python 3.8+"},
+    "env_check_label_python": {
+        "ja": "システム Python 3.10〜3.12(推奨)",
+        "en": "System Python 3.10-3.12 (recommended)",
+    },
     "env_check_label_disk": {
         "ja": "インストール先の空き容量(目安{0:.0f}GB)",
         "en": "Free disk space (~{0:.0f}GB)",
@@ -338,8 +379,36 @@ STRINGS: Dict[str, Dict[str, str]] = {
     },
     "env_check_disk_free_detail": {"ja": "空き{0:.1f}GB", "en": "{0:.1f} GB free"},
     "python_not_found": {"ja": "見つかりません", "en": "not found"},
-    "python_check_failed": {"ja": "確認できません ({0})", "en": "could not check ({0})"},
-    "python_version_unknown": {"ja": "不明", "en": "unknown"},
+    "python_version_untested": {
+        "ja": "{0}(動作確認済み範囲3.10〜3.12より新しい・未検証)",
+        "en": "{0} (newer than the tested 3.10-3.12 range, unverified)",
+    },
+    "env_check_install_python_button": {
+        "ja": "Python 3.12 を自動インストール",
+        "en": "Install Python 3.12 automatically",
+    },
+    "env_check_install_python_running": {
+        "ja": "Python 3.12 をインストールしています...",
+        "en": "Installing Python 3.12...",
+    },
+    "env_check_install_python_done": {
+        "ja": "Python 3.12 のインストールが完了しました",
+        "en": "Python 3.12 installed successfully",
+    },
+    "env_check_install_python_failed": {
+        "ja": "自動インストールに失敗しました。上のコマンドを手動で実行してください",
+        "en": "Automatic install failed. Please run the command above manually",
+    },
+    "env_check_install_python_no_manager": {
+        "ja": "自動インストール手段（winget/Homebrew）が見つかりません。"
+              "手動でインストールしてください",
+        "en": "No automatic install tool (winget/Homebrew) was found. "
+              "Please install manually",
+    },
+    "env_check_linux_command_label": {
+        "ja": "Linuxでは以下のコマンドを手動で実行してください:",
+        "en": "On Linux, please run the following command manually:",
+    },
 
     # -- page 3: options (see _build_page_options() etc.) --------------------
     "options_title": {"ja": "オプション", "en": "Options"},
@@ -891,87 +960,348 @@ def _py_launcher_python_exe() -> Optional[str]:
     return exe_path
 
 
-def _find_system_python() -> Optional[str]:
+def _macos_python_exe_candidates() -> List[Path]:
+    """macOS: likely python3 executable paths, in priority order. Mirrors
+    scripts/installer.py's _macos_python_exe_candidates() -- duplicated
+    here (not imported) for the same reason as
+    _windows_python_exe_candidates() above: this check runs before the
+    repo (and thus installer.py) is cloned.
+    macOS: python3 実行ファイルの候補(優先順)。scripts/installer.py の
+    _macos_python_exe_candidates() と同じ処理。_windows_python_exe_candidates()
+    と同じ理由(このチェックはリポジトリ -- ひいては installer.py -- が
+    clone される前に走る)で複製する。
     """
-    Locate a system Python interpreter -- deliberately NOT this frozen
-    app's own bundled interpreter -- for the "system Python 3.8+"
-    prerequisite check. Checks the `py` launcher first (highest priority:
-    some python.org installs register only `py`, not `python`/`python3`,
-    on PATH), then prefers "python3" over "python" since some systems
-    still alias "python" to a Python 2 install. On Windows, also scans
-    common install locations off PATH so an installed-but-not-on-PATH
-    Python is still detected (matching installer.py's discovery).
-    「システム Python 3.8+」前提チェックのため、システムの Python
-    インタプリタを探す(このアプリ自身に同梱された凍結インタプリタでは
-    意図的にない)。最初に `py` ランチャーを確認し(最優先: 一部の
-    python.org インストールは `python`/`python3` ではなく `py` だけを
-    PATH に登録する)、次に一部の環境で今も Python 2 を指す "python" より
-    "python3" を優先する。Windows では PATH 外の一般的なインストール先も
-    走査し、PATH に載っていない Python も検出する(installer.py の発見と一致)。
+    candidates: List[Path] = []
+    on_path = shutil.which("python3")
+    if on_path:
+        candidates.append(Path(on_path))
+
+    homebrew_prefixes: List[Path] = []
+    brew = shutil.which("brew")
+    if brew:
+        try:
+            result = subprocess.run(
+                [brew, "--prefix"], capture_output=True, timeout=SUBPROCESS_PROBE_TIMEOUT_SECONDS,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                homebrew_prefixes.append(Path(result.stdout.strip()))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    for default in (Path("/opt/homebrew"), Path("/usr/local")):
+        if default not in homebrew_prefixes:
+            homebrew_prefixes.append(default)
+
+    for prefix in homebrew_prefixes:
+        for ver in ("3.12", "3.11", "3.10"):
+            candidates.append(prefix / "opt" / f"python@{ver}" / "bin" / f"python{ver}")
+        try:
+            candidates.extend(sorted(prefix.glob("bin/python3*"), reverse=True))
+        except OSError:
+            pass
+
+    try:
+        candidates.extend(
+            sorted(Path("/Library/Frameworks/Python.framework/Versions").glob("3.*/bin/python3"), reverse=True)
+        )
+    except OSError:
+        pass
+
+    for ver in ("3.12", "3.11", "3.10"):
+        found = shutil.which(f"python{ver}")
+        if found:
+            candidates.append(Path(found))
+    return candidates
+
+
+def _linux_python_exe_candidates() -> List[Path]:
+    """Linux: likely python3 executable names on PATH, in priority order.
+    Mirrors scripts/installer.py's _linux_python_exe_candidates().
+    Linux: PATH上の python3 実行ファイル名の候補(優先順)。
+    scripts/installer.py の _linux_python_exe_candidates() と同じ処理。
+    """
+    candidates: List[Path] = []
+    for ver in ("3.12", "3.11", "3.10", "3.13"):
+        found = shutil.which(f"python{ver}")
+        if found:
+            candidates.append(Path(found))
+    on_path = shutil.which("python3")
+    if on_path:
+        candidates.append(Path(on_path))
+    return candidates
+
+
+def _all_python_candidates() -> List[Path]:
+    """Return every plausible system-python executable for the current
+    platform, in priority order (not yet filtered by version). Mirrors
+    scripts/installer.py's _all_python_candidates().
+    現在のプラットフォーム向けの、あり得るシステムPython実行ファイルを
+    全て優先順で返す(まだバージョンで絞り込んでいない)。
+    scripts/installer.py の _all_python_candidates() と同じ処理。
     """
     if sys.platform == "win32":
+        candidates: List[Path] = []
         py_launcher_exe = _py_launcher_python_exe()
         if py_launcher_exe:
-            return py_launcher_exe
-    on_path = shutil.which("python3") or shutil.which("python")
-    if on_path and "windowsapps" not in on_path.lower():
-        return on_path
-    if sys.platform == "win32":
-        for exe in _windows_python_exe_candidates():
-            if exe.is_file():
-                return str(exe)
-    return on_path
+            candidates.append(Path(py_launcher_exe))
+        for name in ("python", "python3"):
+            found = shutil.which(name)
+            if found and "windowsapps" not in found.lower():
+                candidates.append(Path(found))
+        # _windows_python_exe_candidates() already returns full python.exe
+        # paths (not directories) -- see its own docstring.
+        # _windows_python_exe_candidates() は既に python.exe への完全な
+        # パス(ディレクトリではない)を返す -- 同関数の docstring 参照。
+        candidates.extend(_windows_python_exe_candidates())
+        return candidates
+    if sys.platform == "darwin":
+        return _macos_python_exe_candidates()
+    return _linux_python_exe_candidates()
+
+
+def _python_version_tuple(python_exe: Path) -> Optional[Tuple[int, int]]:
+    """Return (major, minor) reported by python_exe, or None on any
+    failure. Never raises. Mirrors scripts/installer.py's
+    _python_version_info().
+    python_exe が報告する (major, minor) を返す。失敗時は None
+    (例外は送出しない)。scripts/installer.py の _python_version_info()
+    と同じ処理。
+    """
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+            capture_output=True, timeout=SUBPROCESS_PROBE_TIMEOUT_SECONDS,
+            encoding="utf-8", errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"(\d+)\.(\d+)", (result.stdout or "").strip())
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)))
+
+
+def find_preferred_system_python() -> Tuple[Optional[str], Optional[Tuple[int, int]], bool]:
+    """
+    Scan every candidate from _all_python_candidates() and apply the same
+    version preference as scripts/installer.py's _find_system_python_dir():
+    a Python inside PYTHON_PREFERRED_MIN..MAX (3.10-3.12) always wins
+    (highest such version if several qualify); failing that, the lowest
+    version newer than PYTHON_PREFERRED_MAX is accepted (closest to the
+    tested range); anything older than PYTHON_PREFERRED_MIN is ignored.
+
+    Returns (executable_path_or_None, version_or_None, is_newer_than_tested).
+    Deliberately NOT this frozen app's own bundled interpreter -- this
+    check is about the system Python that scripts/installer.py will later
+    steer ESP-IDF's venv creation toward, not the interpreter running this
+    GUI itself.
+
+    _all_python_candidates() の全候補を走査し、scripts/installer.py の
+    _find_system_python_dir() と同じバージョン選好を適用する:
+    PYTHON_PREFERRED_MIN〜MAX(3.10〜3.12)の範囲内のPythonが常に優先され
+    (複数該当すれば最も新しいもの)、無ければ PYTHON_PREFERRED_MAX より
+    新しい中で最も低いバージョン(検証済み範囲に最も近いもの)を受理し、
+    PYTHON_PREFERRED_MIN 未満は無視する。
+
+    (実行ファイルパス or None, バージョン or None, 検証済み範囲より新しいか)
+    を返す。このアプリ自身に同梱された凍結インタプリタでは意図的にない --
+    このチェックが問うのは、scripts/installer.py が後で ESP-IDF の venv
+    作成を誘導する先となるシステムPythonであり、このGUI自身を動かして
+    いるインタプリタではない。
+    """
+    preferred: Optional[Tuple[Path, Tuple[int, int]]] = None
+    newer: Optional[Tuple[Path, Tuple[int, int]]] = None
+    for exe in _all_python_candidates():
+        if not exe.is_file():
+            continue
+        version = _python_version_tuple(exe)
+        if version is None:
+            continue
+        if PYTHON_PREFERRED_MIN <= version <= PYTHON_PREFERRED_MAX:
+            if preferred is None or version > preferred[1]:
+                preferred = (exe, version)
+        elif version > PYTHON_PREFERRED_MAX:
+            if newer is None or version < newer[1]:
+                newer = (exe, version)
+    if preferred is not None:
+        return (str(preferred[0]), preferred[1], False)
+    if newer is not None:
+        return (str(newer[0]), newer[1], True)
+    return (None, None, False)
 
 
 def get_system_python_version_string() -> str:
     """
     Human-readable version string for the system Python found by
-    _find_system_python(), or a "not found"/"could not check" message in
-    the current UI language (via tr()). Never raises: any failure is
-    folded into the returned string so callers can display it directly.
-    _find_system_python() が見つけたシステム Python のバージョン文字列
-    (人間可読)。見つからない/確認できない場合は、現在のUI言語での
-    (tr() 経由の)その旨の文字列を返す。例外は送出しない: 呼び出し側が
-    そのまま表示できるよう、失敗も戻り値の文字列に畳み込む。
+    find_preferred_system_python(), or a "not found" message in the
+    current UI language (via tr()). Never raises: any failure is folded
+    into the returned string so callers can display it directly.
+    find_preferred_system_python() が見つけたシステム Python のバージョン
+    文字列(人間可読)。見つからない場合は、現在のUI言語での(tr() 経由の)
+    その旨の文字列を返す。例外は送出しない: 呼び出し側がそのまま表示
+    できるよう、失敗も戻り値の文字列に畳み込む。
     """
-    python_exe = _find_system_python()
-    if not python_exe:
+    _exe, version, is_newer = find_preferred_system_python()
+    if version is None:
         return tr("python_not_found")
-    try:
-        result = subprocess.run(
-            [python_exe, "--version"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=SUBPROCESS_PROBE_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return tr("python_check_failed", exc)
-    # "python --version" prints to stdout on Python 3, historically to
-    # stderr on Python 2 -- check both so an old system Python still
-    # reports a version instead of "unknown".
-    # "python --version" は Python 3 では stdout、歴史的に Python 2 では
-    # stderr に出力する -- 両方確認することで、古いシステム Python でも
-    # "unknown" にならずバージョンを報告できる。
-    version_text = (result.stdout or result.stderr).strip()
-    return version_text or tr("python_version_unknown")
+    version_text = f"{version[0]}.{version[1]}"
+    return tr("python_version_untested", version_text) if is_newer else version_text
 
 
-def check_python_available(min_version: Tuple[int, int] = PYTHON_MIN_VERSION) -> bool:
+def check_python_available() -> bool:
     """
-    Return whether a system Python at or above min_version was found.
-    This is a soft prerequisite (see ENV_CHECK_REQUIRED above): this
-    app's own bundled interpreter is what actually runs installer.py.
-    システム Python が min_version 以上で見つかったか。ソフトな前提条件
-    (上の ENV_CHECK_REQUIRED 参照): installer.py を実際に実行するのは
-    このアプリ自身に同梱されたインタプリタである。
+    Return whether a system Python in the ecosystem's preferred/accepted
+    range (see find_preferred_system_python()) was found. This is a soft
+    prerequisite (see ENV_CHECK_REQUIRED above): this app's own bundled
+    interpreter is what actually runs installer.py.
+    エコシステムの優先/受理範囲(find_preferred_system_python() 参照)の
+    システム Python が見つかったか。ソフトな前提条件(上の
+    ENV_CHECK_REQUIRED 参照): installer.py を実際に実行するのはこの
+    アプリ自身に同梱されたインタプリタである。
     """
-    match = re.search(r"(\d+)\.(\d+)", get_system_python_version_string())
-    if not match:
-        return False
-    found_version = (int(match.group(1)), int(match.group(2)))
-    return found_version >= min_version
+    _exe, version, _is_newer = find_preferred_system_python()
+    return version is not None
+
+
+def _detect_linux_package_manager() -> Optional[str]:
+    """Return the first of apt/dnf/pacman found on PATH, or None. Mirrors
+    scripts/installer.py's _detect_linux_package_manager().
+    PATH上で最初に見つかった apt/dnf/pacman を返す、無ければ None。
+    scripts/installer.py の _detect_linux_package_manager() と同じ処理。
+    """
+    for manager in ("apt", "dnf", "pacman"):
+        if shutil.which(manager):
+            return manager
+    return None
+
+
+def _linux_python_install_command(manager: str) -> str:
+    """Build the shell command string for installing Python 3.12 with
+    `manager`. Mirrors scripts/installer.py's
+    _linux_python_install_command() (returned as a joined string here,
+    not argv, since this GUI only ever displays it for the user to copy
+    -- see docs/plans/gui-installer-plan.md's "no sudo from a GUI" stance
+    -- rather than executing it).
+    `manager` で Python 3.12 を導入するシェルコマンド文字列を組み立てる。
+    scripts/installer.py の _linux_python_install_command() と同じ処理
+    (ここでは argv ではなく連結済み文字列を返す -- 本GUIはユーザーが
+    コピーするために表示するだけで実行はしないため。
+    docs/plans/gui-installer-plan.md の「GUIからsudoしない」方針を参照)。
+    """
+    if manager == "apt":
+        return "sudo apt install -y python3.12 python3.12-venv"
+    if manager == "dnf":
+        return "sudo dnf install -y python3.12"
+    if manager == "pacman":
+        return "sudo pacman -S --noconfirm python"
+    return PYTHON_INSTALL_COMMANDS["linux"]
+
+
+def linux_python_install_command_for_this_host() -> str:
+    """Best Python-3.12 install command string for the detected Linux
+    package manager, falling back to the generic PYTHON_INSTALL_COMMANDS
+    entry when no known manager is on PATH.
+    検出したLinuxパッケージマネージャ向けの、Python 3.12導入コマンド
+    文字列。既知のマネージャがPATH上に無ければ汎用の
+    PYTHON_INSTALL_COMMANDS のエントリにフォールバックする。
+    """
+    manager = _detect_linux_package_manager()
+    if manager:
+        return _linux_python_install_command(manager)
+    return PYTHON_INSTALL_COMMANDS["linux"]
+
+
+def can_auto_install_python() -> bool:
+    """Whether this platform has an automatic-install tool this GUI can
+    drive directly (winget on Windows, Homebrew on macOS). Linux is
+    deliberately excluded: its install needs sudo, which must run in the
+    user's own terminal, not from a GUI worker thread (see
+    _auto_install_python_linux_command_only() / the Linux row's
+    command-display behavior instead of a button).
+    このプラットフォームに、本GUIが直接操作できる自動インストール手段
+    (Windowsのwinget、macOSのHomebrew)があるか。Linuxは意図的に除外する:
+    Linuxの導入にはsudoが必要で、GUIワーカースレッドからではなく
+    ユーザー自身の端末で実行される必要があるため
+    (代わりにボタンではなくコマンド表示を行う、Linux行の挙動を参照)。
+    """
+    if sys.platform == "win32":
+        return shutil.which("winget") is not None
+    if sys.platform == "darwin":
+        return shutil.which("brew") is not None
+    return False
+
+
+def auto_install_python() -> Tuple[bool, str]:
+    """
+    Attempt to install Python 3.12 via this platform's package manager
+    (winget on Windows, Homebrew on macOS), streaming to a returned log
+    string rather than stdout (this runs on a worker thread -- see
+    StampFlySetupApp._on_install_python_clicked()). Returns
+    (succeeded, log_text); `succeeded` means a preferred-range Python is
+    present afterward (re-checked via find_preferred_system_python(), not
+    just "the installer command exited 0" -- winget in particular does
+    not update this process's own PATH, see the Windows branch below).
+
+    winget/Homebrewでの Python 3.12 自動インストールを試みる。このGUIの
+    stdoutではなく戻り値のログ文字列へ出力する(ワーカースレッド上で
+    実行するため -- StampFlySetupApp._on_install_python_clicked() 参照)。
+    (成功したか, ログ文字列) を返す。`succeeded` は、事後に優先範囲の
+    Pythonが存在するかどうかを意味する(find_preferred_system_python() で
+    再確認する。単に「インストールコマンドが exit 0 だったか」ではない --
+    特に winget はこのプロセス自身の PATH を更新しないため。下の Windows
+    分岐を参照)。
+    """
+    log_lines: List[str] = []
+
+    def run_and_log(cmd: List[str]) -> int:
+        log_lines.append("$ " + " ".join(cmd))
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            log_lines.append(str(exc))
+            return 1
+        if result.stdout:
+            log_lines.append(result.stdout)
+        if result.stderr:
+            log_lines.append(result.stderr)
+        return result.returncode
+
+    if sys.platform == "win32":
+        winget = shutil.which("winget")
+        if not winget:
+            return (False, tr("env_check_install_python_no_manager"))
+        rc = run_and_log([
+            winget, "install", "--id", "Python.Python.3.12", "--silent",
+            "--accept-package-agreements", "--accept-source-agreements",
+        ])
+        if rc != 0:
+            log_lines.append(f"winget exited with code {rc}")
+    elif sys.platform == "darwin":
+        brew = shutil.which("brew")
+        if not brew:
+            return (False, tr("env_check_install_python_no_manager"))
+        rc = run_and_log([brew, "install", "python@3.12"])
+        if rc != 0:
+            log_lines.append(f"brew exited with code {rc}")
+    else:
+        return (False, tr("env_check_install_python_no_manager"))
+
+    # Re-scan rather than trust the exit code alone: winget's install does
+    # not update this process's own PATH (Windows only broadcasts an
+    # environment-change message that new processes pick up), and a
+    # partially-successful brew run can still leave a usable interpreter.
+    # 終了コードだけを信用せず再走査する: winget のインストールはこの
+    # プロセス自身の PATH を更新しない(Windows は環境変更通知を送るが、
+    # 新規プロセスのみがそれを反映する)。brew が部分的に失敗しても
+    # 使用可能なインタプリタが残ることがある。
+    _exe, version, _is_newer = find_preferred_system_python()
+    return (version is not None, "\n".join(log_lines))
 
 
 def _existing_ancestor(path: Path) -> Path:
@@ -1418,6 +1748,26 @@ def build_supported_run_kwargs(module, options: SetupOptions,
         "minimal": options.minimal,
         "force": False,
         "no_flasher": not options.include_flasher,
+        # This GUI already surfaces a missing/old system Python on its own
+        # Environment Check page (with a one-click auto-install button --
+        # see can_auto_install_python()/auto_install_python() above) before
+        # the user ever reaches this step. If Python is STILL missing by
+        # the time installer.py's own Step 1 runs (e.g. the user proceeded
+        # past the advisory NG anyway), let installer.py make its own
+        # attempt too rather than dead-ending in a non-interactive run
+        # with no recourse -- see scripts/installer.py's
+        # _offer_python_auto_install() for what this actually controls
+        # (Linux's sudo-gated path ignores it and never runs unattended).
+        # このGUIは、この画面に来る前の環境チェック画面で既に、無い/古い
+        # システムPythonを(ワンクリック自動インストールボタン付きで --
+        # 上の can_auto_install_python()/auto_install_python() 参照)
+        # 提示済み。それでも installer.py 自身のStep1実行時点でまだ
+        # Pythonが無い場合(ユーザーが参考表示のNGを無視して進んだ場合等)、
+        # 非対話実行で手詰まりにするより installer.py 自身にも試させる --
+        # 実際に何を制御するかは scripts/installer.py の
+        # _offer_python_auto_install() 参照(Linuxのsudoゲート経路はこれを
+        # 無視し無人実行は絶対にしない)。
+        "auto_install_python": True,
     }
     try:
         supported_names = set(inspect.signature(module.Installer.run).parameters)
@@ -1693,7 +2043,9 @@ def run_selftest() -> int:
     _current_kwargs = build_supported_run_kwargs(module, _probe_options, queue.Queue())
     report(
         "current Installer.run(): all kwargs supported",
-        set(_current_kwargs) == {"idf_path", "skip_deps", "minimal", "force", "no_flasher"},
+        set(_current_kwargs) == {
+            "idf_path", "skip_deps", "minimal", "force", "no_flasher", "auto_install_python",
+        },
     )
 
     # (6) i18n completeness: every STRINGS key has both a ja and an en
@@ -2038,7 +2390,7 @@ class StampFlySetupApp:
         frame.columnconfigure(1, weight=1)
         ttk.Label(
             frame, text=tr("env_check_title"), font=("TkDefaultFont", 12, "bold")
-        ).grid(row=0, column=0, columnspan=3, sticky="w")
+        ).grid(row=0, column=0, columnspan=4, sticky="w")
 
         for row_index, name in enumerate(ENV_CHECK_ORDER, start=1):
             ttk.Label(frame, text=env_check_label(name), wraplength=280, justify="left").grid(
@@ -2053,7 +2405,24 @@ class StampFlySetupApp:
             )
             copy_button.grid(row=row_index, column=2, sticky="w")
             copy_button.grid_remove()
-            self._env_rows[name] = (status_label, copy_button)
+            # Only meaningfully used for the Python row (see
+            # _handle_env_check_result(): shown instead of copy_button when
+            # can_auto_install_python() is True for this OS -- Windows
+            # winget / macOS Homebrew. Built for every row for the same
+            # "create once, show/hide per result" reason as copy_button.
+            # Python行でのみ意味を持つ(_handle_env_check_result() 参照:
+            # このOSで can_auto_install_python() が True の場合(Windows
+            # winget / macOS Homebrew)、copy_button の代わりに表示する)。
+            # copy_button と同じ「一度作って結果に応じ表示/非表示」の理由で
+            # 全行分作成する。
+            install_button = ttk.Button(
+                frame,
+                text=tr("env_check_install_python_button"),
+                command=lambda check_name=name: self._on_install_python_clicked(check_name),
+            )
+            install_button.grid(row=row_index, column=3, sticky="w")
+            install_button.grid_remove()
+            self._env_rows[name] = (status_label, copy_button, install_button)
 
         return frame
 
@@ -2064,6 +2433,7 @@ class StampFlySetupApp:
             self._env_status_vars[name].set(tr("env_check_checking"))
             self._env_rows[name][0].configure(foreground="")
             self._env_rows[name][1].grid_remove()
+            self._env_rows[name][2].grid_remove()
         self.primary_button.configure(state="disabled")
         self._status_var.set("")
 
@@ -2105,14 +2475,36 @@ class StampFlySetupApp:
     def _handle_env_check_result(self, results, details):
         for name in ENV_CHECK_ORDER:
             is_ok = results[name]
-            status_label, copy_button = self._env_rows[name]
+            status_label, copy_button, install_button = self._env_rows[name]
             extra = " ({0})".format(details[name]) if name in details else ""
             status_label.configure(foreground=OK_TEXT_COLOR if is_ok else WARN_TEXT_COLOR)
             self._env_status_vars[name].set(("OK" if is_ok else "NG") + extra)
-            if not is_ok and name in ENV_CHECK_INSTALL_COMMANDS:
-                copy_button.grid()
-            else:
+
+            # Python row: prefer the one-click auto-install button over the
+            # copy-command button when this OS actually has a tool this GUI
+            # can drive (winget/Homebrew) -- see can_auto_install_python().
+            # Linux never shows this button (sudo must run in the user's
+            # own terminal); it keeps the copy-command button with a
+            # package-manager-specific command (see _on_copy_install_command()).
+            # Python行: このOSに本GUIが操作できる手段(winget/Homebrew)が
+            # 実在する場合、コマンドコピーボタンより自動インストール
+            # ボタンを優先する -- can_auto_install_python() 参照。Linuxは
+            # このボタンを出さない(sudoはユーザー自身の端末で実行される
+            # 必要がある)。パッケージマネージャ固有のコマンドを持つ
+            # コマンドコピーボタンのままにする(_on_copy_install_command() 参照)。
+            show_install_button = (
+                name == ENV_CHECK_PYTHON and not is_ok and can_auto_install_python()
+            )
+            install_button.configure(state="normal")
+            if show_install_button:
+                install_button.grid()
                 copy_button.grid_remove()
+            else:
+                install_button.grid_remove()
+                if not is_ok and name in ENV_CHECK_INSTALL_COMMANDS:
+                    copy_button.grid()
+                else:
+                    copy_button.grid_remove()
 
         can_proceed = all(results[name] for name in ENV_CHECK_REQUIRED)
         self.primary_button.configure(state="normal" if can_proceed else "disabled")
@@ -2122,11 +2514,63 @@ class StampFlySetupApp:
         else:
             self._status_var.set("")
 
+    def _on_install_python_clicked(self, name):
+        """
+        Handle a click on the Python row's "Install automatically" button:
+        run auto_install_python() (winget/brew) on a worker thread so the
+        UI stays responsive, then re-run the environment checks so the
+        Python row (and the Next button, if Python were ever required)
+        reflects the outcome. Disables the button immediately to prevent
+        a double-click from starting two concurrent installs.
+        Python行の「自動インストール」ボタン押下を処理する:
+        auto_install_python()(winget/brew)をワーカースレッドで実行し
+        UIの応答性を保ち、完了後に環境チェックを再実行してPython行
+        (および、Pythonが必須になった場合のNextボタン)へ結果を反映する。
+        二重クリックで同時に2つのインストールが走らないよう、ボタンは
+        即座に無効化する。
+        """
+        _status_label, _copy_button, install_button = self._env_rows[name]
+        install_button.configure(state="disabled")
+        self._status_var.set(tr("env_check_install_python_running"))
+
+        def worker():
+            try:
+                succeeded, log_text = auto_install_python()
+            except Exception as exc:  # noqa: BLE001 - never let this daemon thread die silently
+                succeeded, log_text = False, str(exc)
+            self._queue.put(("python_auto_install_result", succeeded, log_text))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _handle_python_auto_install_result(self, succeeded, log_text):
+        if log_text:
+            for line in log_text.splitlines():
+                self._append_log(line)
+        self._append_log(
+            tr("env_check_install_python_done") if succeeded else tr("env_check_install_python_failed")
+        )
+        # Refresh every row (not just Python) so the whole page reflects
+        # the freshly-installed interpreter, exactly like clicking Recheck.
+        # (全行を)Pythonだけでなく再チェックし、Recheckボタンを押した時と
+        # 同様に新しくインストールされたインタプリタを画面全体へ反映する。
+        self._run_env_checks_async()
+
     def _on_copy_install_command(self, name):
-        commands_by_platform = ENV_CHECK_INSTALL_COMMANDS.get(name)
-        if not commands_by_platform:
-            return
-        command = install_command_for(commands_by_platform)
+        # Python on Linux gets a package-manager-specific command (apt/dnf/
+        # pacman, whichever is actually on this host's PATH) instead of the
+        # generic ENV_CHECK_INSTALL_COMMANDS entry -- see
+        # linux_python_install_command_for_this_host().
+        # LinuxのPythonは、汎用の ENV_CHECK_INSTALL_COMMANDS エントリでは
+        # なく、このホストのPATH上に実在するパッケージマネージャ
+        # (apt/dnf/pacman)固有のコマンドを使う --
+        # linux_python_install_command_for_this_host() 参照。
+        if name == ENV_CHECK_PYTHON and sys.platform not in ("win32", "darwin"):
+            command = linux_python_install_command_for_this_host()
+        else:
+            commands_by_platform = ENV_CHECK_INSTALL_COMMANDS.get(name)
+            if not commands_by_platform:
+                return
+            command = install_command_for(commands_by_platform)
         self.root.clipboard_clear()
         self.root.clipboard_append(command)
         self._status_var.set(tr("env_check_copied", command))
@@ -2381,6 +2825,8 @@ class StampFlySetupApp:
             self._handle_phase_message(message[1])
         elif kind == "env_check_result":
             self._handle_env_check_result(message[1], message[2])
+        elif kind == "python_auto_install_result":
+            self._handle_python_auto_install_result(message[1], message[2])
         elif kind == "done":
             self._on_worker_done(message[1], message[2])
 

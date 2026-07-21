@@ -79,7 +79,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 ### Genesis Simulator
 Genesis物理シミュレータはvenv仮想環境にインストールされている:
 ```bash
-cd simulator/sandbox/genesis_sim
+cd simulator/genesis
 source venv/bin/activate
 cd scripts
 python <script_name>.py

@@ -17,6 +17,12 @@ Options:
     --force             Force reinstall all steps (skip probe checks)
     --no-flasher        Skip the optional Step 4/4 GUI Flasher app install
     --non-interactive   Never call input(); return defaults instead
+    --auto-install-python  Attempt to auto-install a system Python (3.10-3.12)
+                            via winget/brew/apt when none is found. Only takes
+                            effect in --non-interactive mode (interactive mode
+                            always asks via a y/n prompt regardless of this
+                            flag); Linux's sudo-gated install command is never
+                            run non-interactively (guidance only)
 
 Stability contract / 安定契約
 ------------------------------
@@ -62,7 +68,28 @@ main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを
 ためにこの両方に依存する。
 """
 
+# `from __future__ import annotations` MUST come before any other code
+# (docstrings/comments excepted): it defers evaluation of every type
+# annotation in this file to a string, so a builtin-generic annotation like
+# `-> list[Path]` (PEP 585, only usable unquoted from Python 3.9+) no longer
+# raises `TypeError: 'type' object is not subscriptable` at *def* time on
+# Python 3.8. Without this, that TypeError fires while the module is being
+# loaded -- BEFORE the explicit sys.version_info check below ever runs --
+# so a Python 3.8/3.9 user got a confusing traceback instead of the
+# friendly "Python 3.10+ required" message this file is supposed to show.
+# `from __future__ import annotations` は(docstring/コメントを除き)他の
+# どのコードよりも前に置く必要がある: これにより本ファイル内の全ての型
+# 注釈の評価が文字列として遅延され、`-> list[Path]` のような組み込み
+# ジェネリクス注釈(PEP 585、クォート無しで使えるのは Python 3.9+のみ)が
+# Python 3.8 の def 時点で `TypeError: 'type' object is not subscriptable`
+# を送出しなくなる。これが無いと、このTypeErrorはモジュール読み込み中 --
+# 下の明示的な sys.version_info チェックが走るより前 -- に発生するため、
+# Python 3.8/3.9 ユーザーは本来表示されるべき親切な「Python 3.10+ required」
+# メッセージではなく、不可解なトレースバックを見ることになっていた。
+from __future__ import annotations
+
 import os
+import re
 import shlex
 import sys
 import subprocess
@@ -71,10 +98,31 @@ import tempfile
 from pathlib import Path
 from typing import Optional, List, Tuple
 
-# Ensure we're running Python 3.8+
-if sys.version_info < (3, 8):
-    print(f"Error: Python 3.8+ required, found {sys.version_info.major}.{sys.version_info.minor}")
+# Ensure we're running Python 3.10+ (the ecosystem's actual floor: see
+# pyproject.toml's `requires-python = ">=3.10"`; CI validates 3.12). 3.8/3.9
+# used to be accepted here, but nothing downstream (sfcli, its
+# dependencies) has ever actually supported them.
+# Python 3.10+ を必須とする(エコシステムの実質要求。pyproject.toml の
+# `requires-python = ">=3.10"` を参照。CIは3.12で検証)。かつては3.8/3.9も
+# ここで受理していたが、下流(sfcliおよびその依存関係)がそれらを実際に
+# サポートしたことは一度も無い。
+if sys.version_info < (3, 10):
+    print(f"Error: Python 3.10+ required (3.12 recommended), "
+          f"found {sys.version_info.major}.{sys.version_info.minor}")
     sys.exit(1)
+
+
+# The ecosystem's actually-tested Python range. Selection logic throughout
+# this file (see _find_system_python_dir()) prefers a system Python inside
+# this range, accepts anything newer with a warning (untested but likely
+# fine), and rejects anything older (offers auto-install instead).
+# このエコシステムが実際に検証済みのPython範囲。本ファイル全体の選択
+# ロジック(_find_system_python_dir() 参照)は、この範囲内のシステム
+# Pythonを優先し、これより新しいものは警告付きで受け入れ(未検証だが恐らく
+# 問題ない)、これより古いものは不採用とする(代わりに自動インストールを
+# 提案する)。
+PYTHON_PREFERRED_MIN = (3, 10)
+PYTHON_PREFERRED_MAX = (3, 12)
 
 
 def version_sort_key(version: str) -> Tuple[int, int, int]:
@@ -342,69 +390,498 @@ def _py_launcher_python_dir() -> Optional[Path]:
     return exe.parent
 
 
-def _python_is_3_8_plus(python_exe: Path) -> bool:
-    """Return whether python_exe runs and reports Python >= 3.8.
-    python_exe が起動し、Python 3.8 以上を報告するか。"""
+def _python_version_info(python_exe: Path) -> Optional[Tuple[int, int]]:
+    """Return (major, minor) reported by python_exe, or None on any
+    failure (does not exist, times out, non-zero exit, unparsable output).
+    Never raises.
+    python_exe が報告する (major, minor) を返す。起動不可・タイムアウト・
+    非ゼロ終了・出力が解析不能ないずれの場合も None(例外は送出しない)。
+
+    Kept in the same style as the pre-existing _py_launcher_python_dir():
+    a short subprocess timeout, utf-8/replace decoding, and CREATE_NO_WINDOW
+    on Windows so no console flashes open when this runs inside a frozen
+    --windowed GUI.
+    既存の _py_launcher_python_dir() と同じ流儀(短いタイムアウト、
+    utf-8/replace デコード、Windows では CREATE_NO_WINDOW で凍結
+    --windowed GUI 内でもコンソールが一瞬開かないようにする)を踏襲する。
+    """
     try:
         result = subprocess.run(
             [str(python_exe), "-c",
-             "import sys; sys.exit(0 if sys.version_info[:2] >= (3, 8) else 1)"],
+             "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
             capture_output=True, timeout=15,
+            encoding="utf-8", errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
-        return result.returncode == 0
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"(\d+)\.(\d+)", (result.stdout or "").strip())
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)))
+
+
+def _macos_python_exe_candidates() -> list[Path]:
+    """macOS: likely python3 executable paths, in priority order.
+    macOS: python3 実行ファイルの候補(優先順)。
+
+    Covers: whatever `python3` resolves to on PATH; Homebrew's Apple
+    Silicon (/opt/homebrew) and Intel (/usr/local) prefixes, both as
+    plain `bin/python3*` (for formulas that DO symlink into bin, e.g. a
+    non-keg-only `python3`) and as the keg-only `opt/python@3.1x/bin`
+    layout Homebrew actually uses for versioned python@3.x formulas (these
+    are deliberately NOT symlinked into Homebrew's main bin/ to avoid
+    fighting over which python3 wins); python.org's framework installs;
+    and explicit python3.12/3.11/3.10 command names for a pyenv or
+    similar version manager that only shims the versioned names.
+    対象: PATH上の `python3` が指す先、Homebrew の Apple Silicon
+    (/opt/homebrew) と Intel (/usr/local) の各プレフィックス
+    (bin/python3* にシンボリックリンクする formula 向けと、Homebrew が
+    バージョン付き python@3.x formula に実際に使う keg-only な
+    opt/python@3.1x/bin レイアウトの両方 -- 後者は「どの python3 が
+    勝つか」の衝突を避けるため意図的に Homebrew の主 bin/ にはリンク
+    されない)、python.org のフレームワークインストール、pyenv 等
+    バージョン管理ツールがバージョン付き名前のみ shim する場合に備えた
+    python3.12/3.11/3.10 の明示コマンド名。
+    """
+    candidates: list[Path] = []
+    on_path = shutil.which("python3")
+    if on_path:
+        candidates.append(Path(on_path))
+
+    homebrew_prefixes: list[Path] = []
+    brew = shutil.which("brew")
+    if brew:
+        try:
+            result = subprocess.run(
+                [brew, "--prefix"], capture_output=True, timeout=15,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode == 0:
+                prefix = result.stdout.strip()
+                if prefix:
+                    homebrew_prefixes.append(Path(prefix))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    # Fall back to both well-known default prefixes even without (or in
+    # addition to) a working `brew --prefix`, since a fresh `brew install`
+    # in _auto_install_python_macos() may run before `brew` itself is
+    # resolvable in this process's PATH snapshot.
+    # 動作する `brew --prefix` が無くても(あるいはそれに加えて)両方の
+    # 既知既定プレフィックスを候補に含める。_auto_install_python_macos()
+    # 内での新規 `brew install` 直後は、このプロセスの PATH スナップ
+    # ショットではまだ `brew` 自体が解決できないことがあるため。
+    for default in (Path("/opt/homebrew"), Path("/usr/local")):
+        if default not in homebrew_prefixes:
+            homebrew_prefixes.append(default)
+
+    for prefix in homebrew_prefixes:
+        for ver in ("3.12", "3.11", "3.10"):
+            candidates.append(prefix / "opt" / f"python@{ver}" / "bin" / f"python{ver}")
+        try:
+            candidates.extend(sorted(prefix.glob("bin/python3*"), reverse=True))
+        except OSError:
+            pass
+
+    try:
+        candidates.extend(
+            sorted(Path("/Library/Frameworks/Python.framework/Versions").glob("3.*/bin/python3"), reverse=True)
+        )
+    except OSError:
+        pass
+
+    for ver in ("3.12", "3.11", "3.10"):
+        found = shutil.which(f"python{ver}")
+        if found:
+            candidates.append(Path(found))
+    return candidates
+
+
+def _linux_python_exe_candidates() -> list[Path]:
+    """Linux: likely python3 executable names on PATH, in priority order.
+    Linux: PATH上の python3 実行ファイル名の候補(優先順)。
+
+    Unlike Windows/macOS, there is no single well-known "install location"
+    to scan off-PATH -- distributions install versioned interpreters
+    (python3.12, python3.10, ...) via their package manager straight onto
+    PATH. So this just tries specific version names most-preferred first,
+    then python3.13 (accepted with a warning), then the bare `python3`
+    that a fresh `apt install python3.12` etc. may not have repointed.
+    Windows/macOSと異なり、PATH外を走査すべき単一の既知インストール先は
+    無い -- ディストリビューションはパッケージマネージャでバージョン付き
+    インタプリタ(python3.12, python3.10, ...)を直接PATHへ導入する。
+    そのため、優先度の高いバージョン名から順に試し、次に python3.13
+    (警告付きで受理)、最後に(新規 `apt install python3.12` 等で
+    向き先が変わっていないかもしれない)素の `python3` を試す。
+    """
+    candidates: list[Path] = []
+    for ver in ("3.12", "3.11", "3.10", "3.13"):
+        found = shutil.which(f"python{ver}")
+        if found:
+            candidates.append(Path(found))
+    on_path = shutil.which("python3")
+    if on_path:
+        candidates.append(Path(on_path))
+    return candidates
+
+
+def _all_python_candidates() -> list[Path]:
+    """Return every plausible system-python executable for the current
+    platform, in priority order (not yet filtered by version).
+    現在のプラットフォーム向けの、あり得るシステムPython実行ファイルを
+    全て優先順で返す(まだバージョンで絞り込んでいない)。
+    """
+    if sys.platform == "win32":
+        candidates: list[Path] = []
+        # 1. Highest priority: ask the `py` launcher directly. Some
+        # python.org installs register only `py` (not `python`/`python3`)
+        # on PATH, which the name-based lookup right below would
+        # otherwise miss entirely.
+        # 1. 最優先: `py` ランチャーに直接問い合わせる。一部の python.org
+        # インストールは `py` だけを PATH に登録し `python`/`python3` を
+        # 登録しないため、これが無いと直後の名前ベース探索では見つからない。
+        py_dir = _py_launcher_python_dir()
+        if py_dir is not None:
+            candidates.append(py_dir / "python.exe")
+        # 2. Already resolvable on PATH? Skip the WindowsApps stub, which
+        # is a non-functional placeholder that only opens the Store.
+        # 2. 既に PATH で解決できるか? Store を開くだけの機能しない
+        # プレースホルダである WindowsApps スタブは除外する。
+        for name in ("python", "python3"):
+            found = shutil.which(name)
+            if found and "windowsapps" not in found.lower():
+                candidates.append(Path(found))
+        # 3. Known install locations (same as install.bat).
+        # 3. 既知のインストール先(install.bat と同一)。
+        for candidate_dir in _windows_python_dir_candidates():
+            candidates.append(candidate_dir / "python.exe")
+        return candidates
+    if sys.platform == "darwin":
+        return _macos_python_exe_candidates()
+    return _linux_python_exe_candidates()
 
 
 def _find_system_python_dir() -> Optional[Path]:
-    """Windows: directory of a usable system python.exe (3.8+), or None.
-    Windows: 使用可能なシステム python.exe(3.8+) のディレクトリ、無ければ None。
+    """Directory of the best available system python executable, or None.
+    使用可能な中で最善のシステム python 実行ファイルのディレクトリ、
+    無ければ None。
 
-    Why this exists (the 9009 bug): ESP-IDF's own install.bat calls
-    `python` by name, so a real python.exe must be on PATH for it. Under
-    the CLI, install.bat already put one there; under the GUI, the frozen
-    StampFly Setup app is `sys.executable` (no python.exe beside it), so we
-    must discover a system Python separately -- otherwise ESP-IDF tool
-    install fails with exit code 9009 ("command not found"), observed on a
-    workshop Windows laptop 2026-07-20.
-    存在理由(9009 バグ): ESP-IDF の install.bat は `python` を名前で呼ぶため、
-    本物の python.exe が PATH 上に必要。CLI では install.bat が既に配置済み
-    だが、GUI では凍結された StampFly Setup アプリが `sys.executable`
-    (隣に python.exe は無い)のため、システム Python を別途発見しないと
-    ESP-IDF ツール導入が exit 9009("コマンドが見つからない")で失敗する
-    (2026-07-20 に講習用 Windows ノートで観測)。
+    Version preference (applied across ALL candidates from
+    _all_python_candidates(), not just the first one found): (a) a Python
+    inside PYTHON_PREFERRED_MIN..PYTHON_PREFERRED_MAX (3.10-3.12) always
+    wins, picking the highest such version if more than one qualifies;
+    (b) failing that, anything newer (3.13+) is accepted with a printed
+    warning (untested but likely to work), picking the LOWEST such version
+    (closest to the tested range); (c) anything older than 3.10 is
+    rejected outright -- the caller (_run_install_script()) offers an
+    auto-install instead of silently proceeding with an unsupported
+    interpreter.
+    バージョン選好(_all_python_candidates() の全候補に対して適用する。
+    最初に見つかった1つだけではない): (a) PYTHON_PREFERRED_MIN〜MAX
+    (3.10〜3.12) の範囲内の Python が常に優先され、複数該当すれば最も
+    新しいものを選ぶ。(b) 該当が無ければ、それより新しいもの(3.13+)を
+    警告付きで受理する(未検証だが恐らく動作する)。複数あれば最も低い
+    バージョン(検証済み範囲に最も近いもの)を選ぶ。(c) 3.10未満は
+    無条件に不採用とする -- 呼び出し元(_run_install_script())は、
+    未対応のインタプリタで黙って続行する代わりに自動インストールを提案する。
+
+    Why this exists (the 9009 bug, Windows): ESP-IDF's own install.bat
+    calls `python` by name, so a real python.exe must be on PATH for it.
+    Under the CLI, install.bat already put one there; under the GUI, the
+    frozen StampFly Setup app is `sys.executable` (no python.exe beside
+    it), so we must discover a system Python separately -- otherwise
+    ESP-IDF tool install fails with exit code 9009 ("command not found"),
+    observed on a workshop Windows laptop 2026-07-20. The same
+    "install.sh calls python3 by name" reasoning applies on macOS/Linux,
+    which is why this function covers all three platforms rather than
+    Windows alone.
+    存在理由(9009 バグ、Windows): ESP-IDF の install.bat は `python` を
+    名前で呼ぶため、本物の python.exe が PATH 上に必要。CLI では
+    install.bat が既に配置済みだが、GUI では凍結された StampFly Setup
+    アプリが `sys.executable`(隣に python.exe は無い)のため、システム
+    Python を別途発見しないと ESP-IDF ツール導入が exit 9009
+    ("コマンドが見つからない")で失敗する(2026-07-20 に講習用 Windows
+    ノートで観測)。「install.sh も python3 を名前で呼ぶ」という同じ理屈は
+    macOS/Linux にも当てはまるため、本関数は Windows 単独ではなく3
+    プラットフォーム全てを対象にする。
     """
-    if sys.platform != "win32":
-        return None
-    # 1. Highest priority: ask the `py` launcher directly. Some python.org
-    # installs register only `py` (not `python`/`python3`) on PATH, which
-    # the name-based lookup right below would otherwise miss entirely.
-    # 1. 最優先: `py` ランチャーに直接問い合わせる。一部の python.org
-    # インストールは `py` だけを PATH に登録し `python`/`python3` を
-    # 登録しないため、これが無いと直後の名前ベース探索では見つからない。
-    py_dir = _py_launcher_python_dir()
-    if py_dir is not None and _python_is_3_8_plus(py_dir / "python.exe"):
-        return py_dir
-    # 2. Already resolvable on PATH? Skip the WindowsApps stub, which is a
-    # non-functional placeholder that only opens the Store.
-    # 2. 既に PATH で解決できるか? Store を開くだけの機能しないプレース
-    # ホルダである WindowsApps スタブは除外する。
-    for name in ("python", "python3"):
-        found = shutil.which(name)
-        if not found:
+    preferred: Optional[Tuple[Path, Tuple[int, int]]] = None
+    newer: Optional[Tuple[Path, Tuple[int, int]]] = None
+    for exe in _all_python_candidates():
+        if not exe.is_file():
             continue
-        exe = Path(found)
-        if "windowsapps" in str(exe).lower():
+        version = _python_version_info(exe)
+        if version is None:
             continue
-        if _python_is_3_8_plus(exe):
-            return exe.parent
-    # 3. Known install locations (same as install.bat).
-    # 3. 既知のインストール先(install.bat と同一)。
-    for candidate_dir in _windows_python_dir_candidates():
-        exe = candidate_dir / "python.exe"
-        if exe.is_file() and _python_is_3_8_plus(exe):
-            return candidate_dir
+        if PYTHON_PREFERRED_MIN <= version <= PYTHON_PREFERRED_MAX:
+            if preferred is None or version > preferred[1]:
+                preferred = (exe.parent, version)
+        elif version > PYTHON_PREFERRED_MAX:
+            if newer is None or version < newer[1]:
+                newer = (exe.parent, version)
+        # else: older than PYTHON_PREFERRED_MIN -- rejected, not tracked.
+        # それ以外(PYTHON_PREFERRED_MIN未満)は不採用のため記録しない。
+
+    if preferred is not None:
+        return preferred[0]
+    if newer is not None:
+        newer_dir, newer_version = newer
+        warn(f"Found Python {newer_version[0]}.{newer_version[1]}, newer than "
+             f"the tested range ({PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]}). Untested, but likely to work.")
+        warn(f"動作確認済み範囲({PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}〜"
+             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]})より新しい "
+             f"Python {newer_version[0]}.{newer_version[1]} が見つかりました。"
+             "未検証ですが恐らく動作します。")
+        return newer_dir
     return None
+
+
+def _detect_linux_package_manager() -> Optional[str]:
+    """Return the first of apt/dnf/pacman found on PATH, or None.
+    PATH上で最初に見つかった apt/dnf/pacman を返す、無ければ None。"""
+    for manager in ("apt", "dnf", "pacman"):
+        if shutil.which(manager):
+            return manager
+    return None
+
+
+def _linux_python_install_command(manager: str) -> List[str]:
+    """Build the argv for installing Python 3.12 with `manager`.
+    `manager` で Python 3.12 を導入する argv を組み立てる。
+
+    apt's `python3.12-venv` is included because Debian/Ubuntu split venv
+    support out of the base python3.X package -- without it, ESP-IDF's own
+    venv creation (idf_tools.py) fails even though `python3.12` itself
+    runs fine. dnf/pacman do not split this out the same way.
+    apt の `python3.12-venv` を含める理由: Debian/Ubuntu は venv 機能を
+    python3.X 本体パッケージから分離しているため、これが無いと
+    `python3.12` 自体は動いても ESP-IDF 自身の venv 作成
+    (idf_tools.py)が失敗する。dnf/pacman はこの分離を行わない。
+    """
+    if manager == "apt":
+        return ["sudo", "apt", "install", "-y", "python3.12", "python3.12-venv"]
+    if manager == "dnf":
+        return ["sudo", "dnf", "install", "-y", "python3.12"]
+    if manager == "pacman":
+        return ["sudo", "pacman", "-S", "--noconfirm", "python"]
+    return []
+
+
+def _print_manual_python_install_hint() -> None:
+    """Print platform-specific manual install guidance as a last resort,
+    when auto-install was declined, unavailable, or failed.
+    自動インストールが辞退・不可・失敗のいずれかだった場合の、最後の
+    手段としてのプラットフォーム別手動インストール案内を表示する。
+    """
+    error(f"Please install Python {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+          f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} manually, then re-run this installer:")
+    if sys.platform == "win32":
+        error("    winget install --id Python.Python.3.12 "
+              "--accept-package-agreements --accept-source-agreements")
+        error("  or download from https://www.python.org/downloads/windows/")
+        error("  (make sure to keep 'Add python.exe to PATH' checked)")
+    elif sys.platform == "darwin":
+        error("    brew install python@3.12")
+        error("  or download from https://www.python.org/downloads/macos/")
+    else:
+        manager = _detect_linux_package_manager()
+        if manager:
+            error(f"    {' '.join(_linux_python_install_command(manager))}")
+        else:
+            error("    Install python3.12 via your distribution's package manager,")
+            error("    or from https://www.python.org/downloads/source/")
+    error(f"Python {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+          f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]}"
+          " を手動でインストールし、このインストーラーを再実行してください。")
+
+
+def _auto_install_python_windows() -> bool:
+    """Windows: install Python 3.12 via winget if available.
+    Windows: winget があれば経由で Python 3.12 をインストールする。
+
+    Returns whether a preferred-range Python is present afterward. winget
+    installing to a fresh location does not update this process's own PATH
+    (Windows broadcasts an environment-change message, but only new
+    processes pick it up), so success is verified by re-running
+    _find_system_python_dir() rather than assuming winget's own exit code
+    means the interpreter is now reachable -- it re-scans known install
+    locations (see _windows_python_dir_candidates()), which does not
+    depend on PATH at all.
+    winget が新規インストールしても、このプロセス自身の PATH は更新
+    されない(Windows は環境変更通知を送るが、新規プロセスのみがそれを
+    反映する)。そのため、winget自体の終了コードだけでインタプリタに
+    到達可能になったとみなさず、_find_system_python_dir() を再実行して
+    確認する -- これは PATH に一切依存せず既知インストール先を再走査する
+    (_windows_python_dir_candidates() 参照)。
+    """
+    winget = shutil.which("winget")
+    if not winget:
+        _print_manual_python_install_hint()
+        return False
+    info("Installing Python 3.12 via winget (this may take a while)...")
+    try:
+        rc = _stream_subprocess([
+            winget, "install", "--id", "Python.Python.3.12", "--silent",
+            "--accept-package-agreements", "--accept-source-agreements",
+        ])
+    except FileNotFoundError:
+        _print_manual_python_install_hint()
+        return False
+    if rc != 0:
+        warn(f"winget install exited with code {rc}.")
+        _print_manual_python_install_hint()
+        return False
+    return _find_system_python_dir() is not None
+
+
+def _auto_install_python_macos() -> bool:
+    """macOS: install Python 3.12 via Homebrew if available.
+    macOS: Homebrew があれば経由で Python 3.12 をインストールする。
+
+    Success is verified the same way as _auto_install_python_windows():
+    re-running _find_system_python_dir(), whose macOS candidate list
+    (_macos_python_exe_candidates()) already includes the keg-only
+    `$(brew --prefix)/opt/python@3.12/bin` layout `brew install python@3.12`
+    actually produces.
+    _auto_install_python_windows() と同じ方法で成否を確認する:
+    _find_system_python_dir() を再実行する。そのmacOS候補リスト
+    (_macos_python_exe_candidates())は、`brew install python@3.12` が
+    実際に作る keg-only な `$(brew --prefix)/opt/python@3.12/bin`
+    レイアウトを既にカバーしている。
+    """
+    brew = shutil.which("brew")
+    if not brew:
+        _print_manual_python_install_hint()
+        return False
+    info("Installing Python 3.12 via Homebrew (this may take a while)...")
+    try:
+        rc = _stream_subprocess([brew, "install", "python@3.12"])
+    except FileNotFoundError:
+        _print_manual_python_install_hint()
+        return False
+    if rc != 0:
+        warn(f"brew install exited with code {rc}.")
+        _print_manual_python_install_hint()
+        return False
+    return _find_system_python_dir() is not None
+
+
+def _auto_install_python_linux() -> bool:
+    """Linux: install Python 3.12 via apt/dnf/pacman, gated on an
+    interactive terminal and explicit y/n consent regardless of any
+    --auto-install-python flag.
+    Linux: apt/dnf/pacman 経由で Python 3.12 をインストールする。
+    --auto-install-python フラグの有無に関わらず、対話端末での明示的な
+    y/n 同意を必須とする。
+
+    Deliberately never runs non-interactively (SF_INSTALLER_NONINTERACTIVE=1
+    or no TTY): sudo's password prompt must go to the user's own terminal,
+    which a GUI frontend or a scripted/CI run cannot supply. In both of
+    those cases this prints the command and returns False rather than
+    attempting it -- see the module's "Stability contract" for why the
+    non-interactive path must never block on stdin.
+    非対話(SF_INSTALLER_NONINTERACTIVE=1 またはTTY無し)では意図的に
+    絶対実行しない: sudo のパスワード入力はユーザー自身の端末に委ねる
+    必要があり、GUIフロントエンドやスクリプト/CI実行はそれを提供
+    できない。どちらの場合もコマンドを表示するに留め、実行は試みない --
+    非対話経路が stdin でブロックしてはならない理由は本ファイル冒頭の
+    「安定契約」節を参照。
+
+    Uses plain subprocess.run() (not _stream_subprocess()) so sudo's own
+    password prompt and any package-manager confirmation prompts pass
+    through to/from the user's real terminal via inherited stdin/stdout,
+    rather than being captured into our own streaming pipe.
+    素の subprocess.run()(_stream_subprocess() ではない)を使う。これに
+    より sudo 自身のパスワード入力やパッケージマネージャの確認プロンプトが
+    継承された stdin/stdout 経由でユーザーの実端末とやり取りされる
+    (自前のストリーミングパイプに捕捉されない)。
+    """
+    manager = _detect_linux_package_manager()
+    if not manager:
+        _print_manual_python_install_hint()
+        return False
+    command = _linux_python_install_command(manager)
+    command_str = " ".join(command)
+
+    if os.environ.get("SF_INSTALLER_NONINTERACTIVE") == "1" or not sys.stdin.isatty():
+        info(f"To install Python 3.12, run this yourself: {command_str}")
+        info(f"Python 3.12 を導入するには、以下を自分で実行してください: {command_str}")
+        return False
+
+    response = prompt(f"Run `{command_str}` now? (requires sudo) [y/N]", "N")
+    if response.lower() not in ("y", "yes"):
+        info(f"Skipped. Run manually when ready: {command_str}")
+        return False
+
+    info(f"Running: {command_str}")
+    try:
+        result = subprocess.run(command)
+    except (OSError, subprocess.SubprocessError) as exc:
+        warn(f"Failed to run install command: {exc}")
+        _print_manual_python_install_hint()
+        return False
+    if result.returncode != 0:
+        warn(f"Install command exited with code {result.returncode}.")
+        return False
+    return _find_system_python_dir() is not None
+
+
+def _offer_python_auto_install(auto_install_python: bool) -> bool:
+    """Offer, and if accepted attempt, an automatic install of a
+    preferred-range system Python. Returns whether a usable one is
+    present afterward.
+    優先範囲のシステムPythonの自動インストールを提案し、同意されれば
+    試みる。事後に使用可能なものが存在するかを返す。
+
+    Consent (module docstring's "Stability contract"): in interactive
+    mode (no SF_INSTALLER_NONINTERACTIVE), always asks via the existing
+    prompt() y/n regardless of `auto_install_python`. In non-interactive
+    mode, only proceeds (Windows/macOS) when `auto_install_python` is
+    True -- this is what --auto-install-python / Installer.run(...,
+    auto_install_python=True) controls. Linux's sudo-gated path ignores
+    `auto_install_python` entirely and is delegated to
+    _auto_install_python_linux(), which never runs unattended (see its
+    own docstring).
+    同意の取り方(モジュールdocstringの「安定契約」参照): 対話モード
+    (SF_INSTALLER_NONINTERACTIVE 無し)では、`auto_install_python` の値に
+    関わらず既存の prompt() で常に y/n を尋ねる。非対話モードでは
+    (Windows/macOSのみ)`auto_install_python` が True の場合に限り進める --
+    これが --auto-install-python / Installer.run(...,
+    auto_install_python=True) が制御する内容。Linuxのsudo経路は
+    `auto_install_python` を一切無視して _auto_install_python_linux() に
+    委ねる(無人実行は絶対にしない。同関数のdocstring参照)。
+    """
+    header("System Python not found / システムPythonが見つかりません")
+    warn(f"ESP-IDF setup needs a system Python in the "
+         f"{PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+         f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} range, but none was found.")
+    warn(f"ESP-IDFのセットアップには {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}〜"
+         f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} のシステムPythonが必要ですが、"
+         "見つかりませんでした。")
+
+    if sys.platform == "linux":
+        return _auto_install_python_linux()
+
+    non_interactive = os.environ.get("SF_INSTALLER_NONINTERACTIVE") == "1"
+    if non_interactive:
+        if not auto_install_python:
+            _print_manual_python_install_hint()
+            return False
+    else:
+        response = prompt("Attempt to automatically install Python 3.12 now? [y/N]", "N")
+        if response.lower() not in ("y", "yes"):
+            _print_manual_python_install_hint()
+            return False
+
+    if sys.platform == "win32":
+        return _auto_install_python_windows()
+    if sys.platform == "darwin":
+        return _auto_install_python_macos()
+    _print_manual_python_install_hint()  # unreachable in practice (linux handled above)
+    return False
 
 
 def _clean_env_for_cmd() -> dict:
@@ -966,9 +1443,20 @@ class ESPIDFInstaller:
         return not ESPIDFDetector._is_valid_idf(path)
 
     @classmethod
-    def install(cls, target_dir: Optional[Path] = None, version: str = DEFAULT_VERSION) -> Optional[Path]:
+    def install(
+        cls,
+        target_dir: Optional[Path] = None,
+        version: str = DEFAULT_VERSION,
+        auto_install_python: bool = False,
+    ) -> Optional[Path]:
         """Install ESP-IDF with 3-stage clone separation.
-        3段階分離でESP-IDFをインストール"""
+        3段階分離でESP-IDFをインストール
+
+        `auto_install_python` is threaded through to _run_install_script()
+        -- see _offer_python_auto_install() for what it controls.
+        `auto_install_python` は _run_install_script() へそのまま渡される
+        -- 何を制御するかは _offer_python_auto_install() 参照。
+        """
         if target_dir is None:
             target_dir = Path.home() / "esp" / "esp-idf"
 
@@ -986,7 +1474,7 @@ class ESPIDFInstaller:
                 shutil.rmtree(target_dir)
             elif ESPIDFDetector._is_valid_idf(target_dir):
                 info("ESP-IDF repository already cloned, skipping to install step...")
-                return cls._run_install_script(target_dir, version)
+                return cls._run_install_script(target_dir, version, auto_install_python=auto_install_python)
             else:
                 # Directory exists but not a git repo or ESP-IDF
                 # ディレクトリは存在するがgitリポジトリでもESP-IDFでもない
@@ -1047,33 +1535,47 @@ class ESPIDFInstaller:
 
         # Stage 4: Run install script (idempotent)
         # ステージ4: install.sh 実行（冪等）
-        return cls._run_install_script(target_dir, version)
+        return cls._run_install_script(target_dir, version, auto_install_python=auto_install_python)
 
     @classmethod
-    def _run_install_script(cls, target_dir: Path, version: str) -> Optional[Path]:
+    def _run_install_script(
+        cls, target_dir: Path, version: str, auto_install_python: bool = False,
+    ) -> Optional[Path]:
         """Run ESP-IDF install script (idempotent).
         ESP-IDFのinstall.shを実行（冪等）"""
-        # ESP-IDF's install.bat calls `python` by name; without a real
-        # system python.exe on PATH it fails with the cryptic exit code
-        # 9009 ("command not found"). Detect that up front and print an
-        # actionable message instead -- especially important for the GUI
+        # ESP-IDF's own install.bat/install.sh calls `python`/`python3` by
+        # name, so a real interpreter in the ecosystem's tested range
+        # (3.10-3.12; see PYTHON_PREFERRED_MIN/MAX) must be resolvable.
+        # Without one on Windows this fails with the cryptic exit code
+        # 9009 ("command not found") -- especially important for the GUI
         # (StampFly Setup), whose bundled Python is NOT usable here (see
-        # _find_system_python_dir()). Observed on a workshop laptop
-        # 2026-07-20.
-        # ESP-IDF の install.bat は `python` を名前で呼ぶため、本物の
-        # システム python.exe が PATH に無いと難解な exit 9009
-        # ("コマンドが見つからない")で失敗する。先に検出して対処可能な
-        # メッセージを出す -- 特に GUI(StampFly Setup)で重要で、同梱 Python
-        # はここでは使えない(_find_system_python_dir() 参照)。
-        # 2026-07-20 に講習用ノートで観測。
-        if sys.platform == "win32" and _find_system_python_dir() is None:
-            error("ESP-IDF tool installation needs a system Python 3.8+ on this PC,")
-            error("but none was found. ESP-IDF's own install.bat requires it.")
-            error("Install Python (make sure to keep 'Add python.exe to PATH' checked):")
-            error("    winget install Python.Python.3.12")
-            error("  or download from https://www.python.org/downloads/windows/")
-            error("Then run this installer again.")
-            return None
+        # _find_system_python_dir()); observed on a workshop laptop
+        # 2026-07-20. The same "install script calls python by name"
+        # reasoning applies on macOS/Linux, which is why this check (and
+        # the auto-install offer below) runs on all three platforms, not
+        # Windows alone.
+        # ESP-IDF自身の install.bat/install.sh は `python`/`python3` を
+        # 名前で呼ぶため、エコシステムの検証済み範囲(3.10〜3.12。
+        # PYTHON_PREFERRED_MIN/MAX 参照)にある本物のインタプリタが解決
+        # できる必要がある。Windowsでこれが無いと難解な exit 9009
+        # ("コマンドが見つからない")で失敗する -- 特に GUI(StampFly Setup)
+        # で重要で、同梱 Python はここでは使えない
+        # (_find_system_python_dir() 参照)。2026-07-20 に講習用ノートで
+        # 観測。「installスクリプトがpythonを名前で呼ぶ」という同じ理屈は
+        # macOS/Linux にも当てはまるため、このチェック(および下の
+        # 自動インストール提案)は Windows 単独ではなく3プラットフォーム
+        # 全てで走る。
+        if _find_system_python_dir() is None:
+            if not _offer_python_auto_install(auto_install_python):
+                error(f"ESP-IDF tool installation needs a system Python "
+                      f"{PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+                      f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} on this PC,")
+                error("but none was found. ESP-IDF's own install script requires it.")
+                return None
+            if _find_system_python_dir() is None:
+                error("Still no usable system Python after the auto-install attempt.")
+                error("自動インストール後も使用可能なシステムPythonが見つかりません。")
+                return None
 
         info("Installing ESP-IDF tools (this may take a while)...")
         # Streamed via _stream_subprocess() (not subprocess.run(capture_output))
@@ -1393,8 +1895,20 @@ class Installer:
         minimal: bool = False,
         force: bool = False,
         no_flasher: bool = False,
+        auto_install_python: bool = False,
     ) -> int:
-        """Run installation"""
+        """Run installation.
+
+        `auto_install_python`: only takes effect in non-interactive mode
+        (SF_INSTALLER_NONINTERACTIVE=1) -- see _offer_python_auto_install().
+        Interactive mode always asks via a y/n prompt regardless of this
+        value; Linux's sudo-gated install path ignores it entirely (never
+        runs unattended).
+        `auto_install_python`: 非対話モード(SF_INSTALLER_NONINTERACTIVE=1)
+        でのみ効果を持つ -- _offer_python_auto_install() 参照。対話モードは
+        この値に関わらず常にプロンプトで y/n を尋ねる。Linuxのsudoゲート
+        付きインストール経路はこの値を一切無視する(無人実行は絶対にしない)。
+        """
 
         # Surface pre-activated venv / conda env early so the user can
         # course-correct before pip operations begin.
@@ -1430,7 +1944,7 @@ class Installer:
                 choice = prompt_choice("ESP-IDF is required for StampFly development.", choices)
 
                 if choice == 1:
-                    idf_path = ESPIDFInstaller.install()
+                    idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
                     if not idf_path:
                         return 1
                 elif choice == 2:
@@ -1468,7 +1982,7 @@ class Installer:
                 if choice <= len(installations):
                     idf_path, version = installations[choice - 1]
                 else:
-                    idf_path = ESPIDFInstaller.install()
+                    idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
                     if not idf_path:
                         return 1
                     version = ESPIDFDetector._get_version(idf_path)
@@ -1640,7 +2154,12 @@ class Installer:
 
         return 0
 
-    def clean(self, idf_path: Optional[Path] = None, no_flasher: bool = False) -> int:
+    def clean(
+        self,
+        idf_path: Optional[Path] = None,
+        no_flasher: bool = False,
+        auto_install_python: bool = False,
+    ) -> int:
         """Clean install: remove config and sfcli, then reinstall.
         クリーンインストール: 設定とsfcliを削除後、再インストール"""
         header("Cleaning StampFly installation...")
@@ -1677,7 +2196,8 @@ class Installer:
         self._print_uninstall_leftovers_table()
 
         # Re-run installation
-        return self.run(idf_path=idf_path, force=True, no_flasher=no_flasher)
+        return self.run(idf_path=idf_path, force=True, no_flasher=no_flasher,
+                         auto_install_python=auto_install_python)
 
     def _uninstall_flasher_gui(self, idf_path: Optional[Path]) -> None:
         """Uninstall the GUI Flasher desktop app before removing sfcli.
@@ -2379,6 +2899,16 @@ def main() -> int:
              "immediately (sets SF_INSTALLER_NONINTERACTIVE=1 for this process "
              "and any subprocesses it spawns)",
     )
+    parser.add_argument(
+        "--auto-install-python",
+        action="store_true",
+        help="Attempt to auto-install a system Python (3.10-3.12) via "
+             "winget/brew when none is found. Only takes effect together "
+             "with --non-interactive (interactive mode always asks via a "
+             "y/n prompt regardless of this flag); Linux's sudo-gated "
+             "install command is never run non-interactively (printed as "
+             "guidance only, requires a real terminal either way)",
+    )
 
     args = parser.parse_args()
 
@@ -2401,7 +2931,11 @@ def main() -> int:
     if args.uninstall:
         return installer.uninstall()
     elif args.clean:
-        return installer.clean(idf_path=args.idf_path, no_flasher=args.no_flasher)
+        return installer.clean(
+            idf_path=args.idf_path,
+            no_flasher=args.no_flasher,
+            auto_install_python=args.auto_install_python,
+        )
     else:
         return installer.run(
             idf_path=args.idf_path,
@@ -2409,6 +2943,7 @@ def main() -> int:
             minimal=args.minimal,
             force=args.force,
             no_flasher=args.no_flasher,
+            auto_install_python=args.auto_install_python,
         )
 
 

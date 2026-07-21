@@ -41,7 +41,7 @@ xcode-select --install
 brew install cmake ninja dfu-util ccache
 ```
 
-### 1-4. Python 3.8+（既に入っていれば不要）
+### 1-4. Python 3.10以上（推奨3.12。既に入っていれば不要）
 
 macOS には Xcode CLT 経由などで Python が入っていることが多いので、まずバージョンを確認します:
 
@@ -49,7 +49,7 @@ macOS には Xcode CLT 経由などで Python が入っていることが多い�
 python3 --version
 ```
 
-`Python 3.8.0` 以上が表示されればこの節はスキップして 1-5 へ。表示されない、または `3.7` 以下の場合のみインストール:
+`Python 3.10.0` 以上（推奨3.12）が表示されればこの節はスキップして 1-5 へ。表示されない、または `3.9` 以下の場合のみインストール:
 
 ```bash
 brew install python@3.12
@@ -93,7 +93,7 @@ xcode-select -p
 brew --version
 cmake --version
 ninja --version
-python3 --version   # 3.8 以上であること
+python3 --version   # 3.10 以上（推奨3.12）であること
 code --version      # VSCode を入れた場合
 ```
 
