@@ -122,6 +122,18 @@ sil::Plant::Config plant_config_from_env()
         if (eff > 0.0f) { cfg.thrust_efficiency = eff;
             std::printf("[emu] thrust efficiency override = %.3f (default 0.893)\n", cfg.thrust_efficiency); }
     }
+    // SIL_EMU_MOTOR_DELAY = duty-path transport delay [ms] (model-match retrofit #1,
+    // docs/architecture/simulation-policy.md backlog #1). Real-hw identified L =
+    // 14.7/8.4/11.0 ms (roll/pitch/yaw); current SIL has no explicit dead time. OFF
+    // by default (0 ms, byte-identical clean path).
+    // SIL_EMU_MOTOR_DELAY = duty 経路の輸送遅れ[ms]（モデル一致改修#1）。実機同定
+    // L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SIL に明示的なむだ時間は無い。既定 OFF。
+    if (const char* md = std::getenv("SIL_EMU_MOTOR_DELAY")) {
+        float delay_ms = (float)std::atof(md);
+        if (delay_ms > 0.0f) { cfg.motor_delay_ms = delay_ms;
+            std::printf("[emu] motor transport delay ON (%.2f ms, model-match retrofit #1)\n",
+                        cfg.motor_delay_ms); }
+    }
 
     const char* noise = std::getenv("SIL_EMU_NOISE");
     if (!noise) return cfg;

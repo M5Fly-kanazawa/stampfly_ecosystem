@@ -90,6 +90,24 @@ bool Plant::init(const char* model_path, const Config& cfg)
     // センサノイズモデルをシード（既定 OFF）。cfg.noise.seed で決定論的。
     noise_.init(cfg_.noise);
 
+    // Motor transport delay: convert cfg.motor_delay_ms to an integer number of
+    // substeps at this model's fixed timestep h (rounded to the nearest substep —
+    // at 4 kHz that is ±0.125 ms, well under the ms-scale delay being modeled), and
+    // size each motor's ring buffer to hold exactly that many past duty-target
+    // samples, zero-initialized (matches the all-motors-off boot state). 0 → empty
+    // vectors, so substep() takes the explicit bypass branch (byte-identical to the
+    // pre-delay code).
+    // モータ輸送遅れ: cfg.motor_delay_ms を本モデルの固定刻み h での substep 整数個数へ
+    // 変換（最近傍丸め — 4kHz では±0.125ms、ms オーダーのむだ時間に対し十分小さい）し、
+    // 各モータのリングバッファをその個数ぶんゼロ初期化で確保（全モータ停止のブート状態と
+    // 整合）。0＝空ベクタ＝substep() は明示バイパス分岐を通る（遅延導入前とバイト一致）。
+    const double h = m_->opt.timestep;
+    delay_n_ = (cfg_.motor_delay_ms > 0.0f)
+                   ? (int)std::lround((double)cfg_.motor_delay_ms * 1e-3 / h)
+                   : 0;
+    delay_head_ = 0;
+    for (int i = 0; i < 4; ++i) delay_buf_[i].assign((size_t)delay_n_, 0.0f);
+
     // Initialize the battery supply voltage. With the sag model OFF this stays the
     // fixed nominal (cfg_.v_batt) forever; with it ON, start from the initial SoC.
     // 電池電源電圧を初期化。サグモデル OFF なら固定公称（cfg_.v_batt）のまま、ON なら
@@ -121,7 +139,15 @@ void Plant::setDuty(const sf::MotorOutput& cmd)
 
 void Plant::primeMotors()
 {
-    for (int i = 0; i < 4; ++i) motor_duty_[i] = motor_target_[i];
+    for (int i = 0; i < 4; ++i) {
+        motor_duty_[i] = motor_target_[i];
+        // Also pre-fill the transport-delay ring buffer (if enabled) with the target
+        // duty, so a delayed path does not ramp up from the zero-filled boot buffer —
+        // consistent with skipping the first-order spool-up lag just above.
+        // 輸送遅れリングバッファ（有効時）も目標 duty で埋める — 上で一次遅れの
+        // スプールアップを省略しているのと整合させる。
+        for (size_t k = 0; k < delay_buf_[i].size(); ++k) delay_buf_[i][k] = motor_target_[i];
+    }
 }
 
 void Plant::setWind(const sf::math::Vec3& force_ned)
@@ -435,6 +461,27 @@ void Plant::substep(float h)
     // substep の v_batt_ で計算し、その後 v_batt_ を更新＝4kHz で陽的に1 substep 遅れ）。
     const float alpha = 1.0f - std::exp(-h / cfg_.motor_tau);
     const float v_supply = v_batt_;          // this substep's supply voltage
+
+    // Motor transport delay (duty-path): the "L" of the identified G(s)=b·e^(−Ls)/
+    // (s(Ts+1)) (Config::motor_delay_ms). delay_n_==0 → duty_cmd IS motor_target_ (no
+    // buffer touched at all — exact bypass, byte-identical to the pre-delay code).
+    // delay_n_>0 → push this substep's commanded target into each motor's ring
+    // buffer and read back the value written delay_n_ substeps ago as the input to
+    // the first-order lag below.
+    // モータ輸送遅れ（duty経路）: 同定モデル G(s) の L に相当（Config::motor_delay_ms）。
+    // delay_n_==0 は duty_cmd がそのまま motor_target_（バッファ不触＝遅延導入前と完全に
+    // バイト一致）。delay_n_>0 は本 substep の目標を各モータのリングバッファへ push し、
+    // delay_n_ substep 前の値を下の一次遅れの入力として読み出す。
+    float duty_cmd[4];
+    if (delay_n_ == 0) {
+        for (int i = 0; i < 4; ++i) duty_cmd[i] = motor_target_[i];
+    } else {
+        for (int i = 0; i < 4; ++i) {
+            duty_cmd[i] = delay_buf_[i][delay_head_];       // read: delay_n_ substeps old
+            delay_buf_[i][delay_head_] = motor_target_[i];  // write: this substep's target
+        }
+        delay_head_ = (delay_head_ + 1) % delay_n_;
+    }
     // Ground-effect lift gain at the current body height (ENU z = qpos[2]). Computed once
     // per substep and applied to every motor's thrust — near the floor the rotors make more
     // lift for the same ω, so the craft holds altitude on reduced thrust (the touchdown float).
@@ -444,7 +491,7 @@ void Plant::substep(float h)
     float thrust[4];
     float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
     for (int i = 0; i < 4; ++i) {
-        motor_duty_[i] += (motor_target_[i] - motor_duty_[i]) * alpha;
+        motor_duty_[i] += (duty_cmd[i] - motor_duty_[i]) * alpha;
         const float v_motor = motor_duty_[i] * v_supply;
         const float omega   = solveOmega(v_motor);
         thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega * omega * cfg_.health[i] * ge_mult;

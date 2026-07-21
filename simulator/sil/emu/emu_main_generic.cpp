@@ -121,6 +121,25 @@ void apply_turbulence_from_env(sil::Plant::Config& cfg)
     std::printf("[emu] turbulence ON (amplitude=%.3f N, 1-3 Hz)\n", cfg.turbulence_n);
 }
 
+// SIL_EMU_MOTOR_DELAY = duty-path transport delay [ms] (model-match retrofit #1,
+// docs/architecture/simulation-policy.md backlog #1). Real-hw identified L =
+// 14.7/8.4/11.0 ms (roll/pitch/yaw); the current SIL has no explicit dead time —
+// only the motor_tau first-order lag — so its predicted phase margin runs
+// optimistic. OFF by default (0 ms, byte-identical clean path).
+// SIL_EMU_MOTOR_DELAY = duty 経路の輸送遅れ[ms]（モデル一致改修#1）。実機同定
+// L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SIL は motor_tau 一次遅れのみで明示的な
+// むだ時間が無く位相余裕を過大評価する。既定 OFF。
+void apply_motor_delay_from_env(sil::Plant::Config& cfg)
+{
+    const char* md = std::getenv("SIL_EMU_MOTOR_DELAY");
+    if (!md) return;
+    float delay_ms = static_cast<float>(std::atof(md));
+    if (delay_ms <= 0.0f) return;
+    cfg.motor_delay_ms = delay_ms;
+    std::printf("[emu] motor transport delay ON (%.2f ms, model-match retrofit #1)\n",
+                cfg.motor_delay_ms);
+}
+
 void on_advance(int64_t now_us)
 {
     if (now_us > g_last_step_us) {
@@ -220,6 +239,7 @@ int main(int argc, char** argv)
     sil::Plant::Config plant_cfg = plant_config_from_env();
     apply_ground_effect_from_env(plant_cfg);   // opt-in ground effect (default OFF)
     apply_turbulence_from_env(plant_cfg);       // opt-in turbulence disturbance (default OFF)
+    apply_motor_delay_from_env(plant_cfg);      // opt-in motor transport delay (default OFF)
     if (!g_plant.init(model_path, plant_cfg)) {
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;

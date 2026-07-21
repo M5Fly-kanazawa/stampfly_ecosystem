@@ -215,6 +215,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="enable a deterministic 1-3 Hz lateral turbulence force [N] to excite "
                         "the attitude-wobble band (wobble-minimization study). Bare flag = 0.03 N. "
                         "Default OFF.")
+    p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
+                   help="motor transport delay in ms (model-match retrofit #1: real-hardware "
+                        "system ID measured L=14.7/8.4/11.0 ms roll/pitch/yaw vs the current "
+                        "SIL's ~0 ms explicit dead time, docs/architecture/simulation-policy.md "
+                        "backlog #1). Inserted in the duty-path before the motor's first-order "
+                        "lag. Default OFF (0 ms, byte-identical clean path).")
     p.add_argument("--unpaired", action="store_true",
                    help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
@@ -579,6 +585,14 @@ def run_scenario(args: argparse.Namespace) -> int:
     tb = getattr(args, "turbulence", None)
     if tb is not None:
         env["SIL_EMU_TURBULENCE"] = str(tb)
+
+    # --motor-delay sets the duty-path transport delay (model-match retrofit #1: real-hw
+    # identified L=14.7/8.4/11.0ms roll/pitch/yaw vs the SIL's current ~0ms explicit dead
+    # time). Default OFF (byte-identical clean path).
+    # --motor-delay で duty 経路の輸送遅れを設定（モデル一致改修#1）。既定 OFF。
+    md = getattr(args, "motor_delay", None)
+    if md is not None:
+        env["SIL_EMU_MOTOR_DELAY"] = str(md)
 
     # --unpaired: skip the pairing NVS seed so the vehicle boots unpaired and runs the
     # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps

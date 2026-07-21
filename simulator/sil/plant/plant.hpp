@@ -37,6 +37,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <vector>
 
 #include <mujoco/mujoco.h>
 
@@ -101,6 +102,37 @@ public:
         /// セットとは独立。
         float kappa    = 6.12e-3f;  ///< Cq/Ct [m]  (reaction torque Q = kappa·T), measured 2026-07-15
         float motor_tau = 0.02f;    ///< first-order motor lag time constant [s]
+
+        // --- Motor path transport delay (dead time) — Model fidelity ---
+        // The identified plant model G(s) = b·e^(−Ls)/(s(Ts+1)) (docs/architecture/
+        // simulation-policy.md §2 layer 1) factors the duty→rate response into a pure
+        // transport delay L in series with a first-order lag T. Real-hardware system ID
+        // (`sf sysid rate-fit`) measured L = 14.7 ms (roll) / 8.4 ms (pitch) / 11.0 ms
+        // (yaw) (simulation-policy.md backlog #1), while this Plant's only lag source is
+        // motor_tau (~20 ms first-order) — there is no explicit dead time — so the SIL's
+        // effective L is only a few ms and its predicted phase margin is systematically
+        // too optimistic. This models L as a pure delay inserted BEFORE the first-order
+        // lag in the duty→thrust path (substep()), NOT after: battery current, ground
+        // effect and yaw reaction torque all consume the SAME substep's thrust, so
+        // delaying thrust itself (rather than the duty command feeding the lag) would
+        // break that same-substep consistency.
+        // DEFAULT 0 (OFF) so the clean path stays byte-identical and existing scenarios
+        // (tuned without this delay) are unaffected — enable per-scenario via
+        // SIL_EMU_MOTOR_DELAY (sf sil scenario --motor-delay), the same opt-in pattern
+        // as ge_gain/turbulence_n above.
+        //
+        // モータ経路の輸送遅れ（むだ時間）。同定モデル G(s)=b·e^(−Ls)/(s(Ts+1))
+        // （simulation-policy.md §2 層1）は duty→レート応答を「純遅延 L」と「一次遅れ T」の
+        // 直列に分解する。実機同定（sf sysid rate-fit）は L=14.7ms(roll)/8.4ms(pitch)/
+        // 11.0ms(yaw)（simulation-policy.md バックログ#1）だが、本 Plant の遅れ源は
+        // motor_tau（一次遅れ約20ms）のみで明示的なむだ時間が無く、SIL の実効 L は数 ms に
+        // とどまり位相余裕を過大評価する。duty→推力経路（substep()）で一次遅れの**手前**に
+        // 純遅延として挿入する（**後段の推力は不可** — 電池電流・地面効果・ヨー反トルクは
+        // 同じ substep の推力を使うため、推力自体を遅らせると整合が崩れる）。
+        // 既定 0（OFF）でクリーン経路はバイト一致、既存シナリオ（遅延無しで調整済み）へ
+        // 影響しない — SIL_EMU_MOTOR_DELAY（sf sil scenario --motor-delay）でシナリオ毎に
+        // 有効化（上の ge_gain/turbulence_n と同じオプトイン方式）。
+        float motor_delay_ms = 0.0f;  ///< duty-path transport delay [ms] (0 = OFF/bypass)
 
         // --- Ground effect — Model fidelity ---
         // Extra rotor lift near the floor: each motor's thrust is scaled by
@@ -364,6 +396,18 @@ private:
 
     float motor_duty_[4]   = {0.0f, 0.0f, 0.0f, 0.0f}; ///< actual (lagged) duty
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty
+
+    // Motor transport-delay ring buffer (one per motor). Sized to delay_n_ substeps
+    // in init(); empty (size 0) when the delay is OFF, in which case substep() takes
+    // the explicit bypass branch and never touches these. delay_head_ is the shared
+    // next write/read index (all 4 buffers advance in lock-step, one substep apart).
+    // モータ輸送遅れ用リングバッファ（モータ毎）。init() で delay_n_ substep 分に確保、
+    // 遅延 OFF なら空（size 0）＝ substep() は明示バイパス分岐を通り一切触れない。
+    // delay_head_ は共有の次書込/読出インデックス（4バッファは同期して進む）。
+    std::vector<float> delay_buf_[4]; ///< past commanded duty targets, per motor
+    int delay_head_ = 0;              ///< next write/read index into delay_buf_
+    int delay_n_    = 0;              ///< delay length in substeps (0 = OFF/bypass)
+
     float last_dt_ = 0.0025f;  ///< last step dt (for flow count integration)
     float turb_t_  = 0.0f;     ///< accumulated time for the deterministic turbulence force [s]
     double step_accum_ = 0.0;  ///< virtual-time accumulator [s] for fixed substeps
