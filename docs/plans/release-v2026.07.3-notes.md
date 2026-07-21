@@ -1,12 +1,11 @@
-# v2026.07.3 リリースノート（ドラフト）
+# v2026.07.3 リリースノート
+
+> **注記:** `v2026.07.3` は 2026-07-20 にコミット `cf1d084e` で公開済み（13アセット、
+> `gh release view v2026.07.3` で確認済み）。それ以降にリポジトリへ積まれた変更点は
+> [`release-v2026.07.4-notes.md`](release-v2026.07.4-notes.md) を参照。
 
 `docs/contributing/versioning.md` §5「リリース手順」の手順3（前回リリースからの変更点整理）
-に対応する最小限のドラフト。**`v2026.07.3` タグはまだ作成されていない**（本ドキュメント作成
-時点で最新タグは `v2026.07.1..main` 相当の1コミットのみを含む `v2026.07.2`）。本ドラフトは
-下記の1機能のみを記録する暫定版であり、実際にタグを打つ前には他の変更点も棚卸しした上で
-追記・更新すること。
-
-対象範囲: `v2026.07.2..main`。
+に対応する、公開済みリリース `v2026.07.3` の変更点記録。対象範囲: `v2026.07.2..cf1d084e`。
 
 ## 0. 修正: Setup 修復モードが古いクローンで失敗する問題
 
@@ -19,6 +18,8 @@ v2026.07.2 の StampFly Setup で、既存の古いクローン（例: 講習前
 |------|------|
 | pull 先行 | 修復開始時に対象クローンを `git pull --ff-only` で自動最新化（ローカル変更等で更新不能なら警告してそのまま続行。破壊的操作なし） |
 | シグネチャ耐性 | `inspect.signature` で対象 installer.py の `Installer.run()` が受け付ける引数だけを渡す（未対応引数は警告ログを出して無視）。v2026.07.1 実物の installer.py で TypeError 解消を確認済み。selftest に退行チェック2件を追加 |
+
+（コミット: `cf1d084e`）
 
 ## 1. StampFly Setup / インストーラに「StampFly Terminal」ランチャー機能を追加
 
@@ -41,24 +42,29 @@ Step 3/4（StampFly CLI）成功後に自動作成する。GUI インストー�
 | GUI（`tools/installer_gui/stampfly_installer.py`） | 完了画面の文言（`STRINGS["done_install_body"]`、ja/en）に「StampFly Terminal」からも始められる旨を1文追記。新規 stdlib import `tempfile` を hidden-import 契約（Windows版 `.ps1` 生成に使用）に追加 |
 | ドキュメント | `docs/guides/gui-installer.md`（§3・FAQ に日英で追記） |
 
-**検証（本ドラフト作成時点、未コミットの作業ツリーに対して実施）:**
+（コミット: `a0e13327`, `31c264a6`, `bf1b0113`）
+
+**検証:**
 
 - `python3 -m py_compile scripts/installer.py tools/installer_gui/stampfly_installer.py`: OK
 - `python3 tools/installer_gui/stampfly_installer.py --selftest`: 全PASS（Step ヘッダ数は4のまま）
 - `python3 tools/ci/check_installer_gui.py`: 3/3 PASS（stdlib hidden-import 契約含む）
-- macOS 実機（この開発機）: `HOME` を一時ディレクトリへ退避した上で `_create_terminal_launcher` /
+- macOS 実機: `HOME` を一時ディレクトリへ退避した上で `_create_terminal_launcher` /
   `_remove_terminal_launcher` を直接呼び出し、`.command` の生成・chmod 0o755・`cd` 先の一致・
   削除の冪等性を確認（実際の `~/Applications` は変更していない）
-- Linux/.desktop・Windows/.lnk は本開発機（macOS）では実動できないため、生成ロジックの単体検証
-  （一時 `HOME`/`APPDATA` での生成物の内容確認、Windows は `.ps1` 生成内容の文字列検証、
-  Windows パス区切りは POSIX 環境の `pathlib.Path` 制約により `PureWindowsPath` での照合に限定）
-  に留めた。**両OSでの実機検証は未実施**
+- Linux/.desktop・Windows/.lnk は開発機（macOS）では実動できないため、生成ロジックの単体検証
+  （一時 `HOME`/`APPDATA` での生成物の内容確認、Windows は `.ps1` 生成内容の文字列検証）に
+  留めた。**両OSでの実機検証は未実施**
 
-## 2. Next steps
+## 2. その他（ドキュメント整備）
 
-- 本ドラフトが記録する変更をコミットする（このセッションでは意図的に未コミット）
-- タグ作成前に `v2026.07.2..main` の差分を棚卸しし、他の変更点があれば本ドキュメントへ追記する
+| 内容 | コミット |
+|------|---------|
+| `docs/contributing/versioning.md` §6 カリキュラム互換表に `v2026.07.2` の行を追加（初出のStampFly Setup・`rate.roll.td=0.002`既定値を記録） | `296c6cf8` |
+| 同表に `v2026.07.3` の行を追加（`cf1d084e` までの公開内容＝Terminalランチャー・修復モード修正を記録） | `30fc04d0` |
+
+## 3. Next steps
+
 - Linux（GNOME/KDE 等のアプリ一覧からの起動）・Windows（日本語ユーザー名を含む実パスでの
-  `.lnk` 起動）の実機検証
-- `docs/contributing/versioning.md` §6「カリキュラム互換表」に `v2026.07.3` の行を追加
-  （タグ作成後に確定情報で追記する）
+  `.lnk` 起動）での StampFly Terminal 実機検証
+- `v2026.07.3` 公開後に見つかった追加の不具合・機能は `release-v2026.07.4-notes.md` を参照
