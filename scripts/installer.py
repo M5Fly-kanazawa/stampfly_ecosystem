@@ -134,26 +134,26 @@ class Colors:
 
 
 def info(msg: str) -> None:
-    print(f"{Colors.BLUE}[INFO]{Colors.RESET} {msg}")
+    print(f"{Colors.BLUE}[INFO]{Colors.RESET} {msg}", flush=True)
 
 
 def success(msg: str) -> None:
-    print(f"{Colors.GREEN}[OK]{Colors.RESET} {msg}")
+    print(f"{Colors.GREEN}[OK]{Colors.RESET} {msg}", flush=True)
 
 
 def warn(msg: str) -> None:
-    print(f"{Colors.YELLOW}[WARN]{Colors.RESET} {msg}")
+    print(f"{Colors.YELLOW}[WARN]{Colors.RESET} {msg}", flush=True)
 
 
 def error(msg: str) -> None:
-    print(f"{Colors.RED}[ERROR]{Colors.RESET} {msg}", file=sys.stderr)
+    print(f"{Colors.RED}[ERROR]{Colors.RESET} {msg}", file=sys.stderr, flush=True)
 
 
 def header(title: str) -> None:
     line = "=" * 60
-    print(f"\n{Colors.CYAN}{line}{Colors.RESET}")
-    print(f"{Colors.BOLD} {title}{Colors.RESET}")
-    print(f"{Colors.CYAN}{line}{Colors.RESET}\n")
+    print(f"\n{Colors.CYAN}{line}{Colors.RESET}", flush=True)
+    print(f"{Colors.BOLD} {title}{Colors.RESET}", flush=True)
+    print(f"{Colors.CYAN}{line}{Colors.RESET}\n", flush=True)
 
 
 def prompt(message: str, default: str = "") -> str:
@@ -745,7 +745,17 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
                     "PIP_REQUIRE_VIRTUALENV", "PIP_TARGET", "PIP_PREFIX",
                     "PIP_USER"):
             env.pop(var, None)
-        return subprocess.run(cmd, env=env).returncode
+        # Stream pip's output line-by-line instead of a silent
+        # subprocess.run(): a bare subprocess.run() here shows nothing to
+        # the GUI installer until pip exits, so a multi-minute dependency
+        # install (e.g. -r requirements.txt) reads as a frozen progress
+        # bar instead of live log lines. See _stream_subprocess() docstring.
+        # subprocess.run() で無言実行するのではなく pip の出力を1行ずつ
+        # 流す: ここで素の subprocess.run() を使うと GUI インストーラには
+        # pip 終了まで何も見えず、数分かかる依存関係インストール
+        # (-r requirements.txt 等) が進捗停止に見えてしまう。
+        # _stream_subprocess() の docstring 参照。
+        return _stream_subprocess(cmd, env=env)
 
     # Fallback: venv not yet created (e.g. mid-install). Source export script.
     # フォールバック: venv 未作成時のみ export スクリプトを source する
@@ -753,12 +763,12 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
         export_script = idf_path / "export.bat"
         escaped = subprocess.list2cmdline(pip_args)
         cmd = f'call "{export_script}" && python -m pip {escaped}'
-        return subprocess.run(cmd, shell=True, env=_clean_env_for_cmd()).returncode
+        return _stream_subprocess(cmd, shell=True, env=_clean_env_for_cmd())
     else:
         escaped = " ".join(shlex.quote(arg) for arg in pip_args)
         env_prefix = _build_idf_env_command(idf_path)
         inner = f'{env_prefix} && python -m pip {escaped}'
-        return subprocess.run(["bash", "-c", inner]).returncode
+        return _stream_subprocess(["bash", "-c", inner])
 
 
 def _run_sf_in_idf_env(idf_path: Path, sf_args: list[str]) -> int:

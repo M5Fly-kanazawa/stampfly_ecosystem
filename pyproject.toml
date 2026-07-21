@@ -33,7 +33,12 @@ dependencies = [
     "matplotlib>=3.7.0",
     "pandas>=2.0.0",
     "pyserial>=3.5",
-    "jinja2>=3.1.0",
+    # jinja2 lower bound relaxed to 3.0: see requirements.txt for the
+    # ESP-IDF 5.5 constraint-file conflict this avoids (jinja2<3.1 on
+    # Windows + Python<3.11), and why 3.0.x is safe here.
+    # jinja2 の下限を3.0に緩和: 詳細は requirements.txt を参照
+    # (ESP-IDF 5.5 の constraint ファイルとの衝突回避、3.0.xで問題ない理由)。
+    "jinja2>=3.0",
     "websockets>=12.0",
     "PyYAML>=6.0",
     # HTTPS certificate bundle for sf flasher / the GUI flasher's GitHub

@@ -35,7 +35,20 @@ esptool>=4.6
 # CLI Framework
 # ============================================================
 # Using argparse (built-in) for main CLI
-jinja2>=3.1.0            # Template engine for scaffolding
+# jinja2 lower bound relaxed to 3.0: ESP-IDF 5.5's constraint file forces
+# jinja2<3.1 on Windows + Python<3.11 (its bundled gdbgui needs it), and
+# >=3.1.0 here made that combination unresolvable (ResolutionImpossible).
+# No code in this repo uses a jinja2 3.1-only API yet (jinja2 isn't
+# actually imported anywhere — only referenced in an unimplemented
+# scaffolding design doc), so 3.0.x is safe.
+# jinja2 の下限を3.0に緩和: ESP-IDF 5.5 の constraint ファイルは
+# Windows + Python<3.11 で jinja2<3.1 を強制する（同梱の gdbgui が必要と
+# するため）。>=3.1.0 のままだとこの組み合わせが解決不能
+# (ResolutionImpossible) になっていた。本リポジトリでは jinja2 3.1限定の
+# APIを使うコードは現状無い（そもそも jinja2 はどこからも import
+# されておらず、未実装のスキャフォールディング設計書での言及のみ）ため
+# 3.0.x でも問題ない。
+jinja2>=3.0              # Template engine for scaffolding
 PyYAML>=6.0              # YAML config loader (used by sf sysid)
 
 # ============================================================
