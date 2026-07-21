@@ -140,7 +140,7 @@ sf sim run vpython --seed 12345       # シード指定
 |-----|----------|------|
 | ESP-IDF | v5.5.2 | install.shで自動インストール可 |
 | Git | 最新版 | - |
-| Python | 3.10以上（推奨3.12） | - |
+| Python | 3.10〜3.12（推奨3.12） | - |
 
 ## 2. インストール
 
@@ -587,7 +587,7 @@ If you want to build from source, continue with the rest of this guide (ESP-IDF 
 |------|---------|-------|
 | ESP-IDF | v5.5.2 | Auto-install via install.sh |
 | Git | Latest | - |
-| Python | 3.10 or later (3.12 recommended) | - |
+| Python | 3.10-3.12 (3.12 recommended) | - |
 
 ## 2. Installation
 

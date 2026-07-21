@@ -114,15 +114,44 @@ if sys.version_info < (3, 10):
 
 # The ecosystem's actually-tested Python range. Selection logic throughout
 # this file (see _find_system_python_dir()) prefers a system Python inside
-# this range, accepts anything newer with a warning (untested but likely
-# fine), and rejects anything older (offers auto-install instead).
+# this range and rejects anything outside it -- both older AND 3.13+ --
+# offering auto-install (winget/brew/apt, which installs 3.12) instead.
+# 3.13+ used to be accepted with a warning, but real-world failures were
+# observed with it, so it is now rejected outright just like an older,
+# unsupported version (2026-07-22 policy change).
 # このエコシステムが実際に検証済みのPython範囲。本ファイル全体の選択
 # ロジック(_find_system_python_dir() 参照)は、この範囲内のシステム
-# Pythonを優先し、これより新しいものは警告付きで受け入れ(未検証だが恐らく
-# 問題ない)、これより古いものは不採用とする(代わりに自動インストールを
-# 提案する)。
+# Pythonを優先し、範囲外のもの -- 古いバージョンと3.13以降の両方 -- は
+# 不採用とし、代わりに自動インストール(winget/brew/apt経由、3.12を導入)を
+# 提案する。以前は3.13+を警告付きで受け入れていたが、実際に動作しない
+# 事例が報告されたため、対応外の古いバージョンと同様に無条件で不採用と
+# するよう変更した(2026-07-22の方針変更)。
 PYTHON_PREFERRED_MIN = (3, 10)
 PYTHON_PREFERRED_MAX = (3, 12)
+
+# Stability ranking for candidate seeds WITHIN the same version-preference
+# band (see _find_system_python_dir()'s composite ordering: version band
+# > stability > version recency). Lower number = more stable / preferred.
+# A canonical install (python.org, winget, Program Files, the `py`
+# launcher's resolution, or a distro package manager on Linux) is the most
+# predictable seed for ESP-IDF's own venv creation; a version-manager
+# (pyenv/uv/asdf) shim is next; conda's own DLL/shared-library resolution
+# quirks put it below that; and a candidate that turned out to be a venv
+# whose seed we had to resolve via pyvenv.cfg (see _resolve_venv_seed())
+# is the least deliberate, most incidental discovery, so it ranks last.
+# 同一バージョン適合バンド内での候補の安定度ランク(_find_system_python_dir()
+# の合成順序「バージョンバンド > 安定度 > バージョンの新しさ」を参照)。
+# 数値が小さいほど安定/優先。正規インストール(python.org、winget、
+# Program Files、`py` ランチャーの解決先、Linuxのディストリビューション
+# パッケージマネージャ)が ESP-IDF 自身の venv 作成にとって最も予測可能な
+# 種であり、次にバージョン管理ツール(pyenv/uv/asdf)の shim が続く。conda
+# は自身の DLL/共有ライブラリ解決の癖によりその下に位置し、venv の
+# pyvenv.cfg 経由で実体解決せざるを得なかった候補(_resolve_venv_seed()
+# 参照)は最も「狙って選ばれたのではない」発見のため最下位とする。
+STABILITY_CANONICAL = 0
+STABILITY_VERSION_MANAGER = 1
+STABILITY_CONDA = 2
+STABILITY_VENV_RESOLVED = 3
 
 
 def version_sort_key(version: str) -> Tuple[int, int, int]:
@@ -292,47 +321,45 @@ def prompt_choice(message: str, choices: List[str], default: int = 1) -> int:
 
 
 def _windows_python_dir_candidates() -> list[Path]:
-    """Windows: likely directories containing a system python.exe, in the
-    same priority order as install.bat's discovery block.
-    Windows: システム python.exe を含むと思われるディレクトリ一覧。
-    install.bat の発見ブロックと同じ優先順で返す。
+    """Windows: likely directories containing a CANONICAL system
+    python.exe (python.org / winget / scoop installs), in the same
+    priority order as install.bat's discovery block. Version managers
+    (pyenv-win, uv) and conda distributions are intentionally NOT
+    included here -- see _windows_pyenv_win_python_dir(),
+    _uv_python_candidates(), and _windows_conda_dir_candidates(), which
+    are tagged with a different STABILITY_* rank by _all_python_candidates()
+    (see "種の安定度順位付け" in the module's design notes).
+    Windows: 正規(python.org / winget / scoop)インストールの python.exe を
+    含むと思われるディレクトリ一覧。install.bat の発見ブロックと同じ優先順
+    で返す。バージョン管理ツール(pyenv-win、uv)や conda ディストリビュー
+    ションは意図的にここへ含めない -- _windows_pyenv_win_python_dir()、
+    _uv_python_candidates()、_windows_conda_dir_candidates() を参照。これらは
+    _all_python_candidates() で異なる STABILITY_* ランクを付けて扱う
+    (モジュール設計メモの「種の安定度順位付け」参照)。
 
-    Kept in sync with install.bat (pyenv-win, per-user Programs\\Python,
-    machine-wide C:\\Python*, python.org's all-users Program Files
-    location, scoop, conda). Duplicated here — not shared — because
-    installer.py is a standalone stdlib-only script AND because the GUI
-    (StampFly Setup) never runs install.bat at all: the frozen app imports
-    installer.py in-process, so this discovery must live here for the GUI
-    path to find Python for ESP-IDF's own install.bat.
-    install.bat と同期を保つ(pyenv-win、ユーザー毎の Programs\\Python、
-    マシン全体の C:\\Python*、python.org の all-users インストール先の
-    Program Files、scoop、conda)。共有せず複製する理由: 本ファイルは
-    stdlib のみの独立スクリプトであり、かつ GUI(StampFly Setup)は
-    install.bat を一切実行しない — 凍結アプリが installer.py をプロセス内
-    import するため、GUI 経路が ESP-IDF の install.bat 用に Python を
-    見つけられるよう、この発見ロジックはここに置く必要がある。
+    Kept in sync with install.bat (per-user Programs\\Python, machine-wide
+    C:\\Python*, python.org's all-users Program Files location, scoop).
+    Duplicated here — not shared — because installer.py is a standalone
+    stdlib-only script AND because the GUI (StampFly Setup) never runs
+    install.bat at all: the frozen app imports installer.py in-process, so
+    this discovery must live here for the GUI path to find Python for
+    ESP-IDF's own install.bat.
+    install.bat と同期を保つ(ユーザー毎の Programs\\Python、マシン全体の
+    C:\\Python*、python.org の all-users インストール先の Program Files、
+    scoop)。共有せず複製する理由: 本ファイルは stdlib のみの独立スクリプト
+    であり、かつ GUI(StampFly Setup)は install.bat を一切実行しない —
+    凍結アプリが installer.py をプロセス内 import するため、GUI 経路が
+    ESP-IDF の install.bat 用に Python を見つけられるよう、この発見ロジック
+    はここに置く必要がある。
     """
     candidates: list[Path] = []
     userprofile = os.environ.get("USERPROFILE", "")
     localappdata = os.environ.get("LOCALAPPDATA", "")
 
-    # 1. pyenv-win: the version selected in its `version` file.
-    # 1. pyenv-win: `version` ファイルで選択中のバージョン。
-    if userprofile:
-        pyenv_root = Path(userprofile) / ".pyenv" / "pyenv-win"
-        version_file = pyenv_root / "version"
-        try:
-            if version_file.is_file():
-                pyenv_ver = version_file.read_text(encoding="utf-8", errors="replace").strip()
-                if pyenv_ver:
-                    candidates.append(pyenv_root / "versions" / pyenv_ver)
-        except OSError:
-            pass
-
-    # 2. Common install locations (newest first). Program Files / Program
+    # Common install locations (newest first). Program Files / Program
     # Files (x86) are python.org's default "Install for all users" targets
     # -- distinct from the per-user LOCALAPPDATA\Programs\Python default.
-    # 2. 一般的なインストール先(新しい順)。Program Files / Program Files
+    # 一般的なインストール先(新しい順)。Program Files / Program Files
     # (x86) は python.org の既定「全ユーザー用にインストール」先で、
     # ユーザー毎既定の LOCALAPPDATA\Programs\Python とは別物。
     for ver in ("313", "312", "311", "310", "39", "38"):
@@ -343,8 +370,58 @@ def _windows_python_dir_candidates() -> list[Path]:
         candidates.append(Path("C:/Program Files (x86)") / f"Python{ver}")
     if userprofile:
         candidates.append(Path(userprofile) / "scoop" / "apps" / "python" / "current")
-        candidates.append(Path(userprofile) / "anaconda3")
-        candidates.append(Path(userprofile) / "miniconda3")
+    return candidates
+
+
+def _windows_pyenv_win_python_dir() -> Optional[Path]:
+    """Windows: the directory of the version pyenv-win currently has
+    selected (its `version` file), or None if pyenv-win is not set up.
+    Split out of _windows_python_dir_candidates() so callers can tag it
+    with STABILITY_VERSION_MANAGER instead of STABILITY_CANONICAL.
+    Windows: pyenv-win が現在選択しているバージョンのディレクトリ
+    (`version` ファイルの内容)、未設定なら None。
+    _windows_python_dir_candidates() から分離し、呼び出し側が
+    STABILITY_CANONICAL ではなく STABILITY_VERSION_MANAGER でタグ付け
+    できるようにする。
+    """
+    userprofile = os.environ.get("USERPROFILE", "")
+    if not userprofile:
+        return None
+    pyenv_root = Path(userprofile) / ".pyenv" / "pyenv-win"
+    version_file = pyenv_root / "version"
+    try:
+        if version_file.is_file():
+            pyenv_ver = version_file.read_text(encoding="utf-8", errors="replace").strip()
+            if pyenv_ver:
+                return pyenv_root / "versions" / pyenv_ver
+    except OSError:
+        pass
+    return None
+
+
+def _windows_conda_dir_candidates() -> list[Path]:
+    """Windows: known conda/miniconda/anaconda/miniforge base-environment
+    directories (each holds python.exe directly at its root, unlike a
+    normal venv's Scripts\\python.exe). Covers both a per-user install
+    (the common "Install for me only" default) and an all-users install
+    under %PROGRAMDATA% or directly at the drive root.
+    Windows: 既知の conda/miniconda/anaconda/miniforge ベース環境
+    ディレクトリ(通常の venv の Scripts\\python.exe と異なり、python.exe
+    がルート直下にある)。ユーザー毎インストール(「自分専用にインストール」
+    という一般的な既定)と、%PROGRAMDATA% またはドライブ直下への全ユーザー
+    インストールの両方をカバーする。
+    """
+    candidates: list[Path] = []
+    userprofile = os.environ.get("USERPROFILE", "")
+    programdata = os.environ.get("PROGRAMDATA", "C:/ProgramData")
+    if userprofile:
+        for name in ("anaconda3", "miniconda3", "miniforge3"):
+            candidates.append(Path(userprofile) / name)
+    if programdata:
+        for name in ("Anaconda3", "Miniconda3", "Miniforge3"):
+            candidates.append(Path(programdata) / name)
+    for name in ("Anaconda3", "Miniconda3"):
+        candidates.append(Path("C:/") / name)
     return candidates
 
 
@@ -421,6 +498,127 @@ def _python_version_info(python_exe: Path) -> Optional[Tuple[int, int]]:
     if not match:
         return None
     return (int(match.group(1)), int(match.group(2)))
+
+
+def _pyenv_unix_python_candidates() -> list[Path]:
+    """macOS/Linux: python3 executables installed under pyenv's versions
+    directory (e.g. ~/.pyenv/versions/3.12.3/bin/python3), newest
+    version-string first. Tagged STABILITY_VERSION_MANAGER by
+    _all_python_candidates() -- pyenv installs are deliberate and stable,
+    but rank below a canonical python.org/package-manager install (see
+    "種の安定度順位付け" in the module's design notes).
+    macOS/Linux: pyenv の versions ディレクトリ配下にインストールされた
+    python3 実行ファイル(例: ~/.pyenv/versions/3.12.3/bin/python3)。
+    バージョン文字列の新しい順。_all_python_candidates() で
+    STABILITY_VERSION_MANAGER としてタグ付けする -- pyenv インストールは
+    意図的で安定しているが、正規(python.org/パッケージマネージャ)
+    インストールより下位に順位付けする(モジュール設計メモの
+    「種の安定度順位付け」参照)。
+    """
+    try:
+        return sorted(
+            (Path.home() / ".pyenv" / "versions").glob("*/bin/python3"),
+            reverse=True,
+        )
+    except OSError:
+        return []
+
+
+def _asdf_unix_python_candidates() -> list[Path]:
+    """macOS/Linux: python3 executables installed under asdf's python
+    plugin (e.g. ~/.asdf/installs/python/3.12.3/bin/python3). Same
+    STABILITY_VERSION_MANAGER rank as pyenv/uv -- see
+    _pyenv_unix_python_candidates().
+    macOS/Linux: asdf の python プラグインでインストールされた python3
+    実行ファイル(例: ~/.asdf/installs/python/3.12.3/bin/python3)。
+    pyenv/uv と同じ STABILITY_VERSION_MANAGER ランク --
+    _pyenv_unix_python_candidates() を参照。
+    """
+    try:
+        return sorted(
+            (Path.home() / ".asdf" / "installs" / "python").glob("*/bin/python3"),
+            reverse=True,
+        )
+    except OSError:
+        return []
+
+
+def _uv_python_candidates() -> list[Path]:
+    """uv-managed Python interpreters (astral-sh/uv), covering both
+    platforms this file supports directly:
+    Windows: %APPDATA%\\uv\\python\\cpython-3.*\\python.exe
+    macOS/Linux: ~/.local/share/uv/python/cpython-3.*/bin/python3
+
+    Also asks `uv python find 3.12` when `uv` is on PATH, so a uv install
+    that used a non-default UV_PYTHON_INSTALL_DIR is still found -- the
+    directory glob above only covers uv's own default install location.
+    Tagged STABILITY_VERSION_MANAGER by _all_python_candidates().
+
+    uv(astral-sh/uv)が管理する Python インタプリタ。本ファイルが直接
+    対応する両プラットフォームを対象にする:
+    Windows: %APPDATA%\\uv\\python\\cpython-3.*\\python.exe
+    macOS/Linux: ~/.local/share/uv/python/cpython-3.*/bin/python3
+
+    `uv` が PATH にあれば `uv python find 3.12` にも問い合わせる。これに
+    より、既定と異なる UV_PYTHON_INSTALL_DIR を使った uv インストールも
+    見つけられる -- 上のディレクトリ glob は uv 自身の既定インストール先
+    のみをカバーするため。_all_python_candidates() で
+    STABILITY_VERSION_MANAGER としてタグ付けする。
+    """
+    candidates: list[Path] = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            try:
+                candidates.extend(
+                    sorted(Path(appdata).glob("uv/python/cpython-3.*/python.exe"), reverse=True)
+                )
+            except OSError:
+                pass
+    else:
+        try:
+            uv_python_dir = Path.home() / ".local" / "share" / "uv" / "python"
+            candidates.extend(
+                sorted(uv_python_dir.glob("cpython-3.*/bin/python3"), reverse=True)
+            )
+        except OSError:
+            pass
+
+    uv = shutil.which("uv")
+    if uv:
+        try:
+            result = subprocess.run(
+                [uv, "python", "find", "3.12"],
+                capture_output=True, timeout=15,
+                encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            if result.returncode == 0:
+                lines = (result.stdout or "").strip().splitlines()
+                if lines and Path(lines[0]).is_file():
+                    candidates.append(Path(lines[0]))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return candidates
+
+
+def _unix_conda_python_candidates() -> list[Path]:
+    """macOS/Linux: known conda/miniconda/anaconda/miniforge base-
+    environment python3, in priority order. Checked last among managed
+    interpreters -- see STABILITY_CONDA in _all_python_candidates() --
+    because conda's own DLL/shared-library resolution quirks make it the
+    least predictable seed for ESP-IDF's venv creation.
+    macOS/Linux: 既知の conda/miniconda/anaconda/miniforge ベース環境の
+    python3。管理系の中で最後に確認する -- _all_python_candidates() の
+    STABILITY_CONDA を参照 -- conda 自身の DLL/共有ライブラリ解決の癖により、
+    ESP-IDF venv 作成の種として最も予測しづらいため。
+    """
+    home = Path.home()
+    bases = [
+        home / "miniconda3", home / "anaconda3", home / "miniforge3",
+        Path("/opt/miniconda3"), Path("/opt/anaconda3"), Path("/opt/conda"),
+    ]
+    return [base / "bin" / "python3" for base in bases]
 
 
 def _macos_python_exe_candidates() -> list[Path]:
@@ -507,14 +705,18 @@ def _linux_python_exe_candidates() -> list[Path]:
     to scan off-PATH -- distributions install versioned interpreters
     (python3.12, python3.10, ...) via their package manager straight onto
     PATH. So this just tries specific version names most-preferred first,
-    then python3.13 (accepted with a warning), then the bare `python3`
-    that a fresh `apt install python3.12` etc. may not have repointed.
+    then python3.13 (still probed so a rejection message can name it --
+    see _find_system_python_dir() -- even though it is no longer accepted),
+    then the bare `python3` that a fresh `apt install python3.12` etc. may
+    not have repointed.
     Windows/macOSと異なり、PATH外を走査すべき単一の既知インストール先は
     無い -- ディストリビューションはパッケージマネージャでバージョン付き
     インタプリタ(python3.12, python3.10, ...)を直接PATHへ導入する。
     そのため、優先度の高いバージョン名から順に試し、次に python3.13
-    (警告付きで受理)、最後に(新規 `apt install python3.12` 等で
-    向き先が変わっていないかもしれない)素の `python3` を試す。
+    (もはや受理はしないが、不採用メッセージでバージョンを名指しできるよう
+    引き続き探索する -- _find_system_python_dir() 参照)、最後に(新規
+    `apt install python3.12` 等で向き先が変わっていないかもしれない)
+    素の `python3` を試す。
     """
     candidates: list[Path] = []
     for ver in ("3.12", "3.11", "3.10", "3.13"):
@@ -527,14 +729,27 @@ def _linux_python_exe_candidates() -> list[Path]:
     return candidates
 
 
-def _all_python_candidates() -> list[Path]:
+def _all_python_candidates() -> list[Tuple[Path, int]]:
     """Return every plausible system-python executable for the current
-    platform, in priority order (not yet filtered by version).
+    platform, in priority order (not yet filtered by version), each
+    paired with its STABILITY_* rank (see the constants' docstring above).
+    A PATH-resolved `python`/`python3` is tagged STABILITY_CANONICAL even
+    though it *could* turn out to be a venv interpreter -- that
+    possibility is handled uniformly for every candidate afterward by
+    _resolve_venv_seed() in _find_system_python_dir(), which re-tags a
+    resolved venv seed as STABILITY_VENV_RESOLVED regardless of where it
+    was originally found.
     現在のプラットフォーム向けの、あり得るシステムPython実行ファイルを
-    全て優先順で返す(まだバージョンで絞り込んでいない)。
+    全て優先順で返す(まだバージョンで絞り込んでいない)。各候補に
+    STABILITY_* ランク(上の定数のdocstring参照)を付与する。PATH上で
+    解決した `python`/`python3` は、それが venv のインタプリタである
+    可能性があっても STABILITY_CANONICAL としてタグ付けする -- その
+    可能性は _find_system_python_dir() 内の _resolve_venv_seed() が全候補
+    に対して事後に統一的に扱い、実体解決された venv の種は元の発見場所に
+    関わらず STABILITY_VENV_RESOLVED に付け替える。
     """
+    candidates: list[Tuple[Path, int]] = []
     if sys.platform == "win32":
-        candidates: list[Path] = []
         # 1. Highest priority: ask the `py` launcher directly. Some
         # python.org installs register only `py` (not `python`/`python3`)
         # on PATH, which the name-based lookup right below would
@@ -544,7 +759,7 @@ def _all_python_candidates() -> list[Path]:
         # 登録しないため、これが無いと直後の名前ベース探索では見つからない。
         py_dir = _py_launcher_python_dir()
         if py_dir is not None:
-            candidates.append(py_dir / "python.exe")
+            candidates.append((py_dir / "python.exe", STABILITY_CANONICAL))
         # 2. Already resolvable on PATH? Skip the WindowsApps stub, which
         # is a non-functional placeholder that only opens the Store.
         # 2. 既に PATH で解決できるか? Store を開くだけの機能しない
@@ -552,15 +767,141 @@ def _all_python_candidates() -> list[Path]:
         for name in ("python", "python3"):
             found = shutil.which(name)
             if found and "windowsapps" not in found.lower():
-                candidates.append(Path(found))
-        # 3. Known install locations (same as install.bat).
-        # 3. 既知のインストール先(install.bat と同一)。
+                candidates.append((Path(found), STABILITY_CANONICAL))
+        # 3. Known canonical install locations (same as install.bat).
+        # 3. 既知の正規インストール先(install.bat と同一)。
         for candidate_dir in _windows_python_dir_candidates():
-            candidates.append(candidate_dir / "python.exe")
+            candidates.append((candidate_dir / "python.exe", STABILITY_CANONICAL))
+        # 4. Version managers (pyenv-win, uv).
+        # 4. バージョン管理ツール(pyenv-win、uv)。
+        pyenv_dir = _windows_pyenv_win_python_dir()
+        if pyenv_dir is not None:
+            candidates.append((pyenv_dir / "python.exe", STABILITY_VERSION_MANAGER))
+        for uv_exe in _uv_python_candidates():
+            candidates.append((uv_exe, STABILITY_VERSION_MANAGER))
+        # 5. conda/miniconda/anaconda/miniforge (lowest of the managed tiers).
+        # 5. conda/miniconda/anaconda/miniforge(管理系の中で最下位)。
+        for conda_dir in _windows_conda_dir_candidates():
+            candidates.append((conda_dir / "python.exe", STABILITY_CONDA))
         return candidates
+
     if sys.platform == "darwin":
-        return _macos_python_exe_candidates()
-    return _linux_python_exe_candidates()
+        for exe in _macos_python_exe_candidates():
+            candidates.append((exe, STABILITY_CANONICAL))
+    else:
+        for exe in _linux_python_exe_candidates():
+            candidates.append((exe, STABILITY_CANONICAL))
+    # Unix (macOS + Linux) version managers and conda, shared between the
+    # two platforms since both install pyenv/uv/asdf/conda the same way
+    # under $HOME.
+    # Unix(macOS + Linux)のバージョン管理ツールと conda。両プラットフォーム
+    # とも $HOME 配下への導入方法が同じため共有する。
+    for exe in _pyenv_unix_python_candidates():
+        candidates.append((exe, STABILITY_VERSION_MANAGER))
+    for exe in _uv_python_candidates():
+        candidates.append((exe, STABILITY_VERSION_MANAGER))
+    for exe in _asdf_unix_python_candidates():
+        candidates.append((exe, STABILITY_VERSION_MANAGER))
+    for exe in _unix_conda_python_candidates():
+        candidates.append((exe, STABILITY_CONDA))
+    return candidates
+
+
+def _venv_root_if_any(python_exe: Path) -> Optional[Path]:
+    """Return the venv root directory if python_exe lives inside one, else
+    None. A venv's root is the directory holding pyvenv.cfg -- the parent
+    of Scripts\\ (Windows) or bin/ (Unix), i.e. python_exe.parent.parent.
+    python_exe が venv 内にある場合はその venv ルートディレクトリを返す、
+    そうでなければ None。venv のルートは pyvenv.cfg があるディレクトリ --
+    Scripts\\(Windows)/bin/(Unix)の親、すなわち python_exe.parent.parent。
+    """
+    venv_root = python_exe.parent.parent
+    if (venv_root / "pyvenv.cfg").is_file():
+        return venv_root
+    return None
+
+
+def _parse_pyvenv_cfg_home(pyvenv_cfg: Path) -> Optional[Path]:
+    """Read a pyvenv.cfg file's `home = ...` line and return it as a Path,
+    or None if the file is unreadable or has no `home` entry. `home` is
+    the directory of the BASE interpreter that created the venv (not the
+    venv's own bin/Scripts).
+    pyvenv.cfg の `home = ...` 行を読み Path として返す。ファイルが読めない、
+    または `home` エントリが無ければ None。`home` は venv を作成した
+    ベースインタプリタのディレクトリ(venv 自身の bin/Scripts ではない)。
+    """
+    try:
+        text = pyvenv_cfg.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip().lower() == "home":
+            home = value.strip()
+            if home:
+                return Path(home)
+    return None
+
+
+def _resolve_venv_seed(python_exe: Path) -> Optional[Path]:
+    """If python_exe is itself a venv interpreter, resolve it to the BASE
+    interpreter recorded in its pyvenv.cfg `home =` entry instead, so
+    version/stability comparisons operate on the real, durable seed Python
+    rather than an ephemeral venv that could vanish (e.g. a project venv
+    the user deletes). Structurally eliminates nesting: follows the
+    `home` chain exactly ONE hop; if the resolved base interpreter is
+    ITSELF inside another venv, the candidate is discarded (returns None)
+    rather than chased indefinitely -- a venv-of-a-venv is pathological
+    and not worth the risk of an infinite loop.
+
+    Returns python_exe unchanged (not None) if it was never inside a venv
+    to begin with. Returns None if it IS a venv but the base interpreter
+    cannot be resolved to a usable python (malformed pyvenv.cfg, missing
+    `home`, or the home directory/interpreter no longer exists) -- the
+    caller should then discard this candidate rather than treat a
+    half-resolved path as usable.
+    python_exe 自体が venv のインタプリタである場合、そのバージョン/安定度
+    比較を(消えうる一時的な venv ではなく)実体のある永続的な種 Python に
+    対して行えるよう、pyvenv.cfg の `home =` エントリが指すベース
+    インタプリタに解決する。入れ子を構造的に排除する: `home` の連鎖は
+    ちょうど1回だけ追跡する。解決したベースインタプリタ自体がさらに別の
+    venv 内にある場合は、無限に追跡するのではなく候補を破棄する(None を
+    返す) -- venv の入れ子は病的なケースであり、無限ループのリスクを
+    冒してまで対応する価値はない。
+
+    そもそも venv 内になければ python_exe をそのまま返す(None ではない)。
+    venv ではあるがベースインタプリタを解決できない場合(pyvenv.cfg が
+    壊れている、`home` が無い、home ディレクトリ/インタプリタが既に存在
+    しない)は None を返す -- 呼び出し側は、中途半端に解決したパスを
+    使用可能とみなさず、この候補を破棄すべき。
+    """
+    venv_root = _venv_root_if_any(python_exe)
+    if venv_root is None:
+        return python_exe  # not a venv at all -- use as-is / venvではないためそのまま使う
+
+    home = _parse_pyvenv_cfg_home(venv_root / "pyvenv.cfg")
+    if home is None:
+        return None  # malformed/unreadable pyvenv.cfg -- discard / 破損pyvenv.cfg -- 破棄
+
+    exe_names = ["python.exe"] if sys.platform == "win32" else ["python3", "python"]
+    base_exe: Optional[Path] = None
+    for name in exe_names:
+        candidate = home / name
+        if candidate.is_file():
+            base_exe = candidate
+            break
+    if base_exe is None:
+        return None  # home's interpreter is gone -- a dead venv seed / homeのインタプリタが消失 -- 破棄
+
+    if _venv_root_if_any(base_exe) is not None:
+        # One hop already used; a venv-of-a-venv beyond this is discarded.
+        # 1回分のhopは既に使用済み。これ以上先の venv の入れ子は破棄する。
+        return None
+
+    info(f"Detected a virtual environment ({python_exe}); using its base "
+         f"Python instead: {base_exe}")
+    info(f"仮想環境を検出したため({python_exe})ベースの Python を使用します: {base_exe}")
+    return base_exe
 
 
 def _find_system_python_dir() -> Optional[Path]:
@@ -568,24 +909,46 @@ def _find_system_python_dir() -> Optional[Path]:
     使用可能な中で最善のシステム python 実行ファイルのディレクトリ、
     無ければ None。
 
-    Version preference (applied across ALL candidates from
-    _all_python_candidates(), not just the first one found): (a) a Python
-    inside PYTHON_PREFERRED_MIN..PYTHON_PREFERRED_MAX (3.10-3.12) always
-    wins, picking the highest such version if more than one qualifies;
-    (b) failing that, anything newer (3.13+) is accepted with a printed
-    warning (untested but likely to work), picking the LOWEST such version
-    (closest to the tested range); (c) anything older than 3.10 is
-    rejected outright -- the caller (_run_install_script()) offers an
-    auto-install instead of silently proceeding with an unsupported
-    interpreter.
-    バージョン選好(_all_python_candidates() の全候補に対して適用する。
-    最初に見つかった1つだけではない): (a) PYTHON_PREFERRED_MIN〜MAX
-    (3.10〜3.12) の範囲内の Python が常に優先され、複数該当すれば最も
-    新しいものを選ぶ。(b) 該当が無ければ、それより新しいもの(3.13+)を
-    警告付きで受理する(未検証だが恐らく動作する)。複数あれば最も低い
-    バージョン(検証済み範囲に最も近いもの)を選ぶ。(c) 3.10未満は
-    無条件に不採用とする -- 呼び出し元(_run_install_script())は、
-    未対応のインタプリタで黙って続行する代わりに自動インストールを提案する。
+    Composite ordering (applied across ALL candidates from
+    _all_python_candidates(), not just the first one found; each
+    candidate's venv seed is resolved first via _resolve_venv_seed() so
+    a discovered venv interpreter is judged by its real base Python):
+    version-preference BAND first, then STABILITY_* rank, then version
+    recency within a tie -- i.e. "band > stability > newness":
+    (a) a Python inside PYTHON_PREFERRED_MIN..PYTHON_PREFERRED_MAX
+    (3.10-3.12) always wins over anything outside that band; among those,
+    the most stable source wins (STABILITY_CANONICAL over
+    STABILITY_VERSION_MANAGER over STABILITY_CONDA over
+    STABILITY_VENV_RESOLVED); among ties on stability, the highest
+    version wins. (b) anything OUTSIDE that band -- both older than 3.10
+    AND 3.13+ -- is rejected outright, not merely deprioritized: 3.13+
+    used to be accepted with a warning, but real-world failures were
+    observed with it (2026-07-22 policy change), so it is now treated the
+    same as an unsupported older version. The caller
+    (_run_install_script()) offers an auto-install (winget/brew/apt, which
+    installs 3.12) instead of silently proceeding with an unsupported
+    interpreter. When the only candidates found are 3.13+, a bilingual
+    warning names the rejected version before returning None, so the
+    auto-install offer that follows has context instead of appearing out
+    of nowhere.
+    合成順序(_all_python_candidates() の全候補に対して適用する。最初に
+    見つかった1つだけではない。各候補はまず _resolve_venv_seed() で venv
+    の種を解決してから判定するため、発見された venv インタプリタはその
+    実体のベース Python として評価される): まずバージョン適合バンド、
+    次に STABILITY_* ランク、同点ならバージョンの新しさ -- すなわち
+    「バンド > 安定度 > 新しさ」: (a) PYTHON_PREFERRED_MIN〜MAX(3.10〜
+    3.12)の範囲内の Python が、範囲外の何よりも常に優先される。その中では
+    最も安定した種が勝つ(STABILITY_CANONICAL > STABILITY_VERSION_MANAGER
+    > STABILITY_CONDA > STABILITY_VENV_RESOLVED の順)。安定度が同点なら
+    最も新しいバージョンが勝つ。(b) この範囲外のもの -- 3.10未満と3.13以降
+    の両方 -- は単に優先度を下げるのではなく無条件に不採用とする:
+    以前は3.13+を警告付きで受理していたが、実際に動作しない事例が報告
+    されたため(2026-07-22の方針変更)、対応外の古いバージョンと同様の
+    扱いに変更した。呼び出し元(_run_install_script())は、未対応の
+    インタプリタで黙って続行する代わりに自動インストール(winget/brew/apt
+    経由、3.12を導入)を提案する。見つかった候補が3.13+のみだった場合は、
+    None を返す前に不採用としたバージョンを名指しした英日併記の警告を
+    出すことで、後続の自動インストール提案に脈絡を持たせる。
 
     Why this exists (the 9009 bug, Windows): ESP-IDF's own install.bat
     calls `python` by name, so a real python.exe must be on PATH for it.
@@ -607,35 +970,64 @@ def _find_system_python_dir() -> Optional[Path]:
     macOS/Linux にも当てはまるため、本関数は Windows 単独ではなく3
     プラットフォーム全てを対象にする。
     """
-    preferred: Optional[Tuple[Path, Tuple[int, int]]] = None
-    newer: Optional[Tuple[Path, Tuple[int, int]]] = None
-    for exe in _all_python_candidates():
+    # (path, version, stability_rank) for the best in-band candidate seen
+    # so far; `rejected_newer` tracks only the LOWEST 3.13+ version seen,
+    # purely to name it in the warning below -- it is never returned.
+    # 範囲内で見つけた最善候補の (パス, バージョン, 安定度ランク)。
+    # `rejected_newer` は下の警告でバージョンを名指しするためだけに、
+    # 見つかった3.13+の中で最も低いバージョンのみを追跡する -- 戻り値には
+    # 使わない。
+    preferred: Optional[Tuple[Path, Tuple[int, int], int]] = None
+    rejected_newer: Optional[Tuple[int, int]] = None
+    for exe, stability in _all_python_candidates():
+        if not exe.is_file():
+            continue
+        resolved = _resolve_venv_seed(exe)
+        if resolved is None:
+            continue  # dead / doubly-nested venv seed -- discard candidate
+        if resolved != exe:
+            # A venv seed was resolved to its base Python: rank by the
+            # "least deliberate discovery" tier regardless of the
+            # original source (see STABILITY_VENV_RESOLVED's docstring).
+            # venv の種をベース Python に解決した: 元の発見元に関わらず
+            # 「最も狙って選ばれたのではない発見」の階層でランク付けする
+            # (STABILITY_VENV_RESOLVED のdocstring参照)。
+            stability = STABILITY_VENV_RESOLVED
+            exe = resolved
         if not exe.is_file():
             continue
         version = _python_version_info(exe)
         if version is None:
             continue
+
         if PYTHON_PREFERRED_MIN <= version <= PYTHON_PREFERRED_MAX:
-            if preferred is None or version > preferred[1]:
-                preferred = (exe.parent, version)
+            if preferred is None or stability < preferred[2] or (
+                stability == preferred[2] and version > preferred[1]
+            ):
+                preferred = (exe.parent, version, stability)
         elif version > PYTHON_PREFERRED_MAX:
-            if newer is None or version < newer[1]:
-                newer = (exe.parent, version)
+            # Rejected outright (2026-07-22 policy change) -- tracked only
+            # for the informative message below, never selected.
+            # 無条件に不採用(2026-07-22の方針変更) -- 下の警告メッセージの
+            # ためだけに記録し、選出はしない。
+            if rejected_newer is None or version < rejected_newer:
+                rejected_newer = version
         # else: older than PYTHON_PREFERRED_MIN -- rejected, not tracked.
         # それ以外(PYTHON_PREFERRED_MIN未満)は不採用のため記録しない。
 
     if preferred is not None:
         return preferred[0]
-    if newer is not None:
-        newer_dir, newer_version = newer
-        warn(f"Found Python {newer_version[0]}.{newer_version[1]}, newer than "
-             f"the tested range ({PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
-             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]}). Untested, but likely to work.")
-        warn(f"動作確認済み範囲({PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}〜"
-             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]})より新しい "
-             f"Python {newer_version[0]}.{newer_version[1]} が見つかりました。"
-             "未検証ですが恐らく動作します。")
-        return newer_dir
+    if rejected_newer is not None:
+        warn(f"Found Python {rejected_newer[0]}.{rejected_newer[1]}, but "
+             f"versions newer than {PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} "
+             f"are not supported (real failures have been observed) -- "
+             f"{PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} is required.")
+        warn(f"Python {rejected_newer[0]}.{rejected_newer[1]} が見つかりましたが、"
+             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} より新しい"
+             "バージョンは未対応です(動作しない事例が確認されています) -- "
+             f"{PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}〜"
+             f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} が必要です。")
     return None
 
 
@@ -884,17 +1276,78 @@ def _offer_python_auto_install(auto_install_python: bool) -> bool:
     return False
 
 
+# Environment variables that signal an already-activated Python
+# environment (a user venv, conda env, or pyenv shim-selection). Their
+# presence in a CHILD process's environment can steer that child toward
+# the wrong interpreter/site-packages even when we already invoke the
+# target venv's python by absolute path -- e.g. pip still consults
+# VIRTUAL_ENV/PYTHONHOME for some of its own behavior, and a pyenv shim on
+# PATH honors PYENV_VERSION over the absolute path it was invoked with in
+# some edge cases. Shared by every subprocess launch site in this file
+# (_clean_env_for_cmd(), _run_in_idf_env(), _run_sf_in_idf_env()) via
+# _sanitize_activated_env() so a newly-discovered "activated environment"
+# variable only needs to be added once, here.
+# 既に activate 済みの Python 環境(ユーザーの venv、conda 環境、pyenv の
+# シェル選択)を示す環境変数。これらが子プロセスの環境に残っていると、
+# 対象 venv の python を絶対パスで直接呼んでいても誤ったインタプリタ/
+# site-packages へ誘導されうる -- 例えば pip は自身の一部の挙動で今も
+# VIRTUAL_ENV/PYTHONHOME を参照するし、PATH 上の pyenv shim は場合によって
+# 絶対パス呼び出しより PYENV_VERSION を優先することがある。本ファイル内の
+# 全ての子プロセス起動箇所(_clean_env_for_cmd()、_run_in_idf_env()、
+# _run_sf_in_idf_env())が _sanitize_activated_env() 経由でこれを共有する
+# ことで、新たに見つかった「activate済み環境」変数はここに一度追加する
+# だけで済む。
+_ACTIVATED_ENV_VARS = (
+    "VIRTUAL_ENV",
+    "PYTHONHOME",
+    "PYTHONPATH",
+    "CONDA_PREFIX",
+    "CONDA_DEFAULT_ENV",
+    "CONDA_SHLVL",
+    "PYENV_VERSION",
+)
+
+
+def _sanitize_activated_env(env: dict) -> dict:
+    """Remove all _ACTIVATED_ENV_VARS from `env` in place, and return it
+    (for chaining). Deliberately does NOT touch PATH -- stripping an
+    activated venv/conda env's Scripts/bin directory from PATH has wider
+    side effects (e.g. removing access to other tools the user's shell
+    session depends on) than this installer's job warrants; every
+    subprocess call site that matters already invokes the TARGET venv's
+    python by absolute path rather than relying on `python` resolving
+    correctly via PATH.
+    `env` から _ACTIVATED_ENV_VARS を全て除去し(その場で変更)、`env` 自体を
+    返す(呼び出しの連結用)。PATH には意図的に触れない -- activate 済みの
+    venv/conda 環境の Scripts/bin ディレクトリを PATH から取り除くのは、
+    本インストーラーの役目を超えた副作用が広い(例: ユーザーのシェル
+    セッションが依存する他のツールへのアクセスを失わせる)。重要な
+    subprocess 呼び出し箇所は、いずれも `python` が PATH 経由で正しく
+    解決されることに頼らず、既に対象 venv の python を絶対パスで直接
+    呼んでいる。
+    """
+    for var in _ACTIVATED_ENV_VARS:
+        env.pop(var, None)
+    return env
+
+
 def _clean_env_for_cmd() -> dict:
     """Return environment suitable for running .bat scripts via cmd.exe.
     cmd.exe 経由で .bat を実行するための環境を構築
 
     - Strips MSYSTEM (ESP-IDF .bat refuses to run under MINGW/Git Bash)
+    - Strips activated-environment variables (see _sanitize_activated_env())
+      so a pre-activated user venv/conda/pyenv selection cannot steer
+      install.bat's own `python` resolution.
     - Ensures a REAL system python.exe directory is on PATH so ESP-IDF's
       install.bat (which calls `python` by name) can find it. Under the CLI
       that is `sys.executable`'s own directory; under the frozen GUI
       `sys.executable` is StampFly Setup itself (no python.exe there), so we
       fall back to discovering a system Python -- see _find_system_python_dir().
     - MSYSTEM を除去(ESP-IDF の .bat は MINGW/Git Bash 下での実行を拒否)
+    - activate済み環境変数を除去(_sanitize_activated_env() 参照)し、事前
+      activate済みのユーザー venv/conda/pyenv 選択が install.bat 自身の
+      `python` 解決を誤誘導しないようにする
     - 本物のシステム python.exe のディレクトリを PATH に載せ、ESP-IDF の
       install.bat(`python` を名前で呼ぶ)が見つけられるようにする。CLI では
       `sys.executable` の隣がそれだが、凍結 GUI では `sys.executable` が
@@ -903,6 +1356,7 @@ def _clean_env_for_cmd() -> dict:
     """
     env = os.environ.copy()
     env.pop("MSYSTEM", None)
+    _sanitize_activated_env(env)
 
     # Prefer sys.executable's directory when it actually holds a python
     # interpreter (the CLI case); otherwise discover a system Python (the
@@ -1114,6 +1568,184 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
     return None
 
 
+def _find_idf_venv_dirs(idf_path: Path) -> list[Path]:
+    """All existing venv DIRECTORIES matching idf_path's ESP-IDF version
+    prefix (``idf<MAJOR.MINOR>_py*_env``), newest first, regardless of
+    whether a python interpreter still exists inside -- unlike
+    _find_idf_python(), which silently skips a directory whose interpreter
+    is missing.
+
+    Needed by the dead-venv detector (_is_idf_venv_dir_dead() /
+    _recreate_dead_idf_venvs()), which must be able to say "this venv
+    folder is still here, but its interpreter or base Python is gone"
+    rather than just "no venv found" -- the latter is the pre-existing,
+    unrelated "ESP-IDF's own install.sh has never been run yet" case.
+    idf_path の ESP-IDF バージョン接頭辞(``idf<メジャー.マイナー>_py*_env``)
+    に一致する既存 venv ディレクトリを全て新しい順に返す。中の
+    python インタプリタの有無にかかわらず対象とする点が _find_idf_python()
+    と異なる(あちらはインタプリタが無いディレクトリを黙ってスキップする)。
+
+    壊死検出器(_is_idf_venv_dir_dead() / _recreate_dead_idf_venvs())が
+    「venv フォルダはあるがインタプリタ/ベースPythonが消えている」状態を、
+    単なる「venv が見つからない」(= ESP-IDF自身のinstall.shが未実行という
+    既存の別ケース)と区別できるようにするために必要。
+    """
+    target = _idf_major_minor(idf_path)
+    if not target:
+        return []
+    prefix = f"idf{target}_py"
+
+    dirs: list[Path] = []
+    for base in _idf_tools_path_candidates():
+        python_env_dir = base / "python_env"
+        if not python_env_dir.exists():
+            continue
+        try:
+            entries = list(python_env_dir.iterdir())
+        except OSError:
+            continue
+        dirs.extend(
+            d for d in entries
+            if d.is_dir() and d.name.startswith(prefix) and d.name.endswith("_env")
+        )
+    return sorted(dirs, reverse=True)
+
+
+def _is_idf_venv_dir_dead(venv_dir: Path) -> bool:
+    """Return whether the ESP-IDF-managed venv at `venv_dir` looks dead:
+    its pyvenv.cfg is missing/malformed, the base ("seed") Python recorded
+    in pyvenv.cfg's `home =` line no longer exists, or the venv's own
+    python interpreter is missing or fails to report a version.
+
+    This is the classic failure mode when the system Python that ORIGINALLY
+    seeded the venv (e.g. a pyenv-win version, or a python.org install) is
+    later removed/upgraded out from under it: the venv directory survives,
+    but every invocation of its python.exe silently fails to find its
+    stdlib/DLLs.
+    `venv_dir` の ESP-IDF 管理 venv が壊死しているように見えるかを返す:
+    pyvenv.cfg が欠落/破損している、pyvenv.cfg の `home =` 行が指す
+    ベース("種")Pythonが既に存在しない、あるいは venv 自身の python
+    インタプリタが欠落しているかバージョンを報告できない、のいずれか。
+
+    これは、venv を元々 seed したシステム Python(例: pyenv-win の
+    あるバージョン、python.org インストール)が後から削除/更新されて
+    しまう典型的な故障モード: venv ディレクトリ自体は残るが、その
+    python.exe を起動するたびに標準ライブラリ/DLLが見つからず暗黙に
+    失敗する。
+    """
+    bin_subdir = "Scripts" if sys.platform == "win32" else "bin"
+    python_name = "python.exe" if sys.platform == "win32" else "python"
+    venv_python = venv_dir / bin_subdir / python_name
+
+    pyvenv_cfg = venv_dir / "pyvenv.cfg"
+    if not pyvenv_cfg.is_file():
+        return True
+    home = _parse_pyvenv_cfg_home(pyvenv_cfg)
+    if home is None or not home.is_dir():
+        return True
+    base_exe_name = "python.exe" if sys.platform == "win32" else "python3"
+    base_exe = home / base_exe_name
+    if not base_exe.is_file() and sys.platform != "win32":
+        base_exe = home / "python"
+    if not base_exe.is_file():
+        return True
+
+    if not venv_python.is_file():
+        return True
+    return _python_version_info(venv_python) is None
+
+
+def _recreate_dead_idf_venvs(idf_path: Path, version: str, auto_install_python: bool) -> None:
+    """Detect any dead ESP-IDF-managed venv matching idf_path's version
+    (see _is_idf_venv_dir_dead()) and recreate it by deleting the venv
+    directory and re-running ESP-IDF's own install script (idempotent --
+    it only (re)creates whatever is missing; healthy sibling venvs for
+    other ESP-IDF versions are untouched).
+
+    Runs unconditionally at the top of every Step 2/4 (both a normal run
+    and a --clean/repair run), so a dead venv left over from a removed/
+    upgraded system Python self-heals without the user needing to know
+    this check exists. Does nothing if no matching venv directory exists
+    at all yet -- that is the pre-existing, unrelated "install.sh has
+    never been run" case, which the caller's existing error message
+    already covers.
+
+    User-installed packages inside the venv (sfcli itself, plus anything
+    `sf setup sim` added) are assumed to be gone once the directory is
+    deleted -- sfcli is reinstalled by Step 3 immediately after this
+    Step 2 call site returns -- but the deletion is always announced,
+    bilingually, BEFORE it happens.
+    idf_path のバージョンに一致する壊死 ESP-IDF 管理 venv を検出し
+    (_is_idf_venv_dir_dead() 参照)、venv ディレクトリを削除して ESP-IDF
+    自身の install スクリプトを再実行することで再作成する(冪等 --
+    欠けているものだけを(再)作成する。他の ESP-IDF バージョン向けの
+    健全な兄弟 venv には触れない)。
+
+    毎回の Step 2/4 の先頭(通常実行・--clean/修復実行のいずれも)で無条件に
+    実行するため、削除/更新されたシステム Python に起因する壊死 venv は、
+    ユーザーがこのチェックの存在を意識せずとも自己修復する。一致する venv
+    ディレクトリがそもそも存在しない場合は何もしない -- それは既存の別
+    ケース(「install.sh がまだ一度も実行されていない」)であり、呼び出し元
+    の既存エラーメッセージが既にカバーしている。
+
+    venv 内のユーザーインストール済みパッケージ(sfcli 自身、および
+    `sf setup sim` が追加したもの)は、ディレクトリ削除と同時に失われる
+    前提(sfcli はこの Step 2 呼び出し直後の Step 3 で再インストールされる)
+    だが、削除は必ず実行前に英日併記でログに明示する。
+    """
+    for venv_dir in _find_idf_venv_dirs(idf_path):
+        if _is_idf_venv_dir_dead(venv_dir):
+            warn(f"ESP-IDF Python venv looks dead (base Python missing or "
+                 f"unresponsive): {venv_dir}")
+            warn(f"ESP-IDF の Python venv が壊死しています"
+                 f"(ベースPythonの欠落または無応答): {venv_dir}")
+            warn(f"Deleting it now and recreating via ESP-IDF's install script...")
+            warn(f"これから削除し、ESP-IDFのinstallスクリプトで再作成します...")
+            shutil.rmtree(venv_dir, ignore_errors=True)
+            ESPIDFInstaller._run_install_script(idf_path, version, auto_install_python=auto_install_python)
+            continue
+        # Alive but possibly built on an unsupported Python -- warn only,
+        # never recreate (see _warn_if_idf_venv_python_too_new()'s docstring).
+        # 生存しているが未対応のPythonを基盤にしている可能性 -- 警告のみで
+        # 再作成はしない(_warn_if_idf_venv_python_too_new() のdocstring参照)。
+        _warn_if_idf_venv_python_too_new(venv_dir)
+
+
+def _warn_if_idf_venv_python_too_new(venv_dir: Path) -> None:
+    """If a healthy (not dead) ESP-IDF venv's own Python is newer than
+    PYTHON_PREFERRED_MAX (3.13+), print a bilingual warning but take no
+    further action. This venv is not "dead" -- _is_idf_venv_dir_dead()
+    already confirmed it responds -- and the 2026-07-22 policy change to
+    reject 3.13+ outright applies to NEW seed selection
+    (_find_system_python_dir()), not to recreating an already-working
+    venv purely because of its Python version. Recreating a working venv
+    on version grounds alone would be disruptive and is out of scope here.
+    健全な(壊死していない)ESP-IDF venv 自身の Python が
+    PYTHON_PREFERRED_MAX(3.13+)より新しい場合、英日併記の警告のみ表示し
+    それ以上は何もしない。この venv は「壊死」ではない --
+    _is_idf_venv_dir_dead() が既に応答することを確認済み -- また、3.13+を
+    無条件に不採用とする2026-07-22の方針変更は新規の種選択
+    (_find_system_python_dir())に対するものであり、バージョンのみを理由に
+    既に動作している venv を再作成することは対象外。動作中の venv を
+    バージョンだけを根拠に再作成するのは影響が大きく、本関数の対象外とする。
+    """
+    bin_subdir = "Scripts" if sys.platform == "win32" else "bin"
+    python_name = "python.exe" if sys.platform == "win32" else "python"
+    venv_python = venv_dir / bin_subdir / python_name
+    version = _python_version_info(venv_python)
+    if version is None or version <= PYTHON_PREFERRED_MAX:
+        return
+    warn(f"ESP-IDF venv {venv_dir} is built on Python {version[0]}.{version[1]}, "
+         f"newer than the supported {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
+         f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} range. It may still "
+         f"work, but this combination is untested and not recreated automatically.")
+    warn(f"ESP-IDF venv {venv_dir} は Python {version[0]}.{version[1]} を基盤と"
+         f"しており、対応範囲 {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}〜"
+         f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} より新しいです。"
+         "動作する可能性はありますが、この組み合わせは未検証であり、自動的な"
+         "再作成は行いません。")
+
+
 def _find_idf_constraint_file(idf_path: Path) -> Optional[Path]:
     """Find ESP-IDF's pip constraint file for the given installation.
     ESP-IDF のインストールに対応する pip constraint ファイルを探す
@@ -1217,10 +1849,8 @@ def _run_in_idf_env(idf_path: Path, pip_args: list[str]) -> int:
         # 継承され pip が誤誘導されうるので、ESP-IDF venv に絞った subprocess
         # ではこれらを必ず除去する
         env = os.environ.copy()
-        for var in ("VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
-                    "CONDA_SHLVL", "PYTHONHOME", "PYTHONPATH",
-                    "PIP_REQUIRE_VIRTUALENV", "PIP_TARGET", "PIP_PREFIX",
-                    "PIP_USER"):
+        _sanitize_activated_env(env)
+        for var in ("PIP_REQUIRE_VIRTUALENV", "PIP_TARGET", "PIP_PREFIX", "PIP_USER"):
             env.pop(var, None)
         # Stream pip's output line-by-line instead of a silent
         # subprocess.run(): a bare subprocess.run() here shows nothing to
@@ -1291,9 +1921,7 @@ def _run_sf_in_idf_env(idf_path: Path, sf_args: list[str]) -> int:
     # _run_in_idf_env() と同じ環境変数サニタイズ: 事前activate済みの
     # user venv へ sfcli 自身のパス解決が誤誘導されないようにする
     env = os.environ.copy()
-    for var in ("VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
-                "CONDA_SHLVL", "PYTHONHOME", "PYTHONPATH"):
-        env.pop(var, None)
+    _sanitize_activated_env(env)
     return subprocess.run(cmd, env=env).returncode
 
 
@@ -1992,6 +2620,16 @@ class Installer:
 
         # Step 2: Get ESP-IDF Python environment
         header("Step 2/4: Python Environment")
+
+        # Self-heal a dead venv (its seed system Python was removed/
+        # upgraded out from under it) BEFORE trying to use it, in both a
+        # normal run and a --clean/repair run -- see
+        # _recreate_dead_idf_venvs()'s docstring.
+        # 使用を試みる前に、壊死した venv(それを seed したシステム Python
+        # が後から削除/更新された状態)を自己修復する。通常実行・
+        # --clean/修復実行のいずれでも行う -- _recreate_dead_idf_venvs()
+        # のdocstring参照。
+        _recreate_dead_idf_venvs(idf_path, version, auto_install_python=auto_install_python)
 
         info("Getting ESP-IDF Python environment...")
         idf_python = ESPIDFDetector.get_python_env(idf_path)

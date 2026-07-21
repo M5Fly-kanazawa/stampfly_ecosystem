@@ -6,11 +6,13 @@ Checks the development environment for common issues.
 """
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 from importlib import metadata as importlib_metadata
 from pathlib import Path
+from typing import Optional, Tuple
 from ..utils import console, paths, platform
 
 COMMAND_NAME = "doctor"
@@ -190,6 +192,218 @@ def _check_manifest(warnings: list, issues: list) -> None:
                 console.warning(f"  Orphan: {d.name} (not in manifest)")
 
 
+# The ecosystem's actually-tested Python range, mirroring
+# scripts/installer.py's PYTHON_PREFERRED_MIN/MAX (2026-07-22 policy:
+# 3.13+ has real failure reports and is treated as unsupported, same as
+# anything older than 3.10). Duplicated here rather than imported: sfcli
+# is installed *inside* the ESP-IDF venv scripts/installer.py sets up, so
+# it cannot import that standalone top-level script back (no package
+# relationship between them -- see scripts/installer.py's own "Stability
+# contract" for why it must stay a separate, stdlib-only file).
+# scripts/installer.py の PYTHON_PREFERRED_MIN/MAX と同じ値
+# (2026-07-22の方針: 3.13+は実際に動作しない事例があり、3.10未満と同様に
+# 未対応として扱う)。ここで複製する理由: sfcli は scripts/installer.py が
+# セットアップする ESP-IDF venv の「内側」にインストールされるため、その
+# 独立したトップレベルスクリプトを逆に import することはできない
+# (両者にパッケージ関係は無い -- スタンドアロン・stdlib限定でなければ
+# ならない理由は scripts/installer.py 自身の「安定契約」参照)。
+_PYTHON_PREFERRED_MIN = (3, 10)
+_PYTHON_PREFERRED_MAX = (3, 12)
+
+
+def _idf_tools_path_candidates() -> list:
+    """Likely IDF_TOOLS_PATH locations, in priority order. Minimal
+    reimplementation of scripts/installer.py's
+    _idf_tools_path_candidates() (see _PYTHON_PREFERRED_MIN's docstring
+    for why it cannot be imported instead).
+    IDF_TOOLS_PATH の候補を優先順に返す。scripts/installer.py の
+    _idf_tools_path_candidates() の最小限の再実装
+    (import できない理由は _PYTHON_PREFERRED_MIN のdocstring参照)。
+    """
+    tools_path = os.environ.get("IDF_TOOLS_PATH")
+    if tools_path:
+        return [Path(tools_path)]
+    if platform.is_windows():
+        return [Path("C:/Espressif"), Path.home() / ".espressif"]
+    return [Path.home() / ".espressif"]
+
+
+def _idf_major_minor(idf_version: Optional[str]) -> Optional[str]:
+    """Extract MAJOR.MINOR from an ESP-IDF version string (e.g.
+    "v5.5.2" -> "5.5"), or None if it cannot be parsed.
+    ESP-IDF バージョン文字列(例: "v5.5.2")から MAJOR.MINOR を抽出する。
+    解析できなければ None。
+    """
+    if not idf_version:
+        return None
+    match = re.search(r"v?(\d+)\.(\d+)", idf_version)
+    return f"{match.group(1)}.{match.group(2)}" if match else None
+
+
+def _find_idf_venv_dir(idf_version: Optional[str]) -> Optional[Path]:
+    """Find the newest ESP-IDF-managed venv directory matching
+    `idf_version`'s MAJOR.MINOR (``idf<MAJOR.MINOR>_py*_env`` under
+    ``<IDF_TOOLS_PATH>/python_env/``), or None if none exists yet.
+    idf_version の MAJOR.MINOR に一致する ESP-IDF 管理 venv ディレクトリの
+    うち最新のものを返す(``<IDF_TOOLS_PATH>/python_env/`` 配下の
+    ``idf<メジャー.マイナー>_py*_env``)。まだ存在しなければ None。
+    """
+    target = _idf_major_minor(idf_version)
+    if not target:
+        return None
+    prefix = f"idf{target}_py"
+
+    for base in _idf_tools_path_candidates():
+        python_env_dir = base / "python_env"
+        if not python_env_dir.exists():
+            continue
+        try:
+            entries = list(python_env_dir.iterdir())
+        except OSError:
+            continue
+        candidates = sorted(
+            (d for d in entries
+             if d.is_dir() and d.name.startswith(prefix) and d.name.endswith("_env")),
+            reverse=True,
+        )
+        if candidates:
+            return candidates[0]
+    return None
+
+
+def _parse_pyvenv_cfg_home(pyvenv_cfg: Path) -> Optional[Path]:
+    """Read a pyvenv.cfg file's `home = ...` line and return it as a Path,
+    or None if unreadable / has no `home` entry. Minimal reimplementation
+    of scripts/installer.py's identically-named helper (see
+    _PYTHON_PREFERRED_MIN's docstring for why it cannot be imported).
+    pyvenv.cfg の `home = ...` 行を読み Path として返す。読めない、または
+    `home` エントリが無ければ None。scripts/installer.py の同名ヘルパーの
+    最小限の再実装(importできない理由は _PYTHON_PREFERRED_MIN の
+    docstring参照)。
+    """
+    try:
+        text = pyvenv_cfg.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip().lower() == "home":
+            home = value.strip()
+            if home:
+                return Path(home)
+    return None
+
+
+def _venv_python_version(venv_python: Path) -> Optional[Tuple[int, int]]:
+    """Return (major, minor) reported by venv_python, or None on any
+    failure. Never raises.
+    venv_python が報告する (major, minor) を返す。失敗時は None
+    (例外は送出しない)。
+    """
+    try:
+        result = subprocess.run(
+            [str(venv_python), "-c",
+             "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+            capture_output=True, timeout=15,
+            encoding="utf-8", errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"(\d+)\.(\d+)", (result.stdout or "").strip())
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def _check_esp_idf_venv_health(idf_path: Path, idf_version: Optional[str], warnings: list) -> None:
+    """Check that the ESP-IDF-managed venv sfcli lives in has not gone
+    dead: its pyvenv.cfg / recorded base ("seed") Python still exist, and
+    the venv's own python still responds. This is a DIAGNOSIS-only check
+    (unlike scripts/installer.py's _recreate_dead_idf_venvs(), doctor
+    never deletes or recreates anything) -- if dead, it points the user at
+    the installer's repair mode instead.
+
+    Also warns (but does not treat as dead) if the venv's own Python is
+    3.13+: that combination is untested and unsupported for NEW installs
+    (see scripts/installer.py's 2026-07-22 policy change), but an
+    already-working venv built on it is left alone here too, matching
+    scripts/installer.py's _warn_if_idf_venv_python_too_new().
+
+    Does nothing (no warning) if no matching venv directory exists yet --
+    that is a normal pre-install state, not a health problem.
+    sfcli が住んでいる ESP-IDF 管理 venv が壊死していないかを確認する:
+    pyvenv.cfg / そこに記録されたベース("種")Pythonがまだ存在するか、
+    venv 自身の python がまだ応答するか。これは診断のみ(削除・再作成は
+    行わない)のチェックであり、scripts/installer.py の
+    _recreate_dead_idf_venvs() とは異なる -- 壊死していれば、代わりに
+    インストーラの修復モードを案内する。
+
+    venv 自身の Python が3.13+の場合も警告する(壊死扱いにはしない):
+    その組み合わせは新規インストールにおいて未検証・未対応だが
+    (scripts/installer.py の2026-07-22方針変更参照)、既に動作している
+    venv はここでもそのままにする
+    (scripts/installer.py の _warn_if_idf_venv_python_too_new() と同じ)。
+
+    一致する venv ディレクトリがまだ存在しない場合は何もしない(警告なし)
+    -- インストール前の正常な状態であり、健全性の問題ではない。
+    """
+    venv_dir = _find_idf_venv_dir(idf_version)
+    if venv_dir is None:
+        return  # not created yet -- not this check's concern / 未作成 -- 対象外
+
+    bin_subdir = "Scripts" if platform.is_windows() else "bin"
+    python_name = "python.exe" if platform.is_windows() else "python"
+    venv_python = venv_dir / bin_subdir / python_name
+
+    pyvenv_cfg = venv_dir / "pyvenv.cfg"
+    home = _parse_pyvenv_cfg_home(pyvenv_cfg) if pyvenv_cfg.is_file() else None
+    base_exe_name = "python.exe" if platform.is_windows() else "python3"
+    base_exe = (home / base_exe_name) if home else None
+    if base_exe is not None and not base_exe.is_file() and not platform.is_windows():
+        base_exe = home / "python"
+
+    is_dead = (
+        not pyvenv_cfg.is_file()
+        or home is None
+        or not home.is_dir()
+        or base_exe is None
+        or not base_exe.is_file()
+        or not venv_python.is_file()
+    )
+    version = None if is_dead else _venv_python_version(venv_python)
+    if not is_dead and version is None:
+        is_dead = True
+
+    if is_dead:
+        warnings.append(f"ESP-IDF Python venv looks dead: {venv_dir}")
+        console.warning(f"  ESP-IDF venv: DEAD ({venv_dir})")
+        console.print("    Its base (\"seed\") Python appears to have been removed or upgraded.")
+        console.print("    ベースの(\"種\")Pythonが削除または更新された可能性があります。")
+        console.print("    Fix: re-run the installer (or its repair mode) to recreate it:")
+        console.print(f"      python {paths.root() / 'scripts' / 'installer.py'} --clean")
+        return
+
+    console.success(f"  ESP-IDF venv: {venv_dir} (Python {version[0]}.{version[1]})")
+    if version > _PYTHON_PREFERRED_MAX:
+        warnings.append(
+            f"ESP-IDF venv is built on Python {version[0]}.{version[1]}, "
+            f"newer than the supported {_PYTHON_PREFERRED_MIN[0]}.{_PYTHON_PREFERRED_MIN[1]}-"
+            f"{_PYTHON_PREFERRED_MAX[0]}.{_PYTHON_PREFERRED_MAX[1]} range"
+        )
+        console.warning(
+            f"    Python {version[0]}.{version[1]} is newer than the supported "
+            f"{_PYTHON_PREFERRED_MIN[0]}.{_PYTHON_PREFERRED_MIN[1]}-"
+            f"{_PYTHON_PREFERRED_MAX[0]}.{_PYTHON_PREFERRED_MAX[1]} range "
+            "(untested; real failures have been reported for 3.13+)."
+        )
+        console.warning(
+            f"    対応範囲({_PYTHON_PREFERRED_MIN[0]}.{_PYTHON_PREFERRED_MIN[1]}〜"
+            f"{_PYTHON_PREFERRED_MAX[0]}.{_PYTHON_PREFERRED_MAX[1]})より新しい Python "
+            f"{version[0]}.{version[1]} です(未検証。3.13以降は動作しない事例が"
+            "報告されています)。"
+        )
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute doctor command"""
     console.header("StampFly Environment Diagnostics")
@@ -247,6 +461,12 @@ def run(args: argparse.Namespace) -> int:
         if not export_script.exists():
             warnings.append("ESP-IDF export.sh not found")
             console.warning("  export.sh: NOT FOUND")
+
+        # Check the ESP-IDF-managed Python venv's own health (dead-seed
+        # detection, diagnosis only -- see _check_esp_idf_venv_health()).
+        # ESP-IDF管理Python venv自身の健全性を確認(壊死種の検出、診断のみ
+        # -- _check_esp_idf_venv_health() 参照)。
+        _check_esp_idf_venv_health(idf_path, idf_version, warnings)
     else:
         warnings.append("ESP-IDF not found")
         console.warning("  ESP-IDF: NOT FOUND")

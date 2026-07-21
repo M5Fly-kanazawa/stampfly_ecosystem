@@ -41,7 +41,7 @@ python --version
 ```
 
 - [ ] `git --version` が表示されない場合: `winget install Git.Git`
-- [ ] `python --version` が Python 3.10 未満・未導入の場合: `winget install Python.Python.3.12`
+- [ ] `python --version` が Python 3.10 未満・3.13 以上・未導入の場合: `winget install Python.Python.3.12`（3.13以降は未対応。3.10〜3.12が必要）
 - [ ] 導入後は CMD を開き直してから再確認する
 
 ### 1-3. リポジトリの取得

@@ -266,13 +266,16 @@ INSTALLER_NONINTERACTIVE_ENV_VAR = "SF_INSTALLER_NONINTERACTIVE"
 # scripts/installer.py's PYTHON_PREFERRED_MIN/MAX -- duplicated, not
 # imported, for the same "this check runs before the repo is cloned"
 # reason as _windows_python_exe_candidates() below). A Python inside this
-# range is preferred; anything newer is accepted with a warning; anything
-# older fails the check.
+# range is preferred; anything OUTSIDE it -- older AND 3.13+ -- fails the
+# check (2026-07-22 policy change: 3.13+ used to be accepted with a
+# warning, but real-world failures were observed with it).
 # エコシステムが実際に検証済みのPython範囲(scripts/installer.py の
 # PYTHON_PREFERRED_MIN/MAX と同じ値。_windows_python_exe_candidates() と
 # 同じ「このチェックはリポジトリのcloneより前に走る」理由で複製し、
-# importしない)。この範囲内のPythonを優先し、より新しいものは警告付きで
-# 受理し、より古いものはチェック失敗とする。
+# importしない)。この範囲内のPythonを優先し、範囲外のもの -- 古い
+# バージョンと3.13以降の両方 -- はチェック失敗とする(2026-07-22の
+# 方針変更: 以前は3.13+を警告付きで受理していたが、実際に動作しない
+# 事例が報告された)。
 PYTHON_PREFERRED_MIN = (3, 10)
 PYTHON_PREFERRED_MAX = (3, 12)
 DISK_SPACE_MINIMUM_GB = 5.0
@@ -379,9 +382,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
     },
     "env_check_disk_free_detail": {"ja": "空き{0:.1f}GB", "en": "{0:.1f} GB free"},
     "python_not_found": {"ja": "見つかりません", "en": "not found"},
-    "python_version_untested": {
-        "ja": "{0}(動作確認済み範囲3.10〜3.12より新しい・未検証)",
-        "en": "{0} (newer than the tested 3.10-3.12 range, unverified)",
+    "python_version_too_new": {
+        "ja": "{0}(3.13以降は未対応・動作しない事例あり。3.10〜3.12が必要)",
+        "en": "{0} (3.13+ is not supported -- real failures observed; "
+              "3.10-3.12 required)",
     },
     "env_check_install_python_button": {
         "ja": "Python 3.12 を自動インストール",
@@ -914,6 +918,117 @@ def _windows_python_exe_candidates() -> List[Path]:
     return candidates
 
 
+def _windows_conda_python_exe_candidates() -> List[Path]:
+    """Windows: known conda/miniconda/anaconda/miniforge base-environment
+    python.exe paths. Mirrors scripts/installer.py's
+    _windows_conda_dir_candidates() -- duplicated here (not imported) for
+    the same reason as _windows_python_exe_candidates() above: this check
+    runs before the repo (and thus installer.py) is cloned.
+    Windows: 既知の conda/miniconda/anaconda/miniforge ベース環境の
+    python.exe パス。scripts/installer.py の
+    _windows_conda_dir_candidates() と同じ処理。
+    _windows_python_exe_candidates() と同じ理由で複製する。
+    """
+    candidates: List[Path] = []
+    userprofile = os.environ.get("USERPROFILE", "")
+    programdata = os.environ.get("PROGRAMDATA", "C:/ProgramData")
+    if userprofile:
+        for name in ("anaconda3", "miniconda3", "miniforge3"):
+            candidates.append(Path(userprofile) / name / "python.exe")
+    if programdata:
+        for name in ("Anaconda3", "Miniconda3", "Miniforge3"):
+            candidates.append(Path(programdata) / name / "python.exe")
+    for name in ("Anaconda3", "Miniconda3"):
+        candidates.append(Path("C:/") / name / "python.exe")
+    return candidates
+
+
+def _uv_python_exe_candidates() -> List[Path]:
+    """uv-managed Python interpreters (astral-sh/uv), Windows + Unix.
+    Mirrors scripts/installer.py's _uv_python_candidates() -- duplicated
+    here (not imported) for the same reason as
+    _windows_python_exe_candidates() above.
+    uv(astral-sh/uv)が管理する Python インタプリタ。Windows + Unix。
+    scripts/installer.py の _uv_python_candidates() と同じ処理。
+    _windows_python_exe_candidates() と同じ理由で複製する。
+    """
+    candidates: List[Path] = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            try:
+                candidates.extend(
+                    sorted(Path(appdata).glob("uv/python/cpython-3.*/python.exe"), reverse=True)
+                )
+            except OSError:
+                pass
+    else:
+        try:
+            uv_python_dir = Path.home() / ".local" / "share" / "uv" / "python"
+            candidates.extend(
+                sorted(uv_python_dir.glob("cpython-3.*/bin/python3"), reverse=True)
+            )
+        except OSError:
+            pass
+
+    uv = shutil.which("uv")
+    if uv:
+        try:
+            result = subprocess.run(
+                [uv, "python", "find", "3.12"],
+                capture_output=True, timeout=SUBPROCESS_PROBE_TIMEOUT_SECONDS,
+                encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            if result.returncode == 0:
+                lines = (result.stdout or "").strip().splitlines()
+                if lines and Path(lines[0]).is_file():
+                    candidates.append(Path(lines[0]))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return candidates
+
+
+def _pyenv_unix_python_exe_candidates() -> List[Path]:
+    """macOS/Linux: python3 executables under pyenv's versions directory.
+    Mirrors scripts/installer.py's _pyenv_unix_python_candidates().
+    macOS/Linux: pyenv の versions ディレクトリ配下の python3 実行ファイル。
+    scripts/installer.py の _pyenv_unix_python_candidates() と同じ処理。
+    """
+    try:
+        return sorted((Path.home() / ".pyenv" / "versions").glob("*/bin/python3"), reverse=True)
+    except OSError:
+        return []
+
+
+def _asdf_unix_python_exe_candidates() -> List[Path]:
+    """macOS/Linux: python3 executables under asdf's python plugin.
+    Mirrors scripts/installer.py's _asdf_unix_python_candidates().
+    macOS/Linux: asdf の python プラグイン配下の python3 実行ファイル。
+    scripts/installer.py の _asdf_unix_python_candidates() と同じ処理。
+    """
+    try:
+        return sorted((Path.home() / ".asdf" / "installs" / "python").glob("*/bin/python3"), reverse=True)
+    except OSError:
+        return []
+
+
+def _unix_conda_python_exe_candidates() -> List[Path]:
+    """macOS/Linux: known conda/miniconda/anaconda/miniforge base-
+    environment python3. Mirrors scripts/installer.py's
+    _unix_conda_python_candidates().
+    macOS/Linux: 既知の conda/miniconda/anaconda/miniforge ベース環境の
+    python3。scripts/installer.py の _unix_conda_python_candidates() と
+    同じ処理。
+    """
+    home = Path.home()
+    bases = [
+        home / "miniconda3", home / "anaconda3", home / "miniforge3",
+        Path("/opt/miniconda3"), Path("/opt/anaconda3"), Path("/opt/conda"),
+    ]
+    return [base / "bin" / "python3" for base in bases]
+
+
 def _py_launcher_python_exe() -> Optional[str]:
     """
     Windows: ask the `py` launcher for the real python.exe it would run,
@@ -1053,10 +1168,27 @@ def _all_python_candidates() -> List[Path]:
         # _windows_python_exe_candidates() は既に python.exe への完全な
         # パス(ディレクトリではない)を返す -- 同関数の docstring 参照。
         candidates.extend(_windows_python_exe_candidates())
+        # Version managers (pyenv-win handled inside _windows_python_exe_candidates(),
+        # uv here) and conda/miniconda/anaconda/miniforge.
+        # バージョン管理ツール(pyenv-winは_windows_python_exe_candidates()内、
+        # uvはここ)と conda/miniconda/anaconda/miniforge。
+        candidates.extend(_uv_python_exe_candidates())
+        candidates.extend(_windows_conda_python_exe_candidates())
         return candidates
     if sys.platform == "darwin":
-        return _macos_python_exe_candidates()
-    return _linux_python_exe_candidates()
+        candidates = list(_macos_python_exe_candidates())
+    else:
+        candidates = list(_linux_python_exe_candidates())
+    # Unix (macOS + Linux) version managers and conda, shared between the
+    # two platforms since both install pyenv/uv/asdf/conda the same way
+    # under $HOME.
+    # Unix(macOS + Linux)のバージョン管理ツールと conda。両プラットフォーム
+    # とも $HOME 配下への導入方法が同じため共有する。
+    candidates.extend(_pyenv_unix_python_exe_candidates())
+    candidates.extend(_uv_python_exe_candidates())
+    candidates.extend(_asdf_unix_python_exe_candidates())
+    candidates.extend(_unix_conda_python_exe_candidates())
+    return candidates
 
 
 def _python_version_tuple(python_exe: Path) -> Optional[Tuple[int, int]]:
@@ -1089,31 +1221,40 @@ def find_preferred_system_python() -> Tuple[Optional[str], Optional[Tuple[int, i
     Scan every candidate from _all_python_candidates() and apply the same
     version preference as scripts/installer.py's _find_system_python_dir():
     a Python inside PYTHON_PREFERRED_MIN..MAX (3.10-3.12) always wins
-    (highest such version if several qualify); failing that, the lowest
-    version newer than PYTHON_PREFERRED_MAX is accepted (closest to the
-    tested range); anything older than PYTHON_PREFERRED_MIN is ignored.
+    (highest such version if several qualify); anything OUTSIDE that band
+    -- both older than PYTHON_PREFERRED_MIN and 3.13+ -- is rejected
+    outright (2026-07-22 policy change: 3.13+ used to be accepted with a
+    warning, but real-world failures were observed with it, so it is now
+    treated the same as an unsupported older version).
 
-    Returns (executable_path_or_None, version_or_None, is_newer_than_tested).
-    Deliberately NOT this frozen app's own bundled interpreter -- this
-    check is about the system Python that scripts/installer.py will later
-    steer ESP-IDF's venv creation toward, not the interpreter running this
-    GUI itself.
+    Returns (executable_path_or_None, version_or_None, is_rejected_too_new).
+    When nothing in-band was found but the best rejected candidate is
+    3.13+, the executable is None (it is NOT usable) while its version is
+    still returned so callers can show an informative "found but
+    unsupported" message, with is_rejected_too_new=True. Deliberately NOT
+    this frozen app's own bundled interpreter -- this check is about the
+    system Python that scripts/installer.py will later steer ESP-IDF's
+    venv creation toward, not the interpreter running this GUI itself.
 
     _all_python_candidates() の全候補を走査し、scripts/installer.py の
     _find_system_python_dir() と同じバージョン選好を適用する:
     PYTHON_PREFERRED_MIN〜MAX(3.10〜3.12)の範囲内のPythonが常に優先され
-    (複数該当すれば最も新しいもの)、無ければ PYTHON_PREFERRED_MAX より
-    新しい中で最も低いバージョン(検証済み範囲に最も近いもの)を受理し、
-    PYTHON_PREFERRED_MIN 未満は無視する。
+    (複数該当すれば最も新しいもの)、この範囲外のもの -- PYTHON_PREFERRED_MIN
+    未満と3.13以降の両方 -- は無条件に不採用とする(2026-07-22の方針変更:
+    以前は3.13+を警告付きで受理していたが、実際に動作しない事例が報告
+    されたため、対応外の古いバージョンと同様の扱いに変更した)。
 
-    (実行ファイルパス or None, バージョン or None, 検証済み範囲より新しいか)
-    を返す。このアプリ自身に同梱された凍結インタプリタでは意図的にない --
-    このチェックが問うのは、scripts/installer.py が後で ESP-IDF の venv
-    作成を誘導する先となるシステムPythonであり、このGUI自身を動かして
-    いるインタプリタではない。
+    (実行ファイルパス or None, バージョン or None, 不採用理由が「新しすぎる」
+    か)を返す。範囲内が見つからず、不採用にした最善候補が3.13+だった場合、
+    実行ファイルパスは None(使用不可)だがバージョンは返す。呼び出し側が
+    「見つかったが未対応」という情報を表示できるようにするためで、
+    is_rejected_too_new=True になる。このアプリ自身に同梱された凍結
+    インタプリタでは意図的にない -- このチェックが問うのは、
+    scripts/installer.py が後で ESP-IDF の venv 作成を誘導する先となる
+    システムPythonであり、このGUI自身を動かしているインタプリタではない。
     """
     preferred: Optional[Tuple[Path, Tuple[int, int]]] = None
-    newer: Optional[Tuple[Path, Tuple[int, int]]] = None
+    rejected_newer: Optional[Tuple[int, int]] = None
     for exe in _all_python_candidates():
         if not exe.is_file():
             continue
@@ -1124,12 +1265,16 @@ def find_preferred_system_python() -> Tuple[Optional[str], Optional[Tuple[int, i
             if preferred is None or version > preferred[1]:
                 preferred = (exe, version)
         elif version > PYTHON_PREFERRED_MAX:
-            if newer is None or version < newer[1]:
-                newer = (exe, version)
+            # Rejected outright (2026-07-22 policy change) -- tracked only
+            # for the informative message, never returned as usable.
+            # 無条件に不採用(2026-07-22の方針変更) -- 情報表示のためだけに
+            # 記録し、使用可能として返すことはない。
+            if rejected_newer is None or version < rejected_newer:
+                rejected_newer = version
     if preferred is not None:
         return (str(preferred[0]), preferred[1], False)
-    if newer is not None:
-        return (str(newer[0]), newer[1], True)
+    if rejected_newer is not None:
+        return (None, rejected_newer, True)
     return (None, None, False)
 
 
@@ -1144,11 +1289,11 @@ def get_system_python_version_string() -> str:
     その旨の文字列を返す。例外は送出しない: 呼び出し側がそのまま表示
     できるよう、失敗も戻り値の文字列に畳み込む。
     """
-    _exe, version, is_newer = find_preferred_system_python()
+    _exe, version, is_rejected_too_new = find_preferred_system_python()
     if version is None:
         return tr("python_not_found")
     version_text = f"{version[0]}.{version[1]}"
-    return tr("python_version_untested", version_text) if is_newer else version_text
+    return tr("python_version_too_new", version_text) if is_rejected_too_new else version_text
 
 
 def check_python_available() -> bool:
@@ -1162,8 +1307,18 @@ def check_python_available() -> bool:
     ENV_CHECK_REQUIRED 参照): installer.py を実際に実行するのはこの
     アプリ自身に同梱されたインタプリタである。
     """
-    _exe, version, _is_newer = find_preferred_system_python()
-    return version is not None
+    # Check the EXECUTABLE, not the version: since the 2026-07-22 policy
+    # change, find_preferred_system_python() can return a non-None version
+    # for a REJECTED too-new (3.13+) candidate purely for display purposes
+    # (see its docstring) while exe stays None -- that case must count as
+    # "not available", not "available".
+    # バージョンではなく実行ファイルを確認する: 2026-07-22の方針変更以降、
+    # find_preferred_system_python() は不採用(3.13+)候補についても表示用に
+    # バージョンを返すことがある(docstring参照)が、その際 exe は None の
+    # まま -- これは「利用不可」として扱わなければならず「利用可能」では
+    # ない。
+    exe, _version, _is_rejected_too_new = find_preferred_system_python()
+    return exe is not None
 
 
 def _detect_linux_package_manager() -> Optional[str]:
@@ -1300,8 +1455,13 @@ def auto_install_python() -> Tuple[bool, str]:
     # プロセス自身の PATH を更新しない(Windows は環境変更通知を送るが、
     # 新規プロセスのみがそれを反映する)。brew が部分的に失敗しても
     # 使用可能なインタプリタが残ることがある。
-    _exe, version, _is_newer = find_preferred_system_python()
-    return (version is not None, "\n".join(log_lines))
+    # Check the EXECUTABLE, not the version -- see check_python_available()'s
+    # comment: a non-None version alone can mean "found but rejected, too new".
+    # バージョンではなく実行ファイルを確認する -- check_python_available()の
+    # コメント参照: バージョンが非Noneなだけでは「見つかったが新しすぎて
+    # 不採用」の場合がありうる。
+    exe, _version, _is_rejected_too_new = find_preferred_system_python()
+    return (exe is not None, "\n".join(log_lines))
 
 
 def _existing_ancestor(path: Path) -> Path:

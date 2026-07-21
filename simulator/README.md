@@ -62,7 +62,7 @@ StampFly Simulatorは、マイクロドローン「StampFly」の動力学をPyt
 
 ### 必要環境
 
-- Python 3.8以上
+- Python 3.10〜3.12（推奨3.12）
 - pip（パッケージマネージャ）
 
 ### インストール
@@ -556,7 +556,7 @@ StampFly Simulator is a Python-based tool for simulating the dynamics of the "St
 
 ### Requirements
 
-- Python 3.8 or later
+- Python 3.10-3.12 (3.12 recommended)
 - pip (package manager)
 
 ### Installation
