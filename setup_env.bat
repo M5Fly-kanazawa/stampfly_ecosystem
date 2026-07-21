@@ -30,6 +30,9 @@ if exist "%PYENV_ROOT%\version" (
 )
 
 REM 2. python.org / other installers (only if pyenv-win not found)
+REM Program Files / Program Files (x86) are python.org's default
+REM "Install for all users" targets, distinct from the per-user
+REM LOCALAPPDATA\Programs\Python default.
 if not defined PYTHON_DIR (
     for %%d in (
         "%LOCALAPPDATA%\Programs\Python\Python313"
@@ -40,6 +43,14 @@ if not defined PYTHON_DIR (
         "C:\Python312"
         "C:\Python311"
         "C:\Python310"
+        "C:\Program Files\Python313"
+        "C:\Program Files\Python312"
+        "C:\Program Files\Python311"
+        "C:\Program Files\Python310"
+        "C:\Program Files (x86)\Python313"
+        "C:\Program Files (x86)\Python312"
+        "C:\Program Files (x86)\Python311"
+        "C:\Program Files (x86)\Python310"
         "%USERPROFILE%\scoop\apps\python\current"
         "%USERPROFILE%\anaconda3"
         "%USERPROFILE%\miniconda3"

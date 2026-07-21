@@ -332,6 +332,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "en": "Cannot proceed, required checks failing: {0}",
     },
     "env_check_copied": {"ja": "コピーしました: {0}", "en": "Copied to clipboard: {0}"},
+    "env_check_worker_error": {
+        "ja": "確認中にエラーが発生しました: {0}",
+        "en": "An error occurred while checking: {0}",
+    },
     "env_check_disk_free_detail": {"ja": "空き{0:.1f}GB", "en": "{0:.1f} GB free"},
     "python_not_found": {"ja": "見つかりません", "en": "not found"},
     "python_check_failed": {"ja": "確認できません ({0})", "en": "could not check ({0})"},
@@ -465,6 +469,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
             "  cd {1}\n"
             "  ./install.sh          (Windows: install.bat)"
         ),
+    },
+
+    # -- top-level GUI launch failure (see main()'s launch_gui() guard) -----
+    "gui_launch_failed_title": {"ja": "{0} - 起動エラー", "en": "{0} - Launch Error"},
+    "gui_launch_failed_body": {
+        "ja": "{0} の起動に失敗しました。\n\n{1}",
+        "en": "{0} failed to start.\n\n{1}",
     },
 }
 
@@ -817,29 +828,91 @@ def _windows_python_exe_candidates() -> List[Path]:
                     candidates.append(pyenv_root / "versions" / pyenv_ver / "python.exe")
         except OSError:
             pass
+    # Program Files / Program Files (x86) are python.org's default
+    # "Install for all users" targets, distinct from the per-user
+    # LOCALAPPDATA\Programs\Python default below.
+    # Program Files / Program Files (x86) は python.org の既定「全ユーザー
+    # 用にインストール」先で、下のユーザー毎既定 LOCALAPPDATA\Programs\Python
+    # とは別物。
     for ver in ("313", "312", "311", "310", "39", "38"):
         if localappdata:
             candidates.append(Path(localappdata) / "Programs" / "Python" / f"Python{ver}" / "python.exe")
         candidates.append(Path(f"C:/Python{ver}") / "python.exe")
+        candidates.append(Path(f"C:/Program Files/Python{ver}") / "python.exe")
+        candidates.append(Path("C:/Program Files (x86)") / f"Python{ver}" / "python.exe")
     if userprofile:
         candidates.append(Path(userprofile) / "scoop" / "apps" / "python" / "current" / "python.exe")
     return candidates
+
+
+def _py_launcher_python_exe() -> Optional[str]:
+    """
+    Windows: ask the `py` launcher for the real python.exe it would run,
+    so an install that only registered `py` on PATH (not `python`/
+    `python3`) is still found. Mirrors scripts/installer.py's
+    _py_launcher_python_dir() -- duplicated here (not imported) for the
+    same reason as _windows_python_exe_candidates() above: this check runs
+    BEFORE the repo (and thus installer.py) is cloned.
+
+    Returns None (never raises) on any failure, including the resolved
+    path being the non-functional WindowsApps Store stub.
+
+    Windows: `py` ランチャーに実際に実行する python.exe を問い合わせる。
+    `python`/`python3` ではなく `py` だけを PATH に登録したインストール
+    でも見つけられるようにする。scripts/installer.py の
+    _py_launcher_python_dir() と同じ処理だが、上の
+    _windows_python_exe_candidates() と同じ理由(このチェックはリポジトリ
+    -- ひいては installer.py -- が clone される前に走る)で import はせず
+    複製する。
+
+    いかなる失敗でも(解決先が機能しない WindowsApps ストアスタブである
+    場合を含め)None を返す。例外は送出しない。
+    """
+    py_launcher = shutil.which("py")
+    if not py_launcher:
+        return None
+    try:
+        result = subprocess.run(
+            [py_launcher, "-3", "-c", "import sys; print(sys.executable)"],
+            capture_output=True, timeout=SUBPROCESS_PROBE_TIMEOUT_SECONDS,
+            encoding="utf-8", errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.strip()
+    if not output:
+        return None
+    exe_path = output.splitlines()[0]
+    if "windowsapps" in exe_path.lower() or not Path(exe_path).is_file():
+        return None
+    return exe_path
 
 
 def _find_system_python() -> Optional[str]:
     """
     Locate a system Python interpreter -- deliberately NOT this frozen
     app's own bundled interpreter -- for the "system Python 3.8+"
-    prerequisite check. Prefers "python3" over "python" since some
-    systems still alias "python" to a Python 2 install. On Windows, also
-    scans common install locations off PATH so an installed-but-not-on-PATH
+    prerequisite check. Checks the `py` launcher first (highest priority:
+    some python.org installs register only `py`, not `python`/`python3`,
+    on PATH), then prefers "python3" over "python" since some systems
+    still alias "python" to a Python 2 install. On Windows, also scans
+    common install locations off PATH so an installed-but-not-on-PATH
     Python is still detected (matching installer.py's discovery).
     「システム Python 3.8+」前提チェックのため、システムの Python
     インタプリタを探す(このアプリ自身に同梱された凍結インタプリタでは
-    意図的にない)。一部の環境では "python" が今も Python 2 を指すため、
+    意図的にない)。最初に `py` ランチャーを確認し(最優先: 一部の
+    python.org インストールは `python`/`python3` ではなく `py` だけを
+    PATH に登録する)、次に一部の環境で今も Python 2 を指す "python" より
     "python3" を優先する。Windows では PATH 外の一般的なインストール先も
     走査し、PATH に載っていない Python も検出する(installer.py の発見と一致)。
     """
+    if sys.platform == "win32":
+        py_launcher_exe = _py_launcher_python_exe()
+        if py_launcher_exe:
+            return py_launcher_exe
     on_path = shutil.which("python3") or shutil.which("python")
     if on_path and "windowsapps" not in on_path.lower():
         return on_path
@@ -1997,16 +2070,34 @@ class StampFlySetupApp:
         install_dir = Path(self._install_dir_var.get()).expanduser()
 
         def worker():
-            results = {
-                ENV_CHECK_GIT: check_git_available(),
-                ENV_CHECK_PYTHON: check_python_available(),
-                ENV_CHECK_DISK: check_disk_space_sufficient(install_dir),
-                ENV_CHECK_NETWORK: check_network_reachable(),
-            }
-            details = {
-                ENV_CHECK_PYTHON: get_system_python_version_string(),
-                ENV_CHECK_DISK: tr("env_check_disk_free_detail", get_free_disk_space_gb(install_dir)),
-            }
+            # Guarded with a broad except: an unhandled exception here would
+            # run silently on this daemon thread (nothing surfaces it to the
+            # user) and the Environment Check page would stay stuck on
+            # "Checking..." forever, since _handle_env_check_result() is the
+            # only path that re-enables the Next button. Always push a
+            # result -- all rows NG plus the error text -- so the UI can
+            # recover instead of hanging.
+            # 広めの except で保護する: ここで例外が捕捉されないとこの
+            # デーモンスレッド上で黙って落ち、ユーザーには何も表示されない
+            # まま「確認中...」に画面が固まる(Next ボタンを再度有効化する
+            # 経路は _handle_env_check_result() のみのため)。必ず結果を
+            # 積む(全行NG + エラー内容)ことで、固まる代わりに画面が
+            # 復帰できるようにする。
+            try:
+                results = {
+                    ENV_CHECK_GIT: check_git_available(),
+                    ENV_CHECK_PYTHON: check_python_available(),
+                    ENV_CHECK_DISK: check_disk_space_sufficient(install_dir),
+                    ENV_CHECK_NETWORK: check_network_reachable(),
+                }
+                details = {
+                    ENV_CHECK_PYTHON: get_system_python_version_string(),
+                    ENV_CHECK_DISK: tr("env_check_disk_free_detail", get_free_disk_space_gb(install_dir)),
+                }
+            except Exception as exc:
+                error_text = tr("env_check_worker_error", exc)
+                results = {name: False for name in ENV_CHECK_ORDER}
+                details = {name: error_text for name in ENV_CHECK_ORDER}
             self._queue.put(("env_check_result", results, details))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -2449,7 +2540,43 @@ def main(argv=None) -> int:
             traceback.print_exc()
             return 1
 
-    return launch_gui()
+    # Same CLI exception barrier as the --selftest branch above, applied to
+    # the GUI path: an exception escaping launch_gui() (e.g. during
+    # StampFlySetupApp construction, before the Tk event loop even starts)
+    # would otherwise surface as a raw traceback (console build) or a
+    # PyInstaller bootloader modal dialog with no useful message
+    # (--windowed build), leaving a newcomer with nothing actionable.
+    # Print the traceback to stderr, then best-effort show a short
+    # bilingual messagebox -- wrapped in its own try/except in case tkinter
+    # itself is what is broken -- and exit 1.
+    # 上の --selftest 分岐と同じ CLI 例外バリアを GUI 経路にも適用する:
+    # launch_gui() を抜ける例外(例: Tk イベントループが始まる前の
+    # StampFlySetupApp 構築中)を放置すると、素の traceback でクラッシュ
+    # する(コンソールビルド)か、PyInstaller bootloader の有用な情報の
+    # 無いモーダルダイアログになり(--windowed ビルド)、初心者には対処
+    # しようがない。traceback を stderr へ出力し、ベストエフォートで短い
+    # 英日併記のメッセージボックスを表示し(tkinter 自体が壊れている場合に
+    # 備えてそれ自体を try/except で包む)、exit 1 する。
+    try:
+        return launch_gui()
+    except Exception:
+        traceback.print_exc()
+        if messagebox is not None:
+            try:
+                detail = "\n".join(traceback.format_exc().strip().splitlines()[-5:])
+                messagebox.showerror(
+                    tr("gui_launch_failed_title", APP_NAME),
+                    tr("gui_launch_failed_body", APP_NAME, detail),
+                )
+            except Exception:
+                # tkinter itself may be the thing that is broken (e.g. no
+                # display server); the traceback above is already on
+                # stderr, so there is nothing more we can safely surface.
+                # tkinter 自体が壊れている場合がある(例: ディスプレイ
+                # サーバーが無い)。traceback は既に stderr へ出ているため、
+                # これ以上安全に表示できるものは無い。
+                pass
+        return 1
 
 
 if __name__ == "__main__":

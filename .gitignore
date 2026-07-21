@@ -42,6 +42,13 @@ dist/
 build/
 .eggs/
 *.egg
+# PyInstaller-generated spec file (e.g. from building the installer/flasher
+# GUIs with `pyinstaller --onefile ...`); regenerated on every build, not
+# hand-maintained, so it should not be committed.
+# PyInstaller が生成する spec ファイル(インストーラ/フラッシャ GUI を
+# `pyinstaller --onefile ...` でビルドした際に生成される)。ビルドの度に
+# 再生成され手動管理しないため、コミットしない。
+*.spec
 .ipynb_checkpoints/
 .pytest_cache/
 .mypy_cache/

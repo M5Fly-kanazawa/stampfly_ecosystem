@@ -250,15 +250,17 @@ def _windows_python_dir_candidates() -> list[Path]:
     install.bat の発見ブロックと同じ優先順で返す。
 
     Kept in sync with install.bat (pyenv-win, per-user Programs\\Python,
-    machine-wide C:\\Python*, scoop, conda). Duplicated here — not shared —
-    because installer.py is a standalone stdlib-only script AND because the
-    GUI (StampFly Setup) never runs install.bat at all: the frozen app
-    imports installer.py in-process, so this discovery must live here for
-    the GUI path to find Python for ESP-IDF's own install.bat.
+    machine-wide C:\\Python*, python.org's all-users Program Files
+    location, scoop, conda). Duplicated here — not shared — because
+    installer.py is a standalone stdlib-only script AND because the GUI
+    (StampFly Setup) never runs install.bat at all: the frozen app imports
+    installer.py in-process, so this discovery must live here for the GUI
+    path to find Python for ESP-IDF's own install.bat.
     install.bat と同期を保つ(pyenv-win、ユーザー毎の Programs\\Python、
-    マシン全体の C:\\Python*、scoop、conda)。共有せず複製する理由: 本
-    ファイルは stdlib のみの独立スクリプトであり、かつ GUI(StampFly Setup)
-    は install.bat を一切実行しない — 凍結アプリが installer.py をプロセス内
+    マシン全体の C:\\Python*、python.org の all-users インストール先の
+    Program Files、scoop、conda)。共有せず複製する理由: 本ファイルは
+    stdlib のみの独立スクリプトであり、かつ GUI(StampFly Setup)は
+    install.bat を一切実行しない — 凍結アプリが installer.py をプロセス内
     import するため、GUI 経路が ESP-IDF の install.bat 用に Python を
     見つけられるよう、この発見ロジックはここに置く必要がある。
     """
@@ -279,17 +281,65 @@ def _windows_python_dir_candidates() -> list[Path]:
         except OSError:
             pass
 
-    # 2. Common install locations (newest first).
-    # 2. 一般的なインストール先(新しい順)。
+    # 2. Common install locations (newest first). Program Files / Program
+    # Files (x86) are python.org's default "Install for all users" targets
+    # -- distinct from the per-user LOCALAPPDATA\Programs\Python default.
+    # 2. 一般的なインストール先(新しい順)。Program Files / Program Files
+    # (x86) は python.org の既定「全ユーザー用にインストール」先で、
+    # ユーザー毎既定の LOCALAPPDATA\Programs\Python とは別物。
     for ver in ("313", "312", "311", "310", "39", "38"):
         if localappdata:
             candidates.append(Path(localappdata) / "Programs" / "Python" / f"Python{ver}")
         candidates.append(Path(f"C:/Python{ver}"))
+        candidates.append(Path(f"C:/Program Files/Python{ver}"))
+        candidates.append(Path("C:/Program Files (x86)") / f"Python{ver}")
     if userprofile:
         candidates.append(Path(userprofile) / "scoop" / "apps" / "python" / "current")
         candidates.append(Path(userprofile) / "anaconda3")
         candidates.append(Path(userprofile) / "miniconda3")
     return candidates
+
+
+def _py_launcher_python_dir() -> Optional[Path]:
+    """Windows: ask the `py` launcher for the real python.exe it would run,
+    so an install that only registered `py` on PATH (not `python`/
+    `python3`, e.g. some python.org installs) is still found. Checked with
+    highest priority by _find_system_python_dir() since `py` is the most
+    authoritative way to ask "what is THE system Python" on Windows.
+    Windows: `py` ランチャーに実際に実行する python.exe を問い合わせる。
+    `python`/`python3` ではなく `py` だけを PATH に登録したインストール
+    (一部の python.org インストール等)でも見つけられるようにする。
+    `py` は Windows上で「システムの Python は何か」を尋ねる最も権威ある
+    手段のため、_find_system_python_dir() は最優先でこれを確認する。
+
+    Returns None (never raises) on any failure: `py` absent, the subprocess
+    timing out or erroring, or the resolved path being the non-functional
+    WindowsApps Store stub (same exclusion as the PATH lookup below).
+    いかなる失敗でも None を返す(例外は送出しない): `py` が無い、
+    subprocess がタイムアウト/エラーになる、解決先が機能しない
+    WindowsApps ストアスタブである(下の PATH 探索と同じ除外)、のいずれも。
+    """
+    py_launcher = shutil.which("py")
+    if not py_launcher:
+        return None
+    try:
+        result = subprocess.run(
+            [py_launcher, "-3", "-c", "import sys; print(sys.executable)"],
+            capture_output=True, timeout=15,
+            encoding="utf-8", errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.strip()
+    if not output:
+        return None
+    exe = Path(output.splitlines()[0])
+    if "windowsapps" in str(exe).lower() or not exe.is_file():
+        return None
+    return exe.parent
 
 
 def _python_is_3_8_plus(python_exe: Path) -> bool:
@@ -326,9 +376,18 @@ def _find_system_python_dir() -> Optional[Path]:
     """
     if sys.platform != "win32":
         return None
-    # 1. Already resolvable on PATH? Skip the WindowsApps stub, which is a
+    # 1. Highest priority: ask the `py` launcher directly. Some python.org
+    # installs register only `py` (not `python`/`python3`) on PATH, which
+    # the name-based lookup right below would otherwise miss entirely.
+    # 1. 最優先: `py` ランチャーに直接問い合わせる。一部の python.org
+    # インストールは `py` だけを PATH に登録し `python`/`python3` を
+    # 登録しないため、これが無いと直後の名前ベース探索では見つからない。
+    py_dir = _py_launcher_python_dir()
+    if py_dir is not None and _python_is_3_8_plus(py_dir / "python.exe"):
+        return py_dir
+    # 2. Already resolvable on PATH? Skip the WindowsApps stub, which is a
     # non-functional placeholder that only opens the Store.
-    # 1. 既に PATH で解決できるか? Store を開くだけの機能しないプレース
+    # 2. 既に PATH で解決できるか? Store を開くだけの機能しないプレース
     # ホルダである WindowsApps スタブは除外する。
     for name in ("python", "python3"):
         found = shutil.which(name)
@@ -339,8 +398,8 @@ def _find_system_python_dir() -> Optional[Path]:
             continue
         if _python_is_3_8_plus(exe):
             return exe.parent
-    # 2. Known install locations (same as install.bat).
-    # 2. 既知のインストール先(install.bat と同一)。
+    # 3. Known install locations (same as install.bat).
+    # 3. 既知のインストール先(install.bat と同一)。
     for candidate_dir in _windows_python_dir_candidates():
         exe = candidate_dir / "python.exe"
         if exe.is_file() and _python_is_3_8_plus(exe):
@@ -391,6 +450,108 @@ def _clean_env_for_cmd() -> dict:
             # python スタブが、発見した本物のインタプリタに勝たないように。
             env["PATH"] = python_dir_str + os.pathsep + current_path
     return env
+
+
+def _report_git_not_found() -> None:
+    """Print an actionable, bilingual error when git itself is missing
+    from PATH (a bare FileNotFoundError from subprocess otherwise looks
+    like an obscure crash to a newcomer running this installer for the
+    first time).
+    git 自体が PATH に無い場合、対処可能な英日併記エラーを表示する
+    (subprocess の素の FileNotFoundError だけでは、初めてこの
+    インストーラーを実行する初心者には不可解なクラッシュに見えてしまう)。
+    """
+    error("Git was not found on PATH.")
+    error("Install it from https://git-scm.com/download/win and re-run this installer.")
+    error("Git が見つかりません。")
+    error("https://git-scm.com/download/win からインストールして再実行してください。")
+
+
+def _stream_subprocess(
+    cmd,
+    cwd: Optional[Path] = None,
+    shell: bool = False,
+    env: Optional[dict] = None,
+) -> int:
+    """Run cmd, streaming its merged stdout+stderr to our own stdout line
+    by line instead of capturing it silently, and return the exit code.
+
+    Why: a frozen/redirected caller (the GUI installer's stdout capture,
+    see the module docstring's Stability contract) sees nothing at all
+    from a plain `subprocess.run(..., capture_output=True)` until the
+    whole command finishes -- for a multi-minute `git clone` or
+    `install.bat`, that reads as an indefinite freeze rather than
+    progress. Streaming line-by-line with `print(..., flush=True)` lets
+    the caller's own stdout redirection (e.g. contextlib.redirect_stdout
+    into a queue) surface each line as it happens.
+
+    `\\r` (used by progress meters like git's own `--progress` output,
+    which does not end lines with `\\n`) is normalized to `\\n` so those
+    updates still appear as discrete log lines rather than being lost
+    inside a single unterminated read.
+
+    On Windows, CREATE_NO_WINDOW suppresses the console window that would
+    otherwise flash open for a python.exe- or cmd.exe-hosted child when
+    this runs inside a --windowed (no-console) frozen GUI.
+
+    Raises FileNotFoundError if cmd itself cannot be spawned (e.g. `git`
+    is not on PATH); callers are expected to catch this and print a
+    specific, actionable message (see _report_git_not_found() above) --
+    unlike a plain non-zero exit code, which this function reports
+    through its return value rather than an exception.
+
+    cmd を実行し、標準出力+標準エラーを結合して黙って捕捉するのではなく
+    1行ずつ自身の標準出力へ流し、終了コードを返す。
+
+    理由: 凍結/リダイレクトされた呼び出し元(GUIインストーラーの標準出力
+    捕捉、本ファイル冒頭の安定契約を参照)は、素の
+    `subprocess.run(..., capture_output=True)` だとコマンド全体が終わる
+    まで何も見えない -- 数分かかる `git clone` や `install.bat` では、
+    進捗ではなく無期限のフリーズに見えてしまう。`print(..., flush=True)`
+    で1行ずつ流すことで、呼び出し元自身の標準出力リダイレクト(例:
+    contextlib.redirect_stdout でキューへ流す)が発生と同時に各行を
+    表示できる。
+
+    `\\r`(git 自身の `--progress` 出力のような進捗表示が使う。`\\n` で
+    行を終端しない)は `\\n` に正規化し、1つの未終端読み込みの中に
+    埋もれさせず個別のログ行として見せる。
+
+    Windows では CREATE_NO_WINDOW を付け、--windowed(コンソール無し)の
+    凍結GUI内で実行した際に python.exe や cmd.exe をホストする子プロセス
+    用のコンソール窓がちらつくのを抑止する。
+
+    cmd 自体を起動できない場合(例: `git` が PATH に無い)は
+    FileNotFoundError を送出する。呼び出し側でこれを捕捉し、具体的で
+    対処可能なメッセージ(上の _report_git_not_found() 参照)を表示する
+    こと -- 単純な非ゼロ終了コードは(例外ではなく)この関数の戻り値で
+    報告される。
+    """
+    popen_kwargs = dict(
+        cwd=cwd,
+        shell=shell,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    process = subprocess.Popen(cmd, **popen_kwargs)
+
+    assert process.stdout is not None  # guaranteed by stdout=subprocess.PIPE above
+    buffer = ""
+    while True:
+        chunk = process.stdout.read(4096)
+        if not chunk:
+            break
+        buffer += chunk.replace("\r", "\n")
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            print(line, flush=True)
+    if buffer:
+        print(buffer, flush=True)
+    return process.wait()
 
 
 def _idf_tools_path_candidates() -> list[Path]:
@@ -825,20 +986,28 @@ class ESPIDFInstaller:
 
         # Stage 2: Clone main repository (without submodules)
         # ステージ2: メインリポジトリのクローン（サブモジュールなし）
+        # --progress and _stream_subprocess() together surface live clone
+        # progress instead of a multi-minute silence in a frozen/redirected
+        # caller (e.g. the GUI installer's captured stdout).
+        # --progress と _stream_subprocess() の組み合わせで、凍結/
+        # リダイレクトされた呼び出し元(GUIインストーラーの捕捉した標準
+        # 出力など)でも数分間の沈黙ではなくクローンの進捗が見えるようにする。
         info("Cloning ESP-IDF repository (main repo)...")
         try:
-            subprocess.run(
+            rc = _stream_subprocess(
                 [
-                    "git", "clone",
+                    "git", "clone", "--progress",
                     "--branch", version,
                     "--depth", "1",
                     cls.REPO_URL,
                     str(target_dir),
                 ],
-                check=True,
             )
-        except subprocess.CalledProcessError as e:
-            error(f"Failed to clone ESP-IDF: {e}")
+        except FileNotFoundError:
+            _report_git_not_found()
+            return None
+        if rc != 0:
+            error(f"Failed to clone ESP-IDF (git exited with code {rc})")
             # Clean up failed clone
             # 失敗したクローンをクリーンアップ
             if target_dir.exists():
@@ -849,16 +1018,18 @@ class ESPIDFInstaller:
         # ステージ3: サブモジュール初期化（リトライ可能）
         info("Initializing submodules (this may take a while)...")
         try:
-            subprocess.run(
+            rc = _stream_subprocess(
                 [
                     "git", "submodule", "update",
                     "--init", "--depth", "1", "--recursive",
                 ],
                 cwd=target_dir,
-                check=True,
             )
-        except subprocess.CalledProcessError as e:
-            error(f"Failed to initialize submodules: {e}")
+        except FileNotFoundError:
+            _report_git_not_found()
+            return None
+        if rc != 0:
+            error(f"Failed to initialize submodules (git exited with code {rc})")
             warn("Main repository is preserved. Re-run installer to retry submodule init.")
             # Don't delete - main repo is intact, user can retry
             # 削除しない - メインリポジトリはそのまま、再実行でリトライ可能
@@ -895,20 +1066,27 @@ class ESPIDFInstaller:
             return None
 
         info("Installing ESP-IDF tools (this may take a while)...")
+        # Streamed via _stream_subprocess() (not subprocess.run(capture_output))
+        # so a frozen/redirected caller sees live progress instead of a
+        # multi-minute silence -- see that function's docstring.
+        # _stream_subprocess() 経由で流す(subprocess.run(capture_output) では
+        # ない) -- 凍結/リダイレクトされた呼び出し元でも数分間の沈黙では
+        # なく進捗が見えるようにする。詳細は同関数の docstring 参照。
         try:
             if sys.platform == "win32":
                 install_script = target_dir / "install.bat"
                 # Use shell=True + call for .bat execution from any shell
                 # shell=True + call で任意のシェルから .bat を確実に実行
                 cmd = f'call "{install_script}" esp32s3'
-                subprocess.run(cmd, shell=True, check=True, env=_clean_env_for_cmd())
+                rc = _stream_subprocess(cmd, shell=True, env=_clean_env_for_cmd())
             else:
                 install_script = target_dir / "install.sh"
-                subprocess.run(
-                    ["bash", str(install_script), "esp32s3"], check=True,
-                )
-        except subprocess.CalledProcessError as e:
+                rc = _stream_subprocess(["bash", str(install_script), "esp32s3"])
+        except FileNotFoundError as e:
             error(f"Failed to install ESP-IDF tools: {e}")
+            return None
+        if rc != 0:
+            error(f"Failed to install ESP-IDF tools (exit code {rc})")
             return None
 
         success(f"ESP-IDF {version} installed successfully!")
