@@ -96,6 +96,22 @@ extern "C" {
 #define INADDR_NONE       ((uint32_t)0xffffffffUL)
 #define MSG_DONTWAIT   0x08
 #define SHUT_RDWR      2
+// F_GETFL/F_SETFL/O_NONBLOCK + the fcntl() stub below exist so firmware's
+// non-blocking-socket pattern (fcntl(sock, F_GETFL, 0); fcntl(sock, F_SETFL,
+// flags|O_NONBLOCK);) compiles and no-ops against our fake socket() ints,
+// without ever handing those fake fds to the real libc fcntl() (see the
+// fcntl() comment below for why). CAUTION: a translation unit that includes
+// BOTH this header AND the real <fcntl.h> gets a hard compile error on
+// Linux/macOS — see the fcntl() stub's comment below. Prefer relying on this
+// header alone (as telemetry.cpp / api_task.cpp already do) over also
+// including <fcntl.h>.
+// F_GETFL/F_SETFL/O_NONBLOCK と下の fcntl() スタブは、firmware の非ブロッキング
+// ソケットパターン（fcntl(sock, F_GETFL, 0); fcntl(sock, F_SETFL,
+// flags|O_NONBLOCK);）をコンパイル・no-op させるため（下の fcntl() のコメント
+// 参照 — 偽 fd を実 libc の fcntl() へ渡さない）。注意: 本ヘッダと本物の
+// <fcntl.h> の両方を同一翻訳単位で include すると Linux/macOS でコンパイル
+// エラーになる（下記参照）。<fcntl.h> を追加せず本ヘッダ単体に頼ること
+// （telemetry.cpp / api_task.cpp は既にそうしている）。
 #define F_GETFL        3
 #define F_SETFL        4
 #define O_NONBLOCK     0x0004
@@ -158,6 +174,18 @@ static inline int listen(int s, int backlog) { (void)s; (void)backlog; return 0;
 static inline int setsockopt(int s, int lvl, int opt, const void* v, socklen_t l) { (void)s; (void)lvl; (void)opt; (void)v; (void)l; return 0; }
 static inline int getsockopt(int s, int lvl, int opt, void* v, socklen_t* l) { (void)s; (void)lvl; (void)opt; (void)v; (void)l; return 0; }
 static inline int shutdown(int s, int how) { (void)s; (void)how; return 0; }
+// FIXED 3-arg signature by design (matches every call site in this codebase:
+// fcntl(fd, F_GETFL, 0) / fcntl(fd, F_SETFL, flags)). The real libc fcntl()
+// is variadic — int fcntl(int, int, ...) — so if a TU ALSO includes the real
+// <fcntl.h>, that declaration conflicts with this one ("conflicting
+// declaration of C function") on Linux/macOS. This is intentional and
+// unavoidable without either (a) calling the real fcntl() on our fake
+// socket() ints — which could alias a real, unrelated file descriptor at the
+// same small integer value and mutate ITS flags — or (b) a fragile
+// macro-rename trick (tried and confirmed broken: renaming via #define still
+// re-declares the target under the real declaration's linkage/exception-spec,
+// which mismatches ours). See the F_GETFL comment above for the "don't also
+// include <fcntl.h>" rule this implies.
 static inline int fcntl(int s, int cmd, int arg) { (void)s; (void)cmd; (void)arg; return 0; }
 static inline int lwip_close(int s) { (void)s; return 0; }
 #define closesocket(s) lwip_close(s)
