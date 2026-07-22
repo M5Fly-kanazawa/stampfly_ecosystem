@@ -101,6 +101,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 | `v2026.07.3` | 同上（ファーム無変更） | （未定） | リリース済み (2026-07-20)。StampFly Terminal ランチャー・Setup 修復モード修正 |
 | `v2026.07.4` | 同上（ファーム無変更） | （未定） | Windows GUIインストーラ大幅強化（CRLF/cp932/exit9009/jinja2衝突修正）・Python対応3.10〜3.12確定・仮想環境マネージャ対応・シミュレータ symlink 廃止 |
 | `v2026.07.5` | 同上（ファーム無変更） | （未定） | SIL シミュレータの Windows ネイティブ対応（MinGW-w64、WSL不要）・`sf sil regression` と CI 自動回帰ゲート・GUIインストーラに SIL 開発ツールチェーン導入オプション追加・hover_smoke ハーネス離陸フェーズ修正 |
+| `v2026.07.6` | 同上（ファーム無変更） | （未定） | インストーラ・開発環境の互換性修正（pyenv-win shim による exit 9009 再発の根本修正、setup_env の対応 Python 誘導、sfcli の venv 経由 idf.py/esptool 起動、IDF venv と Python の整合検証、シミュレータ依存導入の検証強化） |
 
 ## 7. 教育機関向け推奨
 
@@ -207,6 +208,7 @@ university curriculum). Add a row whenever a new release is cut.
 | `v2026.07.3` | same (firmware unchanged) | TBD | released (2026-07-20); StampFly Terminal launcher, Setup repair-mode fix |
 | `v2026.07.4` | same (firmware unchanged) | TBD | major Windows GUI installer hardening (CRLF/cp932/exit 9009/jinja2 conflict fixes), Python support pinned to 3.10-3.12, virtualenv-manager support, simulator symlink removal |
 | `v2026.07.5` | same (firmware unchanged) | TBD | native Windows SIL simulator support (MinGW-w64, no WSL needed), `sf sil regression` + automated CI regression gate, optional SIL dev toolchain install in the GUI installer, hover_smoke harness takeoff-phase fix |
+| `v2026.07.6` | same (firmware unchanged) | TBD | installer / dev-environment compatibility fixes (root-cause fix for the pyenv-win shim exit 9009 regression, setup_env steering to supported Python, sfcli invoking idf.py/esptool via the venv python, IDF venv / Python match verification, hardened simulator dependency install) |
 
 ## 7. Recommendations for Educational Institutions
 
