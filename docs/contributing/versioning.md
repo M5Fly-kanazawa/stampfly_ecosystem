@@ -81,7 +81,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 
 | # | 項目 | コマンド／確認内容 |
 |---|------|-------------------|
-| 1 | SIL退行テスト（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sil scenario` 等、対象シナリオ一式を実行しPASSを確認 |
+| 1 | SIL退行テスト（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sil regression`（`sf sil scenario` を対象シナリオ一式に一括適用）でPASSを確認。main へのpush・PRで GitHub Actions（`sil-regression.yml`）が自動実行するため、ローカル実行は事前確認・デバッグ用の補助 |
 | 2 | vehicle・controller 両ターゲットのローカルビルドが通ること | `sf build vehicle` / `sf build controller` |
 | 3 | 前回リリースからの変更点を整理すること | CHANGELOG的に、主要な `feat`/`fix` コミットを箇条書きで洗い出す |
 | 4 | バージョンタグを作成すること | `git tag vYYYY.MM.P`（例: `git tag v2026.07.0`） |
@@ -186,7 +186,7 @@ Before cutting a tag, work through the following checklist in order.
 
 | # | Item | Command / What to check |
 |---|------|--------------------------|
-| 1 | SIL regression (a simulation-based check that changes have not broken existing behavior — "regression" here means software regression, not statistical regression) passes | Run the relevant scenario suite, e.g. `sf sil scenario`, and confirm PASS |
+| 1 | SIL regression (a simulation-based check that changes have not broken existing behavior — "regression" here means software regression, not statistical regression) passes | Confirm PASS via `sf sil regression` (applies `sf sil scenario` to the full scenario suite in one shot). GitHub Actions (`sil-regression.yml`) runs this automatically on every push to main and every PR, so a local run is mainly for pre-check / debugging |
 | 2 | Both vehicle and controller build locally | `sf build vehicle` / `sf build controller` |
 | 3 | Summarize changes since the last release | Draft a CHANGELOG-style bullet list of the key `feat`/`fix` commits |
 | 4 | Create the version tag | `git tag vYYYY.MM.P` (e.g. `git tag v2026.07.0`) |

@@ -12,6 +12,9 @@ Subcommands:
   status     Show the machine verdict (results.json) for a milestone
   gate       Gate check: bundle complete AND verdict passes (output-driven)
   scenario   Run a *.scn input scenario (console/ESP-NOW) and assert outputs (E6)
+  regression Run every *.scn that has a matching *.expect and gate on the aggregate
+             (the automated form of the manual A/B loop in release-workflow.md; CI
+             entry point for sil-regression.yml)
   milestone  build → run → video → gate in one shot (the /sil-milestone skill)
 """
 
@@ -19,10 +22,12 @@ import argparse
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -216,6 +221,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "real pairing handshake (pairing.scn)")
     p.set_defaults(func=run_scenario)
 
+    # Regression: run every *.scn that has a matching *.expect (README/TEST_MATRIX
+    # "32 scenarios"; the .expect glob is authoritative) and gate on the aggregate.
+    # This is the CI/pre-release entry point (sil-regression.yml, versioning.md §5).
+    # 退行: .expect を伴う全 *.scn を実行し集約判定でゲートする(README/TEST_MATRIX
+    # の「32本」。.expect グロブが正)。CI・リリース前のエントリポイント。
+    p = sub.add_parser("regression", help="Run all *.scn/*.expect scenarios and gate (CI)")
+    p.add_argument("--json-out", default=None,
+                   help="write a machine-readable summary (per-scenario pass/fail) to this path")
+    p.set_defaults(func=run_regression)
+
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
     p.add_argument("-m", "--milestone", default="P4")
     p.add_argument("--ea", choices=list(ESTIMATORS), default="eskf", help="run A estimator")
@@ -281,6 +296,18 @@ def run_build(args: argparse.Namespace) -> int:
         console.info(f"Windows: configuring for MinGW-w64 ({mingw})")
         cmake_cmd += ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
                       "-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++"]
+    elif (not platform.is_windows() and shutil.which("ninja")
+          and not (bd / "CMakeCache.txt").exists()):
+        # Linux/macOS: prefer Ninja over the default Unix Makefiles generator when
+        # it is on PATH (first configure only, same reasoning as the Windows branch
+        # above) — faster parallel builds, notably for the FetchContent MuJoCo
+        # build in CI (sil-regression.yml apt-installs ninja for exactly this).
+        # Linux/macOS: PATH に ninja があれば既定の Unix Makefiles より優先する
+        # （初回のみ、理由は上の Windows 分岐と同じ）— FetchContent の MuJoCo
+        # ビルドで特に効く並列ビルドの高速化（sil-regression.yml はまさにこの
+        # 目的で ninja を導入する）。
+        console.info("Configuring with Ninja (found on PATH)")
+        cmake_cmd += ["-G", "Ninja"]
 
     console.info("Configuring SIL (cmake)...")
     r = subprocess.run(cmake_cmd, env=env)
@@ -654,6 +681,99 @@ def run_scenario(args: argparse.Namespace) -> int:
             else:
                 console.error("render_video.py failed")
     return 0 if verdict else 2
+
+
+# --- regression: run every *.scn/*.expect pair and gate on the aggregate ------------
+# Each scenario documents its OWN required invocation (target/duration/unpaired/...)
+# in a "sf sil scenario simulator/sil/scenarios/<name>.scn ..." comment inside its own
+# header (e.g. api_flight.scn: "# Run: ... --target vehicle --duration 40000000") —
+# the .scn file is the single source of truth for how it must be run, so this parses
+# that line instead of hand-maintaining a duplicate table that would drift.
+# 各シナリオは自身のヘッダコメント内の "sf sil scenario .../<name>.scn ..." 行で
+# 自分の必要な呼び出し(target/duration/unpaired等)を宣言する（例:
+# api_flight.scn の "# Run: ... --target vehicle --duration 40000000"）。.scn 自身が
+# 自分の呼び出し方法の唯一の正なので、重複管理で陳腐化するテーブルを持たず、この行を
+# 解析する。
+_RUN_LINE_RE = re.compile(r"sf sil scenario\s+\S*?scenarios/(?P<name>[\w.]+)\.scn(?P<rest>.*)")
+
+# Two scenarios whose header comment does NOT document the target they actually need
+# (unlike api_flight/pairing/etc. above) — verified empirically (2026-07) and matching
+# TEST_MATRIX.md's "その他のシナリオ" table: the CLI feeder and ESP-NOW virtual-pilot
+# input channels are wired for vehicle_old only, so these two FAIL under the default
+# vehicle target. Keep this table tiny and named so it stays an obvious exception, not
+# a growing parallel manifest.
+# ヘッダコメントに実際必要な target が書かれていない2本（上記 api_flight/pairing 等とは
+# 違う）。2026-07 に実測で確認済み、TEST_MATRIX.md の「その他のシナリオ」表とも一致:
+# CLI フィーダと ESP-NOW 仮想パイロット入力チャネルは vehicle_old 専用配線のため、既定の
+# vehicle ターゲットでは FAIL する。肥大化する並行マニフェストにならないよう、この表は
+# 小さく・例外だと分かる名前に留める。
+_TARGET_OVERRIDE = {
+    "console_cli": "vehicle_old",
+    "hover_espnow": "vehicle_old",
+}
+
+
+def _scenario_invocation(scn: Path) -> list:
+    """Return the extra `sf sil scenario` CLI args this .scn documents for itself
+    (parsed from its own header comment), always including an explicit --target
+    (falling back to _TARGET_OVERRIDE, then "vehicle"). Returns e.g.
+    ['--target', 'vehicle', '--duration', '40000000'].
+    この .scn が自身のヘッダコメントで宣言する追加CLI引数を返す。--target は
+    常に明示する（宣言が無ければ _TARGET_OVERRIDE、それも無ければ "vehicle"）。
+    """
+    extra = []
+    for line in scn.read_text(encoding="utf-8").splitlines():
+        m = _RUN_LINE_RE.search(line)
+        if m and m.group("name") == scn.stem:
+            extra = shlex.split(m.group("rest"))
+            break
+    if "--target" not in extra:
+        extra = ["--target", _TARGET_OVERRIDE.get(scn.stem, "vehicle")] + extra
+    return extra
+
+
+def run_regression(args: argparse.Namespace) -> int:
+    scn_dir = _sil_dir() / "scenarios"
+    # The .expect glob is authoritative (README/TEST_MATRIX "32 scenarios" as of
+    # 2026-07; scenarios without an .expect are exploratory/manual benches not
+    # gated here — see TEST_MATRIX.md "その他のシナリオ").
+    # .expect グロブが正（2026-07時点で「32本」。.expect の無いものは探索的・手動用の
+    # ベンチでありここではゲートしない — TEST_MATRIX.md「その他のシナリオ」参照）。
+    scenarios = sorted(p for p in scn_dir.glob("*.scn") if p.with_suffix(".expect").exists())
+    if not scenarios:
+        console.error(f"no *.scn/*.expect pairs found under {scn_dir}"); return 1
+
+    console.info(f"SIL regression: {len(scenarios)} scenario(s) with a matching .expect...")
+    results = []
+    for scn in scenarios:
+        extra = _scenario_invocation(scn)
+        target = extra[extra.index("--target") + 1]
+        cmd = [sys.executable, "-m", "sfcli", "sil", "scenario", str(scn)] + extra
+        t0 = time.monotonic()
+        r = subprocess.run(cmd)
+        elapsed = time.monotonic() - t0
+        verdict = (r.returncode == 0)
+        console.info(f"  [{'PASS' if verdict else 'FAIL'}] {scn.stem} "
+                     f"(target={target}, {elapsed:.1f}s)")
+        results.append({"name": scn.stem, "target": target, "extra_args": extra,
+                        "pass": verdict, "exit_code": r.returncode,
+                        "elapsed_s": round(elapsed, 1)})
+
+    n_pass = sum(1 for r in results if r["pass"])
+    n_fail = len(results) - n_pass
+    if getattr(args, "json_out", None):
+        summary = {"total": len(results), "pass": n_pass, "fail": n_fail, "scenarios": results}
+        Path(args.json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        console.info(f"Summary written to {args.json_out}")
+
+    if n_fail:
+        console.error(f"SIL regression: {n_fail}/{len(results)} scenario(s) FAILED:")
+        for r in results:
+            if not r["pass"]:
+                console.error(f"  FAIL {r['name']} (target={r['target']})")
+        return 1
+    console.success(f"SIL regression: all {len(results)} scenarios PASS")
+    return 0
 
 
 def run_gui(args: argparse.Namespace) -> int:
