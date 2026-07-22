@@ -44,6 +44,7 @@
 #include "console_feeder.hpp"    // P8: scripted console bytes → firmware stdin
 #include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
 #include "emu_trajectory.hpp"    // P8: review-video trajectory recorder (SIL_EMU_TRAJ)
+#include "emu_rate_stream.hpp"   // model-match gate: 400Hz rate_ref+gyro (SIL_EMU_RATE_STREAM)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -69,6 +70,11 @@ void on_advance(int64_t now_us)
         // Record a review-video trajectory row (no-op unless SIL_EMU_TRAJ was set).
         // レビュー動画用に軌跡を1行記録（SIL_EMU_TRAJ 未設定なら no-op）。
         sil_emu_traj_sample((double)now_us * 1e-6, &g_plant);
+        // Model-match gate: record one 400Hz rate_ref+gyro row per NEW control
+        // cycle (edge-detected inside; no-op unless SIL_EMU_RATE_STREAM was set).
+        // モデル一致ゲート: 新しい制御周期ごとに rate_ref+gyro を1行記録
+        // （内部でエッジ検出。SIL_EMU_RATE_STREAM 未設定なら no-op）。
+        sil_emu_rate_sample();
     }
 }
 
@@ -186,6 +192,7 @@ int main(int argc, char** argv)
     // P8: 要求時に決定論イベントログ＋レビュー動画軌跡を開く。未設定なら no-op。
     sil_emu_record_open(std::getenv("SIL_EMU_EVENTS"));
     sil_emu_traj_open(std::getenv("SIL_EMU_TRAJ"));
+    sil_emu_rate_open(std::getenv("SIL_EMU_RATE_STREAM"));
 
     // P8: load a scripted input scenario (argv[3]) BEFORE the scheduler starts. A
     // parse error aborts before any firmware singleton exists (safe return).
@@ -318,10 +325,20 @@ int main(int argc, char** argv)
         }
     }
 
+    // Model-match gate: snapshot the LIVE rate-loop gains (SSOT params, after
+    // every override above) into the rate-stream's <path>.gains.json sidecar —
+    // this is the gain set `sf sil sysid-gate` must replay to reconstruct the
+    // rate loop's torque output. No-op unless SIL_EMU_RATE_STREAM was set.
+    // モデル一致ゲート: 上の全上書き適用後の実ゲイン（SSOT params）を rate-stream の
+    // <path>.gains.json sidecar へ書く — sf sil sysid-gate の再生に必須。
+    // SIL_EMU_RATE_STREAM 未設定なら no-op。
+    sil_emu_rate_write_gains();
+
     sil::rtos::Scheduler::instance().run(duration_us);
 
     sil_emu_record_close();   // flush/close the events log
     sil_emu_traj_close();     // flush/close the review-video trajectory (if open)
+    sil_emu_rate_close();     // flush/close the model-match-gate rate stream (if open)
 
     // --- post-run validation: did the real estimator track the Plant? ---------
     // 実行後の検証: 実推定器が Plant を追従したか。

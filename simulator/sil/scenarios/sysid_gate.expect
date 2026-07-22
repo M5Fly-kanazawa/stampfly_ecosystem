@@ -1,0 +1,32 @@
+# sysid_gate.scn.expect — normal-completion check only (G1 state machine + loose
+# G3 attitude/actuator bounds through the 3-axis chirp sequence + landed altitude).
+# The (b,T,L) fit verdict against real-hardware identification is judged by
+# `sf sil sysid-gate` (analysis/reports/rate_sysid_reference/), NOT here.
+# 正常完走のみ（G1状態遷移＋3軸チャープ中の緩いG3境界＋最終着地高度）。(b,T,L) の
+# 実機一致判定は `sf sil sysid-gate` 側で行う（ここでは判定しない）。
+#
+# Same convention as api_flight.expect (also an API "land" scenario): the
+# autonomous descent's ground contact trips the impact detector → "emergency
+# DISARM" (state_manager.cpp AlertType::IMPACT path), not the smooth stalled-
+# descent "DISARM accepted" text — so this checks "Autonomous landing engaged"
+# + a landed-altitude metric instead of a specific disarm log line.
+# api_flight.expect（同じく API "land"）と同じ流儀: 自動降下の接地は衝突検出器を
+# トリップさせ「emergency DISARM」経路になる（state_manager.cpp の
+# AlertType::IMPACT）— 穏やかな失速降下の「DISARM accepted」文言ではないため、
+# 特定の disarm ログではなく「Autonomous landing engaged」＋着地高度メトリクスで見る。
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Takeoff complete"
+log_contains any "cmd: land"
+log_contains any "Autonomous landing engaged"
+order "ARM accepted" "Takeoff complete"
+order "Takeoff complete" "cmd: land"
+order "cmd: land" "Autonomous landing engaged"
+# Loose G3 bounds over the hover+chirp window (t=6..40s, before final descent):
+# not a fit judgment — just "did not tumble / did not saturate the motors".
+# ホバー+チャープ窓(t=6..40s、最終降下前)の緩いG3境界: フィット判定ではなく
+# 「転倒していない／モータが飽和していない」だけを見る。
+metric tilt_max < 35.0  in 6.0 40.0
+metric duty_max < 0.95  in 6.0 40.0
+# Landed and settled by the end of the run. / 実行終了までに着地・整定。
+metric alt_max < 0.05  in 40.0 43.9

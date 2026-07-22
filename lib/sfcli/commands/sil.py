@@ -16,6 +16,8 @@ Subcommands:
              (the automated form of the manual A/B loop in release-workflow.md; CI
              entry point for sil-regression.yml)
   milestone  build → run → video → gate in one shot (the /sil-milestone skill)
+  sysid-gate Model-match gate: fit SIL rate-loop (b,T,L) vs real-hardware sysid
+             (simulation-policy.md §4; distinct from the "gate" milestone check)
 """
 
 import argparse
@@ -262,6 +264,34 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--noise", choices=NOISE_LEVELS, default=None, help="sensor noise level (§13)")
     p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
     p.set_defaults(func=run_milestone)
+
+    # Model-match gate (docs/architecture/simulation-policy.md §4, backlog #0): run
+    # simulator/sil/scenarios/sysid_gate.scn with the 400Hz rate-loop recorder on,
+    # fit (b,T,L) per axis with the SAME code used on real-hardware logs
+    # (tools/log_analyzer/rate_sysid.py), and compare against the real-hardware
+    # reference (analysis/reports/rate_sysid_reference/reference.json). Named
+    # "sysid-gate", NOT "gate" — that name is already the milestone bundle
+    # verdict check (run_gate above); the two are unrelated concepts.
+    # モデル一致ゲート（simulation-policy.md §4、backlog #0）: sysid_gate.scn を
+    # 400Hzレートループ記録付きで実行し、実機ログに使ったのと同一コード（rate_sysid.py）
+    # で軸別 (b,T,L) をフィットして実機基準値と比較する。"gate" ではなく "sysid-gate" と
+    # 命名 — "gate" は既にマイルストーン束バンドル判定（上の run_gate）で使用済みの
+    # 別概念のため。
+    p = sub.add_parser("sysid-gate",
+                       help="Model-match gate: fit SIL rate-loop (b,T,L) vs real-hardware "
+                            "sysid (simulation-policy.md §4)")
+    p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
+                   help="motor transport delay in ms, passed through to the scenario run "
+                        "(see `sf sil scenario --motor-delay`). Default OFF (0 ms).")
+    p.add_argument("--noise", choices=NOISE_LEVELS, default="off",
+                   help="sensor noise level on the emulator Plant (default off — a clean "
+                        "excitation run is what the real-hardware sysid pipeline assumes)")
+    p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
+    p.add_argument("--duration", type=int, default=44_000_000,
+                   help="sim duration in microseconds (default 44s, matches sysid_gate.scn)")
+    p.add_argument("--report", default=None,
+                   help="write the gate verdict + per-axis fit JSON here")
+    p.set_defaults(func=run_sysid_gate)
 
     parser.set_defaults(func=lambda a: (parser.print_help(), 0)[1])
 
@@ -602,6 +632,15 @@ def run_scenario(args: argparse.Namespace) -> int:
     # ペアリングのタイミングに依存させない。
     if getattr(args, "unpaired", False):
         env["SIL_EMU_UNPAIRED"] = "1"
+
+    # extra_env: additional env vars for sil subcommands BUILT ON TOP of run_scenario
+    # (e.g. sysid-gate's SIL_EMU_RATE_STREAM). Not part of the `scenario` CLI surface
+    # itself — plain argparse.Namespace from run_scenario's own parser never sets this.
+    # extra_env: run_scenario の上に構築される他の sil サブコマンド用の追加 env
+    # （例: sysid-gate の SIL_EMU_RATE_STREAM）。`scenario` 自体の CLI 引数ではない。
+    extra_env = getattr(args, "extra_env", None)
+    if extra_env:
+        env.update(extra_env)
 
     console.info(f"Running scenario {scn.name} on {exe.name} ({args.duration} us, "
                  f"noise={noise}, seed={seed})...")
@@ -980,6 +1019,169 @@ def run_milestone(args: argparse.Namespace) -> int:
             return rc
     console.success(f"Milestone {args.milestone} bundle complete and gated.")
     return 0
+
+
+# =============================================================================
+# Model-match gate (docs/architecture/simulation-policy.md §4, backlog #0)
+# モデル一致ゲート
+# =============================================================================
+
+# Pass criteria (simulation-policy.md §4): b within ±50%, L_total=T+L within ±20%.
+# T/L individually are NOT judged (their split is degenerate in some fits — see
+# analysis/reports/rate_sysid_reference/README.md); shown for reference only.
+# 合格基準: b は±50%、L_total=T+L は±20%。T・L個別はフィットで退化しうるため
+# 判定に使わない（参考表示のみ）。
+SYSID_GATE_B_TOL = 0.50
+SYSID_GATE_LTOTAL_TOL = 0.20
+
+
+def _rate_backend():
+    """Import tools/log_analyzer/rate_sysid.py — the SAME identification code the
+    real-hardware `sf sysid rate-fit` command uses (Code Identity: the gate's
+    verdict comes from running identical code, not a reimplementation).
+    実機の `sf sysid rate-fit` と同一の同定コードをインポートする（Code Identity:
+    ゲートの判定は再実装ではなく同一コードの実行に由来する）。"""
+    import sys as _sys
+    backend = paths.root() / "tools" / "log_analyzer"
+    if str(backend) not in _sys.path:
+        _sys.path.insert(0, str(backend))
+    import rate_sysid
+    return rate_sysid
+
+
+def _reference_path() -> Path:
+    return paths.root() / "analysis" / "reports" / "rate_sysid_reference" / "reference.json"
+
+
+def run_sysid_gate(args: argparse.Namespace) -> int:
+    """Run sysid_gate.scn with the 400Hz rate-loop recorder on (SIL_EMU_RATE_STREAM),
+    fit (b,T,L) per axis with rate_sysid.py, and compare against the real-hardware
+    reference. sysid_gate.scn を SIL_EMU_RATE_STREAM 付きで実行し、rate_sysid.py で
+    軸別 (b,T,L) をフィットして実機基準値と比較する。"""
+    scn = _sil_dir() / "scenarios" / "sysid_gate.scn"
+    if not scn.exists():
+        console.error(f"scenario not found: {scn}"); return 1
+    reference_path = _reference_path()
+    if not reference_path.exists():
+        console.error(f"reference missing: {reference_path} — run "
+                      "analysis/reports/rate_sysid_reference/make_reference.py first")
+        return 1
+
+    # Bundle dir matches what run_scenario would derive on its own
+    # (_sil_dir()/viz/out_scn_<stem>) — computed here only to know the rate-stream
+    # CSV path BEFORE the run (run_scenario creates the directory itself).
+    # バンドルディレクトリは run_scenario が自前で導出するのと同じ場所
+    # （_sil_dir()/viz/out_scn_<stem>）— run前に CSV パスを知るためだけにここで計算
+    # する（ディレクトリ自体は run_scenario が作る）。
+    bundle = _sil_dir() / "viz" / f"out_scn_{scn.stem}"
+    csv_path = bundle / "rate_stream.csv"
+    gains_path = Path(str(csv_path) + ".gains.json")
+
+    # Drive the same run_scenario() path every other scenario uses (bundle layout,
+    # console capture, .expect check, injection guardrail) — only difference is the
+    # extra SIL_EMU_RATE_STREAM env var. Constructing the Namespace by hand (rather
+    # than argparse) keeps this independent of the `scenario` subcommand's own flags.
+    # 他の全シナリオと同じ run_scenario() 経路（バンドル構造・コンソール捕捉・.expect
+    # チェック・注入ガードレール）を通す — 違いは SIL_EMU_RATE_STREAM だけ。
+    scenario_ns = argparse.Namespace(
+        scenario=str(scn), target="vehicle", expect=None,
+        duration=getattr(args, "duration", 44_000_000),
+        noise=getattr(args, "noise", "off"), seed=getattr(args, "seed", 12345),
+        video=False, ground_effect=None, turbulence=None,
+        motor_delay=getattr(args, "motor_delay", None), unpaired=False,
+        extra_env={"SIL_EMU_RATE_STREAM": str(csv_path)},
+    )
+    run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating
+
+    # Gate the FIT on a real crash (process exit code / no CSV), NOT on
+    # run_scenario's full .expect verdict. At nonzero --motor-delay the duty_max
+    # check in sysid_gate.expect is EXPECTED to trip (gains were tuned on the
+    # no-delay plant — the whole point of this measurement is to see how far L_total
+    # moves before a retune, per simulation-policy.md backlog #1/#2 sequencing) —
+    # that must not block the identification fit itself.
+    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／CSV欠落）でゲートし、
+    # run_scenario の完全な .expect 判定では止めない。--motor-delay>0 では
+    # sysid_gate.expect の duty_max チェックが意図的に発火しうる（ゲインは無遅延
+    # プラントでチューニング済み — L_total がリチューン前にどれだけ動くかを見るのが
+    # 本計測の目的そのもの）— これで同定フィット自体を止めてはならない。
+    results_path = bundle / "results.json"
+    scenario_pass = None
+    exit_code = None
+    if results_path.exists():
+        bundle_results = json.loads(results_path.read_text())
+        scenario_pass = bundle_results.get("pass")
+        exit_code = bundle_results.get("exit_code")
+    if exit_code not in (0, None):
+        console.error(f"emu_vehicle exited {exit_code} — a real crash, aborting fit "
+                      f"(see {bundle / 'console.log'})")
+        return 1
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        console.error(f"no rate stream at {csv_path} — is emu_vehicle wired for "
+                      "SIL_EMU_RATE_STREAM (simulator/sil/devices/emu_rate_stream.cpp)?")
+        return 1
+    if not gains_path.exists():
+        console.error(f"no gains sidecar at {gains_path}"); return 1
+    if scenario_pass is False:
+        console.warning(f"sysid_gate.expect did NOT fully pass (see {bundle / 'console.log'}) — "
+                        "proceeding with the identification fit anyway; this is expected at "
+                        "nonzero --motor-delay (duty saturates on untuned gains)")
+
+    gains_all = json.loads(gains_path.read_text())
+    reference = json.loads(reference_path.read_text())
+    rs = _rate_backend()
+
+    console.info("Model-match gate (simulation-policy.md §4): SIL plant vs real-hardware sysid "
+                 f"(motor_delay={getattr(args, 'motor_delay', None)} ms)")
+    header = (f"  {'axis':6s} {'b_sil':>10s} {'b_ref':>10s} {'b_err%':>8s}  "
+              f"{'Ltot_sil':>9s} {'Ltot_ref':>9s} {'Ltot_err%':>10s}  "
+              f"{'T[ms]':>6s} {'L[ms]':>6s} {'coh':>5s}  verdict")
+    print(header)
+    rows = []
+    all_pass = True
+    for axis in ("roll", "pitch", "yaw"):
+        fit = rs.fit_from_csv(str(csv_path), axis, gains=gains_all[axis])
+        l_total_s = fit["T"] + fit["L"]
+        ref = reference["axes"][axis]
+        b_err = (fit["b"] - ref["b"]) / ref["b"]
+        lt_err = (l_total_s - ref["L_total_s"]) / ref["L_total_s"]
+        b_ok = abs(b_err) <= SYSID_GATE_B_TOL
+        lt_ok = abs(lt_err) <= SYSID_GATE_LTOTAL_TOL
+        axis_pass = bool(b_ok and lt_ok)
+        all_pass = all_pass and axis_pass
+        row = {
+            "axis": axis,
+            "b_sil": fit["b"], "b_ref": ref["b"], "b_err_pct": b_err * 100.0, "b_pass": b_ok,
+            "L_total_sil_ms": l_total_s * 1e3, "L_total_ref_ms": ref["L_total_s"] * 1e3,
+            "L_total_err_pct": lt_err * 100.0, "L_total_pass": lt_ok,
+            "T_ms": fit["T"] * 1e3, "L_ms": fit["L"] * 1e3,
+            "coherence_mean": fit["coherence_mean"], "pass": axis_pass,
+        }
+        rows.append(row)
+        verdict = "PASS" if axis_pass else "FAIL"
+        print(f"  {axis:6s} {fit['b']:10.0f} {ref['b']:10.0f} {b_err * 100.0:7.1f}%  "
+              f"{l_total_s * 1e3:7.2f}ms {ref['L_total_s'] * 1e3:7.2f}ms {lt_err * 100.0:9.1f}%  "
+              f"{fit['T'] * 1e3:6.2f} {fit['L'] * 1e3:6.2f} {fit['coherence_mean']:.2f}  {verdict}")
+
+    if all_pass:
+        console.success("model-match gate: PASS (all axes within tolerance)")
+    else:
+        console.error("model-match gate: FAIL (see per-axis table above)")
+
+    if getattr(args, "report", None):
+        report = {
+            "pass": all_pass,
+            "tolerances": {"b_rel": SYSID_GATE_B_TOL, "L_total_rel": SYSID_GATE_LTOTAL_TOL},
+            "reference": str(reference_path),
+            "motor_delay_ms": getattr(args, "motor_delay", None),
+            "noise": getattr(args, "noise", "off"),
+            "csv": str(csv_path),
+            "scenario_pass": scenario_pass,   # sysid_gate.expect verdict (informational — see gating note above)
+            "axes": rows,
+        }
+        Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
+        console.info(f"report written: {args.report}")
+
+    return 0 if all_pass else 2
 
 
 def _venv():

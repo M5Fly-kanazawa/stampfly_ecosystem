@@ -1,0 +1,80 @@
+{
+  "provenance": {
+    "runs": [
+      "altlog_20260614T201629",
+      "altlog_20260614T214537"
+    ],
+    "source": "analysis/reports/<run>/metrics.json : sysid.<axis>.fit",
+    "created": "2026-07-22",
+    "generator": "analysis/reports/rate_sysid_reference/make_reference.py",
+    "note": "b and L_total=T+L averaged over the two runs above. T/L individually are NOT used for the gate verdict (degenerate split \u2014 see module docstring); kept per-run for reference only. Re-run this script after adding more real-flight system-ID runs to fold them into the average."
+  },
+  "axes": {
+    "roll": {
+      "b": 65384.09272293463,
+      "L_total_s": 0.014360847410451912,
+      "runs": [
+        {
+          "run": "altlog_20260614T201629",
+          "b": 63861.054543457765,
+          "T_s": 1.4252344099896068e-10,
+          "L_s": 0.014656488952889755,
+          "L_total_s": 0.014656489095413196,
+          "coherence_mean": 0.6517290229159922
+        },
+        {
+          "run": "altlog_20260614T214537",
+          "b": 66907.13090241149,
+          "T_s": 1.7698550938937706e-10,
+          "L_s": 0.014065205548505115,
+          "L_total_s": 0.014065205725490625,
+          "coherence_mean": 0.6986969102474042
+        }
+      ]
+    },
+    "pitch": {
+      "b": 30723.65806876013,
+      "L_total_s": 0.017287289343822086,
+      "runs": [
+        {
+          "run": "altlog_20260614T201629",
+          "b": 33764.01966475833,
+          "T_s": 0.009961195260638059,
+          "L_s": 0.00836997439876306,
+          "L_total_s": 0.01833116965940112,
+          "coherence_mean": 0.5713074930050286
+        },
+        {
+          "run": "altlog_20260614T214537",
+          "b": 27683.29647276193,
+          "T_s": 1.7418296376077954e-10,
+          "L_s": 0.01624340885406009,
+          "L_total_s": 0.016243409028243054,
+          "coherence_mean": 0.5714685042140157
+        }
+      ]
+    },
+    "yaw": {
+      "b": 111896.6692640488,
+      "L_total_s": 0.01082327137520285,
+      "runs": [
+        {
+          "run": "altlog_20260614T201629",
+          "b": 124710.26087068522,
+          "T_s": 1.5792527860735139e-10,
+          "L_s": 0.011045159288409571,
+          "L_total_s": 0.01104515944633485,
+          "coherence_mean": 0.4403180462942711
+        },
+        {
+          "run": "altlog_20260614T214537",
+          "b": 99083.07765741239,
+          "T_s": 8.179158652446214e-11,
+          "L_s": 0.010601383222279267,
+          "L_total_s": 0.010601383304070853,
+          "coherence_mean": 0.5367330953409961
+        }
+      ]
+    }
+  }
+}

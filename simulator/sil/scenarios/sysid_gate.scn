@@ -1,0 +1,45 @@
+# sysid_gate.scn — model-match gate excitation: roll/pitch/yaw rate-loop chirps
+#                  モデル一致ゲート励振: roll/pitch/yaw のレートループチャープ
+#
+# Chain: API takeoff (POS_HOLD hover) → three sequential rate-loop identification
+# chirps (roll, then pitch, then yaw — same "sysid <axis> chirp 25 4" verb as
+# sysid_rate.scn, one axis at a time so each axis's excitation is isolated) →
+# land. Driven by `sf sil sysid-gate` with SIL_EMU_RATE_STREAM set, so the run
+# also records a 400Hz rate_ref+gyro CSV (+ a gains.json sidecar) that
+# tools/log_analyzer/rate_sysid.py — the SAME code used on real-hardware logs —
+# fits into (b, T, L) per axis for comparison against
+# analysis/reports/rate_sysid_reference/reference.json
+# (docs/architecture/simulation-policy.md §4 — model-match gate).
+#
+# 連鎖: API 離陸（POS_HOLD ホバー）→ ロール・ピッチ・ヨーの順で1軸ずつレートループ同定
+# チャープ（sysid_rate.scn と同じ "sysid <軸> chirp 25 4" verb。1軸ずつなので励振が
+# 軸間で混ざらない）→ 着陸。`sf sil sysid-gate` が SIL_EMU_RATE_STREAM を設定して駆動し、
+# 実行と同時に400Hz rate_ref+gyro CSV（+ gains.json sidecar）を記録する。これを
+# tools/log_analyzer/rate_sysid.py（実機ログに使ったのと同じコード）で軸別に (b,T,L)
+# フィットし、analysis/reports/rate_sysid_reference/reference.json の実機同定値と比較
+# する（simulation-policy.md §4 モデル一致ゲート）。
+#
+# This .expect only checks NORMAL COMPLETION (arm/takeoff/disarm log lines +
+# loose G3 attitude/actuator bounds) — the (b,T,L) fit judgment itself is made by
+# `sf sil sysid-gate`, not by this file (fit tolerances live in
+# analysis/reports/rate_sysid_reference/ + the gate command, not in a .expect).
+# この .expect は「正常完走」（arm/takeoff/disarm ログ＋緩い G3 姿勢・アクチュエータ境界）
+# のみを見る — (b,T,L) フィットの合否判定は `sf sil sysid-gate` が行う（許容差は
+# reference.json とゲートコマンド側にあり、この .expect には入れない）。
+#
+# Run: sf sil sysid-gate                              (recommended — see lib/sfcli/commands/sil.py)
+#  or: sf sil scenario simulator/sil/scenarios/sysid_gate.scn --target vehicle --duration 44000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration
+   +    api  "command"                                                           # B: SDK mode
+   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff → 0.8 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC during takeoff+hover (t=6-18)
+   +    api  "sysid roll chirp 25 4"                                            # E: roll chirp excitation (t=18-22)
+   +    rc   2048  2048   2048    2048  0     6000      50                       # F: neutral RC through the roll chirp + settle (t=18-24)
+   +    api  "sysid pitch chirp 25 4"                                           # G: pitch chirp excitation (t=24-28)
+   +    rc   2048  2048   2048    2048  0     6000      50                       # H: neutral RC through the pitch chirp + settle (t=24-30)
+   +    api  "sysid yaw chirp 25 4"                                             # I: yaw chirp excitation (t=30-34)
+   +    rc   2048  2048   2048    2048  0     6000      50                       # J: neutral RC through the yaw chirp + settle (t=30-36)
+   +    api  "land"                                                              # K: land (t=36)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # L: neutral RC through touchdown (t=36-44)

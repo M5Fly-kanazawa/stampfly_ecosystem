@@ -99,6 +99,8 @@ Code Identity のおかげで、実機同定に使ったのと同一の同定パ
 
 ゲート合格域に達するまでは「SIL 直接最適化禁止」の原則を維持する。SIL のプラントは理想（むだ時間小・トルク効き1.0）であり、SIL 乱流ベンチを直接最適化すると実機で位相余裕が負になるゲインに収束した教訓がある（`firmware/vehicle/docs/control_theory_overview.md` §5.4: SIL 上で Td=0.08 に最適化したゲインが実機では PM −375° に発散）。
 
+> **初回計測（2026-07-22, `sf sil sysid-gate`）:** むだ時間0の現行プラントは全軸 FAIL — roll b +39.6% / L_total +39.0%、pitch b +109.7% / L_total +19.3%、yaw b −61.4% / L_total +95.7%。遅れの**構造**が実機と逆で、SIL は一次遅れ支配（T≈20ms=motor_tau、L≈1.5ms）、実機はむだ時間支配（L≈11〜16ms、T小）。`--motor-delay 10` で L は 1.5→10.6〜12.2ms と設計どおり動くが、L_total は 27ms 前後へ悪化する — 一致には遅延単独ではなく、バックログ#2（モータ ODE 化）・#3（係数再較正）との同時調整が必要。なお yaw の実機基準値は3パラフィット由来で最も弱い（`analysis/reports/rate_sysid_reference/README.md` の注意参照）。
+
 ## 5. 期に依らず変わらない規律
 
 - **制御パラメータ変更は必ず実フライトログを使った数値シミュレーションで裏付ける。** 「Ti を短くすれば改善する」のような定性推測だけで提案しない。シミュレーションの結果、逆効果であれば提案しない（`control_theory_overview.md` §5.5 の鉄則）。
@@ -109,8 +111,8 @@ Code Identity のおかげで、実機同定に使ったのと同一の同定パ
 
 | # | 作業 | 根拠・目標値 | 状態 |
 |---|---|---|---|
-| 0 | モデル一致ゲートの実装（§4） | すべての改修の物差し。最優先 | 未着手 |
-| 1 | むだ時間の追加 | 現状 SIL 実効遅れ ~5 ms vs 実機 8.4〜14.7 ms。ゲートで SIL の現状 $L$ を実測し、差分を duty→推力経路の輸送遅れとして設定可能にする | 未着手 |
+| 0 | モデル一致ゲートの実装（§4） | すべての改修の物差し。最優先 | **実装済み（2026-07-22）** — `sf sil sysid-gate` |
+| 1 | むだ時間の追加 | 現状 SIL 実効遅れ ~5 ms vs 実機 8.4〜14.7 ms。ゲートで SIL の現状 $L$ を実測し、差分を duty→推力経路の輸送遅れとして設定可能にする | **実装済み（2026-07-22, 既定OFF）** — `sf sil scenario --motor-delay` |
 | 2 | モータモデルの ODE 化 | `simulator/genesis/motor_model.py` の電気機械 ODE $\dot\omega = \bigl[-(D_m + K_m^2/R_m)\omega - C_Q\omega^2 - Q_f + K_m V/R_m\bigr]/J_{mp}$ を SIL へ移植。実測値 $J_{mp}=1.375\times10^{-8}$ kg·m²、$C_Q=4.10\times10^{-11}$ N·m·s²/rad²、$\omega_{hover}\approx3670$ rad/s、ホバ点実効時定数 $\tau_{eff}\approx17.5$ ms | 未着手 |
 | 3 | $C_T$/$C_Q$/thrust_efficiency の3点セット再較正 | 実測 $C_T=6.7\times10^{-9}$ N/(rad/s)²（2026-07-15）への差し替え。`simulator/sil/plant/plant.hpp` に保留 TODO あり——3値は Model Identity（飛行ログ較正）で連動しており**単独差し替え禁止**（ホバー推力整合を壊す） | 未着手 |
 | 4 | モータ不感帯・低 duty 非線形 | 実機 ~0.9 Hz リミットサイクルの再現に必要。`analysis/datasets/motor_sweep_20260714/` のベンチデータ（3個体・プロペラ有無2条件）で同定 | 未着手 |
@@ -231,6 +233,8 @@ This gate is wired into the SIL regression test suite (automated tests that dete
 
 Until the gate is passed, the principle of "no direct optimization on the SIL" remains in force. The SIL's plant is currently ideal (small dead time, unity torque effectiveness), and directly optimizing against a SIL turbulence bench previously converged on a gain with negative phase margin on real hardware (`firmware/vehicle/docs/control_theory_overview.md` §5.4: a gain optimized to Td=0.08 on the SIL diverged to PM −375° on real hardware).
 
+> **First measurement (2026-07-22, `sf sil sysid-gate`):** the current zero-dead-time plant FAILs on all axes — roll b +39.6% / L_total +39.0%, pitch b +109.7% / L_total +19.3%, yaw b −61.4% / L_total +95.7%. The lag **structure** is inverted vs. real hardware: the SIL is first-order-lag dominated (T≈20 ms = motor_tau, L≈1.5 ms) while the real machine is dead-time dominated (L≈11–16 ms, small T). With `--motor-delay 10`, L moves 1.5→10.6–12.2 ms exactly as designed, but L_total worsens to ~27 ms — matching requires the joint adjustment with backlog #2 (motor ODE) and #3 (coefficient recalibration), not delay alone. The yaw reference is the weakest of the three axes (3-parameter fit; see the note in `analysis/reports/rate_sysid_reference/README.md`).
+
 ## 5. Discipline That Does Not Change With Phase
 
 - **Any control-parameter change must be backed by a numerical simulation using real flight logs.** Do not propose changes based on qualitative reasoning alone (e.g., "shortening Ti should help"). If simulation shows the change backfires, do not propose it (the rule in `control_theory_overview.md` §5.5).
@@ -241,8 +245,8 @@ Until the gate is passed, the principle of "no direct optimization on the SIL" r
 
 | # | Item | Rationale / target value | Status |
 |---|---|---|---|
-| 0 | Implement the model-match gate (§4) | The yardstick for every other item. Highest priority | Not started |
-| 1 | Add transport delay | Current SIL effective lag is ~5 ms vs. 8.4–14.7 ms on real hardware. Once the gate is in place, measure the SIL's current $L$ and set the difference as transport delay in the duty→thrust path | Not started |
+| 0 | Implement the model-match gate (§4) | The yardstick for every other item. Highest priority | **Implemented (2026-07-22)** — `sf sil sysid-gate` |
+| 1 | Add transport delay | Current SIL effective lag is ~5 ms vs. 8.4–14.7 ms on real hardware. Once the gate is in place, measure the SIL's current $L$ and set the difference as transport delay in the duty→thrust path | **Implemented (2026-07-22, default OFF)** — `sf sil scenario --motor-delay` |
 | 2 | Convert the motor model to an ODE | Port the electromechanical ODE from `simulator/genesis/motor_model.py`: $\dot\omega = \bigl[-(D_m + K_m^2/R_m)\omega - C_Q\omega^2 - Q_f + K_m V/R_m\bigr]/J_{mp}$. Measured values: $J_{mp}=1.375\times10^{-8}$ kg·m², $C_Q=4.10\times10^{-11}$ N·m·s²/rad², $\omega_{hover}\approx3670$ rad/s, hover-point effective time constant $\tau_{eff}\approx17.5$ ms | Not started |
 | 3 | Recalibrate the $C_T$/$C_Q$/thrust_efficiency triple | Replace with the measured $C_T=6.7\times10^{-9}$ N/(rad/s)² (2026-07-15). A pending TODO exists in `simulator/sil/plant/plant.hpp` — the three values are coupled via Model Identity (flight-log calibration), so **do not swap any one alone** (it breaks hover-thrust consistency) | Not started |
 | 4 | Motor dead-band / low-duty nonlinearity | Needed to reproduce the ~0.9 Hz limit cycle seen on real hardware. Identify from the bench data in `analysis/datasets/motor_sweep_20260714/` (3 airframes, props on/off) | Not started |

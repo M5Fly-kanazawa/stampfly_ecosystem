@@ -321,6 +321,7 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SIL_EMU_TRAJ)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_rate_stream.cpp   # model-match gate: 400Hz rate_ref+gyro (SIL_EMU_RATE_STREAM)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # estimate overlay (ESKF est → trajectory)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
