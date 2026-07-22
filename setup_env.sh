@@ -98,6 +98,21 @@ fi
 # （StampFly Terminalアプリの.commandランチャー等）では.zshrc/.zprofileが
 # 読み込まれずpyenv/Homebrewのshimが無いため、システムの/usr/bin/python3
 # （3.9や3.13+のことが多い）が使われてしまい、対応するidf5.x venvが見つからない。
+#
+# In addition, a merely "supported" Python is NOT enough: export.sh derives
+# the venv directory name (idf5.x_py3.Y_env) from the DETECTED Python's
+# version. If python3 on PATH is 3.12 but the installer created a py3.10
+# venv, export.sh fails with "python_env ... not found" (observed
+# 2026-07-22 on Windows with pyenv global 3.12 and an installer-created
+# py3.10 venv; the same mismatch is possible here). So the minor version
+# matching an already-installed ESP-IDF venv takes priority over the
+# newest supported version.
+# さらに「対応範囲内」というだけでは不十分: export.sh は検出したPythonの
+# バージョンから venv ディレクトリ名（idf5.x_py3.Y_env）を組み立てる。
+# PATH上の python3 が 3.12 でも、インストーラが作った venv が py3.10 なら
+# 「python_env ... not found」で失敗する（2026-07-22, Windows/Git Bash、
+# pyenv-win の global=3.12 で観測）。このため、インストール済み venv に
+# 一致するマイナーバージョンを最新の対応バージョンより優先する。
 _sf_py_min_major=3
 _sf_py_min_minor=10
 _sf_py_max_minor=12
@@ -120,66 +135,113 @@ _sf_py_in_band() {
     return 0
 }
 
-_sf_py_current_version="$(_sf_py_version python3)"
-
-if [ -z "$_sf_py_current_version" ] || ! _sf_py_in_band "$_sf_py_current_version"; then
-    # Current python3 is missing or out of the supported band; search
-    # known locations for a suitable interpreter.
-    # 現在のpython3が無いか対応範囲外。既知の場所から適合するインタプリタを探す。
-    _sf_py_found=""
+# Find a Python 3.<minor> interpreter in known locations and echo its path.
+# Searched in order: versioned name on PATH, pyenv, Homebrew, python.org.
+# 既知の場所から Python 3.<minor> のインタプリタを探してパスを出力する。
+# 探索順: PATH上のバージョン付き名、pyenv、Homebrew、python.org。
+_sf_py_find_minor() {
+    local _minor="$1" _cand _dir _prefix
 
     # 1) Explicit versioned names already on PATH
     # 1) PATH上の明示的なバージョン名
-    for _sf_py_minor in 12 11 10; do
-        _sf_py_candidate="python3.${_sf_py_minor}"
-        if command -v "$_sf_py_candidate" >/dev/null 2>&1; then
-            _sf_py_candidate_path="$(command -v "$_sf_py_candidate")"
-            _sf_py_candidate_ver="$(_sf_py_version "$_sf_py_candidate_path")"
-            if [ "$_sf_py_candidate_ver" = "3.${_sf_py_minor}" ]; then
-                _sf_py_found="$_sf_py_candidate_path"
-                break
-            fi
+    if command -v "python3.${_minor}" >/dev/null 2>&1; then
+        _cand="$(command -v "python3.${_minor}")"
+        if [ "$(_sf_py_version "$_cand")" = "3.${_minor}" ]; then
+            echo "$_cand"
+            return 0
         fi
-    done
+    fi
 
     # 2) pyenv versions (newest patch first via reverse sort)
     # 2) pyenvのバージョン群（パッチバージョンの新しい順）
-    if [ -z "$_sf_py_found" ] && [ -d "$HOME/.pyenv/versions" ]; then
-        for _sf_py_minor in 12 11 10; do
-            for _sf_py_dir in $(ls -d "$HOME/.pyenv/versions/3.${_sf_py_minor}".* 2>/dev/null | sort -rV); do
-                if [ -x "$_sf_py_dir/bin/python3" ]; then
-                    _sf_py_found="$_sf_py_dir/bin/python3"
-                    break 2
-                fi
-            done
+    if [ -d "$HOME/.pyenv/versions" ]; then
+        for _dir in $(ls -d "$HOME/.pyenv/versions/3.${_minor}".* 2>/dev/null | sort -rV); do
+            if [ -x "$_dir/bin/python3" ]; then
+                echo "$_dir/bin/python3"
+                return 0
+            fi
         done
     fi
 
     # 3) Homebrew (Apple Silicon then Intel prefixes)
     # 3) Homebrew（Apple Siliconの後にIntel）
-    if [ -z "$_sf_py_found" ]; then
-        for _sf_py_minor in 12 11 10; do
-            for _sf_py_prefix in /opt/homebrew/opt /usr/local/opt; do
-                _sf_py_dir="${_sf_py_prefix}/python@3.${_sf_py_minor}/bin"
-                if [ -x "${_sf_py_dir}/python3.${_sf_py_minor}" ]; then
-                    _sf_py_found="${_sf_py_dir}/python3.${_sf_py_minor}"
-                    break 2
-                fi
-            done
-        done
+    for _prefix in /opt/homebrew/opt /usr/local/opt; do
+        _dir="${_prefix}/python@3.${_minor}/bin"
+        if [ -x "${_dir}/python3.${_minor}" ]; then
+            echo "${_dir}/python3.${_minor}"
+            return 0
+        fi
+    done
+
+    # 4) python.org framework installs (macOS)
+    # 4) python.org（macOS Frameworkインストール）
+    _dir="/Library/Frameworks/Python.framework/Versions/3.${_minor}/bin"
+    if [ -x "${_dir}/python3" ]; then
+        echo "${_dir}/python3"
+        return 0
     fi
 
-    # 4) python.org framework installs
-    # 4) python.org（Frameworkインストール）
-    if [ -z "$_sf_py_found" ]; then
-        for _sf_py_minor in 12 11 10; do
-            _sf_py_dir="/Library/Frameworks/Python.framework/Versions/3.${_sf_py_minor}/bin"
-            if [ -x "${_sf_py_dir}/python3" ]; then
-                _sf_py_found="${_sf_py_dir}/python3"
-                break
-            fi
-        done
+    return 1
+}
+
+# Collect the minor versions of already-installed ESP-IDF venvs
+# (idf*_py3.Y_env under IDF_TOOLS_PATH), newest first.
+# インストール済み ESP-IDF venv（IDF_TOOLS_PATH配下のidf*_py3.Y_env）の
+# マイナーバージョンを新しい順に収集する。
+_sf_tools_path="${IDF_TOOLS_PATH:-$HOME/.espressif}"
+_sf_venv_minors=""
+for _sf_venv_dir in "$_sf_tools_path"/python_env/idf*_py3.*_env; do
+    [ -d "$_sf_venv_dir" ] || continue
+    _sf_venv_minor="${_sf_venv_dir##*_py3.}"
+    _sf_venv_minor="${_sf_venv_minor%_env}"
+    case "$_sf_venv_minor" in
+        ''|*[!0-9]*) continue ;;
+    esac
+    case " $_sf_venv_minors " in
+        *" $_sf_venv_minor "*) ;;
+        *) _sf_venv_minors="$_sf_venv_minors $_sf_venv_minor" ;;
+    esac
+done
+_sf_venv_minors="$(echo $_sf_venv_minors | tr ' ' '\n' | sort -rn | tr '\n' ' ')"
+
+# Preferred search order: venv-matching minors first, then newest supported
+# 探索の優先順位: venv一致のマイナーが先、その後は新しい対応バージョン順
+_sf_preferred_minors=""
+for _sf_py_minor in $_sf_venv_minors 12 11 10; do
+    [ "$_sf_py_minor" -ge "$_sf_py_min_minor" ] 2>/dev/null || continue
+    [ "$_sf_py_minor" -le "$_sf_py_max_minor" ] 2>/dev/null || continue
+    case " $_sf_preferred_minors " in
+        *" $_sf_py_minor "*) ;;
+        *) _sf_preferred_minors="$_sf_preferred_minors $_sf_py_minor" ;;
+    esac
+done
+
+# The current python3 can be kept as-is only if it is in the supported band
+# AND (when a venv already exists) matches one of the venv minor versions.
+# 現在のpython3をそのまま使えるのは、対応範囲内であり、かつ（venvが既に
+# ある場合は）venvのマイナーバージョンのいずれかに一致する場合のみ。
+_sf_py_current_version="$(_sf_py_version python3)"
+_sf_py_current_ok=""
+if [ -n "$_sf_py_current_version" ] && _sf_py_in_band "$_sf_py_current_version"; then
+    if [ -z "${_sf_venv_minors// /}" ]; then
+        _sf_py_current_ok=1
+    else
+        case " $_sf_venv_minors " in
+            *" ${_sf_py_current_version#*.} "*) _sf_py_current_ok=1 ;;
+        esac
     fi
+fi
+
+if [ -z "$_sf_py_current_ok" ]; then
+    # Current python3 is missing, out of band, or does not match the
+    # installed venv; search known locations in preferred-minor order.
+    # 現在のpython3が無い・対応範囲外・インストール済みvenvと不一致の
+    # いずれか。優先マイナー順で既知の場所から探す。
+    _sf_py_found=""
+    for _sf_py_minor in $_sf_preferred_minors; do
+        _sf_py_found="$(_sf_py_find_minor "$_sf_py_minor")"
+        [ -n "$_sf_py_found" ] && break
+    done
 
     if [ -n "$_sf_py_found" ]; then
         _sf_py_found_dir="$(dirname "$_sf_py_found")"
@@ -198,40 +260,75 @@ if [ -z "$_sf_py_current_version" ] || ! _sf_py_in_band "$_sf_py_current_version
             ln -sf "$_sf_py_found" "${_sf_py_shim_dir}/python3"
             export PATH="${_sf_py_shim_dir}:$PATH"
         fi
-        echo -e "${_sf_blue}[INFO]${_sf_nc} Using Python $(_sf_py_version "$_sf_py_found") at $_sf_py_found for ESP-IDF (shell default was out of range)."
-        echo "  シェルのデフォルトPythonが対応範囲外のため、上記のPythonを使用します。"
+        echo -e "${_sf_blue}[INFO]${_sf_nc} Using Python $(_sf_py_version "$_sf_py_found") at $_sf_py_found for ESP-IDF (shell default did not match)."
+        echo "  シェルのデフォルトPythonが不適合のため、上記のPythonを使用します。"
     else
-        echo -e "${_sf_red}[ERROR]${_sf_nc} No supported Python (3.${_sf_py_min_minor}-3.${_sf_py_max_minor}) found."
-        echo "  対応するPython (3.${_sf_py_min_minor}〜3.${_sf_py_max_minor}) が見つかりません。"
-        echo "  Run ./install.sh to set one up, or open a normal interactive shell."
-        echo "  ./install.sh を実行するか、通常の対話シェルで再試行してください。"
+        if [ -n "${_sf_venv_minors// /}" ]; then
+            echo -e "${_sf_red}[ERROR]${_sf_nc} Installed ESP-IDF env needs Python 3.${_sf_venv_minors%% *}, but no matching interpreter was found."
+            echo "  インストール済みESP-IDF環境はPython 3.${_sf_venv_minors%% *}を必要としますが、一致するインタプリタが見つかりません。"
+            echo "  Run ./install.sh to reinstall, or install the matching Python."
+            echo "  ./install.sh を再実行するか、一致するバージョンのPythonをインストールしてください。"
+        else
+            echo -e "${_sf_red}[ERROR]${_sf_nc} No supported Python (3.${_sf_py_min_minor}-3.${_sf_py_max_minor}) found."
+            echo "  対応するPython (3.${_sf_py_min_minor}〜3.${_sf_py_max_minor}) が見つかりません。"
+            echo "  Run ./install.sh to set one up, or open a normal interactive shell."
+            echo "  ./install.sh を実行するか、通常の対話シェルで再試行してください。"
+        fi
         echo
-        unset -f _sf_py_version _sf_py_in_band
+        unset -f _sf_py_version _sf_py_in_band _sf_py_find_minor
         unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path
-        unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version
-        unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_candidate _sf_py_candidate_path _sf_py_candidate_ver _sf_py_dir _sf_py_prefix _sf_py_shim_dir
+        unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version _sf_py_current_ok
+        unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_shim_dir
+        unset _sf_tools_path _sf_venv_minors _sf_venv_minor _sf_venv_dir _sf_preferred_minors
         return 1
     fi
 fi
 
-unset -f _sf_py_version _sf_py_in_band
-unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version
-unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_candidate _sf_py_candidate_path _sf_py_candidate_ver _sf_py_dir _sf_py_prefix _sf_py_shim_dir
+unset -f _sf_py_version _sf_py_in_band _sf_py_find_minor
+unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version _sf_py_current_ok
+unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_shim_dir
+unset _sf_tools_path _sf_venv_minors _sf_venv_minor _sf_venv_dir _sf_preferred_minors
 
 # Source ESP-IDF environment
 # ESP-IDF環境を読み込み
 echo -e "${_sf_blue}[INFO]${_sf_nc} Loading ESP-IDF environment..."
+# Drop any stale venv override left by a previous source in this shell so
+# the verification below reflects THIS run, not leftovers.
+# このシェルで以前sourceした際の古いvenv指定を破棄し、下の検証が今回の
+# 実行結果を反映するようにする。
+unset IDF_PYTHON_ENV_PATH
 source "$_sf_idf_path/export.sh"
 _sf_idf_export_status=$?
 
+# export.sh (ESP-IDF v5.5) returns 0 even when its inner activate.py fails:
+# the error is printed but the eval'd export list is simply empty. So a
+# zero status is NOT proof the environment loaded -- verify the exported
+# venv actually exists before declaring success (a py3.12 shell with only
+# a py3.10 venv installed used to print [OK] right after ESP-IDF's own
+# "python_env ... not found" error).
+# export.sh（ESP-IDF v5.5）は内部のactivate.pyが失敗しても0を返す
+# （エラーは表示されるがevalされるexport列が空になるだけ）。そのため
+# ステータス0は環境ロード成功の証明にならない。成功を宣言する前に、
+# エクスポートされたvenvが実在するか検証する（py3.12のシェルにpy3.10の
+# venvしか無い場合、ESP-IDF自身の「python_env ... not found」エラーの
+# 直後に[OK]と表示されていた）。
+_sf_env_ok=1
 if [ "$_sf_idf_export_status" -ne 0 ]; then
+    _sf_env_ok=0
+elif [ -z "${IDF_PYTHON_ENV_PATH-}" ]; then
+    _sf_env_ok=0
+elif [ ! -f "$IDF_PYTHON_ENV_PATH/bin/python" ] && [ ! -f "$IDF_PYTHON_ENV_PATH/Scripts/python.exe" ]; then
+    _sf_env_ok=0
+fi
+
+if [ "$_sf_env_ok" -ne 1 ]; then
     echo
     echo -e "${_sf_red}[ERROR]${_sf_nc} Failed to load ESP-IDF environment."
     echo "  Re-run ./install.sh, or retry from a new terminal."
     echo "  ESP-IDF環境の読み込みに失敗しました。"
     echo "  ./install.sh を再実行するか、新しいターミナルで再試行してください。"
     echo
-    unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path _sf_idf_export_status
+    unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path _sf_idf_export_status _sf_env_ok
     return 1
 fi
 
@@ -245,4 +342,4 @@ echo
 
 # Clean up temporary variables
 # 一時変数をクリーンアップ
-unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path _sf_idf_export_status
+unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path _sf_idf_export_status _sf_env_ok
