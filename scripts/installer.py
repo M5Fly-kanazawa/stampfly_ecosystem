@@ -1454,6 +1454,131 @@ def _clean_env_for_cmd() -> dict:
     return env
 
 
+def _env_with_python3_steering() -> dict:
+    """Environment for running ESP-IDF's install.sh on macOS/Linux, with
+    PATH steered so its own ``tools/detect_python.sh`` -- which tries the
+    bare ``python3`` name FIRST in its candidate list -- resolves to an
+    interpreter inside the PYTHON_PREFERRED_MIN..MAX band, instead of
+    whatever ``/usr/bin/python3`` happens to be.
+
+    Why this exists (2026-07-22 observed failure, macOS): a GUI-launched
+    (frozen) installer runs with none of the user's pyenv/Homebrew PATH
+    entries, only the OS default PATH. On stock macOS that PATH resolves
+    `python3` to /usr/bin/python3 (3.9), so ESP-IDF's install.sh created
+    ~/.espressif/python_env/idf5.5_py3.9_env -- outside this ecosystem's
+    tested range -- and the subsequent `pip install -e` of sfcli failed on
+    its `requires-python >=3.10,<3.13`. The Windows branch of
+    _run_install_script() already avoids the analogous problem via
+    _clean_env_for_cmd()'s PATH steering; this function gives the Unix
+    branch the same protection.
+
+    Resolves the steering directory from _find_system_python_dir() (the
+    same in-band system Python already used elsewhere in this file). If
+    that directory already contains a literal `python3` executable, it is
+    prepended to PATH as-is. Otherwise (e.g. a pyenv version directory that
+    only has `python3.12`), a small temp directory containing a `python3`
+    symlink to the real interpreter is created and prepended instead,
+    since detect_python.sh looks for the bare name -- `python3.12` alone on
+    PATH would not be found. The real interpreter is picked, in order:
+    `python_dir/python3` (already handled above -- unreachable here),
+    then the newest `python_dir/python3.*` whose _python_version_info() is
+    inside the preferred band, then `python_dir/python` as a last resort.
+
+    Falls back to no PATH steering (a plain copy of the ambient
+    environment) if no system Python could be found at all -- the caller
+    is expected to have already handled that case (see
+    _run_install_script()'s own _find_system_python_dir() check just
+    above its call site).
+    macOS/Linux で ESP-IDF の install.sh を実行するための環境を、その
+    内部の ``tools/detect_python.sh``(候補リストの**先頭**で素の
+    ``python3`` という名前を試す)が PYTHON_PREFERRED_MIN〜MAX の範囲内の
+    インタプリタを解決するよう PATH を誘導して返す(たまたま存在する
+    `/usr/bin/python3` にではなく)。
+
+    存在理由(2026-07-22 に観測した実障害、macOS): GUI から起動される
+    (凍結された)インストーラーは、ユーザーの pyenv/Homebrew の PATH
+    エントリを一切持たず、OS既定の PATH のみで動く。素の macOS ではこの
+    PATH で `python3` は /usr/bin/python3(3.9)に解決されるため、
+    ESP-IDF の install.sh が本エコシステムの検証範囲外である
+    ~/.espressif/python_env/idf5.5_py3.9_env を作成してしまい、後続の
+    sfcli の `pip install -e` がその `requires-python >=3.10,<3.13` で
+    失敗した。_run_install_script() の Windows 分岐は
+    _clean_env_for_cmd() の PATH 誘導で既に同種の問題を回避済みであり、
+    本関数は Unix 分岐にも同じ保護を与える。
+
+    誘導先ディレクトリは _find_system_python_dir()(本ファイルの他箇所でも
+    使う、範囲内のシステム Python と同じもの)から取得する。そのディレ
+    クトリに文字通り `python3` という実行ファイルが既にあればそのまま
+    PATH 先頭に付ける。無い場合(例: `python3.12` しか無い pyenv の
+    バージョンディレクトリ)は、実インタプリタへの `python3` という
+    シンボリックリンクを含む小さな一時ディレクトリを作り、それを代わりに
+    PATH 先頭に付ける -- detect_python.sh は素の名前を探すため、
+    `python3.12` だけが PATH にあっても見つけられない。実インタプリタの
+    特定順は: `python_dir/python3`(上で既に判定済み -- ここには来ない)、
+    次に `_python_version_info()` が適合バンド内と判定した最新の
+    `python_dir/python3.*`、最後に `python_dir/python`。
+
+    システム Python が全く見つからない場合は PATH 誘導なし(環境の単純
+    コピー)にフォールバックする -- その場合の対処は呼び出し元
+    (_run_install_script() 自身の呼び出し直前にある
+    _find_system_python_dir() チェック)が既に済ませている前提。
+    """
+    env = os.environ.copy()
+    _sanitize_activated_env(env)
+
+    python_dir = _find_system_python_dir()
+    if python_dir is None:
+        # Defensive fallback -- callers are expected to have already
+        # bailed out via their own _find_system_python_dir() check.
+        # 防御的フォールバック -- 呼び出し元は自身の
+        # _find_system_python_dir() チェックで既に処理済みのはず。
+        return env
+
+    steering_dir = python_dir
+    bare_python3 = python_dir / "python3"
+    bare_version = _python_version_info(bare_python3) if bare_python3.exists() else None
+    if bare_version is None or not (PYTHON_PREFERRED_MIN <= bare_version <= PYTHON_PREFERRED_MAX):
+        # Either no literal `python3` in this directory (e.g. only
+        # `python3.12` is present), or the `python3` that IS there is
+        # outside the preferred band (e.g. Homebrew's bin holding both
+        # `python3.12` and a `python3` that points at 3.14+ -- the
+        # in-band exe is what got this directory selected, not the bare
+        # name). detect_python.sh looks for the bare name, so synthesize
+        # a shim directory with a `python3` symlink to the in-band
+        # interpreter instead.
+        # このディレクトリに素の `python3` が無い(例: `python3.12` のみ)、
+        # または存在する `python3` が適合バンド外(例: Homebrew の bin に
+        # `python3.12` と 3.14+ を指す `python3` が同居 -- この
+        # ディレクトリが選ばれた理由は範囲内の実行ファイルであり、素の
+        # 名前ではない)。detect_python.sh は素の名前を探すため、範囲内の
+        # インタプリタへの `python3` シンボリックリンクを含む shim
+        # ディレクトリを合成する。
+        real_interpreter: Optional[Path] = None
+        for exe in sorted(python_dir.glob("python3.*"), reverse=True):
+            version = _python_version_info(exe)
+            if version is not None and PYTHON_PREFERRED_MIN <= version <= PYTHON_PREFERRED_MAX:
+                real_interpreter = exe
+                break
+        if real_interpreter is None:
+            fallback = python_dir / "python"
+            if fallback.exists():
+                real_interpreter = fallback
+        if real_interpreter is not None:
+            shim_dir = Path(tempfile.mkdtemp(prefix="sf_python3_shim_"))
+            (shim_dir / "python3").symlink_to(real_interpreter)
+            steering_dir = shim_dir
+
+    steering_dir_str = str(steering_dir)
+    current_path = env.get("PATH", "")
+    if steering_dir_str not in current_path.split(os.pathsep):
+        # Prepend (not append): PATH may already contain another
+        # `python3` (e.g. a stale one) that must not win over this one.
+        # 先頭に付ける(末尾ではない): PATH に既に別の `python3`(古いもの
+        # 等)がある場合でも、これに勝たないようにする。
+        env["PATH"] = steering_dir_str + os.pathsep + current_path
+    return env
+
+
 def _report_git_not_found() -> None:
     """Print an actionable, bilingual error when git itself is missing
     from PATH (a bare FileNotFoundError from subprocess otherwise looks
@@ -1623,13 +1748,51 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
             entries = list(python_env_dir.iterdir())
         except OSError:
             continue
-        # Pick newest Python (sort descending) that matches the ESP-IDF prefix
-        # ESP-IDF バージョンに一致する venv のうち Python 版が一番新しいものを選ぶ
+        # Pick the venv whose Python version is (1) inside the
+        # PYTHON_PREFERRED_MIN..MAX band, preferred over anything outside
+        # it, and (2) among ties on that, numerically newest -- NOT a
+        # lexicographic (dictionary-order) sort of the directory name.
+        # A plain `sorted(candidates, reverse=True)` on directory names like
+        # "idf5.5_py3.9_env" vs "idf5.5_py3.12_env" compares the strings
+        # character-by-character, so "9" > "1" makes py3.9 sort ahead of
+        # py3.12 -- exactly the real failure observed 2026-07-22: ESP-IDF's
+        # own install.sh (via tools/detect_python.sh, which tries the bare
+        # `python3` name first) created idf5.5_py3.9_env on a machine whose
+        # PATH had no pyenv/Homebrew, and this dictionary-order sort then
+        # picked that 3.9 venv over the already-present, correct
+        # idf5.5_py3.12_env, so `pip install -e` failed on the sfcli
+        # package's `requires-python >=3.10,<3.13`.
+        # 選ぶ venv は (1) PYTHON_PREFERRED_MIN〜MAX の範囲内を範囲外より
+        # 優先し、(2) その中では数値としてのバージョンが新しい順とする --
+        # ディレクトリ名の辞書順ソートでは**ない**。単純な
+        # `sorted(candidates, reverse=True)` はディレクトリ名
+        # (例: "idf5.5_py3.9_env" と "idf5.5_py3.12_env")を文字列として
+        # 1文字ずつ比較するため、"9" > "1" となり py3.9 が py3.12 より
+        # 前に来てしまう -- これがまさに 2026-07-22 に観測した実障害:
+        # PATH に pyenv/Homebrew が無いマシンで ESP-IDF 自身の install.sh
+        # (内部の tools/detect_python.sh は素の `python3` を最初に試す)が
+        # idf5.5_py3.9_env を新規作成し、この辞書順ソートが既存の正しい
+        # idf5.5_py3.12_env より 3.9 の venv を選んでしまったため、
+        # sfcli パッケージの `requires-python >=3.10,<3.13` により
+        # `pip install -e` が失敗した。
+        version_re = re.compile(r"^idf[\d.]+_py(\d+)\.(\d+)_env$")
+
+        def _venv_sort_key(venv_dir: Path) -> Tuple[bool, Tuple[int, int]]:
+            match = version_re.match(venv_dir.name)
+            # Unreachable in practice (candidates are pre-filtered by
+            # prefix/suffix above), but keep a safe fallback version tuple.
+            # 実際には到達しない(候補は上で prefix/suffix 済み)が、
+            # 安全側のフォールバック版タプルを用意しておく。
+            version = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+            in_band = PYTHON_PREFERRED_MIN <= version <= PYTHON_PREFERRED_MAX
+            return (in_band, version)
+
         candidates = [
             d for d in entries
             if d.is_dir() and d.name.startswith(prefix) and d.name.endswith("_env")
+            and version_re.match(d.name)
         ]
-        for venv_dir in sorted(candidates, reverse=True):
+        for venv_dir in sorted(candidates, key=_venv_sort_key, reverse=True):
             python_exe = venv_dir / bin_subdir / python_name
             if python_exe.exists():
                 return python_exe
@@ -2397,7 +2560,25 @@ class ESPIDFInstaller:
                 rc = _stream_subprocess(cmd, shell=True, env=_clean_env_for_cmd())
             else:
                 install_script = target_dir / "install.sh"
-                rc = _stream_subprocess(["bash", str(install_script), "esp32s3"])
+                # Steer PATH so ESP-IDF's own detect_python.sh (which
+                # tries the bare `python3` name FIRST) resolves to an
+                # in-band interpreter instead of whatever `/usr/bin/
+                # python3` happens to be -- see
+                # _env_with_python3_steering()'s docstring for the full
+                # 2026-07-22 macOS failure this guards against (a
+                # PATH-less GUI launch let /usr/bin/python3 (3.9) win and
+                # create an out-of-band idf5.5_py3.9_env).
+                # ESP-IDF 自身の detect_python.sh(素の `python3` という
+                # 名前を**最初に**試す)が、たまたま存在する
+                # `/usr/bin/python3` ではなく範囲内のインタプリタを
+                # 解決するよう PATH を誘導する -- 本修正が防ぐ 2026-07-22
+                # の macOS 実障害(PATH無しのGUI起動で /usr/bin/python3
+                # (3.9)が勝ち、範囲外の idf5.5_py3.9_env が作成された)の
+                # 詳細は _env_with_python3_steering() の docstring 参照。
+                rc = _stream_subprocess(
+                    ["bash", str(install_script), "esp32s3"],
+                    env=_env_with_python3_steering(),
+                )
         except FileNotFoundError as e:
             error(f"Failed to install ESP-IDF tools: {e}")
             return None
