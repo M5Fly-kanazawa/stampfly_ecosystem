@@ -20,30 +20,43 @@ def find_idf_path() -> Optional[Path]:
 
 
 def idf_command(args: List[str]) -> List[str]:
-    """Build command list to invoke idf.py cross-platform.
-    idf.pyをクロスプラットフォームで呼び出すコマンドリストを構築
+    """Build command list to invoke idf.py on every platform via
+    sys.executable — the ESP-IDF venv Python that sf itself runs from.
+    idf.pyを全プラットフォームで sys.executable（sf 自身が動いている
+    ESP-IDF venv の Python）経由で起動するコマンドリストを構築
 
-    On Windows, idf.py cannot be executed directly (WinError 193).
-    We invoke it via sys.executable (the ESP-IDF venv Python).
+    Windows: idf.py cannot be executed directly (WinError 193).
+    Unix: running bare "idf.py" resolves its `#!/usr/bin/env python`
+    shebang against PATH, and anything prepended to PATH AFTER
+    setup_env.sh ran — e.g. pyenv shims added by .zshrc in the StampFly
+    Terminal launcher's interactive handoff shell — shadows the venv
+    python with a bare interpreter and idf.py dies with a confusing
+    "No module named 'click'" (observed 2026-07-22, macOS). Invoking
+    idf.py with sys.executable's absolute path removes that PATH-order
+    dependency entirely.
+    Windows: idf.py は直接実行できない（WinError 193）。
+    Unix: 素の "idf.py" 起動は `#!/usr/bin/env python` shebang を PATH で
+    解決するため、setup_env.sh 実行**後**に PATH 先頭へ割り込んだもの
+    — 例: StampFly Terminal ランチャーの対話シェル引き継ぎで .zshrc が
+    追加する pyenv shims — が venv python を覆い隠し、idf.py が
+    「No module named 'click'」という分かりにくいエラーで死ぬ
+    （2026-07-22, macOS で観測）。sys.executable の絶対パスで起動すれば
+    この PATH 順序依存を構造的に排除できる。
 
     Args:
         args: Arguments to pass to idf.py (e.g., ["build"], ["-p", "COM3", "flash"])
 
     Returns:
         Command list suitable for subprocess.run()
-        ['build'] → [sys.executable, '<IDF_PATH>/tools/idf.py', 'build']  (Windows)
-        ['build'] → ['idf.py', 'build']                                    (Unix)
+        ['build'] → [sys.executable, '<IDF_PATH>/tools/idf.py', 'build']
     """
-    if platform.is_windows():
-        idf_path = find_idf_path()
-        if idf_path:
-            idf_py = idf_path / "tools" / "idf.py"
-            return [sys.executable, str(idf_py)] + args
-        # Fallback: try python + idf.py on PATH
-        # フォールバック: PATH上のidf.pyをpython経由で実行
-        return [sys.executable, "idf.py"] + args
-    else:
-        return ["idf.py"] + args
+    idf_path = find_idf_path()
+    if idf_path:
+        idf_py = idf_path / "tools" / "idf.py"
+        return [sys.executable, str(idf_py)] + args
+    # Fallback: try python + idf.py on PATH
+    # フォールバック: PATH上のidf.pyをpython経由で実行
+    return [sys.executable, "idf.py"] + args
 
 
 def prepare_idf_env(idf_path: Optional[Path] = None) -> dict:

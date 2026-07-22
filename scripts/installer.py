@@ -3642,13 +3642,24 @@ class Installer:
         `.command` 関連付け（既定 Terminal.app、変更していれば iTerm2 等
         -- docs/guides/gui-installer.md の FAQ 参照）が決める。
 
-        Inside the worker script, `exec "${SHELL:-/bin/zsh}" -i` hands off
-        to an interactive shell after sourcing setup_env.sh so the
-        variables exported there (PATH, IDF_PATH, ...) survive into the
-        shell the user actually types into.
-        ワーカースクリプト内の `exec "${SHELL:-/bin/zsh}" -i` は
-        setup_env.sh を source した後に対話シェルへ引き継ぎ、export された
-        変数(PATH, IDF_PATH等)をユーザーが実際に入力するシェルへ残す。
+        The worker script hands off to an interactive shell whose rc
+        wrapper sources the user's own config (.zshenv/.zprofile/.zshrc)
+        FIRST and setup_env.sh LAST. Ordering is load-bearing: the first
+        iteration sourced setup_env.sh in the worker and then exec'd
+        `$SHELL -i`, which let .zshrc's pyenv init prepend its shims OVER
+        the ESP-IDF venv on PATH -- idf.py's `#!/usr/bin/env python`
+        shebang then resolved to a bare interpreter and died with
+        "No module named 'click'" (observed 2026-07-22, macOS). Sourcing
+        setup_env.sh after the user's rc keeps the venv first.
+        ワーカースクリプトは、rc ラッパーがユーザー自身の設定
+        (.zshenv/.zprofile/.zshrc)を**先に**、setup_env.sh を**最後に**
+        source する対話シェルへ引き継ぐ。この順序が本質: 初期実装は
+        ワーカー内で setup_env.sh を source してから `$SHELL -i` に exec
+        していたため、.zshrc の pyenv init が ESP-IDF venv より前に shims
+        を PATH へ積んでしまい、idf.py の `#!/usr/bin/env python` shebang
+        が素のインタプリタに解決されて「No module named 'click'」で死んだ
+        (2026-07-22, macOS で観測)。ユーザー rc の後に setup_env.sh を
+        source することで venv が先頭を維持する。
         """
         apps_dir = Path.home() / "Applications"
         apps_dir.mkdir(parents=True, exist_ok=True)
@@ -3669,16 +3680,57 @@ class Installer:
         command_content = (
             "#!/bin/zsh\n"
             "# Worker script: open a terminal with the StampFly dev\n"
-            "# environment pre-loaded (setup_env.sh already sourced).\n"
-            "# ワーカースクリプト: StampFly 開発環境(setup_env.sh 読み込み\n"
-            "# 済み)の端末を開く\n"
+            "# environment pre-loaded.\n"
+            "# ワーカースクリプト: StampFly 開発環境入りの端末を開く\n"
+            "#\n"
+            "# The interactive shell must load the user's OWN config first\n"
+            "# and setup_env.sh LAST, so the ESP-IDF venv stays ahead of\n"
+            "# pyenv shims and similar PATH prepends on PATH. Sourcing\n"
+            "# setup_env.sh here and exec'ing '$SHELL -i' afterwards put\n"
+            "# pyenv in front and broke idf.py (\"No module named 'click'\").\n"
+            "# 対話シェルはユーザー自身の設定を先に、setup_env.sh を最後に\n"
+            "# 読み込む必要がある(ESP-IDF venv を pyenv shims 等の PATH\n"
+            "# 先頭追加より前に保つため)。ここで setup_env.sh を source\n"
+            "# してから '$SHELL -i' に exec する旧方式は pyenv が前に来て\n"
+            "# idf.py が壊れた(\"No module named 'click'\")。\n"
+            '_sf_user_shell="${SHELL:-/bin/zsh}"\n'
+            '_sf_rc_dir="$(mktemp -d)"\n'
+            'case "${_sf_user_shell##*/}" in\n'
+            "    zsh)\n"
+            '        cat > "${_sf_rc_dir}/.zshrc" <<\'SF_WRAP\'\n'
+            "unset ZDOTDIR\n"
+            '[ -f "$HOME/.zshenv" ] && source "$HOME/.zshenv"\n'
+            '[ -f "$HOME/.zprofile" ] && source "$HOME/.zprofile"\n'
+            '[ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc"\n'
             f'cd "{self.root}"\n'
             "source setup_env.sh\n"
-            "# Hand off to an interactive shell so the environment exported\n"
-            "# above survives into the shell the user actually types into.\n"
-            "# 上でexportされた環境が、ユーザーが実際に入力する対話シェルへ\n"
-            "# 引き継がれるようにする\n"
-            'exec "${SHELL:-/bin/zsh}" -i\n'
+            '[ -n "$_SF_RC_DIR" ] && rm -rf "$_SF_RC_DIR"\n'
+            "unset _SF_RC_DIR\n"
+            "SF_WRAP\n"
+            '        export _SF_RC_DIR="${_sf_rc_dir}"\n'
+            '        ZDOTDIR="${_sf_rc_dir}" exec "${_sf_user_shell}" -i\n'
+            "        ;;\n"
+            "    bash)\n"
+            '        cat > "${_sf_rc_dir}/.sf_bashrc" <<\'SF_WRAP\'\n'
+            '[ -f "$HOME/.bash_profile" ] && source "$HOME/.bash_profile"\n'
+            '[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"\n'
+            f'cd "{self.root}"\n'
+            "source setup_env.sh\n"
+            '[ -n "$_SF_RC_DIR" ] && rm -rf "$_SF_RC_DIR"\n'
+            "unset _SF_RC_DIR\n"
+            "SF_WRAP\n"
+            '        export _SF_RC_DIR="${_sf_rc_dir}"\n'
+            '        exec "${_sf_user_shell}" --rcfile "${_sf_rc_dir}/.sf_bashrc" -i\n'
+            "        ;;\n"
+            "    *)\n"
+            "        # Unknown shell: fall back to the pre-wrapper behavior.\n"
+            "        # 未知のシェル: ラッパー導入前の挙動にフォールバック。\n"
+            '        rm -rf "${_sf_rc_dir}"\n'
+            f'        cd "{self.root}"\n'
+            "        source setup_env.sh\n"
+            '        exec "${_sf_user_shell}" -i\n'
+            "        ;;\n"
+            "esac\n"
         )
         command_path.write_text(command_content)
         command_path.chmod(TERMINAL_LAUNCHER_MACOS_MODE)

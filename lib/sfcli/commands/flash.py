@@ -133,10 +133,20 @@ def _flash_legacy(args: argparse.Namespace) -> int:
         console.error(env_error)
         return 1
 
-    # Use esptool.py to write binary at target-specific offset
-    # esptool.py でバイナリをターゲット固有のオフセットに書き込む
+    # Use esptool to write binary at target-specific offset. Invoke it via
+    # sys.executable (the ESP-IDF venv Python sf runs from), NOT a bare
+    # "python" from PATH — anything prepended to PATH after setup_env.sh
+    # (e.g. pyenv shims from the launcher's interactive handoff shell)
+    # would shadow the venv and fail with "No module named 'esptool'".
+    # Same rationale as espidf.idf_command().
+    # esptool でバイナリをターゲット固有のオフセットに書き込む。PATH 上の
+    # 素の "python" ではなく sys.executable（sf が動く ESP-IDF venv の
+    # Python）で起動する — setup_env.sh の後で PATH 先頭に割り込んだもの
+    # （ランチャーの対話シェル引き継ぎによる pyenv shims 等）が venv を
+    # 覆い隠すと「No module named 'esptool'」で失敗するため。
+    # 理由の詳細は espidf.idf_command() と同じ。
     cmd = [
-        "python", "-m", "esptool",
+        sys.executable, "-m", "esptool",
         "--chip", "esp32s3",
         "--port", port,
         "--baud", str(args.baud),
