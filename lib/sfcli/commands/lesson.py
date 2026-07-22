@@ -177,6 +177,45 @@ def _find_lesson(identifier) -> Optional[Path]:
     return None
 
 
+def _find_manifest_entry(identifier) -> Optional[Dict[str, Any]]:
+    """Find the raw manifest entry for a lesson by number or ID.
+
+    Mirrors _find_lesson()'s lookup rules but returns the manifest dict
+    itself (needed for fields like has_solution) instead of resolving to
+    a filesystem path.
+
+    番号またはIDでマニフェストの生エントリを検索する。_find_lesson() と
+    同じ検索規則だが、（has_solution等の判定に使うため）ファイルパスではなく
+    マニフェスト辞書そのものを返す。
+
+    Args:
+        identifier: int (lesson number) or str (lesson ID)
+
+    Returns:
+        The manifest entry dict, or None if no manifest or no match.
+    """
+    manifest = _load_manifest()
+    if not manifest:
+        return None
+
+    if isinstance(identifier, str):
+        for entry in manifest:
+            if entry.get("id") == identifier:
+                return entry
+
+    num = identifier if isinstance(identifier, int) else None
+    if num is None:
+        try:
+            num = int(identifier)
+        except (ValueError, TypeError):
+            return None
+
+    for entry in manifest:
+        if entry.get("number") == num:
+            return entry
+    return None
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register command with CLI"""
     parser = subparsers.add_parser(
@@ -475,6 +514,22 @@ def run_switch(args: argparse.Namespace) -> int:
 
     # Determine source file
     if args.solution:
+        # Some lessons (event templates like Lesson 90) declare
+        # has_solution: false because no single "correct answer" exists
+        # by design. Fail with a clear reason instead of the generic
+        # "solution.cpp not found" below.
+        # 一部のレッスン（Lesson 90のようなイベント用テンプレート）は設計上
+        # 唯一の「正解」が存在しないため has_solution: false を宣言している。
+        # 下の汎用的な「solution.cpp not found」ではなく、理由を明示して失敗させる。
+        entry = _find_manifest_entry(identifier)
+        if entry is not None and not entry.get("has_solution", True):
+            console.error(
+                f"Lesson '{args.identifier}' has no solution — "
+                "it is an event template with no single correct answer by design.\n"
+                f"Lesson '{args.identifier}' にsolutionはありません — "
+                "設計上、唯一の正解が存在しないイベント用テンプレートです。"
+            )
+            return 1
         src = lesson_dir / "solution.cpp"
         label = "solution"
     else:
@@ -522,6 +577,23 @@ def run_solution(args: argparse.Namespace) -> int:
 
     if lesson_dir is None:
         console.error(f"Lesson '{args.identifier}' not found")
+        return 1
+
+    # Some lessons (event templates like Lesson 90) declare
+    # has_solution: false because no single "correct answer" exists by
+    # design. Fail with a clear reason instead of the generic
+    # "solution.cpp not found" below.
+    # 一部のレッスン（Lesson 90のようなイベント用テンプレート）は設計上
+    # 唯一の「正解」が存在しないため has_solution: false を宣言している。
+    # 下の汎用的な「solution.cpp not found」ではなく、理由を明示して失敗させる。
+    entry = _find_manifest_entry(identifier)
+    if entry is not None and not entry.get("has_solution", True):
+        console.error(
+            f"Lesson '{args.identifier}' has no solution — "
+            "it is an event template with no single correct answer by design.\n"
+            f"Lesson '{args.identifier}' にsolutionはありません — "
+            "設計上、唯一の正解が存在しないイベント用テンプレートです。"
+        )
         return 1
 
     student = lesson_dir / "student.cpp"

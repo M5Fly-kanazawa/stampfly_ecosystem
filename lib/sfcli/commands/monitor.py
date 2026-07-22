@@ -84,6 +84,15 @@ def run(args: argparse.Namespace) -> int:
     # Prepare environment (uses ESP-IDF's Python, not our venv)
     env = espidf.prepare_idf_env(idf_path)
 
+    # Verify the inherited environment is actually usable before invoking
+    # idf.py monitor (see build.py for the failure modes this catches).
+    # idf.py monitor実行前に継承環境が使えるか検証する
+    # （catchする失敗モードはbuild.pyのコメント参照）
+    env_error = espidf.verify_idf_env(env)
+    if env_error:
+        console.error(env_error)
+        return 1
+
     # Monitor command
     cmd = espidf.idf_command(["-p", port, "-b", str(args.baud), "monitor"])
 

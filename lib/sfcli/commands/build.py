@@ -104,6 +104,17 @@ def run(args: argparse.Namespace) -> int:
         console.error("Failed to prepare ESP-IDF environment")
         return 1
 
+    # Verify the inherited environment is actually usable before invoking
+    # idf.py, so a missing/stale `source setup_env.sh` fails with clear
+    # guidance instead of a confusing "No module named 'click'".
+    # idf.py実行前に継承した環境が実際に使えるか検証する。これにより
+    # setup_env.sh未実行/陳腐化を「No module named 'click'」のような
+    # 分かりにくいエラーではなく、明確な案内で失敗させる。
+    env_error = espidf.verify_idf_env(env)
+    if env_error:
+        console.error(env_error)
+        return 1
+
     # Clean if requested
     if args.clean:
         console.info("Cleaning build directory...")

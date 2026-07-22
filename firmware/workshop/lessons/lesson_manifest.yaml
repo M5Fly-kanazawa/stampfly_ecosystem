@@ -1,5 +1,14 @@
 # Lesson Manifest — Single Source of Truth for lesson ordering
 # レッスンマニフェスト — レッスン順序の唯一の情報源
+#
+# Optional field: has_solution (bool, default: true)
+# レッスンにsolution.cppを必須としない場合はhas_solution: falseを設定する
+# Set has_solution: false for lessons that have no "correct answer" by
+# design (e.g. open-ended event templates) — this suppresses the
+# solution.cpp check in `sf doctor` and `sf lesson switch/solution --solution`.
+# 設計上「正解」が存在しないレッスン（イベント用の自由課題テンプレート等）に
+# 設定する。`sf doctor` と `sf lesson switch/solution --solution` の
+# solution.cppチェックを省略する。省略時はtrue扱い（solution.cpp必須）。
 
 lessons:
   # === Day 1 ===
@@ -144,3 +153,8 @@ lessons:
     description_ja: モータDuty書き換え実習（機体ボタンARM・duty上限0.15）
     description_en: Motor duty exercise (onboard-button arm, duty cap 0.15)
     firmware_dir: lesson_90_dxh_workshop
+    # Event template: participants rewrite the duty value on the day, so
+    # there is no single "correct answer" — no solution.cpp is provided.
+    # イベント用テンプレート: 当日参加者がduty値を書き換える実習のため
+    # 唯一の「正解」が存在しない。solution.cppは提供しない。
+    has_solution: false

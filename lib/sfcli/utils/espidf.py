@@ -6,6 +6,7 @@ ESP-IDF環境のセットアップとコマンド実行を処理
 """
 
 import os
+import shutil
 import sys
 import subprocess
 from pathlib import Path
@@ -62,85 +63,72 @@ def prepare_idf_env(idf_path: Optional[Path] = None) -> dict:
     return os.environ.copy()
 
 
-def _prepare_idf_env_unix(idf_path: Path) -> dict:
-    """Prepare ESP-IDF environment for Unix (macOS/Linux)"""
-    export_script = idf_path / "export.sh"
-    if not export_script.exists():
-        return os.environ.copy()
+def verify_idf_env(env: dict) -> Optional[str]:
+    """Verify that the ESP-IDF environment carried in `env` is loaded and fresh.
+    `env` に含まれるESP-IDF環境がロード済みかつ有効(陳腐化していない)か検証する
 
-    # Build minimal environment to pass to bash
-    # CRITICAL: Do NOT include PATH from current env (it has venv)
-    home = os.environ.get("HOME", "")
-    user = os.environ.get("USER", "")
-    shell = os.environ.get("SHELL", "/bin/bash")
-    term = os.environ.get("TERM", "xterm-256color")
-    lang = os.environ.get("LANG", "en_US.UTF-8")
+    prepare_idf_env() just inherits whatever the shell already has. If the
+    caller's terminal never sourced setup_env.sh, idf.py is simply missing
+    from PATH ("[Errno 2] No such file or directory: 'idf.py'"). If the
+    terminal sourced it a long time ago and the referenced ESP-IDF Python
+    venv was since deleted/recreated (e.g. by a reinstall), idf.py silently
+    falls back to a bare system Python and fails with an unrelated-looking
+    "No module named 'click'". Both are confusing to debug from the error
+    alone, so this check catches them up front with actionable guidance.
 
-    # Use env -i to start with clean environment, then source export.sh
-    # Pass only essential vars that ESP-IDF needs
-    cmd = f'''env -i \
-        HOME="{home}" \
-        USER="{user}" \
-        SHELL="{shell}" \
-        TERM="{term}" \
-        LANG="{lang}" \
-        PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-        IDF_PATH="{idf_path}" \
-        bash -c 'source "{export_script}" > /dev/null 2>&1 && env' '''
+    prepare_idf_env() は現在のシェル環境をそのまま継承するだけである。呼び出し元の
+    ターミナルで setup_env.sh が一度も source されていない場合、idf.py が単に
+    PATH に無く「[Errno 2] No such file or directory: 'idf.py'」となる。以前に
+    source した後、参照先の ESP-IDF Python venv が削除・再作成された場合
+    （再インストール等）は、idf.py が素の system Python にフォールバックし、
+    一見無関係な「No module named 'click'」で失敗する。どちらもエラーメッセージ
+    単体では原因が分かりにくいため、実行前にこの検証で検出し対処法を提示する。
 
-    try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
+    Args:
+        env: Environment dict to verify (as returned by prepare_idf_env()).
+
+    Returns:
+        None if the environment looks usable. Otherwise a bilingual,
+        actionable error message ready to hand to console.error().
+    """
+    venv_path_str = env.get("IDF_PYTHON_ENV_PATH")
+    if not venv_path_str:
+        return (
+            "ESP-IDF environment is not loaded in this terminal.\n"
+            "ESP-IDF環境がこのターミナルにロードされていません。\n"
+            "  -> Run 'source setup_env.sh' in this terminal, then retry.\n"
+            "  -> このターミナルで 'source setup_env.sh' を実行してから再試行してください。"
         )
-        if result.returncode == 0:
-            env = {}
-            for line in result.stdout.split("\n"):
-                if "=" in line:
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip()
-                    if key:  # Skip empty keys
-                        env[key] = value
-            # Ensure IDF_PATH is set
-            env["IDF_PATH"] = str(idf_path)
-            return env
-    except Exception:
-        pass
 
-    return os.environ.copy()
+    venv_dir = Path(venv_path_str)
+    bin_subdir = "Scripts" if platform.is_windows() else "bin"
+    python_name = "python.exe" if platform.is_windows() else "python"
+    venv_python = venv_dir / bin_subdir / python_name
 
-
-def _prepare_idf_env_windows(idf_path: Path) -> dict:
-    """Prepare ESP-IDF environment for Windows"""
-    export_script = idf_path / "export.bat"
-    if not export_script.exists():
-        return os.environ.copy()
-
-    try:
-        result = subprocess.run(
-            f'cmd /c "{export_script}" && set',
-            shell=True,
-            capture_output=True,
-            text=True,
+    if not venv_dir.is_dir() or not venv_python.is_file():
+        return (
+            "This terminal references a deleted/stale ESP-IDF Python "
+            f"environment ({venv_path_str}).\n"
+            "このターミナルは削除済みまたは古いESP-IDF Python環境を参照しています "
+            f"({venv_path_str})。\n"
+            "  -> Open a NEW terminal and run 'source setup_env.sh' again.\n"
+            "  -> 新しいターミナルを開いて 'source setup_env.sh' をやり直してください。"
         )
-        if result.returncode == 0:
-            env = {}
-            for line in result.stdout.split("\n"):
-                if "=" in line:
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip()
-                    if key:
-                        env[key] = value
-            env["IDF_PATH"] = str(idf_path)
-            return env
-    except Exception:
-        pass
 
-    return os.environ.copy()
+    # idf_command() invokes 'idf.py' via PATH on Unix (via sys.executable on
+    # Windows, so PATH is irrelevant there).
+    # idf_command() はUnixではPATH経由でidf.pyを起動する
+    # （Windowsではsys.executable経由のためPATHは無関係）
+    if not platform.is_windows():
+        if shutil.which("idf.py", path=env.get("PATH")) is None:
+            return (
+                "idf.py was not found on PATH.\n"
+                "idf.py がPATH上に見つかりません。\n"
+                "  -> Run 'source setup_env.sh' in this terminal, then retry.\n"
+                "  -> このターミナルで 'source setup_env.sh' を実行してから再試行してください。"
+            )
+
+    return None
 
 
 def run_idf_command(

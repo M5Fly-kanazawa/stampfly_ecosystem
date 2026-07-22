@@ -170,8 +170,16 @@ def _check_manifest(warnings: list, issues: list) -> None:
                 issues.append(f"Lesson {num} ({lid}): firmware_dir '{fw_dir}' missing")
                 console.error(f"  Lesson {num}: firmware_dir '{fw_dir}' NOT FOUND")
             else:
-                # Check for required files
-                for fname in ("student.cpp", "solution.cpp"):
+                # Check for required files. student.cpp is always required;
+                # solution.cpp is skipped for lessons that declare
+                # has_solution: false (e.g. event templates with no single
+                # "correct answer" by design — see lesson_manifest.yaml).
+                # student.cppは常に必須。solution.cppはhas_solution: false
+                # を宣言したレッスン（設計上「正解」が存在しないイベント用
+                # テンプレート等。lesson_manifest.yaml参照）ではスキップする
+                has_solution = entry.get("has_solution", True)
+                required_files = ("student.cpp", "solution.cpp") if has_solution else ("student.cpp",)
+                for fname in required_files:
                     if not (fw_path / fname).exists():
                         warnings.append(f"Lesson {num} ({lid}): {fname} missing")
                         console.warning(f"  Lesson {num}: {fw_dir}/{fname} MISSING")
