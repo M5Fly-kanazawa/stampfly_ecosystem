@@ -1003,6 +1003,28 @@ def _find_system_python_dir() -> Optional[Path]:
             exe = resolved
         if not exe.is_file():
             continue
+        # Windows: the returned directory's whole purpose is to make the
+        # literal name `python.exe` resolvable for ESP-IDF's install.bat
+        # (see the 9009 note above). A candidate that lives in a directory
+        # with no real python.exe -- e.g. pyenv-win's `python.bat` shim,
+        # which shutil.which("python") returns via PATHEXT -- must be
+        # discarded: steering PATH to its shims directory reproduces the
+        # exact 9009 failure this function exists to prevent (observed
+        # 2026-07-23, GUI installer on a pyenv-win machine). pyenv installs
+        # are still honored via _windows_pyenv_win_python_dir(), which
+        # points at the real versions\<ver> directory instead.
+        # Windows: この関数が返すディレクトリの目的は、ESP-IDF の
+        # install.bat が呼ぶ `python.exe` という名前をそのまま解決可能に
+        # すること(上の 9009 の注記参照)。本物の python.exe が無い
+        # ディレクトリに居る候補 -- 例: shutil.which("python") が PATHEXT
+        # 経由で返す pyenv-win の `python.bat` shim -- は除外必須:
+        # shims ディレクトリへ PATH を誘導すると、この関数が防ぐはずの
+        # 9009 障害をそのまま再現する(2026-07-23、pyenv-win 環境の GUI
+        # インストーラーで観測)。pyenv のインストール自体は、実体の
+        # versions\<ver> ディレクトリを指す _windows_pyenv_win_python_dir()
+        # が引き続き拾う。
+        if sys.platform == "win32" and not (exe.parent / "python.exe").is_file():
+            continue
         version = _python_version_info(exe)
         if version is None:
             continue
@@ -1445,12 +1467,19 @@ def _clean_env_for_cmd() -> dict:
     if python_dir is not None:
         python_dir_str = str(python_dir)
         current_path = env.get("PATH", "")
-        if python_dir_str.lower() not in current_path.lower():
-            # Prepend (not append): a WindowsApps python stub already on
-            # PATH must not win over the real interpreter we found.
-            # 先頭に付ける(末尾ではない): PATH 上に既にある WindowsApps の
-            # python スタブが、発見した本物のインタプリタに勝たないように。
-            env["PATH"] = python_dir_str + os.pathsep + current_path
+        # Prepend UNCONDITIONALLY (not append, and not skip-if-present):
+        # a WindowsApps python stub or a pyenv shims directory earlier on
+        # PATH must not win over the real interpreter we found. The old
+        # "skip if the directory already appears anywhere in PATH" check
+        # left the stub winning when the real directory sat AFTER it; a
+        # duplicated entry further down PATH is harmless.
+        # 無条件で先頭に付ける(末尾ではなく、既存チェックによる省略も
+        # しない): PATH 上でより前にある WindowsApps の python スタブや
+        # pyenv の shims ディレクトリが、発見した本物のインタプリタに
+        # 勝ってはならない。従来の「PATH のどこかに既にあれば省略」では、
+        # 実体ディレクトリがスタブより後ろにある場合にスタブが勝って
+        # いた。PATH 後方の重複エントリは無害。
+        env["PATH"] = python_dir_str + os.pathsep + current_path
     return env
 
 
