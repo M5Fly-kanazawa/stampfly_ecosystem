@@ -31,14 +31,37 @@
 #include <string.h>
 #include <errno.h>
 
-// struct timeval / fd_set are defined HERE rather than pulled from host
-// <sys/time.h> / <sys/select.h>, so this shim stays self-contained and never
-// clashes with the host socket stack. Guard timeval against the macOS SDK's
-// own definition (it uses the _STRUCT_TIMEVAL sentinel).
-// timeval / fd_set はここで自前定義（ホスト <sys/time.h>/<sys/select.h> を引かない）。
+// struct timeval: on Windows (MinGW) we self-define it here rather than
+// pulling <sys/time.h>, so this shim stays self-contained and never clashes
+// with the host socket stack. On Linux/macOS we instead use the SYSTEM
+// <sys/time.h>: glibc's <bits/types/struct_timeval.h> (transitively pulled in
+// by many standard headers, e.g. <cstdlib>, via <sys/select.h>) defines the
+// real struct timeval unconditionally under its own guard (__timeval_defined),
+// which our local definition does not set — so a local re-definition causes
+// "redefinition of struct timeval" at compile time on Linux. Including
+// <sys/time.h> ourselves gives every TU the same real type with no clash, and
+// is a no-op if some other header already pulled it in first. macOS's SDK
+// guards its definition with the _STRUCT_TIMEVAL sentinel too, so this stays
+// compatible with the mutual-guard scheme that was already in place there.
+// fd_set is intentionally NOT provided on any platform (see below).
+//
+// struct timeval: Windows(MinGW)ではここで自前定義する（<sys/time.h>を引かず
+// 自己完結を保つ）。Linux/macOSではシステムの<sys/time.h>を使う: glibcの
+// <bits/types/struct_timeval.h>（<cstdlib>等の標準ヘッダから<sys/select.h>
+// 経由で間接的に取り込まれる）が本物のstruct timevalを、こちらの自前定義とは
+// 別のガード（__timeval_defined）で無条件に定義するため、ローカルに再定義すると
+// Linuxでは「redefinition of struct timeval」になる。自前で<sys/time.h>を
+// includeしておけば、どのTUでも同じ本物の型が使え、他ヘッダが先に引き込んで
+// いても no-op になる。macOS SDK側も_STRUCT_TIMEVALで相互ガードしているので、
+// 従来の仕組みとの互換性も保たれる。fd_setはどのプラットフォームでも意図的に
+// 提供しない（下記参照）。
+#if defined(_WIN32)
 #ifndef _STRUCT_TIMEVAL
 #define _STRUCT_TIMEVAL
 struct timeval { long tv_sec; long tv_usec; };
+#endif
+#else
+#include <sys/time.h>
 #endif
 
 // Cooperative yield so a task polling an inert socket does not busy-loop.
