@@ -356,6 +356,76 @@ def _check_vpython_available(python_cmd: str) -> bool:
         return False
 
 
+def _prompt_yes_no(message: str, default: bool = True) -> bool:
+    """Ask a y/n question on stdin and return the answer.
+
+    EOF-safe: if stdin is closed (redirected from /dev/null, a CI runner,
+    etc.), input() raises EOFError, which is caught here and treated as
+    accepting `default` rather than propagating or hanging. Callers must
+    still gate on sys.stdin.isatty() first -- this function only makes a
+    *closed* stdin safe, it does not detect a non-interactive terminal.
+
+    stdin上でy/n形式の質問をし、回答を返す。
+
+    EOFセーフ: stdinが閉じている(/dev/nullへのリダイレクト、CI環境等)場合、
+    input()はEOFErrorを送出するが、ここで捕捉して例外を伝播・ハングさせず
+    `default` を受理したものとして扱う。呼び出し側はそれでも先に
+    sys.stdin.isatty() で対話端末かを確認すること -- この関数が保証するのは
+    「閉じた stdin」への安全性のみで、非対話端末の検出は行わない。
+    """
+    try:
+        response = input(message).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        console.print()
+        return default
+    if not response:
+        return default
+    return response in ("y", "yes")
+
+
+def _install_vpython_into(python_exe: str) -> bool:
+    """Install vpython into `python_exe`'s own environment and verify it
+    actually imports afterward (not just that pip reported success).
+
+    Used to self-heal `sf sim run` when vpython is missing from sf's own
+    environment (see _get_python_cmd()): installing into `sys.executable`
+    -- the SAME interpreter that `sf` itself is running under, since `sf`
+    is a console_scripts entry point inside the ESP-IDF venv (see
+    pyproject.toml's `[project.scripts] sf = "sfcli.cli:main"`) -- keeps
+    vpython inside the sf environment instead of landing in an unrelated
+    system Python via a bare `pip3 install vpython` (the exact drift that
+    prompted this function to exist, see the module-level guidance text
+    below).
+
+    `python_exe` 自身の環境にvpythonを導入し、実際にimportできることまで
+    確認する(pipが成功と報告しただけで終わらせない)。
+
+    sf自身の環境にvpythonが無い場合の `sf sim run` 自己修復に使う
+    (_get_python_cmd() 参照): `sys.executable` -- `sf` 自身が動いている
+    のと同じインタプリタ(`sf` はESP-IDF venv内のconsole_scripts
+    エントリポイントのため。pyproject.tomlの
+    `[project.scripts] sf = "sfcli.cli:main"` 参照) -- に導入することで、
+    素の `pip3 install vpython` が無関係なシステムPythonに着地してしまう
+    (この関数が存在する契機となったずれそのもの。下のガイド文言参照)の
+    ではなく、vpythonをsf環境の中に留める。
+    """
+    console.print(f"  Installing vpython into {python_exe} ...")
+    try:
+        result = subprocess.run(
+            [python_exe, "-m", "pip", "install", "vpython"],
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        console.error("pip install timed out")
+        return False
+    except Exception as e:
+        console.error(f"Failed to run pip: {e}")
+        return False
+    if result.returncode != 0:
+        return False
+    return _check_vpython_available(python_exe)
+
+
 def _check_hidapi_available(python_cmd: str) -> bool:
     """Check if hidapi native library is available for the hid package.
     hidパッケージのネイティブライブラリが利用可能か確認"""
@@ -429,26 +499,69 @@ def _get_python_cmd(backend: dict) -> Optional[str]:
             # Try system Python first (more likely to have vpython)
             system_pythons = ["/usr/bin/python3", "/usr/local/bin/python3"]
 
-            # Check current Python
+            # Check current Python. This is normally the sf/ESP-IDF venv's
+            # OWN interpreter -- `sf` is a console_scripts entry point
+            # installed inside that venv (see pyproject.toml's
+            # `[project.scripts] sf = "sfcli.cli:main"`), so sys.executable
+            # here already IS the environment `sf sim run` should be using.
+            # 現在のPythonを確認する。これは通常sf/ESP-IDF venv自身の
+            # インタプリタである -- `sf` はそのvenv内にインストールされた
+            # console_scriptsエントリポイントのため(pyproject.tomlの
+            # `[project.scripts] sf = "sfcli.cli:main"` 参照)、ここでの
+            # sys.executableは既に`sf sim run`が使うべき環境そのもの。
             if _check_vpython_available(sys.executable):
                 return sys.executable
 
-            # Check system Pythons
+            # Missing from sf's own environment. Self-heal by offering to
+            # install it there directly when attached to an interactive
+            # terminal, instead of silently falling back to an unrelated
+            # system Python (below) that would leave the sf environment
+            # itself still missing vpython. Installing to sys.executable
+            # here (not a bare `pip3 install`) is the fix for the exact
+            # drift this function used to cause: a user following the old
+            # "pip3 install vpython" guidance landed vpython in pyenv's
+            # system Python instead of the sf/ESP-IDF venv, so `sf sim run`
+            # kept working only by accident, via the system-Python fallback
+            # below, while the sf environment itself stayed out of sync.
+            # sf自身の環境に無い場合、対話端末に接続されていればそこへ
+            # 直接インストールするか提案して自己修復する。無関係な
+            # システムPython(下記)への代替探索に無言で頼ると、sf環境
+            # 自体はvpythonが無いままになってしまう。ここで(素の
+            # `pip3 install`ではなく)sys.executableへインストールするのが、
+            # この関数がかつて引き起こしていたずれそのものへの対処:
+            # 旧来の「pip3 install vpython」案内に従ったユーザーはvpythonを
+            # pyenvのシステムPythonに導入してしまい、sf/ESP-IDF venvとは
+            # 別物になっていた。`sf sim run`は下の代替Python探索が拾って
+            # 偶然動いていただけで、sf環境自体はずれたままだった。
+            if sys.stdin.isatty() and sys.stdout.isatty():
+                console.warning(f"vpython not found in the sf environment ({sys.executable})")
+                if _prompt_yes_no("  Install it there now? [Y/n]: ", default=True):
+                    if _install_vpython_into(sys.executable):
+                        console.info("vpython installed in the sf environment")
+                        return sys.executable
+                    console.error("Auto-install failed.")
+
+            # Check system Pythons as a last-resort fallback so the
+            # simulator can still run today, but flag it clearly: this is
+            # NOT the sf environment, and running from here again risks
+            # the exact drift described above.
+            # 代替として最後にシステムPythonを確認し、今すぐシミュレータを
+            # 動かせるようにする。ただしこれはsf環境ではないことを明示する
+            # -- ここから動かし続けると上述のずれを再び招く。
             for py in system_pythons:
                 if Path(py).exists() and _check_vpython_available(py):
+                    console.warning(
+                        f"Using {py} (NOT the sf environment: {sys.executable}). "
+                        "Install vpython into the sf environment (see below) to "
+                        "avoid drift."
+                    )
                     return py
 
-            # Not found
+            # Not found anywhere
             console.error("vpython module not found")
             console.print()
-            console.print("  Install vpython:")
-            console.print("    pip3 install vpython pygame numpy")
-            console.print()
-            console.print("  Or create a dedicated venv:")
-            console.print("    cd simulator")
-            console.print("    python3 -m venv venv")
-            console.print("    source venv/bin/activate")
-            console.print("    pip install vpython pygame numpy")
+            console.print("  Install it into the sf environment (not a system pip3):")
+            console.print(f"    {sys.executable} -m pip install vpython")
             return None
 
         # Use current Python

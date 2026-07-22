@@ -1863,6 +1863,111 @@ def _find_idf_constraint_file(idf_path: Path) -> Optional[Path]:
     return None
 
 
+# -- Post-install package verification ---------------------------------------
+# インストール後のパッケージ検証
+#
+# `pip install -r requirements.txt` (see Installer.run()'s Step 3/4) is only
+# ever treated as a soft warn() on failure, by design -- a single missing
+# optional package (e.g. no arm64 wheel for vpython on a given macOS/Python
+# combination) should not fail the whole install. But that softness means a
+# real gap -- e.g. vpython silently absent from the ESP-IDF venv -- can slip
+# by completely unnoticed: the log scrolls past a `warn()` among hundreds of
+# pip lines, Step 3/4 still prints "StampFly CLI installed!", and the final
+# "Installation Complete!" banner has nothing that says otherwise. This was
+# observed on a real macOS install (2026-07-21): the GUI installer finished
+# looking successful, but `sf sim run` then failed with "vpython module not
+# found", and the user's own `pip3 install vpython` landed in an unrelated
+# system Python instead of the sf/ESP-IDF venv (see sim.py's
+# `_get_python_cmd()` guidance text, updated alongside this).
+#
+# _verify_key_packages() closes that gap: after the bulk requirements.txt
+# install, it individually import-checks each package below inside the
+# ESP-IDF venv, retries a missing one with a targeted `pip install <pkg>`,
+# and returns whatever is STILL missing after the retry so the caller can
+# surface it prominently in the completion banner instead of letting it
+# hide among earlier warnings.
+#
+# Installer.run() の Step 3/4 で行う `pip install -r requirements.txt` は、
+# 失敗しても意図的に warn() だけで済ませる(1つの任意パッケージが欠けた
+# だけ(例: 特定の macOS/Python 組み合わせで vpython の arm64 wheel が
+# 無い)ことでインストール全体を失敗にすべきではないため)。しかしこの
+# 緩さゆえに、本当のギャップ(例: vpython が ESP-IDF venv に無言で欠落)が
+# 完全に見過ごされうる: 何百行もの pip 出力に紛れた warn() はログで
+# 流れ去り、Step 3/4 は "StampFly CLI installed!" と表示し、最後の
+# "Installation Complete!" バナーにも異常を示すものが何も無い。実際に
+# macOS 実機で観測された(2026-07-21): GUI インストーラは成功したように
+# 見えて完了したが、その後 `sf sim run` が "vpython module not found" で
+# 失敗し、ユーザー自身が実行した `pip3 install vpython` は sf/ESP-IDF
+# venv とは無関係なシステム Python に着地していた(この案内文自体も
+# sim.py の `_get_python_cmd()` 側で合わせて修正済み -- そちらのコメント
+# 参照)。
+#
+# _verify_key_packages() はこのギャップを塞ぐ: requirements.txt 一括導入の
+# 後、下記の各パッケージを ESP-IDF venv 内で個別に import 検証し、欠けて
+# いるものは的を絞った `pip install <pkg>` で再試行し、再試行後もなお
+# 欠けているものだけを返す。呼び出し元はそれを完了バナーで目立つ形に
+# 提示でき、以前の警告群に埋もれさせずに済む。
+
+# (import module name, pip package name) pairs always installed as part of
+# pyproject.toml's core `dependencies` -- present in BOTH minimal and full
+# installs (minimal only skips the simulator-only extras below).
+# pyproject.toml のコア `dependencies` として常に導入される(import モジュール名,
+# pipパッケージ名)の組。minimal/フル導入の両方に存在する
+# (minimal が省略するのは下のシミュレータ専用パッケージのみ)。
+CORE_IMPORT_CHECKS: list[Tuple[str, str]] = [
+    ("numpy", "numpy"),
+    ("scipy", "scipy"),
+    ("matplotlib", "matplotlib"),
+    ("pandas", "pandas"),
+    ("yaml", "PyYAML"),
+    ("serial", "pyserial"),
+]
+
+# (import module name, pip package name) pairs installed only by the full
+# `requirements.txt` path (see Installer.run()'s `if minimal: ... else: ...`
+# branch) -- deliberately skipped under --minimal, so these are only
+# checked when minimal is False.
+# フル(requirements.txt)経路でのみ導入される(import モジュール名,
+# pipパッケージ名)の組。--minimal では意図的に省略するため、
+# minimal が False のときのみ検証する。
+SIMULATOR_IMPORT_CHECKS: list[Tuple[str, str]] = [
+    ("vpython", "vpython"),
+    ("pygame", "pygame"),
+    ("cv2", "opencv-python"),
+]
+
+# Timeout for each individual `import <module>` probe subprocess. Generous
+# enough for a slow-importing package (matplotlib's font cache build on
+# first import) without letting one hung interpreter stall the whole
+# verification pass for long.
+# 個々の `import <module>` プローブ subprocess のタイムアウト。matplotlib の
+# 初回 import 時のフォントキャッシュ構築のような重い import にも十分な
+# 余裕を持たせつつ、1つのハングしたインタプリタが検証全体を長時間
+# 止めないようにする。
+IMPORT_CHECK_TIMEOUT_SECONDS = 20
+
+
+def _module_importable(python_exe: Path, module_name: str) -> bool:
+    """Return whether `import <module_name>` succeeds under python_exe.
+    Never raises: a missing interpreter, a timeout, or any other
+    subprocess failure all count as "not importable" (False) rather than
+    propagating -- this is a best-effort probe, not a hard requirement.
+    python_exe で `import <module_name>` が成功するか返す。例外は送出
+    しない: インタプリタ不在・タイムアウト・その他の subprocess 失敗は
+    全て「import不可」(False)として扱う -- これはベストエフォートな
+    プローブであり、必須要件のチェックではない。
+    """
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c", f"import {module_name}"],
+            capture_output=True, timeout=IMPORT_CHECK_TIMEOUT_SECONDS,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def _build_idf_env_command(idf_path: Path) -> str:
     """Build shell prefix that sources ESP-IDF and filters WSL2 PATH.
     ESP-IDF環境を読み込み、WSL2ではWindowsパスを除外するシェルプレフィックスを構築"""
@@ -2723,6 +2828,32 @@ class Installer:
         # Step 3: Install sfcli
         header("Step 3/4: StampFly CLI")
 
+        # Fix setuptools BEFORE any other Step 3/4 pip install runs (moved up
+        # from after the CLI install, 2026-07-22): ESP-IDF's own install.sh
+        # (Step 1/4) may leave the venv on setuptools 82+, which removed
+        # pkg_resources and breaks vpython at IMPORT time even when
+        # vpython's own `pip install` reported success. Pinning
+        # setuptools<81 here -- before requirements.txt/vpython get
+        # installed -- ensures pkg_resources is already back by the time pip
+        # processes them. requirements.txt's own `setuptools>=68.0,<81`
+        # first line is belt-and-suspenders within that SAME transaction,
+        # but doing it here too also guards the --minimal path (which never
+        # touches requirements.txt at all) and guards against a
+        # partial/aborted requirements.txt run leaving the pin never
+        # applied.
+        # setuptools修正: 他のどのStep3/4 pipインストールよりも前に実行する
+        # (2026-07-22、CLIインストール後から前倒し): ESP-IDF自身の
+        # install.sh(Step1/4)がvenvをsetuptools 82+のままにすることがあり、
+        # これはpkg_resourcesを削除しvpythonをimport時に壊す(vpython自身の
+        # `pip install`が成功と報告していても)。requirements.txt/vpythonが
+        # 導入される前にここでsetuptools<81に固定しておけば、pipがそれらを
+        # 処理する時点で既にpkg_resourcesが戻っている。requirements.txt
+        # 自身の`setuptools>=68.0,<81`という1行目は同じトランザクション内の
+        # 保険だが、ここでも行うことで--minimal経路(requirements.txtに
+        # 一切触れない)も保護し、requirements.txt実行が途中で中断してpinが
+        # 適用されないまま終わるケースからも保護する。
+        self._fix_setuptools(idf_path)
+
         if not skip_deps:
             # Probe: check if already installed (skip if not --force)
             # プローブ: インストール済みか確認（--forceでなければスキップ）
@@ -2789,11 +2920,30 @@ class Installer:
         success("StampFly CLI installed!")
         print()
 
-        # Fix setuptools: ESP-IDF install.sh may upgrade to 82+ which removes
-        # pkg_resources, breaking vpython. Pin back to <81.
-        # setuptools修正: ESP-IDFが82+にアップグレードするとpkg_resourcesが
-        # 削除されvpythonが壊れる。<81に固定する。
-        self._fix_setuptools(idf_path)
+        # Verify the key packages requirements.txt (or, under --minimal,
+        # pyproject.toml's core deps alone) were supposed to provide are
+        # actually importable -- see _verify_key_packages()'s docstring and
+        # the CORE_IMPORT_CHECKS/SIMULATOR_IMPORT_CHECKS module comment for
+        # why this exists (a `pip install -r requirements.txt` failure a
+        # few lines above is only ever a warn(), which is easy to miss).
+        # Skipped entirely when --skip-deps was passed: nothing was
+        # (re)installed this run, so a "missing" verdict here would not
+        # reflect anything this run actually did. Stashed on self so the
+        # "Installation Complete!" banner further down can surface it
+        # prominently instead of letting it hide among earlier warnings.
+        # requirements.txt(--minimalの場合はpyproject.tomlのコア依存のみ)が
+        # 導入するはずだった主要パッケージが実際にimport可能か検証する --
+        # 存在理由は_verify_key_packages()のdocstringと
+        # CORE_IMPORT_CHECKS/SIMULATOR_IMPORT_CHECKSのモジュールコメント
+        # 参照(数行上の`pip install -r requirements.txt`失敗はwarn()のみで
+        # 見過ごしやすい)。--skip-depsが指定された場合は完全にスキップする
+        # (今回の実行では何も(再)導入していないため)。selfに保持し、
+        # 後述の"Installation Complete!"バナーで目立つ形に提示できるように
+        # する(以前の警告群に埋もれさせない)。
+        self._missing_packages: List[str] = []
+        if not skip_deps:
+            checks = CORE_IMPORT_CHECKS if minimal else CORE_IMPORT_CHECKS + SIMULATOR_IMPORT_CHECKS
+            self._missing_packages = self._verify_key_packages(idf_path, checks)
 
         # Check hidapi native library for joystick support
         # ジョイスティック用のhidapiネイティブライブラリを確認
@@ -2841,6 +2991,32 @@ class Installer:
 
         # Show completion message
         header("Installation Complete!")
+
+        if self._missing_packages:
+            # Deliberately its own visually distinct block, printed right
+            # in the completion banner rather than folded into the warn()
+            # lines back in Step 3/4 -- see _verify_key_packages() and the
+            # CORE_IMPORT_CHECKS/SIMULATOR_IMPORT_CHECKS module comment for
+            # why a warn()-only failure there is easy to miss. This must
+            # never read as "All OK".
+            # Step3/4中のwarn()行に埋もれさせず、完了バナーの中に意図的に
+            # 見た目上独立したブロックとして出す -- 理由は
+            # _verify_key_packages()とCORE_IMPORT_CHECKS/
+            # SIMULATOR_IMPORT_CHECKSのモジュールコメント参照(そこでの
+            # warn()のみの失敗は見過ごしやすい)。これは決して「全てOK」に
+            # 見えてはならない。
+            warn("Some packages could not be installed automatically:")
+            warn("以下のパッケージは自動導入できませんでした:")
+            for package_name in self._missing_packages:
+                warn(f"  - {package_name}")
+            idf_python = _find_idf_python(idf_path)
+            fix_cmd = (
+                f"{idf_python} -m pip install {' '.join(self._missing_packages)}"
+                if idf_python
+                else f"pip install {' '.join(self._missing_packages)}  (inside the ESP-IDF venv)"
+            )
+            warn(f"Fix: {fix_cmd}")
+            print()
 
         print("To start using StampFly CLI:")
         print()
@@ -3640,6 +3816,44 @@ class Installer:
         else:
             warn("Failed to pin setuptools. vpython may not work.")
             warn("Manual fix: pip install 'setuptools>=68.0,<81'")
+
+    def _verify_key_packages(self, idf_path: Path, checks: List[Tuple[str, str]]) -> List[str]:
+        """Import-check each (module, pip package) pair in `checks` inside
+        the ESP-IDF venv; for any that fails, retry once with a targeted
+        `pip install <package>` and re-check. Returns the pip package names
+        still unimportable after the retry (empty list if everything is
+        OK). See the CORE_IMPORT_CHECKS/SIMULATOR_IMPORT_CHECKS module
+        comment (near _module_importable()) for why this exists.
+        checks の各(モジュール名, pipパッケージ名)の組を ESP-IDF venv 内で
+        import検証する。失敗したものは的を絞った `pip install <package>` で
+        1回だけ再試行し、再検証する。再試行後もimportできなかったpip
+        パッケージ名を返す(全てOKなら空リスト)。存在理由は
+        (_module_importable() 付近の)CORE_IMPORT_CHECKS/
+        SIMULATOR_IMPORT_CHECKS のモジュールコメント参照。
+        """
+        venv_python = _find_idf_python(idf_path)
+        if not venv_python:
+            # No venv found at all -- treat every check as missing rather
+            # than silently reporting "all OK".
+            # venvが全く見つからない -- 「全てOK」と偽って報告するのでは
+            # なく全チェックを欠落扱いにする
+            return [package_name for _module_name, package_name in checks]
+
+        info("Verifying key packages are importable...")
+        still_missing: List[str] = []
+        for module_name, package_name in checks:
+            if _module_importable(venv_python, module_name):
+                continue
+            warn(f"{package_name} is not importable yet; retrying install...")
+            _run_in_idf_env(idf_path, ["install", package_name])
+            if _module_importable(venv_python, module_name):
+                success(f"{package_name} installed on retry")
+            else:
+                still_missing.append(package_name)
+
+        if not still_missing:
+            success("All key packages verified")
+        return still_missing
 
     def _check_hidapi(self) -> None:
         """Check if hidapi native library is available (needed for joystick).
