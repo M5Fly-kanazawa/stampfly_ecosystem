@@ -56,7 +56,7 @@ using sil::rtos::Scheduler;
 using sf::math::Vec3;
 
 namespace {
-constexpr int64_t kSimDurationUs = 5600000;   // 5.6 s
+constexpr int64_t kSimDurationUs = 8600000;   // 8.6 s (T_LAND=8.1 + 0.5 s settle, same margin as before)
 constexpr float kGroundZ = 0.013f;            // body rest height on the ground (ENU up)
 constexpr float kG2AttRmseMaxDeg = 6.0f;      // G2: estimate-vs-truth attitude RMSE bound
 
@@ -69,12 +69,36 @@ constexpr float kG2AttRmseMaxDeg = 6.0f;      // G2: estimate-vs-truth attitude 
 // climb_rate=(throttle−0.5)·2·max_climb_rate(0.5)。0.9→+0.4 m/s、0.5→保持、0.1→−0.4 m/s
 // （移動は |throttle−0.5|>不感帯(0.1)）。中央で高度ループが捕捉高度を保持。地上と着地後は
 // STABILIZE・スロットル0（モータ待機）。
+// T_GROUND..T_CLIMB is the controller's OWN auto-takeoff climb (onTakeoff(),
+// triggered below on ALT_HOLD entry): a FIXED 0.3 m/s climb to a fixed 0.5 m
+// target (pid_controller.cpp defaults takeoff_climb_rate_/takeoff_target_alt_),
+// independent of the throttle stick — so THR_CLIMB below is nominal only
+// (kept so the graph/telemetry still shows "climbing intent"; it has no
+// effect on the controller during this phase). Measured settle time from
+// t=T_GROUND is ~3.8 s (0.013 m start altitude → ~0.5 m, first-order lag), so
+// T_CLIMB must clear that BEFORE the hold-band window opens at T_HOVER+0.3 —
+// otherwise "altitude held through yaw" measures the tail of the climb
+// transient, not a genuine hold (found while re-timing this schedule for the
+// onTakeoff()/onTakeoffComplete() fix above; the old T_CLIMB=1.6s assumed the
+// pre-fix bypass instantly obeyed the throttle stick, which the real
+// controller never does during TakeoffClimb).
+// T_GROUND〜T_CLIMB は制御器「自身」の自動離陸上昇（下で ALT_HOLD 進入時に発火する
+// onTakeoff()）: スロットルスティックに無関係な固定 0.3m/s 上昇・固定 0.5m 目標
+// （pid_controller.cpp の takeoff_climb_rate_/takeoff_target_alt_ 既定値）— 以下の
+// THR_CLIMB は名目のみ（グラフ/テレメトリに「上昇意図」を残すためで、この局面の
+// 制御器には無効）。t=T_GROUND からの実測整定時間は約3.8秒（開始高度0.013m→約0.5m、
+// 一次遅れ）のため、高度保持バンド窓が開く T_HOVER+0.3 より前に T_CLIMB がこれを
+// クリアしている必要がある — さもないと「ヨー中の高度保持」が上昇過渡の尾部を測る
+// ことになり本当の保持にならない（上の onTakeoff()/onTakeoffComplete() 修正に合わせて
+// 本スケジュールを再調整する過程で発見。旧 T_CLIMB=1.6s は修正前のバイパスが
+// スロットルスティックに即座に従う前提だったが、実制御器は TakeoffClimb 中は
+// 決してそうしない）。
 constexpr float T_GROUND = 0.4f;   // STABILIZE, sit on the ground / 地上待機
-constexpr float T_CLIMB  = 1.6f;   // ALT_HOLD climb +0.4 m/s for 1.2 s → ~0.48 m
-constexpr float T_HOVER  = 2.2f;   // ALT_HOLD hold / 高度保持
-constexpr float T_YAW    = 3.4f;   // ALT_HOLD hold + yaw spin (1.2 s) / ヨー旋回
-constexpr float T_STOP   = 4.0f;   // ALT_HOLD hold, yaw stop / ヨー停止
-constexpr float T_LAND   = 5.1f;   // ALT_HOLD descend −0.4 m/s (1.1 s) / 着陸下降
+constexpr float T_CLIMB  = 4.6f;   // controller's own auto-takeoff climb settles (~3.8 s) / 制御器自身の自動離陸上昇が整定
+constexpr float T_HOVER  = 5.2f;   // ALT_HOLD hold / 高度保持
+constexpr float T_YAW    = 6.4f;   // ALT_HOLD hold + yaw spin (1.2 s) / ヨー旋回
+constexpr float T_STOP   = 7.0f;   // ALT_HOLD hold, yaw stop / ヨー停止
+constexpr float T_LAND   = 8.1f;   // ALT_HOLD descend −0.4 m/s (1.1 s) / 着陸下降
                                    // after T_LAND: STABILIZE throttle 0, rest
 
 constexpr float THR_CLIMB   = 0.9f;    // climb  +0.4 m/s (stick up)
@@ -83,10 +107,12 @@ constexpr float THR_DESCEND = 0.1f;    // descend −0.4 m/s (stick down)
 constexpr float YAW_STICK   = 0.2f;    // · max_yaw_rate(5) = 1.0 rad/s
 
 constexpr int64_t kBaroPeriodUs = 20000;  // inject barometer at 50 Hz (BMP280 rate)
+constexpr int64_t kTofPeriodUs  = 33000;  // inject ToF at ~30 Hz (real tof_task.cpp rate)
 
 sil::Plant g_plant;
 int64_t g_last_step_us = 0;
 int64_t g_last_baro_us = 0;
+int64_t g_last_tof_us = 0;
 FILE* g_traj = nullptr;
 int g_rec_count = 0;
 constexpr int kRecDiv = 8;
@@ -194,6 +220,9 @@ void physics(int64_t now_us)
     // 依存するモード変更指令も publish する必要がある。さもないと制御器が init モード（STABILIZE）の
     // ままで ALT_HOLD 高度スケジュールが係合しない（機体が予定通り着陸しない）。
     static uint8_t s_prev_sub_mode = 0xFF;
+    const bool entering_alt_hold =
+        (mode.sub_mode != s_prev_sub_mode) &&
+        (mode.sub_mode == static_cast<uint8_t>(sf::FlightMode::ALT_HOLD));
     if (mode.sub_mode != s_prev_sub_mode) {
         sf::ControllerCommand cc = {};
         cc.command   = static_cast<uint8_t>(sf::ControllerCmd::ModeChange);
@@ -201,6 +230,54 @@ void physics(int64_t now_us)
         cc.timestamp = static_cast<uint32_t>(now_us);
         sf::controller_command.publish(cc);
         s_prev_sub_mode = mode.sub_mode;
+    }
+
+    // The controller's vertical loop has its OWN Grounded/TakeoffClimb/Airborne
+    // phase_ state machine (pid_controller.cpp), separate from onModeChange: it
+    // starts Grounded (thrust hard-clamped to 0, "Armed on the ground: props
+    // stopped") and only leaves it via onTakeoff() — normally fired by
+    // state_task.cpp's ARM+spool-dwell → StateManager::notifyTakeoff() sequence.
+    // Bypassing StateManager (as this bench does for system_mode/controller_command
+    // above) means that sequence never runs, so onModeChange(ALT_HOLD) alone left
+    // phase_ stuck Grounded FOREVER — thrust stayed ~0 for the whole climb/hover
+    // window regardless of the throttle stick (found chasing a P1 gate regression:
+    // max_alt measured 0.013 m against an expected 0.5 m; root-caused with gdb —
+    // every controller_command.publish() traced back to either this ModeChange or
+    // an unrelated StateManager reset, never a Takeoff/TakeoffComplete command).
+    // Fix: fire the SAME two commands state_task.cpp would have (Takeoff once on
+    // ALT_HOLD entry; TakeoffComplete once the controller reports takeoff_reached
+    // via controller_status) — this is the exact real handshake, just driven
+    // directly instead of through StateManager's ARM/mode bookkeeping (which this
+    // bench does not otherwise use). The .scn scenario suite (emu_vehicle) drives
+    // the real ARM/pilot_request path and was never affected by this.
+    // 制御器の鉛直ループには onModeChange とは別に Grounded/TakeoffClimb/Airborne の
+    // 独自 phase_ 状態機械があり（pid_controller.cpp）、Grounded で始まり（推力は 0 に
+    // ハードクランプ、「地上 ARM 中: プロペラ停止」）onTakeoff() でしか抜けない —
+    // 通常は state_task.cpp の ARM+スプールドウェル→StateManager::notifyTakeoff() が
+    // 発火する。本ベンチは（上の system_mode/controller_command と同様）StateManager を
+    // バイパスするためこの経路が一切走らず、onModeChange(ALT_HOLD) だけでは phase_ が
+    // 永久に Grounded のまま — スロットルスティックに関係なく climb/hover 窓全体で
+    // 推力が ~0 のままだった（P1ゲート退行を追う中で発見: max_alt 実測 0.013m、期待
+    // 0.5m。gdb で特定 — controller_command.publish() は全て ModeChange か無関係な
+    // StateManager リセットに遡り、Takeoff/TakeoffComplete 指令は一度も無かった）。
+    // 修正: state_task.cpp が出すのと同じ2指令を発火する（ALT_HOLD 進入で Takeoff を
+    // 一度、controller_status 経由で takeoff_reached を確認したら TakeoffComplete を
+    // 一度）— StateManager の ARM/モード管理（本ベンチは元々使わない）を介さず直接
+    // 駆動するだけで、実際のハンドシェイクそのもの。.scn シナリオ群（emu_vehicle）は
+    // 実 ARM/pilot_request 経路を使っており、この問題の影響を受けていない。
+    if (entering_alt_hold) {
+        sf::ControllerCommand cc = {};
+        cc.command   = static_cast<uint8_t>(sf::ControllerCmd::Takeoff);
+        cc.timestamp = static_cast<uint32_t>(now_us);
+        sf::controller_command.publish(cc);
+    }
+    static bool s_takeoff_complete_sent = false;
+    if (!s_takeoff_complete_sent && sf::controller_status.latest().takeoff_reached) {
+        sf::ControllerCommand cc = {};
+        cc.command   = static_cast<uint8_t>(sf::ControllerCmd::TakeoffComplete);
+        cc.timestamp = static_cast<uint32_t>(now_us);
+        sf::controller_command.publish(cc);
+        s_takeoff_complete_sent = true;
     }
 
     sf::CommandSetpoint sp = {};
@@ -230,6 +307,36 @@ void physics(int64_t now_us)
     if (now_us - g_last_baro_us >= kBaroPeriodUs) {
         sf::sensor_baro.publish(g_plant.baro());
         g_last_baro_us = now_us;
+    }
+
+    // Inject the Plant ToF on sensor_tof at ~30 Hz (the real tof_task.cpp rate).
+    // ImuTask's TakeoffLandingMgr only updates its on_ground_ ground/airborne latch
+    // when a VALID ToF sample arrives (imu_task.cpp: `while (sensor_tof.read(tof))`);
+    // on_ground_ defaults true at construction and is never re-evaluated without ToF
+    // (takeoff_landing.cpp: an invalid/absent sample leaves on_ground_ at its last
+    // value). Without this injection on_ground_ stays true for the WHOLE run, the
+    // craft is permanently treated as grounded, and ALT_HOLD's airborne thrust law
+    // never engages — the craft never climbs (found while chasing a P1 gate
+    // regression: max_alt measured 0.013 m against an expected 0.5 m; the .scn
+    // scenario suite was unaffected because the emulator's real ToF chip model
+    // (devices/vl53_device.cpp) always feeds ImuTask). eskf.use_tof stays false
+    // (set above) so this does NOT feed the estimator — only the ground/airborne
+    // latch, matching what the real vehicle's ToF always provides in flight.
+    // Plant の ToF を sensor_tof に約30Hz（実 tof_task.cpp のレート）で注入する。
+    // ImuTask の TakeoffLandingMgr は有効な ToF サンプルが届いたときだけ on_ground_
+    // （地上/空中ラッチ）を更新する（imu_task.cpp: `while (sensor_tof.read(tof))`）。
+    // on_ground_ は構築時に true が既定で、ToF が無ければ再評価されない
+    // （takeoff_landing.cpp: 無効/不在サンプルは on_ground_ を直前値のまま保つ）。
+    // この注入が無いと on_ground_ が飛行全体で true のままとなり、機体は恒久的に
+    // 接地扱いされ、ALT_HOLD の空中推力則が一切係合せず機体が上昇しない（P1ゲート
+    // 退行を追う過程で発見: max_alt 実測 0.013m、期待 0.5m。.scn シナリオ群は
+    // 影響を受けない — エミュレータの実 ToF チップモデル（devices/vl53_device.cpp）が
+    // 常に ImuTask へ供給しているため）。eskf.use_tof は false のまま（上で設定）
+    // なので推定器には効かず、地上/空中ラッチのみに効く — 実機の飛行中 ToF が
+    // 常に提供するのと同じ役割。
+    if (now_us - g_last_tof_us >= kTofPeriodUs) {
+        sf::sensor_tof.publish(g_plant.tof());
+        g_last_tof_us = now_us;
     }
 
     sil::Plant::Truth tr = g_plant.truth();

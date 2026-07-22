@@ -58,6 +58,22 @@ if(SIL_BUILD_CORES_SMOKE OR SIL_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_core/params.cpp
     ${SIL_COMPAT}/nvs_shim.cpp
     ${SIL_COMPAT}/clock_shim.cpp
+    # Windows/MinGW-only compat TU (empty translation unit elsewhere): defines the
+    # stdout/stderr shadow globals declared by esp_idf_host/cstdio, which is on
+    # sf_cores's PUBLIC include path just below — so it reaches every consumer
+    # (cores_smoke, rtos_smoke, hover_smoke, rate_tune) whenever any firmware
+    # source they compile reads/writes stdout/stderr (e.g. fprintf(stderr, ...)
+    # in error paths), not just emu_vehicle/emu_vehicle_old (which carry their
+    # own copy since they don't link sf_cores). See esp_idf_host/cstdio for why
+    # this shadow exists.
+    # Windows/MinGW 限定の互換 TU（他では空翻訳単位）: esp_idf_host/cstdio が宣言する
+    # stdout/stderr シャドウ変数を実体化する。同ヘッダは直下の sf_cores の PUBLIC
+    # include パスにあるため、cores_smoke/rtos_smoke/hover_smoke/rate_tune が
+    # コンパイルするどの firmware ソースが stdout/stderr を読み書きしても
+    # （エラー経路の fprintf(stderr, ...) 等）届く — sf_cores をリンクしない
+    # （自前でコピーを持つ）emu_vehicle/emu_vehicle_old だけではない。このシムが
+    # 存在する理由は esp_idf_host/cstdio 参照。
+    ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host/win_stdio_shim.cpp
   )
   target_include_directories(sf_cores PUBLIC
     ${SIL_COMPAT}

@@ -58,8 +58,10 @@ sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
 `sf doctor` が SIL ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SIL を使わない人には必須でないため）。
 
 **既知の制約:**
-- `hover_smoke`/`rate_tune`（P1〜P4 マイルストーンの closed-loop ハーネス）はビルド・実行はできるが、離陸後の高度応答が期待値と異なる（`max_alt` が期待 0.5m に対し実測 0.013m 等）。原因未特定（グローバル構築順序の違いを疑うが未確認）。**`.scn` シナリオ回帰スイート（`sf sil scenario`、TEST_MATRIX.md の L1〜L4 一式含む全32本）はこの影響を受けず全て PASS** — シナリオはトピック直接注入でなく実ファームの起動シーケンスを経由するため。
 - MuJoCo 自身の `mju_error`/`mju_warning`（`%zu` 書式）と `mjz_encoder.cc`（Windows パスの `%s`/`wchar_t*` 不一致）は `-Wno-format` で抑制している（vendored コードにパッチを当てない方針）。どちらも本ベンチの実行経路（`.xml` モデル・`.mjb` 非使用）では到達しない。
+
+**過去に発見・修正済みの Windows 固有バグ（記録として残す）:**
+- `hover_smoke`/`rate_tune` は当初、離陸後の高度応答が期待値と異なった（`max_alt` 実測 0.013m、期待 0.5m）。gdb で追跡した結果、原因は Windows/MinGW 固有ではなく、`hover_smoke.cpp` が `system_mode`/`controller_command` を直接注入して StateManager をバイパスする一方、`onTakeoff()`/`onTakeoffComplete()`（PID コントローラ自身の Grounded→TakeoffClimb→Airborne フェーズ機械。通常は state_task.cpp の ARM+スプールドウェル経由で発火）を一度も呼んでいなかったこと ── フェーズが永久に Grounded のまま推力が 0 にクランプされていた。`hover_smoke.cpp` から実際の firmware ハンドシェイク（ALT_HOLD 進入で `ControllerCmd::Takeoff`、`controller_status.takeoff_reached` 確認後に `ControllerCmd::TakeoffComplete`）を発火するよう修正し、実際の自動離陸クライム時間（~3.8秒、旧スケジュールの前提 1.6秒より長い）に合わせてスケジュール定数を再調整。現在は ESKF/相補フィルタ双方・N0ノイズ下で全ゲート PASS。`.scn` シナリオ群（実 ARM/pilot_request 経路を使用）はこの問題の影響を最初から受けていなかった。
 
 ## 2. ロードマップ
 
@@ -102,5 +104,7 @@ sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
 `sf doctor` diagnoses the SIL host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SIL.
 
 **Known limitations:**
-- `hover_smoke`/`rate_tune` (the P1–P4 milestone closed-loop harnesses) build and run, but the post-takeoff altitude response does not match expectations (e.g. `max_alt` measures 0.013 m against an expected 0.5 m). Root cause not yet identified (a global-construction-order difference is suspected but unconfirmed). **The `.scn` scenario regression suite (`sf sil scenario`, all 32 scenarios including the full TEST_MATRIX.md L1–L4 set) is unaffected and all PASS** — scenarios drive the real firmware boot sequence rather than injecting topics directly.
 - MuJoCo's own `mju_error`/`mju_warning` (`%zu` format) and `mjz_encoder.cc` (a Windows-path `%s`/`wchar_t*` mismatch) are silenced with `-Wno-format` (policy: no patching vendored code). Neither is reached by this bench's execution path (`.xml` models; the `.mjb` loader is unused).
+
+**Windows-specific bug found and fixed previously (kept for the record):**
+- `hover_smoke`/`rate_tune` initially showed a wrong post-takeoff altitude response (`max_alt` measured 0.013 m against an expected 0.5 m). Traced with gdb: the root cause was NOT Windows/MinGW-specific — `hover_smoke.cpp` injects `system_mode`/`controller_command` directly, bypassing StateManager, but never called `onTakeoff()`/`onTakeoffComplete()` (the PID controller's own Grounded→TakeoffClimb→Airborne phase machine, normally fired via state_task.cpp's ARM+spool-dwell sequence) — so the phase stayed Grounded forever with thrust clamped to 0. Fixed by having `hover_smoke.cpp` fire the real firmware handshake directly (`ControllerCmd::Takeoff` on ALT_HOLD entry; `ControllerCmd::TakeoffComplete` once `controller_status.takeoff_reached`), and re-timed the schedule constants to match the real auto-takeoff climb duration (~3.8 s, longer than the old schedule's 1.6 s assumption). All gates now PASS with both ESKF and the complementary filter, and under N0 noise. The `.scn` scenario suite (which drives the real ARM/pilot_request path) was never affected by this.
