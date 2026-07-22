@@ -50,8 +50,15 @@ typedef struct {
     int      strip_gpio_num;
     uint32_t max_leds;
     led_pixel_format_t led_pixel_format;        // legacy field (kept for compat)
-    led_color_component_format_t color_component_format;  // newer API
+    // Declaration order matches real ESP-IDF's led_strip_config_t (led_model
+    // before color_component_format) — firmware's led.cpp initializes them in
+    // that order, and C++ designated initializers require the designator
+    // order to match declaration order (unlike C, which allows any order).
+    // 実 ESP-IDF の led_strip_config_t と同じ宣言順（color_component_format より
+    // 先に led_model）。firmware の led.cpp はこの順で初期化しており、C++の
+    // 指示付き初期化子は宣言順と一致させる必要がある（任意順が許される C とは異なる）。
     led_model_t        led_model;
+    led_color_component_format_t color_component_format;  // newer API
     struct { uint32_t invert_out : 1; } flags;
 } led_strip_config_t;
 

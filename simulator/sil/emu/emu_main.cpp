@@ -336,5 +336,27 @@ int main(int argc, char** argv)
     std::printf("[emu] final state=%u sub_mode=%u armed=%d | imu.ts=%u est.ts=%u\n",
                 sm.state, sm.sub_mode, (int)sm.armed,
                 sf::sensor_imu.latest().timestamp, est.timestamp);
-    return 0;
+
+    // Exit WITHOUT running static destructors — same rationale (and pattern) as
+    // emu_main_generic.cpp: the firmware's singletons are designed to live for the
+    // MCU's whole power-on life and are never destructed on real hardware (the
+    // program never returns). Destructing them here, in arbitrary host link order,
+    // double-touches mutexes/semaphores and crashes — an artifact of the host, not
+    // a firmware defect. Confirmed on MinGW/Windows: a plain `return 0` reliably
+    // segfaults during global destruction (MuJoCo's Plant + the firmware's many
+    // pub-sub topic singletons) even though the run itself completes correctly and
+    // every gate/log assertion already passed by this point. _Exit models "the MCU
+    // was powered off": clean, faithful, and matches emu_main_generic.cpp exactly.
+    // 静的破棄を走らせずに終了する — emu_main_generic.cpp と同じ理由・同じパターン。
+    // ファームの静的シングルトンは MCU の電源投入中ずっと生き続ける設計で、実機では
+    // 破棄されない（プログラムは戻らない）。ホスト終了時の任意リンク順での破棄は
+    // mutex/semaphore の二重操作でクラッシュする（ホスト固有の人工物、ファームの
+    // 欠陥ではない）。MinGW/Windows で確認済み: 素の `return 0` は大域破棄中
+    // （MuJoCo の Plant ＋ ファームの多数の Pub-Sub トピック単体）で確実にセグフォルト
+    // する（実行自体は正しく完了し、この時点で全ゲート/ログアサーションは既に合格
+    // 済み）。_Exit は「MCU の電源断」を模し、emu_main_generic.cpp と同じくクリーン
+    // かつ忠実。
+    std::fflush(stdout);
+    std::fflush(stderr);
+    std::_Exit(0);
 }

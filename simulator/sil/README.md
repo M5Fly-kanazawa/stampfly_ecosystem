@@ -40,6 +40,27 @@ cmake --build build --target simulate
 ./build/bin/simulate models/demo_drop.xml
 ```
 
+### Windows ネイティブビルド（MinGW-w64）
+
+MSVC は firmware 側の指定初期化子（C++17, 約35ファイル）で失敗するため使えない。GCC/MinGW は拡張として許容するため、MSYS2 の MinGW-w64（GCC 16, posix スレッドモデル）でビルドする。`sf sil build` は Windows で MinGW を自動検出し、別ディレクトリ `build-mingw/` を使う（既存の MSVC `build/` には触れない）。
+
+```powershell
+# 初回のみ: MSYS2 導入＋ツールチェーン
+winget install --id MSYS2.MSYS2 --silent --accept-package-agreements --accept-source-agreements
+C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"   # コア更新（要求されたら再実行）
+C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
+
+# 以降は sf CLI が MinGW を自動検出（C:\msys64\mingw64\bin）
+sf sil build
+sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
+```
+
+`sf doctor` が SIL ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SIL を使わない人には必須でないため）。
+
+**既知の制約:**
+- `hover_smoke`/`rate_tune`（P1〜P4 マイルストーンの closed-loop ハーネス）はビルド・実行はできるが、離陸後の高度応答が期待値と異なる（`max_alt` が期待 0.5m に対し実測 0.013m 等）。原因未特定（グローバル構築順序の違いを疑うが未確認）。**`.scn` シナリオ回帰スイート（`sf sil scenario`、TEST_MATRIX.md の L1〜L4 一式含む全32本）はこの影響を受けず全て PASS** — シナリオはトピック直接注入でなく実ファームの起動シーケンスを経由するため。
+- MuJoCo 自身の `mju_error`/`mju_warning`（`%zu` 書式）と `mjz_encoder.cc`（Windows パスの `%s`/`wchar_t*` 不一致）は `-Wno-format` で抑制している（vendored コードにパッチを当てない方針）。どちらも本ベンチの実行経路（`.xml` モデル・`.mjb` 非使用）では到達しない。
+
 ## 2. ロードマップ
 
 P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証）→ P3（CLI＋ダッシュボード）→ P4（共有用レビュー動画）。各段の詳細とゲートは [`RESET_PLAN.md`](RESET_PLAN.md)。
@@ -62,3 +83,24 @@ cmake --build build && ./build/cores_smoke
 cmake -S . -B build                                # + MuJoCo (first run fetches 3.9.0)
 cmake --build build && ./build/mujoco_smoke models/quad_smoke.xml
 ```
+
+### Windows native build (MinGW-w64)
+
+MSVC cannot build this: the firmware uses C++17 designated initializers (~35 files) in a way MSVC rejects but GCC accepts as an extension. Build with MSYS2's MinGW-w64 (GCC 16, posix thread model) instead. `sf sil build` auto-detects MinGW on Windows and uses a separate `build-mingw/` directory (never touches an existing MSVC `build/`).
+
+```powershell
+# First time only: install MSYS2 + the toolchain
+winget install --id MSYS2.MSYS2 --silent --accept-package-agreements --accept-source-agreements
+C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"   # core update (re-run if it asks you to)
+C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
+
+# From then on, sf CLI auto-detects MinGW (C:\msys64\mingw64\bin)
+sf sil build
+sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
+```
+
+`sf doctor` diagnoses the SIL host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SIL.
+
+**Known limitations:**
+- `hover_smoke`/`rate_tune` (the P1–P4 milestone closed-loop harnesses) build and run, but the post-takeoff altitude response does not match expectations (e.g. `max_alt` measures 0.013 m against an expected 0.5 m). Root cause not yet identified (a global-construction-order difference is suspected but unconfirmed). **The `.scn` scenario regression suite (`sf sil scenario`, all 32 scenarios including the full TEST_MATRIX.md L1–L4 set) is unaffected and all PASS** — scenarios drive the real firmware boot sequence rather than injecting topics directly.
+- MuJoCo's own `mju_error`/`mju_warning` (`%zu` format) and `mjz_encoder.cc` (a Windows-path `%s`/`wchar_t*` mismatch) are silenced with `-Wno-format` (policy: no patching vendored code). Neither is reached by this bench's execution path (`.xml` models; the `.mjb` loader is unused).

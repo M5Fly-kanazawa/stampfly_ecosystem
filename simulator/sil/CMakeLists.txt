@@ -259,6 +259,14 @@ if(SIL_BUILD_EMU)
   find_package(Threads REQUIRED)
   set(EMU_HOST ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host)
 
+  # Windows/MinGW-only compat TU: defines the stdout/stderr shadow globals
+  # declared by esp_idf_host/cstdio (see that header for why). Empty
+  # translation unit on non-Windows hosts, so it is harmless to always list.
+  # Windows/MinGW 限定の互換 TU: esp_idf_host/cstdio が宣言する stdout/stderr
+  # シャドウ変数を実体化する（理由は同ヘッダ参照）。非 Windows では空の翻訳単位
+  # になるので常に列挙して無害。
+  set(EMU_WIN_COMPAT_SRCS ${EMU_HOST}/win_stdio_shim.cpp)
+
   # All firmware sources under main/tasks/components, EXCLUDING the VL53L3CX
   # vendor docs/ (STM32 CubeIDE examples) and any examples/tests/build output.
   # main/tasks/components の全ソース。VL53 の docs/（STM32例）・examples/test は除外。
@@ -306,7 +314,8 @@ if(SIL_BUILD_EMU)
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
     compat/clock_shim.cpp
-    compat/nvs_shim.cpp)
+    compat/nvs_shim.cpp
+    ${EMU_WIN_COMPAT_SRCS})
   # esp_idf_host + compat FIRST so the shim headers win over anything else.
   # esp_idf_host ＋ compat を最優先にしてシムヘッダを優先解決させる。
   target_include_directories(emu_vehicle BEFORE PRIVATE
@@ -365,7 +374,8 @@ if(SIL_BUILD_EMU)
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
     compat/clock_shim.cpp
-    compat/nvs_shim.cpp)
+    compat/nvs_shim.cpp
+    ${EMU_WIN_COMPAT_SRCS})
   target_include_directories(emu_vehicle_old BEFORE PRIVATE
     ${EMU_HOST} ${SIL_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames

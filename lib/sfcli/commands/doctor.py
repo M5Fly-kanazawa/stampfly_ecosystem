@@ -14,6 +14,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Optional, Tuple
 from ..utils import console, paths, platform
+from . import sil as sil_cmd
 
 COMMAND_NAME = "doctor"
 COMMAND_HELP = "Diagnose environment issues"
@@ -404,6 +405,77 @@ def _check_esp_idf_venv_health(idf_path: Path, idf_version: Optional[str], warni
         )
 
 
+def _check_sil_toolchain(warnings: list) -> None:
+    """Check the SIL host-bench build toolchain (simulator/sil/). This is
+    OPTIONAL — only people building/running the SIL need it — so any gap is a
+    WARN, never a hard error.
+
+    Windows only, so far: looks for a MinGW-w64 toolchain (GCC/G++ + Ninja),
+    since the SIL's host build is C++17 + std::thread-based and needs a real
+    g++ (MSVC alone cannot build it — see simulator/sil/README.md's Windows
+    section). On Linux/macOS the system's own gcc/clang is assumed to work
+    and is not separately checked here (in spirit already covered by "is
+    there a working C/C++ toolchain on this machine" elsewhere in doctor).
+
+    Also confirms the found MinGW's THREAD MODEL is "posix", not "win32": a
+    MinGW-w64 build configured without pthread support cannot link
+    std::thread at all (the SIL's RTOS emulator and MuJoCo both need it), so
+    a non-posix thread model is flagged even though gcc itself was found.
+
+    SIL ホストベンチ（simulator/sil/）のビルドツールチェーンを確認する。任意
+    （SIL を使わない人には無関係）なので欠落は常に警告（エラーにしない）。
+
+    今のところ Windows のみ: MinGW-w64（GCC/G++ + Ninja）を探す。SIL のホスト
+    ビルドは C++17・std::thread ベースで実 g++ が要る（MSVC 単体ではビルド
+    不可 — simulator/sil/README.md の Windows 節参照）。Linux/macOS はシステム
+    の gcc/clang が動く前提で別チェックはしない（doctor の他所で「動く C/C++
+    ツールチェーンがあるか」を趣旨的にカバー済み）。
+
+    見つかった MinGW のスレッドモデルが "posix"（"win32" でない）ことも確認する:
+    pthread 対応無しでビルドされた MinGW-w64 は std::thread を一切リンクできない
+    （SIL の RTOS エミュレータと MuJoCo の両方が必要とする）ため、gcc 自体は
+    見つかってもスレッドモデルが posix でなければ警告する。
+    """
+    if not platform.is_windows():
+        return
+
+    mingw = sil_cmd.mingw_bin()
+    if mingw is None:
+        warnings.append("SIL host toolchain: no MinGW-w64 found (simulator/sil/ build)")
+        console.warning("  SIL host toolchain (MinGW-w64): NOT FOUND")
+        console.print("    Only needed to build/run the SIL host bench (simulator/sil/).")
+        console.print("    SIL ホストベンチ（simulator/sil/）のビルド・実行にのみ必要。")
+        console.print("    Install / 導入: winget install --id MSYS2.MSYS2 "
+                      "--silent --accept-package-agreements --accept-source-agreements")
+        console.print('    Then / 続けて: C:\\msys64\\usr\\bin\\bash -lc "pacman -S '
+                      "--noconfirm --needed mingw-w64-x86_64-toolchain "
+                      'mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"')
+        return
+
+    console.success(f"  SIL host toolchain (MinGW-w64): {mingw}")
+    try:
+        result = subprocess.run([str(mingw / "g++.exe"), "-v"], capture_output=True,
+                                text=True, timeout=15, encoding="utf-8", errors="replace")
+        thread_model = None
+        for line in (result.stderr or "").splitlines():
+            if line.strip().startswith("Thread model:"):
+                thread_model = line.split(":", 1)[1].strip()
+        if thread_model == "posix":
+            console.success(f"    thread model: {thread_model} (std::thread OK)")
+        else:
+            warnings.append(
+                f"SIL host toolchain: MinGW thread model is '{thread_model}', "
+                "not 'posix' — std::thread will not link"
+            )
+            console.warning(
+                f"    thread model: {thread_model or '?'} (need 'posix' for "
+                "std::thread — reinstall mingw-w64-x86_64-toolchain)"
+            )
+    except (OSError, subprocess.SubprocessError) as e:
+        warnings.append(f"SIL host toolchain: could not query g++ ({e})")
+        console.warning(f"    could not query g++ -v: {e}")
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute doctor command"""
     console.header("StampFly Environment Diagnostics")
@@ -504,6 +576,12 @@ def run(args: argparse.Namespace) -> int:
             console.print("    Install with: brew install hidapi")
         elif sys.platform == "linux":
             console.print("    Install with: sudo apt install libhidapi-dev")
+
+    # Check the SIL host-bench toolchain (Windows: MinGW-w64; optional, WARN-only)
+    # SIL ホストベンチのツールチェーン確認（Windows: MinGW-w64。任意、警告のみ）
+    console.print()
+    console.info("Checking SIL host toolchain...")
+    _check_sil_toolchain(warnings)
 
     # Check serial ports
     console.print()

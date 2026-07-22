@@ -20,11 +20,13 @@ import json
 import math
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
-from ..utils import console, paths
+from ..utils import console, paths, platform
 
 COMMAND_NAME = "sil"
 COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gate)"
@@ -46,7 +48,89 @@ def _model() -> Path:
     return _sil_dir() / "models" / "stampfly.xml"
 
 
+# Well-known MSYS2 MinGW-w64 install location (winget/MSYS2 installer default).
+# The SIL host bench was validated against this exact toolchain (GCC 16,
+# posix-thread model — see mingw_toolchain() below); other MinGW distributions
+# are not verified.
+# MSYS2 MinGW-w64 の既定インストール先（winget/MSYS2 インストーラの既定）。
+# SIL ホストベンチはこのツールチェーン（GCC 16, posix スレッドモデル — 下記
+# mingw_toolchain() 参照）で検証済み。他の MinGW ディストリビューションは未検証。
+_MSYS2_MINGW64_BIN = Path("C:/msys64/mingw64/bin")
+
+
+def mingw_bin() -> Optional[Path]:
+    """Locate a MinGW-w64 toolchain's bin/ directory on Windows (need
+    g++/gcc/ninja together — cmake itself can come from anywhere on PATH).
+    Returns None on non-Windows, or on Windows when no MinGW toolchain is
+    found (the SIL build then falls back to whatever generator/compiler CMake
+    picks up from PATH by default, e.g. Visual Studio).
+
+    Checked in order: (1) a g++ already on PATH whose path contains "mingw"
+    (a user's own MSYS2/MinGW setup, respected as-is); (2) the MSYS2 default
+    install path. Used both to configure the build (run_build) and to run the
+    resulting .exe (its libstdc++-6.dll/libgcc_s_seh-1.dll/libwinpthread-1.dll
+    are not on PATH otherwise — see win_run_env()).
+
+    Windows で MinGW-w64 ツールチェーンの bin/ を探す（g++/gcc/ninja が揃って
+    いる必要がある — cmake 自体は PATH 上のどこにあってもよい）。非 Windows、
+    または Windows でも MinGW が見つからない場合は None（その場合 SIL ビルドは
+    CMake が PATH から拾う既定のジェネレータ/コンパイラ、例えば Visual Studio に
+    フォールバックする）。
+
+    確認順序: (1) PATH 上に既にある g++ のパスに "mingw" を含む場合（ユーザー
+    自身の MSYS2/MinGW 環境をそのまま尊重）、(2) MSYS2 既定インストール先。
+    ビルド設定（run_build）と、出来上がった .exe の実行（libstdc++-6.dll 等が
+    他に PATH 上に無い — win_run_env() 参照）の両方に使う。
+    """
+    if not platform.is_windows():
+        return None
+    on_path = shutil.which("g++")
+    if on_path and "mingw" in on_path.lower():
+        return Path(on_path).parent
+    if (_MSYS2_MINGW64_BIN / "g++.exe").exists() and (_MSYS2_MINGW64_BIN / "ninja.exe").exists():
+        return _MSYS2_MINGW64_BIN
+    return None
+
+
+def win_run_env(build_dir: Path) -> dict:
+    """Environment for configuring/building/running the SIL on Windows via
+    MinGW: PATH gets the MinGW bin/ prepended (compiler + the runtime DLLs
+    every MinGW-built .exe needs: libstdc++-6.dll, libgcc_s_seh-1.dll,
+    libwinpthread-1.dll) plus the build dir's own bin/ (libmujoco.dll — MuJoCo
+    builds as a shared library there). A plain copy of os.environ (no-op) on
+    non-Windows, or on Windows when mingw_bin() finds nothing (nothing to add).
+
+    MinGW 経由で SIL を設定・ビルド・実行する Windows 向け環境: PATH の先頭に
+    MinGW の bin/（コンパイラ＋ MinGW ビルドの exe が全て要る実行時 DLL:
+    libstdc++-6.dll, libgcc_s_seh-1.dll, libwinpthread-1.dll）と、ビルドディレクトリ
+    自身の bin/（libmujoco.dll — MuJoCo はそこに共有ライブラリとしてビルドされる）を
+    足す。非 Windows、または Windows でも mingw_bin() が何も見つけない場合は
+    os.environ のそのままのコピー（no-op、足すものが無い）。
+    """
+    env = dict(os.environ)
+    mingw = mingw_bin()
+    if mingw is None:
+        return env
+    extra_dirs = [str(mingw)]
+    dll_dir = build_dir / "bin"
+    if dll_dir.exists():
+        extra_dirs.append(str(dll_dir))
+    env["PATH"] = os.pathsep.join(extra_dirs + [env.get("PATH", "")])
+    return env
+
+
 def _build_dir() -> Path:
+    # Windows: use a SEPARATE build directory when building with MinGW so a
+    # pre-existing MSVC build/ (a different generator's CMakeCache — Visual
+    # Studio project files, different ABI) is never touched/clobbered. Falls
+    # back to the shared build/ when MinGW is not available (e.g. an existing
+    # MSVC-only setup keeps working exactly as before).
+    # Windows: MinGW でビルドする場合は別ディレクトリを使い、既存の MSVC build/
+    # （別ジェネレータの CMakeCache — Visual Studio プロジェクトファイル、別ABI）
+    # に触れない・壊さない。MinGW が無ければ共有の build/ にフォールバック
+    # （既存の MSVC 専用環境はそのまま動き続ける）。
+    if mingw_bin() is not None:
+        return _sil_dir() / "build-mingw"
     return _sil_dir() / "build"
 
 
@@ -55,7 +139,18 @@ def _bundle_dir(milestone: str) -> Path:
 
 
 def _venv_python() -> Path:
-    return _sil_dir() / "viz" / "venv" / "bin" / "python"
+    bin_dir = "Scripts" if platform.is_windows() else "bin"
+    exe = "python.exe" if platform.is_windows() else "python"
+    return _sil_dir() / "viz" / "venv" / bin_dir / exe
+
+
+def _exe(name: str) -> str:
+    """Executable filename for `name` on this platform (CMake's own naming;
+    adds .exe on Windows, bare name elsewhere).
+    このプラットフォームでの実行ファイル名（CMake 自体の命名規則に従う。
+    Windows は .exe を付け、それ以外は無印）。
+    """
+    return f"{name}.exe" if platform.is_windows() else name
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -157,22 +252,53 @@ def run_build(args: argparse.Namespace) -> int:
     jobs = getattr(args, "jobs", 8)
     target = getattr(args, "target", None)
     sd, bd = _sil_dir(), _build_dir()
+    env = win_run_env(bd)
+
+    # Resolve "cmake" against env["PATH"] (not just check it's findABLE) rather
+    # than passing the bare name to subprocess.run: on Windows, CreateProcess's
+    # own executable search uses the CALLING process's PATH, not the PATH
+    # inside the env= block handed to the child — so a bare "cmake" would
+    # raise WinError 2 (file not found) whenever MinGW's cmake.exe is on
+    # win_run_env()'s PATH but not on sf CLI's own process PATH (the common
+    # case: MinGW is installed but nothing added it to the user/system PATH).
+    # "cmake" を env["PATH"] に対して解決してから使う（存在確認だけでなく）:
+    # Windows では CreateProcess 自身の実行ファイル探索は「呼び出し元プロセスの
+    # PATH」を使い、子に渡す env= ブロック内の PATH は使わない —
+    # そのため win_run_env() の PATH には MinGW の cmake.exe があっても sf CLI
+    # 自身のプロセス PATH に無ければ（MinGW 導入済みだが誰も PATH に足していない
+    # ケースは普通に起こる）素の "cmake" は WinError 2 になる。
+    cmake_exe = shutil.which("cmake", path=env.get("PATH")) or "cmake"
+
+    # Windows: configure for MinGW (Ninja + GCC/G++) the FIRST time only — once
+    # CMakeCache.txt exists the generator/compiler are already locked in, and
+    # re-passing -G would just make CMake error on a generator mismatch.
+    # Windows: MinGW 向け設定（Ninja + GCC/G++）は初回のみ — CMakeCache.txt が
+    # 既にあればジェネレータ/コンパイラは確定済みで、-G を渡し直すと
+    # ジェネレータ不一致で CMake がエラーになる。
+    cmake_cmd = [cmake_exe, "-S", str(sd), "-B", str(bd)]
+    mingw = mingw_bin()
+    if mingw is not None and not (bd / "CMakeCache.txt").exists():
+        console.info(f"Windows: configuring for MinGW-w64 ({mingw})")
+        cmake_cmd += ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
+                      "-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++"]
+
     console.info("Configuring SIL (cmake)...")
-    r = subprocess.run(["cmake", "-S", str(sd), "-B", str(bd)])
+    r = subprocess.run(cmake_cmd, env=env)
     if r.returncode != 0:
         console.error("cmake configure failed"); return r.returncode
     console.info("Building SIL (first time fetches MuJoCo — can take minutes)...")
-    cmd = ["cmake", "--build", str(bd), "-j", str(jobs)]
+    cmd = [cmake_exe, "--build", str(bd), "-j", str(jobs)]
     if target:
         cmd += ["--target", target]
-    r = subprocess.run(cmd)
+    r = subprocess.run(cmd, env=env)
     if r.returncode == 0:
         console.success("SIL build OK")
     return r.returncode
 
 
 def run_run(args: argparse.Namespace) -> int:
-    exe = _build_dir() / "hover_smoke"
+    bd = _build_dir()
+    exe = bd / _exe("hover_smoke")
     if not exe.exists():
         console.error("hover_smoke not built — run 'sf sil build' first"); return 1
     bundle = _bundle_dir(args.milestone)
@@ -185,7 +311,7 @@ def run_run(args: argparse.Namespace) -> int:
     # argv: model, bundle, estimator_type, milestone, noise_level, seed.
     # 引数: モデル, バンドル, 推定器種別, マイルストーン, ノイズ準位, シード。
     r = subprocess.run([str(exe), str(_model()), str(bundle), str(et),
-                        str(args.milestone), noise, str(seed)])
+                        str(args.milestone), noise, str(seed)], env=win_run_env(bd))
     if r.returncode == 0:
         console.success(f"Bundle written to {bundle}")
     else:
@@ -204,7 +330,7 @@ def _traj_metric(traj_path: Path, name: str, t0=None, t1=None):
     """
     import csv as _csv
     try:
-        with open(traj_path) as f:
+        with open(traj_path, encoding="utf-8") as f:
             rows = list(_csv.DictReader(f))
     except OSError:
         return None
@@ -294,7 +420,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
     checks = []
-    for raw in expect_path.read_text().splitlines():
+    for raw in expect_path.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -383,7 +509,8 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
 
 def run_scenario(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "vehicle")
-    exe = _build_dir() / ("emu_vehicle" if target == "vehicle" else "emu_vehicle_old")
+    bd = _build_dir()
+    exe = bd / _exe("emu_vehicle" if target == "vehicle" else "emu_vehicle_old")
     if not exe.exists():
         console.error(f"{exe.name} not built — run 'sf sil build' first"); return 1
     scn = Path(args.scenario)
@@ -399,7 +526,7 @@ def run_scenario(args: argparse.Namespace) -> int:
     # deterministic; the recorder is a no-op in any emulator that ignores it.
     # SIL_EMU_TRAJ は render_video.py 互換の trajectory.csv をバンドルへ記録させる
     # （--video で描画可能に）。決定論的で無害、未対応エミュレータでは no-op。
-    env = dict(os.environ, SIL_EMU_EVENTS=str(events), SIL_EMU_TRAJ=str(traj))
+    env = dict(win_run_env(bd), SIL_EMU_EVENTS=str(events), SIL_EMU_TRAJ=str(traj))
 
     # SIL_EMU_NOISE/SIL_EMU_SEED turn on the seeded N0 sensor-noise model on the
     # emulator Plant (§13 P5). Default "off" → env passed but the emulator keeps the
@@ -440,13 +567,26 @@ def run_scenario(args: argparse.Namespace) -> int:
     # The emulator reads stdin (the firmware CLI); feed /dev/null so any non-key
     # read yields EAGAIN. Capture stdout and stderr SEPARATELY (ESP_LOGx → stderr).
     # ファーム CLI の stdin は /dev/null。stdout/stderr を分離捕捉（ESP_LOGx は stderr）。
+    # encoding="utf-8" (not the platform default, e.g. cp932 on Japanese
+    # Windows): the emulator's own log lines are UTF-8 (bilingual EN/JA
+    # comments and messages throughout the firmware), which is not valid
+    # cp932 and would otherwise crash the subprocess module's own stdout/
+    # stderr reader threads with UnicodeDecodeError before r.stdout is even
+    # populated. errors="replace" keeps a single stray non-UTF-8 byte from
+    # doing the same.
+    # encoding="utf-8"（プラットフォーム既定、例えば日本語 Windows の cp932 では
+    # ない）: エミュレータ自身のログ行は UTF-8（ファーム全体の英日併記コメント・
+    # メッセージ）で cp932 として不正なため、指定しないと subprocess モジュール
+    # 自身の stdout/stderr 読み取りスレッドが r.stdout に値が入る前に
+    # UnicodeDecodeError でクラッシュする。errors="replace" は迷い込んだ単発の
+    # 非 UTF-8 バイトでも同様に落ちないようにする。
     with open(os.devnull) as devnull:
         r = subprocess.run([str(exe), str(_model()), str(args.duration), str(scn)],
                            stdin=devnull, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           text=True, env=env)
-    (bundle / "console.out").write_text(r.stdout)
-    (bundle / "console.err").write_text(r.stderr)
-    (bundle / "console.log").write_text(r.stdout + r.stderr)
+                           text=True, encoding="utf-8", errors="replace", env=env)
+    (bundle / "console.out").write_text(r.stdout, encoding="utf-8")
+    (bundle / "console.err").write_text(r.stderr, encoding="utf-8")
+    (bundle / "console.log").write_text(r.stdout + r.stderr, encoding="utf-8")
 
     # Guardrail: every scenario injects at least one event, so events.jsonl must
     # exist and be non-empty. A target that is not wired for scripted input (e.g.
@@ -478,7 +618,7 @@ def run_scenario(args: argparse.Namespace) -> int:
         # レビュー動画タイトル用の正確な飛行ラベル（離着陸を主張しない）。
         "flight": "scripted-input scenario",
     }
-    (bundle / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+    (bundle / "results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
 
     console.info(f"scenario {scn.name}: {'PASS' if verdict else 'FAIL'} "
                  f"(exit {r.returncode}, {len(checks)} checks, events={events.name})")
@@ -567,7 +707,8 @@ def run_compare(args: argparse.Namespace) -> int:
         # 同じ推定器同士の比較は非依存を偽証する。
         console.error(f"--ea and --eb must differ (both '{args.ea}') — a comparison "
                       "needs two distinct estimators"); return 1
-    exe = _build_dir() / "hover_smoke"
+    bd = _build_dir()
+    exe = bd / _exe("hover_smoke")
     if not exe.exists():
         console.error("hover_smoke not built — run 'sf sil build' first"); return 1
     py = _venv()
@@ -588,7 +729,8 @@ def run_compare(args: argparse.Namespace) -> int:
         sub.mkdir(parents=True, exist_ok=True)
         console.info(f"Running closed loop for comparison ({est}, noise={noise})...")
         rc = subprocess.run([str(exe), str(_model()), str(sub), str(ESTIMATORS[est]),
-                             f"{args.milestone}-{est}", noise, str(seed)]).returncode
+                             f"{args.milestone}-{est}", noise, str(seed)],
+                            env=win_run_env(bd)).returncode
         # hover_smoke writes the bundle even on a G3 fail; only a hard early exit
         # (e.g. model load) leaves no files. Require both before render/aggregate so
         # a crash surfaces here, not as an opaque traceback downstream.
@@ -613,8 +755,8 @@ def run_compare(args: argparse.Namespace) -> int:
     # Aggregate verdict: P4 passes iff BOTH runs pass G3 with the bench unchanged.
     # results.json stays the single source of truth (status/gate read only this).
     # 集約判定: 両実行がベンチ無改変で G3 合格のとき P4 合格。results.json が唯一の正。
-    a = json.loads((runs[args.ea] / "results.json").read_text())
-    b = json.loads((runs[args.eb] / "results.json").read_text())
+    a = json.loads((runs[args.ea] / "results.json").read_text(encoding="utf-8"))
+    b = json.loads((runs[args.eb] / "results.json").read_text(encoding="utf-8"))
     both = bool(a.get("pass") and b.get("pass"))
     agg = {
         "gate": "compare",
@@ -635,7 +777,7 @@ def run_compare(args: argparse.Namespace) -> int:
             {"name": "algorithm_independent", "pass": both},
         ],
     }
-    (bundle / "results.json").write_text(json.dumps(agg, indent=2) + "\n")
+    (bundle / "results.json").write_text(json.dumps(agg, indent=2) + "\n", encoding="utf-8")
     console.success(f"Comparison bundle written to {bundle}")
     # Gate the comparison bundle (bundle complete AND both runs passing).
     return run_gate(args)
@@ -645,7 +787,7 @@ def run_status(args: argparse.Namespace) -> int:
     res = _bundle_dir(args.milestone) / "results.json"
     if not res.exists():
         console.error(f"No results.json for {args.milestone} — run 'sf sil run' first"); return 1
-    r = json.loads(res.read_text())
+    r = json.loads(res.read_text(encoding="utf-8"))
     verdict = "PASS" if r.get("pass") else "FAIL"
     console.info(f"{r.get('milestone','?')}/{r.get('gate','?')}: {verdict}")
     # A comparison bundle (P4) carries per-run metrics under "runs"; a single
@@ -715,7 +857,9 @@ def _venv():
     venv_dir = _sil_dir() / "viz" / "venv"
     if subprocess.run([sys.executable, "-m", "venv", str(venv_dir)]).returncode != 0:
         console.error("venv creation failed"); return None
-    pip = venv_dir / "bin" / "pip"
+    pip_bin = "Scripts" if platform.is_windows() else "bin"
+    pip_exe = "pip.exe" if platform.is_windows() else "pip"
+    pip = venv_dir / pip_bin / pip_exe
     if subprocess.run([str(pip), "install", "-q", "mujoco==3.9.0", "numpy",
                        "matplotlib", "imageio", "imageio-ffmpeg"]).returncode != 0:
         console.error("pip install failed"); return None

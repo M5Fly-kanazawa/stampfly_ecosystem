@@ -1,5 +1,6 @@
 # SIL host build artifacts / SIL ホストビルドの生成物
 build/
+build-mingw/
 _deps/
 *.o
 *.a
