@@ -43,6 +43,7 @@ _COMMAND_MODULE_NAMES: Tuple[str, ...] = (
     "sil",
     "cal",
     "sysid",
+    "params",
     "trim",
     "flight",
     "motor",

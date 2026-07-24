@@ -71,6 +71,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf log info` | ログファイル情報表示 |
 | `sf log analyze` | フライトログ解析 |
 | `sf log viz` | ログ可視化 |
+| `sf params check` | 物理パラメータ整合検査（C_T/C_Q/κ/慣性等の手動コピーの食い違い検出）|
 | `sf cal list` | キャリブレーション一覧 |
 | `sf cal gyro/accel/mag` | 各種キャリブレーション |
 | `sf sim list/run` | シミュレータ操作 |
