@@ -2715,8 +2715,9 @@ class Installer:
         self.config_file = self.config_dir / "config.toml"
 
     def _is_sfcli_installed(self, idf_path: Path) -> bool:
-        """Check if sfcli is installed AND importable in the ESP-IDF venv.
-        sfcli が ESP-IDF venv で実際に import できるか確認
+        """Check if sfcli is installed, importable, AND served from THIS repo.
+        sfcli が ESP-IDF venv で import でき、かつ本リポジトリを参照して
+        いるか確認
 
         We deliberately do this with the venv python by absolute path (not via
         a sourced export.sh) so the check answers "is sfcli importable from
@@ -2725,6 +2726,25 @@ class Installer:
         a source of false positives when pyenv shims override the venv.
         絶対パスで venv python を呼び、activate 経由ではなく直接 import を
         試す。PATH 経由だと pyenv 等が誤誘導して false positive になる。
+
+        Besides importability, the probe also verifies the module actually
+        resolves to this checkout (self.root). An editable install records a
+        directory path in the venv, so a venv set up from another clone keeps
+        serving that clone's stale code forever; without this check a re-run
+        of the installer from the right clone would just say "already
+        installed" and skip (observed 2026-07-24: sf doctor kept warning from
+        a tmp clone that predated the has_solution fix). The same probe is
+        aliased as _verify_sfcli_import, so post-install verification also
+        catches an install that landed pointing somewhere unexpected.
+        import 可否に加えて、モジュールの実体がこのチェックアウト
+        (self.root) に解決されることも検証する。editable インストールは
+        venv にディレクトリパスを記録するため、別クローンから構築された
+        venv は古いコードを参照し続け、正しいクローンからインストーラを
+        再実行しても「インストール済み」でスキップされてしまう
+        (2026-07-24 実例: has_solution 修正前の tmp クローンを参照し続け
+        sf doctor が警告を出し続けた)。本プローブは _verify_sfcli_import
+        の別名でもあるため、インストール直後の検証でも参照先ずれを検出
+        できる。
         """
         venv_python = _find_idf_python(idf_path)
         if not venv_python:
@@ -2738,6 +2758,8 @@ class Installer:
             # call assert_all_commands_loadable() (added in cli.py under the
             # C2 dependency-resilience work) so a missing dependency makes
             # this probe correctly report "not installed" and Step 3 reruns.
+            # The trailing print reports where sfcli actually resolves from,
+            # for the location check below.
             # `import sfcli` だけでは不十分: __init__.py はサードパーティ
             # 依存を一切読まないため、sfcliパッケージ自体はあるが依存が
             # 欠けている venv (`pip install -e` が部分失敗した後など) でも
@@ -2746,15 +2768,32 @@ class Installer:
             # assert_all_commands_loadable()（C2の依存耐性対応でcli.pyに
             # 追加）を呼ぶことで、依存欠落時はこのプローブが正しく
             # 「未インストール」と判定し、Step3が再実行されるようにする。
+            # 末尾の print は下の参照先チェック用に sfcli の実体位置を返す。
             result = subprocess.run(
                 [
                     str(venv_python), "-c",
-                    "import sfcli.cli; sfcli.cli.assert_all_commands_loadable()",
+                    "import sfcli.cli; sfcli.cli.assert_all_commands_loadable(); "
+                    "print(sfcli.__file__)",
                 ],
                 capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
             )
-            return result.returncode == 0
+            if result.returncode != 0:
+                return False
+            # Location check: the venv must serve sfcli from THIS repo.
+            # normcase() so the comparison is case-insensitive on Windows.
+            # 参照先チェック: venv の sfcli が本リポジトリの実体であること。
+            # Windows で大文字小文字の揺れを吸収するため normcase() で比較。
+            reported = Path(result.stdout.strip().splitlines()[-1]).resolve()
+            expected = (self.root / "lib" / "sfcli" / "__init__.py").resolve()
+            if os.path.normcase(str(reported)) != os.path.normcase(str(expected)):
+                warn("sfcli in the ESP-IDF venv resolves to a different "
+                     f"location: {reported.parent}")
+                warn(f"  this installer runs from: {self.root}")
+                warn("venv の sfcli が別の場所を参照しています（このリポジトリ"
+                     "から再インストールして修正します）")
+                return False
+            return True
         except Exception:
             return False
 
