@@ -158,7 +158,21 @@ def run_list(args: argparse.Namespace) -> int:
 
     for backend_id, backend in BACKENDS.items():
         script_path = paths.root() / backend["script"]
-        available = script_path.exists()
+        script_exists = script_path.exists()
+
+        # A venv-required backend (e.g. genesis) is only actually usable when
+        # both its launcher script AND its venv exist. Previously "available"
+        # only checked the script, so a missing venv still showed "[OK]" even
+        # though `sf sim run genesis` would immediately fail on venv lookup.
+        # venv必須のバックエンド(genesis等)はスクリプトとvenvの両方が揃って
+        # 初めて使用可能。以前は script の有無しか見ておらず、venv が無くても
+        # "[OK]"と表示されていた（実際は`sf sim run genesis`が即失敗する）。
+        venv_exists = None
+        if backend.get("requires_venv"):
+            venv_path = paths.root() / backend["venv_path"]
+            venv_exists = venv_path.exists()
+
+        available = script_exists and (venv_exists is not False)
 
         status = "[OK]" if available else "[NOT FOUND]"
         status_color = "green" if available else "red"
@@ -167,13 +181,23 @@ def run_list(args: argparse.Namespace) -> int:
         console.print(f"               {backend['description']}")
         console.print(f"               Script: {backend['script']}")
 
-        if backend.get("requires_venv"):
-            venv_path = paths.root() / backend["venv_path"]
-            venv_exists = venv_path.exists()
+        if venv_exists is not None:
             venv_status = "exists" if venv_exists else "not found"
             console.print(f"               Venv: {backend['venv_path']} ({venv_status})")
 
         console.print(f"               Status: {status}")
+
+        # One-line hint on how to create the missing venv (see
+        # simulator/genesis/README.md §2 セットアップ for the full steps).
+        # 不足しているvenvの作成手順を一言で表示
+        # (詳細は simulator/genesis/README.md §2 セットアップ参照)。
+        if venv_exists is False:
+            venv_parent = Path(backend["venv_path"]).parent
+            console.print(
+                f"               Fix: cd {venv_parent} && python3 -m venv venv "
+                f"&& source venv/bin/activate && pip install -r requirements.txt"
+            )
+
         console.print()
 
     console.print("Usage:")
