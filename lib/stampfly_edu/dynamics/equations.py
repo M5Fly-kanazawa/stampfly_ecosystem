@@ -22,11 +22,23 @@ try:
     from defaults import get_flat_defaults
     _DEFAULTS = get_flat_defaults()
 except ImportError:
+    # Fallback values must be kept in sync with tools/sysid/defaults.py
+    # get_flat_defaults() (checked by `sf params check`) — this dict is only
+    # used when tools/sysid is not importable (e.g. standalone script use),
+    # so it cannot pull values from defaults.py automatically and has to be
+    # updated by hand whenever the measured parameters change.
+    # このフォールバック値は tools/sysid/defaults.py の get_flat_defaults() と
+    # 同期必須（`sf params check` が検査）— tools/sysid をインポートできない
+    # 場合（スタンドアロン実行時等）のみ使われるため defaults.py から自動取得
+    # できず、実測パラメータが更新されるたびに手動更新が必要。
     _DEFAULTS = {
         "mass": 0.035, "Ixx": 9.16e-6, "Iyy": 13.3e-6, "Izz": 20.4e-6,
-        "arm_length": 0.023, "Ct": 1.00e-8, "Cq": 9.71e-11,
+        "arm_length": 0.023, "Ct": 6.7e-9,  # 2026-07-15実測（現行プロペラ）
+        "Cq": 4.10e-11,  # 2026-07-15実測（コーストダウン法）
         "max_thrust": 0.15, "g": 9.80665, "Vbat": 3.7,
-        "Rm": 0.34, "Km": 6.125e-4, "tau_m": 0.02,
+        "Rm": 0.593,  # 論文LCR実測採用値, 2026-07-15決定
+        "Km": 5.682e-4,  # 2026-07-16確定（コーストダウン開回路EMF実測・SCPI公式換算）
+        "tau_m": 0.02,
     }
 
 

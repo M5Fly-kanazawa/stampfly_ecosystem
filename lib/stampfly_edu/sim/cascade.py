@@ -32,6 +32,15 @@ try:
     from defaults import get_flat_defaults
     _DEFAULTS = get_flat_defaults()
 except ImportError:
+    # Fallback values must be kept in sync with tools/sysid/defaults.py
+    # get_flat_defaults() (checked by `sf params check`) — this dict is only
+    # used when tools/sysid is not importable (e.g. standalone script use),
+    # so it cannot pull values from defaults.py automatically and has to be
+    # updated by hand whenever the measured parameters change.
+    # このフォールバック値は tools/sysid/defaults.py の get_flat_defaults() と
+    # 同期必須（`sf params check` が検査）— tools/sysid をインポートできない
+    # 場合（スタンドアロン実行時等）のみ使われるため defaults.py から自動取得
+    # できず、実測パラメータが更新されるたびに手動更新が必要。
     _DEFAULTS = {
         "mass": 0.035, "Ixx": 9.16e-6, "arm_length": 0.023,
         "max_thrust": 0.15, "tau_m": 0.02, "g": 9.80665,

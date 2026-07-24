@@ -54,9 +54,20 @@ class QuadConfig:
 
     # Torque/Thrust ratio κ = Cq/Ct (m)
     # トルク推力比
-    # NOTE(2026-07-15): 実測物理は κ=6.12e-3 だがミキサはファームウェア(actuator.cpp)の
-    #  鏡写しのため旧値を維持（プラント側 motor_model.py は実測値に更新済み）
-    kappa: float = 9.71e-3
+    # NOTE(2026-07-24): κ=6.12e-3 は実測確定値(2026-07-15実測)。ミキサは
+    #  ファームウェアのB⁻¹ミキサー実装
+    #  (firmware/vehicle/components/sf_actuator/actuator.cpp)を鏡写ししており、
+    #  そちらは2026-07-17にこの値へ更新済み。プラント側 motor_model.py は
+    #  2026-07-24のCt更新でκ=Cq/Ct=6.12e-3に整合。旧値 9.71e-3 は
+    #  ファームウェアの旧バグ値（1.59倍過大だった）。
+    # NOTE(2026-07-24): kappa=6.12e-3 is the confirmed measured value
+    #  (measured 2026-07-15). This mixer mirrors the firmware's B⁻¹ mixer
+    #  implementation (firmware/vehicle/components/sf_actuator/actuator.cpp),
+    #  which was updated to this value on 2026-07-17. Plant-side
+    #  motor_model.py became consistent (kappa=Cq/Ct=6.12e-3) with the Ct
+    #  update on 2026-07-24. The old 9.71e-3 was the firmware's stale/buggy
+    #  value (1.59x too high).
+    kappa: float = 6.12e-3
 
     # Motor positions [x, y] in NED body frame (m)
     # モータ位置（NED機体座標系）
