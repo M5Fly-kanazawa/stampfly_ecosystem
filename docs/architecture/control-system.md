@@ -6,6 +6,8 @@
 > 影響一覧: analysis/reports/param_correction_impact_20260715.md）。
 > 本文書の数値例のうち旧値（$C_t$=1.0e-8, $C_q$=9.71e-11, $\omega_{m0}$=2930 等）に基づくものは
 > ファームウェア実装の記述としては正確だが、物理値としては上記が正。
+>
+> **【2026-07-24更新】** κ（トルク/推力比）の記載2箇所（ミキサー行列の一般導出、「モーターパラメータ（ファームウェア実装値）」表）を旧値9.71×10⁻³→実測値6.12×10⁻³へ修正した（ファームウェア`actuator.cpp`のKAPPAは2026-07-17に反映済み、修正済みのまま放置されていた記述漏れ）。「StampFly実機値」以降の数値計算例（Ct=1.00×10⁻⁸・ω_m0=2930等）は、firmware/SILが3点セット再較正（`docs/architecture/simulation-policy.md` §6 バックログ#3）未着手のため現在も使用する旧モータ曲線と整合させるため意図的に維持している——物理実測値は本注記冒頭を参照。
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -788,7 +790,7 @@ $$
 ここで：
 - $(x_i, y_i)$：各モーターの重心からの座標 [m]
 - $\sigma_i$：回転方向（CCW: +1, CW: -1）
-- $\kappa = C_q / C_t = 9.71 \times 10^{-3}$：トルク/推力比
+- $\kappa = C_q / C_t = 6.12 \times 10^{-3}$：トルク/推力比（2026-07-15実測。旧値 $9.71 \times 10^{-3}$ は2026-07-17にファームウェア実装へ反映済み）
 
 **対称X配置**（StampFly標準）では $(x_i, y_i) = (\pm d, \pm d)$ となり：
 
@@ -887,7 +889,7 @@ $$
 G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
 $$
 
-ここで $\tau_m = 0.02$ s はモータ時定数（推定値）。
+ここで $\tau_m = 0.02$ s はモータ時定数（2026-07-15実測で裏付け済み: 実測≈0.0175s、既存の設計値0.02sを維持）。
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -1022,7 +1024,7 @@ $$
 
 ### パラメータ（StampFly実機値）
 
-以下のパラメータは `docs/architecture/stampfly-parameters.md` より転載。
+以下のパラメータは `docs/architecture/stampfly-parameters.md` の値を基に、firmware実装（`sf_actuator/actuator.cpp`）が現在も使用する旧モータ曲線（Ct=1.00×10⁻⁸ 等）に統一した、本節の数値計算例である。2026-07-15実測の物理値（Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹ 等）は本文書冒頭の注記および `stampfly-parameters.md` §3 を参照。
 
 #### 機体パラメータ
 
@@ -1044,7 +1046,7 @@ $$
 | 電圧-回転数 2次係数 | $A_m$ | $5.39 \times 10^{-8}$ | V/(rad/s)² | 実験同定 |
 | 電圧-回転数 1次係数 | $B_m$ | $6.33 \times 10^{-4}$ | V/(rad/s) | 実験同定 |
 | バッテリー電圧 | $V_{bat}$ | 3.7 | V | 公称値 |
-| モータ時定数 | $\tau_m$ | 0.02 | s | 推定値 |
+| モータ時定数 | $\tau_m$ | 0.02 | s | 2026-07-15実測で裏付け済み（実測≈0.0175s、既存の設計値0.02sを維持）。旧注記「推定値」から更新 |
 
 #### ホバリング条件
 
@@ -1053,6 +1055,8 @@ $$
 | 1モーターあたり推力 | $T_0$ | 0.0858 | N | $mg/4$ |
 | ホバリング角速度 | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | ホバリング電圧 | $V_0$ | 2.1 | V | 実測 |
+
+> **注記:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸、$m$=0.035kg）基準の値で、firmware/SILが現在も使用する値と一致する。2026-07-15実測の物理値（$C_t$=6.7×10⁻⁹、実測質量約36.8g）で計算するとホバリング角速度は約3670 rad/s、1モーターあたり推力は約0.090Nとなる（本文書冒頭の注記、`analysis/reports/param_correction_impact_20260715.md` 参照）。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
 
 ### 数値計算例
 
@@ -1096,7 +1100,7 @@ $$
 
 #### 参考：ミキサーゲインの導出
 
-制御割り当て（ミキサー）の設計に必要なパラメータを参考として記載する。
+制御割り当て（ミキサー）の設計に必要なパラメータを参考として記載する。以下は「ホバリング条件」の旧モータ曲線（$C_t$=1.00×10⁻⁸、$\omega_{m0}$=2930 rad/s）を用いた計算例——firmware/SILの現在の実装と一致させるため据え置いている（物理実測値は§冒頭の注記を参照）。
 
 電圧-回転数特性 $V = A_m \omega^2 + B_m \omega + C_m$ をホバリング点で線形化：
 
@@ -1507,9 +1511,9 @@ $$
 
 | 機能 | ファイル | クラス/関数 |
 |------|---------|------------|
-| 剛体運動 | `simulator/core/physics.py` | `rigidbody` |
-| マルチコプター | `simulator/core/dynamics.py` | `multicopter` |
-| モーター | `simulator/core/motors.py` | `motor_prop` |
+| 剛体運動 | `simulator/vpython/core/physics.py` | `rigidbody` |
+| マルチコプター | `simulator/vpython/core/dynamics.py` | `multicopter` |
+| モーター | `simulator/vpython/core/motors.py` | `motor_prop` |
 
 ### 主要メソッド
 
@@ -1606,7 +1610,7 @@ Kd = Kp × Td
 | パラメータ | 記号 | 値 | 単位 |
 |-----------|------|-----|------|
 | 推力係数 | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
-| トルク/推力比 | κ (=Cq/Ct) | 9.71×10⁻³ | m |
+| トルク/推力比 | κ (=Cq/Ct) | 6.12×10⁻³ | m |
 | モーメントアーム | d | 0.023 | m |
 | 電圧-回転数 2次係数 | Am | 5.39×10⁻⁸ | V/(rad/s)² |
 | 電圧-回転数 1次係数 | Bm | 6.33×10⁻⁴ | V/(rad/s) |
@@ -1614,6 +1618,8 @@ Kd = Kp × Td
 | バッテリー電圧（公称、フォールバック） | Vbat | 3.7 | V |
 
 > **注記:** duty変換は `duty = V/Vbat` で行い、Vbatは`sensor_power`から得る実電圧（起動直後や異常値のときのみ上記の公称値3.7Vにフォールバック）。旧設計にあった巻線抵抗Rm・逆起電力定数Km・粘性摩擦Dm・静止摩擦Qf・回転子慣性Jmを介した電気回路モデルは、現行の `sf_actuator` では使用しない（V-ω特性 Am/Bm/Cm を直接使う簡略モデルに一本化）。本セクション（8章）の理論式に出てくるRm=0.5Ω、Jm=1.0×10⁻⁷等はシミュレータ初期値の理論値であり、上記の実装値とは別物。
+>
+> **κ・Ctの状態（2026-07-24確認）:** κは2026-07-17に実測値6.12×10⁻³へ更新済み（`actuator.cpp` の `KAPPA`。旧値9.71×10⁻³は1.59倍過大でヨートルクを過小駆動していた）。Ctは2026-07-15実測で6.7×10⁻⁹と確定しているが、Am/Bm/Cm・thrust_efficiencyと連動するModel Identity較正済みチェーンのため、`actuator.cpp` の `MOTOR_CT` は3点セット再較正（`docs/architecture/simulation-policy.md` §6 バックログ#3）とセットで切替予定——上表のCt=1.00×10⁻⁸は現時点の実装を正しく反映した値であり、誤記ではない。
 
 ---
 
@@ -2256,7 +2262,7 @@ $$
 G_T(s) = \frac{T(s)}{T_{cmd}(s)} = \frac{1}{\tau_m s + 1}
 $$
 
-Where $\tau_m = 0.02$ s is the motor time constant (estimated).
+Where $\tau_m = 0.02$ s is the motor time constant (confirmed by measurement 2026-07-15: measured ≈0.0175s, the existing 0.02s design value is retained).
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
@@ -2379,7 +2385,7 @@ Typically, design with PD or P control, adding I only when disturbance rejection
 
 ### Parameters (StampFly Actual Values)
 
-The following parameters are from `docs/architecture/stampfly-parameters.md`.
+The following parameters are numerical examples for this section, based on `docs/architecture/stampfly-parameters.md` but unified to the legacy motor curve (Ct=1.00×10⁻⁸, etc.) that the firmware implementation (`sf_actuator/actuator.cpp`) still uses today. See the note at the top of this document and `stampfly-parameters.md` §3 for the 2026-07-15 measured physical values (Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹, etc.).
 
 #### Vehicle Parameters
 
@@ -2400,7 +2406,7 @@ The following parameters are from `docs/architecture/stampfly-parameters.md`.
 | Voltage-speed quadratic coeff. | $A_m$ | $5.39 \times 10^{-8}$ | V/(rad/s)² | Experimental |
 | Voltage-speed linear coeff. | $B_m$ | $6.33 \times 10^{-4}$ | V/(rad/s) | Experimental |
 | Battery voltage | $V_{bat}$ | 3.7 | V | Nominal |
-| Motor time constant | $\tau_m$ | 0.02 | s | Estimated |
+| Motor time constant | $\tau_m$ | 0.02 | s | Confirmed by measurement 2026-07-15 (measured ≈0.0175s; existing 0.02s design value retained). Updated from earlier "estimated" note |
 
 #### Hover Conditions
 
@@ -2409,6 +2415,8 @@ The following parameters are from `docs/architecture/stampfly-parameters.md`.
 | Thrust per motor | $T_0$ | 0.0858 | N | $mg/4$ |
 | Hover angular velocity | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | Hover voltage | $V_0$ | 2.1 | V | Measured |
+
+> **Note:** The table above is based on the legacy motor curve ($C_t$=1.00×10⁻⁸, $m$=0.035 kg) and matches the values currently used by firmware/SIL. Computed with the 2026-07-15 measured physical values ($C_t$=6.7×10⁻⁹, measured mass ~36.8 g), the hover angular velocity is ~3670 rad/s and thrust per motor is ~0.090 N (see the top-of-document note and `analysis/reports/param_correction_impact_20260715.md`). The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
 
 ### Numerical Example
 
@@ -2452,7 +2460,7 @@ $$
 
 #### Reference: Mixer Gain Derivation
 
-Parameters needed for control allocation (mixer) design are provided as reference.
+Parameters needed for control allocation (mixer) design are provided as reference. The numbers below use the "Hover Conditions" legacy motor curve ($C_t$=1.00×10⁻⁸, $\omega_{m0}$=2930 rad/s) — kept as-is to match the current firmware/SIL implementation (see the section-top note for the measured physical values).
 
 Linearize the voltage-speed relationship $V = A_m \omega^2 + B_m \omega + C_m$ at hover:
 
@@ -2862,9 +2870,9 @@ $$
 
 | Function | File | Class/Method |
 |----------|------|--------------|
-| Rigid body | `simulator/core/physics.py` | `rigidbody` |
-| Multicopter | `simulator/core/dynamics.py` | `multicopter` |
-| Motor | `simulator/core/motors.py` | `motor_prop` |
+| Rigid body | `simulator/vpython/core/physics.py` | `rigidbody` |
+| Multicopter | `simulator/vpython/core/dynamics.py` | `multicopter` |
+| Motor | `simulator/vpython/core/motors.py` | `motor_prop` |
 
 ### Key Methods
 
@@ -2961,7 +2969,7 @@ Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 | Parameter | Symbol | Value | Unit |
 |-----------|--------|-------|------|
 | Thrust coefficient | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
-| Torque/thrust ratio | κ (=Cq/Ct) | 9.71×10⁻³ | m |
+| Torque/thrust ratio | κ (=Cq/Ct) | 6.12×10⁻³ | m |
 | Moment arm | d | 0.023 | m |
 | Voltage-speed quadratic coeff. | Am | 5.39×10⁻⁸ | V/(rad/s)² |
 | Voltage-speed linear coeff. | Bm | 6.33×10⁻⁴ | V/(rad/s) |
@@ -2969,3 +2977,5 @@ Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 | Battery voltage (nominal fallback) | Vbat | 3.7 | V |
 
 > **Note:** Duty is computed as `duty = V/Vbat`, where Vbat is the LIVE voltage from `sensor_power` (falling back to the 3.7V nominal only during boot or on an implausible reading). The earlier design's electrical-circuit model (winding resistance Rm, back-EMF constant Km, viscous friction Dm, static friction Qf, rotor inertia Jm) is not used by the current `sf_actuator` — it is unified into the simpler V-ω curve (Am/Bm/Cm) used directly. The Rm=0.5Ω, Jm=1.0×10⁻⁷, etc. appearing in Section 8's theoretical derivation are simulator initial/theoretical values, distinct from the implementation values above.
+>
+> **κ / Ct status (confirmed 2026-07-24):** κ was updated to the measured 6.12×10⁻³ on 2026-07-17 (`actuator.cpp`'s `KAPPA`; the former 9.71×10⁻³ was 1.59x too high and under-drove yaw torque). Ct was confirmed at 6.7×10⁻⁹ by measurement on 2026-07-15, but because `actuator.cpp`'s `MOTOR_CT` belongs to a Model-Identity-calibrated chain coupled with Am/Bm/Cm and thrust_efficiency, it is scheduled to switch together with the 3-value recalibration (`docs/architecture/simulation-policy.md` §6 backlog #3). The Ct=1.00×10⁻⁸ shown above accurately reflects the current implementation — it is not a typo.
