@@ -160,7 +160,7 @@ def quadratic_decay(t: np.ndarray, v0: float, k: float) -> np.ndarray:
 def fit_translational_decay(
     time: np.ndarray,
     velocity: np.ndarray,
-    mass: float = 0.035,
+    mass: float = 0.037,
 ) -> Tuple[float, float, float]:
     """
     Fit translational decay to estimate drag coefficient
@@ -273,7 +273,7 @@ def fit_rotational_decay(
 def estimate_drag(
     filepath: str | Path,
     drag_type: str = "all",
-    mass: float = 0.035,
+    mass: float = 0.037,
     Izz: float = 20.4e-6,
 ) -> Dict[str, Any]:
     """

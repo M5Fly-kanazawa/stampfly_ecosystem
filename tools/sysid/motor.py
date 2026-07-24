@@ -44,7 +44,7 @@ class MotorResult:
     step_r2: Optional[float] = None
 
     # Metadata
-    mass: float = 0.035
+    mass: float = 0.037
     hover_omega: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -161,7 +161,7 @@ def detect_hover_segments(
 
 def estimate_thrust_coefficient_hover(
     throttle: np.ndarray,
-    mass: float = 0.035,
+    mass: float = 0.037,
     g: float = 9.80665,
     duty_to_omega_func: Optional[callable] = None,
 ) -> Tuple[float, float]:
@@ -313,7 +313,7 @@ def detect_throttle_steps(
 def estimate_motor_params(
     filepath: str | Path,
     param: str = "all",
-    mass: float = 0.035,
+    mass: float = 0.037,
     hover_only: bool = False,
 ) -> Dict[str, Any]:
     """

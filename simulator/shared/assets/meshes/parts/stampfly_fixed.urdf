@@ -152,7 +152,7 @@
     <!-- 軸対応: Genesis ixx=NED Iyy(Pitch), Genesis iyy=NED Ixx(Roll) -->
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.035"/>  <!-- 35g total -->
+      <mass value="0.037"/>  <!-- 37g total (実測36.8g, 2026-07-24統一; was 35g/legacy design value) -->
       <inertia ixx="13.3e-6" ixy="0" ixz="0" iyy="9.16e-6" iyz="0" izz="20.4e-6"/>
     </inertial>
   </link>

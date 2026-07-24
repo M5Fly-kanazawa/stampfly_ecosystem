@@ -1024,13 +1024,13 @@ $$
 
 ### パラメータ（StampFly実機値）
 
-以下のパラメータは `docs/architecture/stampfly-parameters.md` の値を基に、firmware実装（`sf_actuator/actuator.cpp`）が現在も使用する旧モータ曲線（Ct=1.00×10⁻⁸ 等）に統一した、本節の数値計算例である。2026-07-15実測の物理値（Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹ 等）は本文書冒頭の注記および `stampfly-parameters.md` §3 を参照。
+以下のパラメータは `docs/architecture/stampfly-parameters.md` の値を基に、firmware実装（`sf_actuator/actuator.cpp`）が現在も使用する旧モータ曲線（Ct=1.00×10⁻⁸ 等）に統一した、本節の数値計算例である。2026-07-15実測の物理値（Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹ 等）は本文書冒頭の注記および `stampfly-parameters.md` §3 を参照。機体質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み（下表は現在値）——モータ曲線（Ct/Cq）のみ backlog #3 未着手のため旧値のまま。
 
 #### 機体パラメータ
 
 | パラメータ | 記号 | 値 | 単位 | 備考 |
 |-----------|------|-----|------|------|
-| 機体質量 | $m$ | 0.035 | kg | バッテリー込み |
+| 機体質量 | $m$ | 0.037 | kg | バッテリー込み（実測36.8g, 2026-07-24統一） |
 | Roll慣性モーメント | $I_{xx}$ | $9.16 \times 10^{-6}$ | kg·m² | |
 | Pitch慣性モーメント | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
 | Yaw慣性モーメント | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
@@ -1056,7 +1056,7 @@ $$
 | ホバリング角速度 | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | ホバリング電圧 | $V_0$ | 2.1 | V | 実測 |
 
-> **注記:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸、$m$=0.035kg）基準の値で、firmware/SILが現在も使用する値と一致する。2026-07-15実測の物理値（$C_t$=6.7×10⁻⁹、実測質量約36.8g）で計算するとホバリング角速度は約3670 rad/s、1モーターあたり推力は約0.090Nとなる（本文書冒頭の注記、`analysis/reports/param_correction_impact_20260715.md` 参照）。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
+> **注記（2026-07-24更新）:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸）を使った当時の参考計算をそのまま据え置いている（backlog #3 未再較正のため、firmware/SILの`Ct`実装値と一致）。ただし表中の $T_0$・$\omega_{m0}$ の数値自体は旧質量 $m$=0.035kg での計算のままであり、上記「機体パラメータ」表の現在値 $m$=0.037kg とは一致しない——質量統一（2026-07-24）はモータ曲線側の再較正（backlog #3）とセットではないため、この旧Ct計算例に限り質量も歴史的な参考値として残している。2026-07-15実測の物理値（$C_t$=6.7×10⁻⁹、実測質量36.8g=0.037kg）で計算するとホバリング角速度は約3670 rad/s、1モーターあたり推力は約0.090Nとなる（本文書冒頭の注記、`analysis/reports/param_correction_impact_20260715.md` 参照）。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
 
 ### 数値計算例
 
@@ -2385,13 +2385,13 @@ Typically, design with PD or P control, adding I only when disturbance rejection
 
 ### Parameters (StampFly Actual Values)
 
-The following parameters are numerical examples for this section, based on `docs/architecture/stampfly-parameters.md` but unified to the legacy motor curve (Ct=1.00×10⁻⁸, etc.) that the firmware implementation (`sf_actuator/actuator.cpp`) still uses today. See the note at the top of this document and `stampfly-parameters.md` §3 for the 2026-07-15 measured physical values (Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹, etc.).
+The following parameters are numerical examples for this section, based on `docs/architecture/stampfly-parameters.md` but unified to the legacy motor curve (Ct=1.00×10⁻⁸, etc.) that the firmware implementation (`sf_actuator/actuator.cpp`) still uses today. See the note at the top of this document and `stampfly-parameters.md` §3 for the 2026-07-15 measured physical values (Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹, etc.). The vehicle mass was unified to the measured 0.037 kg in the simulator as of 2026-07-24 (the table below shows the current value) — only the motor curve (Ct/Cq) remains at its legacy value pending backlog #3.
 
 #### Vehicle Parameters
 
 | Parameter | Symbol | Value | Unit | Notes |
 |-----------|--------|-------|------|-------|
-| Vehicle mass | $m$ | 0.035 | kg | Including battery |
+| Vehicle mass | $m$ | 0.037 | kg | Including battery (measured 36.8 g, unified 2026-07-24) |
 | Roll moment of inertia | $I_{xx}$ | $9.16 \times 10^{-6}$ | kg·m² | |
 | Pitch moment of inertia | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
 | Yaw moment of inertia | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
@@ -2416,7 +2416,7 @@ The following parameters are numerical examples for this section, based on `docs
 | Hover angular velocity | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | Hover voltage | $V_0$ | 2.1 | V | Measured |
 
-> **Note:** The table above is based on the legacy motor curve ($C_t$=1.00×10⁻⁸, $m$=0.035 kg) and matches the values currently used by firmware/SIL. Computed with the 2026-07-15 measured physical values ($C_t$=6.7×10⁻⁹, measured mass ~36.8 g), the hover angular velocity is ~3670 rad/s and thrust per motor is ~0.090 N (see the top-of-document note and `analysis/reports/param_correction_impact_20260715.md`). The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
+> **Note (updated 2026-07-24):** The table above deliberately keeps the legacy worked example ($C_t$=1.00×10⁻⁸) as-is, matching the firmware/SIL `Ct` implementation (pending backlog #3 recalibration). However, the $T_0$/$\omega_{m0}$ figures themselves are still computed with the old mass $m$=0.035 kg, which no longer matches the current value $m$=0.037 kg in the "Vehicle Parameters" table above — the 2026-07-24 mass unification is independent of the motor-curve recalibration (backlog #3), so this legacy-Ct worked example alone keeps the old mass as a historical reference too. Computed with the 2026-07-15 measured physical values ($C_t$=6.7×10⁻⁹, measured mass 36.8 g = 0.037 kg), the hover angular velocity is ~3670 rad/s and thrust per motor is ~0.090 N (see the top-of-document note and `analysis/reports/param_correction_impact_20260715.md`). The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
 
 ### Numerical Example
 

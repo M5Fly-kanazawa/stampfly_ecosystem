@@ -33,10 +33,21 @@ KAPPA = 6.12e-3        # Torque/thrust ratio [m] (2026-07-15実測)
 D = 0.023              # Moment arm [m]
 
 # Motor model
-RM = 0.34              # Winding resistance [Ω]
-KM = 6.125e-4          # Back-EMF constant [V*s/rad]
-DM = 3.69e-8           # Viscous friction [Nm*s/rad]
-QF = 2.76e-5           # Static friction [Nm]
+# Rm/Km sourced from tools/sysid/defaults.py (single source of truth) instead of
+# duplicating the literals here, so this file cannot re-diverge from the rest of
+# the sysid tooling. NOTE: RM/KM/DM/QF/VBAT/B_INV below are currently UNUSED by
+# reconstruct_torques() (torque is reconstructed from the firmware PID gains
+# directly, not the motor electrical model) — kept for a possible future
+# duty->torque reconstruction path; updated here for correctness/consistency.
+# Rm/Km は tools/sysid/defaults.py（唯一の正）から取得し、ここでの数値の二重管理を
+# 避ける。なお RM/KM/DM/QF/VBAT/B_INV は reconstruct_torques() では現在未使用
+# （トルクはファームPIDゲインから再構成しており、モータ電気モデル経由ではない）—
+# 将来 duty→トルク再構成が必要になった場合のために残し、整合のため値のみ更新する。
+_defaults = get_flat_defaults()
+RM = _defaults['Rm']   # Winding resistance [Ω] (0.593, paper LCR measurement, 2026-07-15 decision)
+KM = _defaults['Km']   # Back-EMF constant [V/(rad/s)] (5.682e-4, direct measurement, 2026-07-16)
+DM = 3.69e-8           # Viscous friction [Nm*s/rad] (matches defaults.py DEFAULT_PARAMS['motor']['Dm'])
+QF = 2.76e-5           # Static friction [Nm] (matches defaults.py DEFAULT_PARAMS['motor']['Qf'])
 VBAT = 3.7             # Battery voltage [V]
 
 # PID gains (from firmware)

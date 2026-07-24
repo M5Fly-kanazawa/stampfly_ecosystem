@@ -114,10 +114,10 @@ def generate_urdf(config_path: Path, output_path: Path):
         urdf_lines.append(f'    </collision>')
 
     # Inertial properties for base_link
-    # Mass: 35g total, body ~30g
+    # Mass: 37g total (measured 36.8g, 2026-07-24 unification), body ~33g + 4x1g props
     urdf_lines.append('    <inertial>')
     urdf_lines.append('      <origin xyz="0 0 0" rpy="0 0 0"/>')
-    urdf_lines.append('      <mass value="0.030"/>')
+    urdf_lines.append('      <mass value="0.033"/>')
     urdf_lines.append('      <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>')
     urdf_lines.append('    </inertial>')
     urdf_lines.append('  </link>')

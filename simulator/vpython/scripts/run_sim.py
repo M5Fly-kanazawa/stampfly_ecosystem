@@ -261,7 +261,8 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate',
     # ===========================================
     # Drone Setup
     # ===========================================
-    mass = 0.035
+    # 実測36.8g、2026-07-24統一（旧0.035は更新漏れ）
+    mass = 0.037
     weight = mass * 9.81
     hover_thrust = weight
 

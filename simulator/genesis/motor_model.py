@@ -43,10 +43,15 @@ class MotorParams:
     """
     # Electrical parameters (LCR meter measurement)
     # 電気パラメータ（LCRメータ測定）
-    # NOTE(2026-07-15): 実測は Ke=5.5e-4（無負荷V-ω、コーストEMFで相互検証）, R=0.593,
-    #  摩擦はコーストダウンで τ_c=9.5e-6, B≈0。本モデルの (Km,Rm,Dm,Qf) は
-    #  自己整合パッケージのため、個別差し替えでなく再フィットとセットで更新すること。
-    Rm: float = 0.34      # Resistance (Ohm) / 巻線抵抗
+    # NOTE(2026-07-24): Rm を論文LCR実測 0.593Ω に統一（先生決定、コミット 9a656a9f
+    #  2026-07-15）。旧値 0.34 は別個体疑いのある旧LCR値。Km/Dm/Qf は Rm から
+    #  Cq・Rm/Am 等で導出される計算プロパティのため、Rm 変更のみで自動的に追従する
+    #  （Am/Bm/Cm は電圧-回転数の実測フィット値で Rm に依存しない）。数値検証の結果、
+    #  この自己整合構造により定常特性（ホバー電圧・ホバーω・任意ωでの所要電圧）は
+    #  Rm の値に依存せず不変（Rm がキャンセルする代数構造）— 悪化なし。
+    #  Km 直接実測 5.682e-4 V/(rad/s)（2026-07-16確定, tools/sysid/defaults.py）との
+    #  比較は docs/architecture/stampfly-parameters.md 参照。
+    Rm: float = 0.593     # Resistance (Ohm) / 巻線抵抗 (2026-07-15 論文LCR実測)
     Lm: float = 1.0e-6    # Inductance (H) / インダクタンス
 
     # RPM-voltage relationship coefficients
@@ -316,7 +321,7 @@ class QuadMotorSystem:
         return sum(self.thrusts)
 
 
-def compute_hover_conditions(params: MotorParams = DEFAULT_MOTOR_PARAMS, mass: float = 0.035):
+def compute_hover_conditions(params: MotorParams = DEFAULT_MOTOR_PARAMS, mass: float = 0.037):
     """
     Compute hover conditions for reference.
     参考用にホバリング条件を計算
@@ -373,7 +378,7 @@ if __name__ == "__main__":
     print(f"  κ  = {p.kappa:.4e} m")
 
     hover = compute_hover_conditions()
-    print(f"\nHover conditions (mass=35g):")
+    print(f"\nHover conditions (mass=37g):")
     print(f"  Thrust/motor = {hover['thrust_per_motor']*1000:.2f} mN")
     print(f"  ω_hover = {hover['omega_hover']:.0f} rad/s")
     print(f"  RPM_hover = {hover['rpm_hover']:.0f}")

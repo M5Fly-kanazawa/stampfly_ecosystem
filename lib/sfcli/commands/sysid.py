@@ -184,8 +184,8 @@ def _register_motor(subparsers):
     parser.add_argument(
         "--mass",
         type=float,
-        default=0.035,
-        help="Vehicle mass in kg (default: 0.035)",
+        default=0.037,
+        help="Vehicle mass in kg (default: 0.037)",
     )
     parser.add_argument(
         "--hover-only",

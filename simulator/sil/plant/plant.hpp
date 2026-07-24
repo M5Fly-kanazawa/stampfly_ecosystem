@@ -180,8 +180,19 @@ public:
         float batt_full_v        = 4.2f;     ///< OCV at full charge [V]
         float batt_empty_v       = 3.3f;     ///< OCV at empty [V]
         float batt_initial_frac  = 1.0f;     ///< initial state of charge [0..1] (1 = full)
-        float motor_Rm           = 0.34f;    ///< winding resistance [Ω] (params doc, LCR)
-        float motor_Km           = 6.12e-4f; ///< back-EMF constant [V/(rad/s)] (params doc)
+        // motor_Rm/motor_Km feed ONLY the battery-current estimate above
+        // (i_motor = (V−Km·ω)/Rm, plant.cpp updateBattery caller), which is used
+        // only when batt_model_enable=true. They are NOT part of the deferred
+        // Ct/Am/thrust_efficiency 3-point calibration set above (solveOmega() uses
+        // only motor_Am/Bm/Cm, never Rm/Km — verified by reading plant.cpp), so they
+        // are updated independently here per the 2026-07-24 Rm/Km decision.
+        // motor_Rm/motor_Km は上のバッテリー電流推定のみで使用（i_motor=(V−Km·ω)/Rm、
+        // batt_model_enable=true の時のみ有効）。上の Ct/Am/thrust_efficiency 3点保留
+        // セットには含まれない（solveOmega() は motor_Am/Bm/Cm のみ使用し Rm/Km は
+        // 一切参照しない — plant.cpp で確認済み）ため、2026-07-24 の Rm/Km 決定に
+        // 従い独立して更新する。
+        float motor_Rm           = 0.593f;   ///< winding resistance [Ω] (paper LCR measurement, 2026-07-15, teacher decision commit 9a656a9f; was 0.34 legacy/possibly-different-unit LCR)
+        float motor_Km           = 5.682e-4f; ///< back-EMF constant [V/(rad/s)] (direct measurement, 2026-07-16, tools/sysid/defaults.py; was 6.12e-4 = stale reference calc from legacy Cq(9.71e-11)·Rm(0.34)/Am)
         float avionics_current_a = 0.1f;     ///< MCU + sensors quiescent draw [A]
         float mass     = 0.037f;    ///< body mass [kg]
         float g        = 9.81f;     ///< gravity [m/s²]

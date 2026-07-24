@@ -226,7 +226,7 @@ import numpy as np
 from simulator.core import multicopter
 
 # 機体の作成
-mass = 0.035  # 35g
+mass = 0.037  # 37g
 inertia = [
     [9.16e-6, 0.0, 0.0],
     [0.0, 13.3e-6, 0.0],
@@ -719,7 +719,7 @@ import numpy as np
 from simulator.core import multicopter
 
 # Create vehicle
-mass = 0.035  # 35g
+mass = 0.037  # 37g
 inertia = [
     [9.16e-6, 0.0, 0.0],
     [0.0, 13.3e-6, 0.0],

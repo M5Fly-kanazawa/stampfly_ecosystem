@@ -249,8 +249,8 @@ if __name__ == "__main__":
     print(f"  [T₄]   [{alloc.B_inv[3,0]:+.2f} {alloc.B_inv[3,1]:+.1f} {alloc.B_inv[3,2]:+.1f} {alloc.B_inv[3,3]:+.1f}]   [u_ψ]")
 
     # Test: hover condition
-    print(f"\n=== Test: Hover (0.035kg) ===")
-    weight = 0.035 * 9.81  # N
+    print(f"\n=== Test: Hover (0.037kg) ===")
+    weight = 0.037 * 9.81  # N
     control_hover = np.array([weight, 0.0, 0.0, 0.0])
     thrusts_hover = alloc.mix(control_hover)
     duties_hover = thrusts_to_duties(thrusts_hover)

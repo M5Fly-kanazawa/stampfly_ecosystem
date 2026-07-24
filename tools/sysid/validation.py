@@ -314,7 +314,7 @@ def cross_validate_inertia_thrust(
     Izz: float,
     Ct: float,
     arm_length: float = 0.023,
-    mass: float = 0.035,
+    mass: float = 0.037,
 ) -> Dict[str, Any]:
     """
     Cross-validate inertia and thrust coefficient estimates

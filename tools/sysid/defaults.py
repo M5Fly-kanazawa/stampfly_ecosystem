@@ -33,19 +33,21 @@ _KAPPA_VALUE = _CQ_VALUE / _CT_VALUE  # m — kappa = Cq/Ct, mechanically derive
 _JMP_VALUE = 1.375e-8  # kg·m^2 — rotor inertia, 2026-07-15 実測（写真法+諸元法）
 
 # Winding resistance / 巻線抵抗:
-# 0.34 Ω (旧LCRメータ実測) と 0.63 Ω (vpython独自実測) が並立中で、どちらが正か
-# 未確定 (docs/architecture/simulation-policy.md §6 backlog #3 で較正と連動して
-# 確定予定)。このファイル内では get_flat_defaults() が従来返していた 0.593 Ω
-# (論文LCR実測採用値, 2026-07-15決定) に統一する。クロスファイルでの値の統一は
-# 本タスクの対象外 — simulator/genesis/motor_model.py 等の Rm=0.34 は意図的に
-# 未変更のまま残す。
-# Winding resistance: 0.34 Ω (old LCR-meter measurement) and 0.63 Ω (independent
-# vpython measurement) currently coexist elsewhere in the repo with no confirmed
-# "correct" value yet (pending calibration, backlog #3). Within this file we
-# standardize on 0.593 Ω (paper's LCR measurement, decided 2026-07-15), which is
-# what get_flat_defaults() already returned before this file was unified.
-# Cross-file reconciliation (e.g. simulator/genesis/motor_model.py's Rm=0.34) is
-# out of scope for this change and intentionally left untouched.
+# RESOLVED 2026-07-24 (teacher decision, commit 9a656a9f 2026-07-15): 0.593 Ω
+# (paper's LCR measurement) is the single adopted value. The two other
+# candidates that used to coexist — 0.34 Ω (older/possibly-different-unit LCR
+# measurement) and 0.63 Ω (vpython's own stale initial value) — were update
+# gaps, not competing measurements, and have since been cross-file unified to
+# 0.593 Ω in simulator/genesis/motor_model.py, simulator/vpython/core/motors.py,
+# and simulator/sil/plant/plant.hpp (see tools/params_audit/params_manifest.py
+# "Rm" group, checked by `sf params check`).
+# 巻線抵抗: 2026-07-24決着（先生決定、コミット9a656a9f 2026-07-15）: 0.593Ω
+# （論文LCR実測）を唯一の採用値とする。かつて並立していた他の2値 — 0.34Ω
+# （旧/別個体疑いのLCR実測）と0.63Ω（vpython側の更新漏れの旧初期値）— は
+# 競合する実測ではなく単なる更新漏れであり、simulator/genesis/motor_model.py・
+# simulator/vpython/core/motors.py・simulator/sil/plant/plant.hpp を含め
+# クロスファイルで0.593Ωへ統一済み（tools/params_audit/params_manifest.py の
+# "Rm" グループ、`sf params check` で検査）。
 _RM_VALUE = 0.593  # Ω
 
 # Back-EMF constant / 逆起電力定数:
@@ -73,9 +75,13 @@ DEFAULT_PARAMS: Dict[str, Any] = {
     # Mass Properties / 質量特性
     # ==========================================================================
     "mass": {
-        "value": 0.035,  # kg
+        "value": 0.037,  # kg
         "unit": "kg",
-        "description": "Vehicle mass including battery / バッテリー込み機体質量",
+        "description": (
+            "Vehicle mass including battery / バッテリー込み機体質量 "
+            "(実測36.8g、firmware は commit 43841314 で2026-03-31反映済み。"
+            "0.035 はシミュレータ側の反映前の設計値だった更新漏れ — 2026-07-24統一)"
+        ),
     },
 
     # Moments of inertia / 慣性モーメント

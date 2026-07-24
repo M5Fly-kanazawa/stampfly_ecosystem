@@ -135,18 +135,32 @@ EXPECTED_IZZ = 20.4e-6
 # モーメントアーム（重心→モータの X/Y オフセット）[m] — 全実装で既に一致済み。
 EXPECTED_ARM = 0.023
 
-# --- UNRESOLVED markers (no confirmed single value yet) ---
-# --- UNRESOLVED マーカー（確定単一値がまだ無い） ---
-UNRESOLVED_RM = Unresolved(
-    candidates="0.34 Ω (旧LCRメータ実測) / 0.593 Ω (論文LCR実測・2026-07-15採用) / "
-               "0.63 Ω (vpython独自実測) が並立。simulation-policy.md backlog #3 の"
-               "3点セット再較正で確定予定。"
-)
-UNRESOLVED_MASS = Unresolved(
-    candidates="0.035 kg (vpython/defaults既定) / 0.037 kg (SIL plant.hpp・stampfly.xml・"
-               "doc firmware欄) / URDF 0.030 kg+prop×4 が並立。個体差・バッテリー重量差の"
-               "疑いがあるが未検証。"
-)
+# Winding resistance Rm [Ω] — RESOLVED 2026-07-24 (teacher decision, commit
+# 9a656a9f 2026-07-15): adopt the paper's LCR measurement. The other two
+# candidates (0.34 = older/possibly-different-unit LCR, 0.63 = vpython's own
+# stale initial value) were update gaps, not competing measurements.
+# 巻線抵抗 Rm [Ω] — 2026-07-24 決着（先生決定、コミット 9a656a9f 2026-07-15）:
+# 論文LCR実測を採用。他の2値（0.34=旧/別個体疑いのLCR、0.63=vpython側の
+# 更新漏れの旧初期値）は競合する実測ではなく単なる更新漏れだった。
+EXPECTED_RM = 0.593
+
+# Vehicle mass [kg] — RESOLVED 2026-07-24: adopt the measured 36.8g (firmware
+# reflected this 2026-03-31, commit 43841314; simulator copies were the update
+# gap). See docs/architecture/stampfly-parameters.md §"質量特性".
+# 機体質量 [kg] — 2026-07-24 決着: 実測36.8gを採用（ファームは2026-03-31に
+# 反映済み、コミット43841314；シミュレータ側が更新漏れだった）。
+EXPECTED_MASS = 0.037
+
+# URDF base_link mass [kg] — simulator/shared/assets/meshes/parts/stampfly.urdf
+# models the vehicle as base_link (body) + 4 separate propeller links (0.001 kg
+# each), so base_link alone is NOT the full vehicle mass. 0.033 + 4*0.001 =
+# 0.037 = EXPECTED_MASS. This constant exists only because the manifest checks
+# one regex-captured number per row; it is not an independent measurement.
+# URDF base_link 質量 [kg] — stampfly.urdf は機体を base_link（本体）＋
+# プロペラ4リンク（各0.001kg）で表現するため、base_link 単体は機体全質量では
+# ない。0.033 + 4*0.001 = 0.037 = EXPECTED_MASS。この定数はマニフェストが
+# 1行1数値しか検査できないために存在するだけで、独立した実測値ではない。
+EXPECTED_URDF_BASE_MASS = 0.033
 
 # --- EXEMPT markers (known-and-accepted mismatch, with reason) ---
 # --- EXEMPT マーカー（既知で許容された不一致、理由付き） ---
@@ -448,76 +462,88 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     ],
 
     # -------------------------------------------------------------------
-    # Rm — winding resistance (UNRESOLVED: 0.34 / 0.593 / 0.63 coexist)
-    # 巻線抵抗（UNRESOLVED: 0.34 / 0.593 / 0.63 が並立）
+    # Rm — winding resistance (RESOLVED 2026-07-24: 0.593, see EXPECTED_RM)
+    # 巻線抵抗（2026-07-24決着: 0.593、EXPECTED_RM 参照）
     # -------------------------------------------------------------------
     "Rm": [
         ParamCheck(
             file="tools/sysid/defaults.py",
             regex=r'_RM_VALUE\s*=\s*([0-9.eE+-]+)',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="module constant _RM_VALUE",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
             regex=r'Rm:\s*float\s*=\s*([0-9.eE+-]+)',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="MotorParams.Rm",
         ),
         ParamCheck(
             file="simulator/vpython/core/motors.py",
             regex=r'self\.Rm\s*=\s*([0-9.eE+-]+)',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="motor_prop.Rm",
         ),
         ParamCheck(
             file="simulator/sil/plant/plant.hpp",
             regex=r'motor_Rm\s*=\s*([0-9.eE+-]+)f;',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="Config::motor_Rm (battery model)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'巻線抵抗\s*\|\s*Rm\s*\|\s*([0-9.eE+-]+)\s*\|',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="body table (JP)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Winding Resistance\s*\|\s*Rm\s*\|\s*([0-9.eE+-]+)\s*\|',
-            expected=UNRESOLVED_RM,
+            expected=EXPECTED_RM,
             note="body table (EN)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # mass — vehicle mass (UNRESOLVED: 0.035 / 0.037 / URDF 0.030 coexist)
-    # 機体質量（UNRESOLVED: 0.035 / 0.037 / URDF 0.030 が並立）
+    # mass — vehicle mass (RESOLVED 2026-07-24: 0.037, see EXPECTED_MASS)
+    # 機体質量（2026-07-24決着: 0.037、EXPECTED_MASS 参照）
     # -------------------------------------------------------------------
     "mass": [
         ParamCheck(
             file="simulator/sil/plant/plant.hpp",
             regex=r'float mass\s*=\s*([0-9.eE+-]+)f;',
-            expected=UNRESOLVED_MASS,
+            expected=EXPECTED_MASS,
             note="Config::mass (battery model)",
         ),
         ParamCheck(
             file="simulator/sil/models/stampfly.xml",
             regex=r'<inertial[^>]*mass="([0-9.eE+-]+)"',
-            expected=UNRESOLVED_MASS,
+            expected=EXPECTED_MASS,
             note="<inertial mass>",
         ),
         ParamCheck(
             file="simulator/vpython/scripts/run_sim.py",
             regex=r'mass = ([0-9.eE+-]+)\n\s*weight = mass',
-            expected=UNRESOLVED_MASS,
+            expected=EXPECTED_MASS,
             note="Drone Setup mass",
         ),
         ParamCheck(
             file="tools/sysid/defaults.py",
             regex=r'"mass":\s*\{\s*"value":\s*([0-9.eE+-]+),',
-            expected=UNRESOLVED_MASS,
+            expected=EXPECTED_MASS,
             note="DEFAULT_PARAMS.mass",
+        ),
+        ParamCheck(
+            file="simulator/shared/assets/meshes/parts/stampfly_fixed.urdf",
+            regex=r'<mass value="([0-9.eE+-]+)"/>\s*<!--',
+            expected=EXPECTED_MASS,
+            note="single-link total mass (fixed-prop variant)",
+        ),
+        ParamCheck(
+            file="simulator/shared/assets/meshes/parts/stampfly.urdf",
+            regex=r'<mass value="([0-9.eE+-]+)"/>\s*\n\s*<inertia ixx="9\.16e-6"',
+            expected=EXPECTED_URDF_BASE_MASS,
+            note="base_link mass only (base 0.033 + 4x1g props = 0.037 total)",
         ),
     ],
 }

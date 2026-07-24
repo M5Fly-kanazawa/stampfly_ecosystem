@@ -61,7 +61,9 @@ class motor_prop():
         self.Cm = 1.53e-2
         #LCRメータで測定したパラメータ
         self.Lm = 7.5e-6 #1.0e-6
-        self.Rm = 0.63 #0.34
+        # Rm を論文LCR実測 0.593Ω に統一（先生決定、コミット 9a656a9f 2026-07-15）。
+        # 旧値 0.63 は vpython 側の旧初期値で更新漏れだった。
+        self.Rm = 0.593 #0.63 #0.34
         #回転数と推力・トルク測定実験から求めたパラメータ
         # Ct updated to the 2026-07-15 bench measurement (was 1.00e-8). This makes
         # the plant's kappa = Cq/Ct = 4.10e-11/6.7e-9 = 6.12e-3 — identical to the
@@ -77,6 +79,9 @@ class motor_prop():
         self.Ct = 6.7e-9
         # NOTE(2026-07-15): 実測は Ke=5.5e-4, R=0.593, τ_c=9.5e-6, B≈0。
         #  (Km,Rm,Dm,Qf)は自己整合パッケージ — 再フィットとセットで更新のこと。
+        #  NOTE(2026-07-24): 上の self.Rm を 0.593 に更新済み。Km/Dm/Qf は Rm から
+        #  Cq*Rm/Am 等で導出される計算値のため自動的に追従し、Rm は定常特性の式で
+        #  代数的にキャンセルする（数値検証: hover ω・電圧とも変化なし）。
         self.Cq = 4.10e-11  # 2026-07-15実測
         #形状と重量から推定した慣性モーメント
         self.Jmp = 1.375e-8  # 2026-07-15実測
