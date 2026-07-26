@@ -327,6 +327,8 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp  # Phase 6: CLI console registry (cli_task)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_realtime.cpp      # P6 stage 1: wall-clock pacing (SIL_EMU_REALTIME)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/rc_stdin.cpp          # P6 stage 1: live RC-over-stdin (SIL_EMU_RC_STDIN)
     plant/plant.cpp                                           # MuJoCo physics plant
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
@@ -387,6 +389,8 @@ if(SIL_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp   # E6: dispatching console registry
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp         # E6: events.jsonl recorder
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp     # review-video trajectory recorder
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_realtime.cpp       # P6 stage 1: wall-clock pacing (SIL_EMU_REALTIME)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/rc_stdin.cpp           # P6 stage 1: live RC-over-stdin (SIL_EMU_RC_STDIN)
     plant/plant.cpp
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp

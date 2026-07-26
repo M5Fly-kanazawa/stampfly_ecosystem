@@ -29,11 +29,24 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
 
 from ..utils import console, paths, platform
+
+# Terminal raw mode (Unix only) — used by `sf sil fly`'s keyboard control,
+# same guarded-import pattern as lib/sfcli/commands/rc.py.
+# ターミナル生入力（Unix専用）— `sf sil fly` のキーボード操縦が使う。
+# lib/sfcli/commands/rc.py と同じガード付きインポート。
+try:
+    import select
+    import termios
+    import tty
+    _HAS_TERMIOS = True
+except ImportError:
+    _HAS_TERMIOS = False
 
 COMMAND_NAME = "sil"
 COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gate)"
@@ -305,6 +318,35 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "SIL_EMU_PARAMS_FILE; unknown names are skipped by the emulator "
                         "itself with a warning (SSOT stays in firmware's params table).")
     p.set_defaults(func=run_scenario)
+
+    # P6 stage 1: real-time, keyboard-piloted SIL flight. Runs emu_vehicle with
+    # SIL_EMU_REALTIME (paces the deterministic scheduler to the wall clock) +
+    # SIL_EMU_RC_STDIN (accepts live 'rc'/'arm'/'land'/'quit' lines — see
+    # simulator/sil/devices/rc_stdin.cpp) and renders its 'STATE ...' HUD line.
+    # P6 stage 1: リアルタイム・キーボード操縦SIL飛行。emu_vehicle を
+    # SIL_EMU_REALTIME（決定論スケジューラを壁時計にペーシング）＋
+    # SIL_EMU_RC_STDIN（ライブ 'rc'/'arm'/'land'/'quit' 行を受理 — rc_stdin.cpp
+    # 参照）付きで起動し、'STATE ...' HUD行を描画する。
+    p = sub.add_parser("fly", help="Real-time keyboard-piloted SIL flight (P6 stage 1)",
+                       description=(
+                           "Fly the real, unmodified vehicle firmware in the SIL from the "
+                           "terminal keyboard, in real time.\n"
+                           "See simulator/sil/README.md's `sf sil fly` section for the key "
+                           "map and the ARM-by-keyboard sequence."
+                       ))
+    p.add_argument("--scenario", default=None,
+                   help="optional .scn to run first (e.g. to reach ARMED_GROUND) before "
+                        "keyboard control takes over. Wait for it to finish before touching "
+                        "the sticks — see README for the ARM-by-keyboard alternative")
+    p.add_argument("--param", action="append", dest="params", metavar="NAME=VALUE",
+                   help="override a firmware param for this session only (repeatable, e.g. "
+                        "--param rate.roll.kp=0.5e-3). Same mechanism as "
+                        "`sf sil scenario --param` — see its help for details.")
+    p.add_argument("--duration", type=int, default=600,
+                   help="max session length in seconds (default 600 = 10 min). The "
+                        "emulator process ends on its own if you exceed this before "
+                        "landing/quitting yourself")
+    p.set_defaults(func=run_fly)
 
     # Regression: run every *.scn that has a matching *.expect (README/TEST_MATRIX
     # "32 scenarios"; the .expect glob is authoritative) and gate on the aggregate.
@@ -948,6 +990,337 @@ def run_scenario(args: argparse.Namespace) -> int:
             else:
                 console.error("render_video.py failed")
     return 0 if verdict else 2
+
+
+# =============================================================================
+# `sf sil fly` — P6 stage 1: real-time, keyboard-piloted SIL flight.
+# `sf sil fly` — P6 stage 1: リアルタイム・キーボード操縦SIL飛行。
+#
+# Spawns emu_vehicle with SIL_EMU_REALTIME=1 (paces the deterministic
+# scheduler to the wall clock — simulator/sil/devices/emu_realtime.cpp) and
+# SIL_EMU_RC_STDIN=1 (accepts live 'rc <roll> <pitch> <yaw> <throttle>' /
+# 'arm' / 'land' / 'quit' lines — simulator/sil/devices/rc_stdin.cpp),
+# translates raw-mode keystrokes into that protocol at ~50Hz, and renders the
+# emulator's own 'STATE ...' HUD line as a live one-line status readout —
+# mirroring `sf rc`'s interactive keyboard mode (lib/sfcli/commands/rc.py) as
+# closely as the different transport (stdin pipe vs. WebSocket/CLI) allows.
+#
+# emu_vehicle を SIL_EMU_REALTIME=1（決定論スケジューラを壁時計にペーシング —
+# emu_realtime.cpp）＋SIL_EMU_RC_STDIN=1（ライブ 'rc ...'/'arm'/'land'/'quit'
+# 行を受理 — rc_stdin.cpp）付きで起動し、rawモードのキー入力を~50Hzで
+# そのプロトコルへ変換、エミュレータ自身の 'STATE ...' HUD行を1行ステータス
+# として描画する — `sf rc` の対話キーボードモード（rc.py）に、輸送経路の違い
+# （stdin pipe 対 WebSocket/CLI）が許す限り揃える。
+# =============================================================================
+
+_FLY_KEY_HELP = """
+  [sf sil fly — real-time keyboard control / リアルタイム・キーボード操縦]
+
+  W/S      Pitch forward / back      前進 / 後退（ピッチ）
+  A/D      Roll left / right         左 / 右ロール
+  ,/.      Yaw left / right          左 / 右ヨー
+  Space/Z  Throttle up / down        スロットル 上げ / 下げ
+  R        ARM / DISARM (tap once)   ARM/DISARM切替（1回タップ — 実機送信機の
+                                      モーメンタリボタンと同じ）
+  +/-      Stick deflection (10-100) スティック振れ幅
+  Q        Land, then quit           着陸してから終了
+  Ctrl+C   Quit immediately (no land) 即終了（着陸なし）
+
+  Note: yaw is ,/. here (not sf rc's q/e) because Q is reserved for land+quit.
+  注: ヨーは（sf rc の q/e でなく），/. — Q は着陸＋終了に予約されているため。
+"""
+
+
+def _fly_adc(v: int) -> int:
+    """Tello-SDK-style axis value (-100..100) -> raw 12-bit ADC (0..4095,
+    centre 2048) — the SAME scale *.scn `rc` events and scenario_inject.hpp
+    use, so a value typed here means the same stick deflection a scenario
+    file would encode.
+    Tello SDK風の軸値(-100..100) -> raw 12bit ADC(0..4095, 中央2048) —
+    *.scn の `rc` イベント・scenario_inject.hpp と同一スケール。
+    """
+    raw = 2048 + round(v * 20.47)
+    return max(0, min(4095, raw))
+
+
+def _fly_parse_state(line: str) -> dict:
+    """Parse emu_vehicle's "STATE k=v k=v ..." HUD line into a dict."""
+    fields: dict = {}
+    for tok in line.split()[1:]:   # skip the leading "STATE" token
+        if "=" not in tok:
+            continue
+        k, v = tok.split("=", 1)
+        if k == "mode":
+            fields[k] = v   # e.g. "FLYING:STABILIZE*" — not numeric
+            continue
+        try:
+            fields[k] = float(v)
+        except ValueError:
+            pass
+    return fields
+
+
+def _fly_handle_key(ch: str, state: dict, timers: dict, now: float,
+                    proc: subprocess.Popen) -> None:
+    """Handle one keypress for `sf sil fly`'s interactive loop.
+
+    `sf sil fly` の対話ループで1キー入力を処理する。
+    """
+    spd = state["speed"]
+    if ch == '\x03':   # Ctrl+C — raw mode delivers it as a plain byte (ISIG off)
+        state["running"] = False
+        state["_immediate_quit"] = True
+    elif ch == 'w':
+        state["b"] = spd; timers["b+"] = now
+    elif ch == 's':
+        state["b"] = -spd; timers["b-"] = now
+    elif ch == 'a':
+        state["a"] = -spd; timers["a-"] = now
+    elif ch == 'd':
+        state["a"] = spd; timers["a+"] = now
+    elif ch == ',':
+        state["d"] = -spd; timers["d-"] = now
+    elif ch == '.':
+        state["d"] = spd; timers["d+"] = now
+    elif ch == ' ':
+        state["c"] = spd; timers["c+"] = now
+    elif ch == 'z':
+        state["c"] = -spd; timers["c-"] = now
+    elif ch in ('+', '='):
+        state["speed"] = min(100, spd + 10)
+    elif ch in ('-', '_'):
+        state["speed"] = max(10, spd - 10)
+    elif ch == 'r':
+        # One-shot pulse (idempotent while already high — see rc_stdin.cpp);
+        # a quick tap is enough, holding the key just re-arms the pulse window.
+        # 1回のパルス（既に高の間は再武装するだけ — rc_stdin.cpp参照）。
+        # 軽くタップすれば十分、押し続けてもパルス窓が延長されるだけ。
+        try:
+            proc.stdin.write("arm\n"); proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+    elif ch == 'q':
+        state["a"] = state["b"] = state["c"] = state["d"] = 0
+        state["_land"] = True
+
+
+def _fly_update_release(state: dict, timers: dict, now: float, timeout: float) -> None:
+    """Zero out an axis whose key hasn't been pressed recently (same 80ms
+    release-detection heuristic as `sf rc`'s interactive mode).
+    最近押されていない軸をゼロにする（`sf rc` 対話モードと同じ80msリリース検出）。
+    """
+    a_plus, a_minus = timers.get("a+", 0), timers.get("a-", 0)
+    if now - max(a_plus, a_minus) > timeout: state["a"] = 0
+    b_plus, b_minus = timers.get("b+", 0), timers.get("b-", 0)
+    if now - max(b_plus, b_minus) > timeout: state["b"] = 0
+    c_plus, c_minus = timers.get("c+", 0), timers.get("c-", 0)
+    if now - max(c_plus, c_minus) > timeout: state["c"] = 0
+    d_plus, d_minus = timers.get("d+", 0), timers.get("d-", 0)
+    if now - max(d_plus, d_minus) > timeout: state["d"] = 0
+
+
+def _fly_display_status(state: dict, sim_state: dict, start_time: float) -> None:
+    """Overwrite the current terminal line with the local stick state AND the
+    emulator's own latest STATE HUD line (may be empty if none arrived yet).
+    現在の端末行をローカルのスティック状態＋エミュレータ自身の最新STATE HUD
+    （まだ届いていなければ空）で上書きする。
+    """
+    a, b, c, d = state["a"], state["b"], state["c"], state["d"]
+    spd = state["speed"]
+    elapsed = time.monotonic() - start_time
+
+    if sim_state:
+        sim_part = (f"mode={sim_state.get('mode', '?')} alt={sim_state.get('alt', 0.0):5.2f}m "
+                   f"R={sim_state.get('roll', 0.0):+5.1f} P={sim_state.get('pitch', 0.0):+5.1f} "
+                   f"Y={sim_state.get('yaw', 0.0):+5.1f} batt={sim_state.get('vbatt', 0.0):.2f}V")
+    else:
+        sim_part = "(waiting for emu_vehicle...)"
+
+    line = (f"  [FLY] R={a:+4d} P={b:+4d} Y={d:+4d} T={c:+4d} spd={spd:3d} | "
+            f"{sim_part} | {elapsed:5.1f}s")
+    pad = max(0, state["last_line_len"] - len(line))
+    sys.stdout.write(f"\r{line}{' ' * pad}")
+    sys.stdout.flush()
+    state["last_line_len"] = len(line)
+
+
+def _fly_stdout_reader(proc: subprocess.Popen, log_tail: list, latest_state: dict,
+                       lock: threading.Lock) -> None:
+    """Background reader: splits emu_vehicle's combined stdout/stderr into the
+    'STATE ...' HUD channel (kept as the single latest snapshot) and everything
+    else (kept as a bounded tail for post-mortem on an unexpected exit).
+    バックグラウンド読み取り: emu_vehicle の合成stdout/stderrを 'STATE ...'
+    HUDチャネル（最新1件のみ保持）とそれ以外（想定外終了時の事後診断用に
+    有界tailで保持）に分ける。
+    """
+    for raw_line in proc.stdout:
+        line = raw_line.rstrip("\n")
+        if line.startswith("STATE "):
+            with lock:
+                latest_state.clear()
+                latest_state.update(_fly_parse_state(line))
+        else:
+            log_tail.append(line)
+            if len(log_tail) > 200:
+                del log_tail[0]
+
+
+def run_fly(args: argparse.Namespace) -> int:
+    """Real-time, keyboard-piloted SIL flight (P6 stage 1) — see the module
+    comment above `_FLY_KEY_HELP` for the design.
+    """
+    if not _HAS_TERMIOS:
+        console.error("`sf sil fly` requires a Unix terminal (termios) — not supported on Windows")
+        return 1
+    if not sys.stdin.isatty():
+        console.error("`sf sil fly` requires an interactive terminal")
+        return 1
+
+    bd = _build_dir()
+    exe = bd / _exe("emu_vehicle")
+    if not exe.exists():
+        console.error(f"{exe.name} not built — run 'sf sil build' first")
+        return 1
+    if not os.environ.get("SF_SIL_SKIP_FRESHNESS_CHECK"):
+        _check_build_freshness(exe)
+
+    bundle = _sil_dir() / "viz" / "out_fly"
+    bundle.mkdir(parents=True, exist_ok=True)
+    env = dict(win_run_env(bd), SIL_EMU_REALTIME="1", SIL_EMU_RC_STDIN="1",
+               SIL_EMU_TRAJ=str(bundle / "trajectory.csv"))
+
+    # --param NAME=VALUE: same SIL_EMU_PARAMS_FILE mechanism as `sf sil
+    # scenario --param` (see its own help text for the full rationale).
+    params_list = getattr(args, "params", None) or []
+    if params_list:
+        valid_lines = []
+        for raw_param in params_list:
+            if "=" not in raw_param:
+                console.warning(f"--param {raw_param!r} — missing '=', expected NAME=VALUE, skipped")
+                continue
+            name, _, value = raw_param.partition("=")
+            valid_lines.append(f"{name.strip()} {value.strip()}")
+        override_path = bundle / "params_override.txt"
+        override_path.write_text(
+            "\n".join(valid_lines) + ("\n" if valid_lines else ""), encoding="utf-8")
+        env["SIL_EMU_PARAMS_FILE"] = str(override_path)
+        console.info(f"{len(valid_lines)} param(s) queued via --param")
+
+    argv = [str(exe), str(_model()), str(int(args.duration * 1e6))]
+    scenario_path = None
+    if getattr(args, "scenario", None):
+        scenario_path = Path(args.scenario)
+        if not scenario_path.exists():
+            console.error(f"scenario not found: {scenario_path}")
+            return 1
+        argv.append(str(scenario_path))
+
+    console.info("Starting sf sil fly (real-time SIL, keyboard control)")
+    console.print(_FLY_KEY_HELP)
+    if scenario_path:
+        console.info(f"Pre-arm scenario queued: {scenario_path.name} — wait for it to "
+                     "finish before touching the sticks (its own RC injection and your "
+                     "keyboard's both write live; see README's known-limitations note)")
+
+    try:
+        proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
+    except OSError as e:
+        console.error(f"failed to launch {exe.name}: {e}")
+        return 1
+
+    log_tail: list = []
+    latest_state: dict = {}
+    state_lock = threading.Lock()
+    reader_thread = threading.Thread(target=_fly_stdout_reader,
+                                     args=(proc, log_tail, latest_state, state_lock),
+                                     daemon=True)
+    reader_thread.start()
+
+    rc_state = {"a": 0, "b": 0, "c": 0, "d": 0, "speed": 50,
+               "running": True, "last_line_len": 0}
+    key_timers: dict = {}
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    start_time = time.monotonic()
+    rate = 50
+    interval = 1.0 / rate
+
+    try:
+        tty.setraw(fd)
+        while rc_state["running"]:
+            loop_start = time.monotonic()
+
+            if proc.poll() is not None:
+                console.print("")
+                console.error(f"emu_vehicle exited unexpectedly (code {proc.returncode})")
+                for line in log_tail[-20:]:
+                    console.print(f"  {line}")
+                break
+
+            while select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1)
+                _fly_handle_key(ch, rc_state, key_timers, loop_start, proc)
+
+            _fly_update_release(rc_state, key_timers, loop_start, timeout=0.08)
+
+            if rc_state.pop("_immediate_quit", False):
+                try:
+                    proc.stdin.write("quit\n"); proc.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    pass
+                break
+            if rc_state.pop("_land", False):
+                try:
+                    proc.stdin.write("land\n"); proc.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    pass
+                time.sleep(1.5)   # grace period for a graceful ALT/POS auto-land
+                try:
+                    proc.stdin.write("quit\n"); proc.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    pass
+                break
+
+            roll, pitch = _fly_adc(rc_state["a"]), _fly_adc(rc_state["b"])
+            yaw, thr = _fly_adc(rc_state["d"]), _fly_adc(rc_state["c"])
+            try:
+                proc.stdin.write(f"rc {roll} {pitch} {yaw} {thr}\n")
+                proc.stdin.flush()
+            except (BrokenPipeError, OSError):
+                console.print("")
+                console.error("lost connection to emu_vehicle stdin")
+                break
+
+            with state_lock:
+                state_snapshot = dict(latest_state)
+            _fly_display_status(rc_state, state_snapshot, start_time)
+
+            elapsed = time.monotonic() - loop_start
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+    except KeyboardInterrupt:
+        try:
+            proc.stdin.write("quit\n"); proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        console.print("")
+        if proc.poll() is None:
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        reader_thread.join(timeout=2)
+
+    console.success(f"sf sil fly session ended (emu_vehicle exit {proc.returncode})")
+    console.print(f"  trajectory: {bundle / 'trajectory.csv'}")
+    return 0 if proc.returncode == 0 else 1
 
 
 # --- regression: run every *.scn/*.expect pair and gate on the aggregate ------------

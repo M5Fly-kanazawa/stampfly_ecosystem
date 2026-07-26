@@ -38,6 +38,8 @@
 #include "console_feeder.hpp"    // E6: scripted console bytes -> firmware stdin
 #include "emu_record.hpp"        // E6: virtual-time-stamped input/event log
 #include "emu_trajectory.hpp"    // review-video trajectory recorder (SIL_EMU_TRAJ)
+#include "emu_realtime.hpp"      // P6 stage 1: wall-clock pacing (SIL_EMU_REALTIME)
+#include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SIL_EMU_RC_STDIN)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -159,6 +161,31 @@ void on_advance(int64_t now_us)
         // レビュー動画用に軌跡を1行記録（SIL_EMU_TRAJ 未設定なら no-op）。
         sil_emu_traj_sample((double)now_us * 1e-6, &g_plant);
     }
+
+    // P6 stage 1 (keyboard-piloted SIL) — same firmware-agnostic hooks as
+    // emu_main.cpp (both are cached env-var checks, complete no-ops on the
+    // default path). No STATE HUD line here: unlike the promoted vehicle,
+    // this firmware (vehicle_old) has no sf::estimate_state/system_mode
+    // pub-sub topics to read from a firmware-agnostic host glue, and
+    // vehicle_old is frozen (no new development — see CLAUDE.md); `sf sil
+    // fly` targets vehicle only for now. Placed OUTSIDE the
+    // `now_us > g_last_step_us` guard so pacing/stdin-draining still run on
+    // the t=0 call.
+    // P6 stage 1（キーボード操縦SIL）— emu_main.cpp と同じファーム非依存フック
+    // （どちらもキャッシュ済みenv判定＝既定経路は完全no-op）。STATE HUD行は
+    // ここには無い: 昇格後vehicleと違いこのファーム（vehicle_old）は
+    // sf::estimate_state/system_mode のようなPub-Subトピックを持たずファーム非依存の
+    // host glueから読めない。またvehicle_oldは凍結（新規開発なし — CLAUDE.md参照）
+    // のため`sf sil fly`は当面vehicle限定。g_last_step_usガードの外に置き、
+    // t=0呼び出しでもペーシング/stdin排出が動くようにする。
+    sil_realtime_pace(now_us);
+    sil_rc_stdin_tick(now_us);
+    if (sil_rc_stdin_quit_requested()) {
+        std::printf("[emu] 'quit' received via RC-over-stdin — shutting down\n");
+        std::fflush(stdout);
+        std::fflush(stderr);
+        std::_Exit(0);
+    }
 }
 
 // app_main runs AS a scheduler task — exactly like the real ESP-IDF "main" task.
@@ -177,6 +204,14 @@ void app_main_task(void* /*arg*/)
 
 int main(int argc, char** argv)
 {
+    // P6 stage 1 (keyboard-piloted SIL): MUST run before STDIN_FILENO is
+    // repurposed below — it dup()s the process's REAL stdin first. No-op
+    // unless SIL_EMU_RC_STDIN is set (see rc_stdin.hpp).
+    // P6 stage 1（キーボード操縦SIL）: 下でSTDIN_FILENOが差し替えられる前に必ず
+    // 実行 — プロセスの実stdinを先にdup()する。SIL_EMU_RC_STDIN未設定ならno-op
+    // （rc_stdin.hpp 参照）。
+    sil_rc_stdin_init();
+
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sil/models/stampfly.xml";
     const int64_t duration_us =

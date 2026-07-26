@@ -73,6 +73,45 @@ sf sil scenario simulator/sil/scenarios/acro_flight.scn --param rate.roll.kp=0.5
 **過去に発見・修正済みの Windows 固有バグ（記録として残す）:**
 - `hover_smoke`/`rate_tune` は当初、離陸後の高度応答が期待値と異なった（`max_alt` 実測 0.013m、期待 0.5m）。gdb で追跡した結果、原因は Windows/MinGW 固有ではなく、`hover_smoke.cpp` が `system_mode`/`controller_command` を直接注入して StateManager をバイパスする一方、`onTakeoff()`/`onTakeoffComplete()`（PID コントローラ自身の Grounded→TakeoffClimb→Airborne フェーズ機械。通常は state_task.cpp の ARM+スプールドウェル経由で発火）を一度も呼んでいなかったこと ── フェーズが永久に Grounded のまま推力が 0 にクランプされていた。`hover_smoke.cpp` から実際の firmware ハンドシェイク（ALT_HOLD 進入で `ControllerCmd::Takeoff`、`controller_status.takeoff_reached` 確認後に `ControllerCmd::TakeoffComplete`）を発火するよう修正し、実際の自動離陸クライム時間（~3.8秒、旧スケジュールの前提 1.6秒より長い）に合わせてスケジュール定数を再調整。現在は ESKF/相補フィルタ双方・N0ノイズ下で全ゲート PASS。`.scn` シナリオ群（実 ARM/pilot_request 経路を使用）はこの問題の影響を最初から受けていなかった。
 
+### `sf sil fly` — リアルタイム・キーボード操縦（P6 stage 1）
+
+「コントローラで操縦できるグラフィカルシムが実ファームに無い」の解消・第1段。ターミナルのキーボードで、無改変の実ファーム（`emu_vehicle`）をリアルタイムに操縦できる。ブラウザ/ゲームパッド対応は第2段。
+
+```bash
+sf sil build          # 初回のみ（または firmware/vehicle 変更後）
+sf sil fly
+```
+
+**起動:**
+- `sf sil fly` は `emu_vehicle` を `SIL_EMU_REALTIME=1`（決定論スケジューラの仮想時計を壁時計にペーシング — 進みすぎたら待ち、遅れは追いつくのみ）と `SIL_EMU_RC_STDIN=1`（stdin から `rc`/`arm`/`land`/`quit` 行を非ブロッキングで読みRCとして注入）付きで起動する。
+- どちらの環境変数も未設定の通常実行（`sf sil scenario`・`sf sil regression` 等）には一切影響しない — 決定論性（byte-identical）は絶対条件として維持している。
+
+**キー割当:**
+
+| キー | 動作 |
+|------|------|
+| W / S | ピッチ 前進 / 後退 |
+| A / D | ロール 左 / 右 |
+| , / . | ヨー 左 / 右 |
+| Space / Z | スロットル 上げ / 下げ |
+| R | ARM/DISARM 切替（1回タップ — 実機送信機のモーメンタリボタンと同じ） |
+| + / - | スティック振れ幅（10〜100） |
+| Q | 着陸してから終了 |
+| Ctrl+C | 即終了（着陸なし） |
+
+`sf rc`（実機用キーボードモード、`lib/sfcli/commands/rc.py`）の慣例に極力揃えたが、ヨーだけ `,`/`.` にした — `Q` を「着陸＋終了」専用に予約したため（`sf rc` の `Q`/`E` は使えない）。
+
+**ARM 手順:** ARM はファームの状態機械が「ARM ワイヤビットの立ち上がり→立ち下がりエッジ」をトグルとして扱う（`state_task.cpp`、実機送信機のモーメンタリボタンと同じ規約）。`scenarios/stab_flight.scn` の ARM シーケンス（4 秒の中立保持で起動校正完了 → ARM 押下 → スロットル投入で離陸）と同じスティック操作がキーボードでも成立することを確認済み（`simulator/tests/test_realtime_fly.py` の自動テスト参照）。手順:
+1. 起動直後は中立（何も押さない）のまま数秒待ち、起動校正が完了して `IDLE_GROUND` になるのを HUD の `mode=` で確認する。
+2. `R` を1回タップして ARM（`ARMED_GROUND` に遷移）。
+3. `Space` でスロットルを上げると自動的に `TAKEOFF` → `FLYING` に進む。
+
+**`--scenario <path>`:** ARM 済み（またはさらに先の状態）まで進めてからキーボード操縦を引き継ぎたい場合に使う。シナリオのタイムラインが尽きるとドライバタスクが自動終了し、以降はキーボード入力のみが効く。**既知の制約:** シナリオ再生中にスティックキーを触ると、シナリオ自身の RC 注入とキーボードの RC 注入が独立に（同じ経路で）書き込むため、同一瞬間に競合する可能性がある — シナリオ再生が終わるまでスティックには触れないこと。
+
+**`--param NAME=VALUE`:** `sf sil scenario --param` と同じ機構（一時上書き、SSOT 非変更）。
+
+**第2段の予告:** ブラウザ UI（`sf sil gui` 相当のライブ操縦版）とゲームパッド入力。
+
 ### Python バインディング（pybind11・`stampfly_control`、P5 stage 1）
 
 **目的:** ファームの C++ 制御則（`firmware/vehicle/components/sf_controller_pid/include/pid.hpp` の `sf::PID`）と、その Python 再実装（`tools/log_analyzer/rate_sysid.py` の `replay_pid()` 等）は、これまで「手で同期を保つ」運用だった ── pid.hpp が変わっても両者が一致し続ける保証が構造的になく、同期ドリフトのリスクがあった。本バインディングは pid.hpp を**無改変**でコンパイルし `stampfly_control.PID` として Python から直接呼べるようにすることで、翻訳ではなく本物の C++ 実装そのものを実行し、この手動同期リスクを解消する。
@@ -141,6 +180,45 @@ Unknown param names are skipped with a warning (never a crash). A normal run wit
 
 **Windows-specific bug found and fixed previously (kept for the record):**
 - `hover_smoke`/`rate_tune` initially showed a wrong post-takeoff altitude response (`max_alt` measured 0.013 m against an expected 0.5 m). Traced with gdb: the root cause was NOT Windows/MinGW-specific — `hover_smoke.cpp` injects `system_mode`/`controller_command` directly, bypassing StateManager, but never called `onTakeoff()`/`onTakeoffComplete()` (the PID controller's own Grounded→TakeoffClimb→Airborne phase machine, normally fired via state_task.cpp's ARM+spool-dwell sequence) — so the phase stayed Grounded forever with thrust clamped to 0. Fixed by having `hover_smoke.cpp` fire the real firmware handshake directly (`ControllerCmd::Takeoff` on ALT_HOLD entry; `ControllerCmd::TakeoffComplete` once `controller_status.takeoff_reached`), and re-timed the schedule constants to match the real auto-takeoff climb duration (~3.8 s, longer than the old schedule's 1.6 s assumption). All gates now PASS with both ESKF and the complementary filter, and under N0 noise. The `.scn` scenario suite (which drives the real ARM/pilot_request path) was never affected by this.
+
+### `sf sil fly` — real-time keyboard control (P6 stage 1)
+
+Stage 1 of closing the "no graphical sim you can fly with a controller against the real firmware" gap. Pilots the real, unmodified firmware (`emu_vehicle`) in real time from the terminal keyboard. Browser/gamepad support is stage 2.
+
+```bash
+sf sil build          # once (or after changing firmware/vehicle)
+sf sil fly
+```
+
+**How it works:**
+- `sf sil fly` launches `emu_vehicle` with `SIL_EMU_REALTIME=1` (paces the deterministic scheduler's virtual clock to the wall clock — sleeps when ahead, never tries to catch up when behind) and `SIL_EMU_RC_STDIN=1` (reads `rc`/`arm`/`land`/`quit` lines from stdin, non-blocking, and injects them as RC).
+- Neither env var touches a normal run (`sf sil scenario`, `sf sil regression`, ...) that leaves both unset — determinism (byte-identical output) is kept as an absolute non-negotiable.
+
+**Key map:**
+
+| Key | Action |
+|-----|--------|
+| W / S | Pitch forward / back |
+| A / D | Roll left / right |
+| , / . | Yaw left / right |
+| Space / Z | Throttle up / down |
+| R | ARM/DISARM toggle (tap once — mirrors a real transmitter's momentary button) |
+| + / - | Stick deflection (10-100) |
+| Q | Land, then quit |
+| Ctrl+C | Quit immediately (no land) |
+
+Matches `sf rc`'s keyboard-mode conventions (`lib/sfcli/commands/rc.py`) as closely as possible, except yaw moved to `,`/`.` — `Q` is reserved for "land then quit" here, so `sf rc`'s `Q`/`E` were unavailable.
+
+**ARM sequence:** the firmware's state machine treats a rising-then-falling edge on the ARM wire bit as a toggle (`state_task.cpp`, the same convention a real transmitter's momentary button uses). The same stick sequence `scenarios/stab_flight.scn` uses (4 s neutral hold for boot calibration → ARM press → throttle up for takeoff) has been verified to work from the keyboard too (see the automated check in `simulator/tests/test_realtime_fly.py`). Steps:
+1. Right after launch, hold neutral (touch nothing) for a few seconds and watch the HUD's `mode=` field reach `IDLE_GROUND` (boot calibration complete).
+2. Tap `R` once to ARM (transitions to `ARMED_GROUND`).
+3. Raise the throttle with `Space` — the firmware auto-advances `TAKEOFF` → `FLYING`.
+
+**`--scenario <path>`:** use this to advance to ARMED (or further) before keyboard control takes over. The scenario driver task ends itself once its timeline is exhausted; only your keyboard input drives RC after that. **Known limitation:** touching the stick keys while the scenario is still replaying can race — the scenario's own RC injection and your keyboard's write through the same path independently, so whichever writes last within a given instant wins. Leave the sticks alone until the scenario finishes.
+
+**`--param NAME=VALUE`:** same mechanism as `sf sil scenario --param` (temporary override, never touches the SSOT).
+
+**Coming in stage 2:** a browser UI (a live-piloting counterpart to `sf sil gui`) and gamepad input.
 
 ### Python bindings (pybind11, `stampfly_control`, P5 stage 1)
 

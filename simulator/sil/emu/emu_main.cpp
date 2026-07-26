@@ -45,6 +45,10 @@
 #include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
 #include "emu_trajectory.hpp"    // P8: review-video trajectory recorder (SIL_EMU_TRAJ)
 #include "emu_rate_stream.hpp"   // model-match gate: 400Hz rate_ref+gyro (SIL_EMU_RATE_STREAM)
+#include "emu_realtime.hpp"      // P6 stage 1: wall-clock pacing (SIL_EMU_REALTIME)
+#include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SIL_EMU_RC_STDIN)
+#include "flight_state.hpp"      // sf::flightStateName / sf::flightModeName (STATE HUD line)
+#include "sf_math.hpp"           // sf::math::Quat (STATE HUD line: attitude → Euler)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -56,6 +60,52 @@ sil::Plant g_plant;
 int64_t    g_last_step_us = 0;
 
 constexpr float kGroundZ = 0.013f;   // body rest height on the ground (ENU up)
+
+// P6 stage 1 (keyboard-piloted SIL): print a one-line HUD state row at ~30Hz,
+// ONLY in realtime mode (a non-realtime batch run would flood stdout with
+// lines nobody reads, and the log-anchored *.scn `.expect` assertions never
+// look for this prefix, so it is harmless either way — but gating on realtime
+// keeps the normal/regression console output exactly as before it existed).
+// Reads the REAL firmware's own published estimate/mode/power topics — the
+// same numbers `sf sil fly`'s HUD and a real telemetry client would see.
+// P6 stage 1（キーボード操縦SIL）: ~30Hzで状態行を1行出力（realtimeモード限定 —
+// バッチ実行だと誰も読まない行でstdoutが埋まる。*.scn の `.expect` はログ内容で
+// 判定するがこのprefixは探さないのでどちらでも無害。realtime限定にすることで
+// 通常/退行テストのコンソール出力を本機能追加前と完全に同じに保つ）。
+// 実ファーム自身が発行する推定/モード/電源トピックを読む — `sf sil fly` の HUD や
+// 実テレメトリクライアントが見るのと同じ数値。
+void print_state_line_if_due(int64_t now_us)
+{
+    if (!sil_realtime_enabled()) return;
+
+    static int64_t next_us = 0;
+    if (now_us < next_us) return;
+    constexpr int64_t kStatePeriodUs = 33'000;   // ~30 Hz
+    next_us = now_us + kStatePeriodUs;
+
+    const sf::StateEstimate est  = sf::estimate_state.latest();
+    const sf::SystemMode    mode = sf::system_mode.latest();
+    const sf::PowerData     pwr  = sf::sensor_power.latest();
+
+    constexpr float kRad2Deg = 57.2957795131f;
+    const sf::math::Quat q(est.attitude[0], est.attitude[1], est.attitude[2], est.attitude[3]);
+    sf::math::Vec3 e{0.0f, 0.0f, 0.0f};
+    const float n2 = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+    if (n2 > 1e-6f) e = q.to_euler();   // [rad] (x=roll, y=pitch, z=yaw)
+
+    const float alt = -est.position[2];   // NED z (down+) → altitude (up+)
+    const char* state_name = sf::flightStateName(static_cast<sf::FlightState>(mode.state));
+    const char* mode_name  = sf::flightModeName(static_cast<sf::FlightMode>(mode.sub_mode));
+
+    // "STATE " prefix (never used by any other emu log line) lets a reader
+    // (e.g. `sf sil fly`'s HUD) pick this out of the mixed firmware log stream
+    // with a trivial startswith() check.
+    // 「STATE 」接頭辞（他のemuログ行では使わない）により、読み手（`sf sil fly`の
+    // HUD等）が混在するファームログの中から単純な startswith() で拾える。
+    std::printf("STATE t=%.3f alt=%.3f roll=%.2f pitch=%.2f yaw=%.2f mode=%s:%s%s vbatt=%.2f\n",
+                (double)now_us * 1e-6, alt, e.x * kRad2Deg, e.y * kRad2Deg, e.z * kRad2Deg,
+                state_name, mode_name, mode.armed ? "*" : "", pwr.voltage);
+}
 
 // Scheduler advance hook: step the physics by the elapsed virtual time, pushing
 // the latched motor duties into the Plant (the BMI270 device then reads the new
@@ -76,6 +126,34 @@ void on_advance(int64_t now_us)
         // （内部でエッジ検出。SIL_EMU_RATE_STREAM 未設定なら no-op）。
         sil_emu_rate_sample();
     }
+
+    // P6 stage 1 (keyboard-piloted SIL) — every hook below is a cached env-var
+    // check that is a complete no-op on the default path (neither env var
+    // set), so normal/regression runs are byte-identical to before this block
+    // existed. Placed OUTSIDE the `now_us > g_last_step_us` guard above so
+    // pacing/stdin-draining/HUD also run on the t=0 call (the very first
+    // on_advance, before the scheduler's run loop starts).
+    // P6 stage 1（キーボード操縦SIL）— 以下は全てキャッシュ済みenv判定で、
+    // 両env変数とも未設定の既定経路では完全なno-op（本ブロック追加前と
+    // byte-identical）。上のg_last_step_usガードの外に置き、t=0呼び出し
+    // （スケジューラのrunループ開始前、最初のon_advance）でもペーシング/
+    // stdin排出/HUDが動くようにする。
+    sil_realtime_pace(now_us);
+    sil_rc_stdin_tick(now_us);
+    if (sil_rc_stdin_quit_requested()) {
+        std::printf("[emu] 'quit' received via RC-over-stdin — shutting down\n");
+        std::fflush(stdout);
+        std::fflush(stderr);
+        // Same rationale as the normal end-of-run _Exit(0) below: the firmware's
+        // static singletons are never destructed on real hardware, so skip
+        // static destruction here too (see the long comment at the bottom of
+        // main() for the full argument).
+        // 通常終了時の_Exit(0)と同じ理由: 実機ではファームの静的シングルトンは
+        // 破棄されないため、ここでも静的破棄を走らせない（詳しい根拠はmain()末尾の
+        // 長いコメント参照）。
+        std::_Exit(0);
+    }
+    print_state_line_if_due(now_us);
 }
 
 // Build the Plant config from the environment. Sensor noise stays OFF unless
@@ -170,6 +248,14 @@ sil::Plant::Config plant_config_from_env()
 
 int main(int argc, char** argv)
 {
+    // P6 stage 1 (keyboard-piloted SIL): MUST run before STDIN_FILENO is
+    // repurposed below — it dup()s the process's REAL stdin first. No-op
+    // unless SIL_EMU_RC_STDIN is set (see rc_stdin.hpp).
+    // P6 stage 1（キーボード操縦SIL）: 下でSTDIN_FILENOが差し替えられる前に必ず
+    // 実行 — プロセスの実stdinを先にdup()する。SIL_EMU_RC_STDIN未設定ならno-op
+    // （rc_stdin.hpp 参照）。
+    sil_rc_stdin_init();
+
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sil/models/stampfly.xml";
     const int64_t duration_us =
