@@ -93,6 +93,22 @@ jobs:
           pip install -e .
           sf --help >/dev/null
 
+      - name: Check physical-parameter consistency
+        # `sf sil regression` (lib/sfcli/commands/sil.py run_regression) already
+        # runs this same check as its first step and fails the whole regression
+        # if it doesn't pass — this standalone step is a fast-fail duplicate: a
+        # hand-copied-parameter drift (tools/params_audit — C_T/C_Q/kappa/
+        # inertia across firmware/SIL/simulator sources) is caught here in
+        # seconds, before the multi-minute MuJoCo FetchContent build below runs
+        # at all on a cache miss.
+        # `sf sil regression`（lib/sfcli/commands/sil.py の run_regression）は
+        # 同じ検査を自身の最初のステップとして既に実行し、不合格なら退行全体を
+        # 失敗させる — 本ステップはそれを早期化する重複ステップ: 手動複製
+        # パラメータの食い違い（tools/params_audit — C_T/C_Q/kappa/慣性等を
+        # ファーム/SIL/シミュレータへ手書きコピー）を、下の MuJoCo FetchContent
+        # ビルド（キャッシュミス時は数分かかる）を走らせる前に数秒で検出する。
+        run: sf params check --strict
+
       - name: Cache SIL build directory (MuJoCo FetchContent + object files)
         # Caches the WHOLE build dir, not just _deps: actions/cache preserves file
         # mtimes on restore, so CMake/Ninja's own mtime-based staleness check still

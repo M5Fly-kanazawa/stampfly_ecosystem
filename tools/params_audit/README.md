@@ -57,6 +57,13 @@ python3 tools/params_audit/check_params.py --json
 終了コード: `MISMATCH` または `ERROR` が1件でもあれば 1、それ以外は 0
 （`--strict` 指定時は `UNRESOLVED` も 1 扱いに追加される）。
 
+### 退行検出への組み込み
+
+本検査は `sf sil regression`（`lib/sfcli/commands/sil.py` の `run_regression()`）
+の最初のステップとして自動実行され、シナリオ実行前に `--strict` 相当で判定
+する。不合格なら回帰全体が即座に失敗する。CI（`.github/workflows/
+sil-regression.yml`）にも同じ検査を早期化する専用ステップがある。
+
 ## 3. マニフェストの拡張方法
 
 検査対象は `tools/params_audit/params_manifest.py` の `MANIFEST` 辞書で定義する。
@@ -159,6 +166,14 @@ python3 tools/params_audit/check_params.py --json
 
 Exit code: 1 if any `MISMATCH` or `ERROR`, 0 otherwise (`--strict` also
 counts `UNRESOLVED` toward failure).
+
+### Wired into Regression Detection
+
+This audit runs automatically as the first step of `sf sil regression`
+(`run_regression()` in `lib/sfcli/commands/sil.py`), gated at `--strict`
+severity before any scenario runs — a failure fails the whole regression
+immediately. CI (`.github/workflows/sil-regression.yml`) also has a
+dedicated step that runs the same check earlier, for a faster fail.
 
 ## 3. Extending the Manifest
 

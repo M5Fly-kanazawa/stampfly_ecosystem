@@ -785,6 +785,43 @@ def _scenario_invocation(scn: Path) -> list:
     return extra
 
 
+def _check_param_consistency() -> tuple:
+    """Run tools/params_audit's consistency audit — the same check `sf params
+    check --strict` performs — and return (passed, total_checks).
+    tools/params_audit の整合検査（`sf params check --strict` と同じ判定）を
+    実行し、(合格したか, 総チェック数) を返す。
+
+    Imported in-process rather than via subprocess, following the
+    sys.path-insert pattern used throughout sfcli for tools/ submodules (see
+    run_check() in lib/sfcli/commands/params.py, and sf sysid's run_fit() for
+    another example). tools/params_audit is stdlib-only, so this never drags
+    a heavy dependency into the SIL regression path.
+    subprocess ではなくプロセス内 import。sfcli 全体で tools/ 配下モジュールに
+    使われる sys.path 差し込みの流儀に従う（lib/sfcli/commands/params.py の
+    run_check()、sf sysid の run_fit() も同様の例）。params_audit は標準
+    ライブラリのみに依存するため、SIL 回帰の経路に重い依存を持ち込まない。
+    """
+    tools_dir = str(paths.root() / "tools")
+    sys.path.insert(0, tools_dir)
+    try:
+        from params_audit import check_params
+    except ImportError as e:
+        console.error(f"Failed to import params_audit.check_params: {e}")
+        return False, 0
+    finally:
+        if tools_dir in sys.path:
+            sys.path.remove(tools_dir)
+
+    rows = check_params.run_audit(paths.root())
+    summary = check_params.summarize(rows)
+    # strict=True: mirrors `sf params check --strict`, so an UNRESOLVED
+    # parameter also gates the regression, not just MISMATCH/ERROR.
+    # strict=True: `sf params check --strict` と同じ判定。UNRESOLVED も
+    # MISMATCH/ERROR と同様に退行の合否対象にする。
+    passed = check_params.compute_exit_code(summary, strict=True) == 0
+    return passed, summary["total"]
+
+
 def run_regression(args: argparse.Namespace) -> int:
     scn_dir = _sil_dir() / "scenarios"
     # The .expect glob is authoritative (README/TEST_MATRIX "32 scenarios" as of
@@ -795,6 +832,26 @@ def run_regression(args: argparse.Namespace) -> int:
     scenarios = sorted(p for p in scn_dir.glob("*.scn") if p.with_suffix(".expect").exists())
     if not scenarios:
         console.error(f"no *.scn/*.expect pairs found under {scn_dir}"); return 1
+
+    # Gate on hand-copied physical-parameter consistency BEFORE running any
+    # scenario (tools/params_audit — C_T/C_Q/kappa/inertia are hand-duplicated
+    # across firmware/SIL/simulator sources, no code-gen pipeline yet, Phase 1
+    # of docs/architecture/simulation-policy.md). A silent drift here would
+    # make every scenario below PASS against the wrong plant, so this must run
+    # first and fail the whole regression immediately — no point spending
+    # minutes on scenarios whose physics reference is already known-wrong.
+    # シナリオ実行前に、手動複製された物理パラメータの整合性
+    # （tools/params_audit — C_T/C_Q/kappa/慣性等をファーム/SIL/シミュレータへ
+    # 手書きコピー。コード生成パイプライン未整備、Phase 1、simulation-policy.md
+    # 参照）をゲートする。ここでの食い違いを見逃すと、以下の全シナリオが
+    # 「間違った機体モデル」に対して PASS してしまう。よって最初に検査し、
+    # 不合格なら回帰全体を即座に失敗させる — 物理基準が既に誤りと分かっている
+    # のに数分かけてシナリオを回す意味が無い。
+    params_ok, n_param_checks = _check_param_consistency()
+    if not params_ok:
+        console.error("[FAIL] parameter consistency check — run `sf params check` for details")
+        return 1
+    console.info(f"[PASS] parameter consistency ({n_param_checks} checks)")
 
     console.info(f"SIL regression: {len(scenarios)} scenario(s) with a matching .expect...")
     results = []
