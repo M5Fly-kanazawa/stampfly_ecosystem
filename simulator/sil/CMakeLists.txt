@@ -453,3 +453,72 @@ if(SIL_BUILD_PMW3901_PROBE)
   target_include_directories(pmw3901_probe PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/devices)
 endif()
+
+# -----------------------------------------------------------------------------
+# Python bindings for firmware control laws (P5 stage 1): compile the REAL
+# sf::PID struct (firmware/vehicle/components/sf_controller_pid/include/
+# pid.hpp, unmodified, header-only, zero #includes) via pybind11 and expose it
+# as `stampfly_control.PID`. Purpose: eliminate hand-sync drift between the
+# firmware C++ control law and its Python re-implementations (rate_sysid.py's
+# replay_pid(), etc.) by calling the real C++ directly instead of trusting a
+# second hand-port to stay in sync. See simulator/tests/test_pid_lockstep.py
+# for the numerical-equivalence proof this enables, and simulator/sil/
+# README.md for usage.
+#
+# ON by default so `sf sil build` (no target arg) builds it as part of the
+# default target set, but the guard below degrades to a WARN+skip (not a hard
+# configure failure) when Python3 development headers are unavailable, so a
+# dev machine without them can still build every other SIL target.
+#
+# ファーム制御則の Python バインディング（P5 stage 1）: 本物の sf::PID 構造体
+# （pid.hpp、無改変・ヘッダオンリー・#include ゼロ）を pybind11 でコンパイルし
+# `stampfly_control.PID` として公開する。目的: ファームの C++ 制御則と Python
+# 再実装（rate_sysid.py の replay_pid() 等）の手動同期ドリフトを、本物の C++ を
+# 直接呼ぶことで解消する（二重の手動移植が同期し続ける保証に頼らない）。
+# 数値等価性の証明は simulator/tests/test_pid_lockstep.py、使い方は
+# simulator/sil/README.md 参照。
+#
+# 既定 ON — `sf sil build`（target 未指定）の既定ビルド対象に含まれる。ただし
+# 下記ガードは Python3 開発ヘッダが無い環境では configure を失敗させず
+# WARN+スキップに留める（それ以外の SIL ターゲットは開発ヘッダ無しでも
+# ビルドできるようにするため）。
+# -----------------------------------------------------------------------------
+option(SIL_BUILD_PYBIND_CONTROL "Build pybind11 Python bindings for firmware control laws (stampfly_control module)" ON)
+if(SIL_BUILD_PYBIND_CONTROL)
+  # On macOS, CMake's FindPython3 defaults to searching Apple's Frameworks
+  # location BEFORE the PATH-resolved interpreter (Python3_FIND_FRAMEWORK
+  # defaults to FIRST) -- this silently picks up an unrelated Homebrew-managed
+  # framework Python (observed: 3.14) instead of the ESP-IDF-managed venv
+  # python3 that `source setup_env.sh` puts first on PATH (3.12, the one with
+  # sfcli/pytest/numpy installed). Setting LAST makes CMake prefer the
+  # PATH/venv interpreter, matching the interpreter every other `sf` command
+  # runs under.
+  # macOS では CMake の FindPython3 が既定で Apple Frameworks 側を PATH 解決の
+  # インタプリタより先に探索する（Python3_FIND_FRAMEWORK の既定は FIRST）ため、
+  # `source setup_env.sh` が PATH 先頭に置く ESP-IDF 管理の venv python3（3.12、
+  # sfcli/pytest/numpy 導入済み）ではなく、無関係な Homebrew 管理の framework
+  # Python（実測 3.14）が黙って選ばれる。LAST にして PATH/venv 側の
+  # インタプリタを優先させ、他の `sf` コマンドと同じインタプリタに揃える。
+  set(Python3_FIND_FRAMEWORK LAST)
+  find_package(Python3 COMPONENTS Interpreter Development.Module QUIET)
+  if(NOT Python3_FOUND)
+    message(WARNING "Python3 development headers not found -- skipping stampfly_control pybind11 module (SIL_BUILD_PYBIND_CONTROL)")
+  else()
+    include(FetchContent)
+    # pybind11 v3.0.4: latest stable tag at the time this was added (checked via
+    # `git ls-remote --tags`), pinned exactly (never a moving branch).
+    # pybind11 v3.0.4: 追加当時の最新安定タグ（`git ls-remote --tags` で確認）。
+    # 常に固定タグを指定し、移動するブランチは使わない。
+    FetchContent_Declare(
+      pybind11
+      GIT_REPOSITORY https://github.com/pybind/pybind11.git
+      GIT_TAG v3.0.4
+      GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(pybind11)
+
+    pybind11_add_module(stampfly_control pybind/sf_control_bindings.cpp)
+    target_include_directories(stampfly_control PRIVATE
+      ${VN}/components/sf_controller_pid/include)
+  endif()
+endif()

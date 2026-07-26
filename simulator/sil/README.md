@@ -73,6 +73,19 @@ sf sil scenario simulator/sil/scenarios/acro_flight.scn --param rate.roll.kp=0.5
 **過去に発見・修正済みの Windows 固有バグ（記録として残す）:**
 - `hover_smoke`/`rate_tune` は当初、離陸後の高度応答が期待値と異なった（`max_alt` 実測 0.013m、期待 0.5m）。gdb で追跡した結果、原因は Windows/MinGW 固有ではなく、`hover_smoke.cpp` が `system_mode`/`controller_command` を直接注入して StateManager をバイパスする一方、`onTakeoff()`/`onTakeoffComplete()`（PID コントローラ自身の Grounded→TakeoffClimb→Airborne フェーズ機械。通常は state_task.cpp の ARM+スプールドウェル経由で発火）を一度も呼んでいなかったこと ── フェーズが永久に Grounded のまま推力が 0 にクランプされていた。`hover_smoke.cpp` から実際の firmware ハンドシェイク（ALT_HOLD 進入で `ControllerCmd::Takeoff`、`controller_status.takeoff_reached` 確認後に `ControllerCmd::TakeoffComplete`）を発火するよう修正し、実際の自動離陸クライム時間（~3.8秒、旧スケジュールの前提 1.6秒より長い）に合わせてスケジュール定数を再調整。現在は ESKF/相補フィルタ双方・N0ノイズ下で全ゲート PASS。`.scn` シナリオ群（実 ARM/pilot_request 経路を使用）はこの問題の影響を最初から受けていなかった。
 
+### Python バインディング（pybind11・`stampfly_control`、P5 stage 1）
+
+**目的:** ファームの C++ 制御則（`firmware/vehicle/components/sf_controller_pid/include/pid.hpp` の `sf::PID`）と、その Python 再実装（`tools/log_analyzer/rate_sysid.py` の `replay_pid()` 等）は、これまで「手で同期を保つ」運用だった ── pid.hpp が変わっても両者が一致し続ける保証が構造的になく、同期ドリフトのリスクがあった。本バインディングは pid.hpp を**無改変**でコンパイルし `stampfly_control.PID` として Python から直接呼べるようにすることで、翻訳ではなく本物の C++ 実装そのものを実行し、この手動同期リスクを解消する。
+
+**ビルド:** `sf sil build`（または手動 `cmake` ビルド）で自動的にビルドされ、`simulator/sil/build/stampfly_control.*.so`（例: `stampfly_control.cpython-312-darwin.so`）が生成される。Python 開発ヘッダが見つからない環境では `SIL_BUILD_PYBIND_CONTROL` オプションが警告付きでスキップされる（configure 自体は失敗しない）。無効化する場合: `cmake -S . -B build -DSIL_BUILD_PYBIND_CONTROL=OFF`。
+
+**lockstep テストの実行:**
+```bash
+source setup_env.sh && sf sil build
+pytest simulator/tests/test_pid_lockstep.py -v
+```
+`stampfly_control.PID`（本物のファーム）と `rate_sysid.replay_pid()`（手動移植）を同一の入力列で1ステップずつ駆動し、出力を数値比較する。詳細は同テストファイル内のコメント参照。
+
 ## 2. ロードマップ
 
 P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証）→ P3（CLI＋ダッシュボード）→ P4（共有用レビュー動画）。各段の詳細とゲートは [`RESET_PLAN.md`](RESET_PLAN.md)。
@@ -128,3 +141,16 @@ Unknown param names are skipped with a warning (never a crash). A normal run wit
 
 **Windows-specific bug found and fixed previously (kept for the record):**
 - `hover_smoke`/`rate_tune` initially showed a wrong post-takeoff altitude response (`max_alt` measured 0.013 m against an expected 0.5 m). Traced with gdb: the root cause was NOT Windows/MinGW-specific — `hover_smoke.cpp` injects `system_mode`/`controller_command` directly, bypassing StateManager, but never called `onTakeoff()`/`onTakeoffComplete()` (the PID controller's own Grounded→TakeoffClimb→Airborne phase machine, normally fired via state_task.cpp's ARM+spool-dwell sequence) — so the phase stayed Grounded forever with thrust clamped to 0. Fixed by having `hover_smoke.cpp` fire the real firmware handshake directly (`ControllerCmd::Takeoff` on ALT_HOLD entry; `ControllerCmd::TakeoffComplete` once `controller_status.takeoff_reached`), and re-timed the schedule constants to match the real auto-takeoff climb duration (~3.8 s, longer than the old schedule's 1.6 s assumption). All gates now PASS with both ESKF and the complementary filter, and under N0 noise. The `.scn` scenario suite (which drives the real ARM/pilot_request path) was never affected by this.
+
+### Python bindings (pybind11, `stampfly_control`, P5 stage 1)
+
+**Purpose:** the firmware C++ control law (`sf::PID` in `firmware/vehicle/components/sf_controller_pid/include/pid.hpp`) and its Python re-implementations (e.g. `tools/log_analyzer/rate_sysid.py`'s `replay_pid()`) used to be "kept in sync by hand" — nothing enforced that the two stayed identical as pid.hpp evolved, a structural sync-drift risk. This binding compiles pid.hpp **unmodified** and exposes it as `stampfly_control.PID`, so Python calls the real C++ implementation directly instead of a translation, eliminating that hand-sync risk.
+
+**Build:** built automatically by `sf sil build` (or a manual `cmake` build), producing `simulator/sil/build/stampfly_control.*.so` (e.g. `stampfly_control.cpython-312-darwin.so`). On a machine without Python development headers, the `SIL_BUILD_PYBIND_CONTROL` option WARNs and skips it (configure itself does not fail). Disable it explicitly with `cmake -S . -B build -DSIL_BUILD_PYBIND_CONTROL=OFF`.
+
+**Run the lockstep test:**
+```bash
+source setup_env.sh && sf sil build
+pytest simulator/tests/test_pid_lockstep.py -v
+```
+It drives `stampfly_control.PID` (the real firmware) and `rate_sysid.replay_pid()` (the hand port) step-by-step on identical inputs and compares the outputs numerically. See the comments in that test file for details.
