@@ -160,6 +160,78 @@ def _exe(name: str) -> str:
     return f"{name}.exe" if platform.is_windows() else name
 
 
+# --- build freshness advisory / ビルド鮮度の参考警告 ---------------------------
+# Directory names to prune while walking for sources (build outputs, venvs,
+# caches — none of these feed the compiled binary, and build/ alone holds
+# ~19k files in simulator/sil/). Kept as a set (not a glob) so os.walk can
+# prune dirnames in place without re-descending into a pruned subtree.
+# ソース走査時に剪定するディレクトリ名（ビルド成果物・venv・キャッシュ — どれも
+# コンパイル済みバイナリを構成しない。simulator/sil/ だけで build/ 配下は
+# 約19000ファイル）。glob ではなく集合にして os.walk が dirnames をその場で
+# 剪定し、剪定済みサブツリーに再度降りないようにする。
+_SIL_STALE_SKIP_DIRS = {"build", "build-mingw", "venv", ".cache",
+                       "managed_components", "__pycache__", ".git"}
+_SIL_STALE_EXTS = (".cpp", ".hpp", ".c", ".h")
+
+
+def _sil_source_mtime() -> float:
+    """Latest mtime among simulator/sil/ and firmware/vehicle/ source files that
+    feed the SIL binary (Code Identity: SIL links firmware/vehicle sources
+    directly — see architecture.md). Restricted to .cpp/.hpp/.c/.h/CMakeLists.txt
+    and walked with build/venv/cache dirs pruned in-place (os.walk, not
+    Path.rglob — rglob would still descend into an excluded subtree before
+    discarding it) to keep the scan cheap: ~600 files, well under 0.1 s, versus
+    the ~19k files under simulator/sil/build/ alone if unfiltered.
+    SILバイナリを構成するソースの最新mtime（simulator/sil/・firmware/vehicle/。
+    Code Identity: SIL は firmware/vehicle のソースを直接リンクする）。
+    .cpp/.hpp/.c/.h/CMakeLists.txt に限定し、build/venv/cache 等を os.walk で
+    その場剪定（Path.rglob は除外対象のサブツリーにも一旦降りてから捨てるため
+    不利）して走査コストを抑える: 約600ファイル・0.1秒未満（build/ 単体で
+    約19000ファイルある無フィルタ走査に対して）。
+    """
+    latest = 0.0
+    for base in (paths.root() / "simulator" / "sil", paths.root() / "firmware" / "vehicle"):
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in _SIL_STALE_SKIP_DIRS]
+            for name in filenames:
+                if name == "CMakeLists.txt" or os.path.splitext(name)[1] in _SIL_STALE_EXTS:
+                    try:
+                        latest = max(latest, os.path.getmtime(os.path.join(dirpath, name)))
+                    except OSError:
+                        pass  # file vanished mid-walk (e.g. concurrent edit) — ignore
+    return latest
+
+
+def _check_build_freshness(exe: Path, src_mtime: Optional[float] = None) -> bool:
+    """Warn (never blocks — this is advisory, not a build gate) if `exe` predates
+    the newest tracked SIL/firmware source file: a likely sign the sources were
+    edited after the last `sf sil build`. Returns True iff a warning was printed,
+    so callers with more than one exe (run_regression: vehicle + vehicle_old) can
+    share a single source scan (pass a precomputed src_mtime) instead of walking
+    the tree once per exe.
+    `exe` が最新の SIL/ファームソースより古ければ警告する（ブロックはしない —
+    あくまで参考情報。ビルドゲートではない）。最後の `sf sil build` の後にソースが
+    編集された可能性のサイン。警告を出したら True を返す — 複数 exe を持つ呼び出し
+    元（run_regression: vehicle と vehicle_old）が exe ごとに再走査せず、1回の
+    ソース走査結果（src_mtime を渡す）を使い回せるようにする。
+    """
+    try:
+        exe_mtime = exe.stat().st_mtime
+    except OSError:
+        return False
+    if src_mtime is None:
+        src_mtime = _sil_source_mtime()
+    if src_mtime > exe_mtime:
+        # console.warning() already prints the "[WARN]" prefix itself (see
+        # lib/sfcli/utils/console.py) — do not repeat it in the message text.
+        # console.warning() は自身で "[WARN]" 接頭辞を付ける（console.py 参照）
+        # — メッセージ本文で二重に付けない。
+        console.warning(f"SIL binary is older than sources — run `sf sil build` "
+                       f"({exe.name})")
+        return True
+    return False
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register the sil command with the CLI."""
     parser = subparsers.add_parser(COMMAND_NAME, help=COMMAND_HELP, description=__doc__,
@@ -227,6 +299,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
                         "real pairing handshake (pairing.scn)")
+    p.add_argument("--param", action="append", dest="params", metavar="NAME=VALUE",
+                   help="override a firmware param for this run only (repeatable, e.g. "
+                        "--param rate.roll.kp=0.5e-3). Written to a temp file wired through "
+                        "SIL_EMU_PARAMS_FILE; unknown names are skipped by the emulator "
+                        "itself with a warning (SSOT stays in firmware's params table).")
     p.set_defaults(func=run_scenario)
 
     # Regression: run every *.scn that has a matching *.expect (README/TEST_MATRIX
@@ -289,6 +366,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
     p.add_argument("--duration", type=int, default=44_000_000,
                    help="sim duration in microseconds (default 44s, matches sysid_gate.scn)")
+    p.add_argument("--param", action="append", dest="params", metavar="NAME=VALUE",
+                   help="override a firmware param for this run only (repeatable, e.g. "
+                        "--param rate.roll.kp=0.5e-3). Same mechanism as "
+                        "`sf sil scenario --param` — see its help for details.")
     p.add_argument("--report", default=None,
                    help="write the gate verdict + per-axis fit JSON here")
     p.set_defaults(func=run_sysid_gate)
@@ -619,6 +700,16 @@ def run_scenario(args: argparse.Namespace) -> int:
     exe = bd / _exe("emu_vehicle" if target == "vehicle" else "emu_vehicle_old")
     if not exe.exists():
         console.error(f"{exe.name} not built — run 'sf sil build' first"); return 1
+    # Build-freshness advisory (skippable — see SF_SIL_SKIP_FRESHNESS_CHECK): warn if
+    # this exe predates its own sources. run_regression sets the env var after doing
+    # this check ONCE up front, so its 30+ per-scenario subprocess calls into this
+    # function don't each re-warn (or re-walk the source tree) redundantly.
+    # ビルド鮮度の参考警告（SF_SIL_SKIP_FRESHNESS_CHECK でスキップ可）: この exe が
+    # 自身のソースより古ければ警告する。run_regression は冒頭で1回だけ判定した後に
+    # この環境変数を立てるので、以降30本超のシナリオ用子プロセスがこの関数を呼んでも
+    # 重複警告・重複走査は起きない。
+    if not os.environ.get("SF_SIL_SKIP_FRESHNESS_CHECK"):
+        _check_build_freshness(exe)
     scn = Path(args.scenario)
     if not scn.exists():
         console.error(f"scenario not found: {scn}"); return 1
@@ -667,6 +758,49 @@ def run_scenario(args: argparse.Namespace) -> int:
     if md is not None:
         env["SIL_EMU_MOTOR_DELAY"] = str(md)
 
+    # --param NAME=VALUE (repeatable): temporary, single-run firmware param overrides,
+    # routed through the EXISTING SIL_EMU_PARAMS_FILE mechanism (emu_main.cpp reads
+    # "<name> <value>" lines from a text file and applies each through the SSOT params
+    # table's own type-correct setter, warning+skipping unknown names itself — see
+    # simulator/sil/emu/emu_main.cpp). This CLI option is a thin wrapper: parse
+    # "NAME=VALUE" tokens into that line format, write them into THIS scenario's OWN
+    # bundle directory (not a tempfile — easier to inspect while debugging a run, and
+    # nothing to clean up afterward), and point SIL_EMU_PARAMS_FILE at it. No parameter
+    # name validation happens here — that stays the emulator's job, so the params table
+    # remains the single source of truth (no duplicate allowlist to drift).
+    # --param NAME=VALUE（繰り返し指定可）: 既存の SIL_EMU_PARAMS_FILE 機構を通した、
+    # 単発実行限りの一時的なファームパラメータ上書き（emu_main.cpp が "<名前> <値>" 行の
+    # テキストファイルを読み、SSOT パラメータテーブル自身の型正しいセッタで適用し、未知の
+    # 名前は自身で警告してスキップする — simulator/sil/emu/emu_main.cpp 参照）。この CLI
+    # オプションは薄いラッパーに過ぎない: "NAME=VALUE" トークンをその行形式に変換し、
+    # このシナリオ自身のバンドルディレクトリ（tempfile ではなく — 実行内容をデバッグ時に
+    # 確認しやすく、後始末も不要）に書き込み、SIL_EMU_PARAMS_FILE をそこへ向ける。名前の
+    # 妥当性検証はここでは行わない（エミュレータの役目のまま — パラメータテーブルを唯一の
+    # 正に保ち、重複した許可リストで陳腐化させない）。
+    params_list = getattr(args, "params", None) or []
+    if params_list:
+        valid_lines = []
+        for raw_param in params_list:
+            if "=" not in raw_param:
+                console.warning(f"--param {raw_param!r} — missing '=', expected NAME=VALUE, skipped")
+                continue
+            name, _, value = raw_param.partition("=")
+            valid_lines.append(f"{name.strip()} {value.strip()}")
+        # An externally-set SIL_EMU_PARAMS_FILE (e.g. from the SIL GUI's own parameter
+        # panel, or a wrapping script) would otherwise be silently clobbered below —
+        # say so explicitly rather than leaving a confusing "my env var was ignored".
+        # 外部で既に設定済みの SIL_EMU_PARAMS_FILE（SIL GUI のパラメータパネルや、
+        # 呼び出し元スクリプト等）は以下で無言のまま上書きされてしまう — 「自分の環境
+        # 変数が無視された」という混乱を避けるため、ここで明示的に表示する。
+        if env.get("SIL_EMU_PARAMS_FILE"):
+            console.info("--param overrides externally-set "
+                         f"SIL_EMU_PARAMS_FILE={env['SIL_EMU_PARAMS_FILE']}")
+        override_path = bundle / "params_override.txt"
+        override_path.write_text(
+            "\n".join(valid_lines) + ("\n" if valid_lines else ""), encoding="utf-8")
+        env["SIL_EMU_PARAMS_FILE"] = str(override_path)
+        console.info(f"{len(valid_lines)} param(s) queued via --param")
+
     # --unpaired: skip the pairing NVS seed so the vehicle boots unpaired and runs the
     # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps
     # the vehicle pre-paired so flight scenarios are not gated on pairing timing.
@@ -710,6 +844,25 @@ def run_scenario(args: argparse.Namespace) -> int:
     (bundle / "console.out").write_text(r.stdout, encoding="utf-8")
     (bundle / "console.err").write_text(r.stderr, encoding="utf-8")
     (bundle / "console.log").write_text(r.stdout + r.stderr, encoding="utf-8")
+
+    # --param visibility: the emulator's own PARAMS_FILE log lines (emu_main.cpp —
+    # the "N param(s) overridden" summary and any "unknown param"/"rejected" lines)
+    # would otherwise only land in bundle/console.log, invisible on the terminal.
+    # Surface them here too, ONLY when --param was actually used (params_list
+    # non-empty), so the normal (no --param) path gets no extra noise.
+    # --param の可視化: エミュレータ自身の PARAMS_FILE ログ行（emu_main.cpp の
+    # 「N個上書き」サマリ、"unknown param"/"rejected" 行）は放置すると
+    # bundle/console.log にしか残らずターミナルから見えない。--param を実際に
+    # 使った場合のみ（params_list が非空のときだけ）ここで転送する — 通常経路
+    # （--param 不使用）には余計な出力を増やさない。
+    if params_list:
+        for line in r.stdout.splitlines():
+            if "SIL_EMU_PARAMS_FILE=" in line:
+                console.info(f"  {line}")
+            elif "PARAMS_FILE: unknown param" in line:
+                console.warning(f"  {line}")
+            elif "PARAMS_FILE:" in line and "rejected" in line:
+                console.warning(f"  {line}")
 
     # Guardrail: every scenario injects at least one event, so events.jsonl must
     # exist and be non-empty. A target that is not wired for scripted input (e.g.
@@ -913,6 +1066,31 @@ def run_regression(args: argparse.Namespace) -> int:
         console.error("[FAIL] parameter consistency check — run `sf params check` for details")
         return 1
     console.info(f"[PASS] parameter consistency ({n_param_checks} checks)")
+
+    # Build-freshness advisory: judged ONCE here, up front (same "gate the loop
+    # before it starts" pattern as _check_param_consistency() above), rather than
+    # once per scenario — the loop below spawns each scenario as its OWN subprocess
+    # (see _RUN_LINE_RE comment), so without this the freshness check inside
+    # run_scenario() would print once per scenario (32 times). Both target binaries
+    # are checked (regression can exercise vehicle AND vehicle_old — see
+    # _TARGET_OVERRIDE) against a single shared source scan. Setting the env var on
+    # THIS process is enough: subprocess.run(cmd) below has no env= kwarg, so it
+    # inherits the parent's os.environ (incl. this var) into every child scenario run.
+    # ビルド鮮度の参考警告: ここで冒頭に1回だけ判定する（上の _check_param_consistency
+    # と同じ「ループ開始前にゲート」パターン）。以下のループは各シナリオを別
+    # プロセスとして起動するため、これが無いと run_scenario 内の判定がシナリオ数
+    # (32回)ぶん重複表示されてしまう。回帰は vehicle と vehicle_old 両方を実行し
+    # うるため両方の exe を、ソース走査は共有した1回分でチェックする。この
+    # プロセスで環境変数を立てるだけでよい — 以下の subprocess.run(cmd) は env=
+    # を指定していないため親プロセスの os.environ（この変数を含む）をそのまま
+    # 継承し、全ての子シナリオ実行に伝播する。
+    src_mtime = _sil_source_mtime()
+    bd = _build_dir()
+    for exe_name in ("emu_vehicle", "emu_vehicle_old"):
+        exe = bd / _exe(exe_name)
+        if exe.exists():
+            _check_build_freshness(exe, src_mtime=src_mtime)
+    os.environ["SF_SIL_SKIP_FRESHNESS_CHECK"] = "1"
 
     console.info(f"SIL regression: {len(scenarios)} scenario(s) with a matching .expect...")
     results = []
@@ -1249,6 +1427,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
         noise=getattr(args, "noise", "off"), seed=getattr(args, "seed", 12345),
         video=False, ground_effect=None, turbulence=None,
         motor_delay=getattr(args, "motor_delay", None), unpaired=False,
+        params=getattr(args, "params", None),
         extra_env={"SIL_EMU_RATE_STREAM": str(csv_path)},
     )
     run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating

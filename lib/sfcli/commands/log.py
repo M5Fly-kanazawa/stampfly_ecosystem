@@ -753,6 +753,24 @@ def run_viz(args: argparse.Namespace) -> int:
                 visualize_telemetry.visualize_position_only(df, str(path), args.save, show)
             else:
                 visualize_telemetry.visualize_all(df, str(path), args.save, show)
+        # SIL trajectory.csv (sf sil scenario output) - has t, px, alt, roll,
+        # yawrate, yawcmd, alt_est, m0-m3. Checked as a set (column order is not
+        # guaranteed) against a combination distinctive enough not to collide
+        # with the WiFi/extended/FFT formats above.
+        # SIL trajectory.csv（sf sil scenario の出力）- t, px, alt, roll, yawrate,
+        # yawcmd, alt_est, m0-m3 を持つ。列順は保証されないため集合として判定し、
+        # 上の WiFi/extended/FFT 各書式と衝突しない組み合わせを使う。
+        elif {
+            't', 'px', 'py', 'pz', 'qw', 'alt', 'roll', 'pitch',
+            'yawrate', 'yawcmd', 'alt_est', 'm0', 'm1', 'm2', 'm3',
+        }.issubset(set(columns)):
+            import visualize_sil_trajectory
+            console.info("Detected: SIL trajectory (sf sil scenario)")
+
+            df = visualize_sil_trajectory.load_trajectory_csv(str(path))
+            visualize_sil_trajectory.visualize_all(
+                df, str(path), save_path=args.save, show=(args.save is None)
+            )
         else:
             console.error("Unknown CSV format. Cannot determine visualizer.")
             return 1

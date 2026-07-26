@@ -57,6 +57,16 @@ sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
 
 `sf doctor` が SIL ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SIL を使わない人には必須でないため）。
 
+### シナリオの一時パラメータ上書き（`--param`）
+
+`sf sil scenario`（`sysid-gate` も同様）は `--param NAME=VALUE` を繰り返し指定できる。ゲイン等のファームパラメータをリビルド無しで一時的に試すためのオプションで、ファームの永続パラメータや SSOT（`params.cpp` テーブル）そのものは変更しない。
+
+```bash
+sf sil scenario simulator/sil/scenarios/acro_flight.scn --param rate.roll.kp=0.5e-3 --param rate.roll.ti=0.03
+```
+
+存在しないパラメータ名は無視され、警告付きでスキップされる（クラッシュしない）。`--param` を指定しない通常実行は従来通り（byte-identical）。
+
 **既知の制約:**
 - MuJoCo 自身の `mju_error`/`mju_warning`（`%zu` 書式）と `mjz_encoder.cc`（Windows パスの `%s`/`wchar_t*` 不一致）は `-Wno-format` で抑制している（vendored コードにパッチを当てない方針）。どちらも本ベンチの実行経路（`.xml` モデル・`.mjb` 非使用）では到達しない。
 
@@ -102,6 +112,16 @@ sf sil scenario simulator/sil/scenarios/pos_flight.scn --target vehicle
 ```
 
 `sf doctor` diagnoses the SIL host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SIL.
+
+### Temporary parameter overrides for a scenario run (`--param`)
+
+`sf sil scenario` (and `sysid-gate`) accepts a repeatable `--param NAME=VALUE`. It is meant for trying a gain or other firmware param for a single run without rebuilding — it never touches firmware's persistent params or the SSOT (`params.cpp` table).
+
+```bash
+sf sil scenario simulator/sil/scenarios/acro_flight.scn --param rate.roll.kp=0.5e-3 --param rate.roll.ti=0.03
+```
+
+Unknown param names are skipped with a warning (never a crash). A normal run without `--param` is unaffected (byte-identical).
 
 **Known limitations:**
 - MuJoCo's own `mju_error`/`mju_warning` (`%zu` format) and `mjz_encoder.cc` (a Windows-path `%s`/`wchar_t*` mismatch) are silenced with `-Wno-format` (policy: no patching vendored code). Neither is reached by this bench's execution path (`.xml` models; the `.mjb` loader is unused).
