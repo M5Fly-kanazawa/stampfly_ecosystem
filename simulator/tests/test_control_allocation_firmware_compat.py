@@ -11,47 +11,132 @@ This test compares:
 2. Thrust-to-duty conversion
 3. Hover duty values
 
+NOTE (2026-07-26): `control_allocation.hpp`/`.cpp` (the file names this test
+originally referenced) belong to the frozen legacy `firmware/vehicle_old`
+component `sf_algo_control`. The current mainline firmware `firmware/vehicle`
+implements the same B⁻¹ math directly inside
+`firmware/vehicle/components/sf_actuator/actuator.cpp`
+(`mixerCompute()` for the allocation, `thrustToDuty()` for the motor curve;
+there is no separate `buildMatrices()` — the B⁻¹ coefficients are inlined as
+per-motor thrust formulas). References below point at that file.
+NOTE(2026-07-26): このテストが元々参照していた `control_allocation.hpp`/`.cpp` は
+凍結レガシー `firmware/vehicle_old` の `sf_algo_control` コンポーネントのもの。
+現行主力ファーム `firmware/vehicle` は同じ B⁻¹ の数式を
+`firmware/vehicle/components/sf_actuator/actuator.cpp` に直接実装している
+（配分は `mixerCompute()`、モータ曲線は `thrustToDuty()`。独立した
+`buildMatrices()` はなく、B⁻¹ の係数は各モータ推力の式に埋め込まれている）。
+以下の参照はこのファイルを指す。
+
 @see docs/architecture/control-allocation-migration.md
-@see firmware/vehicle/components/sf_algo_control/
+@see firmware/vehicle/components/sf_actuator/actuator.cpp (mixerCompute, thrustToDuty)
 """
 
 import numpy as np
 import sys
 import os
 
-# Add simulator path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# pytest is only needed for the test_* wrappers (xfail marker). Standalone
+# execution (`python3 <this file>`) must keep working without pytest installed,
+# so fall back to a no-op xfail decorator stub.
+# pytest が要るのは test_* ラッパー（xfailマーカー）だけ。直接実行
+# （`python3 <本ファイル>`）は pytest 未導入でも動く必要があるため、
+# 無い場合は何もしない xfail デコレータのスタブに差し替える。
+try:
+    import pytest
+except ImportError:
+    class _PytestMarkStub:
+        @staticmethod
+        def xfail(*_args, **_kwargs):
+            def _decorator(func):
+                return func
+            return _decorator
+
+    class _PytestStub:
+        mark = _PytestMarkStub()
+
+    pytest = _PytestStub()
+
+# Add simulator path — the `core` package this test needs (core.motors) lives
+# under simulator/vpython/, not directly under simulator/. The old path
+# (dirname(__file__)/..  == simulator/) was missing the vpython/ segment and
+# broke `from core.motors import motor_prop` with ModuleNotFoundError.
+# シミュレータのパスを追加 — 必要な `core` パッケージ (core.motors) の実体は
+# simulator/ 直下ではなく simulator/vpython/ 配下にある。旧パス
+# (dirname(__file__)/.. == simulator/) は vpython/ セグメントが抜けており
+# `from core.motors import motor_prop` が ModuleNotFoundError になっていた。
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'vpython'))
+
+# tools/sysid/_generated_params.py is the auto-generated SSOT for
+# calibration-derived constants (kappa, arm length). Importing from there
+# instead of re-hardcoding avoids yet another place these numbers can drift.
+# tools/sysid/_generated_params.py は較正由来の定数（kappa・アーム長）の
+# 自動生成 SSOT。ここから import することで値のドリフト元をこれ以上増やさない。
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools', 'sysid'))
 
 from core.motors import motor_prop
+from _generated_params import KAPPA_ADOPTED, EXPECTED_ARM
 
 
 # =============================================================================
-# Firmware Parameters (from control_allocation.hpp)
+# Firmware Parameters (mirrors firmware/vehicle/components/sf_actuator/actuator.cpp)
 # =============================================================================
 
 class FirmwareParams:
-    """Parameters matching firmware implementation"""
-    # QuadConfig defaults
-    d = 0.023  # Moment arm [m]
-    kappa = 9.71e-3  # Cq/Ct [m]
+    """Parameters matching firmware implementation (actuator.cpp)"""
+    # X-quad geometry (ARM_D, motor layout) — actuator.cpp lines ~88-103
+    d = EXPECTED_ARM  # Moment arm [m], == ARM_D
+    kappa = KAPPA_ADOPTED  # Cq/Ct [m], == KAPPA (measured 2026-07-15)
     motor_x = [0.023, -0.023, -0.023, 0.023]  # M1:FR, M2:RR, M3:RL, M4:FL
     motor_y = [0.023, 0.023, -0.023, -0.023]
     motor_dir = [-1, 1, -1, 1]  # CCW, CW, CCW, CW
     max_thrust_per_motor = 0.15  # [N]
 
-    # MotorParams defaults
-    Ct = 1.0e-8  # [N/(rad/s)²]
-    Cq = 9.71e-11  # [Nm/(rad/s)²]
-    Rm = 0.34  # [Ω]
-    Km = 6.125e-4  # [V·s/rad]
-    Dm = 3.69e-8  # [Nm·s/rad]
-    Qf = 2.76e-5  # [Nm]
-    Vbat = 3.7  # [V]
+    # Motor curve coefficients: V = Am·ω² + Bm·ω + Cm (actuator.cpp MOTOR_AM/BM/CM).
+    # These match simulator/vpython/core/motors.py's Am/Bm/Cm exactly (both are
+    # fit to the same bench data), so they are NOT part of the known drift below.
+    # モータ曲線係数: V = Am·ω² + Bm·ω + Cm（actuator.cpp の MOTOR_AM/BM/CM）。
+    # simulator/vpython/core/motors.py の Am/Bm/Cm と完全一致（同じベンチデータで
+    # フィット済み）のため、下記の既知のドリフトには含まれない。
+    Am = 5.39e-8  # [V·s²/rad²]
+    Bm = 6.33e-4  # [V·s/rad]
+    Cm = 1.53e-2  # [V]
+
+    # KNOWN DRIFT (2026-07-26): firmware's MOTOR_CT is still the pre-2026-07-15
+    # value (1.00e-8). The 2026-07-15 sysid update replaced Ct with the bench-
+    # measured 6.7e-9 (see simulator/vpython/core/motors.py) and updated KAPPA
+    # in firmware at the same time, but did NOT update firmware's MOTOR_CT to
+    # match — that update landed only in the simulator/sysid side. This test
+    # deliberately mirrors firmware's *actual* (stale) value rather than the
+    # updated plant value, per instruction: "firmware's real value is ground
+    # truth for this compatibility test." See Test 4 for the resulting
+    # firmware-vs-simulator duty discrepancy this produces at higher thrusts.
+    # 既知のドリフト(2026-07-26): firmwareのMOTOR_CTは2026-07-15更新前の値
+    # (1.00e-8)のまま。2026-07-15のsysid更新でCtはベンチ実測6.7e-9に置き換わり
+    # (simulator/vpython/core/motors.py参照)、同時にKAPPAもfirmware側で更新
+    # されたが、MOTOR_CTはfirmware側で追従更新されなかった（更新はシミュレータ/
+    # sysid側だけに反映済み）。本テストは「firmwareの実値を正とする」という指示
+    # に従い、更新済みのプラント値ではなくfirmwareの実際の（旧）値をそのまま
+    # 鏡写しする。これにより高推力側でfirmware/シミュレータ間のduty差が生じる
+    # 詳細はTest 4を参照。
+    Ct = 1.0e-8  # [N/(rad/s)²], == MOTOR_CT (firmware actual value, stale)
+
+    # Cq is NOT an independent firmware constant — actuator.cpp derives yaw
+    # torque via kappa (T·kappa), not via a separate Cq. Deriving it here as
+    # kappa*Ct (rather than hardcoding a third number) keeps kappa, Ct, Cq
+    # mutually consistent and prevents silent drift between the three.
+    # Cq はfirmware側の独立定数ではない — actuator.cppはヨートルクを別のCqでは
+    # なくkappa経由(T·kappa)で扱う。ここでkappa*Ctとして導出する（3つ目の数値を
+    # ハードコードしない）ことで、kappa・Ct・Cqの整合を保ち暗黙のドリフトを防ぐ。
+    Cq = kappa * Ct  # [Nm/(rad/s)²], derived, == kappa*Ct
+
+    Vbat = 3.7  # [V], == V_BATT_NOMINAL
 
 
 def build_allocation_matrix_firmware():
     """
-    Build allocation matrix B as in firmware control_allocation.cpp:buildMatrices()
+    Build allocation matrix B — the forward map implied by the B⁻¹
+    coefficients firmware actuator.cpp:mixerCompute() uses (there is no
+    explicit buildMatrices()/B in firmware; mixerCompute inlines B⁻¹ directly).
 
     B maps [T1, T2, T3, T4] -> [u_thrust, u_roll, u_pitch, u_yaw]
     """
@@ -69,7 +154,9 @@ def build_allocation_matrix_firmware():
 
 def build_inverse_matrix_firmware():
     """
-    Build inverse matrix B⁻¹ as in firmware control_allocation.cpp:buildMatrices()
+    Build inverse matrix B⁻¹ as used in firmware
+    actuator.cpp:mixerCompute() (per-motor thrust formulas
+    T_i = 1/4*(u_t ± u_phi/d ± u_theta/d ± u_psi/kappa), one row per motor).
 
     B⁻¹ maps [u_thrust, u_roll, u_pitch, u_yaw] -> [T1, T2, T3, T4]
     """
@@ -117,17 +204,26 @@ def thrust_to_omega(thrust: float, Ct: float) -> float:
 
 def omega_to_voltage(omega: float, params: FirmwareParams) -> float:
     """
-    Convert angular velocity to voltage (steady-state approximation)
-    From motor_model.hpp:omegaToVoltage()
+    Convert angular velocity to voltage using the motor curve polynomial.
+    Mirrors firmware actuator.cpp:thrustToDuty()'s
+    `volts = MOTOR_AM*omega*omega + MOTOR_BM*omega + MOTOR_CM` line exactly
+    (no electrical model — firmware does not use Rm/Km/Dm/Qf at all).
+    角速度から電圧への変換。firmware actuator.cpp:thrustToDuty() の
+    `volts = MOTOR_AM*omega*omega + MOTOR_BM*omega + MOTOR_CM` をそのまま
+    鏡写しする（電気モデルは不使用 — firmwareはRm/Km/Dm/Qfを一切使わない）。
     """
     p = params
-    return p.Rm * ((p.Dm + p.Km**2 / p.Rm) * omega + p.Cq * omega**2 + p.Qf) / p.Km
+    return p.Am * omega**2 + p.Bm * omega + p.Cm
 
 
 def thrust_to_duty_firmware(thrust: float, params: FirmwareParams = None) -> float:
     """
     Convert thrust [N] to duty cycle [0-1]
-    Matches firmware motor_model.hpp:thrustToDuty()
+    Matches firmware actuator.cpp:thrustToDuty() exactly:
+        omega = sqrt(T / MOTOR_CT)
+        volts = MOTOR_AM*omega^2 + MOTOR_BM*omega + MOTOR_CM
+        duty  = volts / vbat, clamped to [MIN_DUTY, MAX_DUTY]
+    firmware actuator.cpp:thrustToDuty() を厳密に鏡写しする。
     """
     if params is None:
         params = FirmwareParams()
@@ -158,7 +254,7 @@ def thrust_to_duty_simulator(thrust: float) -> float:
 # Tests
 # =============================================================================
 
-def test_allocation_matrix():
+def check_allocation_matrix():
     """Test 1: Verify allocation matrix B"""
     print("\n" + "="*60)
     print("Test 1: Allocation Matrix B")
@@ -182,7 +278,7 @@ def test_allocation_matrix():
     return is_identity
 
 
-def test_inverse_matrix():
+def check_inverse_matrix():
     """Test 2: Verify inverse matrix B⁻¹"""
     print("\n" + "="*60)
     print("Test 2: Inverse Matrix B⁻¹")
@@ -206,7 +302,7 @@ def test_inverse_matrix():
     return is_close
 
 
-def test_hover_mixing():
+def check_hover_mixing():
     """Test 3: Verify hover mixing (equal thrust distribution)"""
     print("\n" + "="*60)
     print("Test 3: Hover Mixing")
@@ -235,7 +331,7 @@ def test_hover_mixing():
     return is_equal
 
 
-def test_thrust_to_duty_comparison():
+def check_thrust_to_duty_comparison():
     """Test 4: Compare firmware and simulator thrust-to-duty conversion"""
     print("\n" + "="*60)
     print("Test 4: Thrust-to-Duty Comparison")
@@ -254,14 +350,35 @@ def test_thrust_to_duty_comparison():
         max_diff = max(max_diff, diff)
         print(f"  {T:8.4f}      {duty_fw:8.4f}        {duty_sim:8.4f}        {diff:8.4f}")
 
-    # Allow 5% difference due to parameter variations
+    # Allow 5% difference due to parameter variations. This is intentionally
+    # NOT loosened to force a PASS: the growing gap at higher thrust is the
+    # real, known firmware MOTOR_CT=1.0e-8 vs simulator Ct=6.7e-9 mismatch
+    # documented on FirmwareParams.Ct above (firmware missed the 2026-07-15
+    # sysid Ct update that landed alongside the KAPPA update). A FAIL here is
+    # this test correctly detecting that unresolved drift, not a test bug.
+    # 5%許容。ここは無理にPASSさせるために緩めていない — 高推力側で広がる差は
+    # 上のFirmwareParams.Ctに記載した実在の食い違い（firmware MOTOR_CT=1.0e-8 vs
+    # シミュレータ Ct=6.7e-9。2026-07-15のKAPPA更新と同時のCt更新がfirmware側に
+    # 反映されなかった）そのもの。ここでFAILするのはテストが未解消のドリフトを
+    # 正しく検出している結果であり、テストの不具合ではない。
     is_close = max_diff < 0.05
     print(f"\n✓ Max difference < 5%: {is_close} (max={max_diff:.4f})")
+    if not is_close:
+        print(
+            "  NOTE: This FAIL reflects a real firmware/plant parameter drift\n"
+            "  (MOTOR_CT stale in firmware since the 2026-07-15 sysid update),\n"
+            "  not a bug in this test. See FirmwareParams.Ct comment above and\n"
+            "  firmware/vehicle/components/sf_actuator/actuator.cpp for details.\n"
+            "  この FAIL は firmware/plant 間の実在するパラメータ食い違い\n"
+            "  （2026-07-15のsysid更新でMOTOR_CTがfirmware側で追従更新されな\n"
+            "  かった）を反映したもので、本テストの不具合ではない。詳細は上の\n"
+            "  FirmwareParams.Ct コメントと actuator.cpp を参照。"
+        )
 
     return is_close
 
 
-def test_hover_duty():
+def check_hover_duty():
     """Test 5: Verify hover duty cycle"""
     print("\n" + "="*60)
     print("Test 5: Hover Duty Verification")
@@ -290,7 +407,7 @@ def test_hover_duty():
     return is_close
 
 
-def test_roll_torque():
+def check_roll_torque():
     """Test 6: Verify roll torque mixing"""
     print("\n" + "="*60)
     print("Test 6: Roll Torque Mixing")
@@ -329,7 +446,7 @@ def test_roll_torque():
     return is_close
 
 
-def test_yaw_torque():
+def check_yaw_torque():
     """Test 7: Verify yaw torque mixing"""
     print("\n" + "="*60)
     print("Test 7: Yaw Torque Mixing")
@@ -366,6 +483,81 @@ def test_yaw_torque():
     return is_close
 
 
+# =============================================================================
+# Pytest wrappers
+# =============================================================================
+#
+# The check_*() functions above are diagnostic-style: they print a report and
+# return a bool. That is how this file is normally driven — as a standalone
+# script via `if __name__ == "__main__"` (see run_all_tests() / bottom of
+# file), not via pytest. Because they don't `assert`, collecting them
+# directly under pytest with a `test_*` name only emits a
+# PytestReturnNotNoneWarning and pytest reports every one of them as PASSED
+# regardless of the returned bool — confirmed 2026-07-26: `pytest -v` on this
+# file printed "7 passed" while check_thrust_to_duty_comparison() was, in
+# fact, returning False. The thin wrappers below give pytest a real
+# assertion to collect without touching the check_*() functions' print-heavy
+# behavior that run_all_tests() depends on.
+#
+# 上の check_*() は診断向け（レポートを表示して bool を返す）。本ファイルを通常
+# 駆動するのは `if __name__ == "__main__"` 経由の直接実行（run_all_tests() /
+# ファイル末尾参照）であって pytest ではない。assert がないため、`test_*` の
+# 名前でそのまま pytest に収集させると PytestReturnNotNoneWarning が出るだけで、
+# 返り値の bool に関わらず全て PASSED 扱いになる — 2026-07-26 に確認済み:
+# `pytest -v` はこのファイルに対し check_thrust_to_duty_comparison() が実際には
+# False を返しているにもかかわらず "7 passed" と表示した。以下の薄いラッパーは
+# run_all_tests() が依存する check_*() のprint主体の挙動に手を入れず、pytest に
+# 本物のassertionを渡すためのもの。
+
+def test_allocation_matrix():
+    assert check_allocation_matrix()
+
+
+def test_inverse_matrix():
+    assert check_inverse_matrix()
+
+
+def test_hover_mixing():
+    assert check_hover_mixing()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="firmware MOTOR_CT=1.0e-8 stale since the 2026-07-15 sysid Ct=6.7e-9 "
+           "update; switch is deliberately deferred to backlog #3's firmware-side "
+           "step with real-flight validation (simulation-policy.md §6, tracked as "
+           "EXEMPT by `sf params check`). strict=True forces this marker to be "
+           "removed the moment firmware catches up.",
+)
+def test_thrust_to_duty_comparison():
+    # KNOWN drift (2026-07-26): real firmware/plant divergence, not a test bug —
+    # same xfail philosophy as the SIL regression `xfail:` markers: the suite
+    # stays green, the divergence stays visible in the xfail report, and
+    # strict=True flips it to an error (forcing marker removal) once firmware's
+    # MOTOR_CT is updated. See the FirmwareParams.Ct comment above.
+    # 既知のドリフト(2026-07-26): firmware/plant間の実在する乖離であり、テストの
+    # 不具合ではない。SIL回帰の `xfail:` マーカーと同じ運用哲学: スイートは緑を
+    # 維持し、乖離は xfail 報告として可視のまま、firmware の MOTOR_CT が更新された
+    # 瞬間に strict=True がエラー化してマーカー削除を強制する。上の
+    # FirmwareParams.Ct コメント参照。
+    assert check_thrust_to_duty_comparison(), (
+        "firmware/plant Ct mismatch (firmware MOTOR_CT=1.0e-8 stale since "
+        "2026-07-15 sysid update) -- see FirmwareParams.Ct comment"
+    )
+
+
+def test_hover_duty():
+    assert check_hover_duty()
+
+
+def test_roll_torque():
+    assert check_roll_torque()
+
+
+def test_yaw_torque():
+    assert check_yaw_torque()
+
+
 def run_all_tests():
     """Run all verification tests"""
     print("\n" + "#"*60)
@@ -375,13 +567,13 @@ def run_all_tests():
 
     results = []
 
-    results.append(("Allocation Matrix B", test_allocation_matrix()))
-    results.append(("Inverse Matrix B⁻¹", test_inverse_matrix()))
-    results.append(("Hover Mixing", test_hover_mixing()))
-    results.append(("Thrust-to-Duty Comparison", test_thrust_to_duty_comparison()))
-    results.append(("Hover Duty", test_hover_duty()))
-    results.append(("Roll Torque Mixing", test_roll_torque()))
-    results.append(("Yaw Torque Mixing", test_yaw_torque()))
+    results.append(("Allocation Matrix B", check_allocation_matrix()))
+    results.append(("Inverse Matrix B⁻¹", check_inverse_matrix()))
+    results.append(("Hover Mixing", check_hover_mixing()))
+    results.append(("Thrust-to-Duty Comparison", check_thrust_to_duty_comparison()))
+    results.append(("Hover Duty", check_hover_duty()))
+    results.append(("Roll Torque Mixing", check_roll_torque()))
+    results.append(("Yaw Torque Mixing", check_yaw_torque()))
 
     print("\n" + "="*60)
     print("Summary / サマリー")

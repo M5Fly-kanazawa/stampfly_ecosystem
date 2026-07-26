@@ -445,6 +445,12 @@ def _check_sil_toolchain(warnings: list) -> None:
     見つかってもスレッドモデルが posix でなければ警告する。
     """
     if not platform.is_windows():
+        # On Linux/macOS, the system's gcc/clang is assumed to work.
+        # No separate MinGW check is needed here (already covered by system
+        # toolchain validation elsewhere in doctor).
+        # Linux/macOS ではシステムの gcc/clang が動く前提。個別の MinGW チェック
+        # は不要（doctor の他所でシステムツールチェーン検証済み）。
+        console.info("  Not Windows — skipping MinGW check (system gcc/clang assumed)")
         return
 
     mingw = sil_cmd.mingw_bin()
