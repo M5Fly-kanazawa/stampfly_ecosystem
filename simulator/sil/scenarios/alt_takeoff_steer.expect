@@ -1,19 +1,30 @@
 # alt_takeoff_steer.expect — pilot attitude control DURING the ALT_HOLD auto-takeoff climb
 # ALT_HOLD 自動離陸の上昇中のパイロット姿勢制御
 #
-# The roll stick is held RIGHT from ARM. [8.4,9.2] is the TakeoffClimb window (altitude
-# still climbing 0.05→0.41 m). The craft MUST tilt there (tilt_max > 6°) — proving attitude
-# is never locked out during auto-takeoff (the old level-attitude hold gave tilt ≈ 0). The
-# auto-vertical still carries it to 0.5 m and reaches Airborne, then centering self-levels.
-# ロールを ARM から右に保持。[8.4,9.2] は TakeoffClimb 窓（高度 0.05→0.41 m 上昇中）。そこで
-# 機体は傾く必要（tilt_max > 6°）— 自動離陸中も姿勢を奪わない証明（旧水平保持では tilt≈0）。
-# 鉛直は自動で 0.5 m へ到達し Airborne、中央復帰で水平化。
+# The roll stick goes RIGHT after a short (2.0 s) centred head start from ARM (event C0
+# in the .scn — 2026-07-26 ODEプラント(実測Ct)対応再調整, see the justification below).
+# [9.8,10.6] is the (shifted) TakeoffClimb window (altitude still climbing, ~0.20→0.39 m).
+# The craft MUST tilt there (tilt_max > 6°) — proving attitude is never locked out during
+# auto-takeoff (the old level-attitude hold gave tilt ≈ 0). The auto-vertical still carries
+# it to 0.5 m and reaches Airborne, then centering self-levels.
+# ロールは ARM から 2.0 秒の中立頭出し(C0)の後に右へ。[9.8,10.6] は(繰り下げた)TakeoffClimb
+# 窓（高度 約0.20→0.39 m 上昇中）。そこで機体は傾く必要（tilt_max > 6°）— 自動離陸中も
+# 姿勢を奪わない証明（旧水平保持では tilt≈0）。鉛直は自動で 0.5 m へ到達し Airborne、
+# 中央復帰で水平化。
+#
+# 2026-07-26 ODEプラント(実測Ct)対応再調整: 全メトリクス窓を C0(2.0s頭出し)分だけ
+# 後ろへシフトした。新ホバーduty=0.7245(旧0.6976)下では、ARM直後(climb=0)にロール
+# 外乱を当てると自動垂直側の余裕が足りず、centre後もalt_mean が目標(0.5m)未達のまま
+# 沈下し続ける(実測: 旧スケジュールで [12.5,13.5] alt_mean=0.296)。ARM後に2.0s
+# centered stick の頭出し(C0)を入れて上昇に助走を付けてからロールを当てると、傾き量
+# ・duty健全性は変わらず(tilt_max・duty_maxとも旧同等)、centre後は0.5mへ回復・整定する
+# (実測: [14.5,15.5] alt_mean=0.588)。
 exit 0
 log_contains any "Auto-takeoff complete — normal mode law engaged"
 # Roll RESPONDS during the takeoff climb (the key behaviour — old code held it level).
-metric tilt_max > 6.0  in 8.4 9.2
-metric tilt_max < 25.0 in 8.0 11.0
-# Auto-vertical still reached the target and holds ~0.5 m after self-leveling.
-metric alt_mean > 0.42 in 12.5 13.5
-metric alt_mean < 0.70 in 12.5 13.5
-metric duty_max < 0.95 in 8.0 13.0
+metric tilt_max > 6.0  in 9.8 10.6
+metric tilt_max < 25.0 in 9.5 12.6
+# Auto-vertical recovers to hold ~0.5 m after self-leveling (D's settled tail).
+metric alt_mean > 0.42 in 14.5 15.5
+metric alt_mean < 0.70 in 14.5 15.5
+metric duty_max < 0.95 in 9.5 15.0

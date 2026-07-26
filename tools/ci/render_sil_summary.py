@@ -56,16 +56,32 @@ def render(results_path: Path) -> str:
 
     data = json.loads(results_path.read_text(encoding="utf-8"))
     total, n_pass, n_fail = data["total"], data["pass"], data["fail"]
+    # known_fail/xpass are new fields (xfail known-fail mechanism, 2026-07); absent on
+    # an older results.json, so default to 0 for backward compatibility with a summary
+    # produced by a pre-xfail `sf sil regression`.
+    # known_fail/xpass は新フィールド（xfail 既知失敗機構、2026-07）。xfail 導入前の
+    # 古い results.json には無いので、後方互換のため既定 0。
+    n_known_fail = data.get("known_fail", 0)
+    n_xpass = data.get("xpass", 0)
     verdict = "PASS" if n_fail == 0 else "FAIL"
+    title = f"## SIL scenario regression: {verdict} ({n_pass}/{total} scenarios PASS"
+    if n_known_fail or n_xpass:
+        title += f", {n_known_fail} known-fail, {n_xpass} xpass"
+    title += ")"
     lines = [
-        f"## SIL scenario regression: {verdict} ({n_pass}/{total} scenarios PASS)",
+        title,
         "",
-        "| Scenario | Target | Result | Time (s) |",
-        "|----------|--------|--------|----------|",
+        "| Scenario | Target | Result | Time (s) | Known-fail reason |",
+        "|----------|--------|--------|----------|--------------------|",
     ]
     for s in data["scenarios"]:
-        mark = "PASS" if s["pass"] else "FAIL"
-        lines.append(f"| {s['name']} | {s['target']} | {mark} | {s['elapsed_s']} |")
+        # "status" is the new per-scenario field (PASS/FAIL/KNOWN-FAIL/XPASS); fall
+        # back to the old boolean "pass" for a pre-xfail results.json.
+        # "status" は新フィールド。xfail 導入前の results.json では旧来の
+        # 真偽値 "pass" にフォールバックする。
+        mark = s.get("status") or ("PASS" if s["pass"] else "FAIL")
+        reason = s.get("xfail_reason") or ""
+        lines.append(f"| {s['name']} | {s['target']} | {mark} | {s['elapsed_s']} | {reason} |")
     lines.append("")
     return "\n".join(lines)
 

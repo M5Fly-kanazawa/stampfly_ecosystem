@@ -140,12 +140,21 @@ void Plant::setDuty(const sf::MotorOutput& cmd)
 void Plant::primeMotors()
 {
     for (int i = 0; i < 4; ++i) {
-        motor_duty_[i] = motor_target_[i];
+        // Duty itself carries no lag anymore (the first-order motor_tau smoothing
+        // stage was retired 2026-07-26, backlog #2) — the ODE state omega is now the
+        // ONLY spool-up dynamics, so prime IT directly to the steady-state speed for
+        // this target duty. Without this, a from-rest warm start would show
+        // ~3·τ_eff ≈ 50 ms of electromechanical spin-up that primeMotors() exists to
+        // skip.
+        // duty 自体にはもう遅れが無い（一次遅れ段 motor_tau は 2026-07-26 バックログ#2
+        // で撤去）— 残るスプールアップ動特性は ODE 状態 omega のみなので、これを目標
+        // duty の定常回転数へ直接プライムする。これをしないと、静止からの暖機起動が
+        // primeMotors() 本来の目的である約3·τ_eff≈50ms の電気機械的立上りを見せてしまう。
+        motor_omega_[i] = steadyStateOmega(motor_target_[i] * v_batt_);
+
         // Also pre-fill the transport-delay ring buffer (if enabled) with the target
-        // duty, so a delayed path does not ramp up from the zero-filled boot buffer —
-        // consistent with skipping the first-order spool-up lag just above.
-        // 輸送遅れリングバッファ（有効時）も目標 duty で埋める — 上で一次遅れの
-        // スプールアップを省略しているのと整合させる。
+        // duty, so a delayed path does not ramp up from the zero-filled boot buffer.
+        // 輸送遅れリングバッファ（有効時）も目標 duty で埋める。
         for (size_t k = 0; k < delay_buf_[i].size(); ++k) delay_buf_[i][k] = motor_target_[i];
     }
 }
@@ -316,30 +325,61 @@ void Plant::handlingSubstep(float h)
 }
 
 // -----------------------------------------------------------------------------
-// dutyToThrust — normalized duty [0,1] → steady-state thrust [N] via the real
-// motor + propeller curve (docs/architecture/stampfly-parameters.md §3):
-//   V = duty·v_batt ; solve V = Am·ω² + Bm·ω + Cm for ω ; T = Ct·ω².
-// dutyToThrust — 正規化 duty[0,1] → 実モータ＋プロペラ曲線で定常推力 [N]。
+// omegaDot / steadyStateOmega — the motor+propeller electromechanical ODE
+// (backlog #2, 2026-07-26), ported from simulator/genesis/motor_model.py
+// Motor.omega_dot() (motor_model.py:132-150):
+//   dω/dt = [-(Dm + Km²/Rm)·ω - Cq·ω² - Qf + Km·V/Rm] / Jmp
+// omegaDot() is the RHS the RK4 integrator in substep() calls every substep —
+// THIS is the dynamics now; there is no more static V-ω curve standing in for
+// it. steadyStateOmega() solves the SAME equation at equilibrium (dω/dt = 0),
+// i.e. the positive root of Cq·ω² + (Dm+Km²/Rm)·ω + (Qf − Km·V/Rm) = 0 — used
+// ONLY by dutyToThrust() (duty→thrust, steady-state) and primeMotors()
+// (warm-start), NEVER inside substep()'s per-step dynamics.
+//
+// omegaDot / steadyStateOmega — モータ+プロペラの電気機械 ODE（バックログ#2,
+// 2026-07-26）。simulator/genesis/motor_model.py の Motor.omega_dot() を移植:
+//   dω/dt = [-(Dm+Km²/Rm)·ω - Cq·ω² - Qf + Km·V/Rm]/Jmp
+// omegaDot() は substep() の RK4 積分器が毎回呼ぶ右辺そのもの — これが動特性で
+// あり、もはや代替の静的 V-ω 曲線は無い。steadyStateOmega() は同じ式を平衡点
+// （dω/dt=0）で解いた Cq·ω²+(Dm+Km²/Rm)·ω+(Qf−Km·V/Rm)=0 の正根 —
+// dutyToThrust()（duty→推力、定常）と primeMotors()（暖機起動）のみで使用、
+// substep() の毎ステップ動特性では絶対に使わない。
 // -----------------------------------------------------------------------------
-// solveOmega — positive root of Am·ω² + Bm·ω + (Cm − V) = 0 (0 if V ≤ Cm).
-// solveOmega — Am·ω²+Bm·ω+(Cm−V)=0 の正の根（V≤Cm なら 0）。
-float Plant::solveOmega(float V) const
+float Plant::omegaDot(float omega, float v_motor) const
 {
-    if (V <= cfg_.motor_Cm) return 0.0f;           // below the offset → no spin
-    const float a = cfg_.motor_Am;
-    const float b = cfg_.motor_Bm;
-    const float disc = b * b + 4.0f * a * (V - cfg_.motor_Cm);  // > 0 since V > Cm
+    const float drag = (cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm) * omega
+                        + cfg_.Cq * omega * omega + cfg_.Qf;
+    const float drive = cfg_.motor_Km * v_motor / cfg_.motor_Rm;
+    return (drive - drag) / cfg_.Jmp;
+}
+
+float Plant::steadyStateOmega(float v_motor) const
+{
+    if (v_motor <= 0.0f) return 0.0f;
+    const float a = cfg_.Cq;
+    const float b = cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm;
+    const float c = cfg_.Qf - cfg_.motor_Km * v_motor / cfg_.motor_Rm;
+    const float disc = b * b - 4.0f * a * c;
+    if (disc <= 0.0f) return 0.0f;
     const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
     return omega > 0.0f ? omega : 0.0f;
 }
 
+// -----------------------------------------------------------------------------
+// dutyToThrust — normalized duty [0,1] → STEADY-STATE thrust [N] via the ODE's
+// equilibrium (backlog #2, 2026-07-26): V = duty·v_batt (current supply);
+// ω = steadyStateOmega(V); T = η·Ct·ω². This is the thrust a HELD duty
+// eventually settles to, not the per-step transient (substep()'s RK4
+// integration owns that).
+// dutyToThrust — 正規化 duty[0,1] → ODE 平衡での定常推力[N]（バックログ#2,
+// 2026-07-26）: V=duty·v_batt（現在の電源）、ω=steadyStateOmega(V)、
+// T=η·Ct·ω²。保持した duty が最終的に落ち着く推力であり、過渡ではない
+// （過渡は substep() の RK4 積分が担う）。
+// -----------------------------------------------------------------------------
 float Plant::dutyToThrust(float duty) const
 {
     if (duty <= 0.0f) return 0.0f;
-    const float omega = solveOmega(duty * v_batt_);  // V = duty·v_batt (current supply)
-    // T = Ct·ω², scaled by the real-world thrust efficiency (see Config::thrust_efficiency:
-    // the firmware's HOVER_THRUST_CORRECTION 1.12 compensates this deficit on real hw).
-    // T = Ct·ω² に実機推力効率を乗ずる（ファームの 1.12 補償が打ち消す実機の欠損）。
+    const float omega = steadyStateOmega(duty * v_batt_);
     return cfg_.thrust_efficiency * cfg_.Ct * omega * omega;   // thrust T [N]
 }
 
@@ -384,16 +424,25 @@ void Plant::updateBattery(float i_total_a, float h)
 }
 
 // -----------------------------------------------------------------------------
-// hoverDuty — per-motor duty that gives mg/4 of thrust (inverts the motor curve).
-// hoverDuty — mg/4 の推力を出す各モータ duty（モータ曲線の逆算）。
+// hoverDuty — per-motor duty that gives mg/4 of thrust at ODE STEADY STATE
+// (backlog #2, 2026-07-26). Inverts T = η·Ct·ω² for ω, then inverts the ODE's
+// equilibrium (dω/dt = 0, same equation steadyStateOmega() solves the other
+// direction) for the voltage V that holds that ω:
+//   Km·V/Rm = (Dm+Km²/Rm)·ω + Cq·ω² + Qf
+//   ⇒ V = Km·ω + (Rm/Km)·(Cq·ω² + Dm·ω + Qf)
+// hoverDuty — ODE 定常状態で mg/4 の推力を出す各モータ duty（バックログ#2,
+// 2026-07-26）。T=η·Ct·ω² を ω について逆算し、続いて ODE 平衡
+// （dω/dt=0、steadyStateOmega() が逆方向に解くのと同じ式）をその ω を保持する
+// 電圧 V について逆算する:
+//   Km·V/Rm = (Dm+Km²/Rm)·ω + Cq·ω² + Qf  ⇒  V = Km·ω + (Rm/Km)·(Cq·ω²+Dm·ω+Qf)
 // -----------------------------------------------------------------------------
 float Plant::hoverDuty() const
 {
     const float thrust = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
-    // Invert T = efficiency·Ct·ω² so the OUTPUT thrust (after efficiency) is mg/4.
-    // 効率込みの T=efficiency·Ct·ω² を逆算し、出力推力が mg/4 になる ω を得る。
     const float omega = std::sqrt(thrust / (cfg_.Ct * cfg_.thrust_efficiency));  // ω = √(T/(Ct·η))
-    const float V = cfg_.motor_Am * omega * omega + cfg_.motor_Bm * omega + cfg_.motor_Cm;
+    const float V = cfg_.motor_Km * omega
+                     + (cfg_.motor_Rm / cfg_.motor_Km)
+                           * (cfg_.Cq * omega * omega + cfg_.Dm * omega + cfg_.Qf);
     return V / v_batt_;                                    // duty = V / v_batt (current supply)
 }
 
@@ -439,7 +488,7 @@ void Plant::step(float dt)
 
 // -----------------------------------------------------------------------------
 // substep — one fixed-timestep physics step of length h:
-//   motor lag → thrust → reaction yaw torque + wind → mj_step → advance noise.
+//   motor ODE (RK4) → thrust → reaction yaw torque + wind → mj_step → advance noise.
 //
 // MuJoCo <motor gear="0 0 1 0 0 0"> applies thrust along each rotor site's +Z
 // (FLU up); the off-center sites give the roll/pitch arm moment for free. Only the
@@ -451,15 +500,24 @@ void Plant::step(float dt)
 // -----------------------------------------------------------------------------
 void Plant::substep(float h)
 {
-    // First-order motor lag toward the commanded target, then quadratic thrust.
-    // Each motor's terminal voltage is duty·v_batt_ (this substep's supply); ω and
-    // thrust follow the motor curve, and the electrical current I = (V − Km·ω)/Rm
-    // is accumulated to drive the battery sag (computed with this substep's v_batt_,
-    // then v_batt_ is updated for the next substep — an explicit 1-substep lag at 4kHz).
-    // 指令目標への一次遅れ、続いて二次推力。各モータ端子電圧は duty·v_batt_（本 substep の
-    // 電源）。ω・推力はモータ曲線、電気電流 I=(V−Km·ω)/Rm を積算して電池サグを駆動（本
-    // substep の v_batt_ で計算し、その後 v_batt_ を更新＝4kHz で陽的に1 substep 遅れ）。
-    const float alpha = 1.0f - std::exp(-h / cfg_.motor_tau);
+    // Motor+propeller electromechanical ODE (backlog #2, 2026-07-26): each motor's
+    // angular velocity omega_i is now a genuine INTEGRATED STATE (motor_omega_[i]),
+    // not a value solved instantaneously from a static V-ω curve. Terminal voltage
+    // is duty_cmd·v_supply (this substep's supply); the ODE (dω/dt = [-(Dm+Km²/Rm)ω
+    // - Cq·ω² - Qf + Km·V/Rm]/Jmp, ported from simulator/genesis/motor_model.py) is
+    // integrated one classical-RK4 step of length h below. This IS the "motor lag"
+    // now — there is no separate first-order duty-smoothing stage (the retired
+    // Config::motor_tau). Electrical current I=(V−Km·ω)/Rm is accumulated to drive
+    // the battery sag (computed with this substep's v_batt_, then v_batt_ is
+    // updated for the next substep — an explicit 1-substep lag at 4kHz).
+    // モータ+プロペラ電気機械 ODE（バックログ#2, 2026-07-26）: 各モータ角速度
+    // omega_i は静的 V-ω 曲線から瞬時に解くのでなく、真の積分状態
+    // （motor_omega_[i]）になった。端子電圧は duty_cmd·v_supply（本 substep の
+    // 電源）。ODE（simulator/genesis/motor_model.py 移植）を下で長さ h の古典 RK4 で
+    // 1ステップ積分する。これが「モータ遅れ」そのもの — 別建ての一次遅れ段
+    // （撤去済みの Config::motor_tau）は無い。電気電流 I=(V−Km·ω)/Rm を積算し
+    // 電池サグを駆動（本 substep の v_batt_ で計算、その後 v_batt_ を更新＝4kHz で
+    // 陽的に1 substep 遅れ）。
     const float v_supply = v_batt_;          // this substep's supply voltage
 
     // Motor transport delay (duty-path): the "L" of the identified G(s)=b·e^(−Ls)/
@@ -467,11 +525,11 @@ void Plant::substep(float h)
     // buffer touched at all — exact bypass, byte-identical to the pre-delay code).
     // delay_n_>0 → push this substep's commanded target into each motor's ring
     // buffer and read back the value written delay_n_ substeps ago as the input to
-    // the first-order lag below.
+    // the ODE below.
     // モータ輸送遅れ（duty経路）: 同定モデル G(s) の L に相当（Config::motor_delay_ms）。
     // delay_n_==0 は duty_cmd がそのまま motor_target_（バッファ不触＝遅延導入前と完全に
     // バイト一致）。delay_n_>0 は本 substep の目標を各モータのリングバッファへ push し、
-    // delay_n_ substep 前の値を下の一次遅れの入力として読み出す。
+    // delay_n_ substep 前の値を下の ODE の入力として読み出す。
     float duty_cmd[4];
     if (delay_n_ == 0) {
         for (int i = 0; i < 4; ++i) duty_cmd[i] = motor_target_[i];
@@ -490,29 +548,56 @@ void Plant::substep(float h)
     const float ge_mult = groundEffectMultiplier(static_cast<float>(d_->qpos[2]));
     float thrust[4];
     float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
+    float tau_yaw_flu_z = 0.0f;              // accumulated per-motor below
     for (int i = 0; i < 4; ++i) {
-        motor_duty_[i] += (duty_cmd[i] - motor_duty_[i]) * alpha;
-        const float v_motor = motor_duty_[i] * v_supply;
-        const float omega   = solveOmega(v_motor);
-        thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega * omega * cfg_.health[i] * ge_mult;
+        float v_motor = duty_cmd[i] * v_supply;
+        if (v_motor < 0.0f) v_motor = 0.0f;
+        if (v_motor > v_supply) v_motor = v_supply;  // V clamped to [0, v_supply]
+
+        // Classical RK4, one substep of length h (genesis Motor.step(),
+        // motor_model.py:152-181, ported 1:1).
+        // 古典 RK4、長さ h の1 substep（genesis Motor.step()、motor_model.py:152-181
+        // を1:1移植）。
+        const float omega0 = motor_omega_[i];
+        const float k1 = omegaDot(omega0, v_motor);
+        const float k2 = omegaDot(omega0 + 0.5f * h * k1, v_motor);
+        const float k3 = omegaDot(omega0 + 0.5f * h * k2, v_motor);
+        const float k4 = omegaDot(omega0 + h * k3, v_motor);
+        float omega1 = omega0 + (h / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
+        if (omega1 < 0.0f) omega1 = 0.0f;             // ω clamped ≥ 0
+        motor_omega_[i] = omega1;
+        const float omega_dot = (omega1 - omega0) / h;  // this substep's realized ω̇
+
+        thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega1 * omega1 * cfg_.health[i] * ge_mult;
         if (i < m_->nu) d_->ctrl[i] = thrust[i];
 
         // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.
         // モータ電気電流（DC モデル: V = I·Rm + Km·ω）。0 以上にクランプ。
-        const float i_motor = (v_motor - cfg_.motor_Km * omega) / cfg_.motor_Rm;
+        const float i_motor = (v_motor - cfg_.motor_Km * omega1) / cfg_.motor_Rm;
         i_total += (i_motor > 0.0f) ? i_motor : 0.0f;
+
+        // Per-motor reaction torque about body +Z(FLU): aerodynamic drag Cq·ω² PLUS
+        // the rotor's own angular-momentum reaction Jmp·ω̇ (backlog #2, 2026-07-26) —
+        // this is what reproduces the real yaw-axis reaction-torque zero τ_z
+        // (firmware/vehicle/docs/yaw_axis_model.md), replacing the old kappa·T
+        // shortcut. health[i]/ge_mult scale it the same way they scale thrust[i]
+        // above (behavior parity with the P7 motor-degradation scenarios and GE).
+        // CCW props (M1 FR=0, M3 RL=2) react −Z_FLU; CW props (M2 RR=1, M4 FL=3)
+        // react +Z_FLU — same sign pattern as before.
+        // 機体+Z(FLU)まわりの毎モータ反トルク: 空力抗力 Cq·ω² に加えローター自身の
+        // 角運動量反作用 Jmp·ω̇（バックログ#2, 2026-07-26）— 旧 kappa·T 近似を置換し、
+        // 実機ヨー軸反トルク零点 τ_z（yaw_axis_model.md）を再現する。health[i]/
+        // ge_mult は上の thrust[i] と同じ倍率で適用（P7モータ劣化シナリオ・GEとの
+        // 挙動整合）。CCW(M1=0,M3=2)は−Z_FLU、CW(M2=1,M4=3)は+Z_FLU（符号パターンは
+        // 従来と同一）。
+        const float reaction = (cfg_.Cq * omega1 * omega1 + cfg_.Jmp * omega_dot)
+                                * cfg_.health[i] * ge_mult;
+        tau_yaw_flu_z += (i == 0 || i == 2) ? -reaction : reaction;
     }
 
     // Update the battery supply (Coulomb count + IR sag) for the next substep.
     // 次 substep に向けて電池電源を更新（クーロンカウント＋IR サグ）。
     updateBattery(i_total, h);
-
-    // Net reaction yaw torque about body +Z in FLU (Z up). CCW props (M1 FR, M3 RL)
-    // give −Z_FLU reaction; CW props (M2 RR, M4 FL) give +Z_FLU.
-    // 機体 +Z（FLU・Z上）まわりの正味反トルク。CCW プロペラ(M1 FR, M3 RL)は −Z_FLU、
-    // CW プロペラ(M2 RR, M4 FL)は +Z_FLU の反作用。
-    const float tau_yaw_flu_z =
-        (-thrust[0] - thrust[2] + thrust[1] + thrust[3]) * cfg_.kappa;
 
     // Express the body-Z(FLU) torque in the world (ENU) using the truth quaternion
     // (framequat: body FLU → world ENU). At level this is just world +Z (up).
@@ -560,12 +645,19 @@ void Plant::substep(float h)
 
     mj_step(m_, d_);
 
-    // Feed the current throttle (mean of the four actual motor duties) to the noise
-    // model so the N1 throttle-dependent vibration σ tracks the commanded thrust. No
-    // effect for N0 (vib disabled). 現在のスロットル（4モータ実 duty の平均）をノイズ
-    // モデルへ渡し、N1 のスロットル依存振動 σ を推力に追従させる（N0 では無効）。
+    // Feed the current throttle (mean of the four commanded motor duties, post-
+    // transport-delay) to the noise model so the N1 throttle-dependent vibration σ
+    // tracks the commanded thrust. No effect for N0 (vib disabled). Uses duty_cmd
+    // (this substep's post-delay command) — with the retired motor_tau smoothing
+    // stage gone, duty itself has no separate lag anymore (the ODE above is the only
+    // remaining electromechanical lag), so there is no other "actual duty" to feed.
+    // 現在のスロットル（4モータ指令 duty、輸送遅れ後の平均）をノイズモデルへ渡し、
+    // N1 のスロットル依存振動 σ を推力に追従させる（N0 では無効）。duty_cmd（本
+    // substep の遅延後指令）を使用 — 撤去済みの motor_tau 平滑化段が無くなった今、
+    // duty 自体に別建ての遅れは無い（上の ODE が残る唯一の電気機械遅れ）ため、他に
+    // 「実 duty」と呼べる量は無い。
     const float mean_duty =
-        0.25f * (motor_duty_[0] + motor_duty_[1] + motor_duty_[2] + motor_duty_[3]);
+        0.25f * (duty_cmd[0] + duty_cmd[1] + duty_cmd[2] + duty_cmd[3]);
     noise_.setThrottle(mean_duty);
 
     // Advance the IMU noise one substep (bias random walk + fresh white sample) so

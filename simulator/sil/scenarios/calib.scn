@@ -22,11 +22,39 @@
 # Run (calibration ON, gated):   sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle
 # Run (calibration OFF, contrast): SIL_EMU_NO_CALIB=1 sf sil scenario simulator/sil/scenarios/calib.scn --target vehicle
 #
+# 2026-07-26 KNOWN FAILING (pending, NOT fixed here — throttle-recalibration task only,
+# no firmware/gain changes made): with the mandated raw substitution above (3330->3473,
+# needed just to leave the ground under the new ODE plant), this scenario now crashes
+# instead of holding. Boot calibration DOES measure the injected bias correctly
+# (log: "Boot calibration applied: ... accel_bias=[0.120 0.000 -0.002]" vs injected
+# 0.12/0.0/0.0 — near-exact), yet pitch develops a fast, self-excited, GROWING oscillation
+# (~0.6-0.7 Hz, 0 to +-0.27 rad within ~1.5 s) starting almost immediately after liftoff,
+# ending in a ground impact ("Impact detected: 5.3-5.7G" -> emergency DISARM, not the
+# scripted pilot DISARM the .expect checks for). Verified NOT a dwell/timing artifact:
+# the same crash occurs at dwell 1300ms AND 2500ms, and at throttle 3400/3440/3460/3473
+# alike (severity threshold is about "any liftoff", not the specific margin). Verified
+# the BIAS is the destabilizer, not the new plant/throttle alone: re-running this exact
+# scn with the bias line removed (diagnostic only, not committed) flies perfectly (no
+# crash, DISARM accepted, att_rmse/tilt_max ~0). Root cause is therefore an interaction
+# between the injected body-frame IMU bias and the new (ODE, measured-motor-curve) plant's
+# liftoff dynamics that the current attitude estimator/controller does not handle —
+# outside the scope of a scn/expect-only recalibration (would need estimator/gain
+# investigation). 2026-07-26 既知の未解決（保留、本タスクでは未修正 — ファーム/ゲイン変更なし）:
+# 上記の必須 raw 置換（新プラントで離陸するために必要）適用後、本シナリオは保持でなく墜落する。
+# 起動校正はバイアスを正確に測定・適用しているが（ログ: 0.120/0.000/-0.002、注入値
+# 0.12/0.0/0.0とほぼ一致）、離陸直後にピッチが急速な自励・成長振動（~0.6-0.7Hz、約1.5秒で
+# 0→±0.27rad）を起こし地面衝突（5.3-5.7G→emergency DISARM、.expect が期待するパイロット
+# DISARM ではない）に至る。ドウェル(1300ms/2500ms)非依存、スロットル(3400-3473)非依存を実測
+# 確認済み。バイアス行を外した同一シナリオ（診断用、未コミット）は完全に正常飛行することも確認
+# 済み（バイアスが不安定化因子）。原因は注入バイアスと新プラントの離陸ダイナミクスの相互作用に
+# 現行の姿勢推定器/制御器が対応できていないことにあり、scn/expect のみの再校正では解決不可
+# （推定器・ゲインの調査が必要）。
+#
 #  <t>  ch    args
    0    bias  0.12  0.0  0.0   0.0  0.0  0.02         # raw IMU bias: accel +0.12 m/s² (body X), gyro +0.02 rad/s (body Z / yaw)
    0    rc    2048  2048   2048    2048  0  4000  50          # A: disarmed 4 s → IDLE_GROUND (boot calibration measures the bias here)
    +    rc    2048  2048   2048    2048  1  1000  50          # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND)
-   +    rc    3330  2048   2048    2048  1  2500  50          # C: STABILIZE take-off → TAKEOFF → FLYING
+   +    rc    3473  2048   2048    2048  1  2500  50          # C: STABILIZE take-off → TAKEOFF → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
    +    rc    2048  2048   2048    2048  1  12000 50     1    # D: ALT_HOLD capture + hover 12 s (watch attitude vs the injected bias)
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM

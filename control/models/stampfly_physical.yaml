@@ -117,13 +117,25 @@ constants:
 # ==============================================================================
 calibration_sets:
   # Current adopted family — confirmed by the 2026-07-15..17 measurement
-  # campaign (multicopter_introduction qa_log Q4-9..13). kappa is the only
-  # member independent of the Ct/Am/thrust_efficiency 3-point set still
-  # pending under legacy_motor_curve below (backlog #3).
-  # 現行採用ファミリ — 2026-07-15〜17測定キャンペーンで確定
-  # （multicopter_introduction qa_log Q4-9..13）。kappa のみ、下記
-  # legacy_motor_curve に残る Ct/Am/thrust_efficiency の3点セット
-  # （バックログ#3、再較正待ち）から独立している。
+  # campaign (multicopter_introduction qa_log Q4-9..13), plus the 2026-07-26
+  # coast-down 3-term refit (Dm/Qf). As of 2026-07-26 (backlog #2, motor ODE)
+  # simulator/sil/plant/plant.hpp sources Ct/Cq/Jmp/Dm/Qf/Rm/Km/kappa directly
+  # from this set via generated_params.hpp (sil_params::adopted::*) -- the
+  # legacy_motor_curve set below (Am/Bm/Cm static V-omega curve) is retired
+  # from plant.hpp entirely, replaced by the electromechanical ODE. Only
+  # firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT still
+  # mirrors the legacy Ct (hand literal, backlog #3 firmware-side switch
+  # pending) -- firmware is out of scope for backlog #2.
+  # 現行採用ファミリ — 2026-07-15〜17測定キャンペーン
+  # （multicopter_introduction qa_log Q4-9..13）に加え、2026-07-26 の
+  # コーストダウン3項再フィット（Dm/Qf）で確定。2026-07-26（バックログ#2、
+  # モータODE化）時点で simulator/sil/plant/plant.hpp は Ct/Cq/Jmp/Dm/Qf/
+  # Rm/Km/kappa を全て本セットから generated_params.hpp
+  # （sil_params::adopted::*）経由で直接参照する -- 下記 legacy_motor_curve
+  # （Am/Bm/Cm 静的V-ω曲線）は plant.hpp から完全撤退し ODE に置換された。
+  # firmware/vehicle/components/sf_actuator/actuator.cpp の MOTOR_CT のみ
+  # 旧 Ct を鏡写しのまま保持（手書きリテラル、バックログ#3のファーム側
+  # 切替待ち）-- firmware はバックログ#2の対象外。
   measured_2026_07:
     status: adopted
     coupled: true
@@ -135,10 +147,10 @@ calibration_sets:
         method_en: "Thrust-stand measurement"
         date: "2026-07-15"
         note: >
-          T = Ct·ω²。simulator/sil/plant/plant.hpp の Config::Ct と
-          firmware actuator.cpp の MOTOR_CT は、Am/Bm/Cm・thrust_efficiency
-          と連動するModel Identity較正チェーンのため、この値への切替は
-          backlog #3（3点セット再較正）まで意図的に保留（EXEMPT）。
+          T = Ct·ω²。simulator/sil/plant/plant.hpp は本値へ切替済み
+          （2026-07-26 ODE化、backlog #2）。firmware actuator.cpp の
+          MOTOR_CT のみ引き続き旧値（実機ファームの現状を鏡写し、
+          backlog #3 のファーム側切替待ち）。
       Cq:
         value: 4.10e-11
         unit: "N·m/(rad/s)²"
@@ -173,6 +185,27 @@ calibration_sets:
           docs/architecture/stampfly-parameters.md §3「派生パラメータ」の
           脚注で解明済み（Am/Bm/Cmが旧ファミリの代数的言い換えのため）。
           採用値は本直接実測。
+      Dm:
+        value: 0.0
+        unit: "N·m·s/rad"
+        method: "コーストダウン3項フィット ω̇=−a·ω²−b·ω−c の b 項（下限拘束）"
+        method_en: "Coast-down 3-term fit ω̇=−a·ω²−b·ω−c, b term (lower-bound constrained)"
+        date: "2026-07-26"
+        note: >
+          コーストダウン3項フィット ω̇=−a·ω²−b·ω−c の b≈0（下限拘束・粘性摩擦は
+          検出されず）／c=691.41 rad/s² × J_total、2026-07-26 再実行で数値確定。
+          τ_eff検算: ホバ点 ω_h=3670 rad/s で τ_eff=Jmp/(Km²/Rm+Dm+2·Cq·ω_h)=
+          16.26ms（qa_logの16.3msと一致）。legacy_motor_curve.Dm(3.69e-8、旧
+          Am/Bm/Cmの代数的言い換え)とは別系統のフィット——単独差し替え不可。
+      Qf:
+        value: 9.507e-6
+        unit: "N·m"
+        method: "コーストダウン3項フィット ω̇=−a·ω²−b·ω−c の c 項 × Jmp"
+        method_en: "Coast-down 3-term fit ω̇=−a·ω²−b·ω−c, c term × Jmp"
+        date: "2026-07-26"
+        note: >
+          c=691.41 rad/s² × Jmp(1.375e-8 kg·m²) = 9.507e-6 N·m。既知の
+          τ_c≈9.5e-6（旧知見）と一致。2026-07-26 再実行で数値確定。
       kappa_adopted:
         value: 6.12e-3
         unit: "m"
@@ -195,19 +228,25 @@ calibration_sets:
       kappa: "Cq / Ct"                # 完全精度。_generated_params.py の _KAPPA_VALUE に対応
       Am_consistent: "Rm * Cq / Km"   # 参考値のみ（バックログ#3用）。どの生成物からも実消費されない
 
-  # Legacy electrical family still referenced by simulator/sil/plant/plant.hpp
-  # (Config::Ct/motor_Am/motor_Bm/motor_Cm/thrust_efficiency) and firmware
-  # actuator.cpp's MOTOR_CT. Frozen pending
-  # docs/architecture/simulation-policy.md §6 backlog #3 (the Ct/Am/
-  # thrust_efficiency 3-point recalibration) — swapping a single member would
-  # break hover-thrust consistency (Model Identity). Not yet wired into any
-  # consuming file by Phase 1; generated for backlog #3 to consume later.
-  # firmware/SILが現在も参照する旧電気系ファミリ（Config::Ct/motor_Am/
-  # motor_Bm/motor_Cm/thrust_efficiency、firmware actuator.cpp の
-  # MOTOR_CT）。docs/architecture/simulation-policy.md §6 バックログ#3
-  # （Ct/Am/thrust_efficiency の3点セット再較正）が未着手のため凍結中 —
-  # 単独差し替えはホバー推力整合（Model Identity）を壊す。Phase 1 では
-  # どの消費ファイルにも配線しない（バックログ#3が後で使う前提で生成のみ）。
+  # Legacy electrical family. As of 2026-07-26 (backlog #2, motor ODE)
+  # simulator/sil/plant/plant.hpp no longer references ANY member of this set
+  # (Config::motor_Am/motor_Bm/motor_Cm and the static-curve Config::Ct were
+  # removed together with solveOmega() -- replaced by the electromechanical
+  # ODE sourced from measured_2026_07 above). The only surviving consumer is
+  # firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT (a hand
+  # literal equal to this set's Ct=1.00e-8, NOT sourced from here), pending
+  # docs/architecture/simulation-policy.md §6 backlog #3's firmware-side
+  # switch. Kept in the SSOT for historical reference and for backlog #3 to
+  # consult when that firmware switch happens.
+  # 旧電気系ファミリ。2026-07-26（バックログ#2、モータODE化）時点で
+  # simulator/sil/plant/plant.hpp は本セットのどのメンバーも参照しない
+  # （Config::motor_Am/motor_Bm/motor_Cm と静的曲線版 Config::Ct は
+  # solveOmega() と共に撤去——上の measured_2026_07 由来の電気機械ODEに
+  # 置換済み）。唯一残る消費者は firmware/vehicle/components/sf_actuator/
+  # actuator.cpp の MOTOR_CT（本セットの Ct=1.00e-8 と同値の手書きリテラル、
+  # ここから配線されているわけではない）——
+  # docs/architecture/simulation-policy.md §6 バックログ#3のファーム側切替待ち。
+  # 履歴参照およびバックログ#3が将来参照する用に SSOT に残す。
   legacy_motor_curve:
     status: frozen_for_implementation
     coupled: true

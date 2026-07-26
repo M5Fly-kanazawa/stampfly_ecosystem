@@ -37,8 +37,9 @@ Pipeline / 手順:
 Mechanical-spec default plant / 機械仕様ベースの既定プラント:
     b = 1/J  (J: Ixx 9.16e-6 / Iyy 13.3e-6 / Izz 20.4e-6 kg m²,
               docs/architecture/stampfly-parameters.md)
-    T = 0.02 s (motor+prop thrust lag — Model Identity with the SIL plant's
-                motor_tau; plant.hpp)
+    T = 0.02 s (motor+prop thrust lag — real-hardware structural default; as of
+                2026-07-26 the SIL plant's own lag comes from its motor ODE's
+                electromechanical time constant, not a hand-set T, see plant.hpp)
     L = 0.005 s (1.5 control periods @400 Hz + BMI270 OSR4 group delay)
 """
 
@@ -53,7 +54,7 @@ DT = 1.0 / FS
 
 # Mechanical-spec defaults / 機械仕様の既定値
 SPEC_INERTIA = {"roll": 9.16e-6, "pitch": 13.3e-6, "yaw": 20.4e-6}   # [kg m^2]
-SPEC_MOTOR_T = 0.02          # [s] motor/prop lag (SIL plant motor_tau — Model Identity)
+SPEC_MOTOR_T = 0.02          # [s] motor/prop lag (real-hardware structural default; see module docstring)
 SPEC_DELAY_L = 0.005         # [s] loop dead time (1.5 ctrl periods + IMU filter)
 
 # Flight-proven firmware gains (params.cpp defaults) used for the u replay.

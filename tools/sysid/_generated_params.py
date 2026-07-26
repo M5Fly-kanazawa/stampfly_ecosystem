@@ -15,6 +15,8 @@ Regenerate: sf params generate
 _CT_VALUE = 6.7e-09   # N/(rad/s)^2 -- thrust coeff
 _CQ_VALUE = 4.1e-11   # N*m/(rad/s)^2 -- torque coeff
 _JMP_VALUE = 1.375e-08   # kg*m^2 -- rotor inertia
+_DM_VALUE = 0.0   # N*m*s/rad -- viscous damping (2026-07-26 coast-down 3-term refit, b term ~0)
+_QF_VALUE = 9.507e-06   # N*m -- Coulomb friction torque (2026-07-26 coast-down 3-term refit, c term x Jmp)
 _RM_VALUE = 0.593   # ohm -- winding resistance
 _KM_VALUE = 0.0005682   # V/(rad/s) -- back-EMF constant
 _KAPPA_VALUE = 0.006119402985074627   # m -- kappa = Cq/Ct, full precision (derived)
@@ -38,5 +40,7 @@ EXPECTED_URDF_BASE_MASS = 0.033
 EXPECTED_CT = _CT_VALUE
 EXPECTED_CQ = _CQ_VALUE
 EXPECTED_JMP = _JMP_VALUE
+EXPECTED_DM = _DM_VALUE
+EXPECTED_QF = _QF_VALUE
 EXPECTED_RM = _RM_VALUE
 EXPECTED_KAPPA = KAPPA_ADOPTED

@@ -33,8 +33,17 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration
    +    api  "command"                                                           # B: SDK mode
-   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff → 0.8 m
-   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC during takeoff+hover (t=6-18)
+   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff → 0.5 m (unified)
+   +    rc   2048  2048   2048    2048  0     7000      50                       # D1: let the auto-takeoff overshoot settle (t=6-13)
+   # D2/D3: climb BEFORE the chirps — 2026-07-26 ODEプラント(実測Ct)対応再調整: 新ホバー
+   # duty=0.7245(旧0.6976)により、pitch/yaw の chirp 励振中は差動トルク維持のため一時的に
+   # 平均推力がホバー未満になり沈下する(実測: pitch chirp直後にduty_max=1.0固着のまま
+   # 0.5m→0m墜落・"Impact detected"→emergency DISARM)。ここで0.5m起点のまま7000msだけ
+   # 待って(D1)hoverを落ち着かせてから0.65m登り(D2)、残り5000msで落ち着かせる(D3) —
+   # D1+up+D3の合計はDの元の12000msと同じなので、E以降(roll/pitch/yaw chirp・land)の
+   # 絶対時刻は一切変えていない。
+   +    api  "up 65"                                                             # D2: climb to ~1.2 m before the chirps (t=13)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # D3: climb settle, ends at the ORIGINAL t=18 (unchanged from here on)
    +    api  "sysid roll chirp 25 4"                                            # E: roll chirp excitation (t=18-22)
    +    rc   2048  2048   2048    2048  0     6000      50                       # F: neutral RC through the roll chirp + settle (t=18-24)
    +    api  "sysid pitch chirp 25 4"                                           # G: pitch chirp excitation (t=24-28)

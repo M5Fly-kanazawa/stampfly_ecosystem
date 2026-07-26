@@ -19,9 +19,38 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
-   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
-   +    rc   3290  2600   2600    2048  1     600       50                       # C2: DIAGONAL step (roll-right + pitch-fwd ~+8°) 0.6 s → 2-axis drift
+   +    rc   3473  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc   3393  2600   2600    2048  1     600       50                       # C2: DIAGONAL step (roll-right + pitch-fwd ~+8°) 0.6 s → 2-axis drift (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
    +    rc   2048  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest 2-axis drift + hold 14 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
+#
+# 2026-07-26 KNOWN UNRESOLVED (throttle-calibration task, firmware/plant untouched --
+# reported PENDING, NOT silently patched): unlike pos_roll/pos_pitch (each axis alone
+# PASSES cleanly), the SIMULTANEOUS roll+pitch step C2 makes m1/m3 pin to duty=1.0
+# within ~0.3 s of the step -- STILL IN STABILIZE, before POS_HOLD ever engages -- and
+# never recover. Roll/pitch then oscillate uncontrolled (+-5..8 deg, never settling)
+# because two of four motors have zero remaining differential authority, and the craft
+# loses altitude and hits the ground at t~18.7 s (impact failsafe -> emergency DISARM,
+# NOT the scripted end-of-flight DISARM -- hence log_contains "DISARM accepted" and the
+# order check both FAIL, plus duty_max=1.0). Root cause: the combined (vector-sum, ~sqrt2x
+# single-axis) attitude-correction demand needs more differential duty than is left above
+# the new plant's higher (~0.745) required base duty. This is a genuine control-authority
+# regression exposed by the plant switch, not a scenario-calibration artifact -- the
+# roll/pitch stick values are unchanged (forbidden to touch per task scope) and no
+# .expect window/threshold change can turn an actual ground impact into a pass. Needs a
+# firmware-side look (mixer/rate-PID differential headroom under the new base duty),
+# out of scope here; pos_flight.expect left UNCHANGED.
+# 2026-07-26 既知の未解決事項（スロットル較正タスクにつきファーム/プラント無編集 —
+# 保留として報告、黙って調整せず）: pos_roll/pos_pitch は単独軸なら合格するが、C2 の
+# ロール+ピッチ同時ステップでは m1/m3 がステップ後約0.3秒で duty=1.0 に張り付き
+# （POS_HOLD 係合前、STABILIZE のうちに）、以後回復しない。ロール/ピッチは±5~8°で
+# 収束せず振動を続け、機体は高度を失い t≈18.7s で地面に衝突（衝撃フェイルセーフ→
+# 緊急DISARM。台本末尾の意図した DISARM ではないため log_contains "DISARM accepted" と
+# order チェックの両方が FAIL、加えて duty_max=1.0）。原因は、単独軸のおよそ√2倍必要な
+# 複合姿勢補正要求が、新プラントの高い（約0.745）基準 duty の上に残る差動余裕を上回る
+# ため。プラント切替で露呈した実際の制御権限の後退であり、シナリオ較正の産物ではない
+# （roll/pitch スティック値は本タスク範囲外につき無変更）。地面衝突を .expect の
+# 窓/閾値変更で「合格」にはできない。ファーム側（新基準 duty 下でのミキサ/レートPID
+# 差動余裕）の検討が必要で本タスク範囲外につき pos_flight.expect は無変更。

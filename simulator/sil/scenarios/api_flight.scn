@@ -9,9 +9,11 @@
 #      requestArm (still-calibration gate) → ARM-triggered auto-takeoff climb to the
 #      0.5 m TARGET → FLYING → guidance HOLDS that altitude (unified with manual RC
 #      takeoff; the API no longer commands its own height — decision ④, 2026-06-14).
-#   3. "forward 50" / "cw 90" / "up 30": moves COMPOSE on the guidance target;
+#   3. "forward 50" / "up 70" / "cw 90": moves COMPOSE on the guidance target;
 #      the POS_HOLD cascade tracks the walking setpoint; each replies "ok" only
-#      after the estimate enters the tolerance sphere.
+#      after the estimate enters the tolerance sphere. "up 70" now runs BEFORE
+#      "cw 90" (2026-07-26 ODEプラント(実測Ct)対応再調整: reordered — see the
+#      note above the "up 70" line below for the physical justification).
 #   4. "land": Landing verb → 0.3 m/s descent → touchdown → IDLE_GROUND.
 # The RC stays paired with neutral sticks throughout (real-world configuration:
 # a safety pilot holding a centered transmitter) — proving the stick-MOVEMENT
@@ -32,9 +34,14 @@
    +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
    +    api  "forward 50"                                                        # E: +50 cm forward (north at yaw 0) (t=18)
    +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC during the move
-   +    api  "cw 90"                                                             # G: turn 90 deg clockwise (t=23)
-   +    rc   2048  2048   2048    2048  0     4000      50                       # H: neutral RC during the turn
-   +    api  "up 30"                                                             # I: climb +30 cm (t=27)
-   +    rc   2048  2048   2048    2048  0     4000      50                       # J: neutral RC during the climb
+   # G/H: climb BEFORE the turn, not after — 2026-07-26 ODEプラント(実測Ct)対応再調整:
+   # 新ホバーduty=0.7245(旧0.6976)により、cw90中に維持が必要な差動ヨートルクの分だけ
+   # 一時的に平均推力がホバー未満になり約0.6-0.7m沈下する。0.5m起点のままだと地面に届く
+   # (実測: duty_max=1.0固着で0.5m→0m墜落)。旋回前に0.7m多く登っておけば、同じ沈下量でも
+   # 地面まで届かず回復できる（実測: 旋回窓内の最小高度0.375m、着陸まで無事到達）。
+   +    api  "up 70"                                                             # G: climb +70 cm to ~1.2 m BEFORE the turn (t=23)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # H: neutral RC while climbing+settling
+   +    api  "cw 90"                                                             # I: turn 90 deg clockwise at ~1.2 m altitude (t=27)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # J: neutral RC during the turn
    +    api  "land"                                                              # K: autonomous landing (t=31)
    +    rc   2048  2048   2048    2048  0     8000      50                       # L: neutral RC through touchdown (t=31-39)

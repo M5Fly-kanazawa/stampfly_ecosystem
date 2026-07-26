@@ -21,10 +21,40 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
-   +    rc   3330  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s
-   +    rc   3290  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command)
-   +    rc   3290  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading
+   +    rc   3473  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc   3393  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command) (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
+   +    rc   3393  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
    +    rc   2048  2048   2048    2048  1     13000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 13 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
+#
+# 2026-07-26 KNOWN UNRESOLVED (throttle-calibration task, firmware/plant untouched --
+# reported PENDING, NOT silently patched): the C1 YAW-rotate stick (raw yaw=2700, still
+# in STABILIZE, before POS_HOLD engages) makes m1/m3 pin to duty=1.0 within ~0.3 s of the
+# step and never recover, driving a sustained, uncorrected yaw rate (~0.9-1.0 rad/s --
+# the heading just keeps spinning, not "rotates then holds"). The craft loses altitude
+# and hits the ground at t~18.7 s (impact failsafe -> emergency DISARM, NOT the scripted
+# end-of-flight DISARM -- hence log_contains "DISARM accepted" and the order check both
+# FAIL, plus duty_max=1.0). Same root cause as pos_flight/yaw_hold: the new plant's
+# higher (~0.745) required base duty leaves too little differential headroom for the
+# yaw-rate PID (config::rate_yaw_max_torque=1.83e-3 Nm) to null this commanded rate
+# before hitting the physical duty=1.0 ceiling on two motors. This is a genuine
+# control-authority regression exposed by the plant switch, not a scenario-calibration
+# artifact -- the yaw stick value is unchanged (forbidden to touch per task scope) and no
+# .expect window/threshold change can turn an actual ground impact into a pass. Needs a
+# firmware-side look (yaw-rate PID / mixer differential headroom under the new base
+# duty), out of scope here; pos_yaw.expect left UNCHANGED.
+# 2026-07-26 既知の未解決事項（スロットル較正タスクにつきファーム/プラント無編集 —
+# 保留として報告、黙って調整せず）: C1 のヨー回転スティック（raw yaw=2700、POS_HOLD
+# 係合前の STABILIZE 中）で m1/m3 がステップ後約0.3秒で duty=1.0 に張り付き、以後回復せず、
+# 持続的で補正されないヨーレート（約0.9~1.0rad/s、「回転して保持」ではなく回り続ける）を
+# 生む。機体は高度を失い t≈18.7s で地面に衝突（衝撃フェイルセーフ→緊急DISARM。台本末尾の
+# 意図した DISARM ではないため log_contains "DISARM accepted" と order チェックの両方が
+# FAIL、加えて duty_max=1.0）。pos_flight/yaw_hold と同根: 新プラントの高い（約0.745）
+# 基準 duty の上に、ヨーレート PID（config::rate_yaw_max_torque=1.83e-3 Nm）がこの指令
+# レートを打ち消すための差動余裕が2モータの物理上限 duty=1.0 に対して不足している。
+# プラント切替で露呈した実際の制御権限の後退であり、シナリオ較正の産物ではない（yaw
+# スティック値は本タスク範囲外につき無変更）。地面衝突を .expect の窓/閾値変更で
+# 「合格」にはできない。ファーム側（新基準 duty 下でのヨーレート PID/ミキサ差動余裕）の
+# 検討が必要で本タスク範囲外につき pos_yaw.expect は無変更。

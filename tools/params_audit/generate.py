@@ -218,6 +218,14 @@ def render_python(view: Dict[str, Any]) -> str:
     out.append(f"_CT_VALUE = {_py_float(m['Ct'])}   # N/(rad/s)^2 -- thrust coeff")
     out.append(f"_CQ_VALUE = {_py_float(m['Cq'])}   # N*m/(rad/s)^2 -- torque coeff")
     out.append(f"_JMP_VALUE = {_py_float(m['Jmp'])}   # kg*m^2 -- rotor inertia")
+    out.append(
+        f"_DM_VALUE = {_py_float(m['Dm'])}   # N*m*s/rad -- viscous damping "
+        "(2026-07-26 coast-down 3-term refit, b term ~0)"
+    )
+    out.append(
+        f"_QF_VALUE = {_py_float(m['Qf'])}   # N*m -- Coulomb friction torque "
+        "(2026-07-26 coast-down 3-term refit, c term x Jmp)"
+    )
     out.append(f"_RM_VALUE = {_py_float(m['Rm'])}   # ohm -- winding resistance")
     out.append(f"_KM_VALUE = {_py_float(m['Km'])}   # V/(rad/s) -- back-EMF constant")
     out.append(
@@ -243,6 +251,8 @@ def render_python(view: Dict[str, Any]) -> str:
     out.append("EXPECTED_CT = _CT_VALUE")
     out.append("EXPECTED_CQ = _CQ_VALUE")
     out.append("EXPECTED_JMP = _JMP_VALUE")
+    out.append("EXPECTED_DM = _DM_VALUE")
+    out.append("EXPECTED_QF = _QF_VALUE")
     out.append("EXPECTED_RM = _RM_VALUE")
     out.append("EXPECTED_KAPPA = KAPPA_ADOPTED")
     out.append("")
@@ -272,13 +282,32 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(f"constexpr float ARM_OFFSET = {_cpp_float(c['arm_offset'])};  ///< moment arm [m]")
     out.append("")
     out.append("// --- calibration_sets.measured_2026_07 (status: adopted) ---")
+    out.append("// Consumed directly by simulator/sil/plant/plant.hpp::Config (backlog #2,")
+    out.append("// 2026-07-26 motor ODE): Ct/Cq/Jmp/Dm/Qf/Rm/Km all feed the electromechanical")
+    out.append("// ODE dw/dt = [-(Dm+Km^2/Rm)*w - Cq*w^2 - Qf + Km*V/Rm] / Jmp directly (no")
+    out.append("// longer 'reference only' -- the static Am/Bm/Cm curve they used to sit")
+    out.append("// beside is retired).")
     out.append("namespace adopted {")
     out.append(
-        f"constexpr float CT = {_cpp_float(m['Ct'])};  ///< N/(rad/s)^2 "
-        "(reference only -- plant.hpp Config::Ct keeps the legacy value, EXEMPT pending backlog #3)"
+        f"constexpr float CT = {_cpp_float(m['Ct'])};  ///< N/(rad/s)^2, Config::Ct source "
+        "(T = Ct*omega^2)"
     )
-    out.append(f"constexpr float CQ = {_cpp_float(m['Cq'])};  ///< N*m/(rad/s)^2 (reference only)")
-    out.append(f"constexpr float JMP = {_cpp_float(m['Jmp'])};  ///< kg*m^2 (reference only)")
+    out.append(
+        f"constexpr float CQ = {_cpp_float(m['Cq'])};  ///< N*m/(rad/s)^2, Config::Cq source "
+        "(Q = Cq*omega^2, also the ODE's aero-drag term)"
+    )
+    out.append(
+        f"constexpr float JMP = {_cpp_float(m['Jmp'])};  ///< kg*m^2, Config::Jmp source "
+        "(ODE rotor inertia)"
+    )
+    out.append(
+        f"constexpr float DM = {_cpp_float(m['Dm'])};  ///< N*m*s/rad, Config::Dm source "
+        "(viscous damping, ~0 -- 2026-07-26 coast-down refit)"
+    )
+    out.append(
+        f"constexpr float QF = {_cpp_float(m['Qf'])};  ///< N*m, Config::Qf source "
+        "(Coulomb friction torque)"
+    )
     out.append(f"constexpr float RM = {_cpp_float(m['Rm'])};  ///< ohm, winding resistance")
     out.append(f"constexpr float KM = {_cpp_float(m['Km'])};  ///< V/(rad/s), back-EMF constant")
     out.append(
@@ -295,8 +324,12 @@ def render_cpp(view: Dict[str, Any]) -> str:
         "// --- calibration_sets.legacy_motor_curve (status: frozen_for_implementation, "
         "backlog #3) ---"
     )
-    out.append("// Not yet wired into plant.hpp (kept literal there pending backlog #3);")
-    out.append("// exposed here for that future recalibration to consume.")
+    out.append("// Not consumed by any implementation as of 2026-07-26 -- plant.hpp switched")
+    out.append("// its motor model to the electromechanical ODE (backlog #2) and no longer")
+    out.append("// references Am/Bm/Cm/motor-curve-Ct at all. The only surviving copy of this")
+    out.append("// family's Ct is firmware actuator.cpp's MOTOR_CT, a hand literal (NOT")
+    out.append("// sourced from here). Kept for historical reference and for backlog #3")
+    out.append("// (firmware-side switch) to consult.")
     out.append("namespace legacy {")
     out.append(f"constexpr float CT = {_cpp_float(lg['Ct'])};")
     out.append(f"constexpr float CQ = {_cpp_float(lg['Cq'])};")

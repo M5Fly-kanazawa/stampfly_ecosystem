@@ -64,6 +64,8 @@ from sysid._generated_params import (  # noqa: E402
     EXPECTED_CQ,
     EXPECTED_KAPPA,
     EXPECTED_JMP,
+    EXPECTED_DM,
+    EXPECTED_QF,
     EXPECTED_IXX,
     EXPECTED_IYY,
     EXPECTED_IZZ,
@@ -156,12 +158,20 @@ class ParamCheck:
 
 # --- EXEMPT markers (known-and-accepted mismatch, with reason) ---
 # --- EXEMPT マーカー（既知で許容された不一致、理由付き） ---
-EXEMPT_PLANT_CT = Exempt(
-    reason="simulator/sil/plant/plant.hpp の TODO(2026-07-15): Ct・Am(∝Cq)・"
-           "thrust_efficiency は Model Identity（飛行ログ較正）で連動しており、"
-           "単独差し替えはホバ推力を壊す。更新は3点セット "
-           "(Am_new=Rm·Cq_new/Km=2.28e-8, Ct_new=6.7e-9, thrust_efficiency再フィット) "
-           "とセットで実施すること — docs/architecture/simulation-policy.md backlog #3。"
+# Phase 1 (2026-07-26, backlog #2 motor ODE): simulator/sil/plant/plant.hpp's
+# Config::Ct switched to the adopted (measured) value -- EXEMPT_PLANT_CT (which
+# used to cover it) is retired. The ONLY remaining known-and-accepted mismatch
+# is firmware's still-legacy MOTOR_CT (backlog #3, firmware out of scope here).
+# Phase 1（2026-07-26、バックログ#2モータODE化）: simulator/sil/plant/plant.hpp
+# の Config::Ct は adopted（実測）値へ切替済み -- それをカバーしていた
+# EXEMPT_PLANT_CT は撤廃。唯一残る既知許容の不一致は firmware の旧 MOTOR_CT
+# （バックログ#3、本タスクでは firmware は対象外）。
+EXEMPT_FIRMWARE_MOTOR_CT = Exempt(
+    reason="firmware/vehicle/components/sf_actuator/actuator.cpp の MOTOR_CT は"
+           "実機ファーム現状の鏡写し（backlog #2 では firmware/ を変更しない）。"
+           "simulator/sil/plant/plant.hpp の Config::Ct は 2026-07-26 に adopted 値へ"
+           "切替済み（backlog #2, motor ODE 化）。ファーム側の切替は "
+           "docs/architecture/simulation-policy.md backlog #3 で別途実施する。"
 )
 
 
@@ -214,10 +224,31 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="body table (EN)",
         ),
         ParamCheck(
-            file="simulator/sil/plant/plant.hpp",
-            regex=r'float Ct\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXEMPT_PLANT_CT,
-            note="Config::Ct (deferred 3-point set)",
+            # Phase 1 (2026-07-26, backlog #2): plant.hpp's Config::Ct now reads
+            # sil_params::adopted::CT (generated_params.hpp) -- a symbolic
+            # reference, not a numeric literal, so there is nothing left to
+            # regex-match in plant.hpp itself (same pattern as kappa/RM/mass
+            # below). The literal moved to generated_params.hpp.
+            # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Ct は
+            # sil_params::adopted::CT（generated_params.hpp）を参照する記号参照に
+            # なり、plant.hpp 自体には正規表現で捕捉すべき数値リテラルが無くなった
+            # （下の kappa/RM/mass と同じパターン）。リテラルは generated_params.hpp
+            # へ移動した。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float CT = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_CT,
+            note="sil_params::adopted::CT (Config::Ct source, backlog #2 ODE)",
+        ),
+        ParamCheck(
+            # Firmware is out of scope for backlog #2 (motor ODE, SIL-only); the
+            # firmware mixer's thrust curve still uses the legacy Ct pending
+            # backlog #3's separate firmware-side switch.
+            # firmware はバックログ#2（モータODE化、SIL限定）の対象外——ファーム
+            # ミキサーの推力曲線は backlog #3 の別途ファーム側切替待ちで旧 Ct のまま。
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_CT\s*=\s*([0-9eE.+-]+)f;',
+            expected=EXEMPT_FIRMWARE_MOTOR_CT,
+            note="mixerCompute() thrust curve MOTOR_CT (legacy, backlog #3 pending)",
         ),
     ],
 
@@ -257,11 +288,21 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             expected=EXPECTED_CQ,
             note="body table (EN)",
         ),
-        # NOTE: simulator/sil/plant/plant.hpp has no standalone Cq constant —
-        # its torque model is kappa*T, not Cq*omega^2 — so it is intentionally
-        # NOT in this list (task spec: "無ければ対象外").
-        # plant.hpp は独立した Cq 定数を持たない（反トルクは kappa*T で計算、
-        # Cq*omega^2 ではない）ため意図的に対象外。
+        ParamCheck(
+            # Phase 1 (2026-07-26, backlog #2): plant.hpp now HAS a standalone Cq
+            # (Config::Cq, sourced from sil_params::adopted::CQ) -- the reaction
+            # torque model switched from kappa*T to a direct per-motor
+            # Cq*omega^2 + Jmp*omega_dot in substep() (supersedes the note that
+            # used to live here).
+            # Phase 1（2026-07-26、バックログ#2）: plant.hpp は独立した Cq
+            # （Config::Cq、sil_params::adopted::CQ 由来）を持つようになった——
+            # 反トルクモデルが kappa*T からモータ毎の直接 Cq*omega^2+Jmp*omega_dot
+            # （substep()）へ切替（旧注記を置換）。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float CQ = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_CQ,
+            note="sil_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
+        ),
     ],
 
     # -------------------------------------------------------------------
@@ -351,6 +392,54 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'Rotor Inertia\s*\|\s*Jmp\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_JMP,
             note="body table (EN)",
+        ),
+        ParamCheck(
+            # Phase 1 (2026-07-26, backlog #2): plant.hpp's Config::Jmp (ODE rotor
+            # inertia) now sources this directly.
+            # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Jmp
+            # （ODEローター慣性）は本値を直接参照する。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float JMP = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_JMP,
+            note="sil_params::adopted::JMP (Config::Jmp source, backlog #2 ODE)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # D_m — viscous damping (2026-07-26 coast-down 3-term refit, backlog #2)
+    # 粘性摩擦係数（2026-07-26 コーストダウン3項再フィット、バックログ#2）
+    # -------------------------------------------------------------------
+    "D_m": [
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'_DM_VALUE\s*=\s*([0-9eE.+-]+)',
+            expected=EXPECTED_DM,
+            note="module constant _DM_VALUE (generated)",
+        ),
+        ParamCheck(
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float DM = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_DM,
+            note="sil_params::adopted::DM (Config::Dm source, backlog #2 ODE)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # Q_f — Coulomb friction torque (2026-07-26 coast-down 3-term refit, backlog #2)
+    # 静止摩擦トルク（2026-07-26 コーストダウン3項再フィット、バックログ#2）
+    # -------------------------------------------------------------------
+    "Q_f": [
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'_QF_VALUE\s*=\s*([0-9eE.+-]+)',
+            expected=EXPECTED_QF,
+            note="module constant _QF_VALUE (generated)",
+        ),
+        ParamCheck(
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float QF = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_QF,
+            note="sil_params::adopted::QF (Config::Qf source, backlog #2 ODE)",
         ),
     ],
 

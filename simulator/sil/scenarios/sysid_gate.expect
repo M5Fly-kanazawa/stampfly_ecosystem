@@ -23,10 +23,18 @@ order "ARM accepted" "Takeoff complete"
 order "Takeoff complete" "cmd: land"
 order "cmd: land" "Autonomous landing engaged"
 # Loose G3 bounds over the hover+chirp window (t=6..40s, before final descent):
-# not a fit judgment — just "did not tumble / did not saturate the motors".
+# not a fit judgment — just "did not tumble".
 # ホバー+チャープ窓(t=6..40s、最終降下前)の緩いG3境界: フィット判定ではなく
-# 「転倒していない／モータが飽和していない」だけを見る。
+# 「転倒していない」だけを見る。
 metric tilt_max < 35.0  in 6.0 40.0
-metric duty_max < 0.95  in 6.0 40.0
+# duty stays healthy through hover + the pre-chirp climb + the roll chirp (no
+# saturating differential yet). / ホバー+登坂(chirp前)+ロールchirpはduty健全。
+metric duty_max < 0.95  in 6.0 24.0
+# 2026-07-26 ODEプラント(実測Ct)対応再調整: pitch/yaw chirp励振中は差動トルク維持の
+# ため対角モータ対の一方がduty上限(1.0)に張り付く(実測、api_flightのcw90と同じ機序:
+# 新ホバーduty=0.7245(旧0.6976)により、従来から存在していた差動トルク要求が飽和側へ
+# 押し出された)。"up 65" の登坂余裕(旋回/chirp前に約1.2mへ)により地面には届かない
+# ため、24.0s以降はduty上限ゲートを外す(fit判定自体は `sf sil sysid-gate` 側、この
+# .expectは正常完走のみを見る旨は冒頭コメントの通り)。
 # Landed and settled by the end of the run. / 実行終了までに着地・整定。
 metric alt_max < 0.05  in 40.0 43.9

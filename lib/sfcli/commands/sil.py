@@ -457,13 +457,53 @@ _METRIC_OPS = {
 }
 
 
+def _read_xfail(expect_path: Path) -> Optional[str]:
+    """Return the reason string from a leading 'xfail: <reason>' directive in
+    an .expect file, or None if the file carries no such marker. A known-fail
+    marker documents that THIS scenario's current failure is a real, tracked
+    firmware/plant-fidelity issue (see docs/architecture/simulation-policy.md
+    backlog) rather than a broken assertion — `sf sil regression` reports it
+    as [KNOWN-FAIL] instead of counting it against the gate, and flips to
+    [XPASS] (gate failure) if the scenario starts passing while the marker is
+    still there, so a fixed issue can't silently go untracked.
+
+    Directive placement: must be the FIRST non-blank, non-'#'-comment line in
+    the file (i.e. before "exit 0" / any assertion) — this keeps the scanner
+    trivial (stop at the first such line) and matches "reserved header slot"
+    rather than a marker that could be confused with prose deeper in the file.
+
+    .expect ファイル先頭の 'xfail: <理由>' 指令行から理由文字列を返す（無ければ
+    None）。既知失敗マーカーは「このシナリオの現在の失敗はファーム/プラント忠実度の
+    既知の追跡課題であり、壊れたアサーションではない」ことを明示する
+    （docs/architecture/simulation-policy.md のバックログ参照）。`sf sil regression`
+    はこれをゲート対象外の [KNOWN-FAIL] として報告し、マーカーが残ったまま合格に
+    転じたら [XPASS]（ゲート失敗）にして直った課題の見逃しを防ぐ。
+
+    配置規則: ファイル内で最初の非空行・非 '#' コメント行でなければならない
+    （"exit 0" 等のアサーションより前）。走査を単純にし（最初の該当行で確定）、
+    ファイル深部の文章と紛れない「予約されたヘッダ位置」という扱いにする。
+    """
+    for raw in expect_path.read_text(encoding="utf-8").splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("xfail:"):
+            return stripped[len("xfail:"):].strip()
+        return None  # first real line is not xfail: → no marker
+    return None
+
+
 def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int,
                  traj_path: Path = None):
-    """Evaluate an assertions file against the captured output. Returns (checks,
-    all_pass). Assertions are anchored to OUTPUT TEXT/ORDER, never wall-clock, so
-    a check is deterministic exactly because the scenario's output is byte-
-    identical across runs. 出力テキスト/順序にアンカー（壁時計不使用）＝決定論的。
+    """Evaluate an assertions file against the captured output. Returns
+    (checks, all_pass, xfail_reason). Assertions are anchored to OUTPUT
+    TEXT/ORDER, never wall-clock, so a check is deterministic exactly because
+    the scenario's output is byte-identical across runs. 出力テキスト/順序に
+    アンカー（壁時計不使用）＝決定論的。
 
+      xfail: <reason>                         known-fail marker (see _read_xfail);
+                                              not an assertion — parsed out here so
+                                              it never becomes a "bad assertion"
       log_contains <out|err|any> "<text>"   stream contains the text
       log_absent   <out|err|any> "<text>"   stream does NOT contain the text
       order "<a>" "<b>"                       a's first occurrence precedes b's
@@ -483,10 +523,13 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
     checks = []
+    xfail_reason = _read_xfail(expect_path)
     for raw in expect_path.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue
+        if stripped.startswith("xfail:"):
+            continue  # known-fail marker, not an assertion — see _read_xfail()
         if stripped.startswith("skip"):
             reason = stripped[len("skip"):].strip()
             checks.append({"name": f"skipped: {reason}", "pass": True, "skipped": True,
@@ -567,7 +610,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
         checks.append({"name": "no assertions evaluated", "pass": False,
                        "detail": "expect file has no evaluable assertion"})
     all_pass = all(c["pass"] for c in checks)
-    return checks, all_pass
+    return checks, all_pass, xfail_reason
 
 
 def run_scenario(args: argparse.Namespace) -> int:
@@ -680,8 +723,9 @@ def run_scenario(args: argparse.Namespace) -> int:
                               + ("" if injected else f" — is {exe.name} wired for scripted input?")}
 
     expect = Path(args.expect) if args.expect else scn.with_suffix(".expect")
+    xfail_reason = None
     if expect.exists():
-        checks, verdict = _eval_expect(expect, r.stdout, r.stderr, r.returncode, traj)
+        checks, verdict, xfail_reason = _eval_expect(expect, r.stdout, r.stderr, r.returncode, traj)
     else:
         console.info(f"(no .expect at {expect.name} — verdict = injection + exit code)")
         checks = [{"name": "exit == 0", "pass": r.returncode == 0, "detail": f"got {r.returncode}"}]
@@ -694,6 +738,14 @@ def run_scenario(args: argparse.Namespace) -> int:
         "scenario": str(scn), "target": target, "exit_code": r.returncode,
         "noise": noise, "seed": seed,
         "pass": bool(verdict), "checks": checks,
+        # Known-fail marker (docs/architecture/simulation-policy.md backlog), if the
+        # .expect carries one — informational only here; `sf sil scenario` still
+        # reports the RAW verdict above (see xfail_reason annotation below). Only
+        # `sf sil regression` changes gating behavior on this field.
+        # 既知失敗マーカー（simulation-policy.md バックログ）。ここでは情報表示のみ
+        # — `sf sil scenario` 単体では素の合否を報告する。ゲート挙動を変えるのは
+        # `sf sil regression` のみ。
+        "xfail_reason": xfail_reason,
         # Accurate flight label for the review-video title (no takeoff/landing claim).
         # レビュー動画タイトル用の正確な飛行ラベル（離着陸を主張しない）。
         "flight": "scripted-input scenario",
@@ -711,6 +763,15 @@ def run_scenario(args: argparse.Namespace) -> int:
         console.success(f"bundle: {bundle}")
     else:
         console.error(f"scenario FAILED — see {bundle}/console.log")
+    # xfail annotation: a single `sf sil scenario` run always shows the RAW verdict
+    # above (PASS is PASS, FAIL is FAIL) — this is just a one-line note that the
+    # .expect carries a known-fail marker. Only `sf sil regression` changes gating
+    # behavior (KNOWN-FAIL / XPASS) on this field.
+    # xfail 注記: 単体の `sf sil scenario` は常に上の素の合否を表示する（xfail が
+    # あっても FAIL は FAIL と見せる）。これは .expect に既知失敗マーカーがある
+    # ことを示す1行注記のみ。ゲート挙動を変えるのは `sf sil regression` のみ。
+    if xfail_reason:
+        console.warning(f"[xfail marker] {xfail_reason}")
 
     # --video: render a review MP4 (MuJoCo 3D + state graphs) from the trajectory the
     # run just recorded. Only on PASS and only if a trajectory was actually written.
@@ -863,26 +924,68 @@ def run_regression(args: argparse.Namespace) -> int:
         r = subprocess.run(cmd)
         elapsed = time.monotonic() - t0
         verdict = (r.returncode == 0)
-        console.info(f"  [{'PASS' if verdict else 'FAIL'}] {scn.stem} "
-                     f"(target={target}, {elapsed:.1f}s)")
+        # xfail: a "xfail: <reason>" directive at the head of the .expect marks
+        # this scenario's current failure as a tracked, known issue (see
+        # docs/architecture/simulation-policy.md backlog), not a broken
+        # assertion. Classification:
+        #   no marker,   PASS  -> PASS        (normal)
+        #   no marker,   FAIL  -> FAIL        (gates the regression)
+        #   marker,      FAIL  -> KNOWN-FAIL  (reported, does NOT gate)
+        #   marker,      PASS  -> XPASS       (the issue is gone but the marker
+        #                                      wasn't removed — SIL is
+        #                                      deterministic, so this MUST gate
+        #                                      the regression, or a fixed issue
+        #                                      could silently stay "known-fail"
+        #                                      forever)
+        # xfail: .expect 先頭の "xfail: <理由>" 指令は、このシナリオの現在の失敗が
+        # 追跡中の既知課題（simulation-policy.md バックログ）であり壊れたアサー
+        # ションではないことを示す。分類は上記コメント参照。SIL は決定論的なので
+        # XPASS（直ったのにマーカーが残っている）は必ず回帰全体を失敗させる。
+        xfail_reason = _read_xfail(scn.with_suffix(".expect"))
+        if xfail_reason is None:
+            status = "PASS" if verdict else "FAIL"
+            console.info(f"  [{status}] {scn.stem} (target={target}, {elapsed:.1f}s)")
+        elif not verdict:
+            status = "KNOWN-FAIL"
+            console.warning(f"  [KNOWN-FAIL] {scn.stem} — {xfail_reason} "
+                            f"(target={target}, {elapsed:.1f}s)")
+        else:
+            status = "XPASS"
+            console.error(f"  [XPASS] {scn.stem} — remove the xfail marker "
+                         f"(target={target}, {elapsed:.1f}s)")
         results.append({"name": scn.stem, "target": target, "extra_args": extra,
                         "pass": verdict, "exit_code": r.returncode,
-                        "elapsed_s": round(elapsed, 1)})
+                        "elapsed_s": round(elapsed, 1),
+                        "xfail_reason": xfail_reason, "status": status})
 
-    n_pass = sum(1 for r in results if r["pass"])
-    n_fail = len(results) - n_pass
+    n_pass = sum(1 for r in results if r["status"] == "PASS")
+    n_known_fail = sum(1 for r in results if r["status"] == "KNOWN-FAIL")
+    n_xpass = sum(1 for r in results if r["status"] == "XPASS")
+    n_fail = sum(1 for r in results if r["status"] == "FAIL")
+    # n_fail (real, un-marked FAILs) and n_xpass (fixed-but-still-marked) are the
+    # only two statuses that gate the regression — KNOWN-FAIL is informational.
+    # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが回帰をゲート
+    # する — KNOWN-FAIL は情報表示のみ。
+    n_unexpected = n_fail + n_xpass
+
     if getattr(args, "json_out", None):
-        summary = {"total": len(results), "pass": n_pass, "fail": n_fail, "scenarios": results}
+        summary = {"total": len(results), "pass": n_pass, "known_fail": n_known_fail,
+                  "xpass": n_xpass, "fail": n_unexpected, "scenarios": results}
         Path(args.json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         console.info(f"Summary written to {args.json_out}")
 
-    if n_fail:
-        console.error(f"SIL regression: {n_fail}/{len(results)} scenario(s) FAILED:")
+    if n_unexpected:
+        console.error(f"SIL regression: {n_fail} FAIL + {n_xpass} XPASS "
+                     f"(of {len(results)}; known-fail={n_known_fail}):")
         for r in results:
-            if not r["pass"]:
+            if r["status"] == "FAIL":
                 console.error(f"  FAIL {r['name']} (target={r['target']})")
+            elif r["status"] == "XPASS":
+                console.error(f"  XPASS {r['name']} (target={r['target']}) — "
+                             f"remove the xfail marker in {r['name']}.expect")
         return 1
-    console.success(f"SIL regression: all {len(results)} scenarios PASS")
+    console.success(f"SIL regression: {n_pass} PASS + {n_known_fail} KNOWN-FAIL "
+                    f"({len(results)} total) known-fail={n_known_fail}")
     return 0
 
 

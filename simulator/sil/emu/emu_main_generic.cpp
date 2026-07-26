@@ -123,12 +123,15 @@ void apply_turbulence_from_env(sil::Plant::Config& cfg)
 
 // SIL_EMU_MOTOR_DELAY = duty-path transport delay [ms] (model-match retrofit #1,
 // docs/architecture/simulation-policy.md backlog #1). Real-hw identified L =
-// 14.7/8.4/11.0 ms (roll/pitch/yaw); the current SIL has no explicit dead time —
-// only the motor_tau first-order lag — so its predicted phase margin runs
-// optimistic. OFF by default (0 ms, byte-identical clean path).
+// 14.7/8.4/11.0 ms (roll/pitch/yaw); the SIL still has no explicit dead time of
+// its own — as of 2026-07-26 (backlog #2) its lag comes from the motor ODE's
+// electromechanical time constant rather than a hand-set first-order motor_tau
+// (retired) — so its predicted phase margin can still run optimistic. OFF by
+// default (0 ms, byte-identical clean path).
 // SIL_EMU_MOTOR_DELAY = duty 経路の輸送遅れ[ms]（モデル一致改修#1）。実機同定
-// L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SIL は motor_tau 一次遅れのみで明示的な
-// むだ時間が無く位相余裕を過大評価する。既定 OFF。
+// L=14.7/8.4/11.0ms（roll/pitch/yaw）、SIL には引き続き明示的なむだ時間が無い —
+// 2026-07-26（バックログ#2）時点で遅れ源は手設定の一次遅れ motor_tau（撤去済み）で
+// なくモータ ODE の電気機械時定数であり、それでも位相余裕を過大評価しうる。既定 OFF。
 void apply_motor_delay_from_env(sil::Plant::Config& cfg)
 {
     const char* md = std::getenv("SIL_EMU_MOTOR_DELAY");

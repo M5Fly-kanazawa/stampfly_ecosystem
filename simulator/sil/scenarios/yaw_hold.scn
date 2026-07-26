@@ -22,7 +22,7 @@
 #  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc    2048  2048   2048    2048  0     4000      50              # A: boot → IDLE_GROUND 4 s
    +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM edge, idle 1 s
-   +    rc    3330  2048   2048    2048  1     2000      50              # C: STABILIZE take-off climb 2 s
+   +    rc    3473  2048   2048    2048  1     2000      50              # C: STABILIZE take-off climb 2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
    +    rc    2048  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD settle 4 s (baseline, hold engaged)
    +    fault 0     0.80                                                 # E: M1 (FR) at 80% — standing yaw+tilt disturbance
    +    rc    2048  2048   2048    2048  1     8000      50        1     # F: hands-off hover UNDER the fault 8 s — heading must stay bounded
@@ -36,3 +36,31 @@
 # G restore@19, H 19-21, I-K disarm 21-22.
 # Gates in yaw_hold.expect: yaw_band bounded through F (THE heading-hold gate),
 # attitude/altitude bounded, motors unsaturated.
+#
+# 2026-07-26 KNOWN UNRESOLVED (throttle-calibration task, firmware/plant untouched --
+# reported PENDING, not silently patched): under the new (higher, ~0.72-0.75) base duty
+# needed to hover, motors m1/m3 pin to duty=1.0 for the ENTIRE ~8 s fault window (E-F),
+# not just a brief transient -- the higher base duty leaves far less differential headroom
+# before the mixer's ±ik·ur allocation for the M1-fault-induced yaw/tilt correction hits
+# the physical MAX_DUTY=1.0 ceiling. Measured: yaw_band=5.40° (WORSE than the 2026-06-11
+# "hold disabled" reference of 3.06° that the 1.5° gate was calibrated to reject --
+# not just outside the old margin, actively worse), alt_max=1.62 m, duty_max=1.0 sustained.
+# yaw_band is THIS SCENARIO'S PRIMARY GATE (see header/2026-06-11 note above); loosening
+# it would defeat the test's purpose (telling "hold works" from "hold broken/absent"
+# apart), so it is intentionally left UNCHANGED. Root cause looks like reduced yaw/roll
+# differential authority at the new plant's higher hover-duty operating point -- a
+# firmware/mixer/plant-fidelity question (config::rate_yaw_max_torque headroom, or the
+# mixer's duty allocation under the new, necessarily higher base duty), out of scope for
+# a throttle-recalibration task and NOT fixed here.
+# 2026-07-26 既知の未解決事項（スロットル較正タスクにつきファーム/プラント無編集 —
+# 保留として報告、黙って調整せず）: 新しい（より高い、約0.72-0.75の）ホバー基準 duty の
+# もとで、故障窓 E-F の8秒間ずっと m1/m3 が duty=1.0 に張り付く（一過性ではない）。基準
+# duty が高いほど、M1故障によるヨー/傾き補正を配分する mixer の余裕（1.0 までの差分）が
+# 少なくなるため。実測: yaw_band=5.40°（2026-06-11 の「ホールド無効」対照実験3.06°より
+# even 悪化— 単に旧マージン外というだけでなく実質的な悪化）、alt_max=1.62m、duty_max=1.0
+# 持続。yaw_band は本シナリオの本命ゲート（上部のヘッダー/2026-06-11注記参照）なので、
+# 閾値を緩めるとテストの目的（「ホールドが効いている」と「壊れている/無い」を判別する）を
+# 損なうため意図的に変更していない。根本原因は新プラントの高いホバー動作点でのヨー/ロール
+# 差動権限低下に見える — ファーム/ミキサ/プラント忠実度の課題
+# （config::rate_yaw_max_torque の余裕、または新しい必然的に高い基準 duty のもとでの
+# ミキサ配分）であり、スロットル較正タスクの範囲外につき本タスクでは未修正。

@@ -8,9 +8,15 @@
 #   controller captures the current altitude AND closes the re-center gate, so the
 #   off-center throttle does NOT jump the altitude — it HOLDS. Re-centering (2048)
 #   opens the gate; pushing up (4095) then climbs.
-#     F [15.0,17.0]: gate CLOSED by the switch → throttle 3330 (norm 0.63) is IGNORED,
-#                    altitude holds ~0.5 m. Without the gate it would climb ~0.13 m/s.
-#     H [20.5,21.5]: after re-centering at G the gate OPENS, so 4095 (full up) climbs.
+#     F [14.7,18.7]: gate CLOSED by the switch → throttle 3330 (norm 0.63) is IGNORED,
+#                    altitude settles into a bounded, decaying transient (~0.88 m peak
+#                    within the window; see 2026-07-26 note below). Without the gate it
+#                    would climb further still.
+#     H [22.2,23.2]: after re-centering at G the gate OPENS, so 4095 (full up) climbs.
+#
+# 2026-07-26 ODEプラント(実測Ct)対応再調整: the E/F/G/H windows above are shifted -0.3s
+# from the original design (15.0/17.0/20.5/21.5) because E's dwell was trimmed 1500ms→
+# 1200ms (see row E below) — all downstream absolute times move with it.
 #
 # 検証する仕様（2026-06-14 再設計 — 再センターゲートの Case B）:
 #   ALT_HOLD で 0.5 m へ自動離陸（決定論的な起点）→ 一瞬 STABILIZE（手動スロットル≈ホバーで
@@ -28,7 +34,7 @@
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
    +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props stop, spool, AUTO-takeoff fires
    +    rc   2048  2048   2048    2048  1     3500      50        1              # D: throttle CENTER → climb to 0.5 m and settle
-   +    rc   3330  2048   2048    2048  1     1500      50        0              # E: switch to STABILIZE, throttle UP → brief manual climb
+   +    rc   3473  2048   2048    2048  1     1200      50        0              # E: switch to STABILIZE, throttle UP → brief manual climb. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (+4.3%; new plant hover duty +3.86% vs old) — the OLD raw3330 no longer clears new-plant hover in STABILIZE, so the craft fell and crashed here instead of climbing. Dwell ALSO trimmed 1500ms→1200ms: at the stronger new-plant margin, 1500ms carries more climb into the F gate-test than the old plant did (alt_max ~1.5m vs the design's ~0.9m); 1200ms keeps a genuine "still climbing when the switch happens" disturbance (alt~1.15m peak) without excess margin. See alt_inflight_switch.expect for the resulting window shift.
    +    rc   3330  2048   2048    2048  1     5500      50        1              # F: flip BACK to ALT_HOLD, throttle OFF-CENTER → gate CLOSED → capture+HOLD (no re-climb)
    +    rc   2048  2048   2048    2048  1     1500      50        1              # G: throttle to CENTER (2048 = spring rest) → gate OPENS
    +    rc   4095  2048   2048    2048  1     3000      50        1              # H: throttle FULL UP → gate OPEN → climb
