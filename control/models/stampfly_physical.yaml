@@ -1,0 +1,256 @@
+# StampFly Physical Parameters — Single Source of Truth (SSOT)
+# StampFly 物理パラメータ — 唯一の正（Single Source of Truth）
+#
+# This file is read by `sf params generate` (tools/params_audit/generate.py),
+# which machine-generates:
+#   - tools/sysid/_generated_params.py           (flat Python constants)
+#   - simulator/sil/plant/generated_params.hpp   (C++ constexpr constants)
+#   - the <!-- AUTO-GENERATED:params --> marker table in
+#     docs/architecture/stampfly-parameters.md (JP + EN)
+#
+# To change a value: edit this file, run `sf params generate`, then commit
+# both this file and the regenerated outputs. Never hand-edit a generated
+# file directly — `sf params generate --check` (also run in CI) fails if a
+# generated file has drifted from this source.
+#
+# 本ファイルは `sf params generate`（tools/params_audit/generate.py）が読み込み、
+# 以下を機械生成する:
+#   - tools/sysid/_generated_params.py           （フラットな Python 定数）
+#   - simulator/sil/plant/generated_params.hpp   （C++ constexpr 定数）
+#   - docs/architecture/stampfly-parameters.md 内の
+#     <!-- AUTO-GENERATED:params --> マーカー表（日本語・英語）
+#
+# 値を変更する手順: 本ファイルを編集 → `sf params generate` を実行 →
+# 本ファイルと生成物の両方をコミットする。生成物を直接手編集しないこと —
+# `sf params generate --check`（CIでも実行）が、生成物が本ファイルから
+# 乖離していれば失敗する。
+
+meta:
+  updated: "2026-07-26"
+  description:
+    ja: >
+      StampFly の機体物理パラメータ（幾何・剛体慣性・モータ／プロペラの
+      電気機械係数）を集約する。control/README.md が定義する models/
+      の用途（数学モデル・同定結果置き場）に沿う。較正（モータ実測）に
+      依存しない値は constants に、実測キャンペーンごとに連動する値の
+      組は calibration_sets に分ける。
+    en: >
+      Consolidates StampFly's vehicle physical parameters (geometry, rigid-
+      body inertia, motor/propeller electromechanical coefficients).
+      Matches the role of models/ documented in control/README.md
+      (mathematical models and system-identification results). Values that
+      do not depend on a motor-measurement campaign live under constants;
+      values that are coupled within one measurement campaign are grouped
+      under calibration_sets.
+
+# ==============================================================================
+# Calibration-independent geometry & rigid-body inertia.
+# 較正（モータ実測キャンペーン）に依存しない機体形状・剛体慣性。
+#
+# NOTE: as of Phase 1 these constants are NOT yet wired into
+# tools/sysid/defaults.py's DEFAULT_PARAMS (which keeps its own hand-written
+# literals for mass/Ixx/Iyy/Izz/arm_length, per the Phase-1 task scope) — only
+# tools/params_audit/params_manifest.py's EXPECTED_* comparison values and
+# simulator/sil/plant/generated_params.hpp draw from here. Wiring
+# DEFAULT_PARAMS itself to this file is left to a future phase.
+# 注: Phase 1 時点ではこれらの定数は tools/sysid/defaults.py の
+# DEFAULT_PARAMS（mass/Ixx/Iyy/Izz/arm_length は引き続き手書きリテラルを保持、
+# Phase 1 のタスク範囲による）へは未配線 — ここから値を引くのは
+# tools/params_audit/params_manifest.py の EXPECTED_* 比較値と
+# simulator/sil/plant/generated_params.hpp のみ。DEFAULT_PARAMS 自体の配線は
+# 将来フェーズに委ねる。
+# ==============================================================================
+constants:
+  mass:
+    value: 0.037
+    unit: "kg"
+    date: "2026-03-31"
+    source: >
+      実測36.8g。ファームウェア反映は commit 43841314
+      "fix(control): update vehicle mass to 37g for accurate hover thrust"
+      （2026-03-31）。シミュレータ側（旧0.035kg）は2026-07-24に統一
+      （更新漏れであり個体差ではないと確認済み）。
+  Ixx:
+    value: 9.16e-6
+    unit: "kg·m²"
+    date: "unknown"
+    source: >
+      Roll慣性モーメント。出所文書は未特定（tools/sysid/defaults.py 由来、
+      全実装で既に一致済み — params_manifest.py の「既に一致済みの正常
+      参照ケース」コメント参照）。
+  Iyy:
+    value: 13.3e-6
+    unit: "kg·m²"
+    date: "unknown"
+    source: "Pitch慣性モーメント。出所文書は未特定（全実装で既に一致済み）。"
+  Izz:
+    value: 20.4e-6
+    unit: "kg·m²"
+    date: "unknown"
+    source: "Yaw慣性モーメント。出所文書は未特定（全実装で既に一致済み）。"
+  arm_offset:
+    value: 0.023
+    unit: "m"
+    date: "unknown"
+    source: >
+      モーメントアーム（重心→モータの X/Y オフセット）。出所文書は未特定
+      （全実装で既に一致済み）。対角のモーター間距離は 2×arm_offset/√2×2
+      = 0.065 m（アーム長 0.0325 m = arm_offset×√2、docs/architecture/
+      stampfly-parameters.md §2「機体形状」参照）。
+  urdf_base_mass:
+    value: 0.033
+    unit: "kg"
+    date: "2026-07-24"
+    source: >
+      simulator/shared/assets/meshes/parts/stampfly.urdf の base_link
+      単体質量。base_link(0.033) + 4×プロペラリンク(各0.001) = mass(0.037)。
+      独立した実測値ではなく mass からの差し引きで決まる表現上の値
+      （tools/params_audit/params_manifest.py EXPECTED_URDF_BASE_MASS 参照）。
+
+# ==============================================================================
+# Motor/propeller electromechanical coefficient sets. Values inside ONE set
+# are coupled (derived/cross-checked together) — never swap a single member
+# of a set without re-deriving the others.
+# モータ／プロペラの電気機械係数セット。1セット内の値は連動しており
+# （互いに導出・整合検証されているため）、セット内の1値だけを差し替えては
+# ならない。
+# ==============================================================================
+calibration_sets:
+  # Current adopted family — confirmed by the 2026-07-15..17 measurement
+  # campaign (multicopter_introduction qa_log Q4-9..13). kappa is the only
+  # member independent of the Ct/Am/thrust_efficiency 3-point set still
+  # pending under legacy_motor_curve below (backlog #3).
+  # 現行採用ファミリ — 2026-07-15〜17測定キャンペーンで確定
+  # （multicopter_introduction qa_log Q4-9..13）。kappa のみ、下記
+  # legacy_motor_curve に残る Ct/Am/thrust_efficiency の3点セット
+  # （バックログ#3、再較正待ち）から独立している。
+  measured_2026_07:
+    status: adopted
+    coupled: true
+    params:
+      Ct:
+        value: 6.7e-9
+        unit: "N/(rad/s)²"
+        method: "推力測定（thrust stand）"
+        method_en: "Thrust-stand measurement"
+        date: "2026-07-15"
+        note: >
+          T = Ct·ω²。simulator/sil/plant/plant.hpp の Config::Ct と
+          firmware actuator.cpp の MOTOR_CT は、Am/Bm/Cm・thrust_efficiency
+          と連動するModel Identity較正チェーンのため、この値への切替は
+          backlog #3（3点セット再較正）まで意図的に保留（EXEMPT）。
+      Cq:
+        value: 4.10e-11
+        unit: "N·m/(rad/s)²"
+        method: "コーストダウン法"
+        method_en: "Coast-down method"
+        date: "2026-07-15"
+        note: "Q = Cq·ω²。plant.hpp は独立した Cq 定数を持たない（反トルクは kappa·T で計算）。"
+      Jmp:
+        value: 1.375e-8
+        unit: "kg·m²"
+        method: "写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン）"
+        method_en: "Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down)"
+        date: "2026-07-15"
+      Rm:
+        value: 0.593
+        unit: "Ω"
+        method: "論文LCRメータ実測"
+        method_en: "Paper's LCR meter measurement"
+        date: "2026-07-15"
+        decision: "先生決定、commit 9a656a9f（実測2026-07-15／決着2026-07-24）"
+        note: >
+          旧候補0.34Ω（別個体疑いの旧LCR実測）・0.63Ω（vpython側の更新漏れの
+          旧初期値）は競合する実測ではなく更新漏れと判明。0.593Ωに統一。
+      Km:
+        value: 5.682e-4
+        unit: "V/(rad/s)"
+        method: "コーストダウン開回路EMF実測（SCPI公式換算）"
+        method_en: "Coast-down open-circuit EMF measurement (SCPI-formula conversion)"
+        date: "2026-07-16"
+        note: >
+          式 Cq×Rm/Am による参考計算（4.51e-4）とは約20.6%ずれるが、
+          docs/architecture/stampfly-parameters.md §3「派生パラメータ」の
+          脚注で解明済み（Am/Bm/Cmが旧ファミリの代数的言い換えのため）。
+          採用値は本直接実測。
+      kappa_adopted:
+        value: 6.12e-3
+        unit: "m"
+        method: "kappa = Cq/Ct の3桁丸め"
+        method_en: "kappa = Cq/Ct rounded to 3 sig figs"
+        date: "2026-07-17"
+        note: >
+          firmware B⁻¹ミキサー（firmware/vehicle/components/sf_actuator/
+          actuator.cpp の KAPPA）・SILプラント（simulator/sil/plant/plant.hpp
+          の Config::kappa）へ2026-07-17に採用済みの丸め値。下記
+          derived.kappa（完全精度、Cq/Ct≈6.11940e-3）とは丸め起因で相対誤差
+          約1e-4ずれる。Phase 1 はこの既存の丸め差異自体を変更しない
+          （挙動中立が絶対条件）——生成コードは kappa_adopted を
+          firmware/SIL比較・plant.hpp配線用、derived.kappa を tools/sysid
+          （完全精度でなければ既存 get_flat_defaults() とビット一致しない）
+          用に、意図的に分けて出力する。
+    derived:
+      # Computed by the generator — do not hand-write a numeric literal here.
+      # 生成器が計算する — ここに数値リテラルを手書きしないこと。
+      kappa: "Cq / Ct"                # 完全精度。_generated_params.py の _KAPPA_VALUE に対応
+      Am_consistent: "Rm * Cq / Km"   # 参考値のみ（バックログ#3用）。どの生成物からも実消費されない
+
+  # Legacy electrical family still referenced by simulator/sil/plant/plant.hpp
+  # (Config::Ct/motor_Am/motor_Bm/motor_Cm/thrust_efficiency) and firmware
+  # actuator.cpp's MOTOR_CT. Frozen pending
+  # docs/architecture/simulation-policy.md §6 backlog #3 (the Ct/Am/
+  # thrust_efficiency 3-point recalibration) — swapping a single member would
+  # break hover-thrust consistency (Model Identity). Not yet wired into any
+  # consuming file by Phase 1; generated for backlog #3 to consume later.
+  # firmware/SILが現在も参照する旧電気系ファミリ（Config::Ct/motor_Am/
+  # motor_Bm/motor_Cm/thrust_efficiency、firmware actuator.cpp の
+  # MOTOR_CT）。docs/architecture/simulation-policy.md §6 バックログ#3
+  # （Ct/Am/thrust_efficiency の3点セット再較正）が未着手のため凍結中 —
+  # 単独差し替えはホバー推力整合（Model Identity）を壊す。Phase 1 では
+  # どの消費ファイルにも配線しない（バックログ#3が後で使う前提で生成のみ）。
+  legacy_motor_curve:
+    status: frozen_for_implementation
+    coupled: true
+    params:
+      Ct:
+        value: 1.00e-8
+        unit: "N/(rad/s)²"
+        note: >
+          旧モータ曲線（〜2026-07-14）。simulator/sil/plant/plant.hpp の
+          Config::Ct と firmware actuator.cpp の MOTOR_CT が現在も使用
+          （tools/params_audit/params_manifest.py EXEMPT_PLANT_CT 参照）。
+      Cq:
+        value: 9.71e-11
+        unit: "N·m/(rad/s)²"
+        note: "旧トルク係数（〜2026-07-16、docs/architecture/stampfly-parameters.md §3派生パラメータ脚注 参照）。"
+      Am:
+        value: 5.39e-8
+        unit: "V/(rad/s)²"
+        note: "V = Am·ω² + Bm·ω + Cm。実験同定。simulator/sil/plant/plant.hpp Config::motor_Am が現在も使用。"
+      Bm:
+        value: 6.33e-4
+        unit: "V/(rad/s)"
+        note: "実験同定。simulator/sil/plant/plant.hpp Config::motor_Bm が現在も使用。"
+      Cm:
+        value: 1.53e-2
+        unit: "V"
+        note: "実験同定。simulator/sil/plant/plant.hpp Config::motor_Cm が現在も使用。"
+      Rm:
+        value: 0.34
+        unit: "Ω"
+        note: "旧LCRメータ実測（別個体の疑い）。2026-07-24決着で measured_2026_07.Rm(0.593)が採用値。"
+      Km:
+        value: 6.125e-4
+        unit: "V/(rad/s)"
+        note: >
+          旧ファミリの逆起電力定数。Am/Bm/Cmは本ファミリの代数的言い換え
+          （Am=Rm·Cq/Km, Bm=Rm·Dm/Km+Km, Cm=Rm·Qf/Km — 3値とも厳密一致、
+          docs/architecture/stampfly-parameters.md §3派生パラメータ脚注で検算済み）。
+      Dm:
+        value: 3.69e-8
+        unit: "N·m·s/rad"
+        note: "粘性摩擦係数（旧ファミリ）。tools/sysid/defaults.py DEFAULT_PARAMS.motor.Dm と同値だが、Phase 1では未配線（今回の決定事項に含まれない）。"
+      Qf:
+        value: 2.76e-5
+        unit: "N·m"
+        note: "静止摩擦トルク（旧ファミリ）。tools/sysid/defaults.py DEFAULT_PARAMS.motor.Qf と同値だが、Phase 1では未配線。"

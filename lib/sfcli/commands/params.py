@@ -10,7 +10,8 @@ tools/params_audit の薄いラッパー（詳細は同ディレクトリの REA
 （C_T, C_Q, kappa, 慣性 等）が一致しているかを検査する。
 
 Subcommands:
-    check   - Run the parameter consistency audit
+    check      - Run the parameter consistency audit
+    generate   - Regenerate physical-parameter code from control/models/stampfly_physical.yaml
 """
 
 import argparse
@@ -49,6 +50,22 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     check_parser.set_defaults(func=run_check)
 
+    generate_parser = sub.add_parser(
+        "generate",
+        help="Regenerate physical-parameter code from the SSOT YAML",
+        description="Read control/models/stampfly_physical.yaml (the Single Source of "
+                     "Truth) and regenerate tools/sysid/_generated_params.py, "
+                     "simulator/sil/plant/generated_params.hpp, and the "
+                     "<!-- AUTO-GENERATED:params --> marker table in "
+                     "docs/architecture/stampfly-parameters.md.",
+    )
+    generate_parser.add_argument(
+        "--check", action="store_true",
+        help="do not write anything; exit 1 if generated files are stale "
+             "(the YAML changed without regenerating)",
+    )
+    generate_parser.set_defaults(func=run_generate)
+
     parser.set_defaults(func=lambda a: (parser.print_help(), 0)[1])
 
 
@@ -80,3 +97,31 @@ def run_check(args: argparse.Namespace) -> int:
     if args.strict:
         argv.append("--strict")
     return check_params.main(argv)
+
+
+def run_generate(args: argparse.Namespace) -> int:
+    """Run the code generator (tools/params_audit/generate.py).
+    コード生成器を実行する（tools/params_audit/generate.py）。
+
+    Same tools/-on-sys.path import pattern as run_check() above -- a missing
+    or broken params_audit/generate.py (or a missing PyYAML) only disables
+    `sf params generate`, never `sf` itself.
+    run_check() と同じ tools/ を sys.path に載せる import パターン --
+    params_audit/generate.py の欠落・破損（または PyYAML 未導入）があっても
+    `sf params generate` だけが無効化され、`sf` 全体は道連れにならない。
+    """
+    tools_dir = str(paths.root() / "tools")
+    sys.path.insert(0, tools_dir)
+    try:
+        from params_audit import generate
+    except ImportError as e:
+        console.error(f"Failed to import params_audit.generate: {e}")
+        return 1
+    finally:
+        if tools_dir in sys.path:
+            sys.path.remove(tools_dir)
+
+    argv = []
+    if args.check:
+        argv.append("--check")
+    return generate.main(argv)

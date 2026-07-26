@@ -132,6 +132,24 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 
 ## 3. モーター・プロペラパラメータ
 
+<!-- AUTO-GENERATED:params BEGIN -->
+> 以下は `control/models/stampfly_physical.yaml`（Single Source of Truth）から `sf params generate` が生成した確定値の一覧である。手編集しないこと。
+
+| 記号 | パラメータ | 値 | 単位 | 実測日 | 方法 |
+|---|---|---|---|---|---|
+| mass | 機体質量 | 0.037 | kg | 2026-03-31 | - |
+| Ixx | Roll慣性モーメント | 9.16×10⁻⁶ | kg·m² | unknown | - |
+| Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
+| Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
+| arm_offset | モーメントアーム | 0.023 | m | unknown | - |
+| Ct | 推力係数 | 6.7×10⁻⁹ | N/(rad/s)² | 2026-07-15 | 推力測定（thrust stand） |
+| Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
+| Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
+| Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文LCRメータ実測 |
+| Km | 逆起電力定数 | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
+| κ | トルク/推力比（採用値） | 6.12×10⁻³ | m | 2026-07-17 | kappa = Cq/Ct の3桁丸め |
+<!-- AUTO-GENERATED:params END -->
+
 ### モーター配置と回転方向
 
 | モーター | 位置 | X座標 (m) | Y座標 (m) | 回転方向 |
@@ -589,6 +607,24 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | Air density | 1.225 | kg/m³ | Standard atmosphere |
 
 ## 3. Motor & Propeller Parameters
+
+<!-- AUTO-GENERATED:params BEGIN -->
+> The table below is generated from `control/models/stampfly_physical.yaml` (Single Source of Truth) by `sf params generate`. Do not hand-edit it.
+
+| Symbol | Parameter | Value | Unit | Date | Method |
+|---|---|---|---|---|---|
+| mass | Vehicle mass | 0.037 | kg | 2026-03-31 | - |
+| Ixx | Roll moment of inertia | 9.16×10⁻⁶ | kg·m² | unknown | - |
+| Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
+| Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
+| arm_offset | Moment arm | 0.023 | m | unknown | - |
+| Ct | Thrust coefficient | 6.7×10⁻⁹ | N/(rad/s)² | 2026-07-15 | Thrust-stand measurement |
+| Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
+| Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
+| Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's LCR meter measurement |
+| Km | Back-EMF constant | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
+| κ | Torque/thrust ratio (adopted) | 6.12×10⁻³ | m | 2026-07-17 | kappa = Cq/Ct rounded to 3 sig figs |
+<!-- AUTO-GENERATED:params END -->
 
 ### Motor Layout and Rotation Direction
 

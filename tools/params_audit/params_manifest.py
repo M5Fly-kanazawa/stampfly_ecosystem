@@ -36,8 +36,42 @@ and can never observe a mismatch.
 決して観測できない。
 """
 
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Union
+
+# Import the generated EXPECTED_* constants (Phase 1: spec YAML -> code
+# generation, see docs/architecture/simulation-policy.md). `tools/` is added
+# to sys.path defensively here (not just relied upon from the caller) so this
+# module keeps working both when `sf params check` puts tools/ on sys.path
+# AND when check_params.py is run directly as a script (python auto-adds only
+# tools/params_audit/, its own directory, to sys.path in that mode -- see
+# check_params.py's find_repo_root()/module docstring for the two contexts).
+# 生成された EXPECTED_* 定数を import する（Phase 1: spec YAML→コード生成、
+# docs/architecture/simulation-policy.md 参照）。`tools/` はここでも
+# 防御的に sys.path へ追加する（呼び出し元任せにしない）— `sf params check`
+# が tools/ を sys.path に載せる場合と、check_params.py を直接スクリプト
+# 実行する場合（この場合 Python は自身のディレクトリ tools/params_audit/ の
+# みを自動追加する — 2通りの実行文脈は check_params.py の
+# find_repo_root()/モジュール docstring 参照）の両方で動き続けるようにする。
+_TOOLS_DIR = str(Path(__file__).resolve().parent.parent)
+if _TOOLS_DIR not in sys.path:
+    sys.path.insert(0, _TOOLS_DIR)
+
+from sysid._generated_params import (  # noqa: E402
+    EXPECTED_CT,
+    EXPECTED_CQ,
+    EXPECTED_KAPPA,
+    EXPECTED_JMP,
+    EXPECTED_IXX,
+    EXPECTED_IYY,
+    EXPECTED_IZZ,
+    EXPECTED_ARM,
+    EXPECTED_RM,
+    EXPECTED_MASS,
+    EXPECTED_URDF_BASE_MASS,
+)
 
 
 # =============================================================================
@@ -97,70 +131,28 @@ class ParamCheck:
 
 
 # =============================================================================
-# Confirmed measured values (2026-07-15/17 measurement campaign) — the SSOT
-# for every "expected" float below. Do not hand-edit a numeric literal into a
-# ParamCheck row; add/adjust the constant here instead, with its source.
-# 確定済み実測値（2026-07-15/17 測定キャンペーン）— 以下の全"期待値"の正典。
-# ParamCheck の行に数値リテラルを直接書き込まず、ここの定数を追加・修正し、
-# 出所を添えること。
+# Confirmed measured values — the SSOT for every "expected" float below.
+#
+# Phase 1 (spec YAML -> code generation, see docs/architecture/
+# simulation-policy.md): these EXPECTED_* values are no longer hand-typed
+# literals in this file. They are imported (see top of file) from
+# tools/sysid/_generated_params.py, which `sf params generate` machine-
+# generates from the single YAML source of truth
+# control/models/stampfly_physical.yaml. To change one, edit that YAML, run
+# `sf params generate`, then commit both. Do not hand-edit a numeric literal
+# into a ParamCheck row below, and do not redefine EXPECTED_* here.
+#
+# 確定済み実測値 — 以下の全"期待値"の正典。
+#
+# Phase 1（spec YAML→コード生成、docs/architecture/simulation-policy.md
+# 参照）: これらの EXPECTED_* は、もうこのファイルへ手書きされたリテラルでは
+# ない。（ファイル冒頭で）唯一の正である YAML
+# （control/models/stampfly_physical.yaml）から `sf params generate` が
+# 機械生成する tools/sysid/_generated_params.py から import する。値を
+# 変更する場合はその YAML を編集し `sf params generate` を実行、両方を
+# コミットすること。以下の ParamCheck 行に数値リテラルを直接書き込んだり、
+# ここで EXPECTED_* を再定義したりしないこと。
 # =============================================================================
-# Thrust coefficient C_T [N/(rad/s)^2], thrust-stand measurement, 2026-07-15.
-# 推力係数 [N/(rad/s)^2]、推力測定、2026-07-15。
-# Source: docs/architecture/simulation-policy.md backlog #3;
-#         docs/architecture/stampfly-parameters.md header note.
-EXPECTED_CT = 6.7e-9
-
-# Torque coefficient C_Q [N*m/(rad/s)^2], coast-down measurement, 2026-07-15.
-# トルク係数 [N・m/(rad/s)^2]、コーストダウン法、2026-07-15。
-EXPECTED_CQ = 4.10e-11
-
-# Torque/thrust ratio kappa = C_Q / C_T [m]. Adopted in the firmware B^-1
-# mixer on 2026-07-17 (firmware/vehicle/components/sf_actuator/actuator.cpp:99).
-# トルク/推力比 kappa = C_Q/C_T [m]。2026-07-17 にファーム B^-1 ミキサーへ採用済み。
-EXPECTED_KAPPA = 6.12e-3
-
-# Rotor inertia J_mp [kg*m^2], photographic + spec-sheet method, 2026-07-15.
-# ローター慣性 [kg・m^2]、写真法+諸元法、2026-07-15。
-EXPECTED_JMP = 1.375e-8
-
-# Body inertia [kg*m^2] — already consistent everywhere; kept here so this
-# manifest is the single place a future re-identification would touch.
-# 機体慣性 [kg・m^2] — 全実装で既に一致済み。将来の再同定で触る箇所を
-# ここ1箇所に集約しておく。
-EXPECTED_IXX = 9.16e-6
-EXPECTED_IYY = 13.3e-6
-EXPECTED_IZZ = 20.4e-6
-
-# Moment arm (X/Y offset from CG to motor) [m] — already consistent everywhere.
-# モーメントアーム（重心→モータの X/Y オフセット）[m] — 全実装で既に一致済み。
-EXPECTED_ARM = 0.023
-
-# Winding resistance Rm [Ω] — RESOLVED 2026-07-24 (teacher decision, commit
-# 9a656a9f 2026-07-15): adopt the paper's LCR measurement. The other two
-# candidates (0.34 = older/possibly-different-unit LCR, 0.63 = vpython's own
-# stale initial value) were update gaps, not competing measurements.
-# 巻線抵抗 Rm [Ω] — 2026-07-24 決着（先生決定、コミット 9a656a9f 2026-07-15）:
-# 論文LCR実測を採用。他の2値（0.34=旧/別個体疑いのLCR、0.63=vpython側の
-# 更新漏れの旧初期値）は競合する実測ではなく単なる更新漏れだった。
-EXPECTED_RM = 0.593
-
-# Vehicle mass [kg] — RESOLVED 2026-07-24: adopt the measured 36.8g (firmware
-# reflected this 2026-03-31, commit 43841314; simulator copies were the update
-# gap). See docs/architecture/stampfly-parameters.md §"質量特性".
-# 機体質量 [kg] — 2026-07-24 決着: 実測36.8gを採用（ファームは2026-03-31に
-# 反映済み、コミット43841314；シミュレータ側が更新漏れだった）。
-EXPECTED_MASS = 0.037
-
-# URDF base_link mass [kg] — simulator/shared/assets/meshes/parts/stampfly.urdf
-# models the vehicle as base_link (body) + 4 separate propeller links (0.001 kg
-# each), so base_link alone is NOT the full vehicle mass. 0.033 + 4*0.001 =
-# 0.037 = EXPECTED_MASS. This constant exists only because the manifest checks
-# one regex-captured number per row; it is not an independent measurement.
-# URDF base_link 質量 [kg] — stampfly.urdf は機体を base_link（本体）＋
-# プロペラ4リンク（各0.001kg）で表現するため、base_link 単体は機体全質量では
-# ない。0.033 + 4*0.001 = 0.037 = EXPECTED_MASS。この定数はマニフェストが
-# 1行1数値しか検査できないために存在するだけで、独立した実測値ではない。
-EXPECTED_URDF_BASE_MASS = 0.033
 
 # --- EXEMPT markers (known-and-accepted mismatch, with reason) ---
 # --- EXEMPT マーカー（既知で許容された不一致、理由付き） ---
@@ -182,10 +174,14 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "C_T": [
         ParamCheck(
-            file="tools/sysid/defaults.py",
+            # Phase 1: _CT_VALUE moved from tools/sysid/defaults.py (hand-typed
+            # literal) into the generated tools/sysid/_generated_params.py.
+            # Phase 1: _CT_VALUE は手書きリテラルだった tools/sysid/defaults.py
+            # から、生成物 tools/sysid/_generated_params.py へ移動した。
+            file="tools/sysid/_generated_params.py",
             regex=r'_CT_VALUE\s*=\s*([0-9eE.+-]+)',
             expected=EXPECTED_CT,
-            note="module constant _CT_VALUE",
+            note="module constant _CT_VALUE (generated)",
         ),
         ParamCheck(
             file="lib/stampfly_edu/sim/plants.py",
@@ -230,10 +226,12 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "C_Q": [
         ParamCheck(
-            file="tools/sysid/defaults.py",
+            # Phase 1: moved to the generated tools/sysid/_generated_params.py
+            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
+            file="tools/sysid/_generated_params.py",
             regex=r'_CQ_VALUE\s*=\s*([0-9eE.+-]+)',
             expected=EXPECTED_CQ,
-            note="module constant _CQ_VALUE",
+            note="module constant _CQ_VALUE (generated)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
@@ -277,10 +275,17 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="mixerCompute() B^-1 KAPPA",
         ),
         ParamCheck(
-            file="simulator/sil/plant/plant.hpp",
-            regex=r'float kappa\s*=\s*([0-9eE.+-]+)f;',
+            # Phase 1: plant.hpp's Config::kappa now reads
+            # sil_params::adopted::KAPPA (simulator/sil/plant/generated_params.hpp)
+            # instead of a hand-written literal -- the literal itself moved there.
+            # Phase 1: plant.hpp の Config::kappa は手書きリテラルではなく
+            # sil_params::adopted::KAPPA
+            # （simulator/sil/plant/generated_params.hpp）を参照するようになった
+            # -- リテラル自体がそちらへ移動した。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float KAPPA = ([0-9eE.+-]+)f;',
             expected=EXPECTED_KAPPA,
-            note="Config::kappa (independent of the deferred Ct set)",
+            note="sil_params::adopted::KAPPA (independent of the deferred Ct set)",
         ),
         ParamCheck(
             file="simulator/genesis/control_allocation.py",
@@ -316,10 +321,12 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "J_mp": [
         ParamCheck(
-            file="tools/sysid/defaults.py",
+            # Phase 1: moved to the generated tools/sysid/_generated_params.py
+            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
+            file="tools/sysid/_generated_params.py",
             regex=r'_JMP_VALUE\s*=\s*([0-9eE.+-]+)',
             expected=EXPECTED_JMP,
-            note="module constant _JMP_VALUE",
+            note="module constant _JMP_VALUE (generated)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
@@ -467,10 +474,12 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "Rm": [
         ParamCheck(
-            file="tools/sysid/defaults.py",
+            # Phase 1: moved to the generated tools/sysid/_generated_params.py
+            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
+            file="tools/sysid/_generated_params.py",
             regex=r'_RM_VALUE\s*=\s*([0-9.eE+-]+)',
             expected=EXPECTED_RM,
-            note="module constant _RM_VALUE",
+            note="module constant _RM_VALUE (generated)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
@@ -485,10 +494,14 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="motor_prop.Rm",
         ),
         ParamCheck(
-            file="simulator/sil/plant/plant.hpp",
-            regex=r'motor_Rm\s*=\s*([0-9.eE+-]+)f;',
+            # Phase 1: plant.hpp's Config::motor_Rm now reads
+            # sil_params::adopted::RM (generated_params.hpp) -- literal moved there.
+            # Phase 1: plant.hpp の Config::motor_Rm は sil_params::adopted::RM
+            # （generated_params.hpp）を参照する -- リテラルはそちらへ移動した。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float RM = ([0-9.eE+-]+)f;',
             expected=EXPECTED_RM,
-            note="Config::motor_Rm (battery model)",
+            note="sil_params::adopted::RM (battery model source, Config::motor_Rm)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
@@ -510,10 +523,14 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "mass": [
         ParamCheck(
-            file="simulator/sil/plant/plant.hpp",
-            regex=r'float mass\s*=\s*([0-9.eE+-]+)f;',
+            # Phase 1: plant.hpp's Config::mass now reads sil_params::MASS
+            # (generated_params.hpp) -- the literal moved there.
+            # Phase 1: plant.hpp の Config::mass は sil_params::MASS
+            # （generated_params.hpp）を参照する -- リテラルはそちらへ移動した。
+            file="simulator/sil/plant/generated_params.hpp",
+            regex=r'constexpr float MASS = ([0-9.eE+-]+)f;',
             expected=EXPECTED_MASS,
-            note="Config::mass (battery model)",
+            note="sil_params::MASS (Config::mass source)",
         ),
         ParamCheck(
             file="simulator/sil/models/stampfly.xml",

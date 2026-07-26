@@ -11,54 +11,71 @@ from typing import Any, Dict, Tuple
 # ==============================================================================
 # Motor & Propeller measured coefficients / モーター・プロペラの実測係数
 #
-# These are the single-source values that both DEFAULT_PARAMS (below) and
-# get_flat_defaults() derive kappa/Ct/Cq from. Defining them once as module
-# constants — instead of writing the same literal twice — is what keeps the
-# two public APIs from re-diverging the way they did before this file was
-# unified (Ct=1.00e-8/Cq=9.71e-11/kappa=9.71e-3 in DEFAULT_PARAMS vs.
-# Ct=6.7e-9/Cq=4.10e-11/kappa=6.12e-3 in get_flat_defaults()).
+# Phase 1 (spec YAML -> code generation, see docs/architecture/
+# simulation-policy.md): these six module constants are no longer hand-typed
+# literals here. They are imported from tools/sysid/_generated_params.py,
+# which `sf params generate` machine-generates from the single YAML source of
+# truth control/models/stampfly_physical.yaml. Both DEFAULT_PARAMS (below)
+# and get_flat_defaults() derive kappa/Ct/Cq/Jmp/Rm/Km from these imports, so
+# there is no longer a hand-copy for them to re-diverge from -- the previous
+# risk this comment used to describe (Ct=1.00e-8/Cq=9.71e-11/kappa=9.71e-3 in
+# DEFAULT_PARAMS vs. Ct=6.7e-9/Cq=4.10e-11/kappa=6.12e-3 in
+# get_flat_defaults()) is now structurally impossible: there is only one
+# place (the YAML) to edit.
 #
-# ここで一度だけ定義した値から、DEFAULT_PARAMS (後述) と get_flat_defaults() の
-# 両方が kappa/Ct/Cq を導出する。値を2箇所に書き写すのではなくモジュール定数を
-# 1箇所に置くことで、このファイルが統一される前に発生していた再分岐
-# (DEFAULT_PARAMS側はCt=1.00e-8/Cq=9.71e-11/kappa=9.71e-3の旧値、
+# Phase 1（spec YAML→コード生成、docs/architecture/simulation-policy.md
+# 参照）: この6つのモジュール定数は、もうこのファイルへ手書きされた
+# リテラルではない。`sf params generate` が唯一の正である YAML
+# （control/models/stampfly_physical.yaml）から機械生成する
+# tools/sysid/_generated_params.py から import する。DEFAULT_PARAMS
+# （後述）と get_flat_defaults() の両方がこの import から kappa/Ct/Cq/
+# Jmp/Rm/Km を導出するため、以前このコメントが説明していた再分岐リスク
+# （DEFAULT_PARAMS側はCt=1.00e-8/Cq=9.71e-11/kappa=9.71e-3の旧値、
 #  get_flat_defaults側はCt=6.7e-9/Cq=4.10e-11/kappa=6.12e-3の実測値、
-#  という同一ファイル内矛盾)を構造的に防ぐ。
+#  という同一ファイル内矛盾）は構造的に起こり得なくなった——編集すべき
+# 場所が YAML の1箇所しかないため。
+#
+# No silent fallback on import failure: a missing/broken
+# _generated_params.py must surface as a loud ImportError here, not degrade
+# tools/sysid's physical constants to some other default (that fallback
+# pattern is reserved for lib/stampfly_edu's ImportError-fallback dicts,
+# which are a distinct, intentionally-forgiving educational-code path).
+# import 失敗時に黙ってフォールバックしない: _generated_params.py が
+# 欠落・破損していれば、ここで大きな ImportError として表面化させる
+# （tools/sysid の物理定数を別の既定値へ黙って劣化させない）——その
+# フォールバック方式は lib/stampfly_edu の ImportError フォールバック
+# 辞書専用（意図的に寛容な教育用コード経路であり、別物）。
 # ==============================================================================
-_CT_VALUE = 6.7e-9   # N/(rad/s)^2 — thrust coeff, 2026-07-15 実測（現行プロペラ・推力測定）
-_CQ_VALUE = 4.10e-11  # N・m/(rad/s)^2 — torque coeff, 2026-07-15 実測（コーストダウン法）
-_KAPPA_VALUE = _CQ_VALUE / _CT_VALUE  # m — kappa = Cq/Ct, mechanically derived, not a
-                                       # separately hand-entered literal
-                                       # kappa = Cq/Ct として機械的に導出（別途手入力しない）
-_JMP_VALUE = 1.375e-8  # kg·m^2 — rotor inertia, 2026-07-15 実測（写真法+諸元法）
-
-# Winding resistance / 巻線抵抗:
-# RESOLVED 2026-07-24 (teacher decision, commit 9a656a9f 2026-07-15): 0.593 Ω
-# (paper's LCR measurement) is the single adopted value. The two other
-# candidates that used to coexist — 0.34 Ω (older/possibly-different-unit LCR
-# measurement) and 0.63 Ω (vpython's own stale initial value) — were update
-# gaps, not competing measurements, and have since been cross-file unified to
-# 0.593 Ω in simulator/genesis/motor_model.py, simulator/vpython/core/motors.py,
-# and simulator/sil/plant/plant.hpp (see tools/params_audit/params_manifest.py
-# "Rm" group, checked by `sf params check`).
-# 巻線抵抗: 2026-07-24決着（先生決定、コミット9a656a9f 2026-07-15）: 0.593Ω
-# （論文LCR実測）を唯一の採用値とする。かつて並立していた他の2値 — 0.34Ω
-# （旧/別個体疑いのLCR実測）と0.63Ω（vpython側の更新漏れの旧初期値）— は
-# 競合する実測ではなく単なる更新漏れであり、simulator/genesis/motor_model.py・
-# simulator/vpython/core/motors.py・simulator/sil/plant/plant.hpp を含め
-# クロスファイルで0.593Ωへ統一済み（tools/params_audit/params_manifest.py の
-# "Rm" グループ、`sf params check` で検査）。
-_RM_VALUE = 0.593  # Ω
-
-# Back-EMF constant / 逆起電力定数:
-# Cq×Rm/Am の理論式ではなく、コーストダウン開回路EMF実測（SCPI公式換算）による
-# 直接測定値。Am(電圧-角速度2次係数)を本ファイルでは保持していないため式では
-# 表せず、実測値としてそのまま保持する。
-# Not derived from the Cq×Rm/Am formula here — this is a direct measurement from
-# coastdown open-circuit EMF (converted via the SCPI formula). Am (the V-ω²
-# coefficient) is not tracked in this file, so there is no in-file formula to
-# express Km through; it is kept as a directly measured literal instead.
-_KM_VALUE = 5.682e-4  # V/(rad/s), 2026-07-16 確定（コーストダウン開回路EMF実測・SCPI公式換算）
+# Dual import context, same pattern as tools/params_audit/check_params.py:
+# (a) package import (`from sysid import defaults` / `sysid.defaults`) uses
+# the relative form; (b) bare import (`import defaults` with tools/sysid on
+# sys.path — lib/stampfly_edu and sf CLI helpers do this) has no parent
+# package, so the plain absolute import resolves from the same directory.
+# A missing _generated_params.py still fails loudly in BOTH contexts.
+# 2つの import 文脈に対応（tools/params_audit/check_params.py と同じ流儀）:
+# (a) パッケージ経由（`from sysid import defaults`）は相対 import、
+# (b) 裸 import（tools/sysid を sys.path に載せて `import defaults` —
+# lib/stampfly_edu や sf CLI 補助がこの形）は親パッケージが無いため、
+# 同一ディレクトリから絶対 import で解決する。_generated_params.py が
+# 欠落していればどちらの文脈でも大きく失敗する（黙って劣化しない）。
+try:
+    from ._generated_params import (  # noqa: E402
+        _CT_VALUE,
+        _CQ_VALUE,
+        _KAPPA_VALUE,
+        _JMP_VALUE,
+        _RM_VALUE,
+        _KM_VALUE,
+    )
+except ImportError:
+    from _generated_params import (  # noqa: E402
+        _CT_VALUE,
+        _CQ_VALUE,
+        _KAPPA_VALUE,
+        _JMP_VALUE,
+        _RM_VALUE,
+        _KM_VALUE,
+    )
 
 
 # Default StampFly parameters from measured/identified values

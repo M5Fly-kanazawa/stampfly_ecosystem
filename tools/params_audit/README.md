@@ -7,19 +7,29 @@
 ### このドキュメントについて
 
 `tools/params_audit` は、StampFly の機体物理パラメータ（推力係数 C_T、トルク係数
-C_Q、トルク/推力比 kappa、慣性モーメント 等）がファームウェア・SIL・複数の
-シミュレータへ手動でコピペされていることによる食い違いを、決定論的に検出する
-検査ツールである。`sf params check` として CLI から実行する。
+C_Q、トルク/推力比 kappa、慣性モーメント 等）に関する2つのツールをまとめた
+ディレクトリである: (1) `sf params generate` — 唯一の正である
+`control/models/stampfly_physical.yaml` からコードを機械生成する（Phase 1）、
+(2) `sf params check` — 生成の対象になっていない残りの手動コピー箇所を決定論的に
+検査する（Phase 0）。
 
 ### なぜ必要か
 
-コード生成パイプライン（spec YAML → 各言語のコードを自動生成する仕組み）が
-まだ無い（Phase 1、`docs/architecture/simulation-policy.md` 参照）ため、同じ
-物理定数が `tools/sysid/defaults.py`・`simulator/genesis/motor_model.py`・
+**Phase 1（コード生成、2026-07-26 一部着手）:** `control/models/
+stampfly_physical.yaml` を唯一の正とし、`sf params generate` が
+`tools/sysid/_generated_params.py`・`simulator/sil/plant/generated_params.hpp`・
+`docs/architecture/stampfly-parameters.md` のマーカー表を機械生成する。この3箇所は
+もう手書きの数値リテラルを持たない — YAML を編集して `sf params generate` を
+実行するだけで全て揃う。
+
+**Phase 0（監査、現役）:** 上記3箇所以外——`simulator/genesis/motor_model.py`・
 `simulator/vpython/core/motors.py`・`firmware/vehicle/components/sf_actuator/
-actuator.cpp` 等、10箇所以上に手書きで複製されている。一度でも実測値が更新
-されると、更新漏れの箇所だけ旧値のまま取り残される — これを人手でのレビュー
-ではなく機械的に検出するのが本ツールの目的（Phase 0）。
+actuator.cpp`（firmware は生成対象外）・MuJoCo XML・URDF・
+`stampfly-parameters.md` の既存手書き表 等——は、引き続き同じ物理定数を手書きで
+複製している（10箇所以上）。一度でも実測値が更新されると、更新漏れの箇所だけ
+旧値のまま取り残される — これを人手でのレビューではなく機械的に検出するのが
+`sf params check` の目的。`sf params generate` が対象を広げるほど、この監査対象は
+減っていく設計。
 
 ### 対象読者
 
@@ -29,9 +39,24 @@ actuator.cpp` 等、10箇所以上に手書きで複製されている。一度�
 
 ## 2. 使い方
 
+### 値を変更する（Phase 1 対象箇所）
+
 ```bash
 source setup_env.sh   # ESP-IDF + sf CLI を有効化
 
+# 1. control/models/stampfly_physical.yaml を編集
+# 2. コードを再生成
+sf params generate
+# 3. sf params check --strict で全体の整合を確認してからコミット
+sf params check --strict
+```
+
+`sf params generate --check` は何も書き込まず、生成物が YAML から乖離していないか
+（YAML を編集したのに再生成を忘れていないか）だけを確認する（CI 用、exit 1 で失敗）。
+
+### 整合を検査する（Phase 0 監査、Phase 1 対象箇所も含め全体）
+
+```bash
 sf params check              # テキスト表で結果を表示
 sf params check --json       # 機械可読 JSON で出力
 sf params check --strict     # UNRESOLVED（未確定パラメータ）も失敗扱いにする
@@ -70,16 +95,22 @@ sil-regression.yml`）にも同じ検査を早期化する専用ステップが�
 パラメータ名（例 `"C_T"`）をキーに、`ParamCheck` のリストを値とする:
 
 ```python
-"C_T": [
+"Ixx": [
     ParamCheck(
         file="tools/sysid/defaults.py",
-        regex=r'_CT_VALUE\s*=\s*([0-9eE.+-]+)',
-        expected=EXPECTED_CT,
-        note="module constant _CT_VALUE",
+        regex=r'"Ixx":\s*\{\s*"value":\s*([0-9eE.+-]+),',
+        expected=EXPECTED_IXX,
+        note="DEFAULT_PARAMS.inertia.Ixx",
     ),
     ...
 ],
 ```
+
+（`"C_T"`/`"C_Q"`/`"J_mp"`/`"Rm"`/`"kappa"` の一部の行は Phase 1 で `sf params
+generate` の生成先——`tools/sysid/_generated_params.py`・`simulator/sil/plant/
+generated_params.hpp`——を指すようになった。それらの値を変更するときは
+`params_manifest.py` を編集するのではなく `control/models/
+stampfly_physical.yaml` を編集して `sf params generate` を実行すること。）
 
 新しいコピー箇所を追加する手順:
 
@@ -97,12 +128,18 @@ sil-regression.yml`）にも同じ検査を早期化する専用ステップが�
 5. `sf params check` を実行し、新しい行が `ERROR` にならず意図した判定
    （`OK`/`MISMATCH`/`UNRESOLVED`/`EXEMPT`）になることを確認する。
 
-### Phase 1 への発展
+### Phase 1 の状況
 
-将来的には spec YAML（`protocol/spec/` に倣った機械可読定義）から各言語の
-コードを自動生成する方式へ移行する計画があり、実現すれば本マニフェストによる
-「後追い検査」自体が不要になる。それまでの Phase 0 として、本ツールは
-食い違いの早期発見に用いる。
+`control/models/stampfly_physical.yaml`（spec YAML）から `sf params generate`
+がコードを生成する方式が、`tools/sysid/_generated_params.py`・
+`simulator/sil/plant/generated_params.hpp`・`docs/architecture/
+stampfly-parameters.md` のマーカー表について 2026-07-26 に着手済み——この3箇所は
+もう本マニフェストによる「後追い検査」の対象ではなく、YAML そのものが正で
+生成が保証する（`sf params generate --check` で検出、CI 組み込み済み）。
+残りの手動コピー箇所（`simulator/genesis/*`・`simulator/vpython/*`・
+firmware（生成対象外）・MuJoCo XML・URDF・docs の既存手書き表）は引き続き
+Phase 0 の本マニフェストで監査する。生成対象を広げるたびに、対応するマニフェスト
+の行を `tools/sysid/_generated_params.py` や生成先ファイルへ差し替えていく。
 
 ---
 
@@ -112,23 +149,33 @@ sil-regression.yml`）にも同じ検査を早期化する専用ステップが�
 
 ### About This Document
 
-`tools/params_audit` deterministically detects divergence caused by
-StampFly's vehicle physical parameters (thrust coefficient C_T, torque
-coefficient C_Q, torque/thrust ratio kappa, moments of inertia, etc.) being
-hand-copied across the firmware, the SIL, and several simulators. It runs
-from the CLI as `sf params check`.
+`tools/params_audit` bundles two tools for StampFly's vehicle physical
+parameters (thrust coefficient C_T, torque coefficient C_Q, torque/thrust
+ratio kappa, moments of inertia, etc.): (1) `sf params generate` — machine-
+generates code from the single source of truth `control/models/
+stampfly_physical.yaml` (Phase 1), and (2) `sf params check` —
+deterministically audits the remaining hand-copied locations that generation
+does not yet cover (Phase 0).
 
 ### Why This Is Needed
 
-There is no code-generation pipeline yet (Phase 1 — generating per-language
-code from a spec YAML, see `docs/architecture/simulation-policy.md`), so the
-same physical constants are hand-duplicated in 10+ places, including
-`tools/sysid/defaults.py`, `simulator/genesis/motor_model.py`,
-`simulator/vpython/core/motors.py`, and
-`firmware/vehicle/components/sf_actuator/actuator.cpp`. Whenever a measured
-value is updated, any copy that was missed is silently left stale. This
-tool's purpose (Phase 0) is to detect that mechanically instead of relying
-on manual review.
+**Phase 1 (code generation, started 2026-07-26):** `control/models/
+stampfly_physical.yaml` is the single source of truth. `sf params generate`
+machine-generates `tools/sysid/_generated_params.py`,
+`simulator/sil/plant/generated_params.hpp`, and the marker table in
+`docs/architecture/stampfly-parameters.md`. These three locations no longer
+hold hand-typed numeric literals -- edit the YAML and run `sf params
+generate`.
+
+**Phase 0 (audit, still active):** Everywhere else -- `simulator/genesis/
+motor_model.py`, `simulator/vpython/core/motors.py`,
+`firmware/vehicle/components/sf_actuator/actuator.cpp` (firmware is out of
+generation scope), MuJoCo XML, URDF files, and the pre-existing hand-written
+tables in `stampfly-parameters.md` -- still hand-duplicates the same physical
+constants in 10+ places. Whenever a measured value is updated, any copy that
+was missed is silently left stale. `sf params check`'s purpose is to detect
+that mechanically instead of relying on manual review. This audited surface
+shrinks as `sf params generate` covers more consumers.
 
 ### Target Audience
 
@@ -139,9 +186,25 @@ on manual review.
 
 ## 2. Usage
 
+### Changing a value (Phase 1 locations)
+
 ```bash
 source setup_env.sh   # activate ESP-IDF + sf CLI
 
+# 1. Edit control/models/stampfly_physical.yaml
+# 2. Regenerate the code
+sf params generate
+# 3. Confirm everything agrees before committing
+sf params check --strict
+```
+
+`sf params generate --check` writes nothing; it only confirms the generated
+files have not drifted from the YAML (i.e. you didn't forget to regenerate
+after editing it) -- used in CI, exits 1 on staleness.
+
+### Auditing consistency (Phase 0, covers the whole surface including Phase 1 locations)
+
+```bash
 sf params check              # text table
 sf params check --json       # machine-readable JSON
 sf params check --strict     # also fail on UNRESOLVED parameters
@@ -182,16 +245,22 @@ Checked locations are declared in the `MANIFEST` dict in
 `"C_T"`), each mapping to a list of `ParamCheck` entries:
 
 ```python
-"C_T": [
+"Ixx": [
     ParamCheck(
         file="tools/sysid/defaults.py",
-        regex=r'_CT_VALUE\s*=\s*([0-9eE.+-]+)',
-        expected=EXPECTED_CT,
-        note="module constant _CT_VALUE",
+        regex=r'"Ixx":\s*\{\s*"value":\s*([0-9eE.+-]+),',
+        expected=EXPECTED_IXX,
+        note="DEFAULT_PARAMS.inertia.Ixx",
     ),
     ...
 ],
 ```
+
+(Some `"C_T"`/`"C_Q"`/`"J_mp"`/`"Rm"`/`"kappa"` entries now point at `sf
+params generate`'s output -- `tools/sysid/_generated_params.py` and
+`simulator/sil/plant/generated_params.hpp` (Phase 1). To change one of those
+values, edit `control/models/stampfly_physical.yaml` and run `sf params
+generate`, rather than editing `params_manifest.py`.)
 
 To add a new copy location:
 
@@ -212,9 +281,17 @@ To add a new copy location:
 5. Run `sf params check` and confirm the new row is not `ERROR` and lands on
    the intended verdict (`OK`/`MISMATCH`/`UNRESOLVED`/`EXEMPT`).
 
-### Path to Phase 1
+### Phase 1 Status
 
-The long-term plan is to generate per-language code from a machine-readable
-spec YAML (following the pattern in `protocol/spec/`), which would make this
-after-the-fact manifest check unnecessary. Until then, this Phase-0 tool is
-used to catch divergence early.
+Generating code from `control/models/stampfly_physical.yaml` (the spec YAML)
+via `sf params generate` started 2026-07-26, covering
+`tools/sysid/_generated_params.py`, `simulator/sil/plant/generated_params.hpp`,
+and the marker table in `docs/architecture/stampfly-parameters.md`. These
+three locations are no longer audited after the fact by this manifest -- the
+YAML is authoritative and generation guarantees agreement (caught by `sf
+params generate --check`, wired into CI). The remaining hand-copied locations
+(`simulator/genesis/*`, `simulator/vpython/*`, firmware -- out of generation
+scope --, MuJoCo XML, URDF, the docs' pre-existing hand-written tables) are
+still audited by this Phase-0 manifest. As generation coverage grows, the
+corresponding manifest rows get repointed at `tools/sysid/_generated_params.py`
+or the relevant generated file.

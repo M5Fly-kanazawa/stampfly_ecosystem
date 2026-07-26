@@ -101,13 +101,36 @@ jobs:
         # inertia across firmware/SIL/simulator sources) is caught here in
         # seconds, before the multi-minute MuJoCo FetchContent build below runs
         # at all on a cache miss.
+        #
+        # `sf params generate --check` (Phase 1: spec YAML -> code generation,
+        # see docs/architecture/simulation-policy.md) catches the OTHER half
+        # of the same class of bug: someone edited control/models/
+        # stampfly_physical.yaml (the physical-parameter SSOT) but forgot to
+        # run `sf params generate`, so the generated copies
+        # (tools/sysid/_generated_params.py, simulator/sil/plant/
+        # generated_params.hpp, the docs marker table) are stale relative to
+        # the YAML. `sf params check` alone would not catch this — the
+        # generated files would still agree with EACH OTHER (both imported
+        # from the same stale generated module), just not with the YAML.
+        #
         # `sf sil regression`（lib/sfcli/commands/sil.py の run_regression）は
         # 同じ検査を自身の最初のステップとして既に実行し、不合格なら退行全体を
         # 失敗させる — 本ステップはそれを早期化する重複ステップ: 手動複製
         # パラメータの食い違い（tools/params_audit — C_T/C_Q/kappa/慣性等を
         # ファーム/SIL/シミュレータへ手書きコピー）を、下の MuJoCo FetchContent
         # ビルド（キャッシュミス時は数分かかる）を走らせる前に数秒で検出する。
-        run: sf params check --strict
+        #
+        # `sf params generate --check`（Phase 1: spec YAML→コード生成、
+        # docs/architecture/simulation-policy.md 参照）は同種のバグのもう半分を
+        # 検出する: control/models/stampfly_physical.yaml（物理パラメータの
+        # SSOT）を編集したのに `sf params generate` を忘れたケース。生成物
+        # （tools/sysid/_generated_params.py・simulator/sil/plant/
+        # generated_params.hpp・docsマーカー表）は YAML から乖離していても
+        # 互いには一致し続ける（同じ古い生成物から import しているため）ため、
+        # `sf params check` だけでは検出できない。
+        run: |
+          sf params check --strict
+          sf params generate --check
 
       - name: Cache SIL build directory (MuJoCo FetchContent + object files)
         # Caches the WHOLE build dir, not just _deps: actions/cache preserves file
