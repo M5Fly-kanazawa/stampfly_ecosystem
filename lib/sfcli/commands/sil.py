@@ -1036,6 +1036,53 @@ def _check_param_consistency() -> tuple:
     return passed, summary["total"]
 
 
+def _check_pid_lockstep() -> tuple:
+    """Run simulator/tests/test_pid_lockstep.py (P5 stage 1) and return
+    (passed, stdout+stderr). That test drives the REAL firmware sf::PID
+    (firmware/vehicle/components/sf_controller_pid/include/pid.hpp, via the
+    stampfly_control pybind11 module) and tools/log_analyzer/rate_sysid.py's
+    hand-ported replay_pid() on identical input sequences and asserts their
+    outputs match step-by-step.
+    simulator/tests/test_pid_lockstep.py（P5 stage 1）を実行し、(合格したか,
+    stdout+stderr) を返す。このテストは本物のファーム sf::PID（pid.hpp、
+    stampfly_control pybind11 モジュール経由）と rate_sysid.py の手動移植
+    replay_pid() を同一入力系列で駆動し、出力が1ステップずつ一致することを
+    確認する。
+
+    Equivalence between the sysid pipeline's replay_pid() and the firmware
+    PID is a Code Identity precondition (development_roadmap.md's 3
+    principles: Code/Param/Model Identity) — every rate-loop gain fit `sf
+    sysid` produces is only meaningful for the ACTUAL firmware if the two
+    stay identical. The moment either side is edited (pid.hpp or
+    replay_pid()) and they diverge, `sf sysid` would silently keep fitting
+    gains against a plant model the firmware no longer runs. This must gate
+    the regression immediately, before any *.scn scenario runs, same as
+    _check_param_consistency() above.
+    同定パイプライン(replay_pid)とファームPIDの等価性は Code Identity
+    （development_roadmap.md の3原則）の前提 — `sf sysid` が出すレート系
+    ゲインフィットは、両者が同一である限りにおいてのみ実ファームに対して
+    意味を持つ。どちらか（pid.hpp か replay_pid()）が編集されて乖離した瞬間、
+    `sf sysid` は黙って「もうファームが実行していないプラント」に対する
+    ゲインを算出し続けてしまう。上の _check_param_consistency() と同様、
+    *.scn シナリオを1本も走らせる前に回帰全体をゲートする。
+
+    Run as its own subprocess (not in-process pytest.main()) so a hard crash
+    inside the pybind11 extension cannot take down `sf sil regression`
+    itself — only fail this one gate, with pytest's own output (including
+    the module's actionable "run `sf sil build`" ImportError message when
+    stampfly_control isn't built) captured for the caller to print.
+    プロセス内 pytest.main() ではなくサブプロセスとして実行する: pybind11
+    拡張内のクラッシュが `sf sil regression` 自体を道連れにせず、このゲート
+    1つだけを失敗させるため。pytest 自身の出力（stampfly_control 未ビルド時の
+    「sf sil build を実行せよ」という実用的な ImportError メッセージを含む）
+    を呼び出し元が表示できるよう捕捉する。
+    """
+    test_path = paths.root() / "simulator" / "tests" / "test_pid_lockstep.py"
+    r = subprocess.run([sys.executable, "-m", "pytest", str(test_path), "-q"],
+                       capture_output=True, text=True)
+    return r.returncode == 0, r.stdout + r.stderr
+
+
 def run_regression(args: argparse.Namespace) -> int:
     scn_dir = _sil_dir() / "scenarios"
     # The .expect glob is authoritative (README/TEST_MATRIX "32 scenarios" as of
@@ -1091,6 +1138,35 @@ def run_regression(args: argparse.Namespace) -> int:
         if exe.exists():
             _check_build_freshness(exe, src_mtime=src_mtime)
     os.environ["SF_SIL_SKIP_FRESHNESS_CHECK"] = "1"
+
+    # Gate on PID lockstep equivalence BEFORE running any scenario (same
+    # "gate the loop before it starts" pattern as _check_param_consistency()
+    # above). Equivalence between the identification pipeline (replay_pid)
+    # and the firmware PID is a Code Identity precondition: the moment either
+    # side is edited and the two diverge, this must be caught here — see
+    # _check_pid_lockstep()'s docstring for the full rationale.
+    # シナリオ実行前に PID ロックステップ等価性をゲートする（上の
+    # _check_param_consistency() と同じ「ループ開始前にゲート」パターン）。
+    # 同定パイプライン(replay_pid)とファームPIDの等価性は Code Identity の
+    # 前提 — どちらかが編集されて乖離した瞬間にここで検出する。詳細な理由は
+    # _check_pid_lockstep() の docstring 参照。
+    lockstep_ok, lockstep_output = _check_pid_lockstep()
+    if not lockstep_ok:
+        # Flush explicitly: stdout is fully-buffered when not a tty (redirected
+        # to a file/CI log), while console.error()'s stderr print below is not
+        # — without this, the summary line below can land in the log BEFORE
+        # this raw pytest dump it is meant to follow.
+        # 明示的に flush する: tty でない場合（ファイル/CIログへリダイレクト時）
+        # stdout は完全バッファリングされる一方、下の console.error() の stderr
+        # 出力はされない — これが無いと、下の要約行がこの生 pytest 出力より
+        # 先にログへ現れてしまう。
+        sys.stdout.write(lockstep_output)
+        sys.stdout.flush()
+        console.error("[FAIL] PID lockstep — firmware pid.hpp and rate_sysid "
+                     "replay_pid have diverged; run pytest "
+                     "simulator/tests/test_pid_lockstep.py -v")
+        return 1
+    console.info("[PASS] PID lockstep (firmware pid.hpp == replay_pid)")
 
     console.info(f"SIL regression: {len(scenarios)} scenario(s) with a matching .expect...")
     results = []

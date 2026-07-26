@@ -86,11 +86,29 @@ jobs:
         # `pip install -e .` is the same install path documented throughout the
         # project (README, scripts/installer.py, release.yml's flasher_gui job).
         # No ESP-IDF setup step here — see the header comment above.
+        #
+        # pytest is installed separately (it is a [dev]-extra-only dependency,
+        # not a base one — see pyproject.toml): `sf sil regression`
+        # (run_regression's _check_pid_lockstep() gate, lib/sfcli/commands/
+        # sil.py) shells out to `python3 -m pytest simulator/tests/
+        # test_pid_lockstep.py` as its 3rd pre-scenario gate (PID lockstep —
+        # firmware pid.hpp vs rate_sysid replay_pid Code Identity), so pytest
+        # must be importable here or that gate fails before any scenario runs.
         # `pip install -e .` はプロジェクト全体で使われる導入方法と同じ
         # （README・scripts/installer.py・release.yml の flasher_gui ジョブ）。
         # ESP-IDF セットアップ手順はここには無い（冒頭コメント参照）。
+        #
+        # pytest は別途インストールする（pyproject.toml では base ではなく
+        # [dev] extra 専用の依存）: `sf sil regression`（run_regression の
+        # _check_pid_lockstep() ゲート、lib/sfcli/commands/sil.py）はシナリオ
+        # 実行前の第3ゲートとして `python3 -m pytest simulator/tests/
+        # test_pid_lockstep.py`（PID ロックステップ — ファーム pid.hpp と
+        # rate_sysid replay_pid の Code Identity）を子プロセスで呼ぶため、
+        # ここで pytest を import 可能にしておかないと全シナリオの前でこの
+        # ゲートが失敗してしまう。
         run: |
           pip install -e .
+          pip install "pytest>=7.0.0"
           sf --help >/dev/null
 
       - name: Check physical-parameter consistency
