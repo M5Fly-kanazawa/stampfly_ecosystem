@@ -58,15 +58,19 @@
         \vspace{-1.5em}
       \end{block}
       \vspace{-0.2em}
+      % 2026-07-27 実測ファミリへ更新(stampfly_physical.yaml)
+      % Dm はコーストダウン単体では検出限界以下(≈0)だが、ホバー点では
+      % プロペラ空力減衰 2*Cq*omega_h(omega_h≈3670rad/s)が実効的に効くため、
+      % 表の Dm はこの空力優勢の実効値(2Cq*omega_h)を示す
       {\scriptsize
       \begin{tabular}{lll}
         \hline
-        $J_{mp}$ & 2.01e-8\,kg$\cdot$m$^2$ & 回転子慣性 \\
-        $R_m$    & 0.34\,$\Omega$    & 巻線抵抗 \\
-        $K_e$    & 6.13e-4\,V/(rad/s) & 逆起電力定数 \\
-        $D_m$    & 3.69e-8 & 粘性摩擦 \\
+        $J_{mp}$ & 1.375e-8\,kg$\cdot$m$^2$ & 回転子慣性 \\
+        $R_m$    & 0.593\,$\Omega$    & 巻線抵抗 \\
+        $K_e$    & 5.682e-4\,V/(rad/s) & 逆起電力定数 \\
+        $D_m$    & 3.0e-7 & 実効減衰(空力) \\
         \hline
-        $\tau_m$ & \textbf{0.018\,s} $\approx$ \textbf{0.02\,s} & \\
+        $\tau_m$ & \textbf{0.0163\,s} $\approx$ \textbf{0.02\,s} & \\
         \hline
       \end{tabular}}
     \end{column}
@@ -84,15 +88,16 @@
         \vspace{-1.5em}
       \end{block}
       \vspace{-0.2em}
+      % 2026-07-27 実測ファミリへ更新(stampfly_physical.yaml)
       {\scriptsize
       \begin{tabular}{lll}
         \hline
         $K_f$       & 0.010\,N/duty & 同定値 \\
         $L$         & 0.023\,m & アーム長 \\
-        $\kappa$    & 9.71e-3\,m & トルク推力比 \\
+        $\kappa$    & 6.12e-3\,m & トルク推力比 \\
         \hline
         $K_{m,rp}$  & \textbf{9.3e-4}\,N$\cdot$m & Roll/Pitch \\
-        $K_{m,yaw}$ & \textbf{3.9e-4}\,N$\cdot$m & Yaw \\
+        $K_{m,yaw}$ & \textbf{2.4e-4}\,N$\cdot$m & Yaw \\
         \hline
       \end{tabular}}
     \end{column}
@@ -101,7 +106,7 @@
   \vspace{0.5em}
   \centering
   実効プラントゲイン: \; $K = K_m / I$
-  \quad ($K_{roll}\!=\!102$,\; $K_{pitch}\!=\!70$,\; $K_{yaw}\!=\!19$\,rad/s$^2$)
+  \quad ($K_{roll}\!=\!102$,\; $K_{pitch}\!=\!70$,\; $K_{yaw}\!=\!12$\,rad/s$^2$)
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -113,11 +118,12 @@
       \textbf{パラメータ} & \textbf{記号} & \textbf{Roll} & \textbf{Pitch} & \textbf{Yaw} \\
       \hline
       慣性モーメント & $I$ & 9.16e-6 & 13.3e-6 & 20.4e-6\,kg\,$\cdot$\,m$^2$ \\
-      トルクゲイン & $K_m$ & 9.3e-4 & 9.3e-4 & 3.9e-4\,N$\cdot$m \\
-      モータ時定数 & $\tau_m$ & \multicolumn{3}{c}{0.02\,s（共通）} \\
+      % 2026-07-27 実測ファミリへ更新(stampfly_physical.yaml)
+      トルクゲイン & $K_m$ & 9.3e-4 & 9.3e-4 & 2.4e-4\,N$\cdot$m \\
+      モータ時定数 & $\tau_m$ & \multicolumn{3}{c}{0.02\,s（共通、実測 $\tau_{eff}\!\approx\!0.0163$\,s）} \\
       \hline
       \textbf{プラントゲイン} & $\bm{K = K_m/I}$
-        & \textbf{102} & \textbf{70} & \textbf{19}\,rad/s$^2$ \\
+        & \textbf{102} & \textbf{70} & \textbf{12}\,rad/s$^2$ \\
       \hline
     \end{tabular}
   \end{table}
@@ -270,7 +276,8 @@
       \hline
       Roll  & 102 & 0.50 & 0.25 & 0.12 \\
       Pitch &  70 & 0.60 & 0.36 & 0.18 \\
-      Yaw   &  19 & 1.15 & 1.34 & 0.66 \\
+      % 2026-07-27 実測ファミリへ更新(stampfly_physical.yaml): kappa変更でK_yaw 19→12
+      Yaw   &  12 & 1.44 & 2.13 & 1.04 \\
       \hline
     \end{tabular}
   \end{table}
@@ -290,10 +297,11 @@
 \begin{frame}[fragile]{実習: モデルベースゲイン設計 / Hands-on}
   \begin{sflisting}{user\_code.cpp (excerpt)}
 // Model-based Kp design (target zeta = 0.7)
+// 2026-07-27 実測ファミリへ更新(stampfly_physical.yaml): K_yaw 19.0f→12.0f
 const float tau_m = 0.02f;
 const float K_roll  = 102.0f;
 const float K_pitch =  70.0f;
-const float K_yaw   =  19.0f;
+const float K_yaw   =  12.0f;
 float zeta = 0.7f;
 
 float Kp_roll  = 1.0f/(4*zeta*zeta*K_roll *tau_m);
