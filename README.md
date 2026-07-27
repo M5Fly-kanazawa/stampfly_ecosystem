@@ -211,6 +211,16 @@ Getting Started で初フライトができたら、次は**ワークショッ�
 
 ---
 
+## 詳細ドキュメント
+
+| ドキュメント | 説明 |
+|-------------|------|
+| [ドキュメント目録](docs/DOCUMENT_INDEX.md) | リポジトリ内の全ドキュメントの目録 |
+| [物理パラメータリファレンス](docs/architecture/stampfly-parameters.md) | 機体の物理パラメータ（質量・慣性・モータ特性等）の確定値 |
+| [stampfly_physical.yaml](control/models/stampfly_physical.yaml) | 物理パラメータの機械可読 SSOT（Single Source of Truth） |
+
+---
+
 ## ライセンス
 
 MIT License
@@ -429,6 +439,16 @@ Once you've completed your first flight with Getting Started, dive deeper with t
 | Pose Estimation | ESKF (Error-State Kalman Filter) |
 | Communication | ESP-NOW + WiFi (telemetry) |
 | Sensors | BMI270, BMM150, BMP280, VL53L3CX, PMW3901 |
+
+---
+
+## Further Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Document Index](docs/DOCUMENT_INDEX.md) | Index of all documentation in this repository |
+| [Physical Parameters Reference](docs/architecture/stampfly-parameters.md) | Confirmed values for the vehicle's physical parameters (mass, inertia, motor characteristics, etc.) |
+| [stampfly_physical.yaml](control/models/stampfly_physical.yaml) | Machine-readable SSOT (Single Source of Truth) for physical parameters |
 
 ---
 

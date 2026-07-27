@@ -2,6 +2,19 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+> ⚠️ **このディレクトリは凍結されたレガシー実装**（実飛行87回の実績、新規開発なし）。現行ファームは
+> [`../vehicle/`](../vehicle/)。**本 README・ソース中の物理パラメータ（Ct=1.0e-8, κ=9.71e-3, Rm=0.34 等）は
+> 旧世代の値**であり、現在の確定値は
+> [docs/architecture/stampfly-parameters.md](../../docs/architecture/stampfly-parameters.md) と
+> [control/models/stampfly_physical.yaml](../../control/models/stampfly_physical.yaml) を参照。
+>
+> ⚠️ **This directory is a frozen legacy implementation** (87 real flights, no new development). The
+> current firmware is [`../vehicle/`](../vehicle/). **Physical parameters in this README and its source
+> code (Ct=1.0e-8, κ=9.71e-3, Rm=0.34, etc.) are old-generation values** — see
+> [docs/architecture/stampfly-parameters.md](../../docs/architecture/stampfly-parameters.md) and
+> [control/models/stampfly_physical.yaml](../../control/models/stampfly_physical.yaml) for the current
+> confirmed values.
+
 ## 1. 概要
 
 ### このプロジェクトについて

@@ -310,6 +310,18 @@ def main():
         derive_physical_params(result, Rm=args.Rm, Cq=args.Cq)
         print_results(result, reference=ref_034)
     else:
+        # NOTE (2026-07-24): Rm was decided at 0.593 Ω (commit 9a656a9f) -- see
+        # docs/architecture/stampfly-parameters.md / control/models/
+        # stampfly_physical.yaml. The 0.34/0.63 comparison below is kept as-is
+        # for its historical context (it was a 2-candidate comparison at the
+        # time this script was written, before the 2026-07-24 resolution) and
+        # is NOT a live "which is correct" decision anymore. Values unchanged.
+        # 注記（2026-07-24）: Rm は0.593Ω（コミット9a656a9f）に決着済み——出所は
+        # 上記ドキュメント参照。以下の0.34/0.63比較は、本スクリプト作成当時
+        # （2026-07-24決着より前）の2候補比較という歴史的文脈の再現用として
+        # そのまま残しており、現在「どちらが正しいか」を判定するものではない。
+        # 値は変更していない。
+        #
         # Try both Rm values for comparison
         # 両方の Rm で比較
         print_results(result)

@@ -180,13 +180,20 @@ class ControlAllocator:
         return thrusts, saturated
 
 
-def thrust_to_duty(thrust: float, Ct: float = 1.0e-8, Vbat: float = 3.7,
-                   Km: float = 6.125e-4, Rm: float = 0.34,
-                   Dm: float = 3.69e-8, Cq: float = 9.71e-11,
-                   Qf: float = 2.76e-5) -> float:
+def thrust_to_duty(thrust: float, Ct: float = 6.7e-9, Vbat: float = 3.7,
+                   Km: float = 5.682e-4, Rm: float = 0.593,
+                   Dm: float = 0.0, Cq: float = 4.10e-11,
+                   Qf: float = 9.507e-6) -> float:
     """
     Convert thrust to motor duty cycle (steady-state approximation).
     推力からモータDutyサイクルへの変換（定常状態近似）
+
+    Defaults are the 2026-07 measured family (adopted, see
+    control/models/stampfly_physical.yaml calibration_sets.measured_2026_07 /
+    docs/architecture/stampfly-parameters.md). Vbat=3.7 is a nominal battery
+    voltage, independent of that measurement campaign.
+    既定値は2026-07実測ファミリ（採用値、出所は上記ドキュメント参照）。
+    Vbat=3.7 は測定キャンペーンとは独立の公称バッテリ電圧。
 
     Args:
         thrust: Desired thrust (N)

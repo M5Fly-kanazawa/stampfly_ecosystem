@@ -71,9 +71,21 @@ from sysid._generated_params import (  # noqa: E402
     EXPECTED_IZZ,
     EXPECTED_ARM,
     EXPECTED_RM,
+    EXPECTED_KM,
     EXPECTED_MASS,
     EXPECTED_URDF_BASE_MASS,
 )
+
+# HTML display-scale variants of EXPECTED_* used by control/design/
+# loop_shaping_tool/index.html's Calculation tab, whose <input> fields show
+# Ct/Cq pre-divided by a fixed power-of-ten (labelled "×10⁻⁸" etc. next to
+# the field) rather than the raw SI value. Never hand-adjust these except to
+# match a scale-label change in index.html itself.
+# control/design/loop_shaping_tool/index.html の Calculation タブが使う
+# EXPECTED_* の表示スケール版。Ct/Cq の <input> はSI値そのものではなく、
+# 固定の10のべき乗（フィールド脇に「×10⁻⁸」等と表示）で割った値を表示する。
+# index.html 自体の表示スケール表記が変わらない限り手で調整しないこと。
+EXPECTED_CT_SCALED_1EM8 = EXPECTED_CT / 1e-8  # calc-ct field ("×10⁻⁸ N/(rad/s)²")
 
 
 # =============================================================================
@@ -174,6 +186,23 @@ EXEMPT_FIRMWARE_MOTOR_CT = Exempt(
            "docs/architecture/simulation-policy.md backlog #3 で別途実施する。"
 )
 
+# firmware/vehicle_old is FROZEN legacy (87 real flights, no new development,
+# see firmware/vehicle_old/README.md banner). Its physical-parameter literals
+# are intentionally left at their old-generation values -- this manifest exists
+# to document that fact (and catch accidental edits), not to demand they be
+# updated to the adopted family.
+# firmware/vehicle_old は凍結されたレガシー（実飛行87回、新規開発なし、
+# firmware/vehicle_old/README.md 冒頭バナー参照）。物理パラメータのリテラルは
+# 意図的に旧世代の値のまま据え置く -- 本マニフェストはその事実を記録し
+# （誤編集を検知するため）登録するのであり、採用ファミリへの更新を求める
+# ものではない。
+EXEMPT_VEHICLE_OLD = Exempt(
+    reason="firmware/vehicle_old は凍結されたレガシーファーム（実飛行87回、"
+           "新規開発なし）。現行ファームは firmware/vehicle/。現在の確定値は "
+           "docs/architecture/stampfly-parameters.md / "
+           "control/models/stampfly_physical.yaml を参照。"
+)
+
 
 # =============================================================================
 # The manifest / マニフェスト本体
@@ -249,6 +278,28 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'MOTOR_CT\s*=\s*([0-9eE.+-]+)f;',
             expected=EXEMPT_FIRMWARE_MOTOR_CT,
             note="mixerCompute() thrust curve MOTOR_CT (legacy, backlog #3 pending)",
+        ),
+        ParamCheck(
+            file="simulator/genesis/control_allocation.py",
+            regex=r'def thrust_to_duty\(thrust: float, Ct: float = ([0-9eE.+-]+)',
+            expected=EXPECTED_CT,
+            note="thrust_to_duty() default Ct",
+        ),
+        ParamCheck(
+            file="control/design/loop_shaping_tool/index.html",
+            regex=r'id="calc-ct" value="([0-9eE.+-]+)"',
+            expected=EXPECTED_CT_SCALED_1EM8,
+            note="Calculation tab calc-ct input (×10⁻⁸ display scale)",
+        ),
+        ParamCheck(
+            # firmware_old is EXEMPT (frozen legacy), not MISMATCH -- see
+            # EXEMPT_VEHICLE_OLD above and firmware/vehicle_old/README.md banner.
+            # firmware_old はEXEMPT（凍結レガシー）——MISMATCHではない。上記
+            # EXEMPT_VEHICLE_OLD と firmware/vehicle_old/README.md 冒頭バナー参照。
+            file="firmware/vehicle_old/components/sf_algo_control/motor_model.cpp",
+            regex=r'\.Ct = ([0-9eE.+-]+)f,',
+            expected=EXEMPT_VEHICLE_OLD,
+            note="DEFAULT_MOTOR_PARAMS.Ct (frozen legacy firmware)",
         ),
     ],
 
@@ -355,6 +406,16 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         # (_KAPPA_VALUE = _CQ_VALUE / _CT_VALUE) になったため、正規表現で
         # 値を捕捉する対象が無い — 上の C_T/C_Q エントリが OK であれば
         # 構造的に正しいことが保証される（この箇所は間接的にカバー済み）。
+        ParamCheck(
+            # firmware_old is EXEMPT (frozen legacy) -- see EXEMPT_VEHICLE_OLD
+            # above and firmware/vehicle_old/README.md banner.
+            # firmware_old はEXEMPT（凍結レガシー）——上記 EXEMPT_VEHICLE_OLD と
+            # firmware/vehicle_old/README.md 冒頭バナー参照。
+            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
+            regex=r'float kappa = ([0-9eE.+-]+)f;',
+            expected=EXEMPT_VEHICLE_OLD,
+            note="QuadConfig::kappa member default (frozen legacy firmware)",
+        ),
     ],
 
     # -------------------------------------------------------------------
@@ -604,6 +665,30 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             expected=EXPECTED_RM,
             note="body table (EN)",
         ),
+        ParamCheck(
+            file="simulator/genesis/control_allocation.py",
+            regex=r'Km: float = [0-9eE.+-]+,\s*Rm: float = ([0-9eE.+-]+)',
+            expected=EXPECTED_RM,
+            note="thrust_to_duty() default Rm",
+        ),
+        ParamCheck(
+            file="control/design/loop_shaping_tool/index.html",
+            regex=r'id="calc-rm" value="([0-9eE.+-]+)"',
+            expected=EXPECTED_RM,
+            note="Calculation tab calc-rm input (unscaled, Ω)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # Km — back-EMF constant / 逆起電力定数
+    # -------------------------------------------------------------------
+    "Km": [
+        ParamCheck(
+            file="simulator/genesis/control_allocation.py",
+            regex=r'def thrust_to_duty\([^)]*Km: float = ([0-9eE.+-]+)',
+            expected=EXPECTED_KM,
+            note="thrust_to_duty() default Km",
+        ),
     ],
 
     # -------------------------------------------------------------------
@@ -650,6 +735,30 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'<mass value="([0-9.eE+-]+)"/>\s*\n\s*<inertia ixx="9\.16e-6"',
             expected=EXPECTED_URDF_BASE_MASS,
             note="base_link mass only (base 0.033 + 4x1g props = 0.037 total)",
+        ),
+        ParamCheck(
+            file="simulator/genesis/scripts/run_genesis_sim.py",
+            regex=r'MASS = ([0-9.eE+-]+)\s*#\s*kg \(37g\)',
+            expected=EXPECTED_MASS,
+            note="Physical Constants MASS",
+        ),
+        ParamCheck(
+            file="simulator/genesis/scripts/run_genesis_headless.py",
+            regex=r'MASS = ([0-9.eE+-]+)\nWEIGHT = MASS \* GRAVITY',
+            expected=EXPECTED_MASS,
+            note="Physical Constants MASS",
+        ),
+        ParamCheck(
+            file="simulator/vpython/scripts/run_vpython_headless.py",
+            regex=r'mass = ([0-9.eE+-]+)\n\s*weight = mass \* 9\.81',
+            expected=EXPECTED_MASS,
+            note="Create drone mass",
+        ),
+        ParamCheck(
+            file="control/design/loop_shaping_tool/index.html",
+            regex=r'id="calc-mass" value="([0-9.eE+-]+)"',
+            expected=EXPECTED_MASS,
+            note="Calculation tab calc-mass input (unscaled, kg)",
         ),
     ],
 }

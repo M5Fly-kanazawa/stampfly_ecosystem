@@ -38,7 +38,10 @@ from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time,
 # Physical Constants
 # =============================================================================
 GRAVITY = 9.81
-MASS = 0.035
+# Vehicle mass: measured 36.8g, confirmed 2026-07-24 (see
+# docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml).
+# 機体質量: 実測36.8g、2026-07-24確定（出所は上記ドキュメント参照）。
+MASS = 0.037
 WEIGHT = MASS * GRAVITY
 
 

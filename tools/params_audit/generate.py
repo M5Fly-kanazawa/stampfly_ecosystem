@@ -254,6 +254,7 @@ def render_python(view: Dict[str, Any]) -> str:
     out.append("EXPECTED_DM = _DM_VALUE")
     out.append("EXPECTED_QF = _QF_VALUE")
     out.append("EXPECTED_RM = _RM_VALUE")
+    out.append("EXPECTED_KM = _KM_VALUE")
     out.append("EXPECTED_KAPPA = KAPPA_ADOPTED")
     out.append("")
     return "\n".join(out)

@@ -63,7 +63,10 @@ from control.pid import PID
 # Physical Constants
 # =============================================================================
 GRAVITY = 9.81  # m/s^2
-MASS = 0.035    # kg (35g)
+# Vehicle mass: measured 36.8g, confirmed 2026-07-24 (see
+# docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml).
+# 機体質量: 実測36.8g、2026-07-24確定（出所は上記ドキュメント参照）。
+MASS = 0.037    # kg (37g)
 WEIGHT = MASS * GRAVITY  # N
 MAX_THRUST = 4 * 0.15  # 4 motors × max thrust per motor (N)
 

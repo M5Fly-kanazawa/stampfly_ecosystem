@@ -172,7 +172,10 @@ def run_headless(input_file, output_file, duration=10.0):
     print(f"\nPhysics: {PHYSICS_HZ}Hz, Control: {CONTROL_HZ}Hz, Log: {LOG_HZ}Hz")
 
     # Create drone
-    mass = 0.035
+    # Vehicle mass: measured 36.8g, confirmed 2026-07-24 (see
+    # docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml).
+    # 機体質量: 実測36.8g、2026-07-24確定（出所は上記ドキュメント参照）。
+    mass = 0.037
     weight = mass * 9.81
     hover_thrust = weight
 

@@ -278,7 +278,16 @@ class MotorMixer:
         motor_positions: list = None,
         motor_dirs: list = None,
         max_thrust_n: float = 0.15,
-        torque_coeff: float = 0.00971,
+        # kappa = Cq/Ct, measured 2026-07-15, confirmed 2026-07-17 (see
+        # docs/architecture/stampfly-parameters.md / control/models/
+        # stampfly_physical.yaml). Old value 0.00971 was the firmware's
+        # stale/buggy figure (~1.59x too high). This parameter appears unused
+        # by current call sites, but corrected to remove a latent stale value.
+        # kappa = Cq/Ct、2026-07-15実測・2026-07-17確定（出所は上記ドキュメント
+        # 参照）。旧値0.00971はファームウェアの旧バグ値（約1.59倍過大）。本
+        # パラメータは現状の呼び出し元では未使用と見られるが、将来の地雷と
+        # なる旧値を除去するために修正。
+        torque_coeff: float = 6.12e-3,
     ) -> np.ndarray:
         """
         Calculate torques from motor outputs using individual motor positions.

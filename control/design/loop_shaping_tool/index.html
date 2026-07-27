@@ -875,7 +875,7 @@
                     <h3>機体パラメータ / Vehicle Parameters</h3>
                     <div class="param-row">
                         <label>機体質量 m</label>
-                        <input type="number" id="calc-mass" value="0.035" step="0.001" min="0.001">
+                        <input type="number" id="calc-mass" value="0.037" step="0.001" min="0.001">
                         <span class="unit">kg</span>
                     </div>
                     <div class="param-row">
@@ -899,17 +899,17 @@
                     <h3>モーター特性 / Motor Characteristics</h3>
                     <div class="param-row">
                         <label>巻線抵抗 Rm</label>
-                        <input type="number" id="calc-rm" value="0.34" step="0.01" min="0.01">
+                        <input type="number" id="calc-rm" value="0.593" step="0.01" min="0.01">
                         <span class="unit">Ω</span>
                     </div>
                     <div class="param-row">
                         <label>回転子慣性 Jmp</label>
-                        <input type="number" id="calc-jmp" value="2.01" step="0.01" min="0.01">
+                        <input type="number" id="calc-jmp" value="1.375" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁸ kg·m²</span>
                     </div>
                     <div class="param-row">
                         <label>トルク定数 Kt=Ke</label>
-                        <input type="number" id="calc-kt" value="6.12" step="0.01" min="0.01">
+                        <input type="number" id="calc-kt" value="5.682" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁴ V/(rad/s)</span>
                     </div>
                     <div style="font-size: 0.75em; color: #888; margin-top: 5px; padding-left: 140px;">
@@ -921,12 +921,12 @@
                     <h3>プロペラ特性 / Propeller Characteristics</h3>
                     <div class="param-row">
                         <label>推力係数 Ct</label>
-                        <input type="number" id="calc-ct" value="1.00" step="0.01" min="0.01">
+                        <input type="number" id="calc-ct" value="0.67" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁸ N/(rad/s)²</span>
                     </div>
                     <div class="param-row">
                         <label>トルク係数 Cq</label>
-                        <input type="number" id="calc-cq" value="9.71" step="0.01" min="0.01">
+                        <input type="number" id="calc-cq" value="4.10" step="0.01" min="0.01">
                         <span class="unit">×10⁻¹¹ N·m/(rad/s)²</span>
                     </div>
                 </div>
@@ -1051,6 +1051,10 @@
                     <div style="font-size: 0.85em; color: #888; margin-top: 5px;">
                         • docs/architecture/stampfly-parameters.md<br>
                         • docs/architecture/control-system.md (§6 DCモータモデル, §7 線形化と伝達関数)
+                    </div>
+                    <div style="font-size: 0.75em; color: #666; margin-top: 5px;">
+                        既定値は2026-07実測ファミリ（stampfly_physical.yaml）準拠、最終同期2026-07-27 /
+                        Defaults follow the 2026-07 measured family (stampfly_physical.yaml), last synced 2026-07-27
                     </div>
                 </div>
             </div>
@@ -1200,6 +1204,30 @@
 
         // Axis parameters storage (inertia values from stampfly-parameters.md)
         // Ixx = 9.16e-6, Iyy = 13.3e-6, Izz = 20.4e-6 kg·m²
+        //
+        // NOTE on kp/ti/td units (2026-07-27 clarified, see getAxisParams() below
+        // for the exact scale factors): kp/ti/td here use the SAME physical unit
+        // system as firmware's rate.*.kp/ti/td (Kp in N·m·s/rad, Ti/Td in seconds)
+        // -- only the on-screen display scale differs (kp shown ×10⁻³, ti/td shown
+        // in ms; getAxisParams() converts kp*1e-3 -> Kp[N·m·s/rad], ti/1000,
+        // td/1000 -> Ti/Td[s]). HOWEVER these are this tool's OWN Bode/loop-shaping
+        // design-example gains, NOT synced with firmware's currently tuned values
+        // (e.g. firmware/vehicle/components/sf_core/params.cpp rate.roll.kp=1.0e-3,
+        // rate.roll.td=0.002s, arrived at via real-flight A/B tuning that postdates
+        // this tool's example). Do not treat axisParams as "the current firmware
+        // gains" -- use "各軸に反映 / Apply to Tabs" only as a starting point.
+        //
+        // kp/ti/td の単位について（2026-07-27明確化、正確な換算係数は下の
+        // getAxisParams() 参照）: ここでの kp/ti/td はファームウェアの
+        // rate.*.kp/ti/td と同じ物理単位系（Kp: N·m·s/rad, Ti/Td: 秒）を使う——
+        // 画面表示スケールが異なるだけ（kp は ×10⁻³ 表示、ti/td は ms 表示。
+        // getAxisParams() が kp*1e-3→Kp[N·m·s/rad]、ti/1000, td/1000→Ti/Td[秒] に
+        // 変換する）。ただし数値そのものは本ツール独自のボード線図設計例であり、
+        // ファームウェアの現在のチューニング済みゲイン（例:
+        // firmware/vehicle/components/sf_core/params.cpp の rate.roll.kp=1.0e-3,
+        // rate.roll.td=0.002秒。本ツールの設計例より後の実機A/Bチューニングで
+        // 確定）とは同期していない。axisParams を「現在のファームゲイン」として
+        // 扱わないこと——「各軸に反映 / Apply to Tabs」はあくまで出発点として使う。
         const axisParams = {
             roll: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
             pitch: { inertia: 13.3, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
@@ -2239,18 +2267,24 @@
             return inv;
         }
 
-        // Reset calculation tab to default values (from stampfly-parameters.md)
+        // Reset calculation tab to default values.
+        // 既定値は2026-07実測ファミリ（stampfly_physical.yaml calibration_sets.
+        // measured_2026_07）準拠。最終同期2026-07-27。出所:
+        // docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml
+        // Defaults follow the 2026-07 measured family (stampfly_physical.yaml
+        // calibration_sets.measured_2026_07). Last synced 2026-07-27. Source:
+        // docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml
         function resetCalcDefaults() {
             const defaults = {
-                'calc-mass': 0.035,        // kg
+                'calc-mass': 0.037,        // kg
                 'calc-ixx': 9.16,          // ×10⁻⁶ kg·m²
                 'calc-iyy': 13.3,          // ×10⁻⁶ kg·m²
                 'calc-izz': 20.4,          // ×10⁻⁶ kg·m²
-                'calc-rm': 0.34,           // Ω
-                'calc-jmp': 2.01,          // ×10⁻⁸ kg·m²
-                'calc-kt': 6.12,           // ×10⁻⁴ V/(rad/s)
-                'calc-ct': 1.00,           // ×10⁻⁸ N/(rad/s)²
-                'calc-cq': 9.71,           // ×10⁻¹¹ N·m/(rad/s)²
+                'calc-rm': 0.593,          // Ω
+                'calc-jmp': 1.375,         // ×10⁻⁸ kg·m²
+                'calc-kt': 5.682,          // ×10⁻⁴ V/(rad/s)
+                'calc-ct': 0.67,           // ×10⁻⁸ N/(rad/s)² (= Ct 6.7e-9)
+                'calc-cq': 4.10,           // ×10⁻¹¹ N·m/(rad/s)² (= Cq 4.10e-11)
                 'calc-tau-override': 20,   // ms
                 // Propeller positions (mm)
                 'prop-m1-x': 23, 'prop-m1-y': 23,
