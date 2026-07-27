@@ -1,0 +1,68 @@
+{
+  "study": "MOTOR_CT switch (firmware backlog #3) — log-driven consistency analysis",
+  "date_run": "2026-07-27",
+  "repository_state": "read-only analysis; no repo files modified",
+  "hypothesis_tested": "New motor chain (Ct=6.7e-9, V-omega curve from Rm/Km/Cq/Qf bench measurements) predicts real flight hover duty with corr≈1.0 (no correction needed), unlike the old chain which needs hover.thrust_corr≈1.12.",
+  "verdict": "NOT SUPPORTED (falsified as stated). The new chain's implied correction is NOT close to 1.0 — it deviates from 1.0 by almost exactly the same magnitude as the old chain does, just on the opposite side (new: mean 0.909, |dev|=0.091; old: mean 1.083, |dev|=0.083; both significant vs 1.0 at p<0.01, n=9 independent dates). Switching Ct/Am/Bm/Cm to the bench-measured values does NOT eliminate the need for a hover-thrust correction; it only flips its sign and changes its magnitude slightly.",
+  "data": {
+    "logs_dir": "stampfly_ecosystem/logs (repo, untouched)",
+    "selection_criterion": ">=15s of ALT_HOLD(2)/POS_HOLD(3) samples in a stampfly_udp_*.jsonl log dated 2026-06 or 2026-07; fixed threshold decided before computing any implied_corr numbers (avoids cherry-picking)",
+    "n_candidate_logs": 42,
+    "n_logs_with_qualifying_hover_segments": 24,
+    "n_distinct_dates": 9,
+    "n_hover_segments": 85,
+    "total_hover_duration_s": 345.2,
+    "hover_segment_definition": "contiguous run (>=1.0s) of: flight_mode in {ALT_HOLD,POS_HOLD}; 1.5s-centered rolling std(altitude)<0.02m; rolling max(|vertical velocity|)<0.10 m/s; rolling max(|roll/pitch/yaw stick|)<0.05; 0.05<duty<0.95 (armed, not saturated). Thresholds tuned once on stampfly_udp_20260621T232227 and held fixed for every other log."
+  },
+  "verification_of_method": {
+    "duty_units_confirmed": "motor_duty[4] in WireCtrlRef (firmware/vehicle/components/sf_telemetry/include/data_stream_wire.hpp) is [0,1], FR/RR/RL/FL, = actuator.cpp's post-mixer post-clamp value written to the motor HAL (not a raw stick or setpoint)",
+    "voltage_source_confirmed": "status.voltage is the live INA3221 battery-bus voltage (sensor_power), same signal actuator.cpp's batteryVoltage() uses for duty=V/Vbat",
+    "old_chain_forward_reconstruction_check": "Forward-predicting duty from the logged total_thrust/4 (OLD chain) reproduces the logged duty_mean to within 0.003-0.004 (float32 rounding + small per-motor torque asymmetry) across a full ALT_HOLD flight — confirms the Python re-implementation of actuator.cpp math is correct.",
+    "old_chain_inversion_vs_firmware_logged_thrust": "Inverting motor_duty via the OLD chain reproduces the firmware's own logged total_thrust/mg ratio to <0.001 in every session — confirms the inversion is numerically exact, not just forward-consistent.",
+    "current_ma_cross_check": "ATTEMPTED, INCONCLUSIVE (documented as unresolved, not counted for or against the hypothesis). Predicted total battery current from the NEW chain's Rm/Km (4*(V-Km*omega)/Rm + 0.1A avionics) is ~3.5-3.7A, but logged current_ma is ~325-330mA and nearly constant (std 1.6mA) across duty 0.60-0.67 and 7 different sessions — far too flat and too small to be total battery current under motor load. The current_ma channel almost certainly monitors only the avionics/logic rail, not the motor supply; it cannot be used to cross-validate Rm/Km with the current firmware telemetry. Needs a hardware/wiring check of the INA3221 channel assignment (out of scope for this log-only analysis)."
+  },
+  "results": {
+    "pooled_segments_n85": {
+      "old_chain_implied_corr": {"mean": 1.084, "std": 0.063, "min": 0.991, "max": 1.265},
+      "new_chain_implied_corr": {"mean": 0.909, "std": 0.052, "min": 0.831, "max": 1.061}
+    },
+    "per_date_mean_n9": {
+      "old_chain_implied_corr": {"mean": 1.083, "std": 0.064, "min": 0.995, "max": 1.225},
+      "new_chain_implied_corr": {"mean": 0.909, "std": 0.053, "min": 0.835, "max": 1.028}
+    },
+    "one_sample_t_test_vs_1.0_n9_dates": {
+      "old_chain": {"t": 3.70, "p": 0.0061},
+      "new_chain": {"t": -4.84, "p": 0.0013}
+    },
+    "new_over_old_ratio_across_9_dates": {
+      "mean": 0.83881, "std": 0.00005,
+      "note": "Remarkably constant (relative std 0.006%) across duty 0.585-0.77 and voltage 3.4-4.1V. Switching the whole (Ct,Am,Bm,Cm) set acts as an almost pure multiplicative rescale of the implied correction over the observed flight envelope — it does not change the FUNCTIONAL SHAPE of the hover.thrust_corr requirement, only its absolute value. This is a reassuring internal-consistency finding even though the hypothesis (corr≈1.0) itself is refuted."
+    },
+    "duty_dependence_caveat": {
+      "correlation_implied_corr_vs_duty_mean": 0.779,
+      "note": "Both chains show implied_corr rising with duty (same r for old/new since they share the underlying duty dependence) — consistent with an un-modeled resistive voltage drop (battery ESR + wiring + ESC Rds_on) that both chains ignore (both assume V_motor = duty*Vbat exactly). This is a pre-existing limitation of the whole thrust->duty formulation, not something the CT switch introduces or fixes."
+    }
+  },
+  "proposed_constants_if_switch_proceeds": {
+    "MOTOR_CT": 6.7e-9,
+    "MOTOR_AM": 4.279e-8,
+    "MOTOR_BM": 5.682e-4,
+    "MOTOR_CM": 9.92e-3,
+    "KAPPA": "6.12e-3 (unchanged — already switched to the measured Cq/Ct ratio in actuator.cpp, 2026-07-15)",
+    "hover_thrust_corr_default": {
+      "current": 1.12,
+      "proposed_if_switching": 0.90,
+      "basis": "Mean empirical implied_corr_new across 9 dates (0.909), rounded down slightly (toward the low end of the observed 0.835-1.028 range) so a first-ever takeoff under-thrusts rather than over-thrusts before the always-on onboard hover-thrust learner (hover.thrust.learn=1, default-on) adapts it within seconds.",
+      "caveat": "This constant carries the SAME session-to-session spread (std~0.05, i.e. ±5-6%) that the current 1.12 seed already has — it is a better-centered seed, not a more precise one. The onboard learner remains load-bearing regardless of which chain is used."
+    }
+  },
+  "recommendation": "HOLD the switch as a 'drop-in, corr stays 1.0' change — that premise is refuted by real-flight data. If the switch still proceeds (e.g. for single-source-of-truth consistency with the already-switched KAPPA/Cq numbers), it MUST ship together with hover.thrust_corr default changed from 1.12 to ~0.90 (same coordinated-constants precedent already used for the 2026-07-15 KAPPA fix, which co-rescaled rate.yaw.kp/max_torque). Recommend at least one real-hardware validation flight (SIL gate + real ALT_HOLD hover) with the new constants before promoting to a release default, per docs/architecture/simulation-policy.md's Model Identity discipline.",
+  "artifacts": {
+    "scripts": [
+      "parse_log.py", "scan_logs.py", "motor_chains.py", "hover_segments.py",
+      "run_analysis.py", "current_check.py", "plot_results.py"
+    ],
+    "data": ["hover_segments.csv", "file_summary.csv", "date_summary.csv", "current_check.csv", "overall_stats.json"],
+    "figure": "implied_corr_timeseries.png"
+  }
+}
