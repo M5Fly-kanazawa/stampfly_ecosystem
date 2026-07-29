@@ -1,0 +1,3 @@
+file,n,ts_start_us,ts_end_us,duration_s,voltage_first,voltage_last,flying_s,t_flying_start_s,t_flying_end_s,fs_seq,gap_from_prev_s
+stampfly_udp_20260718T022929.jsonl,5966,53628396,173593418,119.965022,4.328,3.736,115.84,3.48002,119.965022,145,
+stampfly_udp_20260718T064222.jsonl,5964,153493315,273460771,119.967456,4.312,3.968,67.46,4.484988,113.459979,14521214121214561,-20.100103

@@ -168,6 +168,8 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 | 回転子慣性モーメント | Jmp | 1.375×10⁻⁸ | kg·m² | 実測（プロペラ写真デジタイズ+画素積分＋コーストダウン、2026-07-15確定）。旧値(参考): 2.01×10⁻⁸（形状・重量から推定、〜2026-07-14） |
 
 > **注記（2026-07-24決着）:** 巻線抵抗 Rm はかつて 0.34Ω（本表旧値、旧LCRメータ実測）・0.593Ω（`tools/sysid/defaults.py`、論文LCR実測）・0.63Ω（`simulator/vpython/core/motors.py`、visual simulator旧初期値）の3値が並立していたが、先生決定（コミット `9a656a9f` 2026-07-15）により **0.593Ω（論文LCR実測）に統一**した。旧2値は競合する実測ではなく、0.34は別個体の疑いがある旧LCR値、0.63はvpython側の反映漏れだった単純な更新漏れと判明している（`analysis/reports/param_correction_impact_20260715.md` §F1 参照）。genesis/vpython のモータモデルは下記「派生パラメータ」の Km・Dm を Rm から `Cq·Rm/Am` 等の式で導出する自己整合構造のため、Rm の値によらず定常特性（ホバー電圧・ホバーω）は代数的に不変であることを数値検証済み（Rmがモデルの定常方程式から完全にキャンセルする）。
+>
+> **追記（2026-07-29 飛行内熱ドリフトの発見）:** 飛行ログ解析（`analysis/scripts/thermal_ident_study_20260729/`）で、ホバー必要電圧が飛行中に上昇する現象を休止ペア試験（30〜37秒の地上休止で電圧がリセットする）により**巻線温度上昇（H1）**と判別した。推定 Rm_cold≈0.36Ω・Rm_hot≈0.52Ω（+45%、巻線ΔT≈110°C相当）。**Rm は定数ではなく温度状態量**であり、旧0.34Ωは冷間値・0.593Ωは温間側に近く、かつての3値並立が同一モータの温度状態の違いを見ていた可能性がある（ただし無電流LCR測定が温間側の値を返した理由は未解明・要追検証）。採用値0.593Ωの決定自体は維持。
 
 ### 回転数-電圧特性
 
@@ -644,6 +646,8 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | Rotor Inertia | Jmp | 1.375×10⁻⁸ | kg·m² | Measured (propeller photo digitization + pixel integration + coast-down, confirmed 2026-07-15). Legacy value (reference): 2.01×10⁻⁸ (estimated from geometry, until 2026-07-14) |
 
 > **Note (resolved 2026-07-24):** Winding resistance Rm previously had three values in parallel use: 0.34 Ω (this table's old value, an older LCR measurement), 0.593 Ω (`tools/sysid/defaults.py`, paper LCR measurement), and 0.63 Ω (`simulator/vpython/core/motors.py`, visual simulator's stale initial value). The teacher's decision (commit `9a656a9f`, 2026-07-15) adopted **0.593 Ω (paper LCR measurement)** as the single value. The other two were never competing measurements — 0.34 Ω was an older LCR reading possibly from a different unit, and 0.63 Ω was simply an un-synced stale value in vpython (`analysis/reports/param_correction_impact_20260715.md` §F1). The genesis/vpython motor models derive Km and Dm below from Rm via `Cq·Rm/Am` etc. (a self-consistent formula package), so the steady-state behavior (hover voltage, hover ω) is algebraically invariant to the value of Rm — verified numerically, Rm cancels exactly out of the steady-state equations.
+>
+> **Addendum (2026-07-29, in-flight thermal drift discovered):** Flight-log analysis (`analysis/scripts/thermal_ident_study_20260729/`) found the required hover voltage rising during flight, and a pause-pair test (V resets after a 30-37 s motors-off ground gap on the same battery) attributes it to **winding temperature rise (H1)**. Estimated Rm_cold~0.36 ohm, Rm_hot~0.52 ohm (+45%, winding dT~110 C). **Rm is a temperature state, not a constant** — the old 0.34 ohm matches the cold state and 0.593 ohm sits near the hot side, so the former three-way disagreement may have been the same motor observed at different temperatures (why a zero-current LCR measurement returned the hot-side value remains unresolved and needs re-verification). The adopted 0.593 ohm decision itself stands.
 
 ### Speed-Voltage Relationship
 
