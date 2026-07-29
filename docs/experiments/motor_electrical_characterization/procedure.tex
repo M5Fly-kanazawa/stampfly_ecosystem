@@ -1,0 +1,648 @@
+% ==================================================================
+% モータ電気特性評価 実験手順書
+% Motor Electrical Characterization — Experimental Procedure
+%
+% Build: lualatex procedure.tex (run twice)
+% ltjsarticle + luatexja（ワークショップスライドと同系統の日本語組版）
+% ==================================================================
+\documentclass[a4paper,11pt]{ltjsarticle}
+
+% --- Japanese fonts (LuaLaTeX + luatexja-fontspec) ---
+% クロスプラットフォーム: ヒラギノ (macOS) → 游明朝/游ゴシック (Windows) → Noto (Linux)
+\usepackage{luatexja-fontspec}
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Mincho ProN}{%
+  \setmainjfont{Hiragino Mincho ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Mincho}{%
+    \setmainjfont{Yu Mincho}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Serif CJK JP}{%
+    \setmainjfont{Noto Serif CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\usepackage[margin=22mm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{float}
+\usepackage{enumitem}
+\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=5.5mm}
+\setlist[enumerate]{noitemsep, topsep=2pt, leftmargin=7mm}
+\usepackage[hidelinks]{hyperref}
+
+% --- Brand colors (StampFly Ecosystem 既定パレット踏襲) ---
+\definecolor{sfblue}{RGB}{0, 120, 200}
+\definecolor{sfdark}{RGB}{0, 60, 100}
+\definecolor{sfgray}{RGB}{80, 80, 80}
+\definecolor{sfgreen}{RGB}{40, 160, 40}
+\definecolor{sfred}{RGB}{220, 50, 30}
+\definecolor{sforange}{RGB}{230, 140, 20}
+
+% --- Compact run-in field label (目的/機材/手順/... の見出し) ---
+\newcommand{\expfield}[1]{\medskip\noindent\textbf{#1}\par\nobreak\smallskip\noindent}
+
+\newcommand{\ohm}{\ensuremath{\Omega}}
+
+\title{\textbf{モータ電気特性評価 実験手順書}\\[2mm]
+\large ホバー電圧ドリフトの発生源切り分けと $V(\omega)$ 同定前提の検証}
+\author{StampFly Ecosystem}
+\date{\today}
+
+\begin{document}
+\maketitle
+\thispagestyle{plain}
+
+% ==================================================================
+\section*{はじめに}
+% ==================================================================
+飛行ログ解析により，ホバー維持に必要な電圧が飛行中に緩やかに上昇し（約 $+0.16\,\mathrm{V}$），
+飛行を休止すると回復するという現象（ドリフト）が確認されている。
+本書は，このドリフトの発生源を切り分け，モータ電圧モデル
+\[
+V(\omega) = K_m\,\omega + \frac{R}{K_m}\left(C_q\,\omega^2 + Q_f\right)
+\]
+の同定において暗黙に置いている前提，特に
+\[
+\beta = \frac{K_m}{\sqrt{C_t}}
+\]
+の温度不動性，を検証するための一連のベンチ実験の手順をまとめたものである。
+ここで $\omega$ はモータ角速度，$K_m$ は逆起電力定数，$R$ は巻線抵抗，
+$C_q$・$Q_f$ はそれぞれ空力トルク係数・摩擦トルク項，$C_t$ は推力係数である。
+
+モータの巻線抵抗 $R$ は，
+\begin{enumerate}
+  \item[(a)] 測定電流依存性（ブラシ接触抵抗の非線形性），
+  \item[(b)] 温度依存性（銅の温度係数），
+  \item[(c)] PWM 運用下でのモデル妥当性（平均電圧近似 $\bar V = \mathrm{duty}\cdot V_\mathrm{batt}$ の成立範囲），
+\end{enumerate}
+という三重の理由により，単一の「固定値」として同定することが本質的に難しい。
+実際，$R$ の値には旧 LCR 測定 $0.34\,\Omega$，論文採用値 $0.593\,\Omega$，
+飛行データからの逆算値（冷間 $\approx 0.36\,\Omega$・温間 $\approx 0.52\,\Omega$）という
+食い違いが並立しており，この食い違いの原因を実験的に切り分けることが本書の主目的である。
+
+以下，\S1 で背景となる既知数値と判定基準を整理し，\S2 で全実験に共通する安全・記録事項を示し，
+\S3 に配線図，\S4〜\S8 に実験 E1〜E5 の手順を示す。
+
+% ==================================================================
+\section{背景と判定基準}
+% ==================================================================
+以下は，飛行ログ解析および既存の同定作業から得られている数値の一覧である。
+各実験の判定基準は，これらの値との比較によって行う。
+
+\expfield{表1：巻線抵抗 $R$ の候補値（並立する食い違い）}
+\begin{tabular}{@{}p{48mm}p{28mm}p{75mm}@{}}
+\toprule
+出典 & 値 & 条件・備考 \\
+\midrule
+旧 LCR 測定 & $0.34\,\Omega$ & 測定条件の記録が不十分（参考値） \\
+論文 LCR 測定（現行採用値） & $0.593\,\Omega$ & 学会論文の同定で現在採用中の値 \\
+飛行データ逆算（冷間参考値） & $\approx 0.36\,\Omega$ & 「ドリフト全量 $=$ 巻線 $R$ 変化」と仮定した場合のモデル依存値 \\
+飛行データ逆算（温間参考値） & $\approx 0.52\,\Omega$ & 同上（飛行中ホバー電圧 $+0.16\,\mathrm{V}$ 相当） \\
+\bottomrule
+\end{tabular}
+
+\expfield{表2：既知パラメータ一覧}
+\begin{tabular}{@{}p{40mm}p{45mm}p{66mm}@{}}
+\toprule
+記号／項目 & 値 & 説明 \\
+\midrule
+$K_m$ & $5.682\times10^{-4}\,\mathrm{V/(rad/s)}$ & コーストダウン EMF 実測値（SCPI 取得，実績手順の反復）\\
+磁石の温度係数 & $-0.1 \sim -0.2\,\%/^\circ\mathrm{C}$ & 永久磁石一般の目安値 \\
+銅の温度係数 & $+0.393\,\%/^\circ\mathrm{C}$ & 巻線抵抗の理論値 \\
+飛行推定 $\Delta R$ & $\approx +45\,\%$ & $\Delta T \approx 110\,^\circ\mathrm{C}$ 相当（未確定，モデル依存） \\
+電気時定数 $\tau_e$ & $\approx 1.33\,\mu\mathrm{s}$ & $L/R$ 相当 \\
+モータ PWM 周波数 & $150\,\mathrm{kHz}$（周期 $6.67\,\mu\mathrm{s}$） & オフ時間が $\tau_e$ と同程度 $\to$ 導通モード要検証 \\
+ホバー相当電流 & $\approx 0.8\,\mathrm{A}$/個 & プロペラ装着時 \\
+無負荷電流 & $\approx 60$--$70\,\mathrm{mA}$ & プロペラ無し \\
+$C_q$ & $4.10\times10^{-11}$ & 空力トルク係数 \\
+$Q_f$ & $9.507\times10^{-6}$ & 摩擦トルク項 \\
+$C_t$ & $6.7\times10^{-9}$ & 推力係数 \\
+$\omega_\mathrm{hover}$ & $\approx 3670\,\mathrm{rad/s}$ & ホバー相当角速度 \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\noindent
+{\footnotesize 備考: $\beta = K_m/\sqrt{C_t}$ が温度に対して不動であれば，$K_m$ と $C_t$ の温度依存が
+相殺し合う形になる。E3 で $K_m$ の温度依存を直接測定することが，この前提の検証にあたる。}
+
+% ==================================================================
+\section{共通事項}
+% ==================================================================
+\expfield{安全}
+\begin{itemize}
+  \item E1・E5 はプロペラを必ず外して実施すること。
+  \item E2・E4 のプロペラ装着運転は，機体を固定治具に固定し，保護メガネを着用すること。
+  \item LiPo バッテリーは電流制限を設定し，過放電・過熱を避けること。
+\end{itemize}
+
+\expfield{環境記録}
+\begin{itemize}
+  \item 周囲温度・使用個体名（白2／無印／黄3）・実施日を必ず記録する。
+\end{itemize}
+
+\expfield{データ置き場}
+\texttt{analysis/datasets/motor\_bench\_YYYYMMDD/} に CSV 形式で保存する。
+列定義は各実験節の「記録フォーマット」に従う。
+
+\expfield{実施順序の推奨}
+\begin{center}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+1 & 2 & 3 & 4 & 5 \\
+\midrule
+E1 & E2 & E3（E2と同一セッション） & E5 & E4（シャント準備後） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ==================================================================
+\section{配線図}
+% ==================================================================
+E1（4線式 DC 測定）と E4（シャント抵抗 + オシロスコープ）の配線図を示す。
+他の実験（E2・E3・E5）は，本節の図と各実験節の「機材」「手順」を参照すること。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw=sfblue, line width=1.2pt, fill=sfblue!6,
+      rounded corners=2.5pt, minimum width=32mm, minimum height=15mm,
+      font=\small, align=center, text=black},
+    meter/.style={circle, draw=sfdark, line width=1.1pt, fill=white,
+      minimum size=8mm, font=\bfseries\small, text=sfdark},
+    wire/.style={line width=1pt, sfgray},
+    sense/.style={line width=0.7pt, sforange},
+    dot/.style={circle, fill=black, minimum size=2.4pt, inner sep=0pt},
+  ]
+  % Nodes
+  \node[box] (psu) at (0,0) {電流制限付き\\直流電源};
+  \node[box] (motor) at (9.2,0) {モータ\\(ロータ拘束)};
+  \node[meter] (amm) at (4.6,1.1) {A};
+  \node[meter] (volt) at (6.8,2.4) {V};
+
+  % Force leads: PSU(+) -> Ammeter -> Motor(+)
+  \draw[wire,-{Stealth[length=2.4mm]}] (psu.north) ++(0.4,0) -- ++(0,1.1) -| (amm.west);
+  \draw[wire,-{Stealth[length=2.4mm]}] (amm.east) -| (motor.north);
+  % Force lead: Motor(-) -> PSU(-)
+  \draw[wire,-{Stealth[length=2.4mm]}] (motor.south) ++(-0.4,-0.5) coordinate (mminus) -- ++(0,-0.9) -| (psu.south);
+
+  % Sense leads (Kelvin taps directly at motor terminals)
+  \coordinate (mplus_tap) at ($(motor.north)+(-0.4,0)$);
+  \node[dot] at (mplus_tap) {};
+  \node[dot] at (mminus) {};
+  \draw[sense] (mplus_tap) |- (volt.east);
+  \draw[sense] (mminus) -- ++(0,1.6) -| (volt.west);
+
+  \node[font=\scriptsize, text=sfgray, above=1mm of psu, xshift=6mm] {(force leads / 通電線)};
+  \node[font=\scriptsize, text=sforange, above=1mm of volt] {(sense leads / 電圧検出線・端子直近でタップ)};
+\end{tikzpicture}
+\caption{図1：E1 4線式 DC 測定 配線図。電流計 A は通電線に直列に挿入し，
+電圧計 V の検出線（オレンジ）はモータ端子直近（黒丸のタップ点）から独立に引き出す。}
+\label{fig:e1_wiring}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw=sfblue, line width=1.2pt, fill=sfblue!6,
+      rounded corners=2.5pt, minimum width=24mm, minimum height=13mm,
+      font=\small, align=center, text=black},
+    res/.style={rectangle, draw=sforange, line width=1.2pt, fill=sforange!8,
+      minimum width=13mm, minimum height=9mm, font=\small, text=black},
+    scope/.style={rectangle, draw=sfdark, line width=1.2pt, fill=sfdark!6,
+      minimum width=22mm, minimum height=30mm, font=\small, align=center},
+    wire/.style={line width=1pt, sfgray},
+    ch/.style={line width=0.8pt, sfgreen},
+    dot/.style={circle, fill=black, minimum size=2.4pt, inner sep=0pt},
+    chlbl/.style={font=\scriptsize, text=sfgreen, align=center},
+  ]
+  % Main power path (left column, top to bottom)
+  \node[box] (batt) at (0,0) {バッテリー};
+  \node[box] (drv) at (3.0,0) {StampFly\\駆動回路\\(PWM duty)};
+  \node[dot] (nodeP) at (5.6,0) {};
+  \node[box, minimum width=20mm] (motor) at (7.8,0) {モータ};
+  \node[dot] (nodeQ) at (7.8,-1.3) {};
+  \node[res] (shunt) at (7.8,-2.5) {$R_s$};
+  \node[dot] (nodeG) at (7.8,-3.6) {};
+
+  \draw[wire,-{Stealth[length=2.4mm]}] (batt.east) -- (drv.west);
+  \draw[wire,-{Stealth[length=2.4mm]}] (drv.east) -- (nodeP) -- (motor.west);
+  \draw[wire] (motor.south) -- (nodeQ);
+  \draw[wire,-{Stealth[length=2.4mm]}] (nodeQ) -- (shunt.north);
+  \draw[wire,-{Stealth[length=2.4mm]}] (shunt.south) -- (nodeG);
+  \draw[wire,-{Stealth[length=2.4mm]}] (nodeG) -| (batt.south);
+
+  % Oscilloscope (tall box, three channel inputs stacked on its west edge)
+  \node[scope] (scope) at (12.6,-1.8) {オシロ\\スコープ};
+  \coordinate (ch1in) at ($(scope.west)+(0,0.9)$);
+  \coordinate (ch2in) at ($(scope.west)+(0,0)$);
+  \coordinate (ch3in) at ($(scope.west)+(0,-0.9)$);
+
+  % CH1: motor(+) node -> routed above the motor box -> scope top input
+  \draw[ch,-{Stealth[length=2.2mm]}]
+    (nodeP) -- (5.6,0.9) -- (9.4,0.9) -- (9.4,0.9|-ch1in) -- (ch1in);
+  \node[chlbl, above] at (6.6,0.9) {CH1\\(モータ$+$)};
+
+  % CH2: motor(-) node, directly below the motor box -> scope middle input
+  \draw[ch,-{Stealth[length=2.2mm]}]
+    (nodeQ) -- (9.9,-1.3) -- (9.9,-1.3|-ch2in) -- (ch2in);
+  \node[chlbl, above] at (8.7,-1.3) {CH2 (モータ$-$)};
+
+  % CH3: shunt-to-ground node -> scope bottom input
+  \draw[ch,-{Stealth[length=2.2mm]}]
+    (nodeG) -- (10.4,-3.6) -- (10.4,-3.6|-ch3in) -- (ch3in);
+  \node[chlbl, above] at (8.9,-3.6) {CH3 (シャント両端)};
+
+  \node[font=\scriptsize, text=sfgray, below=1mm of nodeG] {(共通基準/バッテリー$-$)};
+\end{tikzpicture}
+\caption{図2：E4 シャント抵抗 + オシロスコープ 配線図。$R_s$ をモータ$-$端子と共通基準の間に挿入し，
+CH1$-$CH2 の差動演算でモータ端子間電圧を，CH3 でシャント両端電圧（電流換算）を得る。}
+\label{fig:e4_wiring}
+\end{figure}
+
+% ==================================================================
+\section{実験 E1：DC V/I カーブ（冷間）}
+% ==================================================================
+\expfield{目的}
+ブラシ接触抵抗の電流依存性を検出する。LCR 微小信号測定値（$0.593\,\Omega$）と
+飛行推定の冷間値（$\approx 0.36\,\Omega$）の食い違いを説明する候補として検証する。
+
+\expfield{機材}
+\begin{itemize}
+  \item 安定化電源（電流制限機能付き）
+  \item マルチメータ 2 台（4 線式接続：電流測定用 + 電圧測定用。電圧はモータ端子直近で測定）
+  \item モータ本体（プロペラを外した状態）
+  \item ロータ拘束治具（テープ等）
+\end{itemize}
+配線は図1（\S3）を参照。
+
+\expfield{手順}
+\begin{enumerate}
+  \item プロペラを外し，ロータをテープ等で拘束する。
+  \item 4 線式接続で，電圧計をモータ端子直近に，電流計を通電線に直列に接続する（図1）。
+  \item 安定化電源の電流制限を用いて目標電流値に設定し，通電する。
+  \item 各測定点で電圧・電流を記録した後，直ちに電源を切る（通電は各点数秒以内に留め，発熱を避ける）。
+  \item ロータの軸位置を変えて（目安として $0^\circ$，$120^\circ$，$240^\circ$ の3点），手順1--4を繰り返す。
+  \item 全測定点・全軸位置の記録が終わったら終了する。
+\end{enumerate}
+
+\expfield{測定点表（目標電流 [mA]）}
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}l*{10}{c}@{}}
+\toprule
+点番号 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
+\midrule
+目標電流 [mA] & 1 & 2 & 5 & 10 & 20 & 50 & 100 & 200 & 500 & 800 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\expfield{記録フォーマット（CSV 列定義）}
+\begin{tabular}{@{}p{30mm}p{28mm}p{95mm}@{}}
+\toprule
+列名 & 単位／形式 & 説明 \\
+\midrule
+timestamp & ISO8601 & 記録時刻 \\
+motor\_id & 文字列 & 個体名（白2／無印／黄3） \\
+rotor\_position\_deg & deg & 拘束時のロータ軸位置（目安 $0/120/240$） \\
+target\_current\_mA & mA & 測定点表の目標電流値 \\
+V\_measured & V & モータ端子直近で測定した電圧 \\
+I\_measured & A & 実測電流 \\
+R\_calc & \ohm & $=$ V\_measured / I\_measured \\
+ambient\_temp\_C & \textcelsius & 周囲温度 \\
+notes & 文字列 & 特記事項 \\
+\bottomrule
+\end{tabular}
+
+\expfield{判定基準}
+$R(1\,\mathrm{mA})$ が $R(500\,\mathrm{mA})$ より有意に（目安 20\% 以上）大きい場合，
+接触抵抗の電流依存が支配的であると判断する。$R(500$--$800\,\mathrm{mA})$ を DC 実効値として採用する。
+
+\expfield{注意}
+拘束時は単一の整流子片に電流が集中するため，各点の通電は短時間に留め，軸位置を変えて測定すること。
+長時間通電による発熱でブラシ特性自体が変化する恐れがある。
+
+% ==================================================================
+\section{実験 E2：冷間 $\to$ 温間 $\Delta R$ と熱時定数}
+% ==================================================================
+\expfield{目的}
+実運転相当の温度上昇による巻線抵抗変化（$\Delta R$）と冷却時定数を求め，
+飛行推定 $\Delta R \approx +45\,\%$ と比較する。
+
+\expfield{機材}
+\begin{itemize}
+  \item StampFly 機体（プロペラ装着，固定治具で固定）
+  \item 安定化電源またはバッテリー
+  \item E1 と同一の 4 線式測定治具
+  \item ストップウォッチ，非接触温度計（任意）
+\end{itemize}
+
+\expfield{手順}
+\begin{enumerate}
+  \item 機体を固定治具に固定し，プロペラを装着したまま \texttt{sf motor sweep} 相当のホバー duty
+    （$\approx 65\,\%$）で $2$--$3$ 分運転する（または実ホバー飛行の直後でもよい）。
+  \item 運転停止後，安全のため直ちにプロペラを外し，E1 と同じ 4 線式接続で R 測定を開始する（図1）。
+  \item $t = +5, 10, 20, 30, 60, 120, 300\,\mathrm{s}$ の各時刻で R を測定する
+    （発熱への影響を避けるため，E1 の低電流点，目安 $50$--$100\,\mathrm{mA}$ を使用）。
+  \item 周囲温度を記録する。
+  \item 同一条件で 2 回反復する。
+\end{enumerate}
+
+\expfield{測定点表（冷却曲線 経過時間 $t$ [s]）}
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}l*{7}{c}@{}}
+\toprule
+点番号 & 1 & 2 & 3 & 4 & 5 & 6 & 7 \\
+\midrule
+$t$ [s]（停止後） & 5 & 10 & 20 & 30 & 60 & 120 & 300 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\expfield{記録フォーマット（CSV 列定義）}
+\begin{tabular}{@{}p{30mm}p{28mm}p{95mm}@{}}
+\toprule
+列名 & 単位／形式 & 説明 \\
+\midrule
+timestamp & ISO8601 & 記録時刻 \\
+motor\_id & 文字列 & 個体名 \\
+run\_id & 整数 & 反復回数（1 または 2） \\
+t\_since\_stop\_s & s & 運転停止からの経過時間 \\
+V\_measured & V & 測定電圧 \\
+I\_measured & A & 測定電流 \\
+R\_calc & \ohm & $=$ V\_measured / I\_measured \\
+ambient\_temp\_C & \textcelsius & 周囲温度 \\
+notes & 文字列 & 特記事項 \\
+\bottomrule
+\end{tabular}
+
+\expfield{判定基準}
+冷却曲線を指数関数でフィットし，$t=0$（運転停止直後）へ外挿して $R_\mathrm{hot}$ を推定する。
+$\Delta R / R_\mathrm{cold} = (R_\mathrm{hot} - R_\mathrm{cold}) / R_\mathrm{cold}$ を算出し，
+飛行推定 $+45\,\%$ と比較する。また，飛行の休止ペア解析が示唆する速い熱時定数成分
+（$15$--$30\,\mathrm{s}$）の有無を確認する。
+
+\expfield{注意}
+プロペラ装着運転中は機体を固定し，保護メガネを着用すること。
+停止後の R 測定は必ずプロペラを外してから実施する（E1 と同様，拘束通電時の発熱に注意）。
+LiPo の電流制限に注意する。
+
+% ==================================================================
+\section{実験 E3：$K_e$ 冷間／温間（コーストダウン EMF）}
+% ==================================================================
+\expfield{目的}
+$\beta = K_m/\sqrt{C_t}$ の温度不動性を直接検証する。$\Delta K_e / K_e$ を求め，
+磁石の温度係数（$-0.1 \sim -0.2\,\%/^\circ\mathrm{C}$）$\times$ 推定 $\Delta T$ と整合するか確認する。
+
+\expfield{機材}
+\begin{itemize}
+  \item multicopter\_introduction の既存コーストダウン計測治具一式（電源，DS1054Z オシロスコープ，
+    LAN/SCPI 接続 PC）
+\end{itemize}
+
+\expfield{手順}
+\begin{enumerate}
+  \item (a) 完全冷間状態で，モータを 2 秒駆動した後に電源をカットし，コーストダウン波形（2ch）を収録する。
+  \item DS1054Z から LAN/SCPI 経由で波形データを直接取得する。
+  \item $V = V_\mathrm{bat} - K_e \cdot \omega$ の直線フィットにより $K_e$ を算出する。
+  \item (b) E2 と同じ加熱直後の条件で，同様のコーストダウン計測を実施する（E2 終了後，間を置かず実施）。
+  \item (a)・(b) の $K_e$ を比較する。
+\end{enumerate}
+
+\expfield{測定点表}
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+条件 & タイミング & 反復回数 & 備考 \\
+\midrule
+(a) 冷間 & セッション開始直後 & 2 & 完全冷間状態を確保 \\
+(b) 温間 & E2 運転停止の直後 & 2 & 温度低下前に速やかに実施 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\expfield{記録フォーマット（CSV 列定義）}
+\begin{tabular}{@{}p{30mm}p{28mm}p{95mm}@{}}
+\toprule
+列名 & 単位／形式 & 説明 \\
+\midrule
+timestamp & ISO8601 & 記録時刻 \\
+motor\_id & 文字列 & 個体名 \\
+condition & cold / hot & (a)冷間 / (b)温間 \\
+rep & 整数 & 反復回数（1 または 2） \\
+waveform\_file & ファイル名 & DS1054Z 収録波形の保存先 \\
+Ke\_fit & V/(rad/s) & 直線フィットで得た $K_e$ \\
+R2\_fit & 無次元 & フィットの決定係数 \\
+ambient\_temp\_C & \textcelsius & 周囲温度 \\
+notes & 文字列 & 特記事項 \\
+\bottomrule
+\end{tabular}
+
+\expfield{判定基準}
+$\Delta K_e / K_e$ が小さい（目安 1\% 未満）であれば，$\beta$ 固定戦略が成立すると判断する。
+磁石温度係数からの予想値（$-0.1 \sim -0.2\,\%/^\circ\mathrm{C} \times$ 推定 $\Delta T$）と比較する。
+
+\expfield{注意}
+E2 実施直後，間を置かずに実施すること（温度が下がる前に計測する）。
+
+% ==================================================================
+\section{実験 E4：PWM 実波形の確認}
+% ==================================================================
+\expfield{目的}
+平均電圧近似 $\bar V = \mathrm{duty} \cdot V_\mathrm{batt}$ の仮定を検証する。
+
+\expfield{機材}
+\begin{itemize}
+  \item シャント抵抗 $0.05$--$0.1\,\Omega$（定格数 W。既知抵抗の並列で自作可）
+  \item DS1054Z オシロスコープ（CH1 $=$ モータ端子$+$，CH2 $=$ モータ端子$-$，
+    CH1$-$CH2 演算で端子間電圧，CH3 $=$ シャント両端電圧）
+  \item StampFly 機体
+  \item バッテリー 2 水準（満充電・消耗気味）
+\end{itemize}
+配線は図2（\S3）を参照。
+
+\expfield{手順}
+\begin{enumerate}
+  \item モータの通電線にシャント抵抗を挿入する（図2）。
+  \item CH1 をモータ$+$端子，CH2 をモータ$-$端子に接続し，CH1$-$CH2 の数式演算波形で端子間電圧を得る。
+  \item CH3 をシャント両端に接続し，電流波形を得る。
+  \item \texttt{sf motor sweep} で duty $20/40/60/80\,\%$ を印加する。
+  \item 各 duty・各バッテリー水準で波形を記録し，平均電圧・電流波形の連続性を確認する。
+\end{enumerate}
+
+\expfield{測定点表}
+\begin{center}
+\small
+\begin{tabular}{@{}cll@{}}
+\toprule
+条件 No. & Duty [\%] & バッテリー水準 \\
+\midrule
+1 & 20 & 満充電 \\
+2 & 20 & 消耗気味 \\
+3 & 40 & 満充電 \\
+4 & 40 & 消耗気味 \\
+5 & 60 & 満充電 \\
+6 & 60 & 消耗気味 \\
+7 & 80 & 満充電 \\
+8 & 80 & 消耗気味 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\expfield{記録フォーマット（CSV 列定義）}
+\begin{tabular}{@{}p{44mm}p{22mm}p{87mm}@{}}
+\toprule
+列名 & 単位／形式 & 説明 \\
+\midrule
+timestamp & ISO8601 & 記録時刻 \\
+duty\_pct & \% & 印加 duty \\
+battery\_level & full / low & 満充電 / 消耗気味 \\
+Vbatt\_measured & V & バッテリー電圧実測値 \\
+Vbar\_measured & V & CH1$-$CH2 演算による平均端子電圧 \\
+diff\_from\_duty\_Vbatt & V & Vbar\_measured $-$ duty$\cdot$Vbatt\_measured \\
+current\_continuous & bool & 電流波形が連続導通か（true/false） \\
+notes & 文字列 & 特記事項 \\
+\bottomrule
+\end{tabular}
+
+\expfield{判定基準}
+平均端子電圧と duty$\cdot V_\mathrm{batt}$ の差の有無・duty 依存性の有無を確認する。
+また，電流が連続導通か不連続導通かを確認する（電気時定数 $\tau_e \approx 1.33\,\mu\mathrm{s}$ に対し，
+PWM オフ時間が同程度の境界域であるため，導通モードの検証が特に重要）。
+
+\expfield{注意}
+シャント抵抗の発熱に注意する（定格数 W）。差動演算はオシロスコープの数式機能を使用する。
+
+% ==================================================================
+\section{実験 E5：LCR メータの周波数・信号レベル特性の記録}
+% ==================================================================
+\expfield{目的}
+「$0.593\,\Omega$」がどの測定条件（周波数・信号レベル）の値かを確定し，E1 の DC 値と接続する。
+
+\expfield{機材}
+\begin{itemize}
+  \item LCR メータ
+  \item モータ（プロペラを外した状態）
+\end{itemize}
+
+\expfield{手順}
+\begin{enumerate}
+  \item プロペラを外す。
+  \item 測定周波数 $100\,\mathrm{Hz} / 1\,\mathrm{kHz} / 10\,\mathrm{kHz} / 100\,\mathrm{kHz}$ で $R_s$（直列等価抵抗），
+    $L_s$（直列等価インダクタンス）を記録する。
+  \item 試験信号レベルが可変な場合は，各レベルでも測定する。
+  \item ロータの軸位置 3 点（目安 $0^\circ$，$120^\circ$，$240^\circ$）で反復する。
+\end{enumerate}
+
+\expfield{測定点表（測定周波数）}
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+点番号 & 1 & 2 & 3 & 4 \\
+\midrule
+周波数 & 100 Hz & 1 kHz & 10 kHz & 100 kHz \\
+\bottomrule
+\end{tabular}
+\end{center}
+{\footnotesize 信号レベルが可変な機種では，設定可能な全レベルで上記4周波数を反復する。}
+
+\expfield{記録フォーマット（CSV 列定義）}
+\begin{tabular}{@{}p{34mm}p{26mm}p{93mm}@{}}
+\toprule
+列名 & 単位／形式 & 説明 \\
+\midrule
+timestamp & ISO8601 & 記録時刻 \\
+motor\_id & 文字列 & 個体名 \\
+rotor\_position\_deg & deg & ロータ軸位置（目安 $0/120/240$） \\
+freq\_Hz & Hz & 測定周波数 \\
+signal\_level & 文字列／V & 試験信号レベル（機種依存の設定値） \\
+Rs & \ohm & 直列等価抵抗 \\
+Ls & H & 直列等価インダクタンス \\
+notes & 文字列 & 特記事項 \\
+\bottomrule
+\end{tabular}
+
+\expfield{判定基準}
+$0.593\,\Omega$ に対応する周波数・信号レベル条件を特定し，E1 の DC（低周波・大電流相当）側の値との
+関係を明らかにする。
+
+\expfield{注意}
+特になし（無通電・低リスク測定）。ただし個体・軸位置の記録は他実験と同様に徹底すること。
+
+\clearpage
+% ==================================================================
+\section*{English Summary}
+% ==================================================================
+\small
+\noindent
+\textbf{Purpose.} Flight-log analysis revealed a slow drift in hover voltage during flight
+(approximately $+0.16\,\mathrm{V}$), which recovers when the vehicle is paused. This document
+specifies a bench-experiment series to isolate the source of this drift and to test an
+assumption implicit in identifying the motor voltage model
+\[
+V(\omega) = K_m\,\omega + \frac{R}{K_m}\left(C_q\,\omega^2 + Q_f\right),
+\]
+namely the temperature invariance of $\beta = K_m/\sqrt{C_t}$. The winding resistance $R$ is
+difficult to identify as a single fixed value for three compounding reasons: (a) dependence on
+measurement current (brush contact resistance nonlinearity), (b) temperature dependence
+(copper's temperature coefficient), and (c) the validity of the PWM average-voltage
+approximation $\bar V = \mathrm{duty}\cdot V_\mathrm{batt}$ in actual operation. Existing $R$
+values disagree substantially: an old LCR measurement of $0.34\,\Omega$, the value currently
+adopted in the paper ($0.593\,\Omega$), and flight-data-inferred values (cold
+$\approx 0.36\,\Omega$, hot $\approx 0.52\,\Omega$, both model-dependent under the assumption
+that the entire drift is due to winding $R$).
+
+\textbf{Known parameters (summary).} $K_m = 5.682\times10^{-4}\,\mathrm{V/(rad/s)}$ (from
+coast-down EMF, SCPI-acquired); magnet temperature coefficient $-0.1$ to $-0.2\,\%/^\circ\mathrm{C}$;
+copper temperature coefficient $+0.393\,\%/^\circ\mathrm{C}$; flight-implied $\Delta R \approx
++45\,\%$ (corresponding to $\Delta T \approx 110\,^\circ\mathrm{C}$, unconfirmed); electrical
+time constant $\tau_e \approx 1.33\,\mu\mathrm{s}$; motor PWM frequency $150\,\mathrm{kHz}$
+(period $6.67\,\mu\mathrm{s}$) — the off-time is comparable to $\tau_e$, so the conduction mode
+must be verified; hover current $\approx 0.8\,\mathrm{A}$ per motor; no-load current
+$\approx 60$--$70\,\mathrm{mA}$; $C_q = 4.10\times10^{-11}$; $Q_f = 9.507\times10^{-6}$;
+$C_t = 6.7\times10^{-9}$; $\omega_\mathrm{hover} \approx 3670\,\mathrm{rad/s}$.
+
+\textbf{Experiments.}
+\begin{itemize}
+  \item[\textbf{E1}] \emph{DC V/I curve (cold).} Sweep locked-rotor current
+    (1--800\,mA, 4-wire sensing at the terminals) to detect brush-contact nonlinearity.
+    Pass/fail: $R(1\,\mathrm{mA})$ significantly larger than $R(500\,\mathrm{mA})$ indicates
+    contact-resistance dominance; adopt $R(500$--$800\,\mathrm{mA})$ as the DC effective value.
+  \item[\textbf{E2}] \emph{Cold$\to$hot $\Delta R$ and thermal time constant.} Run at hover
+    duty ($\approx 65\,\%$) for 2--3 minutes, then measure the cooling curve
+    ($t=5,10,20,30,60,120,300\,\mathrm{s}$) and extrapolate to $t=0$ for $R_\mathrm{hot}$.
+    Compare $\Delta R/R_\mathrm{cold}$ against the flight-implied $+45\,\%$.
+  \item[\textbf{E3}] \emph{$K_e$ cold/hot (coast-down EMF).} Repeat the existing coast-down
+    procedure fully cold and immediately after E2. Small $\Delta K_e/K_e$ (target
+    $<1\,\%$) supports the temperature-invariant-$\beta$ assumption.
+  \item[\textbf{E4}] \emph{PWM waveform verification.} Insert a shunt and scope the motor
+    terminals (CH1$-$CH2 difference) and shunt (CH3) across duty $20/40/60/80\,\%$ and two
+    battery levels, to test $\bar V = \mathrm{duty}\cdot V_\mathrm{batt}$ and check conduction
+    continuity.
+  \item[\textbf{E5}] \emph{LCR meter frequency/level sweep.} Measure $R_s, L_s$ at
+    100\,Hz/1/10/100\,kHz (and available signal levels) to determine which condition the
+    adopted $0.593\,\Omega$ corresponds to, and reconcile it with the E1 DC value.
+\end{itemize}
+
+\textbf{Safety and logging.} Remove propellers for E1/E5; secure the frame and wear eye
+protection for propeller-on runs (E2/E4); set LiPo current limits. Record ambient temperature,
+motor unit ID, and date for every run. Store CSV data under
+\texttt{analysis/datasets/motor\_bench\_YYYYMMDD/} using the column definitions given in each
+section. Recommended order: E1 $\to$ E2 $\to$ E3 (same session) $\to$ E5 $\to$ E4 (after shunt
+preparation).
+
+\end{document}
