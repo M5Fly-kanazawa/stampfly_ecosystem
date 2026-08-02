@@ -1,0 +1,48 @@
+# pos_gain_deficit_reposition_hold40.scn — POS_HOLD stick reposition, LONG hold (vehicle)
+# POS_HOLD スティック再配置・長時間保持（vehicle）
+#
+# hikoki64 §3.3 SIL gain-deficit injection study (2026-08-02): a copy of
+# pos_reposition.scn with the settled-hold segment (F) extended from 6 s to 40 s.
+# The real in-flight divergence identified a ~9.4 s period (ω≈0.68 rad/s, growth rate
+# σ≈+0.057/s) — 6 s covers well under 1 cycle, far too short to show clearly GROWING
+# oscillation vs a merely under-damped one. 40 s covers ~4 cycles, enough to see
+# amplitude growth (divergence) or settling (stability) unambiguously.
+#
+# Uses ARM-triggered AUTO-takeoff (closed-loop climb, POS_HOLD from the ground) rather
+# than pos_roll.scn's open-loop STABILIZE throttle step deliberately: the injected
+# --torque-authority knob (Plant::Config::torque_authority) leaves net vertical thrust
+# untouched by construction, but an open-loop STABILIZE throttle magnitude (a fixed raw
+# stick value hand-calibrated for the un-injected plant) is still a confound worth
+# avoiding. The closed-loop auto-takeoff and the roll-stick REPOSITION velocity command
+# both route through the position/velocity cascade, so they adapt automatically.
+#
+# hikoki64 §3.3 SILゲイン欠損注入実験（2026-08-02）: pos_reposition.scn の複製で、整定後
+# 保持区間（F）を6s→40sへ延長。実飛行同定の発散周期は約9.4s（ω≈0.68rad/s,
+# 成長率σ≈+0.057/s）——6sでは1周期未満しか入らず、「成長している振動」と「単に
+# 減衰不足」の区別ができない。40sなら~4周期入り、振幅の成長（発散）か整定（安定）かを
+# 明確に判別できる。
+#
+# ARM起動の自動離陸（閉ループ上昇、地上からPOS_HOLD）を pos_roll.scn の開ループ
+# STABILIZEスロットルステップの代わりに意図的に使用: 注入する --torque-authority ノブ
+# （Plant::Config::torque_authority）は構造上正味鉛直推力に触れないが、開ループ
+# STABILIZEスロットル量（無注入プラント用に手較正された固定raw値）はなお避けるべき
+# 交絡要因。閉ループ自動離陸とロールスティックのREPOSITION速度指令はどちらも位置/速度
+# カスケードを経由するため自動的に適応する。
+#
+# roll 3000 = (3000-2048)/2048 = 0.465 norm, deadband 0.05 -> 0.44, x stick_vel 0.4 =
+# ~0.175 m/s east; ~0.5-0.7 m over the 4 s reposition window.
+#
+# Run: sf sil scenario simulator/sil/scenarios/pos_gain_deficit_reposition_hold40.scn \
+#        --torque-authority 0.55 --flow-scale 0.66 --duration 60000000 \
+#        --param position.pos.kp=1.0 --param position.vel.kp=0.8
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        0     0     1  # C: ARM in POS_HOLD — props spool, AUTO-takeoff fires (throttle ignored)
+   +    rc   2048  2048   2048    2048  1     4000      50        0     0     1  # D: climb to 0.5 m, settle + HOLD launch point
+   +    rc   2048  3000   2048    2048  1     4000      50        0     0     1  # E: ROLL-RIGHT stick → REPOSITION east ~0.175 m/s for 4 s
+   +    rc   2048  2048   2048    2048  1     40000     50        0     0     1  # F: stick CENTER → re-capture + HOLD the new position 40 s (extended for divergence-vs-stable discrimination)
+   +    rc   2048  2048   2048    2048  0     200       50                       # G: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # H: press again → DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50                       # I: settle disarmed

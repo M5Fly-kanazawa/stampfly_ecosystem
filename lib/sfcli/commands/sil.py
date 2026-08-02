@@ -308,6 +308,28 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "SIL's ~0 ms explicit dead time, docs/architecture/simulation-policy.md "
                         "backlog #1). Inserted in the duty-path before the motor's first-order "
                         "lag. Default OFF (0 ms, byte-identical clean path).")
+    p.add_argument("--thrust-eff", type=float, default=None, metavar="RATIO",
+                   help="override the plant's real-vs-ideal thrust efficiency (Plant::Config::"
+                        "thrust_efficiency; scales the MEAN of all 4 motor thrusts, so it cuts "
+                        "net vertical/hover authority too — a 0.4-0.7x cut was found to stall "
+                        "takeoff/hover outright, see --torque-authority for the differential-"
+                        "only knob used by the hikoki64 §3.3 study). Default OFF (Config "
+                        "default 1.0, byte-identical).")
+    p.add_argument("--torque-authority", type=float, default=None, metavar="RATIO",
+                   help="override the plant's roll/pitch DIFFERENTIAL torque authority "
+                        "(Plant::Config::torque_authority; scales only the per-motor thrust "
+                        "deviation from the 4-motor mean, so NET vertical thrust/hover "
+                        "authority is exactly unaffected). Used by the hikoki64 §3.3 SIL "
+                        "gain-deficit injection study to model the in-flight-identified "
+                        "~0.4-0.7x motor torque effectiveness without also cutting net thrust "
+                        "(unlike --thrust-eff, which was found to stall takeoff at this "
+                        "magnitude). Default OFF (Config default 1.0, byte-identical).")
+    p.add_argument("--flow-scale", type=float, default=None, metavar="RATIO",
+                   help="override the plant's optical-flow velocity under-read model "
+                        "(Plant::Config::flow_vel_scale; multiplies synthesized flow dx/dy "
+                        "counts). Used by the hikoki64 §3.3 SIL gain-deficit injection study "
+                        "to model the in-flight-identified ~0.66x flow velocity under-read. "
+                        "Default OFF (Config default 1.0, byte-identical).")
     p.add_argument("--unpaired", action="store_true",
                    help="boot the vehicle UNPAIRED (skip the SIL pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
@@ -799,6 +821,22 @@ def run_scenario(args: argparse.Namespace) -> int:
     md = getattr(args, "motor_delay", None)
     if md is not None:
         env["SIL_EMU_MOTOR_DELAY"] = str(md)
+
+    # --thrust-eff / --flow-scale: hikoki64 §3.3 SIL gain-deficit injection study —
+    # override the plant's torque-authority and flow-velocity-under-read knobs
+    # (Plant::Config::thrust_efficiency / flow_vel_scale, emu_main.cpp). Default OFF
+    # (byte-identical clean path unless explicitly passed).
+    # --thrust-eff / --flow-scale: hikoki64 §3.3 SILゲイン欠損注入実験 — プラントの
+    # トルク効き・フロー速度過小読みノブを上書き。既定 OFF（明示指定しない限りバイト一致）。
+    te = getattr(args, "thrust_eff", None)
+    if te is not None:
+        env["SIL_EMU_THRUST_EFF"] = str(te)
+    ta = getattr(args, "torque_authority", None)
+    if ta is not None:
+        env["SIL_EMU_TORQUE_AUTHORITY"] = str(ta)
+    fsc = getattr(args, "flow_scale", None)
+    if fsc is not None:
+        env["SIL_EMU_FLOW_SCALE"] = str(fsc)
 
     # --param NAME=VALUE (repeatable): temporary, single-run firmware param overrides,
     # routed through the EXISTING SIL_EMU_PARAMS_FILE mechanism (emu_main.cpp reads

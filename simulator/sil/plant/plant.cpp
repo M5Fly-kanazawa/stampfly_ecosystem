@@ -569,7 +569,6 @@ void Plant::substep(float h)
         const float omega_dot = (omega1 - omega0) / h;  // this substep's realized ω̇
 
         thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega1 * omega1 * cfg_.health[i] * ge_mult;
-        if (i < m_->nu) d_->ctrl[i] = thrust[i];
 
         // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.
         // モータ電気電流（DC モデル: V = I·Rm + Km·ω）。0 以上にクランプ。
@@ -593,6 +592,67 @@ void Plant::substep(float h)
         const float reaction = (cfg_.Cq * omega1 * omega1 + cfg_.Jmp * omega_dot)
                                 * cfg_.health[i] * ge_mult;
         tau_yaw_flu_z += (i == 0 || i == 2) ? -reaction : reaction;
+    }
+
+    // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SIL
+    // injection study, 2026-08-02). Redistribute the 4 per-motor thrusts about their
+    // MEAN with cfg_.torque_authority scaling ONLY the deviation from the mean:
+    //   ctrl[i] = mean(thrust) + torque_authority · (thrust[i] − mean(thrust))
+    // sum(ctrl) == sum(thrust) for ANY torque_authority (the deviations sum to zero),
+    // so NET vertical thrust — hence hover/climb/altitude authority — is exactly
+    // unaffected. Only the DIFFERENTIAL component that produces roll/pitch torque
+    // (MuJoCo derives it "for free" from the off-center per-motor forces, see the
+    // file-level ODE comment) is scaled. This is deliberately NOT the same knob as
+    // thrust_efficiency (which scales the mean too, and was found — 2026-08-02 SIL
+    // injection study — to blow the plant's thrust margin: even 10-20% cuts stall
+    // the closed-loop climb/hover long before reaching a nominal torque_authority=
+    // 0.4-0.7 deficit). Physically this models a mechanical/aerodynamic loss in the
+    // motor→differential-thrust path (e.g. mount flex, blade flapping) distinct from
+    // the motor's raw thrust-vs-ω curve; the real in-flight symptom this reproduces
+    // (attitude tracking ~0.58, NOT a failure to take off/hover) supports that
+    // separation. i_motor/battery current above still uses the UNSCALED omega (a
+    // torque-authority loss need not be an electrical one). DEFAULT 1.0 (OFF) so the
+    // clean path stays byte-identical — enable via SIL_EMU_TORQUE_AUTHORITY
+    // (sf sil scenario --torque-authority).
+    // ロール/ピッチ差動トルク効き — Model fidelity（hikoki64 §3.3 SIL注入実験、
+    // 2026-08-02）。4モータ推力をその平均のまわりに再配分し、平均からの偏差だけを
+    // torque_authority で縮小: ctrl[i] = mean(thrust) + torque_authority·(thrust[i]
+    // − mean(thrust))。偏差の総和は常にゼロゆえ sum(ctrl)==sum(thrust) が任意の
+    // torque_authority で成立 — 正味鉛直推力（ホバー/上昇/高度権限）は一切影響を受けない。
+    // ロール/ピッチトルクを生む差動成分のみ縮小（MuJoCo が偏心設置から「タダで」導出、
+    // ファイル冒頭の ODE コメント参照）。thrust_efficiency（平均も縮小）とは意図的に別ノブ
+    // ―― 2026-08-02 の SIL 注入実験で、平均も縮小する thrust_efficiency では10-20%の
+    // 削減でも閉ループ上昇/ホバーが止まり、目標の torque_authority=0.4-0.7 相当の欠損に
+    // 到達する前にプラントの推力余裕を使い果たすと判明したための分離。物理的にはモータ→
+    // 差動推力経路の機械/空力損失（マウントたわみ・ブレードフラッピング等）を模擬し、モータ
+    // 自体の推力対ω曲線とは別物 ―― 実飛行の症状（姿勢達成度~0.58、離陸/ホバー不能ではない）
+    // がこの切り分けを支持する。上の i_motor/電池電流は非スケールの omega のまま（トルク効き
+    // 損失が電気的とは限らないため）。既定 1.0（OFF）でクリーン経路はバイト一致 ――
+    // SIL_EMU_TORQUE_AUTHORITY（sf sil scenario --torque-authority）で有効化。
+    //
+    // Exact bypass at the default (1.0): mean_thrust +/- (thrust[i]-mean_thrust) is only
+    // MATHEMATICALLY equal to thrust[i] — in float it is a fresh rounding of a sum/diff/
+    // scale/sum chain, so it can differ from thrust[i] in the last bit. That ULP-level
+    // noise compounds over a long closed-loop run into a macroscopic trajectory
+    // difference (found by the 2026-08-02 byte-identical regression check on pos_roll/
+    // pos_pitch/pos_reposition, all of which have nonzero roll/pitch differential — the
+    // symmetric hover_alt was unaffected). So, exactly like delay_n_==0 above, take an
+    // explicit branch that writes thrust[i] straight through with NO arithmetic when the
+    // knob is at its default.
+    // 既定値(1.0)での厳密バイパス: mean_thrust+/-(thrust[i]-mean_thrust) は「数学的には」
+    // thrust[i] と等しいだけ — float では加減乗算の連鎖による新たな丸めが入るため最下位
+    // ビットで thrust[i] と異なりうる。そのULPノイズは長時間の閉ループ実行で軌跡の巨視的な
+    // 差に増幅する（2026-08-02 のバイト一致退行チェックで発見 — ロール/ピッチ差動が非ゼロな
+    // pos_roll/pos_pitch/pos_reposition で発生、対称な hover_alt は無影響）。よって上の
+    // delay_n_==0 と同様、既定値では算術を一切行わず thrust[i] をそのまま書く明示分岐にする。
+    if (cfg_.torque_authority == 1.0f) {
+        for (int i = 0; i < 4; ++i) if (i < m_->nu) d_->ctrl[i] = thrust[i];
+    } else {
+        const float mean_thrust = 0.25f * (thrust[0] + thrust[1] + thrust[2] + thrust[3]);
+        for (int i = 0; i < 4; ++i) {
+            const float ctrl_i = mean_thrust + cfg_.torque_authority * (thrust[i] - mean_thrust);
+            if (i < m_->nu) d_->ctrl[i] = ctrl_i;
+        }
     }
 
     // Update the battery supply (Coulomb count + IR sag) for the next substep.
@@ -825,6 +885,10 @@ sf::FlowData Plant::flow() const
     float rpp = cfg_.flow_rad_per_pixel;
     float fdx = (v_body.x / height + t.omega_frd.y) * last_dt_ / rpp;
     float fdy = (v_body.y / height - t.omega_frd.x) * last_dt_ / rpp;
+    // Opt-in under-read model (default 1.0 = no effect) — see Config::flow_vel_scale.
+    // オプトインの過小読みモデル（既定1.0=無効）— Config::flow_vel_scale 参照。
+    fdx *= cfg_.flow_vel_scale;
+    fdy *= cfg_.flow_vel_scale;
 
     sf::FlowData out{};
     out.dx = (int16_t)std::lround(fdx);

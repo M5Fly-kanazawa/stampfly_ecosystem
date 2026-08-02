@@ -211,6 +211,37 @@ sil::Plant::Config plant_config_from_env()
         if (eff > 0.0f) { cfg.thrust_efficiency = eff;
             std::printf("[emu] thrust efficiency override = %.3f (default 1.0)\n", cfg.thrust_efficiency); }
     }
+    // SIL_EMU_TORQUE_AUTHORITY overrides the plant's roll/pitch differential-torque
+    // authority (Config::torque_authority; NET vertical thrust is unaffected — see
+    // plant.hpp's Config comment and substep()'s redistribution formula). hikoki64
+    // §3.3 SIL injection study (2026-08-02): in-flight system ID attributes the
+    // divergence to ~0.4-0.7x motor torque effectiveness. Unlike SIL_EMU_THRUST_EFF
+    // (which also cuts net thrust and was found to stall takeoff/hover at this
+    // magnitude), this knob isolates the differential/attitude-authority loss.
+    // SIL_EMU_TORQUE_AUTHORITY はプラントのロール/ピッチ差動トルク効き（Config::
+    // torque_authority; 正味鉛直推力は無影響 — plant.hpp の Config コメントと substep()
+    // の再配分式参照）を上書き。hikoki64 §3.3 SIL注入実験（2026-08-02）: 実飛行同定は
+    // 発散を約0.4-0.7倍のモータトルク効きに帰属。SIL_EMU_THRUST_EFF（正味推力も削減し、
+    // この規模では離陸/ホバーが止まると判明）と異なり、本ノブは差動/姿勢権限の損失のみ切り分ける。
+    if (const char* ta = std::getenv("SIL_EMU_TORQUE_AUTHORITY")) {
+        float ta_val = (float)std::atof(ta);
+        if (ta_val > 0.0f) { cfg.torque_authority = ta_val;
+            std::printf("[emu] torque authority override = %.3f (default 1.0)\n", cfg.torque_authority); }
+    }
+    // SIL_EMU_FLOW_SCALE overrides the plant's optical-flow velocity under-read model
+    // (Config::flow_vel_scale). hikoki64 §3.3 SIL injection study (2026-08-02): the
+    // real PMW3901 pipeline was identified to read ~0.66x true velocity near the
+    // divergence frequency. Lower it (e.g. 0.66) to reproduce that under-read; unset
+    // -> the Config default 1.0 (no effect, byte-identical clean path) is used.
+    // SIL_EMU_FLOW_SCALE はプラントの光学フロー速度過小読みモデル（Config::flow_vel_scale）
+    // を上書き。hikoki64 §3.3 SIL注入実験（2026-08-02）: 実機 PMW3901 パイプラインは発散
+    // 周波数近傍で真速度の約0.66倍しか読めないと同定。下げて(例: 0.66)再現。未設定なら
+    // Config既定1.0（無効、バイト一致クリーン経路）。
+    if (const char* fs = std::getenv("SIL_EMU_FLOW_SCALE")) {
+        float scale = (float)std::atof(fs);
+        if (scale > 0.0f) { cfg.flow_vel_scale = scale;
+            std::printf("[emu] flow velocity scale override = %.3f (default 1.0)\n", cfg.flow_vel_scale); }
+    }
     // SIL_EMU_MOTOR_DELAY = duty-path transport delay [ms] (model-match retrofit #1,
     // docs/architecture/simulation-policy.md backlog #1). Real-hw identified L =
     // 14.7/8.4/11.0 ms (roll/pitch/yaw); current SIL has no explicit dead time. OFF

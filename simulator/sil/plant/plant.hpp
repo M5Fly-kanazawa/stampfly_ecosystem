@@ -109,6 +109,30 @@ public:
         /// SIL_EMU_THRUST_EFF（emu_main.cpp）で実行毎に上書き可（A/B比較用）。
         float thrust_efficiency = 1.0f;  ///< 1.0 = ODE curve is the actual output (see above)
 
+        // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SIL
+        // injection study, 2026-08-02). Deliberately SEPARATE from thrust_efficiency
+        // above: substep() redistributes the 4 per-motor thrusts about their MEAN,
+        // scaling ONLY the deviation from the mean by this factor, so NET vertical
+        // thrust (hover/climb authority) is exactly unaffected — only the roll/pitch
+        // torque-producing differential is. thrust_efficiency scales the mean too and
+        // was found (same study) to exceed the plant's thrust margin at the
+        // in-flight-identified 0.4-0.7x deficit (duty saturates before liftoff/hover),
+        // which does not match the real symptom (the craft flew and hovered fine; only
+        // attitude TRACKING was deficient, ~0.58 achievement ratio at the divergence
+        // frequency). See substep()'s longer comment for the redistribution formula.
+        // DEFAULT 1.0 (OFF) so the clean path stays byte-identical — enable per-run via
+        // SIL_EMU_TORQUE_AUTHORITY (sf sil scenario --torque-authority).
+        // ロール/ピッチ差動トルク効き — Model fidelity（hikoki64 §3.3 SIL注入実験、
+        // 2026-08-02）。上の thrust_efficiency とは意図的に別ノブ: substep() が4モータ推力を
+        // その平均のまわりに再配分し、平均からの偏差だけを本係数で縮小 — 正味鉛直推力
+        // （ホバー/上昇権限）は一切影響を受けず、ロール/ピッチトルクを生む差動成分のみ縮小。
+        // thrust_efficiency は平均も縮小し、同実験で実機同定の0.4-0.7倍欠損ではプラントの
+        // 推力余裕を超える（離陸/ホバー前に duty 飽和）と判明 — 実機の症状（機体は正常に
+        // 飛行・ホバーし、姿勢「追従」のみ発散周波数で達成度~0.58に劣化）と整合しない。
+        // 再配分式は substep() の長いコメント参照。既定 1.0（OFF）でクリーン経路はバイト
+        // 一致 —— SIL_EMU_TORQUE_AUTHORITY（sf sil scenario --torque-authority）で有効化。
+        float torque_authority = 1.0f;  ///< 1.0 = OFF (roll/pitch differential thrust unscaled)
+
         // --- Motor path transport delay (dead time) — Model fidelity ---
         // The identified plant model G(s) = b·e^(−Ls)/(s(Ts+1)) (docs/architecture/
         // simulation-policy.md §2 layer 1) factors the duty→rate response into a pure
@@ -237,6 +261,33 @@ public:
         sf::math::Vec3 imu_bias_accel = {0.0f, 0.0f, 0.0f}; ///< accel raw bias [m/s²]
         sf::math::Vec3 imu_bias_gyro  = {0.0f, 0.0f, 0.0f}; ///< gyro  raw bias [rad/s]
         float flow_rad_per_pixel = 0.00222f; ///< PMW3901 rad per count (matches ESKF)
+
+        // Optical-flow VELOCITY under-read — Model fidelity (hikoki64 §3.3 SIL
+        // injection study, 2026-08-02). In-flight system ID (poshold_attID.py,
+        // firmware/vehicle/docs/poshold_journey.md) found the real PMW3901 pipeline
+        // reports ~0.66x the true horizontal velocity near the ω≈0.68 rad/s
+        // divergence frequency (self-coupling with the ESKF's own estimated height,
+        // sensor/optics nonlinearity, floor texture — the exact split is NOT
+        // resolved, hence a single multiplicative knob rather than a mechanistic
+        // model). This scales the SYNTHESIZED dx/dy pixel counts (both the
+        // translation term and the rotation-compensation term — a uniform
+        // count/rad miscalibration would hit both identically) BEFORE they reach
+        // the firmware, so the estimator's flow-derived velocity reads low by this
+        // factor, exactly like the real sensor. DEFAULT 1.0 (OFF) so the clean path
+        // stays byte-identical — enable per-run via SIL_EMU_FLOW_SCALE
+        // (sf sil scenario --flow-scale), same opt-in pattern as thrust_efficiency.
+        // 光学フロー速度の過小読み — Model fidelity（hikoki64 §3.3 SIL注入実験、
+        // 2026-08-02）。実飛行同定（poshold_attID.py, poshold_journey.md）で、実機
+        // PMW3901 パイプラインは発散周波数 ω≈0.68 rad/s 近傍で真の水平速度の約0.66倍しか
+        // 報告しないと判明（ESKF自身の推定高度との自己結合・センサ非線形・床面テクスチャ
+        // ―― 内訳未解明ゆえ機構モデルでなく単一の乗数ノブ）。合成 dx/dy ピクセルカウント
+        // （並進項・回転補償項の両方 ―― count/rad の一様な較正誤差なら両方に均等に効く）を
+        // ファームへ渡す前にスケールし、推定器のフロー由来速度が実センサ同様にこの倍率だけ
+        // 低く読める。既定 1.0（OFF）でクリーン経路はバイト一致 —— SIL_EMU_FLOW_SCALE
+        // （sf sil scenario --flow-scale）で実行毎に有効化（thrust_efficiency と同じ
+        // オプトイン方式）。
+        float flow_vel_scale = 1.0f;  ///< multiplier on synthesized flow dx/dy (1.0 = OFF/no effect)
+
         SensorNoise::Config noise; ///< IMU sensor noise (N0, default OFF). RESET_PLAN §13
     };
 
