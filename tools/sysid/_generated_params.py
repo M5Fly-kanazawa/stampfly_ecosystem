@@ -12,21 +12,21 @@ Regenerate: sf params generate
 # --- calibration_sets.measured_2026_07 (status: adopted) ---
 # tools/sysid/defaults.py's module constants and
 # tools/params_audit/params_manifest.py's EXPECTED_* both import from here.
-_CT_VALUE = 6.7e-09   # N/(rad/s)^2 -- thrust coeff
+_CT_VALUE = 1e-08   # N/(rad/s)^2 -- thrust coeff
 _CQ_VALUE = 4.1e-11   # N*m/(rad/s)^2 -- torque coeff
 _JMP_VALUE = 1.375e-08   # kg*m^2 -- rotor inertia
 _DM_VALUE = 0.0   # N*m*s/rad -- viscous damping (2026-07-26 coast-down 3-term refit, b term ~0)
 _QF_VALUE = 9.507e-06   # N*m -- Coulomb friction torque (2026-07-26 coast-down 3-term refit, c term x Jmp)
 _RM_VALUE = 0.593   # ohm -- winding resistance
 _KM_VALUE = 0.0005682   # V/(rad/s) -- back-EMF constant
-_KAPPA_VALUE = 0.006119402985074627   # m -- kappa = Cq/Ct, full precision (derived)
+_KAPPA_VALUE = 0.0041   # m -- kappa = Cq/Ct, full precision (derived)
 
 # Rounded/adopted kappa (3 sig figs), hand-written into firmware's B^-1
 # mixer (actuator.cpp KAPPA) and simulator/sil/plant Config::kappa on
 # 2026-07-17. Differs from _KAPPA_VALUE (full precision) by ~1e-4 relative --
 # both are kept (see control/models/stampfly_physical.yaml kappa_adopted note)
 # to avoid changing that existing rounding (behavior neutrality).
-KAPPA_ADOPTED = 0.00612
+KAPPA_ADOPTED = 0.0041
 
 # --- constants (calibration-independent) ---
 EXPECTED_MASS = 0.037

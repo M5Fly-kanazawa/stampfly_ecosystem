@@ -575,20 +575,24 @@ private:
     // _OUTPUT_LIMIT): the proven rate gains were tuned against this saturation.
     // It sits below the geometric maximum (2·0.168 N·0.023 m ≈ 7.7e-3 Nm),
     // leaving thrust headroom — full differential torque would starve the
-    // collective. Yaw (geometric max 2·0.168 N·κ ≈ 2.06e-3 Nm at the measured
-    // κ=6.12e-3, actuator.cpp) is runtime-tunable via rate.yaw.max_torque after
-    // the NT-Kanazawa yaw-saturation diagnosis — default is the treatment value;
-    // provenance and the flight-proven-equivalent fallback are in params.cpp.
+    // collective. Yaw (geometric max 2·0.168 N·κ ≈ 1.38e-3 Nm at κ=4.10e-3,
+    // actuator.cpp; was ≈2.06e-3 Nm under the 2026-07-17..2026-08-02 κ=6.12e-3)
+    // is runtime-tunable via rate.yaw.max_torque after the NT-Kanazawa
+    // yaw-saturation diagnosis — default is the treatment value, rescaled by
+    // the exact same ratio as κ on 2026-08-03 (PURE rescale, physical torque
+    // cap unchanged); provenance and the flight-proven-equivalent fallback
+    // are in params.cpp.
     // レートループ出力上限（PID アンチワインドアップ用、loadParams 参照）。各 PID は
     // 出力と積分器を ±output_limit でゲートするため、上限はプラントが出せる量の
     // オーダーと一致させる必要がある — 既定 1.0 のままだと積分器は実トルクの約130倍
     // まで巻き上がる。ロール/ピッチは旧 vehicle/ の「飛行実績」上限（*_OUTPUT_LIMIT）で、
     // 幾何最大値（2·0.168N·0.023m≈7.7e-3 Nm）より低く総推力の余裕を残す。ヨー（幾何最大
-    // 2·0.168N·κ≈2.06e-3 Nm、実測 κ=6.12e-3）は NT金沢ヨー飽和診断を受け
-    // rate.yaw.max_torque でランタイム調整可能 — 既定は治療値。出典と飛行実績等価の
-    // フォールバック値は params.cpp のコメント参照。
+    // 2·0.168N·κ≈1.38e-3 Nm、κ=4.10e-3。2026-07-17〜2026-08-02のκ=6.12e-3下では
+    // ≈2.06e-3 Nmだった）は NT金沢ヨー飽和診断を受け rate.yaw.max_torque でランタイム
+    // 調整可能 — 既定は治療値。2026-08-03にκと厳密に同じ比で再スケール（純粋な再スケール、
+    // 物理トルク上限は不変）。出典と飛行実績等価のフォールバック値は params.cpp のコメント参照。
     float max_roll_pitch_torque_ = 5.2e-3f;  // [Nm] legacy ROLL/PITCH_OUTPUT_LIMIT
-    float max_yaw_torque_        = 1.83e-3f; // [Nm] default = param rate.yaw.max_torque (SSOT params.cpp)
+    float max_yaw_torque_        = 1.226e-3f; // [Nm] default = param rate.yaw.max_torque (SSOT params.cpp)
 
     // Autonomous landing descent rate (VerticalPhase::Landing — set by onLanding,
     // cleared by reset() at the next ARM). 0.3 m/s ≈ gentle indoor descent; the

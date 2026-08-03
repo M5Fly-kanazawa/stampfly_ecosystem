@@ -1,13 +1,16 @@
 # StampFly 物理パラメータリファレンス（シミュレータ＆ファームウェア）
 
-> **【実測値ノート 2026-07-15】** モータ+プロペラ系の物理パラメータが再測定で確定した:
-> $C_T$=6.7e-9, $C_Q$=4.10e-11（κ=6.12e-3 m）, $J_{mp}$=1.375e-8 kg·m², $\omega_{hover}$=3670 rad/s,
-> ホバ点実効時定数 ≈18 ms（詳細: multicopter_introduction/notes/qa_log.md Q4-9..13、
-> 影響一覧: analysis/reports/param_correction_impact_20260715.md）。
-> 本文書の数値例のうち旧値（$C_t$=1.0e-8, $C_q$=9.71e-11, $\omega_{m0}$=2930 等）に基づくものは
-> ファームウェア実装の記述としては正確だが、物理値としては上記が正。
+> **【実測値ノート 2026-07-15、2026-08-03改定】** モータ+プロペラ系の物理パラメータは2026-07-15の再測定でいったん確定したが、
+> このうち $C_T$（推力係数）は撤回済みである——新プロペラでは印加電圧・回転数・推力の3量同時計測が一度も行われておらず、
+> thrust stand単独の実測値では根拠が不十分と判断された（詳細: `control/models/stampfly_physical.yaml` の
+> `measured_2026_07.Ct` note）。SSOT採用値は **$C_T$=1.00e-8 N/(rad/s)²（暫定採用・ベンチでのV-ω-T同時計測待ち）**、
+> **$C_Q$=4.10e-11 N·m/(rad/s)²（コーストダウン実測・確定）**、**κ=$C_Q$/$C_T$=4.10e-3 m**（2026-07-17〜2026-08-02は
+> 撤回済みthrust stand Ct由来のκを採用していたが、Ct撤回に伴い2026-08-03に再改定）。$J_{mp}$=1.375e-8 kg·m² はコーストダウン+写真法実測のため
+> 確定のまま変更なし（詳細: multicopter_introduction/notes/qa_log.md Q4-9..13、Cq/Jmp/Rm/Kmの根拠campaign）。
+> ファームウェアは κ 改定と同率で `rate.yaw.kp`・`rate.yaw.max_torque` を再スケール済みのため、閉ループのデューティ出力は
+> 改定前後で恒等（飛行挙動は不変）。
 >
-> **【2026-07-24更新】** 本文§3の推力・トルク特性表と回転子慣性を上記実測値へ更新した（旧値は表内に履歴併記）。**【2026-07-26更新】** SILプラント（`simulator/sil/plant/plant.hpp`）は実測ファミリ（$C_t$=6.7e-9・thrust_efficiency=1.0、静的曲線Am/Bm/Cmは廃止しモータをODE化）へ切替済み——新ホバーduty≈0.7245（旧0.6976）。ファームウェア実装（`sf_actuator/actuator.cpp` の `MOTOR_CT`）のみ、Am/Bm/Cm・thrust_efficiencyと連動する3点セット再較正が未着手のため、意図的に $C_t$=1.0e-8 のまま保留している（`docs/architecture/simulation-policy.md` §6 バックログ#3——firmware側の切替は実機飛行検証とセットで行う必要があり、ユーザー判断待ち）。κ（トルク/推力比）のみ独立パラメータのため両実装とも実測値へ反映済み（2026-07-17）。ホバリング条件（§3）の表の値は引き続き firmware 基準の旧モータ曲線例——firmwareの現在の挙動と一致させるため据え置いている（SIL側の新ホバーduty≈0.7245は§3注記参照）。本文書とファームウェア/SIL実装の整合は `sf params check` コマンドで機械的に検査できる（意図的な保留は EXEMPT、未確定値があれば UNRESOLVED として報告される）。
+> **【2026-07-24更新】** 本文§3の推力・トルク特性表と回転子慣性を実測値へ更新した（旧値は表内に履歴併記）。**【2026-07-26更新】** SILプラント（`simulator/sil/plant/plant.hpp`）は静的曲線Am/Bm/Cmを廃止しモータをODE化した。**【2026-08-03更新】** 上記Ct撤回・再改定により、ファームウェア実装（`sf_actuator/actuator.cpp` の `MOTOR_CT`）とSILプラント（`plant.hpp`）は再び $C_T$=1.00e-8・κ=4.10e-3 で一致している（`docs/architecture/simulation-policy.md` §6 バックログ#3「ファームCt切替」は本改定により解消——ファーム値がそのまま採用値になったため、以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。本文書とファームウェア/SIL実装の整合は `sf params check` コマンドで機械的に検査できる（暫定状態にある値は EXEMPT、未確定値があれば UNRESOLVED として報告される）。
 >
 > **【2026-07-24 巻線抵抗Rm・機体質量 決着】** 巻線抵抗 Rm は3値並立が解消し **0.593 Ω**（論文LCR実測）に統一した（先生決定、コミット `9a656a9f` 2026-07-15）。旧0.34Ω（旧LCRメータ実測、別個体の疑い）・旧0.63Ω（vpython側の更新漏れの旧初期値）はいずれも「競合する実測」ではなく更新漏れだったと判明。機体質量も **0.037 kg**（実測36.8g）に統一——ファームウェアは2026-03-31に反映済み（コミット `43841314`）だったが、シミュレータ側（genesis/vpython/URDF/`tools/sysid/defaults.py`）が0.035kgのまま更新漏れだった。genesis/vpython のモータモデルは Km・Dm・Qf を Rm から `Cq·Rm/Am` 等で導出する自己整合構造のため、Rm 変更のみで定常特性（ホバー電圧・ホバーω）は数値的に不変（代数的にRmがキャンセルする——数値検証済み、悪化なし）。詳細は本文§2「質量特性」・§3「モーター電気特性」参照。
 
@@ -95,7 +98,7 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 | Pitch慣性モーメント | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
 | Yaw慣性モーメント | Izz | 20.4×10⁻⁶ | - | kg·m² | |
 
-> **注記（2026-07-24統一済み）:** ファームウェアの機体質量 0.037 kg は高度制御の重力補償（`sf_controller_pid`, `PidController::kMassG` = 0.037×9.80665）で使用される。0.035→0.037への変更は2026-03-31、実測重量（36.8g）に合わせた修正（コミット `43841314` "fix(control): update vehicle mass to 37g for accurate hover thrust"）で、`analysis/reports/param_correction_impact_20260715.md` も実測36.8gとして確認済み（変更不要と結論）。シミュレータの 0.035 kg はこの実測反映前の設計値のまま同期されていなかった（個体差ではなくシミュレータ側の更新漏れ）が、2026-07-24に `tools/sysid/defaults.py`・`simulator/genesis/motor_model.py`・`simulator/vpython/scripts/run_sim.py`・`lib/stampfly_edu` フォールバック・URDF（`simulator/shared/assets/meshes/parts/`）を含め全箇所を 0.037 kg へ統一し、ファームウェアと一致した。
+> **注記（2026-07-24統一済み）:** ファームウェアの機体質量 0.037 kg は高度制御の重力補償（`sf_controller_pid`, `PidController::kMassG` = 0.037×9.80665）で使用される。0.035→0.037への変更は2026-03-31、実測重量（36.8g）に合わせた修正（コミット `43841314` "fix(control): update vehicle mass to 37g for accurate hover thrust"）で、`analysis/reports/param_correction_impact_20260715.md`（撤回・削除済み 2026-08-03）も実測36.8gとして確認済み（変更不要と結論）。シミュレータの 0.035 kg はこの実測反映前の設計値のまま同期されていなかった（個体差ではなくシミュレータ側の更新漏れ）が、2026-07-24に `tools/sysid/defaults.py`・`simulator/genesis/motor_model.py`・`simulator/vpython/scripts/run_sim.py`・`lib/stampfly_edu` フォールバック・URDF（`simulator/shared/assets/meshes/parts/`）を含め全箇所を 0.037 kg へ統一し、ファームウェアと一致した。
 
 ### 機体形状
 
@@ -142,12 +145,12 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 | Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | モーメントアーム | 0.023 | m | unknown | - |
-| Ct | 推力係数 | 6.7×10⁻⁹ | N/(rad/s)² | 2026-07-15 | 推力測定（thrust stand） |
+| Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち） |
 | Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
 | Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
 | Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文LCRメータ実測 |
 | Km | 逆起電力定数 | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
-| κ | トルク/推力比（採用値） | 6.12×10⁻³ | m | 2026-07-17 | kappa = Cq/Ct の3桁丸め |
+| κ | トルク/推力比（採用値） | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct（丸め不要、厳密値） |
 <!-- AUTO-GENERATED:params END -->
 
 ### モーター配置と回転方向
@@ -167,9 +170,9 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 | 巻線インダクタンス | Lm | 1.0×10⁻⁶ | H | LCRメータ測定 |
 | 回転子慣性モーメント | Jmp | 1.375×10⁻⁸ | kg·m² | 実測（プロペラ写真デジタイズ+画素積分＋コーストダウン、2026-07-15確定）。旧値(参考): 2.01×10⁻⁸（形状・重量から推定、〜2026-07-14） |
 
-> **注記（2026-07-24決着）:** 巻線抵抗 Rm はかつて 0.34Ω（本表旧値、旧LCRメータ実測）・0.593Ω（`tools/sysid/defaults.py`、論文LCR実測）・0.63Ω（`simulator/vpython/core/motors.py`、visual simulator旧初期値）の3値が並立していたが、先生決定（コミット `9a656a9f` 2026-07-15）により **0.593Ω（論文LCR実測）に統一**した。旧2値は競合する実測ではなく、0.34は別個体の疑いがある旧LCR値、0.63はvpython側の反映漏れだった単純な更新漏れと判明している（`analysis/reports/param_correction_impact_20260715.md` §F1 参照）。genesis/vpython のモータモデルは下記「派生パラメータ」の Km・Dm を Rm から `Cq·Rm/Am` 等の式で導出する自己整合構造のため、Rm の値によらず定常特性（ホバー電圧・ホバーω）は代数的に不変であることを数値検証済み（Rmがモデルの定常方程式から完全にキャンセルする）。
+> **注記（2026-07-24決着）:** 巻線抵抗 Rm はかつて 0.34Ω（本表旧値、旧LCRメータ実測）・0.593Ω（`tools/sysid/defaults.py`、論文LCR実測）・0.63Ω（`simulator/vpython/core/motors.py`、visual simulator旧初期値）の3値が並立していたが、先生決定（コミット `9a656a9f` 2026-07-15）により **0.593Ω（論文LCR実測）に統一**した。旧2値は競合する実測ではなく、0.34は別個体の疑いがある旧LCR値、0.63はvpython側の反映漏れだった単純な更新漏れと判明している（`analysis/reports/param_correction_impact_20260715.md` §F1、撤回・削除済み 2026-08-03）。genesis/vpython のモータモデルは下記「派生パラメータ」の Km・Dm を Rm から `Cq·Rm/Am` 等の式で導出する自己整合構造のため、Rm の値によらず定常特性（ホバー電圧・ホバーω）は代数的に不変であることを数値検証済み（Rmがモデルの定常方程式から完全にキャンセルする）。
 >
-> **追記（2026-07-29 飛行内ドリフトの発見、帰属は未確定）:** 飛行ログ解析（`analysis/scripts/thermal_ident_study_20260729/`）で、ホバー必要電圧が飛行中に約+0.16V 上昇し、休止ペア試験（同一電池・30〜37秒の地上休止で冷間値へリセット、n=2）により「休止で回復する状態量＝駆動経路のどこかの発熱」が有力と判別された（電池内部抵抗は負の温度係数のため消去）。**ただし発熱箇所の帰属は未確定**——巻線Rm・FETオン抵抗・配線・ブラシ接触抵抗はホバー1点の観測では区別できず、「全ドリフトがRm」と仮定した場合の逆算値（Rm_cold≈0.36Ω・Rm_hot≈0.52Ω）はモデル依存の参考値である。旧0.34Ω=冷間説は示唆的な符合にとどまり、無電流LCR測定（冷間）が0.593Ωを返した事実と未整合のまま。判別にはベンチでの冷間/温間再測定が必要。採用値0.593Ωの決定自体は維持。
+> **追記（2026-07-29 飛行内ドリフトの発見、帰属は未確定）:** 飛行ログ解析（`analysis/scripts/thermal_ident_study_20260729/`、撤回・削除済み 2026-08-03）で、ホバー必要電圧が飛行中に約+0.16V 上昇し、休止ペア試験（同一電池・30〜37秒の地上休止で冷間値へリセット、n=2）により「休止で回復する状態量＝駆動経路のどこかの発熱」が有力と判別された（電池内部抵抗は負の温度係数のため消去）。**ただし発熱箇所の帰属は未確定**——巻線Rm・FETオン抵抗・配線・ブラシ接触抵抗はホバー1点の観測では区別できず、「全ドリフトがRm」と仮定した場合の逆算値（Rm_cold≈0.36Ω・Rm_hot≈0.52Ω）はモデル依存の参考値である。旧0.34Ω=冷間説は示唆的な符合にとどまり、無電流LCR測定（冷間）が0.593Ωを返した事実と未整合のまま。判別にはベンチでの冷間/温間再測定が必要。採用値0.593Ωの決定自体は維持。
 
 ### 回転数-電圧特性
 
@@ -189,11 +192,11 @@ V = Am × ω² + Bm × ω + Cm
 
 | パラメータ | 記号 | 値 | 単位 | 備考 |
 |-----------|------|-----|------|------|
-| 推力係数 | Ct | 6.7×10⁻⁹ | N/(rad/s)² | T = Ct × ω²。2026-07-15実測（推力測定）。旧値(参考): 1.00×10⁻⁸ (〜2026-07-14) |
-| トルク係数 | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω²。2026-07-15実測（コーストダウン）。旧値(参考): 9.71×10⁻¹¹ (〜2026-07-14) |
-| トルク/推力比 | κ | 6.12×10⁻³ | m | κ = Cq/Ct。2026-07-15実測。2026-07-17 にファームウェア B⁻¹ ミキサー（actuator.cpp）・SILプラント（plant.hpp）へ反映済み。旧値(参考): 9.71×10⁻³ (〜2026-07-16) |
+| 推力係数 | Ct | 1.00×10⁻⁸ | N/(rad/s)² | T = Ct × ω²。暫定採用値（2026-08-03、同径プロペラの過去実測＋理論シミュレーション整合、ベンチでのV-ω-T同時計測待ち）。2026-07-15のthrust stand実測値は新プロペラでの有効な同時計測を欠くため撤回 |
+| トルク係数 | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω²。2026-07-15実測（コーストダウン、確定）。旧値(参考): 9.71×10⁻¹¹ (〜2026-07-14) |
+| トルク/推力比 | κ | 4.10×10⁻³ | m | κ = Cq/Ct（丸め不要、厳密値）。2026-08-03改定（Ct撤回に伴う再スケール）。2026-07-17〜2026-08-02は撤回済みthrust stand Ct由来のκを採用していた。旧値(参考): 9.71×10⁻³ (〜2026-07-16) |
 
-> **注記（2026-07-24、2026-07-26更新）:** 上表の Ct・Cq は2026-07-15実測の物理値に更新済み。**SILプラント（`simulator/sil/plant/plant.hpp`）は2026-07-26に実測ファミリへ切替済み**（Ct=6.7×10⁻⁹・thrust_efficiency=1.0、静的曲線Am/Bm/Cmは廃止しモータをODE化——新ホバーduty≈0.7245）。**`sf_actuator/actuator.cpp` の `MOTOR_CT` のみ**、Am/Bm/Cm・thrust_efficiency と連動するModel Identity較正済みチェーンのため、Ct=1.00×10⁻⁸（旧値）を意図的に保留している（`docs/architecture/simulation-policy.md` §6 バックログ#3——firmware側の切替は実機飛行検証とセットで行う必要があり、ユーザー判断待ち）。κは独立パラメータ（推力→反トルク変換のみに使用）のため両実装とも実測値へ反映済み（2026-07-17）。本文書とファームウェア実装が一致していないように見えるのは既知の意図的な状態であり、バグではない。
+> **注記（2026-08-03更新）:** Ct は2026-07-15のthrust stand実測値（撤回済み）に代わり、暫定採用値 1.00×10⁻⁸ を採用した。ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）・SILプラント（`simulator/sil/plant/plant.hpp`）とも本値で一致しており、`docs/architecture/simulation-policy.md` §6 バックログ#3（ファームCt切替）は本改定により解消した（以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。κ = Cq/Ct = 4.10×10⁻³ への改定に伴い、ファームウェアは `rate.yaw.kp`・`rate.yaw.max_torque` を旧κとの比（4.10/6.12 ≈ 0.6699）で同率再スケールしており、閉ループのデューティ出力は改定前後で恒等（飛行挙動は不変）。本文書とファームウェア/SIL実装の整合は `sf params check` コマンドで機械的に検査できる。
 
 ### 派生パラメータ
 
@@ -217,7 +220,7 @@ V = Am × ω² + Bm × ω + Cm
 | ホバリング角速度 | 約2930 | rad/s |
 | ホバリング電圧 | 約2.1 | V |
 
-> **注記（2026-07-24更新、2026-07-26追記）:** 上表は firmware 基準の説明として、旧モータ曲線（Ct=1.00×10⁻⁸、m=0.035kg）を使った当時の参考計算をそのまま据え置いている——`sf_actuator/actuator.cpp` の `MOTOR_CT` は今も Ct=1.00×10⁻⁸ のままで（backlog #3 の firmware側切替は実機飛行検証とセットで行う必要があり、ユーザー判断待ち）、上表は firmware の現在の挙動と一致する。**一方 SIL 側（`plant.hpp`）は2026-07-26に実測ファミリ（Ct=6.7×10⁻⁹・thrust_efficiency=1.0、モータODE化）へ切替済みで、もはや上表と同じ値では計算していない**——SIL のホバー角速度は約3670 rad/s、1モーターあたり推力は約0.090N、per-motor duty は約0.7245（旧モータ曲線基準の約0.6976から上昇。`simulator/sil/scenarios/api_flight.expect` 等に実測記録）。なお質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み——上表の m=0.035kg はこの旧Ct計算例に限った歴史的な参考値であり、現在のシミュレータ既定質量ではない（現在の既定は§2「質量特性」参照）。2026-07-15実測の物理値（Ct=6.7×10⁻⁹、実測質量36.8g=0.037kg）で計算するとホバリング角速度は約3670 rad/s、1モーターあたり推力は約0.090Nとなる（冒頭注記、`analysis/reports/param_correction_impact_20260715.md` 参照）。ホバリング電圧はCtに依存しない実測値のためそのまま有効。
+> **注記（2026-08-03更新）:** 上表は firmware 基準の説明として、旧モータ曲線由来の Ct=1.00×10⁻⁸・m=0.035kg を使った参考計算を据え置いている。2026-07-26〜2026-08-02の期間は、SILプラント（`plant.hpp`）が2026-07-15のthrust stand実測値（撤回済み）に基づく別のCtへ切替えており、ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）と数値が一時的に乖離していた。2026-08-03のCt撤回・再改定により、**ファームウェアとSILプラントは再び Ct=1.00×10⁻⁸ で一致**した（`docs/architecture/simulation-policy.md` §6 バックログ#3はこれにより解消）。なお質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み——上表の m=0.035kg はこの旧Ct計算例に限った歴史的な参考値であり、現在のシミュレータ既定質量ではない（現在の既定は§2「質量特性」参照）。ホバリング電圧はCtに依存しない実測値のためそのまま有効。
 
 ## 4. センサパラメータ
 
@@ -573,7 +576,7 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | Pitch Moment of Inertia | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
 | Yaw Moment of Inertia | Izz | 20.4×10⁻⁶ | - | kg·m² | |
 
-> **Note (unified 2026-07-24):** The firmware mass of 0.037 kg is used for gravity compensation in altitude control (`sf_controller_pid`, `PidController::kMassG` = 0.037 × 9.80665). The 0.035→0.037 change was made 2026-03-31 to match the measured weight (36.8 g; commit `43841314`, "fix(control): update vehicle mass to 37g for accurate hover thrust"), and `analysis/reports/param_correction_impact_20260715.md` also confirms 36.8 g measured (concluding no further change needed). The simulator's 0.035 kg was the pre-correction design value that had never been synced (a simulator update gap, not individual-unit variation); on 2026-07-24 every simulator copy (`tools/sysid/defaults.py`, `simulator/genesis/motor_model.py`, `simulator/vpython/scripts/run_sim.py`, the `lib/stampfly_edu` fallback dicts, and the URDF files under `simulator/shared/assets/meshes/parts/`) was unified to 0.037 kg to match the firmware.
+> **Note (unified 2026-07-24):** The firmware mass of 0.037 kg is used for gravity compensation in altitude control (`sf_controller_pid`, `PidController::kMassG` = 0.037 × 9.80665). The 0.035→0.037 change was made 2026-03-31 to match the measured weight (36.8 g; commit `43841314`, "fix(control): update vehicle mass to 37g for accurate hover thrust"), and `analysis/reports/param_correction_impact_20260715.md` (retracted/deleted 2026-08-03) also confirms 36.8 g measured (concluding no further change needed). The simulator's 0.035 kg was the pre-correction design value that had never been synced (a simulator update gap, not individual-unit variation); on 2026-07-24 every simulator copy (`tools/sysid/defaults.py`, `simulator/genesis/motor_model.py`, `simulator/vpython/scripts/run_sim.py`, the `lib/stampfly_edu` fallback dicts, and the URDF files under `simulator/shared/assets/meshes/parts/`) was unified to 0.037 kg to match the firmware.
 
 ### Vehicle Geometry
 
@@ -620,12 +623,12 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | Moment arm | 0.023 | m | unknown | - |
-| Ct | Thrust coefficient | 6.7×10⁻⁹ | N/(rad/s)² | 2026-07-15 | Thrust-stand measurement |
+| Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement) |
 | Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
 | Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
 | Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's LCR meter measurement |
 | Km | Back-EMF constant | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
-| κ | Torque/thrust ratio (adopted) | 6.12×10⁻³ | m | 2026-07-17 | kappa = Cq/Ct rounded to 3 sig figs |
+| κ | Torque/thrust ratio (adopted) | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct (exact, no rounding needed) |
 <!-- AUTO-GENERATED:params END -->
 
 ### Motor Layout and Rotation Direction
@@ -645,9 +648,9 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | Winding Inductance | Lm | 1.0×10⁻⁶ | H | LCR meter |
 | Rotor Inertia | Jmp | 1.375×10⁻⁸ | kg·m² | Measured (propeller photo digitization + pixel integration + coast-down, confirmed 2026-07-15). Legacy value (reference): 2.01×10⁻⁸ (estimated from geometry, until 2026-07-14) |
 
-> **Note (resolved 2026-07-24):** Winding resistance Rm previously had three values in parallel use: 0.34 Ω (this table's old value, an older LCR measurement), 0.593 Ω (`tools/sysid/defaults.py`, paper LCR measurement), and 0.63 Ω (`simulator/vpython/core/motors.py`, visual simulator's stale initial value). The teacher's decision (commit `9a656a9f`, 2026-07-15) adopted **0.593 Ω (paper LCR measurement)** as the single value. The other two were never competing measurements — 0.34 Ω was an older LCR reading possibly from a different unit, and 0.63 Ω was simply an un-synced stale value in vpython (`analysis/reports/param_correction_impact_20260715.md` §F1). The genesis/vpython motor models derive Km and Dm below from Rm via `Cq·Rm/Am` etc. (a self-consistent formula package), so the steady-state behavior (hover voltage, hover ω) is algebraically invariant to the value of Rm — verified numerically, Rm cancels exactly out of the steady-state equations.
+> **Note (resolved 2026-07-24):** Winding resistance Rm previously had three values in parallel use: 0.34 Ω (this table's old value, an older LCR measurement), 0.593 Ω (`tools/sysid/defaults.py`, paper LCR measurement), and 0.63 Ω (`simulator/vpython/core/motors.py`, visual simulator's stale initial value). The teacher's decision (commit `9a656a9f`, 2026-07-15) adopted **0.593 Ω (paper LCR measurement)** as the single value. The other two were never competing measurements — 0.34 Ω was an older LCR reading possibly from a different unit, and 0.63 Ω was simply an un-synced stale value in vpython (`analysis/reports/param_correction_impact_20260715.md` §F1, retracted/deleted 2026-08-03). The genesis/vpython motor models derive Km and Dm below from Rm via `Cq·Rm/Am` etc. (a self-consistent formula package), so the steady-state behavior (hover voltage, hover ω) is algebraically invariant to the value of Rm — verified numerically, Rm cancels exactly out of the steady-state equations.
 >
-> **Addendum (2026-07-29, in-flight drift discovered; attribution unresolved):** Flight-log analysis (`analysis/scripts/thermal_ident_study_20260729/`) found the required hover voltage rising ~+0.16 V within a flight; a pause-pair test (same battery, V resets toward the cold value after a 30-37 s motors-off ground gap, n=2) favors "a rest-recovering state = heating somewhere in the drive path" (battery internal resistance has the wrong temperature sign and is ruled out). **The heating location is NOT established** — winding Rm, FET on-resistance, board traces, and brush contact resistance are indistinguishable from a single hover operating point; the back-computed values under the all-drift-is-Rm assumption (Rm_cold~0.36, Rm_hot~0.52 ohm) are model-dependent reference numbers only. The old-0.34-as-cold reading is a suggestive coincidence that still conflicts with the zero-current (cold) LCR measurement returning 0.593 ohm. A cold/warm bench remeasurement is required to discriminate. The adopted 0.593 ohm decision itself stands.
+> **Addendum (2026-07-29, in-flight drift discovered; attribution unresolved):** Flight-log analysis (`analysis/scripts/thermal_ident_study_20260729/`, retracted/deleted 2026-08-03) found the required hover voltage rising ~+0.16 V within a flight; a pause-pair test (same battery, V resets toward the cold value after a 30-37 s motors-off ground gap, n=2) favors "a rest-recovering state = heating somewhere in the drive path" (battery internal resistance has the wrong temperature sign and is ruled out). **The heating location is NOT established** — winding Rm, FET on-resistance, board traces, and brush contact resistance are indistinguishable from a single hover operating point; the back-computed values under the all-drift-is-Rm assumption (Rm_cold~0.36, Rm_hot~0.52 ohm) are model-dependent reference numbers only. The old-0.34-as-cold reading is a suggestive coincidence that still conflicts with the zero-current (cold) LCR measurement returning 0.593 ohm. A cold/warm bench remeasurement is required to discriminate. The adopted 0.593 ohm decision itself stands.
 
 ### Speed-Voltage Relationship
 
@@ -667,11 +670,11 @@ V = Am × ω² + Bm × ω + Cm
 
 | Parameter | Symbol | Value | Unit | Notes |
 |-----------|--------|-------|------|-------|
-| Thrust coefficient | Ct | 6.7×10⁻⁹ | N/(rad/s)² | T = Ct × ω². Measured 2026-07-15 (thrust stand). Legacy value (reference): 1.00×10⁻⁸ (until 2026-07-14) |
-| Torque coefficient | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω². Measured 2026-07-15 (coast-down). Legacy value (reference): 9.71×10⁻¹¹ (until 2026-07-14) |
-| Torque/Thrust ratio | κ | 6.12×10⁻³ | m | κ = Cq/Ct. Measured 2026-07-15. Applied to the firmware B⁻¹ mixer (actuator.cpp) and the SIL plant (plant.hpp) on 2026-07-17. Legacy value (reference): 9.71×10⁻³ (until 2026-07-16) |
+| Thrust coefficient | Ct | 1.00×10⁻⁸ | N/(rad/s)² | T = Ct × ω². Provisional adoption (2026-08-03; past same-diameter-propeller measurement + theoretical simulation consistency; pending bench V-ω-T co-measurement). The 2026-07-15 thrust-stand measurement was retracted for lacking a valid simultaneous measurement on the new propeller |
+| Torque coefficient | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω². Measured 2026-07-15 (coast-down, confirmed). Legacy value (reference): 9.71×10⁻¹¹ (until 2026-07-14) |
+| Torque/Thrust ratio | κ | 4.10×10⁻³ | m | κ = Cq/Ct (exact, no rounding needed). Revised 2026-08-03 following the Ct retraction (pure rescale). From 2026-07-17 to 2026-08-02 this document used κ derived from the now-retracted thrust-stand Ct. Legacy value (reference): 9.71×10⁻³ (until 2026-07-16) |
 
-> **Note (2026-07-24, updated 2026-07-26):** Ct and Cq above are now the measured 2026-07-15 physical values. **The SIL plant (`simulator/sil/plant/plant.hpp`) has since switched to the measured family** (Ct=6.7×10⁻⁹ / thrust_efficiency=1.0, static Am/Bm/Cm curve dropped, motor converted to an ODE — new hover duty ≈0.7245). **Only `MOTOR_CT` in `sf_actuator/actuator.cpp`** intentionally keeps the legacy Ct=1.00×10⁻⁸, because it belongs to a Model-Identity-calibrated chain coupled with Am/Bm/Cm and thrust_efficiency (`docs/architecture/simulation-policy.md` §6 backlog #3 — the firmware-side switch must be paired with real-hardware flight validation and is a user decision). κ is an independent parameter (used only for thrust→reaction-torque conversion), so both implementations already carry the measured value (applied 2026-07-17). The apparent mismatch between this document and the firmware implementation is a known, intentional state — not a bug.
+> **Note (updated 2026-08-03):** Ct now uses the provisional adopted value 1.00×10⁻⁸, replacing the retracted 2026-07-15 thrust-stand measurement. The firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`) and the SIL plant (`simulator/sil/plant/plant.hpp`) now agree on this value, so `docs/architecture/simulation-policy.md` §6 backlog #3 (the firmware-side Ct switch) is resolved by this revision (the earlier state — firmware alone holding an intentionally-stale value — no longer exists). Following the κ = Cq/Ct = 4.10×10⁻³ revision, the firmware rescaled `rate.yaw.kp` and `rate.yaw.max_torque` by the same ratio as the old-to-new κ (≈0.6699 = 4.10/6.12), so the closed-loop duty output is identical before and after the revision (flight behavior unchanged). Consistency between this document and the firmware/SIL implementation can be checked mechanically with `sf params check`.
 
 ### Derived Parameters
 
@@ -693,7 +696,7 @@ Vehicle weight 0.035 kg (legacy motor-curve worked example — see note below) �
 | Hover angular velocity | ~2930 | rad/s |
 | Hover voltage | ~2.1 | V |
 
-> **Note (updated 2026-07-24, amended 2026-07-26):** The table above is kept as a firmware-referenced worked example — it deliberately reflects the legacy motor curve (Ct=1.00×10⁻⁸, m=0.035 kg), matching `MOTOR_CT` in `sf_actuator/actuator.cpp`, which still uses Ct=1.00×10⁻⁸ today (the firmware-side switch under backlog #3 must be paired with real-hardware flight validation and is a user decision). **The SIL side (`plant.hpp`) has since switched to the measured family as of 2026-07-26** (Ct=6.7×10⁻⁹ / thrust_efficiency=1.0, motor converted to an ODE) and no longer computes with the values in the table above — the SIL's hover angular velocity is ~3670 rad/s, thrust per motor is ~0.090 N, and per-motor hover duty is ~0.7245 (up from ~0.6976 under the legacy motor curve; see e.g. `simulator/sil/scenarios/api_flight.expect`). Separately, the mass has been unified to the measured 0.037 kg in the simulator as of 2026-07-24 — the m=0.035 kg in this specific legacy-Ct worked example is a historical reference tied to that old Ct calculation, not the simulator's current default mass (see "Mass Properties" in §2 for the current default). Computed with the 2026-07-15 measured physical values (Ct=6.7×10⁻⁹, measured mass 36.8 g = 0.037 kg), the hover angular velocity is ~3670 rad/s and thrust per motor is ~0.090 N (see the top-of-document note and `analysis/reports/param_correction_impact_20260715.md`). Hover voltage is a direct measurement independent of Ct, so it remains valid as-is.
+> **Note (updated 2026-08-03):** The table above is kept as a firmware-referenced worked example using the legacy motor curve's Ct=1.00×10⁻⁸ and m=0.035 kg. Between 2026-07-26 and 2026-08-02, the SIL plant (`plant.hpp`) had switched to a different Ct derived from the (now-retracted) 2026-07-15 thrust-stand measurement, so it temporarily diverged numerically from the firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`). Following the 2026-08-03 Ct retraction and revision, **the firmware and the SIL plant again agree on Ct=1.00×10⁻⁸** (`docs/architecture/simulation-policy.md` §6 backlog #3 is resolved by this revision). Separately, the mass has been unified to the measured 0.037 kg in the simulator as of 2026-07-24 — the m=0.035 kg in this specific legacy-Ct worked example is a historical reference tied to that old Ct calculation, not the simulator's current default mass (see "Mass Properties" in §2 for the current default). Hover voltage is a direct measurement independent of Ct, so it remains valid as-is.
 
 ## 4. Sensor Parameters
 

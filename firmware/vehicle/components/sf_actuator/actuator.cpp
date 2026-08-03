@@ -86,21 +86,52 @@ static constexpr float MAX_DUTY = 1.0f;
 // モータモデルに準拠。制御入力は物理量（推力 [N]・トルク [Nm]）で、ミキサーは配分を
 // 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SIL プラントの duty→推力 の逆）。
 static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
-// Torque/thrust ratio κ = Cq/Ct, MEASURED 2026-07-15 (coast-down: Cq=4.10e-11,
-// thrust stand: Ct=6.7e-9; SSOT tools/sysid/defaults.py, multicopter_introduction
-// qa_log Q4-9..13). The former value 9.71e-3 was 1.59× too high, so the mixer's
-// τψ/κ under-drove yaw: physical yaw torque was only 0.63× the commanded value.
-// The yaw rate gain and torque cap were rescaled with this fix (params.cpp
-// rate.yaw.kp, rate.yaw.max_torque) to keep the flight-proven loop gain.
-// トルク/推力比 κ = Cq/Ct、2026-07-15 実測（コーストダウン Cq=4.10e-11、推力測定
-// Ct=6.7e-9。正典 tools/sysid/defaults.py）。旧値 9.71e-3 は 1.59 倍過大で、ミキサーの
-// τψ/κ がヨーを過小駆動（物理ヨートルク＝指令の 0.63 倍）だった。飛行実績ループゲイン
-// を保つため、ヨーレートゲインとトルク上限もこの修正と同時に再スケール（params.cpp）。
-static constexpr float KAPPA    = 6.12e-3f;  // torque/thrust ratio Cq/Ct [m], measured 2026-07-15
+// Torque/thrust ratio κ = Cq/Ct. Cq=4.10e-11 is coast-down MEASURED
+// 2026-07-15 (open-circuit, confirmed by the user's own measurement --
+// SSOT control/models/stampfly_physical.yaml measured_2026_07.Cq). Ct is a
+// PROVISIONAL value as of 2026-08-03 (see below) -- the 2026-07-15
+// thrust-stand Ct was retracted for lack of a valid simultaneous
+// voltage/RPM/thrust measurement on the new propeller. κ = Cq/Ct = 4.10e-3
+// (was 9.71e-3 before 2026-07-17, then 6.12e-3 from 2026-07-17 through
+// 2026-08-02 while Ct was the now-retracted thrust-stand value). The
+// 2026-07-17 fix (9.71e-3 -> 6.12e-3) corrected a mixer under-drive: at the
+// old κ, τψ/κ delivered only 0.63× the commanded yaw torque. The 2026-08-03
+// change (6.12e-3 -> 4.10e-3) is a PURE RESCALE tied to the Ct retraction
+// above, not a new physical finding -- rate.yaw.kp and rate.yaw.max_torque
+// were rescaled by the same ratio (params.cpp) so the physical yaw-torque
+// output is UNCHANGED (closed-loop behavior identity), following the same
+// pattern as the 2026-07-17 rescale.
+// トルク/推力比 κ = Cq/Ct。Cq=4.10e-11 はコーストダウン法による 2026-07-15
+// 実測（開回路、ユーザー自身の計測で信頼確定 — 正典
+// control/models/stampfly_physical.yaml measured_2026_07.Cq）。Ct は
+// 2026-08-03 時点で暫定値（下記参照）——2026-07-15 の thrust stand Ct は、
+// 新プロペラでの電圧/回転数/推力の有効な同時計測を欠くため撤回。
+// κ = Cq/Ct = 4.10e-3（2026-07-17 以前は 9.71e-3、2026-07-17〜2026-08-02は
+// 撤回済みthrust stand Ct由来の 6.12e-3）。2026-07-17 の修正（9.71e-3→
+// 6.12e-3）はミキサーの過小駆動を是正するもの（旧κではτψ/κが指令ヨー
+// トルクの0.63倍しか出せていなかった）。2026-08-03 の変更（6.12e-3→
+// 4.10e-3）は上記 Ct 撤回に伴う純粋な再スケールであり新たな物理的知見
+// ではない——rate.yaw.kp と rate.yaw.max_torque を同率で再スケール
+// （params.cpp）し、物理ヨートルク出力は不変（閉ループ挙動の恒等性）。
+// 2026-07-17 の再スケールと同じパターンを踏襲。
+static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
 static constexpr float MOTOR_AM = 5.39e-8f;  // V = Am·ω² + Bm·ω + Cm
 static constexpr float MOTOR_BM = 6.33e-4f;
 static constexpr float MOTOR_CM = 1.53e-2f;
-static constexpr float MOTOR_CT = 1.00e-8f;  // thrust T = Ct·ω² [N]
+// thrust T = Ct·ω² [N]. PROVISIONAL as of 2026-08-03 (numerically unchanged
+// from before: the retracted 2026-07-15 thrust-stand Ct never reached
+// firmware, so this literal was and remains the pre-2026-07-15 legacy
+// value). Provenance: (1) past same-diameter-propeller measurement,
+// (2) theoretical-simulation consistency. Pending a bench V-ω-T
+// co-measurement on the current propeller to confirm/replace. SSOT:
+// control/models/stampfly_physical.yaml measured_2026_07.Ct.
+// 推力 T = Ct·ω² [N]。2026-08-03 時点で暫定値（数値は不変——撤回された
+// 2026-07-15 thrust stand Ct はそもそも firmware に反映されていなかった
+// ため、この値は2026-07-15以前の旧値のまま）。拠り所: (1) 同径プロペラ
+// での過去の確からしい実測、(2) 理論シミュレーションとの整合。現行
+// プロペラでのベンチ V-ω-T 同時計測で確定・置換予定。正典:
+// control/models/stampfly_physical.yaml measured_2026_07.Ct。
+static constexpr float MOTOR_CT = 1.00e-8f;
 
 // Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
 // Uses the LIVE battery voltage from sensor_power so the thrust→duty stage tracks

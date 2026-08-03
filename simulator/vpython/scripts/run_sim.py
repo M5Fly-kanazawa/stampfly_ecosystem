@@ -132,12 +132,16 @@ class ControlAllocator:
     def __init__(self):
         # Quad parameters
         self.d = 0.023          # Moment arm [m]
-        # kappa derived from the plant (Cq/Ct = 6.12e-3 with the 2026-07-15
-        # measurements) — matches the firmware mixer KAPPA (commit 0ae4dea).
-        # Was a stale hand-copied 9.71e-3.
-        # kappa はプラントから導出（2026-07-15 実測で Cq/Ct = 6.12e-3）—
-        # ファームのミキサー KAPPA（コミット 0ae4dea）と一致。旧値は手書き
-        # 複製の 9.71e-3 のまま陳腐化していた。
+        # kappa derived from the plant (Cq/Ct = 4.10e-3 as of 2026-08-03,
+        # core/motors.py) — matches the firmware mixer KAPPA. History:
+        # 9.71e-3 (stale hand-copy) -> 6.12e-3 (2026-07-15..2026-08-02,
+        # thrust-stand Ct) -> 4.10e-3 (2026-08-03, thrust-stand Ct retracted,
+        # see core/motors.py's Ct comment for the full provenance).
+        # kappa はプラントから導出（Cq/Ct = 4.10e-3、2026-08-03時点、
+        # core/motors.py）— ファームのミキサー KAPPA と一致。履歴:
+        # 9.71e-3（陳腐化した手書き複製）→ 6.12e-3（2026-07-15〜2026-08-02、
+        # thrust stand Ct）→ 4.10e-3（2026-08-03、thrust stand Ct 撤回。
+        # 詳細は core/motors.py の Ct コメント参照）。
         self.kappa = MotorParams.Cq / MotorParams.Ct
         self.max_thrust = 0.15  # Max thrust per motor [N]
 

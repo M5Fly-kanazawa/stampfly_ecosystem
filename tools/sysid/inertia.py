@@ -24,10 +24,15 @@ from .defaults import get_flat_defaults
 # Motor Model and Mixing Parameters (from reconstruct_duties.py)
 # =============================================================================
 
-# Motor/propeller coefficients
-CT = 6.7e-9            # Thrust coefficient [N/(rad/s)²] (2026-07-15実測・現行プロペラ)
+# Motor/propeller coefficients. Ct is PROVISIONAL as of 2026-08-03 (the
+# 2026-07-15 thrust-stand value was retracted for lack of a valid
+# simultaneous voltage/RPM/thrust measurement on the new propeller); Cq is
+# coast-down MEASURED 2026-07-15 and still trusted. See
+# control/models/stampfly_physical.yaml measured_2026_07.Ct for the full
+# provenance of the provisional value.
+CT = 1.0e-8            # Thrust coefficient [N/(rad/s)²] (2026-08-03暫定採用)
 CQ = 4.10e-11          # Torque coefficient [Nm/(rad/s)²] (2026-07-15実測)
-KAPPA = 6.12e-3        # Torque/thrust ratio [m] (2026-07-15実測)
+KAPPA = 4.10e-3        # Torque/thrust ratio [m] (Cq/Ct, 2026-08-03改定)
 
 # Geometry
 D = 0.023              # Moment arm [m]

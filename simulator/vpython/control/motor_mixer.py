@@ -278,16 +278,21 @@ class MotorMixer:
         motor_positions: list = None,
         motor_dirs: list = None,
         max_thrust_n: float = 0.15,
-        # kappa = Cq/Ct, measured 2026-07-15, confirmed 2026-07-17 (see
+        # kappa = Cq/Ct = 4.10e-3, current as of 2026-08-03 (see
         # docs/architecture/stampfly-parameters.md / control/models/
-        # stampfly_physical.yaml). Old value 0.00971 was the firmware's
-        # stale/buggy figure (~1.59x too high). This parameter appears unused
-        # by current call sites, but corrected to remove a latent stale value.
-        # kappa = Cq/Ct、2026-07-15実測・2026-07-17確定（出所は上記ドキュメント
-        # 参照）。旧値0.00971はファームウェアの旧バグ値（約1.59倍過大）。本
-        # パラメータは現状の呼び出し元では未使用と見られるが、将来の地雷と
-        # なる旧値を除去するために修正。
-        torque_coeff: float = 6.12e-3,
+        # stampfly_physical.yaml). History: 0.00971 (firmware's stale/buggy
+        # figure, ~1.59x too high) -> 6.12e-3 (2026-07-15..2026-08-02, tied
+        # to a now-retracted thrust-stand Ct) -> 4.10e-3 (2026-08-03, PURE
+        # rescale following the Ct retraction, see the YAML's kappa_adopted
+        # note). This parameter appears unused by current call sites, but
+        # kept current to avoid a latent stale value.
+        # kappa = Cq/Ct = 4.10e-3、2026-08-03時点の現行値（出所は上記ドキュメント
+        # 参照）。履歴: 0.00971（ファームウェアの旧バグ値、約1.59倍過大）→
+        # 6.12e-3（2026-07-15〜2026-08-02、撤回済みthrust stand Ct由来）→
+        # 4.10e-3（2026-08-03、Ct撤回に伴う純粋な再スケール、詳細はYAMLの
+        # kappa_adopted note参照）。本パラメータは現状の呼び出し元では未使用と
+        # 見られるが、将来の地雷となる陳腐値を避けるため現行値に更新。
+        torque_coeff: float = 4.10e-3,
     ) -> np.ndarray:
         """
         Calculate torques from motor outputs using individual motor positions.

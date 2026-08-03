@@ -1,13 +1,15 @@
 # StampFly 制御系設計
 
-> **【実測値ノート 2026-07-15】** モータ+プロペラ系の物理パラメータが再測定で確定した:
-> $C_T$=6.7e-9, $C_Q$=4.10e-11（κ=6.12e-3 m）, $J_{mp}$=1.375e-8 kg·m², $\omega_{hover}$=3670 rad/s,
-> ホバ点実効時定数 ≈18 ms（詳細: multicopter_introduction/notes/qa_log.md Q4-9..13、
-> 影響一覧: analysis/reports/param_correction_impact_20260715.md）。
-> 本文書の数値例のうち旧値（$C_t$=1.0e-8, $C_q$=9.71e-11, $\omega_{m0}$=2930 等）に基づくものは
-> ファームウェア実装の記述としては正確だが、物理値としては上記が正。
+> **【実測値ノート 2026-07-15、2026-08-03改定】** モータ+プロペラ系の物理パラメータのうち $C_T$（推力係数）は撤回済みである
+> ——新プロペラでは印加電圧・回転数・推力の3量同時計測が一度も行われておらず、thrust stand単独の実測値では根拠が不十分と
+> 判断された（詳細: `control/models/stampfly_physical.yaml` の `measured_2026_07.Ct` note）。SSOT採用値は
+> **$C_T$=1.00e-8 N/(rad/s)²（暫定採用・ベンチでのV-ω-T同時計測待ち）**、**$C_Q$=4.10e-11 N·m/(rad/s)²（コーストダウン
+> 実測・確定）**、**κ=$C_Q$/$C_T$=4.10e-3 m**（2026-07-17〜2026-08-02は撤回済みthrust stand Ct由来のκを採用していたが、
+> Ct撤回に伴い2026-08-03に再改定）。$J_{mp}$=1.375e-8 kg·m² はコーストダウン+写真法実測のため確定のまま変更なし
+> （詳細: multicopter_introduction/notes/qa_log.md Q4-9..13）。ファームウェアは κ 改定と同率で `rate.yaw.kp`・
+> `rate.yaw.max_torque` を再スケール済みのため、閉ループのデューティ出力は改定前後で恒等（飛行挙動は不変）。
 >
-> **【2026-07-24更新】** κ（トルク/推力比）の記載2箇所（ミキサー行列の一般導出、「モーターパラメータ（ファームウェア実装値）」表）を旧値9.71×10⁻³→実測値6.12×10⁻³へ修正した（ファームウェア`actuator.cpp`のKAPPAは2026-07-17に反映済み、修正済みのまま放置されていた記述漏れ）。「StampFly実機値」以降の数値計算例（Ct=1.00×10⁻⁸・ω_m0=2930等）は、firmware/SILが3点セット再較正（`docs/architecture/simulation-policy.md` §6 バックログ#3）未着手のため現在も使用する旧モータ曲線と整合させるため意図的に維持している——物理実測値は本注記冒頭を参照。
+> **【2026-07-24更新】** κ（トルク/推力比）の記載2箇所（ミキサー行列の一般導出、「モーターパラメータ（ファームウェア実装値）」表）を旧値9.71×10⁻³→実測値へ修正した（ファームウェア`actuator.cpp`のKAPPAは2026-07-17に反映済み、修正済みのまま放置されていた記述漏れ）。**【2026-08-03更新】** 上記Ct撤回・再改定によりκをさらに4.10×10⁻³へ改定した。「StampFly実機値」以降の数値計算例（Ct=1.00×10⁻⁸・ω_m0=2930等）は、Ct=1.00×10⁻⁸ が現在のSSOT採用値そのものになったため、もはや「意図的な旧値」ではなく現在の実装・物理値の双方を正しく反映した値である。
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -790,7 +792,7 @@ $$
 ここで：
 - $(x_i, y_i)$：各モーターの重心からの座標 [m]
 - $\sigma_i$：回転方向（CCW: +1, CW: -1）
-- $\kappa = C_q / C_t = 6.12 \times 10^{-3}$：トルク/推力比（2026-07-15実測。旧値 $9.71 \times 10^{-3}$ は2026-07-17にファームウェア実装へ反映済み）
+- $\kappa = C_q / C_t = 4.10 \times 10^{-3}$：トルク/推力比（2026-08-03改定。$C_q$=4.10e-11はコーストダウン実測で確定、$C_t$=1.00e-8は暫定採用値。旧値 $9.71 \times 10^{-3}$ は2026-07-17に、その後の中間値は2026-08-03にファームウェア実装へ反映済み）
 
 **対称X配置**（StampFly標準）では $(x_i, y_i) = (\pm d, \pm d)$ となり：
 
@@ -1024,7 +1026,7 @@ $$
 
 ### パラメータ（StampFly実機値）
 
-以下のパラメータは `docs/architecture/stampfly-parameters.md` の値を基に、firmware実装（`sf_actuator/actuator.cpp`）が現在も使用する旧モータ曲線（Ct=1.00×10⁻⁸ 等）に統一した、本節の数値計算例である。2026-07-15実測の物理値（Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹ 等）は本文書冒頭の注記および `stampfly-parameters.md` §3 を参照。機体質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み（下表は現在値）——モータ曲線（Ct/Cq）のみ backlog #3 未着手のため旧値のまま。
+以下のパラメータは `docs/architecture/stampfly-parameters.md` の値を基に、firmware実装（`sf_actuator/actuator.cpp`）が現在も使用する旧モータ曲線（Ct=1.00×10⁻⁸ 等）に統一した、本節の数値計算例である。2026-08-03のCt撤回・再改定により、この旧モータ曲線のCt=1.00×10⁻⁸自体が現在のSSOT採用値（暫定・計測待ち）と一致している。Cq=4.10×10⁻¹¹（コーストダウン実測・確定）は本文書冒頭の注記および `stampfly-parameters.md` §3 を参照。機体質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み（下表は現在値）。
 
 #### 機体パラメータ
 
@@ -1056,7 +1058,7 @@ $$
 | ホバリング角速度 | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | ホバリング電圧 | $V_0$ | 2.1 | V | 実測 |
 
-> **注記（2026-07-24更新）:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸）を使った当時の参考計算をそのまま据え置いている（backlog #3 未再較正のため、firmware/SILの`Ct`実装値と一致）。ただし表中の $T_0$・$\omega_{m0}$ の数値自体は旧質量 $m$=0.035kg での計算のままであり、上記「機体パラメータ」表の現在値 $m$=0.037kg とは一致しない——質量統一（2026-07-24）はモータ曲線側の再較正（backlog #3）とセットではないため、この旧Ct計算例に限り質量も歴史的な参考値として残している。2026-07-15実測の物理値（$C_t$=6.7×10⁻⁹、実測質量36.8g=0.037kg）で計算するとホバリング角速度は約3670 rad/s、1モーターあたり推力は約0.090Nとなる（本文書冒頭の注記、`analysis/reports/param_correction_impact_20260715.md` 参照）。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
+> **注記（2026-08-03更新）:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸）を使った参考計算をそのまま据え置いている。2026-08-03のCt撤回・再改定により、この $C_t$=1.00×10⁻⁸ は歴史的な旧値であるだけでなく現在のSSOT採用値（暫定・ベンチでのV-ω-T同時計測待ち）そのものであり、firmware/SILの`Ct`実装値とも一致する。ただし表中の $T_0$・$\omega_{m0}$ の数値自体は旧質量 $m$=0.035kg での計算のままであり、上記「機体パラメータ」表の現在値 $m$=0.037kg とは一致しない——この旧Ct計算例に限り質量も歴史的な参考値として残している。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
 
 ### 数値計算例
 
@@ -1610,7 +1612,7 @@ Kd = Kp × Td
 | パラメータ | 記号 | 値 | 単位 |
 |-----------|------|-----|------|
 | 推力係数 | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
-| トルク/推力比 | κ (=Cq/Ct) | 6.12×10⁻³ | m |
+| トルク/推力比 | κ (=Cq/Ct) | 4.10×10⁻³ | m |
 | モーメントアーム | d | 0.023 | m |
 | 電圧-回転数 2次係数 | Am | 5.39×10⁻⁸ | V/(rad/s)² |
 | 電圧-回転数 1次係数 | Bm | 6.33×10⁻⁴ | V/(rad/s) |
@@ -1619,7 +1621,7 @@ Kd = Kp × Td
 
 > **注記:** duty変換は `duty = V/Vbat` で行い、Vbatは`sensor_power`から得る実電圧（起動直後や異常値のときのみ上記の公称値3.7Vにフォールバック）。旧設計にあった巻線抵抗Rm・逆起電力定数Km・粘性摩擦Dm・静止摩擦Qf・回転子慣性Jmを介した電気回路モデルは、現行の `sf_actuator` では使用しない（V-ω特性 Am/Bm/Cm を直接使う簡略モデルに一本化）。本セクション（8章）の理論式に出てくるRm=0.5Ω、Jm=1.0×10⁻⁷等はシミュレータ初期値の理論値であり、上記の実装値とは別物。
 >
-> **κ・Ctの状態（2026-07-24確認）:** κは2026-07-17に実測値6.12×10⁻³へ更新済み（`actuator.cpp` の `KAPPA`。旧値9.71×10⁻³は1.59倍過大でヨートルクを過小駆動していた）。Ctは2026-07-15実測で6.7×10⁻⁹と確定しているが、Am/Bm/Cm・thrust_efficiencyと連動するModel Identity較正済みチェーンのため、`actuator.cpp` の `MOTOR_CT` は3点セット再較正（`docs/architecture/simulation-policy.md` §6 バックログ#3）とセットで切替予定——上表のCt=1.00×10⁻⁸は現時点の実装を正しく反映した値であり、誤記ではない。
+> **κ・Ctの状態（2026-08-03改定）:** κは2026-07-17に実測値へ更新（`actuator.cpp` の `KAPPA`。旧値9.71×10⁻³は1.59倍過大でヨートルクを過小駆動していた）後、2026-08-03のCt撤回に伴い4.10×10⁻³へ再改定した。Ctは2026-07-15のthrust stand実測値が撤回され、暫定採用値1.00×10⁻⁸（ベンチでのV-ω-T同時計測待ち）に統一されている。`actuator.cpp` の `MOTOR_CT` はこの暫定採用値と数値一致しており、ファームウェアとSILプラント（`plant.hpp`）の間で乖離はない——上表のCt=1.00×10⁻⁸は現時点の実装・SSOT採用値の双方を正しく反映した値である。
 
 ---
 
@@ -2385,7 +2387,7 @@ Typically, design with PD or P control, adding I only when disturbance rejection
 
 ### Parameters (StampFly Actual Values)
 
-The following parameters are numerical examples for this section, based on `docs/architecture/stampfly-parameters.md` but unified to the legacy motor curve (Ct=1.00×10⁻⁸, etc.) that the firmware implementation (`sf_actuator/actuator.cpp`) still uses today. See the note at the top of this document and `stampfly-parameters.md` §3 for the 2026-07-15 measured physical values (Ct=6.7×10⁻⁹, Cq=4.10×10⁻¹¹, etc.). The vehicle mass was unified to the measured 0.037 kg in the simulator as of 2026-07-24 (the table below shows the current value) — only the motor curve (Ct/Cq) remains at its legacy value pending backlog #3.
+The following parameters are numerical examples for this section, based on `docs/architecture/stampfly-parameters.md` but unified to the legacy motor curve (Ct=1.00×10⁻⁸, etc.) that the firmware implementation (`sf_actuator/actuator.cpp`) still uses today. Following the 2026-08-03 Ct retraction and revision, this legacy Ct=1.00×10⁻⁸ is not just a historical value anymore — it is also the current SSOT adopted value (provisional, pending bench co-measurement). See the note at the top of this document and `stampfly-parameters.md` §3 for Cq=4.10×10⁻¹¹ (coast-down measured, confirmed). The vehicle mass was unified to the measured 0.037 kg in the simulator as of 2026-07-24 (the table below shows the current value).
 
 #### Vehicle Parameters
 
@@ -2416,7 +2418,7 @@ The following parameters are numerical examples for this section, based on `docs
 | Hover angular velocity | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | Hover voltage | $V_0$ | 2.1 | V | Measured |
 
-> **Note (updated 2026-07-24):** The table above deliberately keeps the legacy worked example ($C_t$=1.00×10⁻⁸) as-is, matching the firmware/SIL `Ct` implementation (pending backlog #3 recalibration). However, the $T_0$/$\omega_{m0}$ figures themselves are still computed with the old mass $m$=0.035 kg, which no longer matches the current value $m$=0.037 kg in the "Vehicle Parameters" table above — the 2026-07-24 mass unification is independent of the motor-curve recalibration (backlog #3), so this legacy-Ct worked example alone keeps the old mass as a historical reference too. Computed with the 2026-07-15 measured physical values ($C_t$=6.7×10⁻⁹, measured mass 36.8 g = 0.037 kg), the hover angular velocity is ~3670 rad/s and thrust per motor is ~0.090 N (see the top-of-document note and `analysis/reports/param_correction_impact_20260715.md`). The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
+> **Note (updated 2026-08-03):** The table above deliberately keeps the legacy worked example ($C_t$=1.00×10⁻⁸) as-is. Following the 2026-08-03 Ct retraction and revision, this $C_t$=1.00×10⁻⁸ is not just a historical value — it is also the current SSOT adopted value (provisional), matching the firmware/SIL `Ct` implementation. However, the $T_0$/$\omega_{m0}$ figures themselves are still computed with the old mass $m$=0.035 kg, which no longer matches the current value $m$=0.037 kg in the "Vehicle Parameters" table above — this legacy-Ct worked example alone keeps the old mass as a historical reference. The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
 
 ### Numerical Example
 
@@ -2969,7 +2971,7 @@ Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 | Parameter | Symbol | Value | Unit |
 |-----------|--------|-------|------|
 | Thrust coefficient | Ct | 1.00×10⁻⁸ | N/(rad/s)² |
-| Torque/thrust ratio | κ (=Cq/Ct) | 6.12×10⁻³ | m |
+| Torque/thrust ratio | κ (=Cq/Ct) | 4.10×10⁻³ | m |
 | Moment arm | d | 0.023 | m |
 | Voltage-speed quadratic coeff. | Am | 5.39×10⁻⁸ | V/(rad/s)² |
 | Voltage-speed linear coeff. | Bm | 6.33×10⁻⁴ | V/(rad/s) |
@@ -2978,4 +2980,4 @@ Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 
 > **Note:** Duty is computed as `duty = V/Vbat`, where Vbat is the LIVE voltage from `sensor_power` (falling back to the 3.7V nominal only during boot or on an implausible reading). The earlier design's electrical-circuit model (winding resistance Rm, back-EMF constant Km, viscous friction Dm, static friction Qf, rotor inertia Jm) is not used by the current `sf_actuator` — it is unified into the simpler V-ω curve (Am/Bm/Cm) used directly. The Rm=0.5Ω, Jm=1.0×10⁻⁷, etc. appearing in Section 8's theoretical derivation are simulator initial/theoretical values, distinct from the implementation values above.
 >
-> **κ / Ct status (confirmed 2026-07-24):** κ was updated to the measured 6.12×10⁻³ on 2026-07-17 (`actuator.cpp`'s `KAPPA`; the former 9.71×10⁻³ was 1.59x too high and under-drove yaw torque). Ct was confirmed at 6.7×10⁻⁹ by measurement on 2026-07-15, but because `actuator.cpp`'s `MOTOR_CT` belongs to a Model-Identity-calibrated chain coupled with Am/Bm/Cm and thrust_efficiency, it is scheduled to switch together with the 3-value recalibration (`docs/architecture/simulation-policy.md` §6 backlog #3). The Ct=1.00×10⁻⁸ shown above accurately reflects the current implementation — it is not a typo.
+> **κ / Ct status (revised 2026-08-03):** κ was first updated on 2026-07-17 (`actuator.cpp`'s `KAPPA`; the former 9.71×10⁻³ was 1.59x too high and under-drove yaw torque), then revised again to 4.10×10⁻³ on 2026-08-03 following the Ct retraction. Ct's 2026-07-15 thrust-stand measurement was retracted for lacking a valid simultaneous voltage/RPM/thrust measurement on the new propeller; the SSOT now carries Ct=1.00×10⁻⁸ as a provisional adopted value pending a bench co-measurement. `actuator.cpp`'s `MOTOR_CT` numerically matches this provisional value, so the firmware and SIL plant (`plant.hpp`) agree — the Ct=1.00×10⁻⁸ shown above accurately reflects both the current implementation and the current SSOT value.

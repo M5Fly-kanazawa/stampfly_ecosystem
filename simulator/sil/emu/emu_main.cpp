@@ -195,17 +195,27 @@ sil::Plant::Config plant_config_from_env()
     }
     // SIL_EMU_THRUST_EFF overrides the plant real-vs-ideal thrust efficiency. DEFAULT
     // 1.0 as of 2026-07-26 (backlog #2, motor ODE): the prior default 0.893 = 1/1.12
-    // was a fudge compensating for the LEGACY Ct (1.00e-8, ~1.49x too large vs the
-    // measured 6.7e-9 now wired in directly) -- with the real Ct in place that
-    // compensation is no longer warranted. Lower it (e.g. below 1.0) to model a WORN/
-    // weaker airframe, or raise it for a FRESH/stronger one, reproducing an over/
-    // under-thrust (hover duty shift + auto-takeoff climb-rate shift). OFF by default
-    // (env var unset -> the Config default above is used unmodified).
+    // was a fudge compensating for the pre-2026-07-15 Ct (1.00e-8) being ~1.49x too
+    // large vs the 2026-07-15 thrust-stand measurement (6.7e-9) then wired in directly
+    // -- with that (then believed accurate) smaller Ct in place, the compensation was
+    // no longer warranted. NOTE (2026-08-03): that thrust-stand Ct was itself
+    // RETRACTED (no valid simultaneous voltage/RPM/thrust measurement exists for the
+    // new propeller) and Ct reverted to a PROVISIONAL 1.00e-8 (see plant.hpp's
+    // Config::thrust_efficiency comment) -- this 1.0 default was NOT reassessed as
+    // part of that retraction. Lower it (e.g. below 1.0) to model a WORN/weaker
+    // airframe, or raise it for a FRESH/stronger one, reproducing an over/under-thrust
+    // (hover duty shift + auto-takeoff climb-rate shift). OFF by default (env var
+    // unset -> the Config default above is used unmodified).
     // SIL_EMU_THRUST_EFF はプラント実/理想推力効率を上書き。2026-07-26（バックログ#2、
-    // モータODE化）既定 1.0 に変更: 旧既定 0.893=1/1.12 は旧 Ct(1.00e-8、実測6.7e-9の
-    // 約1.49倍過大)を打ち消すファッジ係数だった -- 実測 Ct を配線した今その補正は不要。
-    // 値を下げて摩耗/弱い機体、上げて新品/強い機体を模擬し、過不足推力（ホバー duty シフト
-    // ＋自動離陸上昇率シフト）を再現。既定 OFF（環境変数未設定なら上の Config 既定のまま）。
+    // モータODE化）既定 1.0 に変更: 旧既定 0.893=1/1.12 は2026-07-14以前のCt(1.00e-8)が
+    // 2026-07-15のthrust stand実測(6.7e-9、当時直接配線)より約1.49倍過大だったことを
+    // 打ち消すファッジ係数だった -- その（当時は正確と信じられていた）小さいCtを配線
+    // した状態では補正は不要と判断された。注記（2026-08-03）: そのthrust stand Ct自体
+    // が撤回（新プロペラでの電圧/回転数/推力の有効な同時計測が存在しないため）され、Ctは
+    // 暫定値1.00e-8に戻った（plant.hpp の Config::thrust_efficiency コメント参照）——
+    // この既定1.0はそのCt撤回に伴って再検討されていない。値を下げて摩耗/弱い機体、上げて
+    // 新品/強い機体を模擬し、過不足推力（ホバー duty シフト＋自動離陸上昇率シフト）を
+    // 再現。既定 OFF（環境変数未設定なら上の Config 既定のまま）。
     if (const char* te = std::getenv("SIL_EMU_THRUST_EFF")) {
         float eff = (float)std::atof(te);
         if (eff > 0.0f) { cfg.thrust_efficiency = eff;

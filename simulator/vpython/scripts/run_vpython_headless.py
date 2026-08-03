@@ -89,10 +89,16 @@ def thrust_to_voltage(thrust):
 class ControlAllocator:
     def __init__(self):
         self.d = 0.023
-        # Derived from the plant (Cq/Ct = 6.12e-3, 2026-07-15 measurements);
-        # matches the firmware mixer KAPPA (0ae4dea). Was stale 9.71e-3.
-        # プラントから導出（Cq/Ct = 6.12e-3、2026-07-15実測）。ファームの
-        # ミキサー KAPPA（0ae4dea）と一致。旧値 9.71e-3 は陳腐化していた。
+        # Derived from the plant (Cq/Ct = 4.10e-3 as of 2026-08-03,
+        # core/motors.py); matches the firmware mixer KAPPA. History:
+        # 9.71e-3 (stale) -> 6.12e-3 (2026-07-15..2026-08-02, thrust-stand
+        # Ct) -> 4.10e-3 (2026-08-03, thrust-stand Ct retracted -- see
+        # core/motors.py's Ct comment for the full provenance).
+        # プラントから導出（Cq/Ct = 4.10e-3、2026-08-03時点、core/motors.py）。
+        # ファームのミキサー KAPPA と一致。履歴: 9.71e-3（陳腐化）→
+        # 6.12e-3（2026-07-15〜2026-08-02、thrust stand Ct）→
+        # 4.10e-3（2026-08-03、thrust stand Ct 撤回。詳細は core/motors.py
+        # の Ct コメント参照）。
         self.kappa = MotorParams.Cq / MotorParams.Ct
         self.max_thrust = 0.15
 

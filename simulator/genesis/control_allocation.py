@@ -54,20 +54,20 @@ class QuadConfig:
 
     # Torque/Thrust ratio κ = Cq/Ct (m)
     # トルク推力比
-    # NOTE(2026-07-24): κ=6.12e-3 は実測確定値(2026-07-15実測)。ミキサは
-    #  ファームウェアのB⁻¹ミキサー実装
-    #  (firmware/vehicle/components/sf_actuator/actuator.cpp)を鏡写ししており、
-    #  そちらは2026-07-17にこの値へ更新済み。プラント側 motor_model.py は
-    #  2026-07-24のCt更新でκ=Cq/Ct=6.12e-3に整合。旧値 9.71e-3 は
-    #  ファームウェアの旧バグ値（1.59倍過大だった）。
-    # NOTE(2026-07-24): kappa=6.12e-3 is the confirmed measured value
-    #  (measured 2026-07-15). This mixer mirrors the firmware's B⁻¹ mixer
-    #  implementation (firmware/vehicle/components/sf_actuator/actuator.cpp),
-    #  which was updated to this value on 2026-07-17. Plant-side
-    #  motor_model.py became consistent (kappa=Cq/Ct=6.12e-3) with the Ct
-    #  update on 2026-07-24. The old 9.71e-3 was the firmware's stale/buggy
-    #  value (1.59x too high).
-    kappa: float = 6.12e-3
+    # NOTE(2026-08-03): κ=4.10e-3 = Cq/Ct with Cq=4.10e-11 (coast-down
+    #  measured, 2026-07-15, still trusted) and Ct=1.00e-8 (PROVISIONAL as of
+    #  2026-08-03 -- the 2026-07-15 thrust-stand Ct was retracted for lack of
+    #  a valid simultaneous voltage/RPM/thrust measurement on the new
+    #  propeller; see control/models/stampfly_physical.yaml
+    #  measured_2026_07.Ct for the full provenance). This mixer mirrors the
+    #  firmware's B⁻¹ mixer implementation
+    #  (firmware/vehicle/components/sf_actuator/actuator.cpp), which was
+    #  rescaled to this value on 2026-08-03 (a PURE rescale, not a new
+    #  physical finding -- 6.12e-3 was itself derived from the now-retracted
+    #  Ct). History: 9.71e-3 (pre-2026-07-17, firmware's stale/buggy value,
+    #  1.59x too high) -> 6.12e-3 (2026-07-17..2026-08-02) -> 4.10e-3
+    #  (2026-08-03, this value).
+    kappa: float = 4.10e-3
 
     # Motor positions [x, y] in NED body frame (m)
     # モータ位置（NED機体座標系）
@@ -180,7 +180,7 @@ class ControlAllocator:
         return thrusts, saturated
 
 
-def thrust_to_duty(thrust: float, Ct: float = 6.7e-9, Vbat: float = 3.7,
+def thrust_to_duty(thrust: float, Ct: float = 1.0e-8, Vbat: float = 3.7,
                    Km: float = 5.682e-4, Rm: float = 0.593,
                    Dm: float = 0.0, Cq: float = 4.10e-11,
                    Qf: float = 9.507e-6) -> float:
@@ -190,10 +190,14 @@ def thrust_to_duty(thrust: float, Ct: float = 6.7e-9, Vbat: float = 3.7,
 
     Defaults are the 2026-07 measured family (adopted, see
     control/models/stampfly_physical.yaml calibration_sets.measured_2026_07 /
-    docs/architecture/stampfly-parameters.md). Vbat=3.7 is a nominal battery
+    docs/architecture/stampfly-parameters.md). Ct=1.0e-8 is PROVISIONAL as of
+    2026-08-03 (the 2026-07-15 thrust-stand value was retracted; see the
+    YAML's Ct.note for the full provenance). Vbat=3.7 is a nominal battery
     voltage, independent of that measurement campaign.
     既定値は2026-07実測ファミリ（採用値、出所は上記ドキュメント参照）。
-    Vbat=3.7 は測定キャンペーンとは独立の公称バッテリ電圧。
+    Ct=1.0e-8 は2026-08-03時点で暫定値（2026-07-15のthrust stand値は撤回、
+    詳細は上記YAMLのCt.note参照）。Vbat=3.7 は測定キャンペーンとは独立の
+    公称バッテリ電圧。
 
     Args:
         thrust: Desired thrust (N)

@@ -88,6 +88,23 @@ from sysid._generated_params import (  # noqa: E402
 EXPECTED_CT_SCALED_1EM8 = EXPECTED_CT / 1e-8  # calc-ct field ("×10⁻⁸ N/(rad/s)²")
 
 
+# EXPECTED_AM / EXPECTED_BM / EXPECTED_CM — control/models/stampfly_physical.yaml
+# calibration_sets.legacy_motor_curve.params.{Am,Bm,Cm}.value. Deliberately
+# hand-typed here (not imported from tools/sysid/_generated_params.py like the
+# EXPECTED_* above): generate.py's render_python() only emits the
+# measured_2026_07 family (CT/CQ/JMP/DM/QF/RM/KM/KAPPA) into that file. The
+# legacy_motor_curve family IS machine-generated, but only on the C++ side
+# (simulator/sil/plant/generated_params.hpp's sil_params::legacy::AM/BM/CM,
+# via render_cpp()) -- a header nothing currently consumes
+# (status: frozen_for_implementation, see the YAML family header comment).
+# 旧ファミリ定数。バックログ#3で新チェーンへ切替予定。If backlog #3 adds a
+# Python-side generated symbol for this family, replace these three literals
+# with imports the same way EXPECTED_CT etc. are imported above.
+EXPECTED_AM = 5.39e-8   # V/(rad/s)^2 -- legacy_motor_curve.Am
+EXPECTED_BM = 6.33e-4   # V/(rad/s)   -- legacy_motor_curve.Bm
+EXPECTED_CM = 1.53e-2   # V           -- legacy_motor_curve.Cm
+
+
 # =============================================================================
 # Judgement markers — used in place of a numeric "expected" value.
 # 判定マーカー — 数値の「期待値」の代わりに使う。
@@ -170,21 +187,21 @@ class ParamCheck:
 
 # --- EXEMPT markers (known-and-accepted mismatch, with reason) ---
 # --- EXEMPT マーカー（既知で許容された不一致、理由付き） ---
-# Phase 1 (2026-07-26, backlog #2 motor ODE): simulator/sil/plant/plant.hpp's
-# Config::Ct switched to the adopted (measured) value -- EXEMPT_PLANT_CT (which
-# used to cover it) is retired. The ONLY remaining known-and-accepted mismatch
-# is firmware's still-legacy MOTOR_CT (backlog #3, firmware out of scope here).
-# Phase 1（2026-07-26、バックログ#2モータODE化）: simulator/sil/plant/plant.hpp
-# の Config::Ct は adopted（実測）値へ切替済み -- それをカバーしていた
-# EXEMPT_PLANT_CT は撤廃。唯一残る既知許容の不一致は firmware の旧 MOTOR_CT
-# （バックログ#3、本タスクでは firmware は対象外）。
-EXEMPT_FIRMWARE_MOTOR_CT = Exempt(
-    reason="firmware/vehicle/components/sf_actuator/actuator.cpp の MOTOR_CT は"
-           "実機ファーム現状の鏡写し（backlog #2 では firmware/ を変更しない）。"
-           "simulator/sil/plant/plant.hpp の Config::Ct は 2026-07-26 に adopted 値へ"
-           "切替済み（backlog #2, motor ODE 化）。ファーム側の切替は "
-           "docs/architecture/simulation-policy.md backlog #3 で別途実施する。"
-)
+# (2026-08-03): EXEMPT_FIRMWARE_MOTOR_CT, which used to cover
+# firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT pending
+# backlog #3's firmware-side Ct switch, is RETIRED. The measured_2026_07
+# family's Ct is now a provisional 1.00e-8 (the 2026-07-15 thrust-stand value
+# was retracted -- see control/models/stampfly_physical.yaml Ct.note) --
+# numerically identical to the legacy literal MOTOR_CT already held, so the
+# C_T check below promotes that row from EXEMPT to a normal EXPECTED_CT (OK)
+# comparison.
+# （2026-08-03）: backlog #3 のファーム側 Ct 切替待ちとして firmware/vehicle/
+# components/sf_actuator/actuator.cpp の MOTOR_CT をカバーしていた
+# EXEMPT_FIRMWARE_MOTOR_CT は撤廃。measured_2026_07 ファミリの Ct は暫定値
+# 1.00e-8 になった（2026-07-15のthrust stand値は撤回 -- 詳細は
+# control/models/stampfly_physical.yaml の Ct.note 参照）-- MOTOR_CT が既に
+# 保持していた旧リテラルと数値上一致するため、下記 C_T チェックはこの行を
+# EXEMPT から通常の EXPECTED_CT（OK）比較へ昇格する。
 
 # firmware/vehicle_old is FROZEN legacy (87 real flights, no new development,
 # see firmware/vehicle_old/README.md banner). Its physical-parameter literals
@@ -201,6 +218,60 @@ EXEMPT_VEHICLE_OLD = Exempt(
            "新規開発なし）。現行ファームは firmware/vehicle/。現在の確定値は "
            "docs/architecture/stampfly-parameters.md / "
            "control/models/stampfly_physical.yaml を参照。"
+)
+
+# tools/log_analyzer's duty-reconstruction / interactive-visualization scripts
+# intentionally mirror the firmware constants THAT WERE ACTIVE WHEN THE
+# REPLAYED LOGS WERE RECORDED (the pre-2026-07-17 motor curve / 9.71e-3 kappa),
+# not today's firmware nor the SIL-adopted measured family, so their
+# reconstructed thrust/duty plots match what the real hardware actually did at
+# the time. Frozen mirrors for log reconstruction -- NOT a stray copy. See
+# reconstruct_duties.py's own NOTE(2026-07-15) comment. Not code-changed by
+# the 2026-08-03 kappa/Ct revision (out of scope -- see params_manifest.py's
+# task instructions); only this EXEMPT reason text was updated to correct a
+# prior inaccuracy ("mirrors CURRENT firmware", which was never quite true --
+# firmware's kappa moved on 2026-07-17 and again 2026-08-03, these files did
+# not).
+# tools/log_analyzer の duty再構成／対話可視化スクリプトは、今日のファームでも
+# SILの実測ファミリでもなく、「再生対象のログが記録された当時、有効だった」
+# ファーム定数（2026-07-17以前のモータ曲線・kappa=9.71e-3）を意図的に鏡写し
+# している——実機がその当時実際にどう動いていたかにログ再構成の結果を一致
+# させるため。過去ログ再構成用の凍結鏡写しであり、単なるコピー漏れではない
+# （reconstruct_duties.py 自身の NOTE(2026-07-15) コメント参照）。2026-08-03の
+# κ/Ct改定ではコード変更しない（対象外——本パラメータ大改定タスクの指示書
+# 参照）。理由文のみ、従来の不正確な記述（「現行ファームを鏡写し」——実際には
+# ファームのkappaは2026-07-17・2026-08-03と動いたがこれらのファイルは
+# 動いていない）を修正した。
+EXEMPT_LOG_ANALYZER_MIRROR = Exempt(
+    reason="過去ログ再構成用の凍結鏡写し（当時の飛行ファーム定数）。"
+           "時代別対応は将来課題。"
+)
+
+# max_thrust_per_motor: provenance of the 0.15 N vs 0.168 N per-motor limit is
+# NOT confirmed against a measurement (unlike C_T/C_Q/kappa/mass/inertia
+# above, all of which trace to a dated bench measurement in the SSOT YAML).
+# Modeled as EXEMPT rather than Unresolved (2026-08-03): `sf sil regression` /
+# CI's --strict treats any UNRESOLVED row as a failure, which made this open
+# question block automated checks. EXEMPT keeps the mismatch visible in the
+# report (reason text below, prefixed "計測待ち（出所未確認）:") without
+# failing --strict -- it does not assert either candidate value is correct.
+# 最大推力（1モーターあたり）: 0.15N/0.168Nどちらの出所も実測で確認されていない
+# （上のC_T/C_Q/kappa/mass/慣性と異なり、SSOT YAMLに紐づく実測日がない）。
+# Unresolved ではなく EXEMPT として扱う（2026-08-03）: `sf sil regression`/CIの
+# --strict は UNRESOLVED を1件でも失敗扱いにするため、この未決着課題が自動検査を
+# 止めてしまっていた。EXEMPT ならレポート上の可視性（下記理由文、先頭に
+# 「計測待ち（出所未確認）:」）を保ったまま --strict を通す -- どちらの候補値が
+# 正しいかを主張するものではない。
+EXEMPT_MAX_THRUST_PER_MOTOR = Exempt(
+    reason="計測待ち（出所未確認）: 0.15N/0.168Nどちらの出所も実測で確認されて"
+           "いない（上のC_T/C_Q/kappa/mass/慣性と異なり、SSOT YAMLに紐づく実測日が"
+           "ない）。ベンチ実測 duty0.9 で 0.108 N/枚と乖離（2026-07-15調査時点の"
+           "実測記録。詳細レポートは日付付き分析記録の整理に伴い削除済み、"
+           "2026-08-03）。0.168 = 旧Ct(1.0e-8)×(4097 rad/s)² と一致する可能性あり"
+           "（未確認）。0.15 N 系（tools/sysid・lib/stampfly_edu・simulator/genesis・"
+           "simulator/vpython 等9箇所）と 0.168 N 系（firmware/vehicle "
+           "pid_controller.hpp・tools/log_analyzer/visualize_interactive.py "
+           "の2箇所）の2値が並立している。"
 )
 
 
@@ -269,15 +340,18 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="sil_params::adopted::CT (Config::Ct source, backlog #2 ODE)",
         ),
         ParamCheck(
-            # Firmware is out of scope for backlog #2 (motor ODE, SIL-only); the
-            # firmware mixer's thrust curve still uses the legacy Ct pending
-            # backlog #3's separate firmware-side switch.
-            # firmware はバックログ#2（モータODE化、SIL限定）の対象外——ファーム
-            # ミキサーの推力曲線は backlog #3 の別途ファーム側切替待ちで旧 Ct のまま。
+            # Promoted from EXEMPT to a normal OK comparison 2026-08-03: the
+            # measured_2026_07 family's Ct is now the same provisional 1.00e-8
+            # this literal already held (see the EXEMPT markers header comment
+            # above and control/models/stampfly_physical.yaml Ct.note).
+            # 2026-08-03にEXEMPTから通常のOK比較へ昇格: measured_2026_07
+            # ファミリのCtは、このリテラルが既に保持していた暫定値1.00e-8と
+            # 同じになった（上のEXEMPTマーカー冒頭コメントと
+            # control/models/stampfly_physical.yaml のCt.note参照）。
             file="firmware/vehicle/components/sf_actuator/actuator.cpp",
             regex=r'MOTOR_CT\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXEMPT_FIRMWARE_MOTOR_CT,
-            note="mixerCompute() thrust curve MOTOR_CT (legacy, backlog #3 pending)",
+            expected=EXPECTED_CT,
+            note="mixerCompute() thrust curve MOTOR_CT (adopted, provisional as of 2026-08-03)",
         ),
         ParamCheck(
             file="simulator/genesis/control_allocation.py",
@@ -300,6 +374,20 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'\.Ct = ([0-9eE.+-]+)f,',
             expected=EXEMPT_VEHICLE_OLD,
             note="DEFAULT_MOTOR_PARAMS.Ct (frozen legacy firmware)",
+        ),
+        ParamCheck(
+            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
+            # mirror, not a stray copy of the SIL-adopted measured value.
+            file="tools/log_analyzer/reconstruct_duties.py",
+            regex=r'\bCT = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="module constant CT (firmware actuator.cpp mirror)",
+        ),
+        ParamCheck(
+            file="tools/log_analyzer/visualize_interactive.py",
+            regex=r'\bCt = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="thrust_to_duty() local Ct (firmware actuator.cpp mirror)",
         ),
     ],
 
@@ -353,6 +441,20 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'constexpr float CQ = ([0-9eE.+-]+)f;',
             expected=EXPECTED_CQ,
             note="sil_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
+        ),
+        ParamCheck(
+            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
+            # mirror, not a stray copy of the SIL-adopted measured value.
+            file="tools/log_analyzer/reconstruct_duties.py",
+            regex=r'\bCQ = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="module constant CQ (firmware actuator.cpp mirror)",
+        ),
+        ParamCheck(
+            file="tools/log_analyzer/visualize_interactive.py",
+            regex=r'\bCq = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="thrust_to_duty() local Cq (firmware actuator.cpp mirror)",
         ),
     ],
 
@@ -415,6 +517,89 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'float kappa = ([0-9eE.+-]+)f;',
             expected=EXEMPT_VEHICLE_OLD,
             note="QuadConfig::kappa member default (frozen legacy firmware)",
+        ),
+        ParamCheck(
+            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
+            # mirror, not a stray copy of the SIL-adopted measured value.
+            file="tools/log_analyzer/reconstruct_duties.py",
+            regex=r'\bKAPPA = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="module constant KAPPA (firmware actuator.cpp mirror)",
+        ),
+        ParamCheck(
+            file="tools/log_analyzer/visualize_interactive.py",
+            regex=r'\bkappa = ([0-9eE.+-]+)',
+            expected=EXEMPT_LOG_ANALYZER_MIRROR,
+            note="B^-1 mixer local kappa (firmware actuator.cpp mirror)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # Am / Bm / Cm — legacy motor-curve family: V = Am·ω² + Bm·ω + Cm
+    # 旧モータ曲線ファミリ。バックログ#3で新チェーンへ切替予定。
+    # (firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT/AM/BM/CM
+    # are the only surviving consumers as of the 2026-07-26 motor-ODE change
+    # that removed this family from simulator/sil/plant/plant.hpp -- see the
+    # SSOT YAML's legacy_motor_curve family header comment.)
+    # -------------------------------------------------------------------
+    "Am": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_AM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_AM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_AM (legacy family, backlog #3 pending)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'2次係数\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_AM,
+            note="body table (JP)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'Quadratic coefficient\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_AM,
+            note="body table (EN)",
+        ),
+    ],
+    "Bm": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_BM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_BM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_BM (legacy family, backlog #3 pending)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'1次係数\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_BM,
+            note="body table (JP)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'Linear coefficient\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_BM,
+            note="body table (EN)",
+        ),
+    ],
+    "Cm": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_CM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_CM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_CM (legacy family, backlog #3 pending)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'定数項\s*\|\s*Cm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_CM,
+            note="body table (JP)",
+        ),
+        ParamCheck(
+            file="docs/architecture/stampfly-parameters.md",
+            regex=r'Constant term\s*\|\s*Cm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
+            expected=EXPECTED_CM,
+            note="body table (EN)",
         ),
     ],
 
@@ -759,6 +944,111 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'id="calc-mass" value="([0-9.eE+-]+)"',
             expected=EXPECTED_MASS,
             note="Calculation tab calc-mass input (unscaled, kg)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # max_thrust_per_motor — EXEMPT, not compared numerically (see
+    # EXEMPT_MAX_THRUST_PER_MOTOR above for why EXEMPT rather than
+    # Unresolved). Two competing values circulate: 0.15 N (most of
+    # tools/simulator) and 0.168 N (firmware/vehicle pid_controller.hpp,
+    # tools/log_analyzer/visualize_interactive.py). Neither traces to a dated
+    # bench measurement in the SSOT YAML -- this section exists to make that
+    # gap visible, not to declare a winner.
+    # 最大推力（1モーターあたり）— EXEMPT、数値比較は行わない（Unresolved
+    # ではなく EXEMPT を使う理由は上の EXEMPT_MAX_THRUST_PER_MOTOR 参照）。
+    # 0.15N系と0.168N系の2値が並立し、どちらもSSOT YAMLの実測日に紐づいて
+    # いない——本セクションはその欠落を可視化するためのものであり、正解を
+    # 宣言するものではない。
+    # -------------------------------------------------------------------
+    "max_thrust_per_motor": [
+        ParamCheck(
+            file="tools/sysid/defaults.py",
+            regex=r'"max_thrust":\s*\{\s*"value":\s*([0-9.eE+-]+),',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="DEFAULT_PARAMS.motor.max_thrust (0.15 N family)",
+        ),
+        ParamCheck(
+            file="tools/sysid/inertia.py",
+            regex=r'MAX_THRUST_PER_MOTOR = ([0-9.eE+-]+)',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="module constant MAX_THRUST_PER_MOTOR (0.15 N family)",
+        ),
+        ParamCheck(
+            file="tools/log_analyzer/reconstruct_duties.py",
+            regex=r'MAX_THRUST_PER_MOTOR = ([0-9.eE+-]+)',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="module constant MAX_THRUST_PER_MOTOR (0.15 N family)",
+        ),
+        ParamCheck(
+            file="simulator/genesis/control_allocation.py",
+            regex=r'max_thrust_per_motor: float = ([0-9.eE+-]+)',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="mix_with_saturation() default max_thrust_per_motor (0.15 N family)",
+        ),
+        ParamCheck(
+            file="simulator/vpython/control/motor_mixer.py",
+            regex=r'def motor_to_thrust\(motor_output: float, max_thrust_n: float = ([0-9.eE+-]+)\)',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="motor_to_thrust() default max_thrust_n (0.15 N family)",
+        ),
+        ParamCheck(
+            file="simulator/vpython/control/motor_mixer.py",
+            regex=(r'def motor_to_torque\(\s*motors: np\.ndarray,\s*'
+                   r'motor_positions: list = None,\s*motor_dirs: list = None,\s*'
+                   r'max_thrust_n: float = ([0-9.eE+-]+),'),
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="motor_to_torque() default max_thrust_n (0.15 N family)",
+        ),
+        ParamCheck(
+            file="simulator/vpython/scripts/run_sim.py",
+            regex=r'self\.max_thrust = ([0-9.eE+-]+)\s*#\s*Max thrust per motor',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="Drone Setup max_thrust (0.15 N family)",
+        ),
+        ParamCheck(
+            file="lib/stampfly_edu/dynamics/equations.py",
+            regex=r'"max_thrust":\s*([0-9.eE+-]+),\s*"g":\s*9\.80665,\s*"Vbat"',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="_DEFAULTS.max_thrust (0.15 N family)",
+        ),
+        ParamCheck(
+            file="lib/stampfly_edu/sim/plants.py",
+            regex=r'"max_thrust":\s*([0-9.eE+-]+),\s*"g":\s*9\.80665,',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="_DEFAULTS.max_thrust (0.15 N family)",
+        ),
+        ParamCheck(
+            file="firmware/vehicle/components/sf_controller_pid/include/pid_controller.hpp",
+            regex=r'float max_thrust_\s*=\s*([0-9.eE+-]+)f;\s*//\s*\[N\] total',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="max_thrust_ = 4 x 0.168 N per motor (0.168 N family)",
+        ),
+        ParamCheck(
+            file="tools/log_analyzer/visualize_interactive.py",
+            regex=r'max_thrust = ([0-9.eE+-]+)\s*#\s*duty',
+            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
+            note="local max_thrust (0.168 N family)",
+        ),
+        ParamCheck(
+            # firmware_old is EXEMPT (frozen legacy) -- see EXEMPT_VEHICLE_OLD
+            # above and firmware/vehicle_old/README.md banner.
+            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
+            regex=r'float max_thrust_per_motor = ([0-9.eE+-]+)f;\s*//\s*duty',
+            expected=EXEMPT_VEHICLE_OLD,
+            note="QuadConfig::max_thrust_per_motor (frozen legacy firmware)",
+        ),
+        ParamCheck(
+            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
+            regex=r'float max_thrust_\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXEMPT_VEHICLE_OLD,
+            note="ControlAllocator::max_thrust_ member default (frozen legacy firmware)",
+        ),
+        ParamCheck(
+            file="firmware/vehicle_old/main/tasks/control_task.cpp",
+            regex=r'MAX_TOTAL_THRUST = 4\.0f \* ([0-9.eE+-]+)f;',
+            expected=EXEMPT_VEHICLE_OLD,
+            note="MAX_TOTAL_THRUST = 4 x max_thrust_per_motor (frozen legacy firmware)",
         ),
     ],
 }

@@ -85,7 +85,7 @@ class FirmwareParams:
     """Parameters matching firmware implementation (actuator.cpp)"""
     # X-quad geometry (ARM_D, motor layout) — actuator.cpp lines ~88-103
     d = EXPECTED_ARM  # Moment arm [m], == ARM_D
-    kappa = KAPPA_ADOPTED  # Cq/Ct [m], == KAPPA (measured 2026-07-15)
+    kappa = KAPPA_ADOPTED  # Cq/Ct [m], == KAPPA (4.10e-3 as of 2026-08-03; Cq measured 2026-07-15, Ct provisional)
     motor_x = [0.023, -0.023, -0.023, 0.023]  # M1:FR, M2:RR, M3:RL, M4:FL
     motor_y = [0.023, 0.023, -0.023, -0.023]
     motor_dir = [-1, 1, -1, 1]  # CCW, CW, CCW, CW
@@ -101,24 +101,41 @@ class FirmwareParams:
     Bm = 6.33e-4  # [V·s/rad]
     Cm = 1.53e-2  # [V]
 
-    # KNOWN DRIFT (2026-07-26): firmware's MOTOR_CT is still the pre-2026-07-15
-    # value (1.00e-8). The 2026-07-15 sysid update replaced Ct with the bench-
-    # measured 6.7e-9 (see simulator/vpython/core/motors.py) and updated KAPPA
-    # in firmware at the same time, but did NOT update firmware's MOTOR_CT to
-    # match — that update landed only in the simulator/sysid side. This test
-    # deliberately mirrors firmware's *actual* (stale) value rather than the
-    # updated plant value, per instruction: "firmware's real value is ground
-    # truth for this compatibility test." See Test 4 for the resulting
-    # firmware-vs-simulator duty discrepancy this produces at higher thrusts.
-    # 既知のドリフト(2026-07-26): firmwareのMOTOR_CTは2026-07-15更新前の値
-    # (1.00e-8)のまま。2026-07-15のsysid更新でCtはベンチ実測6.7e-9に置き換わり
-    # (simulator/vpython/core/motors.py参照)、同時にKAPPAもfirmware側で更新
-    # されたが、MOTOR_CTはfirmware側で追従更新されなかった（更新はシミュレータ/
-    # sysid側だけに反映済み）。本テストは「firmwareの実値を正とする」という指示
-    # に従い、更新済みのプラント値ではなくfirmwareの実際の（旧）値をそのまま
-    # 鏡写しする。これにより高推力側でfirmware/シミュレータ間のduty差が生じる
-    # 詳細はTest 4を参照。
-    Ct = 1.0e-8  # [N/(rad/s)²], == MOTOR_CT (firmware actual value, stale)
+    # HISTORY: 2026-07-15..2026-08-02, firmware's MOTOR_CT (1.00e-8, pre-2026-07-15
+    # value) DRIFTED from the simulator/sysid side, which had switched Ct to the
+    # 2026-07-15 bench thrust-stand measurement (6.7e-9, see
+    # simulator/vpython/core/motors.py) while KAPPA was updated in firmware at the
+    # same time. This test deliberately mirrored firmware's *actual* value rather
+    # than the updated plant value, per instruction: "firmware's real value is
+    # ground truth for this compatibility test" — Test 4 (below) FAILED (via
+    # strict xfail) during that window, correctly flagging the drift.
+    #
+    # RESOLVED as of 2026-08-03 (not by firmware catching up, but by the plant
+    # side reverting): the 2026-07-15 thrust-stand Ct was RETRACTED (no valid
+    # simultaneous voltage/RPM/thrust measurement exists for the new propeller),
+    # so simulator/vpython/core/motors.py's Ct reverted to a PROVISIONAL 1.00e-8
+    # — numerically identical to firmware's MOTOR_CT here. Both sides are now
+    # 1.00e-8 (mirroring firmware, which never changed), so this is no longer a
+    # drift and Test 4's xfail marker was removed. See
+    # control/models/stampfly_physical.yaml measured_2026_07.Ct for the full
+    # provenance of the provisional value.
+    # 経緯: 2026-07-15〜2026-08-02、firmwareのMOTOR_CT（2026-07-15以前の値
+    # 1.00e-8）はシミュレータ/sysid側から乖離していた——シミュレータ側は
+    # 2026-07-15のベンチthrust stand実測(6.7e-9、simulator/vpython/core/motors.py
+    # 参照)へCtを切替え、同時にKAPPAもfirmware側で更新されたが、MOTOR_CTは
+    # firmware側で追従更新されなかった。本テストは「firmwareの実値を正とする」
+    # という指示に従い、更新済みのプラント値ではなくfirmwareの実際の値をそのまま
+    # 鏡写ししていた——この期間はTest 4が（strict xfail経由で）意図通りFAILし、
+    # 乖離を正しく検出していた。
+    #
+    # 2026-08-03に解消（firmware側が追従したのではなく、プラント側が撤回で
+    # 揃った）: 2026-07-15のthrust stand Ct が撤回（新プロペラでの電圧/回転数/
+    # 推力の有効な同時計測が存在しないため）され、simulator/vpython/core/motors.py
+    # のCtは暫定値1.00e-8に戻った——本ファイルのfirmware MOTOR_CTと数値一致。
+    # 両者とも1.00e-8（一度も変わっていないfirmware側に一致）となったため、
+    # もはや乖離ではなく、Test 4のxfailマーカーは削除済み。暫定値の詳細な出所は
+    # control/models/stampfly_physical.yaml の measured_2026_07.Ct 参照。
+    Ct = 1.0e-8  # [N/(rad/s)²], == MOTOR_CT (firmware actual value; matches plant's provisional Ct as of 2026-08-03)
 
     # Cq is NOT an independent firmware constant — actuator.cpp derives yaw
     # torque via kappa (T·kappa), not via a separate Cq. Deriving it here as
@@ -350,29 +367,30 @@ def check_thrust_to_duty_comparison():
         max_diff = max(max_diff, diff)
         print(f"  {T:8.4f}      {duty_fw:8.4f}        {duty_sim:8.4f}        {diff:8.4f}")
 
-    # Allow 5% difference due to parameter variations. This is intentionally
-    # NOT loosened to force a PASS: the growing gap at higher thrust is the
-    # real, known firmware MOTOR_CT=1.0e-8 vs simulator Ct=6.7e-9 mismatch
-    # documented on FirmwareParams.Ct above (firmware missed the 2026-07-15
-    # sysid Ct update that landed alongside the KAPPA update). A FAIL here is
-    # this test correctly detecting that unresolved drift, not a test bug.
-    # 5%許容。ここは無理にPASSさせるために緩めていない — 高推力側で広がる差は
-    # 上のFirmwareParams.Ctに記載した実在の食い違い（firmware MOTOR_CT=1.0e-8 vs
-    # シミュレータ Ct=6.7e-9。2026-07-15のKAPPA更新と同時のCt更新がfirmware側に
-    # 反映されなかった）そのもの。ここでFAILするのはテストが未解消のドリフトを
-    # 正しく検出している結果であり、テストの不具合ではない。
+    # Allow 5% difference due to parameter variations. As of 2026-08-03 firmware
+    # and plant Ct are numerically equal (both 1.00e-8, see FirmwareParams.Ct
+    # comment for the 2026-07-15..2026-08-02 drift this resolves) and the
+    # electrical curves are algebraically equivalent (Am/Bm/Cm <-> Rm/Km/Dm/Qf,
+    # see simulator/genesis/motor_model.py's self-consistency note), so the
+    # observed difference is ~0 across the board, not just within tolerance.
+    # 5%許容。2026-08-03時点でfirmwareとプラントのCtは数値上一致し（両方とも
+    # 1.00e-8。2026-07-15〜2026-08-02の乖離の解消についてはFirmwareParams.Ct
+    # コメント参照）、電気系カーブも代数的に等価（Am/Bm/Cm ⇔ Rm/Km/Dm/Qf、
+    # simulator/genesis/motor_model.py の自己整合性の注記参照）なので、観測される
+    # 差は許容範囲内というより、全域でほぼ0になる。
     is_close = max_diff < 0.05
     print(f"\n✓ Max difference < 5%: {is_close} (max={max_diff:.4f})")
     if not is_close:
         print(
-            "  NOTE: This FAIL reflects a real firmware/plant parameter drift\n"
-            "  (MOTOR_CT stale in firmware since the 2026-07-15 sysid update),\n"
-            "  not a bug in this test. See FirmwareParams.Ct comment above and\n"
+            "  NOTE: firmware and plant Ct are expected to match numerically as of\n"
+            "  2026-08-03 (both 1.00e-8) -- if this FAILS, either FirmwareParams.Ct\n"
+            "  or simulator/vpython/core/motors.py's Ct has drifted again. See\n"
+            "  FirmwareParams.Ct comment above and\n"
             "  firmware/vehicle/components/sf_actuator/actuator.cpp for details.\n"
-            "  この FAIL は firmware/plant 間の実在するパラメータ食い違い\n"
-            "  （2026-07-15のsysid更新でMOTOR_CTがfirmware側で追従更新されな\n"
-            "  かった）を反映したもので、本テストの不具合ではない。詳細は上の\n"
-            "  FirmwareParams.Ct コメントと actuator.cpp を参照。"
+            "  firmwareとプラントのCtは2026-08-03時点で数値一致するはず（両方とも\n"
+            "  1.00e-8）——このFAILは、FirmwareParams.Ctまたは\n"
+            "  simulator/vpython/core/motors.pyのCtが再び乖離したことを示す。詳細は\n"
+            "  上のFirmwareParams.Ctコメントとactuator.cppを参照。"
         )
 
     return is_close
@@ -521,28 +539,24 @@ def test_hover_mixing():
     assert check_hover_mixing()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="firmware MOTOR_CT=1.0e-8 stale since the 2026-07-15 sysid Ct=6.7e-9 "
-           "update; switch is deliberately deferred to backlog #3's firmware-side "
-           "step with real-flight validation (simulation-policy.md §6, tracked as "
-           "EXEMPT by `sf params check`). strict=True forces this marker to be "
-           "removed the moment firmware catches up.",
-)
 def test_thrust_to_duty_comparison():
-    # KNOWN drift (2026-07-26): real firmware/plant divergence, not a test bug —
-    # same xfail philosophy as the SIL regression `xfail:` markers: the suite
-    # stays green, the divergence stays visible in the xfail report, and
-    # strict=True flips it to an error (forcing marker removal) once firmware's
-    # MOTOR_CT is updated. See the FirmwareParams.Ct comment above.
-    # 既知のドリフト(2026-07-26): firmware/plant間の実在する乖離であり、テストの
-    # 不具合ではない。SIL回帰の `xfail:` マーカーと同じ運用哲学: スイートは緑を
-    # 維持し、乖離は xfail 報告として可視のまま、firmware の MOTOR_CT が更新された
-    # 瞬間に strict=True がエラー化してマーカー削除を強制する。上の
-    # FirmwareParams.Ct コメント参照。
+    # xfail(strict=True) marker REMOVED 2026-08-03: the drift it tracked
+    # (firmware MOTOR_CT=1.0e-8 vs a since-retracted plant Ct=6.7e-9) is gone
+    # now that the plant's Ct reverted to a provisional 1.00e-8 -- see
+    # FirmwareParams.Ct comment above for the full history. If this ever
+    # starts failing again, that means firmware and plant Ct have drifted
+    # apart once more; re-add an xfail (with a fresh reason) rather than
+    # loosening the tolerance.
+    # xfail(strict=True)マーカーは2026-08-03に削除: 追跡していた乖離
+    # （firmware MOTOR_CT=1.0e-8 vs 後に撤回されたプラントCt=6.7e-9）は、
+    # プラント側のCtが暫定値1.00e-8に戻ったことで解消した——詳細は上の
+    # FirmwareParams.Ctコメント参照。もし再びFAILし始めたら、それはfirmwareと
+    # プラントのCtが再度乖離したことを意味する。許容誤差を緩めるのではなく、
+    # 新しい理由でxfailを再追加すること。
     assert check_thrust_to_duty_comparison(), (
-        "firmware/plant Ct mismatch (firmware MOTOR_CT=1.0e-8 stale since "
-        "2026-07-15 sysid update) -- see FirmwareParams.Ct comment"
+        "firmware/plant Ct mismatch -- if this fails, Ct has drifted between "
+        "FirmwareParams.Ct (actuator.cpp mirror) and "
+        "simulator/vpython/core/motors.py; see FirmwareParams.Ct comment"
     )
 
 

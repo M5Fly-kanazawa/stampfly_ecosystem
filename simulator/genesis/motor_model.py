@@ -62,7 +62,18 @@ class MotorParams:
 
     # Aerodynamic coefficients (thrust/torque vs RPM measurement)
     # 空力係数（推力・トルク vs 回転数測定）
-    Ct: float = 6.7e-9    # Thrust coefficient (N·s²/rad²) / 推力係数 (2026-07-15実測: 現行プロペラ推力測定)
+    # Ct: PROVISIONAL as of 2026-08-03 — the 2026-07-15 thrust-stand value was
+    # retracted (no valid simultaneous voltage/RPM/thrust measurement exists
+    # for the new propeller). Provenance: (1) past same-diameter-propeller
+    # measurement, (2) theoretical-simulation consistency. Pending a bench
+    # V-omega-T co-measurement. SSOT: control/models/stampfly_physical.yaml
+    # measured_2026_07.Ct.
+    # Ct: 2026-08-03時点で暫定値——2026-07-15のthrust stand値は撤回（新プロペラ
+    # での電圧/回転数/推力の有効な同時計測が存在しないため）。拠り所: (1) 同径
+    # プロペラでの過去の確からしい実測、(2) 理論シミュレーションとの整合。ベンチ
+    # V-ω-T同時計測で確定予定。正典: control/models/stampfly_physical.yaml
+    # measured_2026_07.Ct。
+    Ct: float = 1.0e-8    # Thrust coefficient (N·s²/rad²) / 推力係数 (2026-08-03暫定採用)
     Cq: float = 4.10e-11  # Torque coefficient (N·m·s²/rad²) / トルク係数 (2026-07-15実測: コーストダウン法)
 
     # Rotor inertia (estimated from shape and weight)

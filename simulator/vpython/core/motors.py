@@ -65,18 +65,30 @@ class motor_prop():
         # 旧値 0.63 は vpython 側の旧初期値で更新漏れだった。
         self.Rm = 0.593 #0.63 #0.34
         #回転数と推力・トルク測定実験から求めたパラメータ
-        # Ct updated to the 2026-07-15 bench measurement (was 1.00e-8). This makes
-        # the plant's kappa = Cq/Ct = 4.10e-11/6.7e-9 = 6.12e-3 — identical to the
-        # flight-validated mixer KAPPA adopted in firmware commit 0ae4dea. The old
-        # 1.00e-8 made the plant produce ~18% more thrust than the controller's
-        # inverse model demanded at hover -> the sim climbed at neutral stick
-        # (found on the DXH loaner PCs, 2026-07-19).
-        # Ct を 2026-07-15 のベンチ実測値へ更新（旧 1.00e-8）。これによりプラントの
-        # kappa = Cq/Ct = 6.12e-3 となり、ファーム側で飛行検証済みのミキサー KAPPA
-        # （コミット 0ae4dea）と一致する。旧値ではホバー時に制御側逆モデルの要求より
-        # 約18%大きい推力をプラントが発生し、スティック中立でも上昇し続けていた
-        # （2026-07-19、DXH貸出PCで発見）。
-        self.Ct = 6.7e-9
+        # Ct history: pre-2026-07-15 the value here was 1.00e-8. On 2026-07-15
+        # it was switched to a bench thrust-stand measurement (6.7e-9), which
+        # made kappa = Cq/Ct = 6.12e-3, matching the flight-validated mixer
+        # KAPPA of the time (firmware commit 0ae4dea) and fixing a ~18% hover
+        # thrust mismatch that made the sim climb at neutral stick (found on
+        # the DXH loaner PCs, 2026-07-19). On 2026-08-03 that thrust-stand
+        # value was RETRACTED (no valid simultaneous voltage/RPM/thrust
+        # measurement exists for the current propeller) and Ct reverted to a
+        # PROVISIONAL 1.00e-8 -- numerically the same as the pre-2026-07-15
+        # value, but now justified by (1) past same-diameter-propeller
+        # measurement and (2) theoretical-simulation consistency, pending a
+        # bench V-omega-T co-measurement. kappa (line below, derived from
+        # Cq/Ct) is now 4.10e-3. SSOT: control/models/stampfly_physical.yaml
+        # measured_2026_07.Ct.
+        # Ct の経緯: 2026-07-15以前はここは 1.00e-8 だった。2026-07-15にベンチ推力測定値
+        # （6.7e-9）へ切替し、kappa = Cq/Ct = 6.12e-3 となって当時飛行検証済みのミキサー
+        # KAPPA（コミット 0ae4dea）と一致、ホバー時の約18%推力ミスマッチ（スティック中立でも
+        # 上昇し続けた、2026-07-19 DXH貸出PCで発見）を解消した。2026-08-03、そのthrust
+        # stand値は撤回（現行プロペラでの電圧/回転数/推力の有効な同時計測が存在しないため）
+        # され、Ct は暫定値 1.00e-8 に戻った——数値上は2026-07-15以前と同じだが、拠り所は
+        # (1) 同径プロペラでの過去の確からしい実測、(2) 理論シミュレーションとの整合であり、
+        # ベンチ V-ω-T同時計測で確定予定。以下の kappa（Cq/Ct から導出）は 4.10e-3 になる。
+        # 正典: control/models/stampfly_physical.yaml measured_2026_07.Ct。
+        self.Ct = 1.0e-8
         # NOTE(2026-07-15): 実測は Ke=5.5e-4, R=0.593, τ_c=9.5e-6, B≈0。
         #  (Km,Rm,Dm,Qf)は自己整合パッケージ — 再フィットとセットで更新のこと。
         #  NOTE(2026-07-24): 上の self.Rm を 0.593 に更新済み。Km/Dm/Qf は Rm から

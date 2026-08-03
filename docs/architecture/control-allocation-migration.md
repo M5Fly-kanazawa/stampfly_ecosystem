@@ -1,11 +1,12 @@
 # 物理単位ベース制御アロケーションの理論と移行計画
 
-> **【実測値ノート 2026-07-15】** モータ+プロペラ系の物理パラメータが再測定で確定した:
-> $C_T$=6.7e-9, $C_Q$=4.10e-11（κ=6.12e-3 m）, $J_{mp}$=1.375e-8 kg·m², $\omega_{hover}$=3670 rad/s,
-> ホバ点実効時定数 ≈18 ms（詳細: multicopter_introduction/notes/qa_log.md Q4-9..13、
-> 影響一覧: analysis/reports/param_correction_impact_20260715.md）。
-> 本文書の数値例のうち旧値（$C_t$=1.0e-8, $C_q$=9.71e-11, $\omega_{m0}$=2930 等）に基づくものは
-> ファームウェア実装の記述としては正確だが、物理値としては上記が正。
+> **【2026-08-03: κ再改定】** 本書は §2〜§7 で κ=9.71×10⁻³（移行計画当時の値）を使った移行記録として書かれている。
+> その後 2026-07-17 に κ は thrust stand実測由来の $C_T$ を使った値へ更新されたが、この $C_T$ は撤回された
+> （新プロペラでの電圧・回転数・推力の有効な同時計測を欠くため）。撤回に伴い κ は 2026-08-03 に **4.10×10⁻³**
+> （$C_Q$=4.10e-11 のコーストダウン実測・確定 ÷ $C_T$=1.00e-8 の暫定採用値）へ再改定された。ファームウェアは
+> `rate.yaw.kp`・`rate.yaw.max_torque` を旧κとの比で同率再スケールしており、飛行挙動は不変。**本書自体（§2〜§7の
+> 数値例・コード片）は移行計画当時の記録として変更せず保存する** — 現在の採用値は
+> `docs/architecture/stampfly-parameters.md` §3、現在の実装は `firmware/vehicle/components/sf_actuator/actuator.cpp` を参照。
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 

@@ -124,10 +124,10 @@ $K_m$ & $5.682\times10^{-4}\,\mathrm{V/(rad/s)}$ & コーストダウン EMF 実
 モータ PWM 周波数 & $150\,\mathrm{kHz}$（周期 $6.67\,\mu\mathrm{s}$） & オフ時間が $\tau_e$ と同程度 $\to$ 導通モード要検証 \\
 ホバー相当電流 & $\approx 0.8\,\mathrm{A}$/個 & プロペラ装着時 \\
 無負荷電流 & $\approx 60$--$70\,\mathrm{mA}$ & プロペラ無し \\
-$C_q$ & $4.10\times10^{-11}$ & 空力トルク係数 \\
+$C_q$ & $4.10\times10^{-11}$ & 空力トルク係数（コーストダウン実測・確定） \\
 $Q_f$ & $9.507\times10^{-6}$ & 摩擦トルク項 \\
-$C_t$ & $6.7\times10^{-9}$ & 推力係数 \\
-$\omega_\mathrm{hover}$ & $\approx 3670\,\mathrm{rad/s}$ & ホバー相当角速度 \\
+$C_t$ & $1.00\times10^{-8}$ & 推力係数（暫定採用値，2026-08-03。2026-07-15 thrust stand実測値は新プロペラでの有効な同時計測を欠くため撤回済み——本実験系列とは別のベンチ $V$-$\omega$-$T$ 同時計測で確定させる） \\
+$\omega_\mathrm{hover}$ & $\approx 3010\,\mathrm{rad/s}$ & ホバー相当角速度（暫定 $C_t$ に基づく参考値） \\
 \bottomrule
 \end{tabular}
 
@@ -613,8 +613,11 @@ copper temperature coefficient $+0.393\,\%/^\circ\mathrm{C}$; flight-implied $\D
 time constant $\tau_e \approx 1.33\,\mu\mathrm{s}$; motor PWM frequency $150\,\mathrm{kHz}$
 (period $6.67\,\mu\mathrm{s}$) — the off-time is comparable to $\tau_e$, so the conduction mode
 must be verified; hover current $\approx 0.8\,\mathrm{A}$ per motor; no-load current
-$\approx 60$--$70\,\mathrm{mA}$; $C_q = 4.10\times10^{-11}$; $Q_f = 9.507\times10^{-6}$;
-$C_t = 6.7\times10^{-9}$; $\omega_\mathrm{hover} \approx 3670\,\mathrm{rad/s}$.
+$\approx 60$--$70\,\mathrm{mA}$; $C_q = 4.10\times10^{-11}$ (coast-down measured, confirmed); $Q_f = 9.507\times10^{-6}$;
+$C_t = 1.00\times10^{-8}$ (provisional adopted value, 2026-08-03 — the 2026-07-15 thrust-stand figure was retracted for
+lacking a valid simultaneous voltage/RPM/thrust measurement on the new propeller; to be confirmed by a separate bench
+$V$-$\omega$-$T$ co-measurement); $\omega_\mathrm{hover} \approx 3010\,\mathrm{rad/s}$ (reference value based on the
+provisional $C_t$).
 
 \textbf{Experiments.}
 \begin{itemize}

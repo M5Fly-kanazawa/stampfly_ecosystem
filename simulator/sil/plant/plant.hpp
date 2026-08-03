@@ -96,17 +96,30 @@ public:
         /// Real-world thrust efficiency vs the ODE's idealized T=Ct·ω² curve (motor/prop
         /// losses + battery sag the firmware's vbat reading doesn't capture). DEFAULT 1.0
         /// as of 2026-07-26 (backlog #2): the prior 1/1.12 ("worn motor" fudge) compensated
-        /// for the LEGACY Ct (1.00e-8, ≈1.49× too large vs the measured 6.7e-9 now wired in
-        /// directly above) — with the real Ct in place, that compensating fudge is no longer
-        /// physically warranted. The parameter itself is KEPT (not deleted) for future
-        /// flight-log recalibration (Model Identity); override per-run with
+        /// for the pre-2026-07-15 Ct (1.00e-8) being ≈1.49× larger than the 2026-07-15
+        /// thrust-stand measurement (6.7e-9) that was wired in directly above at the time
+        /// — with that (then believed accurate) smaller Ct in place, the compensating fudge
+        /// was no longer physically warranted. NOTE (2026-08-03): the 2026-07-15
+        /// thrust-stand Ct was itself RETRACTED (no valid simultaneous voltage/RPM/thrust
+        /// measurement exists for the new propeller) and Ct above reverted to a
+        /// PROVISIONAL 1.00e-8 — numerically the SAME value the old 1/1.12 fudge was
+        /// compensating for. This default was NOT reassessed as part of that Ct retraction
+        /// (out of scope here); it may need re-review once the pending bench V-ω-T
+        /// co-measurement confirms Ct. The parameter itself is KEPT (not deleted) for
+        /// future flight-log recalibration (Model Identity); override per-run with
         /// SIL_EMU_THRUST_EFF (emu_main.cpp) for A/B testing.
         /// 実機の推力効率（ODE理想曲線 T=Ct·ω² 比、モータ/プロップ損失＋ファームが測れない
         /// 電池サグ）。2026-07-26（バックログ#2）既定 1.0 に変更: 旧 1/1.12（「摩耗モータ」
-        /// ファッジ係数）は旧 Ct(1.00e-8、上で直接配線した実測6.7e-9の約1.49倍過大)を
-        /// 打ち消すためのものだった — 実測 Ct を配線した今、その補正は物理的にもう不要。
-        /// パラメータ自体は削除せず残す（将来のフライトログ再較正=Model Identity 用）。
-        /// SIL_EMU_THRUST_EFF（emu_main.cpp）で実行毎に上書き可（A/B比較用）。
+        /// ファッジ係数）は2026-07-14以前のCt(1.00e-8)が、当時直接配線した2026-07-15の
+        /// thrust stand実測(6.7e-9)より約1.49倍過大だったことを打ち消すためのものだった
+        /// — その（当時は正確と信じられていた）小さいCtを配線した状態では、補正は物理的に
+        /// もう不要と判断された。注記（2026-08-03）: その2026-07-15のthrust stand Ct自体が
+        /// 撤回（新プロペラでの電圧/回転数/推力の有効な同時計測が存在しないため）され、
+        /// 上のCtは暫定値1.00e-8に戻った——旧1/1.12ファッジ係数がまさに打ち消そうとして
+        /// いた値と数値上同じである。本既定値はそのCt撤回に伴って再検討されていない
+        /// （本タスクの対象外）——ベンチ V-ω-T 同時計測でCtが確定した後に見直しが必要な
+        /// 可能性がある。パラメータ自体は削除せず残す（将来のフライトログ再較正=Model
+        /// Identity 用）。SIL_EMU_THRUST_EFF（emu_main.cpp）で実行毎に上書き可（A/B比較用）。
         float thrust_efficiency = 1.0f;  ///< 1.0 = ODE curve is the actual output (see above)
 
         // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SIL

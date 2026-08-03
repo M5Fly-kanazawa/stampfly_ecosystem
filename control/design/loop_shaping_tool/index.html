@@ -921,7 +921,7 @@
                     <h3>プロペラ特性 / Propeller Characteristics</h3>
                     <div class="param-row">
                         <label>推力係数 Ct</label>
-                        <input type="number" id="calc-ct" value="0.67" step="0.01" min="0.01">
+                        <input type="number" id="calc-ct" value="1.00" step="0.01" min="0.01">
                         <span class="unit">×10⁻⁸ N/(rad/s)²</span>
                     </div>
                     <div class="param-row">
@@ -2269,10 +2269,13 @@
 
         // Reset calculation tab to default values.
         // 既定値は2026-07実測ファミリ（stampfly_physical.yaml calibration_sets.
-        // measured_2026_07）準拠。最終同期2026-07-27。出所:
+        // measured_2026_07）準拠。最終同期2026-08-03（Ctは暫定採用値へ改定、
+        // 2026-07-15のthrust stand値は撤回）。出所:
         // docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml
         // Defaults follow the 2026-07 measured family (stampfly_physical.yaml
-        // calibration_sets.measured_2026_07). Last synced 2026-07-27. Source:
+        // calibration_sets.measured_2026_07). Last synced 2026-08-03 (Ct revised
+        // to the provisional adopted value; the 2026-07-15 thrust-stand value was
+        // retracted). Source:
         // docs/architecture/stampfly-parameters.md / control/models/stampfly_physical.yaml
         function resetCalcDefaults() {
             const defaults = {
@@ -2283,7 +2286,7 @@
                 'calc-rm': 0.593,          // Ω
                 'calc-jmp': 1.375,         // ×10⁻⁸ kg·m²
                 'calc-kt': 5.682,          // ×10⁻⁴ V/(rad/s)
-                'calc-ct': 0.67,           // ×10⁻⁸ N/(rad/s)² (= Ct 6.7e-9)
+                'calc-ct': 1.00,           // ×10⁻⁸ N/(rad/s)² (= Ct 1.0e-8, provisional as of 2026-08-03)
                 'calc-cq': 4.10,           // ×10⁻¹¹ N·m/(rad/s)² (= Cq 4.10e-11)
                 'calc-tau-override': 20,   // ms
                 // Propeller positions (mm)
