@@ -6,7 +6,7 @@
 
 ### このドキュメントについて
 
-vehicle の **POSITION_HOLD（位置保持）** が SIL で「飛び去る／タンブルする」問題を、原因究明から解決まで追った記録である。なぜ飛び去ったのか（物理）、何を試して何が効かなかったのか、最終的にどう直したのか、そして何が残っているのかを、制御工学の言葉で順に説明する。
+vehicle の **POSITION_HOLD（位置保持）** が SILS で「飛び去る／タンブルする」問題を、原因究明から解決まで追った記録である。なぜ飛び去ったのか（物理）、何を試して何が効かなかったのか、最終的にどう直したのか、そして何が残っているのかを、制御工学の言葉で順に説明する。
 
 ### 一文で言うと
 
@@ -14,7 +14,7 @@ vehicle の **POSITION_HOLD（位置保持）** が SIL で「飛び去る／タ
 
 ### 対象読者
 
-vehicle の推定（ESKF）・制御（PID カスケード）・SIL テストに関わる人。ドローンの姿勢推定がなぜ難しいかを学びたい人。
+vehicle の推定（ESKF）・制御（PID カスケード）・SILS テストに関わる人。ドローンの姿勢推定がなぜ難しいかを学びたい人。
 
 ## 2. 問題 — なぜ POSITION_HOLD が飛び去ったか
 
@@ -63,7 +63,7 @@ pos_flight シナリオ（ロール単軸のステップ擾乱→保持）で 3 
 
 ### 3.1 診断 — バイアスの発生源はどこか
 
-2つの仮説を SIL のデータで切り分けた：
+2つの仮説を SILS のデータで切り分けた：
 
 | 仮説 | 内容 | 判定 |
 |------|------|------|
@@ -163,7 +163,7 @@ accel を弱めるのでなく、**運動加速度 `a_kin` を独立な情報源
 | `params.cpp` | 上記パラメータを登録 |
 | `pid_controller.cpp` | 位置カスケード（vel.kp） |
 
-### 4.3 結果（clean SIL・全4軸タイト保持）
+### 4.3 結果（clean SILS・全4軸タイト保持）
 
 | 軸 | 最大ドリフト | 終端オフセット | 推定 att_rmse |
 |----|------------|---------------|---------------|
@@ -176,7 +176,7 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 
 ## 5. テスト方法（網羅テストの作り方）
 
-今回の鍵は「ロール単軸だけ試して満足しない」こと。**個別軸 → 複合**の構成と**物理真値の数値ゲート**を導入した。詳細は `simulator/sil/scenarios/TEST_MATRIX.md`。
+今回の鍵は「ロール単軸だけ試して満足しない」こと。**個別軸 → 複合**の構成と**物理真値の数値ゲート**を導入した。詳細は `simulator/sils/scenarios/TEST_MATRIX.md`。
 
 - **個別軸 → 複合**：`pos_roll`（ロール単独）→ `pos_pitch`（ピッチ単独）→ `pos_flight`（斜め複合 capstone）→ `pos_yaw`（機首を回して保持）
 - **数値ゲート**：`.expect` に `metric <name> <op> <value> in <t0> <t1>` を追加し、`trajectory.csv` の真値＋推定から G2（推定追従）/G3（有界・タイト）/G4（非飽和）を機械判定。従来はログ文字列（≈G1）だけだった
@@ -187,10 +187,10 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 
 | # | 課題 | 説明 | 方向性 |
 |---|------|------|--------|
-| 1 | **入口過渡の振動** | 擾乱直後に水平 ~0.85m まで振れ、~10秒かけて減衰してから定点に収まる（「即収束」でなく「減衰しながら収束」） | 位置/速度ループの減衰を上げる（vel の微分項 td、または位置の積分 ti）。ただしゲインは脆弱な領域があるので SIL で慎重に |
+| 1 | **入口過渡の振動** | 擾乱直後に水平 ~0.85m まで振れ、~10秒かけて減衰してから定点に収まる（「即収束」でなく「減衰しながら収束」） | 位置/速度ループの減衰を上げる（vel の微分項 td、または位置の積分 ti）。ただしゲインは脆弱な領域があるので SILS で慎重に |
 | 2 | **過酷振動（n1/n2）下の飛び去り** | スロットル依存振動 n1／帯域制限 n2 では baseline 同様に飛び去る。フロー速度がノイズで汚れ a_kin が劣化するため | 振動処理（ノッチフィルタ、フローノイズモデルの精緻化）が必要。clean + N0 が主検証レベルで、n1/n2 は別フェーズの課題 |
-| 3 | **実機 ESP-IDF ビルド未検証** | host SIL は全ソースを通すが、ESP32 ターゲットでのビルドは未確認 | `sf build vehicle` で確認 |
-| 4 | **実機飛行未検証** | SIL（物理真値）で成立したが、実機 POSITION_HOLD は未飛行 | development_roadmap Phase 4.3 の手順（SIL→実機 Code Identity）で進める |
+| 3 | **実機 ESP-IDF ビルド未検証** | host SILS は全ソースを通すが、ESP32 ターゲットでのビルドは未確認 | `sf build vehicle` で確認 |
+| 4 | **実機飛行未検証** | SILS（物理真値）で成立したが、実機 POSITION_HOLD は未飛行 | development_roadmap Phase 4.3 の手順（SILS→実機 Code Identity）で進める |
 
 ### 残課題の優先度
 
@@ -198,11 +198,11 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 
 ### 更新 — 初の実機 POS_HOLD 飛行（2026-06-22, log 20260622T161055）
 
-残課題#4（実機未検証）に着手。狭い部屋・手放しで POS_HOLD 飛行 → SIL のような即タンブルではなく、**周期約9.4秒・振幅 ±0.37→0.62m と成長する緩い水平振動（不安定リミットサイクル）**で壁に激突。同時刻の ALT_HOLD は単調ドリフトのみ（振動なし）で、振動が**閉じた位置ループ固有**であることを切り分けた。フローは健全（SQUAL 79–184）、姿勢の張り付きも無し（α-β 補償は実機でも有効）。
+残課題#4（実機未検証）に着手。狭い部屋・手放しで POS_HOLD 飛行 → SILS のような即タンブルではなく、**周期約9.4秒・振幅 ±0.37→0.62m と成長する緩い水平振動（不安定リミットサイクル）**で壁に激突。同時刻の ALT_HOLD は単調ドリフトのみ（振動なし）で、振動が**閉じた位置ループ固有**であることを切り分けた。フローは健全（SQUAL 79–184）、姿勢の張り付きも無し（α-β 補償は実機でも有効）。
 
-**真因**: 同定（`analysis/scripts/poshold_loop_design.py`）で、実機の「指令傾き→実測水平速度」の実効ゲインが**約 0.4 g しかない**（傾き未達＋フロー速度の過小読み）。これが内側(速度)ループ帯域を外側(位置)ループより下げ、カスケードの時間スケール分離を壊して発散。**SIL は理想フロー（K=g, ノイズ無し）ゆえ安定 = 残課題#1「入口過渡」の実機での正体はこのゲイン不足による不安定**だった。
+**真因**: 同定（`analysis/scripts/poshold_loop_design.py`）で、実機の「指令傾き→実測水平速度」の実効ゲインが**約 0.4 g しかない**（傾き未達＋フロー速度の過小読み）。これが内側(速度)ループ帯域を外側(位置)ループより下げ、カスケードの時間スケール分離を壊して発散。**SILS は理想フロー（K=g, ノイズ無し）ゆえ安定 = 残課題#1「入口過渡」の実機での正体はこのゲイン不足による不安定**だった。
 
-**暫定対策（実装済み・SIL退行なし）**: 同定プラント上で `position.vel.kp 0.8→2.0`（≈0.8·g/K、速度ループの権限回復）＋`position.pos.kp 1.0→0.3`（外ループを遅く）。K∈[2.4,9.8]・τ∈[50,300]ms でロバスト安定。実機の外乱 0.19 m/s² へのピーク偏差は約0.27m。**ただしこれは不足プラントへの band-aid**。真の tight hold には**ゲイン不足の根治**（姿勢ループの傾き達成度の確認・フロー速度スケール/ToF高さの校正）が必要 = 残課題#5（新規）。
+**暫定対策（実装済み・SILS退行なし）**: 同定プラント上で `position.vel.kp 0.8→2.0`（≈0.8·g/K、速度ループの権限回復）＋`position.pos.kp 1.0→0.3`（外ループを遅く）。K∈[2.4,9.8]・τ∈[50,300]ms でロバスト安定。実機の外乱 0.19 m/s² へのピーク偏差は約0.27m。**ただしこれは不足プラントへの band-aid**。真の tight hold には**ゲイン不足の根治**（姿勢ループの傾き達成度の確認・フロー速度スケール/ToF高さの校正）が必要 = 残課題#5（新規）。
 
 | # | 課題 | 方向性 |
 |---|------|--------|
@@ -217,7 +217,7 @@ N0 ノイズ下でも drift ≤ 1.3m。決定論的（同シードで byte-ident
 ## 1. Overview
 
 A record of diagnosing and fixing the vehicle **POSITION_HOLD** "fly-away / tumble"
-problem in SIL: why it flew away (the physics), what was tried and what failed, how it
+problem in SILS: why it flew away (the physics), what was tried and what failed, how it
 was finally fixed, and what remains — explained in control-engineering terms.
 
 ### In one sentence
@@ -310,7 +310,7 @@ went 0.3 → 0.8 (the old contaminated estimate capped it at 0.3, the diagonal d
 | `eskf.accel_comp.max` | 5.0 | physical clamp on a_kin [m/s²] |
 | `position.vel.kp` | 0.8 | position velocity loop (raised from 0.3) |
 
-Result (clean SIL): all four axes hold tight — drift ≤ 1.1 m, final offset ≤ 1.0 m,
+Result (clean SILS): all four axes hold tight — drift ≤ 1.1 m, final offset ≤ 1.0 m,
 att_rmse ≤ 3.1°; ≤ 1.3 m under N0 noise; deterministic.
 
 ## 5. Test methodology
@@ -318,7 +318,7 @@ att_rmse ≤ 3.1°; ≤ 1.3 m under N0 noise; deterministic.
 The key was not to stop at a single-axis test. Use **isolated-axis → combined** scenarios
 (`pos_roll`/`pos_pitch`/`pos_flight`/`pos_yaw`) and **physical-truth numerical gates**
 (`metric <name> <op> <value> in <t0> <t1>` in `.expect`, computed from `trajectory.csv` for
-G2/G3/G4 — the DSL was log-only ≈ G1). See `simulator/sil/scenarios/TEST_MATRIX.md`.
+G2/G3/G4 — the DSL was log-only ≈ G1). See `simulator/sils/scenarios/TEST_MATRIX.md`.
 
 > **Lesson: a single-axis test hides axis-asymmetric bugs.** Only the per-axis-then-combined
 > structure revealed the pitch-axis divergence.
@@ -327,10 +327,10 @@ G2/G3/G4 — the DSL was log-only ≈ G1). See `simulator/sil/scenarios/TEST_MAT
 
 | # | Issue | Description | Direction |
 |---|-------|-------------|-----------|
-| 1 | **Entry transient** | a ~0.85 m swing that damps over ~10 s before settling (damped, not instant convergence) | add velocity-loop damping (td) or position integral (ti); tune carefully in SIL (fragile regions exist) |
+| 1 | **Entry transient** | a ~0.85 m swing that damps over ~10 s before settling (damped, not instant convergence) | add velocity-loop damping (td) or position integral (ti); tune carefully in SILS (fragile regions exist) |
 | 2 | **Fly-away under n1/n2** | severe vibration corrupts the flow velocity → a_kin degrades; flies away like the baseline | needs vibration handling (notch, better flow-noise model); clean + N0 are the primary levels |
-| 3 | **On-target ESP-IDF build unverified** | host SIL compiles all sources; the ESP32 build is unchecked | run `sf build vehicle` |
-| 4 | **Real-flight unverified** | holds in SIL (physical truth); the real POSITION_HOLD is unflown | proceed via development_roadmap Phase 4.3 (SIL→hardware Code Identity) |
+| 3 | **On-target ESP-IDF build unverified** | host SILS compiles all sources; the ESP32 build is unchecked | run `sf build vehicle` |
+| 4 | **Real-flight unverified** | holds in SILS (physical truth); the real POSITION_HOLD is unflown | proceed via development_roadmap Phase 4.3 (SILS→hardware Code Identity) |
 
 Items 1 and 3 are short; 2 and 4 are separate phases. This fix resolves the ROOT CAUSE
 (fly-away from attitude contamination); further damping the entry transient is incremental

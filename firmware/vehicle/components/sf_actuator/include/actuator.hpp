@@ -86,7 +86,7 @@ public:
     void disarm();
 
     /// BENCH MOTOR TEST: drive the 4 motors to the given raw duties [0,1], bypassing the
-    /// mixer. Arms the HAL and publishes actuator_motor for telemetry/SIL. The CALLER
+    /// mixer. Arms the HAL and publishes actuator_motor for telemetry/SILS. The CALLER
     /// (ControlTask) must gate this to the DISARMED state only — it exists for the
     /// wiring/direction check (development_roadmap Phase 2). Not used in flight.
     /// ベンチ用モータテスト: ミキサーを介さず 4 モータを生 duty [0,1] で駆動。HAL を arm し

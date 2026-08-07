@@ -155,7 +155,7 @@ def main(path, out):
     fig.tight_layout(); fig.savefig(f"{out}/02_sysid.png", dpi=110); plt.close(fig)
 
     # --- suggested gains for a target PM/wc (per axis), VERIFIED numerically ---
-    # 目標 PM/wc の推奨ゲイン（数値検証付き）。実機適用は SIL 検証が前提。
+    # 目標 PM/wc の推奨ゲイン（数値検証付き）。実機適用は SILS 検証が前提。
     TARGET = {"roll": (40.0, 55.0), "pitch": (40.0, 55.0), "yaw": (25.0, 55.0)}  # (wc rad/s, PM deg)
     for a in AXES:
         f = M["sysid"][a]["fit"]

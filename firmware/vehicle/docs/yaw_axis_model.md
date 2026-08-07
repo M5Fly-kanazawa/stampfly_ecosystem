@@ -207,7 +207,7 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 
 ロール3パラ回帰テストは不変（byte一致）。
 
-> **注意:** SIL のヨープラントは最小位相（零点なし）ゆえ**この退化を再現できない**。SILは回帰確認のみ、**実機が最終判定**。
+> **注意:** SILS のヨープラントは最小位相（零点なし）ゆえ**この退化を再現できない**。SILSは回帰確認のみ、**実機が最終判定**。
 
 ### 9.2 実機合格基準
 
@@ -302,7 +302,7 @@ Result params per axis: `autotune.<axis>.{b, tau(=T), tauz(=τ_z, RHP zero), del
 
 ## 9. Validation & Acceptance
 
-Host test `autotune_fit_yaw_rhp_zero`: a synthetic RHP-zero plant ($\tau_z=14$ ms) → the 3-param fit degenerates (residual >0.08), `fitPlantYaw` recovers $b/T/\tau_z$ (τ_z within 2 ms, $L$ fixed, residual <0.05), PID feasible at $\omega_c=15$. The roll 3-param regression test is unchanged. **SIL's yaw plant is minimum-phase and cannot reproduce the degeneracy — hardware is the ground truth.**
+Host test `autotune_fit_yaw_rhp_zero`: a synthetic RHP-zero plant ($\tau_z=14$ ms) → the 3-param fit degenerates (residual >0.08), `fitPlantYaw` recovers $b/T/\tau_z$ (τ_z within 2 ms, $L$ fixed, residual <0.05), PID feasible at $\omega_c=15$. The roll 3-param regression test is unchanged. **SILS's yaw plant is minimum-phase and cannot reproduce the degeneracy — hardware is the ground truth.**
 
 Hardware acceptance (`autotune yaw`, default $\omega_c=18$, then `param save`):
 

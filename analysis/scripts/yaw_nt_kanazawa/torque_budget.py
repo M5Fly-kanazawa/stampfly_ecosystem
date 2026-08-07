@@ -12,10 +12,10 @@ StampFly 実飛行ログ（2026-06-27 NT金沢会場）のヨートルク収支�
         firmware/vehicle/components/sf_core/params.cpp:608
         docs/architecture/stampfly-parameters.md:343,786
     I_z（ヨー慣性）
-        simulator/sil/models/stampfly.xml:86 (diaginertia 第3成分 = Z軸)
+        simulator/sils/models/stampfly.xml:86 (diaginertia 第3成分 = Z軸)
         docs/architecture/stampfly-parameters.md:525 (Izz = 20.4e-6 kg·m^2)
     質量 m = 0.037 kg
-        simulator/sil/plant/plant.hpp:140 (0.037), docs/architecture/stampfly-parameters.md:522
+        simulator/sils/plant/plant.hpp:140 (0.037), docs/architecture/stampfly-parameters.md:522
     ソフトウェア・ヨートルクリミット max_yaw_torque_ = 2.2e-3 Nm
         firmware/vehicle/components/sf_controller_pid/include/pid_controller.hpp:410
     ctrl_ref.motor_duty = 最終適用 duty（actuator_motor トピックのミラー、post-clamp）
@@ -60,7 +60,7 @@ D2R = np.pi / 180.0
 # Physical parameters (see module docstring for file:line provenance)
 # =============================================================================
 # NOTE(2026-07-15): 実測の物理値は Ct=6.7e-9, Cq=4.10e-11, κ=6.12e-3, Jmp=1.375e-8
-#  （出所: multicopter_introduction/notes/qa_log.md Q4-9..13）。本ブロックはファームウェア/SIL
+#  （出所: multicopter_introduction/notes/qa_log.md Q4-9..13）。本ブロックはファームウェア/SILS
 #  実装の鏡写しが目的のため、ファームウェア側の更新まで旧値を維持する。
 KAPPA = 0.00971          # actuator.cpp:89  torque/thrust ratio Cq/Ct [m]
 ARM_D = 0.023             # actuator.cpp:88  moment arm [m] (unused directly for yaw)

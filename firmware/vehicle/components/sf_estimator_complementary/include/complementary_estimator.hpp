@@ -11,8 +11,8 @@
  * @brief Mahony-style complementary filter — a second IEstimator implementation.
  *        Mahony 型相補フィルタ — 2つ目の IEstimator 実装。
  *
- * Proves the SIL is algorithm-independent (RESET_PLAN P2): swapping ESKF →
- * complementary filter requires ZERO change to the SIL bench or the firmware
+ * Proves the SILS is algorithm-independent (RESET_PLAN P2): swapping ESKF →
+ * complementary filter requires ZERO change to the SILS bench or the firmware
  * tasks — only the `estimator.type` parameter. This estimator computes what
  * stabilized hover and altitude-hold need: attitude (gyro integration corrected
  * toward the accelerometer's gravity direction), the body angular rate
@@ -22,8 +22,8 @@
  * Horizontal position/velocity are NOT estimated; those StateEstimate fields
  * stay zero. ~120 lines of actual math.
  *
- * SIL がアルゴリズム非依存であることを実証する（RESET_PLAN P2）: ESKF → 相補フィルタ
- * の差し替えは SIL ベンチもファームタスクも一切変更せず、`estimator.type` パラメータ
+ * SILS がアルゴリズム非依存であることを実証する（RESET_PLAN P2）: ESKF → 相補フィルタ
+ * の差し替えは SILS ベンチもファームタスクも一切変更せず、`estimator.type` パラメータ
  * だけで行える。本推定器は安定化ホバーと高度保持に必要な分を計算する: 姿勢（ジャイロ積分を
  * 加速度計の重力方向へ補正）、機体角速度（バイアス補正済みジャイロ）、鉛直チャネル
  * （加速度積分による高度＋鉛直速度を ToF で固定 — ESKF と同一センサ構成で公平比較。

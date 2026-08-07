@@ -125,13 +125,13 @@ namespace param_vars {
     // D-on-M, η=0.125), the same B^-1 mixer geometry (d=0.023 m, and the mixer's
     // then-assumed κ=0.00971 — see the 2026-07-17 κ-correction note below) and the
     // same motor curve, so the plant seen by the rate loop is identical.
-    // Earlier SIL-derived near-P values (kp = I/τ_resp, ti=20) are superseded.
+    // Earlier SILS-derived near-P values (kp = I/τ_resp, ti=20) are superseded.
     // レートゲインは物理 [Nm/(rad/s)]（ミキサーは B^-1 配分）。値は旧 vehicle/ の
     // 「飛行実績ゲイン」（config.hpp rate_control 物理単位モード）— 両ファームは
     // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m と
     // 当時のミキサー仮定 κ=0.00971 — 下の 2026-07-17 κ補正ノート参照）、
     // モータ曲線が同一で、レートループから見たプラントが同じため
-    // そのまま移植できる。以前の SIL 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
+    // そのまま移植できる。以前の SILS 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
     // Values are the original M5StampFly (M5Fly-kanazawa) hand-tuned ACRO rate gains,
     // CONVERTED into this firmware's torque[Nm] form, then VALIDATED in real flight
     // (2026-06-27, converted gains flew well → adopted as default). Conversion bridges
@@ -143,7 +143,7 @@ namespace param_vars {
     // the 2026-06-19 on-board autotune values (roll 3.40e-4/ti0.4, pitch 5.16e-4/ti0.4,
     // yaw 5.31e-3/ti1.6): vs those, roll/pitch P is ~2.8x with a longer Ti (more low-freq
     // phase margin in the ~0.9 Hz band), yaw is gentler. See analysis/scripts/
-    // acro_gain_conversion.py + the SIL/linear-margin validation report.
+    // acro_gain_conversion.py + the SILS/linear-margin validation report.
     // 値はオリジナル M5StampFly（M5Fly-kanazawa）のハンドチューン ACRO レートゲインを本ファームの
     // トルク[Nm]形へ換算し、実機飛行で検証（2026-06-27 良好→既定採用）。換算は両ファームの出力
     // 表現の橋渡し（オリジナル＝モータ「電圧」線形ミキサ、本機＝トルク[Nm] の B^-1＋ω²曲線）。
@@ -315,7 +315,7 @@ namespace param_vars {
     float autotune_roll_reject = 0.0f, autotune_pitch_reject = 0.0f, autotune_yaw_reject = 0.0f;
 
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
-    // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SIL
+    // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SILS
     // bench swaps estimators via this parameter alone — no code change.
     // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補。
     int32_t estimator_type = 0;
@@ -412,12 +412,12 @@ namespace param_vars {
     // Values are the FLIGHT-PROVEN legacy vehicle/ gains (config.hpp
     // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). The legacy velocity
     // loop also output physical thrust [N] (VEL_OUTPUT_MAX 0.15 N), so the units
-    // match and the gains transfer 1:1. The earlier, stronger SIL-tuned values
+    // match and the gains transfer 1:1. The earlier, stronger SILS-tuned values
     // (1.5/8 → 0.3/2) are superseded by the hardware-proven set.
     // 高度制御 — カスケード 高度→鉛直速度→推力[N]。値は旧 vehicle/ の飛行実績ゲイン
     // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。旧の速度
     // ループも物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植
-    // できる。以前の強めの SIL 調整値（1.5/8 → 0.3/2）は実機実績値で置換。
+    // できる。以前の強めの SILS 調整値（1.5/8 → 0.3/2）は実機実績値で置換。
     // alt.kp 0.6->0.45 (2026-06-22): real-flight tuned to damp a slow altitude bob.
     // The bob is the altitude loop being marginally under-damped against the ~110 ms
     // MOTOR/PROP ACTUATION lag (thrust cmd -> actual vertical accel, MEASURED from a
@@ -449,7 +449,7 @@ namespace param_vars {
     // rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
     // capture overshoot (integrator windup, +60% in sim/flight). Splitting
     // Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
-    // TakeoffClimb unchanged (SIL isolation proof: takeoff overshoot
+    // TakeoffClimb unchanged (SILS isolation proof: takeoff overshoot
     // unchanged 9.96→9.22 cm with ti_hover=1.5). Flight A/B 2026-07-17
     // (logs 224906/231940): standalone effect is band reshaping (~neutral
     // total std) — but WITH the altitude DOB (altitude.dob.fc, default-on
@@ -463,7 +463,7 @@ namespace param_vars {
     // 外乱は短いTiで除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバー
     // シュートを悪化させる（積分巻き上がり、シム/実機+60%）。フェーズ分離
     // （climb=alt_vel_ti, hover=alt_vel_ti_hover）で TakeoffClimb は不変
-    // （SIL分離実証: ti_hover=1.5 で離陸OS不変 9.96→9.22cm）。実飛行A/B
+    // （SILS分離実証: ti_hover=1.5 で離陸OS不変 9.96→9.22cm）。実飛行A/B
     // 2026-07-17（ログ224906/231940）: 単独では帯域再配分（合計stdほぼ中立）
     // だが、高度DOB（altitude.dob.fc、2026-07-18から既定有効）併用では 1.5/2.5
     // の差が効く: 同一ログ再生で DOB+ti1.5=94.2mm vs DOB+ti2.5=107.1mm。
@@ -500,7 +500,7 @@ namespace param_vars {
     // held at 167.2 mm (-67%, beats the prediction); d_hat clamp saturation
     // 0%; fc/clamp detune sweep found no better point. Promoted to the
     // compiled default 2026-07-18 (pilot decision; precedent: roll retune /
-    // yaw kappa defaults after single-craft A/B): SIL passes ALL flight
+    // yaw kappa defaults after single-craft A/B): SILS passes ALL flight
     // gates with the DOB enabled, and the inner-loop margins (thrust gain
     // +/-30%, mass +/-10%, delay +50 ms) cover craft-to-craft variation.
     // Venue-class environments not yet flight-validated — if misbehavior is
@@ -515,7 +515,7 @@ namespace param_vars {
     // 実飛行検証 2026-07-18（ログ022929、手放しPOS_HOLD、fc=1.5）: 同一エアコン
     // 外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝予測超え）、d̂クランプ
     // 飽和0%、fc/クランプ掃引に現行超えなし。同日コンパイル既定へ昇格（パイロット
-    // 判断。前例: ロール再調整・ヨーκ修正も単機A/B後に既定値化）: SILはDOB有効で
+    // 判断。前例: ロール再調整・ヨーκ修正も単機A/B後に既定値化）: SILSはDOB有効で
     // 全飛行ゲートPASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
     // 個体差をカバー。会場級環境は実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
     // が出たら0にすること。
@@ -549,7 +549,7 @@ namespace param_vars {
     // diverges into the wall. vel.kp 0.8->3.0 restores the inner velocity loop's
     // authority (it had collapsed below the outer loop); pos.kp 1.0->0.4 slows the
     // outer loop -> cascade separation restored. Robust over K in [2.8,7] / tau in
-    // [50,300] ms; SIL pos_* still pass. Tuned over TWO real flights: 0.3/2.0 first
+    // [50,300] ms; SILS pos_* still pass. Tuned over TWO real flights: 0.3/2.0 first
     // stopped the divergence (held ~13 cm), then 0.4/3.0 tightened it (steady-hold
     // drift RMS 31->16 mm, max 126->83 mm) with no extra tilt buzz. The residual
     // wander is set by the ~0.4 g effective tilt->velocity gain (root cause, separate
@@ -558,7 +558,7 @@ namespace param_vars {
     // 必ず一致させる）。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の実効
     // 「傾き→速度」ゲインが約 0.4 g しかなく内/外ループの分離が崩れ閉ループが緩やかに発散
     // して壁へ。vel.kp 0.8→3.0 で内側(速度)ループの権限を回復、pos.kp 1.0→0.4 で外ループを
-    // 遅く → カスケード分離を回復。K∈[2.8,7]/τ∈[50,300]ms でロバスト、SIL pos_* 全 PASS。
+    // 遅く → カスケード分離を回復。K∈[2.8,7]/τ∈[50,300]ms でロバスト、SILS pos_* 全 PASS。
     // 実機2飛行で調整: 0.3/2.0 でまず発散を止め（~13cm 保持）、0.4/3.0 で締めた（定常保持の
     // ドリフト RMS 31→16mm・最大 126→83mm、傾きのビビり増なし）。残る揺らぎは ~0.4 g の
     // 実効ゲインが律速（根治は別タスク: 姿勢ループの傾き達成度／フロー速度スケール）。
@@ -602,12 +602,12 @@ namespace param_vars {
     // χ² REJECTION on real data is ~10 % (over-rejecting the x-axis 11.9 Hz airframe
     // vibration), it hits the ideal ~5 % at 1.2, and over-rejects-the-other-way (1.3 %, more
     // accel-bias drift) at 2.0. 1.2 is the data-optimum; pair it with eskf_accel_att_lpf
-    // (the SIL n2 vibration is isotropic and could not show this — the real x-axis mode is
+    // (the SILS n2 vibration is isotropic and could not show this — the real x-axis mode is
     // the driver; see altlog REPORT §3–4).
     // 0.06→0.8 で χ² ラッチアップ解消、さらに 0.8→1.2 を実機ログ再生で確定: 0.8 は実データで
     // χ² 棄却 ~10%（x軸 11.9Hz 機体振動を過剰棄却）、1.2 で理想 ~5%、2.0 で過小棄却＋バイアス
-    // ドリフト増。1.2 がデータ最適。eskf_accel_att_lpf と併用（SIL の n2 振動は等方的で実機の
-    // x軸モードを欠くため SIL では出ない）。
+    // ドリフト増。1.2 がデータ最適。eskf_accel_att_lpf と併用（SILS の n2 振動は等方的で実機の
+    // x軸モードを欠くため SILS では出ない）。
     float eskf_accel_att      = 1.2f;
     // Accel-attitude LPF cutoff [Hz] (0 = off). 30 Hz cleans the airframe vibration from the
     // gravity reference; the offline sweep cut accel-bias drift 0.28→0.18 (12 Hz notch did
@@ -649,7 +649,7 @@ namespace param_vars {
     // POS_HOLD が飛び去る。フロー速度の α-β トラッカで a_kin を推定（状態=速度+加速度、β 小で
     // 持続ドリフト加速度を単純微分のように washout せず捕捉）、accel-attitude が R^T·a_kin を
     // 差し引き残差を真の姿勢誤差にする。
-    bool  eskf_accel_comp_enable = true;  // on (adopted; SIL clean+N0 all 4 axes hold)
+    bool  eskf_accel_comp_enable = true;  // on (adopted; SILS clean+N0 all 4 axes hold)
     float eskf_accel_comp_alpha  = 0.2f;  // α-β velocity gain
     float eskf_accel_comp_beta   = 0.02f; // α-β acceleration gain (small = capture DC drift)
     float eskf_accel_comp_max    = 5.0f;  // [m/s²] physical clamp on a_kin
@@ -780,7 +780,7 @@ static const ParamEntry table[] = {
     {"attitude.yawhold.kp",       ParamType::FLOAT, &att_yawhold_kp,       3.0f, 0.0f, 10.0f, &notifyControllerReload},
     {"attitude.yawhold.rate_max", ParamType::FLOAT, &att_yawhold_rate_max, 2.0f, 0.1f, 5.0f,  &notifyControllerReload},
 
-    // Altitude control (SIL-validated; see the variable defaults above)
+    // Altitude control (SILS-validated; see the variable defaults above)
     {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.45f, 0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
@@ -802,7 +802,7 @@ static const ParamEntry table[] = {
     // restores cascade timescale separation on the IDENTIFIED plant: raise vel.kp
     // (0.8->3.0, recovering the inner velocity loop's authority) and lower pos.kp
     // (1.0->0.4, slowing the outer loop). Robustly stable over K in [2.8,7],
-    // tau in [50,300] ms; SIL pos_* still pass. Real-flight tuned over 2 flights:
+    // tau in [50,300] ms; SILS pos_* still pass. Real-flight tuned over 2 flights:
     // 0.3/2.0 first stopped the divergence (~13 cm hold), 0.4/3.0 tightened it
     // (steady-hold drift RMS 31->16 mm, max 126->83 mm). KEEP EQUAL to the
     // initializers above. See analysis/scripts/poshold_loop_design.py + the doc.
@@ -811,7 +811,7 @@ static const ParamEntry table[] = {
     // (速度) ループ帯域が外側 (位置) ループより下がってカスケードの時間スケール分離が崩れ、
     // 閉ループが緩やかに発散（~0.1Hz 振動が ±0.37→0.62m に成長し壁に激突）。修正は同定
     // プラント上で分離を回復: vel.kp を上げ（0.8→3.0、内側ループの権限回復）、pos.kp を下げ
-    // （1.0→0.4、外ループを遅く）。K∈[2.8,7]・τ∈[50,300]ms でロバスト、SIL pos_* 全 PASS。
+    // （1.0→0.4、外ループを遅く）。K∈[2.8,7]・τ∈[50,300]ms でロバスト、SILS pos_* 全 PASS。
     // 実機2飛行で調整: 0.3/2.0 で発散停止（~13cm）、0.4/3.0 で締め（ドリフト RMS 31→16mm・
     // 最大 126→83mm）。上の初期化子と必ず一致させる。
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  0.4f,  0.0f, 10.0f,  &notifyControllerReload},

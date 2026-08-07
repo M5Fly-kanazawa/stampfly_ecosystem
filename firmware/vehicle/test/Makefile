@@ -21,11 +21,11 @@ SRCS = test_main.cpp \
 TARGET = test_vehicle
 
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
-# state_manager/failsafe through the now-removed simulator/sil/compat shim and
-# sil_topics.cpp (deleted in the SIL clean-slate, 2026-05-31). It will be
-# re-wired onto the new SIL host shim; test_state_manager.cpp is kept for that.
-# 注: test_state_manager は一時無効化。削除済み simulator/sil/compat シム +
-# sil_topics.cpp 経由でビルドしていたため(SIL更地化)。新SILのホストシム上で
+# state_manager/failsafe through the now-removed simulator/sils/compat shim and
+# sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
+# re-wired onto the new SILS host shim; test_state_manager.cpp is kept for that.
+# 注: test_state_manager は一時無効化。削除済み simulator/sils/compat シム +
+# sils_topics.cpp 経由でビルドしていたため(SILS更地化)。新SILSのホストシム上で
 # 再配線予定。test_state_manager.cpp は再配線のため残置。
 
 .PHONY: all clean test

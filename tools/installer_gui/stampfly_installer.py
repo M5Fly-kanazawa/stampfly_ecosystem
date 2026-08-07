@@ -430,9 +430,9 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "ja": "シミュレータ関連の依存を省略(minimal)",
         "en": "Skip simulator dependencies (minimal)",
     },
-    "options_sil_toolchain": {
-        "ja": "SIL開発ツールチェーンも導入(Windowsのみ有効、約2GB)",
-        "en": "Also install the SIL development toolchain (Windows only, ~2GB)",
+    "options_sils_toolchain": {
+        "ja": "SILS開発ツールチェーンも導入(Windowsのみ有効、約2GB)",
+        "en": "Also install the SILS development toolchain (Windows only, ~2GB)",
     },
     "options_existing_checkout_title": {
         "ja": "既存のインストールが見つかりました",
@@ -1730,13 +1730,13 @@ class SetupOptions:
     """
 
     def __init__(self, install_dir: Path, action: str, skip_clone: bool, include_flasher: bool, minimal: bool,
-                 with_sil_toolchain: bool = False):
+                 with_sils_toolchain: bool = False):
         self.install_dir = install_dir
         self.action = action
         self.skip_clone = skip_clone
         self.include_flasher = include_flasher
         self.minimal = minimal
-        self.with_sil_toolchain = with_sil_toolchain
+        self.with_sils_toolchain = with_sils_toolchain
 
 
 def run_git_clone(
@@ -1937,14 +1937,14 @@ def build_supported_run_kwargs(module, options: SetupOptions,
         # Advisory-only until a matching Options-page checkbox exists on
         # every repair-mode target too -- same signature-tolerance concern
         # as the rest of this dict: an older cloned installer.py without
-        # this parameter simply has it dropped below, the SIL toolchain
+        # this parameter simply has it dropped below, the SILS toolchain
         # install is then skipped (its default is False either way).
         # 修復モード対象の全てで対応するオプション画面チェックボックスが
         # あるとは限らないため参考表示扱い -- この辞書の他の項目と同じ
         # シグネチャ耐性の理由。この引数が無い古いクローンのinstaller.py
-        # では単に下で落とされ、SILツールチェーン導入はスキップされる
+        # では単に下で落とされ、SILSツールチェーン導入はスキップされる
         # （既定値もFalseなので挙動は変わらない）。
-        "with_sil_toolchain": options.with_sil_toolchain,
+        "with_sils_toolchain": options.with_sils_toolchain,
     }
     try:
         supported_names = set(inspect.signature(module.Installer.run).parameters)
@@ -2222,7 +2222,7 @@ def run_selftest() -> int:
         "current Installer.run(): all kwargs supported",
         set(_current_kwargs) == {
             "idf_path", "skip_deps", "minimal", "force", "no_flasher", "auto_install_python",
-            "with_sil_toolchain",
+            "with_sils_toolchain",
         },
     )
 
@@ -2318,7 +2318,7 @@ class StampFlySetupApp:
         self._include_flasher_var = tk.BooleanVar(value=True)
         self._desktop_shortcut_var = tk.BooleanVar(value=True)  # see SetupOptions docstring re: current limits
         self._minimal_var = tk.BooleanVar(value=False)
-        self._sil_toolchain_var = tk.BooleanVar(value=False)
+        self._sils_toolchain_var = tk.BooleanVar(value=False)
         self._existing_mode_var = tk.StringVar(value=EXISTING_CHECKOUT_MODE_REPAIR)
         # Keep the primary button's label honest when the user flips the
         # repair/uninstall radio on the Options page.
@@ -2790,8 +2790,8 @@ class StampFlySetupApp:
         ).grid(row=5, column=0, sticky="w")
         ttk.Checkbutton(
             frame,
-            text=tr("options_sil_toolchain"),
-            variable=self._sil_toolchain_var,
+            text=tr("options_sils_toolchain"),
+            variable=self._sils_toolchain_var,
         ).grid(row=6, column=0, sticky="w")
 
         self._existing_checkout_frame = ttk.Labelframe(
@@ -2897,7 +2897,7 @@ class StampFlySetupApp:
             skip_clone=checkout_exists,
             include_flasher=self._include_flasher_var.get(),
             minimal=self._minimal_var.get(),
-            with_sil_toolchain=self._sil_toolchain_var.get(),
+            with_sils_toolchain=self._sils_toolchain_var.get(),
         )
 
         def worker():

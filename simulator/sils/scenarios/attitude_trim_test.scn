@@ -1,0 +1,30 @@
+# attitude_trim_test.scn — validate the all-mode attitude trim against a steady wind
+# 全モード姿勢トリム検証: 定常横風に対する平衡傾き
+#
+# At yaw=0 the craft's forward (FRD body X) points to ENU east = the trajectory px
+# axis = NED east = wind component fy. So a wind along fy is a HEAD/TAIL wind that
+# pitch trim is the correct axis to cancel. (A north wind fx hits the body Y axis,
+# which pitch trim cannot cancel — that was the earlier mistake.)
+# yaw=0 で機体前方(FRD body X)は ENU east=軌跡 px 軸=NED east=風成分 fy を向く。よって
+# fy 方向の風は pitch トリムが打ち消すべき正面/背面風（north 風 fx は body Y に当たり
+# pitch では打ち消せない — これが前回の誤り）。
+#
+# The wind is applied from t=0 (sustained) so trim and wind balance from the moment
+# of takeoff. Injecting a boot-time pitch trim while there is NO wind tips the craft
+# over during climb (it accelerates sideways and lands) — so the wind must be present
+# throughout for a clean balance test.
+# 風は t=0 から持続。起動時トリムを風が無い状態で入れると climb 中に横へ倒れて着地する
+# ため、釣り合いを見るには風を常時与える。
+#
+# Run twice and compare px drift in the hover window [20, 28] s:
+#   (1) trim=0 (default):     drifts +px (downwind, east)
+#   (2) trim=+0.0552 (pitch): SILS_EMU_PARAMS_FILE=/tmp/trim.txt -> holds px (cancels wind)
+# Steady wind 0.02 N east -> equilibrium pitch asin(0.02/(0.037*9.80665)) = 0.0552 rad.
+#
+#  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    wind  0.0   0.008  0.0                                          # steady NED-east wind (body forward at yaw=0), sustained from t=0 (weak: eq tilt ~1.26 deg)
+   0    rc    2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s (boot -> IDLE)
+   +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM rising edge in IDLE
+   +    rc    3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m
+   +    rc    2048  2048   2048    2048  1     12000     50        1      # D: ALT_HOLD hover 12 s under wind (MEASURE px drift)
+   +    rc    2048  2048   2048    2048  1     2000      50        1      # E: settle 2 s

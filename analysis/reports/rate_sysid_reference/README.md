@@ -1,4 +1,4 @@
-# rate_sysid_reference — SILモデル一致ゲートの実機基準値
+# rate_sysid_reference — SILSモデル一致ゲートの実機基準値
 
 `docs/architecture/simulation-policy.md` §4「モデル一致ゲート」が使う、実機同定の基準値。
 
@@ -44,8 +44,8 @@ python3 analysis/reports/rate_sysid_reference/make_reference.py
 
 ## 使用箇所
 
-`sf sil sysid-gate`（`lib/sfcli/commands/sil.py`）が本 `reference.json` を読み、
-`simulator/sil/scenarios/sysid_gate.scn` の SIL 実行結果（`tools/log_analyzer/rate_sysid.py`
+`sf sils sysid-gate`（`lib/sfcli/commands/sils.py`）が本 `reference.json` を読み、
+`simulator/sils/scenarios/sysid_gate.scn` の SILS 実行結果（`tools/log_analyzer/rate_sysid.py`
 — 実機同定と同一コード — でフィット）と比較して合否を判定する。
 
 許容差（`docs/architecture/simulation-policy.md` §4）:

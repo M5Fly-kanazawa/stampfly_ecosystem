@@ -1195,9 +1195,9 @@ void CLITask(void* pvParameters)
     registerCommands();                   // R6 registry / R6 レジストリ
 
     // Start the interactive REPL — esp_console reads the USB-CDC serial line in its
-    // own task. On the SIL host this is inert (commands stay registered and remain
+    // own task. On the SILS host this is inert (commands stay registered and remain
     // dispatchable via a scenario console feeder).
-    // 対話 REPL を起動 — esp_console が自前タスクで USB-CDC シリアル行を読む。SIL ホスト
+    // 対話 REPL を起動 — esp_console が自前タスクで USB-CDC シリアル行を読む。SILS ホスト
     // では inert（コマンドは登録済みのままで、シナリオのコンソールフィーダから dispatch 可）。
     esp_console_start_repl(repl);
 
@@ -1205,12 +1205,12 @@ void CLITask(void* pvParameters)
     // CLI (requirements §7: CLI = USB Serial / TCP): bench operations like the
     // motor test run on battery with the USB cable OFF, so commands must be
     // reachable over WiFi. Connect with `nc <vehicle-ip> 23` (SoftAP:
-    // 192.168.10.1). On the SIL host the inert socket shim never accepts, so
+    // 192.168.10.1). On the SILS host the inert socket shim never accepts, so
     // this loop just idles.
     // 以降は REPL タスクが USB の対話入力を所有する。本タスクは TCP CLI を提供する
     // （要件§7: CLI = USB Serial / TCP）: モータテスト等のベンチ作業は USB ケーブルを
     // 外した電池駆動で行うため、コマンドは WiFi 経由で届く必要がある。接続は
-    // `nc <機体IP> 23`（SoftAP なら 192.168.10.1）。SIL ホストでは inert ソケットシムが
+    // `nc <機体IP> 23`（SoftAP なら 192.168.10.1）。SILS ホストでは inert ソケットシムが
     // accept しないため、このループは待機するだけ。
     runTcpCliServer();
 }

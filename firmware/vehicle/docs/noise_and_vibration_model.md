@@ -5,10 +5,10 @@
 
 ## 1. 概要
 
-本文書は **SIL の合成センサに与えるノイズモデルと振動モデル**の設計を定義する。
+本文書は **SILS の合成センサに与えるノイズモデルと振動モデル**の設計を定義する。
 大学制御工学教育レベルの物理的妥当性を目指す。
 
-物理エンジンは **MuJoCo**（剛体運動＋接触、RESET_PLAN §6）が担い、**IMU・ToF・フロー・気圧の合成、モータ、風は自前で実装する**。本文書は、その自作センサ・モータモデルに載せるノイズ／振動の仕様である。SIL の作り方の全体像は `simulator/sil/RESET_PLAN.md` を参照。
+物理エンジンは **MuJoCo**（剛体運動＋接触、RESET_PLAN §6）が担い、**IMU・ToF・フロー・気圧の合成、モータ、風は自前で実装する**。本文書は、その自作センサ・モータモデルに載せるノイズ／振動の仕様である。SILS の作り方の全体像は `simulator/sils/RESET_PLAN.md` を参照。
 
 ### 重要な認識
 
@@ -34,7 +34,7 @@ Q_d = σ_c² × Δt    [単位²]
 
 ### ESKF 15状態のQ行列
 
-> **SIL が出すのは §3〜§4 の物理的なセンサノイズだけ**で、各推定器（ESKF／相補／Madgwick／MPC）はそこから自分の Q/R・ゲインを導く（アルゴリズム非依存、RESET_PLAN 方針2）。下の Q/R 表は**現行 ESKF の例示**であり、同じ物理ノイズが一つの推定器の行列にどう写るかを示すもの。SIL の義務は 15 状態 ESKF 形の構造を出すことではなく、物理ノイズを出すことである。
+> **SILS が出すのは §3〜§4 の物理的なセンサノイズだけ**で、各推定器（ESKF／相補／Madgwick／MPC）はそこから自分の Q/R・ゲインを導く（アルゴリズム非依存、RESET_PLAN 方針2）。下の Q/R 表は**現行 ESKF の例示**であり、同じ物理ノイズが一つの推定器の行列にどう写るかを示すもの。SILS の義務は 15 状態 ESKF 形の構造を出すことではなく、物理ノイズを出すことである。
 
 | 状態 | Q要素 | StampFly値 |
 |------|-------|-----------|
@@ -88,7 +88,7 @@ w[k] ~ N(0, σ_rw² × Δt)
 
 スロットル依存性: `振幅 ≈ K × duty²`
 
-### SILでの振動再現レベル（Noise Model Stage）
+### SILSでの振動再現レベル（Noise Model Stage）
 
 > **Note:** 本節の `N0〜N4` はノイズモデルの理論的段階を指す（教材としての複雑度区分）。<br>
 > 開発工程の `Phase 0〜6` やプラント同定層 `Layer 1〜4`（`development_roadmap.md`）とは別概念で、衝突を避けるため `N` プレフィックスを用いる。
@@ -104,8 +104,8 @@ w[k] ~ N(0, σ_rw² × Δt)
 ### 推奨: N2（帯域制限スロットル依存ノイズ）
 
 ```cpp
-// SIL 合成センサのノイズモデル構成
-// SIL synthetic-sensor noise model structure
+// SILS 合成センサのノイズモデル構成
+// SILS synthetic-sensor noise model structure
 
 struct SensorNoiseModel {
     // 1. Static noise (datasheet)
@@ -139,10 +139,10 @@ struct SensorNoiseModel {
 
 // Starting values seeded from a legacy-hardware flight log (firmware/vehicle,
 // hover02, 2026-04-13). They give a realistic initial noise model for the new
-// SIL; refining them against vehicle's own logs is Model Fidelity work,
+// SILS; refining them against vehicle's own logs is Model Fidelity work,
 // done only after vehicle flies (development_roadmap.md Phase 5).
 // 旧機（firmware/vehicle, hover02, 2026-04-13）のログから採った初期値。
-// 新 SIL の現実的な初期ノイズモデルになる。vehicle 自身のログでの精緻化は
+// 新 SILS の現実的な初期ノイズモデルになる。vehicle 自身のログでの精緻化は
 // Model Fidelity（実機飛行後＝development_roadmap.md Phase 5）で行う。
 //   vib_accel_k = {3.96, 2.35, 5.64}  [m/s²]
 //   vib_gyro_k  = {1.08, 0.83, 0.15}  [rad/s]
@@ -156,7 +156,7 @@ MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロ�
 
 ### 加速度計が測る加速度（specific force）の正しい計算 ← 合成加速度計
 
-加速度計は、重力への反作用を含んだ加速度（＝加速度計が実際に測る量。慣性航法でいう specific force）を出力する。**符号と回転行列はファーム本体の規約に厳密に合わせること**（正典＝`eskf_core.cpp:172,854` / `calibration.cpp:262` / `simulator/sil/plant/plant.cpp:520`・`frames.hpp`。`coordinate_frames.md` と一致）:
+加速度計は、重力への反作用を含んだ加速度（＝加速度計が実際に測る量。慣性航法でいう specific force）を出力する。**符号と回転行列はファーム本体の規約に厳密に合わせること**（正典＝`eskf_core.cpp:172,854` / `calibration.cpp:262` / `simulator/sils/plant/plant.cpp:520`・`frames.hpp`。`coordinate_frames.md` と一致）:
 
 - **StampFly の生加速度計は水平静止で `[0,0,−9.81]`（−g 規約）を読む。** これは標準的な specific-force 定義 `f = R_bn(a_world − g_ned)` そのもの（水平静止で −g）。HAL ドライバ段で `body.z = −chip.z` の軸変換を行い、この −g 規約で機体 FRD へ供給する。
 - 回転は **`R_bn = R_nb^T`（NED→body）**。`q`（`attitude`）は `q_nb`（body→NED）なので、NED 量を body へ移すには `inv_rotate`（=`R_bn`）を使う。`g_ned = [0,0,+9.81]`（+Z 下）。
@@ -169,16 +169,16 @@ MuJoCo が剛体運動（並進・回転、オイラー方程式・ジャイロ�
   水平静止: a_world=0, R_bn=I → raw_body = −g_ned = [0,0,−9.81]
 ```
 
-ファームはこの生値（−g）をそのまま使う。起動校正は `accel_bias[2] += G`（重力除去）で純センサオフセットのみを推定する — `ba_z ≈ 0`。**`ba_z ≈ +2g` の起動バイアス機構は旧 vehicle 由来で新ファームには存在しない**（旧版の `−= G` は −2G を生む符号バグだった、`calibration.cpp:262` 参照）。**SIL の合成加速度計も静止で `[0,0,−9.81]` を出力する**（`plant.cpp` は既に −g）。
+ファームはこの生値（−g）をそのまま使う。起動校正は `accel_bias[2] += G`（重力除去）で純センサオフセットのみを推定する — `ba_z ≈ 0`。**`ba_z ≈ +2g` の起動バイアス機構は旧 vehicle 由来で新ファームには存在しない**（旧版の `−= G` は −2G を生む符号バグだった、`calibration.cpp:262` 参照）。**SILS の合成加速度計も静止で `[0,0,−9.81]` を出力する**（`plant.cpp` は既に −g）。
 
-旧 SIL の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>`（site=body 系で加速度計が測る加速度を返す）と突き合わせて検算する。
+旧 SILS の合成センサは推力加速度を含めていなかった（致命的バグ）。**自作加速度計では推力寄与を必ず含める。** MuJoCo 内蔵 `<accelerometer>`（site=body 系で加速度計が測る加速度を返す）と突き合わせて検算する。
 
 ### バイアス初期化 ← 起動キャリブレーションの再現
 
 vehicle は **−g 規約**（前項）ゆえ `ba_z ≈ +2g` のセットは**しない**。起動校正は
 静止平均から純センサオフセットのみを推定し（`calibration.cpp`、`accel_bias[2] += G` で
 重力を除去）、`ba_z ≈ 0` で種付けする。`ba_z ≈ 2g` の `setAttitudeReference()` は旧
-vehicle（+g 規約）の手当てであり、新ファームでは不要・未使用。SIL は起動校正フロー
+vehicle（+g 規約）の手当てであり、新ファームでは不要・未使用。SILS は起動校正フロー
 （静止ゲート → バイアス平均 → 推定器種付け）を再現すればよく、+2g 初期化は再現しない。
 
 ### 推力の二乗則 ← 自作モータモデル
@@ -209,15 +209,15 @@ I_zz × ω̇_z = τ_z - (I_yy - I_xx) × ω_x × ω_y
 | f_low, f_high | FFT PSDの-10dBポイント | 定常ホバリングのFFT |
 | バイアスドリフト | Allan分散解析 | 長時間静置データ |
 
-> **実機ログは SIL を作る・動かす前提ではない（RESET_PLAN §2 方針1）。** §4 のレガシー値は「現実的な初期値の**任意のシード**」にすぎず、SIL はデータシート値×経験的倍率のような妥当な初期値でも build/run してゲートまで到達できる。旧機（既に飛んだ**別の**機体）のログがたまたま存在するのでシードに使うだけで、vehicle 自身での同定は実機飛行後（Model Fidelity、Phase 5）に行う。
+> **実機ログは SILS を作る・動かす前提ではない（RESET_PLAN §2 方針1）。** §4 のレガシー値は「現実的な初期値の**任意のシード**」にすぎず、SILS はデータシート値×経験的倍率のような妥当な初期値でも build/run してゲートまで到達できる。旧機（既に飛んだ**別の**機体）のログがたまたま存在するのでシードに使うだけで、vehicle 自身での同定は実機飛行後（Model Fidelity、Phase 5）に行う。
 
 ## 7. 実装ロードマップ
 
-SIL の合成センサ整備の順序。RESET_PLAN の **P1（物理ベース SIL の骨格）**の中で進め、N3/N4 は教材・Model Fidelity として後段に置く。
+SILS の合成センサ整備の順序。RESET_PLAN の **P1（物理ベース SILS の骨格）**の中で進め、N3/N4 は教材・Model Fidelity として後段に置く。
 
 | 段階 | 内容 | 教育目標 | 対応（RESET_PLAN / Phase） |
 |------|------|---------|--------------------------|
-| 基礎 | 加速度計の式の修正 + バイアス初期化（合成IMUが正しく動く） | SILが正常に飛ぶ | P1 |
+| 基礎 | 加速度計の式の修正 + バイアス初期化（合成IMUが正しく動く） | SILSが正常に飛ぶ | P1 |
 | N0 | IMUガウスノイズ + バイアス | KFの基礎 | P1 |
 | N1 | スロットル依存ノイズ | 振動とノイズの関係 | P1 |
 | N2 | 帯域制限 + ToF/Baroノイズ | フィルタ設計の動機 | P1 |
@@ -230,10 +230,10 @@ SIL の合成センサ整備の順序。RESET_PLAN の **P1（物理ベース SI
 
 ## 1. Overview
 
-This document defines the **sensor noise and vibration models fed to the SIL's synthetic sensors**.
+This document defines the **sensor noise and vibration models fed to the SILS's synthetic sensors**.
 Target: university-level control engineering education with physical validity.
 
-The physics engine is **MuJoCo** (rigid-body + contact, RESET_PLAN §6); the **IMU/ToF/flow/baro synthesis, the motor, and wind are written by hand**. This document is the noise/vibration spec layered on top of those self-written sensor/motor models. For the full SIL design, see `simulator/sil/RESET_PLAN.md`.
+The physics engine is **MuJoCo** (rigid-body + contact, RESET_PLAN §6); the **IMU/ToF/flow/baro synthesis, the motor, and wind are written by hand**. This document is the noise/vibration spec layered on top of those self-written sensor/motor models. For the full SILS design, see `simulator/sils/RESET_PLAN.md`.
 
 ### Key Insight
 
@@ -261,7 +261,7 @@ The primary cause is **motor/propeller vibration**, making static noise models i
 - N4: Real FFT profile injection (validation — Model Fidelity, after first real flight)
 
 **Self-written sensor/motor model requirements (on top of MuJoCo):**
-1. Specific force: the synthetic accelerometer must include the thrust contribution (the old SIL's bug); cross-check against MuJoCo's built-in `<accelerometer>`
+1. Specific force: the synthetic accelerometer must include the thrust contribution (the old SILS's bug); cross-check against MuJoCo's built-in `<accelerometer>`
 2. Startup calibration (bias initialization, `ba_z ≈ 2g`)
 3. Quadratic thrust motor model (`thrust = k·duty²`) plus motor lag and health/degradation; rigid-body rotation (Euler/gyroscopic terms) is handled by MuJoCo, not hand-integrated
 4. Sensor noise (Gaussian + bias + per-axis vibration), seeded from legacy logs, refined later via Model Fidelity

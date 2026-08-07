@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-wobble_bench.py — measure the hover wobble from a wobble_bench SIL run's trajectory.csv.
+wobble_bench.py — measure the hover wobble from a wobble_bench SILS run's trajectory.csv.
 
 Window [12,28] s of wobble_bench.scn (POS_HOLD hover under 1-3 Hz turbulence): reports the
 attitude RMS (the wobble), rate RMS, motor-duty RMS (effort/vibration), and position drift.

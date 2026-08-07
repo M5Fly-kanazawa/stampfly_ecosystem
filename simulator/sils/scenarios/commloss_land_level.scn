@@ -1,0 +1,53 @@
+# commloss_land_level.scn — a FAILSAFE (comm-loss) landing stays LEVEL despite stale sticks
+#                          通信途絶のフェイルセーフ着陸は古いスティックを無視して水平を保つ (new 2026-06-14)
+#
+# Adversarial guard for INV-2 ("attitude is the pilot's — level ONLY on a dead link"):
+# the pilot is holding ROLL RIGHT when the link drops, so the last setpoint is a non-zero
+# tilt. During the comm-loss hover grace the craft still follows that stale roll (FLYING),
+# but once it enters LANDING the controller sees the setpoint is STALE (link dead) and the
+# single level gate forces roll/pitch/yaw to ZERO — the descent is level, NOT a stale-stick
+# tilt. Contrast alt_disarm_land_steer.scn (live link → pilot STEERS the descent).
+#
+# INV-2 の敵対的ガード（姿勢はパイロットのもの — 水平化はリンク途絶時のみ）: リンク途絶の瞬間に
+# パイロットがロール右を保持＝最後の設定点が非ゼロ傾き。通信途絶ホバー猶予中（FLYING）は機体は
+# その古いロールに従うが、LANDING に入ると制御器は設定点が stale（リンク途絶）と判定し、単一の
+# 水平ゲートで roll/pitch/yaw を 0 に強制 — 降下は水平で、古いスティックの傾きにならない。
+# 対照: alt_disarm_land_steer.scn（リンク生存→パイロットが降下を操縦）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/commloss_land_level.scn --target vehicle
+#
+# 2026-07-26 KNOWN FAILING (pending, NOT fixed here — throttle-recalibration task only,
+# no firmware/gain changes made): with the mandated raw substitution above, takeoff and
+# the full failsafe chain (Comm lost -> LANDING -> Autonomous landing -> touchdown) now
+# work, and the grace-period check (stale ROLL-RIGHT still applied, tilt_max>8 deg) PASSES.
+# But commloss_land_level.expect's LANDING-phase level-gate check (tilt_max<6 deg in
+# [15.0,15.6]) still FAILS (measured ~11.9 deg): once LANDING/the level gate engages, roll
+# swings from the held +14 deg down through zero, overshoots to about -11 deg by the checked
+# window, and then — unlike a normal decaying correction — CONTINUES to grow in magnitude
+# (reaching ~-22 deg right before touchdown) instead of settling toward 0. This is not a
+# timing artifact: no window placement recovers a small tilt because the divergence is
+# still growing at touchdown, not decaying. Likely the same systemic reduced-damping
+# consequence of the new (ODE, measured-motor-curve) plant + its motor transport delay
+# seen elsewhere (alt_flight/alt_inflight_switch's slow altitude oscillations; calib.scn's
+# pitch blow-up) — here in the roll/level-gate control path. Outside the scope of a
+# scn/expect-only recalibration (would need attitude-PID/level-gate gain investigation
+# against the new plant). 2026-07-26 既知の未解決（保留、本タスクでは未修正 — ファーム/
+# ゲイン変更なし）: 上記raw置換適用後、離陸とフェイルセーフ連鎖(Comm lost→LANDING→
+# Autonomous landing→着地)は正常動作し、猶予期間チェック(古いロール右のまま tilt_max>8°)
+# もPASSする。しかし commloss_land_level.expect の LANDING水平化ゲートチェック
+# (tilt_max<6° in [15.0,15.6]) は依然FAIL(実測~11.9°): LANDING/水平ゲート起動後、
+# ロールは保持していた+14°からゼロを通過して-11°付近までオーバーシュートし、その後
+# （通常の減衰と異なり）着地直前には~-22°まで成長し続ける（0へ収束しない）。タイミングの
+# 問題ではない — 着地時点で発散がまだ成長中のため、どの窓を選んでも小さいtiltは得られない。
+# 他所（alt_flight/alt_inflight_switchの遅い高度振動、calib.scnのピッチ暴走）と同様、新
+# プラント(ODE・実測モータ曲線)＋モータ伝達遅延に起因する系統的な減衰不足がロール/水平ゲート
+# 制御経路にも現れている可能性が高い。scn/expectのみの再校正では解決不可（姿勢PID/水平ゲート
+# ゲインの新プラントに対する再調査が必要）。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0      rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND
+   +      rc   2048  2048   2048    2048  1     1000      50              # B: ARM
+   +      rc   3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
+   +      rc   2048  2048   2048    2048  1     2500      50        1     # D: ALT_HOLD capture + hover (settle, FLYING)
+   +      rc   2048  2800   2048    2048  1     800       50        1     # E: hold ROLL RIGHT (link live → tilts, FLYING) — this is the LAST setpoint before the gap
+   +8000  rc   2048  2048   2048    2048  0     1000      50              # F: 8 s SILENCE → COMM_LOST (>500ms) → 3 s grace (stale roll) → LANDING (LEVEL gate) → touchdown

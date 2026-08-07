@@ -12,7 +12,7 @@ firmware struct `sf::PID`
 
 Instead of trusting a second hand-translation to stay in sync, this test
 drives the real C++ struct directly via the `stampfly_control` pybind11
-module (built by `sf sil build` from simulator/sil/pybind/
+module (built by `sf sils build` from simulator/sils/pybind/
 sf_control_bindings.cpp, which #includes pid.hpp UNMODIFIED) and compares
 its output, step-by-step, against replay_pid() on identical (setpoint,
 measurement) sequences.
@@ -22,13 +22,13 @@ replay_pid() の手動移植（rate_sysid.py 自身のコメントが「pid.hpp 
 `sf::PID`（pid.hpp）と実際に一致するかを、1ステップずつ数値で証明する。
 
 二重の手動移植が同期し続けることを信頼する代わりに、pybind11 モジュール
-`stampfly_control`（`sf sil build` が simulator/sil/pybind/
+`stampfly_control`（`sf sils build` が simulator/sils/pybind/
 sf_control_bindings.cpp から生成。pid.hpp を無改変で #include）経由で本物の
 C++ 構造体を直接駆動し、同一の (setpoint, measurement) 列に対する出力を
 replay_pid() と1ステップずつ比較する。
 
 Prerequisite / 事前条件:
-    source setup_env.sh && sf sil build      # builds stampfly_control.*.so
+    source setup_env.sh && sf sils build      # builds stampfly_control.*.so
     pytest simulator/tests/test_pid_lockstep.py -v
 
 If `import stampfly_control` fails below, this is a HARD FAILURE (not a
@@ -54,15 +54,15 @@ sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
 import rate_sysid  # noqa: E402  (import after sys.path setup, matches repo convention)
 
 # Same pattern for the compiled pybind11 module: it lands directly in
-# simulator/sil/build/ (verified: `pybind11_add_module` placed at the CMake
-# root, not under add_subdirectory, lands flat like every other SIL target --
+# simulator/sils/build/ (verified: `pybind11_add_module` placed at the CMake
+# root, not under add_subdirectory, lands flat like every other SILS target --
 # e.g. build/cores_smoke, build/stampfly_control.cpython-312-darwin.so).
-# コンパイル済み pybind11 モジュールも同じパターン: simulator/sil/build/ 直下に
+# コンパイル済み pybind11 モジュールも同じパターン: simulator/sils/build/ 直下に
 # フラットに置かれる（`pybind11_add_module` を CMake ルートに直接置いた場合、
-# add_subdirectory 経由ではないため他の SIL ターゲットと同様フラットになる —
+# add_subdirectory 経由ではないため他の SILS ターゲットと同様フラットになる —
 # 確認済み: build/cores_smoke 等と同じ場所に build/stampfly_control.cpython-
 # 312-darwin.so が生成される）。
-sys.path.insert(0, str(paths.sil_build()))
+sys.path.insert(0, str(paths.sils_build()))
 
 # Module-not-built handling: a clear FAILURE, not a silent skip. A quietly
 # green skip would hide the fact that nothing was actually verified.
@@ -73,8 +73,8 @@ try:
 except ImportError as exc:
     raise ImportError(
         "stampfly_control pybind11 module not found (tried sys.path entry "
-        f"{paths.sil_build()}). Build it first with:\n"
-        "    source setup_env.sh && sf sil build\n"
+        f"{paths.sils_build()}). Build it first with:\n"
+        "    source setup_env.sh && sf sils build\n"
         f"Original ImportError: {exc}"
     ) from exc
 

@@ -94,7 +94,7 @@ EXPECTED_CT_SCALED_1EM8 = EXPECTED_CT / 1e-8  # calc-ct field ("×10⁻⁸ N/(ra
 # EXPECTED_* above): generate.py's render_python() only emits the
 # measured_2026_07 family (CT/CQ/JMP/DM/QF/RM/KM/KAPPA) into that file. The
 # legacy_motor_curve family IS machine-generated, but only on the C++ side
-# (simulator/sil/plant/generated_params.hpp's sil_params::legacy::AM/BM/CM,
+# (simulator/sils/plant/generated_params.hpp's sils_params::legacy::AM/BM/CM,
 # via render_cpp()) -- a header nothing currently consumes
 # (status: frozen_for_implementation, see the YAML family header comment).
 # 旧ファミリ定数。バックログ#3で新チェーンへ切替予定。If backlog #3 adds a
@@ -223,7 +223,7 @@ EXEMPT_VEHICLE_OLD = Exempt(
 # tools/log_analyzer's duty-reconstruction / interactive-visualization scripts
 # intentionally mirror the firmware constants THAT WERE ACTIVE WHEN THE
 # REPLAYED LOGS WERE RECORDED (the pre-2026-07-17 motor curve / 9.71e-3 kappa),
-# not today's firmware nor the SIL-adopted measured family, so their
+# not today's firmware nor the SILS-adopted measured family, so their
 # reconstructed thrust/duty plots match what the real hardware actually did at
 # the time. Frozen mirrors for log reconstruction -- NOT a stray copy. See
 # reconstruct_duties.py's own NOTE(2026-07-15) comment. Not code-changed by
@@ -233,7 +233,7 @@ EXEMPT_VEHICLE_OLD = Exempt(
 # firmware's kappa moved on 2026-07-17 and again 2026-08-03, these files did
 # not).
 # tools/log_analyzer の duty再構成／対話可視化スクリプトは、今日のファームでも
-# SILの実測ファミリでもなく、「再生対象のログが記録された当時、有効だった」
+# SILSの実測ファミリでもなく、「再生対象のログが記録された当時、有効だった」
 # ファーム定数（2026-07-17以前のモータ曲線・kappa=9.71e-3）を意図的に鏡写し
 # している——実機がその当時実際にどう動いていたかにログ再構成の結果を一致
 # させるため。過去ログ再構成用の凍結鏡写しであり、単なるコピー漏れではない
@@ -250,14 +250,14 @@ EXEMPT_LOG_ANALYZER_MIRROR = Exempt(
 # max_thrust_per_motor: provenance of the 0.15 N vs 0.168 N per-motor limit is
 # NOT confirmed against a measurement (unlike C_T/C_Q/kappa/mass/inertia
 # above, all of which trace to a dated bench measurement in the SSOT YAML).
-# Modeled as EXEMPT rather than Unresolved (2026-08-03): `sf sil regression` /
+# Modeled as EXEMPT rather than Unresolved (2026-08-03): `sf sils regression` /
 # CI's --strict treats any UNRESOLVED row as a failure, which made this open
 # question block automated checks. EXEMPT keeps the mismatch visible in the
 # report (reason text below, prefixed "計測待ち（出所未確認）:") without
 # failing --strict -- it does not assert either candidate value is correct.
 # 最大推力（1モーターあたり）: 0.15N/0.168Nどちらの出所も実測で確認されていない
 # （上のC_T/C_Q/kappa/mass/慣性と異なり、SSOT YAMLに紐づく実測日がない）。
-# Unresolved ではなく EXEMPT として扱う（2026-08-03）: `sf sil regression`/CIの
+# Unresolved ではなく EXEMPT として扱う（2026-08-03）: `sf sils regression`/CIの
 # --strict は UNRESOLVED を1件でも失敗扱いにするため、この未決着課題が自動検査を
 # 止めてしまっていた。EXEMPT ならレポート上の可視性（下記理由文、先頭に
 # 「計測待ち（出所未確認）:」）を保ったまま --strict を通す -- どちらの候補値が
@@ -325,19 +325,19 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # Phase 1 (2026-07-26, backlog #2): plant.hpp's Config::Ct now reads
-            # sil_params::adopted::CT (generated_params.hpp) -- a symbolic
+            # sils_params::adopted::CT (generated_params.hpp) -- a symbolic
             # reference, not a numeric literal, so there is nothing left to
             # regex-match in plant.hpp itself (same pattern as kappa/RM/mass
             # below). The literal moved to generated_params.hpp.
             # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Ct は
-            # sil_params::adopted::CT（generated_params.hpp）を参照する記号参照に
+            # sils_params::adopted::CT（generated_params.hpp）を参照する記号参照に
             # なり、plant.hpp 自体には正規表現で捕捉すべき数値リテラルが無くなった
             # （下の kappa/RM/mass と同じパターン）。リテラルは generated_params.hpp
             # へ移動した。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float CT = ([0-9eE.+-]+)f;',
             expected=EXPECTED_CT,
-            note="sil_params::adopted::CT (Config::Ct source, backlog #2 ODE)",
+            note="sils_params::adopted::CT (Config::Ct source, backlog #2 ODE)",
         ),
         ParamCheck(
             # Promoted from EXEMPT to a normal OK comparison 2026-08-03: the
@@ -377,7 +377,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SIL-adopted measured value.
+            # mirror, not a stray copy of the SILS-adopted measured value.
             file="tools/log_analyzer/reconstruct_duties.py",
             regex=r'\bCT = ([0-9eE.+-]+)',
             expected=EXEMPT_LOG_ANALYZER_MIRROR,
@@ -429,22 +429,22 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # Phase 1 (2026-07-26, backlog #2): plant.hpp now HAS a standalone Cq
-            # (Config::Cq, sourced from sil_params::adopted::CQ) -- the reaction
+            # (Config::Cq, sourced from sils_params::adopted::CQ) -- the reaction
             # torque model switched from kappa*T to a direct per-motor
             # Cq*omega^2 + Jmp*omega_dot in substep() (supersedes the note that
             # used to live here).
             # Phase 1（2026-07-26、バックログ#2）: plant.hpp は独立した Cq
-            # （Config::Cq、sil_params::adopted::CQ 由来）を持つようになった——
+            # （Config::Cq、sils_params::adopted::CQ 由来）を持つようになった——
             # 反トルクモデルが kappa*T からモータ毎の直接 Cq*omega^2+Jmp*omega_dot
             # （substep()）へ切替（旧注記を置換）。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float CQ = ([0-9eE.+-]+)f;',
             expected=EXPECTED_CQ,
-            note="sil_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
+            note="sils_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
         ),
         ParamCheck(
             # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SIL-adopted measured value.
+            # mirror, not a stray copy of the SILS-adopted measured value.
             file="tools/log_analyzer/reconstruct_duties.py",
             regex=r'\bCQ = ([0-9eE.+-]+)',
             expected=EXEMPT_LOG_ANALYZER_MIRROR,
@@ -470,16 +470,16 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # Phase 1: plant.hpp's Config::kappa now reads
-            # sil_params::adopted::KAPPA (simulator/sil/plant/generated_params.hpp)
+            # sils_params::adopted::KAPPA (simulator/sils/plant/generated_params.hpp)
             # instead of a hand-written literal -- the literal itself moved there.
             # Phase 1: plant.hpp の Config::kappa は手書きリテラルではなく
-            # sil_params::adopted::KAPPA
-            # （simulator/sil/plant/generated_params.hpp）を参照するようになった
+            # sils_params::adopted::KAPPA
+            # （simulator/sils/plant/generated_params.hpp）を参照するようになった
             # -- リテラル自体がそちらへ移動した。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float KAPPA = ([0-9eE.+-]+)f;',
             expected=EXPECTED_KAPPA,
-            note="sil_params::adopted::KAPPA (independent of the deferred Ct set)",
+            note="sils_params::adopted::KAPPA (independent of the deferred Ct set)",
         ),
         ParamCheck(
             file="simulator/genesis/control_allocation.py",
@@ -520,7 +520,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SIL-adopted measured value.
+            # mirror, not a stray copy of the SILS-adopted measured value.
             file="tools/log_analyzer/reconstruct_duties.py",
             regex=r'\bKAPPA = ([0-9eE.+-]+)',
             expected=EXEMPT_LOG_ANALYZER_MIRROR,
@@ -539,7 +539,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # 旧モータ曲線ファミリ。バックログ#3で新チェーンへ切替予定。
     # (firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT/AM/BM/CM
     # are the only surviving consumers as of the 2026-07-26 motor-ODE change
-    # that removed this family from simulator/sil/plant/plant.hpp -- see the
+    # that removed this family from simulator/sils/plant/plant.hpp -- see the
     # SSOT YAML's legacy_motor_curve family header comment.)
     # -------------------------------------------------------------------
     "Am": [
@@ -644,10 +644,10 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             # inertia) now sources this directly.
             # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Jmp
             # （ODEローター慣性）は本値を直接参照する。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float JMP = ([0-9eE.+-]+)f;',
             expected=EXPECTED_JMP,
-            note="sil_params::adopted::JMP (Config::Jmp source, backlog #2 ODE)",
+            note="sils_params::adopted::JMP (Config::Jmp source, backlog #2 ODE)",
         ),
     ],
 
@@ -663,10 +663,10 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="module constant _DM_VALUE (generated)",
         ),
         ParamCheck(
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float DM = ([0-9eE.+-]+)f;',
             expected=EXPECTED_DM,
-            note="sil_params::adopted::DM (Config::Dm source, backlog #2 ODE)",
+            note="sils_params::adopted::DM (Config::Dm source, backlog #2 ODE)",
         ),
     ],
 
@@ -682,10 +682,10 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="module constant _QF_VALUE (generated)",
         ),
         ParamCheck(
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float QF = ([0-9eE.+-]+)f;',
             expected=EXPECTED_QF,
-            note="sil_params::adopted::QF (Config::Qf source, backlog #2 ODE)",
+            note="sils_params::adopted::QF (Config::Qf source, backlog #2 ODE)",
         ),
     ],
 
@@ -702,7 +702,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="DEFAULT_PARAMS.inertia.Ixx",
         ),
         ParamCheck(
-            file="simulator/sil/models/stampfly.xml",
+            file="simulator/sils/models/stampfly.xml",
             regex=r'diaginertia="([0-9.eE+-]+) ',
             expected=EXPECTED_IXX,
             note="<inertial diaginertia> [0]",
@@ -728,7 +728,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="DEFAULT_PARAMS.inertia.Iyy",
         ),
         ParamCheck(
-            file="simulator/sil/models/stampfly.xml",
+            file="simulator/sils/models/stampfly.xml",
             regex=r'diaginertia="[0-9.eE+-]+ ([0-9.eE+-]+) ',
             expected=EXPECTED_IYY,
             note="<inertial diaginertia> [1]",
@@ -754,7 +754,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="DEFAULT_PARAMS.inertia.Izz",
         ),
         ParamCheck(
-            file="simulator/sil/models/stampfly.xml",
+            file="simulator/sils/models/stampfly.xml",
             regex=r'diaginertia="[0-9.eE+-]+ [0-9.eE+-]+ ([0-9.eE+-]+)"',
             expected=EXPECTED_IZZ,
             note="<inertial diaginertia> [2]",
@@ -784,7 +784,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="DEFAULT_PARAMS.geometry.arm_length",
         ),
         ParamCheck(
-            file="simulator/sil/models/stampfly.xml",
+            file="simulator/sils/models/stampfly.xml",
             regex=r'name="rotor1" pos="\s*([0-9.]+)',
             expected=EXPECTED_ARM,
             note="<site name=rotor1> X offset",
@@ -830,13 +830,13 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             # Phase 1: plant.hpp's Config::motor_Rm now reads
-            # sil_params::adopted::RM (generated_params.hpp) -- literal moved there.
-            # Phase 1: plant.hpp の Config::motor_Rm は sil_params::adopted::RM
+            # sils_params::adopted::RM (generated_params.hpp) -- literal moved there.
+            # Phase 1: plant.hpp の Config::motor_Rm は sils_params::adopted::RM
             # （generated_params.hpp）を参照する -- リテラルはそちらへ移動した。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float RM = ([0-9.eE+-]+)f;',
             expected=EXPECTED_RM,
-            note="sil_params::adopted::RM (battery model source, Config::motor_Rm)",
+            note="sils_params::adopted::RM (battery model source, Config::motor_Rm)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
@@ -882,17 +882,17 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
     "mass": [
         ParamCheck(
-            # Phase 1: plant.hpp's Config::mass now reads sil_params::MASS
+            # Phase 1: plant.hpp's Config::mass now reads sils_params::MASS
             # (generated_params.hpp) -- the literal moved there.
-            # Phase 1: plant.hpp の Config::mass は sil_params::MASS
+            # Phase 1: plant.hpp の Config::mass は sils_params::MASS
             # （generated_params.hpp）を参照する -- リテラルはそちらへ移動した。
-            file="simulator/sil/plant/generated_params.hpp",
+            file="simulator/sils/plant/generated_params.hpp",
             regex=r'constexpr float MASS = ([0-9.eE+-]+)f;',
             expected=EXPECTED_MASS,
-            note="sil_params::MASS (Config::mass source)",
+            note="sils_params::MASS (Config::mass source)",
         ),
         ParamCheck(
-            file="simulator/sil/models/stampfly.xml",
+            file="simulator/sils/models/stampfly.xml",
             regex=r'<inertial[^>]*mass="([0-9.eE+-]+)"',
             expected=EXPECTED_MASS,
             note="<inertial mass>",

@@ -1,0 +1,29 @@
+# alt_disarm_land_steer.scn — pilot keeps ROLL/PITCH during the auto-landing descent
+#                            自動着陸の降下中もパイロットがロール/ピッチを操縦できる  (new 2026-06-14)
+#
+# Regression guard for the landing-law UNIFICATION (INV-1/INV-2, refactor A 2026-06-14):
+# a pilot-commanded auto-landing (DISARM in ALT_HOLD) is STEERABLE — the pilot keeps
+# roll/pitch/yaw while the command link is LIVE; the vertical channel descends
+# automatically. The OLD computeLanding() forced level attitude (roll_sp=pitch_sp=0),
+# DEAD-STICKING the pilot during landing (hardware bug 2026-06-14). With Landing now a
+# VerticalPhase in the one pipeline, a roll stick held through the descent TILTS the
+# craft (tilt_max > 6°) — the centered-stick twin alt_disarm_land holds tilt ≈ 0.
+# A failsafe (comm-loss) landing instead stays LEVEL — see commloss_land_level.scn.
+#
+# 着陸則の統一（INV-1/INV-2, リファクタA）の回帰ガード: パイロット指令の自動着陸（ALT_HOLD
+# での DISARM）は操縦可 — リンク生存中はパイロットが roll/pitch/yaw を保ち、鉛直チャネルだけ
+# 自動降下。旧 computeLanding() は水平強制（roll_sp=pitch_sp=0）で着陸中スティックが死んだ
+# （実機バグ）。Landing を単一パイプラインの VerticalPhase にしたので、降下中にロールを保持
+# すると機体が傾く（tilt_max>6°）。中立版 alt_disarm_land は tilt≈0。フェイルセーフ着陸は水平
+# （commloss_land_level.scn）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/alt_disarm_land_steer.scn --target vehicle
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD → auto-takeoff
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, hover
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release the ARM button
+   +    rc   2048  2800   2048    2048  1     3500      50        1              # F: press DISARM → AUTO-LAND; ROLL RIGHT held — link LIVE → pilot STEERS the descent
+   +    rc   2048  2048   2048    2048  0     2000      50                       # G: settle (sticks centered, disarmed after touchdown)

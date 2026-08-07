@@ -16,9 +16,9 @@ Options:
     --clean             Clean install (remove config and sfcli, then reinstall)
     --force             Force reinstall all steps (skip probe checks)
     --no-flasher        Skip the optional Step 4/4 GUI Flasher app install
-    --with-sil-toolchain  Install the optional SIL development toolchain
+    --with-sils-toolchain  Install the optional SILS development toolchain
                             (Windows: MSYS2/MinGW-w64, ~2GB) used to build
-                            simulator/sil/ from source. Only takes effect in
+                            simulator/sils/ from source. Only takes effect in
                             --non-interactive mode (interactive mode always
                             asks via a y/n prompt, default No, regardless of
                             this flag); macOS/Linux only print guidance (no
@@ -1069,23 +1069,23 @@ def _detect_linux_package_manager() -> Optional[str]:
     return None
 
 
-# -- SIL development toolchain (Windows: MSYS2/MinGW-w64) --------------------
-# SIL開発ツールチェーン（Windows: MSYS2/MinGW-w64）
+# -- SILS development toolchain (Windows: MSYS2/MinGW-w64) --------------------
+# SILS開発ツールチェーン（Windows: MSYS2/MinGW-w64）
 #
-# Optional, best-effort install of the toolchain simulator/sil/'s native
+# Optional, best-effort install of the toolchain simulator/sils/'s native
 # Windows build needs (C++17 + std::thread, MSVC alone cannot build it --
-# see simulator/sil/README.md). Mirrors `sf doctor`'s "SIL host toolchain"
-# check (lib/sfcli/commands/doctor.py's _check_sil_toolchain(), which in
-# turn calls lib/sfcli/commands/sil.py's mingw_bin()) but is reimplemented
+# see simulator/sils/README.md). Mirrors `sf doctor`'s "SILS host toolchain"
+# check (lib/sfcli/commands/doctor.py's _check_sils_toolchain(), which in
+# turn calls lib/sfcli/commands/sils.py's mingw_bin()) but is reimplemented
 # standalone here rather than imported, since this file must stay stdlib-only
 # and runnable before sfcli itself is installed (see the module docstring's
 # "Stability contract" point 3).
 #
-# simulator/sil/ のネイティブWindowsビルドが必要とするツールチェーンの、
+# simulator/sils/ のネイティブWindowsビルドが必要とするツールチェーンの、
 # 任意・ベストエフォートな導入(C++17 + std::threadが必要でMSVC単体では
-# ビルド不可 -- simulator/sil/README.md参照)。`sf doctor` の
-# 「SIL host toolchain」チェック(lib/sfcli/commands/doctor.pyの
-# _check_sil_toolchain()、内部でlib/sfcli/commands/sil.pyのmingw_bin()を
+# ビルド不可 -- simulator/sils/README.md参照)。`sf doctor` の
+# 「SILS host toolchain」チェック(lib/sfcli/commands/doctor.pyの
+# _check_sils_toolchain()、内部でlib/sfcli/commands/sils.pyのmingw_bin()を
 # 呼ぶ)と同じ考え方だが、import はせずここで自己完結的に再実装する --
 # 本ファイルはsfcli自体が未インストールでも動く必要があり、stdlibのみを
 # 使い続ける契約があるため(モジュールdocstringの「安定契約」項目3参照)。
@@ -1100,14 +1100,14 @@ def _find_mingw_bin_windows() -> Optional[Path]:
 
     Checked in order: (1) a g++ already on PATH whose path contains "mingw"
     (a user's own MSYS2/MinGW setup, respected as-is); (2) the MSYS2 default
-    install path. This mirrors sf CLI's sil.mingw_bin() detection logic.
+    install path. This mirrors sf CLI's sils.mingw_bin() detection logic.
 
     Windows で MinGW-w64 ツールチェーンの bin/ を探す（g++ と ninja が揃って
     いる必要がある）。非Windows、または見つからない場合は None。
 
     確認順序: (1) PATH上に既にあるg++のパスに"mingw"を含む場合(ユーザー
     自身のMSYS2/MinGW環境をそのまま尊重)、(2) MSYS2既定インストール先。
-    sf CLIのsil.mingw_bin()の検出ロジックと同じ考え方。
+    sf CLIのsils.mingw_bin()の検出ロジックと同じ考え方。
     """
     if sys.platform != "win32":
         return None
@@ -1119,10 +1119,10 @@ def _find_mingw_bin_windows() -> Optional[Path]:
     return None
 
 
-def _linux_sil_toolchain_hint(manager: Optional[str]) -> str:
+def _linux_sils_toolchain_hint(manager: Optional[str]) -> str:
     """Build a one-line package-manager hint for the C++17 toolchain +
-    cmake + ninja the SIL host build needs on Linux.
-    Linux上でSILホストビルドが必要とするC++17ツールチェーン+cmake+ninja
+    cmake + ninja the SILS host build needs on Linux.
+    Linux上でSILSホストビルドが必要とするC++17ツールチェーン+cmake+ninja
     のパッケージマネージャコマンドを1行で組み立てる。"""
     if manager == "apt":
         return "sudo apt install -y build-essential cmake ninja-build"
@@ -2949,7 +2949,7 @@ class Installer:
         force: bool = False,
         no_flasher: bool = False,
         auto_install_python: bool = False,
-        with_sil_toolchain: bool = False,
+        with_sils_toolchain: bool = False,
     ) -> int:
         """Run installation.
 
@@ -3232,11 +3232,11 @@ class Installer:
         header("Step 4/4: GUI Flasher (optional)")
         self._install_flasher_gui(idf_path, no_flasher=no_flasher)
 
-        # SIL development toolchain (optional, not its own "Step N/4" --
-        # see _install_sil_toolchain()'s docstring for why).
-        # SIL開発ツールチェーン（任意。独立した「Step N/4」にしない理由は
-        # _install_sil_toolchain() のdocstring参照）。
-        self._install_sil_toolchain(with_sil_toolchain=with_sil_toolchain)
+        # SILS development toolchain (optional, not its own "Step N/4" --
+        # see _install_sils_toolchain()'s docstring for why).
+        # SILS開発ツールチェーン（任意。独立した「Step N/4」にしない理由は
+        # _install_sils_toolchain() のdocstring参照）。
+        self._install_sils_toolchain(with_sils_toolchain=with_sils_toolchain)
 
         # Show completion message
         header("Installation Complete!")
@@ -3300,7 +3300,7 @@ class Installer:
         idf_path: Optional[Path] = None,
         no_flasher: bool = False,
         auto_install_python: bool = False,
-        with_sil_toolchain: bool = False,
+        with_sils_toolchain: bool = False,
     ) -> int:
         """Clean install: remove config and sfcli, then reinstall.
         クリーンインストール: 設定とsfcliを削除後、再インストール"""
@@ -3340,7 +3340,7 @@ class Installer:
         # Re-run installation
         return self.run(idf_path=idf_path, force=True, no_flasher=no_flasher,
                          auto_install_python=auto_install_python,
-                         with_sil_toolchain=with_sil_toolchain)
+                         with_sils_toolchain=with_sils_toolchain)
 
     def _uninstall_flasher_gui(self, idf_path: Optional[Path]) -> None:
         """Uninstall the GUI Flasher desktop app before removing sfcli.
@@ -3475,15 +3475,15 @@ class Installer:
             warn("GUI Flasher install failed (this does not affect the rest of the install).")
             warn("You can install it manually later with: sf flasher install")
 
-    def _install_sil_toolchain(self, with_sil_toolchain: bool) -> None:
-        """Offer to install the optional SIL development toolchain (Windows:
-        MSYS2/MinGW-w64) used to build simulator/sil/ from source.
-        SIL開発ツールチェーン（Windows: MSYS2/MinGW-w64）の任意導入を案内する
+    def _install_sils_toolchain(self, with_sils_toolchain: bool) -> None:
+        """Offer to install the optional SILS development toolchain (Windows:
+        MSYS2/MinGW-w64) used to build simulator/sils/ from source.
+        SILS開発ツールチェーン（Windows: MSYS2/MinGW-w64）の任意導入を案内する
 
         Deliberately best-effort and strictly optional, same mindset as
         _install_flasher_gui(): failure here is never propagated as an
-        installer failure. Most users never touch simulator/sil/ (it is for
-        people doing control-systems development against the SIL host
+        installer failure. Most users never touch simulator/sils/ (it is for
+        people doing control-systems development against the SILS host
         bench), so this defaults to OFF everywhere and is NOT its own
         "Step N/4" -- same reasoning as _create_terminal_launcher() (see the
         module docstring's Stability contract point 2: the GUI's step
@@ -3491,49 +3491,49 @@ class Installer:
 
         Non-interactive contract mirrors auto_install_python's, not
         no_flasher's: interactive mode ALWAYS asks via a y/n prompt
-        (default No) regardless of `with_sil_toolchain`; non-interactive
-        mode installs only when `with_sil_toolchain` is True, with no
+        (default No) regardless of `with_sils_toolchain`; non-interactive
+        mode installs only when `with_sils_toolchain` is True, with no
         prompt. (Contrast with the GUI Flasher's y/n prompt, whose
         non-interactive default is Yes -- this one defaults the other way
         because the ~2GB MSYS2 download is a much heavier, more niche ask.)
 
         _install_flasher_gui() と同じくベストエフォート・完全に任意: ここでの
         失敗はインストーラーの失敗として伝播しない。ほとんどのユーザーは
-        simulator/sil/ に触れない（SILホストベンチでの制御系開発を行う人
+        simulator/sils/ に触れない（SILSホストベンチでの制御系開発を行う人
         向け）ため、既定はどこでもOFFとし、独立した「Step N/4」にはしない
         -- _create_terminal_launcher() と同じ理由（モジュールdocstringの
         安定契約項目2参照: GUIのステップインジケータは4ステップ固定）。
 
         非対話契約は no_flasher ではなく auto_install_python 型: 対話モードは
-        `with_sil_toolchain` の値に関わらず常にy/nプロンプト（既定No）で
-        尋ねる。非対話モードは `with_sil_toolchain` がTrueの時のみ、
+        `with_sils_toolchain` の値に関わらず常にy/nプロンプト（既定No）で
+        尋ねる。非対話モードは `with_sils_toolchain` がTrueの時のみ、
         プロンプト無しでインストールする（GUIフラッシャのy/nプロンプトの
         非対話既定はYesだが、こちらは約2GBのMSYS2ダウンロードというより
         重くニッチな要求のため逆向きの既定にする）。
         """
-        header("SIL Development Toolchain (optional)")
+        header("SILS Development Toolchain (optional)")
 
         if os.environ.get("SF_INSTALLER_NONINTERACTIVE") == "1":
-            want = with_sil_toolchain
+            want = with_sils_toolchain
         else:
             response = prompt(
-                "Install the SIL development toolchain (MSYS2/MinGW-w64, "
-                "~2GB)? For building/running the SIL simulator from source "
+                "Install the SILS development toolchain (MSYS2/MinGW-w64, "
+                "~2GB)? For building/running the SILS simulator from source "
                 "(control systems development) -- most people do not need "
-                "this. / SILシミュレータをソースからビルドして制御開発を"
+                "this. / SILSシミュレータをソースからビルドして制御開発を"
                 "したい人向け（約2GB）。ほとんどの人には不要です [y/N]",
                 "N",
             )
             want = response.lower() in ("y", "yes")
 
         if not want:
-            info("Skipping SIL development toolchain install.")
-            info("(install later: see simulator/sil/README.md, or re-run "
-                 "with --with-sil-toolchain)")
+            info("Skipping SILS development toolchain install.")
+            info("(install later: see simulator/sils/README.md, or re-run "
+                 "with --with-sils-toolchain)")
             return
 
         if sys.platform != "win32":
-            info("SIL can be built with this machine's own gcc/clang -- no "
+            info("SILS can be built with this machine's own gcc/clang -- no "
                  "separate toolchain install is needed here.")
             if sys.platform == "darwin":
                 info("macOS: install the Xcode Command Line Tools if not "
@@ -3543,35 +3543,35 @@ class Installer:
                 manager = _detect_linux_package_manager()
                 info("Linux: ensure a C++17 toolchain, cmake, and ninja are "
                      "installed, e.g.:")
-                info(f"  {_linux_sil_toolchain_hint(manager)}")
-            info("See simulator/sil/README.md for build instructions.")
+                info(f"  {_linux_sils_toolchain_hint(manager)}")
+            info("See simulator/sils/README.md for build instructions.")
             return
 
-        self._install_sil_toolchain_windows()
+        self._install_sils_toolchain_windows()
 
-    def _install_sil_toolchain_windows(self) -> None:
+    def _install_sils_toolchain_windows(self) -> None:
         """Windows: install MSYS2 (via winget) and the MinGW-w64 toolchain
-        packages (via pacman) that simulator/sil/'s native build needs.
+        packages (via pacman) that simulator/sils/'s native build needs.
         Windows: winget経由でMSYS2を、pacman経由でMinGW-w64ツールチェーン
-        パッケージ（simulator/sil/のネイティブビルドが必要とする）を導入する
+        パッケージ（simulator/sils/のネイティブビルドが必要とする）を導入する
 
         Idempotent: skips straight to "already detected" if a working
         MinGW-w64 (g++ + ninja) is already found via _find_mingw_bin_windows()
         -- covers both a from-scratch MSYS2 install by this function on a
         previous run and a user's own pre-existing MSYS2/MinGW setup.
         Every step is best-effort: a failure only warns and points at
-        simulator/sil/README.md for manual recovery, it never raises or
+        simulator/sils/README.md for manual recovery, it never raises or
         returns a failure code, matching _install_flasher_gui()'s contract.
         冪等: _find_mingw_bin_windows() で動作するMinGW-w64（g++ + ninja）が
         既に見つかれば「検出済み」に直行する -- 本関数による過去実行済みの
         MSYS2導入と、ユーザー自身の既存MSYS2/MinGW環境の両方をカバーする。
         各ステップはベストエフォート: 失敗しても警告と
-        simulator/sil/README.md への案内のみで、例外や失敗コードは返さない
+        simulator/sils/README.md への案内のみで、例外や失敗コードは返さない
         （_install_flasher_gui() と同じ契約）。
         """
         mingw = _find_mingw_bin_windows()
         if mingw is not None:
-            success(f"SIL development toolchain already detected: {mingw}")
+            success(f"SILS development toolchain already detected: {mingw}")
             return
 
         if _MSYS2_BASH.exists():
@@ -3583,7 +3583,7 @@ class Installer:
             winget = shutil.which("winget")
             if not winget:
                 warn("winget not found -- cannot auto-install MSYS2.")
-                warn("Manual install: see simulator/sil/README.md "
+                warn("Manual install: see simulator/sils/README.md "
                      "(Windows native build section).")
                 return
             try:
@@ -3593,18 +3593,18 @@ class Installer:
                 ])
             except FileNotFoundError:
                 warn("winget not found -- cannot auto-install MSYS2.")
-                warn("Manual install: see simulator/sil/README.md "
+                warn("Manual install: see simulator/sils/README.md "
                      "(Windows native build section).")
                 return
             if rc != 0:
                 warn(f"MSYS2 install via winget exited with code {rc}.")
-                warn("Manual install: see simulator/sil/README.md "
+                warn("Manual install: see simulator/sils/README.md "
                      "(Windows native build section).")
                 return
             if not _MSYS2_BASH.exists():
                 warn("MSYS2 install reported success, but bash.exe was not "
                      f"found at the expected path ({_MSYS2_BASH}).")
-                warn("Manual steps: see simulator/sil/README.md (Windows "
+                warn("Manual steps: see simulator/sils/README.md (Windows "
                      "native build section).")
                 return
 
@@ -3636,13 +3636,13 @@ class Installer:
         ])
         if rc != 0:
             warn(f"pacman package install exited with code {rc}.")
-            warn("Manual steps: see simulator/sil/README.md (Windows "
+            warn("Manual steps: see simulator/sils/README.md (Windows "
                  "native build section).")
             return
 
         mingw = _find_mingw_bin_windows()
         if mingw is not None:
-            success(f"SIL development toolchain installed: {mingw}")
+            success(f"SILS development toolchain installed: {mingw}")
         else:
             warn("Install commands completed, but MinGW-w64 was not "
                  "detected afterward (expected at C:\\msys64\\mingw64). "
@@ -4299,10 +4299,10 @@ def main() -> int:
         help="Skip the optional Step 4/4 GUI Flasher app install (sf flasher install)",
     )
     parser.add_argument(
-        "--with-sil-toolchain",
+        "--with-sils-toolchain",
         action="store_true",
-        help="Install the optional SIL development toolchain (Windows: "
-             "MSYS2/MinGW-w64, ~2GB) used to build simulator/sil/ from "
+        help="Install the optional SILS development toolchain (Windows: "
+             "MSYS2/MinGW-w64, ~2GB) used to build simulator/sils/ from "
              "source. Only takes effect together with --non-interactive "
              "(interactive mode always asks via a y/n prompt, default No, "
              "regardless of this flag); on macOS/Linux this only prints "
@@ -4351,7 +4351,7 @@ def main() -> int:
             idf_path=args.idf_path,
             no_flasher=args.no_flasher,
             auto_install_python=args.auto_install_python,
-            with_sil_toolchain=args.with_sil_toolchain,
+            with_sils_toolchain=args.with_sils_toolchain,
         )
     else:
         return installer.run(
@@ -4361,7 +4361,7 @@ def main() -> int:
             force=args.force,
             no_flasher=args.no_flasher,
             auto_install_python=args.auto_install_python,
-            with_sil_toolchain=args.with_sil_toolchain,
+            with_sils_toolchain=args.with_sils_toolchain,
         )
 
 

@@ -1,0 +1,26 @@
+# alt_disarm_land.scn — pilot DISARM in ALT_HOLD triggers an AUTO-LANDING (not a drop)
+#                      ALT_HOLD でのパイロット DISARM が自動着陸を起動（落下でなく）  (new 2026-06-14)
+#
+# Spec (user request 2026-06-14): in ALT_HOLD/POS_HOLD a pilot DISARM must NOT cut the
+# motors mid-air (the craft would drop). Instead it starts an AUTO-LANDING — a gradual
+# descent (computeLanding, ~0.3 m/s) — and touchdown does the real DISARM (LANDING →
+# IDLE_GROUND). ACRO/STABILIZE and the ground states still cut immediately, and a DISARM
+# pressed AGAIN while landing is the emergency cut.
+#   C/D: ARM in ALT_HOLD → auto-takeoff → hover at 0.5 m.
+#   F:   press DISARM while FLYING → auto-land. Motors keep running through a gradual
+#        descent (duty > 0.3), then touchdown DISARMs. NOT an instant motor cut / drop.
+#
+# 仕様（ユーザー要望 2026-06-14）: ALT_HOLD/POS_HOLD のパイロット DISARM は空中でモータを
+# 切ってはならない（落下する）。代わりに自動着陸（緩降下 ~0.3 m/s）を起動し、接地で本当の
+# DISARM（LANDING→IDLE_GROUND）。ACRO/STABILIZE・地上は即停止のまま、着陸中の再 DISARM は緊急カット。
+#
+# Run: sf sils scenario simulator/sils/scenarios/alt_disarm_land.scn --target vehicle
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (press) — props stop, spool, AUTO-takeoff fires
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, reach Airborne, hover
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release the ARM button (so the next press is an edge)
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # F: press DISARM while FLYING → AUTO-LAND (gradual descent → touchdown → DISARM)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle (disarmed after touchdown)

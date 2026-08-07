@@ -127,7 +127,7 @@ vehicle v3 設計で予約した将来 Topic。`command_target` / `nav_path` は
 |---|---------|---------|--------|------|-----------|-----------|------|------|------|
 | 24 | `command_target` | `GuidanceTarget` | Latest | 1 | (Navigator / Guidance) | ControlTask, NotifyTask | 10Hz | 位置 + yaw target、ウェイポイント | 実体定義済 (M4+ 配線) |
 | 25 | `nav_path` | `NavigationPath` | Queue | 4 | (Navigator) | (Guidance) | 1Hz | 経路シーケンス | 実体定義済 (Phase 6 配線) |
-| 26 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SIL 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
+| 26 | `sensor_imu_raw` | `ImuRawData` | RingBuffer | 8 | ImuTask | (学習者・SILS 検証) | 400Hz | キャリブ前の生 IMU。教育用、L2 学習者向け | 未定義 (M2) |
 
 **新規 Topic の根拠（横断ルール対応）:**
 - `sensor_imu_raw` — L2 学習者が「キャリブ前の生 IMU を見たい」「自分でキャリブを学びたい」シナリオに対応

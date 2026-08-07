@@ -172,14 +172,14 @@ private:
     // hover_thrust_ = mg × 1.12: the 1.12 is the legacy vehicle/'s FLIGHT-MEASURED
     // correction (HOVER_THRUST_CORRECTION, stable 1.11–1.13 across logs) — the
     // motor curve over-promises thrust by ~12% on real hardware, and both
-    // firmwares share that curve. In SIL the plant inverts the curve exactly, so
+    // firmwares share that curve. In SILS the plant inverts the curve exactly, so
     // the +12% bias is absorbed by the velocity-loop integrator (within its
     // ±0.15 N limit).
     // スラスト出力は物理の総推力 [N]: B^-1 ミキサーが各モータに配分しモータ曲線で duty に。
     // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）。
     // hover_thrust_ = mg×1.12: 1.12 は旧 vehicle/ の「飛行実測」補正
     // （HOVER_THRUST_CORRECTION、ログ全体で 1.11–1.13 と安定）— モータ曲線は実機で
-    // 推力を約12%過大に見積もり、曲線は両ファーム共通。SIL ではプラントが曲線を厳密に
+    // 推力を約12%過大に見積もり、曲線は両ファーム共通。SILS ではプラントが曲線を厳密に
     // 逆変換するため +12% の偏りは速度ループ積分（±0.15N 上限内）が吸収する。
     float max_thrust_     = 0.672f;  // [N] total (4 × 0.168 N per motor)
     float hover_thrust_   = 0.407f;  // [N] mg × 1.12 = 0.037·9.80665·1.12
@@ -367,12 +367,12 @@ private:
     // NO acceleration state, so the observation is the ESKF velocity differentiated to
     // a body-frame accel and EMA-smoothed; integrated with time constant kTrimLearnTau;
     // clamped to kTrimMax (= the param range); persisted to NVS on the landing edge.
-    // See learnTrim(). Signs match sf trim analyze (SIL-verified).
+    // See learnTrim(). Signs match sf trim analyze (SILS-verified).
     // 常時オンボード・トリム学習（ホバー限定）。ホバー中に roll_trim_/pitch_trim_ を
     // ゆっくり動かし定常水平ドリフトを打ち消す（手動 sf trim analyze 不要）。StateEstimate
     // に加速度状態が無いので、観測は ESKF 速度の微分による機体加速度を EMA 平滑、時定数
     // kTrimLearnTau で積分、kTrimMax（=param 範囲）にクランプ、着陸エッジで NVS 保存。
-    // learnTrim() 参照。符号は sf trim analyze（SIL 検証済み）と一致。
+    // learnTrim() 参照。符号は sf trim analyze（SILS 検証済み）と一致。
     static constexpr float kTrimMax            = 0.1f;   // [rad] trim clamp (= param range)
     static constexpr float kTrimLearnTau       = 20.0f;  // [s] learning time constant
     static constexpr float kTrimLearnAccelHz   = 0.3f;   // [Hz] accel EMA cutoff (rejects ~99% of the 400Hz differentiation noise, passes <0.1Hz drift)
@@ -498,7 +498,7 @@ private:
     // (thrust-calibration deficit k_T≈0.95, README §2) AND the Airborne entry
     // usually happens mid-transient (takeoff capture / in-flight switch while
     // arresting a climb). Zero-init or instantaneous-sample priming turns
-    // either into a multi-second thrust bump — SIL flight test showed a full
+    // either into a multi-second thrust bump — SILS flight test showed a full
     // clamp-pinned collapse (alt_flight, DOB-enabled run, 2026-07-18). So:
     //  1) PRIME: average the residual over kDobPrimeCycles (0.25 s — the same
     //     window the sim's equilibrium init used), d_hat forced 0 meanwhile,
@@ -511,7 +511,7 @@ private:
     // --- エンゲージ整形（3段）。残差には定在DC（推力較正欠損 k_T≈0.95、README
     // §2）があり、さらに Airborne 進入はたいてい過渡の最中（離陸捕捉・上昇減速
     // 中の飛行中切替）に起きる。ゼロ初期化や瞬時値プライミングはどちらも数秒
-    // スケールの推力バンプになる — DOB有効SIL飛行試験でクランプ張り付きの墜落を
+    // スケールの推力バンプになる — DOB有効SILS飛行試験でクランプ張り付きの墜落を
     // 実測（alt_flight, 2026-07-18）。よって:
     //  1) プライム: kDobPrimeCycles（0.25s、シムの平衡初期化と同じ窓）の残差
     //     平均を取り（その間 d_hat=0）、その定常状態へ Q+ウォッシュアウトを

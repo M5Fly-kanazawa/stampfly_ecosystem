@@ -40,7 +40,7 @@ _COMMAND_MODULE_NAMES: Tuple[str, ...] = (
     "blocks",
     "log",
     "sim",
-    "sil",
+    "sils",
     "cal",
     "sysid",
     "params",

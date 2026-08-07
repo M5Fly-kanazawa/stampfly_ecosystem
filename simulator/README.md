@@ -8,7 +8,7 @@ StampFly用のPythonベースフライトシミュレータ。物理エンジン
 
 | シミュレータ | 特徴 | 用途 |
 |-------------|------|------|
-| **VPython版**（[vpython/](vpython/)） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SIL/HIL |
+| **VPython版**（[vpython/](vpython/)） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SILS/HIL |
 | **Genesis版**（[genesis/](genesis/)） | 高精度物理エンジン、2000Hz物理演算、物理量ベース制御 | 高精度シミュレーション |
 
 ```bash
@@ -370,16 +370,16 @@ throttle = ctrl.update(
 )
 ```
 
-## 6. SIL/HILテスト
+## 6. SILS/HILテスト
 
-### SIL（Software-in-the-Loop）
+### SILS（Software-in-the-Loop）
 
 Pythonで実装した制御器をシミュレータ内で実行：
 
 ```python
 from simulator.interfaces import SILInterface, SensorData
 
-sil = SILInterface()
+sils = SILInterface()
 
 # 制御器の更新
 sensor_data = SensorData(
@@ -390,7 +390,7 @@ sensor_data = SensorData(
     altitude=0.0,
 )
 
-commands = sil.update(sensor_data, dt=0.0025)
+commands = sils.update(sensor_data, dt=0.0025)
 motor_outputs = commands.motors
 ```
 
@@ -510,7 +510,7 @@ for device in hid.enumerate():
 
 | Simulator | Features | Use Cases |
 |-----------|----------|-----------|
-| **VPython version** (this directory) | Lightweight, browser 3D, rich sensor models | Control learning, SIL/HIL |
+| **VPython version** (this directory) | Lightweight, browser 3D, rich sensor models | Control learning, SILS/HIL |
 | **Genesis version** ([sandbox/genesis_sim/](sandbox/genesis_sim/)) | High-precision physics, 2000Hz, physical units | High-fidelity simulation |
 
 ## 1. Overview
@@ -627,7 +627,7 @@ simulator/
 │   ├── joystick.py        # HID joystick
 │   ├── messages.py        # Protocol messages
 │   ├── protocol_bridge.py # Simulator state ↔ protocol conversion
-│   ├── sil_interface.py   # SIL interface
+│   ├── sils_interface.py   # SILS interface
 │   └── hil_interface.py   # HIL interface
 │
 ├── visualization/         # Visualization
@@ -863,16 +863,16 @@ throttle = ctrl.update(
 )
 ```
 
-## 6. SIL/HIL Testing
+## 6. SILS/HIL Testing
 
-### SIL (Software-in-the-Loop)
+### SILS (Software-in-the-Loop)
 
 Run Python-implemented controllers within the simulator:
 
 ```python
 from simulator.interfaces import SILInterface, SensorData
 
-sil = SILInterface()
+sils = SILInterface()
 
 # Update controller
 sensor_data = SensorData(
@@ -883,7 +883,7 @@ sensor_data = SensorData(
     altitude=0.0,
 )
 
-commands = sil.update(sensor_data, dt=0.0025)
+commands = sils.update(sensor_data, dt=0.0025)
 motor_outputs = commands.motors
 ```
 

@@ -4,14 +4,14 @@ sf params check — physical parameter consistency audit.
 sf params check — 物理パラメータ整合検査。
 
 StampFly's vehicle physical parameters (C_T, C_Q, kappa, inertia, ...) are
-hand-copied across firmware, SIL, and multiple simulators because there is
+hand-copied across firmware, SILS, and multiple simulators because there is
 no code-generation pipeline yet (Phase 1, see docs/architecture/
 simulation-policy.md). This tool deterministically re-reads every copy
 listed in params_manifest.MANIFEST and reports whether it still matches the
 confirmed measured value.
 StampFly の機体物理パラメータ（C_T, C_Q, kappa, 慣性 等）は、コード生成
 パイプラインがまだ無い（Phase 1、docs/architecture/simulation-policy.md
-参照）ため、ファーム・SIL・複数シミュレータへ手動でコピペされている。
+参照）ため、ファーム・SILS・複数シミュレータへ手動でコピペされている。
 本ツールは params_manifest.MANIFEST に列挙された全コピーを決定論的に
 読み直し、確定実測値と一致しているかを報告する。
 

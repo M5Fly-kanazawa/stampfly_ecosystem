@@ -1,6 +1,6 @@
 # StampFly Simulator 移植計画
 
-> **【2026-07-22 注記】** 本書は 2026-03 時点の旧シミュレータ（VPython/Genesis）移植計画の記録である。現行のシミュレーション方針は `docs/architecture/simulation-policy.md`、SIL の設計は `simulator/sil/RESET_PLAN.md` を正とする。
+> **【2026-07-22 注記】** 本書は 2026-03 時点の旧シミュレータ（VPython/Genesis）移植計画の記録である。現行のシミュレーション方針は `docs/architecture/simulation-policy.md`、SILS の設計は `simulator/sils/RESET_PLAN.md` を正とする。
 
 既存の [stampfly_sim](https://github.com/kouhei1970/stampfly_sim) を本リポジトリに移植し、
 現在の `firmware/vehicle/` 実装と互換性のあるシミュレータに再設計する計画です。
@@ -75,7 +75,7 @@ simulator/
 │   ├── joystick.py          # joystick.py から移植
 │   ├── messages.py          # ✓ protocol/spec/messages.yaml の Python 実装
 │   ├── protocol_bridge.py   # ✓ SimulatorState ↔ Protocol 変換
-│   ├── sil_interface.py     # ✓ SILインターフェース・SimpleRateController
+│   ├── sils_interface.py     # ✓ SILSインターフェース・SimpleRateController
 │   └── hil_interface.py     # ✓ HILインターフェース・シリアル通信
 │
 ├── visualization/           # 可視化（複数バックエンド対応）
@@ -112,7 +112,7 @@ simulator/
 │
 ├── scripts/                 # 実行スクリプト
 │   ├── run_sim.py           # メインシミュレータ
-│   ├── run_sil.py           # SILモード
+│   ├── run_sils.py           # SILSモード
 │   ├── sandbox.py           # 開発用
 │   ├── test_sensors.py      # ✓ センサモデル単体テスト
 │   ├── test_protocol.py     # ✓ プロトコルメッセージテスト
@@ -217,7 +217,7 @@ firmware/vehicle/
    - BinaryLogger / BinaryLogReader
    - log_to_numpy / numpy_to_log 変換関数
 3. [x] ProtocolBridge: SimulatorState ↔ Protocol 変換
-4. [x] SIL インターフェース実装 (`interfaces/sil_interface.py`)
+4. [x] SILS インターフェース実装 (`interfaces/sils_interface.py`)
    - SensorData / ActuatorCommand データ構造
    - SILInterface クラス
    - SimpleRateController (テスト用)

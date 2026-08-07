@@ -1,0 +1,255 @@
+# StampFly Emulator — 旧ファーム (firmware/vehicle) 起動ログ
+# Generated: clean run, emu_vehicle, 20s sim, stdin=/dev/null
+# 旧ファーム(87回飛行実績)を無改変でホスト上のエミュレータで実行した全起動ログ
+# EXIT 0 / FATAL なし / 決定論的(2回同一) / 全14タスク稼働 / IMU 400Hz read_fails=0
+# ============================================================================
+
+[emu] === StampFly emulator (firmware-agnostic entry) ===
+[emu] (1) plant.init ...
+[emu] running scheduler for 20000000 us
+
+
+*** StampFly Boot Start ***
+
+[INFO] main: ========================================
+[INFO] main:   StampFly RTOS Skeleton
+[INFO] main:   ESP-IDF version: sils-host
+[INFO] main: ========================================
+[INFO] main: Initializing NVS...
+[INFO] main: NVS initialized
+[INFO] main: Initializing network interface...
+[INFO] main: Network interface initialized
+[INFO] main: Initializing state manager...
+[INFO] StampFlyState: StampFlyState initialized
+[INFO] main: Initializing system manager...
+[INFO] SystemManager: SystemManager initialized
+[INFO] main: Initializing I2C...
+[INFO] init: Initializing I2C bus...
+[INFO] init: I2C bus initialized
+[INFO] SystemState: SystemStateManager initialized
+[INFO] main: SystemStateManager initialized
+[INFO] main: Initializing actuators...
+[INFO] init: Initializing actuators...
+[INFO] MotorDriver: Initializing Motor Driver
+[INFO] MotorDriver:   M1(FR): GPIO42, M2(RR): GPIO41, M3(RL): GPIO10, M4(FL): GPIO5
+[INFO] MotorDriver:   PWM Freq: 150000 Hz, Resolution: 8 bits
+[INFO] MotorDriver: Motor Driver initialized successfully
+[INFO] init: Motor Driver initialized
+[INFO] LEDManager: Initializing LED Manager
+[INFO] LED: Initializing LED on GPIO21, 1 LEDs
+[INFO] LED: LED initialized successfully
+[INFO] LED: Initializing LED on GPIO39, 2 LEDs
+[INFO] LED: LED initialized successfully
+[INFO] LEDManager: LED Manager initialized (SYSTEM=MCU, BODY=TOP+BOTTOM)
+[INFO] init: LEDManager initialized (MCU=GPIO21, BODY=GPIO39x2)
+[INFO] Buzzer: Initializing Buzzer on GPIO40
+[INFO] Buzzer: Buzzer initialized successfully
+[INFO] init: Buzzer initialized
+[INFO] Button: Initializing Button on GPIO0
+[INFO] Button: Button initialized successfully
+[INFO] init: Button initialized
+[INFO] main: Phase 1: Place on flat surface and keep still (5 s)...
+[INFO] init: Initializing sensors...
+[INFO] BMI270_SPI: Deactivating other SPI device on GPIO12 (shared bus)
+[INFO] BMI270_SPI: Other SPI device CS set to HIGH (inactive)
+[INFO] BMI270_SPI: SPI bus initialized on host 1
+[INFO] BMI270_SPI: BMI270 SPI device added successfully
+[INFO] BMI270_SPI: GPIO - MOSI:14 MISO:43 SCLK:44 CS:46
+[INFO] BMI270_SPI: SPI Clock: 10000000 Hz
+[INFO] BMI270_INIT: ========================================
+[INFO] BMI270_INIT:  BMI270 Initialization Sequence
+[INFO] BMI270_INIT: ========================================
+[INFO] BMI270_INIT: Step 1: Soft reset
+[INFO] BMI270_INIT: Performing soft reset...
+[INFO] BMI270_INIT: Waiting 2000 µs for reset to complete...
+[INFO] BMI270_INIT: Re-activating SPI mode after reset...
+[INFO] BMI270_INIT: SPI mode re-activated
+[INFO] BMI270_INIT: Soft reset complete, CHIP_ID verified: 0x24
+[INFO] BMI270_INIT: Step 2: Upload configuration file
+[INFO] BMI270_INIT: Starting config file upload (8192 bytes)...
+[INFO] BMI270_INIT: Disabling advanced power save...
+[INFO] BMI270_INIT: Preparing for config file upload (INIT_CTRL = 0x00)...
+[INFO] BMI270_INIT: Uploading config file (8192 bytes, 256-byte chunks)...
+[INFO] BMI270_INIT: Progress: 2048 / 8192 bytes (25.0%)
+[INFO] BMI270_INIT: Progress: 4096 / 8192 bytes (50.0%)
+[INFO] BMI270_INIT: Progress: 6144 / 8192 bytes (75.0%)
+[INFO] BMI270_INIT: Progress: 8192 / 8192 bytes (100.0%)
+[INFO] BMI270_INIT: Config file upload complete (8192 bytes)
+[INFO] BMI270_INIT: Signaling config upload complete (INIT_CTRL = 0x01)...
+[INFO] BMI270_INIT: Waiting for initialization to start...
+[INFO] BMI270_INIT: Step 3: Wait for initialization complete
+[INFO] BMI270_INIT: Waiting for initialization to complete (max 150 ms)...
+[INFO] BMI270_INIT: INTERNAL_STATUS = 0x01, message = 0x01
+[INFO] BMI270_INIT: ✓ Initialization complete (message = 0x01) after 1 polls
+[INFO] BMI270_INIT: Step 4: Enable sensors
+[INFO] BMI270_INIT: Accelerometer, gyroscope, and temperature enabled (PWR_CTRL = 0x0E)
+[INFO] BMI270_SPI: BMI270 initialization complete - switched to normal mode timing
+[INFO] BMI270_INIT: Step 6: Read default range settings
+[INFO] BMI270_INIT: Default ranges: ACC=0x01, GYR=0x06
+[INFO] BMI270_INIT: ========================================
+[INFO] BMI270_INIT:  ✓ BMI270 Initialization Complete
+[INFO] BMI270_INIT: ========================================
+[INFO] BMI270_DATA: Accelerometer range set to 0x02
+[INFO] BMI270_DATA: Gyroscope range set to 0x00
+[INFO] BMI270_DATA: Accelerometer config set: ODR=0x0C, filter_perf=1 (ACC_CONF=0x8C)
+[INFO] BMI270_DATA: Gyroscope config set: ODR=0x0C, filter_perf=1 (GYR_CONF=0x8C)
+[INFO] BMI270Wrapper: BMI270 initialized successfully
+[INFO] init: IMU initialized
+[ERR]  BMM150: Invalid chip ID: 0x00 (expected 0x32)
+[WARN] init: Magnetometer init failed: ESP_ERR
+[ERR]  BMP280: Invalid chip ID: 0x00 (expected 0x58 or 0x60)
+[WARN] init: Barometer init failed: ESP_ERR
+[INFO] VL53L3CX: Initializing dual ToF sensors...
+[ERR]  VL53L3CX: WaitDeviceBooted failed: -7
+[ERR]  VL53L3CX: Failed to initialize bottom sensor
+[WARN] init: ToF init failed: ESP_ERR
+[INFO] PMW3901: === PMW3901 Initialization Start ===
+[INFO] PMW3901: Step 1: Power stabilization wait (45ms >= 40ms required)
+[INFO] PMW3901:   Power stable: OK
+[INFO] PMW3901: Step 1.5: SPI port reset (NCS High->Low)
+[INFO] PMW3901:   SPI port reset: OK
+[INFO] PMW3901: Step 2: SPI bus initialization
+[INFO] PMW3901:   SPI bus: Skipped (shared with another device)
+[INFO] PMW3901:   SPI device: OK
+[INFO] PMW3901: Step 3: Power-up reset (write 0x5A to reg 0x3A)
+[INFO] PMW3901:   Reset: OK (waiting 5ms for completion)
+[INFO] PMW3901: Step 4: Initial motion register read (clear internal buffers)
+[INFO] PMW3901:   Motion registers read: OK
+[INFO] PMW3901: Step 5: Reading and verifying chip IDs
+[INFO] PMW3901:   Product ID: 0x00 (expected 0x49)
+[INFO] PMW3901:   Inverse ID: 0x00 (expected 0xB6)
+[ERR]  PMW3901:   Invalid product ID!
+[WARN] init: Optical Flow init failed: Failed to initialize PMW3901 sensor
+[ERR]  PowerMonitor: Invalid manufacturer ID: 0x0000 (expected 0x5449)
+[WARN] init: Power Monitor init failed: ESP_ERR
+[INFO] main: Initializing estimators...
+[INFO] init: Initializing estimators...
+[INFO] MagCal: Loading calibration from NVS
+[WARN] MagCal: No valid calibration in NVS
+[WARN] init: No magnetometer calibration found in NVS
+[INFO] ESKF: Initializing ESKF (15-state, active_mask)
+[INFO] ESKF: ESKF initialized (active_mask=0x06FF)
+[INFO] init: Sensor fusion initialized (predict at 400Hz)
+[INFO] init:   Sensors: flow=1, baro=0, tof=1, mag=0
+[INFO] init: Landing handler initialized (alt=0.05m, tof=ON)
+[INFO] main: Initializing communication...
+[INFO] init: Initializing communication...
+[INFO] init: Using default WiFi channel 1
+[INFO] ControllerComm: Initializing ESP-NOW communication
+[INFO] ControllerComm:   WiFi channel: 1
+[INFO] ControllerComm: AP SSID 'StampFly_0001' saved to NVS
+[INFO] ControllerComm: ESP-NOW communication initialized
+[INFO] ControllerComm: ========================================
+[INFO] ControllerComm:   SSID: StampFly_0001
+[INFO] ControllerComm: ========================================
+[INFO] ControllerComm: WiFi AP 'StampFly_0001' started on channel 1 (http://192.168.4.1)
+[INFO] ControllerComm: ESP-NOW communication started
+[INFO] init: ControllerComm initialized
+[INFO] ControlArbiter: Initialized (mode: ESP-NOW, timeout: 500ms)
+[INFO] SystemState: State change callback registered (ID: 0)
+[INFO] init: LED state callback registered with SystemStateManager
+[INFO] CommandQueue: CommandQueue initialized (max queue size: 8)
+[INFO] init: CommandQueue initialized
+[INFO] FlightCmd: Initializing Flight Command Service
+[INFO] main: Initializing Console...
+[INFO] init: Initializing Console...
+[INFO] Console: Console::init() called
+[INFO] Console: Console initialized (commands can be registered after REPL init)
+[INFO] init: Console pre-initialized
+[INFO] main: Initializing Logger...
+[INFO] init: Initializing Logger...
+[INFO] Logger: Initialized at 400 Hz, queue size=16
+[INFO] init: Logger initialized at 400Hz
+[INFO] main: Initializing Telemetry...
+[INFO] init: Initializing Telemetry...
+[INFO] Telemetry: Initializing WebSocket telemetry server...
+[INFO] Telemetry: WebSocket telemetry server started on port 80
+[INFO] Telemetry:   Open http://192.168.4.1/ in browser
+[INFO] init: Telemetry initialized - Connect to WiFi 'StampFly', open http://192.168.4.1
+[INFO] UDPTelem: UDP Log Server initialized on port 8890
+[INFO] init: UDP telemetry log server ready on port 8890
+[INFO] main: Initializing WiFi CLI...
+[INFO] init: Initializing WiFi CLI...
+[INFO] WiFiCLI: Initialized (port 23, max_clients 2)
+[INFO] WiFiCLI: Started on port 23
+[INFO] init: WiFi CLI initialized - telnet 192.168.4.1
+[INFO] main: Waiting 3987 ms for settle...
+[INFO] Logger: Writer task started
+[INFO] UDPTelem: RX task started, listening on port 8890
+[INFO] WiFiCLI: Accept task started
+[INFO] main: Phase 1 complete (5.0 s)
+[INFO] main: Starting tasks...
+[INFO] main: Starting FreeRTOS tasks...
+[INFO] main: IMU timer started: 2.5ms period (400Hz)
+[INFO] main: All tasks started
+[INFO] main: Waiting for sensor tasks to start filling buffers...
+[INFO] main:   Sensors: IMU=1 MAG=0 BARO=0 ToF=0 FLOW=0
+[INFO] IMUTask: IMUTask started (400Hz via ESP Timer)
+[INFO] ControlTask: ControlTask started (400Hz via semaphore)
+[INFO] ControlTask: Physical units mode enabled
+[INFO] ControlTask:   Kp units: [Nm/(rad/s)], Output units: [Nm]
+[INFO] ControlTask: RateController initialized
+[INFO] ControlTask:   Sensitivity: R=1.0 P=1.0 Y=5.0 [rad/s]
+[INFO] ControlTask:   Roll  PID: Kp=1.37e-03 Ti=0.700 Td=0.0100 Limit=5.20e-03
+[INFO] ControlTask:   Pitch PID: Kp=2.00e-03 Ti=0.700 Td=0.0100 Limit=5.20e-03
+[INFO] ControlTask:   Yaw   PID: Kp=5.31e-03 Ti=1.600 Td=0.0100 Limit=2.20e-03
+[INFO] ControlTask: AttitudeController initialized
+[INFO] ControlTask:   Max angles: Roll=30.0° Pitch=30.0°
+[INFO] ControlTask:   Roll  Angle PID: Kp=5.00 Ti=4.00 Td=0.040
+[INFO] ControlTask:   Pitch Angle PID: Kp=5.00 Ti=4.00 Td=0.040
+[INFO] OptFlowTask: OptFlowTask started
+[INFO] MagTask: MagTask started
+[INFO] BaroTask: BaroTask started
+[INFO] CommTask: CommTask started
+[INFO] ToFTask: ToFTask started, bottom_init=0, front_init=0
+[INFO] TelemetryTask: TelemetryTask started
+[INFO] TelemetryTask: Queue: 4 × 1026B, send task on core 0
+[INFO] PowerTask: PowerTask started
+[INFO] TelemetryTask: TelemetrySendTask started
+[INFO] ButtonTask: ButtonTask started
+[INFO] LEDTask: LEDTask started
+[INFO] CLITask: CLITask started, waiting for boot complete...
+[INFO] main: Sensor buffers ready after 10 ms (tof=0)
+[INFO] main: Phase 2: Waiting for sensors to stabilize...
+[INFO] main:   Checking: IMU=1 MAG=0 BARO=0 ToF_B=0 ToF_F=0
+[INFO] ControlTask: Mode changed to STABILIZE
+[INFO] main:   Gyro:  PASSED (0.00000 < 0.010, n=80)
+[INFO] main:   Accel: PASSED (0.0066 < 0.050, n=80)
+[INFO] main: ========================================
+[INFO] main: ALL SENSORS STABILIZED after 400 ms
+[INFO] main:   Accel: 0.0066 < 0.050
+[INFO] main:   Gyro:  0.00000 < 0.010
+[INFO] main: ========================================
+[INFO] main: Bias recalculated from stable buffers (164 samples):
+[INFO] main:   Gyro: [0.00000, 0.00000, 0.00000] rad/s
+[INFO] main:   Accel: [0.0000, 0.0000, 0.0738] m/s²
+[WARN] main: No mag samples in buffer, cannot initialize attitude
+[INFO] main: Sensor fusion initialized and ready to run
+[INFO] main: Phase 3: System ready!
+[INFO] main: ========================================
+[INFO] main: StampFly initialized successfully!
+[INFO] main: ESKF ready - you can start logging now
+[INFO] main: Free heap: 1048576 bytes
+[INFO] main: ========================================
+[INFO] SerialCLI: Initializing Serial CLI
+[INFO] SerialCLI: stdin/stdout buffering disabled
+[INFO] SerialCLI: stdin flags: 0x4 (O_NONBLOCK=YES)
+[INFO] Console: Registering all commands
+[INFO] SensorCmds: Log level loaded from NVS: 0
+[INFO] ControlCmds: Trim loaded: roll=0.0000, pitch=0.0000, yaw=0.0000
+[INFO] Console: All commands registered
+[INFO] SerialCLI: Serial CLI initialized
+[INFO] CLITask: Serial CLI initialized, starting REPL loop
+[INFO] SerialCLI: Starting Serial CLI
+
+========================================
+  StampFly Vehicle Firmware
+========================================
+Type 'help' for available commands
+
+stampfly> [INFO] IMUTask: Att: R=0.00 P=0.00 Y=0.00 | BA=[0.0000,0.0000,0.0738] (grounded)
+[INFO] IMUTask: Att: R=0.00 P=0.00 Y=0.00 | BA=[0.0000,0.0000,0.0738] (grounded)
+[INFO] OptFlowTask: OptFlowTask alive: loop=1000, stack_free=4096
+[INFO] main: IMU timer alive: count=4000, imu_loop=3999
+[INFO] IMUTask: IMUTask alive: loop=4000, read_fails=0, stack_free=4096
+[emu] scheduler stopped — run complete. truth alt=0.010 m

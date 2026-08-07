@@ -118,7 +118,7 @@ vehicle/
 2. `architecture.md` — アーキテクチャ設計書（4階層アクセス + 横断ルール R1〜R16 + BSP 層）
 3. `detailed_design.md` — 詳細設計書
 4. `coding_and_education.md` — コーディング方針・教育計画
-5. `development_roadmap.md` — 開発ロードマップ・SIL→実機ワークフロー
+5. `development_roadmap.md` — 開発ロードマップ・SILS→実機ワークフロー
 6. `hardware_init.md` — BSP・ハードウェア初期化設計
 
 #### vehicle/components/
@@ -156,7 +156,7 @@ Pub-Sub トピック経由で疎結合）。
 ### firmware/vehicle_old/
 旧世代の機体ファームウェア（実飛行87回、**凍結・新規開発なし**）。
 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名（旧 `firmware/vehicle/` 時代の構成）。
-sf CLI・SIL回帰から `--target vehicle_old` として引き続きビルド・テスト可能。
+sf CLI・SILS回帰から `--target vehicle_old` として引き続きビルド・テスト可能。
 `firmware/common/` を controller と共有する。
 
 ---
@@ -254,7 +254,7 @@ control/
   - 設計根拠を残す
 
 - simulation/
-  - SIL 等の検証環境
+  - SILS 等の検証環境
 
 - validation/
   - 実機ログとの照合
@@ -325,14 +325,14 @@ simulator/
 ├── genesis/    # Genesis物理エンジン版シミュレータ（高精度物理演算・物理量ベース制御）
 ├── sandbox/    # STL分割・WebGLビューア等の実験用フォルダ
 ├── shared/     # 機体モデル・設定・シナリオ（assets/configs/scenarios）— 各シミュレータが共有
-├── sil/        # Software-in-the-Loop 本体（決定論的・ESP-IDFホストビルド、設計の正は sil/RESET_PLAN.md）
+├── sils/        # Software-in-the-Loop 本体（決定論的・ESP-IDFホストビルド、設計の正は sils/RESET_PLAN.md）
 ├── tests/      # シミュレータ横断のテスト（例: 制御アロケーション互換性検証）
 ├── tools/      # シミュレータ間比較などの補助ツール（compare_simulators）
-└── vpython/    # VPython版シミュレータ（軽量・ブラウザ3D表示・SIL/HIL向け）
+└── vpython/    # VPython版シミュレータ（軽量・ブラウザ3D表示・SILS/HIL向け）
 ```
 
-- SIL 本体の設計・構築経緯は `simulator/sil/RESET_PLAN.md` を正とする。
-- シミュレーション全体の方針（3層構造: 設計用線形モデル / 実ログ駆動再生 / SIL、Model Fidelity 期の忠実度目標）は `docs/architecture/simulation-policy.md` を正とする。
+- SILS 本体の設計・構築経緯は `simulator/sils/RESET_PLAN.md` を正とする。
+- シミュレーション全体の方針（3層構造: 設計用線形モデル / 実ログ駆動再生 / SILS、Model Fidelity 期の忠実度目標）は `docs/architecture/simulation-policy.md` を正とする。
 - protocol を介した I/O により、実機との一貫性を保つ。
 
 ---

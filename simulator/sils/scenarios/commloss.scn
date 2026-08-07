@@ -1,0 +1,32 @@
+# commloss.scn — P2-2 comm-loss failsafe (ESP-NOW link loss → auto-LANDING)
+# P2-2 通信断フェイルセーフ（ESP-NOW リンク喪失 → 自動 LANDING）
+#
+# Flies to an ALTITUDE_HOLD hover (FLYING), then DELIBERATELY stops the 50 Hz rc
+# stream for 1.5 s while still airborne. With the Failsafe wired into PowerTask,
+# checkCommTimeout() sees the latest CommandSetpoint age cross the 500 ms link
+# timeout, raises AlertType::COMM_LOST, and the StateManager — the sole transition
+# authority — takes FLYING → LANDING (architecture.md §4 failsafe-as-event).
+#
+# ALTITUDE_HOLD ホバー（FLYING）まで上昇し、空中のまま 50Hz rc 列を 1.5 s 意図的に
+# 止める。Failsafe を PowerTask に配線済みなので checkCommTimeout() が最新
+# CommandSetpoint の経過時間が 500ms リンクタイムアウトを越えたのを検出し
+# AlertType::COMM_LOST を発報、StateManager（唯一の遷移実行者）が FLYING → LANDING
+# を行う（architecture.md §4 フェイルセーフはイベント）。
+#
+# The gap is created by timing the NEXT event at '+1500' (1.5 s after the previous
+# rc hold ENDS): the scenario driver emits no packets during that window, so the
+# link genuinely goes stale — the same mechanism disturb.scn warns about ("a long
+# pause would trip the ESP-NOW failsafe"). After the gap the stream resumes, but the
+# craft is already in LANDING (comm recovery does not un-land it).
+# 隙間は次イベントを '+1500'（前の rc ホールド終了の 1.5 s 後）に置いて作る。その間
+# ドライバはパケットを出さないのでリンクは実際に古くなる（disturb.scn が警告する機構と
+# 同じ）。隙間の後は再開するが、機体は既に LANDING（通信復帰で着陸は取り消されない）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/commloss.scn --target vehicle
+#
+#  <t>    ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0      rc    2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND before ARM edge
+   +      rc    2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND)
+   +      rc    3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → TAKEOFF → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
+   +      rc    2048  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD capture + hover 4 s (settle, FLYING)
+   +1500  rc    2048  2048   2048    2048  1     3000      50        1     # E: 1.5 s SILENCE before this → COMM_LOST (>500ms) while FLYING → LANDING; stream resumes 3 s

@@ -8,15 +8,15 @@
 
 ### このドキュメントについて
 
-vehicle の **POS_HOLD（位置保持）** を成立させるまでに越えた2つの大きな壁 ──「加速度センサの比力の罠」と「SIL と実機の乖離」── を、物理・制御工学の言葉で順に説明する。なぜ難しいのか、何を試して何が効かなかったのか、最終的にどう成立させたのか、そして何が残っているのかを俯瞰する。
+vehicle の **POS_HOLD（位置保持）** を成立させるまでに越えた2つの大きな壁 ──「加速度センサの比力の罠」と「SILS と実機の乖離」── を、物理・制御工学の言葉で順に説明する。なぜ難しいのか、何を試して何が効かなかったのか、最終的にどう成立させたのか、そして何が残っているのかを俯瞰する。
 
 ### 対象読者
 
-ドローンの姿勢推定・位置制御・SIL テストに関わる人。GPS の無い屋内で「その場に張り付くホバリング」がなぜ難しいのかを学びたい人。制御工学・ハードウェアの素養を前提とし、ソフトウェア固有の用語には補足を添える。
+ドローンの姿勢推定・位置制御・SILS テストに関わる人。GPS の無い屋内で「その場に張り付くホバリング」がなぜ難しいのかを学びたい人。制御工学・ハードウェアの素養を前提とし、ソフトウェア固有の用語には補足を添える。
 
 ### 一文で言うと
 
-> **POS_HOLD は「位置→速度→姿勢→レート」の4段カスケードを全部成立させる到達点であり、その途中で (1) 加速度センサが水平加速中に「見かけの重力」を指す原理的問題と、(2) 理想化された SIL では再現できない実機モータの権限不足、という2つの壁に突き当たった。前者は運動加速度補償（α-β トラッカ）で根治し、後者は実機同定でプラントを作り直して設計し直すことで、定点保持 ±6〜7cm を達成した。**
+> **POS_HOLD は「位置→速度→姿勢→レート」の4段カスケードを全部成立させる到達点であり、その途中で (1) 加速度センサが水平加速中に「見かけの重力」を指す原理的問題と、(2) 理想化された SILS では再現できない実機モータの権限不足、という2つの壁に突き当たった。前者は運動加速度補償（α-β トラッカ）で根治し、後者は実機同定でプラントを作り直して設計し直すことで、定点保持 ±6〜7cm を達成した。**
 
 ## 2. そもそも POS_HOLD はなぜ難しいのか
 
@@ -121,27 +121,27 @@ vehicle の **POS_HOLD（位置保持）** を成立させるまでに越えた2
 
 α-β は残差を **加速度状態に積分** するので、高域微分のように DC を捨てず、**持続ドリフト加速度（バイアスの真因そのもの）を捉える**。`β=0.02` でノイズに強くし、**生フロー速度** を使う（融合速度 `vel_` だと predict で accel を再注入してピッチ軸が自己強化する）。
 
-結果、**SIL clean で全4軸タイト保持（drift ≤ 1.1m, att_rmse ≤ 3.1°）** を達成した。
+結果、**SILS clean で全4軸タイト保持（drift ≤ 1.1m, att_rmse ≤ 3.1°）** を達成した。
 
-### 3.5 SIL が炙り出した方法論の教訓
+### 3.5 SILS が炙り出した方法論の教訓
 
 この軸非対称バグは **単軸テストでは隠れていた**（当初は roll 単軸しか試していなかった）。**個別軸（pos_roll / pos_pitch / pos_diag / pos_yaw）→ 複合（pos_flight）** の網羅テスト構成と、物理真値の **数値ゲート**（`.expect` に `metric <name> <op> <value> in <t0> <t1>`）を導入して初めて、ピッチ軸の発散という重大バグが見えた。
 
 > **教訓：単軸テストは軸非対称のバグを隠す。** 各軸を1軸ずつ試し、最後に複合で試す構成にして初めてバグが見える。
 
-## 4. 第二の壁 — SIL では飛ぶのに実機では発散する
+## 4. 第二の壁 — SILS では飛ぶのに実機では発散する
 
 ### 4.1 Code Identity の哲学
 
-この開発の特徴は、**SIL（Software-in-the-Loop, 本体C++コードをそのままコンパイルして物理シミュレータ上で走らせる試験環境）** が、テスト用に書き直した別コードではなく **実機と同一のソース** を走らせること（Code Identity）。これにより SIL で見つけたバグは実機のバグと等価になる ── はずだった。
+この開発の特徴は、**SILS（Software-in-the-Loop, 本体C++コードをそのままコンパイルして物理シミュレータ上で走らせる試験環境）** が、テスト用に書き直した別コードではなく **実機と同一のソース** を走らせること（Code Identity）。これにより SILS で見つけたバグは実機のバグと等価になる ── はずだった。
 
-ところが POS_HOLD は **SIL では完璧に保持するのに、初の実機飛行で発散した**。これが本件の核心的教訓である。
+ところが POS_HOLD は **SILS では完璧に保持するのに、初の実機飛行で発散した**。これが本件の核心的教訓である。
 
 ### 4.2 実機の症状 — 成長する不安定リミットサイクル
 
 狭い部屋・手放しで POS_HOLD →
 
-- SIL のような即タンブルではなく、**周期約9.4秒・振幅 ±0.37→0.50→0.62m と成長する緩い水平振動**（不安定リミットサイクル, ω≈0.68 rad/s, σ≈+0.057/s）で壁に激突
+- SILS のような即タンブルではなく、**周期約9.4秒・振幅 ±0.37→0.50→0.62m と成長する緩い水平振動**（不安定リミットサイクル, ω≈0.68 rad/s, σ≈+0.057/s）で壁に激突
 - 同時刻の ALT_HOLD は単調ドリフトのみで **振動なし** → 振動は **閉じた位置ループ固有** と切り分け
 - フローは健全（SQUAL 79–184）、姿勢の張り付きも無し → **第一の壁（α-β 補償）は実機でも有効**
 
@@ -161,7 +161,7 @@ vehicle の **POS_HOLD（位置保持）** を成立させるまでに越えた2
                               →  カスケード時間スケール分離が崩壊  →  不安定化（発散）
 ```
 
-**K = g（理想）なら現ゲインは安定（σ −0.124）= SIL 合格・実機墜落の正体**。SIL は理想フロー（plant.cpp で SQUAL=100固定・ノイズ無し・トルク効き1.0）ゆえ、この **ハード由来の権限不足を再現できなかった**。「Code Identity でも実機で動かない」盲点の実例である。
+**K = g（理想）なら現ゲインは安定（σ −0.124）= SILS 合格・実機墜落の正体**。SILS は理想フロー（plant.cpp で SQUAL=100固定・ノイズ無し・トルク効き1.0）ゆえ、この **ハード由来の権限不足を再現できなかった**。「Code Identity でも実機で動かない」盲点の実例である。
 
 ### 4.4 対策と「ハード限界」という結論
 
@@ -181,7 +181,7 @@ K∈[2.8,7]・τ∈[50,300ms] でロバスト安定。実機検証：
 | 定常ドリフト | 31 → 16mm に締まり（vel.kp 強化で改善） |
 | 有界性 | 前半 RMS 0.028m ≈ 後半 0.031m（非成長＝有界） |
 
-ただし重要な結論として、**att.kp を上げると 1.2Hz 共振が出るだけ、att.ti を下げても僅か** ── 姿勢ループのチューニングに伸びしろは無い。**±6〜7cm がこの37g機のトルク効きでの実用限界** で、これ以上のタイトホールドはハード（高効率モータ/プロペラ）の話。SIL は理想トルク効きゆえこの限界を再現できず「直せない」。
+ただし重要な結論として、**att.kp を上げると 1.2Hz 共振が出るだけ、att.ti を下げても僅か** ── 姿勢ループのチューニングに伸びしろは無い。**±6〜7cm がこの37g機のトルク効きでの実用限界** で、これ以上のタイトホールドはハード（高効率モータ/プロペラ）の話。SILS は理想トルク効きゆえこの限界を再現できず「直せない」。
 
 ## 5. 仕上げ — スティックで動かせる POS モード
 
@@ -191,7 +191,7 @@ K∈[2.8,7]・τ∈[50,300ms] でロバスト安定。実機検証：
 - **中立に戻すと、離した位置で停止して再捕捉**（位置目標を更新して止まる）
 - `position.stick_vel`（既定 0.4 m/s）でライブ調整
 
-「定点に張り付くが、動かしたい時はスティックで動かせて、離せばまた止まる」── これで実用的な位置制御モードになった。SIL `pos_reposition`（東へ 0.70m 移動→新位置 6cm 保持）19/19 PASS、実機でも良好。INV-1（全鉛直フェーズが単一姿勢パイプラインを通る不変条件）も維持。
+「定点に張り付くが、動かしたい時はスティックで動かせて、離せばまた止まる」── これで実用的な位置制御モードになった。SILS `pos_reposition`（東へ 0.70m 移動→新位置 6cm 保持）19/19 PASS、実機でも良好。INV-1（全鉛直フェーズが単一姿勢パイプラインを通る不変条件）も維持。
 
 ## 6. すごさ — 何が達成されたのか
 
@@ -209,7 +209,7 @@ K∈[2.8,7]・τ∈[50,300ms] でロバスト安定。実機検証：
 | **物理の罠が制御を直撃** | 加速度センサの比力という原理が、位置制御の傾き動作と本質的に干渉する。制御だけ・推定だけでは解けず、両者をまたいで理解する必要があった |
 | **対症療法が全部裏目** | 「accel を弱める」直感は鶏卵問題で全滅。**正しく直す** しかなく、独立情報源（フロー）という発想転換が必要だった |
 | **対称コードの非対称バグ** | ピッチだけ発散。単軸テストでは隠れ、軸別→複合の網羅テスト＋数値ゲートを作って初めて見えた |
-| **SIL と実機の乖離** | SIL 完璧→実機発散。理想フロー・理想トルクの SIL は **ハード由来の権限不足を再現しない**。実機同定でプラントを作り直して設計し直す必要があった |
+| **SILS と実機の乖離** | SILS 完璧→実機発散。理想フロー・理想トルクの SILS は **ハード由来の権限不足を再現しない**。実機同定でプラントを作り直して設計し直す必要があった |
 | **チューニングでは越えられない壁** | 最後はモータのトルク効き 0.4〜0.7 倍というハード限界に突き当たる。ソフトの伸びしろが尽きる地点を見極めること自体が難しい |
 
 ## 8. 残っている宿題 — 既知・ハード律速
@@ -246,11 +246,11 @@ POS_HOLD 成立後も残る2つの微小振動。**どちらもハードが律�
 
 ### About this document
 
-It walks through the two big walls crossed on the way to vehicle **POS_HOLD** — the "accelerometer specific-force trap" and the "SIL-vs-hardware gap" — in physics and control-engineering terms: why it is hard, what was tried and failed, how it was finally made to work, and what remains.
+It walks through the two big walls crossed on the way to vehicle **POS_HOLD** — the "accelerometer specific-force trap" and the "SILS-vs-hardware gap" — in physics and control-engineering terms: why it is hard, what was tried and failed, how it was finally made to work, and what remains.
 
 ### In one sentence
 
-> **POS_HOLD is the milestone of getting an entire position→velocity→attitude→rate cascade to hold together. Along the way it hit two walls: (1) the accelerometer pointing at "apparent gravity" while accelerating horizontally, and (2) the real motor authority shortfall that an idealised SIL cannot reproduce. The first was cured with kinematic-acceleration compensation (an α-β tracker); the second was solved by re-identifying the plant from real flight and redesigning the loop — yielding ±6–7 cm fixed-point hold.**
+> **POS_HOLD is the milestone of getting an entire position→velocity→attitude→rate cascade to hold together. Along the way it hit two walls: (1) the accelerometer pointing at "apparent gravity" while accelerating horizontally, and (2) the real motor authority shortfall that an idealised SILS cannot reproduce. The first was cured with kinematic-acceleration compensation (an α-β tracker); the second was solved by re-identifying the plant from real flight and redesigning the loop — yielding ±6–7 cm fixed-point hold.**
 
 ## 2. Why POS_HOLD is hard
 
@@ -298,21 +298,21 @@ The gyro tracks the true (growing) tilt, but the accel update keeps yanking the 
 
 Estimate the kinematic acceleration `a_kin` from an INDEPENDENT source (optical-flow velocity) and subtract it: predict `f_pred = g_expected + R^T·a_kin`, so the innovation is the true attitude error. At hover `a_kin ≈ 0` and it reduces to the plain update.
 
-A naive flow-velocity derivative exposed an **axis-asymmetric bug**: it held roll/yaw but diverged on pitch (98 m) and the diagonal — symmetric code, asymmetric result — because the derivative spiked on jittery timing and, being a high-pass, washed out the SUSTAINED (DC) acceleration. The fix is an **α-β filter** (a velocity+acceleration two-state tracker) on the RAW flow velocity (the fused `vel_` re-injects the accel and makes pitch self-reinforce). It integrates the residual into the acceleration state, capturing the sustained drift acceleration. Result: all four axes hold tight in clean SIL (drift ≤ 1.1 m, att_rmse ≤ 3.1°).
+A naive flow-velocity derivative exposed an **axis-asymmetric bug**: it held roll/yaw but diverged on pitch (98 m) and the diagonal — symmetric code, asymmetric result — because the derivative spiked on jittery timing and, being a high-pass, washed out the SUSTAINED (DC) acceleration. The fix is an **α-β filter** (a velocity+acceleration two-state tracker) on the RAW flow velocity (the fused `vel_` re-injects the accel and makes pitch self-reinforce). It integrates the residual into the acceleration state, capturing the sustained drift acceleration. Result: all four axes hold tight in clean SILS (drift ≤ 1.1 m, att_rmse ≤ 3.1°).
 
-### 3.5 Methodology lesson the SIL forced out
+### 3.5 Methodology lesson the SILS forced out
 
 The asymmetric bug was hidden by single-axis testing. Only the **per-axis → combined** scenario structure (`pos_roll/pitch/diag/flight`) plus **numerical truth gates** (`metric <name> <op> <value> in <t0> <t1>` in `.expect`) revealed the pitch divergence. **A single-axis test hides axis-asymmetric bugs.**
 
-## 4. Wall #2 — flies in SIL, diverges on hardware
+## 4. Wall #2 — flies in SILS, diverges on hardware
 
 ### 4.1 The Code Identity philosophy
 
-The SIL compiles the actual firmware C++ and runs it on a physics simulator — the same source as the real craft (Code Identity) — so a SIL bug should equal a hardware bug. Yet POS_HOLD held perfectly in SIL but **diverged on the first real flight**. That is the core lesson here.
+The SILS compiles the actual firmware C++ and runs it on a physics simulator — the same source as the real craft (Code Identity) — so a SILS bug should equal a hardware bug. Yet POS_HOLD held perfectly in SILS but **diverged on the first real flight**. That is the core lesson here.
 
 ### 4.2 The hardware symptom — a growing unstable limit cycle
 
-Hands-off in a small room: not an instant tumble like SIL, but a **slow horizontal oscillation of period ≈ 9.4 s, amplitude ±0.37→0.50→0.62 m growing** (ω ≈ 0.68 rad/s, σ ≈ +0.057/s) until it hit a wall. The simultaneous ALT_HOLD only drifted monotonically (no oscillation), isolating the oscillation as **intrinsic to the closed position loop**. Flow was healthy (SQUAL 79–184) and the attitude was not stuck — so Wall #1's α-β compensation works on hardware too.
+Hands-off in a small room: not an instant tumble like SILS, but a **slow horizontal oscillation of period ≈ 9.4 s, amplitude ±0.37→0.50→0.62 m growing** (ω ≈ 0.68 rad/s, σ ≈ +0.057/s) until it hit a wall. The simultaneous ALT_HOLD only drifted monotonically (no oscillation), isolating the oscillation as **intrinsic to the closed position loop**. Flow was healthy (SQUAL 79–184) and the attitude was not stuck — so Wall #1's α-β compensation works on hardware too.
 
 ### 4.3 Root cause — the effective "tilt→velocity" gain is only 0.4 g
 
@@ -325,7 +325,7 @@ shortfall in the forward path (tilt→vel)  →  inner(velocity)-loop bandwidth 
                                           →  cascade time-scale separation collapses  →  instability (divergence)
 ```
 
-**With K = g (ideal) the current gains are stable (σ −0.124) — that is exactly why SIL passes and hardware crashes.** SIL uses ideal flow (plant.cpp pins SQUAL=100, no noise, torque effectiveness 1.0), so it **cannot reproduce the hardware authority shortfall** — a concrete example of "passes Code-Identity SIL yet fails on hardware".
+**With K = g (ideal) the current gains are stable (σ −0.124) — that is exactly why SILS passes and hardware crashes.** SILS uses ideal flow (plant.cpp pins SQUAL=100, no noise, torque effectiveness 1.0), so it **cannot reproduce the hardware authority shortfall** — a concrete example of "passes Code-Identity SILS yet fails on hardware".
 
 ### 4.4 The fix and the "hardware limit" conclusion
 
@@ -336,11 +336,11 @@ Redesign the closed loop on the hardware-identified plant (`analysis/scripts/pos
 | `position.vel.kp` | 0.8 → **3.0** | restore velocity-loop authority (compensate the K shortfall) |
 | `position.pos.kp` | 1.0 → **0.4** | slow the outer loop, restore time-scale separation |
 
-Robustly stable over K∈[2.8,7], τ∈[50,300 ms]. On hardware: divergence gone, hold ±6–7 cm / 16 mm RMS, steady drift tightened 31 → 16 mm, bounded (first-half RMS 0.028 m ≈ second-half 0.031 m). Crucially, **raising att.kp only excites a 1.2 Hz resonance and lowering att.ti barely helps** — the attitude loop has no tuning headroom left. **±6–7 cm is the practical limit for this 37 g craft's torque effectiveness**; tighter hold is a hardware question (more efficient motors/props). SIL's ideal torque cannot reproduce this limit, so it cannot "fix" it.
+Robustly stable over K∈[2.8,7], τ∈[50,300 ms]. On hardware: divergence gone, hold ±6–7 cm / 16 mm RMS, steady drift tightened 31 → 16 mm, bounded (first-half RMS 0.028 m ≈ second-half 0.031 m). Crucially, **raising att.kp only excites a 1.2 Hz resonance and lowering att.ti barely helps** — the attitude loop has no tuning headroom left. **±6–7 cm is the practical limit for this 37 g craft's torque effectiveness**; tighter hold is a hardware question (more efficient motors/props). SILS's ideal torque cannot reproduce this limit, so it cannot "fix" it.
 
 ## 5. The finishing touch — a stick-movable POS mode
 
-With fixed-point hold complete, a **velocity-command repositioning** stick scheme was added (commit `ef3f854`) — deflect to move, release to hold: roll/pitch sticks inject a horizontal velocity command (body frame, matching the STABILIZE tilt direction) into the velocity loop; returning to neutral re-captures the stopped position as the new target. `position.stick_vel` (default 0.4 m/s) is live-tunable. SIL `pos_reposition` (move 0.70 m east → hold the new spot within 6 cm) passes 19/19; good on hardware; INV-1 (single attitude pipeline for all vertical phases) preserved.
+With fixed-point hold complete, a **velocity-command repositioning** stick scheme was added (commit `ef3f854`) — deflect to move, release to hold: roll/pitch sticks inject a horizontal velocity command (body frame, matching the STABILIZE tilt direction) into the velocity loop; returning to neutral re-captures the stopped position as the new target. `position.stick_vel` (default 0.4 m/s) is live-tunable. SILS `pos_reposition` (move 0.70 m east → hold the new spot within 6 cm) passes 19/19; good on hardware; INV-1 (single attitude pipeline for all vertical phases) preserved.
 
 ## 6. What's impressive
 
@@ -358,7 +358,7 @@ With fixed-point hold complete, a **velocity-command repositioning** stick schem
 | **Physics trap hits control directly** | The accelerometer's specific force intrinsically interferes with the position-loop's tilting action — unsolvable from control alone or estimation alone |
 | **Every band-aid backfired** | The intuitive "weaken the accel" all failed (chicken-and-egg); the only way was to CORRECT it, requiring the independent-source (flow) reframing |
 | **Asymmetric bug in symmetric code** | Pitch alone diverged; hidden by single-axis tests, only the per-axis→combined matrix with numerical gates exposed it |
-| **SIL-vs-hardware gap** | Perfect in SIL, diverged on hardware; ideal flow/torque SIL does not reproduce the hardware authority shortfall — required re-identifying the plant and redesigning |
+| **SILS-vs-hardware gap** | Perfect in SILS, diverged on hardware; ideal flow/torque SILS does not reproduce the hardware authority shortfall — required re-identifying the plant and redesigning |
 | **A wall tuning cannot cross** | It ends at the hardware limit of 0.4–0.7× torque effectiveness; recognising where software headroom runs out is itself hard |
 
 ## 8. Remaining homework — known, hardware-limited

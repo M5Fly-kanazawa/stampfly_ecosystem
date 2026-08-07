@@ -62,10 +62,10 @@ static constexpr uint32_t READ_FAIL_LOG_INTERVAL = 400;
 
 /// Active estimator, selected by the estimator.type parameter via the factory
 /// below. Held as an IEstimator* so the implementation is swappable WITHOUT
-/// touching this task — the SIL bench picks ESKF or complementary via a param
+/// touching this task — the SILS bench picks ESKF or complementary via a param
 /// (RESET_PLAN P2: algorithm-independence).
 /// アクティブな推定器（下のファクトリが estimator.type で選ぶ）。実装を差し替え可能に
-/// するため IEstimator* で持つ。SIL ベンチは param で ESKF/相補を選ぶ（P2）。
+/// するため IEstimator* で持つ。SILS ベンチは param で ESKF/相補を選ぶ（P2）。
 static sf::IEstimator* g_estimator = nullptr;
 
 /// Takeoff/landing manager — derives the on-ground/airborne state from ToF altitude
@@ -139,10 +139,10 @@ static stampfly::BMI270Wrapper imu_wrapper;
 /// terminal failure). FlowTask polls this via sf::tasks::imu_spi_init_done()
 /// before touching the bus — see tasks.hpp for the CS/MISO race rationale.
 /// Plain atomic (no board dependency) because this source is shared with the
-/// partial SIL test programs that do not link sf_board.
+/// partial SILS test programs that do not link sf_board.
 /// 共有 SPI バス上の BMI270 初期化が終わったら set（成功・確定失敗とも）。FlowTask は
 /// バスに触れる前に sf::tasks::imu_spi_init_done() でこれをポーリングする — CS/MISO
-/// 競合の理由は tasks.hpp 参照。sf_board をリンクしない部分 SIL 試験プログラムと
+/// 競合の理由は tasks.hpp 参照。sf_board をリンクしない部分 SILS 試験プログラムと
 /// ソース共有のため、board 依存のない素の atomic で表現する。
 static std::atomic<bool> s_imu_spi_init_done{false};
 
@@ -675,11 +675,11 @@ void ImuTask(void* pvParameters)
     // sf_board owns the SPI bus (R1): it called spi_bus_initialize() in Phase 1,
     // so the IMU driver must only add its device, not re-init the bus. We set the
     // flag here (a plain bool) rather than calling sf::internal::board::imu_spi()
-    // because this source is shared with the partial SIL test programs that do
+    // because this source is shared with the partial SILS test programs that do
     // not link sf_board; spi_host stays SPI2_HOST = board::imu_spi() by design.
     // SPI バスは sf_board が所有(R1)し Phase 1 で spi_bus_initialize() 済み。よって
     // IMU ドライバは device add のみ行う。この .cpp は sf_board をリンクしない部分
-    // SIL 試験プログラムと共有のため board::imu_spi() を呼ばず bool で設定する。
+    // SILS 試験プログラムと共有のため board::imu_spi() を呼ばず bool で設定する。
     auto imu_cfg = stampfly::BMI270Wrapper::Config::defaultStampFly();
     imu_cfg.skip_bus_init = true;
     esp_err_t imu_init_result = imu_wrapper.init(imu_cfg);

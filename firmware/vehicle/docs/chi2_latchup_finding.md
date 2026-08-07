@@ -61,7 +61,7 @@ PASS ケースは att_rmse 2〜3°（推定健全）。**棄却率は PASS/FAIL 
 
 ## 3. 位置づけ（危険性の評価）
 
-- **実機にも関わる構造的弱点**: 引き金は SIL の 0.1% に限らず、突風・センサノイズスパイク・
+- **実機にも関わる構造的弱点**: 引き金は SILS の 0.1% に限らず、突風・センサノイズスパイク・
   少し違う操作でも臨界に当たれば同じラッチに入りうる。**一度ラッチすると自力回復しない**
   （ゲートが回復補正を弾く）→ 実機では墜落に直結。
 - **ただし顕在化は限定的**: 激しい毎軸 POS_HOLD「ステップで流して捕捉」ストレステストのみ。
@@ -70,15 +70,15 @@ PASS ケースは att_rmse 2〜3°（推定健全）。**棄却率は PASS/FAIL 
 
 ## 4. 当座の回避（Phase 3+, commit b8fd27e）— 根治ではない
 
-SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sensor_power）を live 追従。
+SILS に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sensor_power）を live 追従。
 → 端子電圧が動的に動くと、INA3221 の 8mV 量子化が**一定バイアスでなく微小ディザ**になり、
 ラッチ閾値を一定方向に押し続けないため非発火。**χ² ゲートの構造は変えていない**ので、
 別の外乱が臨界に当たれば再発しうる。
 
 ## 5. 根治の候補（このタスクでやること）
 
-**CLAUDE.md 原則: 制御/推定器パラメータの変更は必ず SIL 数値シミュレーションで裏付けてから。**
-定性推測で決めない。以下を SIL で掃引・比較し、最良策を数値選定する。
+**CLAUDE.md 原則: 制御/推定器パラメータの変更は必ず SILS 数値シミュレーションで裏付けてから。**
+定性推測で決めない。以下を SILS で掃引・比較し、最良策を数値選定する。
 
 1. **χ² ゲートの緩和**: `accel_chi2_gate` 7.8（95%点）→ 11.3（99%点）や更に上。
    - 期待: ラッチ閾値が上がり、臨界マニューバでも棄却され過ぎず回復余地が残る。
@@ -95,7 +95,7 @@ SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sens
 ### 検証方法（合格基準）
 
 - **臨界の消失を直接確認**: actuator を fixed 3.7→3.696（推力+0.1%）にしても pos_yaw が
-  発散しないこと（`SIL_EMU_BATTERY=off` で電池サグを切り、量子化バイアスを再現できる）。
+  発散しないこと（`SILS_EMU_BATTERY=off` で電池サグを切り、量子化バイアスを再現できる）。
   または electric デッドバンド 0.05 を有効化して全 POS_HOLD/STABILIZE が PASS すること。
 - **退行なし**: vehicle 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
   かつ att_rmse が悪化しないこと。
@@ -105,16 +105,16 @@ SIL に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sens
 
 ```bash
 source setup_env.sh
-sf sil build
+sf sils build
 # 量子化バイアスで臨界を再現（電池サグOFF＝固定電圧に量子化を載せる）:
 #   actuator batteryVoltage() を一時的に 3.696f 固定 にして以下が FAIL することを確認
-SIL_EMU_BATTERY=off sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
+SILS_EMU_BATTERY=off sf sils scenario simulator/sils/scenarios/pos_yaw.scn --target vehicle
 # χ² 棄却率ログは emu の stderr（console.log）に "chi2: d2=... reject=.../..." で出る
-grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail
+grep "chi2:" simulator/sils/viz/out_scn_pos_yaw/console.log | tail
 ```
 
 `eskf.att.chi2_gate` は params 経由（`eskf_estimator.cpp:47`）なので、掃引はコード再ビルド
-なしで params から変えられる可能性あり（要確認: SIL の params 注入経路）。
+なしで params から変えられる可能性あり（要確認: SILS の params 注入経路）。
 
 ## 6. 関連コード
 
@@ -123,8 +123,8 @@ grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail
 | `components/sf_estimator_eskf/eskf_core.cpp::vectorUpdate3` | χ² ゲート本体（d²>7.8 で return） |
 | `components/sf_estimator_eskf/eskf_core.cpp::updateAccelAttitude` | innovation 構築＋適応 R＋accel_comp |
 | `components/sf_estimator_eskf/eskf_estimator.cpp:47` | `eskf.att.chi2_gate` を params から読む |
-| `simulator/sil/emu/emu_main.cpp` | `SIL_EMU_BATTERY=off` で電池サグ切替 |
-| `simulator/sil/plant/plant.cpp` | 電池サグモデル（当座の回避） |
+| `simulator/sils/emu/emu_main.cpp` | `SILS_EMU_BATTERY=off` で電池サグ切替 |
+| `simulator/sils/plant/plant.cpp` | 電池サグモデル（当座の回避） |
 
 ## 7. デッドバンドとの関係
 
@@ -138,7 +138,7 @@ STABILIZE を崩す。**χ² を根治すればデッドバンド 0.05 もその
 
 ### 真因（計測で特定）
 
-`SIL_EMU_BATTERY=off pos_yaw` で臨界を確実再現（drift 7.40m, att_rmse 8.84°）し、
+`SILS_EMU_BATTERY=off pos_yaw` で臨界を確実再現（drift 7.40m, att_rmse 8.84°）し、
 `updateAccelAttitude` の動態を計測した結果、**当初の「推定が数百度ズレて固着」説は誤り**で、
 実際は次のメカニズムだった：
 
@@ -172,9 +172,9 @@ param 範囲超で旧来拒否されていた。
 定性推測（「数百度ラッチ」「ノルムで判別」）は2回とも外れ、**計測（d²/innov/R/est を時系列ログ）
 が真因（タイトな R による過剰棄却）を一発で示した**。CLAUDE.md 原則どおり数値で裏付けて選定。
 
-### SIL 掃引ツール（emu_main.cpp）
-`SIL_EMU_CHI2_GATE` / `SIL_EMU_KADAPT` / `SIL_EMU_ACCEL_ATT` で各 param を再ビルド無しに上書き
-（app_main 後・scheduler 前に set。NO_CALIB と同じ窓）。`SIL_EMU_BATTERY=off` で臨界を再現。
+### SILS 掃引ツール（emu_main.cpp）
+`SILS_EMU_CHI2_GATE` / `SILS_EMU_KADAPT` / `SILS_EMU_ACCEL_ATT` で各 param を再ビルド無しに上書き
+（app_main 後・scheduler 前に set。NO_CALIB と同じ窓）。`SILS_EMU_BATTERY=off` で臨界を再現。
 
 ### 申し送り
 - **デッドバンド 0.05** と **重力統一 9.80665**（χ²未修正時に pos_flight を崩した）は、本根治後に

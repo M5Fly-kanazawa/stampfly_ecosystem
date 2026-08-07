@@ -405,10 +405,10 @@ stampfly-ecosystem/
 │   ├── spec/          # Machine-readable protocol definition (YAML/proto)
 │   ├── generated/     # Auto-generated code from spec
 │   └── tools/         # Validation and code generation
-├── control/           # Control systems design (models, PID, MPC, SIL)
+├── control/           # Control systems design (models, PID, MPC, SILS)
 ├── analysis/          # Data analysis (notebooks, scripts, datasets)
 ├── tools/             # Utilities (flashing, calibration, log capture, CI)
-├── simulator/         # SIL/HIL testing environments
+├── simulator/         # SILS/HIL testing environments
 ├── examples/          # Minimal working examples for learning
 └── third_party/       # External dependencies
 ```
@@ -427,7 +427,7 @@ stampfly-ecosystem/
 2. `firmware/vehicle/docs/architecture.md` — アーキテクチャ設計書（v3: 4階層アクセス + 横断ルール R1〜R16 + BSP 層）
 3. `firmware/vehicle/docs/detailed_design.md` — 詳細設計書
 4. `firmware/vehicle/docs/coding_and_education.md` — **コーディング方針・教育計画（必読）**
-5. `firmware/vehicle/docs/development_roadmap.md` — **開発ロードマップ・SIL→実機ワークフロー（必読）** — 3原則（Code/Param/Model Identity）、ACROレート制御を起点とする層別プラント同定戦略、Phase 0〜6 の合格基準
+5. `firmware/vehicle/docs/development_roadmap.md` — **開発ロードマップ・SILS→実機ワークフロー（必読）** — 3原則（Code/Param/Model Identity）、ACROレート制御を起点とする層別プラント同定戦略、Phase 0〜6 の合格基準
 6. `firmware/vehicle/docs/hardware_init.md` — **BSP・ハードウェア初期化設計** — sf_board 責務、起動シーケンス、Critical/Optional/Recoverable 分類、HAL 接続規約、namespace 規約（sf::api / sf::internal）
 
 **特に重要な原則:**
@@ -438,10 +438,10 @@ stampfly-ecosystem/
 - **マジックナンバー禁止** — 全数値にconfig定数名またはパラメータ名
 - **@designタグ必須** — クラス・インターフェース・状態遷移に設計文書の参照と判定ステータス `[OK]`/`[NG]`/`[--]` を記載。リリース時は全て `[OK]` であること
 - **設計矛盾は即時報告** — 実装中に設計文書との矛盾・不都合を発見したら実装を止めて報告・議論する
-- **アーキテクチャ不変条件（INV）への照合を必須とする（場当たりパッチ再発防止, 2026-06-14）** — 制御則・状態機械・離着陸/飛行フェーズに関わる変更は、コミット前に `architecture.md` の「アーキテクチャ不変条件（INV）」節に照合すること。**新機能の追加・要件変更で、ある機能の前提が変わるときは、その前提を埋め込んでいる既存コンポーネントを必ず列挙し（リップル確認）、古い前提のまま並列経路・独自実装が残っていないか確認する。** 「最小変更で動かし SIL を通す」だけで満足しない（SIL が通っても INV 違反は退行）。機能追加時は常に**あるべき姿（INV準拠の統一構造）**で実装し、既存の局所形に引きずられて並列パッチを足さない。
+- **アーキテクチャ不変条件（INV）への照合を必須とする（場当たりパッチ再発防止, 2026-06-14）** — 制御則・状態機械・離着陸/飛行フェーズに関わる変更は、コミット前に `architecture.md` の「アーキテクチャ不変条件（INV）」節に照合すること。**新機能の追加・要件変更で、ある機能の前提が変わるときは、その前提を埋め込んでいる既存コンポーネントを必ず列挙し（リップル確認）、古い前提のまま並列経路・独自実装が残っていないか確認する。** 「最小変更で動かし SILS を通す」だけで満足しない（SILS が通っても INV 違反は退行）。機能追加時は常に**あるべき姿（INV準拠の統一構造）**で実装し、既存の局所形に引きずられて並列パッチを足さない。
 - Exampleは**単独ビルド可能**、**コメントは本体より多くてもいい**
 
-`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SIL回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sil scenario --target vehicle_old`）。
+`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SILS回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sils scenario --target vehicle_old`）。
 
 ## Build System
 
@@ -484,4 +484,4 @@ When developing this codebase, follow this order:
 ## Reference
 
 All architectural decisions are documented in `PROJECT_PLAN.md`. Consult this document before making structural changes.
-シミュレーション方針（3層構造・Model Fidelity 期の SIL 忠実度目標・改修バックログ）は `docs/architecture/simulation-policy.md` を正とする。
+シミュレーション方針（3層構造・Model Fidelity 期の SILS 忠実度目標・改修バックログ）は `docs/architecture/simulation-policy.md` を正とする。

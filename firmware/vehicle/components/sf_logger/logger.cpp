@@ -259,9 +259,9 @@ void Logger::writeBlackbox()
 {
     // Lazy-open: if no session file is open yet, start one. If the open already
     // failed this session, do NOT retry every cycle — that would spam the log at
-    // the logging rate when SPIFFS is unavailable (e.g. no partition, or host SIL).
+    // the logging rate when SPIFFS is unavailable (e.g. no partition, or host SILS).
     // 遅延 open: セッション未開始ならここで開く。今セッションで既に失敗していれば
-    // 毎周期は再試行しない — SPIFFS が無い (パーティション無し / ホスト SIL) とき
+    // 毎周期は再試行しない — SPIFFS が無い (パーティション無し / ホスト SILS) とき
     // ロギングレートでログが氾濫するため。
     if (g_log_fp == nullptr) {
         if (blackbox_failed_) {
