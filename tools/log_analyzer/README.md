@@ -111,7 +111,7 @@ sf log viz log.csv --no-eskf
 - Extended (400Hz ESKF+sensors): `timestamp_us`, `quat_w` 含む
 - FFT batch: `timestamp_ms`, `gyro_corrected_x` 含む
 - Normal WiFi: `timestamp_ms`, `roll_deg` 含む
-- SIL trajectory（`sf sil scenario` 出力）: `t`, `px`, `alt`, `roll`, `yawrate`, `yawcmd`, `alt_est`, `m0`-`m3` 含む
+- SILS trajectory（`sf sils scenario` 出力）: `t`, `px`, `alt`, `roll`, `yawrate`, `yawcmd`, `alt_est`, `m0`-`m3` 含む
 
 ## 典型的なワークフロー
 
@@ -157,7 +157,7 @@ sf log analyze --fft
 | `visualize_extended.py` | `sf log viz` | 拡張テレメトリ可視化 |
 | `visualize_telemetry.py` | `sf log viz` | WiFi CSV可視化 |
 | `visualize_eskf.py` | `sf log viz` | バイナリログ可視化 |
-| `visualize_sil_trajectory.py` | `sf log viz` | SIL trajectory.csv可視化 |
+| `visualize_sils_trajectory.py` | `sf log viz` | SILS trajectory.csv可視化 |
 | `visualize_attitude_3d.py` | - | 姿勢3Dアニメーション |
 | `visualize_pose_3d.py` | - | 位置+姿勢3Dアニメーション |
 

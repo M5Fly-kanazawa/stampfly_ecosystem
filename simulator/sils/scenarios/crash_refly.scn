@@ -1,0 +1,54 @@
+# crash_refly.scn — crash → auto-DISARM → physical handling → re-calibrate → re-fly
+#                    墜落 → 自動DISARM → 物理ハンドリング → 再校正 → 再飛行 (vehicle, Phase 8)
+#
+# Phase-8 ★robust re-flight capstone. The whole re-fly readiness chain in one run:
+#   1. take off, hover in ALTITUDE_HOLD.
+#   2. CRASH: one motor degrades (asymmetric torque tips the craft) WHILE a strong
+#      downward wind slams it into the ground → the impact failsafe fires (>3 G, ×2) and
+#      auto-DISARMs (FLYING → IDLE_GROUND, full ESKF reset, flight mode → STABILIZE).
+#   3. the hand PHYSICALLY HANDLES it: lift → right (level the tipped craft) → carry →
+#      place back on the ground (Plant kinematic trajectory, ToF rises → IDLE_HELD,
+#      placement → IDLE_GROUND → re-calibration starts).
+#   4. on the ground it RE-CALIBRATES (gyro/accel bias); ARM is gated until it completes.
+#   5. RE-ARM → RE-TAKEOFF → hover recovery in ALTITUDE_HOLD → land/DISARM.
+#
+# Phase-8 ★ロバスト再飛行キャップストーン。再飛行 readiness の全鎖を1走行で:
+#   1. 離陸し ALT_HOLD でホバー。
+#   2. 墜落: 1モータ劣化（非対称トルクで機体が傾く）＋強い下向き風で地面に叩きつけ → 衝撃
+#      フェイルセーフ発火（>3G×2）で自動DISARM（FLYING→IDLE_GROUND、ESKF全リセット、
+#      モード→STABILIZE）。
+#   3. 手で物理ハンドリング: 持上げ→正立（傾いた機体を水平へ）→運搬→地面に設置（Plant
+#      キネマティック軌道、ToF 上昇→IDLE_HELD、設置→IDLE_GROUND→再校正開始）。
+#   4. 地上で再校正（gyro/accel バイアス）。完了まで ARM はゲートで拒否。
+#   5. 再ARM→再離陸→ALT_HOLD でホバー回復→着陸/DISARM。
+#
+# Longer than the 25 s default — run with --duration 33000000 (33 s).
+# 既定 25s より長い — --duration 33000000（33s）で実行する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/crash_refly.scn --target vehicle --duration 33000000
+#
+#  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration
+   +    rc     2048  2048   2048    2048  1     1000      50              # B: ARM (rising edge)
+   +    rc     3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc     2048  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s (clean baseline)
+#  --- CRASH: asymmetric motor fault (tips the craft) + downward wind slams it down ---
+#  --- 墜落: 非対称モータ故障（機体を傾ける）＋下向き風で叩きつけ ---
+   +    fault  0     0.30                                                 # E: motor 0 (M1 FR) → 30% — roll/pitch torque tips it
+   +    wind   0.0   0.0     2.0                                          # F: 2 N downward shove (NED +z down) — overpowers thrust
+   +    rc     2048  2048   2048    2048  1     2000      50        1     # G: armed slam 2 s → impact (>3 G ×2) → auto-DISARM
+#  --- Clear the disturbances, settle on the ground (disarmed), then handle ---
+#  --- 外乱を解除し地上で静止（disarmed）、その後ハンドリング ---
+   +    wind   0.0   0.0     0.0                                          # H: wind off
+   +    fault  0     1.00                                                 # I: motor restored (healthy for the re-fly)
+   +    rc     2048  2048   2048    2048  0     2500      50              # J: disarmed settle 2.5 s (clean falling edge)
+   +    handle 0.40  0.0     0.0     1200  1200  1200                     # K: lift → right → carry to origin → place (3.6 s)
+   +    rc     2048  2048   2048    2048  0     8000      50              # L: disarmed 8 s — handle 3.6 s + re-calibration (~3.5 s) + margin
+#  --- RE-FLY: re-ARM, re-takeoff, hover recovery ---
+#  --- 再飛行: 再ARM・再離陸・ホバー回復 ---
+   +    rc     2048  2048   2048    2048  1     1000      50              # M: RE-ARM (rising edge — gated until re-calibration done)
+   +    rc     3473  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, 同上)
+   +    rc     2048  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

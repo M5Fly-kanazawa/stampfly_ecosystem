@@ -931,9 +931,9 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     trim_accel_lpf_[1] += alpha * (ay_body - trim_accel_lpf_[1]);
 
     // Integrate the smoothed drift into the trim with time constant kTrimLearnTau.
-    // Signs match sf trim analyze (SIL-verified): forward drift -> +pitch (nose up
+    // Signs match sf trim analyze (SILS-verified): forward drift -> +pitch (nose up
     // brakes it), right drift -> -roll. First-order: trim -> equilibrium as 1/tau.
-    // 平滑ドリフトを時定数 kTrimLearnTau でトリムに積分。符号は sf trim analyze（SIL
+    // 平滑ドリフトを時定数 kTrimLearnTau でトリムに積分。符号は sf trim analyze（SILS
     // 検証済み）と一致: 前方ドリフト -> +pitch（機首上げで制動）、右 -> -roll。1次系。
     const float k = dt / kTrimLearnTau;
     pitch_trim_ += k * (trim_accel_lpf_[0] / gravity_);
@@ -1159,13 +1159,13 @@ float PidController::computeDobCorrection(const StateEstimate& state, float dt)
     // state — the DOB engages from equilibrium with no artificial step. The
     // residual carries a standing DC (thrust-calibration deficit k_T≈0.95,
     // README §2) AND Airborne entry usually lands mid-transient; see the
-    // "engage conditioning" doc in pid_controller.hpp (SIL-measured collapse
+    // "engage conditioning" doc in pid_controller.hpp (SILS-measured collapse
     // with an instantaneous-sample prime, 2026-07-18).
     // 第1段 — プライム: 最初の kDobPrimeCycles で残差を平均（この間 d_hat=0）し、
     // その平均の定常状態へ Q・ウォッシュアウトをプリセット — 人工ステップなしの
     // 平衡からエンゲージ。残差には定在DC（推力較正欠損 k_T≈0.95、README §2）が
     // あり、さらに Airborne 進入はたいてい過渡の最中に起きる。瞬時値プライムでの
-    // SIL実測墜落（2026-07-18）含め pid_controller.hpp「エンゲージ整形」解説参照。
+    // SILS実測墜落（2026-07-18）含め pid_controller.hpp「エンゲージ整形」解説参照。
     if (dob_prime_count_ < kDobPrimeCycles) {
         dob_prime_accum_ += residual;
         ++dob_prime_count_;

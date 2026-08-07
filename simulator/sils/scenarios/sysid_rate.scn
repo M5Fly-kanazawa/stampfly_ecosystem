@@ -1,0 +1,26 @@
+# sysid_rate.scn — in-flight rate-loop identification excitation via the API
+#                  API 経由の飛行中レートループ同定励振
+#
+# Chain: API takeoff (POS_HOLD hover) → "sysid roll chirp 25 4" adds a ±25 dps
+# log-chirp (1→25 Hz) to the ROLL rate setpoint for 4 s while the hover loops
+# keep station → excitation ends cleanly → land. Verifies: the excitation
+# actually moves the craft (the rate loop tracks it), the flight stays BOUNDED
+# (outer loops unharmed), and the Data Stream rate_ref/gyro pair (logged at
+# 400 Hz) is what `sf sysid rate-fit` consumes on hardware.
+# 連鎖: API 離陸（POS_HOLD ホバー）→ "sysid roll chirp 25 4" がロールのレート目標に
+# ±25 dps の対数チャープ（1→25 Hz）を 4 秒加算、ホバーループは定点維持 → 励振終了 →
+# 着陸。検証: 励振が実際に機体を動かし（レートループが追従）、飛行は「有界」
+# （外側ループ無傷）。実機では Data Stream の rate_ref/gyro 対（400Hz）を
+# `sf sysid rate-fit` が消費する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_rate.scn --target vehicle --duration 32000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration
+   +    api  "command"                                                           # B: SDK mode
+   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff → 0.8 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC during takeoff+hover (t=6-18)
+   +    api  "sysid roll chirp 25 4"                                            # E: roll chirp excitation (t=18-22)
+   +    rc   2048  2048   2048    2048  0     6000      50                       # F: neutral RC through the chirp + settle
+   +    api  "land"                                                              # G: land (t=24)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # H: neutral RC through touchdown

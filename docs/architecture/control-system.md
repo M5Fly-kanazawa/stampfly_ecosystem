@@ -1058,7 +1058,7 @@ $$
 | ホバリング角速度 | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | ホバリング電圧 | $V_0$ | 2.1 | V | 実測 |
 
-> **注記（2026-08-03更新）:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸）を使った参考計算をそのまま据え置いている。2026-08-03のCt撤回・再改定により、この $C_t$=1.00×10⁻⁸ は歴史的な旧値であるだけでなく現在のSSOT採用値（暫定・ベンチでのV-ω-T同時計測待ち）そのものであり、firmware/SILの`Ct`実装値とも一致する。ただし表中の $T_0$・$\omega_{m0}$ の数値自体は旧質量 $m$=0.035kg での計算のままであり、上記「機体パラメータ」表の現在値 $m$=0.037kg とは一致しない——この旧Ct計算例に限り質量も歴史的な参考値として残している。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
+> **注記（2026-08-03更新）:** 上表は旧モータ曲線（$C_t$=1.00×10⁻⁸）を使った参考計算をそのまま据え置いている。2026-08-03のCt撤回・再改定により、この $C_t$=1.00×10⁻⁸ は歴史的な旧値であるだけでなく現在のSSOT採用値（暫定・ベンチでのV-ω-T同時計測待ち）そのものであり、firmware/SILSの`Ct`実装値とも一致する。ただし表中の $T_0$・$\omega_{m0}$ の数値自体は旧質量 $m$=0.035kg での計算のままであり、上記「機体パラメータ」表の現在値 $m$=0.037kg とは一致しない——この旧Ct計算例に限り質量も歴史的な参考値として残している。以降の数値計算例（伝達関数・ミキサーゲイン導出）も上表の旧モータ曲線基準で統一する。
 
 ### 数値計算例
 
@@ -1102,7 +1102,7 @@ $$
 
 #### 参考：ミキサーゲインの導出
 
-制御割り当て（ミキサー）の設計に必要なパラメータを参考として記載する。以下は「ホバリング条件」の旧モータ曲線（$C_t$=1.00×10⁻⁸、$\omega_{m0}$=2930 rad/s）を用いた計算例——firmware/SILの現在の実装と一致させるため据え置いている（物理実測値は§冒頭の注記を参照）。
+制御割り当て（ミキサー）の設計に必要なパラメータを参考として記載する。以下は「ホバリング条件」の旧モータ曲線（$C_t$=1.00×10⁻⁸、$\omega_{m0}$=2930 rad/s）を用いた計算例——firmware/SILSの現在の実装と一致させるため据え置いている（物理実測値は§冒頭の注記を参照）。
 
 電圧-回転数特性 $V = A_m \omega^2 + B_m \omega + C_m$ をホバリング点で線形化：
 
@@ -1621,7 +1621,7 @@ Kd = Kp × Td
 
 > **注記:** duty変換は `duty = V/Vbat` で行い、Vbatは`sensor_power`から得る実電圧（起動直後や異常値のときのみ上記の公称値3.7Vにフォールバック）。旧設計にあった巻線抵抗Rm・逆起電力定数Km・粘性摩擦Dm・静止摩擦Qf・回転子慣性Jmを介した電気回路モデルは、現行の `sf_actuator` では使用しない（V-ω特性 Am/Bm/Cm を直接使う簡略モデルに一本化）。本セクション（8章）の理論式に出てくるRm=0.5Ω、Jm=1.0×10⁻⁷等はシミュレータ初期値の理論値であり、上記の実装値とは別物。
 >
-> **κ・Ctの状態（2026-08-03改定）:** κは2026-07-17に実測値へ更新（`actuator.cpp` の `KAPPA`。旧値9.71×10⁻³は1.59倍過大でヨートルクを過小駆動していた）後、2026-08-03のCt撤回に伴い4.10×10⁻³へ再改定した。Ctは2026-07-15のthrust stand実測値が撤回され、暫定採用値1.00×10⁻⁸（ベンチでのV-ω-T同時計測待ち）に統一されている。`actuator.cpp` の `MOTOR_CT` はこの暫定採用値と数値一致しており、ファームウェアとSILプラント（`plant.hpp`）の間で乖離はない——上表のCt=1.00×10⁻⁸は現時点の実装・SSOT採用値の双方を正しく反映した値である。
+> **κ・Ctの状態（2026-08-03改定）:** κは2026-07-17に実測値へ更新（`actuator.cpp` の `KAPPA`。旧値9.71×10⁻³は1.59倍過大でヨートルクを過小駆動していた）後、2026-08-03のCt撤回に伴い4.10×10⁻³へ再改定した。Ctは2026-07-15のthrust stand実測値が撤回され、暫定採用値1.00×10⁻⁸（ベンチでのV-ω-T同時計測待ち）に統一されている。`actuator.cpp` の `MOTOR_CT` はこの暫定採用値と数値一致しており、ファームウェアとSILSプラント（`plant.hpp`）の間で乖離はない——上表のCt=1.00×10⁻⁸は現時点の実装・SSOT採用値の双方を正しく反映した値である。
 
 ---
 
@@ -2418,7 +2418,7 @@ The following parameters are numerical examples for this section, based on `docs
 | Hover angular velocity | $\omega_{m0}$ | 2930 | rad/s | $\sqrt{T_0/C_t}$ |
 | Hover voltage | $V_0$ | 2.1 | V | Measured |
 
-> **Note (updated 2026-08-03):** The table above deliberately keeps the legacy worked example ($C_t$=1.00×10⁻⁸) as-is. Following the 2026-08-03 Ct retraction and revision, this $C_t$=1.00×10⁻⁸ is not just a historical value — it is also the current SSOT adopted value (provisional), matching the firmware/SIL `Ct` implementation. However, the $T_0$/$\omega_{m0}$ figures themselves are still computed with the old mass $m$=0.035 kg, which no longer matches the current value $m$=0.037 kg in the "Vehicle Parameters" table above — this legacy-Ct worked example alone keeps the old mass as a historical reference. The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
+> **Note (updated 2026-08-03):** The table above deliberately keeps the legacy worked example ($C_t$=1.00×10⁻⁸) as-is. Following the 2026-08-03 Ct retraction and revision, this $C_t$=1.00×10⁻⁸ is not just a historical value — it is also the current SSOT adopted value (provisional), matching the firmware/SILS `Ct` implementation. However, the $T_0$/$\omega_{m0}$ figures themselves are still computed with the old mass $m$=0.035 kg, which no longer matches the current value $m$=0.037 kg in the "Vehicle Parameters" table above — this legacy-Ct worked example alone keeps the old mass as a historical reference. The numerical examples that follow (transfer functions, mixer-gain derivation) are likewise kept on the legacy-motor-curve basis.
 
 ### Numerical Example
 
@@ -2462,7 +2462,7 @@ $$
 
 #### Reference: Mixer Gain Derivation
 
-Parameters needed for control allocation (mixer) design are provided as reference. The numbers below use the "Hover Conditions" legacy motor curve ($C_t$=1.00×10⁻⁸, $\omega_{m0}$=2930 rad/s) — kept as-is to match the current firmware/SIL implementation (see the section-top note for the measured physical values).
+Parameters needed for control allocation (mixer) design are provided as reference. The numbers below use the "Hover Conditions" legacy motor curve ($C_t$=1.00×10⁻⁸, $\omega_{m0}$=2930 rad/s) — kept as-is to match the current firmware/SILS implementation (see the section-top note for the measured physical values).
 
 Linearize the voltage-speed relationship $V = A_m \omega^2 + B_m \omega + C_m$ at hover:
 
@@ -2980,4 +2980,4 @@ Constants inside `sf_actuator/actuator.cpp` (mixer + thrust-to-duty conversion):
 
 > **Note:** Duty is computed as `duty = V/Vbat`, where Vbat is the LIVE voltage from `sensor_power` (falling back to the 3.7V nominal only during boot or on an implausible reading). The earlier design's electrical-circuit model (winding resistance Rm, back-EMF constant Km, viscous friction Dm, static friction Qf, rotor inertia Jm) is not used by the current `sf_actuator` — it is unified into the simpler V-ω curve (Am/Bm/Cm) used directly. The Rm=0.5Ω, Jm=1.0×10⁻⁷, etc. appearing in Section 8's theoretical derivation are simulator initial/theoretical values, distinct from the implementation values above.
 >
-> **κ / Ct status (revised 2026-08-03):** κ was first updated on 2026-07-17 (`actuator.cpp`'s `KAPPA`; the former 9.71×10⁻³ was 1.59x too high and under-drove yaw torque), then revised again to 4.10×10⁻³ on 2026-08-03 following the Ct retraction. Ct's 2026-07-15 thrust-stand measurement was retracted for lacking a valid simultaneous voltage/RPM/thrust measurement on the new propeller; the SSOT now carries Ct=1.00×10⁻⁸ as a provisional adopted value pending a bench co-measurement. `actuator.cpp`'s `MOTOR_CT` numerically matches this provisional value, so the firmware and SIL plant (`plant.hpp`) agree — the Ct=1.00×10⁻⁸ shown above accurately reflects both the current implementation and the current SSOT value.
+> **κ / Ct status (revised 2026-08-03):** κ was first updated on 2026-07-17 (`actuator.cpp`'s `KAPPA`; the former 9.71×10⁻³ was 1.59x too high and under-drove yaw torque), then revised again to 4.10×10⁻³ on 2026-08-03 following the Ct retraction. Ct's 2026-07-15 thrust-stand measurement was retracted for lacking a valid simultaneous voltage/RPM/thrust measurement on the new propeller; the SSOT now carries Ct=1.00×10⁻⁸ as a provisional adopted value pending a bench co-measurement. `actuator.cpp`'s `MOTOR_CT` numerically matches this provisional value, so the firmware and SILS plant (`plant.hpp`) agree — the Ct=1.00×10⁻⁸ shown above accurately reflects both the current implementation and the current SSOT value.

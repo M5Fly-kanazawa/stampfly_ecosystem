@@ -22,7 +22,7 @@ _KM_VALUE = 0.0005682   # V/(rad/s) -- back-EMF constant
 _KAPPA_VALUE = 0.0041   # m -- kappa = Cq/Ct, full precision (derived)
 
 # Rounded/adopted kappa (3 sig figs), hand-written into firmware's B^-1
-# mixer (actuator.cpp KAPPA) and simulator/sil/plant Config::kappa on
+# mixer (actuator.cpp KAPPA) and simulator/sils/plant Config::kappa on
 # 2026-07-17. Differs from _KAPPA_VALUE (full precision) by ~1e-4 relative --
 # both are kept (see control/models/stampfly_physical.yaml kappa_adopted note)
 # to avoid changing that existing rounding (behavior neutrality).

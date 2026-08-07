@@ -246,7 +246,7 @@ def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
     #   - active piloting that holds position: euler ~= equilibrium, drift ~= 0
     #     -> trim = mean(euler)  (the pilot's average correction IS the trim)
     # Signs: roll a_y=+g*phi -> roll_trim = mean_roll - a_y/g; pitch a_x=-g*theta
-    # -> pitch_trim = mean_pitch + a_x/g. (Accel term verified on the SIL wind
+    # -> pitch_trim = mean_pitch + a_x/g. (Accel term verified on the SILS wind
     # bench attitude_trim_test.scn: trim>0 cuts downwind drift ~87%.)
     # 平衡トリム（手放しでも、操縦中でも成立）。ビタホバさせるトリム = スティック中立で
     # 機体が保つべき姿勢。よって trim =（機体が保った平均姿勢）−（残留ドリフト加速度）/g。
@@ -349,6 +349,6 @@ def _print_report(r: dict) -> None:
     console.print("      TRYING to hold position - do not deliberately translate or turn.")
     console.print("    - Assumes NO WIND (indoor). Wind adds to the drift; if unsure,")
     console.print("      apply HALF the delta first and re-test.")
-    console.print("    - Sign verified on the SIL wind bench (attitude_trim_test.scn).")
+    console.print("    - Sign verified on the SILS wind bench (attitude_trim_test.scn).")
     console.print("=" * 66)
     console.print()

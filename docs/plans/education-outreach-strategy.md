@@ -21,7 +21,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | # | 結論 |
 |---|------|
 | 1 | **市場に空白がある。** DJIがTello/Tello EDU/RoboMaster TT教育事業を2023年末に終了し、2026年時点で公式後継はない。教育用ドローン市場の最大手が消えた空白を、CoDrone EDU（クローズド・小中高止まり）とHula-JP（カリキュラム薄い）が埋めつつある段階。 |
-| 2 | **StampFly Ecosystemの構造的な独自性は「学年を超えて成長できる唯一の白箱」。** 小学生（micro:bit）から研究者（ESKF・システム同定・SIL）まで、同一機体・同一リポジトリ・4階層API（L0〜L3）で連続的に登れるプラットフォームは調査した限り世界に存在しない。 |
+| 2 | **StampFly Ecosystemの構造的な独自性は「学年を超えて成長できる唯一の白箱」。** 小学生（micro:bit）から研究者（ESKF・システム同定・SILS）まで、同一機体・同一リポジトリ・4階層API（L0〜L3）で連続的に登れるプラットフォームは調査した限り世界に存在しない。 |
 | 3 | **最大の課題は供給側（教材の質）ではなく需要側（採用のしやすさ）。** 学校導入向け機体比較記事にStampFlyは候補として載っていない。ESP-IDFビルド必須・教員向け完成パッケージ不在・クラスセット調達導線不在・安全/保険の制度整備不在が導入を阻んでいる。 |
 | 4 | **橋頭堡（ビーチヘッド）は高専・大学学部。** 意思決定者は教員個人で、国立大学の目安では30〜50万円未満なら教員裁量で即決できる。1万円強のStampFlyは10台クラスセットでも裁量枠に収まる。教材も9割完成しており、最小の追加投資で最大の成果が出る層。 |
 | 5 | **小中高はパートナーモデルで臨む（Horizon 2）。** 非情報系教員にリポジトリとAI対話を渡すモデルは成立しない。StampFly Edu（micro:bit + MakeCode）の製品化と、指導案・出前授業・教員研修を担うパートナー網が前提条件。 |
@@ -70,11 +70,11 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | ワークショップ（`docs/workshop/`） | 4+1日間・12〜13レッスン（環境構築→モータ制御→P制御→システム同定→PID→姿勢推定→Python SDK）+ Day5競技会。Beamerスライド+TikZ図25点+講師ガイド+競技ルール+アンケート設計（21問） | ◎（アンケートは未実施） | 高専・大学 |
 | 大学15回カリキュラム（`docs/university/` + `analysis/notebooks/education/`） | 半期15回（90分）シラバス+評価ルーブリック+**Jupyterノートブック01〜15は実装済み**（理論→シミュレーション予習→同梱サンプルデータ解析→実機実験（任意）の4段構成。実機なしでも各回の大半が完結） | ◎（ただしシラバスからノートブックへのリンクがなく「在るのに見えない」） | 学部3〜4年 |
 | Examples（`examples/education/`） | Python実装例8本（hello_flight〜waypoint_mission・Allan分散）。全例が `connect_or_simulate()` 経由のため**実機なしでもそのまま動く**（接続失敗時は純Pythonシミュレータへ自動フォールバック） | ◎ | 入門〜中級 |
-| 無機体学習環境 | `sf sil gui`（ブラウザでシナリオ作成・パラメータ54個編集・3Dリプレイ・合否ゲート表示、依存ゼロ）+ SILシナリオ39本 + VPythonシミュレータ + 同梱サンプルデータ5本（`analysis/datasets/education/`）+ 実機ログ150本以上（`logs/`） | ◎（購入前に体験できる導線として未宣伝） | 全層 |
+| 無機体学習環境 | `sf sils gui`（ブラウザでシナリオ作成・パラメータ54個編集・3Dリプレイ・合否ゲート表示、依存ゼロ）+ SILSシナリオ39本 + VPythonシミュレータ + 同梱サンプルデータ5本（`analysis/datasets/education/`）+ 実機ログ150本以上（`logs/`） | ◎（購入前に体験できる導線として未宣伝） | 全層 |
 | ガイド（`docs/guides/`） | 安全・用語集・トラブルシューティング等6本、日英併記 | ◎ | 全層 |
 | 4階層API | L0 `ws::*`（2関数で完結）→ L1 `sf::api`（制御則・推定器の差し替え）→ L2 HALラッパー（組込み学習）→ L3 `sf::internal`（ファーム実装） | ◎（設計思想として文書化済み） | 小中高〜実装者 |
-| SIL + Code Identity | 実機と同一ソースを参照コンパイルするシミュレータ。SILでPIDチューニング→実機書き込みが同一パラメータで通る | ◎ | 学部〜研究者 |
-| Tello SDK互換API | djitellopy（Tello用Pythonライブラリ）が無改変で動く互換層。UDP:8889/8890は実機ファームのみが開くため**実機専用の入口**（SILは文字列注入方式で検証） | ○（SIL検証済・実機未検証） | 中高〜Python入門層 |
+| SILS + Code Identity | 実機と同一ソースを参照コンパイルするシミュレータ。SILSでPIDチューニング→実機書き込みが同一パラメータで通る | ◎ | 学部〜研究者 |
+| Tello SDK互換API | djitellopy（Tello用Pythonライブラリ）が無改変で動く互換層。UDP:8889/8890は実機ファームのみが開くため**実機専用の入口**（SILSは文字列注入方式で検証） | ○（SILS検証済・実機未検証） | 中高〜Python入門層 |
 | コード＝教材の規約 | 1関数50行以内・バイリンガルコメント・マジックナンバー禁止・@designタグ（設計文書への参照+判定） | ◎ | 全層 |
 
 #### 実績資産（信用と接点）
@@ -150,7 +150,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | 柱 | 内容 | 対抗軸 |
 |----|------|--------|
 | **白箱（ホワイトボックス）** | PID・ESKF・プロトコル・ミキサーまで全ソースが読める（MIT）。「ブラックボックスのAPIを呼ぶ」ではなく「中身を理解し差し替える」教育ができる | CoDrone EDU（クローズド）・Hula-JP |
-| **梯子（ラダー）** | micro:bit/MakeCode（小中）→ Python/Tello SDK互換（中高）→ C++/4階層API（高専・学部）→ ESKF・システム同定・SIL（院・研究）。買い替え不要・環境乗り換え最小 | CoDrone（上で頭打ち）・Crazyflie（下に降りない） |
+| **梯子（ラダー）** | micro:bit/MakeCode（小中）→ Python/Tello SDK互換（中高）→ C++/4階層API（高専・学部）→ ESKF・システム同定・SILS（院・研究）。買い替え不要・環境乗り換え最小 | CoDrone（上で頭打ち）・Crazyflie（下に降りない） |
 | **軽さ** | 約37g・100g未満で航空法の登録/許可不要、屋内授業がそのまま成立。価格は競合の1/5（$49.95） | 産業機ベースの教育全般 |
 
 補助メッセージ（上位層向け）：**AIと作る自分専用カリキュラム**（JUIDA理事長賞受賞ビジョン）。リポジトリ全体が設計文書・要件・実装・シミュレータまで一貫して機械可読なため、AIに文脈を与えて自分の授業・研究に合わせた教材を生成できる。ただしこれは高専・大学教員・社会人など「自分でカリキュラムを設計する自由と能力がある層」への訴求であり、**K-12教員には完成品パッケージで臨む**（AI自作を求めるのは負荷の転嫁になる）。
@@ -162,7 +162,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | 小中 | StampFly Edu（micro:bit + MakeCode）——**ブラウザ完結必須**（端末はChromeOS 60%+iPad 31%、§2.7） | プロトタイプ→**製品化・指導案・出前授業・保険/安全パック**。将来はブラウザ・コックピット（H2-7） | FAP factory等パートナー・金沢モデル横展開・校長直接ルート | Horizon 2 |
 | 高校（工業・SSH・探究） | Python（Tello SDK互換）+ 完成ファーム——**Windows優勢+BYODのためインストール型が通る**（§2.7） | 西脇工業の実績→**探究テーマ集・教員向け半日研修** | 工業高校ネットワーク・SSH課題研究・村田財団等の助成枠 | Horizon 1後半〜2 |
 | **高専・大学学部（橋頭堡）** | ワークショップ+15回カリキュラム | 教材9割完成→**ノートブック完成・クラスセット導線・導入事例パック** | 学会（SICE等）・教員個人裁量予算・高専機構口座（開設済） | **Horizon 1** |
-| 大学院・研究者 | SIL・システム同定・ESKF・ソース全体 | 完成→**英語論文・比較ベンチマーク公開** | 国際会議・研究室間の口コミ（Crazyflie型） | Horizon 1〜2 |
+| 大学院・研究者 | SILS・システム同定・ESKF・ソース全体 | 完成→**英語論文・比較ベンチマーク公開** | 国際会議・研究室間の口コミ（Crazyflie型） | Horizon 1〜2 |
 | 社会人・ホビイスト | 完成ファーム+ハンズオン+書籍 | ブログ/連載→**書籍化・M5Burner配布・定例ハンズオン** | M5Stackコミュニティ・connpass・技術書店/CQ系 | Horizon 1 |
 
 ### 3.3 橋頭堡の論理
@@ -197,7 +197,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 |---|------|------|-------------|
 | P0-1 | **ビルド不要化** | GitHub Releasesでvehicle/controllerのビルド済みバイナリ配布+ブラウザ書き込み（ESP Web Tools等のWebSerial方式）+M5Burner登録。「箱を開けて15分で飛ぶ」を実現し、所要時間をドキュメントに明記。WebSerialはChromebookでも動くが教委ポリシーで要許可設定（手引きに記載）、**iPadでは不可**のため書き込み済み機体の配布運用も用意（§2.7） | 欠落1 |
 | P0-2 | **オンライン可視化** | mkdocsサイトの公開（PagesはlandingのみのためlandingとPagesアーティファクトを統合し `/docs/` 配下に併載するのが最短）・公開済みlanding（2026-06-07〜）へのREADME/SNS/検索導線の整備・トップに「あなたはどの階層？」入口ルータ（小中/高校/高専大学/研究/ホビー別の最短経路） | 欠落6 |
-| P0-3 | **既存教材の接続と動作保証** | ノートブック01〜15は実装済み——残作業は (a) シラバス⇔ノートブックのリンク接続、(b) 古い「計画中」READMEの現状化、(c) 無機体経路の動作保証（`sf sim run` のコントローラ無し起動バグは2026-07-08修正済み。`sf sil gui`・全ノートブックの通し確認）、(d) 「機体を買う前にブラウザで試す」導線の明文化 | 欠落6・橋頭堡の弾薬 |
+| P0-3 | **既存教材の接続と動作保証** | ノートブック01〜15は実装済み——残作業は (a) シラバス⇔ノートブックのリンク接続、(b) 古い「計画中」READMEの現状化、(c) 無機体経路の動作保証（`sf sim run` のコントローラ無し起動バグは2026-07-08修正済み。`sf sils gui`・全ノートブックの通し確認）、(d) 「機体を買う前にブラウザで試す」導線の明文化 | 欠落6・橋頭堡の弾薬 |
 | P0-4 | **クラスセット調達導線** | 「教育機関向け導入ページ」：10台/20台構成例・見積もりテンプレート・スイッチサイエンスB2B窓口への導線・教員裁量予算に収まる価格表 | 欠落3 |
 | P0-5 | **安全・運用パック** | 保険の考え方（任意・施設側要求例）・施設許可申請書式（前橋市/足立区の様式を参考に雛形化）・責任分担の整理・教員向け安全チェックリスト。国の統一基準が不在の今、**デファクトを先取り** | 欠落4 |
 
@@ -331,7 +331,7 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 | # | Conclusion |
 |---|-----------|
 | 1 | **There is a market vacuum.** DJI discontinued its education line (Tello / Tello EDU / RoboMaster TT) at the end of 2023 with no official successor as of 2026. |
-| 2 | **StampFly Ecosystem's structural uniqueness is being "the only white-box platform students never outgrow."** No other platform spans elementary school (micro:bit) to research (ESKF, system identification, SIL) on one airframe, one repository, and a 4-tier API. |
+| 2 | **StampFly Ecosystem's structural uniqueness is being "the only white-box platform students never outgrow."** No other platform spans elementary school (micro:bit) to research (ESKF, system identification, SILS) on one airframe, one repository, and a 4-tier API. |
 | 3 | **The biggest problem is demand-side (ease of adoption), not supply-side (material quality).** StampFly does not even appear in the 2026 school-adoption drone comparison articles; ESP-IDF build requirement, missing teacher packages, missing procurement paths, and missing safety/insurance guidance block adoption. |
 | 4 | **The beachhead is KOSEN and undergraduate programs.** Adoption there is decided by individual instructors within discretionary budgets (roughly under 300–500k JPY at national universities); a 10-unit StampFly class set (~120k JPY) fits easily, and the materials for this tier are ~90% complete. |
 | 5 | **K-12 requires a partner model (Horizon 2).** Handing a repository and an AI assistant to non-IT teachers does not work; productizing StampFly Edu (micro:bit + MakeCode) plus lesson plans, visiting lectures, and teacher training via partners is the precondition. |
@@ -342,7 +342,7 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 
 **Regulatory advantage:** Under Japan's amended Aviation Act (2022), sub-100g aircraft (StampFly ≈ 37g) are exempt from registration and flight permits; indoor flight is outside the Act entirely. Facility-level rules (flight plans, insurance confirmation, spotters) still apply and should be templated (see P0-5).
 
-**Internal assets:** a 4+1-day workshop (12–13 lessons, Beamer slides, competition rules, survey design), a 15-week university curriculum (notebooks 01–15 already implemented with bundled sample datasets — most sessions run hardware-free via a simulator fallback, but the syllabus does not link to them: assets exist yet are invisible), 8 Python examples, bilingual guides, the 4-tier API (L0 `ws::*` → L3 `sf::internal`), a Code-Identity SIL simulator with a browser GUI, and a Tello-SDK-compatible API (djitellopy runs unmodified; SIL-verified; hardware-only path). Track record: JUIDA Chairman's Award (2026-06), Kanazawa City "Digital Studies" classes, a technical-high-school training day, conference talks, magazine serials. Notably, the Workshop repo has 55 forks vs 5 stars — evidence that hands-on workshops are the strongest acquisition channel.
+**Internal assets:** a 4+1-day workshop (12–13 lessons, Beamer slides, competition rules, survey design), a 15-week university curriculum (notebooks 01–15 already implemented with bundled sample datasets — most sessions run hardware-free via a simulator fallback, but the syllabus does not link to them: assets exist yet are invisible), 8 Python examples, bilingual guides, the 4-tier API (L0 `ws::*` → L3 `sf::internal`), a Code-Identity SILS simulator with a browser GUI, and a Tello-SDK-compatible API (djitellopy runs unmodified; SILS-verified; hardware-only path). Track record: JUIDA Chairman's Award (2026-06), Kanazawa City "Digital Studies" classes, a technical-high-school training day, conference talks, magazine serials. Notably, the Workshop repo has 55 forks vs 5 stars — evidence that hands-on workshops are the strongest acquisition channel.
 
 **Demand-side gaps:** (1) firmware must be self-built (no prebuilt binaries/releases), (2) no teacher-ready packages (vs CoDrone's PD training, 5E lesson plans, visiting lectures), (3) no class-set procurement path (vs $3,999 12-packs, PO payment, RaaS), (4) no safety/insurance/facility-permission kit, (5) no English materials or papers (explicit English requests exist on forums), (6) near-zero visibility (absent from adoption comparison articles; docs site not deployed).
 
@@ -352,7 +352,7 @@ An outreach strategy for making StampFly Ecosystem penetrate the full educationa
 
 ## 3. Strategic Core
 
-**Positioning: "The platform students never outgrow."** Three pillars: **white-box** (all control/estimation source readable, MIT), **the ladder** (micro:bit → Python/Tello SDK → C++/4-tier API → ESKF/sysid/SIL on the same airframe), and **lightness** (sub-100g regulatory exemption, indoor classes, 1/5 the competitor price). The AI-personalized-curriculum vision (JUIDA award) targets tiers that design their own courses (KOSEN/university instructors, hobbyists); K-12 gets finished packages instead.
+**Positioning: "The platform students never outgrow."** Three pillars: **white-box** (all control/estimation source readable, MIT), **the ladder** (micro:bit → Python/Tello SDK → C++/4-tier API → ESKF/sysid/SILS on the same airframe), and **lightness** (sub-100g regulatory exemption, indoor classes, 1/5 the competitor price). The AI-personalized-curriculum vision (JUIDA award) targets tiers that design their own courses (KOSEN/university instructors, hobbyists); K-12 gets finished packages instead.
 
 **Beachhead: KOSEN + undergraduate.** Highest material completeness, fastest decision-making, strongest existing credibility, and a natural propagation point both downward (outreach classes) and upward (graduates become researchers/engineers).
 

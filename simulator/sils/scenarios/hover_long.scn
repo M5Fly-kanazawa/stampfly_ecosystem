@@ -1,0 +1,46 @@
+# hover_long.scn — LONG-duration airborne ALTITUDE_HOLD hover (legacy / emu_vehicle_old)
+# 長時間 空中 ALTITUDE_HOLD ホバー（旧ファーム / emu_vehicle_old）
+#
+# Same take-off as hover_alt.scn, but holds ALTITUDE_HOLD for 90 s to probe the
+# ESKF vertical channel's LONG-term stability (slow accel-bias drift, setpoint
+# creep, thrust trend). The physics is 4000 Hz locked to virtual time (cea0d8c)
+# and the Plant carries the 1/1.12 thrust efficiency (66752df). See
+# simulator/sils/scenarios/hover_alt.scn for the full per-token rationale and
+# simulator/sils/docs/plant_timebase_bug.md for the time-base fix.
+#
+# hover_alt.scn と同じ離陸の後、ALTITUDE_HOLD を 90 秒保持し、ESKF 鉛直チャネルの
+# 長時間安定（緩い accel-bias ドリフト・setpoint クリープ・推力トレンド）を調べる。
+# 物理は 4000Hz 仮想時間ロック、Plant は推力効率込み。詳細は hover_alt.scn を参照。
+#
+# Run: sf sils scenario simulator/sils/scenarios/hover_long.scn --duration 116000000
+# 解析: console.log の "ALT_HOLD: sp=.. alt=.. vz=.. thrust=.." が時間でどう変わるか
+#   （sp/alt が一定、vz≈0、thrust≈hover 0.407 N を 90 s 維持すれば鉛直は安定）。
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc   2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s — clear boot→IDLE (~9.5 s) before ARM edge
+   +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (now IDLE), throttle centre = T=0, 1 s
+   +    rc   3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m, 2.6 s
+   +    rc   2048  2048   2048    2048  1     90000     50        1     # D: ALT_HOLD captures ~0.62 m and HOLDS for 90 s (long-stability probe)
+   +    rc   1000  2048   2048    2048  1     7000      50        1     # E: descent stick (norm -0.51 → -0.14 m/s) → setpoint sinks to MIN 0.10 m, 7 s (gentle landing, no motor-cut free-fall)
+   +    rc   2048  2048   2048    2048  0     1000      50              # F: DISARM near the ground, motors cut 1 s
+#
+# Expectation (LONG hover): over the 90 s hold the firmware ESKF alt (console
+# "ALT_HOLD: alt=..") stays within a few cm of the captured setpoint with vz≈0 and
+# the commanded thrust stays near the hover feedforward 0.407 N — no slow climb,
+# no negative divergence, no monotonic thrust ramp. The truth alt (trajectory.csv
+# `alt`) likewise stays flat. A slow drift would expose a residual accel-bias /
+# observability issue that the 16 s hover_alt is too short to reveal.
+# 期待（長時間ホバー）: 90 s の保持で ESKF alt は capture 値の数 cm 以内、vz≈0、指令推力
+# は hover 0.407 N 近傍を維持（緩い上昇・負への発散・推力の単調増減が無い）。真値 alt も
+# 平坦。緩いドリフトがあれば 16 s では見えない残留バイアス/可観測性の問題を炙り出す。
+#
+# Landing note: the descent is controlled (sp clamps at MIN 0.10 m, vz≈-0.12 m/s),
+# but the firmware's impact detector trips on TOUCHDOWN ("IMPACT ... 3.7G → Auto
+# DISARM"). That ~3.7 G spike is a MuJoCo rigid box-on-plane CONTACT-STIFFNESS
+# artifact (the collision geom uses the default solref) — even a ~3 cm/s touchdown
+# decelerates sharply. It is NOT a control/hover defect; the 90 s hover above is the
+# actual probe and is clean. (Softening the ground contact is a separate model task.)
+# 着地注記: 降下は制御されている（sp は MIN 0.10 m でクランプ、vz≈-0.12 m/s）が、接地で
+# firmware の衝撃検出が発火（3.7G→Auto DISARM）。この約 3.7G スパイクは MuJoCo の剛体
+# ボックス対地面の接触剛性アーティファクト（衝突 geom は既定 solref）で、~3 cm/s の接地でも
+# 急減速する。制御/ホバーの欠陥ではない。90 s ホバーが本試験で、そちらはクリーン。

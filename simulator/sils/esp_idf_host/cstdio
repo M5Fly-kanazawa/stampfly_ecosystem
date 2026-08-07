@@ -1,0 +1,63 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kouhei Ito
+ * Part of StampFly Ecosystem (SILS host bench — ESP-IDF host platform).
+ */
+
+/**
+ * @file cstdio
+ * @brief Host shim for <cstdio> — makes stdout/stderr reassignable on
+ *        Windows, where they are not lvalues. Real POSIX hosts (Linux/
+ *        macOS) already have real stdout/stderr, so this file is a no-op
+ *        there (see the #ifdef _WIN32 guard below).
+ *        <cstdio> のホスト用シム — Windows で非左辺値の stdout/stderr を
+ *        再代入可能にする。実 POSIX ホストは元々左辺値なので何もしない。
+ *
+ * mingw-w64/MSVC define `stdout`/`stderr` as `(__acrt_iob_func(N))` — a
+ * function call, not an lvalue — so `stdout = x;` fails to compile. Real
+ * ESP-IDF (newlib) makes stdout a genuine per-task reassignable FILE*
+ * variable, which firmware/vehicle/tasks/cli_task.cpp's TCP-CLI-over-WiFi
+ * feature relies on: it swaps stdout to a socket FILE* for the session's
+ * duration so the UNMODIFIED printf() call sites in that function route
+ * their output to the TCP client. This header shadows stdout/stderr with
+ * real global variables (defined in win_stdio_shim.cpp) so that assignment
+ * compiles.
+ *
+ * Scope of the fix — compiles, does not fully replicate newlib's semantics:
+ * printf()/puts()/etc. are hard-wired by the CRT to the real console file
+ * descriptor and do NOT consult this variable at all, so the TCP CLI's
+ * redirect-by-reassignment stays cosmetic on this platform (the assignment
+ * itself is harmless — it only changes what `stdout` reads back as). This is
+ * an accepted limitation, not a functional regression for anything this SILS
+ * bench actually exercises: the socket layer it would redirect through
+ * (esp_idf_host/lwip/sockets.h) is an inert stub, so no real TCP client can
+ * ever reach serveTcpClient() here — this shim exists purely so the
+ * unmodified firmware file compiles. fprintf(stdout, ...)/fflush(stdout)
+ * elsewhere are UNAFFECTED and remain fully correct: they take the FILE*
+ * argument by value, which is unchanged by this shim (same pointer either
+ * way).
+ *
+ * 適用範囲 — コンパイルは通すが newlib の意味論を完全再現しない: printf()/
+ * puts() 等は CRT が実コンソールの fd に直結しており、この変数を一切参照しない
+ * ため、TCP CLI の「再代入によるリダイレクト」はこのプラットフォームでは見た目
+ * だけになる（代入自体は無害 — stdout の読み戻し値が変わるだけ）。本 SILS
+ * ベンチが実際に検証する範囲では機能退行ではない: リダイレクト先のソケット層
+ * （esp_idf_host/lwip/sockets.h）は inert スタブなので、実 TCP クライアントが
+ * serveTcpClient() に到達することはそもそも無い — 本シムは無改変ファームを
+ * コンパイル通過させるためだけに存在する。他所の fprintf(stdout, ...)/
+ * fflush(stdout) は影響を受けず完全に正しい: FILE* 引数を値で受け取るため、
+ * このシムでポインタ自体は変わらない（どちらの経路でも同じポインタ）。
+ */
+
+#pragma once
+
+#include_next <cstdio>
+
+#ifdef _WIN32
+#undef stdout
+#undef stderr
+extern "C" FILE* g_sils_win_stdout;
+extern "C" FILE* g_sils_win_stderr;
+#define stdout g_sils_win_stdout
+#define stderr g_sils_win_stderr
+#endif

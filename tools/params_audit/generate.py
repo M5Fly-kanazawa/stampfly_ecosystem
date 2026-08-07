@@ -9,15 +9,15 @@ StampFly's physical parameters) and machine-generates three artifacts:
   1. tools/sysid/_generated_params.py         -- flat, stdlib-importable
      Python constants (consumed by tools/sysid/defaults.py and
      tools/params_audit/params_manifest.py).
-  2. simulator/sil/plant/generated_params.hpp -- C++ constexpr constants
-     (consumed by simulator/sil/plant/plant.hpp).
+  2. simulator/sils/plant/generated_params.hpp -- C++ constexpr constants
+     (consumed by simulator/sils/plant/plant.hpp).
   3. The <!-- AUTO-GENERATED:params --> marker table inside
      docs/architecture/stampfly-parameters.md (both the JP and EN sections).
 
 `--check` renders the same three artifacts in memory and compares them
 against what is currently on disk WITHOUT writing anything — used to catch
 "edited the YAML but forgot to regenerate" (wired into CI, see
-.github/workflows/sil-regression.yml).
+.github/workflows/sils-regression.yml).
 
 control/models/stampfly_physical.yaml（StampFly 物理パラメータの唯一の正）を
 読み込み、以下の3種類の生成物を機械生成する:
@@ -25,14 +25,14 @@ control/models/stampfly_physical.yaml（StampFly 物理パラメータの唯一�
   1. tools/sysid/_generated_params.py         -- フラットな、標準ライブラリ
      だけで import 可能な Python 定数（tools/sysid/defaults.py と
      tools/params_audit/params_manifest.py が使用）。
-  2. simulator/sil/plant/generated_params.hpp -- C++ constexpr 定数
-     （simulator/sil/plant/plant.hpp が使用）。
+  2. simulator/sils/plant/generated_params.hpp -- C++ constexpr 定数
+     （simulator/sils/plant/plant.hpp が使用）。
   3. docs/architecture/stampfly-parameters.md 内の
      <!-- AUTO-GENERATED:params --> マーカー表（日本語・英語セクション両方）。
 
 `--check` は同じ3生成物をメモリ上でレンダリングし、ディスク上の現在の内容と
 比較するだけで書き込みは行わない — 「YAMLを変えたのに再生成を忘れた」を
-検出する（CI に配線済み、.github/workflows/sil-regression.yml 参照）。
+検出する（CI に配線済み、.github/workflows/sils-regression.yml 参照）。
 
 Depends on PyYAML (available in the ESP-IDF python env that `sf` runs under;
 see setup_env.sh). Unlike check_params.py, this module is NOT required to be
@@ -65,7 +65,7 @@ except ImportError:  # pragma: no cover - environment problem, not a code bug
 
 SSOT_REL = "control/models/stampfly_physical.yaml"
 GEN_PY_REL = "tools/sysid/_generated_params.py"
-GEN_HPP_REL = "simulator/sil/plant/generated_params.hpp"
+GEN_HPP_REL = "simulator/sils/plant/generated_params.hpp"
 DOCS_REL = "docs/architecture/stampfly-parameters.md"
 
 MARKER_BEGIN = "<!-- AUTO-GENERATED:params BEGIN -->"
@@ -233,7 +233,7 @@ def render_python(view: Dict[str, Any]) -> str:
     )
     out.append("")
     out.append("# Rounded/adopted kappa (3 sig figs), hand-written into firmware's B^-1")
-    out.append("# mixer (actuator.cpp KAPPA) and simulator/sil/plant Config::kappa on")
+    out.append("# mixer (actuator.cpp KAPPA) and simulator/sils/plant Config::kappa on")
     out.append("# 2026-07-17. Differs from _KAPPA_VALUE (full precision) by ~1e-4 relative --")
     out.append("# both are kept (see control/models/stampfly_physical.yaml kappa_adopted note)")
     out.append("# to avoid changing that existing rounding (behavior neutrality).")
@@ -261,7 +261,7 @@ def render_python(view: Dict[str, Any]) -> str:
 
 
 # =============================================================================
-# Renderer 2: simulator/sil/plant/generated_params.hpp
+# Renderer 2: simulator/sils/plant/generated_params.hpp
 # =============================================================================
 def render_cpp(view: Dict[str, Any]) -> str:
     c = view["constants"]
@@ -273,7 +273,7 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(_header_block("/*", " */", line_prefix=" * ").rstrip())
     out.append("#pragma once")
     out.append("")
-    out.append("namespace sil_params {")
+    out.append("namespace sils_params {")
     out.append("")
     out.append("// --- constants (calibration-independent) / 較正非依存の定数 ---")
     out.append(f"constexpr float MASS = {_cpp_float(c['mass'])};  ///< vehicle mass [kg]")
@@ -283,7 +283,7 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(f"constexpr float ARM_OFFSET = {_cpp_float(c['arm_offset'])};  ///< moment arm [m]")
     out.append("")
     out.append("// --- calibration_sets.measured_2026_07 (status: adopted) ---")
-    out.append("// Consumed directly by simulator/sil/plant/plant.hpp::Config (backlog #2,")
+    out.append("// Consumed directly by simulator/sils/plant/plant.hpp::Config (backlog #2,")
     out.append("// 2026-07-26 motor ODE): Ct/Cq/Jmp/Dm/Qf/Rm/Km all feed the electromechanical")
     out.append("// ODE dw/dt = [-(Dm+Km^2/Rm)*w - Cq*w^2 - Qf + Km*V/Rm] / Jmp directly (no")
     out.append("// longer 'reference only' -- the static Am/Bm/Cm curve they used to sit")
@@ -343,7 +343,7 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(f"constexpr float QF = {_cpp_float(lg['Qf'])};")
     out.append("}  // namespace legacy")
     out.append("")
-    out.append("}  // namespace sil_params")
+    out.append("}  // namespace sils_params")
     out.append("")
     return "\n".join(out)
 

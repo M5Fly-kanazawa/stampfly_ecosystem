@@ -29,7 +29,7 @@ vehicle は、StampFly 教育プラットフォームのための次世代機体
 | [`docs/architecture.md`](docs/architecture.md) | アーキテクチャ設計（v3: 4階層 + R1〜R16） |
 | [`docs/detailed_design.md`](docs/detailed_design.md) | Topic / インターフェース / 状態遷移 |
 | [`docs/coding_and_education.md`](docs/coding_and_education.md) | コーディング規約・教育計画 |
-| [`docs/development_roadmap.md`](docs/development_roadmap.md) | 開発ロードマップ・SIL→実機ワークフロー |
+| [`docs/development_roadmap.md`](docs/development_roadmap.md) | 開発ロードマップ・SILS→実機ワークフロー |
 | [`docs/hardware_init.md`](docs/hardware_init.md) | BSP・HW 初期化設計 |
 
 ---
@@ -65,7 +65,7 @@ vehicle は複数の第三者ドライバ・フレームワークを利用して
 
 ### 起点ファームウェア
 
-vehicle は **M5Stack 社公開の M5StampFly 公式ファームウェア** を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものです。
+vehicle は **M5Stack 社公開の M5StampFly 公式ファームウェア** を起点として、関心の分離・教育性向上・SILS 検証の観点から再設計したものです。
 
 - M5StampFly 公式: https://github.com/m5stack/M5StampFly
 - ライセンス: MIT

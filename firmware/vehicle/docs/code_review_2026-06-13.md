@@ -31,34 +31,34 @@
 
 ## 2. サブシステム別 現状
 
-成熟度: ◎=高（設計適合・検証済み）／○=中／△=要整備。検証: 実=実機確認、SIL=シミュレーション回帰、host=ホスト単体テスト。
+成熟度: ◎=高（設計適合・検証済み）／○=中／△=要整備。検証: 実=実機確認、SILS=シミュレーション回帰、host=ホスト単体テスト。
 
 | # | サブシステム | 成熟度 | 検証 | 現状の要点 |
 |---|-------------|:------:|------|-----------|
-| 1 | **ESKF 状態推定** (`sf_estimator_eskf`) | ◎ | SIL+実 | 15 状態・疎構造化 predict・active_mask P 隔離・χ²ゲート・右摂動クォータニオン。核心数学は内部整合かつ SIL 座標規約と一致。`accel_att_noise=0.8`／バイアスクランプ±0.03 維持。重大バグなし |
-| 2 | **相補フィルタ** (`sf_estimator_complementary`) | ○ | SIL | Mahony 型・差替可能な 2 つ目の IEstimator。ゼロ除算/NaN ガード良好。ただし baro 融合が ToF-only 方針に反して無条件に効く（既定 ESKF ゆえ休眠） |
-| 3 | **PID カスケード制御** (`sf_controller_pid`) | ◎ | SIL+実 | ACRO/STAB/ALT/POS＋自動離着陸＋ヘディングホールド＋誘導。離散化・単位・符号・鉛直フェーズが規範と 1:1。致命的バグなし。指摘はコメント不一致・死にコードのみ |
-| 4 | **アクチュエータ/ミキサー** (`sf_actuator`,`sf_hal_motor`) | ◎ | SIL+実 | B⁻¹ X-quad ミキサー・モータ曲線逆変換・電池電圧補償が SIL プラントと厳密逆（Model Identity）。ARM 二重ゲート・disarm リトライ・watchdog 完備 |
-| 5 | **状態管理** (`sf_state`) | ◎ | SIL+実 | 唯一の遷移実行者。モード調停表§3.1 に厳密適合。ARM 前ゲート群・通信断タイマ正しい。soft-landing 未配線と pairing IDLE_HELD 許容の乖離あり |
-| 6 | **状態タスク（調停）** (`state_task`) | ◎ | SIL | 表§3.1 全セルを忠実に符号化。エッジ持続・不一致再適用・接地リセット確認済み |
-| 7 | **IMU タスク（推定＋クラスB）** (`imu_task`) | ◎ | SIL+実 | predict→観測 update→鉛直ハンドオフ→発行→通知の中核。SPSC 消費・校正連携・loud halt 完備。重大バグなし |
-| 8 | **制御タスク** (`control_task`) | ◎ | SIL+実 | IMU 同期・通知 watchdog・motor_test 時計ラップ対策。重大バグなし |
-| 9 | **フェイルセーフ＋電源** (`sf_failsafe`,`power_task`,`sf_hal_power`) | ◎ | SIL+実※ | §9 検出器（衝撃/ジャイロ/通信断/低電圧）実装、検出と判断を分離。INA3221 ch1 修正済（※電池接続確認待ち）。地上 DISARM 欠落の乖離あり |
-| 10 | **離着陸＋ToF** (`sf_takeoff_landing`,`tof_task`) | ○ | SIL | 着陸鎖は SIL 検証済。ただし離陸確認タイマーが死にコード・ToF 生値にグリッチ除去なしが実機リスク |
-| 11 | **通信（ESP-NOW/ペアリング）** (`sf_comm`,`sf_command`) | ◎ | SIL+実 | 14B ControlPacket 解析が送信機と 1:1。相互 MAC 学習・混信フィルタ・NVS・チャネル追従。再ペア時 MAC の軽微競合のみ |
-| 12 | **Tello風API** (`api_task`,`sf_api`) | ○ | SIL | UDP テキスト解析・誘導シーク・権限分担。座標/符号正しい。誘導解除の API 非同期と emergency ゲート順の穴あり。実機未検証 |
-| 13 | **キャリブレーション** (`sf_calibration`) | ◎ | SIL+実 | 静止ゲート・分散チェック・やり直し・fail-close。符号規約整合。level_offset 算出するも未使用（傾き校正で bias 汚染） |
+| 1 | **ESKF 状態推定** (`sf_estimator_eskf`) | ◎ | SILS+実 | 15 状態・疎構造化 predict・active_mask P 隔離・χ²ゲート・右摂動クォータニオン。核心数学は内部整合かつ SILS 座標規約と一致。`accel_att_noise=0.8`／バイアスクランプ±0.03 維持。重大バグなし |
+| 2 | **相補フィルタ** (`sf_estimator_complementary`) | ○ | SILS | Mahony 型・差替可能な 2 つ目の IEstimator。ゼロ除算/NaN ガード良好。ただし baro 融合が ToF-only 方針に反して無条件に効く（既定 ESKF ゆえ休眠） |
+| 3 | **PID カスケード制御** (`sf_controller_pid`) | ◎ | SILS+実 | ACRO/STAB/ALT/POS＋自動離着陸＋ヘディングホールド＋誘導。離散化・単位・符号・鉛直フェーズが規範と 1:1。致命的バグなし。指摘はコメント不一致・死にコードのみ |
+| 4 | **アクチュエータ/ミキサー** (`sf_actuator`,`sf_hal_motor`) | ◎ | SILS+実 | B⁻¹ X-quad ミキサー・モータ曲線逆変換・電池電圧補償が SILS プラントと厳密逆（Model Identity）。ARM 二重ゲート・disarm リトライ・watchdog 完備 |
+| 5 | **状態管理** (`sf_state`) | ◎ | SILS+実 | 唯一の遷移実行者。モード調停表§3.1 に厳密適合。ARM 前ゲート群・通信断タイマ正しい。soft-landing 未配線と pairing IDLE_HELD 許容の乖離あり |
+| 6 | **状態タスク（調停）** (`state_task`) | ◎ | SILS | 表§3.1 全セルを忠実に符号化。エッジ持続・不一致再適用・接地リセット確認済み |
+| 7 | **IMU タスク（推定＋クラスB）** (`imu_task`) | ◎ | SILS+実 | predict→観測 update→鉛直ハンドオフ→発行→通知の中核。SPSC 消費・校正連携・loud halt 完備。重大バグなし |
+| 8 | **制御タスク** (`control_task`) | ◎ | SILS+実 | IMU 同期・通知 watchdog・motor_test 時計ラップ対策。重大バグなし |
+| 9 | **フェイルセーフ＋電源** (`sf_failsafe`,`power_task`,`sf_hal_power`) | ◎ | SILS+実※ | §9 検出器（衝撃/ジャイロ/通信断/低電圧）実装、検出と判断を分離。INA3221 ch1 修正済（※電池接続確認待ち）。地上 DISARM 欠落の乖離あり |
+| 10 | **離着陸＋ToF** (`sf_takeoff_landing`,`tof_task`) | ○ | SILS | 着陸鎖は SILS 検証済。ただし離陸確認タイマーが死にコード・ToF 生値にグリッチ除去なしが実機リスク |
+| 11 | **通信（ESP-NOW/ペアリング）** (`sf_comm`,`sf_command`) | ◎ | SILS+実 | 14B ControlPacket 解析が送信機と 1:1。相互 MAC 学習・混信フィルタ・NVS・チャネル追従。再ペア時 MAC の軽微競合のみ |
+| 12 | **Tello風API** (`api_task`,`sf_api`) | ○ | SILS | UDP テキスト解析・誘導シーク・権限分担。座標/符号正しい。誘導解除の API 非同期と emergency ゲート順の穴あり。実機未検証 |
+| 13 | **キャリブレーション** (`sf_calibration`) | ◎ | SILS+実 | 静止ゲート・分散チェック・やり直し・fail-close。符号規約整合。level_offset 算出するも未使用（傾き校正で bias 汚染） |
 | 14 | **オンボード自動チューン** (`sf_autotune`) | ○ | host | I/Q 掃引→Nelder-Mead 同定→PID 設計。ホストと同型。GM 下限ゲート欠落・GM 未検出時 0dB 返しが要対応。実機未検証 |
-| 15 | **HAL: IMU+Flow** (`bmi270`,`pmw3901`) | ◎ | SIL+実 | LSB→物理量・軸変換（FRD）・SPI 共有保護が整合。Flow の SQUAL がドライバまでで ESKF 側ゲート未使用 |
+| 15 | **HAL: IMU+Flow** (`bmi270`,`pmw3901`) | ◎ | SILS+実 | LSB→物理量・軸変換（FRD）・SPI 共有保護が整合。Flow の SQUAL がドライバまでで ESKF 側ゲート未使用 |
 | 16 | **HAL: 地磁気** (`bmm150`,`mag_calibration`) | ◎ | 実※ | 温度補償・軸リマップが旧 vehicle と 1:1＋NaN ガード。低品質校正でも valid=true（既定 off ゆえ休眠） |
-| 17 | **HAL: 気圧+ToF** (`bmp280`,`vl53l3cx_wrapper`) | ◎ | SIL+実 | Bosch 補償式と完全一致。BMP280 が絶対標高固定基準（相補選択時に矛盾） |
+| 17 | **HAL: 気圧+ToF** (`bmp280`,`vl53l3cx_wrapper`) | ◎ | SILS+実 | Bosch 補償式と完全一致。BMP280 が絶対標高固定基準（相補選択時に矛盾） |
 | 18 | **HAL: LED/ブザー/ボタン** (`led`,`buzzer`,`button`) | ○ | 実 | LEDC/GPIO 競合なし。setColor が brightness_ 未適用（輝度コマンド無効）・blocking playTone・死蔵パターン |
 | 19 | **通知** (`sf_notify`) | ○ | 実 | 優先度オーバーレイ・2 チャネル LED・最新の点滅反転は正しい。LED 輝度無効と blocking ブザーは #18 と同根 |
 | 20 | **テレメトリ+Data Stream+ログ** (`sf_telemetry`,`sf_logger`) | ◎ | 実 | 旧 vehicle 電文互換・UDP 非ブロッキング・SPIFFS グレースフル。Blackbox の容量見積りコメントが 100Hz と不一致 |
-| 21 | **コア基盤** (`sf_core`: params/topic/data_types) | ◎ | SIL+実 | params SSOT（手書き table[]）・Topic テンプレート・lock-free ring。overflow_count 過大計上の軽微バグ・updated() 死にAPI |
+| 21 | **コア基盤** (`sf_core`: params/topic/data_types) | ◎ | SILS+実 | params SSOT（手書き table[]）・Topic テンプレート・lock-free ring。overflow_count 過大計上の軽微バグ・updated() 死にAPI |
 | 22 | **BSP** (`sf_board`) | ◎ | 実 | 共有 HW 唯一所有（R1）・失敗 3 分類・直列 init。PWM タイマ定数の重複定義と netif 起動順序 doc 乖離 |
 | 23 | **CLI** (`cli_task`) | ◎ | 実 | esp_console レジストリ・USB+TCP:23・motor_test 安全・param save armed 拒否。wifi NVS の armed ガード欠落 |
-| 24 | **小センサタスク** (flow/mag/baro/button) | ◎ | SIL+実 | 周期/優先度/コア割当が§8 と一致。BaroTask の DRDY ゲート欠落（重複発行） |
+| 24 | **小センサタスク** (flow/mag/baro/button) | ◎ | SILS+実 | 周期/優先度/コア割当が§8 と一致。BaroTask の DRDY ゲート欠落（重複発行） |
 | 横 | **並行性** (横断) | ◎ | — | Latest/RingBuffer/atomic/xTaskNotify が概ね健全。重大レースなし。軽微競合（再ペア MAC・motor_test）は disarmed 限定 |
 | 横 | **単位・符号・frame** (横断) | ◎ | — | IMU→推定→制御→ミキサーの端から端まで NED/FRD・rad・符号が一貫。コードは正、**規範文書側の加速度符号記述が逆**（doc 修正対象） |
 | 横 | **設計適合** (横断) | ◎ | — | R1〜R16・調停表§3.1・クラスA/B・SSOT に高度に適合。例外は地上 DISARM 欠落（§9 乖離） |
@@ -75,7 +75,7 @@
 - **場所:** `tasks/api_task.cpp:480-508`、`components/sf_autotune/autotune.cpp:242-276`
 - **内容:** `cmdAutotune` は FLYING 中に同定残差<0.3・達成 PM が目標±5°・Kp が現ゲインの 1/4〜4 倍・param テーブル範囲の 4 条件でゲインを**飛行中ライブ適用**するが、ゲイン余裕（`tune.gm_db`）の下限を一切チェックしない。ホスト自己テスト（`test_main.cpp:413`）は `gm_db > 6.0` を健全 GM として必須にしているのに、実機ゲートには反映されていない。
 - **影響:** PM は満たすが GM が薄い（数 dB 以下）ゲインが飛行中に無確認適用され、モデル誤差・トルク効きの非線形でゲイン側不安定（発振）に至りうる。auto-memory にも実績 yaw ゲインが PM22°/GM3.8dB と薄かった記録があり、GM 支配の軸が現実に存在する。
-- **対策:** ① `autotune::tunePid` が GM を有効検出できたか（位相 −180° 交差を掃引域内で見つけたか）を `gm_valid` フラグで返すよう拡張（**H-1 は L-15 と必ずセットで直す** — 下記）。② `api_task.cpp:482` の受理判定直後に `if (tune.gm_valid && tune.gm_db < kMinGmDb) { reply("error gain margin too low"); return; }` を追加。`kMinGmDb` は config 定数（既定 6.0dB、yaw は 8.0dB 等軸別）。マジックナンバー禁止規約に従い config 化。SIL/host で GM 未検出ケースが誤って弾かれないことを回帰固定。
+- **対策:** ① `autotune::tunePid` が GM を有効検出できたか（位相 −180° 交差を掃引域内で見つけたか）を `gm_valid` フラグで返すよう拡張（**H-1 は L-15 と必ずセットで直す** — 下記）。② `api_task.cpp:482` の受理判定直後に `if (tune.gm_valid && tune.gm_db < kMinGmDb) { reply("error gain margin too low"); return; }` を追加。`kMinGmDb` は config 定数（既定 6.0dB、yaw は 8.0dB 等軸別）。マジックナンバー禁止規約に従い config 化。SILS/host で GM 未検出ケースが誤って弾かれないことを回帰固定。
 
 ### 3.2 MEDIUM（8 件）
 
@@ -184,7 +184,7 @@
 加速度符号は **コードが正典**（全層 −g 規約: ドライバ段 `body.z=−chip.z` → 水平静止で機体 Z accel ≈ −9.81）。以下を実装に合わせて訂正:
 1. `docs/noise_and_vibration_model.md:161-172` の「生加速度計は水平静止で [0,0,+9.81]（+g 規約）」「ba_z≈+2g で内部変換」を「静止で [0,0,−9.81]（−g 規約）、ba_z≈0」へ。+2g バイアス機構は旧 vehicle 由来で新ファームに存在しない。
 2. detailed_design 等の規範文の「静止時 +9.81 の反力」を「静止時 body z ≈ −9.81」へ。
-3. `simulator/sil/docs/coordinate_frames.md` は既に −g で正しく、変更不要。符号の SSOT を `eskf_core.cpp:172,854` / `calibration.cpp:262` に集約する旨を明記。
+3. `simulator/sils/docs/coordinate_frames.md` は既に −g で正しく、変更不要。符号の SSOT を `eskf_core.cpp:172,854` / `calibration.cpp:262` に集約する旨を明記。
 
 ---
 
@@ -199,7 +199,7 @@
 | 5 | **L-1**（Flow SQUAL）、**L-5**（mag 保護）、**L-20**（overflow_count）、**L-21**（baro DRDY） | 実機 POS_HOLD/use_mag 有効化前・診断精度 |
 | 6 | LOW/INFO のコメント・死にコード・ドキュメント整合（L-6〜L-19, I-*, §3.5） | 教材コードとしての模範性・保守性 |
 
-各修正は **(1) 該当 SIL シナリオで回帰固定（修正後は必ず `sf sil build`）→(2) host 単体テスト→(3) 実機ベンチ確認** の順で検証する。安全関連（M-1〜M-3, M-6）は SIL に専用シナリオを 1 本ずつ追加して恒久化することを推奨。
+各修正は **(1) 該当 SILS シナリオで回帰固定（修正後は必ず `sf sils build`）→(2) host 単体テスト→(3) 実機ベンチ確認** の順で検証する。安全関連（M-1〜M-3, M-6）は SILS に専用シナリオを 1 本ずつ追加して恒久化することを推奨。
 
 ---
 
@@ -213,7 +213,7 @@ vehicle は「スパゲッティ化の解消」「責務分離」「設計段階
 
 レビュー段で挙がったが、検証段で実コードを精査して**棄却**した指摘。
 
-1. **`Telemetry::setDestination` の非同期更新競合** — `setDestination()` の呼び出し元がファーム・SIL・tools のどこにも存在せず（定義のみ）、競合経路が成立しない。
+1. **`Telemetry::setDestination` の非同期更新競合** — `setDestination()` の呼び出し元がファーム・SILS・tools のどこにも存在せず（定義のみ）、競合経路が成立しない。
 2. **ESP-NOW 受信コールバックが Latest トピックの mutex を `portMAX_DELAY` で取得し 400Hz 制御ループと競合** — 経路は事実だが正しい設計（コールバックは WiFi タスク文脈の非 ISR、ミューテックスは短時間保持、優先度逆転は起きない）。指摘者自身も「実害なし」と認めた。
 3. **`ApiCmd::Takeoff` が FLYING 中に `requestModeChange` を許し調停表に反する** — コード断片は実在するが、API Takeoff の唯一の発行元が地上限定で、FLYING 中のシナリオは到達不能。調停表の「FLYING/API設定=誘導目標のみ」は正しく実装されている。
 

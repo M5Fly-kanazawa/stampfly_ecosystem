@@ -91,11 +91,11 @@ struct EskfConfig {
     // Minimum PMW3901 surface quality (SQUAL) to fuse a flow sample. Low-quality
     // surfaces (poor texture, dark, high altitude) give noisy displacement that
     // would corrupt POS_HOLD; reject below this. Default 10 only drops near-no-lock
-    // flow (real usable flow has SQUAL well above this; the SIL plant reports 100).
+    // flow (real usable flow has SQUAL well above this; the SILS plant reports 100).
     // Tune up from real POS_HOLD SQUAL logs during bring-up (code_review L-1).
     // フローを融合する PMW3901 表面品質(SQUAL)の下限。低品質面（特徴乏しい/暗い/高高度）は
     // ノイズだらけの変位を出し POS_HOLD を汚すため、これ未満は棄却。既定 10 はほぼ no-lock の
-    // フローのみ落とす（実用フローの SQUAL はこれより十分高い。SIL プラントは 100 を報告）。
+    // フローのみ落とす（実用フローの SQUAL はこれより十分高い。SILS プラントは 100 を報告）。
     // 実機 POS_HOLD の SQUAL ログから引き上げて調整する (L-1)。
     uint8_t flow_min_squal   = 10;
 
@@ -131,12 +131,12 @@ struct EskfConfig {
     // estimate sticks at the "apparent gravity" angle atan(a/g) → POS_HOLD flies away. We
     // estimate a_kin from the OPTICAL-FLOW velocity (independent of attitude-from-accel) with
     // an α-β tracker, and updateAccelAttitude predicts f = g_expected + R^T·a_kin so the
-    // residual is the TRUE attitude error. SIL Layer-4: all of roll/pitch/diagonal/yaw hold
+    // residual is the TRUE attitude error. SILS Layer-4: all of roll/pitch/diagonal/yaw hold
     // (clean + N0). 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は比力 f=a_kin−g を
     // 測り、素の更新は a_kin=0 を仮定するので水平マニューバ中に a_kin を傾きと誤認し推定が
     // 「見かけの重力」角 atan(a/g) に張付き POS_HOLD が飛び去る。a_kin を（姿勢-加速度と独立な）
     // オプティカルフロー速度から α-β トラッカで推定し、updateAccelAttitude が
-    // f = g_expected + R^T·a_kin と予測 → 残差が真の姿勢誤差に。SIL Layer-4 で roll/pitch/斜め/
+    // f = g_expected + R^T·a_kin と予測 → 残差が真の姿勢誤差に。SILS Layer-4 で roll/pitch/斜め/
     // yaw すべて保持（clean + N0）。
     bool  accel_comp_enable = true;     // master enable / マスタ有効
     float accel_comp_alpha  = 0.2f;     // α-β velocity gain / α-β 速度ゲイン

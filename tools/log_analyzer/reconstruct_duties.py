@@ -41,7 +41,7 @@ YAW_OUTPUT_LIMIT = 2.2e-3
 # Quad config
 D = 0.023              # moment arm [m]
 # NOTE(2026-07-15): 実測の物理値は Ct=6.7e-9, Cq=4.10e-11, κ=6.12e-3, Jmp=1.375e-8
-#  （出所: multicopter_introduction/notes/qa_log.md Q4-9..13）。本ブロックはファームウェア/SIL
+#  （出所: multicopter_introduction/notes/qa_log.md Q4-9..13）。本ブロックはファームウェア/SILS
 #  実装の鏡写しが目的のため、ファームウェア側の更新まで旧値を維持する。
 KAPPA = 9.71e-3        # torque/thrust ratio [m]
 MAX_THRUST_PER_MOTOR = 0.15  # N

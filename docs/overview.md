@@ -115,7 +115,7 @@ stampfly_ecosystem/
 
 1. **設計**: control/ で制御系を設計
 2. **実装**: firmware/vehicle/ でファームウェアを実装
-3. **検証**: simulator/ でSIL検証
+3. **検証**: simulator/ でSILS検証
 4. **実験**: 実機でフライトテスト
 5. **解析**: analysis/ でログ解析
 
@@ -234,7 +234,7 @@ stampfly_ecosystem/
 
 1. **Design**: Design control systems in control/
 2. **Implement**: Implement firmware in firmware/vehicle/
-3. **Verify**: SIL verification in simulator/
+3. **Verify**: SILS verification in simulator/
 4. **Experiment**: Flight test with real drone
 5. **Analyze**: Log analysis in analysis/
 

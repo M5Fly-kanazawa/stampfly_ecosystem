@@ -10,7 +10,7 @@
 > ファームウェアは κ 改定と同率で `rate.yaw.kp`・`rate.yaw.max_torque` を再スケール済みのため、閉ループのデューティ出力は
 > 改定前後で恒等（飛行挙動は不変）。
 >
-> **【2026-07-24更新】** 本文§3の推力・トルク特性表と回転子慣性を実測値へ更新した（旧値は表内に履歴併記）。**【2026-07-26更新】** SILプラント（`simulator/sil/plant/plant.hpp`）は静的曲線Am/Bm/Cmを廃止しモータをODE化した。**【2026-08-03更新】** 上記Ct撤回・再改定により、ファームウェア実装（`sf_actuator/actuator.cpp` の `MOTOR_CT`）とSILプラント（`plant.hpp`）は再び $C_T$=1.00e-8・κ=4.10e-3 で一致している（`docs/architecture/simulation-policy.md` §6 バックログ#3「ファームCt切替」は本改定により解消——ファーム値がそのまま採用値になったため、以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。本文書とファームウェア/SIL実装の整合は `sf params check` コマンドで機械的に検査できる（暫定状態にある値は EXEMPT、未確定値があれば UNRESOLVED として報告される）。
+> **【2026-07-24更新】** 本文§3の推力・トルク特性表と回転子慣性を実測値へ更新した（旧値は表内に履歴併記）。**【2026-07-26更新】** SILSプラント（`simulator/sils/plant/plant.hpp`）は静的曲線Am/Bm/Cmを廃止しモータをODE化した。**【2026-08-03更新】** 上記Ct撤回・再改定により、ファームウェア実装（`sf_actuator/actuator.cpp` の `MOTOR_CT`）とSILSプラント（`plant.hpp`）は再び $C_T$=1.00e-8・κ=4.10e-3 で一致している（`docs/architecture/simulation-policy.md` §6 バックログ#3「ファームCt切替」は本改定により解消——ファーム値がそのまま採用値になったため、以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。本文書とファームウェア/SILS実装の整合は `sf params check` コマンドで機械的に検査できる（暫定状態にある値は EXEMPT、未確定値があれば UNRESOLVED として報告される）。
 >
 > **【2026-07-24 巻線抵抗Rm・機体質量 決着】** 巻線抵抗 Rm は3値並立が解消し **0.593 Ω**（論文LCR実測）に統一した（先生決定、コミット `9a656a9f` 2026-07-15）。旧0.34Ω（旧LCRメータ実測、別個体の疑い）・旧0.63Ω（vpython側の更新漏れの旧初期値）はいずれも「競合する実測」ではなく更新漏れだったと判明。機体質量も **0.037 kg**（実測36.8g）に統一——ファームウェアは2026-03-31に反映済み（コミット `43841314`）だったが、シミュレータ側（genesis/vpython/URDF/`tools/sysid/defaults.py`）が0.035kgのまま更新漏れだった。genesis/vpython のモータモデルは Km・Dm・Qf を Rm から `Cq·Rm/Am` 等で導出する自己整合構造のため、Rm 変更のみで定常特性（ホバー電圧・ホバーω）は数値的に不変（代数的にRmがキャンセルする——数値検証済み、悪化なし）。詳細は本文§2「質量特性」・§3「モーター電気特性」参照。
 
@@ -61,7 +61,7 @@ C(s) = Kp × (1 + 1/(Ti·s) + Td·s / (η·Td·s + 1))
 
 #### シミュレータ
 
-VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulator/README.md` 参照）。2026-01-15のディレクトリ再編で `simulator/core/` 等は `simulator/vpython/core/` 等へ移動済み。
+VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulator/README.md` 参照）。2026-01-15のディレクトリ再編で `simulator/core/` 等は `simulator/vpython/core/` 等へ移動済み。
 
 | モジュール | ファイルパス |
 |-----------|-------------|
@@ -72,8 +72,8 @@ VPython版（`simulator/vpython/`）とSIL/Genesis版が並存する（`simulato
 | IMUセンサ（VPython） | `simulator/vpython/sensors/imu.py` |
 | 気圧センサ（VPython） | `simulator/vpython/sensors/barometer.py` |
 | モーターミキサー（VPython） | `simulator/vpython/control/motor_mixer.py` |
-| SILプラント（物理モデル、MuJoCo） | `simulator/sil/plant/plant.hpp` |
-| SILモデル定義（MuJoCo XML） | `simulator/sil/models/stampfly.xml` |
+| SILSプラント（物理モデル、MuJoCo） | `simulator/sils/plant/plant.hpp` |
+| SILSモデル定義（MuJoCo XML） | `simulator/sils/models/stampfly.xml` |
 | Genesisモータモデル | `simulator/genesis/motor_model.py` |
 
 #### ファームウェア
@@ -196,7 +196,7 @@ V = Am × ω² + Bm × ω + Cm
 | トルク係数 | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω²。2026-07-15実測（コーストダウン、確定）。旧値(参考): 9.71×10⁻¹¹ (〜2026-07-14) |
 | トルク/推力比 | κ | 4.10×10⁻³ | m | κ = Cq/Ct（丸め不要、厳密値）。2026-08-03改定（Ct撤回に伴う再スケール）。2026-07-17〜2026-08-02は撤回済みthrust stand Ct由来のκを採用していた。旧値(参考): 9.71×10⁻³ (〜2026-07-16) |
 
-> **注記（2026-08-03更新）:** Ct は2026-07-15のthrust stand実測値（撤回済み）に代わり、暫定採用値 1.00×10⁻⁸ を採用した。ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）・SILプラント（`simulator/sil/plant/plant.hpp`）とも本値で一致しており、`docs/architecture/simulation-policy.md` §6 バックログ#3（ファームCt切替）は本改定により解消した（以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。κ = Cq/Ct = 4.10×10⁻³ への改定に伴い、ファームウェアは `rate.yaw.kp`・`rate.yaw.max_torque` を旧κとの比（4.10/6.12 ≈ 0.6699）で同率再スケールしており、閉ループのデューティ出力は改定前後で恒等（飛行挙動は不変）。本文書とファームウェア/SIL実装の整合は `sf params check` コマンドで機械的に検査できる。
+> **注記（2026-08-03更新）:** Ct は2026-07-15のthrust stand実測値（撤回済み）に代わり、暫定採用値 1.00×10⁻⁸ を採用した。ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）・SILSプラント（`simulator/sils/plant/plant.hpp`）とも本値で一致しており、`docs/architecture/simulation-policy.md` §6 バックログ#3（ファームCt切替）は本改定により解消した（以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。κ = Cq/Ct = 4.10×10⁻³ への改定に伴い、ファームウェアは `rate.yaw.kp`・`rate.yaw.max_torque` を旧κとの比（4.10/6.12 ≈ 0.6699）で同率再スケールしており、閉ループのデューティ出力は改定前後で恒等（飛行挙動は不変）。本文書とファームウェア/SILS実装の整合は `sf params check` コマンドで機械的に検査できる。
 
 ### 派生パラメータ
 
@@ -220,7 +220,7 @@ V = Am × ω² + Bm × ω + Cm
 | ホバリング角速度 | 約2930 | rad/s |
 | ホバリング電圧 | 約2.1 | V |
 
-> **注記（2026-08-03更新）:** 上表は firmware 基準の説明として、旧モータ曲線由来の Ct=1.00×10⁻⁸・m=0.035kg を使った参考計算を据え置いている。2026-07-26〜2026-08-02の期間は、SILプラント（`plant.hpp`）が2026-07-15のthrust stand実測値（撤回済み）に基づく別のCtへ切替えており、ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）と数値が一時的に乖離していた。2026-08-03のCt撤回・再改定により、**ファームウェアとSILプラントは再び Ct=1.00×10⁻⁸ で一致**した（`docs/architecture/simulation-policy.md` §6 バックログ#3はこれにより解消）。なお質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み——上表の m=0.035kg はこの旧Ct計算例に限った歴史的な参考値であり、現在のシミュレータ既定質量ではない（現在の既定は§2「質量特性」参照）。ホバリング電圧はCtに依存しない実測値のためそのまま有効。
+> **注記（2026-08-03更新）:** 上表は firmware 基準の説明として、旧モータ曲線由来の Ct=1.00×10⁻⁸・m=0.035kg を使った参考計算を据え置いている。2026-07-26〜2026-08-02の期間は、SILSプラント（`plant.hpp`）が2026-07-15のthrust stand実測値（撤回済み）に基づく別のCtへ切替えており、ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_CT`）と数値が一時的に乖離していた。2026-08-03のCt撤回・再改定により、**ファームウェアとSILSプラントは再び Ct=1.00×10⁻⁸ で一致**した（`docs/architecture/simulation-policy.md` §6 バックログ#3はこれにより解消）。なお質量は2026-07-24にシミュレータ側も実測値0.037kgへ統一済み——上表の m=0.035kg はこの旧Ct計算例に限った歴史的な参考値であり、現在のシミュレータ既定質量ではない（現在の既定は§2「質量特性」参照）。ホバリング電圧はCtに依存しない実測値のためそのまま有効。
 
 ## 4. センサパラメータ
 
@@ -539,7 +539,7 @@ Conversion between forms:
 
 #### Simulator
 
-The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexist (see `simulator/README.md`). A 2026-01-15 directory reorganization moved `simulator/core/` etc. to `simulator/vpython/core/` etc.
+The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coexist (see `simulator/README.md`). A 2026-01-15 directory reorganization moved `simulator/core/` etc. to `simulator/vpython/core/` etc.
 
 | Module | File Path |
 |--------|-----------|
@@ -550,8 +550,8 @@ The VPython simulator (`simulator/vpython/`) and the SIL/Genesis simulator coexi
 | IMU Sensor (VPython) | `simulator/vpython/sensors/imu.py` |
 | Barometric Sensor (VPython) | `simulator/vpython/sensors/barometer.py` |
 | Motor Mixer (VPython) | `simulator/vpython/control/motor_mixer.py` |
-| SIL Plant (physics model, MuJoCo) | `simulator/sil/plant/plant.hpp` |
-| SIL Model Definition (MuJoCo XML) | `simulator/sil/models/stampfly.xml` |
+| SILS Plant (physics model, MuJoCo) | `simulator/sils/plant/plant.hpp` |
+| SILS Model Definition (MuJoCo XML) | `simulator/sils/models/stampfly.xml` |
 | Genesis Motor Model | `simulator/genesis/motor_model.py` |
 
 #### Firmware
@@ -674,7 +674,7 @@ V = Am × ω² + Bm × ω + Cm
 | Torque coefficient | Cq | 4.10×10⁻¹¹ | N·m/(rad/s)² | Q = Cq × ω². Measured 2026-07-15 (coast-down, confirmed). Legacy value (reference): 9.71×10⁻¹¹ (until 2026-07-14) |
 | Torque/Thrust ratio | κ | 4.10×10⁻³ | m | κ = Cq/Ct (exact, no rounding needed). Revised 2026-08-03 following the Ct retraction (pure rescale). From 2026-07-17 to 2026-08-02 this document used κ derived from the now-retracted thrust-stand Ct. Legacy value (reference): 9.71×10⁻³ (until 2026-07-16) |
 
-> **Note (updated 2026-08-03):** Ct now uses the provisional adopted value 1.00×10⁻⁸, replacing the retracted 2026-07-15 thrust-stand measurement. The firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`) and the SIL plant (`simulator/sil/plant/plant.hpp`) now agree on this value, so `docs/architecture/simulation-policy.md` §6 backlog #3 (the firmware-side Ct switch) is resolved by this revision (the earlier state — firmware alone holding an intentionally-stale value — no longer exists). Following the κ = Cq/Ct = 4.10×10⁻³ revision, the firmware rescaled `rate.yaw.kp` and `rate.yaw.max_torque` by the same ratio as the old-to-new κ (≈0.6699 = 4.10/6.12), so the closed-loop duty output is identical before and after the revision (flight behavior unchanged). Consistency between this document and the firmware/SIL implementation can be checked mechanically with `sf params check`.
+> **Note (updated 2026-08-03):** Ct now uses the provisional adopted value 1.00×10⁻⁸, replacing the retracted 2026-07-15 thrust-stand measurement. The firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`) and the SILS plant (`simulator/sils/plant/plant.hpp`) now agree on this value, so `docs/architecture/simulation-policy.md` §6 backlog #3 (the firmware-side Ct switch) is resolved by this revision (the earlier state — firmware alone holding an intentionally-stale value — no longer exists). Following the κ = Cq/Ct = 4.10×10⁻³ revision, the firmware rescaled `rate.yaw.kp` and `rate.yaw.max_torque` by the same ratio as the old-to-new κ (≈0.6699 = 4.10/6.12), so the closed-loop duty output is identical before and after the revision (flight behavior unchanged). Consistency between this document and the firmware/SILS implementation can be checked mechanically with `sf params check`.
 
 ### Derived Parameters
 
@@ -696,7 +696,7 @@ Vehicle weight 0.035 kg (legacy motor-curve worked example — see note below) �
 | Hover angular velocity | ~2930 | rad/s |
 | Hover voltage | ~2.1 | V |
 
-> **Note (updated 2026-08-03):** The table above is kept as a firmware-referenced worked example using the legacy motor curve's Ct=1.00×10⁻⁸ and m=0.035 kg. Between 2026-07-26 and 2026-08-02, the SIL plant (`plant.hpp`) had switched to a different Ct derived from the (now-retracted) 2026-07-15 thrust-stand measurement, so it temporarily diverged numerically from the firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`). Following the 2026-08-03 Ct retraction and revision, **the firmware and the SIL plant again agree on Ct=1.00×10⁻⁸** (`docs/architecture/simulation-policy.md` §6 backlog #3 is resolved by this revision). Separately, the mass has been unified to the measured 0.037 kg in the simulator as of 2026-07-24 — the m=0.035 kg in this specific legacy-Ct worked example is a historical reference tied to that old Ct calculation, not the simulator's current default mass (see "Mass Properties" in §2 for the current default). Hover voltage is a direct measurement independent of Ct, so it remains valid as-is.
+> **Note (updated 2026-08-03):** The table above is kept as a firmware-referenced worked example using the legacy motor curve's Ct=1.00×10⁻⁸ and m=0.035 kg. Between 2026-07-26 and 2026-08-02, the SILS plant (`plant.hpp`) had switched to a different Ct derived from the (now-retracted) 2026-07-15 thrust-stand measurement, so it temporarily diverged numerically from the firmware (`MOTOR_CT` in `sf_actuator/actuator.cpp`). Following the 2026-08-03 Ct retraction and revision, **the firmware and the SILS plant again agree on Ct=1.00×10⁻⁸** (`docs/architecture/simulation-policy.md` §6 backlog #3 is resolved by this revision). Separately, the mass has been unified to the measured 0.037 kg in the simulator as of 2026-07-24 — the m=0.035 kg in this specific legacy-Ct worked example is a historical reference tied to that old Ct calculation, not the simulator's current default mass (see "Mass Properties" in §2 for the current default). Hover voltage is a direct measurement independent of Ct, so it remains valid as-is.
 
 ## 4. Sensor Parameters
 

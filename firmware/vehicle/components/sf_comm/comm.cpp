@@ -594,11 +594,11 @@ void Comm::publishBindStatus(bool bound, bool restored)
     pc.bound     = bound;
     pc.restored  = restored;
     // Stamp a NON-ZERO timestamp so a subscriber can use timestamp!=0 to mean
-    // "comm has reported its bind status". On the SIL the virtual clock can read 0
+    // "comm has reported its bind status". On the SILS the virtual clock can read 0
     // at init (before the scheduler advances), which would otherwise collide with
     // the "never reported" sentinel and make StateManager miss a boot-restored bind.
     // 非ゼロの timestamp を刻み、購読側が timestamp!=0 で「comm が報告済み」と判定できる
-    // ようにする。SIL の仮想クロックは init 時（スケジューラ進行前）に 0 を返しうるため、
+    // ようにする。SILS の仮想クロックは init 時（スケジューラ進行前）に 0 を返しうるため、
     // そのままだと「未報告」番兵と衝突し StateManager が起動時復元バインドを取りこぼす。
     const uint32_t ts = static_cast<uint32_t>(esp_timer_get_time());
     pc.timestamp = (ts != 0) ? ts : 1;
@@ -891,8 +891,8 @@ void Comm::startSoftAp()
     esp_netif_t* ap_netif = sf::internal::board::ap_netif();
     if (ap_netif != nullptr) {
         // Pack octets a.b.c.d into esp_ip4_addr_t (memory order = a,b,c,d; valid on
-        // the little-endian ESP32 and the LE SIL host). Avoids the lwip IP4_ADDR macro
-        // (absent from the SIL shim). / オクテットを LE バイト順で詰める（lwip IP4_ADDR 不使用）。
+        // the little-endian ESP32 and the LE SILS host). Avoids the lwip IP4_ADDR macro
+        // (absent from the SILS shim). / オクテットを LE バイト順で詰める（lwip IP4_ADDR 不使用）。
         auto make_ip4 = [](uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
             esp_ip4_addr_t r{};
             r.addr = static_cast<uint32_t>(a) | (static_cast<uint32_t>(b) << 8) |

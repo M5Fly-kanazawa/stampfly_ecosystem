@@ -34,11 +34,11 @@
  * 込みで）追従する。移動は推定値でなく「目標」に対して合成（Tello 流）するため、
  * 連続移動で推定ドリフトが蓄積しない。
  *
- * SIL: the inert socket shim never receives UDP, so the scenario engine injects
+ * SILS: the inert socket shim never receives UDP, so the scenario engine injects
  * command lines via sf_api_inject_line() — the SAME parser/executor runs (Code
  * Identity); only the byte transport is bypassed. Replies are always logged so
  * the expect gates (and hardware debugging) can read them.
- * SIL: ソケットシムは UDP を受信しないため、シナリオエンジンが sf_api_inject_line()
+ * SILS: ソケットシムは UDP を受信しないため、シナリオエンジンが sf_api_inject_line()
  * でコマンド行を注入する — パーサ/実行系は「同一コード」が走り（Code Identity）、
  * バイト輸送だけを迂回する。応答は常にログにも出す（expect ゲートと実機デバッグ用）。
  *
@@ -108,19 +108,19 @@ constexpr float    kRcDescentRateDef = 0.5f;  // [m/s] down fallback / 降下 �
 constexpr float    kRcYawRateMax   = 1.0f;    // [rad/s] at ±100 (= guide_yaw_rate_max_)
 
 // =============================================================================
-// SIL / test injection — a tiny critical-section FIFO of command lines.
+// SILS / test injection — a tiny critical-section FIFO of command lines.
 // The scenario engine calls sf_api_inject_line() from outside this task.
-// SIL / テスト注入 — クリティカルセクション保護の小さな行 FIFO。
+// SILS / テスト注入 — クリティカルセクション保護の小さな行 FIFO。
 // シナリオエンジンがタスク外から sf_api_inject_line() を呼ぶ。
 // =============================================================================
 
 // Single-producer (scenario engine) / single-consumer (this task) lock-free
 // ring: the producer writes the slot THEN publishes head with release order;
 // the consumer acquires head before reading the slot. No mutex needed, and it
-// works identically on hardware and the SIL host FreeRTOS shim.
+// works identically on hardware and the SILS host FreeRTOS shim.
 // 単一生産者（シナリオエンジン）/ 単一消費者（本タスク）のロックフリーリング:
 // 生産者はスロットを書いてから head を release 順序で公開し、消費者は head を
-// acquire してからスロットを読む。ミューテックス不要で、実機と SIL ホストの
+// acquire してからスロットを読む。ミューテックス不要で、実機と SILS ホストの
 // FreeRTOS シムで同一に動く。
 constexpr int kInjectSlots = 8;
 constexpr int kInjectLen   = 64;
@@ -189,8 +189,8 @@ int batteryPercent()
 }
 
 // -----------------------------------------------------------------------------
-// reply — send the answer to the UDP client AND log it (SIL gates / debugging).
-// reply — UDP クライアントへ返信し、ログにも出す（SIL ゲート・デバッグ用）。
+// reply — send the answer to the UDP client AND log it (SILS gates / debugging).
+// reply — UDP クライアントへ返信し、ログにも出す（SILS ゲート・デバッグ用）。
 // -----------------------------------------------------------------------------
 void reply(const char* text)
 {
@@ -941,8 +941,8 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 }
 
 // -----------------------------------------------------------------------------
-// processLine — parse + execute one command line (shared HW / SIL path).
-// processLine — 1 コマンド行の解析＋実行（実機 / SIL 共通経路）。
+// processLine — parse + execute one command line (shared HW / SILS path).
+// processLine — 1 コマンド行の解析＋実行（実機 / SILS 共通経路）。
 // -----------------------------------------------------------------------------
 void processLine(char* line)
 {
@@ -1109,8 +1109,8 @@ void processLine(char* line)
 }  // namespace
 
 // =============================================================================
-// SIL / test injection entry point (C linkage for the scenario engine).
-// SIL / テスト注入の入口（シナリオエンジン用 C リンケージ）。
+// SILS / test injection entry point (C linkage for the scenario engine).
+// SILS / テスト注入の入口（シナリオエンジン用 C リンケージ）。
 // =============================================================================
 extern "C" void sf_api_inject_line(const char* line)
 {
@@ -1127,10 +1127,10 @@ void ApiTask(void* /*pvParameters*/)
 {
     ESP_LOGI(TAG, "ApiTask started");
 
-    // UDP server socket (non-blocking; the loop also drains SIL injections).
-    // On the SIL host the shim socket simply never delivers datagrams.
-    // UDP サーバソケット（ノンブロッキング。ループは SIL 注入も drain する）。
-    // SIL ホストではシムのソケットにデータグラムが届かないだけ。
+    // UDP server socket (non-blocking; the loop also drains SILS injections).
+    // On the SILS host the shim socket simply never delivers datagrams.
+    // UDP サーバソケット（ノンブロッキング。ループは SILS 注入も drain する）。
+    // SILS ホストではシムのソケットにデータグラムが届かないだけ。
     g_sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (g_sock >= 0) {
         sockaddr_in addr = {};
@@ -1214,7 +1214,7 @@ void ApiTask(void* /*pvParameters*/)
             }
         }
 
-        // 1. SIL/test injections / SIL・テスト注入
+        // 1. SILS/test injections / SILS・テスト注入
         while (popInjected(line, sizeof(line))) {
             processLine(line);
         }
@@ -1225,8 +1225,8 @@ void ApiTask(void* /*pvParameters*/)
             sockaddr_in from = {};
             socklen_t from_len = sizeof(from);
             // MSG_DONTWAIT (per-call non-blocking): the loop must keep draining
-            // SIL injections; a parked blocking receive would starve them.
-            // MSG_DONTWAIT（呼び出し単位の非ブロッキング）: ループは SIL 注入の
+            // SILS injections; a parked blocking receive would starve them.
+            // MSG_DONTWAIT（呼び出し単位の非ブロッキング）: ループは SILS 注入の
             // drain を続ける必要があり、ブロッキング受信のパークはそれを飢餓させる。
             const ssize_t r = ::recvfrom(g_sock, line, sizeof(line) - 1, MSG_DONTWAIT,
                                          reinterpret_cast<sockaddr*>(&from),

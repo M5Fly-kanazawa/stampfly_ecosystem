@@ -1,13 +1,13 @@
 # vehicle ⇄ コントローラ ペアリング — 調査結果と実装計画
 
-最終更新: 2026-06-09（**P1〜P3 実装完了・SIL 検証済み。残=実機検証・P4(per-drone ch)**）
+最終更新: 2026-06-09（**P1〜P3 実装完了・SILS 検証済み。残=実機検証・P4(per-drone ch)**）
 
 > **【実装完了 2026-06-09】P1（自分宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
-> P3（状態機械統合＋NVS 永続化）を実装し SIL で検証済み。** 旧 vehicle のシーケンスを踏襲し
+> P3（状態機械統合＋NVS 永続化）を実装し SILS で検証済み。** 旧 vehicle のシーケンスを踏襲し
 > vehicle アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
 > architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
-> コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SIL検証)。
-> **SIL ゲート**: `sf sil scenario simulator/sil/scenarios/pairing.scn --target vehicle --unpaired`
+> コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SILS検証)。
+> **SILS ゲート**: `sf sils scenario simulator/sils/scenarios/pairing.scn --target vehicle --unpaired`
 > = 未ペア起動→自動Pairing→bind（相互MAC学習）＋誤MAC送信機のARM/離陸を破棄（混信拒否, duty=0）。
 > **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
 > ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
@@ -73,7 +73,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 1. **アドレッシング＝ドローン MAC 下位3バイト**（ControlPacket 0-2）。SSOT を尊重し、新パケットを
    増やさない。
 2. **最小の混信対策＝「自分宛フィルタ」**（受信時に 0-2 が自 MAC[3:5] と不一致なら破棄）。
-   ブロードキャスト宛（FF FF FF）は後方互換で受理（SIL/ベンチ・未ペア時のため）。
+   ブロードキャスト宛（FF FF FF）は後方互換で受理（SILS/ベンチ・未ペア時のため）。
 3. **ペアリング UX ＝ コントローラのスキャンに応答**：機体が PAIRING モードで自分の MAC と
    channel を `PairingPacket` で広告 → コントローラが発見して bind（コントローラ側は実装済み）。
 4. **R5（Pub-Sub 疎結合）/ StateManager 単一所有**を守る：PAIRING も状態遷移なら StateManager が
@@ -85,9 +85,9 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 
 ### P1: 自分宛フィルタ（即・低コスト・最高価値）
 - comm 受信で `ControlPacket.drone_mac`(0-2) を取り出し、**自 MAC 下位3B**（`esp_wifi_get_mac` /
-  efuse、SIL は固定値）と照合。不一致は破棄。`FF FF FF`（broadcast 宛）は受理。
+  efuse、SILS は固定値）と照合。不一致は破棄。`FF FF FF`（broadcast 宛）は受理。
 - これだけで「他人の送信機で自分が動く」が止まる（コントローラは既にペア相手 MAC を入れて送る）。
-- **SIL 検証**: scenario で「誤 drone_mac の ControlPacket」を注入→ motor 不動、「正 MAC / FF」→
+- **SILS 検証**: scenario で「誤 drone_mac の ControlPacket」を注入→ motor 不動、「正 MAC / FF」→
   通常飛行。scenario DSL に MAC 付き rc 注入を足す（既存 `inject_rc` を MAC 引数で拡張）。
 - 影響: comm.cpp の受信ハンドラに数行。R5・SSOT 遵守。**まず P1 だけでも価値が大きい。**
 
@@ -129,7 +129,7 @@ WiFi ハード層が弾く）。
 - 機体側: bind 時に ControlPacket の `drone_mac` 欄(0-2)＝自MAC下位3B 一致を要求（誤狙い弾く防御層。
   ただし「こちらを狙った2台」は区別不可＝先着のまま）。
 - **RSSI で最寄りを選ぶ／ボタン同時押し確認**＝取り違えをほぼ排除するが**コントローラ側改修が必要**。
-- SIL に「2台同時ペアリング」シナリオを足して取り違え挙動をゲート化（現状 SIL の仮想送信機は1台で未検証）。
+- SILS に「2台同時ペアリング」シナリオを足して取り違え挙動をゲート化（現状 SILS の仮想送信機は1台で未検証）。
 
 > **方針決定（2026-06-09, ユーザー B）**: いま堅牢化はせず**「1ペアずつ運用」で実機ブリングアップを
 > 先行**。同時マスペアリング堅牢化（per-drone channel + RSSI/確認）は **30機ワークショップ運用が
@@ -137,7 +137,7 @@ WiFi ハード層が弾く）。
 
 ---
 
-## 6. SIL 検証方針
+## 6. SILS 検証方針
 
 - **P1**: scenario で `drone_mac` 付き ControlPacket を注入できるよう `scenario_inject` を拡張。
   「誤 MAC → 無視（ARM もしない）」「正 MAC / broadcast → 飛行」をゲート化（log/metric）。

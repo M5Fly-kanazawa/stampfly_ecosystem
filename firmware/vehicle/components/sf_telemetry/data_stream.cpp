@@ -43,7 +43,7 @@
 // NOTE: do NOT also #include <fcntl.h> here. fcntl()/F_GETFL/F_SETFL/
 // O_NONBLOCK below are already supplied transitively via data_stream.hpp ->
 // lwip/sockets.h (its inert socket shim declares its own fixed-arity
-// fcntl()). On the SIL host bench, adding the real <fcntl.h> in the same
+// fcntl()). On the SILS host bench, adding the real <fcntl.h> in the same
 // translation unit re-declares fcntl() with libc's variadic signature
 // (int, int, ...) and fails to compile on Linux/macOS ("conflicting
 // declaration") — telemetry.cpp / api_task.cpp already rely on the
@@ -51,7 +51,7 @@
 // pattern; follow that precedent here instead of including <fcntl.h>.
 // 注意: ここで <fcntl.h> を追加 include しないこと。下で使う fcntl()/F_GETFL/
 // F_SETFL/O_NONBLOCK は data_stream.hpp -> lwip/sockets.h 経由で既に供給済み
-// （inert ソケットシムが固定引数の fcntl() を自前宣言する）。SIL ホストベンチで
+// （inert ソケットシムが固定引数の fcntl() を自前宣言する）。SILS ホストベンチで
 // 同一翻訳単位に本物の <fcntl.h> を追加すると、libc の可変引数シグネチャ
 // (int, int, ...) で fcntl() が再宣言され、Linux/macOS では
 //「conflicting declaration」でコンパイルに失敗する — telemetry.cpp /

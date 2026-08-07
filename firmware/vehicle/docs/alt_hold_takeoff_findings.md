@@ -6,9 +6,9 @@
 
 ### このドキュメントについて
 
-2026-06-14 の ALT_HOLD/POS_HOLD 離陸シーケンス再設計（ARM 起動離陸・目標 0.5m 捕捉・スロットル再センターゲート）の実装中に表面化した、**2 つの落とし穴**を実測データの図とともに解説する。どちらも「制御則そのものは正しく、前提（テスト用の数値・クランプの向き）が誤っていた」もので、SIL（ソフトウェア・イン・ザ・ループ＝実ファームをホストで走らせ MuJoCo で物理を閉じる試験環境）が炙り出した。
+2026-06-14 の ALT_HOLD/POS_HOLD 離陸シーケンス再設計（ARM 起動離陸・目標 0.5m 捕捉・スロットル再センターゲート）の実装中に表面化した、**2 つの落とし穴**を実測データの図とともに解説する。どちらも「制御則そのものは正しく、前提（テスト用の数値・クランプの向き）が誤っていた」もので、SILS（ソフトウェア・イン・ザ・ループ＝実ファームをホストで走らせ MuJoCo で物理を閉じる試験環境）が炙り出した。
 
-図はすべて **実際の SIL トラジェクトリ**（`trajectory.csv`）から matplotlib で描いた実測グラフ、または mermaid で描いた状態遷移図である。
+図はすべて **実際の SILS トラジェクトリ**（`trajectory.csv`）から matplotlib で描いた実測グラフ、または mermaid で描いた状態遷移図である。
 
 ### 対象読者
 
@@ -22,7 +22,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 
 ## 2. 離陸シーケンスと時系列（実測）
 
-下図は実 SIL ラン（`alt_auto_takeoff` シナリオ、ノイズ off、決定論的）の高度時系列である。真値（青）と ESKF 推定（赤破線）、フェーズ帯（ARMED_GROUND／TAKEOFF／FLYING）、地上ブラインド窓、ToF ハンドオフ、行き過ぎピーク、目標捕捉を重ねた。
+下図は実 SILS ラン（`alt_auto_takeoff` シナリオ、ノイズ off、決定論的）の高度時系列である。真値（青）と ESKF 推定（赤破線）、フェーズ帯（ARMED_GROUND／TAKEOFF／FLYING）、地上ブラインド窓、ToF ハンドオフ、行き過ぎピーク、目標捕捉を重ねた。
 
 ![離陸タイムライン（実測）](figures/fig2_takeoff_timeline.png)
 
@@ -44,7 +44,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 
 ### 第1層（表面）— テストの中央取り違え
 
-実装当初のファームは ALT_HOLD のスロットル→上昇率を `climb = (norm − 0.5)·2·max_climb`（norm は STABILIZE 用の `[0,1]`）で計算しており、**ホールド（climb=0）は norm 0.5 = raw 3072** だった。SIL シナリオで「中央へ戻す」を raw 2048 と書いたら、2048 は norm 0.0 ゆえ `|0.0 − 0.5| = 0.5 > deadzone` で**再センターゲートが一度も開かず**テストが空振りした。シナリオを 3072 に直したら通った——が、これは**バグに合わせてテストを歪めた**だけだった。
+実装当初のファームは ALT_HOLD のスロットル→上昇率を `climb = (norm − 0.5)·2·max_climb`（norm は STABILIZE 用の `[0,1]`）で計算しており、**ホールド（climb=0）は norm 0.5 = raw 3072** だった。SILS シナリオで「中央へ戻す」を raw 2048 と書いたら、2048 は norm 0.0 ゆえ `|0.0 − 0.5| = 0.5 > deadzone` で**再センターゲートが一度も開かず**テストが空振りした。シナリオを 3072 に直したら通った——が、これは**バグに合わせてテストを歪めた**だけだった。
 
 ### 第2層（本当のバグ）— 規約がハードウェアと真逆
 
@@ -56,7 +56,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 | 3072 | ホールド | 上昇 |
 | 4095（全上げ）| +0.5 m/s | 最大上昇 |
 
-旧 vehicle `altitude_controller.hpp` は明示的に「**Stick center (2048) = hold altitude**」「バネ復帰式なら離すだけでロック解除」と書いており、`(raw−2048)/2048 ∈ [-1,+1]`（中央2048=hold）を使う。当時の vehicle は STABILIZE 用 `[0,1]` を `(throttle−0.5)` で流用したため中立が raw 3072 にズレ、**スロットルを離す（バネで2048に戻る）と降下＝離せばホバーできない**。SIL が通ったのは「ファーム自身の（誤った）規約」をテストに注入したからで、バネ物理を模擬しないため見抜けなかった（ALT_HOLD 実機未検証ゆえ未発覚）。
+旧 vehicle `altitude_controller.hpp` は明示的に「**Stick center (2048) = hold altitude**」「バネ復帰式なら離すだけでロック解除」と書いており、`(raw−2048)/2048 ∈ [-1,+1]`（中央2048=hold）を使う。当時の vehicle は STABILIZE 用 `[0,1]` を `(throttle−0.5)` で流用したため中立が raw 3072 にズレ、**スロットルを離す（バネで2048に戻る）と降下＝離せばホバーできない**。SILS が通ったのは「ファーム自身の（誤った）規約」をテストに注入したからで、バネ物理を模擬しないため見抜けなかった（ALT_HOLD 実機未検証ゆえ未発覚）。
 
 ### 是正 — 対称方式（中央2048=ホールド・上=上昇・下=降下）
 
@@ -72,7 +72,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 
 ### ゲートの実動作（是正後）
 
-下図は実 SIL ラン（`alt_recenter_gate`）。左軸=高度、右軸=throttle_axis。ゲート閉中はスロットルを上げたまま保持しても 0.5m に留まり（上げ無視）、**中央(2048)に戻すとゲート開**→上げで上昇→**下げで降下**（対称の新機能）→中央で保持、と一連で動く。再センターゲートは「バネを離せば中央に戻って解除」＝旧 vehicle stick-lock と同型。
+下図は実 SILS ラン（`alt_recenter_gate`）。左軸=高度、右軸=throttle_axis。ゲート閉中はスロットルを上げたまま保持しても 0.5m に留まり（上げ無視）、**中央(2048)に戻すとゲート開**→上げで上昇→**下げで降下**（対称の新機能）→中央で保持、と一連で動く。再センターゲートは「バネを離せば中央に戻って解除」＝旧 vehicle stick-lock と同型。
 
 ![再センターゲート＋対称な上昇/降下（是正後）](figures/fig4_recenter_gate.png)
 
@@ -100,7 +100,7 @@ ESKF は離陸前、鉛直の位置・速度を **0 に固定（hold）**して�
 
 最初の版は「離陸＝上昇」という思い込みで片側クランプ（`vel_sp < 0 → 0`、降下指令を 0 で潰す）にしていた。すると 0.66m に行き過ぎた後、外側ループが「降りて戻れ」という負の vel_sp を出しても 0 に潰され、**機体は 0.66m に居座ったまま降りてこられない**。捕捉判定 `|0.5 − 高度| < 0.05m` に永久に入らず、`Auto-takeoff complete` が出ず、TAKEOFF→FLYING が発火しない。
 
-下図が両クランプの実 SIL ラン比較。**climb-only（赤）は ≈0.59m で居座り捕捉に失敗**、**対称クランプ（青）は行き過ぎ後に緩降下して 0.5m を捕捉**する。
+下図が両クランプの実 SILS ラン比較。**climb-only（赤）は ≈0.59m で居座り捕捉に失敗**、**対称クランプ（青）は行き過ぎ後に緩降下して 0.5m を捕捉**する。
 
 ![クランプ比較（実測）](figures/fig3_clamp_comparison.png)
 
@@ -117,10 +117,10 @@ if (vel_sp < -takeoff_climb_rate) vel_sp = -takeoff_climb_rate;   // ← 緩降�
 
 | # | 落とし穴 | 真因 | 教訓 |
 |---|---------|------|------|
-| 1 | ゲートが開かない→**実は規約バグ** | ①テストの中央取り違え（バグに合わせて歪めた）→ ②規約自体が誤り（中立 raw 3072 がバネ静止 2048 と真逆＝離せば降下） | **SIL が通っても規約が正しいとは限らない**。ハードの物理（バネ静止2048）と飛行実績（旧 vehicle=中央2048ホールド）に照合する。対称 throttle_axis へ是正 |
+| 1 | ゲートが開かない→**実は規約バグ** | ①テストの中央取り違え（バグに合わせて歪めた）→ ②規約自体が誤り（中立 raw 3072 がバネ静止 2048 と真逆＝離せば降下） | **SILS が通っても規約が正しいとは限らない**。ハードの物理（バネ静止2048）と飛行実績（旧 vehicle=中央2048ホールド）に照合する。対称 throttle_axis へ是正 |
 | 2 | 目標を捕捉できない | 速度クランプを片側（上昇のみ）にした | 捕捉は片道でなく**双方向の整定問題**。観測不能窓の行き過ぎを下げて戻す自由度が要る |
 
-落とし穴2は制御則自体は正しく前提ミスを SIL が炙り出した例。落とし穴1は逆に、**SIL の偽合格が規約バグを覆い隠していた**例で、実機ハードの物理と飛行実績コードへの照合が決め手になった。いずれも「数値で裏付けてから実装・コミット」（CLAUDE.md 規約）に加え、**模擬が物理を写しているか**を問う重要性を示す。
+落とし穴2は制御則自体は正しく前提ミスを SILS が炙り出した例。落とし穴1は逆に、**SILS の偽合格が規約バグを覆い隠していた**例で、実機ハードの物理と飛行実績コードへの照合が決め手になった。いずれも「数値で裏付けてから実装・コミット」（CLAUDE.md 規約）に加え、**模擬が物理を写しているか**を問う重要性を示す。
 
 ---
 
@@ -130,9 +130,9 @@ if (vel_sp < -takeoff_climb_rate) vel_sp = -takeoff_climb_rate;   // ← 緩降�
 
 ### About This Document
 
-During the 2026-06-14 redesign of the ALT_HOLD/POS_HOLD takeoff sequence (ARM-triggered takeoff, 0.5 m target capture, throttle re-center gate), **two pitfalls** surfaced. This document explains them with figures plotted from real SIL data. In both, the control law itself was correct — the wrong assumption was in the test constant or the clamp direction — and SIL surfaced them.
+During the 2026-06-14 redesign of the ALT_HOLD/POS_HOLD takeoff sequence (ARM-triggered takeoff, 0.5 m target capture, throttle re-center gate), **two pitfalls** surfaced. This document explains them with figures plotted from real SILS data. In both, the control law itself was correct — the wrong assumption was in the test constant or the clamp direction — and SILS surfaced them.
 
-All figures are real measurements: matplotlib plots of actual SIL `trajectory.csv`, or a mermaid state diagram.
+All figures are real measurements: matplotlib plots of actual SILS `trajectory.csv`, or a mermaid state diagram.
 
 ### Overall Sequence
 
@@ -142,7 +142,7 @@ In ALT_HOLD/POS_HOLD, **ARM itself triggers the takeoff** (no throttle input). A
 
 ## 2. Takeoff Sequence and Timeline (measured)
 
-The figure below is a real SIL run (`alt_auto_takeoff`, noise off, deterministic): true altitude (blue) and ESKF estimate (red dashed), with phase bands, the ground blind window, the ToF handoff, the overshoot peak, and the target capture.
+The figure below is a real SILS run (`alt_auto_takeoff`, noise off, deterministic): true altitude (blue) and ESKF estimate (red dashed), with phase bands, the ground blind window, the ToF handoff, the overshoot peak, and the target capture.
 
 ![Takeoff timeline (measured)](figures/fig2_takeoff_timeline.png)
 
@@ -162,7 +162,7 @@ This was a **two-layer** pitfall. Fixing the surface-level test mistake made it 
 
 ### Layer 1 (surface) — wrong center in the test
 
-The initial firmware computed ALT_HOLD climb as `climb = (norm − 0.5)·2·max_climb` (norm is the STABILIZE `[0,1]`), so **hold (climb=0) was at norm 0.5 = raw 3072**. The SIL scenario used raw 2048 for "center"; since 2048 is norm 0.0, `|0.0 − 0.5| = 0.5 > deadzone` and the re-center gate never opened. Changing the scenario to 3072 made it pass — but that just **bent the test to match the bug**.
+The initial firmware computed ALT_HOLD climb as `climb = (norm − 0.5)·2·max_climb` (norm is the STABILIZE `[0,1]`), so **hold (climb=0) was at norm 0.5 = raw 3072**. The SILS scenario used raw 2048 for "center"; since 2048 is norm 0.0, `|0.0 − 0.5| = 0.5 > deadzone` and the re-center gate never opened. Changing the scenario to 3072 made it pass — but that just **bent the test to match the bug**.
 
 ### Layer 2 (the real bug) — the convention was inverted vs the hardware
 
@@ -174,7 +174,7 @@ The controller's throttle is **spring-centred at raw 2048** (`protocol/spec/mess
 | 3072 | hold | climb |
 | 4095 (full up) | +0.5 m/s | max climb |
 
-The legacy `altitude_controller.hpp` explicitly says "**Stick center (2048) = hold altitude**" / "release the spring stick to unlock", using `(raw−2048)/2048 ∈ [-1,+1]` (centre 2048 = hold). vehicle reused the STABILIZE `[0,1]` with a `(throttle−0.5)` shift, moving the neutral to 3072 — so **releasing the throttle (spring → 2048) would descend, you could not hover by releasing**. SIL passed because it injected the firmware's *own* (wrong) convention and does not model the spring; ALT_HOLD was never hardware-tested, so it went unnoticed.
+The legacy `altitude_controller.hpp` explicitly says "**Stick center (2048) = hold altitude**" / "release the spring stick to unlock", using `(raw−2048)/2048 ∈ [-1,+1]` (centre 2048 = hold). vehicle reused the STABILIZE `[0,1]` with a `(throttle−0.5)` shift, moving the neutral to 3072 — so **releasing the throttle (spring → 2048) would descend, you could not hover by releasing**. SILS passed because it injected the firmware's *own* (wrong) convention and does not model the spring; ALT_HOLD was never hardware-tested, so it went unnoticed.
 
 ### Fix — symmetric scheme (centre 2048 = hold, up = climb, down = descend)
 
@@ -184,7 +184,7 @@ ALT_HOLD/POS_HOLD now use a **symmetric throttle** like the legacy vehicle (`Com
 
 ### Re-center gate in action (corrected)
 
-A real SIL run (`alt_recenter_gate`): with the gate CLOSED, holding the throttle UP still holds 0.5 m; returning to **centre (2048) OPENS the gate**; then up = climb, **down = descend** (the new symmetric capability), centre = hold. The gate = the legacy "release the spring stick to unlock".
+A real SILS run (`alt_recenter_gate`): with the gate CLOSED, holding the throttle UP still holds 0.5 m; returning to **centre (2048) OPENS the gate**; then up = climb, **down = descend** (the new symmetric capability), centre = hold. The gate = the legacy "release the spring stick to unlock".
 
 ![Re-center gate + symmetric climb/descend (corrected)](figures/fig4_recenter_gate.png)
 
@@ -212,7 +212,7 @@ Clamp symmetrically (±takeoff_climb_rate) so the cascade can gently descend bac
 
 | # | Pitfall | Root cause | Lesson |
 |---|---------|------------|--------|
-| 1 | Gate never opens → **really a convention bug** | (1) wrong center in the test (bent to match the bug); (2) the convention itself was inverted — neutral raw 3072 vs the spring rest 2048 (release → descend) | **A passing SIL run does not prove the convention is right.** Cross-check against the hardware physics (spring rest 2048) and the flight-proven code (legacy = centre 2048 hold). Fixed to a symmetric throttle_axis |
+| 1 | Gate never opens → **really a convention bug** | (1) wrong center in the test (bent to match the bug); (2) the convention itself was inverted — neutral raw 3072 vs the spring rest 2048 (release → descend) | **A passing SILS run does not prove the convention is right.** Cross-check against the hardware physics (spring rest 2048) and the flight-proven code (legacy = centre 2048 hold). Fixed to a symmetric throttle_axis |
 | 2 | Target not captured | velocity clamp was one-sided (climb only) | Capture is a bidirectional settle, not a one-way climb; allow correcting the unobservable-window overshoot back down |
 
-Pitfall 2 is a case where the control law was correct and SIL surfaced a wrong assumption. Pitfall 1 is the opposite — a **false SIL pass masked a convention bug**, and cross-checking against the real hardware physics and the flight-proven code was decisive. Both underscore "back it with simulation before committing" (CLAUDE.md) AND asking **whether the simulation actually mirrors the physics**.
+Pitfall 2 is a case where the control law was correct and SILS surfaced a wrong assumption. Pitfall 1 is the opposite — a **false SILS pass masked a convention bug**, and cross-checking against the real hardware physics and the flight-proven code was decisive. Both underscore "back it with simulation before committing" (CLAUDE.md) AND asking **whether the simulation actually mirrors the physics**.

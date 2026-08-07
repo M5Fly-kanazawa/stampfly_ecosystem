@@ -153,7 +153,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 | estimator.hpp:29–85（7件） | requirements §4/§10, architecture §2, detailed_design §5, coding §2 | OK | `IEstimator` 純粋仮想IF＝差替可能性、predict/update*/getState/reset 一致、観測スイッチ規約、バイリンガル準拠 |
 | estimator.hpp:203 | detailed_design §3 onEnter(LANDING→IDLE) bias freeze | **NG** | §3 注3 で bias freeze は見送り確定。`freezeBias()` は capability 残置・未配線。タグ説明が実態と乖離 → 文言修正で OK 化 |
 | estimator.hpp:210 | detailed_design §3 onEnter(TAKEOFF→FLYING) bias unfreeze | **NG** | 同上（`unfreezeBias()`） |
-| estimator.hpp:223 | architecture §4 ground→flight covariance handoff | OK | `inflateCovariance(mask)` が状態 x を保持し姿勢共分散のみ膨張（SIL掃引確定） |
+| estimator.hpp:223 | architecture §4 ground→flight covariance handoff | OK | `inflateCovariance(mask)` が状態 x を保持し姿勢共分散のみ膨張（SILS掃引確定） |
 | eskf_estimator.hpp:14–16 / eskf_estimator.cpp:14–15（5件） | requirements §4, detailed_design §5 | OK | IEstimator 実装・観測スイッチを core へ委譲 |
 | eskf_core.hpp:20 | requirements §4 #2 | OK | 15状態 [pos,vel,att_err,bg,ba] の状態推定 |
 | eskf_core.hpp:21 | architecture §3 — Sensor observation switch | **STALE** | 「観測スイッチ」は detailed_design §5。architecture §3（インターフェース設計）に該当記述なし |
@@ -242,7 +242,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 | 項目 | 決定 | 実装 | コミット |
 |------|------|------|---------|
 | failsafe 安全閾値（§9, NG×3） | **コードを要件に合わせる** | impact 4.0→3.0G、gyro 1000→800dps、LiPo 警告 3.3→3.4V、連続2回デバウンス（consecutive_count=2）を実装。critical 3.0V 緊急着陸は追加安全網として維持 | `10b96d1` |
-| esp_netif STA 所有（NG×1） | **board 所有に統一** | board::init() が STA netif を生成し `sta_netif()` で公開、comm は借用に変更（自前生成を撤去）。SIL に esp_wifi_default.h shim 追加 | `a7810a3` |
+| esp_netif STA 所有（NG×1） | **board 所有に統一** | board::init() が STA netif を生成し `sta_netif()` で公開、comm は借用に変更（自前生成を撤去）。SILS に esp_wifi_default.h shim 追加 | `a7810a3` |
 | bias freeze/unfreeze（NG×2） | 設計§3 注3（見送り）に整合 | タグを「capability retained, NOT wired (dropped)」に書き換え（コードは見送り決定どおり no-op 残置）→ [OK] | （本バッチ） |
 
 ### 7-B. STALE 16件の参照修正（→ [OK]）
@@ -267,4 +267,4 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 - キャリブレーション手順（calibration）の詳細節
 - failsafe の「連続2回」は PowerTask レート(10Hz)で約200ms継続 — 極短の衝撃スパイク取りこぼしの可能性（failsafe.cpp にコメントで明記、レート見直しは将来課題）
 
-検証: 全フェーズで vehicle 11シナリオ＋legacy hover_espnow＋hover_smoke G2+G3＋ESP-IDF 実機ビルド 全PASS。@design タグ flip はコメントのみ（SIL ビルド OK で確認）。
+検証: 全フェーズで vehicle 11シナリオ＋legacy hover_espnow＋hover_smoke G2+G3＋ESP-IDF 実機ビルド 全PASS。@design タグ flip はコメントのみ（SILS ビルド OK で確認）。

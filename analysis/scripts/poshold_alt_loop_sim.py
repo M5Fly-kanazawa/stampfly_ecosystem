@@ -16,9 +16,9 @@ loop gain rises the velocity crossover enters the actuation-lag region, which th
 first-order-lag + injected-noise model under-represents — so high-gain results are
 OPTIMISTIC and conflict with the firmware's real-flight note ("raising vel.kp is
 counterproductive due to the ~110ms lag"). Do NOT adopt a gain increase from this
-sim alone; it requires a real vertical sysid + SIL design.
+sim alone; it requires a real vertical sysid + SILS design.
 注意: 本再生は現行(低帯域)動作点で検証済み。高ゲイン域は遅れの影響を過小評価し実機知見と
-矛盾するため、本シミュ単独でゲイン増を採用しないこと(要 鉛直sysid + SIL設計)。
+矛盾するため、本シミュ単独でゲイン増を採用しないこと(要 鉛直sysid + SILS設計)。
 
 Usage: python3 analysis/scripts/poshold_alt_loop_sim.py [log.jsonl]
 """
@@ -119,4 +119,4 @@ if __name__ == '__main__':
     print("- alt.ti (outer integral): no help — the disturbance enters at the INNER loop (thrust).")
     print("- velocity-loop D: hurts (differentiates noisy vz). position-loop D: modest, redundant.")
     print("- vel.kp (proportional): effective in sim but raises crossover into the lag -> OPTIMISTIC")
-    print("  and conflicts with real-flight tuning. Validate any change via vertical sysid + SIL.")
+    print("  and conflicts with real-flight tuning. Validate any change via vertical sysid + SILS.")

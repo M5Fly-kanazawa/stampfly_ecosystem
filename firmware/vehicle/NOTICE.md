@@ -91,6 +91,6 @@ VL53L3CX driver 自体の詳細ライセンス文は `components/sf_hal_vl53l3cx
 
 ## 7. 起点ファームウェアからの派生
 
-vehicle は M5Stack 社が公開する **M5StampFly 公式ファームウェア** (https://github.com/m5stack/M5StampFly, MIT License, Copyright (c) Kouhei Ito) を起点として、関心の分離・教育性向上・SIL 検証の観点から再設計したものである。本プロジェクトの著作者と M5StampFly 公式ファームウェアの主たる著作者は同一（Kouhei Ito）であるため、ライセンス継承上の追加義務は発生しない。
+vehicle は M5Stack 社が公開する **M5StampFly 公式ファームウェア** (https://github.com/m5stack/M5StampFly, MIT License, Copyright (c) Kouhei Ito) を起点として、関心の分離・教育性向上・SILS 検証の観点から再設計したものである。本プロジェクトの著作者と M5StampFly 公式ファームウェアの主たる著作者は同一（Kouhei Ito）であるため、ライセンス継承上の追加義務は発生しない。
 
 詳細は [`README.md`](README.md) の Credits / Influences 節を参照。

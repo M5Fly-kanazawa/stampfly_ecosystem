@@ -160,12 +160,12 @@ inline constexpr uint32_t CONTROL_NOTIFY_TIMEOUT_MS = 10;  // = 4 × IMU period
 inline constexpr uint32_t CALIB_GYRO_SAMPLES = 1000;
 
 // Settle delay before collecting calibration samples [ms]. The craft must be at TRUE
-// rest: at boot a freshly-placed (or, in SIL, ground-contact-settling) craft has a
+// rest: at boot a freshly-placed (or, in SILS, ground-contact-settling) craft has a
 // vertical transient that biases the accel average — averaging through it produces a
 // spurious accel bias that degrades the estimator. Waiting lets the transient decay
 // so the average reflects gravity + the true bias only.
 // 校正サンプル収集前の整定待ち [ms]。機体は「真の静止」である必要がある: 起動直後は
-// 置いた直後（SIL では接地接触の整定）の鉛直過渡があり加速度平均をバイアスする — 過渡を
+// 置いた直後（SILS では接地接触の整定）の鉛直過渡があり加速度平均をバイアスする — 過渡を
 // 含めて平均すると spurious な加速度バイアスを生み推定器を劣化させる。待つことで過渡が
 // 減衰し、平均が重力＋真のバイアスのみを反映する。
 inline constexpr uint32_t CALIB_SETTLE_MS = 1000;
@@ -194,13 +194,13 @@ inline constexpr float CALIB_STILL_EMA_ALPHA      = 0.05f;  // EMA factor (~3Hz 
 // Bias deadband: if the measured boot bias is below these magnitudes it is treated as
 // negligible and NOT seeded into the estimator — the calibration stays a true no-op
 // instead of overwriting the filter's own (already ~zero) online bias estimate. This
-// keeps a clean IMU byte-neutral (the SIL plant's only residual is the gravity-constant
+// keeps a clean IMU byte-neutral (the SILS plant's only residual is the gravity-constant
 // rounding ~0.002 m/s²), while a real MEMS offset (~0.1–0.4 m/s²) is well above and
 // applied. Seeding a near-zero "calibration" mid-run otherwise discards the filter's
 // converged estimate and perturbs the (marginal) POSITION_HOLD entry.
 // バイアスのデッドバンド: 測定した起動バイアスがこの大きさ未満なら無視可能として推定器に
 // 種付けしない — 校正をフィルタ自身の（既にほぼゼロの）オンライン推定の上書きでなく真の
-// no-op に保つ。クリーンな IMU を byte 中立に保ち（SIL プラントの残差は重力定数の丸め
+// no-op に保つ。クリーンな IMU を byte 中立に保ち（SILS プラントの残差は重力定数の丸め
 // ~0.002 m/s² のみ）、実機の MEMS オフセット（~0.1–0.4 m/s²）は十分上回り適用される。
 // ほぼゼロの「校正」を実行中に種付けすると、フィルタの収束済み推定を捨て、（脆弱な）
 // POSITION_HOLD 入口を撹乱してしまう。

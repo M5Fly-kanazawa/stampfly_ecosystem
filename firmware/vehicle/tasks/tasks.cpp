@@ -46,14 +46,14 @@ void start_all()
     // it BELOW the 400Hz pair on the same core proved fatal on hardware — when
     // the IMU+Control cycle time approaches the 2.5ms budget, priority 22 on
     // core 1 is starved for tens of seconds and INIT→IDLE never runs (the
-    // real-hardware INIT-stuck bug, 2026-06; the SIL cannot see CPU saturation).
+    // real-hardware INIT-stuck bug, 2026-06; the SILS cannot see CPU saturation).
     // On core 0, priority 22 is the HIGHEST there, so state decisions can never
     // be starved by estimation math.
     // コアパイプライン。IMU + Control はコア1（厳格な 400Hz ループのペア）。
     // StateTask は「コア0」で走らせる: イベント駆動で軽量であり、同一コアで 400Hz
     // ペアの下に置く構成は実機で致命的だった — IMU+Control の周期が 2.5ms 予算に
     // 迫るとコア1 の優先度 22 は数十秒単位で飢餓し、INIT→IDLE が走らない（実機
-    // INIT 停止バグ, 2026-06。SIL は CPU 飽和を見られない）。コア0 では 22 が最高
+    // INIT 停止バグ, 2026-06。SILS は CPU 飽和を見られない）。コア0 では 22 が最高
     // 優先度なので、状態判断が推定演算に飢餓させられることはない。
     xTaskCreatePinnedToCore(StateTask, "StateTask",
         config::STACK_STATE, nullptr, config::PRIORITY_STATE, nullptr, 0);

@@ -230,13 +230,13 @@ void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel
     // We deliberately do NOT shrink the bias covariance: keeping the normal
     // covariance lets the filter still track the slow in-flight bias drift (random
     // walk), and makes a zero-bias calibration (a clean IMU) an EXACT no-op, so the
-    // default SIL path stays regression-neutral.
+    // default SILS path stays regression-neutral.
     // フィルタのバイアス状態を静止測定値で種付けする。ESKF predict はこれを引く
     // （accel−ba_, gyro−bg_）ので、正しい種は1サイクル目から生オフセットを除去する
     // （未校正の加速度バイアスが姿勢を不安定化する離陸過渡を、ゼロから収束しない）。
     // バイアス共分散は意図的に縮小しない: 通常の共分散を保てば飛行中の緩いバイアス
     // ドリフト（ランダムウォーク）を追え、ゼロバイアス校正（クリーンな IMU）が厳密
-    // no-op になり、既定 SIL 経路が回帰中立に保たれる。
+    // no-op になり、既定 SILS 経路が回帰中立に保たれる。
     core_.setGyroBias(math::Vec3(gyro_bias[0], gyro_bias[1], gyro_bias[2]));
     core_.setAccelBias(math::Vec3(accel_bias[0], accel_bias[1], accel_bias[2]));
 

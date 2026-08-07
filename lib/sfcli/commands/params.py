@@ -4,9 +4,9 @@ sf params - 物理パラメータ整合検査
 
 Thin wrapper around tools/params_audit (see that directory's README.md).
 Checks that hand-copied vehicle physical parameters (C_T, C_Q, kappa,
-inertia, ...) agree across firmware/SIL/simulator source files.
+inertia, ...) agree across firmware/SILS/simulator source files.
 tools/params_audit の薄いラッパー（詳細は同ディレクトリの README.md）。
-ファーム/SIL/シミュレータの各ソースに手動複製された機体物理パラメータ
+ファーム/SILS/シミュレータの各ソースに手動複製された機体物理パラメータ
 （C_T, C_Q, kappa, 慣性 等）が一致しているかを検査する。
 
 Subcommands:
@@ -55,7 +55,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Regenerate physical-parameter code from the SSOT YAML",
         description="Read control/models/stampfly_physical.yaml (the Single Source of "
                      "Truth) and regenerate tools/sysid/_generated_params.py, "
-                     "simulator/sil/plant/generated_params.hpp, and the "
+                     "simulator/sils/plant/generated_params.hpp, and the "
                      "<!-- AUTO-GENERATED:params --> marker table in "
                      "docs/architecture/stampfly-parameters.md.",
     )
@@ -74,9 +74,9 @@ def run_check(args: argparse.Namespace) -> int:
     パラメータ整合検査を実行する（tools/params_audit/check_params.py）。
 
     Import happens with tools/ temporarily on sys.path — same pattern as
-    sf sysid / sf sil (see lib/sfcli/commands/sysid.py) — so a missing or
+    sf sysid / sf sils (see lib/sfcli/commands/sysid.py) — so a missing or
     broken params_audit module only disables `sf params`, never `sf` itself.
-    tools/ を一時的に sys.path に載せて import する（sf sysid / sf sil と
+    tools/ を一時的に sys.path に載せて import する（sf sysid / sf sils と
     同じ流儀、lib/sfcli/commands/sysid.py 参照）— params_audit が壊れていても
     `sf params` だけが無効化され、`sf` 全体は道連れにならない。
     """

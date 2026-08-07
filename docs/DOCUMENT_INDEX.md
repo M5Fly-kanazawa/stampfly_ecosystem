@@ -47,7 +47,7 @@
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | 座標系の定義 |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | 物理パラメータリファレンス |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis シミュレータ統合 |
-| [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致ゲート・SILプラント改修バックログ |
+| [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致ゲート・SILSプラント改修バックログ |
 
 ### ガイド・リファレンス (`guides/`)
 
@@ -123,7 +123,7 @@
 | [firmware/vehicle/docs/architecture.md](../firmware/vehicle/docs/architecture.md) | アーキテクチャ設計書（4階層アクセス・横断ルール R1〜R16・BSP 層） |
 | [firmware/vehicle/docs/detailed_design.md](../firmware/vehicle/docs/detailed_design.md) | 詳細設計書 |
 | [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | コーディング方針・教育計画 |
-| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | 開発ロードマップ・SIL→実機ワークフロー |
+| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | 開発ロードマップ・SILS→実機ワークフロー |
 | [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | ハードウェア初期化設計（BSP・起動シーケンス） |
 
 上記6文書に加え、`firmware/vehicle/docs/` にはフライト調査・不具合診断ノート（`poshold_journey.md`、`feature_status.md`、`operation_manual.md`、`topic_reference.md`、`control_theory_overview.md`、`yaw_axis_model.md` 等、計約28ファイル）が格納されている。
@@ -269,7 +269,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | Coordinate system definitions |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | Physical parameters reference |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis simulator integration |
-| [architecture/simulation-policy.md](architecture/simulation-policy.md) | Authoritative simulation policy — three-layer structure, model-identity gate, SIL plant retrofit backlog |
+| [architecture/simulation-policy.md](architecture/simulation-policy.md) | Authoritative simulation policy — three-layer structure, model-identity gate, SILS plant retrofit backlog |
 
 ### Guides & Reference (`guides/`)
 
@@ -345,7 +345,7 @@ Full design document set for the current firmware. The six canonical documents:
 | [firmware/vehicle/docs/architecture.md](../firmware/vehicle/docs/architecture.md) | Architecture design (4-layer access, cross-cutting rules R1-R16, BSP layer) |
 | [firmware/vehicle/docs/detailed_design.md](../firmware/vehicle/docs/detailed_design.md) | Detailed design |
 | [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | Coding policy and education plan |
-| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | Development roadmap and SIL-to-real-hardware workflow |
+| [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | Development roadmap and SILS-to-real-hardware workflow |
 | [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | Hardware initialization design (BSP, boot sequence) |
 
 Beyond these six, `firmware/vehicle/docs/` also holds flight-investigation and debugging notes (`poshold_journey.md`, `feature_status.md`, `operation_manual.md`, `topic_reference.md`, `control_theory_overview.md`, `yaw_axis_model.md`, etc. — about 28 files total).

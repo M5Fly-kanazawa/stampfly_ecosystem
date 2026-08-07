@@ -31,9 +31,9 @@
  * 単一ヘッダから導出することで、その乖離を構造的に不可能にする（M-5）。
  *
  * Plain ints (no driver/ledc.h dependency) so sf_core stays buildable in the
- * partial SIL test programs that do not link the ESP-IDF LEDC driver.
+ * partial SILS test programs that do not link the ESP-IDF LEDC driver.
  * 生 int（driver/ledc.h 非依存）にして、ESP-IDF LEDC ドライバをリンクしない
- * 部分 SIL 試験でも sf_core がビルドできるようにする。
+ * 部分 SILS 試験でも sf_core がビルドできるようにする。
  */
 
 #pragma once

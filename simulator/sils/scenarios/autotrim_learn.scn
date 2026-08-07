@@ -1,0 +1,22 @@
+# autotrim_learn.scn — validate the ALWAYS-ON onboard trim learner
+# 常時オンボード・トリム学習器の検証
+#
+# Start with trim=0 (default), apply a steady head wind along the body forward axis,
+# and hover for a LONG time. The onboard learner (pid_controller::learnTrim) should
+# integrate the downwind drift into pitch_trim_ with time constant ~20 s, so the
+# drift RATE decreases over the hover and the craft self-trims — WITHOUT any param
+# override (the learner does it on its own). Compare px drift rate early vs late.
+#
+# trim=0(既定)・機体前方軸の定常向かい風・長いホバーで開始。オンボード学習器
+# (pid_controller::learnTrim)が風下ドリフトを時定数~20sで pitch_trim_ に積分→ドリフト
+# 速度がホバー中に減衰し自己トリムする(param上書きなし)。px ドリフト速度を前半/後半で比較。
+#
+# Run: sf sils scenario simulator/sils/scenarios/autotrim_learn.scn --target vehicle --duration 110000000
+#
+#  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    wind  0.0   0.008  0.0                                          # steady NED-east wind (body forward at yaw=0)
+   0    rc    2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s
+   +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM
+   +    rc    3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off (trim=0, clean climb)
+   +    rc    2048  2048   2048    2048  1     90000     50        1      # D: ALT_HOLD hover 90 s — learner integrates drift -> pitch_trim_
+   +    rc    2048  2048   2048    2048  1     2000      50        1      # E: settle 2 s

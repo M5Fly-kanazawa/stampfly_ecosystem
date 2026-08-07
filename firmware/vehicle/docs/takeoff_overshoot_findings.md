@@ -12,11 +12,11 @@
 
 - **制御器・リセット経路のバグではない。** ARM→`controller Reset`→`onTakeoff` は初回も再離陸も**同一経路**。
 - 真因は**推定器（ESKF）のバイアス収束差**: **ARM は ESKF バイアスをリセットしない**（`InflateCov(Attitude)` のみ、detailed_design §3 注1）。よって**再離陸は飛行#1で収束したバイアスを継承**するが、**初回離陸は起動校正のバイアス**（残差あり）を使う。
-- **SIL は起動校正が完璧（誤差ゼロ）ゆえ非対称を再現しない** → SIL では投機的修正を検証できない。実機側の課題。
+- **SILS は起動校正が完璧（誤差ゼロ）ゆえ非対称を再現しない** → SILS では投機的修正を検証できない。実機側の課題。
 
 ## 2. 詳細
 
-### SIL A/B 測定（`alt_double_takeoff.scn`, noise off / GE off）
+### SILS A/B 測定（`alt_double_takeoff.scn`, noise off / GE off）
 
 1ランで「初回離陸 → 着陸 → 再離陸」を行い、各 climb のピーク高度を比較した。
 
@@ -25,11 +25,11 @@
 | 初回（TAKEOFF #1） | 0.658 m | **+0.158 m** |
 | 再離陸（TAKEOFF #2） | 0.654 m | **+0.154 m** |
 
-→ **差は +0.004 m（ほぼ同一）**。SIL では非対称が出ない。
+→ **差は +0.004 m（ほぼ同一）**。SILS では非対称が出ない。
 
-### なぜ SIL で出ないか
+### なぜ SILS で出ないか
 
-- SIL の `noise off` 経路では IMU に誤差がなく、起動校正が**真のバイアス（≈0）を完全に捕捉**する。よって初回も再離陸も ESKF バイアスは正確で同一 → climb 過渡も同一。
+- SILS の `noise off` 経路では IMU に誤差がなく、起動校正が**真のバイアス（≈0）を完全に捕捉**する。よって初回も再離陸も ESKF バイアスは正確で同一 → climb 過渡も同一。
 - 観測された ~0.16m のオーバーシュートは**両離陸に共通**で、これは**地上ブラインド窓由来の構造的過渡**（ESKF は ToF ハンドオフ 0.15m まで鉛直速度を 0 に保持するため、速度ループが初期に過励起する。detailed_design §3 注2/注4）。バイアス収束とは独立で、初回特有ではない。
 
 ### 実機で初回が大きい理由（仮説）
@@ -45,7 +45,7 @@
 
 ## 3. 推奨対応（修正は実機検証が前提）
 
-SIL で再現・検証できないため、**投機的な制御変更はしない**（CLAUDE.md: 制御系変更は SIL 数値裏付け後）。実機側で：
+SILS で再現・検証できないため、**投機的な制御変更はしない**（CLAUDE.md: 制御系変更は SILS 数値裏付け後）。実機側で：
 
 1. **起動校正の改善**（第一候補）: 静止サンプル数/窓を増やす、または ba_z を重力基準でより正確に推定して初回の残差を縮める。
 2. **初回離陸の保守化**（任意）: 初回のみ `takeoff_climb_rate_` を下げる／ブラインド窓の速度ループゲインを下げ、ba_z 残差への感度を落とす。
@@ -67,11 +67,11 @@ Investigation (refactor C) of the pilot report (2026-06-14): "the FIRST takeoff 
 
 - **Not a controller / reset bug.** ARM → `controller Reset` → `onTakeoff` is the SAME path for the first and the re-takeoff.
 - Root cause is **ESKF bias convergence**: **ARM does NOT reset the ESKF biases** (only `InflateCov(Attitude)`, §3 note 1). So the **re-takeoff inherits the biases converged during flight #1**, while the **first takeoff uses the boot-calibration biases** (with residual error).
-- **SIL has a perfect (zero-error) boot calibration, so it does NOT reproduce the asymmetry** → a fix cannot be SIL-verified; it is a hardware-side item.
+- **SILS has a perfect (zero-error) boot calibration, so it does NOT reproduce the asymmetry** → a fix cannot be SILS-verified; it is a hardware-side item.
 
 ## 2. Details
 
-### SIL A/B (`alt_double_takeoff.scn`, noise off / GE off)
+### SILS A/B (`alt_double_takeoff.scn`, noise off / GE off)
 
 One run does first-takeoff → land → re-takeoff and compares the climb peaks.
 
@@ -80,9 +80,9 @@ One run does first-takeoff → land → re-takeoff and compares the climb peaks.
 | First (#1) | 0.658 m | **+0.158 m** |
 | Re-takeoff (#2) | 0.654 m | **+0.154 m** |
 
-→ **Difference +0.004 m (essentially identical).** No asymmetry in SIL.
+→ **Difference +0.004 m (essentially identical).** No asymmetry in SILS.
 
-### Why SIL does not show it
+### Why SILS does not show it
 
 - On the `noise off` path the IMU has no error and the boot calibration captures the true bias (≈0) perfectly, so both takeoffs have identical, accurate ESKF biases → identical climb transient.
 - The observed ~0.16 m overshoot is COMMON to both takeoffs — a structural transient from the ground-blind window (the ESKF holds vertical velocity at 0 until the 0.15 m ToF handoff, so the velocity loop over-excites initially; §3 notes 2/4). It is independent of bias convergence and is not first-takeoff-specific.
@@ -98,7 +98,7 @@ One run does first-takeoff → land → re-takeoff and compares the climb peaks.
 
 ## 3. Recommended action (a fix requires hardware verification)
 
-Since SIL cannot reproduce/verify it, **no speculative control change is made** (CLAUDE.md: control changes need SIL numerical backing). On hardware:
+Since SILS cannot reproduce/verify it, **no speculative control change is made** (CLAUDE.md: control changes need SILS numerical backing). On hardware:
 
 1. **Improve the boot calibration** (first choice): more still samples / a longer window, or a more accurate gravity-referenced ba_z, to shrink the first-takeoff residual.
 2. **Make the first takeoff conservative** (optional): only for the first takeoff, lower `takeoff_climb_rate_` or the blind-window velocity-loop gain to reduce sensitivity to the ba_z residual.

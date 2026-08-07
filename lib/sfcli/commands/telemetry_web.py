@@ -3,7 +3,7 @@ sf telemetry --web — browser telemetry view (UDP -> SSE proxy)
 
 Receives the vehicle 50Hz monitoring telemetry (UDP broadcast :5005,
 104-byte binary packet — decoder shared with `sf telemetry`) and serves a
-single-page browser dashboard. Zero external dependencies, matching the SIL
+single-page browser dashboard. Zero external dependencies, matching the SILS
 GUI policy: a stdlib ThreadingHTTPServer serves the embedded page and pushes
 live JSON over Server-Sent Events (`/events`) — SSE is the stdlib-friendly
 equivalent of the WebSocket proxy named in requirements §7 (one-way push is
@@ -11,7 +11,7 @@ all a monitor needs).
 
 vehicle の 50Hz モニタ用テレメトリ（UDP ブロードキャスト :5005、104B
 バイナリ — デコーダは `sf telemetry` と共有）を受信し、ブラウザ用の
-シングルページダッシュボードを提供する。SIL GUI と同じ「外部依存ゼロ」方針:
+シングルページダッシュボードを提供する。SILS GUI と同じ「外部依存ゼロ」方針:
 stdlib の ThreadingHTTPServer が埋め込みページを配信し、Server-Sent Events
 （`/events`）でライブ JSON をプッシュする — SSE は requirements §7 の
 WebSocket プロキシの stdlib 等価（モニタに必要なのは一方向プッシュのみ）。
@@ -74,10 +74,10 @@ def _udp_listener(port: int, csv_path=None) -> None:
                            + ",".join(f"{pkt[k]:.6g}" for k in telem.FLOAT_NAMES) + "\n")
 
 
-# The dashboard page lives as a sibling asset (it grew a full SIL-GUI-ported 3D
-# view); the STL body parts are the SAME files the SIL GUI and MuJoCo use.
-# ダッシュボードページは隣接アセット（SIL GUI 移植の 3D ビューを含み大きい）。
-# STL 本体パーツは SIL GUI・MuJoCo と「同一ファイル」。
+# The dashboard page lives as a sibling asset (it grew a full SILS-GUI-ported 3D
+# view); the STL body parts are the SAME files the SILS GUI and MuJoCo use.
+# ダッシュボードページは隣接アセット（SILS GUI 移植の 3D ビューを含み大きい）。
+# STL 本体パーツは SILS GUI・MuJoCo と「同一ファイル」。
 _PAGE_PATH = Path(__file__).resolve().parent.parent / "assets" / "telemetry_web.html"
 _MESH_DIR = None   # resolved lazily (repo root lookup) / 遅延解決（リポジトリルート探索）
 
@@ -104,8 +104,8 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         elif self.path.startswith("/mesh/"):
             # StampFly STL part for the 3D view — whitelisted name, no traversal
-            # (same rule as the SIL GUI server).
-            # 3D 用 STL パーツ — 名前を制限しトラバーサル防止（SIL GUI と同じ規則）。
+            # (same rule as the SILS GUI server).
+            # 3D 用 STL パーツ — 名前を制限しトラバーサル防止（SILS GUI と同じ規則）。
             name = self.path[len("/mesh/"):]
             if not re.fullmatch(r"[a-z0-9_]+\.stl", name):
                 self.send_error(400, "bad mesh name")

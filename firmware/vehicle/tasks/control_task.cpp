@@ -389,9 +389,9 @@ void ControlTask(void* pvParameters)
         // =====================================================================
         // Step 4: Run the X-quad mixer. It reads the control_output published
         // just above, publishes per-motor duty on actuator_motor (telemetry +
-        // SIL plant), and drives the motor HAL.
+        // SILS plant), and drives the motor HAL.
         // Step 4: X-quad ミキサーを実行。直上で発行した control_output を読み、各
-        // モーター duty を actuator_motor に発行（テレメトリ＋SIL プラント）し、
+        // モーター duty を actuator_motor に発行（テレメトリ＋SILS プラント）し、
         // モーター HAL を駆動する。
         // =====================================================================
 

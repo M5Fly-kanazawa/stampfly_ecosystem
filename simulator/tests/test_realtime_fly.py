@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Real-time keyboard-piloted SIL — pacing / RC-over-stdin / determinism (P6 stage 1)
-リアルタイム・キーボード操縦SIL — ペーシング/RC-over-stdin/決定論性（P6 stage 1）
+Real-time keyboard-piloted SILS — pacing / RC-over-stdin / determinism (P6 stage 1)
+リアルタイム・キーボード操縦SILS — ペーシング/RC-over-stdin/決定論性（P6 stage 1）
 
 Verifies, WITHOUT any manual keyboard interaction, the three properties the P6
-stage 1 emulator additions (simulator/sil/devices/emu_realtime.* and
-rc_stdin.*, wired into simulator/sil/emu/emu_main.cpp) must hold:
+stage 1 emulator additions (simulator/sils/devices/emu_realtime.* and
+rc_stdin.*, wired into simulator/sils/emu/emu_main.cpp) must hold:
 
-  (a) SIL_EMU_REALTIME=1 paces the virtual clock to the wall clock, within
+  (a) SILS_EMU_REALTIME=1 paces the virtual clock to the wall clock, within
       tolerance — the whole point of a keyboard-piloted session.
-  (b) SIL_EMU_RC_STDIN=1's scripted ARM -> throttle-up sequence produces a
+  (b) SILS_EMU_RC_STDIN=1's scripted ARM -> throttle-up sequence produces a
       real altitude climb through the REAL, unmodified firmware state
       machine (StateManager ARM edge -> TAKEOFF -> FLYING/STABILIZE) — the
       same stick sequence scenarios/stab_flight.scn uses.
@@ -22,9 +22,9 @@ rc_stdin.*, wired into simulator/sil/emu/emu_main.cpp) must hold:
 
 手動キーボード操作なしで、P6 stage 1 のemu追加（emu_realtime.*/rc_stdin.*、
 emu_main.cppへの配線）が満たすべき3性質を検証する:
-  (a) SIL_EMU_REALTIME=1 が仮想時計を壁時計にペーシングする（許容誤差内）—
+  (a) SILS_EMU_REALTIME=1 が仮想時計を壁時計にペーシングする（許容誤差内）—
       キーボード操縦セッションの本質そのもの。
-  (b) SIL_EMU_RC_STDIN=1 の台本化ARM→スロットル上げ系列が、無改変の実ファーム
+  (b) SILS_EMU_RC_STDIN=1 の台本化ARM→スロットル上げ系列が、無改変の実ファーム
       状態機械（StateManager ARMエッジ→TAKEOFF→FLYING/STABILIZE）を通して
       実際の高度上昇を生む — scenarios/stab_flight.scn と同じスティック系列。
   (c) どちらのenv変数も未設定なら、本機能実装前とbyte-identical。これは絶対
@@ -32,7 +32,7 @@ emu_main.cppへの配線）が満たすべき3性質を検証する:
       env判定で未設定時は完全no-op — 本テストがその数値的証明。
 
 Prerequisite / 事前条件:
-    source setup_env.sh && sf sil build
+    source setup_env.sh && sf sils build
     pytest simulator/tests/test_realtime_fly.py -v
 """
 
@@ -52,17 +52,17 @@ from sfcli.utils.paths import paths
 
 def _exe(name: str) -> Path:
     suffix = ".exe" if sys.platform.startswith("win") else ""
-    return paths.sil_build() / f"{name}{suffix}"
+    return paths.sils_build() / f"{name}{suffix}"
 
 
 EMU_VEHICLE = _exe("emu_vehicle")
-MODEL = paths.root() / "simulator" / "sil" / "models" / "stampfly.xml"
-ACRO_SCN = paths.root() / "simulator" / "sil" / "scenarios" / "acro_flight.scn"
+MODEL = paths.root() / "simulator" / "sils" / "models" / "stampfly.xml"
+ACRO_SCN = paths.root() / "simulator" / "sils" / "scenarios" / "acro_flight.scn"
 
-# Captured BEFORE this feature existed (repo HEAD 3d1a35ed, "feat(sil):
+# Captured BEFORE this feature existed (repo HEAD 3d1a35ed, "feat(sils):
 # model-match gate", 2026-07-27), via:
-#   sf sil scenario simulator/sil/scenarios/acro_flight.scn --target vehicle
-#   shasum -a 256 simulator/sil/viz/out_scn_acro_flight/trajectory.csv
+#   sf sils scenario simulator/sils/scenarios/acro_flight.scn --target vehicle
+#   shasum -a 256 simulator/sils/viz/out_scn_acro_flight/trajectory.csv
 # This is the number test (c) below must reproduce exactly with NO new env
 # vars set — see the module docstring's item (c).
 # 本機能実装前（HEAD 3d1a35ed, 2026-07-27）に採取した基準値。下記(c)は新規
@@ -75,7 +75,7 @@ ACRO_FLIGHT_BASELINE_SHA256 = (
 def _require_built() -> None:
     if not EMU_VEHICLE.exists():
         pytest.fail(
-            f"{EMU_VEHICLE} not built — run 'source setup_env.sh && sf sil build' first"
+            f"{EMU_VEHICLE} not built — run 'source setup_env.sh && sf sils build' first"
         )
 
 
@@ -108,9 +108,9 @@ def test_determinism_unchanged_without_env_vars(tmp_path):
     _require_built()
     traj = tmp_path / "trajectory.csv"
     env = dict(os.environ)
-    env.pop("SIL_EMU_REALTIME", None)   # explicit: this run must NOT opt in
-    env.pop("SIL_EMU_RC_STDIN", None)
-    env["SIL_EMU_TRAJ"] = str(traj)
+    env.pop("SILS_EMU_REALTIME", None)   # explicit: this run must NOT opt in
+    env.pop("SILS_EMU_RC_STDIN", None)
+    env["SILS_EMU_TRAJ"] = str(traj)
 
     with open(os.devnull) as devnull:
         r = subprocess.run(
@@ -130,14 +130,14 @@ def test_determinism_unchanged_without_env_vars(tmp_path):
 
 
 # =============================================================================
-# (a) Pacing — SIL_EMU_REALTIME=1 keeps virtual time within wall-clock tolerance.
-# (a) ペーシング — SIL_EMU_REALTIME=1 で仮想時間が壁時計の許容誤差内。
+# (a) Pacing — SILS_EMU_REALTIME=1 keeps virtual time within wall-clock tolerance.
+# (a) ペーシング — SILS_EMU_REALTIME=1 で仮想時間が壁時計の許容誤差内。
 # =============================================================================
 
 def test_realtime_pacing_matches_wall_clock():
     _require_built()
     env = dict(os.environ)
-    env["SIL_EMU_REALTIME"] = "1"
+    env["SILS_EMU_REALTIME"] = "1"
     virtual_s = 4.0
     duration_us = int(virtual_s * 1e6)
 
@@ -155,7 +155,7 @@ def test_realtime_pacing_matches_wall_clock():
     # 主判定: プロセス全体の壁時計時間 対 要求仮想時間。
     rel_err = abs(wall_s - virtual_s) / virtual_s
     assert rel_err <= 0.20, (
-        f"SIL_EMU_REALTIME pacing off by {rel_err:.1%}: wall={wall_s:.3f}s "
+        f"SILS_EMU_REALTIME pacing off by {rel_err:.1%}: wall={wall_s:.3f}s "
         f"vs virtual={virtual_s:.3f}s (want <=20%)"
     )
 
@@ -164,7 +164,7 @@ def test_realtime_pacing_matches_wall_clock():
     # 相互確認: HUD自身の仮想時刻列（パイロットが実際に見る量）、realtime限定
     # ~30Hzで出力。
     state_lines = [l for l in r.stdout.splitlines() if l.startswith("STATE ")]
-    assert state_lines, "no STATE HUD lines emitted under SIL_EMU_REALTIME=1"
+    assert state_lines, "no STATE HUD lines emitted under SILS_EMU_REALTIME=1"
     last_t = _parse_state(state_lines[-1])["t"]
     rel_err_state = abs(float(last_t) - virtual_s) / virtual_s
     assert rel_err_state <= 0.20, (
@@ -191,8 +191,8 @@ def _read_stdout_lines(proc: subprocess.Popen, sink: List[str]) -> None:
 def test_rc_stdin_arm_and_throttle_climbs():
     _require_built()
     env = dict(os.environ)
-    env["SIL_EMU_REALTIME"] = "1"
-    env["SIL_EMU_RC_STDIN"] = "1"
+    env["SILS_EMU_REALTIME"] = "1"
+    env["SILS_EMU_RC_STDIN"] = "1"
 
     proc = subprocess.Popen(
         [str(EMU_VEHICLE), str(MODEL), "12000000"],

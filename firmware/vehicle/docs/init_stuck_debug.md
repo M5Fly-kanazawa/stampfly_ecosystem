@@ -2,7 +2,7 @@
 
 最終更新: 2026-06-10
 状態: **調査中（根本原因を行単位で特定する最終フラッシュ待ち）**
-方針: **ユーザー強い指示＝場当たり対処禁止・根本原因を特定して抜本対処。SIL で動くこと自体が盲点（記憶済 `project_sil_hardware_concurrency_gap`）。**
+方針: **ユーザー強い指示＝場当たり対処禁止・根本原因を特定して抜本対処。SILS で動くこと自体が盲点（記憶済 `project_sils_hardware_concurrency_gap`）。**
 
 > このバグが解けるまで実機ブリングアップ（development_roadmap Phase 2/3）は進めない。本書がブロッカーの単一情報源。
 
@@ -137,7 +137,7 @@ revert 手順（確定後）: 上記 2 commit の追加分を取り除く（`git
 
 ## 7. 関連文書・記憶
 
-- 記憶 `project_sil_hardware_concurrency_gap` — SIL が実機並行性バグを構造的に見逃す盲点（今後の課題）。
-- 記憶 `project_pairing_status` — ペアリング P1〜P3 実装＋SIL 検証完了。
+- 記憶 `project_sils_hardware_concurrency_gap` — SILS が実機並行性バグを構造的に見逃す盲点（今後の課題）。
+- 記憶 `project_pairing_status` — ペアリング P1〜P3 実装＋SILS 検証完了。
 - `development_roadmap.md §4 Phase 2/3` — このバグ解決後に戻る本道。
 - `next_session_plan.md` — 全体の優先順（本書はその最優先タスクの詳細）。

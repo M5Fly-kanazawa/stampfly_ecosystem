@@ -27,7 +27,7 @@ stampfly_ecosystem/
 ├── examples/          # 学習用サンプル
 ├── firmware/          # ファームウェア（vehicle, controller）
 ├── protocol/          # 通信プロトコル仕様
-├── simulator/         # SIL/HILシミュレータ
+├── simulator/         # SILS/HILシミュレータ
 ├── third_party/       # 外部依存
 └── tools/             # ユーティリティ（log_capture, calibration等）
 ```
@@ -464,7 +464,7 @@ stampfly_ecosystem/
 ├── examples/          # Learning samples
 ├── firmware/          # Firmware (vehicle, controller)
 ├── protocol/          # Communication protocol spec
-├── simulator/         # SIL/HIL simulator
+├── simulator/         # SILS/HIL simulator
 ├── third_party/       # External dependencies
 └── tools/             # Utilities (log_capture, calibration, etc.)
 ```

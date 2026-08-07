@@ -12,15 +12,15 @@
 
 ### 設計を貫く3つの同一性（Identity）原則
 
-開発ロードマップ（`development_roadmap.md`）が掲げる、SIL（Software-in-the-Loop, 実機ファームをそのままPC上の物理シミュレータで走らせる試験）と実機を貫く3原則：
+開発ロードマップ（`development_roadmap.md`）が掲げる、SILS（Software-in-the-Loop, 実機ファームをそのままPC上の物理シミュレータで走らせる試験）と実機を貫く3原則：
 
 | 原則 | 意味 |
 |------|------|
-| **Code Identity** | SIL も実機も**同一のC++ソース**を走らせる。テスト用の書き直しをしない |
+| **Code Identity** | SILS も実機も**同一のC++ソース**を走らせる。テスト用の書き直しをしない |
 | **Param Identity** | ゲイン・フィルタ定数は単一の出所（params SSOT）から両者へ供給する |
-| **Model Identity** | プラントモデルは推測でなく**実機データの同定**で決める。モデルの妥当性が SIL→実機の転送可能性を保証する |
+| **Model Identity** | プラントモデルは推測でなく**実機データの同定**で決める。モデルの妥当性が SILS→実機の転送可能性を保証する |
 
-この3原則が、後述する「SIL では成立するが実機で発散」という乖離を**意識的に扱える**枠組みを与えている。
+この3原則が、後述する「SILS では成立するが実機で発散」という乖離を**意識的に扱える**枠組みを与えている。
 
 ## 2. 状態推定 — 誤差状態カルマンフィルタ（ESKF）
 
@@ -90,7 +90,7 @@ $$
 | 気圧高度 | BMP280 | `−p_z`（既定 off, ToF 優先） | スカラー |
 | 地磁気方位 | 磁気センサ | `R(q)ᵀ m_ref`（既定 off, 校正後のみ） | 3次元 |
 
-**鉛直は ToF のみ**を一次情報源とする設計判断（baro 却下）。理由は、baro を有効化すると hover 中の気圧ドリフトで高度がランウェイする SIL 事象を観測したため。フローは加速度計と**独立**な水平速度源で、これが §2.5 の運動加速度補償の鍵になる。
+**鉛直は ToF のみ**を一次情報源とする設計判断（baro 却下）。理由は、baro を有効化すると hover 中の気圧ドリフトで高度がランウェイする SILS 事象を観測したため。フローは加速度計と**独立**な水平速度源で、これが §2.5 の運動加速度補償の鍵になる。
 
 ### 2.4 ロバスト化の4つの仕掛け
 
@@ -167,7 +167,7 @@ $$
 
 ### 3.4 Model Identity ── 同定でモデルを決める
 
-上記の `(b, T, L, τ_z)` は推測でなく**実飛行データから同定**する（§5）。SIL のプラントはこのモデルの理想版（むだ時間・トルク効き 1.0・理想フロー）であり、**SIL と実機の差はこのモデルパラメータの差として理解できる**。これが Model Identity の実体である。
+上記の `(b, T, L, τ_z)` は推測でなく**実飛行データから同定**する（§5）。SILS のプラントはこのモデルの理想版（むだ時間・トルク効き 1.0・理想フロー）であり、**SILS と実機の差はこのモデルパラメータの差として理解できる**。これが Model Identity の実体である。
 
 ## 4. カスケード制御の設計
 
@@ -248,9 +248,9 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 | ゲイン余裕 GM | ≥ 6 dB（全軸統一） | ヨーの旧8dBは未モデル零点の保守値→零点モデル化で6dBに |
 | ヨー ωc 上限 | `0.3/τ_z` | 非最小位相の帯域限界を避ける（リードの場合は保守的余裕） |
 
-### 5.4 SIL 対実機 ── 同定の決定的役割
+### 5.4 SILS 対実機 ── 同定の決定的役割
 
-最大の教訓は **「SIL で最適化したゲインが実機で発振する」**こと。SIL のプラントは理想（むだ時間小・トルク効き1.0）で、SIL 乱流ベンチを直接最適化すると**実機で位相余裕が負になるゲイン**（例: Td=0.08 で実機 PM −375°）に収束する。
+最大の教訓は **「SILS で最適化したゲインが実機で発振する」**こと。SILS のプラントは理想（むだ時間小・トルク効き1.0）で、SILS 乱流ベンチを直接最適化すると**実機で位相余裕が負になるゲイン**（例: Td=0.08 で実機 PM −375°）に収束する。
 
 → **必ず実機同定したプラント上でループ整形する**。ACRO レート発振の解決（実遅れ12-16ms・トルク効き0.36-0.71倍を同定→再設計で実機の振動峰消失、roll PM57°/pitch59° を飛行ログで裏付け）、POS_HOLD の実機再設計（実効ゲイン K≈0.4g を3手法で同定→`vel.kp 0.8→3.0`/`pos.kp 1.0→0.4` で発散停止）は、いずれも**同定がゲイン決定を駆動した**。
 
@@ -265,9 +265,9 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 | 観点 | 本設計の立場 |
 |------|-------------|
 | **推定** | 教科書 ESKF に留まらず、χ²・適応R・P隔離・バイアスクランプ・運動加速度補償の**ロバスト化層**で実機の汚染経路を有界化 |
-| **モデル** | プラントは推測でなく**実機同定**（Model Identity）。SIL と実機の乖離をモデルパラメータ差として扱える |
+| **モデル** | プラントは推測でなく**実機同定**（Model Identity）。SILS と実機の乖離をモデルパラメータ差として扱える |
 | **制御** | 多段カスケードの**時間スケール分離**を、非力なモータ（トルク効き0.4〜0.7倍）という制約下で成立させる。INV で並列パッチを排除 |
-| **調整** | ゲインは**同定された伝達関数からループ整形**で決め、安全ゲートを通す。SIL でなく**実機プラントで設計**する規律 |
+| **調整** | ゲインは**同定された伝達関数からループ整形**で決め、安全ゲートを通す。SILS でなく**実機プラントで設計**する規律 |
 
 理論（ESKF・伝達関数・ループ整形）と実機の物理（比力・トルク効き・むだ時間）を**同定で橋渡し**する ── これが本ファームの制御設計を貫く一本の筋である。
 
@@ -285,15 +285,15 @@ For a 37 g drone to go from attitude stabilisation to fixed-point hover indoors 
 
 ### The three Identity principles
 
-From `development_roadmap.md`, spanning SIL (the firmware compiled and run on a PC physics simulator) and hardware:
+From `development_roadmap.md`, spanning SILS (the firmware compiled and run on a PC physics simulator) and hardware:
 
 | Principle | Meaning |
 |-----------|---------|
-| **Code Identity** | SIL and hardware run the SAME C++ source — no test rewrites |
+| **Code Identity** | SILS and hardware run the SAME C++ source — no test rewrites |
 | **Param Identity** | gains/filter constants come from one source (params SSOT) to both |
-| **Model Identity** | the plant model is IDENTIFIED from real data, not guessed — its validity is what makes SIL→hardware transfer trustworthy |
+| **Model Identity** | the plant model is IDENTIFIED from real data, not guessed — its validity is what makes SILS→hardware transfer trustworthy |
 
-These let us consciously handle the "passes in SIL, diverges on hardware" gap discussed in §5.
+These let us consciously handle the "passes in SILS, diverges on hardware" gap discussed in §5.
 
 ## 2. State Estimation — Error-State Kalman Filter (ESKF)
 
@@ -325,7 +325,7 @@ Each observation `z=h(x)+ν`, with innovation `r=z−h(x̂)`, Jacobian `H=∂h/�
 | Baro altitude | BMP280 | `−p_z` (default off; ToF preferred) | scalar |
 | Heading | magnetometer | `R(q)ᵀ m_ref` (default off; only if calibrated) | 3-D |
 
-**Vertical uses ToF only** as the primary source (baro rejected: enabling it produced a SIL altitude runaway from pressure drift in hover). Flow is a horizontal-velocity source **independent of the accelerometer** — the key to §2.5.
+**Vertical uses ToF only** as the primary source (baro rejected: enabling it produced a SILS altitude runaway from pressure drift in hover). Flow is a horizontal-velocity source **independent of the accelerometer** — the key to §2.5.
 
 ### 2.4 Four robustness mechanisms
 
@@ -378,7 +378,7 @@ Total thrust → per-motor via the `B⁻¹` mixer (`actuator.cpp`), which invert
 
 ### 3.4 Model Identity
 
-`(b,T,L,τ_z)` are IDENTIFIED from real flight (§5), not guessed. The SIL plant is the ideal version (small delay, torque effectiveness 1.0, ideal flow), so **the SIL-vs-hardware difference is exactly a difference in these model parameters** — that is what Model Identity means in practice.
+`(b,T,L,τ_z)` are IDENTIFIED from real flight (§5), not guessed. The SILS plant is the ideal version (small delay, torque effectiveness 1.0, ideal flow), so **the SILS-vs-hardware difference is exactly a difference in these model parameters** — that is what Model Identity means in practice.
 
 ## 4. Cascade-Control Design
 
@@ -436,9 +436,9 @@ Real flight is full of disturbance/noise, so autotune adds a **coherence/SNR gat
 
 Given `G(jω)`, solve the PID gains meeting a target crossover ωc and phase margin PM (`tunePid`). Since the PID phase can be non-monotonic in Td, solve by a peak scan, not bisection (a past bug: bisection misread the upper end). Then `evalMargins` evaluates the achieved GM/PM and a **safety gate** must pass before live (non-persisted) application: PM ≥ spec; GM ≥ 6 dB (unified across axes; yaw's old 8 dB was a conservative pad for the unmodelled zero); yaw ωc cap `0.3/τ_z` to stay clear of the bandwidth limit.
 
-### 5.4 SIL vs hardware — identification is decisive
+### 5.4 SILS vs hardware — identification is decisive
 
-The biggest lesson: **gains optimised in SIL oscillate on hardware.** The SIL plant is ideal (small delay, torque 1.0), so directly optimising a SIL turbulence bench converges to gains with NEGATIVE phase margin on hardware (e.g. Td=0.08 → real PM −375°). So **always loop-shape on the hardware-identified plant.** Both the ACRO rate-oscillation fix (identified 12–16 ms delay, 0.36–0.71× torque → redesign removed the vibration peak, roll PM 57°/pitch 59° confirmed from flight logs) and the POS_HOLD hardware redesign (K≈0.4 g identified by 3 methods → `vel.kp 0.8→3.0`/`pos.kp 1.0→0.4` stopped the divergence) were **driven by identification.**
+The biggest lesson: **gains optimised in SILS oscillate on hardware.** The SILS plant is ideal (small delay, torque 1.0), so directly optimising a SILS turbulence bench converges to gains with NEGATIVE phase margin on hardware (e.g. Td=0.08 → real PM −375°). So **always loop-shape on the hardware-identified plant.** Both the ACRO rate-oscillation fix (identified 12–16 ms delay, 0.36–0.71× torque → redesign removed the vibration peak, roll PM 57°/pitch 59° confirmed from flight logs) and the POS_HOLD hardware redesign (K≈0.4 g identified by 3 methods → `vel.kp 0.8→3.0`/`pos.kp 1.0→0.4` stopped the divergence) were **driven by identification.**
 
 ### 5.5 The rule for control-parameter changes
 
@@ -451,8 +451,8 @@ This discipline against guesswork is of a piece with the identification-driven a
 | Aspect | This design's stance |
 |--------|----------------------|
 | **Estimation** | beyond a textbook ESKF: a robustness layer (χ², adaptive R, P-isolation, bias clamp, acceleration compensation) bounds the hardware contamination paths |
-| **Modelling** | the plant is IDENTIFIED, not guessed (Model Identity); the SIL-hardware gap is a model-parameter difference |
+| **Modelling** | the plant is IDENTIFIED, not guessed (Model Identity); the SILS-hardware gap is a model-parameter difference |
 | **Control** | a multi-loop cascade with time-scale separation made to work under weak motors (0.4–0.7× torque); INV rules out parallel patches |
-| **Tuning** | gains come from loop-shaping an IDENTIFIED transfer function through safety gates, designed on the HARDWARE plant, not SIL |
+| **Tuning** | gains come from loop-shaping an IDENTIFIED transfer function through safety gates, designed on the HARDWARE plant, not SILS |
 
 Bridging theory (ESKF, transfer functions, loop shaping) and hardware physics (specific force, torque effectiveness, dead time) **through identification** — that is the single thread running through this firmware's control design.

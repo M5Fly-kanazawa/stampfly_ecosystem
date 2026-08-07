@@ -53,7 +53,7 @@ vehicle の POS_HOLD カスケード・ESKF 速度推定・実機チューニン
 |----|---------|------------|------|
 | **A. vel.kp を下げる** | `param set position.vel.kp 2.0`（2.5 も） | フラフラ減（ジッタ 0.43 → 0.29°）／位置が緩む（16 → 31 mm 方向） | ライブ param |
 | **B. att.ti を戻す** | `attitude.*.ti 3〜4` | フラフラ減／手応え薄まる | ライブ param |
-| **C. 速度をローパス（本筋）** | フロー速度を位置カスケード前で低域通過 | **締まりを保ったままフラフラだけ除去** | コード＋SIL |
+| **C. 速度をローパス（本筋）** | フロー速度を位置カスケード前で低域通過 | **締まりを保ったままフラフラだけ除去** | コード＋SILS |
 | **D. 根本（ノイズ源）** | 床テクスチャ濃く／ホバー高度↓（フロー SN↑）、高効率モータ（トルク効き↑→vel.kp 下げられる） | ノイズ源そのものを減らす | ハード／環境 |
 
 ## 4. 推奨設計 — 速度ローパス（案 C）
@@ -72,7 +72,7 @@ vehicle の POS_HOLD カスケード・ESKF 速度推定・実機チューニン
 
 1. `poshold_loop_design.py`（ファーム忠実 sim）にローパスを1次の状態として追加し、`vel.kp=3.0` 据え置きで閉ループ極（ω, σ）を確認。カットオフを 0.3〜0.8 Hz で振り、**worst-σ < −0.03 を K∈[2.8,7]·τ∈[50,300]ms で維持**するカットオフを選ぶ。
 2. 平滑後の速度ノイズ std から傾きジッタ `vel.kp·σ/g` を再計算し、目標（例 < 0.2°）に入るか確認。
-3. SIL `pos_*` 退行確認（理想フローゆえノイズ効果は出ないが安定性は確認できる）。
+3. SILS `pos_*` 退行確認（理想フローゆえノイズ効果は出ないが安定性は確認できる）。
 4. 実機で `sf log wifi` → `poshold_analysis.py` でジャイロ rms・コヒーレンスの低下を確認。
 
 ### 4.3 実装箇所
@@ -144,7 +144,7 @@ wobble at the cost of the firm feel.
 |---|--------|---------------|------|
 | A | lower `vel.kp` (3.0 → 2.0–2.5) | less wobble (jitter 0.43 → 0.29°) / looser hold | live param |
 | B | restore `att.ti` (3–4) | less wobble / less firm feel | live param |
-| C | **low-pass the velocity** before the position cascade | **removes the wobble while KEEPING tightness** | code + SIL |
+| C | **low-pass the velocity** before the position cascade | **removes the wobble while KEEPING tightness** | code + SILS |
 | D | root: floor texture / lower hover (flow SNR), better motors (torque → lower vel.kp) | reduce the noise source | hw / env |
 
 ## 4. Recommended design — velocity low-pass (option C)
@@ -161,7 +161,7 @@ already marginal at K≈0.4g, so:
 1. Add the LPF as a 1st-order state in `poshold_loop_design.py`; keep `vel.kp=3.0`; sweep the
    cutoff 0.3–0.8 Hz and pick the one keeping **worst-σ < −0.03 over K∈[2.8,7], τ∈[50,300] ms**.
 2. Recompute the tilt jitter from the smoothed noise; confirm it meets the target (e.g. < 0.2°).
-3. SIL `pos_*` regression (ideal flow won't show the noise benefit but confirms stability).
+3. SILS `pos_*` regression (ideal flow won't show the noise benefit but confirms stability).
 4. Hardware: `sf log wifi` → `poshold_analysis.py`; confirm lower gyro rms / coherence.
 
 **Where:** smooth `state.velocity[0..1]` in `computePositionHold` with a 1st-order LPF state

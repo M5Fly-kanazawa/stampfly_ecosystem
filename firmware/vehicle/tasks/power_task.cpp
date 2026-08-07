@@ -174,9 +174,9 @@ void PowerTask(void* pvParameters)
                 data.power   = reading.power_mw;
 
                 // One-shot boot battery log — useful for hardware bring-up
-                // (don't fly on a low pack) and confirms the read path in SIL.
+                // (don't fly on a low pack) and confirms the read path in SILS.
                 // 起動時電池電圧の単発ログ — 実機ブリングアップに有用（低電圧では
-                // 飛ばさない）。SIL では読み取り経路の確認も兼ねる。
+                // 飛ばさない）。SILS では読み取り経路の確認も兼ねる。
                 if (!logged_first) {
                     logged_first = true;
                     ESP_LOGI(TAG, "Battery: %.2fV (boot reading)", data.voltage);

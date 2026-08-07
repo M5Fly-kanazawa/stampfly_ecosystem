@@ -202,7 +202,7 @@ ESP-IDF ツールインストールを実行し、9009 で失敗していた操�
 
 | # | 項目 | 状態 |
 |---|------|------|
-| 1 | SIL退行テストPASS | 確認済み。SIL関連パス（`lib/sfcli/**` 等）に触れた本範囲最後のコミット `e538253f` の push で CI `SIL scenario regression`（Actions run `29903750603`）が success。以降のコミットはパスフィルタ対象外（`scripts/`・`setup_env.*`・docs のみ） |
+| 1 | SILS退行テストPASS | 確認済み。SILS関連パス（`lib/sfcli/**` 等）に触れた本範囲最後のコミット `e538253f` の push で CI `SILS scenario regression`（Actions run `29903750603`）が success。以降のコミットはパスフィルタ対象外（`scripts/`・`setup_env.*`・docs のみ） |
 | 2 | `sf build vehicle` / `sf build controller` ローカルビルド成功 | 確認済み（2026-07-23、Windows pyenv-win マシン上で両ターゲットとも Build successful。vehicle 1119.0 KB） |
 | 3 | 前回リリースからの変更点整理 | 本ドキュメント |
 | 4-5 | タグ作成・push | **未実施** |

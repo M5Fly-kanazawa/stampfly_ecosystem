@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <!--
-  sf telemetry - -web — live telemetry dashboard with the SIL-GUI 3D view.
+  sf telemetry - -web — live telemetry dashboard with the SILS-GUI 3D view.
   The 3D scene (StampFly model, lighting, OrbitControls + per-OS trackpad zoom,
-  prop spin driven by per-motor duty) is PORTED from simulator/sil/gui/static/
-  app.js so the look and the controls are identical to the SIL GUI. STL body
+  prop spin driven by per-motor duty) is PORTED from simulator/sils/gui/static/
+  app.js so the look and the controls are identical to the SILS GUI. STL body
   parts are served at /mesh/ from the same simulator/shared assets. If three.js
   cannot load (offline field use — CDN unreachable), the page falls back to the
   legacy 2D attitude indicator.
-  sf telemetry - -web — SIL GUI と同一の 3D ビュー付きライブテレメトリ。3D シーン
+  sf telemetry - -web — SILS GUI と同一の 3D ビュー付きライブテレメトリ。3D シーン
   （StampFly モデル・照明・OrbitControls＋OS別ズーム・モータ duty 比例のプロペラ
-  回転）は simulator/sil/gui/static/app.js から移植し、見た目も操作も SIL GUI と
+  回転）は simulator/sils/gui/static/app.js から移植し、見た目も操作も SILS GUI と
   同一。STL は同じ simulator/shared アセットを /mesh/ で配信。three.js が読めない
   場合（現場のオフライン運用で CDN 不達）は旧 2D 姿勢表示器にフォールバックする。
 -->
@@ -45,7 +45,7 @@
  <span class="muted" id="meta">waiting for packets...</span></h1>
 <div class="row">
  <div class="card">
-  <div class="muted">3D view — SIL GUI と同一
+  <div class="muted">3D view — SILS GUI と同一
    <select id="scaleSel" title="機体表示スケール">
     <option value="1">機体 ×1（実寸）</option>
     <option value="3" selected>機体 ×3</option>
@@ -56,7 +56,7 @@
   <div id="canvasWrap"><canvas id="scene"></canvas></div>
   <canvas id="attitudeIndicator" width="240" height="240"
           style="width:240px;height:240px;display:none"></canvas>
-  <div class="hint">ドラッグ=回転 / ホイール・ピンチ=ズーム / 右ドラッグ=パン（SIL GUI と同じ操作）</div>
+  <div class="hint">ドラッグ=回転 / ホイール・ピンチ=ズーム / 右ドラッグ=パン（SILS GUI と同じ操作）</div>
  </div>
  <div>
   <div class="row">
@@ -253,11 +253,11 @@ window.addEventListener("error", (e)=>{   // importmap/CDN failure surfaces here
 
 <script type="module">
 // ============================================================================
-// 3D view — PORTED from the SIL GUI (simulator/sil/gui/static/app.js): same
+// 3D view — PORTED from the SILS GUI (simulator/sils/gui/static/app.js): same
 // StampFly model (landing-page geometry + real STL parts), same lighting, same
 // OrbitControls with the per-OS trackpad/wheel zoom, same duty-driven prop
 // spin. Live data replaces the trajectory playback.
-// 3D ビュー — SIL GUI から移植: 同じ StampFly モデル（landing 形状＋実 STL）、
+// 3D ビュー — SILS GUI から移植: 同じ StampFly モデル（landing 形状＋実 STL）、
 // 同じ照明、同じ OrbitControls＋OS別ズーム、同じ duty 駆動プロペラ回転。
 // 軌跡再生の代わりにライブデータで駆動する。
 // ============================================================================
@@ -317,7 +317,7 @@ function installTrackpadZoom(canvas) {
   }, { passive: false });
 }
 
-// --- StampFly model (SIL GUI / landing page, verbatim) ----------------------
+// --- StampFly model (SILS GUI / landing page, verbatim) ----------------------
 const PART_MAT = {
   frame:           new THREE.MeshStandardMaterial({ color: 0xccd2db, roughness: 0.5,  metalness: 0.1 }),
   pcb:             new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.55, metalness: 0.2 }),
@@ -408,7 +408,7 @@ function buildDrone() {
 // D: FRD->FLU = diag(1,-1,-1). Because C != D this is NOT a similarity, so the old
 // "v'=C·v, w'=w" (which is C·R·C^T) was wrong: it left a constant 90° body-yaw
 // offset that made ROLL and PITCH (the X and Y axes) appear SWAPPED. The closed
-// form of the quaternion of C·R·D^T (verified numerically vs the SIL GUI's direct
+// form of the quaternion of C·R·D^T (verified numerically vs the SILS GUI's direct
 // FLU-in-ENU quaternion) is below.
 // NED オイラー角（FRD 機体）→ ENU worldGroup 内 FLU 機体の three.js クォータニオン。
 // 回転 R_nb を表示系で R' = C·R_nb·D^T と表す。世界基底は C（NED→ENU, x↔y入替・z反転）、
@@ -427,7 +427,7 @@ function quatFromNedEuler(roll, pitch, yaw) {
   return [s*(qx+qy), s*(qx-qy), s*(qw-qz), s*(qw+qz)];   // (x,y,z,w) for three / three 用
 }
 
-// --- scene (SIL GUI init3D, verbatim apart from live-data wiring) ------------
+// --- scene (SILS GUI init3D, verbatim apart from live-data wiring) ------------
 const canvas = $("scene");
 renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 scene = new THREE.Scene();
@@ -492,8 +492,8 @@ function animate() {
       trailGeo.setDrawRange(0, $("trailChk").checked ? trailPts.length / 3 : 0);
     }
     // Prop spin: per-motor duty, real turn direction (same visual law as the
-    // SIL GUI: idle creep + duty-proportional rate).
-    // プロペラ回転: モータ別 duty・実回転方向（SIL GUI と同じ視覚則）。
+    // SILS GUI: idle creep + duty-proportional rate).
+    // プロペラ回転: モータ別 duty・実回転方向（SILS GUI と同じ視覚則）。
     props.forEach(pr => {
       const duty = p[pr.motor] || 0;
       pr.pivot.rotation.y += pr.dir * (0.05 + duty * 1.6);

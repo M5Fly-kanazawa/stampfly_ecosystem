@@ -57,7 +57,7 @@
 
 ## 2. 問題：位置保持が「綱渡り」だった
 
-毎軸の POSITION_HOLD / STABILIZE を SIL（ソフトウェア上の飛行試験）で回すと、
+毎軸の POSITION_HOLD / STABILIZE を SILS（ソフトウェア上の飛行試験）で回すと、
 **限界安定**だった。つまり「かろうじて保っている」状態。
 
 | 与えた違い | 横方向のドリフト | 結果 |
@@ -156,7 +156,7 @@
 **回復補正を門番自身が拒否して永久に固着する**」だった（電子回路の latch-up になぞらえ、
 当初これを『ラッチアップ』と呼んでいた — が、これから見るように外れる）。
 
-確かめるため、**この破綻を確実に再現する環境**を用意した（`SIL_EMU_BATTERY=off` で電池電圧の
+確かめるため、**この破綻を確実に再現する環境**を用意した（`SILS_EMU_BATTERY=off` で電池電圧の
 ゆらぎという“偶然の救済”を切り、`pos_yaw` を走らせると必ず 7.4m 流れる）。そして
 `updateAccelAttitude` の中身を時系列でログした。
 
@@ -245,20 +245,20 @@
 
 ```bash
 source setup_env.sh
-sf sil build
+sf sils build
 
 # 破綻を再現（電池電圧のゆらぎを切る）— 元の値 0.06 では pos_yaw が 7.4m 流れる
-SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.06 sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
+SILS_EMU_BATTERY=off SILS_EMU_ACCEL_ATT=0.06 sf sils scenario simulator/sils/scenarios/pos_yaw.scn --target vehicle
 
 # 直った値 0.8 では安定（att_rmse ~1.1°）
-SIL_EMU_BATTERY=off SIL_EMU_ACCEL_ATT=0.8  sf sil scenario simulator/sil/scenarios/pos_yaw.scn --target vehicle
+SILS_EMU_BATTERY=off SILS_EMU_ACCEL_ATT=0.8  sf sils scenario simulator/sils/scenarios/pos_yaw.scn --target vehicle
 
 # 中の量を観察（d²・棄却率は emu の console.log に出る）
-grep "chi2:" simulator/sil/viz/out_scn_pos_yaw/console.log | tail
+grep "chi2:" simulator/sils/viz/out_scn_pos_yaw/console.log | tail
 ```
 
 掃引用の環境変数（再ビルド不要、`emu_main.cpp`）：
-`SIL_EMU_ACCEL_ATT`（R の基準）・`SIL_EMU_CHI2_GATE`（門番の閾値）・`SIL_EMU_KADAPT`（適応Rの強さ）・
-`SIL_EMU_BATTERY=off`（破綻を再現）。
+`SILS_EMU_ACCEL_ATT`（R の基準）・`SILS_EMU_CHI2_GATE`（門番の閾値）・`SILS_EMU_KADAPT`（適応Rの強さ）・
+`SILS_EMU_BATTERY=off`（破綻を再現）。
 
 技術的な詳細・棄却した代替案の記録は [`chi2_latchup_finding.md`](chi2_latchup_finding.md) を参照。

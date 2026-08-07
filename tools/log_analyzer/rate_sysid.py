@@ -38,7 +38,7 @@ Mechanical-spec default plant / 機械仕様ベースの既定プラント:
     b = 1/J  (J: Ixx 9.16e-6 / Iyy 13.3e-6 / Izz 20.4e-6 kg m²,
               docs/architecture/stampfly-parameters.md)
     T = 0.02 s (motor+prop thrust lag — real-hardware structural default; as of
-                2026-07-26 the SIL plant's own lag comes from its motor ODE's
+                2026-07-26 the SILS plant's own lag comes from its motor ODE's
                 electromechanical time constant, not a hand-set T, see plant.hpp)
     L = 0.005 s (1.5 control periods @400 Hz + BMI270 OSR4 group delay)
 """

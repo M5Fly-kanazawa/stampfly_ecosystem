@@ -20,7 +20,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 ### 判定基準と更新
 
 - 「計画当初」= 6設計文書（requirements / architecture / detailed_design / coding_and_education / development_roadmap / hardware_init）に記載があるもの
-- 「完了」= 実装済みかつ SIL 回帰または実機ベンチで検証済み
+- 「完了」= 実装済みかつ SILS 回帰または実機ベンチで検証済み
 - 最終更新: 2026-07-05。機能の出入りがあったら本書を更新すること
 
 ## 2. 計画当初にあって完了したもの
@@ -30,7 +30,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | 4階層アクセス＋横断ルール R1〜R16 | コンポーネント責務分離、@design タグ、直接呼び出し禁止 | 全コードレビュー済（2026-06-10） |
-| Pub-Sub トピック通信 | Latest / Queue / RingBuffer の3種、約30トピック | SIL＋実機 |
+| Pub-Sub トピック通信 | Latest / Queue / RingBuffer の3種、約30トピック | SILS＋実機 |
 | BSP（sf_board） | バス所有（I2C/SPI/LEDC/RMT/netif）、Critical/Optional/Recoverable 起動分類 | 実機 |
 | パラメータシステム | params.cpp = SSOT、NVS 永続化（FNV-1aキー）、ReloadParams によるライブ反映 | 実機 |
 | タスク構成 | 16タスク（IMU/Control 400Hz、State、センサ群、Comm、Telemetry、Log、CLI、Notify ほか）、コア分担 | 実機（負荷 watermark 毎分ログ） |
@@ -40,22 +40,22 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | センサ HAL 一式 | BMI270（SPI 1600Hz・OSR4）/ PMW3901 / BMM150（25Hz・DRDYゲート）/ BMP280 / VL53L3CX（底面）/ INA3221 | 実機（全センサ設計レート達成を Data Stream で確認） |
-| 15状態 ESKF | χ²ゲート・active_mask による P 行列隔離・疎構造化（predict 720積和） | SIL G2 ゲート＋実機 |
-| 推定器差し替え | IEstimator、`estimator_type` パラメータで ESKF / 相補フィルタ切替 | SIL 比較検証（P6） |
-| 鉛直系 | ToF-only 鉛直＋接地アンカー＋離陸エッジの鉛直ハンドオフ | SIL alt_rmse 1.6cm＋実機 |
-| 制御器差し替え | IController、カスケード PID（ACRO/STABILIZE/ALT_HOLD/POS_HOLD） | SIL 16シナリオ |
+| 15状態 ESKF | χ²ゲート・active_mask による P 行列隔離・疎構造化（predict 720積和） | SILS G2 ゲート＋実機 |
+| 推定器差し替え | IEstimator、`estimator_type` パラメータで ESKF / 相補フィルタ切替 | SILS 比較検証（P6） |
+| 鉛直系 | ToF-only 鉛直＋接地アンカー＋離陸エッジの鉛直ハンドオフ | SILS alt_rmse 1.6cm＋実機 |
+| 制御器差し替え | IController、カスケード PID（ACRO/STABILIZE/ALT_HOLD/POS_HOLD） | SILS 16シナリオ |
 | POS_HOLD 実機検証 | roadmap Phase 4 | **実機検証済み**（保持精度 ±6-7cm, RMS 16mm） |
-| ミキサー | B⁻¹ 制御配分（物理単位 Nm/N）＋モータ曲線＋ライブ電池電圧補償 | SIL＋実機 |
+| ミキサー | B⁻¹ 制御配分（物理単位 Nm/N）＋モータ曲線＋ライブ電池電圧補償 | SILS＋実機 |
 | 起動校正 | ジャイロ/加速度バイアス測定→推定器種付け、完了まで ARM ゲート | 実機（§4 の静止ゲートで強化） |
 
 ### 状態機械・安全
 
 | 機能 | 内容 | 検証 |
 |------|------|------|
-| フライト状態機械 | INIT→IDLE_GROUND↔IDLE_HELD→ARMED_GROUND→TAKEOFF→FLYING→LANDING、StateManager 単一所有 | SIL＋実機 |
-| フェイルセーフ | 通信断／電池 EMERGENCY → 自動着陸（Landing verb、−0.3 m/s）、衝撃・ジャイロ異常 → 即時 DISARM | SIL commloss/crash_refly |
-| 墜落→再飛行 readiness | ESKF リセット＋再校正＋モード再伝播の全鎖 | SIL crash_refly 21/21 |
-| ペアリング | 相互 MAC 学習・混信フィルタ・NVS 復元・チャネル追従（1教室30機前提） | SIL pairing＋実機 |
+| フライト状態機械 | INIT→IDLE_GROUND↔IDLE_HELD→ARMED_GROUND→TAKEOFF→FLYING→LANDING、StateManager 単一所有 | SILS＋実機 |
+| フェイルセーフ | 通信断／電池 EMERGENCY → 自動着陸（Landing verb、−0.3 m/s）、衝撃・ジャイロ異常 → 即時 DISARM | SILS commloss/crash_refly |
+| 墜落→再飛行 readiness | ESKF リセット＋再校正＋モード再伝播の全鎖 | SILS crash_refly 21/21 |
+| ペアリング | 相互 MAC 学習・混信フィルタ・NVS 復元・チャネル追従（1教室30機前提） | SILS pairing＋実機 |
 
 ### 通信・ログ・UI
 
@@ -69,19 +69,19 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | WiFi STA/AP 両対応 | `wifi.mode` パラメータ＋CLI `wifi`、ESP-NOW チャネル共存 | 実機 |
 | LED/ブザー UI | 状態別 LED・イベント音・mute/輝度の NVS 設定 | 実機（§4 の2チャネル化で発展） |
 
-### 開発基盤（SIL）
+### 開発基盤（SILS）
 
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | StampFly エミュレータ | 実 app_main・全タスク・実ドライバを**無改変**でホスト実行（Code Identity） | 16シナリオ回帰 |
 | シナリオ DSL＋expect ゲート | rc/wind/fault/bias/handle 注入、G1〜G4 機械判定 | TEST_MATRIX.md |
-| 3原則 | Code / Param / Model Identity（ロードマップ §2） | params.cpp 共有、ミキサー/モータ曲線が SIL プラントと厳密逆 |
+| 3原則 | Code / Param / Model Identity（ロードマップ §2） | params.cpp 共有、ミキサー/モータ曲線が SILS プラントと厳密逆 |
 
 ## 3. 計画当初にあって未完了のもの
 
 | 機能 | 計画箇所 | 状態 | 備考 |
 |------|---------|------|------|
-| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SIL api_flight で全鎖検証 | 残: Tello 互換の拡張コマンド（flip/curve 等）、実機飛行検証 |
+| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SILS api_flight で全鎖検証 | 残: Tello 互換の拡張コマンド（flip/curve 等）、実機飛行検証 |
 | Data Stream の USB 経路 | requirements §7（UDP/USB 選択） | UDP のみ | WiFi 不要環境向けの変種 |
 | 校正の NVS 永続化 | calibration.cpp に保存系あり | **意図的保留** | NVS commit のフラッシュ消去が 400Hz ループを >10ms 停止させる。CONFIG_SPI_FLASH_AUTO_SUSPEND 調査とセットで再開 |
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
@@ -99,7 +99,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | **地上モード変更＋ALT/POS 自動離陸**（仕様変更） | 「設置時のモード変更が最も安全なのにできないのは不自然」。制御器に鉛直フェーズ（Grounded=推力ゼロ/TakeoffClimb/Airborne）導入 | 4220de1 |
 | **2チャネル LED UI**（本体=モード色、StampS3=システム状態） | 「3つの LED の使い分けができていない」— disarm 中のモード視認の要望 | b5bba36 |
 | **地磁気校正の配線**（magcal＋起動時磁気参照捕捉＋未校正は融合から自動除外） | 「校正機能がない」— 移植済みだが未配線の MagCalibrator を発見し配線 | 9598dd7 |
-| **INIT 停止根治**（-O2 固定＋ESKF 疎構造化＋StateTask コア0） | 実機でコア1飽和→StateTask 飢餓。SIL では CPU 飽和が見えない教訓 | b4f4800 |
+| **INIT 停止根治**（-O2 固定＋ESKF 疎構造化＋StateTask コア0） | 実機でコア1飽和→StateTask 飢餓。SILS では CPU 飽和が見えない教訓 | b4f4800 |
 | ARM の press-toggle 化 | 実機でボタン押下中のみ ARM される誤実装が発覚（コントローラの ARM はモーメンタリ） | — |
 | 設計保留事項の確定（A1〜A6） | レビューで設計保留 → ユーザー決定: 自動着陸 verb / WiFi 両対応 / 相補フィルタ ToF / ReloadParams / 衝撃検出 400Hz | 5コミット |
 | 運用安全の小品 | `param save` の armed 拒否（フラッシュ停止対策）／起動音の2秒遅延（esptool 窓回避）／ControlTask 通知ウォッチドッグ／`param reset` | — |
@@ -150,7 +150,7 @@ vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed
 ### Criteria
 
 - "Originally planned" = written in the six design documents (requirements / architecture / detailed_design / coding_and_education / development_roadmap / hardware_init)
-- "Done" = implemented AND verified by the SIL regression or on hardware
+- "Done" = implemented AND verified by the SILS regression or on hardware
 - Last updated 2026-07-05; update this document when features move.
 
 ## 2. Planned and Completed
@@ -159,18 +159,18 @@ vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed
 |------|-----------|----------|
 | Architecture | 4-layer access + rules R1–R16, Pub-Sub topics (~30), BSP (sf_board) with Critical/Optional/Recoverable boot classes, params.cpp SSOT + NVS + live reload, 16 tasks (IMU/Control 400 Hz) | Full code review + hardware |
 | Sensors | BMI270 (SPI 1600 Hz, OSR4) / PMW3901 / BMM150 (25 Hz, DRDY-gated) / BMP280 / VL53L3CX / INA3221 — all at design rates (confirmed via Data Stream) | Hardware E2E |
-| Estimation | 15-state ESKF (chi2 gates, active_mask P isolation, sparse predict), swappable IEstimator (ESKF/complementary), ToF-only vertical + ground anchoring + takeoff handoff | SIL G2 + hardware |
-| Control | Swappable IController, cascade PID (ACRO/STAB/ALT/POS), B^-1 mixer in physical units + motor curve + live battery compensation | SIL 16 scenarios |
+| Estimation | 15-state ESKF (chi2 gates, active_mask P isolation, sparse predict), swappable IEstimator (ESKF/complementary), ToF-only vertical + ground anchoring + takeoff handoff | SILS G2 + hardware |
+| Control | Swappable IController, cascade PID (ACRO/STAB/ALT/POS), B^-1 mixer in physical units + motor curve + live battery compensation | SILS 16 scenarios |
 | POS_HOLD hardware validation | roadmap Phase 4 | **Validated on real hardware** (hold accuracy ±6-7cm, RMS 16mm) |
-| State machine & safety | Full flight state machine, comm-loss/battery auto-landing (Landing verb, −0.3 m/s), impact DISARM, crash→re-fly readiness chain, pairing (anti-cross-talk, 30 craft/classroom) | SIL + hardware |
+| State machine & safety | Full flight state machine, comm-loss/battery auto-landing (Landing verb, −0.3 m/s), impact DISARM, crash→re-fly readiness chain, pairing (anti-cross-talk, 30 craft/classroom) | SILS + hardware |
 | Comms & logging | SSOT ControlPacket 14B, Telemetry UDP 50 Hz (receiver: `sf telemetry`, terminal or `--web` browser via UDP→SSE), **Data Stream 400 Hz wire-compatible with legacy** (`sf log wifi`/`viz` unmodified), Blackbox on SPIFFS, CLI over USB + TCP:23, WiFi STA/AP dual | Hardware E2E |
-| SIL | Real app_main/tasks/drivers run UNMODIFIED on the host (Code Identity), scenario DSL + expect gates G1–G4, Code/Param/Model Identity principles | 16/16 regression |
+| SILS | Real app_main/tasks/drivers run UNMODIFIED on the host (Code Identity), scenario DSL + expect gates G1–G4, Code/Param/Model Identity principles | 16/16 regression |
 
 ## 3. Planned, Not Yet Done
 
 | Feature | Status |
 |---------|--------|
-| Tello API / UDP command receive | CORE DONE (ApiTask: command/takeoff/land/emergency/stop/moves/rotate/queries + Python SDK, SIL-verified end-to-end); extended Tello verbs + hardware flights remain |
+| Tello API / UDP command receive | CORE DONE (ApiTask: command/takeoff/land/emergency/stop/moves/rotate/queries + Python SDK, SILS-verified end-to-end); extended Tello verbs + hardware flights remain |
 | Data Stream over USB | UDP only today |
 | Calibration NVS persistence | Deliberately deferred — NVS flash erase stalls the 400 Hz loop >10 ms; revisit with CONFIG_SPI_FLASH_AUTO_SUSPEND |
 | Front ToF | HAL present, not brought up |
@@ -188,7 +188,7 @@ All retrofitted into the design documents.
 | Ground mode change + ALT/POS auto-takeoff (spec change) | "Changing modes while parked is the safest time"; controller vertical phases (Grounded = zero thrust / TakeoffClimb / Airborne) | 4220de1 |
 | Dual LED channels (body = mode colour, StampS3 = system state) | Bench UX feedback | b5bba36 |
 | Magnetometer calibration wiring (magcal + boot mag-ref capture + uncalibrated keep-out) | "No mag calibration" — found the ported-but-unwired MagCalibrator | 9598dd7 |
-| INIT-stuck root fix (-O2 + sparse ESKF + StateTask on core 0) | Core-1 saturation starved StateTask on hardware; SIL cannot see CPU saturation | b4f4800 |
+| INIT-stuck root fix (-O2 + sparse ESKF + StateTask on core 0) | Core-1 saturation starved StateTask on hardware; SILS cannot see CPU saturation | b4f4800 |
 | ARM press-toggle, A1–A6 decisions, param-save armed refusal, deferred boot chime, ControlTask watchdog, `param reset`, Data Stream delivery fixes (flow full-rate, DRDY-in-burst, capacity-drop accounting) | Various hardware findings | — |
 
 ## 5. In vehicle_old but Not in vehicle

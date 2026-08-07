@@ -1,14 +1,14 @@
 # Interface modules
 # インターフェースモジュール
 """
-External interfaces: joystick, protocol bridge, SIL, etc.
-外部インターフェース：ジョイスティック、プロトコルブリッジ、SILなど
+External interfaces: joystick, protocol bridge, SILS, etc.
+外部インターフェース：ジョイスティック、プロトコルブリッジ、SILSなど
 
 Modules:
 - joystick: HID joystick input (ATOM Joystick)
 - messages: Protocol message classes (ControlPacket, TelemetryPacket, etc.)
 - protocol_bridge: Simulator state <-> Protocol conversion
-- sil_interface: Software-in-the-Loop interface
+- sils_interface: Software-in-the-Loop interface
 """
 
 # Joystick
@@ -44,11 +44,11 @@ from .protocol_bridge import (
     numpy_to_log,
 )
 
-# SIL Interface
-from .sil_interface import (
+# SILS Interface
+from .sils_interface import (
     SensorData,
     ActuatorCommand,
-    SILInterface,
+    SILSInterface,
     SimpleRateController,
 )
 
@@ -91,10 +91,10 @@ __all__ = [
     'BinaryLogReader',
     'log_to_numpy',
     'numpy_to_log',
-    # SIL Interface
+    # SILS Interface
     'SensorData',
     'ActuatorCommand',
-    'SILInterface',
+    'SILSInterface',
     'SimpleRateController',
     # HIL Interface
     'HILInterface',

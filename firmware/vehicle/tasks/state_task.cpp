@@ -45,7 +45,7 @@ static sf::StateManager g_state_manager;
 // Ground→flight covariance handoff at ARM — why ATTITUDE-only, not a full reset
 //
 // detailed_design §3 originally called for a full ESKF reset at ARM (rationale: the
-// on-ground covariance convergence is not flight-representative). A SIL reset-timing
+// on-ground covariance convergence is not flight-representative). A SILS reset-timing
 // sweep (8 strategies × the flight suite) showed the literal full reset — and any
 // inflation of the POSITION/VELOCITY/BIAS covariance — destabilizes the takeoff
 // transient: the re-inflated covariance over-trusts the thrust-contaminated
@@ -61,7 +61,7 @@ static sf::StateManager g_state_manager;
 //
 // ARM での地上→飛行 共分散ハンドオフ — なぜ「姿勢のみ」で全リセットでないか。
 // detailed_design §3 は当初 ARM時 ESKF 全リセットを求めた（地上の共分散収束は飛行を代表
-// しない、という根拠）。SIL のリセットタイミング掃引（8方策×飛行スイート）で、字義通りの
+// しない、という根拠）。SILS のリセットタイミング掃引（8方策×飛行スイート）で、字義通りの
 // 全リセット — および位置/速度/バイアスの共分散の膨張 — は離陸過渡を不安定化すると判明:
 // 再膨張した共分散がスラスト汚染された加速度計を過信し POS_HOLD 姿勢が発散
 // （pos_roll/pitch/flight 墜落）。スイート全PASS は2方策のみ＝「何もしない」と「姿勢の共分散
@@ -71,7 +71,7 @@ static sf::StateManager g_state_manager;
 // バイアスは飛行中も同じ IMU ゆえ地上推定を保持。（CLAUDE.md: 制御変更はシミュレーションで裏付け。）
 //
 // @design detailed_design.md §3 — ARM: ESKF attitude-covariance inflation (was full reset) [OK]
-// @design architecture.md §4 — ground→flight covariance handoff (SIL-validated)            [OK]
+// @design architecture.md §4 — ground→flight covariance handoff (SILS-validated)            [OK]
 
 /// Register the StateManager transition callbacks (called once at task start, after
 /// init()). Each callback publishes reset commands on the estimator/controller/notify
@@ -117,14 +117,14 @@ static void registerStateCallbacks(sf::StateManager& manager)
                     // gate forever), so it never self-rights. The craft is now KNOWN level and
                     // stationary on the ground, so a full ESKF reset re-seeds the attitude to
                     // level (identity) and re-inflates the covariance, clearing the latch — the
-                    // missing half of re-fly readiness (SIL crash_refly surfaced this). INIT
+                    // missing half of re-fly readiness (SILS crash_refly surfaced this). INIT
                     // boots from a clean estimator (constructor reset), so it skips this.
                     // 墜落機を扱って置き直した直後: 推定器が墜落由来の大姿勢誤差を latch しうる ―
                     // タンブル/反転で姿勢推定が真値から大きく外れ、accel-attitude の χ² ゲートが
                     // それを直す補正自体を棄却し（残差がゲートを超え続ける）自己復帰しない。機体は
                     // 今 level・静止と既知ゆえ、ESKF 全リセットで姿勢を level（identity）へ再シード・
                     // 共分散を再膨張し latch を解除する ― 再飛行 readiness の欠けていた半分
-                    // （SIL crash_refly が炙り出した）。INIT は構築時 reset のクリーンな推定器
+                    // （SILS crash_refly が炙り出した）。INIT は構築時 reset のクリーンな推定器
                     // から起動するため不要。
                     sf::estimator_command.publish(
                         {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
@@ -174,13 +174,13 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 //  2. estimator InflateCov(Attitude) — declare flight-uncertainty about the
                 //     attitude (the ground convergence is re-asserted against gravity before
                 //     takeoff). NOT a full reset / not pos-vel-bias — those destabilize the
-                //     takeoff transient (see the header note: SIL sweep result).
+                //     takeoff transient (see the header note: SILS sweep result).
                 //  3. arm tone.
                 // ARM（detailed_design §3: 全PIDリセット、ESKF姿勢共分散の膨張、arm音）:
                 //  1. controller Reset — PID 積分器クリア。
                 //  2. estimator InflateCov(Attitude) — 姿勢の飛行不確かさを宣言（地上収束は
                 //     離陸前に重力で再主張される）。全リセットでも pos/vel/bias でもない — それらは
-                //     離陸過渡を不安定化する（ヘッダ注記: SIL 掃引結果）。
+                //     離陸過渡を不安定化する（ヘッダ注記: SILS 掃引結果）。
                 //  3. arm 音。
                 sf::controller_command.publish(
                     {static_cast<uint8_t>(sf::ControllerCmd::Reset), 0, now});
@@ -282,10 +282,10 @@ void StateTask(void* pvParameters)
     bool init_done = false;   // INIT → IDLE_GROUND done once / 初期化完了遷移を1回
 
     // Previous comm bind flag (pairing_complete.bound), for false→true edge detection.
-    // We react to the EDGE (comm became bound) once, robustly to the SIL virtual clock
+    // We react to the EDGE (comm became bound) once, robustly to the SILS virtual clock
     // reading 0 (a timestamp-based sentinel would be unreliable there).
     // 前回の comm バインドフラグ（pairing_complete.bound）。false→true エッジ検出用。
-    // SIL 仮想クロックが 0 を返しても頑健なよう、エッジ（comm がバインドした瞬間）に1回反応する。
+    // SILS 仮想クロックが 0 を返しても頑健なよう、エッジ（comm がバインドした瞬間）に1回反応する。
     bool prev_bound = false;
 
     // ARMED_GROUND entry time, for the ALT/POS auto-takeoff spool/settle dwell
@@ -361,7 +361,7 @@ void StateTask(void* pvParameters)
             // the switch EDGE only — a switch position is the pilot's intent at
             // the moment it was flipped, not a standing override. Level-apply
             // would let a parked transmitter revert a mode set by another
-            // authority every 20 ms (found by SIL api_flight: the API set
+            // authority every 20 ms (found by SILS api_flight: the API set
             // POS_HOLD, the neutral RC reverted it to STABILIZE the instant
             // FLYING was reached → zero thrust → impact). Flipping the switch
             // mid-flight still changes the mode immediately — the pilot wins —
@@ -369,7 +369,7 @@ void StateTask(void* pvParameters)
             // モードスイッチから要求 FlightMode を導出（優先: POS>ALT>ACRO>STAB）し、
             // 「スイッチのエッジでのみ」適用する — スイッチ位置は倒した瞬間の意図で
             // あり、常時上書きではない。レベル適用だと放置された送信機が他権限の設定
-            // モードを 20ms 毎に引き戻す（SIL api_flight が発見: API の POS_HOLD を
+            // モードを 20ms 毎に引き戻す（SILS api_flight が発見: API の POS_HOLD を
             // 中立 RC が FLYING 到達直後に STABILIZE へ戻し → 推力ゼロ → 墜落）。
             // 飛行中にスイッチを倒せば即座にモードが変わる — パイロット優先 — で、
             // 制御器の「スティックを動かしたら誘導解除」則と同じ思想。

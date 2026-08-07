@@ -27,7 +27,7 @@
 ## 決着（2026-07-17 追記）
 
 - **第2段採用確定**（パイロットが操縦感を承認）。td=0.02 + kp=1.268773e-3 を
-  params.cpp 既定値へ反映（param_vars + table[] 両方）。SIL 回帰 31 PASS・退行なし
+  params.cpp 既定値へ反映（param_vars + table[] 両方）。SILS 回帰 31 PASS・退行なし
   （FAIL 8件は main 由来の既知インフラ問題）
 
 ## 未決着

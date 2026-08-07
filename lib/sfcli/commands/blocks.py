@@ -21,12 +21,12 @@ StampFly vehicle's Tello-compatible text API:
 
 Classrooms are OFFLINE while the PC is joined to the drone's WiFi AP, so this
 module is stdlib-only (no external dependencies) — same policy as
-`sf telemetry --web` / the SIL GUI. HTTP server binds 127.0.0.1 ONLY: this is
+`sf telemetry --web` / the SILS GUI. HTTP server binds 127.0.0.1 ONLY: this is
 a control channel (it can take off / land / cut motors), never a LAN service.
 
 教室は PC がドローンの WiFi AP に接続している間インターネット無しで動く前提
 なので、本モジュールは stdlib のみで書く（外部依存ゼロ）— `sf telemetry --web`
-や SIL GUI と同じ方針。HTTP サーバは 127.0.0.1 のみに bind する: これは制御
+や SILS GUI と同じ方針。HTTP サーバは 127.0.0.1 のみに bind する: これは制御
 チャネル（離陸・着陸・モータ停止ができる）であり、LAN サービスにしてはならない。
 
 We do NOT reuse tools/stampfly_py/stampfly.py — its client is strictly

@@ -4,7 +4,7 @@
 # This file is read by `sf params generate` (tools/params_audit/generate.py),
 # which machine-generates:
 #   - tools/sysid/_generated_params.py           (flat Python constants)
-#   - simulator/sil/plant/generated_params.hpp   (C++ constexpr constants)
+#   - simulator/sils/plant/generated_params.hpp   (C++ constexpr constants)
 #   - the <!-- AUTO-GENERATED:params --> marker table in
 #     docs/architecture/stampfly-parameters.md (JP + EN)
 #
@@ -16,7 +16,7 @@
 # 本ファイルは `sf params generate`（tools/params_audit/generate.py）が読み込み、
 # 以下を機械生成する:
 #   - tools/sysid/_generated_params.py           （フラットな Python 定数）
-#   - simulator/sil/plant/generated_params.hpp   （C++ constexpr 定数）
+#   - simulator/sils/plant/generated_params.hpp   （C++ constexpr 定数）
 #   - docs/architecture/stampfly-parameters.md 内の
 #     <!-- AUTO-GENERATED:params --> マーカー表（日本語・英語）
 #
@@ -51,13 +51,13 @@ meta:
 # tools/sysid/defaults.py's DEFAULT_PARAMS (which keeps its own hand-written
 # literals for mass/Ixx/Iyy/Izz/arm_length, per the Phase-1 task scope) — only
 # tools/params_audit/params_manifest.py's EXPECTED_* comparison values and
-# simulator/sil/plant/generated_params.hpp draw from here. Wiring
+# simulator/sils/plant/generated_params.hpp draw from here. Wiring
 # DEFAULT_PARAMS itself to this file is left to a future phase.
 # 注: Phase 1 時点ではこれらの定数は tools/sysid/defaults.py の
 # DEFAULT_PARAMS（mass/Ixx/Iyy/Izz/arm_length は引き続き手書きリテラルを保持、
 # Phase 1 のタスク範囲による）へは未配線 — ここから値を引くのは
 # tools/params_audit/params_manifest.py の EXPECTED_* 比較値と
-# simulator/sil/plant/generated_params.hpp のみ。DEFAULT_PARAMS 自体の配線は
+# simulator/sils/plant/generated_params.hpp のみ。DEFAULT_PARAMS 自体の配線は
 # 将来フェーズに委ねる。
 # ==============================================================================
 constants:
@@ -122,9 +122,9 @@ calibration_sets:
   # PROVISIONAL value as of 2026-08-03 (see the Ct entry's own note below --
   # the 2026-07-15 thrust-stand figure was retracted for lack of a valid
   # simultaneous voltage/RPM/thrust measurement on the new propeller). As of
-  # 2026-07-26 (backlog #2, motor ODE) simulator/sil/plant/plant.hpp sources
+  # 2026-07-26 (backlog #2, motor ODE) simulator/sils/plant/plant.hpp sources
   # Ct/Cq/Jmp/Dm/Qf/Rm/Km/kappa directly from this set via
-  # generated_params.hpp (sil_params::adopted::*) -- the legacy_motor_curve
+  # generated_params.hpp (sils_params::adopted::*) -- the legacy_motor_curve
   # set below (Am/Bm/Cm static V-omega curve) is retired from plant.hpp
   # entirely, replaced by the electromechanical ODE.
   # firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT now
@@ -136,9 +136,9 @@ calibration_sets:
   # コーストダウン3項再フィット（Dm/Qf）で確定。Ct は2026-08-03時点で暫定値
   # （下の Ct エントリの note 参照 -- 2026-07-15 のthrust stand値は、新
   # プロペラでの電圧/回転数/推力の有効な同時計測を欠くため撤回）。
-  # 2026-07-26（バックログ#2、モータODE化）時点で simulator/sil/plant/
+  # 2026-07-26（バックログ#2、モータODE化）時点で simulator/sils/plant/
   # plant.hpp は Ct/Cq/Jmp/Dm/Qf/Rm/Km/kappa を全て本セットから
-  # generated_params.hpp（sil_params::adopted::*）経由で直接参照する --
+  # generated_params.hpp（sils_params::adopted::*）経由で直接参照する --
   # 下記 legacy_motor_curve（Am/Bm/Cm 静的V-ω曲線）は plant.hpp から完全
   # 撤退し ODE に置換された。
   # firmware/vehicle/components/sf_actuator/actuator.cpp の MOTOR_CT は
@@ -160,7 +160,7 @@ calibration_sets:
           おらず、2026-07-15のthrust stand値は撤回（計測待ち）。暫定値
           1.00e-8 の拠り所: (1) 同径プロペラでの過去の確からしい実測、(2)
           理論に基づくシミュレーションとの整合。ベンチでのV-ω-T同時計測に
-          より確定させること。T = Ct·ω²。simulator/sil/plant/plant.hpp は
+          より確定させること。T = Ct·ω²。simulator/sils/plant/plant.hpp は
           本値へ切替済み（2026-07-26 ODE化、backlog #2、値自体は2026-08-03
           改定）。firmware actuator.cpp の MOTOR_CT は本値と数値一致
           （backlog #3 のファーム側切替を待たず、暫定値が旧リテラルと
@@ -242,7 +242,7 @@ calibration_sets:
       Am_consistent: "Rm * Cq / Km"   # 参考値のみ（バックログ#3用）。どの生成物からも実消費されない
 
   # Legacy electrical family. As of 2026-07-26 (backlog #2, motor ODE)
-  # simulator/sil/plant/plant.hpp no longer references ANY member of this set
+  # simulator/sils/plant/plant.hpp no longer references ANY member of this set
   # (Config::motor_Am/motor_Bm/motor_Cm and the static-curve Config::Ct were
   # removed together with solveOmega() -- replaced by the electromechanical
   # ODE sourced from measured_2026_07 above). Am/Bm/Cm still have a surviving
@@ -254,7 +254,7 @@ calibration_sets:
   # 2026-07-14 measurement) and pending the ongoing bench V-ω-T
   # co-measurement that will confirm or replace the provisional Ct.
   # 旧電気系ファミリ。2026-07-26（バックログ#2、モータODE化）時点で
-  # simulator/sil/plant/plant.hpp は本セットのどのメンバーも参照しない
+  # simulator/sils/plant/plant.hpp は本セットのどのメンバーも参照しない
   # （Config::motor_Am/motor_Bm/motor_Cm と静的曲線版 Config::Ct は
   # solveOmega() と共に撤去——上の measured_2026_07 由来の電気機械ODEに
   # 置換済み）。Am/Bm/Cm は引き続き消費者が残る（firmware/vehicle/

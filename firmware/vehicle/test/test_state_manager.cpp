@@ -12,15 +12,15 @@
  *        StateManager と Failsafe の決定論ユニットテスト
  *
  * Runs on host PC against the UNMODIFIED firmware sources
- * (state_manager.cpp, failsafe.cpp) compiled through the simulator/sil/compat
+ * (state_manager.cpp, failsafe.cpp) compiled through the simulator/sils/compat
  * shim. Covers every transition edge, every guard rejection, every AlertType
  * branch, callback ordering, and Failsafe thresholds — the state-transition
- * coverage that the integrated SIL alone cannot guarantee.
+ * coverage that the integrated SILS alone cannot guarantee.
  *
  * ホストPCで無改変のファームソース(state_manager.cpp, failsafe.cpp)を
- * simulator/sil/compat シム経由でコンパイルして実行する。全遷移エッジ・
+ * simulator/sils/compat シム経由でコンパイルして実行する。全遷移エッジ・
  * 全ガード拒否・全AlertType分岐・コールバック順序・Failsafe閾値を網羅 —
- * 統合SIL単独では保証できない状態遷移カバレッジを担保する。
+ * 統合SILS単独では保証できない状態遷移カバレッジを担保する。
  *
  * @design requirements.md §10 — Unit testing on PC                    [--]
  * @design architecture.md §2 — Sole transition owner                  [--]

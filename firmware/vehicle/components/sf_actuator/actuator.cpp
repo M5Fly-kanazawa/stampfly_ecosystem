@@ -81,10 +81,10 @@ static constexpr float MAX_DUTY = 1.0f;
 // documented motor model (docs/architecture/stampfly-parameters.md §3). The
 // control inputs are PHYSICAL — thrust [N] and torques [Nm] — and the mixer
 // inverts the allocation, then converts each motor thrust to a PWM duty through
-// the motor curve (the exact inverse of the SIL plant's duty→thrust).
+// the motor curve (the exact inverse of the SILS plant's duty→thrust).
 // X-quad 幾何＋モータ曲線（B^-1 制御配分用）。飛行実績のあるレガシー配分器と文書の
 // モータモデルに準拠。制御入力は物理量（推力 [N]・トルク [Nm]）で、ミキサーは配分を
-// 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SIL プラントの duty→推力 の逆）。
+// 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SILS プラントの duty→推力 の逆）。
 static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
 // Torque/thrust ratio κ = Cq/Ct. Cq=4.10e-11 is coast-down MEASURED
 // 2026-07-15 (open-circuit, confirmed by the user's own measurement --
@@ -136,13 +136,13 @@ static constexpr float MOTOR_CT = 1.00e-8f;
 // Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
 // Uses the LIVE battery voltage from sensor_power so the thrust→duty stage tracks
 // the 1S LiPo as it sags under load — REQUIRED on real HW (a fixed assumption would
-// under/over-drive the motors as the pack deviates from nominal) and matched in SIL
+// under/over-drive the motors as the pack deviates from nominal) and matched in SILS
 // by the plant's battery sag model (Model Identity). The floor guards the boot
 // window (no PowerData yet → voltage 0) and any implausible reading so thrustToDuty
 // never divides by ~0 and blows up the duty.
 // モータ曲線の電圧 → PWM duty 変換（duty = V/Vbat）に使う電源電圧。sensor_power の実電圧を
 // 使い、負荷で垂下する 1S LiPo に thrust→duty 段を追従させる。実機で必須（固定だとパックが
-// 公称からずれると過/不足駆動）。SIL ではプラントの電池サグモデルで一致（Model Identity）。
+// 公称からずれると過/不足駆動）。SILS ではプラントの電池サグモデルで一致（Model Identity）。
 // 下限ガードは起動窓（PowerData 未発行→電圧0）と異常値を弾き、~0 除算で duty を暴発させない。
 static constexpr float V_BATT_NOMINAL = 3.7f;   // 1S LiPo nominal fallback [V]
 static constexpr float V_BATT_MIN     = 2.5f;   // below this → treat as invalid [V]
@@ -176,10 +176,10 @@ static stampfly::MotorDriver::Config makeMotorConfig()
     // sf_board owns the shared LEDC timer (R1) and configures it in Phase 1, so
     // the motor HAL must not re-configure it — only bind its channels. Set as a
     // plain bool (not via sf_board) because this source is shared with the
-    // partial SIL test programs that do not link sf_board.
+    // partial SILS test programs that do not link sf_board.
     // 共有 LEDC タイマは sf_board が所有(R1)し Phase 1 で構成するため、モータ HAL
     // は再構成せずチャンネル紐付けのみ行う。この .cpp は sf_board をリンクしない
-    // 部分 SIL 試験と共有のため bool で設定する。
+    // 部分 SILS 試験と共有のため bool で設定する。
     cfg.skip_timer_init = true;
     return cfg;
 }
@@ -216,10 +216,10 @@ void Actuator::init()
 // -----------------------------------------------------------------------------
 // thrustToDuty — per-motor thrust [N] → PWM duty [0,1] via the motor curve:
 //   ω = √(T/Ct) ;  V = Am·ω² + Bm·ω + Cm ;  duty = V / Vbat.
-// Exact inverse of the SIL plant's duty→thrust, so a thrust the allocator
+// Exact inverse of the SILS plant's duty→thrust, so a thrust the allocator
 // commands is the thrust the (modeled) motor produces. Vbat is the LIVE supply
 // voltage (passed in), so the conversion tracks the 1S LiPo as it sags under load.
-// thrustToDuty — 各モータ推力 [N] → PWM duty [0,1]（モータ曲線）。SIL プラントの
+// thrustToDuty — 各モータ推力 [N] → PWM duty [0,1]（モータ曲線）。SILS プラントの
 // duty→推力 の厳密な逆。Vbat は実電源電圧（引数）で、負荷で垂下する 1S LiPo に追従する。
 // -----------------------------------------------------------------------------
 static float thrustToDuty(float thrust, float vbat)
@@ -401,9 +401,9 @@ void Actuator::disarm()
 //
 // SAFETY: the caller (ControlTask) gates this to the DISARMED state only; it is never
 // reached while armed. We arm the HAL (idempotent) so it accepts the duty write, set the
-// duties, and publish for telemetry/SIL. ControlTask calls disarm() to stop the test.
+// duties, and publish for telemetry/SILS. ControlTask calls disarm() to stop the test.
 // 安全: 呼び出し側（ControlTask）が disarmed 限定に gate し、armed 中は到達しない。HAL を arm
-// （冪等）して duty 書き込みを受理させ、duty を設定し、テレメトリ/SIL 用に発行する。テスト停止は
+// （冪等）して duty 書き込みを受理させ、duty を設定し、テレメトリ/SILS 用に発行する。テスト停止は
 // ControlTask が disarm() を呼ぶ。
 // -----------------------------------------------------------------------------
 void Actuator::applyTestDuties(const float duties[4])

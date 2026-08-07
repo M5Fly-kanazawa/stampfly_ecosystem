@@ -195,12 +195,12 @@ public:
     // enforceCovarianceConstraints) is for PERMANENT sensor-absence isolation — it resets
     // the frozen state's covariance to its init value each cycle. Toggling it across the
     // ground↔flight boundary therefore restores a huge covariance at unfreeze and
-    // destabilizes the takeoff transient (SIL-validated). detailed_design §3 note 3 defers
+    // destabilizes the takeoff transient (SILS-validated). detailed_design §3 note 3 defers
     // it; bias estimation stays active in flight. Do NOT re-wire into a transition without a
     // covariance-preserving "soft freeze". Kept as a capability for that future redesign.
     // 注意（現在未配線）: ESKF の凍結機構（active_mask＋enforceCovarianceConstraints）は
     // 「センサ恒久不在」の隔離用で、凍結状態の共分散を毎周期 init 値へ戻す。地上↔飛行で
-    // トグルすると解除時に巨大な共分散が復活し離陸過渡を不安定化する（SIL 実証）。
+    // トグルすると解除時に巨大な共分散が復活し離陸過渡を不安定化する（SILS 実証）。
     // detailed_design §3 注3 で見送り。バイアス推定は飛行中もアクティブのまま。共分散保持の
     // 「ソフト凍結」なしに遷移へ再配線しないこと。将来の再設計用に capability として残置。
     // =========================================================================

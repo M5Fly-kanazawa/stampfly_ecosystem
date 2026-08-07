@@ -239,7 +239,7 @@ PairingState を参照。
 | 入力ソース | ドライバ追加で拡張 | Yes |
 | パラメータ | WiFi変更、NVS永続化 | Yes |
 | ナビゲーション | 将来追加可能な構造 | 構造のみ |
-| SILシミュレータ | HAL差し替えでPC上動作 | Yes |
+| SILSシミュレータ | HAL差し替えでPC上動作 | Yes |
 | 単体テスト | アルゴリズム層をPC上でテスト可能 | Yes |
 | コード品質 | 日英バイリンガルコメント、読みやすさ重視 | Yes |
 | サンプル集 | 機能別の最小動作コード、チュートリアル的コメント | Yes |
@@ -490,7 +490,7 @@ Task mapping for new responsibilities (Failsafe, Takeoff/Landing Manager, etc.) 
 | Input sources | Extend by adding drivers | Yes |
 | Parameters | WiFi modification, NVS persistence | Yes |
 | Navigation | Future-extensible structure | Structure only |
-| SIL simulator | Run on PC by replacing HAL | Yes |
+| SILS simulator | Run on PC by replacing HAL | Yes |
 | Unit testing | Algorithm layer testable on PC | Yes |
 | Code quality | Bilingual comments (JP/EN), readability focus | Yes |
 | Example collection | Minimal working code per feature, tutorial-style comments | Yes |

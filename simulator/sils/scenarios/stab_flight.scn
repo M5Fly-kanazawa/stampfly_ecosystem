@@ -1,0 +1,77 @@
+# stab_flight.scn — STABILIZE attitude-loop flight (vehicle, Layer 2)
+# STABILIZE 姿勢ループ飛行（vehicle, Layer 2）
+#
+# Goal: exercise the full state machine ARMED_GROUND → TAKEOFF → FLYING and the
+# STABILIZE attitude loop (ESKF roll/pitch + attitude PID + rate PID). STABILIZE
+# is self-levelling, so roll/pitch stick steps tilt the craft to a held angle —
+# a clean, bounded attitude-tracking test that does NOT depend on the vertical
+# estimate (which is a Phase B / Layer 3 concern). Default flight mode is
+# STABILIZE, so no mode token is needed.
+# 目的: 状態機械 ARMED_GROUND→TAKEOFF→FLYING と STABILIZE 姿勢ループ（ESKF roll/pitch
+# ＋姿勢 PID＋レート PID）を動かす。STABILIZE は自己水平化ゆえ roll/pitch ステップで
+# 機体が一定角に傾く＝鉛直推定に依存しない有界な姿勢追従試験。既定モードが STABILIZE
+# なのでモードトークンは不要。
+#
+# Sticks are raw 12-bit ADC, centre 2048. throttle_norm = clamp((raw-2048)/2048, 0,1).
+# Hover ≈ 0.64 (raw ≈3367); takeoff trigger threshold = 0.5 (raw >3072, config::TAKEOFF_THROTTLE_THRESH).
+# roll/pitch angle_sp = norm * 30°. raw 2600 → ≈8° tilt.
+# スティックは raw 12bit ADC（中央2048）。ホバー≈0.64、離陸閾値0.5。角度=norm×30°。
+#
+# 2026-07-26 ODEプラント(実測Ct)対応再調整: SILS plant switched to a measured-motor-curve
+# ODE (simulator/sils/plant/, uncommitted at authoring time). Same duty now yields ~-6%
+# steady thrust vs the old plant, so hover moved from duty≈0.6976 to duty≈0.7245 (+3.86%).
+# The throttle raw values below were re-derived by inverting firmware's UNCHANGED
+# actuator.cpp thrustToDuty()/legacy motor curve against the plant's real ODE equilibrium
+# (per-motor: V=duty·v_batt, ω=steadyStateOmega(V) via adopted Cq/Dm/Qf/Rm/Km, T=Ct·ω²),
+# reproducing the same thrust/weight margins the old raw values (3330/3290) gave under the
+# old (matched) plant — see report for the derivation. firmware/plant files were NOT edited.
+# 2026-07-26 ODEプラント(実測Ct)対応再調整: SILS プラントが実測モータ曲線ベースの ODE へ
+# 切替（simulator/sils/plant/、執筆時点で未コミット）。同一 duty での定常推力が旧比
+# 約-6%になり、ホバーduty が 0.6976→0.7245（+3.86%）へ移動。以下の raw 値はファーム
+# actuator.cpp の thrustToDuty()（無改変・旧モータ曲線）をプラントの実 ODE 平衡に対して
+# 逆算し、旧 raw 値（3330/3290）が旧（整合していた）プラントで与えていた推力/重量マージン
+# を再現するよう再導出した。ファーム/プラントのファイルは無編集。
+#
+# vehicle reaches IDLE_GROUND within ~1 s of boot (estimator first valid output),
+# so a 4 s disarmed lead is ample for the single ARM edge to land in IDLE_GROUND.
+# vehicle は起動後 ~1s で IDLE_GROUND。4s の無装着で ARM エッジは確実に IDLE_GROUND に届く。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50       # A: disarmed 4 s → boot reaches IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50       # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
+   +    rc   3473  2048   2048    2048  1     2000      50       # C: throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING/STABILIZE; climbs off the ground
+   +    rc   3393  2600   2048    2048  1     1500      50       # D: near-hover (raw≈3393) + roll-right step (~+8°) — attitude PID holds the angle
+   +    rc   3393  1496   2048    2048  1     1500      50       # E: roll-left step (~-8°)
+   +    rc   3393  2048   2600    2048  1     1500      50       # F: pitch-forward step (~+8°)
+   +    rc   3393  2048   2048    2048  1     1500      50       # G: centre → self-level back toward 0°
+   +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
+   +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
+   +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
+#
+# Expectation: log shows "Transition: ARMED_GROUND → TAKEOFF" then "TAKEOFF → FLYING";
+# trajectory roll/pitch track the commanded ±8° steps and return to ~0° on centre,
+# bounded (no divergence, no motor saturation runaway). DISARM cuts motors.
+# 期待: ログに ARMED_GROUND→TAKEOFF→FLYING、trajectory の roll/pitch が指令±8°に追従し
+# 中央復帰で~0°、有界（発散・モータ飽和暴走なし）。DISARM でモータ停止。
+#
+# 2026-07-26 known residual (analysis only, NOT fixed here — throttle-calibration task,
+# firmware untouched): the F step (fresh pitch+8° while roll is still settling from E)
+# drives the yaw RATE PID to its config::rate_yaw_max_torque ceiling (1.83e-3 Nm) for a
+# sustained ~3 s. At ANY throttle that keeps the craft airborne under the new (higher,
+# ~0.72-0.78) base duty, mixerCompute()'s ±ik·ur allocation for that torque alone pushes
+# two motors' commanded duty to/through 1.0 (verified analytically AND by sweeping raw
+# throttle from below-hover to +16% margin — duty_max stays pinned at 1.0 throughout,
+# confirming this is throttle-independent, not a calibration artifact). See stab_flight.expect
+# for the resulting duty_max gate change. Follow-up candidate (out of scope here): the
+# yaw rate loop's behavior — or config::rate_yaw_max_torque headroom — under the new,
+# necessarily-higher base duty.
+# 2026-07-26 既知の残課題（分析のみ、本タスクでは未修正 — スロットル較正タスクにつき
+# ファーム無編集）: F ステップ（E からのロール整定途上での新規ピッチ+8°）がヨー・レート
+# PID を config::rate_yaw_max_torque 上限（1.83e-3 Nm）に約3秒間貼り付かせる。新プラント
+# の高い（~0.72-0.78）基準 duty 下で機体を空中に保つどのスロットルでも、その torque だけで
+# mixerCompute() の ±ik·ur 配分が2モータの duty を 1.0 まで/超えて押し上げる（解析的に
+# 確認済み、かつホバー未満〜+16%マージンまで raw スロットルを掃引しても duty_max は
+# 常に 1.0 に張り付く＝スロットル非依存＝較正の産物ではないことを確認済み）。結果としての
+# duty_max ゲート変更は stab_flight.expect 参照。次点候補（本タスク範囲外）: 新しい
+# （必然的に高い）基準 duty のもとでのヨー・レートループの挙動、または
+# config::rate_yaw_max_torque の余裕の再検討。

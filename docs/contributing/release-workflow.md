@@ -25,7 +25,7 @@
 | 文書 | 役割 |
 |------|------|
 | [versioning.md](versioning.md) | バージョン体系（§2）・成果物一覧（§3）・リリースチェックリスト（§5）・互換表（§6） |
-| [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) | 3原則（Code/Param/Model Identity）・SIL→実機ワークフロー |
+| [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) | 3原則（Code/Param/Model Identity）・SILS→実機ワークフロー |
 | [architecture.md](../../firmware/vehicle/docs/architecture.md) | アーキテクチャ不変条件（INV）— 制御則変更時は照合必須 |
 | [docs/plans/](../plans/) | リリースごとのノート原稿 `release-vYYYY.MM.P-notes.md` の置き場 |
 
@@ -53,34 +53,34 @@
 | 変更の出どころ | 必要な裏付け |
 |--------------|-------------|
 | 解析・チューニング研究からの提案 | 実フライトログを使ったシミュレーションで効果を定量確認する。ログ取得は `sf log wifi` / `sf log convert`、解析・再生シミュレーションは `analysis/` 配下のスタディスクリプト（例: `analysis/scripts/roll_tuning_20260717/`）が先行例。変更前後の定量指標（帯域RMS・追従誤差の改善率等）を、コミットメッセージまたはリリースノート原稿に残す |
-| パイロットの実飛行ハンドチューニング指示 | 指示値をそのまま採用してよいが、**SIL 退行テストの A/B**（下記）は必須 |
+| パイロットの実飛行ハンドチューニング指示 | 指示値をそのまま採用してよいが、**SILS 退行テストの A/B**（下記）は必須 |
 
-SIL（Software-In-the-Loop。ファームウェアを PC 上のエミュレータで飛ばす退行テスト）は
+SILS（Software-In-the-Loop。ファームウェアを PC 上のエミュレータで飛ばす退行テスト）は
 **コンパイル時既定値をそのまま使って飛行する**（Param Identity —
 [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) 参照）ため、
-既定値の変更は SIL の挙動に直接反映される。A/B 一致の確認は「挙動が変わっても、
+既定値の変更は SILS の挙動に直接反映される。A/B 一致の確認は「挙動が変わっても、
 全シナリオの合否基準を満たし続ける」ことの検証である。
 
 A/B の手順は時系列で次のとおり。個々のシナリオの pass/fail は
-`sf sil scenario` の終了コード（0=PASS）で判定できる:
+`sf sils scenario` の終了コード（0=PASS）で判定できる:
 
 ```bash
 source setup_env.sh
-sf sil build
+sf sils build
 # ① 変更前の結果をファイルに保存 / save the pre-change results
-for scn in simulator/sil/scenarios/*.scn; do
-  sf sil scenario "$scn" >/dev/null 2>&1 \
+for scn in simulator/sils/scenarios/*.scn; do
+  sf sils scenario "$scn" >/dev/null 2>&1 \
     && echo "PASS $(basename "$scn")" || echo "FAIL $(basename "$scn")"
-done | tee /tmp/sil_before.txt
+done | tee /tmp/sils_before.txt
 
-# ② params.cpp を変更 → ③ sf sil build で再ビルドし、同じループを
-#    /tmp/sil_after.txt に保存
+# ② params.cpp を変更 → ③ sf sils build で再ビルドし、同じループを
+#    /tmp/sils_after.txt に保存
 
 # ④ 差分ゼロ（pass/fail 集合の一致）を確認
-diff /tmp/sil_before.txt /tmp/sil_after.txt && echo "退行なし"
+diff /tmp/sils_before.txt /tmp/sils_after.txt && echo "退行なし"
 ```
 
-対象は `simulator/sil/scenarios/*.scn` の全シナリオ（2026-07 時点で39本。正は
+対象は `simulator/sils/scenarios/*.scn` の全シナリオ（2026-07 時点で39本。正は
 グロブであり、本数は増えてよい）。「既知の FAIL」とは①の変更前実行で既に FAIL
 だったものを指す — 変更後に新たに FAIL へ転じたものだけが退行である。
 
@@ -122,9 +122,9 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 |------|------|
 | 1. 設計照合 | 制御則・状態機械・飛行フェーズに関わる変更は `architecture.md` の INV（アーキテクチャ不変条件）に照合。前提が変わる場合は既存コンポーネントへのリップル確認 |
 | 2. 実装 | バイリンガルコメント・`@design` タグ・マジックナンバー禁止などのコーディング規約に従う |
-| 3. SIL 退行テスト | `simulator/sil/scenarios/*.scn` の全シナリオを実行し、変更前後で pass/fail 集合が一致することを確認（§2 の A/B 手順と同じ。既知 FAIL の判定も同様に変更前の実行結果を基準とする） |
+| 3. SILS 退行テスト | `simulator/sils/scenarios/*.scn` の全シナリオを実行し、変更前後で pass/fail 集合が一致することを確認（§2 の A/B 手順と同じ。既知 FAIL の判定も同様に変更前の実行結果を基準とする） |
 | 4. ビルド | `sf build vehicle`（controller に触れた場合は `sf build controller` も） |
-| 5. 実機検証 | 制御則の変更は実飛行での確認まで行う（SIL PASS は実機安全の保証ではない） |
+| 5. 実機検証 | 制御則の変更は実飛行での確認まで行う（SILS PASS は実機安全の保証ではない） |
 | 6. コミット | `/commit` スキルで Next steps 付きコミット |
 
 ## 4. リリース作業の全体フロー
@@ -135,7 +135,7 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 | # | 作業 | コマンド／確認内容 |
 |---|------|-------------------|
 | 1 | リリースノート原稿を作成・更新 | バージョン番号を決めた時点で `docs/plans/release-vYYYY.MM.P-notes.md` を新規作成する（前回リリースの原稿、例: `release-v2026.07.2-notes.md` をコピーして書き換えると早い）。既定値変更は §2 の2点を含める |
-| 2 | SIL 退行テストを main の最終状態で一括実行 | `simulator/sil/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
+| 2 | SILS 退行テストを main の最終状態で一括実行 | `simulator/sils/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
 | 3 | ローカルビルド確認 | `sf build vehicle` / `sf build controller` |
 | 4 | CI の事前検証 | GitHub リポジトリの **Actions タブ → `Release firmware binaries` を選択 → Run workflow → ブランチ `main` を指定して実行**。全ジョブ（ファームビルド2 = vehicle/controller + フラッシャ 4OS）が緑であることを確認。タグ無し実行では Release 発行ジョブだけがスキップされる |
 | 5 | タグ作成〜リリース発行 | [versioning.md §5](versioning.md#5-リリース手順) のチェックリストに従う: `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → Release workflow 完走 → アセット13点（ファーム4 = vehicle/controller × full/app、フラッシャ4 = Windows/macOS ARM/macOS Intel/Linux、セットアップ4 = Windows/macOS ARM/macOS Intel/Linux、`SHA256SUMS.txt`）の添付を確認 |
@@ -179,7 +179,7 @@ choose the version number (the `P` increment rules), see
 | Document | Role |
 |----------|------|
 | [versioning.md](versioning.md) | Versioning scheme (§2), artifact list (§3), release checklist (§5), compatibility table (§6) |
-| [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) | The 3 identity principles (Code/Param/Model), SIL→hardware workflow |
+| [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) | The 3 identity principles (Code/Param/Model), SILS→hardware workflow |
 | [architecture.md](../../firmware/vehicle/docs/architecture.md) | Architectural invariants (INV) — mandatory cross-check for control-law changes |
 | [docs/plans/](../plans/) | Home of the per-release notes drafts `release-vYYYY.MM.P-notes.md` |
 
@@ -208,35 +208,35 @@ Control-parameter changes must be committed **with numerical backing**
 | Origin of the change | Required backing |
 |----------------------|------------------|
 | Analysis / tuning study proposal | Quantify the effect via simulation against real flight logs. Capture logs with `sf log wifi` / `sf log convert`; prior art for analysis/replay lives under `analysis/` (e.g. `analysis/scripts/roll_tuning_20260717/`). Record the before/after quantitative metrics (band-limited RMS, tracking-error improvement, ...) in the commit message or the release-notes draft |
-| Pilot's in-flight hand-tune direction | The directed value may be adopted as-is, but the **A/B SIL regression run** (below) is still mandatory |
+| Pilot's in-flight hand-tune direction | The directed value may be adopted as-is, but the **A/B SILS regression run** (below) is still mandatory |
 
-SIL (Software-In-the-Loop: the firmware flying in a PC emulator as a
+SILS (Software-In-the-Loop: the firmware flying in a PC emulator as a
 regression test) **flies on the compiled-in defaults** (Param Identity — see
 [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md)),
-so a default change feeds straight into SIL behavior. The A/B check verifies
+so a default change feeds straight into SILS behavior. The A/B check verifies
 that "the behavior may change, but every scenario still meets its pass
 criteria."
 
 The A/B procedure, in order — each scenario's pass/fail is the exit code of
-`sf sil scenario` (0 = PASS):
+`sf sils scenario` (0 = PASS):
 
 ```bash
 source setup_env.sh
-sf sil build
+sf sils build
 # 1) save the pre-change results
-for scn in simulator/sil/scenarios/*.scn; do
-  sf sil scenario "$scn" >/dev/null 2>&1 \
+for scn in simulator/sils/scenarios/*.scn; do
+  sf sils scenario "$scn" >/dev/null 2>&1 \
     && echo "PASS $(basename "$scn")" || echo "FAIL $(basename "$scn")"
-done | tee /tmp/sil_before.txt
+done | tee /tmp/sils_before.txt
 
-# 2) edit params.cpp  3) rebuild with `sf sil build` and rerun the same
-#    loop into /tmp/sil_after.txt
+# 2) edit params.cpp  3) rebuild with `sf sils build` and rerun the same
+#    loop into /tmp/sils_after.txt
 
 # 4) assert an empty diff (identical pass/fail sets)
-diff /tmp/sil_before.txt /tmp/sil_after.txt && echo "no regression"
+diff /tmp/sils_before.txt /tmp/sils_after.txt && echo "no regression"
 ```
 
-The scope is every scenario matching `simulator/sil/scenarios/*.scn`
+The scope is every scenario matching `simulator/sils/scenarios/*.scn`
 (39 as of 2026-07; the glob is authoritative, the count may grow). A "known
 FAIL" is one that already failed in step 1's pre-change run — only scenarios
 that newly flip to FAIL count as regressions.
@@ -282,9 +282,9 @@ coding_and_education / development_roadmap / hardware_init) first, then follow:
 |------|---------|
 | 1. Design cross-check | Changes touching control laws, state machines, or flight phases must be checked against the INV section of `architecture.md`; if an assumption changes, enumerate ripple effects on existing components |
 | 2. Implementation | Follow the coding rules: bilingual comments, `@design` tags, no magic numbers |
-| 3. SIL regression | Run every scenario in `simulator/sil/scenarios/*.scn`; the pass/fail set must match the pre-change run (same A/B procedure as §2, including the known-FAIL definition) |
+| 3. SILS regression | Run every scenario in `simulator/sils/scenarios/*.scn`; the pass/fail set must match the pre-change run (same A/B procedure as §2, including the known-FAIL definition) |
 | 4. Build | `sf build vehicle` (and `sf build controller` if touched) |
-| 5. Hardware validation | Control-law changes require real-flight verification (SIL PASS does not guarantee hardware safety) |
+| 5. Hardware validation | Control-law changes require real-flight verification (SILS PASS does not guarantee hardware safety) |
 | 6. Commit | Use the `/commit` skill, including a Next steps section |
 
 ## 4. The Release Flow End to End
@@ -295,7 +295,7 @@ Once all changes are on main, proceed in this order. Choose the tag name per
 | # | Step | Command / check |
 |---|------|-----------------|
 | 1 | Create/update the release-notes draft | When the version number is decided, create `docs/plans/release-vYYYY.MM.P-notes.md` (copying the previous release's draft, e.g. `release-v2026.07.2-notes.md`, is the fast path). Default changes must include both points from §2 |
-| 2 | One consolidated SIL run on final main | Every scenario in `simulator/sil/scenarios/*.scn`, once, right before tagging — even if each commit passed individually |
+| 2 | One consolidated SILS run on final main | Every scenario in `simulator/sils/scenarios/*.scn`, once, right before tagging — even if each commit passed individually |
 | 3 | Local builds | `sf build vehicle` / `sf build controller` |
 | 4 | CI pre-verification | On GitHub: **Actions tab → select `Release firmware binaries` → Run workflow → choose branch `main`**. All jobs must be green (2 firmware builds = vehicle/controller + 4-OS flasher). Without a tag, only the Release-publish job is skipped |
 | 5 | Tag and publish | Follow [versioning.md §5](versioning.md#5-release-procedure): `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → workflow completes → confirm all 13 assets are attached (4 firmware = vehicle/controller × full/app, 4 flasher = Windows / macOS ARM / macOS Intel / Linux, 4 setup = Windows / macOS ARM / macOS Intel / Linux, plus `SHA256SUMS.txt`) |

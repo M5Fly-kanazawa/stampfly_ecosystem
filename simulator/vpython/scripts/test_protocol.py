@@ -38,10 +38,10 @@ from interfaces import (
     BinaryLogger,
     BinaryLogReader,
     log_to_numpy,
-    # SIL
+    # SILS
     SensorData,
     ActuatorCommand,
-    SILInterface,
+    SILSInterface,
     SimpleRateController,
 )
 
@@ -325,18 +325,18 @@ def test_binary_logging():
         log_path.unlink()
 
 
-def test_sil_interface():
-    """Test SIL interface / SILインターフェースをテスト"""
-    print("Testing SIL interface...")
+def test_sils_interface():
+    """Test SILS interface / SILSインターフェースをテスト"""
+    print("Testing SILS interface...")
 
     # Create controller
     controller = SimpleRateController(kp=0.5, ki=0.1, kd=0.01)
     controller.set_setpoints(throttle=0.5, roll_rate=0.0, pitch_rate=0.0, yaw_rate=0.0)
 
-    # Create SIL interface
-    sil = SILInterface(control_rate_hz=400, telemetry_rate_hz=50)
-    sil.set_control_callback(controller.update)
-    sil.start()
+    # Create SILS interface
+    sils = SILSInterface(control_rate_hz=400, telemetry_rate_hz=50)
+    sils.set_control_callback(controller.update)
+    sils.start()
 
     # Simulate a few steps
     for i in range(100):
@@ -348,8 +348,8 @@ def test_sil_interface():
             mag=np.array([20.0, -5.0, 45.0]),
         )
 
-        sil.push_sensor_data(sensor_data)
-        commands = sil.step(2500)
+        sils.push_sensor_data(sensor_data)
+        commands = sils.step(2500)
 
         if commands is not None:
             assert len(commands.motor_outputs) == 4
@@ -358,16 +358,16 @@ def test_sil_interface():
     # Check telemetry was generated
     telemetry_count = 0
     while True:
-        telem = sil.pop_telemetry()
+        telem = sils.pop_telemetry()
         if telem is None:
             break
         telemetry_count += 1
 
     assert telemetry_count > 0, "No telemetry generated"
 
-    sil.stop()
+    sils.stop()
 
-    print("  ✓ SIL interface tests passed")
+    print("  ✓ SILS interface tests passed")
 
 
 def main():
@@ -386,7 +386,7 @@ def main():
         test_packet_identification()
         test_protocol_bridge()
         test_binary_logging()
-        test_sil_interface()
+        test_sils_interface()
 
         print()
         print("=" * 60)

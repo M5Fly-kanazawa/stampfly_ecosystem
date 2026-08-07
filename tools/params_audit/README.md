@@ -17,7 +17,7 @@ C_Q、トルク/推力比 kappa、慣性モーメント 等）に関する2つ�
 
 **Phase 1（コード生成、2026-07-26 一部着手）:** `control/models/
 stampfly_physical.yaml` を唯一の正とし、`sf params generate` が
-`tools/sysid/_generated_params.py`・`simulator/sil/plant/generated_params.hpp`・
+`tools/sysid/_generated_params.py`・`simulator/sils/plant/generated_params.hpp`・
 `docs/architecture/stampfly-parameters.md` のマーカー表を機械生成する。この3箇所は
 もう手書きの数値リテラルを持たない — YAML を編集して `sf params generate` を
 実行するだけで全て揃う。
@@ -34,7 +34,7 @@ actuator.cpp`（firmware は生成対象外）・MuJoCo XML・URDF・
 ### 対象読者
 
 - 機体物理パラメータ（モータ・プロペラ係数、慣性、質量 等）を再測定・更新する開発者
-- SIL・シミュレータの物理モデルを改修する開発者
+- SILS・シミュレータの物理モデルを改修する開発者
 - CI にパラメータ整合チェックを組み込みたい開発者
 
 ## 2. 使い方
@@ -84,10 +84,10 @@ python3 tools/params_audit/check_params.py --json
 
 ### 退行検出への組み込み
 
-本検査は `sf sil regression`（`lib/sfcli/commands/sil.py` の `run_regression()`）
+本検査は `sf sils regression`（`lib/sfcli/commands/sils.py` の `run_regression()`）
 の最初のステップとして自動実行され、シナリオ実行前に `--strict` 相当で判定
 する。不合格なら回帰全体が即座に失敗する。CI（`.github/workflows/
-sil-regression.yml`）にも同じ検査を早期化する専用ステップがある。
+sils-regression.yml`）にも同じ検査を早期化する専用ステップがある。
 
 ## 3. マニフェストの拡張方法
 
@@ -107,7 +107,7 @@ sil-regression.yml`）にも同じ検査を早期化する専用ステップが�
 ```
 
 （`"C_T"`/`"C_Q"`/`"J_mp"`/`"Rm"`/`"kappa"` の一部の行は Phase 1 で `sf params
-generate` の生成先——`tools/sysid/_generated_params.py`・`simulator/sil/plant/
+generate` の生成先——`tools/sysid/_generated_params.py`・`simulator/sils/plant/
 generated_params.hpp`——を指すようになった。それらの値を変更するときは
 `params_manifest.py` を編集するのではなく `control/models/
 stampfly_physical.yaml` を編集して `sf params generate` を実行すること。）
@@ -132,7 +132,7 @@ stampfly_physical.yaml` を編集して `sf params generate` を実行するこ�
 
 `control/models/stampfly_physical.yaml`（spec YAML）から `sf params generate`
 がコードを生成する方式が、`tools/sysid/_generated_params.py`・
-`simulator/sil/plant/generated_params.hpp`・`docs/architecture/
+`simulator/sils/plant/generated_params.hpp`・`docs/architecture/
 stampfly-parameters.md` のマーカー表について 2026-07-26 に着手済み——この3箇所は
 もう本マニフェストによる「後追い検査」の対象ではなく、YAML そのものが正で
 生成が保証する（`sf params generate --check` で検出、CI 組み込み済み）。
@@ -162,7 +162,7 @@ does not yet cover (Phase 0).
 **Phase 1 (code generation, started 2026-07-26):** `control/models/
 stampfly_physical.yaml` is the single source of truth. `sf params generate`
 machine-generates `tools/sysid/_generated_params.py`,
-`simulator/sil/plant/generated_params.hpp`, and the marker table in
+`simulator/sils/plant/generated_params.hpp`, and the marker table in
 `docs/architecture/stampfly-parameters.md`. These three locations no longer
 hold hand-typed numeric literals -- edit the YAML and run `sf params
 generate`.
@@ -181,7 +181,7 @@ shrinks as `sf params generate` covers more consumers.
 
 - Developers re-measuring or updating vehicle physical parameters (motor/prop
   coefficients, inertia, mass, etc.)
-- Developers modifying the SIL/simulator physics models
+- Developers modifying the SILS/simulator physics models
 - Developers wiring a parameter-consistency check into CI
 
 ## 2. Usage
@@ -232,10 +232,10 @@ counts `UNRESOLVED` toward failure).
 
 ### Wired into Regression Detection
 
-This audit runs automatically as the first step of `sf sil regression`
-(`run_regression()` in `lib/sfcli/commands/sil.py`), gated at `--strict`
+This audit runs automatically as the first step of `sf sils regression`
+(`run_regression()` in `lib/sfcli/commands/sils.py`), gated at `--strict`
 severity before any scenario runs — a failure fails the whole regression
-immediately. CI (`.github/workflows/sil-regression.yml`) also has a
+immediately. CI (`.github/workflows/sils-regression.yml`) also has a
 dedicated step that runs the same check earlier, for a faster fail.
 
 ## 3. Extending the Manifest
@@ -258,7 +258,7 @@ Checked locations are declared in the `MANIFEST` dict in
 
 (Some `"C_T"`/`"C_Q"`/`"J_mp"`/`"Rm"`/`"kappa"` entries now point at `sf
 params generate`'s output -- `tools/sysid/_generated_params.py` and
-`simulator/sil/plant/generated_params.hpp` (Phase 1). To change one of those
+`simulator/sils/plant/generated_params.hpp` (Phase 1). To change one of those
 values, edit `control/models/stampfly_physical.yaml` and run `sf params
 generate`, rather than editing `params_manifest.py`.)
 
@@ -285,7 +285,7 @@ To add a new copy location:
 
 Generating code from `control/models/stampfly_physical.yaml` (the spec YAML)
 via `sf params generate` started 2026-07-26, covering
-`tools/sysid/_generated_params.py`, `simulator/sil/plant/generated_params.hpp`,
+`tools/sysid/_generated_params.py`, `simulator/sils/plant/generated_params.hpp`,
 and the marker table in `docs/architecture/stampfly-parameters.md`. These
 three locations are no longer audited after the fact by this manifest -- the
 YAML is authoritative and generation guarantees agreement (caught by `sf

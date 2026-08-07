@@ -165,10 +165,42 @@ def main(argv: Optional[List[str]] = None) -> int:
     # docstring を参照。
     _warn_if_commands_unavailable()
 
+    # Legacy environment-variable names: command modules that renamed
+    # their environment variables expose promote_legacy_environment(),
+    # which maps old names onto new ones (currently only sils: SIL_* ->
+    # SILS_*, renamed 2026-08-07). Run before dispatch so subprocesses
+    # inherit the promoted names.
+    # 旧環境変数名: 環境変数を改名したコマンドモジュールは
+    # promote_legacy_environment() を公開し、旧名を新名へ写像する
+    # （現在は sils のみ: SIL_* -> SILS_*、2026-08-07 改名）。
+    # サブプロセスが昇格済みの名前を継承できるよう、ディスパッチ前に実行。
+    for _name in commands.__all__:
+        _promote = getattr(getattr(commands, _name), "promote_legacy_environment", None)
+        if _promote is not None:
+            _promote()
+
     parser = create_parser()
 
     # Parse arguments
     args = parser.parse_args(argv)
+
+    # Legacy command names: a renamed command keeps its old name as an
+    # argparse alias for a transition period (see the module's
+    # LEGACY_COMMAND_ALIASES, e.g. "sil" -> "sils"). Tell the user the
+    # canonical name once per invocation.
+    # 旧コマンド名: 改名されたコマンドは移行期間中、旧名を argparse の
+    # エイリアスとして維持する（各モジュールの LEGACY_COMMAND_ALIASES
+    # 参照。例: "sil" -> "sils"）。実行のたびに正式名を1行で案内する。
+    if args.command:
+        for _name in commands.__all__:
+            _module = getattr(commands, _name)
+            if args.command in getattr(_module, "LEGACY_COMMAND_ALIASES", ()):
+                console.warning(
+                    f"'sf {args.command}' has been renamed to "
+                    f"'sf {_module.COMMAND_NAME}'; the old name still works "
+                    f"for now, but please switch (renamed 2026-08-07)."
+                )
+                break
 
     # Handle no-color option
     if args.no_color:

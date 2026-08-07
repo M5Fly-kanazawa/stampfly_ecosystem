@@ -129,9 +129,9 @@ class Paths:
         """Get simulator/ directory"""
         return self.root() / "simulator"
 
-    def sil_build(self) -> Path:
-        """Get simulator/sil/build/ directory (host SIL build output)."""
-        return self.simulator() / "sil" / "build"
+    def sils_build(self) -> Path:
+        """Get simulator/sils/build/ directory (host SILS build output)."""
+        return self.simulator() / "sils" / "build"
 
     def tools(self) -> Path:
         """Get tools/ directory"""
