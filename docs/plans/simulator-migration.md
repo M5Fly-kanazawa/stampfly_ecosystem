@@ -219,7 +219,7 @@ firmware/vehicle/
 3. [x] ProtocolBridge: SimulatorState ↔ Protocol 変換
 4. [x] SILS インターフェース実装 (`interfaces/sils_interface.py`)
    - SensorData / ActuatorCommand データ構造
-   - SILInterface クラス
+   - SILSInterface クラス
    - SimpleRateController (テスト用)
 
 **成果物**: 実機ログと同形式のシミュレータ出力 ✓

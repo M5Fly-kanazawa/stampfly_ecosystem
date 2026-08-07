@@ -377,9 +377,9 @@ throttle = ctrl.update(
 Pythonで実装した制御器をシミュレータ内で実行：
 
 ```python
-from simulator.interfaces import SILInterface, SensorData
+from simulator.interfaces import SILSInterface, SensorData
 
-sils = SILInterface()
+sils = SILSInterface()
 
 # 制御器の更新
 sensor_data = SensorData(
@@ -870,9 +870,9 @@ throttle = ctrl.update(
 Run Python-implemented controllers within the simulator:
 
 ```python
-from simulator.interfaces import SILInterface, SensorData
+from simulator.interfaces import SILSInterface, SensorData
 
-sils = SILInterface()
+sils = SILSInterface()
 
 # Update controller
 sensor_data = SensorData(

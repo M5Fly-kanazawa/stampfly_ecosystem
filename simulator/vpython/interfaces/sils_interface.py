@@ -127,7 +127,7 @@ class ActuatorCommand:
 # SILS Interface
 # =============================================================================
 
-class SILInterface:
+class SILSInterface:
     """
     Software-in-the-Loop Interface.
     ソフトウェアインザループインターフェース
@@ -136,7 +136,7 @@ class SILInterface:
     シミュレータ物理と制御アルゴリズムを橋渡し。
 
     Usage:
-        sils = SILInterface()
+        sils = SILSInterface()
         sils.start()
 
         while running:

@@ -48,7 +48,7 @@ from .protocol_bridge import (
 from .sils_interface import (
     SensorData,
     ActuatorCommand,
-    SILInterface,
+    SILSInterface,
     SimpleRateController,
 )
 
@@ -94,7 +94,7 @@ __all__ = [
     # SILS Interface
     'SensorData',
     'ActuatorCommand',
-    'SILInterface',
+    'SILSInterface',
     'SimpleRateController',
     # HIL Interface
     'HILInterface',

@@ -41,7 +41,7 @@ from interfaces import (
     # SILS
     SensorData,
     ActuatorCommand,
-    SILInterface,
+    SILSInterface,
     SimpleRateController,
 )
 
@@ -334,7 +334,7 @@ def test_sils_interface():
     controller.set_setpoints(throttle=0.5, roll_rate=0.0, pitch_rate=0.0, yaw_rate=0.0)
 
     # Create SILS interface
-    sils = SILInterface(control_rate_hz=400, telemetry_rate_hz=50)
+    sils = SILSInterface(control_rate_hz=400, telemetry_rate_hz=50)
     sils.set_control_callback(controller.update)
     sils.start()
 
