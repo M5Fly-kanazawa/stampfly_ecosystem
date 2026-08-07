@@ -51,6 +51,55 @@ except ImportError:
 COMMAND_NAME = "sils"
 COMMAND_HELP = "Software-in-the-Loop bench (closed-loop hover, review video, gate)"
 
+# Transition alias: "sil" was renamed to "sils" on 2026-08-07 (SILS
+# terminology unification; SITL stays reserved for the ArduPilot/PX4
+# tools). cli.py registers these as argparse aliases and prints a
+# one-line notice when one is used. Remove after the 2026-09-10 SCI
+# tutorial season.
+# 移行用エイリアス: 2026-08-07 の SILS 用語統一で "sil" を "sils" に改名
+# （SITL は ArduPilot/PX4 のツール名として予約）。cli.py が argparse の
+# エイリアスとして登録し、使用時に1行の案内を表示する。2026-09-10 の
+# SCI チュートリアル期が過ぎたら削除する。
+LEGACY_COMMAND_ALIASES = ("sil",)
+
+# Legacy environment-variable prefix: every SILS_* variable used to be
+# SIL_* before the rename. promote_legacy_environment() below maps old
+# names onto new ones so existing user scripts keep working.
+# 旧環境変数プレフィクス: 改名前は SILS_* が全て SIL_* だった。下の
+# promote_legacy_environment() が旧名を新名に写像し、既存のユーザー
+# スクリプトを動かし続ける。
+_LEGACY_ENV_PREFIX = "SIL_"
+
+
+def promote_legacy_environment() -> None:
+    """Map legacy SIL_* environment variables onto their SILS_* names.
+
+    Called once from cli.py at startup. Only fills a SILS_* name that is
+    not already set (an explicit new-name value always wins), and prints
+    a one-line notice listing what was mapped so the user learns the new
+    names. The emulator subprocesses inherit os.environ, so promoting
+    here covers every sf entry point.
+    旧 SIL_* 環境変数を SILS_* 名へ写像する。cli.py の起動時に1回呼ぶ。
+    SILS_* 名が未設定の場合のみ埋める（明示された新名が常に優先）。
+    何を写像したか1行で案内し、ユーザーが新名を覚えられるようにする。
+    エミュレータのサブプロセスは os.environ を継承するため、ここで
+    昇格すれば全ての sf 経路をカバーできる。
+    """
+    promoted = []
+    for key in sorted(os.environ):
+        if not key.startswith(_LEGACY_ENV_PREFIX) or key.startswith("SILS_"):
+            continue
+        new_key = "SILS_" + key[len(_LEGACY_ENV_PREFIX):]
+        if new_key not in os.environ:
+            os.environ[new_key] = os.environ[key]
+            promoted.append(f"{key}->{new_key}")
+    if promoted:
+        console.warning(
+            "Legacy SIL_* environment variable(s) mapped to SILS_* "
+            f"({', '.join(promoted)}); please switch to the new names "
+            "(renamed 2026-08-07)."
+        )
+
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
 NOISE_LEVELS = ["off", "n0", "n1", "n2"]
@@ -248,6 +297,7 @@ def _check_build_freshness(exe: Path, src_mtime: Optional[float] = None) -> bool
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register the sils command with the CLI."""
     parser = subparsers.add_parser(COMMAND_NAME, help=COMMAND_HELP, description=__doc__,
+                                   aliases=list(LEGACY_COMMAND_ALIASES),
                                    formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="sils_command", metavar="<subcommand>")
 
