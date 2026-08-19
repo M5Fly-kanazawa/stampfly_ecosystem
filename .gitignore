@@ -160,3 +160,6 @@ simulator/sils/viz/out_fly/
 
 # Generated analysis artifacts (figures, metrics)
 analysis/out/
+
+# Claude Code worktrees (作業用チェックアウト実体 / working checkouts)
+.claude/worktrees/
