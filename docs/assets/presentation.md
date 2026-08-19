@@ -68,7 +68,7 @@ style: |
 
 | 柱 | 内容 |
 |---|------|
-| **ハードウェア** | 35g マイクロドローン + 専用コントローラ |
+| **ハードウェア** | 37g マイクロドローン + 専用コントローラ |
 | **ファームウェア** | ESP-IDF + FreeRTOS、4種の飛行モード |
 | **シミュレータ** | VPython（軽量）+ Genesis（高精度物理） |
 | **開発ツール** | sf CLI、チューニング GUI、ログ解析 |
@@ -82,9 +82,9 @@ style: |
 
 ## StampFly 機体
 
-![bg right:50% 102%](stampfly_spec.png)
+![bg right:50% contain](stampfly_spec.png)
 
-- **質量**: 35g
+- **質量**: 37g
 - **MCU**: ESP32-S3 (M5Stamp S3)
 - **センサ**:
   - IMU (BMI270) 400Hz
