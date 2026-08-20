@@ -21,14 +21,14 @@
 # SOFTWARE.
 
 """
-Hardware-in-the-Loop (HIL) Interface
-ハードウェアインザループ（HIL）インターフェース
+Hardware In the Loop Simulation (HILS) Interface
+ハードウェアインザループ（HILS）インターフェース
 
 Provides interface for connecting simulator to real firmware via serial.
 シリアル経由で実機ファームウェアとシミュレータを接続するインターフェース。
 
-HIL Architecture:
-HILアーキテクチャ：
+HILS Architecture:
+HILSアーキテクチャ：
 
 ┌─────────────────┐         Serial          ┌─────────────────┐
 │   Simulator     │ ←────────────────────→  │   Firmware      │
@@ -72,11 +72,11 @@ from .messages import (
 
 
 # =============================================================================
-# HIL Message Definitions
+# HILS Message Definitions
 # =============================================================================
 
-class HILMessageType(IntEnum):
-    """HIL message types / HILメッセージタイプ"""
+class HILSMessageType(IntEnum):
+    """HILS message types / HILSメッセージタイプ"""
     # Simulator → Firmware (Sensor Injection)
     IMU_DATA = 0x10
     MAG_DATA = 0x11
@@ -91,20 +91,20 @@ class HILMessageType(IntEnum):
     # Control
     SYNC_REQUEST = 0x30
     SYNC_RESPONSE = 0x31
-    HIL_ENABLE = 0x40
-    HIL_DISABLE = 0x41
+    HILS_ENABLE = 0x40
+    HILS_DISABLE = 0x41
 
 
 @dataclass
-class HILIMUData:
+class HILSIMUData:
     """
-    IMU sensor data for HIL injection.
-    HIL注入用IMUセンサデータ
+    IMU sensor data for HILS injection.
+    HILS注入用IMUセンサデータ
 
     Size: 28 bytes
     """
     SIZE = 28
-    MSG_TYPE = HILMessageType.IMU_DATA
+    MSG_TYPE = HILSMessageType.IMU_DATA
 
     timestamp_us: int = 0
     gyro_x: float = 0.0      # rad/s
@@ -128,7 +128,7 @@ class HILIMUData:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILIMUData']:
+    def unpack(cls, data: bytes) -> Optional['HILSIMUData']:
         """Deserialize from bytes / バイト列からデシリアライズ"""
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
@@ -144,15 +144,15 @@ class HILIMUData:
 
 
 @dataclass
-class HILMagData:
+class HILSMagData:
     """
-    Magnetometer data for HIL injection.
-    HIL注入用地磁気センサデータ
+    Magnetometer data for HILS injection.
+    HILS注入用地磁気センサデータ
 
     Size: 16 bytes
     """
     SIZE = 16
-    MSG_TYPE = HILMessageType.MAG_DATA
+    MSG_TYPE = HILSMessageType.MAG_DATA
 
     timestamp_us: int = 0
     mag_x: float = 0.0       # µT
@@ -171,7 +171,7 @@ class HILMagData:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILMagData']:
+    def unpack(cls, data: bytes) -> Optional['HILSMagData']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -185,15 +185,15 @@ class HILMagData:
 
 
 @dataclass
-class HILBaroData:
+class HILSBaroData:
     """
-    Barometer data for HIL injection.
-    HIL注入用気圧センサデータ
+    Barometer data for HILS injection.
+    HILS注入用気圧センサデータ
 
     Size: 14 bytes
     """
     SIZE = 14
-    MSG_TYPE = HILMessageType.BARO_DATA
+    MSG_TYPE = HILSMessageType.BARO_DATA
 
     timestamp_us: int = 0
     pressure_pa: float = 101325.0
@@ -211,7 +211,7 @@ class HILBaroData:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILBaroData']:
+    def unpack(cls, data: bytes) -> Optional['HILSBaroData']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -225,15 +225,15 @@ class HILBaroData:
 
 
 @dataclass
-class HILToFData:
+class HILSToFData:
     """
-    ToF sensor data for HIL injection.
-    HIL注入用ToFセンサデータ
+    ToF sensor data for HILS injection.
+    HILS注入用ToFセンサデータ
 
     Size: 12 bytes
     """
     SIZE = 12
-    MSG_TYPE = HILMessageType.TOF_DATA
+    MSG_TYPE = HILSMessageType.TOF_DATA
 
     timestamp_us: int = 0
     distance_mm: int = 0
@@ -252,7 +252,7 @@ class HILToFData:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILToFData']:
+    def unpack(cls, data: bytes) -> Optional['HILSToFData']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -267,15 +267,15 @@ class HILToFData:
 
 
 @dataclass
-class HILFlowData:
+class HILSFlowData:
     """
-    Optical flow data for HIL injection.
-    HIL注入用オプティカルフローデータ
+    Optical flow data for HILS injection.
+    HILS注入用オプティカルフローデータ
 
     Size: 14 bytes
     """
     SIZE = 14
-    MSG_TYPE = HILMessageType.FLOW_DATA
+    MSG_TYPE = HILSMessageType.FLOW_DATA
 
     timestamp_us: int = 0
     delta_x: int = 0         # pixels
@@ -295,7 +295,7 @@ class HILFlowData:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILFlowData']:
+    def unpack(cls, data: bytes) -> Optional['HILSFlowData']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -310,7 +310,7 @@ class HILFlowData:
 
 
 @dataclass
-class HILMotorOutput:
+class HILSMotorOutput:
     """
     Motor output data from firmware.
     ファームウェアからのモーター出力データ
@@ -318,7 +318,7 @@ class HILMotorOutput:
     Size: 22 bytes
     """
     SIZE = 22
-    MSG_TYPE = HILMessageType.MOTOR_OUTPUT
+    MSG_TYPE = HILSMessageType.MOTOR_OUTPUT
 
     timestamp_us: int = 0
     motor1: float = 0.0      # 0-1 normalized
@@ -338,7 +338,7 @@ class HILMotorOutput:
         return data[:-1] + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILMotorOutput']:
+    def unpack(cls, data: bytes) -> Optional['HILSMotorOutput']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -358,7 +358,7 @@ class HILMotorOutput:
 
 
 @dataclass
-class HILStateUpdate:
+class HILSStateUpdate:
     """
     State update from firmware.
     ファームウェアからの状態更新
@@ -366,7 +366,7 @@ class HILStateUpdate:
     Size: 10 bytes
     """
     SIZE = 10
-    MSG_TYPE = HILMessageType.STATE_UPDATE
+    MSG_TYPE = HILSMessageType.STATE_UPDATE
 
     timestamp_us: int = 0
     flight_state: FlightState = FlightState.INIT
@@ -386,7 +386,7 @@ class HILStateUpdate:
         return data + bytes([cs])
 
     @classmethod
-    def unpack(cls, data: bytes) -> Optional['HILStateUpdate']:
+    def unpack(cls, data: bytes) -> Optional['HILSStateUpdate']:
         if len(data) < cls.SIZE or data[0] != cls.MSG_TYPE:
             return None
         if checksum_sum(data[:-1]) != data[-1]:
@@ -402,56 +402,56 @@ class HILStateUpdate:
 
 
 # =============================================================================
-# HIL Interface
+# HILS Interface
 # =============================================================================
 
-class HILInterface:
+class HILSInterface:
     """
-    Hardware-in-the-Loop Interface.
+    Hardware In the Loop Simulation Interface.
     ハードウェアインザループインターフェース
 
     Connects simulator to real firmware via serial port.
     シリアルポート経由でシミュレータを実機ファームウェアに接続。
 
     Usage:
-        hil = HILInterface()
-        hil.connect('/dev/ttyUSB0')
-        hil.enable_hil()
+        hils = HILSInterface()
+        hils.connect('/dev/ttyUSB0')
+        hils.enable_hils()
 
         while running:
             # Inject sensor data
-            hil.inject_imu(timestamp, gyro, accel)
-            hil.inject_baro(timestamp, pressure, temp)
+            hils.inject_imu(timestamp, gyro, accel)
+            hils.inject_baro(timestamp, pressure, temp)
 
             # Get motor outputs
-            motors = hil.get_motor_output()
+            motors = hils.get_motor_output()
 
             # Apply to physics simulation
             ...
 
-        hil.disable_hil()
-        hil.disconnect()
+        hils.disable_hils()
+        hils.disconnect()
     """
 
     DEFAULT_BAUDRATE = 921600
     READ_TIMEOUT = 0.001  # 1ms
 
     def __init__(self):
-        """Initialize HIL interface / HILインターフェースを初期化"""
+        """Initialize HILS interface / HILSインターフェースを初期化"""
         if not SERIAL_AVAILABLE:
-            raise ImportError("pyserial is required for HIL interface. Install with: pip install pyserial")
+            raise ImportError("pyserial is required for HILS interface. Install with: pip install pyserial")
 
         self._serial: Optional[serial.Serial] = None
         self._running = False
         self._read_thread: Optional[threading.Thread] = None
 
         # Message queues
-        self._motor_queue: queue.Queue[HILMotorOutput] = queue.Queue(maxsize=10)
-        self._state_queue: queue.Queue[HILStateUpdate] = queue.Queue(maxsize=10)
+        self._motor_queue: queue.Queue[HILSMotorOutput] = queue.Queue(maxsize=10)
+        self._state_queue: queue.Queue[HILSStateUpdate] = queue.Queue(maxsize=10)
 
         # Callbacks
-        self._motor_callback: Optional[Callable[[HILMotorOutput], None]] = None
-        self._state_callback: Optional[Callable[[HILStateUpdate], None]] = None
+        self._motor_callback: Optional[Callable[[HILSMotorOutput], None]] = None
+        self._state_callback: Optional[Callable[[HILSStateUpdate], None]] = None
 
         # Statistics
         self._tx_count = 0
@@ -507,7 +507,7 @@ class HILInterface:
             return True
 
         except serial.SerialException as e:
-            print(f"HIL: Failed to connect: {e}")
+            print(f"HILS: Failed to connect: {e}")
             return False
 
     def disconnect(self):
@@ -526,10 +526,10 @@ class HILInterface:
         """Check if connected / 接続しているかチェック"""
         return self._serial is not None and self._serial.is_open
 
-    def enable_hil(self) -> bool:
+    def enable_hils(self) -> bool:
         """
-        Enable HIL mode on firmware.
-        ファームウェアでHILモードを有効化
+        Enable HILS mode on firmware.
+        ファームウェアでHILSモードを有効化
 
         Returns:
             True if successful
@@ -537,15 +537,15 @@ class HILInterface:
         if not self.is_connected():
             return False
 
-        data = struct.pack('<BB', HILMessageType.HIL_ENABLE, 0)
+        data = struct.pack('<BB', HILSMessageType.HILS_ENABLE, 0)
         cs = checksum_sum(data)
         self._send(data + bytes([cs]))
         return True
 
-    def disable_hil(self) -> bool:
+    def disable_hils(self) -> bool:
         """
-        Disable HIL mode on firmware.
-        ファームウェアでHILモードを無効化
+        Disable HILS mode on firmware.
+        ファームウェアでHILSモードを無効化
 
         Returns:
             True if successful
@@ -553,7 +553,7 @@ class HILInterface:
         if not self.is_connected():
             return False
 
-        data = struct.pack('<BB', HILMessageType.HIL_DISABLE, 0)
+        data = struct.pack('<BB', HILSMessageType.HILS_DISABLE, 0)
         cs = checksum_sum(data)
         self._send(data + bytes([cs]))
         return True
@@ -573,7 +573,7 @@ class HILInterface:
             gyro: Angular rates [gx, gy, gz] (rad/s)
             accel: Accelerations [ax, ay, az] (m/s²)
         """
-        msg = HILIMUData(
+        msg = HILSIMUData(
             timestamp_us=timestamp_us,
             gyro_x=float(gyro[0]),
             gyro_y=float(gyro[1]),
@@ -597,7 +597,7 @@ class HILInterface:
             timestamp_us: Timestamp in microseconds
             mag: Magnetic field [mx, my, mz] (µT)
         """
-        msg = HILMagData(
+        msg = HILSMagData(
             timestamp_us=timestamp_us,
             mag_x=float(mag[0]),
             mag_y=float(mag[1]),
@@ -620,7 +620,7 @@ class HILInterface:
             pressure_pa: Pressure (Pa)
             temperature_c: Temperature (°C)
         """
-        msg = HILBaroData(
+        msg = HILSBaroData(
             timestamp_us=timestamp_us,
             pressure_pa=pressure_pa,
             temperature_c=temperature_c,
@@ -642,7 +642,7 @@ class HILInterface:
             distance_mm: Distance in millimeters
             valid: Whether measurement is valid
         """
-        msg = HILToFData(
+        msg = HILSToFData(
             timestamp_us=timestamp_us,
             distance_mm=distance_mm,
             valid=valid,
@@ -666,7 +666,7 @@ class HILInterface:
             delta_y: Y displacement (pixels)
             quality: Surface quality (0-255)
         """
-        msg = HILFlowData(
+        msg = HILSFlowData(
             timestamp_us=timestamp_us,
             delta_x=delta_x,
             delta_y=delta_y,
@@ -674,7 +674,7 @@ class HILInterface:
         )
         self._send(msg.pack())
 
-    def get_motor_output(self, timeout: float = 0.0) -> Optional[HILMotorOutput]:
+    def get_motor_output(self, timeout: float = 0.0) -> Optional[HILSMotorOutput]:
         """
         Get motor output from firmware.
         ファームウェアからモーター出力を取得
@@ -683,7 +683,7 @@ class HILInterface:
             timeout: Timeout in seconds (0 = non-blocking)
 
         Returns:
-            HILMotorOutput or None
+            HILSMotorOutput or None
         """
         try:
             if timeout > 0:
@@ -693,7 +693,7 @@ class HILInterface:
         except queue.Empty:
             return None
 
-    def get_state_update(self, timeout: float = 0.0) -> Optional[HILStateUpdate]:
+    def get_state_update(self, timeout: float = 0.0) -> Optional[HILSStateUpdate]:
         """
         Get state update from firmware.
         ファームウェアから状態更新を取得
@@ -702,7 +702,7 @@ class HILInterface:
             timeout: Timeout in seconds (0 = non-blocking)
 
         Returns:
-            HILStateUpdate or None
+            HILSStateUpdate or None
         """
         try:
             if timeout > 0:
@@ -712,11 +712,11 @@ class HILInterface:
         except queue.Empty:
             return None
 
-    def set_motor_callback(self, callback: Callable[[HILMotorOutput], None]):
+    def set_motor_callback(self, callback: Callable[[HILSMotorOutput], None]):
         """Set callback for motor output / モーター出力のコールバックを設定"""
         self._motor_callback = callback
 
-    def set_state_callback(self, callback: Callable[[HILStateUpdate], None]):
+    def set_state_callback(self, callback: Callable[[HILSStateUpdate], None]):
         """Set callback for state update / 状態更新のコールバックを設定"""
         self._state_callback = callback
 
@@ -732,7 +732,7 @@ class HILInterface:
             return 0
 
         # Send sync request
-        data = struct.pack('<BB', HILMessageType.SYNC_REQUEST, 0)
+        data = struct.pack('<BB', HILSMessageType.SYNC_REQUEST, 0)
         cs = checksum_sum(data)
         self._send(data + bytes([cs]))
 
@@ -765,11 +765,11 @@ class HILInterface:
                     msg_type = buffer[0]
 
                     # Determine message size based on type
-                    if msg_type == HILMessageType.MOTOR_OUTPUT:
-                        msg_size = HILMotorOutput.SIZE
-                    elif msg_type == HILMessageType.STATE_UPDATE:
-                        msg_size = HILStateUpdate.SIZE
-                    elif msg_type == HILMessageType.SYNC_RESPONSE:
+                    if msg_type == HILSMessageType.MOTOR_OUTPUT:
+                        msg_size = HILSMotorOutput.SIZE
+                    elif msg_type == HILSMessageType.STATE_UPDATE:
+                        msg_size = HILSStateUpdate.SIZE
+                    elif msg_type == HILSMessageType.SYNC_RESPONSE:
                         msg_size = 6  # type + timestamp + checksum
                     else:
                         # Unknown message, skip byte
@@ -793,8 +793,8 @@ class HILInterface:
         """Process received message / 受信メッセージを処理"""
         self._rx_count += 1
 
-        if msg_type == HILMessageType.MOTOR_OUTPUT:
-            msg = HILMotorOutput.unpack(data)
+        if msg_type == HILSMessageType.MOTOR_OUTPUT:
+            msg = HILSMotorOutput.unpack(data)
             if msg:
                 try:
                     self._motor_queue.put_nowait(msg)
@@ -803,8 +803,8 @@ class HILInterface:
                 if self._motor_callback:
                     self._motor_callback(msg)
 
-        elif msg_type == HILMessageType.STATE_UPDATE:
-            msg = HILStateUpdate.unpack(data)
+        elif msg_type == HILSMessageType.STATE_UPDATE:
+            msg = HILSStateUpdate.unpack(data)
             if msg:
                 try:
                     self._state_queue.put_nowait(msg)
@@ -813,7 +813,7 @@ class HILInterface:
                 if self._state_callback:
                     self._state_callback(msg)
 
-        elif msg_type == HILMessageType.SYNC_RESPONSE:
+        elif msg_type == HILSMessageType.SYNC_RESPONSE:
             # Extract firmware timestamp
             if len(data) >= 5:
                 self._firmware_time_offset = struct.unpack('<I', data[1:5])[0]
@@ -829,35 +829,35 @@ class HILInterface:
 
 
 # =============================================================================
-# HIL Simulation Runner
+# HILS Simulation Runner
 # =============================================================================
 
-class HILSimulationRunner:
+class HILSSimulationRunner:
     """
-    HIL simulation runner that coordinates physics, sensors, and firmware.
-    物理・センサ・ファームウェアを調整するHILシミュレーション実行器
+    HILS simulation runner that coordinates physics, sensors, and firmware.
+    物理・センサ・ファームウェアを調整するHILSシミュレーション実行器
 
-    Manages the real-time loop for HIL testing.
-    HILテスト用のリアルタイムループを管理。
+    Manages the real-time loop for HILS testing.
+    HILSテスト用のリアルタイムループを管理。
     """
 
     def __init__(
         self,
-        hil: HILInterface,
+        hils: HILSInterface,
         physics_callback: Callable[[np.ndarray, float], dict],
         sensor_rates: dict = None,
     ):
         """
-        Initialize HIL simulation runner.
-        HILシミュレーション実行器を初期化
+        Initialize HILS simulation runner.
+        HILSシミュレーション実行器を初期化
 
         Args:
-            hil: HIL interface instance
+            hils: HILS interface instance
             physics_callback: Function that takes (motor_outputs, dt) and returns
                              sensor data dict
             sensor_rates: Dict of sensor rates in Hz (default: firmware rates)
         """
-        self.hil = hil
+        self.hils = hils
         self.physics_callback = physics_callback
 
         # Default sensor rates (matching firmware)
@@ -875,8 +875,8 @@ class HILSimulationRunner:
 
     def run(self, duration_s: float = None, realtime: bool = True):
         """
-        Run HIL simulation.
-        HILシミュレーションを実行
+        Run HILS simulation.
+        HILSシミュレーションを実行
 
         Args:
             duration_s: Simulation duration (None = run until stopped)
@@ -886,15 +886,15 @@ class HILSimulationRunner:
         self._sim_time_us = 0
         start_time = time.time()
 
-        # Enable HIL mode
-        self.hil.enable_hil()
+        # Enable HILS mode
+        self.hils.enable_hils()
 
         try:
             while self._running:
                 loop_start = time.time()
 
                 # Get motor outputs from firmware
-                motor_output = self.hil.get_motor_output(timeout=0.001)
+                motor_output = self.hils.get_motor_output(timeout=0.001)
 
                 if motor_output:
                     # Calculate dt
@@ -921,7 +921,7 @@ class HILSimulationRunner:
                         time.sleep(sleep_time)
 
         finally:
-            self.hil.disable_hil()
+            self.hils.disable_hils()
 
     def stop(self):
         """Stop simulation / シミュレーションを停止"""
@@ -934,7 +934,7 @@ class HILSimulationRunner:
         # IMU (400Hz)
         if self._should_inject('imu', current_time):
             if 'gyro' in sensor_data and 'accel' in sensor_data:
-                self.hil.inject_imu(
+                self.hils.inject_imu(
                     current_time,
                     sensor_data['gyro'],
                     sensor_data['accel'],
@@ -943,12 +943,12 @@ class HILSimulationRunner:
         # Magnetometer (100Hz)
         if self._should_inject('mag', current_time):
             if 'mag' in sensor_data:
-                self.hil.inject_mag(current_time, sensor_data['mag'])
+                self.hils.inject_mag(current_time, sensor_data['mag'])
 
         # Barometer (50Hz)
         if self._should_inject('baro', current_time):
             if 'pressure' in sensor_data:
-                self.hil.inject_baro(
+                self.hils.inject_baro(
                     current_time,
                     sensor_data['pressure'],
                     sensor_data.get('temperature', 25.0),
@@ -957,7 +957,7 @@ class HILSimulationRunner:
         # ToF (30Hz)
         if self._should_inject('tof', current_time):
             if 'tof_distance' in sensor_data:
-                self.hil.inject_tof(
+                self.hils.inject_tof(
                     current_time,
                     int(sensor_data['tof_distance'] * 1000),
                     sensor_data.get('tof_valid', True),
@@ -966,7 +966,7 @@ class HILSimulationRunner:
         # Optical Flow (100Hz)
         if self._should_inject('flow', current_time):
             if 'flow_x' in sensor_data:
-                self.hil.inject_flow(
+                self.hils.inject_flow(
                     current_time,
                     int(sensor_data['flow_x']),
                     int(sensor_data['flow_y']),

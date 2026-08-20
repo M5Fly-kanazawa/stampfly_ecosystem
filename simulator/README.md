@@ -2,13 +2,13 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-StampFly用のPythonベースフライトシミュレータ。物理エンジン、センサモデル、制御システム、HILテスト機能を備えた教育・研究プラットフォーム。
+StampFly用のPythonベースフライトシミュレータ。物理エンジン、センサモデル、制御システム、HILSテスト機能を備えた教育・研究プラットフォーム。
 
 ## シミュレータの選択
 
 | シミュレータ | 特徴 | 用途 |
 |-------------|------|------|
-| **VPython版**（[vpython/](vpython/)） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SILS/HIL |
+| **VPython版**（[vpython/](vpython/)） | 軽量、ブラウザ3D表示、センサモデル充実 | 制御学習、SILS/HILS |
 | **Genesis版**（[genesis/](genesis/)） | 高精度物理エンジン、2000Hz物理演算、物理量ベース制御 | 高精度シミュレーション |
 
 ```bash
@@ -28,7 +28,7 @@ StampFly Simulatorは、マイクロドローン「StampFly」の動力学をPyt
 - **制御アルゴリズムの開発・検証**: 安全な環境でPIDゲインの調整やフライトモードの実装
 - **センサフュージョンの研究**: リアルなノイズモデルを持つセンサシミュレーション
 - **教育**: ドローン動力学と制御理論の可視化学習
-- **HILテスト**: 実機ファームウェアとシミュレータの連携テスト
+- **HILSテスト**: 実機ファームウェアとシミュレータの連携テスト
 
 ### 機体構成
 
@@ -86,7 +86,7 @@ pip install -r requirements.txt
 | Pillow | 画像処理 | ○ |
 | opencv-python | 画像処理（オプティカルフロー） | ○ |
 | hid | ジョイスティック入力 | △ |
-| pyserial | HIL通信 | △ |
+| pyserial | HILS通信 | △ |
 
 **注意**: `hid`パッケージはシステムレベルのHIDライブラリが必要です。
 
@@ -370,7 +370,7 @@ throttle = ctrl.update(
 )
 ```
 
-## 6. SILS/HILテスト
+## 6. SILS/HILSテスト
 
 ### SILS（Software-in-the-Loop）
 
@@ -394,26 +394,28 @@ commands = sils.update(sensor_data, dt=0.0025)
 motor_outputs = commands.motors
 ```
 
-### HIL（Hardware-in-the-Loop）
+### HILS（Hardware In the Loop Simulation）
 
 実機ファームウェアとシリアル通信でセンサデータを注入：
 
-```python
-from simulator.interfaces import HILInterface, HILSimulationRunner
+> **注（2026-08-20）**: 以下はPython側インターフェースの実装例。`firmware/vehicle`・`firmware/controller` にはHILSの受信処理が実装されておらず、呼び出し元も無いため、実機とは現状接続できない。詳細は [`docs/plans/archive/hils-firmware.md`](../docs/plans/archive/hils-firmware.md) を参照。
 
-# HILインターフェースの作成
-hil = HILInterface()
-hil.connect(port="/dev/tty.usbserial-XXX", baudrate=921600)
+```python
+from simulator.interfaces import HILSInterface, HILSSimulationRunner
+
+# HILSインターフェースの作成
+hils = HILSInterface()
+hils.connect(port="/dev/tty.usbserial-XXX", baudrate=921600)
 
 # シミュレータからセンサデータを注入
-hil.inject_imu(
+hils.inject_imu(
     timestamp_us=1000,
     gyro=np.array([0.0, 0.0, 0.0]),
     accel=np.array([0.0, 0.0, -9.81])
 )
 
 # ファームウェアからモーター出力を取得
-motor_output = hil.get_motor_output(timeout=0.01)
+motor_output = hils.get_motor_output(timeout=0.01)
 if motor_output:
     print(f"Motors: {motor_output.motors}")
 ```
@@ -487,11 +489,13 @@ for device in hid.enumerate():
     print(f"VID: {device['vendor_id']:04x}, PID: {device['product_id']:04x}")
 ```
 
-### HIL通信エラー
+### HILS通信エラー
+
+> **注（2026-08-20）**: ファームウェア側にHILSの受信処理が未実装のため、以下の手順を試しても接続はできない。実装状況は [6. SILS/HILSテスト](#6-silshilsテスト) を参照。
 
 1. シリアルポートが正しいか確認
 2. ボーレート（921600）が一致しているか確認
-3. ファームウェアがHILモードで起動しているか確認
+3. ファームウェアがHILSモードで起動しているか確認
 
 ## 10. 参考資料
 
@@ -510,7 +514,7 @@ for device in hid.enumerate():
 
 | Simulator | Features | Use Cases |
 |-----------|----------|-----------|
-| **VPython version** (this directory) | Lightweight, browser 3D, rich sensor models | Control learning, SILS/HIL |
+| **VPython version** (this directory) | Lightweight, browser 3D, rich sensor models | Control learning, SILS/HILS |
 | **Genesis version** ([sandbox/genesis_sim/](sandbox/genesis_sim/)) | High-precision physics, 2000Hz, physical units | High-fidelity simulation |
 
 ## 1. Overview
@@ -522,7 +526,7 @@ StampFly Simulator is a Python-based tool for simulating the dynamics of the "St
 - **Control Algorithm Development**: Safely tune PID gains and implement flight modes
 - **Sensor Fusion Research**: Sensor simulation with realistic noise models
 - **Education**: Visual learning of drone dynamics and control theory
-- **HIL Testing**: Integration testing between firmware and simulator
+- **HILS Testing**: Integration testing between firmware and simulator
 
 ### Vehicle Configuration
 
@@ -580,7 +584,7 @@ pip install -r requirements.txt
 | Pillow | Image processing | ○ |
 | opencv-python | Image processing (optical flow) | ○ |
 | hid | Joystick input | △ |
-| pyserial | HIL communication | △ |
+| pyserial | HILS communication | △ |
 
 **Note**: The `hid` package requires system-level HID libraries.
 
@@ -628,7 +632,7 @@ simulator/
 │   ├── messages.py        # Protocol messages
 │   ├── protocol_bridge.py # Simulator state ↔ protocol conversion
 │   ├── sils_interface.py   # SILS interface
-│   └── hil_interface.py   # HIL interface
+│   └── hils_interface.py  # HILS interface (Python side only; firmware not implemented)
 │
 ├── visualization/         # Visualization
 │   └── vpython_backend.py # VPython 3D renderer
@@ -863,7 +867,7 @@ throttle = ctrl.update(
 )
 ```
 
-## 6. SILS/HIL Testing
+## 6. SILS/HILS Testing
 
 ### SILS (Software-in-the-Loop)
 
@@ -887,26 +891,28 @@ commands = sils.update(sensor_data, dt=0.0025)
 motor_outputs = commands.motors
 ```
 
-### HIL (Hardware-in-the-Loop)
+### HILS (Hardware In the Loop Simulation)
 
 Inject sensor data to real firmware via serial communication:
 
-```python
-from simulator.interfaces import HILInterface, HILSimulationRunner
+> **Note (2026-08-20):** The example below shows the Python-side interface only. Neither `firmware/vehicle` nor `firmware/controller` implements the HILS receiver, and nothing currently calls this interface, so it cannot connect to real hardware yet. See [`docs/plans/archive/hils-firmware.md`](../docs/plans/archive/hils-firmware.md) for details.
 
-# Create HIL interface
-hil = HILInterface()
-hil.connect(port="/dev/tty.usbserial-XXX", baudrate=921600)
+```python
+from simulator.interfaces import HILSInterface, HILSSimulationRunner
+
+# Create HILS interface
+hils = HILSInterface()
+hils.connect(port="/dev/tty.usbserial-XXX", baudrate=921600)
 
 # Inject sensor data from simulator
-hil.inject_imu(
+hils.inject_imu(
     timestamp_us=1000,
     gyro=np.array([0.0, 0.0, 0.0]),
     accel=np.array([0.0, 0.0, -9.81])
 )
 
 # Get motor output from firmware
-motor_output = hil.get_motor_output(timeout=0.01)
+motor_output = hils.get_motor_output(timeout=0.01)
 if motor_output:
     print(f"Motors: {motor_output.motors}")
 ```
@@ -980,11 +986,13 @@ for device in hid.enumerate():
     print(f"VID: {device['vendor_id']:04x}, PID: {device['product_id']:04x}")
 ```
 
-### HIL Communication Errors
+### HILS Communication Errors
+
+> **Note (2026-08-20):** The firmware does not implement a HILS receiver yet, so the steps below will not achieve a connection. See [6. SILS/HILS Testing](#6-silshils-testing) for implementation status.
 
 1. Verify the serial port is correct
 2. Verify baud rate (921600) matches
-3. Verify firmware is running in HIL mode
+3. Verify firmware is running in HILS mode
 
 ## 10. References
 

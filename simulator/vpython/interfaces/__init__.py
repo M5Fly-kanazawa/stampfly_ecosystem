@@ -52,18 +52,18 @@ from .sils_interface import (
     SimpleRateController,
 )
 
-# HIL Interface
-from .hil_interface import (
-    HILInterface,
-    HILSimulationRunner,
-    HILMessageType,
-    HILIMUData,
-    HILMagData,
-    HILBaroData,
-    HILToFData,
-    HILFlowData,
-    HILMotorOutput,
-    HILStateUpdate,
+# HILS Interface
+from .hils_interface import (
+    HILSInterface,
+    HILSSimulationRunner,
+    HILSMessageType,
+    HILSIMUData,
+    HILSMagData,
+    HILSBaroData,
+    HILSToFData,
+    HILSFlowData,
+    HILSMotorOutput,
+    HILSStateUpdate,
 )
 
 __all__ = [
@@ -96,15 +96,15 @@ __all__ = [
     'ActuatorCommand',
     'SILSInterface',
     'SimpleRateController',
-    # HIL Interface
-    'HILInterface',
-    'HILSimulationRunner',
-    'HILMessageType',
-    'HILIMUData',
-    'HILMagData',
-    'HILBaroData',
-    'HILToFData',
-    'HILFlowData',
-    'HILMotorOutput',
-    'HILStateUpdate',
+    # HILS Interface
+    'HILSInterface',
+    'HILSSimulationRunner',
+    'HILSMessageType',
+    'HILSIMUData',
+    'HILSMagData',
+    'HILSBaroData',
+    'HILSToFData',
+    'HILSFlowData',
+    'HILSMotorOutput',
+    'HILSStateUpdate',
 ]

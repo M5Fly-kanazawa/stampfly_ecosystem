@@ -408,7 +408,7 @@ stampfly-ecosystem/
 ├── control/           # Control systems design (models, PID, MPC, SILS)
 ├── analysis/          # Data analysis (notebooks, scripts, datasets)
 ├── tools/             # Utilities (flashing, calibration, log capture, CI)
-├── simulator/         # SILS/HIL testing environments
+├── simulator/         # SILS/HILS testing environments
 ├── examples/          # Minimal working examples for learning
 └── third_party/       # External dependencies
 ```

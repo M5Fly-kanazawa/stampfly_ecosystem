@@ -94,8 +94,10 @@ sf sim run genesis
 
 | シミュレータ | 特徴 |
 |-------------|------|
-| VPython版 | 軽量、センサモデル充実、SILS/HIL対応 |
+| VPython版 | 軽量、センサモデル充実、SILS/HILS対応 |
 | Genesis版 | 2000Hz物理演算、物理量ベース制御 |
+
+> **注:** HILS（Hardware In the Loop Simulation）は `simulator/vpython/interfaces/` にPython側インターフェースのみ実装済みで、ファームウェア側（実機と接続する受信処理）は未実装のため現状は接続できません。詳細は [`simulator/README.md`](simulator/README.md) を参照。
 
 **→ [シミュレータで遊ぶ（詳細手順）](docs/getting-started.md#0-まずはシミュレータで遊んでみよう)**
 
@@ -325,8 +327,10 @@ You can fly a drone freely in the 3D view.
 
 | Simulator | Features |
 |-----------|----------|
-| VPython | Lightweight, rich sensor models, SILS/HIL |
+| VPython | Lightweight, rich sensor models, SILS/HILS |
 | Genesis | 2000Hz physics, physical-unit control |
+
+> **Note:** HILS (Hardware In the Loop Simulation) has a Python-side interface only, in `simulator/vpython/interfaces/`. The firmware-side receiver is not implemented, so it cannot currently be connected. See [`simulator/README.md`](simulator/README.md) for details.
 
 **→ [Play with the Simulator (Detailed Steps)](docs/getting-started.md#0-try-the-simulator-first)**
 

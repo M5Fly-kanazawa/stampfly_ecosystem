@@ -164,7 +164,7 @@ Q: 何についてか？
 | 種類 | 形式 | 例 |
 |------|------|-----|
 | 一般ドキュメント | `kebab-case.md` | `control-system.md` |
-| 計画ドキュメント | `UPPER_SNAKE_CASE.md` | `HIL_FIRMWARE_PLAN.md` |
+| 計画ドキュメント | `UPPER_SNAKE_CASE.md` | `HILS_FIRMWARE_PLAN.md` |
 | ガイド・規約 | `UPPER_SNAKE_CASE.md` | `STYLE_GUIDE.md` |
 
 ---
@@ -331,5 +331,5 @@ Q: What is it about?
 | Type | Format | Example |
 |------|--------|---------|
 | General docs | `kebab-case.md` | `control-system.md` |
-| Plan docs | `UPPER_SNAKE_CASE.md` | `HIL_FIRMWARE_PLAN.md` |
+| Plan docs | `UPPER_SNAKE_CASE.md` | `HILS_FIRMWARE_PLAN.md` |
 | Guides/Standards | `UPPER_SNAKE_CASE.md` | `STYLE_GUIDE.md` |

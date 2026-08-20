@@ -76,7 +76,7 @@ simulator/
 │   ├── messages.py          # ✓ protocol/spec/messages.yaml の Python 実装
 │   ├── protocol_bridge.py   # ✓ SimulatorState ↔ Protocol 変換
 │   ├── sils_interface.py     # ✓ SILSインターフェース・SimpleRateController
-│   └── hil_interface.py     # ✓ HILインターフェース・シリアル通信
+│   └── hils_interface.py    # ✓ HILS（Hardware In the Loop Simulation）インターフェース・シリアル通信（Python側のみ、ファーム側未実装）
 │
 ├── visualization/           # 可視化（複数バックエンド対応）
 │   ├── __init__.py
@@ -249,25 +249,27 @@ firmware/vehicle/
 
 **成果物**: 実機と同じ制御応答のシミュレータ ✓
 
-### Phase 5: HIL対応
+### Phase 5: HILS対応
 
 **目標**: 実機ファームウェアとの接続
 
-1. [x] シリアル通信インターフェース (`interfaces/hil_interface.py`)
+> **実装状況（2026-08-20 注記）**: 以下はいずれも Python 側インターフェースの実装状況を指す。ファームウェア側（実機と接続する受信処理）は未実装で、呼び出し元も無いため、実機との接続は現状できない。詳細は `docs/plans/archive/hils-firmware.md` を参照。
+
+1. [x] シリアル通信インターフェース (`interfaces/hils_interface.py`)
    - pyserial ベースの接続管理
    - 自動ポート検出
 2. [x] リアルタイム同期機構
    - タイムスタンプ同期 (SYNC_REQUEST/SYNC_RESPONSE)
    - センサレート管理 (IMU 400Hz, Mag/Flow 100Hz, Baro 50Hz, ToF 30Hz)
 3. [x] センサ注入・アクチュエータ読み取り
-   - HILIMUData, HILMagData, HILBaroData, HILToFData, HILFlowData
-   - HILMotorOutput, HILStateUpdate
+   - HILSIMUData, HILSMagData, HILSBaroData, HILSToFData, HILSFlowData
+   - HILSMotorOutput, HILSStateUpdate
    - チェックサム検証
-4. [x] HILSimulationRunner クラス
+4. [x] HILSSimulationRunner クラス
    - リアルタイムループ管理
    - 物理シミュレーションコールバック
 
-**成果物**: HIL（Hardware-in-the-Loop）テスト環境 ✓
+**成果物**: HILS 通信インターフェース（Python側のみ。ファームウェア側は未実装のため未接続）
 
 ---
 
@@ -324,7 +326,7 @@ matplotlib
 vpython
 ```
 
-### オプション（HIL/拡張用）
+### オプション（HILS/拡張用）
 ```
 pyserial
 hid

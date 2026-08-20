@@ -328,7 +328,7 @@ simulator/
 ├── sils/        # Software-in-the-Loop 本体（決定論的・ESP-IDFホストビルド、設計の正は sils/RESET_PLAN.md）
 ├── tests/      # シミュレータ横断のテスト（例: 制御アロケーション互換性検証）
 ├── tools/      # シミュレータ間比較などの補助ツール（compare_simulators）
-└── vpython/    # VPython版シミュレータ（軽量・ブラウザ3D表示・SILS/HIL向け）
+└── vpython/    # VPython版シミュレータ（軽量・ブラウザ3D表示・SILS/HILS向け）
 ```
 
 - SILS 本体の設計・構築経緯は `simulator/sils/RESET_PLAN.md` を正とする。

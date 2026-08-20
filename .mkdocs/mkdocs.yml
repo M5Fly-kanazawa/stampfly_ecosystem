@@ -295,7 +295,7 @@ nav:
       - Controller メニュー USB: docs/plans/archive/controller-menu-usb.md
       - エコシステム移行: docs/plans/archive/ecosystem-migration.md
       - HW テスト: docs/plans/archive/hardware-test.md
-      - HIL FW: docs/plans/archive/hil-firmware.md
+      - HILS FW: docs/plans/archive/hils-firmware.md
       - インストーラ: docs/plans/archive/installer-architecture.md
       - Serial CLI: docs/plans/archive/serial-cli-rebuild.md
       - Tello 互換: docs/plans/archive/tello-compat.md

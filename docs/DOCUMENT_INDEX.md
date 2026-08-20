@@ -95,7 +95,7 @@
 | [plans/installer-architecture.md](plans/installer-architecture.md) | インストーラ設計 |
 | [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | コントローラメニュー・USB 計画（完了） |
 | [plans/hardware-test.md](plans/hardware-test.md) | 実機テスト計画 |
-| [plans/archive/hil-firmware.md](plans/archive/hil-firmware.md) | HIL ファームウェア計画 |
+| [plans/archive/hils-firmware.md](plans/archive/hils-firmware.md) | HILS ファームウェア計画（未実施） |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 統合計画 |
 | [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | シリアル CLI 再構築計画（完了） |
 | [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello 互換計画 |
@@ -317,7 +317,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [plans/installer-architecture.md](plans/installer-architecture.md) | Installer architecture |
 | [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | Controller menu & USB plan (completed) |
 | [plans/hardware-test.md](plans/hardware-test.md) | Hardware test plan |
-| [plans/archive/hil-firmware.md](plans/archive/hil-firmware.md) | HIL firmware plan |
+| [plans/archive/hils-firmware.md](plans/archive/hils-firmware.md) | HILS firmware plan (not implemented) |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 integration plan |
 | [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | Serial CLI rebuild plan (completed) |
 | [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello compatibility plan |

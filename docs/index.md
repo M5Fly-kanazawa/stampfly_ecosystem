@@ -42,7 +42,7 @@ stampfly-ecosystem/
 ├── control/       制御設計（モデル・PID・MPC）
 ├── analysis/      データ解析（ノートブック・スクリプト）
 ├── tools/         開発ツール
-├── simulator/     SILS/HIL テスト
+├── simulator/     SILS/HILS テスト
 └── examples/      学習用サンプル
 ```
 
