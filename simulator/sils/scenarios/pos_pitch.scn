@@ -15,9 +15,31 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
-   +    rc   3243  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc   3243  2048   2048    2048  1     1300      50                       # C: STABILIZE take-off, climb (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用). Dwell 2000ms->1300ms 2026-08-22, see note below / dwell 2000ms→1300ms（2026-08-22）、下記注記参照
    +    rc   3176  2048   2600    2048  1     600       50                       # C2: PITCH-forward step (~+8°) 0.6 s → longitudinal drift (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
    +    rc   2048  2048   2048    2048  1     14000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 14 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
+
+# 2026-08-22 thrust recalibration: row C's dwell was shortened from 2000ms to
+# 1300ms, matching pos_roll.scn. With the old 2000ms the craft overshot to
+# ~3.4 m and the return swing could reach the ground BEFORE the scenario's
+# DISARM step at t=21.6 s, so 'DISARM accepted' never appeared. This passed on
+# macOS/arm64 but FAILED on the Linux/x86_64 CI runner (run 32546982140) --
+# i.e. the scenario was sitting on a floating-point knife edge, not merely
+# unlucky. At 1300ms the peak is ~1.1 m and the craft is still airborne when
+# the DISARM step fires (landing at 21.38 s is the RESULT of that disarm, not
+# a premature touchdown), which is a real robustness margin rather than a
+# tighter tolerance. pos_flight.scn / pos_yaw.scn keep 2000ms: both are
+# KNOWN-FAIL for the yaw torque-authority gap (backlog #12), so the gate does
+# not depend on them -- align them when that backlog item is addressed.
+# 2026-08-22 推力較正: 行C の dwell を 2000ms→1300ms に短縮した（pos_roll.scn と同値）。
+# 旧 2000ms のままだと約 3.4 m まで行き過ぎ、その戻りがシナリオの DISARM 手順（t=21.6s）
+# より前に接地しうるため 'DISARM accepted' に到達しない。macOS/arm64 では通るが
+# Linux/x86_64 の CI では失敗した（run 32546982140）— つまり運が悪かったのではなく、
+# 浮動小数点の差で表裏が変わる境界に乗っていた。1300ms なら最高高度 ~1.1 m で、DISARM
+# 手順の時点でまだ滞空している（21.38s の着地は DISARM の結果であって早期接地ではない）。
+# 許容値を緩めるのではなく余裕そのものを作る修正である。pos_flight.scn / pos_yaw.scn は
+# 2000ms のまま — 双方ヨートルク権限のギャップ（バックログ#12）で KNOWN-FAIL であり
+# ゲートが依存しないため。当該バックログ対応時に揃えること。
