@@ -21,9 +21,9 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s → IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50                       # B: ARM, idle 1 s
-   +    rc   3473  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
-   +    rc   3393  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command) (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
-   +    rc   3393  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
+   +    rc   3243  2048   2048    2048  1     2000      50                       # C: STABILIZE take-off, climb ~2 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc   3176  2048   2048    2700  1     1500      50                       # C1: YAW-rotate the heading 1.5 s (yaw-rate command) (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
+   +    rc   3176  2600   2048    2048  1     600       50                       # C2: ROLL-right step (~+8°) 0.6 s at the rotated heading (2026-07-26 ODEプラント(実測Ct)対応再調整: 3290->3393, +3.1%, 同上)
    +    rc   2048  2048   2048    2048  1     13000     50        0     0     1  # D: POS_HOLD (pos=1) — arrest drift + hold 13 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM

@@ -253,6 +253,15 @@ calibration_sets:
   # in the SSOT for historical reference (V-ω curve coefficients, pre-
   # 2026-07-14 measurement) and pending the ongoing bench V-ω-T
   # co-measurement that will confirm or replace the provisional Ct.
+  # UPDATE (2026-08-22): "surviving consumer" above must now be read as
+  # "consumer of the same functional form", not a literal numeric match --
+  # actuator.cpp's MOTOR_AM/MOTOR_BM/MOTOR_CM hold the flight_anchored_
+  # motor_curve values below (this family's Am/Bm/Cm folded together with the
+  # flight-verified hover.thrust_corr=1.12), not these raw Am/Bm/Cm anymore.
+  # This family's Am/Bm/Cm are kept UNCHANGED as the historical experimental-
+  # identification record (do not edit their numeric values) -- see
+  # flight_anchored_motor_curve below for what the firmware currently loads
+  # and why.
   # 旧電気系ファミリ。2026-07-26（バックログ#2、モータODE化）時点で
   # simulator/sils/plant/plant.hpp は本セットのどのメンバーも参照しない
   # （Config::motor_Am/motor_Bm/motor_Cm と静的曲線版 Config::Ct は
@@ -264,6 +273,14 @@ calibration_sets:
   # （理由は同エントリの note 参照）。歴史的参照（V-ω曲線係数、
   # 2026-07-14以前の実測）として、また進行中のベンチ V-ω-T 同時計測が
   # 暫定 Ct を確定／置換するまでの参照用に SSOT に残す。
+  # 追記（2026-08-22）: 上記「消費者が残る」は「同じ関数形の消費者」という
+  # 意味に読み替えること——数値が一致するわけではない。actuator.cpp の
+  # MOTOR_AM/MOTOR_BM/MOTOR_CM は現在、下記 flight_anchored_motor_curve の値
+  # （本ファミリの Am/Bm/Cm と、飛行実証済みの hover.thrust_corr=1.12 を
+  # 畳み込んだもの）を保持しており、本ファミリの生の Am/Bm/Cm ではない。
+  # 本ファミリの Am/Bm/Cm は実験同定の記録として値を変更せず保存する
+  # （数値は編集しないこと）——ファームが現在読み込む値とその理由は
+  # 下記 flight_anchored_motor_curve を参照。
   legacy_motor_curve:
     status: frozen_for_implementation
     coupled: true
@@ -286,15 +303,30 @@ calibration_sets:
       Am:
         value: 5.39e-8
         unit: "V/(rad/s)²"
-        note: "V = Am·ω² + Bm·ω + Cm。実験同定。firmware actuator.cpp の MOTOR_AM が現在も使用（plant.hpp からは 2026-07-26 モータODE化で撤去済み）。"
+        note: >
+          V = Am·ω² + Bm·ω + Cm。実験同定。firmware actuator.cpp の MOTOR_AM
+          は2026-08-22までこの値をそのまま使用していた（plant.hpp からは
+          2026-07-26 モータODE化で撤去済み）。ファームは 2026-08-22 以降
+          flight_anchored_motor_curve を使用（hover.thrust_corr=1.12 の畳み
+          込み、下記セット参照）——本値自体は実験同定の記録として変更していない。
       Bm:
         value: 6.33e-4
         unit: "V/(rad/s)"
-        note: "実験同定。firmware actuator.cpp の MOTOR_BM が現在も使用（plant.hpp からは 2026-07-26 モータODE化で撤去済み）。"
+        note: >
+          実験同定。firmware actuator.cpp の MOTOR_BM は2026-08-22までこの
+          値をそのまま使用していた（plant.hpp からは 2026-07-26 モータODE化
+          で撤去済み）。ファームは 2026-08-22 以降 flight_anchored_motor_curve
+          を使用（hover.thrust_corr=1.12 の畳み込み、下記セット参照）——
+          本値自体は実験同定の記録として変更していない。
       Cm:
         value: 1.53e-2
         unit: "V"
-        note: "実験同定。firmware actuator.cpp の MOTOR_CM が現在も使用（plant.hpp からは 2026-07-26 モータODE化で撤去済み）。"
+        note: >
+          実験同定。firmware actuator.cpp の MOTOR_CM は2026-08-22までこの
+          値をそのまま使用していた（plant.hpp からは 2026-07-26 モータODE化
+          で撤去済み）。ファームは 2026-08-22 以降 flight_anchored_motor_curve
+          を使用するが、Cm は畳み込み式で不変のため数値上の変更はない
+          （下記セット参照）。本値自体は実験同定の記録として変更していない。
       Rm:
         value: 0.34
         unit: "Ω"
@@ -314,3 +346,108 @@ calibration_sets:
         value: 2.76e-5
         unit: "N·m"
         note: "静止摩擦トルク（旧ファミリ）。tools/sysid/defaults.py DEFAULT_PARAMS.motor.Qf と同値だが、Phase 1では未配線。"
+
+  # Flight-anchored motor curve (2026-08-22) -- a mechanical fold of
+  # legacy_motor_curve's Am/Bm/Cm above with the flight-verified correction
+  # hover.thrust_corr=1.12. What was actually validated on real hardware was
+  # never the legacy curve alone -- per the firmware's own long-standing
+  # comment ("the ideal motor curve overestimates thrust, so real hardware
+  # only hovers after a x1.12 correction"), it was ALWAYS "legacy curve x
+  # corr 1.12" as one combined mapping, split across two constants: a static
+  # curve in firmware/vehicle/components/sf_actuator/actuator.cpp and a
+  # runtime NVS parameter hover.thrust_corr in params.cpp. This set folds
+  # that combination into a single curve so hover.thrust_corr can revert to
+  # its intended meaning (per-unit trim, nominal 1.0) instead of silently
+  # carrying a systematic motor-curve correction on every vehicle.
+  # Derivation: holding duty identical while corr goes 1.12 -> 1.0 requires,
+  # at every thrust T, omega_new = sqrt(T/1.0/Ct) = omega_legacy / sqrt(1.12).
+  # Substituting into V = Am*omega^2 + Bm*omega + Cm shows that
+  # Am_new = Am_legacy x 1.12, Bm_new = Bm_legacy x sqrt(1.12), and
+  # Cm_new = Cm_legacy (unchanged) reproduce V_new(omega_new) =
+  # V_legacy(omega_legacy) EXACTLY across the whole thrust range -- not an
+  # approximation. firmware/vehicle/components/sf_actuator/actuator.cpp's
+  # MOTOR_AM/MOTOR_BM/MOTOR_CM are the sole consumer of this set as of
+  # 2026-08-22 (previously they held the legacy_motor_curve literals above).
+  #
+  # IMPORTANT CAVEAT (read before citing either curve family as "the" motor
+  # model): this static V-omega curve family (legacy_motor_curve, and this
+  # flight_anchored derivative of it) is an algebraic paraphrase of a
+  # DIFFERENT electrical family than the one measured_2026_07/plant.hpp's ODE
+  # uses (Am = Rm*Cq/Km etc., see docs/architecture/stampfly-parameters.md
+  # section 3 "Derived Parameters" footnote). The two families describe TWO
+  # DIFFERENT MOTORS -- they diverge by a factor of approximately 1.252x in
+  # thrust at the hover operating point. No V-omega-T simultaneous
+  # measurement exists on the new propeller (see measured_2026_07.Ct's note
+  # above), so which family (if either) is physically correct remains
+  # UNDECIDED (backlog #3). This fold does NOT assert new physics and does
+  # NOT resolve that gap -- it only consolidates the single flight-validated
+  # (legacy curve + corr 1.12) mapping into one place so it stops being split
+  # across two constants that could silently drift apart.
+  #
+  # フライト実証済みモータ曲線（2026-08-22）—— legacy_motor_curve の
+  # Am/Bm/Cm と、実飛行で検証済みの補正 hover.thrust_corr=1.12 を機械的に
+  # 畳み込んだもの。ファーム側の従来からのコメント通り「理想モータ曲線は
+  # 推力を過大評価するため、実機は×1.12の補正をしないとホバーしない」——
+  # 実飛行で検証されていたのは legacy 曲線単体ではなく、常に「legacy 曲線 +
+  # corr 1.12」という組み合わせ全体であり、それが2つの定数（firmware/
+  # vehicle/components/sf_actuator/actuator.cpp の静的曲線と、params.cpp の
+  # 実行時NVSパラメータ hover.thrust_corr）に分割して持たれていた。本セットは
+  # この組み合わせを1つの曲線に畳み込み、hover.thrust_corr が本来の意味
+  # （個体差トリム、公称=1.0）へ戻れるようにする——そうしなければ全機体が
+  # 気づかれないままモータ曲線の系統的補正を黙って抱え続けることになる。
+  # 導出: duty を変えずに corr を 1.12→1.0 にするには、全推力域で
+  # ω_new=√(T/1.0/Ct)=ω_legacy/√1.12 が必要で、V = Am·ω²+Bm·ω+Cm に代入すると
+  # Am_new=Am_legacy×1.12、Bm_new=Bm_legacy×√1.12、Cm_new=Cm_legacy（変更なし）
+  # とすれば V_new(ω_new)=V_legacy(ω_legacy) が近似ではなく全推力域で厳密に
+  # 成立することが分かる。firmware/vehicle/components/sf_actuator/
+  # actuator.cpp の MOTOR_AM/MOTOR_BM/MOTOR_CM が2026-08-22時点で本セットの
+  # 唯一の消費者（それ以前は上記 legacy_motor_curve のリテラルを保持して
+  # いた）。
+  #
+  # 重要な注記（どちらの曲線ファミリも「唯一のモータモデル」として引用する前に
+  # 必読）: この静的 V-ω 曲線ファミリ（legacy_motor_curve、および本
+  # derivative である flight_anchored）は、measured_2026_07/plant.hpp の
+  # ODE が使う電気系ファミリとは別物の代数的言い換え（Am=Rm·Cq/Km 等、
+  # docs/architecture/stampfly-parameters.md §3「派生パラメータ」脚注参照）
+  # である。両ファミリは別のモータを記述しており、ホバー点で約1.252倍の
+  # 推力差がある。新プロペラでの V-ω-T 同時計測が一度も行われていないため
+  # （measured_2026_07.Ct の note 参照）、どちらのファミリが（あるいは
+  # どちらも）物理的に正しいかは未決着のまま（バックログ#3）。本畳み込みは
+  # 新しい物理を主張するものでも、その未決着を解消するものでもなく、単一の
+  # 飛行実証済み写像（legacy曲線+corr1.12）を1箇所に集約しただけである。
+  flight_anchored_motor_curve:
+    status: frozen_for_implementation
+    coupled: true
+    params:
+      Am:
+        value: 6.0368e-8
+        unit: "V/(rad/s)²"
+        date: "2026-08-22"
+        note: >
+          legacy_motor_curve.Am(5.39e-8) × 1.12 の機械的な畳み込み——ホバーに
+          必須だった hover.thrust_corr=1.12 をモータ曲線側へ吸収した値
+          （このファミリ冒頭コメントの導出参照）。5.39e-8×1.12=6.0368e-8。
+          legacy_motor_curve.Am の値からの機械的導出であり、新しい実測では
+          ない。firmware/vehicle/components/sf_actuator/actuator.cpp の
+          MOTOR_AM が現在の唯一の消費者（2026-08-22〜）。
+      Bm:
+        value: 6.699042e-4
+        unit: "V/(rad/s)"
+        date: "2026-08-22"
+        note: >
+          legacy_motor_curve.Bm(6.33e-4) × √1.12 の機械的な畳み込み
+          （このファミリ冒頭コメントの導出参照、根拠は Am と同一）。
+          6.33e-4×√1.12=6.33e-4×1.058300...=6.699042e-4。
+          legacy_motor_curve.Bm の値からの機械的導出であり、新しい実測では
+          ない。firmware/vehicle/components/sf_actuator/actuator.cpp の
+          MOTOR_BM が現在の唯一の消費者（2026-08-22〜）。
+      Cm:
+        value: 1.53e-2
+        unit: "V"
+        date: "2026-08-22"
+        note: >
+          legacy_motor_curve.Cm と数値変更なし——畳み込み式は
+          Cm_new=Cm_legacy であり、定数項は corr の影響を受けない（Am/Bm の
+          note 参照）。firmware/vehicle/components/sf_actuator/actuator.cpp
+          の MOTOR_CM が現在の唯一の消費者（2026-08-22〜、値は
+          legacy_motor_curve.Cm と同一）。

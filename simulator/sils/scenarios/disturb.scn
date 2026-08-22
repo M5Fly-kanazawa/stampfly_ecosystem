@@ -19,7 +19,7 @@
 #  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc    2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s (boot→IDLE before ARM edge)
    +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM rising edge in IDLE
-   +    rc    3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m
+   +    rc    3106  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m
    +    rc    2048  2048   2048    2048  1     4000      50        1      # D: ALT_HOLD capture + settle 4 s (clean baseline)
 #  --- Disturbance 1: LATERAL wind gust (horizontal force only — altitude-safe) ---
 #  A purely horizontal force never threatens altitude (no vertical component) and

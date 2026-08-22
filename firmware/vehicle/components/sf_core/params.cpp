@@ -530,7 +530,7 @@ namespace param_vars {
     // 摩耗ハードは corr≈1.12（飛行実測）でホバー。新品/強いモータは同 duty で推力が大きい
     // → corr を下げる（さもないと自動離陸が過上昇しレートループが過敏化）。ホバーログから
     // corr_new = 1.12 ×（新duty/旧duty）で調整。
-    float hover_thrust_corr = 1.12f;
+    float hover_thrust_corr = 1.00f;
 
     // Onboard hover-thrust learning enable (1 = learn the true hover thrust in flight and
     // persist into hover.thrust_corr at touchdown, 0 = manual hover.thrust_corr only). Makes
@@ -789,7 +789,7 @@ static const ParamEntry table[] = {
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       0.0f, 0.0f, 5.0f, &notifyControllerReload},
-    {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.12f, 0.5f, 2.0f, &notifyControllerReload},
+    {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.00f, 0.5f, 2.0f, &notifyControllerReload},
     {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 
     // Position control. Gains re-tuned from the first real POS_HOLD flight

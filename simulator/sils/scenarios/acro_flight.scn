@@ -23,13 +23,13 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro>
    0    rc   2048  2048   2048    2048  0     4000      50        0    0   # A: disarmed 4 s → IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50        0    0   # B: ARM (IDLE_GROUND → ARMED_GROUND)
-   +    rc   3473  2048   2048    2048  1     2000      50        0    1   # C: throttle up → TAKEOFF→FLYING, acro=1 → mode ACRO; climbs off ground. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
-   +    rc   3393  3000   2048    2048  1     300       50        0    1   # D: roll-rate + doublet (≈+0.46 rad/s, 0.3 s), near-hover throttle. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3290→3393 (near-hover, +3.1%)
-   +    rc   3393  1096   2048    2048  1     300       50        0    1   # E: roll-rate - (return)
-   +    rc   3393  2048   3000    2048  1     300       50        0    1   # F: pitch-rate +
-   +    rc   3393  2048   1096    2048  1     300       50        0    1   # G: pitch-rate -
-   +    rc   3393  2048   2048    3000  1     500       50        0    1   # H: yaw-rate + (0.5 s)
-   +    rc   3393  2048   2048    2048  1     1000      50        0    1   # I: centre, settle
+   +    rc   3243  2048   2048    2048  1     2000      50        0    1   # C: throttle up → TAKEOFF→FLYING, acro=1 → mode ACRO; climbs off ground. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
+   +    rc   3176  3000   2048    2048  1     300       50        0    1   # D: roll-rate + doublet (≈+0.46 rad/s, 0.3 s), near-hover throttle. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3290→3393 (near-hover, +3.1%)
+   +    rc   3176  1096   2048    2048  1     300       50        0    1   # E: roll-rate - (return)
+   +    rc   3176  2048   3000    2048  1     300       50        0    1   # F: pitch-rate +
+   +    rc   3176  2048   1096    2048  1     300       50        0    1   # G: pitch-rate -
+   +    rc   3176  2048   2048    3000  1     500       50        0    1   # H: yaw-rate + (0.5 s)
+   +    rc   3176  2048   2048    2048  1     1000      50        0    1   # I: centre, settle
    +      rc    2048 2048 2048 2048  0     200       50        0              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50        0              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50        0              # settle disarmed / disarm 後整定

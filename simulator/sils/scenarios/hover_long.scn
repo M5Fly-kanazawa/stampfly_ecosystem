@@ -19,7 +19,7 @@
 #  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s — clear boot→IDLE (~9.5 s) before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (now IDLE), throttle centre = T=0, 1 s
-   +    rc   3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m, 2.6 s
+   +    rc   3106  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off to ~0.62 m, 2.6 s
    +    rc   2048  2048   2048    2048  1     90000     50        1     # D: ALT_HOLD captures ~0.62 m and HOLDS for 90 s (long-stability probe)
    +    rc   1000  2048   2048    2048  1     7000      50        1     # E: descent stick (norm -0.51 → -0.14 m/s) → setpoint sinks to MIN 0.10 m, 7 s (gentle landing, no motor-cut free-fall)
    +    rc   2048  2048   2048    2048  0     1000      50              # F: DISARM near the ground, motors cut 1 s

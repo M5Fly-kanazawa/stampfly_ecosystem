@@ -47,7 +47,7 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0      rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND
    +      rc   2048  2048   2048    2048  1     1000      50              # B: ARM
-   +      rc   3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
+   +      rc   3243  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
    +      rc   2048  2048   2048    2048  1     2500      50        1     # D: ALT_HOLD capture + hover (settle, FLYING)
    +      rc   2048  2800   2048    2048  1     800       50        1     # E: hold ROLL RIGHT (link live → tilts, FLYING) — this is the LAST setpoint before the gap
    +8000  rc   2048  2048   2048    2048  0     1000      50              # F: 8 s SILENCE → COMM_LOST (>500ms) → 3 s grace (stale roll) → LANDING (LEVEL gate) → touchdown

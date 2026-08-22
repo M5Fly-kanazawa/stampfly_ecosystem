@@ -27,6 +27,6 @@
 #  <t>    ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0      rc    2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s → IDLE_GROUND before ARM edge
    +      rc    2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND)
-   +      rc    3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → TAKEOFF → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
+   +      rc    3243  2048   2048    2048  1     2500      50              # C: STABILIZE take-off → TAKEOFF → FLYING. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old)
    +      rc    2048  2048   2048    2048  1     4000      50        1     # D: ALT_HOLD capture + hover 4 s (settle, FLYING)
    +1500  rc    2048  2048   2048    2048  1     3000      50        1     # E: 1.5 s SILENCE before this → COMM_LOST (>500ms) while FLYING → LANDING; stream resumes 3 s

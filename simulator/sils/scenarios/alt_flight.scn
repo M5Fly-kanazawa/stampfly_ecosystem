@@ -17,12 +17,16 @@
 # 離陸時に ToF innovation ゲートを超え推定が発散する（P8 Phase B 修正参照）。
 #
 # Sticks are raw 12-bit ADC, centre 2048. STABILIZE thrust = clamp((raw-2048)/2048,0,1)
-# * max_thrust; with the Plant's 1/1.12 efficiency, hover sits near raw 3290 (norm 0.61).
+# * max_thrust; as of 2026-08-22 (Plant thrust_efficiency=0.7133, firmware static
+# motor curve folding in hover.thrust_corr=1.12), hover sits near raw 3154
+# (norm 0.540, = mg/max_thrust).
 # In ALT_HOLD the throttle stick is the SYMMETRIC climb/descend command (controller
 # convention: raw 2048 = centre = 0 = HOLD, up>2048 = climb, down<2048 = descend).
 # roll/pitch angle = norm * 30°.
-# スティックは raw 12bit ADC（中央2048）。STABILIZE 推力は norm×max_thrust、Plant 効率
-# 1/1.12 でホバーは raw≈3290。ALT_HOLD ではスロットルは対称な上昇/降下指令
+# スティックは raw 12bit ADC（中央2048）。STABILIZE 推力は norm×max_thrust。2026-08-22
+# 時点（Plant の thrust_efficiency=0.7133、ファーム静的モータ曲線への
+# hover.thrust_corr=1.12 畳み込み）でホバーは raw≈3154（norm 0.540, = mg/max_thrust）。
+# ALT_HOLD ではスロットルは対称な上昇/降下指令
 # （raw 2048=中央=0=ホールド、上>2048=上昇、下<2048=降下）。
 #
 # vehicle reaches IDLE_GROUND within ~1 s of boot, so a 4 s disarmed lead lands
@@ -32,7 +36,7 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s — boot reaches IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
-   +    rc   3473  2048   2048    2048  1     1300      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%). Dwell ALSO shortened 2500ms→1300ms: at the new plant's stronger thrust margin, holding 3473 for the old 2500ms carries ~1.7 m/s of residual climb into the ALT_HOLD handoff, which pushes truth altitude past the ToF's 4.0 m valid range (plant.cpp) and destabilizes the estimate — verified empirically (sweep of dwell 900–2500ms: <1150ms never leaves the ground / re-touches down, ≥1300ms gives a clean, bounded, DECAYING handoff transient with no ToF range exceedance). 1300ms keeps the craft safely airborne (min alt 0.19 m post-handoff) with margin.
+   +    rc   3243  2048   2048    2048  1     1300      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%). Dwell ALSO shortened 2500ms→1300ms: at the new plant's stronger thrust margin, holding 3473 for the old 2500ms carries ~1.7 m/s of residual climb into the ALT_HOLD handoff, which pushes truth altitude past the ToF's 4.0 m valid range (plant.cpp) and destabilizes the estimate — verified empirically (sweep of dwell 900–2500ms: <1150ms never leaves the ground / re-touches down, ≥1300ms gives a clean, bounded, DECAYING handoff transient with no ToF range exceedance). 1300ms keeps the craft safely airborne (min alt 0.19 m post-handoff) with margin. UPDATE 2026-08-22: STABILIZE throttle raw further recalibrated (deviation-from-centre ×0.8386) 3473→3243; the 1300ms dwell above was chosen under the 3473 calibration and is unaffected by this later raw-value change.
    +    rc   2048  2048   2048    2048  1     12000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE; throttle raw 2048 = climb-rate 0 → captureAltitude + HOLD 12 s. WATCH truth alt for runaway vs hold.
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM

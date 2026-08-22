@@ -24,5 +24,5 @@
    0    rc          2048  2048   2048    2048  0     5000      50   # A: paired Tx, disarmed 5 s — bind on first RC + boot calibration completes (~3.5 s)
    +    rc_foreign  3330  2048   2048    2048  1     3000      50   # B: FOREIGN Tx ARM + takeoff throttle 3 s → crosstalk filter DROPS it (motors stay off)
    +    rc          2048  2048   2048    2048  1     1000      50   # C: paired Tx ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
-   +    rc          3330  2048   2048    2048  1     2500      50   # D: paired Tx take-off — throttle up (>0.5) → TAKEOFF → FLYING, gentle climb 2.5 s
+   +    rc          3123  2048   2048    2048  1     2500      50   # D: paired Tx take-off — throttle up (>0.5) → TAKEOFF → FLYING, gentle climb 2.5 s
    +    rc          2048  2048   2048    2048  0     1000      50   # E: paired Tx DISARM (FLYING → IDLE_GROUND, motors cut) 1 s

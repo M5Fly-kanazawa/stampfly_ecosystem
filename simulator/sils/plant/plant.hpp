@@ -120,7 +120,31 @@ public:
         /// （本タスクの対象外）——ベンチ V-ω-T 同時計測でCtが確定した後に見直しが必要な
         /// 可能性がある。パラメータ自体は削除せず残す（将来のフライトログ再較正=Model
         /// Identity 用）。SILS_EMU_THRUST_EFF（emu_main.cpp）で実行毎に上書き可（A/B比較用）。
-        float thrust_efficiency = 1.0f;  ///< 1.0 = ODE curve is the actual output (see above)
+        ///
+        /// UPDATE (2026-08-22, Model Fidelity backlog #3): default changed AGAIN, this
+        /// time 1.0 → 0.7133. Root cause identified: the firmware's static motor curve
+        /// (SSOT legacy_motor_curve family — an algebraic restatement of it) and this
+        /// Plant's ODE (SSOT measured_2026_07 family) describe two DIFFERENT motors. At
+        /// the hover point, unscaled, the Plant delivers 1.252× the firmware's commanded
+        /// thrust; combined with hover.thrust_corr's 1.12 (firmware side), the pair was
+        /// jointly over-thrusting the airframe by 1.402×. thrust_efficiency = 0.7133 =
+        /// 1/1.402 exactly cancels that joint gap so a feed-forward command lands the
+        /// craft precisely at hover. This is a bookkeeping fix for the two-motor-family
+        /// mismatch, not a new physical measurement — once a bench V-ω-T co-measurement
+        /// unifies both sides onto one motor family, this should be revisited and can
+        /// likely return to 1.0 (see docs/architecture/simulation-policy.md backlog #3).
+        /// 追記（2026-08-22, Model Fidelity バックログ#3）: 既定値が再び変更され、
+        /// 1.0→0.7133 になった。根本原因を特定: ファームの静的モータ曲線（SSOT
+        /// legacy_motor_curve 族 — その代数的な言い換え）と本 Plant の ODE（SSOT
+        /// measured_2026_07 族）は別のモータを記述している。ホバー点で、無補正のまま
+        /// だとプラントはファーム指令推力の1.252倍を出し、ファーム側 hover.thrust_corr の
+        /// 1.12 と合わせて両者は機体重量を1.402倍過大に推力していた。thrust_efficiency=
+        /// 0.7133=1/1.402 はその合成した差をちょうど打ち消し、フィードフォワード指令が
+        /// 機体をちょうどホバーさせる。これは2モータ族の不一致に対する帳尻合わせであり、
+        /// 新しい物理計測ではない——ベンチ V-ω-T 同時計測で両側のモータ族が統一されれば
+        /// 見直すべきで、おそらく 1.0 に戻せる（docs/architecture/simulation-policy.md
+        /// バックログ#3 参照）。
+        float thrust_efficiency = 0.7133f;  ///< 1.0 = ODE curve is the actual output (see above)
 
         // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SILS
         // injection study, 2026-08-02). Deliberately SEPARATE from thrust_efficiency

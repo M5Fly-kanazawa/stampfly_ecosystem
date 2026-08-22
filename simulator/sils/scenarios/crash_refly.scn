@@ -30,7 +30,7 @@
 #  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration
    +    rc     2048  2048   2048    2048  1     1000      50              # B: ARM (rising edge)
-   +    rc     3473  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc     3243  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
    +    rc     2048  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s (clean baseline)
 #  --- CRASH: asymmetric motor fault (tips the craft) + downward wind slams it down ---
 #  --- 墜落: 非対称モータ故障（機体を傾ける）＋下向き風で叩きつけ ---
@@ -47,7 +47,7 @@
 #  --- RE-FLY: re-ARM, re-takeoff, hover recovery ---
 #  --- 再飛行: 再ARM・再離陸・ホバー回復 ---
    +    rc     2048  2048   2048    2048  1     1000      50              # M: RE-ARM (rising edge — gated until re-calibration done)
-   +    rc     3473  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, 同上)
+   +    rc     3243  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, 同上)
    +    rc     2048  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM

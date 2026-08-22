@@ -184,9 +184,21 @@ V = Am × ω² + Bm × ω + Cm
 
 | パラメータ | 記号 | 値 | 単位 | 備考 |
 |-----------|------|-----|------|------|
-| 2次係数 | Am | 5.39×10⁻⁸ | V/(rad/s)² | 実験同定 |
-| 1次係数 | Bm | 6.33×10⁻⁴ | V/(rad/s) | 実験同定 |
-| 定数項 | Cm | 1.53×10⁻² | V | 実験同定 |
+| 2次係数 | Am | 5.39×10⁻⁸ | V/(rad/s)² | 実験同定（`legacy_motor_curve`、生の同定記録） |
+| 1次係数 | Bm | 6.33×10⁻⁴ | V/(rad/s) | 実験同定（`legacy_motor_curve`、生の同定記録） |
+| 定数項 | Cm | 1.53×10⁻² | V | 実験同定（`legacy_motor_curve`、生の同定記録） |
+
+> **注記（2026-08-22追加）:** 上表は `legacy_motor_curve`（実験同定の生値、`control/models/stampfly_physical.yaml` 参照）であり、実測記録として保存されている。**ファームウェア（`sf_actuator/actuator.cpp` の `MOTOR_AM`/`MOTOR_BM`/`MOTOR_CM`）は 2026-08-22 以降、下表の flight-anchored 値を使用しており、上表の値をそのまま実機の係数として読んではならない。**
+
+| パラメータ | 記号 | 値 | 単位 | 備考 |
+|-----------|------|-----|------|------|
+| 2次係数（ファーム採用値） | Am | 6.0368×10⁻⁸ | V/(rad/s)² | `flight_anchored_motor_curve`。legacy Am×1.12 |
+| 1次係数（ファーム採用値） | Bm | 6.699042×10⁻⁴ | V/(rad/s) | `flight_anchored_motor_curve`。legacy Bm×√1.12 |
+| 定数項（ファーム採用値） | Cm | 1.53×10⁻² | V | `flight_anchored_motor_curve`。legacy Cm と同一（畳み込みで不変） |
+
+> **導出（2026-08-22）:** これまで実機がホバーするには、上の legacy 曲線に加えて別途 `hover.thrust_corr = 1.12`（実飛行で計測）を掛ける必要があった——理想モータ曲線が推力を過大評価するためである。つまり実飛行で検証されていたのは「legacy 曲線 + corr 1.12」という組み合わせ全体であり、これを1つの曲線に畳み込み、`hover.thrust_corr` を本来の意味（個体差トリム、既定=1.0）に戻した。corr を 1.12→1.0 にしても同じ duty（同じ推力 T）を出すには ω_new = ω_legacy/√1.12 が必要で、V = Am·ω²+Bm·ω+Cm に代入すると Am_new = Am_legacy×1.12、Bm_new = Bm_legacy×√1.12、Cm_new = Cm_legacy（変更なし）とすれば全推力域で厳密に V_new(ω_new) = V_legacy(ω_legacy) が成立する。**この畳み込みは新しい物理を主張するものではなく、飛行実証済みの写像を1箇所に集約しただけである。** legacy 曲線の値自体は実験同定の記録として変更していない。SSOT: `control/models/stampfly_physical.yaml` の `calibration_sets.flight_anchored_motor_curve`。
+>
+> **重要な注記:** 本表（ファームの静的曲線）は `legacy_motor_curve` ファミリの代数的言い換え（Am=Rm·Cq/Km 等、下記「派生パラメータ」参照）であるのに対し、SILS プラントの ODE（`plant.hpp`）は下記「推力・トルク特性」表の `measured_2026_07` ファミリを使っている。両者は**別のモータを記述しており**、ホバー点で約1.252倍の推力差がある（新プロペラでの V-ω-T 同時計測が存在しないため、どちらが実体かは未決着——バックログ#3）。
 
 ### 推力・トルク特性
 
@@ -662,9 +674,21 @@ V = Am × ω² + Bm × ω + Cm
 
 | Parameter | Symbol | Value | Unit | Notes |
 |-----------|--------|-------|------|-------|
-| Quadratic coefficient | Am | 5.39×10⁻⁸ | V/(rad/s)² | Experimental |
-| Linear coefficient | Bm | 6.33×10⁻⁴ | V/(rad/s) | Experimental |
-| Constant term | Cm | 1.53×10⁻² | V | Experimental |
+| Quadratic coefficient | Am | 5.39×10⁻⁸ | V/(rad/s)² | Experimental (`legacy_motor_curve`, raw identification record) |
+| Linear coefficient | Bm | 6.33×10⁻⁴ | V/(rad/s) | Experimental (`legacy_motor_curve`, raw identification record) |
+| Constant term | Cm | 1.53×10⁻² | V | Experimental (`legacy_motor_curve`, raw identification record) |
+
+> **Note (added 2026-08-22):** The table above is `legacy_motor_curve` (the raw experimentally-identified values, see `control/models/stampfly_physical.yaml`), kept as the historical measurement record. **As of 2026-08-22 the firmware (`MOTOR_AM`/`MOTOR_BM`/`MOTOR_CM` in `sf_actuator/actuator.cpp`) uses the flight-anchored values in the table below instead -- do not read the table above as the coefficients actually running on hardware.**
+
+| Parameter | Symbol | Value | Unit | Notes |
+|-----------|--------|-------|------|-------|
+| Quadratic coefficient (firmware-adopted) | Am | 6.0368×10⁻⁸ | V/(rad/s)² | `flight_anchored_motor_curve`. legacy Am × 1.12 |
+| Linear coefficient (firmware-adopted) | Bm | 6.699042×10⁻⁴ | V/(rad/s) | `flight_anchored_motor_curve`. legacy Bm × √1.12 |
+| Constant term (firmware-adopted) | Cm | 1.53×10⁻² | V | `flight_anchored_motor_curve`. Same as legacy Cm (unchanged by the fold) |
+
+> **Derivation (2026-08-22):** Real hardware previously needed a separate flight-measured correction `hover.thrust_corr = 1.12` on top of the legacy curve above just to hover -- because the idealized motor curve overestimates thrust. In other words, what flight testing actually validated was always the combination "legacy curve × corr 1.12", now folded into a single curve so `hover.thrust_corr` can revert to its intended meaning (per-unit trim, default 1.0). Holding duty (and thus thrust T) fixed while corr goes 1.12 → 1.0 requires omega_new = omega_legacy / sqrt(1.12); substituting into V = Am·ω² + Bm·ω + Cm gives Am_new = Am_legacy × 1.12, Bm_new = Bm_legacy × sqrt(1.12), Cm_new = Cm_legacy (unchanged) -- reproducing V_new(omega_new) = V_legacy(omega_legacy) exactly across the whole thrust range. **This fold does not assert new physics -- it only consolidates the single flight-validated mapping into one place.** The legacy curve's own values are unchanged, kept as the experimental-identification record. SSOT: `calibration_sets.flight_anchored_motor_curve` in `control/models/stampfly_physical.yaml`.
+>
+> **Important caveat:** This table (the firmware's static curve) is an algebraic paraphrase of the `legacy_motor_curve` family (Am = Rm·Cq/Km etc., see "Derived Parameters" below), while the SILS plant's ODE (`plant.hpp`) uses the `measured_2026_07` family from the "Thrust & Torque Characteristics" table below. The two families describe **different motors** -- they diverge by roughly 1.252× in thrust at the hover operating point. No simultaneous V-ω-T measurement exists for the new propeller, so which is physically correct remains undecided (backlog #3).
 
 ### Thrust & Torque Characteristics
 

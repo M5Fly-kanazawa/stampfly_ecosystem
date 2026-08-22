@@ -39,11 +39,11 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    rc   2048  2048   2048    2048  0     4000      50       # A: disarmed 4 s → boot reaches IDLE_GROUND
    +    rc   2048  2048   2048    2048  1     1000      50       # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
-   +    rc   3473  2048   2048    2048  1     2000      50       # C: throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING/STABILIZE; climbs off the ground
-   +    rc   3393  2600   2048    2048  1     1500      50       # D: near-hover (raw≈3393) + roll-right step (~+8°) — attitude PID holds the angle
-   +    rc   3393  1496   2048    2048  1     1500      50       # E: roll-left step (~-8°)
-   +    rc   3393  2048   2600    2048  1     1500      50       # F: pitch-forward step (~+8°)
-   +    rc   3393  2048   2048    2048  1     1500      50       # G: centre → self-level back toward 0°
+   +    rc   3243  2048   2048    2048  1     2000      50       # C: throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING/STABILIZE; climbs off the ground
+   +    rc   3176  2600   2048    2048  1     1500      50       # D: near-hover (raw≈3176, 2026-08-22 STABILIZE throttle recal: deviation-from-centre ×0.8386, was raw≈3393) + roll-right step (~+8°) — attitude PID holds the angle
+   +    rc   3176  1496   2048    2048  1     1500      50       # E: roll-left step (~-8°)
+   +    rc   3176  2048   2600    2048  1     1500      50       # F: pitch-forward step (~+8°)
+   +    rc   3176  2048   2048    2048  1     1500      50       # G: centre → self-level back toward 0°
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定

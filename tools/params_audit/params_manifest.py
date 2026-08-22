@@ -100,9 +100,53 @@ EXPECTED_CT_SCALED_1EM8 = EXPECTED_CT / 1e-8  # calc-ct field ("×10⁻⁸ N/(ra
 # 旧ファミリ定数。バックログ#3で新チェーンへ切替予定。If backlog #3 adds a
 # Python-side generated symbol for this family, replace these three literals
 # with imports the same way EXPECTED_CT etc. are imported above.
+#
+# NOTE (2026-08-22): firmware/vehicle/components/sf_actuator/actuator.cpp's
+# MOTOR_AM/MOTOR_BM/MOTOR_CM no longer hold these legacy literals -- they were
+# switched to the flight_anchored_motor_curve values (EXPECTED_AM_FA/
+# EXPECTED_BM_FA below). These EXPECTED_AM/BM/CM therefore now check ONLY the
+# docs table (the legacy_motor_curve historical record), not actuator.cpp --
+# see the "Am"/"Bm" ParamCheck lists below, which were split accordingly.
+# 注記（2026-08-22）: firmware/vehicle/components/sf_actuator/actuator.cpp の
+# MOTOR_AM/MOTOR_BM/MOTOR_CM はもうこの旧リテラルを保持していない——
+# flight_anchored_motor_curve の値（下記 EXPECTED_AM_FA/EXPECTED_BM_FA）へ
+# 切替済み。よってこの EXPECTED_AM/BM/CM は docs の表（legacy_motor_curve の
+# 歴史的記録）のみを照合する——actuator.cpp は照合しない。下記 "Am"/"Bm" の
+# ParamCheck 一覧をそれに合わせて分割済み。
 EXPECTED_AM = 5.39e-8   # V/(rad/s)^2 -- legacy_motor_curve.Am
 EXPECTED_BM = 6.33e-4   # V/(rad/s)   -- legacy_motor_curve.Bm
-EXPECTED_CM = 1.53e-2   # V           -- legacy_motor_curve.Cm
+EXPECTED_CM = 1.53e-2   # V           -- legacy_motor_curve.Cm (unchanged by the fold, shared with flight_anchored_motor_curve.Cm)
+
+# EXPECTED_AM_FA / EXPECTED_BM_FA — control/models/stampfly_physical.yaml
+# calibration_sets.flight_anchored_motor_curve.params.{Am,Bm}.value (added
+# 2026-08-22). This family is a mechanical fold of legacy_motor_curve's Am/Bm
+# with the flight-verified hover.thrust_corr=1.12 correction (that correction
+# reverted to its intended per-unit-trim meaning, nominal 1.0, once folded in
+# here) -- NOT an independent measurement, so it is derived from EXPECTED_AM/
+# EXPECTED_BM above rather than re-typed as an unrelated literal:
+#   Am_FA = Am_legacy * 1.12         (5.39e-8 * 1.12       = 6.0368e-8)
+#   Bm_FA = Bm_legacy * sqrt(1.12)   (6.33e-4 * sqrt(1.12) ~= 6.699042e-4)
+# (Cm is unchanged by the fold -- see EXPECTED_CM above, shared by both
+# families.) Hand-typed here for the same reason EXPECTED_AM/BM/CM above are
+# (not machine-generated on the Python side; see that comment). Sole
+# consumer: firmware/vehicle/components/sf_actuator/actuator.cpp's
+# MOTOR_AM/MOTOR_BM (as of 2026-08-22). See
+# control/models/stampfly_physical.yaml's flight_anchored_motor_curve family
+# header comment for the full derivation and the caveat that this curve
+# family and the measured_2026_07/plant.hpp ODE family describe two different
+# motors (~1.252x thrust divergence at hover, unresolved -- backlog #3).
+# 追加ファミリ定数（2026-08-22追加）。legacy_motor_curve の Am/Bm と、飛行
+# 実証済みの hover.thrust_corr=1.12 を機械的に畳み込んだ値——独立した実測
+# ではないため、無関係なリテラルとして打ち直すのではなく上の EXPECTED_AM/
+# EXPECTED_BM から導出して示す（Am_FA=Am_legacy×1.12、
+# Bm_FA=Bm_legacy×√1.12。Cm は畳み込みで不変のため EXPECTED_CM をそのまま
+# 共有）。唯一の消費者は firmware actuator.cpp の MOTOR_AM/MOTOR_BM
+# （2026-08-22〜）。導出の詳細と、本ファミリが measured_2026_07/plant.hpp の
+# ODEファミリとは別のモータを記述している（ホバー点で約1.252倍の推力差、
+# バックログ#3で未決着）という注意点は、SSOT YAML の
+# flight_anchored_motor_curve ファミリ冒頭コメント参照。
+EXPECTED_AM_FA = EXPECTED_AM * 1.12          # V/(rad/s)^2 -- flight_anchored_motor_curve.Am (= 6.0368e-8)
+EXPECTED_BM_FA = EXPECTED_BM * (1.12 ** 0.5)  # V/(rad/s)   -- flight_anchored_motor_curve.Bm (= 6.699042e-4)
 
 
 # =============================================================================
@@ -536,50 +580,53 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
 
     # -------------------------------------------------------------------
     # Am / Bm / Cm — legacy motor-curve family: V = Am·ω² + Bm·ω + Cm
-    # 旧モータ曲線ファミリ。バックログ#3で新チェーンへ切替予定。
-    # (firmware/vehicle/components/sf_actuator/actuator.cpp's MOTOR_CT/AM/BM/CM
-    # are the only surviving consumers as of the 2026-07-26 motor-ODE change
-    # that removed this family from simulator/sils/plant/plant.hpp -- see the
-    # SSOT YAML's legacy_motor_curve family header comment.)
+    # 旧モータ曲線ファミリ。
+    #
+    # SPLIT (2026-08-22): firmware/vehicle/components/sf_actuator/actuator.cpp's
+    # MOTOR_AM/MOTOR_BM no longer hold these legacy literals -- they were
+    # switched to the flight_anchored_motor_curve values (legacy Am/Bm folded
+    # with the flight-verified hover.thrust_corr=1.12; see the SSOT YAML's
+    # flight_anchored_motor_curve family header comment for the derivation).
+    # So "Am"/"Bm" below now check ONLY the docs table (the legacy_motor_curve
+    # historical record); the firmware check moved to the new
+    # "Am_flight_anchored"/"Bm_flight_anchored" groups below. Cm is UNCHANGED
+    # by the fold (Cm_new = Cm_legacy), so its firmware+docs check stays as one
+    # group -- no split needed.
+    # 分割（2026-08-22）: firmware actuator.cpp の MOTOR_AM/MOTOR_BM はもう
+    # この旧リテラルを保持していない——flight_anchored_motor_curve の値
+    # （legacy Am/Bm と、飛行実証済み hover.thrust_corr=1.12 の畳み込み。
+    # 導出は SSOT YAML の flight_anchored_motor_curve ファミリ冒頭コメント
+    # 参照）へ切替済み。よって下記 "Am"/"Bm" は docs の表（legacy_motor_curve
+    # の歴史的記録）のみを照合し、firmware側の照合は新設の
+    # "Am_flight_anchored"/"Bm_flight_anchored" へ移した。Cm は畳み込みで
+    # 不変（Cm_new=Cm_legacy）のため firmware+docs の1グループのまま分割不要。
     # -------------------------------------------------------------------
     "Am": [
-        ParamCheck(
-            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
-            regex=r'MOTOR_AM\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXPECTED_AM,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_AM (legacy family, backlog #3 pending)",
-        ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'2次係数\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_AM,
-            note="body table (JP)",
+            note="body table (JP, legacy_motor_curve historical record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Quadratic coefficient\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_AM,
-            note="body table (EN)",
+            note="body table (EN, legacy_motor_curve historical record)",
         ),
     ],
     "Bm": [
         ParamCheck(
-            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
-            regex=r'MOTOR_BM\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXPECTED_BM,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_BM (legacy family, backlog #3 pending)",
-        ),
-        ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'1次係数\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_BM,
-            note="body table (JP)",
+            note="body table (JP, legacy_motor_curve historical record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Linear coefficient\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_BM,
-            note="body table (EN)",
+            note="body table (EN, legacy_motor_curve historical record)",
         ),
     ],
     "Cm": [
@@ -587,7 +634,7 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             file="firmware/vehicle/components/sf_actuator/actuator.cpp",
             regex=r'MOTOR_CM\s*=\s*([0-9.eE+-]+)f;',
             expected=EXPECTED_CM,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_CM (legacy family, backlog #3 pending)",
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_CM (unchanged by the 2026-08-22 fold, shared by legacy_motor_curve and flight_anchored_motor_curve)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
@@ -600,6 +647,40 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'Constant term\s*\|\s*Cm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
             expected=EXPECTED_CM,
             note="body table (EN)",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # Am_flight_anchored / Bm_flight_anchored — flight-anchored motor curve
+    # (added 2026-08-22): legacy_motor_curve's Am/Bm folded with the
+    # flight-verified hover.thrust_corr=1.12. Sole consumer: firmware
+    # actuator.cpp's MOTOR_AM/MOTOR_BM. See control/models/
+    # stampfly_physical.yaml's flight_anchored_motor_curve family header
+    # comment for the derivation and the caveat that this curve family and
+    # measured_2026_07/plant.hpp's ODE family describe two different motors
+    # (~1.252x thrust divergence at hover, unresolved -- backlog #3).
+    # フライト実証済みモータ曲線（2026-08-22追加）: legacy_motor_curve の
+    # Am/Bm と、飛行実証済みの hover.thrust_corr=1.12 を畳み込んだもの。
+    # 唯一の消費者は firmware actuator.cpp の MOTOR_AM/MOTOR_BM。導出と、
+    # 本ファミリが measured_2026_07/plant.hpp の ODEファミリとは別のモータを
+    # 記述している（ホバー点で約1.252倍の推力差、バックログ#3で未決着）
+    # という注意点は control/models/stampfly_physical.yaml の
+    # flight_anchored_motor_curve ファミリ冒頭コメント参照。
+    # -------------------------------------------------------------------
+    "Am_flight_anchored": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_AM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_AM_FA,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_AM (flight_anchored_motor_curve, adopted 2026-08-22)",
+        ),
+    ],
+    "Bm_flight_anchored": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_BM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_BM_FA,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_BM (flight_anchored_motor_curve, adopted 2026-08-22)",
         ),
     ],
 

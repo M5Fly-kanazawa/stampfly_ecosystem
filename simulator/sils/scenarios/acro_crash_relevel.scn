@@ -19,8 +19,8 @@
    0    rc   2048  2048   2048    2048  0     5000      50                       # A: boot at rest — calibration
    +    rc   2048  2048   2048    2048  0     1000      50        0     1        # B: ACRO switch ON (edge) while disarmed
    +    rc   2048  2048   2048    2048  1     1000      50        0     1        # C: ARM (ACRO held)
-   +    rc   3330  2048   2048    2048  1     2500      50        0     1        # D: ACRO take-off climb
-   +    rc   3290  2048   2048    2048  1     2000      50        0     1        # E: ACRO hover-ish 2 s
-   +    rc   3290  2048   2048    2048  0     200       50        0     1        # F: release ARM button (ACRO held)
-   +    rc   3290  2048   2048    2048  1     200       50        0     1        # G: press → DISARM mid-air = crash drop
+   +    rc   3123  2048   2048    2048  1     2500      50        0     1        # D: ACRO take-off climb
+   +    rc   3090  2048   2048    2048  1     2000      50        0     1        # E: ACRO hover-ish 2 s
+   +    rc   3090  2048   2048    2048  0     200       50        0     1        # F: release ARM button (ACRO held)
+   +    rc   3090  2048   2048    2048  1     200       50        0     1        # G: press → DISARM mid-air = crash drop
    +    rc   2048  2048   2048    2048  0     6000      50        0     1        # H: fall + ground reset; ACRO SWITCH STILL ON

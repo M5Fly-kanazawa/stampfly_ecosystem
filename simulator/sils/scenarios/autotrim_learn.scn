@@ -17,6 +17,6 @@
    0    wind  0.0   0.008  0.0                                          # steady NED-east wind (body forward at yaw=0)
    0    rc    2048  2048   2048    2048  0     13000     50              # A: disarmed 13 s
    +    rc    2048  2048   2048    2048  1     1000      50              # B: ARM
-   +    rc    3310  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off (trim=0, clean climb)
+   +    rc    3106  2048   2048    2048  1     2600      50              # C: STABILIZE gentle take-off (trim=0, clean climb)
    +    rc    2048  2048   2048    2048  1     90000     50        1      # D: ALT_HOLD hover 90 s — learner integrates drift -> pitch_trim_
    +    rc    2048  2048   2048    2048  1     2000      50        1      # E: settle 2 s

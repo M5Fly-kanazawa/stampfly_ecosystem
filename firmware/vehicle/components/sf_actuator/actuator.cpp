@@ -115,8 +115,8 @@ static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
 // （params.cpp）し、物理ヨートルク出力は不変（閉ループ挙動の恒等性）。
 // 2026-07-17 の再スケールと同じパターンを踏襲。
 static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
-static constexpr float MOTOR_AM = 5.39e-8f;  // V = Am·ω² + Bm·ω + Cm
-static constexpr float MOTOR_BM = 6.33e-4f;
+static constexpr float MOTOR_AM = 6.0368e-8f;  // V = Am·ω² + Bm·ω + Cm
+static constexpr float MOTOR_BM = 6.699042e-4f;
 static constexpr float MOTOR_CM = 1.53e-2f;
 // thrust T = Ct·ω² [N]. PROVISIONAL as of 2026-08-03 (numerically unchanged
 // from before: the retracted 2026-07-15 thrust-stand Ct never reached
