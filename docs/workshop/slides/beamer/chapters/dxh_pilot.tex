@@ -44,6 +44,30 @@ sf sim run   ← 3Dシミュレータが起動
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}{①（参考）購入したコントローラのセットアップ}
+  \begin{alertblock}{ご自身で購入したコントローラをお使いの場合}
+    \footnotesize M5Atom Joystick は購入時 \textbf{M5Stack 社の出荷時ファーム}のままです。StampFly 用ではないため \textbf{最初に一度だけ}専用ファームウェアの書き込みが必要です
+  \end{alertblock}
+
+  \begin{block}{書き込み手順（PC 側の開発環境が構築済みであること）}
+    \begin{enumerate}\footnotesize
+      \setlength{\itemsep}{0pt}
+      \item コントローラを USB ケーブルで PC に接続する
+      \item \code{sf build controller}
+      \item \code{sf flash controller}
+    \end{enumerate}
+  \end{block}
+
+  \vspace{0.1em}
+
+  \begin{exampleblock}{確認}
+    \footnotesize LCD に StampFly 用の起動画面が出れば OK。次ページの USB HID モード切替に進めます
+  \end{exampleblock}
+
+  {\footnotesize ※ 講座当日お渡しした貸出コントローラは書き込み済みのため、この手順は不要でした}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{①（参考）ご自宅・学校でシミュレータを試すには}
   \begin{center}
     \resizebox{!}{0.28\textheight}{\input{../tikz/controller_annotated}}
