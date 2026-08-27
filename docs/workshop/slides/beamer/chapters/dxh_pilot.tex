@@ -44,6 +44,25 @@ sf sim run   ← 3Dシミュレータが起動
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}{①（参考）ご自宅・学校でシミュレータを試すには}
+  \begin{center}
+    \resizebox{!}{0.28\textheight}{\input{../tikz/controller_annotated}}
+  \end{center}
+
+  \begin{block}{USB HID モードへの切替（初期状態 = ESP-NOW から）}
+    \begin{enumerate}\footnotesize
+      \setlength{\itemsep}{0pt}
+      \item \textbf{M5ボタン}（上図、画面下の小さな丸ボタン）を\textbf{短く1回}押す $\to$ メニューが開く
+      \item \textbf{右スティック}を上下に倒し「Comm: ESP-NOW」にカーソルを合わせる
+      \item \textbf{右ボタン}（STABILIZE/ACRO切替と共用）を押して選択 $\to$「Comm: UDP」に変わる（まだ使えない）
+      \item \textbf{もう一度右ボタン}を押して選択 $\to$「Comm: USB HID」に切り替わり自動的に再起動
+    \end{enumerate}
+  \end{block}
+
+  {\scriptsize ※ 今日お渡しする機材は事前設定済みのため不要な手順です。ご自身の機材の場合、USBケーブルは「データ通信対応」のものを使用してください（充電専用ケーブルでは認識されません）}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}{① シミュレータ → 実機への切り替え}
   \begin{block}{コントローラを実機用（ESP-NOW）に戻す}
     \begin{enumerate}\small
