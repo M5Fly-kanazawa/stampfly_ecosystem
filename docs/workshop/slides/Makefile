@@ -7,7 +7,7 @@
 #   make chapter   — Single chapter: make chapter NAME=led_control
 #   make clean     — Remove build artifacts
 
-.PHONY: all tikz slides dxh chapter clean
+.PHONY: all tikz slides dxh dxh-docswell sci sci-docswell chapter clean
 
 # ---------------------------------------------------------------------------
 # TikZ diagrams
@@ -69,6 +69,25 @@ $(BEAMER_DIR)/$(DXH_DOCSWELL_PDF): $(BEAMER_DIR)/$(DXH_TEX) $(BEAMER_DIR)/preamb
 	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}" && lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}"
 
 # ---------------------------------------------------------------------------
+# SCI/SICE tutorial deck (2026-09-10, control-engineering researchers)
+# SCI/SICE チュートリアル講座（2026-09-10、制御工学研究者向け）進行スライド
+# ---------------------------------------------------------------------------
+
+SCI_TEX := sci_tutorial.tex
+SCI_PDF := sci_tutorial.pdf
+SCI_DOCSWELL_PDF := sci_tutorial_docswell.pdf
+
+sci: $(BEAMER_DIR)/$(SCI_PDF)
+
+$(BEAMER_DIR)/$(SCI_PDF): $(BEAMER_DIR)/$(SCI_TEX) $(BEAMER_DIR)/preamble.tex $(BEAMER_DIR)/stampfly_slides.sty $(CHAPTER_SOURCES)
+	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode $(SCI_TEX) && lualatex -interaction=nonstopmode $(SCI_TEX)
+
+sci-docswell: $(BEAMER_DIR)/$(SCI_DOCSWELL_PDF)
+
+$(BEAMER_DIR)/$(SCI_DOCSWELL_PDF): $(BEAMER_DIR)/$(SCI_TEX) $(BEAMER_DIR)/preamble.tex $(BEAMER_DIR)/stampfly_slides.sty $(CHAPTER_SOURCES)
+	cd $(BEAMER_DIR) && lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}" && lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}"
+
+# ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
 # Usage: make chapter NAME=led_control
 # ---------------------------------------------------------------------------
@@ -96,5 +115,5 @@ clean:
 	      $(BEAMER_DIR)/*.out $(BEAMER_DIR)/*.snm $(BEAMER_DIR)/*.toc \
 	      $(BEAMER_DIR)/*.vrb
 	rm -f $(BEAMER_DIR)/$(SLIDES_PDF)
-	rm -f $(BEAMER_DIR)/$(DXH_PDF)
+	rm -f $(BEAMER_DIR)/$(DXH_PDF) $(BEAMER_DIR)/$(SCI_PDF) $(BEAMER_DIR)/$(SCI_DOCSWELL_PDF)
 	rm -f $(IMAGES_DIR)/*.png
