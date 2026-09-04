@@ -297,6 +297,57 @@ float estimated_yaw();
 float estimated_altitude();
 
 // -----------------------------------------------------------------------------
+// Control Target Logging (Lesson 7: System Identification)
+// 制御目標のロギング（レッスン7: システム同定）
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief Record the current inner-loop (rate) control target for the 400Hz
+ *        Data Stream
+ *        400Hz Data Stream 用に、現在の内側ループ（角速度）制御目標を記録する
+ *
+ * Call this once per loop_400Hz(), right after computing the target angular
+ * rate your control law is chasing (e.g. right after
+ * `roll_target = ws::rc_roll() * rate_max`). WorkshopControlTask copies the
+ * value into the Data Stream's rate_ref[] field once per cycle so `sf sysid
+ * fit` (Lesson 7) can reconstruct the plant input from
+ * u = Kp * (rate_ref - gyro). This is a LOGGING HOOK ONLY — it does not
+ * affect motor output, and flight works without calling it.
+ *
+ * loop_400Hz() 内で、制御則が追う角速度目標を計算した直後に一度呼ぶ（例:
+ * `roll_target = ws::rc_roll() * rate_max` の直後）。WorkshopControlTask が
+ * 周期に一度、その値を Data Stream の rate_ref[] へコピーする。これにより
+ * `sf sysid fit`（レッスン7）が u = Kp * (rate_ref - gyro) でプラント入力を
+ * 復元できる。これは「ロギング専用フック」であり、モータ出力には影響しない
+ * — 呼ばなくても飛行自体は動く。
+ *
+ * @param roll  Roll rate target [rad/s], Body FRD (positive = right wing down)
+ * @param pitch Pitch rate target [rad/s], Body FRD (positive = nose up)
+ * @param yaw   Yaw rate target [rad/s], Body FRD (positive = clockwise from above)
+ */
+void set_rate_target(float roll, float pitch, float yaw);
+
+/**
+ * @brief Record the current outer-loop (tilt angle) control target for the
+ *        400Hz Data Stream
+ *        400Hz Data Stream 用に、現在の外側ループ（傾き角）制御目標を記録する
+ *
+ * Same logging-only contract as set_rate_target(): call once per
+ * loop_400Hz() after computing the target tilt angle (only meaningful for a
+ * cascade/angle controller — most lessons only use set_rate_target()). Read
+ * into the Data Stream's angle_ref[] field; has no effect on control.
+ *
+ * set_rate_target() と同じ「ロギング専用」契約: loop_400Hz() 内で目標傾き角
+ * を計算した直後に一度呼ぶ（カスケード/角度制御でのみ意味を持つ — ほとんどの
+ * レッスンは set_rate_target() のみ使用）。Data Stream の angle_ref[] へ
+ * 記録される。制御には影響しない。
+ *
+ * @param roll  Roll angle target [rad], Body FRD (positive = right wing down)
+ * @param pitch Pitch angle target [rad], Body FRD (positive = nose up)
+ */
+void set_angle_target(float roll, float pitch);
+
+// -----------------------------------------------------------------------------
 // Utility
 // ユーティリティ
 // -----------------------------------------------------------------------------

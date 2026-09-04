@@ -152,6 +152,12 @@ void loop_400Hz(float dt)
     float yaw_output = clamp(yaw_P + yaw_I + yaw_D, output_limit);
 
     // =====================================================================
+    // Record targets for the Data Stream (Lesson 7 sysid uses this)
+    // Data Stream に目標値を記録（レッスン7のシステム同定で使用）
+    // =====================================================================
+    ws::set_rate_target(roll_target, pitch_target, yaw_target);
+
+    // =====================================================================
     // Apply to motors
     // モーターに適用
     // =====================================================================

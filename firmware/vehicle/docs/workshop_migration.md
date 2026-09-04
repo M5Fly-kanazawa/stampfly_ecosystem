@@ -381,7 +381,7 @@ M5 完了後、`firmware/workshop/` は vehicle と同じファームウェア�
 | `ws::tof_front()` | 常に -1.0（vehicle パイプラインに前方 ToF が無い）。Lesson 10 から使用を除去済み |
 | `ws::flow_vx/vy()` | 速度 [m/s] → 生カウントに単位変更（使用は Lesson 10 の表示のみ） |
 | `ws::rc_roll_pitch_button()` | 常に false（現行プロトコルに FLIP フラグ無し。使用レッスン無し） |
-| Data Stream の rate_ref/angle_ref | 常に 0（学習者ループはカスケード目標を持たない）。Lesson 7 の sysid 手順は SCI チュートリアル（2026-09）前に要再検証 |
+| Data Stream の rate_ref/angle_ref | **解消済み（2026-09-04）**。`ws::set_rate_target(roll,pitch,yaw)` / `ws::set_angle_target(roll,pitch)` を追加し、学習者ループが計算した目標を `ws_internal::ControlTargets` にラッチ、`WorkshopControlTask::publishLogStream()` が Data Stream の `rate_ref[]`/`angle_ref[]` へ反映する（呼ばなければ従来通り 0）。Lesson 5/7/8 の `solution.cpp` に呼び出しを追加。Lesson 7 の sysid 手順を新基盤（`sf log wifi -o *.csv` → `sf sysid fit`）に更新し、`sf sysid fit`（tools/sysid/plant_fit.py）が新旧2種の CSV 列を自動判別するよう改修。既知の破損（`eskf_sim` モジュール不在によりレガシー経路が import エラーで動作不能だった）も同時に修正。自己検証: 既知プラント（K=102, τm=20ms）を P 制御閉ループで離散シミュレーションし合成した Data Stream 形式 CSV から `sf sysid fit --selftest` が K, τm を数%誤差で復元することを確認 |
 | Lesson 12（Python SDK） | ビルドは PASS。vehicle の Tello API 経由の飛行検証は実機確認待ち |
 
 ### 検証記録（2026-07-18）

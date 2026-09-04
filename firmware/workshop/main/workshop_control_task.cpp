@@ -111,21 +111,25 @@ static void processControllerCommands()
 
 /// Build and publish the 400Hz Data Stream record, same shape as vehicle's
 /// publishLogStream (control_task.cpp) so `sf log wifi` / Data Stream tooling
-/// works unmodified on workshop. rate_ref/angle_ref stay zero (§6: workshop has
-/// no cascade controller to export a setpoint from) and thrust is the mixer's T
-/// input when a mixer request is active, 0 otherwise (Direct mode has no thrust
-/// concept).
+/// works unmodified on workshop. rate_ref/angle_ref come from the learner's
+/// ws::set_rate_target()/set_angle_target() calls (zero if the lesson never
+/// calls them — see ws_internal.hpp ControlTargets) and thrust is the mixer's
+/// T input when a mixer request is active, 0 otherwise (Direct mode has no
+/// thrust concept).
 /// 400Hz Data Stream レコードを組んで発行する。vehicle の publishLogStream
 /// （control_task.cpp）と同じ形にし、`sf log wifi` / Data Stream ツールが workshop
-/// でも無改変で動くようにする。rate_ref/angle_ref はゼロのまま（§6: workshop には
-/// 目標値を出すカスケード制御器が無い）、thrust は mixer 要求が有効な時だけ T、
-/// それ以外は 0（Direct モードには推力の概念が無い）。
+/// でも無改変で動くようにする。rate_ref/angle_ref は学習者の
+/// ws::set_rate_target()/set_angle_target() 呼び出しに由来する（レッスンが
+/// 一度も呼ばなければゼロのまま — ws_internal.hpp ControlTargets 参照）。
+/// thrust は mixer 要求が有効な時だけ T、それ以外は 0（Direct モードには
+/// 推力の概念が無い）。
 static void publishLogStream(uint8_t state, uint8_t sub_mode)
 {
     const sf::ImuData       imu   = sf::sensor_imu.latest();
     const sf::StateEstimate est   = sf::estimate_state.latest();
     const sf::MotorOutput   motor = sf::actuator_motor.latest();
-    const ws_internal::MotorRequest& req = ws_internal::motor_request();
+    const ws_internal::MotorRequest&   req     = ws_internal::motor_request();
+    const ws_internal::ControlTargets& targets = ws_internal::control_targets();
 
     sf::LogStreamSample sample = {};
     sample.timestamp = imu.timestamp;
@@ -136,11 +140,14 @@ static void publishLogStream(uint8_t state, uint8_t sub_mode)
         sample.accel_bias[i] = est.accel_bias[i];
         sample.pos[i]        = est.position[i];
         sample.vel[i]        = est.velocity[i];
+        sample.rate_ref[i]   = targets.rate[i];
     }
     for (int i = 0; i < 4; ++i) {
         sample.quat[i] = est.attitude[i];
         sample.duty[i] = motor.duty[i];
     }
+    sample.angle_ref[0]  = targets.angle[0];
+    sample.angle_ref[1]  = targets.angle[1];
     sample.thrust        = (req.mode == ws_internal::MotorMode::Mixer) ? req.thrust : 0.0f;
     sample.flight_mode    = sub_mode;
     sample.flight_state   = state;

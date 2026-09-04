@@ -15,10 +15,14 @@
 //   tau_m = motor time constant [s]
 //
 // The sf sysid fit tool reconstructs plant I/O from this data:
-//   target = ctrl * rate_max
-//   u_plant = Kp * (target - gyro)   <- plant input
-//   y_plant = gyro                   <- plant output
-// So you need to remember the Kp and rate_max values used here.
+//   u_plant = Kp * (rate_ref - gyro)   <- plant input
+//   y_plant = gyro                     <- plant output
+// rate_ref comes from the Data Stream, recorded by your ws::set_rate_target()
+// call below -- so you need to remember only the Kp value used here (not
+// rate_max: the target is logged as an absolute rad/s value already).
+// rate_ref は Data Stream から得る（下の ws::set_rate_target() 呼び出しが
+// 記録する）— そのため覚えておくのは Kp の値だけでよい（rate_max は不要:
+// 目標値は既に絶対値 [rad/s] としてログされる）。
 
 static uint32_t tick = 0;
 
@@ -68,11 +72,13 @@ void loop_400Hz(float dt)
     // P control (same structure as L5)
     // P 制御（L5 と同じ構造）
     // =====================================================================
-    // Telemetry automatically records ctrl_roll, gyro_corrected_x, etc.
-    // テレメトリが ctrl_roll, gyro_corrected_x 等を自動記録する
     float roll_target  = ws::rc_roll()  * rate_max_rp;
     float pitch_target = ws::rc_pitch() * rate_max_rp;
     float yaw_target   = ws::rc_yaw()   * rate_max_yaw;
+
+    // TODO: Record your rate targets for the Data Stream (sf sysid fit reads this)
+    // TODO: Data Stream に角速度目標を記録する（sf sysid fit がこれを読む）
+    // ヒント: ws::set_rate_target(roll_target, pitch_target, yaw_target);
 
     float roll_cmd  = Kp     * (roll_target  - ws::gyro_x());
     float pitch_cmd = Kp     * (pitch_target - ws::gyro_y());

@@ -20,6 +20,8 @@ ws:: API の全体像を理解し、その土台となる L1 sf_api 層につい
 | `ws::flow_vx/vy()` | Optical flow raw counts (see note below) | count |
 | `ws::battery_voltage()` | Battery voltage | V |
 | `ws::print(fmt, ...)` | Serial print (Teleplot compatible) | - |
+| `ws::set_rate_target(r,p,y)` | Record rate-loop target for the Data Stream (logging only, see L7) | rad/s |
+| `ws::set_angle_target(r,p)` | Record angle-loop target for the Data Stream (logging only, see L7) | rad |
 
 Note: `ws::flow_vx/vy()` return the raw optical-flow counts, not a
 converted velocity (unlike the old vehicle_old API). For a physical

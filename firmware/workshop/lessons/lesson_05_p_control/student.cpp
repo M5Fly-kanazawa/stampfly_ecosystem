@@ -72,6 +72,10 @@ void loop_400Hz(float dt)
 
     float yaw_output = 0.0f;  // Replace with your calculation / 計算結果に置き換える
 
+    // TODO: Record your rate targets for the Data Stream (Lesson 7 sysid uses this)
+    // TODO: Data Stream に角速度目標を記録する（レッスン7のシステム同定で使用）
+    // ヒント: ws::set_rate_target(roll_target, pitch_target, yaw_target);
+
     // --- Apply to motors ---
     // モーターに適用
     ws::motor_mixer(throttle, roll_output, pitch_output, yaw_output);

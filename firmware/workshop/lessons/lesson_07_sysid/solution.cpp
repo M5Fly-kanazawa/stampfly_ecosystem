@@ -10,6 +10,13 @@
 //
 // P 制御（Kp=0.5）で飛行し、WiFi テレメトリを取得後:
 //   sf sysid fit flight.csv --kp 0.5 --plot
+//
+// ws::set_rate_target() below records the rate target into the Data Stream
+// (rate_ref_*) so `sf sysid fit` can reconstruct the plant input without
+// re-deriving it from the raw stick value.
+// 下の ws::set_rate_target() が角速度目標を Data Stream（rate_ref_*）に記録
+// する。`sf sysid fit` はこれを読むだけでプラント入力を復元でき、生の
+// スティック値から再導出する必要がない。
 
 static uint32_t tick = 0;
 
@@ -62,6 +69,12 @@ void loop_400Hz(float dt)
     float roll_target  = ws::rc_roll()  * rate_max_rp;
     float pitch_target = ws::rc_pitch() * rate_max_rp;
     float yaw_target   = ws::rc_yaw()   * rate_max_yaw;
+
+    // Record targets for the Data Stream: `sf sysid fit` reads rate_ref_*
+    // (this call) + gyro_* to reconstruct u = Kp * (rate_ref - gyro).
+    // Data Stream に目標値を記録: `sf sysid fit` は rate_ref_*（この呼び出し）
+    // + gyro_* を読み、u = Kp * (rate_ref - gyro) でプラント入力を復元する。
+    ws::set_rate_target(roll_target, pitch_target, yaw_target);
 
     float roll_cmd  = Kp     * (roll_target  - ws::gyro_x());
     float pitch_cmd = Kp     * (pitch_target - ws::gyro_y());

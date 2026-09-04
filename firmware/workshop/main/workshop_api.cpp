@@ -315,6 +315,31 @@ float ws::estimated_altitude()
 }
 
 // =============================================================================
+// Control Target Logging
+// =============================================================================
+
+void ws::set_rate_target(float roll, float pitch, float yaw)
+{
+    // Latch only — WorkshopControlTask::publishLogStream() reads this once
+    // per 400Hz cycle into the Data Stream's rate_ref[]. No effect on motor
+    // output (see ws_internal.hpp ControlTargets doc).
+    // ラッチのみ — WorkshopControlTask::publishLogStream() が 400Hz 周期に
+    // 一度これを読んで Data Stream の rate_ref[] へ反映する。モータ出力には
+    // 影響しない（ws_internal.hpp ControlTargets のドキュメント参照）。
+    ws_internal::ControlTargets& targets = ws_internal::control_targets();
+    targets.rate[0] = roll;
+    targets.rate[1] = pitch;
+    targets.rate[2] = yaw;
+}
+
+void ws::set_angle_target(float roll, float pitch)
+{
+    ws_internal::ControlTargets& targets = ws_internal::control_targets();
+    targets.angle[0] = roll;
+    targets.angle[1] = pitch;
+}
+
+// =============================================================================
 // Utility
 // =============================================================================
 
