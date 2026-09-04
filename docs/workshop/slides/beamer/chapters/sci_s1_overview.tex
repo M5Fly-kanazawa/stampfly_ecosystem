@@ -198,7 +198,7 @@
   \vspace{0.5em}
 
   \begin{exampleblock}{実機検証}
-    \small POS\_HOLD（位置制御）は実機で検証済み。保持精度 $\pm$6--7\,cm、RMS 16\,mm
+    \small POS\_HOLD（位置制御）は実機で検証済み。保持精度 $\pm$6--7\,cm
   \end{exampleblock}
 \end{frame}
 
@@ -243,7 +243,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{Code / Param / Model Fidelity の3原則}
+\begin{frame}{開発の3原則 / Code Identity, Parameter Identity, Model Fidelity}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{lp{80mm}}
@@ -265,7 +265,7 @@
   \vspace{0.5em}
 
   \begin{itemize}\small\setlength{\itemsep}{3pt}
-    \item MuJoCoベースSILSと42シナリオのCI回帰（\code{sf sils regression}）
+    \item MuJoCoベースSILS。42本のシナリオのうち32本をCIで回帰（\code{sf sils regression}）
     \item 対話的シナリオ実行・可視化ツール \code{sf sils gui}
     \item POS\_HOLD の実機検証（保持精度 $\pm$6--7\,cm）
     \item ビルド不要の Web Flasher と GUI インストーラ「StampFly Setup」
