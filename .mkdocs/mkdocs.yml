@@ -83,12 +83,13 @@ markdown_extensions:
 # site root and must not also be copied under /docs/.
 # logs/ は約1.5GBのフライトログ、docs/juida2026/ は28MBのPDFと埋め込み .git（40MB超）を含む。
 # docs/sci26/・docs/hikoki64/ は学会原稿の作業ディレクトリで公開サイト対象外。
-# docs/sci_tutorial/ is the SCI/SICE tutorial-course event-material working
-# directory (ad PDF etc.) — the official application page at iscie.or.jp is
-# the public channel, so it is likewise excluded from the published site.
-# docs/sci_tutorial/ はチュートリアル講座のイベント資料作業ディレクトリ
-# （広告PDF等）。公開導線は iscie.or.jp の公式申込ページが担うため、
-# 同様に公開サイトからは除外する。
+# docs/sci_tutorial/ holds the SCI/SICE tutorial-course (2026-09-10) participant
+# materials — README, hands-on review guide and cheat sheet are published so
+# attendees can revisit them online; only the instructor-side verification
+# checklist stays out of the site.
+# docs/sci_tutorial/ は SCI/SICE チュートリアル講座（2026-09-10）の参加者向け
+# 資料。README・復習手順ガイド・早見表は参加者がオンラインで復習できるよう
+# 公開し、講師用の実機検証チェックリストだけをサイトから除外する。
 # docs/workshop/dxh2026/ is the DXH high-school-teacher workshop (2026-07-18/19)
 # event-material working directory — internal curriculum/setup docs plus
 # unmeasured rehearsal placeholders, not ready for the public site. Promotion
@@ -114,7 +115,8 @@ exclude_docs: |
   landing/
   docs/juida2026/
   docs/sci26/
-  docs/sci_tutorial/
+  docs/sci_tutorial/verification_checklist.md
+  docs/sci_tutorial/*.pdf
   docs/hikoki64/
   docs/workshop/dxh2026/
 
@@ -173,6 +175,10 @@ nav:
       - 競技ルール: docs/workshop/competition_rules.md
       - スライド資料ガイド: docs/workshop/slides/README.md
       - ワークショップアンケート: docs/workshop/survey/workshop_survey.md
+      - SCI/SICE チュートリアル 2026:
+        - 概要と事前準備: docs/sci_tutorial/README.md
+        - 復習手順ガイド: docs/sci_tutorial/handson_guide.md
+        - コマンド・API 早見表: docs/sci_tutorial/cheatsheet.md
       - シラバス: docs/university/syllabus.md
       - 評価ルーブリック: docs/university/assessment_rubric.md
     - 開発ガイドライン:

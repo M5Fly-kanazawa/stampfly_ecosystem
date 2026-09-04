@@ -70,7 +70,7 @@
 |------|------|
 | 1 | [Webフラッシャ](https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/) から機体・コントローラのファームウェアを書き込む |
 | 2 | コントローラのペアリングを行う（初回のみ手動: コントローラは LCD パネルボタンを押しながら電源投入，StampFly は本体ボタンを2秒長押し。双方がビープしたら完了。以降は電源投入だけで自動再接続する。手順は `docs/getting-started.md` §5 を参照） |
-| 3 | 機体ボタンでARMし、モータが応答することを確認する |
+| 3 | プロペラを外した状態でコントローラから ARM（右スティック押し込み）し、モータが応答することを確認する |
 
 ### シミュレータの試走
 
@@ -165,7 +165,7 @@ If you are not comfortable with a terminal, use the "StampFly Setup" GUI install
 |------|--------|
 | 1 | Flash the vehicle and controller firmware from the [Web Flasher](https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/) |
 | 2 | Pair the controller (first time only, manual: power on the controller while holding its LCD panel button, then hold the StampFly's body button for 2 seconds; both beep when paired. After that, power-up alone reconnects automatically. See `docs/getting-started.md` §5) |
-| 3 | Arm with the vehicle button and confirm the motors respond |
+| 3 | With the propellers removed, arm from the controller (push the right stick) and confirm the motors respond |
 
 ### Simulator dry run
 
