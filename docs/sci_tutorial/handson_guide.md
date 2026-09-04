@@ -111,8 +111,8 @@ Teleplot で `cf_roll`（自作の相補フィルタ）と `eskf_roll`（機体�
 ### 発展: 自動チューニング
 
 ```bash
-sf sysid rate-fit flight.csv --axis roll
-sf sysid rate-tune --fit result.yaml --wc 25 --pm 60
+sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 ```
 
 **参照:** `docs/workshop/slides/beamer/chapters/{rate_p_control,system_modeling,system_identification,pid_control,attitude_estimation}.tex`、Notebook `04_pid_theory.ipynb`, `07_system_identification.ipynb`, `08_sensor_fusion.ipynb`
@@ -254,8 +254,8 @@ Overlay `cf_roll` (your hand-written complementary filter) and `eskf_roll` (the 
 ### Extension: Autotune
 
 ```bash
-sf sysid rate-fit flight.csv --axis roll
-sf sysid rate-tune --fit result.yaml --wc 25 --pm 60
+sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 ```
 
 **References:** `docs/workshop/slides/beamer/chapters/{rate_p_control,system_modeling,system_identification,pid_control,attitude_estimation}.tex`, Notebooks `04_pid_theory.ipynb`, `07_system_identification.ipynb`, `08_sensor_fusion.ipynb`
