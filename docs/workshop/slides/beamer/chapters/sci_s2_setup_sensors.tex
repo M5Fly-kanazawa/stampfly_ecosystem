@@ -187,12 +187,12 @@ sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{データ取得経路③ ログ取得と可視化 / Data Path 3: Log \& Visualize}
   \begin{block}{WiFi 経由で 400\,Hz Data Stream を記録する}
-    \small \code{sf log wifi} は機体の WiFi アクセスポイントに接続して受信し、CSV として保存する
+    \small \code{sf log wifi} は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400\,Hz の Data Stream を UDP 受信し、\code{-o *.csv} で 1 周期 1 行の CSV に保存する
   \end{block}
 
   \begin{lstlisting}[style=sfbash, numbers=none]
-sf log wifi -d 30              # 30秒キャプチャ -> CSV自動保存
-sf log viz logs/stampfly_wifi_*.csv
+sf log wifi -d 30 -o flight.csv   # 30秒キャプチャ -> Data Stream CSV
+sf log viz flight.csv
   \end{lstlisting}
 
   \vspace{0.3em}
@@ -254,15 +254,15 @@ sf log viz logs/stampfly_wifi_*.csv
       \hline
       \textbf{理論} & \textbf{コード} & \textbf{Data Stream 列} & \textbf{トピック} \\
       \hline
-      角速度 $\omega$ [rad/s]\newline Body FRD & \api{ws::gyro\_x()} & \code{gyro\_x} & \code{sensor.imu} \\
-      並進加速度 $a$ [m/s\textsuperscript{2}] & \api{ws::accel\_x()} & \code{accel\_x} & \code{sensor.imu} \\
+      角速度 $\omega$ [rad/s]\newline Body FRD & \api{ws::gyro\_x()} & \code{gyro\_x} & \code{sensor\_imu} \\
+      並進加速度 $a$ [m/s\textsuperscript{2}] & \api{ws::accel\_x()} & \code{accel\_x} & \code{sensor\_imu} \\
       \hline
     \end{tabular}
   \end{table}
 
   \vspace{0.5em}
 
-  {\small 学習者が呼ぶ \api{ws::} 関数は、内部で \code{sensor.imu} トピックを購読しているだけである（L0 $\to$ L1 の対応）}
+  {\small 学習者が呼ぶ \api{ws::} 関数は、内部で \code{sensor\_imu} トピックを購読しているだけである（L0 $\to$ L1 の対応）}
 \end{frame}
 
 % ------------------------------------------------------------------

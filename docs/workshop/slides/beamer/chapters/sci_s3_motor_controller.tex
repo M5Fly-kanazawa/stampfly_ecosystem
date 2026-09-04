@@ -104,13 +104,13 @@ void loop_400Hz(float dt) {
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{ペアリングとチャンネル / Pairing \& Channel}
   \begin{block}{ペアリング}
-    \footnotesize コントローラの M5 ボタンを押しながら電源ON $\to$ StampFly のボタンを3秒長押し $\to$ 完了
+    \footnotesize コントローラの M5 ボタン（LCD パネル）を押しながら電源ON $\to$ StampFly のボタンを約2秒長押し $\to$ 両方のビープで完了。次回以降は自動接続
   \end{block}
 
   \vspace{0.3em}
 
   \begin{alertblock}{チャンネル設定}
-    \footnotesize 教室内で複数機体が同時に飛ぶと混信する。\api{ws::set\_channel(ch)} を \code{setup()} で呼び、機体とコントローラで同じ番号（1/6/11）に揃える
+    \footnotesize 教室内で複数機体が同時に飛ぶと混信する。\api{ws::set\_channel(ch)} を \code{setup()} で呼んで機体のチャンネルを 1/6/11 のいずれかにし、再ペアリングする。コントローラはペアリング時に機体のチャンネルへ自動追従する
   \end{alertblock}
 
   \vspace{0.3em}
@@ -209,7 +209,7 @@ void loop_400Hz(float dt) {
     \textbf{理論} & \textbf{コード} & \textbf{通信} & \textbf{トピック} \\
     \hline
     Duty比 $[0,1]$ & \api{ws::motor\_set\_duty(id,d)} & --- & \code{actuator.motor} \\
-    スティック指令 $T,R,P,Y$ & \api{ws::rc\_throttle()} 等 & \code{ControlPacket}（14B） & \code{command.setpoint} \\
+    スティック指令 $T,R,P,Y$ & \api{ws::rc\_throttle()} 等 & \code{ControlPacket}（14B） & \code{command\_setpoint} \\
     ミキシング & \api{ws::motor\_mixer(T,R,P,Y)} & --- & --- \\
     \hline
   \end{tabular}}
