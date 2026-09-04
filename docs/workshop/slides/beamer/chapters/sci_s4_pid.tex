@@ -1,2 +1,511 @@
-% sci_s4_pid — SCI tutorial chapter (placeholder, filled by content work packages)
-% sci_s4_pid — SCI チュートリアル章（仮置き。本文は作業パッケージで埋める）
+% ==============================================================================
+% sci_s4_pid.tex — SCI/SICE tutorial Session 4: feedback control basics, PID
+% attitude stabilisation (14:00-15:00)
+% SCI/SICE チュートリアル セッション4: フィードバック制御の基礎
+% --- PID による姿勢安定化（14:00-15:00）
+% ==============================================================================
+
+% Fallback so this chapter still builds standalone (make chapter NAME=sci_s4_pid)
+% before chapters/sci_intro.tex has run. In the full deck sci_intro defines the
+% real \scisessionmap (five-session map, N highlighted) first, so this no-ops there.
+% chapters/sci_intro.tex 読み込み前でも単体ビルドできるようにするフォールバック。
+% フルビルドでは sci_intro が本物の \scisessionmap（5セッション地図、N強調）を
+% 先に定義するため、ここでは何もしない。
+\providecommand{\scisessionmap}[1]{}
+
+% ------------------------------------------------------------------
+\begin{frame}{地図: 今ここ / Map: You Are Here}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\scisessionmap{4}}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \small
+      S2・S3 で組み上げた機体を、本セッションでは制御理論と突き合わせて飛ばす。
+      「設計 $\to$ 実装」の次にくる「実験」のフェーズにあたる。
+
+      \vspace{0.5em}
+
+      \begin{block}{今日のセッションで扱うもの}
+        \footnotesize
+        レート P 制御の初飛行 $\to$ プラントモデルによる裏付け $\to$ PID 化 $\to$
+        姿勢推定 $\to$ 実機データでの検証
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{要点3つ / Three Key Points}
+  \begin{enumerate}
+    \item モータ+機体のプラント伝達関数 $G_p(s) = K/(s(\tau_m s+1))$ を実測パラメータから導出し，ゲイン設計に使う
+    \item P 制御から PID 化し，不完全微分・アンチワインドアップ・積分リセットまで含めた「本物の実装」と学習者コードを対比する
+    \item フライトデータからプラントを同定し，設計値と実測値を突き合わせる
+  \end{enumerate}
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{本セッションの立ち位置}
+    \small
+    ここまでのレッスンは動かすことが目的だった。ここからは，動いた結果を
+    モデルと数値で説明できるかを問う
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{内側ループ: レート制御 / Inner Loop: Rate Control}
+  \begin{center}
+    \resizebox{0.85\textwidth}{!}{\input{../tikz/feedback_block}}
+  \end{center}
+
+  \vspace{0.5em}
+
+  \begin{itemize}\small
+    \item この図は\textbf{内側ループ（レート制御）}: 目標角速度とジャイロ計測値の差を制御。
+          ACRO はこのループ単体で完結する
+    \item \textbf{外側ループ（姿勢制御）}は，この図の入力 Target Rate を作る側にもう1段乗る。
+          目標姿勢角と推定角の差から目標角速度を作り，STABILIZE 以上で有効になる
+          （カスケード = ループの入れ子）
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{PID 制御器 / PID Controller}
+  \begin{center}
+    \resizebox{0.78\textwidth}{!}{\input{../tikz/pid_block}}
+  \end{center}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{プラントモデル / Plant Model}
+  \begin{center}
+    \vspace{-2mm}
+    \resizebox{0.85\textwidth}{!}{\input{../tikz/plant_model}}
+  \end{center}
+
+  \vspace{-0.5em}
+
+  \begin{exampleblock}{ホバー近傍で線形化すると2ブロックに集約できる}
+    \begin{itemize}
+      \item \textbf{Mixer + Motor}: duty $\to$ トルク，1次遅れ $K_m/(\tau_m s+1)$
+      \item \textbf{Body}: トルク $\to$ 角速度，積分器 $1/(I \cdot s)$
+    \end{itemize}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{実測パラメータ / Measured Parameters}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{llccc}
+      \hline
+      \textbf{パラメータ} & \textbf{記号} & \textbf{Roll} & \textbf{Pitch} & \textbf{Yaw} \\
+      \hline
+      慣性モーメント & $I$ & 9.16e-6 & 13.3e-6 & 20.4e-6\,kg$\cdot$m$^2$ \\
+      トルクゲイン   & $K_m$ & 9.3e-4 & 9.3e-4 & 1.6e-4\,N$\cdot$m \\
+      モータ時定数   & $\tau_m$ & \multicolumn{3}{c}{0.02\,s（共通，実測 0.0163\,s）} \\
+      \hline
+      \textbf{プラントゲイン} & $K = K_m/I$ & \textbf{102} & \textbf{70} & \textbf{8.0}\,rad/s$^2$ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{軸ごとに $K$ が違う理由}
+    \footnotesize
+    Roll/Pitch は同じ $K_m$ だが $I_{yy} > I_{xx}$ なので Pitch の方が遅い。
+    Yaw は $\kappa \ll L$（トルク推力比がアーム長よりずっと小さい）ため
+    $K_m$ 自体が小さく，さらに遅い
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{2次系設計 / Second-Order Design}
+  \vspace{-2mm}
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\input{../tikz/step_response_zeta}}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \begin{block}{閉ループ伝達関数（2次系）}
+        \vspace{-0.3em}
+        $G_{cl}(s) = \dfrac{K_p K}{\tau_m s^2 + s + K_p K}$
+        \vspace{-0.7em}
+      \end{block}
+
+      \vspace{0.2em}
+
+      \begin{block}{$\zeta$ から $K_p$ を逆算する設計式}
+        \vspace{-0.3em}
+        \[
+          K_p = \frac{1}{4\zeta^2 K \tau_m}
+        \]
+        \vspace{-0.7em}
+      \end{block}
+
+      \vspace{0.2em}
+
+      {\small
+      Roll/Pitch で $\zeta = 0.7$（オーバーシュート約5\%）を狙うと
+      $K_{p,roll}=0.25$，$K_{p,pitch}=0.36$}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{開ループボード線図 / Open-Loop Bode Plot}
+  \begin{columns}[c]
+    \begin{column}{0.50\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\input{../tikz/bode_loop_shaping}}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \begin{block}{開ループ伝達関数}\small
+        \vspace{-0.3em}
+        \[
+          L(s) = K_p \cdot G_p(s) = \frac{K_p K}{s(\tau_m s + 1)}
+        \]
+        \vspace{-0.7em}
+      \end{block}
+
+      \vspace{0.3em}
+
+      {\small $K_p$ を上げるとゲイン交差周波数 $\omega_{gc}$ が上がり，位相余裕（PM）は下がる。
+      P 制御だけでは応答速度と安定性がトレードオフの関係にある}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{無駄時間の影響 / Dead Time Effect}
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\input{../tikz/bode_dead_time}}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \begin{block}{制御ループの無駄時間}\small
+        $\tau_d \approx 5$\,ms（センサ処理 + 制御演算 + PWM 更新）
+        \vspace{-0.3em}
+        \[
+          L_{delay}(s) = L(s)\cdot e^{-\tau_d s}
+        \]
+        \vspace{-1em}
+      \end{block}
+
+      \vspace{0.3em}
+
+      \begin{alertblock}{\small 実用上 PM $\geq 60°$ が必要}\scriptsize
+        モデル上は安定なゲインでも，無駄時間を足すと実機で振動することがある
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習: L5 のレート P 制御 / Rate P-Control Recap}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp (Lesson 5)}
+float Kp_rp=0.5f, Kp_yaw=2.0f, rmax=1.0f, ymax=5.0f;
+float re = ws::rc_roll()*rmax  - ws::gyro_x();
+float pe = ws::rc_pitch()*rmax - ws::gyro_y();
+float ye = ws::rc_yaw()*ymax   - ws::gyro_z();
+ws::motor_mixer(ws::rc_throttle(),
+    Kp_rp*re, Kp_rp*pe, Kp_yaw*ye);
+  \end{sflisting}
+
+  \vspace{0.5em}
+
+  {\small L5 では飛ばして安定するかどうかだけを見た。$K_p=0.5$ は勘で決めた値である}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モデルで見る L5 の設計 / Explaining L5's Gain}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lcc}
+      \hline
+      & \textbf{Roll（$K=102$）} & \textbf{Pitch（$K=70$）} \\
+      \hline
+      L5 の $K_p=0.5$ での $\zeta$ & 0.50 & 0.60 \\
+      $\zeta=0.7$ 設計の $K_p$     & 0.25 & 0.36 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{読み取り}
+    \footnotesize
+    L5 の $K_p=0.5$ は Roll で $\zeta=0.50$，やや振動的な設定だったとモデルが説明する。
+    P 制御だけでは，ゲインを下げて安定性を確保すると定常偏差と外乱への弱さが残る。
+    ここから I 項・D 項を追加する
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{PID 工学形式パラメータ / Engineering Form}
+  \begin{table}
+    \centering\scriptsize
+    \renewcommand{\arraystretch}{0.95}
+    \begin{tabular}{llp{58mm}}
+      \hline
+      \textbf{パラメータ} & \textbf{意味} & \textbf{効果} \\
+      \hline
+      $K_p$  & 比例ゲイン   & 大きいほど応答が速い，大きすぎると振動 \\
+      $T_i$  & 積分時間 [s] & 小さいほど積分が強く効き偏差が早く消える \\
+      $T_d$  & 微分時間 [s] & 大きいほど微分が強く効き振動を抑える \\
+      $\eta$ & フィルタ係数  & $0.1\sim0.2$，大きいほどノイズに強い \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \begin{block}{教科書形式との対応}\footnotesize
+    $K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d$
+  \end{block}
+
+  {\footnotesize L8 で使う推奨ゲイン（$K_p$ は前ページのモデルベース設計値，$\eta=0.125$ 共通）:
+  Roll $(0.25,\,1.67,\,0.01)$，Pitch $(0.36,\,1.67,\,0.01)$，Yaw $(3.19,\,4.0,\,0.005)$}
+  \par\vspace{0.2em}
+  {\scriptsize Yaw の $K_p$ はレッスン教材の値ではなく，本ページと同じ $\zeta=0.7$ 設計式を
+  $K=8.0$（最新の実測値）に適用した値を掲載する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{D 項とアンチワインドアップ / D-Term \& Anti-Windup}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{L8 学習者コード}\scriptsize
+        理想 PID から不完全微分フィルタへ置換
+      \end{block}
+      \begin{lstlisting}[style=sfcpp, basicstyle=\ttfamily\scriptsize]
+float D = Kp*Td*(err-prev_err)/dt;
+// -> incomplete derivative filter
+float alpha = 2*eta*Td/dt;
+float a=(alpha-1)/(alpha+1);
+float b=2*Td/((alpha+1)*dt);
+d_filt = a*d_filt - b*(err-prev_err);
+      \end{lstlisting}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{alertblock}{本物: sf\_controller\_pid}\scriptsize
+        微分は誤差ではなく\textbf{測定値}に掛ける（D-on-M）。目標値が
+        階段状に変わっても微分キックが出ない
+      \end{alertblock}
+      \begin{exampleblock}{アンチワインドアップ}\scriptsize
+        単純な積分クランプではなく，出力が飽和方向に押される間だけ
+        積分を止める「条件付き積分」を使う
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+
+  {\scriptsize L8 では振動と定常偏差の体感を優先し，この2点は扱わない。
+  \code{sf\_controller\_pid/include/pid.hpp} が本物のコード}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{離散化と ARM 時リセット / Discretization \& Reset}
+  \begin{block}{離散化: 双一次変換（Tustin）}\small
+    比例・積分・微分すべてに双一次変換を使う。L8 の不完全微分フィルタの式
+    （$\alpha, a, b$）はこの変換そのもの
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{積分リセットのタイミング}\small
+    積分器は DISARM 中ずっとゼロなのではなく，\textbf{ARM 遷移のたびに}
+    リセットされる。着地して DISARM し，次に ARM した瞬間に積分が空になり，
+    前のフライトの偏差を引きずらない
+  \end{exampleblock}
+
+  \vspace{0.3em}
+
+  {\footnotesize
+  ライブチューニング（\code{param set} での即時反映）では，積分器の状態は
+  \textbf{保持}される。ゲイン変更のたびにループを蹴らないための区別}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{姿勢推定: ジャイロドリフト問題 / Gyro Drift Problem}
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{\input{../tikz/gyro_drift}}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \begin{itemize}\small
+        \item ジャイロは角速度 $\omega$ を測定，角度は積分 $\theta=\int\omega\,dt$ が必要
+        \item バイアスが蓄積し，ドリフトが増大する
+      \end{itemize}
+      \vspace{0.5em}
+      \begin{alertblock}{問題}\small
+        ジャイロ単体では長時間の姿勢推定ができない。STABILIZE 以上で
+        姿勢角を目標にするには，角度そのものの推定が要る
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{相補フィルタと STABILIZE / Complementary Filter}
+  \begin{columns}[c]
+    \begin{column}{0.50\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{\input{../tikz/comp_filter}}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{数式}\footnotesize
+        $\hat\theta_k = \alpha(\hat\theta_{k-1}+\omega\Delta t) + (1-\alpha)\theta_{accel}$
+      \end{block}
+      \vspace{0.3em}
+      \begin{itemize}\small
+        \item $\alpha=0.98$（ジャイロ98\% + 加速度2\%）
+        \item StampFly の既定は 15 状態 ESKF。相補フィルタは自作して
+              \api{estimated\_roll()} と比較する教材
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.3em}
+
+  {\small STABILIZE ではこの推定角を外側ループの入力にし，スティックが
+  傾き角そのものを指令する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{システム同定: sf sysid fit / Model Fitting}
+  \begin{block}{$K_p$ が既知なら，閉ループデータから開ループプラントを復元できる}
+    \footnotesize $u(t) = K_p(\text{target}-\text{gyro})$，$y(t)=\text{gyro}$ として
+    $G_p(s)=K/(s(\tau_m s+1))$ に最小二乗フィット
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{出力例}
+sf sysid fit flight.csv --kp 0.5 --plot
+  Roll  K= 98.5 (ref:102.0, err:3.4%) tau_m=0.019 R2=0.94
+  Pitch K= 72.1 (ref: 70.0, err:3.0%) tau_m=0.021 R2=0.91
+  \end{sflisting}
+
+  {\small 理論値（L6）との誤差3〜4\%は，モデル簡略化と無駄時間の影響で説明できる}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{自動チューニング: sf sysid rate-fit / rate-tune}
+  \begin{block}{ETFE によるプラント同定と仕様ベースのゲイン設計}\footnotesize
+    ステップドサイン励振で軸ごとに $(b, L, T)$ を推定し，
+    $G_p(s) = b\,e^{-Ls}/(s(Ts+1))$ にフィットする。sf sysid fit と違い
+    $K_p$ を仮定しない開ループ同定
+  \end{block}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf sysid rate-fit flight.csv --axis roll
+sf sysid rate-tune --fit result.yaml --wc 25 --pm 60
+  \end{sflisting}
+
+  {\footnotesize \code{rate-tune} はゲイン交差周波数 $\omega_c$ と位相余裕 PM の仕様を満たす
+  $K_p/T_i/T_d$ を逆算し，\code{param set rate.roll.kp ...} の形で出力する}
+
+  {\scriptsize \warn{注:} 学習者コードで rate-fit/rate-tune を使うには，角速度目標を計算した
+  直後に \api{ws::set\_rate\_target(roll,pitch,yaw)} を呼ぶ（L7 で追加，Data Stream の
+  \code{rate\_ref\_*} に記録される）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ: 完成コードで飛行 / Demo: Final Code}
+  \begin{exampleblock}{デモの見方}\footnotesize
+    \textbf{見るだけ}: ステップ応答の波形と設計値の一致を確認するだけで要点はつかめる。
+    \textbf{一緒に打つ}: 手元の flight.csv で \code{sf sysid fit} を試す。
+    \textbf{帰宅後に再現}: 本日は見るだけにして，後日 L5〜L9 を通しで動かす
+  \end{exampleblock}
+
+  \begin{block}{手順}\footnotesize
+    \begin{enumerate}
+      \item PID 化した学習者コードで飛行し，\code{sf log wifi} でテレメトリ取得
+      \item \code{sf log viz} でロール角速度のステップ応答を表示
+      \item モデル予測（$\zeta=0.7$ の応答波形）と重ねて比較
+    \end{enumerate}
+  \end{block}
+
+  {\footnotesize 会場の通信環境に備え，事前取得済みのログを保険として用意する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{発展の予告 / What's Next}
+  \begin{itemize}\small
+    \item \textbf{オートチューン}: \code{sf sysid rate-fit/rate-tune} と同じアルゴリズムを
+          機体上で実行する \api{sf\_autotune}。ステップドサイン励振とプラントフィットを
+          オンボードで完結させる
+    \item \textbf{ESKF}: 相補フィルタで自作した推定と，機体が実際に使う15状態
+          ESKF の違い
+    \item \textbf{高度・位置ループ}: 今日のレート/姿勢カスケードのさらに外側に
+          高度・位置ループが乗る。S5 のシミュレータ活用で扱う
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{理論とコードの対応表 / Theory-to-Code Map}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llll}
+    \hline
+    \textbf{教科書表記} & \textbf{L8 学習者コード} & \textbf{vehicle 実装} & \textbf{Data Stream} \\
+    \hline
+    比例ゲイン $K_p$   & \code{float Kp}（無次元） & \code{rate.roll.kp}（Nm/(rad/s)） & --- \\
+    積分時間 $T_i$      & \code{float Ti}           & \code{rate.roll.ti}（s）          & --- \\
+    微分時間 $T_d,\eta$ & \code{float Td, eta}      & \code{rate.roll.td}，$\eta$固定    & --- \\
+    姿勢ゲイン          & ---（L8では未使用）       & \code{attitude.roll.kp/ti/td}      & --- \\
+    目標角速度          & \code{target}             & \code{rate\_sp\_roll}              & \code{rate\_ref\_roll} \\
+    角速度計測値        & \code{ws::gyro\_x()}      & \code{state.angular\_rate[0]}       & \code{gyro\_x} \\
+    アンチワインドアップ & ---（未実装）             & 条件付き積分（\code{pid.hpp}）      & --- \\
+    ARM 時リセット      & ---（未実装）             & \code{PidController::reset()}       & --- \\
+    \hline
+  \end{tabular}}
+
+  \vspace{0.5em}
+
+  {\small レートループの $K_p$ は，学習者コードでは duty 空間の無次元値，
+  vehicle 実装では物理トルク単位（ミキサーが推力配分に変換する前の値）。
+  数値を単純比較できない点が「模型と本物の違い」を最もよく表す}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{復習パス / Review Path}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llll}
+    \hline
+    \textbf{コマンド} & \textbf{レッスン} & \textbf{文書} & \textbf{Notebook} \\
+    \hline
+    \code{sf lesson switch 5}  & L5 レート P 制御 & \code{rate\_p\_control.tex}     & 05\_rate\_control\_tuning.ipynb \\
+    \code{sf lesson switch 6}  & L6 システムモデリング & \code{system\_modeling.tex} & 04\_pid\_theory.ipynb \\
+    \code{sf sysid fit}        & L7 システム同定 & \code{system\_identification.tex} & 07\_system\_identification.ipynb \\
+    \code{sf lesson switch 8}  & L8 PID 制御      & \code{pid\_control.tex}          & 04\_pid\_theory.ipynb \\
+    \code{sf lesson switch 9}  & L9 姿勢推定      & \code{attitude\_estimation.tex}  & 08\_sensor\_fusion.ipynb \\
+    \hline
+  \end{tabular}}
+
+  \vspace{0.5em}
+
+  {\small すべて \code{sf lesson build} $\to$ \code{sf lesson flash} で実機に反映する。
+  \code{--solution} で模範解答に切り替えられる}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] $G_p(s)=K/(s(\tau_m s+1))$ と実測パラメータの対応を説明できる
+      \item[$\square$] P 制御の限界と，I 項・D 項が何を補うかを説明できる
+      \item[$\square$] 不完全微分・アンチワインドアップ・ARM 時リセットで
+            学習者コードと本物の実装がどう違うか説明できる
+      \item[$\square$] \code{sf sysid fit} の入出力と，理論値との比較の読み方を理解した
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のセッション}
+    S5: シミュレータ・解析ツールの活用と発展的テーマ（15:30 -- 16:30）
+  \end{block}
+\end{frame}
