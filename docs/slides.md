@@ -7,6 +7,7 @@
 | 資料 | 説明 |
 |------|------|
 | [stampfly_workshop.pdf](workshop/slides/beamer/stampfly_workshop.pdf) | ワークショップ Beamer スライド（全レッスン） |
+| [sci_tutorial.pdf](workshop/slides/beamer/sci_tutorial.pdf) | SCI/SICE チュートリアル講座 2026（2026-09-10）Beamer スライド。参加者向けガイドは [sci_tutorial/](sci_tutorial/README.md) |
 
 ## TikZ 図
 
@@ -43,6 +44,7 @@
 | Material | Description |
 |----------|-------------|
 | [stampfly_workshop.pdf](workshop/slides/beamer/stampfly_workshop.pdf) | Workshop Beamer slides (all lessons) |
+| [sci_tutorial.pdf](workshop/slides/beamer/sci_tutorial.pdf) | SCI/SICE Tutorial Course 2026 (2026-09-10) Beamer deck; participant guides in [sci_tutorial/](sci_tutorial/README.md) |
 
 ## TikZ Diagrams
 

@@ -85,6 +85,9 @@
 | [workshop/workshop_schedule.md](workshop/workshop_schedule.md) | ワークショップスケジュール |
 | [workshop/competition_rules.md](workshop/competition_rules.md) | 競技ルール |
 | [workshop/slides/README.md](workshop/slides/README.md) | スライド資料ガイド |
+| [sci_tutorial/README.md](sci_tutorial/README.md) | SCI/SICE チュートリアル講座 2026: 概要・事前準備・資料索引 |
+| [sci_tutorial/handson_guide.md](sci_tutorial/handson_guide.md) | チュートリアル復習手順ガイド（セッション別） |
+| [sci_tutorial/cheatsheet.md](sci_tutorial/cheatsheet.md) | sf CLI・ws:: API 早見表 |
 
 ### 開発計画 (`plans/`)
 
