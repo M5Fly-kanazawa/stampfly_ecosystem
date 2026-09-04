@@ -59,21 +59,21 @@
     \resizebox{0.95\textwidth}{!}{\input{../tikz/sci_sim_layers}}
   \end{center}
 
-  {\footnotesize 目的の異なる3層を使い分ける。詳細は \code{docs/architecture/simulation-policy.md} が正}
+  {\footnotesize 目的の異なる3層を使い分ける。詳細は \code{docs/architecture/simulation-policy.md} を参照}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{層1・層2: 設計モデルとログ再生 / Layers 1 \& 2}
   \begin{exampleblock}{層1: 設計用線形モデル}\small
     $G(s) = b\,e^{-Ls}/(s(Ts+1))$ を \code{sf sysid rate-fit} で実飛行ログから
-    同定し，制御設計とループ整形の正とする（S4 で扱った同定と同じ枠組み）
+    同定し，制御設計とループ整形の基準とする（S4 で扱った同定と同じ枠組み）
   \end{exampleblock}
 
   \vspace{0.5em}
 
   \begin{block}{層2: 実ログ駆動オフライン再生}\small
     層1のモデルと Python に移植した制御則を，実機ログから再構成した
-    実外乱・実指令で駆動する閉ループ再生。パラメータ変更の A/B 判定の正
+    実外乱・実指令で駆動する閉ループ再生。パラメータ変更の A/B 判定の基準
   \end{block}
 
   {\footnotesize \code{analysis/scripts/} 配下の Python 群。ヨー$\kappa$修正のリプレイ一致

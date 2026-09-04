@@ -40,7 +40,7 @@
 \begin{frame}{要点3つ / Three Key Points}
   \begin{enumerate}
     \item モータ+機体のプラント伝達関数 $G_p(s) = K/(s(\tau_m s+1))$ を実測パラメータから導出し，ゲイン設計に使う
-    \item P 制御から PID 化し，不完全微分・アンチワインドアップ・積分リセットまで含めた「本物の実装」と学習者コードを対比する
+    \item P 制御から PID 化し，不完全微分・アンチワインドアップ・積分リセットまで含めたvehicle 実装と学習者コードを対比する
     \item フライトデータからプラントを同定し，設計値と実測値を突き合わせる
   \end{enumerate}
 
@@ -290,7 +290,7 @@ d_filt = a*d_filt + b*(err-prev_err);
       \end{lstlisting}
     \end{column}
     \begin{column}{0.5\textwidth}
-      \begin{alertblock}{本物: sf\_controller\_pid}\scriptsize
+      \begin{alertblock}{vehicle 実装: sf\_controller\_pid}\scriptsize
         微分は誤差ではなく\textbf{測定値}に掛ける（D-on-M）。目標値が
         階段状に変わっても微分キックが出ない
       \end{alertblock}
@@ -302,7 +302,7 @@ d_filt = a*d_filt + b*(err-prev_err);
   \end{columns}
 
   {\scriptsize L8 では振動と定常偏差の体感を優先し，この2点は扱わない。
-  \code{sf\_controller\_pid/include/pid.hpp} が本物のコード}
+  \code{sf\_controller\_pid/include/pid.hpp} が vehicle 実装のコード}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -467,7 +467,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 
   {\small レートループの $K_p$ は，学習者コードでは duty 空間の無次元値，
   vehicle 実装では物理トルク単位（ミキサーが推力配分に変換する前の値）。
-  数値を単純比較できない点が「模型と本物の違い」を最もよく表す}
+  数値を単純比較できない点が「学習者コードと vehicle 実装の違い」を最もよく表す}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -498,7 +498,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
       \item[$\square$] $G_p(s)=K/(s(\tau_m s+1))$ と実測パラメータの対応を説明できる
       \item[$\square$] P 制御の限界と，I 項・D 項が何を補うかを説明できる
       \item[$\square$] 不完全微分・アンチワインドアップ・ARM 時リセットで
-            学習者コードと本物の実装がどう違うか説明できる
+            学習者コードと vehicle 実装がどう違うか説明できる
       \item[$\square$] \code{sf sysid fit} の入出力と，理論値との比較の読み方を理解した
     \end{itemize}
   \end{alertblock}

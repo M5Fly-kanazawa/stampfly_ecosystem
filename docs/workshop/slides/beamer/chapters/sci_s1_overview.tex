@@ -133,7 +133,7 @@
       \hline
       \textbf{柱} & \textbf{内容} \\
       \hline
-      集約と Protocol as SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を単一の正とする \\
+      集約と Protocol as SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を唯一の基準とする \\
       sf CLI                  & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供 \\
       段階的抽象化 \code{ws::} & Workshop API がHW・タスク・Topicの詳細を隠しつつ、レッスンの進行に応じて段階的に開放する \\
       シミュレータ統合         & VPython（軽量3D）と Genesis（高精度物理）を、実ファームと同一の制御アルゴリズムで動かす \\
@@ -230,8 +230,8 @@
       \hline
       \textbf{層} & \textbf{内容} & \textbf{位置づけ} \\
       \hline
-      層1 設計用線形モデル & 実飛行ログから同定した低次 $G(s)$ & 制御系設計・ループ整形の正 \\
-      層2 実ログ駆動再生   & 移植した制御則を実ログの外乱・指令で駆動 & パラメータ変更の A/B 判定の正 \\
+      層1 設計用線形モデル & 実飛行ログから同定した低次 $G(s)$ & 制御系設計・ループ整形の基準 \\
+      層2 実ログ駆動再生   & 移植した制御則を実ログの外乱・指令で駆動 & パラメータ変更の A/B 判定の基準 \\
       層3 SILS             & MuJoCo + 実ファーム C++、Code/Param Identity & システム全体の検証ベンチ \\
       \hline
     \end{tabular}
@@ -251,7 +251,7 @@
       \textbf{原則} & \textbf{内容} \\
       \hline
       Code Identity  & SILS は本体ソースを書き換えず参照コンパイルして実行する。一致するのは推定・制御の数式だけでなく、ループ全体である \\
-      Parameter Identity & SILS も実機も \code{params.cpp} を単一の正として読む。チューニング値は同じスキーマで往復する \\
+      Parameter Identity & SILS も実機も \code{params.cpp} を唯一の基準として読む。チューニング値は同じスキーマで往復する \\
       Model Fidelity & SILS の真値は物理モデルから得る。実機データが必要になるのは、初飛行のあとにモデルを現実へ近づける段階だけである \\
       \hline
     \end{tabular}
