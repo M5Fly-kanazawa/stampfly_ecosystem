@@ -1,0 +1,129 @@
+% sci_sim_layers.tex — Three simulation layers for the SCI tutorial (S5)
+% シミュレーションの3層構造図。SCIチュートリアル S5 用。
+%
+% Source: docs/architecture/simulation-policy.md §2 (three-layer table) and
+% §4 (model-match gate).
+% 出典: docs/architecture/simulation-policy.md §2（3層構造の表）と
+% §4（モデル一致ゲート）。
+%
+% Layout: three side-by-side boxes (Layer 1 -> 2 -> 3, left to right) with a
+% horizontal arrow chain showing increasing physical/code fidelity — a wide,
+% short shape that fits a 16:9 slide without being scaled down to
+% illegibility (an earlier stacked-box version was too tall; see git log).
+% A gate box spans the full width below, with a feedback arrow on the left
+% margin looping the SILS-derived identification back up to Layer 1.
+% レイアウト: 3つの箱を左から層1→層2→層3の順に横に並べ、水平の矢印連鎖で
+% 物理・コードの忠実度が増していくことを示す。横長で低い形状にすることで、
+% 16:9スライドに収めても文字が潰れない（縦積み版は高さが出過ぎたため変更。
+% git log 参照）。下に全幅のゲート箱を置き、左マージンのフィードバック矢印で
+% SILS側の同定値を層1へ戻すループを示す。
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) → Yu Gothic (Windows) → Noto (Linux)
+% クロスプラットフォーム: ヒラギノ (macOS) → 游ゴシック (Windows) → Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+\definecolor{s1color}{RGB}{0, 100, 180}
+\definecolor{s2color}{RGB}{40, 140, 60}
+\definecolor{s3color}{RGB}{150, 90, 20}
+\definecolor{gatecolor}{RGB}{170, 30, 30}
+\definecolor{gray1}{RGB}{120, 120, 120}
+
+% Plain-LaTeX helper macros for the colored text lines inside each box
+% 箱の中の色付きテキスト用マクロ
+\newcommand{\ttier}[2]{{\bfseries\normalsize\color{#1}#2}}
+\newcommand{\tsub}[1]{{\scriptsize\color{black!55}#1}}
+
+\begin{tikzpicture}[
+    tier/.style={
+      rectangle, rounded corners=4pt, draw=#1, line width=1.5pt,
+      fill=#1!8, minimum width=60mm, minimum height=30mm,
+      align=left, inner xsep=4mm, inner ysep=3mm
+    },
+    gatebox/.style={
+      rectangle, rounded corners=4pt, draw=gatecolor, line width=1.3pt,
+      fill=gatecolor!7, minimum width=178mm, minimum height=13mm,
+      align=left, inner xsep=6mm, inner ysep=2mm
+    },
+    arr/.style={-{Stealth[length=3mm]}, line width=1.5pt, gray1},
+    garr/.style={-{Stealth[length=3mm]}, line width=1.4pt, gatecolor},
+  ]
+
+  % Three layers, left (Layer 1, design-time) to right (Layer 3, SILS)
+  % 3層。左（層1・設計用）から右（層3・SILS）まで
+  \node[tier=s1color] (S1) at (0, 0) {%
+    \begin{minipage}{54mm}\raggedright
+      \ttier{s1color}{層1: 設計用線形モデル}\\[3pt]
+      \tsub{プラント: $G(s){=}b\,e^{-Ls}/(s(Ts{+}1))$}\\[2pt]
+      \tsub{制御コード: 伝達関数として扱う}\\[2pt]
+      \tsub{\texttt{sf sysid rate-fit} で同定，設計の正}
+    \end{minipage}%
+  };
+  \node[tier=s2color, right=10mm of S1] (S2) {%
+    \begin{minipage}{54mm}\raggedright
+      \ttier{s2color}{層2: 実ログ駆動再生}\\[3pt]
+      \tsub{プラント: 低次線形 $G(s)$ + 飽和等}\\[2pt]
+      \tsub{制御コード: Python 移植，実ログ外乱で駆動}\\[2pt]
+      \tsub{\texttt{analysis/scripts/}，A/B 判定の正}
+    \end{minipage}%
+  };
+  \node[tier=s3color, right=10mm of S2] (S3) {%
+    \begin{minipage}{54mm}\raggedright
+      \ttier{s3color}{層3: SILS}\\[3pt]
+      \tsub{プラント: 非線形6自由度（MuJoCo）}\\[2pt]
+      \tsub{制御コード: 実ファーム C++ そのもの}\\[2pt]
+      \tsub{Code/Param Identity，CI 回帰 33/42 本}
+    \end{minipage}%
+  };
+
+  % Rightward arrow chain, offset above the boxes (clear of both box border
+  % and text — routed entirely in open space, T4 compliant)
+  % 右向き矢印の連鎖。箱の上外側の空間に配線
+  \draw[arr] ($(S1.north -| S1.east)+(0,6mm)$) -- ($(S2.north -| S2.west)+(0,6mm)$);
+  \draw[arr] ($(S2.north -| S2.east)+(0,6mm)$) -- ($(S3.north -| S3.west)+(0,6mm)$);
+
+  % Single label above the whole arrow chain (horizontally centered over S2)
+  % 矢印の連鎖全体に対する説明ラベル（層2の真上、中央に1つだけ配置）
+  \node[font=\small, text=gray1, align=center, anchor=south]
+    at ($(S2.north)+(0,10mm)$) {物理・コードの忠実度が上がる};
+
+  % Model-match gate: a full-width feedback box below all three layers,
+  % connected by a return path on the LEFT margin back up to Layer 1
+  % (right-angle routing, >=5mm stem before each arrowhead).
+  % モデル一致ゲート: 3層の下に全幅のフィードバック箱。左マージンの
+  % 折り返し経路で層1へ戻す（直角ルーティング、矢頭前に5mm以上の幹）。
+  \node[gatebox, below=12mm of $(S1.south)!0.5!(S3.south)$] (GATE) {%
+    \begin{minipage}{170mm}\raggedright
+      \ttier{gatecolor}{モデル一致ゲート}\quad
+      \tsub{層3のログに同一の同定パイプラインを適用し $(b,L,T)$ を層1の実機基準値と比較（\texttt{sf sils sysid-gate}）}
+    \end{minipage}%
+  };
+
+  \coordinate (gateLeft) at ($(GATE.west)+(-8mm,0)$);
+  \coordinate (s1Left)   at ($(S1.west)+(-8mm,0)$);
+  \draw[gatecolor, line width=1.4pt] (GATE.west) -- (gateLeft) |- (s1Left);
+  \draw[garr] (s1Left) -- (S1.west);
+  \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
+    at ($(gateLeft)!0.5!(s1Left) + (-3mm,0)$) {実機同定値と突き合わせ};
+
+\end{tikzpicture}
+\end{document}
