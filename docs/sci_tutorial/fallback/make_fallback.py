@@ -484,7 +484,16 @@ def build_s5_graph(bundle: Path) -> None:
     ax_rate.set_ylabel("Angular rate  [deg/s]")
     ax_rate.set_xlim(*window)
     ax_rate.grid(True, alpha=0.3)
-    ax_rate.legend(loc="best", framealpha=0.9)
+    # Fixed "upper left" placement (not "best"): the roll/pitch-rate transients
+    # at the roll+8/roll-8/pitch+8 step edges reach +-45..70 deg/s and "best"
+    # can still auto-place the legend box close enough to graze a peak. The
+    # pre-climb region (t in [ARM-0.3, climb start]) is provably all-zero rate
+    # (boot/idle, no attitude command yet), so anchoring there is always clear.
+    # "best" ではなく固定配置「upper left」: ロール/ピッチのステップ切替点での
+    # 角速度過渡は+-45〜70deg/sに達し、"best" でも凡例枠がピークに接近しうる。
+    # 離陸前区間（t∈[ARM-0.3, 上昇開始]）は起動・アイドルでレートが確実にゼロ
+    # なので、そこに固定すれば常に衝突しない。
+    ax_rate.legend(loc="upper left", framealpha=0.9)
 
     _step_lines = ((S5_T_ARM, "ARM"), (S5_T_STEP_D, "roll+8"),
                    (S5_T_STEP_E, "roll-8"), (S5_T_STEP_F, "pitch+8"),
