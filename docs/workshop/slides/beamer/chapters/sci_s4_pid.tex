@@ -125,25 +125,27 @@
 \begin{frame}{2次系設計 / Second-Order Design}
   \vspace{-2mm}
   \begin{columns}[c]
-    \begin{column}{0.42\textwidth}
+    \begin{column}{0.38\textwidth}
       \centering
       \resizebox{\columnwidth}{!}{\input{../tikz/step_response_zeta}}
     \end{column}
-    \begin{column}{0.58\textwidth}
+    \begin{column}{0.60\textwidth}
       \begin{block}{閉ループ伝達関数（2次系）}
-        \vspace{-0.3em}
-        $G_{cl}(s) = \dfrac{K_p K}{\tau_m s^2 + s + K_p K}$
-        \vspace{-0.7em}
+        \setlength{\abovedisplayskip}{2pt}\setlength{\belowdisplayskip}{2pt}%
+        \setlength{\abovedisplayshortskip}{2pt}\setlength{\belowdisplayshortskip}{2pt}%
+        \[
+          G_{cl}(s) = \frac{K_p K}{\tau_m s^2 + s + K_p K}
+        \]
       \end{block}
 
       \vspace{0.2em}
 
       \begin{block}{$\zeta$ から $K_p$ を逆算する設計式}
-        \vspace{-0.3em}
+        \setlength{\abovedisplayskip}{2pt}\setlength{\belowdisplayskip}{2pt}%
+        \setlength{\abovedisplayshortskip}{2pt}\setlength{\belowdisplayshortskip}{2pt}%
         \[
           K_p = \frac{1}{4\zeta^2 K \tau_m}
         \]
-        \vspace{-0.7em}
       \end{block}
 
       \vspace{0.2em}
@@ -164,11 +166,11 @@
     \end{column}
     \begin{column}{0.50\textwidth}
       \begin{block}{開ループ伝達関数}\small
-        \vspace{-0.3em}
+        \setlength{\abovedisplayskip}{2pt}\setlength{\belowdisplayskip}{2pt}%
+        \setlength{\abovedisplayshortskip}{2pt}\setlength{\belowdisplayshortskip}{2pt}%
         \[
           L(s) = K_p \cdot G_p(s) = \frac{K_p K}{s(\tau_m s + 1)}
         \]
-        \vspace{-0.7em}
       \end{block}
 
       \vspace{0.3em}
@@ -188,12 +190,12 @@
     \end{column}
     \begin{column}{0.52\textwidth}
       \begin{block}{制御ループの無駄時間}\small
+        \setlength{\abovedisplayskip}{2pt}\setlength{\belowdisplayskip}{2pt}%
+        \setlength{\abovedisplayshortskip}{2pt}\setlength{\belowdisplayshortskip}{2pt}%
         $\tau_d \approx 5$\,ms（センサ処理 + 制御演算 + PWM 更新）
-        \vspace{-0.3em}
         \[
           L_{delay}(s) = L(s)\cdot e^{-\tau_d s}
         \]
-        \vspace{-1em}
       \end{block}
 
       \vspace{0.3em}
