@@ -1,2 +1,297 @@
-% sci_s2_setup_sensors — SCI tutorial chapter (placeholder, filled by content work packages)
-% sci_s2_setup_sensors — SCI チュートリアル章（仮置き。本文は作業パッケージで埋める）
+% ==============================================================================
+% sci_s2_setup_sensors.tex — SCI/SICE tutorial Session 2:
+% environment setup and sensor data acquisition
+% SCI/SICE チュートリアル セッション2: 開発環境のセットアップとセンサデータの取得
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{地図 / Map}
+  \centering
+  \vspace{-1mm}
+  \resizebox{0.62\textwidth}{!}{\scisessionmap{2}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{要点3つ / Three Takeaways}
+  \begin{enumerate}
+    \item ビルド環境は ESP-IDF と \code{sf CLI} が担う。開発を伴わない参加者は Web Flasher / GUI インストーラという代替経路がある
+    \item 学習者が書くコードは \api{setup()} と \api{loop\_400Hz(dt)} の2関数だけ。センサやHWの詳細は \api{ws::} 名前空間が隠す
+    \item センサデータの取得経路は3通りある。目的に応じて \api{ws::print}、\code{sf telemetry}、\code{sf log wifi} を使い分ける
+  \end{enumerate}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{事前準備の確認 / Environment Check}
+  \begin{block}{全員で \code{sf doctor} を実行する}
+    \small ESP-IDF、Python、USBシリアルドライバ、sf CLI 自体のバージョンをまとめて診断する
+  \end{block}
+
+  \begin{lstlisting}[style=sfbash, numbers=none]
+source setup_env.sh
+sf doctor
+  \end{lstlisting}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{ここで通らなくても心配は不要}
+    \footnotesize すべて OK にならなかった場合は、このあとのデモは「見るだけ」で参加し、復習パス（本セッション末尾）に沿って会場外で環境を整えてほしい
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ツールチェーン / Toolchain}
+  \begin{block}{ESP-IDF の上に sf CLI を重ねる}
+    \small \code{idf.py} を直接叩く代わりに、ビルド・書き込み・診断・ログ取得を統一したコマンド体系で提供する
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{コマンド} & \textbf{役割} \\
+      \hline
+      \code{sf build [target]} & ファームウェアビルド \\
+      \code{sf flash [target] -m} & 書き込み（\code{-m} でモニタ付き） \\
+      \code{sf monitor}          & シリアルモニタ \\
+      \code{sf doctor}           & 環境診断 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  {\small \code{target} には \code{vehicle} / \code{controller} / \code{workshop} を指定する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ビルド不要の選択肢 / No Dev Environment Needed}
+  \begin{block}{開発環境がなくても書き込みだけはできる}
+    \small ブラウザまたはデスクトップアプリから、公開済みの完成版ファームウェアを直接書き込める
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lp{60mm}}
+      \hline
+      \textbf{方法} & \textbf{特徴} \\
+      \hline
+      Web Flasher & ブラウザ（Chrome/Edge）から書き込み。インストール不要 \\
+      GUI インストーラ & デスクトップアプリ「StampFly Setup」。ウィザードに従うだけで \code{sf} CLI 一式を導入 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+
+  {\footnotesize 本チュートリアルの実習は \code{sf} CLI を使うが、授業に持ち帰る際は受講者の環境に応じて使い分けてほしい}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{Sketch の型とワークフロー / Sketch Shape \& Workflow}
+  \begin{columns}[T]
+    \begin{column}{0.44\textwidth}
+      \begin{block}{学習者が書く関数は2つだけ}
+        \footnotesize
+        \begin{itemize}
+          \item \api{setup()} --- 起動時に1回
+          \item \api{loop\_400Hz(dt)} --- 400\,Hz毎
+        \end{itemize}
+      \end{block}
+      \vspace{0.3em}
+      \begin{exampleblock}{切替・ビルド・書き込み}
+        \footnotesize
+        \code{sf lesson switch N}\\
+        \code{sf lesson build}\\
+        \code{sf lesson flash}
+      \end{exampleblock}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\input{../tikz/build_flash_flow}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{IMU の軸定義 / IMU Axis Convention}
+  \vspace{-0.5em}
+  \begin{center}
+    \resizebox{0.6\textwidth}{!}{\input{../tikz/imu_axes}}
+  \end{center}
+  \vspace{-0.5em}
+  \begin{block}{}
+    \centering\small
+    BMI270 --- 6軸（3軸ジャイロ + 3軸加速度）400\,Hz \quad|\quad Body FRD 座標系
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{IMU API と単位 / IMU API \& Units}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{関数} & \textbf{説明} & \textbf{単位} \\
+      \hline
+      \api{gyro\_x/y/z()}  & 角速度（Roll/Pitch/Yaw） & rad/s \\
+      \api{accel\_x/y/z()} & 加速度（X/Y/Z） & m/s\textsuperscript{2} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{静止時の目安}
+    \small ジャイロ $\approx 0$、加速度 Z $\approx -9.81$\,m/s\textsuperscript{2}（重力に対する反力）
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{データ取得経路① Teleplot / Data Path 1: Teleplot}
+  \begin{block}{\api{ws::print} をそのままグラフにする}
+    \small \code{>変数名:値} の形式で出力すると、VSCode拡張機能 Teleplot がリアルタイムにグラフ化する
+  \end{block}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+void loop_400Hz(float dt) {
+    if (tick++ % 4 == 0) {   // 100Hz decimation
+        ws::print(">gyro_x:%.3f", ws::gyro_x());
+        ws::print(">gyro_y:%.3f", ws::gyro_y());
+    }
+}
+  \end{sflisting}
+
+  {\footnotesize \code{sf monitor} で接続し、VSCode の Teleplot パネルを開くだけで波形が動き出す}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{データ取得経路② sf telemetry / Data Path 2: sf telemetry}
+  \begin{block}{コード変更なしでライブ表示}
+    \small 機体は状態推定値を常時 50\,Hz で送信している。受信して表示するだけなら学習者コードの変更は不要
+  \end{block}
+
+  \begin{lstlisting}[style=sfbash, numbers=none]
+sf telemetry          # ターミナル表示（既定）
+sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
+  \end{lstlisting}
+
+  \vspace{0.3em}
+
+  {\small 講義や複数人での画面共有には \code{--web} が見やすい}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{データ取得経路③ ログ取得と可視化 / Data Path 3: Log \& Visualize}
+  \begin{block}{WiFi 経由で 400\,Hz Data Stream を記録する}
+    \small \code{sf log wifi} は機体の WiFi アクセスポイントに接続して受信し、CSV として保存する
+  \end{block}
+
+  \begin{lstlisting}[style=sfbash, numbers=none]
+sf log wifi -d 30              # 30秒キャプチャ -> CSV自動保存
+sf log viz logs/stampfly_wifi_*.csv
+  \end{lstlisting}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{使い分けの目安}
+    \footnotesize Teleplot = その場で波形を見る／\code{sf telemetry} = コード変更なしで確認／\code{sf log wifi} = 後で解析するためのデータ保存
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{デモ: 傾けて確認 / Demo: Tilt Test}
+  \vspace{0.3em}
+
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \vspace{0.5em}
+
+  \begin{block}{何を見るか}
+    \begin{itemize}\small
+      \item StampFly を手に持ち、前後左右に傾ける
+      \item \api{gyro\_x}/\api{gyro\_y} が傾ける速さに応じて振れる
+      \item 静止させると \api{accel\_z} が $-9.81$ 付近に戻る
+    \end{itemize}
+  \end{block}
+
+  \begin{alertblock}{手順}
+    \footnotesize \code{sf lesson switch 4} $\to$ 前ページのコードを書く $\to$ \code{sf lesson build \&\& sf lesson flash} $\to$ Teleplot で確認
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{他のセンサ / Other Sensors}
+  \small IMU 以外のセンサも同じ考え方で読める。時間の都合で本セッションでは扱わないが、単独ビルド可能な例題として用意してある
+
+  \vspace{0.5em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{例題} & \textbf{センサ} \\
+      \hline
+      \code{examples/05\_read\_tof} & VL53L3CX（ToF距離センサ） \\
+      \code{examples/06\_read\_baro} & BMP280（気圧センサ） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  {\footnotesize \code{firmware/vehicle/examples/} 配下。各ディレクトリで \code{idf.py build} すれば単体で動く}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{理論とコードの対応表 / Theory-to-Code Map}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lccc}
+      \hline
+      \textbf{理論} & \textbf{コード} & \textbf{Data Stream 列} & \textbf{トピック} \\
+      \hline
+      角速度 $\omega$ [rad/s]\newline Body FRD & \api{ws::gyro\_x()} & \code{gyro\_x} & \code{sensor.imu} \\
+      並進加速度 $a$ [m/s\textsuperscript{2}] & \api{ws::accel\_x()} & \code{accel\_x} & \code{sensor.imu} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  {\small 学習者が呼ぶ \api{ws::} 関数は、内部で \code{sensor.imu} トピックを購読しているだけである（L0 $\to$ L1 の対応）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{復習パス / Review Path}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llll}
+    \hline
+    \textbf{コマンド} & \textbf{レッスン} & \textbf{文書} & \textbf{Notebook} \\
+    \hline
+    \code{sf lesson switch 0} & Lesson 0 & \code{docs/guides/troubleshooting.md} & --- \\
+    \code{sf lesson switch 4} & Lesson 4 & \code{firmware/vehicle/docs/architecture.md \S2} & \code{01\_hello\_stampfly.ipynb} \\
+    \code{sf log wifi} / \code{sf log viz} & --- & \code{docs/guides/flight-log-viz.md} & \code{15\_analysis\_toolkit.ipynb} \\
+    \hline
+  \end{tabular}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] \code{sf doctor} が通る、または代替経路（Web Flasher / GUI インストーラ）を把握した
+      \item[$\square$] \api{setup()}/\api{loop\_400Hz(dt)} の2関数構造を説明できる
+      \item[$\square$] ジャイロ・加速度をどれか1つの経路で確認できた
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のセッション}
+    S3: モータ制御とコントローラ入力の実装 --- センサの次は、機体を動かす側を作る
+  \end{block}
+\end{frame}

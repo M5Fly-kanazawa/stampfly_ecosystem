@@ -1,0 +1,109 @@
+% sci_tier_access.tex — 4-tier learner-entry-point diagram for the SCI tutorial
+% 4階層アクセス（学習者の入口）図。SCIチュートリアル用。
+%
+% Source of the four tiers: firmware/vehicle/docs/architecture.md §2
+% 「学習者の入口（4階層アクセス）」の表を図として再構成したもの。
+%
+% Layout: four stacked boxes, top = highest abstraction (L0, beginners),
+% bottom = lowest abstraction (L3, firmware implementers). A downward arrow
+% chain to the right of the boxes shows that a learner may step down as far
+% as their topic requires; each tier is otherwise usable on its own.
+% レイアウト: 4段の箱を縦に積む。上ほど抽象度が高く（L0・初心者向け）、
+% 下ほど抽象度が低い（L3・ファーム実装者向け）。箱の右側の下向き矢印は、
+% 学習者が必要な分だけ下の層へ降りられることを示す（各層は単独でも使える）。
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) → Yu Gothic (Windows) → Noto (Linux)
+% クロスプラットフォーム: ヒラギノ (macOS) → 游ゴシック (Windows) → Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+\definecolor{l0color}{RGB}{0, 100, 180}
+\definecolor{l1color}{RGB}{40, 140, 60}
+\definecolor{l2color}{RGB}{120, 80, 150}
+\definecolor{l3color}{RGB}{110, 110, 110}
+\definecolor{gray1}{RGB}{120, 120, 120}
+
+% Plain-LaTeX helper macros for the colored text lines inside each box
+% (kept as ordinary commands, not tikz styles, since they are used inside
+% node text rather than as tikzpicture options)
+% 箱の中の色付きテキスト用マクロ（ノードのテキスト内で使うのでtikzの
+% オプションではなく普通のLaTeXコマンドとして定義する）
+\newcommand{\ttier}[2]{{\bfseries\large\color{#1}#2}}
+\newcommand{\tns}[2]{{\ttfamily\normalsize\color{#1}#2}}
+\newcommand{\tsub}[1]{{\small\color{black!55}#1}}
+
+\begin{tikzpicture}[
+    tier/.style={
+      rectangle, rounded corners=4pt, draw=#1, line width=1.5pt,
+      fill=#1!8, minimum width=92mm, minimum height=25mm,
+      align=left, inner xsep=10mm, inner ysep=2mm
+    },
+    arr/.style={-{Stealth[length=3.2mm]}, line width=1.6pt, gray1},
+  ]
+
+  % Four tiers, top (L0, most abstract) to bottom (L3, closest to hardware)
+  % 4層。上（L0・最も抽象的）から下（L3・ハードウェアに最も近い）まで
+  \node[tier=l0color] (L0) at (0, 0) {%
+    \begin{minipage}{86mm}
+      \ttier{l0color}{L0: Sketch API}\quad\tns{l0color}{ws::*}\\[3pt]
+      \tsub{典型ユーザー: Workshop 受講者}\\[1pt]
+      \tsub{setup() / loop\_400Hz(dt)、30+ 関数で完結}
+    \end{minipage}%
+  };
+  \node[tier=l1color, below=12mm of L0] (L1) {%
+    \begin{minipage}{86mm}
+      \ttier{l1color}{L1: Topic API}\quad\tns{l1color}{sf::api::*}\\[3pt]
+      \tsub{典型ユーザー: 推定・制御学習者}\\[1pt]
+      \tsub{Topic を subscribe/publish、IEstimator/IController 差替え}
+    \end{minipage}%
+  };
+  \node[tier=l2color, below=12mm of L1] (L2) {%
+    \begin{minipage}{86mm}
+      \ttier{l2color}{L2: HAL Direct}\quad\tns{l2color}{stampfly::*Wrapper}\\[3pt]
+      \tsub{典型ユーザー: HW 学習者}\\[1pt]
+      \tsub{SPI / I2C を直接呼ぶ（Topic を介さない経路）}
+    \end{minipage}%
+  };
+  \node[tier=l3color, below=12mm of L2] (L3) {%
+    \begin{minipage}{86mm}
+      \ttier{l3color}{L3: BSP Internal}\quad\tns{l3color}{sf::internal::board}\\[3pt]
+      \tsub{典型ユーザー: ファーム実装者}\\[1pt]
+      \tsub{bus handle、起動順序を直接扱う}
+    \end{minipage}%
+  };
+
+  % Downward arrow chain, offset to the right of the boxes (clear of both
+  % box border and text — routed entirely in open space, T4 compliant)
+  % 下向き矢印の連鎖。箱の右外側（枠・テキストと重ならない空間）に配線
+  \draw[arr] ($(L0.south -| L0.east)+(10mm,0)$) -- ($(L1.north -| L1.east)+(10mm,0)$);
+  \draw[arr] ($(L1.south -| L1.east)+(10mm,0)$) -- ($(L2.north -| L2.east)+(10mm,0)$);
+  \draw[arr] ($(L2.south -| L2.east)+(10mm,0)$) -- ($(L3.north -| L3.east)+(10mm,0)$);
+
+  % Single side label for the whole arrow chain (vertically centered)
+  % 矢印の連鎖全体に対する説明ラベル（縦方向の中央に1つだけ配置）
+  \coordinate (midy) at ($(L1.south)!0.5!(L2.north)$);
+  \node[rotate=270, font=\small, text=gray1, align=center,
+        anchor=center] at ($(midy -| L0.east) + (26mm, 0)$)
+    {必要な分だけ降りられる\\（各層は単独でも使える）};
+
+\end{tikzpicture}
+\end{document}

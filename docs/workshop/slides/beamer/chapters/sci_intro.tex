@@ -1,2 +1,160 @@
-% sci_intro — SCI tutorial chapter (placeholder, filled by content work packages)
-% sci_intro — SCI チュートリアル章（仮置き。本文は作業パッケージで埋める）
+% ==============================================================================
+% sci_intro.tex — SCI/SICE tutorial: opening (instructor, format, map, safety)
+% SCI/SICE チュートリアル: オープニング（講師紹介・進め方・地図・安全）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+% \scisessionmap{N} — five-session-of-the-day map, overlaid on the
+% ecosystem's own design->implementation->experiment->analysis->education
+% cycle (see CLAUDE.md "Project Overview"). N selects which node(s) to
+% highlight (1-5); N=0 highlights nothing (used for the whole-day view in
+% this opening chapter). Defined here so S2-S5 can reuse it at the start
+% of their own chapter with \scisessionmap{2}..\scisessionmap{5}.
+%
+% \scisessionmap{N} --- 5セッションの地図。エコシステム自身の
+% 「設計→実装→実験→解析→教育」という循環（CLAUDE.md「Project Overview」）
+% に、本日の5セッションを重ねて示す。N (1-5) で該当ノードを強調表示する。
+% N=0 は強調なし（本章の全体像ページで使用）。S2〜S5 の各章が冒頭で
+% \scisessionmap{2}..\scisessionmap{5} として再利用できるよう、ここで定義する。
+% ------------------------------------------------------------------
+\newcommand{\scisessionmap}[1]{%
+  \def\cycDesignStyle{cycnode}%
+  \def\cycImplStyle{cycnode}%
+  \def\cycExpStyle{cycnode}%
+  \def\cycAnaStyle{cycnode}%
+  \def\cycEduStyle{cycnode}%
+  \ifnum#1=1 \def\cycDesignStyle{cychl}\fi
+  \ifnum#1=2 \def\cycImplStyle{cychl}\fi
+  \ifnum#1=3 \def\cycImplStyle{cychl}\fi
+  \ifnum#1=4 \def\cycExpStyle{cychl}\fi
+  \ifnum#1=5 \def\cycAnaStyle{cychl}\def\cycEduStyle{cychl}\fi
+  \begin{tikzpicture}[
+      cycnode/.style={
+        rectangle, rounded corners=3pt, draw=sfgray, line width=0.8pt,
+        fill=sfgray!6, text=sfgray, minimum width=32mm, minimum height=15mm,
+        align=center, font=\bfseries
+      },
+      cychl/.style={
+        rectangle, rounded corners=3pt, draw=sfblue, line width=2pt,
+        fill=sfblue!15, text=sfdark, minimum width=32mm, minimum height=15mm,
+        align=center, font=\bfseries
+      },
+      cycarr/.style={-{Stealth[length=2.6mm]}, line width=1.1pt, draw=sfgray!70},
+    ]
+    \node[\cycDesignStyle] (design) at (90:38mm)  {設計\\{\footnotesize\normalfont S1}};
+    \node[\cycImplStyle]   (impl)   at (18:38mm)  {実装\\{\footnotesize\normalfont S2 \textperiodcentered\ S3}};
+    \node[\cycExpStyle]    (exp)    at (-54:38mm) {実験\\{\footnotesize\normalfont S4}};
+    \node[\cycAnaStyle]    (ana)    at (234:38mm) {解析\\{\footnotesize\normalfont S5}};
+    \node[\cycEduStyle]    (edu)    at (162:38mm) {教育\\{\footnotesize\normalfont S5}};
+
+    \draw[cycarr] (design) to[bend left=18] (impl);
+    \draw[cycarr] (impl)   to[bend left=18] (exp);
+    \draw[cycarr] (exp)    to[bend left=18] (ana);
+    \draw[cycarr] (ana)    to[bend left=18] (edu);
+    \draw[cycarr] (edu)    to[bend left=18] (design);
+  \end{tikzpicture}%
+}
+
+% ------------------------------------------------------------------
+\begin{frame}{講師紹介 / Instructor}
+  \begin{block}{伊藤 恒平 --- 金沢工業大学}
+    \small StampFly Ecosystem の開発者。専門はドローンの飛行制御工学
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{itemize}\small
+    \item 本チュートリアルで扱うファームウェア・シミュレータ・教材は、すべて本人が開発と保守を行っている
+    \item 大学の講義、高校教員向け講座、本日のような学会チュートリアルなど、複数の教育現場で同じコードベースを使い回している
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{本日の進め方 / How Today Works}
+  \begin{block}{講義とデモのハイブリッド}
+    \small 講師が実演しながら説明を進める。手元の環境構築でつまずいても、その場で全員を待たせることはしない
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{itemize}\small
+    \item デモは「見るだけ」でも十分に内容を追える構成にしてある
+    \item 手を動かしたい方は、講師と同じコマンドを一緒に打ってみてほしい
+    \item 進度が合わなかった箇所は、録画と資料を使って帰宅後に復習できる
+  \end{itemize}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{各セッション共通の型}
+    \footnotesize 地図（今どこにいるか）→ 要点3つ → デモ → 理論とコードの対応表 → 復習パス → チェックポイント
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{参加のしかたと資料 / Participation \& Materials}
+  \begin{block}{デモの3段階}
+    \begin{itemize}\small
+      \item \textbf{見るだけ}: 画面とスクリーンを見ているだけで流れがわかる
+      \item \textbf{一緒に打つ}: 持参のPCとStampFlyでコマンドを再現する
+      \item \textbf{帰宅後に再現}: 会場では見るだけにして、録画と資料で後日試す
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{資料はすべて公開されている}
+    \footnotesize
+    リポジトリ: \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}\\
+    ドキュメント: \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/}\\
+    本日の内容はオンデマンド配信でも後日視聴できる
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{今日の地図 / Today's Map}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \vspace{-1mm}
+      \resizebox{\columnwidth}{!}{\scisessionmap{0}}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \small
+      StampFly Ecosystem は「設計 $\to$ 実装 $\to$ 実験 $\to$ 解析 $\to$ 教育」を循環させながら育ってきた。本日の5セッションはこの循環の上を進む
+      \vspace{0.5em}
+
+      \begin{table}
+        \centering\scriptsize
+        \begin{tabular}{ll}
+          \hline
+          S1 & 10:05 -- 11:00 \\
+          S2 & 11:00 -- 12:00 \\
+          \multicolumn{2}{c}{(昼休み)} \\
+          S3 & 13:00 -- 14:00 \\
+          S4 & 14:00 -- 15:00 \\
+          \multicolumn{2}{c}{(休憩)} \\
+          S5 & 15:30 -- 16:30 \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{必要機材と安全ルール / Equipment \& Safety}
+  \begin{block}{持参いただくもの}
+    \small StampFly 実機とコントローラ、ノートPC（実習に参加する場合）
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{飛行時の安全ルール}
+    \begin{itemize}\small\setlength{\itemsep}{2pt}
+      \item プロペラガードを装着した状態で飛行させる
+      \item 飛行エリアはネットで区画された範囲に限る
+      \item \warn{ARM} は機体ボタンの単クリックまたはコントローラで行う。予期せず回転したら即座に \warn{DISARM}
+      \item 機体の真上には顔や手を出さない
+    \end{itemize}
+  \end{alertblock}
+\end{frame}
