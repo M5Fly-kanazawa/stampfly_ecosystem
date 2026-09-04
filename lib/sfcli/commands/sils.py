@@ -103,6 +103,19 @@ def promote_legacy_environment() -> None:
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
 NOISE_LEVELS = ["off", "n0", "n1", "n2"]
+
+# Friendly firmware target name -> its emulator exe / CMake target name
+# (CMakeLists.txt names every emulator "emu_<target>"). "workshop" runs the
+# learner's own setup()/loop_400Hz() (main/user_code.cpp, copied by `sf lesson
+# switch`) through the same reused vehicle sensor/state tasks as "vehicle" —
+# see simulator/sils/CMakeLists.txt's emu_workshop comment.
+# 親しみやすいファーム名 -> エミュレータ exe / CMake ターゲット名（CMakeLists.txt は
+# 全エミュレータを "emu_<target>" と命名）。"workshop" は学習者自身の
+# setup()/loop_400Hz()（`sf lesson switch` がコピーする main/user_code.cpp）を、
+# "vehicle" と同じ再利用センサ/状態タスク経由で走らせる — CMakeLists.txt の
+# emu_workshop コメント参照。
+SILS_TARGETS = ("vehicle", "vehicle_old", "workshop")
+_TARGET_EXE_NAME = {name: f"emu_{name}" for name in SILS_TARGETS}
 # Default sensor-noise level per milestone (RESET_PLAN §13): noise milestones run N0.
 # マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で走る。
 MILESTONE_NOISE = {"P5": "n0", "P6": "n0", "P7": "n0"}
@@ -303,7 +316,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("build", help="Build the host SILS")
     p.add_argument("-j", "--jobs", type=int, default=8)
-    p.add_argument("-t", "--target", default=None, help="cmake target (default: all)")
+    p.add_argument("-t", "--target", default=None,
+                   help="cmake target (default: all). A friendly firmware name "
+                        f"({', '.join(SILS_TARGETS)}) is mapped to its emu_<name> "
+                        "CMake target; any other value is passed through as-is "
+                        "(e.g. cores_smoke, hover_smoke, emu_vehicle).")
     p.set_defaults(func=run_build)
 
     p = sub.add_parser("run", help="Run the closed loop and write the bundle")
@@ -330,9 +347,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # E6: 決定論的な *.scn 入力シナリオを走らせ、ファーム出力をアサートする。
     p = sub.add_parser("scenario", help="Run a *.scn input scenario and assert outputs (E6)")
     p.add_argument("scenario", help="path to the .scn scenario file")
-    p.add_argument("--target", choices=["vehicle", "vehicle_old"], default="vehicle",
+    p.add_argument("--target", choices=list(SILS_TARGETS), default="vehicle",
                    help="emulator binary (default: vehicle = current firmware; "
-                        "vehicle_old = legacy firmware)")
+                        "vehicle_old = legacy firmware; workshop = learner "
+                        "setup()/loop_400Hz() from `sf lesson switch`, on the "
+                        "same reused vehicle sensor/state tasks)")
     p.add_argument("--expect", default=None,
                    help="assertions file (default: <scenario>.expect if it exists)")
     p.add_argument("--duration", type=int, default=25_000_000,
@@ -497,6 +516,12 @@ def run_build(args: argparse.Namespace) -> int:
     # milestone フローは -j/-t を持たないので getattr で既定値化して再利用できるようにする。
     jobs = getattr(args, "jobs", 8)
     target = getattr(args, "target", None)
+    # Map a friendly firmware name (vehicle/vehicle_old/workshop) onto its
+    # actual CMake target (emu_<name>); any other value (cores_smoke,
+    # hover_smoke, an explicit emu_vehicle, ...) passes through unchanged.
+    # 親しみやすいファーム名を実際の CMake ターゲット（emu_<name>）へ写像する。
+    # それ以外の値（cores_smoke・hover_smoke・明示的な emu_vehicle 等）はそのまま。
+    target = _TARGET_EXE_NAME.get(target, target)
     sd, bd = _sils_dir(), _build_dir()
     env = win_run_env(bd)
 
@@ -811,7 +836,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
 def run_scenario(args: argparse.Namespace) -> int:
     target = getattr(args, "target", "vehicle")
     bd = _build_dir()
-    exe = bd / _exe("emu_vehicle" if target == "vehicle" else "emu_vehicle_old")
+    exe = bd / _exe(_TARGET_EXE_NAME.get(target, f"emu_{target}"))
     if not exe.exists():
         console.error(f"{exe.name} not built — run 'sf sils build' first"); return 1
     # Build-freshness advisory (skippable — see SF_SILS_SKIP_FRESHNESS_CHECK): warn if

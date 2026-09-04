@@ -402,6 +402,113 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_VV_INCS})
   target_link_libraries(emu_vehicle_old PRIVATE Threads::Threads mujoco)
+
+  # ---------------------------------------------------------------------------
+  # Third firmware: firmware/workshop (rebuilt 2026-07-18 on the vehicle
+  # component base — R12, workshop_migration.md §8). Task table is IDENTICAL to
+  # emu_vehicle EXCEPT ControlTask: firmware/workshop/main/workshop_control_task.cpp
+  # (WorkshopControlTask) replaces vehicle/tasks/control_task.cpp and calls the
+  # learner's setup()/loop_400Hz() (main/user_code.cpp, copied by `sf lesson
+  # switch`) instead of running sf::PidController — every other task (ImuTask,
+  # StateTask, sensors, comm, ...) is the SAME vehicle source, unmodified. This
+  # gives Code Identity for the LEARNER's own control law, not just the
+  # firmware's: the exact student/solution.cpp that gets flashed to hardware
+  # runs here and closes the loop through the same MuJoCo Plant as emu_vehicle.
+  # emu_main.cpp / devices/emu_vehicle_glue.cpp are reused UNCHANGED — both only
+  # touch generic vehicle topics (sf::estimate_state, sf::system_mode, ...)
+  # populated by the reused sensor/state tasks, with no PID-controller-specific
+  # assumption, so they need no workshop-specific counterpart.
+  #
+  # 3本目: firmware/workshop（2026-07-18 に vehicle のコンポーネント基盤上に
+  # 再構築済み — 横断ルール R12、workshop_migration.md §8）。タスク表は
+  # emu_vehicle と同一で ControlTask のみ例外:
+  # firmware/workshop/main/workshop_control_task.cpp（WorkshopControlTask）が
+  # vehicle/tasks/control_task.cpp を置き換え、sf::PidController の代わりに学習者の
+  # setup()/loop_400Hz()（`sf lesson switch` がコピーする main/user_code.cpp）を
+  # 呼ぶ — それ以外の全タスク（ImuTask・StateTask・センサ・通信…）は同一の vehicle
+  # ソースを無改変で再利用する。これによりファーム自体だけでなく「学習者自身の
+  # 制御則」の Code Identity が実証される: 実機に書き込まれるのと同じ
+  # student/solution.cpp がここで動き、emu_vehicle と同じ MuJoCo Plant でループを
+  # 閉じる。emu_main.cpp / devices/emu_vehicle_glue.cpp はそのまま再利用する —
+  # どちらも汎用の vehicle トピック（sf::estimate_state, sf::system_mode 等、
+  # 再利用センサ/状態タスクが発行）しか触れず PID コントローラ固有の前提が無いため、
+  # workshop 専用版は不要。
+  # ---------------------------------------------------------------------------
+  set(WS ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/workshop)
+
+  # Auto-bootstrap main/user_code.cpp from the Lesson 0 seed if absent — same
+  # first-configure convenience as firmware/workshop/main/CMakeLists.txt (the
+  # real firmware build), so `sf sils build --target workshop` also works on a
+  # fresh checkout before any `sf lesson switch` has run. Gitignored (see
+  # firmware/workshop/.gitignore); NOT overwritten if it already exists (`sf
+  # lesson switch` owns overwriting it thereafter).
+  # main/user_code.cpp が無ければ Lesson 0 テンプレートから生成する — 実ファーム
+  # ビルド（firmware/workshop/main/CMakeLists.txt）と同じ初回配慮。`sf lesson
+  # switch` が一度も走っていないチェックアウトでも `sf sils build --target
+  # workshop` が動く。gitignore 対象（firmware/workshop/.gitignore 参照）で
+  # 既存ファイルは上書きしない（以後の上書きは `sf lesson switch` の役目）。
+  set(WS_USER_CODE "${WS}/main/user_code.cpp")
+  set(WS_USER_CODE_SEED "${WS}/lessons/lesson_00_setup/student.cpp")
+  if(NOT EXISTS "${WS_USER_CODE}" AND EXISTS "${WS_USER_CODE_SEED}")
+    configure_file("${WS_USER_CODE_SEED}" "${WS_USER_CODE}" COPYONLY)
+    message(STATUS "[sils] Bootstrapped ${WS_USER_CODE} from Lesson 0 template")
+  endif()
+
+  # Reuse EMU_FW_SRCS (vehicle main+tasks+components, already filtered for
+  # docs/examples/test/build/CubeIDE) minus vehicle/main/main.cpp (own app_main)
+  # and tasks/control_task.cpp + tasks/tasks.cpp (own ControlTask + start_all) —
+  # the exact same exclusion firmware/workshop/main/CMakeLists.txt makes for the
+  # real firmware build.
+  # EMU_FW_SRCS（vehicle の main+tasks+components、docs/examples/test/build/
+  # CubeIDE 除外済み）を再利用し、vehicle/main/main.cpp（自前 app_main を持つため）と
+  # tasks/control_task.cpp + tasks/tasks.cpp（自前 ControlTask + start_all を
+  # 持つため）を除く — 実ファームビルド（firmware/workshop/main/CMakeLists.txt）と
+  # 全く同じ除外。
+  set(EMU_WS_SRCS ${EMU_FW_SRCS})
+  list(FILTER EMU_WS_SRCS EXCLUDE REGEX "/main/main\\.cpp$|/tasks/(control_task|tasks)\\.cpp$")
+
+  add_executable(emu_workshop
+    ${CMAKE_CURRENT_SOURCE_DIR}/emu/emu_main.cpp               # unchanged — reads generic vehicle topics only
+    ${EMU_WS_SRCS}
+    ${WS}/main/workshop_main.cpp        # app_main (5-phase boot, ControlTask -> WorkshopControlTask)
+    ${WS}/main/workshop_tasks.cpp       # sf::workshop_tasks::start_all()
+    ${WS}/main/workshop_control_task.cpp # WorkshopControlTask (calls learner setup()/loop_400Hz())
+    ${WS}/main/workshop_api.cpp         # ws::* implementation
+    ${WS}/main/user_code.cpp            # learner code (bootstrapped above; overwritten by `sf lesson switch`)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c  # missing fw platform fn
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp     # E1: BMI270 + motors → Plant
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp       # E2: VL53L3CX ToF chip model
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp    # PMW3901 optical-flow chip model
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SILS_EMU_TRAJ)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_rate_stream.cpp   # model-match gate: 400Hz rate_ref+gyro (SILS_EMU_RATE_STREAM)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # estimate overlay (sf::estimate_state → trajectory); reused unchanged, no PID-specific assumption
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp  # Phase 6: CLI console registry (cli_task)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_realtime.cpp      # P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/rc_stdin.cpp          # P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
+    plant/plant.cpp                                           # MuJoCo physics plant
+    rtos/scheduler.cpp
+    rtos/esp_timer_shim.cpp
+    compat/clock_shim.cpp
+    compat/nvs_shim.cpp
+    ${EMU_WIN_COMPAT_SRCS})
+  # esp_idf_host + compat FIRST (shim headers win), then EMU_FW_INCS (vehicle
+  # component/main/tasks includes, shared with emu_vehicle) PLUS the workshop
+  # main dir itself (workshop_api.hpp / ws_internal.hpp — no filename collision
+  # with vehicle/main, verified).
+  # esp_idf_host ＋ compat を最優先（シムヘッダ優先）、続けて EMU_FW_INCS（vehicle の
+  # component/main/tasks include、emu_vehicle と共有）＋ workshop 自身の main
+  # ディレクトリ（workshop_api.hpp / ws_internal.hpp — vehicle/main とのファイル名
+  # 衝突なしを確認済み）。
+  target_include_directories(emu_workshop BEFORE PRIVATE
+    ${EMU_HOST} ${SILS_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos
+    ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_FW_INCS} ${WS}/main)
+  target_link_libraries(emu_workshop PRIVATE Threads::Threads mujoco)
 endif()
 
 # -----------------------------------------------------------------------------
