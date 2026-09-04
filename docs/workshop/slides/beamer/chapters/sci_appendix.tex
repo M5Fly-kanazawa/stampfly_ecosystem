@@ -1,2 +1,174 @@
-% sci_appendix — SCI tutorial chapter (placeholder, filled by content work packages)
-% sci_appendix — SCI チュートリアル章（仮置き。本文は作業パッケージで埋める）
+% ==============================================================================
+% sci_appendix.tex — SCI/SICE tutorial appendix: cheat sheets, review paths,
+% troubleshooting (take-home material)
+% SCI/SICE チュートリアル 付録: チートシートと復習パス（持ち帰り資料）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf CLI チートシート (1/2) / sf CLI Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{75mm}}
+      \hline
+      \textbf{コマンド} & \textbf{機能} \\
+      \hline
+      \code{sf doctor}     & 環境診断（問題があればまず実行） \\
+      \code{sf build/flash/monitor} & ビルド・書き込み・シリアルモニタ \\
+      \code{sf telemetry}  & 50\,Hz テレメトリのライブ表示（\code{--web} でブラウザ） \\
+      \code{sf blocks}     & Blockly ブロックプログラミング（\code{--demo} で機体なしデモ） \\
+      \code{sf cal gyro/accel/mag} & センサキャリブレーション \\
+      \code{sf lesson}     & Workshop レッスン管理（\code{switch/build/flash}） \\
+      \code{sf trim}       & ホバーログから姿勢トリムを算出 \\
+      \code{sf flight}     & Tello 風ミニコマンド（\code{takeoff/land/hover/jump} 等） \\
+      \code{sf competition} & ホバー耐久・スコア記録 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf CLI チートシート (2/2) / sf CLI Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{75mm}}
+      \hline
+      \textbf{コマンド} & \textbf{機能} \\
+      \hline
+      \code{sf log wifi/capture} & WiFi/USB 経由でテレメトリ・ログ取得 \\
+      \code{sf log viz/analyze}  & ログ可視化・解析 \\
+      \code{sf sim run vpython/genesis} & シミュレータ起動（S5） \\
+      \code{sf sils build/scenario/gui} & SILS ベンチ（S5） \\
+      \code{sf sysid fit}        & 閉ループ P 制御ログからプラント同定（L7） \\
+      \code{sf sysid rate-fit/rate-tune} & 開ループ ETFE 同定と仕様ベース PID 設計（S4） \\
+      \code{sf params check}     & 物理パラメータ整合検査 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 順序は \code{sf --help} 表示順に準拠。全コマンドは \code{lib/sfcli/commands/} に実装がある}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ws:: API チートシート (1/2) / ws:: API Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{72mm}}
+      \hline
+      \textbf{カテゴリ} & \textbf{関数} \\
+      \hline
+      モータ制御 & \code{motor\_set\_duty(id,duty)}, \code{motor\_set\_all(duty)},
+        \code{motor\_stop\_all()}, \code{motor\_mixer(t,r,p,y)}, \code{arm()},
+        \code{disarm()}, \code{is\_armed()} \\
+      コントローラ入力 & \code{rc\_throttle/roll/pitch/yaw()} \\
+      ボタン・モード & \code{rc\_throttle\_yaw\_button()}, \code{rc\_roll\_pitch\_button()},
+        \code{rc\_stabilize\_acro\_mode()}, \code{rc\_alt\_mode()}, \code{rc\_pos\_mode()} \\
+      LED 制御 & \code{led\_color(r,g,b)}, \code{disable/enable\_led\_task()} \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ws:: API チートシート (2/2) / ws:: API Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{72mm}}
+      \hline
+      \textbf{カテゴリ} & \textbf{関数} \\
+      \hline
+      IMU センサ & \code{gyro\_x/y/z()}, \code{accel\_x/y/z()} \\
+      環境・距離センサ & \code{baro\_altitude/pressure()}, \code{mag\_x/y/z()},
+        \code{tof\_bottom/front()}, \code{flow\_vx/vy/quality()} \\
+      姿勢推定 & \code{estimated\_roll/pitch/yaw()}, \code{estimated\_altitude()} \\
+      制御目標のロギング & \code{set\_rate\_target(r,p,y)}, \code{set\_angle\_target(r,p)}
+        （L7，Data Stream の \code{rate\_ref\_*}/\code{angle\_ref\_*} に記録，制御には無関係） \\
+      ユーティリティ & \code{millis()}, \code{battery\_voltage()}, \code{print(fmt,...)},
+        \code{set\_channel(ch)} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize \code{\#include "workshop\_api.hpp"}，全関数は \code{ws::} 名前空間}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{トラブルシューティング (1/2) / Troubleshooting}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{55mm}}
+      \hline
+      \textbf{症状} & \textbf{原因} & \textbf{対処} \\
+      \hline
+      StampFly の WiFi が見つからない & 電源が入っていない & バッテリーを確認，電源を入れ直す \\
+      接続しても通信できない & IP アドレスが違う & \code{192.168.4.1} を確認 \\
+      離陸しない & キャリブレーション未実施 & \code{sf cal gyro} を実行 \\
+      振動する & PID ゲインが高すぎる & ゲインを下げる（S4 参照） \\
+      シミュレータに自動フォールバック & WiFi 未接続 & 意図的ならそのまま使用可 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 出典: \code{docs/guides/troubleshooting.md}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{トラブルシューティング (2/2) / Troubleshooting}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{55mm}}
+      \hline
+      \textbf{症状} & \textbf{原因} & \textbf{対処} \\
+      \hline
+      ビルドエラー（赤字 \code{error:}） & 打ち間違い（カンマ・セミコロン抜け等） & エラー1行目のファイル名・行番号を確認し実習コードと見比べる \\
+      \code{sf lesson flash} が失敗 & USB ケーブル・ポートの問題 & ケーブル交換／ポートを使う他アプリを閉じる／BOOT ボタンを押しながら挿し直す \\
+      モータが回らない & ARM し忘れ／USB 接続のまま & 機体ボタンを1回クリック／USB を外しバッテリー駆動を確認 \\
+      起動 LED が緑にならない & 校正中に機体を動かした & 機体を静かに置き直し，緑点灯＋ビープ3回まで待つ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 出典: DXH 講座トラブルシューティング早見表（\code{docs/workshop/dxh2026/handout.md}）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{5セッション復習パス / Review Path, All Sessions}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{lllll}
+    \hline
+    & \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} & \textbf{Notebook} \\
+    \hline
+    S1 & \code{sf sim run}         & シミュレータ操縦        & \code{docs/architecture/simulation-policy.md} & 01\_hello\_stampfly \\
+    S1 & ---                       & 大学講義シラバス         & \code{docs/university/syllabus.md}            & 全15本 \\
+    S2 & \code{sf lesson switch 4} & IMU センサ              & \code{firmware/vehicle/docs/architecture.md \S2} & 01\_hello\_stampfly \\
+    S2 & \code{sf log wifi/viz}    & テレメトリ取得と可視化  & \code{docs/guides/flight-log-viz.md}          & 15\_analysis\_toolkit \\
+    S3 & \code{sf lesson switch 1} & モータ制御              & \code{firmware/vehicle/docs/hardware\_init.md} & --- \\
+    S3 & \code{sf lesson switch 2} & コントローラ入力        & \code{protocol/spec/}（ControlPacket）        & --- \\
+    S4 & \code{sf lesson switch 8} & PID 制御                & \code{pid\_control.tex}                       & 04\_pid\_theory \\
+    S4 & \code{sf sysid fit}       & システム同定            & \code{system\_identification.tex}             & 07\_system\_identification \\
+    S5 & \code{sf sils gui}        & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md}           & --- \\
+    S5 & \code{sf log viz}         & ログ解析                & \code{docs/guides/flight-log-viz.md}          & 15\_analysis\_toolkit \\
+    \hline
+  \end{tabular}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{持ち帰りのご案内 / Take It Home}
+  \begin{exampleblock}{資料はすべて公開されている}\small
+    \begin{itemize}
+      \item リポジトリ: \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}
+      \item ドキュメント: \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/}
+      \item 本日の内容はオンデマンド配信でも後日視聴できる
+    \end{itemize}
+  \end{exampleblock}
+
+  \vspace{0.5em}
+
+  \begin{block}{ご自身の StampFly で}\small
+    ノート PC と StampFly さえあれば，今日のデモは自宅・研究室でそのまま再現できる。
+    まずは \code{sf doctor} で環境を確認してから始めてほしい
+  \end{block}
+
+  \vspace{0.5em}
+
+  {\small ご質問・不具合報告はリポジトリの Issue へ。開発に協力してくれる方も歓迎する}
+\end{frame}
