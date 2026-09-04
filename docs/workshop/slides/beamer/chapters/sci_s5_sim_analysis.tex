@@ -194,24 +194,22 @@ sf sils gui
 \end{frame}
 
 % ------------------------------------------------------------------
-% [WP-B dependent] --target workshop is being added by another work
-% package; sils.py currently only accepts vehicle/vehicle_old.
-\begin{frame}{学習者コードを SILS で試す / Learner Code in SILS}
+\begin{frame}[fragile]{学習者コードを SILS で試す / Learner Code in SILS}
   \begin{block}{実機の前にシミュレータで確かめる}\small
     S4 で書いた PID コードを，実機を飛ばす前に SILS で検証する。
     墜落のリスクなしに極端なゲインや外乱を試せる
   \end{block}
 
-  \vspace{0.5em}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf sils build --target workshop
+sf sils scenario .../workshop_acro.scn --target workshop
+  \end{sflisting}
 
-  \begin{alertblock}{現状}\footnotesize
-    \code{sf sils} の \code{--target} は現在 \code{vehicle}/\code{vehicle\_old} のみ。
-    学習者コード（workshop ファーム）を対象にした \code{--target workshop} は
-    追加作業中
-  \end{alertblock}
-
-  {\small 対応後は，L5〜L9 で書いたコードをそのまま SILS シナリオで
-  飛ばして，実機前の当たりを付けられるようになる}
+  \begin{exampleblock}{現状}\scriptsize
+    \code{--target workshop} に対応済み。L5/L8 の模範解答で ARM$\to$離陸$\to$
+    ホバー相当の飛行を確認できる。高度ループがないため着陸は DISARM に
+    よる降下のみ。\code{sf sils regression} の自動 CI には未組み込み
+  \end{exampleblock}
 \end{frame}
 
 % ------------------------------------------------------------------
