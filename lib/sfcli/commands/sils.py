@@ -447,6 +447,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("regression", help="Run all *.scn/*.expect scenarios and gate (CI)")
     p.add_argument("--json-out", default=None,
                    help="write a machine-readable summary (per-scenario pass/fail) to this path")
+    p.add_argument("--include-workshop", action="store_true",
+                   help="also run workshop-target scenarios (default: SKIPPED — they "
+                        "depend on whatever firmware/workshop/main/user_code.cpp "
+                        "currently holds, which `sf lesson switch` owns and a fresh "
+                        "checkout's CMake bootstrap seeds with Lesson 0 (drives no "
+                        "motors), so a liftoff gate fails by construction there, not "
+                        "from a real regression. Run `sf lesson switch N --solution` "
+                        "first, then pass this flag)")
     p.set_defaults(func=run_regression)
 
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
@@ -1656,9 +1664,40 @@ def run_regression(args: argparse.Namespace) -> int:
 
     console.info(f"SILS regression: {len(scenarios)} scenario(s) with a matching .expect...")
     results = []
+    include_workshop = getattr(args, "include_workshop", False)
     for scn in scenarios:
         extra = _scenario_invocation(scn)
         target = extra[extra.index("--target") + 1]
+
+        # workshop-target scenarios depend on whatever main/user_code.cpp CURRENTLY
+        # contains — that file is `sf lesson switch`'s target, gitignored, not repo
+        # state. A fresh checkout's CMake bootstrap (simulator/sils/CMakeLists.txt)
+        # seeds it from the Lesson 0 template, which drives no motors, so a liftoff
+        # gate like workshop_acro.expect's `metric alt_max > 0.1` fails there BY
+        # CONSTRUCTION, not because of a real regression — this would otherwise
+        # redden CI on every PR regardless of content. Skip by default (does not
+        # count as FAIL — see the SKIP status below, same non-gating treatment as
+        # xfail's KNOWN-FAIL); --include-workshop opts in once the caller has
+        # switched to a known lesson (see workshop_acro.scn's header).
+        # workshop 対象シナリオは main/user_code.cpp の「現在の」中身に依存する —
+        # このファイルは `sf lesson switch` の対象であり gitignore 対象、リポジトリ
+        # 状態ではない。新規チェックアウトの CMake ブートストラップ
+        # （simulator/sils/CMakeLists.txt）は Lesson 0 テンプレートから種付けし、
+        # これはモータを動かさないため、workshop_acro.expect の
+        # `metric alt_max > 0.1` のような離陸ゲートは実回帰ではなく構造的に失敗する
+        # — これを放置すると内容に関わらず全 PR で CI が赤くなる。既定でスキップし
+        # （FAIL 扱いしない — 下の SKIP ステータス、xfail の KNOWN-FAIL と同じ
+        # 非ゲート扱い）、--include-workshop は呼び出し側が既知のレッスンへ切り替えた
+        # 後にのみ opt-in する（workshop_acro.scn のヘッダ参照）。
+        if target == "workshop" and not include_workshop:
+            status = "SKIP"
+            console.info(f"  [SKIP] {scn.stem} (target=workshop; run manually after "
+                         f"`sf lesson switch N --solution`, or pass --include-workshop)")
+            results.append({"name": scn.stem, "target": target, "extra_args": extra,
+                            "pass": True, "exit_code": 0, "elapsed_s": 0.0,
+                            "xfail_reason": None, "status": status})
+            continue
+
         cmd = [sys.executable, "-m", "sfcli", "sils", "scenario", str(scn)] + extra
         t0 = time.monotonic()
         r = subprocess.run(cmd)
@@ -1702,15 +1741,18 @@ def run_regression(args: argparse.Namespace) -> int:
     n_known_fail = sum(1 for r in results if r["status"] == "KNOWN-FAIL")
     n_xpass = sum(1 for r in results if r["status"] == "XPASS")
     n_fail = sum(1 for r in results if r["status"] == "FAIL")
+    n_skip = sum(1 for r in results if r["status"] == "SKIP")
     # n_fail (real, un-marked FAILs) and n_xpass (fixed-but-still-marked) are the
-    # only two statuses that gate the regression — KNOWN-FAIL is informational.
+    # only two statuses that gate the regression — KNOWN-FAIL and SKIP (workshop
+    # scenarios skipped by default — see the loop above) are informational only.
     # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが回帰をゲート
-    # する — KNOWN-FAIL は情報表示のみ。
+    # する — KNOWN-FAIL と SKIP（既定でスキップされる workshop シナリオ。上のループ
+    # 参照）は情報表示のみ。
     n_unexpected = n_fail + n_xpass
 
     if getattr(args, "json_out", None):
         summary = {"total": len(results), "pass": n_pass, "known_fail": n_known_fail,
-                  "xpass": n_xpass, "fail": n_unexpected, "scenarios": results}
+                  "xpass": n_xpass, "fail": n_unexpected, "skip": n_skip, "scenarios": results}
         Path(args.json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         console.info(f"Summary written to {args.json_out}")
 
@@ -1725,7 +1767,7 @@ def run_regression(args: argparse.Namespace) -> int:
                              f"remove the xfail marker in {r['name']}.expect")
         return 1
     console.success(f"SILS regression: {n_pass} PASS + {n_known_fail} KNOWN-FAIL "
-                    f"({len(results)} total) known-fail={n_known_fail}")
+                    f"+ {n_skip} SKIP ({len(results)} total) known-fail={n_known_fail}")
     return 0
 
 

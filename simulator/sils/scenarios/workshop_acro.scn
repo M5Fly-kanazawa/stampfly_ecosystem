@@ -71,6 +71,35 @@
 # 直接切る＝）DISARM 直行を採用した — acro_flight.scn（vehicle）で既に安全と実証
 # 済みのパターン（近い高度・速度域からの自由落下は衝撃アラート無く収束）と同じ。
 #
+# SKIPPED BY DEFAULT IN `sf sils regression` (2026-09-04): this scenario needs
+# firmware/workshop/main/user_code.cpp to actually be a rate-control solution
+# (Lesson 5/8) — that file is gitignored and owned by `sf lesson switch`, so a
+# fresh checkout's CMake bootstrap seeds it with the Lesson 0 template (drives no
+# motors), which would fail the alt_max liftoff gate below BY CONSTRUCTION, not
+# from a real regression. `sf sils regression` therefore skips any scenario whose
+# header declares --target workshop unless `--include-workshop` is passed (see
+# lib/sfcli/commands/sils.py's run_regression). To run this scenario for real:
+#   sf lesson switch 8 --solution
+#   touch firmware/workshop/main/user_code.cpp   # `sf lesson switch` preserves
+#                                                 # the source mtime (shutil.copy2),
+#                                                 # which can make ninja skip the
+#                                                 # rebuild below otherwise
+#   sf sils build --target workshop
+#   sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
+#   # or: sf sils regression --include-workshop
+#
+# `sf sils regression` での既定スキップ（2026-09-04）: 本シナリオが検証するのは
+# firmware/workshop/main/user_code.cpp が実際にレート制御の解答（Lesson 5/8）で
+# あることが前提 — このファイルは gitignore 対象で `sf lesson switch` が所有する
+# ため、新規チェックアウトの CMake ブートストラップは Lesson 0 テンプレート
+# （モータを動かさない）で種付けし、下の alt_max 離陸ゲートは実回帰ではなく
+# 構造的に失敗する。そのため `sf sils regression` はヘッダで --target workshop を
+# 宣言するシナリオを、`--include-workshop` を渡さない限りスキップする
+# （lib/sfcli/commands/sils.py の run_regression 参照）。実際に走らせるには
+# 上記コマンド（sf lesson switch 8 --solution → touch → sf sils build --target
+# workshop → sf sils scenario ... --target workshop、または
+# sf sils regression --include-workshop）を使うこと。
+#
 # Run: sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
