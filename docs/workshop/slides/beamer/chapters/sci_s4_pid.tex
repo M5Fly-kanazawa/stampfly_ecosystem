@@ -266,11 +266,11 @@ ws::motor_mixer(ws::rc_throttle(),
     $K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d$
   \end{block}
 
-  {\footnotesize L8 で使う推奨ゲイン（$K_p$ は前ページのモデルベース設計値，$\eta=0.125$ 共通）:
-  Roll $(0.25,\,1.67,\,0.01)$，Pitch $(0.36,\,1.67,\,0.01)$，Yaw $(3.19,\,4.0,\,0.005)$}
+  {\footnotesize L8 の解答が使うゲイン $(K_p, T_i, T_d)$（$\eta=0.125$ 共通）:
+  Roll $(0.25,\,1.67,\,0.01)$，Pitch $(0.36,\,1.67,\,0.01)$。$K_p$ は前ページの $\zeta=0.7$ 設計値}
   \par\vspace{0.2em}
-  {\scriptsize Yaw の $K_p$ はレッスン教材の値ではなく，本ページと同じ $\zeta=0.7$ 設計式を
-  $K=8.0$（最新の実測値）に適用した値を掲載する}
+  {\scriptsize Yaw は L8 の解答では経験値 $K_p=2.0$ を使う。同じ設計式を最新の実測値 $K=8.0$ に
+  適用すると $K_p=3.19$ になり，設計式で追い直せる例として挙げる}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -286,7 +286,7 @@ float D = Kp*Td*(err-prev_err)/dt;
 float alpha = 2*eta*Td/dt;
 float a=(alpha-1)/(alpha+1);
 float b=2*Td/((alpha+1)*dt);
-d_filt = a*d_filt - b*(err-prev_err);
+d_filt = a*d_filt + b*(err-prev_err);
       \end{lstlisting}
     \end{column}
     \begin{column}{0.5\textwidth}
@@ -395,14 +395,14 @@ sf sysid fit flight.csv --kp 0.5 --plot
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{自動チューニング: sf sysid rate-fit / rate-tune}
   \begin{block}{ETFE によるプラント同定と仕様ベースのゲイン設計}\footnotesize
-    ステップドサイン励振で軸ごとに $(b, L, T)$ を推定し，
+    チャープ（またはダブレット）励振で軸ごとに $(b, L, T)$ を推定し，
     $G_p(s) = b\,e^{-Ls}/(s(Ts+1))$ にフィットする。sf sysid fit と違い
     $K_p$ を仮定しない開ループ同定
   \end{block}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
-sf sysid rate-fit flight.csv --axis roll
-sf sysid rate-tune --fit result.yaml --wc 25 --pm 60
+sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   \end{sflisting}
 
   {\footnotesize \code{rate-tune} はゲイン交差周波数 $\omega_c$ と位相余裕 PM の仕様を満たす
@@ -435,9 +435,9 @@ sf sysid rate-tune --fit result.yaml --wc 25 --pm 60
 % ------------------------------------------------------------------
 \begin{frame}{発展の予告 / What's Next}
   \begin{itemize}\small
-    \item \textbf{オートチューン}: \code{sf sysid rate-fit/rate-tune} と同じアルゴリズムを
-          機体上で実行する \api{sf\_autotune}。ステップドサイン励振とプラントフィットを
-          オンボードで完結させる
+    \item \textbf{オートチューン}: \code{sf sysid rate-tune} と同じ $\omega_c$・PM 仕様のゲイン設計を
+          機体上で行う \api{sf\_autotune}。励振はステップドサインで，周波数点ごとの I/Q 積算から
+          $G(j\omega)$ を測り，プラントフィットまでオンボードで完結させる
     \item \textbf{ESKF}: 相補フィルタで自作した推定と，機体が実際に使う15状態
           ESKF の違い
     \item \textbf{高度・位置ループ}: 今日のレート/姿勢カスケードのさらに外側に
