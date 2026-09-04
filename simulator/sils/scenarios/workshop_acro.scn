@@ -1,0 +1,83 @@
+# workshop_acro.scn — learner Lesson 5/8 rate-control liftoff+hover (workshop, Layer 3)
+# 学習者 Lesson 5/8 レート制御 離陸+ホバー（workshop, Layer 3）
+#
+# Goal: prove a learner's Lesson 5 (P) / Lesson 8 (PID) solution.cpp can lift the
+# craft off the ground and hold level attitude in the SILS — the "SILS で離陸・
+# ホバーする" demo for the 9/10 tutorial. Unlike acro_flight.scn (vehicle target),
+# the throttle values here are NOT the vehicle open-loop thrust-fraction convention
+# (thrust = norm * max_thrust_, then converted through the nonlinear motor curve
+# thrustToDuty() in sf_actuator/actuator.cpp) — they are PWM DUTY DIRECTLY, because
+# ws::motor_mixer(T, ...)'s T is written straight to the motor HAL by
+# Actuator::applyTestDuties() (ws_internal.hpp resolve_motor_request(), bypassing
+# the mixer/thrust-curve entirely). Reusing acro_flight.scn's throttle raw values
+# (norm ~0.54-0.58, tuned to vehicle's thrust-fraction convention) as workshop duty
+# undershoots badly: measured SILS hover duty (see alt_flight.scn / this file's
+# derivation below) is ~0.676, so norm 0.54-0.58 commands ~35% less duty than
+# liftoff needs and the craft never leaves the ground (see simulator/sils/README.md
+# "エミュレータターゲット" section for the investigation that found this).
+#
+# 目的: 学習者の Lesson 5（P制御）/ Lesson 8（PID）の solution.cpp が SILS 上で
+# 実際に離陸し水平姿勢を保てることを示す — 9/10 チュートリアル向けデモ。
+# acro_flight.scn（vehicle 用）と異なり、ここのスロットル値は vehicle の開ループ
+# 推力比率規約（thrust = norm * max_thrust_ を sf_actuator/actuator.cpp の非線形
+# モータ曲線 thrustToDuty() で duty に変換）ではなく「PWM duty 直値」である —
+# ws::motor_mixer(T, ...) の T は Actuator::applyTestDuties() でモータ HAL へ
+# そのまま書き込まれる（ws_internal.hpp の resolve_motor_request()、ミキサー/
+# 推力曲線を完全に迂回）。acro_flight.scn のスロットル raw 値（norm ~0.54-0.58、
+# vehicle の推力比率規約に合わせて調整済み）を workshop の duty としてそのまま
+# 再利用すると大きく不足する: 実測 SILS ホバー duty（下記導出、alt_flight.scn 参照）
+# は ~0.676 なので、norm 0.54-0.58 は離陸に必要な duty より約35%少ない
+# （simulator/sils/README.md「エミュレータターゲット」節の調査で判明）。
+#
+# Hover-duty derivation (2026-09-04 investigation): alt_flight.scn (vehicle,
+# ALTITUDE_HOLD) settles to a steady per-motor duty of 0.6745-0.6784 (mean 0.6763)
+# while holding altitude flat (alt_band=0.093 m) in [11.0,17.8]s — see
+# simulator/sils/viz/out_scn_alt_flight/trajectory.csv columns m0..m3. That duty
+# IS the SILS Plant's actual hover-equilibrium PWM duty (thrust == weight), so it
+# is the right value to feed directly as workshop's T (unlike vehicle's own
+# throttle-stick convention, which is a THRUST fraction, not a duty).
+# ホバー duty の導出（2026-09-04 調査）: alt_flight.scn（vehicle, ALTITUDE_HOLD）は
+# 高度を平坦に保ちながら（alt_band=0.093m, [11.0,17.8]s）モータ duty 0.6745-0.6784
+# （平均0.6763）に収束する — 上記 trajectory.csv の m0..m3 列参照。この duty こそが
+# SILS Plant の実際のホバー均衡 PWM duty（推力=重量）であり、workshop の T へ
+# 直接渡すべき値（vehicle 自身のスティック規約は「推力比率」であって duty ではない）。
+#
+# Profile: ARM -> short climb burst (duty 0.72, above hover) -> cruise near the
+# measured hover duty (0.676) with sticks CENTERED (roll/pitch/yaw rate targets =
+# 0, i.e. "hover-equivalent": Lesson 5/8's rate loop has nothing to correct except
+# residual noise) -> DISARM directly (motors cut) while still airborne and settle.
+# 段階: ARM → 短い上昇バースト（duty 0.72、ホバーより上）→ 実測ホバー duty
+# （0.676）付近を巡航、スティックは中立のまま（roll/pitch/yaw のレート目標=0、
+# 「ホバー相当」— Lesson 5/8 のレートループは残留ノイズ以外に補正すべきものが無い）
+# → まだ空中にいる状態で直接 DISARM（モータ停止）し沈降・接地させる。
+#
+# NOTE on landing: an explicit scripted throttle-DOWN descent (duty below hover,
+# held for O(second)s to fly the craft back to the ground) was tried during the
+# investigation and is NOT used here — at this craft's mass (~37 g) even a modest
+# duty deficit compounds into meters/second of descent rate within under a second
+# (this is why STABILIZE/ACRO have no altitude hold: the pilot corrects
+# continuously in real time, which a static scripted profile cannot replicate) and
+# reliably tripped the IMU impact failsafe (measured 7.6-8.0 G, threshold 3.0 G —
+# sf_failsafe/include/failsafe.hpp's impact_accel_g) on ground contact. Cutting
+# power directly (this scenario's approach) matches the pattern already proven
+# safe by acro_flight.scn (vehicle target) — free-fall from a similar height/
+# velocity regime settles cleanly with no impact alert.
+# 着陸についての注記: スロットルを明示的に下げて着陸させる台本（duty をホバー未満に
+# 数百ms〜1秒程度保持）も調査中に試したが、本機体の質量（~37g）ではわずかな duty
+# 不足でも1秒未満で降下速度が m/s オーダーまで積み上がり（STABILIZE/ACRO に高度
+# ホールドが無い理由そのもの — 実パイロットは常時補正するが静的台本には不可能）、
+# 接地時に IMU 衝撃フェイルセーフ（実測7.6-8.0G、閾値3.0G — sf_failsafe/include/
+# failsafe.hpp の impact_accel_g）を確実に踏んだ。そのため本シナリオでは（電源を
+# 直接切る＝）DISARM 直行を採用した — acro_flight.scn（vehicle）で既に安全と実証
+# 済みのパターン（近い高度・速度域からの自由落下は衝撃アラート無く収束）と同じ。
+#
+# Run: sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc  2048  2048   2048    2048  0     4000      50   # A: disarmed 4s — boot calibration completes (~3.5s)
+   +    rc  2048  2048   2048    2048  1     500       50   # B: ARM (IDLE_GROUND -> ARMED_GROUND)
+   +    rc  3523  2048   2048    2048  1     400       50   # C: climb burst, duty=0.72 (above hover) -> TAKEOFF -> FLYING
+   +    rc  3432  2048   2048    2048  1     2500      50   # D: cruise near measured hover duty=0.676, sticks centered (hover-equivalent)
+   +    rc  2048  2048   2048    2048  0     200       50   # release ARM button
+   +    rc  2048  2048   2048    2048  1     200       50   # press again -> DISARM (toggle) — cuts power while airborne
+   +    rc  2048  2048   2048    2048  0     600       50   # settle disarmed (free-fall + ground contact, no throttle)

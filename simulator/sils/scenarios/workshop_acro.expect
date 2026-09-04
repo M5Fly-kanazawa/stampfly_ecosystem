@@ -1,0 +1,32 @@
+# workshop_acro.expect — loose liftoff + no-divergence gate for a learner's Lesson
+# 5/8 rate-control solution on the workshop SILS target. Deliberately loose (per
+# the 9/10 tutorial investigation): this is NOT a hover-quality/altitude-hold gate
+# (workshop has no altitude loop — see workshop_acro.scn's landing note) — it only
+# confirms (1) the craft actually leaves the ground under the learner's own control
+# law and (2) it does not tumble while doing so.
+# workshop_acro.expect — workshop SILS ターゲットで学習者の Lesson 5/8 レート制御
+# 解答に対する、離陸検知＋発散なしの緩いゲート。意図的に緩い（9/10 チュートリアル
+# 調査に基づく）: ホバー品質・高度保持のゲートではない（workshop に高度ループは
+# 無い — workshop_acro.scn の着陸に関する注記参照）— (1) 学習者自身の制御則で
+# 実際に地面を離れること、(2) その間に転倒しないこと、の2点のみ確認する。
+exit 0
+log_contains any "ARM accepted"          # IDLE_GROUND -> ARMED_GROUND
+log_contains any "Takeoff detected"      # ARMED_GROUND -> TAKEOFF
+log_contains any "Takeoff complete"      # TAKEOFF -> FLYING (ToF airborne, system_status.airborne)
+log_contains any "DISARM accepted"       # FLYING -> IDLE_GROUND (scripted disarm toggle)
+order "ARM accepted" "Takeoff detected"
+order "Takeoff detected" "Takeoff complete"
+order "Takeoff complete" "DISARM accepted"
+# G1-equivalent (liftoff): truth altitude clears 0.1 m during the climb+cruise
+# window [4.5,7.4]s (measured ~0.65 m peak with the Lesson 5/8 solutions, 2026-09-04).
+# G1相当（離陸）: 上昇+巡航窓 [4.5,7.4]s で真値高度が 0.1m を超える
+# （Lesson 5/8 解答での実測ピーク ~0.65m, 2026-09-04）。
+metric alt_max > 0.1 in 4.5 7.4
+# G3-equivalent (no divergence): combined roll+pitch tilt stays well bounded
+# through cruise and the post-disarm settle (measured ~0.00 deg — sticks are
+# centered throughout, so there is no commanded tilt to track). Loose 15 deg
+# threshold: this gate is about "no tumble", not tracking precision.
+# G3相当（発散なし）: 巡航〜disarm後の沈降まで roll+pitch 合成傾きが有界
+# （実測 ~0.00deg — スティックは終始中立で追従すべき傾き指令が無い）。閾値15度は
+# 緩め — 本ゲートは「転倒しない」ことの確認であり追従精度ではない。
+metric tilt_max < 15.0 in 4.5 8.4
