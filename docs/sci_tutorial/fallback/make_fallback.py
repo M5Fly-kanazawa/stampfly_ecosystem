@@ -77,18 +77,22 @@ SILS_DIR = ROOT / "simulator" / "sils"
 VIZ_DIR = SILS_DIR / "viz"
 OUT_DIR = ROOT / "docs" / "sci_tutorial" / "fallback"
 
-# Slide-readable plotting defaults: 150dpi, landscape, >=12pt fonts (project
-# slide rules — docs/sci_tutorial/fallback is reviewed at data-projector size).
-# スライド投影で読めるデフォルト: 150dpi・横長・12pt 以上。
+# Slide-readable plotting defaults: 150dpi, landscape, >=14pt fonts (project
+# slide rules — docs/sci_tutorial/fallback is reviewed at data-projector size;
+# figures are embedded on the SCI appendix "demo fallback" slides scaled to
+# ~0.68\textheight, so undersized fonts there vanish at projector distance).
+# スライド投影で読めるデフォルト: 150dpi・横長・14pt 以上。SCI付録「デモ保険」
+# スライドで約0.68\textheightに縮小埋め込みされるため、フォントが小さいと
+# 投影距離で読めなくなる。
 plt.rcParams.update({
     "figure.dpi": 150,
     "savefig.dpi": 150,
-    "font.size": 12,
-    "axes.titlesize": 14,
-    "axes.labelsize": 12,
-    "legend.fontsize": 11,
-    "xtick.labelsize": 11,
-    "ytick.labelsize": 11,
+    "font.size": 14,
+    "axes.titlesize": 16,
+    "axes.labelsize": 14,
+    "legend.fontsize": 13,
+    "xtick.labelsize": 13,
+    "ytick.labelsize": 13,
 })
 
 RAD2DEG = 57.29577951308232
@@ -207,8 +211,12 @@ def build_s1(bundle: Path) -> None:
                   color="#2ca02c", zorder=5, label="End (disarmed)")
     ax_xy.set_xlabel("East  py  [m]")
     ax_xy.set_ylabel("North  px  [m]")
-    ax_xy.set_title("S1: POS_HOLD horizontal trajectory (top-down)\n"
-                     "scenario: pos_roll.scn (SILS/MuJoCo, vehicle)")
+    # One-line title: scenario name is already in the slide caption
+    # (sci_appendix.tex) — a second title line at the bigger 16pt font
+    # crowded the legend box below it.
+    # タイトルは1行: シナリオ名はスライドのキャプション（sci_appendix.tex）
+    # 側にある — 16ptフォントで2行にすると下の凡例と接近しすぎていた。
+    ax_xy.set_title("S1: POS_HOLD horizontal trajectory (top-down)")
     ax_xy.set_aspect("equal", adjustable="datalim")
     ax_xy.grid(True, alpha=0.3)
     ax_xy.legend(loc="best", framealpha=0.9)
@@ -222,12 +230,24 @@ def build_s1(bundle: Path) -> None:
     _label_box = dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.85)
     ax_err.text(S1_T_DISTURB_START, ax_err.get_ylim()[1] * 0.55, " roll\n disturbance",
                 fontsize=10, color="#666666", va="center", bbox=_label_box)
-    ax_err.text(S1_T_POSHOLD_ENGAGE, ax_err.get_ylim()[1] * 0.9, "POS_HOLD\nengage",
+    # y-fraction lowered from 0.9 to 0.68: at the bigger 13pt legend font the
+    # "upper right" legend box's left edge reaches back to ~x=7.6s (close to
+    # this label's x=6.9s anchor); placing the label below the legend's
+    # bottom edge, instead of relying on horizontal separation alone, avoids
+    # the overlap regardless of legend width (T2).
+    # yの比率を0.9→0.68に変更: 13pt凡例フォントでは「upper right」凡例の
+    # 左端がx≈7.6sまで達し、このラベルのx=6.9sアンカーに接近する。水平方向の
+    # 分離だけに頼らず凡例の下端より下に配置することで、凡例の幅に関わらず
+    # 重なりを避ける（T2）。
+    ax_err.text(S1_T_POSHOLD_ENGAGE, ax_err.get_ylim()[1] * 0.68, "POS_HOLD\nengage",
                 fontsize=10, color="#d62728", va="top", bbox=_label_box)
     ax_err.set_xlabel("Time  t  [s]")
     ax_err.set_ylabel("Horizontal error [m]")
-    ax_err.set_title(f"S1: position-hold error vs time\n"
-                      f"max after engage = {drift_max_hold:.2f} m (gate {S1_DRIFT_GATE_M:.1f} m)")
+    # One-line title (same rationale as ax_xy above): drop the "vs time"
+    # wording to keep it comfortably within one line at 16pt.
+    # 1行タイトル（ax_xyと同じ理由）: 16ptで1行に収まるよう「vs time」を省略。
+    ax_err.set_title(f"S1: position-hold error — max {drift_max_hold:.2f} m "
+                      f"(gate {S1_DRIFT_GATE_M:.1f} m)")
     ax_err.grid(True, alpha=0.3)
     ax_err.legend(loc="upper right", framealpha=0.9)
 
@@ -335,7 +355,14 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
     """
     df5, df8 = load_traj(bundle_l5), load_traj(bundle_l8)
 
-    fig, (ax5, ax8) = plt.subplots(2, 1, figsize=(13, 9), sharex=True)
+    # Side-by-side (not stacked) layout: a wide, short canvas (~2.5:1) keeps
+    # the >=14pt fonts legible after the appendix slide's height-constrained
+    # scale-down, instead of the old 2-row stack (13x9in, near-square 1.44:1)
+    # that forced a much larger shrink factor to fit the slide height.
+    # 縦積みではなく左右並び: 横長 (~2.5:1) にすることで、付録スライドの
+    # 高さ制約による縮小後も14pt以上のフォントが読める。旧版の2段積み
+    # (13x9in, 1.44:1に近い正方形寄り) は縮小率が大きくなりすぎていた。
+    fig, (ax5, ax8) = plt.subplots(1, 2, figsize=(14, 5.5))
     # Plot window ends at D3 (6.4-7.4s, sticks re-centred, clean settle) and
     # deliberately EXCLUDES the E/F/G release-ARM -> DISARM -> free-fall/ground-
     # contact tail (7.4-8.4s): differentiating the truth roll angle through a
@@ -349,10 +376,16 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
     # 末尾区間に追加情報は無い。
     window = (S4_T_ARM + 1.3, S4_T_STEP_END + 1.0)
 
+    # Short one-line titles: scenario name, gains and the derivative caveat
+    # already live in the slide caption (sci_appendix.tex) — the in-figure
+    # text only needs to say which lesson/gain each panel is.
+    # タイトルは1行の短文: シナリオ名・ゲイン・微分の注記はスライドの
+    # キャプション（sci_appendix.tex）側にあるため、図内は各パネルが
+    # どのレッスン・ゲインかだけ示せば十分。
     metrics = {}
-    for ax, df, label, color in (
-        (ax5, df5, "Lesson 5 — P only (Kp=0.5)", "#1f77b4"),
-        (ax8, df8, "Lesson 8 — PID (Kp=0.25, Ti gain 0.3, Kd gain 0.005)", "#d62728"),
+    for ax, df, title, legend_label, color in (
+        (ax5, df5, "Lesson 5 — P (Kp=0.5)", "roll rate (P only)", "#1f77b4"),
+        (ax8, df8, "Lesson 8 — PID (Kp=0.25, Ti=0.3, Kd=0.005)", "roll rate (PID)", "#d62728"),
     ):
         t_full = df["t"].values
         rate_full = roll_rate_deg(df)
@@ -360,13 +393,14 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
         t, rate = t_full[wmask], rate_full[wmask]
         ref = s4_rate_ref(t)
         ax.plot(t, ref, color="black", ls="--", lw=1.6,
-                label=f"rate_ref (commanded, stick x rate_max = {S4_RATE_TARGET_DEG_S:.1f} deg/s)")
-        ax.plot(t, rate, color=color, lw=1.8, label=f"roll rate — {label}")
+                label=f"rate_ref (target {S4_RATE_TARGET_DEG_S:.1f} deg/s)")
+        ax.plot(t, rate, color=color, lw=1.8, label=legend_label)
         ax.axvline(S4_T_STEP_START, color="#999999", ls=":", lw=1.1)
         ax.axvline(S4_T_STEP_END, color="#999999", ls=":", lw=1.1)
         ax.set_xlim(*window)
+        ax.set_xlabel("Time  t  [s]")
         ax.set_ylabel("Roll rate  [deg/s]")
-        ax.set_title(label)
+        ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.legend(loc="upper right", framealpha=0.9)
 
@@ -375,14 +409,11 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
         val_end = rate[int(np.argmin(np.abs(t - S4_T_STEP_END)))]
         mask_post = (t > S4_T_STEP_END) & (t <= S4_T_STEP_END + 0.3)
         undershoot = rate[mask_post].min()
-        metrics[label] = (peak, val_end, undershoot)
+        metrics[title] = (peak, val_end, undershoot)
 
-    ax8.set_xlabel("Time  t  [s]")
-    fig.suptitle("S4: roll rate-loop step response — Lesson 5 (P) vs Lesson 8 (PID)\n"
-                 "scenario: workshop_acro_step.scn (SILS/MuJoCo, workshop target); "
-                 "roll rate = numerical derivative of truth roll angle (noise off)",
-                 fontsize=13)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.suptitle("S4: roll rate-loop step response — Lesson 5 (P) vs Lesson 8 (PID)",
+                 fontsize=16)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(OUT_DIR / "S4_roll_step_p_vs_pid.png")
     plt.close(fig)
 
@@ -467,12 +498,19 @@ def build_s5_graph(bundle: Path) -> None:
     t = t_full[wmask]
     roll_rate_full, pitch_rate_full = roll_rate_deg(df), pitch_rate_deg(df)
 
-    fig, (ax_att, ax_rate) = plt.subplots(2, 1, figsize=(13, 8.5), sharex=True)
+    # Side-by-side (not stacked) layout: same rationale as build_s4 — a wide,
+    # short canvas (~2.5:1) keeps >=14pt fonts legible after the appendix
+    # slide's height-constrained scale-down. Scenario name / gate result live
+    # in the slide caption, so the in-figure titles are one short word each.
+    # 縦積みではなく左右並び: build_s4 と同じ理由。シナリオ名・ゲート結果は
+    # スライドのキャプションにあるため、図内タイトルは短い1語ずつでよい。
+    fig, (ax_att, ax_rate) = plt.subplots(1, 2, figsize=(14, 5.5))
 
     ax_att.plot(t, df["roll"].values[wmask], color="#1f77b4", lw=1.8, label="Roll [deg]")
     ax_att.plot(t, df["pitch"].values[wmask], color="#2ca02c", lw=1.6, label="Pitch [deg]")
+    ax_att.set_xlabel("Time  t  [s]")
     ax_att.set_ylabel("Angle  [deg]")
-    ax_att.set_title("S5: attitude and angular rate — stab_flight.scn (SILS/MuJoCo, vehicle, STABILIZE)")
+    ax_att.set_title("Attitude")
     ax_att.grid(True, alpha=0.3)
     ax_att.legend(loc="best", framealpha=0.9)
 
@@ -482,6 +520,7 @@ def build_s5_graph(bundle: Path) -> None:
                  label="Yaw rate [deg/s] (truth column)")
     ax_rate.set_xlabel("Time  t  [s]")
     ax_rate.set_ylabel("Angular rate  [deg/s]")
+    ax_rate.set_title("Angular rate")
     ax_rate.set_xlim(*window)
     ax_rate.grid(True, alpha=0.3)
     # Fixed "upper left" placement (not "best"): the roll/pitch-rate transients
@@ -502,19 +541,20 @@ def build_s5_graph(bundle: Path) -> None:
         ax.set_xlim(*window)
         for tt, _lab in _step_lines:
             ax.axvline(tt, color="#999999", ls=":", lw=1.0)
-    # Labels only on the top (attitude) panel, rotated and anchored near the
-    # top of the axis (clear of the roll/pitch curves, which dip well below
-    # this region during the steps) — avoids the bottom-anchored label
-    # touching the roll-8 curve's trough that an earlier draft had.
-    # ラベルは上段（姿勢）パネルのみ、回転させ軸上部に固定する（ステップ中に
-    # 大きく沈むロール/ピッチ曲線から離れる）— 旧版で roll-8 の谷にラベルが
+    # Labels only on the attitude panel, rotated and anchored near the top of
+    # the axis (clear of the roll/pitch curves, which dip well below this
+    # region during the steps) — avoids the bottom-anchored label touching
+    # the roll-8 curve's trough that an earlier draft had.
+    # ラベルは姿勢パネルのみ、回転させ軸上部に固定する（ステップ中に大きく
+    # 沈むロール/ピッチ曲線から離れる）— 旧版で roll-8 の谷にラベルが
     # 接触していた問題を回避。
     att_top = ax_att.get_ylim()[1]
     for tt, lab in _step_lines:
-        ax_att.text(tt, att_top * 0.97, lab, fontsize=9, color="#666666",
+        ax_att.text(tt, att_top * 0.97, lab, fontsize=10, color="#666666",
                      rotation=90, va="top", ha="right")
 
-    fig.tight_layout()
+    fig.suptitle("S5: attitude and angular rate (STABILIZE)", fontsize=16)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(OUT_DIR / "S5_attitude_rate.png")
     plt.close(fig)
 

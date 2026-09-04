@@ -48,6 +48,7 @@
 | 復習手順ガイド | [`handson_guide.md`](handson_guide.md) |
 | コマンド・API 早見表 | [`cheatsheet.md`](cheatsheet.md) |
 | 実機検証チェックリスト（講師用） | [`verification_checklist.md`](verification_checklist.md) |
+| デモ保険（SILS で生成したグラフ・動画・合否ログ） | [`fallback/`](fallback/README.md) |
 | スライド付録（持ち帰り資料） | スライド本編の末尾「付録」章（チートシート・トラブルシューティング・復習パス） |
 
 ## 4. 参加者向けの事前準備
@@ -143,6 +144,7 @@ Every session follows the same shape: map (where we are) -> three key points -> 
 | Review-session guide | [`handson_guide.md`](handson_guide.md) |
 | Command / API cheat sheet | [`cheatsheet.md`](cheatsheet.md) |
 | Hardware verification checklist (instructor) | [`verification_checklist.md`](verification_checklist.md) |
+| Demo fallback (SILS-generated plots, videos, gate logs) | [`fallback/`](fallback/README.md) |
 | Slide appendix (take-home material) | The "Appendix" chapter at the end of the main deck (cheat sheets, troubleshooting, review paths) |
 
 ## 4. Pre-Workshop Preparation

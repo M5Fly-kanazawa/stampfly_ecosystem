@@ -172,3 +172,66 @@
 
   {\small ご質問・不具合報告はリポジトリの Issue へ。開発に協力してくれる方も歓迎する}
 \end{frame}
+
+% ==============================================================================
+% Demo fallback (SILS-generated) — shown only if a live demo fails at the venue.
+% Assets and regeneration script: docs/sci_tutorial/fallback/ (make_fallback.py)
+% デモ保険（SILS 生成）— 会場で実演が失敗したときだけ見せる。
+% 素材と再生成スクリプト: docs/sci_tutorial/fallback/（make_fallback.py）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ保険: 索引 / Demo Fallback Index}
+  \vspace{0.3em}
+  {\small 会場で実演がうまくいかない場合は，SILS（MuJoCo）で事前に飛ばした次の結果を示す。
+  素材は \code{docs/sci\_tutorial/fallback/}，再生成は \code{make\_fallback.py}}
+
+  \vspace{0.5em}
+
+  \resizebox{\textwidth}{!}{%
+    \begin{tabular}{lp{58mm}p{72mm}}
+      \hline
+      \textbf{デモ} & \textbf{ファイル} & \textbf{見せどころ} \\
+      \hline
+      S1 POS\_HOLD & \code{S1\_pos\_hold\_xy.png}\newline \code{S1\_pos\_hold\_flight.mp4}
+        & ロール外乱の後に位置保持へ入り，水平ドリフトが 0.39\,m 以内で収まる（\code{pos\_roll.scn}，ゲート 12/12 PASS） \\
+      S4 P vs PID & \code{S4\_roll\_step\_p\_vs\_pid.png}\newline \code{S4\_lesson5\_p\_flight.mp4}\newline \code{S4\_lesson8\_pid\_flight.mp4}
+        & 同じロールステップに対し，Lesson 5（P）はオーバーシュートと振動，Lesson 8（PID）は振動なし \\
+      S5 SILS & \code{S5\_attitude\_rate.png}\newline \code{S5\_stab\_flight.mp4}\newline \code{S5\_gate\_result.txt}
+        & \code{stab\_flight.scn} の姿勢・角速度と合否ゲート（12/12 PASS），回帰 28 PASS + 5 既知失敗 + 1 スキップ \\
+      \hline
+    \end{tabular}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ保険 S1: POS\_HOLD（SILS） / Fallback S1}
+  \centering
+  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_pos_hold_xy.png}
+
+  {\scriptsize \code{pos\_roll.scn}（vehicle）: 離陸 $\to$ ロール外乱 $\to$ POS\_HOLD 係合 $\to$ 保持。係合後の水平ドリフト最大 0.39\,m}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ保険 S1: 高度と姿勢（SILS） / Fallback S1}
+  \centering
+  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_altitude_attitude.png}
+
+  {\scriptsize 同じ飛行の高度と姿勢角の時系列。外乱直後の傾きが位置制御で戻る様子を指差す}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ保険 S4: P vs PID ステップ応答 / Fallback S4}
+  \centering
+  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S4_roll_step_p_vs_pid.png}
+
+  {\scriptsize \code{workshop\_acro\_step.scn}（ロール +0.3 を 0.5\,s）。目標 15.1\,deg/s に対し Lesson 5（P）はピーク 17.9\,deg/s と
+  $-2.4$\,deg/s のアンダーシュート，Lesson 8（PID）はピーク 13.2\,deg/s で振動なし。角速度は真値ロール角の数値微分}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ保険 S5: SILS シナリオ実行 / Fallback S5}
+  \centering
+  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S5_attitude_rate.png}
+
+  {\scriptsize \code{stab\_flight.scn}（vehicle）の姿勢角と角速度。合否ゲート 12/12 PASS。\code{sf sils regression} は 28 PASS + 5 既知失敗 + 1 スキップ（34 本）}
+\end{frame}

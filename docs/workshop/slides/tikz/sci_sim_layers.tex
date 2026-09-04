@@ -111,7 +111,7 @@
   % (right-angle routing, >=5mm stem before each arrowhead).
   % モデル一致ゲート: 3層の下に全幅のフィードバック箱。左マージンの
   % 折り返し経路で層1へ戻す（直角ルーティング、矢頭前に5mm以上の幹）。
-  \node[gatebox, below=12mm of $(S1.south)!0.5!(S3.south)$] (GATE) {%
+  \node[gatebox, below=20mm of $(S1.south)!0.5!(S3.south)$] (GATE) {%
     \begin{minipage}{170mm}\raggedright
       \ttier{gatecolor}{モデル一致ゲート}\quad
       \tsub{層3のログに同一の同定パイプラインを適用し $(b,L,T)$ を層1の実機基準値と比較（\texttt{sf sils sysid-gate}）}
@@ -132,8 +132,26 @@
   \draw[gatecolor, line width=1.4pt]
     (GATE.west) -- (feedX -| GATE.west) -- (feedX);
   \draw[garr] (feedX) -- (S1.west);
+  % Label sits clear to the LEFT of the vertical bus/arrow corner (feedX).
+  % NOTE: the midpoint must be captured as its own coordinate first — TikZ
+  % calc parses "(A)!0.5!(B) + (dx,dy)" by attaching "+(dx,dy)" to B, not to
+  % the interpolated result, which silently halved the intended x-offset in
+  % an earlier revision (label barely moved, still grazed by the arrow).
+  % Widening the offset to -8mm and the S1-GATE gap (12mm -> 20mm, below)
+  % together keep the rotated text's right edge and vertical span clear of
+  % the arrow's corner and arrowhead. Previously the arrowhead crossed the
+  % "と" character (T2).
+  % ラベルは垂直バス/コーナー(feedX)から左に十分離して配置する。
+  % 注意: 中間点は必ず独立した座標として確定させること — TikZ calc は
+  % 「(A)!0.5!(B) + (dx,dy)」を「B に +(dx,dy)」と解釈するため、以前の版では
+  % 意図したxオフセットが半分になり、ラベルがほぼ動かず矢印に接触したまま
+  % だった。オフセットを-8mmへ広げ、層1〜3とGATEの間隔（below）も12mm→20mm
+  % に広げたことで、回転テキストの右端と縦方向の占有幅の両方が、矢印の
+  % コーナー・矢頭から確実に離れる。以前は矢頭が「と」の文字に重なって
+  % いた（T2違反）。
+  \coordinate (feedMid) at ($(feedX)!0.5!(feedX -| GATE.west)$);
   \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
-    at ($(feedX)!0.5!(feedX -| GATE.west) + (-3mm,0)$) {実機同定値と突き合わせ};
+    at ($(feedMid) + (-8mm,0)$) {実機同定値と突き合わせ};
 
 \end{tikzpicture}
 \end{document}
