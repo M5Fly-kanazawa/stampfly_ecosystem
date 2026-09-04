@@ -748,6 +748,107 @@ class UDPTelemetryCapture:
 
         print(f"  Saved: {filepath} ({len(all_entries)} lines)")
 
+    def save_stream_csv(self, filepath: str):
+        """Save the 400Hz Data Stream as ONE merged CSV row per control cycle.
+        400Hz Data Stream を「制御周期1件=CSV1行」でマージ保存する。
+
+        Unlike save_jsonl() (one line per sensor sample, grouped by type),
+        this joins the 400Hz IMU+ESKF and RateRef blocks by their shared
+        per-cycle index (both are appended in lock-step, 8 per unified packet
+        -- see UnifiedPacketBuilder::begin() in data_stream_wire.hpp) and
+        forward-fills the slower 50Hz CtrlRef entry (angle_ref/total_thrust/
+        motor_duty) onto each row by timestamp. This is the schema
+        `sf sysid fit` (tools/sysid/plant_fit.py _detect_csv_format) reads as
+        the "stream" format: timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/
+        yaw, plus total_thrust for flight-segment detection.
+        save_jsonl()（センサ種別ごとにグループ化した1行1サンプル）と異なり、
+        400Hz の IMU+ESKF と RateRef ブロックを周期内の共有インデックスで結合
+        し（両方とも統合パケット1個につき8件ずつ、ロックステップで追加される
+        -- data_stream_wire.hpp の UnifiedPacketBuilder::begin() 参照）、
+        50Hz の CtrlRef エントリ（angle_ref/total_thrust/motor_duty）を
+        タイムスタンプで前方補完して各行に載せる。これは `sf sysid fit`
+        （tools/sysid/plant_fit.py の _detect_csv_format）が "stream" 形式と
+        して読む列構成: timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/yaw、
+        および飛行区間検出用の total_thrust。
+
+        Raises:
+            ValueError: no IMU+ESKF samples were captured.
+        """
+        imu = self.samples.get(PKT_IMU_ESKF, [])
+        rate_ref = self.samples.get(PKT_RATE_REF, [])
+        ctrl_ref = sorted(self.samples.get(PKT_CTRL_REF, []),
+                          key=lambda s: s['timestamp_us'])
+
+        if not imu:
+            raise ValueError("no IMU+ESKF samples captured -- nothing to save")
+
+        n = len(imu)
+        if rate_ref and len(rate_ref) != n:
+            # Should not happen (both blocks are written together per unified
+            # packet, see data_stream_wire.hpp) -- truncate defensively rather
+            # than crash or silently misalign rows.
+            # 通常起こらない（両ブロックは統合パケット毎に一緒に書かれる、
+            # data_stream_wire.hpp 参照）— クラッシュや暗黙のズレより、
+            # 安全側に切り詰める。
+            n = min(n, len(rate_ref))
+            print(f"  Warning: IMU samples ({len(imu)}) != rate_ref samples "
+                  f"({len(rate_ref)}) -- truncating merged CSV to {n} rows")
+
+        fieldnames = [
+            'timestamp_us',
+            'gyro_x', 'gyro_y', 'gyro_z',
+            'accel_x', 'accel_y', 'accel_z',
+            'quat_w', 'quat_x', 'quat_y', 'quat_z',
+            'gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z',
+            'accel_bias_x', 'accel_bias_y', 'accel_bias_z',
+            'rate_ref_roll', 'rate_ref_pitch', 'rate_ref_yaw',
+            'angle_ref_roll', 'angle_ref_pitch', 'total_thrust',
+            'motor_duty_FR', 'motor_duty_RR', 'motor_duty_RL', 'motor_duty_FL',
+            'flight_mode',
+        ]
+
+        ctrl_idx = 0
+        last_ctrl = None
+        with open(filepath, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for i in range(n):
+                row = dict(imu[i])   # timestamp_us, gyro_*, accel_*, quat_*, *_bias_*
+                ts = row['timestamp_us']
+
+                if rate_ref:
+                    row['rate_ref_roll']  = rate_ref[i]['rate_ref_roll']  / 1000.0
+                    row['rate_ref_pitch'] = rate_ref[i]['rate_ref_pitch'] / 1000.0
+                    row['rate_ref_yaw']   = rate_ref[i]['rate_ref_yaw']   / 1000.0
+                else:
+                    row['rate_ref_roll'] = row['rate_ref_pitch'] = row['rate_ref_yaw'] = 0.0
+
+                # Forward-fill the latest 50Hz CtrlRef entry at/before this
+                # 400Hz sample's timestamp (merge-asof by hand).
+                # この 400Hz サンプルの時刻以前で最新の 50Hz CtrlRef エントリを
+                # 前方補完する（手動 merge-asof）。
+                while ctrl_idx < len(ctrl_ref) and ctrl_ref[ctrl_idx]['timestamp_us'] <= ts:
+                    last_ctrl = ctrl_ref[ctrl_idx]
+                    ctrl_idx += 1
+
+                if last_ctrl is not None:
+                    row['angle_ref_roll']  = last_ctrl.get('angle_ref_roll', 0) / 10000.0
+                    row['angle_ref_pitch'] = last_ctrl.get('angle_ref_pitch', 0) / 10000.0
+                    row['total_thrust']    = last_ctrl.get('total_thrust', 0.0)
+                    for m in ('FR', 'RR', 'RL', 'FL'):
+                        row[f'motor_duty_{m}'] = last_ctrl.get(f'motor_duty_{m}', 0.0)
+                    row['flight_mode'] = last_ctrl.get('flight_mode', 0)
+                else:
+                    row['angle_ref_roll'] = row['angle_ref_pitch'] = 0.0
+                    row['total_thrust'] = 0.0
+                    for m in ('FR', 'RR', 'RL', 'FL'):
+                        row[f'motor_duty_{m}'] = 0.0
+                    row['flight_mode'] = 0
+
+                writer.writerow({k: row.get(k, '') for k in fieldnames})
+
+        print(f"  Saved: {filepath} ({n} rows)")
+
 
 # =============================================================================
 # Progress bar
@@ -802,7 +903,15 @@ def main():
     capture.print_stats()
 
     if not args.no_save and output:
-        capture.save_jsonl(output)
+        # .csv -> merged Data Stream CSV (one row per 400Hz cycle, the format
+        # `sf sysid fit` reads); anything else (default .jsonl) -> per-sample
+        # JSON Lines. .csv -> マージ済み Data Stream CSV（400Hz周期1件=1行、
+        # `sf sysid fit` が読む形式）; それ以外（既定 .jsonl）-> 1サンプル1行の
+        # JSON Lines。
+        if output.lower().endswith('.csv'):
+            capture.save_stream_csv(output)
+        else:
+            capture.save_jsonl(output)
 
     return 0
 

@@ -10,14 +10,31 @@ Where:
   tau_m: Motor time constant [s]
 
 Algorithm:
-  Since Kp is known, plant I/O can be reconstructed from telemetry:
-    target(t) = ctrl_axis(t) * rate_max
+  Since Kp is known, plant I/O can be reconstructed from telemetry. Two CSV
+  schemas are auto-detected from the header (see _detect_csv_format):
+    "stream" (current 400Hz Data Stream, `sf log wifi -o *.csv` -- shared by
+              vehicle and workshop, see data_stream_wire.hpp):
+      target(t) = rate_ref_<axis>(t)            <- already rad/s, no scaling
+    "legacy" (pre-migration analysis CSV):
+      target(t) = ctrl_<axis>(t) * rate_max     <- normalized stick * rate_max
+  Either way:
     u_plant(t) = Kp * (target(t) - gyro(t))
     y_plant(t) = gyro(t)
 
   The open-loop model is fitted directly via MSE minimization:
     u_plant -> G_p(s) -> y_simulated
     minimize |y_simulated - y_plant|^2  ->  K, tau_m
+
+閉ループ P 制御フライトデータから開ループプラントパラメータを同定する。
+CSV ヘッダから2種類の形式を自動判別する（_detect_csv_format 参照）:
+  "stream"（現行 400Hz Data Stream。`sf log wifi -o *.csv` — vehicle と
+           workshop で共通、data_stream_wire.hpp 参照）:
+    target(t) = rate_ref_<axis>(t)              <- 既に rad/s、スケール不要
+  "legacy"（移行前の分析用 CSV）:
+    target(t) = ctrl_<axis>(t) × rate_max       <- 正規化スティック × rate_max
+いずれも:
+  u_plant(t) = Kp × (target(t) − gyro(t))
+  y_plant(t) = gyro(t)
 """
 
 from dataclasses import dataclass
@@ -39,12 +56,38 @@ REFERENCE_PLANT_GAINS: Dict[str, float] = {
     'yaw': 19.0,
 }
 
-# Axis mapping: axis name -> (ctrl attribute, gyro array index)
-# 軸マッピング: 軸名 -> (制御入力属性名, ジャイロ配列インデックス)
-_AXIS_CONFIG = {
-    'roll':  {'ctrl_attr': 'ctrl_roll',  'gyro_idx': 0},
-    'pitch': {'ctrl_attr': 'ctrl_pitch', 'gyro_idx': 1},
-    'yaw':   {'ctrl_attr': 'ctrl_yaw',   'gyro_idx': 2},
+# Body FRD axis order (roll about x, pitch about y, yaw about z) -- same
+# convention used throughout the repo (see e.g. tools/log_analyzer/rate_sysid.py
+# and data_stream_wire.hpp), kept identical here so `--axis` selection and the
+# gyro sign/axis mapping never drift from the README's coordinate system.
+# Body FRD 軸順（roll=x軸周り, pitch=y軸周り, yaw=z軸周り）— リポジトリ全体で
+# 使われる規約と同一（例: tools/log_analyzer/rate_sysid.py, data_stream_wire.hpp）。
+# --axis 選択とジャイロの軸・符号対応が README の座標系からずれないよう、
+# ここでも同じ規約を使う。
+_AXIS_NAMES: Tuple[str, str, str] = ('roll', 'pitch', 'yaw')
+
+# "stream" format (sf log wifi -o *.csv): gyro column per axis.
+# "stream" 形式（sf log wifi -o *.csv）: 軸ごとのジャイロ列。
+_STREAM_GYRO_COL: Dict[str, str] = {'roll': 'gyro_x', 'pitch': 'gyro_y', 'yaw': 'gyro_z'}
+# "stream" format: rate target column per axis (already rad/s, see
+# workshop_control_task.cpp publishLogStream() / ws::set_rate_target()).
+# "stream" 形式: 軸ごとの角速度目標列（既に rad/s。
+# workshop_control_task.cpp publishLogStream() / ws::set_rate_target() 参照）。
+_STREAM_TARGET_COL: Dict[str, str] = {
+    'roll': 'rate_ref_roll', 'pitch': 'rate_ref_pitch', 'yaw': 'rate_ref_yaw',
+}
+
+# "legacy" format: normalized stick column per axis (multiplied by --rate-max).
+# "legacy" 形式: 軸ごとの正規化スティック列（--rate-max を掛ける）。
+_LEGACY_CTRL_COL: Dict[str, str] = {
+    'roll': 'ctrl_roll', 'pitch': 'ctrl_pitch', 'yaw': 'ctrl_yaw',
+}
+# "legacy" format: gyro column per axis, preferring the bias-corrected value
+# when present (falls back to _STREAM_GYRO_COL's raw gyro_x/y/z).
+# "legacy" 形式: 軸ごとのジャイロ列。バイアス補正済みがあればそちらを優先
+# （無ければ _STREAM_GYRO_COL の生ジャイロ gyro_x/y/z にフォールバック）。
+_LEGACY_GYRO_COL: Dict[str, str] = {
+    'roll': 'gyro_corrected_x', 'pitch': 'gyro_corrected_y', 'yaw': 'gyro_corrected_z',
 }
 
 
@@ -240,76 +283,138 @@ def _fit_segment(
     return K_opt, tau_m_opt, r_squared, rmse
 
 
+def _detect_csv_format(fieldnames: Optional[List[str]]) -> str:
+    """
+    Auto-detect which of the two CSV schemas a flight log uses, from its
+    header alone.
+    CSV のヘッダだけから、フライトログが2種類のうちどちらの形式かを自動判別。
+
+    Returns:
+        "stream" if rate_ref_<axis> + gyro_x/y/z columns are present (current
+            400Hz Data Stream -- `sf log wifi -o *.csv`, shared by vehicle and
+            workshop).
+        "legacy" if ctrl_<axis> columns are present (pre-migration analysis
+            CSV -- normalized stick + gyro_corrected_x/y/z, falling back to
+            gyro_x/y/z).
+
+    Raises:
+        ValueError: neither schema's required columns are present.
+    """
+    cols = set(fieldnames or [])
+
+    has_stream_target = any(c in cols for c in _STREAM_TARGET_COL.values())
+    has_stream_gyro = all(c in cols for c in _STREAM_GYRO_COL.values())
+    if has_stream_target and has_stream_gyro:
+        return "stream"
+
+    has_legacy_ctrl = any(c in cols for c in _LEGACY_CTRL_COL.values())
+    if has_legacy_ctrl:
+        return "legacy"
+
+    raise ValueError(
+        "CSV format not recognized -- need either the current Data Stream "
+        "columns (rate_ref_roll/pitch/yaw + gyro_x/y/z, from `sf log wifi "
+        "-o *.csv`) or the legacy analysis columns (ctrl_roll/pitch/yaw + "
+        f"gyro_corrected_x/y/z or gyro_x/y/z). Header columns found: "
+        f"{sorted(cols)}"
+    )
+
+
 def _load_axis_data(
     filepath: str | Path,
     axis: str,
     fs: float = 400.0,
     time_range: Optional[Tuple[float, float]] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, str]:
     """
-    Load and extract axis-specific data from CSV
-    CSVから軸固有のデータを読み込み・抽出
+    Load and extract axis-specific plant I/O from a flight-log CSV.
+    CSV から軸固有のプラント入出力を読み込み・抽出する。
+
+    Self-contained CSV reader (csv.DictReader + numpy only) that auto-detects
+    the "stream" vs "legacy" schema via _detect_csv_format() -- see the module
+    docstring for both schemas' column names and semantics.
+    自己完結の CSV リーダ（csv.DictReader + numpy のみ）。
+    _detect_csv_format() で "stream"/"legacy" を自動判別する — 両形式の列名・
+    意味はモジュール docstring 参照。
 
     Returns:
-        (time_s, ctrl, gyro, throttle, dt)
+        (time_s, target_raw, gyro, throttle, dt, fmt)
+        target_raw is the RAW target column: already rad/s for "stream"
+        (caller must NOT multiply by rate_max), normalized stick [-1, 1] for
+        "legacy" (caller multiplies by rate_max). `fmt` tells the caller which.
+        target_raw は列の生値: "stream" は既に rad/s（呼び出し側は rate_max を
+        掛けてはいけない）、"legacy" は正規化スティック値 [-1, 1]（呼び出し側が
+        rate_max を掛ける）。どちらかは `fmt` で判別する。
     """
-    import sys
-    from pathlib import Path as P
+    import csv as _csv
 
-    if axis not in _AXIS_CONFIG:
-        raise ValueError(
-            f"Unknown axis: {axis}. Choose from: {list(_AXIS_CONFIG.keys())}"
-        )
-    config = _AXIS_CONFIG[axis]
+    if axis not in _AXIS_NAMES:
+        raise ValueError(f"Unknown axis: {axis}. Choose from: {list(_AXIS_NAMES)}")
 
-    # Load CSV using eskf_sim loader
-    # CSV読み込み
-    tools_path = P(__file__).parent.parent
-    added = False
-    if str(tools_path) not in sys.path:
-        sys.path.insert(0, str(tools_path))
-        added = True
-    try:
-        from eskf_sim.loader import load_csv
-    finally:
-        if added and str(tools_path) in sys.path:
-            sys.path.remove(str(tools_path))
+    with open(filepath, newline='') as f:
+        reader = _csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        fmt = _detect_csv_format(fieldnames)
+        rows = list(reader)
 
-    log_data = load_csv(filepath)
-    samples = log_data.samples
+    if len(rows) < 100:
+        raise ValueError(f"Too few samples: {len(rows)}")
 
-    if len(samples) < 100:
-        raise ValueError(f"Too few samples: {len(samples)}")
+    cols = set(fieldnames or [])
 
-    # Use detected sample rate if available
-    # 検出されたサンプルレートがあれば使用
-    if log_data.sample_rate_hz > 0:
-        fs = log_data.sample_rate_hz
+    def col(row: Dict[str, str], name: str, default: float = 0.0) -> float:
+        value = row.get(name)
+        if value is None or value == '':
+            return default
+        try:
+            return float(value)
+        except ValueError:
+            return default
+
+    # --- Timestamp -> time_s, refining fs from the data when it looks sane ---
+    # タイムスタンプ -> time_s。データから妥当な範囲ならサンプルレートを補正。
+    ts_col = next((c for c in ('timestamp_us', 'timestamp', 'timestamp_ms') if c in cols), None)
+    if ts_col is not None:
+        scale_to_us = 1000.0 if ts_col == 'timestamp_ms' else 1.0
+        ts_us = np.array([col(r, ts_col) for r in rows]) * scale_to_us
+        time_s = (ts_us - ts_us[0]) / 1e6
+        deltas = np.diff(time_s)
+        deltas = deltas[deltas > 0]
+        if len(deltas) > 10:
+            detected_fs = 1.0 / float(np.median(deltas))
+            if 0.5 * fs <= detected_fs <= 2.0 * fs:   # reject obviously-wrong units
+                fs = detected_fs
+    else:
+        time_s = np.arange(len(rows)) / fs
     dt = 1.0 / fs
 
-    # Extract time
-    timestamps_us = np.array([s.timestamp_us for s in samples])
-    time_s = (timestamps_us - timestamps_us[0]) / 1e6
-
-    # Control input for this axis
-    ctrl_attr = config['ctrl_attr']
-    ctrl = np.array([
-        getattr(s, ctrl_attr) if getattr(s, ctrl_attr) is not None else 0.0
-        for s in samples
-    ])
-
-    # Gyro output (prefer corrected)
-    gyro_idx = config['gyro_idx']
-    if samples[0].gyro_corrected is not None:
-        gyro = np.array([s.gyro_corrected[gyro_idx] for s in samples])
+    # --- Target + gyro, per detected schema ---
+    # 目標値 + ジャイロ（判別した形式に応じて）
+    if fmt == "stream":
+        target = np.array([col(r, _STREAM_TARGET_COL[axis]) for r in rows])
+        gyro = np.array([col(r, _STREAM_GYRO_COL[axis]) for r in rows])
     else:
-        gyro = np.array([s.gyro[gyro_idx] for s in samples])
+        target = np.array([col(r, _LEGACY_CTRL_COL[axis]) for r in rows])
+        gyro_col = _LEGACY_GYRO_COL[axis] if _LEGACY_GYRO_COL[axis] in cols else _STREAM_GYRO_COL[axis]
+        gyro = np.array([col(r, gyro_col) for r in rows])
 
-    # Throttle for flight detection
-    throttle = np.array([
-        s.ctrl_throttle if s.ctrl_throttle is not None else 0.0
-        for s in samples
-    ])
+    # --- Throttle-equivalent for flight-segment detection ---
+    # 飛行区間検出用のスロットル相当量
+    if fmt == "legacy":
+        throttle = np.array([col(r, 'ctrl_throttle') for r in rows])
+    elif 'total_thrust' in cols:
+        throttle = np.array([col(r, 'total_thrust') for r in rows])
+    elif all(f'motor_duty_{m}' in cols for m in ('FR', 'RR', 'RL', 'FL')):
+        throttle = np.mean(
+            [[col(r, f'motor_duty_{m}') for m in ('FR', 'RR', 'RL', 'FL')] for r in rows],
+            axis=1,
+        )
+    else:
+        raise ValueError(
+            "stream-format CSV needs a flight-activity column to find flight "
+            "segments: total_thrust (ws::motor_mixer thrust) or "
+            "motor_duty_FR/RR/RL/FL. Neither was found in the header."
+        )
 
     # Apply time range filter
     # 時間範囲フィルタを適用
@@ -317,11 +422,11 @@ def _load_axis_data(
         t_start, t_end = time_range
         mask = (time_s >= t_start) & (time_s <= t_end)
         time_s = time_s[mask]
-        ctrl = ctrl[mask]
+        target = target[mask]
         gyro = gyro[mask]
         throttle = throttle[mask]
 
-    return time_s, ctrl, gyro, throttle, dt
+    return time_s, target, gyro, throttle, dt, fmt
 
 
 def _find_flight_segments(
@@ -400,16 +505,21 @@ def fit_plant(
     """
     # Load data
     # データ読み込み
-    time_s, ctrl, gyro, throttle, dt = _load_axis_data(
+    time_s, target_raw, gyro, throttle, dt, fmt = _load_axis_data(
         filepath, axis, fs, time_range,
     )
 
-    # Reconstruct plant I/O
-    # Kp 既知のためプラント入出力を復元
-    #   target(t) = ctrl(t) * rate_max
+    # Reconstruct plant I/O. "stream" CSVs already record the physical rate
+    # target [rad/s] (ws::set_rate_target / vehicle rate_ref) so rate_max is
+    # NOT applied; "legacy" CSVs store a normalized stick value that must be
+    # scaled by rate_max first.
+    # プラント入出力を復元。"stream" 形式は既に物理量の角速度目標 [rad/s]
+    # （ws::set_rate_target / vehicle の rate_ref）を記録しているため rate_max
+    # は適用しない。"legacy" 形式は正規化スティック値のため rate_max でスケール
+    # する。
     #   u_plant(t) = Kp * (target(t) - gyro(t))
     #   y_plant(t) = gyro(t)
-    target = ctrl * rate_max
+    target = target_raw if fmt == "stream" else target_raw * rate_max
     u_plant = kp * (target - gyro)
     y_plant = gyro
 
@@ -514,12 +624,13 @@ def compute_fit_timeseries(
             'y_simulated': Simulated angular velocity
             'residual': y_measured - y_simulated
     """
-    time_s, ctrl, gyro, throttle, dt = _load_axis_data(
+    time_s, target_raw, gyro, throttle, dt, fmt = _load_axis_data(
         filepath, result.axis, fs, time_range,
     )
 
-    # Reconstruct plant I/O
-    target = ctrl * rate_max
+    # Reconstruct plant I/O -- same fmt-dependent scaling as fit_plant()
+    # プラント入出力を復元 -- fit_plant() と同じ fmt 依存のスケーリング
+    target = target_raw if fmt == "stream" else target_raw * rate_max
     u_plant = result.kp_used * (target - gyro)
     y_measured = gyro
 
@@ -540,3 +651,125 @@ def compute_fit_timeseries(
         'y_simulated': y_simulated,
         'residual': y_measured - y_simulated,
     }
+
+
+# =============================================================================
+# Self-test: synthesize a "stream"-format flight from a KNOWN plant, recover
+# it. Run via `sf sysid fit --selftest`.
+# 自己テスト: 既知プラントから "stream" 形式のフライトを合成し、復元を検証。
+# `sf sysid fit --selftest` から実行。
+# =============================================================================
+
+def selftest(verbose: bool = True) -> bool:
+    """
+    Closed-loop self-test for the "stream" (current Data Stream) CSV path.
+    既知プラントを P 制御閉ループで離散シミュレーションし、`sf log wifi
+    -o *.csv` と同じ "stream" 形式の CSV を合成、fit_plant() が K, tau_m を
+    許容誤差内で復元することを確認する。
+
+    Verifies end to end: _detect_csv_format() picks "stream", _load_axis_data()
+    reads rate_ref_roll/gyro_x/total_thrust correctly, and the (format-
+    independent) MSE fit in _fit_segment() recovers the plant that generated
+    the data. Uses the EXACT same discretization as _simulate_plant() to
+    generate the synthetic flight, so any recovery error reflects the fit
+    tool's own accuracy, not a model mismatch.
+    一気通貫の検証: _detect_csv_format() が "stream" を選び、_load_axis_data()
+    が rate_ref_roll/gyro_x/total_thrust を正しく読み、（形式非依存の）
+    _fit_segment() の MSE フィットが生成元のプラントを復元できることを確認
+    する。合成フライトの生成には _simulate_plant() と全く同じ離散化を使うため、
+    復元誤差はフィットツール自体の精度を反映し、モデル不整合には起因しない。
+    """
+    import csv as _csv
+    import os
+    import tempfile
+
+    axis = 'roll'
+    K_true = REFERENCE_PLANT_GAINS[axis]   # 102.0 [rad/s^2 per duty]
+    tau_m_true = 0.02                      # [s] -- L06 nominal motor lag
+    kp = 0.5
+    fs = 400.0
+    dt = 1.0 / fs
+    n = 8000                               # 20 s @ 400 Hz
+
+    alpha = np.exp(-dt / tau_m_true)
+    gain = K_true * (1.0 - alpha)
+
+    t = np.arange(n) * dt
+    # Broadband log-chirp target (0.5->20 Hz over 5 s, repeated): similar
+    # spectral richness to a pilot's stick doublets, wide enough to resolve
+    # both the integrator gain K and the ~8 Hz motor-lag corner (tau_m=20ms).
+    # 広帯域対数チャープ目標（0.5〜20Hz、5s周期で繰り返し）: パイロットの
+    # スティックダブレットに近いスペクトルで、積分ゲイン K とモータ遅れの
+    # コーナー周波数（tau_m=20ms、約8Hz）の両方を解ける帯域幅を持つ。
+    f0, f1, period = 0.5, 20.0, 5.0
+    k_chirp = (f1 / f0) ** (1.0 / period)
+    tm = t % period
+    target = 0.35 * np.sin(2 * np.pi * f0 * ((k_chirp ** tm) - 1.0) / np.log(k_chirp))
+
+    # Closed-loop P-control simulation with the EXACT discretization
+    # _simulate_plant() uses (motor-lag alpha filter + trapezoidal
+    # integration) -- z[i]/omega[i] depend only on u[i-1], so this is causal
+    # and needs no algebraic-loop solving.
+    # _simulate_plant() と全く同じ離散化（モータ遅れの指数フィルタ + 台形
+    # 積分）による閉ループ P 制御シミュレーション -- z[i]/omega[i] は
+    # u[i-1] のみに依存するため、代数ループを解く必要のない因果的な計算。
+    omega = np.zeros(n)
+    z = np.zeros(n)
+    u = np.zeros(n)
+    for i in range(1, n):
+        error = target[i - 1] - omega[i - 1]
+        u[i - 1] = kp * error
+        z[i] = alpha * z[i - 1] + gain * u[i - 1]
+        omega[i] = omega[i - 1] + 0.5 * dt * (z[i - 1] + z[i])
+    u[-1] = kp * (target[-1] - omega[-1])
+
+    rng = np.random.default_rng(7)
+    gyro_meas = omega + rng.normal(0.0, 0.003, n)   # [rad/s] BMI270-scale noise
+
+    # Write a "stream"-format Data Stream CSV (same header shape as `sf log
+    # wifi -o *.csv`): only the test axis carries nonzero rate_ref/gyro,
+    # total_thrust is a constant in-flight value (> the 0.3 flight threshold).
+    # "stream" 形式の Data Stream CSV を書き出す（`sf log wifi -o *.csv` と
+    # 同じヘッダ形状）: テスト対象軸のみ rate_ref/gyro を非ゼロにし、
+    # total_thrust は飛行中を示す定数値（飛行判定閾値 0.3 を超える）にする。
+    fieldnames = (['timestamp_us']
+                  + list(_STREAM_GYRO_COL.values())
+                  + list(_STREAM_TARGET_COL.values())
+                  + ['total_thrust'])
+    gyro_col = _STREAM_GYRO_COL[axis]
+    target_col = _STREAM_TARGET_COL[axis]
+
+    fd, csv_path = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_')
+    try:
+        with os.fdopen(fd, 'w', newline='') as f:
+            writer = _csv.writer(f)
+            writer.writerow(fieldnames)
+            for i in range(n):
+                row = {name: 0.0 for name in fieldnames}
+                row['timestamp_us'] = t[i] * 1e6
+                row[gyro_col] = gyro_meas[i]
+                row[target_col] = target[i]
+                row['total_thrust'] = 0.4
+                writer.writerow([row[name] for name in fieldnames])
+
+        result = fit_plant(csv_path, axis=axis, kp=kp, rate_max=1.0, fs=fs)
+    finally:
+        os.unlink(csv_path)
+
+    K_err = abs(result.K / K_true - 1.0)
+    tau_err = abs(result.tau_m / tau_m_true - 1.0)
+    ok = K_err < 0.15 and tau_err < 0.30 and result.r_squared > 0.9
+
+    if verbose:
+        print(f"true : K={K_true:.1f} [rad/s^2/duty]  tau_m={tau_m_true * 1000:.1f} ms")
+        print(f"fit  : K={result.K:.1f} ({K_err * 100:.1f}% err)  "
+              f"tau_m={result.tau_m * 1000:.1f} ms ({tau_err * 100:.1f}% err)  "
+              f"R^2={result.r_squared:.3f}  n_segments={result.n_segments}")
+        print("SELFTEST:", "PASS" if ok else "FAIL")
+
+    return ok
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(0 if selftest() else 1)

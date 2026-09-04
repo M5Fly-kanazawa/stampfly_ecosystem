@@ -319,13 +319,21 @@ def _register_fit(subparsers):
         help="Fit plant model to flight data",
         description=(
             "Identify open-loop plant parameters G_p(s) = K/(s*(tau_m*s+1)) "
-            "from closed-loop P-control flight data. Requires Kp and rate_max "
-            "values used during flight."
+            "from closed-loop P-control flight data. Requires --kp (the P "
+            "gain used during flight). The input CSV format is auto-detected: "
+            "the current 400Hz Data Stream (`sf log wifi -o *.csv`, columns "
+            "rate_ref_roll/pitch/yaw + gyro_x/y/z -- shared by vehicle and "
+            "workshop, --rate-max is ignored since rate_ref is already rad/s) "
+            "or the legacy analysis CSV (ctrl_roll/pitch/yaw + "
+            "gyro_corrected_x/y/z, --rate-max required). "
+            "Run --selftest to verify the whole pipeline against a synthetic "
+            "known plant."
         ),
     )
     parser.add_argument(
         "input",
-        help="Input CSV file (flight data with ctrl and gyro columns)",
+        nargs="?",
+        help="Input CSV file (Data Stream or legacy format, auto-detected)",
     )
     parser.add_argument(
         "--axis",
@@ -336,14 +344,16 @@ def _register_fit(subparsers):
     parser.add_argument(
         "--kp",
         type=float,
-        required=True,
-        help="P gain used during flight (must match firmware value)",
+        help="P gain used during flight (must match firmware value; "
+             "required unless --selftest)",
     )
     parser.add_argument(
         "--rate-max",
         type=float,
         default=1.0,
-        help="Maximum angular rate [rad/s] (default: 1.0, yaw typically 5.0)",
+        help="Maximum angular rate [rad/s] (default: 1.0, yaw typically 5.0). "
+             "Ignored for Data Stream CSVs -- rate_ref is already an absolute "
+             "rad/s target, only the legacy ctrl*rate_max path uses this.",
     )
     parser.add_argument(
         "--time-range",
@@ -364,6 +374,11 @@ def _register_fit(subparsers):
     parser.add_argument(
         "--plot-output",
         help="Save plot to file (PNG/PDF)",
+    )
+    parser.add_argument(
+        "--selftest",
+        action="store_true",
+        help="Run the synthetic-plant pipeline self-test and exit",
     )
     parser.set_defaults(func=run_fit)
 
@@ -422,7 +437,7 @@ def run_fit(args: argparse.Namespace) -> int:
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
         from sysid.plant_fit import (
-            fit_plant, compute_fit_timeseries, REFERENCE_PLANT_GAINS,
+            fit_plant, compute_fit_timeseries, REFERENCE_PLANT_GAINS, selftest,
         )
         from sysid.defaults import get_flat_defaults
     except ImportError as e:
@@ -431,6 +446,16 @@ def run_fit(args: argparse.Namespace) -> int:
     finally:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
+
+    if args.selftest:
+        return 0 if selftest() else 1
+
+    if not args.input:
+        console.error("input CSV required (or --selftest)")
+        return 1
+    if args.kp is None:
+        console.error("--kp is required (or --selftest)")
+        return 1
 
     # Check input file
     if not Path(args.input).exists():

@@ -123,7 +123,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     wifi_parser.add_argument(
         "-o", "--output",
-        help="Output CSV filename (auto-generated if not specified)",
+        help="Output filename (auto-generated .jsonl if not specified). "
+             "A .csv extension saves a merged Data Stream CSV (one row per "
+             "400Hz cycle, the format `sf sysid fit` reads) instead of the "
+             "default per-sample .jsonl",
     )
     wifi_parser.add_argument(
         "-d", "--duration",
@@ -439,7 +442,16 @@ def run_wifi(args: argparse.Namespace) -> int:
         capture.print_stats()
 
         if not args.no_save and output:
-            capture.save_jsonl(output)
+            # .csv -> merged Data Stream CSV (one row per 400Hz cycle -- the
+            # format `sf sysid fit` auto-detects); anything else (default
+            # .jsonl) -> per-sample JSON Lines.
+            # .csv -> マージ済み Data Stream CSV（400Hz周期1件=1行 —
+            # `sf sysid fit` が自動判別する形式）; それ以外（既定 .jsonl）->
+            # 1サンプル1行の JSON Lines。
+            if output.lower().endswith(".csv"):
+                capture.save_stream_csv(output)
+            else:
+                capture.save_jsonl(output)
 
         return 0
 
