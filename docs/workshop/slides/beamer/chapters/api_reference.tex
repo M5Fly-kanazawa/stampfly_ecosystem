@@ -1,13 +1,13 @@
 % ------------------------------------------------------------------
 \begin{frame}{今日のゴール / Today's Goal}
   \begin{block}{目標}
-    ws:: API 全 43 関数をカテゴリ別に理解し、各関数の使い方を把握する
+    ws:: API 全 45 関数をカテゴリ別に理解し、各関数の使い方を把握する
   \end{block}
 
   \vspace{0.5em}
 
   \begin{itemize}
-    \item ws:: API 全 43 関数をカテゴリ別に理解
+    \item ws:: API 全 45 関数をカテゴリ別に理解
     \item 各 API の使い方をコード例で確認
     \item 環境・距離センサ API で全センサに直接アクセス
   \end{itemize}
@@ -32,10 +32,11 @@
     IMU Sensor      & ジャイロ・加速度センサ     & 6 \\
     Env / Distance  & 気圧・磁気・ToF・光学フロー & 10 \\
     Estimation      & ESKF 姿勢・高度推定        & 4 \\
+    Sysid Logging   & 制御目標のロギング（L7）   & 2 \\
     LED             & LED 色制御                 & 3 \\
     Utility         & 時刻・電圧・通信・出力     & 4 \\
     \hline
-    \multicolumn{2}{l}{\textbf{合計}} & \textbf{43} \\
+    \multicolumn{2}{l}{\textbf{合計}} & \textbf{45} \\
     \hline
   \end{tabular}
   }
@@ -321,6 +322,38 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}[fragile]{System ID API --- 制御目標ロギング}
+  \vspace{0.3em}
+  {\small
+  \begin{tabular}{lll}
+    \hline
+    \textbf{関数} & \textbf{単位} & \textbf{説明} \\
+    \hline
+    \texttt{set\_rate\_target(r, p, y)}  & rad/s & 角速度目標を Data Stream に記録 \\
+    \texttt{set\_angle\_target(r, p)}    & rad   & 傾き角目標を Data Stream に記録 \\
+    \hline
+  \end{tabular}
+  }
+
+  \vspace{0.3em}
+
+  \begin{lstlisting}[style=sfcpp, basicstyle=\ttfamily\scriptsize]
+void loop_400Hz(float dt) {
+    float roll_target = ws::rc_roll() * rate_max;
+    // ... compute roll_output from roll_target, gyro_x() ...
+
+    ws::set_rate_target(roll_target, pitch_target, yaw_target);
+    ws::motor_mixer(throttle, roll_output, pitch_output, yaw_output);
+}
+  \end{lstlisting}
+
+  \vspace{0.2em}
+  {\footnotesize \warn{注意:} ロギング専用 --- 制御には無関係。呼ばなくても飛行は動く。
+  \texttt{sf sysid fit}（L7）が \texttt{rate\_ref} と \texttt{gyro} から
+  $u = K_p(\text{rate\_ref} - \text{gyro})$ を復元する}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}[fragile]{Utility API}
   \vspace{0.3em}
   {\small
@@ -439,7 +472,7 @@ void loop_400Hz(float dt) {
 \begin{frame}{チェックポイント / Checkpoint}
   \begin{alertblock}{確認事項}
     \begin{itemize}
-      \item[$\square$] ws:: API 全 43 関数のカテゴリと役割を把握した
+      \item[$\square$] ws:: API 全 45 関数のカテゴリと役割を把握した
       \item[$\square$] Motor / RC / IMU / Sensor / Estimation の使い方を理解した
       \item[$\square$] 気圧・磁気・ToF・光学フロー API で値を取得できた
       \item[$\square$] Teleplot で複数センサのグラフを同時表示した

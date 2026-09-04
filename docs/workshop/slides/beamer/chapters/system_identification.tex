@@ -66,14 +66,16 @@
 % ------------------------------------------------------------------
 % Slide 5: Reconstructing Plant I/O
 % ------------------------------------------------------------------
-\begin{frame}{プラント入出力の復元 / Reconstructing Plant I/O}
+\begin{frame}[fragile]{プラント入出力の復元 / Reconstructing Plant I/O}
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
-      \begin{block}{テレメトリの記録内容}
+      \begin{block}{Data Stream の記録内容}
+        {\footnotesize
         \begin{tabular}{ll}
-          \code{ctrl\_roll} & スティック入力 \\
+          \code{rate\_ref\_roll} & 角速度目標 \\
           \code{gyro\_x} & 角速度（計測値） \\
         \end{tabular}
+        }
       \end{block}
 
       \vspace{0.5em}
@@ -81,10 +83,11 @@
       \begin{exampleblock}{復元手順（$K_p$ 既知）}
         {\footnotesize
         \begin{enumerate}
-          \item $\text{target} = \text{ctrl} \times \text{rate\_max}$
-          \item $u(t) = K_p \!\times\! (\text{target} - \text{gyro})$
+          \item $u(t) = K_p \!\times\! (\text{rate\_ref} - \text{gyro})$
           \item $y(t) = \text{gyro}$
         \end{enumerate}
+        \code{rate\_ref} は既に絶対値[rad/s]なので\\
+        \code{rate\_max}換算は不要
         }
       \end{exampleblock}
     \end{column}
@@ -98,14 +101,15 @@
 
       \vspace{0.5em}
 
-      {\footnotesize
-      \begin{tabular}{ll}
-        \textbf{パラメータ} & \textbf{値} \\
-        \hline
-        $K_p$ & L5 の値（例: 0.5） \\
-        \code{rate\_max} & 1.0\,rad/s \\
-      \end{tabular}
-      }
+      \begin{exampleblock}{記録する側（user\_code.cpp）}
+        \begin{lstlisting}[style=sfcpp, basicstyle=\ttfamily\scriptsize]
+float roll_target =
+    ws::rc_roll() * rate_max;
+ws::set_rate_target(
+    roll_target, pitch_target,
+    yaw_target);
+        \end{lstlisting}
+      \end{exampleblock}
     \end{column}
   \end{columns}
 \end{frame}
@@ -159,9 +163,10 @@
   \begin{enumerate}
     \item \code{sf lesson switch 7} でテンプレートをコピー
     \item \code{user\_code.cpp} に $K_p$（例: 0.5）をセット
+    \item 角速度目標の直後に \code{ws::set\_rate\_target(...)} を呼ぶ
     \item ビルド \& 書き込み: \code{sf lesson build} → \code{sf lesson flash}
     \item 離陸し、スティック操作でロール・ピッチ入力を入れる
-    \item PC でデータ受信:
+    \item PC でデータ受信（\code{.csv} で Data Stream を直接保存）:
   \end{enumerate}
 
   \begin{sflisting}{ターミナル}
@@ -192,7 +197,7 @@ sf log wifi -o flight.csv
   \begin{tabular}{ll}
     \code{-{}-kp 0.5} & 飛行時の $K_p$（\textbf{必須}） \\
     \code{-{}-axis roll} & 特定軸のみ分析 \\
-    \code{-{}-rate-max 1.0} & \code{rate\_max}（既定=1.0, yaw=5.0） \\
+    \code{-{}-rate-max 1.0} & 旧形式 CSV 用（Data Stream では無視） \\
     \code{-o result.yaml} & 結果をファイルに保存 \\
   \end{tabular}
   }
