@@ -1,0 +1,17 @@
+sf sils regression summary
+Run: sf sils regression
+
+SILS regression: 28 PASS + 5 KNOWN-FAIL + 1 SKIP (34 total) known-fail=5
+
+KNOWN-FAIL (tracked, not gating — docs/architecture/simulation-policy.md backlog):
+  calib                 — injected IMU bias x ODE-plant takeoff dynamics produce a
+                          0.6-0.7 Hz self-oscillation (backlog #4/#13)
+  commloss_land_level   — LANDING leveling gate roll convergence insufficient under
+                          the ODE motor plant (backlog #13)
+  pos_flight            — ODE plant yaw torque-authority saturation under combined
+                          maneuvers, NT-Kanazawa-class issue (backlog #12)
+  pos_yaw               — same root cause as pos_flight (backlog #12)
+  yaw_hold              — yaw-band degradation, same root cause (backlog #11/#12)
+
+SKIP: workshop_acro (target=workshop; needs `sf lesson switch N --solution` +
+      --include-workshop, skipped by default on a fresh checkout)

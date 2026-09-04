@@ -1,0 +1,53 @@
+# workshop_acro_step.scn — learner Lesson 5/8 rate-control ROLL STEP RESPONSE (workshop, Layer 3)
+# 学習者 Lesson 5/8 レート制御 ロール・ステップ応答（workshop, Layer 3）
+#
+# Goal: SCI tutorial S4 fallback video/graph material — a roll-rate STEP response
+# comparison between Lesson 5 (P-only) and Lesson 8 (PID), run on the SAME scenario
+# so the two runs are directly comparable. workshop_acro.scn (this file's parent)
+# is a liftoff+hover demo with sticks held CENTERED throughout the cruise phase —
+# useful for proving liftoff, but it never excites the rate loop, so it cannot show
+# a P vs PID step-response difference. This variant inserts a roll-stick STEP
+# (+0.3, 500 ms, then back to centre) into the middle of the cruise phase, all
+# other timing/duty unchanged from workshop_acro.scn (see that file's header for
+# the full hover-duty derivation and landing-method rationale — not repeated here).
+#
+# 目的: SCI チュートリアル S4 の保険用動画・グラフ素材 — Lesson 5（Pのみ）と
+# Lesson 8（PID）のロール・レート・ステップ応答を「同一シナリオ」で比較する。
+# 親ファイル workshop_acro.scn はスティック中立のまま巡航するだけの離陸+ホバー
+# デモで、レートループを励振しないため P/PID の差を示せない。本バリアントは
+# 巡航区間の途中にロール・スティックのステップ（+0.3、500ms、その後中立）を挿入
+# する。それ以外のタイミング・duty は workshop_acro.scn から無変更（ホバーduty
+# の導出・着陸方式の根拠は親ファイルのヘッダ参照、ここでは繰り返さない）。
+#
+# Step sizing: roll raw 2662 = normalizeAxis (2662-2048)/2048 = 0.2998 -> after the
+# firmware's centre deadband (command.cpp, deadband_=0.05, rescale to reach +-1 at
+# full deflection): (0.2998-0.05)/(1-0.05) = 0.2629 stick. Lesson 5/8 both compute
+# roll_target = ws::rc_roll() * rate_max_rp (rate_max_rp=1.0 rad/s), so the commanded
+# rate step is ~0.263 rad/s (~15.1 deg/s) — comfortably inside the rate loop's linear
+# range, not a saturating input.
+# ステップ量: roll raw 2662 は正規化 0.2998、ファームの中央デッドバンド（command.cpp,
+# deadband_=0.05, 全振りで+-1に届くよう再スケール）適用後 0.2629。Lesson 5/8 とも
+# roll_target = ws::rc_roll() * rate_max_rp（rate_max_rp=1.0 rad/s）なので指令レート
+# ステップは約0.263 rad/s（約15.1 deg/s）— レートループの線形域内、飽和しない入力。
+#
+# NOT added to `sf sils regression` (no .expect file): this is fallback demo
+# material, not a regression gate. Same workshop-target build/lesson-switch
+# prerequisites as workshop_acro.scn apply — see that file's header for the full
+# `sf lesson switch` / `touch` / `sf sils build --target workshop` sequence.
+# `sf sils regression` には追加しない（.expect なし）: 本ファイルは回帰ゲートでは
+# なく保険用デモ素材。workshop ターゲットのビルド/レッスン切替の前提は
+# workshop_acro.scn と同一（同ファイルのヘッダの手順参照）。
+#
+# Run (after `sf lesson switch 5 --solution` or `8 --solution` + touch + build):
+#   sf sils scenario simulator/sils/scenarios/workshop_acro_step.scn --target workshop --video
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc  2048  2048   2048    2048  0     4000      50   # A: disarmed 4s — boot calibration completes (~3.5s)
+   +    rc  2048  2048   2048    2048  1     500       50   # B: ARM (IDLE_GROUND -> ARMED_GROUND)
+   +    rc  3523  2048   2048    2048  1     400       50   # C: climb burst, duty=0.72 (above hover) -> TAKEOFF -> FLYING
+   +    rc  3432  2048   2048    2048  1     1000      50   # D1: cruise at hover duty=0.676, sticks centered — pre-step settle
+   +    rc  3432  2662   2048    2048  1     500       50   # D2: ROLL STEP +0.3 stick (~+0.263 rad/s commanded rate) 0.5s
+   +    rc  3432  2048   2048    2048  1     1000      50   # D3: roll stick back to centre — step-response recovery/settle
+   +    rc  2048  2048   2048    2048  0     200       50   # release ARM button
+   +    rc  2048  2048   2048    2048  1     200       50   # press again -> DISARM (toggle) — cuts power while airborne
+   +    rc  2048  2048   2048    2048  0     600       50   # settle disarmed (free-fall + ground contact, no throttle)

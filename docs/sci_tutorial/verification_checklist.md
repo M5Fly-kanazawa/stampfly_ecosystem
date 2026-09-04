@@ -56,6 +56,8 @@
 - [ ] S5: `sf sils gui` でのシナリオ実行のスクリーン録画
 - [ ] 全動画・ログを講師 PC のローカルとクラウド（会場 WiFi 不通に備え）の両方に保存する
 
+**SILS 由来の保険は生成済み:** S1/S4/S5 の SILS（MuJoCo）グラフ・動画・テキストサマリは `docs/sci_tutorial/fallback/`（索引は同ディレクトリの `README.md`）に生成済み。上記チェックボックスが指す**実機由来**の動画・ログ（S1 の POS_HOLD 実写ホバリング、S4 の Lesson 5→8 実飛行、`rate-fit`/`rate-tune` の実ログ出力）は対象外で、講師が別途リハーサルで取得すること。
+
 ---
 
 <a id="english"></a>
@@ -117,3 +119,5 @@ Capture the following during rehearsal, for every session's demo.
 - [ ] S4: the run log and output of `sf sysid rate-fit`/`rate-tune` (saved as text)
 - [ ] S5: a screen recording of a `sf sils gui` scenario run
 - [ ] Save every video and log both locally on the instructor laptop and in the cloud (in case venue WiFi is down)
+
+**SILS-derived fallback material is already generated:** the S1/S4/S5 SILS (MuJoCo) graphs, videos, and text summaries live in `docs/sci_tutorial/fallback/` (see that directory's `README.md` for the index). The **hardware**-derived video/logs the checkboxes above refer to (S1's real POS_HOLD hover footage, S4's real Lesson 5->8 flight, the `rate-fit`/`rate-tune` run logs) are out of scope there and still need to be captured by the instructor during a separate rehearsal.
