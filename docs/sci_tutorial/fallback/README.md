@@ -16,7 +16,7 @@
 ### 前提
 
 - `docs/sci_tutorial/verification_checklist.md` §5「動画・ログの保険取得」の一部としてここに保険素材を置く。**実機由来の動画・ログ（S1 の POS_HOLD ホバリング実写、S4 の Lesson 5→8 実飛行）は本ディレクトリの対象外** — checklist §5 のとおり講師が別途リハーサルで取得する。ここにあるのは SILS（シミュレーション）由来の素材のみ。
-- グラフは全て matplotlib、150dpi・横長・12pt 以上のフォントで、データプロジェクタ投影を想定している。
+- グラフは全て matplotlib、150dpi・横長・14pt 以上のフォントで、データプロジェクタ投影を想定している。
 
 ## 2. ファイル一覧
 
@@ -93,7 +93,7 @@ This directory holds pre-generated graphs, videos, and text summaries from SILS 
 ### Scope
 
 - This is part of `docs/sci_tutorial/verification_checklist.md` §5 ("Backup Video and Logs"). **Hardware-derived video/logs (S1's real POS_HOLD hover footage, S4's real Lesson 5→8 flight) are OUT of scope here** — per checklist §5, the instructor captures those separately during rehearsal. Only SILS (simulation) material lives in this directory.
-- Graphs use matplotlib at 150dpi, landscape, >=12pt fonts, sized for a data projector.
+- Graphs use matplotlib at 150dpi, landscape, >=14pt fonts, sized for a data projector.
 
 ## 2. File list
 
