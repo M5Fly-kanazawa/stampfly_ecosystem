@@ -118,12 +118,22 @@
     \end{minipage}%
   };
 
-  \coordinate (gateLeft) at ($(GATE.west)+(-8mm,0)$);
-  \coordinate (s1Left)   at ($(S1.west)+(-8mm,0)$);
-  \draw[gatecolor, line width=1.4pt] (GATE.west) -- (gateLeft) |- (s1Left);
-  \draw[garr] (s1Left) -- (S1.west);
+  % NOTE: the vertical bus MUST use a single x-coordinate anchored to S1
+  % (not to GATE.west), because GATE is centered on the S1-S3 span and its
+  % west edge is well to the right of S1's west edge — using GATE.west's own
+  % x for the bus would route the line back through S1's interior (T4
+  % violation). Anchoring both turns to feedX keeps the whole bus strictly
+  % in the left margin, clear of every box.
+  % 注意: 垂直バスは必ず S1 基準の単一 x 座標を使うこと（GATE.west 基準にしない）。
+  % GATE は S1〜S3 の全幅中央に配置されるため GATE.west は S1.west よりかなり
+  % 右にある。GATE.west 基準で配線すると S1 内部を貫通する（T4違反）。
+  % feedX に両方の折れ点を揃えることで、バス全体を左マージンに収める。
+  \coordinate (feedX) at ($(S1.west)+(-8mm,0)$);
+  \draw[gatecolor, line width=1.4pt]
+    (GATE.west) -- (feedX -| GATE.west) -- (feedX);
+  \draw[garr] (feedX) -- (S1.west);
   \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
-    at ($(gateLeft)!0.5!(s1Left) + (-3mm,0)$) {実機同定値と突き合わせ};
+    at ($(feedX)!0.5!(feedX -| GATE.west) + (-3mm,0)$) {実機同定値と突き合わせ};
 
 \end{tikzpicture}
 \end{document}
