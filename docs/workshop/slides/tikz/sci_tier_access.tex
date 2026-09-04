@@ -63,28 +63,28 @@
   % Four tiers, top (L0, most abstract) to bottom (L3, closest to hardware)
   % 4層。上（L0・最も抽象的）から下（L3・ハードウェアに最も近い）まで
   \node[tier=l0color] (L0) at (0, 0) {%
-    \begin{minipage}{86mm}
+    \begin{minipage}{86mm}\raggedright
       \ttier{l0color}{L0: Sketch API}\quad\tns{l0color}{ws::*}\\[3pt]
       \tsub{典型ユーザー: Workshop 受講者}\\[1pt]
       \tsub{setup() / loop\_400Hz(dt)、30+ 関数で完結}
     \end{minipage}%
   };
   \node[tier=l1color, below=12mm of L0] (L1) {%
-    \begin{minipage}{86mm}
+    \begin{minipage}{86mm}\raggedright
       \ttier{l1color}{L1: Topic API}\quad\tns{l1color}{sf::api::*}\\[3pt]
       \tsub{典型ユーザー: 推定・制御学習者}\\[1pt]
       \tsub{Topic を subscribe/publish、IEstimator/IController 差替え}
     \end{minipage}%
   };
   \node[tier=l2color, below=12mm of L1] (L2) {%
-    \begin{minipage}{86mm}
+    \begin{minipage}{86mm}\raggedright
       \ttier{l2color}{L2: HAL Direct}\quad\tns{l2color}{stampfly::*Wrapper}\\[3pt]
       \tsub{典型ユーザー: HW 学習者}\\[1pt]
       \tsub{SPI / I2C を直接呼ぶ（Topic を介さない経路）}
     \end{minipage}%
   };
   \node[tier=l3color, below=12mm of L2] (L3) {%
-    \begin{minipage}{86mm}
+    \begin{minipage}{86mm}\raggedright
       \ttier{l3color}{L3: BSP Internal}\quad\tns{l3color}{sf::internal::board}\\[3pt]
       \tsub{典型ユーザー: ファーム実装者}\\[1pt]
       \tsub{bus handle、起動順序を直接扱う}

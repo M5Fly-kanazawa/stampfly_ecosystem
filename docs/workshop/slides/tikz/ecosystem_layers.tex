@@ -95,12 +95,20 @@
   \node[infra=ctools] (tools) at (-2.5, -2.8) {\texttt{tools/}\\[-2pt]{\scriptsize sf CLI}};
   \node[infra=cprotocol] (proto) at (2.5, -2.8) {\texttt{protocol/}\\[-2pt]{\scriptsize 通信仕様 SSOT}};
 
-  % Dashed lines to show infrastructure supports everything
+  % Dashed fork to show infrastructure supports everything
+  % (right-angle routing: stem down from firmware/, horizontal bar,
+  % vertical drops to tools/ and protocol/ — T4 compliant)
   % ダッシュ線でインフラが全体を支えることを示す
+  % （直角ルーティング: firmware/ から下に幹線、水平バー、
+  % tools/・protocol/ へ垂直ドロップ。T4準拠）
+  \coordinate (infrabar) at (0, -1.75);
+  \draw[dashed, line width=0.8pt, black!45]
+    (fw.south) -- (infrabar);
+  \fill[black!45] (infrabar) circle (1.2pt);
   \draw[dashed, line width=0.8pt, ctools!60]
-    (tools.north) -- (fw.south west);
+    (infrabar) -| (tools.north);
   \draw[dashed, line width=0.8pt, cprotocol!60]
-    (proto.north) -- (fw.south east);
+    (infrabar) -| (proto.north);
 
   % Infrastructure label
   % インフラ層のラベル

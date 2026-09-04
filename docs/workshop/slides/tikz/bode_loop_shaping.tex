@@ -69,15 +69,15 @@
   (axis cs:23, 0) -- (axis cs:23, -40);
 
 % Asymptotic slope annotations
-\node[font=\scriptsize, labelcolor, rotate=-17] at (axis cs:5, 32)
+\node[font=\scriptsize, labelcolor, rotate=-17, xshift=13mm, yshift=1mm] at (axis cs:5, 32)
   {$-20$ dB/dec};
 \node[font=\scriptsize, labelcolor, rotate=-32] at (axis cs:350, -18)
   {$-40$ dB/dec};
 
 % Break frequency
 \draw[refcolor, densely dashed, line width=0.5pt]
-  (axis cs:50, -40) -- (axis cs:50, 55);
-\node[font=\scriptsize, refcolor] at (axis cs:50, 58)
+  (axis cs:50, -40) -- (axis cs:50, 46);
+\node[font=\scriptsize, refcolor, anchor=south] at (axis cs:50, 48)
   {$\frac{1}{\tau_m}\!=\!50$};
 
 % Legend
