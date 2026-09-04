@@ -188,6 +188,18 @@ sf log analyze <logfile>
 - P → D → I の順でチューニング
 - テレメトリで効果を確認しながら調整
 
+### 学習者コードを SILS で試す（Lesson 5 / 8 / 11 補足）
+
+Lesson 5・8・11 で書く `setup()`/`loop_400Hz()`（`main/user_code.cpp`）は、実機フラッシュ前に SILS（`simulator/sils/`、`--target workshop`）上でも走らせられる。実機に書き込まれるのと同じソースがそのまま動く（Code Identity）ので、ARM・状態遷移（ARMED_GROUND→TAKEOFF→FLYING）・モータ応答の配線ミスは実機を壊さずに気付ける。
+
+```bash
+sf sils build --target workshop                 # 初回のみ
+sf lesson switch 8 --solution                    # 動作確認したいレッスンに切替
+sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
+```
+
+**現状の注意:** `sf lesson switch` は `student.cpp`/`solution.cpp` の更新日時を保持するため、切替直後の `sf sils build --target workshop` が「変更なし」と誤判定することがある。反映されない場合は `touch firmware/workshop/main/user_code.cpp` してから再ビルドする。また、レッスンのゲイン・ミキサー式は実機（`firmware/vehicle_old`）向けの調整値であり、現行 SILS プラントに対して検証済みではない — 既定のスティック指令では離陸まで届かないため、**ホバー品質の確認には使えない**。ARM・モード遷移・モータ応答の配線確認が主な用途。詳細は `simulator/sils/README.md`「エミュレータターゲット」節を参照。
+
 ## 4. 安全管理
 
 ### 基本ルール
@@ -255,6 +267,8 @@ sf lesson switch 0 && sf lesson build
 Each lesson follows: Lecture (10-15 min) → Demo (5 min) → Hands-on (30-40 min) → Test (10-15 min) → Wrap-up (5 min).
 
 See the Japanese section above for detailed lesson-by-lesson instructions.
+
+**Trying learner code in SILS (Lessons 5/8/11):** the exact `main/user_code.cpp` a student writes can run on the host SILS bench before it ever touches hardware — `sf sils build --target workshop` then `sf sils scenario <scn> --target workshop` (see `simulator/sils/README.md`'s "Emulator targets" section). Good for catching ARM/state-machine/motor-wiring mistakes safely; the lesson gains and legacy mixer formula are not yet validated against the current SILS plant, so it is not a hover-quality check.
 
 ## 4. Safety
 

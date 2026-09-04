@@ -19,6 +19,32 @@
 | `models/` | 機体の MJCF（`quad_smoke.xml`／`demo_drop.xml` ＝ P1.0、StampFly 完全版 ＝ P1.2） |
 | `smoke/` | スモークテスト（`mujoco_smoke`・`cores_smoke` ＝ P1.0、`rtos_smoke` ＝ P1.1） |
 
+### エミュレータターゲット（vehicle / vehicle_old / workshop）
+
+`sf sils build --target <name>` と `sf sils scenario <scn> --target <name>` は3つのファームを選べる（いずれも同じ MuJoCo Plant／仮想ボード基盤に、無改変のファーム本体をリンクする）。
+
+| target | 実行ファイル | 内容 |
+|--------|------------|------|
+| `vehicle`（既定） | `emu_vehicle` | 現行 `firmware/vehicle`。`sf::PidController`（ControlTask）が全軸を制御 |
+| `vehicle_old` | `emu_vehicle_old` | レガシー `firmware/vehicle_old`（凍結・実飛行87回） |
+| `workshop` | `emu_workshop` | `firmware/workshop`。タスク表は vehicle と同一で、ControlTask だけが `WorkshopControlTask` に置き換わり、学習者の `setup()`/`loop_400Hz()`（`sf lesson switch` がコピーする `firmware/workshop/main/user_code.cpp`）を毎周期呼ぶ |
+
+```bash
+sf sils build --target workshop
+sf lesson switch 8 --solution   # main/user_code.cpp を Lesson 8 解答で上書き
+sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
+```
+
+`main/user_code.cpp` が無い（gitignore 対象・`sf lesson switch` 未実行）場合、`sf sils build --target workshop` の初回 configure で Lesson 0 のテンプレートから自動生成される（`firmware/workshop/main/CMakeLists.txt` の実ファームビルドと同じ配慮）。
+
+**workshop ターゲットが実証すること:** 実機に書き込まれるのと同じ `user_code.cpp`（学習者コード）がここで動き、`emu_vehicle` と同じ Plant でループを閉じる — 学習者自身の制御則の Code Identity。ARM・状態遷移（ARMED_GROUND→TAKEOFF→FLYING）・モータ応答は vehicle と同一の StateTask/ImuTask/Actuator 経由で検証できる。
+
+**既知の制約:** `ws::motor_mixer()` が再現する旧電圧スケールミキサー（`T + 0.25·(±R±P±Y)/3.7`、`ws_internal.hpp`）と Lesson 5/8 のゲインは、`firmware/vehicle_old` 実機向けに調整されたものであり、vehicle 用に同定された現行 SILS プラント（モータ ODE・`thrust_efficiency` 等、`docs/architecture/simulation-policy.md`）に対して検証・再チューニングされていない。`acro_flight.scn` で Lesson 5/8 の解答を実行すると ARM・モード遷移・モータ応答（duty 変化）は vehicle と同様に正しく動くが、既定のスティック指令では離陸（ToF airborne 検知、`system_status.airborne`）までは届かない。workshop ターゲットの目的は状態機械・Pub-Sub 配線・Code Identity の実証であり、レッスンのゲイン調整はスコープ外（レッスンのゲイン・ミキサー式は変更しない）。
+
+`sf lesson switch` は `shutil.copy2` でコピー元（`student.cpp`/`solution.cpp`）の mtime を保つ。そのため切替直後に `sf sils build --target workshop` を実行しても、コピー元の mtime が既存ビルドの `user_code.cpp.o` より古いと ninja が変更を検知せず「no work to do」になることがある。確実に反映させるには `touch firmware/workshop/main/user_code.cpp` してから `sf sils build --target workshop` を実行する。
+
+`sf sils regression`（CI）は現時点で `vehicle`/`vehicle_old` の `*.scn`/`*.expect` のみを対象にする。workshop 用のシナリオ・ゲートは未整備（上記の通りレッスンの既定ゲインは離陸まで届かないため、既存のホバー系ゲートをそのまま転用できない）。
+
 ### ビルド（スモークテスト）
 
 ```bash
@@ -136,6 +162,32 @@ P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証
 ## 1. Overview
 
 A physics-based, MuJoCo, algorithm-independent SILS (Software-in-the-Loop) bench. It verifies the vehicle firmware on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`RESET_PLAN.md`](RESET_PLAN.md).
+
+### Emulator targets (vehicle / vehicle_old / workshop)
+
+`sf sils build --target <name>` and `sf sils scenario <scn> --target <name>` pick one of three firmwares (all link the same, unmodified firmware sources onto the same MuJoCo Plant / virtual board infrastructure).
+
+| target | executable | what it is |
+|--------|-----------|------------|
+| `vehicle` (default) | `emu_vehicle` | Current `firmware/vehicle`. `sf::PidController` (ControlTask) drives every axis |
+| `vehicle_old` | `emu_vehicle_old` | Legacy `firmware/vehicle_old` (frozen, 87 real flights) |
+| `workshop` | `emu_workshop` | `firmware/workshop`. Same task table as vehicle, except ControlTask is replaced by `WorkshopControlTask`, which calls the learner's `setup()`/`loop_400Hz()` (`firmware/workshop/main/user_code.cpp`, copied there by `sf lesson switch`) every cycle |
+
+```bash
+sf sils build --target workshop
+sf lesson switch 8 --solution   # overwrite main/user_code.cpp with the Lesson 8 solution
+sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
+```
+
+If `main/user_code.cpp` is missing (gitignored; `sf lesson switch` never run yet), the first `sf sils build --target workshop` configure auto-bootstraps it from the Lesson 0 template — the same convenience `firmware/workshop/main/CMakeLists.txt` gives the real firmware build.
+
+**What the workshop target proves:** the exact `user_code.cpp` (learner code) that gets flashed to hardware runs here and closes the loop through the same Plant as `emu_vehicle` — Code Identity for the learner's own control law. ARM, state transitions (ARMED_GROUND→TAKEOFF→FLYING) and motor response go through the same reused StateTask/ImuTask/Actuator as vehicle.
+
+**Known limitation:** the legacy voltage-scale mixer `ws::motor_mixer()` reproduces (`T + 0.25·(±R±P±Y)/3.7`, `ws_internal.hpp`) and the Lesson 5/8 gains were tuned for the real `firmware/vehicle_old` hardware — neither has been validated or retuned against the current SILS plant identified for vehicle (motor ODE, `thrust_efficiency`, etc. — see `docs/architecture/simulation-policy.md`). Running the Lesson 5/8 solutions against `acro_flight.scn` shows ARM, mode switching and motor response (duty changes) working exactly as on vehicle, but the default stick commands never reach liftoff (ToF airborne detection, `system_status.airborne`). The workshop target's purpose is proving the state machine / Pub-Sub wiring / Code Identity — retuning lesson gains is out of scope (lesson gains and the mixer formula are not changed).
+
+`sf lesson switch` uses `shutil.copy2`, which preserves the source file's (`student.cpp`/`solution.cpp`) mtime. So running `sf sils build --target workshop` right after a switch can report "no work to do" if that mtime is older than the existing `user_code.cpp.o` — ninja never sees a change. To force a rebuild, `touch firmware/workshop/main/user_code.cpp` before `sf sils build --target workshop`.
+
+`sf sils regression` (CI) currently only covers `vehicle`/`vehicle_old` `*.scn`/`*.expect` files. No workshop scenarios/gates exist yet — as above, the lessons' default gains never reach liftoff, so the existing hover-style gates cannot be reused as-is.
 
 ### Build (P1.0 smoke tests)
 
