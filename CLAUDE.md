@@ -477,9 +477,9 @@ When developing this codebase, follow this order:
 - **Analysis/Tools**: Python (Jupyter notebooks, scripts)
 - **Protocol Spec**: YAML or Protocol Buffers
 
-## SCI26 原稿
+## 非公開文書の扱い
 
-`docs/sci26/` に SCI26 OS04 の学会原稿（LaTeX）がある。原稿の執筆・推敲を行う場合は、必ず `docs/sci26/WRITING_POLICY.md` を最初に読み、方針に従うこと。
+学会原稿・申請書（科研費等）・個人の研究計画は、この公開リポジトリには置かない（履歴にも残さない、2026-09-05 に履歴から除去済み）。それらは手元の別の非公開リポジトリで管理する。この公開リポジトリ側から非公開リポジトリへのリンクやパスを書かない。クラウド版セッションは作業ブランチを origin に push するため、非公開文書の作業をこのリポジトリで開いてはならない。`.gitignore` の `docs/_private/`・`papers/`・`grants/` は置き間違え防止用である。
 
 ## Reference
 

@@ -125,10 +125,19 @@ knote/
 # 開発中（git管理対象外）
 _wip/
 
-# Private documents (conference papers, etc.)
-# 非公開ドキュメント（学会原稿等）
+# Private documents (conference manuscripts, grant applications, personal plans)
+# are kept outside this public repository. Never add them here, even on a branch.
+# 非公開文書（学会原稿・申請書・個人計画）はこの公開リポジトリの外で管理する。
+# ブランチであってもここに追加しない（クラウド版セッションは作業ブランチを origin へ push する）。
 docs/sci26/
 docs/juida2026/
+docs/hikoki64/
+docs/si2026/
+docs/kakenhi/
+docs/_private/
+papers/
+grants/
+analysis/scripts/verify_hikoki64/
 
 # ====================
 # Build / runtime caches

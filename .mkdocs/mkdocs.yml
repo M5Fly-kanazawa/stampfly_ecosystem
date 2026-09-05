@@ -77,12 +77,9 @@ markdown_extensions:
 
 # Exclude non-documentation directories from processing
 # ドキュメント対象外のディレクトリを除外
-# logs/ is ~1.5GB of flight logs; docs/juida2026/ has a 28MB PDF plus an embedded
-# .git (40MB+); docs/sci26/ and docs/hikoki64/ are conference-manuscript working
-# directories not meant for the public site; landing/ is served separately at the
-# site root and must not also be copied under /docs/.
-# logs/ は約1.5GBのフライトログ、docs/juida2026/ は28MBのPDFと埋め込み .git（40MB超）を含む。
-# docs/sci26/・docs/hikoki64/ は学会原稿の作業ディレクトリで公開サイト対象外。
+# logs/ is ~1.5GB of flight logs; docs/_private/ is a local-only scratch area;
+# landing/ is served separately at the site root and must not also be copied under /docs/.
+# logs/ は約1.5GBのフライトログ、docs/_private/ は手元専用の作業領域。
 # docs/sci_tutorial/ holds the SCI/SICE tutorial-course (2026-09-10) participant
 # materials — README, hands-on review guide and cheat sheet are published so
 # attendees can revisit them online; only the instructor-side verification
@@ -113,11 +110,9 @@ exclude_docs: |
   third_party/
   logs/
   landing/
-  docs/juida2026/
-  docs/sci26/
+  docs/_private/
   docs/sci_tutorial/verification_checklist.md
   docs/sci_tutorial/*.pdf
-  docs/hikoki64/
   docs/workshop/dxh2026/
 
 nav:
