@@ -199,9 +199,17 @@ sf sils gui
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習: 自分の PID を SILS で飛ばす}
-  \begin{block}{実機の前にシミュレータで確かめる}\small
-    実習 8（PID）の \code{setup()}/\code{loop\_400Hz()} を，飛ばす前に SILS で検証する
-  \end{block}
+  \vspace{0.15em}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \vspace{0.2em}
+
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item 実習8（PID）用に SILS ホストベンチをビルドする
+    \item 実習8の解答（または S4 で書いた自分のコード）に切り替える
+    \item 切替後に再ビルドし，新しいコードを取り込む
+    \item シナリオを実行し，合否判定を確認する
+  \end{enumerate}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
 sf sils build --target workshop
@@ -267,7 +275,7 @@ sf log analyze flight.csv
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{センサノイズの評価: Allan 分散}
+\begin{frame}[fragile]{センサノイズの評価: Allan 分散\later}
   \begin{block}{Allan 分散でわかること}\small
     静止センサの出力から Allan 偏差（Allan deviation）を計算すると，
     ホワイトノイズと長時間のバイアス不安定性を分離して評価できる。
@@ -290,27 +298,112 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{研究利用の入口: L1 Topic API}
-  \begin{block}{自分の推定器・制御器を載せる}\small
-    L1 Topic API（\code{sf::api::*}）は Pub-Sub（発行/購読型のメッセージ配信）
-    トピックを subscribe/publish し，
-    \code{IEstimator}/\code{IController} を実装して既存のコンポーネントと
-    差し替えられる
+% Author's 2nd-round review: the single "L1 Topic API" frame was too
+% abrupt. Expanded into 3 \later frames so participants can read this at
+% home: (a) what the Topic API is (real topic names from topics.hpp, real
+% read functions from sf_api.hpp), (b) how to plug in your own estimator/
+% controller (real IEstimator/IController methods, real swap mechanism),
+% (c) a pointer to the example program. Accuracy note (checked against the
+% headers directly): sf::api::* (sf_api.hpp, M2d scope) is READ-ONLY today
+% — thin wrappers around Topic<T>::latest(). There is no publish-side
+% entry point exposed to learners yet (actuator control / state requests
+% are explicitly out of scope in the header's own comment). So frame (a)
+% describes Topic<T> publish/latest as the underlying Pub-Sub mechanism
+% used BETWEEN firmware components, and sf::api::* as the read-only subset
+% exposed to L1. Frame (b) describes the actual swap path found in the
+% task sources (imu_task.cpp's createEstimator() factory keyed on the
+% estimator.type param; control_task.cpp's single static PidController
+% instance for the controller side, since no controller factory exists
+% yet).
+% 著者の第2ラウンドレビュー: 「L1 Topic API」1枚は説明が急すぎた。3枚の
+% \later フレームに拡張し，受講者が後で読めるようにした: (a) Topic API とは
+% 何か（topics.hppの実トピック名，sf_api.hppの実読み取り関数），(b) 自分の
+% 推定器・制御器を載せる方法（実際のIEstimator/IControllerメソッド，実際の
+% 差替え機構），(c) サンプルプログラムへの導線。正確性の注記（ヘッダを直接
+% 確認済み）: sf::api::*（sf_api.hpp, M2dスコープ）は現状「読み取り専用」—
+% Topic<T>::latest() の薄いラッパーに過ぎない。学習者向けのpublish側の入口は
+% まだ無い（アクチュエータ制御・状態要求はヘッダ自身のコメントで明示的に
+% 対象外）。そこで(a)ではファームコンポーネント間で使われる本来のPub-Sub機構
+% としてTopic<T>のpublish/latestを説明し，sf::api::*はL1に公開された読み取り
+% 専用の部分集合と位置づける。(b)ではタスクソースで実際に見つかった差替え
+% 経路を説明する（推定器はimu_task.cppのcreateEstimator()ファクトリが
+% estimator.typeパラメータで分岐；制御器はcontrol_task.cppの単一static
+% PidControllerインスタンスを直接差し替える — 制御器側にはまだファクトリが
+% 無いため）。
+\begin{frame}{研究利用の入口 (1/3): Topic API とは\later}
+  \begin{block}{Pub-Sub（発行/購読型のメッセージ配信）}\footnotesize
+    \code{Topic<T>}（\code{sf\_core}）がコンポーネント間を疎結合につなぐ。
+    発行側は \code{publish(data)}，購読側は \code{latest()} で最新値を読む
   \end{block}
 
-  \vspace{0.5em}
+  \vspace{0.2em}
 
-  \begin{itemize}\small
-    \item 推定: \code{sf\_estimator}（インターフェース）+ \code{sf\_estimator\_eskf}。
-          \code{sf\_estimator\_complementary} という代替実装もすでにある
-    \item 制御: \code{sf\_controller}（インターフェース）+ \code{sf\_controller\_pid}
-    \item Workshop 受講者の L0 と同じ機体・同じファーム基盤の上で，
-          より深いレイヤーにアクセスできる
-  \end{itemize}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{ll}
+      \hline
+      \textbf{トピック（\code{sf::}名前空間）} & \textbf{内容} \\
+      \hline
+      \code{sensor\_imu}       & IMU 生データ（400\,Hz） \\
+      \code{estimate\_state}   & 推定した姿勢・位置・速度 \\
+      \code{command\_setpoint} & パイロット/API の目標値 \\
+      \code{control\_output}   & 推力・トルク指令 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\scriptsize 学習者向け読み取り関数（\code{sf::api::*}，\code{sf\_api.hpp}）:
+  \code{imu\_latest()}/\code{estimate\_latest()}/\code{command\_latest()} など。
+  \code{Topic<T>::latest()} をラップした\warn{読み取り専用}の入口（書き込み側は未公開）}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{再現性の3原則}
+\begin{frame}[fragile]{研究利用の入口 (2/3): 推定器・制御器を載せる\later}
+  \begin{block}{\code{IEstimator}/\code{IController} を実装する}\footnotesize
+    既存の ESKF・PID と同じインターフェース（\code{sf\_estimator}/\code{sf\_controller}）
+    を実装すれば差し替えられる
+  \end{block}
+
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{ll}
+      \hline
+      \textbf{インターフェース} & \textbf{主なメソッド} \\
+      \hline
+      \code{IEstimator}  & \code{predict()}, \code{update*()}, \code{getState()}, \code{reset()} \\
+      \code{IController} & \code{compute()}, \code{reset()}, \code{onModeChange()} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\scriptsize \textbf{差替え手順:} 推定器は \code{estimator.type} パラメータで選ぶ
+  （\code{imu\_task.cpp} の \code{createEstimator()} を拡張して自作を足す）。制御器は
+  現状 PID の単一実装のみのため，\code{control\_task.cpp} の \code{static PidController
+  controller;} を自分のクラスに置き換える（コントローラ側にはまだファクトリが無い）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{研究利用の入口 (3/3): サンプルプログラム\later}
+  \begin{block}{\code{examples/09\_topic\_api\_hello}}\footnotesize
+    姿勢トピックを購読し，roll/pitch/yaw を 10\,Hz でシリアル表示する最小例
+  \end{block}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{抜粋（イメージ）}
+sf::StateEstimate est = sf::api::estimate_latest();
+auto rpy = sf::math::Quat(est.attitude[0], est.attitude[1],
+                           est.attitude[2], est.attitude[3]).to_euler();
+printf("roll=%.1f pitch=%.1f yaw=%.1f\n",
+       rpy.x*180/M_PI, rpy.y*180/M_PI, rpy.z*180/M_PI);
+  \end{sflisting}
+
+  {\scriptsize ビルド: \code{idf.py set-target esp32s3 \&\& idf.py build} $\to$
+  \code{idf.py -p <port> flash monitor}\\[2pt]
+  \warn{帰宅後に再現:} \code{examples/09\_topic\_api\_hello}（\code{04\_read\_imu} 等と
+  同じく単独ビルド可能）を手元で試す}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{再現性の3原則\later}
   \vspace{0.3em}
 
   {\small S1 で見た開発の3原則を，再現性の観点から振り返る}
@@ -338,7 +431,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{発展テーマ: AI と強化学習}
+\begin{frame}{発展テーマ: AI と強化学習\later}
   \begin{itemize}\small
     \item \textbf{AI コーディングエージェントの活用}: 制御則の実装・デバッグや
           シミュレーションログの解析を，AI コーディングエージェントを補助に
@@ -352,7 +445,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{発展テーマ: 制御・推定・自律飛行}
+\begin{frame}{発展テーマ: 制御・推定・自律飛行\later}
   \begin{itemize}\small
     \item \textbf{MPC・適応制御}: 今日扱った PID の先にある発展的な制御手法
     \item \textbf{ESKF・オートチューン}: 15状態 ESKF の実装，
@@ -367,7 +460,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{教育・研究での再利用}
+\begin{frame}{教育・研究での再利用\later}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \begin{block}{自分の授業・研究室で使うには}\footnotesize
@@ -392,7 +485,11 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{理論とコードの対応表}
+\begin{frame}{理論とコードの対応表\later}
+  {\footnotesize 本セッションの概念が，リポジトリのどのファイル・コマンドに対応するか一覧する}
+
+  \vspace{0.3em}
+
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline

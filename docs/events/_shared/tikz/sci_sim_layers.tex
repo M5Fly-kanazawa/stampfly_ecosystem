@@ -1,22 +1,37 @@
 % sci_sim_layers.tex — Three simulation layers for the SCI tutorial (S5)
 % シミュレーションの3層構造図。SCIチュートリアル S5 用。
 %
-% Source: docs/architecture/simulation-policy.md §2 (three-layer table) and
-% §4 (model-match gate).
-% 出典: docs/architecture/simulation-policy.md §2（3層構造の表）と
+% Source: docs/architecture/simulation-policy.md §2 (three-layer table),
+% §2 "層の関係" (layer 2 is independently positioned, NOT a simplified
+% version of layer 3), and §4 (model-match gate).
+% 出典: docs/architecture/simulation-policy.md §2（3層構造の表）、
+% §2「層の関係」（層2は層3の簡略版ではなく独立した位置づけ）、
 % §4（モデル一致ゲート）。
 %
-% Layout: three side-by-side boxes (Layer 1 -> 2 -> 3, left to right) with a
-% horizontal arrow chain showing increasing physical/code fidelity — a wide,
-% short shape that fits a 16:9 slide without being scaled down to
-% illegibility (an earlier stacked-box version was too tall; see git log).
-% A gate box spans the full width below, with a feedback arrow on the left
-% margin looping the SILS-derived identification back up to Layer 1.
-% レイアウト: 3つの箱を左から層1→層2→層3の順に横に並べ、水平の矢印連鎖で
-% 物理・コードの忠実度が増していくことを示す。横長で低い形状にすることで、
-% 16:9スライドに収めても文字が潰れない（縦積み版は高さが出過ぎたため変更。
-% git log 参照）。下に全幅のゲート箱を置き、左マージンのフィードバック矢印で
-% SILS側の同定値を層1へ戻すループを示す。
+% Author's 2nd-round review (2026-09): the previous version drew a FLOW
+% (three boxes side by side, left-to-right arrow chain) — the reviewer's
+% point was that this reads as a pipeline/flowchart, not as layers. This
+% version redraws the three tiers as STACKED HORIZONTAL BANDS (layer1 on
+% top, matching the top-to-bottom row order used by the "対応表"/"table"
+% frame elsewhere in this chapter), each band self-contained (title / what
+% it provides / tool / what it verifies). Short vertical arrows between
+% adjacent bands carry the teaching narrative from S5 item 1:
+%   モデルがある(層1) -> 実ログで検証できる(層2) -> 飛ばす前にSILSで検証できる(層3)
+% The model-match gate is drawn as a SIDE box (not another stacked band,
+% since it is not itself a simulation tier — it is the §4 procedure that
+% cross-checks layer3's identified plant against layer1's real-machine
+% reference), connected by right-angle arrows to layer1 and layer3 only.
+%
+% 著者の第2ラウンドレビュー（2026-09）: 旧版は3つの箱を横に並べ矢印で
+% つなぐ「フロー」だった — 指摘は「層ではなくフローに見える」というもの。
+% 本版は3層を縦積みの横長バンドとして描き直す（層1を上に、本章の
+% 「対応表」フレームの行順=層1→層2→層3の上から下という並びと揃える）。
+% 各バンドは自己完結（タイトル/提供するもの/ツール/何を検証するか）。
+% 隣接バンド間の短い垂直矢印が、S5 item 1 の説明の流れを運ぶ:
+%   モデルがある(層1) -> 実ログで検証できる(層2) -> 飛ばす前にSILSで検証できる(層3)
+% モデル一致ゲートは「層」ではない（§4の判定手順であり、層3で同定した
+% プラントを層1の実機基準値と突き合わせる）ため、積み重ねた4つ目のバンドに
+% はせず、層1・層3の2つだけに直角矢印で接続するサイド箱として描く。
 \documentclass[border=10pt]{standalone}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, calc}
@@ -48,143 +63,130 @@
 \definecolor{gatecolor}{RGB}{170, 30, 30}
 \definecolor{gray1}{RGB}{120, 120, 120}
 
-% Plain-LaTeX helper macros for the colored text lines inside each box
-% 箱の中の色付きテキスト用マクロ
+% Plain-LaTeX helper macros for the colored text lines inside each band
+% 帯の中の色付きテキスト用マクロ
 \newcommand{\ttier}[2]{{\bfseries\normalsize\color{#1}#2}}
 \newcommand{\tsub}[1]{{\scriptsize\color{black!55}#1}}
 
 \begin{tikzpicture}[
-    tier/.style={
+    band/.style={
       rectangle, rounded corners=4pt, draw=#1, line width=1.5pt,
-      fill=#1!8, minimum width=60mm, minimum height=30mm,
-      align=left, inner xsep=4mm, inner ysep=3mm
+      fill=#1!8, minimum width=108mm, minimum height=13mm,
+      align=left, inner xsep=4mm, inner ysep=0.8mm
     },
     gatebox/.style={
       rectangle, rounded corners=4pt, draw=gatecolor, line width=1.3pt,
-      fill=gatecolor!7, minimum width=178mm, minimum height=13mm,
-      align=left, inner xsep=6mm, inner ysep=2mm
+      fill=gatecolor!7, minimum width=50mm, minimum height=28mm,
+      align=left, inner xsep=3mm, inner ysep=2mm
     },
-    arr/.style={-{Stealth[length=3mm]}, line width=1.5pt, gray1},
+    relarr/.style={-{Stealth[length=3mm]}, line width=1.5pt, gray1},
     garr/.style={-{Stealth[length=3mm]}, line width=1.4pt, gatecolor},
   ]
 
-  % Three layers, left (Layer 1, design-time) to right (Layer 3, SILS)
-  % 3層。左（層1・設計用）から右（層3・SILS）まで
-  \node[tier=s1color] (S1) at (0, 0) {%
-    \begin{minipage}{54mm}\raggedright
-      \ttier{s1color}{層1: 設計用線形モデル}\\[3pt]
-      \tsub{プラント: $G(s){=}b\,e^{-Ls}/(s(Ts{+}1))$}\\[2pt]
-      \tsub{制御コード: 伝達関数として扱う}\\[2pt]
-      \tsub{\texttt{sf sysid rate-fit} で同定，設計の正}
+  % Three STACKED bands, top (Layer 1, design-time) to bottom (Layer 3,
+  % SILS) — matches the row order of the "対応表" table elsewhere in this
+  % chapter (層1/層2/層3 top-to-bottom). This is the core fix for the
+  % reviewer's "flow, not layers" complaint: full-width horizontal bars
+  % stacked vertically, not boxes chained left-to-right.
+  %
+  % Line budget: each band is title + 2 SHORT sublines (not long sentences)
+  % so every line fits in ONE row at this width without wrapping — a
+  % wrapped line silently doubles a band's height and was the actual cause
+  % of an earlier revision's 91pt (32mm) frame overflow (verified by
+  % rebuilding and reading the log, not guessed).
+  % 3つの帯を縦に積む。上（層1・設計時）から下（層3・SILS）へ — 本章の
+  % 「対応表」の行順（層1/層2/層3、上から下）と揃える。「フローであって
+  % 層ではない」という指摘への核心的な修正: 横長のバーを縦に積むのであって、
+  % 箱を左から右へ連鎖させるのではない。
+  %
+  % 行数の設計: 各帯はタイトル＋短い2行（長い一文にしない）とし、この幅で
+  % 折り返さず1行に収める — 行の折り返しは帯の高さを暗黙に倍増させ、
+  % 以前の版でフレームが91pt（32mm）溢れた実際の原因だった（推測ではなく
+  % 再ビルドしてログを読んで確認済み）。
+  \node[band=s1color] (S1) at (0, 0) {%
+    \begin{minipage}{99mm}\raggedright
+      \ttier{s1color}{層1: 設計用線形モデル}\\[1.5pt]
+      \tsub{$G(s){=}b\,e^{-Ls}/(s(Ts{+}1))$（伝達関数として扱う）}\\[1pt]
+      \tsub{\texttt{sf sysid rate-fit} で同定 $\to$ 設計・ループ整形の正}
     \end{minipage}%
   };
-  \node[tier=s2color, right=10mm of S1] (S2) {%
-    \begin{minipage}{54mm}\raggedright
-      \ttier{s2color}{層2: 実ログ駆動再生}\\[3pt]
-      \tsub{プラント: 低次線形 $G(s)$ + 飽和等}\\[2pt]
-      \tsub{制御コード: Python 移植，実ログ外乱で駆動}\\[2pt]
-      \tsub{\texttt{analysis/scripts/}，A/B 判定の正}
+  \node[band=s2color, below=5mm of S1] (S2) {%
+    \begin{minipage}{99mm}\raggedright
+      \ttier{s2color}{層2: 実ログ駆動オフライン再生}\\[1.5pt]
+      \tsub{層1と同じ$G(s)$＋飽和等，制御則はPython移植}\\[1pt]
+      \tsub{実ログ外乱で駆動（\texttt{analysis/scripts/}）$\to$ A/B判定の正}
     \end{minipage}%
   };
-  \node[tier=s3color, right=10mm of S2] (S3) {%
-    \begin{minipage}{54mm}\raggedright
-      \ttier{s3color}{層3: SILS}\\[3pt]
-      \tsub{プラント: 非線形6自由度（MuJoCo）}\\[2pt]
-      \tsub{制御コード: 実ファーム C++ そのもの}\\[2pt]
-      \tsub{Code/Param Identity}
-    \end{minipage}%
-  };
-
-  % Rightward arrow chain, directly connecting adjacent box edges
-  % (S1.east -> S2.west, S2.east -> S3.west): each arrow starts and ends on
-  % a box border (T3/T4 fix — the previous version floated 6mm above the
-  % boxes, touching neither; see git log). The 10mm box gap leaves a ~7mm
-  % straight trunk before each 3mm arrowhead.
-  % 右向き矢印の連鎖。隣接する箱の辺を直接つなぐ（S1.east→S2.west，
-  % S2.east→S3.west）。矢印の始点・終点が必ず箱の枠に接する（T3/T4修正:
-  % 以前は箱の6mm上を浮いて配線され、どちらの箱にも接していなかった。
-  % git log 参照）。箱の間隔10mmのうち矢頭3mmを除いた約7mmが幹になる。
-  \draw[arr] (S1.east) -- (S2.west);
-  \draw[arr] (S2.east) -- (S3.west);
-
-  % Single label above the whole arrow chain (horizontally centered over S2)
-  % 矢印の連鎖全体に対する説明ラベル（層2の真上、中央に1つだけ配置）
-  \node[font=\small, text=gray1, align=center, anchor=south]
-    at ($(S2.north)+(0,10mm)$) {物理・コードの忠実度が上がる};
-
-  % Model-match gate: a full-width feedback box below all three layers,
-  % connected by a return path on the LEFT margin back up to Layer 1
-  % (right-angle routing, >=5mm stem before each arrowhead).
-  % モデル一致ゲート: 3層の下に全幅のフィードバック箱。左マージンの
-  % 折り返し経路で層1へ戻す（直角ルーティング、矢頭前に5mm以上の幹）。
-  \node[gatebox, below=20mm of $(S1.south)!0.5!(S3.south)$] (GATE) {%
-    \begin{minipage}{170mm}\raggedright
-      \ttier{gatecolor}{モデル一致の合否判定}\quad
-      \tsub{層3のログに同一の同定パイプラインを適用し $(b,L,T)$ を層1の実機基準値と比較（\texttt{sf sils sysid-gate}）}
+  \node[band=s3color, below=5mm of S2] (S3) {%
+    \begin{minipage}{99mm}\raggedright
+      \ttier{s3color}{層3: SILS（実ファーム + MuJoCo）}\\[1.5pt]
+      \tsub{非線形6自由度のプラント＋実ファームC++そのもの}\\[1pt]
+      \tsub{Code/Param Identity $\to$ 飛ばす前のシステム全体検証}
     \end{minipage}%
   };
 
-  % NOTE: the vertical bus MUST use a single x-coordinate anchored to S1
-  % (not to GATE.west), because GATE is centered on the S1-S3 span and its
-  % west edge is well to the right of S1's west edge — using GATE.west's own
-  % x for the bus would route the line back through S1's interior (T4
-  % violation). Anchoring both turns to feedX keeps the whole bus strictly
-  % in the left margin, clear of every box.
-  % 注意: 垂直バスは必ず S1 基準の単一 x 座標を使うこと（GATE.west 基準にしない）。
-  % GATE は S1〜S3 の全幅中央に配置されるため GATE.west は S1.west よりかなり
-  % 右にある。GATE.west 基準で配線すると S1 内部を貫通する（T4違反）。
-  % feedX に両方の折れ点を揃えることで、バス全体を左マージンに収める。
-  \coordinate (feedX) at ($(S1.west)+(-8mm,0)$);
-  % Fix (T4): "-|" takes the x-coordinate from its RIGHT operand and the
-  % y-coordinate from its LEFT operand, so the corner must be written as
-  % (GATE.west -| feedX) = (feedX's x, GATE.west's y). The previous
-  % (feedX -| GATE.west) = (GATE.west's x, feedX's y) instead put the corner
-  % at GATE.west's x (~-19mm), which lies inside S1's x-range ([-30,30]mm)
-  % and drove the bus straight through the S1 box.
-  % 修正（T4）: 「-|」は x 座標を右側の被演算子から、y 座標を左側の
-  % 被演算子から取る。よってコーナーは (GATE.west -| feedX) =
-  % (feedXのx, GATE.westのy) と書く必要がある。以前の
-  % (feedX -| GATE.west) は (GATE.westのx, feedXのy) となり、コーナーが
-  % GATE.westのx（約-19mm）になっていた。これはS1のx範囲（[-30,30]mm）の
-  % 内側であり、バスがS1の箱を貫通していた。
-  \draw[gatecolor, line width=1.4pt]
-    (GATE.west) -- (GATE.west -| feedX) -- (feedX);
-  \draw[garr] (feedX) -- (S1.west);
-  % Label sits clear to the LEFT of the vertical bus/arrow corner (feedX).
-  % NOTE: the midpoint must be captured as its own coordinate first — TikZ
-  % calc parses "(A)!0.5!(B) + (dx,dy)" by attaching "+(dx,dy)" to B, not to
-  % the interpolated result, which silently halved the intended x-offset in
-  % an earlier revision (label barely moved, still grazed by the arrow).
-  % Widening the offset to -8mm and the S1-GATE gap (12mm -> 20mm, below)
-  % together keep the rotated text's right edge and vertical span clear of
-  % the arrow's corner and arrowhead. Previously the arrowhead crossed the
-  % "と" character (T2).
-  % ラベルは垂直バス/コーナー(feedX)から左に十分離して配置する。
-  % 注意: 中間点は必ず独立した座標として確定させること — TikZ calc は
-  % 「(A)!0.5!(B) + (dx,dy)」を「B に +(dx,dy)」と解釈するため、以前の版では
-  % 意図したxオフセットが半分になり、ラベルがほぼ動かず矢印に接触したまま
-  % だった。オフセットを-8mmへ広げ、層1〜3とGATEの間隔（below）も12mm→20mm
-  % に広げたことで、回転テキストの右端と縦方向の占有幅の両方が、矢印の
-  % コーナー・矢頭から確実に離れる。以前は矢頭が「と」の文字に重なって
-  % いた（T2違反）。
-  % Use the same corrected corner point as the bus above so the label sits
-  % on the actual vertical segment (in the left margin), not on the old
-  % (now-removed) mis-routed segment.
-  % 上のバスと同じ修正後のコーナー点を使う。ラベルを実際の垂直区間
-  % （左マージン側）の上に置くため（以前の誤配線区間の上ではなく）。
-  \coordinate (feedMid) at ($(feedX)!0.5!(GATE.west -| feedX)$);
-  \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
-    at ($(feedMid) + (-8mm,0)$) {実機同定値と突き合わせ};
+  % Short vertical arrows between adjacent bands, straight (no bend needed
+  % since the bands already share the same x-center), centered on the gap
+  % between bands. Each carries one clause of the S5 item-1 narrative.
+  % 隣接する帯の間の短い垂直矢印。帯は既に同じx中心を共有しているため
+  % 折れ曲がり不要の直線。帯間のギャップの中央に配置し、各矢印がS5 item 1
+  % の説明文の一節を運ぶ。
+  \draw[relarr] (S1.south) -- (S2.north);
+  \draw[relarr] (S2.south) -- (S3.north);
 
-  % Verification input: Layer 3 (SILS) feeds its log into the gate. S3 is
-  % centered directly above GATE's span (both centered on S2's x), so this
-  % is a plain vertical drop with a 20mm trunk — no jog needed, no crossing
-  % with the S1 return bus (left margin) or the S1-S2-S3 label (above S2).
-  % 検証の入力: 層3(SILS)のログがゲートに入る。S3はGATEの範囲の真上
-  % （どちらもS2のxを中心とする）にあるため、折れ曲がりなしの垂直線で
-  % 幹は20mm。左マージンの層1帰還バスや層1-2-3ラベル（S2の真上）とは
-  % 交差しない。
-  \draw[garr] (S3.south) -- (GATE.north -| S3.south);
+  % Labels sit to the RIGHT of each vertical arrow (not on top of the
+  % line — T2), inside the inter-band gap so they cannot collide with any
+  % band's text (the gap is empty space between two boxes) or with the
+  % gate/bus on the right margin (labels stop well before that region).
+  % ラベルは各垂直矢印の右側に置く（線の上に乗せない — T2）。帯間ギャップ
+  % （2つの箱の間の空白）の中に収まるため、帯のテキストとも右マージンの
+  % ゲート/バスとも衝突しない（ラベルはその領域よりずっと手前で止まる）。
+  \node[font=\scriptsize, text=gray1, anchor=west]
+    at ($(S1.south)!0.5!(S2.north)+(4mm,0)$) {実ログで照合};
+  \node[font=\scriptsize, text=gray1, anchor=west]
+    at ($(S2.south)!0.5!(S3.north)+(4mm,0)$) {飛行前検証};
+
+  % Model-match gate (§4): a SIDE box, not a fourth stacked layer — it is
+  % the verification procedure that cross-checks layer3's identified
+  % plant against layer1's real-machine reference, so it connects to
+  % layer1 AND layer3 only (never layer2, which the policy explicitly
+  % keeps independent of layer3 — §2 "層の関係"). Vertically centered on
+  % the S1-S3 span (== S2's height, since bands are symmetric).
+  % モデル一致ゲート（§4）: 「層」ではなくサイド箱 — 層3で同定したプラント
+  % を層1の実機基準値と突き合わせる判定手順そのものなので、層1・層3にのみ
+  % 接続する（層2には繋がない。方針書§2「層の関係」で層2は層3と独立と
+  % 明記されているため）。S1〜S3の全体スパンの中央（帯が対称なのでS2の高さ
+  % と同じ）に配置。
+  \node[gatebox, right=20mm of S2] (GATE) {%
+    \begin{minipage}{43mm}\raggedright
+      \ttier{gatecolor}{モデル一致の合否判定}\\[3pt]
+      \tsub{層3ログを層1と同一手順で同定}\\[2pt]
+      \tsub{$(b,L,T)$ を層1基準値と比較}\\[2pt]
+      \tsub{（\texttt{sf sils sysid-gate}）}
+    \end{minipage}%
+  };
+
+  % Right-angle routing from Layer 1 / Layer 3 into the gate. The corner
+  % x-coordinate is taken from GATE (via "-|", which reads x from its
+  % RIGHT operand) so the vertical run lands exactly on GATE's north/south
+  % edge midpoint — an edge, not a corner (T4f) — with a >=8mm straight
+  % trunk before each arrowhead.
+  % 層1／層3からゲートへの直角配線。コーナーのx座標はGATE側から取る
+  % （"-|" は右側の被演算子からxを読む）ため、垂直区間はGATEのnorth/south
+  % 辺の中点に正確に着地する（角ではなく辺 — T4f）。矢頭前に8mm以上の
+  % 直線区間を確保する。
+  \draw[garr] (S1.east) -- (S1.east -| GATE) -- (GATE.north);
+  \draw[garr] (S3.east) -- (S3.east -| GATE) -- (GATE.south);
+
+  % Labels for the gate's two inputs, placed above/below their horizontal
+  % run (clear of the S1/S3 bands to the left and the GATE box to the
+  % right — this horizontal segment is empty space by construction).
+  % ゲートへの2入力のラベル。それぞれの水平区間の上/下に配置する
+  % （左のS1/S3帯とも右のGATE箱とも構造上ぶつからない空白領域）。
+  \node[font=\scriptsize, text=gatecolor, anchor=south]
+    at ($(S1.east)!0.5!(S1.east -| GATE)+(0,1mm)$) {実機同定値（基準）};
+  \node[font=\scriptsize, text=gatecolor, anchor=north]
+    at ($(S3.east)!0.5!(S3.east -| GATE)+(0,-1mm)$) {同一パイプラインで同定};
 
 \end{tikzpicture}
 \end{document}
