@@ -18,11 +18,15 @@
 #   make dxh-docswell   — DXH deck, Docswell upload variant (no QR codes)
 #   make sci             — SCI/SICE tutorial course deck
 #   make sci-docswell    — SCI deck, Docswell upload variant (no QR codes)
+#   make sci-html         — Prototype HTML slide viewer for the SCI deck
+#                           (tools/slides/pdf_deck_html.py, into sci_tutorial_2026/slides/html/)
+#   make dxh-html         — Same, for the DXH deck (dxh2026/slides/html/)
+#   make workshop-html    — Same, for the Workshop deck (stampfly_workshop/slides/html/)
 #   make chapter NAME=<x> — Single chapter, searched across all events'
 #                           chapters/ directories: make chapter NAME=led_control
 #   make clean           — Remove build artifacts
 
-.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-docswell chapter clean
+.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-docswell sci-html dxh-html workshop-html chapter clean
 
 # ---------------------------------------------------------------------------
 # Shared TikZ diagrams
@@ -129,6 +133,36 @@ sci-docswell: $(SCI_DIR)/$(SCI_DOCSWELL_PDF)
 
 $(SCI_DIR)/$(SCI_DOCSWELL_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS)
 	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}" && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}"
+
+# ---------------------------------------------------------------------------
+# Prototype HTML slide viewer (tools/slides/pdf_deck_html.py)
+# HTMLスライドビューア試作（tools/slides/pdf_deck_html.py）
+#
+# Converts an already-built PDF deck into a browser viewer under
+# <event>/slides/html/. Not wired into `all` — run explicitly, after the
+# corresponding PDF target. Output is git-ignored (docs/events/.gitignore)
+# until the format is finalized and someone decides whether to commit it
+# for GitHub Pages hosting.
+#
+# 既にビルド済みのPDFデッキを <event>/slides/html/ 配下のブラウザビューアに
+# 変換する。`all` には含めない — 対応するPDFターゲットの後に明示的に実行する。
+# 出力はフォーマット確定まで git 管理外（docs/events/.gitignore）とし、
+# GitHub Pages公開用にコミットするかは別途判断する。
+# ---------------------------------------------------------------------------
+
+PDF_DECK_HTML := ../../tools/slides/pdf_deck_html.py
+
+sci-html: $(SCI_DIR)/$(SCI_PDF)
+	python3 $(PDF_DECK_HTML) $(SCI_DIR)/$(SCI_PDF) $(SCI_DIR)/html \
+		--title "StampFly Ecosystem 紹介（SCI/SICEチュートリアル2026）"
+
+dxh-html: $(DXH_DIR)/$(DXH_PDF)
+	python3 $(PDF_DECK_HTML) $(DXH_DIR)/$(DXH_PDF) $(DXH_DIR)/html \
+		--title "StampFly DXH高校教員講座2026"
+
+workshop-html: $(WORKSHOP_DIR)/$(WORKSHOP_PDF)
+	python3 $(PDF_DECK_HTML) $(WORKSHOP_DIR)/$(WORKSHOP_PDF) $(WORKSHOP_DIR)/html \
+		--title "StampFly Workshop"
 
 # ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)

@@ -11,6 +11,13 @@
 _shared/tikz/*.pdf
 */slides/.build_chapters/
 
+# Prototype HTML slide viewer output (make sci-html / dxh-html / workshop-html,
+# tools/slides/pdf_deck_html.py). Regenerable from the tracked PDF; kept out of
+# git until the lead decides whether to commit it for GitHub Pages hosting.
+# HTMLスライドビューア試作の出力（make sci-html 等）。追跡済みのPDFから
+# 再生成できるため、GitHub Pages公開用にコミットするか決まるまでgit管理外とする。
+*/slides/html/
+
 # Unified deck PDFs are tracked (committed for distribution)
 # stampfly_workshop/slides/stampfly_workshop.pdf
 # dxh2026/slides/dxh_workshop.pdf
