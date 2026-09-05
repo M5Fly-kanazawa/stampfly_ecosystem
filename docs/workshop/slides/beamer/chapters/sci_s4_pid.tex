@@ -208,8 +208,8 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習: L5 のレート P 制御 / Rate P-Control Recap}
-  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp (Lesson 5)}
+\begin{frame}[fragile]{実習 5 を振り返る: レート P 制御 / Rate P-Control Recap}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp（実習 5）}
 float Kp_rp=0.5f, Kp_yaw=2.0f, rmax=1.0f, ymax=5.0f;
 float re = ws::rc_roll()*rmax  - ws::gyro_x();
 float pe = ws::rc_pitch()*rmax - ws::gyro_y();
@@ -220,18 +220,18 @@ ws::motor_mixer(ws::rc_throttle(),
 
   \vspace{0.5em}
 
-  {\small L5 では飛ばして安定するかどうかだけを見た。$K_p=0.5$ は勘で決めた値である}
+  {\small 実習 5 では飛ばして安定するかどうかだけを見た。$K_p=0.5$ は勘で決めた値である}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モデルで見る L5 の設計 / Explaining L5's Gain}
+\begin{frame}{モデルで見る実習 5の設計 / Explaining Exercise 5's Gain}
   \begin{table}
     \centering\small
     \begin{tabular}{lcc}
       \hline
       & \textbf{Roll（$K=102$）} & \textbf{Pitch（$K=70$）} \\
       \hline
-      L5 の $K_p=0.5$ での $\zeta$ & 0.50 & 0.60 \\
+      実習 5 の $K_p=0.5$ での $\zeta$ & 0.50 & 0.60 \\
       $\zeta=0.7$ 設計の $K_p$     & 0.25 & 0.36 \\
       \hline
     \end{tabular}
@@ -241,7 +241,7 @@ ws::motor_mixer(ws::rc_throttle(),
 
   \begin{exampleblock}{読み取り}
     \footnotesize
-    L5 の $K_p=0.5$ は Roll で $\zeta=0.50$，やや振動的な設定だったとモデルが説明する。
+    実習 5 の $K_p=0.5$ は Roll で $\zeta=0.50$，やや振動的な設定だったとモデルが説明する。
     P 制御だけでは，ゲインを下げて安定性を確保すると定常偏差と外乱への弱さが残る。
     ここから I 項・D 項を追加する
   \end{exampleblock}
@@ -264,37 +264,43 @@ ws::motor_mixer(ws::rc_throttle(),
     \end{tabular}
   \end{table}
 
-  \begin{block}{教科書形式との対応}\footnotesize
-    $K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d$
+  \begin{block}{教科書形式との対応（この形は vehicle の \code{rate.<axis>.kp/ti/td} が使う）}\footnotesize
+    $K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d$（逆に $T_i = K_p/K_i,\ T_d = K_d/K_p$）
   \end{block}
 
-  {\footnotesize L8 の解答が使うゲイン $(K_p, T_i, T_d)$（$\eta=0.125$ 共通）:
-  Roll $(0.25,\,1.67,\,0.01)$，Pitch $(0.36,\,1.67,\,0.01)$。$K_p$ は前ページの $\zeta=0.7$ 設計値}
-  \par\vspace{0.2em}
-  {\scriptsize Yaw は L8 の解答では経験値 $K_p=2.0$ を使う。同じ設計式を最新の実測値 $K=8.0$ に
-  適用すると $K_p=3.19$ になり，設計式で追い直せる例として挙げる}
+  {\scriptsize 実習 8 の解答は工学形式ではなく直接ゲイン $(K_p,K_i,K_d)$ を使う：
+  Roll $(0.25,0.3,0.005)$，Pitch $(0.36,0.3,0.005)$，Yaw $(2.0,0.5,0.01)$
+  （$K_p$ は Roll/Pitch が前ページの $\zeta=0.7$ 設計値，Yaw のみ経験値）。
+  換算 $(T_i,T_d)$：Roll $(0.83\text{s},0.020\text{s})$，Pitch $(1.2\text{s},0.014\text{s})$，
+  Yaw $(4.0\text{s},0.005\text{s})$。不完全微分フィルタと $\eta$ は未使用
+  （vehicle 実装が追加する改良点）}
+  \par\vspace{0.1em}
+  {\scriptsize Yaw の設計式を最新の実測値 $K=8.0$ に適用すると $K_p=3.19$ になり，
+  設計式で追い直せる例として挙げる}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{D 項とアンチワインドアップ / D-Term \& Anti-Windup}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      \begin{block}{L8 学習者コード}\scriptsize
-        理想 PID から不完全微分フィルタへ置換
+      \begin{block}{実習 8 学習者コード}\scriptsize
+        誤差の後退差分 D + 積分クランプ（フィルタ・条件分岐なし）
       \end{block}
       \begin{lstlisting}[style=sfcpp, basicstyle=\ttfamily\scriptsize]
-float D = Kp*Td*(err-prev_err)/dt;
-// -> incomplete derivative filter
-float alpha = 2*eta*Td/dt;
-float a=(alpha-1)/(alpha+1);
-float b=2*Td/((alpha+1)*dt);
-d_filt = a*d_filt + b*(err-prev_err);
+// D term: raw backward difference
+float D = Kd*(err-prev_err)/dt;
+
+// Anti-windup: clamp the integral itself
+integral += err*dt;
+integral = clamp(integral, 0.5f);
+float I = Ki*integral;
       \end{lstlisting}
     \end{column}
     \begin{column}{0.5\textwidth}
       \begin{alertblock}{vehicle 実装: sf\_controller\_pid}\scriptsize
-        微分は誤差ではなく\textbf{測定値}に掛ける（D-on-M）。目標値が
-        階段状に変わっても微分キックが出ない
+        D項に不完全微分フィルタ（$\eta=0.125$）を追加し，誤差ではなく
+        \textbf{測定値}に掛ける（D-on-M）。目標値が階段状に変わっても
+        微分キックが出ない
       \end{alertblock}
       \begin{exampleblock}{アンチワインドアップ}\scriptsize
         単純な積分クランプではなく，出力が飽和方向に押される間だけ
@@ -303,20 +309,22 @@ d_filt = a*d_filt + b*(err-prev_err);
     \end{column}
   \end{columns}
 
-  {\scriptsize L8 では振動と定常偏差の体感を優先し，この2点は扱わない。
-  \code{sf\_controller\_pid/include/pid.hpp} が vehicle 実装のコード}
+  {\scriptsize 実習 8 の積分は $\pm0.5$ のクランプのみ（disarm 中は毎ループ 0 に戻る）。
+  D-on-M・条件付き積分・不完全微分フィルタは vehicle 実装が追加する改良点
+  （学習者コードへの拡張課題にもなる）。\code{sf\_controller\_pid/include/pid.hpp}
+  が vehicle 実装のコード}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{離散化と ARM 時リセット / Discretization \& Reset}
-  \begin{block}{離散化: 双一次変換（Tustin）}\small
-    比例・積分・微分すべてに双一次変換を使う。L8 の不完全微分フィルタの式
-    （$\alpha, a, b$）はこの変換そのもの
+  \begin{block}{離散化: 双一次変換（Tustin，vehicle 実装）}\small
+    \code{sf\_controller\_pid} は比例・積分・微分に双一次変換を使う（$\alpha, a, b$ の式）。
+    実習 8 は後退差分 D と矩形積分（Tustin ではない）
   \end{block}
 
   \vspace{0.3em}
 
-  \begin{exampleblock}{積分リセットのタイミング}\small
+  \begin{exampleblock}{積分リセットのタイミング（vehicle 実装）}\small
     積分器は DISARM 中ずっとゼロなのではなく，\textbf{ARM 遷移のたびに}
     リセットされる。着地して DISARM し，次に ARM した瞬間に積分が空になり，
     前のフライトの偏差を引きずらない
@@ -326,7 +334,8 @@ d_filt = a*d_filt + b*(err-prev_err);
 
   {\footnotesize
   ライブチューニング（\code{param set} での即時反映）では，積分器の状態は
-  \textbf{保持}される。ゲイン変更のたびにループを蹴らないための区別}
+  \textbf{保持}される。ゲイン変更のたびにループを蹴らないための区別。
+  実習 8 は disarm 中は毎ループ 0 に戻り，結果として同じ効果になる}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -391,7 +400,7 @@ sf sysid fit flight.csv --kp 0.5 --plot
   Pitch K= 72.1 (ref: 70.0, err:3.0%) tau_m=0.021 R2=0.91
   \end{sflisting}
 
-  {\small 理論値（L6）との誤差3〜4\%は，モデル簡略化と無駄時間の影響で説明できる}
+  {\small 理論値（実習 6）との誤差3〜4\%は，モデル簡略化と無駄時間の影響で説明できる}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -411,7 +420,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   $K_p/T_i/T_d$ を逆算し，\code{param set rate.roll.kp ...} の形で出力する}
 
   {\scriptsize \warn{注:} 学習者コードで rate-fit/rate-tune を使うには，角速度目標を計算した
-  直後に \api{ws::set\_rate\_target(roll,pitch,yaw)} を呼ぶ（L7 で追加，Data Stream の
+  直後に \api{ws::set\_rate\_target(roll,pitch,yaw)} を呼ぶ（実習 7 で追加，Data Stream の
   \code{rate\_ref\_*} に記録される）}
 \end{frame}
 
@@ -420,7 +429,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   \begin{exampleblock}{デモの見方}\footnotesize
     \textbf{見るだけ}: ステップ応答の波形と設計値の一致を確認するだけで要点はつかめる。
     \textbf{一緒に打つ}: 手元の flight.csv で \code{sf sysid fit} を試す。
-    \textbf{帰宅後に再現}: 本日は見るだけにして，後日 L5〜L9 を通しで動かす
+    \textbf{帰宅後に再現}: 本日は見るだけにして，後日実習 5〜9を通しで動かす
   \end{exampleblock}
 
   \begin{block}{手順}\footnotesize
@@ -430,8 +439,19 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
       \item モデル予測（$\zeta=0.7$ の応答波形）と重ねて比較
     \end{enumerate}
   \end{block}
+\end{frame}
 
-  {\footnotesize 会場の通信環境に備え，事前取得済みのログを保険として用意する}
+% ------------------------------------------------------------------
+\begin{frame}{デモの期待結果: P 制御と PID 制御のステップ応答 / Expected Result}
+  \begin{center}
+    \includegraphics[width=\textwidth, height=0.46\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S4_roll_step_p_vs_pid.png}
+  \end{center}
+
+  \vspace{0.2em}
+
+  {\footnotesize SILS（MuJoCo）で \code{workshop\_acro\_step.scn}（ロール $+0.3$ を $0.5$\,s）を実行。
+  目標 15.1\,deg/s に対し実習 5（P）はピーク 17.9\,deg/s と $-2.4$\,deg/s のアンダーシュート，
+  実習 8（PID）はピーク 13.2\,deg/s で振動なし。角速度は真値ロール角の数値微分}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -452,16 +472,16 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{llll}
     \hline
-    \textbf{教科書表記} & \textbf{L8 学習者コード} & \textbf{vehicle 実装} & \textbf{Data Stream} \\
+    \textbf{教科書表記} & \textbf{実習 8 学習者コード} & \textbf{vehicle 実装} & \textbf{Data Stream} \\
     \hline
     比例ゲイン $K_p$   & \code{float Kp}（無次元） & \code{rate.roll.kp}（Nm/(rad/s)） & --- \\
-    積分時間 $T_i$      & \code{float Ti}           & \code{rate.roll.ti}（s）          & --- \\
-    微分時間 $T_d,\eta$ & \code{float Td, eta}      & \code{rate.roll.td}，$\eta$固定    & --- \\
-    姿勢ゲイン          & ---（L8では未使用）       & \code{attitude.roll.kp/ti/td}      & --- \\
+    積分ゲイン $K_i$（$T_i{=}K_p/K_i$） & \code{float Ki}（直接ゲイン） & \code{rate.roll.ti}（s，換算値） & --- \\
+    微分ゲイン $K_d$（$T_d{=}K_d/K_p$） & \code{float Kd}（フィルタなし） & \code{rate.roll.td}，$\eta$固定（実習8は未使用） & --- \\
+    姿勢ゲイン          & ---（実習 8では未使用）    & \code{attitude.roll.kp/ti/td}      & --- \\
     目標角速度          & \code{target}             & \code{rate\_sp\_roll}              & \code{rate\_ref\_roll} \\
     角速度計測値        & \code{ws::gyro\_x()}      & \code{state.angular\_rate[0]}       & \code{gyro\_x} \\
-    アンチワインドアップ & ---（未実装）             & 条件付き積分（\code{pid.hpp}）      & --- \\
-    ARM 時リセット      & ---（未実装）             & \code{PidController::reset()}       & --- \\
+    アンチワインドアップ & 積分クランプ $\pm0.5$     & 条件付き積分（\code{pid.hpp}）      & --- \\
+    ARM 時リセット      & disarm 中毎ループ 0 に    & \code{PidController::reset()}（ARM遷移時） & --- \\
     \hline
   \end{tabular}}
 
@@ -475,15 +495,15 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 % ------------------------------------------------------------------
 \begin{frame}{復習パス / Review Path}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{llll}
+  \begin{tabular}{lll}
     \hline
-    \textbf{コマンド} & \textbf{レッスン} & \textbf{文書} & \textbf{Notebook} \\
+    \textbf{コマンド} & \textbf{実習} & \textbf{文書} \\
     \hline
-    \code{sf lesson switch 5}  & L5 レート P 制御 & \code{rate\_p\_control.tex}     & 05\_rate\_control\_tuning.ipynb \\
-    \code{sf lesson switch 6}  & L6 システムモデリング & \code{system\_modeling.tex} & 04\_pid\_theory.ipynb \\
-    \code{sf sysid fit}        & L7 システム同定 & \code{system\_identification.tex} & 07\_system\_identification.ipynb \\
-    \code{sf lesson switch 8}  & L8 PID 制御      & \code{pid\_control.tex}          & 04\_pid\_theory.ipynb \\
-    \code{sf lesson switch 9}  & L9 姿勢推定      & \code{attitude\_estimation.tex}  & 08\_sensor\_fusion.ipynb \\
+    \code{sf lesson switch sci2026:5} & 実習 5 レート P 制御 & \code{rate\_p\_control.tex} \\
+    \code{sf lesson switch sci2026:6} & 実習 6 システムモデリング & \code{system\_modeling.tex} \\
+    \code{sf sysid fit}               & 実習 7 システム同定 & \code{system\_identification.tex} \\
+    \code{sf lesson switch sci2026:8} & 実習 8 PID 制御      & \code{pid\_control.tex} \\
+    \code{sf lesson switch sci2026:9} & 実習 9 姿勢推定      & \code{attitude\_estimation.tex} \\
     \hline
   \end{tabular}}
 

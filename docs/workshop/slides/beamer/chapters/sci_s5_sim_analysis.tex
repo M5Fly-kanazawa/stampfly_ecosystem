@@ -40,8 +40,8 @@
           層3（SILS）は実ファームを無改変で走らせる
     \item 学習者が実装した推定器・制御器は，L1 Topic API 経由で
           既存の実装と差し替えられる
-    \item エコシステムは発展の途上にあり，研究・教育の両方で
-          協力者を必要としている
+    \item 実習 5/8 で書いた PID コードは，実機を飛ばす前に SILS で
+          検証してから持ち帰れる（本セッション後半で実習）
   \end{enumerate}
 
   \vspace{0.5em}
@@ -77,7 +77,7 @@
   \end{block}
 
   {\footnotesize \code{analysis/scripts/} 配下の Python 群。ヨー$\kappa$修正のリプレイ一致
-  0.0〜0.7\%，ALT\_HOLD 再生誤差約8\%などの実績がある}
+  0.0〜0.7\%，ALT\_HOLD 再生誤差約8\%という精度で検証できている}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -93,13 +93,13 @@
     \item 状態機械・推定器・フェイルセーフを含むシステム全体の検証ベンチ
     \item 推定器を ESKF から相補フィルタに差し替えても，ベンチは無改変で
           同じ検証ができる（アルゴリズムの中身に依存しない設計）
-    \item シナリオファイルは 42 本，うち 33 本が \code{.expect} を伴う。32 本が
-          CI 回帰（\code{sils-regression.yml}）の既定対象で，workshop 用の 1 本は手動実行
+    \item シナリオファイル（\code{.scn}）と合格基準（\code{.expect}）の組で自動判定する。
+          \code{sf sils regression} でまとめて実行できる
   \end{itemize}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モデル一致ゲート / Model-Match Gate}
+\begin{frame}{モデル一致の合否判定 / Model-Match Verification}
   \begin{block}{Code Identity を使った検証}\small
     実機ログに使うのと同じ同定パイプラインを，SILS が生成したログにも
     そのまま適用し，$(b, L, T)$ を実機同定値と比較する（\code{sf sils sysid-gate}）
@@ -109,18 +109,18 @@
 
   \begin{table}
     \centering\small
-    \begin{tabular}{lcc}
+    \begin{tabular}{lc}
       \hline
-      \textbf{指標} & \textbf{許容差} & \textbf{2026-07-26 判定} \\
+      \textbf{指標} & \textbf{許容差（判定条件）} \\
       \hline
-      ステップ応答立ち上がり時定数 & $\pm20\%$ & Roll/Pitch PASS \\
-      gyro RMS & $\pm50\%$ & Yaw は識別が退化し FAIL \\
+      ステップ応答立ち上がり時定数 & $\pm20\%$ \\
+      gyro RMS & $\pm50\%$ \\
       \hline
     \end{tabular}
   \end{table}
 
   {\footnotesize Yaw は反トルク零点を持ち，現行の3パラメータフィットでは表現しきれない。
-  全軸合格までは公称モデル1点最適化を避け，摂動族での検証も併用する}
+  軸ごとの物理特性に応じて，公称モデル1点比較と摂動族での検証を使い分ける}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -159,9 +159,9 @@ sf sim run genesis
       \code{build}      & SILS ホストベンチをビルド \\
       \code{run}         & 閉ループを実行しバンドルを書き出す \\
       \code{scenario}    & \code{.scn} シナリオを実行し合否判定 \\
-      \code{regression}  & 全 \code{.scn/.expect} を実行し CI ゲート判定 \\
+      \code{regression}  & 全 \code{.scn/.expect} を実行し，CI で合否判定する \\
       \code{gate}        & マイルストーンバンドルの合否確認 \\
-      \code{sysid-gate}  & モデル一致ゲート（前ページ） \\
+      \code{sysid-gate}  & モデル一致の合否判定（前ページ） \\
       \code{gui}         & ブラウザ GUI（次ページ） \\
       \hline
     \end{tabular}
@@ -194,22 +194,24 @@ sf sils gui
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{学習者コードを SILS で試す / Learner Code in SILS}
+\begin{frame}[fragile]{実習: 自分の PID を SILS で飛ばす / PID in SILS}
   \begin{block}{実機の前にシミュレータで確かめる}\small
-    S4 で書いた PID コードを，実機を飛ばす前に SILS で検証する。
-    墜落のリスクなしに極端なゲインや外乱を試せる
+    実習 8（PID）の \code{setup()}/\code{loop\_400Hz()} を，飛ばす前に SILS で検証する
   \end{block}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
 sf sils build --target workshop
-sf sils scenario .../workshop_acro.scn --target workshop
+sf lesson switch sci2026:8 --solution   # または S4 で書いた自分のコード
+touch firmware/workshop/main/user_code.cpp   # 切替後は更新日時が保たれるため
+sf sils build --target workshop         # 再ビルドで新しいコードを取り込む
+sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
   \end{sflisting}
 
-  \begin{exampleblock}{現状}\scriptsize
-    \code{--target workshop} に対応済み。L5/L8 の模範解答で ARM$\to$離陸$\to$
-    ホバー相当の飛行を確認できる。高度ループがないため着陸は DISARM に
-    よる降下のみ。\code{sf sils regression} の自動 CI には未組み込み
-  \end{exampleblock}
+  \vspace{-2.5mm}
+
+  {\scriptsize 合格基準（\code{.expect}）: 離陸（真値高度 $>0.1$\,m）と傾き $15^\circ$ 未満
+  （発散しない）。実測 alt\_max $\approx 0.64$\,m，tilt\_max $0^\circ$，判定 PASS。
+  \warn{注:} \code{sf sils gui} は workshop を選べないため学習者コードには上記 CLI を使う}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -225,10 +227,21 @@ sf sils scenario .../workshop_acro.scn --target workshop
   \begin{block}{手順}\footnotesize
     \begin{enumerate}
       \item \code{sf sim run vpython} でブラウザ3D操縦
-      \item \code{sf sils gui} でシナリオを1本実行し，PASS/FAIL ゲートを確認
+      \item \code{sf sils gui} でシナリオを1本実行し，判定結果（PASS/FAIL）を確認
       \item 同じシナリオでパラメータを変え，挙動の変化を見る
     \end{enumerate}
   \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモの期待結果: SILS シナリオ実行 / Expected Result}
+  \begin{center}
+    \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S5_attitude_rate.png}
+  \end{center}
+
+  \vspace{0.3em}
+
+  {\footnotesize \code{stab\_flight.scn}（vehicle）の姿勢角と角速度。12 項目の合否判定をすべて満たす}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -250,29 +263,26 @@ sf log analyze flight.csv
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{教育 Notebook と Allan 分散 / Education Notebooks}
-  \begin{block}{15本の Jupyter Notebook}\small
-    \code{analysis/notebooks/education/} 配下に基礎から実装まで通しで並ぶ。
-    \code{lib/stampfly\_edu}（シミュレーション・ダイナミクス・ESKF・ウィジェット）
-    が共通基盤
+\begin{frame}[fragile]{センサノイズの評価: Allan 分散 / Allan Variance}
+  \begin{block}{Allan 分散でわかること}\small
+    静止センサの出力から Allan 偏差（Allan deviation）を計算すると，
+    ホワイトノイズと長時間のバイアス不安定性を分離して評価できる。
+    ESKF の Q/R（プロセス／観測ノイズ共分散）チューニングの基礎データになる
   \end{block}
 
-  \vspace{0.3em}
+  \vspace{0.2em}
 
-  \begin{table}
-    \centering\scriptsize
-    \begin{tabular}{ll}
-      \hline
-      04\_pid\_theory.ipynb & S4 の PID 設計に対応 \\
-      07\_system\_identification.ipynb & S4 のシステム同定に対応 \\
-      08\_sensor\_fusion.ipynb & S4 の姿勢推定に対応 \\
-      15\_analysis\_toolkit.ipynb & 本セッションの解析ツールに対応 \\
-      \hline
-    \end{tabular}
-  \end{table}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf log wifi -d 60 -o static_noise.csv   # 機体を静止させて60秒取得
+sf sysid noise static_noise.csv --sensor gyro --static-only --plot
+  \end{sflisting}
 
-  {\footnotesize センサノイズの評価には \code{examples/education/noise\_analysis/allan\_variance.py}
-  で Allan 分散を使う。ホバリング精度のトリム調整には \code{sf trim} がある}
+  \vspace{-1.5mm}
+
+  {\footnotesize \code{--sensor} は \code{gyro/accel/baro/tof/all} を選べるが，
+  \code{sf log wifi -o} の CSV は gyro/accel のみ。baro/tof には
+  \code{sf log capture} $\to$ \code{sf log convert} を使う。
+  トリム調整には \code{sf trim analyze} がある}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -319,10 +329,10 @@ sf log analyze flight.csv
 % ------------------------------------------------------------------
 \begin{frame}{発展テーマ: AI と強化学習 / AI \& RL}
   \begin{itemize}\small
-    \item \textbf{AI コーディングエージェントとの協働}: このエコシステムの
-          ファームウェア・シミュレータ・スライド・教材文書は，AI コーディング
-          エージェントとの協働で構築している。StampFly を題材にした
-          AI コーディング教育の教材化も構想している
+    \item \textbf{AI コーディングエージェントの活用}: 制御則の実装・デバッグや
+          シミュレーションログの解析を，AI コーディングエージェントを補助に
+          進める流れが広がりつつある。StampFly のような小型・低リスクな
+          実験プラットフォームは，その検証サイクルを高速に回す題材になりうる
     \item \textbf{強化学習と Sim-to-Real}: シミュレータ上で学習した制御方策を
           実機に転移する流れを教材化できれば，古典制御から学習型制御へ
           カリキュラムの射程が広がる。機体が小型・軽量で墜落時のリスクが
@@ -333,39 +343,37 @@ sf log analyze flight.csv
 % ------------------------------------------------------------------
 \begin{frame}{発展テーマ: 制御・推定・自律飛行 / Autonomy}
   \begin{itemize}\small
-    \item \textbf{MPC・適応制御}: 今日扱った PID の先にある発展的な制御手法。
-          エコシステムの今後の拡張先として構想している
+    \item \textbf{MPC・適応制御}: 今日扱った PID の先にある発展的な制御手法
     \item \textbf{ESKF・オートチューン}: 15状態 ESKF の実装，
           S4 で紹介した \code{sf\_autotune} によるオンボードチューニング
     \item \textbf{高度・位置ループ}: レート/姿勢カスケードの外側に
           ALT\_HOLD/POS\_HOLD が乗る。外乱オブザーバ（\code{altitude.dob.fc}）も
           パラメータで opt-in できる
     \item \textbf{Tello 互換 SDK と ROS2}: Python SDK（\code{lib/stampfly}）と
-          \code{sf flight} で自律飛行の入口を用意している。ROS2 連携は
-          現時点では構想段階（実装は未着手）
+          \code{sf takeoff} などの Tello 風コマンド（\code{sf takeoff/land/hover/jump} …）
+          で自律飛行の入口を用意している。ROS2 との連携も発展的なテーマの一つである
   \end{itemize}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{教育での使い方とコミュニティ / Community}
+\begin{frame}{教育・研究での再利用 / Reuse in Your Own Class or Lab}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      \begin{block}{教育現場での実績}\footnotesize
+      \begin{block}{自分の授業・研究室で使うには}\footnotesize
         \begin{itemize}
-          \item 4+1日間ワークショップ
-          \item 大学講義（半期15回シラバス）
-          \item 高校教員向け DXH 講座
-          \item Blockly（\code{sf blocks --demo}）や
-                競技会（\code{sf competition}）も
-                授業向けに用意している
+          \item \code{lesson\_manifest.yaml} の \code{courses:} に実習順序を
+                追加できる（本チュートリアルの \code{sci2026} も同じ仕組み）
+          \item 本スライド一式は LaTeX（Beamer）ソースごと公開されている
+          \item SILS で実機なしの演習・採点も一部自動化できる
+          \item Blockly・競技会（\code{sf blocks --demo}, \code{sf competition}）
+                も用意している
         \end{itemize}
       \end{block}
     \end{column}
     \begin{column}{0.47\textwidth}
       \begin{exampleblock}{コミュニティへ}\footnotesize
-        本エコシステムはまだ発展の途上にあり，構想はあっても実装が
-        追いついていない部分も多い。開発や教材改善に協力してくれる仲間を
-        探している。OSS として公開している理由の一つはそこにある
+        質問・不具合報告・開発への協力はリポジトリの Issue で受け付けている\\[4pt]
+        \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}
       \end{exampleblock}
     \end{column}
   \end{columns}
@@ -381,7 +389,7 @@ sf log analyze flight.csv
     層1: 設計用線形モデル       & \code{control/models/stampfly\_physical.yaml} & \code{sf sysid rate-fit} \\
     層2: 実ログ駆動オフライン再生 & \code{analysis/scripts/}                       & --- \\
     層3: SILS                   & \code{simulator/sils/}                         & \code{sf sils scenario} \\
-    モデル一致ゲート             & \code{tools/log\_analyzer/rate\_sysid.py}      & \code{sf sils sysid-gate} \\
+    モデル一致の合否判定         & \code{tools/log\_analyzer/rate\_sysid.py}      & \code{sf sils sysid-gate} \\
     推定インターフェース         & \code{sf\_estimator} / \code{sf\_estimator\_eskf} & --- \\
     制御インターフェース         & \code{sf\_controller} / \code{sf\_controller\_pid} & --- \\
     \hline
@@ -396,15 +404,14 @@ sf log analyze flight.csv
 % ------------------------------------------------------------------
 \begin{frame}{復習パス / Review Path}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{llll}
+  \begin{tabular}{lll}
     \hline
-    \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} & \textbf{Notebook} \\
+    \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} \\
     \hline
-    \code{sf sim run vpython}  & VPython シミュレータ    & \code{simulator/README.md}                & --- \\
-    \code{sf sils gui}         & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md}       & --- \\
-    \code{sf log viz}          & ログ可視化              & \code{docs/guides/flight-log-viz.md}      & 15\_analysis\_toolkit.ipynb \\
-    ---                        & シミュレーション方針     & \code{docs/architecture/simulation-policy.md} & --- \\
-    ---                        & 教育カリキュラム         & \code{analysis/notebooks/README.md}       & 01〜15（全15本） \\
+    \code{sf sim run vpython}  & VPython シミュレータ    & \code{simulator/README.md} \\
+    \code{sf sils gui}         & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md} \\
+    \code{sf log viz}          & ログ可視化              & \code{docs/guides/flight-log-viz.md} \\
+    ---                        & シミュレーション方針     & \code{docs/architecture/simulation-policy.md} \\
     \hline
   \end{tabular}}
 \end{frame}
@@ -413,10 +420,10 @@ sf log analyze flight.csv
 \begin{frame}{質疑 / Q\&A}
   \begin{block}{想定質問}\small
     \begin{itemize}
-      \item モデル一致ゲートで Yaw だけ FAIL しているのはなぜか
+      \item モデル一致の判定で Yaw 軸だけ精度が悪化するのはなぜか
       \item 自作の制御器を載せるとき，安全機構（フェイルセーフ）は
             どこまで自分で書く必要があるか
-      \item ROS2 連携はいつ頃実装される見込みか
+      \item ROS2 と連携するにはどこから手を付ければよいか
     \end{itemize}
   \end{block}
 
@@ -433,7 +440,7 @@ sf log analyze flight.csv
       \item[$\square$] シミュレーションの3層構造と，それぞれの役割を説明できる
       \item[$\square$] \code{sf sils gui} でシナリオ実行とパラメータ編集を体験した
       \item[$\square$] L1 Topic API で自分の推定器・制御器を差し替える方法を理解した
-      \item[$\square$] 教育 Notebook と解析ツールの入口を把握した
+      \item[$\square$] 解析ツールの入口を把握した
     \end{itemize}
   \end{alertblock}
 

@@ -66,7 +66,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習: Duty をハードコードして回す / Hands-on: Hardcoded Duty}
+\begin{frame}[fragile]{実習: Duty をハードコードして回す / Hardcoded Duty}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
 void setup() {
     ws::print("Motor duty test");
@@ -80,18 +80,32 @@ void loop_400Hz(float dt) {
 }
   \end{sflisting}
 
-  {\footnotesize \code{sf lesson switch 1} で切替。ARM は機体ボタンの単クリックで行う}
+  {\footnotesize \code{sf lesson switch sci2026:3} で切替。ARM は機体ボタンの単クリックで行う}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{コントローラ / Controller}
-  \begin{center}
-    \resizebox{!}{0.78\textheight}{\input{../tikz/controller_annotated}}
-  \end{center}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \resizebox{!}{0.66\textheight}{\input{../tikz/controller_annotated}}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \centering
+      % Manufacturer's own product illustration (M5Atom Joystick, the
+      % hardware base of the StampFly controller), cropped from the shop
+      % page screenshot to drop unrelated e-commerce chrome (price/cart).
+      % コントローラの実体である M5Atom Joystick のメーカー公式図。
+      % ショップページのスクリーンショットから，価格・カート等の
+      % 無関係な部分を除いてトリミングしたもの。
+      \includegraphics[width=\columnwidth]{atom_joystick.jpg}\\[4pt]
+      {\footnotesize 実機写真（M5Atom Joystick）}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{ESP-NOW と ControlPacket / ESP-NOW \& ControlPacket}
+\begin{frame}{ESP-NOW と ControlPacket}
   \begin{center}
     \adjustbox{max width=0.92\textwidth, max height=0.68\textheight}{\input{../tikz/espnow_dataflow}}
   \end{center}
@@ -160,7 +174,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{デモ: スティックでモータを回す / Demo: Stick to Motors}
+\begin{frame}[fragile]{デモ: スティックでモータを回す / Stick to Motors}
   \vspace{0.3em}
 
   {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
@@ -168,7 +182,7 @@ void loop_400Hz(float dt) {
   \vspace{0.5em}
 
   \begin{block}{手順}\footnotesize
-    \code{sf lesson switch 2} $\to$ ペアリング $\to$ \code{ws::motor\_mixer} を書いて \code{sf lesson build \&\& sf lesson flash} $\to$ スティックで4モータの回転差を確認
+    \code{sf lesson switch sci2026:4} $\to$ ペアリング $\to$ \code{ws::motor\_mixer} を書いて \code{sf lesson build \&\& sf lesson flash} $\to$ スティックで4モータの回転差を確認
   \end{block}
 
   \vspace{0.3em}
@@ -218,15 +232,19 @@ void loop_400Hz(float dt) {
 % ------------------------------------------------------------------
 \begin{frame}{復習パス / Review Path}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{llll}
+  \begin{tabular}{lll}
     \hline
-    \textbf{コマンド} & \textbf{レッスン} & \textbf{文書} & \textbf{Notebook} \\
+    \textbf{コマンド} & \textbf{実習} & \textbf{文書} \\
     \hline
-    \code{sf lesson switch 1} & Lesson 1 モータ制御 & \code{firmware/vehicle/docs/hardware\_init.md} & --- \\
-    \code{sf lesson switch 2} & Lesson 2 コントローラ入力 & \code{protocol/spec/}（ControlPacket） & --- \\
-    \code{sf flash controller} & --- & \code{docs/commands/sf-flasher.md} & --- \\
+    \code{sf lesson switch sci2026:3} & 実習 3 モータ制御 & \code{firmware/vehicle/docs/hardware\_init.md} \\
+    \code{sf lesson switch sci2026:4} & 実習 4 コントローラ入力 & \code{protocol/spec/}（ControlPacket） \\
+    \code{sf flash controller} & --- & \code{docs/commands/sf-flasher.md} \\
     \hline
   \end{tabular}}
+
+  \vspace{0.5em}
+
+  {\small すべて \code{sf lesson build} $\to$ \code{sf lesson flash} で実機に反映する}
 \end{frame}
 
 % ------------------------------------------------------------------

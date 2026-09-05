@@ -35,26 +35,34 @@
 
 % ------------------------------------------------------------------
 \begin{frame}{StampFly ハードウェア / Hardware}
-  \begin{table}
-    \centering\small
-    \begin{tabular}{ll}
-      \hline
-      \textbf{項目} & \textbf{仕様} \\
-      \hline
-      MCU        & ESP32-S3（M5StampS3） \\
-      IMU        & BMI270（6軸 400\,Hz） \\
-      気圧       & BMP280 \\
-      磁力計     & BMM150（3軸） \\
-      測距       & VL53L3CX $\times$2（Bottom / Front） \\
-      光学フロー & PMW3901 \\
-      電流電圧   & INA3221 \\
-      モータ     & コアレスモータ $\times$4 \\
-      バッテリ   & 300\,mAh 1S LiPo \\
-      質量       & 37\,g（バッテリ含む） \\
-      コントローラ & M5Atom JoyStick（ESP-NOW） \\
-      \hline
-    \end{tabular}
-  \end{table}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{Stampfly_onhand.jpg}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \begin{table}
+        \centering\scriptsize
+        \begin{tabular}{ll}
+          \hline
+          \textbf{項目} & \textbf{仕様} \\
+          \hline
+          MCU        & ESP32-S3（M5StampS3） \\
+          IMU        & BMI270（6軸 400\,Hz） \\
+          気圧       & BMP280 \\
+          磁力計     & BMM150（3軸） \\
+          測距       & VL53L3CX $\times$2（Bottom / Front） \\
+          光学フロー & PMW3901 \\
+          電流電圧   & INA3221 \\
+          モータ     & コアレスモータ $\times$4 \\
+          バッテリ   & 300\,mAh 1S LiPo \\
+          質量       & 37\,g（バッテリ含む） \\
+          コントローラ & M5Atom JoyStick（ESP-NOW） \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -158,7 +166,7 @@
       ビルド・書込み   & \code{sf build} / \code{sf flash} \\
       診断             & \code{sf doctor} / \code{sf monitor} \\
       ログ             & \code{sf log wifi} / \code{sf log viz} \\
-      シミュレータ     & \code{sf sim run} / \code{sf sils gui} \\
+      シミュレータ     & \code{sf sim run vpython} / \code{sf sils gui} \\
       同定・整合       & \code{sf sysid} / \code{sf params check} \\
       \hline
     \end{tabular}
@@ -166,7 +174,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{深掘り: 段階的抽象化 / Deep Dive: Progressive Abstraction}
+\begin{frame}{深掘り: 段階的抽象化 / Progressive Abstraction}
   \small \code{ws::} 名前空間は、制御ループの起動やセンサ初期化を隠しつつ、\api{setup()} と \api{loop\_400Hz(dt)} だけで機体を動かせるようにする
 
   \vspace{0.5em}
@@ -239,11 +247,11 @@
 
   \vspace{0.3em}
 
-  {\small 層3の合否はモデル一致ゲートで判定する。詳細は S5 で扱う}
+  {\small 層3の合否はモデル一致の判定条件で決まる。詳細は S5 で扱う}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{開発の3原則 / Code Identity, Parameter Identity, Model Fidelity}
+\begin{frame}{開発の3原則 / Three Principles}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{lp{80mm}}
@@ -259,22 +267,6 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{原稿提出後5か月の進捗 / Five Months Since the Manuscript}
-  \small 本チュートリアルの原稿（SCI'26 OS04）は2026年4月に提出した。それ以降に進んだことを紹介する
-
-  \vspace{0.5em}
-
-  \begin{itemize}\small\setlength{\itemsep}{3pt}
-    \item MuJoCoベースSILS。42本のシナリオのうち32本をCIで回帰（\code{sf sils regression}）
-    \item 対話的シナリオ実行・可視化ツール \code{sf sils gui}
-    \item POS\_HOLD の実機検証（保持精度 $\pm$6--7\,cm）
-    \item ビルド不要の Web Flasher と GUI インストーラ「StampFly Setup」
-    \item Tello 互換 Python SDK（\code{lib/stampfly}）と \code{sf flight}（takeoff/land/hover/jump）
-    \item Workshop ファームの vehicle コンポーネント基盤への統合
-  \end{itemize}
-\end{frame}
-
-% ------------------------------------------------------------------
 \begin{frame}[fragile]{デモ①: シミュレータ操縦 / Demo 1: Simulator Piloting}
   \vspace{0.3em}
 
@@ -284,7 +276,7 @@
 
   \begin{block}{何を見るか}
     \begin{itemize}\small
-      \item \code{sf sim run} でVPythonシミュレータが起動し、実機と同じ制御アルゴリズムが動く
+      \item \code{sf sim run vpython} でVPythonシミュレータが起動し、実機と同じ制御アルゴリズムが動く
       \item HIDジョイスティック（Atom JoyStick）でそのまま操縦できる
       \item 実機がなくても制御コードの挙動を3Dで確認できる
     \end{itemize}
@@ -292,7 +284,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ②: 実機 POS\_HOLD 飛行 / Demo 2: Real POS\_HOLD Flight}
+\begin{frame}{デモ②: 実機 POS\_HOLD 飛行 / POS\_HOLD Flight}
   \vspace{0.3em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
@@ -303,38 +295,44 @@
     \begin{itemize}\small
       \item ホバー中の位置保持精度（実測 $\pm$6--7\,cm）
       \item 手で軽く押すなどの外乱を与えたときの復帰動作
-      \item 会場の条件に備え、事前撮影の動画を保険として用意する
     \end{itemize}
   \end{block}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{教育実績 / Track Record}
-  \begin{table}
-    \centering\small
-    \begin{tabular}{lp{68mm}}
-      \hline
-      \textbf{形態} & \textbf{内容} \\
-      \hline
-      4+1日ワークショップ & Day1--4 でLesson 0--12、Day5午前に精密着陸競技会 \\
-      大学講義シラバス     & 半期15回（各90分）、工学系学部3--4年生向け \\
-      高校教員向け講座     & DXH講座（2026年7月、操縦体験と書き込み実習） \\
-      \hline
-    \end{tabular}
-  \end{table}
+\begin{frame}{デモ②の期待結果: 位置保持 / Expected: Position Hold}
+  \centering
+  {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
+
+  \vspace{0.15em}
+
+  \includegraphics[width=\textwidth, height=0.5\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_pos_hold_xy.png}
+
+  {\scriptsize \code{pos\_roll.scn}（vehicle）: 離陸 $\to$ ロール外乱 $\to$ POS\_HOLD 係合 $\to$ 保持。係合後の水平ドリフト最大 0.39\,m}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ②の期待結果: 高度と姿勢 / Altitude \& Attitude}
+  \centering
+  {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
+
+  \vspace{0.15em}
+
+  \includegraphics[width=\textwidth, height=0.5\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_altitude_attitude.png}
+
+  {\scriptsize 同じ飛行の高度と姿勢角の時系列。外乱直後の傾きが位置制御で戻る}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{復習パス / Review Path}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{llll}
+  \begin{tabular}{lll}
     \hline
-    \textbf{コマンド} & \textbf{対象} & \textbf{文書} & \textbf{Notebook} \\
+    \textbf{コマンド} & \textbf{対象} & \textbf{文書} \\
     \hline
-    \code{sf sim run} & シミュレータ操縦 & \code{docs/architecture/simulation-policy.md} & \code{01\_hello\_stampfly.ipynb} \\
-    \code{sf sils gui} & SILS 回帰・可視化 & \code{firmware/vehicle/docs/development\_roadmap.md} & --- \\
-    --- & 4階層アクセス & \code{firmware/vehicle/docs/architecture.md \S2} & --- \\
-    --- & 大学講義シラバス & \code{docs/university/syllabus.md} & 全15冊 \\
+    \code{sf sim run vpython} & シミュレータ操縦 & \code{docs/architecture/simulation-policy.md} \\
+    \code{sf sils gui} & SILS 回帰・可視化 & \code{firmware/vehicle/docs/development\_roadmap.md} \\
+    --- & 4階層アクセス & \code{firmware/vehicle/docs/architecture.md \S2} \\
     \hline
   \end{tabular}}
 \end{frame}

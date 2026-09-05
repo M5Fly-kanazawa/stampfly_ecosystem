@@ -17,9 +17,9 @@
       \code{sf telemetry}  & 50\,Hz テレメトリのライブ表示（\code{--web} でブラウザ） \\
       \code{sf blocks}     & Blockly ブロックプログラミング（\code{--demo} で機体なしデモ） \\
       \code{sf cal gyro/accel/mag} & センサキャリブレーション \\
-      \code{sf lesson}     & Workshop レッスン管理（\code{switch/build/flash}） \\
+      \code{sf lesson}     & Workshop 実習管理（\code{switch sci2026:N}/\code{build}/\code{flash}，一覧は \code{list --course sci2026}） \\
       \code{sf trim}       & ホバーログから姿勢トリムを算出 \\
-      \code{sf flight}     & Tello 風ミニコマンド（\code{takeoff/land/hover/jump} 等） \\
+      \code{sf takeoff} 等   & Tello 風ミニコマンド（\code{sf takeoff/land/hover/jump}，個別のトップレベルコマンド） \\
       \code{sf competition} & ホバー耐久・スコア記録 \\
       \hline
     \end{tabular}
@@ -38,7 +38,7 @@
       \code{sf log viz/analyze}  & ログ可視化・解析 \\
       \code{sf sim run vpython/genesis} & シミュレータ起動（S5） \\
       \code{sf sils build/scenario/gui} & SILS ベンチ（S5） \\
-      \code{sf sysid fit}        & 閉ループ P 制御ログからプラント同定（L7） \\
+      \code{sf sysid fit}        & 閉ループ P 制御ログからプラント同定（実習7） \\
       \code{sf sysid rate-fit/rate-tune} & 開ループ ETFE 同定と仕様ベース PID 設計（S4） \\
       \code{sf params check}     & 物理パラメータ整合検査 \\
       \hline
@@ -81,7 +81,7 @@
         \code{tof\_bottom/front()}, \code{flow\_vx/vy/quality()} \\
       姿勢推定 & \code{estimated\_roll/pitch/yaw()}, \code{estimated\_altitude()} \\
       制御目標のロギング & \code{set\_rate\_target(r,p,y)}, \code{set\_angle\_target(r,p)}
-        （L7，Data Stream の \code{rate\_ref\_*}/\code{angle\_ref\_*} に記録，制御には無関係） \\
+        （実習7，Data Stream の \code{rate\_ref\_*}/\code{angle\_ref\_*} に記録，制御には無関係） \\
       ユーティリティ & \code{millis()}, \code{battery\_voltage()}, \code{print(fmt,...)},
         \code{set\_channel(ch)} \\
       \hline
@@ -100,7 +100,7 @@
       \textbf{症状} & \textbf{原因} & \textbf{対処} \\
       \hline
       StampFly の WiFi が見つからない & 電源が入っていない & バッテリーを確認，電源を入れ直す \\
-      接続しても通信できない & IP アドレスが違う & \code{192.168.4.1} を確認 \\
+      接続しても通信できない & IP アドレスが違う & \code{192.168.10.1} を確認 \\
       離陸しない & キャリブレーション未実施 & \code{sf cal gyro} を実行 \\
       振動する & PID ゲインが高すぎる & ゲインを下げる（S4 参照） \\
       シミュレータに自動フォールバック & WiFi 未接続 & 意図的ならそのまま使用可 \\
@@ -126,27 +126,24 @@
       \hline
     \end{tabular}
   \end{table}
-
-  {\footnotesize 出典: DXH 講座トラブルシューティング早見表（\code{docs/workshop/dxh2026/handout.md}）}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{5セッション復習パス / Review Path, All Sessions}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{lllll}
+  \begin{tabular}{llll}
     \hline
-    & \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} & \textbf{Notebook} \\
+    & \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} \\
     \hline
-    S1 & \code{sf sim run}         & シミュレータ操縦        & \code{docs/architecture/simulation-policy.md} & 01\_hello\_stampfly \\
-    S1 & ---                       & 大学講義シラバス         & \code{docs/university/syllabus.md}            & 全15本 \\
-    S2 & \code{sf lesson switch 4} & IMU センサ              & \code{firmware/vehicle/docs/architecture.md \S2} & 01\_hello\_stampfly \\
-    S2 & \code{sf log wifi/viz}    & テレメトリ取得と可視化  & \code{docs/guides/flight-log-viz.md}          & 15\_analysis\_toolkit \\
-    S3 & \code{sf lesson switch 1} & モータ制御              & \code{firmware/vehicle/docs/hardware\_init.md} & --- \\
-    S3 & \code{sf lesson switch 2} & コントローラ入力        & \code{protocol/spec/}（ControlPacket）        & --- \\
-    S4 & \code{sf lesson switch 8} & PID 制御                & \code{pid\_control.tex}                       & 04\_pid\_theory \\
-    S4 & \code{sf sysid fit}       & システム同定            & \code{system\_identification.tex}             & 07\_system\_identification \\
-    S5 & \code{sf sils gui}        & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md}           & --- \\
-    S5 & \code{sf log viz}         & ログ解析                & \code{docs/guides/flight-log-viz.md}          & 15\_analysis\_toolkit \\
+    S1 & \code{sf sim run vpython}        & シミュレータ操縦        & \code{docs/architecture/simulation-policy.md} \\
+    S2 & \code{sf lesson switch sci2026:2} & IMU センサ（実習2）    & \code{firmware/vehicle/docs/architecture.md \S2} \\
+    S2 & \code{sf log wifi/viz}           & テレメトリ取得と可視化  & \code{docs/guides/flight-log-viz.md} \\
+    S3 & \code{sf lesson switch sci2026:3} & モータ制御（実習3）     & \code{firmware/vehicle/docs/hardware\_init.md} \\
+    S3 & \code{sf lesson switch sci2026:4} & コントローラ入力（実習4） & \code{protocol/spec/}（ControlPacket） \\
+    S4 & \code{sf lesson switch sci2026:8} & PID 制御（実習8）       & \code{pid\_control.tex} \\
+    S4 & \code{sf sysid fit}              & システム同定            & \code{system\_identification.tex} \\
+    S5 & \code{sf sils gui}               & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md} \\
+    S5 & \code{sf log viz}                & ログ解析                & \code{docs/guides/flight-log-viz.md} \\
     \hline
   \end{tabular}}
 \end{frame}
@@ -161,77 +158,14 @@
     \end{itemize}
   \end{exampleblock}
 
-  \vspace{0.5em}
+  \vspace{0.15em}
 
   \begin{block}{ご自身の StampFly で}\small
     ノート PC と StampFly さえあれば，今日のデモは自宅・研究室でそのまま再現できる。
     まずは \code{sf doctor} で環境を確認してから始めてほしい
   \end{block}
 
-  \vspace{0.5em}
+  \vspace{0.15em}
 
   {\small ご質問・不具合報告はリポジトリの Issue へ。開発に協力してくれる方も歓迎する}
-\end{frame}
-
-% ==============================================================================
-% Demo fallback (SILS-generated) — shown only if a live demo fails at the venue.
-% Assets and regeneration script: docs/sci_tutorial/fallback/ (make_fallback.py)
-% デモ保険（SILS 生成）— 会場で実演が失敗したときだけ見せる。
-% 素材と再生成スクリプト: docs/sci_tutorial/fallback/（make_fallback.py）
-% ==============================================================================
-
-% ------------------------------------------------------------------
-\begin{frame}{デモ保険: 索引 / Demo Fallback Index}
-  \vspace{0.3em}
-  {\small 会場で実演がうまくいかない場合は，SILS（MuJoCo）で事前に飛ばした次の結果を示す。
-  素材は \code{docs/sci\_tutorial/fallback/}，再生成は \code{make\_fallback.py}}
-
-  \vspace{0.5em}
-
-  \resizebox{\textwidth}{!}{%
-    \begin{tabular}{lp{58mm}p{72mm}}
-      \hline
-      \textbf{デモ} & \textbf{ファイル} & \textbf{見せどころ} \\
-      \hline
-      S1 POS\_HOLD & \code{S1\_pos\_hold\_xy.png}\newline \code{S1\_pos\_hold\_flight.mp4}
-        & ロール外乱の後に位置保持へ入り，水平ドリフトが 0.39\,m 以内で収まる（\code{pos\_roll.scn}，ゲート 12/12 PASS） \\
-      S4 P vs PID & \code{S4\_roll\_step\_p\_vs\_pid.png}\newline \code{S4\_lesson5\_p\_flight.mp4}\newline \code{S4\_lesson8\_pid\_flight.mp4}
-        & 同じロールステップに対し，Lesson 5（P）はオーバーシュートと振動，Lesson 8（PID）は振動なし \\
-      S5 SILS & \code{S5\_attitude\_rate.png}\newline \code{S5\_stab\_flight.mp4}\newline \code{S5\_gate\_result.txt}
-        & \code{stab\_flight.scn} の姿勢・角速度と合否ゲート（12/12 PASS），回帰 28 PASS + 5 既知失敗 + 1 スキップ \\
-      \hline
-    \end{tabular}}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{デモ保険 S1: POS\_HOLD（SILS） / Fallback S1}
-  \centering
-  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_pos_hold_xy.png}
-
-  {\scriptsize \code{pos\_roll.scn}（vehicle）: 離陸 $\to$ ロール外乱 $\to$ POS\_HOLD 係合 $\to$ 保持。係合後の水平ドリフト最大 0.39\,m}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{デモ保険 S1: 高度と姿勢（SILS） / Fallback S1}
-  \centering
-  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_altitude_attitude.png}
-
-  {\scriptsize 同じ飛行の高度と姿勢角の時系列。外乱直後の傾きが位置制御で戻る様子を指差す}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{デモ保険 S4: P vs PID ステップ応答 / Fallback S4}
-  \centering
-  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S4_roll_step_p_vs_pid.png}
-
-  {\scriptsize \code{workshop\_acro\_step.scn}（ロール +0.3 を 0.5\,s）。目標 15.1\,deg/s に対し Lesson 5（P）はピーク 17.9\,deg/s と
-  $-2.4$\,deg/s のアンダーシュート，Lesson 8（PID）はピーク 13.2\,deg/s で振動なし。角速度は真値ロール角の数値微分}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{デモ保険 S5: SILS シナリオ実行 / Fallback S5}
-  \centering
-  \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S5_attitude_rate.png}
-
-  {\scriptsize \code{stab\_flight.scn}（vehicle）の姿勢角と角速度。合否ゲート 12/12 PASS。\code{sf sils regression} は 28 PASS + 5 既知失敗 + 1 スキップ（34 本）}
 \end{frame}

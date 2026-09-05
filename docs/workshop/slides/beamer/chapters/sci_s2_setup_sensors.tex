@@ -21,6 +21,47 @@
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}[fragile]{開発環境の導入 (1/2): PC 側 / Toolchain Setup (1/2)}
+  \begin{block}{方法①: GUI インストーラ「StampFly Setup」}
+    \footnotesize ターミナル操作なしで導入できる。GitHub の Releases ページから OS 別の実行ファイルをダウンロードして起動し、ウィザードに従うだけで \code{sf} CLI 一式（ESP-IDF 含む）が入る\\
+    \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest}
+  \end{block}
+
+  \vspace{0.15em}
+
+  \begin{exampleblock}{方法②: CLI インストーラ}
+    \begin{lstlisting}[style=sfbash, numbers=none]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+cd stampfly_ecosystem
+./install.sh          # Windows は install.bat
+    \end{lstlisting}
+  \end{exampleblock}
+
+  \vspace{0.15em}
+
+  {\scriptsize いずれの方法で導入しても、この後の \code{source setup\_env.sh} $\to$ \code{sf doctor}（次ページ）で確認する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{開発環境の導入 (2/2): 機体とペアリング / Setup (2/2)}
+  \begin{block}{開発環境なしでも書き込みだけはできる}
+    \small ブラウザから Web Flasher を開き、公開済みの完成版ファームウェアを機体・コントローラへ直接書き込める\\
+    \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{コントローラのペアリング（初回のみ）}
+    \footnotesize
+    \begin{enumerate}\setlength{\itemsep}{2pt}
+      \item コントローラの LCD パネルボタンを押しながら電源を入れる
+      \item StampFly 本体のボタンを2秒長押しする
+      \item 双方がビープしたらペアリング完了。以降は電源を入れるだけで自動再接続する
+    \end{enumerate}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}[fragile]{事前準備の確認 / Environment Check}
   \begin{block}{全員で \code{sf doctor} を実行する}
     \small ESP-IDF、Python、USBシリアルドライバ、sf CLI 自体のバージョンをまとめて診断する
@@ -91,7 +132,7 @@ sf doctor
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{Sketch の型とワークフロー / Sketch Shape \& Workflow}
+\begin{frame}[fragile]{学習者コードの型とワークフロー / Code \& Workflow}
   \begin{columns}[T]
     \begin{column}{0.44\textwidth}
       \begin{block}{学習者が書く関数は2つだけ}
@@ -104,7 +145,7 @@ sf doctor
       \vspace{0.3em}
       \begin{exampleblock}{切替・ビルド・書き込み}
         \footnotesize
-        \code{sf lesson switch N}\\
+        \code{sf lesson switch sci2026:N}\\
         \code{sf lesson build}\\
         \code{sf lesson flash}
       \end{exampleblock}
@@ -169,7 +210,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{データ取得経路② sf telemetry / Data Path 2: sf telemetry}
+\begin{frame}[fragile]{データ取得経路② sf telemetry / Data Path 2}
   \begin{block}{コード変更なしでライブ表示}
     \small 機体は状態推定値を常時 50\,Hz で送信している。受信して表示するだけなら学習者コードの変更は不要
   \end{block}
@@ -185,7 +226,7 @@ sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{データ取得経路③ ログ取得と可視化 / Data Path 3: Log \& Visualize}
+\begin{frame}[fragile]{データ取得経路③ ログ取得と可視化 / Data Path 3}
   \begin{block}{WiFi 経由で 400\,Hz Data Stream を記録する}
     \small \code{sf log wifi} は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400\,Hz の Data Stream を UDP 受信し、\code{-o *.csv} で 1 周期 1 行の CSV に保存する
   \end{block}
@@ -219,7 +260,7 @@ sf log viz flight.csv
   \end{block}
 
   \begin{alertblock}{手順}
-    \footnotesize \code{sf lesson switch 4} $\to$ 前ページのコードを書く $\to$ \code{sf lesson build \&\& sf lesson flash} $\to$ Teleplot で確認
+    \footnotesize \code{sf lesson switch sci2026:2} $\to$ 前ページのコードを書く $\to$ \code{sf lesson build \&\& sf lesson flash} $\to$ Teleplot で確認
   \end{alertblock}
 \end{frame}
 
@@ -262,19 +303,20 @@ sf log viz flight.csv
 
   \vspace{0.5em}
 
-  {\small 学習者が呼ぶ \api{ws::} 関数は、内部で \code{sensor\_imu} トピックを購読しているだけである（L0 $\to$ L1 の対応）}
+  {\small 学習者が呼ぶ \api{ws::} 関数は、内部で \code{sensor\_imu} トピックを購読しているだけである
+  （アクセス階層 L0（Workshop API）$\to$ L1（Topic API）の対応）}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{復習パス / Review Path}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{llll}
+  \begin{tabular}{lll}
     \hline
-    \textbf{コマンド} & \textbf{レッスン} & \textbf{文書} & \textbf{Notebook} \\
+    \textbf{コマンド} & \textbf{実習} & \textbf{文書} \\
     \hline
-    \code{sf lesson switch 0} & Lesson 0 & \code{docs/guides/troubleshooting.md} & --- \\
-    \code{sf lesson switch 4} & Lesson 4 & \code{firmware/vehicle/docs/architecture.md \S2} & \code{01\_hello\_stampfly.ipynb} \\
-    \code{sf log wifi} / \code{sf log viz} & --- & \code{docs/guides/flight-log-viz.md} & \code{15\_analysis\_toolkit.ipynb} \\
+    \code{sf lesson switch sci2026:1} & 実習1（環境セットアップ） & \code{docs/guides/troubleshooting.md} \\
+    \code{sf lesson switch sci2026:2} & 実習2（IMU） & \code{firmware/vehicle/docs/architecture.md \S2} \\
+    \code{sf log wifi} / \code{sf log viz} & --- & \code{docs/guides/flight-log-viz.md} \\
     \hline
   \end{tabular}}
 \end{frame}
