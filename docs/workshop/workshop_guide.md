@@ -193,12 +193,14 @@ sf log analyze <logfile>
 Lesson 5・8・11 で書く `setup()`/`loop_400Hz()`（`main/user_code.cpp`）は、実機フラッシュ前に SILS（`simulator/sils/`、`--target workshop`）上でも走らせられる。実機に書き込まれるのと同じソースがそのまま動く（Code Identity）ので、ARM・状態遷移（ARMED_GROUND→TAKEOFF→FLYING）・モータ応答の配線ミスは実機を壊さずに気付ける。
 
 ```bash
-sf sils build --target workshop                 # 初回のみ
+sf sils build --target workshop                  # 初回のみ
 sf lesson switch 8 --solution                    # 動作確認したいレッスンに切替
-sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
+touch firmware/workshop/main/user_code.cpp       # 切替は更新日時を保持するため touch する
+sf sils build --target workshop                  # touch 後にもう一度ビルドして反映
+sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 ```
 
-**現状の注意:** `sf lesson switch` は `student.cpp`/`solution.cpp` の更新日時を保持するため、切替直後の `sf sils build --target workshop` が「変更なし」と誤判定することがある。反映されない場合は `touch firmware/workshop/main/user_code.cpp` してから再ビルドする。また、レッスンのゲイン・ミキサー式は実機（`firmware/vehicle_old`）向けの調整値であり、現行 SILS プラントに対して検証済みではない — 既定のスティック指令では離陸まで届かないため、**ホバー品質の確認には使えない**。ARM・モード遷移・モータ応答の配線確認が主な用途。詳細は `simulator/sils/README.md`「エミュレータターゲット」節を参照。
+**手順の注意:** `sf lesson switch` は `student.cpp`/`solution.cpp` をコピーする際に更新日時を保持したままにするため、切替直後にそのまま `sf sils build --target workshop` を実行しても新しいコードとして認識されない。上記のとおり `touch firmware/workshop/main/user_code.cpp` で更新日時を進めてから**もう一度**再ビルドする、という2段階を毎回踏むこと（省略できる例外ではなく通常の手順）。また、`workshop_acro.scn` のスティック指令（duty）は Lesson 5/8 のレート制御解答が実測ホバー duty（~0.676）付近で中立に収束する前提でチューニングされている。旧 `acro_flight.scn`（vehicle 用の推力比率規約で調整済み）の値を workshop の生 duty として流用すると約35%不足し離陸しないため、離陸+ホバー相当のデモには本シナリオを使うこと。Lesson 5/8 では ARM→離陸検知→ホバー相当巡航→空中 DISARM の一連を確認できる（合格基準: 真値高度が0.1mを超える、roll+pitch合成傾きが15°未満）。Lesson 11（独自ファームウェア開発）は制御則が学習者ごとに異なるため、同じ duty で離陸する保証はない — ARM・モード遷移・モータ応答の配線確認が主な用途になる。詳細は `simulator/sils/README.md`「エミュレータターゲット」節を参照。
 
 ## 4. 安全管理
 
@@ -268,7 +270,17 @@ Each lesson follows: Lecture (10-15 min) → Demo (5 min) → Hands-on (30-40 mi
 
 See the Japanese section above for detailed lesson-by-lesson instructions.
 
-**Trying learner code in SILS (Lessons 5/8/11):** the exact `main/user_code.cpp` a student writes can run on the host SILS bench before it ever touches hardware — `sf sils build --target workshop` then `sf sils scenario <scn> --target workshop` (see `simulator/sils/README.md`'s "Emulator targets" section). Good for catching ARM/state-machine/motor-wiring mistakes safely; the lesson gains and legacy mixer formula are not yet validated against the current SILS plant, so it is not a hover-quality check.
+**Trying learner code in SILS (Lessons 5/8/11):** the exact `main/user_code.cpp` a student writes can run on the host SILS bench before it ever touches hardware:
+
+```bash
+sf sils build --target workshop                  # once
+sf lesson switch 8 --solution                     # switch to the lesson you want to check
+touch firmware/workshop/main/user_code.cpp        # switching preserves the mtime, so touch it
+sf sils build --target workshop                   # rebuild again so the new code is picked up
+sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
+```
+
+`sf lesson switch` copies `student.cpp`/`solution.cpp` while preserving their old mtime, so a build run right after the switch will not detect the new code as changed. Touching the file and then rebuilding a **second** time is a required two-step sequence every time — not an occasional workaround. (See `simulator/sils/README.md`'s "Emulator targets" section; use `workshop_acro.scn`, not `acro_flight.scn` — the latter's stick values are tuned for vehicle's thrust-fraction convention and undershoot workshop's raw-duty convention by about 35%, so the craft never lifts off.) With `workshop_acro.scn`, Lessons 5/8's rate-control solutions do lift off and hold a hover-equivalent attitude (pass criteria: true altitude clears 0.1 m, combined roll+pitch tilt stays under 15°) before an in-air DISARM. Lesson 11 (open-ended custom firmware) has no such guarantee, since the control law varies by student — there, the scenario is mainly useful for catching ARM/state-machine/motor-wiring mistakes safely.
 
 ## 4. Safety
 

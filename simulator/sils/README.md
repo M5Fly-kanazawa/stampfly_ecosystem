@@ -32,7 +32,9 @@
 ```bash
 sf sils build --target workshop
 sf lesson switch 8 --solution   # main/user_code.cpp を Lesson 8 解答で上書き
-sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
+touch firmware/workshop/main/user_code.cpp   # 切替直後は mtime が保たれるため（下記）
+sf sils build --target workshop
+sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 ```
 
 `main/user_code.cpp` が無い（gitignore 対象・`sf lesson switch` 未実行）場合、`sf sils build --target workshop` の初回 configure で Lesson 0 のテンプレートから自動生成される（`firmware/workshop/main/CMakeLists.txt` の実ファームビルドと同じ配慮）。
@@ -43,7 +45,7 @@ sf sils scenario simulator/sils/scenarios/acro_flight.scn --target workshop
 
 `sf lesson switch` は `shutil.copy2` でコピー元（`student.cpp`/`solution.cpp`）の mtime を保つ。そのため切替直後に `sf sils build --target workshop` を実行しても、コピー元の mtime が既存ビルドの `user_code.cpp.o` より古いと ninja が変更を検知せず「no work to do」になることがある。確実に反映させるには `touch firmware/workshop/main/user_code.cpp` してから `sf sils build --target workshop` を実行する。
 
-**`workshop_acro.scn`（離陸+ホバー相当デモ, `simulator/sils/scenarios/`）:** ARM → 上昇バースト → 実測ホバー duty（~0.676）で巡航（スティック中立）→ 空中で DISARM して安全に沈降・着地、という構成。ゲートは緩め（`metric alt_max > 0.1`＝離陸検知、`metric tilt_max < 15.0`＝転倒なし）。開ループのスクリプト制御では真の高度保持ができない（37g級の機体はわずかな duty 過不足が1秒未満で m/s 級の昇降速度に積み上がる）ため、着陸はスロットルを絞る台本ではなく空中 DISARM 直行（`acro_flight.scn` で実証済みの安全パターン）を採用している。詳細な調査記録・スロットル値の導出はファイル冒頭のコメント参照。
+**`workshop_acro.scn`（離陸+ホバー相当デモ, `simulator/sils/scenarios/`）:** ARM → 上昇バースト → 実測ホバー duty（~0.676）で巡航（スティック中立）→ 空中で DISARM して安全に沈降・着地、という構成。合格基準は緩め（`metric alt_max > 0.1`＝離陸検知、`metric tilt_max < 15.0`＝転倒なし）。開ループのスクリプト制御では真の高度保持ができない（37g級の機体はわずかな duty 過不足が1秒未満で m/s 級の昇降速度に積み上がる）ため、着陸はスロットルを絞る台本ではなく空中 DISARM 直行（`acro_flight.scn` で実証済みの安全パターン）を採用している。詳細な調査記録・スロットル値の導出はファイル冒頭のコメント参照。
 
 `sf sils regression`（CI）は `vehicle`/`vehicle_old` に加え、ヘッダで `--target workshop` を宣言するシナリオ（`workshop_acro.scn`）も `*.scn`/`*.expect` の対象に含むが、**既定ではスキップする**（`[SKIP] workshop_acro (target=workshop; ...)`、結果集計は PASS/FAIL に数えない）。理由: `main/user_code.cpp` は `sf lesson switch` が所有する gitignore 対象ファイルで、新規チェックアウトでは CMake ブートストラップが Lesson 0（モータを動かさない）で種付けするため、離陸ゲートが実回帰と無関係に構造的失敗する。`sf lesson switch N --solution` でレッスンを切り替えた上で `sf sils regression --include-workshop` を渡すと実行される。
 

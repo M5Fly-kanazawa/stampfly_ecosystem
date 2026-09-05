@@ -50,6 +50,17 @@ them into place (no video encoding here).
 
      python3 docs/sci_tutorial/fallback/make_fallback.py --run --run-s4 --restore-lesson 0
 
+4) --plots-only: PNG のラベルだけを直したい場合に使う。既存の SILS バンドル・
+   永続化済み trajectory.csv からグラフのみ再生成し、4本の動画ファイルには
+   一切触れない（バンドルに新しい動画があっても使わない）。--run/--run-s4 と
+   同時指定は不可。
+   --plots-only: use this when only a label needs fixing. Re-plots from
+   already-persisted bundles/trajectory.csv only — never touches any of the
+   four video files (even if the bundle happens to carry a fresh one).
+   Incompatible with --run/--run-s4.
+
+     python3 docs/sci_tutorial/fallback/make_fallback.py --plots-only
+
 生成ファイル一覧は docs/sci_tutorial/fallback/README.md の表を参照。
 See docs/sci_tutorial/fallback/README.md's table for the full output file list.
 
@@ -69,6 +80,7 @@ import pandas as pd
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 
 # --- paths -------------------------------------------------------------------
@@ -94,6 +106,44 @@ plt.rcParams.update({
     "xtick.labelsize": 13,
     "ytick.labelsize": 13,
 })
+
+
+def _find_cjk_font() -> str | None:
+    """Return the name of an installed Japanese-capable font, checked in a
+    preference order covering common macOS/Windows/Linux fonts, or None if
+    none is installed. Used to decide whether in-plot text may use Japanese
+    labels; without a CJK font matplotlib silently draws missing glyphs as
+    empty tofu boxes instead of raising an error, so this check must run
+    before any Japanese text is placed on a figure.
+    インストール済みの日本語対応フォント名を返す（無ければ None）。macOS /
+    Windows / Linux の代表的な日本語フォントを優先順で確認する。プロット文字
+    を日本語にしてよいか判定するために使う — CJKフォントが無い環境では
+    matplotlib はエラーを出さず文字化け（tofu ボックス）を描くだけなので、
+    日本語を置く前に必ずこのチェックを通す。
+    """
+    candidates = [
+        "Hiragino Sans", "Hiragino Kaku Gothic ProN",   # macOS
+        "Noto Sans CJK JP", "Noto Sans JP",              # Linux (Noto)
+        "Yu Gothic", "Meiryo", "MS Gothic",              # Windows
+        "IPAexGothic", "IPAGothic", "TakaoGothic",       # Linux (IPA/Takao)
+    ]
+    available = {f.name for f in fm.fontManager.ttflist}
+    return next((name for name in candidates if name in available), None)
+
+
+# Detected once at import time: drives the Japanese/English fallback choice
+# for the few in-plot labels that carry Japanese text (S1 pass-criterion
+# label, S4 lesson/exercise titles). All other plot titles in this script are
+# English-only and unaffected.
+# 起動時に一度だけ判定: 日本語テキストを含む一部のプロット表示（S1の判定条件
+# ラベル、S4のレッスン／実習タイトル）で日本語／英語のどちらを使うか決める。
+# このスクリプトの他のタイトルは元々英語のみで影響を受けない。
+_CJK_FONT = _find_cjk_font()
+if _CJK_FONT:
+    plt.rcParams["font.family"] = _CJK_FONT
+    print(f"[make_fallback] CJK font found ({_CJK_FONT}) — using Japanese plot labels")
+else:
+    print("[make_fallback] no CJK font found — falling back to English plot labels")
 
 RAD2DEG = 57.29577951308232
 
@@ -179,7 +229,7 @@ S1_T_DISARM = 21.3
 S1_DRIFT_GATE_M = 3.0
 
 
-def build_s1(bundle: Path) -> None:
+def build_s1(bundle: Path, copy_video: bool = True) -> None:
     df = load_traj(bundle)
     t = df["t"].values
 
@@ -222,8 +272,15 @@ def build_s1(bundle: Path) -> None:
     ax_xy.legend(loc="best", framealpha=0.9)
 
     ax_err.plot(t, drift, color="#1f77b4", lw=1.8, label="Horizontal error from hold target")
+    # "Gate" is avoided here per project terminology rules (insider jargon for
+    # a lay/projector audience) — Japanese "判定条件" (pass criterion) when a
+    # CJK font is installed, else the English label.
+    # 「ゲート」は内輪語のため使わない（投影・一般向け資料）。CJKフォントが
+    # あれば日本語ラベル「判定条件」、無ければ英語ラベルを使う。
+    _s1_gate_label = (f"判定条件: drift < {S1_DRIFT_GATE_M:.1f} m" if _CJK_FONT
+                       else f"Pass criterion: drift < {S1_DRIFT_GATE_M:.1f} m")
     ax_err.axhline(S1_DRIFT_GATE_M, color="#d62728", ls="--", lw=1.4,
-                    label=f"Gate: drift < {S1_DRIFT_GATE_M:.1f} m")
+                    label=_s1_gate_label)
     ax_err.axvline(S1_T_DISTURB_START, color="#999999", ls=":", lw=1.2)
     ax_err.axvline(S1_T_POSHOLD_ENGAGE, color="#d62728", ls=":", lw=1.2)
     ax_err.axvline(S1_T_DISARM, color="#888888", ls=":", lw=1.2)
@@ -244,10 +301,14 @@ def build_s1(bundle: Path) -> None:
     ax_err.set_xlabel("Time  t  [s]")
     ax_err.set_ylabel("Horizontal error [m]")
     # One-line title (same rationale as ax_xy above): drop the "vs time"
-    # wording to keep it comfortably within one line at 16pt.
+    # wording to keep it comfortably within one line at 16pt. "limit" (not
+    # "pass criterion", which overflows the panel width at this font size) —
+    # avoids the banned "gate" jargon while staying short.
     # 1行タイトル（ax_xyと同じ理由）: 16ptで1行に収まるよう「vs time」を省略。
+    # "pass criterion" だとこのフォントサイズでパネル幅からはみ出すため
+    # "limit" を使う — 内輪語「gate」は避けつつ短く保つ。
     ax_err.set_title(f"S1: position-hold error — max {drift_max_hold:.2f} m "
-                      f"(gate {S1_DRIFT_GATE_M:.1f} m)")
+                      f"(limit {S1_DRIFT_GATE_M:.1f} m)")
     ax_err.grid(True, alpha=0.3)
     ax_err.legend(loc="upper right", framealpha=0.9)
 
@@ -281,12 +342,15 @@ def build_s1(bundle: Path) -> None:
     fig.savefig(OUT_DIR / "S1_altitude_attitude.png")
     plt.close(fig)
 
-    # --- (c) video -------------------------------------------------------------
+    # --- (c) video (skipped in --plots-only mode, or if the bundle has none) ---
     src = bundle / f"scn_{S1_SCN}.mp4"
-    shutil.copyfile(src, OUT_DIR / "S1_pos_hold_flight.mp4")
+    if copy_video and src.exists():
+        shutil.copyfile(src, OUT_DIR / "S1_pos_hold_flight.mp4")
+    elif copy_video:
+        print(f"S1: no video in bundle ({src}) — leaving S1_pos_hold_flight.mp4 as-is")
 
     print(f"S1: drift_max after engage = {drift_max_hold:.3f} m "
-          f"(gate < {S1_DRIFT_GATE_M} m)")
+          f"(pass criterion < {S1_DRIFT_GATE_M} m)")
 
 
 # =============================================================================
@@ -325,6 +389,16 @@ _V = (_STICK_RAW - 2048) / 2048.0
 _DB = 0.05
 _V_DB = 0.0 if abs(_V) < _DB else np.sign(_V) * (abs(_V) - _DB) / (1 - _DB)
 S4_RATE_TARGET_DEG_S = np.degrees(_V_DB * 1.0)  # ~15.07 deg/s
+
+# Panel/suptitle numbering words: the workshop deck now numbers these
+# tutorial-local exercises 実習5/実習8 (sf lesson switch sci2026:5 / :8), not
+# "Lesson 5/8" — kept in sync with the CJK-font check above (English fallback
+# "Exercise N" when no CJK font is installed).
+# パネル・総合タイトルの呼称: workshop の教材は現在これらを「実習5」「実習8」
+# と呼ぶ（sf lesson switch sci2026:5 / :8）。「Lesson 5/8」ではない — 上の
+# CJKフォント判定と連動（CJKフォントが無ければ英語 "Exercise N"）。
+_S4_L5 = "実習 5" if _CJK_FONT else "Exercise 5"
+_S4_L8 = "実習 8" if _CJK_FONT else "Exercise 8"
 
 
 def s4_rate_ref(t: np.ndarray) -> np.ndarray:
@@ -384,8 +458,8 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
     # どのレッスン・ゲインかだけ示せば十分。
     metrics = {}
     for ax, df, title, legend_label, color in (
-        (ax5, df5, "Lesson 5 — P (Kp=0.5)", "roll rate (P only)", "#1f77b4"),
-        (ax8, df8, "Lesson 8 — PID (Kp=0.25, Ti=0.3, Kd=0.005)", "roll rate (PID)", "#d62728"),
+        (ax5, df5, f"{_S4_L5} (P, Kp=0.5)", "roll rate (P only)", "#1f77b4"),
+        (ax8, df8, f"{_S4_L8} (PID)", "roll rate (PID)", "#d62728"),
     ):
         t_full = df["t"].values
         rate_full = roll_rate_deg(df)
@@ -411,7 +485,7 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
         undershoot = rate[mask_post].min()
         metrics[title] = (peak, val_end, undershoot)
 
-    fig.suptitle("S4: roll rate-loop step response — Lesson 5 (P) vs Lesson 8 (PID)",
+    fig.suptitle(f"S4: roll rate-loop step response — {_S4_L5} (P) vs {_S4_L8} (PID)",
                  fontsize=16)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(OUT_DIR / "S4_roll_step_p_vs_pid.png")
@@ -479,7 +553,7 @@ S5_T_STEP_G = 11.5  # centre / self-level
 S5_T_DISARM = 13.4
 
 
-def build_s5_graph(bundle: Path) -> None:
+def build_s5_graph(bundle: Path, copy_video: bool = True) -> None:
     df = load_traj(bundle)
     t_full = df["t"].values
 
@@ -558,7 +632,13 @@ def build_s5_graph(bundle: Path) -> None:
     fig.savefig(OUT_DIR / "S5_attitude_rate.png")
     plt.close(fig)
 
-    shutil.copyfile(bundle / f"scn_{S5_SCN}.mp4", OUT_DIR / "S5_stab_flight.mp4")
+    # Skipped in --plots-only mode, or if the bundle has no rendered video.
+    # --plots-only モード、またはバンドルに動画が無い場合はスキップする。
+    src = bundle / f"scn_{S5_SCN}.mp4"
+    if copy_video and src.exists():
+        shutil.copyfile(src, OUT_DIR / "S5_stab_flight.mp4")
+    elif copy_video:
+        print(f"S5: no video in bundle ({src}) — leaving S5_stab_flight.mp4 as-is")
 
 
 def build_s5_gate_text(bundle: Path) -> None:
@@ -627,7 +707,16 @@ def main() -> int:
     ap.add_argument("--restore-lesson", default="0",
                      help="lesson id/number to restore after --run-s4 (default: 0, "
                           "= Lesson 0 student — check `sf lesson list` first if unsure)")
+    ap.add_argument("--plots-only", action="store_true",
+                     help="rebuild only the PNGs/text from already-persisted bundles/"
+                          "trajectory.csv (e.g. after a label-only edit to this script) "
+                          "without touching any of the four .mp4 videos, even if the "
+                          "bundle happens to carry a freshly rendered one. Incompatible "
+                          "with --run/--run-s4")
     args = ap.parse_args()
+
+    if args.plots_only and (args.run or args.run_s4):
+        raise SystemExit("--plots-only cannot be combined with --run/--run-s4")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -636,7 +725,7 @@ def main() -> int:
         sf(S5_RUN_CMD)
 
     s1_bundle = require_bundle(S1_SCN, S1_RUN_CMD)
-    build_s1(s1_bundle)
+    build_s1(s1_bundle, copy_video=not args.plots_only)
 
     if args.run_s4:
         l5_dir, l8_dir = run_s4(args.restore_lesson)
@@ -662,7 +751,7 @@ def main() -> int:
         build_s4(l5_dir, l8_dir)
 
     s5_bundle = require_bundle(S5_SCN, S5_RUN_CMD)
-    build_s5_graph(s5_bundle)
+    build_s5_graph(s5_bundle, copy_video=not args.plots_only)
     build_s5_gate_text(s5_bundle)
     build_s5_regression_text()
 
