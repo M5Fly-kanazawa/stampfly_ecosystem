@@ -2,6 +2,13 @@
 \usepackage{stampfly_slides}
 \input{preamble}
 
+% --- "read later" badge for frame titles -----------------------------------
+% Marks frames the instructor skims live but participants should read later.
+% Usage: \begin{frame}{タイトル\later}
+% 講師が当日は流し、参加者に後で読んでほしいフレームの目印。
+% 使い方: \begin{frame}{タイトル\later}
+\newcommand{\later}{\hfill{\normalsize\colorbox{white}{\textcolor{sfdark}{\scriptsize\,あとで読む\,}}}}
+
 % --- SCI tutorial session-divider macro ------------------------------------
 % \lessondivider (stampfly_slides.sty) hardcodes the word "Lesson N". The SCI
 % tutorial is organised as five timetabled sessions, so define a local divider

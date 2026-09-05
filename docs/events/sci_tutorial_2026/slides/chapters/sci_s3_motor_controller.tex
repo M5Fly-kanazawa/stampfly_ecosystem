@@ -5,14 +5,14 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
-\begin{frame}{地図 / Map}
+\begin{frame}{地図}
   \centering
   \vspace{-1mm}
   \resizebox{0.62\textwidth}{!}{\scisessionmap{3}}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{要点3つ / Three Takeaways}
+\begin{frame}{要点3つ}
   \begin{enumerate}
     \item モータは PWM（パルス幅変調）の Duty 比で駆動する。4基の配置と回転方向はトルクバランスで決まっている
     \item コントローラのスティック値は ESP-NOW で 14 バイトの \code{ControlPacket} として届く
@@ -21,7 +21,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{安全 / Safety}
+\begin{frame}{安全}
   \begin{alertblock}{モータを回す実習の注意}
     \begin{itemize}\small\setlength{\itemsep}{2pt}
       \item \warn{プロペラは外した状態}で行う（本セッションは机上でモータの回転だけを確認する）
@@ -36,7 +36,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モータと PWM / Motors \& PWM}
+\begin{frame}{モータと PWM}
   \begin{columns}[T]
     \begin{column}{0.45\textwidth}
       \centering
@@ -55,7 +55,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モータ配置 / Motor Layout}
+\begin{frame}{モータ配置}
   \begin{center}
     \resizebox{0.4\textwidth}{!}{\input{../../_shared/tikz/motor_layout}}
   \end{center}
@@ -66,7 +66,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習: Duty をハードコードして回す / Hardcoded Duty}
+\begin{frame}[fragile]{実習: Duty をハードコードして回す}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
 void setup() {
     ws::print("Motor duty test");
@@ -88,7 +88,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{コントローラ / Controller}
+\begin{frame}{コントローラ}
   \begin{columns}[T]
     \begin{column}{0.56\textwidth}
       \centering
@@ -120,7 +120,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{ペアリングとチャンネル / Pairing \& Channel}
+\begin{frame}[fragile]{ペアリングとチャンネル}
   \begin{block}{ペアリング}
     \footnotesize コントローラの M5 ボタン（LCD パネル）を押しながら電源ON $\to$ StampFly のボタンを約2秒長押し $\to$ 両方のビープで完了。次回以降は自動接続
   \end{block}
@@ -139,7 +139,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{オープンループ制御 / Open-Loop Control}
+\begin{frame}{オープンループ制御}
   \begin{center}
     \resizebox{0.7\textwidth}{!}{\input{../../_shared/tikz/open_loop}}
   \end{center}
@@ -158,7 +158,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{ミキサ行列 / Mixer Matrix}
+\begin{frame}{ミキサ行列}
   \begin{columns}[T]
     \begin{column}{0.45\textwidth}
       \centering
@@ -180,7 +180,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{デモ: スティックでモータを回す / Stick to Motors}
+\begin{frame}[fragile]{デモ: スティックでモータを回す}
   \vspace{0.3em}
 
   {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
@@ -199,7 +199,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{プラントの定義 / Defining the Plant}
+\begin{frame}{プラントの定義}
   \small 本セッションで作った経路が、そのまま制御対象（プラント）の定義になる
 
   \vspace{0.5em}
@@ -222,7 +222,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{理論とコードの対応表 / Theory-to-Code Map}
+\begin{frame}{理論とコードの対応表}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{llll}
     \hline
@@ -236,7 +236,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス / Review Path}
+\begin{frame}{復習パス}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
@@ -254,7 +254,7 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{チェックポイント / Checkpoint}
+\begin{frame}{チェックポイント}
   \begin{alertblock}{確認事項}
     \begin{itemize}
       \item[$\square$] Duty とモータ配置・回転方向の対応を説明できる

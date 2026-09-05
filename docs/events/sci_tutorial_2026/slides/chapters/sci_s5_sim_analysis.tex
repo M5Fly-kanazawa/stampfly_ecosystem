@@ -11,7 +11,7 @@
 \providecommand{\scisessionmap}[1]{}
 
 % ------------------------------------------------------------------
-\begin{frame}{地図: 今ここ / Map: You Are Here}
+\begin{frame}{地図: 今ここ}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
@@ -34,7 +34,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{要点3つ / Three Key Points}
+\begin{frame}{要点3つ}
   \begin{enumerate}
     \item StampFly のシミュレーションは目的の異なる3層で構成され，
           層3（SILS）は実ファームを無改変で走らせる
@@ -54,7 +54,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{シミュレーションの3層構造 / Three Simulation Layers}
+\begin{frame}{シミュレーションの3層構造}
   \begin{center}
     \resizebox{0.95\textwidth}{!}{\input{../../_shared/tikz/sci_sim_layers}}
   \end{center}
@@ -63,7 +63,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{層1・層2: 設計モデルとログ再生 / Layers 1 \& 2}
+\begin{frame}{層1・層2: 設計モデルとログ再生}
   \begin{exampleblock}{層1: 設計用線形モデル}\small
     $G(s) = b\,e^{-Ls}/(s(Ts+1))$ を \code{sf sysid rate-fit} で実飛行ログから
     同定し，制御設計とループ整形の基準とする（S4 で扱った同定と同じ枠組み）
@@ -81,7 +81,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{層3: SILS / Layer 3: SILS}
+\begin{frame}{層3: SILS}
   \begin{block}{Code Identity と Parameter Identity}\small
     SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で
     物理シミュレーションと閉ループ実行する検証手法）は，
@@ -101,7 +101,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モデル一致の合否判定 / Model-Match Verification}
+\begin{frame}{モデル一致の合否判定}
   \begin{block}{Code Identity を使った検証}\small
     実機ログに使うのと同じ同定パイプラインを，SILS が生成したログにも
     そのまま適用し，$(b, L, T)$ を実機同定値と比較する（\code{sf sils sysid-gate}）
@@ -126,7 +126,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{VPython と Genesis / VPython \& Genesis}
+\begin{frame}[fragile]{VPython と Genesis}
   \begin{table}
     \centering\small
     \begin{tabular}{lll}
@@ -153,7 +153,7 @@ sf sim run genesis
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{sf sils コマンド一覧 / sf sils Subcommands}
+\begin{frame}[fragile]{sf sils コマンド一覧}
   \begin{table}
     \centering\footnotesize
     \begin{tabular}{ll}
@@ -198,7 +198,7 @@ sf sils gui
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習: 自分の PID を SILS で飛ばす / PID in SILS}
+\begin{frame}[fragile]{実習: 自分の PID を SILS で飛ばす}
   \begin{block}{実機の前にシミュレータで確かめる}\small
     実習 8（PID）の \code{setup()}/\code{loop\_400Hz()} を，飛ばす前に SILS で検証する
   \end{block}
@@ -219,7 +219,7 @@ sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ: シミュレータを動かす / Demo: The Simulator}
+\begin{frame}{デモ: シミュレータを動かす}
   \begin{exampleblock}{デモの見方}\footnotesize
     \textbf{見るだけ}: 3D 上での挙動とグラフの対応を確認するだけで要点はつかめる。
     \textbf{一緒に打つ}: 手元でも \code{sf sim run vpython} を起動してみる。
@@ -238,7 +238,7 @@ sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモの期待結果: SILS シナリオ実行 / Expected Result}
+\begin{frame}{デモの期待結果: SILS シナリオ実行}
   \begin{center}
     \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../fallback/S5_attitude_rate.png}
   \end{center}
@@ -267,7 +267,7 @@ sf log analyze flight.csv
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{センサノイズの評価: Allan 分散 / Allan Variance}
+\begin{frame}[fragile]{センサノイズの評価: Allan 分散}
   \begin{block}{Allan 分散でわかること}\small
     静止センサの出力から Allan 偏差（Allan deviation）を計算すると，
     ホワイトノイズと長時間のバイアス不安定性を分離して評価できる。
@@ -290,7 +290,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{研究利用の入口: L1 Topic API / Entry for Research}
+\begin{frame}{研究利用の入口: L1 Topic API}
   \begin{block}{自分の推定器・制御器を載せる}\small
     L1 Topic API（\code{sf::api::*}）は Pub-Sub（発行/購読型のメッセージ配信）
     トピックを subscribe/publish し，
@@ -310,7 +310,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{再現性の3原則 / Three Principles of Reproducibility}
+\begin{frame}{再現性の3原則}
   \vspace{0.3em}
 
   {\small S1 で見た開発の3原則を，再現性の観点から振り返る}
@@ -338,7 +338,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{発展テーマ: AI と強化学習 / AI \& RL}
+\begin{frame}{発展テーマ: AI と強化学習}
   \begin{itemize}\small
     \item \textbf{AI コーディングエージェントの活用}: 制御則の実装・デバッグや
           シミュレーションログの解析を，AI コーディングエージェントを補助に
@@ -352,7 +352,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{発展テーマ: 制御・推定・自律飛行 / Autonomy}
+\begin{frame}{発展テーマ: 制御・推定・自律飛行}
   \begin{itemize}\small
     \item \textbf{MPC・適応制御}: 今日扱った PID の先にある発展的な制御手法
     \item \textbf{ESKF・オートチューン}: 15状態 ESKF の実装，
@@ -367,7 +367,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{教育・研究での再利用 / Reuse in Your Own Class or Lab}
+\begin{frame}{教育・研究での再利用}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \begin{block}{自分の授業・研究室で使うには}\footnotesize
@@ -392,7 +392,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{理論とコードの対応表 / Concept-to-Code Map}
+\begin{frame}{理論とコードの対応表}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
@@ -414,7 +414,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス / Review Path}
+\begin{frame}{復習パス}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
@@ -429,7 +429,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{質疑 / Q\&A}
+\begin{frame}{質疑}
   \begin{block}{想定質問}\small
     \begin{itemize}
       \item モデル一致の判定で Yaw 軸だけ精度が悪化するのはなぜか
@@ -446,7 +446,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{チェックポイント / Checkpoint}
+\begin{frame}{チェックポイント}
   \begin{alertblock}{確認事項}\small
     \begin{itemize}
       \item[$\square$] シミュレーションの3層構造と，それぞれの役割を説明できる

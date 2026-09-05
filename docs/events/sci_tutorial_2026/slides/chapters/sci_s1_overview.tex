@@ -5,14 +5,14 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
-\begin{frame}{地図 / Map}
+\begin{frame}{地図}
   \centering
   \vspace{-1mm}
   \resizebox{0.62\textwidth}{!}{\scisessionmap{1}}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{要点3つ / Three Takeaways}
+\begin{frame}{要点3つ}
   \begin{enumerate}
     \item マルチコプタは制御なしには1秒も飛べない。この性質が制御工学の教材として理想的である
     \item 必要なリソースが分散していることが普及の障壁になっている。StampFly Ecosystem は単一リポジトリへの集約でこれに応える
@@ -21,7 +21,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{制御がなければ飛べない / No Control, No Flight}
+\begin{frame}{制御がなければ飛べない}
   \vspace{0.3em}
 
   \small マルチコプタは固定翼機のように滑空できず、ヘリコプタのようにオートローテーションで降りることもできない。制御系が止まれば即座に墜落する
@@ -34,7 +34,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{StampFly ハードウェア / Hardware}
+\begin{frame}{StampFly ハードウェア}
   \begin{columns}[T]
     \begin{column}{0.42\textwidth}
       \centering
@@ -68,7 +68,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{4つの障壁 / Four Barriers}
+\begin{frame}{4つの障壁}
   \small 手のひらサイズで安全性が高く安価な StampFly でも、要点②のリソース分散に加えて、教育現場での普及には次の4つの障壁がある
 
   \vspace{0.5em}
@@ -82,7 +82,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{既存プラットフォームとの比較 / Platform Comparison}
+\begin{frame}{既存プラットフォームとの比較}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{lcccc}
@@ -106,7 +106,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{1機から学べる8分野 / Eight Fields, One Airframe}
+\begin{frame}{1機から学べる8分野}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{ll}
@@ -131,14 +131,14 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{エコシステムの地図 / Ecosystem Map}
+\begin{frame}{エコシステムの地図}
   \centering
   \vspace{1mm}
   \resizebox{!}{0.78\textheight}{\input{../../_shared/tikz/ecosystem_layers}}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{設計思想5本柱 / Five Design Pillars}
+\begin{frame}{設計思想5本柱}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{lp{72mm}}
@@ -156,7 +156,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{深掘り: sf CLI / Deep Dive: sf CLI}
+\begin{frame}{深掘り: sf CLI}
   \small \code{idf.py} を直接叩く代わりに、ビルド・書き込み・診断・ログ取得・シミュレーションを統一されたコマンド体系で提供する
 
   \vspace{0.5em}
@@ -178,7 +178,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{深掘り: 段階的抽象化 / Progressive Abstraction}
+\begin{frame}{深掘り: 段階的抽象化}
   \small \code{ws::} 名前空間は、制御ループの起動やセンサ初期化を隠しつつ、\api{setup()} と \api{loop\_400Hz(dt)} だけで機体を動かせるようにする
 
   \vspace{0.5em}
@@ -191,7 +191,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{vehicle ファーム構造 / vehicle Firmware Structure}
+\begin{frame}{vehicle ファーム構造}
   \begin{table}
     \centering\small
     \begin{tabular}{ll}
@@ -217,7 +217,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{400\,Hz 制御ループ / The 400\,Hz Control Loop}
+\begin{frame}{400\,Hz 制御ループ}
   \centering
   \vspace{-1mm}
   \resizebox{0.82\textwidth}{!}{\input{../../_shared/tikz/loop_400hz_timeline}}
@@ -228,14 +228,14 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{4階層アクセス / Four-Tier Access}
+\begin{frame}{4階層アクセス}
   \centering
   \vspace{-1mm}
   \resizebox{!}{0.82\textheight}{\input{../../_shared/tikz/sci_tier_access}}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{シミュレーション3層 / Three Simulation Layers}
+\begin{frame}{シミュレーション3層}
   \vspace{0.3em}
 
   \begin{table}
@@ -261,7 +261,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{開発の3原則 / Three Principles}
+\begin{frame}{開発の3原則}
   \begin{table}
     \centering\scriptsize
     \begin{tabular}{lp{80mm}}
@@ -277,7 +277,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{デモ①: シミュレータ操縦 / Demo 1: Simulator Piloting}
+\begin{frame}[fragile]{デモ①: シミュレータ操縦}
   \vspace{0.3em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
@@ -294,7 +294,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ②: 実機 POS\_HOLD 飛行 / POS\_HOLD Flight}
+\begin{frame}{デモ②: 実機 POS\_HOLD 飛行}
   \vspace{0.3em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
@@ -310,7 +310,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ②の期待結果: 位置保持 / Expected: Position Hold}
+\begin{frame}{デモ②の期待結果: 位置保持}
   \centering
   {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
 
@@ -322,7 +322,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ②の期待結果: 高度と姿勢 / Altitude \& Attitude}
+\begin{frame}{デモ②の期待結果: 高度と姿勢}
   \centering
   {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
 
@@ -334,7 +334,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス / Review Path}
+\begin{frame}{復習パス}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
@@ -348,7 +348,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{チェックポイント / Checkpoint}
+\begin{frame}{チェックポイント}
   \begin{alertblock}{確認事項}
     \begin{itemize}
       \item[$\square$] マルチコプタが制御教材として適している理由を説明できる

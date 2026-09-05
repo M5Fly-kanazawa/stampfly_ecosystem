@@ -14,7 +14,7 @@
 \providecommand{\scisessionmap}[1]{}
 
 % ------------------------------------------------------------------
-\begin{frame}{地図: 今ここ / Map: You Are Here}
+\begin{frame}{地図: 今ここ}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
@@ -37,7 +37,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{要点3つ / Three Key Points}
+\begin{frame}{要点3つ}
   \begin{enumerate}
     \item モータ+機体のプラント伝達関数 $G_p(s) = K/(s(\tau_m s+1))$ を実測パラメータから導出し，ゲイン設計に使う
     \item P 制御から PID 化し，不完全微分・アンチワインドアップ・積分リセットまで含めたvehicle 実装と学習者コードを対比する
@@ -54,7 +54,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{内側ループ: レート制御 / Inner Loop: Rate Control}
+\begin{frame}{内側ループ: レート制御}
   \begin{center}
     \resizebox{0.85\textwidth}{!}{\input{../../_shared/tikz/feedback_block}}
   \end{center}
@@ -71,14 +71,14 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{PID 制御器 / PID Controller}
+\begin{frame}{PID 制御器}
   \begin{center}
     \resizebox{0.78\textwidth}{!}{\input{../../_shared/tikz/pid_block}}
   \end{center}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{プラントモデル / Plant Model}
+\begin{frame}{プラントモデル}
   \begin{center}
     \vspace{-2mm}
     \resizebox{0.85\textwidth}{!}{\input{../../_shared/tikz/plant_model}}
@@ -95,7 +95,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{実測パラメータ / Measured Parameters}
+\begin{frame}{実測パラメータ}
   \begin{table}
     \centering\small
     \begin{tabular}{llccc}
@@ -129,7 +129,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{2次系設計 / Second-Order Design}
+\begin{frame}{2次系設計}
   \vspace{-2mm}
   \begin{columns}[c]
     \begin{column}{0.38\textwidth}
@@ -165,7 +165,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{開ループボード線図 / Open-Loop Bode Plot}
+\begin{frame}{開ループボード線図}
   \begin{columns}[c]
     \begin{column}{0.50\textwidth}
       \centering
@@ -189,7 +189,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{無駄時間の影響 / Dead Time Effect}
+\begin{frame}{無駄時間の影響}
   \begin{columns}[c]
     \begin{column}{0.48\textwidth}
       \centering
@@ -215,7 +215,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習 5 の振り返り: レート P 制御 / Recap}
+\begin{frame}[fragile]{実習 5 の振り返り: レート P 制御}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp（実習 5）}
 float Kp_rp=0.5f, Kp_yaw=2.0f, rmax=1.0f, ymax=5.0f;
 float re = ws::rc_roll()*rmax  - ws::gyro_x();
@@ -231,7 +231,7 @@ ws::motor_mixer(ws::rc_throttle(),
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モデルで見る実習 5 の設計 / Model View}
+\begin{frame}{モデルで見る実習 5 の設計}
   \begin{table}
     \centering\small
     \begin{tabular}{lcc}
@@ -255,7 +255,7 @@ ws::motor_mixer(ws::rc_throttle(),
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{PID 工学形式パラメータ / Engineering Form}
+\begin{frame}{PID 工学形式パラメータ}
   \begin{table}
     \centering\scriptsize
     \renewcommand{\arraystretch}{0.95}
@@ -290,7 +290,7 @@ ws::motor_mixer(ws::rc_throttle(),
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{D 項とアンチワインドアップ / D-Term \& Anti-Windup}
+\begin{frame}[fragile]{D 項とアンチワインドアップ}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \begin{block}{実習 8 学習者コード}\scriptsize
@@ -326,7 +326,7 @@ float I = Ki*integral;
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{離散化と ARM 時リセット / Discretization \& Reset}
+\begin{frame}{離散化と ARM 時リセット}
   \begin{block}{離散化: 双一次変換（Tustin，vehicle 実装）}\small
     \code{sf\_controller\_pid} は比例・積分・微分に双一次変換を使う（$\alpha, a, b$ の式）。
     実習 8 は後退差分 D と矩形積分（Tustin ではない）
@@ -349,7 +349,7 @@ float I = Ki*integral;
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{姿勢推定: ジャイロドリフト問題 / Gyro Drift Problem}
+\begin{frame}{姿勢推定: ジャイロドリフト問題}
   \begin{columns}[c]
     \begin{column}{0.48\textwidth}
       \centering
@@ -370,7 +370,7 @@ float I = Ki*integral;
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{相補フィルタと STABILIZE / Complementary Filter}
+\begin{frame}{相補フィルタと STABILIZE}
   \begin{columns}[c]
     \begin{column}{0.50\textwidth}
       \centering
@@ -396,7 +396,7 @@ float I = Ki*integral;
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{システム同定: sf sysid fit / Model Fitting}
+\begin{frame}[fragile]{システム同定: sf sysid fit}
   \begin{block}{$K_p$ が既知なら，閉ループデータから開ループプラントを復元できる}
     \footnotesize $u(t) = K_p(\text{target}-\text{gyro})$，$y(t)=\text{gyro}$ として
     $G_p(s)=K/(s(\tau_m s+1))$ に最小二乗フィット
@@ -438,7 +438,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモ: 完成コードで飛行 / Demo: Final Code}
+\begin{frame}{デモ: 完成コードで飛行}
   \begin{exampleblock}{デモの見方}\footnotesize
     \textbf{見るだけ}: ステップ応答の波形と設計値の一致を確認するだけで要点はつかめる。
     \textbf{一緒に打つ}: 手元の flight.csv で \code{sf sysid fit} を試す。
@@ -468,7 +468,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{発展の予告 / What's Next}
+\begin{frame}{発展の予告}
   \begin{itemize}\small
     \item \textbf{オートチューン}: \code{sf sysid rate-tune} と同じ $\omega_c$・PM 仕様のゲイン設計を
           機体上で行う \api{sf\_autotune}。励振はステップドサインで，周波数点ごとの I/Q 積算から
@@ -481,7 +481,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{理論とコードの対応表 / Theory-to-Code Map}
+\begin{frame}{理論とコードの対応表}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{llll}
     \hline
@@ -506,7 +506,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス / Review Path}
+\begin{frame}{復習パス}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
@@ -529,7 +529,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{チェックポイント / Checkpoint}
+\begin{frame}{チェックポイント}
   \begin{alertblock}{確認事項}
     \begin{itemize}
       \item[$\square$] $G_p(s)=K/(s(\tau_m s+1))$ と実測パラメータの対応を説明できる
