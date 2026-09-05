@@ -1,0 +1,250 @@
+# End-to-end test of the Windows install path: install.bat -> setup_env.bat
+# -> sf doctor -> sf lesson build / sf build vehicle, on a real
+# windows-latest GitHub-hosted runner.
+# Windows導入経路のエンドツーエンドテスト: install.bat -> setup_env.bat ->
+# sf doctor -> sf lesson build / sf build vehicle を、実際の windows-latest
+# GitHub ホスト型ランナー上で検証する。
+#
+# Why this workflow exists / このワークフローが存在する理由:
+# Neither existing workflow exercises this path. release.yml's Windows
+# matrix legs (flasher_gui / installer_gui) build and smoke-test the
+# PyInstaller-frozen GUI apps, but never run install.bat or touch ESP-IDF.
+# sils-regression.yml runs on ubuntu-latest only and deliberately has no
+# ESP-IDF involvement at all (the SILS host bench compiles with the system
+# GCC directly). install.sh (macOS/Linux) is likewise never exercised by
+# any workflow today. This file is therefore the first CI job that actually
+# downloads and installs ESP-IDF on Windows and drives the real `sf` CLI
+# against it.
+# 既存のどちらのワークフローもこの経路を検証していない。release.yml の
+# Windows マトリクス（flasher_gui / installer_gui）は PyInstaller で固めた
+# GUI アプリのビルド・スモークテストのみ行い、install.bat は実行せず
+# ESP-IDF にも触れない。sils-regression.yml は ubuntu-latest 専用で、
+# 意図的に ESP-IDF を一切使わない（SILS ホストベンチはシステム GCC で
+# 直接コンパイルする）。install.sh（macOS/Linux）も同様に、現状どの
+# ワークフローからも実行されていない。よって本ファイルが、Windows 上で
+# 実際に ESP-IDF をダウンロード・インストールし、実物の `sf` コマンドを
+# 動かす初めての CI ジョブとなる。
+#
+# SILS is intentionally NOT part of this workflow: the SILS host-bench
+# toolchain (MSYS2/MinGW-w64) is a separate ~2GB opt-in
+# (--with-sils-toolchain) that most users skip, and sils-regression.yml
+# already covers SILS correctness on ubuntu-latest. Adding it here would
+# only test MSYS2 provisioning, not the install path this workflow targets.
+# SILS は意図的に対象外とする: SILS ホストベンチのツールチェーン
+# （MSYS2/MinGW-w64）はほとんどのユーザーが使わない約2GBの任意導入
+# （--with-sils-toolchain）であり、SILS 自体の正しさは
+# sils-regression.yml が ubuntu-latest で既にカバーしている。ここに含めても
+# 検証できるのは MSYS2 の導入手順だけで、本ワークフローが検証したい
+# 導入経路そのものではない。
+name: Windows install E2E
+
+on:
+  push:
+    paths: &windows_e2e_paths
+      - 'install.bat'
+      - 'setup_env.bat'
+      - 'scripts/installer.py'
+      - 'lib/sfcli/**'
+      - 'tools/**'
+      - 'setup_env.sh'
+      - 'install.sh'
+      - '.github/workflows/windows-e2e.yml'
+  pull_request:
+    paths: *windows_e2e_paths
+  workflow_dispatch: # manual run / 手動実行
+
+permissions:
+  contents: read
+
+jobs:
+  windows-e2e:
+    runs-on: windows-latest
+    # ESP-IDF's own install.bat downloads a whole compiler toolchain the
+    # first time (no cache yet on a fresh branch/PR), so give this much more
+    # room than a typical job before declaring it hung.
+    # ESP-IDF自身のinstall.batは初回にコンパイラツールチェーン一式を
+    # ダウンロードする（新規ブランチ/PRではキャッシュがまだ無い）ため、
+    # 通常のジョブより大きく余裕を持たせ、ハングと誤判定しないようにする。
+    timeout-minutes: 90
+    env:
+      # cmd.exe's console code page (cp1252 on the en-US windows-latest
+      # image) cannot encode the Japanese text that scripts/installer.py
+      # and sf CLI print in their bilingual messages; printing it raised
+      # UnicodeEncodeError elsewhere in this repo's Windows CI (the
+      # --windowed flasher app, and `sf upgrade` via cli.py's own
+      # reconfigure(errors="replace") guard — see lib/sfcli/cli.py). Forcing
+      # Python's UTF-8 mode here makes stdout/stderr encode as UTF-8
+      # regardless of the console code page, which the GitHub Actions log
+      # viewer renders correctly, sidestepping the crash entirely instead of
+      # merely tolerating it.
+      # cmd.exeのコンソールコードページ（en-US windows-latestイメージでは
+      # cp1252）は、scripts/installer.pyやsf CLIがバイリンガルメッセージで
+      # 出力する日本語を表現できない。この出力がこのリポジトリの他所の
+      # Windows CI（--windowedフラッシャアプリ、および `sf upgrade` の
+      # lib/sfcli/cli.py自身のreconfigure(errors="replace")対策）で
+      # UnicodeEncodeErrorを起こした前例がある。ここでPythonのUTF-8モードを
+      # 強制することで、コンソールのコードページに関わらずstdout/stderrが
+      # UTF-8でエンコードされるようになり（GitHub Actionsのログビューアは
+      # これを正しく表示する）、単に耐えるのではなくクラッシュ自体を回避する。
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+      # ESP-IDF version, extracted below into GITHUB_ENV; used as the cache
+      # key so a version bump in scripts/installer.py naturally invalidates
+      # the old cache instead of silently reusing a stale toolchain.
+      # ESP-IDFバージョンは下のステップでGITHUB_ENVへ抽出する。キャッシュ
+      # キーに使うことで、scripts/installer.py側のバージョン更新が
+      # 古いツールチェーンキャッシュを黙って使い回すことなく自然に
+      # 無効化されるようにする。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # No submodules: this repository has no .gitmodules (confirmed
+        # 2026-09-06), so `submodules: true` would be a no-op.
+        # サブモジュールなし: 本リポジトリに .gitmodules は存在しない
+        # （2026-09-06確認済み）ため、`submodules: true` は指定しても
+        # 何もしない。
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # setup_env.bat only accepts Python 3.10-3.12 (it must match an
+          # installed ESP-IDF venv's minor version; see sf_check_python
+          # there). 3.12 is the same version release.yml's Windows legs use.
+          # setup_env.batはPython 3.10-3.12のみ受理する（導入済みESP-IDF
+          # venvのマイナーバージョンと一致している必要がある。同ファイルの
+          # sf_check_python参照）。release.ymlのWindowsレッグと同じ3.12を使う。
+          python-version: '3.12'
+
+      - name: Determine ESP-IDF version for cache key
+        shell: bash
+        # Parenthetical: git-bash (not WSL) is what "shell: bash" resolves
+        # to on a windows-latest runner, and it ships a portable sed -E, so
+        # this step's script needs no Windows-specific handling.
+        # 補足: windows-latestランナー上で "shell: bash" が指すのはgit-bash
+        # （WSLではない）で、可搬性のあるsed -Eを同梱しているため、この
+        # ステップのスクリプトにWindows固有の分岐は不要。
+        run: |
+          ver=$(grep -m1 'DEFAULT_VERSION' scripts/installer.py | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Detected ESP-IDF DEFAULT_VERSION=$ver"
+          echo "IDF_VERSION=$ver" >> "$GITHUB_ENV"
+
+      - name: Cache ESP-IDF tools directory
+        # Caches only the tools dir (compiler toolchains, cmake, ninja, and
+        # the ESP-IDF-managed Python venv under python_env/) -- NOT the
+        # ~/esp/esp-idf git checkout, which install.bat re-clones with
+        # --depth 1 every run regardless (a few minutes, not worth the
+        # cache-restore complexity). ~/.espressif is IDF_TOOLS_PATH's
+        # default on every OS (see scripts/installer.py's
+        # _idf_tools_path_candidates(); installer.py never overrides
+        # IDF_TOOLS_PATH itself, so ESP-IDF's own idf_tools.py default
+        # applies). The very first run on this branch has no cache to
+        # restore and must still succeed unassisted -- that is the whole
+        # point of this workflow.
+        # ツールディレクトリ（コンパイラツールチェーン、cmake、ninja、
+        # python_env/配下のESP-IDF管理Python venv）のみをキャッシュする --
+        # ~/esp/esp-idf のgitチェックアウトはキャッシュしない（install.batが
+        # 毎回 --depth 1 で再クローンする。数分程度でキャッシュ復元の複雑さに
+        # 見合わない）。~/.espressif は全OS共通のIDF_TOOLS_PATH既定値
+        # （scripts/installer.pyの_idf_tools_path_candidates()参照。
+        # installer.py自身はIDF_TOOLS_PATHを上書きしないため、ESP-IDF自身の
+        # idf_tools.pyの既定がそのまま適用される）。このブランチでの初回実行
+        # にはキャッシュが存在せず、それでも無支援で成功する必要がある --
+        # それこそが本ワークフローの狙いそのもの。
+        uses: actions/cache@v4
+        with:
+          path: ~/.espressif
+          key: windows-espidf-${{ env.IDF_VERSION }}
+          restore-keys: |
+            windows-espidf-
+
+      - name: Run install.bat (non-interactive, minimal, no GUI flasher)
+        shell: cmd
+        # --non-interactive: never call input() (required — there is no TTY
+        #   on a hosted runner; without this, any prompt() call blocks
+        #   forever until timeout-minutes kills the job).
+        # --minimal: skip the simulator dependency set (VPython/Genesis) --
+        #   this workflow only needs the ESP-IDF build toolchain, not the
+        #   simulator; installing it would just add time and a possible
+        #   extra failure surface unrelated to what this test proves.
+        # --no-flasher: skip Step 4/4's GUI Flasher desktop-app install --
+        #   in --non-interactive mode this step defaults to YES (see
+        #   scripts/installer.py's _install_flasher_gui() docstring), so it
+        #   must be explicitly skipped or the job would spend time building
+        #   a Start Menu shortcut nobody on a CI runner will ever click.
+        #   (--with-sils-toolchain is left unset for the same reason SILS is
+        #   excluded from this workflow entirely -- see the header comment.)
+        # --non-interactive: input()を一切呼ばない（必須 — ホスト型ランナー
+        #   にはTTYが無く、これが無いとprompt()呼び出しがタイムアウトまで
+        #   永久にブロックする）。
+        # --minimal: シミュレータ依存(VPython/Genesis)一式を導入しない --
+        #   本ワークフローが必要とするのはESP-IDFビルドツールチェーンのみで
+        #   シミュレータではない。導入すれば時間と、本テストの主旨と無関係な
+        #   失敗要因が増えるだけ。
+        # --no-flasher: Step 4/4のGUIフラッシャ デスクトップアプリ導入を
+        #   スキップする -- --non-interactiveモードではこのステップの既定が
+        #   YESになる（scripts/installer.pyの_install_flasher_gui()の
+        #   docstring参照）ため、明示的にスキップしないと、CIランナー上で
+        #   誰もクリックしないスタートメニューショートカットの作成に時間を
+        #   費やしてしまう。
+        #   （--with-sils-toolchainを付けないのは、SILSを本ワークフローから
+        #   丸ごと除外しているのと同じ理由 -- 冒頭のコメント参照）
+        run: install.bat --non-interactive --minimal --no-flasher
+
+      - name: Activate environment and run sf commands
+        shell: cmd
+        # `call` is required here: invoking a .bat from inside another
+        # script/step WITHOUT `call` transfers control permanently instead
+        # of returning, so setup_env.bat's own trailing `exit /b 0` would
+        # terminate this entire step before the `&&`-chained sf commands
+        # ever ran. `call` also preserves the environment hand-off:
+        # setup_env.bat ends with
+        # `endlocal & set "PATH=..." & set "IDF_PATH=..."` and then calls
+        # ESP-IDF's own export.bat in that now-unscoped environment, so
+        # everything export.bat exports (the ESP-IDF Python venv's Scripts
+        # dir on PATH, IDF_PYTHON_ENV_PATH, etc.) is visible right here once
+        # setup_env.bat returns -- but only within this same step (GitHub
+        # Actions starts a fresh process/environment per step, so none of
+        # this would survive into a separate step without manually
+        # re-exporting it via $GITHUB_ENV/$GITHUB_PATH first).
+        # ここで `call` が必須な理由: 別のスクリプト/ステップ内から .bat を
+        # `call` 無しで呼ぶと、制御は戻ってこず恒久的に移ってしまうため、
+        # setup_env.bat 末尾の `exit /b 0` がこのステップ全体を、`&&` で
+        # 連結した sf コマンド群が実行される前に終了させてしまう。`call` は
+        # 環境の引き継ぎも保つ: setup_env.bat は
+        # `endlocal & set "PATH=..." & set "IDF_PATH=..."` で終わった後、
+        # そのスコープ解除済みの環境内でESP-IDF自身のexport.batを呼ぶため、
+        # export.batがエクスポートするもの全て（PATH上のESP-IDF Python venv
+        # のScriptsディレクトリ、IDF_PYTHON_ENV_PATH等）が、setup_env.bat
+        # から戻った時点でここに見えている -- ただしこれは同一ステップ内
+        # に限られる（GitHub Actionsはステップごとに新しいプロセス/環境を
+        # 開始するため、先に $GITHUB_ENV/$GITHUB_PATH へ手動でエクスポート
+        # しない限り、別ステップには引き継がれない）。
+        run: call setup_env.bat && sf doctor && sf --version && sf lesson list --course sci2026 && sf lesson switch sci2026:3 && sf lesson build && sf build vehicle && sf sim list
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-e2e-build-logs
+          # idf.py streams build output straight to the inherited
+          # stdout/stderr (see lib/sfcli/commands/build.py's plain
+          # subprocess.run(..., env=env) with no capture) -- that output is
+          # already in this job's own step log above, so it is not
+          # duplicated here. What is NOT in the step log is CMake's own
+          # diagnostic detail, which it writes only to these files.
+          # idf.pyはビルド出力を継承したstdout/stderrへそのまま流す
+          # （lib/sfcli/commands/build.pyの素のsubprocess.run(..., env=env)
+          # はcaptureしていない）ため、その出力は上のこのジョブ自身の
+          # ステップログに既に含まれており、ここでは重複させない。
+          # ステップログに含まれないのはCMake自身の診断詳細で、これは
+          # 以下のファイルにのみ書き出される。
+          path: |
+            firmware/workshop/build/CMakeCache.txt
+            firmware/workshop/build/CMakeFiles/CMakeError.log
+            firmware/workshop/build/CMakeFiles/CMakeOutput.log
+            firmware/workshop/build/log/**
+            firmware/vehicle/build/CMakeCache.txt
+            firmware/vehicle/build/CMakeFiles/CMakeError.log
+            firmware/vehicle/build/CMakeFiles/CMakeOutput.log
+            firmware/vehicle/build/log/**
+          if-no-files-found: ignore
