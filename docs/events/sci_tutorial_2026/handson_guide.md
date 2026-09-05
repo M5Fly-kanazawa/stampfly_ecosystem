@@ -45,7 +45,7 @@ sf telemetry                 # 50Hz テレメトリのライブ表示
 sf lesson switch sci2026:3
 sf lesson build
 sf lesson flash
-# プロペラを外した状態で動作確認すること
+# 机上で行うこと。モータ回転中は手を近づけない。異常時は即 DISARM
 ```
 
 **観察ポイント:** `motor_set_duty()` の duty を変えるとモータの回転数が変わる。
@@ -63,7 +63,7 @@ sf lesson flash
 
 ## 4. S4 の再現: フィードバック制御
 
-対応: 実習 5〜9（Workshop の Lesson 5〜9）。**必ず保護メガネを着用し、プロペラガードを装着した状態で低スロットルから試すこと。**
+対応: 実習 5〜9（Workshop の Lesson 5〜9）。**必ず机上で行い、モータ回転中は手を近づけず、低スロットルから試すこと。異常時は即 DISARM。**
 
 ### 実習 5: レート P 制御
 
@@ -202,7 +202,7 @@ Corresponding to: Exercise 3 (motor control, Workshop Lesson 1), Exercise 4 (con
 sf lesson switch sci2026:3
 sf lesson build
 sf lesson flash
-# Remove the propellers before testing
+# Do this on a table. Keep hands clear of the spinning motors. DISARM immediately if anything looks wrong
 ```
 
 **Watch for:** motor speed changes with the duty passed to `motor_set_duty()`.
@@ -220,7 +220,7 @@ sf lesson flash
 
 ## 4. Reproducing S4: Feedback Control
 
-Corresponding to: Exercises 5-9 (Workshop Lessons 5-9). **Wear eye protection and keep the prop guards on; start at low throttle.**
+Corresponding to: Exercises 5-9 (Workshop Lessons 5-9). **Do this on a table, keep hands clear of the spinning motors, and start at low throttle. DISARM immediately if anything looks wrong.**
 
 ### Exercise 5: Rate P-Control
 

@@ -150,7 +150,7 @@ vehicle は **学習者がレベルに応じて入口を選べる** 並列 API �
 
 | 層 | 名前空間 | 典型ユーザー | できること |
 |----|---------|------------|----------|
-| **L0: Sketch API** | `ws::*` | Workshop 受講者・初心者 | `setup()` / `loop_400Hz(dt)`、`ws::motor_set_duty()`, `ws::gyro_x()` 等の 30+ 関数で完結。HW・タスク・Topic 知識ゼロでフライト制御まで体験 |
+| **L0: Workshop API** | `ws::*` | Workshop 受講者・初心者 | `setup()` / `loop_400Hz(dt)`、`ws::motor_set_duty()`, `ws::gyro_x()` 等の 30+ 関数で完結。HW・タスク・Topic 知識ゼロでフライト制御まで体験 |
 | **L1: Topic API** | `sf::api::*` | 推定・制御・ガイダンス学習者 | Topic を subscribe / publish して自分の ESKF / PID / Navigator を実装。`IEstimator` / `IController` を実装して既存と差替え |
 | **L2: HAL Direct** | `stampfly::*Wrapper` | HW 学習者 | `BMI270Wrapper.readSensorData()` 等を直接呼び、SPI / I2C / RMT / LEDC を理解。Topic を介さない経路 |
 | **L3: BSP Internal** | `sf::internal::board` | ファーム実装者・拡張者 | `sf_board` の getter で bus handle を取得、esp-idf 直叩き。起動順序や HW 資源管理を変更できる |
@@ -159,7 +159,7 @@ vehicle は **学習者がレベルに応じて入口を選べる** 並列 API �
 
 #### HW 要素から見た入口マッピング
 
-| HW 要素 | L0 (Sketch) | L1 (Topic) | L2 (HAL) | L3 (BSP) |
+| HW 要素 | L0 (Workshop) | L1 (Topic) | L2 (HAL) | L3 (BSP) |
 |---------|-----------|-----------|----------|----------|
 | BMI270 IMU | `ws::gyro_x()` | `sensor_imu` | `BMI270Wrapper` | SPI bus |
 | BMP280 Baro | `ws::baro_altitude()` | `sensor_baro` | `BMP280Wrapper` | I2C bus |
@@ -517,6 +517,8 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 | PowerTask | 10Hz | 12 | 4KB | センシング(Power) + フェイルセーフ |
 | ButtonTask | 50Hz | 10 | 4KB | ボタン入力 |
 | NotifyTask | 30Hz | 8 | 4KB | 通知(LED/ブザー) |
+| ApiTask | 50Hz(ポーリング) | 6 | 6KB | 外部API(Tello風 UDP:8889) + スケジュールautotune |
+| TelloStateTask | 10Hz | 6 | 4KB | テレメトリ(Tello状態 UDP:8890) |
 | CLITask | 20Hz | 5 | 8KB | CLI + パラメータ |
 | LogTask | 非同期 | 5 | 4KB | データロガー + Blackbox |
 
@@ -624,7 +626,7 @@ This document defines the architecture design of vehicle, based on the requireme
 
 ## 2. Responsibility Assignment (14 Components)
 
-> **v3 update note:** The Japanese §2 has been extended with cross-cutting rules R1–R16, a new BSP layer (`sf_board`), and the 4-tier learner access model (L0 Sketch / L1 Topic / L2 HAL / L3 BSP). Full English translation will be completed in milestone M1c. For the authoritative v3 design, see the Japanese sections above and [`hardware_init.md`](hardware_init.md).
+> **v3 update note:** The Japanese §2 has been extended with cross-cutting rules R1–R16, a new BSP layer (`sf_board`), and the 4-tier learner access model (L0 Workshop / L1 Topic / L2 HAL / L3 BSP). Full English translation will be completed in milestone M1c. For the authoritative v3 design, see the Japanese sections above and [`hardware_init.md`](hardware_init.md).
 
 ### Layered Architecture
 
@@ -814,6 +816,8 @@ Motor output
 | PowerTask | 10Hz | 12 | 4KB | Sensing(Power) + Failsafe |
 | ButtonTask | 50Hz | 10 | 4KB | Button input |
 | NotifyTask | 30Hz | 8 | 4KB | Notification(LED/Buzzer) |
+| ApiTask | 50Hz(polling) | 6 | 6KB | External API(Tello-style UDP:8889) + scheduled autotune |
+| TelloStateTask | 10Hz | 6 | 4KB | Telemetry(Tello state UDP:8890) |
 | CLITask | 20Hz | 5 | 8KB | CLI + Parameters |
 | LogTask | Async | 5 | 4KB | Data Logger + Blackbox |
 

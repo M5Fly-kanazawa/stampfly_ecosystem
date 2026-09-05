@@ -82,8 +82,8 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Phase 3: Parameters loaded");
 
     // =========================================================================
-    // Phase 4: Tasks — create all 14 FreeRTOS tasks (see sf::tasks::start_all).
-    // Phase 4: タスク — 14 個の FreeRTOS タスクを生成（sf::tasks::start_all 参照）。
+    // Phase 4: Tasks — create all 16 FreeRTOS tasks (see sf::tasks::start_all).
+    // Phase 4: タスク — 16 個の FreeRTOS タスクを生成（sf::tasks::start_all 参照）。
     // =========================================================================
     sf::tasks::start_all();
     ESP_LOGI(TAG, "=== Phase 4: tasks started — INIT complete ===");

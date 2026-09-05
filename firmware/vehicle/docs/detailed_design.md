@@ -574,7 +574,7 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 
 ### RAMメモリ（ESP32-S3 512KB）
 
-タスクスタックの合計: 約92KB
+タスクスタックの合計: 約102KB
 
 | タスク | スタック |
 |--------|---------|
@@ -590,11 +590,13 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 | PowerTask | 4KB |
 | ButtonTask | 4KB |
 | NotifyTask | 4KB |
+| ApiTask | 6KB |
+| TelloStateTask | 4KB |
 | CLITask | 8KB |
 | LogTask | 4KB |
-| **合計** | **92KB** |
+| **合計** | **102KB** |
 
-残り約420KBでPub-Subバッファ、ESKF行列、ヒープ等を賄う。
+残り約410KBでPub-Subバッファ、ESKF行列、ヒープ等を賄う。
 
 ## 9. Guidance / Navigation 層の予約設計（v3）
 
@@ -811,4 +813,4 @@ storage,   data, spiffs,  0x310000, 0x200000,   # 2MB Blackbox
 
 ### Task Stack Summary
 
-Total task stacks: ~92KB out of 512KB RAM. Remaining ~420KB for Pub-Sub buffers, ESKF matrices, heap, etc.
+Total task stacks: ~102KB out of 512KB RAM. Remaining ~410KB for Pub-Sub buffers, ESKF matrices, heap, etc.

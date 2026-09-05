@@ -12,7 +12,7 @@ vehicle は、StampFly 教育プラットフォームのための次世代機体
 
 | 層 | 入口 | 典型ユーザー |
 |----|-----|------------|
-| **L0: Sketch API** | `ws::*` | Workshop 受講者・初学者 — `setup()` / `loop_400Hz(dt)` で完結 |
+| **L0: Workshop API** | `ws::*` | Workshop 受講者・初学者 — `setup()` / `loop_400Hz(dt)` で完結 |
 | **L1: Topic API** | `sf::api::*` | 推定・制御・ガイダンス学習者 — 自分の ESKF / PID / Navigator を実装 |
 | **L2: HAL Direct** | `stampfly::*Wrapper` | HW 学習者 — SPI / I2C / RMT / LEDC を理解 |
 | **L3: BSP Internal** | `sf::internal::board` | ファーム実装者・拡張者 — 起動順序や HW 資源管理を変更 |
@@ -82,7 +82,7 @@ vehicle は **M5Stack 社公開の M5StampFly 公式ファームウェア** を�
 | **PX4 Autopilot** ([px4.io](https://px4.io/), BSD-3-Clause) | uORB Pub-Sub の思想 | 同一 MCU 内特化のテンプレート + 3 ポリシー (Latest / RingBuffer / Queue) として独自実装 |
 | **Zephyr RTOS** ([zephyrproject.org](https://www.zephyrproject.org/), Apache 2.0) | parent-child バス所有モデル、init level による順序明示 | `sf_board` BSP として ESP-IDF ネイティブ機構で実装（devicetree なし） |
 | **Crazyflie firmware** ([bitcraze.io](https://www.bitcraze.io/), GPLv3) | 教育プラットフォームとしての枠組み | 同じ「ナノドローン教育」ニッチで、ESP32 ベースの代替として位置づけ |
-| **Arduino** ([arduino.cc](https://www.arduino.cc/), LGPL/GPL) | `setup()` / `loop()` の簡潔さ | L0 Sketch API（`ws::*`）として再現、HW 詳細を完全に隠蔽 |
+| **Arduino** ([arduino.cc](https://www.arduino.cc/), LGPL/GPL) | `setup()` / `loop()` の簡潔さ | L0 Workshop API（`ws::*`）として再現、HW 詳細を完全に隠蔽 |
 
 ### 学術的位置づけ
 
@@ -136,7 +136,7 @@ vehicle is a next-generation flight controller firmware for the StampFly educati
 
 | Tier | Entry Point | Typical User |
 |------|------------|------------|
-| **L0: Sketch API** | `ws::*` | Workshop students — write `setup()` / `loop_400Hz(dt)` |
+| **L0: Workshop API** | `ws::*` | Workshop students — write `setup()` / `loop_400Hz(dt)` |
 | **L1: Topic API** | `sf::api::*` | Estimation / control / guidance learners — implement own ESKF / PID / Navigator |
 | **L2: HAL Direct** | `stampfly::*Wrapper` | Hardware learners — understand SPI / I2C / RMT / LEDC |
 | **L3: BSP Internal** | `sf::internal::board` | Firmware implementers — modify boot sequence or HW resource management |

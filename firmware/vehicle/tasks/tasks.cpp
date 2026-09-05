@@ -11,19 +11,19 @@
  * @brief Task startup aggregation — sf::tasks::start_all()
  *        タスク起動の集約 — sf::tasks::start_all()
  *
- * Creates all 14 FreeRTOS tasks. Keeping the xTaskCreate calls here (instead of
+ * Creates all 16 FreeRTOS tasks. Keeping the xTaskCreate calls here (instead of
  * inline in app_main) keeps main.cpp declarative: app_main names the boot phases,
  * this file owns the task table. No task-handle out-parameters are taken — the
  * pipeline tasks that need to notify each other register their own handle via
  * xTaskGetCurrentTaskHandle() (R3: no extern task handles).
  *
- * 14 個の FreeRTOS タスクを生成する。xTaskCreate を app_main にベタ書きせずここに
+ * 16 個の FreeRTOS タスクを生成する。xTaskCreate を app_main にベタ書きせずここに
  * 集約することで main.cpp を宣言的に保つ: app_main は起動フェーズを並べるだけ、
  * 本ファイルがタスク表を所有する。ハンドルの出力引数は取らない — 相互通知が必要な
  * パイプラインタスクは自分のハンドルを xTaskGetCurrentTaskHandle() で登録する
  * （R3: extern タスクハンドル禁止）。
  *
- * @design architecture.md §6 — Task list (14 tasks)                    [OK]
+ * @design architecture.md §6 — Task list (16 tasks)                    [OK]
  * @design detailed_design.md §8 — Task priorities and stacks           [OK]
  * @design hardware_init.md §4 — Phase 4: tasks::start_all()            [OK]
  */

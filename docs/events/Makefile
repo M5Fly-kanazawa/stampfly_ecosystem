@@ -3,9 +3,9 @@
 #
 # Layout / 構成:
 #   docs/events/_shared/            common TikZ sources, generated images, Beamer
-#                                    preamble/style, legacy assets
+#                                    preamble/style
 #                                    共通 TikZ ソース・生成画像・Beamer
-#                                    プリアンブル/スタイル・レガシー資産
+#                                    プリアンブル/スタイル
 #   docs/events/<event>/slides/     one Beamer deck per event (own chapters/)
 #                                    イベント毎の Beamer デッキ（専用 chapters/）
 #

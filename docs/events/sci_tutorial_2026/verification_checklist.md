@@ -9,12 +9,12 @@
 > `docs/events/dxh2026/day2-morning-checklist.md` に倣う。**各項目は「操作 → 期待される結果」**
 > **を確認し、チェックボックスで記録する。NG が出た場合は該当節の「NG時の代替」に従う。**
 
-## 1. ベンチ確認（プロペラを外した状態で実施）
+## 1. ベンチ確認（机上で実施。モータ回転中は手を近づけない）
 
 - [ ] `sf doctor` を実行 → エラーなく完了すること
 - [ ] `sf lesson switch sci2026:1` → `sf lesson build` → `sf lesson flash` → 起動音・緑常灯まで到達すること
 - [ ] 起動音が授業チャイムであること（workshop ファーム共通の識別音。vehicle の標準起動音 C5→E5→G5 とは異なる。`sf flash vehicle` に戻すと標準音に戻る）
-- [ ] `sf lesson switch sci2026:3 --solution` → `sf lesson build` → `sf lesson flash` → プロペラなしでモータが回転すること（duty を上げるとゆっくり回転数が上がる）
+- [ ] `sf lesson switch sci2026:3 --solution` → `sf lesson build` → `sf lesson flash` → 机上でモータが回転すること（duty を上げるとゆっくり回転数が上がる。異常時は即 DISARM）
 - [ ] `sf lesson switch sci2026:4 --solution` → コントローラのスティックを倒すと `rc_roll()`/`rc_pitch()` 等の値がシリアル出力で追従すること
 - [ ] USB 接続中は本体ボタン ARM が拒否されること（安全仕様）
 - [ ] USB を抜きバッテリ駆動 → 本体ボタンで ARM → DISARM が機能すること
@@ -24,7 +24,7 @@
 
 **NG時の代替:** ベンチ確認で問題が出た場合、`sf flash vehicle`（標準ファーム）に戻して S1〜S3 の実機デモは標準ファームで行う。workshop ファーム固有の問題（実習5以降）は「見るだけ」に切り替え、実演できない場合の代替として事前取得済みのログ・動画（§5）を使う。
 
-## 2. 飛行確認（プロペラガード装着，保護メガネ着用，低スロットルから）
+## 2. 飛行確認（低スロットルから開始。異常時は即 DISARM）
 
 - [ ] `sf lesson switch sci2026:5 --solution` → 離陸しホバリングが安定すること（実習5 の $K_p=0.5$ 設定）
 - [ ] `sf lesson switch sci2026:8 --solution` → PID 化した状態で離陸し，P のみと比べて定常偏差が減ること
@@ -73,12 +73,12 @@
 > **action and its expected result; check the box once confirmed. If an item**
 > **fails, follow that section's fallback.**
 
-## 1. Bench Check (propellers removed)
+## 1. Bench Check (on a table; keep hands clear of the spinning motors)
 
 - [ ] `sf doctor` completes with no errors
 - [ ] `sf lesson switch sci2026:1` -> `sf lesson build` -> `sf lesson flash` -> reaches the boot chime and steady green LED
 - [ ] The boot sound is the school chime (the workshop firmware's common identity sound, distinct from the vehicle's standard C5-E5-G5 chime; `sf flash vehicle` restores the standard sound)
-- [ ] `sf lesson switch sci2026:3 --solution` -> `sf lesson build` -> `sf lesson flash` -> motors spin with no propellers (speed rises gradually with duty)
+- [ ] `sf lesson switch sci2026:3 --solution` -> `sf lesson build` -> `sf lesson flash` -> motors spin on the table (speed rises gradually with duty; DISARM immediately if anything looks wrong)
 - [ ] `sf lesson switch sci2026:4 --solution` -> `rc_roll()`/`rc_pitch()` etc. track the controller sticks in the serial output
 - [ ] Button ARM is rejected while USB is connected (safety behavior)
 - [ ] Unplug USB, run on battery -> button ARM and DISARM both work
@@ -88,7 +88,7 @@
 
 **Fallback:** if the bench check fails, flash the production firmware (`sf flash vehicle`) and run the S1-S3 hardware demos on it instead. For workshop-firmware-specific issues (Exercise 5 onward), switch to "watch only" and use the pre-recorded log/video from §5.
 
-## 2. Flight Check (prop guards on, eye protection, start at low throttle)
+## 2. Flight Check (start at low throttle; DISARM immediately if anything looks wrong)
 
 - [ ] `sf lesson switch sci2026:5 --solution` -> takes off and hovers stably (Exercise 5's $K_p=0.5$)
 - [ ] `sf lesson switch sci2026:8 --solution` -> takes off with PID enabled, steady-state error visibly smaller than P-only

@@ -168,7 +168,7 @@ vehicle は学習者・実装者がそれぞれのレベルで作業に集中で
 
 | 層 | namespace | 公開ヘッダ | 何を提供するか | 学習者からの見え方 |
 |----|---------|---------|------------|------------------|
-| **L0** | `ws::` | `ws_api.hpp` | Sketch API（`setup()` / `loop_400Hz(dt)` / `ws::motor_set_duty()` 等の関数群） | Workshop 受講者・初心者が `ws_api.hpp` 1 つを include して完結 |
+| **L0** | `ws::` | `ws_api.hpp` | Workshop API（`setup()` / `loop_400Hz(dt)` / `ws::motor_set_duty()` 等の関数群） | Workshop 受講者・初心者が `ws_api.hpp` 1 つを include して完結 |
 | **L1** | `sf::api::` | `sf_api.hpp` | Topic / params / state / mode への公開 API | 推定・制御・ガイダンス学習者が Topic を subscribe / publish |
 | **L2** | `stampfly::` | 各 HAL の `*_wrapper.hpp` | `BMI270Wrapper`, `VL53L3CXWrapper` 等の HAL クラス | HW 学習者が SPI / I2C / RMT / LEDC を直接扱う |
 | **L3** | `sf::internal::` | `sf_board.hpp` 等 | bus handle、event_loop、起動シーケンスなど BSP 内部資源 | ファーム実装者・拡張者のみ。学習者は通常触らない |

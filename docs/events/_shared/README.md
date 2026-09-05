@@ -15,8 +15,6 @@
 | `beamer/` | 共通 Beamer プリアンブル・スタイル（`preamble.tex`, `stampfly_slides.sty`）。各イベントの `.tex` からは `TEXINPUTS` 経由で参照する（後述） |
 | `tikz/` | 全イベント共通の TikZ ダイアグラムソース（.tex、全30ファイル） |
 | `images/` | `tikz/` から生成した PNG、および写真・QRコード等の静止画像 |
-| `diagrams/` | draw.io 原稿（`.drawio`）。対応する TikZ 図の下絵として作成したもので、TikZ 化後も参照用に保持 |
-| `legacy/pptx/` | 旧 PowerPoint ベースのスライド生成スクリプト（`generate_slides.py`）。現行の Beamer 構成では使用していない孤立ファイルだが、過去資産として保持 |
 
 ### 各イベントからの参照方法
 
@@ -79,8 +77,6 @@ python3 tools/extract_snippets.py expand
 | `beamer/` | Shared Beamer preamble/style (`preamble.tex`, `stampfly_slides.sty`), resolved from each event's `.tex` via `TEXINPUTS` (see below) |
 | `tikz/` | TikZ diagram sources shared by every event (.tex, 30 files) |
 | `images/` | PNGs generated from `tikz/`, plus photos, QR codes, and other static images |
-| `diagrams/` | draw.io source files (`.drawio`), kept as reference sketches for the corresponding TikZ diagrams |
-| `legacy/pptx/` | Legacy PowerPoint-based slide generator (`generate_slides.py`), orphaned under the current Beamer setup but kept as a historical asset |
 
 ### How Each Event References These Assets
 

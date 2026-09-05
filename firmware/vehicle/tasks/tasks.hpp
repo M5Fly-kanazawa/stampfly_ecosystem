@@ -11,13 +11,13 @@
  * @brief FreeRTOS task function declarations
  *        FreeRTOSタスク関数宣言
  *
- * All 14 task functions declared here. Each task file implements
+ * All 16 task functions declared here. Each task file implements
  * one function. Tasks are started in main.cpp app_main().
  *
- * 全14タスク関数をここで宣言。各タスクファイルが1関数を実装する。
+ * 全16タスク関数をここで宣言。各タスクファイルが1関数を実装する。
  * タスクはmain.cppのapp_main()で起動される。
  *
- * @design architecture.md §6 — Task design (14 tasks)                 [OK]
+ * @design architecture.md §6 — Task design (16 tasks)                 [OK]
  * @design detailed_design.md §8 — Task list                           [OK]
  */
 
@@ -32,9 +32,9 @@
 namespace sf {
 namespace tasks {
 
-/// Create all 14 FreeRTOS tasks with their configured priorities/stacks/cores.
+/// Create all 16 FreeRTOS tasks with their configured priorities/stacks/cores.
 /// Called once from app_main() Phase 4 — keeps the entry point declarative.
-/// 14 個の FreeRTOS タスクを所定の優先度/スタック/コアで生成する。app_main() の
+/// 16 個の FreeRTOS タスクを所定の優先度/スタック/コアで生成する。app_main() の
 /// Phase 4 から 1 回呼ぶ — エントリポイントを宣言的に保つ。
 ///
 /// @design hardware_init.md §4 — Phase 4: tasks::start_all()           [OK]

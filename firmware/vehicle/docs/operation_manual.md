@@ -30,7 +30,7 @@ CLI コマンド**をまとめた実機運用マニュアル。UI（LED/ブザ�
 | Phase 1 | BSP（sf_board）: I2C/SPI/LEDC バス | — | — |
 | Phase 2 | Pub-Sub トピック初期化 | — | — |
 | Phase 3 | パラメータ読込（NVS or 既定） | — | — |
-| Phase 4 | 14 タスク起動 → NotifyTask 起動 | **白 常灯**（INIT） | **startTone**（ドミソ: C5→E5→G5）|
+| Phase 4 | 16 タスク起動 → NotifyTask 起動 | **白 常灯**（INIT） | **startTone**（ドミソ: C5→E5→G5）|
 | — | INIT → IDLE_GROUND（IMU が有効値を出す）| 白 → 緑/マゼンタへ | — |
 | 校正 | 起動バイアス校正（静止確認済 2.5 秒分を平均。動かすとやり直し）| **マゼンタ 低速点滅** | （無音）|
 | 完了 | 校正完了 → ARM 可能 | **緑 常灯** | **readyTone**（ピッ×3）|
@@ -327,7 +327,7 @@ After power-on the firmware runs Phase 0–4 in order, signalling state via LED 
 | Phase 1 | BSP (sf_board): I2C/SPI/LEDC buses | — | — |
 | Phase 2 | Pub-Sub topics | — | — |
 | Phase 3 | Parameters (NVS or defaults) | — | — |
-| Phase 4 | 14 tasks start → NotifyTask | **white solid** (INIT) | **startTone** (C5→E5→G5) |
+| Phase 4 | 16 tasks start → NotifyTask | **white solid** (INIT) | **startTone** (C5→E5→G5) |
 | — | INIT → IDLE_GROUND (IMU valid) | white → green/magenta | — |
 | Calib | Boot bias calibration (averages 2.5 s of VERIFIED-still samples; motion restarts it) | **magenta slow blink** | (silent) |
 | Ready | Calibration done → can ARM | **green solid** | **readyTone** (beep ×3) |

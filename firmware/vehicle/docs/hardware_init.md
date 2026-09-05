@@ -54,7 +54,7 @@ vehicle における **共有ハードウェア資源の所有権・初期化フ
 |--------------|------------|------------|
 | **Zephyr RTOS** | parent-child バス所有モデル、init level による順序明示 | devicetree は ESP-IDF と二重メンテになる |
 | **Mbed OS** | （特になし） | コンストラクタで失敗を返せない設計は教育的に NG |
-| **Arduino** | 「ユーザーコードの簡潔さ」（L0 Sketch API のヒント） | グローバル `Wire` はマルチタスク/ISR で破綻 |
+| **Arduino** | 「ユーザーコードの簡潔さ」（L0 Workshop API のヒント） | グローバル `Wire` はマルチタスク/ISR で破綻 |
 
 **結論**: Zephyr 思想（所有関係 + init 順序）を採用しつつ、ESP-IDF / FreeRTOS のネイティブ機構（`i2c_master_bus_handle_t`, `esp_err_t`, FreeRTOS task）はそのまま使うハイブリッド。
 
@@ -127,7 +127,7 @@ extern "C" void app_main() {
   sf::params::init();
 
   // ===== Phase 4: tasks =====
-  // 14 タスクを優先度付きで生成、ImuTask が pipeline を駆動
+  // 16 タスクを優先度付きで生成、ImuTask が pipeline を駆動
   sf::tasks::start_all();
 
   ESP_LOGI(TAG, "=== boot complete ===");
@@ -282,7 +282,7 @@ void TofTask(void*) {
 
 | 層 | namespace | 公開ヘッダ | 学習者からの見え方 |
 |----|---------|---------|------------------|
-| L0 | `ws::` | `ws_api.hpp` | Sketch API、`ws::motor_set_duty()` 等 |
+| L0 | `ws::` | `ws_api.hpp` | Workshop API、`ws::motor_set_duty()` 等 |
 | L1 | `sf::api::` | `sf_api.hpp` | Topic / params / state、`sf::api::sensor_imu` 等 |
 | L2 | `stampfly::` | 各 HAL の `*_wrapper.hpp` | HAL クラス、`stampfly::BMI270Wrapper` 等 |
 | L3 | `sf::internal::` | `sf_board.hpp` 等 | BSP getter、bus handle 取得 |
