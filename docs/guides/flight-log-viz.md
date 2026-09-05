@@ -34,7 +34,7 @@ sf log wifi -d 30 -o logs/flight_001.csv
 |-----------|------|
 | `-d, --duration` | 取得時間（秒）デフォルト: 30 |
 | `-o, --output` | 出力ファイル名 |
-| `-i, --ip` | StampFlyのIPアドレス（デフォルト: 192.168.4.1） |
+| `-i, --ip` | StampFlyのIPアドレス（デフォルト: 192.168.10.1） |
 | `--fft` | 取得後にFFT解析を実行 |
 
 ### USB経由でのログ取得
@@ -118,7 +118,7 @@ sf log viz logs/test_flight.csv --save test_flight.png
 ```bash
 # StampFlyのAP（SSID: StampFly_XXXX）に接続されているか確認
 # IPアドレスを明示的に指定
-sf log wifi -i 192.168.4.1
+sf log wifi -i 192.168.10.1
 ```
 
 **ログが空またはエラー**

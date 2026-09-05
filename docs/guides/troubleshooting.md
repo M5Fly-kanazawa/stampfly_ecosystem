@@ -17,7 +17,7 @@
 | 問題 | 原因 | 解決策 |
 |------|------|--------|
 | StampFly の WiFi が見つからない | 電源が入っていない | バッテリーを確認、電源を入れ直す |
-| 接続しても通信できない | IP アドレスが違う | `192.168.4.1` を確認 |
+| 接続しても通信できない | IP アドレスが違う | `192.168.10.1` を確認 |
 | 接続が不安定 | 距離が遠い | StampFly に近づく（1m以内推奨）|
 | タイムアウトエラー | ファームウェアが応答しない | StampFly を再起動 |
 
@@ -65,7 +65,7 @@
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | Cannot find StampFly WiFi | Not powered on | Check battery, restart |
-| Connected but no communication | Wrong IP | Verify `192.168.4.1` |
+| Connected but no communication | Wrong IP | Verify `192.168.10.1` |
 | Unstable connection | Too far | Move closer (within 1m) |
 
 ## 3. Flight Issues
