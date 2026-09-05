@@ -111,7 +111,11 @@
     \end{tabular}
   \end{table}
 
-  \vspace{0.5em}
+  {\tiny 注: この $K_m$（duty$\to$トルク，N$\cdot$m）はモータの逆起電力定数
+  （back-EMF constant，V/(rad/s)，\code{docs/architecture/stampfly-parameters.md}）
+  とは別物（記号が同じだけ）}
+
+  \vspace{0.3em}
 
   \begin{exampleblock}{軸ごとに $K$ が違う理由}
     \footnotesize
@@ -119,6 +123,9 @@
     Yaw は $\kappa \ll L$（トルク推力比がアーム長よりずっと小さい）ため
     $K_m$ 自体が小さく，さらに遅い
   \end{exampleblock}
+
+  {\tiny 実習 6 配布コードの $K_{yaw}=19$（旧 $\kappa=9.71\times10^{-3}$\,m 由来）は
+  この表の $K=8.0$（現行 $\kappa=4.10\times10^{-3}$\,m 由来）と異なる（次ページで詳述）}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -208,7 +215,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{実習 5 を振り返る: レート P 制御 / Rate P-Control Recap}
+\begin{frame}[fragile]{実習 5 の振り返り: レート P 制御 / Recap}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp（実習 5）}
 float Kp_rp=0.5f, Kp_yaw=2.0f, rmax=1.0f, ymax=5.0f;
 float re = ws::rc_roll()*rmax  - ws::gyro_x();
@@ -224,7 +231,7 @@ ws::motor_mixer(ws::rc_throttle(),
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{モデルで見る実習 5の設計 / Explaining Exercise 5's Gain}
+\begin{frame}{モデルで見る実習 5 の設計 / Model View}
   \begin{table}
     \centering\small
     \begin{tabular}{lcc}
@@ -264,19 +271,22 @@ ws::motor_mixer(ws::rc_throttle(),
     \end{tabular}
   \end{table}
 
+  \vspace{-0.35em}
   \begin{block}{教科書形式との対応（この形は vehicle の \code{rate.<axis>.kp/ti/td} が使う）}\footnotesize
     $K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d$（逆に $T_i = K_p/K_i,\ T_d = K_d/K_p$）
   \end{block}
 
+  \vspace{-0.3em}
   {\scriptsize 実習 8 の解答は工学形式ではなく直接ゲイン $(K_p,K_i,K_d)$ を使う：
   Roll $(0.25,0.3,0.005)$，Pitch $(0.36,0.3,0.005)$，Yaw $(2.0,0.5,0.01)$
   （$K_p$ は Roll/Pitch が前ページの $\zeta=0.7$ 設計値，Yaw のみ経験値）。
   換算 $(T_i,T_d)$：Roll $(0.83\text{s},0.020\text{s})$，Pitch $(1.2\text{s},0.014\text{s})$，
   Yaw $(4.0\text{s},0.005\text{s})$。不完全微分フィルタと $\eta$ は未使用
   （vehicle 実装が追加する改良点）}
-  \par\vspace{0.1em}
-  {\scriptsize Yaw の設計式を最新の実測値 $K=8.0$ に適用すると $K_p=3.19$ になり，
-  設計式で追い直せる例として挙げる}
+  \par
+  {\tiny 実習 6 の配布コードは $\kappa$ 改定前の $K_{yaw}=19$（$K_p=1.34$）のまま。
+  現行 $\kappa=4.10\times10^{-3}$\,m の $K=8.0$ を前ページの設計式に適用すると
+  $K_p=3.19$ になり，設計式で追い直せる例として挙げる}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -407,8 +417,9 @@ sf sysid fit flight.csv --kp 0.5 --plot
 \begin{frame}[fragile]{自動チューニング: sf sysid rate-fit / rate-tune}
   \begin{block}{ETFE によるプラント同定と仕様ベースのゲイン設計}\footnotesize
     チャープ（またはダブレット）励振で軸ごとに $(b, L, T)$ を推定し，
-    $G_p(s) = b\,e^{-Ls}/(s(Ts+1))$ にフィットする。sf sysid fit と違い
-    $K_p$ を仮定しない開ループ同定
+    $G_p(s) = b\,e^{-Ls}/(s(Ts+1))$ にフィットする。sf sysid fit は P 制御のみ仮定の
+    逆算だが，ここでは実際に飛んだ PID 出力（I・D 項含む）を再構成してから
+    ETFE を取る閉ループ同定
   \end{block}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
@@ -416,12 +427,14 @@ sf sysid rate-fit flight.csv --axis roll -o fit.json
 sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   \end{sflisting}
 
+  \vspace{-0.3em}
   {\footnotesize \code{rate-tune} はゲイン交差周波数 $\omega_c$ と位相余裕 PM の仕様を満たす
   $K_p/T_i/T_d$ を逆算し，\code{param set rate.roll.kp ...} の形で出力する}
 
+  \vspace{-0.3em}
   {\scriptsize \warn{注:} 学習者コードで rate-fit/rate-tune を使うには，角速度目標を計算した
-  直後に \api{ws::set\_rate\_target(roll,pitch,yaw)} を呼ぶ（実習 7 で追加，Data Stream の
-  \code{rate\_ref\_*} に記録される）}
+  直後に \api{ws::set\_rate\_target(roll,pitch,yaw)} を呼ぶ（実習 5 の解答でヒント導入・
+  実習 7 で必須，Data Stream の \code{rate\_ref\_*} に記録される）}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -442,7 +455,7 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{デモの期待結果: P 制御と PID 制御のステップ応答 / Expected Result}
+\begin{frame}{デモの期待結果: P と PID のステップ応答}
   \begin{center}
     \includegraphics[width=\textwidth, height=0.46\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S4_roll_step_p_vs_pid.png}
   \end{center}

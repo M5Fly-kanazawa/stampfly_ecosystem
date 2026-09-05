@@ -11,7 +11,7 @@
 \definecolor{sflight}{RGB}{220, 240, 255}
 
 \begin{tikzpicture}[
-    node distance=1.5cm and 2.0cm,
+    node distance=1.5cm and 1.5cm,
     block/.style={draw, #1, line width=1.2pt, fill=#1!8,
                   minimum width=2.0cm, minimum height=0.9cm,
                   font=\normalsize\bfseries, rounded corners=3pt},
@@ -20,8 +20,12 @@
                  circle, minimum size=0.9cm,
                  font=\normalsize\bfseries},
     gain/.default=sfblue,
+    % Summing-junction circle diameter ~40% of block height (Block Diagram
+    % Style convention; matches feedback_block.tex / pid_block.tex).
+    % 加え合わせ点の円の直径はブロック高さの約4割（ブロック線図の流儀。
+    % feedback_block.tex / pid_block.tex と揃える）。
     sum/.style={draw, sfblue, line width=1.2pt, fill=white,
-                circle, minimum size=0.8cm,
+                circle, minimum size=0.4cm,
                 font=\normalsize\bfseries},
     input/.style={font=\normalsize\bfseries, sfgray},
     output/.style={font=\large\bfseries, sfblue},
@@ -29,41 +33,62 @@
     pathlbl/.style={font=\normalsize\bfseries},
   ]
 
-  % --- Input nodes ---
+  % --- Gyro path (top row): omega -> x(Delta t) -> Sigma1 -> alpha -> Sigma2 -> output ---
+  % ジャイロ経路（上段）: ω → ×Δt → Σ1 → α → Σ2 → 出力
   \node[input] (gyro_in) {Gyro $\omega$};
-  \node[input, below=3.0cm of gyro_in] (accel_in) {Accel};
+  \node[block=sfred, right=1.3cm of gyro_in] (dt_block) {$\times\Delta t$};
+  \node[sum, right=1.3cm of dt_block] (sum1) {$\Sigma$};
+  \node[gain=sfred, right=1.3cm of sum1] (alpha) {$\alpha$};
+  \node[sum, right=1.3cm of alpha] (sum2) {$\Sigma$};
+  \node[output, right=1.1cm of sum2] (output) {$\hat{\theta}$};
 
-  % --- Gyro path (top) ---
-  \node[block=sfred, right=1.5cm of gyro_in] (integrator) {$\displaystyle\int dt$};
-  \node[gain=sfred, right=1.5cm of integrator] (alpha) {$\alpha$};
+  % --- Accel path (bottom row) ---
+  % 加速度経路（下段）
+  \node[input, below=3.4cm of gyro_in] (accel_in) {Accel};
+  \node[block=sfgreen, right=1.3cm of accel_in] (atan) {atan2};
+  \node[gain=sfgreen, right=1.3cm of atan] (one_alpha) {$1\!-\!\alpha$};
 
-  % --- Accel path (bottom) ---
-  \node[block=sfgreen, right=1.5cm of accel_in] (atan) {atan2};
-  \node[gain=sfgreen, right=1.5cm of atan] (one_alpha) {$1\!-\!\alpha$};
+  % --- Feedback delay path (middle row): previous estimate theta_hat_{k-1} ---
+  % フィードバック遅延経路（中段）: 前回推定値 θ̂_{k-1} を戻す
+  \node[block=sfblue, below=1.5cm of sum1, minimum width=1.6cm] (delay) {$z^{-1}$};
 
-  % --- Summation ---
-  \node[sum] at ($(alpha)!0.5!(one_alpha) + (2.5, 0)$) (sumnode) {$+$};
+  % --- Branch point on the output line (theta_hat is tapped, not re-derived) ---
+  % 出力線上の分岐点（θ̂ をそのまま分岐、再計算しない）
+  \coordinate (tap) at ($(sum2)!0.5!(output)$);
 
-  % --- Output ---
-  \node[output, right=1.2cm of sumnode] (output) {$\hat{\theta}$};
+  % --- Connections: gyro path ---
+  \draw[line, sfred] (gyro_in) -- (dt_block);
+  \draw[line, sfred] (dt_block) -- (sum1.west);
+  \draw[line, sfred] (sum1.east) -- (alpha.west);
+  \draw[line, sfred] (alpha.east) -- (sum2.west);
 
-  % --- Connections ---
-  % Gyro path
-  \draw[line, sfred] (gyro_in) -- (integrator);
-  \draw[line, sfred] (integrator) -- (alpha);
-  \draw[line, sfred] (alpha.east) -- ++(0.5, 0) |- (sumnode.150);
-
-  % Accel path
+  % --- Connections: accel path ---
   \draw[line, sfgreen] (accel_in) -- (atan);
   \draw[line, sfgreen] (atan) -- (one_alpha);
-  \draw[line, sfgreen] (one_alpha.east) -- ++(0.5, 0) |- (sumnode.210);
+  \draw[line, sfgreen] (one_alpha.east) -- ++(0.4, 0) -| (sum2.south);
 
-  % Output
-  \draw[line, sfblue, line width=1.5pt] (sumnode) -- (output);
+  % --- Output line and its branch dot ---
+  \draw[line, sfblue, line width=1.5pt] (sum2) -- (output);
+  \fill[sfblue] (tap) circle (2.2pt);
 
-  % --- Path labels ---
-  \node[pathlbl, sfred, above=0.2cm of integrator] {High-pass};
+  % --- Feedback path: branch dot -> down -> into delay (east) -> up into sum1 (south) ---
+  % フィードバック経路: 分岐点 → 下へ → 遅延ブロック(東側) → 上へ → Σ1(南側)
+  \draw[line, sfblue] (tap) -- (tap |- delay.east) -- (delay.east);
+  \draw[line, sfblue] (delay.north) -- (sum1.south);
+
+  % --- Sum node signs: "+" above the left-entering arrow, "+" to the right
+  %     of the bottom-entering arrow (Block Diagram Style convention).
+  % 加え合わせ点の符号: 「＋」は左から入る矢印の上、「＋」は下から入る
+  % 矢印の右側に置く（ブロック線図の流儀）。
+  \node[font=\scriptsize, sfred,  anchor=south east] at ($(sum1.north)+(150:0.3)$) {$+$};
+  \node[font=\scriptsize, sfblue, anchor=north west] at ($(sum1.south)+(330:0.3)$) {$+$};
+  \node[font=\scriptsize, sfred,  anchor=south east] at ($(sum2.north)+(150:0.3)$) {$+$};
+  \node[font=\scriptsize, sfgreen, anchor=north west] at ($(sum2.south)+(330:0.3)$) {$+$};
+
+  % --- Path labels (kept off the signal lines) ---
+  \node[pathlbl, sfred, above=0.2cm of dt_block] {High-pass};
   \node[pathlbl, sfgreen, below=0.2cm of atan] {Low-pass};
+  \node[pathlbl, sfblue, below=0.15cm of delay] {前回値};
 
 \end{tikzpicture}
 \end{document}

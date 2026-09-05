@@ -58,11 +58,21 @@ SPEC_MOTOR_T = 0.02          # [s] motor/prop lag (real-hardware structural defa
 SPEC_DELAY_L = 0.005         # [s] loop dead time (1.5 ctrl periods + IMU filter)
 
 # Flight-proven firmware gains (params.cpp defaults) used for the u replay.
+# Synced with firmware/vehicle/components/sf_core/params.cpp table[] (checked
+# 2026-09-06; roll/pitch/yaw kp/ti/td at that file's lines 712-720, roll/pitch
+# limit = max_roll_pitch_torque_ in pid_controller.hpp, yaw limit =
+# rate.yaw.max_torque). Previous values here (kp 1.365e-3/1.995e-3/5.31e-3,
+# yaw ti 1.6, yaw limit 2.2e-3) were stale relative to the current firmware.
 # u 再構成に使う飛行時ゲイン（params.cpp 既定 = 実績値）。
+# firmware/vehicle/components/sf_core/params.cpp の table[]（2026-09-06 確認、
+# 712〜720行目）と同期。roll/pitch の limit は pid_controller.hpp の
+# max_roll_pitch_torque_、yaw の limit は rate.yaw.max_torque。旧値
+# （kp 1.365e-3/1.995e-3/5.31e-3、yaw ti 1.6、yaw limit 2.2e-3）は
+# 現行ファームより古い値だった。
 DEFAULT_GAINS = {
-    "roll":  {"kp": 1.365e-3, "ti": 0.7, "td": 0.01, "limit": 5.2e-3},
-    "pitch": {"kp": 1.995e-3, "ti": 0.7, "td": 0.01, "limit": 5.2e-3},
-    "yaw":   {"kp": 5.31e-3,  "ti": 1.6, "td": 0.01, "limit": 2.2e-3},
+    "roll":  {"kp": 1.0e-3,      "ti": 0.7, "td": 0.002, "limit": 5.2e-3},
+    "pitch": {"kp": 1.426432e-3, "ti": 0.7, "td": 0.025, "limit": 5.2e-3},
+    "yaw":   {"kp": 8.029796e-4, "ti": 0.8, "td": 0.01,  "limit": 1.226e-3},
 }
 
 
