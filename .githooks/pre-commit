@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# StampFly Ecosystem — private-document guard git hook.
+#
+# Refuse to commit files that belong outside this public repository
+# (conference manuscripts, grant applications, personal plans). These paths
+# were removed from the history on 2026-09-05 and must never come back, even
+# on a working branch: cloud sessions push working branches to origin.
+#
+# 非公開文書（学会原稿・申請書・個人計画）に属するファイルのコミットを拒否する。
+# これらのパスは 2026-09-05 に履歴から除去済みで、作業ブランチであっても戻して
+# はならない（クラウド版セッションは作業ブランチを自動で origin へ push する）。
+#
+# Enable (opt-in):  git config core.hooksPath .githooks
+# Bypass (only when you are certain): git commit --no-verify
+
+set -euo pipefail
+
+# Paths that belong to the private research repository
+# 非公開リポジトリに属するパス
+BLOCKED_PATHS='^(docs/hikoki64/|docs/si2026/|docs/sci26/|docs/juida2026/|docs/kakenhi/|docs/_private/|papers/|grants/|analysis/scripts/verify_hikoki64/)'
+# Words that only appear in grant-application material
+# 申請書関連にしか現れない語
+BLOCKED_WORDS='科研費|科学研究費|KAKENHI|kakenhi'
+# Files allowed to mention those words (rules and this hook itself)
+# 上記の語を含んでよいファイル（ルール文書とこのフック自身）
+WORD_EXEMPT='^(\.githooks/|\.gitignore$|CLAUDE\.md$)'
+
+bad_paths=""; bad_words=""
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if printf '%s\n' "$f" | grep -qE "$BLOCKED_PATHS"; then bad_paths="${bad_paths}  ${f}"$'\n'; continue; fi
+    printf '%s\n' "$f" | grep -qE "$WORD_EXEMPT" && continue
+    case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.bin|*.mp4|*.pptx|*.docx|*.zip) continue;; esac
+    if git diff --cached -U0 -- "$f" | grep -E '^\+' | grep -qE "$BLOCKED_WORDS"; then bad_words="${bad_words}  ${f}"$'\n'; fi
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ -n "$bad_paths" ] || [ -n "$bad_words" ]; then
+    echo "pre-commit: refusing to commit private documents into the public repository" >&2
+    echo "pre-commit: 非公開文書は公開リポジトリにコミットできません（別の非公開リポジトリへ）" >&2
+    [ -n "$bad_paths" ] && { echo "  blocked paths / 対象外パス:" >&2; printf '%s' "$bad_paths" >&2; }
+    [ -n "$bad_words" ] && { echo "  grant-related words added in / 申請書関連の語を含む追加行:" >&2; printf '%s' "$bad_words" >&2; }
+    echo "  (bypass only when certain: git commit --no-verify)" >&2
+    exit 1
+fi
+exit 0
