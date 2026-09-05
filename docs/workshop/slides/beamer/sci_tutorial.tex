@@ -35,11 +35,20 @@
   \end{frame}
 }
 
-% Build variants: production (make sci) may carry QR codes; the Docswell-upload
-% build (make sci-docswell) defines \DocswellBuild and omits them. Resolve the
-% choice here in the preamble, never inside frame bodies.
-% ビルド2系統: 本番（make sci）は QR あり、ドクセル公開用（make sci-docswell、
-% \DocswellBuild 定義）は QR なし。分岐はプリアンブルで解決し、フレーム内には書かない。
+% Build variants (comment corrected — see fix-round notes): dxh_workshop.tex's
+% title page shows a QR to its own Docswell page (qr_docswell_dxh.png) in the
+% non-Docswell build. This deck has no such QR image yet (no
+% docs/workshop/slides/images/qr_docswell_sci* file exists), so the title page
+% carries NO QR in either build (\sciTitleQR is empty on both branches below).
+% The \ifdefined branch structure is kept for parity with the other decks so a
+% QR can be dropped in later without restructuring.
+% ビルド2系統についての注記（今回の修正で訂正）: dxh_workshop.tex は本番
+% ビルドでタイトルページ右下に自分自身のドクセル公開ページへのQR
+% （qr_docswell_dxh.png）を出している。本デッキにはそのQR画像がまだ存在しない
+% （docs/workshop/slides/images/qr_docswell_sci* が無い）ため、タイトルページは
+% どちらのビルドでもQRなし（下の \sciTitleQR は両分岐とも空）。\ifdefined
+% 分岐の構造だけは他デッキと揃えて残してあり、後でQR画像を追加する際に
+% 構造変更が不要になるようにしてある。
 \ifdefined\DocswellBuild
   \newcommand{\sciTitleQR}{}
 \else

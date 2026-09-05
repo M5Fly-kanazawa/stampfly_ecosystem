@@ -176,5 +176,15 @@
   \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
     at ($(feedMid) + (-8mm,0)$) {実機同定値と突き合わせ};
 
+  % Verification input: Layer 3 (SILS) feeds its log into the gate. S3 is
+  % centered directly above GATE's span (both centered on S2's x), so this
+  % is a plain vertical drop with a 20mm trunk — no jog needed, no crossing
+  % with the S1 return bus (left margin) or the S1-S2-S3 label (above S2).
+  % 検証の入力: 層3(SILS)のログがゲートに入る。S3はGATEの範囲の真上
+  % （どちらもS2のxを中心とする）にあるため、折れ曲がりなしの垂直線で
+  % 幹は20mm。左マージンの層1帰還バスや層1-2-3ラベル（S2の真上）とは
+  % 交差しない。
+  \draw[garr] (S3.south) -- (GATE.north -| S3.south);
+
 \end{tikzpicture}
 \end{document}

@@ -71,9 +71,25 @@
   \draw[line, sfblue, line width=1.5pt] (sum2) -- (output);
   \fill[sfblue] (tap) circle (2.2pt);
 
-  % --- Feedback path: branch dot -> down -> into delay (east) -> up into sum1 (south) ---
-  % フィードバック経路: 分岐点 → 下へ → 遅延ブロック(東側) → 上へ → Σ1(南側)
-  \draw[line, sfblue] (tap) -- (tap |- delay.east) -- (delay.east);
+  % --- Feedback path: branch dot -> detour below accel row -> into delay
+  %     (west) -> up into sum1 (south). A direct tap -> delay.east route
+  %     would run horizontally at delay's mid-height and cross the accel
+  %     path's one_alpha -> sum2 connector (whose vertical segment sits at
+  %     sum2's x-coordinate, between delay and tap) without a junction dot
+  %     (CLAUDE.md T4: no line/node crossings except at genuine branch
+  %     points). Routing below the whole accel row and entering delay from
+  %     the west avoids that crossing entirely.
+  % フィードバック経路: 分岐点 → 加速度経路の下段を迂回 → 遅延ブロック
+  % (西側)へ → 上へ → Σ1(南側)。分岐点から遅延ブロック東側へ直接引くと、
+  % delayの高さで水平に走る線が、加速度経路(1-α → Σ2)の接続線
+  % (Σ2のx座標を通る垂直線。ちょうどdelayとtapの間に位置する)と
+  % ジャンクションドットなしに交差してしまう(CLAUDE.mdのT4: 分岐点以外
+  % での線・ノードの交差禁止)。加速度経路の下段全体を迂回してdelayの
+  % 西側から入ることで、この交差を回避する。
+  \coordinate (fbLowY) at ($(one_alpha.south)+(0,-1.0)$);
+  \coordinate (fbMarginX) at ($(accel_in.west)+(-0.6,0)$);
+  \draw[line, sfblue] (tap) -- (tap |- fbLowY) -- (fbMarginX |- fbLowY)
+                       -- (fbMarginX |- delay.west) -- (delay.west);
   \draw[line, sfblue] (delay.north) -- (sum1.south);
 
   % --- Sum node signs: "+" above the left-entering arrow, "+" to the right
