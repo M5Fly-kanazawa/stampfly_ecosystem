@@ -39,7 +39,36 @@ cd stampfly_ecosystem
 
   \vspace{0.15em}
 
-  {\scriptsize いずれの方法で導入しても、この後の \code{source setup\_env.sh} $\to$ \code{sf doctor}（このあとの「事前準備の確認」で）確認する}
+  {\scriptsize いずれの方法で導入しても、この後の \code{source setup\_env.sh} $\to$ \code{sf doctor}（このあとの「実習 1」で）確認する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{OS による違いはここだけ}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{OS} & \textbf{インストール} & \textbf{環境の有効化} \\
+      \hline
+      macOS / Linux  & \code{./install.sh}  & \code{source setup\_env.sh} \\
+      Windows（CMD） & \code{install.bat}   & \code{setup\_env.bat} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+
+  {\footnotesize Windows は Git 同梱の CMD（コマンドプロンプト）でそのままファイル名を打つ。\code{./} も \code{source} も付けない}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{書き込み時のシリアルポート名も違う}
+    \footnotesize \code{sf flash vehicle -p /dev/ttyACM0}（Linux）／\code{-p /dev/cu.usbmodem*}（macOS）／\code{-p COM3}（Windows）
+  \end{exampleblock}
+
+  \vspace{0.3em}
+
+  {\small 違いはこの2点だけ。\code{sf} コマンド自体（\code{sf build}、\code{sf lesson} 等）とワークフローは3\,OSで完全に同一}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -62,21 +91,24 @@ cd stampfly_ecosystem
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{事前準備の確認}
-  \begin{block}{全員で \code{sf doctor} を実行する}
-    \small ESP-IDF、Python、USBシリアルドライバ、sf CLI 自体のバージョンをまとめて診断する
+\begin{frame}[fragile]{実習 1: 環境確認とビルド}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \begin{block}{手順}
+    \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+      \item \code{source setup\_env.sh}（Windows は \code{setup\_env.bat}）
+      \item \code{sf doctor}（ESP-IDF・Python・USBドライバ・sf CLI 自体を診断）
+      \item \code{sf lesson switch sci2026:1}
+      \item \code{sf lesson build}
+      \item \code{sf lesson flash}
+    \end{enumerate}
   \end{block}
 
-  \begin{lstlisting}[style=sfbash, numbers=none]
-source setup_env.sh
-sf doctor
-  \end{lstlisting}
+  \begin{exampleblock}{確認すること}
+    \footnotesize 書き込み直後の起動音と、機体上の LED が点灯・点滅すること
+  \end{exampleblock}
 
-  \vspace{0.3em}
-
-  \begin{alertblock}{ここで通らなくても心配は不要}
-    \footnotesize すべて OK にならなかった場合は、このあとのデモは「見るだけ」で参加し、復習パス（本セッション末尾）に沿って会場外で環境を整えてほしい
-  \end{alertblock}
+  {\footnotesize \code{sf doctor} が全て OK にならなくても心配は不要。このあとは「見るだけ」で参加し、復習パス（本セッション末尾）に沿って会場外で環境を整えてほしい}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -109,7 +141,7 @@ sf doctor
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{学習者コードの型とワークフロー}
   \begin{columns}[T]
-    \begin{column}{0.44\textwidth}
+    \begin{column}{0.56\textwidth}
       \begin{block}{学習者が書く関数は2つだけ}
         \footnotesize
         \begin{itemize}
@@ -118,22 +150,24 @@ sf doctor
         \end{itemize}
       \end{block}
       \vspace{0.3em}
-      \begin{exampleblock}{切替・ビルド・書き込み}
+      \begin{exampleblock}{切替・編集・ビルド・書き込み}
         \footnotesize
         \code{sf lesson switch sci2026:N}\\
+        \code{sf lesson edit}\\
         \code{sf lesson build}\\
-        \code{sf lesson flash}
+        \code{sf lesson flash}\\
+        \code{sf monitor workshop}
       \end{exampleblock}
     \end{column}
-    \begin{column}{0.54\textwidth}
+    \begin{column}{0.40\textwidth}
       \centering
-      \resizebox{\columnwidth}{!}{\input{../../_shared/tikz/build_flash_flow}}
+      \adjustbox{max width=\columnwidth, max height=0.78\textheight}{\input{../../_shared/tikz/sci_build_flash_flow}}
     \end{column}
   \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{IMU の軸定義}
+\begin{frame}{機体の軸定義}
   \vspace{-0.5em}
   \begin{center}
     \resizebox{0.6\textwidth}{!}{\input{../../_shared/tikz/imu_axes}}
@@ -143,6 +177,7 @@ sf doctor
     \centering\small
     BMI270 --- 6軸（3軸ジャイロ + 3軸加速度）400\,Hz \quad|\quad \mbox{Body FRD（前方-右-下）座標系}
   \end{block}
+  {\footnotesize IMU（ジャイロ・加速度センサ）自体は取り付け方向を持たないが、StampFly では機体への実装時に IMU の軸をそのまま機体の Body 座標系（前方・右・下）として採用している}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -167,6 +202,27 @@ sf doctor
 \end{frame}
 
 % ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 2: IMU の値を見る}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \begin{block}{手順}
+    \begin{enumerate}\footnotesize\setlength{\itemsep}{1pt}
+      \item \code{sf lesson switch sci2026:2}
+      \item \code{sf lesson edit} で \code{user\_code.cpp} を開き、次ページのコードを書く
+      \item \code{sf lesson build}
+      \item \code{sf lesson flash}
+      \item \code{sf monitor workshop}（\code{sf lesson flash} 直後はそのまま開く）
+    \end{enumerate}
+  \end{block}
+
+  \begin{exampleblock}{確認: Teleplot の波形}
+    \small VSCode 拡張 \code{alexnesnes.teleplot} 上で \api{gyro\_x}/\api{gyro\_y} の波形が動くこと
+  \end{exampleblock}
+
+  {\footnotesize 帰宅後に再現: 同じ手順（switch $\to$ edit $\to$ build $\to$ flash $\to$ monitor）をそのまま実行すればよい}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}[fragile]{データ取得経路① Teleplot}
   \begin{block}{\texttt{ws::print} をそのままグラフにする}
     \small \code{>変数名:値} の形式で出力すると、VSCode拡張機能 Teleplot がリアルタイムにグラフ化する
@@ -188,7 +244,24 @@ void loop_400Hz(float dt) {
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{データ取得経路② sf telemetry}
+\begin{frame}[fragile]{実習 2: 傾けて確認}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \vspace{0.3em}
+
+  \begin{block}{何を見るか}
+    \begin{itemize}\small
+      \item StampFly を手に持ち、前後左右に傾ける
+      \item \api{gyro\_x}/\api{gyro\_y} が傾ける速さに応じて振れる
+      \item 静止させると \api{accel\_z} が $-9.81$ 付近に戻る
+    \end{itemize}
+  \end{block}
+
+  {\footnotesize 前ページまでの \code{sf lesson build \&\& sf lesson flash} 完了後、Teleplot 画面を見ながら機体を傾ける}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{データ取得経路② sf telemetry\later}
   \begin{block}{コード変更なしでライブ表示}
     \small 機体は状態推定値を常時 50\,Hz で送信している。受信して表示するだけなら学習者コードの変更は不要
   \end{block}
@@ -204,7 +277,7 @@ sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{データ取得経路③ ログ取得と可視化}
+\begin{frame}[fragile]{データ取得経路③ ログ取得と可視化\later}
   \begin{block}{WiFi 経由で 400\,Hz Data Stream を記録する}
     \small \code{sf log wifi} は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400\,Hz の Data Stream を UDP 受信し、\code{-o *.csv} で 1 周期 1 行の CSV に保存する
   \end{block}
@@ -222,51 +295,34 @@ sf log viz flight.csv
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{デモ: 傾けて確認}
-  \vspace{0.3em}
-
-  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
-
-  \vspace{0.5em}
-
-  \begin{block}{何を見るか}
-    \begin{itemize}\small
-      \item StampFly を手に持ち、前後左右に傾ける
-      \item \api{gyro\_x}/\api{gyro\_y} が傾ける速さに応じて振れる
-      \item 静止させると \api{accel\_z} が $-9.81$ 付近に戻る
-    \end{itemize}
-  \end{block}
-
-  \begin{alertblock}{手順}
-    \footnotesize \code{sf lesson switch sci2026:2} $\to$ データ取得経路①（Teleplot）のページのコードを書く $\to$ \code{sf lesson build \&\& sf lesson flash} $\to$ Teleplot で確認
-  \end{alertblock}
-\end{frame}
-
-% ------------------------------------------------------------------
-\begin{frame}{他のセンサ}
+\begin{frame}{他のセンサ\later}
   \small IMU 以外のセンサも同じ考え方で読める。時間の都合で本セッションでは扱わないが、単独ビルド可能な例題として用意してある
 
   \vspace{0.5em}
 
   \begin{table}
-    \centering\small
+    \centering\footnotesize
     \begin{tabular}{ll}
       \hline
       \textbf{例題} & \textbf{センサ} \\
       \hline
-      \code{examples/05\_read\_tof} & VL53L3CX（ToF距離センサ） \\
-      \code{examples/06\_read\_baro} & BMP280（気圧センサ） \\
+      \code{firmware/vehicle/examples/05\_read\_tof} & VL53L3CX（ToF距離センサ） \\
+      \code{firmware/vehicle/examples/06\_read\_baro} & BMP280（気圧センサ） \\
       \hline
     \end{tabular}
   \end{table}
 
   \vspace{0.5em}
 
-  {\footnotesize \code{firmware/vehicle/examples/} 配下。各ディレクトリで \code{idf.py set-target esp32s3 \&\& idf.py build} すれば単体で動く}
+  {\footnotesize 各ディレクトリで単独ビルド可能: \code{idf.py set-target esp32s3 \&\& idf.py build}}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{理論とコードの対応表}
+\begin{frame}{理論とコードの対応表\later}
+  {\footnotesize 目的: 理論の各項目が実装のどこにあるか（関数・Data Stream 列・トピック）を後で引ける索引にする}
+
+  \vspace{0.3em}
+
   \begin{table}
     \centering\small
     \begin{tabular}{lccc}
@@ -286,7 +342,7 @@ sf log viz flight.csv
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス}
+\begin{frame}{復習パス\later}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline

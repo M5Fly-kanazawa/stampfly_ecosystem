@@ -1,0 +1,91 @@
+% sci_build_flash_flow.tex — Vertical edit/build/flash/monitor cycle for the
+% SCI/SICE tutorial "learner code workflow" slide (S2, P37).
+% SCI/SICEチュートリアル「学習者コードの型とワークフロー」スライド用の
+% 縦型 編集/ビルド/書込/モニタ 周回図。
+%
+% Not shared with the DXH workshop deck (build_flash_flow.tex, horizontal,
+% 4 steps, no edit step) — kept as a separate file per that deck's request.
+% DXHワークショップ資料が使う build_flash_flow.tex（横型・4ステップ・
+% editステップなし）とは別ファイル（先方の指定により共有しない）。
+\documentclass[border=6pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{luatexja}
+\usepackage[match]{luatexja-fontspec}
+% Cross-platform font: Hiragino (macOS) -> Yu Gothic (Windows) -> Noto (Linux)
+% クロスプラットフォーム: ヒラギノ (macOS) -> 游ゴシック (Windows) -> Noto (Linux)
+\usepackage{ifthen}
+\newboolean{jfontset}\setboolean{jfontset}{false}
+\IfFontExistsTF{Hiragino Kaku Gothic ProN}{%
+  \setmainjfont{Hiragino Kaku Gothic ProN}%
+  \setsansjfont{Hiragino Kaku Gothic ProN}%
+  \setboolean{jfontset}{true}}{}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Yu Gothic}{%
+    \setmainjfont{Yu Gothic}%
+    \setsansjfont{Yu Gothic}%
+    \setboolean{jfontset}{true}}{}}
+\ifthenelse{\boolean{jfontset}}{}{%
+  \IfFontExistsTF{Noto Sans CJK JP}{%
+    \setmainjfont{Noto Sans CJK JP}%
+    \setsansjfont{Noto Sans CJK JP}}{}}
+
+\begin{document}
+
+\definecolor{blue1}{RGB}{0, 100, 180}
+\definecolor{orange1}{RGB}{200, 110, 0}
+\definecolor{green1}{RGB}{50, 140, 50}
+\definecolor{yellow1}{RGB}{180, 140, 0}
+\definecolor{purple1}{RGB}{120, 80, 150}
+\definecolor{gray1}{RGB}{120, 120, 120}
+
+\begin{tikzpicture}[
+    step/.style={
+      rectangle, rounded corners=5pt, draw=#1, line width=1.5pt,
+      fill=#1!8, minimum width=40mm, minimum height=10mm,
+      font=\bfseries\normalsize, text=#1, align=center, inner sep=2pt
+    },
+    desc/.style={font=\scriptsize, text=gray1, align=left},
+    arr/.style={-{Stealth[length=3.5mm, width=2.5mm]}, line width=1.8pt, #1},
+    feedback/.style={-{Stealth[length=3mm, width=2mm]}, line width=1.1pt, gray1, dashed},
+  ]
+
+  % Steps, top to bottom
+  % ステップ（上から下へ）
+  \node[step=blue1]                 (s1) at (0, 0) {sf lesson\\switch N};
+  \node[step=orange1, below=8mm of s1] (s2) {sf lesson\\edit};
+  \node[step=green1,  below=8mm of s2] (s3) {sf lesson\\build};
+  \node[step=yellow1, below=8mm of s3] (s4) {sf lesson\\flash};
+  \node[step=purple1, below=8mm of s4] (s5) {sf monitor\\workshop};
+
+  % Main flow arrows (right-angle: each is already a single vertical
+  % segment since the nodes share the same x-coordinate)
+  % 本流の矢印（ノードが同一x座標のため各区間は単純な垂直線）
+  \draw[arr=blue1]   (s1) -- (s2);
+  \draw[arr=orange1] (s2) -- (s3);
+  \draw[arr=green1]  (s3) -- (s4);
+  \draw[arr=yellow1] (s4) -- (s5);
+
+  % Descriptions to the right of each box
+  % 各ボックス右側の説明
+  \node[desc, right=4mm of s1] {レッスンへ切替};
+  \node[desc, right=4mm of s2] {user\_code.cpp\\を書く};
+  \node[desc, right=4mm of s3] {ESP-IDF\\コンパイル};
+  \node[desc, right=4mm of s4] {USB書込};
+  \node[desc, right=4mm of s5] {波形/出力を確認};
+
+  % Feedback loop: from the confirm step (s5) back up to edit (s2), for
+  % iterating on the code. Routed on the LEFT side (west) so it does not
+  % cross the description labels on the right, using right-angle routing
+  % (horizontal - vertical - horizontal) with >=5mm of straight stem before
+  % the arrowhead enters s2.
+  % 確認(s5)から編集(s2)へ戻るフィードバック。右側の説明ラベルと交差しない
+  % よう左(west)側を通す。直角ルーティング(水平-垂直-水平)、矢頭手前に
+  % 5mm以上の直線区間を確保。
+  \coordinate (fbx) at ($(s5.west) + (-26mm, 0)$);
+  \draw[feedback] (s5.west) -- (fbx) -- (fbx -| s2.west) -- (s2.west);
+  \node[font=\scriptsize\itshape, text=gray1, align=right, anchor=east, fill=white, inner sep=1pt]
+    at ($(fbx)!0.5!(fbx -| s2.west) + (-2mm, 0)$) {直して\\再挑戦};
+
+\end{tikzpicture}
+\end{document}
