@@ -73,6 +73,7 @@
 | [contributing/adding-sf-commands.md](contributing/adding-sf-commands.md) | コマンド追加ガイド |
 | [contributing/adding-firmware-commands.md](contributing/adding-firmware-commands.md) | CLI コマンド追加ガイド |
 | [contributing/scaffolding-tool.md](contributing/scaffolding-tool.md) | スキャフォールディングツール |
+| [contributing/claude-code-practices.md](contributing/claude-code-practices.md) | Claude Code 活用ノウハウ |
 
 ### 教育資料
 
@@ -298,6 +299,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [contributing/adding-sf-commands.md](contributing/adding-sf-commands.md) | Adding commands guide |
 | [contributing/adding-firmware-commands.md](contributing/adding-firmware-commands.md) | Adding CLI commands guide |
 | [contributing/scaffolding-tool.md](contributing/scaffolding-tool.md) | Scaffolding tool |
+| [contributing/claude-code-practices.md](contributing/claude-code-practices.md) | Claude Code Best Practices |
 
 ### Educational Materials
 

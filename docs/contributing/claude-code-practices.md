@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-本ドキュメントは、StampFly Ecosystem 開発で蓄積した Claude Code の実践的な使い方をまとめたものである。50回以上のコミットを通じて得られた知見に基づく。
+本ドキュメントは、StampFly Ecosystem 開発で蓄積した Claude Code の実践的な使い方をまとめたものである。2026年4月の初版執筆時点で50件超、2026年9月時点で1,800件を超えるコミットを通じて得られた知見に基づく。
 
 ## 1. セッション管理
 
@@ -35,29 +35,31 @@ Next steps:
 - 検証すべき指標が明確（「BA が飛行中に変化しない」）
 - 優先順位順に記載
 
-**悪い例:** 「テスト」「動作確認」「その他の改善」— 次のセッションで何をすべきか分からない。
+**悪い例:** 「テスト」「動作確認」「その他の改善」。これでは次のセッションで何をすべきか分からない。
 
 ## 2. コミット戦略
 
 ### Conventional Commits の一貫した使用
 
-本プロジェクトの50コミットは全て `type(scope): subject` 形式に統一されている。
+本プロジェクトのコミットは、マージコミットなど一部の例外を除き `type(scope): subject` 形式に統一されている（2026年9月5日時点で総数1,800件超）。
 
-| タイプ | 使用回数 | 典型的な使い方 |
+| タイプ | 使用回数（2026-09-05時点） | 典型的な使い方 |
 |--------|---------|--------------|
-| `feat` | 20+ | 新機能・新ツール追加 |
-| `fix` | 15+ | バグ修正・パラメータ修正 |
-| `docs` | 8 | ドキュメント更新 |
-| `refactor` | 4 | ESKF V1→V2 統合など |
-| `chore` | 2 | 設定変更、デッドコード削除 |
-| `test` | 1 | PC ユニットテスト追加 |
-| `revert` | 1 | PID ゲインの巻き戻し |
+| `feat` | 589 | 新機能・新ツール追加 |
+| `fix` | 646 | バグ修正・パラメータ修正 |
+| `docs` | 338 | ドキュメント更新 |
+| `refactor` | 98 | ESKF V1→V2 統合など |
+| `chore` | 54 | 設定変更、デッドコード削除 |
+| `test` | 26 | PC ユニットテスト追加 |
+| `revert` | 11 | PID ゲインの巻き戻し |
+
+件数は `git log --pretty=%s | grep -c '^<type>('` の形で type ごとに再集計できる。コミット数は日々増え続けるため、上表は目安として参照すること。
 
 **教訓:** `/commit` スキルを使えばガイドラインに沿ったメッセージが自動生成される。手動でコミットメッセージを書かない。
 
 ### 小さく頻繁にコミットする
 
-ESKF リファクタリングの例が良い手本:
+ESKF（Error State Kalman Filter、姿勢・位置推定に使う拡張カルマンフィルタの一種）のリファクタリングの例が良い手本:
 
 ```
 1. feat(eskf): add ESKF_V2 with active_mask based P-matrix isolation
@@ -87,7 +89,7 @@ ESKF リファクタリングの例が良い手本:
 2. **ログ取得:** `sf log wifi` で 400Hz テレメトリを取得
 3. **可視化:** `sf log viz` でクォータニオン・バイアスの時系列を確認
 4. **原因特定:** active_mask で状態が凍結されているのに predict() が位置を更新 → 発散 → リセット発動
-5. **修正:** 3段階のコミットで修正（predict のスキップ → 着陸検出統合 → リセット削除）
+5. **修正:** 3段階のコミットで修正（着陸検出統合 → predict のスキップ → リセット削除）
 6. **検証:** 再フライトでリセットが消えたことをログで確認
 
 **教訓:** Claude Code にログデータの解析を依頼すると、時系列の異常パターンを素早く発見できる。ただし「ログを見て」だけでは不十分。「13秒周期の姿勢リセットの原因を特定して」のように具体的に指示する。
@@ -97,8 +99,8 @@ ESKF リファクタリングの例が良い手本:
 1つのバグに対して一度に全てを修正しようとせず、段階を分ける:
 
 ```
-fix(eskf): skip position prediction when states frozen by active_mask
 fix(landing): unify landing detection, prevent in-flight false triggers
+fix(eskf): skip position prediction when states frozen by active_mask
 fix(imu): remove in-flight ESKF reset, keep NaN detection as log only
 ```
 
@@ -140,7 +142,7 @@ implementation.
 
 ```
 # 非推奨: 個別スクリプトを直接実行
-python tools/log_analysis/viz_interactive.py data.csv
+python tools/log_analyzer/plot_timeseries.py data.csv
 
 # 推奨: sf CLI 経由
 sf log viz data.csv
@@ -187,15 +189,15 @@ Changes:
 | 大きな変更を一度に依頼 | 段階に分けて1つずつ依頼（ESKF リファクタリングの例） |
 | コンテキスト切れで作業ロスト | Next steps をコミットに含めて復帰可能にする |
 | ドキュメント更新を後回し | 「コード変更と同時にドキュメントも更新して」と明記 |
-| 不要なファイル生成 | CLAUDE.md に「READMEは明示的に要求されない限り作成しない」と記載 |
+| 不要なファイル生成 | Claude Code のツール既定方針（明示的な要求がない限り README やドキュメントファイルを作成しない）に従う。プロジェクト固有の運用にしたい場合は CLAUDE.md に明記する |
 
 ### CLAUDE.md の反復改善
 
 CLAUDE.md は一度書いて終わりではない。作業中に発見した問題をルールとして追記していく:
 
-- **Slide Rules** — スライド変更時の自動レビューが漏れた → ルール化
-- **画像確認はサブエージェント限定** — rate limit 問題が発生 → ルール化
-- **L8 コードブロック下端** — 同じレイアウト崩れが6回発生 → チェックリストに追加
+- **Slide Rules**: スライド変更時の自動レビューが漏れた失敗を教訓に、ルール化した
+- **画像確認はサブエージェント限定**: rate limit（一定期間内に使えるトークン量・利用量の上限）に抵触する問題が発生し、ルール化した
+- **BL8（コードブロック下端）**: 同じレイアウト崩れが6回発生し、チェックリストに追加した
 
 CLAUDE.md 自体が「プロジェクト固有の学習済みルールブック」として成長する。
 
@@ -205,7 +207,7 @@ CLAUDE.md 自体が「プロジェクト固有の学習済みルールブック�
 
 # Claude Code Best Practices
 
-This document summarizes practical know-how for using Claude Code, accumulated through the development of the StampFly Ecosystem. Based on insights from 50+ commits.
+This document summarizes practical know-how for using Claude Code, accumulated through the development of the StampFly Ecosystem. It was first written in April 2026, based on insights from 50+ commits; by September 2026 the project had grown past 1,800 commits.
 
 ## 1. Session Management
 
@@ -235,11 +237,11 @@ Every commit includes a `Next steps:` section, making it clear where to resume.
 
 ### Consistent Conventional Commits
 
-All 50 commits follow `type(scope): subject` format. Use the `/commit` skill for automatic guideline-compliant messages.
+Commits follow `type(scope): subject` format, with merge commits as the main exception (roughly 1,800 total as of September 2026). Use the `/commit` skill for automatic guideline-compliant messages.
 
 ### Small, Frequent Commits
 
-The ESKF refactoring split one large change into 7 steps, each maintaining a buildable/testable state with 7 rollback points.
+The ESKF (Error State Kalman Filter, the attitude/position estimator) refactoring split one large change into 7 steps, each maintaining a buildable/testable state with 7 rollback points.
 
 ## 3. Debugging Workflow
 
@@ -281,4 +283,4 @@ Update related documentation in the same session as code changes. "Do it later" 
 | Large changes at once | Break into stages (ESKF refactoring example) |
 | Context loss between sessions | Include Next steps in every commit |
 | Deferred documentation | "Update docs alongside code changes" in CLAUDE.md |
-| Iterating CLAUDE.md | Add rules as problems are discovered — it grows as a project-specific learned rulebook |
+| Iterating CLAUDE.md | Add rules as problems are discovered; it grows into a project-specific rulebook over time |

@@ -184,6 +184,7 @@ nav:
       - コマンド追加: docs/contributing/adding-sf-commands.md
       - FW コマンド追加: docs/contributing/adding-firmware-commands.md
       - スキャフォールディング: docs/contributing/scaffolding-tool.md
+      - Claude Code 活用ノウハウ: docs/contributing/claude-code-practices.md
 
   # ==================== ファームウェア ====================
   - ファームウェア:
