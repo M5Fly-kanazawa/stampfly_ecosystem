@@ -44,9 +44,9 @@
   %     Rises: (-42,-44)→(-42,-21) = 23mm, (+42,-44)→(+42,-21) = 23mm ✓
   %
   \node[smallbox=ctrlcolor, below left=35mm and 5mm of ctrl]
-    (lstick) {Left Stick\\[-1pt]{\footnotesize\color{gray1} Throttle / Yaw}};
+    (lstick) {Left Stick\\[-1pt]{\footnotesize\color{gray1} Pitch / Roll}};
   \node[smallbox=ctrlcolor, below right=35mm and 5mm of ctrl]
-    (rstick) {Right Stick\\[-1pt]{\footnotesize\color{gray1} Roll / Pitch}};
+    (rstick) {Right Stick\\[-1pt]{\footnotesize\color{gray1} Throttle / Yaw}};
 
   \coordinate (fork_ctrl) at ([yshift=-12mm]ctrl.south);
   \draw[line width=1.5pt, ctrlcolor] (lstick.north) -- (lstick.north |- fork_ctrl);

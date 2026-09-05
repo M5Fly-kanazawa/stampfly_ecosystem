@@ -65,17 +65,17 @@
   \draw[plus]  (Y.east) -- (M3.west);
   \draw[minus] (Y.east) -- (M4.west);
 
-  % Matrix representation (below)
-  \node[font=\large, motorcolor, anchor=north] at (4, -5) {%
-    $\begin{bmatrix} M_1 \\ M_2 \\ M_3 \\ M_4 \end{bmatrix}
-    = \frac{1}{4}
-    \begin{bmatrix}
-      1 & -\frac{1}{L} & +\frac{1}{L} & +\frac{1}{k_q} \\[3pt]
-      1 & -\frac{1}{L} & -\frac{1}{L} & -\frac{1}{k_q} \\[3pt]
-      1 & +\frac{1}{L} & -\frac{1}{L} & +\frac{1}{k_q} \\[3pt]
-      1 & +\frac{1}{L} & +\frac{1}{L} & -\frac{1}{k_q}
-    \end{bmatrix}
-    \begin{bmatrix} T \\ \tau_\phi \\ \tau_\theta \\ \tau_\psi \end{bmatrix}$
+  % Matrix representation (below) — matches ws::motor_mixer() exactly
+  % (firmware/workshop/main/ws_internal.hpp resolve_motor_request()):
+  % out[i] = T + 0.25*(...)/3.7, a shared-scale approximation, NOT the
+  % physical tau/L, kappa mixer used by the real flight controller.
+  \node[font=\normalsize, motorcolor, anchor=north] at (4, -5) {%
+    $\begin{aligned}
+      M_1 &= T + \tfrac{0.25}{3.7}(-R+P+Y) \\[2pt]
+      M_2 &= T + \tfrac{0.25}{3.7}(-R-P-Y) \\[2pt]
+      M_3 &= T + \tfrac{0.25}{3.7}(+R-P+Y) \\[2pt]
+      M_4 &= T + \tfrac{0.25}{3.7}(+R+P-Y)
+    \end{aligned}$
   };
 
   % Legend (right of matrix)

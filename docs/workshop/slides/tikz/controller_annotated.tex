@@ -56,15 +56,15 @@
     \node[lbl, anchor=south] (pwr) at (0.53, 1.04) {Power SW};
     \draw[arr] (pwr.south) -- (0.52, 0.90);
 
-    % --- Yellow button LEFT (Alt Hold / Manual) ---
+    % --- Yellow button LEFT (Alt/Pos Hold 3-state cycle) ---
     \node[btnbox, anchor=south east] (yleft) at (0.18, 1.04)
-      {Alt Hold /\\Manual\\{\tiny (予定)}};
-    \draw[arr, accentylw!80!black] (yleft.south) -- (0.16, 0.96);
+      {OFF / ALT /\\POS HOLD};
+    \draw[arr, accentylw!80!black] (yleft.south) -- (0.31, 0.89);
 
     % --- Yellow button RIGHT (STABILIZE / ACRO) ---
     \node[btnbox, anchor=south west] (yright) at (0.82, 1.04)
       {STABILIZE /\\ACRO};
-    \draw[arr, accentylw!80!black] (yright.south) -- (0.84, 0.96);
+    \draw[arr, accentylw!80!black] (yright.south) -- (0.645, 0.89);
 
     % --- M5 Button = LCD panel ---
     \node[lbl, anchor=north, draw=accentgrn, text=accentgrn] (lcd) at (0.50, -0.06)

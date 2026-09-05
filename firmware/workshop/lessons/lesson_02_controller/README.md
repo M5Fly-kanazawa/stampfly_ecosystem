@@ -31,10 +31,10 @@ Read stick values into variables and compute each motor's Duty using arithmetic 
 
 | Motor | T | Roll | Pitch | Yaw |
 |-------|---|------|-------|-----|
-| M1 FR | + | + | - | - |
-| M2 RR | + | + | + | + |
-| M3 RL | + | - | + | - |
-| M4 FL | + | - | - | + |
+| M1 FR | + | - | + | + |
+| M2 RR | + | - | - | - |
+| M3 RL | + | + | - | + |
+| M4 FL | + | + | + | - |
 
 ## Steps / 手順
 1. `sf lesson switch 2`
