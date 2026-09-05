@@ -57,17 +57,19 @@
           モータ     & コアレスモータ $\times$4 \\
           バッテリ   & 300\,mAh 1S LiPo \\
           質量       & 37\,g（バッテリ含む） \\
-          コントローラ & M5Atom JoyStick（ESP-NOW） \\
+          コントローラ & M5Stack AtomS3 + Atom JoyStick（ESP-NOW） \\
           \hline
         \end{tabular}
       \end{table}
+
+      {\tiny IMU（慣性計測装置）／ESP-NOW（ESP32 の無線プロトコル）。前方 ToF は現行ファームでは未使用（高度推定は下方 ToF）}
     \end{column}
   \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}{4つの障壁 / Four Barriers}
-  \small 手のひらサイズで安全性が高く安価なStampFlyでも、教育現場での普及にはリソース分散に加えて次の障壁がある
+  \small 手のひらサイズで安全性が高く安価な StampFly でも、要点②のリソース分散に加えて、教育現場での普及には次の4つの障壁がある
 
   \vspace{0.5em}
 
@@ -85,7 +87,7 @@
     \centering\scriptsize
     \begin{tabular}{lcccc}
       \hline
-       & Crazyflie & Tello EDU & PX4 & StampFly Eco. \\
+       & Crazyflie & Tello EDU\textsuperscript{*} & PX4 & StampFly Eco. \\
       \hline
       制御ループアクセス & \checkmark & --- & \checkmark & \checkmark \\
       教材・カリキュラム & $\triangle$ & $\triangle$ & $\triangle$ & \checkmark \\
@@ -99,6 +101,8 @@
   \vspace{0.5em}
 
   {\small 制御ループへのフルアクセスと体系的な教材・ツールの統合提供を両立させ、ファームウェア全体を一人の学習者が読み通せる規模に抑えている点が異なる}
+
+  {\tiny \textsuperscript{*}Tello EDU は2023年末に販売終了。評価は筆者による定性的な見解である}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -142,7 +146,7 @@
       \textbf{柱} & \textbf{内容} \\
       \hline
       集約と Protocol as SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を唯一の基準とする \\
-      sf CLI                  & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供 \\
+      sf CLI（コマンドラインツール） & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供 \\
       段階的抽象化 \code{ws::} & Workshop API がHW・タスク・Topicの詳細を隠しつつ、レッスンの進行に応じて段階的に開放する \\
       シミュレータ統合         & VPython（軽量3D）と Genesis（高精度物理）を、実ファームと同一の制御アルゴリズムで動かす \\
       オープンソース           & 制御ループからドライバまで公開し、ブラックボックス問題を根本から排除する \\
@@ -194,7 +198,7 @@
       \hline
       コンポーネント数 & 30（\code{sf\_*} 命名, フラット構造） \\
       通信方式         & Pub-Sub トピック（直接呼び出し禁止） \\
-      タスク数         & 14 \\
+      タスク数         & 16 \\
       制御周期         & 400\,Hz（IMU $\to$ 状態推定 $\to$ 制御） \\
       状態推定         & ESKF（誤差状態カルマンフィルタ） \\
       制御器           & カスケード PID \\
@@ -203,7 +207,9 @@
     \end{tabular}
   \end{table}
 
-  \vspace{0.5em}
+  {\footnotesize Pub-Sub（出版購読型のメッセージ配信）}
+
+  \vspace{0.3em}
 
   \begin{exampleblock}{実機検証}
     \small POS\_HOLD（位置制御）は実機で検証済み。保持精度 $\pm$6--7\,cm
@@ -246,6 +252,10 @@
   \end{table}
 
   \vspace{0.3em}
+
+  {\footnotesize SILS（Software-in-the-Loop: 実ファームをホスト PC 上で MuJoCo 物理エンジンと組み合わせて動かす検証）}
+
+  \vspace{0.2em}
 
   {\small 層3の合否はモデル一致の判定条件で決まる。詳細は S5 で扱う}
 \end{frame}
@@ -318,7 +328,7 @@
 
   \vspace{0.15em}
 
-  \includegraphics[width=\textwidth, height=0.5\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_altitude_attitude.png}
+  \includegraphics[width=\textwidth, height=0.6\textheight, keepaspectratio]{../../../sci_tutorial/fallback/S1_altitude_attitude.png}
 
   {\scriptsize 同じ飛行の高度と姿勢角の時系列。外乱直後の傾きが位置制御で戻る}
 \end{frame}
@@ -331,7 +341,7 @@
     \textbf{コマンド} & \textbf{対象} & \textbf{文書} \\
     \hline
     \code{sf sim run vpython} & シミュレータ操縦 & \code{docs/architecture/simulation-policy.md} \\
-    \code{sf sils gui} & SILS 回帰・可視化 & \code{firmware/vehicle/docs/development\_roadmap.md} \\
+    \code{sf sils gui} & SILS シナリオ実行・可視化 & \code{simulator/sils/gui/README.md} \\
     --- & 4階層アクセス & \code{firmware/vehicle/docs/architecture.md \S2} \\
     \hline
   \end{tabular}}
