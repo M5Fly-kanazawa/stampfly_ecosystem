@@ -18,9 +18,9 @@ order "ARM accepted" "Takeoff detected"
 order "Takeoff detected" "Takeoff complete"
 order "Takeoff complete" "DISARM accepted"
 # G1-equivalent (liftoff): truth altitude clears 0.1 m during the climb+cruise
-# window [4.5,7.4]s (measured ~0.65 m peak with the Lesson 5/8 solutions, 2026-09-04).
+# window [4.5,7.4]s (~0.64 m (0.6438, 2026-09-06 re-run) peak with the Lesson 5/8 solutions).
 # G1相当（離陸）: 上昇+巡航窓 [4.5,7.4]s で真値高度が 0.1m を超える
-# （Lesson 5/8 解答での実測ピーク ~0.65m, 2026-09-04）。
+# （Lesson 5/8 解答での実測ピーク ~0.64 m (0.6438, 2026-09-06 re-run)）。
 metric alt_max > 0.1 in 4.5 7.4
 # G3-equivalent (no divergence): combined roll+pitch tilt stays well bounded
 # through cruise and the post-disarm settle (measured ~0.00 deg — sticks are

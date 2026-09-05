@@ -83,6 +83,8 @@
 % ------------------------------------------------------------------
 \begin{frame}{層3: SILS / Layer 3: SILS}
   \begin{block}{Code Identity と Param Identity}\small
+    SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で
+    物理シミュレーションと閉ループ実行する検証手法）は，
     MuJoCo（非線形6自由度の物理エンジン）と\textbf{実ファーム C++ そのもの}を，
     実機と同じソース・同じパラメータで走らせる
   \end{block}
@@ -131,11 +133,13 @@
       \hline
       & \textbf{特徴} & \textbf{用途} \\
       \hline
-      VPython & 軽量，ブラウザ3D表示，センサモデル充実 & 制御学習，SILS/HILS \\
+      VPython & 軽量，ブラウザ3D表示，センサモデル充実 & 制御学習，SILS/HILS\footnotemark \\
       Genesis & 高精度物理エンジン，2000\,Hz 物理演算 & 高精度シミュレーション \\
       \hline
     \end{tabular}
   \end{table}
+  \footnotetext{\scriptsize HILS（Hardware-in-the-Loop Simulation）:
+  実機を接続した検証。本エコシステムではファーム側未対応}
 
   \vspace{0.5em}
 
@@ -288,7 +292,8 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 % ------------------------------------------------------------------
 \begin{frame}{研究利用の入口: L1 Topic API / Entry for Research}
   \begin{block}{自分の推定器・制御器を載せる}\small
-    L1 Topic API（\code{sf::api::*}）は Pub-Sub トピックを subscribe/publish し，
+    L1 Topic API（\code{sf::api::*}）は Pub-Sub（発行/購読型のメッセージ配信）
+    トピックを subscribe/publish し，
     \code{IEstimator}/\code{IController} を実装して既存のコンポーネントと
     差し替えられる
   \end{block}
@@ -306,6 +311,10 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 
 % ------------------------------------------------------------------
 \begin{frame}{再現性の3原則 / Three Principles of Reproducibility}
+  {\small S1 で見た開発の3原則を，再現性の観点から振り返る}
+
+  \vspace{0.3em}
+
   \begin{table}
     \centering\small
     \begin{tabular}{lp{80mm}}
@@ -349,9 +358,9 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
     \item \textbf{高度・位置ループ}: レート/姿勢カスケードの外側に
           ALT\_HOLD/POS\_HOLD が乗る。外乱オブザーバ（\code{altitude.dob.fc}）も
           パラメータで opt-in できる
-    \item \textbf{Tello 互換 SDK と ROS2}: Python SDK（\code{lib/stampfly}）と
+    \item \textbf{Tello 互換 SDK と ROS 2}: Python SDK（\code{lib/stampfly}）と
           \code{sf takeoff} などの Tello 風コマンド（\code{sf takeoff/land/hover/jump} …）
-          で自律飛行の入口を用意している。ROS2 との連携も発展的なテーマの一つである
+          で自律飛行の入口を用意している。ROS 2 との連携も発展的なテーマの一つである
   \end{itemize}
 \end{frame}
 
@@ -361,6 +370,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
     \begin{column}{0.5\textwidth}
       \begin{block}{自分の授業・研究室で使うには}\footnotesize
         \begin{itemize}
+          \setlength{\itemsep}{1pt}
           \item \code{lesson\_manifest.yaml} の \code{courses:} に実習順序を
                 追加できる（本チュートリアルの \code{sci2026} も同じ仕組み）
           \item 本スライド一式は LaTeX（Beamer）ソースごと公開されている
@@ -423,7 +433,7 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
       \item モデル一致の判定で Yaw 軸だけ精度が悪化するのはなぜか
       \item 自作の制御器を載せるとき，安全機構（フェイルセーフ）は
             どこまで自分で書く必要があるか
-      \item ROS2 と連携するにはどこから手を付ければよいか
+      \item ROS 2 と連携するにはどこから手を付ければよいか
     \end{itemize}
   \end{block}
 
@@ -435,16 +445,17 @@ sf sysid noise static_noise.csv --sensor gyro --static-only --plot
 
 % ------------------------------------------------------------------
 \begin{frame}{チェックポイント / Checkpoint}
-  \begin{alertblock}{確認事項}
+  \begin{alertblock}{確認事項}\small
     \begin{itemize}
       \item[$\square$] シミュレーションの3層構造と，それぞれの役割を説明できる
-      \item[$\square$] \code{sf sils gui} でシナリオ実行とパラメータ編集を体験した
+      \item[$\square$] \code{sf sils gui} でのシナリオ実行とパラメータ編集の流れを見た
+            （または手元で試した）
       \item[$\square$] L1 Topic API で自分の推定器・制御器を差し替える方法を理解した
       \item[$\square$] 解析ツールの入口を把握した
     \end{itemize}
   \end{alertblock}
 
-  \vspace{0.6em}
+  \vspace{0.1em}
 
   \begin{block}{本日はこれで終了}
     資料・録画は公開されている。持ち帰り資料（付録）で復習を続けられる

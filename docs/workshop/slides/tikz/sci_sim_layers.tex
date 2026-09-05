@@ -91,15 +91,21 @@
       \ttier{s3color}{層3: SILS}\\[3pt]
       \tsub{プラント: 非線形6自由度（MuJoCo）}\\[2pt]
       \tsub{制御コード: 実ファーム C++ そのもの}\\[2pt]
-      \tsub{Code/Param Identity，CI 回帰 33/42 本}
+      \tsub{Code/Param Identity}
     \end{minipage}%
   };
 
-  % Rightward arrow chain, offset above the boxes (clear of both box border
-  % and text — routed entirely in open space, T4 compliant)
-  % 右向き矢印の連鎖。箱の上外側の空間に配線
-  \draw[arr] ($(S1.north -| S1.east)+(0,6mm)$) -- ($(S2.north -| S2.west)+(0,6mm)$);
-  \draw[arr] ($(S2.north -| S2.east)+(0,6mm)$) -- ($(S3.north -| S3.west)+(0,6mm)$);
+  % Rightward arrow chain, directly connecting adjacent box edges
+  % (S1.east -> S2.west, S2.east -> S3.west): each arrow starts and ends on
+  % a box border (T3/T4 fix — the previous version floated 6mm above the
+  % boxes, touching neither; see git log). The 10mm box gap leaves a ~7mm
+  % straight trunk before each 3mm arrowhead.
+  % 右向き矢印の連鎖。隣接する箱の辺を直接つなぐ（S1.east→S2.west，
+  % S2.east→S3.west）。矢印の始点・終点が必ず箱の枠に接する（T3/T4修正:
+  % 以前は箱の6mm上を浮いて配線され、どちらの箱にも接していなかった。
+  % git log 参照）。箱の間隔10mmのうち矢頭3mmを除いた約7mmが幹になる。
+  \draw[arr] (S1.east) -- (S2.west);
+  \draw[arr] (S2.east) -- (S3.west);
 
   % Single label above the whole arrow chain (horizontally centered over S2)
   % 矢印の連鎖全体に対する説明ラベル（層2の真上、中央に1つだけ配置）
