@@ -86,20 +86,56 @@ def _ensure_user_code_exists() -> bool:
     return True
 
 
-def _load_manifest() -> Optional[List[Dict[str, Any]]]:
-    """Load lesson manifest YAML. Returns None if unavailable."""
+def _load_manifest_data() -> Optional[Dict[str, Any]]:
+    """Load the raw manifest YAML document (both `lessons:` and `courses:`).
+
+    Kept separate from _load_manifest() so both the lesson list and the
+    course list can share a single file read/parse instead of each
+    re-reading the YAML file.
+    マニフェストYAMLの生ドキュメント全体（`lessons:` と `courses:` の
+    両方）を読み込む。_load_manifest() とは分離し、レッスン一覧と
+    コース一覧がYAMLファイルの読み込み・パースを1回で共有できるようにする。
+
+    Returns None if the file is missing, PyYAML is unavailable, or
+    parsing fails.
+    """
     manifest_path = _get_lessons_dir() / MANIFEST_FILE
     if not manifest_path.exists():
         return None
     try:
         import yaml
         with open(manifest_path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return data.get("lessons", [])
+            return yaml.safe_load(f)
     except ImportError:
         return None
     except Exception:
         return None
+
+
+def _load_manifest() -> Optional[List[Dict[str, Any]]]:
+    """Load lesson manifest YAML. Returns None if unavailable.
+
+    Backward compatible: returns only the `lessons:` list, exactly as
+    before this module gained `courses:` support.
+    後方互換: このモジュールが `courses:` に対応する前と同じく、
+    `lessons:` リストのみを返す。
+    """
+    data = _load_manifest_data()
+    if data is None:
+        return None
+    return data.get("lessons", [])
+
+
+def _load_courses() -> List[Dict[str, Any]]:
+    """Load the top-level `courses:` list. Empty list if unavailable.
+
+    トップレベルの `courses:` リストを読み込む。取得できない場合は
+    空リストを返す。
+    """
+    data = _load_manifest_data()
+    if data is None:
+        return []
+    return data.get("courses", [])
 
 
 def _discover_lessons() -> List[Tuple[int, str, Path]]:
@@ -216,6 +252,108 @@ def _find_manifest_entry(identifier) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _find_course(course_id: str) -> Optional[Dict[str, Any]]:
+    """Find a course entry by its id (e.g. 'sci2026').
+
+    id（例: 'sci2026'）でコースエントリを検索する。
+    """
+    for course in _load_courses():
+        if course.get("id") == course_id:
+            return course
+    return None
+
+
+def _find_course_step(course: Dict[str, Any], number: int) -> Optional[Dict[str, Any]]:
+    """Find a step within a course by its course-local step number.
+
+    コース内の課の番号（コース固有の連番）でステップを検索する。
+    """
+    for step in course.get("steps", []):
+        if step.get("number") == number:
+            return step
+    return None
+
+
+def _resolve_course_identifier(raw: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Resolve a `<course_id>:<N>` identifier to the underlying lesson id.
+
+    `<course_id>:<N>` 形式の識別子を、実体のレッスンidへ解決する。
+
+    Args:
+        raw: the full identifier string, e.g. "sci2026:8".
+
+    Returns:
+        (lesson_id, course_display, error_message). On success,
+        lesson_id/course_display are set and error_message is None. On
+        failure, lesson_id/course_display are None and error_message
+        describes the problem (already bilingual, ready for
+        console.error()).
+        成功時は (レッスンid, "sci2026:8" のような表示用文字列, None)。
+        失敗時は (None, None, エラーメッセージ) — エラーメッセージは
+        console.error() にそのまま渡せるバイリンガル文言。
+    """
+    course_id, _, number_str = raw.partition(":")
+
+    course = _find_course(course_id)
+    if course is None:
+        available = ", ".join(c["id"] for c in _load_courses()) or "(none)"
+        return None, None, (
+            f"Unknown course '{course_id}'.\n"
+            f"未知のコース '{course_id}' です。\n"
+            f"  Available courses / 利用可能なコース: {available}"
+        )
+
+    try:
+        number = int(number_str)
+    except ValueError:
+        return None, None, (
+            f"Invalid course step '{number_str}' — must be an integer.\n"
+            f"コースのステップ '{number_str}' は整数である必要があります。"
+        )
+
+    step = _find_course_step(course, number)
+    if step is None:
+        valid = ", ".join(str(s["number"]) for s in course.get("steps", [])) or "(none)"
+        return None, None, (
+            f"Unknown step {number} in course '{course_id}'.\n"
+            f"コース '{course_id}' にステップ {number} はありません。\n"
+            f"  Available steps / 利用可能なステップ: {valid}"
+        )
+
+    return step["lesson"], f"{course_id}:{number}", None
+
+
+def _resolve_identifier_arg(raw: str) -> Optional[Tuple[Any, Optional[str]]]:
+    """Resolve a CLI identifier argument, handling `<course>:<N>` syntax.
+
+    CLIの識別子引数を解決する（`<course>:<N>` 構文に対応）。
+
+    Plain identifiers (no ':') pass through _parse_identifier() unchanged,
+    exactly like before course support existed. A `<course>:<N>` argument
+    is resolved via the course's `steps:` list down to the underlying
+    manifest lesson id, so every existing lookup (_find_lesson,
+    _find_manifest_entry) keeps working unmodified.
+    ':'を含まない識別子は、コース対応前と同じく _parse_identifier() を
+    そのまま通す。`<course>:<N>` は該当コースの `steps:` を経由して
+    実体のマニフェストレッスンidへ解決するため、既存の検索処理
+    （_find_lesson, _find_manifest_entry）は無変更のまま動作する。
+
+    Returns:
+        (identifier, course_display) on success (course_display is None
+        for a plain, non-course identifier). None if resolution failed —
+        the error has already been printed via console.error().
+    """
+    if ":" not in raw:
+        return _parse_identifier(raw), None
+
+    lesson_id, course_display, error = _resolve_course_identifier(raw)
+    if error is not None:
+        console.error(error)
+        return None
+
+    return _parse_identifier(lesson_id), course_display
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register command with CLI"""
     parser = subparsers.add_parser(
@@ -237,7 +375,22 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="List all available lessons",
         description="Show all workshop lessons with status.",
     )
+    list_parser.add_argument(
+        "--course",
+        default=None,
+        metavar="<id>",
+        help="List steps for one course (e.g. sci2026) instead of all lessons",
+    )
     list_parser.set_defaults(func=run_list)
+
+    # Identifier help text shared by switch/solution/info: every one of
+    # them also accepts the `<course_id>:<N>` course-step syntax.
+    # switch/solution/info共通の識別子ヘルプ文言: いずれも
+    # `<course_id>:<N>` というコースのステップ構文を受け付ける。
+    identifier_help = (
+        "Lesson number (e.g., 0, 5), ID (e.g., motor_control), "
+        "or <course_id>:<N> (e.g., sci2026:8)"
+    )
 
     # --- switch ---
     switch_parser = lesson_subparsers.add_parser(
@@ -245,10 +398,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Switch to a lesson",
         description="Copy lesson student.cpp to user_code.cpp for building.",
     )
-    switch_parser.add_argument(
-        "identifier",
-        help="Lesson number (e.g., 0, 5) or ID (e.g., motor_control)",
-    )
+    switch_parser.add_argument("identifier", help=identifier_help)
     switch_parser.add_argument(
         "--solution",
         action="store_true",
@@ -262,10 +412,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Show solution for a lesson",
         description="Display diff between student.cpp and solution.cpp.",
     )
-    solution_parser.add_argument(
-        "identifier",
-        help="Lesson number (e.g., 5) or ID (e.g., pid_control)",
-    )
+    solution_parser.add_argument("identifier", help=identifier_help)
     solution_parser.set_defaults(func=run_solution)
 
     # --- info ---
@@ -274,10 +421,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Show detailed lesson information",
         description="Display detailed information for a lesson.",
     )
-    info_parser.add_argument(
-        "identifier",
-        help="Lesson number (e.g., 5) or ID (e.g., pid_control)",
-    )
+    info_parser.add_argument("identifier", help=identifier_help)
     info_parser.set_defaults(func=run_info)
 
     # --- edit ---
@@ -354,21 +498,57 @@ def _parse_identifier(raw: str):
 
 
 def run_list(args: argparse.Namespace) -> int:
-    """List all available lessons"""
-    manifest = _load_manifest()
+    """List all available lessons, or one course's steps with --course"""
+    course_id = getattr(args, "course", None)
+    if course_id:
+        return _run_list_course(course_id)
 
+    manifest = _load_manifest()
     if manifest:
-        return _run_list_manifest(manifest)
-    return _run_list_fallback()
+        result = _run_list_manifest(manifest)
+    else:
+        result = _run_list_fallback()
+
+    _print_courses_summary()
+    return result
+
+
+def _current_user_code() -> str:
+    """Read user_code.cpp's current content, or "" if not switched yet.
+
+    user_code.cppの現在の内容を読む。まだ切り替えられていなければ""。
+    """
+    user_code_path = _get_user_code_path()
+    if user_code_path.exists():
+        return user_code_path.read_text()
+    return ""
+
+
+def _is_lesson_current(entry: Dict[str, Any], current_content: str) -> bool:
+    """Check whether a manifest lesson's student/solution.cpp is the one
+    currently copied into user_code.cpp.
+
+    マニフェストのレッスンのstudent/solution.cppが、現在user_code.cppに
+    コピーされている内容と一致するか判定する。
+    """
+    if not current_content:
+        return False
+    fw_dir = entry.get("firmware_dir")
+    if not fw_dir:
+        return False
+    lesson_path = _get_lessons_dir() / fw_dir
+    if not lesson_path.exists():
+        return False
+    for fname in ("student.cpp", "solution.cpp"):
+        fpath = lesson_path / fname
+        if fpath.exists() and fpath.read_text() == current_content:
+            return True
+    return False
 
 
 def _run_list_manifest(manifest: List[Dict[str, Any]]) -> int:
     """List lessons from manifest with day grouping"""
-    # Check current lesson
-    user_code_path = _get_user_code_path()
-    current_content = ""
-    if user_code_path.exists():
-        current_content = user_code_path.read_text()
+    current_content = _current_user_code()
 
     # Build number->entry lookup
     by_number = {e["number"]: e for e in manifest}
@@ -383,23 +563,7 @@ def _run_list_manifest(manifest: List[Dict[str, Any]]) -> int:
             if not entry:
                 continue
 
-            fw_dir = entry.get("firmware_dir")
-            lesson_path = None
-            if fw_dir and fw_dir is not None:
-                lesson_path = _get_lessons_dir() / fw_dir
-                if not lesson_path.exists():
-                    lesson_path = None
-
-            # Check if current
-            is_current = False
-            if lesson_path and current_content:
-                for fname in ("student.cpp", "solution.cpp"):
-                    fpath = lesson_path / fname
-                    if fpath.exists() and fpath.read_text() == current_content:
-                        is_current = True
-                        break
-
-            marker = " >> " if is_current else "    "
+            marker = " >> " if _is_lesson_current(entry, current_content) else "    "
             title_ja = entry.get("title_ja", "")
             title_en = entry.get("title_en", "")
             desc_ja = entry.get("description_ja", "")
@@ -409,51 +573,109 @@ def _run_list_manifest(manifest: List[Dict[str, Any]]) -> int:
                 console.print(f"              {desc_ja}")
         console.print()
 
-    # Event templates (number >= 90, outside the Day 1-5 sequence)
-    # イベント用テンプレート（90番以降、Day 1〜5 の通常レッスンとは別系統）
-    day_numbers = {n for _, numbers in DAY_GROUPS for n in numbers}
-    event_entries = [e for e in manifest if e["number"] not in day_numbers]
-    if event_entries:
-        console.print("  Events（教育イベント）:")
-        for entry in sorted(event_entries, key=lambda e: e["number"]):
-            fw_dir = entry.get("firmware_dir")
-            lesson_path = None
-            if fw_dir and fw_dir is not None:
-                lesson_path = _get_lessons_dir() / fw_dir
-                if not lesson_path.exists():
-                    lesson_path = None
-
-            is_current = False
-            if lesson_path and current_content:
-                for fname in ("student.cpp", "solution.cpp"):
-                    fpath = lesson_path / fname
-                    if fpath.exists() and fpath.read_text() == current_content:
-                        is_current = True
-                        break
-
-            marker = " >> " if is_current else "    "
-            title_ja = entry.get("title_ja", "")
-            title_en = entry.get("title_en", "")
-            desc_ja = entry.get("description_ja", "")
-            console.print(
-                f"{marker}Lesson {entry['number']:2d}: {title_ja} / {title_en}"
-                f"  (id: {entry.get('id', '')})"
-            )
-            if desc_ja:
-                console.print(f"              {desc_ja}")
-        # Show the next free event number so new tutorials know where to start
-        # 次イベントの空き番号を表示（新規チュートリアル追加時の起点が一目で分かる）
-        next_event = max(e["number"] for e in event_entries) + 1
-        console.print(
-            f"    (next event number / 次のイベント番号: {next_event} — "
-            f"lesson_{next_event}_<name> + manifest 追記で追加)"
-        )
-        console.print()
+    _print_event_lessons(manifest, current_content)
 
     console.print(f"  Total: {len(manifest)} lessons")
     console.print(f"  Switch: sf lesson switch <N or id>")
 
     return 0
+
+
+def _print_event_lessons(manifest: List[Dict[str, Any]], current_content: str) -> None:
+    """Print the "Events" section (number >= 90, outside Day 1-5).
+
+    「Events」節（90番以降、Day 1〜5の通常レッスンとは別系統）を表示する。
+    """
+    day_numbers = {n for _, numbers in DAY_GROUPS for n in numbers}
+    event_entries = [e for e in manifest if e["number"] not in day_numbers]
+    if not event_entries:
+        return
+
+    console.print("  Events（教育イベント）:")
+    for entry in sorted(event_entries, key=lambda e: e["number"]):
+        marker = " >> " if _is_lesson_current(entry, current_content) else "    "
+        title_ja = entry.get("title_ja", "")
+        title_en = entry.get("title_en", "")
+        desc_ja = entry.get("description_ja", "")
+        console.print(
+            f"{marker}Lesson {entry['number']:2d}: {title_ja} / {title_en}"
+            f"  (id: {entry.get('id', '')})"
+        )
+        if desc_ja:
+            console.print(f"              {desc_ja}")
+
+    # Show the next free event number so new tutorials know where to start
+    # 次イベントの空き番号を表示（新規チュートリアル追加時の起点が一目で分かる）
+    next_event = max(e["number"] for e in event_entries) + 1
+    console.print(
+        f"    (next event number / 次のイベント番号: {next_event} — "
+        f"lesson_{next_event}_<name> + manifest 追記で追加)"
+    )
+    console.print()
+
+
+def _run_list_course(course_id: str) -> int:
+    """List one course's steps under its own tutorial-local numbering.
+
+    コース1件分のステップを、チュートリアル固有の番号で一覧表示する。
+    """
+    course = _find_course(course_id)
+    if course is None:
+        available = ", ".join(c["id"] for c in _load_courses()) or "(none)"
+        console.error(f"Unknown course '{course_id}'")
+        console.print(f"  Available courses / 利用可能なコース: {available}")
+        return 1
+
+    manifest = _load_manifest() or []
+    by_id = {e["id"]: e for e in manifest}
+    current_content = _current_user_code()
+
+    title_ja = course.get("title_ja", course_id)
+    title_en = course.get("title_en", course_id)
+    console.header(f"{title_ja} / {title_en}")
+    console.print()
+
+    for step in course.get("steps", []):
+        lesson_entry = by_id.get(step["lesson"])
+        base_number = lesson_entry["number"] if lesson_entry else "?"
+        step_title_ja = lesson_entry.get("title_ja", "") if lesson_entry else step["lesson"]
+        step_title_en = lesson_entry.get("title_en", "") if lesson_entry else ""
+
+        is_current = bool(lesson_entry) and _is_lesson_current(lesson_entry, current_content)
+        marker = " >> " if is_current else "    "
+
+        console.print(
+            f"{marker}実習 {step['number']}: {step_title_ja} / {step_title_en}"
+            f"  (Lesson {base_number}, {step.get('session', '-')})"
+        )
+
+    console.print()
+    console.print(f"  Switch: sf lesson switch {course_id}:<N>")
+
+    return 0
+
+
+def _print_courses_summary() -> None:
+    """Append a short "Courses:" section to `sf lesson list`'s output.
+
+    `sf lesson list` の出力末尾に短い「Courses:」節を付け加える。
+
+    Silently does nothing if no courses are declared, so callers can
+    invoke this unconditionally after either listing path.
+    コースが1件も宣言されていなければ何もしない。呼び出し側はどちらの
+    一覧表示の後でも無条件に呼び出せる。
+    """
+    courses = _load_courses()
+    if not courses:
+        return
+
+    console.print("  Courses:")
+    for course in courses:
+        title_ja = course.get("title_ja", "")
+        title_en = course.get("title_en", "")
+        console.print(f"    {course['id']}: {title_ja} / {title_en}")
+    console.print(f"    Detail: sf lesson list --course <id>")
+    console.print()
 
 
 def _run_list_fallback() -> int:
@@ -465,10 +687,7 @@ def _run_list_fallback() -> int:
         console.print(f"  Expected at: {_get_lessons_dir()}")
         return 1
 
-    user_code_path = _get_user_code_path()
-    current_content = ""
-    if user_code_path.exists():
-        current_content = user_code_path.read_text()
+    current_content = _current_user_code()
 
     console.header("Workshop Lessons")
     console.print()
@@ -494,9 +713,56 @@ def _run_list_fallback() -> int:
     return 0
 
 
+def _resolve_switch_source(
+    lesson_dir: Path, identifier: Any, raw_identifier: str, use_solution: bool
+) -> Optional[Tuple[Path, str]]:
+    """Pick student.cpp or solution.cpp as the `switch` copy source.
+
+    switchのコピー元としてstudent.cppかsolution.cppを選ぶ。
+
+    Returns (path, label) on success. Returns None after printing an
+    error (via console.error()) if the lesson has no solution by design
+    (has_solution: false) or the chosen file is simply missing.
+    成功時は (パス, ラベル)。設計上solutionが存在しない
+    （has_solution: false）場合、または該当ファイルが単に無い場合は
+    console.error()でエラー出力の上Noneを返す。
+    """
+    if not use_solution:
+        src = lesson_dir / "student.cpp"
+        label = "student"
+    else:
+        # Some lessons (event templates like Lesson 90) declare
+        # has_solution: false because no single "correct answer" exists
+        # by design. Fail with a clear reason instead of the generic
+        # "solution.cpp not found" below.
+        # 一部のレッスン（Lesson 90のようなイベント用テンプレート）は設計上
+        # 唯一の「正解」が存在しないため has_solution: false を宣言している。
+        # 下の汎用的な「solution.cpp not found」ではなく、理由を明示して失敗させる。
+        entry = _find_manifest_entry(identifier)
+        if entry is not None and not entry.get("has_solution", True):
+            console.error(
+                f"Lesson '{raw_identifier}' has no solution — "
+                "it is an event template with no single correct answer by design.\n"
+                f"Lesson '{raw_identifier}' にsolutionはありません — "
+                "設計上、唯一の正解が存在しないイベント用テンプレートです。"
+            )
+            return None
+        src = lesson_dir / "solution.cpp"
+        label = "solution"
+
+    if not src.exists():
+        console.error(f"{label}.cpp not found for Lesson '{raw_identifier}'")
+        return None
+
+    return src, label
+
+
 def run_switch(args: argparse.Namespace) -> int:
     """Switch to a lesson"""
-    identifier = _parse_identifier(args.identifier)
+    resolved = _resolve_identifier_arg(args.identifier)
+    if resolved is None:
+        return 1
+    identifier, course_display = resolved
     lesson_dir = _find_lesson(identifier)
 
     if lesson_dir is None:
@@ -512,33 +778,10 @@ def run_switch(args: argparse.Namespace) -> int:
                 console.print(f"  Available: {', '.join(nums)}")
         return 1
 
-    # Determine source file
-    if args.solution:
-        # Some lessons (event templates like Lesson 90) declare
-        # has_solution: false because no single "correct answer" exists
-        # by design. Fail with a clear reason instead of the generic
-        # "solution.cpp not found" below.
-        # 一部のレッスン（Lesson 90のようなイベント用テンプレート）は設計上
-        # 唯一の「正解」が存在しないため has_solution: false を宣言している。
-        # 下の汎用的な「solution.cpp not found」ではなく、理由を明示して失敗させる。
-        entry = _find_manifest_entry(identifier)
-        if entry is not None and not entry.get("has_solution", True):
-            console.error(
-                f"Lesson '{args.identifier}' has no solution — "
-                "it is an event template with no single correct answer by design.\n"
-                f"Lesson '{args.identifier}' にsolutionはありません — "
-                "設計上、唯一の正解が存在しないイベント用テンプレートです。"
-            )
-            return 1
-        src = lesson_dir / "solution.cpp"
-        label = "solution"
-    else:
-        src = lesson_dir / "student.cpp"
-        label = "student"
-
-    if not src.exists():
-        console.error(f"{label}.cpp not found for Lesson '{args.identifier}'")
+    source = _resolve_switch_source(lesson_dir, identifier, args.identifier, args.solution)
+    if source is None:
         return 1
+    src, label = source
 
     dst = _get_user_code_path()
 
@@ -561,7 +804,13 @@ def run_switch(args: argparse.Namespace) -> int:
                 num_display = f"{entry['number']:02d} - {entry['title_ja']}"
                 break
 
-    console.success(f"Switched to Lesson {num_display} ({label})")
+    # When switched via a course, show the tutorial-local step alongside
+    # the underlying lesson so the user can cross-reference either.
+    # コース経由で切り替えた場合、実体のレッスンと併せてチュートリアル
+    # 固有のステップも表示し、どちらからでも参照できるようにする。
+    course_suffix = f"  [{course_display}]" if course_display else ""
+
+    console.success(f"Switched to Lesson {num_display} ({label}){course_suffix}")
     console.print(f"  Source: {src}")
     console.print(f"  Target: {dst}")
     console.print()
@@ -572,7 +821,10 @@ def run_switch(args: argparse.Namespace) -> int:
 
 def run_solution(args: argparse.Namespace) -> int:
     """Show solution diff for a lesson"""
-    identifier = _parse_identifier(args.identifier)
+    resolved = _resolve_identifier_arg(args.identifier)
+    if resolved is None:
+        return 1
+    identifier, course_display = resolved
     lesson_dir = _find_lesson(identifier)
 
     if lesson_dir is None:
@@ -607,7 +859,8 @@ def run_solution(args: argparse.Namespace) -> int:
         console.error(f"solution.cpp not found for Lesson '{args.identifier}'")
         return 1
 
-    console.header(f"Lesson {args.identifier} Solution Diff")
+    header_suffix = f"  [{course_display}]" if course_display else ""
+    console.header(f"Lesson {args.identifier} Solution Diff{header_suffix}")
     console.print()
 
     result = subprocess.run(
@@ -623,7 +876,10 @@ def run_solution(args: argparse.Namespace) -> int:
 
 def run_info(args: argparse.Namespace) -> int:
     """Show detailed lesson information"""
-    identifier = _parse_identifier(args.identifier)
+    resolved = _resolve_identifier_arg(args.identifier)
+    if resolved is None:
+        return 1
+    identifier, course_display = resolved
     manifest = _load_manifest()
 
     if not manifest:
@@ -642,7 +898,8 @@ def run_info(args: argparse.Namespace) -> int:
         return 1
 
     num = entry["number"]
-    console.header(f"Lesson {num}: {entry['title_ja']} / {entry['title_en']}")
+    header_suffix = f"  [{course_display}]" if course_display else ""
+    console.header(f"Lesson {num}: {entry['title_ja']} / {entry['title_en']}{header_suffix}")
     console.print()
     console.print(f"  ID:          {entry['id']}")
     console.print(f"  Description: {entry.get('description_ja', '-')}")

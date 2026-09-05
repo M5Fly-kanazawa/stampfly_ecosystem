@@ -200,6 +200,51 @@ def _check_manifest(warnings: list, issues: list) -> None:
                 warnings.append(f"Orphan directory: {d.name} (not in manifest)")
                 console.warning(f"  Orphan: {d.name} (not in manifest)")
 
+    _check_courses(data.get("courses", []), lessons, warnings, issues)
+
+
+def _check_courses(courses: list, lessons: list, warnings: list, issues: list) -> None:
+    """Validate the manifest's `courses:` list against `lessons:`.
+
+    マニフェストの `courses:` リストを `lessons:` と照合検証する。
+
+    Checks:
+    1. Every step's `lesson` field references an existing lesson id.
+    2. Step numbers are unique within a course.
+    3. Course ids are unique across the file.
+    チェック内容:
+    1. 各ステップの `lesson` フィールドが実在するレッスンidを指しているか
+    2. コース内でステップ番号が重複していないか
+    3. ファイル内でコースidが重複していないか
+    """
+    if not courses:
+        return
+
+    known_lesson_ids = {e.get("id") for e in lessons}
+    console.success(f"  courses: {len(courses)} course(s)")
+
+    seen_course_ids = set()
+    for course in courses:
+        cid = course.get("id", "unknown")
+        if cid in seen_course_ids:
+            issues.append(f"Course '{cid}': duplicate course id")
+            console.error(f"  Course '{cid}': DUPLICATE course id")
+        seen_course_ids.add(cid)
+
+        seen_numbers = set()
+        for step in course.get("steps", []):
+            number = step.get("number", "?")
+            lesson_id = step.get("lesson")
+
+            if number in seen_numbers:
+                issues.append(f"Course '{cid}' step {number}: duplicate step number")
+                console.error(f"  Course '{cid}' step {number}: DUPLICATE step number")
+            seen_numbers.add(number)
+
+            if lesson_id not in known_lesson_ids:
+                issues.append(f"Course '{cid}' step {number}: unknown lesson id '{lesson_id}'")
+                console.error(f"  Course '{cid}' step {number}: unknown lesson id '{lesson_id}'")
+
 
 # The ecosystem's actually-tested Python range, mirroring
 # scripts/installer.py's PYTHON_PREFERRED_MIN/MAX (2026-07-22 policy:

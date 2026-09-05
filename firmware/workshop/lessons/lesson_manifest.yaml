@@ -9,6 +9,25 @@
 # 設計上「正解」が存在しないレッスン（イベント用の自由課題テンプレート等）に
 # 設定する。`sf doctor` と `sf lesson switch/solution --solution` の
 # solution.cppチェックを省略する。省略時はtrue扱い（solution.cpp必須）。
+#
+# Top-level `courses:` field (optional) — event-specific orderings
+# Event templates (e.g. a one-day tutorial that walks through existing
+# lessons in a different order) do NOT need a new lesson_9X directory.
+# Instead, add an entry under `courses:` below: it maps a tutorial-local
+# step number onto an existing lesson id, so `sf lesson switch <id>:<N>`
+# resolves to the real lesson and no firmware directory is copied per
+# event. Reserve `lesson_9X` directories under `lessons:` for content
+# that has no existing-lesson equivalent (e.g. Lesson 90's onboard-button
+# duty exercise below).
+# トップレベルの `courses:` フィールド（任意）— イベント固有の順序付け
+# イベント（例: 既存レッスンを別順序で辿る1日チュートリアル）を追加する
+# のに、新しい lesson_9X ディレクトリは不要。代わりに下記の `courses:`
+# にエントリを追加する — チュートリアル固有のステップ番号を既存の
+# レッスンidへ対応付けるだけなので、`sf lesson switch <id>:<N>` が実体の
+# レッスンへ解決され、イベントごとにファームウェアディレクトリを
+# コピーする必要がない。`lessons:` 配下の `lesson_9X` ディレクトリは、
+# 既存レッスンに相当するものがない本当に新規のコンテンツ専用として
+# 予約する（例: 下記 Lesson 90 のオンボードボタンduty実習）。
 
 lessons:
   # === Day 1 ===
@@ -143,9 +162,16 @@ lessons:
     slide_file: precision_landing
 
   # === Events / 教育イベント（通常レッスンとは別系統の実習テンプレート） ===
-  # Event templates live at number >= 90 so future tutorials (SCI/SICE etc.)
-  # can be added as lesson_9X without touching the Day 1-5 sequence.
-  # イベント用テンプレートは 90 番以降。今後のチュートリアルも lesson_9X で追加する。
+  # Event templates live at number >= 90, but ONLY for genuinely new
+  # content with no existing-lesson equivalent (e.g. Lesson 90 below).
+  # An event that reuses existing lessons in a different order (e.g. a
+  # one-day tutorial) does not belong here — declare it under the
+  # top-level `courses:` field instead (see header comment above).
+  # イベント用テンプレートは90番以降だが、既存レッスンに相当するものが
+  # ない本当に新規のコンテンツにのみ使う（例: 下記 Lesson 90）。既存
+  # レッスンを別順序で再利用するイベント（1日チュートリアル等）はここに
+  # 追加せず、トップレベルの `courses:` フィールドに宣言する
+  # （上記ヘッダーコメント参照）。
   - number: 90
     id: dxh_workshop
     title_ja: DXH高校の先生向け体験講座
@@ -158,3 +184,45 @@ lessons:
     # イベント用テンプレート: 当日参加者がduty値を書き換える実習のため
     # 唯一の「正解」が存在しない。solution.cppは提供しない。
     has_solution: false
+
+# === Courses / コース（イベント固有のレッスン順序） ===
+# A course maps a tutorial-local step number onto an existing lesson id
+# (via its `lesson:` field) — it never introduces new firmware content.
+# Resolve a step with `sf lesson switch <course id>:<N>` (also works for
+# `solution`/`info`), or browse steps with `sf lesson list --course <id>`.
+# コースは、チュートリアル固有のステップ番号を（`lesson:` フィールド経由で）
+# 既存レッスンidへ対応付けるだけで、新しいファームウェア内容は導入しない。
+# ステップの解決は `sf lesson switch <コースid>:<N>`（`solution`/`info`も
+# 同様）、閲覧は `sf lesson list --course <id>` で行う。
+courses:
+  - id: sci2026
+    title_ja: SCI/SICE チュートリアル講座 2026
+    title_en: SCI/SICE Tutorial 2026
+    steps:
+      - number: 1
+        lesson: environment_setup      # Lesson 0
+        session: S2
+      - number: 2
+        lesson: imu_sensor             # Lesson 4
+        session: S2
+      - number: 3
+        lesson: motor_control          # Lesson 1
+        session: S3
+      - number: 4
+        lesson: controller_input       # Lesson 2
+        session: S3
+      - number: 5
+        lesson: rate_p_control         # Lesson 5
+        session: S4
+      - number: 6
+        lesson: system_modeling        # Lesson 6
+        session: S4
+      - number: 7
+        lesson: system_identification  # Lesson 7
+        session: S4
+      - number: 8
+        lesson: pid_control            # Lesson 8
+        session: S4
+      - number: 9
+        lesson: attitude_estimation    # Lesson 9
+        session: S4
