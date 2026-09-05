@@ -64,7 +64,7 @@
   % 4層。上（L0・最も抽象的）から下（L3・ハードウェアに最も近い）まで
   \node[tier=l0color] (L0) at (0, 0) {%
     \begin{minipage}{86mm}\raggedright
-      \ttier{l0color}{L0: Sketch API}\quad\tns{l0color}{ws::*}\\[3pt]
+      \ttier{l0color}{L0: Workshop API}\quad\tns{l0color}{ws::*}\\[3pt]
       \tsub{典型ユーザー: Workshop 受講者}\\[1pt]
       \tsub{setup() / loop\_400Hz(dt)、30+ 関数で完結}
     \end{minipage}%
@@ -91,12 +91,16 @@
     \end{minipage}%
   };
 
-  % Downward arrow chain, offset to the right of the boxes (clear of both
-  % box border and text — routed entirely in open space, T4 compliant)
-  % 下向き矢印の連鎖。箱の右外側（枠・テキストと重ならない空間）に配線
-  \draw[arr] ($(L0.south -| L0.east)+(10mm,0)$) -- ($(L1.north -| L1.east)+(10mm,0)$);
-  \draw[arr] ($(L1.south -| L1.east)+(10mm,0)$) -- ($(L2.north -| L2.east)+(10mm,0)$);
-  \draw[arr] ($(L2.south -| L2.east)+(10mm,0)$) -- ($(L3.north -| L3.east)+(10mm,0)$);
+  % Downward arrow chain, connecting each box directly at its center
+  % (Lk.south -> L(k+1).north), so the arrowhead touches the box below.
+  % Fix: the previous version drew the arrows 10mm to the right of the
+  % boxes, floating in open space and touching nothing (T3 violation).
+  % 下向き矢印の連鎖。各箱を中心で直結する（Lk.south -> L(k+1).north）。
+  % 矢頭が下の箱に接する。修正: 以前は箱の右10mmにオフセットして描画
+  % しており、何にも接続しない宙に浮いた矢印だった（T3違反）。
+  \draw[arr] (L0.south) -- (L1.north);
+  \draw[arr] (L1.south) -- (L2.north);
+  \draw[arr] (L2.south) -- (L3.north);
 
   % Single side label for the whole arrow chain (vertically centered)
   % 矢印の連鎖全体に対する説明ラベル（縦方向の中央に1つだけ配置）

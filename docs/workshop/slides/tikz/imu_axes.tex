@@ -37,17 +37,25 @@
     ({-1.1*\Xx-1.1*\Yx},{-1.1*\Xy-1.1*\Yy}) --
     ({-1.1*\Xx+1.1*\Yx},{-1.1*\Xy+1.1*\Yy}) -- cycle;
 
-  % Front marker triangle
-  \fill[axisX!50]
-    ({1.1*\Xx-0.35},{1.1*\Xy}) --
-    ({1.1*\Xx+0.35},{1.1*\Xy}) --
-    ({1.1*\Xx},{1.1*\Xy+0.3}) -- cycle;
-
   % Axis length
   \pgfmathsetmacro{\AL}{4.5}
 
   % X axis (Forward / North)
   \draw[axis, axisX] (0,0) -- ({\AL*\Xx},{\AL*\Xy});
+
+  % Front marker triangle -- drawn AFTER the X axis line so its opaque fill
+  % paints over the line where it would otherwise cross the marker,
+  % keeping the marker readable as one solid shape (its base midpoint sits
+  % exactly on the X-axis line, which used to bisect it when drawn first).
+  % 前方マーカーの三角形。X軸の線より後に描く（三角形の塗りが不透明なため、
+  % そのままだと線が三角形を貫通する箇所を上塗りし、マーカーが1つの
+  % 塗りつぶし形状として読めるようにする）。三角形の底辺の中点はちょうど
+  % X軸の直線上にあり、先に描くと三角形が線で分断されて見えていた。
+  \fill[axisX!50]
+    ({1.1*\Xx-0.35},{1.1*\Xy}) --
+    ({1.1*\Xx+0.35},{1.1*\Xy}) --
+    ({1.1*\Xx},{1.1*\Xy+0.3}) -- cycle;
+
   \node[font=\Large\bfseries, axisX, above left]
     at ({\AL*\Xx},{\AL*\Xy}) {X (Forward)};
 

@@ -113,7 +113,7 @@
   % 折り返し経路で層1へ戻す（直角ルーティング、矢頭前に5mm以上の幹）。
   \node[gatebox, below=20mm of $(S1.south)!0.5!(S3.south)$] (GATE) {%
     \begin{minipage}{170mm}\raggedright
-      \ttier{gatecolor}{モデル一致ゲート}\quad
+      \ttier{gatecolor}{モデル一致の合否判定}\quad
       \tsub{層3のログに同一の同定パイプラインを適用し $(b,L,T)$ を層1の実機基準値と比較（\texttt{sf sils sysid-gate}）}
     \end{minipage}%
   };
@@ -129,8 +129,20 @@
   % 右にある。GATE.west 基準で配線すると S1 内部を貫通する（T4違反）。
   % feedX に両方の折れ点を揃えることで、バス全体を左マージンに収める。
   \coordinate (feedX) at ($(S1.west)+(-8mm,0)$);
+  % Fix (T4): "-|" takes the x-coordinate from its RIGHT operand and the
+  % y-coordinate from its LEFT operand, so the corner must be written as
+  % (GATE.west -| feedX) = (feedX's x, GATE.west's y). The previous
+  % (feedX -| GATE.west) = (GATE.west's x, feedX's y) instead put the corner
+  % at GATE.west's x (~-19mm), which lies inside S1's x-range ([-30,30]mm)
+  % and drove the bus straight through the S1 box.
+  % 修正（T4）: 「-|」は x 座標を右側の被演算子から、y 座標を左側の
+  % 被演算子から取る。よってコーナーは (GATE.west -| feedX) =
+  % (feedXのx, GATE.westのy) と書く必要がある。以前の
+  % (feedX -| GATE.west) は (GATE.westのx, feedXのy) となり、コーナーが
+  % GATE.westのx（約-19mm）になっていた。これはS1のx範囲（[-30,30]mm）の
+  % 内側であり、バスがS1の箱を貫通していた。
   \draw[gatecolor, line width=1.4pt]
-    (GATE.west) -- (feedX -| GATE.west) -- (feedX);
+    (GATE.west) -- (GATE.west -| feedX) -- (feedX);
   \draw[garr] (feedX) -- (S1.west);
   % Label sits clear to the LEFT of the vertical bus/arrow corner (feedX).
   % NOTE: the midpoint must be captured as its own coordinate first — TikZ
@@ -149,7 +161,12 @@
   % に広げたことで、回転テキストの右端と縦方向の占有幅の両方が、矢印の
   % コーナー・矢頭から確実に離れる。以前は矢頭が「と」の文字に重なって
   % いた（T2違反）。
-  \coordinate (feedMid) at ($(feedX)!0.5!(feedX -| GATE.west)$);
+  % Use the same corrected corner point as the bus above so the label sits
+  % on the actual vertical segment (in the left margin), not on the old
+  % (now-removed) mis-routed segment.
+  % 上のバスと同じ修正後のコーナー点を使う。ラベルを実際の垂直区間
+  % （左マージン側）の上に置くため（以前の誤配線区間の上ではなく）。
+  \coordinate (feedMid) at ($(feedX)!0.5!(GATE.west -| feedX)$);
   \node[font=\scriptsize, text=gatecolor, align=center, rotate=90]
     at ($(feedMid) + (-8mm,0)$) {実機同定値と突き合わせ};
 

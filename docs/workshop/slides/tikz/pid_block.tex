@@ -17,10 +17,14 @@
       minimum width=38mm, minimum height=13mm,
       font=\bfseries, text=#1, align=center
     },
+    % Summing-junction circle diameter is ~40% of block height (Block
+    % Diagram Style convention), not 77% as before (10mm / 13mm block).
+    % 加え合わせ点の円の直径はブロック高さの約4割（ブロック線図の流儀）。
+    % 以前は 10mm / ブロック高さ13mm = 77% だった。
     sum/.style={
       circle, draw=sumcolor, line width=1.5pt,
-      fill=sumcolor!8, minimum size=10mm,
-      font=\large\bfseries, text=sumcolor
+      fill=sumcolor!8, minimum size=5.5mm,
+      font=\normalsize\bfseries, text=sumcolor
     },
     arrow/.style={-{Stealth[length=3mm]}, line width=1.2pt, arrowcolor},
   ]
@@ -63,10 +67,16 @@
   % Sum to output
   \draw[arrow] (sum) -- (output);
 
-  % Plus signs at sum
-  \node[font=\scriptsize, pcolor] at ($(sum)+(120:0.75)$) {$+$};
-  \node[font=\scriptsize, icolor] at ($(sum)+(180:0.75)$) {$+$};
-  \node[font=\scriptsize, dcolor] at ($(sum)+(240:0.75)$) {$+$};
+  % Plus signs at sum.
+  % Fix: the I-branch "+" was at 180 deg, exactly on the horizontal I-sum
+  % arrow's own axis, so it was hidden under the arrowhead. Moved to
+  % 160 deg (off-axis, slightly above) with a larger radius for clearance.
+  % 修正: I分岐の「+」は180度（I→Sumの水平矢印の軸線上）にあり、矢頭の
+  % 下に隠れていた。矢印の軸から外れる160度（軸よりやや上）へ移動し、
+  % 半径も少し広げて余裕を持たせた。
+  \node[font=\scriptsize, pcolor] at ($(sum)+(120:0.7)$) {$+$};
+  \node[font=\scriptsize, icolor] at ($(sum)+(160:0.85)$) {$+$};
+  \node[font=\scriptsize, dcolor] at ($(sum)+(240:0.7)$) {$+$};
 
   % Labels
   \node[font=\small, pcolor, anchor=south west] at (7.5, 2) {Proportional};

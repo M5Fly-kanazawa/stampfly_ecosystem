@@ -15,10 +15,14 @@
       minimum width=26mm, minimum height=14mm,
       font=\bfseries, text=blockcolor, align=center
     },
+    % Summing-junction circle diameter is ~40% of block height (Block
+    % Diagram Style convention), not 71% as before (10mm / 14mm block).
+    % 加え合わせ点の円の直径はブロック高さの約4割（ブロック線図の流儀）。
+    % 以前は 10mm / ブロック高さ14mm = 71% だった。
     sum/.style={
       circle, draw=sumcolor, line width=1.5pt,
-      fill=sumcolor!8, minimum size=10mm,
-      font=\large\bfseries, text=sumcolor
+      fill=sumcolor!8, minimum size=6mm,
+      font=\normalsize\bfseries, text=sumcolor
     },
     arrow/.style={-{Stealth[length=3mm]}, line width=1.2pt, arrowcolor},
     lbl/.style={font=\small, above, text=arrowcolor},
@@ -48,9 +52,19 @@
   \draw[arrow, fbcolor] (fb_tap) -- (fb_tap |- gyro) -- (gyro);
   \draw[arrow, fbcolor] (gyro) -- (3, -3) -- (sum);
 
-  % Sum signs
-  \node[font=\scriptsize, sumcolor, anchor=south east] at ($(sum.north)+(150:0.4)$) {$+$};
-  \node[font=\scriptsize, fbcolor, anchor=north east] at ($(sum.south)+(210:0.4)$) {$-$};
+  % Sum signs: "+" above the left-entering arrow, "-" to the RIGHT of the
+  % bottom-entering feedback arrow (Block Diagram Style convention).
+  % 加え合わせ点の符号: 「+」は左から入る矢印の上、「-」は下から入る
+  % フィードバック矢印の右側に置く（ブロック線図の流儀）。
+  % Fix: the "-" was at 210 deg (left of the upward arrow) with anchor
+  % "north east" (glyph extending further left) -- it sat on the WRONG
+  % (left) side of the arrow. Moved to 330 deg (right of the arrow) with
+  % anchor "north west" (glyph extending right of the point).
+  % 修正: 以前「-」は210度（上向き矢印の左側）・anchor=north east
+  % （グリフがさらに左に伸びる）で、矢印の誤った（左）側にあった。
+  % 330度（矢印の右側）・anchor=north west（グリフが右に伸びる）へ移動。
+  \node[font=\scriptsize, sumcolor, anchor=south east] at ($(sum.north)+(150:0.3)$) {$+$};
+  \node[font=\scriptsize, fbcolor, anchor=north west] at ($(sum.south)+(330:0.3)$) {$-$};
 
   % Labels
   \node[font=\small, arrowcolor, above] at ($(drone.east)+(1.2, 0.5)$) {angular rate};
