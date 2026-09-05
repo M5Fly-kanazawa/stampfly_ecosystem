@@ -23,7 +23,7 @@
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{開発環境の導入 (1/2): PC 側 / Toolchain Setup (1/2)}
   \begin{block}{方法①: GUI インストーラ「StampFly Setup」}
-    \footnotesize ターミナル操作なしで導入できる。GitHub の Releases ページから OS 別の実行ファイルをダウンロードして起動し、ウィザードに従うだけで \code{sf} CLI 一式（ESP-IDF 含む）が入る\\
+    \footnotesize ターミナル操作なしで導入できる。GitHub の Releases ページから OS 別の実行ファイルをダウンロードして起動し、ウィザードに従うだけで \code{sf} CLI 一式（ESP-IDF: Espressif の ESP32 向け開発基盤を含む）が入る\\
     \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest}
   \end{block}
 
@@ -45,7 +45,7 @@ cd stampfly_ecosystem
 % ------------------------------------------------------------------
 \begin{frame}{開発環境の導入 (2/2): 機体とペアリング / Setup (2/2)}
   \begin{block}{開発環境なしでも書き込みだけはできる}
-    \small ブラウザから Web Flasher を開き、公開済みの完成版ファームウェアを機体・コントローラへ直接書き込める\\
+    \small ブラウザ（Chrome/Edge）から Web Flasher を開き、公開済みの完成版ファームウェアを機体・コントローラへ直接書き込める。インストール不要\\
     \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/}
   \end{block}
 
@@ -107,31 +107,6 @@ sf doctor
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}[fragile]{ビルド不要の選択肢 / No Dev Environment Needed}
-  \begin{block}{開発環境がなくても書き込みだけはできる}
-    \small ブラウザまたはデスクトップアプリから、公開済みの完成版ファームウェアを直接書き込める
-  \end{block}
-
-  \vspace{0.3em}
-
-  \begin{table}
-    \centering\small
-    \begin{tabular}{lp{60mm}}
-      \hline
-      \textbf{方法} & \textbf{特徴} \\
-      \hline
-      Web Flasher & ブラウザ（Chrome/Edge）から書き込み。インストール不要 \\
-      GUI インストーラ & デスクトップアプリ「StampFly Setup」。ウィザードに従うだけで \code{sf} CLI 一式を導入 \\
-      \hline
-    \end{tabular}
-  \end{table}
-
-  \vspace{0.3em}
-
-  {\footnotesize 本チュートリアルの実習は \code{sf} CLI を使うが、授業に持ち帰る際は受講者の環境に応じて使い分けてほしい}
-\end{frame}
-
-% ------------------------------------------------------------------
 \begin{frame}[fragile]{学習者コードの型とワークフロー / Code \& Workflow}
   \begin{columns}[T]
     \begin{column}{0.44\textwidth}
@@ -166,7 +141,7 @@ sf doctor
   \vspace{-0.5em}
   \begin{block}{}
     \centering\small
-    BMI270 --- 6軸（3軸ジャイロ + 3軸加速度）400\,Hz \quad|\quad Body FRD 座標系
+    BMI270 --- 6軸（3軸ジャイロ + 3軸加速度）400\,Hz \quad|\quad \mbox{Body FRD（前方-右-下）座標系}
   \end{block}
 \end{frame}
 
@@ -198,6 +173,7 @@ sf doctor
   \end{block}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+static uint32_t tick = 0;
 void loop_400Hz(float dt) {
     if (tick++ % 4 == 0) {   // 100Hz decimation
         ws::print(">gyro_x:%.3f", ws::gyro_x());
@@ -206,7 +182,9 @@ void loop_400Hz(float dt) {
 }
   \end{sflisting}
 
-  {\footnotesize \code{sf monitor} で接続し、VSCode の Teleplot パネルを開くだけで波形が動き出す}
+  \vspace{-4.5mm}
+
+  {\footnotesize VSCode 拡張 \code{alexnesnes.teleplot} を導入後、\code{sf monitor workshop} で接続（\code{sf lesson flash} 直後はそのまま開く）}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -222,7 +200,7 @@ sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
 
   \vspace{0.3em}
 
-  {\small 講義や複数人での画面共有には \code{--web} が見やすい}
+  {\small 講義や複数人での画面共有には \code{--web} が見やすい。UDP:5005 を SSE（サーバーからブラウザへの一方向配信）でブラウザへ届けている}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -284,7 +262,7 @@ sf log viz flight.csv
 
   \vspace{0.5em}
 
-  {\footnotesize \code{firmware/vehicle/examples/} 配下。各ディレクトリで \code{idf.py build} すれば単体で動く}
+  {\footnotesize \code{firmware/vehicle/examples/} 配下。各ディレクトリで \code{idf.py set-target esp32s3 \&\& idf.py build} すれば単体で動く}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -295,7 +273,7 @@ sf log viz flight.csv
       \hline
       \textbf{理論} & \textbf{コード} & \textbf{Data Stream 列} & \textbf{トピック} \\
       \hline
-      角速度 $\omega$ [rad/s]\newline Body FRD & \api{ws::gyro\_x()} & \code{gyro\_x} & \code{sensor\_imu} \\
+      角速度 $\omega$ [rad/s]、Body FRD & \api{ws::gyro\_x()} & \code{gyro\_x} & \code{sensor\_imu} \\
       並進加速度 $a$ [m/s\textsuperscript{2}] & \api{ws::accel\_x()} & \code{accel\_x} & \code{sensor\_imu} \\
       \hline
     \end{tabular}

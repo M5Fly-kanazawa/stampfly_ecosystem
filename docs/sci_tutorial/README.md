@@ -64,6 +64,7 @@
 | 1 | [GUI インストーラガイド](../guides/gui-installer.md) からダウンロードし、ウィザードに従って導入する |
 | 2 | 導入後、`sf doctor` を実行して環境を診断する（問題があれば表示に従って解消する） |
 | 3 | ターミナル操作に慣れている場合は CLI インストーラ（`install.sh`/`install.bat`）でもよい |
+| 4 | VSCode 拡張機能 `alexnesnes.teleplot` を入れておく（Teleplot でセンサ波形をリアルタイム表示するために使う） |
 
 ### 機体・コントローラの準備
 
@@ -160,6 +161,7 @@ If you are not comfortable with a terminal, use the "StampFly Setup" GUI install
 | 1 | Download from the [GUI installer guide](../guides/gui-installer.md) and follow the wizard |
 | 2 | After install, run `sf doctor` to diagnose the environment (follow its output to resolve any issue) |
 | 3 | If you are comfortable with a terminal, the CLI installer (`install.sh`/`install.bat`) works too |
+| 4 | Install the VSCode extension `alexnesnes.teleplot` (used to graph sensor data live via Teleplot) |
 
 ### Vehicle and controller
 

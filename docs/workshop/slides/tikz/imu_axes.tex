@@ -90,15 +90,26 @@
   % Pitch - rotation around Y axis
   % Arc lies in the X-Z plane, centered on Y axis
   % Projected semi-axes: X direction (-0.71,0.5) and Z direction (0,-1)
+  %
+  % Right-hand cyclic rule for a positive rotation about axis A: the arc
+  % must be parametrised as (first-of-remaining-pair)*cos + (second)*sin
+  % following the cyclic order X->Y->Z->X. Roll (about X) uses Y*cos+Z*sin
+  % and yaw (about Z) uses X*cos+Y*sin, so pitch (about Y) must use
+  % Z*cos+X*sin -- NOT X*cos+Z*sin, which would reverse the sense.
+  % 右手系の巡回則: 軸Aまわりの正回転の円弧は、X->Y->Z->Xの巡回順で
+  % 「（残り2軸のうち先の軸）*cos + （後の軸）*sin」としてパラメータ化する。
+  % ロール（X軸まわり）はY*cos+Z*sin、ヨー（Z軸まわり）はX*cos+Y*sinを
+  % 使うので、ピッチ（Y軸まわり）はZ*cos+X*sinでなければならない
+  % （X*cos+Z*sinでは回転の向きが逆になる）。
   \pgfmathsetmacro{\Pcx}{2.6*\Yx}
   \pgfmathsetmacro{\Pcy}{2.6*\Yy}
   \pgfmathsetmacro{\Pr}{0.9}
   \draw[rotarrow, axisY!70!black]
-    ({\Pcx+\Pr*\Xx*cos(200)+\Pr*\Zx*sin(200)},
-     {\Pcy+\Pr*\Xy*cos(200)+\Pr*\Zy*sin(200)})
+    ({\Pcx+\Pr*\Zx*cos(200)+\Pr*\Xx*sin(200)},
+     {\Pcy+\Pr*\Zy*cos(200)+\Pr*\Xy*sin(200)})
     \foreach \a in {200,210,...,490} {
-      -- ({\Pcx+\Pr*\Xx*cos(\a)+\Pr*\Zx*sin(\a)},
-          {\Pcy+\Pr*\Xy*cos(\a)+\Pr*\Zy*sin(\a)})
+      -- ({\Pcx+\Pr*\Zx*cos(\a)+\Pr*\Xx*sin(\a)},
+          {\Pcy+\Pr*\Zy*cos(\a)+\Pr*\Xy*sin(\a)})
     };
   \node[font=\normalsize\bfseries, axisY!70!black, above right]
     at ({\Pcx+\Pr*0.3},{\Pcy+\Pr*0.7}) {Pitch};
@@ -116,8 +127,13 @@
       -- ({\Wcx+\Wr*\Xx*cos(\a)+\Wr*\Yx*sin(\a)},
           {\Wcy+\Wr*\Xy*cos(\a)+\Wr*\Yy*sin(\a)})
     };
-  \node[font=\normalsize\bfseries, axisZ!70!black, left]
-    at ({\Wcx-\Wr*0.8},{\Wcy+\Wr*0.3}) {Yaw};
+  % Label pushed further outside the loop than the 0.8/0.3 multipliers
+  % originally used (found by visual review to have its "w" overlapped
+  % by the arc stroke).
+  % ラベルを元の0.8/0.3倍率より外側へ押し出す（目視レビューで"w"の文字に
+  % 弧の線が重なっていたのを修正）。
+  \node[font=\normalsize\bfseries, axisZ!70!black, above left]
+    at ({\Wcx-\Wr*1.4},{\Wcy+\Wr*0.55}) {Yaw};
 
 \end{tikzpicture}
 \end{document}

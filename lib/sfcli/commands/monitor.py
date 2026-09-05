@@ -25,7 +25,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "target",
         nargs="?",
         default="vehicle",
-        choices=["vehicle", "vehicle_old", "controller"],
+        choices=["vehicle", "vehicle_old", "controller", "workshop"],
         help="Target project (for ELF file, default: vehicle)",
     )
     parser.add_argument(
@@ -45,10 +45,17 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 def run(args: argparse.Namespace) -> int:
     """Execute monitor command"""
     # Determine target directory
+    # ターゲットディレクトリを決定する
     if args.target == "vehicle":
         target_dir = paths.vehicle()
     elif args.target == "vehicle_old":
         target_dir = paths.vehicle_old()
+    elif args.target == "workshop":
+        # Same resolution `sf lesson build`/`sf lesson flash` use via
+        # flash.py's paths.firmware_target_dir("workshop").
+        # `sf lesson build`/`sf lesson flash` が flash.py の
+        # paths.firmware_target_dir("workshop") 経由で使うのと同じ解決先
+        target_dir = paths.workshop()
     else:
         target_dir = paths.controller()
 

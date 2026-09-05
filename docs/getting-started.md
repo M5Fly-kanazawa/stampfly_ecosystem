@@ -288,7 +288,7 @@ StampFlyは2つの通信モードをサポートしています。
 ```
 ┌────────────┐      WiFi AP      ┌────────────┐
 │ Controller │ ←───────────────→ │  Vehicle   │
-│   (STA)    │   192.168.4.1     │   (AP)     │
+│   (STA)    │   192.168.10.1    │   (AP)     │
 └────────────┘                   └────────────┘
 ```
 
@@ -381,7 +381,7 @@ StampFlyは2つの通信モードをサポートしています。
 |-----|-----|
 | SSID | `StampFly` |
 | パスワード | なし |
-| URL | `http://192.168.4.1/` |
+| URL | `http://192.168.10.1/` |
 
 ### ログキャプチャ
 
@@ -716,7 +716,7 @@ For solo flights or development/debugging. Simple setup.
 ```
 ┌────────────┐      WiFi AP      ┌────────────┐
 │ Controller │ ←───────────────→ │  Vehicle   │
-│   (STA)    │   192.168.4.1     │   (AP)     │
+│   (STA)    │   192.168.10.1    │   (AP)     │
 └────────────┘                   └────────────┘
 ```
 
@@ -807,7 +807,7 @@ For solo flights or development/debugging. Simple setup.
 |------|-------|
 | SSID | `StampFly` |
 | Password | None |
-| URL | `http://192.168.4.1/` |
+| URL | `http://192.168.10.1/` |
 
 ### Log Capture
 
