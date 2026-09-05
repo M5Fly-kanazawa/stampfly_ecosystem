@@ -33,8 +33,8 @@
     pathlbl/.style={font=\normalsize\bfseries},
   ]
 
-  % --- Gyro path (top row): omega -> x(Delta t) -> Sigma1 -> alpha -> Sigma2 -> output ---
-  % ジャイロ経路（上段）: ω → ×Δt → Σ1 → α → Σ2 → 出力
+  % --- Main path (gyro row): omega -> x(Delta t) -> Sigma1 -> alpha -> Sigma2 -> output ---
+  % 主経路（ジャイロ行）: ω → ×Δt → Σ1 → α → Σ2 → 出力
   \node[input] (gyro_in) {Gyro $\omega$};
   \node[block=sfred, right=1.3cm of gyro_in] (dt_block) {$\times\Delta t$};
   \node[sum, right=1.3cm of dt_block] (sum1) {$\Sigma$};
@@ -42,14 +42,21 @@
   \node[sum, right=1.3cm of alpha] (sum2) {$\Sigma$};
   \node[output, right=1.1cm of sum2] (output) {$\hat{\theta}$};
 
-  % --- Accel path (bottom row) ---
-  % 加速度経路（下段）
-  \node[input, below=3.4cm of gyro_in] (accel_in) {Accel};
+  % --- Accel path (top row): drops into Sigma2 from above, entirely outside
+  %     the gyro feedback loop below (which stays self-contained around
+  %     Sigma1). This is the layout fix versus the previous revision, where
+  %     the accel row sat below the main row and visually nested inside the
+  %     feedback loop even though it carries no feedback signal. ---
+  % 加速度経路（上段）: Σ2 に上から入る。下側のジャイロ・フィードバック
+  % ループ（Σ1周りで閉じる）とは完全に別の場所を通る。旧版は加速度経路が
+  % 主経路の下段にあり，フィードバック信号ではないのに見た目上ループの
+  % 内側に入り込んでいた。これを是正したのが今回のレイアウト。
+  \node[input, above=2.0cm of gyro_in] (accel_in) {Accel};
   \node[block=sfgreen, right=1.3cm of accel_in] (atan) {atan2};
   \node[gain=sfgreen, right=1.3cm of atan] (one_alpha) {$1\!-\!\alpha$};
 
-  % --- Feedback delay path (middle row): previous estimate theta_hat_{k-1} ---
-  % フィードバック遅延経路（中段）: 前回推定値 θ̂_{k-1} を戻す
+  % --- Feedback delay path (below row): previous estimate theta_hat_{k-1} ---
+  % フィードバック遅延経路（下段）: 前回推定値 θ̂_{k-1} を戻す
   \node[block=sfblue, below=1.5cm of sum1, minimum width=1.6cm] (delay) {$z^{-1}$};
 
   % --- Branch point on the output line (theta_hat is tapped, not re-derived) ---
@@ -62,48 +69,50 @@
   \draw[line, sfred] (sum1.east) -- (alpha.west);
   \draw[line, sfred] (alpha.east) -- (sum2.west);
 
-  % --- Connections: accel path ---
+  % --- Connections: accel path. Drops straight down into Sigma2 from the
+  %     north; a short right-angle jog (down, then across) absorbs the
+  %     small misalignment between one_alpha's x-position and sum2's,
+  %     since "right=1.3cm of" spacing is computed from each row's own
+  %     node widths and the two rows use different-width nodes. ---
+  % 加速度経路の接続。Σ2 に北側からまっすぐ下りる。one_alpha と sum2 の
+  % x座標のわずかなズレ（"right=1.3cm of" の間隔は各行のノード幅から
+  % 計算されるため，幅の違う行同士では厳密には揃わない）を、
+  % 短い直角ジョグ（下りてから横に寄せる）で吸収する。
   \draw[line, sfgreen] (accel_in) -- (atan);
   \draw[line, sfgreen] (atan) -- (one_alpha);
-  \draw[line, sfgreen] (one_alpha.east) -- ++(0.4, 0) -| (sum2.south);
+  \draw[line, sfgreen] (one_alpha.south) -- ++(0,-0.4) -| (sum2.north);
 
   % --- Output line and its branch dot ---
   \draw[line, sfblue, line width=1.5pt] (sum2) -- (output);
   \fill[sfblue] (tap) circle (2.2pt);
 
-  % --- Feedback path: branch dot -> detour below accel row -> into delay
-  %     (west) -> up into sum1 (south). A direct tap -> delay.east route
-  %     would run horizontally at delay's mid-height and cross the accel
-  %     path's one_alpha -> sum2 connector (whose vertical segment sits at
-  %     sum2's x-coordinate, between delay and tap) without a junction dot
-  %     (CLAUDE.md T4: no line/node crossings except at genuine branch
-  %     points). Routing below the whole accel row and entering delay from
-  %     the west avoids that crossing entirely.
-  % フィードバック経路: 分岐点 → 加速度経路の下段を迂回 → 遅延ブロック
-  % (西側)へ → 上へ → Σ1(南側)。分岐点から遅延ブロック東側へ直接引くと、
-  % delayの高さで水平に走る線が、加速度経路(1-α → Σ2)の接続線
-  % (Σ2のx座標を通る垂直線。ちょうどdelayとtapの間に位置する)と
-  % ジャンクションドットなしに交差してしまう(CLAUDE.mdのT4: 分岐点以外
-  % での線・ノードの交差禁止)。加速度経路の下段全体を迂回してdelayの
-  % 西側から入ることで、この交差を回避する。
-  \coordinate (fbLowY) at ($(one_alpha.south)+(0,-1.0)$);
-  \coordinate (fbMarginX) at ($(accel_in.west)+(-0.6,0)$);
-  \draw[line, sfblue] (tap) -- (tap |- fbLowY) -- (fbMarginX |- fbLowY)
-                       -- (fbMarginX |- delay.west) -- (delay.west);
+  % --- Feedback path: branch dot -> straight down -> into delay from the
+  %     east -> up into Sigma1 from below. With the accel path now routed
+  %     above the main row, the lower half-plane belongs to this path
+  %     alone, so (unlike the previous revision) no detour around another
+  %     signal is needed. ---
+  % フィードバック経路: 分岐点 → まっすぐ下へ → 遅延ブロックへ東側から
+  % 入る → 上へ → Σ1 に南側から入る。加速度経路が上段に移ったことで
+  % 下半分はこの経路専用になり，旧版で必要だった他信号を避ける迂回が
+  % 不要になった。
+  \draw[line, sfblue] (tap) -- (tap |- delay.east) -- (delay.east);
   \draw[line, sfblue] (delay.north) -- (sum1.south);
 
-  % --- Sum node signs: "+" above the left-entering arrow, "+" to the right
-  %     of the bottom-entering arrow (Block Diagram Style convention).
-  % 加え合わせ点の符号: 「＋」は左から入る矢印の上、「＋」は下から入る
-  % 矢印の右側に置く（ブロック線図の流儀）。
+  % --- Sum node signs (Block Diagram Style convention): "+" sits above a
+  %     horizontally (west-)entering arrow. For a vertically-entering arrow
+  %     (into Sigma1 from below, into Sigma2 from above) the "+" sits to
+  %     the arrow's right, mirroring Sigma1's existing bottom-entry sign. ---
+  % 加え合わせ点の符号（ブロック線図の流儀）: 水平（西側）から入る矢印の
+  % 「＋」はその上に置く。垂直に入る矢印（Σ1は下から，Σ2は上から）の
+  % 「＋」はその右側に置く（Σ1の下からの入力の符号と同じ規則）。
   \node[font=\scriptsize, sfred,  anchor=south east] at ($(sum1.north)+(150:0.3)$) {$+$};
   \node[font=\scriptsize, sfblue, anchor=north west] at ($(sum1.south)+(330:0.3)$) {$+$};
   \node[font=\scriptsize, sfred,  anchor=south east] at ($(sum2.north)+(150:0.3)$) {$+$};
-  \node[font=\scriptsize, sfgreen, anchor=north west] at ($(sum2.south)+(330:0.3)$) {$+$};
+  \node[font=\scriptsize, sfgreen, anchor=south west] at ($(sum2.north)+(30:0.3)$) {$+$};
 
   % --- Path labels (kept off the signal lines) ---
-  \node[pathlbl, sfred, above=0.2cm of dt_block] {High-pass};
-  \node[pathlbl, sfgreen, below=0.2cm of atan] {Low-pass};
+  \node[pathlbl, sfred, below=0.2cm of dt_block] {High-pass};
+  \node[pathlbl, sfgreen, above=0.2cm of atan] {Low-pass};
   \node[pathlbl, sfblue, below=0.15cm of delay] {前回値};
 
 \end{tikzpicture}
