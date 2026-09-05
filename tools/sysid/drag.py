@@ -288,15 +288,9 @@ def estimate_drag(
     Returns:
         Dictionary with estimation results
     """
-    import sys
-    from pathlib import Path as P
-
-    # Import loader
-    tools_path = P(__file__).parent.parent
-    if str(tools_path) not in sys.path:
-        sys.path.insert(0, str(tools_path))
-
-    from eskf_sim.loader import load_csv
+    # Loader lives alongside this module (tools/sysid/loader.py)
+    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
+    from .loader import load_csv
 
     # Load data
     log_data = load_csv(filepath)
