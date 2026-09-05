@@ -84,7 +84,8 @@
 % ------------------------------------------------------------------
 \begin{frame}{既存プラットフォームとの比較}
   \begin{table}
-    \centering\scriptsize
+    \centering
+    \resizebox{\textwidth}{!}{%
     \begin{tabular}{lcccc}
       \hline
        & Crazyflie & Tello EDU\textsuperscript{*} & PX4 & StampFly Eco. \\
@@ -95,7 +96,7 @@
       コスト             & 高 & 低 & 高 & 低 \\
       コード規模         & 中 & --- & 大 & 小 \\
       \hline
-    \end{tabular}
+    \end{tabular}}
   \end{table}
 
   \vspace{0.5em}
@@ -108,7 +109,9 @@
 % ------------------------------------------------------------------
 \begin{frame}{1機から学べる8分野}
   \begin{table}
-    \centering\scriptsize
+    \centering\small
+    \renewcommand{\arraystretch}{1.15}
+    \setlength{\tabcolsep}{10pt}
     \begin{tabular}{ll}
       \hline
       \textbf{分野} & \textbf{主な学習項目} \\
@@ -141,11 +144,12 @@
 \begin{frame}{設計思想5本柱}
   \begin{table}
     \centering\scriptsize
-    \begin{tabular}{lp{72mm}}
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{lp{88mm}}
       \hline
       \textbf{柱} & \textbf{内容} \\
       \hline
-      集約と Protocol as SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を唯一の基準とする \\
+      集約と SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を SSOT（Single Source of Truth、唯一の正となる情報源）とする \\
       sf CLI（コマンドラインツール） & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供 \\
       段階的抽象化 \code{ws::} & Workshop API がHW・タスク・Topicの詳細を隠しつつ、レッスンの進行に応じて段階的に開放する \\
       シミュレータ統合         & VPython（軽量3D）と Genesis（高精度物理）を、実ファームと同一の制御アルゴリズムで動かす \\
@@ -156,7 +160,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{深掘り: sf CLI}
+\begin{frame}{深掘り: sf CLI\later}
   \small \code{idf.py} を直接叩く代わりに、ビルド・書き込み・診断・ログ取得・シミュレーションを統一されたコマンド体系で提供する
 
   \vspace{0.5em}
@@ -178,15 +182,15 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{深掘り: 段階的抽象化}
-  \small \code{ws::} 名前空間は、制御ループの起動やセンサ初期化を隠しつつ、\api{setup()} と \api{loop\_400Hz(dt)} だけで機体を動かせるようにする
+\begin{frame}{深掘り: 4階層は同時に存在する\later}
+  \small \code{ws::} 名前空間（L0 Workshop API）は、制御ループの起動やセンサ初期化を隠しつつ、\api{setup()} と \api{loop\_400Hz(dt)} だけで機体を動かせるようにする
 
   \vspace{0.5em}
 
   \begin{itemize}\small
-    \item 隠蔽は永続的なブラックボックスではなく、レッスンの進行に応じて解除される
-    \item 初期のレッスンはモータ制御APIのみ公開し、進むにつれてセンサ・推定値・テレメトリが順次開放される
-    \item この考え方をファーム全体に一般化したものが、次に示す4階層アクセスである
+    \item L0 Workshop API・L1 Topic API・L2 HAL・L3 ハードウェア直叩きの4層は、レッスンの進行に応じて後から現れるのではなく、ファームウェア起動時点からすべて実装済みで並行して存在する
+    \item 学習者はどの層からでも入口を選べる。全員がL0から順に進む必要はない
+    \item 本チュートリアルはL0から順に説明していくが、これは教える都合の順序であり層の解禁順ではない。4層の全体像は本セッション後半の「4階層アクセス」で示す
   \end{itemize}
 \end{frame}
 
@@ -240,7 +244,8 @@
 
   \begin{table}
     \centering\scriptsize
-    \begin{tabular}{lp{45mm}p{35mm}}
+    \setlength{\tabcolsep}{7pt}
+    \begin{tabular}{lp{58mm}p{48mm}}
       \hline
       \textbf{層} & \textbf{内容} & \textbf{位置づけ} \\
       \hline
@@ -261,10 +266,11 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{開発の3原則}
+\begin{frame}{開発の3原則\later}
   \begin{table}
-    \centering\scriptsize
-    \begin{tabular}{lp{80mm}}
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{lp{105mm}}
       \hline
       \textbf{原則} & \textbf{内容} \\
       \hline
@@ -272,7 +278,7 @@
       Parameter Identity & SILS も実機も \code{params.cpp} を唯一の基準として読む。チューニング値は同じスキーマで往復する \\
       Model Fidelity & SILS の真値は物理モデルから得る。実機データが必要になるのは、初飛行のあとにモデルを現実へ近づける段階だけである \\
       \hline
-    \end{tabular}
+    \end{tabular}}
   \end{table}
 \end{frame}
 
@@ -280,7 +286,7 @@
 \begin{frame}[fragile]{デモ①: シミュレータ操縦}
   \vspace{0.3em}
 
-  {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
+  {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ（\code{sf sim run vpython}） ｜ 帰宅後に再現}
 
   \vspace{0.5em}
 
@@ -312,9 +318,7 @@
 % ------------------------------------------------------------------
 \begin{frame}{デモ②の期待結果: 位置保持}
   \centering
-  {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
-
-  \vspace{0.15em}
+  \vspace{0.3em}
 
   \includegraphics[width=\textwidth, height=0.5\textheight, keepaspectratio]{../fallback/S1_pos_hold_xy.png}
 
@@ -324,9 +328,7 @@
 % ------------------------------------------------------------------
 \begin{frame}{デモ②の期待結果: 高度と姿勢}
   \centering
-  {\footnotesize SILS（MuJoCo）でのシミュレーション結果。実演がこのように進むことを示す参考として見てほしい}
-
-  \vspace{0.15em}
+  \vspace{0.3em}
 
   \includegraphics[width=\textwidth, height=0.6\textheight, keepaspectratio]{../fallback/S1_altitude_attitude.png}
 
@@ -334,7 +336,7 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{復習パス}
+\begin{frame}{復習パス\later}
   \resizebox{\textwidth}{!}{%
   \begin{tabular}{lll}
     \hline
