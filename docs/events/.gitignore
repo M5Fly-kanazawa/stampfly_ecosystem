@@ -1,0 +1,19 @@
+# LaTeX build intermediates
+*.aux
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.log
+
+# Generated intermediate files (rebuild with `make tikz` / `make chapter`)
+_shared/tikz/*.pdf
+*/slides/.build_chapters/
+
+# Unified deck PDFs are tracked (committed for distribution)
+# stampfly_workshop/slides/stampfly_workshop.pdf
+# dxh2026/slides/dxh_workshop.pdf
+# dxh2026/slides/dxh_workshop_docswell.pdf
+# sci_tutorial_2026/slides/sci_tutorial.pdf
+# sci_tutorial_2026/slides/sci_tutorial_docswell.pdf

@@ -1,0 +1,436 @@
+% ------------------------------------------------------------------
+\begin{frame}{今日のゴール / Today's Goal}
+  \begin{block}{目標}
+    相補フィルタを実装し、ESKFの推定値と比較する
+  \end{block}
+
+  \vspace{1em}
+
+  \begin{itemize}
+    \item ジャイロ積分のドリフト問題を理解
+    \item 相補フィルタで加速度センサとジャイロを融合
+    \item Teleplot で CF vs ESKF をリアルタイム比較
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Frame 3: Euler Angle Representation
+% ------------------------------------------------------------------
+\begin{frame}{姿勢の表現 --- ZYX オイラー角}
+
+  \begin{block}{オイラー角とは}
+    3次元の姿勢（回転）を 3 つの角度で表現する方法の一つ
+  \end{block}
+
+  \vspace{0.3em}
+
+  {\small
+  \begin{tabular}{lcll}
+    \hline
+    \textbf{記号} & \textbf{名称} & \textbf{回転軸} & \textbf{意味} \\
+    \hline
+    $\phi$   & Roll（ロール）  & $X''$ 軸 & 左右の傾き \\
+    $\theta$ & Pitch（ピッチ） & $Y'$ 軸  & 前後の傾き \\
+    $\psi$   & Yaw（ヨー）     & $Z$ 軸   & 機首方向 \\
+    \hline
+  \end{tabular}
+  }
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{StampFly の規約: ZYX オイラー角}
+    {\small
+    回転順序: $Z$ 軸 $(\psi)$ → $Y'$ 軸 $(\theta)$ → $X''$ 軸 $(\phi)$\\[2pt]
+    航空宇宙分野で標準的な \textbf{Tait--Bryan 角}。ジンバルロック ($\theta = \pm 90°$) に注意。
+    }
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Frame 4: Euler Angle Kinematics
+% ------------------------------------------------------------------
+\begin{frame}{オイラー角微分とジャイロ角速度の関係}
+
+  \begin{block}{ジャイロの測定値 $\boldsymbol{\omega}$ からオイラー角の微分を求める}
+    {\small
+    ジャイロはボディ座標系の角速度 $\boldsymbol{\omega} = [\omega_x,\;\omega_y,\;\omega_z]^T$ を測定する。
+    オイラー角の微分とは\textbf{一致しない}。現在の姿勢に依存する変換が必要:
+    }
+  \end{block}
+
+  \vspace{-1.0em}
+  {\small
+  \begin{align*}
+    \dot{\phi}   &= \omega_x
+                  + \omega_y \sin\phi\tan\theta
+                  + \omega_z \cos\phi\tan\theta \\
+    \dot{\theta} &= \phantom{\omega_x +{}}
+                    \omega_y \cos\phi
+                  - \omega_z \sin\phi \\
+    \dot{\psi}   &= \phantom{\omega_x +{}}
+                    \omega_y \,(\sin\phi\,/\,\cos\theta)
+                  + \omega_z \,(\cos\phi\,/\,\cos\theta)
+  \end{align*}
+  }
+
+  \vspace{-0.8em}
+
+  \begin{exampleblock}{離散積分（毎ステップ更新）}
+    {\small
+    $\phi_{k+1} = \phi_k + \dot{\phi}_k\,\Delta t,\quad
+    \theta_{k+1} = \theta_k + \dot{\theta}_k\,\Delta t,\quad
+    \psi_{k+1} = \psi_k + \dot{\psi}_k\,\Delta t$
+    }
+  \end{exampleblock}
+
+  \vspace{-0.2em}
+
+  {\footnotesize
+    \textbf{注意:}
+    現在の $(\phi,\theta)$ に依存 → 毎ステップ再計算。
+    $\theta{=}\pm 90°$ で $\cos\theta{=}0$（ジンバルロック）
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+% Frame 5: Euler Angles from Accelerometer (1) - Derivation
+% ------------------------------------------------------------------
+\begin{frame}{加速度からのオイラー角算出 (1) --- 座標変換}
+
+  \begin{block}{静止時、加速度センサは重力の\textbf{反力}を測定する}
+    {\small
+    NED 座標系の重力 $[0,\,0,\,g]^T$ に対し、センサ出力は $\mathbf{R}^T\,[0,\,0,\,-g]^T$:
+    }
+  \end{block}
+
+  {\small
+  \[
+  \begin{bmatrix} a_x \\ a_y \\ a_z \end{bmatrix}
+  = \mathbf{R}^T
+  \begin{bmatrix} 0 \\ 0 \\ -g \end{bmatrix}
+  = \begin{bmatrix}
+    g\sin\theta \\
+    -g\sin\phi\cos\theta \\
+    -g\cos\phi\cos\theta
+  \end{bmatrix}
+  \]
+  }
+
+  \vspace{-0.3em}
+
+  {\small
+  \begin{itemize}
+    \item $a_x$ は\textbf{ピッチ角 $\theta$ のみ}に依存（$\phi$ を含まない）
+    \item $a_y$ と $a_z$ は\textbf{ロール角 $\phi$ とピッチ角 $\theta$ の両方}に依存
+    \item \textbf{ヨー角 $\psi$} はどの成分にも現れない（重力は鉛直 → $\psi$ の情報なし）
+  \end{itemize}
+  }
+
+  \vspace{0.3em}
+
+  {\footnotesize
+  \textbf{前提:} 機体が静止または等速運動中であること。加速中は重力以外の成分が混入しノイズとなる。
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+% Frame 6: Euler Angles from Accelerometer (2) - Solving
+% ------------------------------------------------------------------
+\begin{frame}{加速度からのオイラー角算出 (2) --- Roll と Pitch の導出}
+
+  \begin{block}{Roll $\phi$ の算出: $(-a_y)$ と $(-a_z)$ の比}
+    {\small
+    $(-a_y)/(-a_z)$ をとると $g\cos\theta$ が約分され $\theta$ が消える:
+    }
+    \vspace{-0.5em}
+    {\footnotesize
+    \[
+    \frac{-a_y}{-a_z}
+    = \frac{g\sin\phi\cos\theta}{g\cos\phi\cos\theta}
+    = \frac{\sin\phi}{\cos\phi}
+    = \tan\phi
+    \qquad\Longrightarrow\qquad
+    \boxed{\;\phi = \mathrm{atan2}(-a_y,\; -a_z)\;}
+    \]
+    }
+  \end{block}
+
+  \vspace{-0.5em}
+
+  \begin{block}{Pitch $\theta$ の算出: $a_x$ と $\sqrt{a_y^2 + a_z^2}$}
+    {\small
+    $a_y^2 + a_z^2 = g^2\cos^2\!\theta\,(\sin^2\!\phi + \cos^2\!\phi) = g^2\cos^2\!\theta$ より:
+    }
+    \vspace{-0.5em}
+    {\footnotesize
+    \[
+    \frac{a_x}{\sqrt{a_y^2 + a_z^2}}
+    = \frac{g\sin\theta}{g\cos\theta}
+    = \tan\theta
+    \qquad\Longrightarrow\qquad
+    \boxed{\;\theta = \mathrm{atan2}\!\bigl(a_x,\;\sqrt{a_y^2 + a_z^2}\bigr)\;}
+    \]
+    }
+  \end{block}
+
+  \vspace{-0.3em}
+
+  {\scriptsize
+    \textbf{Yaw $\psi$:} 加速度のみでは算出不可（磁気センサが必要）\quad
+    \textbf{長所:} ドリフトなし\quad \textbf{短所:} 振動ノイズ大
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ジャイロドリフト問題 / Gyro Drift Problem}
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{\input{../../_shared/tikz/gyro_drift}}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \begin{itemize}
+        \item ジャイロは\textbf{角速度} $\omega$ を測定
+        \item 角度 $\theta = \int \omega\,dt$（積分が必要）
+        \item バイアスが蓄積 → ドリフト増大
+      \end{itemize}
+      \vspace{0.5em}
+      \begin{alertblock}{問題}
+        ジャイロ単体では長時間の姿勢推定が不可能
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{相補フィルタ / Complementary Filter}
+  \begin{columns}[c]
+    \begin{column}{0.50\textwidth}
+      \centering
+      \resizebox{\linewidth}{!}{\input{../../_shared/tikz/comp_filter}}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{数式}
+        $\hat{\theta}_k = \alpha\,(\hat{\theta}_{k-1} + \omega\,\Delta t) + (1-\alpha)\,\theta_{\mathrm{accel}}$
+      \end{block}
+
+      \vspace{0.3em}
+
+      \begin{itemize}
+        \item $\alpha = 0.98$（ジャイロ 98\% + 加速度 2\%）
+        \item ジャイロ: 短期精度◎ / 長期ドリフト✕
+        \item 加速度: 長期安定◎ / 振動ノイズ✕
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{姿勢推定 API}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{関数} & \textbf{説明} & \textbf{単位} \\
+      \hline
+      \api{gyro\_x/y/z()}  & 角速度（Roll/Pitch/Yaw） & rad/s \\
+      \api{accel\_x/y/z()} & 加速度（X/Y/Z）          & m/s\textsuperscript{2} \\
+      \api{estimated\_roll/pitch/yaw()} & ESKF 推定姿勢角 & rad \\
+      \api{print(fmt, ...)} & シリアル出力（Teleplot 対応） & --- \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{実習で使う組み合わせ}
+    ジャイロ + 加速度 → 相補フィルタで姿勢を自作\\
+    \api{estimated\_roll()} → ESKF の推定値と比較
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習: 相補フィルタ + Teleplot / Hands-on}
+  \vspace{-0.5em}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp (excerpt)}
+#include "workshop_api.hpp"
+#include <cmath>
+static float cf_roll = 0.0f, cf_pitch = 0.0f;
+void setup() { ws::print("Lesson 9: Attitude Estimation"); }
+void loop_400Hz(float dt) {
+    float gx = ws::gyro_x(), gy = ws::gyro_y();
+    float ax = ws::accel_x(), ay = ws::accel_y(),
+          az = ws::accel_z();
+    float accel_roll  = atan2f(ay, az);
+    float accel_pitch = atan2f(-ax, az);
+    constexpr float alpha = 0.98f;
+    cf_roll  = alpha*(cf_roll + gx*dt) + (1-alpha)*accel_roll;
+    cf_pitch = alpha*(cf_pitch + gy*dt) + (1-alpha)*accel_pitch;
+    // Teleplot output (VSCode Teleplot extension)
+    ws::print(">cf_roll:%.1f", cf_roll*57.3f);
+    ws::print(">eskf_roll:%.1f", ws::estimated_roll()*57.3f);
+}
+  \end{sflisting}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{Teleplot によるリアルタイム可視化}
+  \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+      \begin{block}{Teleplot フォーマット}
+        \api{>変数名:値} をシリアルに出力するだけ
+      \end{block}
+      \begin{lstlisting}[style=sfcpp, basicstyle=\ttfamily\scriptsize]
+// Teleplot format: >name:value
+ws::print(">cf_roll:%.2f", cf_roll * 57.3f);
+ws::print(">cf_pitch:%.2f", cf_pitch * 57.3f);
+ws::print(">eskf_roll:%.2f",
+           ws::estimated_roll() * 57.3f);
+      \end{lstlisting}
+    \end{column}
+    \begin{column}{0.43\textwidth}
+      \begin{exampleblock}{セットアップ}
+        \begin{enumerate}
+          \item VSCode 拡張: \texttt{alexnesnes.teleplot} をインストール
+          \item Teleplot パネルでシリアルポートを選択
+          \item 自動でグラフ化される
+        \end{enumerate}
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+  {\footnotesize \textbf{注意:} 400\,Hz 全 tick で出力するとシリアル帯域に負荷。4\,tick 毎（100\,Hz）にデシメーション推奨}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Madgwick フィルタ / Madgwick Filter}
+  \begin{block}{勾配降下法によるクォータニオン推定}
+    チューニングパラメータが $\beta$ の \textbf{1つだけ} --- シンプルかつ高精度
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      {\small
+      \begin{itemize}
+        \item 状態: $\mathbf{q} = [q_0,\, q_1,\, q_2,\, q_3]$
+        \item 予測: $\dot{\mathbf{q}} = \tfrac{1}{2}\,\mathbf{q} \otimes \boldsymbol{\omega}$
+        \item 補正勾配:\\[2pt]
+              $\nabla f = \mathbf{J}^T(\hat{\mathbf{q}},\,\hat{\mathbf{d}})\;\mathbf{f}(\hat{\mathbf{q}},\,\hat{\mathbf{d}})$
+      \end{itemize}
+      }
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{alertblock}{更新則}
+        $\mathbf{q}_{t+1} = \mathbf{q}_t + \Delta t\Bigl(\tfrac{1}{2}\,\mathbf{q}_t \otimes \boldsymbol{\omega} - \beta\,\dfrac{\nabla f}{|\nabla f|}\Bigr)$
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.3em}
+  {\footnotesize $\mathbf{f}$: 加速度/磁気の目的関数、$\mathbf{J}$: そのヤコビアン、$\beta$: 補正ゲイン（$\approx 0.04$）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{EKF（拡張カルマンフィルタ）}
+  \begin{block}{非線形カルマンフィルタの5ステップ}
+    状態ベクトル例: $\mathbf{x} = [\phi,\;\theta,\;\psi,\;b_{gx},\;b_{gy},\;b_{gz}]^T$
+  \end{block}
+
+  \vspace{0.3em}
+
+  {\small
+  \begin{tabular}{lll}
+    \hline
+    \textbf{ステップ} & \textbf{数式} & \textbf{意味} \\
+    \hline
+    状態予測 & $\hat{\mathbf{x}}^- = f(\hat{\mathbf{x}},\,\mathbf{u})$ & ジャイロで姿勢を積分 \\
+    共分散予測 & $\mathbf{P}^- = \mathbf{F}\mathbf{P}\mathbf{F}^T + \mathbf{Q}$ & 不確かさの伝播 \\
+    カルマンゲイン & $\mathbf{K} = \mathbf{P}^-\mathbf{H}^T(\mathbf{H}\mathbf{P}^-\mathbf{H}^T + \mathbf{R})^{-1}$ & 予測と観測の信頼度配分 \\
+    状態更新 & $\hat{\mathbf{x}} = \hat{\mathbf{x}}^- + \mathbf{K}(\mathbf{z} - h(\hat{\mathbf{x}}^-))$ & 観測で補正 \\
+    共分散更新 & $\mathbf{P} = (\mathbf{I} - \mathbf{K}\mathbf{H})\mathbf{P}^-$ & 不確かさを縮小 \\
+    \hline
+  \end{tabular}
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ESKF（誤差状態カルマンフィルタ）}
+  \begin{block}{StampFly で実際に使われている 15 状態 ESKF}
+    名目状態 + 誤差状態の分離アーキテクチャ
+  \end{block}
+
+  \vspace{0.3em}
+
+  {\small
+  \begin{columns}[t]
+    \begin{column}{0.48\textwidth}
+      \textbf{誤差状態ベクトル（15 states）:}
+      \[
+        \delta\mathbf{x} = [\delta\mathbf{p},\;\delta\mathbf{v},\;\delta\boldsymbol{\theta},\;\delta\mathbf{b}_g,\;\delta\mathbf{b}_a]^T
+      \]
+      \begin{itemize}
+        \item 予測: 名目状態はジャイロ/加速度で直接積分
+        \item 誤差共分散のみ伝播
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{観測更新:}
+      \begin{itemize}
+        \item 気圧 → 高度補正
+        \item ToF → 対地高度補正
+        \item 磁気 → ヨー補正
+        \item 光学フロー → 速度補正
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  }
+
+  \vspace{0.3em}
+  {\footnotesize \textbf{利点:} 誤差状態は常に小さい → 線形化が正確}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{推定手法の比較 / Estimator Comparison}
+  \centering
+  \resizebox{0.95\linewidth}{!}{%
+  \begin{tabular}{lcccc}
+    \hline
+    & \textbf{相補フィルタ} & \textbf{Madgwick} & \textbf{EKF} & \textbf{ESKF} \\
+    \hline
+    計算量       & 極小           & 小             & 中           & 中〜大 \\
+    パラメータ数  & 1（$\alpha$）  & 1（$\beta$）   & $\mathbf{Q},\mathbf{R}$ 行列 & $\mathbf{Q},\mathbf{R}$ 行列 \\
+    推定対象     & Roll/Pitch     & R/P/Yaw        & 姿勢+バイアス & 位置/速度/姿勢/バイアス \\
+    使用センサ   & Gyro+Accel     & Gyro+Accel+Mag & Gyro+Accel+Mag & 全センサ（6種） \\
+    精度         & ○              & ◎             & ◎            & ◎◎ \\
+    \hline
+  \end{tabular}
+  }
+
+  \vspace{0.8em}
+
+  {\footnotesize
+    \textbf{StampFly のデフォルト:} ESKF（15 状態）を使用。
+    このレッスンでは相補フィルタを自作し、ESKF と比較して理解を深める。
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] 手で傾けると CF のロール・ピッチが変化する
+      \item[$\square$] CF と ESKF の値が概ね一致する（Teleplot で確認）
+      \item[$\square$] $\alpha$ を変えて応答の違いを観察
+      \item[$\square$] Madgwick / EKF / ESKF の特徴を説明できる
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のレッスン}
+    Lesson 10: ws:: API リファレンス
+  \end{block}
+\end{frame}

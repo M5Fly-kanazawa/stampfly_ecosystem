@@ -1,0 +1,98 @@
+\documentclass[aspectratio=169, 14pt]{beamer}
+\usepackage{stampfly_slides}
+\input{preamble}
+
+% --- SCI tutorial session-divider macro ------------------------------------
+% \lessondivider (stampfly_slides.sty) hardcodes the word "Lesson N". The SCI
+% tutorial is organised as five timetabled sessions, so define a local divider
+% that shows the session number, title and time slot instead. The shared style
+% file is left untouched (same approach as dxh_workshop.tex).
+% \lessondivider は "Lesson N" を固定表示するため、時間割で区切る本チュートリアル
+% には合わない。共有スタイルは触らず、セッション番号・題目・時間帯を出す専用の
+% 区切りマクロをここで定義する（dxh_workshop.tex と同じ方針）。
+\newcommand{\scisession}[3]{%
+  \begin{frame}[plain]
+    \centering
+    \vspace*{\fill}
+    \begin{tikzpicture}
+      \node[
+        rectangle, rounded corners=8pt,
+        draw=sfblue, line width=1.5pt,
+        fill=sflight,
+        inner xsep=20pt, inner ysep=16pt,
+        align=center,
+        text width=120mm,
+      ] {%
+        {\fontsize{30}{36}\selectfont\bfseries\textcolor{sfblue}{Session #1}}\\[8pt]
+        {\Large\bfseries\textcolor{sfdark}{#2}}\\[4pt]
+        {\normalsize\textcolor{sfgray}{#3}}%
+      };
+    \end{tikzpicture}
+    \vspace*{\fill}
+    \par
+    {\small\textcolor{sfgray}{SCI/SICE チュートリアル講座 2026}}\par
+    \vspace{8mm}
+  \end{frame}
+}
+
+% Build variants (comment corrected — see fix-round notes): dxh_workshop.tex's
+% title page shows a QR to its own Docswell page (qr_docswell_dxh.png) in the
+% non-Docswell build. This deck has no such QR image yet (no
+% docs/events/_shared/images/qr_docswell_sci* file exists), so the title page
+% carries NO QR in either build (\sciTitleQR is empty on both branches below).
+% The \ifdefined branch structure is kept for parity with the other decks so a
+% QR can be dropped in later without restructuring.
+% ビルド2系統についての注記（今回の修正で訂正）: dxh_workshop.tex は本番
+% ビルドでタイトルページ右下に自分自身のドクセル公開ページへのQR
+% （qr_docswell_dxh.png）を出している。本デッキにはそのQR画像がまだ存在しない
+% （docs/events/_shared/images/qr_docswell_sci* が無い）ため、タイトルページは
+% どちらのビルドでもQRなし（下の \sciTitleQR は両分岐とも空）。\ifdefined
+% 分岐の構造だけは他デッキと揃えて残してあり、後でQR画像を追加する際に
+% 構造変更が不要になるようにしてある。
+\ifdefined\DocswellBuild
+  \newcommand{\sciTitleQR}{}
+\else
+  \newcommand{\sciTitleQR}{}
+\fi
+
+\title{制御教育教材 StampFly Ecosystem の紹介}
+\subtitle{コーディングから飛行試験、データ取得まで}
+\author{伊藤 恒平（金沢工業大学）}
+\date{2026年9月10日（木）大阪大学中之島センター + Zoom\\ システム制御情報学会・計測自動制御学会 チュートリアル講座 2026}
+
+\begin{document}
+
+% === Title page ===
+\begin{frame}
+  \titlepage
+  \sciTitleQR
+\end{frame}
+
+% === Opening: how this day works, participation levels, materials ===
+\input{chapters/sci_intro}
+
+% === Session 1: overview and design philosophy (10:05-11:00) ===
+\scisession{1}{StampFly Ecosystem の全体像と設計思想}{10:05 -- 11:00}
+\input{chapters/sci_s1_overview}
+
+% === Session 2: environment setup and sensor data (11:00-12:00) ===
+\scisession{2}{開発環境のセットアップとセンサデータの取得}{11:00 -- 12:00}
+\input{chapters/sci_s2_setup_sensors}
+
+% === Session 3: motor control and controller input (13:00-14:00) ===
+\scisession{3}{モータ制御とコントローラ入力の実装}{13:00 -- 14:00}
+\input{chapters/sci_s3_motor_controller}
+
+% === Session 4: feedback control basics, PID attitude stabilisation (14:00-15:00) ===
+\scisession{4}{フィードバック制御の基礎 --- PID による姿勢安定化}{14:00 -- 15:00}
+\input{chapters/sci_s4_pid}
+
+% === Session 5: simulator, analysis tools, advanced topics, Q&A (15:30-16:30) ===
+\scisession{5}{シミュレータ・解析ツールの活用と発展的テーマ}{15:30 -- 16:30}
+\input{chapters/sci_s5_sim_analysis}
+
+% === Appendix: cheat sheets, review paths, troubleshooting ===
+\scisession{付録}{チートシートと復習パス}{持ち帰り資料}
+\input{chapters/sci_appendix}
+
+\end{document}

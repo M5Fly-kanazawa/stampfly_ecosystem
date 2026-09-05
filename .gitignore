@@ -147,7 +147,7 @@ analysis/scripts/verify_hikoki64/
 # ====================
 # Beamer auto-generated listings
 # ====================
-docs/workshop/slides/beamer/*.listing
+docs/events/*/slides/*.listing
 
 # ====================
 # Temporary / WIP firmware projects

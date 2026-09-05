@@ -27,8 +27,8 @@ from pathlib import Path
 # Paths relative to repository root
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LESSONS_DIR = REPO_ROOT / "firmware" / "workshop" / "lessons"
-CHAPTERS_DIR = REPO_ROOT / "docs" / "education" / "workshop" / "slides" / "beamer" / "chapters"
-BUILD_DIR = REPO_ROOT / "docs" / "education" / "workshop" / "slides" / "beamer" / ".build_chapters"
+CHAPTERS_DIR = REPO_ROOT / "docs" / "events" / "stampfly_workshop" / "slides" / "chapters"
+BUILD_DIR = REPO_ROOT / "docs" / "events" / "stampfly_workshop" / "slides" / ".build_chapters"
 
 # Regex patterns
 SNIPPET_MARKER_START = re.compile(r'^\s*//\s*@@snippet:\s*(\S+)\s*$')

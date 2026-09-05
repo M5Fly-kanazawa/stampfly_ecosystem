@@ -1,6 +1,13 @@
 # Lesson Manifest — Single Source of Truth for lesson ordering
 # レッスンマニフェスト — レッスン順序の唯一の情報源
 #
+# `slide_file` (below) names a chapter without its extension, resolved by
+# `sf doctor` and tools/extract_snippets.py against
+# docs/events/stampfly_workshop/slides/chapters/<slide_file>.tex.
+# 下記の `slide_file` は拡張子なしのチャプター名で、`sf doctor` と
+# tools/extract_snippets.py がdocs/events/stampfly_workshop/slides/chapters/<slide_file>.tex
+# として解決する。
+#
 # Optional field: has_solution (bool, default: true)
 # レッスンにsolution.cppを必須としない場合はhas_solution: falseを設定する
 # Set has_solution: false for lessons that have no "correct answer" by

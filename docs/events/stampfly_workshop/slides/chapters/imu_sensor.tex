@@ -1,0 +1,139 @@
+% ------------------------------------------------------------------
+\begin{frame}{今日のゴール / Today's Goal}
+  \begin{block}{目標}
+    IMU（ジャイロ+加速度）データを読み取り、シリアルモニタと WiFi テレメトリで確認する
+  \end{block}
+
+  \vspace{1em}
+
+  \begin{itemize}
+    \item NED 座標系（北-東-下）の理解
+    \item ジャイロスコープで角速度を取得
+    \item 加速度センサで並進加速度を取得
+    \item WiFi テレメトリでデータ取得・可視化
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{NED 座標系 / NED Coordinate System}
+  \vspace{-0.5em}
+  \begin{center}
+    \resizebox{0.65\textwidth}{!}{\input{../../_shared/tikz/imu_axes}}
+  \end{center}
+  \vspace{-0.5em}
+  \begin{block}{}
+    \centering\small
+    BMI270 IMU --- 6軸（3軸ジャイロ + 3軸加速度）400\,Hz
+    \quad|\quad
+    回転矢印 = ジャイロ正方向（右手の法則）
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{IMU API}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{関数} & \textbf{説明} & \textbf{単位} \\
+      \hline
+      \api{gyro\_x/y/z()}  & 角速度 (Roll/Pitch/Yaw) & rad/s \\
+      \api{accel\_x/y/z()} & 加速度 (X/Y/Z) & m/s\textsuperscript{2} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{静止時の値}
+    ジャイロ $\approx 0$、加速度 Z $\approx -9.81$\,m/s\textsuperscript{2}（重力の反力、上向き）
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習: 6軸読み取り + シリアル表示 / Hands-on}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+#include "workshop_api.hpp"
+static uint32_t tick = 0;
+void setup() { ws::print("Lesson 4: IMU Sensor"); }
+void loop_400Hz(float dt) {
+    tick++;
+    float gx=ws::gyro_x(), gy=ws::gyro_y(), gz=ws::gyro_z();
+    float ax=ws::accel_x(),ay=ws::accel_y(),az=ws::accel_z();
+    if (tick % 40 == 0)  // Print every 100ms
+        ws::print("G=(%.3f,%.3f,%.3f) A=(%.2f,%.2f,%.2f)",
+                  gx, gy, gz, ax, ay, az);
+}
+  \end{sflisting}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{WiFi テレメトリ受信 / Receiving WiFi Telemetry}
+  {\small システムが IMU・姿勢・センサデータを自動的に 400\,Hz で送信しています}
+  \vspace{0.3em}
+  \begin{block}{手順}
+    \begin{enumerate}
+      \item シリアルモニタで SSID を確認（\code{StampFly\_XXXX}）
+      \item PC の WiFi で StampFly に接続（IP: \code{192.168.10.1}）
+      \item \code{sf log wifi -d 30} で30秒キャプチャ → CSV 自動保存
+    \end{enumerate}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{出力例}
+    \code{logs/stampfly\_wifi\_20260303T143000.csv} に保存されました
+  \end{exampleblock}
+
+  \vspace{0.3em}
+  {\small
+  \code{-o name.csv} でファイル名指定、\code{--no-save} で保存なし（統計のみ）
+  }
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{データの可視化 / Data Visualization}
+  \begin{block}{保存した CSV を可視化}
+    \code{sf log viz logs/stampfly\_wifi\_*.csv}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{モード} & \textbf{表示内容} \\
+      \hline
+      \code{--mode all}      & 全パネル（デフォルト） \\
+      \code{--mode sensors}  & IMU + 高度センサ \\
+      \code{--mode attitude} & 姿勢推定（Roll/Pitch/Yaw） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{itemize}
+    \item \code{--save plot.png} でファイル保存可能
+    \item StampFly を手で揺らしながらキャプチャし、ジャイロの変化をグラフで確認しよう
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] シリアルモニタでジャイロ・加速度の値を確認できる
+      \item[$\square$] 静止時に accel\_z $\approx -9.81$ を確認（反力）
+      \item[$\square$] \code{sf log wifi} でセンサデータを受信できる
+      \item[$\square$] \code{sf log viz} でデータをグラフ表示できる
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のレッスン}
+    Lesson 5: レート P 制御 --- ジャイロフィードバックで初フライト
+  \end{block}
+\end{frame}

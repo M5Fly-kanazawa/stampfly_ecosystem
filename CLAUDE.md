@@ -268,10 +268,12 @@ Agent ツールで以下のようなプロンプトのサブエージェント�
    magick -density 150 <file>.pdf -quality 85 /tmp/tikz_<file>.png
 
 2. スライドをコンパイル・画像化して各ページを Read で確認:
-   [Beamer の場合]
-   cd docs/workshop/slides/beamer
-   lualatex -interaction=nonstopmode stampfly_workshop.tex
-   magick -density 150 "stampfly_workshop.pdf[<page>]" -quality 85 /tmp/beamer_p<N>.png
+   [Beamer の場合。共有プリアンブル/スタイルは docs/events/_shared/beamer/ にあり、
+    docs/events/Makefile が TEXINPUTS を設定する。`cd docs/events && make sci` の
+    ように Makefile 経由でビルドするか、下記のように TEXINPUTS を手動指定する]
+   cd docs/events/sci_tutorial_2026/slides
+   TEXINPUTS=../../_shared/beamer//: lualatex -interaction=nonstopmode sci_tutorial.tex
+   magick -density 150 "sci_tutorial.pdf[<page>]" -quality 85 /tmp/beamer_p<N>.png
 
    [Marp の場合]
    cd docs/assets

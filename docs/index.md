@@ -28,7 +28,7 @@ sf flash vehicle -m
 | [アーキテクチャ](architecture/control-system.md) | 制御系設計・座標系・パラメータ |
 | [sf CLI](commands/README.md) | コマンドラインツール |
 | [ガイド](guides/safety.md) | 安全・トラブルシューティング |
-| [教育](workshop/workshop_guide.md) | ワークショップ・大学講義 |
+| [教育](events/stampfly_workshop/workshop_guide.md) | ワークショップ・大学講義 |
 | [スライド資料](slides.md) | ワークショップ PDF スライド |
 | [ドキュメント目録](DOCUMENT_INDEX.md) | 全ドキュメントの一覧 |
 
@@ -76,6 +76,6 @@ See the [Getting Started Guide](getting-started.md) for details.
 | [Architecture](architecture/control-system.md) | Control system, coordinates, parameters |
 | [sf CLI](commands/README.md) | Command-line tools |
 | [Guides](guides/safety.md) | Safety & troubleshooting |
-| [Education](workshop/workshop_guide.md) | Workshop & university courses |
+| [Education](events/stampfly_workshop/workshop_guide.md) | Workshop & university courses |
 | [Slides](slides.md) | Workshop PDF slides |
 | [Document Index](DOCUMENT_INDEX.md) | Complete document listing |

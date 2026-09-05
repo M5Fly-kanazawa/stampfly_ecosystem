@@ -127,9 +127,9 @@ $ARGUMENTS を解釈:
    3. 候補が見つかった場合、一覧を表示:
       ```
       📎 画像候補:
-        1. docs/workshop/images/lesson4_block_diagram.png (45KB)
-        2. docs/workshop/images/lesson7_pid_response.png (62KB)
-        3. docs/workshop/build/slides_lesson4.png (128KB)
+        1. docs/events/_shared/images/lesson4_block_diagram.png (45KB)
+        2. docs/events/_shared/images/lesson7_pid_response.png (62KB)
+        3. docs/events/stampfly_workshop/slides/build/slides_lesson4.png (128KB)
       添付する画像の番号を選択してください（例: 1,2、スキップは Enter）
       ```
    4. ユーザーのチャット入力を待つ（最大4枚まで選択可能）

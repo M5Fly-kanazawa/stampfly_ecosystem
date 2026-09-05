@@ -1,0 +1,125 @@
+% ------------------------------------------------------------------
+\begin{frame}{今日のゴール / Today's Goal}
+  \begin{block}{目標}
+    モータの番号と配置を理解し、PWM で個別制御する
+  \end{block}
+
+  \vspace{1em}
+
+  \begin{itemize}
+    \item モータ番号 M1--M4 の位置を覚える
+    \item ARM / DISARM の仕組みを理解する
+    \item PWM デューティ比でモータ回転数を制御
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モータ配置 / Motor Layout}
+  \begin{center}
+    \resizebox{0.38\textwidth}{!}{\input{../../_shared/tikz/motor_layout}}
+  \end{center}
+  \begin{itemize}
+    \item 対角のモータが同じ方向に回転（トルクバランス）
+    \item M1(FR), M3(RL) = CCW / M2(RR), M4(FL) = CW
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{PWM とは / What is PWM?}
+  \begin{columns}[T]
+    \begin{column}{0.45\textwidth}
+      \begin{center}
+        \resizebox{!}{0.72\textheight}{\input{../../_shared/tikz/pwm_waveform}}
+      \end{center}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \vspace{1em}
+      \begin{itemize}
+        \item \textbf{Pulse Width Modulation}\\（パルス幅変調）
+        \item \textbf{Duty 0\%} = 停止
+        \item \textbf{Duty 100\%} = 最大回転
+        \item API: \api{motor\_set\_duty(id, duty)}\\
+              \small id=1--4, duty=0.0--1.0
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ARM / DISARM とは / What is ARM?}
+  \begin{block}{安全スイッチ / Safety Switch}
+    \begin{itemize}
+      \item \textbf{ARM} = モーター出力を有効化（回転可能になる）
+      \item \textbf{DISARM} = モーター出力を無効化（強制停止）
+      \item コードから \api{arm()} で ARM できる
+    \end{itemize}
+  \end{block}
+
+  \vspace{1em}
+
+  \begin{alertblock}{重要 / Important}
+    \warn{\api{arm()} を呼ばないとモーターは回らない！\\
+    \texttt{setup()} 内で最初に呼ぶこと}
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モータ制御 API}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{関数} & \textbf{説明} & \textbf{引数} \\
+      \hline
+      \api{arm()} & モーター出力を有効化 & --- \\
+      \api{disarm()} & モーター出力を無効化 & --- \\
+      \api{motor\_set\_duty(id, duty)} & 個別モータ設定 & id=1--4, duty=0.0--1.0 \\
+      \api{motor\_set\_all(duty)} & 全モータ一括 & duty=0.0--1.0 \\
+      \api{motor\_stop\_all()} & 全モータ停止 & --- \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{1em}
+
+  \begin{alertblock}{安全注意 / Safety}
+    \warn{duty は 0.15 以下で！機体を手で押さえてテスト！}
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習: モータを順番に回す / Hands-on}
+  \begin{sflisting}{user\_code.cpp}
+#include "workshop_api.hpp"
+static uint32_t timer = 0;
+
+void setup() {
+    ws::print("Lesson 1: Motor Control");
+    ws::arm();  // Enable motor output
+}
+void loop_400Hz(float dt) {
+    timer++;
+    // 800 ticks = 2 seconds at 400Hz
+    int motor_id = (timer / 800) % 4 + 1;
+    ws::motor_stop_all();
+    ws::motor_set_duty(motor_id, 0.1f);
+}
+  \end{sflisting}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] \api{arm()} なしではモータが回らないことを確認した
+      \item[$\square$] M1 が FR（右前）のプロペラを回す
+      \item[$\square$] M1$\to$M2$\to$M3$\to$M4 の順に回転する
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のレッスン}
+    Lesson 2: コントローラ入力 --- スティックでモータを操作
+  \end{block}
+\end{frame}

@@ -197,7 +197,7 @@ Getting Started で初フライトができたら、次は**ワークショッ�
 | Lesson 7 | レート P 制御 | 角速度フィードバックによる安定化 |
 | Lesson 8 | PID 制御 | 姿勢角の PID 制御と飛行 |
 
-**→ [ワークショップスライド](docs/workshop/slides/README.md)** | **[ワークショップガイド](docs/workshop/)**
+**→ [ワークショップスライド](docs/events/README.md)** | **[ワークショップガイド](docs/events/stampfly_workshop/)**
 
 ---
 
@@ -430,7 +430,7 @@ Once you've completed your first flight with Getting Started, dive deeper with t
 | Lesson 7 | Rate P Control | Stabilization via angular rate feedback |
 | Lesson 8 | PID Control | Attitude PID control and flight |
 
-**→ [Workshop Slides](docs/workshop/slides/README.md)** | **[Workshop Guide](docs/workshop/)**
+**→ [Workshop Slides](docs/events/README.md)** | **[Workshop Guide](docs/events/stampfly_workshop/)**
 
 ---
 

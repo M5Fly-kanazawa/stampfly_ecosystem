@@ -1,0 +1,180 @@
+% ==============================================================================
+% sci_appendix.tex — SCI/SICE tutorial appendix: cheat sheets, review paths,
+% troubleshooting (take-home material)
+% SCI/SICE チュートリアル 付録: チートシートと復習パス（持ち帰り資料）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf CLI チートシート (1/2) / sf CLI Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{75mm}}
+      \hline
+      \textbf{コマンド} & \textbf{機能} \\
+      \hline
+      \code{sf doctor}     & 環境診断（問題があればまず実行） \\
+      \code{sf build/flash/monitor} & ビルド・書き込み・シリアルモニタ \\
+      \code{sf telemetry}  & 50\,Hz テレメトリのライブ表示（\code{--web} でブラウザ） \\
+      \code{sf blocks}     & Blockly ブロックプログラミング（\code{--demo} で機体なしデモ） \\
+      \code{sf cal gyro/accel/mag} & センサキャリブレーション \\
+      \code{sf lesson}     & Workshop 実習管理（\code{switch sci2026:N}/\code{build}/\code{flash}，一覧は \code{list --course sci2026}） \\
+      \code{sf trim analyze} & ホバーログから姿勢トリムを算出 \\
+      \code{sf takeoff} 等   & Tello 風ミニコマンド（\code{sf takeoff/land/hover/jump}，個別のトップレベルコマンド） \\
+      \code{sf competition hover-time/score} & ホバー耐久・スコア記録 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf CLI チートシート (2/2) / sf CLI Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{75mm}}
+      \hline
+      \textbf{コマンド} & \textbf{機能} \\
+      \hline
+      \code{sf log wifi/capture} & WiFi/USB 経由でテレメトリ・ログ取得 \\
+      \code{sf log viz/analyze}  & ログ可視化・解析 \\
+      \code{sf sim run vpython/genesis} & シミュレータ起動（S5） \\
+      \code{sf sils build/scenario/gui} & SILS ベンチ（S5） \\
+      \code{sf sysid fit}        & 閉ループ P 制御ログからプラント同定（実習7） \\
+      \code{sf sysid rate-fit/rate-tune} & 閉ループ同定（ETFE + フィット）と仕様ベース PID 設計（S4） \\
+      \code{sf sysid noise}      & 静止センサログから Allan 分散でノイズ特性を推定 \\
+      \code{sf params check}     & 物理パラメータ整合検査 \\
+      \code{sf upgrade}          & 最新版を pull し環境を再同期 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize \code{sf --help} の順序を基本に，授業で頻出する \code{sf lesson} を前に出している。全コマンドは \code{lib/sfcli/commands/} に実装がある}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ws:: API チートシート (1/2) / ws:: API Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{72mm}}
+      \hline
+      \textbf{カテゴリ} & \textbf{関数} \\
+      \hline
+      モータ制御 & \code{motor\_set\_duty(id,duty)} [id 1--4, duty 0--1], \code{motor\_set\_all(duty)} [0--1],
+        \code{motor\_stop\_all()}, \code{motor\_mixer(t,r,p,y)} [t 0--1, r/p/y $-1$--1], \code{arm()},
+        \code{disarm()}, \code{is\_armed()} \\
+      コントローラ入力 & \code{rc\_throttle()} [0--1], \code{rc\_roll/pitch/yaw()} [$-1$--1] \\
+      ボタン・モード & \code{rc\_throttle\_yaw\_button()}, \code{rc\_roll\_pitch\_button()},
+        \code{rc\_stabilize\_acro\_mode()}, \code{rc\_alt\_mode()}, \code{rc\_pos\_mode()}\mbox{（すべて bool）} \\
+      LED 制御 & \code{led\_color(r,g,b)} [0--255], \code{disable/enable\_led\_task()},
+        \code{is\_led\_task\_disabled()} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 実習中は Duty $\le$ 0.15 で運用する（安全上の運用ルール。ファーム側では強制されない）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ws:: API チートシート (2/2) / ws:: API Cheat Sheet}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{72mm}}
+      \hline
+      \textbf{カテゴリ} & \textbf{関数} \\
+      \hline
+      IMU センサ & \code{gyro\_x/y/z()} [rad/s], \code{accel\_x/y/z()} [m/s$^2$] \\
+      環境・距離センサ & \code{baro\_altitude/pressure()} [m, Pa], \code{mag\_x/y/z()} [$\mu$T],
+        \code{tof\_bottom/front()} [m], \code{flow\_vx/vy/quality()} [m/s, 0--255] \\
+      姿勢推定 & \code{estimated\_roll/pitch/yaw()} [rad], \code{estimated\_altitude()} [m] \\
+      制御目標のロギング & \code{set\_rate\_target(r,p,y)} [rad/s], \code{set\_angle\_target(r,p)} [rad]
+        （実習7，Data Stream の \code{rate\_ref\_*}/\code{angle\_ref\_*} に記録，制御には無関係） \\
+      ユーティリティ & \code{millis()} [ms], \code{battery\_voltage()} [V], \code{print(fmt,...)},
+        \code{set\_channel(ch)} [1, 6, 11] \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize \code{\#include "workshop\_api.hpp"}，全関数は \code{ws::} 名前空間}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{トラブルシューティング (1/2) / Troubleshooting}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{55mm}}
+      \hline
+      \textbf{症状} & \textbf{原因} & \textbf{対処} \\
+      \hline
+      StampFly の WiFi が見つからない & 電源が入っていない & バッテリーを確認，電源を入れ直す \\
+      接続しても通信できない & IP アドレスが違う & \code{192.168.10.1} を確認 \\
+      離陸しない & キャリブレーション未実施 & \code{sf cal gyro} を実行 \\
+      振動する & PID ゲインが高すぎる & ゲインを下げる（S4 参照） \\
+      シミュレータに自動フォールバック & WiFi 未接続 & 意図的ならそのまま使用可 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 出典: \code{docs/guides/troubleshooting.md}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{トラブルシューティング (2/2) / Troubleshooting}
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{28mm}>{\raggedright\arraybackslash}p{55mm}}
+      \hline
+      \textbf{症状} & \textbf{原因} & \textbf{対処} \\
+      \hline
+      ビルドエラー（赤字 \code{error:}） & 打ち間違い（カンマ・セミコロン抜け等） & エラー1行目のファイル名・行番号を確認し実習コードと見比べる \\
+      \code{sf lesson flash} が失敗 & 書き込みポートの競合・接触不良 & 別のケーブル／ポートを試す。改善しなければ機体の BOOT ボタンを押したまま USB を挿し直し，書き込み専用モードで再実行する \\
+      モータが回らない & ARM されていない，または USB 給電中（安全のため ARM 拒否） & 機体ボタンをクリックして ARM 状態を確認する。USB を外してバッテリー駆動になっているか確認する \\
+      起動 LED が緑にならない & 静止校正中に機体を動かしてしまった & 機体を静かに置き直し，緑点灯とビープ3回（readyTone）を待つ \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{5セッション復習パス / Review Path, All Sessions}
+  \resizebox{\textwidth}{!}{%
+  \begin{tabular}{llll}
+    \hline
+    & \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} \\
+    \hline
+    S1 & \code{sf sim run vpython}        & シミュレータ操縦        & \code{docs/commands/sf-sim.md} \\
+    S2 & \code{sf lesson switch sci2026:2} & IMU センサ（実習2）    & \code{firmware/vehicle/docs/architecture.md \S2} \\
+    S2 & \code{sf log wifi/viz}           & テレメトリ取得と可視化  & \code{docs/guides/flight-log-viz.md} \\
+    S3 & \code{sf lesson switch sci2026:3} & モータ制御（実習3）     & \code{firmware/vehicle/docs/hardware\_init.md} \\
+    S3 & \code{sf lesson switch sci2026:4} & コントローラ入力（実習4） & \code{protocol/spec/}（ControlPacket） \\
+    S4 & \code{sf lesson switch sci2026:8} & PID 制御（実習8）       & Workshop Lesson 8 \\
+    S4 & \code{sf sysid fit}              & システム同定（実習7）    & Workshop Lesson 7 \\
+    S5 & \code{sf sils gui}               & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md} \\
+    S5 & \code{sf log viz}                & ログ解析                & \code{docs/guides/flight-log-viz.md} \\
+    \hline
+  \end{tabular}}
+
+  \vspace{0.3em}
+
+  {\scriptsize Workshop スライド（\code{docs/events/stampfly\_workshop/slides/chapters/}）内の該当 Lesson 章に対応}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{持ち帰りのご案内 / Take It Home}
+  \begin{exampleblock}{資料はすべて公開されている}\small
+    \begin{itemize}
+      \item リポジトリ: \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}
+      \item ドキュメント: \url{https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/}
+      \item 本日の内容はオンデマンド配信でも後日視聴できる
+    \end{itemize}
+  \end{exampleblock}
+
+  \vspace{0.15em}
+
+  \begin{block}{ご自身の StampFly で}\small
+    ノート PC と StampFly さえあれば，今日のデモは自宅・研究室でそのまま再現できる。
+    まずは \code{sf doctor} で環境を確認してから始めてほしい
+  \end{block}
+
+  \vspace{0.15em}
+
+  {\small ご質問・不具合報告はリポジトリの Issue へ。開発に協力してくれる方も歓迎する}
+\end{frame}

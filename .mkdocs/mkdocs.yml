@@ -80,18 +80,19 @@ markdown_extensions:
 # logs/ is ~1.5GB of flight logs; docs/_private/ is a local-only scratch area;
 # landing/ is served separately at the site root and must not also be copied under /docs/.
 # logs/ は約1.5GBのフライトログ、docs/_private/ は手元専用の作業領域。
-# docs/sci_tutorial/ holds the SCI/SICE tutorial-course (2026-09-10) participant
-# materials — README, hands-on review guide and cheat sheet are published so
-# attendees can revisit them online; only the instructor-side verification
-# checklist stays out of the site.
-# docs/sci_tutorial/ は SCI/SICE チュートリアル講座（2026-09-10）の参加者向け
-# 資料。README・復習手順ガイド・早見表は参加者がオンラインで復習できるよう
-# 公開し、講師用の実機検証チェックリストだけをサイトから除外する。
-# docs/workshop/dxh2026/ is the DXH high-school-teacher workshop (2026-07-18/19)
+# docs/events/sci_tutorial_2026/ holds the SCI/SICE tutorial-course (2026-09-10)
+# participant materials — README, hands-on review guide and cheat sheet are
+# published so attendees can revisit them online; the instructor-side
+# verification checklist and rehearsal runsheet stay out of the site.
+# docs/events/sci_tutorial_2026/ は SCI/SICE チュートリアル講座（2026-09-10）の
+# 参加者向け資料。README・復習手順ガイド・早見表は参加者がオンラインで復習
+# できるよう公開し、講師用の実機検証チェックリストとリハーサル進行表だけを
+# サイトから除外する。
+# docs/events/dxh2026/ is the DXH high-school-teacher workshop (2026-07-18/19)
 # event-material working directory — internal curriculum/setup docs plus
 # unmeasured rehearsal placeholders, not ready for the public site. Promotion
 # to a published guide is planned for the August documentation sprint.
-# docs/workshop/dxh2026/ は DXH 高校教員向け体験講座（2026-07-18/19）の
+# docs/events/dxh2026/ は DXH 高校教員向け体験講座（2026-07-18/19）の
 # イベント資料作業ディレクトリ（内部向けカリキュラム・セットアップ文書、
 # 未実測のリハーサル用プレースホルダを含む）。公開ガイドへの昇格は
 # 8月のドキュメントスプリントで行う予定のため、現時点ではサイト非公開とする。
@@ -111,9 +112,10 @@ exclude_docs: |
   logs/
   landing/
   docs/_private/
-  docs/sci_tutorial/verification_checklist.md
-  docs/sci_tutorial/*.pdf
-  docs/workshop/dxh2026/
+  docs/events/sci_tutorial_2026/verification_checklist.md
+  docs/events/sci_tutorial_2026/instructor_runsheet.md
+  docs/events/sci_tutorial_2026/*.pdf
+  docs/events/dxh2026/
 
 nav:
   # ==================== Home ====================
@@ -165,15 +167,15 @@ nav:
       - 開発ツール: docs/guides/tools.md
       - フライトログ可視化: docs/guides/flight-log-viz.md
     - 教育:
-      - ワークショップガイド: docs/workshop/workshop_guide.md
-      - スケジュール: docs/workshop/workshop_schedule.md
-      - 競技ルール: docs/workshop/competition_rules.md
-      - スライド資料ガイド: docs/workshop/slides/README.md
-      - ワークショップアンケート: docs/workshop/survey/workshop_survey.md
+      - ワークショップガイド: docs/events/stampfly_workshop/workshop_guide.md
+      - スケジュール: docs/events/stampfly_workshop/workshop_schedule.md
+      - 競技ルール: docs/events/stampfly_workshop/competition_rules.md
+      - スライド資料ガイド: docs/events/_shared/README.md
+      - ワークショップアンケート: docs/events/stampfly_workshop/survey/workshop_survey.md
       - SCI/SICE チュートリアル 2026:
-        - 概要と事前準備: docs/sci_tutorial/README.md
-        - 復習手順ガイド: docs/sci_tutorial/handson_guide.md
-        - コマンド・API 早見表: docs/sci_tutorial/cheatsheet.md
+        - 概要と事前準備: docs/events/sci_tutorial_2026/README.md
+        - 復習手順ガイド: docs/events/sci_tutorial_2026/handson_guide.md
+        - コマンド・API 早見表: docs/events/sci_tutorial_2026/cheatsheet.md
       - シラバス: docs/university/syllabus.md
       - 評価ルーブリック: docs/university/assessment_rubric.md
     - 開発ガイドライン:

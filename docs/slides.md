@@ -6,22 +6,24 @@
 
 | 資料 | 説明 |
 |------|------|
-| [stampfly_workshop.pdf](workshop/slides/beamer/stampfly_workshop.pdf) | ワークショップ Beamer スライド（全レッスン） |
-| [sci_tutorial.pdf](workshop/slides/beamer/sci_tutorial.pdf) | SCI/SICE チュートリアル講座 2026（2026-09-10）Beamer スライド。参加者向けガイドは [sci_tutorial/](sci_tutorial/README.md) |
+| [stampfly_workshop.pdf](events/stampfly_workshop/slides/stampfly_workshop.pdf) | ワークショップ Beamer スライド（全レッスン） |
+| [sci_tutorial.pdf](events/sci_tutorial_2026/slides/sci_tutorial.pdf) | SCI/SICE チュートリアル講座 2026（2026-09-10）Beamer スライド。参加者向けガイドは [sci_tutorial_2026/](events/sci_tutorial_2026/README.md) |
 
 ## TikZ 図
 
+TikZ ソースの PDF は生成物のため追跡対象外（`.gitignore`）。以下は `make tikz` でビルドされる PNG 版へのリンク。
+
 | 図 | 説明 |
 |-----|------|
-| [motor_layout.pdf](workshop/slides/tikz/motor_layout.pdf) | モーター配置 |
-| [firmware_layers.pdf](workshop/slides/tikz/firmware_layers.pdf) | ファームウェアレイヤー構成 |
-| [build_flash_flow.pdf](workshop/slides/tikz/build_flash_flow.pdf) | ビルド・書き込みフロー |
-| [espnow_dataflow.pdf](workshop/slides/tikz/espnow_dataflow.pdf) | ESP-NOW データフロー |
-| [led_state_machine.pdf](workshop/slides/tikz/led_state_machine.pdf) | LED ステートマシン |
-| [imu_axes.pdf](workshop/slides/tikz/imu_axes.pdf) | IMU 軸定義 |
-| [mixer_matrix.pdf](workshop/slides/tikz/mixer_matrix.pdf) | ミキサーマトリクス |
-| [loop_400hz_timeline.pdf](workshop/slides/tikz/loop_400hz_timeline.pdf) | 400Hz ループタイムライン |
-| [python_sdk_arch.pdf](workshop/slides/tikz/python_sdk_arch.pdf) | Python SDK アーキテクチャ |
+| [motor_layout.png](events/_shared/images/motor_layout.png) | モーター配置 |
+| [firmware_layers.png](events/_shared/images/firmware_layers.png) | ファームウェアレイヤー構成 |
+| [build_flash_flow.png](events/_shared/images/build_flash_flow.png) | ビルド・書き込みフロー |
+| [espnow_dataflow.png](events/_shared/images/espnow_dataflow.png) | ESP-NOW データフロー |
+| [led_state_machine.png](events/_shared/images/led_state_machine.png) | LED ステートマシン |
+| [imu_axes.png](events/_shared/images/imu_axes.png) | IMU 軸定義 |
+| [mixer_matrix.png](events/_shared/images/mixer_matrix.png) | ミキサーマトリクス |
+| [loop_400hz_timeline.png](events/_shared/images/loop_400hz_timeline.png) | 400Hz ループタイムライン |
+| [python_sdk_arch.png](events/_shared/images/python_sdk_arch.png) | Python SDK アーキテクチャ |
 
 ## Bonus スライド
 
@@ -43,22 +45,24 @@
 
 | Material | Description |
 |----------|-------------|
-| [stampfly_workshop.pdf](workshop/slides/beamer/stampfly_workshop.pdf) | Workshop Beamer slides (all lessons) |
-| [sci_tutorial.pdf](workshop/slides/beamer/sci_tutorial.pdf) | SCI/SICE Tutorial Course 2026 (2026-09-10) Beamer deck; participant guides in [sci_tutorial/](sci_tutorial/README.md) |
+| [stampfly_workshop.pdf](events/stampfly_workshop/slides/stampfly_workshop.pdf) | Workshop Beamer slides (all lessons) |
+| [sci_tutorial.pdf](events/sci_tutorial_2026/slides/sci_tutorial.pdf) | SCI/SICE Tutorial Course 2026 (2026-09-10) Beamer deck; participant guides in [sci_tutorial_2026/](events/sci_tutorial_2026/README.md) |
 
 ## TikZ Diagrams
 
+TikZ source PDFs are build artifacts and untracked (`.gitignore`); the links below point at the PNGs built by `make tikz` instead.
+
 | Diagram | Description |
 |---------|-------------|
-| [motor_layout.pdf](workshop/slides/tikz/motor_layout.pdf) | Motor layout |
-| [firmware_layers.pdf](workshop/slides/tikz/firmware_layers.pdf) | Firmware layer structure |
-| [build_flash_flow.pdf](workshop/slides/tikz/build_flash_flow.pdf) | Build & flash flow |
-| [espnow_dataflow.pdf](workshop/slides/tikz/espnow_dataflow.pdf) | ESP-NOW data flow |
-| [led_state_machine.pdf](workshop/slides/tikz/led_state_machine.pdf) | LED state machine |
-| [imu_axes.pdf](workshop/slides/tikz/imu_axes.pdf) | IMU axis definitions |
-| [mixer_matrix.pdf](workshop/slides/tikz/mixer_matrix.pdf) | Mixer matrix |
-| [loop_400hz_timeline.pdf](workshop/slides/tikz/loop_400hz_timeline.pdf) | 400Hz loop timeline |
-| [python_sdk_arch.pdf](workshop/slides/tikz/python_sdk_arch.pdf) | Python SDK architecture |
+| [motor_layout.png](events/_shared/images/motor_layout.png) | Motor layout |
+| [firmware_layers.png](events/_shared/images/firmware_layers.png) | Firmware layer structure |
+| [build_flash_flow.png](events/_shared/images/build_flash_flow.png) | Build & flash flow |
+| [espnow_dataflow.png](events/_shared/images/espnow_dataflow.png) | ESP-NOW data flow |
+| [led_state_machine.png](events/_shared/images/led_state_machine.png) | LED state machine |
+| [imu_axes.png](events/_shared/images/imu_axes.png) | IMU axis definitions |
+| [mixer_matrix.png](events/_shared/images/mixer_matrix.png) | Mixer matrix |
+| [loop_400hz_timeline.png](events/_shared/images/loop_400hz_timeline.png) | 400Hz loop timeline |
+| [python_sdk_arch.png](events/_shared/images/python_sdk_arch.png) | Python SDK architecture |
 
 ## Bonus Slides
 

@@ -1,0 +1,361 @@
+% ------------------------------------------------------------------
+\begin{frame}{ワークショップカリキュラム / Workshop Curriculum}
+  \begin{table}
+    \centering
+    \begin{tabular}{lll}
+      \hline
+      \textbf{Day} & \textbf{Lesson} & \textbf{テーマ} \\
+      \hline
+      Day 1    & 0\,--\,2   & 環境セットアップ + モータ + コントローラ \\
+      Day 2    & 3\,--\,5   & LED + IMU + 初フライト \\
+      Day 3    & 6\,--\,8   & モデリング + システム同定 + PID制御 \\
+      Day 4    & 9\,--\,12  & 姿勢推定 + API + 独自FW + Python SDK \\
+      Day 5 AM & 13         & 精密着陸競技会 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{StampFly ハードウェア / Hardware}
+  \begin{columns}[c]
+    \begin{column}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\columnwidth]{Stampfly_onhand.jpg}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \begin{table}
+        \centering\small
+        \begin{tabular}{ll}
+          \hline
+          \textbf{項目} & \textbf{仕様} \\
+          \hline
+          MCU    & ESP32-S3 (M5Stamp S3) \\
+          IMU    & BMI270 (6軸 400\,Hz) \\
+          気圧   & BMP280 \\
+          ToF    & VL53L3CX \\
+          質量   & 37\,g（バッテリ含む） \\
+          通信   & ESP-NOW + WiFi \\
+          バッテリ & LiPo 1S 3.7\,V \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{エコシステム全体像 / Ecosystem Overview}
+  \centering
+  \vspace{2mm}
+  \resizebox{!}{0.78\textheight}{\input{../../_shared/tikz/ecosystem_layers}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{開発ツール sf CLI / Development Tool}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{カテゴリ} & \textbf{コマンド例} & \textbf{説明} \\
+      \hline
+      ビルド         & \code{sf build} / \code{sf flash}    & ファームウェア開発 \\
+      診断           & \code{sf doctor} / \code{sf monitor}  & デバッグ \\
+      ログ           & \code{sf log wifi} / \code{sf log viz} & テレメトリ取得・可視化 \\
+      シミュレータ   & \code{sf sim run}                     & 仮想環境で練習 \\
+      キャリブレーション & \code{sf cal gyro/accel/mag}      & センサ校正 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{ワークショップの基本ワークフロー（各レッスン共通）}
+    \code{sf lesson switch N} → \code{sf lesson build} → \code{sf lesson flash}\\[0.3em]
+    {\footnotesize
+      レッスン切替 → ビルド → 書き込みの 3 ステップで、\\
+      コードを書いてすぐに実機で動作確認できます。
+    }
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{Windows 環境構築 (1/2) / Windows Setup}
+  \begin{table}
+    \centering\small
+    \begin{tabular}{lll}
+      \hline
+      \textbf{確認コマンド (CMD)} & \textbf{期待される結果} & \textbf{なければ} \\
+      \hline
+      \code{git --version}    & git version 2.x   & \code{winget install Git.Git} \\
+      \code{python --version} & Python 3.8 以上   & \code{winget install Python.Python.3.12} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+
+  \begin{block}{インストール手順（CMD で実行）}
+    \footnotesize
+    \textbf{1.}~リポジトリをクローン\\
+    \textbf{2.}~\code{install.bat} を実行（ESP-IDF + sfcli 自動インストール）\\
+    \textbf{3.}~\code{setup\_env.bat} で開発環境をアクティベート
+  \end{block}
+
+  \begin{lstlisting}[style=sfbash, numbers=none]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+cd stampfly_ecosystem
+install.bat
+setup_env.bat
+  \end{lstlisting}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Windows 環境構築 (2/2) / Driver \& Verification}
+  \begin{block}{USB シリアルドライバ}
+    CH9102F ドライバをインストール（M5Stack 製品用）\\
+    \footnotesize\url{https://docs.m5stack.com/en/download}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{block}{動作確認}
+    \code{sf doctor} で環境診断 --- すべて \textcolor{sfgreen}{OK} になれば完了
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{macOS / Linux ユーザー}
+    \code{install.sh} + \code{setup\_env.sh} を使用してください
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{今日のゴール / Today's Goal}
+  \begin{block}{目標}
+    ワークショップファームウェアをビルド・書き込み・動作確認する
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{enumerate}
+    \item \code{sf lesson build} でビルド
+    \item \code{sf lesson flash} で書き込み
+    \item シリアルモニタで \texttt{"Hello StampFly!"} を確認
+  \end{enumerate}
+
+  \vspace{0.3em}
+
+  \begin{center}
+    \resizebox{0.85\textwidth}{!}{\input{../../_shared/tikz/build_flash_flow}}
+  \end{center}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{sf CLI とは / What is sf CLI?}
+  \begin{itemize}
+    \item StampFly 開発専用のコマンドラインツール
+    \item ESP-IDF のコマンドをシンプルに実行できる
+  \end{itemize}
+
+  \vspace{0.5em}
+
+  \begin{table}
+    \centering\small
+    \begin{tabular}{ll}
+      \hline
+      \textbf{コマンド} & \textbf{説明} \\
+      \hline
+      \code{sf doctor}          & 環境診断 \\
+      \code{sf lesson build}  & ワークショップビルド \\
+      \code{sf lesson flash} & 書き込み＋モニタ \\
+      \code{sf lesson switch N} & レッスン切り替え \\
+      \code{sf monitor}         & シリアルモニタ \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ワークショップの構造 / Workshop Structure}
+  \begin{block}{学生が実装する関数は2つだけ！}
+    \begin{itemize}
+      \item \api{setup()} --- 起動時に1回呼ばれる
+      \item \api{loop\_400Hz(dt)} --- 400Hz（2.5ms毎）で呼ばれる
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{itemize}
+    \item ハードウェアの複雑さは \api{ws::} 名前空間で隠蔽
+    \item FreeRTOS, SPI/I2C, センサーフュージョンを意識する必要なし
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ファームウェアの全体像 / Firmware Architecture}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \vspace{-2mm}
+      \resizebox{0.95\columnwidth}{!}{\input{../../_shared/tikz/firmware_layers}}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \footnotesize
+      \begin{itemize}\setlength{\itemsep}{4pt}
+        \item 皆さんのコードはここ！\\
+              \api{user\_code.cpp} を編集するだけ
+        \item \api{ws::gyro\_x()} と書くだけで\\
+              SPI通信→フィルタ→バイアス補正を全部やってくれる
+        \item 下のレイヤーはワークショップ中\\
+              意識する必要なし
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{400Hz ループの裏側 / Behind the 400Hz Loop}
+  \begin{center}
+    \vspace{-2mm}
+    \resizebox{0.85\textwidth}{!}{\input{../../_shared/tikz/loop_400hz_timeline}}
+  \end{center}
+
+  \vspace{-0.5em}
+
+  \begin{exampleblock}{ポイント}
+    \api{loop\_400Hz(dt)} は常にIMUデータ更新後に呼ばれる
+    --- 学生はタイマー管理不要、ただ関数を書くだけ！
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習: Hello StampFly / Hands-on}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+#include "workshop_api.hpp"
+void setup() {
+    ws::print("Hello StampFly!");
+}
+void loop_400Hz(float dt) {
+    // Nothing to do in Lesson 0
+}
+  \end{sflisting}
+  \vspace{-0.5em}
+  \begin{exampleblock}{手順}\small
+    \textbf{1.}~\code{sf lesson switch 0}\\
+    \textbf{2.}~上のコードを \code{user\_code.cpp} に書く\\
+    \textbf{3.}~\code{sf lesson build \&\& sf lesson flash}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{作業の進め方 / Workflow}
+  \begin{columns}[T]
+    \begin{column}{0.45\textwidth}
+      \begin{block}{ファイル構造}
+        \footnotesize\ttfamily
+        firmware/workshop/\\
+        \hspace{1em}├── lessons/\\
+        \hspace{1em}│\hspace{1em}├── lesson\_00/student.cpp\\
+        \hspace{1em}│\hspace{1em}├── lesson\_01/student.cpp\\
+        \hspace{1em}│\hspace{1em}└── ...\\
+        \hspace{1em}└── main/\\
+        \hspace{2.5em}└── user\_code.cpp ← 編集！
+      \end{block}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}\setlength{\itemsep}{4pt}
+        \item \code{sf lesson switch N}\\
+              {\footnotesize テンプレートを \code{user\_code.cpp} にコピー}
+        \item \code{user\_code.cpp} を編集
+        \item \code{sf lesson build}
+        \item \code{sf lesson flash}
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{注意}
+    \code{student.cpp} はテンプレートなので直接編集しない！\\
+    \code{switch} で何度でもリセットできる
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{コントローラのセットアップ / Controller Setup}
+  \begin{block}{コントローラのビルドと書き込み}
+    \begin{enumerate}
+      \item コントローラを USB 接続
+      \item \code{sf build controller}
+      \item \code{sf flash controller}
+    \end{enumerate}
+  \end{block}
+
+  \vspace{1em}
+
+  \begin{exampleblock}{確認}
+    LCD に起動画面が表示されれば OK\\
+    Lesson 2 でペアリングして使用する
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{シミュレータで遊ぶ / Try the Simulator}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{USB HID モードに切替}\footnotesize
+        \begin{enumerate}\setlength{\itemsep}{0pt}
+          \item 画面タッチでメニューを開く
+          \item \texttt{Comm:} を選択
+          \item \texttt{USB HID} に切替 → 自動再起動
+        \end{enumerate}
+      \end{block}
+      \vspace{0.2em}
+      \begin{block}{コマンド}\footnotesize
+        \code{sf sim run}\\
+        \code{sf sim run -w ringworld}
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \footnotesize
+      \begin{table}
+        \centering\footnotesize
+        \begin{tabular}{ll}
+          \hline
+          \textbf{操作} & \textbf{説明} \\
+          \hline
+          スロットル       & 上昇 \\
+          ロール / ピッチ  & 傾き \\
+          ヨー             & 回転 \\
+          \hline
+        \end{tabular}
+      \end{table}
+      \vspace{-0.5em}
+      アクロモード（角速度制御）で飛行
+    \end{column}
+  \end{columns}
+
+  \begin{alertblock}{注意}\footnotesize
+    終了後は \texttt{Comm:} を \texttt{ESP-NOW} に戻すこと（実機飛行用）
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] \code{sf doctor} がエラーなしで通る
+      \item[$\square$] ビルドが成功し \texttt{"Hello StampFly!"} が表示される
+      \item[$\square$] コントローラのビルド・書き込みが完了した
+      \item[$\square$] シミュレータが起動し操縦を試した
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のレッスン}
+    Lesson 1: モータ制御 --- モータを回してプロペラの動きを確認
+  \end{block}
+\end{frame}

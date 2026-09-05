@@ -1,0 +1,209 @@
+% Slide 1: Title
+% ------------------------------------------------------------------
+
+% ------------------------------------------------------------------
+% Slide 2: Goal
+% ------------------------------------------------------------------
+\begin{frame}{今日のゴール / Today's Goal}
+  \begin{block}{目標}
+    モデルベースの $K_p$ を起点に、I 項・D 項を追加して制御を改善する
+  \end{block}
+
+  \vspace{0.8em}
+
+  \begin{itemize}
+    \item P 制御の限界: モデル不確かさ・外乱に弱い
+    \item 工学形式 $K_p / T_i / T_d$ とは
+    \item 不完全微分: ノイズに強い微分項
+    \item ログから調整する方法
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 3: PID Block Diagram
+% ------------------------------------------------------------------
+\begin{frame}{PID 制御器 / PID Controller}
+  \begin{center}
+    \resizebox{0.78\textwidth}{!}{\input{../../_shared/tikz/pid_block}}
+  \end{center}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 4: Why Incomplete Derivative?
+% ------------------------------------------------------------------
+\begin{frame}{なぜ不完全微分か / Why Incomplete Derivative?}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{alertblock}{問題}
+        \begin{itemize}
+          \item ジャイロにはノイズがある
+          \item 理想微分 $\frac{de}{dt}$ はノイズを増幅
+          \item 高周波振動 $\to$ モータに悪影響
+        \end{itemize}
+      \end{alertblock}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{exampleblock}{解決策}
+        \begin{itemize}
+          \item 不完全微分フィルタで高周波カット
+          \item $\eta = 0.1 \sim 0.2$
+          \item 小 $\to$ フィルタ弱い
+          \item 大 $\to$ フィルタ強い
+        \end{itemize}
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.8em}
+
+  \begin{block}{トレードオフ}
+    微分の効き（応答速度）$\longleftrightarrow$ ノイズ除去（安定性）
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 5: Engineering Form Parameters
+% ------------------------------------------------------------------
+\begin{frame}{工学形式パラメータ / Engineering Form}
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{llp{55mm}}
+      \hline
+      \textbf{パラメータ} & \textbf{意味} & \textbf{効果} \\
+      \hline
+      $K_p$  & 比例ゲイン   & 大$\to$応答速い、大きすぎ$\to$振動 \\
+      $T_i$  & 積分時間 [s] & 小$\to$積分強い（偏差早く消える）、小さすぎ$\to$ワインドアップ \\
+      $T_d$  & 微分時間 [s] & 大$\to$微分強い（振動抑制）、大きすぎ$\to$ノイズ増幅 \\
+      $\eta$ & フィルタ係数  & $0.1 \sim 0.2$、大$\to$ノイズに強い \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{教科書形式との対応}
+    $K_i = K_p / T_i$\,,\quad $K_d = K_p \cdot T_d$
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 6: Log-Based Tuning Guide
+% ------------------------------------------------------------------
+\begin{frame}{ログから調整する / Log-Based Tuning}
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{lll}
+      \hline
+      \textbf{ログで見える症状} & \textbf{原因} & \textbf{調整} \\
+      \hline
+      振動が収まらない   & $K_p$ 過大          & $K_p\!\downarrow$ \\
+      応答が遅い         & $K_p$ 過小          & $K_p\!\uparrow$ \\
+      定常偏差が残る     & I 項不足            & $T_i\!\downarrow$（積分強化）\\
+      オーバーシュート大 & D 項不足            & $T_d\!\uparrow$（微分強化）\\
+      高周波ノイズ       & $\eta$ 過小         & $\eta\!\uparrow$（$0.1\!\to\!0.2$）\\
+      ゆっくり発散       & ワインドアップ      & $T_i\!\uparrow$ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  \begin{block}{ヒント}
+    L7 で取得したテレメトリデータを見ながら調整する
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 7: Recommended Gains (model-based Kp)
+% ------------------------------------------------------------------
+\begin{frame}{推奨ゲイン / Recommended Gains}
+  \begin{table}
+    \centering
+    \begin{tabular}{lcccc}
+      \hline
+      \textbf{軸} & \textbf{$K_p$} & \textbf{$T_i$ [s]} & \textbf{$T_d$ [s]} & \textbf{$\eta$} \\
+      \hline
+      Roll  & 0.25 & 1.67 & 0.01  & 0.125 \\
+      Pitch & 0.36 & 1.67 & 0.01  & 0.125 \\
+      Yaw   & 1.34 & 4.0  & 0.005 & 0.125 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+
+  {\small $K_p$ は L6 のモデルベース設計値（$\zeta = 0.7$）を使用}
+
+  \vspace{0.3em}
+
+  \begin{block}{チューニング手順}
+    \begin{enumerate}
+      \item $T_i{=}0,\; T_d{=}0$ にして $K_p$ を調整（振動しない最大値）
+      \item $T_i$ を大きい値 (5.0) から徐々に下げる
+      \item $T_d$ を小さい値 (0.001) から徐々に上げる
+    \end{enumerate}
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 8: Hands-on Step 1 -- Ideal PID
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 Step\,1: 理想 PID / Ideal PID}
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp (roll axis excerpt)}
+float Kp=0.25f, Ti=1.67f, Td=0.01f;
+float integral=0, prev_err=0;
+// inside loop_400Hz(dt)
+float err = target - ws::gyro_x();
+float P = Kp * err;
+if (Ti > 0) integral += (dt/(2*Ti))*(err+prev_err);
+float I = Kp * integral;
+float D = Kp*Td*(err - prev_err)/dt; // ideal D
+prev_err = err;
+float roll_out = P + I + D;
+  \end{sflisting}
+  \begin{exampleblock}{やってみよう}
+    飛ばしてみて $\to$ 高周波振動に注目
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 9: Hands-on Step 2 -- Incomplete Derivative Filter
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 Step\,2: 不完全微分 / Incomplete Derivative}
+  \begin{sflisting}{user\_code.cpp (D term replacement)}
+// Replace ideal D with incomplete derivative filter
+float eta = 0.125f;
+float d_filt = 0;  // persistent state
+// inside loop_400Hz(dt)
+float alpha = 2*eta*Td / dt;
+float a = (alpha - 1) / (alpha + 1);
+float b = 2*Td / ((alpha + 1) * dt);
+d_filt = a * d_filt + b * (error - prev_err);
+float D = Kp * d_filt;  // Filtered!
+  \end{sflisting}
+
+  \begin{exampleblock}{やってみよう}
+    再び飛ばして $\to$ 高周波振動が減ったことを確認
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Slide 10: Checkpoint
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント / Checkpoint}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] 理想微分 vs 不完全微分で高周波振動の違いを確認
+      \item[$\square$] 定常偏差がなくなった（P のみと比較）
+      \item[$\square$] ゲイン調整表を使って応答を改善できた
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のレッスン}
+    Lesson 9: 姿勢推定 --- センサフュージョンで角度を推定
+  \end{block}
+\end{frame}

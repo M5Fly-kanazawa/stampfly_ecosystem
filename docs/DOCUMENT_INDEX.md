@@ -82,13 +82,13 @@
 | [setup/education.md](setup/education.md) | 教育向けセットアップガイド |
 | [university/syllabus.md](university/syllabus.md) | 大学講義シラバス |
 | [university/assessment_rubric.md](university/assessment_rubric.md) | 評価ルーブリック |
-| [workshop/workshop_guide.md](workshop/workshop_guide.md) | ワークショップガイド |
-| [workshop/workshop_schedule.md](workshop/workshop_schedule.md) | ワークショップスケジュール |
-| [workshop/competition_rules.md](workshop/competition_rules.md) | 競技ルール |
-| [workshop/slides/README.md](workshop/slides/README.md) | スライド資料ガイド |
-| [sci_tutorial/README.md](sci_tutorial/README.md) | SCI/SICE チュートリアル講座 2026: 概要・事前準備・資料索引 |
-| [sci_tutorial/handson_guide.md](sci_tutorial/handson_guide.md) | チュートリアル復習手順ガイド（セッション別） |
-| [sci_tutorial/cheatsheet.md](sci_tutorial/cheatsheet.md) | sf CLI・ws:: API 早見表 |
+| [events/stampfly_workshop/workshop_guide.md](events/stampfly_workshop/workshop_guide.md) | ワークショップガイド |
+| [events/stampfly_workshop/workshop_schedule.md](events/stampfly_workshop/workshop_schedule.md) | ワークショップスケジュール |
+| [events/stampfly_workshop/competition_rules.md](events/stampfly_workshop/competition_rules.md) | 競技ルール |
+| [events/_shared/README.md](events/_shared/README.md) | スライド資料ガイド |
+| [events/sci_tutorial_2026/README.md](events/sci_tutorial_2026/README.md) | SCI/SICE チュートリアル講座 2026: 概要・事前準備・資料索引 |
+| [events/sci_tutorial_2026/handson_guide.md](events/sci_tutorial_2026/handson_guide.md) | チュートリアル復習手順ガイド（セッション別） |
+| [events/sci_tutorial_2026/cheatsheet.md](events/sci_tutorial_2026/cheatsheet.md) | sf CLI・ws:: API 早見表 |
 
 ### 開発計画 (`plans/`)
 
@@ -308,10 +308,10 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [setup/education.md](setup/education.md) | Education-oriented setup guide |
 | [university/syllabus.md](university/syllabus.md) | University course syllabus |
 | [university/assessment_rubric.md](university/assessment_rubric.md) | Assessment rubric |
-| [workshop/workshop_guide.md](workshop/workshop_guide.md) | Workshop guide |
-| [workshop/workshop_schedule.md](workshop/workshop_schedule.md) | Workshop schedule |
-| [workshop/competition_rules.md](workshop/competition_rules.md) | Competition rules |
-| [workshop/slides/README.md](workshop/slides/README.md) | Slide materials guide |
+| [events/stampfly_workshop/workshop_guide.md](events/stampfly_workshop/workshop_guide.md) | Workshop guide |
+| [events/stampfly_workshop/workshop_schedule.md](events/stampfly_workshop/workshop_schedule.md) | Workshop schedule |
+| [events/stampfly_workshop/competition_rules.md](events/stampfly_workshop/competition_rules.md) | Competition rules |
+| [events/_shared/README.md](events/_shared/README.md) | Slide materials guide |
 
 ### Development Plans (`plans/`)
 

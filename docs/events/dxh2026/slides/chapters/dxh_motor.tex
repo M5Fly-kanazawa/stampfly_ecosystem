@@ -1,0 +1,211 @@
+% ==============================================================================
+% dxh_motor.tex — DXH workshop Part 3-4: rewriting code + motor control
+% DXH講座 ③: プログラム書き換え・モータの制御
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{③ モータ実習の安全}
+  \begin{block}{プロペラを回す実習ならではの注意}
+    \begin{itemize}\small
+      \item \warn{Duty は 0.15 以下}（ファームでは強制されないので数値を必ずダブルチェック）
+      \item プロペラは付けたまま --- 機体上部の基板を上から\textbf{指で押さえて}回す
+      \item バッテリーと USB の同時接続は避ける（動作確認はバッテリー駆動）
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{alertblock}{止め方}
+    \footnotesize 機体本体ボタンをもう一度クリック（DISARM）／完全に切るときはバッテリーを外す
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③ モータ配置}
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \includegraphics[width=0.82\columnwidth]{stampfly_upside.jpg}\\
+      {\scriptsize 実機（上から見た写真）}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \centering
+      \resizebox{0.62\columnwidth}{!}{\input{../../_shared/tikz/motor_layout}}
+    \end{column}
+  \end{columns}
+  \vspace{0.2em}
+  \begin{itemize}\small
+    \item モータ ID：1 = FR（右前） / 2 = RR（右後） / 3 = RL（左後） / 4 = FL（左前）
+    \item 対角のモータが同じ方向に回転（トルクバランス）：M1・M3 = CCW / M2・M4 = CW
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③ PWM と Duty / ARM・DISARM とは}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \begin{center}
+        \resizebox{!}{0.6\textheight}{\input{../../_shared/tikz/pwm_waveform}}
+      \end{center}
+    \end{column}
+    \begin{column}{0.53\textwidth}
+      \textbf{PWM とは}
+      \begin{itemize}\small
+        \item モータの力加減は、電源を\textbf{高速で ON/OFF} して調整する（PWM）
+        \item ON の時間の割合が \textbf{Duty} --- 0\% = 停止、50\% = 半分の力、100\% = 全力
+        \item 身近な例: LED 照明の明るさ調整も同じ仕組み
+      \end{itemize}
+
+      \vspace{0.4em}
+
+      \textbf{ARM / DISARM とは}
+      \begin{itemize}\small
+        \item \textbf{ARM} = モータ出力を有効化（回転可能に）
+        \item \textbf{DISARM} = モータ出力を無効化（強制停止）
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{③ 実習の手順（1）：ビルドと書き込み}
+  \begin{block}{PC 側の操作（コマンドプロンプト）}
+    \begin{lstlisting}[style=sfbash, numbers=none]
+cd stampfly_ecosystem
+setup_env.bat
+sf lesson edit    ← VSCodeが開く。コードを編集して保存
+sf lesson build
+sf lesson flash   ← 書き込み後シリアルモニタが自動起動
+    \end{lstlisting}
+  \end{block}
+
+  {\footnotesize ※ 「←」以降は説明なので入力しません（打ち込むのはコマンドだけ）}
+
+  \vspace{0.2em}
+
+  {\footnotesize シリアルモニタの終了は \code{Ctrl+]}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③ 実習の手順（2）：機体側の動作確認}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \begin{block}{バッテリー駆動で確認する}
+        \begin{enumerate}\small
+          \item USB ケーブルを外す
+          \item バッテリーを接続して機体の電源を入れる
+          \item 起動 LED シーケンスを待つ（右表）
+          \item 機体本体ボタンを\textbf{1回クリック} $\to$ ARM（設定した Duty で回転）
+          \item もう一度クリック $\to$ DISARM（停止）
+        \end{enumerate}
+      \end{block}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{table}
+        \centering\scriptsize
+        \setlength{\tabcolsep}{2pt}
+        \begin{tabular}{@{}c p{19mm} p{20mm}@{}}
+          \hline
+          \# & LED & 状態 \\
+          \hline
+          1 & 白（明滅） & 置いて待つ（約3秒） \\
+          2 & 青（明滅） & センサ初期化中 \\
+          3 & マゼンタ（点滅） & 安定化待ち（約3秒・触らない） \\
+          4 & 緑点灯+ビープ$\times$3 & 操作可能 \\
+          \hline
+        \end{tabular}
+      \end{table}
+      {\tiny ※ 実習用ファームの表示です（①の機体とは異なります）}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.4em}
+
+  \begin{alertblock}{安全}
+    プロペラは付けたまま --- 機体上部の基板を上から指で押さえて回す
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{③ 実習コード}
+  \begin{adjustbox}{max width=\textwidth, max height=0.86\textheight, center}
+  \begin{sflisting}[basicstyle=\ttfamily\tiny, aboveskip=1pt, belowskip=0pt]{user\_code.cpp}
+#include "workshop_api.hpp"
+
+// =========================================================================
+// Motor duty test (hardcoded)
+// 各モータの Duty をハードコードする
+// =========================================================================
+//
+// Motor IDs / モータ ID:
+//   1 = FR (右前)   2 = RR (右後)
+//   3 = RL (左後)   4 = FL (左前)
+//
+// Duty range: 0.0 - 1.0
+//   0.0  = stop / 止める
+//   0.10 = spin at 10% / 10% で回す
+//   このチュートリアルでは 0.15 を上限とする
+
+void setup()
+{
+    ws::print("Motor duty test");
+
+    // Do NOT auto-arm in code. Arming is controlled by the controller's
+    // ARM button or a single click of the vehicle's onboard button, so
+    // motors never spin until you intentionally press it.
+    // コードでは自動 ARM しない。アーム/解除はコントローラの ARM ボタン
+    // または機体本体ボタンの単クリックで行うので、意図的に押すまで
+    // モータは絶対に回らない
+}
+
+void loop_400Hz(float dt)
+{
+    // ----- Set each motor's duty here / 各モータの Duty をここで設定 -----
+    ws::motor_set_duty(1, 0.10f);   // FR (右前)
+    ws::motor_set_duty(2, 0.00f);   // RR (右後)
+    ws::motor_set_duty(3, 0.00f);   // RL (左後)
+    ws::motor_set_duty(4, 0.00f);   // FL (左前)
+    // -------------------------------------------------------------------
+}
+  \end{sflisting}
+  \end{adjustbox}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③ 改造課題：推力の差で「動き」を作る}
+  \begin{block}{4つの Duty に差をつけて ARM してみる}
+    \small 飛行原理のページで見た「推力の差 → ロール・ピッチ・ヨー」を、机の上で手に感じる実習です
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{l>{\raggedright\arraybackslash}p{52mm}}
+      \hline
+      \textbf{設定（Duty）} & \textbf{機体が「しようとする」動き} \\
+      \hline
+      右2つ（M1・M2）= 0.10、左2つ = 0.05 & 左に傾こうとする（ロール） \\
+      前2つ（M1・M4）= 0.10、後2つ = 0.05 & 後ろに傾こうとする（ピッチ） \\
+      CW 組（M2・M4）= 0.10、CCW 組 = 0.05 & 機首が回ろうとする（ヨー・反トルク） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.2em}
+
+  \begin{alertblock}{必ず守る}
+    \footnotesize 機体上部の基板を上から\textbf{指で押さえたまま} ARM する。傾く「力」を感じたら DISARM
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{③ チェックポイント}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] Duty を書き換えてビルド・書き込みができた
+      \item[$\square$] 機体本体ボタンで ARM $\to$ モータ回転 $\to$ DISARM $\to$ 停止を確認した
+      \item[$\square$] 指定したモータが指定の Duty で回ることを確認した
+    \end{itemize}
+  \end{alertblock}
+\end{frame}
