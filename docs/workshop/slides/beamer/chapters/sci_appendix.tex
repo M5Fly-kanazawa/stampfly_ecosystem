@@ -18,9 +18,9 @@
       \code{sf blocks}     & Blockly ブロックプログラミング（\code{--demo} で機体なしデモ） \\
       \code{sf cal gyro/accel/mag} & センサキャリブレーション \\
       \code{sf lesson}     & Workshop 実習管理（\code{switch sci2026:N}/\code{build}/\code{flash}，一覧は \code{list --course sci2026}） \\
-      \code{sf trim}       & ホバーログから姿勢トリムを算出 \\
+      \code{sf trim analyze} & ホバーログから姿勢トリムを算出 \\
       \code{sf takeoff} 等   & Tello 風ミニコマンド（\code{sf takeoff/land/hover/jump}，個別のトップレベルコマンド） \\
-      \code{sf competition} & ホバー耐久・スコア記録 \\
+      \code{sf competition hover-time/score} & ホバー耐久・スコア記録 \\
       \hline
     \end{tabular}
   \end{table}
@@ -39,13 +39,15 @@
       \code{sf sim run vpython/genesis} & シミュレータ起動（S5） \\
       \code{sf sils build/scenario/gui} & SILS ベンチ（S5） \\
       \code{sf sysid fit}        & 閉ループ P 制御ログからプラント同定（実習7） \\
-      \code{sf sysid rate-fit/rate-tune} & 開ループ ETFE 同定と仕様ベース PID 設計（S4） \\
+      \code{sf sysid rate-fit/rate-tune} & 閉ループ同定（ETFE + フィット）と仕様ベース PID 設計（S4） \\
+      \code{sf sysid noise}      & 静止センサログから Allan 分散でノイズ特性を推定 \\
       \code{sf params check}     & 物理パラメータ整合検査 \\
+      \code{sf upgrade}          & 最新版を pull し環境を再同期 \\
       \hline
     \end{tabular}
   \end{table}
 
-  {\footnotesize 順序は \code{sf --help} 表示順に準拠。全コマンドは \code{lib/sfcli/commands/} に実装がある}
+  {\footnotesize \code{sf --help} の順序を基本に，授業で頻出する \code{sf lesson} を前に出している。全コマンドは \code{lib/sfcli/commands/} に実装がある}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -56,16 +58,19 @@
       \hline
       \textbf{カテゴリ} & \textbf{関数} \\
       \hline
-      モータ制御 & \code{motor\_set\_duty(id,duty)}, \code{motor\_set\_all(duty)},
-        \code{motor\_stop\_all()}, \code{motor\_mixer(t,r,p,y)}, \code{arm()},
+      モータ制御 & \code{motor\_set\_duty(id,duty)} [id 1--4, duty 0--1], \code{motor\_set\_all(duty)} [0--1],
+        \code{motor\_stop\_all()}, \code{motor\_mixer(t,r,p,y)} [t 0--1, r/p/y $-1$--1], \code{arm()},
         \code{disarm()}, \code{is\_armed()} \\
-      コントローラ入力 & \code{rc\_throttle/roll/pitch/yaw()} \\
+      コントローラ入力 & \code{rc\_throttle()} [0--1], \code{rc\_roll/pitch/yaw()} [$-1$--1] \\
       ボタン・モード & \code{rc\_throttle\_yaw\_button()}, \code{rc\_roll\_pitch\_button()},
-        \code{rc\_stabilize\_acro\_mode()}, \code{rc\_alt\_mode()}, \code{rc\_pos\_mode()} \\
-      LED 制御 & \code{led\_color(r,g,b)}, \code{disable/enable\_led\_task()} \\
+        \code{rc\_stabilize\_acro\_mode()}, \code{rc\_alt\_mode()}, \code{rc\_pos\_mode()}\mbox{（すべて bool）} \\
+      LED 制御 & \code{led\_color(r,g,b)} [0--255], \code{disable/enable\_led\_task()},
+        \code{is\_led\_task\_disabled()} \\
       \hline
     \end{tabular}
   \end{table}
+
+  {\footnotesize 実習中は Duty $\le$ 0.15 で運用する（安全上の運用ルール。ファーム側では強制されない）}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -76,14 +81,14 @@
       \hline
       \textbf{カテゴリ} & \textbf{関数} \\
       \hline
-      IMU センサ & \code{gyro\_x/y/z()}, \code{accel\_x/y/z()} \\
-      環境・距離センサ & \code{baro\_altitude/pressure()}, \code{mag\_x/y/z()},
-        \code{tof\_bottom/front()}, \code{flow\_vx/vy/quality()} \\
-      姿勢推定 & \code{estimated\_roll/pitch/yaw()}, \code{estimated\_altitude()} \\
-      制御目標のロギング & \code{set\_rate\_target(r,p,y)}, \code{set\_angle\_target(r,p)}
+      IMU センサ & \code{gyro\_x/y/z()} [rad/s], \code{accel\_x/y/z()} [m/s$^2$] \\
+      環境・距離センサ & \code{baro\_altitude/pressure()} [m, Pa], \code{mag\_x/y/z()} [$\mu$T],
+        \code{tof\_bottom/front()} [m], \code{flow\_vx/vy/quality()} [m/s, 0--255] \\
+      姿勢推定 & \code{estimated\_roll/pitch/yaw()} [rad], \code{estimated\_altitude()} [m] \\
+      制御目標のロギング & \code{set\_rate\_target(r,p,y)} [rad/s], \code{set\_angle\_target(r,p)} [rad]
         （実習7，Data Stream の \code{rate\_ref\_*}/\code{angle\_ref\_*} に記録，制御には無関係） \\
-      ユーティリティ & \code{millis()}, \code{battery\_voltage()}, \code{print(fmt,...)},
-        \code{set\_channel(ch)} \\
+      ユーティリティ & \code{millis()} [ms], \code{battery\_voltage()} [V], \code{print(fmt,...)},
+        \code{set\_channel(ch)} [1, 6, 11] \\
       \hline
     \end{tabular}
   \end{table}
@@ -120,9 +125,9 @@
       \textbf{症状} & \textbf{原因} & \textbf{対処} \\
       \hline
       ビルドエラー（赤字 \code{error:}） & 打ち間違い（カンマ・セミコロン抜け等） & エラー1行目のファイル名・行番号を確認し実習コードと見比べる \\
-      \code{sf lesson flash} が失敗 & USB ケーブル・ポートの問題 & ケーブル交換／ポートを使う他アプリを閉じる／BOOT ボタンを押しながら挿し直す \\
-      モータが回らない & ARM し忘れ／USB 接続のまま & 機体ボタンを1回クリック／USB を外しバッテリー駆動を確認 \\
-      起動 LED が緑にならない & 校正中に機体を動かした & 機体を静かに置き直し，緑点灯＋ビープ3回まで待つ \\
+      \code{sf lesson flash} が失敗 & 書き込みポートの競合・接触不良 & 別のケーブル／ポートを試す。改善しなければ機体の BOOT ボタンを押したまま USB を挿し直し，書き込み専用モードで再実行する \\
+      モータが回らない & ARM されていない，または USB 給電中（安全のため ARM 拒否） & 機体ボタンをクリックして ARM 状態を確認する。USB を外してバッテリー駆動になっているか確認する \\
+      起動 LED が緑にならない & 静止校正中に機体を動かしてしまった & 機体を静かに置き直し，緑点灯とビープ3回（readyTone）を待つ \\
       \hline
     \end{tabular}
   \end{table}
@@ -135,13 +140,13 @@
     \hline
     & \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} \\
     \hline
-    S1 & \code{sf sim run vpython}        & シミュレータ操縦        & \code{docs/architecture/simulation-policy.md} \\
+    S1 & \code{sf sim run vpython}        & シミュレータ操縦        & \code{docs/commands/sf-sim.md} \\
     S2 & \code{sf lesson switch sci2026:2} & IMU センサ（実習2）    & \code{firmware/vehicle/docs/architecture.md \S2} \\
     S2 & \code{sf log wifi/viz}           & テレメトリ取得と可視化  & \code{docs/guides/flight-log-viz.md} \\
     S3 & \code{sf lesson switch sci2026:3} & モータ制御（実習3）     & \code{firmware/vehicle/docs/hardware\_init.md} \\
     S3 & \code{sf lesson switch sci2026:4} & コントローラ入力（実習4） & \code{protocol/spec/}（ControlPacket） \\
     S4 & \code{sf lesson switch sci2026:8} & PID 制御（実習8）       & \code{pid\_control.tex} \\
-    S4 & \code{sf sysid fit}              & システム同定            & \code{system\_identification.tex} \\
+    S4 & \code{sf sysid fit}              & システム同定（実習7）    & \code{system\_identification.tex} \\
     S5 & \code{sf sils gui}               & SILS ブラウザ実験環境   & \code{simulator/sils/gui/README.md} \\
     S5 & \code{sf log viz}                & ログ解析                & \code{docs/guides/flight-log-viz.md} \\
     \hline

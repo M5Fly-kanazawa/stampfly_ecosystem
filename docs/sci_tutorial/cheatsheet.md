@@ -28,7 +28,7 @@
 | `sf sils build/run/scenario/regression/gate/sysid-gate/gui` | SILS ベンチ操作 |
 | `sf cal gyro/accel/mag` | センサキャリブレーション |
 | `sf sysid fit` | 閉ループ P 制御ログからプラント同定（実習 7） |
-| `sf sysid rate-fit/rate-tune` | 開ループ ETFE 同定と仕様ベース PID 設計 |
+| `sf sysid rate-fit/rate-tune` | 閉ループ同定（ETFE + フィット）と仕様ベース PID 設計 |
 | `sf sysid noise` | 静止センサログから Allan 分散でノイズ特性を推定（`--sensor gyro/accel/baro/tof/all`） |
 | `sf params check` | 物理パラメータ整合検査 |
 | `sf trim analyze` | ホバーログから姿勢トリムを算出 |
@@ -130,7 +130,7 @@ In `sf --help` display order.
 | `sf sils build/run/scenario/regression/gate/sysid-gate/gui` | SILS bench operations |
 | `sf cal gyro/accel/mag` | Sensor calibration |
 | `sf sysid fit` | Identify the plant from a closed-loop P-control log (Exercise 7) |
-| `sf sysid rate-fit/rate-tune` | Open-loop ETFE identification and spec-based PID design |
+| `sf sysid rate-fit/rate-tune` | Closed-loop identification (ETFE + fit) and spec-based PID design |
 | `sf sysid noise` | Estimate sensor noise from a static log via Allan variance (`--sensor gyro/accel/baro/tof/all`) |
 | `sf params check` | Physical-parameter consistency audit |
 | `sf trim analyze` | Compute attitude trim from a hover log |
