@@ -80,6 +80,7 @@ def _udp_listener(port: int, csv_path=None) -> None:
 # STL 本体パーツは SILS GUI・MuJoCo と「同一ファイル」。
 _PAGE_PATH = Path(__file__).resolve().parent.parent / "assets" / "telemetry_web.html"
 _MESH_DIR = None   # resolved lazily (repo root lookup) / 遅延解決（リポジトリルート探索）
+_VENDOR_DIR = None # three.js, same lazy-resolve pattern as _mesh_dir() / three.js。_mesh_dir()と同じ遅延解決
 
 
 def _mesh_dir() -> Path:
@@ -87,6 +88,21 @@ def _mesh_dir() -> Path:
     if _MESH_DIR is None:
         _MESH_DIR = paths.root() / "simulator" / "shared" / "assets" / "meshes" / "parts"
     return _MESH_DIR
+
+
+def _vendor_dir() -> Path:
+    # three.js is vendored (not CDN-loaded): this page's normal use is a PC
+    # whose Wi-Fi is associated 1:1 with the vehicle's own SoftAP (or an
+    # offline workshop LAN), which has no route to any CDN at all -- not an
+    # occasional outage. See simulator/shared/assets/vendor/three/README.md.
+    # three.js はCDNではなくローカル同梱: このページの通常利用はPCのWi-Fiが
+    # 機体自身のSoftAP（またはオフライン講習LAN）に1対1接続された状態で、
+    # CDNへの経路がそもそも無い -- 稀な障害ではない。詳細は
+    # simulator/shared/assets/vendor/three/README.md 参照。
+    global _VENDOR_DIR
+    if _VENDOR_DIR is None:
+        _VENDOR_DIR = paths.root() / "simulator" / "shared" / "assets" / "vendor" / "three"
+    return _VENDOR_DIR
 
 
 
@@ -117,6 +133,25 @@ class _Handler(BaseHTTPRequestHandler):
             body = mesh.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "model/stl")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path.startswith("/vendor/three/"):
+            # Vendored three.js (see _vendor_dir()) -- whitelisted relative
+            # path, no traversal (same rule as /mesh/ above).
+            # 同梱三js（_vendor_dir()参照） -- 相対パスを許可リスト化しトラバーサル防止
+            # （上の /mesh/ と同じ規則）。
+            rel = self.path[len("/vendor/three/"):]
+            if not re.fullmatch(r"[A-Za-z0-9_./-]+\.js", rel) or ".." in rel.split("/"):
+                self.send_error(400, "bad vendor path")
+                return
+            asset = _vendor_dir() / rel
+            if not asset.exists():
+                self.send_error(404)
+                return
+            body = asset.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

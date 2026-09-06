@@ -4,21 +4,29 @@
   The 3D scene (StampFly model, lighting, OrbitControls + per-OS trackpad zoom,
   prop spin driven by per-motor duty) is PORTED from simulator/sils/gui/static/
   app.js so the look and the controls are identical to the SILS GUI. STL body
-  parts are served at /mesh/ from the same simulator/shared assets. If three.js
-  cannot load (offline field use — CDN unreachable), the page falls back to the
-  legacy 2D attitude indicator.
+  parts and three.js itself are both served locally (/mesh/, /vendor/three/)
+  from simulator/shared/assets -- NOT a CDN: this page's normal use is a PC
+  whose Wi-Fi is associated 1:1 with the vehicle's own SoftAP (or an offline
+  workshop LAN), which has no route to any CDN at all, not just occasionally.
+  See simulator/shared/assets/vendor/three/README.md. The 2D fallback below
+  still exists as defense-in-depth (e.g. a browser without ES module import
+  support).
   sf telemetry - -web — SILS GUI と同一の 3D ビュー付きライブテレメトリ。3D シーン
   （StampFly モデル・照明・OrbitControls＋OS別ズーム・モータ duty 比例のプロペラ
   回転）は simulator/sils/gui/static/app.js から移植し、見た目も操作も SILS GUI と
-  同一。STL は同じ simulator/shared アセットを /mesh/ で配信。three.js が読めない
-  場合（現場のオフライン運用で CDN 不達）は旧 2D 姿勢表示器にフォールバックする。
+  同一。STL と three.js 本体はどちらも simulator/shared/assets からローカル配信
+  （/mesh/、/vendor/three/）— CDNではない: このページの通常利用はPCのWi-Fiが
+  機体自身のSoftAP（またはオフライン講習LAN）に1対1接続された状態で、CDNへの経路が
+  そもそも存在しない（稀な障害ではない）。詳細は
+  simulator/shared/assets/vendor/three/README.md 参照。下記の2Dフォールバックは
+  多重防御として残す（ESモジュールimport非対応ブラウザ等に備える）。
 -->
 <html lang="ja"><head><meta charset="utf-8">
 <title>StampFly telemetry</title>
 <script type="importmap">
 { "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three": "/vendor/three/three.module.min.js",
+    "three/addons/": "/vendor/three/addons/"
 } }
 </script>
 <style>
@@ -244,7 +252,7 @@ function activate2DFallback(){
   $("trailChk").parentElement.style.display = "none";
   $("attitudeIndicator").style.display = "block";
   document.querySelector(".hint").textContent =
-    "3D ライブラリ未到達（オフライン）— 2D 姿勢表示器で表示中";
+    "3D ライブラリを読み込めません — 2D 姿勢表示器で表示中";
 }
 window.addEventListener("error", (e)=>{   // importmap/CDN failure surfaces here
   if (String(e.message||"").includes("three") && !use2DFallback) activate2DFallback();
