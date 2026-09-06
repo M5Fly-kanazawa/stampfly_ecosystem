@@ -2318,7 +2318,7 @@ class StampFlySetupApp:
         self._include_flasher_var = tk.BooleanVar(value=True)
         self._desktop_shortcut_var = tk.BooleanVar(value=True)  # see SetupOptions docstring re: current limits
         self._minimal_var = tk.BooleanVar(value=False)
-        self._sils_toolchain_var = tk.BooleanVar(value=False)
+        self._sils_toolchain_var = tk.BooleanVar(value=True)
         self._existing_mode_var = tk.StringVar(value=EXISTING_CHECKOUT_MODE_REPAIR)
         # Keep the primary button's label honest when the user flips the
         # repair/uninstall radio on the Options page.

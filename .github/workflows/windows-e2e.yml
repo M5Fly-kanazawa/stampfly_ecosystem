@@ -26,16 +26,18 @@
 # 動かす初めての CI ジョブとなる。
 #
 # SILS is intentionally NOT part of this workflow: the SILS host-bench
-# toolchain (MSYS2/MinGW-w64) is a separate ~2GB opt-in
-# (--with-sils-toolchain) that most users skip, and sils-regression.yml
-# already covers SILS correctness on ubuntu-latest. Adding it here would
-# only test MSYS2 provisioning, not the install path this workflow targets.
+# toolchain (MSYS2/MinGW-w64, ~2GB) installs by default now, but is opted
+# out here with --no-sils-toolchain (see the install.bat step below) --
+# sils-regression.yml already covers SILS correctness on ubuntu-latest, and
+# adding it here would only test MSYS2 provisioning (several to twenty-plus
+# extra minutes per run), not the install path this workflow targets.
 # SILS は意図的に対象外とする: SILS ホストベンチのツールチェーン
-# （MSYS2/MinGW-w64）はほとんどのユーザーが使わない約2GBの任意導入
-# （--with-sils-toolchain）であり、SILS 自体の正しさは
-# sils-regression.yml が ubuntu-latest で既にカバーしている。ここに含めても
-# 検証できるのは MSYS2 の導入手順だけで、本ワークフローが検証したい
-# 導入経路そのものではない。
+# （MSYS2/MinGW-w64、約2GB）は既定で導入されるようになったが、ここでは
+# 下の install.bat ステップで --no-sils-toolchain を渡して除外している --
+# SILS 自体の正しさは sils-regression.yml が ubuntu-latest で既にカバーして
+# いる。ここに含めても検証できるのは MSYS2 の導入手順（1回あたり数分〜
+# 十数分の追加時間）だけで、本ワークフローが検証したい導入経路そのものでは
+# ない。
 name: Windows install E2E
 
 on:
@@ -171,8 +173,13 @@ jobs:
         #   scripts/installer.py's _install_flasher_gui() docstring), so it
         #   must be explicitly skipped or the job would spend time building
         #   a Start Menu shortcut nobody on a CI runner will ever click.
-        #   (--with-sils-toolchain is left unset for the same reason SILS is
-        #   excluded from this workflow entirely -- see the header comment.)
+        # --no-sils-toolchain: skip the optional SILS/MinGW-w64 toolchain
+        #   install -- in --non-interactive mode this step now defaults to
+        #   YES (scripts/installer.py's _install_sils_toolchain() docstring),
+        #   so it must be explicitly opted out here for the same reason SILS
+        #   is excluded from this workflow entirely -- see the header
+        #   comment. Without this flag the job would spend several to
+        #   twenty-plus minutes downloading/building MinGW-w64 it never uses.
         # --non-interactive: input()を一切呼ばない（必須 — ホスト型ランナー
         #   にはTTYが無く、これが無いとprompt()呼び出しがタイムアウトまで
         #   永久にブロックする）。
@@ -186,9 +193,14 @@ jobs:
         #   docstring参照）ため、明示的にスキップしないと、CIランナー上で
         #   誰もクリックしないスタートメニューショートカットの作成に時間を
         #   費やしてしまう。
-        #   （--with-sils-toolchainを付けないのは、SILSを本ワークフローから
-        #   丸ごと除外しているのと同じ理由 -- 冒頭のコメント参照）
-        run: install.bat --non-interactive --minimal --no-flasher
+        # --no-sils-toolchain: 任意のSILS/MinGW-w64ツールチェーン導入を
+        #   スキップする -- --non-interactiveモードではこのステップも既定が
+        #   YESになった（scripts/installer.pyの_install_sils_toolchain()の
+        #   docstring参照）ため明示的なオプトアウトが必要。SILSを本
+        #   ワークフローから丸ごと除外しているのと同じ理由（冒頭のコメント
+        #   参照）。無ければCIランナー上で使いもしないMinGW-w64のダウンロード・
+        #   ビルドに数分〜十数分費やしてしまう。
+        run: install.bat --non-interactive --minimal --no-flasher --no-sils-toolchain
 
       - name: Activate environment and run sf commands
         shell: cmd

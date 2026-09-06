@@ -544,13 +544,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 # --- handlers / ハンドラ -------------------------------------------------------
 def run_install_toolchain(args: argparse.Namespace) -> int:
-    """`sf sils install-toolchain`: install MinGW-w64 (via winget, falling
-    back to a direct download) so `sf sils build` has a compiler that can
-    build this codebase (MSVC cannot — see simulator/sils/README.md).
-    `sf sils install-toolchain`: MinGW-w64 を導入する（winget、失敗時は直接
-    ダウンロードにフォールバック）。`sf sils build` がこのコードベースを
-    ビルドできるコンパイラを持つようにする（MSVC では不可 —
-    simulator/sils/README.md 参照）。"""
+    """`sf sils install-toolchain`: install MinGW-w64 (direct MSYS2 download
+    by default; `--winget` tries winget first instead) so `sf sils build`
+    has a compiler that can build this codebase (MSVC cannot — see
+    simulator/sils/README.md).
+    `sf sils install-toolchain`: MinGW-w64 を導入する（既定は MSYS2 の直接
+    ダウンロード。`--winget` を渡すと先に winget を試す）。`sf sils build`
+    がこのコードベースをビルドできるコンパイラを持つようにする
+    （MSVC では不可 — simulator/sils/README.md 参照）。"""
     if not platform.is_windows():
         console.info("Not Windows — the SILS build uses the system gcc/clang here; no toolchain install needed.")
         return 0
