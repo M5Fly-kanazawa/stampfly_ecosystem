@@ -565,7 +565,25 @@ jobs:
         # みが必要。バージョン固定は flasher_gui の同等ステップと同じ理由
         # -- PyInstaller 7 は --onefile + --windowed の組み合わせを macOS で
         # 必ずエラーにするため、パッケージングを作り直すまでは6.x系に固定する
-        run: pip install "pyinstaller>=6,<7"
+        run: pip install "pyinstaller>=6,<7" pytest
+
+      - name: Run installer drift-detection test
+        # scripts/test_gui_installer_parity.py guards the Python
+        # auto-install logic that scripts/installer.py and this GUI
+        # necessarily duplicate (the GUI runs before the repo is cloned,
+        # so it cannot import scripts/installer.py -- see that test's
+        # module docstring and the installer-duplication audit plan). Runs
+        # here, on every matrix OS, since the test itself is pure source
+        # inspection (no real install commands executed) and catches
+        # drift regardless of which file was edited.
+        # scripts/test_gui_installer_parity.py は、scripts/installer.py と
+        # 本GUIがやむを得ず重複させているPython自動導入ロジックを守る
+        # （GUIはリポジトリのクローン前に動くため scripts/installer.py を
+        # importできない -- 同テストのdocstringとインストーラ重複監査の
+        # 計画参照）。テスト自体は純粋なソース検査（実際のインストール
+        # コマンドは実行しない）なので、全マトリクスOSでここで実行し、
+        # どちらのファイルが編集されてもドリフトを検知する。
+        run: pytest scripts/test_gui_installer_parity.py -v
 
       - name: Smoke-test the app entry point
         # Cheap sanity check with the system Python before spending time on
