@@ -82,10 +82,15 @@
   % 確認(s5)から編集(s2)へ戻るフィードバック。右側の説明ラベルと交差しない
   % よう左(west)側を通す。直角ルーティング(水平-垂直-水平)、矢頭手前に
   % 5mm以上の直線区間を確保。
+  % NOTE: (a -| b) is (b.x, a.y). The vertical run must sit at fbx's x, so
+  % the corner at s2's level is (s2.west -| fbx), not (fbx -| s2.west).
+  % 注意: (a -| b) は「b の x、a の y」。縦線は fbx の x に置くので、
+  % s2 の高さの角は (s2.west -| fbx)。逆に書くと s2 の下から入ってしまう。
   \coordinate (fbx) at ($(s5.west) + (-26mm, 0)$);
-  \draw[feedback] (s5.west) -- (fbx) -- (fbx -| s2.west) -- (s2.west);
+  \coordinate (fbtop) at (s2.west -| fbx);
+  \draw[feedback] (s5.west) -- (fbx) -- (fbtop) -- (s2.west);
   \node[font=\scriptsize\itshape, text=gray1, align=right, anchor=east, fill=white, inner sep=1pt]
-    at ($(fbx)!0.5!(fbx -| s2.west) + (-2mm, 0)$) {直して\\再挑戦};
+    at ($(fbx)!0.5!(fbtop) + (-2mm, 0)$) {直して\\再挑戦};
 
 \end{tikzpicture}
 \end{document}

@@ -41,6 +41,10 @@ IMAGES_DIR := _shared/images
 TIKZ_DPI   := 300
 
 TIKZ_SOURCES := $(wildcard $(TIKZ_DIR)/*.tex)
+# Shared figures/images are \input/\includegraphics-ed by the chapters, so a
+# fix there must rebuild the deck too.
+# 共有の図・画像は章から読み込まれるため、図の修正でもデッキを再ビルドする。
+SHARED_ASSETS    := $(wildcard _shared/tikz/*.tex) $(wildcard _shared/images/*)
 TIKZ_PDFS    := $(TIKZ_SOURCES:.tex=.pdf)
 TIKZ_PNGS    := $(patsubst $(TIKZ_DIR)/%.tex,$(IMAGES_DIR)/%.png,$(TIKZ_SOURCES))
 
@@ -87,7 +91,7 @@ WORKSHOP_CHAPTERS := $(wildcard $(WORKSHOP_DIR)/chapters/*.tex)
 slides: $(WORKSHOP_DIR)/$(WORKSHOP_PDF)
 workshop: slides
 
-$(WORKSHOP_DIR)/$(WORKSHOP_PDF): $(WORKSHOP_DIR)/$(WORKSHOP_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(WORKSHOP_CHAPTERS)
+$(WORKSHOP_DIR)/$(WORKSHOP_PDF): $(WORKSHOP_DIR)/$(WORKSHOP_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(WORKSHOP_CHAPTERS) $(SHARED_ASSETS)
 	cd $(WORKSHOP_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(WORKSHOP_TEX) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(WORKSHOP_TEX)
 
 # ---------------------------------------------------------------------------
@@ -102,7 +106,7 @@ DXH_CHAPTERS := $(wildcard $(DXH_DIR)/chapters/*.tex)
 
 dxh: $(DXH_DIR)/$(DXH_PDF)
 
-$(DXH_DIR)/$(DXH_PDF): $(DXH_DIR)/$(DXH_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(DXH_CHAPTERS)
+$(DXH_DIR)/$(DXH_PDF): $(DXH_DIR)/$(DXH_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(DXH_CHAPTERS) $(SHARED_ASSETS)
 	cd $(DXH_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(DXH_TEX) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(DXH_TEX)
 
 # Docswell-upload variant: same deck without QR codes (title-page Docswell QR,
@@ -113,7 +117,7 @@ DXH_DOCSWELL_PDF := dxh_workshop_docswell.pdf
 
 dxh-docswell: $(DXH_DIR)/$(DXH_DOCSWELL_PDF)
 
-$(DXH_DIR)/$(DXH_DOCSWELL_PDF): $(DXH_DIR)/$(DXH_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(DXH_CHAPTERS)
+$(DXH_DIR)/$(DXH_DOCSWELL_PDF): $(DXH_DIR)/$(DXH_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(DXH_CHAPTERS) $(SHARED_ASSETS)
 	cd $(DXH_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}" && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=dxh_workshop_docswell "\def\DocswellBuild{1}\input{$(DXH_TEX)}"
 
 # ---------------------------------------------------------------------------
@@ -129,12 +133,12 @@ SCI_CHAPTERS     := $(wildcard $(SCI_DIR)/chapters/*.tex)
 
 sci: $(SCI_DIR)/$(SCI_PDF)
 
-$(SCI_DIR)/$(SCI_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS)
+$(SCI_DIR)/$(SCI_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS) $(SHARED_ASSETS)
 	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(SCI_TEX) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(SCI_TEX)
 
 sci-docswell: $(SCI_DIR)/$(SCI_DOCSWELL_PDF)
 
-$(SCI_DIR)/$(SCI_DOCSWELL_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS)
+$(SCI_DIR)/$(SCI_DOCSWELL_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS) $(SHARED_ASSETS)
 	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}" && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode -jobname=sci_tutorial_docswell "\def\DocswellBuild{1}\input{$(SCI_TEX)}"
 
 # ---------------------------------------------------------------------------
