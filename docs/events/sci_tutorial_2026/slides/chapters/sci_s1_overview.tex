@@ -143,17 +143,18 @@
 % ------------------------------------------------------------------
 \begin{frame}{設計思想5本柱}
   \begin{table}
-    \centering\scriptsize
+    \centering\footnotesize
+    \renewcommand{\arraystretch}{1.2}
     \setlength{\tabcolsep}{8pt}
-    \begin{tabular}{lp{88mm}}
+    \begin{tabular}{lp{104mm}}
       \hline
       \textbf{柱} & \textbf{内容} \\
       \hline
-      集約と SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。ESP-NOW 通信仕様は \code{protocol/spec/} を SSOT（Single Source of Truth、唯一の正となる情報源）とする \\
-      sf CLI（コマンドラインツール） & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供 \\
-      段階的抽象化 \code{ws::} & Workshop API がHW・タスク・Topicの詳細を隠しつつ、レッスンの進行に応じて段階的に開放する \\
-      シミュレータ統合         & VPython（軽量3D）と Genesis（高精度物理）を、実ファームと同一の制御アルゴリズムで動かす \\
-      オープンソース           & 制御ループからドライバまで公開し、ブラックボックス問題を根本から排除する \\
+      集約と SSOT & ファーム・シミュレータ・解析・教材を単一リポジトリに集約。通信仕様は \code{protocol/spec/} を SSOT（Single Source of Truth、唯一の正となる情報源）とする \\
+      sf CLI & ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供する（CLI: コマンドラインツール） \\
+      4 階層アクセス & Workshop API（\code{ws::}）から Topic API・HAL・ハードウェアまで 4 つの入口が同時に存在し、学習者は必要な深さから入れる \\
+      シミュレータ統合 & VPython（軽量 3D）・Genesis（高精度物理）・SILS（実ファーム + MuJoCo）を同じ制御アルゴリズムで動かす \\
+      オープンソース & 制御ループからドライバまで公開し、ブラックボックス問題を根本から排除する \\
       \hline
     \end{tabular}
   \end{table}
