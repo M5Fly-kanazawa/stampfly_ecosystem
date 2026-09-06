@@ -111,9 +111,8 @@
     \end{tabular}
   \end{table}
 
-  {\tiny 注: この $K_m$（duty$\to$トルク，N$\cdot$m）はモータの逆起電力定数
-  （back-EMF constant，V/(rad/s)，\code{docs/architecture/stampfly-parameters.md}）
-  とは別物（記号が同じだけ）}
+  {\scriptsize 注: この $K_m$（duty$\to$トルク，N$\cdot$m）はモータの逆起電力定数
+  （back-EMF constant，V/(rad/s)）とは別物（記号が同じだけ）}
 
   \vspace{0.3em}
 
@@ -216,11 +215,11 @@
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習 5: レート P 制御で初飛行}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{block}{実装する内容（\code{user\_code.cpp} の TODO）}\footnotesize
     誤差 $=$ 目標角速度 $-$ 実測角速度，出力 $=K_p\times$誤差 を Roll/Pitch/Yaw
@@ -229,14 +228,15 @@
     （実習 7 のシステム同定で使う）
   \end{block}
 
-  \begin{alertblock}{手順}\footnotesize
-    \code{sf lesson switch sci2026:5} $\to$ \code{user\_code.cpp} の TODO を埋める
-    （\api{ws::gyro\_x/y/z()}，\api{ws::rc\_roll/pitch/yaw()}）
-    $\to$ \code{sf lesson build \&\& sf lesson flash}
-  \end{alertblock}
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item \code{sf lesson switch sci2026:5}
+    \item \code{user\_code.cpp} の TODO を埋める（\api{ws::gyro\_x/y/z()}，\api{ws::rc\_roll/pitch/yaw()}）
+    \item \code{sf lesson build}
+    \item \code{sf lesson flash}
+    \item 確認: 講師が完成コード（$K_p=0.5$）で飛ばす。スティック追従とわずかな振動を見る
+  \end{enumerate}
 
-  {\footnotesize 本日は\textbf{見るだけ}: 講師が完成コード（$K_p=0.5$）で飛ばす。
-  スティックへの追従とわずかな振動を見る。帰宅後に自分の $K_p$ で飛ばして再現する}
+  {\footnotesize 帰宅後に自分の $K_p$ で飛ばして再現する}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -281,11 +281,11 @@ ws::motor_mixer(ws::rc_throttle(),
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習 6: システムモデリング}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{block}{実装する内容（\code{user\_code.cpp} の TODO）}\footnotesize
     設計式 $K_p=1/(4\zeta^2 K \tau_m)$ を Roll/Pitch/Yaw それぞれで実装する
@@ -293,37 +293,41 @@ ws::motor_mixer(ws::rc_throttle(),
     $\zeta=0.7\to0.5\to1.0$ の順に変えて飛行し，違いを体感する
   \end{block}
 
-  \begin{alertblock}{手順}\footnotesize
-    \code{sf lesson switch sci2026:6} $\to$ \code{Kp\_roll/pitch/yaw} を
-    設計式で計算するコードを書く $\to$ \code{sf lesson build \&\& sf lesson flash}
-  \end{alertblock}
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item \code{sf lesson switch sci2026:6}
+    \item \code{Kp\_roll/pitch/yaw} を設計式で計算するコードを書く
+    \item \code{sf lesson build}
+    \item \code{sf lesson flash}
+    \item 確認: $\zeta$ を変えた3種類の飛行の違いを見る
+  \end{enumerate}
 
-  {\footnotesize 本日は\textbf{見るだけ}: $\zeta$ を変えた3種類の飛行の違いを見る。
-  帰宅後に自分のコードで $\zeta$ を振って再現する}
+  {\footnotesize 帰宅後に自分のコードで $\zeta$ を振って再現する}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習 7: システム同定（sf sysid fit）}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{block}{実装する内容（\code{user\_code.cpp} の TODO）}\footnotesize
     実習 5 の P 制御コードに \api{ws::set\_rate\_target(roll,pitch,yaw)} を
     追加する（角速度目標を Data Stream に記録するだけで，制御自体には無関係）
   \end{block}
 
-  \begin{alertblock}{手順}\footnotesize
-    \code{sf lesson switch sci2026:7} $\to$ $K_p$ を設定し
-    \api{ws::set\_rate\_target} を呼ぶ $\to$ \code{sf lesson build \&\& sf lesson flash}
-    $\to$ 飛行しながら \code{sf log wifi -o flight.csv} $\to$
-    \code{sf sysid fit flight.csv --kp 0.5 --plot}
-  \end{alertblock}
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item \code{sf lesson switch sci2026:7}
+    \item $K_p$ を設定し \api{ws::set\_rate\_target} を呼ぶ
+    \item \code{sf lesson build}
+    \item \code{sf lesson flash}
+    \item 飛行しながら \code{sf log wifi -o flight.csv}
+    \item \code{sf sysid fit flight.csv --kp 0.5 --plot}
+  \end{enumerate}
 
-  {\footnotesize 本日は\textbf{見るだけ}: 同定結果 $K,\tau_m$ が実習 6 の理論値と
-  数\%の誤差で一致することを見る。帰宅後に自分のフライトデータで再現する}
+  {\footnotesize 確認: 同定結果 $K,\tau_m$ が実習 6 の理論値と数\%の誤差で一致する。
+  帰宅後に自分のフライトデータで再現する}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -346,11 +350,11 @@ sf sysid fit flight.csv --kp 0.5 --plot
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習 8: PID 制御}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{block}{実装する内容（\code{user\_code.cpp} の TODO）}\footnotesize
     実習 5 の P 制御に I 項（\code{integral += error*dt} を $\pm0.5$ でクランプ）と
@@ -358,13 +362,15 @@ sf sysid fit flight.csv --kp 0.5 --plot
     \code{integral}/\code{prev\_error} を 0 にリセットする
   \end{block}
 
-  \begin{alertblock}{手順}\footnotesize
-    \code{sf lesson switch sci2026:8} $\to$ 軸ごとに I 項・D 項・アンチワインドアップ
-    を追加 $\to$ \code{sf lesson build \&\& sf lesson flash}
-  \end{alertblock}
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item \code{sf lesson switch sci2026:8}
+    \item 軸ごとに I 項・D 項・アンチワインドアップを追加
+    \item \code{sf lesson build}
+    \item \code{sf lesson flash}
+    \item 確認: 実習 5（P のみ）と比べて定常偏差とオーバーシュートの変化を見る
+  \end{enumerate}
 
-  {\footnotesize 本日は\textbf{見るだけ}: 実習 5（P のみ）と比べて定常偏差と
-  オーバーシュートがどう変わるかを見る。帰宅後に自分のゲインで再現する}
+  {\footnotesize 帰宅後に自分のゲインで再現する}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -393,13 +399,9 @@ sf sysid fit flight.csv --kp 0.5 --plot
   {\scriptsize 実習 8 の解答は工学形式ではなく直接ゲイン $(K_p,K_i,K_d)$ を使う：
   Roll $(0.25,0.3,0.005)$，Pitch $(0.36,0.3,0.005)$，Yaw $(2.0,0.5,0.01)$
   （$K_p$ は Roll/Pitch が「2次系設計」の $\zeta=0.7$ 設計値，Yaw のみ経験値）。
-  換算 $(T_i,T_d)$：Roll $(0.83\text{s},0.020\text{s})$，Pitch $(1.2\text{s},0.014\text{s})$，
-  Yaw $(4.0\text{s},0.005\text{s})$。不完全微分フィルタと $\eta$ は未使用
-  （vehicle 実装が追加する改良点）}
-  \par
-  {\scriptsize 実習 6 の配布コードは $\kappa$ 改定前の $K_{yaw}=19$（$K_p=1.34$）のまま。
-  現行 $\kappa=4.10\times10^{-3}$\,m の $K=8.0$ を「2次系設計」の設計式に適用すると
-  $K_p=3.19$ になり，設計式で追い直せる例として挙げる}
+  不完全微分フィルタと $\eta$ は未使用（vehicle 実装が追加する改良点）。
+  実習 6 の配布コードは $\kappa$ 改定前の $K_{yaw}=19$（$K_p=1.34$）のまま，
+  現行 $\kappa=4.10\times10^{-3}$\,m の $K=8.0$ を設計式に適用すると $K_p=3.19$}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -463,11 +465,11 @@ float I = Ki*integral;
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{実習 9: 姿勢推定（相補フィルタ）}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
   {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
-  \vspace{0.5em}
+  \vspace{0.3em}
 
   \begin{block}{実装する内容（\code{user\_code.cpp} の TODO）}\footnotesize
     \code{atan2f} で加速度から角度を計算し（\code{accel\_roll = atan2f(ay,az)} など），
@@ -476,14 +478,15 @@ float I = Ki*integral;
     Teleplot で比較する
   \end{block}
 
-  \begin{alertblock}{手順}\footnotesize
-    \code{sf lesson switch sci2026:9} $\to$ 相補フィルタを実装
-    $\to$ \code{sf lesson build \&\& sf lesson flash} $\to$
-    \code{sf monitor} + Teleplot で \code{cf\_roll} と \code{eskf\_roll} を比較
-  \end{alertblock}
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item \code{sf lesson switch sci2026:9}
+    \item 相補フィルタを実装
+    \item \code{sf lesson build}
+    \item \code{sf lesson flash}
+    \item \code{sf monitor} + Teleplot で \code{cf\_roll} と \code{eskf\_roll} を比較
+  \end{enumerate}
 
-  {\footnotesize 本日は\textbf{見るだけ}: 機体を手で傾け，相補フィルタと ESKF の
-  推定値が Teleplot 上で近い挙動をすることを見る。帰宅後に $\alpha$ を変えて再現する}
+  {\footnotesize 確認: 機体を手で傾け，両者が近い挙動をすることを見る。帰宅後に $\alpha$ を変えて再現する}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -580,19 +583,24 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
     \includegraphics[width=\textwidth, height=0.32\textheight, keepaspectratio]{../fallback/S4_roll_step_p_vs_pid.png}
   \end{center}
 
-  {\tiny SILS（MuJoCo）で \code{workshop\_acro\_step.scn}（ロール $+0.3$ を $0.5$\,s）を実行。
+  {\footnotesize SILS（MuJoCo）で \code{workshop\_acro\_step.scn}（ロール $+0.3$ を $0.5$\,s）を実行。
   目標 15.1\,deg/s に対し実習 5（P）はピーク 17.9\,deg/s と $-2.4$\,deg/s のアンダーシュート，
   実習 8（PID）はピーク 13.2\,deg/s で振動なし。角速度は真値ロール角の数値微分}
+\end{frame}
 
-  \vspace{-0.4em}
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{期待結果の再現手順\later}
+  \begin{sflisting}{実習 5 の結果を再現する（実習 8 は sci2026:8 に置き換え）}
+sf sils build --target workshop
+sf lesson switch sci2026:5 --solution
+touch firmware/workshop/main/user_code.cpp
+sf sils build --target workshop
+sf sils scenario simulator/sils/scenarios/workshop_acro_step.scn --target workshop
+  \end{sflisting}
 
-  {\tiny 再現: \code{sf sils build --target workshop}；
-  \code{sf lesson switch sci2026:5 --solution}；
-  \code{touch firmware/workshop/main/user\_code.cpp}；
-  \code{sf sils build --target workshop}；
-  \code{sf sils scenario simulator/sils/scenarios/workshop\_acro\_step.scn --target workshop}
-  （実習8は \code{sci2026:8}）。S5「実習: 自分の PID を SILS で飛ばす」も
-  \code{workshop\_acro.scn} で同様}
+  \vspace{0.3em}
+
+  {\small S5「実習: 自分の PID を SILS で飛ばす」も \code{workshop\_acro.scn} で同様に再現できる}
 \end{frame}
 
 % ------------------------------------------------------------------

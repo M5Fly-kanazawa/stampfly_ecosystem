@@ -62,7 +62,7 @@
         \end{tabular}
       \end{table}
 
-      {\tiny IMU（慣性計測装置）／ESP-NOW（ESP32 の無線プロトコル）。前方 ToF は現行ファームでは未使用（高度推定は下方 ToF）}
+      {\scriptsize IMU（慣性計測装置）／ESP-NOW（ESP32 の無線プロトコル）。前方 ToF は未使用（高度推定は下方 ToF）}
     \end{column}
   \end{columns}
 \end{frame}
@@ -103,7 +103,7 @@
 
   {\small 制御ループへのフルアクセスと体系的な教材・ツールの統合提供を両立させ、ファームウェア全体を一人の学習者が読み通せる規模に抑えている点が異なる}
 
-  {\tiny \textsuperscript{*}Tello EDU は2023年末に販売終了。評価は筆者による定性的な見解である}
+  {\scriptsize \textsuperscript{*}Tello EDU は2023年末に販売終了（評価は筆者の定性的見解）}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -284,15 +284,16 @@
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{デモ①: シミュレータ操縦}
-  \vspace{0.3em}
+  \vspace{0.15em}
 
-  {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ（\code{sf sim run vpython}） ｜ 帰宅後に再現}
+  {\small \textcolor{sfblue}{\textbf{見るだけ}} ｜ 一緒に打つ ｜ 帰宅後に再現}
 
   \vspace{0.5em}
 
   \begin{block}{何を見るか}
     \begin{itemize}\small
-      \item \code{sf sim run vpython} でVPythonシミュレータが起動し、実機と同じ制御アルゴリズムが動く
+      \item \code{sf sim run vpython} を手元でも起動
+      \item VPythonシミュレータが起動し、実機と同じ制御アルゴリズムが動く
       \item HIDジョイスティック（Atom JoyStick）でそのまま操縦できる
       \item 実機がなくても制御コードの挙動を3Dで確認できる
     \end{itemize}
