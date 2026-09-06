@@ -184,7 +184,7 @@ if __name__ == "__main__":  # round-trip check on a real scenario / 実シナリ
     import sys
     from pathlib import Path
     root = Path(__file__).resolve().parents[3]
-    scn = (root / "simulator/sils/scenarios/modeswitch.scn").read_text()
+    scn = (root / "simulator/sils/scenarios/modeswitch.scn").read_text(encoding="utf-8")
     evs = parse_scn(scn)
     print(f"{len(evs)} events parsed", file=sys.stderr)
     print(generate_scn(evs))

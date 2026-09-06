@@ -51,7 +51,7 @@ def parse_params(params_cpp: Path):
 
     params.cpp の table[] を読み、各 param を辞書で返す。見つからなければ空リスト。
     """
-    text = Path(params_cpp).read_text()
+    text = Path(params_cpp).read_text(encoding="utf-8")
     out = []
     for m in _ROW.finditer(text):
         name, ptype, dflt, lo, hi = m.groups()
