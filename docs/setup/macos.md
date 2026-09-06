@@ -13,7 +13,9 @@ macOSでのStampFly開発環境セットアップ手順です。
 
 - macOS 用の `.zip`（Apple Silicon / Intel を選択）をダウンロードして展開・起動するだけ
 - 5画面のウィザードでインストール先やオプションを選択
-- 中身は本ガイドの CLI インストーラ（`./install.sh`）と同じロジックなので、機能差はない
+- 中身は `scripts/installer.py`（本ガイドの `./install.sh` が最終的に呼び出すのと同じ本体）を
+  直接動かす。ただし `./install.sh` 自身が事前に行う Xcode CLT / Homebrew の必須チェックは
+  GUI 側では行わないため、事前にそれらを導入していない場合は挙動が異なることがある
 
 詳細手順は **[GUI インストーラガイド](../guides/gui-installer.md)** を参照してください。
 
@@ -45,7 +47,7 @@ xcode-select --install
 ## 5. 依存パッケージのインストール
 
 ```bash
-brew install cmake ninja dfu-util python3
+brew install cmake ninja dfu-util ccache python@3.12
 ```
 
 ## 6. ESP-IDFのインストール
@@ -126,8 +128,9 @@ with just a few clicks.
 
 - Download and unzip a `.zip` for macOS (choose Apple Silicon or Intel), then launch it
 - A 5-screen wizard walks you through the install location and options
-- Runs the exact same logic as this guide's CLI installer (`./install.sh`) internally — no
-  feature difference
+- Runs `scripts/installer.py` directly (the same program this guide's `./install.sh` eventually
+  calls). Note that `./install.sh` itself performs prerequisite checks (Xcode CLT / Homebrew)
+  before that, which the GUI does not -- behavior can differ if those aren't already installed
 
 See the **[GUI Installer Guide](../guides/gui-installer.md)** for details.
 
@@ -159,7 +162,7 @@ xcode-select --install
 ## 5. Install Dependencies
 
 ```bash
-brew install cmake ninja dfu-util python3
+brew install cmake ninja dfu-util ccache python@3.12
 ```
 
 ## 6. Install ESP-IDF

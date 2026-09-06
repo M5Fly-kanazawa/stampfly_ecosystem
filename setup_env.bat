@@ -134,7 +134,7 @@ if errorlevel 1 (
         echo   The installed ESP-IDF env additionally requires Python 3.%SF_VENV_MINORS%.
         echo   Run install.bat again, or install that Python version.
     ) else (
-        echo   Install one with: winget install --id Python.Python.3.12
+        echo   Install one with: winget install Python.Python.3.12
         echo   https://www.python.org/downloads/
     )
     exit /b 1

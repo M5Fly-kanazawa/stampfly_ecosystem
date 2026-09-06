@@ -1134,8 +1134,7 @@ def _print_manual_python_install_hint() -> None:
     error(f"Please install Python {PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
           f"{PYTHON_PREFERRED_MAX[0]}.{PYTHON_PREFERRED_MAX[1]} manually, then re-run this installer:")
     if sys.platform == "win32":
-        error("    winget install --id Python.Python.3.12 "
-              "--accept-package-agreements --accept-source-agreements")
+        error("    winget install Python.Python.3.12")
         error("  or download from https://www.python.org/downloads/windows/")
         error("  (make sure to keep 'Add python.exe to PATH' checked)")
     elif sys.platform == "darwin":
@@ -1582,15 +1581,34 @@ def _report_git_not_found() -> None:
     """Print an actionable, bilingual error when git itself is missing
     from PATH (a bare FileNotFoundError from subprocess otherwise looks
     like an obscure crash to a newcomer running this installer for the
-    first time).
+    first time). This runs on every OS (ESP-IDF's git clone/submodule
+    steps are cross-platform), so the URL/hint must not be Windows-only.
     git 自体が PATH に無い場合、対処可能な英日併記エラーを表示する
     (subprocess の素の FileNotFoundError だけでは、初めてこの
     インストーラーを実行する初心者には不可解なクラッシュに見えてしまう)。
+    全OSで実行されうる経路のため(ESP-IDFのgit clone/submodule手順は
+    クロスプラットフォーム)、URL/案内をWindows専用にしてはならない。
     """
     error("Git was not found on PATH.")
-    error("Install it from https://git-scm.com/download/win and re-run this installer.")
+    if sys.platform == "win32":
+        error("Install it with: winget install Git.Git")
+        error("Or download from: https://git-scm.com/download/win")
+    elif sys.platform == "darwin":
+        error("Install it with: brew install git")
+        error("Or install the Xcode Command Line Tools: xcode-select --install")
+    else:
+        error("Install it with your package manager, e.g.: sudo apt install git")
+    error("Then re-run this installer.")
     error("Git が見つかりません。")
-    error("https://git-scm.com/download/win からインストールして再実行してください。")
+    if sys.platform == "win32":
+        error("winget install Git.Git でインストールするか、")
+        error("https://git-scm.com/download/win からダウンロードしてください。")
+    elif sys.platform == "darwin":
+        error("brew install git でインストールするか、")
+        error("Xcode Command Line Tools（xcode-select --install）を導入してください。")
+    else:
+        error("パッケージマネージャでインストールしてください（例: sudo apt install git）。")
+    error("導入後、このインストーラーを再実行してください。")
 
 
 def _stream_subprocess(
@@ -4076,7 +4094,8 @@ class Installer:
                 success("hidapi native library found")
             else:
                 warn("hidapi native library not found (needed for joystick)")
-                warn("Install with: sudo apt install libhidapi-dev")
+                warn("Install with: sudo apt install libhidapi-dev  # Debian/Ubuntu")
+                warn("Or: sudo dnf install hidapi-devel  # Fedora")
 
     def _save_config(self, idf_path: Path) -> None:
         """Save configuration file"""

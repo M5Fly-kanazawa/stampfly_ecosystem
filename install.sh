@@ -11,7 +11,7 @@
 #   --no-flasher     Skip the optional GUI Flasher app install
 #   --minimal        Install minimal dependencies (skip simulator)
 #
-# This script checks for Python 3.8+ and then runs the Python installer.
+# This script checks for Python 3.10-3.12 and then runs the Python installer.
 # --help/--uninstall/--clean skip the system prerequisite checks below
 # (cmake/ninja/etc. are only needed to actually build firmware, not to
 # print help or remove an existing install).
@@ -190,7 +190,18 @@ check_python() {
         local minor
         minor=$("$cmd" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null)
 
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 8 ]; then
+        # Accept only the same 3.10-3.12 band scripts/installer.py itself
+        # accepts (PYTHON_PREFERRED_MIN/MAX): older than 3.10 lacks features
+        # ESP-IDF/sfcli rely on, and 3.13+ has caused real observed failures
+        # (2026-07-22 policy change), so this script's own gate must match --
+        # otherwise a 3.8/3.9/3.13+ interpreter passes here only to be
+        # rejected by installer.py moments later.
+        # scripts/installer.py 自身が受理する 3.10〜3.12 帯（PYTHON_PREFERRED_MIN/MAX）
+        # とだけ一致させる: 3.10未満はESP-IDF/sfcliが必要とする機能を欠き、
+        # 3.13以降は実際に動作しない事例が確認されている(2026-07-22の方針変更)
+        # ため、本スクリプトのゲートもこれに合わせないと、3.8/3.9/3.13以降の
+        # インタプリタがここを通過した直後に installer.py に弾かれることになる。
+        if [ "$major" -eq 3 ] && [ "$minor" -ge 10 ] && [ "$minor" -le 12 ]; then
             echo "$cmd:$version"
             return 0
         fi
@@ -212,7 +223,7 @@ find_python() {
 # Install Python guidance
 install_python_guidance() {
     echo
-    error "Python 3.8+ is required but not found."
+    error "Python 3.10-3.12 is required but not found."
     echo
 
     case "$(uname -s)" in
@@ -226,7 +237,7 @@ install_python_guidance() {
         Linux)
             if [ -f /etc/debian_version ]; then
                 echo "  Install Python using apt:"
-                echo "    ${BOLD}sudo apt update && sudo apt install python3.12${NC}"
+                echo "    ${BOLD}sudo apt update && sudo apt install python3.12 python3.12-venv${NC}"
             elif [ -f /etc/fedora-release ]; then
                 echo "  Install Python using dnf:"
                 echo "    ${BOLD}sudo dnf install python3.12${NC}"

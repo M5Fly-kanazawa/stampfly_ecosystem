@@ -648,7 +648,8 @@ def run(args: argparse.Namespace) -> int:
         if sys.platform == "darwin":
             console.print("    Install with: brew install hidapi")
         elif sys.platform == "linux":
-            console.print("    Install with: sudo apt install libhidapi-dev")
+            console.print("    Install with: sudo apt install libhidapi-dev  # Debian/Ubuntu")
+            console.print("    Or: sudo dnf install hidapi-devel  # Fedora")
 
     # Check the SILS host-bench toolchain (Windows: MinGW-w64; optional, WARN-only)
     # SILS ホストベンチのツールチェーン確認（Windows: MinGW-w64。任意、警告のみ）
