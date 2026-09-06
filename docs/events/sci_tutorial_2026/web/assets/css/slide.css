@@ -1,0 +1,481 @@
+/* slide.css — visual styling of slide CONTENT (header/footer, Beamer-like
+   blocks, tables, code listings, stage pills, columns, checkboxes, title
+   and divider slides, math, figures). Mirrors the Beamer Madrid theme +
+   stampfly_slides.sty palette used by the LaTeX deck.
+   スライド本文の見た目（ヘッダー/フッター・ブロック・表・コード・
+   ピル・段組・チェックボックス・表紙/区切り・数式・図）。
+   LaTeX側の Beamer Madrid テーマ + stampfly_slides.sty の配色を踏襲する。
+
+   Font sizes below all come from the --fs-* ladder defined in deck.css,
+   which is calibrated against the compiled PDF's real embedded font
+   sizes (measured with `pdftohtml -xml`), not chosen by eye. They are
+   plain px against the fixed 1280x720 design canvas, not `em`, so a
+   scope class (e.g. .fs-small) always renders at the same absolute size
+   regardless of nesting — matching LaTeX, where \small/\footnotesize/…
+   are absolute size switches, not multipliers on the enclosing size.
+   下記のフォントサイズは deck.css の --fs-* 段階（PDFの実測フォント
+   サイズに基づいて較正、目分量ではない）を参照する。1280x720固定
+   デザインキャンバスに対する px 指定であり em ではない — LaTeXの
+   \small 等が「相対倍率」ではなく「絶対サイズの切り替え」であることに
+   合わせ、入れ子になっても値がぶれないようにしている。 */
+
+.slide { font-size: var(--fs-normal); line-height: 1.5; }
+
+/* ---- header band (mirrors \setbeamercolor{frametitle}) -------------- */
+.slide-header {
+  flex: none;
+  background: var(--sf-blue);
+  color: #fff;
+  padding: 15px 40px 13px;
+  position: relative;
+}
+.slide-header h2 {
+  margin: 0;
+  font-size: var(--fs-large);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.later-badge {
+  position: absolute;
+  top: 14px;
+  /* Clear the fixed #chrome control-button cluster (目次/全画面/?, which
+     sits ~160px wide at the viewport's top-right and overlaps this
+     header when the slide fills the viewport with no letterboxing).
+     固定#chromeの操作ボタン群（幅約160px）と重ならない位置に置く
+     （レターボックス無しでスライドが画面いっぱいになる時に衝突するため）。*/
+  right: 180px;
+  background: #fff;
+  color: var(--sf-dark);
+  font-size: var(--fs-scriptsize);
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 3px;
+}
+
+/* ---- body -------------------------------------------------------------
+   A flex column so a .figure (or any flex-grow child) can claim exactly
+   the vertical space left over after the surrounding text, instead of
+   overflowing past the footer. 残りの縦方向スペースを図が使い切れる
+   ように、本文をflex縦並びコンテナにする（フッターへのはみ出し防止）。*/
+.slide-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 40px 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.slide-body > p:first-child { margin-top: 0; }
+.slide-body p { margin: 0.45em 0; }
+
+/* ---- fit-inner: last-resort shrink-to-fit wrapper ----------------------
+   deck.js wraps every .slide-body's real content in this div. It grows
+   (flex-grow:1) to fill .slide-body when there's spare room — same as the
+   old direct-children layout, so .figure/.columns can still flex-grow
+   into it — but refuses to compress (flex-shrink:0), so when the real
+   content is genuinely taller than the slide, THIS box overflows
+   .slide-body (which clips it) at its true natural size instead of being
+   silently squashed. deck.js measures that natural size and, only then,
+   applies `transform: scale()` here so nothing is ever cut off.
+   deck.js が .slide-body の中身をこのdivでラップする。空きがあれば
+   flex-grow:1で.slide-bodyいっぱいに伸びる（.figure/.columnsが従来通り
+   flex-growできる）が、flex-shrink:0で押し潰されはしない。内容が本当に
+   スライドより高い場合はこの箱が.slide-body（overflow:hiddenでクリップ）
+   からはみ出た「本来の高さ」のまま計測でき、そのときだけJSが
+   transform:scale()を当てて絶対に切れないようにする。*/
+.fit-inner { display: flex; flex-direction: column; flex: 1 0 auto; transform-origin: top center; }
+
+/* ---- footer band ------------------------------------------------------ */
+.slide-footer {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 40px;
+  background: var(--sf-dark);
+  color: #cfe6f5;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+/* ---- blocks (block / exampleblock / alertblock) ---------------------- */
+.block {
+  border-radius: 3px;
+  margin: 0.5em 0;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  flex: none;
+}
+.block-title {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: var(--fs-large);
+  line-height: 1.25;
+  font-weight: 700;
+  color: #fff;
+  background: var(--sf-blue);
+}
+.block.example .block-title { background: var(--sf-green); }
+.block.alert .block-title { background: var(--sf-red); }
+.block-body {
+  padding: 12px 16px;
+  background: var(--sf-light);
+}
+.block.example .block-body { background: rgba(40, 160, 40, 0.08); }
+.block.alert .block-body { background: rgba(220, 50, 30, 0.08); }
+.block-body > p:first-child { margin-top: 0; }
+.block-body > p:last-child { margin-bottom: 0; }
+.block-body ul, .block-body ol { margin: 0.3em 0; }
+
+/* ---- lists (setbeamercolor item fg=sfblue) ---------------------------- */
+.slide-body ul, .slide-body ol { padding-left: 1.3em; margin: 0.45em 0; }
+.slide-body li { margin: 0.26em 0; }
+.slide-body ul > li::marker { color: var(--sf-blue); }
+.slide-body ol > li::marker { color: var(--sf-blue); font-weight: 700; }
+li.li-marker { list-style: none; margin-left: -1.3em; padding-left: 0; }
+li.li-marker .marker { display: inline-block; width: 1.3em; color: var(--sf-blue); }
+
+/* ---- inline code / API / warn -----------------------------------------
+   \texttt/\api don't change LaTeX's font SIZE, only the family — so these
+   inherit the ambient size (1em) rather than shrinking it further, which
+   would double-shrink already-scoped text (e.g. inside .fs-footnotesize).
+   \texttt/\api はLaTeXでは書体を変えるだけでサイズは変えないため、
+   周囲のサイズをそのまま継承する（.fs-footnotesize 等の中で二重に
+   縮小されるのを防ぐ）。*/
+code, .code-block pre, .code-block code {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+}
+code.tex-code, code.tex-api, code.tex-texttt {
+  background: rgba(0, 60, 100, 0.08);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+}
+code.tex-api { color: var(--sf-blue); font-weight: 600; }
+.warn { color: var(--sf-red); font-weight: 700; }
+a.tex-url { color: var(--sf-blue); word-break: break-all; }
+
+/* ---- code listings (mirrors sflisting tcolorbox) -----------------------
+   \scriptsize is the deck's actual listing size (see stampfly_slides.sty
+   sfcpp/sfpython lstdefinestyle). Lines wrap instead of relying on
+   horizontal scroll, which a live talk will never actually scroll.
+   実際のリスト書式は \scriptsize（sfcpp/sfpython の定義）。横スクロール
+   に頼らず折り返す（発表中に誰もスクロールしないため）。*/
+.code-block {
+  border: 1px solid rgba(0, 120, 200, 0.55);
+  border-radius: 4px;
+  background: var(--sf-light);
+  margin: 0.5em 0;
+  overflow: hidden;
+  flex: none;
+}
+.code-title {
+  background: rgba(0, 120, 200, 0.8);
+  color: #fff;
+  font-size: var(--fs-scriptsize);
+  font-weight: 700;
+  padding: 5px 14px;
+}
+.code-block pre {
+  margin: 0;
+  padding: 10px 16px;
+  font-size: var(--fs-scriptsize);
+  line-height: 1.4;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- tables ------------------------------------------------------------
+   No independent font-size multiplier here: a table's actual size comes
+   entirely from whatever \small/\scriptsize scope wraps it in the source
+   (render_table_wrap copies that scope class onto .table-wrap), same as
+   LaTeX. The one exception is a table with NO such scope at all — see the
+   "bare table" rule further down, for tables the source leaves unscoped
+   because it relies on \resizebox instead.
+   テーブル自体に独自の縮小倍率は持たせない — 実際のサイズはソース側の
+   スコープ（\small等）だけで決まる（LaTeXと同じ）。唯一の例外は
+   スコープが一切ないテーブル — ソース側が\resizeboxに任せていて
+   スコープを持たないケースで、下の「素の表」ルールを参照。*/
+.table-wrap { margin: 0.5em 0; flex: none; }
+.table-scroll { overflow-x: auto; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  /* LaTeX's \arraystretch defaults to 1.0 (tight rows), not the ~1.5
+     paragraph line-height a table would otherwise inherit from .slide —
+     a real difference between prose and tabular typesetting, not a
+     cosmetic choice, and it matters most for the deck's several
+     8-10-row reference tables.
+     LaTeXの\arraystretchは既定1.0（詰まった行間）— .slideから継承する
+     地の文用の行間1.5とは表組みとして本来別物。本デッキの8〜10行ある
+     早見表で特に効いてくる。*/
+  line-height: 1.25;
+  /* table-layout stays `auto` (content-proportional columns) rather than
+     `fixed`: fixed forces equal-width columns, which for an unevenly
+     "short header / long description" table forces MORE line-wraps than
+     necessary and grows the table taller than it needs to be. `auto`
+     still respects width:100% as a hard cap — browsers shrink each
+     column's share to fit it — as long as cell content is actually
+     allowed to wrap (below), so a single unbreakable long token (a
+     code/API string, a path) can no longer force the whole table wider
+     than the slide.
+     table-layoutは`fixed`ではなく`auto`のまま（列幅は中身に応じて配分）
+     — fixedだと列幅が均等になり、「見出しは短いが説明は長い」ような
+     表で不要な折り返しが増え、かえって縦に伸びてしまう。`auto`でも
+     width:100%という上限は効く（各列の取り分をその中に収まるよう
+     ブラウザが縮める）— ただしセル内容が折り返せることが前提（下記）。
+     これにより、改行できない長いトークン（コード／API文字列やパス）
+     1つで表全体がスライド幅を超えることもなくなる。*/
+}
+thead th {
+  background: var(--sf-light);
+  border-bottom: 2px solid var(--sf-blue);
+  font-weight: 700;
+  padding: 6px 12px;
+}
+tbody td { padding: 5px 12px; border-bottom: 1px solid #ddd; }
+tbody tr:last-child td { border-bottom: none; }
+th, td { overflow-wrap: anywhere; word-break: break-word; }
+
+/* A bare table — no \table/\centering wrapper in the source, just
+   \resizebox{\textwidth}{!}{\begin{tabular}...}} directly in the frame
+   body — carries no LaTeX size command at all, because the author relied
+   on resizebox's "scale the whole box, text included, to exactly this
+   width" behaviour instead. render_tabular() has no such wrapper div to
+   hang a scope class on (see beamer_to_html.py), and CSS has no
+   equivalent of scaling text to hit an exact width, so approximate the
+   same "this is dense reference material, not body prose" intent with a
+   smaller fixed size instead of the full body-text size.
+   素の表（\table環境や\centeringのラッパーがなく、フレーム本文に
+   \resizebox{\textwidth}{!}{\begin{tabular}...}}だけが置かれている
+   パターン）はLaTeX側にサイズ指定が一切ない — resizeboxの「文字ごと
+   箱をこの幅にぴったり合わせる」機能に任せているため。render_tabular()
+   にはスコープクラスを掛けるラッパーdivがなく（beamer_to_html.py参照）、
+   CSSにも「幅に合わせて文字を縮小」に相当する機能はないため、本文と
+   同じ大きさではなく「本文ではなく密な早見表」という意図を小さめの
+   固定サイズで近似する。*/
+.slide-body > .table-scroll, .fit-inner > .table-scroll, .column > .table-scroll {
+  font-size: var(--fs-scriptsize);
+}
+
+/* ---- columns ------------------------------------------------------------
+   stretch (not flex-start) so both columns share the row's full height —
+   required for a figure in one column to flex-grow to fill it, mirroring
+   how a LaTeX \columns row is one shared block. 図をflexで縦方向に
+   広げるには両カラムが行の高さを共有する必要がある（LaTeXのcolumns環境
+   と同じく、1つの行としてまとまっていることを反映）。*/
+.columns { display: flex; gap: 24px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+.column { min-width: 0; flex: 1 1 0; display: flex; flex-direction: column; min-height: 0; }
+
+/* ---- figures -------------------------------------------------------------
+   Every figure in this deck is preceded by \centering, so it always
+   arrives wrapped in a direct .slide-body/.column child: .align-center.
+   That wrapper (below) and .figure itself both flex so the image claims
+   the remaining vertical space and never overflows past the footer.
+   本デッキの図はすべて \centering の直後に置かれるため、常に
+   .slide-body/.column の直下に .align-center として現れる。この
+   ラッパーと .figure 自身の両方をflex化し、図が残りの縦スペースを
+   使い切って、フッターへはみ出さないようにする。
+
+   min-width:0/min-height:0 on .figure, .align-center AND the <img>/<svg>
+   itself are all load-bearing, not decorative: a flex item's default
+   min-width/min-height is `auto`, which for a replaced element like an
+   <img> effectively floors it at its own INTRINSIC size — e.g. a
+   3593x2695px source photo — no matter how small max-width:100% and
+   object-fit:contain say it should be. In a narrow \columns split (e.g.
+   a photo column at 42% width) that floor wins over the 100% cap and the
+   image spills out past the slide's edge. Overriding min-*:0 at every
+   flex level removes that floor so contain/max-width can actually apply.
+   .figure・.align-center・<img>/<svg>自身へのmin-width:0/min-height:0は
+   飾りではなく必須: flexアイテムのmin-width/min-heightは既定で`auto`
+   となり、<img>のような置換要素ではそれが自身の「本来の大きさ」
+   （例: 3593x2695pxの元写真）を下限にしてしまう — max-width:100%や
+   object-fit:containがどれだけ小さくすべきと言っても関係ない。
+   \columnsで幅を分け合う構成（例: 写真列が42%幅）だと、その下限が
+   100%上限に勝ってしまい、画像がスライド端からはみ出す。flexの
+   各階層でmin-*:0を明示することでこの下限を外し、contain/max-widthが
+   実際に効くようにする。*/
+.figure {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0.3em 0;
+}
+.figure img, .figure svg {
+  /* width/height:100% (not auto) + object-fit:contain, deliberately —
+     this makes the <img>'s own BOX trivially equal to its container
+     (.figure) on both axes, with no ambiguity left for the browser to
+     resolve; object-fit then does the aspect-preserving letterboxing
+     purely at paint time, on the image CONTENT inside that fixed box.
+     width/height:auto + percentage max-width/max-height (the more
+     "obvious" combination) measured wrong in this deck: nested 5-deep in
+     \columns > .column > .align-center > .figure flex containers with a
+     non-stretched (align-items:center) cross axis, Chrome sized a
+     landscape photo by height alone and ignored the width cap, letting
+     it overflow past the slide's left edge in a narrow column (see the
+     QA session's slide-11 investigation). 100%/100% sidesteps that
+     resolution path entirely.
+     width/height は auto ではなく意図的に 100%（+object-fit:contain）と
+     する — こうすると<img>自身の箱は縦横とも単純に親(.figure)と同じに
+     なり、ブラウザ側に解決の余地を残さない。object-fitは、その固定した
+     箱の中の「絵の中身」だけを、アスペクト比を保ちながら描画時に
+     レターボックス状に収める。より「素直」に見える width/height:auto +
+     パーセントmax-width/max-heightの組み合わせは、本デッキでは誤動作
+     した: \columns > .column > .align-center > .figure という5階層の
+     flexネストで、かつクロス軸がstretchでない(align-items:center)場合、
+     Chromeが横長写真を高さだけで採寸し幅の上限を無視してしまい、狭い
+     column内で画像がスライド左端からはみ出た（QAセッションのslide-11
+     調査を参照）。100%/100%はこの解決経路自体を回避する。*/
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  /* Belt-and-suspenders absolute caps, in addition to width/height:100%
+     above. Harmless in the normal case (the 100% box is always smaller
+     than these), but a fallback ceiling in case some future slide layout
+     ever gives .figure an unexpectedly large definite box.
+     width/height:100%に加えた保険としての絶対px上限。通常は100%の箱が
+     常にこれより小さいため無害だが、将来何らかのスライド構成で
+     .figureに想定外に大きな確定サイズが与えられた場合の上限として残す。*/
+  max-height: 600px;
+  max-width: 1180px;
+}
+.align-center {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* A .align-center that only centers text (no figure inside) shouldn't
+   stretch to consume the whole slide — only grow when it actually needs
+   to hand space down to a figure.
+   図を含まない（文字だけの）中央寄せは全高を占有しない —
+   図へ空間を渡す必要がある時だけ伸びる。*/
+.align-center:not(:has(.figure)) { flex: none; }
+
+/* ---- math --------------------------------------------------------------- */
+.math-display { text-align: center; margin: 0.4em 0; flex: none; }
+.math-inline { white-space: nowrap; }
+
+/* ---- footnotes ------------------------------------------------------------ */
+.footnote, p.footnote { font-size: var(--fs-scriptsize); color: var(--sf-gray); margin: 0.3em 0; }
+
+/* ---- font-size scope classes (from \tiny .. \Large) -----------------------
+   Absolute px (the --fs-* ladder), not em multipliers — see file header.
+   絶対px指定（--fs-* 段階）。emの掛け算にしない（ファイル冒頭の注記参照）。*/
+.fs-tiny { font-size: var(--fs-tiny); }
+.fs-scriptsize { font-size: var(--fs-scriptsize); }
+.fs-footnotesize { font-size: var(--fs-footnotesize); }
+.fs-small { font-size: var(--fs-small); }
+.fs-normal { font-size: var(--fs-normal); }
+.fs-large { font-size: var(--fs-large); }
+.fs-large2 { font-size: var(--fs-large2); }
+
+/* ---- TODO markers (should not appear once the deck is clean) ------------- */
+.todo {
+  background: #fff3cd;
+  color: #7a5c00;
+  border: 1px dashed #d9a400;
+  padding: 0 4px;
+  font-size: var(--fs-scriptsize);
+  font-family: monospace;
+}
+
+/* ---- 3-stage participation pills ------------------------------------------ */
+.stage-pills {
+  display: flex;
+  gap: 10px;
+  margin: 0.5em 0 0.7em;
+  flex-wrap: wrap;
+  flex: none;
+}
+.pill {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--sf-blue);
+  color: var(--sf-dark);
+  font-size: var(--fs-footnotesize);
+  background: #fff;
+}
+.pill.active { background: var(--sf-blue); color: #fff; font-weight: 700; }
+.pill strong { color: inherit; }
+
+/* ---- title slide ----------------------------------------------------------- */
+.slide.title {
+  background: linear-gradient(160deg, var(--sf-blue) 0%, var(--sf-dark) 100%);
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.title-content { max-width: 84%; }
+.title-content h1 {
+  font-size: var(--fs-large2);
+  margin: 0 0 20px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+.title-content .subtitle { font-size: var(--fs-normal); margin: 0 0 26px; opacity: 0.92; }
+.title-content .author { font-size: var(--fs-small); margin: 0 0 10px; }
+.title-content .date { font-size: var(--fs-footnotesize); opacity: 0.85; line-height: 1.6; }
+
+/* ---- divider (session break) slides ---------------------------------------- */
+.slide.divider {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: #fff;
+  gap: 26px;
+}
+.divider-box {
+  border: 2px solid var(--sf-blue);
+  border-radius: 12px;
+  background: var(--sf-light);
+  padding: 36px 64px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.divider-num { font-size: 85px; line-height: 1.15; font-weight: 800; color: var(--sf-blue); }
+.divider-title { font-size: var(--fs-large2); line-height: 1.25; font-weight: 700; color: var(--sf-dark); }
+.divider-time { font-size: var(--fs-normal); line-height: 1.2; color: var(--sf-gray); }
+.divider-foot { font-size: var(--fs-small); line-height: 1.2; color: var(--sf-gray); margin-top: 18px; }
+
+/* ---- "later" (あとで読む) frames: a faint dashed inner border cue -------- */
+.slide.later .slide-header { border-bottom: 3px dashed rgba(255, 255, 255, 0.6); }
+
+/* ---- flex-column spacing: gap replaces margins between DIRECT children --
+   .fit-inner/.column/.align-center are flex containers, and flex items
+   never collapse adjacent margins the way normal block-flow siblings do
+   (a real, spec-defined difference, not a browser quirk) — without this,
+   e.g. a .block's margin-bottom and the next <ul>'s margin-top would both
+   apply in full instead of collapsing to the larger one, roughly
+   doubling every inter-element gap and pushing content off the bottom of
+   the slide. Each element keeps its own margin for when it's nested in
+   normal flow (e.g. inside .block-body); this only clears the top-level
+   case, where `gap` now provides the real spacing.
+   flex縦並びコンテナ内の間隔はmarginではなくgapで統一する — flexアイテムは
+   普通のブロック要素と違って隣接マージンが相殺されない（仕様通りの挙動）。
+   これがないと.blockのmargin-bottomと次の<ul>のmargin-topが両方効いて
+   間隔がほぼ倍になり、スライド下端からのはみ出しを招く。各要素自身の
+   marginは.block-body内など通常フロー時のために残し、直下の子として
+   置かれた場合だけここで打ち消す（間隔はgapが担当）。*/
+.fit-inner, .column, .align-center { gap: 8px; }
+.fit-inner > p, .fit-inner > ul, .fit-inner > ol, .fit-inner > .block,
+.fit-inner > .table-wrap, .fit-inner > .code-block, .fit-inner > .math-display,
+.fit-inner > .stage-pills, .fit-inner > .align-center, .fit-inner > .columns,
+.column > p, .column > ul, .column > ol, .column > .block,
+.column > .table-wrap, .column > .code-block, .column > .math-display,
+.column > .stage-pills, .column > .align-center, .column > .columns,
+.align-center > p, .align-center > .figure {
+  margin-top: 0;
+  margin-bottom: 0;
+}
