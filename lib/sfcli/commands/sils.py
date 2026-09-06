@@ -331,12 +331,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "MinGW-w64 toolchain if it is missing")
     p.add_argument("--no-auto-toolchain", action="store_true",
                    help="Windows only: never auto-install MinGW-w64; just warn if missing")
+    p.add_argument("--winget", action="store_true",
+                   help="Windows only: try winget install --id MSYS2.MSYS2 first (not the "
+                        "default — MSYS2's own docs don't list winget as a supported "
+                        "install method; falls back to the direct download either way)")
     p.set_defaults(func=run_build)
 
     p = sub.add_parser("install-toolchain",
                         help="Install the MinGW-w64 toolchain needed to build the SILS on "
-                             "Windows (winget first, direct-download fallback if winget fails)")
+                             "Windows (direct download by default; --winget to try winget first)")
     p.add_argument("-y", "--yes", action="store_true", help="Don't prompt for confirmation")
+    p.add_argument("--winget", action="store_true",
+                   help="Try winget install --id MSYS2.MSYS2 first (not the default — MSYS2's "
+                        "own docs don't list winget as a supported install method; falls back "
+                        "to the direct download either way)")
     p.set_defaults(func=run_install_toolchain)
 
     p = sub.add_parser("run", help="Run the closed loop and write the bundle")
@@ -552,7 +560,10 @@ def run_install_toolchain(args: argparse.Namespace) -> int:
         console.success(f"MinGW-w64 toolchain already installed: {found}")
         return 0
 
-    installed = msys2_install.install_toolchain(assume_yes=getattr(args, "yes", False))
+    installed = msys2_install.install_toolchain(
+        assume_yes=getattr(args, "yes", False),
+        prefer_winget=getattr(args, "winget", False),
+    )
     if installed is None:
         return 1
     console.success(f"MinGW-w64 toolchain installed: {installed}")
@@ -585,7 +596,10 @@ def run_build(args: argparse.Namespace) -> int:
     if (platform.is_windows() and mingw_bin() is None
             and not getattr(args, "no_auto_toolchain", False)):
         console.warning("MinGW-w64 not found — MSVC cannot build the SILS (see simulator/sils/README.md).")
-        if msys2_install.install_toolchain(assume_yes=getattr(args, "yes", False)) is None:
+        if msys2_install.install_toolchain(
+            assume_yes=getattr(args, "yes", False),
+            prefer_winget=getattr(args, "winget", False),
+        ) is None:
             console.warning("Proceeding without MinGW-w64; CMake will fall back to whatever "
                              "compiler it finds on PATH (likely MSVC, which will fail to build).")
     sd, bd = _sils_dir(), _build_dir()

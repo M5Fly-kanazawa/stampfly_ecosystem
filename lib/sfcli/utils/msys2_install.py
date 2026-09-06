@@ -2,28 +2,34 @@
 sf sils build's MSYS2 / MinGW-w64 toolchain auto-install (Windows only)
 sf sils build 用の MSYS2 / MinGW-w64 ツールチェーン自動導入（Windows専用）
 
-simulator/sils/README.md's "Windows native build" section documents a
-manual two-step install (winget install --id MSYS2.MSYS2, then pacman for
-the toolchain). `winget install --id MSYS2.MSYS2` is known to fail on some
-machines with errors like "NoApplicableInstallers" — a problem in winget's
-own MSYS2 package integration, not a broken link in this repo (see
-microsoft/winget-pkgs#287981, msys2/msys2-installer#47). This module tries
-that same winget command first (so behavior matches the documented manual
-steps when it works), then falls back to downloading MSYS2's official
+The canonical install method here is downloading MSYS2's own official
 "base" self-extracting archive directly from GitHub and extracting it —
 the same unattended approach the official msys2/setup-msys2 GitHub Action
-uses in CI, with no GUI installer and no interactive wizard.
+uses in CI, with no GUI installer and no interactive wizard. This is
+deliberately NOT winget: msys2.org's own installer docs
+(https://www.msys2.org/docs/installer/) list only the GUI installer, the
+sfx archive, and the tarballs as install methods — winget is not among
+them. The `MSYS2.MSYS2` winget manifest lives in Microsoft's
+community-editable winget-pkgs repo, not something the MSYS2 project
+maintains itself, and its integration has known, long-unresolved problems
+(e.g. "NoApplicableInstallers"; see microsoft/winget-pkgs#287981 and
+msys2/msys2-installer#47) — not a broken link in this repo. winget is
+therefore only used if a caller explicitly opts in (prefer_winget=True);
+by default this module never touches it.
 
-simulator/sils/README.md の「Windows ネイティブビルド」節は手動の2段階導入
-（winget install --id MSYS2.MSYS2 → pacman でツールチェーン導入）を案内している。
-`winget install --id MSYS2.MSYS2` は一部の環境で "NoApplicableInstallers" 等の
-エラーで失敗することが知られている — これは本リポジトリのリンク切れではなく、
-winget 自身の MSYS2 パッケージ連携の問題である（参照:
-microsoft/winget-pkgs#287981, msys2/msys2-installer#47）。本モジュールはまず
-同じ winget コマンドを試し（成功すれば手動手順と同じ挙動になる）、失敗したら
-MSYS2 公式の "base" 自己解凍アーカイブを GitHub から直接ダウンロードして展開する
-方式にフォールバックする — GUI インストーラや対話ウィザードを使わない、公式の
-msys2/setup-msys2 GitHub Action が CI で使うのと同じ無人インストール方式。
+ここでの正規のインストール方法は、MSYS2 公式の "base" 自己解凍アーカイブを
+GitHub から直接ダウンロードして展開することである — GUI インストーラや対話
+ウィザードを使わない、公式の msys2/setup-msys2 GitHub Action が CI で使うのと
+同じ無人インストール方式。これは意図的に winget を使わない選択である:
+msys2.org 自身のインストーラ文書（https://www.msys2.org/docs/installer/）が
+挙げるインストール方法は GUI インストーラ・sfx アーカイブ・tarball のみで、
+winget は含まれていない。`MSYS2.MSYS2` の winget マニフェストは Microsoft が
+運営する誰でも編集できる winget-pkgs リポジトリに存在するものであり、MSYS2
+プロジェクト自身が保守しているものではなく、連携には既知の長期未解決の問題が
+ある（例: "NoApplicableInstallers"。参照: microsoft/winget-pkgs#287981,
+msys2/msys2-installer#47）— 本リポジトリ側のリンク切れではない。したがって
+winget は呼び出し側が明示的にオプトイン（prefer_winget=True）した場合のみ使い、
+既定では一切触れない。
 """
 
 import shutil
@@ -240,22 +246,35 @@ def _direct_install_msys2() -> bool:
     return True
 
 
-def ensure_msys2(assume_yes: bool = False) -> bool:
-    """Ensure an MSYS2 root exists at MSYS2_ROOT, installing it if missing:
-    winget first (matches the documented manual instructions when it
-    works), falling back to a direct download+extract when winget fails or
-    is unavailable. Prompts for confirmation unless assume_yes (this writes
+def ensure_msys2(assume_yes: bool = False, prefer_winget: bool = False) -> bool:
+    """Ensure an MSYS2 root exists at MSYS2_ROOT, installing it if missing.
+
+    By default goes straight to the direct download+extract of MSYS2's
+    official base-tarball sfx archive (the canonical method here — see this
+    module's docstring for why winget is not the default). Pass
+    prefer_winget=True to try `winget install --id MSYS2.MSYS2` first
+    instead, falling back to the direct method only if that fails; use this
+    only when a caller specifically wants MSYS2 registered with winget
+    (e.g. for `winget upgrade`/uninstall tracking), not as a general
+    workaround. Prompts for confirmation unless assume_yes (this writes
     ~500MB under C:\\).
-    MSYS2_ROOT に MSYS2 が無ければ導入する: まず winget（成功すれば手動手順と
-    同じ）、失敗または未導入なら直接ダウンロード+展開にフォールバックする。
-    assume_yes が無ければ確認を求める（C:\\ 配下に約500MB書き込むため）。"""
+
+    MSYS2_ROOT に MSYS2 が無ければ導入する。既定では MSYS2 公式の base
+    tarball sfx アーカイブの直接ダウンロード+展開（本モジュールの正規の方法 —
+    winget を既定にしない理由はモジュール先頭のdocstring参照）に直行する。
+    prefer_winget=True を渡すと、代わりにまず `winget install --id
+    MSYS2.MSYS2` を試し、失敗した場合のみ直接方式にフォールバックする —
+    winget によるアップグレード/アンインストール管理下に置きたいという
+    明確な要望がある場合のみ使うオプションであり、一般的な回避策としては
+    使わない。assume_yes が無ければ確認を求める（C:\\ 配下に約500MB
+    書き込むため）。"""
     if _has_msys2_root():
         return True
 
     if not _confirm(f"MSYS2 not found at {MSYS2_ROOT}. Install it now (~500MB download)?", assume_yes):
         return False
 
-    if _try_winget_install():
+    if prefer_winget and _try_winget_install():
         console.success("  MSYS2 installed via winget.")
         return True
 
@@ -270,15 +289,17 @@ def ensure_msys2(assume_yes: bool = False) -> bool:
     return True
 
 
-def install_toolchain(assume_yes: bool = False) -> Optional[Path]:
+def install_toolchain(assume_yes: bool = False, prefer_winget: bool = False) -> Optional[Path]:
     """Ensure MSYS2 plus the mingw-w64 toolchain (gcc/g++, cmake, ninja) are
     installed, installing whatever is missing via ensure_msys2() + pacman.
     Returns the mingw64/bin path on success, or None (with an explanatory
-    message already printed) on failure or if the user declines.
+    message already printed) on failure or if the user declines. See
+    ensure_msys2() for prefer_winget.
     MSYS2 と mingw-w64 ツールチェーン（gcc/g++・cmake・ninja）の導入を保証する
     （不足分は ensure_msys2() + pacman で導入）。成功時は mingw64/bin のパスを、
-    失敗時・ユーザーが拒否した場合は None を返す（説明メッセージは表示済み）。"""
-    if not ensure_msys2(assume_yes):
+    失敗時・ユーザーが拒否した場合は None を返す（説明メッセージは表示済み）。
+    prefer_winget は ensure_msys2() 参照。"""
+    if not ensure_msys2(assume_yes, prefer_winget=prefer_winget):
         return None
 
     existing = mingw_bin()

@@ -505,18 +505,22 @@ def _check_sils_toolchain(warnings: list) -> None:
         console.print("    Only needed to build/run the SILS host bench (simulator/sils/).")
         console.print("    SILS ホストベンチ（simulator/sils/）のビルド・実行にのみ必要。")
         console.print("    Auto-install / 自動導入: sf sils install-toolchain")
-        console.print("      (tries winget install --id MSYS2.MSYS2 first, then falls back to a "
-                      "direct download+extract if winget fails — a known, unresolved "
-                      "winget/MSYS2 integration issue, e.g. 'NoApplicableInstallers'; see "
+        console.print("      (downloads MSYS2's official base-tarball sfx archive directly from "
+                      "GitHub and extracts it — the same unattended method msys2/setup-msys2 uses "
+                      "in CI. NOT winget by default: msys2.org's own installer docs don't list "
+                      "winget as a supported method, and the MSYS2.MSYS2 winget manifest has "
+                      "known, unresolved integration problems (e.g. 'NoApplicableInstallers'; see "
                       "https://github.com/microsoft/winget-pkgs/issues/287981 and "
-                      "https://github.com/msys2/msys2-installer/issues/47. `sf sils build` runs "
-                      "this automatically too.)")
-        console.print("      （まず winget install --id MSYS2.MSYS2 を試し、失敗したら直接"
-                      "ダウンロード+展開にフォールバックする — winget と MSYS2 の既知の未解決の"
-                      "連携不良、例えば 'NoApplicableInstallers' が原因のことがある。"
-                      "`sf sils build` もこれを自動的に実行する。)")
-        console.print("    Manual fallback / 手動での代替手順: winget install --id MSYS2.MSYS2 "
-                      "--silent --accept-package-agreements --accept-source-agreements, then "
+                      "https://github.com/msys2/msys2-installer/issues/47). Pass --winget to try "
+                      "winget first anyway. `sf sils build` runs this automatically too.)")
+        console.print("      （MSYS2 公式の base tarball sfx アーカイブを GitHub から直接"
+                      "ダウンロードして展開する — msys2/setup-msys2 が CI で使うのと同じ無人方式。"
+                      "既定では winget を使わない: msys2.org 自身のインストーラ文書は winget を"
+                      "対応方法として挙げておらず、MSYS2.MSYS2 の winget マニフェストには既知の"
+                      "未解決の連携問題がある（例: 'NoApplicableInstallers'）。--winget を渡せば"
+                      "先に winget を試すこともできる。`sf sils build` もこれを自動的に実行する。)")
+        console.print("    Manual fallback / 手動での代替手順: download the installer directly "
+                      "from https://www.msys2.org/, install into C:\\msys64, then "
                       '"C:\\msys64\\usr\\bin\\bash -lc \\"pacman -S --noconfirm --needed '
                       'mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja\\""')
         return
