@@ -1154,7 +1154,7 @@ Estimate translational and rotational drag coefficients.
         else:
             content = f"# StampFly System Identification Test Plans\n{plans[args.type]}"
 
-        Path(args.output).write_text(content)
+        Path(args.output).write_text(content, encoding="utf-8")
         console.success(f"Saved: {args.output}")
 
     return 0

@@ -27,7 +27,8 @@ def run_eskf(params):
     cmd = [ESKF_REPLAY, DATA_FILE, "/tmp/opt_test.csv", "--quiet"]
     for name, value in params.items():
         cmd.append(f"--{name}={value}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace")
     for line in result.stdout.split('\n'):
         if 'final_dist' in line:
             return json.loads(line)

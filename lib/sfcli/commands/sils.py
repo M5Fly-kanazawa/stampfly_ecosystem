@@ -1418,7 +1418,8 @@ def run_fly(args: argparse.Namespace) -> int:
 
     try:
         proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                                errors="replace", bufsize=1, env=env)
     except OSError as e:
         console.error(f"failed to launch {exe.name}: {e}")
         return 1

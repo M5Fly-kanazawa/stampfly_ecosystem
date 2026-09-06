@@ -35,7 +35,8 @@ def build():
 
 def run(events, aatt, tof, lpf=0.0, notch=0.0):
     out = subprocess.run([BIN, str(aatt), str(tof), str(lpf), str(notch)],
-                         stdin=open(events), capture_output=True, text=True).stdout
+                         stdin=open(events), capture_output=True, text=True,
+                         encoding="utf-8", errors="replace").stdout
     for line in out.splitlines():
         p = line.split()
         if len(p) >= 13:                       # the CSV result line (skip the ESKF init log)

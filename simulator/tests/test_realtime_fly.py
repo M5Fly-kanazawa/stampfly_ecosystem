@@ -197,7 +197,7 @@ def test_rc_stdin_arm_and_throttle_climbs():
     proc = subprocess.Popen(
         [str(EMU_VEHICLE), str(MODEL), "12000000"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1, env=env,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
     )
     lines: List[str] = []
     reader = threading.Thread(target=_read_stdout_lines, args=(proc, lines), daemon=True)

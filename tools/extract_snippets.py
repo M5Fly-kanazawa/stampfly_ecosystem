@@ -44,7 +44,7 @@ def extract_snippets_from_file(filepath: Path) -> dict[str, str]:
     snippets: dict[str, list[str]] = {}
     active: dict[str, list[str]] = {}
 
-    for line in filepath.read_text().splitlines():
+    for line in filepath.read_text(encoding="utf-8").splitlines():
         # Check for start marker
         m = SNIPPET_MARKER_START.match(line)
         if m:
@@ -122,7 +122,7 @@ def expand_file(tex_path: Path, cache: dict[str, dict[str, str]]) -> tuple[str, 
 
     Returns (expanded_text, list_of_errors).
     """
-    text = tex_path.read_text()
+    text = tex_path.read_text(encoding="utf-8")
     errors = []
 
     def replacer(match):
@@ -164,7 +164,7 @@ def cmd_check(args):
         # Check if any chapters use snippets
         has_snippets = False
         for tex_path in sorted(CHAPTERS_DIR.glob("*.tex")):
-            if PLACEHOLDER.search(tex_path.read_text()):
+            if PLACEHOLDER.search(tex_path.read_text(encoding="utf-8")):
                 has_snippets = True
                 break
         if has_snippets:
@@ -188,12 +188,12 @@ def cmd_expand(args):
     expanded_count = 0
 
     for tex_path in sorted(CHAPTERS_DIR.glob("*.tex")):
-        text = tex_path.read_text()
+        text = tex_path.read_text(encoding="utf-8")
 
         if not PLACEHOLDER.search(text):
             # No placeholders — copy as-is (symlink for efficiency)
             dst = BUILD_DIR / tex_path.name
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             continue
 
         expanded, errors = expand_file(tex_path, cache)
@@ -204,7 +204,7 @@ def cmd_expand(args):
                 print(f"  ERROR: {err}")
 
         dst = BUILD_DIR / tex_path.name
-        dst.write_text(expanded)
+        dst.write_text(expanded, encoding="utf-8")
         expanded_count += 1
 
     print(f"Expanded {expanded_count} files to {BUILD_DIR}")

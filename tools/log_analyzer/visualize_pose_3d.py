@@ -108,7 +108,8 @@ def main():
             sys.exit(1)
 
         result = subprocess.run([eskf_replay, input_file, csv_file],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, encoding="utf-8",
+                                errors="replace")
         if result.returncode != 0:
             print(f"eskf_replay failed:\n{result.stderr}")
             sys.exit(1)

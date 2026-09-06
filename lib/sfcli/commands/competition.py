@@ -35,7 +35,7 @@ def _load_scores() -> dict:
     """Load competition scores from file"""
     path = _scores_path()
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     return {"teams": {}}
 
 
@@ -43,7 +43,7 @@ def _save_scores(scores: dict) -> None:
     """Save competition scores to file"""
     path = _scores_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(scores, indent=2, ensure_ascii=False))
+    path.write_text(json.dumps(scores, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

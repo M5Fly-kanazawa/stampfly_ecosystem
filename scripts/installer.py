@@ -3298,7 +3298,7 @@ class Installer:
         # 設定またはコマンドライン引数からESP-IDFパスを取得
         resolved_idf_path = idf_path
         if not resolved_idf_path and self.config_file.exists():
-            for line in self.config_file.read_text().split('\n'):
+            for line in self.config_file.read_text(encoding="utf-8").split('\n'):
                 if line.startswith('path = "'):
                     resolved_idf_path = Path(line.split('"')[1])
                     break
@@ -4114,7 +4114,7 @@ version = "{version}"
 default_target = "vehicle"
 '''
 
-        self.config_file.write_text(config_content)
+        self.config_file.write_text(config_content, encoding="utf-8")
         info(f"Configuration saved to {self.config_file}")
 
     def uninstall(self) -> int:
@@ -4128,7 +4128,7 @@ default_target = "vehicle"
 
         # Parse config (simple TOML parsing)
         idf_path = None
-        for line in self.config_file.read_text().split('\n'):
+        for line in self.config_file.read_text(encoding="utf-8").split('\n'):
             if line.startswith('path = "'):
                 idf_path = Path(line.split('"')[1])
                 break

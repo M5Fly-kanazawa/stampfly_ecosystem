@@ -21,6 +21,8 @@ def get_commits_by_count(count: int) -> list[dict]:
         ["git", "log", f"-{count}", "--format=%H|%s|%b"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     return parse_git_log(result.stdout)
@@ -32,6 +34,8 @@ def get_commits_by_days(days: int) -> list[dict]:
         ["git", "log", f"--since={days} days ago", "--format=%H|%s|%b"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     return parse_git_log(result.stdout)
@@ -45,6 +49,8 @@ def get_commits_by_hashes(hashes: list[str]) -> list[dict]:
             ["git", "show", hash, "--format=%H|%s|%b", "--no-patch"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         commits.extend(parse_git_log(result.stdout))
@@ -57,6 +63,8 @@ def get_commits_by_range(range_spec: str) -> list[dict]:
         ["git", "log", range_spec, "--format=%H|%s|%b"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     return parse_git_log(result.stdout)
@@ -94,6 +102,8 @@ def interactive_select() -> list[dict]:
         ["git", "log", "-20", "--oneline"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
 
@@ -376,6 +386,8 @@ def main():
             ["git", "log", f"-{args.list}", "--format=%H|%s"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         commits_list = []

@@ -520,7 +520,7 @@ def _current_user_code() -> str:
     """
     user_code_path = _get_user_code_path()
     if user_code_path.exists():
-        return user_code_path.read_text()
+        return user_code_path.read_text(encoding="utf-8")
     return ""
 
 
@@ -541,7 +541,7 @@ def _is_lesson_current(entry: Dict[str, Any], current_content: str) -> bool:
         return False
     for fname in ("student.cpp", "solution.cpp"):
         fpath = lesson_path / fname
-        if fpath.exists() and fpath.read_text() == current_content:
+        if fpath.exists() and fpath.read_text(encoding="utf-8") == current_content:
             return True
     return False
 
@@ -699,7 +699,7 @@ def _run_list_fallback() -> int:
         is_current = False
         if current_content:
             for fname, exists in [("student.cpp", has_student), ("solution.cpp", has_solution)]:
-                if exists and (path / fname).read_text() == current_content:
+                if exists and (path / fname).read_text(encoding="utf-8") == current_content:
                     is_current = True
                     break
 
