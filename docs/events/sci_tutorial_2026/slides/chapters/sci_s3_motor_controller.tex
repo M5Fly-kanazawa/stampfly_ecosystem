@@ -5,10 +5,17 @@
 % ==============================================================================
 
 % ------------------------------------------------------------------
-\begin{frame}{地図}
-  \centering
-  \vspace{-1mm}
-  \resizebox{0.62\textwidth}{!}{\scisessionmap{3}}
+\begin{frame}{地図: 今ここ}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\scisessionmap{3}}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \small
+      S2 でセンサの値を読めるようになった。ここでは読んだ値を使って機体を動かす側（モータ・コントローラ）を作る
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------

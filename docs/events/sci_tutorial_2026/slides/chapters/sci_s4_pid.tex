@@ -189,6 +189,10 @@
 
 % ------------------------------------------------------------------
 \begin{frame}{無駄時間の影響}
+  {\small 前の「開ループボード線図」で見た $L(s)$ に、むだ時間を加える}
+
+  \vspace{0.3em}
+
   \begin{columns}[c]
     \begin{column}{0.48\textwidth}
       \centering
@@ -257,6 +261,10 @@ ws::motor_mixer(ws::rc_throttle(),
 
 % ------------------------------------------------------------------
 \begin{frame}{モデルで見る実習 5 の設計}
+  {\small $\zeta = 0.7$ の設計式（「2次系設計」）から求めた $K_p$ と、実習 5 で勘で置いた $K_p = 0.5$ を比べる}
+
+  \vspace{0.3em}
+
   \begin{table}
     \centering\small
     \begin{tabular}{lcc}
@@ -658,19 +666,20 @@ sf sils scenario simulator/sils/scenarios/workshop_acro_step.scn --target worksh
 
 % ------------------------------------------------------------------
 \begin{frame}{チェックポイント}
-  \begin{alertblock}{確認事項}
-    \begin{itemize}
+  \begin{alertblock}{確認事項}\small
+    \begin{itemize}\setlength{\itemsep}{1pt}
       \item[$\square$] $G_p(s)=K/(s(\tau_m s+1))$ と実測パラメータの対応を説明できる
       \item[$\square$] P 制御の限界と，I 項・D 項が何を補うかを説明できる
       \item[$\square$] 不完全微分・アンチワインドアップ・ARM 時リセットで
             学習者コードと vehicle 実装がどう違うか説明できる
+            （詳しくは持ち帰り資料「D 項とアンチワインドアップ」「離散化と ARM 時リセット」）
       \item[$\square$] \code{sf sysid fit} の入出力と，理論値との比較の読み方を理解した
     \end{itemize}
   \end{alertblock}
 
-  \vspace{1em}
+  \vspace{0.15em}
 
   \begin{block}{次のセッション}
-    S5: シミュレータ・解析ツールの活用と発展的テーマ（15:30 -- 16:30）
+    S5: シミュレータ・解析ツールの活用と発展的テーマ（15:30 -- 16:30）--- 飛ばして確かめた結果を、シミュレータと解析ツールで裏付ける
   \end{block}
 \end{frame}
