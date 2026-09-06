@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SCI/SICE ウィジェット テストページ</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #d7dee5;
+    font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  }
+  .page-note {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #333;
+  }
+  .stage {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    margin: 16px auto;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage-title {
+    flex: 0 0 auto;
+    padding: 18px 28px 6px;
+    font-size: 26px;
+    font-weight: 700;
+    color: rgb(0,60,100);
+    border-bottom: 3px solid rgb(0,120,200);
+    margin: 0 24px;
+  }
+  .stage-body {
+    flex: 1 1 auto;
+    display: flex;
+    padding: 16px 28px 24px;
+    gap: 20px;
+    min-height: 0;
+  }
+  .widget-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+  .side-note {
+    flex: 0 0 300px;
+    font-size: 14px;
+    color: #333;
+    line-height: 1.6;
+  }
+  .side-note code {
+    background: #eef3f7;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  /* Second row on the mixer stage: two widgets side by side at a smaller
+     "embedded in a slide alongside text" size, to check responsiveness. */
+  .stage-body.split .widget-box { flex: 1 1 50%; }
+</style>
+<link rel="stylesheet" href="widgets.css">
+</head>
+<body>
+
+<div class="page-note">
+  SCI/SICEチュートリアル ウィジェット確認ページ（1280×720ステージ×3）。
+  <code>?demo=1</code> を付けるとスライダー操作の代わりにプリセットを自動で巡回します。
+</div>
+
+<div class="stage" id="stage-pid">
+  <div class="stage-title">実習 5〜8: レートループ ステップ応答（pid_step.js）</div>
+  <div class="stage-body">
+    <div class="widget-box" id="mount-pid"></div>
+    <div class="side-note">
+      G_p(s)=K/(s(τ_m s+1))、K=102/70/8.0（Roll/Pitch/Yaw）、τ_m=0.02s、
+      むだ時間L=5ms。工学形式PID: u=Kp(e+(1/Ti)∫e+Td de/dt)、η=微分フィルタ。<br>
+      出典: <code>sci_s4_pid.tex:81-405</code>、
+      <code>pid.hpp</code>
+    </div>
+  </div>
+</div>
+
+<div class="stage" id="stage-mixer">
+  <div class="stage-title">ミキサ: X型クアッド（mixer.js）</div>
+  <div class="stage-body split">
+    <div class="widget-box" id="mount-mixer"></div>
+    <div class="widget-box" id="mount-mixer-2"></div>
+  </div>
+</div>
+
+<div class="stage" id="stage-comp">
+  <div class="stage-title">実習 9: 相補フィルタ（comp_filter.js）</div>
+  <div class="stage-body">
+    <div class="widget-box" id="mount-comp"></div>
+    <div class="side-note">
+      θ̂_k=α(θ̂_{k-1}+ωΔt)+(1-α)θ_accel、α=0.98、Δt=1/400s。<br>
+      出典: <code>sci_s4_pid.tex:467-537</code>、
+      <code>lesson_09_estimation/solution.cpp:38-42</code>
+    </div>
+  </div>
+</div>
+
+<script src="pid_step.js"></script>
+<script src="mixer.js"></script>
+<script src="comp_filter.js"></script>
+<script>
+  var params = new URLSearchParams(location.search);
+  var demo = params.get("demo") === "1";
+
+  var pidInst = window.SfWidgets.pidStep(document.getElementById("mount-pid"), {
+    axis: "roll", preset: "lesson8", demo: demo,
+  });
+  var mixerInst = window.SfWidgets.mixer(document.getElementById("mount-mixer"), {
+    T: 0.5, R: 0, P: 0, Y: 0, demo: demo,
+  });
+  var mixerInst2 = window.SfWidgets.mixer(document.getElementById("mount-mixer-2"), {
+    T: 0.6, R: 0.4, P: -0.2, Y: 0.15, demo: false,
+  });
+  var compInst = window.SfWidgets.compFilter(document.getElementById("mount-comp"), {
+    alpha: 0.98, autoplay: true, demo: demo,
+  });
+
+  // Small self-check surfaced in the DOM (not just console) so a headless
+  // screenshot + Read can confirm the widgets mounted without throwing.
+  // 目視確認用に簡易な起動チェックをDOMにも出す（コンソールだけに頼らない）。
+  window.addEventListener("error", function (ev) {
+    var d = document.createElement("div");
+    d.style.cssText = "position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;" +
+      "font:12px monospace;padding:6px;z-index:9999;white-space:pre-wrap";
+    d.textContent = "JS ERROR: " + ev.message + " (" + ev.filename + ":" + ev.lineno + ")";
+    document.body.appendChild(d);
+  });
+
+  if (params.get("debugcanvas") === "1") {
+    setTimeout(function () {
+      var lines = [];
+      document.querySelectorAll("canvas").forEach(function (c, i) {
+        var wrap = c.parentElement;
+        var wr = wrap.getBoundingClientRect();
+        lines.push(
+          "canvas" + i + " buf=" + c.width + "x" + c.height +
+          " css=" + c.offsetWidth + "x" + c.offsetHeight +
+          " wrapRect=" + wr.width.toFixed(0) + "x" + wr.height.toFixed(0)
+        );
+      });
+      var pre = document.createElement("pre");
+      pre.style.cssText = "position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;" +
+        "font:11px monospace;padding:6px;z-index:9999;margin:0;max-height:160px;overflow:auto";
+      pre.textContent = lines.join("\n");
+      document.body.appendChild(pre);
+    }, 300);
+  }
+</script>
+</body>
+</html>

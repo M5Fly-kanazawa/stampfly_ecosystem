@@ -1,0 +1,207 @@
+/* widgets.css — shared styling for the SCI/SICE tutorial interactive widgets
+ * (pid_step.js / mixer.js / comp_filter.js).
+ * SCI/SICEチュートリアル用インタラクティブ教材（3ウィジェット共通）のスタイル。
+ *
+ * Palette matches the deck (see ../../web/assets/css/deck.css :root and
+ * docs/events/_shared/beamer/stampfly_slides.sty) but is namespaced under
+ * `--sfw-*` (StampFly Widget) so it never collides with the deck's own
+ * `--sf-*` custom properties when both stylesheets are loaded on the same
+ * page.
+ * パレットはデッキ（deck.css の :root / stampfly_slides.sty）と同じ値だが、
+ * 同じページにデッキの `--sf-*` と同時に読み込まれても衝突しないよう
+ * `--sfw-*`（StampFly Widget）名前空間に分けている。
+ */
+
+.sfw {
+  --sfw-blue: rgb(0, 120, 200);
+  --sfw-dark: rgb(0, 60, 100);
+  --sfw-light: rgb(220, 240, 255);
+  --sfw-gray: rgb(80, 80, 80);
+  --sfw-red: rgb(220, 50, 30);
+  --sfw-green: rgb(40, 160, 40);
+  --sfw-bg: #ffffff;
+  --sfw-border: #cfe0ee;
+
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--sfw-bg);
+  border: 1px solid var(--sfw-border);
+  border-radius: 8px;
+  color: #202429;
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+               sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.sfw *,
+.sfw *::before,
+.sfw *::after {
+  box-sizing: border-box;
+}
+
+/* ---- header row: title + axis/mode selector -------------------------- */
+.sfw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sfw-title {
+  font-weight: 700;
+  color: var(--sfw-dark);
+  font-size: 1.05em;
+}
+.sfw-seg {
+  display: inline-flex;
+  border: 1px solid var(--sfw-blue);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sfw-seg button {
+  font-family: inherit;
+  font-size: 0.82em;
+  padding: 4px 10px;
+  border: none;
+  background: #fff;
+  color: var(--sfw-blue);
+  cursor: pointer;
+}
+.sfw-seg button + button {
+  border-left: 1px solid var(--sfw-blue);
+}
+.sfw-seg button.active {
+  background: var(--sfw-blue);
+  color: #fff;
+}
+
+/* ---- canvas area ------------------------------------------------------ */
+.sfw-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 110px;
+  background: #fbfdff;
+  border: 1px solid var(--sfw-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sfw-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- controls: sliders + checkboxes ----------------------------------- */
+.sfw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-end;
+}
+.sfw-control {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8em;
+  color: var(--sfw-gray);
+  flex: 1 1 130px;
+  min-width: 110px;
+}
+.sfw-control-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.sfw-control-label .sfw-val {
+  font-variant-numeric: tabular-nums;
+  color: var(--sfw-dark);
+  font-weight: 700;
+}
+.sfw-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--sfw-blue);
+}
+.sfw-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8em;
+  color: var(--sfw-gray);
+  white-space: nowrap;
+}
+.sfw-check input[type="checkbox"] {
+  accent-color: var(--sfw-blue);
+}
+
+/* ---- readouts ---------------------------------------------------------- */
+.sfw-readouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-size: 0.8em;
+  color: var(--sfw-gray);
+}
+.sfw-readouts b {
+  color: var(--sfw-blue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- buttons (presets, play/pause, reset) ------------------------------ */
+.sfw-btnrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.sfw-btn {
+  font-family: inherit;
+  background: var(--sfw-blue);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 11px;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.sfw-btn:hover {
+  filter: brightness(1.1);
+}
+.sfw-btn.secondary {
+  background: #fff;
+  color: var(--sfw-blue);
+  border: 1px solid var(--sfw-blue);
+}
+.sfw-btn.play {
+  background: var(--sfw-green);
+}
+
+/* ---- small caption / source note --------------------------------------- */
+.sfw-note {
+  font-size: 0.72em;
+  color: #7a828a;
+}
+
+/* ---- legend dots -------------------------------------------------------- */
+.sfw-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.78em;
+  color: var(--sfw-gray);
+}
+.sfw-legend span.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
