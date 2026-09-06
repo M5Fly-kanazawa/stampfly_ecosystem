@@ -7,7 +7,10 @@
 % Usage: \begin{frame}{タイトル\later}
 % 講師が当日は流し、参加者に後で読んでほしいフレームの目印。
 % 使い方: \begin{frame}{タイトル\later}
-\newcommand{\later}{\hfill{\normalsize\colorbox{white}{\textcolor{sfdark}{\scriptsize\,あとで読む\,}}}}
+% Badge geometry: a strut sets the box height (taller than the text), and
+% \raisebox lifts it so its centre sits on the title's visual centre line.
+% バッジの高さは支柱で確保し、\raisebox でタイトル文字の上下中央に合わせる。
+\newcommand{\later}{\hspace{0pt plus 1filll}\raisebox{0.35ex}{\colorbox{white}{\rule[-0.55ex]{0pt}{2.1ex}\textcolor{sfdark}{\footnotesize\,あとで読む\,}}}}
 
 % --- SCI tutorial session-divider macro ------------------------------------
 % \lessondivider (stampfly_slides.sty) hardcodes the word "Lesson N". The SCI
