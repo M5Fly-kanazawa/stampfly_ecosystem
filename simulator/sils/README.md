@@ -85,6 +85,8 @@ sf sils build
 sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle
 ```
 
+**`winget install --id MSYS2.MSYS2` が失敗する場合:** これは本リポジトリ側のリンク切れではなく、winget と MSYS2 の連携そのものに既知の問題がある（`NoApplicableInstallers` エラーや、winget 側のバージョン検出不良によりパッケージが「信頼できない」と判定され非表示・失敗になるケースが報告されている。参照: [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981)、[msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)）。この場合は winget を経由せず、公式サイト [msys2.org](https://www.msys2.org/) または [msys2-installer の Releases ページ](https://github.com/msys2/msys2-installer/releases) からインストーラ（`msys2-x86_64-*.exe`）を直接ダウンロードし、既定の `C:\msys64` にインストールしてから上記の `pacman` 以降の手順を続ける。
+
 `sf doctor` が SILS ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SILS を使わない人には必須でないため）。
 
 ### シナリオの一時パラメータ上書き（`--param`）
@@ -220,6 +222,8 @@ C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-
 sf sils build
 sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle
 ```
+
+**If `winget install --id MSYS2.MSYS2` fails:** this is not a broken link in this repo — winget's own MSYS2 integration has known problems (a `NoApplicableInstallers` error, or winget's version-detection logic flagging the package as unreliable and hiding/failing it; see [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981) and [msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)). Skip winget and download the installer (`msys2-x86_64-*.exe`) directly from [msys2.org](https://www.msys2.org/) or the [msys2-installer releases page](https://github.com/msys2/msys2-installer/releases), install it into the default `C:\msys64`, then continue with the `pacman` steps above.
 
 `sf doctor` diagnoses the SILS host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SILS.
 

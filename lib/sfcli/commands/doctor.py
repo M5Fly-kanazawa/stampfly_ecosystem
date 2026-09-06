@@ -506,6 +506,16 @@ def _check_sils_toolchain(warnings: list) -> None:
         console.print("    SILS ホストベンチ（simulator/sils/）のビルド・実行にのみ必要。")
         console.print("    Install / 導入: winget install --id MSYS2.MSYS2 "
                       "--silent --accept-package-agreements --accept-source-agreements")
+        console.print("    If winget fails (known winget/MSYS2 integration issues, e.g. "
+                      "'NoApplicableInstallers' or a stale cached manifest): download the "
+                      "installer directly from https://www.msys2.org/ (or "
+                      "https://github.com/msys2/msys2-installer/releases) and run it manually "
+                      "into the default C:\\msys64 location, then continue below.")
+        console.print("    winget が失敗する場合（'NoApplicableInstallers' 等、winget と "
+                      "MSYS2 の既知の連携不良、または古いキャッシュ済みマニフェストが原因のことがある）: "
+                      "https://www.msys2.org/ （または "
+                      "https://github.com/msys2/msys2-installer/releases）から公式インストーラを "
+                      "直接ダウンロードし、既定の C:\\msys64 に手動でインストールしてから以降の手順に進む。")
         console.print('    Then / 続けて: C:\\msys64\\usr\\bin\\bash -lc "pacman -S '
                       "--noconfirm --needed mingw-w64-x86_64-toolchain "
                       'mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"')
