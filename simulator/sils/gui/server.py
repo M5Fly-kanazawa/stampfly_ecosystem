@@ -175,7 +175,7 @@ def run_scenario(req: dict):
         try:
             proc = subprocess.run(cmd, cwd=str(ROOT), env=env,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                  text=True, timeout=300)
+                                  text=True, encoding="utf-8", timeout=300)
         except FileNotFoundError:
             return {"error": "`sf` not found on PATH — launch the GUI from a shell where "
                              "`source setup_env.sh` has run."}
