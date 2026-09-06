@@ -17,6 +17,26 @@ echo.
 echo [INFO] Setting up StampFly development environment...
 echo.
 
+REM --- Determine IDF_TOOLS_PATH: env var > C:\Espressif > %USERPROFILE%\.espressif ---
+REM scripts\installer.py's _idf_tools_path_candidates() installs to
+REM C:\Espressif when IDF_TOOLS_PATH is unset at install time (its Windows-
+REM specific first choice, ahead of the ESP-IDF default of
+REM %USERPROFILE%\.espressif). IDF_TOOLS_PATH is a plain process env var --
+REM nothing persists it to the registry -- so a fresh shell that never had
+REM it set falls through to export.bat's own default (%USERPROFILE%\
+REM .espressif) and reports the venv "not found" even though it exists at
+REM C:\Espressif (observed 2026-09-07). Probe both locations here and
+REM export whichever one actually has a python_env, so export.bat gets the
+REM same IDF_TOOLS_PATH the installer used, every time this script runs.
+set "SF_TOOLS_PATH=%IDF_TOOLS_PATH%"
+if not defined SF_TOOLS_PATH (
+    if exist "C:\Espressif\python_env" (
+        set "SF_TOOLS_PATH=C:\Espressif"
+    ) else (
+        set "SF_TOOLS_PATH=%USERPROFILE%\.espressif"
+    )
+)
+
 REM --- Determine required Python minor from installed ESP-IDF venvs ---
 REM export.bat derives the venv name (idf5.x_py3.Y_env) from the version of
 REM the python.exe it finds on PATH. A merely in-range python is therefore
@@ -26,8 +46,6 @@ REM exits 0, so this script used to print [OK] right after that error
 REM (observed 2026-07-22, pyenv-win global 3.12 + installer-created py3.10
 REM venv). Collect the minor versions of installed venvs here and let
 REM :sf_check_python accept only a matching python.
-set "SF_TOOLS_PATH=%IDF_TOOLS_PATH%"
-if not defined SF_TOOLS_PATH set "SF_TOOLS_PATH=%USERPROFILE%\.espressif"
 set "SF_VENV_MINORS="
 if exist "%SF_TOOLS_PATH%\python_env" (
     for /d %%v in ("%SF_TOOLS_PATH%\python_env\idf*_env") do (
@@ -157,7 +175,7 @@ if exist "%SF_CONFIG%" (
 if not defined SF_IDF_PATH set "SF_IDF_PATH=%USERPROFILE%\esp\esp-idf"
 
 set "DISCOVERED_PATH=!PATH!"
-endlocal & set "PATH=%DISCOVERED_PATH%" & set "IDF_PATH=%SF_IDF_PATH%"
+endlocal & set "PATH=%DISCOVERED_PATH%" & set "IDF_PATH=%SF_IDF_PATH%" & set "IDF_TOOLS_PATH=%SF_TOOLS_PATH%"
 
 if not exist "%IDF_PATH%\export.bat" (
     echo [ERROR] ESP-IDF not found at %IDF_PATH%
