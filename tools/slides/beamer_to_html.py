@@ -246,6 +246,127 @@ def extract_verbatim_blocks(text: str, store: list[RawBlock]) -> str:
 
 
 # ===========================================================================
+# Section 2b — `% @web:` marker extraction (web-only widgets/videos)
+# `% @web:` マーカー抽出（Web版限定のウィジェット・動画）
+#
+# LaTeX comments are invisible to lualatex, so `% @web: ...` lines are safe
+# to leave in the .tex sources: the PDF deck is unaffected. This converter
+# reads them from the RAW (not-yet-comment-stripped) per-frame text, before
+# strip_comments_outside_verbatim() would erase them, and attaches the
+# result to that Frame so make_content_slide() can splice in the extra HTML
+# (see apply_web_markers in Section 6).
+# LaTeXのコメントはlualatexから見えないため、`% @web: ...` 行はそのまま
+# .texソースに残してもPDFデッキに影響しない。本コンバータはこれを
+# strip_comments_outside_verbatim()でコメントが消される前の、フレーム単位の
+# 生テキストから読み取り、そのFrameに結果を添付する（make_content_slide()が
+# 追加HTMLを合成する、詳細はSection 6のapply_web_markers参照）。
+# ===========================================================================
+
+WEB_MARKER_LINE_RE = re.compile(r"^[ \t]*%[ \t]*@web:[ \t]*(.*)$", re.MULTILINE)
+WEB_MARKER_KEY_RE = re.compile(r"(widget|axis|preset|alpha|height|video|caption|layout)=")
+
+
+@dataclass
+class WebWidgetSpec:
+    widget: str            # 'pid_step' | 'mixer' | 'comp_filter'
+    attrs: dict            # extra data-* attrs (axis, preset, alpha, ...)
+    height: int | None
+
+
+@dataclass
+class WebVideoSpec:
+    src: str               # raw marker path, e.g. "../fallback/S4_....mp4"
+    caption: str
+
+
+@dataclass
+class WebMarkers:
+    widgets: list           # list[WebWidgetSpec]
+    videos: list             # list[WebVideoSpec]
+    layout: str              # 'below' (default) | 'right' | 'replace'
+
+    def is_empty(self) -> bool:
+        return not self.widgets and not self.videos
+
+
+def parse_web_marker_fields(content: str) -> dict:
+    """Parse one '@web:' line's "k=v k=v ..." content into a dict. A value
+    runs until the next recognized key= token (or end of line), so
+    `caption=実習 5（P のみ）` can freely contain spaces/parentheses without
+    a naive whitespace split cutting it short.
+    '@web:' 1行分の "k=v k=v ..." を辞書へ変換する。値は次の既知キーの
+    key= が現れるまで（無ければ行末まで）を1つの値として読む — 単純な
+    空白区切りでは `caption=実習 5（P のみ）` のような値が途中で
+    切れてしまうため。"""
+    matches = list(WEB_MARKER_KEY_RE.finditer(content))
+    fields = {}
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        fields[m.group(1)] = content[m.end():end].strip()
+    return fields
+
+
+def extract_web_markers(frame_raw: str) -> WebMarkers:
+    """Scan one frame's RAW text (still carrying '%' comments) for every
+    `% @web: ...` line and fold them into one WebMarkers for that frame.
+    Multiple `widget=`/`video=` lines accumulate; a `layout=` line (order-
+    independent) sets the frame's layout, defaulting to 'below'.
+    1フレームの生テキストから `% @web: ...` 行をすべて拾い、1つの
+    WebMarkersにまとめる。`widget=`/`video=` は複数行あれば積み上がり、
+    `layout=` はどこにあってもそのフレームのレイアウトを決める
+    （既定は 'below'）。"""
+    widgets: list = []
+    videos: list = []
+    layout = "below"
+    for m in WEB_MARKER_LINE_RE.finditer(frame_raw):
+        fields = parse_web_marker_fields(m.group(1))
+        if "layout" in fields:
+            layout = fields["layout"].strip() or layout
+        if "widget" in fields:
+            height = int(fields["height"]) if fields.get("height") else None
+            attrs = {k: v for k, v in fields.items()
+                     if k not in ("widget", "height", "layout")}
+            widgets.append(WebWidgetSpec(widget=fields["widget"], attrs=attrs, height=height))
+        elif "video" in fields:
+            videos.append(WebVideoSpec(src=fields["video"], caption=fields.get("caption", "")))
+    return WebMarkers(widgets=widgets, videos=videos, layout=layout)
+
+
+def is_commented_out(text: str, pos: int) -> bool:
+    """True if `pos` sits inside a LaTeX '%' comment on its own line (an
+    unescaped '%' appears earlier on the same line). Used defensively when
+    locating \\begin{frame}/\\end{frame} in text whose comments have NOT
+    been stripped yet (see parse_chapter_frames), so a stray `% \\begin
+    {frame}` inside a docstring is never mistaken for a real frame
+    boundary. `pos` がその行内で（エスケープされていない）'%' より後に
+    あるかどうかを判定する。コメント未除去のテキストでフレーム境界を
+    探す際の防御用（docstring中の`% \\begin{frame}`等を実境界と誤認
+    しないため）。"""
+    line_start = text.rfind("\n", 0, pos) + 1
+    i = line_start
+    while i < pos:
+        if text[i] == "\\" and i + 1 < pos:
+            i += 2
+            continue
+        if text[i] == "%":
+            return True
+        i += 1
+    return False
+
+
+def find_uncommented(text: str, needle: str, start: int) -> int:
+    """Like str.find, but skips any match that is_commented_out() flags.
+    str.findと同じだが、is_commented_out()がコメント内と判定した
+    マッチは読み飛ばす。"""
+    pos = start
+    while True:
+        idx = text.find(needle, pos)
+        if idx == -1 or not is_commented_out(text, idx):
+            return idx
+        pos = idx + len(needle)
+
+
+# ===========================================================================
 # Section 3 — Node tree and the recursive-descent parser
 # ノード木と再帰下降パーサ
 # ===========================================================================
@@ -1082,6 +1203,7 @@ class Frame:
     body_nodes: list
     title_text: str
     todo_count: int
+    web_markers: WebMarkers
 
 
 def strip_later(nodes: list[Node]) -> bool:
@@ -1115,23 +1237,37 @@ def parse_chapter_frames(path: Path) -> list[Frame]:
     raw_text = path.read_text(encoding="utf-8")
     store: list[RawBlock] = []
     extracted = extract_verbatim_blocks(raw_text, store)
-    cleaned = strip_comments_outside_verbatim(extracted)
     chapter_stem = path.stem
     frames = []
     pos = 0
     begin_tag, end_tag = "\\begin{frame}", "\\end{frame}"
     while True:
-        start = cleaned.find(begin_tag, pos)
+        # Frame boundaries are located BEFORE comment-stripping (find_
+        # uncommented, not str.find) so `% @web:` marker lines further
+        # inside the frame body are still there to read (see
+        # extract_web_markers) — each frame's own text is cleaned
+        # individually right after, which is equivalent to the old
+        # whole-file strip since '%' comments never span a newline.
+        # コメント除去より前にフレーム境界を探す（str.findではなく
+        # find_uncommented）— こうしないとフレーム本文内の`% @web:`行が
+        # 消えてしまう（extract_web_markers参照）。各フレームのテキストは
+        # 直後に個別クリーニングする — '%'コメントは改行を越えないため、
+        # 旧来のファイル全体一括クリーニングと結果は同じになる。
+        start = find_uncommented(extracted, begin_tag, pos)
         if start == -1:
             break
         body_start = start + len(begin_tag)
-        end = cleaned.find(end_tag, body_start)
-        frames.append(parse_one_frame(cleaned[body_start:end], store, chapter_stem))
+        end = find_uncommented(extracted, end_tag, body_start)
+        frame_raw = extracted[body_start:end]
+        web_markers = extract_web_markers(frame_raw)
+        cleaned_frame = strip_comments_outside_verbatim(frame_raw)
+        frames.append(parse_one_frame(cleaned_frame, store, chapter_stem, web_markers))
         pos = end + len(end_tag)
     return frames
 
 
-def parse_one_frame(frame_text: str, store: list[RawBlock], chapter_stem: str) -> Frame:
+def parse_one_frame(frame_text: str, store: list[RawBlock], chapter_stem: str,
+                     web_markers: WebMarkers | None = None) -> Frame:
     pos = 0
     _, pos = try_read_bracket_raw(frame_text, pos)  # [fragile]/[plain]/... ignored
     parser = Parser(frame_text, store, chapter_stem)
@@ -1143,7 +1279,8 @@ def parse_one_frame(frame_text: str, store: list[RawBlock], chapter_stem: str) -
     body_nodes, _ = parser.parse_to_eof(pos)
     todo_count = STATS["todo_total"] - before
     STATS["frames"] += 1
-    return Frame(title_nodes, is_later, body_nodes, flatten_text(title_nodes), todo_count)
+    return Frame(title_nodes, is_later, body_nodes, flatten_text(title_nodes), todo_count,
+                 web_markers or WebMarkers(widgets=[], videos=[], layout="below"))
 
 
 def extract_command_raw(text: str, cmdname: str) -> str:
@@ -1204,6 +1341,7 @@ class Slide:
     divider_num: str = ""
     divider_time: str = ""
     todo_count: int = 0
+    has_web_extra: bool = False
 
 
 def make_title_slide(fields: dict) -> Slide:
@@ -1219,15 +1357,74 @@ def make_title_slide(fields: dict) -> Slide:
     )
 
 
+def render_web_widget(w: WebWidgetSpec) -> str:
+    """One widget mount point: an empty div deck.js fills via
+    window.SfWidgets.<camelCase>(el, {...from data-* attrs...}) on slide
+    show, and empties again (dispose()) on slide hide (see deck.js "web-only
+    widgets" section). 1個のウィジェット差し込み先。空のdivをdeck.jsが
+    表示時にwindow.SfWidgets経由でマウントし、非表示時にdispose()で
+    空に戻す（deck.jsの「web-only widgets」節参照）。"""
+    attrs_html = "".join(f' data-{esc(k)}="{esc(v)}"' for k, v in w.attrs.items())
+    style = f' style="height:{w.height}px"' if w.height else ""
+    return f'<div class="web-only widget" data-widget="{esc(w.widget)}"{attrs_html}{style}></div>'
+
+
+def render_web_video(v: WebVideoSpec) -> str:
+    basename = Path(v.src).name
+    caption = f"<figcaption>{esc(v.caption)}</figcaption>" if v.caption else ""
+    return (f'<figure class="web-only video"><video controls muted playsinline '
+            f'preload="metadata" src="assets/video/{esc(basename)}"></video>{caption}</figure>')
+
+
+def render_web_extra(markers: WebMarkers) -> str:
+    parts = [render_web_widget(w) for w in markers.widgets]
+    if len(markers.videos) > 1:
+        # Multiple `% @web: video=...` lines on one frame -> side by side.
+        # 同一フレームに複数の video= 行 -> 横並び。
+        parts.append('<div class="web-videos">' +
+                      "".join(render_web_video(v) for v in markers.videos) + "</div>")
+    else:
+        parts.extend(render_web_video(v) for v in markers.videos)
+    return "".join(parts)
+
+
+def apply_web_markers(body_html: str, markers: WebMarkers):
+    """Splice a frame's `% @web:` widgets/videos into its rendered HTML per
+    the marker's `layout` (see Section 2b): 'below' appends after the
+    LaTeX content (default), 'right' puts the LaTeX content and the extra
+    content in a two-column row (reusing the existing .columns/.column
+    layout primitives from slide.css), 'replace' drops the LaTeX content
+    entirely (title/footer stay). Returns (new_body_html, has_web_extra) —
+    the latter drives the "Web 版のみ" header badge.
+    フレームの`% @web:`ウィジェット/動画を、marker指定のlayoutに従って
+    レンダリング済みHTMLへ合成する: 'below'はLaTeX本文の後ろに追加（既定）、
+    'right'はLaTeX本文と追加分を2カラムに並べる（slide.cssの既存
+    .columns/.columnをそのまま流用）、'replace'はLaTeX本文を丸ごと
+    差し替える（タイトル・フッターはそのまま）。戻り値の
+    has_web_extraは「Web 版のみ」バッジの表示に使う。"""
+    if markers.is_empty():
+        return body_html, False
+    extra_html = render_web_extra(markers)
+    if markers.layout == "replace":
+        return extra_html, True
+    if markers.layout == "right":
+        return (f'<div class="columns web-columns">'
+                f'<div class="column">{body_html}</div>'
+                f'<div class="column">{extra_html}</div></div>'), True
+    return body_html + extra_html, True
+
+
 def make_content_slide(frame: Frame, session_label: str) -> Slide:
+    body_html, has_web_extra = apply_web_markers(render_block(frame.body_nodes), frame.web_markers)
     return Slide(
         kind="content",
         title_html=render_inline(frame.title_nodes),
         title_text=frame.title_text,
-        body_html=render_block(frame.body_nodes),
+        body_html=body_html,
         is_later=frame.is_later,
         session_label=session_label,
         todo_count=frame.todo_count,
+        has_web_extra=has_web_extra,
     )
 
 
@@ -1286,7 +1483,8 @@ def render_slide_section(slide: Slide, index: int, total: int) -> str:
 
 def render_content_slide_body(slide: Slide, index: int, total: int) -> str:
     later_badge = '<span class="later-badge">あとで読む</span>' if slide.is_later else ""
-    header = f'<header class="slide-header"><h2>{slide.title_html}</h2>{later_badge}</header>'
+    web_badge = '<span class="web-badge">Web 版のみ</span>' if slide.has_web_extra else ""
+    header = f'<header class="slide-header"><h2>{slide.title_html}</h2>{later_badge}{web_badge}</header>'
     body = f'<div class="slide-body">{slide.body_html}</div>'
     footer = (f'<footer class="slide-footer"><span class="footer-title">'
               f'{esc(DECK_SHORT_TITLE)}</span><span class="footer-page">'
@@ -1366,6 +1564,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <link rel="stylesheet" href="assets/vendor/katex/katex.min.css">
 <link rel="stylesheet" href="assets/css/deck.css">
 <link rel="stylesheet" href="assets/css/slide.css">
+<link rel="stylesheet" href="assets/widgets/widgets.css">
 </head>
 <body>
 <div id="chrome">
@@ -1385,6 +1584,9 @@ PAGE_TEMPLATE = """<!doctype html>
 {help}
 <script src="assets/vendor/katex/katex.min.js"></script>
 <script src="assets/vendor/katex/auto-render.min.js"></script>
+<script src="assets/widgets/pid_step.js"></script>
+<script src="assets/widgets/mixer.js"></script>
+<script src="assets/widgets/comp_filter.js"></script>
 <script src="assets/js/deck.js"></script>
 </body>
 </html>
@@ -1560,6 +1762,41 @@ def find_image_source(name: str, images_dir: Path, fallback_dir: Path):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Video assets (from `% @web: video=...` markers, Section 2b)
+# 動画アセット（`% @web: video=...` マーカー由来、Section 2b参照）
+#
+# The marker's path is written relative to slides/chapters/ (matching this
+# deck's existing \includegraphics{../fallback/...} convention), so its
+# source always resolves under <sci-dir>/fallback/ regardless of the exact
+# relative prefix in the marker — only the basename is trusted, same as
+# copy_images() above.
+# マーカーのパスは slides/chapters/ からの相対（既存の
+# \includegraphics{../fallback/...} 規約と同じ）で書くため、マーカー中の
+# 相対プレフィックスに関わらず実体は常に <sci-dir>/fallback/ 配下にある
+# — copy_images()と同じくbasenameのみを信頼する。
+# ---------------------------------------------------------------------------
+
+def collect_video_refs(slides: list[Slide]) -> set:
+    refs = set()
+    for s in slides:
+        refs.update(re.findall(r'assets/video/([^"]+)', s.body_html))
+    return refs
+
+
+def copy_videos(basenames: set, fallback_dir: Path, out_video_dir: Path) -> list[str]:
+    out_video_dir.mkdir(parents=True, exist_ok=True)
+    report = []
+    for name in sorted(basenames):
+        src = fallback_dir / name
+        if not src.exists():
+            report.append(f"MISSING {name}")
+            continue
+        shutil.copy2(src, out_video_dir / name)
+        report.append(f"OK      {name}")
+    return report
+
+
 # ===========================================================================
 # Section 9 — CLI entry point and the conversion report
 # CLIエントリポイントと変換レポート
@@ -1582,8 +1819,10 @@ def build_argparser() -> argparse.ArgumentParser:
     return p
 
 
-def print_report(slides: list[Slide], tikz_report: list[str], img_report: list[str]) -> None:
+def print_report(slides: list[Slide], tikz_report: list[str], img_report: list[str],
+                  video_report: list[str] | None = None) -> None:
     total_todo = sum(s.todo_count for s in slides)
+    web_slides = [s for s in slides if s.has_web_extra]
     print(f"[beamer_to_html] frames converted: {STATS['frames']} "
           f"(+{sum(1 for s in slides if s.kind == 'divider')} dividers, "
           f"+1 title) = {len(slides)} slides")
@@ -1591,6 +1830,11 @@ def print_report(slides: list[Slide], tikz_report: list[str], img_report: list[s
     for i, s in enumerate(slides, start=1):
         if s.todo_count:
             print(f"  slide {i:3d} [{s.title_text}]: {s.todo_count} TODO")
+    if web_slides:
+        print(f"[beamer_to_html] web-only content (% @web:): {len(web_slides)} slides")
+        for i, s in enumerate(slides, start=1):
+            if s.has_web_extra:
+                print(f"  slide {i:3d} [{s.title_text}]")
     if tikz_report:
         print(f"[beamer_to_html] TikZ SVG build: {len(tikz_report)} figures")
         for line in tikz_report:
@@ -1598,6 +1842,10 @@ def print_report(slides: list[Slide], tikz_report: list[str], img_report: list[s
     if img_report:
         print(f"[beamer_to_html] image assets: {len(img_report)}")
         for line in img_report:
+            print(f"  {line}")
+    if video_report:
+        print(f"[beamer_to_html] video assets: {len(video_report)}")
+        for line in video_report:
             print(f"  {line}")
 
 
@@ -1621,10 +1869,13 @@ def main() -> int:
     img_report = copy_images(img_refs, args.images_dir, sci_dir / "fallback",
                               web_dir / "assets" / "img")
 
+    video_refs = collect_video_refs(slides)
+    video_report = copy_videos(video_refs, sci_dir / "fallback", web_dir / "assets" / "video")
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(render_page(slides), encoding="utf-8")
     print(f"[beamer_to_html] wrote {out_path}")
-    print_report(slides, tikz_report, img_report)
+    print_report(slides, tikz_report, img_report, video_report)
     return 0
 
 

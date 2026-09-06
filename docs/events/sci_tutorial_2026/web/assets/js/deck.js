@@ -57,6 +57,54 @@
     updateOutlineHighlight();
     updateUrl(opts.replace);
     renderMath();
+    mountWidgetsForSlide(slides[n - 1]);
+    disposeWidgetsExceptSlide(slides[n - 1]);
+  }
+
+  // ---- web-only widgets (`% @web: widget=...` markers, see
+  // tools/slides/beamer_to_html.py apply_web_markers/render_web_widget) --
+  // Each `.web-only.widget[data-widget]` div is an empty mount point in the
+  // static HTML. Mount only the CURRENT slide's widgets (so a canvas/
+  // rAF-driven widget is never running for a slide the viewer navigated
+  // away from) and dispose() any widget whose slide is no longer current.
+  // `% @web: widget=...`マーカー由来のウィジェット差し込み先
+  // （`.web-only.widget[data-widget]`、静的HTML上は空div）。現在
+  // 表示中のスライドの分だけマウントし（canvas/rAFループを他スライドで
+  // 動かし続けない）、表示から外れたスライドのウィジェットはdispose()する。
+  // ------------------------------------------------------------------------
+  function numOrUndef(v) { return v === undefined ? undefined : Number(v); }
+  var WIDGET_FACTORY = {
+    pid_step: function (el, data) {
+      return window.SfWidgets.pidStep(el, { axis: data.axis, preset: data.preset });
+    },
+    mixer: function (el, data) {
+      return window.SfWidgets.mixer(el, {
+        T: numOrUndef(data.t), R: numOrUndef(data.r), P: numOrUndef(data.p), Y: numOrUndef(data.y),
+      });
+    },
+    comp_filter: function (el, data) {
+      return window.SfWidgets.compFilter(el, { alpha: numOrUndef(data.alpha) });
+    },
+  };
+  var mountedWidgets = new Map(); // <div class="web-only widget"> -> instance
+
+  function mountWidgetsForSlide(slide) {
+    if (!slide || typeof window.SfWidgets === "undefined") return;
+    slide.querySelectorAll(".web-only.widget[data-widget]").forEach(function (el) {
+      if (mountedWidgets.has(el)) return;
+      var factory = WIDGET_FACTORY[el.dataset.widget];
+      if (!factory) return;
+      mountedWidgets.set(el, factory(el, el.dataset));
+    });
+  }
+
+  function disposeWidgetsExceptSlide(currentSlide) {
+    mountedWidgets.forEach(function (inst, el) {
+      if (el.closest(".slide") !== currentSlide) {
+        inst.dispose();
+        mountedWidgets.delete(el);
+      }
+    });
   }
 
   function updateProgress() {

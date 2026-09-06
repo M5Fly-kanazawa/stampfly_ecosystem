@@ -452,6 +452,94 @@ th, td { overflow-wrap: anywhere; word-break: break-word; }
 /* ---- "later" (あとで読む) frames: a faint dashed inner border cue -------- */
 .slide.later .slide-header { border-bottom: 3px dashed rgba(255, 255, 255, 0.6); }
 
+/* ---- web-only interactive content (`% @web:` markers) ------------------
+   Inserted by tools/slides/beamer_to_html.py (apply_web_markers) for
+   frames carrying `% @web: widget=...`/`video=...` comment markers in the
+   LaTeX source — present only in this HTML deck, not the PDF. Widget divs
+   are mounted/emptied by deck.js on slide show/hide (see deck.js "web-only
+   widgets"); sizing here just needs to let them flex to fill the space the
+   marker's `height=` doesn't already claim via inline style.
+   `% @web:` マーカー由来のWeb版限定コンテンツ（tools/slides/
+   beamer_to_html.pyのapply_web_markersが差し込む）。PDFには存在しない。
+   ウィジェットdivの中身はdeck.jsがスライドの表示/非表示に合わせてマウント/
+   破棄する（deck.js「web-only widgets」節参照）。ここではmarkerの
+   height=（インラインstyle）で決まらない分の余白をflexで埋められれば
+   よい。*/
+.web-only.widget { flex: 1 1 auto; min-height: 0; min-width: 0; margin: 0.3em 0; }
+.web-videos { display: flex; gap: 20px; flex: 1 1 auto; min-height: 0; align-items: stretch; }
+figure.web-only.video {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 0.3em 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+figure.web-only.video video {
+  width: 100%;
+  max-height: 460px;
+  border-radius: 6px;
+  background: #000;
+  object-fit: contain;
+}
+figure.web-only.video figcaption {
+  font-size: var(--fs-footnotesize);
+  color: var(--sf-gray);
+  text-align: center;
+}
+/* A single video (not part of a .web-videos row) reads better capped and
+   centered than stretched edge-to-edge across the whole 1280px canvas.
+   1本だけの動画（.web-videosの行に属さない）は、1280px幅いっぱいに
+   伸ばすより上限を設けて中央寄せした方が見やすい。*/
+.fit-inner > figure.web-only.video, .column > figure.web-only.video {
+  max-width: 900px;
+  align-self: center;
+  width: 100%;
+}
+/* Two-column `layout=right` frames (LaTeX content | widget), reusing the
+   existing .columns/.column primitives above.
+   `layout=right`の2カラム構成（LaTeX本文｜ウィジェット）— 上の既存
+   .columns/.columnをそのまま流用する。*/
+.web-columns { flex: 1 1 auto; }
+
+/* "Web 版のみ" badge: same slot/style as .later-badge (the two never
+   co-occur in this deck's current marker placements), in the deck's green
+   accent instead of white so the two are visually distinct if they ever do.
+   「Web 版のみ」バッジ: .later-badgeと同じ位置・見た目（現状のマーカー
+   配置では両者は同時に出現しない）。色だけデッキのgreenにして区別する。*/
+.web-badge {
+  position: absolute;
+  top: 14px;
+  right: 180px;
+  background: var(--sf-green);
+  color: #fff;
+  font-size: var(--fs-scriptsize);
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 3px;
+}
+
+/* ---- print: a <video> can't play on paper — show the caption only,
+   with a placeholder note in place of the controls. deck.css's own
+   @media print block handles page-per-slide/chrome-hiding; this only
+   covers the web-only video content itself. --------------------------- */
+@media print {
+  figure.web-only.video video { display: none; }
+  figure.web-only.video::before {
+    content: "▶ 動画（Web版でのみ再生可能）";
+    display: block;
+    font-size: var(--fs-footnotesize);
+    color: var(--sf-gray);
+    padding: 12px;
+    border: 1px dashed #ccc;
+    border-radius: 6px;
+    text-align: center;
+  }
+}
+
 /* ---- flex-column spacing: gap replaces margins between DIRECT children --
    .fit-inner/.column/.align-center are flex containers, and flex items
    never collapse adjacent margins the way normal block-flow siblings do

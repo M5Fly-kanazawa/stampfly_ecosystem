@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>制御教育教材 StampFly Ecosystem の紹介 — SCI/SICEチュートリアル2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="assets/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="assets/css/deck.css">
+<link rel="stylesheet" href="assets/css/slide.css">
+<link rel="stylesheet" href="assets/widgets/widgets.css">
+</head>
+<body>
+<div id="chrome">
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div id="controls">
+    <button id="btn-outline" title="目次 (t)">目次</button>
+    <button id="btn-fullscreen" title="全画面 (f)">全画面</button>
+    <button id="btn-help" title="ヘルプ (?)">?</button>
+  </div>
+</div>
+<div id="viewport">
+  <div id="stage">
+<section class="slide title" id="s-001" data-title="制御教育教材 StampFly Ecosystem の紹介" data-session="タイトル"><div class="title-content"><h1>制御教育教材 StampFly Ecosystem の紹介</h1><p class="subtitle">コーディングから飛行試験、データ取得まで</p><p class="author">伊藤 恒平（金沢工業大学）</p><p class="date">2026年9月10日（木）大阪大学中之島センター + Zoom<br> システム制御情報学会・計測自動制御学会 チュートリアル講座 2026</p></div></section>
+<section class="slide content" id="s-002" data-title="講師紹介" data-session="オープニング"><header class="slide-header"><h2>講師紹介</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">伊藤 恒平</h3><div class="block-body"><div class="fs-small"><p> 金沢工業大学<br>
+    情報理工学部 ロボティクス学科<br>
+    StampFly Ecosystem の開発者。専門はドローンの飛行制御工学
+  </p></div></div></div>
+<ul class="fs-small"><li> 4+1 日ワークショップ（大学生向け、一般の方も参加可。講義・実習と精密着陸競技会）で同じ教材を使用
+    </li><li> ZEP エンジニアリング主催の講習会（2025 年 8 月、品川、2 日間）
+    </li><li> 高校教員向け DXH 講座（2026 年 7 月、操縦体験と書き込み実習）
+    </li><li> 学会チュートリアル（本日）
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">2 / 133</span></footer></section>
+<section class="slide content" id="s-003" data-title="本日の進め方" data-session="オープニング"><header class="slide-header"><h2>本日の進め方</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">講義とデモのハイブリッド</h3><div class="block-body"><div class="fs-small"><p> 講師が実演しながら説明を進める。手元の環境構築でつまずいても、その場で全員を待たせることはしない
+  </p></div></div></div>
+<ul class="fs-small"><li> 手を動かしたい方は、講師と同じコマンドを一緒に打ってみてほしい
+    </li><li> 進度が合わなかった箇所は、録画と資料を使って帰宅後に復習できる
+  </li></ul>
+<div class="block alert"><h3 class="block-title">各セッション共通の型</h3><div class="block-body"><div class="fs-footnotesize"><p> 地図（今どこにいるか）→ 要点3つ → デモ → 理論とコードの対応表 → 復習パス → チェックポイント
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">3 / 133</span></footer></section>
+<section class="slide content" id="s-004" data-title="参加のしかたと資料" data-session="オープニング"><header class="slide-header"><h2>参加のしかたと資料</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">デモの3段階</h3><div class="block-body"><ul class="fs-small"><li> <strong>見るだけ</strong>: 画面とスクリーンを見ているだけで流れがわかる
+      </li><li> <strong>一緒に打つ</strong>: 持参のPCとStampFlyでコマンドを再現する
+      </li><li> <strong>帰宅後に再現</strong>: 会場では見るだけにして、録画と資料で後日試す
+    </li></ul></div></div>
+<div class="block example"><h3 class="block-title">資料はすべて公開されている</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    リポジトリ: <a class="tex-url" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">https://github.com/M5Fly-kanazawa/stampfly_ecosystem</a><br>
+    ドキュメント: <a class="tex-url" href="https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/" target="_blank" rel="noopener">https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/</a><br>
+    本日の内容はオンデマンド配信でも後日視聴できる
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">4 / 133</span></footer></section>
+<section class="slide content" id="s-005" data-title="今日の地図" data-session="オープニング"><header class="slide-header"><h2>今日の地図</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.52 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_0.svg" alt=""></div>
+<p>
+      <span class="fs-scriptsize"> S2・S3 は「実装」、S5 は「解析・教育」を担当</span>
+    </p></div></div><div class="column" style="flex:0.45 1 0"><div class="fs-small"><p>
+      StampFly Ecosystem は「設計 <span class="math-inline">\(\to\)</span> 実装 <span class="math-inline">\(\to\)</span> 実験 <span class="math-inline">\(\to\)</span> 解析 <span class="math-inline">\(\to\)</span> 教育」を循環させながら育ってきた。本日の5セッションはこの循環の上を進む
+      </p>
+<div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><tbody><tr><td style="text-align:left">S1 </td><td style="text-align:left"> 10:05 – 11:00</td></tr><tr><td style="text-align:left">S2 </td><td style="text-align:left"> 11:00 – 12:00</td></tr><tr><td style="text-align:center" colspan="2">(昼休み)</td></tr><tr><td style="text-align:left">S3 </td><td style="text-align:left"> 13:00 – 14:00</td></tr><tr><td style="text-align:left">S4 </td><td style="text-align:left"> 14:00 – 15:00</td></tr><tr><td style="text-align:center" colspan="2">(休憩)</td></tr><tr><td style="text-align:left">S5 </td><td style="text-align:left"> 15:30 – 16:30</td></tr></tbody></table></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">5 / 133</span></footer></section>
+<section class="slide content" id="s-006" data-title="必要機材と安全ルール" data-session="オープニング"><header class="slide-header"><h2>必要機材と安全ルール</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">持参いただくもの</h3><div class="block-body"><div class="fs-small"><p> ノートPC、StampFly 実機とコントローラ（いずれも実習に参加する場合）
+  </p></div></div></div>
+<div class="block alert"><h3 class="block-title">飛行時の安全ルール</h3><div class="block-body"><ul class="fs-small"><li> 実機の飛行は講師が行う。参加者は機体から距離を保つ
+      </li><li> <span class="warn">ARM</span> は機体ボタンの単クリックまたはコントローラで行う。予期せず回転したら即座に <span class="warn">DISARM</span>
+      </li><li> 機体の真上には顔や手を出さない
+    </li></ul></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">6 / 133</span></footer></section>
+<section class="slide divider" id="s-007" data-title="StampFly Ecosystem の全体像と設計思想" data-session="S1"><div class="divider-box"><div class="divider-num">Session 1</div><div class="divider-title">StampFly Ecosystem の全体像と設計思想</div><div class="divider-time">10:05 – 11:00</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-008" data-title="地図: 今ここ" data-session="S1"><header class="slide-header"><h2>地図: 今ここ</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_1.svg" alt=""></div></div></div><div class="column" style="flex:0.47 1 0"><div class="fs-small"><p>
+      今日はこの循環を 5 つのセッションで 1 周する。まずは全体像と設計思想から
+    </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">8 / 133</span></footer></section>
+<section class="slide content" id="s-009" data-title="要点3つ" data-session="S1"><header class="slide-header"><h2>要点3つ</h2></header><div class="slide-body"><ol><li> マルチコプタは制御なしには1秒も飛べない。この性質が制御工学の教材として理想的である
+    </li><li> 必要なリソースが分散していることが普及の障壁になっている。StampFly Ecosystem は単一リポジトリへの集約でこれに応える
+    </li><li> ファームウェアは4階層のアクセス構造を持ち、Workshop 受講者から研究者まで同じコードベースを共有しながら自分の関心に合わせて深さを選べる
+  </li></ol>
+<p>  <span class="fs-small"> 後半では、飛ばす前後で同じモデルを使って結果を確かめる仕組み（シミュレーション 3 層）にも触れる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">9 / 133</span></footer></section>
+<section class="slide content" id="s-010" data-title="制御がなければ飛べない" data-session="S1"><header class="slide-header"><h2>制御がなければ飛べない</h2></header><div class="slide-body"><div class="fs-small"><p> マルチコプタは固定翼機のように滑空できず、ヘリコプタのようにオートローテーションで降りることもできない。制御系が止まれば即座に墜落する</p>
+<div class="block example"><h3 class="block-title">教材としての魅力</h3><div class="block-body"><div class="fs-small"><p> この性質は安全上の課題であると同時に、学習者が「制御がなければ飛べない」という事実を身をもって体験できる特性でもある。フィードバック制御の役割を直感的に理解する入口になる
+  </p></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">10 / 133</span></footer></section>
+<section class="slide content" id="s-011" data-title="StampFly ハードウェア" data-session="S1"><header class="slide-header"><h2>StampFly ハードウェア</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.42 1 0"><div class="align-center"><div class="figure"><img src="assets/img/Stampfly_onhand.jpg" alt=""></div></div></div><div class="column" style="flex:0.56 1 0"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>項目</strong> </th><th style="text-align:left"> <strong>仕様</strong></th></tr></thead><tbody><tr><td style="text-align:left">MCU        </td><td style="text-align:left"> ESP32-S3（M5StampS3）</td></tr><tr><td style="text-align:left">IMU        </td><td style="text-align:left"> BMI270（6軸 400 Hz）</td></tr><tr><td style="text-align:left">気圧       </td><td style="text-align:left"> BMP280</td></tr><tr><td style="text-align:left">磁力計     </td><td style="text-align:left"> BMM150（3軸）</td></tr><tr><td style="text-align:left">測距       </td><td style="text-align:left"> VL53L3CX <span class="math-inline">\(\times\)</span>2（Bottom / Front）</td></tr><tr><td style="text-align:left">光学フロー </td><td style="text-align:left"> PMW3901</td></tr><tr><td style="text-align:left">電流電圧   </td><td style="text-align:left"> INA3221</td></tr><tr><td style="text-align:left">モータ     </td><td style="text-align:left"> コアレスモータ <span class="math-inline">\(\times\)</span>4</td></tr><tr><td style="text-align:left">バッテリ   </td><td style="text-align:left"> 300 mAh 1S LiPo</td></tr><tr><td style="text-align:left">質量       </td><td style="text-align:left"> 37 g（バッテリ含む）</td></tr><tr><td style="text-align:left">コントローラ </td><td style="text-align:left"> M5Stack AtomS3 + Atom JoyStick（ESP-NOW）</td></tr></tbody></table></div></div>
+<p>      <span class="fs-scriptsize"> IMU（慣性計測装置）／ESP-NOW（ESP32 の無線プロトコル）。前方 ToF は未使用（高度推定は下方 ToF）</span>
+    </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">11 / 133</span></footer></section>
+<section class="slide content" id="s-012" data-title="4つの障壁" data-session="S1"><header class="slide-header"><h2>4つの障壁</h2></header><div class="slide-body"><div class="fs-small"><p> 手のひらサイズで安全性が高く安価な StampFly でも、要点②のリソース分散に加えて、教育現場での普及には次の4つの障壁がある</p>
+<ul class="fs-small"><li> <strong>ブラックボックス問題</strong>: 市販の教育用ドローンは飛ぶが、制御ループの中身に触れられない
+    </li><li> <strong>理論と実装のギャップ</strong>: PIDの数式は教科書で学べても、組込みのリアルタイム制御ループとして実装するには別のスキルが要る
+    </li><li> <strong>体系的教材の不在</strong>: センサ取得から状態推定、制御、実験、データ解析までを一貫して学べる教材が見当たらない
+    </li><li> <strong>教育者の準備負担</strong>: カリキュラム設計・教材作成・ツール整備を一人の教育者がすべて担うのは現実的でない
+  </li></ul></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">12 / 133</span></footer></section>
+<section class="slide content" id="s-013" data-title="既存プラットフォームとの比較" data-session="S1"><header class="slide-header"><h2>既存プラットフォームとの比較</h2></header><div class="slide-body"><div class="table-wrap align-center"><div class="table-scroll"><table><thead><tr><th style="text-align:left"></th><th style="text-align:center"> Crazyflie </th><th style="text-align:center"> Tello EDU<sup>*</sup> </th><th style="text-align:center"> PX4 </th><th style="text-align:center"> StampFly Eco.</th></tr></thead><tbody><tr><td style="text-align:left">制御ループアクセス </td><td style="text-align:center"> ✓ </td><td style="text-align:center"> — </td><td style="text-align:center"> ✓ </td><td style="text-align:center"> ✓</td></tr><tr><td style="text-align:left">教材・カリキュラム </td><td style="text-align:center"> <span class="math-inline">\(\triangle\)</span> </td><td style="text-align:center"> <span class="math-inline">\(\triangle\)</span> </td><td style="text-align:center"> <span class="math-inline">\(\triangle\)</span> </td><td style="text-align:center"> ✓</td></tr><tr><td style="text-align:left">シミュレータ統合   </td><td style="text-align:center"> ✓ </td><td style="text-align:center"> — </td><td style="text-align:center"> ✓ </td><td style="text-align:center"> ✓</td></tr><tr><td style="text-align:left">コスト             </td><td style="text-align:center"> 高 </td><td style="text-align:center"> 低 </td><td style="text-align:center"> 高 </td><td style="text-align:center"> 低</td></tr><tr><td style="text-align:left">コード規模         </td><td style="text-align:center"> 中 </td><td style="text-align:center"> — </td><td style="text-align:center"> 大 </td><td style="text-align:center"> 小</td></tr></tbody></table></div></div>
+<p>  <span class="fs-small"> 制御ループへのフルアクセスと体系的な教材・ツールの統合提供を両立させ、ファームウェア全体を一人の学習者が読み通せる規模に抑えている点が異なる</span></p>
+<p>  <span class="fs-scriptsize"> <sup>*</sup>Tello EDU は2023年末に販売終了（評価は筆者の定性的見解）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">13 / 133</span></footer></section>
+<section class="slide content" id="s-014" data-title="エコシステムの地図" data-session="S1"><header class="slide-header"><h2>エコシステムの地図</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/ecosystem_layers.svg" alt=""></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">14 / 133</span></footer></section>
+<section class="slide content" id="s-015" data-title="設計思想5本柱" data-session="S1"><header class="slide-header"><h2>設計思想5本柱</h2></header><div class="slide-body"><div class="table-wrap align-center fs-footnotesize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>柱</strong> </th><th style="text-align:left"> <strong>内容</strong></th></tr></thead><tbody><tr><td style="text-align:left">集約と SSOT </td><td style="text-align:left"> ファーム・シミュレータ・解析・教材を単一リポジトリに集約。通信仕様は <code class="tex-code">protocol/spec/</code> を SSOT（Single Source of Truth、唯一の正となる情報源）とする</td></tr><tr><td style="text-align:left">sf CLI </td><td style="text-align:left"> ビルド・書込み・ログ取得・シミュレーション操作を統一コマンド体系で提供する（CLI: コマンドラインツール）</td></tr><tr><td style="text-align:left">4 階層アクセス </td><td style="text-align:left"> Workshop API（<code class="tex-code">ws::</code>）から Topic API・HAL・ハードウェアまで 4 つの入口が同時に存在し、学習者は必要な深さから入れる</td></tr><tr><td style="text-align:left">シミュレータ統合 </td><td style="text-align:left"> VPython（軽量 3D）・Genesis（高精度物理）・SILS（実ファーム + MuJoCo）を同じ制御アルゴリズムで動かす</td></tr><tr><td style="text-align:left">オープンソース </td><td style="text-align:left"> 制御ループからドライバまで公開し、ブラックボックス問題を根本から排除する</td></tr></tbody></table></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">15 / 133</span></footer></section>
+<section class="slide content" id="s-016" data-title="1機から学べる8分野" data-session="S1"><header class="slide-header"><h2>1機から学べる8分野</h2></header><div class="slide-body"><p>
+  <span class="fs-small"> この 5 本柱の上で、1 機から次の 8 分野を扱える</span></p>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>分野</strong> </th><th style="text-align:left"> <strong>主な学習項目</strong></th></tr></thead><tbody><tr><td style="text-align:left">制御理論       </td><td style="text-align:left"> PID, カスケード制御, FF/FB, アンチワインドアップ</td></tr><tr><td style="text-align:left">飛行力学       </td><td style="text-align:left"> 6DoF運動方程式, ホバー条件, NED/Body座標変換</td></tr><tr><td style="text-align:left">センサ工学     </td><td style="text-align:left"> IMU, 気圧, 光学フロー, Allan分散, ノイズ解析</td></tr><tr><td style="text-align:left">状態推定       </td><td style="text-align:left"> 相補フィルタ, ESKF, センサフュージョン</td></tr><tr><td style="text-align:left">アクチュエータ </td><td style="text-align:left"> PWM制御, 推力モデル, プロペラ空力特性, ミキサ行列</td></tr><tr><td style="text-align:left">システム同定   </td><td style="text-align:left"> 周波数応答, パラメータ推定, モデル検証</td></tr><tr><td style="text-align:left">通信・IoT      </td><td style="text-align:left"> ESP-NOW, WiFiテレメトリ, プロトコル設計</td></tr><tr><td style="text-align:left">ソフトウェア工学 </td><td style="text-align:left"> リアルタイムタスク, 組込み開発, OSS開発</td></tr></tbody></table></div></div>
+<p>  <span class="fs-small"> これらは独立した知識ではなく、1台の機体の中で密接に関連し合っている。PIDゲインの設計には慣性モーメントやモータ応答特性の知識が要り、推定精度はセンサのノイズ特性に左右される</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">16 / 133</span></footer></section>
+<section class="slide content later" id="s-017" data-title="深掘り: sf CLI" data-session="S1"><header class="slide-header"><h2>深掘り: sf CLI</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="fs-small"><p> <code class="tex-code">idf.py</code> を直接叩く代わりに、ビルド・書き込み・診断・ログ取得・シミュレーションを統一されたコマンド体系で提供する</p>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>カテゴリ</strong> </th><th style="text-align:left"> <strong>コマンド例</strong></th></tr></thead><tbody><tr><td style="text-align:left">ビルド・書込み   </td><td style="text-align:left"> <code class="tex-code">sf build</code> / <code class="tex-code">sf flash</code></td></tr><tr><td style="text-align:left">診断             </td><td style="text-align:left"> <code class="tex-code">sf doctor</code> / <code class="tex-code">sf monitor</code></td></tr><tr><td style="text-align:left">ログ             </td><td style="text-align:left"> <code class="tex-code">sf log wifi</code> / <code class="tex-code">sf log viz</code></td></tr><tr><td style="text-align:left">シミュレータ     </td><td style="text-align:left"> <code class="tex-code">sf sim run vpython</code> / <code class="tex-code">sf sils gui</code></td></tr><tr><td style="text-align:left">同定・整合       </td><td style="text-align:left"> <code class="tex-code">sf sysid</code> / <code class="tex-code">sf params check</code></td></tr></tbody></table></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">17 / 133</span></footer></section>
+<section class="slide content later" id="s-018" data-title="深掘り: 4階層は同時に存在する" data-session="S1"><header class="slide-header"><h2>深掘り: 4階層は同時に存在する</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="fs-small"><p> <code class="tex-code">ws::</code> 名前空間（L0 Workshop API）は、制御ループの起動やセンサ初期化を隠しつつ、<code class="tex-api">setup()</code> と <code class="tex-api">loop_400Hz(dt)</code> だけで機体を動かせるようにする</p>
+<ul class="fs-small"><li> L0 Workshop API・L1 Topic API・L2 HAL・L3 ハードウェア直叩きの4層は、レッスンの進行に応じて後から現れるのではなく、ファームウェア起動時点からすべて実装済みで並行して存在する
+    </li><li> 学習者はどの層からでも入口を選べる。全員がL0から順に進む必要はない
+    </li><li> 本チュートリアルはL0から順に説明していくが、これは教える都合の順序であり層の解禁順ではない。4層の全体像は本セッション後半の「4階層アクセス」で示す
+  </li></ul></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">18 / 133</span></footer></section>
+<section class="slide content" id="s-019" data-title="vehicle ファーム構造" data-session="S1"><header class="slide-header"><h2>vehicle ファーム構造</h2></header><div class="slide-body"><div class="table-wrap align-center fs-small"><div class="table-scroll"><table><tbody><tr><td style="text-align:left">コンポーネント数 </td><td style="text-align:left"> 30（<code class="tex-code">sf_*</code> 命名, フラット構造）</td></tr><tr><td style="text-align:left">通信方式         </td><td style="text-align:left"> Pub-Sub トピック（直接呼び出し禁止）</td></tr><tr><td style="text-align:left">タスク数         </td><td style="text-align:left"> 16</td></tr><tr><td style="text-align:left">制御周期         </td><td style="text-align:left"> 400 Hz（IMU <span class="math-inline">\(\to\)</span> 状態推定 <span class="math-inline">\(\to\)</span> 制御）</td></tr><tr><td style="text-align:left">状態推定         </td><td style="text-align:left"> ESKF（誤差状態カルマンフィルタ）</td></tr><tr><td style="text-align:left">制御器           </td><td style="text-align:left"> カスケード PID</td></tr><tr><td style="text-align:left">飛行モード       </td><td style="text-align:left"> ACRO / STABILIZE / ALT_HOLD / POS_HOLD</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> Pub-Sub（出版購読型のメッセージ配信）</span></p>
+<div class="block example"><h3 class="block-title">実機検証</h3><div class="block-body"><div class="fs-small"><p> POS_HOLD（位置制御）は実機で検証済み。保持精度 <span class="math-inline">\(\pm\)</span>6–7 cm
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">19 / 133</span></footer></section>
+<section class="slide content" id="s-020" data-title="400 Hz 制御ループ" data-session="S1"><header class="slide-header"><h2>400 Hz 制御ループ</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/loop_400hz_timeline.svg" alt=""></div>
+<p>  <span class="fs-small"> IMU 割込みを起点に、状態推定 <span class="math-inline">\(\to\)</span> 制御 <span class="math-inline">\(\to\)</span> アクチュエーションが 2.5 ms 周期で走る。全コンポーネントが同じ周期を共有する</span>
+</p></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">20 / 133</span></footer></section>
+<section class="slide content" id="s-021" data-title="4階層アクセス" data-session="S1"><header class="slide-header"><h2>4階層アクセス</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/sci_tier_access.svg" alt=""></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">21 / 133</span></footer></section>
+<section class="slide content" id="s-022" data-title="シミュレーション3層" data-session="S1"><header class="slide-header"><h2>シミュレーション3層</h2></header><div class="slide-body"><p>  <span class="fs-small"> 5 本柱の「シミュレータ統合」を掘り下げる。目的の異なる 3 層を使い分ける</span></p>
+<div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>層</strong> </th><th style="text-align:left"> <strong>内容</strong> </th><th style="text-align:left"> <strong>位置づけ</strong></th></tr></thead><tbody><tr><td style="text-align:left">層1 設計用線形モデル </td><td style="text-align:left"> 実飛行ログから同定した低次 <span class="math-inline">\(G(s)\)</span> </td><td style="text-align:left"> 制御系設計・ループ整形の基準</td></tr><tr><td style="text-align:left">層2 実ログ駆動再生   </td><td style="text-align:left"> 移植した制御則を実ログの外乱・指令で駆動 </td><td style="text-align:left"> パラメータ変更の A/B 判定の基準</td></tr><tr><td style="text-align:left">層3 SILS             </td><td style="text-align:left"> MuJoCo + 実ファーム C++、Code/Param Identity </td><td style="text-align:left"> システム全体の検証ベンチ</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で MuJoCo 物理エンジンと組み合わせて動かすシミュレーション検証）</span></p>
+<p>  <span class="fs-small"> 3 層とも同じ物理パラメータを参照するため、飛ばす前の設計（層 1・層 2）と飛ばした後の答え合わせ（層 3）が同じモデルの上でつながる。合否の基準と SILS の実習は S5 で扱う</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">22 / 133</span></footer></section>
+<section class="slide content later" id="s-023" data-title="開発の3原則" data-session="S1"><header class="slide-header"><h2>開発の3原則</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="table-wrap align-center"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>原則</strong> </th><th style="text-align:left"> <strong>内容</strong></th></tr></thead><tbody><tr><td style="text-align:left">Code Identity  </td><td style="text-align:left"> SILS は本体ソースを書き換えず参照コンパイルして実行する。一致するのは推定・制御の数式だけでなく、ループ全体である</td></tr><tr><td style="text-align:left">Parameter Identity </td><td style="text-align:left"> SILS も実機も <code class="tex-code">params.cpp</code> を唯一の基準として読む。チューニング値は同じスキーマで往復する</td></tr><tr><td style="text-align:left">Model Fidelity </td><td style="text-align:left"> SILS の真値は物理モデルから得る。実機データが必要になるのは、初飛行のあとにモデルを現実へ近づける段階だけである</td></tr></tbody></table></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">23 / 133</span></footer></section>
+<section class="slide content" id="s-024" data-title="デモ①: シミュレータ操縦" data-session="S1"><header class="slide-header"><h2>デモ①: シミュレータ操縦</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">何を見るか</h3><div class="block-body"><ul class="fs-small"><li> <code class="tex-code">sf sim run vpython</code> を手元でも起動
+      </li><li> VPythonシミュレータが起動し、実機と同じ制御アルゴリズムが動く
+      </li><li> HIDジョイスティック（Atom JoyStick）でそのまま操縦できる
+      </li><li> 実機がなくても制御コードの挙動を3Dで確認できる
+    </li></ul></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">24 / 133</span></footer></section>
+<section class="slide content" id="s-025" data-title="デモ②: 実機 POS_HOLD 飛行" data-session="S1"><header class="slide-header"><h2>デモ②: 実機 POS_HOLD 飛行</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">何を見るか</h3><div class="block-body"><ul class="fs-small"><li> ホバー中の位置保持精度（実測 <span class="math-inline">\(\pm\)</span>6–7 cm）
+      </li><li> 手で軽く押すなどの外乱を与えたときの復帰動作
+    </li></ul></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">25 / 133</span></footer></section>
+<section class="slide content" id="s-026" data-title="デモ②の期待結果: 位置保持" data-session="S1"><header class="slide-header"><h2>デモ②の期待結果: 位置保持</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><figure class="web-only video"><video controls muted playsinline preload="metadata" src="assets/video/S1_pos_hold_flight.mp4"></video><figcaption>POS_HOLD 飛行（MuJoCo 3D + 状態グラフ）</figcaption></figure></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">26 / 133</span></footer></section>
+<section class="slide content" id="s-027" data-title="デモ②の期待結果: 高度と姿勢" data-session="S1"><header class="slide-header"><h2>デモ②の期待結果: 高度と姿勢</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/img/S1_altitude_attitude.png" alt=""></div>
+<p>  <span class="fs-scriptsize"> 同じ飛行の高度と姿勢角の時系列。外乱直後の傾きが位置制御で戻る</span>
+</p></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">27 / 133</span></footer></section>
+<section class="slide content later" id="s-028" data-title="復習パス" data-session="S1"><header class="slide-header"><h2>復習パス</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>対象</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf sim run vpython</code> </td><td style="text-align:left"> シミュレータ操縦 </td><td style="text-align:left"> <code class="tex-code">docs/architecture/simulation-policy.md</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf sils gui</code> </td><td style="text-align:left"> SILS シナリオ実行・可視化 </td><td style="text-align:left"> <code class="tex-code">simulator/sils/gui/README.md</code></td></tr><tr><td style="text-align:left">— </td><td style="text-align:left"> 4階層アクセス </td><td style="text-align:left"> <code class="tex-code">firmware/vehicle/docs/architecture.md §2</code></td></tr></tbody></table></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">28 / 133</span></footer></section>
+<section class="slide content" id="s-029" data-title="チェックポイント" data-session="S1"><header class="slide-header"><h2>チェックポイント</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">確認事項</h3><div class="block-body"><ul><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> マルチコプタが制御教材として適している理由を説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> StampFly Ecosystem が集約によってどの障壁に対応しているか説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> 4階層アクセス（L0–L3）のうち自分の関心に合う層を1つ選べる
+    </li></ul></div></div>
+<div class="block block"><h3 class="block-title">次のセッション</h3><div class="block-body"><p>
+    S2: 開発環境のセットアップとセンサデータの取得（11:00 – 12:00）— 全体像を見た次は、実際に手を動かしてセンサの値を読む番
+  </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">29 / 133</span></footer></section>
+<section class="slide divider" id="s-030" data-title="開発環境のセットアップとセンサデータの取得" data-session="S2"><div class="divider-box"><div class="divider-num">Session 2</div><div class="divider-title">開発環境のセットアップとセンサデータの取得</div><div class="divider-time">11:00 – 12:00</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-031" data-title="地図: 今ここ" data-session="S2"><header class="slide-header"><h2>地図: 今ここ</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_2.svg" alt=""></div></div></div><div class="column" style="flex:0.47 1 0"><div class="fs-small"><p>
+      S1 で見た全体像のうち、まず実装の入口（環境構築とセンサ取得）から手を動かす
+    </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">31 / 133</span></footer></section>
+<section class="slide content" id="s-032" data-title="要点3つ" data-session="S2"><header class="slide-header"><h2>要点3つ</h2></header><div class="slide-body"><ol><li> ビルド環境は ESP-IDF と <code class="tex-code">sf CLI</code> が担う。開発を伴わない参加者は Web Flasher / GUI インストーラという代替経路がある
+    </li><li> 学習者が書くコードは <code class="tex-api">setup()</code> と <code class="tex-api">loop_400Hz(dt)</code> の2関数だけ。センサやHWの詳細は <code class="tex-api">ws::</code> 名前空間が隠す
+    </li><li> センサデータの取得経路は3通りある。目的に応じて <code class="tex-api">ws::print</code>、<code class="tex-code">sf telemetry</code>、<code class="tex-code">sf log wifi</code> を使い分ける
+  </li></ol></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">32 / 133</span></footer></section>
+<section class="slide content" id="s-033" data-title="開発環境の導入 (1/2): PC 側" data-session="S2"><header class="slide-header"><h2>開発環境の導入 (1/2): PC 側</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">方法①: GUI インストーラ「StampFly Setup」</h3><div class="block-body"><div class="fs-footnotesize"><p> ターミナル操作なしで導入できる。GitHub の Releases ページから OS 別の実行ファイルをダウンロードして起動し、ウィザードに従うだけで <code class="tex-code">sf</code> CLI 一式（ESP-IDF: Espressif の ESP32 向け開発基盤を含む）が入る<br>
+    <a class="tex-url" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest" target="_blank" rel="noopener">https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest</a>
+  </p></div></div></div>
+<div class="block example"><h3 class="block-title">方法②: CLI インストーラ</h3><div class="block-body"><div class="code-block"><pre><code class="lang-bash">git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem
+cd stampfly_ecosystem
+./install.sh          # Windows は install.bat
+    </code></pre></div></div></div>
+<p>  <span class="fs-scriptsize"> いずれの方法で導入しても、この後の <code class="tex-code">source setup_env.sh</code> <span class="math-inline">\(\to\)</span> <code class="tex-code">sf doctor</code>（このあとの「実習 1」で）確認する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">33 / 133</span></footer></section>
+<section class="slide content" id="s-034" data-title="OS による違いはここだけ" data-session="S2"><header class="slide-header"><h2>OS による違いはここだけ</h2></header><div class="slide-body"><div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>OS</strong> </th><th style="text-align:left"> <strong>インストール</strong> </th><th style="text-align:left"> <strong>環境の有効化</strong></th></tr></thead><tbody><tr><td style="text-align:left">macOS / Linux  </td><td style="text-align:left"> <code class="tex-code">./install.sh</code>  </td><td style="text-align:left"> <code class="tex-code">source setup_env.sh</code></td></tr><tr><td style="text-align:left">Windows（CMD） </td><td style="text-align:left"> <code class="tex-code">install.bat</code>   </td><td style="text-align:left"> <code class="tex-code">setup_env.bat</code></td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> Windows は Git 同梱の CMD（コマンドプロンプト）でそのままファイル名を打つ。<code class="tex-code">./</code> も <code class="tex-code">source</code> も付けない</span></p>
+<div class="block example"><h3 class="block-title">書き込み時のシリアルポート名も違う</h3><div class="block-body"><div class="fs-footnotesize"><p> <code class="tex-code">sf flash vehicle -p /dev/ttyACM0</code>（Linux）／<code class="tex-code">-p /dev/cu.usbmodem*</code>（macOS）／<code class="tex-code">-p COM3</code>（Windows）
+  </p></div></div></div>
+<p>  <span class="fs-small"> 違いはこの2点だけ。<code class="tex-code">sf</code> コマンド自体（<code class="tex-code">sf build</code>、<code class="tex-code">sf lesson</code> 等）とワークフローは3 OSで完全に同一</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">34 / 133</span></footer></section>
+<section class="slide content" id="s-035" data-title="開発環境の導入 (2/2): 機体とペアリング" data-session="S2"><header class="slide-header"><h2>開発環境の導入 (2/2): 機体とペアリング</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">開発環境なしでも書き込みだけはできる</h3><div class="block-body"><div class="fs-small"><p> ブラウザ（Chrome/Edge）から Web Flasher を開き、公開済みの完成版ファームウェアを機体・コントローラへ直接書き込める。インストール不要<br>
+    <a class="tex-url" href="https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/" target="_blank" rel="noopener">https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/</a>
+  </p></div></div></div>
+<div class="block example"><h3 class="block-title">コントローラのペアリング（初回のみ）</h3><div class="block-body"><div class="fs-footnotesize"><ol><li> コントローラの LCD パネルボタンを押しながら電源を入れる
+      </li><li> StampFly 本体のボタンを2秒長押しする
+      </li><li> 双方がビープしたらペアリング完了。以降は電源を入れるだけで自動再接続する
+    </li></ol></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">35 / 133</span></footer></section>
+<section class="slide content" id="s-036" data-title="実習 1: 環境確認とビルド" data-session="S2"><header class="slide-header"><h2>実習 1: 環境確認とビルド</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">手順</h3><div class="block-body"><ol class="fs-footnotesize"><li> <code class="tex-code">source setup_env.sh</code>（Windows は <code class="tex-code">setup_env.bat</code>）
+      </li><li> <code class="tex-code">sf doctor</code>（ESP-IDF・Python・USBドライバ・sf CLI 自体を診断）
+      </li><li> <code class="tex-code">sf lesson switch sci2026:1</code>
+      </li><li> <code class="tex-code">sf lesson build</code>
+      </li><li> <code class="tex-code">sf lesson flash</code>
+    </li></ol></div></div>
+<div class="block example"><h3 class="block-title">確認すること</h3><div class="block-body"><div class="fs-footnotesize"><p> 書き込み直後の起動音と、機体上の LED が点灯・点滅すること
+  </p></div></div></div>
+<p>  <span class="fs-footnotesize"> <code class="tex-code">sf doctor</code> が全て OK にならなくても心配は不要。このあとは「見るだけ」で参加し、復習パス（本セッション末尾）に沿って会場外で環境を整えてほしい</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">36 / 133</span></footer></section>
+<section class="slide content" id="s-037" data-title="ツールチェーン" data-session="S2"><header class="slide-header"><h2>ツールチェーン</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">ESP-IDF の上に sf CLI を重ねる</h3><div class="block-body"><div class="fs-small"><p> <code class="tex-code">idf.py</code> を直接叩く代わりに、ビルド・書き込み・診断・ログ取得を統一したコマンド体系で提供する
+  </p></div></div></div>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>役割</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf build [target]</code> </td><td style="text-align:left"> ファームウェアビルド</td></tr><tr><td style="text-align:left"><code class="tex-code">sf flash [target] -m</code> </td><td style="text-align:left"> 書き込み（<code class="tex-code">-m</code> でモニタ付き）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf monitor</code>          </td><td style="text-align:left"> シリアルモニタ</td></tr><tr><td style="text-align:left"><code class="tex-code">sf doctor</code>           </td><td style="text-align:left"> 環境診断</td></tr></tbody></table></div></div>
+<p>  <span class="fs-small"> <code class="tex-code">target</code> には <code class="tex-code">vehicle</code> / <code class="tex-code">controller</code> / <code class="tex-code">workshop</code> を指定する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">37 / 133</span></footer></section>
+<section class="slide content" id="s-038" data-title="学習者コードの型とワークフロー" data-session="S2"><header class="slide-header"><h2>学習者コードの型とワークフロー</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.56 1 0"><div class="block block"><h3 class="block-title">学習者が書く関数は2つだけ</h3><div class="block-body"><div class="fs-footnotesize"><ul><li> <code class="tex-api">setup()</code> — 起動時に1回
+          </li><li> <code class="tex-api">loop_400Hz(dt)</code> — 400 Hz毎
+        </li></ul></div></div></div>
+<div class="block example"><h3 class="block-title">切替・編集・ビルド・書き込み</h3><div class="block-body"><div class="fs-footnotesize"><p>
+        <code class="tex-code">sf lesson switch sci2026:N</code><br>
+        <code class="tex-code">sf lesson edit</code><br>
+        <code class="tex-code">sf lesson build</code><br>
+        <code class="tex-code">sf lesson flash</code><br>
+        <code class="tex-code">sf monitor workshop</code>
+      </p></div></div></div></div><div class="column" style="flex:0.40 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/sci_build_flash_flow.svg" alt=""></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">38 / 133</span></footer></section>
+<section class="slide content" id="s-039" data-title="機体の軸定義" data-session="S2"><header class="slide-header"><h2>機体の軸定義</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/imu_axes.svg" alt=""></div></div>
+<div class="block block"><div class="block-body"><div class="align-center"><div class="fs-small"><p>
+    BMI270 — 6軸（3軸ジャイロ + 3軸加速度）400 Hz &nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp; Body FRD（前方-右-下）座標系
+  </p></div></div></div></div>
+<p>
+  <span class="fs-footnotesize"> StampFly では IMU の軸をそのまま機体の Body 座標系として採用している</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">39 / 133</span></footer></section>
+<section class="slide content" id="s-040" data-title="IMU API と単位" data-session="S2"><header class="slide-header"><h2>IMU API と単位</h2></header><div class="slide-body"><div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>関数</strong> </th><th style="text-align:left"> <strong>説明</strong> </th><th style="text-align:left"> <strong>単位</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-api">gyro_x/y/z()</code>  </td><td style="text-align:left"> 角速度（Roll/Pitch/Yaw） </td><td style="text-align:left"> rad/s</td></tr><tr><td style="text-align:left"><code class="tex-api">accel_x/y/z()</code> </td><td style="text-align:left"> 加速度（X/Y/Z） </td><td style="text-align:left"> m/s<sup>2</sup></td></tr></tbody></table></div></div>
+<div class="block example"><h3 class="block-title">静止時の目安</h3><div class="block-body"><div class="fs-small"><p> ジャイロ <span class="math-inline">\(\approx 0\)</span>、加速度 Z <span class="math-inline">\(\approx -9.81\)</span> m/s<sup>2</sup>（重力に対する反力）
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">40 / 133</span></footer></section>
+<section class="slide content" id="s-041" data-title="実習 2: IMU の値を見る" data-session="S2"><header class="slide-header"><h2>実習 2: IMU の値を見る</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">手順</h3><div class="block-body"><ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:2</code>
+      </li><li> <code class="tex-code">sf lesson edit</code> で <code class="tex-code">user_code.cpp</code> を開き、次ページのコードを書く
+      </li><li> <code class="tex-code">sf lesson build</code>
+      </li><li> <code class="tex-code">sf lesson flash</code>
+      </li><li> <code class="tex-code">sf monitor workshop</code>（<code class="tex-code">sf lesson flash</code> 直後はそのまま開く）
+    </li></ol></div></div>
+<div class="block example"><h3 class="block-title">確認: Teleplot の波形</h3><div class="block-body"><div class="fs-small"><p> VSCode 拡張 <code class="tex-code">alexnesnes.teleplot</code> 上で <code class="tex-api">gyro_x</code>/<code class="tex-api">gyro_y</code> の波形が動くこと
+  </p></div></div></div>
+<p>  <span class="fs-footnotesize"> 帰宅後に再現: 同じ手順（switch <span class="math-inline">\(\to\)</span> edit <span class="math-inline">\(\to\)</span> build <span class="math-inline">\(\to\)</span> flash <span class="math-inline">\(\to\)</span> monitor）をそのまま実行すればよい</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">41 / 133</span></footer></section>
+<section class="slide content" id="s-042" data-title="データ取得経路① Teleplot" data-session="S2"><header class="slide-header"><h2>データ取得経路① Teleplot</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title"><code class="tex-texttt">ws::print</code> をそのままグラフにする</h3><div class="block-body"><div class="fs-small"><p> <code class="tex-code">&gt;変数名:値</code> の形式で出力すると、VSCode拡張機能 Teleplot がリアルタイムにグラフ化する
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">user_code.cpp</div><pre><code class="lang-cpp">static uint32_t tick = 0;
+void loop_400Hz(float dt) {
+    if (tick++ % 4 == 0) {   // 100Hz decimation
+        ws::print(&quot;&gt;gyro_x:%.3f&quot;, ws::gyro_x());
+        ws::print(&quot;&gt;gyro_y:%.3f&quot;, ws::gyro_y());
+    }
+}
+  </code></pre></div>
+<p>  <span class="fs-footnotesize"> VSCode 拡張 <code class="tex-code">alexnesnes.teleplot</code> を導入後、<code class="tex-code">sf monitor workshop</code> で接続（<code class="tex-code">sf lesson flash</code> 直後はそのまま開く）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">42 / 133</span></footer></section>
+<section class="slide content" id="s-043" data-title="実習 2: 傾けて確認" data-session="S2"><header class="slide-header"><h2>実習 2: 傾けて確認</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">何を見るか</h3><div class="block-body"><ul class="fs-small"><li> StampFly を手に持ち、前後左右に傾ける
+      </li><li> <code class="tex-api">gyro_x</code>/<code class="tex-api">gyro_y</code> が傾ける速さに応じて振れる
+      </li><li> 静止させると <code class="tex-api">accel_z</code> が <span class="math-inline">\(-9.81\)</span> 付近に戻る
+    </li></ul></div></div>
+<p>  <span class="fs-footnotesize"> 前ページまでの <code class="tex-code">sf lesson build &amp;&amp; sf lesson flash</code> 完了後、Teleplot 画面を見ながら機体を傾ける</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">43 / 133</span></footer></section>
+<section class="slide content later" id="s-044" data-title="データ取得経路② sf telemetry" data-session="S2"><header class="slide-header"><h2>データ取得経路② sf telemetry</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title">コード変更なしでライブ表示</h3><div class="block-body"><div class="fs-small"><p> 機体は状態推定値を常時 50 Hz で送信している。受信して表示するだけなら学習者コードの変更は不要
+  </p></div></div></div>
+<div class="code-block"><pre><code class="lang-bash">sf telemetry          # ターミナル表示（既定）
+sf telemetry --web    # ブラウザ表示（UDP:5005 -&gt; SSE）
+  </code></pre></div>
+<p>  <span class="fs-small"> 講義や複数人での画面共有には <code class="tex-code">--web</code> が見やすい。UDP:5005 を SSE（サーバーからブラウザへの一方向配信）でブラウザへ届けている</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">44 / 133</span></footer></section>
+<section class="slide content later" id="s-045" data-title="データ取得経路③ ログ取得と可視化" data-session="S2"><header class="slide-header"><h2>データ取得経路③ ログ取得と可視化</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title">WiFi 経由で 400 Hz Data Stream を記録する</h3><div class="block-body"><div class="fs-small"><p> <code class="tex-code">sf log wifi</code> は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400 Hz の Data Stream を UDP 受信し、<code class="tex-code">-o *.csv</code> で 1 周期 1 行の CSV に保存する
+  </p></div></div></div>
+<div class="code-block"><pre><code class="lang-bash">sf log wifi -d 30 -o flight.csv   # 30秒キャプチャ -&gt; Data Stream CSV
+sf log viz flight.csv
+  </code></pre></div>
+<div class="block example"><h3 class="block-title">使い分けの目安</h3><div class="block-body"><div class="fs-footnotesize"><p> Teleplot = その場で波形を見る／<code class="tex-code">sf telemetry</code> = コード変更なしで確認／<code class="tex-code">sf log wifi</code> = 後で解析するためのデータ保存
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">45 / 133</span></footer></section>
+<section class="slide content later" id="s-046" data-title="他のセンサ" data-session="S2"><header class="slide-header"><h2>他のセンサ</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="fs-small"><p> IMU 以外のセンサも同じ考え方で読める。時間の都合で本セッションでは扱わないが、単独ビルド可能な例題として用意してある</p>
+<div class="table-wrap align-center fs-footnotesize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>例題</strong> </th><th style="text-align:left"> <strong>センサ</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">firmware/vehicle/examples/05_read_tof</code> </td><td style="text-align:left"> VL53L3CX（ToF距離センサ）</td></tr><tr><td style="text-align:left"><code class="tex-code">firmware/vehicle/examples/06_read_baro</code> </td><td style="text-align:left"> BMP280（気圧センサ）</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> 各ディレクトリで単独ビルド可能: <code class="tex-code">idf.py set-target esp32s3 &amp;&amp; idf.py build</code></span>
+</p></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">46 / 133</span></footer></section>
+<section class="slide content later" id="s-047" data-title="理論とコードの対応表" data-session="S2"><header class="slide-header"><h2>理論とコードの対応表</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><p>
+  <span class="fs-footnotesize"> 目的: 理論の各項目が実装のどこにあるか（関数・Data Stream 列・トピック）を後で引ける索引にする</span></p>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>理論</strong> </th><th style="text-align:center"> <strong>コード</strong> </th><th style="text-align:center"> <strong>Data Stream 列</strong> </th><th style="text-align:center"> <strong>トピック</strong></th></tr></thead><tbody><tr><td style="text-align:left">角速度 <span class="math-inline">\(\omega\)</span> [rad/s]、Body FRD </td><td style="text-align:center"> <code class="tex-api">ws::gyro_x()</code> </td><td style="text-align:center"> <code class="tex-code">gyro_x</code> </td><td style="text-align:center"> <code class="tex-code">sensor_imu</code></td></tr><tr><td style="text-align:left">並進加速度 <span class="math-inline">\(a\)</span> [m/s<sup>2</sup>] </td><td style="text-align:center"> <code class="tex-api">ws::accel_x()</code> </td><td style="text-align:center"> <code class="tex-code">accel_x</code> </td><td style="text-align:center"> <code class="tex-code">sensor_imu</code></td></tr></tbody></table></div></div>
+<p>  <span class="fs-small"> 学習者が呼ぶ <code class="tex-api">ws::</code> 関数は、内部で <code class="tex-code">sensor_imu</code> トピックを購読しているだけである
+  （アクセス階層 L0（Workshop API）<span class="math-inline">\(\to\)</span> L1（Topic API）の対応）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">47 / 133</span></footer></section>
+<section class="slide content later" id="s-048" data-title="復習パス" data-session="S2"><header class="slide-header"><h2>復習パス</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>実習</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:1</code> </td><td style="text-align:left"> 実習1（環境セットアップ） </td><td style="text-align:left"> <code class="tex-code">docs/guides/troubleshooting.md</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:2</code> </td><td style="text-align:left"> 実習2（IMU） </td><td style="text-align:left"> <code class="tex-code">firmware/vehicle/docs/architecture.md §2</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf log wifi</code> / <code class="tex-code">sf log viz</code> </td><td style="text-align:left"> — </td><td style="text-align:left"> <code class="tex-code">docs/guides/flight-log-viz.md</code></td></tr></tbody></table></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">48 / 133</span></footer></section>
+<section class="slide content" id="s-049" data-title="チェックポイント" data-session="S2"><header class="slide-header"><h2>チェックポイント</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">確認事項</h3><div class="block-body"><ul><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> <code class="tex-code">sf doctor</code> が通る、または代替経路（Web Flasher / GUI インストーラ）を把握した
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> <code class="tex-api">setup()</code>/<code class="tex-api">loop_400Hz(dt)</code> の2関数構造を説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> ジャイロ・加速度をどれか1つの経路で確認できた
+    </li></ul></div></div>
+<div class="block block"><h3 class="block-title">次のセッション</h3><div class="block-body"><p>
+    S3: モータ制御とコントローラ入力の実装 — センサの次は、機体を動かす側を作る
+  </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">49 / 133</span></footer></section>
+<section class="slide divider" id="s-050" data-title="モータ制御とコントローラ入力の実装" data-session="S3"><div class="divider-box"><div class="divider-num">Session 3</div><div class="divider-title">モータ制御とコントローラ入力の実装</div><div class="divider-time">13:00 – 14:00</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-051" data-title="地図: 今ここ" data-session="S3"><header class="slide-header"><h2>地図: 今ここ</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_3.svg" alt=""></div></div></div><div class="column" style="flex:0.47 1 0"><div class="fs-small"><p>
+      S2 でセンサの値を読めるようになった。ここでは読んだ値を使って機体を動かす側（モータ・コントローラ）を作る
+    </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">51 / 133</span></footer></section>
+<section class="slide content" id="s-052" data-title="要点3つ" data-session="S3"><header class="slide-header"><h2>要点3つ</h2></header><div class="slide-body"><ol><li> モータは PWM（パルス幅変調）の Duty 比で駆動する。4基の配置と回転方向はトルクバランスで決まっている
+    </li><li> コントローラのスティック値は ESP-NOW で 14 バイトの <code class="tex-code">ControlPacket</code> として届く
+    </li><li> <code class="tex-api">ws::motor_mixer(T,R,P,Y)</code> で手動ミキシングしても、フィードバックがない限り安定して飛べない。ここに次セッションの動機がある
+  </li></ol></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">52 / 133</span></footer></section>
+<section class="slide content" id="s-053" data-title="安全" data-session="S3"><header class="slide-header"><h2>安全</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">モータを回す実習の注意</h3><div class="block-body"><ul class="fs-small"><li> <span class="warn">必ず机上</span>で行う。回転中はモータに手を近づけない
+      </li><li> <span class="warn">Duty は 0.15 以下</span>に固定する。ファーム側では強制されないので数値を必ず確認する
+      </li><li> <span class="warn">ARM</span> は機体ボタンの単クリックまたはコントローラで行う。コードの中で自動 ARM しない
+      </li><li> 異常な振動・音・回転が起きたら即座に <span class="warn">DISARM</span>（機体ボタン再クリック）
+    </li></ul></div></div>
+<p>  <span class="fs-small"> 止め方: 機体ボタンをもう一度クリック（DISARM）。バッテリー駆動での確認を基本とする</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">53 / 133</span></footer></section>
+<section class="slide content" id="s-054" data-title="モータと PWM" data-session="S3"><header class="slide-header"><h2>モータと PWM</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.45 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/pwm_waveform.svg" alt=""></div></div></div><div class="column" style="flex:0.5 1 0"><ul class="fs-small"><li> LEDC（ESP32 のハードウェア PWM）でモータを駆動する
+        </li><li> Duty 0% = 停止、100% = 最大回転
+        </li><li> API: <code class="tex-api">ws::motor_set_duty(id, duty)</code><br>
+              <span class="fs-small"> id=1–4, duty=0.0–1.0
+      </span></li></ul></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">54 / 133</span></footer></section>
+<section class="slide content" id="s-055" data-title="モータ配置" data-session="S3"><header class="slide-header"><h2>モータ配置</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/motor_layout.svg" alt=""></div></div>
+<ul class="fs-small"><li> モータ ID: 1=FR（右前）、2=RR（右後）、3=RL（左後）、4=FL（左前）
+    </li><li> 対角のモータが同じ方向に回転する。M1・M3 = CCW、M2・M4 = CW（反トルクを打ち消す）
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">55 / 133</span></footer></section>
+<section class="slide content" id="s-056" data-title="実習 3: Duty をハードコードして回す" data-session="S3"><header class="slide-header"><h2>実習 3: Duty をハードコードして回す</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<div class="columns"><div class="column" style="flex:0.44 1 0"><div class="fs-footnotesize"><ol><li> <code class="tex-code">sf lesson switch sci2026:3</code>
+        </li><li> 右のコードに書き換える
+        </li><li> <code class="tex-code">sf lesson build</code>
+        </li><li> <code class="tex-code">sf lesson flash</code>
+        </li><li> 機体ボタンを1回クリックして ARM
+        </li><li> 確認: FR モータだけが回る
+      </li></ol></div></div><div class="column" style="flex:0.54 1 0"><div class="code-block titled"><div class="code-title">user_code.cpp</div><pre><code class="lang-cpp">void loop_400Hz(float dt) {
+    ws::motor_set_duty(1, 0.10f);   // FR
+    ws::motor_set_duty(2, 0.00f);   // RR
+    ws::motor_set_duty(3, 0.00f);   // RL
+    ws::motor_set_duty(4, 0.00f);   // FL
+}
+      </code></pre></div></div></div>
+<p>  <span class="fs-footnotesize"> <span class="warn">注意</span>: 配布される模範解答（<code class="tex-texttt">--solution</code>）は起動時に自動 ARM する。必ず机上に置いた状態で起動すること（コードの中で自動 ARM しない）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">56 / 133</span></footer></section>
+<section class="slide content" id="s-057" data-title="コントローラ" data-session="S3"><header class="slide-header"><h2>コントローラ</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/controller_annotated.svg" alt=""></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">57 / 133</span></footer></section>
+<section class="slide content" id="s-058" data-title="ESP-NOW と ControlPacket" data-session="S3"><header class="slide-header"><h2>ESP-NOW と ControlPacket</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/espnow_dataflow.svg" alt=""></div></div>
+<p>  <span class="fs-small"> コントローラとStampFlyは ESP-NOW で直接通信する。1パケット <code class="tex-code">ControlPacket</code> は <strong>14バイト</strong>（throttle/roll/pitch/yaw + flags + checksum）を約 <strong>50 Hz</strong>（TDMA フレーム周期 20 ms）で送信する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">58 / 133</span></footer></section>
+<section class="slide content" id="s-059" data-title="TDMA で 30 機を同時に飛ばす" data-session="S3"><header class="slide-header"><h2>TDMA で 30 機を同時に飛ばす</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">TDMA（時分割多重アクセス、Time Division Multiple Access）</h3><div class="block-body"><div class="fs-footnotesize"><p> 1つの無線チャンネルを短い時間枠（スロット）に分割し、機体ごとに送信タイミングをずらして電波の衝突を避ける方式
+  </p></div></div></div>
+<div class="table-wrap align-center fs-footnotesize"><div class="table-scroll"><table><tbody><tr><td style="text-align:left">フレーム周期 20 ms、スロット幅 2 ms </td><td style="text-align:left"> <span class="math-inline">\(\to\)</span> 1フレーム10スロット</td></tr><tr><td style="text-align:left"><strong>1チャンネルあたり最大10機</strong> </td><td style="text-align:left"> 非重複3チャンネル（1/6/11ch）で<strong>理論上30機</strong></td></tr></tbody></table></div></div>
+<div class="columns"><div class="column" style="flex:0.48 1 0"><div class="block alert"><h3 class="block-title">なぜ必要か</h3><div class="block-body"><div class="fs-scriptsize"><p> 教室で複数の送信機が無調整のまま同時に電波を出すと衝突し、機体が通信途絶と判断して自動着陸する
+      </p></div></div></div></div><div class="column" style="flex:0.5 1 0"><div class="block example"><h3 class="block-title">スロットの割当</h3><div class="block-body"><div class="fs-scriptsize"><p> タッチメニューで <strong>Device ID</strong>（0–9）を手動設定し NVS（不揮発性メモリ）に保存（再起動後に反映）。ID=0 が20 msごとにビーコンを送る「親機」、他はその受信時刻を基準に自分のスロットのみで送信する。ペアリングでは自動割当されない
+      </p></div></div></div></div></div>
+<p>  <span class="fs-scriptsize"> 実績: DXH2026講座で10台を1/6/11chに4/3/3台で分散、Device IDを個別割当し同時運用した</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">59 / 133</span></footer></section>
+<section class="slide content" id="s-060" data-title="ペアリングとチャンネル" data-session="S3"><header class="slide-header"><h2>ペアリングとチャンネル</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">ペアリング</h3><div class="block-body"><div class="fs-footnotesize"><p> コントローラの M5 ボタン（LCD パネル）を押しながら電源ON <span class="math-inline">\(\to\)</span> StampFly のボタンを約2秒長押し <span class="math-inline">\(\to\)</span> 両方のビープで完了。次回以降は自動接続
+  </p></div></div></div>
+<div class="block alert"><h3 class="block-title">チャンネル設定</h3><div class="block-body"><div class="fs-footnotesize"><p> 教室内で複数機体が同時に飛ぶと混信する。<code class="tex-api">ws::set_channel(ch)</code> を <code class="tex-code">setup()</code> で呼んで機体のチャンネルを 1/6/11 のいずれかにし、再ペアリングする。コントローラはペアリング時に機体のチャンネルへ自動追従する
+  </p></div></div></div>
+<div class="block example"><h3 class="block-title">自分で購入したコントローラを使う場合</h3><div class="block-body"><div class="fs-footnotesize"><p> ご購入直後のコントローラには出荷時点のファームウェアが入っているが、本チュートリアルで使う版とは異なる。最初に一度だけ、<code class="tex-code">sf flash controller</code> で書き込み直す必要がある
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">60 / 133</span></footer></section>
+<section class="slide content" id="s-061" data-title="オープンループ制御" data-session="S3"><header class="slide-header"><h2>オープンループ制御</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/open_loop.svg" alt=""></div></div>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><tbody><tr><td style="text-align:left"><code class="tex-api">ws::rc_throttle/roll/pitch/yaw()</code> </td><td style="text-align:left"> スティック値の取得</td></tr><tr><td style="text-align:left"><code class="tex-api">ws::motor_mixer(T, R, P, Y)</code>      </td><td style="text-align:left"> 4モータへの配分</td></tr></tbody></table></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">61 / 133</span></footer></section>
+<section class="slide content" id="s-062" data-title="ミキサ行列" data-session="S3"><header class="slide-header"><h2>ミキサ行列</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><div class="web-only widget" data-widget="mixer" style="height:480px"></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">62 / 133</span></footer></section>
+<section class="slide content" id="s-063" data-title="実習 4: スティックでモータを回す" data-session="S3"><header class="slide-header"><h2>実習 4: スティックでモータを回す</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<div class="columns"><div class="column" style="flex:0.44 1 0"><div class="fs-footnotesize"><ol><li> <code class="tex-code">sf lesson switch sci2026:4</code>
+        </li><li> コントローラとペアリング
+        </li><li> <code class="tex-api">ws::motor_mixer(T,R,P,Y)</code> を書く
+        </li><li> <code class="tex-code">sf lesson build</code>
+        </li><li> <code class="tex-code">sf lesson flash</code>
+        </li><li> 確認: スティックで回転差が出る
+      </li></ol></div></div><div class="column" style="flex:0.54 1 0"><div class="code-block titled"><div class="code-title">user_code.cpp</div><pre><code class="lang-cpp">void loop_400Hz(float dt) {
+    float t = ws::rc_throttle();
+    float r = ws::rc_roll();
+    float p = ws::rc_pitch();
+    float y = ws::rc_yaw();
+    ws::motor_mixer(t, r, p, y);
+}
+      </code></pre></div></div></div>
+<div class="block alert"><h3 class="block-title">これでは飛べない理由</h3><div class="block-body"><div class="fs-scriptsize"><p> モータの個体差，機体のミスアライメント（推力軸のずれ・重心ずれ），電池電圧の低下といった外乱に対して何の補正もかからないため，スティック指令どおりの回転を保てない
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">63 / 133</span></footer></section>
+<section class="slide content" id="s-064" data-title="プラントの定義" data-session="S3"><header class="slide-header"><h2>プラントの定義</h2></header><div class="slide-body"><div class="fs-small"><p> 本セッションで作った経路（ミキサ <span class="math-inline">\(\to\)</span> モータ <span class="math-inline">\(\to\)</span> 機体）が、そのまま制御対象（プラント）の入出力になる</p>
+<div class="columns"><div class="column" style="flex:0.4 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/sci_s3_motor_controller_inline_tikz_1.svg" alt=""></div></div></div><div class="column" style="flex:0.55 1 0"><ul class="fs-footnotesize"><li> <strong>入力</strong>: ミキサが出す4つの Duty（<code class="tex-api">ws::motor_mixer(T,R,P,Y)</code> の R/P/Y トルク指令に相当）
+        </li><li> <strong>出力</strong>: <code class="tex-api">ws::gyro_x/y/z()</code> が返す角速度の実測値
+      </li></ul></div></div>
+<div class="block example"><h3 class="block-title">次セッションへ</h3><div class="block-body"><div class="fs-footnotesize"><p> S4 の PID 制御器がこの間にフィードバックループを作り，出力を目標値に近づける。伝達関数とゲイン <span class="math-inline">\(K_p\)</span> の設計が S4「フィードバック制御の基礎」の主題である
+  </p></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">64 / 133</span></footer></section>
+<section class="slide content later" id="s-065" data-title="理論とコードの対応表" data-session="S3"><header class="slide-header"><h2>理論とコードの対応表</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><p>  <span class="fs-small"> ここまで登場した理論用語・API・通信・実装トピックの対応を一覧できるようにまとめた早見表</span></p>
+<div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>理論</strong> </th><th style="text-align:left"> <strong>コード</strong> </th><th style="text-align:left"> <strong>通信</strong> </th><th style="text-align:left"> <strong>トピック</strong></th></tr></thead><tbody><tr><td style="text-align:left">Duty比 <span class="math-inline">\([0,1]\)</span> </td><td style="text-align:left"> <code class="tex-api">ws::motor_set_duty(id,d)</code> </td><td style="text-align:left"> — </td><td style="text-align:left"> <code class="tex-code">actuator_motor</code></td></tr><tr><td style="text-align:left">スティック指令 <span class="math-inline">\(T,R,P,Y\)</span> </td><td style="text-align:left"> <code class="tex-api">ws::rc_throttle()</code> 等 </td><td style="text-align:left"> <code class="tex-code">ControlPacket</code>（14B） </td><td style="text-align:left"> <code class="tex-code">command_setpoint</code></td></tr><tr><td style="text-align:left">ミキシング </td><td style="text-align:left"> <code class="tex-api">ws::motor_mixer(T,R,P,Y)</code> </td><td style="text-align:left"> — </td><td style="text-align:left"> —</td></tr></tbody></table></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">65 / 133</span></footer></section>
+<section class="slide content later" id="s-066" data-title="復習パス" data-session="S3"><header class="slide-header"><h2>復習パス</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>実習</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:3</code> </td><td style="text-align:left"> 実習 3 モータ制御 </td><td style="text-align:left"> <code class="tex-code">firmware/vehicle/docs/hardware_init.md</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:4</code> </td><td style="text-align:left"> 実習 4 コントローラ入力 </td><td style="text-align:left"> <code class="tex-code">protocol/spec/</code>（ControlPacket）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf flash controller</code> </td><td style="text-align:left"> — </td><td style="text-align:left"> <code class="tex-code">docs/commands/sf-flasher.md</code></td></tr></tbody></table></div>
+<p>  <span class="fs-small"> すべて <code class="tex-code">sf lesson build</code> <span class="math-inline">\(\to\)</span> <code class="tex-code">sf lesson flash</code> で実機に反映する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">66 / 133</span></footer></section>
+<section class="slide content" id="s-067" data-title="チェックポイント" data-session="S3"><header class="slide-header"><h2>チェックポイント</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">確認事項</h3><div class="block-body"><ul><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> Duty とモータ配置・回転方向の対応を説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> ControlPacket がどの経路（ESP-NOW）でどれだけの頻度で届くか説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> オープンループ制御が「なぜ飛べないか」を自分の言葉で説明できる
+    </li></ul></div></div>
+<div class="block block"><h3 class="block-title">次のセッション</h3><div class="block-body"><p>
+    S4: フィードバック制御の基礎 — PID による姿勢安定化（14:00 – 15:00）
+  </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">67 / 133</span></footer></section>
+<section class="slide divider" id="s-068" data-title="フィードバック制御の基礎 — PID による姿勢安定化" data-session="S4"><div class="divider-box"><div class="divider-num">Session 4</div><div class="divider-title">フィードバック制御の基礎 — PID による姿勢安定化</div><div class="divider-time">14:00 – 15:00</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-069" data-title="地図: 今ここ" data-session="S4"><header class="slide-header"><h2>地図: 今ここ</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_4.svg" alt=""></div></div></div><div class="column" style="flex:0.47 1 0"><div class="fs-small"><p>
+      S2・S3 で組み上げた機体を、本セッションでは制御理論と突き合わせて飛ばす。
+      「設計 <span class="math-inline">\(\to\)</span> 実装」の次にくる「実験」のフェーズにあたる。</p>
+<div class="block block"><h3 class="block-title">本セッションで扱うもの</h3><div class="block-body"><div class="fs-footnotesize"><p>
+        レート P 制御の初飛行 <span class="math-inline">\(\to\)</span> プラントモデルによる裏付け <span class="math-inline">\(\to\)</span> PID 化 <span class="math-inline">\(\to\)</span>
+        姿勢推定 <span class="math-inline">\(\to\)</span> 実機データでの検証
+      </p></div></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">69 / 133</span></footer></section>
+<section class="slide content" id="s-070" data-title="要点3つ" data-session="S4"><header class="slide-header"><h2>要点3つ</h2></header><div class="slide-body"><ol><li> モータ+機体のプラント伝達関数 <span class="math-inline">\(G_p(s) = K/(s(\tau_m s+1))\)</span> を実測パラメータから導出し，ゲイン設計に使う
+    </li><li> P 制御から PID 化し，不完全微分・アンチワインドアップ・積分リセットまで含めたvehicle 実装と学習者コードを対比する
+    </li><li> フライトデータからプラントを同定し，設計値と実測値を突き合わせる
+  </li></ol>
+<div class="block alert"><h3 class="block-title">本セッションの立ち位置</h3><div class="block-body"><div class="fs-small"><p>
+    ここまでのレッスンは動かすことが目的だった。ここからは，動いた結果を
+    モデルと数値で説明できるかを問う
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">70 / 133</span></footer></section>
+<section class="slide content" id="s-071" data-title="内側ループ: レート制御" data-session="S4"><header class="slide-header"><h2>内側ループ: レート制御</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/feedback_block.svg" alt=""></div></div>
+<ul class="fs-small"><li> この図は<strong>内側ループ（レート制御）</strong>: 目標角速度とジャイロ計測値の差を制御。
+          ACRO はこのループ単体で完結する
+    </li><li> <strong>外側ループ（姿勢制御）</strong>は，この図の入力 Target Rate を作る側にもう1段乗る。
+          目標姿勢角と推定角の差から目標角速度を作り，STABILIZE 以上で有効になる
+          （カスケード = ループの入れ子）
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">71 / 133</span></footer></section>
+<section class="slide content" id="s-072" data-title="PID 制御器" data-session="S4"><header class="slide-header"><h2>PID 制御器</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><div class="columns web-columns"><div class="column"><div class="align-center"><div class="figure"><img src="assets/tikz/pid_block.svg" alt=""></div></div></div><div class="column"><div class="web-only widget" data-widget="pid_step" data-axis="roll" data-preset="lesson8" style="height:430px"></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">72 / 133</span></footer></section>
+<section class="slide content" id="s-073" data-title="プラントモデル" data-session="S4"><header class="slide-header"><h2>プラントモデル</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/plant_model.svg" alt=""></div></div>
+<div class="block example"><h3 class="block-title">ホバー近傍で線形化すると2ブロックに集約できる</h3><div class="block-body"><ul><li> <strong>Mixer + Motor</strong>: duty <span class="math-inline">\(\to\)</span> トルク，1次遅れ <span class="math-inline">\(K_m/(\tau_m s+1)\)</span>
+      </li><li> <strong>Body</strong>: トルク <span class="math-inline">\(\to\)</span> 角速度，積分器 <span class="math-inline">\(1/(I \cdot s)\)</span>
+    </li></ul></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">73 / 133</span></footer></section>
+<section class="slide content" id="s-074" data-title="実測パラメータ" data-session="S4"><header class="slide-header"><h2>実測パラメータ</h2></header><div class="slide-body"><div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>パラメータ</strong> </th><th style="text-align:left"> <strong>記号</strong> </th><th style="text-align:center"> <strong>Roll</strong> </th><th style="text-align:center"> <strong>Pitch</strong> </th><th style="text-align:center"> <strong>Yaw</strong></th></tr></thead><tbody><tr><td style="text-align:left">慣性モーメント </td><td style="text-align:left"> <span class="math-inline">\(I\)</span> </td><td style="text-align:center"> 9.16e-6 </td><td style="text-align:center"> 13.3e-6 </td><td style="text-align:center"> 20.4e-6 kg<span class="math-inline">\(\cdot\)</span>m<span class="math-inline">\(^2\)</span></td></tr><tr><td style="text-align:left">トルクゲイン   </td><td style="text-align:left"> <span class="math-inline">\(K_m\)</span> </td><td style="text-align:center"> 9.3e-4 </td><td style="text-align:center"> 9.3e-4 </td><td style="text-align:center"> 1.6e-4 N<span class="math-inline">\(\cdot\)</span>m</td></tr><tr><td style="text-align:left">モータ時定数   </td><td style="text-align:left"> <span class="math-inline">\(\tau_m\)</span> </td><td style="text-align:center" colspan="3">0.02 s（共通，実測 0.0163 s）</td></tr><tr><td style="text-align:left"><strong>プラントゲイン</strong> </td><td style="text-align:left"> <span class="math-inline">\(K = K_m/I\)</span> </td><td style="text-align:center"> <strong>102</strong> </td><td style="text-align:center"> <strong>70</strong> </td><td style="text-align:center"> <strong>8.0</strong> rad/s<span class="math-inline">\(^2\)</span></td></tr></tbody></table></div></div>
+<p>  <span class="fs-scriptsize"> 注: この <span class="math-inline">\(K_m\)</span>（duty<span class="math-inline">\(\to\)</span>トルク，N<span class="math-inline">\(\cdot\)</span>m）はモータの逆起電力定数
+  （back-EMF constant，V/(rad/s)）とは別物（記号が同じだけ）</span></p>
+<div class="block example"><h3 class="block-title">軸ごとに <span class="math-inline">\(K\)</span> が違う理由</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    Roll/Pitch は同じ <span class="math-inline">\(K_m\)</span> だが <span class="math-inline">\(I_{yy} &gt; I_{xx}\)</span> なので Pitch の方が遅い。
+    Yaw は <span class="math-inline">\(\kappa \ll L\)</span>（トルク推力比がアーム長よりずっと小さい）ため
+    <span class="math-inline">\(K_m\)</span> 自体が小さく，さらに遅い
+  </p></div></div></div>
+<p>  <span class="fs-scriptsize"> 実習 6 配布コードの <span class="math-inline">\(K_{yaw}=19\)</span>（旧 <span class="math-inline">\(\kappa=9.71\times10^{-3}\)</span> m 由来）は
+  この表の <span class="math-inline">\(K=8.0\)</span>（現行 <span class="math-inline">\(\kappa=4.10\times10^{-3}\)</span> m 由来）と異なる（後述の「PID 工学形式パラメータ」で詳述）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">74 / 133</span></footer></section>
+<section class="slide content later" id="s-075" data-title="2次系設計" data-session="S4"><header class="slide-header"><h2>2次系設計</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.38 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/step_response_zeta.svg" alt=""></div></div></div><div class="column" style="flex:0.60 1 0"><div class="block block"><h3 class="block-title">閉ループ伝達関数（2次系）</h3><div class="block-body"><div class="math-display">\[
+          G_{cl}(s) = \frac{K_p K}{\tau_m s^2 + s + K_p K}
+        \]</div></div></div>
+<div class="block block"><h3 class="block-title"><span class="math-inline">\(\zeta\)</span> から <span class="math-inline">\(K_p\)</span> を逆算する設計式</h3><div class="block-body"><div class="math-display">\[
+          K_p = \frac{1}{4\zeta^2 K \tau_m}
+        \]</div></div></div>
+<p>      <span class="fs-small">
+      Roll/Pitch で <span class="math-inline">\(\zeta = 0.7\)</span>（オーバーシュート約5%）を狙うと
+      <span class="math-inline">\(K_{p,roll}=0.25\)</span>，<span class="math-inline">\(K_{p,pitch}=0.36\)</span></span>
+    </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">75 / 133</span></footer></section>
+<section class="slide content later" id="s-076" data-title="開ループボード線図" data-session="S4"><header class="slide-header"><h2>開ループボード線図</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.50 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/bode_loop_shaping.svg" alt=""></div></div></div><div class="column" style="flex:0.50 1 0"><div class="block block"><h3 class="block-title">開ループ伝達関数</h3><div class="block-body"><div class="fs-small"><div class="math-display">\[
+          L(s) = K_p \cdot G_p(s) = \frac{K_p K}{s(\tau_m s + 1)}
+        \]</div></div></div></div>
+<p>      <span class="fs-small"> <span class="math-inline">\(K_p\)</span> を上げるとゲイン交差周波数 <span class="math-inline">\(\omega_{gc}\)</span> が上がり，位相余裕（PM）は下がる。
+      P 制御だけでは応答速度と安定性がトレードオフの関係にある</span>
+    </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">76 / 133</span></footer></section>
+<section class="slide content" id="s-077" data-title="無駄時間の影響" data-session="S4"><header class="slide-header"><h2>無駄時間の影響</h2></header><div class="slide-body"><p>
+  <span class="fs-small"> 前の「開ループボード線図」で見た <span class="math-inline">\(L(s)\)</span> に、むだ時間を加える</span></p>
+<div class="columns"><div class="column" style="flex:0.48 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/bode_dead_time.svg" alt=""></div></div></div><div class="column" style="flex:0.52 1 0"><div class="block block"><h3 class="block-title">制御ループの無駄時間</h3><div class="block-body"><div class="fs-small"><p>
+        
+        
+        <span class="math-inline">\(\tau_d \approx 5\)</span> ms（センサ処理 + 制御演算 + PWM 更新）
+        </p>
+<div class="math-display">\[
+          L_{delay}(s) = L(s)\cdot e^{-\tau_d s}
+        \]</div></div></div></div>
+<div class="block alert"><h3 class="block-title"><span class="fs-small"> 実用上 PM <span class="math-inline">\(\geq 60°\)</span> が必要</span></h3><div class="block-body"><div class="fs-scriptsize"><p>
+        モデル上は安定なゲインでも，無駄時間を足すと実機で振動することがある
+      </p></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">77 / 133</span></footer></section>
+<section class="slide content" id="s-078" data-title="実習 5: レート P 制御で初飛行" data-session="S4"><header class="slide-header"><h2>実習 5: レート P 制御で初飛行</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">実装する内容（<code class="tex-code">user_code.cpp</code> の TODO）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    誤差 <span class="math-inline">\(=\)</span> 目標角速度 <span class="math-inline">\(-\)</span> 実測角速度，出力 <span class="math-inline">\(=K_p\times\)</span>誤差 を Roll/Pitch/Yaw
+    それぞれで計算し <code class="tex-api">ws::motor_mixer(T,R,P,Y)</code> に渡す。角速度目標は
+    <code class="tex-api">ws::set_rate_target(roll,pitch,yaw)</code> で Data Stream に記録しておく
+    （実習 7 のシステム同定で使う）
+  </p></div></div></div>
+<ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:5</code>
+    </li><li> <code class="tex-code">user_code.cpp</code> の TODO を埋める（<code class="tex-api">ws::gyro_x/y/z()</code>，<code class="tex-api">ws::rc_roll/pitch/yaw()</code>）
+    </li><li> <code class="tex-code">sf lesson build</code>
+    </li><li> <code class="tex-code">sf lesson flash</code>
+    </li><li> 確認: 講師が完成コード（<span class="math-inline">\(K_p=0.5\)</span>）で飛ばす。スティック追従とわずかな振動を見る
+  </li></ol>
+<p>  <span class="fs-footnotesize"> 帰宅後に自分の <span class="math-inline">\(K_p\)</span> で飛ばして再現する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">78 / 133</span></footer></section>
+<section class="slide content" id="s-079" data-title="実習 5 の振り返り: レート P 制御" data-session="S4"><header class="slide-header"><h2>実習 5 の振り返り: レート P 制御</h2></header><div class="slide-body"><div class="code-block titled"><div class="code-title">user_code.cpp（実習 5）</div><pre><code class="lang-cpp">float Kp_rp=0.5f, Kp_yaw=2.0f, rmax=1.0f, ymax=5.0f;
+float re = ws::rc_roll()*rmax  - ws::gyro_x();
+float pe = ws::rc_pitch()*rmax - ws::gyro_y();
+float ye = ws::rc_yaw()*ymax   - ws::gyro_z();
+ws::motor_mixer(ws::rc_throttle(),
+    Kp_rp*re, Kp_rp*pe, Kp_yaw*ye);
+  </code></pre></div>
+<p>  <span class="fs-small"> 実習 5 では飛ばして安定するかどうかだけを見た。<span class="math-inline">\(K_p=0.5\)</span> は勘で決めた値である</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">79 / 133</span></footer></section>
+<section class="slide content" id="s-080" data-title="モデルで見る実習 5 の設計" data-session="S4"><header class="slide-header"><h2>モデルで見る実習 5 の設計</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><p>
+  <span class="fs-small"> <span class="math-inline">\(\zeta = 0.7\)</span> の設計式（「2次系設計」）から求めた <span class="math-inline">\(K_p\)</span> と、実習 5 で勘で置いた <span class="math-inline">\(K_p = 0.5\)</span> を比べる</span></p>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"></th><th style="text-align:center"> <strong>Roll（<span class="math-inline">\(K=102\)</span>）</strong> </th><th style="text-align:center"> <strong>Pitch（<span class="math-inline">\(K=70\)</span>）</strong></th></tr></thead><tbody><tr><td style="text-align:left">実習 5 の <span class="math-inline">\(K_p=0.5\)</span> での <span class="math-inline">\(\zeta\)</span> </td><td style="text-align:center"> 0.50 </td><td style="text-align:center"> 0.60</td></tr><tr><td style="text-align:left"><span class="math-inline">\(\zeta=0.7\)</span> 設計の <span class="math-inline">\(K_p\)</span>     </td><td style="text-align:center"> 0.25 </td><td style="text-align:center"> 0.36</td></tr></tbody></table></div></div>
+<div class="block example"><h3 class="block-title">読み取り</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    実習 5 の <span class="math-inline">\(K_p=0.5\)</span> は Roll で <span class="math-inline">\(\zeta=0.50\)</span>，やや振動的な設定だったとモデルが説明する。
+    P 制御だけでは，ゲインを下げて安定性を確保すると定常偏差と外乱への弱さが残る。
+    ここから I 項・D 項を追加する
+  </p></div></div></div><div class="web-only widget" data-widget="pid_step" data-axis="roll" data-preset="lesson5" style="height:230px"></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">80 / 133</span></footer></section>
+<section class="slide content" id="s-081" data-title="実習 6: システムモデリング" data-session="S4"><header class="slide-header"><h2>実習 6: システムモデリング</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">実装する内容（<code class="tex-code">user_code.cpp</code> の TODO）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    設計式 <span class="math-inline">\(K_p=1/(4\zeta^2 K \tau_m)\)</span> を Roll/Pitch/Yaw それぞれで実装する
+    （<code class="tex-code">K_roll</code>/<code class="tex-code">K_pitch</code>/<code class="tex-code">K_yaw</code>，<code class="tex-code">tau_m</code> は定義済み）。
+    <span class="math-inline">\(\zeta=0.7\to0.5\to1.0\)</span> の順に変えて飛行し，違いを体感する
+  </p></div></div></div>
+<ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:6</code>
+    </li><li> <code class="tex-code">Kp_roll/pitch/yaw</code> を設計式で計算するコードを書く
+    </li><li> <code class="tex-code">sf lesson build</code>
+    </li><li> <code class="tex-code">sf lesson flash</code>
+    </li><li> 確認: <span class="math-inline">\(\zeta\)</span> を変えた3種類の飛行の違いを見る
+  </li></ol>
+<p>  <span class="fs-footnotesize"> 帰宅後に自分のコードで <span class="math-inline">\(\zeta\)</span> を振って再現する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">81 / 133</span></footer></section>
+<section class="slide content" id="s-082" data-title="実習 7: システム同定（sf sysid fit）" data-session="S4"><header class="slide-header"><h2>実習 7: システム同定（sf sysid fit）</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">実装する内容（<code class="tex-code">user_code.cpp</code> の TODO）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    実習 5 の P 制御コードに <code class="tex-api">ws::set_rate_target(roll,pitch,yaw)</code> を
+    追加する（角速度目標を Data Stream に記録するだけで，制御自体には無関係）
+  </p></div></div></div>
+<ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:7</code>
+    </li><li> <span class="math-inline">\(K_p\)</span> を設定し <code class="tex-api">ws::set_rate_target</code> を呼ぶ
+    </li><li> <code class="tex-code">sf lesson build</code>
+    </li><li> <code class="tex-code">sf lesson flash</code>
+    </li><li> 飛行しながら <code class="tex-code">sf log wifi -o flight.csv</code>
+    </li><li> <code class="tex-code">sf sysid fit flight.csv --kp 0.5 --plot</code>
+  </li></ol>
+<p>  <span class="fs-footnotesize"> 確認: 同定結果 <span class="math-inline">\(K,\tau_m\)</span> が実習 6 の理論値と数%の誤差で一致する。
+  帰宅後に自分のフライトデータで再現する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">82 / 133</span></footer></section>
+<section class="slide content" id="s-083" data-title="システム同定: sf sysid fit" data-session="S4"><header class="slide-header"><h2>システム同定: sf sysid fit</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title"><span class="math-inline">\(K_p\)</span> が既知なら，閉ループデータから開ループプラントを復元できる</h3><div class="block-body"><div class="fs-footnotesize"><p> <span class="math-inline">\(u(t) = K_p(\text{target}-\text{gyro})\)</span>，<span class="math-inline">\(y(t)=\text{gyro}\)</span> として
+    <span class="math-inline">\(G_p(s)=K/(s(\tau_m s+1))\)</span> に最小二乗フィット
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">出力例</div><pre><code class="lang-cpp">sf sysid fit flight.csv --kp 0.5 --plot
+  Roll  K= 98.5 (ref:102.0, err:3.4%) tau_m=0.019 R2=0.94
+  Pitch K= 72.1 (ref: 70.0, err:3.0%) tau_m=0.021 R2=0.91
+  </code></pre></div>
+<p>  <span class="fs-small"> 理論値（実習 6）との誤差3〜4%は，モデル簡略化と無駄時間の影響で説明できる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">83 / 133</span></footer></section>
+<section class="slide content" id="s-084" data-title="実習 8: PID 制御" data-session="S4"><header class="slide-header"><h2>実習 8: PID 制御</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">実装する内容（<code class="tex-code">user_code.cpp</code> の TODO）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    実習 5 の P 制御に I 項（<code class="tex-code">integral += error*dt</code> を <span class="math-inline">\(\pm0.5\)</span> でクランプ）と
+    D 項（<code class="tex-code">Kd*(error-prev_error)/dt</code>）を追加する。disarm 時は
+    <code class="tex-code">integral</code>/<code class="tex-code">prev_error</code> を 0 にリセットする
+  </p></div></div></div>
+<ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:8</code>
+    </li><li> 軸ごとに I 項・D 項・アンチワインドアップを追加
+    </li><li> <code class="tex-code">sf lesson build</code>
+    </li><li> <code class="tex-code">sf lesson flash</code>
+    </li><li> 確認: 実習 5（P のみ）と比べて定常偏差とオーバーシュートの変化を見る
+  </li></ol>
+<p>  <span class="fs-footnotesize"> 帰宅後に自分のゲインで再現する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">84 / 133</span></footer></section>
+<section class="slide content later" id="s-085" data-title="PID 工学形式パラメータ" data-session="S4"><header class="slide-header"><h2>PID 工学形式パラメータ</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>パラメータ</strong> </th><th style="text-align:left"> <strong>意味</strong> </th><th style="text-align:left"> <strong>効果</strong></th></tr></thead><tbody><tr><td style="text-align:left"><span class="math-inline">\(K_p\)</span>  </td><td style="text-align:left"> 比例ゲイン   </td><td style="text-align:left"> 大きいほど応答が速い，大きすぎると振動</td></tr><tr><td style="text-align:left"><span class="math-inline">\(T_i\)</span>  </td><td style="text-align:left"> 積分時間 [s] </td><td style="text-align:left"> 小さいほど積分が強く効き偏差が早く消える</td></tr><tr><td style="text-align:left"><span class="math-inline">\(T_d\)</span>  </td><td style="text-align:left"> 微分時間 [s] </td><td style="text-align:left"> 大きいほど微分が強く効き振動を抑える</td></tr><tr><td style="text-align:left"><span class="math-inline">\(\eta\)</span> </td><td style="text-align:left"> フィルタ係数  </td><td style="text-align:left"> <span class="math-inline">\(0.1\sim0.2\)</span>，大きいほどノイズに強い</td></tr></tbody></table></div></div>
+<div class="block block"><h3 class="block-title">教科書形式との対応（この形は vehicle の <code class="tex-code">rate.&lt;axis&gt;.kp/ti/td</code> が使う）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    <span class="math-inline">\(K_i = K_p / T_i\,,\quad K_d = K_p \cdot T_d\)</span>（逆に <span class="math-inline">\(T_i = K_p/K_i,\ T_d = K_d/K_p\)</span>）
+  </p></div></div></div>
+<p>
+  <span class="fs-scriptsize"> 実習 8 の解答は工学形式ではなく直接ゲイン <span class="math-inline">\((K_p,K_i,K_d)\)</span> を使う：
+  Roll <span class="math-inline">\((0.25,0.3,0.005)\)</span>，Pitch <span class="math-inline">\((0.36,0.3,0.005)\)</span>，Yaw <span class="math-inline">\((2.0,0.5,0.01)\)</span>
+  （<span class="math-inline">\(K_p\)</span> は Roll/Pitch が「2次系設計」の <span class="math-inline">\(\zeta=0.7\)</span> 設計値，Yaw のみ経験値）。
+  不完全微分フィルタと <span class="math-inline">\(\eta\)</span> は未使用（vehicle 実装が追加する改良点）。
+  実習 6 の配布コードは <span class="math-inline">\(\kappa\)</span> 改定前の <span class="math-inline">\(K_{yaw}=19\)</span>（<span class="math-inline">\(K_p=1.34\)</span>）のまま，
+  現行 <span class="math-inline">\(\kappa=4.10\times10^{-3}\)</span> m の <span class="math-inline">\(K=8.0\)</span> を設計式に適用すると <span class="math-inline">\(K_p=3.19\)</span></span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">85 / 133</span></footer></section>
+<section class="slide content later" id="s-086" data-title="D 項とアンチワインドアップ" data-session="S4"><header class="slide-header"><h2>D 項とアンチワインドアップ</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="block block"><h3 class="block-title">実習 8 学習者コード</h3><div class="block-body"><div class="fs-scriptsize"><p>
+        誤差の後退差分 D + 積分クランプ（フィルタ・条件分岐なし）
+      </p></div></div></div>
+<div class="code-block"><pre><code class="lang-cpp">// D term: raw backward difference
+float D = Kd*(err-prev_err)/dt;
+
+// Anti-windup: clamp the integral itself
+integral += err*dt;
+integral = clamp(integral, 0.5f);
+float I = Ki*integral;
+      </code></pre></div></div><div class="column" style="flex:0.5 1 0"><div class="block alert"><h3 class="block-title">vehicle 実装: sf_controller_pid</h3><div class="block-body"><div class="fs-scriptsize"><p>
+        D項に不完全微分フィルタ（<span class="math-inline">\(\eta=0.125\)</span>）を追加し，誤差ではなく
+        <strong>測定値</strong>に掛ける（D-on-M）。目標値が階段状に変わっても
+        微分キックが出ない
+      </p></div></div></div>
+<div class="block example"><h3 class="block-title">アンチワインドアップ</h3><div class="block-body"><div class="fs-scriptsize"><p>
+        単純な積分クランプではなく，出力が飽和方向に押される間だけ
+        積分を止める「条件付き積分」を使う
+      </p></div></div></div></div></div>
+<p>  <span class="fs-scriptsize"> 実習 8 の積分は <span class="math-inline">\(\pm0.5\)</span> のクランプのみ（disarm 中は毎ループ 0 に戻る）。
+  D-on-M・条件付き積分・不完全微分フィルタは vehicle 実装が追加する改良点
+  （学習者コードへの拡張課題にもなる）。<code class="tex-code">sf_controller_pid/include/pid.hpp</code>
+  が vehicle 実装のコード</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">86 / 133</span></footer></section>
+<section class="slide content later" id="s-087" data-title="離散化と ARM 時リセット" data-session="S4"><header class="slide-header"><h2>離散化と ARM 時リセット</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title">離散化: 双一次変換（Tustin，vehicle 実装）</h3><div class="block-body"><div class="fs-small"><p>
+    <code class="tex-code">sf_controller_pid</code> は比例・積分・微分に双一次変換を使う（<span class="math-inline">\(\alpha, a, b\)</span> の式）。
+    実習 8 は後退差分 D と矩形積分（Tustin ではない）
+  </p></div></div></div>
+<div class="block example"><h3 class="block-title">積分リセットのタイミング（vehicle 実装）</h3><div class="block-body"><div class="fs-small"><p>
+    積分器は DISARM 中ずっとゼロなのではなく，<strong>ARM 遷移のたびに</strong>
+    リセットされる。着地して DISARM し，次に ARM した瞬間に積分が空になり，
+    前のフライトの偏差を引きずらない
+  </p></div></div></div>
+<p>  <span class="fs-footnotesize">
+  ライブチューニング（<code class="tex-code">param set</code> での即時反映）では，積分器の状態は
+  <strong>保持</strong>される。ゲイン変更のたびにループを蹴らないための区別。
+  実習 8 は disarm 中は毎ループ 0 に戻り，結果として同じ効果になる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">87 / 133</span></footer></section>
+<section class="slide content" id="s-088" data-title="実習 9: 姿勢推定（相補フィルタ）" data-session="S4"><header class="slide-header"><h2>実習 9: 姿勢推定（相補フィルタ）</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill active"><span><strong>見るだけ</strong></span></span><span class="pill">一緒に打つ</span><span class="pill">帰宅後に再現</span></div>
+<div class="block block"><h3 class="block-title">実装する内容（<code class="tex-code">user_code.cpp</code> の TODO）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    <code class="tex-code">atan2f</code> で加速度から角度を計算し（<code class="tex-code">accel_roll = atan2f(ay,az)</code> など），
+    相補フィルタ <span class="math-inline">\(\hat\theta_k=\alpha(\hat\theta_{k-1}+\omega\Delta t)+(1-\alpha)\theta_{accel}\)</span>
+    （<span class="math-inline">\(\alpha=0.98\)</span>）を実装する。<code class="tex-api">ws::estimated_roll()</code>（機体既定の ESKF）と
+    Teleplot で比較する
+  </p></div></div></div>
+<ol class="fs-footnotesize"><li> <code class="tex-code">sf lesson switch sci2026:9</code>
+    </li><li> 相補フィルタを実装
+    </li><li> <code class="tex-code">sf lesson build</code>
+    </li><li> <code class="tex-code">sf lesson flash</code>
+    </li><li> <code class="tex-code">sf monitor</code> + Teleplot で <code class="tex-code">cf_roll</code> と <code class="tex-code">eskf_roll</code> を比較
+  </li></ol>
+<p>  <span class="fs-footnotesize"> 確認: 機体を手で傾け，両者が近い挙動をすることを見る。帰宅後に <span class="math-inline">\(\alpha\)</span> を変えて再現する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">88 / 133</span></footer></section>
+<section class="slide content" id="s-089" data-title="姿勢推定: ジャイロドリフト問題" data-session="S4"><header class="slide-header"><h2>姿勢推定: ジャイロドリフト問題</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.48 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/gyro_drift.svg" alt=""></div></div></div><div class="column" style="flex:0.50 1 0"><ul class="fs-small"><li> ジャイロは角速度 <span class="math-inline">\(\omega\)</span> を測定，角度は積分 <span class="math-inline">\(\theta=\int\omega\,dt\)</span> が必要
+        </li><li> バイアスが蓄積し，ドリフトが増大する
+      </li></ul>
+<div class="block alert"><h3 class="block-title">問題</h3><div class="block-body"><div class="fs-small"><p>
+        ジャイロ単体では長時間の姿勢推定ができない。STABILIZE 以上で
+        姿勢角を目標にするには，角度そのものの推定が要る
+      </p></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">89 / 133</span></footer></section>
+<section class="slide content" id="s-090" data-title="相補フィルタと STABILIZE" data-session="S4"><header class="slide-header"><h2>相補フィルタと STABILIZE</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><div class="web-only widget" data-widget="comp_filter" data-alpha="0.98" style="height:480px"></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">90 / 133</span></footer></section>
+<section class="slide content" id="s-091" data-title="自動チューニング: sf sysid rate-fit / rate-tune" data-session="S4"><header class="slide-header"><h2>自動チューニング: sf sysid rate-fit / rate-tune</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">ETFE によるプラント同定と仕様ベースのゲイン設計</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    チャープ（またはダブレット）励振で軸ごとに <span class="math-inline">\((b, L, T)\)</span> を推定し，
+    <span class="math-inline">\(G_p(s) = b\,e^{-Ls}/(s(Ts+1))\)</span> にフィットする。sf sysid fit は P 制御のみ仮定の
+    逆算だが，ここでは実際に飛んだ PID 出力（I・D 項含む）を再構成してから
+    ETFE を取る閉ループ同定
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">コマンド</div><pre><code class="lang-cpp">sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-tune --fit fit.json --wc 25 --pm 60
+  </code></pre></div>
+<p>
+  <span class="fs-footnotesize"> <code class="tex-code">rate-tune</code> はゲイン交差周波数 <span class="math-inline">\(\omega_c\)</span> と位相余裕 PM の仕様を満たす
+  <span class="math-inline">\(K_p/T_i/T_d\)</span> を逆算し，<code class="tex-code">param set rate.roll.kp ...</code> の形で出力する</span></p>
+<p>
+  <span class="fs-scriptsize"> <span class="warn">注:</span> 学習者コードで rate-fit/rate-tune を使うには，角速度目標を計算した
+  直後に <code class="tex-api">ws::set_rate_target(roll,pitch,yaw)</code> を呼ぶ（実習 5 の解答でヒント導入・
+  実習 7 で必須，Data Stream の <code class="tex-code">rate_ref_*</code> に記録される）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">91 / 133</span></footer></section>
+<section class="slide content" id="s-092" data-title="デモ: 完成コードで飛行" data-session="S4"><header class="slide-header"><h2>デモ: 完成コードで飛行</h2></header><div class="slide-body"><div class="block example"><h3 class="block-title">デモの見方</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    <strong>見るだけ</strong>: ステップ応答の波形と設計値の一致を確認するだけで要点はつかめる。
+    <strong>一緒に打つ</strong>: 手元の flight.csv で <code class="tex-code">sf sysid fit</code> を試す。
+    <strong>帰宅後に再現</strong>: 本日は見るだけにして，後日実習 5〜9を通しで動かす
+  </p></div></div></div>
+<div class="block block"><h3 class="block-title">手順</h3><div class="block-body"><div class="fs-footnotesize"><ol><li> PID 化した学習者コードで飛行し，<code class="tex-code">sf log wifi</code> でテレメトリ取得
+      </li><li> <code class="tex-code">sf log viz</code> でロール角速度のステップ応答を表示
+      </li><li> モデル予測（<span class="math-inline">\(\zeta=0.7\)</span> の応答波形）と重ねて比較
+    </li></ol></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">92 / 133</span></footer></section>
+<section class="slide content" id="s-093" data-title="デモの期待結果: P と PID のステップ応答" data-session="S4"><header class="slide-header"><h2>デモの期待結果: P と PID のステップ応答</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><div class="web-videos"><figure class="web-only video"><video controls muted playsinline preload="metadata" src="assets/video/S4_lesson5_p_flight.mp4"></video><figcaption>実習 5（P のみ）</figcaption></figure><figure class="web-only video"><video controls muted playsinline preload="metadata" src="assets/video/S4_lesson8_pid_flight.mp4"></video><figcaption>実習 8（PID）</figcaption></figure></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">93 / 133</span></footer></section>
+<section class="slide content later" id="s-094" data-title="期待結果の再現手順" data-session="S4"><header class="slide-header"><h2>期待結果の再現手順</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="code-block titled"><div class="code-title">実習 5 の結果を再現する（実習 8 は sci2026:8 に置き換え）</div><pre><code class="lang-cpp">sf sils build --target workshop
+sf lesson switch sci2026:5 --solution
+touch firmware/workshop/main/user_code.cpp
+sf sils build --target workshop
+sf sils scenario simulator/sils/scenarios/workshop_acro_step.scn --target workshop
+  </code></pre></div>
+<p>  <span class="fs-small"> S5「実習: 自分の PID を SILS で飛ばす」も <code class="tex-code">workshop_acro.scn</code> で同様に再現できる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">94 / 133</span></footer></section>
+<section class="slide content later" id="s-095" data-title="理論とコードの対応表" data-session="S4"><header class="slide-header"><h2>理論とコードの対応表</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><p>
+  <span class="fs-small"> 目的: 同じ概念を指す変数・パラメータが，学習者コード／vehicle 実装／
+  Data Stream の間でどう呼び名を変えるかを一覧で確認する</span></p>
+<div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>教科書表記</strong> </th><th style="text-align:left"> <strong>実習 8 学習者コード</strong> </th><th style="text-align:left"> <strong>vehicle 実装</strong> </th><th style="text-align:left"> <strong>Data Stream</strong></th></tr></thead><tbody><tr><td style="text-align:left">比例ゲイン <span class="math-inline">\(K_p\)</span>   </td><td style="text-align:left"> <code class="tex-code">float Kp</code>（無次元） </td><td style="text-align:left"> <code class="tex-code">rate.roll.kp</code>（Nm/(rad/s)） </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">積分ゲイン <span class="math-inline">\(K_i\)</span>（<span class="math-inline">\(T_i{=}K_p/K_i\)</span>） </td><td style="text-align:left"> <code class="tex-code">float Ki</code>（直接ゲイン） </td><td style="text-align:left"> <code class="tex-code">rate.roll.ti</code>（s，換算値） </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">微分ゲイン <span class="math-inline">\(K_d\)</span>（<span class="math-inline">\(T_d{=}K_d/K_p\)</span>） </td><td style="text-align:left"> <code class="tex-code">float Kd</code>（フィルタなし） </td><td style="text-align:left"> <code class="tex-code">rate.roll.td</code>，<span class="math-inline">\(\eta\)</span>固定（実習8は未使用） </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">姿勢ゲイン          </td><td style="text-align:left"> —（実習 8では未使用）    </td><td style="text-align:left"> <code class="tex-code">attitude.roll.kp/ti/td</code>      </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">目標角速度          </td><td style="text-align:left"> <code class="tex-code">target</code>             </td><td style="text-align:left"> <code class="tex-code">rate_sp_roll</code>              </td><td style="text-align:left"> <code class="tex-code">rate_ref_roll</code></td></tr><tr><td style="text-align:left">角速度計測値        </td><td style="text-align:left"> <code class="tex-code">ws::gyro_x()</code>      </td><td style="text-align:left"> <code class="tex-code">state.angular_rate[0]</code>       </td><td style="text-align:left"> <code class="tex-code">gyro_x</code></td></tr><tr><td style="text-align:left">アンチワインドアップ </td><td style="text-align:left"> 積分クランプ <span class="math-inline">\(\pm0.5\)</span>     </td><td style="text-align:left"> 条件付き積分（<code class="tex-code">pid.hpp</code>）      </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">ARM 時リセット      </td><td style="text-align:left"> disarm 中毎ループ 0 に    </td><td style="text-align:left"> <code class="tex-code">PidController::reset()</code>（ARM遷移時） </td><td style="text-align:left"> —</td></tr></tbody></table></div>
+<p>  <span class="fs-small"> レートループの <span class="math-inline">\(K_p\)</span> は，学習者コードでは duty 空間の無次元値，
+  vehicle 実装では物理トルク単位（ミキサーが推力配分に変換する前の値）。
+  数値を単純比較できない点が「学習者コードと vehicle 実装の違い」を最もよく表す</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">95 / 133</span></footer></section>
+<section class="slide content" id="s-096" data-title="復習パス" data-session="S4"><header class="slide-header"><h2>復習パス</h2></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>実習</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:5</code> </td><td style="text-align:left"> 実習 5 レート P 制御 </td><td style="text-align:left"> Workshop Lesson 5</td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:6</code> </td><td style="text-align:left"> 実習 6 システムモデリング </td><td style="text-align:left"> Workshop Lesson 6</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sysid fit</code>               </td><td style="text-align:left"> 実習 7 システム同定 </td><td style="text-align:left"> Workshop Lesson 7</td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:8</code> </td><td style="text-align:left"> 実習 8 PID 制御      </td><td style="text-align:left"> Workshop Lesson 8</td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson switch sci2026:9</code> </td><td style="text-align:left"> 実習 9 姿勢推定      </td><td style="text-align:left"> Workshop Lesson 9</td></tr></tbody></table></div>
+<p>  <span class="fs-small"> すべて <code class="tex-code">sf lesson build</code> <span class="math-inline">\(\to\)</span> <code class="tex-code">sf lesson flash</code> で実機に反映する。
+  <code class="tex-code">--solution</code> で模範解答に切り替えられる</span></p>
+<p>  <span class="fs-scriptsize"> Workshop スライド（<code class="tex-code">docs/events/stampfly_workshop/slides/chapters/</code>）内の該当 Lesson 章に対応</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">96 / 133</span></footer></section>
+<section class="slide content" id="s-097" data-title="チェックポイント" data-session="S4"><header class="slide-header"><h2>チェックポイント</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">確認事項</h3><div class="block-body"><div class="fs-small"><ul><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> <span class="math-inline">\(G_p(s)=K/(s(\tau_m s+1))\)</span> と実測パラメータの対応を説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> P 制御の限界と，I 項・D 項が何を補うかを説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> 不完全微分・アンチワインドアップ・ARM 時リセットで
+            学習者コードと vehicle 実装がどう違うか説明できる
+            （詳しくは持ち帰り資料「D 項とアンチワインドアップ」「離散化と ARM 時リセット」）
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> <code class="tex-code">sf sysid fit</code> の入出力と，理論値との比較の読み方を理解した
+    </li></ul></div></div></div>
+<div class="block block"><h3 class="block-title">次のセッション</h3><div class="block-body"><p>
+    S5: シミュレータ・解析ツールの活用と発展的テーマ（15:30 – 16:30）— 飛ばして確かめた結果を、シミュレータと解析ツールで裏付ける
+  </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">97 / 133</span></footer></section>
+<section class="slide divider" id="s-098" data-title="シミュレータ・解析ツールの活用と発展的テーマ" data-session="S5"><div class="divider-box"><div class="divider-num">Session 5</div><div class="divider-title">シミュレータ・解析ツールの活用と発展的テーマ</div><div class="divider-time">15:30 – 16:30</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-099" data-title="地図: 今ここ" data-session="S5"><header class="slide-header"><h2>地図: 今ここ</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/scisessionmap_5.svg" alt=""></div></div></div><div class="column" style="flex:0.47 1 0"><div class="fs-small"><p>
+      S4 で飛ばした結果を，本セッションではシミュレータと解析ツールで
+      裏付ける。「実験」の次にくる「解析」と「教育」のフェーズにあたる。</p>
+<div class="block block"><h3 class="block-title">本日の最後に扱うもの</h3><div class="block-body"><div class="fs-footnotesize"><p>
+        3層シミュレーション <span class="math-inline">\(\to\)</span> SILS 実習 <span class="math-inline">\(\to\)</span> 解析ツールと教育教材 <span class="math-inline">\(\to\)</span>
+        研究・発展テーマ <span class="math-inline">\(\to\)</span> 質疑
+      </p></div></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">99 / 133</span></footer></section>
+<section class="slide content" id="s-100" data-title="要点3つ" data-session="S5"><header class="slide-header"><h2>要点3つ</h2></header><div class="slide-body"><ol><li> StampFly のシミュレーションは目的の異なる3層で構成され，
+          層3（SILS）は実ファームを無改変で走らせる
+    </li><li> 学習者が実装した推定器・制御器は，L1 Topic API 経由で
+          既存の実装と差し替えられる
+    </li><li> 実習 5/8 で書いた PID コードは，実機を飛ばす前に SILS で
+          検証してから持ち帰れる（本セッション後半で実習）
+  </li></ol>
+<div class="block alert"><h3 class="block-title">本セッションの立ち位置</h3><div class="block-body"><div class="fs-small"><p>
+    S4 までは1機の StampFly を飛ばす話だった。ここからは，飛ばさずに
+    検証する方法と，1機から先の広がりを扱う
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">100 / 133</span></footer></section>
+<section class="slide content" id="s-101" data-title="シミュレーションの3層構造" data-session="S5"><header class="slide-header"><h2>シミュレーションの3層構造</h2></header><div class="slide-body"><div class="align-center"><div class="figure"><img src="assets/tikz/sci_sim_layers.svg" alt=""></div></div>
+<p>  <span class="fs-footnotesize"> 目的の異なる3層を使い分ける。詳細は <code class="tex-code">docs/architecture/simulation-policy.md</code> を参照</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">101 / 133</span></footer></section>
+<section class="slide content" id="s-102" data-title="層1・層2: 設計モデルとログ再生" data-session="S5"><header class="slide-header"><h2>層1・層2: 設計モデルとログ再生</h2></header><div class="slide-body"><div class="block example"><h3 class="block-title">層1: 設計用線形モデル</h3><div class="block-body"><div class="fs-small"><p>
+    <span class="math-inline">\(G(s) = b\,e^{-Ls}/(s(Ts+1))\)</span> を <code class="tex-code">sf sysid rate-fit</code> で実飛行ログから
+    同定し，制御設計とループ整形の基準とする（S4 で扱った同定と同じ枠組み）
+  </p></div></div></div>
+<div class="block block"><h3 class="block-title">層2: 実ログ駆動オフライン再生</h3><div class="block-body"><div class="fs-small"><p>
+    層1のモデルと Python に移植した制御則を，実機ログから再構成した
+    実外乱・実指令で駆動する閉ループ再生。パラメータ変更の A/B 判定の基準
+  </p></div></div></div>
+<p>  <span class="fs-footnotesize"> <code class="tex-code">analysis/scripts/</code> 配下の Python 群。ヨー<span class="math-inline">\(\kappa\)</span>修正のリプレイ一致
+  0.0〜0.7%，ALT_HOLD 再生誤差約8%という精度で検証できている</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">102 / 133</span></footer></section>
+<section class="slide content" id="s-103" data-title="層3: SILS" data-session="S5"><header class="slide-header"><h2>層3: SILS</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">Code Identity と Parameter Identity</h3><div class="block-body"><div class="fs-small"><p>
+    SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で
+    物理シミュレーションと閉ループ実行する検証手法）は，
+    MuJoCo（非線形6自由度の物理エンジン）と<strong>実ファーム C++ そのもの</strong>を，
+    実機と同じソース・同じパラメータで走らせる
+  </p></div></div></div>
+<ul class="fs-small"><li> 状態機械・推定器・フェイルセーフを含むシステム全体の検証ベンチ
+    </li><li> 推定器を ESKF から相補フィルタに差し替えても，ベンチは無改変で
+          同じ検証ができる（アルゴリズムの中身に依存しない設計）
+    </li><li> シナリオファイル（<code class="tex-code">.scn</code>）と合格基準（<code class="tex-code">.expect</code>）の組で自動判定する。
+          <code class="tex-code">sf sils regression</code> でまとめて実行できる
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">103 / 133</span></footer></section>
+<section class="slide content" id="s-104" data-title="モデル一致の合否判定" data-session="S5"><header class="slide-header"><h2>モデル一致の合否判定</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">Code Identity を使った検証</h3><div class="block-body"><div class="fs-small"><p>
+    実機ログに使うのと同じ同定パイプラインを，SILS が生成したログにも
+    そのまま適用し，<span class="math-inline">\((b, L, T)\)</span> を実機同定値と比較する（<code class="tex-code">sf sils sysid-gate</code>）
+  </p></div></div></div>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>指標</strong> </th><th style="text-align:center"> <strong>許容差（判定条件）</strong></th></tr></thead><tbody><tr><td style="text-align:left">ステップ応答立ち上がり時定数 </td><td style="text-align:center"> <span class="math-inline">\(\pm20\%\)</span></td></tr><tr><td style="text-align:left">gyro RMS </td><td style="text-align:center"> <span class="math-inline">\(\pm50\%\)</span></td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> Yaw は反トルク零点を持ち，現行の3パラメータフィットでは表現しきれない。
+  軸ごとの物理特性に応じて，公称モデル1点比較と摂動族での検証を使い分ける</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">104 / 133</span></footer></section>
+<section class="slide content" id="s-105" data-title="VPython と Genesis" data-session="S5"><header class="slide-header"><h2>VPython と Genesis</h2></header><div class="slide-body"><div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"></th><th style="text-align:left"> <strong>特徴</strong> </th><th style="text-align:left"> <strong>用途</strong></th></tr></thead><tbody><tr><td style="text-align:left">VPython </td><td style="text-align:left"> 軽量，ブラウザ3D表示，センサモデル充実 </td><td style="text-align:left"> 制御学習，SILS/HILS<sup class="footnotemark">*</sup></td></tr><tr><td style="text-align:left">Genesis </td><td style="text-align:left"> 高精度物理エンジン，2000 Hz 物理演算 </td><td style="text-align:left"> 高精度シミュレーション</td></tr></tbody></table></div></div>
+<p class="footnote">* <span class="fs-scriptsize"> HILS（Hardware-in-the-Loop Simulation）:
+  実機を接続した検証。本エコシステムではファーム側未対応</span></p>
+<div class="code-block titled"><div class="code-title">コマンド</div><pre><code class="lang-cpp">sf sim run vpython
+sf sim run genesis
+  </code></pre></div>
+<p>  <span class="fs-footnotesize"> AtomS3 + Atom JoyStick を USB HID モードで使い，実機と同じ操縦感で
+  シミュレータを飛ばせる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">105 / 133</span></footer></section>
+<section class="slide content" id="s-106" data-title="sf sils コマンド一覧" data-session="S5"><header class="slide-header"><h2>sf sils コマンド一覧</h2></header><div class="slide-body"><div class="table-wrap align-center fs-footnotesize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>サブコマンド</strong> </th><th style="text-align:left"> <strong>機能</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">build</code>      </td><td style="text-align:left"> SILS ホストベンチをビルド</td></tr><tr><td style="text-align:left"><code class="tex-code">run</code>         </td><td style="text-align:left"> 閉ループを実行しバンドルを書き出す</td></tr><tr><td style="text-align:left"><code class="tex-code">scenario</code>    </td><td style="text-align:left"> <code class="tex-code">.scn</code> シナリオを実行し合否判定</td></tr><tr><td style="text-align:left"><code class="tex-code">regression</code>  </td><td style="text-align:left"> 全 <code class="tex-code">.scn/.expect</code> を実行し，CI で合否判定する</td></tr><tr><td style="text-align:left"><code class="tex-code">gate</code>        </td><td style="text-align:left"> マイルストーンバンドルの合否確認</td></tr><tr><td style="text-align:left"><code class="tex-code">sysid-gate</code>  </td><td style="text-align:left"> モデル一致の合否判定（前ページ）</td></tr><tr><td style="text-align:left"><code class="tex-code">gui</code>         </td><td style="text-align:left"> ブラウザ GUI（次ページ）</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> ESP-IDF は関与しない。firmware ソースをシステム GCC で
+  素の CMake から直接コンパイルし，ヘッドレスで実行する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">106 / 133</span></footer></section>
+<section class="slide content" id="s-107" data-title="sf sils gui" data-session="S5"><header class="slide-header"><h2>sf sils gui</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">ブラウザだけで完結する SILS 実験環境</h3><div class="block-body"><div class="fs-small"><p>
+    シナリオ作成・パラメータ編集・実行・グラフ化・飛行アニメーションを
+    すべて画面で行える
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">起動</div><pre><code class="lang-cpp">sf sils build
+sf sils gui
+  </code></pre></div>
+<ul class="fs-small"><li> イベント（rc/wind/fault/handle など）を表で組んでシナリオを作る
+    </li><li> PID ゲインや ESKF 設定など 54 項目をブラウザで編集，
+          変更した項目だけが反映される（再ビルド不要）
+    </li><li> three.js によるライブ 3D と Plotly のグラフが時刻カーソルで同期
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">107 / 133</span></footer></section>
+<section class="slide content" id="s-108" data-title="実習: 自分の PID を SILS で飛ばす" data-session="S5"><header class="slide-header"><h2>実習: 自分の PID を SILS で飛ばす</h2></header><div class="slide-body"><div class="stage-pills"><span class="pill">見るだけ</span><span class="pill active"><span><strong>一緒に打つ</strong></span></span><span class="pill">帰宅後に再現</span></div>
+<ol class="fs-footnotesize"><li> 実習8（PID）用に SILS ホストベンチをビルドする
+    </li><li> 実習8の解答（または S4 で書いた自分のコード）に切り替える
+    </li><li> 切替後に再ビルドし，新しいコードを取り込む
+    </li><li> シナリオを実行し，合否判定を確認する
+  </li></ol>
+<div class="code-block titled"><div class="code-title">コマンド</div><pre><code class="lang-cpp">sf sils build --target workshop
+sf lesson switch sci2026:8 --solution   # または S4 で書いた自分のコード
+touch firmware/workshop/main/user_code.cpp   # 切替後は更新日時が保たれるため
+sf sils build --target workshop         # 再ビルドで新しいコードを取り込む
+sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
+  </code></pre></div>
+<p>  <span class="fs-scriptsize"> 合格基準（<code class="tex-code">.expect</code>）: 離陸（真値高度 <span class="math-inline">\(&gt;0.1\)</span> m）と傾き <span class="math-inline">\(15^\circ\)</span> 未満
+  （発散しない）。実測 alt_max <span class="math-inline">\(\approx 0.64\)</span> m，tilt_max <span class="math-inline">\(0^\circ\)</span>，判定 PASS。
+  <span class="warn">注:</span> <code class="tex-code">sf sils gui</code> は workshop を選べないため学習者コードには上記 CLI を使う</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">108 / 133</span></footer></section>
+<section class="slide content" id="s-109" data-title="デモ: シミュレータを動かす" data-session="S5"><header class="slide-header"><h2>デモ: シミュレータを動かす</h2></header><div class="slide-body"><div class="block example"><h3 class="block-title">デモの見方</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    <strong>見るだけ</strong>: 3D 上での挙動とグラフの対応を確認するだけで要点はつかめる。
+    <strong>一緒に打つ</strong>: 手元でも <code class="tex-code">sf sim run vpython</code> を起動してみる。
+    <strong>帰宅後に再現</strong>: 本日は見るだけにして，後日ジョイスティックで操縦する
+  </p></div></div></div>
+<div class="block block"><h3 class="block-title">手順</h3><div class="block-body"><div class="fs-footnotesize"><ol><li> <code class="tex-code">sf sim run vpython</code> でブラウザ3D操縦
+      </li><li> <code class="tex-code">sf sils gui</code> でシナリオを1本実行し，判定結果（PASS/FAIL）を確認
+      </li><li> 同じシナリオでパラメータを変え，挙動の変化を見る
+    </li></ol></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">109 / 133</span></footer></section>
+<section class="slide content" id="s-110" data-title="デモの期待結果: SILS シナリオ実行" data-session="S5"><header class="slide-header"><h2>デモの期待結果: SILS シナリオ実行</h2><span class="web-badge">Web 版のみ</span></header><div class="slide-body"><figure class="web-only video"><video controls muted playsinline preload="metadata" src="assets/video/S5_stab_flight.mp4"></video><figcaption>STABILIZE 飛行（MuJoCo 3D + 状態グラフ）</figcaption></figure></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">110 / 133</span></footer></section>
+<section class="slide content" id="s-111" data-title="解析ツール: sf log analyze / viz" data-session="S5"><header class="slide-header"><h2>解析ツール: sf log analyze / viz</h2></header><div class="slide-body"><div class="block block"><h3 class="block-title">取得したテレメトリをそのまま解析する</h3><div class="block-body"><div class="fs-small"><p>
+    <code class="tex-code">sf log wifi</code>/<code class="tex-code">sf log capture</code> で取得した CSV を，
+    追加スクリプトなしで解析・可視化できる
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">コマンド</div><pre><code class="lang-cpp">sf log viz flight.csv
+sf log analyze flight.csv
+  </code></pre></div>
+<p>  <span class="fs-footnotesize"> 詳しい手順は <code class="tex-code">docs/guides/flight-log-viz.md</code>。取得 <span class="math-inline">\(\to\)</span> 可視化 <span class="math-inline">\(\to\)</span>
+  解析の流れは S4 のシステム同定と同じログを使い回せる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">111 / 133</span></footer></section>
+<section class="slide content later" id="s-112" data-title="センサノイズの評価: Allan 分散" data-session="S5"><header class="slide-header"><h2>センサノイズの評価: Allan 分散</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title">Allan 分散でわかること</h3><div class="block-body"><div class="fs-small"><p>
+    静止センサの出力から Allan 偏差（Allan deviation）を計算すると，
+    ホワイトノイズと長時間のバイアス不安定性を分離して評価できる。
+    ESKF の Q/R（プロセス／観測ノイズ共分散）チューニングの基礎データになる
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">コマンド</div><pre><code class="lang-cpp">sf log wifi -d 60 -o static_noise.csv   # 機体を静止させて60秒取得
+sf sysid noise static_noise.csv --sensor gyro --static-only --plot
+  </code></pre></div>
+<p>  <span class="fs-footnotesize"> <code class="tex-code">--sensor</code> は <code class="tex-code">gyro/accel/baro/tof/all</code> を選べるが，
+  <code class="tex-code">sf log wifi -o</code> の CSV は gyro/accel のみ。baro/tof には
+  <code class="tex-code">sf log capture</code> <span class="math-inline">\(\to\)</span> <code class="tex-code">sf log convert</code> を使う。
+  トリム調整には <code class="tex-code">sf trim analyze</code> がある</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">112 / 133</span></footer></section>
+<section class="slide content later" id="s-113" data-title="研究利用の入口 (1/3): Topic API とは" data-session="S5"><header class="slide-header"><h2>研究利用の入口 (1/3): Topic API とは</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title">Pub-Sub（発行/購読型のメッセージ配信）</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    <code class="tex-code">Topic&lt;T&gt;</code>（<code class="tex-code">sf_core</code>）がコンポーネント間を疎結合につなぐ。
+    発行側は <code class="tex-code">publish(data)</code>，購読側は <code class="tex-code">latest()</code> で最新値を読む
+  </p></div></div></div>
+<div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>トピック（<code class="tex-code">sf::</code>名前空間）</strong> </th><th style="text-align:left"> <strong>内容</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sensor_imu</code>       </td><td style="text-align:left"> IMU 生データ（400 Hz）</td></tr><tr><td style="text-align:left"><code class="tex-code">estimate_state</code>   </td><td style="text-align:left"> 推定した姿勢・位置・速度</td></tr><tr><td style="text-align:left"><code class="tex-code">command_setpoint</code> </td><td style="text-align:left"> パイロット/API の目標値</td></tr><tr><td style="text-align:left"><code class="tex-code">control_output</code>   </td><td style="text-align:left"> 推力・トルク指令</td></tr></tbody></table></div></div>
+<p>  <span class="fs-scriptsize"> 学習者向け読み取り関数（<code class="tex-code">sf::api::*</code>，<code class="tex-code">sf_api.hpp</code>）:
+  <code class="tex-code">imu_latest()</code>/<code class="tex-code">estimate_latest()</code>/<code class="tex-code">command_latest()</code> など。
+  <code class="tex-code">Topic&lt;T&gt;::latest()</code> をラップした<span class="warn">読み取り専用</span>の入口（書き込み側は未公開）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">113 / 133</span></footer></section>
+<section class="slide content later" id="s-114" data-title="研究利用の入口 (2/3): 推定器・制御器を載せる" data-session="S5"><header class="slide-header"><h2>研究利用の入口 (2/3): 推定器・制御器を載せる</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title"><code class="tex-code">IEstimator</code>/<code class="tex-code">IController</code> を実装する</h3><div class="block-body"><div class="fs-footnotesize"><p>
+    既存の ESKF・PID と同じインターフェース（<code class="tex-code">sf_estimator</code>/<code class="tex-code">sf_controller</code>）
+    を実装すれば差し替えられる
+  </p></div></div></div>
+<div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>インターフェース</strong> </th><th style="text-align:left"> <strong>主なメソッド</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">IEstimator</code>  </td><td style="text-align:left"> <code class="tex-code">predict()</code>, <code class="tex-code">update*()</code>, <code class="tex-code">getState()</code>, <code class="tex-code">reset()</code></td></tr><tr><td style="text-align:left"><code class="tex-code">IController</code> </td><td style="text-align:left"> <code class="tex-code">compute()</code>, <code class="tex-code">reset()</code>, <code class="tex-code">onModeChange()</code></td></tr></tbody></table></div></div>
+<p>  <span class="fs-scriptsize"> <strong>差替え手順:</strong> 推定器は <code class="tex-code">estimator.type</code> パラメータで選ぶ
+  （<code class="tex-code">imu_task.cpp</code> の <code class="tex-code">createEstimator()</code> を拡張して自作を足す）。制御器は
+  現状 PID の単一実装のみのため，<code class="tex-code">control_task.cpp</code> の <code class="tex-code">static PidController
+  controller;</code> を自分のクラスに置き換える（コントローラ側にはまだファクトリが無い）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">114 / 133</span></footer></section>
+<section class="slide content later" id="s-115" data-title="研究利用の入口 (3/3): サンプルプログラム" data-session="S5"><header class="slide-header"><h2>研究利用の入口 (3/3): サンプルプログラム</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="block block"><h3 class="block-title"><code class="tex-code">examples/09_topic_api_hello</code></h3><div class="block-body"><div class="fs-footnotesize"><p>
+    姿勢トピックを購読し，roll/pitch/yaw を 10 Hz でシリアル表示する最小例
+  </p></div></div></div>
+<div class="code-block titled"><div class="code-title">抜粋（イメージ）</div><pre><code class="lang-cpp">sf::StateEstimate est = sf::api::estimate_latest();
+auto rpy = sf::math::Quat(est.attitude[0], est.attitude[1],
+                           est.attitude[2], est.attitude[3]).to_euler();
+printf(&quot;roll=%.1f pitch=%.1f yaw=%.1f\n&quot;,
+       rpy.x*180/M_PI, rpy.y*180/M_PI, rpy.z*180/M_PI);
+  </code></pre></div>
+<p>  <span class="fs-scriptsize"> ビルド: <code class="tex-code">idf.py set-target esp32s3 &amp;&amp; idf.py build</code> <span class="math-inline">\(\to\)</span>
+  <code class="tex-code">idf.py -p &lt;port&gt; flash monitor</code><br>
+  <span class="warn">帰宅後に再現:</span> <code class="tex-code">examples/09_topic_api_hello</code>（<code class="tex-code">04_read_imu</code> 等と
+  同じく単独ビルド可能）を手元で試す</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">115 / 133</span></footer></section>
+<section class="slide content later" id="s-116" data-title="再現性の3原則" data-session="S5"><header class="slide-header"><h2>再現性の3原則</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><p>  <span class="fs-small"> S1 で見た開発の3原則を，再現性の観点から振り返る</span></p>
+<div class="table-wrap align-center fs-small"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>原則</strong> </th><th style="text-align:left"> <strong>内容</strong></th></tr></thead><tbody><tr><td style="text-align:left">Code Identity </td><td style="text-align:left"> SILS は実ファームと同じソースをそのままコンパイルして走る</td></tr><tr><td style="text-align:left">Parameter Identity </td><td style="text-align:left"> 同じパラメータで走らせる</td></tr><tr><td style="text-align:left">Model Fidelity </td><td style="text-align:left"> 実機飛行後にモデルをログで較正する（後追いの精度向上）</td></tr></tbody></table></div></div>
+<p>  <span class="fs-small"> パラメータは <code class="tex-code">param set</code>/<code class="tex-code">param save</code> で NVS に保存する。
+  自作の推定器・制御器を試すときも，この3原則があるから「SILS で通った」が
+  実機の挙動を意味する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">116 / 133</span></footer></section>
+<section class="slide content later" id="s-117" data-title="発展テーマ: AI と強化学習" data-session="S5"><header class="slide-header"><h2>発展テーマ: AI と強化学習</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><ul class="fs-small"><li> <strong>AI コーディングエージェントの活用</strong>: 制御則の実装・デバッグや
+          シミュレーションログの解析を，AI コーディングエージェントを補助に
+          進める流れが広がりつつある。StampFly のような小型・低リスクな
+          実験プラットフォームは，その検証サイクルを高速に回す題材になりうる
+    </li><li> <strong>強化学習と Sim-to-Real</strong>: シミュレータ上で学習した制御方策を
+          実機に転移する流れを教材化できれば，古典制御から学習型制御へ
+          カリキュラムの射程が広がる。機体が小型・軽量で墜落時のリスクが
+          小さいことは Sim-to-Real の実機検証に向く
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">117 / 133</span></footer></section>
+<section class="slide content later" id="s-118" data-title="発展テーマ: 制御・推定・自律飛行" data-session="S5"><header class="slide-header"><h2>発展テーマ: 制御・推定・自律飛行</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><ul class="fs-small"><li> <strong>MPC・適応制御</strong>: 今日扱った PID の先にある発展的な制御手法
+    </li><li> <strong>ESKF・オートチューン</strong>: 15状態 ESKF の実装，
+          S4 で紹介した <code class="tex-code">sf_autotune</code> によるオンボードチューニング
+    </li><li> <strong>高度・位置ループ</strong>: レート/姿勢カスケードの外側に
+          ALT_HOLD/POS_HOLD が乗る。外乱オブザーバ（<code class="tex-code">altitude.dob.fc</code>）も
+          パラメータで opt-in できる
+    </li><li> <strong>Tello 互換 SDK と ROS 2</strong>: Python SDK（<code class="tex-code">lib/stampfly</code>）と
+          <code class="tex-code">sf takeoff</code> などの Tello 風コマンド（<code class="tex-code">sf takeoff/land/hover/jump</code> …）
+          で自律飛行の入口を用意している。ROS 2 との連携も発展的なテーマの一つである
+  </li></ul></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">118 / 133</span></footer></section>
+<section class="slide content later" id="s-119" data-title="教育・研究での再利用" data-session="S5"><header class="slide-header"><h2>教育・研究での再利用</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.5 1 0"><div class="block block"><h3 class="block-title">自分の授業・研究室で使うには</h3><div class="block-body"><div class="fs-footnotesize"><ul><li> <code class="tex-code">lesson_manifest.yaml</code> の <code class="tex-code">courses:</code> に実習順序を
+                追加できる（本チュートリアルの <code class="tex-code">sci2026</code> も同じ仕組み）
+          </li><li> 本スライド一式は LaTeX（Beamer）ソースごと公開されている
+          </li><li> SILS で実機なしの演習・採点も一部自動化できる
+          </li><li> Blockly・競技会（<code class="tex-code">sf blocks --demo</code>, <code class="tex-code">sf competition</code>）
+                も用意している
+        </li></ul></div></div></div></div><div class="column" style="flex:0.47 1 0"><div class="block example"><h3 class="block-title">コミュニティへ</h3><div class="block-body"><div class="fs-footnotesize"><p>
+        質問・不具合報告・開発への協力はリポジトリの Issue で受け付けている<br>
+        <a class="tex-url" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">https://github.com/M5Fly-kanazawa/stampfly_ecosystem</a>
+      </p></div></div></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">119 / 133</span></footer></section>
+<section class="slide content later" id="s-120" data-title="理論とコードの対応表" data-session="S5"><header class="slide-header"><h2>理論とコードの対応表</h2><span class="later-badge">あとで読む</span></header><div class="slide-body"><p>
+  <span class="fs-footnotesize"> 本セッションの概念が，リポジトリのどのファイル・コマンドに対応するか一覧する</span></p>
+<div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>概念</strong> </th><th style="text-align:left"> <strong>実装場所</strong> </th><th style="text-align:left"> <strong>コマンド</strong></th></tr></thead><tbody><tr><td style="text-align:left">層1: 設計用線形モデル       </td><td style="text-align:left"> <code class="tex-code">control/models/stampfly_physical.yaml</code> </td><td style="text-align:left"> <code class="tex-code">sf sysid rate-fit</code></td></tr><tr><td style="text-align:left">層2: 実ログ駆動オフライン再生 </td><td style="text-align:left"> <code class="tex-code">analysis/scripts/</code>                       </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">層3: SILS                   </td><td style="text-align:left"> <code class="tex-code">simulator/sils/</code>                         </td><td style="text-align:left"> <code class="tex-code">sf sils scenario</code></td></tr><tr><td style="text-align:left">モデル一致の合否判定         </td><td style="text-align:left"> <code class="tex-code">tools/log_analyzer/rate_sysid.py</code>      </td><td style="text-align:left"> <code class="tex-code">sf sils sysid-gate</code></td></tr><tr><td style="text-align:left">推定インターフェース         </td><td style="text-align:left"> <code class="tex-code">sf_estimator</code> / <code class="tex-code">sf_estimator_eskf</code> </td><td style="text-align:left"> —</td></tr><tr><td style="text-align:left">制御インターフェース         </td><td style="text-align:left"> <code class="tex-code">sf_controller</code> / <code class="tex-code">sf_controller_pid</code> </td><td style="text-align:left"> —</td></tr></tbody></table></div>
+<p>  <span class="fs-small"> 3層とも同じ物理パラメータ（<code class="tex-code">stampfly-parameters.md</code>）を参照する。
+  層を追うごとにプラント物理・制御コードの忠実度が上がる</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">120 / 133</span></footer></section>
+<section class="slide content" id="s-121" data-title="復習パス" data-session="S5"><header class="slide-header"><h2>復習パス</h2></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>扱う内容</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf sim run vpython</code>  </td><td style="text-align:left"> VPython シミュレータ    </td><td style="text-align:left"> <code class="tex-code">simulator/README.md</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf sils gui</code>         </td><td style="text-align:left"> SILS ブラウザ実験環境   </td><td style="text-align:left"> <code class="tex-code">simulator/sils/gui/README.md</code></td></tr><tr><td style="text-align:left"><code class="tex-code">sf log viz</code>          </td><td style="text-align:left"> ログ可視化              </td><td style="text-align:left"> <code class="tex-code">docs/guides/flight-log-viz.md</code></td></tr><tr><td style="text-align:left">—                        </td><td style="text-align:left"> シミュレーション方針     </td><td style="text-align:left"> <code class="tex-code">docs/architecture/simulation-policy.md</code></td></tr></tbody></table></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">121 / 133</span></footer></section>
+<section class="slide content" id="s-122" data-title="質疑: 想定質問と回答 (1/2)" data-session="S5"><header class="slide-header"><h2>質疑: 想定質問と回答 (1/2)</h2></header><div class="slide-body"><div class="fs-scriptsize"><div class="block block"><h3 class="block-title">Q1. モデル一致の判定で Yaw 軸だけ精度が悪化するのはなぜか</h3><div class="block-body"><p>
+    ヨーだけ反トルク（角加速度に比例）が抗力トルクに重畳し，伝達関数に物理的な
+    零点（LHP・位相リード，<span class="math-inline">\(\tau_z\approx45\)</span> ms）を持つ。零点は励振帯域より低く，
+    トルク権限もロール/ピッチの約1/4しかなく，3パラメータ同定では零点を分離できず
+    精度が落ちる（コヒーレンス0.44）。対策はヨーの合否判定を分離し，κ実測＋
+    4パラメータ化で基準を再導出すること。
+  </p></div></div>
+<div class="block block"><h3 class="block-title">Q2. 自作の制御器を載せるとき，安全機構はどこまで自分で書く必要があるか</h3><div class="block-body"><p>
+    状態機械（ARM/DISARM・モード遷移），通信途絶/低電圧の検知とLANDING移行，
+    ミキサー出力（duty）の最終クランプは，どの制御器でもファームウェア側が担う。
+    自作側は <code class="tex-texttt">IController</code> 契約——<code class="tex-texttt">reset()</code>/<code class="tex-texttt">onModeChange()</code>
+    の実装，400 Hz周期内の非ブロッキングな <code class="tex-texttt">compute()</code>，出力の妥当範囲
+    維持——を守ればよい。
+  </p></div></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">122 / 133</span></footer></section>
+<section class="slide content" id="s-123" data-title="質疑: 想定質問と回答 (2/2)" data-session="S5"><header class="slide-header"><h2>質疑: 想定質問と回答 (2/2)</h2></header><div class="slide-body"><div class="fs-footnotesize"><div class="block block"><h3 class="block-title">Q3. ROS 2 と連携するにはどこから手を付ければよいか</h3><div class="block-body"><p>
+    リポジトリの <code class="tex-texttt">ros/</code> には ROS 2 ブリッジが既にあるが，これは旧世代
+    ファーム（vehicle_old）のWebSocketテレメトリ・独自UDP制御プロトコル向けで，
+    現行ファーム（vehicle）のUDPテレメトリ・Tello式コマンドAPIとは互換性がない。
+    現実的な入口は，PC側で現行のUDPテレメトリ（<code class="tex-texttt">sf log wifi</code> と同じ形式）を
+    購読し，Tello風コマンドを送る rclpy ノードを新規に書くこと（ファーム改修は不要）。
+  </p></div></div>
+<p>  <span class="fs-small"> 質疑の時間は本セッション末の15分。時間内に扱いきれなかった質問は，
+  リポジトリの Issue で受け付けている</span>
+</p></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">123 / 133</span></footer></section>
+<section class="slide content" id="s-124" data-title="チェックポイント" data-session="S5"><header class="slide-header"><h2>チェックポイント</h2></header><div class="slide-body"><div class="block alert"><h3 class="block-title">確認事項</h3><div class="block-body"><div class="fs-small"><ul><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> シミュレーションの3層構造と，それぞれの役割を説明できる
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> <code class="tex-code">sf sils gui</code> でのシナリオ実行とパラメータ編集の流れを見た
+            （または手元で試した）
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> L1 Topic API で自分の推定器・制御器を差し替える方法を理解した
+            （詳しくは「研究利用の入口 (1/3)〜(3/3)」）
+      </li><li class="li-marker"><span class="marker"><span class="math-inline">\(\square\)</span></span> 解析ツールの入口を把握した
+    </li></ul></div></div></div>
+<div class="block block"><h3 class="block-title">本日はこれで終了</h3><div class="block-body"><p>
+    資料・録画は公開されている。持ち帰り資料（付録）で復習を続けられる
+  </p></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">124 / 133</span></footer></section>
+<section class="slide divider" id="s-125" data-title="チートシートと復習パス" data-session="チートシートと復習パス"><div class="divider-box"><div class="divider-num">付録</div><div class="divider-title">チートシートと復習パス</div><div class="divider-time">持ち帰り資料</div></div><div class="divider-foot">SCI/SICE チュートリアル講座 2026</div></section>
+<section class="slide content" id="s-126" data-title="sf CLI チートシート (1/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>sf CLI チートシート (1/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>機能</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf doctor</code>     </td><td style="text-align:left"> 環境診断（問題があればまず実行）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf build/flash/monitor</code> </td><td style="text-align:left"> ビルド・書き込み・シリアルモニタ</td></tr><tr><td style="text-align:left"><code class="tex-code">sf telemetry</code>  </td><td style="text-align:left"> 50 Hz テレメトリのライブ表示（<code class="tex-code">--web</code> でブラウザ）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf blocks</code>     </td><td style="text-align:left"> Blockly ブロックプログラミング（<code class="tex-code">--demo</code> で機体なしデモ）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf cal gyro/accel/mag</code> </td><td style="text-align:left"> センサキャリブレーション</td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson</code>     </td><td style="text-align:left"> Workshop 実習管理（<code class="tex-code">switch sci2026:N</code>/<code class="tex-code">build</code>/<code class="tex-code">flash</code>，一覧は <code class="tex-code">list --course sci2026</code>）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf trim analyze</code> </td><td style="text-align:left"> ホバーログから姿勢トリムを算出</td></tr><tr><td style="text-align:left"><code class="tex-code">sf takeoff</code> 等   </td><td style="text-align:left"> Tello 風ミニコマンド（<code class="tex-code">sf takeoff/land/hover/jump</code>，個別のトップレベルコマンド）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf competition hover-time/score</code> </td><td style="text-align:left"> ホバー耐久・スコア記録</td></tr></tbody></table></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">126 / 133</span></footer></section>
+<section class="slide content" id="s-127" data-title="sf CLI チートシート (2/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>sf CLI チートシート (2/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>コマンド</strong> </th><th style="text-align:left"> <strong>機能</strong></th></tr></thead><tbody><tr><td style="text-align:left"><code class="tex-code">sf log wifi/capture</code> </td><td style="text-align:left"> WiFi/USB 経由でテレメトリ・ログ取得</td></tr><tr><td style="text-align:left"><code class="tex-code">sf log viz/analyze</code>  </td><td style="text-align:left"> ログ可視化・解析</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sim run vpython/genesis</code> </td><td style="text-align:left"> シミュレータ起動（S5）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sils build/scenario/gui</code> </td><td style="text-align:left"> SILS ベンチ（S5）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sysid fit</code>        </td><td style="text-align:left"> 閉ループ P 制御ログからプラント同定（実習7）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sysid rate-fit/rate-tune</code> </td><td style="text-align:left"> 閉ループ同定（ETFE + フィット）と仕様ベース PID 設計（S4）</td></tr><tr><td style="text-align:left"><code class="tex-code">sf sysid noise</code>      </td><td style="text-align:left"> 静止センサログから Allan 分散でノイズ特性を推定</td></tr><tr><td style="text-align:left"><code class="tex-code">sf params check</code>     </td><td style="text-align:left"> 物理パラメータ整合検査</td></tr><tr><td style="text-align:left"><code class="tex-code">sf upgrade</code>          </td><td style="text-align:left"> 最新版を pull し環境を再同期</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> <code class="tex-code">sf --help</code> の順序を基本に，授業で頻出する <code class="tex-code">sf lesson</code> を前に出している。全コマンドは <code class="tex-code">lib/sfcli/commands/</code> に実装がある</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">127 / 133</span></footer></section>
+<section class="slide content" id="s-128" data-title="ws:: API チートシート (1/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>ws:: API チートシート (1/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>カテゴリ</strong> </th><th style="text-align:left"> <strong>関数</strong></th></tr></thead><tbody><tr><td style="text-align:left">モータ制御 </td><td style="text-align:left"> <code class="tex-code">motor_set_duty(id,duty)</code> [id 1–4, duty 0–1], <code class="tex-code">motor_set_all(duty)</code> [0–1],
+        <code class="tex-code">motor_stop_all()</code>, <code class="tex-code">motor_mixer(t,r,p,y)</code> [t 0–1, r/p/y <span class="math-inline">\(-1\)</span>–1], <code class="tex-code">arm()</code>,
+        <code class="tex-code">disarm()</code>, <code class="tex-code">is_armed()</code></td></tr><tr><td style="text-align:left">コントローラ入力 </td><td style="text-align:left"> <code class="tex-code">rc_throttle()</code> [0–1], <code class="tex-code">rc_roll/pitch/yaw()</code> [<span class="math-inline">\(-1\)</span>–1]</td></tr><tr><td style="text-align:left">ボタン・モード </td><td style="text-align:left"> <code class="tex-code">rc_throttle_yaw_button()</code>, <code class="tex-code">rc_roll_pitch_button()</code>,
+        <code class="tex-code">rc_stabilize_acro_mode()</code>, <code class="tex-code">rc_alt_mode()</code>, <code class="tex-code">rc_pos_mode()</code>（すべて bool）</td></tr><tr><td style="text-align:left">LED 制御 </td><td style="text-align:left"> <code class="tex-code">led_color(r,g,b)</code> [0–255], <code class="tex-code">disable/enable_led_task()</code>,
+        <code class="tex-code">is_led_task_disabled()</code></td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> 実習中は Duty <span class="math-inline">\(\le\)</span> 0.15 で運用する（安全上の運用ルール。ファーム側では強制されない）</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">128 / 133</span></footer></section>
+<section class="slide content" id="s-129" data-title="ws:: API チートシート (2/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>ws:: API チートシート (2/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>カテゴリ</strong> </th><th style="text-align:left"> <strong>関数</strong></th></tr></thead><tbody><tr><td style="text-align:left">IMU センサ </td><td style="text-align:left"> <code class="tex-code">gyro_x/y/z()</code> [rad/s], <code class="tex-code">accel_x/y/z()</code> [m/s<span class="math-inline">\(^2\)</span>]</td></tr><tr><td style="text-align:left">環境・距離センサ </td><td style="text-align:left"> <code class="tex-code">baro_altitude/pressure()</code> [m, Pa], <code class="tex-code">mag_x/y/z()</code> [<span class="math-inline">\(\mu\)</span>T],
+        <code class="tex-code">tof_bottom/front()</code> [m], <code class="tex-code">flow_vx/vy/quality()</code> [m/s, 0–255]</td></tr><tr><td style="text-align:left">姿勢推定 </td><td style="text-align:left"> <code class="tex-code">estimated_roll/pitch/yaw()</code> [rad], <code class="tex-code">estimated_altitude()</code> [m]</td></tr><tr><td style="text-align:left">制御目標のロギング </td><td style="text-align:left"> <code class="tex-code">set_rate_target(r,p,y)</code> [rad/s], <code class="tex-code">set_angle_target(r,p)</code> [rad]
+        （実習7，Data Stream の <code class="tex-code">rate_ref_*</code>/<code class="tex-code">angle_ref_*</code> に記録，制御には無関係）</td></tr><tr><td style="text-align:left">ユーティリティ </td><td style="text-align:left"> <code class="tex-code">millis()</code> [ms], <code class="tex-code">battery_voltage()</code> [V], <code class="tex-code">print(fmt,...)</code>,
+        <code class="tex-code">set_channel(ch)</code> [1, 6, 11]</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> <code class="tex-code">#include &quot;workshop_api.hpp&quot;</code>，全関数は <code class="tex-code">ws::</code> 名前空間</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">129 / 133</span></footer></section>
+<section class="slide content" id="s-130" data-title="トラブルシューティング (1/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>トラブルシューティング (1/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>症状</strong> </th><th style="text-align:left"> <strong>原因</strong> </th><th style="text-align:left"> <strong>対処</strong></th></tr></thead><tbody><tr><td style="text-align:left">StampFly の WiFi が見つからない </td><td style="text-align:left"> 電源が入っていない </td><td style="text-align:left"> バッテリーを確認，電源を入れ直す</td></tr><tr><td style="text-align:left">接続しても通信できない </td><td style="text-align:left"> IP アドレスが違う </td><td style="text-align:left"> <code class="tex-code">192.168.10.1</code> を確認</td></tr><tr><td style="text-align:left">離陸しない </td><td style="text-align:left"> キャリブレーション未実施 </td><td style="text-align:left"> <code class="tex-code">sf cal gyro</code> を実行</td></tr><tr><td style="text-align:left">振動する </td><td style="text-align:left"> PID ゲインが高すぎる </td><td style="text-align:left"> ゲインを下げる（S4 参照）</td></tr><tr><td style="text-align:left">シミュレータに自動フォールバック </td><td style="text-align:left"> WiFi 未接続 </td><td style="text-align:left"> 意図的ならそのまま使用可</td></tr></tbody></table></div></div>
+<p>  <span class="fs-footnotesize"> 出典: <code class="tex-code">docs/guides/troubleshooting.md</code></span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">130 / 133</span></footer></section>
+<section class="slide content" id="s-131" data-title="トラブルシューティング (2/2)" data-session="チートシートと復習パス"><header class="slide-header"><h2>トラブルシューティング (2/2)</h2></header><div class="slide-body"><div class="table-wrap align-center fs-scriptsize"><div class="table-scroll"><table><thead><tr><th style="text-align:left"><strong>症状</strong> </th><th style="text-align:left"> <strong>原因</strong> </th><th style="text-align:left"> <strong>対処</strong></th></tr></thead><tbody><tr><td style="text-align:left">ビルドエラー（赤字 <code class="tex-code">error:</code>） </td><td style="text-align:left"> 打ち間違い（カンマ・セミコロン抜け等） </td><td style="text-align:left"> エラー1行目のファイル名・行番号を確認し実習コードと見比べる</td></tr><tr><td style="text-align:left"><code class="tex-code">sf lesson flash</code> が失敗 </td><td style="text-align:left"> 書き込みポートの競合・接触不良 </td><td style="text-align:left"> 別のケーブル／ポートを試す。改善しなければ機体の BOOT ボタンを押したまま USB を挿し直し，書き込み専用モードで再実行する</td></tr><tr><td style="text-align:left">モータが回らない </td><td style="text-align:left"> ARM されていない，または USB 給電中（安全のため ARM 拒否） </td><td style="text-align:left"> 機体ボタンをクリックして ARM 状態を確認する。USB を外してバッテリー駆動になっているか確認する</td></tr><tr><td style="text-align:left">起動 LED が緑にならない </td><td style="text-align:left"> 静止校正中に機体を動かしてしまった </td><td style="text-align:left"> 機体を静かに置き直し，緑点灯とビープ3回（readyTone）を待つ</td></tr></tbody></table></div></div></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">131 / 133</span></footer></section>
+<section class="slide content" id="s-132" data-title="5セッション復習パス" data-session="チートシートと復習パス"><header class="slide-header"><h2>5セッション復習パス</h2></header><div class="slide-body"><div class="table-scroll"><table><thead><tr><th style="text-align:left"></th><th style="text-align:left"> <strong>コマンド</strong> </th><th style="text-align:left"> <strong>扱う内容</strong> </th><th style="text-align:left"> <strong>文書</strong></th></tr></thead><tbody><tr><td style="text-align:left">S1 </td><td style="text-align:left"> <code class="tex-code">sf sim run vpython</code>        </td><td style="text-align:left"> シミュレータ操縦        </td><td style="text-align:left"> <code class="tex-code">docs/commands/sf-sim.md</code></td></tr><tr><td style="text-align:left">S1 </td><td style="text-align:left"> <code class="tex-code">sf sils gui</code>               </td><td style="text-align:left"> 層 3 の体験             </td><td style="text-align:left"> <code class="tex-code">simulator/sils/gui/README.md</code></td></tr><tr><td style="text-align:left">S2 </td><td style="text-align:left"> <code class="tex-code">sf lesson switch sci2026:2</code> </td><td style="text-align:left"> IMU センサ（実習2）    </td><td style="text-align:left"> <code class="tex-code">firmware/vehicle/docs/architecture.md §2</code></td></tr><tr><td style="text-align:left">S2 </td><td style="text-align:left"> <code class="tex-code">sf log wifi/viz</code>           </td><td style="text-align:left"> テレメトリ取得と可視化  </td><td style="text-align:left"> <code class="tex-code">docs/guides/flight-log-viz.md</code></td></tr><tr><td style="text-align:left">S3 </td><td style="text-align:left"> <code class="tex-code">sf lesson switch sci2026:3</code> </td><td style="text-align:left"> モータ制御（実習3）     </td><td style="text-align:left"> <code class="tex-code">firmware/vehicle/docs/hardware_init.md</code></td></tr><tr><td style="text-align:left">S3 </td><td style="text-align:left"> <code class="tex-code">sf lesson switch sci2026:4</code> </td><td style="text-align:left"> コントローラ入力（実習4） </td><td style="text-align:left"> <code class="tex-code">protocol/spec/</code>（ControlPacket）</td></tr><tr><td style="text-align:left">S4 </td><td style="text-align:left"> <code class="tex-code">sf lesson switch sci2026:8</code> </td><td style="text-align:left"> PID 制御（実習8）       </td><td style="text-align:left"> Workshop Lesson 8</td></tr><tr><td style="text-align:left">S4 </td><td style="text-align:left"> <code class="tex-code">sf sysid fit</code>              </td><td style="text-align:left"> システム同定（実習7）    </td><td style="text-align:left"> Workshop Lesson 7</td></tr><tr><td style="text-align:left">S5 </td><td style="text-align:left"> <code class="tex-code">sf sils gui</code>               </td><td style="text-align:left"> SILS ブラウザ実験環境   </td><td style="text-align:left"> <code class="tex-code">simulator/sils/gui/README.md</code></td></tr><tr><td style="text-align:left">S5 </td><td style="text-align:left"> <code class="tex-code">sf log viz</code>                </td><td style="text-align:left"> ログ解析                </td><td style="text-align:left"> <code class="tex-code">docs/guides/flight-log-viz.md</code></td></tr></tbody></table></div>
+<p>  <span class="fs-scriptsize"> Workshop スライド（<code class="tex-code">docs/events/stampfly_workshop/slides/chapters/</code>）内の該当 Lesson 章に対応</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">132 / 133</span></footer></section>
+<section class="slide content" id="s-133" data-title="持ち帰りのご案内" data-session="チートシートと復習パス"><header class="slide-header"><h2>持ち帰りのご案内</h2></header><div class="slide-body"><div class="block example"><h3 class="block-title">資料はすべて公開されている</h3><div class="block-body"><div class="fs-small"><ul><li> リポジトリ: <a class="tex-url" href="https://github.com/M5Fly-kanazawa/stampfly_ecosystem" target="_blank" rel="noopener">https://github.com/M5Fly-kanazawa/stampfly_ecosystem</a>
+      </li><li> ドキュメント: <a class="tex-url" href="https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/" target="_blank" rel="noopener">https://m5fly-kanazawa.github.io/stampfly_ecosystem/docs/</a>
+      </li><li> 本日の内容はオンデマンド配信でも後日視聴できる
+    </li></ul></div></div></div>
+<div class="block block"><h3 class="block-title">ご自身の StampFly で</h3><div class="block-body"><div class="fs-small"><p>
+    ノート PC と StampFly さえあれば，今日のデモは自宅・研究室でそのまま再現できる。
+    まずは <code class="tex-code">sf doctor</code> で環境を確認してから始めてほしい
+  </p></div></div></div>
+<p>  <span class="fs-small"> ご質問・不具合報告はリポジトリの Issue へ。開発に協力してくれる方も歓迎する</span>
+</p></div><footer class="slide-footer"><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">133 / 133</span></footer></section>
+  </div>
+</div>
+<nav id="outline" class="outline" hidden><h3>目次</h3><div class="outline-group"><h4>タイトル</h4><ul><li><a href="?s=1" data-slide="1">1. 制御教育教材 StampFly Ecosystem の紹介</a></li></ul></div><div class="outline-group"><h4>オープニング</h4><ul><li><a href="?s=2" data-slide="2">2. 講師紹介</a></li><li><a href="?s=3" data-slide="3">3. 本日の進め方</a></li><li><a href="?s=4" data-slide="4">4. 参加のしかたと資料</a></li><li><a href="?s=5" data-slide="5">5. 今日の地図</a></li><li><a href="?s=6" data-slide="6">6. 必要機材と安全ルール</a></li></ul></div><div class="outline-group"><h4>S1</h4><ul><li><a href="?s=7" data-slide="7">7. StampFly Ecosystem の全体像と設計思想</a></li><li><a href="?s=8" data-slide="8">8. 地図: 今ここ</a></li><li><a href="?s=9" data-slide="9">9. 要点3つ</a></li><li><a href="?s=10" data-slide="10">10. 制御がなければ飛べない</a></li><li><a href="?s=11" data-slide="11">11. StampFly ハードウェア</a></li><li><a href="?s=12" data-slide="12">12. 4つの障壁</a></li><li><a href="?s=13" data-slide="13">13. 既存プラットフォームとの比較</a></li><li><a href="?s=14" data-slide="14">14. エコシステムの地図</a></li><li><a href="?s=15" data-slide="15">15. 設計思想5本柱</a></li><li><a href="?s=16" data-slide="16">16. 1機から学べる8分野</a></li><li><a href="?s=17" data-slide="17">17. 深掘り: sf CLI（あとで読む）</a></li><li><a href="?s=18" data-slide="18">18. 深掘り: 4階層は同時に存在する（あとで読む）</a></li><li><a href="?s=19" data-slide="19">19. vehicle ファーム構造</a></li><li><a href="?s=20" data-slide="20">20. 400 Hz 制御ループ</a></li><li><a href="?s=21" data-slide="21">21. 4階層アクセス</a></li><li><a href="?s=22" data-slide="22">22. シミュレーション3層</a></li><li><a href="?s=23" data-slide="23">23. 開発の3原則（あとで読む）</a></li><li><a href="?s=24" data-slide="24">24. デモ①: シミュレータ操縦</a></li><li><a href="?s=25" data-slide="25">25. デモ②: 実機 POS_HOLD 飛行</a></li><li><a href="?s=26" data-slide="26">26. デモ②の期待結果: 位置保持</a></li><li><a href="?s=27" data-slide="27">27. デモ②の期待結果: 高度と姿勢</a></li><li><a href="?s=28" data-slide="28">28. 復習パス（あとで読む）</a></li><li><a href="?s=29" data-slide="29">29. チェックポイント</a></li></ul></div><div class="outline-group"><h4>S2</h4><ul><li><a href="?s=30" data-slide="30">30. 開発環境のセットアップとセンサデータの取得</a></li><li><a href="?s=31" data-slide="31">31. 地図: 今ここ</a></li><li><a href="?s=32" data-slide="32">32. 要点3つ</a></li><li><a href="?s=33" data-slide="33">33. 開発環境の導入 (1/2): PC 側</a></li><li><a href="?s=34" data-slide="34">34. OS による違いはここだけ</a></li><li><a href="?s=35" data-slide="35">35. 開発環境の導入 (2/2): 機体とペアリング</a></li><li><a href="?s=36" data-slide="36">36. 実習 1: 環境確認とビルド</a></li><li><a href="?s=37" data-slide="37">37. ツールチェーン</a></li><li><a href="?s=38" data-slide="38">38. 学習者コードの型とワークフロー</a></li><li><a href="?s=39" data-slide="39">39. 機体の軸定義</a></li><li><a href="?s=40" data-slide="40">40. IMU API と単位</a></li><li><a href="?s=41" data-slide="41">41. 実習 2: IMU の値を見る</a></li><li><a href="?s=42" data-slide="42">42. データ取得経路① Teleplot</a></li><li><a href="?s=43" data-slide="43">43. 実習 2: 傾けて確認</a></li><li><a href="?s=44" data-slide="44">44. データ取得経路② sf telemetry（あとで読む）</a></li><li><a href="?s=45" data-slide="45">45. データ取得経路③ ログ取得と可視化（あとで読む）</a></li><li><a href="?s=46" data-slide="46">46. 他のセンサ（あとで読む）</a></li><li><a href="?s=47" data-slide="47">47. 理論とコードの対応表（あとで読む）</a></li><li><a href="?s=48" data-slide="48">48. 復習パス（あとで読む）</a></li><li><a href="?s=49" data-slide="49">49. チェックポイント</a></li></ul></div><div class="outline-group"><h4>S3</h4><ul><li><a href="?s=50" data-slide="50">50. モータ制御とコントローラ入力の実装</a></li><li><a href="?s=51" data-slide="51">51. 地図: 今ここ</a></li><li><a href="?s=52" data-slide="52">52. 要点3つ</a></li><li><a href="?s=53" data-slide="53">53. 安全</a></li><li><a href="?s=54" data-slide="54">54. モータと PWM</a></li><li><a href="?s=55" data-slide="55">55. モータ配置</a></li><li><a href="?s=56" data-slide="56">56. 実習 3: Duty をハードコードして回す</a></li><li><a href="?s=57" data-slide="57">57. コントローラ</a></li><li><a href="?s=58" data-slide="58">58. ESP-NOW と ControlPacket</a></li><li><a href="?s=59" data-slide="59">59. TDMA で 30 機を同時に飛ばす</a></li><li><a href="?s=60" data-slide="60">60. ペアリングとチャンネル</a></li><li><a href="?s=61" data-slide="61">61. オープンループ制御</a></li><li><a href="?s=62" data-slide="62">62. ミキサ行列</a></li><li><a href="?s=63" data-slide="63">63. 実習 4: スティックでモータを回す</a></li><li><a href="?s=64" data-slide="64">64. プラントの定義</a></li><li><a href="?s=65" data-slide="65">65. 理論とコードの対応表（あとで読む）</a></li><li><a href="?s=66" data-slide="66">66. 復習パス（あとで読む）</a></li><li><a href="?s=67" data-slide="67">67. チェックポイント</a></li></ul></div><div class="outline-group"><h4>S4</h4><ul><li><a href="?s=68" data-slide="68">68. フィードバック制御の基礎 — PID による姿勢安定化</a></li><li><a href="?s=69" data-slide="69">69. 地図: 今ここ</a></li><li><a href="?s=70" data-slide="70">70. 要点3つ</a></li><li><a href="?s=71" data-slide="71">71. 内側ループ: レート制御</a></li><li><a href="?s=72" data-slide="72">72. PID 制御器</a></li><li><a href="?s=73" data-slide="73">73. プラントモデル</a></li><li><a href="?s=74" data-slide="74">74. 実測パラメータ</a></li><li><a href="?s=75" data-slide="75">75. 2次系設計（あとで読む）</a></li><li><a href="?s=76" data-slide="76">76. 開ループボード線図（あとで読む）</a></li><li><a href="?s=77" data-slide="77">77. 無駄時間の影響</a></li><li><a href="?s=78" data-slide="78">78. 実習 5: レート P 制御で初飛行</a></li><li><a href="?s=79" data-slide="79">79. 実習 5 の振り返り: レート P 制御</a></li><li><a href="?s=80" data-slide="80">80. モデルで見る実習 5 の設計</a></li><li><a href="?s=81" data-slide="81">81. 実習 6: システムモデリング</a></li><li><a href="?s=82" data-slide="82">82. 実習 7: システム同定（sf sysid fit）</a></li><li><a href="?s=83" data-slide="83">83. システム同定: sf sysid fit</a></li><li><a href="?s=84" data-slide="84">84. 実習 8: PID 制御</a></li><li><a href="?s=85" data-slide="85">85. PID 工学形式パラメータ（あとで読む）</a></li><li><a href="?s=86" data-slide="86">86. D 項とアンチワインドアップ（あとで読む）</a></li><li><a href="?s=87" data-slide="87">87. 離散化と ARM 時リセット（あとで読む）</a></li><li><a href="?s=88" data-slide="88">88. 実習 9: 姿勢推定（相補フィルタ）</a></li><li><a href="?s=89" data-slide="89">89. 姿勢推定: ジャイロドリフト問題</a></li><li><a href="?s=90" data-slide="90">90. 相補フィルタと STABILIZE</a></li><li><a href="?s=91" data-slide="91">91. 自動チューニング: sf sysid rate-fit / rate-tune</a></li><li><a href="?s=92" data-slide="92">92. デモ: 完成コードで飛行</a></li><li><a href="?s=93" data-slide="93">93. デモの期待結果: P と PID のステップ応答</a></li><li><a href="?s=94" data-slide="94">94. 期待結果の再現手順（あとで読む）</a></li><li><a href="?s=95" data-slide="95">95. 理論とコードの対応表（あとで読む）</a></li><li><a href="?s=96" data-slide="96">96. 復習パス</a></li><li><a href="?s=97" data-slide="97">97. チェックポイント</a></li></ul></div><div class="outline-group"><h4>S5</h4><ul><li><a href="?s=98" data-slide="98">98. シミュレータ・解析ツールの活用と発展的テーマ</a></li><li><a href="?s=99" data-slide="99">99. 地図: 今ここ</a></li><li><a href="?s=100" data-slide="100">100. 要点3つ</a></li><li><a href="?s=101" data-slide="101">101. シミュレーションの3層構造</a></li><li><a href="?s=102" data-slide="102">102. 層1・層2: 設計モデルとログ再生</a></li><li><a href="?s=103" data-slide="103">103. 層3: SILS</a></li><li><a href="?s=104" data-slide="104">104. モデル一致の合否判定</a></li><li><a href="?s=105" data-slide="105">105. VPython と Genesis</a></li><li><a href="?s=106" data-slide="106">106. sf sils コマンド一覧</a></li><li><a href="?s=107" data-slide="107">107. sf sils gui</a></li><li><a href="?s=108" data-slide="108">108. 実習: 自分の PID を SILS で飛ばす</a></li><li><a href="?s=109" data-slide="109">109. デモ: シミュレータを動かす</a></li><li><a href="?s=110" data-slide="110">110. デモの期待結果: SILS シナリオ実行</a></li><li><a href="?s=111" data-slide="111">111. 解析ツール: sf log analyze / viz</a></li><li><a href="?s=112" data-slide="112">112. センサノイズの評価: Allan 分散（あとで読む）</a></li><li><a href="?s=113" data-slide="113">113. 研究利用の入口 (1/3): Topic API とは（あとで読む）</a></li><li><a href="?s=114" data-slide="114">114. 研究利用の入口 (2/3): 推定器・制御器を載せる（あとで読む）</a></li><li><a href="?s=115" data-slide="115">115. 研究利用の入口 (3/3): サンプルプログラム（あとで読む）</a></li><li><a href="?s=116" data-slide="116">116. 再現性の3原則（あとで読む）</a></li><li><a href="?s=117" data-slide="117">117. 発展テーマ: AI と強化学習（あとで読む）</a></li><li><a href="?s=118" data-slide="118">118. 発展テーマ: 制御・推定・自律飛行（あとで読む）</a></li><li><a href="?s=119" data-slide="119">119. 教育・研究での再利用（あとで読む）</a></li><li><a href="?s=120" data-slide="120">120. 理論とコードの対応表（あとで読む）</a></li><li><a href="?s=121" data-slide="121">121. 復習パス</a></li><li><a href="?s=122" data-slide="122">122. 質疑: 想定質問と回答 (1/2)</a></li><li><a href="?s=123" data-slide="123">123. 質疑: 想定質問と回答 (2/2)</a></li><li><a href="?s=124" data-slide="124">124. チェックポイント</a></li></ul></div><div class="outline-group"><h4>チートシートと復習パス</h4><ul><li><a href="?s=125" data-slide="125">125. チートシートと復習パス</a></li><li><a href="?s=126" data-slide="126">126. sf CLI チートシート (1/2)</a></li><li><a href="?s=127" data-slide="127">127. sf CLI チートシート (2/2)</a></li><li><a href="?s=128" data-slide="128">128. ws:: API チートシート (1/2)</a></li><li><a href="?s=129" data-slide="129">129. ws:: API チートシート (2/2)</a></li><li><a href="?s=130" data-slide="130">130. トラブルシューティング (1/2)</a></li><li><a href="?s=131" data-slide="131">131. トラブルシューティング (2/2)</a></li><li><a href="?s=132" data-slide="132">132. 5セッション復習パス</a></li><li><a href="?s=133" data-slide="133">133. 持ち帰りのご案内</a></li></ul></div></nav>
+<div id="help" class="overlay" hidden><div class="overlay-box"><h3>キー操作</h3><table><tr><td>→ / Space / PageDown / n</td><td>次のスライド</td></tr><tr><td>← / PageUp / p</td><td>前のスライド</td></tr><tr><td>Home / End</td><td>最初 / 最後のスライド</td></tr><tr><td>f</td><td>全画面表示</td></tr><tr><td>t</td><td>目次パネルの開閉</td></tr><tr><td>?</td><td>このヘルプの開閉</td></tr><tr><td>クリック（右1/3・左1/3）</td><td>次へ・前へ</td></tr><tr><td>スワイプ</td><td>次へ・前へ（左右）</td></tr></table><button id="help-close">閉じる</button></div></div>
+<script src="assets/vendor/katex/katex.min.js"></script>
+<script src="assets/vendor/katex/auto-render.min.js"></script>
+<script src="assets/widgets/pid_step.js"></script>
+<script src="assets/widgets/mixer.js"></script>
+<script src="assets/widgets/comp_filter.js"></script>
+<script src="assets/js/deck.js"></script>
+</body>
+</html>

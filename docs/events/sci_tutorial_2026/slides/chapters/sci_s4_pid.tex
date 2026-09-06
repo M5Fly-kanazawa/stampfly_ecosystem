@@ -75,6 +75,10 @@
   \begin{center}
     \resizebox{0.78\textwidth}{!}{\input{../../_shared/tikz/pid_block}}
   \end{center}
+  % Web版のみ: レートループのステップ応答を実際に触って確認できるウィジェット
+  % （ブロック図の右に配置、docs/events/README等のWeb版マーカー記法参照）
+  % @web: layout=right
+  % @web: widget=pid_step axis=roll preset=lesson8 height=430
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -285,6 +289,9 @@ ws::motor_mixer(ws::rc_throttle(),
     P 制御だけでは，ゲインを下げて安定性を確保すると定常偏差と外乱への弱さが残る。
     ここから I 項・D 項を追加する
   \end{exampleblock}
+  % Web版のみ: 実習5のP制御プリセットでステップ応答を再現（収まらない場合は
+  % 「PID 制御器」フレームのウィジェットのみに絞る）
+  % @web: widget=pid_step axis=roll preset=lesson5 height=230
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -542,6 +549,9 @@ float I = Ki*integral;
 
   {\small STABILIZE ではこの推定角を外側ループの入力にし，スティックが
   傾き角そのものを指令する}
+  % Web版のみ: 相補フィルタをα可変で実際に動かして確認する
+  % @web: widget=comp_filter alpha=0.98 height=480
+  % @web: layout=replace
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -594,6 +604,10 @@ sf sysid rate-tune --fit fit.json --wc 25 --pm 60
   {\footnotesize SILS（MuJoCo）で \code{workshop\_acro\_step.scn}（ロール $+0.3$ を $0.5$\,s）を実行。
   目標 15.1\,deg/s に対し実習 5（P）はピーク 17.9\,deg/s と $-2.4$\,deg/s のアンダーシュート，
   実習 8（PID）はピーク 13.2\,deg/s で振動なし。角速度は真値ロール角の数値微分}
+  % Web版のみ: 静止グラフの代わりに実飛行動画2本を並べて見せる
+  % @web: video=../fallback/S4_lesson5_p_flight.mp4 caption=実習 5（P のみ）
+  % @web: video=../fallback/S4_lesson8_pid_flight.mp4 caption=実習 8（PID）
+  % @web: layout=replace
 \end{frame}
 
 % ------------------------------------------------------------------

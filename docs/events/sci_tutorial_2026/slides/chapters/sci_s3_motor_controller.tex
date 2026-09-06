@@ -224,6 +224,9 @@ void loop_400Hz(float dt) {
   \end{columns}
 
   {\scriptsize $T$ は \api{ws::rc\_throttle()} の正規化スティック値で $[0,1]$，$R,P,Y$ は \api{ws::rc\_roll/pitch/yaw()} で $[-1,1]$。\api{ws::motor\_set\_duty} は Duty を $[0,1]$ にクランプする}
+  % Web版のみ: T/R/P/Yスライダーで4モータのDutyを実際に動かして確認する
+  % @web: widget=mixer height=480
+  % @web: layout=replace
 \end{frame}
 
 % ------------------------------------------------------------------
