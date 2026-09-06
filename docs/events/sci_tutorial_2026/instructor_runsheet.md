@@ -6,13 +6,13 @@
 
 ### このドキュメントについて
 
-2026年9月10日（木）開催の SCI/SICE チュートリアル講座 2026（全132ページのスライド `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`）から、講師が当日**実際に実演する（実演）**か**参加者にやってもらう（実習）**フレーム、および**期待結果を提示するだけ**のフレームだけを抜き出し、進行順に並べたもの。132ページ全体をめくらなくても、この1枚でリハーサルと本番進行ができることを目的とする。
+2026年9月10日（木）開催の SCI/SICE チュートリアル講座 2026（全133ページのスライド `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`）から、講師が当日**実際に実演する（実演）**か**参加者にやってもらう（実習）**フレーム、および**期待結果を提示するだけ**のフレームだけを抜き出し、進行順に並べたもの。133ページ全体をめくらなくても、この1枚でリハーサルと本番進行ができることを目的とする。
 
 ### 出典と手法
 
 - スライド本文: `docs/events/sci_tutorial_2026/slides/sci_tutorial.tex` および `chapters/sci_intro.tex`、`sci_s1_overview.tex`〜`sci_s5_sim_analysis.tex`、`sci_appendix.tex`
 - 参加者向け・復習向け資料: `README.md`（タイムテーブル・事前準備）、`handson_guide.md`（帰宅後の復習手順）、`cheatsheet.md`（コマンド・API早見表）、`verification_checklist.md`（講師のリハーサル手順）、`fallback/README.md`（代替素材の索引）
-- ページ番号は `pdftotext -f N -l N sci_tutorial.pdf -` で1ページずつ本文を抽出し、各チャプターの `\begin{frame}` 数（intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 25 + 付録 8 = 125、セッション区切り6枚（Session 1〜5と付録）・表紙1枚を加えて132）が実ページ数132と一致することを確認したうえで、代表ページを個別に照合した
+- ページ番号は `pdftotext -f N -l N sci_tutorial.pdf -` で1ページずつ本文を抽出し、各チャプターの `\begin{frame}` 数（intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 26 + 付録 8 = 126、セッション区切り6枚（Session 1〜5と付録）・表紙1枚を加えて133）が実ページ数133と一致することを確認したうえで、代表ページを個別に照合した
 
 ### 使い方
 
@@ -229,7 +229,7 @@ sf sils gui
 
 | 箇所 | 内容 |
 |------|------|
-| `sf sim run` の表記ゆれ（**解消済み**） | 従来、pp.24/28/17（S1深掘り）は引数なし`sf sim run`と表記し、S5（現行では p.105「VPythonとGenesis」・p.109「デモ: シミュレータを動かす」）・付録（現行では p.126「sf CLIチートシート(2/2)」）、README、handson_guide、cheatsheetは`sf sim run vpython`（引数あり）と表記していた。批判的レビューを反映した再構成後の現行スライドは全ページが`sf sim run vpython`に統一されており、この表記ゆれは解消済み |
+| `sf sim run` の表記ゆれ（**解消済み**） | 従来、pp.24/28/17（S1深掘り）は引数なし`sf sim run`と表記し、S5（現行では p.105「VPythonとGenesis」・p.109「デモ: シミュレータを動かす」）・付録（現行では p.127「sf CLIチートシート(2/2)」）、README、handson_guide、cheatsheetは`sf sim run vpython`（引数あり）と表記していた。批判的レビューを反映した再構成後の現行スライドは全ページが`sf sim run vpython`に統一されており、この表記ゆれは解消済み |
 | `verification_checklist.md`のレッスン番号と`実習N`の不一致（**解消済み**） | 従来、`verification_checklist.md` §1は`sf lesson switch 0/1/2/4`という**Workshopの生のレッスン番号**でベンチ確認しており、`lesson_manifest.yaml`の`sci2026`コースにおける実習1〜4の順序とは対応がずれていた（正確な対応関係は§9の表を参照）。`verification_checklist.md`側を本ランシートと同じ`sci2026:N`表記（`sf lesson switch sci2026:N`）に統一し、この不一致は解消済み |
 | S4「本日は見るだけ」の実演範囲 | p.92のデモの見方には「本日は見るだけにして，後日実習5〜9を通しで動かす」とあるが、`verification_checklist.md` §2は講師自身が実習5・実習8・実習9を当日リハーサルで確認する前提で書かれている（実習6・実習7には専用のリハーサル項目がない）。両者は矛盾しないが（参加者は見るだけ・講師は実演する、という役割分担）、実習6・実習7を含めた5件すべての実演を60分のセッション内で律儀にこなすと時間を圧迫する。**未解決:** 実習6（ζ3種類の飛行比較）・実習7（システム同定用の飛行）を当日実際に飛ばすのか、口頭説明のみに留めるのかはスライド・checklistのどちらにも明記がなく、講師の当日の判断に委ねられている |
 | S4「デモの期待結果」の数値の出どころ | p.93キャプションは「SILS（MuJoCo）でworkshop_acro_step.scnを実行」した結果であることを明記しており、実機フライトの実測値ではない。一方p.92「デモ: 完成コードで飛行」は実機での飛行を手順として説明している。したがってp.92のライブ実演で実際に出るステップ応答の数値は、p.93が示す参考値（ピーク17.9/13.2 deg/s等）と厳密には一致しない可能性がある点に注意 |
@@ -244,13 +244,13 @@ sf sils gui
 
 ### About this document
 
-Extracted from the 132-page slide deck for the SCI/SICE Tutorial 2026 (`docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`, held 2026-09-10), this document lists — in running order — only the frames the instructor will actually **demonstrate**, have participants **do hands-on**, or that **present an expected result**. The goal is a single sheet the instructor can rehearse from and run the day off, without paging through all 132 slides.
+Extracted from the 133-page slide deck for the SCI/SICE Tutorial 2026 (`docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`, held 2026-09-10), this document lists — in running order — only the frames the instructor will actually **demonstrate**, have participants **do hands-on**, or that **present an expected result**. The goal is a single sheet the instructor can rehearse from and run the day off, without paging through all 133 slides.
 
 ### Sources and method
 
 - Slide body: `docs/events/sci_tutorial_2026/slides/sci_tutorial.tex` and `chapters/sci_intro.tex`, `sci_s1_overview.tex` through `sci_s5_sim_analysis.tex`, `sci_appendix.tex`
 - Participant- and review-facing material: `README.md` (timetable, pre-workshop prep), `handson_guide.md` (post-event reproduction steps), `cheatsheet.md` (command/API reference), `verification_checklist.md` (instructor rehearsal procedure), `fallback/README.md` (index of fallback material)
-- Page numbers were derived by extracting each page's text with `pdftotext -f N -l N sci_tutorial.pdf -`, cross-checked against the frame count per chapter file (intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 25 + appendix 8 = 125, plus 6 session dividers (Sessions 1-5 and the appendix) and 1 title page = 132), matching the deck's actual 132 pages, then spot-verified on representative pages
+- Page numbers were derived by extracting each page's text with `pdftotext -f N -l N sci_tutorial.pdf -`, cross-checked against the frame count per chapter file (intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 26 + appendix 8 = 126, plus 6 session dividers (Sessions 1-5 and the appendix) and 1 title page = 133), matching the deck's actual 133 pages, then spot-verified on representative pages
 
 ### How to use this document
 
@@ -467,7 +467,7 @@ Recorded as found, not fixed.
 
 | Where | Detail |
 |-------|--------|
-| `sf sim run` wording differs (**resolved**) | pp.24/28/17 (S1 deep-dive) used to print bare `sf sim run` (no argument), while S5 (now p.105 "VPython and Genesis" / p.109 "Demo: The Simulator") and the appendix (now p.126 "sf CLI Cheat Sheet (2/2)"), README, handson_guide, and cheatsheet printed `sf sim run vpython` (with the argument). After the post-review rebuild, every page in the current deck prints `sf sim run vpython` consistently, so this wording gap is resolved |
+| `sf sim run` wording differs (**resolved**) | pp.24/28/17 (S1 deep-dive) used to print bare `sf sim run` (no argument), while S5 (now p.105 "VPython and Genesis" / p.109 "Demo: The Simulator") and the appendix (now p.127 "sf CLI Cheat Sheet (2/2)"), README, handson_guide, and cheatsheet printed `sf sim run vpython` (with the argument). After the post-review rebuild, every page in the current deck prints `sf sim run vpython` consistently, so this wording gap is resolved |
 | `verification_checklist.md`'s lesson numbers vs. "Exercise N" (**resolved**) | `verification_checklist.md` §1 used to bench-check using the **raw Workshop lesson numbers** (`sf lesson switch 0/1/2/4`), which did not match the `sci2026` course's Exercise 1-4 sequence in `lesson_manifest.yaml` (see §9's table for the exact correspondence). The checklist has since been normalized to the same `sci2026:N` notation used in this runsheet (`sf lesson switch sci2026:N`), resolving the mismatch |
 | Scope of "watch only" in S4 | p.92's demo-viewing note says "today is watch-only; run Exercises 5-9 end to end afterward," while `verification_checklist.md` §2 is written assuming the instructor personally confirms Exercises 5, 8, and 9 on the day (Exercises 6 and 7 have no dedicated rehearsal item). The two are not actually contradictory (participants watch; the instructor demonstrates), but running all five live demos inside a 60-minute session is tight. **Unresolved:** whether Exercise 6 (three flights at different damping ratios) and Exercise 7 (a flight for system identification) are actually flown live on the day, or only described verbally, is not settled by either the slides or the checklist -- it is left to the instructor's on-the-day judgment |
 | Source of the S4 "expected result" numbers | p.93's caption explicitly states the figures come from running `workshop_acro_step.scn` in SILS (MuJoCo), not from a measured real flight, while p.92 "Demo: Final Code" describes flying on real hardware as the procedure. So the step-response numbers the live demo on p.92 actually produces may not exactly match the SILS reference figures on p.93 (peak 17.9/13.2 deg/s etc.) |
