@@ -22,11 +22,14 @@
 #                           (tools/slides/pdf_deck_html.py, into sci_tutorial_2026/slides/html/)
 #   make dxh-html         — Same, for the DXH deck (dxh2026/slides/html/)
 #   make workshop-html    — Same, for the Workshop deck (stampfly_workshop/slides/html/)
+#   make sci-web          — Native HTML slide deck for the SCI tutorial, parsed
+#                           directly from the Beamer .tex sources (tools/slides/
+#                           beamer_to_html.py, into sci_tutorial_2026/web/)
 #   make chapter NAME=<x> — Single chapter, searched across all events'
 #                           chapters/ directories: make chapter NAME=led_control
 #   make clean           — Remove build artifacts
 
-.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-docswell sci-html dxh-html workshop-html chapter clean
+.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-docswell sci-html dxh-html workshop-html sci-web chapter clean
 
 # ---------------------------------------------------------------------------
 # Shared TikZ diagrams
@@ -163,6 +166,32 @@ dxh-html: $(DXH_DIR)/$(DXH_PDF)
 workshop-html: $(WORKSHOP_DIR)/$(WORKSHOP_PDF)
 	python3 $(PDF_DECK_HTML) $(WORKSHOP_DIR)/$(WORKSHOP_PDF) $(WORKSHOP_DIR)/html \
 		--title "StampFly Workshop"
+
+# ---------------------------------------------------------------------------
+# Native HTML slide deck (tools/slides/beamer_to_html.py)
+# HTMLネイティブ・スライドデッキ（tools/slides/beamer_to_html.py）
+#
+# Parses the SCI/SICE tutorial's Beamer .tex sources DIRECTLY (not the
+# built PDF) into a single-page HTML deck under sci_tutorial_2026/web/,
+# with a TikZ -> SVG build pass included. Distinct from `sci-html` above,
+# which post-processes an already-built PDF into page images/SVGs; this
+# target makes each frame real HTML/DOM (selectable text, `?s=N` deep
+# links, offline-vendored KaTeX) suitable for committing and serving via
+# GitHub Pages.
+#
+# SCI/SICEチュートリアルのBeamer .texソースを（ビルド済みPDFではなく）
+# 直接解析し、sci_tutorial_2026/web/ 配下へ1枚のHTMLデッキとして出力する
+# （TikZ->SVGビルドを含む）。上の sci-html（ビルド済みPDFの後処理）とは
+# 別物 — 各フレームが本物のHTML/DOM（選択可能なテキスト、?s=N の
+# ディープリンク、オフライン同梱のKaTeX）になり、GitHub Pagesでの
+# コミット・公開に向く。
+# ---------------------------------------------------------------------------
+
+BEAMER_TO_HTML := ../../tools/slides/beamer_to_html.py
+
+sci-web:
+	python3 $(BEAMER_TO_HTML) --sci-dir sci_tutorial_2026 --tikz-dir $(TIKZ_DIR) \
+		--images-dir $(IMAGES_DIR) --build-tikz
 
 # ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
