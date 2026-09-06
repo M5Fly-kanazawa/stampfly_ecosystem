@@ -1,0 +1,194 @@
+# End-to-end test of the macOS/Linux install path: install.sh -> setup_env.sh
+# -> sf doctor -> sf lesson build / sf build vehicle, on real
+# macos-latest/ubuntu-latest GitHub-hosted runners.
+# macOS/Linux導入経路のエンドツーエンドテスト: install.sh -> setup_env.sh ->
+# sf doctor -> sf lesson build / sf build vehicle を、実際の
+# macos-latest/ubuntu-latest GitHub ホスト型ランナー上で検証する。
+#
+# Why this workflow exists / このワークフローが存在する理由:
+# This is the macOS/Linux counterpart of windows-e2e.yml (see that file's
+# header for the full rationale). Before this file, install.sh had no CI
+# coverage at all -- an audit of installer duplication across this repo
+# (2026-09-06, plan saved at
+# C:\Users\kouhe\.claude\plans\rosy-enchanting-scott.md) found that install.sh
+# and scripts/installer.py had already silently drifted (install.sh accepted
+# Python 3.8+ with no upper bound and was missing python3.12-venv on Debian --
+# fixed in the same round of changes that added this workflow) precisely
+# because nothing ever ran install.sh for real. This workflow exists so that
+# class of drift fails CI instead of surfacing only when a user hits it.
+# 本ファイルは windows-e2e.yml の macOS/Linux 版（詳細な理由は同ファイルの
+# 冒頭コメント参照）。本ファイルが無い間、install.sh には CI カバレッジが
+# 一切無かった -- 本リポジトリのインストーラ重複監査（2026-09-06、計画は
+# C:\Users\kouhe\.claude\plans\rosy-enchanting-scott.md）で、install.sh と
+# scripts/installer.py が既に黙って乖離していたことが判明した（install.sh は
+# 上限無しで Python 3.8+ を受理し、Debian 向けに python3.12-venv が
+# 抜けていた -- 本ワークフロー追加と同じ一連の変更で修正済み）。原因は
+# install.sh を実際に実行するテストが一つも無かったこと。本ワークフローは、
+# この種のドリフトをユーザーが踏む前にCIで検知できるようにするために存在する。
+#
+# SILS is intentionally NOT part of this workflow, for the same reasons as
+# windows-e2e.yml: sils-regression.yml already covers SILS correctness on
+# ubuntu-latest, and on macOS/Linux the SILS toolchain step is guidance-only
+# anyway (no real install happens -- see scripts/installer.py's
+# _install_sils_toolchain()), so --no-sils-toolchain here mainly keeps output
+# quiet rather than saving real time.
+# SILS は windows-e2e.yml と同じ理由で意図的に対象外とする:
+# sils-regression.yml が ubuntu-latest で SILS 自体の正しさを既にカバーして
+# いる。macOS/Linux では SILS ツールチェーンの手順は案内表示のみで実際の
+# 導入は行われない（scripts/installer.py の _install_sils_toolchain() 参照）
+# ため、ここでの --no-sils-toolchain は実時間の節約というより出力を
+# 静かに保つ意味合いが大きい。
+name: macOS/Linux install E2E
+
+on:
+  push:
+    paths: &macos_linux_e2e_paths
+      - 'install.bat'
+      - 'setup_env.bat'
+      - 'scripts/installer.py'
+      - 'lib/sfcli/**'
+      - 'tools/**'
+      - 'setup_env.sh'
+      - 'install.sh'
+      - '.github/workflows/macos-linux-e2e.yml'
+  pull_request:
+    paths: *macos_linux_e2e_paths
+  workflow_dispatch: # manual run / 手動実行
+
+permissions:
+  contents: read
+
+jobs:
+  macos-linux-e2e:
+    strategy:
+      # Same fail-fast: false rationale as release.yml's installer_gui
+      # matrix: let both OSes finish so one flaky leg doesn't hide the
+      # other's result.
+      # release.yml の installer_gui マトリクスと同じ理由: 片方が失敗しても
+      # もう片方の結果を隠さないよう最後まで走らせる。
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    # Same generous budget as windows-e2e.yml: ESP-IDF's own install script
+    # downloads a whole compiler toolchain the first time (no cache yet on a
+    # fresh branch/PR).
+    # windows-e2e.yml と同じ余裕を持たせた予算: ESP-IDF自身のインストール
+    # スクリプトは初回にコンパイラツールチェーン一式をダウンロードする
+    # （新規ブランチ/PRではキャッシュがまだ無い）。
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # No submodules: this repository has no .gitmodules (confirmed
+        # 2026-09-06, same as windows-e2e.yml).
+        # サブモジュールなし（2026-09-06確認済み、windows-e2e.yml と同じ）。
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # install.sh's check_python() now only accepts 3.10-3.12 (fixed in
+          # the same round of changes that added this workflow, to match
+          # scripts/installer.py's PYTHON_PREFERRED_MIN/MAX) -- pin the same
+          # version windows-e2e.yml/release.yml's Windows legs use.
+          # install.sh の check_python() は今回 3.10-3.12 のみ受理するよう
+          # 修正した（scripts/installer.py の PYTHON_PREFERRED_MIN/MAX に
+          # 合わせるため、本ワークフロー追加と同じ一連の変更）--
+          # windows-e2e.yml/release.yml の Windows レッグと同じバージョンに
+          # 固定する。
+          python-version: '3.12'
+
+      - name: Install Linux build prerequisites (apt)
+        if: runner.os == 'Linux'
+        # install.sh's check_prerequisites_linux() only *checks* for these
+        # (docs/setup/linux.md carries the same list, see the installer audit)
+        # and exits 1 with guidance if any are missing rather than installing
+        # them itself (installing packages needs sudo, which install.sh
+        # deliberately never runs unattended) -- so this CI job must install
+        # them itself first, exactly as a human would from docs/setup/linux.md.
+        # install.sh の check_prerequisites_linux() はこれらの存在を
+        # *確認するだけ*で（docs/setup/linux.md も同じ一覧を持つ -- インストーラ
+        # 監査参照）、不足時は案内を出して exit 1 する（パッケージのインストール
+        # には sudo が要り、install.sh は無人実行では意図的に行わない）ため、
+        # 本CIジョブが docs/setup/linux.md の手順どおり事前に自分で導入する
+        # 必要がある。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git cmake ninja-build python3 python3-pip python3-venv \
+            wget flex bison gperf ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+
+      - name: Install macOS build prerequisites (brew)
+        if: runner.os == 'macOS'
+        # install.sh's check_prerequisites_macos() requires cmake/ninja/
+        # dfu-util/ccache via brew (Xcode CLT and Homebrew itself are
+        # preinstalled on GitHub's macos-latest image already) -- same list
+        # as docs/setup/macos.md's step 5 (fixed to match in the same round
+        # of changes that added this workflow).
+        # install.sh の check_prerequisites_macos() は brew 経由で cmake/
+        # ninja/dfu-util/ccache を要求する（Xcode CLT・Homebrew自体は
+        # GitHubのmacos-latestイメージに導入済み）-- docs/setup/macos.md の
+        # 手順5と同じ一覧（本ワークフロー追加と同じ一連の変更で内容を
+        # 一致させた）。
+        run: brew install cmake ninja dfu-util ccache
+
+      - name: Determine ESP-IDF version for cache key
+        run: |
+          ver=$(grep -m1 'DEFAULT_VERSION' scripts/installer.py | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Detected ESP-IDF DEFAULT_VERSION=$ver"
+          echo "IDF_VERSION=$ver" >> "$GITHUB_ENV"
+
+      - name: Cache ESP-IDF tools directory
+        # Same scope/rationale as windows-e2e.yml's equivalent step: only
+        # the tools dir (~/.espressif, IDF_TOOLS_PATH's default on every OS),
+        # not the ~/esp/esp-idf git checkout (re-cloned with --depth 1 every
+        # run regardless). Keyed per-OS since compiled toolchains differ.
+        # windows-e2e.yml の同等ステップと同じ範囲・理由: ツールディレクトリ
+        # のみ（~/.espressif、全OS共通のIDF_TOOLS_PATH既定値）をキャッシュし、
+        # ~/esp/esp-idf のgitチェックアウトはしない（毎回--depth 1で
+        # 再クローンされる）。コンパイル済みツールチェーンはOSごとに異なる
+        # ためキーもOSごとに分ける。
+        uses: actions/cache@v4
+        with:
+          path: ~/.espressif
+          key: ${{ runner.os }}-espidf-${{ env.IDF_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-espidf-
+
+      - name: Run install.sh (non-interactive, minimal, no GUI flasher)
+        # --non-interactive/--minimal/--no-flasher/--no-sils-toolchain: same
+        # flags and rationale as windows-e2e.yml's install.bat step (see its
+        # comments) -- forwarded to scripts/installer.py unchanged by
+        # install.sh (see install.sh's own header comment).
+        # --non-interactive/--minimal/--no-flasher/--no-sils-toolchain:
+        # windows-e2e.yml の install.bat ステップと同じフラグ・理由
+        # （そのコメント参照）-- install.sh はこれらを変更せず
+        # scripts/installer.py へそのまま転送する（install.sh 自身の冒頭
+        # コメント参照）。
+        run: ./install.sh --non-interactive --minimal --no-flasher --no-sils-toolchain
+
+      - name: Activate environment and run sf commands
+        run: source setup_env.sh && sf doctor && sf --version && sf lesson list --course sci2026 && sf lesson switch sci2026:3 && sf lesson build && sf build vehicle && sf sim list
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-e2e-build-logs
+          # Same rationale as windows-e2e.yml's equivalent step: idf.py's own
+          # stdout/stderr is already in the step log above; only CMake's own
+          # diagnostic files (written only to disk, never to stdout) are
+          # worth uploading separately.
+          # windows-e2e.yml の同等ステップと同じ理由: idf.py自身の
+          # stdout/stderrは上のステップログに既に含まれる。別途アップロード
+          # する価値があるのはCMake自身の診断ファイル（ディスクにのみ書かれ、
+          # stdoutには出ない）だけ。
+          path: |
+            firmware/workshop/build/CMakeCache.txt
+            firmware/workshop/build/CMakeFiles/CMakeError.log
+            firmware/workshop/build/CMakeFiles/CMakeOutput.log
+            firmware/workshop/build/log/**
+            firmware/vehicle/build/CMakeCache.txt
+            firmware/vehicle/build/CMakeFiles/CMakeError.log
+            firmware/vehicle/build/CMakeFiles/CMakeOutput.log
+            firmware/vehicle/build/log/**
+          if-no-files-found: ignore
