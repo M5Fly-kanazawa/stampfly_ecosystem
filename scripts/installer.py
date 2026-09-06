@@ -4250,9 +4250,34 @@ default_target = "vehicle"
         return 0
 
 
+def _guard_console_encoding() -> None:
+    """Keep the installer alive on consoles that cannot encode every character.
+
+    Windows consoles use a code page (cp932 on Japanese Windows, cp1252 on
+    English) that cannot represent all UTF-8 text; the installer prints
+    Japanese in several info()/warn() paths, which would raise
+    UnicodeEncodeError and abort the install. errors="replace" prints '?'
+    instead -- the same guard lib/sfcli/cli.py applies to `sf`.
+    エンコードできない文字でインストーラを死なせない。Windows のコンソールは
+    コードページ（日本語 Windows は cp932、英語は cp1252）で動き、UTF-8 の
+    全文字は表現できない。本スクリプトは info()/warn() で日本語を出力する
+    箇所があり、そこで UnicodeEncodeError が起きると導入が中断する。
+    errors="replace" は '?' に置き換えて続行する（lib/sfcli/cli.py と同じ対処）。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # Non-reconfigurable stream (exotic redirection): leave as-is.
+            # 再構成できないストリーム（特殊なリダイレクト）: そのまま。
+            pass
+
+
 def main() -> int:
     """Main entry point"""
     import argparse
+
+    _guard_console_encoding()
 
     parser = argparse.ArgumentParser(
         description="StampFly Ecosystem Installer",
