@@ -1119,6 +1119,83 @@ def _find_mingw_bin_windows() -> Optional[Path]:
     return None
 
 
+# MSYS2's official "base" tarball self-extracting archive, published under a
+# stable "latest" alias by msys2-installer's releases. This is the CANONICAL
+# install method here, not winget: msys2.org's own installer docs
+# (https://www.msys2.org/docs/installer/) list only the GUI installer, the
+# sfx archive, and the tarballs -- winget is not among them. The
+# `MSYS2.MSYS2` winget manifest lives in Microsoft's community-editable
+# winget-pkgs repo, not something the MSYS2 project maintains itself, and its
+# integration has known, long-unresolved problems (e.g.
+# "NoApplicableInstallers"; see microsoft/winget-pkgs#287981 and
+# msys2/msys2-installer#47) -- not a broken link in this repo. Mirrors
+# lib/sfcli/utils/msys2_install.py's approach and rationale (kept
+# stdlib-only and self-contained here per this file's contract -- see the
+# comment above _MSYS2_MINGW64_BIN).
+# MSYS2 公式の "base" tarball 自己解凍アーカイブ。msys2-installer のリリースが
+# 固定の "latest" エイリアスで公開している。ここでの正規のインストール方法は
+# これであり winget ではない: msys2.org 自身のインストーラ文書
+# （https://www.msys2.org/docs/installer/）が挙げる方法は GUI インストーラ・
+# sfx アーカイブ・tarball のみで、winget は含まれていない。`MSYS2.MSYS2` の
+# winget マニフェストは Microsoft が運営する誰でも編集できる winget-pkgs
+# リポジトリにあるもので MSYS2 プロジェクト自身の保守物ではなく、連携には
+# 既知の長期未解決の問題がある（例: "NoApplicableInstallers"。参照:
+# microsoft/winget-pkgs#287981, msys2/msys2-installer#47）-- 本リポジトリの
+# リンク切れではない。lib/sfcli/utils/msys2_install.py と同じ方式・理由
+# （本ファイルの契約により stdlib のみで自己完結させる -- _MSYS2_MINGW64_BIN
+# 直前のコメント参照）。
+_MSYS2_BASE_SFX_URL = (
+    "https://github.com/msys2/msys2-installer/releases/latest/download/"
+    "msys2-base-x86_64-latest.sfx.exe"
+)
+
+
+def _download_msys2_base_sfx(dest: Path) -> bool:
+    """Download _MSYS2_BASE_SFX_URL to dest. Returns False (without
+    raising) on any network/IO failure so the caller can fall back to
+    printing manual install instructions, matching this file's
+    best-effort contract for optional steps.
+    _MSYS2_BASE_SFX_URL を dest へダウンロードする。通信/IO 失敗時は
+    例外を出さず False を返す -- 呼び出し元が手動インストール手順の
+    表示にフォールバックできるようにする（本ファイルの、任意ステップは
+    ベストエフォートという契約に合わせる）。"""
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    # certifi is a third-party package that may not be installed yet at this
+    # point in a from-scratch bootstrap; fall back to the OS's own cert
+    # store (Windows always works there) rather than hard-depending on it,
+    # matching lib/sfcli/utils/flasher_install/__init__.py's identical
+    # fallback and rationale.
+    # certifi はサードパーティ製で、ゼロからのブートストラップ時点ではまだ
+    # 入っていないことがある。OS 自身の証明書ストア（Windows では常に動く）へ
+    # フォールバックし、certifi に必須依存しない --
+    # lib/sfcli/utils/flasher_install/__init__.py の同じフォールバックと
+    # 理由に合わせる。
+    try:
+        import certifi
+        context = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        context = ssl.create_default_context()
+
+    request = urllib.request.Request(
+        _MSYS2_BASE_SFX_URL, headers={"User-Agent": "stampfly-ecosystem-installer/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30, context=context) as response:
+            with open(dest, "wb") as out_file:
+                while True:
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
+        return True
+    except (urllib.error.URLError, OSError) as exc:
+        warn(f"Download failed: {exc}")
+        return False
+
+
 def _linux_sils_toolchain_hint(manager: Optional[str]) -> str:
     """Build a one-line package-manager hint for the C++17 toolchain +
     cmake + ninja the SILS host build needs on Linux.
@@ -3550,10 +3627,13 @@ class Installer:
         self._install_sils_toolchain_windows()
 
     def _install_sils_toolchain_windows(self) -> None:
-        """Windows: install MSYS2 (via winget) and the MinGW-w64 toolchain
+        """Windows: install MSYS2 (direct download, NOT winget -- see
+        _MSYS2_BASE_SFX_URL's comment for why) and the MinGW-w64 toolchain
         packages (via pacman) that simulator/sils/'s native build needs.
-        Windows: winget経由でMSYS2を、pacman経由でMinGW-w64ツールチェーン
-        パッケージ（simulator/sils/のネイティブビルドが必要とする）を導入する
+        Windows: MSYS2を直接ダウンロードで（wingetではなく -- 理由は
+        _MSYS2_BASE_SFX_URL のコメント参照）、pacman経由でMinGW-w64
+        ツールチェーンパッケージ（simulator/sils/のネイティブビルドが
+        必要とする）を導入する
 
         Idempotent: skips straight to "already detected" if a working
         MinGW-w64 (g++ + ninja) is already found via _find_mingw_bin_windows()
@@ -3578,35 +3658,47 @@ class Installer:
             info("MSYS2 is already installed; installing the MinGW-w64 "
                  "packages only...")
         else:
-            info("Installing MSYS2 via winget (this may take a few "
-                 "minutes)...")
-            winget = shutil.which("winget")
-            if not winget:
-                warn("winget not found -- cannot auto-install MSYS2.")
-                warn("Manual install: see simulator/sils/README.md "
-                     "(Windows native build section).")
-                return
+            info("Downloading MSYS2 (official base-tarball sfx archive, "
+                 "direct from GitHub; this may take a few minutes)... / "
+                 "MSYS2をダウンロードしています（公式base tarball sfx"
+                 "アーカイブ、GitHubから直接取得。数分かかることがあります）")
+            download_dir = Path(tempfile.mkdtemp(prefix="stampfly_msys2_dl_"))
+            sfx_path = download_dir / "msys2-base-x86_64-latest.sfx.exe"
             try:
-                rc = _stream_subprocess([
-                    winget, "install", "--id", "MSYS2.MSYS2", "--silent",
-                    "--accept-package-agreements", "--accept-source-agreements",
-                ])
-            except FileNotFoundError:
-                warn("winget not found -- cannot auto-install MSYS2.")
+                if not _download_msys2_base_sfx(sfx_path):
+                    warn("Manual install: see simulator/sils/README.md "
+                         "(Windows native build section).")
+                    return
+
+                info(r"Extracting MSYS2 to C:\ (unattended: -y -oC:\)...")
+                try:
+                    rc = _stream_subprocess([str(sfx_path), "-y", "-oC:\\"])
+                except OSError as exc:
+                    warn(f"Extraction failed: {exc}")
+                    warn("Manual install: see simulator/sils/README.md "
+                         "(Windows native build section).")
+                    return
+            finally:
+                shutil.rmtree(download_dir, ignore_errors=True)
+
+            if rc != 0 or not _MSYS2_BASH.exists():
+                warn(f"MSYS2 extraction did not produce {_MSYS2_BASH} "
+                     f"(exit {rc}).")
                 warn("Manual install: see simulator/sils/README.md "
                      "(Windows native build section).")
                 return
-            if rc != 0:
-                warn(f"MSYS2 install via winget exited with code {rc}.")
-                warn("Manual install: see simulator/sils/README.md "
-                     "(Windows native build section).")
-                return
-            if not _MSYS2_BASH.exists():
-                warn("MSYS2 install reported success, but bash.exe was not "
-                     f"found at the expected path ({_MSYS2_BASH}).")
-                warn("Manual steps: see simulator/sils/README.md (Windows "
-                     "native build section).")
-                return
+
+            # First launch performs MSYS2's own post-extract setup (rebasing
+            # the bundled DLLs); one no-op shell command triggers it, same
+            # as the official msys2/setup-msys2 GitHub Action does before
+            # ever calling pacman.
+            # 初回起動でMSYS2自身の展開後セットアップ（同梱DLLのリベース）が
+            # 走る。pacmanを呼ぶ前に無害なシェルコマンドを1回実行して発火
+            # させる -- 公式のmsys2/setup-msys2 GitHub Actionと同じ手順。
+            try:
+                subprocess.run([str(_MSYS2_BASH), "-lc", "exit 0"], timeout=120)
+            except (OSError, subprocess.SubprocessError):
+                pass  # best-effort; a real problem surfaces in the pacman steps below
 
             # First-time MSYS2 setup: pacman -Syu updates the core runtime
             # itself and frequently needs a second pass to finish cleanly
