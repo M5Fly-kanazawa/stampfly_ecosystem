@@ -75,19 +75,18 @@ cmake --build build --target simulate
 MSVC は firmware 側の指定初期化子（C++17, 約35ファイル）で失敗するため使えない。GCC/MinGW は拡張として許容するため、MSYS2 の MinGW-w64（GCC 16, posix スレッドモデル）でビルドする。`sf sils build` は Windows で MinGW を自動検出し、別ディレクトリ `build-mingw/` を使う（既存の MSVC `build/` には触れない）。
 
 ```powershell
-# 初回のみ: MSYS2 導入＋ツールチェーン
-winget install --id MSYS2.MSYS2 --silent --accept-package-agreements --accept-source-agreements
-C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"   # コア更新（要求されたら再実行）
-C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
-
-# 以降は sf CLI が MinGW を自動検出（C:\msys64\mingw64\bin）
+# 初回のみ: MinGW-w64 が無ければ sf sils build が自動導入する（確認プロンプトあり。
+# 非対話実行なら sf sils build --yes、事前に済ませたいだけなら
+# sf sils install-toolchain --yes）
 sf sils build
 sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle
 ```
 
-**`winget install --id MSYS2.MSYS2` が失敗する場合:** これは本リポジトリ側のリンク切れではなく、winget と MSYS2 の連携そのものに既知の問題がある（`NoApplicableInstallers` エラーや、winget 側のバージョン検出不良によりパッケージが「信頼できない」と判定され非表示・失敗になるケースが報告されている。参照: [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981)、[msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)）。この場合は winget を経由せず、公式サイト [msys2.org](https://www.msys2.org/) または [msys2-installer の Releases ページ](https://github.com/msys2/msys2-installer/releases) からインストーラ（`msys2-x86_64-*.exe`）を直接ダウンロードし、既定の `C:\msys64` にインストールしてから上記の `pacman` 以降の手順を続ける。
+**自動導入（`sf sils install-toolchain`、`sf sils build` からも自動的に呼ばれる）の中身:** まず `winget install --id MSYS2.MSYS2` を試し、失敗したら [msys2-installer の Releases](https://github.com/msys2/msys2-installer/releases) から公式の base tarball 自己解凍アーカイブ（`msys2-base-x86_64-latest.sfx.exe`）を直接ダウンロードして `C:\msys64` へ展開する（公式 GitHub Action `msys2/setup-msys2` と同じ無人インストール方式。GUI インストーラや対話ウィザードは使わない）。続けて `pacman` で `mingw-w64-x86_64-toolchain`/`cmake`/`ninja` を導入する。実装は `lib/sfcli/utils/msys2_install.py`。
 
-`sf doctor` が SILS ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SILS を使わない人には必須でないため）。
+`winget install --id MSYS2.MSYS2` 単体（自動導入を使わず手動で行う場合）が失敗するのは、本リポジトリ側のリンク切れではなく、winget と MSYS2 の連携そのものに既知の問題があるため（`NoApplicableInstallers` エラー等。参照: [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981)、[msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)）。`sf sils install-toolchain` はこの既知の不具合を自動的に検知してダウンロード方式へ切り替えるので、通常は手動対応は不要。手動で行いたい場合のみ、[msys2.org](https://www.msys2.org/) からインストーラを直接ダウンロードし、既定の `C:\msys64` にインストールしてから `C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"` を実行する。
+
+`sf doctor` が SILS ホストツールチェーン（MinGW-w64 の有無・スレッドモデル）を診断する（未導入は警告のみ、SILS を使わない人には必須でないため）。未導入時は `sf sils install-toolchain` の実行を案内する。
 
 ### シナリオの一時パラメータ上書き（`--param`）
 
@@ -213,19 +212,18 @@ cmake --build build && ./build/mujoco_smoke models/quad_smoke.xml
 MSVC cannot build this: the firmware uses C++17 designated initializers (~35 files) in a way MSVC rejects but GCC accepts as an extension. Build with MSYS2's MinGW-w64 (GCC 16, posix thread model) instead. `sf sils build` auto-detects MinGW on Windows and uses a separate `build-mingw/` directory (never touches an existing MSVC `build/`).
 
 ```powershell
-# First time only: install MSYS2 + the toolchain
-winget install --id MSYS2.MSYS2 --silent --accept-package-agreements --accept-source-agreements
-C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"   # core update (re-run if it asks you to)
-C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"
-
-# From then on, sf CLI auto-detects MinGW (C:\msys64\mingw64\bin)
+# First time only: sf sils build auto-installs MinGW-w64 if it's missing
+# (asks for confirmation). For non-interactive runs use --yes; to install
+# it ahead of time on its own, use `sf sils install-toolchain --yes`.
 sf sils build
 sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle
 ```
 
-**If `winget install --id MSYS2.MSYS2` fails:** this is not a broken link in this repo — winget's own MSYS2 integration has known problems (a `NoApplicableInstallers` error, or winget's version-detection logic flagging the package as unreliable and hiding/failing it; see [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981) and [msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)). Skip winget and download the installer (`msys2-x86_64-*.exe`) directly from [msys2.org](https://www.msys2.org/) or the [msys2-installer releases page](https://github.com/msys2/msys2-installer/releases), install it into the default `C:\msys64`, then continue with the `pacman` steps above.
+**What the auto-install (`sf sils install-toolchain`, also called automatically by `sf sils build`) does:** it tries `winget install --id MSYS2.MSYS2` first; if that fails, it downloads the official base-tarball self-extracting archive (`msys2-base-x86_64-latest.sfx.exe`) directly from the [msys2-installer releases page](https://github.com/msys2/msys2-installer/releases) and extracts it into `C:\msys64` — the same unattended approach the official `msys2/setup-msys2` GitHub Action uses (no GUI installer, no interactive wizard). It then runs `pacman` to install `mingw-w64-x86_64-toolchain`/`cmake`/`ninja`. Implementation: `lib/sfcli/utils/msys2_install.py`.
 
-`sf doctor` diagnoses the SILS host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SILS.
+`winget install --id MSYS2.MSYS2` on its own (if you install manually instead of using the auto-install) can fail for reasons unrelated to this repo — winget's own MSYS2 integration has known problems (a `NoApplicableInstallers` error, etc.; see [microsoft/winget-pkgs#287981](https://github.com/microsoft/winget-pkgs/issues/287981) and [msys2/msys2-installer#47](https://github.com/msys2/msys2-installer/issues/47)). `sf sils install-toolchain` already detects this and switches to the direct download automatically, so manual intervention normally isn't needed. If you do want to do it by hand, download the installer directly from [msys2.org](https://www.msys2.org/), install it into the default `C:\msys64`, then run `C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja"`.
+
+`sf doctor` diagnoses the SILS host toolchain (MinGW-w64 presence + thread model); missing is a WARN only, since it is not required unless you use the SILS. It points at `sf sils install-toolchain` when missing.
 
 ### Temporary parameter overrides for a scenario run (`--param`)
 

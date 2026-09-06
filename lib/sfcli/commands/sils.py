@@ -6,7 +6,12 @@ sf sils - Software-in-the-Loop bench (physics-based, MuJoCo, algorithm-independe
 アウトプット主導のマイルストーン(RESET_PLAN §8〜§10)を CLI から回す。
 
 Subcommands:
-  build      Build the host SILS (compat + firmware sources + MuJoCo)
+  build      Build the host SILS (compat + firmware sources + MuJoCo). On Windows,
+             auto-installs the MinGW-w64 toolchain first if missing (see
+             install-toolchain).
+  install-toolchain
+             Windows only: install MinGW-w64 (winget, falling back to a direct
+             download if winget fails — see lib/sfcli/utils/msys2_install.py)
   run        Run the closed loop and write the bundle (trajectory + results.json)
   video      Render the review video (MuJoCo 3D + state graphs)
   status     Show the machine verdict (results.json) for a milestone
@@ -34,7 +39,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from ..utils import console, paths, platform
+from ..utils import console, msys2_install, paths, platform
 
 # Terminal raw mode (Unix only) — used by `sf sils fly`'s keyboard control,
 # same guarded-import pattern as lib/sfcli/commands/rc.py.
@@ -321,7 +326,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         f"({', '.join(SILS_TARGETS)}) is mapped to its emu_<name> "
                         "CMake target; any other value is passed through as-is "
                         "(e.g. cores_smoke, hover_smoke, emu_vehicle).")
+    p.add_argument("-y", "--yes", action="store_true",
+                   help="Windows only: don't prompt before auto-installing the "
+                        "MinGW-w64 toolchain if it is missing")
+    p.add_argument("--no-auto-toolchain", action="store_true",
+                   help="Windows only: never auto-install MinGW-w64; just warn if missing")
     p.set_defaults(func=run_build)
+
+    p = sub.add_parser("install-toolchain",
+                        help="Install the MinGW-w64 toolchain needed to build the SILS on "
+                             "Windows (winget first, direct-download fallback if winget fails)")
+    p.add_argument("-y", "--yes", action="store_true", help="Don't prompt for confirmation")
+    p.set_defaults(func=run_install_toolchain)
 
     p = sub.add_parser("run", help="Run the closed loop and write the bundle")
     p.add_argument("-m", "--milestone", default="P1")
@@ -519,6 +535,30 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 # --- handlers / ハンドラ -------------------------------------------------------
+def run_install_toolchain(args: argparse.Namespace) -> int:
+    """`sf sils install-toolchain`: install MinGW-w64 (via winget, falling
+    back to a direct download) so `sf sils build` has a compiler that can
+    build this codebase (MSVC cannot — see simulator/sils/README.md).
+    `sf sils install-toolchain`: MinGW-w64 を導入する（winget、失敗時は直接
+    ダウンロードにフォールバック）。`sf sils build` がこのコードベースを
+    ビルドできるコンパイラを持つようにする（MSVC では不可 —
+    simulator/sils/README.md 参照）。"""
+    if not platform.is_windows():
+        console.info("Not Windows — the SILS build uses the system gcc/clang here; no toolchain install needed.")
+        return 0
+
+    found = mingw_bin()
+    if found is not None:
+        console.success(f"MinGW-w64 toolchain already installed: {found}")
+        return 0
+
+    installed = msys2_install.install_toolchain(assume_yes=getattr(args, "yes", False))
+    if installed is None:
+        return 1
+    console.success(f"MinGW-w64 toolchain installed: {installed}")
+    return 0
+
+
 def run_build(args: argparse.Namespace) -> int:
     # getattr defaults so the milestone flow (which lacks -j/-t) can reuse this.
     # milestone フローは -j/-t を持たないので getattr で既定値化して再利用できるようにする。
@@ -530,6 +570,24 @@ def run_build(args: argparse.Namespace) -> int:
     # 親しみやすいファーム名を実際の CMake ターゲット（emu_<name>）へ写像する。
     # それ以外の値（cores_smoke・hover_smoke・明示的な emu_vehicle 等）はそのまま。
     target = _TARGET_EXE_NAME.get(target, target)
+
+    # Windows has no usable C++17 compiler without MinGW-w64 (MSVC rejects
+    # designated initializers the firmware relies on — README's "Windows
+    # native build" section). Auto-install it here rather than letting the
+    # build silently fall through to MSVC and fail later with a confusing
+    # compiler error. `--no-auto-toolchain` opts out (just warn); `--yes`
+    # skips the confirmation prompt (for CI/scripts).
+    # Windows には MinGW-w64 無しで使える C++17 コンパイラが無い（MSVC は
+    # ファームが使う指定初期化子を拒否する — README の「Windows ネイティブ
+    # ビルド」節）。ビルドを黙って MSVC に流し後で分かりにくいコンパイル
+    # エラーで失敗させるより、ここで自動導入する。`--no-auto-toolchain` で
+    # 無効化（警告のみ）、`--yes` で確認プロンプトを省略（CI/スクリプト向け）。
+    if (platform.is_windows() and mingw_bin() is None
+            and not getattr(args, "no_auto_toolchain", False)):
+        console.warning("MinGW-w64 not found — MSVC cannot build the SILS (see simulator/sils/README.md).")
+        if msys2_install.install_toolchain(assume_yes=getattr(args, "yes", False)) is None:
+            console.warning("Proceeding without MinGW-w64; CMake will fall back to whatever "
+                             "compiler it finds on PATH (likely MSVC, which will fail to build).")
     sd, bd = _sils_dir(), _build_dir()
     env = win_run_env(bd)
 
