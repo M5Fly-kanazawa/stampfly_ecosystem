@@ -6,13 +6,13 @@
 
 ### このドキュメントについて
 
-2026年9月10日（木）開催の SCI/SICE チュートリアル講座 2026（全122ページのスライド `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`）から、講師が当日**実際に実演する（実演）**か**参加者にやってもらう（実習）**フレーム、および**期待結果を提示するだけ**のフレームだけを抜き出し、進行順に並べたもの。122ページ全体をめくらなくても、この1枚でリハーサルと本番進行ができることを目的とする。
+2026年9月10日（木）開催の SCI/SICE チュートリアル講座 2026（全132ページのスライド `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`）から、講師が当日**実際に実演する（実演）**か**参加者にやってもらう（実習）**フレーム、および**期待結果を提示するだけ**のフレームだけを抜き出し、進行順に並べたもの。132ページ全体をめくらなくても、この1枚でリハーサルと本番進行ができることを目的とする。
 
 ### 出典と手法
 
 - スライド本文: `docs/events/sci_tutorial_2026/slides/sci_tutorial.tex` および `chapters/sci_intro.tex`、`sci_s1_overview.tex`〜`sci_s5_sim_analysis.tex`、`sci_appendix.tex`
 - 参加者向け・復習向け資料: `README.md`（タイムテーブル・事前準備）、`handson_guide.md`（帰宅後の復習手順）、`cheatsheet.md`（コマンド・API早見表）、`verification_checklist.md`（講師のリハーサル手順）、`fallback/README.md`（代替素材の索引）
-- ページ番号は `pdftotext -f N -l N sci_tutorial.pdf -` で1ページずつ本文を抽出し、各チャプターの `\begin{frame}` 数（intro 5 + S1 22 + S2 17 + S3 16 + S4 24 + S5 23 + 付録 8 = 115、セッション区切り6枚（Session 1〜5 と付録）・表紙1枚を加えて122）が実ページ数122と一致することを確認したうえで、代表ページを個別に照合した
+- ページ番号は `pdftotext -f N -l N sci_tutorial.pdf -` で1ページずつ本文を抽出し、各チャプターの `\begin{frame}` 数（intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 25 + 付録 8 = 125、セッション区切り6枚（Session 1〜5と付録）・表紙1枚を加えて132）が実ページ数132と一致することを確認したうえで、代表ページを個別に照合した
 
 ### 使い方
 
@@ -33,14 +33,14 @@
 |------|---------|------|
 | 実機・コントローラ | 講師用デモ機と貸出用予備のバッテリーを全数充電。対面参加者は基本的に実機を持参する（README §「持ち物」）ため、予備の必要台数はその日の参加者構成による — 資料に具体的な予備台数の指定はない | README 開催情報, verification_checklist §5 |
 | Web Flasher | `https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/` をブラウザで開いておく | README §4 |
-| 講師 PC 環境 | `source setup_env.sh` を実行し、`sf doctor` がエラーなく通ることを確認 | README §4, sci_s2 p.35 |
+| 講師 PC 環境 | `source setup_env.sh` を実行し、`sf doctor` がエラーなく通ることを確認 | README §4, sci_s2 p.36 |
 | 代替素材フォルダ | `docs/events/sci_tutorial_2026/fallback/` を開いておく（実演が失敗した場合に即座に画像・動画を提示できる状態にする） | verification_checklist §5, fallback/README.md |
 | 投影・配信 | プロジェクタ接続を確認。Zoom 画面共有をテストする（オンライン参加者向け、当日はオンデマンド配信もあり） | README 開催情報 |
-| ペアリング | 貸出用コントローラは事前ペアリング済みであることを確認（初回のみ手動: コントローラ LCD パネルボタンを押しながら電源投入 → StampFly 本体ボタンを2秒長押し → 双方ビープで完了） | sci_s2 p.34, sci_s3 p.57 |
+| ペアリング | 貸出用コントローラは事前ペアリング済みであることを確認（初回のみ手動: コントローラ LCD パネルボタンを押しながら電源投入 → StampFly 本体ボタンを2秒長押し → 双方ビープで完了） | sci_s2 p.35, sci_s3 p.60 |
 
 ## 3. Session 1: StampFly Ecosystem の全体像と設計思想（10:05–11:00）
 
-全22フレーム中、実演・期待結果の提示は4件。
+全22フレーム中、実演・期待結果の提示は4件。ページ番号は再構成の前後で変化なし（S1 は今回の改訂対象外）。
 
 | 種別 | ページ | 内容 | 使うコマンド | 期待する結果 | 所要目安 | 事前準備・注意 | 代替 |
 |------|--------|------|-------------|-------------|---------|---------------|------|
@@ -51,14 +51,17 @@
 
 ## 4. Session 2: 開発環境のセットアップとセンサデータの取得（11:00–12:00）
 
-全17フレーム中、実演・実習は2件。
+全19フレーム中、実演・実習は3件（再構成で17→19フレームに増加。実習1・実習2それぞれに手順を明記した専用フレームが立った）。
+
+新設の p.34「OSによる違いはここだけ」は macOS/Linux と Windows のコマンド差異（`./install.sh` 対 `install.bat`、`source setup_env.sh` 対 `setup_env.bat`、シリアルポート名）をまとめた参照フレームで、当日はデモしない。Windows参加者から質問が出た際の説明に使う。
 
 | 種別 | ページ | 内容 | 使うコマンド | 期待する結果 | 所要目安 | 事前準備・注意 | 代替 |
 |------|--------|------|-------------|-------------|---------|---------------|------|
-| 実習（全員参加） | p.35 | 事前準備の確認。全員で`sf doctor`を実行し、ESP-IDF・Python・USBシリアルドライバ・sf CLI自体のバージョンを診断する | `source setup_env.sh`<br>`sf doctor` | エラーなく完了する（README §4の合格の目安と同じ） | 3〜5分（目安。個別に通らない参加者への対応を含めるとさらに延びる） | 事前準備（README §4）で前日までに済ませておくよう案内済み。ここで通らなくても心配不要 — 以降のデモは「見るだけ」で参加してもらい、復習パスで後日対応（p.35 alertblock） | fallback/に専用素材はなし。個別に通らない参加者は「見るだけ」に切替え、`docs/guides/troubleshooting.md`を案内 |
-| 実演（一緒に打つ） | p.43 | デモ: 傾けて確認。StampFlyを手に持ち前後左右に傾け、`gyro_x`/`gyro_y`が傾ける速さに応じて振れ、静止すると`accel_z`が−9.81付近に戻ることを確認する | `sf lesson switch sci2026:2`<br>`sf lesson build && sf lesson flash`<br>`sf monitor workshop`（VSCode拡張 `alexnesnes.teleplot` 導入が前提。`sf lesson flash`直後は自動でこの接続状態のまま開く） | Teleplotで`gyro_x`/`gyro_y`/`accel_z`の波形が動く。静止時ジャイロ≈0、`accel_z`≈−9.81 m/s² | 5〜7分（目安。ビルド・書き込み時間を含む） | VSCode拡張`alexnesnes.teleplot`を事前に導入しておく。事前にp.40のコード（下記参照）を`user_code.cpp`に書く。参加者ごとにビルド時間が発生するため、講師機で先に流れを見せてから各自試すと時間短縮できる | fallback/に専用素材はなし。うまくいかない場合は講師機のTeleplot画面を共有し「見るだけ」に切替え |
+| 実習（全員参加） | p.36 | 実習1: 環境確認とビルド。全員で`sf doctor`を実行してESP-IDF・Python・USBシリアルドライバ・sf CLI自体を診断したうえで、`sci2026:1`（Lesson 0）をビルド・書き込みする | `source setup_env.sh`（Windowsは`setup_env.bat`）<br>`sf doctor`<br>`sf lesson switch sci2026:1`<br>`sf lesson build`<br>`sf lesson flash` | 書き込み直後の起動音と、機体上のLEDが点灯・点滅する。`sf doctor`が全てOKにならなくても心配不要（p.36 alertblock） | 4〜6分（目安。個別に通らない参加者への対応を含めるとさらに延びる） | 事前準備（README §4）で前日までに済ませておくよう案内済み。通らなかった参加者は以降「見るだけ」で参加し、復習パス（本セッション末尾）で後日対応 | fallback/に専用素材はなし。個別に通らない参加者は「見るだけ」に切替え、`docs/guides/troubleshooting.md`を案内 |
+| 実演（一緒に打つ） | p.41 | 実習2（1/2）: IMUの値を見る。`user_code.cpp`にp.42のコードを書き、ビルド・書き込み・`sf monitor workshop`でTeleplot接続まで行う | `sf lesson switch sci2026:2`<br>`sf lesson edit`（`user_code.cpp`を開いてp.42のコードを書く）<br>`sf lesson build`<br>`sf lesson flash`<br>`sf monitor workshop`（VSCode拡張 `alexnesnes.teleplot` 導入が前提。`sf lesson flash`直後は自動でこの接続状態のまま開く） | Teleplotで`gyro_x`/`gyro_y`の波形表示画面が開く（値はまだ静止状態） | 4〜6分（目安。ビルド・書き込み時間を含む） | VSCode拡張`alexnesnes.teleplot`を事前に導入しておく。参加者ごとにビルド時間が発生するため、講師機で先に流れを見せてから各自試すと時間短縮できる | fallback/に専用素材はなし。うまくいかない場合は講師機のTeleplot画面を共有し「見るだけ」に切替え |
+| 実演（一緒に打つ） | p.43 | 実習2（2/2）: 傾けて確認。StampFlyを手に持ち前後左右に傾け、`gyro_x`/`gyro_y`が傾ける速さに応じて振れ、静止すると`accel_z`が−9.81付近に戻ることを確認する | （このページにコマンド文字列の明記なし。前ページ〈p.41〉までの`sf lesson build`/`sf lesson flash`完了後、Teleplot画面を見ながら機体を傾ける） | 静止時ジャイロ≈0、`accel_z`≈−9.81 m/s²。傾ける速さに応じて`gyro_x`/`gyro_y`の波形が振れる | 1〜2分（目安） | p.41の実習2（1/2）が完了していることが前提 | fallback/に専用素材はなし。うまくいかない場合は講師機のTeleplot画面を共有し「見るだけ」に切替え |
 
-参考コード（p.40、実演前に書くコード）:
+参考コード（p.42「データ取得経路① Teleplot」、実習2で`user_code.cpp`に書くコード）:
 
 ```cpp
 static uint32_t tick = 0;
@@ -72,20 +75,18 @@ void loop_400Hz(float dt) {
 
 ## 5. Session 3: モータ制御とコントローラ入力の実装（13:00–14:00）
 
-全16フレーム中、実演・実習は2件。**安全（p.51）**: 机上で実施し、モータ回転中は手を近づけない。Duty は0.15以下に固定（ファーム側では強制されないため必ず目視確認）。ARMは機体ボタンの単クリックまたはコントローラのみで行い、コード内で自動ARMしない。
+全17フレーム中、実演・実習は2件（新設のTDMA解説フレームが1枚増え16→17）。**安全（p.53）**: 机上で実施し、モータ回転中は手を近づけない。Duty は0.15以下に固定（ファーム側では強制されないため必ず目視確認）。ARMは機体ボタンの単クリックまたはコントローラのみで行い、コード内で自動ARMしない。
+
+新設の p.59「TDMAで30機を同時に飛ばす」はTDMA（時分割多重アクセス、Time Division Multiple Access）の原理と、非重複3チャンネル（1/6/11ch）で理論上30機まで運用できることを説明する参照フレームで、当日は実演しない。DXH2026講座で10台を1/6/11chに4/3/3台で分散運用した実績が紹介されており、教室で複数機体が同時に飛ぶ場合の混信対策として質疑応答に使える。
 
 | 種別 | ページ | 内容 | 使うコマンド | 期待する結果 | 所要目安 | 事前準備・注意 | 代替 |
 |------|--------|------|-------------|-------------|---------|---------------|------|
-| 実習 | p.54 | 実習: Dutyをハードコードして回す。`user_code.cpp`に`motor_set_duty`を直接指定し、机上でモータの回転を確認する | `sf lesson switch sci2026:3`<br>（このページにビルド・書き込みコマンドの明記なし。p.37の標準ワークフローに従い`sf lesson build`→`sf lesson flash`を実行） | 機体ボタンでARMするとFR（M1）のみが低速回転する（duty 0.10、他モータは0.00）。DISARMで停止 | 5〜8分（目安） | 【安全 p.51】机上で実施しモータ回転中は手を近づけない、Duty 0.15以下、ARMは機体ボタン単クリックまたはコントローラのみ。**注:** 模範解答（`--solution`）は起動時に自動ARMするため、机上に固定し回転中は手を近づけない状態でのみ使う（p.54の注意書き） | fallback/にS3専用素材はなし。ベンチ確認（verification_checklist §1）でNGの場合は`sf flash vehicle`で標準ファームに戻し、このデモを「見るだけ」に切替える |
-| 実演（一緒に打つ） | p.60 | デモ: スティックでモータを回す。`ws::motor_mixer`を書き、スティック操作で4モータの回転差を確認する（コントローラの指令はESP-NOWで約50Hzの`ControlPacket`として届く）。外乱に弱いことを見せる | `sf lesson switch sci2026:4`<br>`sf lesson build && sf lesson flash` | スティックを倒すと4モータの回転数に差が出る。風で軽く煽ると指令通りの回転が保てない（オープンループ制御の限界） | 5〜7分（目安） | ペアリング未実施なら先にp.57の手順（コントローラLCDボタンを押しながら電源投入→本体ボタン2秒長押し→双方ビープ）を済ませる。機体は机上に置いたまま、モータ回転中は手を近づけない | fallback/にS3専用素材はなし。checklist §1と同様、NG時は`sf flash vehicle`に戻す |
+| 実習 | p.56 | 実習3: Dutyをハードコードして回す。`user_code.cpp`の`loop_400Hz`を右のコードに書き換え、机上でモータの回転を確認する | `sf lesson switch sci2026:3`<br>（コードを書き換える）<br>`sf lesson build`<br>`sf lesson flash`<br>機体ボタンを1回クリックしてARM | 機体ボタンでARMするとFR（M1）のみが低速回転する（duty 0.10、他モータは0.00）。DISARMで停止 | 5〜7分（目安） | 【安全 p.53】机上で実施しモータ回転中は手を近づけない、Duty 0.15以下、ARMは機体ボタン単クリックまたはコントローラのみ。**注意（p.56）:** 配布される模範解答（`--solution`）は起動時に自動ARMするため、机上に固定し回転中は手を近づけない状態でのみ使う | fallback/にS3専用素材はなし。ベンチ確認（verification_checklist §1）でNGの場合は`sf flash vehicle`で標準ファームに戻し、このデモを「見るだけ」に切替える |
+| 実演（一緒に打つ） | p.63 | 実習4: スティックでモータを回す。`ws::motor_mixer`を書き、スティック操作で4モータの回転差を確認する（コントローラの指令はESP-NOWで約50Hzの`ControlPacket`として届く）。外乱に弱いことを見せる | `sf lesson switch sci2026:4`<br>コントローラとペアリング<br>`ws::motor_mixer(T,R,P,Y)`を書く<br>`sf lesson build`<br>`sf lesson flash` | スティックを倒すと4モータの回転数に差が出る。風で軽く煽ると指令通りの回転が保てない（オープンループ制御の限界） | 5〜7分（目安） | ペアリング未実施なら先にp.60の手順（コントローラLCDボタンを押しながら電源投入→本体ボタン2秒長押し→双方ビープ）を済ませる。機体は机上に置いたまま、モータ回転中は手を近づけない | fallback/にS3専用素材はなし。checklist §1と同様、NG時は`sf flash vehicle`に戻す |
 
-参考コード（p.54、実習で書くコード）:
+参考コード（p.56「実習3: Dutyをハードコードして回す」、`user_code.cpp`の`loop_400Hz`）:
 
 ```cpp
-void setup() {
-    ws::print("Motor duty test");
-    // Do NOT auto-arm in code / コードでは自動ARMしない
-}
 void loop_400Hz(float dt) {
     ws::motor_set_duty(1, 0.10f);   // FR
     ws::motor_set_duty(2, 0.00f);   // RR
@@ -94,29 +95,41 @@ void loop_400Hz(float dt) {
 }
 ```
 
+（`setup()`側のコードはこのフレームには印字されていない。ARMは機体ボタンの単クリックで行い、コードの中で自動ARMしないことをp.56本文が明記している。）
+
 ## 6. Session 4: フィードバック制御の基礎 — PID による姿勢安定化（14:00–15:00）
 
-全24フレーム中、実演・期待結果の提示は2件のみ。**本セッションの実習5〜9そのもの（コードを書いて飛ばす作業）は当日は「見るだけ」で、実際に手を動かすのは帰宅後**（p.84のデモの見方: 「帰宅後に再現: 本日は見るだけにして，後日実習5〜9を通しで動かす」）。当日その場で実際に飛行させるのは講師のみである。
+全29フレーム中、実演・実習・期待結果の提示は7件（24→29フレームへの再構成で、実習5〜9それぞれに手順を明記した専用フレームが立ち、「発展の予告」が削除され、「期待結果の再現手順」が新設された）。
+
+**参加者にとっては実習5〜9そのもの（コードを書いて実機で試す作業）は当日「見るだけ」で、実際に手を動かすのは帰宅後**（p.92のデモの見方: 「帰宅後に再現: 本日は見るだけにして，後日実習5〜9を通しで動かす」）。ただし、各実習フレーム自体には**講師が実演する内容**（初飛行・ζ比較・システム同定・PID比較・姿勢推定の一致確認）が numbered steps として明記されているため、下表では実習5〜9も実演フレームとして扱う。
+
+**リハーサル状況に注意:** `verification_checklist.md` §2がリハーサル必須と定めているのは実習5・実習8・実習9の3件のみ。実習6（ζを3種類変えた飛行比較）と実習7（システム同定用の飛行）には専用のリハーサル項目がなく、当日の時間と機体状態次第で口頭説明のみに切り替えるか講師が判断する（下表の該当行に明記）。全実演を律儀に行うと5〜8分×5件+デモ本編5〜8分で合計30分近くを要し、60分のセッションを圧迫する点に留意する。
 
 | 種別 | ページ | 内容 | 使うコマンド | 期待する結果 | 所要目安 | 事前準備・注意 | 代替 |
 |------|--------|------|-------------|-------------|---------|---------------|------|
-| 実演（見るだけ） | p.84 | デモ: 完成コードで飛行。PID化した学習者コード（実習8）で飛行し、ロール角速度のステップ応答をP制御（実習5）時と比較する | `sf log wifi -d 30 -o flight.csv`<br>`sf log viz flight.csv`（p.84本文は「`sf log wifi`でテレメトリ取得」「`sf log viz`でステップ応答を表示」と散文で説明するのみで具体的な引数は明記されていない。上記はp.42に印字されている構文を援用） | 目標15.1 deg/sに対し実習5（P）はピーク17.9 deg/sと−2.4 deg/sのアンダーシュート、実習8（PID）はピーク13.2 deg/sで振動なし（p.85キャプション） | 5〜8分（目安） | 実際に飛行させるのは講師のみ。verification_checklist §2「飛行確認」で実習5・実習8の安定動作を事前リハーサル必須。低スロットルから開始し、異常時は即 DISARM | `fallback/S4_lesson5_p_flight.mp4`、`fallback/S4_lesson8_pid_flight.mp4`（checklist §2の方針どおり、不安定なレッスンだけ動画に切替も可） |
-| 期待結果の提示 | p.85 | デモの期待結果: PとPIDのステップ応答（スライドタイトルからは「制御」「比較グラフ」の語が落ち、簡潔化されている） | なし（静止画） | 上記に同じ数値（p.85キャプション） | 2〜3分（目安） | 画像は`fallback/S4_roll_step_p_vs_pid.png` | 該当なし（本フレーム自体が代替素材） |
+| 実演（見るだけ） | p.78 | 実習5: レートP制御で初飛行。誤差＝目標角速度−実測角速度、出力＝Kp×誤差をRoll/Pitch/Yawで計算し`ws::motor_mixer`に渡すコードで、講師がKp=0.5の完成コードにより初飛行する | `sf lesson switch sci2026:5`<br>（`user_code.cpp`のTODOを埋める: `ws::gyro_x/y/z()`, `ws::rc_roll/pitch/yaw()`）<br>`sf lesson build`<br>`sf lesson flash` | スティック追従はできるが、わずかな振動が見える（P制御のみの限界）。角速度目標は`ws::set_rate_target()`でData Streamに記録され、実習7で使う | 4〜6分（目安） | verification_checklist §2でリハーサル必須（Kp=0.5でホバリング安定を確認）。低スロットルから開始、異常時は即DISARM | `fallback/S4_lesson5_p_flight.mp4` |
+| 実演（見るだけ。時間・リハーサル状況次第） | p.81 | 実習6: システムモデリング。設計式 $K_p=1/(4\zeta^2 K \tau_m)$ をRoll/Pitch/Yawで実装し、ζ=0.7→0.5→1.0の順に変えて3回飛行し違いを見せる | `sf lesson switch sci2026:6`<br>（設計式でKp_roll/pitch/yawを計算するコードを書く）<br>`sf lesson build`<br>`sf lesson flash`（ζを変えるたびに再ビルド・再書き込み） | ζ=0.5でやや振動的、ζ=0.7で滑らか、ζ=1.0で遅い応答という質的な違いが見える | 3〜5分（目安。時間が厳しい場合は1〜2種類のζに絞るか口頭説明のみに短縮） | verification_checklist §2に本実習専用のリハーサル項目はない（実習5のリハーサルで機体の基本安定性は確認済みという前提での実演）。3回の飛行を通しで行うと時間を圧迫する | 専用動画はfallback/にない。口頭説明への切替で対応 |
+| 実演（見るだけ。時間・リハーサル状況次第） | p.82 | 実習7: システム同定（sf sysid fit）。実習5のP制御コードに`ws::set_rate_target(roll,pitch,yaw)`を追加し、飛行しながらログ取得後、プラント（$K, \tau_m$）を同定する | `sf lesson switch sci2026:7`<br>（Kpを設定し`ws::set_rate_target`を呼ぶ）<br>`sf lesson build`<br>`sf lesson flash`<br>飛行しながら`sf log wifi -o flight.csv`<br>`sf sysid fit flight.csv --kp 0.5 --plot` | 同定結果$K, \tau_m$が実習6の理論値（$K_{roll}=102$, $K_{pitch}=70$）と数%の誤差で一致する | 4〜6分（目安） | verification_checklist §3で同定パイプライン自体は確認済みだが、§2に本実習専用の飛行リハーサル項目はない。収束しない場合はchecklist §3の代替方針どおり`analysis/reports/rate_sysid_reference/`の参照ログに切替え、実演区分を「一緒に打つ」ではなく「見るだけ」にする | 参照ログでのデモに切替（checklist §3） |
+| 実演（見るだけ） | p.84 | 実習8: PID制御。実習5のP制御にI項（`integral += error*dt`を±0.5でクランプ）とD項（`Kd*(error-prev_error)/dt`）を追加したPIDコードで飛行し、実習5（Pのみ）と比較する | `sf lesson switch sci2026:8`<br>（軸ごとにI項・D項・アンチワインドアップを追加）<br>`sf lesson build`<br>`sf lesson flash` | 実習5と比べて定常偏差とオーバーシュートの変化が見える | 4〜6分（目安） | verification_checklist §2でリハーサル必須（PID化した状態で離陸しPのみと比べ定常偏差が減ることを確認）。disarm時はintegral/prev_errorを0にリセット | `fallback/S4_lesson8_pid_flight.mp4` |
+| 実演（見るだけ。手で傾ける、飛行はしない） | p.88 | 実習9: 姿勢推定（相補フィルタ）。`atan2f`で加速度から角度を計算し、相補フィルタ $\hat\theta_k=\alpha(\hat\theta_{k-1}+\omega\Delta t)+(1-\alpha)\theta_{accel}$（α=0.98）を実装、`ws::estimated_roll()`（機体既定のESKF）とTeleplotで比較する | `sf lesson switch sci2026:9`<br>（相補フィルタを実装）<br>`sf lesson build`<br>`sf lesson flash`<br>`sf monitor`＋Teleplotで`cf_roll`と`eskf_roll`を比較 | 機体を手で傾けると、`cf_roll`と`eskf_roll`が近い挙動を示す | 3〜5分（目安） | verification_checklist §2でリハーサル必須（Teleplotで`cf_roll`と`eskf_roll`がおおむね一致することを確認）。飛行ではなくS2の実習2と同様の手持ち確認でよい | 専用動画なし。うまくいかない場合は講師機のTeleplot画面を共有 |
+| 実演（`sf sysid fit`部分は一緒に打つ） | p.92 | デモ: 完成コードで飛行。PID化した学習者コード（実習8）で飛行し、ロール角速度のステップ応答をP制御（実習5）時と比較する。取得した`flight.csv`は参加者にも共有し、各自のPCで`sf sysid fit`を一緒に実行する | `sf log wifi -d 30 -o flight.csv`<br>`sf log viz flight.csv`<br>（p.92本文は「`sf log wifi`でテレメトリ取得」「`sf log viz`でステップ応答を表示」と散文で説明するのみで具体的な引数は明記されていない。上記はp.45に印字されている構文を援用）<br>`sf sysid fit flight.csv --kp 0.5 --plot`（参加者が一緒に打つ部分） | 実機のステップ応答で、P制御（実習5）よりPID（実習8）の方がオーバーシュート・振動が小さいことが視覚的に確認できる（具体的な数値ベンチマークはp.93のSILS参考値、下記参照） | 5〜8分（目安） | 実際に飛行させるのは講師のみ。verification_checklist §2で実習8のリハーサル必須（実習5は別途リハーサル済み）。低スロットルから開始、異常時は即 DISARM | `fallback/S4_lesson5_p_flight.mp4`、`fallback/S4_lesson8_pid_flight.mp4`（checklist §2の方針どおり、不安定なレッスンだけ動画に切替も可） |
+| 期待結果の提示 | p.93 | デモの期待結果: PとPIDのステップ応答。**SILS（MuJoCo）で`workshop_acro_step.scn`（ロール+0.3を0.5秒）を実行した結果であり、実機フライトそのものの数値ではなく設計の目安として提示される**（p.93キャプション明記） | なし（静止画） | 目標15.1 deg/sに対し実習5（P）はピーク17.9 deg/sと−2.4 deg/sのアンダーシュート、実習8（PID）はピーク13.2 deg/sで振動なし（数値はSILSシミュレーション結果） | 2〜3分（目安） | 画像は`fallback/S4_roll_step_p_vs_pid.png`。詳しいSILS再現手順はp.94「期待結果の再現手順」参照 | 該当なし（本フレーム自体が代替素材） |
 
 **本表から除外したフレーム（参考として口頭で触れるにとどめる、または講師の裁量で任意実演）:**
 
-- p.75「実習5の振り返り: レートP制御」（旧題「実習5を振り返る: レートP制御」から簡潔化）: 実習5のコードを再掲する解説フレームで、その場での再実行はない
-- p.82「システム同定: sf sysid fit」、p.83「自動チューニング: sf sysid rate-fit / rate-tune」: いずれもコマンドの出力例を提示するのみで、本番中に講師が実際に実行するとはスライド上に明記されていない
+- p.79「実習5の振り返り: レートP制御」: 実習5のコードを再掲する解説フレームで、その場での再実行はない
+- p.83「システム同定: sf sysid fit」、p.91「自動チューニング: sf sysid rate-fit / rate-tune」: いずれもコマンドの出力例を提示するのみで、本番中に講師が実際に実行するとはスライド上に明記されていない
+- p.94「期待結果の再現手順」（あとで読む）: p.93の数値をSILSで自分で再現するCLI手順（`sf sils build --target workshop`→`sf lesson switch sci2026:5 --solution`→`touch`→再ビルド→`sf sils scenario ... workshop_acro_step.scn`）。当日のライブ実演ではなく、事前準備または帰宅後の参照用
 
 ## 7. Session 5: シミュレータ・解析ツールの活用と発展的テーマ（15:30–16:30）
 
-全23フレーム中、実演・実習・期待結果の提示は3件。
+全25フレーム中、実演・実習・期待結果の提示は3件（「研究利用の入口」が1枚→3枚に分割されたぶん23→25フレームに増加。この3枚〈p.113〜115〉はいずれも「あとで読む」の参照フレームで、当日は実演しない）。
 
 | 種別 | ページ | 内容 | 使うコマンド | 期待する結果 | 所要目安 | 事前準備・注意 | 代替 |
 |------|--------|------|-------------|-------------|---------|---------------|------|
-| 実習 | p.100 | 実習: 自分のPIDをSILSで飛ばす。実習8（PID）の`setup()`/`loop_400Hz()`を、実機で飛ばす前にSILSで検証する | `sf sils build --target workshop`<br>`sf lesson switch sci2026:8 --solution`（または自分のコード）<br>`touch firmware/workshop/main/user_code.cpp`<br>`sf sils build --target workshop`（再ビルドして反映）<br>`sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop` | 合格基準（`.expect`）は離陸（真値高度 > 0.1m）と傾き15°未満（発散しない）の2点。高度ループがないため着陸はDISARM降下のみ。上記どおりに実行すると`alt_max`≈0.64m、`tilt_max`=0.0でPASS | 4〜6分（目安。`sf sils build`の初回コンパイル時間を含めると延びる） | `sf lesson switch`は`user_code.cpp`の更新日時を保持したままコピーするため，切替直後に`sf sils build --target workshop`を実行しても新しいコードとして認識されない。`touch`で更新日時を進めてから**もう一度**`sf sils build --target workshop`を実行して反映させる、という2段階が毎回必要な手順（省略できる例外ではない）。`sf sils gui`はworkshopターゲットを選べないため、この一連のCLIコマンドを使う（既定で`sf sils regression`から除外、`--include-workshop`で含む） | fallback/に本実習専用の動画はない。CLI実行が失敗した場合は口頭説明に切替え、SILS自体の信頼性は`fallback/S5_regression_summary.txt`（28 PASS + 5 既知の追跡中課題 + 1 workshop対象スキップ、計34本）で補強できる |
-| 実演（`sf sim run vpython`部分は一緒に打つ） | p.101 | デモ: シミュレータを動かす。VPythonシミュレータの3D操縦と、`sf sils gui`でのシナリオ実行・合否判定確認、パラメータ変更による挙動変化の確認 | `sf sim run vpython`<br>`sf sils build`<br>`sf sils gui` | ブラウザに3D操縦画面が出る。`sf sils gui`でシナリオを実行するとPASS/FAILの判定結果が表示され、パラメータを変えると挙動が変わる | 5〜8分（目安） | `sf sils build`は初回のみでよい（p.99）。HIDジョイスティック（AtomS3 + Atom JoyStick）があれば接続、なければキーボード操作にフォールバック | `fallback/S5_stab_flight.mp4`（STABILIZE飛行動画）、`fallback/S5_attitude_rate.png`、`fallback/S5_gate_result.txt`（12項目の合否判定結果） |
-| 期待結果の提示 | p.102 | デモの期待結果: SILSシナリオ実行。姿勢角・角速度の時系列グラフ | なし（静止画） | `stab_flight.scn`（vehicle）の姿勢角と角速度。12項目の合否判定をすべて満たす（`att_rmse=2.82<3.0`, `tilt_max=13.77<18.0`, `duty_max=1.00<1.001` — 数値は`fallback/README.md`の数値サマリより） | 2〜3分（目安） | 画像は`fallback/S5_attitude_rate.png` | 該当なし（本フレーム自体が代替素材） |
+| 実習 | p.108 | 実習: 自分のPIDをSILSで飛ばす。実習8（PID）の`setup()`/`loop_400Hz()`を、実機で飛ばす前にSILSで検証する | `sf sils build --target workshop`<br>`sf lesson switch sci2026:8 --solution`（または自分のコード）<br>`touch firmware/workshop/main/user_code.cpp`<br>`sf sils build --target workshop`（再ビルドして反映）<br>`sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop` | 合格基準（`.expect`）は離陸（真値高度 > 0.1m）と傾き15°未満（発散しない）の2点。高度ループがないため着陸はDISARM降下のみ。上記どおりに実行すると`alt_max`≈0.64m、`tilt_max`=0.0でPASS | 4〜6分（目安。`sf sils build`の初回コンパイル時間を含めると延びる） | `sf lesson switch`は`user_code.cpp`の更新日時を保持したままコピーするため，切替直後に`sf sils build --target workshop`を実行しても新しいコードとして認識されない。`touch`で更新日時を進めてから**もう一度**`sf sils build --target workshop`を実行して反映させる、という2段階が毎回必要な手順（省略できる例外ではない）。`sf sils gui`はworkshopターゲットを選べないため、この一連のCLIコマンドを使う（既定で`sf sils regression`から除外、`--include-workshop`で含む） | fallback/に本実習専用の動画はない。CLI実行が失敗した場合は口頭説明に切替え、SILS自体の信頼性は`fallback/S5_regression_summary.txt`（28 PASS + 5 既知の追跡中課題 + 1 workshop対象スキップ、計34本）で補強できる |
+| 実演（`sf sim run vpython`部分は一緒に打つ） | p.109 | デモ: シミュレータを動かす。VPythonシミュレータの3D操縦と、`sf sils gui`でのシナリオ実行・合否判定確認、パラメータ変更による挙動変化の確認 | `sf sim run vpython`<br>`sf sils gui`（`sf sils build`はp.107に印字。demoページ自体は「シナリオを1本実行し判定結果を確認する」と散文で説明するのみ） | ブラウザに3D操縦画面が出る。`sf sils gui`でシナリオを実行するとPASS/FAILの判定結果が表示され、パラメータを変えると挙動が変わる | 5〜8分（目安） | HIDジョイスティック（AtomS3 + Atom JoyStick）があれば接続、なければキーボード操作にフォールバック（フォールバック自体はスライドに明記なし、VPythonシミュレータの一般的な操作性による） | `fallback/S5_stab_flight.mp4`（STABILIZE飛行動画）、`fallback/S5_attitude_rate.png`、`fallback/S5_gate_result.txt`（12項目の合否判定結果） |
+| 期待結果の提示 | p.110 | デモの期待結果: SILSシナリオ実行。姿勢角・角速度の時系列グラフ | なし（静止画） | `stab_flight.scn`（vehicle）の姿勢角と角速度。12項目の合否判定をすべて満たす（`att_rmse=2.82<3.0`, `tilt_max=13.77<18.0`, `duty_max=1.00<1.001` — 数値は`fallback/README.md`の数値サマリより） | 2〜3分（目安） | 画像は`fallback/S5_attitude_rate.png` | 該当なし（本フレーム自体が代替素材） |
 
 ## 8. コマンド全一覧（実行順）
 
@@ -133,8 +146,14 @@ sf sim run vpython
 ```bash
 source setup_env.sh
 sf doctor
+sf lesson switch sci2026:1
+sf lesson build
+sf lesson flash
 sf lesson switch sci2026:2
-sf lesson build && sf lesson flash
+sf lesson edit
+sf lesson build
+sf lesson flash
+sf monitor workshop
 ```
 
 **Session 3**
@@ -144,14 +163,35 @@ sf lesson switch sci2026:3
 sf lesson build
 sf lesson flash
 sf lesson switch sci2026:4
-sf lesson build && sf lesson flash
+sf lesson build
+sf lesson flash
 ```
 
 **Session 4**
 
+見るだけ扱いの実習5〜9まで含めた「理想の通し」の全順序。実際にタイプするのは講師のみで、実習6・実習7は時間次第で省略しうる（§6参照）。
+
 ```bash
+sf lesson switch sci2026:5
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:6
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:7
+sf lesson build
+sf lesson flash
+sf log wifi -o flight.csv
+sf sysid fit flight.csv --kp 0.5 --plot
+sf lesson switch sci2026:8
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:9
+sf lesson build
+sf lesson flash
 sf log wifi -d 30 -o flight.csv
 sf log viz flight.csv
+sf sysid fit flight.csv --kp 0.5 --plot
 ```
 
 **Session 5**
@@ -173,7 +213,7 @@ sf sils gui
 
 | 実習 | セッション | 対応する Workshop レッスン | 参加者が書くもの（関数名など） |
 |------|-----------|---------------------------|-------------------------------|
-| 実習1 | S2 | environment_setup（Workshop Lesson 0） | なし（環境確認のみ。`sf doctor`の実行が中心で、コード記述は発生しない） |
+| 実習1 | S2 | environment_setup（Workshop Lesson 0） | なし（環境確認とビルド確認のみ。`sf doctor`の実行とLesson 0のビルド・書き込みが中心で、コード記述は発生しない） |
 | 実習2 | S2 | imu_sensor（Workshop Lesson 4） | `loop_400Hz`内で`ws::print(">gyro_x:%.3f", ws::gyro_x())`等、IMU値をTeleplot形式で出力 |
 | 実習3 | S3 | motor_control（Workshop Lesson 1） | `loop_400Hz`内で`ws::motor_set_duty(id, duty)`を各モータへ直接指定 |
 | 実習4 | S3 | controller_input（Workshop Lesson 2） | `ws::rc_throttle/roll/pitch/yaw()`を読み、`ws::motor_mixer(T,R,P,Y)`で4モータへ配分 |
@@ -189,10 +229,12 @@ sf sils gui
 
 | 箇所 | 内容 |
 |------|------|
-| `sf sim run` の表記ゆれ（**解消済み**） | 従来、p.24・p.28・p.17（S1深掘り）は引数なし`sf sim run`と表記し、p.98・p.102（S5）、付録p.116、README、handson_guide、cheatsheetは`sf sim run vpython`（引数あり）と表記していた。批判的レビューを反映した再構成後の現行スライドは全ページが`sf sim run vpython`に統一されており、この表記ゆれは解消済み |
+| `sf sim run` の表記ゆれ（**解消済み**） | 従来、pp.24/28/17（S1深掘り）は引数なし`sf sim run`と表記し、S5（現行では p.105「VPythonとGenesis」・p.109「デモ: シミュレータを動かす」）・付録（現行では p.126「sf CLIチートシート(2/2)」）、README、handson_guide、cheatsheetは`sf sim run vpython`（引数あり）と表記していた。批判的レビューを反映した再構成後の現行スライドは全ページが`sf sim run vpython`に統一されており、この表記ゆれは解消済み |
 | `verification_checklist.md`のレッスン番号と`実習N`の不一致（**解消済み**） | 従来、`verification_checklist.md` §1は`sf lesson switch 0/1/2/4`という**Workshopの生のレッスン番号**でベンチ確認しており、`lesson_manifest.yaml`の`sci2026`コースにおける実習1〜4の順序とは対応がずれていた（正確な対応関係は§9の表を参照）。`verification_checklist.md`側を本ランシートと同じ`sci2026:N`表記（`sf lesson switch sci2026:N`）に統一し、この不一致は解消済み |
-| S4「本日は見るだけ」の実演範囲 | p.84のデモの見方には「本日は見るだけにして，後日実習5〜9を通しで動かす」とあるが、`verification_checklist.md` §2は講師自身が実習5・実習8を当日リハーサルで飛行確認する前提で書かれている。両者は矛盾しないが（参加者は見るだけ・講師は飛ばす、という役割分担）、スライド単体からは「講師が実際に飛ばすのか、代替動画のみを見せるのか」は判別できない。verification_checklist §2のNG時対応（動画切替）を踏まえ、本ランシートのp.84行では代替動画を明記した |
+| S4「本日は見るだけ」の実演範囲 | p.92のデモの見方には「本日は見るだけにして，後日実習5〜9を通しで動かす」とあるが、`verification_checklist.md` §2は講師自身が実習5・実習8・実習9を当日リハーサルで確認する前提で書かれている（実習6・実習7には専用のリハーサル項目がない）。両者は矛盾しないが（参加者は見るだけ・講師は実演する、という役割分担）、実習6・実習7を含めた5件すべての実演を60分のセッション内で律儀にこなすと時間を圧迫する。**未解決:** 実習6（ζ3種類の飛行比較）・実習7（システム同定用の飛行）を当日実際に飛ばすのか、口頭説明のみに留めるのかはスライド・checklistのどちらにも明記がなく、講師の当日の判断に委ねられている |
+| S4「デモの期待結果」の数値の出どころ | p.93キャプションは「SILS（MuJoCo）でworkshop_acro_step.scnを実行」した結果であることを明記しており、実機フライトの実測値ではない。一方p.92「デモ: 完成コードで飛行」は実機での飛行を手順として説明している。したがってp.92のライブ実演で実際に出るステップ応答の数値は、p.93が示す参考値（ピーク17.9/13.2 deg/s等）と厳密には一致しない可能性がある点に注意 |
 | S2/S3用の代替素材が存在しない | `docs/events/sci_tutorial_2026/fallback/README.md`が提供する代替素材はS1・S4・S5のみで、S2（IMU確認）・S3（モータ・コントローラ）専用の動画・画像は用意されていない。これらのセッションでNGが出た場合の代替手段は「標準ファーム（`sf flash vehicle`）に戻す」「見るだけに切替える」のみで、verification_checklist §1にその旨明記されている |
+| `sf sils build`が「初回のみでよい」という旧注記 | 旧版のランシートはp.99（S5）に「`sf sils build`は初回のみでよい」という注記の出典を求めていたが、現行スライド（p.99「地図: 今ここ」、p.105〜109）にはこの文言は見当たらない。SILSベンチはソースを変更したときだけ再ビルドが必要という一般的なCLIの使用感自体は妥当だが、スライド上の特定ページに印字された記述ではないため、本版では出典なしの運用知識として扱い、旧来の「（p.99）」という個別ページ引用は削除した |
 
 ---
 
@@ -202,13 +244,13 @@ sf sils gui
 
 ### About this document
 
-Extracted from the 122-page slide deck for the SCI/SICE Tutorial 2026 (`docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`, held 2026-09-10), this document lists — in running order — only the frames the instructor will actually **demonstrate**, have participants **do hands-on**, or that **present an expected result**. The goal is a single sheet the instructor can rehearse from and run the day off, without paging through all 122 slides.
+Extracted from the 132-page slide deck for the SCI/SICE Tutorial 2026 (`docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`, held 2026-09-10), this document lists — in running order — only the frames the instructor will actually **demonstrate**, have participants **do hands-on**, or that **present an expected result**. The goal is a single sheet the instructor can rehearse from and run the day off, without paging through all 132 slides.
 
 ### Sources and method
 
 - Slide body: `docs/events/sci_tutorial_2026/slides/sci_tutorial.tex` and `chapters/sci_intro.tex`, `sci_s1_overview.tex` through `sci_s5_sim_analysis.tex`, `sci_appendix.tex`
 - Participant- and review-facing material: `README.md` (timetable, pre-workshop prep), `handson_guide.md` (post-event reproduction steps), `cheatsheet.md` (command/API reference), `verification_checklist.md` (instructor rehearsal procedure), `fallback/README.md` (index of fallback material)
-- Page numbers were derived by extracting each page's text with `pdftotext -f N -l N sci_tutorial.pdf -`, cross-checked against the frame count per chapter file (intro 5 + S1 22 + S2 17 + S3 16 + S4 24 + S5 23 + appendix 8 = 115, plus 6 session dividers (Sessions 1-5 and the appendix) and 1 title page = 122), matching the deck's actual 122 pages, then spot-verified on representative pages
+- Page numbers were derived by extracting each page's text with `pdftotext -f N -l N sci_tutorial.pdf -`, cross-checked against the frame count per chapter file (intro 5 + S1 22 + S2 19 + S3 17 + S4 29 + S5 25 + appendix 8 = 125, plus 6 session dividers (Sessions 1-5 and the appendix) and 1 title page = 132), matching the deck's actual 132 pages, then spot-verified on representative pages
 
 ### How to use this document
 
@@ -229,14 +271,14 @@ Complete `verification_checklist.md` §1-§4 (bench check, flight check, system-
 |------|------------------|--------|
 | Vehicle & controller | Fully charge the instructor's demo unit and any loaner spares. On-site participants generally bring their own hardware (README "Bring"), so the number of spares needed depends on the day's attendee mix — the materials give no specific spare count | README event info, verification_checklist §5 |
 | Web Flasher | Open `https://m5fly-kanazawa.github.io/stampfly_ecosystem/flash/` in the browser | README §4 |
-| Instructor PC environment | Run `source setup_env.sh` and confirm `sf doctor` completes with no errors | README §4, sci_s2 p.35 |
+| Instructor PC environment | Run `source setup_env.sh` and confirm `sf doctor` completes with no errors | README §4, sci_s2 p.36 |
 | Fallback material folder | Open `docs/events/sci_tutorial_2026/fallback/` (so images/videos can be shown immediately if a live demo fails) | verification_checklist §5, fallback/README.md |
 | Projector / Zoom | Confirm the projector connection. Test Zoom screen sharing (for online attendees; the day is also recorded for on-demand viewing) | README event info |
-| Pairing | Confirm loaner controllers are already paired (first time only, manual: power on the controller while holding its LCD panel button, then hold the StampFly body button for 2 seconds; both beep when done) | sci_s2 p.34, sci_s3 p.57 |
+| Pairing | Confirm loaner controllers are already paired (first time only, manual: power on the controller while holding its LCD panel button, then hold the StampFly body button for 2 seconds; both beep when done) | sci_s2 p.35, sci_s3 p.60 |
 
 ## 3. Session 1: Overview and Design Philosophy of the StampFly Ecosystem (10:05-11:00)
 
-Of 22 frames, 4 are demonstration or expected-result frames.
+Of 22 frames, 4 are demonstration or expected-result frames. Page numbers are unchanged before/after the rebuild (S1 was not part of this revision).
 
 | Type | Page | Content | Command | Expected result | Rough time | Prep & pitfalls | Fallback |
 |------|------|---------|---------|------------------|-----------|------------------|----------|
@@ -247,14 +289,17 @@ Of 22 frames, 4 are demonstration or expected-result frames.
 
 ## 4. Session 2: Environment Setup and Sensor Data Acquisition (11:00-12:00)
 
-Of 17 frames, 2 are demonstration/hands-on frames.
+Of 19 frames, 3 are demonstration/hands-on frames (the rebuild grew this session from 17 to 19 frames by giving Exercise 1 and Exercise 2 their own frames with explicit steps).
+
+The new p.34 "OS-Specific Differences" is a reference frame summarizing macOS/Linux vs. Windows command differences (`./install.sh` vs. `install.bat`, `source setup_env.sh` vs. `setup_env.bat`, serial port names). It is not demoed on the day; use it if a Windows attendee has trouble.
 
 | Type | Page | Content | Command | Expected result | Rough time | Prep & pitfalls | Fallback |
 |------|------|---------|---------|------------------|-----------|------------------|----------|
-| Hands-on (everyone) | p.35 | Environment Check. Everyone runs `sf doctor` together, diagnosing ESP-IDF, Python, the USB serial driver, and the sf CLI's own version | `source setup_env.sh`<br>`sf doctor` | Completes with no errors (same pass criterion as README §4) | 3-5 min (rough; longer if individual attendees need troubleshooting) | This should already be done before the day per README §4's pre-workshop prep. Not passing here is not a problem — those attendees continue "watch only" and catch up later via the review path (p.35 alertblock) | No dedicated fallback/ material. Attendees who fail individually switch to "watch only"; point them to `docs/guides/troubleshooting.md` |
-| Demo (follow along) | p.43 | Demo: Tilt Test. Hold the StampFly and tilt it front/back/left/right; `gyro_x`/`gyro_y` swing with the tilt speed, and `accel_z` returns to about -9.81 at rest | `sf lesson switch sci2026:2`<br>`sf lesson build && sf lesson flash`<br>`sf monitor workshop` (requires the VSCode extension `alexnesnes.teleplot`; `sf lesson flash` opens this same connection right after flashing) | The Teleplot waveforms for `gyro_x`/`gyro_y`/`accel_z` move. At rest, gyro is approximately 0 and `accel_z` is approximately -9.81 m/s^2 | 5-7 min (rough; includes build/flash time) | Install the VSCode extension `alexnesnes.teleplot` beforehand. Write the code from p.40 (below) into `user_code.cpp` first. Since each attendee's build takes time, showing the flow once on the instructor's machine before everyone tries it saves time | No dedicated fallback/ material. If it does not work, share the instructor's own Teleplot view and switch to "watch only" |
+| Hands-on (everyone) | p.36 | Exercise 1: Environment Check and Build. Everyone runs `sf doctor` together, diagnosing ESP-IDF, Python, the USB serial driver, and the sf CLI's own version, then builds and flashes `sci2026:1` (Lesson 0) | `source setup_env.sh` (Windows: `setup_env.bat`)<br>`sf doctor`<br>`sf lesson switch sci2026:1`<br>`sf lesson build`<br>`sf lesson flash` | The boot sound plays and the onboard LED lights/blinks right after flashing. `sf doctor` not passing cleanly is not a problem (p.36 alertblock) | 4-6 min (rough; longer if individual attendees need troubleshooting) | This should already be done before the day per README §4's pre-workshop prep. Attendees who fail continue "watch only" and catch up later via the review path (end of this session) | No dedicated fallback/ material. Attendees who fail individually switch to "watch only"; point them to `docs/guides/troubleshooting.md` |
+| Demo (follow along) | p.41 | Exercise 2 (1/2): Viewing IMU Values. Write the code from p.42 into `user_code.cpp`, then build, flash, and connect Teleplot via `sf monitor workshop` | `sf lesson switch sci2026:2`<br>`sf lesson edit` (open `user_code.cpp` and write the code from p.42)<br>`sf lesson build`<br>`sf lesson flash`<br>`sf monitor workshop` (requires the VSCode extension `alexnesnes.teleplot`; `sf lesson flash` opens this same connection right after flashing) | The Teleplot view for `gyro_x`/`gyro_y` opens (still flat while the vehicle is stationary) | 4-6 min (rough; includes build/flash time) | Install the VSCode extension `alexnesnes.teleplot` beforehand. Since each attendee's build takes time, showing the flow once on the instructor's machine before everyone tries it saves time | No dedicated fallback/ material. If it does not work, share the instructor's own Teleplot view and switch to "watch only" |
+| Demo (follow along) | p.43 | Exercise 2 (2/2): Tilt Test. Hold the StampFly and tilt it front/back/left/right; `gyro_x`/`gyro_y` swing with the tilt speed, and `accel_z` returns to about -9.81 at rest | (No command string printed on this page. After the build/flash from the previous page, p.41, watch the Teleplot view while tilting the vehicle) | At rest, gyro is approximately 0 and `accel_z` is approximately -9.81 m/s^2. The `gyro_x`/`gyro_y` waveforms swing with tilt speed | 1-2 min (rough) | Assumes Exercise 2 (1/2) on p.41 is already complete | No dedicated fallback/ material. If it does not work, share the instructor's own Teleplot view and switch to "watch only" |
 
-Reference code (p.40, written before this demo):
+Reference code (p.42 "Data Path 1: Teleplot", written into `user_code.cpp` for Exercise 2):
 
 ```cpp
 static uint32_t tick = 0;
@@ -268,20 +313,18 @@ void loop_400Hz(float dt) {
 
 ## 5. Session 3: Motor Control and Controller Input Implementation (13:00-14:00)
 
-Of 16 frames, 2 are demonstration/hands-on frames. **Safety (p.51):** do this on a table, keeping hands clear of the spinning motors throughout. Duty capped at 0.15 (not enforced by the firmware, so verify visually). ARM only via a single click of the body button or the controller, never auto-armed in code.
+Of 17 frames, 2 are demonstration/hands-on frames (a new TDMA explainer frame grew this session from 16 to 17). **Safety (p.53):** do this on a table, keeping hands clear of the spinning motors throughout. Duty capped at 0.15 (not enforced by the firmware, so verify visually). ARM only via a single click of the body button or the controller, never auto-armed in code.
+
+The new p.59 "Flying 30 Vehicles at Once with TDMA" is a reference frame explaining TDMA (Time Division Multiple Access) and how three non-overlapping channels (1/6/11) support up to 30 vehicles in theory. It is not demoed on the day; it cites a real deployment (10 vehicles split 4/3/3 across channels 1/6/11 at the DXH2026 workshop) and can be used if asked about running many vehicles in one classroom.
 
 | Type | Page | Content | Command | Expected result | Rough time | Prep & pitfalls | Fallback |
 |------|------|---------|---------|------------------|-----------|------------------|----------|
-| Hands-on | p.54 | Hands-on: Hardcoded Duty. Hardcode `motor_set_duty` calls in `user_code.cpp` and confirm motor spin on the table | `sf lesson switch sci2026:3`<br>(No build/flash command printed on this page; per the standard workflow on p.37, run `sf lesson build` then `sf lesson flash`) | Arming from the body button spins only FR (M1) at low speed (duty 0.10; the others are 0.00). DISARM stops it | 5-8 min (rough) | **Safety (p.51):** do this on a table, keep hands clear of the spinning motors, duty <=0.15, ARM only via body button or controller. **Note:** the distributed solution (`--solution`) auto-arms on boot, so use it only on the table with hands clear of the motors (per the warning now printed on p.54) | No dedicated S3 fallback/ material. If the bench check (verification_checklist §1) fails, revert to production firmware (`sf flash vehicle`) and switch this demo to watch-only |
-| Demo (follow along) | p.60 | Demo: Stick to Motors. Write `ws::motor_mixer` and see the four motors' speed differ with stick input (the controller's commands arrive over ESP-NOW as a `ControlPacket` at roughly 50 Hz); shows that it cannot hold commanded speed under a light disturbance | `sf lesson switch sci2026:4`<br>`sf lesson build && sf lesson flash` | Motor speeds diverge with stick input. A light gust defeats the commanded speed (the limit of open-loop control) | 5-7 min (rough) | If pairing has not been done, do it first per p.57 (hold the controller's LCD panel button while powering on -> hold the body button 2s -> both beep). Keep the vehicle on the table, hands clear of the motors | No dedicated S3 fallback/ material. As in checklist §1, revert to `sf flash vehicle` if this fails |
+| Hands-on | p.56 | Exercise 3: Hardcoded Duty. Rewrite `loop_400Hz` in `user_code.cpp` to the code shown on the slide and confirm motor spin on the table | `sf lesson switch sci2026:3`<br>(rewrite the code)<br>`sf lesson build`<br>`sf lesson flash`<br>Click the body button once to ARM | Arming from the body button spins only FR (M1) at low speed (duty 0.10; the others are 0.00). DISARM stops it | 5-7 min (rough) | **Safety (p.53):** do this on a table, keep hands clear of the spinning motors, duty <=0.15, ARM only via body button or controller. **Note (p.56):** the distributed solution (`--solution`) auto-arms on boot, so use it only on the table with hands clear of the motors | No dedicated S3 fallback/ material. If the bench check (verification_checklist §1) fails, revert to production firmware (`sf flash vehicle`) and switch this demo to watch-only |
+| Demo (follow along) | p.63 | Exercise 4: Stick to Motors. Write `ws::motor_mixer` and see the four motors' speed differ with stick input (the controller's commands arrive over ESP-NOW as a `ControlPacket` at roughly 50 Hz); shows that it cannot hold commanded speed under a light disturbance | `sf lesson switch sci2026:4`<br>Pair with the controller<br>Write `ws::motor_mixer(T,R,P,Y)`<br>`sf lesson build`<br>`sf lesson flash` | Motor speeds diverge with stick input. A light gust defeats the commanded speed (the limit of open-loop control) | 5-7 min (rough) | If pairing has not been done, do it first per p.60 (hold the controller's LCD panel button while powering on -> hold the body button 2s -> both beep). Keep the vehicle on the table, hands clear of the motors | No dedicated S3 fallback/ material. As in checklist §1, revert to `sf flash vehicle` if this fails |
 
-Reference code (p.54, written for this exercise):
+Reference code (p.56 "Exercise 3: Hardcoded Duty", `loop_400Hz` in `user_code.cpp`):
 
 ```cpp
-void setup() {
-    ws::print("Motor duty test");
-    // Do NOT auto-arm in code / コードでは自動ARMしない
-}
 void loop_400Hz(float dt) {
     ws::motor_set_duty(1, 0.10f);   // FR
     ws::motor_set_duty(2, 0.00f);   // RR
@@ -290,29 +333,41 @@ void loop_400Hz(float dt) {
 }
 ```
 
+(This frame does not print a `setup()` body. The p.56 body text states ARM is a single click of the body button and that code must not auto-arm.)
+
 ## 6. Session 4: Feedback Control Basics -- PID Attitude Stabilization (14:00-15:00)
 
-Of 24 frames, only 2 are demonstration/expected-result frames. **Exercises 5-9 themselves (writing code and flying it) are watch-only on the day** (p.84's demo-viewing note: "reproduce at home: today is watch-only, run Exercises 5-9 end to end afterward"). Only the instructor actually flies live that day.
+Of 29 frames, 7 are demonstration/hands-on/expected-result frames (the 24-to-29 rebuild gave Exercises 5-9 each their own frame with explicit steps, dropped the "coming attractions" frame, and added "Reproducing the Expected Result").
+
+**For participants, Exercises 5-9 themselves (writing code and trying it on real hardware) are watch-only on the day** (p.92's demo-viewing note: "reproduce at home: today is watch-only, run Exercises 5-9 end to end afterward"). However, each exercise frame itself spells out numbered steps for a **live instructor demonstration** (first flight, comparing damping ratios, system identification, PID comparison, attitude-estimation agreement), so this table treats Exercises 5-9 as demo frames too.
+
+**Rehearsal caveat:** `verification_checklist.md` §2 only requires rehearsing Exercises 5, 8, and 9. Exercise 6 (three flights at different damping ratios) and Exercise 7 (a flight for system identification) have no dedicated rehearsal item; the instructor decides on the day, based on time and hardware condition, whether to fly them live or describe them verbally only (noted in the relevant rows below). Running all five live demos back-to-back plus the 5-8 min final comparison demo can approach 30 minutes, which is tight inside a 60-minute session.
 
 | Type | Page | Content | Command | Expected result | Rough time | Prep & pitfalls | Fallback |
 |------|------|---------|---------|------------------|-----------|------------------|----------|
-| Demo (watch only) | p.84 | Demo: Final Code. Fly the PID-ified learner code (Exercise 8) and compare the roll-rate step response against P-control (Exercise 5) | `sf log wifi -d 30 -o flight.csv`<br>`sf log viz flight.csv` (p.84 only describes this in prose -- "capture telemetry with `sf log wifi`", "show the step response with `sf log viz`" -- without printing the exact arguments; the above borrows the syntax printed on p.42) | Against a 15.1 deg/s target, Exercise 5 (P) peaks at 17.9 deg/s with a -2.4 deg/s undershoot; Exercise 8 (PID) peaks at 13.2 deg/s with no ringing (p.85 caption) | 5-8 min (rough) | Only the instructor flies live. Rehearse stable flight for Exercises 5 and 8 per verification_checklist §2 ("Flight Check"). Start at low throttle; DISARM immediately if anything looks wrong | `fallback/S4_lesson5_p_flight.mp4`, `fallback/S4_lesson8_pid_flight.mp4` (per checklist §2, switch only the unstable lesson to video if needed) |
-| Expected-result presentation | p.85 | Demo Expected Result: P vs. PID step response (the on-slide title dropped "control" and "comparison graph" for brevity) | None (static image) | Same figures as above (p.85 caption) | 2-3 min (rough) | Image is `fallback/S4_roll_step_p_vs_pid.png` | Not applicable (this frame is itself the fallback material) |
+| Demo (watch only) | p.78 | Exercise 5: First Flight with Rate P-Control. Compute error = target rate - measured rate, output = Kp * error for Roll/Pitch/Yaw and feed it to `ws::motor_mixer`; the instructor flies the finished code with Kp = 0.5 | `sf lesson switch sci2026:5`<br>(fill in the `user_code.cpp` TODOs: `ws::gyro_x/y/z()`, `ws::rc_roll/pitch/yaw()`)<br>`sf lesson build`<br>`sf lesson flash` | Stick input is followed, but with a slight oscillation (the limit of P-only control). The rate target is logged to the Data Stream via `ws::set_rate_target()` for use in Exercise 7 | 4-6 min (rough) | Rehearse per verification_checklist §2 (confirm stable hover at Kp=0.5). Start at low throttle; DISARM immediately if anything looks wrong | `fallback/S4_lesson5_p_flight.mp4` |
+| Demo (watch only; time/rehearsal permitting) | p.81 | Exercise 6: System Modeling. Implement the design formula $K_p=1/(4\zeta^2 K \tau_m)$ for Roll/Pitch/Yaw and fly three times with $\zeta=0.7 \to 0.5 \to 1.0$ to show the difference | `sf lesson switch sci2026:6`<br>(write code computing Kp_roll/pitch/yaw from the design formula)<br>`sf lesson build`<br>`sf lesson flash` (rebuild/reflash for each $\zeta$) | $\zeta=0.5$ looks somewhat oscillatory, $\zeta=0.7$ smooth, $\zeta=1.0$ visibly slower -- a qualitative difference | 3-5 min (rough; if time is tight, limit to 1-2 values of $\zeta$ or describe verbally only) | verification_checklist §2 has no dedicated rehearsal item for this exercise (it assumes basic stability was already confirmed via Exercise 5's rehearsal). Three back-to-back flights eat into the schedule | No dedicated video in fallback/. Fall back to a verbal explanation |
+| Demo (watch only; time/rehearsal permitting) | p.82 | Exercise 7: System Identification (sf sysid fit). Add `ws::set_rate_target(roll,pitch,yaw)` to Exercise 5's P-control code, capture a log while flying, then identify the plant ($K$, $\tau_m$) | `sf lesson switch sci2026:7`<br>(set Kp and call `ws::set_rate_target`)<br>`sf lesson build`<br>`sf lesson flash`<br>while flying: `sf log wifi -o flight.csv`<br>`sf sysid fit flight.csv --kp 0.5 --plot` | The identified $K$, $\tau_m$ match Exercise 6's theoretical values ($K_{roll}=102$, $K_{pitch}=70$) to within a few percent | 4-6 min (rough) | verification_checklist §3 confirms the identification pipeline itself, but §2 has no dedicated flight-rehearsal item for this exercise. If the fit does not converge, switch to the reference logs under `analysis/reports/rate_sysid_reference/` per checklist §3's fallback, and downgrade this from "follow along" to "watch only" | Switch to a demo using the reference logs (checklist §3) |
+| Demo (watch only) | p.84 | Exercise 8: PID Control. Add an I term (`integral += error*dt`, clamped to +/-0.5) and a D term (`Kd*(error-prev_error)/dt`) to Exercise 5's P-control, fly it, and compare against Exercise 5 (P only) | `sf lesson switch sci2026:8`<br>(add I term, D term, and anti-windup per axis)<br>`sf lesson build`<br>`sf lesson flash` | Steady-state error and overshoot visibly change compared to Exercise 5 | 4-6 min (rough) | Rehearse per verification_checklist §2 (confirm taking off with PID reduces steady-state error vs. P-only). Reset integral/prev_error to 0 on disarm | `fallback/S4_lesson8_pid_flight.mp4` |
+| Demo (watch only; hand-tilted, no flight) | p.88 | Exercise 9: Attitude Estimation (Complementary Filter). Compute angle from acceleration with `atan2f`, implement the complementary filter $\hat\theta_k=\alpha(\hat\theta_{k-1}+\omega\Delta t)+(1-\alpha)\theta_{accel}$ ($\alpha=0.98$), and compare it against `ws::estimated_roll()` (the vehicle's default ESKF) on Teleplot | `sf lesson switch sci2026:9`<br>(implement the complementary filter)<br>`sf lesson build`<br>`sf lesson flash`<br>`sf monitor` + Teleplot to compare `cf_roll` and `eskf_roll` | Tilting the vehicle by hand shows `cf_roll` and `eskf_roll` tracking each other closely | 3-5 min (rough) | Rehearse per verification_checklist §2 (confirm `cf_roll` and `eskf_roll` roughly agree on Teleplot). This is a hand-held check like Exercise 2 in S2, not a flight | No dedicated video. If it does not work, share the instructor's own Teleplot view |
+| Demo (the `sf sysid fit` part is follow-along) | p.92 | Demo: Final Code. Fly the PID-ified learner code (Exercise 8) and compare the roll-rate step response against P-control (Exercise 5). Share the captured `flight.csv` so attendees can run `sf sysid fit` on their own machines together with the instructor | `sf log wifi -d 30 -o flight.csv`<br>`sf log viz flight.csv` (p.92 only describes this in prose -- "capture telemetry with `sf log wifi`", "show the step response with `sf log viz`" -- without printing the exact arguments; the above borrows the syntax printed on p.45)<br>`sf sysid fit flight.csv --kp 0.5 --plot` (the follow-along part) | The live step response visibly shows less overshoot/ringing for PID (Exercise 8) than for P (Exercise 5) (the specific benchmark numbers are the SILS reference on p.93, see below) | 5-8 min (rough) | Only the instructor flies live. Rehearse per verification_checklist §2 for Exercise 8 (Exercise 5 is rehearsed separately). Start at low throttle; DISARM immediately if anything looks wrong | `fallback/S4_lesson5_p_flight.mp4`, `fallback/S4_lesson8_pid_flight.mp4` (per checklist §2, switch only the unstable lesson to video if needed) |
+| Expected-result presentation | p.93 | Demo Expected Result: P vs. PID step response. **The caption explicitly states these numbers come from running `workshop_acro_step.scn` in SILS (MuJoCo), not from measuring the live flight itself; they are a design-target reference** | None (static image) | Against a 15.1 deg/s target, Exercise 5 (P) peaks at 17.9 deg/s with a -2.4 deg/s undershoot; Exercise 8 (PID) peaks at 13.2 deg/s with no ringing (figures are from the SILS simulation) | 2-3 min (rough) | Image is `fallback/S4_roll_step_p_vs_pid.png`. See p.94 "Reproducing the Expected Result" for the detailed SILS reproduction steps | Not applicable (this frame is itself the fallback material) |
 
 **Frames excluded from this table (mention verbally only, or demo at the instructor's discretion):**
 
-- p.75 "Recap" (retitled from "Rate P-Control Recap"; JA title "実習5の振り返り: レートP制御"): re-displays Exercise 5's code for explanation; nothing is re-run live here
-- p.82 "System ID: sf sysid fit", p.83 "Autotuning: sf sysid rate-fit / rate-tune": both present example command output only; the slides do not state that the instructor runs these live on the day
+- p.79 "Recap: Rate P-Control": re-displays Exercise 5's code for explanation; nothing is re-run live here
+- p.83 "System ID: sf sysid fit", p.91 "Autotuning: sf sysid rate-fit / rate-tune": both present example command output only; the slides do not state that the instructor runs these live on the day
+- p.94 "Reproducing the Expected Result" (read later): the CLI steps to reproduce p.93's numbers yourself via SILS (`sf sils build --target workshop` -> `sf lesson switch sci2026:5 --solution` -> `touch` -> rebuild -> `sf sils scenario ... workshop_acro_step.scn`). Not a live in-session demo; it is a prep/at-home reference
 
 ## 7. Session 5: Simulator and Analysis Tools, Advanced Topics (15:30-16:30)
 
-Of 23 frames, 3 are demonstration/hands-on/expected-result frames.
+Of 25 frames, 3 are demonstration/hands-on/expected-result frames ("Where Research Begins" split from 1 frame into 3, growing this session from 23 to 25 frames; all three new frames, pp.113-115, are "read later" reference material and are not demoed on the day).
 
 | Type | Page | Content | Command | Expected result | Rough time | Prep & pitfalls | Fallback |
 |------|------|---------|---------|------------------|-----------|------------------|----------|
-| Hands-on | p.100 | Exercise: Fly Your PID in SILS. Verify Exercise 8's (PID) `setup()`/`loop_400Hz()` in SILS before flying it for real | `sf sils build --target workshop`<br>`sf lesson switch sci2026:8 --solution` (or your own code)<br>`touch firmware/workshop/main/user_code.cpp`<br>`sf sils build --target workshop` (rebuild to pick it up)<br>`sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop` | Pass criteria (`.expect`): lift-off (true altitude > 0.1 m) and tilt under 15 degrees (no tumble). No altitude loop, so landing is DISARM descent only. Following the sequence as written yields `alt_max` ~= 0.64 m, `tilt_max` = 0.0, i.e. PASS | 4-6 min (rough; longer including `sf sils build`'s first compile) | `sf lesson switch` copies the file while preserving `user_code.cpp`'s old mtime, so building right after the switch does not detect the new code. Touching the file and then rebuilding a **second** time is a required two-step sequence every time -- not an occasional workaround. `sf sils gui` cannot select the workshop target, hence this CLI sequence (excluded from `sf sils regression` by default; include it with `--include-workshop`) | No dedicated video for this exercise in fallback/. If the CLI run fails, explain verbally; SILS's general reliability can be backed by `fallback/S5_regression_summary.txt` (28 PASS + 5 known, tracked issues + 1 workshop-target skip, 34 total) |
-| Demo (the `sf sim run vpython` part is follow-along) | p.101 | Demo: The Simulator. 3D piloting in VPython, plus running a scenario and checking pass/fail in `sf sils gui`, then varying a parameter to see the effect | `sf sim run vpython`<br>`sf sils build`<br>`sf sils gui` | A 3D piloting view opens in the browser. Running a scenario in `sf sils gui` shows a PASS/FAIL verdict, and changing a parameter changes the behavior | 5-8 min (rough) | `sf sils build` only needs to run once (p.99). Connect the HID joystick (AtomS3 + Atom JoyStick) if available; otherwise it falls back to keyboard control | `fallback/S5_stab_flight.mp4` (STABILIZE flight video), `fallback/S5_attitude_rate.png`, `fallback/S5_gate_result.txt` (12-item pass verdict) |
-| Expected-result presentation | p.102 | Demo Expected Result: SILS Scenario Run. Attitude/angular-rate time series | None (static image) | `stab_flight.scn` (vehicle) attitude and angular rate. All 12 pass criteria satisfied (`att_rmse=2.82<3.0`, `tilt_max=13.77<18.0`, `duty_max=1.00<1.001` -- figures from `fallback/README.md`'s numeric summary) | 2-3 min (rough) | Image is `fallback/S5_attitude_rate.png` | Not applicable (this frame is itself the fallback material) |
+| Hands-on | p.108 | Exercise: Fly Your PID in SILS. Verify Exercise 8's (PID) `setup()`/`loop_400Hz()` in SILS before flying it for real | `sf sils build --target workshop`<br>`sf lesson switch sci2026:8 --solution` (or your own code)<br>`touch firmware/workshop/main/user_code.cpp`<br>`sf sils build --target workshop` (rebuild to pick it up)<br>`sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop` | Pass criteria (`.expect`): lift-off (true altitude > 0.1 m) and tilt under 15 degrees (no tumble). No altitude loop, so landing is DISARM descent only. Following the sequence as written yields `alt_max` ~= 0.64 m, `tilt_max` = 0.0, i.e. PASS | 4-6 min (rough; longer including `sf sils build`'s first compile) | `sf lesson switch` copies the file while preserving `user_code.cpp`'s old mtime, so building right after the switch does not detect the new code. Touching the file and then rebuilding a **second** time is a required two-step sequence every time -- not an occasional workaround. `sf sils gui` cannot select the workshop target, hence this CLI sequence (excluded from `sf sils regression` by default; include it with `--include-workshop`) | No dedicated video for this exercise in fallback/. If the CLI run fails, explain verbally; SILS's general reliability can be backed by `fallback/S5_regression_summary.txt` (28 PASS + 5 known, tracked issues + 1 workshop-target skip, 34 total) |
+| Demo (the `sf sim run vpython` part is follow-along) | p.109 | Demo: The Simulator. 3D piloting in VPython, plus running a scenario and checking pass/fail in `sf sils gui`, then varying a parameter to see the effect | `sf sim run vpython`<br>`sf sils gui` (`sf sils build` is printed on p.107; the demo page itself only describes "run one scenario and check the result" in prose) | A 3D piloting view opens in the browser. Running a scenario in `sf sils gui` shows a PASS/FAIL verdict, and changing a parameter changes the behavior | 5-8 min (rough) | Connect the HID joystick (AtomS3 + Atom JoyStick) if available; otherwise it falls back to keyboard control (the keyboard fallback itself is not printed on the slide -- it follows from VPython's general controls) | `fallback/S5_stab_flight.mp4` (STABILIZE flight video), `fallback/S5_attitude_rate.png`, `fallback/S5_gate_result.txt` (12-item pass verdict) |
+| Expected-result presentation | p.110 | Demo Expected Result: SILS Scenario Run. Attitude/angular-rate time series | None (static image) | `stab_flight.scn` (vehicle) attitude and angular rate. All 12 pass criteria satisfied (`att_rmse=2.82<3.0`, `tilt_max=13.77<18.0`, `duty_max=1.00<1.001` -- figures from `fallback/README.md`'s numeric summary) | 2-3 min (rough) | Image is `fallback/S5_attitude_rate.png` | Not applicable (this frame is itself the fallback material) |
 
 ## 8. All Commands, in Execution Order
 
@@ -329,8 +384,14 @@ sf sim run vpython
 ```bash
 source setup_env.sh
 sf doctor
+sf lesson switch sci2026:1
+sf lesson build
+sf lesson flash
 sf lesson switch sci2026:2
-sf lesson build && sf lesson flash
+sf lesson edit
+sf lesson build
+sf lesson flash
+sf monitor workshop
 ```
 
 **Session 3**
@@ -340,14 +401,35 @@ sf lesson switch sci2026:3
 sf lesson build
 sf lesson flash
 sf lesson switch sci2026:4
-sf lesson build && sf lesson flash
+sf lesson build
+sf lesson flash
 ```
 
 **Session 4**
 
+The full "ideal walkthrough" order, including the watch-only Exercises 5-9. Only the instructor types these; Exercises 6 and 7 may be skipped depending on time (see §6).
+
 ```bash
+sf lesson switch sci2026:5
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:6
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:7
+sf lesson build
+sf lesson flash
+sf log wifi -o flight.csv
+sf sysid fit flight.csv --kp 0.5 --plot
+sf lesson switch sci2026:8
+sf lesson build
+sf lesson flash
+sf lesson switch sci2026:9
+sf lesson build
+sf lesson flash
 sf log wifi -d 30 -o flight.csv
 sf log viz flight.csv
+sf sysid fit flight.csv --kp 0.5 --plot
 ```
 
 **Session 5**
@@ -369,7 +451,7 @@ sf sils gui
 
 | Exercise | Session | Underlying Workshop Lesson | What participants write (function names, etc.) |
 |----------|---------|------------------------------|---------------------------------------------------|
-| Exercise 1 | S2 | environment_setup (Workshop Lesson 0) | None (environment check only; centers on running `sf doctor`, no code written) |
+| Exercise 1 | S2 | environment_setup (Workshop Lesson 0) | None (environment and build check only; centers on running `sf doctor` and building/flashing Lesson 0, no code written) |
 | Exercise 2 | S2 | imu_sensor (Workshop Lesson 4) | In `loop_400Hz`, print IMU values Teleplot-style with `ws::print(">gyro_x:%.3f", ws::gyro_x())` etc. |
 | Exercise 3 | S3 | motor_control (Workshop Lesson 1) | In `loop_400Hz`, drive each motor directly with `ws::motor_set_duty(id, duty)` |
 | Exercise 4 | S3 | controller_input (Workshop Lesson 2) | Read `ws::rc_throttle/roll/pitch/yaw()` and distribute to the four motors with `ws::motor_mixer(T,R,P,Y)` |
@@ -385,7 +467,9 @@ Recorded as found, not fixed.
 
 | Where | Detail |
 |-------|--------|
-| `sf sim run` wording differs (**resolved**) | pp.24/28/17 (S1 deep-dive) used to print bare `sf sim run` (no argument), while pp.98/102 (S5), appendix p.116, README, handson_guide, and cheatsheet printed `sf sim run vpython` (with the argument). After the post-review rebuild, every page in the current deck prints `sf sim run vpython` consistently, so this wording gap is resolved |
+| `sf sim run` wording differs (**resolved**) | pp.24/28/17 (S1 deep-dive) used to print bare `sf sim run` (no argument), while S5 (now p.105 "VPython and Genesis" / p.109 "Demo: The Simulator") and the appendix (now p.126 "sf CLI Cheat Sheet (2/2)"), README, handson_guide, and cheatsheet printed `sf sim run vpython` (with the argument). After the post-review rebuild, every page in the current deck prints `sf sim run vpython` consistently, so this wording gap is resolved |
 | `verification_checklist.md`'s lesson numbers vs. "Exercise N" (**resolved**) | `verification_checklist.md` §1 used to bench-check using the **raw Workshop lesson numbers** (`sf lesson switch 0/1/2/4`), which did not match the `sci2026` course's Exercise 1-4 sequence in `lesson_manifest.yaml` (see §9's table for the exact correspondence). The checklist has since been normalized to the same `sci2026:N` notation used in this runsheet (`sf lesson switch sci2026:N`), resolving the mismatch |
-| Scope of "watch only" in S4 | p.84's demo-viewing note says "today is watch-only; run Exercises 5-9 end to end afterward," while `verification_checklist.md` §2 is written assuming the instructor personally rehearses and flies Exercises 5 and 8 live that day. The two are not actually contradictory (participants watch; the instructor flies), but the slide alone does not make clear whether the instructor really flies live or only shows the fallback video. This runsheet's p.84 row spells out the fallback video option, informed by checklist §2's failure-mode guidance |
+| Scope of "watch only" in S4 | p.92's demo-viewing note says "today is watch-only; run Exercises 5-9 end to end afterward," while `verification_checklist.md` §2 is written assuming the instructor personally confirms Exercises 5, 8, and 9 on the day (Exercises 6 and 7 have no dedicated rehearsal item). The two are not actually contradictory (participants watch; the instructor demonstrates), but running all five live demos inside a 60-minute session is tight. **Unresolved:** whether Exercise 6 (three flights at different damping ratios) and Exercise 7 (a flight for system identification) are actually flown live on the day, or only described verbally, is not settled by either the slides or the checklist -- it is left to the instructor's on-the-day judgment |
+| Source of the S4 "expected result" numbers | p.93's caption explicitly states the figures come from running `workshop_acro_step.scn` in SILS (MuJoCo), not from a measured real flight, while p.92 "Demo: Final Code" describes flying on real hardware as the procedure. So the step-response numbers the live demo on p.92 actually produces may not exactly match the SILS reference figures on p.93 (peak 17.9/13.2 deg/s etc.) |
 | No fallback material for S2/S3 | `docs/events/sci_tutorial_2026/fallback/README.md`'s material covers only S1, S4, and S5 -- there is no dedicated video/image for S2 (IMU check) or S3 (motor/controller). If either fails on the day, the only documented fallbacks are reverting to production firmware (`sf flash vehicle`) or switching to watch-only, per verification_checklist §1 |
+| Old note that `sf sils build` "only needs to run once" | The previous version of this runsheet cited p.99 (S5) as the source for "`sf sils build` only needs to run once." That wording no longer appears anywhere in the current deck (p.99 is now "Map: You Are Here"; pp.105-109 do not state it either). The underlying operational claim (the SILS bench only needs rebuilding when its source changes) is still reasonable CLI know-how, but it is no longer text printed on a specific slide, so this version treats it as unsourced operational knowledge and drops the old page-99 citation |
