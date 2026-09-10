@@ -19,9 +19,9 @@ import asyncio
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Callable, List, Optional
 
-from ..utils import console, paths
+from ..utils import console, paths, plotting
 
 COMMAND_NAME = "log"
 COMMAND_HELP = "Log capture and analysis"
@@ -627,7 +627,10 @@ def _run_motor_health(args: argparse.Namespace) -> int:
 
 
 def run_viz(args: argparse.Namespace) -> int:
-    """Visualize log data"""
+    """Visualize log data: resolve the file, then dispatch to the
+    interactive (Plotly), JSONL, or CSV renderer.
+    ログデータを可視化する: ファイルを解決し、インタラクティブ (Plotly)・
+    JSONL・CSV いずれかの描画処理へ振り分ける。"""
     file_path = args.file
 
     # Find latest log file if not specified
@@ -660,8 +663,72 @@ def run_viz(args: argparse.Namespace) -> int:
     # JSONL static overview (default for .jsonl files)
     # JSONL 静的一覧表示（.jsonl ファイルのデフォルト）
     if path.suffix == '.jsonl' and not is_interactive:
-        try:
-            sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+        return _viz_jsonl(path, args)
+
+    # Interactive mode (Plotly) -- works for both .csv and .jsonl, and
+    # never touches matplotlib, so it needs no backend handling.
+    # インタラクティブモード (Plotly) -- .csv と .jsonl の両方に対応し、
+    # matplotlib には一切触れないためバックエンド対応は不要。
+    if is_interactive:
+        return _viz_interactive(path, args)
+
+    return _viz_csv(path, args)
+
+
+def _viz_interactive(path: Path, args: argparse.Namespace) -> int:
+    """Interactive Plotly visualization. Unchanged by the matplotlib
+    backend fallback work -- Plotly opens in a browser tab, not a
+    matplotlib window, so there is no headless case to handle here.
+    インタラクティブな Plotly 可視化。matplotlib バックエンドのフォール
+    バック対応による変更なし -- Plotly はブラウザタブで開くため
+    matplotlib のウィンドウではなく、ここで扱うべきヘッドレスの場合はない。
+    """
+    try:
+        sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+        import visualize_interactive
+
+        layout = None
+        if args.layout:
+            try:
+                parts = args.layout.lower().split('x')
+                layout = (int(parts[0]), int(parts[1]))
+            except (ValueError, IndexError):
+                console.error(f"Invalid layout '{args.layout}'. Use ROWSxCOLS (e.g., 3x2)")
+                return 1
+
+        visualize_interactive.visualize(
+            str(path),
+            groups=args.groups,
+            layout=layout,
+            output=args.save,
+        )
+        return 0
+    except ImportError as e:
+        console.error(f"Failed to import interactive visualizer: {e}")
+        console.print("  Required: pip install plotly")
+        return 1
+    except Exception as e:
+        console.error(f"Interactive visualization failed: {e}")
+        return 1
+    finally:
+        sys.path.pop(0)
+
+
+def _viz_jsonl(path: Path, args: argparse.Namespace) -> int:
+    """Static JSONL overview (matplotlib), with the headless PNG fallback.
+    静的な JSONL 一覧表示（matplotlib）。GUIバックエンドが無ければPNGへ
+    フォールバックする。"""
+    try:
+        sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+
+        def render(save_path: Optional[str], show: bool) -> None:
+            # visualize_jsonl imports matplotlib.pyplot at module load, so
+            # it must not be imported before _render_with_fallback() has
+            # picked a backend -- this closure only runs after that.
+            # visualize_jsonl はモジュール読み込み時に matplotlib.pyplot を
+            # import するため、_render_with_fallback() がバックエンドを
+            # 選ぶより前に import してはならない -- このクロージャは
+            # それより後にしか呼ばれない。
             import visualize_jsonl
 
             show_invalid = getattr(args, 'show_invalid', False)
@@ -669,58 +736,48 @@ def run_viz(args: argparse.Namespace) -> int:
             tr = None
             if hasattr(args, 'time_range') and args.time_range:
                 tr = tuple(args.time_range)
+            # plot_overview has no `show` argument: it shows when save is
+            # None and saves otherwise, so `show` is unused here.
+            # plot_overview に show 引数は無い: save が None なら表示、
+            # そうでなければ保存するため、ここでは show を使わない。
             visualize_jsonl.plot_overview(
                 data,
                 title=path.name,
-                save=getattr(args, 'save', None),
+                save=save_path,
                 time_range=tr,
             )
-            return 0
-        except ImportError as e:
-            console.error(f"Failed to import visualizer: {e}")
-            console.print("  Required: pip install matplotlib numpy")
-            return 1
-        except Exception as e:
-            console.error(f"Visualization failed: {e}")
-            return 1
-        finally:
-            sys.path.pop(0)
 
-    # Interactive mode (Plotly)
-    if is_interactive:
-        try:
-            sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
-            import visualize_interactive
+        return _render_with_fallback(path, args, render)
+    except ImportError as e:
+        console.error(f"Failed to import visualizer: {e}")
+        console.print("  Required: pip install matplotlib numpy")
+        return 1
+    finally:
+        sys.path.pop(0)
 
-            layout = None
-            if args.layout:
-                try:
-                    parts = args.layout.lower().split('x')
-                    layout = (int(parts[0]), int(parts[1]))
-                except (ValueError, IndexError):
-                    console.error(f"Invalid layout '{args.layout}'. Use ROWSxCOLS (e.g., 3x2)")
-                    return 1
 
-            visualize_interactive.visualize(
-                str(path),
-                groups=args.groups,
-                layout=layout,
-                output=args.save,
-            )
-            return 0
-        except ImportError as e:
-            console.error(f"Failed to import interactive visualizer: {e}")
-            console.print("  Required: pip install plotly")
-            return 1
-        except Exception as e:
-            console.error(f"Interactive visualization failed: {e}")
-            return 1
-        finally:
-            sys.path.pop(0)
-
+def _viz_csv(path: Path, args: argparse.Namespace) -> int:
+    """CSV visualization: detect the format, then draw it with the
+    matching visualize_* module (falls back to a saved PNG when no GUI
+    backend is usable).
+    CSV可視化: 書式を判定し、対応する visualize_* モジュールで描画する
+    （GUIバックエンドが使えない場合は保存したPNGへフォールバックする）。"""
     try:
-        # Import visualization module
         sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+
+        # Every visualize_* module below imports matplotlib.pyplot at
+        # module load time, which locks in whatever backend is active at
+        # that moment. Format detection itself needs visualize_stream (for
+        # is_stream_csv()), so the backend must be chosen here, before that
+        # first import. The result is handed to _render_with_fallback() so
+        # the (Tk window-creating) probe runs only once.
+        # 以下の visualize_* モジュールはいずれもモジュール読み込み時に
+        # matplotlib.pyplot を import し、その時点で有効なバックエンドを
+        # 固定してしまう。書式判定自体が visualize_stream（is_stream_csv()
+        # 用）を必要とするため、その最初の import より前にここでバックエンドを
+        # 選んでおく。結果は _render_with_fallback() に渡し、（Tk ウィンドウを
+        # 作る）プローブが一度しか走らないようにする。
+        backend = plotting.select_backend(want_window=args.save is None)
 
         # Detect CSV format to choose appropriate visualizer
         import csv
@@ -737,49 +794,56 @@ def run_viz(args: argparse.Namespace) -> int:
         import visualize_stream
         if visualize_stream.is_stream_csv(columns):
             console.info("Detected: Data Stream CSV (sf log wifi -o *.csv, 400Hz)")
-
             df = visualize_stream.load_stream_csv(str(path))
-            visualize_stream.visualize_all(
-                df, str(path), save_path=args.save, show=(args.save is None),
-                time_range=args.time_range, mode=args.mode,
-            )
+
+            def render(save_path: Optional[str], show: bool) -> None:
+                visualize_stream.visualize_all(
+                    df, str(path), save_path=save_path, show=show,
+                    time_range=args.time_range, mode=args.mode,
+                )
         # Extended format (400Hz with ESKF) - has timestamp_us and quat_w
         elif 'timestamp_us' in columns and 'quat_w' in columns:
             import visualize_extended
             console.info("Detected: Extended telemetry (400Hz with ESKF)")
-
             data, fmt = visualize_extended.load_csv(str(path))
-            visualize_extended.plot_extended(
-                data,
-                output_file=args.save,
-                time_range=args.time_range,
-                show_eskf=not args.no_eskf,
-                show_sensors=not args.no_sensors,
-            )
+
+            def render(save_path: Optional[str], show: bool) -> None:
+                # plot_extended has no `show` argument: passing a save path
+                # makes it save instead of show -- same behaviour as before
+                # this refactor, so `show` is unused here.
+                # plot_extended に show 引数は無い: 保存パスを渡すと表示の
+                # 代わりに保存する -- この改修前と同じ挙動のため、ここでは
+                # show を使わない。
+                visualize_extended.plot_extended(
+                    data,
+                    output_file=save_path,
+                    time_range=args.time_range,
+                    show_eskf=not args.no_eskf,
+                    show_sensors=not args.no_sensors,
+                )
         # FFT batch format - has timestamp_ms and gyro_corrected_x
         elif 'timestamp_ms' in columns and 'gyro_corrected_x' in columns:
             import visualize_extended
             console.info("Detected: FFT batch telemetry")
-
             data, fmt = visualize_extended.load_csv(str(path))
-            visualize_extended.plot_legacy(data, fmt, output_file=args.save)
+
+            def render(save_path: Optional[str], show: bool) -> None:
+                visualize_extended.plot_legacy(data, fmt, output_file=save_path)
         # Normal WiFi telemetry - has timestamp_ms and roll_deg
         elif 'timestamp_ms' in columns and 'roll_deg' in columns:
             import visualize_telemetry
             console.info("Detected: Normal WiFi telemetry")
-
-            # Load data and call appropriate function
             df = visualize_telemetry.load_telemetry_csv(str(path))
-            show = args.save is None
 
-            if args.mode == "sensors":
-                visualize_telemetry.visualize_sensors_only(df, str(path), args.save, show)
-            elif args.mode == "attitude":
-                visualize_telemetry.visualize_attitude_only(df, str(path), args.save, show)
-            elif args.mode == "position":
-                visualize_telemetry.visualize_position_only(df, str(path), args.save, show)
-            else:
-                visualize_telemetry.visualize_all(df, str(path), args.save, show)
+            def render(save_path: Optional[str], show: bool) -> None:
+                if args.mode == "sensors":
+                    visualize_telemetry.visualize_sensors_only(df, str(path), save_path, show)
+                elif args.mode == "attitude":
+                    visualize_telemetry.visualize_attitude_only(df, str(path), save_path, show)
+                elif args.mode == "position":
+                    visualize_telemetry.visualize_position_only(df, str(path), save_path, show)
+                else:
+                    visualize_telemetry.visualize_all(df, str(path), save_path, show)
         # SILS trajectory.csv (sf sils scenario output) - has t, px, alt, roll,
         # yawrate, yawcmd, alt_est, m0-m3. Checked as a set (column order is not
         # guaranteed) against a combination distinctive enough not to collide
@@ -793,25 +857,99 @@ def run_viz(args: argparse.Namespace) -> int:
         }.issubset(set(columns)):
             import visualize_sils_trajectory
             console.info("Detected: SILS trajectory (sf sils scenario)")
-
             df = visualize_sils_trajectory.load_trajectory_csv(str(path))
-            visualize_sils_trajectory.visualize_all(
-                df, str(path), save_path=args.save, show=(args.save is None)
-            )
+
+            def render(save_path: Optional[str], show: bool) -> None:
+                visualize_sils_trajectory.visualize_all(
+                    df, str(path), save_path=save_path, show=show,
+                )
         else:
+            # Unknown format: bail out before _render_with_fallback() so
+            # this case never triggers backend-selection or PNG fallback
+            # logic -- there is nothing renderable to fall back to.
+            # 未知の書式: _render_with_fallback() を呼ぶ前に打ち切ることで、
+            # このケースがバックエンド選択やPNGフォールバックの経路に
+            # 入らないようにする -- フォールバックできる描画対象がそもそもない。
             console.error("Unknown CSV format. Cannot determine visualizer.")
             return 1
 
-        sys.path.pop(0)
-        return 0
+        return _render_with_fallback(path, args, render, backend)
 
     except ImportError as e:
         console.error(f"Failed to import visualization module: {e}")
         console.print("  Required: matplotlib, numpy")
         return 1
     except Exception as e:
+        # Covers format-detection failures (bad/unreadable CSV) -- errors
+        # from render() itself are already handled inside
+        # _render_with_fallback() and never reach this far.
+        # 書式判定自体の失敗（壊れた/読めないCSV）を捕捉する -- render()
+        # 自体のエラーは _render_with_fallback() 内で既に処理済みで、
+        # ここまでは届かない。
         console.error(f"Visualization failed: {e}")
         return 1
+    finally:
+        sys.path.pop(0)
+
+
+def _render_with_fallback(
+    path: Path,
+    args: argparse.Namespace,
+    render: Callable[[Optional[str], bool], None],
+    backend: Optional[plotting.BackendInfo] = None,
+) -> int:
+    """Draw one figure set via `render(save_path, show)`, choosing the
+    matplotlib backend first. Falls back to a PNG saved next to the log
+    (opened with the OS default viewer) when no window can be shown, and
+    retries headlessly once if a GUI backend passes its import-time probe
+    but still fails while actually drawing/showing.
+    `render(save_path, show)` で1つの図を描く。まず matplotlib バックエンドを
+    選ぶ。ウィンドウを表示できない場合はログの隣に PNG を保存して
+    （OS標準の画像ビューアで開く）フォールバックし、GUIバックエンドが
+    import時のプローブは通過したのに実際の描画/表示で失敗した場合は
+    一度だけヘッドレスで再試行する。
+
+    `render` must not import any matplotlib.pyplot-importing module until
+    it is actually called -- the backend must be selected first, either by
+    the caller (passed as `backend`) or here.
+    `render` は実際に呼ばれるまで matplotlib.pyplot を import するモジュール
+    を import してはならない -- バックエンドの選択は、呼び出し側（`backend`
+    で渡す）かこの関数が先に行う。
+    """
+    want_window = args.save is None
+    info = backend or plotting.select_backend(want_window=want_window)
+
+    save_path, show = args.save, want_window
+    opened_fallback = False
+    if want_window and not info.interactive:
+        save_path = str(plotting.default_png_path(path))
+        show = False
+        opened_fallback = True
+        plotting.report_headless(console, info, Path(save_path))
+
+    try:
+        render(save_path, show)
+    except Exception as first_error:  # noqa: BLE001 - draw-time errors must not crash sf
+        if not show:
+            console.error(f"Visualization failed: {first_error}")
+            return 1
+        # The GUI backend passed the probe but failed while drawing/showing
+        # (e.g. a Tk/Qt runtime error): retry the same render headlessly once.
+        # GUIバックエンドはプローブを通過したが描画/表示時に失敗した
+        # （Tk/Qtの実行時エラー等）: 同じ描画を一度だけヘッドレスで再試行する。
+        plotting.force_headless()
+        save_path = str(plotting.default_png_path(path))
+        opened_fallback = True
+        try:
+            render(save_path, False)
+        except Exception:  # noqa: BLE001 - report the ORIGINAL error, not the retry's
+            console.error(f"Visualization failed: {first_error}")
+            return 1
+        console.warning(f"Plot window failed ({first_error}); saved the plot to {save_path} instead.")
+
+    if opened_fallback:
+        plotting.open_with_default_viewer(Path(save_path))
+    return 0
 
 
 # --- Helper functions ---

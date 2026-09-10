@@ -48,6 +48,27 @@
 | VPython が起動しない | vpython 未インストール | `pip install vpython` |
 | シミュレーションが遅い | データ点数が多い | dt を大きくする |
 
+## 6. グラフ表示（matplotlib）
+
+| 症状 | 原因 | 解決策 |
+|------|------|--------|
+| `sf log viz` / `sf sysid fit --plot` でウィンドウが開かず、`FigureCanvasAgg is non-interactive, and thus cannot be shown` という警告だけが出て終わる | この Python の matplotlib（グラフ描画ライブラリ）に使える GUI バックエンド（ウィンドウ表示の仕組み）が無く、自動的に画面を出さない "Agg" バックエンドが選ばれている | 何もしなくても sf が自動でログの隣に `<ログ名>.png` を保存し、既定の画像ビューアで開く（下記参照）。恒久的に直したい場合は下表の対処を行う |
+| `Can't find a usable init.tcl in the following directories: ...` という `TclError` で終了する | pyenv-win 等でインストールした Python の Tcl/Tk（Tkウィンドウ表示に必要な一式）が不完全 | 同上（sf が自動で PNG 保存に切り替える）。恒久的に直すには下表の「pyenv-win」の行を参照 |
+
+**sf が自動で行うこと（2026-09 対応）:** `lib/sfcli/utils/plotting.py` が、matplotlib の GUI バックエンドを候補順（macOS: macosx → Qt → Tk、Windows: Tk → Qt → wx、Linux: Qt → GTK → Tk → wx）に1つずつ試し、実際に使える物だけを選ぶ。全て使えない場合だけ画面なしの "Agg" に切り替え、ログファイルと同じフォルダに `<ログ名>.png` を保存して OS 標準の画像ビューアで自動的に開く。この仕組みは `sf log viz` と `sf sysid fit/noise --plot` の両方に入っている。
+
+**事前確認:** `sf doctor` を実行し、「Checking plot window support (matplotlib)」の項目を見る。`GUI backend: macosx`（等）と出れば正常、`GUI backend: NONE` ならこの節の対処が必要。
+
+**恒久的に直す方法:**
+
+| 環境 | 対処 |
+|------|------|
+| Windows（新規インストール） | python.org から Python を再インストールする際、「tcl/tk and IDLE」にチェックを入れる。その後 `install.bat` を再実行する |
+| Windows / macOS 共通 | sf の Python 環境に Qt バックエンドを追加する: `pip install PyQt5` |
+| pyenv-win（`Can't find a usable init.tcl` の場合） | 環境変数 `TCL_LIBRARY` / `TK_LIBRARY` を、ベースにした Python 本体の `tcl\tcl8.6` / `tcl\tk8.6` フォルダに設定する |
+| バックエンドを自分で固定したいとき | 環境変数 `MPLBACKEND` で明示指定する（例: `MPLBACKEND=agg`）|
+| そもそもウィンドウ不要で保存だけでよいとき | `--save <ファイル名>`（`sf log viz`）や `--plot-output <ファイル名>`（`sf sysid fit/noise`）を付けて実行する |
+
 ---
 
 <a id="english"></a>
@@ -82,3 +103,32 @@
 |-------|-------|----------|
 | No plots | Backend config | Add `%matplotlib inline` |
 | Kernel crashes | Out of memory | Process data in chunks |
+
+## 5. Simulator
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Automatic fallback to the simulator | WiFi not connected | Fine to keep using it if intended |
+| VPython does not start | vpython not installed | `pip install vpython` |
+| Simulation is slow | Too many data points | Increase dt |
+
+## 6. Plot Window (matplotlib)
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| `sf log viz` / `sf sysid fit --plot` opens no window, and only prints a `FigureCanvasAgg is non-interactive, and thus cannot be shown` warning before exiting | This Python's matplotlib (the plotting library) has no usable GUI backend (window-display mechanism), so it silently picked the headless "Agg" backend | sf now saves a `<log>.png` next to the log and opens it with the default image viewer automatically (see below). To fix it permanently, see the table below |
+| Exits with `TclError: Can't find a usable init.tcl in the following directories: ...` | The Python install (often via pyenv-win) has an incomplete Tcl/Tk (the toolkit Tk windows need) | Same as above -- sf automatically switches to saving a PNG. For a permanent fix, see the "pyenv-win" row below |
+
+**What sf now does automatically (added 2026-09):** `lib/sfcli/utils/plotting.py` tries each GUI backend in order (macOS: macosx -> Qt -> Tk; Windows: Tk -> Qt -> wx; Linux: Qt -> GTK -> Tk -> wx) and picks the first one that actually works. Only when none of them work does it fall back to the headless "Agg" backend, save a `<log>.png` next to the log file, and open it with the OS default image viewer. This applies to both `sf log viz` and `sf sysid fit/noise --plot`.
+
+**To check:** run `sf doctor` and look at "Checking plot window support (matplotlib)". `GUI backend: macosx` (or similar) means it is working; `GUI backend: NONE` means this section applies.
+
+**Permanent fixes:**
+
+| Environment | Fix |
+|-------------|-----|
+| Windows (fresh install) | Reinstall Python from python.org with "tcl/tk and IDLE" checked, then run `install.bat` again |
+| Windows / macOS | Install a Qt backend into the sf Python environment: `pip install PyQt5` |
+| pyenv-win (`Can't find a usable init.tcl`) | Set the `TCL_LIBRARY` / `TK_LIBRARY` environment variables to the base Python install's `tcl\tcl8.6` / `tcl\tk8.6` folders |
+| To pin the backend yourself | Set the `MPLBACKEND` environment variable (e.g. `MPLBACKEND=agg`) |
+| When a window is not needed at all | Pass `--save <file>` (`sf log viz`) or `--plot-output <file>` (`sf sysid fit/noise`) |

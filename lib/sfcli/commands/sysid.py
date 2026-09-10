@@ -26,7 +26,7 @@ from typing import Optional
 
 import yaml
 
-from ..utils import console, paths
+from ..utils import console, paths, plotting
 
 COMMAND_NAME = "sysid"
 COMMAND_HELP = "System identification from flight logs"
@@ -594,6 +594,51 @@ def run_help(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_plot_target(
+    args: argparse.Namespace, info: 'plotting.BackendInfo', suffix: str,
+) -> tuple:
+    """Decide where a sysid plot goes: a live window, the user's explicit
+    --plot-output path, or (when no GUI backend works) a PNG saved next to
+    the input file.
+    sysid のプロットの行き先を決める: ライブウィンドウか、ユーザー指定の
+    --plot-output パスか、（GUIバックエンドが使えない場合は）入力ファイルの
+    隣に保存する PNG か。
+
+    Args:
+        args: parsed CLI args (reads .plot, .plot_output, .input)
+        info: backend chosen by plotting.select_backend(), called by the
+            caller BEFORE importing sysid.visualizer
+        suffix: filename suffix for the headless fallback PNG (e.g. "_fit")
+
+    Returns (plot_output_base, show, headless):
+        plot_output_base: None (let the module show without saving) or a
+            Path base to save to -- same base --plot-output already used,
+            so per-axis filenames are derived from it the same way.
+        show: whether to open a live window.
+        headless: True when this function chose the PNG fallback path --
+            the caller must open the produced file(s) with the default
+            viewer afterwards.
+    """
+    if args.plot_output:
+        # Explicit file: save there; also show a window only when one is
+        # possible (never call plt.show() on a headless backend).
+        # 明示的なファイル指定: そこへ保存し、ウィンドウは表示可能なときだけ
+        # 開く（ヘッドレスなバックエンドで plt.show() は呼ばない）。
+        if args.plot and not info.interactive:
+            console.warning("No GUI backend for matplotlib is usable; plot window skipped (file saved).")
+        return Path(args.plot_output), args.plot and info.interactive, False
+
+    if not args.plot:
+        return None, False, False
+
+    if info.interactive:
+        return None, True, False
+
+    fallback_base = plotting.default_png_path(Path(args.input), suffix)
+    plotting.report_headless(console, info, fallback_base)
+    return fallback_base, False, True
+
+
 def run_fit(args: argparse.Namespace) -> int:
     """Run plant model fitting"""
     try:
@@ -782,10 +827,17 @@ def run_fit(args: argparse.Namespace) -> int:
     if args.plot or args.plot_output:
         try:
             sys.path.insert(0, str(paths.root() / "tools"))
+            # Backend must be chosen before this import -- sysid.visualizer
+            # imports matplotlib.pyplot at module load time.
+            # このimportより前にバックエンドを選ぶこと -- sysid.visualizer は
+            # モジュール読み込み時に matplotlib.pyplot を import する。
+            info = plotting.select_backend(want_window=bool(args.plot))
             from sysid.visualizer import plot_plant_fit
         except ImportError:
             console.warning("matplotlib not available, skipping plot")
         else:
+            plot_output_base, show, headless = _resolve_plot_target(args, info, "_fit")
+            saved_paths = []
             for axis, r in results.items():
                 try:
                     # Use axis-specific rate_max
@@ -802,9 +854,8 @@ def run_fit(args: argparse.Namespace) -> int:
                     )
 
                     plot_out = None
-                    if args.plot_output:
-                        base = Path(args.plot_output)
-                        plot_out = str(base.with_stem(f"{base.stem}_{axis}"))
+                    if plot_output_base:
+                        plot_out = str(plot_output_base.with_stem(f"{plot_output_base.stem}_{axis}"))
 
                     if r.input_mode == 'duty':
                         u_plant_unit = 'Nm' if r.mixer == 'vehicle' else 'duty'
@@ -822,11 +873,16 @@ def run_fit(args: argparse.Namespace) -> int:
                         tau_m=r.tau_m,
                         r_squared=r.r_squared,
                         output_path=plot_out,
-                        show=args.plot,
+                        show=show,
                         u_plant_unit=u_plant_unit,
                     )
+                    if headless and plot_out:
+                        saved_paths.append(plot_out)
                 except Exception as e:
                     console.warning(f"Plot failed for {axis}: {e}")
+
+            for saved_path in saved_paths:
+                plotting.open_with_default_viewer(Path(saved_path))
         finally:
             if str(paths.root() / "tools") in sys.path:
                 sys.path.remove(str(paths.root() / "tools"))
@@ -838,8 +894,14 @@ def run_noise(args: argparse.Namespace) -> int:
     """Run noise characterization"""
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
+        # sysid.visualizer (imported later, only if a plot is requested)
+        # imports matplotlib.pyplot at module load time, so it is NOT
+        # imported here -- plotting.select_backend() must run first.
+        # sysid.visualizer（プロットが要求された場合のみ後で import する）は
+        # モジュール読み込み時に matplotlib.pyplot を import するため、
+        # ここでは import しない -- plotting.select_backend() を先に
+        # 実行する必要がある。
         from sysid.noise import load_and_estimate
-        from sysid.visualizer import plot_noise_analysis
     except ImportError as e:
         console.error(f"Failed to import sysid module: {e}")
         return 1
@@ -903,13 +965,31 @@ def run_noise(args: argparse.Namespace) -> int:
     # Plot
     if args.plot or args.plot_output:
         try:
-            plot_noise_analysis(
-                result,
-                output_path=args.plot_output,
-                show=args.plot,
-            )
+            sys.path.insert(0, str(paths.root() / "tools"))
+            # Backend must be chosen before this import -- sysid.visualizer
+            # imports matplotlib.pyplot at module load time.
+            # このimportより前にバックエンドを選ぶこと -- sysid.visualizer は
+            # モジュール読み込み時に matplotlib.pyplot を import する。
+            info = plotting.select_backend(want_window=bool(args.plot))
+            from sysid.visualizer import plot_noise_analysis
         except ImportError:
             console.warning("matplotlib not available, skipping plot")
+        else:
+            plot_output_base, show, headless = _resolve_plot_target(args, info, "_noise")
+            output_path = str(plot_output_base) if plot_output_base else None
+            try:
+                plot_noise_analysis(
+                    result,
+                    output_path=output_path,
+                    show=show,
+                )
+                if headless and output_path:
+                    plotting.open_with_default_viewer(Path(output_path))
+            except Exception as e:
+                console.warning(f"Plot failed: {e}")
+        finally:
+            if str(paths.root() / "tools") in sys.path:
+                sys.path.remove(str(paths.root() / "tools"))
 
     return 0
 

@@ -13,7 +13,7 @@ import sys
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Optional, Tuple
-from ..utils import console, paths, platform
+from ..utils import console, paths, platform, plotting
 from . import sils as sils_cmd
 
 COMMAND_NAME = "doctor"
@@ -549,6 +549,48 @@ def _check_sils_toolchain(warnings: list) -> None:
         console.warning(f"    could not query g++ -v: {e}")
 
 
+def _check_plot_backend(warnings: list) -> None:
+    """Check that matplotlib has at least one usable GUI backend in this
+    Python (sf log viz / sf sysid fit/noise need one to show a plot
+    window). This is the same probe plotting.select_backend() runs before
+    every plot command, so a doctor warning here predicts what those
+    commands will do.
+
+    Does not duplicate the "matplotlib: NOT INSTALLED" warning already
+    produced by the package check above -- if matplotlib itself is
+    missing, this function only reports that and returns.
+    matplotlib にこの Python で使える GUI バックエンドが最低1つあるかを
+    確認する（sf log viz / sf sysid fit/noise がプロットウィンドウを
+    表示するにはこれが必要）。これは plotting.select_backend() が
+    プロットコマンド実行のたびに行うのと同じプローブなので、ここでの警告は
+    それらのコマンドが実際にどう振る舞うかを予測する。
+
+    上のパッケージチェックが既に出す「matplotlib: NOT INSTALLED」警告を
+    重複させない -- matplotlib 自体が無ければ、この関数はそれだけを
+    報告して終わる。
+    """
+    try:
+        info = plotting.select_backend(want_window=True)
+    except ImportError:
+        console.warning("  matplotlib: NOT INSTALLED")
+        return
+    except Exception as e:  # noqa: BLE001 - a probe crash must not take doctor down
+        warnings.append(f"Could not check the matplotlib GUI backend: {e}")
+        console.warning(f"  GUI backend: could not check ({e})")
+        return
+
+    if info.interactive:
+        console.success(f"  GUI backend: {info.name}")
+        return
+
+    warnings.append("matplotlib has no usable GUI backend; plots will be saved as PNG files")
+    console.warning("  GUI backend: NONE (plots will be saved as PNG and opened in the image viewer)")
+    if info.reason:
+        console.print(f"    ({info.reason})")
+    for hint in plotting.headless_fix_hints():
+        console.print(f"    {hint}")
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute doctor command"""
     console.header("StampFly Environment Diagnostics")
@@ -629,6 +671,11 @@ def run(args: argparse.Namespace) -> int:
         except ImportError:
             warnings.append(f"Missing package: {package_name}")
             console.warning(f"  {package_name}: NOT INSTALLED")
+
+    # Check plot window support (matplotlib GUI backend)
+    console.print()
+    console.info("Checking plot window support (matplotlib)...")
+    _check_plot_backend(warnings)
 
     # Check hidapi native library (for joystick / simulator)
     # hidapiネイティブライブラリの確認（ジョイスティック／シミュレータ用）

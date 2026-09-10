@@ -165,6 +165,14 @@ sf log info logs/flight.csv
 pip install matplotlib numpy scipy pyyaml
 ```
 
+**プロットウィンドウが開かない／"non-interactive" 警告が出る**
+```bash
+# sf が自動でログの隣に <ログ名>.png を保存し、既定の画像ビューアで開く
+# 詳しい原因と恒久的な直し方は docs/guides/troubleshooting.md
+# 第6章「グラフ表示（matplotlib）」を参照
+sf doctor   # "Checking plot window support" でGUIバックエンドの状態を確認できる
+```
+
 ---
 
 <a id="english"></a>
@@ -246,4 +254,36 @@ Use `--mode attitude` for the 3 rate panels plus attitude only, `--time-range
 # Capture -> Visualize
 sf log wifi -d 30 -o logs/test.csv
 sf log viz logs/test.csv --save overview.png
+```
+
+## 5. Troubleshooting
+
+### Common Issues
+
+**Cannot connect over WiFi**
+```bash
+# Check that you are connected to StampFly's AP (SSID: StampFly_XXXX)
+# Specify the IP address explicitly
+sf log wifi -i 192.168.10.1
+```
+
+**Log is empty or errors out**
+```bash
+# Check the log file's info
+sf log info logs/flight.csv
+```
+
+**matplotlib error**
+```bash
+# Install the required packages
+pip install matplotlib numpy scipy pyyaml
+```
+
+**Plot window does not open / "non-interactive" warning**
+```bash
+# sf now saves a <log>.png next to the log and opens it with the
+# default image viewer automatically. For the cause and a permanent
+# fix, see docs/guides/troubleshooting.md section 6
+# "Plot Window (matplotlib)".
+sf doctor   # "Checking plot window support" shows the GUI backend status
 ```
