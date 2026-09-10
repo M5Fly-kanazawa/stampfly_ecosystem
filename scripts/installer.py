@@ -3682,6 +3682,44 @@ class Installer:
             # 追加）を呼ぶことで、依存欠落時はこのプローブが正しく
             # 「未インストール」と判定し、Step3が再実行されるようにする。
             # 末尾の print は下の参照先チェック用に sfcli の実体位置を返す。
+            #
+            # PYTHONPATH must NOT be inherited here: if the caller's own
+            # process has PYTHONPATH pointing at some checkout's lib/ (e.g.
+            # `sf upgrade`'s self-bootstrap hop, or SF_ROOT_OVERRIDE-based
+            # testing -- see docs/plans/dedicated-environment-plan.md Phase
+            # F), that path shadows the venv's real site-packages/editable
+            # install ahead of it on sys.path, so `import sfcli.cli` here
+            # would resolve through PYTHONPATH instead of reporting what
+            # this venv actually has installed. That silently defeats the
+            # whole point of this probe: a migration that reuses an
+            # existing dedicated venv while running under such a
+            # PYTHONPATH would see a false "already installed" match and
+            # skip reinstalling, leaving the venv's editable link stale
+            # (observed 2026-09-11 while exercising Phase F of the
+            # dedicated-environment plan: `sf upgrade --migrate` run with
+            # SF_ROOT_OVERRIDE+PYTHONPATH both set to the new checkout hid
+            # the fact that the shared venv's sfcli editable install still
+            # pointed at a different, previously-migrated checkout).
+            # PYTHONPATH をここで継承してはならない: 呼び出し元プロセス
+            # 自身の PYTHONPATH が何らかのチェックアウトの lib/ を指して
+            # いる場合(`sf upgrade` の自己ブートストラップ・ホップ、または
+            # SF_ROOT_OVERRIDE を使ったテスト --
+            # docs/plans/dedicated-environment-plan.md Phase F 参照)、その
+            # パスが venv 本来の site-packages/editable インストールより
+            # sys.path で先に来てしまい、ここでの `import sfcli.cli` は
+            # このvenvが実際に持っている状態ではなく PYTHONPATH 経由で
+            # 解決されてしまう。これは本プローブの存在意義を静かに
+            # 無効化する: 既存の専用venvを再利用する移行を、そのような
+            # PYTHONPATH の下で実行すると、誤って「インストール済み」と
+            # 一致してしまい再インストールをスキップし、venvのeditable
+            # リンクが古いまま残ってしまう(2026-09-11、専用環境計画の
+            # Phase F 実施中に発見: SF_ROOT_OVERRIDE と PYTHONPATH を両方
+            # 新しいチェックアウトに向けて `sf upgrade --migrate` を実行
+            # したところ、共有venvのsfcli editableインストールが実際には
+            # 別の、以前に移行した別チェックアウトを指したままであった
+            # ことが隠れてしまった)。
+            probe_env = dict(os.environ)
+            probe_env.pop("PYTHONPATH", None)
             result = subprocess.run(
                 [
                     str(venv_python), "-c",
@@ -3690,6 +3728,7 @@ class Installer:
                 ],
                 capture_output=True, text=True,
                 encoding="utf-8", errors="replace",
+                env=probe_env,
             )
             if result.returncode != 0:
                 return False
