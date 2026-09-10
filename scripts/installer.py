@@ -114,6 +114,7 @@ main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを
 # メッセージではなく、不可解なトレースバックを見ることになっていた。
 from __future__ import annotations
 
+import codecs
 import datetime
 import hashlib
 import json
@@ -126,6 +127,7 @@ import subprocess
 import shutil
 import tarfile
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -2304,6 +2306,106 @@ def _report_git_not_found() -> None:
     error("導入後、このインストーラーを再実行してください。")
 
 
+# Child-process output relay (see _stream_subprocess() below).
+# 子プロセス出力の中継（下の _stream_subprocess() 参照）。
+STREAM_READ_BYTES = 4096
+PROGRESS_LOG_INTERVAL_SECONDS = 2.0
+
+
+class _OutputRelay:
+    """Forward a child's decoded output to our stdout, treating `\\r`
+    correctly for the two kinds of stdout we can have.
+
+    Terminal (isatty): text is written through unchanged, so a progress
+    meter that rewrites its line with `\\r` overwrites in place exactly as
+    the child intended.
+
+    Captured stdout (GUI installer queue, log file, CI): a `\\r` marks the
+    current partial line as a progress update. Such updates are printed
+    as separate lines at most once per PROGRESS_LOG_INTERVAL_SECONDS
+    (the first one immediately), and the final state of the line is
+    always printed when its `\\n` arrives. `\\r\\n` is an ordinary line
+    ending. A `\\r` at the very end of a chunk is held back until the
+    next chunk shows what follows it.
+
+    子プロセスのデコード済み出力を自分の標準出力へ転送する。`\\r` の扱いを
+    標準出力の種類ごとに分ける。
+
+    端末（isatty）: そのまま書き出す。`\\r` で行を書き直す進捗表示は、
+    子プロセスの意図どおりその場で上書きされる。
+
+    捕捉された標準出力（GUI インストーラのキュー、ログファイル、CI）:
+    `\\r` は「ここまでの部分行は進捗更新」の印。進捗更新は
+    PROGRESS_LOG_INTERVAL_SECONDS ごとに最大 1 行（最初の 1 回は即時）だけ
+    別行として印字し、行の最終状態は `\\n` が届いた時点で必ず印字する。
+    `\\r\\n` は通常の行末。チャンク末尾の `\\r` は、続きが分かるまで
+    保留する。
+    """
+
+    def __init__(self) -> None:
+        self._partial = ""
+        self._last_progress_time = float("-inf")
+
+    @staticmethod
+    def _stdout_is_tty() -> bool:
+        stream = sys.stdout
+        return bool(getattr(stream, "isatty", None) and stream.isatty())
+
+    def feed(self, text: str) -> None:
+        """Consume decoded text from the child.
+        子プロセスからのデコード済みテキストを取り込む。"""
+        if not text:
+            return
+        if self._stdout_is_tty():
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            return
+        self._partial += text
+        self._drain_captured()
+
+    def _drain_captured(self) -> None:
+        """Emit complete lines / throttled progress from the partial buffer.
+        部分バッファから完成した行と間引いた進捗を書き出す。"""
+        while True:
+            newline_at = self._partial.find("\n")
+            return_at = self._partial.find("\r")
+            if newline_at < 0 and return_at < 0:
+                return
+            if return_at >= 0 and (newline_at < 0 or return_at < newline_at):
+                if return_at == len(self._partial) - 1:
+                    return  # hold a trailing CR until we know what follows / 末尾の CR は保留
+                if self._partial[return_at + 1] == "\n":
+                    self._emit_line(self._partial[:return_at])
+                    self._partial = self._partial[return_at + 2:]
+                else:
+                    self._emit_progress(self._partial[:return_at])
+                    self._partial = self._partial[return_at + 1:]
+            else:
+                self._emit_line(self._partial[:newline_at])
+                self._partial = self._partial[newline_at + 1:]
+
+    def _emit_line(self, line: str) -> None:
+        print(line, flush=True)
+
+    def _emit_progress(self, line: str) -> None:
+        now = time.monotonic()
+        if line.strip() and now - self._last_progress_time >= PROGRESS_LOG_INTERVAL_SECONDS:
+            print(line, flush=True)
+            self._last_progress_time = now
+
+    def close(self) -> None:
+        """Flush whatever is left (an unterminated last line).
+        残り（終端されていない最終行）を書き出す。"""
+        if self._stdout_is_tty():
+            return
+        if self._partial.endswith("\r"):
+            self._partial = self._partial[:-1]
+        self._drain_captured()
+        if self._partial:
+            print(self._partial, flush=True)
+            self._partial = ""
+
+
 def _stream_subprocess(
     cmd,
     cwd: Optional[Path] = None,
@@ -2322,10 +2424,13 @@ def _stream_subprocess(
     the caller's own stdout redirection (e.g. contextlib.redirect_stdout
     into a queue) surface each line as it happens.
 
-    `\\r` (used by progress meters like git's own `--progress` output,
-    which does not end lines with `\\n`) is normalized to `\\n` so those
-    updates still appear as discrete log lines rather than being lost
-    inside a single unterminated read.
+    `\\r` (used by progress meters like git's own `--progress` output and
+    idf_tools.py's download counters, which rewrite one line in place) is
+    handled by _OutputRelay: passed through untouched on a terminal, and
+    throttled to one log line per PROGRESS_LOG_INTERVAL_SECONDS when
+    stdout is captured (GUI installer, log file) -- turning every `\\r`
+    into `\\n`, as this function once did, printed thousands of lines and
+    scrolled the whole install log out of the terminal buffer.
 
     On Windows, CREATE_NO_WINDOW suppresses the console window that would
     otherwise flash open for a python.exe- or cmd.exe-hosted child when
@@ -2349,9 +2454,12 @@ def _stream_subprocess(
     contextlib.redirect_stdout でキューへ流す)が発生と同時に各行を
     表示できる。
 
-    `\\r`(git 自身の `--progress` 出力のような進捗表示が使う。`\\n` で
-    行を終端しない)は `\\n` に正規化し、1つの未終端読み込みの中に
-    埋もれさせず個別のログ行として見せる。
+    `\\r`(git 自身の `--progress` 出力や idf_tools.py のダウンロード
+    カウンタのように、1 行をその場で書き直す進捗表示が使う)は
+    _OutputRelay が扱う: 端末へはそのまま通し、標準出力が捕捉されている
+    場合(GUI インストーラ、ログファイル)は PROGRESS_LOG_INTERVAL_SECONDS
+    ごとに 1 行へ間引く -- かつてこの関数が行っていた `\\r` の `\\n` 化は
+    数千行を印字し、インストールログ全体を端末バッファから押し流していた。
 
     Windows では CREATE_NO_WINDOW を付け、--windowed(コンソール無し)の
     凍結GUI内で実行した際に python.exe や cmd.exe をホストする子プロセス
@@ -2368,26 +2476,27 @@ def _stream_subprocess(
         shell=shell,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        encoding="utf-8",
-        errors="replace",
         env=env,
     )
     if os.name == "nt":
         popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     process = subprocess.Popen(cmd, **popen_kwargs)
-
     assert process.stdout is not None  # guaranteed by stdout=subprocess.PIPE above
-    buffer = ""
+    # Binary pipe + incremental decoder: read1() returns as soon as ANY
+    # bytes are available (a text-mode read(4096) blocks until 4096 chars),
+    # so progress reaches the screen without a 4 KB lag.
+    # バイナリのパイプ + 逐次デコーダ: read1() はバイトが 1 つでも届けば
+    # すぐ返る（テキストモードの read(4096) は 4096 文字たまるまで塞がる）
+    # ため、進捗が 4 KB 分遅れずに画面へ届く。
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    relay = _OutputRelay()
     while True:
-        chunk = process.stdout.read(4096)
+        chunk = process.stdout.read1(STREAM_READ_BYTES)
         if not chunk:
             break
-        buffer += chunk.replace("\r", "\n")
-        while "\n" in buffer:
-            line, buffer = buffer.split("\n", 1)
-            print(line, flush=True)
-    if buffer:
-        print(buffer, flush=True)
+        relay.feed(decoder.decode(chunk))
+    relay.feed(decoder.decode(b"", final=True))
+    relay.close()
     return process.wait()
 
 

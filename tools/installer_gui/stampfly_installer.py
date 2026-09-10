@@ -128,6 +128,7 @@ CI は各OS向けに Python 不要のスタンドアロン実行ファイルを�
 from __future__ import annotations
 
 import argparse
+import codecs  # noqa: F401  -- hidden-import only, see the contract block below
 import contextlib
 import ctypes.util  # noqa: F401  -- hidden-import only, see the contract block below
 import datetime  # noqa: F401  -- hidden-import only, see the contract block below
@@ -149,6 +150,7 @@ import sys
 import tarfile  # noqa: F401  -- hidden-import only, see the contract block below
 import tempfile  # noqa: F401  -- hidden-import only, see the contract block below
 import threading
+import time  # noqa: F401  -- hidden-import only, see the contract block below
 import traceback
 import types
 import urllib.parse  # noqa: F401  -- hidden-import only, see the contract block below
@@ -186,16 +188,17 @@ from typing import Dict, List, Optional, Tuple
 # `json`, and re-verified again 2026-09-11 after the dedicated-environment
 # feature (docs/plans/dedicated-environment-plan.md Phase B:
 # provision_private_python() and friends) added `datetime`, `hashlib`,
-# `platform`, `tarfile`, `urllib.parse`, and `urllib.request`:
+# `platform`, `tarfile`, `urllib.parse`, and `urllib.request`, and once more
+# the same day after _OutputRelay (progress relay) added `codecs` and `time`:
 #   os, shlex, sys, subprocess, shutil, tempfile, json, datetime, hashlib,
-#   platform, tarfile, urllib.parse, urllib.request, pathlib.Path,
+#   platform, tarfile, urllib.parse, urllib.request, codecs, time, pathlib.Path,
 #   typing.{Optional,List,Tuple}, re (used inline in two functions),
 #   ctypes.util (used inline, Linux-only branch), tempfile (used inline,
 #   Windows-only branch: Installer._create_terminal_launcher_windows()'s
 #   .ps1 temp file), argparse (used inline in main()).
 # All of these are already imported above for this GUI's own use, EXCEPT
 # shlex, ctypes.util, tempfile, json, datetime, hashlib, platform, tarfile,
-# urllib.parse, and urllib.request, which are imported for this contract
+# urllib.parse, urllib.request, codecs, and time, which are imported for this contract
 # alone (see the `# noqa: F401` markers). ssl/venv were considered as
 # generic examples during planning but are NOT currently imported by
 # scripts/installer.py -- do not add them speculatively.
