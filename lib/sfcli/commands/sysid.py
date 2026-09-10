@@ -632,6 +632,7 @@ def _resolve_plot_target(
         return None, False, False
 
     if info.interactive:
+        console.info(f"Plot window backend: {info.name}")
         return None, True, False
 
     fallback_base = plotting.default_png_path(Path(args.input), suffix)

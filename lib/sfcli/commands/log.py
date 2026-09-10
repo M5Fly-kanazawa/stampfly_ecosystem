@@ -921,6 +921,12 @@ def _render_with_fallback(
 
     save_path, show = args.save, want_window
     opened_fallback = False
+    if want_window and info.interactive:
+        # One line so a user can see which GUI backend the window uses
+        # (macosx / tkagg / qtagg) without any extra flag.
+        # 追加のフラグ無しで、ウィンドウがどの GUI バックエンド
+        # （macosx / tkagg / qtagg）で開くかを 1 行で示す。
+        console.info(f"Plot window backend: {info.name}")
     if want_window and not info.interactive:
         save_path = str(plotting.default_png_path(path))
         show = False
