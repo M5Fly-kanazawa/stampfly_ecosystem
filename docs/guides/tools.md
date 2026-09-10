@@ -2,61 +2,72 @@
 
 StampFly開発支援ツールの使い方ガイドです。
 
+> **重要:** ツールは全て **sf CLI** 経由で使用してください。`tools/` 配下の Python スクリプトは
+> sf CLI のバックエンド実装であり、直接実行は非推奨です（3Dアニメーション等、sf コマンド化
+> されていない一部のツールを除く）。
+
 ## 概要
 
 ```
 tools/
-├── log_capture/      # ログ取得
-├── log_analyzer/     # ログ解析・可視化・最適化
-├── calibration/      # センサキャリブレーション
-├── flashing/         # ファームウェア書き込み
+├── log_capture/      # ログ取得（sf log capture のバックエンド）
+├── log_analyzer/     # ログ解析・可視化（sf log analyze / sf log viz のバックエンド）
+├── calibration/      # センサキャリブレーション（sf cal のバックエンド）
+├── flashing/         # ファームウェア書き込み（sf flash のバックエンド）
 └── ci/               # CI用スクリプト
 ```
 
 ## クイックスタート
 
-### 1. 環境セットアップ
-
 ```bash
-cd tools/log_analyzer
-pip install -r requirements.txt
-```
+# 開発環境のセットアップ
+source setup_env.sh
 
-### 2. ログ取得
+# 環境診断（問題があればまずこれを実行）
+sf doctor
 
-```bash
-cd tools/log_capture
-python log_capture.py capture -p /dev/tty.usbmodem* -o flight.bin -d 60
-```
+# WiFi経由で400Hzテレメトリを取得（30秒間）
+sf log wifi -d 30
 
-### 3. ログ可視化
-
-```bash
-cd tools/log_analyzer
-python visualize_eskf.py ../log_capture/flight.bin
+# 最新ログを可視化
+sf log viz
 ```
 
 ---
 
-## log_capture - ログ取得
+## ログ取得
 
-デバイスからセンサログをキャプチャします。
+### USB経由（sf log capture）
 
-### 基本コマンド
+デバイスからバイナリセンサログをUSBシリアル経由でキャプチャします。
 
 ```bash
-# キャプチャ（60秒）
-python log_capture.py capture -p /dev/tty.usbmodem* -o sensor.bin -d 60
+# キャプチャ（60秒、既定）
+sf log capture
+
+# ポート・時間・出力ファイルを指定
+sf log capture -p /dev/tty.usbmodem* -o sensor.bin -d 30
 
 # ライブ表示付き
-python log_capture.py capture -p /dev/tty.usbmodem* -o sensor.bin -d 30 --live
+sf log capture -d 30 --live
 
-# CSV変換
-python log_capture.py convert --input sensor.bin --output sensor.csv
+# CSVに変換
+sf log convert sensor.bin
 
 # ログ情報表示
-python log_capture.py info sensor.bin
+sf log info sensor.bin
 ```
+
+**主なオプション:**
+
+| オプション | 説明 |
+|-----------|------|
+| `-p, --port` | シリアルポート（未指定時は自動検出） |
+| `-o, --output` | 出力ファイル名（未指定時は自動生成） |
+| `-d, --duration` | キャプチャ時間（秒）既定: 60 |
+| `-b, --baudrate` | ボーレート 既定: 115200 |
+| `--live` | パケットデータをライブ表示 |
+| `--no-auto` | binlog on/off コマンドを自動送信しない |
 
 ### シリアルポート確認
 
@@ -68,117 +79,185 @@ ls /dev/tty.usbmodem*
 ls /dev/ttyUSB* /dev/ttyACM*
 ```
 
----
+### WiFi経由（sf log wifi）400Hzテレメトリ
 
-## log_analyzer - ログ解析
-
-### 可視化ツール
-
-#### visualize_eskf.py（メイン）
+StampFlyのWiFi APに接続して、USBより高レートの400Hzテレメトリをキャプチャします。
 
 ```bash
-# 全パネル表示
-python visualize_eskf.py data.bin
+# 基本（30秒キャプチャ、既定IP 192.168.10.1）
+sf log wifi
 
-# センサ生値と姿勢のみ
-python visualize_eskf.py data.bin --sensors --attitude
+# 60秒キャプチャ + ファイル名指定
+sf log wifi -d 60 -o flight_test.jsonl
 
-# 画像に保存
-python visualize_eskf.py data.bin --all --save result.png --no-show
+# .csv 指定時は Data Stream CSV（sf sysid fit が読む形式）として保存
+sf log wifi -d 30 -o flight_test.csv
+
+# 統計のみ表示（保存なし）
+sf log wifi --no-save
+
+# IPアドレス・ポートを明示
+sf log wifi -i 192.168.10.1 --port 8890
 ```
 
-**オプション:**
-
-| オプション | 説明 |
-|-----------|------|
-| `--all` | 全パネル表示（デフォルト） |
-| `--sensors` | センサ生値 |
-| `--attitude` | 姿勢（Roll/Pitch/Yaw） |
-| `--position` | 位置・速度 |
-| `--biases` | バイアス推定値 |
-| `--trajectory` | XY軌跡 |
-| `--compare` | PC vs Device比較 |
-| `--save FILE` | 画像保存 |
-
-#### ラッパースクリプト
-
-```bash
-python viz_all.py data.bin        # 全パネル
-python viz_sensors.py data.bin    # センサ生値
-python viz_attitude.py data.bin   # 姿勢
-python viz_position.py data.bin   # 位置・速度
-python viz_compare.py result.csv  # PC vs Device比較
-```
-
-#### 3Dアニメーション
-
-```bash
-# 姿勢3D
-python visualize_attitude_3d.py data.bin
-
-# 位置+姿勢3D
-python visualize_pose_3d.py data.bin
-
-# MP4動画に保存
-python visualize_pose_3d.py data.bin --mp4
-```
-
-### 解析ツール
-
-#### pure_accel_integration.py
-
-加速度をESKFなしで純積分し、ドリフト特性を確認します。
-
-```bash
-python pure_accel_integration.py data.bin
-```
+**含まれるデータ:** IMU生データ（ジャイロ・加速度）、バイアス補正済みジャイロ、ESKF推定値
+（姿勢・位置・速度・バイアス）、センサデータ（気圧高度、ToF、光学フロー）、コントローラ入力。
 
 ---
 
-## calibration - キャリブレーション
-
-### plot_mag_xy.py
-
-地磁気キャリブレーションを確認します。
+## ログ可視化（sf log viz）
 
 ```bash
-python plot_mag_xy.py sensor.bin
+# 未指定時は最新ログを自動選択（.jsonl優先、なければ.csv）
+sf log viz
+
+# ファイル指定
+sf log viz log.csv
+
+# モード指定（既定 all）
+sf log viz log.csv --mode sensors    # センサ生値のみ
+sf log viz log.csv --mode attitude   # 姿勢のみ
+sf log viz log.csv --mode position   # 位置・速度のみ
+sf log viz log.csv --mode eskf       # ESKF推定値のみ
+
+# 画像保存（GUIバックエンドが無い環境では自動でPNG保存にフォールバック）
+sf log viz log.csv --save output.png
+
+# 時間範囲指定
+sf log viz log.csv --time-range 5 15
+
+# パネルの表示切り替え
+sf log viz log.csv --no-eskf      # ESKFパネル非表示
+sf log viz log.csv --no-sensors   # 追加センサパネル（baro/tof/flow）非表示
+sf log viz log.csv --show-invalid # 無効センサ値を隠さず表示
+
+# インタラクティブ表示（Plotly、ブラウザで開く）
+sf log viz log.csv -i
+sf log viz log.csv -i --layout 3x2 --groups attitude bias_gyro
+```
+
+**自動フォーマット検出:**
+- Data Stream CSV（`sf log wifi -o *.csv`、400Hz、`rate_ref`+50Hz CtrlRefマージ）
+- Extended（400Hz ESKF+sensors）: `timestamp_us`, `quat_w` 含む
+- FFT batch: `timestamp_ms`, `gyro_corrected_x` 含む
+- Normal WiFi: `timestamp_ms`, `roll_deg` 含む
+- SILS trajectory（`sf sils scenario` 出力）: `t`, `px`, `alt`, `roll`, `yawrate`, `yawcmd`, `alt_est`, `m0`-`m3` 含む
+- JSONL（`sf log wifi` の既定出力）: 静的一覧表示。`-i` を付けるとインタラクティブ表示
+
+---
+
+## フライト解析（sf log analyze）
+
+```bash
+# フライト解析（振動周波数のFFT検出を含む。常時実行されフラグ不要）
+sf log analyze
+
+# モータ健全性レポート（劣化ロータの検出、JSONLログが必要）
+sf log analyze --health
+
+# 複数ログでクロスログ隅特定（CG除去）
+sf log analyze --health --batch
+
+# セッション/機体をグロブで明示
+sf log analyze --health --batch "stampfly_udp_2026061*.jsonl"
+
+# AI/スクリプト連携用の機械可読 JSON
+sf log analyze --health --batch --json
+```
+
+詳細は `tools/log_analyzer/README.md` の「sf log analyze --health」節を参照してください。
+
+---
+
+## キャリブレーション確認（sf cal）
+
+### 磁気キャリブレーション確認（sf cal plot）
+
+地磁気キャリブレーションを確認します（バックエンド: `plot_mag_xy.py`）。
+
+```bash
+# 最新のログから確認
+sf cal plot
+
+# ファイル指定 + 画像保存
+sf cal plot sensor.bin -o mag_xy.png
 ```
 
 **判定:**
 - 正常: 原点中心の円
 - 要調整: オフセットまたは楕円
 
+その他のキャリブレーション（ジャイロ・加速度）は `sf cal gyro` / `sf cal accel`、一覧は
+`sf cal list` を使用してください。詳細は `tools/calibration/README.md` を参照。
+
+---
+
+## ビルド・書き込み
+
+```bash
+# ビルド（既定 target: vehicle）
+sf build vehicle
+sf build controller
+
+# クリーンビルド
+sf build vehicle -c
+
+# 書き込み（-m でモニタ付き）
+sf flash vehicle -m
+
+# ビルドしてから書き込み
+sf flash vehicle --build -m
+```
+
+---
+
+## 3Dアニメーション（sf非対応、直接実行が必要）
+
+姿勢・位置の3Dアニメーション表示は sf CLI に未統合のため、`tools/log_analyzer/` 配下の
+スクリプトを直接実行します。
+
+```bash
+cd tools/log_analyzer
+
+# 姿勢3Dアニメーション（CSVのみ対応）
+python3 visualize_attitude_3d.py data.csv
+
+# 位置+姿勢3Dアニメーション（.bin/.csv対応）
+python3 visualize_pose_3d.py data.bin
+
+# MP4動画として保存
+python3 visualize_pose_3d.py data.bin --mp4
+```
+
 ---
 
 ## 典型的なワークフロー
 
-### ESKFログ解析サイクル
+### 1. フライトログ取得・解析サイクル
 
 ```bash
-# 1. ログ取得
-cd tools/log_capture
-python log_capture.py capture -p /dev/tty.usbmodem* -o test.bin -d 30
+# 1. StampFly WiFi APに接続してログ取得
+sf log wifi -d 60
 
-# 2. 現状確認
-cd ../log_analyzer
-python visualize_eskf.py ../log_capture/test.bin --attitude --position
+# 2. 可視化
+sf log viz
 
-# 3. ファームウェア再ビルド・テスト
-cd ../../firmware/vehicle
-idf.py build flash monitor
+# 3. 詳細解析（FFTによる振動周波数検出を含む）
+sf log analyze
+
+# 4. ファームウェア修正後の再ビルド・書き込み
+sf build vehicle
+sf flash vehicle -m
 ```
 
-### キャリブレーション確認
+### 2. キャリブレーション確認
 
 ```bash
-# 1. 静止状態でデータ取得
-cd tools/log_capture
-python log_capture.py capture -p /dev/tty.usbmodem* -o static.bin -d 30
+# 1. 静止状態でUSBログ取得
+sf log capture -d 30 -o static.bin
 
 # 2. 地磁気確認
-cd ../calibration
-python plot_mag_xy.py ../log_capture/static.bin
+sf cal plot static.bin
 ```
 
 ---
@@ -189,31 +268,38 @@ python plot_mag_xy.py ../log_capture/static.bin
 
 ```bash
 # デバイスを接続してから
-ls /dev/tty.usbmodem*  # macOS
-ls /dev/ttyUSB* /dev/ttyACM*  # Linux
+ls /dev/tty.usbmodem*        # macOS
+ls /dev/ttyUSB* /dev/ttyACM* # Linux
+
+# 環境診断
+sf doctor
 ```
 
 ### グラフが表示されない
 
 ```bash
-# matplotlibバックエンド確認
-python -c "import matplotlib; print(matplotlib.get_backend())"
+# 環境診断（matplotlib GUIバックエンドの自動修復を含む）
+sf doctor --fix
 
-# 画像に保存で確認
-python visualize_eskf.py data.bin --save test.png --no-show
+# 画像保存で確認（GUIバックエンドが無い場合は自動でPNGにフォールバックする）
+sf log viz log.csv --save test.png
 ```
 
-### 最適化が収束しない
+### ログファイルが見つからない
 
-- イテレーション数を増やす: `--iter 1000`
-- 複数データセットで実行
-- `--roll-weight` を調整
+```bash
+# 全ログファイル一覧
+sf log list --all
+
+# ログ情報確認（フォーマット検出）
+sf log info log.csv
+```
 
 ---
 
 ## 関連ドキュメント
 
 - [次のステップ](../next_step.md) - 操縦と開発の詳細
-- `tools/log_analyzer/README.md` - 詳細なツールリファレンス
+- `tools/log_analyzer/README.md` - ログ解析・可視化の詳細なツールリファレンス
 - `tools/log_capture/README.md` - ログ取得の詳細
 - `tools/calibration/README.md` - キャリブレーションの詳細

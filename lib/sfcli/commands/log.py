@@ -193,16 +193,6 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Log file path (default: latest CSV)",
     )
     analyze_parser.add_argument(
-        "--fft",
-        action="store_true",
-        help="Run FFT analysis",
-    )
-    analyze_parser.add_argument(
-        "--no-plot",
-        action="store_true",
-        help="Skip visualization",
-    )
-    analyze_parser.add_argument(
         "--health",
         action="store_true",
         help="Motor health report: detect a degraded rotor from hover trim (JSONL)",

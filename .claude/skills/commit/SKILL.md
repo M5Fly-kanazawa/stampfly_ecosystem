@@ -79,7 +79,7 @@ Next steps:
 Next steps:
 - Flash firmware to vehicle (idf.py flash)
 - Test jump 0.15m command via WiFi CLI:
-    python3 tools/stampfly_cli.py --ip 192.168.2.19 jump 0.15
+    sf jump 0.15 --ip 192.168.2.19
 - Verify altitude control with ±2cm tolerance
 - Monitor ToF raw values in serial log during climb/descent
 - Test consecutive jumps to verify queue handling

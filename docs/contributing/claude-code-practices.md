@@ -142,7 +142,7 @@ implementation.
 
 ```
 # 非推奨: 個別スクリプトを直接実行
-python tools/log_analyzer/plot_timeseries.py data.csv
+python tools/log_analyzer/visualize_extended.py data.csv
 
 # 推奨: sf CLI 経由
 sf log viz data.csv

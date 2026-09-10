@@ -28,7 +28,7 @@ sf log wifi -d 30 && sf log viz
 | コマンド | 説明 | 例 |
 |---------|------|-----|
 | `sf log list` | ログファイル一覧 | `sf log list --all` |
-| `sf log wifi` | WiFi経由400Hzキャプチャ | `sf log wifi -d 60 --fft` |
+| `sf log wifi` | WiFi経由400Hzキャプチャ | `sf log wifi -d 60 -o flight.csv` |
 | `sf log capture` | USB経由バイナリキャプチャ | `sf log capture -d 30` |
 | `sf log convert` | バイナリ→CSV変換 | `sf log convert log.bin` |
 | `sf log info` | ログ情報表示 | `sf log info log.csv` |
@@ -68,8 +68,8 @@ StampFlyのWiFi APに接続して400Hzテレメトリをキャプチャします
 # 基本（30秒キャプチャ）
 sf log wifi
 
-# 60秒キャプチャ + FFT解析
-sf log wifi -d 60 --fft
+# 60秒キャプチャ（振動解析したい場合は取得後に sf log analyze を使う）
+sf log wifi -d 60 -o flight.csv
 
 # ファイル名指定
 sf log wifi -d 30 -o flight_test.csv
@@ -131,12 +131,15 @@ sf log analyze
 
 ### 2. 振動解析（FFT）
 
-```bash
-# キャプチャ + FFT解析
-sf log wifi -d 30 --fft
+FFT解析（支配的な振動周波数の検出）は `sf log analyze` の解析処理に常時組み込まれており、
+別途フラグを指定する必要はない。
 
-# または別途FFT解析
-sf log analyze --fft
+```bash
+# キャプチャ
+sf log wifi -d 30
+
+# 解析（FFTによる振動周波数の検出を含む）
+sf log analyze
 ```
 
 ## バックエンドスクリプト
@@ -154,9 +157,11 @@ sf log analyze --fft
 
 | スクリプト | sf コマンド | 説明 |
 |-----------|------------|------|
-| `visualize_extended.py` | `sf log viz` | 拡張テレメトリ可視化 |
-| `visualize_telemetry.py` | `sf log viz` | WiFi CSV可視化 |
-| `visualize_eskf.py` | `sf log viz` | バイナリログ可視化 |
+| `visualize_stream.py` | `sf log viz` | Data Stream CSV可視化（`sf log wifi -o *.csv`、400Hz） |
+| `visualize_extended.py` | `sf log viz` | 拡張テレメトリ可視化（400Hz ESKF付き / FFT batch形式） |
+| `visualize_telemetry.py` | `sf log viz` | WiFi CSV可視化（通常テレメトリ形式） |
+| `visualize_jsonl.py` | `sf log viz` | JSONLログの静的一覧表示（`.jsonl` のデフォルト） |
+| `visualize_interactive.py` | `sf log viz -i` | インタラクティブ表示（Plotly、CSV/JSONL共通） |
 | `visualize_sils_trajectory.py` | `sf log viz` | SILS trajectory.csv可視化 |
 | `visualize_attitude_3d.py` | - | 姿勢3Dアニメーション |
 | `visualize_pose_3d.py` | - | 位置+姿勢3Dアニメーション |
@@ -165,8 +170,7 @@ sf log analyze --fft
 
 | スクリプト | sf コマンド | 説明 |
 |-----------|------------|------|
-| `flight_analysis.py` | `sf log analyze` | フライト解析 |
-| `analyze_fft.py` | `sf log analyze --fft` | FFT解析 |
+| `flight_analysis.py` | `sf log analyze` | フライト解析（FFTによる振動周波数検出を含む） |
 
 ## 必要なライブラリ
 
