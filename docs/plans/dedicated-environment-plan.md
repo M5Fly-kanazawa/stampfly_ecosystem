@@ -23,7 +23,7 @@
 | 専用 Python | python-build-standalone（以下 PBS。管理者権限なしで展開できる CPython 配布物）の `install_only` 版 3.12.14（リリース 20260901）を固定。tkinter・venv・pip・SSL を同梱。Windows 版は VC ランタイム DLL も同梱（本計画作成時に配布物の中身と macOS 版の実動作を確認済み） |
 | 専用フォルダ | Windows `C:\StampFly`（ESP-IDF は非 ASCII・空白入りパスを嫌うため `%LOCALAPPDATA%` は使わない）、macOS/Linux `~/.stampfly`。環境変数 `SF_HOME` で上書き可 |
 | 既存環境 | 触らない。`sf upgrade` が移行を提案し、承諾すれば専用環境を横に作って切り替える。旧環境の削除は手動（手順を文書化） |
-| 容量 | 約 4〜6 GB（Python 0.05〜0.15 GB、ESP-IDF 0.65 GB、ツール 1.5 GB 前後、仮想環境 1.5〜3.4 GB）。公式 ESP-IDF がある PC ではその分が二重になる |
+| 容量 | 約 5 GB（Phase F 実測、macOS・`--minimal`: Python 72 MB、ESP-IDF 647 MB、ツール置き場 4.1 GB = ESP32-S3 用ツールチェーン約 3 GB + 仮想環境）。sim 一式を含む通常インストールでは仮想環境が 1〜2 GB 増える。公式 ESP-IDF がある PC ではその分が二重になる |
 | 成果 | Python の版に起因する不具合が構造的に消える。tkinter が常にあるため matplotlib のウィンドウ表示は Tk で成立し、PyQt6 自動導入（209dd05f）は保険として残るだけになる。アンインストールはフォルダ 1 つの削除で完結 |
 
 ## 1. 現状の事実（調査 2026-09-11）
@@ -140,3 +140,4 @@ default_target = "vehicle"
 | 日付 | 内容 |
 |------|------|
 | 2026-09-11 | 計画作成。PBS の Windows 版の中身と macOS 版の動作を確認。SHA-256 を公式一覧から取得し手元の 2 配布物と一致確認 |
+| 2026-09-11 | Phase A〜E 実装・コミット（615130d4 計画、ad285109 B、3cfeb589 C、889ab6e3 D、1b0c9431 E）。並行して進捗表示の改行量産を修正（a1c7e437）。Phase F（本 Mac、HOME/SF_HOME を一時フォルダへ）: 新規専用インストール 3 分 41 秒で成功、`sf doctor` が専用環境を認識、`sf build vehicle` 成功（約 1 分）、`sf log viz --save` 成功、tkinter 9.0。v1 設定の複製に `sf upgrade --migrate`: 8 秒で完了（専用 Python・ESP-IDF・ツールは既存を再利用、設定は v2 に更新）。発見した不具合 1 件を修正（sfcli の導入済み判定が PYTHONPATH の影響を受ける、96328d8e）。**Windows 実機（Phase G）は未実施** |
