@@ -10,12 +10,73 @@ REM  (2) under a cp932 console (Japanese Windows) it reads UTF-8 Japanese
 REM      bytes as raw bytes -- some decode to command separators (& | < >),
 REM      so a REM line with Japanese text can execute part of itself.
 REM Same ASCII-only rule the generated uninstall.cmd follows (spec 4-1).
+REM
+REM Dedicated vs legacy (docs\plans\dedicated-environment-plan.md section 2):
+REM if .sf\config.toml has [env] kind = "dedicated", this script trusts the
+REM paths written there (python_dir/tools_path/path) outright and skips ALL
+REM of the probing below (IDF_TOOLS_PATH guessing, pyenv-win/python.org
+REM discovery, version matching). A v1 config (no [env] section) or
+REM kind = "legacy" runs the exact same probing this script always has.
 
 setlocal enabledelayedexpansion
 
 echo.
 echo [INFO] Setting up StampFly development environment...
 echo.
+
+REM --- Read .sf\config.toml up front (kind / python_dir / tools_path /
+REM     path) so dedicated mode can decide to skip all legacy probing below
+REM     before any of it runs. /b anchors each findstr match to the start
+REM     of the line, so "python_dir"/"tools_path" can never falsely match
+REM     the shorter "python"/"path" searches (a line starting with
+REM     "tools_path" does not start with "path", and vice versa).
+REM     delims== (equals and space) makes token 2 the quoted value with
+REM     its internal spaces intact -- stripping every space (the old
+REM     approach) broke paths such as a LOCALAPPDATA fallback under a
+REM     user name containing a space. Only the quotes are removed. ---
+set "SF_CONFIG=%~dp0.sf\config.toml"
+set "SF_KIND="
+set "SF_PY_DIR_CFG="
+set "SF_TOOLS_PATH_CFG="
+set "SF_IDF_PATH="
+if exist "%SF_CONFIG%" (
+    set "SF_RAW="
+    for /f "tokens=1,* delims== " %%a in ('findstr /b "kind" "%SF_CONFIG%"') do set "SF_RAW=%%b"
+    if defined SF_RAW (
+        set "SF_RAW=!SF_RAW:"=!"
+        set "SF_KIND=!SF_RAW!"
+    )
+
+    set "SF_RAW="
+    for /f "tokens=1,* delims== " %%a in ('findstr /b "python_dir" "%SF_CONFIG%"') do set "SF_RAW=%%b"
+    if defined SF_RAW (
+        set "SF_RAW=!SF_RAW:"=!"
+        set "SF_PY_DIR_CFG=!SF_RAW!"
+    )
+
+    set "SF_RAW="
+    for /f "tokens=1,* delims== " %%a in ('findstr /b "tools_path" "%SF_CONFIG%"') do set "SF_RAW=%%b"
+    if defined SF_RAW (
+        set "SF_RAW=!SF_RAW:"=!"
+        set "SF_TOOLS_PATH_CFG=!SF_RAW!"
+    )
+
+    set "SF_RAW="
+    for /f "tokens=1,* delims== " %%a in ('findstr /b "path" "%SF_CONFIG%"') do set "SF_RAW=%%b"
+    if defined SF_RAW (
+        set "SF_RAW=!SF_RAW:"=!"
+        set "SF_IDF_PATH=!SF_RAW!"
+    )
+    set "SF_RAW="
+)
+if not defined SF_IDF_PATH set "SF_IDF_PATH=%USERPROFILE%\esp\esp-idf"
+
+if "%SF_KIND%"=="dedicated" goto :sf_dedicated_env
+
+REM ==========================================================================
+REM Legacy mode: probe for IDF_TOOLS_PATH and a system Python, exactly as
+REM this script did before dedicated mode existed.
+REM ==========================================================================
 
 REM --- Determine IDF_TOOLS_PATH: env var > C:\Espressif > %USERPROFILE%\.espressif ---
 REM scripts\installer.py's _idf_tools_path_candidates() installs to
@@ -158,23 +219,36 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM --- Determine IDF_PATH: .sf/config.toml > default ---
-set "SF_IDF_PATH="
-set "SF_CONFIG=%~dp0.sf\config.toml"
-if exist "%SF_CONFIG%" (
-    for /f "tokens=1,* delims==" %%a in ('findstr /b "path" "%SF_CONFIG%"') do (
-        set "SF_RAW=%%b"
-    )
-    if defined SF_RAW (
-        set "SF_RAW=!SF_RAW: =!"
-        set "SF_RAW=!SF_RAW:"=!"
-        set "SF_IDF_PATH=!SF_RAW!"
-    )
-)
-
-if not defined SF_IDF_PATH set "SF_IDF_PATH=%USERPROFILE%\esp\esp-idf"
-
 set "DISCOVERED_PATH=!PATH!"
+goto :sf_env_handoff
+
+REM ==========================================================================
+REM Dedicated mode: everything comes straight from .sf\config.toml -- no
+REM probing, no version matching, no venv-minor scan. Just verify the two
+REM paths the installer wrote are still there, then use them as-is.
+REM ==========================================================================
+:sf_dedicated_env
+if not exist "%SF_PY_DIR_CFG%\python.exe" goto :sf_dedicated_incomplete
+if not exist "%SF_IDF_PATH%\export.bat" goto :sf_dedicated_incomplete
+
+set "DISCOVERED_PATH=%SF_PY_DIR_CFG%;%SF_PY_DIR_CFG%\Scripts;%PATH%"
+set "SF_TOOLS_PATH=%SF_TOOLS_PATH_CFG%"
+goto :sf_env_handoff
+
+:sf_dedicated_incomplete
+echo [ERROR] Dedicated environment is incomplete.
+echo   Expected Python at: %SF_PY_DIR_CFG%\python.exe
+echo   Expected ESP-IDF at: %SF_IDF_PATH%\export.bat
+echo   Run install.bat to re-provision it.
+exit /b 1
+
+REM ==========================================================================
+REM Shared tail: hand off PATH/IDF_PATH/IDF_TOOLS_PATH out of this script's
+REM setlocal scope (so they persist in the caller's console), then load
+REM ESP-IDF's own export.bat and verify it actually worked. Reached by
+REM either branch above -- do not duplicate this in the dedicated branch.
+REM ==========================================================================
+:sf_env_handoff
 endlocal & set "PATH=%DISCOVERED_PATH%" & set "IDF_PATH=%SF_IDF_PATH%" & set "IDF_TOOLS_PATH=%SF_TOOLS_PATH%"
 
 if not exist "%IDF_PATH%\export.bat" (
@@ -229,6 +303,7 @@ REM (see the venv scan near the top). Returns via errorlevel:
 REM   0 = acceptable
 REM   1 = missing, unusable, out of range, or venv mismatch
 REM Silent by design (called many times while probing candidates) -- callers
-REM decide what to print once the final outcome is known.
+REM decide what to print once the final outcome is known. Legacy-mode-only
+REM (dedicated mode goes straight to :sf_dedicated_env and never calls this).
 "%~1" -c "import os,sys; v=sys.version_info[:2]; a=os.environ.get('SF_VENV_MINORS','').split(); sys.exit(0 if (3,10) <= v <= (3,12) and (not a or str(v[1]) in a) else 1)" >nul 2>&1
 exit /b %errorlevel%

@@ -35,9 +35,28 @@ _sf_idf_path=""
 
 # Try .sf/config.toml first
 # まず設定ファイルを確認
+#
+# Also read the [env] section (kind/python_dir/tools_path) here, added by
+# the dedicated-environment installer (docs/plans/dedicated-environment-plan.md
+# section 2). A v1 config (no [env] section, written by older installer.py)
+# leaves _sf_kind empty, which the branch below treats as "legacy" --
+# unchanged behavior. Patterns include the trailing " = " so "python_dir"
+# never matches "^python " and "tools_path" never matches "^path ".
+# [env]セクション（kind/python_dir/tools_path）もここで読む
+# （docs/plans/dedicated-environment-plan.md 2節の専用環境インストーラが
+# 書き込む）。v1設定（[env]無し、旧installer.pyが書いたもの）では
+# _sf_kindが空になり、下の分岐でlegacy扱いになる（挙動不変）。パターンは
+# 末尾の" = "を含めることで、"python_dir"が"^python "に、"tools_path"が
+# "^path "に誤一致しないようにしている。
 _sf_config="${_sf_script_dir}/.sf/config.toml"
+_sf_kind=""
+_sf_python_dir=""
+_sf_tools_path_cfg=""
 if [ -f "$_sf_config" ]; then
     _sf_idf_path="$(grep '^path = ' "$_sf_config" 2>/dev/null | head -1 | sed 's/^path = "//;s/"$//')"
+    _sf_kind="$(grep '^kind = ' "$_sf_config" 2>/dev/null | head -1 | sed 's/^kind = "//;s/"$//')"
+    _sf_python_dir="$(grep '^python_dir = ' "$_sf_config" 2>/dev/null | head -1 | sed 's/^python_dir = "//;s/"$//')"
+    _sf_tools_path_cfg="$(grep '^tools_path = ' "$_sf_config" 2>/dev/null | head -1 | sed 's/^tools_path = "//;s/"$//')"
 fi
 
 # Fallback to IDF_PATH env or default
@@ -58,6 +77,7 @@ if [ ! -f "$_sf_idf_path/export.sh" ]; then
     echo
     # Clean up temporary variables
     unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path
+    unset _sf_kind _sf_python_dir _sf_tools_path_cfg
     return 1
 fi
 
@@ -84,6 +104,30 @@ if [ -d /opt/homebrew/bin ]; then
         *) export PATH="$PATH:/opt/homebrew/bin" ;;
     esac
 fi
+
+if [ "$_sf_kind" = "dedicated" ]; then
+    # Dedicated environment (docs/plans/dedicated-environment-plan.md
+    # section 2): everything comes straight from .sf/config.toml -- no
+    # probing, no version matching, no venv-minor scan. Just verify the two
+    # paths the installer wrote are still there, then use them as-is.
+    # 専用環境（docs/plans/dedicated-environment-plan.md 2節）:
+    # 全て.sf/config.tomlの値をそのまま使う -- 探索・版照合・venv走査は
+    # 一切行わない。インストーラが書いた2つのパスの実在を確認するのみ。
+    if [ ! -x "$_sf_python_dir/python3" ] || [ ! -f "$_sf_idf_path/export.sh" ]; then
+        echo -e "${_sf_red}[ERROR]${_sf_nc} Dedicated environment is incomplete."
+        echo "  Expected Python at: $_sf_python_dir/python3"
+        echo "  Expected ESP-IDF at: $_sf_idf_path/export.sh"
+        echo "  Run ./install.sh to (re)provision it."
+        echo "  専用環境が不完全です。./install.sh を実行してください。"
+        echo
+        unset _sf_green _sf_blue _sf_red _sf_nc _sf_script_dir _sf_config _sf_idf_path
+        unset _sf_kind _sf_python_dir _sf_tools_path_cfg
+        return 1
+    fi
+    export PATH="$_sf_python_dir:$PATH"
+    export IDF_TOOLS_PATH="$_sf_tools_path_cfg"
+    export IDF_PATH="$_sf_idf_path"
+else
 
 # Ensure a supported Python (3.10-3.12) is first on PATH before running
 # export.sh, since ESP-IDF's detect_python.sh blindly picks the first
@@ -280,6 +324,7 @@ if [ -z "$_sf_py_current_ok" ]; then
         unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version _sf_py_current_ok
         unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_shim_dir
         unset _sf_tools_path _sf_venv_minors _sf_venv_minor _sf_venv_dir _sf_preferred_minors
+        unset _sf_kind _sf_python_dir _sf_tools_path_cfg
         return 1
     fi
 fi
@@ -288,6 +333,8 @@ unset -f _sf_py_version _sf_py_in_band _sf_py_find_minor
 unset _sf_py_min_major _sf_py_min_minor _sf_py_max_minor _sf_py_current_version _sf_py_current_ok
 unset _sf_py_found _sf_py_found_dir _sf_py_minor _sf_py_shim_dir
 unset _sf_tools_path _sf_venv_minors _sf_venv_minor _sf_venv_dir _sf_preferred_minors
+fi
+unset _sf_kind _sf_python_dir _sf_tools_path_cfg
 
 # Source ESP-IDF environment
 # ESP-IDF環境を読み込み
