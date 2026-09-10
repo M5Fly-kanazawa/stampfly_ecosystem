@@ -9,7 +9,22 @@ Usage:
     python scripts/installer.py [options]
 
 Options:
-    --idf-path PATH     Specify ESP-IDF path
+    --idf-path PATH     Specify ESP-IDF path (implies the legacy discover/
+                        prompt flow; mutually exclusive with --dedicated)
+    --use-existing-idf  Use an existing/system ESP-IDF via the legacy
+                        discover/prompt flow instead of the dedicated
+                        environment. Implies dedicated=False; mutually
+                        exclusive with --dedicated
+    --dedicated         Force the dedicated environment (self-contained
+                        Python + ESP-IDF under SF_HOME). Already the
+                        default unless --idf-path/--use-existing-idf is
+                        given
+    --sf-home PATH      Dedicated environment root (default: $SF_HOME, or
+                        C:\\StampFly on Windows / ~/.stampfly on macOS/
+                        Linux)
+    --purge             With --uninstall: also delete the dedicated
+                        environment (SF_HOME) if one is configured,
+                        without prompting
     --skip-deps         Skip dependency installation
     --minimal           Install minimal dependencies (skip simulator)
     --uninstall         Remove sfcli from ESP-IDF environment
@@ -99,14 +114,20 @@ main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを
 # メッセージではなく、不可解なトレースバックを見ることになっていた。
 from __future__ import annotations
 
+import datetime
+import hashlib
 import json
 import os
+import platform
 import re
 import shlex
 import sys
 import subprocess
 import shutil
+import tarfile
 import tempfile
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Optional, List, Tuple
 
@@ -330,6 +351,651 @@ def prompt_choice(message: str, choices: List[str], default: int = 1) -> int:
         except ValueError:
             pass
         print(f"Please enter a number between 1 and {len(choices)}")
+
+
+# =============================================================================
+# Dedicated environment (SF_HOME): private Python + layout + manifest
+# 専用環境(SF_HOME): 専用Python・フォルダ配置・manifest
+# =============================================================================
+# See docs/plans/dedicated-environment-plan.md. Unlike the legacy
+# "discover whatever system Python/ESP-IDF happens to be installed" machinery
+# below (kept for --use-existing-idf / --idf-path), this section provisions a
+# self-contained Python (python-build-standalone, "PBS") and ESP-IDF tools
+# folder under one root, so nothing here depends on the participant's own PC
+# state. See docs/plans/dedicated-environment-plan.md 参照。この下にある
+# 「たまたまPCにあるシステムPython/ESP-IDFを探す」旧来の仕組み
+# (--use-existing-idf / --idf-path 用に温存)とは異なり、本節は自己完結した
+# Python(python-build-standalone、以下PBS)とESP-IDFツールフォルダを1つの
+# ルートの下に用意する。参加者のPCの状態には一切依存しない。
+
+# Schema version written to manifest.json's "schema" key (see
+# write_manifest()). Bump this if the manifest's shape ever changes
+# incompatibly.
+# manifest.json の "schema" キーに書き込むスキーマ版(write_manifest()参照)。
+# manifest の形式に非互換な変更をした場合はここを上げる。
+SF_ENV_SCHEMA = 1
+
+# The python-build-standalone release this installer provisions. Both
+# constants together identify one immutable GitHub release asset set; bump
+# them together (and PRIVATE_PYTHON_ASSETS below) when moving to a newer PBS
+# release.
+# 本インストーラが導入する python-build-standalone のリリース。この2定数が
+# 揃って1つの不変な GitHub リリースのアセット群を特定する。新しいPBS
+# リリースへ移行する際は両方(および下のPRIVATE_PYTHON_ASSETS)を同時に
+# 上げること。
+PRIVATE_PYTHON_VERSION = "3.12.14"
+PRIVATE_PYTHON_RELEASE = "20260901"
+PRIVATE_PYTHON_BASE_URL = "https://github.com/astral-sh/python-build-standalone/releases/download/"
+
+# (sys.platform, normalized machine) -> (asset file name, sha256). Values
+# copied verbatim from docs/plans/dedicated-environment-plan.md's table
+# (SHA-256 taken from python-build-standalone's own published SHA256SUMS).
+# (sys.platform, 正規化済みmachine) -> (配布物名, sha256)。値は
+# docs/plans/dedicated-environment-plan.md の表からそのまま転記
+# (SHA-256はpython-build-standalone自身が公開するSHA256SUMSより)。
+PRIVATE_PYTHON_ASSETS = {
+    ("win32", "x86_64"):  ("cpython-3.12.14+20260901-x86_64-pc-windows-msvc-install_only.tar.gz",  "e90c1b6419da3bd812dd73bb3de40287a21abf153438147639ec5e20375ea93f"),
+    ("win32", "arm64"):   ("cpython-3.12.14+20260901-aarch64-pc-windows-msvc-install_only.tar.gz", "4e852236277eb8f7105cbe0f5adf45592f521af238bc0f700c351856e2c2e41a"),
+    ("darwin", "arm64"):  ("cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz",    "3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76"),
+    ("darwin", "x86_64"): ("cpython-3.12.14+20260901-x86_64-apple-darwin-install_only.tar.gz",     "2e31b23f3f1319f707d0e620b48847a0046577541d357276821f9f1b5492e0ba"),
+    ("linux", "x86_64"):  ("cpython-3.12.14+20260901-x86_64-unknown-linux-gnu-install_only.tar.gz", "936c246dfdbbfa7cb22dd01814a21f582a892689fae96b06071a5e433baffa22"),
+    ("linux", "arm64"):   ("cpython-3.12.14+20260901-aarch64-unknown-linux-gnu-install_only.tar.gz","b61b856c3e1a4fc65b8f6e6b0495ef975dd0924f90c59f3ea61b38a079173b84"),
+}
+
+SF_HOME_ENV = "SF_HOME"
+# ESP-IDF's toolchain dislikes non-ASCII/space paths; a Japanese username
+# makes %LOCALAPPDATA% non-ASCII, so the dedicated root defaults to C:\
+# directly (see sf_home_default()).
+# ESP-IDFのツールチェーンは非ASCII/空白パスを嫌う。日本語ユーザー名では
+# %LOCALAPPDATA% が非ASCIIになるため、専用ルートの既定はC:\直下とする
+# (sf_home_default()参照)。
+SF_HOME_WINDOWS_DEFAULT = Path("C:/StampFly")
+SF_HOME_UNIX_DIRNAME = ".stampfly"
+SF_MANIFEST_NAME = "manifest.json"
+DOWNLOAD_CHUNK_BYTES = 1 << 20  # 1 MiB
+DOWNLOAD_TIMEOUT_SECONDS = 60
+PYTHON_VERIFY_TIMEOUT_SECONDS = 60
+
+
+def _normalize_machine(machine: str) -> str:
+    """Normalize platform.machine() into one of PRIVATE_PYTHON_ASSETS' key
+    spellings ("x86_64" / "arm64"), or the input lowercased if unrecognized.
+    Handles the real-world spelling variants: Windows reports "AMD64"/
+    "ARM64", Apple/Linux report "x86_64"/"arm64"/"aarch64".
+    platform.machine() を PRIVATE_PYTHON_ASSETS のキー表記("x86_64"/
+    "arm64")のいずれかへ正規化する。認識できない場合は小文字化した入力を
+    返す。実際に観測される表記ゆれに対応する: Windows は "AMD64"/"ARM64"、
+    Apple/Linux は "x86_64"/"arm64"/"aarch64" を報告する。
+    """
+    upper = machine.strip().upper()
+    if upper in ("AMD64", "X86_64", "X64"):
+        return "x86_64"
+    if upper in ("ARM64", "AARCH64"):
+        return "arm64"
+    return machine.strip().lower()
+
+
+def private_python_asset() -> Tuple[str, str]:
+    """Return (asset_file_name, sha256) for the current platform/machine,
+    or raise RuntimeError naming every supported target if this platform
+    has no PBS build in PRIVATE_PYTHON_ASSETS.
+    現在のプラットフォーム/machine向けの (配布物名, sha256) を返す。
+    PRIVATE_PYTHON_ASSETS に対応するPBSビルドが無い場合は、対応する
+    全ターゲットを列挙した RuntimeError を送出する。
+    """
+    key = (sys.platform, _normalize_machine(platform.machine()))
+    asset = PRIVATE_PYTHON_ASSETS.get(key)
+    if asset is None:
+        supported = ", ".join(f"{plat}/{mach}" for plat, mach in sorted(PRIVATE_PYTHON_ASSETS))
+        raise RuntimeError(
+            f"No dedicated Python build for platform={sys.platform!r} "
+            f"machine={platform.machine()!r} (normalized to {key[1]!r}). "
+            f"Supported targets: {supported}"
+        )
+    return asset
+
+
+def private_python_asset_url() -> str:
+    """Full download URL for the current platform/machine's PBS asset.
+    `+` in the file name (e.g. "cpython-3.12.14+20260901-...") must be
+    percent-encoded as %2B or GitHub's release-asset URL 404s.
+    現在のプラットフォーム/machine向けPBS配布物の完全なダウンロードURL。
+    ファイル名中の `+`(例: "cpython-3.12.14+20260901-...")はGitHubの
+    リリースアセットURLが404を返さないよう %2B にパーセントエンコードする
+    必要がある。
+    """
+    asset_name, _sha256 = private_python_asset()
+    return PRIVATE_PYTHON_BASE_URL + PRIVATE_PYTHON_RELEASE + "/" + urllib.parse.quote(asset_name)
+
+
+def sf_home_default() -> Path:
+    """Resolve the dedicated environment root ("SF_HOME").
+    専用環境のルート("SF_HOME")を解決する
+
+    Priority: the SF_HOME environment variable, then a platform default.
+    Windows prefers C:\\StampFly outright (see SF_HOME_WINDOWS_DEFAULT's
+    comment); if that cannot be created (e.g. a locked-down machine),
+    falls back to %LOCALAPPDATA%\\StampFly. macOS/Linux use ~/.stampfly.
+    優先順位: 環境変数 SF_HOME、その次にプラットフォーム既定。Windows は
+    C:\\StampFly を無条件に優先する(理由は SF_HOME_WINDOWS_DEFAULT の
+    コメント参照)。作成できない場合(権限が制限されたマシン等)は
+    %LOCALAPPDATA%\\StampFly にフォールバックする。macOS/Linux は
+    ~/.stampfly を使う。
+    """
+    env_value = os.environ.get(SF_HOME_ENV)
+    if env_value:
+        return Path(env_value).expanduser()
+
+    if sys.platform == "win32":
+        try:
+            SF_HOME_WINDOWS_DEFAULT.mkdir(parents=True, exist_ok=True)
+            return SF_HOME_WINDOWS_DEFAULT
+        except OSError:
+            local_app_data = os.environ.get("LOCALAPPDATA", str(Path.home()))
+            return Path(local_app_data) / "StampFly"
+
+    return Path.home() / SF_HOME_UNIX_DIRNAME
+
+
+def path_is_idf_safe(path: Path) -> bool:
+    """True if `path` is pure ASCII and contains no spaces -- ESP-IDF's own
+    toolchain (and some of its Python dependencies) is known to misbehave
+    on non-ASCII or space-containing paths.
+    `path` が純粋なASCIIで空白を含まなければ True を返す -- ESP-IDF自身の
+    ツールチェーン(および一部のPython依存関係)は非ASCIIや空白入りの
+    パスで誤動作することが知られている。
+    """
+    text = str(path)
+    try:
+        text.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+    return " " not in text
+
+
+def warn_if_path_unsafe(path: Path) -> None:
+    """Print a bilingual warning if `path` fails path_is_idf_safe()."""
+    if path_is_idf_safe(path):
+        return
+    warn(f"Path contains non-ASCII characters or spaces; ESP-IDF's own "
+         f"toolchain may not handle this correctly: {path}")
+    warn(f"パスに非ASCII文字または空白が含まれています。ESP-IDFのツール"
+         f"チェーンが正しく扱えない場合があります: {path}")
+
+
+def dedicated_python_dir(root: Path) -> Path:
+    """Directory to prepend to PATH so the bare name `python`/`python3`
+    resolves to the dedicated interpreter (Windows: root/python; Unix:
+    root/python/bin, matching PBS's own internal layout).
+    PATH の先頭に置くことで素の名前 `python`/`python3` が専用インタプリタに
+    解決されるようにするディレクトリ(Windows: root/python、Unix:
+    root/python/bin。PBS自身の内部レイアウトに合わせる)。
+    """
+    if sys.platform == "win32":
+        return root / "python"
+    return root / "python" / "bin"
+
+
+def dedicated_python_exe(root: Path) -> Path:
+    """Path to the dedicated interpreter's executable itself."""
+    if sys.platform == "win32":
+        return root / "python" / "python.exe"
+    return root / "python" / "bin" / "python3"
+
+
+def dedicated_idf_dir(root: Path) -> Path:
+    """Dedicated ESP-IDF checkout location."""
+    return root / "esp-idf"
+
+
+def dedicated_tools_dir(root: Path) -> Path:
+    """Dedicated IDF_TOOLS_PATH (holds tools/, dist/, python_env/)."""
+    return root / "espressif"
+
+
+def dedicated_downloads_dir(root: Path) -> Path:
+    """Where fetched archives (e.g. the PBS tarball) are cached."""
+    return root / "downloads"
+
+
+def dedicated_manifest_path(root: Path) -> Path:
+    """Path to the dedicated environment's manifest.json."""
+    return root / SF_MANIFEST_NAME
+
+
+def read_manifest(root: Path) -> dict:
+    """Read manifest.json under `root`; returns {} if missing or corrupt
+    (never raises -- a missing/corrupt manifest just means "nothing
+    recorded yet", handled the same as a fresh install).
+    `root` 直下の manifest.json を読む。無い/壊れている場合は {} を返す
+    (例外は送出しない -- manifest が無い/壊れているのは「まだ何も
+    記録されていない」に過ぎず、新規インストールと同様に扱う)。
+    """
+    try:
+        return json.loads(dedicated_manifest_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def write_manifest(root: Path, data: dict) -> None:
+    """Shallow-merge `data`'s top-level keys into manifest.json under
+    `root` (creating `root` and the file as needed), stamping "schema",
+    "created" (only if not already present) and "updated" (always).
+    `data` の各トップレベルキーを `root` 下の manifest.json へ浅くマージする
+    (`root` とファイルは必要に応じて作成)。"schema"・"created"(未設定の
+    ときのみ)・"updated"(常に)を書き込む。
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    merged = read_manifest(root)
+    merged.update(data)
+    merged.setdefault("schema", SF_ENV_SCHEMA)
+    merged.setdefault("created", now)
+    merged["updated"] = now
+    dedicated_manifest_path(root).write_text(
+        json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+    )
+
+
+def _sha256_of(path: Path) -> str:
+    """Stream-hash `path` in DOWNLOAD_CHUNK_BYTES chunks (avoids loading a
+    multi-ten-megabyte archive fully into memory).
+    `path` を DOWNLOAD_CHUNK_BYTES 単位でストリームハッシュする
+    (数十MBの配布物を一度に全部メモリへ読み込まない)。
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(DOWNLOAD_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download_file_urllib(url: str, dest: Path) -> None:
+    """Download `url` to `dest` via urllib, streaming to a `.part` sibling
+    file first (so a crash mid-download never leaves a truncated file at
+    `dest`) and printing progress at most once per 10% (or once, if the
+    server does not report Content-Length).
+    `url` を urllib 経由で `dest` へダウンロードする。まず `.part` という
+    隣接ファイルへストリーム書き込みし(ダウンロード中のクラッシュで
+    `dest` に不完全なファイルが残らないようにする)、進捗は最大でも
+    10%刻みで1回だけ表示する(サーバがContent-Lengthを返さない場合は
+    完了時に1回だけ)。
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dest = dest.with_name(dest.name + ".part")
+    request = urllib.request.Request(url, headers={"User-Agent": "stampfly-installer"})
+    with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+        total = int(response.headers.get("Content-Length") or 0)
+        downloaded = 0
+        last_decile = -1
+        with tmp_dest.open("wb") as fh:
+            while True:
+                chunk = response.read(DOWNLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                fh.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    decile = (downloaded * 10) // total
+                    if decile != last_decile:
+                        last_decile = decile
+                        info(f"  {downloaded * 100 // total}% "
+                             f"({downloaded}/{total} bytes)")
+    tmp_dest.replace(dest)
+
+
+def _download_file(url: str, dest: Path) -> None:
+    """Download `url` to `dest`, falling back to the system `curl` command
+    if the urllib attempt fails for any network/SSL reason (some
+    locked-down environments have a broken/incomplete CA bundle for
+    Python's ssl module even though the OS's own curl works fine). Raises
+    if curl is unavailable or also fails.
+    `url` を `dest` へダウンロードする。urllib での試行がネットワーク/SSL
+    関連の理由で失敗した場合は、システムの `curl` コマンドへフォール
+    バックする(Pythonのsslモジュール用のCA証明書束が壊れている/不完全な
+    ロックダウン環境でも、OS自身のcurlは正常動作することがあるため)。
+    curl が無い、またはcurlも失敗した場合は例外を送出する。
+    """
+    try:
+        _download_file_urllib(url, dest)
+    except (OSError, ValueError) as exc:
+        curl = shutil.which("curl")
+        if not curl:
+            raise
+        warn(f"urllib download failed ({exc}); falling back to curl")
+        warn(f"urllib でのダウンロードに失敗しました({exc})。curl にフォールバックします")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        rc = subprocess.run([curl, "-L", "--fail", "-o", str(dest), url]).returncode
+        if rc != 0:
+            raise RuntimeError(f"curl failed to download {url} (exit code {rc})")
+
+
+def _extract_private_python(root: Path, archive_path: Path) -> None:
+    """Extract the PBS tarball at `archive_path` into a private temp
+    directory under `root`, then move its top-level `python/` folder into
+    place at `root/python` (replacing any existing one -- it is ours to
+    replace, never a user-managed directory), cleaning up the temp
+    directory in all cases.
+    `archive_path` のPBS tarballを `root` 下の専用一時ディレクトリへ展開し、
+    その直下の `python/` フォルダを `root/python` へ移動する(既存の
+    ものは置き換える -- これは本インストーラが管理するディレクトリであり、
+    ユーザーが管理するものではない)。一時ディレクトリはいずれの場合も
+    後片付けする。
+
+    Uses tarfile's PEP 706 "data" extraction filter when available (Python
+    3.12+) to reject archive members that would escape `root` or set
+    dangerous permissions/special files -- see
+    https://docs.python.org/3/library/tarfile.html#tarfile-extraction-filter.
+    利用可能な場合(Python 3.12+)は tarfile の PEP 706 "data" 展開
+    フィルタを使い、`root` の外へ出る、または危険な権限/特殊ファイルを
+    設定するアーカイブメンバーを拒否する。
+    """
+    extract_dir = root / f".python.extract-{os.getpid()}"
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with tarfile.open(archive_path, "r:gz") as tar:
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(extract_dir, filter="data")
+            else:
+                tar.extractall(extract_dir)  # pragma: no cover - only on Python < 3.12
+
+        extracted_python = extract_dir / "python"
+        if not extracted_python.is_dir():
+            raise RuntimeError(
+                f"{archive_path.name} did not contain a top-level 'python' directory"
+            )
+
+        target = root / "python"
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.move(str(extracted_python), str(target))
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+
+def _python_reported_version(python_exe: Path) -> Optional[str]:
+    """Run `python_exe` and return the version string it reports (also
+    confirming venv/pip/ssl import successfully, so a partially-broken
+    standalone build is caught here rather than surfacing later inside
+    ESP-IDF's own tooling), or None on any failure (missing executable,
+    timeout, non-zero exit, unparsable output). Never raises.
+    `python_exe` を実行し、報告するバージョン文字列を返す(venv/pip/ssl の
+    import も併せて確認するため、一部破損したstandaloneビルドはここで
+    検出され、後段のESP-IDF自身のツール内で表面化することを防ぐ)。
+    起動不可・タイムアウト・非ゼロ終了・出力解析不能のいずれでも None
+    (例外は送出しない)。
+    """
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c",
+             "import sys, venv, pip, ssl; print(sys.version.split()[0])"],
+            capture_output=True, timeout=PYTHON_VERIFY_TIMEOUT_SECONDS,
+            encoding="utf-8", errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return (result.stdout or "").strip()
+
+
+def _warn_if_tkinter_missing(python_exe: Path) -> None:
+    """Best-effort check that `python_exe` can `import tkinter`; a failure
+    is only a warn() (headless Linux may legitimately lack libX11), never
+    a hard error -- the Qt fallback (see lib/sfcli/utils/plotting.py) still
+    covers plotting in that case.
+    `python_exe` が `import tkinter` できるかをベストエフォートで確認する。
+    失敗しても warn() のみ(ヘッドレスLinuxはlibX11を正当に欠くことが
+    ある)で、致命的エラーにはしない -- その場合もQtフォールバック
+    (lib/sfcli/utils/plotting.py 参照)がプロット表示をカバーする。
+    """
+    try:
+        result = subprocess.run(
+            [str(python_exe), "-c", "import tkinter"],
+            capture_output=True, timeout=PYTHON_VERIFY_TIMEOUT_SECONDS,
+            encoding="utf-8", errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is None or result.returncode != 0:
+        warn("Dedicated Python could not import tkinter (matplotlib's Qt "
+             "fallback will be used instead; this is expected on a "
+             "headless Linux box without libX11).")
+        warn("専用Pythonで tkinter を import できませんでした(代わりに"
+             "matplotlibのQtフォールバックが使われます。libX11の無い"
+             "ヘッドレスLinuxでは想定内です)。")
+
+
+def provision_private_python(root: Path, force: bool = False) -> Path:
+    """Ensure a dedicated CPython (python-build-standalone) is present at
+    dedicated_python_exe(root), downloading and extracting it if needed.
+    Idempotent: safe to call on every install/`sf upgrade` run. Returns
+    the interpreter path. Raises RuntimeError on unrecoverable failure
+    (checksum mismatch, corrupt archive, interpreter fails to verify).
+    dedicated_python_exe(root) に専用CPython(python-build-standalone)が
+    存在することを保証する。必要ならダウンロード・展開する。冪等: install/
+    `sf upgrade` の実行毎に呼んでも安全。インタプリタのパスを返す。
+    回復不能な失敗(チェックサム不一致、アーカイブ破損、インタプリタの
+    検証失敗)では RuntimeError を送出する。
+
+    Two "already present" short-circuits, both skipping the download:
+    (a) manifest.json already records this exact version/release AND the
+    interpreter still verifies -- the normal repeat-run case; (b)
+    manifest.json does NOT record it (or `force` was requested to bypass
+    (a)), but the interpreter is already there and reports exactly
+    PRIVATE_PYTHON_VERSION -- this happens when install.sh/install.bat
+    (Phase C) already bootstrapped the same PBS archive via curl+tar
+    before this function ever ran, since those scripts do not write
+    manifest.json. In case (b) the manifest is simply backfilled from the
+    known asset table, adopting the existing install instead of
+    re-downloading it.
+    2種類の「導入済み」短絡経路があり、いずれもダウンロードを省略する:
+    (a) manifest.json が既にこの正確なversion/releaseを記録しており、
+    かつインタプリタの検証にも成功する -- 通常の再実行ケース。(b)
+    manifest.json には記録が無い(または (a) を迂回する `force` 指定)が、
+    インタプリタは既に存在し PRIVATE_PYTHON_VERSION をそのまま報告する --
+    これは install.sh/install.bat(Phase C)が本関数の実行前に curl+tar で
+    同じPBSアーカイブを既にブートストラップ済みの場合に起きる(それらの
+    スクリプトは manifest.json を書かないため)。(b) の場合は既知の
+    アセット表から manifest を補完するだけで、既存の導入を再ダウンロード
+    せず採用する。
+    """
+    python_exe = dedicated_python_exe(root)
+    asset_name, sha256 = private_python_asset()
+
+    if not force:
+        manifest_python = read_manifest(root).get("python", {})
+        manifest_matches = (
+            manifest_python.get("version") == PRIVATE_PYTHON_VERSION
+            and manifest_python.get("release") == PRIVATE_PYTHON_RELEASE
+        )
+        already_valid = _python_reported_version(python_exe) == PRIVATE_PYTHON_VERSION
+        if manifest_matches and already_valid:
+            success(f"Dedicated Python {PRIVATE_PYTHON_VERSION} already present")
+            success(f"専用Python {PRIVATE_PYTHON_VERSION} は導入済みです")
+            return python_exe
+        if already_valid:
+            # install.sh/install.bat bootstrapped this interpreter without
+            # writing a manifest -- adopt it rather than re-downloading.
+            # install.sh/install.bat が manifest を書かずに本インタプリタを
+            # 用意済み -- 再ダウンロードせず採用する。
+            write_manifest(root, {"python": {
+                "version": PRIVATE_PYTHON_VERSION,
+                "release": PRIVATE_PYTHON_RELEASE,
+                "asset": asset_name,
+                "sha256": sha256,
+            }})
+            success(f"Dedicated Python {PRIVATE_PYTHON_VERSION} already present "
+                    "(adopted an existing install, manifest backfilled)")
+            success(f"専用Python {PRIVATE_PYTHON_VERSION} は導入済みです"
+                    "(既存の導入を採用し、manifestを補完しました)")
+            return python_exe
+
+    downloads_dir = dedicated_downloads_dir(root)
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = downloads_dir / asset_name
+
+    if archive_path.is_file() and _sha256_of(archive_path) == sha256:
+        info(f"Reusing already-downloaded {asset_name}")
+        info(f"ダウンロード済みの {asset_name} を再利用します")
+    else:
+        url = private_python_asset_url()
+        info(f"Downloading dedicated Python ({asset_name}) ...")
+        info(f"専用Pythonをダウンロードしています ({asset_name}) ...")
+        _download_file(url, archive_path)
+        actual_sha256 = _sha256_of(archive_path)
+        if actual_sha256 != sha256:
+            archive_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"SHA-256 mismatch for {asset_name}: expected {sha256}, got {actual_sha256}"
+            )
+
+    info("Extracting dedicated Python...")
+    _extract_private_python(root, archive_path)
+
+    if _python_reported_version(python_exe) != PRIVATE_PYTHON_VERSION:
+        raise RuntimeError(f"Dedicated Python failed to verify after extraction: {python_exe}")
+    _warn_if_tkinter_missing(python_exe)
+
+    write_manifest(root, {"python": {
+        "version": PRIVATE_PYTHON_VERSION,
+        "release": PRIVATE_PYTHON_RELEASE,
+        "asset": asset_name,
+        "sha256": sha256,
+    }})
+    success(f"Dedicated Python {PRIVATE_PYTHON_VERSION} installed at {python_exe}")
+    success(f"専用Python {PRIVATE_PYTHON_VERSION} を導入しました: {python_exe}")
+    return python_exe
+
+
+# -----------------------------------------------------------------------
+# Dedicated-environment runtime context, consulted by _clean_env_for_cmd()/
+# _env_with_python3_steering() (below) and ESPIDFInstaller._run_install_
+# script() so ESP-IDF's own install.bat/install.sh run against the
+# dedicated Python/tools instead of triggering the legacy system-Python
+# discovery. Set by Installer.run() at the start of a dedicated Step 1,
+# cleared when run() falls back to the legacy flow (see run()'s docstring).
+# _clean_env_for_cmd()/_env_with_python3_steering()(下)と
+# ESPIDFInstaller._run_install_script() が参照する専用環境の実行時
+# コンテキスト。これにより、ESP-IDF自身のinstall.bat/install.shが旧来の
+# システムPython探索を発動させず、専用Python/ツールに対して動く。
+# Installer.run() が専用モードのStep1開始時に設定し、run()が旧来経路へ
+# 落ちる場合はクリアする(run()のdocstring参照)。
+# -----------------------------------------------------------------------
+_DEDICATED: dict = {}
+
+
+def set_dedicated_context(python_dir: Path, tools_path: Path) -> None:
+    """Record the dedicated python directory and IDF_TOOLS_PATH so
+    _clean_env_for_cmd()/_env_with_python3_steering() steer subprocess
+    environments at them instead of discovering a system Python.
+    専用python ディレクトリと IDF_TOOLS_PATH を記録し、
+    _clean_env_for_cmd()/_env_with_python3_steering() がシステムPythonの
+    発見ではなくそちらへsubprocess環境を誘導するようにする。
+    """
+    _DEDICATED["python_dir"] = python_dir
+    _DEDICATED["tools_path"] = tools_path
+
+
+def clear_dedicated_context() -> None:
+    """Undo set_dedicated_context() (used when falling back to the legacy
+    discovery flow within the same process, e.g. a GUI re-run with
+    --use-existing-idf after an earlier dedicated run).
+    set_dedicated_context() を取り消す(同一プロセス内で旧来の発見経路へ
+    落ちる場合に使う。例: 専用モードでの実行後、同一プロセスでGUIが
+    --use-existing-idf 相当の再実行をする場合)。
+    """
+    _DEDICATED.clear()
+
+
+def _apply_dedicated_env(env: dict) -> dict:
+    """Steer `env` at the dedicated context set by set_dedicated_context(),
+    in place, and return it. Prepends the dedicated python directory (plus
+    its Scripts\\ subfolder on Windows, where console-script shims live)
+    to PATH, points IDF_TOOLS_PATH at the dedicated tools folder, and
+    removes IDF_PYTHON_ENV_PATH so ESP-IDF's own scripts cannot be steered
+    by a stale activated venv from outside this process.
+    set_dedicated_context() で設定された専用コンテキストへ `env` をその場で
+    誘導し、返す。専用pythonディレクトリ(Windowsではコンソールスクリプト
+    シムが置かれるScripts\\サブフォルダも)をPATH先頭に置き、
+    IDF_TOOLS_PATH を専用ツールフォルダへ向け、IDF_PYTHON_ENV_PATH を
+    除去して、このプロセス外の古いactivate済みvenvにESP-IDF自身の
+    スクリプトが誤誘導されないようにする。
+    """
+    python_dir = Path(_DEDICATED["python_dir"])
+    tools_path = Path(_DEDICATED["tools_path"])
+
+    path_entries = [str(python_dir)]
+    if sys.platform == "win32":
+        path_entries.append(str(python_dir / "Scripts"))
+    env["PATH"] = os.pathsep.join(path_entries) + os.pathsep + env.get("PATH", "")
+    env["IDF_TOOLS_PATH"] = str(tools_path)
+    env.pop("IDF_PYTHON_ENV_PATH", None)
+    return env
+
+
+def _dir_size_bytes(path: Path) -> int:
+    """Total size in bytes of every file under `path`, walked recursively.
+    Best-effort: an unreadable entry is skipped rather than raising, since
+    this is only used for an informational "about N GB" uninstall prompt.
+    `path` 配下の全ファイルの合計バイト数を再帰的に集計する。ベスト
+    エフォート: 読み取れないエントリは例外を送出せずスキップする
+    (アンインストール時の「約N GB」という情報表示にのみ使うため)。
+    """
+    if not path.exists():
+        return 0
+    total = 0
+    for entry in path.rglob("*"):
+        try:
+            if entry.is_file():
+                total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def read_config(config_path: Path) -> dict:
+    """Minimal `.sf/config.toml` reader: parses `[section]` headers and
+    `key = "value"` lines into {section: {key: value}}, ignoring comments
+    (#) and blank lines. Returns {} if the file is missing or unreadable.
+    Not a full TOML parser (no arrays/tables/multi-line strings) -- this
+    file only ever writes flat quoted-string values (see
+    Installer._save_config()), so this is deliberately just enough for
+    that shape, mirroring the line-scanning setup_env.sh/.bat already do.
+    最小限の `.sf/config.toml` リーダー: `[section]` 見出しと
+    `key = "value"` 行を {section: {key: value}} に解析する。コメント(#)と
+    空行は無視する。ファイルが無い/読めない場合は {} を返す。完全な
+    TOMLパーサーではない(配列/テーブル/複数行文字列非対応) -- 本ファイルは
+    常にフラットな引用符付き文字列値のみを書く(Installer._save_config()
+    参照)ため、意図的にその形に限定している。setup_env.sh/.bat が既に
+    行っている行走査を踏襲する。
+    """
+    sections: dict = {}
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return sections
+
+    current: Optional[str] = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1].strip()
+            sections.setdefault(current, {})
+            continue
+        if current is None or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+            value = value[1:-1]
+        sections[current][key] = value
+    return sections
 
 
 def _windows_python_dir_candidates() -> list[Path]:
@@ -1416,10 +2082,23 @@ def _clean_env_for_cmd() -> dict:
       `sys.executable` の隣がそれだが、凍結 GUI では `sys.executable` が
       StampFly Setup 自身(python.exe は無い)なので、システム Python の
       発見にフォールバックする -- _find_system_python_dir() 参照。
+
+    Dedicated-environment mode (see set_dedicated_context()) short-circuits
+    all of the above: PATH is steered at the dedicated python directory
+    (and its Scripts\\ subfolder) and IDF_TOOLS_PATH is pointed at the
+    dedicated tools folder instead, since there is no ambient system
+    Python to discover or protect.
+    専用環境モード(set_dedicated_context() 参照)では上記を全て迂回する:
+    PATH は専用pythonディレクトリ(とそのScripts\\サブフォルダ)へ誘導し、
+    IDF_TOOLS_PATH は専用ツールフォルダへ向ける -- 発見/保護すべき既存の
+    システムPythonが存在しないため。
     """
     env = os.environ.copy()
     env.pop("MSYSTEM", None)
     _sanitize_activated_env(env)
+
+    if _DEDICATED:
+        return _apply_dedicated_env(env)
 
     # Prefer sys.executable's directory when it actually holds a python
     # interpreter (the CLI case); otherwise discover a system Python (the
@@ -1521,9 +2200,22 @@ def _env_with_python3_steering() -> dict:
     コピー)にフォールバックする -- その場合の対処は呼び出し元
     (_run_install_script() 自身の呼び出し直前にある
     _find_system_python_dir() チェック)が既に済ませている前提。
+
+    Dedicated-environment mode (see set_dedicated_context()) short-circuits
+    all of the above: the dedicated python/bin already provides a real
+    `python3` executable (PBS's own Unix layout), so no shim symlink is
+    needed -- PATH and IDF_TOOLS_PATH are simply steered at the dedicated
+    context.
+    専用環境モード(set_dedicated_context() 参照)では上記を全て迂回する:
+    専用の python/bin には既に本物の `python3` 実行ファイルがある
+    (PBSのUnixレイアウトそのもの)ため shim シンボリックリンクは不要 --
+    PATH と IDF_TOOLS_PATH を専用コンテキストへ誘導するだけでよい。
     """
     env = os.environ.copy()
     _sanitize_activated_env(env)
+
+    if _DEDICATED:
+        return _apply_dedicated_env(env)
 
     python_dir = _find_system_python_dir()
     if python_dir is None:
@@ -1732,7 +2424,7 @@ def _idf_major_minor(idf_path: Path) -> Optional[str]:
     return None
 
 
-def _find_idf_python(idf_path: Path) -> Optional[Path]:
+def _find_idf_python(idf_path: Path, tools_path: Optional[Path] = None) -> Optional[Path]:
     """Find the ESP-IDF venv Python that matches `idf_path`.
     `idf_path` に対応する ESP-IDF venv の Python を探す
 
@@ -1745,6 +2437,21 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
     複数バージョン共存時、選択した ESP-IDF と無関係な venv に install されない
     よう、idf_path のバージョンに一致する venv のみ返す。マッチが見つから
     なければ None (ESP-IDF 未インストール、未活性化、または命名規約違反)。
+
+    `tools_path`, when given, overrides _idf_tools_path_candidates() (which
+    otherwise reads the IDF_TOOLS_PATH environment variable / platform
+    defaults) with this single explicit IDF_TOOLS_PATH -- used by tests and
+    documents dedicated-mode callers' intent explicitly, even though
+    Installer.run() also sets os.environ["IDF_TOOLS_PATH"] for the
+    dedicated environment (see set_dedicated_context()), which every
+    caller that omits this argument already picks up transparently.
+    `tools_path` を指定すると、_idf_tools_path_candidates()(通常は
+    IDF_TOOLS_PATH 環境変数/プラットフォーム既定を読む)の代わりに、
+    この単一の明示的な IDF_TOOLS_PATH を使う -- テスト用、および専用
+    モードの呼び出し意図を明示するためのもの。実際には Installer.run() が
+    専用環境用に os.environ["IDF_TOOLS_PATH"] も設定するため
+    (set_dedicated_context() 参照)、この引数を省略する既存の呼び出し元は
+    何も変更せずとも透過的にそれを拾える。
     """
     target = _idf_major_minor(idf_path)
     if not target:
@@ -1758,7 +2465,8 @@ def _find_idf_python(idf_path: Path) -> Optional[Path]:
     bin_subdir = "Scripts" if sys.platform == "win32" else "bin"
     python_name = "python.exe" if sys.platform == "win32" else "python"
 
-    for base in _idf_tools_path_candidates():
+    tools_path_candidates = [tools_path] if tools_path is not None else _idf_tools_path_candidates()
+    for base in tools_path_candidates:
         python_env_dir = base / "python_env"
         if not python_env_dir.exists():
             continue
@@ -2502,6 +3210,7 @@ class ESPIDFInstaller:
         target_dir: Optional[Path] = None,
         version: str = DEFAULT_VERSION,
         auto_install_python: bool = False,
+        force: bool = False,
     ) -> Optional[Path]:
         """Install ESP-IDF with 3-stage clone separation.
         3段階分離でESP-IDFをインストール
@@ -2510,6 +3219,20 @@ class ESPIDFInstaller:
         -- see _offer_python_auto_install() for what it controls.
         `auto_install_python` は _run_install_script() へそのまま渡される
         -- 何を制御するかは _offer_python_auto_install() 参照。
+
+        `force`: when a DIFFERENT ESP-IDF version is already present at
+        `target_dir` (dedicated-mode `Installer.run()` passes a fixed
+        target_dir shared across runs -- see dedicated_idf_dir()), remove
+        it and re-clone instead of erroring out. Has no effect when
+        `target_dir` is empty/absent, or already holds the REQUESTED
+        version (that case always short-circuits the clone regardless of
+        `force`).
+        `force`: `target_dir` に**別バージョン**のESP-IDFが既にある場合
+        (専用モードの `Installer.run()` は実行を跨いで同一の target_dir を
+        渡す -- dedicated_idf_dir() 参照)、エラー終了せず削除して再clone
+        する。`target_dir` が空/未存在の場合、または既に**要求バージョン**
+        が入っている場合(この場合は `force` に関わらず常にcloneを省略する)
+        には効果が無い。
         """
         if target_dir is None:
             target_dir = Path.home() / "esp" / "esp-idf"
@@ -2527,8 +3250,20 @@ class ESPIDFInstaller:
                 warn(f"Incomplete clone detected at {target_dir}, cleaning up...")
                 shutil.rmtree(target_dir)
             elif ESPIDFDetector._is_valid_idf(target_dir):
-                info("ESP-IDF repository already cloned, skipping to install step...")
-                return cls._run_install_script(target_dir, version, auto_install_python=auto_install_python)
+                existing_version = ESPIDFDetector._get_version(target_dir)
+                if existing_version == version:
+                    info(f"ESP-IDF {version} already present at {target_dir}, "
+                         "skipping to install step...")
+                    return cls._run_install_script(target_dir, version, auto_install_python=auto_install_python)
+                if not force:
+                    error(f"ESP-IDF {existing_version} is already present at "
+                          f"{target_dir}, but {version} was requested.")
+                    error("Re-run with --force to remove it and re-clone, "
+                          "or remove it manually.")
+                    return None
+                warn(f"ESP-IDF {existing_version} found at {target_dir}, but "
+                     f"{version} was requested; removing and re-cloning (--force)...")
+                shutil.rmtree(target_dir)
             else:
                 # Directory exists but not a git repo or ESP-IDF
                 # ディレクトリは存在するがgitリポジトリでもESP-IDFでもない
@@ -2619,7 +3354,18 @@ class ESPIDFInstaller:
         # macOS/Linux にも当てはまるため、このチェック(および下の
         # 自動インストール提案)は Windows 単独ではなく3プラットフォーム
         # 全てで走る。
-        if _find_system_python_dir() is None:
+        #
+        # Dedicated-environment mode (see set_dedicated_context()) skips
+        # this gate entirely: the dedicated Python IS the interpreter that
+        # will be on PATH for install.bat/install.sh (see
+        # _clean_env_for_cmd()/_env_with_python3_steering()), so there is
+        # nothing to discover or auto-install here.
+        # 専用環境モード(set_dedicated_context() 参照)ではこの関門を完全に
+        # スキップする: install.bat/install.sh の PATH に載るインタプリタは
+        # 専用Python自身であり
+        # (_clean_env_for_cmd()/_env_with_python3_steering() 参照)、ここで
+        # 発見/自動導入すべきものは無い。
+        if not _DEDICATED and _find_system_python_dir() is None:
             if not _offer_python_auto_install(auto_install_python):
                 error(f"ESP-IDF tool installation needs a system Python "
                       f"{PYTHON_PREFERRED_MIN[0]}.{PYTHON_PREFERRED_MIN[1]}-"
@@ -3008,6 +3754,8 @@ class Installer:
         no_flasher: bool = False,
         auto_install_python: bool = False,
         with_sils_toolchain: bool = True,
+        dedicated: Optional[bool] = None,
+        sf_home: Optional[Path] = None,
     ) -> int:
         """Run installation.
 
@@ -3020,7 +3768,32 @@ class Installer:
         でのみ効果を持つ -- _offer_python_auto_install() 参照。対話モードは
         この値に関わらず常にプロンプトで y/n を尋ねる。Linuxのsudoゲート
         付きインストール経路はこの値を一切無視する(無人実行は絶対にしない)。
+
+        `dedicated`/`sf_home` (see docs/plans/dedicated-environment-plan.md):
+        when `dedicated` is None (the default), a self-contained Python +
+        ESP-IDF environment under `sf_home` (or sf_home_default()) is used
+        UNLESS `idf_path` was given, in which case the legacy
+        "discover/prompt for a system ESP-IDF" flow runs instead --
+        mirroring the pre-existing meaning of passing `idf_path`. Passing
+        `dedicated=True` together with a non-None `idf_path` is rejected
+        (they select mutually exclusive ESP-IDF sources).
+        `dedicated`/`sf_home`(docs/plans/dedicated-environment-plan.md
+        参照): `dedicated` が None(既定)のとき、`idf_path` が指定されて
+        いなければ `sf_home`(未指定なら sf_home_default())下の自己完結
+        Python + ESP-IDF環境を使う。`idf_path` が指定されていれば代わりに
+        旧来の「システムESP-IDFを発見/プロンプトで選ばせる」経路を使う --
+        これは `idf_path` 指定の従来の意味をそのまま踏襲する。
+        `dedicated=True` と非Noneの `idf_path` を同時に指定した場合は
+        エラーにする(選ぶESP-IDFの取得元が互いに排他的なため)。
         """
+        if dedicated is None:
+            dedicated = idf_path is None
+        elif dedicated and idf_path is not None:
+            error("--dedicated and --idf-path are mutually exclusive "
+                  "(they select different ESP-IDF sources).")
+            error("--dedicated と --idf-path は同時に指定できません"
+                  "(ESP-IDFの取得元が異なるため)。")
+            return 1
 
         # Surface pre-activated venv / conda env early so the user can
         # course-correct before pip operations begin.
@@ -3028,76 +3801,131 @@ class Installer:
         # ユーザが軌道修正できるようにする
         self._warn_if_env_preactivated()
 
-        # Step 1: Find or install ESP-IDF
-        header("Step 1/4: ESP-IDF")
+        # Step 1: Find or install ESP-IDF (dedicated environment, or the
+        # legacy discover/prompt flow -- see the docstring above).
+        # Deliberately a SINGLE header() call site with a conditional
+        # title (not two separate calls) so the "exactly 4 Step N/4:
+        # headers" GUI contract (module docstring's Stability contract)
+        # counts this as one, regardless of which branch runs.
+        # Step1: ESP-IDFの取得(専用環境、または旧来の発見/プロンプト経路 --
+        # 上のdocstring参照)。意図的に単一の header() 呼び出し箇所とし
+        # (2箇所に分けない)、タイトルのみ条件分岐させる。これにより、
+        # どちらの分岐が実行されても「Step N/4: ヘッダはちょうど4つ」という
+        # GUI契約(モジュールdocstringの安定契約)ではこの箇所を1つとして
+        # 数える。
+        dedicated_root: Optional[Path] = None
+        header("Step 1/4: Python + ESP-IDF" if dedicated else "Step 1/4: ESP-IDF")
 
-        if idf_path:
-            # User specified path
-            if not ESPIDFDetector._is_valid_idf(idf_path):
-                error(f"Invalid ESP-IDF path: {idf_path}")
+        if dedicated:
+            clear_dedicated_context()  # discard any leftover context from an earlier in-process run
+            dedicated_root = sf_home if sf_home is not None else sf_home_default()
+            dedicated_root.mkdir(parents=True, exist_ok=True)
+            warn_if_path_unsafe(dedicated_root)
+            info(f"Dedicated environment: {dedicated_root}")
+            info(f"専用環境: {dedicated_root}")
+
+            try:
+                provision_private_python(dedicated_root, force=force)
+            except RuntimeError as exc:
+                error(f"Failed to provision the dedicated Python: {exc}")
+                return 1
+
+            # From here on, every ESP-IDF install-script invocation and
+            # every _find_idf_python()/_run_in_idf_env() lookup (Steps 2-4)
+            # must resolve against the dedicated tools folder instead of a
+            # system Python -- set both the in-process context (for
+            # _clean_env_for_cmd()/_env_with_python3_steering()) and the
+            # environment variable (for _idf_tools_path_candidates(),
+            # which every later step already calls unmodified).
+            # ここから先、ESP-IDFのinstallスクリプト実行、および
+            # _find_idf_python()/_run_in_idf_env() の全ての解決
+            # (Step2-4)は、システムPythonではなく専用ツールフォルダを
+            # 参照しなければならない -- プロセス内コンテキスト
+            # (_clean_env_for_cmd()/_env_with_python3_steering() 用)と
+            # 環境変数(_idf_tools_path_candidates() 用。後続の全ステップは
+            # これを無改修のまま呼ぶ)の両方を設定する。
+            set_dedicated_context(dedicated_python_dir(dedicated_root), dedicated_tools_dir(dedicated_root))
+            os.environ["IDF_TOOLS_PATH"] = str(dedicated_tools_dir(dedicated_root))
+
+            idf_path = ESPIDFInstaller.install(
+                target_dir=dedicated_idf_dir(dedicated_root),
+                auto_install_python=auto_install_python,
+                force=force,
+            )
+            if not idf_path:
                 return 1
             version = ESPIDFDetector._get_version(idf_path)
-            info(f"Using specified ESP-IDF: {idf_path} ({version})")
+            write_manifest(dedicated_root, {"esp_idf": {"version": version, "path": str(idf_path)}})
         else:
-            # Detect ESP-IDF installations
-            info("Checking ESP-IDF installations...")
-            installations = ESPIDFDetector.find_all()
+            clear_dedicated_context()  # legacy mode never steers env at a dedicated context
 
-            if not installations:
-                # No ESP-IDF found, offer to install
-                warn("No ESP-IDF installation found.")
-                print()
-
-                choices = [
-                    f"Install ESP-IDF {ESPIDFInstaller.DEFAULT_VERSION} (recommended)",
-                    "Specify custom path",
-                    "Cancel",
-                ]
-                choice = prompt_choice("ESP-IDF is required for StampFly development.", choices)
-
-                if choice == 1:
-                    idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
-                    if not idf_path:
-                        return 1
-                elif choice == 2:
-                    path_str = prompt("Enter ESP-IDF path")
-                    idf_path = Path(path_str).expanduser().resolve()
-                    if not ESPIDFDetector._is_valid_idf(idf_path):
-                        error(f"Invalid ESP-IDF path: {idf_path}")
-                        return 1
-                else:
-                    info("Installation cancelled.")
+            if idf_path:
+                # User specified path
+                if not ESPIDFDetector._is_valid_idf(idf_path):
+                    error(f"Invalid ESP-IDF path: {idf_path}")
                     return 1
-
                 version = ESPIDFDetector._get_version(idf_path)
-
-            elif len(installations) == 1:
-                # Single installation found
-                idf_path, version = installations[0]
-                info(f"Found ESP-IDF {version} at {idf_path}")
-
-                response = prompt("Use this installation? [Y/n]", "Y")
-                if response.lower() not in ("y", "yes", ""):
-                    info("Installation cancelled.")
-                    return 1
-
+                info(f"Using specified ESP-IDF: {idf_path} ({version})")
             else:
-                # Multiple installations found
-                choices = [f"{ver:8} {path}" for path, ver in installations]
-                choices.append("Install new ESP-IDF")
+                # Detect ESP-IDF installations
+                info("Checking ESP-IDF installations...")
+                installations = ESPIDFDetector.find_all()
 
-                choice = prompt_choice(
-                    f"Found {len(installations)} ESP-IDF installations:",
-                    choices
-                )
+                if not installations:
+                    # No ESP-IDF found, offer to install
+                    warn("No ESP-IDF installation found.")
+                    print()
 
-                if choice <= len(installations):
-                    idf_path, version = installations[choice - 1]
-                else:
-                    idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
-                    if not idf_path:
+                    choices = [
+                        f"Install ESP-IDF {ESPIDFInstaller.DEFAULT_VERSION} (recommended)",
+                        "Specify custom path",
+                        "Cancel",
+                    ]
+                    choice = prompt_choice("ESP-IDF is required for StampFly development.", choices)
+
+                    if choice == 1:
+                        idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
+                        if not idf_path:
+                            return 1
+                    elif choice == 2:
+                        path_str = prompt("Enter ESP-IDF path")
+                        idf_path = Path(path_str).expanduser().resolve()
+                        if not ESPIDFDetector._is_valid_idf(idf_path):
+                            error(f"Invalid ESP-IDF path: {idf_path}")
+                            return 1
+                    else:
+                        info("Installation cancelled.")
                         return 1
+
                     version = ESPIDFDetector._get_version(idf_path)
+
+                elif len(installations) == 1:
+                    # Single installation found
+                    idf_path, version = installations[0]
+                    info(f"Found ESP-IDF {version} at {idf_path}")
+
+                    response = prompt("Use this installation? [Y/n]", "Y")
+                    if response.lower() not in ("y", "yes", ""):
+                        info("Installation cancelled.")
+                        return 1
+
+                else:
+                    # Multiple installations found
+                    choices = [f"{ver:8} {path}" for path, ver in installations]
+                    choices.append("Install new ESP-IDF")
+
+                    choice = prompt_choice(
+                        f"Found {len(installations)} ESP-IDF installations:",
+                        choices
+                    )
+
+                    if choice <= len(installations):
+                        idf_path, version = installations[choice - 1]
+                    else:
+                        idf_path = ESPIDFInstaller.install(auto_install_python=auto_install_python)
+                        if not idf_path:
+                            return 1
+                        version = ESPIDFDetector._get_version(idf_path)
 
         success(f"Using ESP-IDF {version}")
         print()
@@ -3274,7 +4102,7 @@ class Installer:
             self._install_udev_rules()
 
         # Save configuration
-        self._save_config(idf_path)
+        self._save_config(idf_path, dedicated_root=dedicated_root)
 
         # Create the "StampFly Terminal" double-click launcher (setup_env
         # pre-loaded) right after Step 3/4 (StampFly CLI) succeeds, and
@@ -3376,14 +4204,27 @@ class Installer:
         クリーンインストール: 設定とsfcliを削除後、再インストール"""
         header("Cleaning StampFly installation...")
 
-        # Find ESP-IDF path from config or argument
-        # 設定またはコマンドライン引数からESP-IDFパスを取得
+        # Find ESP-IDF path (and, if this was a dedicated environment, its
+        # root) from config or argument.
+        # 設定またはコマンドライン引数からESP-IDFパス(専用環境だった場合は
+        # そのルートも)を取得
+        config = read_config(self.config_file) if self.config_file.exists() else {}
         resolved_idf_path = idf_path
-        if not resolved_idf_path and self.config_file.exists():
-            for line in self.config_file.read_text(encoding="utf-8").split('\n'):
-                if line.startswith('path = "'):
-                    resolved_idf_path = Path(line.split('"')[1])
-                    break
+        if not resolved_idf_path:
+            path_value = config.get("esp_idf", {}).get("path")
+            if path_value:
+                resolved_idf_path = Path(path_value)
+
+        env_section = config.get("env", {})
+        dedicated_root_value = env_section.get("root") if env_section.get("kind") == "dedicated" else None
+        if dedicated_root_value:
+            # Let _find_idf_python()/_run_in_idf_env() below (and the
+            # dedicated re-run further down) resolve the dedicated venv
+            # instead of a legacy default IDF_TOOLS_PATH.
+            # 下の _find_idf_python()/_run_in_idf_env()(および末尾の専用
+            # 環境での再実行)が、旧来の既定 IDF_TOOLS_PATH ではなく専用
+            # venv を解決できるようにする。
+            os.environ["IDF_TOOLS_PATH"] = str(dedicated_tools_dir(Path(dedicated_root_value)))
 
         # Uninstall the GUI Flasher desktop app first, while sfcli is still
         # importable in the venv (flasher uninstall shells out to sfcli).
@@ -3407,10 +4248,25 @@ class Installer:
         success("Clean complete. Re-running installer...")
         self._print_uninstall_leftovers_table()
 
-        # Re-run installation
+        # Re-run installation. If the removed config was a dedicated
+        # environment, re-run in dedicated mode against that SAME root
+        # instead of letting run() fall back to sf_home_default() -- which
+        # would silently diverge from a non-default SF_HOME the user chose
+        # originally.
+        # 再インストールを実行する。削除した設定が専用環境だった場合は、
+        # run() が sf_home_default() にフォールバックするのではなく、
+        # 同じルートに対して専用モードで再実行する -- そうしないと、
+        # ユーザーが元々選んだ非既定の SF_HOME と黙って食い違ってしまう。
+        dedicated: Optional[bool] = None
+        sf_home: Optional[Path] = None
+        if dedicated_root_value and idf_path is None:
+            dedicated = True
+            sf_home = Path(dedicated_root_value)
+
         return self.run(idf_path=idf_path, force=True, no_flasher=no_flasher,
                          auto_install_python=auto_install_python,
-                         with_sils_toolchain=with_sils_toolchain)
+                         with_sils_toolchain=with_sils_toolchain,
+                         dedicated=dedicated, sf_home=sf_home)
 
     def _uninstall_flasher_gui(self, idf_path: Optional[Path]) -> None:
         """Uninstall the GUI Flasher desktop app before removing sfcli.
@@ -4252,28 +5108,68 @@ class Installer:
                 warn("Install with: sudo apt install libhidapi-dev  # Debian/Ubuntu")
                 warn("Or: sudo dnf install hidapi-devel  # Fedora")
 
-    def _save_config(self, idf_path: Path) -> None:
-        """Save configuration file"""
+    def _save_config(self, idf_path: Path, dedicated_root: Optional[Path] = None) -> None:
+        """Save `.sf/config.toml` (v2, see docs/plans/dedicated-environment-plan.md).
+        `dedicated_root` is None for the legacy flow (writes `[env] kind =
+        "legacy"`) or the dedicated environment's root (writes `[env] kind
+        = "dedicated"` plus its layout paths) -- see read_config() for the
+        reader.
+        `.sf/config.toml`(v2、docs/plans/dedicated-environment-plan.md
+        参照)を保存する。`dedicated_root` は旧来フローでは None
+        (`[env] kind = "legacy"` を書く)、専用環境ではそのルート
+        (`[env] kind = "dedicated"` とその配置パス群を書く) -- 読み手は
+        read_config() 参照。
+        """
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         version = ESPIDFDetector._get_version(idf_path)
 
-        config_content = f'''# StampFly Ecosystem Configuration
-# Auto-generated by installer
+        lines = [
+            "# StampFly Ecosystem Configuration",
+            "# Auto-generated by installer",
+            "",
+            "[esp_idf]",
+            f'path = "{idf_path}"',
+            f'version = "{version}"',
+            "",
+            "[env]",
+        ]
+        if dedicated_root is not None:
+            lines += [
+                'kind = "dedicated"',
+                f'root = "{dedicated_root}"',
+                f'python = "{dedicated_python_exe(dedicated_root)}"',
+                f'python_dir = "{dedicated_python_dir(dedicated_root)}"',
+                f'tools_path = "{dedicated_tools_dir(dedicated_root)}"',
+            ]
+        else:
+            lines.append('kind = "legacy"')
+        lines += ["", "[project]", 'default_target = "vehicle"', ""]
 
-[esp_idf]
-path = "{idf_path}"
-version = "{version}"
-
-[project]
-default_target = "vehicle"
-'''
-
-        self.config_file.write_text(config_content, encoding="utf-8")
+        self.config_file.write_text("\n".join(lines), encoding="utf-8")
         info(f"Configuration saved to {self.config_file}")
 
-    def uninstall(self) -> int:
-        """Uninstall sfcli from ESP-IDF environment"""
+    def uninstall(self, purge: bool = False) -> int:
+        """Uninstall sfcli from the ESP-IDF environment.
+        ESP-IDF環境からsfcliをアンインストールする
+
+        `purge`: also delete the dedicated environment root (SF_HOME) when
+        the saved config says `[env] kind = "dedicated"` -- without
+        prompting. When False and running interactively, the user is
+        asked instead; when False and non-interactive
+        (SF_INSTALLER_NONINTERACTIVE=1), the dedicated environment is left
+        in place (prompt()'s own non-interactive default is "N"). A
+        legacy environment (`[env] kind = "legacy"`, or no `[env]` at all)
+        is never affected by `purge` -- there is no dedicated root to
+        delete.
+        `purge`: 保存済み設定が `[env] kind = "dedicated"` の場合、専用
+        環境のルート(SF_HOME)もプロンプト無しで削除する。False かつ
+        対話実行時はユーザーに確認する。False かつ非対話実行時
+        (SF_INSTALLER_NONINTERACTIVE=1)は専用環境をそのまま残す
+        (prompt() 自身の非対話時既定値は "N")。旧来環境
+        (`[env] kind = "legacy"`、または `[env]` 自体が無い)には `purge`
+        は一切影響しない -- 削除すべき専用ルートが存在しないため。
+        """
         header("StampFly Ecosystem Uninstaller")
 
         # Load config to find ESP-IDF path
@@ -4281,18 +5177,25 @@ default_target = "vehicle"
             error("No configuration found. Nothing to uninstall.")
             return 1
 
-        # Parse config (simple TOML parsing)
-        idf_path = None
-        for line in self.config_file.read_text(encoding="utf-8").split('\n'):
-            if line.startswith('path = "'):
-                idf_path = Path(line.split('"')[1])
-                break
+        config = read_config(self.config_file)
+        path_value = config.get("esp_idf", {}).get("path")
+        idf_path = Path(path_value) if path_value else None
+        env_section = config.get("env", {})
+        dedicated_root_value = env_section.get("root") if env_section.get("kind") == "dedicated" else None
 
         if not idf_path:
             error("Could not determine ESP-IDF path from config.")
             return 1
 
         info(f"ESP-IDF path: {idf_path}")
+
+        if dedicated_root_value:
+            # See clean()'s identical comment: lets _find_idf_python()/
+            # _run_in_idf_env() below resolve the dedicated venv.
+            # clean() の同一コメント参照: 下の
+            # _find_idf_python()/_run_in_idf_env() が専用venvを解決できる
+            # ようにする。
+            os.environ["IDF_TOOLS_PATH"] = str(dedicated_tools_dir(Path(dedicated_root_value)))
 
         # Uninstall the GUI Flasher desktop app first (needs sfcli, which
         # we are about to remove).
@@ -4318,6 +5221,28 @@ default_target = "vehicle"
             info("Removed configuration file")
 
         success("Uninstall complete!")
+
+        # Optionally delete the dedicated environment itself (never
+        # anything outside `dedicated_root` -- see _dir_size_bytes()'s
+        # docstring on why this is only ever an informational estimate).
+        # 専用環境自体を任意で削除する(`dedicated_root` の外は一切
+        # 触れない -- なぜこれが情報表示用の見積りに過ぎないかは
+        # _dir_size_bytes() のdocstring参照)。
+        if dedicated_root_value:
+            dedicated_root = Path(dedicated_root_value)
+            should_purge = purge
+            if not should_purge:
+                size_gb = _dir_size_bytes(dedicated_root) / (1024 ** 3)
+                response = prompt(
+                    f"Delete the dedicated environment at {dedicated_root} "
+                    f"(about {size_gb:.1f} GB)? [y/N]", "N",
+                )
+                should_purge = response.strip().lower() in ("y", "yes")
+            if should_purge and dedicated_root.exists():
+                shutil.rmtree(dedicated_root, ignore_errors=True)
+                success(f"Removed dedicated environment: {dedicated_root}")
+                success(f"専用環境を削除しました: {dedicated_root}")
+
         self._print_uninstall_leftovers_table()
         return 0
 
@@ -4358,7 +5283,38 @@ def main() -> int:
     parser.add_argument(
         "--idf-path",
         type=Path,
-        help="Specify ESP-IDF path",
+        help="Specify ESP-IDF path (implies the legacy flow -- mutually "
+             "exclusive with --dedicated)",
+    )
+    parser.add_argument(
+        "--use-existing-idf",
+        action="store_true",
+        help="Use an existing/system ESP-IDF installation via the legacy "
+             "discover/prompt flow, instead of the dedicated environment. "
+             "Implies dedicated=False; mutually exclusive with --dedicated",
+    )
+    parser.add_argument(
+        "--dedicated",
+        dest="dedicated",
+        action="store_true",
+        default=None,
+        help="Force the dedicated environment (self-contained Python + "
+             "ESP-IDF under SF_HOME). This is already the default unless "
+             "--idf-path/--use-existing-idf is given",
+    )
+    parser.add_argument(
+        "--sf-home",
+        type=Path,
+        default=None,
+        help="Dedicated environment root (default: the SF_HOME "
+             "environment variable, else C:\\StampFly on Windows or "
+             "~/.stampfly on macOS/Linux)",
+    )
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="With --uninstall: also delete the dedicated environment "
+             "(SF_HOME) if one is configured, without prompting",
     )
     parser.add_argument(
         "--skip-deps",
@@ -4436,6 +5392,26 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    # Resolve the dedicated/legacy choice from the three flags that can
+    # express it: --dedicated (explicit True), --use-existing-idf and
+    # --idf-path (both force legacy). Installer.run() itself also rejects
+    # --dedicated + a non-None idf_path, so this is belt-and-suspenders
+    # with a clearer CLI-level message.
+    # dedicated/legacy の選択を、それを表現しうる3つのフラグ(--dedicated
+    # は明示True、--use-existing-idf と --idf-path はどちらも legacy を
+    # 強制)から解決する。Installer.run() 自体も --dedicated と非None の
+    # idf_path の組み合わせを拒否するが、ここではCLIレベルでより分かり
+    # やすいメッセージを出す(保険)。
+    dedicated = args.dedicated
+    if args.use_existing_idf:
+        if dedicated:
+            parser.error("--dedicated and --use-existing-idf are mutually exclusive")
+        dedicated = False
+    if args.idf_path is not None:
+        if dedicated:
+            parser.error("--dedicated and --idf-path are mutually exclusive")
+        dedicated = False
+
     # Set this before anything else runs so both this process' own
     # prompt()/prompt_choice() calls and any child processes that inherit
     # os.environ see it (e.g. a GUI frontend importing this module in-process).
@@ -4453,7 +5429,7 @@ def main() -> int:
     installer = Installer()
 
     if args.uninstall:
-        return installer.uninstall()
+        return installer.uninstall(purge=args.purge)
     elif args.clean:
         return installer.clean(
             idf_path=args.idf_path,
@@ -4470,6 +5446,8 @@ def main() -> int:
             no_flasher=args.no_flasher,
             auto_install_python=args.auto_install_python,
             with_sils_toolchain=args.with_sils_toolchain,
+            dedicated=dedicated,
+            sf_home=args.sf_home,
         )
 
 
