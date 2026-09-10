@@ -7,7 +7,7 @@ Captures telemetry logs and provides analysis tools.
 Subcommands:
     list     - List captured log files
     capture  - Capture binary log via USB serial
-    wifi     - Capture telemetry via WiFi WebSocket
+    wifi     - Capture telemetry via WiFi UDP
     convert  - Convert binary log to CSV
     info     - Show log file information
     analyze  - Analyze flight log data (--health: motor-fault report)
@@ -290,7 +290,7 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("Subcommands:")
     console.print("  list      List captured log files")
     console.print("  capture   Capture binary log via USB serial")
-    console.print("  wifi      Capture telemetry via WiFi WebSocket")
+    console.print("  wifi      Capture telemetry via WiFi UDP")
     console.print("  convert   Convert binary log to CSV")
     console.print("  info      Show log file information")
     console.print("  analyze   Analyze flight log data")

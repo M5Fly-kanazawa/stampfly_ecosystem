@@ -23,6 +23,9 @@ Subcommands:
   milestone  build → run → video → gate in one shot (the /sils-milestone skill)
   sysid-gate Model-match gate: fit SILS rate-loop (b,T,L) vs real-hardware sysid
              (simulation-policy.md §4; distinct from the "gate" milestone check)
+  fly        Real-time keyboard-piloted SILS flight (P6 stage 1)
+  compare    Side-by-side ESKF vs complementary video (P4/P6)
+  gui        Launch the SILS Web GUI (scenarios, graphs, 3D playback)
 """
 
 import argparse

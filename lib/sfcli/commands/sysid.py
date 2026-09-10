@@ -450,7 +450,7 @@ def _register_fit(subparsers):
              "textbook closed-loop identifiability trap on real, modestly- "
              "excited human-piloted flight: a human cannot safely produce "
              "the ~8Hz persistent stick motion a direct fit would need. "
-             "'indirect' recovered K within a few % to ~25% of theory on "
+             "'indirect' recovered K within a few %% to ~25%% of theory on "
              "real lesson_07 test flights where direct fits gave R^2<0 and "
              "K off by 1-3 orders of magnitude on the SAME data, "
              "2026-09-10). 'control_output' = the PRE-MIXER commanded "

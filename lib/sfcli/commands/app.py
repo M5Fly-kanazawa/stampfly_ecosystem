@@ -19,6 +19,7 @@ Subcommands:
     edit    - Open the learner-facing source file in an editor
     build   - Build a project (= sf build apps/<name>)
     flash   - Flash a project (= sf flash apps/<name>)
+    sils    - Run an embedded-type app's SILS scenario
     list    - List your projects and the examples available for --from
 """
 
