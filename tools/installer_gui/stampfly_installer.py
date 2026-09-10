@@ -382,8 +382,20 @@ STRINGS: Dict[str, Dict[str, str]] = {
     # -- page 2: environment check (see _build_page_env_check() etc.) -------
     "env_check_title": {"ja": "環境チェック", "en": "Environment check"},
     "env_check_label_python": {
-        "ja": "システム Python 3.10〜3.12(推奨)",
-        "en": "System Python 3.10-3.12 (recommended)",
+        "ja": "Python",
+        "en": "Python",
+    },
+    # Shown for the Python row instead of OK/NG once the dedicated
+    # environment made a system Python optional -- see
+    # docs/plans/dedicated-environment-plan.md and the comment on
+    # ENV_CHECK_REQUIRED below.
+    # 専用環境の導入でシステム Python が不要になったため、Python行では
+    # OK/NG の代わりにこれを表示する --
+    # docs/plans/dedicated-environment-plan.md と下の ENV_CHECK_REQUIRED の
+    # コメント参照。
+    "env_check_python_not_required": {
+        "ja": "不要(専用の Python 3.12 を SF_HOME に導入します)",
+        "en": "Not required (a private Python 3.12 is installed into SF_HOME)",
     },
     "env_check_label_disk": {
         "ja": "インストール先の空き容量(目安{0:.0f}GB)",
@@ -511,6 +523,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "en": "Next steps -- open a terminal and run:\n\n  {0}\n  sf doctor"
               "\n\nOr get started from \"StampFly Terminal\" (Start Menu / "
               "~/Applications / your app launcher).",
+    },
+    "done_install_sf_home_line": {
+        "ja": "専用環境(SF_HOME): {0}",
+        "en": "Dedicated environment (SF_HOME): {0}",
     },
     "save_log_saved": {"ja": "ログを保存しました: {0}", "en": "Log saved to: {0}"},
 
@@ -738,15 +754,27 @@ def env_check_label(name: str) -> str:
 # Only git and network actually block the "Next" button on the
 # Environment Check page. System Python and disk space are advisory only
 # (see docs/plans/gui-installer-plan.md §1 前提条件の扱い): this GUI's own
-# bundled Python is what runs installer.py, so a missing/old system
-# Python does not stop the install, and the disk figure is only a rough
-# estimate ("目安"), not a hard requirement.
+# bundled Python is what runs installer.py (in-process, via
+# load_installer_module()), so a missing/old system Python does not stop
+# the install, and the disk figure is only a rough estimate ("目安"), not
+# a hard requirement. Since docs/plans/dedicated-environment-plan.md,
+# this is doubly true: installer.py's default (dedicated) flow installs
+# its OWN private Python 3.12 into SF_HOME regardless of what -- if
+# anything -- is on the system, so the Python row is now purely
+# informational (see env_check_python_not_required and
+# _handle_env_check_result()) rather than a probe the user is expected to
+# fix.
 # 「次へ」を実際にブロックするのは git とネットワークのみ。システム
 # Python とディスク容量は参考表示にとどめる
 # (docs/plans/gui-installer-plan.md §1 前提条件の扱い参照): installer.py を
-# 実行するのはこのGUI自身に同梱された Python であり、システム Python が
-# 無い/古くてもインストールは止めない。ディスク容量も「目安」であり
-# 厳密な要件ではない。
+# 実行するのはこのGUI自身に同梱された Python であり(load_installer_module()
+# 経由でプロセス内実行)、システム Python が無い/古くてもインストールは
+# 止めない。ディスク容量も「目安」であり厳密な要件ではない。
+# docs/plans/dedicated-environment-plan.md 以降はなおさらそうで、
+# installer.py の既定(専用環境)フローは、システムに何があろうと専用の
+# Python 3.12 を SF_HOME へ導入する。そのためPython行は、ユーザーが
+# 対処すべきプローブではなく、純粋な参考表示になった
+# (env_check_python_not_required と _handle_env_check_result() 参照)。
 ENV_CHECK_REQUIRED = frozenset({ENV_CHECK_GIT, ENV_CHECK_NETWORK})
 ENV_CHECK_INSTALL_COMMANDS = {
     ENV_CHECK_GIT: GIT_INSTALL_COMMANDS,
@@ -1933,6 +1961,25 @@ def build_supported_run_kwargs(module, options: SetupOptions,
     落とした引数はログに出し、無視されたことをユーザーに知らせる。
     """
     desired: Dict[str, object] = {
+        # Always None: ESP-IDF discovery/confirmation is handled entirely
+        # by installer.py itself, never by this GUI. Leaving idf_path
+        # None means Installer.run()'s own default (`dedicated = idf_path
+        # is None`) resolves to True, i.e. the dedicated environment
+        # (self-contained Python + ESP-IDF under SF_HOME) -- see
+        # docs/plans/dedicated-environment-plan.md. This GUI has no "use
+        # an existing ESP-IDF" advanced option today, so every install it
+        # drives is a dedicated one; only pass `dedicated`/`sf_home`
+        # explicitly here if such an option is ever added.
+        # 常に None: ESP-IDFの発見/確認は installer.py 自身が完結して
+        # 行い、本GUIは一切関与しない。idf_path を None のままにすると、
+        # Installer.run() 自身の既定(`dedicated = idf_path is None`)が
+        # True になる、すなわち専用環境(SF_HOME 下の自己完結
+        # Python+ESP-IDF)が選ばれる --
+        # docs/plans/dedicated-environment-plan.md 参照。本GUIには現状
+        # 「既存のESP-IDFを使う」上級者向けオプションが無いため、本GUIが
+        # 行うインストールは常に専用環境になる。そのようなオプションを
+        # 将来追加する場合のみ、ここに明示的に `dedicated`/`sf_home` を
+        # 渡すこと。
         "idf_path": None,
         "skip_deps": False,
         "minimal": options.minimal,
@@ -2008,9 +2055,33 @@ def run_installer_setup(module, options: SetupOptions, output_queue: "queue.Queu
 
 
 def run_installer_uninstall(module, output_queue: "queue.Queue") -> int:
-    """Call module.Installer().uninstall() under the same contract as run_installer_setup()."""
-    # run_installer_setup() と同じ契約の下で module.Installer().uninstall() を呼ぶ
-    return run_installer_in_process(module, output_queue, lambda: module.Installer().uninstall())
+    """Call module.Installer().uninstall() under the same contract as
+    run_installer_setup(). Always purge=False when the loaded installer.py
+    supports that parameter: this GUI has no confirmation dialog and must
+    never delete the dedicated environment (SF_HOME, potentially several
+    GB) out from under the user without asking -- see
+    docs/plans/dedicated-environment-plan.md. The `hasattr`-style
+    signature check tolerates a repair-mode target checkout whose
+    installer.py predates the `purge` parameter (same concern as
+    build_supported_run_kwargs()); such an old uninstall() has no way to
+    purge at all, so omitting the keyword there is equivalent to False.
+    run_installer_setup() と同じ契約の下で module.Installer().uninstall() を
+    呼ぶ。読み込んだ installer.py が `purge` 引数を持つ場合は常に
+    purge=False にする: 本GUIには確認ダイアログが無く、ユーザーに確認
+    せず専用環境(SF_HOME、数GBになりうる)を削除してはならない --
+    docs/plans/dedicated-environment-plan.md 参照。シグネチャ確認は、
+    `purge` 引数より前の installer.py を対象とする修復モード
+    (build_supported_run_kwargs() と同じ懸念)を許容する -- そのような
+    旧 uninstall() はそもそも purge できないため、引数を渡さないことは
+    False と等価になる。"""
+    try:
+        supports_purge = "purge" in inspect.signature(module.Installer.uninstall).parameters
+    except (TypeError, ValueError):
+        supports_purge = False
+    uninstall_kwargs = {"purge": False} if supports_purge else {}
+    return run_installer_in_process(
+        module, output_queue, lambda: module.Installer().uninstall(**uninstall_kwargs)
+    )
 
 
 def perform_setup_workflow(output_queue: "queue.Queue", options: SetupOptions, cancel_event: threading.Event) -> int:
@@ -2070,6 +2141,26 @@ def perform_setup_workflow(output_queue: "queue.Queue", options: SetupOptions, c
 
         if options.action == ACTION_UNINSTALL:
             return run_installer_uninstall(module, output_queue)
+
+        # Surface the dedicated environment root (SF_HOME) for the Done
+        # page (see _render_done_page()) -- docs/plans/dedicated-
+        # environment-plan.md Phase E. getattr-guarded the same way
+        # build_supported_run_kwargs() tolerates an older repair-mode
+        # target checkout whose installer.py predates sf_home_default();
+        # best-effort only, so any failure here must never fail the
+        # install itself.
+        # Done画面(_render_done_page() 参照)向けに専用環境のルート
+        # (SF_HOME)を伝える -- docs/plans/dedicated-environment-plan.md
+        # Phase E。build_supported_run_kwargs() と同様に getattr で
+        # ガードし、sf_home_default() より前の installer.py を対象とする
+        # 修復モードでも動くようにする。ベストエフォートであり、ここでの
+        # 失敗がインストール自体を失敗させてはならない。
+        sf_home_default_fn = getattr(module, "sf_home_default", None)
+        if sf_home_default_fn is not None:
+            try:
+                output_queue.put(("sf_home", str(sf_home_default_fn())))
+            except Exception:
+                pass
         return run_installer_setup(module, options, output_queue)
     except InstallError as exc:
         output_queue.put(("log", str(exc)))
@@ -2337,6 +2428,17 @@ class StampFlySetupApp:
         self._current_page = None
         self._result_success = None
         self._last_action = ACTION_INSTALL
+        # Dedicated environment root (SF_HOME), reported by the worker
+        # thread for the current install run -- see perform_setup_workflow()
+        # and _render_done_page(). None until an install run reports it
+        # (e.g. still running, an uninstall run, or an older repair-mode
+        # installer.py that predates sf_home_default()).
+        # 専用環境のルート(SF_HOME)。現在のインストール実行についてワーカー
+        # スレッドが報告する -- perform_setup_workflow() と
+        # _render_done_page() 参照。インストール実行がまだ報告していない間
+        # (実行中、アンインストール実行、または sf_home_default() より前の
+        # 旧い修復モード installer.py の場合)は None のまま。
+        self._done_sf_home = None
 
         self._install_dir_var = tk.StringVar(value=str(DEFAULT_INSTALL_DIR))
         self._include_flasher_var = tk.BooleanVar(value=True)
@@ -2677,37 +2779,47 @@ class StampFlySetupApp:
 
     def _handle_env_check_result(self, results, details):
         for name in ENV_CHECK_ORDER:
-            is_ok = results[name]
             status_label, copy_button, install_button = self._env_rows[name]
+
+            if name == ENV_CHECK_PYTHON:
+                # Dedicated-environment mode (the only mode this GUI
+                # drives -- see build_supported_run_kwargs()) installs its
+                # own private Python 3.12 into SF_HOME no matter what this
+                # system has, so the probe result is never shown as OK/NG
+                # and never offers the auto-install button: doing so would
+                # invite the user to go fix something that installer.py is
+                # about to make irrelevant anyway. check_python_available()/
+                # get_system_python_version_string() are still called by
+                # the worker above so this stays real, exercised code (the
+                # legacy/system-Python path this GUI has no UI for today,
+                # and the parity test scripts/test_gui_installer_parity.py)
+                # rather than dead detection logic.
+                # 専用環境モード(本GUIが行う唯一のモード --
+                # build_supported_run_kwargs() 参照)は、このシステムに
+                # 何があろうと専用の Python 3.12 を SF_HOME へ導入するため、
+                # このプローブ結果は OK/NG として出さず、自動インストール
+                # ボタンも提示しない: それをすると、installer.py がどのみち
+                # 無関係にしてしまうものをユーザーに直させることになる。
+                # check_python_available()/get_system_python_version_string()
+                # は引き続き上のワーカーから呼ぶことで、死んだ検出コードに
+                # せず、実際に動くコード(本GUIに現状UIが無い旧来の
+                # システムPython経路や、parity テスト
+                # scripts/test_gui_installer_parity.py)であり続けさせる。
+                status_label.configure(foreground=NOTE_TEXT_COLOR)
+                self._env_status_vars[name].set(tr("env_check_python_not_required"))
+                install_button.grid_remove()
+                copy_button.grid_remove()
+                continue
+
+            is_ok = results[name]
             extra = " ({0})".format(details[name]) if name in details else ""
             status_label.configure(foreground=OK_TEXT_COLOR if is_ok else WARN_TEXT_COLOR)
             self._env_status_vars[name].set(("OK" if is_ok else "NG") + extra)
-
-            # Python row: prefer the one-click auto-install button over the
-            # copy-command button when this OS actually has a tool this GUI
-            # can drive (winget/Homebrew) -- see can_auto_install_python().
-            # Linux never shows this button (sudo must run in the user's
-            # own terminal); it keeps the copy-command button with a
-            # package-manager-specific command (see _on_copy_install_command()).
-            # Python行: このOSに本GUIが操作できる手段(winget/Homebrew)が
-            # 実在する場合、コマンドコピーボタンより自動インストール
-            # ボタンを優先する -- can_auto_install_python() 参照。Linuxは
-            # このボタンを出さない(sudoはユーザー自身の端末で実行される
-            # 必要がある)。パッケージマネージャ固有のコマンドを持つ
-            # コマンドコピーボタンのままにする(_on_copy_install_command() 参照)。
-            show_install_button = (
-                name == ENV_CHECK_PYTHON and not is_ok and can_auto_install_python()
-            )
-            install_button.configure(state="normal")
-            if show_install_button:
-                install_button.grid()
-                copy_button.grid_remove()
+            install_button.grid_remove()
+            if not is_ok and name in ENV_CHECK_INSTALL_COMMANDS:
+                copy_button.grid()
             else:
-                install_button.grid_remove()
-                if not is_ok and name in ENV_CHECK_INSTALL_COMMANDS:
-                    copy_button.grid()
-                else:
-                    copy_button.grid_remove()
+                copy_button.grid_remove()
 
         can_proceed = all(results[name] for name in ENV_CHECK_REQUIRED)
         self.primary_button.configure(state="normal" if can_proceed else "disabled")
@@ -2906,6 +3018,7 @@ class StampFlySetupApp:
         self._busy = True
         self._set_step_indicator(0)
         self._status_var.set(tr("execute_starting"))
+        self._done_sf_home = None  # discard any value from a previous run -- see __init__
 
         install_dir = Path(self._install_dir_var.get()).expanduser()
         checkout_exists = detect_existing_checkout(install_dir)
@@ -2972,7 +3085,17 @@ class StampFlySetupApp:
             if sys.platform == "win32"
             else "source {0}".format(install_dir / "setup_env.sh")
         )
-        self._done_body_var.set(tr("done_install_body", setup_env_command))
+        body = tr("done_install_body", setup_env_command)
+        # self._done_sf_home is set by _handle_message() from the worker's
+        # ("sf_home", ...) message -- see perform_setup_workflow(). Absent
+        # for an older repair-mode installer.py without sf_home_default().
+        # self._done_sf_home は、ワーカーの ("sf_home", ...) メッセージから
+        # _handle_message() が設定する -- perform_setup_workflow() 参照。
+        # sf_home_default() より前の旧い修復モード installer.py では
+        # 設定されない。
+        if self._done_sf_home:
+            body += "\n\n" + tr("done_install_sf_home_line", self._done_sf_home)
+        self._done_body_var.set(body)
 
     def _on_save_log_clicked(self):
         save_path = filedialog.asksaveasfilename(
@@ -3036,6 +3159,8 @@ class StampFlySetupApp:
             self._handle_env_check_result(message[1], message[2])
         elif kind == "python_auto_install_result":
             self._handle_python_auto_install_result(message[1], message[2])
+        elif kind == "sf_home":
+            self._done_sf_home = message[1]
         elif kind == "done":
             self._on_worker_done(message[1], message[2])
 

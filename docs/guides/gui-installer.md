@@ -95,7 +95,7 @@ StampFly Setup は5画面のウィザード形式です。**UI は日本語 / En
 | # | 画面 | 内容 |
 |---|------|------|
 | 1 | ようこそ | 何が導入されるか（sf CLI / ESP-IDF / 書き込みアプリ）、目安のダウンロードサイズ・所要時間を表示。右上に言語切替（日本語 / English） |
-| 2 | 環境チェック | git・Python・ディスク空き容量・ネットワーク接続を検査。NG項目があれば OS別の対処コマンド（`winget` / `brew` / `apt` 等）をコピーボタン付きで提示し、直せたら「再チェック」できる |
+| 2 | 環境チェック | git・システムPython・ディスク空き容量・ネットワーク接続を検査。実際に「次へ」をブロックするのは git とネットワークのみ。**Pythonの行は参考表示**（「不要（専用のPython 3.12がSF_HOMEに導入されます）」等）で、見つからなくても／古くても先に進める。git・ネットワークにNG項目があればOS別の対処コマンド（`winget` / `brew` / `apt` 等）をコピーボタン付きで提示し、直せたら「再チェック」できる |
 | 3 | オプション | インストール先フォルダ、書き込みアプリの同梱（既定 ON）、ショートカット作成（既定 ON）、minimal インストール（シミュレータ依存を省略、既定 OFF）を選択。既存インストールを検出した場合は「そのまま使う（修復）」/「アンインストール」も選べる（詳細: [6. 既存インストールがある場合](#repair-uninstall-ja)） |
 | 4 | 実行 | クローン → Step 1/4 〜 4/4 の進捗をステップインジケータで表示しながら、処理のログをその場に流す |
 | 5 | 完了 | 成功時: 次にやること（`sf doctor` の実行など）を案内。失敗時: ログの保存ボタンと、CLI での復旧手順（[7. うまくいかないとき](#cli-fallback-ja)）を案内 |
@@ -149,8 +149,10 @@ OS別の詳しい手順・トラブルシューティングは [Windows](../setu
 
 ### Python を別途インストールする必要がありますか？
 
-StampFly Setup 自体は Python 実行環境を同梱しているため不要です。ただし ESP-IDF 自身が別途
-Python を必要とする場面があり、その場合は警告として案内されます（エラーにはなりません）。
+不要です。StampFly Setup 自体が Python 実行環境を同梱しているだけでなく、導入されるエコシステム
+本体も**このエコシステム専用のPython 3.12**を `SF_HOME`（下記「エコシステムはどこに導入されますか？」
+参照）へ自動導入し、ESP-IDFもそれを使います。あなたのPCに既にあるPythonの版や有無は一切関係ありません。
+「環境チェック」画面のPythonの行は参考表示にすぎず、NGでも先に進めます。
 
 ### git は必要ですか？
 
@@ -166,7 +168,11 @@ Python を必要とする場面があり、その場合は警告として案内�
 
 ### エコシステムはどこに導入されますか？
 
-既定では `~/stampfly_ecosystem` です。ウィザードの「オプション」画面で変更できます。
+2箇所に分かれます。**リポジトリ本体**（ドキュメント・ツール類）は既定で `~/stampfly_ecosystem`
+に取得され、ウィザードの「オプション」画面で変更できます。**専用のPython 3.12・ESP-IDF
+v5.5.2・ツール一式**（このエコシステム専用の自己完結環境）は `SF_HOME`（macOS/Linux:
+`~/.stampfly`、Windows: `C:\StampFly`。環境変数 `SF_HOME` で上書き可）に導入され、合計
+容量は約4〜6 GBです。あなたのPCに既にあるPythonやESP-IDFには一切依存しません。
 
 ### 導入後、最新版に更新するには？
 
@@ -176,7 +182,14 @@ StampFly Setup は初回導入専用です。導入後にエコシステムを�
 ### アンインストールするには？
 
 StampFly Setup をもう一度起動すると、既存インストールを検出して「アンインストール」を選べます。
-詳細は [6. 既存インストールがある場合](#repair-uninstall-ja)を参照してください。
+詳細は [6. 既存インストールがある場合](#repair-uninstall-ja)を参照してください。GUI経由の
+アンインストールは sf CLI と設定ファイルを削除しますが、**専用環境（SF_HOME、約4〜6 GB）は
+確認なく削除されないよう、あえて残します**。専用環境ごと完全に削除したい場合は、CLI で
+`--purge` を付けて実行してください（[アップグレードガイド](upgrading.md)参照）。
+
+```bash
+./install.sh --uninstall --purge
+```
 
 ### ターミナルを開かずに `sf` を使うには？
 
@@ -308,7 +321,7 @@ available).
 | # | Screen | Content |
 |---|--------|---------|
 | 1 | Welcome | What gets installed (sf CLI / ESP-IDF / flashing app), plus the approximate download size and time. Language switch (日本語 / English) at the top right |
-| 2 | Environment Check | Probes git, Python, disk space, and network connectivity. Failing items show an OS-specific fix command (`winget` / `brew` / `apt`, etc.) with a copy button, and you can "Recheck" once fixed |
+| 2 | Environment Check | Probes git, system Python, disk space, and network connectivity. Only git and network actually block "Next." **The Python row is informational only** (e.g. "Not required (a private Python 3.12 is installed into SF_HOME)") -- missing or outdated system Python does not stop the install. A failing git or network item shows an OS-specific fix command (`winget` / `brew` / `apt`, etc.) with a copy button, and you can "Recheck" once fixed |
 | 3 | Options | Choose the install location, whether to bundle the flashing app (default ON), whether to create shortcuts (default ON), and a minimal install (skips simulator dependencies, default OFF). If an existing install is detected, you can also choose "Use as-is (repair)" / "Uninstall" (details: [6. If an Existing Install Is Found](#repair-uninstall-en)) |
 | 4 | Execute | Shows a step indicator progressing from clone through Step 1/4–4/4, streaming the live log alongside |
 | 5 | Done | On success: what to do next (e.g. run `sf doctor`). On failure: a "Save log" button plus the CLI recovery steps ([7. Falling Back to the CLI](#cli-fallback-en)) |
@@ -362,8 +375,11 @@ If you saved a log from the "Done" screen on failure, attaching it makes trouble
 
 ### Do I need to install Python separately?
 
-No — StampFly Setup bundles its own Python runtime. However, ESP-IDF itself sometimes needs a
-separate Python, in which case you'll see a warning (not an error) with guidance.
+No. StampFly Setup itself bundles its own Python runtime, and the ecosystem it installs also
+automatically provisions **a private Python 3.12 dedicated to this ecosystem** under `SF_HOME`
+(see "Where does the ecosystem get installed?" below) -- ESP-IDF uses that same private Python
+too. Any Python already on your machine (or lack thereof) is irrelevant. The Python row on the
+Environment Check screen is informational only; a failing result there does not stop the install.
 
 ### Do I need git?
 
@@ -379,7 +395,12 @@ automatically without a new GUI release.
 
 ### Where does the ecosystem get installed?
 
-`~/stampfly_ecosystem` by default. Change it on the "Options" screen.
+Two places. The **repository** (docs and tooling) is cloned to `~/stampfly_ecosystem` by
+default -- change it on the "Options" screen. The **private Python 3.12, ESP-IDF v5.5.2, and
+toolchain** (a self-contained environment dedicated to this ecosystem) go under `SF_HOME`
+(macOS/Linux: `~/.stampfly`; Windows: `C:\StampFly`; override with the `SF_HOME` environment
+variable), totaling about 4-6 GB. Neither depends on any Python or ESP-IDF already on your
+machine.
 
 ### How do I update after installing?
 
@@ -390,7 +411,14 @@ StampFly Setup is a one-time install tool. Once installed, use `sf upgrade` — 
 
 Launch StampFly Setup again; it will detect the existing install and offer "Uninstall." See
 [6. If an Existing Install Is Found](#repair-uninstall-en) for
-details.
+details. Uninstalling from the GUI removes sf CLI and its config file, but **deliberately
+leaves the dedicated environment (SF_HOME, about 4-6 GB) in place** rather than deleting
+several gigabytes without asking. To also delete it entirely, run the CLI with `--purge`
+(see the [Upgrading Guide](upgrading.md)).
+
+```bash
+./install.sh --uninstall --purge
+```
 
 ### How do I use `sf` without opening a terminal manually?
 

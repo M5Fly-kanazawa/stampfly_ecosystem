@@ -39,23 +39,26 @@ GUI 版の説明は **[GUI インストーラガイド](docs/guides/gui-installe
 
 | 段階 | 内容 |
 |------|------|
-| ① 前提ツール | Git と Python 3.10〜3.12（推奨 3.12）を入れる |
-| ② 取得と導入 | リポジトリを取得し、インストーラを実行する（ESP-IDF v5.5.2 も導入される） |
+| ① 前提ツール | Git を入れる（Python は不要 — 専用の Python 3.12 と ESP-IDF v5.5.2 がインストーラによって自動導入される） |
+| ② 取得と導入 | リポジトリを取得し、インストーラを実行する |
 | ③ 有効化と診断 | 開発環境を有効化し、`sf doctor` で確認する |
 
-インストーラ（②）の途中で ESP-IDF の導入を尋ねられたら **1（Install ESP-IDF v5.5.2）** を選びます。
-ESP-IDF のダウンロードを含むため、時間に余裕のあるときに実行してください。
+専用の Python・ESP-IDF・ツール一式は `SF_HOME`（既定は Windows が `C:\StampFly`、
+macOS/Linux が `~/.stampfly`）に自己完結導入され、容量は合計で約 4〜6 GB です。
+ダウンロードを含むため、時間とディスクに余裕のあるときに実行してください。
+既存の ESP-IDF・システム Python をそのまま使いたい開発者向けの**旧来モード**
+（`install.bat --use-existing-idf` 等）もあります。詳細は
+**[セットアップガイド](docs/setup/README.md)** を参照してください。
 
 ### Windows
 
 コマンドプロンプト（CMD）で実行します。WSL は不要です。
 
-**① Git と Python 3.12 を導入**（すでにあれば省略）。末尾の 2 つのオプションは、初回に出る利用規約への同意の質問を省くためのものです。
+**① Git を導入**（すでにあれば省略）。末尾の 2 つのオプションは、初回に出る利用規約への同意の質問を省くためのものです。
 終わったら CMD を一度閉じて開き直します。
 
 ```cmd
 winget install Git.Git --accept-source-agreements --accept-package-agreements
-winget install Python.Python.3.12 --accept-source-agreements --accept-package-agreements
 ```
 
 **② リポジトリを取得し、インストーラを実行**。途中の質問には画面の指示に従って答えます。
@@ -87,10 +90,10 @@ Xcode Command Line Tools が無い場合はここで一緒に導入されます�
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-続けて、ビルドに必要なツールと Python 3.12 を入れます。
+続けて、ビルドに必要なツールを入れます（Python は不要です）。
 
 ```bash
-brew install cmake ninja dfu-util ccache python@3.12
+brew install cmake ninja dfu-util ccache
 ```
 
 **② リポジトリを取得し、インストーラを実行**。途中の質問には画面の指示に従って答えます。
@@ -114,12 +117,12 @@ sf doctor
 
 ターミナルで実行します（Ubuntu 22.04 LTS 以降）。
 
-**① Git・Python・ビルドツールを導入**。パスワードを求められたら入力します。
+**① Git・ビルドツールを導入**（Python は不要です）。パスワードを求められたら入力します。
 
 ```bash
 sudo apt update
-sudo apt install -y git wget flex bison gperf python3 python3-pip python3-venv \
-    cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+sudo apt install -y git curl tar cmake ninja-build wget flex bison gperf ccache \
+    libffi-dev libssl-dev dfu-util libusb-1.0-0
 ```
 
 **② リポジトリを取得し、インストーラを実行**。途中の質問には画面の指示に従って答えます。
@@ -424,23 +427,26 @@ your terminal, wait for it to finish, then move on to the next block.
 
 | Stage | What you do |
 |-------|-------------|
-| 1. Prerequisites | Install Git and Python 3.10–3.12 (3.12 recommended) |
-| 2. Get and install | Clone the repository and run the installer (it also installs ESP-IDF v5.5.2) |
+| 1. Prerequisites | Install Git (Python is not required -- a private Python 3.12 and ESP-IDF v5.5.2 are installed automatically) |
+| 2. Get and install | Clone the repository and run the installer |
 | 3. Activate and check | Activate the development environment and run `sf doctor` |
 
-When the installer (stage 2) asks about ESP-IDF, choose **1 (Install ESP-IDF v5.5.2)**.
-It downloads ESP-IDF, so run it when you have some time.
+The private Python, ESP-IDF, and toolchain are self-contained under `SF_HOME`
+(default: `C:\StampFly` on Windows, `~/.stampfly` on macOS/Linux), about 4-6 GB in
+total. It downloads a fair amount, so run it when you have some time and disk space
+to spare. A **legacy mode** (`install.bat --use-existing-idf`, etc.) is also available
+for developers who want to keep using an existing ESP-IDF and system Python -- see the
+**[Setup Guide](docs/setup/README.md)** for details.
 
 ### Windows
 
 Run in Command Prompt (CMD). WSL is not required.
 
-**1. Install Git and Python 3.12** (skip if already installed). The two trailing options skip the
+**1. Install Git** (skip if already installed). The two trailing options skip the
 license-agreement questions that appear on first use. Close and reopen CMD when done.
 
 ```cmd
 winget install Git.Git --accept-source-agreements --accept-package-agreements
-winget install Python.Python.3.12 --accept-source-agreements --accept-package-agreements
 ```
 
 **2. Clone the repository and run the installer.** Answer its questions as prompted on screen.
@@ -472,10 +478,10 @@ When it finishes, copy and run the commands shown under "Next steps" to add brew
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-Then install the build tools and Python 3.12.
+Then install the build tools (Python is not required).
 
 ```bash
-brew install cmake ninja dfu-util ccache python@3.12
+brew install cmake ninja dfu-util ccache
 ```
 
 **2. Clone the repository and run the installer.** Answer its questions as prompted on screen.
@@ -499,12 +505,12 @@ sf doctor
 
 Run in a terminal (Ubuntu 22.04 LTS or later).
 
-**1. Install Git, Python and the build tools.** Type your password when asked.
+**1. Install Git and the build tools** (Python is not required). Type your password when asked.
 
 ```bash
 sudo apt update
-sudo apt install -y git wget flex bison gperf python3 python3-pip python3-venv \
-    cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+sudo apt install -y git curl tar cmake ninja-build wget flex bison gperf ccache \
+    libffi-dev libssl-dev dfu-util libusb-1.0-0
 ```
 
 **2. Clone the repository and run the installer.** Answer its questions as prompted on screen.

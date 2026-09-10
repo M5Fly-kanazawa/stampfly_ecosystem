@@ -44,8 +44,8 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps] [--migrate | -
 > Python・既存のESP-IDF）は削除・変更されません** — 専用環境はその横に新規作成されるだけです。
 > 移行が終わったら、**このターミナルを閉じて新しいターミナル（または StampFly Terminal）を
 > 開き直してから**使い始めてください（`setup_env` を開き直すだけでも構いません）。
-> 現在の環境を手動で片付けたい場合は [アップグレードガイド](../guides/upgrading.md) を参照
-> してください（本フェーズ時点では専用環境向けの追記は今後の更新で反映されます）。
+> 現在の環境（旧来環境）を手動で片付けたい場合は、[アップグレードガイド](../guides/upgrading.md)
+> の「専用環境への移行」にある手動削除の対象・場所の一覧を参照してください。
 
 詳細な各ステップの解説と、Gitコマンドとの対応表は [アップグレードガイド §3](../guides/upgrading.md) を参照してください。
 
@@ -133,8 +133,8 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps] [--migrate | -
 > (system Python, any existing ESP-IDF) is left untouched** -- the dedicated one is created
 > alongside it. Once migration finishes, **close this terminal and open a new one (or StampFly
 > Terminal)** before using it (re-running `setup_env` also works). To manually clean up the old
-> environment afterward, see the [Upgrading Guide](../guides/upgrading.md) (dedicated-environment
-> -specific cleanup steps will be added there in a later phase).
+> (legacy) environment afterward, see the list of what to remove and where under "Migrating to
+> the dedicated environment" in the [Upgrading Guide](../guides/upgrading.md).
 
 See [Upgrading Guide §3](../guides/upgrading.md#3-what-sf-upgrade-does-internally) for a detailed walkthrough of each step and its manual Git-command equivalent.
 

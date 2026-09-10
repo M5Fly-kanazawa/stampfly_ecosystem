@@ -39,18 +39,21 @@ sf upgrade
 
 ## 3. `sf upgrade` が内部でやること
 
-`sf upgrade` は、以下の8ステップを順番に実行します。各ステップに対応する「手動でやる場合」の Git コマンドも併記します（Gitの学習にもなります）。
+`sf upgrade` は、以下の9ステップを順番に実行します。各ステップに対応する「手動でやる場合」の Git コマンドも併記します（Gitの学習にもなります）。
 
 | # | ステップ | 内容 | 手動でやる場合の等価コマンド |
 |---|---------|------|------------------------------|
 | 1 | リポジトリ確認 | Gitのクローンか、`origin`（公式リモート）が設定されているかを確認。現在のブランチを表示（`main` 以外なら警告のみ、続行） | `git remote get-url origin` |
-| 2 | 取得＋差分確認 | 最新情報を取得し、何コミット遅れているか判定。0件（最新）なら「依存関係の同期」と「書き込みアプリ未導入時の一回限り提案（ステップ7参照）」だけ実行して終了 | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
+| 2 | 取得＋差分確認 | 最新情報を取得し、何コミット遅れているか判定。0件（最新）なら、ステップ6（専用環境への移行提案）→ステップ7（依存関係の再同期）→ステップ8（書き込みアプリ未導入時の一回限り提案）だけ実行して終了 | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | 更新内容のプレビュー | 取り込まれるコミットの一覧（最大15件）を表示し、`Y/n` で確認（`--yes` で省略可） | `git log --oneline HEAD..origin/main` |
 | 4 | ローカル変更の取り込み | 下記4.1参照 | 下記参照 |
-| 5 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる。併せて、matplotlib（グラフ描画ライブラリ）のGUIバックエンド（ウィンドウ表示の仕組み）が使えるかも確認し、必要ならPyQt6（Qtバインディング）を自動導入する | `pip install -e .` |
-| 6 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | （手動での再現は複雑なため `sf upgrade` 推奨） |
-| 7 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
-| 8 | サマリ表示 | 更新前後のコミットハッシュ、実施した処置、次にやるべきこと（例: `sf build vehicle`）を表示 | — |
+| 5 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | （手動での再現は複雑なため `sf upgrade` 推奨） |
+| 6 | 専用環境への移行提案 | まだ専用環境（自己完結した Python 3.12 + ESP-IDF v5.5.2 を SF_HOME 配下にまとめた環境）でなければ、移行するか尋ねる（対話時の既定は `Y`）。承諾した、または `--migrate` を指定した場合はここで移行を実行し、成功すればステップ7・8を飛ばして終了する。詳細は下記「5. インストール／アンインストールのライフサイクル」内の「専用環境への移行」を参照 | `python scripts/installer.py --dedicated --non-interactive --no-flasher` |
+| 7 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる。併せて、matplotlib（グラフ描画ライブラリ）のGUIバックエンド（ウィンドウ表示の仕組み）が使えるかも確認し、必要ならPyQt6（Qtバインディング）を自動導入する | `pip install -e .` |
+| 8 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
+| 9 | サマリ表示 | 更新前後のコミットハッシュ、実施した処置、次にやるべきこと（例: `sf build vehicle`）を表示 | — |
+
+> **補足（ステップ6・専用環境）:** 既に専用環境（`kind = "dedicated"`）のチェックアウトでは何もしない。旧来環境（`kind = "legacy"`）で `--migrate` を付けない場合は、対話端末なら `Y/n` で尋ね、非対話（スクリプト等）なら尋ねずに案内だけ表示してスキップする。`--no-migrate` を付けると今回は一切尋ねない。辞退すると `.sf/config.toml` に `kind = "legacy"` が記録され、以後は `sf upgrade --migrate` を明示するまで尋ねられなくなる。
 
 > **注（ステップ2→3の間・自己ブートストラップ）:** 取得した更新に `sf` 自身（`lib/sfcli`）への
 > 変更が含まれる場合、ステップ3のプレビューへ進む前に、取得したばかりの最新版の `upgrade`
@@ -177,10 +180,40 @@ git stash drop
 | `sf` を環境から外す | `install.bat --uninstall`（書き込みアプリも一緒に削除。残るものは下表参照） |
 | 完全撤去 | `--uninstall` 後、下表の「手動で消す場合」を実行 |
 | 壊れた環境のリセット | `install.bat --clean`（設定+`sf` を消して入れ直し） |
+| 旧来環境（システム Python + 自分の ESP-IDF）を専用環境に切り替えたい | `sf upgrade --migrate`（対話端末で普通に `sf upgrade` を実行しても尋ねられる） |
 
-### 何が置かれ、何が消えるか
+### 専用環境への移行
 
-`sf` エコシステムのインストーラ（`./install.sh` / `install.bat`）が何を・どこに置くか、`--uninstall` / `--clean` が何を削除し何を削除しないかの一覧です。
+2026-09 以降、新規インストールの既定は**専用環境**です: `SF_HOME`（Windows は
+`C:\StampFly`、macOS/Linux は `~/.stampfly`。環境変数 `SF_HOME` で上書き可）の下に、
+このエコシステム専用の Python・ESP-IDF・ツール一式を自己完結させ、参加者の PC に
+ある Python や ESP-IDF には一切依存しません。それより前にインストールした環境
+（システム Python + 自分自身の ESP-IDF、以下「旧来環境」）を使っている場合は、
+`sf upgrade` で専用環境へ移行できます。
+
+| 項目 | 内容 |
+|------|------|
+| 何が作られるか | `SF_HOME` の下に `python/`（専用 CPython 3.12）、`esp-idf/`（専用 ESP-IDF v5.5.2）、`espressif/`（ツールチェーン・仮想環境）、`downloads/`、`manifest.json` |
+| 容量 | 約 4〜6 GB。旧来環境がある PC ではその分と二重になる |
+| 移行方法 | `sf upgrade` を実行すると尋ねられる（対話端末の既定は `Y`）。確認なしで移行したい場合は `sf upgrade --migrate`。今回だけ移行を尋ねられたくない場合は `sf upgrade --no-migrate` |
+| 辞退した場合 | `.sf/config.toml` に `kind = "legacy"` が記録され、以後の `sf upgrade` では尋ねられなくなる（`sf upgrade --migrate` でいつでも再度移行可能） |
+| 移行中に何が起きるか | 内部で `scripts/installer.py --dedicated --non-interactive --no-flasher` が実行され、ダウンロード・展開の進捗がそのまま表示される。時間制限は無し（回線速度によっては数分かかる） |
+| 移行後にやること | ターミナルを一度閉じ、「StampFly Terminal」を開き直す（または `setup_env.bat` / `source setup_env.sh` を再実行する）。設定ファイルが新しくなったため、開いたままのターミナルには反映されない |
+| 移行に失敗したら | 現在の環境（旧来環境）はそのまま残る。エラー内容を確認し、`sf upgrade --migrate` で再挑戦する |
+| 旧来環境は消えるか | **消えない。** 専用環境は横に新しく作られるだけで、旧来環境（ESP-IDF・仮想環境）はそのまま残る |
+
+**旧来環境を手動で消す場合**（他で使っていないと確信できる場合のみ）:
+
+| 対象 | 場所（macOS/Linux） | 場所（Windows） |
+|------|---------------------|-------------------|
+| ESP-IDF 本体 | `~/esp/esp-idf` | `%USERPROFILE%\esp\esp-idf` |
+| IDF_TOOLS_PATH（ツールチェーン・仮想環境） | `~/.espressif` | `C:\Espressif` |
+
+移行後もこれらは自動では削除されません（他のプロジェクトと共有されている可能性があるため）。消してよいと確信できる場合のみ、上記フォルダを手動で削除してください。
+
+### 何が置かれ、何が消えるか（旧来環境）
+
+以下は**旧来環境**（システム Python + 自分自身の ESP-IDF。上記で移行しなかった場合、または `--use-existing-idf` / `--idf-path` で導入した場合）での配置です。専用環境の配置は上記「専用環境への移行」の表を参照してください。`sf` エコシステムのインストーラ（`./install.sh` / `install.bat`）が何を・どこに置くか、`--uninstall` / `--clean` が何を削除し何を削除しないかの一覧です。
 
 | 対象 | 場所 | `--uninstall` / `--clean` で削除されるか | 手動で消す場合 |
 |------|------|------------------------------------------|----------------|
@@ -195,7 +228,7 @@ git stash drop
 
 **あえて削除しない理由:** ESP-IDF本体・ツールチェーン・venv・udevルールは、他のプロジェクトや別のツールと共有されている可能性があります。`sf` が持ち主だと確信できないものを勝手に消さない設計です。消したい場合は表の「手動で消す場合」のコマンドを使ってください。
 
-この表は `./install.sh --uninstall` / `--clean` 実行時にもコンソールへ同じ内容が表示されます。
+この表は `./install.sh --uninstall` / `--clean` 実行時にもコンソールへ同じ内容が表示されます。専用環境の場合は `./install.sh --uninstall --purge`（`install.bat --uninstall --purge`）で `SF_HOME` ごと削除できます（確認なしで削除するため注意）。
 
 ## 6. よくある質問（FAQ）
 
@@ -263,18 +296,21 @@ This guide targets **teachers and students who are not software-development spec
 
 ## 3. What `sf upgrade` Does Internally
 
-`sf upgrade` runs the following 8 steps in order. The manual Git-command equivalent is listed alongside each one (useful if you want to learn Git along the way).
+`sf upgrade` runs the following 9 steps in order. The manual Git-command equivalent is listed alongside each one (useful if you want to learn Git along the way).
 
 | # | Step | What happens | Manual equivalent |
 |---|------|---------------|--------------------|
 | 1 | Repository check | Confirms this is a git clone with an `origin` remote configured, and shows the current branch (a warning-only, non-blocking notice if it isn't `main`) | `git remote get-url origin` |
-| 2 | Fetch + diff check | Fetches the latest state and counts how many commits behind you are. If 0 (already up to date), only the dependency resync step still runs | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
+| 2 | Fetch + diff check | Fetches the latest state and counts how many commits behind you are. If 0 (already up to date), only step 6 (dedicated-environment migration offer), step 7 (dependency resync), and step 8 (one-time Flasher offer) still run | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | Update preview | Shows up to 15 incoming commits and asks `Y/n` to proceed (skipped with `--yes`) | `git log --oneline HEAD..origin/main` |
 | 4 | Local change handling | See 3.1 below | See below |
-| 5 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds. Also checks whether matplotlib (the plotting library) has a working GUI backend (window-display mechanism) and installs PyQt6 (a Qt binding) automatically if needed | `pip install -e .` |
-| 6 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
-| 7 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
-| 8 | Summary | Shows the before/after commit hash, actions taken, and the recommended next step (e.g. `sf build vehicle`) | — |
+| 5 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
+| 6 | Dedicated-environment migration offer | If this checkout is not already the dedicated environment (a self-contained Python 3.12 + ESP-IDF v5.5.2 under SF_HOME), asks whether to migrate (default `Y` when interactive). If accepted, or `--migrate` was passed, migration runs here and, on success, steps 7-8 are skipped. See "Migrating to the dedicated environment" under "5. Install / Uninstall Lifecycle" below | `python scripts/installer.py --dedicated --non-interactive --no-flasher` |
+| 7 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds. Also checks whether matplotlib (the plotting library) has a working GUI backend (window-display mechanism) and installs PyQt6 (a Qt binding) automatically if needed | `pip install -e .` |
+| 8 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
+| 9 | Summary | Shows the before/after commit hash, actions taken, and the recommended next step (e.g. `sf build vehicle`) | — |
+
+> **Note (step 6, dedicated environment):** a checkout already in the dedicated environment (`kind = "dedicated"`) does nothing here. A legacy checkout (`kind = "legacy"`) without `--migrate` is asked `Y/n` at an interactive terminal, or, non-interactively (e.g. from a script), just shown guidance and skipped without asking. `--no-migrate` skips the offer entirely for this run. Declining records `kind = "legacy"` in `.sf/config.toml`, so future runs stop asking unless you explicitly run `sf upgrade --migrate`.
 
 > **Note (between steps 2 and 3 — self-bootstrap):** if the fetched update includes changes
 > to `sf` itself (`lib/sfcli`), execution automatically hands off to the just-fetched, updated
@@ -399,10 +435,40 @@ Two things are managed: the **ecosystem itself** (repository + ESP-IDF + `sf`) a
 | Remove `sf` from the environment | `install.bat --uninstall` (also removes the flashing app; leftovers listed below) |
 | Complete removal | After `--uninstall`, run the "Manual removal" commands in the table below |
 | Reset a broken setup | `install.bat --clean` (removes config + `sf`, then reinstalls) |
+| Switch a legacy install (system Python + your own ESP-IDF) to the dedicated environment | `sf upgrade --migrate` (a plain `sf upgrade` at an interactive terminal also asks) |
 
-### What is placed where, and what gets removed
+### Migrating to the dedicated environment
 
-What the ecosystem installer (`./install.sh` / `install.bat`) places where, and what `--uninstall` / `--clean` do and do not remove.
+Since 2026-09, new installs default to the **dedicated environment**: a self-contained
+Python, ESP-IDF, and toolchain for this ecosystem alone, all under `SF_HOME` (Windows:
+`C:\StampFly`; macOS/Linux: `~/.stampfly`; override with the `SF_HOME` environment
+variable), independent of any Python or ESP-IDF already on the machine. If you installed
+before that (system Python + your own ESP-IDF checkout, the "legacy environment" below),
+`sf upgrade` can migrate you to the dedicated one.
+
+| Item | Details |
+|------|---------|
+| What gets created | Under `SF_HOME`: `python/` (a private CPython 3.12), `esp-idf/` (a dedicated ESP-IDF v5.5.2 checkout), `espressif/` (toolchain + virtual environment), `downloads/`, and `manifest.json` |
+| Disk space | About 4-6 GB. On a machine that also has a legacy environment, that space is duplicated |
+| How to migrate | Just run `sf upgrade` -- it asks (default `Y` at an interactive terminal). To migrate without being asked, use `sf upgrade --migrate`. To skip the question for this run only, use `sf upgrade --no-migrate` |
+| If you decline | `.sf/config.toml` records `kind = "legacy"`, so future `sf upgrade` runs stop asking (run `sf upgrade --migrate` any time to migrate later) |
+| What happens during migration | Internally runs `scripts/installer.py --dedicated --non-interactive --no-flasher` and streams its download/extraction progress directly. No time limit (a slow connection can take several minutes) |
+| After migrating | Close this terminal and reopen "StampFly Terminal" (or re-run `setup_env.bat` / `source setup_env.sh`). A terminal that is already open will not pick up the new config |
+| If migration fails | Your current (legacy) environment is left untouched. Check the error, then retry with `sf upgrade --migrate` |
+| Does the legacy environment get deleted? | **No.** The dedicated environment is created alongside it; the legacy ESP-IDF checkout and virtual environment are left exactly as they were |
+
+**Removing the legacy environment by hand** (only once you are sure nothing else uses it):
+
+| Item | Location (macOS/Linux) | Location (Windows) |
+|------|--------------------------|----------------------|
+| ESP-IDF checkout | `~/esp/esp-idf` | `%USERPROFILE%\esp\esp-idf` |
+| IDF_TOOLS_PATH (toolchain + virtual environment) | `~/.espressif` | `C:\Espressif` |
+
+Migrating never deletes these automatically (they may be shared with other projects). Remove them by hand only once you are certain it is safe to do so.
+
+### What is placed where, and what gets removed (legacy environment)
+
+The following describes the **legacy environment** (system Python + your own ESP-IDF checkout -- i.e. you did not migrate above, or you installed with `--use-existing-idf` / `--idf-path`). For the dedicated environment's layout, see the "Migrating to the dedicated environment" table above. What the ecosystem installer (`./install.sh` / `install.bat`) places where, and what `--uninstall` / `--clean` do and do not remove.
 
 | Item | Location | Removed by `--uninstall` / `--clean`? | Manual removal |
 |------|----------|----------------------------------------|-----------------|
@@ -417,7 +483,7 @@ What the ecosystem installer (`./install.sh` / `install.bat`) places where, and 
 
 **Why these are left alone:** ESP-IDF itself, its toolchain, the venv, and the udev rules may be shared with other projects or tools. The design deliberately never deletes things `sf` cannot be certain it solely owns. Use the "Manual removal" column if you want them gone.
 
-The same table is printed to the console when you run `./install.sh --uninstall` / `--clean`.
+The same table is printed to the console when you run `./install.sh --uninstall` / `--clean`. For a dedicated environment, `./install.sh --uninstall --purge` (`install.bat --uninstall --purge`) also deletes `SF_HOME` entirely (no further confirmation, so use it deliberately).
 
 ## 6. FAQ
 

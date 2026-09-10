@@ -8,12 +8,20 @@ StampFly Ecosystemの開発環境セットアップガイドです。
 
 ## 2. 必要要件
 
+既定のインストール（**専用環境**。以下の表と本節を参照）は、参加者のPCにあるPythonや
+ESP-IDFに一切依存しません。
+
 | 項目 | 要件 |
 |------|------|
-| OS | macOS, Linux, Windows (WSL2推奨) |
-| Python | 3.10〜3.12（推奨3.12） |
-| ESP-IDF | v5.5.2 |
+| OS | macOS, Linux, Windows 10 バージョン1803（2018年4月更新）以降 |
+| Python | **不要**（専用のPython 3.12がインストーラによって自動導入されます） |
+| ESP-IDF | 不要（専用のESP-IDF v5.5.2が自動導入されます） |
 | Git | 最新版 |
+| ディスク容量 | 約4〜6 GB |
+
+開発者向けに、既存のESP-IDF・システムPythonをそのまま使う**旧来モード**も
+`--use-existing-idf`（または `--idf-path`）で選べます。この場合はシステムPython
+3.10〜3.12が必要です。
 
 ## 3. クイックスタート
 
@@ -30,13 +38,17 @@ cd stampfly_ecosystem
 ./install.sh
 ```
 
-これにより以下がインストールされます:
+既定では、このエコシステム専用のPython 3.12・ESP-IDF v5.5.2・ツール一式を
+`SF_HOME`（macOS/Linuxは `~/.stampfly`、Windowsは `C:\StampFly`。環境変数
+`SF_HOME` で上書き可）の下に自己完結させてインストールします。加えて以下も
+インストールされます:
 - sf CLI（コマンドラインツール）
 - VPythonシミュレータ依存（vpython, pygame等）
 - 解析ツール依存（numpy, matplotlib等）
 
-> **Note**: ESP-IDFが未インストールの場合、インストーラが案内します。
-> プラットフォーム別の詳細は [macOS](macos.md) / [Linux](linux.md) / [Windows](windows.md) を参照。
+> **Note**: プラットフォーム別の詳細（配置場所の一覧・旧来モードへの切替方法・
+> アンインストール手順を含む）は [macOS](macos.md) / [Linux](linux.md) /
+> [Windows](windows.md) を参照。
 
 ### ステップ 3: sf CLIの確認
 
@@ -108,12 +120,20 @@ Setup guide for StampFly Ecosystem development environment.
 
 ## 2. Requirements
 
+The default install (the **dedicated environment** -- see the table and this section)
+does not depend on any Python or ESP-IDF already on your machine.
+
 | Item | Requirement |
 |------|-------------|
-| OS | macOS, Linux, Windows (WSL2 recommended) |
-| Python | 3.10-3.12 (3.12 recommended) |
-| ESP-IDF | v5.5.2 |
+| OS | macOS, Linux, Windows 10 version 1803 (April 2018 Update) or later |
+| Python | **Not required** (a private Python 3.12 is installed automatically) |
+| ESP-IDF | Not required (a private ESP-IDF v5.5.2 is installed automatically) |
 | Git | Latest version |
+| Disk space | About 4-6 GB |
+
+Developers can opt into a **legacy mode** that uses an existing ESP-IDF and system
+Python instead, via `--use-existing-idf` (or `--idf-path`). That mode requires a
+system Python 3.10-3.12.
 
 ## 3. Quick Start
 
@@ -130,13 +150,17 @@ cd stampfly_ecosystem
 ./install.sh
 ```
 
-This installs:
+By default, this installs a private Python 3.12, ESP-IDF v5.5.2, and toolchain for
+this ecosystem alone, self-contained under `SF_HOME` (macOS/Linux: `~/.stampfly`;
+Windows: `C:\StampFly`; override with the `SF_HOME` environment variable). It also
+installs:
 - sf CLI (command-line tool)
 - VPython simulator dependencies (vpython, pygame, etc.)
 - Analysis tool dependencies (numpy, matplotlib, etc.)
 
-> **Note**: If ESP-IDF is not installed, the installer will guide you.
-> See platform guides for details: [macOS](macos.md) / [Linux](linux.md) / [Windows](windows.md)
+> **Note**: See the platform guides for details -- including the full layout, how to
+> switch to legacy mode, and uninstall steps: [macOS](macos.md) / [Linux](linux.md) /
+> [Windows](windows.md)
 
 ### Step 3: Verify sf CLI
 

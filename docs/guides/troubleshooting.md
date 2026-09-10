@@ -71,6 +71,21 @@
 | バックエンドを自分で固定したいとき | 環境変数 `MPLBACKEND` で明示指定する（例: `MPLBACKEND=agg`）|
 | そもそもウィンドウ不要で保存だけでよいとき | `--save <ファイル名>`（`sf log viz`）や `--plot-output <ファイル名>`（`sf sysid fit/noise`）を付けて実行する |
 
+## 7. 環境（専用環境）
+
+2026-09 以降の新規インストールは、参加者の PC にある Python や ESP-IDF に依存しない
+**専用環境**（`SF_HOME` 配下に自己完結した Python 3.12 + ESP-IDF v5.5.2 一式。
+Windows は `C:\StampFly`、macOS/Linux は `~/.stampfly`）を既定で使います。
+詳細は [アップグレードガイド](upgrading.md) の「専用環境への移行」を参照してください。
+
+| 問題 | 原因 | 解決策 |
+|------|------|--------|
+| `sf` を実行すると意図しない ESP-IDF が使われる／エラーになる | Espressif 公式インストーラが作る「ESP-IDF PowerShell」「ESP-IDF Command Prompt」等のショートカットから開いた端末で `sf` を実行している。そのショートカットは公式インストーラ自身の ESP-IDF・Python を環境変数に設定してしまい、専用環境と競合する | 通常のターミナル（コマンドプロンプト等）を開き、「StampFly Terminal」（スタートメニュー / ~/Applications / アプリ一覧）から始めるか、`setup_env.bat` / `source setup_env.sh` を実行する |
+| Windows で `install.bat` が `[ERROR] curl.exe not found.` / `tar.exe not found.` で終了する | 専用モードは `curl.exe` と `tar.exe` を使って専用 Python を取得する。両方とも Windows 10 バージョン 1803（2018年4月更新）以降に標準搭載だが、それより古い Windows には無い | Windows を更新するか、`install.bat --use-existing-idf` で旧来モード（システムの Python 3.10〜3.12 と自分の ESP-IDF を使う）に切り替える |
+| `[WARN] Could not create C:\StampFly, using ...\StampFly instead.` の後、パスに非ASCII文字が含まれる警告が出る | `C:\StampFly` が作成できず、ユーザー名が日本語等の非ASCII文字を含むために `%LOCALAPPDATA%\StampFly` も非ASCIIパスになった。ESP-IDF は非ASCII・空白入りのパスに対応していない | 環境変数 `SF_HOME` に、空白も非ASCII文字も含まないパス（例: `C:\StampFly`）を設定してから `install.bat` を実行し直す |
+| `setup_env.bat` / `source setup_env.sh` が `[ERROR] Dedicated environment is incomplete.`（専用環境が不完全です）で失敗する | `SF_HOME` 配下の専用 Python または ESP-IDF の `export.sh`/`export.bat` が見つからない（導入が途中で終わった、`SF_HOME` の中身を誤って削除した等） | 表示された `./install.sh`（または `install.bat`）をもう一度実行して、専用環境を再導入する |
+| `sf doctor` が「sf is running under a different Python than the dedicated one」（専用の Python とは別の Python で動いている）と警告する | 専用環境への移行後、移行前から開いたままのターミナルを使い続けている（環境変数が更新されていない） | 新しいターミナルを開き直すか、同じターミナルで `setup_env.bat` / `source setup_env.sh` を再実行する |
+
 ---
 
 <a id="english"></a>
@@ -136,3 +151,19 @@
 | pyenv-win (`Can't find a usable init.tcl`) | Set the `TCL_LIBRARY` / `TK_LIBRARY` environment variables to the base Python install's `tcl\tcl8.6` / `tcl\tk8.6` folders |
 | To pin the backend yourself | Set the `MPLBACKEND` environment variable (e.g. `MPLBACKEND=agg`) |
 | When a window is not needed at all | Pass `--save <file>` (`sf log viz`) or `--plot-output <file>` (`sf sysid fit/noise`) |
+
+## 7. Environment (Dedicated)
+
+New installs since 2026-09 default to a **dedicated environment**: a self-contained
+Python 3.12 + ESP-IDF v5.5.2 under `SF_HOME` (Windows: `C:\StampFly`; macOS/Linux:
+`~/.stampfly`), independent of any Python or ESP-IDF already on the machine. See
+"Migrating to the dedicated environment" in the [Upgrading Guide](upgrading.md) for
+details.
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Running `sf` uses the wrong ESP-IDF, or errors out | `sf` is being run inside a terminal opened from one of Espressif's own shortcuts ("ESP-IDF PowerShell", "ESP-IDF Command Prompt", etc.). Those set environment variables for the OFFICIAL Espressif installer's own Python/ESP-IDF, which conflicts with the dedicated environment | Open a plain terminal and start from "StampFly Terminal" (Start Menu / ~/Applications / your app launcher), or run `setup_env.bat` / `source setup_env.sh` there |
+| On Windows, `install.bat` exits with `[ERROR] curl.exe not found.` / `tar.exe not found.` | Dedicated mode fetches the private Python using `curl.exe` and `tar.exe`. Both ship with Windows 10 version 1803 (April 2018 Update) and later, but not with older Windows | Update Windows, or run `install.bat --use-existing-idf` to use the legacy mode (a system Python 3.10-3.12 and your own ESP-IDF) instead |
+| After `[WARN] Could not create C:\StampFly, using ...\StampFly instead.`, a warning about non-ASCII characters in the path appears | `C:\StampFly` could not be created, and `%LOCALAPPDATA%\StampFly` also becomes a non-ASCII path when the Windows user name contains non-ASCII characters (e.g. Japanese). ESP-IDF does not support non-ASCII or space-containing paths | Set the `SF_HOME` environment variable to a path with no spaces and no non-ASCII characters (e.g. `C:\StampFly`), then run `install.bat` again |
+| `setup_env.bat` / `source setup_env.sh` fails with `[ERROR] Dedicated environment is incomplete.` | The private Python or ESP-IDF's `export.sh`/`export.bat` under `SF_HOME` cannot be found (an interrupted install, or the contents of `SF_HOME` were deleted by hand) | Run the `./install.sh` (or `install.bat`) command shown in the message again to re-provision the dedicated environment |
+| `sf doctor` warns "sf is running under a different Python than the dedicated one" | You are still using a terminal that was open before migrating to the dedicated environment, so its environment variables were never updated | Open a new terminal, or re-run `setup_env.bat` / `source setup_env.sh` in the same one |
