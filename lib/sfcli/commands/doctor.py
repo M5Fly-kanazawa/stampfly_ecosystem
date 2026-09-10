@@ -549,12 +549,52 @@ def _check_sils_toolchain(warnings: list) -> None:
         console.warning(f"    could not query g++ -v: {e}")
 
 
-def _check_plot_backend(warnings: list) -> None:
+# Timeout for `sf doctor --fix`'s own pip install (installing PyQt6 into
+# the CURRENT Python -- the one `sf doctor` itself runs under). Generous
+# because a ~80 MB download over a slow connection, plus dependency
+# resolution, can take a while; this must not be confused with
+# plotting.QT_PROBE_TIMEOUT_S (probing whether Qt already works).
+# `sf doctor --fix` 自身のpip install（「今」動いているPython、つまり
+# `sf doctor` が実際に動く環境へのPyQt6導入）のタイムアウト。低速回線での
+# 約80MBダウンロード+依存解決には時間がかかりうるため長めに取る。
+# plotting.QT_PROBE_TIMEOUT_S（既にQtが動くかのプローブ）とは別物。
+PLOT_FIX_PIP_TIMEOUT_SECONDS = 180
+
+
+def _pip_install_into_current_env(requirements: list) -> bool:
+    """Run `python -m pip install --quiet <requirements>` in THIS
+    process's own Python -- the interpreter `sf doctor` itself is running
+    under (NOT the same as scripts/installer.py's fix, which targets the
+    separate ESP-IDF venv Python from outside it; here `sf doctor` already
+    IS that Python). Used as plotting.ensure_gui_backend()'s pip_install
+    callback for `sf doctor --fix`. Never raises: any failure (missing
+    pip, network error, timeout) counts as False.
+    このプロセス自身のPython（`sf doctor` が実際に動いているインタプリタ）で
+    `python -m pip install --quiet <requirements>` を実行する
+    （scripts/installer.py の修復とは別物 -- あちらは別のESP-IDF venv
+    Pythonを外側から狙うが、ここでは `sf doctor` 自体が既にそのPython）。
+    `sf doctor --fix` 向けに plotting.ensure_gui_backend() の pip_install
+    コールバックとして使う。例外は送出しない: いかなる失敗（pip不在・
+    ネットワークエラー・タイムアウト）もFalse扱いにする。
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", *requirements],
+            timeout=PLOT_FIX_PIP_TIMEOUT_SECONDS,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _check_plot_backend(warnings: list, fix: bool) -> None:
     """Check that matplotlib has at least one usable GUI backend in this
     Python (sf log viz / sf sysid fit/noise need one to show a plot
     window). This is the same probe plotting.select_backend() runs before
     every plot command, so a doctor warning here predicts what those
-    commands will do.
+    commands will do. When `fix` is True (`sf doctor --fix`) and the
+    backend is headless, attempts plotting.ensure_gui_backend() to install
+    the Qt fallback into this Python and re-check before reporting.
 
     Does not duplicate the "matplotlib: NOT INSTALLED" warning already
     produced by the package check above -- if matplotlib itself is
@@ -563,7 +603,10 @@ def _check_plot_backend(warnings: list) -> None:
     確認する（sf log viz / sf sysid fit/noise がプロットウィンドウを
     表示するにはこれが必要）。これは plotting.select_backend() が
     プロットコマンド実行のたびに行うのと同じプローブなので、ここでの警告は
-    それらのコマンドが実際にどう振る舞うかを予測する。
+    それらのコマンドが実際にどう振る舞うかを予測する。`fix` が True
+    （`sf doctor --fix`）でバックエンドがヘッドレスな場合、
+    plotting.ensure_gui_backend() でこのPythonにQtフォールバックを導入し、
+    報告前に再確認する。
 
     上のパッケージチェックが既に出す「matplotlib: NOT INSTALLED」警告を
     重複させない -- matplotlib 自体が無ければ、この関数はそれだけを
@@ -582,6 +625,13 @@ def _check_plot_backend(warnings: list) -> None:
     if info.interactive:
         console.success(f"  GUI backend: {info.name}")
         return
+
+    if fix:
+        # ensure_gui_backend() logs its own "GUI backend: ..." outcome.
+        # ensure_gui_backend() が「GUI backend: ...」の結果を自身で出力する。
+        info = plotting.ensure_gui_backend(pip_install=_pip_install_into_current_env, log=console)
+        if info.interactive:
+            return
 
     warnings.append("matplotlib has no usable GUI backend; plots will be saved as PNG files")
     console.warning("  GUI backend: NONE (plots will be saved as PNG and opened in the image viewer)")
@@ -675,7 +725,7 @@ def run(args: argparse.Namespace) -> int:
     # Check plot window support (matplotlib GUI backend)
     console.print()
     console.info("Checking plot window support (matplotlib)...")
-    _check_plot_backend(warnings)
+    _check_plot_backend(warnings, args.fix)
 
     # Check hidapi native library (for joystick / simulator)
     # hidapiネイティブライブラリの確認（ジョイスティック／シミュレータ用）

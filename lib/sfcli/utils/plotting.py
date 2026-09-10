@@ -35,19 +35,43 @@ docs/guides/troubleshooting.md を参照。
 ゼロでもプロットコマンドは何かしら役に立つ結果を残す。
 """
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 # Longest single-line probe-failure reason kept in BackendInfo.reason
 # before truncation (keeps console output to one readable line per probe).
 # BackendInfo.reason に残す1個のプローブ失敗理由の最大文字数（切り詰め前）。
 # コンソール出力をプローブ1件あたり1行の読みやすい長さに保つ。
 REASON_MAX_CHARS = 120
+
+# Qt binding installed as the automatic "no GUI backend" fix (see
+# ensure_gui_backend() below). PyQt6, not PyQt5 or PySide6, because:
+# (1) it ships prebuilt wheels for every platform/Python combination sf
+# supports (win/mac/linux x cp310-cp312, thanks to the abi3 stable ABI),
+# so `pip install` never falls back to a slow/failing source build;
+# (2) it is a modest, one-time ~80 MB download (PyQt6 6.11: 6.5 MB + PyQt6-Qt6 74 MB on Windows, measured on PyPI 2026-09-11); (3) it is the binding
+# matplotlib.backends.qt_compat probes for FIRST, so once it is present
+# matplotlib's own "qtagg" backend just works with no further
+# configuration; and (4) it is actively maintained (PyQt5 is in
+# maintenance-only mode).
+# 「GUIバックエンドが無い」場合に自動導入するQtバインディング（下記
+# ensure_gui_backend() 参照）。PyQt5でもPySide6でもなくPyQt6を選ぶ理由:
+# (1) sfが対応する全プラットフォーム/Python組み合わせ(win/mac/linux ×
+# cp310-cp312、abi3安定ABIのおかげ)向けにビルド済みwheelが配布されており
+# `pip install`が遅い/失敗するソースビルドに落ちることがない、(2) 一度きり
+# の約80MB（PyQt6 6.11: 6.5MB + PyQt6-Qt6 74MB、Windows。2026-09-11 PyPI 実測）というほどよいサイズ、(3) matplotlib.backends.qt_compatが最初に
+# 探すバインディングであり、導入さえすればmatplotlibの"qtagg"バックエンドが
+# 追加設定なしでそのまま動く、(4) 現役でメンテナンスされている(PyQt5は
+# メンテナンスのみのモード)。
+QT_FALLBACK_PACKAGE = "PyQt6"
+QT_FALLBACK_REQUIREMENT = "PyQt6>=6.5,<7"  # matplotlib >= 3.7 supports PyQt6; abi3 wheels cover py3.10-3.12 on win/mac/linux
+QT_PROBE_TIMEOUT_S = 60
 
 
 @dataclass
@@ -108,12 +132,56 @@ def _probe_tkagg() -> None:
         root.destroy()
 
 
+# Code run inside the throwaway probe subprocess spawned by _probe_qtagg().
+# Mirrors what matplotlib's own qtagg backend does on first use (import the
+# bindings, then construct the QApplication that owns the event loop).
+# _probe_qtagg() が起動する使い捨てプローブ subprocess の中で実行するコード。
+# matplotlib 自身の qtagg バックエンドが初回使用時に行うこと（バインディングの
+# import、そしてイベントループを持つ QApplication の生成）をそのまま模す。
+_QT_PROBE_CODE = (
+    "from matplotlib.backends.qt_compat import QtWidgets\n"
+    "app = QtWidgets.QApplication([])\n"
+    "app.quit()\n"
+)
+
+
 def _probe_qtagg() -> None:
-    """Import only -- do not create a QApplication (that would be a
-    visible side effect just for probing).
-    import のみ行う -- QApplication は作らない（プローブのためだけに
-    目に見える副作用を起こさないため）。"""
-    from matplotlib.backends.qt_compat import QtWidgets  # noqa: F401
+    """Probe whether a Qt GUI backend actually works, OUT OF PROCESS.
+
+    Qt aborts the entire process (an OS-level abort(), not a catchable
+    Python exception) when its platform plugin cannot load -- e.g. Linux
+    without libxcb-cursor0, or a broken Qt install. Probing in-process
+    (just importing qt_compat, as this function used to do) misses that
+    failure mode entirely, and actually building a QApplication in-process
+    to catch it would crash sf log viz itself instead of falling back to a
+    saved PNG. Running the same "import + build a QApplication" check in a
+    throwaway subprocess turns that would-be process abort into an
+    ordinary, catchable non-zero exit code this function can raise as a
+    RuntimeError.
+    Qt バックエンドが実際に動くかを、別プロセスでプローブする。
+    Qt はプラットフォームプラグインを読み込めない場合（例: libxcb-cursor0が
+    無い Linux、壊れた Qt 導入）、プロセス全体を（Python の例外としては
+    捕まえられない OS レベルの abort() で）異常終了させる。in-process で
+    qt_compat を import するだけの旧プローブではこの故障を検出できず、
+    かといって in-process で QApplication まで作って検出しようとすると
+    sf log viz 自体がクラッシュし、PNG保存へのフォールバックにすら
+    到達できない。全く同じ「import して QApplication を作る」チェックを
+    使い捨てのサブプロセスで実行することで、この起こりうるプロセス異常
+    終了を、この関数が RuntimeError として送出できる通常の非ゼロ終了
+    コードに変換する。
+    """
+    result = subprocess.run(
+        [sys.executable, "-c", _QT_PROBE_CODE],
+        capture_output=True,
+        text=True,
+        timeout=QT_PROBE_TIMEOUT_S,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if result.returncode == 0:
+        return
+    stderr_lines = [line for line in result.stderr.splitlines() if line.strip()]
+    reason = stderr_lines[-1] if stderr_lines else f"exit code {result.returncode}"
+    raise RuntimeError(reason)
 
 
 def _probe_macosx() -> None:
@@ -140,6 +208,31 @@ PROBES = {
     "wxagg": _probe_wxagg,
     "gtk3agg": _probe_gtk3agg,
 }
+
+
+def has_display() -> bool:
+    """True if this platform/session can plausibly show a GUI window.
+
+    Windows and macOS always can -- neither has a "headless display
+    server" concept a desktop process needs to check for. Everywhere else
+    (Linux, BSD, ...) a GUI needs an X11 or Wayland display server, which
+    is only present when DISPLAY or WAYLAND_DISPLAY is set (absent on a
+    plain SSH session or a CI runner). Used to decide whether probing/
+    installing a GUI backend is worth attempting at all: select_backend()
+    skips probing GUI candidates entirely when this is False, and
+    ensure_gui_backend() will not install PyQt6 on a headless box.
+    このプラットフォーム/セッションでGUIウィンドウを表示できる見込みが
+    あるかを返す。Windows/macOSには「ヘッドレスなディスプレイサーバ」という
+    概念自体が無く常にTrue。それ以外（Linux、BSD等）ではGUIにX11か
+    Waylandのディスプレイサーバが必要で、これはDISPLAYかWAYLAND_DISPLAYが
+    設定されている場合のみ存在する（素のSSHセッションやCIランナーには無い）。
+    GUIバックエンドのプローブ/導入をそもそも試す価値があるかの判断に使う:
+    select_backend()はこれがFalseならGUI候補のプローブ自体を省略し、
+    ensure_gui_backend()はヘッドレスな環境にPyQt6を導入しない。
+    """
+    if sys.platform in ("win32", "darwin"):
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 def _describe_failure(name: str, exc: Exception) -> str:
@@ -184,8 +277,7 @@ def select_backend(want_window: bool = True) -> BackendInfo:
         matplotlib.use("agg")
         return BackendInfo("agg", False, "")
 
-    if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") \
-            and not os.environ.get("WAYLAND_DISPLAY"):
+    if not has_display():
         matplotlib.use("agg")
         return BackendInfo("agg", False, "no DISPLAY/WAYLAND_DISPLAY (headless session)")
 
@@ -202,6 +294,80 @@ def select_backend(want_window: bool = True) -> BackendInfo:
 
     matplotlib.use("agg")
     return BackendInfo("agg", False, "; ".join(failures))
+
+
+def ensure_gui_backend(pip_install: Callable[[List[str]], bool], log: Any) -> BackendInfo:
+    """Make sure a GUI backend works; if not, install the Qt fallback into
+    THIS Python and re-probe. This is the install-time / upgrade-time ROOT
+    fix -- select_backend()'s PNG fallback (see the module docstring) is
+    the run-time safety net for whenever this was skipped, declined, or
+    still failed.
+
+    log: object with info/success/warning/print methods (sf console, or
+    the installer's shim).
+
+    Rules: (1) MPLBACKEND set -> respect, do nothing. (2) No display
+    (has_display() False) -> do nothing (installing Qt on a headless box
+    is pointless; also keeps CI quiet). (3) select_backend() interactive
+    -> report and return. (4) else log the reason, log "Installing PyQt6
+    (about 80 MB) so plot windows work...", call
+    pip_install([QT_FALLBACK_REQUIREMENT]); if it returns False -> warning
+    + hints, return the headless info. (5) re-probe with select_backend();
+    success -> log "GUI backend: qtagg"; still headless -> warning with
+    reason + headless_fix_hints(). Never raises (wraps unexpected
+    exceptions into a warning and returns a headless BackendInfo).
+
+    確実にGUIバックエンドが動くようにする。動かなければQtのフォールバックを
+    「この」Pythonに導入し、再プローブする。これがインストール時/アップ
+    グレード時の根本対処であり、select_backend()のPNGフォールバック
+    （モジュールdocstring参照）はこれが省略・辞退・失敗した場合の
+    実行時の安全網に過ぎない。
+
+    log: info/success/warning/print メソッドを持つオブジェクト（sfの
+    コンソール、またはインストーラのシム）。
+
+    規則: (1) MPLBACKENDが設定済みなら尊重して何もしない。(2) ディスプレイ
+    が無い（has_display()がFalse）なら何もしない（ヘッドレスな環境への
+    Qt導入は無意味であり、CIも静かに保てる）。(3) select_backend()が
+    インタラクティブなら報告して戻る。(4) それ以外は理由をログし、
+    "Installing PyQt6 (about 80 MB) so plot windows work..." をログし、
+    pip_install([QT_FALLBACK_REQUIREMENT])を呼ぶ。Falseが返れば警告+ヒント
+    を出しヘッドレスな情報を返す。(5) select_backend()で再プローブし、
+    成功すれば"GUI backend: qtagg"をログ、依然ヘッドレスなら理由+
+    headless_fix_hints()付きで警告する。例外は決して送出しない
+    （予期しない例外は警告に変換しヘッドレスなBackendInfoを返す）。
+    """
+    try:
+        if os.environ.get("MPLBACKEND"):
+            return select_backend(want_window=True)
+
+        if not has_display():
+            return select_backend(want_window=True)
+
+        info = select_backend(want_window=True)
+        if info.interactive:
+            log.success(f"GUI backend: {info.name}")
+            return info
+
+        log.info(f"No GUI backend for matplotlib is usable in this Python ({info.reason})")
+        log.info(f"Installing {QT_FALLBACK_PACKAGE} (about 80 MB) so plot windows work...")
+        if not pip_install([QT_FALLBACK_REQUIREMENT]):
+            log.warning(f"{QT_FALLBACK_PACKAGE} install failed; plots will still be saved as PNG files.")
+            for hint in headless_fix_hints():
+                log.print(f"  {hint}")
+            return info
+
+        info = select_backend(want_window=True)
+        if info.interactive:
+            log.success(f"GUI backend: {info.name}")
+        else:
+            log.warning(f"Still no usable GUI backend after installing {QT_FALLBACK_PACKAGE} ({info.reason})")
+            for hint in headless_fix_hints():
+                log.print(f"  {hint}")
+        return info
+    except Exception as exc:  # noqa: BLE001 - this helper must never crash its caller
+        log.warning(f"Could not set up a GUI backend for matplotlib: {exc}")
+        return BackendInfo("agg", False, str(exc))
 
 
 def force_headless() -> None:
@@ -250,16 +416,29 @@ def open_with_default_viewer(path: Path) -> bool:
 def headless_fix_hints() -> List[str]:
     """Short, ASCII-only, platform-specific tips for getting a real GUI
     backend working (printed under the headless warning).
+
+    The first hint is always `sf doctor --fix`, which runs
+    ensure_gui_backend() above and does everything below automatically --
+    the remaining hints are the manual fallback for when that is not
+    available or does not help.
     実際に動く GUI バックエンドを用意するための、短い ASCII 専用・
-    プラットフォーム別のヒント（ヘッドレス警告の下に表示する）。"""
-    hints: List[str] = []
+    プラットフォーム別のヒント（ヘッドレス警告の下に表示する）。
+
+    最初のヒントは常に `sf doctor --fix` -- 上の ensure_gui_backend() を
+    実行し、以下を自動で行う。残りのヒントは、それが使えない/効かない
+    場合の手動フォールバック。"""
+    hints: List[str] = [
+        f"Run: sf doctor --fix   (installs {QT_FALLBACK_PACKAGE} into the sf Python environment)",
+    ]
     if sys.platform == "win32":
-        hints.append("Reinstall Python from python.org with 'tcl/tk and IDLE' checked, then run install.bat again.")
-        hints.append("Or install a Qt backend into this environment: pip install PyQt5")
+        hints.append(
+            "Reinstall Python from python.org with 'tcl/tk and IDLE' checked, "
+            f'then run install.bat again. Or: pip install "{QT_FALLBACK_REQUIREMENT}"'
+        )
     elif sys.platform == "darwin":
-        hints.append("pip install PyQt5   (or: brew install python-tk@3.12)")
+        hints.append(f'pip install "{QT_FALLBACK_REQUIREMENT}"   (or: brew install python-tk@3.12)')
     else:
-        hints.append("sudo apt install python3-tk   (and make sure DISPLAY is set)")
+        hints.append("sudo apt install python3-tk   (or libxcb-cursor0 if PyQt6 is installed but fails to start)")
     hints.append("Details: docs/guides/troubleshooting.md (Plot window)")
     return hints
 
@@ -278,3 +457,49 @@ def report_headless(console: Any, info: BackendInfo, saved_to: Path) -> None:
     console.info(f"Saving the plot to {saved_to} and opening it with the default image viewer instead.")
     for hint in headless_fix_hints():
         console.print(f"  {hint}")
+
+
+def _main(argv: List[str]) -> int:
+    """CLI entry point: `python -m sfcli.utils.plotting --probe`.
+
+    Lets a caller running under a DIFFERENT Python get this module's
+    backend-probe result without importing it directly -- the one caller
+    that matters is scripts/installer.py, which must probe the ESP-IDF
+    venv's python (the one `sf` actually runs under), not its own
+    (system) interpreter. Prints one JSON object to stdout and always
+    exits 0 once the probe actually ran, because a headless result is a
+    valid, successful answer; exit 1 is reserved for "matplotlib is not
+    even installed", a different failure the caller must handle
+    differently (there is no backend to report on).
+    別のPythonから、このモジュールを直接importせずにバックエンドプローブ
+    結果を取得できるようにするCLIエントリポイント -- 実際に使うのは
+    scripts/installer.py で、`sf` が実際に動くESP-IDF venvのpythonを
+    プローブする必要があり、自分自身の(システム)インタプリタでは
+    ないため。JSONオブジェクトを1つ標準出力に印字し、プローブが実際に
+    走った時点で常にexit 0とする（ヘッドレスという結果自体は正常な
+    回答）-- exit 1は「matplotlibがそもそも未インストール」という
+    別種の失敗のみで、これは呼び出し側が別扱いする必要がある
+    （報告すべきバックエンドが無い）。
+    """
+    if "--probe" not in argv:
+        print(json.dumps({"error": "usage: python -m sfcli.utils.plotting --probe"}))
+        return 1
+
+    try:
+        info = select_backend(want_window=True)
+    except ImportError as exc:
+        print(json.dumps({"error": f"matplotlib not installed: {exc}"}))
+        return 1
+
+    print(json.dumps({
+        "backend": info.name,
+        "interactive": info.interactive,
+        "reason": info.reason,
+        "has_display": has_display(),
+        "fallback_requirement": QT_FALLBACK_REQUIREMENT,
+    }))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv[1:]))

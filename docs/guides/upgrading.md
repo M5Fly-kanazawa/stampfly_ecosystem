@@ -47,7 +47,7 @@ sf upgrade
 | 2 | 取得＋差分確認 | 最新情報を取得し、何コミット遅れているか判定。0件（最新）なら「依存関係の同期」と「書き込みアプリ未導入時の一回限り提案（ステップ7参照）」だけ実行して終了 | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | 更新内容のプレビュー | 取り込まれるコミットの一覧（最大15件）を表示し、`Y/n` で確認（`--yes` で省略可） | `git log --oneline HEAD..origin/main` |
 | 4 | ローカル変更の取り込み | 下記4.1参照 | 下記参照 |
-| 5 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる | `pip install -e .` |
+| 5 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる。併せて、matplotlib（グラフ描画ライブラリ）のGUIバックエンド（ウィンドウ表示の仕組み）が使えるかも確認し、必要ならPyQt6（Qtバインディング）を自動導入する | `pip install -e .` |
 | 6 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | （手動での再現は複雑なため `sf upgrade` 推奨） |
 | 7 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
 | 8 | サマリ表示 | 更新前後のコミットハッシュ、実施した処置、次にやるべきこと（例: `sf build vehicle`）を表示 | — |
@@ -271,7 +271,7 @@ This guide targets **teachers and students who are not software-development spec
 | 2 | Fetch + diff check | Fetches the latest state and counts how many commits behind you are. If 0 (already up to date), only the dependency resync step still runs | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | Update preview | Shows up to 15 incoming commits and asks `Y/n` to proceed (skipped with `--yes`) | `git log --oneline HEAD..origin/main` |
 | 4 | Local change handling | See 3.1 below | See below |
-| 5 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds | `pip install -e .` |
+| 5 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds. Also checks whether matplotlib (the plotting library) has a working GUI backend (window-display mechanism) and installs PyQt6 (a Qt binding) automatically if needed | `pip install -e .` |
 | 6 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
 | 7 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
 | 8 | Summary | Shows the before/after commit hash, actions taken, and the recommended next step (e.g. `sf build vehicle`) | — |

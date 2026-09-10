@@ -38,7 +38,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-from ..utils import console, paths, flasher_install
+from ..utils import console, paths, flasher_install, plotting
 
 COMMAND_NAME = "upgrade"
 COMMAND_HELP = "Pull the latest changes and resync the environment"
@@ -508,6 +508,44 @@ def _sync_dependencies(root: Path) -> bool:
     return ok
 
 
+def _ensure_plot_backend_after_sync(root: Path) -> None:
+    """Root-fix step for the matplotlib GUI backend, run right after a
+    successful dependency resync: calls plotting.ensure_gui_backend(),
+    which installs the PyQt6 fallback into this Python when no GUI
+    backend works yet (see that function's docstring for the exact
+    rules -- it does nothing when MPLBACKEND is set or there is no
+    display, which keeps a headless CI run of `sf upgrade` silent here).
+
+    Reuses _run_pip_install() as the installer callback so this inherits
+    its SF_UPGRADE_SKIP_PIP test escape hatch (see that function's
+    docstring) -- tools/ci/check_upgrade.py's dependency-resync check
+    stays a real pip-free run even though this step was added.
+
+    Best-effort like the rest of this module's post-pull steps: a plot
+    backend problem must never turn `sf upgrade` itself into a failure,
+    so the caller does not check this function's (lack of a) return
+    value.
+    matplotlib GUIバックエンドの根本対処ステップ。依存関係の再同期成功
+    直後に実行する: plotting.ensure_gui_backend() を呼び、まだ使える
+    GUIバックエンドが無ければこのPythonにPyQt6フォールバックを導入する
+    （正確な規則は同関数のdocstring参照 -- MPLBACKENDが設定済み、または
+    ディスプレイが無い場合は何もしないため、ヘッドレスなCI実行の
+    `sf upgrade` はこのステップでも静かなまま）。
+
+    インストーラのコールバックには _run_pip_install() を再利用し、その
+    テスト用エスケープハッチ SF_UPGRADE_SKIP_PIP（同関数のdocstring参照）
+    をそのまま引き継ぐ -- このステップを追加しても
+    tools/ci/check_upgrade.py の依存同期チェックは実pip呼び出し無しの
+    ままになる。
+
+    このモジュールの他の取得後ステップと同様ベストエフォート:
+    プロットバックエンドの問題が `sf upgrade` 自体を失敗にすることは
+    決して無いため、呼び出し元はこの関数の戻り値(が無いこと)を確認
+    しない。
+    """
+    plotting.ensure_gui_backend(pip_install=lambda reqs: _run_pip_install(reqs, root), log=console)
+
+
 def _backup_stale_sdkconfigs(root: Path, old_head: str, new_head: str) -> List[str]:
     """For each firmware/<target> whose sdkconfig.defaults or
     partitions.csv changed in the pulled range, rename any existing
@@ -882,6 +920,8 @@ def run(args: argparse.Namespace) -> int:
         else:
             console.print()
             deps_ok = _sync_dependencies(root)
+            if deps_ok:
+                _ensure_plot_backend_after_sync(root)
         # The one-time flasher offer must ALSO run on the up-to-date path:
         # the very audience it exists for — users of an old checkout who
         # bootstrapped with a plain `git pull` and then run `sf upgrade` —
@@ -956,6 +996,7 @@ def run(args: argparse.Namespace) -> int:
         console.print("(--skip-deps: dependency resync skipped)")
     elif _sync_dependencies(root):
         actions_taken.append("Resynced Python dependencies (pip install -e .)")
+        _ensure_plot_backend_after_sync(root)
     else:
         deps_ok = False
         actions_taken.append("Dependency resync FAILED -- see the output above")

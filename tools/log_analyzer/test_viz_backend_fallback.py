@@ -29,7 +29,9 @@ Usage:
 """
 
 import argparse
+import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,6 +64,15 @@ DURATION_S = 5
 N_SAMPLES = SAMPLE_RATE_HZ * DURATION_S
 DT_US = 1_000_000 // SAMPLE_RATE_HZ
 CTRL_REF_STRIDE = 8  # 50Hz CtrlRef among 400Hz IMU+ESKF samples / 400Hz中50Hz
+
+# Timeout for the real `python -m sfcli.utils.plotting --probe` subprocess
+# spawned by test_probe_cli_prints_json_headless() -- generous enough for
+# a cold matplotlib import (font cache build) on a slow CI runner.
+# test_probe_cli_prints_json_headless() が起動する実際の
+# `python -m sfcli.utils.plotting --probe` サブプロセスのタイムアウト。
+# 低速なCIランナーでのmatplotlibの初回import（フォントキャッシュ構築）
+# にも十分な余裕を持たせる。
+PROBE_SUBPROCESS_TIMEOUT_S = 30
 
 
 def _build_stream_csv(tmp_path) -> Path:
@@ -179,6 +190,138 @@ def test_select_backend_picks_first_usable(monkeypatch):
     assert used == ["agg"]
 
 
+# --- plotting.ensure_gui_backend() / _probe_qtagg() / --probe CLI ---
+
+class _FakeLog:
+    """Minimal stand-in for the sf console's info/success/warning/print
+    methods, recording every call so a test can assert on it without any
+    real (colored) console output.
+    sfコンソールのinfo/success/warning/printメソッドの最小限の代役。
+    実際の（色付き）コンソール出力を伴わず検証できるよう、全呼び出しを
+    記録する。"""
+
+    def __init__(self):
+        self.lines = []
+
+    def info(self, message: str) -> None:
+        self.lines.append(("info", message))
+
+    def success(self, message: str) -> None:
+        self.lines.append(("success", message))
+
+    def warning(self, message: str) -> None:
+        self.lines.append(("warning", message))
+
+    def print(self, message: str = "") -> None:
+        self.lines.append(("print", message))
+
+
+def test_probe_cli_prints_json_headless(monkeypatch):
+    monkeypatch.setenv("MPLBACKEND", "agg")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "sfcli.utils.plotting", "--probe"],
+        capture_output=True, text=True, timeout=PROBE_SUBPROCESS_TIMEOUT_S,
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["backend"] == "agg"
+    assert payload["interactive"] is False
+    assert payload["fallback_requirement"] == plotting.QT_FALLBACK_REQUIREMENT
+
+
+def test_ensure_gui_backend_installs_qt_when_headless(monkeypatch):
+    monkeypatch.delenv("MPLBACKEND", raising=False)
+    monkeypatch.setattr(plotting, "has_display", lambda: True)
+
+    responses = [
+        BackendInfo("agg", False, "tkagg: TclError: cannot find init.tcl"),
+        BackendInfo("qtagg", True, ""),
+    ]
+    calls = {"select_backend": 0}
+
+    def _fake_select_backend(want_window=True):
+        info = responses[calls["select_backend"]]
+        calls["select_backend"] += 1
+        return info
+
+    monkeypatch.setattr(plotting, "select_backend", _fake_select_backend)
+
+    pip_calls = []
+
+    def _fake_pip_install(requirements):
+        pip_calls.append(requirements)
+        return True
+
+    log = _FakeLog()
+    result = plotting.ensure_gui_backend(_fake_pip_install, log)
+
+    assert result.interactive is True
+    assert result.name == "qtagg"
+    assert pip_calls == [[plotting.QT_FALLBACK_REQUIREMENT]]
+    assert calls["select_backend"] == 2
+
+
+def test_ensure_gui_backend_skips_without_display(monkeypatch):
+    monkeypatch.delenv("MPLBACKEND", raising=False)
+    monkeypatch.setattr(plotting, "has_display", lambda: False)
+
+    pip_calls = []
+    log = _FakeLog()
+
+    result = plotting.ensure_gui_backend(lambda reqs: pip_calls.append(reqs) or True, log)
+
+    assert pip_calls == []
+    assert result.interactive is False
+
+
+def test_ensure_gui_backend_reports_pip_failure(monkeypatch):
+    monkeypatch.delenv("MPLBACKEND", raising=False)
+    monkeypatch.setattr(plotting, "has_display", lambda: True)
+
+    calls = {"select_backend": 0}
+
+    def _fake_select_backend(want_window=True):
+        calls["select_backend"] += 1
+        return BackendInfo("agg", False, "no Qt binding installed")
+
+    monkeypatch.setattr(plotting, "select_backend", _fake_select_backend)
+
+    log = _FakeLog()
+    result = plotting.ensure_gui_backend(lambda reqs: False, log)
+
+    assert result.interactive is False
+    assert calls["select_backend"] == 1
+    assert any(level == "warning" for level, _ in log.lines)
+
+
+def test_ensure_gui_backend_respects_mplbackend(monkeypatch):
+    monkeypatch.setenv("MPLBACKEND", "agg")
+
+    pip_calls = []
+    log = _FakeLog()
+
+    plotting.ensure_gui_backend(lambda reqs: pip_calls.append(reqs) or True, log)
+
+    assert pip_calls == []
+
+
+def test_probe_qtagg_reports_subprocess_failure(monkeypatch):
+    monkeypatch.setattr(
+        plotting.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(
+            args=a, returncode=134, stdout="",
+            stderr="qt.qpa.plugin: Could not load the Qt platform plugin",
+        ),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        plotting._probe_qtagg()
+
+    assert "qt.qpa.plugin" in str(exc_info.value)
+
+
 # --- log.run_viz() PNG fallback ---
 
 def test_run_viz_saves_png_and_opens_viewer_when_headless(tmp_path, monkeypatch):
@@ -275,6 +418,12 @@ def _run_all():
         (test_select_backend_honors_mplbackend, ()),
         (test_select_backend_falls_back_when_all_probes_fail, ()),
         (test_select_backend_picks_first_usable, ()),
+        (test_probe_cli_prints_json_headless, ()),
+        (test_ensure_gui_backend_installs_qt_when_headless, ()),
+        (test_ensure_gui_backend_skips_without_display, ()),
+        (test_ensure_gui_backend_reports_pip_failure, ()),
+        (test_ensure_gui_backend_respects_mplbackend, ()),
+        (test_probe_qtagg_reports_subprocess_failure, ()),
         (test_run_viz_saves_png_and_opens_viewer_when_headless, (tmp_dir,)),
         (test_run_viz_retries_headless_when_window_backend_fails, (tmp_dir,)),
         (test_run_viz_explicit_save_unaffected, (tmp_dir,)),

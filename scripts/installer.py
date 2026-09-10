@@ -99,6 +99,7 @@ main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを
 # メッセージではなく、不可解なトレースバックを見ることになっていた。
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -2126,6 +2127,75 @@ SIMULATOR_IMPORT_CHECKS: list[Tuple[str, str]] = [
 # 止めないようにする。
 IMPORT_CHECK_TIMEOUT_SECONDS = 20
 
+# Timeout for `<venv_python> -m sfcli.utils.plotting --probe`
+# (Installer._ensure_plot_backend() / _probe_plot_backend() below). Longer
+# than IMPORT_CHECK_TIMEOUT_SECONDS above because the probe's first
+# matplotlib import can build its font cache from scratch (slow the very
+# first time in a fresh venv), and on top of that it may itself spawn a
+# short-lived subprocess per GUI backend candidate (see
+# lib/sfcli/utils/plotting.py's QT_PROBE_TIMEOUT_S).
+# `<venv_python> -m sfcli.utils.plotting --probe`
+# (下記 Installer._ensure_plot_backend() / _probe_plot_backend()) の
+# タイムアウト。上の IMPORT_CHECK_TIMEOUT_SECONDS より長くしてある理由:
+# プローブの初回matplotlib importはフォントキャッシュをゼロから構築
+# しうる(新しいvenvでの初回は遅い)上、プローブ自身がGUIバックエンド候補
+# ごとに短命なサブプロセスを起動することがある
+# (lib/sfcli/utils/plotting.py の QT_PROBE_TIMEOUT_S 参照)。
+PLOT_PROBE_TIMEOUT_SECONDS = 120
+
+
+# _probe_plot_backend() shells out to
+# `<venv_python> -m sfcli.utils.plotting --probe` rather than importing
+# lib/sfcli/utils/plotting directly, for two reasons: (1) the probe must
+# run under the ESP-IDF venv's python -- the interpreter `sf` actually
+# executes under -- not under this installer script's own (system)
+# interpreter, which is typically a different Python entirely; and
+# (2) this file must stay standard-library-only (see the Stability
+# contract at the top of this file), and sfcli is a third-party-adjacent
+# package that may not even be importable yet at the point this runs.
+# _probe_plot_backend() は lib/sfcli/utils/plotting を直接importする
+# のではなく `<venv_python> -m sfcli.utils.plotting --probe` を外部
+# プロセスとして呼ぶ。理由は2つ: (1) プローブはESP-IDF venvのpython
+# (`sf` が実際に実行されるインタプリタ)で行う必要があり、このインストーラ
+# スクリプト自身の(通常は全く別の)システムインタプリタではない、
+# (2) 本ファイルは標準ライブラリのみで動く必要があり(冒頭の安定契約
+# 参照)、sfcliはサードパーティに準ずるパッケージでありこの時点では
+# そもそもimportできないことすらある。
+def _probe_plot_backend(venv_python: Path) -> Optional[dict]:
+    """Run the plotting backend probe inside venv_python and parse the
+    LAST line of its stdout as JSON. Returns None on any failure (missing
+    interpreter, timeout, non-zero exit, unparsable output) -- this is a
+    best-effort probe, not a hard requirement, and the caller must treat
+    None as "could not check" rather than crash the installer.
+    venv_python の中でプロットバックエンドのプローブを実行し、標準出力の
+    最終行をJSONとして解析する。いかなる失敗（インタプリタ不在・
+    タイムアウト・非ゼロ終了・パース不能な出力）でもNoneを返す --
+    これはベストエフォートなプローブであり必須要件のチェックではなく、
+    呼び出し側はNoneを「確認できなかった」として扱い、インストーラを
+    クラッシュさせてはならない。
+    """
+    try:
+        result = subprocess.run(
+            [str(venv_python), "-m", "sfcli.utils.plotting", "--probe"],
+            capture_output=True,
+            text=True,
+            timeout=PLOT_PROBE_TIMEOUT_SECONDS,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        return None
+    try:
+        return json.loads(lines[-1])
+    except json.JSONDecodeError:
+        return None
+
 
 def _module_importable(python_exe: Path, module_name: str) -> bool:
     """Return whether `import <module_name>` succeeds under python_exe.
@@ -3182,6 +3252,18 @@ class Installer:
             checks = CORE_IMPORT_CHECKS if minimal else CORE_IMPORT_CHECKS + SIMULATOR_IMPORT_CHECKS
             self._missing_packages = self._verify_key_packages(idf_path, checks)
 
+            # Root-fix the matplotlib GUI backend right after the key
+            # packages (matplotlib among them) are confirmed importable --
+            # see _ensure_plot_backend()'s docstring. Also skipped under
+            # --skip-deps: nothing was (re)installed this run, so there is
+            # nothing new to root-fix.
+            # 主要パッケージ(matplotlibを含む)がimport可能と確認された
+            # 直後にmatplotlib GUIバックエンドを根本対処する --
+            # _ensure_plot_backend()のdocstring参照。--skip-deps時も
+            # スキップする: 今回の実行では何も(再)導入していないため、
+            # 根本対処すべき新規事項も無い。
+            self._ensure_plot_backend(idf_path)
+
         # Check hidapi native library for joystick support
         # ジョイスティック用のhidapiネイティブライブラリを確認
         self._check_hidapi()
@@ -4071,6 +4153,79 @@ class Installer:
         if not still_missing:
             success("All key packages verified")
         return still_missing
+
+    def _ensure_plot_backend(self, idf_path: Path) -> None:
+        """Sub-step of Step 3/4: make sure matplotlib has a working GUI
+        backend in the ESP-IDF venv, installing the PyQt6 fallback there
+        when it does not. This is the install-time ROOT fix for `sf log
+        viz` / `sf sysid fit --plot` opening no window on a Windows
+        attendee PC with an incomplete Tcl/Tk -- see
+        lib/sfcli/utils/plotting.py's module docstring for the run-time
+        PNG-fallback safety net this complements.
+
+        Deliberately NOT its own "Step N/4": see the Stability contract
+        at the top of this file -- the GUI installer parses "Step N/4:"
+        header lines to advance its step indicator, and that count must
+        stay at 4.
+
+        Best-effort throughout: this never changes the installer's
+        overall return code, matching _check_hidapi() and
+        _verify_key_packages() (a warn(), not a return 1).
+        Step3/4のサブステップ: ESP-IDF venv内でmatplotlibに実際に動くGUI
+        バックエンドがあることを確認し、無ければそこにPyQt6フォール
+        バックを導入する。不完全なTcl/TkのWindows受講者PCで `sf log viz`
+        / `sf sysid fit --plot` がウィンドウを一切開かない問題の
+        インストール時の根本対処 -- これが補完する実行時のPNGフォール
+        バック安全網は lib/sfcli/utils/plotting.py のモジュールdocstring
+        参照。
+
+        意図的に独立した「Step N/4」にはしない: 本ファイル冒頭の安定
+        契約参照 -- GUIインストーラは"Step N/4:"ヘッダ行をパースして
+        ステップインジケータを進めるため、その数は4のまま維持する
+        必要がある。
+
+        全体を通してベストエフォート: _check_hidapi() や
+        _verify_key_packages() と同様、これがインストーラ全体の戻り値を
+        変えることはない（return 1ではなくwarn()）。
+        """
+        venv_python = _find_idf_python(idf_path)
+        if not venv_python:
+            return
+
+        info("Checking plot window support (matplotlib GUI backend)...")
+        probe = _probe_plot_backend(venv_python)
+        if probe is None:
+            warn("Could not check the matplotlib GUI backend: probe failed or timed out")
+            return
+
+        if probe.get("interactive"):
+            success(f"Plot windows: OK (matplotlib backend {probe.get('backend')})")
+            return
+
+        if not probe.get("has_display", True):
+            info("No display in this session; skipping the GUI backend setup "
+                 "(sf log viz will save PNG files)")
+            return
+
+        requirement = probe.get("fallback_requirement")
+        if not requirement:
+            warn("Could not check the matplotlib GUI backend: malformed probe output")
+            return
+
+        warn(f"No GUI backend for matplotlib in the sf Python ({probe.get('reason')})")
+        info(f"Installing {requirement} (about 80 MB) so plot windows work...")
+        rc = _run_in_idf_env(idf_path, ["install", requirement])
+        if rc != 0:
+            warn("PyQt6 install failed; sf log viz will save PNG files instead. Later: sf doctor --fix")
+            return
+
+        probe = _probe_plot_backend(venv_python)
+        if probe and probe.get("interactive"):
+            success(f"Plot windows: OK (matplotlib backend {probe.get('backend')})")
+        else:
+            reason = probe.get("reason") if probe else "probe failed after install"
+            warn(f"Still no usable GUI backend after installing PyQt6 ({reason})")
+            warn("See docs/guides/troubleshooting.md section 6 (Plot Window)")
 
     def _check_hidapi(self) -> None:
         """Check if hidapi native library is available (needed for joystick).
