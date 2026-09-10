@@ -12,6 +12,14 @@ import subprocess
 from pathlib import Path
 from typing import Optional, List
 
+# Sibling submodule, not the parent package -- safe to import directly
+# (paths.py has no dependency back on platform.py, so there is no import
+# cycle regardless of which of the two a caller imports first).
+# 兄弟サブモジュール(親パッケージではない)であり直接importして安全
+# (paths.py はplatform.pyへ依存しないため、どちらを先にimportしても
+# 循環importにはならない)。
+from .paths import paths as _paths
+
 
 class Platform:
     """Platform detection and utilities"""
@@ -53,11 +61,29 @@ class Platform:
 
     def esp_idf_path(self) -> Optional[Path]:
         """Find ESP-IDF installation"""
-        # Check environment variable first
+        # Check environment variable first -- setup_env.sh/.bat sets
+        # IDF_PATH itself from .sf/config.toml (dedicated or legacy),
+        # so once activated this is already authoritative.
+        # 環境変数を最初に確認する -- setup_env.sh/.bat が(専用・旧来
+        # いずれの場合も) .sf/config.toml からIDF_PATHを自ら設定するため、
+        # 有効化済みならこれが既に正となる。
         if "IDF_PATH" in os.environ:
             idf_path = Path(os.environ["IDF_PATH"])
             if idf_path.exists():
                 return idf_path
+
+        # Check .sf/config.toml next, before falling back to the
+        # home-dir guesses below -- a configured path (from either the
+        # dedicated or legacy install flow) is more specific than a
+        # generic default location.
+        # 次に .sf/config.toml を確認する(下のホームディレクトリ既定への
+        # フォールバックより先)-- 設定済みパス(専用・旧来どちらの導入
+        # フローでも)は汎用の既定位置より具体的な情報のため優先する。
+        config_idf_path = _paths.read_config_value("esp_idf", "path")
+        if config_idf_path:
+            config_idf = Path(config_idf_path)
+            if config_idf.exists():
+                return config_idf
 
         # Check common locations
         common_paths = [

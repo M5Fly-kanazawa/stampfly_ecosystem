@@ -6,6 +6,7 @@ Checks the development environment for common issues.
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -641,6 +642,167 @@ def _check_plot_backend(warnings: list, fix: bool) -> None:
         console.print(f"    {hint}")
 
 
+def _check_dedicated_root(root: str, warnings: list) -> None:
+    """Confirm the dedicated environment's root directory (SF_HOME)
+    still exists on disk.
+    専用環境のルートディレクトリ(SF_HOME)がディスク上に実在するか確認する。
+    """
+    if root and Path(root).is_dir():
+        console.success(f"    root: {root}")
+        return
+    warnings.append(f"Dedicated environment root not found: {root}")
+    console.warning(f"    root: NOT FOUND ({root})")
+
+
+def _check_dedicated_python(root: str, warnings: list) -> None:
+    """Confirm the CURRENTLY RUNNING interpreter (the one `sf doctor`
+    itself executes under) is based on the dedicated Python under
+    `<root>/python`. A stale `sf` left on PATH from before migrating to
+    the dedicated environment is a common trap this catches.
+    「今まさに動いている」インタプリタ(`sf doctor` 自体が実行されている
+    もの)が `<root>/python` 配下の専用Pythonであることを確認する。専用
+    環境への移行前の古い`sf`がPATHに残っている、というよくある落とし穴を
+    検出する。
+    """
+    try:
+        root_python_dir = (Path(root) / "python").resolve()
+        running_base = Path(sys.base_prefix).resolve()
+    except OSError as e:
+        warnings.append(f"Could not resolve the dedicated Python path: {e}")
+        console.warning(f"    running Python: could not resolve dedicated Python path ({e})")
+        return
+
+    is_dedicated = running_base == root_python_dir or running_base.is_relative_to(root_python_dir)
+    if is_dedicated:
+        console.success(f"    running Python: {sys.base_prefix} (dedicated)")
+        return
+
+    warnings.append(
+        "sf is running under a different Python than the dedicated one; "
+        "open a new terminal and run setup_env again"
+    )
+    console.warning(
+        "    running Python: sf is running under a different Python than the "
+        "dedicated one; open a new terminal and run setup_env again"
+    )
+
+
+def _check_dedicated_tools_path(env_section: dict, warnings: list) -> None:
+    """Confirm `[env] tools_path` exists on disk and matches the
+    IDF_TOOLS_PATH environment variable actually in effect (set by
+    setup_env.sh/.bat).
+    `[env] tools_path` がディスク上に実在し、(setup_env.sh/.bat が設定する)
+    実際の環境変数 IDF_TOOLS_PATH と一致するか確認する。
+    """
+    tools_path = env_section.get("tools_path")
+    if not tools_path or not Path(tools_path).is_dir():
+        warnings.append(f"IDF_TOOLS_PATH directory not found: {tools_path}")
+        console.warning(f"    IDF_TOOLS_PATH: NOT FOUND ({tools_path})")
+        return
+
+    env_tools_path = os.environ.get("IDF_TOOLS_PATH")
+    if env_tools_path == tools_path:
+        console.success(f"    IDF_TOOLS_PATH: {tools_path}")
+        return
+
+    warnings.append(f"IDF_TOOLS_PATH is {env_tools_path!r}, expected {tools_path!r}")
+    console.warning(
+        f"    IDF_TOOLS_PATH is {env_tools_path or '(not set)'}, expected {tools_path} "
+        "-- run setup_env again"
+    )
+
+
+def _check_dedicated_esp_idf(esp_idf_section: dict, warnings: list) -> None:
+    """Confirm `[esp_idf] path` (as recorded in config) points at a real
+    ESP-IDF checkout (`tools/idf.py` present).
+    `[esp_idf] path`(設定に記録された値)が実在するESP-IDFチェックアウト
+    (`tools/idf.py` が存在する)を指しているか確認する。
+    """
+    idf_path = esp_idf_section.get("path")
+    idf_version = esp_idf_section.get("version", "?")
+    if not idf_path:
+        warnings.append("Dedicated environment: no [esp_idf] path in config")
+        console.warning("    ESP-IDF: no path recorded in config")
+        return
+
+    if (Path(idf_path) / "tools" / "idf.py").is_file():
+        console.success(f"    ESP-IDF: {idf_path} ({idf_version})")
+        return
+
+    warnings.append(f"ESP-IDF not found at configured path: {idf_path}")
+    console.warning(f"    ESP-IDF: NOT FOUND at {idf_path}")
+
+
+def _check_dedicated_manifest(root: str) -> None:
+    """Print the dedicated Python version/release recorded in
+    `<root>/manifest.json`, if readable. Informational only (no warning
+    on failure) -- the Python health itself was already confirmed by
+    _check_dedicated_python() above.
+    `<root>/manifest.json` に記録された専用Pythonの版・リリースを表示する
+    (読めれば)。情報表示のみ(失敗しても警告にしない) -- Python自体の
+    健全性は上の _check_dedicated_python() で確認済みのため。
+    """
+    manifest_path = Path(root) / "manifest.json"
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        console.print(f"    manifest.json: not readable ({manifest_path})")
+        return
+
+    python_info = data.get("python", {})
+    version = python_info.get("version", "?")
+    release = python_info.get("release", "?")
+    console.success(f"    Private Python {version} (release {release})")
+
+
+def _check_environment(warnings: list) -> None:
+    """Report whether this checkout uses the dedicated environment
+    (private Python 3.12 + ESP-IDF v5.5.2 under SF_HOME) or the legacy
+    one (system Python + the user's own ESP-IDF) -- see
+    docs/plans/dedicated-environment-plan.md. For a dedicated
+    environment, also confirms the running interpreter, IDF_TOOLS_PATH,
+    and the configured ESP-IDF are all actually in place.
+    このチェックアウトが専用環境(private Python 3.12 + SF_HOME配下の
+    ESP-IDF v5.5.2)か旧来環境(システムPython + ユーザー自身のESP-IDF)かを
+    報告する -- docs/plans/dedicated-environment-plan.md 参照。専用環境の
+    場合は、実行中のインタプリタ・IDF_TOOLS_PATH・設定されたESP-IDFが
+    実際にすべて揃っているかも確認する。
+    """
+    config = paths.read_config()
+    if not config:
+        console.print("  No .sf/config.toml (not installed via install.sh/install.bat)")
+        return
+
+    env_section = config.get("env")
+    if not env_section:
+        console.print("  Legacy environment (pre-v2 config). Migrate with: sf upgrade --migrate")
+        return
+
+    kind = env_section.get("kind")
+    if kind == "legacy":
+        console.print(
+            "  Legacy environment (system Python + your own ESP-IDF). "
+            "Migrate any time with: sf upgrade --migrate"
+        )
+        return
+
+    if kind != "dedicated":
+        # Unrecognized/garbled kind value -- treat the same as "no
+        # [env]" rather than silently doing nothing or crashing.
+        # 認識できない/壊れた kind 値 -- クラッシュや無言の何もしないでは
+        # なく「[env]無し」と同様に扱う。
+        console.print("  Legacy environment (pre-v2 config). Migrate with: sf upgrade --migrate")
+        return
+
+    root = env_section.get("root", "?")
+    console.success(f"  Dedicated environment: {root}")
+    _check_dedicated_root(root, warnings)
+    _check_dedicated_python(root, warnings)
+    _check_dedicated_tools_path(env_section, warnings)
+    _check_dedicated_esp_idf(config.get("esp_idf", {}), warnings)
+    _check_dedicated_manifest(root)
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute doctor command"""
     console.header("StampFly Environment Diagnostics")
@@ -657,6 +819,11 @@ def run(args: argparse.Namespace) -> int:
         console.error(f"  Python {py_version.major}.{py_version.minor} - 3.8+ required")
     else:
         console.success(f"  Python {py_version.major}.{py_version.minor}.{py_version.micro}")
+
+    # Check environment (dedicated / legacy)
+    console.print()
+    console.info("Checking environment (dedicated / legacy)...")
+    _check_environment(warnings)
 
     # Check repository structure
     console.print()

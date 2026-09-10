@@ -138,11 +138,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help=COMMAND_HELP,
         description=(
             "Pull the latest changes from the tracked remote branch, keep local "
-            "edits safe (auto-stash), resync Python dependencies, and flag stale "
-            "ESP-IDF sdkconfig files.\n\n"
+            "edits safe (auto-stash), resync Python dependencies, flag stale "
+            "ESP-IDF sdkconfig files, and (unless already on it) offer to "
+            "migrate to the self-contained dedicated environment "
+            "(see --migrate/--no-migrate).\n\n"
             "リモートの追跡ブランチから最新の変更を取得し、ローカルの変更は"
             "自動stashで保護しつつ取り込み、Python依存関係を再同期し、"
-            "陳腐化したESP-IDFのsdkconfigを検出します。"
+            "陳腐化したESP-IDFのsdkconfigを検出し、(既に専用環境でなければ)"
+            "自己完結した専用環境への移行を提案します"
+            "（--migrate/--no-migrate 参照）。"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -166,6 +170,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--skip-deps",
         action="store_true",
         help="Skip the Python dependency resync step",
+    )
+    migration_group = parser.add_mutually_exclusive_group()
+    migration_group.add_argument(
+        "--migrate",
+        action="store_true",
+        help="Migrate to the dedicated environment (private Python 3.12 + "
+             "ESP-IDF v5.5.2 under SF_HOME) without asking, even if the "
+             "current environment is legacy",
+    )
+    migration_group.add_argument(
+        "--no-migrate",
+        action="store_true",
+        help="Never offer to migrate to the dedicated environment this run",
     )
     parser.set_defaults(func=run)
 
@@ -588,6 +605,165 @@ def _backup_stale_sdkconfigs(root: Path, old_head: str, new_head: str) -> List[s
     return backed_up_targets
 
 
+DECLINED_MIGRATION_COMMENT = "# declined dedicated migration; run: sf upgrade --migrate"
+
+
+def _write_legacy_kind(config_path: Path) -> None:
+    """Record `[env] kind = "legacy"` into `.sf/config.toml` after the
+    user declines the dedicated-environment migration offer, so they are
+    not asked again on every future `sf upgrade` (spec: "declined ->
+    kind = legacy").
+
+    Does nothing if `config_path` does not exist yet -- a checkout with
+    no config at all was never installed via install.sh/install.bat, so
+    there is nothing to annotate (see docs/plans/dedicated-environment
+    -plan.md). If an `[env]` section already exists (a garbled/partial
+    v2 config with no recognized `kind`), the two lines are inserted
+    right after that header instead of appending a duplicate section.
+
+    ユーザーが専用環境への移行提案を辞退した後、`.sf/config.toml` に
+    `[env] kind = "legacy"` を記録し、以後の `sf upgrade` 実行のたびに
+    尋ねないようにする(仕様: 「辞退時は kind=legacy」)。
+
+    `config_path` がまだ存在しない場合は何もしない -- 設定が一切無い
+    チェックアウトは install.sh/install.bat 経由で導入されたことがない
+    ため、注記すべき対象が無い
+    (docs/plans/dedicated-environment-plan.md 参照)。既に `[env]` 節が
+    存在する場合(認識できない `kind` を持つ壊れた/部分的なv2設定)は、
+    重複する節を追加する代わりにその見出し直後へ2行を挿入する。
+    """
+    if not config_path.exists():
+        return
+
+    text = config_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    for i, line in enumerate(lines):
+        if line.strip() == "[env]":
+            lines[i + 1:i + 1] = [DECLINED_MIGRATION_COMMENT, 'kind = "legacy"']
+            break
+    else:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines += ["[env]", DECLINED_MIGRATION_COMMENT, 'kind = "legacy"']
+
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _run_dedicated_installer(root: Path) -> int:
+    """Run `scripts/installer.py --dedicated --non-interactive
+    --no-flasher` as a subprocess, streaming its output directly (no
+    capture -- the download/extraction progress is exactly what the user
+    needs to see during a multi-GB, potentially multi-minute install).
+    No timeout: provisioning a private Python + ESP-IDF clone over the
+    network can legitimately take a long time on a slow connection.
+
+    `scripts/installer.py --dedicated --non-interactive --no-flasher` を
+    サブプロセスとして実行し、出力をそのまま流す(捕捉しない -- 数GB・
+    数分以上かかりうる導入中は、ダウンロード/展開の進捗こそユーザーが
+    見るべきもの)。タイムアウト無し: 専用Python + ESP-IDFの取得は低速
+    回線では正当に長時間かかりうる。
+    """
+    installer_path = root / "scripts" / "installer.py"
+    env = dict(os.environ)
+    env["SF_INSTALLER_NONINTERACTIVE"] = "1"
+    result = subprocess.run(
+        [sys.executable, str(installer_path), "--dedicated", "--non-interactive", "--no-flasher"],
+        cwd=str(root),
+        env=env,
+    )
+    return result.returncode
+
+
+def _offer_dedicated_migration(root: Path, args: argparse.Namespace) -> Optional[int]:
+    """Offer to migrate this checkout to the dedicated environment
+    (private Python 3.12 + ESP-IDF v5.5.2 self-contained under SF_HOME),
+    per docs/plans/dedicated-environment-plan.md.
+
+    Returns an int if `run()` should return immediately with that exit
+    code (migration was attempted -- accepted and it succeeded, or
+    `--migrate` forced it): the dedicated environment already has
+    everything it needs, so the remaining local-Python steps (dependency
+    resync, flasher offer) are skipped. Returns None otherwise, in which
+    case the caller falls through to those remaining steps completely
+    unaffected -- covers: `--no-migrate`, already dedicated, legacy
+    without `--migrate`, non-interactive skip, declined, and a failed
+    migration attempt (the current environment is left untouched in that
+    last case, so normal flow should continue).
+
+    docs/plans/dedicated-environment-plan.md に基づき、このチェックアウトを
+    専用環境(SF_HOME配下に自己完結したprivate Python 3.12 + ESP-IDF
+    v5.5.2)へ移行するか提案する。
+
+    `run()` がその終了コードで即座にreturnすべき場合はintを返す(移行を
+    試みた場合 -- 承諾して成功した、または `--migrate` で強制した場合):
+    専用環境は既に必要なものを全て備えているため、残りの(ローカルPython
+    向けの)手順(依存関係再同期・フラッシャ提案)は省略する。それ以外は
+    Noneを返し、呼び出し元は影響を受けずそれらの残り手順へそのまま進む
+    -- 該当: `--no-migrate`、既に専用環境、`--migrate`無しの旧来環境、
+    非対話スキップ、辞退、移行試行の失敗(この最後のケースでは現在の
+    環境はそのまま残るため、通常フローを続けるべき)。
+    """
+    if args.no_migrate:
+        return None
+
+    config = paths.read_config()
+    env_section = config.get("env", {})
+    kind = env_section.get("kind")
+
+    if kind == "dedicated":
+        return None
+    if kind == "legacy" and not args.migrate:
+        return None
+
+    if args.migrate:
+        proceed = True
+    elif not sys.stdin.isatty():
+        console.info(
+            "Dedicated environment migration available: run `sf upgrade "
+            "--migrate` (skipped: non-interactive)"
+        )
+        return None
+    else:
+        console.print()
+        console.info(
+            "A dedicated environment (private Python 3.12 + ESP-IDF v5.5.2, "
+            "about 4-6 GB) can be installed under SF_HOME, alongside your "
+            "current setup."
+        )
+        console.info("Your current environment is left untouched either way.")
+        console.info(
+            "After migrating, close this terminal and open a new one (or "
+            "StampFly Terminal) to start using it."
+        )
+        proceed = _confirm(
+            "Migrate to the dedicated environment now?",
+            default_yes=True,
+        )
+
+    if not proceed:
+        _write_legacy_kind(paths.config_file())
+        console.print("Kept the current environment. Migrate later with: sf upgrade --migrate")
+        return None
+
+    console.print()
+    console.info("Installing the dedicated environment...")
+    exit_code = _run_dedicated_installer(root)
+    if exit_code == 0:
+        console.print()
+        console.success(
+            "Dedicated environment installed. Close this terminal, then open "
+            "StampFly Terminal (or run setup_env again) to use it."
+        )
+        return EXIT_OK
+
+    console.warning(
+        f"Migration failed (exit {exit_code}); the current environment is "
+        "unchanged. Re-run later with: sf upgrade --migrate"
+    )
+    return None
+
+
 def _offer_flasher_update(
     args: argparse.Namespace,
     actions_taken: List[str],
@@ -741,6 +917,10 @@ def _reconstruct_cli_flags(args: argparse.Namespace) -> List[str]:
         flags.append("--no-flasher")
     if args.skip_deps:
         flags.append("--skip-deps")
+    if args.migrate:
+        flags.append("--migrate")
+    if args.no_migrate:
+        flags.append("--no-migrate")
     return flags
 
 
@@ -914,6 +1094,11 @@ def run(args: argparse.Namespace) -> int:
 
     if behind_count == 0:
         console.success("Already up to date.")
+
+        migration_exit_code = _offer_dedicated_migration(root, args)
+        if migration_exit_code is not None:
+            return migration_exit_code
+
         deps_ok = True
         if args.skip_deps:
             console.print("(--skip-deps: dependency resync skipped)")
@@ -983,7 +1168,36 @@ def run(args: argparse.Namespace) -> int:
     if merge_exit_code != EXIT_OK:
         return merge_exit_code
 
-    # --- Step 5: dependency resync (always, unless --skip-deps) ----------
+    # --- Step 5: sdkconfig staleness check ---------------------------------
+    # Computed and applied BEFORE the dedicated-environment migration
+    # offer below (deliberately out of numeric Step order): a repo-file
+    # fix-up like this is unrelated to which Python/ESP-IDF environment
+    # ends up running the next build, so it must happen even on the path
+    # where migration short-circuits the rest of this function.
+    # 下の専用環境への移行提案より前に計算・適用する(意図的に番号の順序を
+    # 崩す): これはどのPython/ESP-IDF環境が次のビルドを実行するかとは
+    # 無関係なリポジトリファイルの後始末のため、移行がこの関数の残りを
+    # 打ち切る経路でも必ず実行されなければならない。
+    console.print()
+    new_head = _git_short_hash(root, "HEAD")
+    backed_up_targets = _backup_stale_sdkconfigs(root, old_head, new_head)
+    if backed_up_targets:
+        actions_taken.append("Backed up stale sdkconfig for: " + ", ".join(backed_up_targets))
+
+    # --- Dedicated environment migration offer -----------------------------
+    # If this proceeds and succeeds (or --migrate forced it), the dedicated
+    # environment already has everything it needs -- skip the remaining
+    # LOCAL-Python-only steps (dependency resync, flasher offer) and return
+    # immediately.
+    # 専用環境への移行提案。実行され成功した場合(または --migrate で強制した
+    # 場合)、専用環境は既に必要なものを全て備えているため、残りの
+    # ローカルPython専用の手順(依存関係再同期・フラッシャ提案)は省略し
+    # 即座にreturnする。
+    migration_exit_code = _offer_dedicated_migration(root, args)
+    if migration_exit_code is not None:
+        return migration_exit_code
+
+    # --- Step 6: dependency resync (always, unless --skip-deps) ----------
     # A sync failure does not abort the remaining steps (they are
     # independent and the manual fix was already printed), but it MUST be
     # reflected in the exit code -- scripts and the installer rely on it.
@@ -1000,13 +1214,6 @@ def run(args: argparse.Namespace) -> int:
     else:
         deps_ok = False
         actions_taken.append("Dependency resync FAILED -- see the output above")
-
-    # --- Step 6: sdkconfig staleness check ---------------------------------
-    console.print()
-    new_head = _git_short_hash(root, "HEAD")
-    backed_up_targets = _backup_stale_sdkconfigs(root, old_head, new_head)
-    if backed_up_targets:
-        actions_taken.append("Backed up stale sdkconfig for: " + ", ".join(backed_up_targets))
 
     # --- Step 7: native GUI Flasher ----------------------------------------
     _offer_flasher_update(args, actions_taken)

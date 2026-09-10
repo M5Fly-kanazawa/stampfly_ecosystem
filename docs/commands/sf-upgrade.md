@@ -11,7 +11,7 @@ Git初心者向けの丁寧な解説（衝突の解決手順、インストー�
 ## 2. 構文
 
 ```bash
-sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
+sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps] [--migrate | --no-migrate]
 ```
 
 ## 3. オプション
@@ -22,17 +22,30 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 | `--discard-local` | ローカルの変更をstashせず破棄してから更新する（破壊的操作。ファイル一覧を表示した上で必ず確認） |
 | `--no-flasher` | ネイティブGUIフラッシャの更新提案、および未導入時の一回限りのインストール提案をスキップする（機会は消費しない） |
 | `--skip-deps` | Python依存関係の再同期ステップをスキップする |
+| `--migrate` | 専用環境（private Python 3.12 + ESP-IDF v5.5.2、SF_HOME配下に自己完結）への移行を、確認なしで実行する。旧来環境を選んだ後（`kind = "legacy"`記録済み）でも、このフラグを付ければ改めて移行できる |
+| `--no-migrate` | 今回の実行では専用環境への移行を一切提案しない（`--migrate` と同時指定不可） |
 
 ## 4. やること（ステップ概要）
 
 1. リポジトリ確認（gitクローンか、`origin` リモートが設定済みか）・現在ブランチ表示
-2. `git fetch` して遅れているコミット数を確認（0件なら依存同期と、書き込みアプリ未導入時の一回限り提案＝下記7だけ実行して終了）
+2. `git fetch` して遅れているコミット数を確認（0件なら専用環境への移行提案・依存同期・書き込みアプリ未導入時の一回限り提案＝下記7だけ実行して終了）
 3. 取り込まれるコミットの一覧をプレビュー表示し、`Y/n` で確認
 4. ローカル変更を安全に取り込む（既定=stash→マージ→復元、`--discard-local`=確認の上で破棄）
-5. Python依存関係を再同期（`pip install -e .`）
-6. `sdkconfig.defaults` / `partitions.csv` が変わっていれば、既存 `sdkconfig` を `*.pre-upgrade-backup` へ退避
-7. ネイティブGUIフラッシャ: 導入済みなら更新を提案。**未導入なら、チェックアウトにつき一回だけ**インストールを提案（`--yes` または `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップ。一度尋ねたら `.sf/flasher_install_offered` に記録し、以後は二度と尋ねない）
-8. サマリ表示（更新前後のコミットハッシュ・実施した処置・推奨次アクション）
+5. `sdkconfig.defaults` / `partitions.csv` が変わっていれば、既存 `sdkconfig` を `*.pre-upgrade-backup` へ退避
+6. **専用環境への移行提案**（まだ専用環境でなければ）: 対話実行では既定 `Y` で確認、`--migrate` なら確認なしで実行、非対話（CI等）では一度案内するだけでスキップする。承諾/`--migrate`時は `scripts/installer.py --dedicated --non-interactive --no-flasher` を実行し、成功すればそこで終了する（残りの依存同期・フラッシャ提案は専用環境が別途すべて備えているため省略）。辞退時は `.sf/config.toml` に `kind = "legacy"` を記録し、以後は尋ねない（`sf upgrade --migrate` でいつでも再提案可能）
+7. Python依存関係を再同期（`pip install -e .`）※専用環境へ移行した場合はここへ到達しない
+8. ネイティブGUIフラッシャ: 導入済みなら更新を提案。**未導入なら、チェックアウトにつき一回だけ**インストールを提案（`--yes` または `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップ。一度尋ねたら `.sf/flasher_install_offered` に記録し、以後は二度と尋ねない）
+9. サマリ表示（更新前後のコミットハッシュ・実施した処置・推奨次アクション）
+
+> **専用環境への移行で作られるもの:** `SF_HOME`（既定は Windows `C:\StampFly`、macOS/Linux
+> `~/.stampfly`）配下に、専用の Python 3.12（数十〜150MB程度）・専用の ESP-IDF v5.5.2
+> （約0.65GB）・`IDF_TOOLS_PATH`（ツール+ビルド用仮想環境、合計で数GB）を新規に用意します。
+> 合計の目安は**約4〜6GB**（ダウンロード＋ディスク使用量）です。**現在の環境（システム
+> Python・既存のESP-IDF）は削除・変更されません** — 専用環境はその横に新規作成されるだけです。
+> 移行が終わったら、**このターミナルを閉じて新しいターミナル（または StampFly Terminal）を
+> 開き直してから**使い始めてください（`setup_env` を開き直すだけでも構いません）。
+> 現在の環境を手動で片付けたい場合は [アップグレードガイド](../guides/upgrading.md) を参照
+> してください（本フェーズ時点では専用環境向けの追記は今後の更新で反映されます）。
 
 詳細な各ステップの解説と、Gitコマンドとの対応表は [アップグレードガイド §3](../guides/upgrading.md) を参照してください。
 
@@ -66,6 +79,12 @@ sf upgrade --skip-deps --no-flasher
 
 # ローカル変更を諦めて公式の最新版だけを取り込む
 sf upgrade --discard-local
+
+# 専用環境への移行を確認なしで実行する
+sf upgrade --migrate
+
+# 今回は専用環境への移行提案を出さない
+sf upgrade --no-migrate
 ```
 
 ---
@@ -81,7 +100,7 @@ For a beginner-friendly walkthrough (conflict resolution, the install/uninstall 
 ## 2. Syntax
 
 ```bash
-sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
+sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps] [--migrate | --no-migrate]
 ```
 
 ## 3. Options
@@ -92,17 +111,30 @@ sf upgrade [--yes] [--discard-local] [--no-flasher] [--skip-deps]
 | `--discard-local` | Discard local changes instead of stashing them before updating (destructive; the changed-file list is shown and always confirmed) |
 | `--no-flasher` | Skip the offer to update the native GUI Flasher app, and the one-time install offer if it is not installed (without consuming that one-time chance) |
 | `--skip-deps` | Skip the Python dependency resync step |
+| `--migrate` | Migrate to the dedicated environment (private Python 3.12 + ESP-IDF v5.5.2, self-contained under SF_HOME) without asking. Works even after you previously chose the legacy environment (recorded as `kind = "legacy"`) |
+| `--no-migrate` | Never offer the dedicated-environment migration this run (mutually exclusive with `--migrate`) |
 
 ## 4. What It Does (Step Overview)
 
 1. Repository check (git clone with an `origin` remote?) and current-branch display
-2. `git fetch`, then check how many commits behind (0 -> dependency resync plus the one-time flasher-install offer (step 7) run, then it exits)
+2. `git fetch`, then check how many commits behind (0 -> the dedicated-environment migration offer, dependency resync, and the one-time flasher-install offer (step 8) run, then it exits)
 3. Show a preview of incoming commits and ask `Y/n`
 4. Safely fold in local changes (default = stash -> merge -> restore, `--discard-local` = discard after confirmation)
-5. Resync Python dependencies (`pip install -e .`)
-6. If `sdkconfig.defaults` / `partitions.csv` changed, back up any existing `sdkconfig` to `*.pre-upgrade-backup`
-7. Native GUI Flasher: offer to update it if installed. If **not** installed, offer to install it **once per checkout** (`--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again)
-8. Print a summary (before/after commit hash, actions taken, recommended next step)
+5. If `sdkconfig.defaults` / `partitions.csv` changed, back up any existing `sdkconfig` to `*.pre-upgrade-backup`
+6. **Dedicated-environment migration offer** (unless already dedicated): interactive runs default to `Y`; `--migrate` skips the prompt and always proceeds; a non-interactive run (CI, etc.) just prints a pointer and skips it. If accepted (or forced via `--migrate`), runs `scripts/installer.py --dedicated --non-interactive --no-flasher` and, on success, stops right there -- the remaining steps are skipped because the new dedicated environment already has everything they would have provided. Declining records `kind = "legacy"` in `.sf/config.toml` so you are not asked again (re-offer any time with `sf upgrade --migrate`)
+7. Resync Python dependencies (`pip install -e .`) -- skipped if migration happened above
+8. Native GUI Flasher: offer to update it if installed. If **not** installed, offer to install it **once per checkout** (`--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again)
+9. Print a summary (before/after commit hash, actions taken, recommended next step)
+
+> **What the dedicated-environment migration creates:** under `SF_HOME` (default `C:\StampFly`
+> on Windows, `~/.stampfly` on macOS/Linux), a private Python 3.12 (tens of MB to ~150MB), a
+> private ESP-IDF v5.5.2 checkout (~0.65GB), and `IDF_TOOLS_PATH` (build tools + virtualenvs,
+> several GB total) -- **about 4-6GB** of download/disk altogether. **Your current environment
+> (system Python, any existing ESP-IDF) is left untouched** -- the dedicated one is created
+> alongside it. Once migration finishes, **close this terminal and open a new one (or StampFly
+> Terminal)** before using it (re-running `setup_env` also works). To manually clean up the old
+> environment afterward, see the [Upgrading Guide](../guides/upgrading.md) (dedicated-environment
+> -specific cleanup steps will be added there in a later phase).
 
 See [Upgrading Guide §3](../guides/upgrading.md#3-what-sf-upgrade-does-internally) for a detailed walkthrough of each step and its manual Git-command equivalent.
 
@@ -137,4 +169,10 @@ sf upgrade --skip-deps --no-flasher
 
 # Give up local changes and take only the official latest version
 sf upgrade --discard-local
+
+# Migrate to the dedicated environment without asking
+sf upgrade --migrate
+
+# Do not offer the dedicated-environment migration this run
+sf upgrade --no-migrate
 ```

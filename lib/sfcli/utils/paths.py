@@ -169,6 +169,22 @@ class Paths:
         if local_idf.is_symlink():
             return local_idf.resolve()
 
+        # Check .sf/config.toml -- scripts/installer.py records the
+        # ESP-IDF path there for both the legacy and dedicated flows
+        # (see docs/plans/dedicated-environment-plan.md). Must exist on
+        # disk to count: a stale/hand-edited config entry must not shadow
+        # a real ESP-IDF the fallback searches below would have found.
+        # .sf/config.toml を確認する -- scripts/installer.py は旧来・専用
+        # どちらのフローでもESP-IDFパスをここに記録する
+        # (docs/plans/dedicated-environment-plan.md 参照)。実在するパスの
+        # みを採用する -- 古い/手編集された設定項目が、下のフォールバック
+        # 探索で見つかったはずの実在するESP-IDFを覆い隠さないようにする。
+        config_idf_path = self.read_config_value("esp_idf", "path")
+        if config_idf_path:
+            config_idf = Path(config_idf_path)
+            if config_idf.exists():
+                return config_idf
+
         # Check common locations
         common_paths = [
             Path.home() / "esp" / "esp-idf",
@@ -189,6 +205,84 @@ class Paths:
     def config_file(self) -> Path:
         """Get CLI configuration file path"""
         return self.config_dir() / "config.toml"
+
+    def read_config(self) -> dict:
+        """Minimal `.sf/config.toml` reader: parses `[section]` headers
+        and `key = "value"` lines into {section: {key: value}}, ignoring
+        comments (#) and blank lines. Returns {} if the file is missing
+        or unreadable.
+
+        Deliberately reimplements scripts/installer.py's identically
+        -behaved `read_config()` rather than importing it: sfcli must not
+        import that standalone top-level script (see this module's own
+        `_ROOT_OVERRIDE_ENV_VAR` comment on why paths.py cannot depend on
+        code outside the sfcli package), and installer.py explicitly
+        keeps its own copy stdlib-only and independent for the same
+        reason in reverse. Not a full TOML parser (no arrays/tables/
+        multi-line strings) -- config.toml only ever holds flat quoted
+        -string values (see installer.py's `_save_config()`), so this is
+        deliberately just enough for that shape.
+        最小限の `.sf/config.toml` リーダー: `[section]` 見出しと
+        `key = "value"` 行を {section: {key: value}} に解析する。コメント
+        (#)と空行は無視する。ファイルが無い/読めない場合は {} を返す。
+
+        scripts/installer.py の同じ振る舞いの read_config() を意図的に
+        import せず再実装する: sfcli はそのスタンドアロンなトップレベル
+        スクリプトに依存してはならず(理由はこのモジュール自身の
+        `_ROOT_OVERRIDE_ENV_VAR` のコメント参照)、installer.py 側も同じ
+        理由の裏返しで自身のコピーを標準ライブラリのみ・独立に保っている。
+        完全なTOMLパーサーではない(配列/テーブル/複数行文字列非対応) --
+        config.toml は常にフラットな引用符付き文字列値のみを持つ
+        (installer.py の `_save_config()` 参照)ため、意図的にその形に
+        限定している。
+        """
+        sections: dict = {}
+        try:
+            text = self.config_file().read_text(encoding="utf-8")
+        except OSError:
+            return sections
+
+        current: Optional[str] = None
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                current = line[1:-1].strip()
+                sections.setdefault(current, {})
+                continue
+            if current is None or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+                value = value[1:-1]
+            sections[current][key] = value
+        return sections
+
+    def read_config_value(self, section: str, key: str) -> Optional[str]:
+        """Shortcut for `read_config()[section][key]`, or None if either
+        the section or the key is absent.
+        `read_config()[section][key]` の簡略形。sectionまたはkeyが
+        無ければNone。
+        """
+        return self.read_config().get(section, {}).get(key)
+
+    def dedicated_env(self) -> Optional[dict]:
+        """The `[env]` section of `.sf/config.toml` if this checkout uses
+        the dedicated environment (`kind == "dedicated"`), else None --
+        covers both a legacy environment (`kind == "legacy"`) and a
+        pre-v2 config with no `[env]` section at all.
+        `.sf/config.toml` の `[env]` セクションを返す。このチェックアウトが
+        専用環境(`kind == "dedicated"`)を使っている場合のみ内容を返し、
+        それ以外(旧来環境 `kind == "legacy"`、または `[env]` 節自体が無い
+        v1以前の設定)は None を返す。
+        """
+        env_section = self.read_config().get("env", {})
+        if env_section.get("kind") == "dedicated":
+            return env_section
+        return None
 
     def templates(self) -> Path:
         """Get templates directory"""
