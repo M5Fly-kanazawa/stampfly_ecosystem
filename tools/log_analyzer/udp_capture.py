@@ -8,13 +8,13 @@ StampFly からフルレートセンサデータを UDP でキャプチャ。
 各センサは固有レートの独立パケットとして到着する。
 
 Packet IDs:
-    0x40  IMU + ESKF (400Hz, batch 4)
-    0x41  Position + Velocity (400Hz, batch 4)
-    0x42  Control Input (50Hz, batch 4)
-    0x43  Optical Flow (100Hz, batch 4)
-    0x44  ToF (30Hz, batch 4)
-    0x45  Barometer (50Hz, batch 4)
-    0x46  Magnetometer (25Hz, batch 4)
+    0x40  IMU + ESKF (400Hz, 8 samples/unified packet)
+    0x41  Position + Velocity (400Hz, 8 samples/unified packet)
+    0x42  Control Input (50Hz)
+    0x43  Optical Flow (100Hz)
+    0x44  ToF (30Hz)
+    0x45  Barometer (50Hz)
+    0x46  Magnetometer (25Hz)
     0x49  ESKF P-diagonal (reserved, not sent by any current firmware)
     0x4A  Motor duty (400Hz, unified-packet entry, 8 samples/entry --
           plant input for `sf sysid fit`, see data_stream_wire.hpp kPktDuty400)
@@ -22,6 +22,16 @@ Packet IDs:
           PRE-MIXER commanded thrust+torque, mixer-agnostic plant input for
           `sf sysid fit`/`rate-fit`, see data_stream_wire.hpp kPktCtrlOutput400)
     0x4F  Status / Heartbeat (1Hz)
+    0x50  Unified packet: header carries a 16-bit `sequence`, unwrapped here
+          and combined with each sub-sample's in-packet index to form the
+          v1 flight-log `seq` column (protocol/spec/flight_log.yaml; see
+          UDPTelemetryCapture._unwrap_unified_seq()).
+
+Output is a StampFly flight-log v1 bundle (docs/plans/
+flight-log-format-plan.md section 2): one `.sflog.zip` with a CSV per
+signal, written via lib/sflog (`save_bundle()`).
+出力は StampFly フライトログ v1 一式（計画書 2節）: 信号ごとの CSV を
+まとめた `.sflog.zip` 1個。lib/sflog 経由で書く（`save_bundle()`）。
 
 Usage:
     python udp_capture.py [options]
@@ -29,11 +39,10 @@ Usage:
 
 Examples:
     python udp_capture.py -d 30              # 30 seconds capture
-    python udp_capture.py -d 60 -o flight.csv
+    python udp_capture.py -d 60 -o flight_20260911T120000.sflog.zip
 """
 
 import argparse
-import csv
 import socket
 import struct
 import sys
@@ -42,6 +51,17 @@ import time
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
+
+import pandas as pd
+
+import sflog
+
+# save_bundle()'s meta.json `tool.version` -- this script's own version, not
+# lib/sflog's (sflog.__version__, the on-disk format's implementation).
+# save_bundle() が meta.json の `tool.version` に書く値 -- 本スクリプト
+# 自身の版であり、lib/sflog 側の版（sflog.__version__、形式実装の版）とは
+# 別。
+_TOOL_VERSION = '1.0.0'
 
 # =============================================================================
 # Packet definitions (must match udp_telemetry.hpp)
@@ -62,12 +82,45 @@ PKT_DUTY400   = 0x4A  # 400Hz motor duty (unified-packet entry, 8 samples/entry)
 PKT_CTRL_OUTPUT400 = 0x4B  # 400Hz pre-mixer commanded thrust+torque (8 samples/entry)
 PKT_RATE_REF  = 0x99  # virtual ID for 400Hz rate_ref (fixed part of unified packet)
 PKT_STATUS    = 0x4F
+PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
+
+# Packet types whose 8 sub-samples per PKT_UNIFIED datagram get a v1
+# flight-log `seq` (protocol/spec/flight_log.yaml): unwrapped unified-packet
+# sequence x 8 + in-packet index. Exactly the schema's LOCKSTEP_STREAMS
+# sources (imu/attitude share PKT_IMU_ESKF; posvel/rate_ref/motor/
+# ctrl_output are one each) -- see UDPTelemetryCapture._process_datagram().
+# PKT_UNIFIED データグラム1個につき8個のサブサンプルへ v1 フライトログの
+# `seq`（protocol/spec/flight_log.yaml）を付与するパケット種別: 展開済み
+# 統合パケット sequence × 8 + パケット内インデックス。スキーマの
+# LOCKSTEP_STREAMS の由来そのもの（imu/attitude は PKT_IMU_ESKF を共有、
+# posvel/rate_ref/motor/ctrl_output は1対1）--
+# UDPTelemetryCapture._process_datagram() 参照。
+UNIFIED_SEQ_PACKET_TYPES = (PKT_IMU_ESKF, PKT_POS_VEL, PKT_RATE_REF, PKT_DUTY400, PKT_CTRL_OUTPUT400)
 
 CMD_START_LOG  = 0xF0
 CMD_STOP_LOG   = 0xF1
 CMD_HEARTBEAT  = 0xF2
 
 UDP_LOG_PORT = 8890
+
+# Wire quantization scales -- the firmware packs these two fields as
+# int16 x SCALE to save bandwidth (data_stream_wire.hpp WireRateRef /
+# WireCtrlRef); dividing back by SCALE recovers the physical unit
+# (rad/s, rad) save_bundle() writes to imu-log v1's CSV columns.
+# 電文の量子化スケール -- ファームはこの2フィールドを int16 x SCALE で
+# 詰めて帯域を節約する（data_stream_wire.hpp の WireRateRef /
+# WireCtrlRef）。SCALE で割り戻すと save_bundle() が v1 の CSV 列に書く
+# 物理単位（rad/s, rad）に戻る。
+RATE_REF_WIRE_SCALE = 1000.0
+ANGLE_REF_WIRE_SCALE = 10000.0
+
+# hPa -> Pa: the wire carries barometric pressure as raw hPa
+# (data_stream_wire.hpp WireBaro), but v1's baro.csv unifies on SI Pa
+# (protocol/spec/flight_log.yaml units/baro.pressure).
+# hPa -> Pa: 電文は気圧を生の hPa のまま運ぶ（data_stream_wire.hpp の
+# WireBaro）が、v1 の baro.csv は SI の Pa に統一する
+# （protocol/spec/flight_log.yaml の units/baro.pressure）。
+HPA_TO_PA = 100.0
 
 # struct format strings for each sample type
 # 各サンプル型の struct フォーマット
@@ -247,7 +300,21 @@ def parse_packet(data: bytes) -> list:
 
     # Unified packet (0x50): 8× IMU+ESKF + 8× PosVel + 8× RateRef + sensor entries
     # 統合パケット: 8× IMU+ESKF + 8× PosVel + 8× RateRef + センサエントリ
-    PKT_UNIFIED = 0x50
+    #
+    # Each of the 5 lockstep sub-sample kinds below (IMU+ESKF, PosVel,
+    # RateRef, and -- further down -- Duty400/CtrlOutput400) gets an `_idx`
+    # (0..7, its position within THIS datagram). UDPTelemetryCapture.
+    # _process_datagram() turns `_idx` into the v1 flight-log `seq` column
+    # (unwrapped unified-packet sequence x 8 + `_idx`) and pops it off --
+    # parse_packet() itself is stateless and does not know the running
+    # sequence, only the position within one packet.
+    # 以下5種のロックステップ系サブサンプル（IMU+ESKF、PosVel、RateRef、
+    # さらに下の Duty400/CtrlOutput400）にはそれぞれ `_idx`（0..7、この
+    # データグラム内での位置）を付与する。UDPTelemetryCapture.
+    # _process_datagram() が `_idx` を v1 フライトログの `seq` 列（展開済み
+    # 統合パケット sequence × 8 + `_idx`）へ変換して取り除く --
+    # parse_packet() 自体は状態を持たず、通し番号ではなく1パケット内の
+    # 位置しか分からない。
     if pkt_id == PKT_UNIFIED:
         results = []
         imu_timestamps = []
@@ -260,6 +327,7 @@ def parse_packet(data: bytes) -> list:
             for key in ['gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z',
                         'accel_bias_x', 'accel_bias_y', 'accel_bias_z']:
                 sample[key] = sample[key] / 10000.0
+            sample['_idx'] = i
             imu_timestamps.append(sample['timestamp_us'])
             results.append((PKT_IMU_ESKF, sample))
             offset += 80
@@ -268,6 +336,7 @@ def parse_packet(data: bytes) -> list:
         for i in range(8):
             values = struct.unpack_from(FMT_POS_VEL, data, offset)
             sample = dict(zip(CSV_COLUMNS[PKT_POS_VEL], values))
+            sample['_idx'] = i
             results.append((PKT_POS_VEL, sample))
             offset += 28
 
@@ -279,6 +348,7 @@ def parse_packet(data: bytes) -> list:
                 'rate_ref_roll': values[0],
                 'rate_ref_pitch': values[1],
                 'rate_ref_yaw': values[2],
+                '_idx': i,
             }
             results.append((PKT_RATE_REF, sample))
             offset += 6
@@ -309,6 +379,7 @@ def parse_packet(data: bytes) -> list:
                         'timestamp_us': imu_timestamps[j],
                         'duty_FR': fr / 65535.0, 'duty_RR': rr / 65535.0,
                         'duty_RL': rl / 65535.0, 'duty_FL': fl / 65535.0,
+                        '_idx': j,
                     }))
             # Control output (0x4B): same 8-sub-samples-per-entry convention
             # as duty400 above, PRE-MIXER thrust[N]+torque[Nm] instead of
@@ -329,6 +400,7 @@ def parse_packet(data: bytes) -> list:
                         'ctrl_output_torque_roll': tq_roll,
                         'ctrl_output_torque_pitch': tq_pitch,
                         'ctrl_output_torque_yaw': tq_yaw,
+                        '_idx': j,
                     }))
             elif sensor_id in SAMPLE_INFO and offset + data_size <= len(data) - 1:
                 _, fmt, sample_size = SAMPLE_INFO[sensor_id]
@@ -432,12 +504,194 @@ def parse_packet(data: bytes) -> list:
 
 
 # =============================================================================
+# v1 flight-log bundle row builders (self.samples[pkt_id] entry -> a v1
+# stream's column dict, protocol/spec/flight_log.yaml)
+# v1 フライトログ一式の行ビルダー（self.samples[pkt_id] の1件 -> v1
+# ストリームの列名dict、protocol/spec/flight_log.yaml）
+# =============================================================================
+# Mirrors lib/sflog/convert.py's _row_from_*() builders, but the SOURCE here
+# is this module's own already-decoded sample dict (parse_packet()'s
+# CSV_COLUMNS names) rather than a legacy JSONL object -- so most of these
+# are a plain subset-and-rename. Three keep a wire quantization/unit
+# conversion parse_packet() does not itself undo: rate_ref and ctrl_ref's
+# angle_ref (int16 x SCALE, see RATE_REF_WIRE_SCALE/ANGLE_REF_WIRE_SCALE)
+# and baro's pressure (hPa -> Pa, see HPA_TO_PA).
+# lib/sflog/convert.py の _row_from_*() を模すが、ここでの入力はこの
+# モジュール自身が既にデコード済みのサンプル dict（parse_packet() の
+# CSV_COLUMNS の名前）であり、レガシー JSONL オブジェクトではない --
+# そのため大半は単純な部分集合＋改名で済む。parse_packet() 自身が戻して
+# いない電文量子化/単位変換を残す3つだけ例外: rate_ref と ctrl_ref の
+# angle_ref（int16 x SCALE、RATE_REF_WIRE_SCALE/ANGLE_REF_WIRE_SCALE 参照）、
+# baro の pressure（hPa -> Pa、HPA_TO_PA 参照）。
+
+_IMU_KEYS = (
+    'timestamp_us', 'seq', 'gyro_x', 'gyro_y', 'gyro_z',
+    'accel_x', 'accel_y', 'accel_z',
+    'gyro_raw_x', 'gyro_raw_y', 'gyro_raw_z',
+    'accel_raw_x', 'accel_raw_y', 'accel_raw_z',
+)
+_ATTITUDE_KEYS = (
+    'timestamp_us', 'seq', 'quat_w', 'quat_x', 'quat_y', 'quat_z',
+    'gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z',
+    'accel_bias_x', 'accel_bias_y', 'accel_bias_z',
+)
+_POSVEL_KEYS = ('timestamp_us', 'seq', 'pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z')
+_MOTOR_KEYS = ('timestamp_us', 'seq', 'duty_FR', 'duty_RR', 'duty_RL', 'duty_FL')
+_ESKF_COV_KEYS = (
+    'timestamp_us',
+    'p_pos_x', 'p_pos_y', 'p_pos_z',
+    'p_vel_x', 'p_vel_y', 'p_vel_z',
+    'p_att_x', 'p_att_y', 'p_att_z',
+    'p_bg_x', 'p_bg_y', 'p_bg_z',
+    'p_ba_x', 'p_ba_y', 'p_ba_z',
+)
+
+_STATUS_PID_AXES = ('roll', 'pitch', 'yaw')
+_STATUS_PID_TERMS = ('kp', 'ti', 'td')
+
+
+def _select(sample: dict, keys) -> dict:
+    """Subset `sample` to exactly `keys`, identity-named (the v1 column
+    name equals parse_packet()'s CSV_COLUMNS name already). A key missing
+    from `sample` (e.g. `seq` on a sample that never went through a unified
+    packet) becomes None -- an empty CSV cell, per the "absent, not
+    invented" rule (docs/plans/flight-log-format-plan.md section 2.2).
+    `sample` を `keys` だけへ絞り込む（v1 の列名は parse_packet() の
+    CSV_COLUMNS の名前と既に同じ）。`sample` に無いキー（統合パケットを
+    一度も経由しなかったサンプルの `seq` 等）は None（CSV上は空欄）になる
+    -- 「無いものは無い」規約（計画書 2.2節）。
+    """
+    return {k: sample.get(k) for k in keys}
+
+
+def _rate_ref_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'seq': sample.get('seq'),
+        'rate_ref_roll': sample['rate_ref_roll'] / RATE_REF_WIRE_SCALE,
+        'rate_ref_pitch': sample['rate_ref_pitch'] / RATE_REF_WIRE_SCALE,
+        'rate_ref_yaw': sample['rate_ref_yaw'] / RATE_REF_WIRE_SCALE,
+    }
+
+
+def _ctrl_output_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'seq': sample.get('seq'),
+        'thrust': sample['ctrl_output_thrust'],
+        'torque_roll': sample['ctrl_output_torque_roll'],
+        'torque_pitch': sample['ctrl_output_torque_pitch'],
+        'torque_yaw': sample['ctrl_output_torque_yaw'],
+    }
+
+
+def _pilot_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'throttle': sample['ctrl_throttle'],
+        'roll': sample['ctrl_roll'],
+        'pitch': sample['ctrl_pitch'],
+        'yaw': sample['ctrl_yaw'],
+    }
+
+
+def _ctrl_ref_row(sample: dict) -> dict:
+    """CtrlRef (0x48) -> v1 ctrl_ref.csv row. Older wire versions (v1..v4,
+    see FMT_CTRL_REF_V1..V4) omit every field after `angle_ref_pitch` --
+    `.get()` with a schema-consistent 0.0 default matches this module's
+    (now-removed) JSONL writer's own fallback for the same struct.
+    CtrlRef (0x48) -> v1 ctrl_ref.csv の行。旧電文版（v1..v4、
+    FMT_CTRL_REF_V1..V4 参照）は `angle_ref_pitch` 以降の全フィールドを
+    持たない -- `.get()` とスキーマに整合する既定値 0.0 は、本モジュールの
+    （削除済みの）JSONL 書き出しが同じ構造体に使っていたのと同じ既定値。
+    """
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'flight_mode': sample['flight_mode'],
+        'angle_ref_roll': sample['angle_ref_roll'] / ANGLE_REF_WIRE_SCALE,
+        'angle_ref_pitch': sample['angle_ref_pitch'] / ANGLE_REF_WIRE_SCALE,
+        'total_thrust': sample.get('total_thrust', 0.0),
+        'duty_FR': sample.get('motor_duty_FR', 0.0),
+        'duty_RR': sample.get('motor_duty_RR', 0.0),
+        'duty_RL': sample.get('motor_duty_RL', 0.0),
+        'duty_FL': sample.get('motor_duty_FL', 0.0),
+        'alt_setpoint': sample.get('alt_setpoint', 0.0),
+        'alt_vel_target': sample.get('alt_vel_target', 0.0),
+        'climb_rate_cmd': sample.get('climb_rate_cmd', 0.0),
+        'pos_setpoint_x': sample.get('pos_setpoint_x', 0.0),
+        'pos_setpoint_y': sample.get('pos_setpoint_y', 0.0),
+    }
+
+
+def _baro_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'altitude': sample['baro_altitude'],
+        'pressure': sample['baro_pressure'] * HPA_TO_PA,
+    }
+
+
+def _tof_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'distance': sample['tof_distance'],
+        'status': sample['tof_status'],
+    }
+
+
+def _flow_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'dx': sample['flow_x'],
+        'dy': sample['flow_y'],
+        'quality': sample['flow_quality'],
+    }
+
+
+def _mag_row(sample: dict) -> dict:
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'x': sample['mag_x'], 'y': sample['mag_y'], 'z': sample['mag_z'],
+    }
+
+
+def _status_row(sample: dict) -> dict:
+    """Status (0x4F) -> v1 status.csv row. `sensor_health`/`reset_reason`
+    are decoded for every wire length (17/53/57B, see parse_packet()) so
+    are read directly; `current_ma` (57B only) and the 9 PID gains (53/57B
+    only) fall back to None -- absent, not invented (plan section 2.2).
+    Status (0x4F) -> v1 status.csv の行。`sensor_health`/`reset_reason` は
+    電文長(17/53/57B、parse_packet() 参照)に関わらず常にデコードされるため
+    直接読む。`current_ma`（57Bのみ）とPIDゲイン9個（53/57Bのみ）は
+    無ければ None（無いものは無い、計画書2.2節）。
+    """
+    row = {
+        'timestamp_us': sample['timestamp_us'],
+        'uptime_ms': sample['uptime_ms'],
+        'voltage': sample['voltage'],
+        'current_ma': sample.get('current_ma'),
+        'flight_state': sample['flight_state'],
+        'sensor_health': sample['sensor_health'],
+        'eskf_status': sample['eskf_status'],
+        'reset_reason': sample['reset_reason'],
+    }
+    for axis in _STATUS_PID_AXES:
+        for term in _STATUS_PID_TERMS:
+            row[f'pid_{axis}_{term}'] = sample.get(f'pid_{axis}_{term}')
+    return row
+
+
+# =============================================================================
 # UDP Capture class
 # UDP キャプチャクラス
 # =============================================================================
 
 class UDPTelemetryCapture:
-    """Captures UDP telemetry from StampFly and saves to CSV."""
+    """Captures UDP telemetry from StampFly and saves it as a StampFly
+    flight-log v1 bundle (save_bundle(); docs/plans/flight-log-format-plan.md).
+    StampFly から UDP テレメトリをキャプチャし、StampFly フライトログ v1
+    一式として保存する（save_bundle()；計画書参照）。
+    """
 
     def __init__(self, vehicle_ip: str = '192.168.10.1', port: int = UDP_LOG_PORT):
         self.vehicle_ip = vehicle_ip
@@ -458,6 +712,14 @@ class UDPTelemetryCapture:
         self.last_seq = {}
         self.start_time = 0
         self.end_time = 0
+
+        # Unified-packet (0x50) 16-bit header sequence, unwrapped into an
+        # ever-increasing integer -- see _unwrap_unified_seq(). None until
+        # the first unified packet arrives.
+        # 統合パケット(0x50)の16bitヘッダ sequence を単調増加の整数へ展開した
+        # 状態 -- _unwrap_unified_seq() 参照。最初の統合パケット受信までは None。
+        self._unified_seq_last_raw = None
+        self._unified_seq_wrap_offset = 0
 
     def start(self):
         """Create socket, send start command, begin capture."""
@@ -513,43 +775,7 @@ class UDPTelemetryCapture:
                 except socket.timeout:
                     continue
 
-                self.bytes_received += len(data)
-
-                # Parse packet
-                results = parse_packet(data)
-                if not results:
-                    self.checksum_errors += 1
-                    continue
-
-                for pkt_id, sample in results:
-                    self.sample_count[pkt_id] += 1
-                    self.samples[pkt_id].append(sample)
-
-                # Track packet-level stats
-                pkt_id = data[0]
-                self.packet_count[pkt_id] += 1
-
-                # Sequence gap detection. Also applied to the unified packet
-                # (0x50): vehicle implements its sequence counter, so a lost
-                # unified packet (= 8 lost 400Hz samples) is now detectable.
-                # Guard: the legacy vehicle_old firmware sends seq=0 on every unified
-                # packet (unimplemented TODO) — skip while seq stays 0 so old
-                # captures do not report bogus gaps.
-                # シーケンスギャップ検出。統合パケット(0x50)にも適用: vehicle は
-                # シーケンスカウンタを実装済みで、統合パケット1個の欠落(=400Hzサンプル
-                # 8個の欠落)を検出できる。ガード: 旧 vehicle_old ファームは統合パケットの
-                # seq が常に0(未実装TODO)のため、seq が0のままの間は検出をスキップし
-                # 旧キャプチャで偽ギャップを報告しない。
-                if pkt_id in SAMPLE_INFO or pkt_id == 0x50:
-                    _, seq, _ = struct.unpack_from(FMT_HEADER, data, 0)
-                    if pkt_id in self.last_seq:
-                        last = self.last_seq[pkt_id]
-                        if not (seq == 0 and last == 0):   # legacy seq=0 guard
-                            expected = (last + 1) & 0xFFFF
-                            if seq != expected:
-                                gap = (seq - expected) & 0xFFFF
-                                self.seq_gaps[pkt_id] += gap
-                    self.last_seq[pkt_id] = seq
+                self._process_datagram(data)
 
                 # Progress callback
                 if progress_cb:
@@ -562,6 +788,96 @@ class UDPTelemetryCapture:
             self.stop()
 
         return sum(self.sample_count.values()) > 0
+
+    def _unwrap_unified_seq(self, raw_seq: int) -> int:
+        """Unwrap the unified packet's 16-bit header `sequence` into an
+        ever-increasing integer, by adding 65536 each time the wire value
+        wraps back down (raw_seq < the previous raw_seq). This is the basis
+        of the v1 flight-log `seq` column (protocol/spec/flight_log.yaml):
+        `seq = unwrapped_sequence * 8 + index_in_packet`. A lost packet
+        still shows up as a forward JUMP in the unwrapped value (never
+        masked by this unwrapping) -- `sf log check` reports that as a
+        `seq` gap.
+        統合パケットの16bitヘッダ `sequence` を、巻き戻る（raw_seq が直前より
+        小さくなる）たびに65536を足すことで単調増加の整数へ展開する。これが
+        v1 フライトログの `seq` 列（protocol/spec/flight_log.yaml）の元:
+        `seq = 展開後のsequence * 8 + パケット内インデックス`。パケット欠落は
+        展開後の値の前方への飛びとして残る（この展開で隠れない）--
+        `sf log check` はそれを `seq` の飛びとして報告する。
+        """
+        if self._unified_seq_last_raw is not None and raw_seq < self._unified_seq_last_raw:
+            self._unified_seq_wrap_offset += 0x10000
+        self._unified_seq_last_raw = raw_seq
+        return self._unified_seq_wrap_offset + raw_seq
+
+    def _process_datagram(self, data: bytes) -> None:
+        """Handle one received UDP datagram: parse it, store its samples,
+        and update packet-level statistics (bytes, sample/packet counts,
+        sequence-gap detection, unified-packet `seq` unwrapping). Split out
+        of capture()'s receive loop so tests can feed synthetic datagrams
+        without a real socket (see test_udp_capture_bundle.py).
+        受信した UDP データグラム1個を処理する: パースし、サンプルを格納し、
+        パケット単位の統計（バイト数・サンプル/パケット数・シーケンスギャップ
+        検出・統合パケットの `seq` 展開）を更新する。capture() の受信ループ
+        から分離し、テストが実ソケット無しで合成データグラムを投入できる
+        ようにした（test_udp_capture_bundle.py 参照）。
+        """
+        self.bytes_received += len(data)
+
+        results = parse_packet(data)
+        if not results:
+            self.checksum_errors += 1
+            return
+
+        # Header sequence (16-bit, wraps at 65536) -- read once and reused
+        # below both to unwrap the unified packet's `seq` and for the
+        # generic per-packet-type gap (lost-packet) detection.
+        # ヘッダの sequence（16bit、65536で巻き戻る）-- 1回だけ読み、下の
+        # 統合パケット `seq` 展開とパケット種別ごとの汎用ギャップ（欠落）
+        # 検出の両方に使い回す。
+        pkt_id, header_seq, _count = struct.unpack_from(FMT_HEADER, data, 0)
+
+        # Unified packet (0x50): unwrap its header sequence once, then turn
+        # every lockstep sub-sample's `_idx` (0..7, set by parse_packet())
+        # into the v1 `seq` column -- see UNIFIED_SEQ_PACKET_TYPES and
+        # _unwrap_unified_seq()'s docstring.
+        # 統合パケット(0x50): ヘッダ sequence を1回展開し、ロックステップ系
+        # サブサンプルの `_idx`（0..7、parse_packet() が設定）を v1 の `seq`
+        # 列へ変換する -- UNIFIED_SEQ_PACKET_TYPES と
+        # _unwrap_unified_seq() のドキュメント参照。
+        unwrapped_seq = None
+        if pkt_id == PKT_UNIFIED:
+            unwrapped_seq = self._unwrap_unified_seq(header_seq)
+
+        for sub_pkt_id, sample in results:
+            if unwrapped_seq is not None and sub_pkt_id in UNIFIED_SEQ_PACKET_TYPES:
+                sample['seq'] = unwrapped_seq * 8 + sample.pop('_idx')
+            self.sample_count[sub_pkt_id] += 1
+            self.samples[sub_pkt_id].append(sample)
+
+        # Track packet-level stats
+        self.packet_count[pkt_id] += 1
+
+        # Sequence gap detection (packets lost). Also applied to the unified
+        # packet (0x50): vehicle implements its sequence counter, so a lost
+        # unified packet (= 8 lost 400Hz samples) is now detectable.
+        # Guard: the legacy vehicle_old firmware sends seq=0 on every unified
+        # packet (unimplemented TODO) — skip while seq stays 0 so old
+        # captures do not report bogus gaps.
+        # シーケンスギャップ検出（パケット欠落）。統合パケット(0x50)にも適用:
+        # vehicle はシーケンスカウンタを実装済みで、統合パケット1個の欠落
+        # (=400Hzサンプル8個の欠落)を検出できる。ガード: 旧 vehicle_old
+        # ファームは統合パケットの seq が常に0(未実装TODO)のため、seq が0の
+        # ままの間は検出をスキップし旧キャプチャで偽ギャップを報告しない。
+        if pkt_id in SAMPLE_INFO or pkt_id == PKT_UNIFIED:
+            if pkt_id in self.last_seq:
+                last = self.last_seq[pkt_id]
+                if not (header_seq == 0 and last == 0):   # legacy seq=0 guard
+                    expected = (last + 1) & 0xFFFF
+                    if header_seq != expected:
+                        gap = (header_seq - expected) & 0xFFFF
+                        self.seq_gaps[pkt_id] += gap
+            self.last_seq[pkt_id] = header_seq
 
     def print_stats(self):
         """Print capture statistics with detailed timing analysis.
@@ -579,6 +895,19 @@ class UDPTelemetryCapture:
         print(f"  Total bytes:  {self.bytes_received:,}")
         print(f"  Bandwidth:    {self.bytes_received / duration / 1024:.1f} KB/s")
         print(f"  Checksum err: {self.checksum_errors}")
+        # Unified-packet (0x50) losses -- each one is 8 lost 400Hz samples
+        # and shows up as a gap in the v1 flight-log `seq` column
+        # (protocol/spec/flight_log.yaml; sf log check reports it as a
+        # warning). Already folded into the "TOTAL ... Gaps" row further
+        # down, but that row mixes it with any other packet type's gaps --
+        # called out here on its own since `seq` is entirely derived from it.
+        # 統合パケット(0x50)の欠落 -- 1個につき400Hzサンプル8個の欠落で、
+        # v1フライトログの `seq` 列の飛びとして現れる
+        # （protocol/spec/flight_log.yaml；sf log check が warning で報告）。
+        # 下の「TOTAL ... Gaps」行にも合算済みだが、そちらは他パケット種別の
+        # ギャップと混ざるため、`seq` が丸ごとこれ由来であることをここで
+        # 明示する。
+        print(f"  Pkts lost:    {self.seq_gaps.get(PKT_UNIFIED, 0)} (unified packet 0x50, seq gaps)")
         print()
 
         # Per-sensor statistics
@@ -658,11 +987,12 @@ class UDPTelemetryCapture:
         print()
 
         # 400Hz motor duty entry (0x4A) presence -- plant input for
-        # `sf sysid fit`. Old firmware without it falls back to the 50Hz
-        # CtrlRef forward-fill in save_stream_csv() and needs --kp for the fit.
+        # `sf sysid fit`, saved to the bundle's motor.csv. Old firmware
+        # without it leaves motor.csv absent (schema.STREAMS: optional) and
+        # needs --kp for the fit.
         # 400Hz モータduty エントリ（0x4A）の有無 -- `sf sysid fit` のプラント
-        # 入力。無い旧ファームは save_stream_csv() で 50Hz CtrlRef の前方補完に
-        # フォールバックし、フィットには --kp が必要になる。
+        # 入力で、一式の motor.csv に保存される。無い旧ファームは motor.csv が
+        # 存在せず（schema.STREAMS: 任意）、フィットには --kp が必要になる。
         duty_samples = self.sample_count.get(PKT_DUTY400, 0)
         if duty_samples > 0:
             print(f"  400Hz motor duty (0x4A): present ({duty_samples} samples) "
@@ -687,439 +1017,176 @@ class UDPTelemetryCapture:
             print("  400Hz control_output (0x4B): NOT present -- "
                   "`sf sysid fit` falls back to duty-based (--mixer) reconstruction")
 
-        # 1Hz Status packet (0x4F) presence -- source of the `vbat` column
-        # save_stream_csv() forward-fills, needed only by
-        # `sf sysid fit --mixer vehicle` (actuator.cpp's nonlinear
-        # thrust-to-duty motor curve is voltage-dependent). Absent logs still
-        # work with --mixer vehicle -- plant_fit.py falls back to the nominal
-        # 1S LiPo voltage -- so this is informational, not an error.
-        # 1Hz Status パケット（0x4F）の有無 -- save_stream_csv() が前方補完
-        # する `vbat` 列の元。`sf sysid fit --mixer vehicle`（actuator.cpp の
-        # 電圧依存の非線形 thrust→duty モータ曲線）だけが必要とする。無くても
-        # --mixer vehicle は動く（plant_fit.py が公称1S LiPo電圧に
-        # フォールバックする）ので、これはエラーではなく情報表示。
+        # 1Hz Status packet (0x4F) presence -- source of status.csv's
+        # `voltage` column, needed only by `sf sysid fit --mixer vehicle`
+        # (actuator.cpp's nonlinear thrust-to-duty motor curve is
+        # voltage-dependent). Absent logs still work with --mixer vehicle --
+        # plant_fit.py falls back to the nominal 1S LiPo voltage -- so this
+        # is informational, not an error.
+        # 1Hz Status パケット（0x4F）の有無 -- status.csv の `voltage` 列の元。
+        # `sf sysid fit --mixer vehicle`（actuator.cpp の電圧依存の非線形
+        # thrust→duty モータ曲線）だけが必要とする。無くても --mixer vehicle は
+        # 動く（plant_fit.py が公称1S LiPo電圧にフォールバックする）ので、
+        # これはエラーではなく情報表示。
         status_samples = self.sample_count.get(PKT_STATUS, 0)
         if status_samples > 0:
             print(f"  1Hz Status (0x4F): present ({status_samples} samples) "
-                  f"-- vbat column available for `sf sysid fit --mixer vehicle`")
+                  f"-- voltage column available for `sf sysid fit --mixer vehicle`")
         else:
             print("  1Hz Status (0x4F): NOT present -- "
                   "`sf sysid fit --mixer vehicle` falls back to nominal battery voltage")
         print()
 
-    def save_jsonl(self, filepath: str):
-        """Save captured data as JSONLines (1 line = 1 sensor sample).
-        JSONLines形式で保存（1行 = 1センササンプル）。
+    def save_bundle(
+        self,
+        path,
+        *,
+        source: str = 'vehicle',
+        tool_name: str = 'udp_capture.py',
+        tool_version: str = _TOOL_VERSION,
+        capture_info: dict = None,
+        notes: str = None,
+    ):
+        """Save the captured samples as a StampFly flight-log v1 bundle
+        (docs/plans/flight-log-format-plan.md section 2): one CSV per
+        stream written into `path` (a `.sflog.zip` file, or a directory --
+        see sflog.FlightLog.save()).
 
-        Each line is a self-describing JSON object with sensor type as 'id'.
-        各行はセンサ種別を 'id' フィールドに持つ自己記述的 JSON オブジェクト。
+        Builds exactly the v1 streams that received at least one sample
+        (schema.STREAMS name -> source packet id): imu/attitude share
+        PKT_IMU_ESKF; posvel/rate_ref/motor/ctrl_output/pilot/ctrl_ref/
+        baro/tof_bottom/tof_front/flow/mag/status/eskf_cov each come from
+        their own packet id. A stream with zero samples is simply omitted,
+        never written as an empty file (plan section 2.2: "パケットが無い
+        ストリームのファイルは作らない"). Row values are converted to v1's
+        physical units/column names by this module's `_*_row()` builders
+        (mostly a subset-and-rename of parse_packet()'s already-decoded
+        fields; three still apply a wire scale/unit conversion -- see the
+        row-builders' section docstring above).
 
-        Example:
-          {"id":"imu","ts":75834074,"gyro":[0.01,0.02,-0.003],"accel":[0.12,-0.08,-9.81],...}
-          {"id":"posvel","ts":75834074,"pos":[1.2,0.5,-0.03],"vel":[0.01,-0.02,0.001]}
-          {"id":"flow","ts":75836000,"dx":31,"dy":23,"quality":35}
+        Rows are ordered by capture (arrival) order, stable-sorted: by
+        `seq` for the 6 lockstep streams (schema.LOCKSTEP_STREAMS) --
+        `seq` uniquely and monotonically identifies a control cycle, unlike
+        `timestamp_us` which legitimately repeats (plan section 2.2) -- and
+        by `timestamp_us` for every other stream.
+
+        Args:
+            path: bundle path (`.sflog.zip` file or directory).
+            source: meta.json `source` ("vehicle" for a real capture).
+            tool_name, tool_version: meta.json `tool.name`/`tool.version`.
+            capture_info: extra meta.json `capture` fields (e.g.
+                `{"requested_duration_s": args.duration}`), MERGED on top
+                of this method's own capture stats (`ip`, `port`,
+                `actual_duration_s`, `packets_received`, `packets_lost`) --
+                the caller only needs to supply what it alone knows (this
+                method has no idea what duration the caller originally
+                asked for).
+            notes: optional free-form string, appended to this method's own
+                default note about the `seq` column's definition.
+
+        Returns:
+            The sflog.FlightLog that was written.
+
+        キャプチャしたサンプルを StampFly フライトログ v1 一式として保存する
+        （計画書 2節）: `path`（`.sflog.zip` かディレクトリ）にストリーム
+        ごとの CSV を1個ずつ書く。
+
+        引数・戻り値の詳細は英語側を参照。capture_info はこのメソッド自身が
+        持つキャプチャ統計（ip・port・実測秒数・受信/欠落パケット数）の上に
+        マージする（呼び出し側だけが知る情報 -- 例えば要求秒数 -- だけを
+        渡せばよい。このメソッド自身は呼び出し側が何秒を要求したか知らない）。
         """
-        import json
+        streams = {}
 
-        # Sensor ID to human-readable name and field structure
-        # センサIDから人間が読める名前とフィールド構造へのマッピング
-        JSONL_FORMAT = {
-            PKT_IMU_ESKF: lambda s: {
-                'id': 'imu',
-                'ts': s['timestamp_us'],
-                'gyro': [s['gyro_x'], s['gyro_y'], s['gyro_z']],
-                'accel': [s['accel_x'], s['accel_y'], s['accel_z']],
-                'gyro_raw': [s['gyro_raw_x'], s['gyro_raw_y'], s['gyro_raw_z']],
-                'accel_raw': [s['accel_raw_x'], s['accel_raw_y'], s['accel_raw_z']],
-                'quat': [s['quat_w'], s['quat_x'], s['quat_y'], s['quat_z']],
-                'gyro_bias': [s['gyro_bias_x'], s['gyro_bias_y'], s['gyro_bias_z']],
-                'accel_bias': [s['accel_bias_x'], s['accel_bias_y'], s['accel_bias_z']],
-            },
-            PKT_POS_VEL: lambda s: {
-                'id': 'posvel',
-                'ts': s['timestamp_us'],
-                'pos': [s['pos_x'], s['pos_y'], s['pos_z']],
-                'vel': [s['vel_x'], s['vel_y'], s['vel_z']],
-            },
-            PKT_CONTROL: lambda s: {
-                'id': 'ctrl',
-                'ts': s['timestamp_us'],
-                'throttle': s['ctrl_throttle'],
-                'roll': s['ctrl_roll'],
-                'pitch': s['ctrl_pitch'],
-                'yaw': s['ctrl_yaw'],
-            },
-            PKT_FLOW: lambda s: {
-                'id': 'flow',
-                'ts': s['timestamp_us'],
-                'dx': s['flow_x'],
-                'dy': s['flow_y'],
-                'quality': s['flow_quality'],
-            },
-            PKT_TOF_BOTTOM: lambda s: {
-                'id': 'tof_b',
-                'ts': s['timestamp_us'],
-                'distance': s['tof_distance'],
-                'status': s['tof_status'],
-            },
-            PKT_TOF_FRONT: lambda s: {
-                'id': 'tof_f',
-                'ts': s['timestamp_us'],
-                'distance': s['tof_distance'],
-                'status': s['tof_status'],
-            },
-            PKT_BARO: lambda s: {
-                'id': 'baro',
-                'ts': s['timestamp_us'],
-                'altitude': s['baro_altitude'],
-                'pressure': s['baro_pressure'],
-            },
-            PKT_MAG: lambda s: {
-                'id': 'mag',
-                'ts': s['timestamp_us'],
-                'x': s['mag_x'],
-                'y': s['mag_y'],
-                'z': s['mag_z'],
-            },
-            PKT_CTRL_REF: lambda s: {
-                'id': 'ctrl_ref',
-                'ts': s['timestamp_us'],
-                'mode': s['flight_mode'],
-                'angle_ref': [s['angle_ref_roll'] / 10000.0, s['angle_ref_pitch'] / 10000.0],
-                'total_thrust': round(s.get('total_thrust', 0.0), 4),
-                'motor_duty': [round(s.get(f'motor_duty_{m}', 0.0), 4) for m in ('FR','RR','RL','FL')],
-                'alt_sp': round(s.get('alt_setpoint', 0.0), 4),
-                'alt_vel_target': round(s.get('alt_vel_target', 0.0), 4),
-                'climb_cmd': round(s.get('climb_rate_cmd', 0.0), 4),
-                'pos_sp': [round(s.get('pos_setpoint_x', 0.0), 4),
-                           round(s.get('pos_setpoint_y', 0.0), 4)],
-            },
-            PKT_ESKF_PDIAG: lambda s: {
-                'id': 'p_diag',
-                'ts': s['timestamp_us'],
-                'pos': [s['p_pos_x'], s['p_pos_y'], s['p_pos_z']],
-                'vel': [s['p_vel_x'], s['p_vel_y'], s['p_vel_z']],
-                'att': [s['p_att_x'], s['p_att_y'], s['p_att_z']],
-                'bg': [s['p_bg_x'], s['p_bg_y'], s['p_bg_z']],
-                'ba': [s['p_ba_x'], s['p_ba_y'], s['p_ba_z']],
-            },
-            PKT_RATE_REF: lambda s: {
-                'id': 'rate_ref',
-                'ts': s['timestamp_us'],
-                'rate_ref': [s['rate_ref_roll'] / 1000.0, s['rate_ref_pitch'] / 1000.0, s['rate_ref_yaw'] / 1000.0],
-            },
-            PKT_DUTY400: lambda s: {
-                'id': 'duty400',
-                'ts': s['timestamp_us'],
-                'duty': [round(s['duty_FR'], 4), round(s['duty_RR'], 4),
-                         round(s['duty_RL'], 4), round(s['duty_FL'], 4)],
-            },
-            PKT_STATUS: lambda s: {
-                'id': 'status',
-                'ts': s['timestamp_us'],
-                'uptime_ms': s['uptime_ms'],
-                'voltage': round(s['voltage'], 3),
-                'flight_state': s['flight_state'],
-                'eskf_status': s['eskf_status'],
-                **({
-                    'pid_roll':  [s['pid_roll_kp'],  s['pid_roll_ti'],  s['pid_roll_td']],
-                    'pid_pitch': [s['pid_pitch_kp'], s['pid_pitch_ti'], s['pid_pitch_td']],
-                    'pid_yaw':   [s['pid_yaw_kp'],   s['pid_yaw_ti'],  s['pid_yaw_td']],
-                } if 'pid_roll_kp' in s else {}),
-                **({'current_ma': round(s['current_ma'], 1)} if 'current_ma' in s else {}),
-            },
+        if self.samples.get(PKT_IMU_ESKF):
+            imu_samples = self.samples[PKT_IMU_ESKF]
+            streams['imu'] = self._build_stream(
+                [_select(s, _IMU_KEYS) for s in imu_samples], 'seq')
+            streams['attitude'] = self._build_stream(
+                [_select(s, _ATTITUDE_KEYS) for s in imu_samples], 'seq')
+        if self.samples.get(PKT_POS_VEL):
+            streams['posvel'] = self._build_stream(
+                [_select(s, _POSVEL_KEYS) for s in self.samples[PKT_POS_VEL]], 'seq')
+        if self.samples.get(PKT_RATE_REF):
+            streams['rate_ref'] = self._build_stream(
+                [_rate_ref_row(s) for s in self.samples[PKT_RATE_REF]], 'seq')
+        if self.samples.get(PKT_DUTY400):
+            streams['motor'] = self._build_stream(
+                [_select(s, _MOTOR_KEYS) for s in self.samples[PKT_DUTY400]], 'seq')
+        if self.samples.get(PKT_CTRL_OUTPUT400):
+            streams['ctrl_output'] = self._build_stream(
+                [_ctrl_output_row(s) for s in self.samples[PKT_CTRL_OUTPUT400]], 'seq')
+        if self.samples.get(PKT_CONTROL):
+            streams['pilot'] = self._build_stream(
+                [_pilot_row(s) for s in self.samples[PKT_CONTROL]], 'timestamp_us')
+        if self.samples.get(PKT_CTRL_REF):
+            streams['ctrl_ref'] = self._build_stream(
+                [_ctrl_ref_row(s) for s in self.samples[PKT_CTRL_REF]], 'timestamp_us')
+        if self.samples.get(PKT_BARO):
+            streams['baro'] = self._build_stream(
+                [_baro_row(s) for s in self.samples[PKT_BARO]], 'timestamp_us')
+        if self.samples.get(PKT_TOF_BOTTOM):
+            streams['tof_bottom'] = self._build_stream(
+                [_tof_row(s) for s in self.samples[PKT_TOF_BOTTOM]], 'timestamp_us')
+        if self.samples.get(PKT_TOF_FRONT):
+            streams['tof_front'] = self._build_stream(
+                [_tof_row(s) for s in self.samples[PKT_TOF_FRONT]], 'timestamp_us')
+        if self.samples.get(PKT_FLOW):
+            streams['flow'] = self._build_stream(
+                [_flow_row(s) for s in self.samples[PKT_FLOW]], 'timestamp_us')
+        if self.samples.get(PKT_MAG):
+            streams['mag'] = self._build_stream(
+                [_mag_row(s) for s in self.samples[PKT_MAG]], 'timestamp_us')
+        if self.samples.get(PKT_STATUS):
+            streams['status'] = self._build_stream(
+                [_status_row(s) for s in self.samples[PKT_STATUS]], 'timestamp_us')
+        if self.samples.get(PKT_ESKF_PDIAG):
+            streams['eskf_cov'] = self._build_stream(
+                [_select(s, _ESKF_COV_KEYS) for s in self.samples[PKT_ESKF_PDIAG]], 'timestamp_us')
+
+        merged_capture = {
+            'ip': self.vehicle_ip,
+            'port': self.port,
+            'actual_duration_s': (self.end_time or time.time()) - self.start_time,
+            'packets_received': sum(self.packet_count.values()),
+            'packets_lost': self.seq_gaps.get(PKT_UNIFIED, 0),
         }
+        if capture_info:
+            merged_capture.update(capture_info)
 
-        # Collect all samples with their packet ID, sort by timestamp
-        # 全サンプルをパケットID付きで収集し、タイムスタンプ順にソート
-        all_entries = []
-        for pkt_id, samples in self.samples.items():
-            fmt_fn = JSONL_FORMAT.get(pkt_id)
-            if not fmt_fn:
-                continue
-            for sample in samples:
-                all_entries.append((sample['timestamp_us'], pkt_id, sample))
+        seq_note = 'seq = unified packet sequence x 8 + index (unwrapped)'
+        combined_notes = f'{seq_note}; {notes}' if notes else seq_note
 
-        all_entries.sort(key=lambda e: e[0])
+        meta = sflog.make_meta(
+            source=source,
+            tool_name=tool_name,
+            tool_version=tool_version,
+            capture=merged_capture,
+            notes=combined_notes,
+            streams=streams,
+        )
+        schema_json = sflog.schema.schema_for(streams.keys())
+        log = sflog.FlightLog(meta=meta, schema=schema_json, streams=streams)
+        log.save(path)
 
-        # Trim startup gap: if there's a gap > 1 second in the first 10 entries,
-        # discard everything before the gap (partial batch from before capture start)
-        # 起動時ギャップ除去: 最初の10エントリ内に1秒以上のギャップがあれば
-        # ギャップ前のデータを破棄（キャプチャ開始前の不完全バッチ）
-        if len(all_entries) > 10:
-            for i in range(1, min(10, len(all_entries))):
-                gap_us = all_entries[i][0] - all_entries[i-1][0]
-                if gap_us > 1_000_000:  # > 1 second
-                    all_entries = all_entries[i:]
-                    print(f"  Trimmed {i} startup samples (gap: {gap_us/1e6:.1f}s)")
-                    break
+        print(f"  Saved: {path} ({len(streams)} streams)")
+        return log
 
-        # Write JSONLines
-        with open(filepath, 'w') as f:
-            for ts, pkt_id, sample in all_entries:
-                obj = JSONL_FORMAT[pkt_id](sample)
-                f.write(json.dumps(obj, separators=(',', ':')) + '\n')
-
-        print(f"  Saved: {filepath} ({len(all_entries)} lines)")
-
-    def save_stream_csv(self, filepath: str):
-        """Save the 400Hz Data Stream as ONE merged CSV row per control cycle.
-        400Hz Data Stream を「制御周期1件=CSV1行」でマージ保存する。
-
-        Unlike save_jsonl() (one line per sensor sample, grouped by type),
-        this joins the 400Hz IMU+ESKF and RateRef blocks by their shared
-        per-cycle index (both are appended in lock-step, 8 per unified packet
-        -- see UnifiedPacketBuilder::begin() in data_stream_wire.hpp) and
-        forward-fills the slower 50Hz CtrlRef entry (angle_ref/total_thrust/
-        motor_duty) onto each row by timestamp. This is the schema
-        `sf sysid fit` (tools/sysid/plant_fit.py _detect_csv_format) reads as
-        the "stream" format: timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/
-        yaw, plus total_thrust for flight-segment detection.
-
-        When the firmware also sent the 400Hz duty entry (kPktDuty400/0x4A),
-        motor_duty_FR/RR/RL/FL are filled from IT instead (same column names,
-        just 400Hz-accurate instead of 50Hz-forward-filled) -- this is the
-        actual plant input `sf sysid fit --input duty` uses for rate-loop
-        system identification. Firmware without the entry keeps the 50Hz
-        forward-fill. A trailing `duty_rate_hz` column (400 or 50, appended
-        AFTER the existing 28 columns so old readers are unaffected) records
-        which one actually happened, so `sf sysid fit --input auto` can tell
-        real 400Hz duty from a 50Hz-forward-filled staircase and never
-        silently identifies off the coarser signal.
-        save_jsonl()（センサ種別ごとにグループ化した1行1サンプル）と異なり、
-        400Hz の IMU+ESKF と RateRef ブロックを周期内の共有インデックスで結合
-        し（両方とも統合パケット1個につき8件ずつ、ロックステップで追加される
-        -- data_stream_wire.hpp の UnifiedPacketBuilder::begin() 参照）、
-        50Hz の CtrlRef エントリ（angle_ref/total_thrust/motor_duty）を
-        タイムスタンプで前方補完して各行に載せる。これは `sf sysid fit`
-        （tools/sysid/plant_fit.py の _detect_csv_format）が "stream" 形式と
-        して読む列構成: timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/yaw、
-        および飛行区間検出用の total_thrust。
-
-        ファームが 400Hz duty エントリ（kPktDuty400/0x4A）も送っていれば、
-        motor_duty_FR/RR/RL/FL はそちらから埋める（列名は同じ、50Hz前方補完
-        でなく 400Hz の実測になる）— これが `sf sysid fit --input duty` の
-        レートループ同定に使う実際のプラント入力。無いファームは従来通り
-        50Hz 前方補完のまま。末尾の `duty_rate_hz` 列（400 か 50。既存28列の
-        後ろに追記するため旧リーダに影響しない）にどちらだったかを記録し、
-        `sf sysid fit --input auto` が本物の400Hz duty と50Hz前方補完の階段
-        状データを区別し、粗い信号で黙って誤同定しないようにする。
-
-        Raises:
-            ValueError: no IMU+ESKF samples were captured.
+    @staticmethod
+    def _build_stream(rows: list, sort_key: str):
+        """Build one stream's DataFrame from a list of v1-column row dicts,
+        stable-sorted by `sort_key` to satisfy the "capture order" rule
+        (docs/plans/flight-log-format-plan.md section 2.2) even if UDP
+        delivered datagrams slightly out of order: `seq` for the 6 lockstep
+        streams (uniquely identifies a control cycle), `timestamp_us` for
+        every other stream.
+        v1列名の行dictのリストから1ストリームのDataFrameを作る。「捕捉順」
+        規約（計画書2.2節）を満たすため `sort_key` で安定ソートする -- UDPの
+        データグラムがわずかに順序を崩して届いても対応できる: 6つの
+        ロックステップ系ストリームは `seq`（制御周期を一意に識別）、他の
+        ストリームは `timestamp_us`。
         """
-        imu = self.samples.get(PKT_IMU_ESKF, [])
-        rate_ref = self.samples.get(PKT_RATE_REF, [])
-        ctrl_ref = sorted(self.samples.get(PKT_CTRL_REF, []),
-                          key=lambda s: s['timestamp_us'])
-        duty400 = self.samples.get(PKT_DUTY400, [])
-        ctrl_output400 = self.samples.get(PKT_CTRL_OUTPUT400, [])
-        status = sorted(self.samples.get(PKT_STATUS, []),
-                        key=lambda s: s['timestamp_us'])
-
-        if not imu:
-            raise ValueError("no IMU+ESKF samples captured -- nothing to save")
-
-        n = len(imu)
-        if rate_ref and len(rate_ref) != n:
-            # Should not happen (both blocks are written together per unified
-            # packet, see data_stream_wire.hpp) -- truncate defensively rather
-            # than crash or silently misalign rows.
-            # 通常起こらない（両ブロックは統合パケット毎に一緒に書かれる、
-            # data_stream_wire.hpp 参照）— クラッシュや暗黙のズレより、
-            # 安全側に切り詰める。
-            n = min(n, len(rate_ref))
-            print(f"  Warning: IMU samples ({len(imu)}) != rate_ref samples "
-                  f"({len(rate_ref)}) -- truncating merged CSV to {n} rows")
-
-        if duty400 and len(duty400) != len(imu):
-            # Same defensive truncation reasoning as rate_ref above -- fall
-            # back to the 50Hz forward-fill rather than misalign rows.
-            # 上の rate_ref と同じ理由で安全側に倒す -- 50Hz 前方補完へ
-            # フォールバックし、行のズレを避ける。
-            print(f"  Warning: IMU samples ({len(imu)}) != duty400 samples "
-                  f"({len(duty400)}) -- ignoring 400Hz duty, using 50Hz "
-                  f"CtrlRef forward-fill instead")
-            duty400 = []
-
-        if ctrl_output400 and len(ctrl_output400) != len(imu):
-            # Same defensive truncation reasoning as duty400 above. Unlike
-            # duty400, there is no 50Hz forward-fill fallback for torque (the
-            # 50Hz CtrlRef entry never carried it) -- dropping just means the
-            # ctrl_output_* columns come out empty for this file.
-            # 上の duty400 と同じ理由で安全側に倒す。duty400 と違いトルクには
-            # 50Hz前方補完のフォールバックが無い（50Hz CtrlRef エントリは
-            # トルクを運んだことがない）-- 落とすと単に ctrl_output_* 列が
-            # このファイルでは空欄になる。
-            print(f"  Warning: IMU samples ({len(imu)}) != control_output samples "
-                  f"({len(ctrl_output400)}) -- ignoring control_output entry")
-            ctrl_output400 = []
-
-        # duty_rate_hz (400 or 50) is APPENDED at the end -- the existing 28
-        # columns/order are unchanged so old readers (is_stream_csv() checks
-        # a required subset, not an exact set) keep working. It tells a
-        # reader (`sf sysid fit --input auto`) whether motor_duty_* is real
-        # 400Hz data or a 50Hz-forward-filled staircase, so auto-mode doesn't
-        # silently identify off a stale/quantized signal.
-        # duty_rate_hz（400 か 50）は末尾に追記する -- 既存28列・順序は不変
-        # （is_stream_csv() は必須列の部分集合を見るだけで完全一致ではないため
-        # 旧リーダも動き続ける）。motor_duty_* が本物の400Hzデータか50Hz前方
-        # 補完の階段状データかを読み手（`sf sysid fit --input auto`）に伝え、
-        # 自動モードが古い/粗い信号で黙って誤同定しないようにする。
-        duty_rate_hz = 400 if duty400 else 50
-        # vbat: the 1Hz PKT_STATUS battery voltage, forward-filled onto every
-        # 400Hz row -- same merge-asof pattern as ctrl_ref below. Appended
-        # AFTER duty_rate_hz (so, like it, absent in a CSV read by an older
-        # plant_fit.py, which simply won't look for this column). Sole
-        # consumer: `sf sysid fit --mixer vehicle`, which needs the live
-        # battery voltage to invert actuator.cpp's nonlinear
-        # thrust-to-duty motor curve (duty = f(sqrt(T/Ct)) / Vbat) -- unlike
-        # --mixer legacy's simple linear mixer, "vehicle" cannot recover the
-        # differential torque command from duty alone. Empty when no
-        # PKT_STATUS packet was ever received (plant_fit.py then falls back
-        # to the nominal 1S LiPo voltage and says so).
-        # vbat: 1Hz の PKT_STATUS バッテリ電圧を、全400Hz行へ前方補完する --
-        # 下の ctrl_ref と同じ merge-asof パターン。duty_rate_hz の後ろに
-        # 追記する（それと同様、旧い plant_fit.py で読んだ CSV には無く、
-        # 単にこの列を探さないだけ）。唯一の消費者は
-        # `sf sysid fit --mixer vehicle` -- actuator.cpp の非線形な
-        # thrust→duty モータ曲線（duty = f(√(T/Ct)) / Vbat）を逆算するのに
-        # 実電源電圧が必要（--mixer legacy の単純な線形ミキサーと異なり、
-        # "vehicle" は duty だけからでは差動トルク指令を復元できない）。
-        # PKT_STATUS を一度も受信していないログでは空欄 -- plant_fit.py が
-        # 公称1S LiPo電圧にフォールバックし、その旨を表示する。
-        # ctrl_output_*: the PRE-MIXER commanded thrust[N]+torque[Nm]
-        # (kPktCtrlOutput400/0x4B, 400Hz, same per-index pairing as duty400).
-        # Appended AFTER vbat (absent in a CSV read by an older plant_fit.py).
-        # Unlike duty_rate_hz there is no 50Hz-forward-fill fallback --
-        # ctrl_output_rate_hz is 400 when the entry was present, else 0 and
-        # the 4 data columns are left empty ('') for every row. Lets
-        # `sf sysid fit`/`rate-fit` read u(t) directly without inverting ANY
-        # mixer (legacy or vehicle) -- see docs/events/sci_tutorial_2026 rate-
-        # sysid design memo, 2026-09-09. Comparing this against the duty-
-        # reconstructed actual torque also gives the mixer's gain error as a
-        # diagnostic, purely from logged data.
-        # ctrl_output_*: ミキサー手前の指令推力[N]+トルク[Nm]
-        # （kPktCtrlOutput400/0x4B、400Hz、duty400 と同じ index 対応）。vbat の
-        # 後ろに追記（旧 plant_fit.py で読んだ CSV には無い）。duty_rate_hz と
-        # 異なり50Hz前方補完のフォールバックは無い -- エントリがあれば
-        # ctrl_output_rate_hz=400、無ければ0で4つのデータ列は全行空欄（''）。
-        # `sf sysid fit`/`rate-fit` がどのミキサー（legacy/vehicle）も逆算
-        # せずに u(t) を直接読めるようになる -- 2026-09-09 のレート同定設計
-        # メモ参照。duty から逆算した実トルクと突き合わせれば、ログだけから
-        # ミキサーのゲイン誤差も診断できる。
-        fieldnames = [
-            'timestamp_us',
-            'gyro_x', 'gyro_y', 'gyro_z',
-            'accel_x', 'accel_y', 'accel_z',
-            'quat_w', 'quat_x', 'quat_y', 'quat_z',
-            'gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z',
-            'accel_bias_x', 'accel_bias_y', 'accel_bias_z',
-            'rate_ref_roll', 'rate_ref_pitch', 'rate_ref_yaw',
-            'angle_ref_roll', 'angle_ref_pitch', 'total_thrust',
-            'motor_duty_FR', 'motor_duty_RR', 'motor_duty_RL', 'motor_duty_FL',
-            'flight_mode',
-            'duty_rate_hz',
-            'vbat',
-            'ctrl_output_thrust', 'ctrl_output_torque_roll',
-            'ctrl_output_torque_pitch', 'ctrl_output_torque_yaw',
-            'ctrl_output_rate_hz',
-        ]
-
-        ctrl_idx = 0
-        last_ctrl = None
-        status_idx = 0
-        last_status = None
-        with open(filepath, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for i in range(n):
-                row = dict(imu[i])   # timestamp_us, gyro_*, accel_*, quat_*, *_bias_*
-                ts = row['timestamp_us']
-
-                if rate_ref:
-                    row['rate_ref_roll']  = rate_ref[i]['rate_ref_roll']  / 1000.0
-                    row['rate_ref_pitch'] = rate_ref[i]['rate_ref_pitch'] / 1000.0
-                    row['rate_ref_yaw']   = rate_ref[i]['rate_ref_yaw']   / 1000.0
-                else:
-                    row['rate_ref_roll'] = row['rate_ref_pitch'] = row['rate_ref_yaw'] = 0.0
-
-                # Forward-fill the latest 50Hz CtrlRef entry at/before this
-                # 400Hz sample's timestamp (merge-asof by hand).
-                # この 400Hz サンプルの時刻以前で最新の 50Hz CtrlRef エントリを
-                # 前方補完する（手動 merge-asof）。
-                while ctrl_idx < len(ctrl_ref) and ctrl_ref[ctrl_idx]['timestamp_us'] <= ts:
-                    last_ctrl = ctrl_ref[ctrl_idx]
-                    ctrl_idx += 1
-
-                if last_ctrl is not None:
-                    row['angle_ref_roll']  = last_ctrl.get('angle_ref_roll', 0) / 10000.0
-                    row['angle_ref_pitch'] = last_ctrl.get('angle_ref_pitch', 0) / 10000.0
-                    row['total_thrust']    = last_ctrl.get('total_thrust', 0.0)
-                    for m in ('FR', 'RR', 'RL', 'FL'):
-                        row[f'motor_duty_{m}'] = last_ctrl.get(f'motor_duty_{m}', 0.0)
-                    row['flight_mode'] = last_ctrl.get('flight_mode', 0)
-                else:
-                    row['angle_ref_roll'] = row['angle_ref_pitch'] = 0.0
-                    row['total_thrust'] = 0.0
-                    for m in ('FR', 'RR', 'RL', 'FL'):
-                        row[f'motor_duty_{m}'] = 0.0
-                    row['flight_mode'] = 0
-
-                # 400Hz duty overrides the 50Hz forward-filled value when
-                # present (motor_duty_* column NAMES stay the same either
-                # way -- duty_rate_hz below is what tells a reader which
-                # rate the data actually came from).
-                # 400Hz duty があれば 50Hz 前方補完値を上書きする
-                # （motor_duty_* の列名自体はどちらでも同じ -- 実際どちらの
-                # レートで来たかは下の duty_rate_hz が伝える）。
-                if duty400:
-                    d = duty400[i]
-                    row['motor_duty_FR'] = d['duty_FR']
-                    row['motor_duty_RR'] = d['duty_RR']
-                    row['motor_duty_RL'] = d['duty_RL']
-                    row['motor_duty_FL'] = d['duty_FL']
-                row['duty_rate_hz'] = duty_rate_hz
-
-                # Forward-fill the latest 1Hz PKT_STATUS voltage at/before
-                # this 400Hz sample's timestamp (same merge-asof as ctrl_ref
-                # above). Left as '' (empty) until the first status packet
-                # arrives, same as ctrl_ref's pre-first-packet rows.
-                # この 400Hz サンプルの時刻以前で最新の 1Hz PKT_STATUS 電圧を
-                # 前方補完する（上の ctrl_ref と同じ merge-asof）。最初の
-                # status パケット受信前は ctrl_ref の受信前行と同様 ''（空欄）
-                # のまま。
-                while status_idx < len(status) and status[status_idx]['timestamp_us'] <= ts:
-                    last_status = status[status_idx]
-                    status_idx += 1
-                row['vbat'] = last_status['voltage'] if last_status is not None else ''
-
-                # control_output (0x4B): paired by index with this row's IMU
-                # sample, same convention as duty400 above. No forward-fill
-                # fallback -- absent means empty, not zero (a real zero
-                # command is a valid value; empty means "not recorded").
-                # control_output（0x4B）: 上の duty400 と同じ index 対応。
-                # 前方補完のフォールバックは無い -- 無ければ空欄（0ではない。
-                # 実際の0指令は正当な値であり、空欄は「記録されていない」の
-                # 意味）。
-                if ctrl_output400:
-                    co = ctrl_output400[i]
-                    row['ctrl_output_thrust'] = co['ctrl_output_thrust']
-                    row['ctrl_output_torque_roll'] = co['ctrl_output_torque_roll']
-                    row['ctrl_output_torque_pitch'] = co['ctrl_output_torque_pitch']
-                    row['ctrl_output_torque_yaw'] = co['ctrl_output_torque_yaw']
-                    row['ctrl_output_rate_hz'] = 400
-                else:
-                    row['ctrl_output_thrust'] = ''
-                    row['ctrl_output_torque_roll'] = ''
-                    row['ctrl_output_torque_pitch'] = ''
-                    row['ctrl_output_torque_yaw'] = ''
-                    row['ctrl_output_rate_hz'] = 0
-
-                writer.writerow({k: row.get(k, '') for k in fieldnames})
-
-        duty_src = "400Hz duty entry (0x4A)" if duty400 else "50Hz CtrlRef forward-fill"
-        print(f"  Saved: {filepath} ({n} rows, motor_duty_* from {duty_src})")
+        return pd.DataFrame(rows).sort_values(sort_key, kind='stable').reset_index(drop=True)
 
 
 # =============================================================================
@@ -1145,18 +1212,26 @@ def main():
     parser = argparse.ArgumentParser(
         description="UDP telemetry capture for StampFly",
     )
-    parser.add_argument('-o', '--output', help="Output CSV filename (auto-generated if not specified)")
+    parser.add_argument(
+        '-o', '--output',
+        help="Output bundle path (.sflog.zip; auto-generated if not specified)",
+    )
     parser.add_argument('-d', '--duration', type=float, default=30.0, help="Capture duration in seconds (default: 30)")
     parser.add_argument('-i', '--ip', default='192.168.10.1', help="StampFly IP address (default: 192.168.10.1)")
     parser.add_argument('-p', '--port', type=int, default=UDP_LOG_PORT, help=f"UDP port (default: {UDP_LOG_PORT})")
     parser.add_argument('--no-save', action='store_true', help="Don't save to file, just display stats")
     args = parser.parse_args()
 
-    # Generate output filename
+    # Generate output filename -- the "flight_<capture-start-time>" naming
+    # this tool's caller (`sf log wifi`, lib/sfcli/commands/log.py) also
+    # uses, timestamped at the moment capture BEGINS, not when it finishes.
+    # 出力ファイル名を生成する -- 呼び出し元（`sf log wifi`、lib/sfcli/
+    # commands/log.py）と同じ「flight_<取得開始時刻>」の命名。タイムスタンプは
+    # 取得完了時ではなく開始時点。
     output = args.output
     if not output and not args.no_save:
         timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        output = f"stampfly_udp_{timestamp}.jsonl"
+        output = f"flight_{timestamp}.sflog.zip"
 
     print(f"Capturing UDP telemetry from {args.ip}:{args.port}")
     print(f"  Duration: {args.duration}s")
@@ -1175,15 +1250,7 @@ def main():
     capture.print_stats()
 
     if not args.no_save and output:
-        # .csv -> merged Data Stream CSV (one row per 400Hz cycle, the format
-        # `sf sysid fit` reads); anything else (default .jsonl) -> per-sample
-        # JSON Lines. .csv -> マージ済み Data Stream CSV（400Hz周期1件=1行、
-        # `sf sysid fit` が読む形式）; それ以外（既定 .jsonl）-> 1サンプル1行の
-        # JSON Lines。
-        if output.lower().endswith('.csv'):
-            capture.save_stream_csv(output)
-        else:
-            capture.save_jsonl(output)
+        capture.save_bundle(output, capture_info={'requested_duration_s': args.duration})
 
     return 0
 

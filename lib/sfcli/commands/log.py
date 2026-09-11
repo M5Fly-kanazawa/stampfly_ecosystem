@@ -1,15 +1,22 @@
 """
 sf log - Log capture and analysis commands
 
-Captures telemetry logs and provides analysis tools.
-テレメトリログをキャプチャし、解析ツールを提供します。
+Captures telemetry logs and provides analysis tools. The primary record is
+a StampFly flight-log v1 bundle (`.sflog.zip`; docs/plans/
+flight-log-format-plan.md): one zip with a CSV per signal, plus meta.json/
+schema.json. Aligned/JSONL files are derived products made on demand by
+`sf log convert`, never written as the primary capture.
+テレメトリログをキャプチャし、解析ツールを提供します。一次記録は StampFly
+フライトログ v1 一式（`.sflog.zip`；計画書参照）: 信号ごとの CSV と
+meta.json/schema.json をまとめた zip 1個。整列表/JSONL は `sf log convert`
+が必要なときだけ作る派生物であり、一次記録として書くことはない。
 
 Subcommands:
-    list     - List captured log files
-    capture  - Capture binary log via USB serial
-    wifi     - Capture telemetry via WiFi UDP
-    convert  - Convert binary log to CSV
-    info     - Show log file information
+    list     - List captured flight-log bundles
+    wifi     - Capture telemetry via WiFi UDP, saved as a bundle
+    check    - Validate a bundle's structure/units (lib/sflog.check_bundle)
+    convert  - Convert JSONL<->bundle, or a bundle -> aligned/JSONL CSV
+    info     - Show a bundle's summary (meta.json + per-stream stats)
     analyze  - Analyze flight log data (--health: motor-fault report)
     viz      - Visualize log data
 """
@@ -20,6 +27,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional
+
+import sflog
 
 from ..utils import console, paths, plotting
 
@@ -72,61 +81,22 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     list_parser.set_defaults(func=run_list)
 
-    # --- capture ---
-    capture_parser = log_subparsers.add_parser(
-        "capture",
-        help="Capture binary log via USB serial",
-        description="Capture binary sensor log from StampFly via USB serial port.",
-    )
-    capture_parser.add_argument(
-        "-p", "--port",
-        help="Serial port (auto-detect if not specified)",
-    )
-    capture_parser.add_argument(
-        "-o", "--output",
-        help="Output filename (auto-generated if not specified)",
-    )
-    capture_parser.add_argument(
-        "-d", "--duration",
-        type=float,
-        default=60.0,
-        help="Capture duration in seconds (default: 60)",
-    )
-    capture_parser.add_argument(
-        "-b", "--baudrate",
-        type=int,
-        default=115200,
-        help="Baudrate (default: 115200)",
-    )
-    capture_parser.add_argument(
-        "--live",
-        action="store_true",
-        help="Show live packet data",
-    )
-    capture_parser.add_argument(
-        "--no-auto",
-        action="store_true",
-        help="Do not auto-send binlog on/off commands",
-    )
-    capture_parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug output",
-    )
-    capture_parser.set_defaults(func=run_capture)
-
     # --- wifi ---
     wifi_parser = log_subparsers.add_parser(
         "wifi",
         help="Capture telemetry via WiFi UDP",
-        description="Capture full-rate telemetry from StampFly via WiFi UDP.",
+        description="Capture full-rate telemetry from StampFly via WiFi UDP, "
+                     "saved as a StampFly flight-log v1 bundle (.sflog.zip).",
     )
     wifi_parser.add_argument(
         "-o", "--output",
-        help="Output filename (auto-generated .jsonl if not specified). "
-             "A .csv extension saves a merged Data Stream CSV (one row per "
-             "400Hz cycle, the format `sf sysid fit` reads) instead of the "
-             "default per-sample .jsonl",
+        help="Output path (auto-generated logs/flight_<timestamp>.sflog.zip "
+             "if not specified). A path ending in .sflog.zip writes that "
+             "zip; an existing directory (or a path ending in a path "
+             "separator) gets a same-named bundle written inside it. "
+             "Other extensions (.csv/.jsonl/.bin) are rejected -- the "
+             "bundle is the only capture format; use `sf log convert "
+             "--aligned` or `--jsonl` afterwards for a derived file.",
     )
     wifi_parser.add_argument(
         "-d", "--duration",
@@ -152,32 +122,72 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     wifi_parser.set_defaults(func=run_wifi)
 
+    # --- check ---
+    check_parser = log_subparsers.add_parser(
+        "check",
+        help="Validate a flight-log bundle",
+        description="Check a StampFly flight-log v1 bundle's structure, "
+                     "units, and timing (lib/sflog.check_bundle).",
+    )
+    check_parser.add_argument(
+        "bundle",
+        nargs="?",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
+    )
+    check_parser.set_defaults(func=run_check)
+
     # --- convert ---
     convert_parser = log_subparsers.add_parser(
         "convert",
-        help="Convert binary log to CSV",
-        description="Convert binary log file (.bin) to CSV format.",
+        help="Convert between flight-log formats",
+        description="Convert a legacy .jsonl log into a v1 bundle, or a "
+                     "bundle into a derived aligned/JSONL CSV.",
     )
     convert_parser.add_argument(
         "input",
-        help="Input binary log file (.bin)",
+        help="Input file: a legacy .jsonl log, or a bundle (.sflog.zip/directory)",
     )
     convert_parser.add_argument(
         "-o", "--output",
-        help="Output CSV file (default: same name with .csv)",
+        help="Output path (default: derived from the input name)",
+    )
+    convert_parser.add_argument(
+        "--aligned",
+        action="store_true",
+        help="Bundle input -> a derived <stem>_aligned<rate>.csv "
+             "(one row per --base sample, other streams held/nearest-matched)",
+    )
+    convert_parser.add_argument(
+        "--base",
+        default="imu",
+        help="With --aligned: base stream whose timestamps become the "
+             "aligned table's rows (default: imu)",
+    )
+    convert_parser.add_argument(
+        "--method",
+        choices=["hold", "nearest"],
+        default="hold",
+        help="With --aligned: how non-lockstep streams are matched to the "
+             "base timestamps (default: hold)",
+    )
+    convert_parser.add_argument(
+        "--jsonl",
+        action="store_true",
+        help="Bundle input -> a derived legacy-format .jsonl "
+             "(for analysis/scripts/ research scripts not yet on lib/sflog)",
     )
     convert_parser.set_defaults(func=run_convert)
 
     # --- info ---
     info_parser = log_subparsers.add_parser(
         "info",
-        help="Show log file information",
-        description="Display information about a log file.",
+        help="Show flight-log bundle information",
+        description="Display a bundle's meta.json summary and per-stream stats.",
     )
     info_parser.add_argument(
-        "file",
+        "bundle",
         nargs="?",
-        help="Log file path (default: latest)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
     )
     info_parser.set_defaults(func=run_info)
 
@@ -278,11 +288,11 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("Usage: sf log <subcommand> [options]")
     console.print()
     console.print("Subcommands:")
-    console.print("  list      List captured log files")
-    console.print("  capture   Capture binary log via USB serial")
-    console.print("  wifi      Capture telemetry via WiFi UDP")
-    console.print("  convert   Convert binary log to CSV")
-    console.print("  info      Show log file information")
+    console.print("  list      List captured flight-log bundles")
+    console.print("  wifi      Capture telemetry via WiFi UDP (-> bundle)")
+    console.print("  check     Validate a flight-log bundle")
+    console.print("  convert   Convert JSONL<->bundle, or bundle->aligned/JSONL CSV")
+    console.print("  info      Show flight-log bundle information")
     console.print("  analyze   Analyze flight log data")
     console.print("  viz       Visualize log data")
     console.print()
@@ -291,111 +301,49 @@ def run_help(args: argparse.Namespace) -> int:
 
 
 def run_list(args: argparse.Namespace) -> int:
-    """List log files"""
+    """List flight-log bundles (`*.sflog.zip` files and directory bundles)
+    under logs/, newest first.
+    logs/ 配下のフライトログ一式（`*.sflog.zip` ファイルおよびディレクトリ
+    一式）を新しい順に一覧表示する。
+    """
     log_dir = get_log_dir()
-    analyzer_dir = paths.root() / "tools" / "log_analyzer"
+    bundles = list(_iter_bundles(log_dir))
 
-    # Collect all log files
-    files = []
-
-    # From logs/
-    for pattern in ["*.bin", "*.csv"]:
-        files.extend(log_dir.glob(pattern))
-
-    # From tools/log_analyzer/
-    if analyzer_dir.exists():
-        for pattern in ["*.bin", "*.csv"]:
-            files.extend(analyzer_dir.glob(pattern))
-
-    if not files:
-        console.info("No log files found.")
-        console.print(f"  Directories searched:")
-        console.print(f"    - {log_dir}")
-        console.print(f"    - {analyzer_dir}")
+    if not bundles:
+        console.info("No flight-log bundles found.")
+        console.print(f"  Directory searched: {log_dir}")
         return 0
 
-    # Sort by modification time (newest first)
-    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
-    # Apply limit
+    bundles.sort(key=lambda item: item[0].stat().st_mtime, reverse=True)
     if not args.all:
-        files = files[:args.limit]
+        bundles = bundles[:args.limit]
 
-    console.info(f"Log files (showing {len(files)} most recent):")
+    console.info(f"Flight-log bundles (showing {len(bundles)} most recent):")
     console.print()
+    console.print(f"  {'Name':<40s} {'Size':>9s}  {'Source':<8s} {'Created':<19s} {'Dur(s)':>7s} {'Streams':>7s}")
 
-    for f in files:
-        stat = f.stat()
-        size_kb = stat.st_size / 1024
-        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        ext = f.suffix
-
-        # Color based on type
-        if ext == ".bin":
-            type_str = "[BIN]"
-        else:
-            type_str = "[CSV]"
-
-        console.print(f"  {type_str} {f.name:45s} {size_kb:8.1f} KB  {mtime}")
+    for path, meta in bundles:
+        size_kb = _bundle_size_kb(path)
+        source = meta.get("source") or "?"
+        created_at = _format_created_at(meta.get("created_at"))
+        duration_s = _bundle_duration_s(meta)
+        n_streams = len(meta.get("streams") or {})
+        console.print(
+            f"  {path.name:<40s} {size_kb:8.1f}K  {source:<8s} {created_at:<19s} "
+            f"{duration_s:7.1f} {n_streams:7d}"
+        )
 
     console.print()
-    console.print(f"Log directories:")
-    console.print(f"  - {log_dir}")
-    console.print(f"  - {analyzer_dir}")
-
+    console.print(f"Log directory: {log_dir}")
     return 0
 
 
-def run_capture(args: argparse.Namespace) -> int:
-    """Capture binary log via USB serial"""
-    # Import the capture module
-    try:
-        sys.path.insert(0, str(paths.root() / "tools" / "log_capture"))
-        import log_capture
-    except ImportError as e:
-        console.error(f"Failed to import log_capture module: {e}")
-        return 1
-    finally:
-        sys.path.pop(0)
-
-    # Auto-detect port if not specified
-    port = args.port
-    if not port:
-        port = _find_serial_port()
-        if not port:
-            console.error("No serial port found. Please specify with --port")
-            return 1
-        console.info(f"Auto-detected port: {port}")
-
-    # Generate output filename if not specified
-    output = args.output
-    if not output:
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        output = str(get_log_dir() / f"stampfly_{timestamp}.bin")
-
-    console.info(f"Capturing binary log from {port}")
-    console.print(f"  Duration: {args.duration}s")
-    console.print(f"  Output: {output}")
-    console.print()
-
-    try:
-        log_capture.capture_log(
-            port=port,
-            output=output,
-            duration=args.duration,
-            baudrate=args.baudrate,
-            show_live=args.live,
-            auto_control=not args.no_auto,
-            debug=args.debug,
-        )
-        return 0
-    except Exception as e:
-        console.error(f"Capture failed: {e}")
-        return 1
-
-
 def run_wifi(args: argparse.Namespace) -> int:
-    """Capture telemetry via WiFi (UDP full-rate or legacy WebSocket)"""
+    """Capture telemetry via WiFi UDP, saved as a StampFly flight-log v1
+    bundle (`.sflog.zip`; docs/plans/flight-log-format-plan.md).
+    WiFi UDP でテレメトリを取得し、StampFly フライトログ v1 一式
+    （`.sflog.zip`；計画書参照）として保存する。
+    """
     # Import the UDP capture module (primary)
     # UDP キャプチャモジュールをインポート（主要）
     try:
@@ -407,13 +355,16 @@ def run_wifi(args: argparse.Namespace) -> int:
     finally:
         sys.path.pop(0)
 
-    # Generate output filename if not specified
-    output = args.output
-    if not output and not args.no_save:
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        output = str(get_log_dir() / f"stampfly_udp_{timestamp}.jsonl")
+    port = getattr(args, "port", 8890)
 
-    port = getattr(args, 'port', 8890)
+    output = None
+    if not args.no_save:
+        try:
+            output = _resolve_wifi_output(args.output, get_log_dir())
+        except ValueError as e:
+            console.error(str(e))
+            return 1
+
     console.info(f"Capturing UDP telemetry from {args.ip}:{port}")
     console.print(f"  Duration: {args.duration}s")
     if output:
@@ -431,17 +382,28 @@ def run_wifi(args: argparse.Namespace) -> int:
 
         capture.print_stats()
 
-        if not args.no_save and output:
-            # .csv -> merged Data Stream CSV (one row per 400Hz cycle -- the
-            # format `sf sysid fit` auto-detects); anything else (default
-            # .jsonl) -> per-sample JSON Lines.
-            # .csv -> マージ済み Data Stream CSV（400Hz周期1件=1行 —
-            # `sf sysid fit` が自動判別する形式）; それ以外（既定 .jsonl）->
-            # 1サンプル1行の JSON Lines。
-            if output.lower().endswith(".csv"):
-                capture.save_stream_csv(output)
-            else:
-                capture.save_jsonl(output)
+        if output is None:
+            return 0
+
+        capture.save_bundle(
+            str(output),
+            tool_name="sf log wifi",
+            capture_info={"requested_duration_s": args.duration},
+        )
+        console.success(f"Saved: {output}")
+
+        # Validate the freshly written bundle -- catches a writer bug (or a
+        # firmware wire-format drift parse_packet() silently tolerated)
+        # before the user carries a bad capture into analysis.
+        # 書いたばかりの一式を検証する -- 解析に持ち込む前に、書き出し側の
+        # バグ（または parse_packet() が黙って許容したファーム側の電文
+        # 形式のずれ）を検出する。
+        findings = sflog.check_bundle(output)
+        for finding in findings:
+            console.print(str(finding))
+        if not sflog.is_ok(findings):
+            console.error("Bundle failed validation (sf log check) -- see errors above.")
+            return 1
 
         return 0
 
@@ -450,63 +412,205 @@ def run_wifi(args: argparse.Namespace) -> int:
         return 1
 
 
-def run_convert(args: argparse.Namespace) -> int:
-    """Convert binary log to CSV"""
-    # Import the capture module for conversion
-    try:
-        sys.path.insert(0, str(paths.root() / "tools" / "log_capture"))
-        import log_capture
-    except ImportError as e:
-        console.error(f"Failed to import log_capture module: {e}")
+def run_check(args: argparse.Namespace) -> int:
+    """Validate a flight-log bundle's structure, units, and timing
+    (`lib/sflog.check_bundle`).
+    フライトログ一式の構造・単位・時刻整合性を検査する
+    （`lib/sflog.check_bundle`）。
+    """
+    bundle_path = _resolve_bundle_arg(args.bundle)
+    if bundle_path is None:
         return 1
-    finally:
-        sys.path.pop(0)
 
+    findings = sflog.check_bundle(bundle_path)
+    for finding in findings:
+        console.print(str(finding))
+
+    n_errors = sum(1 for f in findings if f.level == "error")
+    n_warnings = sum(1 for f in findings if f.level == "warning")
+    console.print()
+    if not findings:
+        console.success(f"{bundle_path.name}: no issues found")
+        return 0
+
+    console.print(f"{n_errors} error(s), {n_warnings} warning(s)")
+    return 1 if n_errors else 0
+
+
+def run_convert(args: argparse.Namespace) -> int:
+    """Convert between flight-log formats: legacy `.jsonl` -> bundle, or
+    bundle -> a derived aligned/JSONL CSV (`--aligned`/`--jsonl`).
+    フライトログ形式間を変換する: レガシー `.jsonl` -> 一式、または
+    一式 -> 派生の整列/JSONL CSV（`--aligned`/`--jsonl`）。
+    """
     input_path = Path(args.input)
     if not input_path.exists():
         console.error(f"Input file not found: {input_path}")
         return 1
 
-    # Generate output filename if not specified
-    output = args.output
-    if not output:
-        output = str(input_path.with_suffix(".csv"))
+    if args.aligned or args.jsonl:
+        if not sflog.is_bundle(input_path):
+            console.error(
+                f"--aligned/--jsonl require a flight-log bundle input, not: {input_path}"
+            )
+            return 1
+        return _convert_bundle(input_path, args)
 
-    console.info(f"Converting {input_path.name} to CSV...")
+    if input_path.suffix.lower() == ".jsonl":
+        return _convert_jsonl_to_bundle(input_path, args)
 
+    if sflog.is_bundle(input_path):
+        console.error(
+            "A bundle input needs --aligned or --jsonl to say what derived "
+            "file to build from it -- the bundle itself is already the "
+            "primary record."
+        )
+        return 1
+
+    console.error(
+        f"Unrecognized input: {input_path}. Expected a legacy .jsonl log "
+        "or a flight-log bundle (.sflog.zip or a directory bundle)."
+    )
+    return 1
+
+
+def _convert_jsonl_to_bundle(input_path: Path, args: argparse.Namespace) -> int:
+    """convert mode (a): legacy `.jsonl` -> bundle.
+    変換モード(a): レガシー `.jsonl` -> 一式。
+    """
+    output = Path(args.output) if args.output else input_path.with_suffix(".sflog.zip")
+    console.info(f"Converting {input_path.name} -> bundle...")
     try:
-        log_capture.convert_to_csv(str(input_path), output)
-        console.success(f"Converted to: {output}")
-        return 0
-    except Exception as e:
+        sflog.jsonl_to_bundle(input_path, output)
+    except Exception as e:  # noqa: BLE001
         console.error(f"Conversion failed: {e}")
         return 1
+    console.success(f"Converted to: {output}")
+    return 0
+
+
+def _convert_bundle(input_path: Path, args: argparse.Namespace) -> int:
+    """convert modes (b)/(c): bundle -> aligned CSV (`--aligned`) or bundle
+    -> legacy JSONL (`--jsonl`).
+    変換モード(b)/(c): 一式 -> 整列CSV（`--aligned`）または
+    一式 -> レガシーJSONL（`--jsonl`）。
+    """
+    try:
+        log = sflog.load(input_path)
+    except Exception as e:  # noqa: BLE001
+        console.error(f"Failed to load bundle: {e}")
+        return 1
+
+    stem = _bundle_stem(input_path)
+
+    if args.aligned:
+        if args.base not in log.streams:
+            console.error(f"Base stream '{args.base}' is not present in this bundle.")
+            return 1
+        nominal_hz = sflog.schema.STREAMS.get(args.base, {}).get("nominal_rate_hz")
+        rate_suffix = str(int(nominal_hz)) if nominal_hz else ""
+        default_output = input_path.with_name(f"{stem}_aligned{rate_suffix}.csv")
+        output = Path(args.output) if args.output else default_output
+
+        console.info(f"Building aligned table (base={args.base}, method={args.method})...")
+        try:
+            sflog.aligned_to_csv(
+                log, output,
+                rate_note=f"{nominal_hz}Hz" if nominal_hz else None,
+                base=args.base, method=args.method,
+            )
+        except Exception as e:  # noqa: BLE001
+            console.error(f"Alignment failed: {e}")
+            return 1
+        console.success(f"Converted to: {output} (derived; see {output.name}.meta.json)")
+        return 0
+
+    # args.jsonl (the only other mode _convert_bundle() is called for --
+    # run_convert() requires args.aligned or args.jsonl before dispatching here)
+    default_output = input_path.with_name(f"{stem}.jsonl")
+    output = Path(args.output) if args.output else default_output
+    console.info("Converting bundle -> legacy JSONL...")
+    try:
+        n_lines = sflog.bundle_to_jsonl(log, output)
+    except Exception as e:  # noqa: BLE001
+        console.error(f"Conversion failed: {e}")
+        return 1
+    console.success(f"Converted to: {output} ({n_lines} lines)")
+    return 0
 
 
 def run_info(args: argparse.Namespace) -> int:
-    """Show log file information"""
-    file_path = args.file
-
-    # Find latest file if not specified
-    if not file_path:
-        file_path = _find_latest_log()
-        if not file_path:
-            console.error("No log files found.")
-            return 1
-        console.info(f"Using latest log: {file_path}")
-
-    path = Path(file_path)
-    if not path.exists():
-        console.error(f"File not found: {path}")
+    """Show a bundle's meta.json summary and per-stream stats.
+    一式の meta.json 要約とストリームごとの統計を表示する。
+    """
+    bundle_path = _resolve_bundle_arg(args.bundle)
+    if bundle_path is None:
         return 1
 
-    if path.suffix == ".bin":
-        return _show_bin_info(path)
-    elif path.suffix == ".csv":
-        return _show_csv_info(path)
-    else:
-        console.error(f"Unsupported file type: {path.suffix}")
+    meta = _read_bundle_meta(bundle_path)
+    if meta is None:
+        console.error(f"Failed to read meta.json from: {bundle_path}")
         return 1
+
+    tool = meta.get("tool") or {}
+    capture = meta.get("capture") or {}
+
+    console.print(f"Bundle: {bundle_path.name}")
+    console.print(f"  Size:    {_bundle_size_kb(bundle_path):.1f} KB")
+    console.print(f"  Source:  {meta.get('source', '?')}")
+    console.print(f"  Created: {_format_created_at(meta.get('created_at'))}")
+    console.print(f"  Tool:    {tool.get('name', '?')} {tool.get('version', '')}".rstrip())
+    if capture:
+        console.print(
+            f"  Capture: {capture.get('ip', '?')}:{capture.get('port', '?')} "
+            f"(requested {capture.get('requested_duration_s', '?')}s, "
+            f"actual {capture.get('actual_duration_s', 0):.1f}s, "
+            f"{capture.get('packets_lost', 0)} packets lost)"
+        )
+    notes = meta.get("notes")
+    if notes:
+        console.print(f"  Notes:   {notes}")
+
+    streams = meta.get("streams") or {}
+    if not streams:
+        console.print()
+        console.print("  (no streams)")
+        return 0
+
+    console.print()
+    console.print(
+        f"  {'Stream':<14s} {'Rows':>8s} {'NomHz':>7s} {'MeasHz':>7s} "
+        f"{'First(us)':>14s} {'Last(us)':>14s} {'Dur(s)':>7s}"
+    )
+    for name in sorted(streams):
+        console.print(_stream_info_row(name, streams[name]))
+
+    return 0
+
+
+def _stream_info_row(name: str, stats: dict) -> str:
+    """Format one `sf log info` stream-table row from meta.json's
+    per-stream stats block (bundle.py's `_stream_stats()`).
+    meta.json のストリームごとの統計ブロック（bundle.py の
+    `_stream_stats()`）から `sf log info` の表の1行を組み立てる。
+    """
+    rows = stats.get("rows", 0)
+    nominal = stats.get("nominal_rate_hz")
+    measured = stats.get("measured_rate_hz")
+    first_ts = stats.get("first_timestamp_us")
+    last_ts = stats.get("last_timestamp_us")
+    duration_s = (last_ts - first_ts) / 1e6 if (first_ts is not None and last_ts is not None) else 0.0
+
+    nominal_str = str(nominal) if nominal is not None else "-"
+    measured_str = f"{measured:.1f}" if measured is not None else "-"
+    first_str = str(first_ts) if first_ts is not None else "-"
+    last_str = str(last_ts) if last_ts is not None else "-"
+
+    return (
+        f"  {name:<14s} {rows:>8d} {nominal_str:>7s} {measured_str:>7s} "
+        f"{first_str:>14s} {last_str:>14s} {duration_s:>7.1f}"
+    )
+
 
 
 def run_analyze(args: argparse.Namespace) -> int:
@@ -950,26 +1054,6 @@ def _render_with_fallback(
 
 # --- Helper functions ---
 
-def _find_serial_port() -> Optional[str]:
-    """Find StampFly serial port"""
-    import glob
-
-    # Common patterns for ESP32
-    patterns = [
-        "/dev/tty.usbmodem*",
-        "/dev/tty.usbserial*",
-        "/dev/ttyUSB*",
-        "/dev/ttyACM*",
-    ]
-
-    for pattern in patterns:
-        ports = glob.glob(pattern)
-        if ports:
-            return ports[0]
-
-    return None
-
-
 def _find_latest_log(extension: Optional[str] = None) -> Optional[str]:
     """Find most recent log file"""
     log_dir = get_log_dir()
@@ -995,69 +1079,211 @@ def _find_latest_log(extension: Optional[str] = None) -> Optional[str]:
     return str(files[0])
 
 
-def _show_bin_info(path: Path) -> int:
-    """Show binary log info"""
-    try:
-        sys.path.insert(0, str(paths.root() / "tools" / "log_capture"))
-        import log_capture
-        sys.path.pop(0)
-
-        packets = log_capture.parse_log_file(str(path))
-        if not packets:
-            console.error("No valid packets found in file")
-            return 1
-
-        import math
-
-        console.print(f"File: {path.name}")
-        console.print(f"Size: {path.stat().st_size / 1024:.1f} KB")
-        console.print(f"Packets: {len(packets)}")
-
-        duration = (packets[-1].timestamp_ms - packets[0].timestamp_ms) / 1000.0
-        console.print(f"Duration: {duration:.2f} seconds")
-        console.print(f"Rate: {len(packets) / duration:.1f} Hz")
-
-        console.print()
-        console.print("First packet:")
-        console.print(f"  {packets[0]}")
-        console.print("Last packet:")
-        console.print(f"  {packets[-1]}")
-
-        return 0
-
-    except Exception as e:
-        console.error(f"Failed to parse binary log: {e}")
-        return 1
+# --- Flight-log v1 bundle helpers (list/info/check; not used by the
+# untouched viz/analyze paths above, which still resolve via
+# _find_latest_log() against legacy .jsonl/.csv files -- Phase 2)
+# --- フライトログ v1 一式のヘルパー（list/info/check 用。上の未変更の
+# viz/analyze 経路は引き続き _find_latest_log() でレガシー .jsonl/.csv を
+# 解決する -- Phase 2）
+# =============================================================================
 
 
-def _show_csv_info(path: Path) -> int:
-    """Show CSV log info"""
-    try:
-        import pandas as pd
-    except ImportError:
-        console.error("pandas required for CSV analysis: pip install pandas")
-        return 1
+def _iter_bundles(log_dir: Path):
+    """Yield (path, meta) for every v1 flight-log bundle directly under
+    `log_dir`: `*.sflog.zip` files and directory bundles, identified by
+    `sflog.is_bundle()` (checks meta.json's `format` field, not just the
+    file name) so a stray `.zip`/directory is never mistaken for one.
+    `log_dir` 直下にある v1 フライトログ一式（`*.sflog.zip` ファイルおよび
+    ディレクトリ一式）ごとに (path, meta) を返す。判定は `sflog.is_bundle()`
+    （ファイル名でなく meta.json の `format` フィールドを見る）なので、
+    無関係な `.zip`/ディレクトリを一式と誤認しない。
+    """
+    if not log_dir.exists():
+        return
+    for path in sorted(log_dir.iterdir()):
+        if not sflog.is_bundle(path):
+            continue
+        meta = _read_bundle_meta(path)
+        if meta is not None:
+            yield path, meta
+
+
+def _read_bundle_meta(path: Path) -> Optional[dict]:
+    """Read just a bundle's meta.json (zip or directory), without loading
+    every stream CSV via sflog.FlightLog.load() -- much cheaper for a
+    listing. Returns None if unreadable.
+    一式の meta.json だけを読む（zip・ディレクトリ両対応）。
+    sflog.FlightLog.load() のように全ストリーム CSV を読まないため
+    一覧表示にはこちらの方がずっと軽い。読めなければ None。
+    """
+    import json
+    import zipfile
 
     try:
-        df = pd.read_csv(path)
+        if path.is_dir():
+            meta_path = path / "meta.json"
+            if not meta_path.exists():
+                return None
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        with zipfile.ZipFile(path) as zf:
+            if "meta.json" not in zf.namelist():
+                return None
+            return json.loads(zf.read("meta.json").decode("utf-8"))
+    except (OSError, ValueError) as e:
+        console.debug(f"Failed to read {path}/meta.json: {e}")
+        return None
 
-        console.print(f"File: {path.name}")
-        console.print(f"Size: {path.stat().st_size / 1024:.1f} KB")
-        console.print(f"Samples: {len(df)}")
-        console.print(f"Columns: {len(df.columns)}")
 
-        if 'timestamp_ms' in df.columns:
-            duration = (df['timestamp_ms'].iloc[-1] - df['timestamp_ms'].iloc[0]) / 1000.0
-            console.print(f"Duration: {duration:.2f} seconds")
-            console.print(f"Rate: {len(df) / duration:.1f} Hz")
+def _bundle_size_kb(path: Path) -> float:
+    """Bundle size in KB: the zip file's own size, or the sum of every
+    file inside a directory bundle.
+    一式のサイズ[KB]: zip ファイルそのもののサイズ、またはディレクトリ
+    一式内の全ファイルサイズの合計。
+    """
+    if path.is_file():
+        return path.stat().st_size / 1024
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1024
 
-        console.print()
-        console.print("Columns:")
-        for col in df.columns:
-            console.print(f"  - {col}")
 
-        return 0
+def _bundle_duration_s(meta: dict) -> float:
+    """Best-available capture duration for `sf log list`'s summary row:
+    the actual measured capture span if meta.json recorded one, else the
+    required `imu` stream's own first/last timestamp span.
+    `sf log list` の要約行に出す取得時間の最良推定: meta.json に実測の
+    キャプチャ時間が記録されていればそれ、無ければ必須ストリーム `imu`
+    自身の最初/最後の時刻の差。
+    """
+    capture = meta.get("capture") or {}
+    if capture.get("actual_duration_s") is not None:
+        return float(capture["actual_duration_s"])
+    imu = (meta.get("streams") or {}).get("imu") or {}
+    first_ts, last_ts = imu.get("first_timestamp_us"), imu.get("last_timestamp_us")
+    if first_ts is not None and last_ts is not None:
+        return (last_ts - first_ts) / 1e6
+    return 0.0
 
-    except Exception as e:
-        console.error(f"Failed to read CSV: {e}")
-        return 1
+
+def _format_created_at(created_at: Optional[str]) -> str:
+    """meta.json's ISO 8601 `created_at` -> a fixed-width display string.
+    meta.json の ISO 8601 形式 `created_at` -> 表示用の固定幅文字列。
+    """
+    if not created_at:
+        return "?"
+    try:
+        return datetime.fromisoformat(created_at).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return str(created_at)[:19]
+
+
+def _bundle_stem(bundle_path: Path) -> str:
+    """Base name for a derived file built from `bundle_path` (`sf log
+    convert --aligned`/`--jsonl`): "flight_x.sflog.zip" -> "flight_x", so
+    the derived name reads "flight_x_aligned400.csv", not
+    "flight_x.sflog_aligned400.csv" (Path.stem strips only the LAST
+    suffix, leaving ".sflog" behind for a `.sflog.zip` file). A directory
+    bundle has no such double suffix, so `.stem` already gives the
+    intended name.
+    `bundle_path` から作る派生ファイル名の基幹部（`sf log convert
+    --aligned`/`--jsonl`）: "flight_x.sflog.zip" -> "flight_x"（派生名を
+    "flight_x_aligned400.csv" にするため。Path.stem は最後の拡張子だけを
+    外すので、`.sflog.zip` では ".sflog" が残ってしまう）。ディレクトリ
+    一式にはこの二重拡張子が無いため、`.stem` がそのまま意図した名前になる。
+    """
+    stem = bundle_path.stem
+    if stem.endswith(".sflog"):
+        stem = stem[: -len(".sflog")]
+    return stem
+
+
+def _find_latest_bundle() -> Optional[Path]:
+    """Most recently modified flight-log bundle under logs/ -- the
+    default `sf log list/info/check` fall back to when no bundle is named
+    explicitly. Distinct from _find_latest_log() above, which viz/analyze
+    (Phase 2, untouched by this change) still use for legacy .jsonl/.csv.
+    logs/ 配下で最も新しく更新されたフライトログ一式 -- `sf log
+    list/info/check` がバンドル未指定時に使う既定値。上の
+    _find_latest_log()（viz/analyze が引き続きレガシー .jsonl/.csv に
+    使う。Phase 2、本変更では未変更）とは別物。
+    """
+    bundles = list(_iter_bundles(get_log_dir()))
+    if not bundles:
+        return None
+    bundles.sort(key=lambda item: item[0].stat().st_mtime, reverse=True)
+    return bundles[0][0]
+
+
+def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
+    """Resolve `sf log info/check`'s optional bundle argument: the given
+    path if valid, else the newest bundle in logs/. Prints its own error
+    (via `console.error`) and returns None on any failure, so callers can
+    just `if bundle_path is None: return 1`.
+    `sf log info/check` の任意のバンドル引数を解決する: 指定があれば
+    そのパス、無ければ logs/ 内の最新の一式。失敗時は自身で
+    `console.error` を出し None を返すため、呼び出し側は
+    `if bundle_path is None: return 1` するだけでよい。
+    """
+    if not bundle_arg:
+        latest = _find_latest_bundle()
+        if not latest:
+            console.error("No flight-log bundles found in logs/. Capture one with 'sf log wifi'.")
+            return None
+        console.info(f"Using latest bundle: {latest}")
+        return latest
+
+    path = Path(bundle_arg)
+    if not path.exists():
+        console.error(f"Bundle not found: {path}")
+        return None
+    if not sflog.is_bundle(path):
+        console.error(f"Not a StampFly flight-log bundle (no valid meta.json): {path}")
+        return None
+    return path
+
+
+def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
+    """Resolve `sf log wifi -o`'s output path (see wifi_parser's --help
+    and this module's docstring for the 3 cases):
+      (a) not given -> `logs/flight_<timestamp>.sflog.zip`.
+      (b) ends in `.zip` (covers the `.sflog.zip` convention -- Path.suffix
+          reads only the last extension, same rule sflog.FlightLog.save()
+          itself dispatches on) -> that exact path, a zip bundle.
+      (c) an existing directory, or ends in a path separator -> a
+          same-named (`flight_<timestamp>`, no `.sflog.zip` suffix -- that
+          suffix would force zip mode) DIRECTORY bundle written INSIDE it.
+      (d) any other extension (.csv/.jsonl/.bin) -> rejected: the bundle
+          is the only capture format now (derive a CSV/JSONL afterwards
+          with `sf log convert --aligned`/`--jsonl`).
+      (e) no extension and not an existing directory -> `path` itself
+          becomes the bundle's own directory (sflog.FlightLog.save()'s
+          plain "not a .zip" branch populates the given path directly).
+
+    Raises:
+        ValueError: case (d), with a message meant to be shown as-is via
+            `console.error()`.
+
+    `sf log wifi -o` の出力パスを解決する（3ケースの詳細は英語側 /
+    wifi_parser の --help 参照）。case (d) は ValueError を送出し、
+    メッセージはそのまま `console.error()` で表示する想定。
+    """
+    default_stem = f"flight_{datetime.now().strftime('%Y%m%dT%H%M%S')}"
+
+    if not output_arg:
+        return log_dir / f"{default_stem}.sflog.zip"
+
+    path = Path(output_arg)
+    if path.suffix.lower() == ".zip":
+        return path
+
+    looks_like_dir = str(output_arg).endswith(("/", "\\")) or path.is_dir()
+    if looks_like_dir:
+        return path / default_stem
+
+    if path.suffix.lower() in (".csv", ".jsonl", ".bin"):
+        raise ValueError(
+            f"'{output_arg}': the flight-log bundle (.sflog.zip) is the only "
+            "capture format now -- pass a .sflog.zip path (or a directory), "
+            "then use `sf log convert --aligned` or `--jsonl` for a derived "
+            f"{path.suffix} file."
+        )
+
+    return path

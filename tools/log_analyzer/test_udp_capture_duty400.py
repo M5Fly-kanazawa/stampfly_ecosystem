@@ -8,9 +8,12 @@ data_stream_wire.hpp -- WITH and WITHOUT the 0x4A duty entry, and feeds them
 to udp_capture.parse_packet(), so a firmware-side wire layout change is
 caught here BEFORE it reaches real hardware. Also proves the forward/
 backward compatibility contract (an unknown entry id is skipped via the
-[id][size] framing alone) and save_stream_csv()'s source-selection: 400Hz
-duty when present, 50Hz CtrlRef forward-fill when absent -- same 28-column
-schema either way.
+[id][size] framing alone) and save_bundle()'s motor.csv/ctrl_output.csv
+construction: present only when the corresponding entry was actually
+received (docs/plans/flight-log-format-plan.md section 2.2 -- a stream
+with no samples gets no file), with the v1 `seq` column correctly unwrapped
+from the unified packet's 16-bit header sequence across a 65535->0 wrap,
+and lost (skipped) unified packets counted.
 0x4A モータduty エントリ（kPktDuty400、`sf sysid fit` の400Hzプラント入力
 記録）のホスト側デコードテスト。
 
@@ -18,16 +21,18 @@ schema either way.
 UnifiedPacketBuilder を模す）、0x4A エントリの有無それぞれで
 udp_capture.parse_packet() に投入し、ファーム側の電文レイアウト変更を
 実機の前にここで検出する。前方/後方互換の契約（未知のエントリIDは
-[id][size] 枠組みだけでスキップされる）と、save_stream_csv() の
-ソース選択（400Hz duty があればそちら、無ければ50Hz CtrlRef前方補完、
-列構成は同じ28列）も検証する。
+[id][size] 枠組みだけでスキップされる）と、save_bundle() の
+motor.csv/ctrl_output.csv 構築（対応するエントリを実際に受信した場合のみ
+存在する -- 計画書2.2節「パケットが無いストリームのファイルは作らない」）
+も検証する。v1 の `seq` 列が統合パケットの16bitヘッダ sequence から
+65535->0 の巻き戻りをまたいで正しく展開されること、欠落（飛び番）した
+統合パケットが数えられることも確認する。
 
 Usage:
     python3 test_udp_capture_duty400.py
     pytest test_udp_capture_duty400.py
 """
 
-import csv
 import struct
 import sys
 import tempfile
@@ -35,6 +40,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import udp_capture  # noqa: E402
+
+import sflog  # noqa: E402
 
 PKT_UNIFIED = 0x50
 N = 8  # kSamplesPerPacket
@@ -124,8 +131,8 @@ def test_duty400_entry_decodes_8_samples_paired_with_imu_timestamps():
 
 def test_packet_without_duty400_entry_parses_fine_no_duty_samples():
     """A unified packet with NO 0x4A entry (old firmware) must still parse
-    cleanly, with zero PKT_DUTY400 samples -- the fallback trigger for the
-    50Hz CtrlRef forward-fill in save_stream_csv()."""
+    cleanly, with zero PKT_DUTY400 samples -- the trigger for save_bundle()
+    to omit motor.csv entirely (see test_no_motor_stream_without_duty400_entries)."""
     pkt, _ = build_unified(2, entries=b'', entry_count=0)
     results = udp_capture.parse_packet(pkt)
     assert results  # IMU/PosVel/RateRef fixed blocks still present
@@ -169,142 +176,96 @@ def test_unknown_entry_id_is_skipped_without_corrupting_later_entries():
 
 
 # =============================================================================
-# save_stream_csv() source-selection tests
+# save_bundle() tests: motor.csv (from duty400) -- presence, values, seq
 # =============================================================================
 
-def _seed_imu_and_rate_ref(cap, ts0, dt):
-    for i in range(N):
-        ts = ts0 + i * dt
-        cap.samples[udp_capture.PKT_IMU_ESKF].append({
-            'timestamp_us': ts,
-            'gyro_x': 0.0, 'gyro_y': 0.0, 'gyro_z': 0.0,
-            'accel_x': 0.0, 'accel_y': 0.0, 'accel_z': -9.81,
-            'quat_w': 1.0, 'quat_x': 0.0, 'quat_y': 0.0, 'quat_z': 0.0,
-            'gyro_bias_x': 0.0, 'gyro_bias_y': 0.0, 'gyro_bias_z': 0.0,
-            'accel_bias_x': 0.0, 'accel_bias_y': 0.0, 'accel_bias_z': 0.0,
-        })
+def test_save_bundle_motor_csv_from_duty400_entries():
+    """motor.csv must hold exactly the 400Hz duty400 values (not a 50Hz
+    CtrlRef of any kind -- v1 keeps them as two independent streams, see
+    plan section 2.2), with a `seq` column derived from the unified
+    packet's header sequence (here 1) times 8 plus the in-packet index."""
+    duties = [(0.1 + 0.01 * i, 0.2, 0.3, 0.4) for i in range(N)]
+    pkt, imu_ts = build_unified(1, entries=_duty400_entry(duties), entry_count=1)
 
-
-def test_save_stream_csv_uses_400hz_duty_when_present():
-    """motor_duty_* must come from the 400Hz duty400 samples, NOT the 50Hz
-    CtrlRef forward-fill, when both are present -- proven by giving them
-    deliberately DIFFERENT values and checking which one wins."""
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
-    for i in range(N):
-        ts = ts0 + i * dt
-        cap.samples[udp_capture.PKT_DUTY400].append({
-            'timestamp_us': ts,
-            'duty_FR': 0.6, 'duty_RR': 0.6, 'duty_RL': 0.6, 'duty_FL': 0.6,
-        })
-    # 50Hz CtrlRef carries a DIFFERENT duty (0.1) -- must be overridden.
-    cap.samples[udp_capture.PKT_CTRL_REF].append({
-        'timestamp_us': ts0, 'flight_mode': 1, 'reserved': 0,
-        'angle_ref_roll': 0, 'angle_ref_pitch': 0, 'total_thrust': 0.5,
-        'motor_duty_FR': 0.1, 'motor_duty_RR': 0.1,
-        'motor_duty_RL': 0.1, 'motor_duty_FL': 0.1,
-    })
+    cap._process_datagram(pkt)
 
     with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
 
-        assert len(rows) == N
-        for row in rows:
-            assert abs(float(row['motor_duty_FR']) - 0.6) < 1e-3
-            # angle_ref/total_thrust/flight_mode are unaffected -- still 50Hz CtrlRef.
-            assert abs(float(row['total_thrust']) - 0.5) < 1e-6
-            # duty_rate_hz must say 400 -- this is what `sf sysid fit --input
-            # auto` uses to trust the duty and skip the Kp reconstruction.
-            assert int(row['duty_rate_hz']) == 400
+        motor = log.streams['motor']
+        assert len(motor) == N
+        assert list(motor['seq']) == [1 * 8 + i for i in range(N)]
+        for i in range(N):
+            row = motor.iloc[i]
+            assert row['timestamp_us'] == imu_ts[i]
+            assert abs(row['duty_FR'] - duties[i][0]) < 1e-3
+            assert abs(row['duty_RR'] - duties[i][1]) < 1e-3
+            assert abs(row['duty_RL'] - duties[i][2]) < 1e-3
+            assert abs(row['duty_FL'] - duties[i][3]) < 1e-3
 
 
-def test_save_stream_csv_falls_back_to_50hz_ctrl_ref_when_no_duty400():
-    """Without a duty400 entry (old firmware), motor_duty_* must come from
-    the pre-existing 50Hz CtrlRef forward-fill, unchanged."""
+def test_no_motor_stream_without_duty400_entries():
+    """No duty400 entry ever received (old firmware) -> motor.csv is simply
+    ABSENT from the bundle, never an empty/zero-filled file (plan section
+    2.2: "パケットが無いストリームのファイルは作らない")."""
+    pkt, _ = build_unified(1, entries=b'', entry_count=0)
+
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
-    cap.samples[udp_capture.PKT_CTRL_REF].append({
-        'timestamp_us': ts0, 'flight_mode': 1, 'reserved': 0,
-        'angle_ref_roll': 0, 'angle_ref_pitch': 0, 'total_thrust': 0.5,
-        'motor_duty_FR': 0.3, 'motor_duty_RR': 0.3,
-        'motor_duty_RL': 0.3, 'motor_duty_FL': 0.3,
-    })
+    cap._process_datagram(pkt)
 
     with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
-        assert len(rows) == N
-        for row in rows:
-            assert abs(float(row['motor_duty_FR']) - 0.3) < 1e-6
-            # duty_rate_hz must say 50 -- `sf sysid fit --input auto` uses
-            # this to refuse the (stale/quantized) duty and demand --kp.
-            assert int(row['duty_rate_hz']) == 50
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
+        assert 'motor' not in log.streams
 
 
 # =============================================================================
-# save_stream_csv() vbat forward-fill tests (feeds `sf sysid fit --mixer
-# vehicle`'s battery-voltage-dependent motor-curve inversion -- see
-# plant_fit.py _thrust_from_duty())
-# save_stream_csv() の vbat 前方補完テスト（`sf sysid fit --mixer vehicle`
-# の電圧依存モータ曲線逆算が使う -- plant_fit.py の _thrust_from_duty() 参照）
+# `seq` unwrapping and lost-packet-count tests (UDPTelemetryCapture.
+# _unwrap_unified_seq() / _process_datagram()'s sequence-gap detection)
+# `seq` 展開とパケット欠落数のテスト（UDPTelemetryCapture.
+# _unwrap_unified_seq() / _process_datagram() のシーケンスギャップ検出）
 # =============================================================================
 
-def test_save_stream_csv_forward_fills_vbat_from_status_packets():
-    """vbat must merge-asof the 1Hz PKT_STATUS voltage onto each 400Hz row:
-    rows before the first status packet fall back to the LAST status seen so
-    far, and a later status sample must flip the value for all subsequent
-    rows -- proven with two status samples carrying deliberately DIFFERENT
-    voltages that straddle the middle of the 8-row block."""
+def test_seq_unwraps_across_65535_to_0_wrap():
+    """The unified packet's 16-bit header sequence wraps 65535 -> 0, but
+    the v1 `seq` column must keep climbing (never reset to 0) -- proven by
+    feeding a packet at raw seq=65535 then one at raw seq=0 and checking
+    the second packet's `seq` values are 8 higher than the first's, exactly
+    as if there had been no wrap at all."""
+    duties = [(0.5, 0.5, 0.5, 0.5)] * N
+    pkt_a, _ = build_unified(65535, base_ts_us=1_000_000,
+                              entries=_duty400_entry(duties), entry_count=1)
+    pkt_b, _ = build_unified(0, base_ts_us=1_020_000,
+                              entries=_duty400_entry(duties), entry_count=1)
+
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
-    # Row timestamps: 1000000, 1002500, ..., 1017500 (8 rows, i=0..7).
-    cap.samples[udp_capture.PKT_STATUS].append({
-        'timestamp_us': ts0 - 1000, 'voltage': 4.05,
-    })
-    cap.samples[udp_capture.PKT_STATUS].append({
-        'timestamp_us': ts0 + 4 * dt - 500, 'voltage': 3.95,   # 1009500, between rows 3 and 4
-    })
+    cap._process_datagram(pkt_a)
+    cap._process_datagram(pkt_b)
 
-    with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
-
-        assert len(rows) == N
-        for i, row in enumerate(rows):
-            expected = 4.05 if i < 4 else 3.95
-            assert abs(float(row['vbat']) - expected) < 1e-4, \
-                f"row {i}: vbat={row['vbat']!r}, expected {expected}"
+    seqs = [s['seq'] for s in cap.samples[udp_capture.PKT_DUTY400]]
+    assert seqs[:N] == [65535 * 8 + i for i in range(N)]
+    assert seqs[N:] == [65536 * 8 + i for i in range(N)]  # continues climbing, no reset
 
 
-def test_save_stream_csv_vbat_empty_without_status_packets():
-    """No PKT_STATUS ever received (e.g. a short capture, or old firmware)
-    must leave vbat empty, not some silently-wrong default -- plant_fit.py's
-    _load_axis_data() falls back to the nominal battery voltage on '' and
-    reports that fallback, which requires knowing the column was genuinely
-    absent/unfilled."""
+def test_lost_packet_count_from_seq_gap():
+    """A skipped unified-packet sequence number (1 -> 3, i.e. 2 was never
+    received) must be counted as 1 lost packet in seq_gaps -- the same
+    number save_bundle() reports as meta.json's `capture.packets_lost`
+    (see test_udp_capture_bundle.py)."""
+    pkt_a, _ = build_unified(1, base_ts_us=1_000_000)
+    pkt_b, _ = build_unified(3, base_ts_us=1_020_000)  # seq=2 skipped
+
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
+    cap._process_datagram(pkt_a)
+    cap._process_datagram(pkt_b)
 
-    with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
-
-        assert len(rows) == N
-        for row in rows:
-            assert row['vbat'] == ''
+    assert cap.seq_gaps[udp_capture.PKT_UNIFIED] == 1
 
 
 def _ctrl_output400_entry(samples):
@@ -343,62 +304,56 @@ def test_ctrl_output400_entry_decodes_8_samples_paired_with_imu_timestamps():
 
 def test_packet_without_ctrl_output400_entry_parses_fine_no_samples():
     """Old/other firmware without the 0x4B entry must still parse cleanly --
-    the fallback trigger for the duty-based (--mixer) reconstruction."""
+    the trigger for save_bundle() to omit ctrl_output.csv entirely (see
+    test_no_ctrl_output_stream_without_entries)."""
     pkt, _ = build_unified(2, entries=b'', entry_count=0)
     results = udp_capture.parse_packet(pkt)
     co_samples = [s for pid, s in results if pid == udp_capture.PKT_CTRL_OUTPUT400]
     assert co_samples == []
 
 
-def test_save_stream_csv_writes_ctrl_output_when_present():
+def test_save_bundle_ctrl_output_csv_from_entries():
+    """ctrl_output.csv must hold the PRE-MIXER thrust/torque values with a
+    `seq` column, same shape as motor.csv's duty400 test above."""
+    samples = [(0.3 + 0.01 * i, 0.01 * i, -0.02, 0.03) for i in range(N)]
+    pkt, imu_ts = build_unified(1, entries=_ctrl_output400_entry(samples), entry_count=1)
+
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
-    for i in range(N):
-        ts = ts0 + i * dt
-        cap.samples[udp_capture.PKT_CTRL_OUTPUT400].append({
-            'timestamp_us': ts,
-            'ctrl_output_thrust': 0.35,
-            'ctrl_output_torque_roll': 0.001,
-            'ctrl_output_torque_pitch': -0.002,
-            'ctrl_output_torque_yaw': 0.0005,
-        })
+    cap._process_datagram(pkt)
 
     with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
 
-        assert len(rows) == N
-        for row in rows:
-            assert abs(float(row['ctrl_output_thrust']) - 0.35) < 1e-6
-            assert abs(float(row['ctrl_output_torque_roll']) - 0.001) < 1e-6
-            assert abs(float(row['ctrl_output_torque_pitch']) - (-0.002)) < 1e-6
-            assert abs(float(row['ctrl_output_torque_yaw']) - 0.0005) < 1e-6
-            assert int(row['ctrl_output_rate_hz']) == 400
+        ctrl_output = log.streams['ctrl_output']
+        assert len(ctrl_output) == N
+        assert list(ctrl_output['seq']) == [1 * 8 + i for i in range(N)]
+        for i in range(N):
+            row = ctrl_output.iloc[i]
+            assert row['timestamp_us'] == imu_ts[i]
+            assert abs(row['thrust'] - samples[i][0]) < 1e-5
+            assert abs(row['torque_roll'] - samples[i][1]) < 1e-5
+            assert abs(row['torque_pitch'] - samples[i][2]) < 1e-5
+            assert abs(row['torque_yaw'] - samples[i][3]) < 1e-5
 
 
-def test_save_stream_csv_ctrl_output_empty_without_entry():
-    """No control_output entry (older/other firmware) must leave the 4 data
-    columns empty (not zero -- a real zero command is a valid value) and
-    ctrl_output_rate_hz == 0, so plant_fit.py can tell 'not recorded' apart
-    from 'commanded zero'."""
+def test_no_ctrl_output_stream_without_entries():
+    """No control_output entry ever received -> ctrl_output.csv is simply
+    ABSENT from the bundle (plan section 2.2), not an empty/zero-filled
+    file -- unlike the old save_stream_csv()'s '' placeholder columns."""
+    pkt, _ = build_unified(1, entries=b'', entry_count=0)
+
     cap = udp_capture.UDPTelemetryCapture()
-    ts0, dt = 1_000_000, 2500
-    _seed_imu_and_rate_ref(cap, ts0, dt)
+    cap._process_datagram(pkt)
 
     with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "stream.csv"
-        cap.save_stream_csv(str(csv_path))
-        with open(csv_path) as f:
-            rows = list(csv.DictReader(f))
-
-        assert len(rows) == N
-        for row in rows:
-            assert row['ctrl_output_thrust'] == ''
-            assert row['ctrl_output_torque_roll'] == ''
-            assert int(row['ctrl_output_rate_hz']) == 0
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
+        assert 'ctrl_output' not in log.streams
 
 
 def _run_all():
@@ -407,14 +362,14 @@ def _run_all():
         test_packet_without_duty400_entry_parses_fine_no_duty_samples,
         test_duty400_entry_does_not_corrupt_a_following_entry,
         test_unknown_entry_id_is_skipped_without_corrupting_later_entries,
-        test_save_stream_csv_uses_400hz_duty_when_present,
-        test_save_stream_csv_falls_back_to_50hz_ctrl_ref_when_no_duty400,
-        test_save_stream_csv_forward_fills_vbat_from_status_packets,
-        test_save_stream_csv_vbat_empty_without_status_packets,
+        test_save_bundle_motor_csv_from_duty400_entries,
+        test_no_motor_stream_without_duty400_entries,
+        test_seq_unwraps_across_65535_to_0_wrap,
+        test_lost_packet_count_from_seq_gap,
         test_ctrl_output400_entry_decodes_8_samples_paired_with_imu_timestamps,
         test_packet_without_ctrl_output400_entry_parses_fine_no_samples,
-        test_save_stream_csv_writes_ctrl_output_when_present,
-        test_save_stream_csv_ctrl_output_empty_without_entry,
+        test_save_bundle_ctrl_output_csv_from_entries,
+        test_no_ctrl_output_stream_without_entries,
     ]
     failures = 0
     for t in tests:

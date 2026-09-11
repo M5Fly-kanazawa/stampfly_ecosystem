@@ -35,6 +35,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 import matplotlib
 matplotlib.use('Agg')  # headless / ヘッドレス実行（テストプロセス自体は実
                         # ウィンドウを一切開かない）
@@ -43,13 +45,13 @@ import pytest
 
 _TOOLS_LOG_ANALYZER_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TOOLS_LOG_ANALYZER_DIR.parent.parent
-sys.path.insert(0, str(_TOOLS_LOG_ANALYZER_DIR))  # for udp_capture
 sys.path.insert(0, str(_REPO_ROOT / "lib"))  # for sfcli
 
-import udp_capture  # noqa: E402
 from sfcli.commands import log  # noqa: E402
 from sfcli.utils import plotting  # noqa: E402
 from sfcli.utils.plotting import BackendInfo  # noqa: E402
+
+import sflog  # noqa: E402
 
 # Minimum PNG size used as a smoke check that matplotlib actually rendered
 # panels (an empty/failed figure saves far smaller than this). Matches
@@ -75,42 +77,76 @@ CTRL_REF_STRIDE = 8  # 50Hz CtrlRef among 400Hz IMU+ESKF samples / 400Hz中50Hz
 PROBE_SUBPROCESS_TIMEOUT_S = 30
 
 
+_DUTY_MOTORS = ('FR', 'RR', 'RL', 'FL')
+
+
 def _build_stream_csv(tmp_path) -> Path:
-    """Same synthetic 5s/400Hz Data Stream CSV as
-    test_visualize_stream.py's _build_stream_csv() -- see that file for
-    why this exact shape is used (real save_stream_csv(), not a hand-rolled
-    approximation).
+    """Same synthetic 5s/400Hz aligned CSV as test_visualize_stream.py's
+    _build_stream_csv() -- built from a synthetic flight-log v1 bundle
+    (lib/sflog) and written via sflog.aligned_to_csv(), since `sf log wifi`
+    no longer writes a merged Data Stream CSV directly (see that file's
+    module docstring for the full rationale and the `motor_duty_*` rename).
     test_visualize_stream.py の _build_stream_csv() と同じ合成 5秒/400Hz
-    Data Stream CSV -- なぜこの形にするかは同ファイル参照（本物の
-    save_stream_csv() を使い、手組みの近似にしない）。"""
-    cap = udp_capture.UDPTelemetryCapture()
-    for i in range(N_SAMPLES):
-        ts = 1_000_000 + i * DT_US
-        cap.samples[udp_capture.PKT_IMU_ESKF].append({
-            'timestamp_us': ts,
-            'gyro_x': 0.1 * math.sin(i / 50), 'gyro_y': 0.0, 'gyro_z': 0.0,
-            'accel_x': 0.0, 'accel_y': 0.0, 'accel_z': -9.81,
-            'gyro_raw_x': 0.0, 'gyro_raw_y': 0.0, 'gyro_raw_z': 0.0,
-            'accel_raw_x': 0.0, 'accel_raw_y': 0.0, 'accel_raw_z': -9.81,
-            'quat_w': 1.0, 'quat_x': 0.0, 'quat_y': 0.0, 'quat_z': 0.0,
-            'gyro_bias_x': 0.0, 'gyro_bias_y': 0.0, 'gyro_bias_z': 0.0,
-            'accel_bias_x': 0.0, 'accel_bias_y': 0.0, 'accel_bias_z': 0.0,
-        })
-        rate_ref_roll = 100 if i >= N_SAMPLES // 2 else 0
-        cap.samples[udp_capture.PKT_RATE_REF].append({
-            'timestamp_us': ts, 'rate_ref_roll': rate_ref_roll,
-            'rate_ref_pitch': 0, 'rate_ref_yaw': 0,
-        })
-        if i % CTRL_REF_STRIDE == 0:
-            cap.samples[udp_capture.PKT_CTRL_REF].append({
-                'timestamp_us': ts, 'flight_mode': 1, 'reserved': 0,
-                'angle_ref_roll': 0, 'angle_ref_pitch': 0, 'total_thrust': 0.5,
-                'motor_duty_FR': 0.5, 'motor_duty_RR': 0.5,
-                'motor_duty_RL': 0.5, 'motor_duty_FL': 0.5,
-            })
+    整列CSV -- 合成のフライトログ v1 一式（lib/sflog）から
+    sflog.aligned_to_csv() で書き出す（`sf log wifi` はもはやマージ済み
+    Data Stream CSV を直接書かないため。詳しい理由と `motor_duty_*`
+    リネームは同ファイルの docstring 参照）。"""
+    ts = [1_000_000 + i * DT_US for i in range(N_SAMPLES)]
+    seq = list(range(N_SAMPLES))
+    gyro_x = [0.1 * math.sin(i / 50) for i in range(N_SAMPLES)]
+    rate_ref_roll = [0.1 if i >= N_SAMPLES // 2 else 0.0 for i in range(N_SAMPLES)]
+
+    imu_df = pd.DataFrame({
+        'timestamp_us': ts, 'seq': seq,
+        'gyro_x': gyro_x, 'gyro_y': 0.0, 'gyro_z': 0.0,
+        'accel_x': 0.0, 'accel_y': 0.0, 'accel_z': -9.81,
+        'gyro_raw_x': 0.0, 'gyro_raw_y': 0.0, 'gyro_raw_z': 0.0,
+        'accel_raw_x': 0.0, 'accel_raw_y': 0.0, 'accel_raw_z': -9.81,
+    })
+    attitude_df = pd.DataFrame({
+        'timestamp_us': ts, 'seq': seq,
+        'quat_w': 1.0, 'quat_x': 0.0, 'quat_y': 0.0, 'quat_z': 0.0,
+        'gyro_bias_x': 0.0, 'gyro_bias_y': 0.0, 'gyro_bias_z': 0.0,
+        'accel_bias_x': 0.0, 'accel_bias_y': 0.0, 'accel_bias_z': 0.0,
+    })
+    rate_ref_df = pd.DataFrame({
+        'timestamp_us': ts, 'seq': seq,
+        'rate_ref_roll': rate_ref_roll, 'rate_ref_pitch': 0.0, 'rate_ref_yaw': 0.0,
+    })
+    motor_df = pd.DataFrame({
+        'timestamp_us': ts, 'seq': seq,
+        'duty_FR': 0.5, 'duty_RR': 0.5, 'duty_RL': 0.5, 'duty_FL': 0.5,
+    })
+    ctrl_ref_ts = ts[::CTRL_REF_STRIDE]
+    ctrl_ref_df = pd.DataFrame({
+        'timestamp_us': ctrl_ref_ts,
+        'flight_mode': 1,
+        'angle_ref_roll': 0.0, 'angle_ref_pitch': 0.0,
+        'total_thrust': 0.5,
+        'duty_FR': 0.5, 'duty_RR': 0.5, 'duty_RL': 0.5, 'duty_FL': 0.5,
+        'alt_setpoint': 0.0, 'alt_vel_target': 0.0, 'climb_rate_cmd': 0.0,
+        'pos_setpoint_x': 0.0, 'pos_setpoint_y': 0.0,
+    })
+
+    streams = {
+        'imu': imu_df, 'attitude': attitude_df, 'rate_ref': rate_ref_df,
+        'motor': motor_df, 'ctrl_ref': ctrl_ref_df,
+    }
+    meta = sflog.make_meta(
+        source='sim', tool_name='test_viz_backend_fallback', tool_version='0.0.0',
+        streams=streams,
+    )
+    flight_log = sflog.FlightLog(
+        meta=meta, schema=sflog.schema.schema_for(streams.keys()), streams=streams,
+    )
 
     csv_path = tmp_path / "stream.csv"
-    cap.save_stream_csv(str(csv_path))
+    sflog.aligned_to_csv(flight_log, csv_path, base='imu')
+
+    df = pd.read_csv(csv_path)
+    df = df.rename(columns={f'duty_{m}': f'motor_duty_{m}' for m in _DUTY_MOTORS})
+    df.to_csv(csv_path, index=False)
+
     return csv_path
 
 
