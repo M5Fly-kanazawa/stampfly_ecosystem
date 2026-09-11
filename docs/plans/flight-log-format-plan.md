@@ -322,6 +322,12 @@ Stream の電文定義も `protocol/spec/` には無く、
 
 ## 5. 段階計画
 
+**進捗（2026-09-11 時点、ブランチ `feature/flight-log-bundle`）:** Phase 0 = d85b7971、Phase 1 = c9f5ac1b、
+Phase 2a（sysid/trim/cal plot/教育パッケージ）= 968a8bbd。基準一式 `analysis/datasets/flightlog/` を追加。
+**残り: Phase 2b**（`sf log viz`/`analyze`/`--health` の一式対応と旧描画コード削除、§3.2・§3.4）、
+**Phase 3**（SILS・`sf sim headless`、§3.3）、**Phase 4**（文書、§6）。再開時はこの節と各コミットの
+Next steps を読むこと。実機での `sf log wifi` 確認は未実施。
+
 | Phase | 内容 | 合格基準 | コミット |
 |-------|------|---------|---------|
 | 0 仕様と共通処理 | `flight_log.yaml`、生成スクリプト、`lib/sflog`（読み書き・整列・検査・変換）、単体テスト | 単体テストが通る。`logs/` の既存 JSONL を変換した一式が `check` を通り、整列表が現行 35 列の整列 CSV と数値一致する | 1 |
