@@ -6,7 +6,8 @@ Provides utilities for the StampFly control engineering curriculum:
 制御工学カリキュラム用のユーティリティを提供:
 
 - connect_or_simulate(): Connect to drone or fall back to simulator
-- load_flight_log(): Load CSV flight logs as pandas DataFrames
+- load_flight_log(): Load a flight-log v1 bundle (`.sflog.zip`/directory,
+  see lib/sflog) or a plain CSV as a pandas DataFrame
 - plot_trajectory(): Plot XY flight trajectory
 - compare_logs(): Overlay two flight logs for comparison
 
@@ -14,7 +15,7 @@ Usage:
     from stampfly_edu import connect_or_simulate, load_flight_log, plot_trajectory
 
     drone = connect_or_simulate()
-    log = load_flight_log("flight_data.csv")
+    log = load_flight_log("flight_data.sflog.zip")
     plot_trajectory(log)
 """
 

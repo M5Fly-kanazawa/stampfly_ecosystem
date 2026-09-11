@@ -130,7 +130,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     plot_parser.add_argument(
         "file",
         nargs="?",
-        help="Binary log file (default: latest)",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory). "
+             "Default: latest bundle in logs/",
     )
     plot_parser.add_argument(
         "-o", "--output",
@@ -158,7 +159,7 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  sf cal gyro           # Calibrate gyro (keep still)")
     console.print("  sf cal mag start      # Start mag calibration")
     console.print("  sf cal mag save       # Save mag calibration")
-    console.print("  sf cal plot log.bin   # Plot mag XY from log")
+    console.print("  sf cal plot flight_20260911T120000.sflog.zip   # Plot mag XY from log")
     console.print()
     console.print("Run 'sf cal <subcommand> --help' for details.")
     return 0
@@ -283,13 +284,14 @@ def run_plot(args: argparse.Namespace) -> int:
     """Plot magnetometer data"""
     file_path = args.file
 
-    # Find latest binary log if not specified
+    # Find latest flight-log bundle if not specified
+    # 未指定なら logs/ の最新一式を使う
     if not file_path:
-        file_path = _find_latest_binlog()
+        file_path = paths.latest_bundle()
         if not file_path:
-            console.error("No binary log files found.")
+            console.error("No flight-log bundles (*.sflog.zip) found in logs/.")
             return 1
-        console.info(f"Using latest log: {file_path}")
+        console.info(f"Using latest bundle: {file_path}")
 
     path = Path(file_path)
     if not path.exists():
@@ -303,13 +305,17 @@ def run_plot(args: argparse.Namespace) -> int:
         sys.path.insert(0, str(paths.root() / "tools" / "calibration"))
         import plot_mag_xy
 
-        data = plot_mag_xy.load_binlog(str(path))
-        if not data:
-            console.error("No valid magnetometer data found in file")
+        try:
+            mag_df = plot_mag_xy.load_mag_bundle(str(path))
+        except ValueError as e:
+            console.error(str(e))
+            return 1
+        if len(mag_df) == 0:
+            console.error("No valid magnetometer data found in bundle")
             return 1
 
-        console.print(f"  Samples: {len(data)}")
-        plot_mag_xy.plot_mag_xy(data, args.output)
+        console.print(f"  Samples: {len(mag_df)}")
+        plot_mag_xy.plot_mag_xy(mag_df, args.output)
         return 0
 
     except ImportError as e:
@@ -341,27 +347,6 @@ def _find_serial_port() -> Optional[str]:
             return ports[0]
 
     return None
-
-
-def _find_latest_binlog() -> Optional[str]:
-    """Find most recent binary log file"""
-    search_dirs = [
-        paths.root() / "logs",
-        paths.root() / "tools" / "log_analyzer",
-        paths.root() / "firmware" / "vehicle" / "logs",
-        paths.root() / "firmware" / "vehicle_old" / "logs",
-    ]
-
-    files = []
-    for search_dir in search_dirs:
-        if search_dir.exists():
-            files.extend(search_dir.glob("*.bin"))
-
-    if not files:
-        return None
-
-    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-    return str(files[0])
 
 
 def _send_calibration_command(port: str, command: str) -> int:

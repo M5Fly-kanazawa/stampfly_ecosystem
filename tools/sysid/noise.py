@@ -13,10 +13,12 @@ Reference: IEEE Std 952-1997 (IEEE Standard Specification Format Guide
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
+
+from .loader import sample_rate_hz as _bundle_sample_rate_hz
 
 
 @dataclass
@@ -390,19 +392,59 @@ def detect_static_segments(
     return segments
 
 
+def _native_observations(df: pd.DataFrame, stream: str, columns: List[str]) -> np.ndarray:
+    """
+    Recover a held (forward-filled) stream's native observations from the
+    aligned table: one row per distinct `<stream>_timestamp_us`, skipping
+    the NaN rows before the stream's first observation.
+    整列表から、保持（前方補完）されたストリームの原観測を復元する:
+    `<stream>_timestamp_us` の値ごとに1行、最初の観測より前の NaN 行は除く。
+
+    Args:
+        df: aligned DataFrame from `load_aligned()`.
+        stream: bundle stream name (e.g. "baro"), whose provenance column
+            is `<stream>_timestamp_us`.
+        columns: the stream's value columns to return, in order.
+
+    Returns:
+        Array of shape (n_observations, len(columns)).
+    """
+    provenance_col = f"{stream}_timestamp_us"
+    native = (
+        df[[provenance_col, *columns]]
+        .dropna(subset=[provenance_col])
+        .drop_duplicates(subset=[provenance_col])
+    )
+    return native[columns].to_numpy(dtype=float)
+
+
 def load_and_estimate(
-    filepath: str | Path,
+    df: pd.DataFrame,
     sample_rate: Optional[float] = None,
     sensor: str = "all",
     static_only: bool = False,
     min_duration: float = 10.0,
 ) -> NoiseEstimate:
     """
-    Load CSV file and estimate sensor noise
+    Estimate sensor noise from an aligned flight-log DataFrame
+
+    `df` is the table returned by `tools.sysid.loader.load_aligned()` --
+    one row per imu.csv sample (400 Hz on a real vehicle capture), with
+    optional baro/tof/flow columns held (forward-filled) from their own
+    lower-rate streams when those streams are present in the bundle
+    (see `load_aligned()`'s column contract and `df.attrs["bundle_streams"]`).
+
+    アラインメント済みフライトログ DataFrame からセンサノイズを推定する。
+
+    `df` は `tools.sysid.loader.load_aligned()` が返す表 -- imu.csv の
+    1標本につき1行（実機取得なら400Hz）で、バンドルに baro/tof/flow の
+    各ストリームがあれば、それぞれの低レート値が保持（前方補完）された
+    列を持つ（`load_aligned()` の列契約と `df.attrs["bundle_streams"]`
+    参照）。
 
     Args:
-        filepath: Path to CSV file
-        sample_rate: Sample rate (auto-detected if None)
+        df: aligned DataFrame from `load_aligned()`.
+        sample_rate: Sample rate (auto-detected from timestamp_us if None)
         sensor: Which sensors to analyze ("gyro", "accel", "baro", "tof", "all")
         static_only: If True, only use static segments
         min_duration: Minimum data duration required [s]
@@ -411,25 +453,18 @@ def load_and_estimate(
         NoiseEstimate with analysis results
 
     Raises:
-        ValueError: If file format is unsupported or data is too short
+        ValueError: If the data is too short
     """
-    # Loader lives alongside this module (tools/sysid/loader.py)
-    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
-    from .loader import load_csv
-
-    # Load data
-    log_data = load_csv(filepath)
+    bundle_streams = df.attrs.get("bundle_streams", set())
 
     # Extract arrays
-    n = len(log_data.samples)
-    gyro = np.array([s.gyro for s in log_data.samples])
-    accel = np.array([s.accel for s in log_data.samples])
+    n = len(df)
+    gyro = df[["gyro_x", "gyro_y", "gyro_z"]].to_numpy()
+    accel = df[["accel_x", "accel_y", "accel_z"]].to_numpy()
 
     # Determine sample rate
     if sample_rate is None:
-        sample_rate = log_data.sample_rate_hz
-        if sample_rate == 0:
-            sample_rate = 400.0  # Default
+        sample_rate = _bundle_sample_rate_hz(df)
 
     duration = n / sample_rate
 
@@ -448,28 +483,36 @@ def load_and_estimate(
             accel = accel[longest[0]:longest[1]]
             n = len(gyro)
 
-    # Extract optional sensors
+    # Extract optional sensors -- present only when the source stream
+    # (baro.csv / tof_bottom.csv / flow.csv) is actually in the bundle.
+    # 任意センサの抽出 -- 元ストリーム（baro.csv/tof_bottom.csv/flow.csv）
+    # がバンドルに実在するときのみ。
+    # These streams are slower than the 400Hz imu base, so the aligned table
+    # HOLDS (repeats) each observation until the next one arrives and is NaN
+    # before the first. A noise estimate must see each observation exactly
+    # once -- repeated held values would shrink the apparent std -- so the
+    # native observations are recovered through the `<stream>_timestamp_us`
+    # provenance column aligned() attaches (see lib/sflog/align.py), which
+    # is the bundle-era equivalent of the old loader's
+    # "samples where this sensor actually reported".
+    # これらのストリームは400Hzの imu 基準より遅いため、整列表では各観測が
+    # 次の観測まで保持（反復）され、最初の観測より前は NaN になる。ノイズ
+    # 推定は各観測を1回ずつ見なければならず（保持で繰り返された値は見かけの
+    # 標準偏差を縮める）、aligned() が付ける随伴列 `<stream>_timestamp_us`
+    # （lib/sflog/align.py 参照）から原観測を復元する -- 旧ローダーの
+    # 「そのセンサが実際に報告した標本だけ」に相当する。
     baro = None
     tof = None
     flow = None
 
-    if sensor in ["baro", "all"]:
-        baro_list = [s.baro_altitude for s in log_data.samples if s.baro_altitude is not None]
-        if baro_list:
-            baro = np.array(baro_list[:n])
+    if sensor in ["baro", "all"] and "baro" in bundle_streams:
+        baro = _native_observations(df, "baro", ["altitude"])[:, 0]
 
-    if sensor in ["tof", "all"]:
-        tof_list = [s.tof_distance for s in log_data.samples if s.tof_distance is not None]
-        if tof_list:
-            tof = np.array(tof_list[:n])
+    if sensor in ["tof", "all"] and "tof_bottom" in bundle_streams:
+        tof = _native_observations(df, "tof_bottom", ["distance"])[:, 0]
 
-    if sensor in ["flow", "all"]:
-        flow_list = [
-            [s.flow_dx or 0, s.flow_dy or 0]
-            for s in log_data.samples if s.flow_dx is not None
-        ]
-        if flow_list:
-            flow = np.array(flow_list[:n])
+    if sensor in ["flow", "all"] and "flow" in bundle_streams:
+        flow = _native_observations(df, "flow", ["dx", "dy"])
 
     # Run estimation
     run_allan = sensor in ["gyro", "accel", "all"]

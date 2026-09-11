@@ -13,10 +13,10 @@ Methods:
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 
 from .defaults import get_flat_defaults
@@ -271,16 +271,20 @@ def fit_rotational_decay(
 
 
 def estimate_drag(
-    filepath: str | Path,
+    df: pd.DataFrame,
     drag_type: str = "all",
     mass: float = 0.037,
     Izz: float = 20.4e-6,
 ) -> Dict[str, Any]:
     """
-    Estimate drag coefficients from coastdown/decay data
+    Estimate drag coefficients from an aligned flight-log DataFrame
+
+    `df` is the table returned by `tools.sysid.loader.load_aligned()`.
+    アラインメント済みフライトログ DataFrame（`load_aligned()` が返す表）
+    から空気抵抗係数を推定する。
 
     Args:
-        filepath: Path to CSV log file
+        df: aligned DataFrame from `load_aligned()`.
         drag_type: Type to estimate ("trans", "rot", "all")
         mass: Vehicle mass [kg]
         Izz: Yaw moment of inertia [kg·m²]
@@ -288,28 +292,19 @@ def estimate_drag(
     Returns:
         Dictionary with estimation results
     """
-    # Loader lives alongside this module (tools/sysid/loader.py)
-    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
-    from .loader import load_csv
-
-    # Load data
-    log_data = load_csv(filepath)
+    bundle_streams = df.attrs.get("bundle_streams", set())
 
     # Extract arrays
-    n = len(log_data.samples)
-    timestamps = np.array([s.timestamp_us for s in log_data.samples])
+    timestamps = df["timestamp_us"].to_numpy()
     time_s = (timestamps - timestamps[0]) / 1e6
 
     # Get gyro for yaw rate
-    gyro = np.array([s.gyro for s in log_data.samples])
-    gyro_z = gyro[:, 2]
+    gyro_z = df["gyro_z"].to_numpy()
 
-    # Get velocity if available
-    vel = None
-    if log_data.samples[0].eskf_velocity is not None:
-        vel = np.array([s.eskf_velocity if s.eskf_velocity is not None else [0, 0, 0]
-                        for s in log_data.samples])
-        vel_xy = np.sqrt(vel[:, 0]**2 + vel[:, 1]**2)  # Horizontal velocity magnitude
+    # Get velocity if available (posvel.csv, native 400Hz -- lockstep stream)
+    # 速度（利用可能なら、posvel.csv。ネイティブ400Hz -- ロックステップ系）
+    if "posvel" in bundle_streams:
+        vel_xy = np.sqrt(df["vel_x"].to_numpy() ** 2 + df["vel_y"].to_numpy() ** 2)
     else:
         vel_xy = None
 

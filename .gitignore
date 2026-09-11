@@ -88,6 +88,7 @@ tools/log_analyzer/*.png
 # Sample datasets (regenerable from real flights — keep README only)
 # ====================
 analysis/datasets/education/*.csv
+analysis/datasets/education/*.sflog.zip
 analysis/datasets/sysid/*.csv
 
 # ====================

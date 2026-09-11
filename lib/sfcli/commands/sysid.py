@@ -89,7 +89,8 @@ def _register_noise(subparsers):
     )
     parser.add_argument(
         "input",
-        help="Input CSV file (static sensor data)",
+        help="Input flight-log bundle (.sflog.zip or extracted directory, "
+             "static sensor data)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -133,7 +134,8 @@ def _register_inertia(subparsers):
     )
     parser.add_argument(
         "input",
-        help="Input CSV file (step response data)",
+        help="Input flight-log bundle (.sflog.zip or extracted directory, "
+             "step response data)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -169,7 +171,7 @@ def _register_motor(subparsers):
     )
     parser.add_argument(
         "input",
-        help="Input CSV file",
+        help="Input flight-log bundle (.sflog.zip or extracted directory)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -209,7 +211,8 @@ def _register_drag(subparsers):
     )
     parser.add_argument(
         "input",
-        help="Input CSV file (coastdown data)",
+        help="Input flight-log bundle (.sflog.zip or extracted directory, "
+             "coastdown data)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -336,15 +339,14 @@ def _register_fit(subparsers):
             "genuine 400Hz duty are present, a mixer-gain diagnostic is also "
             "reported (how far the mixer that actually flew is from the "
             "physical model -- see the rate-sysid design memo, "
-            "docs/events/sci_tutorial_2026, 2026-09-09). The input CSV "
-            "format is auto-detected: the "
-            "current 400Hz Data Stream (`sf log wifi -o *.csv`, columns "
-            "rate_ref_roll/pitch/yaw + gyro_x/y/z -- shared by vehicle and "
-            "workshop, --rate-max is ignored since rate_ref is already "
-            "rad/s) or the legacy analysis CSV (ctrl_roll/pitch/yaw + "
-            "gyro_corrected_x/y/z, --rate-max required, 'kp' mode only). "
+            "docs/events/sci_tutorial_2026, 2026-09-09). The input is a "
+            "StampFly flight-log v1 bundle (`.sflog.zip` file or extracted "
+            "directory, produced by `sf log wifi`; see lib/sflog) -- its "
+            "rate_ref stream (rate_ref_roll/pitch/yaw, already rad/s -- "
+            "--rate-max is ignored) and imu stream (gyro_x/y/z) supply the "
+            "target/gyro pair, aligned at the 400Hz control-cycle rate. "
             "--mixer (default legacy) picks WHICH duty inversion the "
-            "FIR Kp auto-estimate and 'duty' fallback use, and the CSV alone "
+            "FIR Kp auto-estimate and 'duty' fallback use, and the bundle alone "
             "cannot say which is right -- you "
             "must know which firmware produced the log: 'legacy' inverts "
             "the simple linear X-quad mixer (ws_internal.hpp / vehicle_old) "
@@ -360,16 +362,16 @@ def _register_fit(subparsers):
         ),
         epilog=(
             "Examples:\n"
-            "  sf sysid fit flight.csv --plot\n"
+            "  sf sysid fit flight.sflog.zip --plot\n"
             "      Fully automatic: no --kp, no --mixer override needed for a\n"
             "      `sf lesson` (firmware/workshop) log. Auto-estimates the\n"
-            "      effective Kp from flight.csv's own duty via a short FIR\n"
+            "      effective Kp from flight.sflog.zip's own duty via a short FIR\n"
             "      regression, then runs the robust indirect closed-loop fit.\n"
             "      完全自動: `sf lesson`（firmware/workshop）ログなら --kp も\n"
-            "      --mixer 指定も不要。flight.csv 自身の duty から短いFIR回帰で\n"
+            "      --mixer 指定も不要。flight.sflog.zip 自身の duty から短いFIR回帰で\n"
             "      実効Kpを自動推定し、頑健な間接閉ループフィットを実行する。\n"
             "\n"
-            "  sf sysid fit flight.csv --mixer vehicle --plot\n"
+            "  sf sysid fit flight.sflog.zip --mixer vehicle --plot\n"
             "      For a log from `sf app` (a firmware/vehicle-based custom\n"
             "      controller): inverts firmware/vehicle's ACTUAL mixer\n"
             "      (physical B^-1 allocation + nonlinear motor curve) instead\n"
@@ -381,7 +383,7 @@ def _register_fit(subparsers):
             "      逆算する。このデータに --mixer legacy を使うと誤った信号を\n"
             "      静かにフィットしてしまう。\n"
             "\n"
-            "  sf sysid fit flight.csv --kp 0.5 --plot\n"
+            "  sf sysid fit flight.sflog.zip --kp 0.5 --plot\n"
             "      Fallback for OLD logs without the 400Hz duty columns:\n"
             "      --kp is the roll/pitch rate P gain written in user_code.cpp\n"
             "      for the tutorial (実習 7). Must match what actually flew.\n"
@@ -389,7 +391,7 @@ def _register_fit(subparsers):
             "      user_code.cppに書いたロール/ピッチのレートP制御ゲインを指定\n"
             "      する（実際に飛行させた値と一致させること）。\n"
             "\n"
-            "  sf sysid fit flight.csv --axis roll -o fit.yaml\n"
+            "  sf sysid fit flight.sflog.zip --axis roll -o fit.yaml\n"
             "      Identify roll only and save the result to a YAML file.\n"
             "      roll軸のみ同定し、結果をYAMLファイルに保存する。\n"
             "\n"
@@ -417,15 +419,17 @@ def _register_fit(subparsers):
             "  （自動推定ならそのR^2も）表示する。\n"
             "\n"
             "Capture the input data with:\n"
-            "  sf log wifi -d 30 -o flight.csv\n"
-            "  入力データは上記コマンドで取得する（-dは秒数、-oは出力ファイル名）。\n"
+            "  sf log wifi -d 30\n"
+            "  sf sysid fit logs/flight_<timestamp>.sflog.zip --plot\n"
+            "  入力データは上記コマンドで取得する（-dは秒数。書き出し先は\n"
+            "  logs/ 配下の一式ファイルで固定、-o は指定しない）。\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "input",
         nargs="?",
-        help="Input CSV file (Data Stream or legacy format, auto-detected)",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory)",
     )
     parser.add_argument(
         "--axis",
@@ -454,12 +458,12 @@ def _register_fit(subparsers):
              "real lesson_07 test flights where direct fits gave R^2<0 and "
              "K off by 1-3 orders of magnitude on the SAME data, "
              "2026-09-10). 'control_output' = the PRE-MIXER commanded "
-             "thrust+torque (400Hz ctrl_output_* columns, "
+             "thrust+torque (the bundle's 400Hz ctrl_output.csv, "
              "kPktCtrlOutput400/0x4B) fit directly -- no --mixer needed, "
              "but still closed-loop-biased; only used by 'auto' as a "
              "fallback when no Kp (given or auto-estimated) is available. "
-             "'duty' = mixer-inverse of the 400Hz motor_duty_FR/RR/RL/FL "
-             "columns fit directly (same fallback role, --mixer must match "
+             "'duty' = mixer-inverse of the bundle's 400Hz motor.csv "
+             "duty_FR/RR/RL/FL fit directly (same fallback role, --mixer must match "
              "the firmware). 'kp' = the OLD direct Kp*(target-gyro) "
              "reconstruction (--kp required) -- kept for comparison/"
              "debugging, not recommended for real flight data.",
@@ -475,7 +479,7 @@ def _register_fit(subparsers):
              "= firmware/vehicle's ACTUAL mixer (physical B^-1 allocation "
              "through a nonlinear motor curve, sf_actuator/actuator.cpp) -- "
              "required for `sf app` (firmware/vehicle-based custom "
-             "controller) logs. The CSV cannot say which firmware produced "
+             "controller) logs. The bundle cannot say which firmware produced "
              "it, so this is never auto-detected -- pick wrong and the fit "
              "silently reconstructs the wrong signal. Ignored when --input "
              "resolves to 'kp'.",
@@ -496,8 +500,10 @@ def _register_fit(subparsers):
         type=float,
         default=1.0,
         help="Maximum angular rate [rad/s] (default: 1.0, yaw typically 5.0). "
-             "Only used by the 'kp' input mode's legacy ctrl*rate_max path -- "
-             "ignored for Data Stream CSVs and the 'duty' input mode.",
+             "Kept for backward compatibility of scripts that pass it: a "
+             "bundle's rate_ref stream is already in rad/s, so this no longer "
+             "scales the target and only sets the --min-target-std-frac "
+             "reference scale.",
     )
     parser.add_argument(
         "--min-target-std-frac",
@@ -583,12 +589,12 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("Run 'sf sysid <subcommand> --help' for details.")
     console.print()
     console.print("Examples:")
-    console.print("  sf sysid noise static.csv --sensor all --plot")
-    console.print("  sf sysid fit flight.csv --plot")
-    console.print("  sf sysid inertia roll_step.csv --axis roll -o result.yaml")
+    console.print("  sf sysid noise static.sflog.zip --sensor all --plot")
+    console.print("  sf sysid fit flight.sflog.zip --plot")
+    console.print("  sf sysid inertia roll_step.sflog.zip --axis roll -o result.yaml")
     console.print("  sf sysid params show")
     console.print("  sf sysid validate identified.yaml --ref defaults.yaml")
-    console.print("  sf sysid rate-fit flight.csv --axis roll --plot   # duty-based, no --kp needed")
+    console.print("  sf sysid rate-fit flight.sflog.zip --axis roll --plot   # duty-based, no --kp needed")
     console.print("  sf sysid rate-tune --fit fit.json --wc 25 --pm 60")
     console.print("  sf sysid rate-excite --axis roll --takeoff --land")
     return 0
@@ -644,6 +650,7 @@ def run_fit(args: argparse.Namespace) -> int:
     """Run plant model fitting"""
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
+        from sysid.loader import load_aligned
         from sysid.plant_fit import (
             fit_plant, compute_fit_timeseries, REFERENCE_PLANT_GAINS,
             REFERENCE_PLANT_GAINS_VEHICLE, selftest,
@@ -660,23 +667,24 @@ def run_fit(args: argparse.Namespace) -> int:
         return 0 if selftest() else 1
 
     if not args.input:
-        console.error("input CSV required (or --selftest)")
+        console.error("input bundle required (or --selftest)")
         return 1
     # NOTE: --kp is NOT required here unconditionally -- with --input auto
     # (default) or --input duty, fit_plant() reads the plant input from the
     # 400Hz motor-duty columns instead. fit_plant() raises a clear ValueError
     # (caught per-axis below) when the resolved mode is 'kp' and --kp is
-    # missing, or when 'duty' is requested/resolved but the CSV lacks the
-    # motor_duty_* columns.
+    # missing, or when 'duty' is requested/resolved but the bundle lacks a
+    # motor stream (genuine 400Hz duty).
     # 注意: --kp はここで無条件必須にしない -- --input auto（既定）や
     # --input duty では fit_plant() が 400Hz モータduty列からプラント入力を
     # 読む。解決したモードが 'kp' で --kp が無い場合、または 'duty' が
-    # 指定/解決されたのに CSV に motor_duty_* 列が無い場合は、fit_plant() が
+    # 指定/解決されたのに一式に motor ストリーム（本物の400Hz duty）が無い場合は、fit_plant() が
     # 明確な ValueError を出す（下の軸ごとの try/except で捕捉）。
 
-    # Check input file
+    # Check input bundle
+    # 入力一式の確認
     if not Path(args.input).exists():
-        console.error(f"Input file not found: {args.input}")
+        console.error(f"Input bundle not found: {args.input}")
         return 1
 
     # Determine axes to process
@@ -684,7 +692,17 @@ def run_fit(args: argparse.Namespace) -> int:
     # Axis-specific rate_max defaults (yaw is typically higher)
     rate_max_defaults = {"roll": 1.0, "pitch": 1.0, "yaw": 5.0}
 
-    console.info(f"Loading: {args.input}")
+    # Load the bundle ONCE into the aligned 400Hz table every axis (and the
+    # plot below) reads from -- see tools/sysid/loader.py for the column
+    # contract.
+    # 一式を1回だけ読み、全軸（と下のプロット）が使う整列済み400Hz表を作る
+    # -- 列契約は tools/sysid/loader.py 参照。
+    console.info(f"Loading bundle: {args.input}")
+    try:
+        df = load_aligned(args.input)
+    except (ValueError, OSError) as e:
+        console.error(f"Failed to load bundle: {e}")
+        return 1
 
     results = {}
     defaults = get_flat_defaults()
@@ -699,7 +717,7 @@ def run_fit(args: argparse.Namespace) -> int:
 
         try:
             result = fit_plant(
-                filepath=args.input,
+                df=df,
                 axis=axis,
                 kp=args.kp,
                 rate_max=rate_max,
@@ -747,7 +765,7 @@ def run_fit(args: argparse.Namespace) -> int:
         if r.input_mode == 'control_output':
             mode_desc = "control_output (pre-mixer commanded thrust+torque, 400Hz, no --mixer needed)"
         elif r.input_mode == 'duty':
-            mode_desc = f"motor duty (--mixer {r.mixer} inverse of motor_duty_FR/RR/RL/FL, 400Hz)"
+            mode_desc = f"motor duty (--mixer {r.mixer} inverse of motor.csv duty_FR/RR/RL/FL, 400Hz)"
         elif r.input_mode == 'indirect':
             if r.kp_source == 'fir_auto':
                 kp_desc = (f"Kp={r.kp_used:.4g} auto-estimated via FIR "
@@ -848,7 +866,7 @@ def run_fit(args: argparse.Namespace) -> int:
                         rate_max = args.rate_max
 
                     ts = compute_fit_timeseries(
-                        filepath=args.input,
+                        df=df,
                         result=r,
                         rate_max=rate_max,
                         time_range=tuple(args.time_range) if args.time_range else None,
@@ -902,6 +920,7 @@ def run_noise(args: argparse.Namespace) -> int:
         # モジュール読み込み時に matplotlib.pyplot を import するため、
         # ここでは import しない -- plotting.select_backend() を先に
         # 実行する必要がある。
+        from sysid.loader import load_aligned
         from sysid.noise import load_and_estimate
     except ImportError as e:
         console.error(f"Failed to import sysid module: {e}")
@@ -910,16 +929,18 @@ def run_noise(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input file
+    # Check input bundle
+    # 入力一式の確認
     if not Path(args.input).exists():
-        console.error(f"Input file not found: {args.input}")
+        console.error(f"Input bundle not found: {args.input}")
         return 1
 
-    console.info(f"Loading: {args.input}")
+    console.info(f"Loading bundle: {args.input}")
 
     try:
+        df = load_aligned(args.input)
         result = load_and_estimate(
-            filepath=args.input,
+            df,
             sensor=args.sensor,
             static_only=args.static_only,
             min_duration=args.min_duration,
@@ -999,6 +1020,7 @@ def run_inertia(args: argparse.Namespace) -> int:
     """Run inertia estimation"""
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
+        from sysid.loader import load_aligned
         from sysid.inertia import estimate_inertia, load_step_response
     except ImportError as e:
         console.error(f"Failed to import sysid.inertia: {e}")
@@ -1008,16 +1030,18 @@ def run_inertia(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input file
+    # Check input bundle
+    # 入力一式の確認
     if not Path(args.input).exists():
-        console.error(f"Input file not found: {args.input}")
+        console.error(f"Input bundle not found: {args.input}")
         return 1
 
-    console.info(f"Loading: {args.input}")
+    console.info(f"Loading bundle: {args.input}")
 
     try:
+        df = load_aligned(args.input)
         result = estimate_inertia(
-            filepath=args.input,
+            df,
             axis=args.axis,
             time_range=args.time_range,
         )
@@ -1048,6 +1072,7 @@ def run_motor(args: argparse.Namespace) -> int:
     """Run motor dynamics identification"""
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
+        from sysid.loader import load_aligned
         from sysid.motor import estimate_motor_params
     except ImportError as e:
         console.error(f"Failed to import sysid.motor: {e}")
@@ -1057,16 +1082,18 @@ def run_motor(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input file
+    # Check input bundle
+    # 入力一式の確認
     if not Path(args.input).exists():
-        console.error(f"Input file not found: {args.input}")
+        console.error(f"Input bundle not found: {args.input}")
         return 1
 
-    console.info(f"Loading: {args.input}")
+    console.info(f"Loading bundle: {args.input}")
 
     try:
+        df = load_aligned(args.input)
         result = estimate_motor_params(
-            filepath=args.input,
+            df,
             param=args.param,
             mass=args.mass,
             hover_only=args.hover_only,
@@ -1098,6 +1125,7 @@ def run_drag(args: argparse.Namespace) -> int:
     """Run drag coefficient estimation"""
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
+        from sysid.loader import load_aligned
         from sysid.drag import estimate_drag
     except ImportError as e:
         console.error(f"Failed to import sysid.drag: {e}")
@@ -1107,16 +1135,18 @@ def run_drag(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input file
+    # Check input bundle
+    # 入力一式の確認
     if not Path(args.input).exists():
-        console.error(f"Input file not found: {args.input}")
+        console.error(f"Input bundle not found: {args.input}")
         return 1
 
-    console.info(f"Loading: {args.input}")
+    console.info(f"Loading bundle: {args.input}")
 
     try:
+        df = load_aligned(args.input)
         result = estimate_drag(
-            filepath=args.input,
+            df,
             drag_type=args.type,
         )
     except Exception as e:
@@ -1319,9 +1349,9 @@ Characterize sensor noise parameters for ESKF tuning.
 ### Procedure
 1. Place StampFly on stable, level surface
 2. Power on and wait 10 seconds for sensor warm-up
-3. Start data capture: `sf log wifi -d 60 -o static_noise.csv`
+3. Start data capture: `sf log wifi -d 60` (writes logs/flight_<timestamp>.sflog.zip)
 4. Ensure vehicle is completely stationary during capture
-5. Run analysis: `sf sysid noise static_noise.csv --sensor all --plot`
+5. Run analysis: `sf sysid noise logs/flight_<timestamp>.sflog.zip --sensor all --plot`
 
 ### Expected Duration
 - Data capture: 60 seconds minimum
@@ -1353,11 +1383,11 @@ Estimate roll, pitch, and yaw moments of inertia from step responses.
 
 ### Procedure (Roll)
 1. Take off and hover at ~0.5m altitude
-2. Start data capture: `sf log wifi -d 20 -o roll_step.csv`
+2. Start data capture: `sf log wifi -d 20` (writes logs/flight_<timestamp>.sflog.zip)
 3. Apply quick roll stick input (±50%) and release
 4. Wait for oscillation to settle
 5. Repeat 3-5 times
-6. Land and analyze: `sf sysid inertia roll_step.csv --axis roll --plot`
+6. Land and analyze: `sf sysid inertia logs/flight_<timestamp>.sflog.zip --axis roll --plot`
 
 ### Procedure (Pitch)
 - Same as roll, using pitch stick
@@ -1389,17 +1419,17 @@ Identify thrust coefficient (Ct), torque coefficient (Cq), and motor time consta
 
 ### Procedure (Hover - for Ct)
 1. Take off and achieve stable hover
-2. Start data capture: `sf log wifi -d 30 -o hover.csv`
+2. Start data capture: `sf log wifi -d 30` (writes logs/flight_<timestamp>.sflog.zip)
 3. Maintain hover for at least 20 seconds
-4. Land and analyze: `sf sysid motor hover.csv --param Ct`
+4. Land and analyze: `sf sysid motor logs/flight_<timestamp>.sflog.zip --param Ct`
 
 ### Procedure (Throttle Step - for τm)
 1. Hover at ~0.3m altitude
-2. Start data capture: `sf log wifi -d 20 -o throttle_step.csv`
+2. Start data capture: `sf log wifi -d 20` (writes logs/flight_<timestamp>.sflog.zip)
 3. Apply quick throttle increase (50% → 70%)
 4. Hold for 2 seconds, then return
 5. Repeat 3-5 times
-6. Analyze: `sf sysid motor throttle_step.csv --param tau --plot`
+6. Analyze: `sf sysid motor logs/flight_<timestamp>.sflog.zip --param tau --plot`
 
 ### Expected Duration
 - Hover test: 2-3 minutes
@@ -1425,19 +1455,19 @@ Estimate translational and rotational drag coefficients.
 
 ### Procedure (Translational Drag)
 1. Take off and hover at ~1m altitude
-2. Start data capture: `sf log wifi -d 30 -o coastdown.csv`
+2. Start data capture: `sf log wifi -d 30` (writes logs/flight_<timestamp>.sflog.zip)
 3. Apply forward velocity (pitch forward)
 4. Cut throttle momentarily and observe deceleration
 5. Repeat for backward, left, right
-6. Analyze: `sf sysid drag coastdown.csv --type trans --plot`
+6. Analyze: `sf sysid drag logs/flight_<timestamp>.sflog.zip --type trans --plot`
 
 ### Procedure (Rotational Drag)
 1. Hover at ~0.5m altitude
-2. Start data capture: `sf log wifi -d 20 -o yaw_decay.csv`
+2. Start data capture: `sf log wifi -d 20` (writes logs/flight_<timestamp>.sflog.zip)
 3. Apply yaw rate input
 4. Release and observe yaw rate decay
 5. Repeat 3-5 times
-6. Analyze: `sf sysid drag yaw_decay.csv --type rot --plot`
+6. Analyze: `sf sysid drag logs/flight_<timestamp>.sflog.zip --type rot --plot`
 
 ### Expected Duration
 - Translational: 5-10 minutes
@@ -1481,13 +1511,15 @@ Estimate translational and rotational drag coefficients.
 # =============================================================================
 # Rate-loop identification + PID auto-tuning (backend: tools/log_analyzer/
 # rate_sysid.py). Workflow on hardware:
-#   1. sf log wifi -o sysid01           (start the 400Hz capture)
+#   1. sf log wifi -d 30                (start the 400Hz capture -> a
+#                                         logs/flight_<timestamp>.sflog.zip
+#                                         bundle -- see lib/sflog)
 #   2. sf sysid rate-excite --axis roll (API: takeoff -> chirp -> land)
-#   3. sf log convert sysid01 ...       (-> CSV with rate_ref/gyro)
-#   4. sf sysid rate-fit sysid01.csv --axis roll      (-> plant b, T, L)
-#   5. sf sysid rate-tune --fit fit.json --wc 25 --pm 60   (-> param set lines)
+#   3. sf sysid rate-fit logs/flight_<timestamp>.sflog.zip --axis roll
+#                                        (-> plant b, T, L)
+#   4. sf sysid rate-tune --fit fit.json --wc 25 --pm 60   (-> param set lines)
 # レートループ同定＋PID自動チューニング（バックエンド: rate_sysid.py）。
-# 実機手順: 400Hzキャプチャ → API励振飛行 → CSV変換 → rate-fit → rate-tune。
+# 実機手順: 400Hzキャプチャ（一式を書く） → API励振飛行 → rate-fit → rate-tune。
 # =============================================================================
 
 def _rate_backend():
@@ -1502,7 +1534,7 @@ def _rate_backend():
 def _register_rate_fit(subparsers):
     parser = subparsers.add_parser(
         "rate-fit",
-        help="Identify the rate-loop plant G(s)=b·e^(-Ls)/(s(Ts+1)) from a Data Stream CSV",
+        help="Identify the rate-loop plant G(s)=b·e^(-Ls)/(s(Ts+1)) from a flight-log bundle",
         description=(
             "Recovers the rate-PID output u(t). The PRIMARY path (--input duty, "
             "default when the log has it) reads the 400Hz motor-duty entry "
@@ -1515,8 +1547,18 @@ def _register_rate_fit(subparsers):
             "ETFE over the excited band and fits b (1/inertia), T (motor lag), "
             "L (dead time). Run --selftest to verify both input paths against "
             "a synthetic known plant."),
+        epilog=(
+            "Capture the input data with:\n"
+            "  sf log wifi -d 30\n"
+            "  sf sysid rate-fit logs/flight_<timestamp>.sflog.zip --axis roll --plot\n"
+            "入力データは上記コマンドで取得する（-dは秒数）。\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("input", nargs="?", help="Data Stream CSV (sf log convert output)")
+    parser.add_argument(
+        "input", nargs="?",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory)",
+    )
     parser.add_argument("--axis", choices=["roll", "pitch", "yaw"], default="roll",
                         help="axis to identify (default: roll)")
     parser.add_argument("--input-mode", dest="input_mode",
@@ -1539,7 +1581,7 @@ def _register_rate_fit(subparsers):
     parser.add_argument("--selftest", action="store_true",
                         help="run the synthetic-plant pipeline self-test and exit")
     parser.add_argument("--plot", action="store_true",
-                        help="save a Bode (measured vs fit) + coherence figure next to the CSV")
+                        help="save a Bode (measured vs fit) + coherence figure next to the input bundle")
     parser.add_argument("--plot-output", help="path for the Bode+coherence PNG (implies --plot)")
     parser.set_defaults(func=run_rate_fit)
 
@@ -1549,18 +1591,35 @@ def run_rate_fit(args) -> int:
     if args.selftest:
         return 0 if rs.selftest() else 1
     if not args.input:
-        console.error("input CSV required (or --selftest)")
+        console.error("input bundle required (or --selftest)")
         return 1
+    if not Path(args.input).exists():
+        console.error(f"Input bundle not found: {args.input}")
+        return 1
+    try:
+        sys.path.insert(0, str(paths.root() / "tools"))
+        from sysid.loader import load_aligned
+    finally:
+        if str(paths.root() / "tools") in sys.path:
+            sys.path.remove(str(paths.root() / "tools"))
+    console.info(f"Loading bundle: {args.input}")
+    df = load_aligned(args.input)
     gains = {k: v for k, v in
              (("kp", args.kp), ("ti", args.ti), ("td", args.td)) if v is not None}
     plot_path = None
     if args.plot_output:
         plot_path = args.plot_output
     elif args.plot:
+        # Path.with_suffix("") on a "*.sflog.zip" bundle only strips the
+        # trailing ".zip" (leaving "*.sflog") -- fine as a filename base, it
+        # just keeps the ".sflog" fragment in the plot's file name.
+        # "*.sflog.zip" 一式に Path.with_suffix("") を使うと末尾の ".zip" だけ
+        # 剥がれる（"*.sflog" が残る）-- ファイル名の元としては問題なく、
+        # プロットのファイル名に ".sflog" の断片が残るだけ。
         plot_path = str(Path(args.input).with_suffix("")) + f"_bode_{args.axis}.png"
-    result = rs.fit_from_csv(args.input, args.axis, gains=gains,
-                             f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
-                             input_mode=args.input_mode)
+    result = rs.fit_from_df(df, args.axis, gains=gains,
+                            f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
+                            input_mode=args.input_mode)
     input_desc = ("400Hz motor duty (firmware/vehicle mixer inverted)"
                   if result["input_mode"] == "duty" else "PID replay (--kp)")
     console.info(f"axis {result['axis']}: input={input_desc}")

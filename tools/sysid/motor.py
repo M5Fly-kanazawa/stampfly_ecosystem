@@ -16,14 +16,15 @@ Methods:
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 from scipy import signal
 from scipy.optimize import curve_fit, minimize_scalar
 
 from .defaults import get_flat_defaults
+from .loader import sample_rate_hz
 
 
 @dataclass
@@ -311,16 +312,20 @@ def detect_throttle_steps(
 
 
 def estimate_motor_params(
-    filepath: str | Path,
+    df: pd.DataFrame,
     param: str = "all",
     mass: float = 0.037,
     hover_only: bool = False,
 ) -> Dict[str, Any]:
     """
-    Estimate motor parameters from flight data
+    Estimate motor parameters from an aligned flight-log DataFrame
+
+    `df` is the table returned by `tools.sysid.loader.load_aligned()`.
+    アラインメント済みフライトログ DataFrame（`load_aligned()` が返す表）
+    からモータパラメータを推定する。
 
     Args:
-        filepath: Path to CSV log file
+        df: aligned DataFrame from `load_aligned()`.
         param: Parameter to estimate ("Ct", "Cq", "tau", "all")
         mass: Vehicle mass [kg]
         hover_only: Only use hover segments for Ct estimation
@@ -328,32 +333,35 @@ def estimate_motor_params(
     Returns:
         Dictionary with estimation results
     """
-    # Loader lives alongside this module (tools/sysid/loader.py)
-    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
-    from .loader import load_csv
-
-    # Load data
-    log_data = load_csv(filepath)
+    bundle_streams = df.attrs.get("bundle_streams", set())
 
     # Extract arrays
-    n = len(log_data.samples)
-    timestamps = np.array([s.timestamp_us for s in log_data.samples])
+    n = len(df)
+    timestamps = df["timestamp_us"].to_numpy()
     time_s = (timestamps - timestamps[0]) / 1e6
 
-    # Get control inputs
-    throttle = np.array([s.ctrl_throttle if s.ctrl_throttle else 0 for s in log_data.samples])
+    # Get control inputs -- pilot.csv's stick throttle, held (forward-filled)
+    # onto the 400Hz base; 0 when the pilot stream is absent from the bundle
+    # (matches the old "if s.ctrl_throttle else 0" fallback).
+    # 操縦入力 -- pilot.csv のスティックスロットル（保持/前方補完）。pilot
+    # ストリームがバンドルに無ければ0（旧 "if s.ctrl_throttle else 0" と同じ
+    # フォールバック）。
+    if "pilot" in bundle_streams:
+        throttle = df["throttle"].to_numpy()
+    else:
+        throttle = np.zeros(n)
 
     # Get gyro
-    gyro = np.array([s.gyro for s in log_data.samples])
+    gyro = df[["gyro_x", "gyro_y", "gyro_z"]].to_numpy()
     gyro_z = gyro[:, 2]
 
-    # Get velocity if available
+    # Get velocity if available (posvel.csv, native 400Hz -- lockstep stream)
+    # 速度（利用可能なら、posvel.csv。ネイティブ400Hz -- ロックステップ系）
     vel_z = None
-    if log_data.samples[0].eskf_velocity is not None:
-        vel_z = np.array([s.eskf_velocity[2] if s.eskf_velocity is not None else 0
-                         for s in log_data.samples])
+    if "posvel" in bundle_streams:
+        vel_z = df["vel_z"].to_numpy()
 
-    dt = 1.0 / log_data.sample_rate_hz if log_data.sample_rate_hz > 0 else 1.0/400.0
+    dt = 1.0 / sample_rate_hz(df)
 
     result = MotorResult(mass=mass)
 
@@ -397,8 +405,7 @@ def estimate_motor_params(
                         )
                     else:
                         # Use vertical acceleration from accel
-                        accel = np.array([s.accel for s in log_data.samples])
-                        accel_z = accel[:, 2]
+                        accel_z = df["accel_z"].to_numpy()
                         tau, tau_std, r2 = estimate_time_constant_step(
                             time_s, accel_z, start
                         )

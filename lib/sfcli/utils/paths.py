@@ -154,6 +154,32 @@ class Paths:
         log_dir.mkdir(exist_ok=True)
         return log_dir
 
+    def latest_bundle(self) -> Optional[Path]:
+        """Most recent StampFly flight-log bundle (`*.sflog.zip`) in logs/,
+        or None if the directory does not exist or holds no bundle.
+
+        Shared by every command that defaults to "the latest log" when no
+        path is given (`sf trim analyze`, `sf cal plot`, ...) -- see
+        docs/plans/flight-log-format-plan.md. Does not create logs/ (unlike
+        logs() above): a plain existence check is enough here and callers
+        should not conjure a log directory just to discover it is empty.
+        logs/ にある最新の StampFly フライトログ一式（`*.sflog.zip`）。
+        ディレクトリが無い、または一式が1つも無ければ None。
+
+        「未指定なら最新ログを使う」動作を持つ全コマンド（`sf trim
+        analyze`、`sf cal plot` 等）で共有する。上の logs() と異なりディレ
+        クトリは作らない -- ここでは存在確認だけで十分で、空だと分かる
+        だけのために logs ディレクトリを作り出す必要はない。
+        """
+        log_dir = self.root() / "logs"
+        if not log_dir.exists():
+            return None
+        files = list(log_dir.glob("*.sflog.zip"))
+        if not files:
+            return None
+        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        return files[0]
+
     def config_dir(self) -> Path:
         """Get .sf/ configuration directory"""
         return self.root() / ".sf"

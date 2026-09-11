@@ -10,17 +10,20 @@ Where:
   tau_m: Motor time constant [s]
 
 Algorithm:
-  Plant I/O is reconstructed from telemetry via one of two INPUT MODES
-  (--input {auto,duty,kp}; see fit_plant()):
+  Plant I/O is reconstructed from an ALIGNED flight-log-bundle DataFrame
+  (tools/sysid/loader.py's load_aligned() -- see that function's docstring
+  for the full column contract; the bundle format itself is documented in
+  docs/plans/flight-log-format-plan.md section 2.2) via one of two INPUT
+  MODES (--input {auto,duty,kp}; see fit_plant()):
 
-    "duty" -- the actual plant input, recovered from the 400Hz motor duty
-      log (motor_duty_FR/RR/RL/FL, from firmware sending the kPktDuty400
-      entry, see data_stream_wire.hpp / udp_capture.py). The 4 motor duties
-      are inverted to recover the per-axis differential command the
-      rate-loop PID actually output, without having to know Kp or assume it
-      never changed (autotune, gain schedule) or that the actuator never
-      saturated. WHICH inversion is used is selected by --mixer
-      {legacy,vehicle} (default "legacy"):
+    "duty" -- the actual plant input, recovered from the bundle's 400Hz
+      motor duty stream (duty_FR/RR/RL/FL, from the bundle's `motor` CSV --
+      firmware sending the kPktDuty400 entry, see data_stream_wire.hpp).
+      The 4 motor duties are inverted to recover the per-axis differential
+      command the rate-loop PID actually output, without having to know Kp
+      or assume it never changed (autotune, gain schedule) or that the
+      actuator never saturated. WHICH inversion is used is selected by
+      --mixer {legacy,vehicle} (default "legacy"):
         "legacy" -- inverts the SIMPLE LINEAR "voltage-scale" X-quad mixer
           (ws_internal.hpp motor_mixer / vehicle_old setMixerOutput): duty
           IS the differential command, additively mixed, no battery-voltage
@@ -39,26 +42,32 @@ Algorithm:
       wire struct), so this cannot be auto-detected from the file alone --
       the caller must know which firmware produced the log.
     "kp" -- the LEGACY reconstruction: since Kp is assumed known and
-      constant, u_plant is approximated as Kp * (target - gyro). Two CSV
-      schemas are auto-detected from the header (see _detect_csv_format):
-        "stream" (400Hz Data Stream, `sf log wifi -o *.csv`):
+      constant, u_plant is approximated as Kp * (target - gyro):
           target(t) = rate_ref_<axis>(t)          <- already rad/s
-        "legacy" (pre-migration analysis CSV):
-          target(t) = ctrl_<axis>(t) * rate_max   <- normalized stick * rate_max
-    "auto" (default) -- "duty" when motor_duty_* columns exist AND --kp was
-      NOT given; otherwise "kp" (which then requires --kp).
+      The bundle format has only this one schema -- the pre-migration
+      "legacy" analysis-CSV schema this mode used to also auto-detect
+      (normalized stick * rate_max, via the retired _detect_csv_format())
+      no longer exists anywhere in the repo and has been removed along with
+      the two independent CSV-format detectors that used to guard this
+      function (see tools/sysid/loader.py's module docstring).
+    "auto" (default) -- "duty" when duty_FR/RR/RL/FL columns exist AND
+      --kp was NOT given; otherwise "kp" (which then requires --kp).
 
   Either way: y_plant(t) = gyro(t). The open-loop model is fitted directly
   via MSE minimization:
     u_plant -> G_p(s) -> y_simulated
     minimize |y_simulated - y_plant|^2  ->  K, tau_m
 
-プラント入出力は2つの「入力モード」（--input {auto,duty,kp}。fit_plant()
+プラント入出力は、整列済みフライトログ一式 DataFrame
+（tools/sysid/loader.py の load_aligned() -- 列の全契約は同関数の
+docstring、一式形式そのものは docs/plans/flight-log-format-plan.md
+2.2節参照）から、2つの「入力モード」（--input {auto,duty,kp}。fit_plant()
 参照）のいずれかで再構成する:
 
-  "duty" -- 400Hz モータduty ログ（motor_duty_FR/RR/RL/FL。ファームが
-    kPktDuty400 エントリを送っている必要がある。data_stream_wire.hpp /
-    udp_capture.py 参照）から復元した「実際のプラント入力」。4モータduty を
+  "duty" -- 一式の400Hz モータduty ストリーム（duty_FR/RR/RL/FL。一式の
+    `motor` CSV 由来 -- ファームが kPktDuty400 エントリを送っている必要が
+    ある。data_stream_wire.hpp 参照）から復元した「実際のプラント入力」。
+    4モータduty を
     逆算し、レートループ PID が実際に出力した軸別の差動指令を復元する —
     Kp を知る必要も、Kp が飛行中に不変（自動チューニング・ゲイン
     スケジューリング無し）だったことも、アクチュエータが飽和しなかった
@@ -81,13 +90,14 @@ Algorithm:
     なので、ファイル単体からは自動判別できない — 呼び出し側がどちらの
     ファームで記録したログかを知っている必要がある。
   "kp" -- 従来の再構成方式: Kp が既知・一定と仮定し、
-    u_plant を Kp × (target − gyro) で近似する。CSV ヘッダから2種類の
-    形式を自動判別する（_detect_csv_format 参照）:
-      "stream"（400Hz Data Stream、`sf log wifi -o *.csv`）:
-        target(t) = rate_ref_<axis>(t)            <- 既に rad/s
-      "legacy"（移行前の分析用 CSV）:
-        target(t) = ctrl_<axis>(t) × rate_max     <- 正規化スティック × rate_max
-  "auto"（既定）-- motor_duty_* 列があり、かつ --kp 未指定なら "duty"。
+    u_plant を Kp × (target − gyro) で近似する:
+      target(t) = rate_ref_<axis>(t)            <- 既に rad/s
+    一式形式はこの1種類のスキーマしか持たない -- このモードがかつて併せて
+    自動判別していた移行前の "legacy" 分析用 CSV スキーマ（正規化スティック
+    × rate_max、廃止済みの _detect_csv_format() 経由）はリポジトリのどこにも
+    もう存在せず、この関数を守っていた2つの独立した CSV 形式判別と共に削除
+    した（tools/sysid/loader.py のモジュール docstring 参照）。
+  "auto"（既定）-- duty_FR/RR/RL/FL 列があり、かつ --kp 未指定なら "duty"。
     それ以外は "kp"（この場合 --kp が必須）。
 
 いずれも: y_plant(t) = gyro(t)。開ループモデルは MSE 最小化で直接フィット
@@ -98,13 +108,16 @@ Algorithm:
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 
+import sflog
+
 from .defaults import get_flat_defaults
+from .loader import load_aligned
 from ._generated_params import EXPECTED_ARM, EXPECTED_KAPPA, EXPECTED_CT, \
     EXPECTED_IXX, EXPECTED_IYY, EXPECTED_IZZ
 
@@ -192,39 +205,49 @@ REFERENCE_PLANT_GAINS_VEHICLE: Dict[str, float] = {
 # ここでも同じ規約を使う。
 _AXIS_NAMES: Tuple[str, str, str] = ('roll', 'pitch', 'yaw')
 
-# "stream" format (sf log wifi -o *.csv): gyro column per axis.
-# "stream" 形式（sf log wifi -o *.csv）: 軸ごとのジャイロ列。
-_STREAM_GYRO_COL: Dict[str, str] = {'roll': 'gyro_x', 'pitch': 'gyro_y', 'yaw': 'gyro_z'}
-# "stream" format: rate target column per axis (already rad/s, see
-# workshop_control_task.cpp publishLogStream() / ws::set_rate_target()).
-# "stream" 形式: 軸ごとの角速度目標列（既に rad/s。
-# workshop_control_task.cpp publishLogStream() / ws::set_rate_target() 参照）。
-_STREAM_TARGET_COL: Dict[str, str] = {
+# Bundle column name per axis for the estimator-input gyro (aligned
+# DataFrame's `imu` stream, bare names -- see
+# tools/sysid/loader.py's load_aligned() docstring). Replaces the retired
+# _STREAM_GYRO_COL/_LEGACY_GYRO_COL pair: the bundle format has only ONE
+# schema now, so there is no "legacy" gyro_corrected_x/y/z fallback to
+# choose between -- imu.csv's gyro_x/y/z IS already the corrected value
+# (there is no separate raw-vs-corrected choice left at this call site).
+# 整列済み DataFrame（`imu` ストリーム、素の列名 -- tools/sysid/loader.py の
+# load_aligned() docstring 参照）における、推定器入力ジャイロの軸ごとの列名。
+# 廃止した _STREAM_GYRO_COL/_LEGACY_GYRO_COL の対を置き換える: 一式形式は
+# もうスキーマが1種類しかないため、"legacy" の gyro_corrected_x/y/z への
+# フォールバックを選ぶ必要が無い -- imu.csv の gyro_x/y/z が既に補正済みの値
+# そのもの（この呼び出し箇所にはもう生値/補正値の選択肢自体が無い）。
+_GYRO_COL: Dict[str, str] = {'roll': 'gyro_x', 'pitch': 'gyro_y', 'yaw': 'gyro_z'}
+
+# Bundle column name per axis for the inner-loop rate reference (aligned
+# DataFrame's `rate_ref` stream, bare names) -- already rad/s (see
+# protocol/spec/flight_log.yaml's rate_ref_roll/pitch/yaw description).
+# Replaces the retired _STREAM_TARGET_COL/_LEGACY_CTRL_COL pair: the
+# "legacy" normalized-stick*rate_max schema no longer exists.
+# 整列済み DataFrame（`rate_ref` ストリーム、素の列名）における、内側ループ
+# （レート制御）角速度目標の軸ごとの列名 -- 既に rad/s
+# （protocol/spec/flight_log.yaml の rate_ref_roll/pitch/yaw 説明参照）。
+# 廃止した _STREAM_TARGET_COL/_LEGACY_CTRL_COL の対を置き換える -- "legacy"
+# の正規化スティック×rate_max スキーマはもう存在しない。
+_TARGET_COL: Dict[str, str] = {
     'roll': 'rate_ref_roll', 'pitch': 'rate_ref_pitch', 'yaw': 'rate_ref_yaw',
 }
 
-# "legacy" format: normalized stick column per axis (multiplied by --rate-max).
-# "legacy" 形式: 軸ごとの正規化スティック列（--rate-max を掛ける）。
-_LEGACY_CTRL_COL: Dict[str, str] = {
-    'roll': 'ctrl_roll', 'pitch': 'ctrl_pitch', 'yaw': 'ctrl_yaw',
-}
-# "legacy" format: gyro column per axis, preferring the bias-corrected value
-# when present (falls back to _STREAM_GYRO_COL's raw gyro_x/y/z).
-# "legacy" 形式: 軸ごとのジャイロ列。バイアス補正済みがあればそちらを優先
-# （無ければ _STREAM_GYRO_COL の生ジャイロ gyro_x/y/z にフォールバック）。
-_LEGACY_GYRO_COL: Dict[str, str] = {
-    'roll': 'gyro_corrected_x', 'pitch': 'gyro_corrected_y', 'yaw': 'gyro_corrected_z',
-}
-
-# Data Stream CSV column names for the 4 motor duties (400Hz when the
-# firmware sends kPktDuty400, else 50Hz-forward-filled -- see
-# udp_capture.py save_stream_csv()). Order matches the wire layout FR,RR,RL,FL.
-# Data Stream CSV のモータduty 4列（ファームが kPktDuty400 を送っていれば
-# 400Hz、無ければ50Hz前方補完 — udp_capture.py save_stream_csv() 参照）。
-# 電文と同じ順序 FR,RR,RL,FL。
-_DUTY_COLS: Tuple[str, str, str, str] = (
-    'motor_duty_FR', 'motor_duty_RR', 'motor_duty_RL', 'motor_duty_FL',
-)
+# Aligned-DataFrame column names for the 4 motor duties -- bare names
+# (no "motor_" prefix, unlike the retired flat-CSV format's
+# motor_duty_FR/RR/RL/FL) because they come straight from the bundle's
+# `motor`/`ctrl_ref` streams (see tools/sysid/loader.py's load_aligned()
+# docstring for when each stream supplies them, and how to tell genuine
+# 400Hz duty from a 50Hz-held fallback via
+# `df.attrs["bundle_streams"]`). Order matches the wire layout FR,RR,RL,FL.
+# 整列済み DataFrame におけるモータduty 4列の名前 -- 素の名前（廃止した
+# 平坦CSV形式の motor_duty_FR/RR/RL/FL と違い "motor_" 接頭辞なし）。一式の
+# `motor`/`ctrl_ref` ストリームからそのまま来るため（どちらが供給するか、
+# 本物の400Hz dutyと50Hz保持フォールバックの見分け方は
+# tools/sysid/loader.py の load_aligned() docstring と
+# `df.attrs["bundle_streams"]` 参照）。電文と同じ順序 FR,RR,RL,FL。
+_DUTY_COLS: Tuple[str, str, str, str] = ('duty_FR', 'duty_RR', 'duty_RL', 'duty_FL')
 
 # X-quad mixer differential-duty coefficient (ws_internal.hpp motor_mixer,
 # reproduced digit-for-digit from vehicle_old's setMixerOutput):
@@ -355,14 +378,14 @@ _MOTOR_BM: float = 6.699042e-4  # V/(rad/s)   -- flight_anchored_motor_curve.Bm
 _MOTOR_CM: float = 1.53e-2      # V           -- flight_anchored_motor_curve.Cm
 
 # Nominal 1S LiPo voltage (actuator.cpp V_BATT_NOMINAL) -- fallback ONLY when
-# the CSV has no `vbat` column (older udp_capture.py, or no PKT_STATUS
-# packets received) or vbat is implausible. A short flight's real cell
+# the bundle DataFrame has no `voltage` column (no `status` stream in the
+# bundle) or the voltage is implausible. A short flight's real cell
 # voltage stays close enough to this for the fit to remain useful; it is
 # reported (duty_reason) whenever used so the caller knows the accuracy
 # caveat applies.
-# 公称 1S LiPo 電圧（actuator.cpp の V_BATT_NOMINAL）—— CSV に `vbat` 列が
-# 無い（旧 udp_capture.py、または PKT_STATUS 未受信）か値が非現実的な場合の
-# みフォールバックする。短時間フライトなら実際のセル電圧はこの値に十分
+# 公称 1S LiPo 電圧（actuator.cpp の V_BATT_NOMINAL）—— バンドルの DataFrame
+# に `voltage` 列が無い（一式に `status` ストリームが無い）か値が非現実的な
+# 場合のみフォールバックする。短時間フライトなら実際のセル電圧はこの値に十分
 # 近く、フィットは実用的なまま。使用時は必ず duty_reason で伝え、精度低下の
 # 可能性を呼び出し側に示す。
 _V_BATT_NOMINAL: float = 3.7
@@ -461,56 +484,62 @@ def _duty_differential_vehicle(
         raise ValueError(f"Unknown axis: {axis}. Choose from: {list(_AXIS_NAMES)}")
 
 
-# Data Stream CSV column recording which rate motor_duty_* actually came from
-# (400 = real kPktDuty400 entry, 50 = CtrlRef forward-fill) -- see
-# udp_capture.py save_stream_csv(). Appended AFTER the pre-existing 28
-# columns, so its absence just means an older udp_capture.py wrote the file.
-# motor_duty_* が実際どちらのレートで来たかを記録する Data Stream CSV の列
-# （400=本物の kPktDuty400 エントリ、50=CtrlRef前方補完）— udp_capture.py の
-# save_stream_csv() 参照。既存28列の後ろに追記するため、無ければ単に旧い
-# udp_capture.py が書いた CSV というだけ。
-_DUTY_RATE_HZ_COL = 'duty_rate_hz'
+# Aligned-DataFrame column carrying the battery voltage (bundle's `status`
+# stream, held/forward-filled onto every row -- see
+# tools/sysid/loader.py's load_aligned() docstring). Replaces the retired
+# flat-CSV format's `vbat` column (same physical quantity, renamed to match
+# protocol/spec/flight_log.yaml's status.csv). ONLY needed for --mixer
+# vehicle's _thrust_from_duty(); --mixer legacy never reads it.
+# 整列済み DataFrame でバッテリ電圧を運ぶ列（一式の `status` ストリーム、
+# 全行へ前方保持 -- tools/sysid/loader.py の load_aligned() docstring
+# 参照）。廃止した平坦CSV形式の `vbat` 列を置き換える（同じ物理量、
+# protocol/spec/flight_log.yaml の status.csv に合わせて改名）。--mixer
+# vehicle の _thrust_from_duty() だけが必要とする列 -- --mixer legacy は
+# 読まない。
+_VOLTAGE_COL = 'voltage'
 
-# Data Stream CSV column carrying the 1Hz PKT_STATUS battery voltage,
-# forward-filled onto every 400Hz row -- see udp_capture.py save_stream_csv().
-# Appended AFTER duty_rate_hz (so, like it, absent in CSVs from an older
-# udp_capture.py or a log with no PKT_STATUS packets received). ONLY needed
-# for --mixer vehicle's _thrust_from_duty(); --mixer legacy never reads it.
-# 1Hz の PKT_STATUS バッテリ電圧を全400Hz行へ前方補完した Data Stream CSV
-# 列 -- udp_capture.py の save_stream_csv() 参照。duty_rate_hz の後ろに追記
-# するため、それと同様、旧い udp_capture.py が書いた CSV や PKT_STATUS を
-# 一度も受信していないログには無い。--mixer vehicle の
-# _thrust_from_duty() だけが必要とする列 -- --mixer legacy は読まない。
-_VBAT_COL = 'vbat'
+# NOTE: the retired flat-CSV format's `duty_rate_hz` and
+# `ctrl_output_rate_hz` columns (and the CTRL_OUTPUT_TORQUE_COL name-per-axis
+# dict) are gone -- see _load_axis_data() for how their job is done now:
+# duty_rate_hz's role (tell genuine 400Hz duty apart from a 50Hz-held
+# fallback) is now answered STRUCTURALLY via
+# `"motor" in df.attrs["bundle_streams"]` rather than a data column, and
+# ctrl_output_rate_hz's role (tell genuine 400Hz control_output apart from a
+# forward-filled one) no longer applies at all -- the bundle's `ctrl_output`
+# stream is ALWAYS native-rate when present (a lockstep stream merged on
+# `seq`, never forward-filled), so presence of the `torque_<axis>` column
+# already answers that.
+# 注: 廃止した平坦CSV形式の `duty_rate_hz`・`ctrl_output_rate_hz` 列
+# （および軸ごとの列名辞書 CTRL_OUTPUT_TORQUE_COL）はもう無い --
+# それぞれの役目が今どう果たされるかは _load_axis_data() 参照:
+# duty_rate_hz の役目（本物の400Hz dutyと50Hz保持フォールバックの見分け）は
+# データ列ではなく `"motor" in df.attrs["bundle_streams"]` という構造的事実
+# で答えが出るようになり、ctrl_output_rate_hz の役目（本物の400Hz
+# control_output と前方補完の見分け）はそもそも不要になった -- 一式の
+# `ctrl_output` ストリームは存在すれば常にネイティブレート（`seq` で結合する
+# ロックステップ系ストリームであり前方補完されない）なので、
+# `torque_<axis>` 列の有無が既にその答えになっている。
 
-# Data Stream CSV columns carrying the PRE-MIXER commanded thrust+torque
-# (kPktCtrlOutput400/0x4B, 400Hz, forward-filled at rate ctrl_output_rate_hz)
-# -- see udp_capture.py save_stream_csv(). Appended AFTER vbat, so absent in
-# a CSV from an older udp_capture.py. The mixer-agnostic 'control_output'
-# input mode and the mixer-gain diagnostic (§07/§08 of the rate-sysid design
-# memo, 2026-09-09) both read these.
-# Data Stream CSV のミキサー手前の指令推力+トルク列
-# （kPktCtrlOutput400/0x4B、400Hz、ctrl_output_rate_hzのレートで前方補完）
-# -- udp_capture.py の save_stream_csv() 参照。vbat の後ろに追記するため、
-# 旧い udp_capture.py の CSV には無い。ミキサー非依存の 'control_output'
-# 入力モードと、ミキサーゲイン診断（2026-09-09 レート同定設計メモ §07/§08）
-# の両方がこれらを読む。
-_CTRL_OUTPUT_TORQUE_COL = {
-    'roll': 'ctrl_output_torque_roll',
-    'pitch': 'ctrl_output_torque_pitch',
-    'yaw': 'ctrl_output_torque_yaw',
-}
-_CTRL_OUTPUT_RATE_HZ_COL = 'ctrl_output_rate_hz'
-
-# Heuristic threshold for CSVs WITHOUT the duty_rate_hz column: if more than
-# this fraction of rows repeat the previous row's 4 duties exactly, the data
-# looks like a 50Hz-forward-filled staircase (a genuine 50Hz CtrlRef entry
-# repeats for ~8 consecutive 400Hz rows, ~87.5% duplicates) rather than real
-# 400Hz duty (which essentially never repeats bit-for-bit).
-# duty_rate_hz 列が無い CSV 向けのヒューリスティック閾値: 直前行と4 duty が
-# 完全一致する行の割合がこれを超えたら、50Hz前方補完の階段状データ（本物の
-# 50Hz CtrlRef エントリは400Hz中約8行連続で同一値、重複率約87.5%）とみなす
-# （本物の400Hz duty はビット単位で繰り返すことがほぼ無い）。
+# Heuristic threshold for _classify_duty_source()'s fallback branch, used
+# when its `duty_rate_hz_col` argument is unavailable -- kept UNCHANGED and
+# shared verbatim with tools/log_analyzer/rate_sysid.py (see
+# _classify_duty_source()'s docstring; both callers now always synthesize
+# and pass a duty_rate_hz array, so in practice this fallback branch is
+# dormant, but the function itself stays untouched rather than special-
+# cased). If more than this fraction of rows repeat the previous row's 4
+# duties exactly, the data looks like a 50Hz-forward-filled staircase (a
+# genuine 50Hz CtrlRef entry repeats for ~8 consecutive 400Hz rows, ~87.5%
+# duplicates) rather than real 400Hz duty (which essentially never repeats
+# bit-for-bit).
+# _classify_duty_source() のフォールバック分岐（`duty_rate_hz_col` 引数が
+# 使えないとき）のヒューリスティック閾値 -- tools/log_analyzer/
+# rate_sysid.py と全く同じものを変更せず共有する（_classify_duty_source()
+# の docstring 参照。両呼び出し元とも今は常に duty_rate_hz 配列を合成して
+# 渡すため、実際にはこのフォールバック分岐は休眠状態だが、関数自体は特別
+# 扱いせずそのままにする）。直前行と4 duty が完全一致する行の割合がこれを
+# 超えたら、50Hz前方補完の階段状データ（本物の50Hz CtrlRef エントリは
+# 400Hz中約8行連続で同一値、重複率約87.5%）とみなす（本物の400Hz duty は
+# ビット単位で繰り返すことがほぼ無い）。
 _DUTY_STAIRSTEP_FRACTION_THRESHOLD = 0.5
 
 
@@ -569,13 +598,31 @@ def _classify_duty_source(
     duty_rate_hz_col: Optional[np.ndarray],
 ) -> Tuple[str, str]:
     """
-    Classify whether the CSV's motor_duty_* columns are genuine 400Hz duty
-    (safe input for the 'duty' fit mode) or a 50Hz-forward-filled staircase
-    (would silently identify off a stale/quantized signal -- must NOT be
-    auto-selected).
-    CSV の motor_duty_* 列が本物の400Hz duty（'duty'入力モードで安全）か、
-    50Hz前方補完の階段状データ（黙って使うと古い/粗い信号で誤同定する --
-    自動選択してはならない）かを判別する。
+    Classify whether the duty_FR/RR/RL/FL series is genuine 400Hz motor
+    duty (safe input for the 'duty' fit mode) or a 50Hz-forward-filled
+    staircase (would silently identify off a stale/quantized signal -- must
+    NOT be auto-selected).
+    duty_FR/RR/RL/FL の系列が本物の400Hz モータduty（'duty'入力モードで
+    安全）か、50Hz前方補完の階段状データ（黙って使うと古い/粗い信号で
+    誤同定する -- 自動選択してはならない）かを判別する。
+
+    `duty_rate_hz_col` is the per-row duty rate [Hz]. For a flight-log
+    bundle (`_load_axis_data()` here, `fit_from_df()` in rate_sysid.py) it
+    is synthesized from the STRUCTURAL fact "is the `motor` stream present
+    in the bundle" (400 if present, 50 if only ctrl_ref supplied the duty)
+    -- the definitive answer, no data heuristic involved. For the SILS
+    `rate_stream.csv` still read by rate_sysid.py's `load_csv()` (Phase 3
+    removes it) it is that file's real `duty_rate_hz` column; None when
+    that CSV predates the column, which falls back to the stairstep
+    heuristic below.
+    `duty_rate_hz_col` は行ごとの duty レート[Hz]。フライトログ一式
+    （本ファイルの `_load_axis_data()`、rate_sysid.py の `fit_from_df()`）
+    では「一式に `motor` ストリームが在るか」という構造的事実から合成する
+    （在れば400、ctrl_ref だけが duty を供給していれば50）-- データの
+    推測ではなく確定的な答え。rate_sysid.py の `load_csv()` がまだ読む
+    SILS の `rate_stream.csv`（Phase 3 で削除）では同ファイルの実際の
+    `duty_rate_hz` 列。その列を持たない古い CSV では None となり、下の
+    階段状ヒューリスティックへフォールバックする。
 
     Returns:
         (quality, reason). quality is 'duty400' (safe) or 'duty50' (unsafe --
@@ -585,8 +632,12 @@ def _classify_duty_source(
     if duty_rate_hz_col is not None and len(duty_rate_hz_col) > 0:
         hz = float(np.median(duty_rate_hz_col))
         if hz >= 200.0:   # nominal 400, generous margin above the 50Hz case
-            return 'duty400', f"duty_rate_hz column says {hz:.0f} Hz (0x4A entry present)"
-        return 'duty50', f"duty_rate_hz column says {hz:.0f} Hz (50Hz CtrlRef forward-fill)"
+            return ('duty400',
+                    f"{hz:.0f} Hz duty -- genuine motor duty (bundle `motor` stream / "
+                    "Duty400 0x4A entry present)")
+        return ('duty50',
+                f"{hz:.0f} Hz duty only -- no `motor` stream in the bundle / no Duty400 "
+                "entry, so duty_FR/RR/RL/FL is the 50Hz CtrlRef value, forward-filled")
 
     # No duty_rate_hz column (CSV from an older udp_capture.py) -- fall back
     # to the consecutive-duplicate-row heuristic.
@@ -1200,113 +1251,109 @@ def _estimate_kp_fir(
     return float(h[0]), float(r_squared), len(y)
 
 
-def _detect_csv_format(fieldnames: Optional[List[str]]) -> str:
-    """
-    Auto-detect which of the two CSV schemas a flight log uses, from its
-    header alone.
-    CSV のヘッダだけから、フライトログが2種類のうちどちらの形式かを自動判別。
-
-    Returns:
-        "stream" if rate_ref_<axis> + gyro_x/y/z columns are present (current
-            400Hz Data Stream -- `sf log wifi -o *.csv`, shared by vehicle and
-            workshop).
-        "legacy" if ctrl_<axis> columns are present (pre-migration analysis
-            CSV -- normalized stick + gyro_corrected_x/y/z, falling back to
-            gyro_x/y/z).
-
-    Raises:
-        ValueError: neither schema's required columns are present.
-    """
-    cols = set(fieldnames or [])
-
-    has_stream_target = any(c in cols for c in _STREAM_TARGET_COL.values())
-    has_stream_gyro = all(c in cols for c in _STREAM_GYRO_COL.values())
-    if has_stream_target and has_stream_gyro:
-        return "stream"
-
-    has_legacy_ctrl = any(c in cols for c in _LEGACY_CTRL_COL.values())
-    if has_legacy_ctrl:
-        return "legacy"
-
-    raise ValueError(
-        "CSV format not recognized -- need either the current Data Stream "
-        "columns (rate_ref_roll/pitch/yaw + gyro_x/y/z, from `sf log wifi "
-        "-o *.csv`) or the legacy analysis columns (ctrl_roll/pitch/yaw + "
-        f"gyro_corrected_x/y/z or gyro_x/y/z). Header columns found: "
-        f"{sorted(cols)}"
-    )
-
-
 def _load_axis_data(
-    filepath: str | Path,
+    df: pd.DataFrame,
     axis: str,
     fs: float = 400.0,
     time_range: Optional[Tuple[float, float]] = None,
     mixer: str = 'legacy',
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, str,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float,
            Optional[np.ndarray], Optional[str], str,
            Optional[np.ndarray], Optional[np.ndarray], bool, Optional[float]]:
     """
-    Load and extract axis-specific plant I/O from a flight-log CSV.
-    CSV から軸固有のプラント入出力を読み込み・抽出する。
+    Extract axis-specific plant I/O from an aligned flight-log bundle
+    DataFrame.
+    整列済みフライトログ一式 DataFrame から軸固有のプラント入出力を抽出する。
 
-    Self-contained CSV reader (csv.DictReader + numpy only) that auto-detects
-    the "stream" vs "legacy" schema via _detect_csv_format() -- see the module
-    docstring for both schemas' column names and semantics.
-    自己完結の CSV リーダ（csv.DictReader + numpy のみ）。
-    _detect_csv_format() で "stream"/"legacy" を自動判別する — 両形式の列名・
-    意味はモジュール docstring 参照。
+    `df` is the output of tools/sysid/loader.py's load_aligned() (base=
+    "imu") -- see that function's docstring for the full column contract
+    and docs/plans/flight-log-format-plan.md section 2.2 for the bundle
+    format itself. This replaces the retired dual CSV-format machinery
+    (_detect_csv_format(), a self-contained csv.DictReader-based reader):
+    the bundle format has only ONE schema, so there is nothing left to
+    auto-detect here -- every column this function reads is either present
+    at its one fixed name or genuinely absent (an optional source stream
+    the bundle does not have).
+    `df` は tools/sysid/loader.py の load_aligned()（base="imu"）の戻り値
+    -- 列の全契約は同関数の docstring、一式形式そのものは
+    docs/plans/flight-log-format-plan.md 2.2節参照。廃止した二重CSV形式判別
+    機構（_detect_csv_format()、自己完結の csv.DictReader ベースリーダ）を
+    置き換える: 一式形式はスキーマが1種類しかないため、ここで自動判別する
+    ものはもう無い -- 本関数が読む列はどれも、決まった1つの名前で存在する
+    か、正当に不在（一式が持たない任意ソースストリーム）かのどちらか。
 
     Args:
+        df: aligned DataFrame from load_aligned(). Must have
+            'timestamp_us' and the axis's 'rate_ref_<axis>'/'gyro_<x/y/z>'
+            columns (imu + rate_ref streams). Optionally 'duty_FR'/
+            'duty_RR'/'duty_RL'/'duty_FL' (genuine 400Hz motor duty when
+            the bundle's `motor` stream is present, else the `ctrl_ref`
+            stream's 50Hz-held fallback under the SAME bare names --
+            distinguished via `df.attrs["bundle_streams"]`, NOT column
+            presence alone -- see load_aligned()'s docstring), 'voltage'
+            (from the bundle's `status` stream), and 'torque_roll'/
+            'torque_pitch'/'torque_yaw' (from the bundle's `ctrl_output`
+            stream -- ALWAYS native-rate when present, a lockstep stream
+            merged on `seq`, never forward-filled, unlike the retired
+            flat-CSV format's ctrl_output_rate_hz column, so there is no
+            separate rate check to do here any more).
+        axis: 'roll', 'pitch', or 'yaw'.
+        fs: nominal sample rate [Hz], refined from `df['timestamp_us']`'s
+            own median sample spacing when that looks sane (same
+            robustness check the retired CSV reader had).
+        time_range: optional (start, end) in seconds to restrict analysis.
         mixer: 'legacy' (default) or 'vehicle' -- selects which duty
-            inversion produces duty_diff (see the module docstring's --mixer
-            section). Only affects the "stream"-format duty_diff
-            reconstruction; ignored for "legacy"-format CSVs (no motor_duty_*
-            columns there).
+            inversion produces duty_diff (see the module docstring's
+            --mixer section).
 
     Returns:
-        (time_s, target_raw, gyro, throttle, dt, fmt, duty_diff, duty_quality,
-        duty_reason)
-        target_raw is the RAW target column: already rad/s for "stream"
-        (caller must NOT multiply by rate_max), normalized stick [-1, 1] for
-        "legacy" (caller multiplies by rate_max). `fmt` tells the caller which.
+        (time_s, target, gyro, throttle, dt, duty_diff, duty_quality,
+        duty_reason, actual_torque_diag, ctrl_output_torque,
+        ctrl_output_available, crash_truncated_at)
+
+        target is `rate_ref_<axis>` -- ALREADY rad/s. Unlike the retired
+        "stream"/"legacy" CSV split, there is only one schema now, so
+        there is no rate_max scaling decision left for the caller to make
+        here (fit_plant() still accepts a `rate_max` argument, but only to
+        scale the excitation-floor threshold -- see its docstring).
+        target は `rate_ref_<axis>` -- 既に rad/s。廃止された
+        "stream"/"legacy" CSV の使い分けと異なりスキーマは1種類しかない
+        ため、呼び出し側がここで rate_max のスケーリングを判断する必要は
+        もう無い（fit_plant() は引き続き rate_max 引数を受け付けるが、
+        励振下限しきい値のスケールにのみ使う -- 同関数の docstring 参照）。
         duty_diff is the mixer-inverted per-axis differential duty/torque
         (see _duty_differential_legacy_linear() /
         _duty_differential_vehicle(), selected by `mixer`) when
-        motor_duty_FR/RR/RL/FL columns are present in the CSV, else None.
-        duty_quality/duty_reason classify that duty as genuine 400Hz data
-        ('duty400') or a 50Hz-forward-filled staircase ('duty50') -- see
-        _classify_duty_source(); duty_quality is None (with an explanatory
-        duty_reason) when duty_diff is None. For mixer='vehicle' without a
-        `vbat` column, duty_reason additionally notes the V_BATT_NOMINAL
-        fallback.
-        target_raw は列の生値: "stream" は既に rad/s（呼び出し側は rate_max を
-        掛けてはいけない）、"legacy" は正規化スティック値 [-1, 1]（呼び出し側が
-        rate_max を掛ける）。どちらかは `fmt` で判別する。
-        duty_diff は motor_duty_FR/RR/RL/FL 列が CSV にあればミキサ逆算した
-        軸別差動duty/トルク（_duty_differential_legacy_linear() /
+        duty_FR/RR/RL/FL columns are present, else None. duty_quality/
+        duty_reason classify that duty as genuine 400Hz data ('duty400')
+        or a 50Hz-held fallback ('duty50') -- see _classify_duty_source();
+        duty_quality is None (with an explanatory duty_reason) when
+        duty_diff is None. For mixer='vehicle' without a `voltage` column,
+        duty_reason additionally notes the V_BATT_NOMINAL fallback.
+        duty_diff は duty_FR/RR/RL/FL 列があればミキサ逆算した軸別差動
+        duty/トルク（_duty_differential_legacy_linear() /
         _duty_differential_vehicle()。`mixer` で選択）、無ければ None。
         duty_quality/duty_reason はその duty が本物の400Hzデータ
-        （'duty400'）か50Hz前方補完の階段状データ（'duty50'）かを判別する
+        （'duty400'）か50Hz保持フォールバック（'duty50'）かを判別する
         （_classify_duty_source() 参照）。duty_diff が None のときは
         duty_quality も None（duty_reason に理由）。mixer='vehicle' で
-        `vbat` 列が無い場合、duty_reason に V_BATT_NOMINAL フォールバックの
-        旨も追記する。
+        `voltage` 列が無い場合、duty_reason に V_BATT_NOMINAL フォール
+        バックの旨も追記する。
         Also returns (actual_torque_diag, ctrl_output_torque,
         ctrl_output_available): actual_torque_diag is ALWAYS the
         vehicle-inversion "real torque" (see _duty_differential_vehicle())
         when genuine 400Hz duty is present, regardless of `mixer` -- a
-        diagnostic signal, not the primary duty_diff. ctrl_output_torque is
-        the axis's PRE-MIXER commanded torque from the CSV's
-        ctrl_output_torque_<axis> column when the firmware sent the 0x4B
-        entry (ctrl_output_available True), else None/False.
+        diagnostic signal, not the primary duty_diff. ctrl_output_torque
+        is the axis's PRE-MIXER commanded torque from `torque_<axis>` when
+        the bundle's `ctrl_output` stream carries non-degenerate values
+        (ctrl_output_available True), else None/False.
         (actual_torque_diag, ctrl_output_torque, ctrl_output_available) も
         返す: actual_torque_diag は本物の400Hz dutyがあれば `mixer` に
         関わらず常に vehicle逆算「実トルク」（_duty_differential_vehicle()
         参照）-- 主経路の duty_diff ではなく診断用信号。ctrl_output_torque
-        はファームが0x4Bエントリを送っていれば（ctrl_output_available=True）
-        CSVの ctrl_output_torque_<axis> 列から得た軸別の指令トルク（ミキサー
-        手前）、無ければ None/False。
+        は一式の `ctrl_output` ストリームが非退化な値を持っていれば
+        （ctrl_output_available=True）`torque_<axis>` から得た軸別の指令
+        トルク（ミキサー手前）、無ければ None/False。
         Also returns crash_truncated_at: the flight-log time [s] at which
         automatic crash/anomaly truncation cut the data (see the "Automatic
         crash/anomaly truncation" comment above the return statement), or
@@ -1315,110 +1362,83 @@ def _load_axis_data(
         データを切り捨てたフライトログ内の時刻[s]（return 文の上の
         コメント参照）、切り捨てが起きなければ None。
     """
-    import csv as _csv
-
     if axis not in _AXIS_NAMES:
         raise ValueError(f"Unknown axis: {axis}. Choose from: {list(_AXIS_NAMES)}")
     if mixer not in ('legacy', 'vehicle'):
         raise ValueError(f"Unknown mixer: {mixer!r}. Choose from: legacy, vehicle")
+    if len(df) < 100:
+        raise ValueError(f"Too few samples: {len(df)}")
 
-    with open(filepath, newline='') as f:
-        reader = _csv.DictReader(f)
-        fieldnames = reader.fieldnames
-        fmt = _detect_csv_format(fieldnames)
-        rows = list(reader)
-
-    if len(rows) < 100:
-        raise ValueError(f"Too few samples: {len(rows)}")
-
-    cols = set(fieldnames or [])
-
-    def col(row: Dict[str, str], name: str, default: float = 0.0) -> float:
-        value = row.get(name)
-        if value is None or value == '':
-            return default
-        try:
-            return float(value)
-        except ValueError:
-            return default
-
-    # --- Timestamp -> time_s, refining fs from the data when it looks sane ---
-    # タイムスタンプ -> time_s。データから妥当な範囲ならサンプルレートを補正。
-    ts_col = next((c for c in ('timestamp_us', 'timestamp', 'timestamp_ms') if c in cols), None)
-    if ts_col is not None:
-        scale_to_us = 1000.0 if ts_col == 'timestamp_ms' else 1.0
-        ts_us = np.array([col(r, ts_col) for r in rows]) * scale_to_us
-        time_s = (ts_us - ts_us[0]) / 1e6
-        deltas = np.diff(time_s)
-        deltas = deltas[deltas > 0]
-        if len(deltas) > 10:
-            detected_fs = 1.0 / float(np.median(deltas))
-            if 0.5 * fs <= detected_fs <= 2.0 * fs:   # reject obviously-wrong units
-                fs = detected_fs
-    else:
-        time_s = np.arange(len(rows)) / fs
+    # --- Timestamp -> time_s, refining fs from the data when it looks sane
+    # (same robustness check the retired CSV reader had -- a bundle's
+    # declared/nominal rate can drift slightly from what the hardware
+    # actually delivered).
+    # タイムスタンプ -> time_s。データから妥当な範囲ならサンプルレートを
+    # 補正する（廃止した CSV リーダーと同じ頑健性チェック -- 一式の公称
+    # レートは実機が実際に出したレートと僅かにずれることがある）。
+    ts_us = df['timestamp_us'].to_numpy(dtype=np.int64)
+    time_s = (ts_us - ts_us[0]) / 1e6
+    deltas = np.diff(time_s)
+    deltas = deltas[deltas > 0]
+    if len(deltas) > 10:
+        detected_fs = 1.0 / float(np.median(deltas))
+        if 0.5 * fs <= detected_fs <= 2.0 * fs:   # reject obviously-wrong units
+            fs = detected_fs
     dt = 1.0 / fs
 
-    # --- Target + gyro, per detected schema ---
-    # 目標値 + ジャイロ（判別した形式に応じて）
-    if fmt == "stream":
-        target = np.array([col(r, _STREAM_TARGET_COL[axis]) for r in rows])
-        gyro = np.array([col(r, _STREAM_GYRO_COL[axis]) for r in rows])
-    else:
-        target = np.array([col(r, _LEGACY_CTRL_COL[axis]) for r in rows])
-        gyro_col = _LEGACY_GYRO_COL[axis] if _LEGACY_GYRO_COL[axis] in cols else _STREAM_GYRO_COL[axis]
-        gyro = np.array([col(r, gyro_col) for r in rows])
+    # --- Target + gyro -- one schema now, no format branch ---
+    # 目標値 + ジャイロ -- スキーマは1種類のみ、分岐なし
+    target = df[_TARGET_COL[axis]].to_numpy(dtype=float)
+    gyro = df[_GYRO_COL[axis]].to_numpy(dtype=float)
 
     # --- Throttle-equivalent for flight-segment detection ---
     # 飛行区間検出用のスロットル相当量
-    if fmt == "legacy":
-        throttle = np.array([col(r, 'ctrl_throttle') for r in rows])
-    elif 'total_thrust' in cols:
-        throttle = np.array([col(r, 'total_thrust') for r in rows])
-    elif all(f'motor_duty_{m}' in cols for m in ('FR', 'RR', 'RL', 'FL')):
-        throttle = np.mean(
-            [[col(r, f'motor_duty_{m}') for m in ('FR', 'RR', 'RL', 'FL')] for r in rows],
-            axis=1,
-        )
+    if 'total_thrust' in df.columns:
+        throttle = df['total_thrust'].to_numpy(dtype=float)
+    elif all(c in df.columns for c in _DUTY_COLS):
+        throttle = np.mean([df[c].to_numpy(dtype=float) for c in _DUTY_COLS], axis=0)
     else:
         raise ValueError(
-            "stream-format CSV needs a flight-activity column to find flight "
-            "segments: total_thrust (ws::motor_mixer thrust) or "
-            "motor_duty_FR/RR/RL/FL. Neither was found in the header."
+            "flight-log bundle needs a flight-activity column to find "
+            "flight segments: total_thrust (the bundle's ctrl_ref stream) "
+            "or duty_FR/RR/RL/FL (the bundle's motor or ctrl_ref stream). "
+            "Neither was found in the aligned DataFrame."
         )
 
     # --- Motor duty -> mixer-inverted differential duty (the "duty" input
-    # mode's u_plant) when the 4 motor_duty_* columns are present, plus a
-    # classification of whether that duty is genuine 400Hz data or a 50Hz
-    # forward-filled staircase (see _classify_duty_source()) -- the 'auto'
-    # input mode must NOT identify off the latter.
+    # mode's u_plant) when the 4 duty_FR/RR/RL/FL columns are present, plus
+    # a classification of whether that duty is genuine 400Hz data or a
+    # 50Hz-held fallback (see _classify_duty_source()) -- the 'auto' input
+    # mode must NOT identify off the latter.
     # モータduty -> ミキサ逆算した差動duty（"duty" 入力モードの u_plant）。
-    # motor_duty_* の4列が揃っていれば計算し、あわせてそのduty が本物の400Hz
-    # データか50Hz前方補完の階段状データかを判別する（_classify_duty_source()
-    # 参照）-- 'auto' 入力モードは後者で同定してはならない。
+    # duty_FR/RR/RL/FL の4列が揃っていれば計算し、あわせてそのduty が本物の
+    # 400Hz データか50Hz保持フォールバックかを判別する
+    # （_classify_duty_source() 参照）-- 'auto' 入力モードは後者で同定して
+    # はならない。
     duty_diff: Optional[np.ndarray] = None
     duty_quality: Optional[str] = None
-    duty_reason = "no motor_duty_FR/RR/RL/FL columns in CSV"
+    duty_reason = "no duty_FR/RR/RL/FL columns in bundle"
     actual_torque_diag: Optional[np.ndarray] = None
-    if all(c in cols for c in _DUTY_COLS):
-        duty_fr = np.array([col(r, 'motor_duty_FR') for r in rows])
-        duty_rr = np.array([col(r, 'motor_duty_RR') for r in rows])
-        duty_rl = np.array([col(r, 'motor_duty_RL') for r in rows])
-        duty_fl = np.array([col(r, 'motor_duty_FL') for r in rows])
+    if all(c in df.columns for c in _DUTY_COLS):
+        duty_fr = df['duty_FR'].to_numpy(dtype=float)
+        duty_rr = df['duty_RR'].to_numpy(dtype=float)
+        duty_rl = df['duty_RL'].to_numpy(dtype=float)
+        duty_fl = df['duty_FL'].to_numpy(dtype=float)
 
-        # vbat is forward-filled from the 1Hz PKT_STATUS entry (see
-        # udp_capture.py save_stream_csv()); fall back to the nominal 1S
-        # LiPo voltage when absent (older CSV / no PKT_STATUS received) or
-        # implausible, and say so in duty_reason. Computed UNCONDITIONALLY
-        # (not just for mixer=='vehicle') because the vehicle-inversion
-        # "actual torque" diagnostic below (§08 of the rate-sysid design
-        # memo, 2026-09-09) needs it regardless of which mixer produced the
-        # PRIMARY duty_diff -- comparing a candidate u_plant against this
-        # actual torque is how the mixer's gain/conversion factor gets
-        # measured straight from the log, for ANY firmware's duty.
-        # vbat は1Hz PKT_STATUSエントリからの前方補完（udp_capture.py の
-        # save_stream_csv() 参照）。無い場合（旧CSV/PKT_STATUS未受信）や
-        # 非現実的な値の場合は公称1S LiPo電圧にフォールバックし、
+        # voltage comes from the bundle's `status` stream, held/forward-
+        # filled onto every row (see load_aligned()'s docstring); fall back
+        # to the nominal 1S LiPo voltage when the `status` stream is absent
+        # or a value is implausible, and say so in duty_reason. Computed
+        # UNCONDITIONALLY (not just for mixer=='vehicle') because the
+        # vehicle-inversion "actual torque" diagnostic below (§08 of the
+        # rate-sysid design memo, 2026-09-09) needs it regardless of which
+        # mixer produced the PRIMARY duty_diff -- comparing a candidate
+        # u_plant against this actual torque is how the mixer's
+        # gain/conversion factor gets measured straight from the log, for
+        # ANY firmware's duty.
+        # voltage は一式の `status` ストリーム由来、全行へ前方保持
+        # （load_aligned() の docstring 参照）。`status` ストリームが無い、
+        # または値が非現実的な場合は公称1S LiPo電圧にフォールバックし、
         # duty_reason にその旨を記す。mixer=='vehicle' のときだけでなく
         # 常に計算する -- 下の vehicle逆算「実トルク」診断（2026-09-09 レート
         # 同定設計メモ §08）は、どちらのミキサーが主経路の duty_diff を
@@ -1426,21 +1446,22 @@ def _load_axis_data(
         # 比較することで、どのファームの duty からでもミキサーのゲイン/
         # 換算係数をログだけから測定できる。
         vbat_note = ''
-        if _VBAT_COL in cols:
-            vbat = np.array([col(r, _VBAT_COL, default=0.0) for r in rows])
+        if _VOLTAGE_COL in df.columns:
+            vbat = df[_VOLTAGE_COL].to_numpy(dtype=float)
             bad = vbat < _V_BATT_MIN
             if np.any(bad):
                 vbat = np.where(bad, _V_BATT_NOMINAL, vbat)
                 vbat_note = (
                     f" ({int(np.sum(bad))}/{len(vbat)} rows had no/implausible "
-                    f"vbat -- used the nominal {_V_BATT_NOMINAL}V there)"
+                    f"voltage -- used the nominal {_V_BATT_NOMINAL}V there)"
                 )
         else:
-            vbat = np.full(len(rows), _V_BATT_NOMINAL)
+            vbat = np.full(len(df), _V_BATT_NOMINAL)
             vbat_note = (
-                f" (no vbat column in CSV -- used the nominal "
-                f"{_V_BATT_NOMINAL}V throughout; re-capture with a current "
-                "udp_capture.py for the real battery-sag-corrected fit)"
+                f" (no voltage column in bundle -- used the nominal "
+                f"{_V_BATT_NOMINAL}V throughout; capture with the bundle's "
+                "status stream present for the real battery-sag-corrected "
+                "fit)"
             )
 
         if mixer == 'vehicle':
@@ -1462,72 +1483,87 @@ def _load_axis_data(
         # 別配列として持つ。
         actual_torque_diag = _duty_differential_vehicle(duty_fr, duty_rr, duty_rl, duty_fl, vbat, axis)
 
-        duty_rate_hz_col = (
-            np.array([col(r, _DUTY_RATE_HZ_COL) for r in rows])
-            if _DUTY_RATE_HZ_COL in cols else None
-        )
+        # Whether duty_FR/RR/RL/FL came from the bundle's genuine 400Hz
+        # `motor` stream, or a 50Hz-held `ctrl_ref` fallback, is now a
+        # STRUCTURAL fact -- WHICH STREAM supplied the column -- rather than
+        # something guessed from the data (see load_aligned()'s docstring).
+        # Feed that fact into the UNCHANGED _classify_duty_source() (shared
+        # verbatim with tools/log_analyzer/rate_sysid.py, same trick used
+        # there) by synthesizing a duty_rate_hz array from it, so both
+        # callers keep exercising the exact same, unmodified classification
+        # function and its existing hz>=200.0 threshold.
+        # duty_FR/RR/RL/FL が一式の本物の400Hz `motor` ストリーム由来か、
+        # 50Hz保持の `ctrl_ref` フォールバック由来かは、今や構造的な事実
+        # （どのストリームがその列を供給したか）であり、データから推測する
+        # ものではない（load_aligned() の docstring 参照）。その事実から
+        # duty_rate_hz 配列を合成し、変更していない _classify_duty_source()
+        # （tools/log_analyzer/rate_sysid.py と全く同じものを共有、同じ手法
+        # をあちらでも使用）へ渡すことで、両呼び出し元が同じ未変更の判別
+        # 関数とその既存の hz>=200.0 しきい値を使い続けられるようにする。
+        motor_present = "motor" in df.attrs.get("bundle_streams", set())
+        duty_rate_hz_arr = np.full(len(duty_fr), 400.0 if motor_present else 50.0)
         duty_quality, duty_reason = _classify_duty_source(
-            duty_fr, duty_rr, duty_rl, duty_fl, duty_rate_hz_col,
+            duty_fr, duty_rr, duty_rl, duty_fl, duty_rate_hz_arr,
         )
         duty_reason += vbat_note
         if duty_quality != 'duty400':
             # The vehicle motor-curve inversion needs genuine 400Hz duty --
-            # a 50Hz-forward-filled staircase is too coarse for either the
-            # primary vehicle fit or the diagnostic (same reasoning as
+            # a 50Hz-held fallback is too coarse for either the primary
+            # vehicle fit or the diagnostic (same reasoning as
             # fit_plant()'s --input duty rejection of duty50).
             # vehicle のモータ曲線逆算には本物の400Hz duty が要る -- 50Hz
-            # 前方補完の階段状データは主経路のvehicleフィットにも診断にも
-            # 粗すぎる（fit_plant() の --input duty が duty50 を拒否するのと
+            # 保持フォールバックは主経路のvehicleフィットにも診断にも粗
+            # すぎる（fit_plant() の --input duty が duty50 を拒否するのと
             # 同じ理由）。
             actual_torque_diag = None
 
-    # --- control_output: PRE-MIXER commanded thrust+torque (kPktCtrlOutput400
-    # /0x4B), when the firmware sent it -- see udp_capture.py save_stream_csv()
-    # and the rate-sysid design memo (docs/events/sci_tutorial_2026,
-    # 2026-09-09). Mixer-agnostic plant input: reading this needs no --mixer
-    # selection and no nonlinear duty->thrust inversion at all.
-    # control_output: ミキサー手前の指令推力+トルク（kPktCtrlOutput400/
-    # 0x4B）、ファームが送っていれば -- udp_capture.py の save_stream_csv()、
-    # レート同定設計メモ（docs/events/sci_tutorial_2026、2026-09-09）参照。
-    # ミキサー非依存のプラント入力: 読むのに --mixer の選択も非線形な
-    # duty->thrust逆算も一切要らない。
-    # NOTE (2026-09-10, urgent fix): the wire entry's *rate* (400Hz) tells you
-    # nothing about whether its *values* are meaningful. firmware/workshop's
-    # WorkshopControlTask never writes LogStreamSample.torque[] at all (see
-    # workshop_control_task.cpp -- it fills only .thrust, from its own
-    # duty-scale MotorRequest.thrust, not physical N) -- torque stays at its
-    # zero-init default even though data_stream.cpp unconditionally sends the
-    # 0x4B entry every cycle. A naive rate-only check would then make 'auto'
-    # PREFER an all-zero, meaningless control_output torque over the
-    # (working) duty-based reconstruction for every workshop/legacy log --
-    # a regression, not an improvement. So: also require non-degenerate
-    # (non-constant-zero) values before trusting this column.
-    # 注（2026-09-10、緊急修正）: 電文の「レート」（400Hz）は「値」が意味を
-    # 持つかとは無関係。firmware/workshop の WorkshopControlTask は
-    # LogStreamSample.torque[] を一切書かない（workshop_control_task.cpp参照
-    # -- 埋めるのは .thrust だけで、しかも物理量Nではなく自前のduty尺度の
-    # MotorRequest.thrust）ため、data_stream.cpp が毎周期0x4Bエントリを無条件
-    # 送信していても torque はゼロ初期化のまま。レートだけで判定すると、
-    # 'auto' が全ての workshop/legacy ログで意味の無い全ゼロトルクを、動く
-    # はずの duty 逆算より優先してしまう -- 改善ではなく退行になる。そこで
-    # 値が非退化（定数ゼロでない）ことも合わせて要求する。
+    # --- control_output: PRE-MIXER commanded thrust+torque, when the
+    # bundle's `ctrl_output` stream is present -- see the rate-sysid design
+    # memo (docs/events/sci_tutorial_2026, 2026-09-09). Mixer-agnostic
+    # plant input: reading this needs no --mixer selection and no nonlinear
+    # duty->thrust inversion at all.
+    # control_output: ミキサー手前の指令推力+トルク、一式の `ctrl_output`
+    # ストリームがあれば -- レート同定設計メモ（docs/events/
+    # sci_tutorial_2026、2026-09-09）参照。ミキサー非依存のプラント入力:
+    # 読むのに --mixer の選択も非線形な duty->thrust逆算も一切要らない。
+    # Unlike the retired flat-CSV format, this stream is ALWAYS native-rate
+    # (400Hz) when present -- it is a lockstep stream merged on `seq`,
+    # never forward-filled (see load_aligned()'s docstring) -- so there is
+    # no separate rate check to do any more. What remains (2026-09-10,
+    # urgent fix, still relevant): firmware/workshop's WorkshopControlTask
+    # never actually WRITES torque[] (see workshop_control_task.cpp -- it
+    # fills only .thrust, from its own duty-scale MotorRequest.thrust, not
+    # physical N), so a captured bundle's ctrl_output.csv can carry a
+    # `torque_<axis>` column that is present but constant zero. A naive
+    # presence-only check would then make 'auto' PREFER an all-zero,
+    # meaningless control_output torque over the (working) duty-based
+    # reconstruction for every workshop log -- a regression, not an
+    # improvement. So: also require non-degenerate (non-constant-zero)
+    # values before trusting this column.
+    # 廃止した平坦CSV形式と異なり、このストリームは存在すれば常にネイティブ
+    # レート（400Hz）-- `seq` で結合するロックステップ系ストリームであり
+    # 前方補完されない（load_aligned() の docstring 参照）-- ので別途レート
+    # チェックはもう不要。残る論点（2026-09-10、緊急修正、今も有効）:
+    # firmware/workshop の WorkshopControlTask は torque[] を実際には一切
+    # 書かない（workshop_control_task.cpp 参照 -- 埋めるのは .thrust だけで、
+    # しかも物理量Nではなく自前のduty尺度のMotorRequest.thrust）ため、取得
+    # した一式の ctrl_output.csv は `torque_<axis>` 列が存在しつつ定数ゼロ
+    # ということがあり得る。存在チェックだけだと、'auto' が全ての workshop
+    # ログで意味の無い全ゼロトルクを、動作する duty 逆算より優先してしまう
+    # -- 改善ではなく退行になる。そこで値が非退化（定数ゼロでない）ことも
+    # 合わせて要求する。
+    torque_col = f'torque_{axis}'
     ctrl_output_torque: Optional[np.ndarray] = None
     ctrl_output_available = False
-    if (_CTRL_OUTPUT_RATE_HZ_COL in cols
-            and all(c in cols for c in _CTRL_OUTPUT_TORQUE_COL.values())):
-        rate_hz_col = np.array([col(r, _CTRL_OUTPUT_RATE_HZ_COL) for r in rows])
-        rate_ok = len(rate_hz_col) > 0 and float(np.median(rate_hz_col)) >= 200.0
-        if rate_ok:
-            candidate = np.array(
-                [col(r, _CTRL_OUTPUT_TORQUE_COL[axis]) for r in rows]
-            )
-            # Constant-zero (or near enough to be numerically indistinguishable
-            # from an unpopulated field) => not genuinely populated.
-            # 定数ゼロ（または未使用フィールドと数値的に見分けが付かない
-            # ほど小さい）なら、実際には値が入っていないとみなす。
-            if np.std(candidate) > 1e-9:
-                ctrl_output_available = True
-                ctrl_output_torque = candidate
+    if torque_col in df.columns:
+        candidate = df[torque_col].to_numpy(dtype=float)
+        # Constant-zero (or near enough to be numerically indistinguishable
+        # from an unpopulated field) => not genuinely populated.
+        # 定数ゼロ（または未使用フィールドと数値的に見分けが付かない
+        # ほど小さい）なら、実際には値が入っていないとみなす。
+        if np.std(candidate) > 1e-9:
+            ctrl_output_available = True
+            ctrl_output_torque = candidate
 
     # Automatic crash/anomaly truncation (2026-09-10, real lesson_07 test
     # flights): a violent tumble/impact spikes |gyro| far beyond anything a
@@ -1591,7 +1627,7 @@ def _load_axis_data(
         if ctrl_output_torque is not None:
             ctrl_output_torque = ctrl_output_torque[mask]
 
-    return (time_s, target, gyro, throttle, dt, fmt, duty_diff, duty_quality,
+    return (time_s, target, gyro, throttle, dt, duty_diff, duty_quality,
             duty_reason, actual_torque_diag, ctrl_output_torque, ctrl_output_available,
             crash_truncated_at)
 
@@ -1641,7 +1677,7 @@ def _find_flight_segments(
 
 
 def fit_plant(
-    filepath: str | Path,
+    df: pd.DataFrame,
     axis: str = 'roll',
     kp: Optional[float] = None,
     rate_max: float = 1.0,
@@ -1658,13 +1694,19 @@ def fit_plant(
     閉ループフライトデータから開ループプラントモデルを同定
 
     Args:
-        filepath: Path to CSV flight log
+        df: Aligned flight-log DataFrame from
+            tools/sysid/loader.py's load_aligned() (base="imu") -- see that
+            function's docstring for the full column contract.
         axis: 'roll', 'pitch', or 'yaw'
         kp: P gain used during flight (must match firmware value). Required
             when input_mode resolves to 'kp'; ignored (may be left None) in
             'duty' mode.
-        rate_max: Maximum angular rate [rad/s] (maps ctrl [-1,+1] to rate).
-            Only used by the 'kp' mode's "legacy" CSV path.
+        rate_max: Maximum angular rate [rad/s]. The bundle format's
+            `rate_ref_<axis>` is already physical rad/s (there is no
+            "legacy" normalized-stick schema left to scale, unlike before
+            this format unification), so rate_max no longer scales
+            target(t) -- it is used ONLY to scale min_target_std_frac's
+            excitation-floor threshold below.
         fs: Sample rate [Hz] (default: 400)
         time_range: Optional (start, end) in seconds to restrict analysis
         segment_length: Segment duration [s] for fitting (default: 3.0)
@@ -1677,16 +1719,16 @@ def fit_plant(
             identifiability pitfall, not a hardware/sign bug -- see
             target_excitation_note on the result). Set to 0 to disable.
         input_mode: 'auto' (default), 'duty', or 'kp' -- see the module
-            docstring. 'auto' picks 'duty' only when the CSV has
-            motor_duty_FR/RR/RL/FL columns, kp is None, AND
+            docstring. 'auto' picks 'duty' only when the bundle DataFrame
+            has duty_FR/RR/RL/FL columns, kp is None, AND
             _classify_duty_source() says the duty is genuine 400Hz data
-            (not a 50Hz-forward-filled staircase); otherwise 'kp'.
+            (not a 50Hz-held fallback); otherwise 'kp'.
         mixer: 'legacy' (default) or 'vehicle' -- which duty inversion the
             'duty'/'auto' input modes use (see the module docstring's
             --mixer section). 'legacy' is correct for firmware/workshop
             (`sf lesson`) and firmware/vehicle_old logs; 'vehicle' is
-            required for firmware/vehicle (`sf app`) logs. The CSV cannot
-            say which firmware produced it -- the caller must know.
+            required for firmware/vehicle (`sf app`) logs. The bundle
+            cannot say which firmware produced it -- the caller must know.
             Ignored when input_mode resolves to 'kp'.
 
     Returns:
@@ -1701,9 +1743,9 @@ def fit_plant(
 
     # Load data
     # データ読み込み
-    (time_s, target_raw, gyro, throttle, dt, fmt, duty_diff, duty_quality, duty_reason,
+    (time_s, target_raw, gyro, throttle, dt, duty_diff, duty_quality, duty_reason,
      actual_torque_diag, ctrl_output_torque, ctrl_output_available, crash_truncated_at) = (
-        _load_axis_data(filepath, axis, fs, time_range, mixer=mixer)
+        _load_axis_data(df, axis, fs, time_range, mixer=mixer)
     )
 
     # Resolve the input mode -- see the module docstring. 2026-09-10 rewrite
@@ -1828,7 +1870,13 @@ def fit_plant(
             u_for_kp = actual_torque_diag if mixer == 'vehicle' else duty_diff
             u_for_kp_is_vehicle_scale = mixer == 'vehicle'
             if u_for_kp is not None and duty_quality == 'duty400':
-                target_for_kp = target_raw if fmt == "stream" else target_raw * rate_max
+                # target_raw is already rad/s (bundle format's one schema
+                # -- no rate_max scaling needed any more, see fit_plant()'s
+                # docstring).
+                # target_raw は既に rad/s（一式形式のスキーマは1種類のみ --
+                # rate_max のスケーリングはもう不要。fit_plant() の
+                # docstring 参照）。
+                target_for_kp = target_raw
                 est = _estimate_kp_fir(target_for_kp - gyro, u_for_kp, throttle, seg_samples)
                 if est is not None:
                     kp_est, kp_r2, _n_fir = est
@@ -1892,11 +1940,13 @@ def fit_plant(
     if resolved_mode == 'control_output':
         if ctrl_output_torque is None:
             raise ValueError(
-                "--input control_output requested but this CSV has no "
-                "ctrl_output_torque_<axis>/ctrl_output_rate_hz columns (or "
-                "the entry was not genuine 400Hz) -- needs firmware sending "
-                "the kPktCtrlOutput400 entry (0x4B). Pass --input duty or "
-                "--input kp instead."
+                "--input control_output requested but this bundle DataFrame "
+                "has no non-degenerate torque_<axis> column -- needs a "
+                "bundle whose `ctrl_output` stream is present AND actually "
+                "populated (firmware sending the kPktCtrlOutput400 entry / "
+                "0x4B with real torque values, not firmware/workshop's "
+                "always-zero torque[]). Pass --input duty or --input kp "
+                "instead."
             )
         # u_plant(t) = control_output.torque(t) -- the PRE-MIXER commanded
         # torque, already in the SAME physical units (Nm) regardless of
@@ -1910,27 +1960,27 @@ def fit_plant(
     elif resolved_mode == 'duty':
         if duty_diff is None:
             raise ValueError(
-                "--input duty requested but this CSV has no "
-                "motor_duty_FR/RR/RL/FL columns -- needs firmware sending "
-                "the 400Hz duty entry (kPktDuty400/0x4A), or the 50Hz "
-                "CtrlRef forward-fill (see udp_capture.py "
-                "save_stream_csv()). Pass --kp to use the legacy "
+                "--input duty requested but this bundle DataFrame has no "
+                "duty_FR/RR/RL/FL columns -- needs a bundle with the "
+                "`motor` stream (genuine 400Hz duty) or the `ctrl_ref` "
+                "stream's 50Hz-held fallback. Pass --kp to use the legacy "
                 "Kp*(target-gyro) reconstruction instead."
             )
         if duty_quality != 'duty400':
             raise ValueError(
                 f"--input duty requested but this log is from OLD firmware "
-                f"(motor_duty_* is 50Hz-forward-filled, not real 400Hz "
-                f"data): {duty_reason}. Pass --kp instead (--input kp) -- "
-                "duty here is too coarse to identify a ~20ms motor lag."
+                f"(duty_FR/RR/RL/FL is 50Hz-held here, not the bundle's "
+                f"genuine 400Hz `motor` stream): {duty_reason}. Pass --kp "
+                "instead (--input kp) -- duty here is too coarse to "
+                "identify a ~20ms motor lag."
             )
-        # u_plant(t) = mixer-inverse(motor_duty_FR/RR/RL/FL)(t) -- the actual
+        # u_plant(t) = mixer-inverse(duty_FR/RR/RL/FL)(t) -- the actual
         # differential command the rate-loop PID output this cycle, using
         # WHICHEVER mixer inversion `mixer` selected (legacy duty-diff vs
         # vehicle torque -- see the module docstring's --mixer section). If
         # the fit below fails or gives a physically-implausible K/tau_m,
         # the most likely cause is the WRONG --mixer for this log's firmware.
-        # u_plant(t) = ミキサ逆算(motor_duty_FR/RR/RL/FL)(t) -- レートループ
+        # u_plant(t) = ミキサ逆算(duty_FR/RR/RL/FL)(t) -- レートループ
         # PID がその周期に実際に出力した差動指令。`mixer` が選んだ方の逆算
         # （legacy の duty差動 vs vehicle のトルク -- モジュール docstring の
         # --mixer 節参照）を使う。下のフィットが失敗する、または物理的に
@@ -1956,7 +2006,7 @@ def fit_plant(
         # フィルタ用の代用に過ぎない（このフィルタが特別扱い不要で済むよう
         # にするため）-- 実際のフィットは下で target_physical と y_plant を
         # 直接使い、この u_plant は一切使わない。
-        target = target_raw if fmt == "stream" else target_raw * rate_max
+        target = target_raw
         u_plant = kp * (target - gyro)
         kp_used = kp
     else:  # 'kp'
@@ -1964,26 +2014,26 @@ def fit_plant(
             if duty_quality == 'duty50':
                 raise ValueError(
                     f"this log is from OLD firmware: {duty_reason}. "
-                    "motor_duty_* is only 50Hz-resolution here (not the "
-                    "real 400Hz kPktDuty400 entry), so --kp is required "
+                    "duty_FR/RR/RL/FL is only 50Hz-resolution here (not "
+                    "the real 400Hz `motor` stream), so --kp is required "
                     "for a reliable fit (--input kp)."
                 )
             raise ValueError(
-                "--input kp (explicit, or auto without motor_duty_* "
+                "--input kp (explicit, or auto without duty_FR/RR/RL/FL "
                 "columns) requires --kp -- the P gain that flew. Capture a "
                 "log with `sf log wifi` on firmware sending the 400Hz duty "
                 "entry to use --input duty instead (no --kp needed)."
             )
-        # Reconstruct plant I/O. "stream" CSVs already record the physical
-        # rate target [rad/s] (ws::set_rate_target / vehicle rate_ref) so
-        # rate_max is NOT applied; "legacy" CSVs store a normalized stick
-        # value that must be scaled by rate_max first.
-        # プラント入出力を復元。"stream" 形式は既に物理量の角速度目標 [rad/s]
-        # （ws::set_rate_target / vehicle の rate_ref）を記録しているため
-        # rate_max は適用しない。"legacy" 形式は正規化スティック値のため
-        # rate_max でスケールする。
+        # Reconstruct plant I/O. The bundle's rate_ref_<axis> already
+        # records the physical rate target [rad/s] (vehicle rate_ref), so
+        # rate_max is NOT applied (see fit_plant()'s docstring -- there is
+        # no remaining "legacy" normalized-stick schema to scale).
+        # プラント入出力を復元。一式の rate_ref_<axis> は既に物理量の角速度
+        # 目標 [rad/s]（vehicle の rate_ref）を記録しているため rate_max は
+        # 適用しない（fit_plant() の docstring 参照 -- スケールすべき
+        # "legacy" 正規化スティックスキーマはもう残っていない）。
         #   u_plant(t) = Kp * (target(t) - gyro(t))
-        target = target_raw if fmt == "stream" else target_raw * rate_max
+        target = target_raw
         u_plant = kp * (target - gyro)
         kp_used = kp
 
@@ -1991,11 +2041,14 @@ def fit_plant(
 
     # Physical-units reference signal, computed regardless of resolved_mode
     # (needed for the excitation check below even in 'duty'/'control_output'
-    # mode, where target never otherwise gets scaled).
+    # mode, where target never otherwise gets scaled). target_raw is
+    # already rad/s (bundle format's one schema) -- see fit_plant()'s
+    # docstring.
     # resolved_mode に関わらず計算する物理量の参照信号（下の励振チェック用。
     # 'duty'/'control_output' モードでは他に target をスケールする箇所が
-    # ないため、ここで用意する）。
-    target_physical = target_raw if fmt == "stream" else target_raw * rate_max
+    # ないため、ここで用意する）。target_raw は既に rad/s（一式形式の
+    # スキーマは1種類のみ）-- fit_plant() の docstring 参照。
+    target_physical = target_raw
     min_target_std = min_target_std_frac * rate_max
 
     # Find flight segments
@@ -2262,7 +2315,7 @@ def fit_plant(
 
 
 def compute_fit_timeseries(
-    filepath: str | Path,
+    df: pd.DataFrame,
     result: PlantFitResult,
     rate_max: float = 1.0,
     fs: float = 400.0,
@@ -2273,9 +2326,14 @@ def compute_fit_timeseries(
     フィット結果のプロット用時系列データを計算
 
     Args:
-        filepath: Path to CSV flight log (same file used for fitting)
+        df: Aligned flight-log DataFrame from
+            tools/sysid/loader.py's load_aligned() (same one used for
+            fitting).
         result: PlantFitResult from fit_plant()
-        rate_max: Maximum angular rate [rad/s]
+        rate_max: Maximum angular rate [rad/s] -- unused now that the
+            bundle format's rate_ref_<axis> is already physical rad/s
+            (see fit_plant()'s docstring); kept for CLI-argument
+            compatibility.
         fs: Sample rate [Hz]
         time_range: Optional (start, end) in seconds
 
@@ -2287,31 +2345,33 @@ def compute_fit_timeseries(
             'y_simulated': Simulated angular velocity
             'residual': y_measured - y_simulated
     """
-    (time_s, target_raw, gyro, throttle, dt, fmt, duty_diff, _duty_quality, _duty_reason,
+    (time_s, target_raw, gyro, throttle, dt, duty_diff, _duty_quality, _duty_reason,
      _actual_torque_diag, ctrl_output_torque, _ctrl_output_available, _crash_truncated_at) = (
-        _load_axis_data(filepath, result.axis, fs, time_range, mixer=result.mixer)
+        _load_axis_data(df, result.axis, fs, time_range, mixer=result.mixer)
     )
 
     # Reconstruct plant I/O -- same input-mode logic as fit_plant(), using
-    # whichever mode the fit ACTUALLY used (result.input_mode), not rate_max
-    # or --kp implied by the caller.
+    # whichever mode the fit ACTUALLY used (result.input_mode). target_raw
+    # is already rad/s (bundle format's one schema) -- see fit_plant()'s
+    # docstring.
     # プラント入出力を復元 -- fit_plant() と同じ入力モードのロジック。
-    # フィットが実際に使ったモード（result.input_mode）に従う（呼び出し側の
-    # rate_max/--kp に引きずられない）。
-    target_physical = target_raw if fmt == "stream" else target_raw * rate_max
+    # フィットが実際に使ったモード（result.input_mode）に従う。target_raw は
+    # 既に rad/s（一式形式のスキーマは1種類のみ）-- fit_plant() の
+    # docstring 参照。
+    target_physical = target_raw
 
     if result.input_mode == 'control_output':
         if ctrl_output_torque is None:
             raise ValueError(
-                "fit used the 'control_output' input mode but this CSV has "
-                "no ctrl_output_torque_<axis> columns"
+                "fit used the 'control_output' input mode but this bundle "
+                "DataFrame has no non-degenerate torque_<axis> column"
             )
         u_plant = ctrl_output_torque
     elif result.input_mode == 'duty':
         if duty_diff is None:
             raise ValueError(
-                "fit used the 'duty' input mode but this CSV has no "
-                "motor_duty_FR/RR/RL/FL columns"
+                "fit used the 'duty' input mode but this bundle DataFrame "
+                "has no duty_FR/RR/RL/FL columns"
             )
         u_plant = duty_diff
     else:
@@ -2373,35 +2433,88 @@ def compute_fit_timeseries(
 
 
 # =============================================================================
-# Self-test: synthesize a "stream"-format flight from a KNOWN plant, recover
+# Self-test: synthesize a flight-log v1 bundle from a KNOWN plant, recover
 # it. Run via `sf sysid fit --selftest`.
-# 自己テスト: 既知プラントから "stream" 形式のフライトを合成し、復元を検証。
-# `sf sysid fit --selftest` から実行。
+# 自己テスト: 既知プラントから StampFly フライトログ v1 一式を合成し、復元を
+# 検証。`sf sysid fit --selftest` から実行。
 # =============================================================================
+
+def _selftest_bundle_df(streams: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """
+    Build a synthetic StampFly flight-log v1 bundle from the given streams,
+    save it to a temp directory, and load it back through
+    tools.sysid.loader.load_aligned() -- the SAME function `sf sysid fit`
+    uses -- so selftest() exercises the real bundle write/read/align path
+    end to end, not a bespoke test-only reader.
+    与えられたストリームから合成 StampFly フライトログ v1 一式を作り、一時
+    ディレクトリへ保存し、tools.sysid.loader.load_aligned()（`sf sysid fit`
+    が使うのと同じ関数）で読み戻す -- selftest() がテスト専用のリーダでは
+    なく、本物の一式書き込み・読み込み・整列経路を一気通貫で検証するため。
+
+    Args:
+        streams: stream name (e.g. "imu", "rate_ref", "motor") -> DataFrame,
+            same shape as sflog.FlightLog.streams (see lib/sflog/bundle.py).
+
+    Returns:
+        The aligned DataFrame (base="imu"), with df.attrs["bundle_streams"]
+        set to the stream names actually written -- see
+        tools/sysid/loader.py's load_aligned() docstring.
+    """
+    import shutil
+    import tempfile
+
+    tmp_dir = tempfile.mkdtemp(prefix='plant_fit_selftest_')
+    try:
+        log = sflog.FlightLog(
+            meta=sflog.make_meta(
+                source='sils', tool_name='tools.sysid.plant_fit.selftest',
+                tool_version='1.0', streams=streams,
+            ),
+            schema={},
+            streams=streams,
+        )
+        # A plain directory (not a .zip) round-trips through the same
+        # save()/load() code path but skips zip compression -- faster for a
+        # selftest that builds several of these, and still exercises
+        # load_aligned() exactly as the CLI calls it (see the module
+        # docstring's "Prefer running through load_aligned() at least once"
+        # requirement, flight-log-format-plan.md section 5).
+        # 一式は素のディレクトリ（.zip ではない）で往復させる -- save()/
+        # load() と同じコード経路を通りつつ zip 圧縮を省く（このセルフ
+        # テストは一式をいくつも作るため高速な方を選ぶ）。それでも
+        # load_aligned() を CLI が呼ぶのと全く同じに検証できる。
+        log.save(tmp_dir)
+        return load_aligned(tmp_dir)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 def selftest(verbose: bool = True) -> bool:
     """
-    Closed-loop self-test for the "stream" (current Data Stream) CSV path.
-    既知プラントを P 制御閉ループで離散シミュレーションし、`sf log wifi
-    -o *.csv` と同じ "stream" 形式の CSV を合成、fit_plant() が K, tau_m を
-    許容誤差内で復元することを確認する。
+    Closed-loop self-test for the flight-log-bundle path.
+    既知プラントを P 制御閉ループで離散シミュレーションし、`sf log wifi` が
+    書く StampFly フライトログ v1 一式と同じ形の合成一式を作り、
+    fit_plant() が K, tau_m を許容誤差内で復元することを確認する。
 
-    Verifies end to end: _detect_csv_format() picks "stream", _load_axis_data()
-    reads rate_ref_roll/gyro_x/total_thrust correctly, and the (format-
-    independent) MSE fit in _fit_segment() recovers the plant that generated
-    the data. Uses the EXACT same discretization as _simulate_plant() to
-    generate the synthetic flight, so any recovery error reflects the fit
-    tool's own accuracy, not a model mismatch.
-    一気通貫の検証: _detect_csv_format() が "stream" を選び、_load_axis_data()
-    が rate_ref_roll/gyro_x/total_thrust を正しく読み、（形式非依存の）
-    _fit_segment() の MSE フィットが生成元のプラントを復元できることを確認
-    する。合成フライトの生成には _simulate_plant() と全く同じ離散化を使うため、
+    Verifies end to end: each synthetic scenario's streams round-trip
+    through sflog.FlightLog.save() / tools.sysid.loader.load_aligned() (the
+    SAME function `sf sysid fit` uses -- see _selftest_bundle_df()),
+    _load_axis_data() reads rate_ref_roll/gyro_x/duty_FR..FL correctly from
+    the resulting aligned DataFrame, and the MSE fit in
+    _fit_segment()/_fit_segment_indirect() recovers the plant that
+    generated the data. Uses the EXACT same discretization as
+    _simulate_plant()/_simulate_closed_loop() to generate each synthetic
+    flight, so any recovery error reflects the fit tool's own accuracy, not
+    a model mismatch.
+    一気通貫の検証: 各シナリオの合成ストリームが sflog.FlightLog.save() /
+    tools.sysid.loader.load_aligned()（`sf sysid fit` が使うのと同じ関数 --
+    _selftest_bundle_df() 参照）を往復し、_load_axis_data() がその整列済み
+    DataFrame から rate_ref_roll/gyro_x/duty_FR..FL を正しく読み、
+    _fit_segment()/_fit_segment_indirect() の MSE フィットが生成元の
+    プラントを復元できることを確認する。各合成フライトの生成には
+    _simulate_plant()/_simulate_closed_loop() と全く同じ離散化を使うため、
     復元誤差はフィットツール自体の精度を反映し、モデル不整合には起因しない。
     """
-    import csv as _csv
-    import os
-    import tempfile
-
     axis = 'roll'
     K_true = REFERENCE_PLANT_GAINS[axis]   # 102.0 [rad/s^2 per duty]
     # Needed early: 'auto' now resolves to 'indirect' with a FIR-auto Kp
@@ -2425,6 +2538,8 @@ def selftest(verbose: bool = True) -> bool:
     gain = K_true * (1.0 - alpha)
 
     t = np.arange(n) * dt
+    ts_us = (t * 1e6).astype(np.int64)
+    seq = np.arange(n)
     # Broadband log-chirp target (0.5->20 Hz over 5 s, repeated): similar
     # spectral richness to a pilot's stick doublets, wide enough to resolve
     # both the integrator gain K and the ~8 Hz motor-lag corner (tau_m=20ms).
@@ -2473,137 +2588,124 @@ def selftest(verbose: bool = True) -> bool:
     duty_rl = T_hover + _MIXER_K * u
     duty_fl = T_hover + _MIXER_K * u
 
-    # Write a "stream"-format Data Stream CSV (same header shape as `sf log
-    # wifi -o *.csv`): only the test axis carries nonzero rate_ref/gyro,
-    # total_thrust is a constant in-flight value (> the 0.3 flight threshold),
-    # and motor_duty_FR/RR/RL/FL carry the synthesized duty above (the "duty"
-    # input mode's data source).
-    # "stream" 形式の Data Stream CSV を書き出す（`sf log wifi -o *.csv` と
-    # 同じヘッダ形状）: テスト対象軸のみ rate_ref/gyro を非ゼロにし、
-    # total_thrust は飛行中を示す定数値（飛行判定閾値 0.3 を超える）、
-    # motor_duty_FR/RR/RL/FL は上で合成した duty（"duty" 入力モードのデータ源）。
-    fieldnames = (['timestamp_us']
-                  + list(_STREAM_GYRO_COL.values())
-                  + list(_STREAM_TARGET_COL.values())
-                  + ['total_thrust']
-                  + list(_DUTY_COLS))
-    gyro_col = _STREAM_GYRO_COL[axis]
-    target_col = _STREAM_TARGET_COL[axis]
+    # Build a bundle with a genuine 400Hz `motor` stream (same header shape
+    # as `sf log wifi`'s output): only the test axis carries nonzero
+    # rate_ref/gyro, and duty_FR/RR/RL/FL carry the synthesized duty above
+    # (the "duty" input mode's data source). Throttle-equivalent for
+    # _find_flight_segments() falls back to the mean of the 4 duty columns
+    # (no `total_thrust`/`ctrl_ref` stream needed -- see
+    # _load_axis_data()'s throttle-equivalent fallback): the roll-only
+    # differential cancels in that mean, leaving exactly T_hover=0.4,
+    # comfortably above the 0.3 flight threshold throughout.
+    # 一式を、本物の400Hz `motor` ストリーム付きで作る（`sf log wifi` の
+    # 出力と同じヘッダ形状）: テスト対象軸のみ rate_ref/gyro を非ゼロにし、
+    # duty_FR/RR/RL/FL は上で合成した duty（"duty" 入力モードのデータ源）。
+    # _find_flight_segments() 用のスロットル相当量は4 duty 列の平均に
+    # フォールバックする（`total_thrust`/`ctrl_ref` ストリームは不要 --
+    # _load_axis_data() のスロットル相当量フォールバック参照）: ロール
+    # 単独励振の差動成分はその平均で相殺し、ちょうど T_hover=0.4 になり、
+    # 飛行判定閾値0.3を終始十分に上回る。
+    df_main = _selftest_bundle_df({
+        'imu': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'gyro_x': gyro_meas}),
+        'rate_ref': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'rate_ref_roll': target}),
+        'motor': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq,
+                                'duty_FR': duty_fr, 'duty_RR': duty_rr,
+                                'duty_RL': duty_rl, 'duty_FL': duty_fl}),
+    })
 
-    fd, csv_path = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_')
+    result_kp = fit_plant(df_main, axis=axis, kp=kp, rate_max=1.0, fs=fs,
+                           input_mode='kp')
+    result_duty = fit_plant(df_main, axis=axis, rate_max=1.0, fs=fs,
+                             input_mode='duty')
+    # 2026-09-10: 'auto' on this genuine (continuously-varying) 400Hz
+    # duty bundle, with NO --kp given, must now resolve to 'indirect' via
+    # _estimate_kp_fir()'s auto-estimated Kp (h(0) from a short FIR
+    # regression of u=duty_diff against lags of target-gyro) -- proving
+    # both that the (unmodified) _classify_duty_source() correctly reads
+    # this bundle's genuine 400Hz `motor` stream as 'duty400' AND that the
+    # FIR auto-Kp estimate is accurate enough to drive a correct
+    # indirect fit end to end, with zero manual parameters.
+    # 2026-09-10: この本物の（連続的に変化する）400Hz duty 一式で、
+    # --kp を一切与えない 'auto' は、_estimate_kp_fir() の自動推定Kp
+    # （u=duty_diff を target-gyro の複数ラグに短いFIR回帰した h(0)）
+    # 経由で 'indirect' に解決されること -- （変更していない）
+    # _classify_duty_source() がこの一式の本物の400Hz `motor` ストリームを
+    # 正しく 'duty400' と読むことと、FIR自動推定Kpが手動パラメータ一切無しで
+    # 正しい間接フィットを駆動できる精度であることの両方を証明する。
+    result_auto = fit_plant(df_main, axis=axis, rate_max=1.0, fs=fs,
+                             input_mode='auto')
+    # 2026-09-10: indirect closed-loop fit (target->gyro, known kp) on
+    # the SAME synthetic closed-loop flight (target, gyro_meas were
+    # generated by simulating exactly this kp/K_true/tau_m_true loop
+    # above) -- must recover K_true, tau_m_true just as well as 'kp'/
+    # 'duty' do. See _simulate_closed_loop()/_fit_segment_indirect().
+    # 2026-09-10: 間接閉ループフィット（target->gyro、既知kp）を、同じ
+    # 合成閉ループフライト（target, gyro_meas は上でこの
+    # kp/K_true/tau_m_true のループをシミュレーションして生成した
+    # もの）に対して行う -- 'kp'/'duty' と同様に K_true, tau_m_true を
+    # 復元できること。_simulate_closed_loop()/_fit_segment_indirect()
+    # 参照。
+    result_indirect = fit_plant(df_main, axis=axis, kp=kp, rate_max=1.0,
+                                 fs=fs, input_mode='indirect')
+
+    # --- Additional case: a 50Hz-HELD duty (the bundle's `motor` stream is
+    # ABSENT; only the `ctrl_ref` stream supplies duty_FR/RR/RL/FL, at its
+    # own native 50Hz timestamps -- sflog.aligned()'s merge_asof does the
+    # holding onto the 400Hz base, exercising the REAL alignment code path
+    # rather than hand-building an 8-row-repeat staircase). This is the new,
+    # definitive way to test what used to be a synthetic "stairstep" CSV:
+    # subsampling the SAME continuous duty_fr/rr/rl/fl arrays above at every
+    # 8th index (ctrl_ref_idx) and letting merge_asof hold them reconstructs
+    # EXACTLY the old hand-built staircase (duty_fr[start] held for
+    # [start, start+8) is what backward-asof against a 50Hz sample at
+    # `start` produces for every base row in that range). 'auto' must NOT
+    # silently fit off this stale/quantized signal: it must fall back to
+    # 'kp' (via the 'indirect' ladder) and require --kp.
+    # 追加ケース: 50Hz保持のduty（一式に `motor` ストリームが無く、
+    # `ctrl_ref` ストリームだけが duty_FR/RR/RL/FL を、その素の50Hzタイム
+    # スタンプで供給する -- sflog.aligned() の merge_asof が400Hz基準への
+    # 保持を行う、本物の整列コード経路を検証する。8行連続保持の階段状データを
+    # 手作業で作る代わりに）。これが、以前の合成「階段状」CSVが検証していた
+    # ものを検証する新しい・決定的な方法: 上と同じ連続 duty_fr/rr/rl/fl
+    # 配列を8個おき（ctrl_ref_idx）に間引き、merge_asof に保持させれば、
+    # 旧来の手作業の階段状データ（duty_fr[start] を [start, start+8) の間
+    # 保持）と厳密に一致する（`start` の50Hz標本に対する backward-asof は
+    # その範囲の全基準行に同じ値を返すため）。'auto' はこの古い/粗い信号で
+    # 黙ってフィットしてはならない -- （'indirect' ラダー経由で）'kp' へ
+    # フォールバックし --kp を要求すること。
+    ctrl_ref_idx = np.arange(0, n, 8)
+    df_stair = _selftest_bundle_df({
+        'imu': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'gyro_x': gyro_meas}),
+        'rate_ref': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'rate_ref_roll': target}),
+        'ctrl_ref': pd.DataFrame({
+            'timestamp_us': ts_us[ctrl_ref_idx],
+            'duty_FR': duty_fr[ctrl_ref_idx], 'duty_RR': duty_rr[ctrl_ref_idx],
+            'duty_RL': duty_rl[ctrl_ref_idx], 'duty_FL': duty_fl[ctrl_ref_idx],
+        }),
+    })
+
     try:
-        with os.fdopen(fd, 'w', newline='') as f:
-            writer = _csv.writer(f)
-            writer.writerow(fieldnames)
-            for i in range(n):
-                row = {name: 0.0 for name in fieldnames}
-                row['timestamp_us'] = t[i] * 1e6
-                row[gyro_col] = gyro_meas[i]
-                row[target_col] = target[i]
-                row['total_thrust'] = 0.4
-                row['motor_duty_FR'] = duty_fr[i]
-                row['motor_duty_RR'] = duty_rr[i]
-                row['motor_duty_RL'] = duty_rl[i]
-                row['motor_duty_FL'] = duty_fl[i]
-                writer.writerow([row[name] for name in fieldnames])
+        fit_plant(df_stair, axis=axis, kp=None, rate_max=1.0, fs=fs, input_mode='auto')
+        stair_rejected_without_kp = False
+        stair_reject_msg = "(did not raise)"
+    except ValueError as e:
+        stair_reject_msg = str(e)
+        stair_rejected_without_kp = 'old firmware' in stair_reject_msg.lower()
 
-        result_kp = fit_plant(csv_path, axis=axis, kp=kp, rate_max=1.0, fs=fs,
-                               input_mode='kp')
-        result_duty = fit_plant(csv_path, axis=axis, rate_max=1.0, fs=fs,
-                                 input_mode='duty')
-        # 2026-09-10: 'auto' on this genuine (continuously-varying) 400Hz
-        # duty CSV, with NO --kp given, must now resolve to 'indirect' via
-        # _estimate_kp_fir()'s auto-estimated Kp (h(0) from a short FIR
-        # regression of u=duty_diff against lags of target-gyro) -- proving
-        # both that _classify_duty_source()'s heuristic has no false
-        # positive (no duty_rate_hz column here either, so this exercises
-        # the heuristic branch, not the authoritative one) AND that the
-        # FIR auto-Kp estimate is accurate enough to drive a correct
-        # indirect fit end to end, with zero manual parameters.
-        # 2026-09-10: この本物の（連続的に変化する）400Hz duty CSV で、
-        # --kp を一切与えない 'auto' は、_estimate_kp_fir() の自動推定Kp
-        # （u=duty_diff を target-gyro の複数ラグに短いFIR回帰した h(0)）
-        # 経由で 'indirect' に解決されること -- _classify_duty_source() の
-        # ヒューリスティックに偽陽性が無いこと（ここも duty_rate_hz 列は無く、
-        # 権威的判定ではなくヒューリスティック分岐を検証する）と、FIR自動
-        # 推定Kpが手動パラメータ一切無しで正しい間接フィットを駆動できる
-        # 精度であることの両方を証明する。
-        result_auto = fit_plant(csv_path, axis=axis, rate_max=1.0, fs=fs,
+    result_stair_kp = fit_plant(df_stair, axis=axis, kp=kp, rate_max=1.0, fs=fs,
                                  input_mode='auto')
-        # 2026-09-10: indirect closed-loop fit (target->gyro, known kp) on
-        # the SAME synthetic closed-loop flight (target, gyro_meas were
-        # generated by simulating exactly this kp/K_true/tau_m_true loop
-        # above) -- must recover K_true, tau_m_true just as well as 'kp'/
-        # 'duty' do. See _simulate_closed_loop()/_fit_segment_indirect().
-        # 2026-09-10: 間接閉ループフィット（target->gyro、既知kp）を、同じ
-        # 合成閉ループフライト（target, gyro_meas は上でこの
-        # kp/K_true/tau_m_true のループをシミュレーションして生成した
-        # もの）に対して行う -- 'kp'/'duty' と同様に K_true, tau_m_true を
-        # 復元できること。_simulate_closed_loop()/_fit_segment_indirect()
-        # 参照。
-        result_indirect = fit_plant(csv_path, axis=axis, kp=kp, rate_max=1.0,
-                                     fs=fs, input_mode='indirect')
-    finally:
-        os.unlink(csv_path)
-
-    # --- Additional case: a 50Hz-forward-filled STAIRCASE duty (each value
-    # held for 8 consecutive 400Hz rows, no duty_rate_hz column -- exercises
-    # the heuristic in _classify_duty_source()). 'auto' must NOT silently
-    # fit off this stale/quantized signal: it must fall back to 'kp' and
-    # require --kp.
-    # 追加ケース: 50Hz前方補完の階段状duty（各値を400Hz中8行連続保持、
-    # duty_rate_hz列なし -- _classify_duty_source() のヒューリスティックを
-    # 検証）。'auto' はこの古い/粗い信号で黙ってフィットしてはならない --
-    # 'kp' へフォールバックし --kp を要求すること。
-    u_stair = u.copy()
-    for start in range(0, n, 8):
-        u_stair[start:start + 8] = u[start]
-    duty_fr_stair = T_hover - _MIXER_K * u_stair
-    duty_rr_stair = T_hover - _MIXER_K * u_stair
-    duty_rl_stair = T_hover + _MIXER_K * u_stair
-    duty_fl_stair = T_hover + _MIXER_K * u_stair
-
-    fd2, csv_path2 = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_stair_')
-    try:
-        with os.fdopen(fd2, 'w', newline='') as f:
-            writer = _csv.writer(f)
-            writer.writerow(fieldnames)
-            for i in range(n):
-                row = {name: 0.0 for name in fieldnames}
-                row['timestamp_us'] = t[i] * 1e6
-                row[gyro_col] = gyro_meas[i]
-                row[target_col] = target[i]
-                row['total_thrust'] = 0.4
-                row['motor_duty_FR'] = duty_fr_stair[i]
-                row['motor_duty_RR'] = duty_rr_stair[i]
-                row['motor_duty_RL'] = duty_rl_stair[i]
-                row['motor_duty_FL'] = duty_fl_stair[i]
-                writer.writerow([row[name] for name in fieldnames])
-
-        try:
-            fit_plant(csv_path2, axis=axis, kp=None, rate_max=1.0, fs=fs, input_mode='auto')
-            stair_rejected_without_kp = False
-            stair_reject_msg = "(did not raise)"
-        except ValueError as e:
-            stair_reject_msg = str(e)
-            stair_rejected_without_kp = 'old firmware' in stair_reject_msg.lower()
-
-        result_stair_kp = fit_plant(csv_path2, axis=axis, kp=kp, rate_max=1.0, fs=fs,
-                                     input_mode='auto')
-    finally:
-        os.unlink(csv_path2)
 
     # 2026-09-10: 'auto' with --kp given now resolves to 'indirect', not the
     # old direct 'kp' -- same trigger (kp is not None, no genuine 400Hz
     # duty), strictly more robust reconstruction (see fit_plant()'s auto
     # ladder and _simulate_closed_loop()'s docstring). duty_quality stays
-    # 'duty50' regardless (that describes the CSV's duty columns, which
+    # 'duty50' regardless (that describes the bundle's duty columns, which
     # 'indirect' never reads).
     # 2026-09-10: --kp が与えられた 'auto' は、もはや旧来の直接 'kp' では
     # なく 'indirect' に解決される -- トリガーは同じ（kp が None でない、
     # 本物の400Hz duty が無い）が、逆算はより頑健になった（fit_plant() の
     # auto ラダーと _simulate_closed_loop() の docstring 参照）。
-    # duty_quality は変わらず 'duty50'（これはCSVのduty列自体の性質を表す
+    # duty_quality は変わらず 'duty50'（これは一式のduty列自体の性質を表す
     # もので、'indirect' はそもそもduty列を読まない）。
     stair_resolved_kp = (result_stair_kp.input_mode == 'indirect'
                           and result_stair_kp.duty_quality == 'duty50')
@@ -2671,18 +2773,18 @@ def selftest(verbose: bool = True) -> bool:
     # _duty_differential_vehicle()/_thrust_from_duty() invert) instead of the
     # linear ws_internal mixer used by `u`/duty_fr above. Proves the vehicle
     # inversion recovers its own forward model correctly (sign, scale, AND
-    # vbat -- vbat_true is deliberately off V_BATT_NOMINAL so a bug that
-    # silently used the nominal fallback instead of the CSV's vbat column
-    # would show up as a scale error here) -- the same sanity the "duty"
-    # case above gets from the ws_internal forward mixer.
+    # voltage -- vbat_true is deliberately off V_BATT_NOMINAL so a bug that
+    # silently used the nominal fallback instead of the bundle's `voltage`
+    # column would show up as a scale error here) -- the same sanity the
+    # "duty" case above gets from the ws_internal forward mixer.
     # --mixer vehicle 回帰: 同じ閉ループ合成だが、ロール軸PID出力 `u_v` は
     # duty差動指令ではなく物理的な差動トルク[Nm]で、線形の ws_internal
     # ミキサーではなく順方向の物理チェーン（B^-1配分 -> thrustToDuty()。
     # _duty_differential_vehicle()/_thrust_from_duty() が逆算するのと同じ
     # _ARM_D/_MOTOR_AM/_MOTOR_BM/_MOTOR_CM/_MOTOR_CT 定数を使う）で4モータ
     # duty に変換する。vehicle 逆算が自身の順方向モデルを正しく逆算できる
-    # こと（符号・スケール・**vbat** -- vbat_true は意図的に
-    # V_BATT_NOMINAL からずらしてあるので、CSV の vbat 列を使わず黙って
+    # こと（符号・スケール・**電圧** -- vbat_true は意図的に
+    # V_BATT_NOMINAL からずらしてあるので、一式の `voltage` 列を使わず黙って
     # ノミナルへフォールバックするバグがあればここでスケール誤差として
     # 現れる）を証明する -- 上の "duty" ケースが順方向 ws_internal ミキサー
     # で得ているのと同じ健全性チェック。
@@ -2719,8 +2821,8 @@ def selftest(verbose: bool = True) -> bool:
     t_rl_v = 0.25 * (thrust_hover_total + u_v / _ARM_D)
     t_fl_v = 0.25 * (thrust_hover_total + u_v / _ARM_D)
 
-    def _thrust_to_duty(t):
-        omega_m = np.sqrt(np.maximum(t, 0.0) / _MOTOR_CT)
+    def _thrust_to_duty(thrust):
+        omega_m = np.sqrt(np.maximum(thrust, 0.0) / _MOTOR_CT)
         volts = _MOTOR_AM * omega_m ** 2 + _MOTOR_BM * omega_m + _MOTOR_CM
         return volts / vbat_true
 
@@ -2729,42 +2831,43 @@ def selftest(verbose: bool = True) -> bool:
     duty_rl_v = _thrust_to_duty(t_rl_v)
     duty_fl_v = _thrust_to_duty(t_fl_v)
 
-    fieldnames_v = fieldnames + ['vbat']
-    fd3, csv_path3 = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_vehicle_')
-    try:
-        with os.fdopen(fd3, 'w', newline='') as f:
-            writer = _csv.writer(f)
-            writer.writerow(fieldnames_v)
-            for i in range(n):
-                row = {name: 0.0 for name in fieldnames_v}
-                row['timestamp_us'] = t[i] * 1e6
-                row[gyro_col] = gyro_meas_v[i]
-                row[target_col] = target[i]
-                row['total_thrust'] = thrust_hover_total
-                row['motor_duty_FR'] = duty_fr_v[i]
-                row['motor_duty_RR'] = duty_rr_v[i]
-                row['motor_duty_RL'] = duty_rl_v[i]
-                row['motor_duty_FL'] = duty_fl_v[i]
-                row['vbat'] = vbat_true
-                writer.writerow([row[name] for name in fieldnames_v])
+    # Common streams for the two vehicle-physics scenarios below (--mixer
+    # vehicle "duty"/"auto", and the "control_output" scenario that reuses
+    # the SAME vehicle-physics flight) -- both need genuine 400Hz duty (the
+    # `motor` stream) and the deliberately-off-nominal battery voltage (the
+    # `status` stream) for the vehicle motor-curve inversion.
+    # 下の vehicle 物理合成を使う2シナリオ（--mixer vehicle の "duty"/
+    # "auto"、および同じ vehicle 物理フライトを再利用する
+    # "control_output" シナリオ）に共通のストリーム -- どちらも vehicle
+    # モータ曲線逆算に、本物の400Hz duty（`motor` ストリーム）と、意図的に
+    # ノミナルからずらしたバッテリ電圧（`status` ストリーム）が要る。
+    imu_v = pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'gyro_x': gyro_meas_v})
+    rate_ref_v = pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'rate_ref_roll': target})
+    motor_v = pd.DataFrame({'timestamp_us': ts_us, 'seq': seq,
+                             'duty_FR': duty_fr_v, 'duty_RR': duty_rr_v,
+                             'duty_RL': duty_rl_v, 'duty_FL': duty_fl_v})
+    status_v = pd.DataFrame({'timestamp_us': np.array([0], dtype=np.int64),
+                              'voltage': np.array([vbat_true])})
 
-        result_vehicle = fit_plant(csv_path3, axis=axis, rate_max=1.0, fs=fs,
-                                    input_mode='duty', mixer='vehicle')
-        # 2026-09-10: --mixer vehicle + 'auto' (no --kp) must use
-        # actual_torque_diag for the FIR auto-Kp estimate (opt-in vehicle/Nm
-        # scale, per the auto ladder's third-pass comment) and recover the
-        # SAME K_true_vehicle -- the counterpart to ok_auto/ok_ws_zero
-        # above, which check the mixer=='legacy' (default) case stays on
-        # the legacy duty-differential scale instead.
-        # 2026-09-10: --mixer vehicle + 'auto'（--kp無し）は FIR自動Kp推定に
-        # actual_torque_diag を使い（auto ラダーの第3弾コメント通り、
-        # vehicle/Nmスケールはオプトイン）、同じ K_true_vehicle を復元する
-        # こと -- 上の ok_auto/ok_ws_zero（mixer=='legacy'既定では legacy
-        # duty差動スケールのままであることを確認）の対になるテスト。
-        result_vehicle_auto = fit_plant(csv_path3, axis=axis, rate_max=1.0, fs=fs,
-                                         input_mode='auto', mixer='vehicle')
-    finally:
-        os.unlink(csv_path3)
+    df_vehicle = _selftest_bundle_df({
+        'imu': imu_v, 'rate_ref': rate_ref_v, 'motor': motor_v, 'status': status_v,
+    })
+
+    result_vehicle = fit_plant(df_vehicle, axis=axis, rate_max=1.0, fs=fs,
+                                input_mode='duty', mixer='vehicle')
+    # 2026-09-10: --mixer vehicle + 'auto' (no --kp) must use
+    # actual_torque_diag for the FIR auto-Kp estimate (opt-in vehicle/Nm
+    # scale, per the auto ladder's third-pass comment) and recover the
+    # SAME K_true_vehicle -- the counterpart to ok_auto/ok_ws_zero
+    # above, which check the mixer=='legacy' (default) case stays on
+    # the legacy duty-differential scale instead.
+    # 2026-09-10: --mixer vehicle + 'auto'（--kp無し）は FIR自動Kp推定に
+    # actual_torque_diag を使い（auto ラダーの第3弾コメント通り、
+    # vehicle/Nmスケールはオプトイン）、同じ K_true_vehicle を復元する
+    # こと -- 上の ok_auto/ok_ws_zero（mixer=='legacy'既定では legacy
+    # duty差動スケールのままであることを確認）の対になるテスト。
+    result_vehicle_auto = fit_plant(df_vehicle, axis=axis, rate_max=1.0, fs=fs,
+                                     input_mode='auto', mixer='vehicle')
 
     K_err_v = abs(result_vehicle.K / K_true_vehicle - 1.0)
     tau_err_v = abs(result_vehicle.tau_m / tau_m_true - 1.0)
@@ -2797,12 +2900,12 @@ def selftest(verbose: bool = True) -> bool:
     # design memo, 2026-09-09, §07 "K_measured = physical gain x mixer gain"
     # / §08 "measure c from the log"): reuses the roll-only vehicle-physics
     # synthesis above (u_v drives the REAL forward B^-1 + motor curve ->
-    # duty_fr_v etc, gyro_meas_v), but writes a DELIBERATELY MISCALIBRATED
-    # ctrl_output_torque_roll = u_v / c_true (c_true != 1) -- i.e. the
-    # commanded torque a hypothetical controller asked for is NOT what was
-    # actually delivered (u_v, which drives gyro_meas_v). Proves two things
-    # at once: (1) fitting input_mode='control_output' against the
-    # miscalibrated commanded signal correctly recovers K_measured =
+    # duty_fr_v etc, gyro_meas_v), but adds a `ctrl_output` stream carrying a
+    # DELIBERATELY MISCALIBRATED torque_roll = u_v / c_true (c_true != 1) --
+    # i.e. the commanded torque a hypothetical controller asked for is NOT
+    # what was actually delivered (u_v, which drives gyro_meas_v). Proves
+    # two things at once: (1) fitting input_mode='control_output' against
+    # the miscalibrated commanded signal correctly recovers K_measured =
     # c_true * K_true_vehicle (NOT K_true_vehicle) -- exactly the §07
     # relationship, not a bug; (2) the mixer_gain diagnostic (commanded vs
     # duty-derived actual torque) recovers c_true itself.
@@ -2811,46 +2914,29 @@ def selftest(verbose: bool = True) -> bool:
     # §08「ログから c を測る」）: 上のロール単独励振・vehicle物理合成
     # （u_v が実際の順方向B^-1+モータ曲線を駆動 -> duty_fr_v等、
     # gyro_meas_v）を再利用しつつ、意図的に較正のズレた
-    # ctrl_output_torque_roll = u_v / c_true（c_true≠1）を書き込む --
-    # つまり仮想のコントローラが要求した指令トルクは、実際に配達された
-    # もの（gyro_meas_v を駆動する u_v）とは異なる。これで2つを同時に
-    # 証明する: (1) input_mode='control_output' で較正のズレた指令信号に
-    # 対してフィットすると、正しく K_measured = c_true * K_true_vehicle
-    # （K_true_vehicle ではない）を復元する -- まさに§07の関係、バグでは
-    # ない。(2) mixer_gain 診断（指令 vs duty逆算の実トルク）が c_true
-    # 自体を復元する。
+    # torque_roll = u_v / c_true（c_true≠1）を運ぶ `ctrl_output`
+    # ストリームを追加する -- つまり仮想のコントローラが要求した指令
+    # トルクは、実際に配達されたもの（gyro_meas_v を駆動する u_v）とは
+    # 異なる。これで2つを同時に証明する: (1) input_mode='control_output'
+    # で較正のズレた指令信号に対してフィットすると、正しく
+    # K_measured = c_true * K_true_vehicle（K_true_vehicle ではない）を
+    # 復元する -- まさに§07の関係、バグではない。(2) mixer_gain 診断
+    # （指令 vs duty逆算の実トルク）が c_true 自体を復元する。
     c_true = 0.85   # deliberately != 1 -- see the comment above
 
-    fieldnames_co = fieldnames_v + [
-        'ctrl_output_thrust', 'ctrl_output_torque_roll',
-        'ctrl_output_torque_pitch', 'ctrl_output_torque_yaw',
-        'ctrl_output_rate_hz',
-    ]
-    fd4, csv_path4 = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_ctrlout_')
-    try:
-        with os.fdopen(fd4, 'w', newline='') as f:
-            writer = _csv.writer(f)
-            writer.writerow(fieldnames_co)
-            for i in range(n):
-                row = {name: 0.0 for name in fieldnames_co}
-                row['timestamp_us'] = t[i] * 1e6
-                row[gyro_col] = gyro_meas_v[i]
-                row[target_col] = target[i]
-                row['total_thrust'] = thrust_hover_total
-                row['motor_duty_FR'] = duty_fr_v[i]
-                row['motor_duty_RR'] = duty_rr_v[i]
-                row['motor_duty_RL'] = duty_rl_v[i]
-                row['motor_duty_FL'] = duty_fl_v[i]
-                row['vbat'] = vbat_true
-                row['ctrl_output_thrust'] = thrust_hover_total
-                row['ctrl_output_torque_roll'] = u_v[i] / c_true
-                row['ctrl_output_rate_hz'] = 400
-                writer.writerow([row[name] for name in fieldnames_co])
+    ctrl_output_co = pd.DataFrame({
+        'timestamp_us': ts_us, 'seq': seq,
+        'torque_roll': u_v / c_true,
+        'torque_pitch': np.zeros(n),
+        'torque_yaw': np.zeros(n),
+    })
+    df_ctrl_output = _selftest_bundle_df({
+        'imu': imu_v, 'rate_ref': rate_ref_v, 'motor': motor_v, 'status': status_v,
+        'ctrl_output': ctrl_output_co,
+    })
 
-        result_ctrl_output = fit_plant(csv_path4, axis=axis, rate_max=1.0, fs=fs,
-                                        input_mode='control_output')
-    finally:
-        os.unlink(csv_path4)
+    result_ctrl_output = fit_plant(df_ctrl_output, axis=axis, rate_max=1.0, fs=fs,
+                                    input_mode='control_output')
 
     K_expected_co = c_true * K_true_vehicle
     K_err_co = abs(result_ctrl_output.K / K_expected_co - 1.0)
@@ -2877,7 +2963,7 @@ def selftest(verbose: bool = True) -> bool:
     # legacy forward mixer composed with the REAL nonlinear motor curve has
     # no hand-derivable closed form, unlike the control_output case above):
     # the EXISTING legacy 'duty' fit (result_duty, from `u`/duty_fr near the
-    # top of this function) already has genuine 400Hz duty and no vbat
+    # top of this function) already has genuine 400Hz duty and no `voltage`
     # column (falls back to nominal), so mixer_gain should come out
     # populated -- a finite, positive conversion factor [Nm per legacy
     # duty-unit], not None or garbage.
@@ -2885,7 +2971,7 @@ def selftest(verbose: bool = True) -> bool:
     # legacyの順方向ミキサーと実際の非線形モータ曲線の合成は手計算できる
     # 閉形式ではない、上のcontrol_outputケースと違って）: この関数冒頭の
     # legacy 'duty'フィット（result_duty、`u`/duty_fr由来）は既に本物の
-    # 400Hz dutyを持ちvbat列は無い（ノミナルにフォールバック）ので、
+    # 400Hz dutyを持ち `voltage` 列は無い（ノミナルにフォールバック）ので、
     # mixer_gainが populated されているはず -- 有限・正の換算係数
     # [Nm/legacy duty単位]、Noneでもおかしな値でもない。
     ok_legacy_diag = (result_duty.mixer_gain is not None
@@ -2900,10 +2986,11 @@ def selftest(verbose: bool = True) -> bool:
     # --- unit-level regression check for _mixer_conversion_factor() itself,
     # across two very different scales (dimensionless-like ~0.85, and a
     # legacy-conversion-like ~1.2e-3) -- proves the regression math (not the
-    # CSV/fit_plant plumbing exercised above) recovers an EXACTLY-known slope.
+    # bundle/fit_plant plumbing exercised above) recovers an EXACTLY-known
+    # slope.
     # _mixer_conversion_factor() 自体の回帰の単体テスト、2つの大きく異なる
     # 尺度（無次元的な~0.85と、legacy換算係数的な~1.2e-3）で -- 回帰の数式
-    # 自体（上で確認したCSV/fit_plantの配線ではなく）が既知の傾きを正確に
+    # 自体（上で確認した一式/fit_plantの配線ではなく）が既知の傾きを正確に
     # 復元することを証明する。
     rng2 = np.random.default_rng(11)
     actual_synth = rng2.normal(0.0, 1.0, 500)
@@ -2921,69 +3008,61 @@ def selftest(verbose: bool = True) -> bool:
             print(f"[mixer_conversion_factor unit test] k_true={k_true_unit:.3g}  "
                   f"recovered={slope:.6g}  err={err:.2e}  r2={r2:.6f}")
 
-    # --- regression (2026-09-10, urgent): a genuine firmware/workshop log
-    # sends the 0x4B control_output entry at 400Hz (data_stream.cpp appends
-    # it unconditionally) but never actually WRITES LogStreamSample.torque[]
-    # -- WorkshopControlTask fills only .thrust, from its own duty-scale
+    # --- regression (2026-09-10, urgent): a genuine firmware/workshop bundle
+    # can have a `ctrl_output` stream present (the firmware sends the 0x4B
+    # entry every cycle) but never actually WRITES torque[] --
+    # WorkshopControlTask fills only .thrust, from its own duty-scale
     # MotorRequest.thrust, not physical N (see workshop_control_task.cpp).
-    # So ctrl_output_torque_<axis> reads back as constant zero even though
-    # ctrl_output_rate_hz says 400. Before the fix above, 'auto' would have
-    # PREFERRED this all-zero, meaningless control_output over the (working)
-    # legacy duty reconstruction -- a regression for every real workshop/
-    # lesson_07 log, not an improvement. Reuses the legacy-scale synthetic
-    # flight (u, gyro_meas, duty_fr/rr/rl/fl) from the 'kp'/'duty'/'auto'
-    # block above.
-    # --- 退行防止（2026-09-10、緊急）: 本物の firmware/workshop ログは
-    # 0x4B の control_output エントリを400Hzで送る（data_stream.cpp が無条件
-    # に追加する）が、LogStreamSample.torque[] は実際には一切書かれない --
+    # So torque_<axis> reads back as constant zero even though the stream
+    # itself is present. Before the fix (2026-09-10) this guarded against,
+    # 'auto' would have PREFERRED this all-zero, meaningless
+    # control_output over the (working) legacy duty reconstruction -- a
+    # regression for every real workshop/lesson_07 log, not an improvement.
+    # Reuses the legacy-scale synthetic flight (u, gyro_meas,
+    # duty_fr/rr/rl/fl) from the 'kp'/'duty'/'auto' block above.
+    # --- 退行防止（2026-09-10、緊急）: 本物の firmware/workshop 一式は
+    # `ctrl_output` ストリームが存在し得る（ファームが毎周期 0x4B
+    # エントリを送るため）が、torque[] は実際には一切書かれない --
     # WorkshopControlTask が埋めるのは .thrust だけで、しかも物理量Nでは
     # なく自前のduty尺度のMotorRequest.thrust（workshop_control_task.cpp
-    # 参照）。そのため ctrl_output_rate_hz が400と言っていても
-    # ctrl_output_torque_<axis> は定数ゼロのまま読める。上の修正が無ければ
-    # 'auto' はこの全ゼロで無意味な control_output を、動作する legacy duty
+    # 参照）。そのためストリーム自体は存在していても torque_<axis> は
+    # 定数ゼロのまま読める。この修正（2026-09-10）が無ければ 'auto' は
+    # この全ゼロで無意味な control_output を、動作する legacy duty
     # 逆算より優先してしまう -- 本物の workshop/実習7 ログすべてにとって
     # 改善ではなく退行になる。上の 'kp'/'duty'/'auto' ブロックの
     # legacy スケール合成飛行（u, gyro_meas, duty_fr/rr/rl/fl）を再利用する。
-    fieldnames_ws = fieldnames + [
-        'ctrl_output_thrust', 'ctrl_output_torque_roll',
-        'ctrl_output_torque_pitch', 'ctrl_output_torque_yaw',
-        'ctrl_output_rate_hz',
-    ]
-    fd5, csv_path5 = tempfile.mkstemp(suffix='.csv', prefix='plant_fit_selftest_wszero_')
-    try:
-        with os.fdopen(fd5, 'w', newline='') as f:
-            writer = _csv.writer(f)
-            writer.writerow(fieldnames_ws)
-            for i in range(n):
-                row = {name: 0.0 for name in fieldnames_ws}
-                row['timestamp_us'] = t[i] * 1e6
-                row[gyro_col] = gyro_meas[i]
-                row[target_col] = target[i]
-                row['total_thrust'] = 0.4
-                row['motor_duty_FR'] = duty_fr[i]
-                row['motor_duty_RR'] = duty_rr[i]
-                row['motor_duty_RL'] = duty_rl[i]
-                row['motor_duty_FL'] = duty_fl[i]
-                # ctrl_output_torque_* left at 0.0 (never written, like
-                # WorkshopControlTask) -- only ctrl_output_rate_hz is genuine.
-                row['ctrl_output_rate_hz'] = 400
-                writer.writerow([row[name] for name in fieldnames_ws])
+    ctrl_output_ws = pd.DataFrame({
+        'timestamp_us': ts_us, 'seq': seq,
+        # torque_* left at 0.0 (never written, like WorkshopControlTask).
+        # torque_* はゼロのまま（WorkshopControlTask と同様に一度も
+        # 書かれない）。
+        'torque_roll': np.zeros(n),
+        'torque_pitch': np.zeros(n),
+        'torque_yaw': np.zeros(n),
+    })
+    df_ws_zero = _selftest_bundle_df({
+        'imu': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'gyro_x': gyro_meas}),
+        'rate_ref': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq, 'rate_ref_roll': target}),
+        'motor': pd.DataFrame({'timestamp_us': ts_us, 'seq': seq,
+                                'duty_FR': duty_fr, 'duty_RR': duty_rr,
+                                'duty_RL': duty_rl, 'duty_FL': duty_fl}),
+        'ctrl_output': ctrl_output_ws,
+    })
 
-        result_ws_zero = fit_plant(csv_path5, axis=axis, rate_max=1.0, fs=fs,
-                                    input_mode='auto')
-    finally:
-        os.unlink(csv_path5)
+    result_ws_zero = fit_plant(df_ws_zero, axis=axis, rate_max=1.0, fs=fs,
+                                input_mode='auto')
 
     # 2026-09-10: since 'auto' now prefers 'indirect' (via FIR auto-Kp) over
     # any direct fit, this regression's bar is now stricter: it must not
     # only avoid the dead all-zero control_output, but resolve all the way
     # to 'indirect' -- the SAME accuracy check as ok_auto above, on the SAME
-    # legacy-scale flight, just with dead control_output columns present.
+    # legacy-scale flight, just with a dead-but-present `ctrl_output`
+    # stream.
     # 2026-09-10: 'auto' が（FIR自動Kp経由で）直接法より 'indirect' を優先
     # するようになったため、この回帰テストの基準はより厳しくなった -- 死んだ
     # 全ゼロ control_output を避けるだけでなく、'indirect' まで解決する
-    # こと。上の ok_auto と同じ精度チェックを、control_output列は存在するが
-    # 死んでいる同じ legacy スケールのフライトに対して行う。
+    # こと。上の ok_auto と同じ精度チェックを、`ctrl_output` ストリームは
+    # 存在するが死んでいる同じ legacy スケールのフライトに対して行う。
     K_err_ws = abs(result_ws_zero.K / K_true - 1.0)
     ok_ws_zero = (result_ws_zero.input_mode == 'indirect'
                   and result_ws_zero.kp_source == 'fir_auto'

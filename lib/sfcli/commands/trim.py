@@ -29,6 +29,8 @@ from pathlib import Path
 
 import numpy as np
 
+import sflog
+
 from ..utils import console, paths
 
 COMMAND_NAME = "trim"
@@ -57,7 +59,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     analyze.add_argument(
         "input", nargs="?",
-        help="JSON-Lines hover log (.jsonl). Omit to use the latest log in logs/",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory). "
+             "Omit to use the latest bundle in logs/",
     )
     analyze.add_argument("-o", "--output", help="Save the JSON report to this file")
     analyze.add_argument(
@@ -89,23 +92,24 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  analyze   Compute the trim correction from a hover log")
     console.print()
     console.print("Pilot a hover (you may correct to stay off the walls), then:")
-    console.print("  sf trim analyze            # uses the latest log in logs/")
+    console.print("  sf trim analyze            # uses the latest bundle in logs/")
     console.print()
     console.print("Iteration (pass the trim you already applied):")
-    console.print("  sf trim analyze hover2.jsonl --current-roll 0.012 --current-pitch -0.004")
+    console.print("  sf trim analyze flight_20260911T120000.sflog.zip "
+                  "--current-roll 0.012 --current-pitch -0.004")
     return 0
 
 
 def run_analyze(args: argparse.Namespace) -> int:
     """Run the trim analysis and print the report / トリム解析を実行し報告"""
-    # No file given -> use the most recent log in logs/ (like sf cal / sf log).
-    # ファイル無指定なら logs/ の最新ログを使う（sf cal / sf log と同様）。
-    log_path = args.input or _find_latest_log()
+    # No file given -> use the most recent bundle in logs/ (like sf cal / sf log).
+    # ファイル無指定なら logs/ の最新一式を使う（sf cal / sf log と同様）。
+    log_path = args.input or paths.latest_bundle()
     if not log_path:
-        console.error("No log given and no .jsonl found in logs/ - specify a file.")
+        console.error("No log given and no *.sflog.zip found in logs/ - specify a bundle.")
         return 1
     if not args.input:
-        console.info(f"Using latest log: {Path(log_path).name}")
+        console.info(f"Using latest bundle: {Path(log_path).name}")
     try:
         result = analyze_trim(
             log_path,
@@ -133,33 +137,6 @@ def run_analyze(args: argparse.Namespace) -> int:
 # Core analysis
 # ---------------------------------------------------------------------------
 
-def _find_latest_log():
-    """The most-recent *.jsonl in the repo logs/ dir, or None.
-    リポジトリ logs/ の最新 *.jsonl（無ければ None）。"""
-    logs_dir = paths.root() / "logs"
-    if not logs_dir.exists():
-        return None
-    files = sorted(logs_dir.glob("*.jsonl"),
-                   key=lambda f: f.stat().st_mtime, reverse=True)
-    return str(files[0]) if files else None
-
-
-def _load_jsonl(path: str) -> dict:
-    """Load a JSON-Lines log grouped by record id / レコード id 別に読み込み"""
-    grouped: dict = {}
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                d = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            grouped.setdefault(d["id"], []).append(d)
-    return grouped
-
-
 def _q2eul(q):
     """Quaternion [w,x,y,z] -> (roll, pitch, yaw) [rad]. Same convention as
     altlog_sysid_eskf.py. / クォータニオン→オイラー角（altlog と同一規約）。"""
@@ -173,20 +150,35 @@ def _q2eul(q):
 def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
                  current_roll=0.0, current_pitch=0.0) -> dict:
     """Identify the equilibrium attitude trim from a hover log.
-    ホバリングログから平衡姿勢トリムを同定する。"""
-    S = _load_jsonl(log_path)
-    if "imu" not in S or "posvel" not in S:
-        raise ValueError("log is missing 'imu' or 'posvel' records")
+    ホバリングログから平衡姿勢トリムを同定する。
 
-    imu = S["imu"]
-    t0 = imu[0]["ts"]
-    t_imu = np.array([(d["ts"] - t0) / 1e6 for d in imu])
-    quat = np.array([d["quat"] for d in imu])
+    log_path is a StampFly flight-log v1 bundle (`.sflog.zip` file or an
+    extracted directory, see lib/sflog) -- reads its `attitude` (quaternion)
+    and `posvel` (position/velocity) streams directly at their own native
+    rate (both are the 400Hz IMU+ESKF/PosVel packets, so their
+    `timestamp_us` columns line up sample-for-sample; no cross-stream
+    alignment is needed here). `flow` is optional, exactly like the old
+    JSONL loader's handling of a log with no flow records.
+    log_path は StampFly フライトログ v1 一式（`.sflog.zip` または展開済み
+    フォルダ、lib/sflog 参照）。`attitude`（クォータニオン）・`posvel`
+    （位置・速度）ストリームをそれぞれの原レートのまま直接読む（どちらも
+    400Hz の IMU+ESKF/PosVel パケット由来なので `timestamp_us` は1行ごとに
+    一致しており、ストリーム間の整列は不要）。`flow` は任意 -- flow
+    レコードの無い JSONL を許容していた旧ローダーと同じ扱い。
+    """
+    log = sflog.FlightLog.load(log_path)
+    if "attitude" not in log.streams or "posvel" not in log.streams:
+        raise ValueError("bundle is missing the 'attitude' or 'posvel' stream")
 
-    posvel = S["posvel"]
-    t_pv = np.array([(d["ts"] - t0) / 1e6 for d in posvel])
-    pos = np.array([d["pos"] for d in posvel])
-    vel = np.array([d["vel"] for d in posvel])
+    attitude = log.streams["attitude"]
+    t0 = int(attitude["timestamp_us"].iloc[0])
+    t_imu = (attitude["timestamp_us"].to_numpy() - t0) / 1e6
+    quat = attitude[["quat_w", "quat_x", "quat_y", "quat_z"]].to_numpy()
+
+    posvel = log.streams["posvel"]
+    t_pv = (posvel["timestamp_us"].to_numpy() - t0) / 1e6
+    pos = posvel[["pos_x", "pos_y", "pos_z"]].to_numpy()
+    vel = posvel[["vel_x", "vel_y", "vel_z"]].to_numpy()
 
     # Hover window: skip the takeoff transient and a short landing tail (mirrors
     # altlog_sysid_eskf.py). / ホバー区間: 離陸過渡と着陸直前を除外（altlog に倣う）。
@@ -265,10 +257,10 @@ def analyze_trim(log_path, hover_start_s=6.0, hover_duration_s=None,
     vh_std = float(np.std(np.linalg.norm(vel_f[:, :2], axis=1)))
 
     squal = None
-    if "flow" in S:
-        fl = S["flow"]
-        t_fl = np.array([(d["ts"] - t0) / 1e6 for d in fl])
-        q_fl = np.array([d.get("quality", d.get("squal", 0)) for d in fl])
+    if "flow" in log.streams:
+        fl = log.streams["flow"]
+        t_fl = (fl["timestamp_us"].to_numpy() - t0) / 1e6
+        q_fl = fl["quality"].to_numpy()
         m = (t_fl >= hover_start_s) & (t_fl <= t_end)
         if np.any(m):
             squal = float(np.mean(q_fl[m]))

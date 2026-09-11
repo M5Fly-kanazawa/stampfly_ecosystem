@@ -10,14 +10,15 @@ we estimate Ixx, Iyy, Izz by fitting τ/α.
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 from scipy import signal
 from scipy.optimize import least_squares
 
 from .defaults import get_flat_defaults
+from .loader import sample_rate_hz as _bundle_sample_rate_hz
 
 
 # =============================================================================
@@ -378,49 +379,60 @@ def detect_step_regions(
 
 
 def estimate_inertia(
-    filepath: str | Path,
+    df: pd.DataFrame,
     axis: str = "all",
     time_range: Optional[Tuple[float, float]] = None,
 ) -> Dict[str, Any]:
     """
-    Estimate moments of inertia from step response data
+    Estimate moments of inertia from an aligned flight-log DataFrame's step
+    response
+
+    `df` is the table returned by `tools.sysid.loader.load_aligned()`.
+    アラインメント済みフライトログ DataFrame（`load_aligned()` が返す表）の
+    ステップ応答から慣性モーメントを推定する。
 
     Args:
-        filepath: Path to CSV log file
+        df: aligned DataFrame from `load_aligned()`.
         axis: Which axis to analyze ("roll", "pitch", "yaw", "all")
         time_range: Optional time range [start, end] in seconds
 
     Returns:
         Dictionary with estimation results
     """
-    # Loader lives alongside this module (tools/sysid/loader.py)
-    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
-    from .loader import load_csv
-
-    # Load data
-    log_data = load_csv(filepath)
+    bundle_streams = df.attrs.get("bundle_streams", set())
 
     # Extract arrays
-    n = len(log_data.samples)
-    timestamps = np.array([s.timestamp_us for s in log_data.samples])
+    timestamps = df["timestamp_us"].to_numpy()
     time_s = (timestamps - timestamps[0]) / 1e6
 
-    # Get gyro (corrected if available)
-    gyro = np.array([s.gyro for s in log_data.samples])
-    if log_data.samples[0].gyro_corrected is not None:
-        gyro = np.array([s.gyro_corrected for s in log_data.samples])
+    # Gyro: imu.csv's gyro_x/y/z is ALWAYS the ESKF-corrected value (see
+    # protocol/spec/flight_log.yaml -- the separate gyro_raw_x/y/z columns
+    # hold the pre-filter value), so there is no more "corrected vs plain"
+    # ambiguity the old CSV loader's `gyro_corrected` fallback handled.
+    # ジャイロ: imu.csv の gyro_x/y/z は常に ESKF 補正済みの値
+    # （protocol/spec/flight_log.yaml 参照 -- フィルタ前の値は別列
+    # gyro_raw_x/y/z に持つ）なので、旧 CSV ローダーの `gyro_corrected`
+    # フォールバックが扱っていた「補正済みか生値か」の曖昧さはもう無い。
+    gyro_x = df["gyro_x"].to_numpy()
+    gyro_y = df["gyro_y"].to_numpy()
+    gyro_z = df["gyro_z"].to_numpy()
 
-    gyro_x = gyro[:, 0]
-    gyro_y = gyro[:, 1]
-    gyro_z = gyro[:, 2]
-
-    # Get control inputs
-    ctrl_roll = np.array([s.ctrl_roll if s.ctrl_roll else 0 for s in log_data.samples])
-    ctrl_pitch = np.array([s.ctrl_pitch if s.ctrl_pitch else 0 for s in log_data.samples])
-    ctrl_yaw = np.array([s.ctrl_yaw if s.ctrl_yaw else 0 for s in log_data.samples])
+    # Get control inputs -- pilot.csv stick, held; 0 when pilot stream absent
+    # (matches the old "if s.ctrl_roll else 0" fallback).
+    # 操縦入力 -- pilot.csv のスティック（保持）。pilot ストリームが無ければ0
+    # （旧 "if s.ctrl_roll else 0" と同じフォールバック）。
+    n = len(df)
+    if "pilot" in bundle_streams:
+        ctrl_roll = df["roll"].to_numpy()
+        ctrl_pitch = df["pitch"].to_numpy()
+        ctrl_yaw = df["yaw"].to_numpy()
+    else:
+        ctrl_roll = np.zeros(n)
+        ctrl_pitch = np.zeros(n)
+        ctrl_yaw = np.zeros(n)
 
     # Compute dt
-    dt = 1.0 / log_data.sample_rate_hz if log_data.sample_rate_hz > 0 else 1.0/400.0
+    dt = 1.0 / _bundle_sample_rate_hz(df)
 
     # Apply time range filter
     if time_range:
@@ -480,29 +492,38 @@ def estimate_inertia(
     return result.to_dict()
 
 
-def load_step_response(filepath: str | Path) -> Dict[str, np.ndarray]:
+def load_step_response(df: pd.DataFrame) -> Dict[str, np.ndarray]:
     """
-    Load step response data from CSV
+    Extract step response data from an aligned flight-log DataFrame
+
+    `df` is the table returned by `tools.sysid.loader.load_aligned()`.
+    アラインメント済みフライトログ DataFrame（`load_aligned()` が返す表）
+    からステップ応答データを取り出す。
 
     Returns dict with: time, gyro_x/y/z, ctrl_roll/pitch/yaw, etc.
     """
-    # Loader lives alongside this module (tools/sysid/loader.py)
-    # ローダーはこのモジュールと同じ tools/sysid/loader.py にある
-    from .loader import load_csv
+    bundle_streams = df.attrs.get("bundle_streams", set())
+    n = len(df)
+    timestamps = df["timestamp_us"].to_numpy()
 
-    log_data = load_csv(filepath)
-
-    timestamps = np.array([s.timestamp_us for s in log_data.samples])
+    if "pilot" in bundle_streams:
+        ctrl_roll = df["roll"].to_numpy()
+        ctrl_pitch = df["pitch"].to_numpy()
+        ctrl_yaw = df["yaw"].to_numpy()
+    else:
+        ctrl_roll = np.zeros(n)
+        ctrl_pitch = np.zeros(n)
+        ctrl_yaw = np.zeros(n)
 
     data = {
         'time': (timestamps - timestamps[0]) / 1e6,
-        'gyro_x': np.array([s.gyro[0] for s in log_data.samples]),
-        'gyro_y': np.array([s.gyro[1] for s in log_data.samples]),
-        'gyro_z': np.array([s.gyro[2] for s in log_data.samples]),
-        'ctrl_roll': np.array([s.ctrl_roll or 0 for s in log_data.samples]),
-        'ctrl_pitch': np.array([s.ctrl_pitch or 0 for s in log_data.samples]),
-        'ctrl_yaw': np.array([s.ctrl_yaw or 0 for s in log_data.samples]),
-        'sample_rate': log_data.sample_rate_hz,
+        'gyro_x': df["gyro_x"].to_numpy(),
+        'gyro_y': df["gyro_y"].to_numpy(),
+        'gyro_z': df["gyro_z"].to_numpy(),
+        'ctrl_roll': ctrl_roll,
+        'ctrl_pitch': ctrl_pitch,
+        'ctrl_yaw': ctrl_yaw,
+        'sample_rate': _bundle_sample_rate_hz(df),
     }
 
     return data
