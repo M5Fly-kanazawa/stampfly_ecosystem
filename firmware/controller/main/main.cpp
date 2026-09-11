@@ -2291,9 +2291,11 @@ static void render_pairing_screen(const pairing_ui_view_t* view)
 static void run_pairing_ui(bool force_pairing)
 {
     static const uint32_t REDRAW_INTERVAL_MS       = 100;   // LCD再描画間隔(10Hz) / LCD redraw interval (10Hz)
-    static const uint32_t NAV_DEBOUNCE_MS          = 200;   // ナビゲーション入力のデバウンス / navigation debounce
     static const int16_t  STICK_CENTER             = 2048;  // 右スティックYの中央値 / right-stick Y center value
     static const int16_t  STICK_NAV_THRESHOLD      = 800;   // 上下判定の閾値 / up/down decision threshold
+    static const int16_t  STICK_NAV_RELEASE        = 400;   // この幅まで戻れば「離した」とみなす（ヒステリシス） / back inside this band = released (hysteresis)
+    static const uint32_t NAV_REPEAT_DELAY_MS      = 700;   // 倒し続けて自動送りが始まるまで / hold this long before auto-repeat starts
+    static const uint32_t NAV_REPEAT_INTERVAL_MS   = 400;   // 自動送りの間隔（ゆっくり） / auto-repeat step interval (slow)
     static const uint32_t WAITING_REPLY_TIMEOUT_MS = 5000;  // 応答待ちタイムアウト / reply-wait timeout
     static const uint32_t PROBE_SEND_INTERVAL_MS   = 200;   // プローブ送信間隔 / probe send interval
     static const uint32_t NO_REPLY_MESSAGE_MS      = 2000;  // "応答なし"案内の表示時間 / "no reply" hint display duration
@@ -2318,6 +2320,8 @@ static void run_pairing_ui(bool force_pairing)
     uint32_t no_reply_message_until_ms = 0;
     uint32_t last_redraw_ms = 0;
     uint32_t last_nav_ms = 0;
+    int      nav_dir_prev = 0;        // 前周期のナビ入力方向(-1/0/+1) / previous navigation direction (-1/0/+1)
+    uint32_t nav_hold_since_ms = 0;   // 倒し始めた時刻 / when the current deflection started
 
     while (state != PAIRING_UI_DONE) {
         M5.update();
@@ -2355,22 +2359,53 @@ static void run_pairing_ui(bool force_pairing)
         if (state == PAIRING_UI_SCANNING_SELECTING) {
             pairing_scan_service();
 
-            // ナビゲーション: 右スティック上下、または黄ボタン2つ（左=上、右=下）
-            // Navigation: right-stick up/down, or the two yellow buttons (left=up, right=down)
-            if (total_count > 0 && now - last_nav_ms > NAV_DEBOUNCE_MS) {
+            // ナビゲーション: 右スティック上下、または黄ボタン2つ（左=上、右=下）。
+            // 1回倒す（押す）ごとに1行だけ動き、中央付近まで戻すまで次へ進まない
+            // （エッジ検出＋ヒステリシス）。倒し続けた場合だけ、遅い自動送りに入る。
+            // 端では周回せず止まる（行き過ぎて反対側の端へ飛ばないように）。
+            // Navigation: right-stick up/down, or the two yellow buttons (left=up,
+            // right=down). One step per deflection/press; no further step until the
+            // input returns near center (edge detection + hysteresis). Holding the
+            // input starts a slow auto-repeat. No wrap-around at the ends (an
+            // overshoot must not jump to the opposite end).
+            if (total_count > 0) {
                 int16_t stick_y = (int16_t)joy_get_stick_right_y() - STICK_CENTER;
-                bool nav_up   = (stick_y < -STICK_NAV_THRESHOLD) || joy_get_button_left();
-                bool nav_down = (stick_y >  STICK_NAV_THRESHOLD) || joy_get_button_right();
+                bool buttons_up   = joy_get_button_left();
+                bool buttons_down = joy_get_button_right();
+                int nav_dir = nav_dir_prev;   // hysteresis band keeps the previous state / ヒステリシス帯では前状態を保持
+                if (stick_y < -STICK_NAV_THRESHOLD || buttons_up) {
+                    nav_dir = -1;
+                } else if (stick_y > STICK_NAV_THRESHOLD || buttons_down) {
+                    nav_dir = +1;
+                } else if (stick_y > -STICK_NAV_RELEASE && stick_y < STICK_NAV_RELEASE) {
+                    nav_dir = 0;   // released / 離した
+                }
 
-                if (nav_up) {
-                    selected_rank = (selected_rank == 0) ? ((int)total_count - 1) : (selected_rank - 1);
-                    memcpy(selected_mac, sorted[selected_rank].mac, 6);
+                bool step = false;
+                if (nav_dir != 0 && nav_dir_prev == 0) {
+                    step = true;                  // edge: first step / 倒した瞬間の1歩
+                    nav_hold_since_ms = now;
                     last_nav_ms = now;
-                } else if (nav_down) {
-                    selected_rank = (selected_rank + 1) % (int)total_count;
-                    memcpy(selected_mac, sorted[selected_rank].mac, 6);
+                } else if (nav_dir != 0 && nav_dir == nav_dir_prev &&
+                           now - nav_hold_since_ms >= NAV_REPEAT_DELAY_MS &&
+                           now - last_nav_ms >= NAV_REPEAT_INTERVAL_MS) {
+                    step = true;                  // slow auto-repeat while held / 保持中の遅い自動送り
                     last_nav_ms = now;
                 }
+                nav_dir_prev = nav_dir;
+
+                if (step) {
+                    int next_rank = selected_rank + nav_dir;
+                    if (next_rank < 0) {
+                        next_rank = 0;
+                    } else if (next_rank > (int)total_count - 1) {
+                        next_rank = (int)total_count - 1;
+                    }
+                    selected_rank = next_rank;
+                    memcpy(selected_mac, sorted[selected_rank].mac, 6);
+                }
+            } else {
+                nav_dir_prev = 0;
             }
 
             // スクロール位置を選択行が常に見えるように追随させる

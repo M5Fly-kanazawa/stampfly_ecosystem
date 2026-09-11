@@ -129,6 +129,8 @@ ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順�
    聞こえていなければ「Searching...」と表示される。**一覧の下4桁を機体に貼ったラベルと
    照合すること**（次節参照）
 4. 右スティックの上下（または黄ボタン2つ）で選びたい行に合わせ、画面の決定ボタン（M5ボタン）
+   （スティックは 1 回倒すごとに 1 行動き、中央に戻すまで次へ進まない。倒し続けると約 0.7 秒後に
+   0.4 秒ごとのゆっくりした自動送りになる。端では止まり周回しない）
    を押して確定する。**候補が1件でもこの確定操作は省略できない**（隣の機体しか見えていない
    状況での誤確定を防ぐため）
 5. 確定すると画面が「Pairing... waiting for vehicle reply...」に切り替わり、選んだ機体からの
@@ -341,6 +343,9 @@ requires the user to pick one** (see `docs/plans/pairing-methods-plan.md` for th
    has been heard yet it shows "Searching...". **Match the last 4 hex digits against the label
    stuck on the vehicle** (see the next section)
 4. Move the highlight with the right stick up/down (or the two yellow buttons) and confirm with
+   (one deflection moves one row and nothing more happens until the stick returns to center; holding
+   it starts a slow auto-repeat after about 0.7 s, one row every 0.4 s; the highlight stops at the
+   ends instead of wrapping around)
    the screen push button (M5 button). **An explicit press is always required, even with a single
    candidate** (this avoids mis-confirming a neighbor's vehicle when only it is visible)
 5. After confirming, the screen shows "Pairing... waiting for vehicle reply..." while it waits for
