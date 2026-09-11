@@ -66,7 +66,7 @@ param save
 reboot
 ```
 
-続けてコントローラとペアリングする（コントローラの LCD パネルボタンを押しながら電源投入 → 機体のボタンを 3 秒以上押し続け、双方のビープで離す。5 秒以上押し続けるとシステムリセット）。PC側: WiFi設定でSSID `StampFly-XXYY` に接続（パスワードは既定 `stampfly`）。接続の確認は `sf telemetry`（IP指定不要、既定192.168.10.1で待ち受け）。
+続けてコントローラとペアリングする（コントローラの LCD パネルボタンを押しながら電源投入 → 機体のボタンを 3 秒以上押し続けビープで離す → コントローラ画面の一覧から自分の機体〈MAC下4桁。`mac` コマンドで確認しラベルを貼っておく〉を選んでボタンで確定。5 秒以上押し続けるとシステムリセット）。PC側: WiFi設定でSSID `StampFly-XXYY` に接続（パスワードは既定 `stampfly`）。接続の確認は `sf telemetry`（IP指定不要、既定192.168.10.1で待ち受け）。
 
 ```
 sf telemetry
@@ -210,7 +210,7 @@ param save
 reboot
 ```
 
-Then pair the controller (hold the controller's LCD panel button while powering on, then hold the vehicle button for 3 s or more and release at the double beep; holding 5 s or more triggers a system reset). PC side: join SSID `StampFly-XXYY` in WiFi settings (default password `stampfly`). Connectivity check: `sf telemetry` (no `--ip` needed; listens on the default 192.168.10.1).
+Then pair the controller (hold the controller's LCD panel button while powering on, then hold the vehicle button for 3 s or more and release at the beep, then pick your own vehicle — last 4 hex digits of its MAC, check it with the `mac` command and stick a label on the vehicle — from the controller's on-screen list and confirm; holding 5 s or more triggers a system reset). PC side: join SSID `StampFly-XXYY` in WiFi settings (default password `stampfly`). Connectivity check: `sf telemetry` (no `--ip` needed; listens on the default 192.168.10.1).
 
 ```
 sf telemetry

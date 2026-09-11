@@ -14,7 +14,7 @@
 - [ ] `sf doctor` を実行 → エラーなく完了すること
 - [ ] `sf build vehicle` → `sf flash vehicle -m` → 標準起動音（C5→E5→G5）・LED 白→緑常灯・モニタに起動ログ、まで到達すること（実習 1 と同じ手順）
 - [ ] 書き込み直後のモニタ CLI で `param reset` → `param set wifi.mode 1` → `param set wifi.channel N` → `param save` → `reboot` が通り、再起動後に `param get wifi.channel` が N を返すこと（実習 1 (2/2) と同じ手順）
-- [ ] コントローラのペアリング: LCD パネルボタンを押しながら電源投入 → 機体ボタンを 3 秒以上押し続けて双方ビープ（5 秒以上でシステムリセットになるので、ビープで離す）
+- [ ] コントローラのペアリング: LCD パネルボタンを押しながら電源投入 → 機体ボタンを 3 秒以上押し続けてビープで離す（5 秒以上でシステムリセット）→ コントローラ画面の一覧から機体（MAC下4桁。`mac` コマンドで確認）を選んでボタンで確定 → 機体LEDが緑常灯になる
 - [ ] 以降の `sf lesson` 書き込みでは起動音が授業チャイムに変わること（実習ファーム共通の識別音。vehicle の標準起動音 C5→E5→G5 とは異なる。`sf flash vehicle` に戻すと標準音に戻る）
 - [ ] `sf lesson switch sci2026:3 --solution` → `sf lesson build` → `sf lesson flash` → 机上でモータが回転すること（duty を上げるとゆっくり回転数が上がる。異常時は即 DISARM）
 - [ ] `sf lesson switch sci2026:4 --solution` → コントローラのスティックを倒すと `rc_roll()`/`rc_pitch()` 等の値がシリアル出力で追従すること
@@ -80,7 +80,7 @@
 - [ ] `sf doctor` completes with no errors
 - [ ] `sf build vehicle` -> `sf flash vehicle -m` -> reaches the standard boot chime (C5-E5-G5), LED white then steady green, and the boot log in the monitor (same steps as Exercise 1)
 - [ ] In the monitor CLI right after flashing, `param reset` -> `param set wifi.mode 1` -> `param set wifi.channel N` -> `param save` -> `reboot` succeeds, and `param get wifi.channel` returns N after the reboot (same steps as Exercise 1 (2/2))
-- [ ] Controller pairing: hold the LCD panel button while powering on the controller, then hold the vehicle button for 3 s or more until both beep (release at the beep; 5 s or more triggers a system reset)
+- [ ] Controller pairing: hold the LCD panel button while powering on the controller, then hold the vehicle button for 3 s or more and release at the beep (5 s or more triggers a system reset), then pick the vehicle (last 4 hex digits of its MAC, check with the `mac` command) from the controller's on-screen list and confirm -> the vehicle's LED turns solid green
 - [ ] Subsequent `sf lesson` flashes switch the boot sound to the school chime (the lesson firmware's common identity sound, distinct from the vehicle's standard C5-E5-G5 chime; `sf flash vehicle` restores the standard sound)
 - [ ] `sf lesson switch sci2026:3 --solution` -> `sf lesson build` -> `sf lesson flash` -> motors spin on the table (speed rises gradually with duty; DISARM immediately if anything looks wrong)
 - [ ] `sf lesson switch sci2026:4 --solution` -> `rc_roll()`/`rc_pitch()` etc. track the controller sticks in the serial output

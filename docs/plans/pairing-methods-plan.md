@@ -158,11 +158,29 @@ W1 近接自動選択、W2 ペアコード、W4 同時押し、C1 Grove ケー�
 
 ## 5. 段階計画
 
-| Phase | 内容 | 合格基準 |
-|-------|------|---------|
-| 1 機体側 | 受理条件の変更、CLI `mac`、`pair status` の自 MAC 表示、起動ログ、SILS 試験、`sf build vehicle` | SILS の新試験と既存 `pairing.scn` が PASS。ビルド成功 |
-| 2 コントローラ側 | 候補表・画面・操作・確定・成立確認、`sf build controller` | ビルド成功。実機ベンチ 2 組同時で誤ペアゼロ（実機は次回） |
-| 3 文書・運用 | `docs/guides/controller.md`・`README.md`・`operation_manual.md` の手順更新と取り違えの注意書き、講習ランシート、機体ラベルに MAC 下 4 桁を併記する運用、`pairing_plan.md` P4 の更新 | 公開ガイドに新手順（一覧から選ぶ）と注意書きがある |
+| Phase | 内容 | 合格基準 | 状態 |
+|-------|------|---------|------|
+| 1 機体側 | 受理条件の変更、CLI `mac`、`pair status` の自 MAC 表示、起動ログ、SILS 試験、`sf build vehicle` | SILS の新試験と既存 `pairing.scn` が PASS。ビルド成功 | **完了**（コミット `79e2c7c8`。SILS 29 PASS + 5 KNOWN-FAIL + 1 SKIP、FAIL 0。host unit test 35/35） |
+| 2 コントローラ側 | 候補表・画面・操作・確定・成立確認、`sf build controller` | ビルド成功。実機ベンチ 2 組同時で誤ペアゼロ（実機は次回） | **完了**（コミット `88c46806`。`sf build controller` OK。実機 2 組同時ペアリングの検証は次回） |
+| 3 文書・運用 | `docs/guides/controller.md`・`README.md`・`operation_manual.md` の手順更新と取り違えの注意書き、講習ランシート、機体ラベルに MAC 下 4 桁を併記する運用、`pairing_plan.md` P4 の更新 | 公開ガイドに新手順（一覧から選ぶ）と注意書きがある | **進行中**（本セッションで実施。変更したドキュメントは下記） |
+
+### Phase 3 で変更したドキュメント
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `docs/guides/controller.md` | §7 ペアリング手順を新方式（一覧選択・確定操作必須）に全面改稿（JA/EN）。「取り違え防止」節を新設。トラブルシューティング表を更新 |
+| `README.md` | クイックスタートのペアリング手順（③）を新方式に更新（JA/EN）。`mac` コマンドとラベルに言及 |
+| `firmware/vehicle/docs/operation_manual.md` | §5 ペアリング手順を新方式に全面改稿（JA/EN）。CLI コマンド表に `mac` を追加。`pair status` の出力例を追加。「1ペアずつ順番に」の注意書きを新しい注意（複数組同時可・ラベル照合必須・LED 緑が最終確認）に置換 |
+| `docs/guides/motor_spin_quickstart.md` | §7 ペアリング手順に一覧選択・確定操作のステップを追加 |
+| `docs/events/sci_tutorial_2026/instructor_runsheet.md` | 事前チェックリスト・実習1(2/2)・実習4の各行を新方式に更新（JA/EN）。ラベル準備の注記を追加 |
+| `docs/events/sci_tutorial_2026/cheatsheet.md` | ペアリング手順の1文を新方式に更新（JA/EN） |
+| `docs/events/sci_tutorial_2026/verification_checklist.md` | ベンチ確認のペアリング項目を新方式に更新（JA/EN） |
+| `docs/events/sci_tutorial_2026/README.md` | 「機体・コントローラの準備」手順2を新方式に更新（JA/EN） |
+| `docs/events/dxh2026/setup-loaner-pc.md` | §2-3「ペアリング（1セットずつ）」を「複数セット同時可・ラベル照合必須」に全面改稿。§4-2 見出し・本文を同様に更新 |
+| `docs/events/dxh2026/equipment-checklist.md` | 前日チェックリスト・終了後チェックリストのペアリング/再ペアリング項目を新方式に更新 |
+| `docs/events/dxh2026/curriculum.md` | リスク対応表「クロスペアリング」行を新方式の仕組みの説明に更新。§4-2 参照文言の「1セットずつ」を削除 |
+| `docs/events/stampfly_workshop/slides/chapters/environment_setup.tex` | 変更なし（「ペアリングして使用する」という一般的な言及のみで、旧ルールの明記なし。確認のみ） |
+| `docs/events/stampfly_workshop/slides/chapters/controller_input.tex` | 「教室では一組ずつペアリングする」という旧ルールの明記を発見。手順表に候補一覧からの選択ステップを追加し、注意書きを新方式の説明に置換（**PDF は未リビルド**、本計画の指示どおりテキストのみ最小修正） |
 
 ## 6. 決定事項の記録
 

@@ -207,17 +207,38 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 ## 5. ペアリング手順
 
 機体とコントローラを1対1に束ね、複数機・複数送信機の混信を防ぐ。詳細は
-[`pairing_plan.md`](pairing_plan.md)。
+[`pairing_plan.md`](pairing_plan.md) と、教室での取り違え対策の検討経緯は
+[`docs/plans/pairing-methods-plan.md`](../../../docs/plans/pairing-methods-plan.md)。
 
 ### 手順
 
 1. 機体の電源を入れる。**未ペアなら自動でペアリング待機**（青 高速点滅 ＋ pairingTone）。
    機体は自分の MAC を含む PairingPacket を 500ms 周期で broadcast する。
-2. **コントローラをペアリングモードにする**（CH1-13 をスキャンして機体を探す）。
-3. コントローラが機体を発見 → 機体 MAC を学習 → 機体宛に ControlPacket を送信。
-4. 機体が最初の ControlPacket の送信元 MAC を相手として確定 → **Paired**（青点滅停止 → 緑常灯）。
+2. **コントローラをペアリングモードにする**（CH1-13 をスキャンし、聞こえた機体を候補表に集める。
+   最初の1通を採用するのではなく、候補が集まる間 LCD の一覧を更新し続ける）。
+3. コントローラの LCD に候補（機体 MAC 下4桁 + チャンネル、受信強度順）が一覧表示される。利用者が
+   一覧から機体を選んでボタンで確定すると、その機体宛に ControlPacket を送信する。
+4. **機体は、自分宛（`drone_mac` が自 MAC の下3バイトと一致）の ControlPacket だけを相手候補に
+   する。** 別の組のコントローラが別の機体を選んで送る電文は、この機体では相手候補にならず棄却
+   される（棄却数は `pair status` の `rejected` に積算される）。
+5. 自分宛の電文の送信元 MAC を相手として確定 → **Paired**（青点滅停止 → 緑常灯）。
    相手 MAC は NVS に保存され、次回起動時に自動復元される。
-5. 以降、相手以外の送信機のパケットは破棄される（混信対策）。
+6. 以降、相手以外の送信機のパケットは破棄される（混信対策、従来どおり）。
+
+### 機体ラベル（MAC 下4桁）
+
+コントローラの候補一覧は各機体を「MAC 下4桁」（例 `A1B2`）で表示する。取り違えを防ぐため、
+機体ごとにこの下4桁を印字したラベル（シール等）を本体に貼っておく。ラベルの値は USB CLI の
+`mac` コマンド（`sf monitor` で接続）で確認できる:
+
+```
+> mac
+MAC: XX:XX:XX:XX:XX:XX
+Label: XXYY
+```
+
+起動時のログにも `Own MAC: .. Label: XXYY` の1行が毎回出力される（モニタを開いたまま電源を
+入れれば確認できる）。
 
 ### 再ペアリング / 解除
 
@@ -225,13 +246,28 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 |------|------|
 | 機体ボタン 長押し3秒（地上）| 既存バインドを破棄して再ペアリング |
 | CLI `unpair` | 同上（バインド破棄＋ペアリング再突入）|
-| CLI `pair status` | 現在の PairingState とバインド済み相手 MAC を表示 |
+| CLI `pair status` | 自 MAC/ラベル・PairingState・バインド済み相手 MAC・棄却カウンタを表示（下記例） |
+
+```
+> pair status
+own mac : XX:XX:XX:XX:XX:XX (label XXYY)
+pairing : Paired
+bound   : XX:XX:XX:XX:XX:XX
+rejected: 3 (packets addressed to a different vehicle)
+```
 
 ### 注意（重要）
 
-- **ペアリングは1ペアずつ順番に行う。** 複数の未ペア機を**同時に**ペアリングモードにすると、
-  取り違え（自コントローラが隣の機体とペア）が起こり得る。既にペア済みで飛行/待機中の他機・他
-  コントローラは干渉しない（[`pairing_plan.md`](pairing_plan.md) §P4 の既知の弱点を参照）。
+- **複数組を同時にペアリングモードにしてよい。** 機体は自分宛の電文だけを相手候補にするため
+  （上記手順4）、隣の組のコントローラが送る電文が原因で取り違えが成立することはない。
+- ただし**コントローラの候補一覧には、電波が届く範囲の他機体のラベルも一緒に並ぶ**。一覧から
+  選ぶ操作そのものは人手なので、**必ず自分の機体に貼ったラベルと一致する行を選ぶこと**。他の
+  組のラベルを誤って選ぶと、その機体との間でペアリングが成立してしまう（機体側の宛先確認は
+  「別の組が誤って選んだ場合」を防ぐものではなく、「何も選んでいない機体が誤って拾われる」こと
+  を防ぐ仕組みである点に注意）。
+- 最終確認は**機体の LED が緑色に変わること**（ペア成立の合図）。誤って別のラベルを選んで
+  しまった場合は、選んだ側の機体の LED が緑になり、本来ペアリングしたかった自分の機体は青点滅
+  のまま残るので気づける。
 
 ## 6. CLI コマンド一覧
 
@@ -246,6 +282,7 @@ TAB で補完。
 | `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | センサ最新値表示 |
 | `version` | — | ファーム名・ビルド日時 |
+| `mac` | — | 自 MAC とラベル用の下4桁を表示（機体ラベル用） |
 | `pair` | `[start\|status]` | ペアリング再突入 / バインド状態表示 |
 | `unpair` | — | バインド破棄＋ペアリング再突入 |
 | `sound` | `[on\|off]` | ブザー有効/無効（NVS 保存）|
@@ -426,22 +463,64 @@ ARM is refused while calibrating, on low/USB power, or while pairing (check `sta
 
 ## 5. Pairing Procedure
 
-Binds one transmitter to one vehicle to prevent crosstalk. See [`pairing_plan.md`](pairing_plan.md).
+Binds one transmitter to one vehicle to prevent crosstalk. See [`pairing_plan.md`](pairing_plan.md);
+for the background on the classroom cross-pairing fix, see
+[`docs/plans/pairing-methods-plan.md`](../../../docs/plans/pairing-methods-plan.md).
 
 1. Power on the vehicle. **If unpaired it auto-enters Pairing** (blue fast blink + tone) and broadcasts
    a PairingPacket (its MAC) every 500 ms.
-2. **Put the controller into pairing mode** (it scans CH1-13 for the vehicle).
-3. The controller finds the vehicle, learns its MAC, and unicasts a ControlPacket to it.
-4. The vehicle fixes the first ControlPacket's src MAC as its peer → **Paired** (blue blink stops →
-   green solid). The peer MAC is saved to NVS and restored on the next boot.
-5. Thereafter ControlPackets from any other transmitter are dropped.
+2. **Put the controller into pairing mode** (it scans CH1-13 and keeps collecting every vehicle it
+   hears into a candidate table — it does not adopt the first packet).
+3. The controller's LCD lists the candidates (vehicle MAC last 4 hex digits + channel, strongest
+   signal first). The user picks one from the list and confirms; the controller then unicasts a
+   ControlPacket to that vehicle.
+4. **The vehicle only treats a ControlPacket as a bind candidate when it is addressed to itself**
+   (`drone_mac` matches this vehicle's own MAC's lower 3 bytes). A packet from a neighboring
+   controller that picked a different vehicle is never a candidate here (the count is tallied in
+   `pair status`'s `rejected` field).
+5. The vehicle fixes the source MAC of a packet addressed to itself as its peer → **Paired** (blue
+   blink stops → green solid). The peer MAC is saved to NVS and restored on the next boot.
+6. Thereafter ControlPackets from any other transmitter are dropped (unchanged from before).
+
+### Vehicle Label (last 4 hex digits of the MAC)
+
+The controller's candidate list shows each vehicle as its "MAC last 4 hex digits" (e.g. `A1B2`).
+To avoid mix-ups, put a sticker with these 4 digits on each vehicle. Read the value with the USB
+CLI `mac` command (connect with `sf monitor`):
+
+```
+> mac
+MAC: XX:XX:XX:XX:XX:XX
+Label: XXYY
+```
+
+The boot log also prints one `Own MAC: .. Label: XXYY` line every time (visible if the monitor is
+already open when power is applied).
 
 **Re-pair / clear**: on-board button long-press 3 s (on the ground), or CLI `unpair`. `pair status`
-shows the current PairingState and bound MAC.
+shows this vehicle's own MAC/label, the PairingState, the bound MAC, and the rejected-packet count:
 
-**Important**: pair ONE pair at a time. Putting multiple unpaired vehicles into pairing mode
-simultaneously can cross-pair (see the known limitation in [`pairing_plan.md`](pairing_plan.md) §P4).
-Already-paired vehicles/controllers nearby do not interfere.
+```
+> pair status
+own mac : XX:XX:XX:XX:XX:XX (label XXYY)
+pairing : Paired
+bound   : XX:XX:XX:XX:XX:XX
+rejected: 3 (packets addressed to a different vehicle)
+```
+
+**Important**:
+- **Several pairs may enter pairing mode at the same time.** Because the vehicle only treats
+  packets addressed to itself as candidates (step 4), a neighboring controller's packets alone
+  cannot cause a cross-pair.
+- However, **the controller's candidate list also shows any other vehicle's label that is within
+  radio range.** Picking from the list is still a human action, so **always pick the row matching
+  the label stuck on your own vehicle.** Picking another pair's label by mistake does complete a
+  pairing with that vehicle (the vehicle-side destination check prevents an *unselected* vehicle
+  from being picked up by accident — it does not prevent a *deliberately wrong* selection from
+  working).
+- The final check is **the vehicle's LED turning green** (the sign of a successful pairing). If
+  you pick the wrong label, that other vehicle's LED turns green while the vehicle you meant to
+  pair keeps blinking blue — so the mistake is noticeable.
 
 ## 6. CLI Commands
 
@@ -454,6 +533,7 @@ completes.
 | `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | Print sensor readings |
 | `version` | — | Firmware name / build date |
+| `mac` | — | Show this vehicle's MAC and its 4-hex-digit label (for the vehicle sticker) |
 | `pair` | `[start\|status]` | Re-enter pairing / show bind |
 | `unpair` | — | Clear bind and re-enter pairing |
 | `sound` | `[on\|off]` | Enable/disable the buzzer (NVS) |

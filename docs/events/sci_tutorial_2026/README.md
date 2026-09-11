@@ -98,7 +98,7 @@ VSCode 拡張機能 `alexnesnes.teleplot` も入れておく（Teleplot でセ�
 | 手順 | 内容 |
 |------|------|
 | 1 | 開発環境で機体ファームをビルドして書き込む（当日の実習 1 と同じ手順）: `sf build vehicle` → `sf flash vehicle -m`。書き込み直後に起動音が鳴り、LED が白から緑の常灯になり、モニタに起動ログが流れれば成功 |
-| 2 | コントローラのペアリングを行う（初回のみ手動: コントローラは LCD パネルボタンを押しながら電源投入，StampFly は本体ボタンを 3 秒以上押し続け、双方がビープしたら離す。5 秒以上押し続けるとシステムリセットになる。以降は電源投入だけで自動再接続する。手順は [送信機の使い方](../../guides/controller.md) を参照）。自分で購入したコントローラは先に `sf flash controller` で書き直す |
+| 2 | コントローラのペアリングを行う（初回のみ手動: コントローラは LCD パネルボタンを押しながら電源投入，StampFly は本体ボタンを 3 秒以上押し続けてビープで離す。5 秒以上押し続けるとシステムリセットになる。続けてコントローラ画面の一覧から自分の機体（MAC下4桁。機体の USB CLI `mac` コマンドで確認できる）を選んでボタンで確定するとペアリング完了。以降は電源投入だけで自動再接続する。手順は [送信機の使い方](../../guides/controller.md) を参照）。自分で購入したコントローラは先に `sf flash controller` で書き直す |
 | 3 | 機体を机の上に置き、モータ回転中は手を近づけない状態でコントローラから ARM（右スティック押し込み）し、モータが応答することを確認する。異常時は即 DISARM |
 
 WiFi モードとチャンネルの設定は、当日の実習 1 (2/2) で講師の指定するチャンネルとあわせて行う。
@@ -224,7 +224,7 @@ Also install the VSCode extension `alexnesnes.teleplot` (used to graph sensor da
 | Step | Detail |
 |------|--------|
 | 1 | Build and flash the vehicle firmware from the dev environment (the same steps as Exercise 1 on the day): `sf build vehicle` then `sf flash vehicle -m`. Success looks like the boot chime, the LED going white then steady green, and the boot log in the monitor |
-| 2 | Pair the controller (first time only, manual: power on the controller while holding its LCD panel button, then hold the StampFly's body button for 3 s or more and release at the double beep; holding 5 s or more triggers a system reset. After that, power-up alone reconnects automatically. See [Using the Transmitter](../../guides/controller.md)). A controller you bought yourself must first be reflashed with `sf flash controller` |
+| 2 | Pair the controller (first time only, manual: power on the controller while holding its LCD panel button, then hold the StampFly's body button for 3 s or more and release at the beep; holding 5 s or more triggers a system reset. Then pick your own vehicle — last 4 hex digits of its MAC, checked with the vehicle's USB CLI `mac` command — from the controller's on-screen list and confirm to complete pairing. After that, power-up alone reconnects automatically. See [Using the Transmitter](../../guides/controller.md)). A controller you bought yourself must first be reflashed with `sf flash controller` |
 | 3 | Place the vehicle on a table, keep hands clear of the spinning motors, and arm from the controller (push the right stick) to confirm the motors respond. DISARM immediately if anything looks wrong |
 
 The WiFi mode and channel are set on the day in Exercise 1 (2/2), together with the channel the instructor assigns you.

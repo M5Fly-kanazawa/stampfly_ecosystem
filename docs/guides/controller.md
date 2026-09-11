@@ -35,7 +35,7 @@
 
 電源スイッチを入れると、通常は既定の ESP-NOW モードで自動的に起動します。起動時には、前回ペアリングした機体の MAC アドレスと通信チャンネルを送信機内部の保存領域（電源を切っても消えない）から読み出し、自動的に再接続を試みます。
 
-画面（M5ボタン）を押しながら電源を入れると、強制ペアリングモードに入ります。画面には「Pairing mode...」「Hold StampFly Btn」「until beep!」と表示されます。詳しい手順は7章で説明します。
+画面（M5ボタン）を押しながら電源を入れると、強制ペアリングモードに入ります。画面には候補機体の一覧画面「=== PAIRING ===」が表示されます。詳しい手順は7章で説明します。
 
 電源投入時に左ボタンなどを押していてもスティックモードは変わりません。スティックモードの切り替えはメニュー操作で行います（8章参照）。
 
@@ -117,16 +117,39 @@ Device ID は送信機を識別する番号で、TDMA（時分割による通信
 
 ## 7. ペアリング（機体との無線接続）
 
-ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順:
+ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順。以前は「最初に届いた1通」を
+無条件に採用していたが、複数組が同時にペアリングすると隣の組と取り違える問題があったため、
+現在は**候補一覧から利用者が選んで確定する方式**になっている
+（背景は `docs/plans/pairing-methods-plan.md` を参照）:
 
 1. 送信機: 画面（M5ボタン）を押しながら電源を入れる
-2. 画面に「Pairing mode...」「Hold StampFly Btn」「until beep!」と表示され、約500msごとにビープ音が鳴りながら機体を探索する
-3. 機体側: 本体のボタンを3秒長押しするとペアリング情報を消して探索を開始する（機体のLEDが青色で速く点滅する）
-4. 送信機が機体を見つけると探索用のビープが止まり、機体側の青い点滅も止まる。これがペアリング完了の合図
-5. 続けて送信機は起動を終え、下降する 2 音を鳴らしてフライト画面に切り替わる（この 2 音は毎回の起動完了音で、ペアリング専用の合図ではない）
-6. ペアリング情報は送信機内部に保存され、次回起動時から自動的に同じ機体へ再接続する
+2. 機体側: 本体のボタンを3秒長押ししてペアリングモードに入る（機体のLEDが青色で速く点滅し、ビープ音が鳴る）
+3. 送信機の LCD に `=== PAIRING ===` 画面が表示され、聞こえた機体を受信強度の強い順に
+   「MAC下4桁 + チャンネル」（例 `A1B2 CH06`）の一覧として最大6件表示する。まだ何も
+   聞こえていなければ「Searching...」と表示される。**一覧の下4桁を機体に貼ったラベルと
+   照合すること**（次節参照）
+4. 右スティックの上下（または黄ボタン2つ）で選びたい行に合わせ、画面の決定ボタン（M5ボタン）
+   を押して確定する。**候補が1件でもこの確定操作は省略できない**（隣の機体しか見えていない
+   状況での誤確定を防ぐため）
+5. 確定すると画面が「Pairing... waiting for vehicle reply...」に切り替わり、選んだ機体からの
+   応答を待つ。応答があればペアリング完了してフライト画面に切り替わる。5秒応答が無ければ
+   「No reply」と表示していったん一覧に戻る（機体側がまだペアリングモードか確認すること）
+6. ペアリング情報は送信機内部（SPIFFS）に保存され、次回起動時から自動的に同じ機体へ再接続する
 
 やり直す場合は手順1からやり直します（画面を押しながら再度電源を入れる）。
+
+### 取り違え防止（教室・イベント等）
+
+複数組が同じ部屋で同時にペアリングモードに入っても、以下の2つの仕組みで取り違え（隣の組の
+機体と誤って組むこと）を防ぐ。
+
+| 仕組み | 内容 |
+|---|---|
+| 一覧からの選択が必須 | 上記手順4のとおり、「最初に届いた1通」を無条件採用せず、必ず一覧から選んで確定する操作を挟む。機体には MAC 下4桁のラベル（シール）を貼っておき、送信機の候補一覧の表示と照合して自分の機体を選ぶ。ラベルは機体の USB CLI `mac` コマンド（`sf monitor` で接続）で確認できる。詳細は[運用マニュアル](../../firmware/vehicle/docs/operation_manual.md)を参照 |
+| 機体側の宛先確認 | 機体はペアリング中でも、自分宛（自分の MAC 下3バイトが一致する）操縦電文だけを相手候補にする。別の組の送信機が送る電文は、その機体が選ばれない限り相手候補にならない |
+
+最終確認は**機体の LED が緑色に変わること**（ペア成立の合図）。誤って別のラベルを選んで
+しまった場合は、選んだ側の機体の LED が緑になり、自分の機体は青点滅のまま残るので気づける。
 
 ### 複数機体・複数送信機を同時に使う場合の注意（教室・イベント等）
 
@@ -180,7 +203,8 @@ ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順:
 | 飛行中に約500ms間隔でビープ音が鳴り続ける | 機体との通信が一定時間途絶えている可能性があります（未確認: 画面表示への反映は実機で確認できていません） |
 | 通信モードをESP-NOWからUDPへ切り替えた後、UDPがうまく繋がらない | 切替時は自動再起動しません。繋がらない場合は電源を入れ直してください（未確認: 再起動なしでの動作） |
 | Device IDを変更しても複数機体運用時にうまく通信できない | Device IDの変更はその場で保存されますが、通信への反映には再起動が必要です |
-| ペアリングが終わらず「Pairing mode...」のまま | 機体側もペアリングモードになっているか確認してください（機体のボタン3秒長押し、LEDが青で速く点滅）。500msごとのビープが続いている間は探索中です |
+| ペアリング画面の一覧に機体が出てこない（「Searching...」のまま） | 機体側もペアリングモードになっているか確認してください（機体のボタン3秒長押し、LEDが青で速く点滅） |
+| 確定後「No reply」と表示されて一覧に戻る | 機体側がまだペアリングモード（LEDが青で速く点滅）か確認してください。5秒以内に応答が無いとこの表示になります |
 | スティックが中央でもわずかにずれている、飛行が一方向に流れる | メニューのCalibrationを実施してください |
 | Batt: の警告電圧を設定しても警告が出ない | 現行ファームウェアでは警告表示・警告音には反映されません（10章参照） |
 
@@ -223,7 +247,7 @@ The diagram above is a schematic of the physical layout (operating the power swi
 
 When you flip the power switch, the controller normally boots into the default ESP-NOW mode automatically. At boot, it restores the MAC address and channel of the last paired vehicle from its internal storage (kept across power-off) and automatically attempts to reconnect.
 
-Holding the screen (M5 button) while powering on enters forced pairing mode. The screen shows "Pairing mode...", "Hold StampFly Btn", and "until beep!". The full procedure is in Chapter 7.
+Holding the screen (M5 button) while powering on enters forced pairing mode. The screen shows the candidate list screen, "=== PAIRING ===". The full procedure is in Chapter 7.
 
 Holding the left button or any other button at power-on does not change the stick mode. The stick mode is changed through the menu (see Chapter 8).
 
@@ -305,16 +329,41 @@ Steps:
 
 ## 7. Pairing (Connecting to the Vehicle)
 
-Pairing procedure over ESP-NOW (Espressif's direct-radio protocol):
+Pairing procedure over ESP-NOW (Espressif's direct-radio protocol). It used to adopt the first
+packet it heard unconditionally, but that let several pairs pairing at the same time end up
+cross-paired with a neighboring set, so the controller now **lists every vehicle it hears and
+requires the user to pick one** (see `docs/plans/pairing-methods-plan.md` for the background):
 
 1. Controller: power on while holding the screen (M5 button)
-2. The screen shows "Pairing mode...", "Hold StampFly Btn", "until beep!" and beeps roughly every 500ms while searching for a vehicle
-3. Vehicle: hold its button for 3 seconds to clear its pairing info and start searching (its LED blinks blue rapidly)
-4. Once the controller finds the vehicle, the search beep stops and the vehicle's blue blinking stops. This is the sign that pairing is complete
-5. The controller then finishes booting, plays a descending two-tone beep, and switches to the flight screen (this two-tone beep is the normal boot-complete sound heard on every startup, not a pairing-specific signal)
-6. Pairing information is saved inside the controller and it automatically reconnects to the same vehicle on every subsequent boot
+2. Vehicle: hold its button for 3 seconds to enter pairing mode (its LED blinks blue rapidly and it beeps)
+3. The controller's LCD shows a `=== PAIRING ===` screen listing every vehicle it hears, strongest
+   signal first, as "MAC last 4 hex digits + channel" (e.g. `A1B2 CH06`), up to 6 rows. If nothing
+   has been heard yet it shows "Searching...". **Match the last 4 hex digits against the label
+   stuck on the vehicle** (see the next section)
+4. Move the highlight with the right stick up/down (or the two yellow buttons) and confirm with
+   the screen push button (M5 button). **An explicit press is always required, even with a single
+   candidate** (this avoids mis-confirming a neighbor's vehicle when only it is visible)
+5. After confirming, the screen shows "Pairing... waiting for vehicle reply..." while it waits for
+   the chosen vehicle to respond. Success switches to the flight screen; no reply within 5 seconds
+   shows "No reply" and returns to the list (check that the vehicle is still in pairing mode)
+6. Pairing information is saved inside the controller (SPIFFS) and it automatically reconnects to
+   the same vehicle on every subsequent boot
 
 To retry, repeat from step 1 (power on again while holding the screen).
+
+### Avoiding cross-pairing (classrooms, events)
+
+When several pairs enter pairing mode in the same room at the same time, two mechanisms keep them
+from cross-pairing (ending up matched with a neighboring pair's vehicle):
+
+| Mechanism | What it does |
+|---|---|
+| Picking from a list is mandatory | As in step 4 above, the first packet heard is never adopted unconditionally — the user must pick from the list and confirm. Put a sticker with the vehicle's last-4-hex-digit MAC label on each vehicle and match it against the controller's candidate list to find your own vehicle. Read the label with the vehicle's USB CLI `mac` command (connect with `sf monitor`); see the [operation manual](../../firmware/vehicle/docs/operation_manual.md) for details |
+| The vehicle checks the destination | Even while pairing, the vehicle only treats a control packet as a bind candidate when it is addressed to itself (the vehicle's own MAC's lower 3 bytes match). A neighboring controller's packets never become a candidate unless that vehicle is the one selected |
+
+The final check is **the vehicle's LED turning green** (the sign that pairing succeeded). If you
+pick the wrong label by mistake, that other vehicle's LED turns green while your own vehicle's LED
+keeps blinking blue — so the mistake is noticeable.
 
 ### Multiple vehicles/controllers at the same location (classrooms, events)
 
@@ -368,6 +417,7 @@ To go back to flying the real vehicle, repeat the Chapter 6 steps and press sele
 | A beep repeats roughly every 500ms during flight | Communication with the vehicle may have been lost for a while (not verified: whether this is reflected on screen has not been confirmed on real hardware) |
 | After switching from ESP-NOW to UDP, UDP does not connect properly | Switching does not restart automatically. Power-cycle the controller if it does not connect (not verified: behavior without a restart) |
 | Changing Device ID does not fix multi-vehicle communication | The Device ID change is saved immediately, but a restart is needed for it to take effect on the radio |
-| Pairing never finishes, stuck on "Pairing mode..." | Check that the vehicle is also in pairing mode (hold its button 3 seconds; its LED should blink blue rapidly). While the 500ms beep continues, it is still searching |
+| No vehicle appears in the pairing list ("Searching..." stays) | Check that the vehicle is also in pairing mode (hold its button 3 seconds; its LED should blink blue rapidly) |
+| "No reply" appears after confirming, and it returns to the list | Check that the vehicle is still in pairing mode (LED blinking blue rapidly). This shows up whenever there is no reply within 5 seconds |
 | Sticks feel slightly off-center, flight drifts one way | Run Calibration from the menu |
 | Setting "Batt:" does not produce a warning | The current firmware does not reflect this setting as a display or sound (see Chapter 10) |

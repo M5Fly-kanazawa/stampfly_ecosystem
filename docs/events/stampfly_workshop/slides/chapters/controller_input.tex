@@ -47,21 +47,23 @@
 % ------------------------------------------------------------------
 \begin{frame}{ペアリング手順 / Pairing}
   \begin{table}
-    \centering
-    \begin{tabular}{cp{120mm}}
+    \centering\small
+    \begin{tabular}{cp{122mm}}
       \hline
       \textbf{Step} & \textbf{操作} \\
       \hline
-      1 & コントローラの \textbf{M5ボタンを押しながら電源ON} → LCD に ``Pairing mode...'' 表示 \\
+      1 & コントローラの \textbf{M5ボタンを押しながら電源ON} → LCD に候補一覧画面 ``=== PAIRING ==='' 表示 \\
       2 & StampFly のボタンを \textbf{3秒長押し} → 青LED高速点滅 + ビープ音 \\
-      3 & ペアリング完了 → ビープ音が鳴り、次回から自動接続 \\
+      3 & 右スティック上下（または黄ボタン2つ）で自分の機体（MAC下4桁ラベル）に合わせ、画面ボタンで確定 \\
+      4 & ペアリング完了 → 機体LEDが緑常灯になり、次回から自動接続 \\
       \hline
     \end{tabular}
   \end{table}
 
   \begin{alertblock}{注意}
+    \small
     \begin{itemize}
-      \item 教室では\textbf{一組ずつ}ペアリングする（ブロードキャスト通信のため近くの機体と干渉する可能性）
+      \item 教室で\textbf{複数組が同時に}ペアリングしても、一覧から MAC ラベルが一致する行を選べば取り違えない（近くの他の機体も一覧に出るので要確認）
       \item うまくいかない場合: 両方を再起動して Step 1 からやり直す
     \end{itemize}
   \end{alertblock}

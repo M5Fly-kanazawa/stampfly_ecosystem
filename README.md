@@ -209,11 +209,11 @@ sf flash vehicle
 
 | 手順 | 操作 |
 |------|------|
-| 1 | 送信機の電源を切り、画面（ボタン）を押したまま電源を入れる。画面に `Pairing mode...` と表示され、ビープ音が繰り返し鳴る |
+| 1 | 送信機の電源を切り、画面（ボタン）を押したまま電源を入れる。画面に候補機体の一覧画面（`=== PAIRING ===`）が表示される |
 | 2 | 機体の電源を入れ、機体のボタンを約 3 秒長押しする。LED が青の速い点滅になり、送信機を探し始める |
-| 3 | 送信機のビープ音が止まって飛行画面に切り替わり、機体の青い点滅が止まればペアリング完了 |
+| 3 | 送信機の画面に機体が「MAC下4桁 + チャンネル」の一覧として表示されたら、対象の機体を選んで画面のボタンで確定する。機体から応答があればペアリング完了 |
 
-ペアリング情報を持たない機体は、電源を入れるだけで自動的に探索を始めます。手順 2 の長押しは、以前の情報を消して確実に探索を始めさせるための操作で、別の送信機と組み替えるときにも使います。
+ペアリング情報を持たない機体は、電源を入れるだけで自動的に探索を始めます。手順 2 の長押しは、以前の情報を消して確実に探索を始めさせるための操作で、別の送信機と組み替えるときにも使います。教室で複数組が同時にペアリングしても、一覧から選ぶ操作が必須なので取り違えません。機体に MAC 下4桁のラベル（`sf monitor` で `mac` コマンドを実行すると確認できる）を貼っておくと、一覧との照合がしやすくなります。詳しい手順は[送信機の使い方](docs/guides/controller.md)を参照してください。
 
 飛行前の確認とスティック操作（アーム・離陸・着陸・飛行モードの切替）は、操縦方法のページを参照してください。
 
@@ -597,11 +597,11 @@ sf flash vehicle
 
 | Step | Action |
 |------|--------|
-| 1 | Power off the transmitter, then power it on while holding the screen (button). The screen shows `Pairing mode...` and it beeps repeatedly |
+| 1 | Power off the transmitter, then power it on while holding the screen (button). The screen shows a candidate list screen (`=== PAIRING ===`) |
 | 2 | Power on the vehicle and hold its button for about 3 seconds. The LED blinks blue rapidly while it searches for a transmitter |
-| 3 | Pairing is complete when the transmitter stops beeping and shows the flight screen, and the vehicle's blue blinking stops |
+| 3 | Once the transmitter's screen lists the vehicle as "MAC last 4 hex digits + channel", select it and confirm with the screen button. Pairing completes once the vehicle replies |
 
-A vehicle with no pairing information starts searching as soon as it is powered on. The long press in step 2 clears any previous pairing so the search starts for certain, and is also how you re-pair with a different transmitter.
+A vehicle with no pairing information starts searching as soon as it is powered on. The long press in step 2 clears any previous pairing so the search starts for certain, and is also how you re-pair with a different transmitter. Several pairs can pair at the same time in a classroom without cross-pairing, since picking from the list is a required step. Putting a sticker with the vehicle's last-4-hex-digit MAC label (read it with the `mac` command over `sf monitor`) on each vehicle makes matching the list easier. See the [Controller Guide](docs/guides/controller.md) for the full procedure.
 
 For the pre-flight checklist and stick operation (arm, take-off, landing, flight-mode switching), see the flying guide.
 

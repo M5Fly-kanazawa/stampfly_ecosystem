@@ -7,7 +7,7 @@
 > vehicle アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
 > architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
 > コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SILS検証)。
-> **SILS ゲート**: `sf sils scenario simulator/sils/scenarios/pairing.scn --target vehicle --unpaired`
+> **SILS 合否判定**: `sf sils scenario simulator/sils/scenarios/pairing.scn --target vehicle --unpaired`
 > = 未ペア起動→自動Pairing→bind（相互MAC学習）＋誤MAC送信機のARM/離陸を破棄（混信拒否, duty=0）。
 > **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
 > ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
@@ -142,7 +142,7 @@ WiFi ハード層が弾く）。
 - 機体側: bind 時に ControlPacket の `drone_mac` 欄(0-2)＝自MAC下位3B 一致を要求（誤狙い弾く防御層。
   ただし「こちらを狙った2台」は区別不可＝先着のまま）。
 - **RSSI で最寄りを選ぶ／ボタン同時押し確認**＝取り違えをほぼ排除するが**コントローラ側改修が必要**。
-- SILS に「2台同時ペアリング」シナリオを足して取り違え挙動をゲート化（現状 SILS の仮想送信機は1台で未検証）。
+- SILS に「2台同時ペアリング」シナリオを足して取り違え挙動を合否判定に組み込む（現状 SILS の仮想送信機は1台で未検証）。
 
 > **方針決定（2026-06-09, ユーザー B）**: いま堅牢化はせず**「1ペアずつ運用」で実機ブリングアップを
 > 先行**。同時マスペアリング堅牢化（per-drone channel + RSSI/確認）は **30機ワークショップ運用が
@@ -153,7 +153,7 @@ WiFi ハード層が弾く）。
 ## 6. SILS 検証方針
 
 - **P1**: scenario で `drone_mac` 付き ControlPacket を注入できるよう `scenario_inject` を拡張。
-  「誤 MAC → 無視（ARM もしない）」「正 MAC / broadcast → 飛行」をゲート化（log/metric）。
+  「誤 MAC → 無視（ARM もしない）」「正 MAC / broadcast → 飛行」を合否判定に組み込む（log/metric）。
 - **P2-P3**: emu で PAIRING 遷移・PairingPacket 送出・NVS 保存/復元を発火確認。エミュレータの
   ESP-NOW shim に「機体が送出したパケット」を観測する経路が要る（送信側 capture の追加）。
 - 既存の決定論・byte-identical 原則を維持（未ペア既定はブロードキャスト受理で従来と一致）。
