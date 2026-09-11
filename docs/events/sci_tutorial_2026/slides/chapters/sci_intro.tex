@@ -77,17 +77,35 @@
 % Pulled forward from Session 2 (sci_s2_setup_sensors.tex) so participants who
 % haven't installed yet can start now and work through it while Session 1 is
 % being presented, instead of losing S2 time to it. The verification step
-% (setup_env -> sf doctor) stays in S2's "実習1"; these frames only preview
-% the commands to type, one slide per OS, plus a slide showing what a
-% successful sf doctor run looks like.
+% (setup_env -> sf doctor) stays in S2's "実習1". These frames first restate
+% the 3-step structure from the README's overview table (common across
+% OSes), then preview the OS-specific commands one slide per OS, then show
+% what a successful sf doctor run looks like.
 % Session 2 (sci_s2_setup_sensors.tex) から先出し: 未導入の参加者が今から
 % 始め、Session 1 を聞いている間に並行して進められるようにする（S2の時間を
 % 削らない）。確認ステップ（setup_env → sf doctor）はS2「実習1」に残すため、
-% ここではOS別に打つコマンドだけを先出しし、最後にsf doctorが成功した時の
-% 表示例を示す1枚を添える。
+% ここではまずREADMEの概要表と同じ3手順（どのOSでも共通）を示し、続けて
+% OS別に打つコマンドを先出しし、最後にsf doctorが成功した時の表示例を
+% 示す1枚を添える。
+\begin{frame}{開発環境の導入（先出し）: 手順はどのOSも共通}
+  \begin{exampleblock}{① 前提ツール}
+    \small Git を入れる（専用の Python 3.12 と ESP-IDF v5.5.2 はインストーラが自動導入）
+  \end{exampleblock}
+  \begin{exampleblock}{② 取得と導入}
+    \small リポジトリを取得し、インストーラを実行する
+  \end{exampleblock}
+  \begin{exampleblock}{③ 有効化と診断}
+    \small 開発環境を有効化し、\code{sf doctor} で確認する
+  \end{exampleblock}
+
+  \vspace{0.3em}
+  {\small 具体的なコマンドはOSごとに違う → 次の3枚（Windows / macOS / Linux）}
+\end{frame}
+
+% ------------------------------------------------------------------
 \begin{frame}[fragile]{開発環境の導入（先出し）: Windows}
   \begin{exampleblock}{① 前提ツール}
-    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt, alsoletter={-}]
 winget install Git.Git --accept-source-agreements --accept-package-agreements
     \end{lstlisting}
   \end{exampleblock}
