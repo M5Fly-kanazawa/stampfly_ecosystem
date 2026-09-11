@@ -42,6 +42,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_system.h"
+#include "esp_mac.h"       // esp_read_mac(ESP_MAC_WIFI_SOFTAP) for `mac` / `mac` の SoftAP BSSID 読み
 #include "esp_console.h"
 #include "esp_timer.h"
 #include "nvs.h"       // wifi credentials (CLI writes, sf_comm reads at boot)
@@ -322,6 +323,17 @@ int cmd_mac(int argc, char** argv)
     // SoftAP の SSID も同じ STA 側 MAC 末尾から作る（Comm::startSoftAp）ので、
     // ラベル・コントローラ一覧・SSID は同じ識別子になる。参考として併記する。
     std::printf("SoftAP SSID: StampFly-%02X%02X\n", diag.own_mac[4], diag.own_mac[5]);
+
+    // The SoftAP interface's own MAC (the BSSID a Wi-Fi scanner shows) is
+    // STA MAC + 1 by ESP32 rule (two interfaces cannot share a MAC); print it
+    // with the relation so the +1 never surprises anyone.
+    // SoftAP インターフェース自身の MAC（Wi-Fi スキャンで見える BSSID）は ESP32 の
+    // 仕様で STA MAC + 1（2 つのインターフェースは同じ MAC を持てない）。関係式を
+    // 添えて表示し、+1 で戸惑わないようにする。
+    uint8_t ap_mac[6] = {};
+    esp_read_mac(ap_mac, ESP_MAC_WIFI_SOFTAP);
+    std::printf("SoftAP BSSID: %02X:%02X:%02X:%02X:%02X:%02X (= MAC + 1, ESP32 rule)\n",
+                ap_mac[0], ap_mac[1], ap_mac[2], ap_mac[3], ap_mac[4], ap_mac[5]);
     return 0;
 }
 

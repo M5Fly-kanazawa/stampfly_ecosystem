@@ -145,7 +145,7 @@ ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順�
 
 | 仕組み | 内容 |
 |---|---|
-| 一覧からの選択が必須 | 上記手順4のとおり、「最初に届いた1通」を無条件採用せず、必ず一覧から選んで確定する操作を挟む。機体には MAC 下4桁のラベル（シール）を貼っておき、送信機の候補一覧の表示と照合して自分の機体を選ぶ。ラベルは機体の USB CLI `mac` コマンド（`sf monitor` で接続）で確認できる。詳細は[運用マニュアル](../../firmware/vehicle/docs/operation_manual.md)を参照 |
+| 一覧からの選択が必須 | 上記手順4のとおり、「最初に届いた1通」を無条件採用せず、必ず一覧から選んで確定する操作を挟む。機体には MAC 下4桁のラベル（シール）を貼っておき、送信機の候補一覧の表示と照合して自分の機体を選ぶ。ラベルは機体の USB CLI `mac` コマンド（`sf monitor` で接続）で確認できる（機体 ID = ステーション MAC の下4桁。SoftAP の SSID 末尾も同じ値。Wi-Fi スキャンで見える BSSID だけは ESP32 の仕様でこれ + 1）。詳細は[運用マニュアル](../../firmware/vehicle/docs/operation_manual.md)を参照 |
 | 機体側の宛先確認 | 機体はペアリング中でも、自分宛（自分の MAC 下3バイトが一致する）操縦電文だけを相手候補にする。別の組の送信機が送る電文は、その機体が選ばれない限り相手候補にならない |
 
 最終確認は**機体の LED が緑色に変わること**（ペア成立の合図）。誤って別のラベルを選んで
@@ -358,7 +358,7 @@ from cross-pairing (ending up matched with a neighboring pair's vehicle):
 
 | Mechanism | What it does |
 |---|---|
-| Picking from a list is mandatory | As in step 4 above, the first packet heard is never adopted unconditionally — the user must pick from the list and confirm. Put a sticker with the vehicle's last-4-hex-digit MAC label on each vehicle and match it against the controller's candidate list to find your own vehicle. Read the label with the vehicle's USB CLI `mac` command (connect with `sf monitor`); see the [operation manual](../../firmware/vehicle/docs/operation_manual.md) for details |
+| Picking from a list is mandatory | As in step 4 above, the first packet heard is never adopted unconditionally — the user must pick from the list and confirm. Put a sticker with the vehicle's last-4-hex-digit MAC label on each vehicle and match it against the controller's candidate list to find your own vehicle. Read the label with the vehicle's USB CLI `mac` command (connect with `sf monitor`); the vehicle ID is the last 4 hex digits of the station MAC, also the SoftAP SSID tail, while the BSSID seen by a Wi-Fi scanner is that + 1 by ESP32 rule; see the [operation manual](../../firmware/vehicle/docs/operation_manual.md) for details |
 | The vehicle checks the destination | Even while pairing, the vehicle only treats a control packet as a bind candidate when it is addressed to itself (the vehicle's own MAC's lower 3 bytes match). A neighboring controller's packets never become a candidate unless that vehicle is the one selected |
 
 The final check is **the vehicle's LED turning green** (the sign that pairing succeeded). If you

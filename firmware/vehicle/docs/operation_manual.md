@@ -225,7 +225,7 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
    相手 MAC は NVS に保存され、次回起動時に自動復元される。
 6. 以降、相手以外の送信機のパケットは破棄される（混信対策、従来どおり）。
 
-### 機体ラベル（MAC 下4桁）
+### 機体 ID（ラベル、MAC 下4桁）
 
 コントローラの候補一覧は各機体を「MAC 下4桁」（例 `A1B2`）で表示する。取り違えを防ぐため、
 機体ごとにこの下4桁を印字したラベル（シール等）を本体に貼っておく。ラベルの値は USB CLI の
@@ -236,15 +236,18 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 MAC: XX:XX:XX:XX:XX:XX
 Label: XXYY
 SoftAP SSID: StampFly-XXYY
+SoftAP BSSID: XX:XX:XX:XX:XX:ZZ (= MAC + 1, ESP32 rule)
 ```
 
 起動時のログにも `Own MAC: .. Label: XXYY` の1行が毎回出力される（モニタを開いたまま電源を
 入れれば確認できる）。
 
-**補足:** ラベル、コントローラの候補一覧、SoftAP の SSID `StampFly-XXYY`、Tello 互換 API の `sn?` は、
-いずれもステーション側 MAC（ESP-NOW の送信元）の下位バイトから作られ、同じ下 4 桁になる。ESP32 は
-SoftAP インターフェースにステーション側 + 1 の MAC を割り当てるが、SSID の名前は意図的にステーション側
-から取っている（機体の識別子を 1 つにするため）。
+**関係式（ESP32 の仕様）:**
+
+| 値 | 由来・関係 |
+|----|-----------|
+| 機体 ID（ラベル、コントローラの候補一覧、SoftAP の SSID `StampFly-XXYY` の末尾、Tello 互換 API の `sn?`） | ステーション側 MAC（ESP-NOW の送信元）の下 4 桁。**機体の識別子はこれ 1 つ** |
+| SoftAP の BSSID（Wi-Fi スキャンで見えるアクセスポイントの MAC） | ステーション側 MAC + 1（末尾 1 バイト）。ESP32 は 2 つのインターフェースに同じ MAC を割り当てられないため、SSID の末尾（= 機体 ID）とは 1 違う |
 
 ### 再ペアリング / 解除
 
@@ -488,7 +491,7 @@ for the background on the classroom cross-pairing fix, see
    blink stops → green solid). The peer MAC is saved to NVS and restored on the next boot.
 6. Thereafter ControlPackets from any other transmitter are dropped (unchanged from before).
 
-### Vehicle Label (last 4 hex digits of the MAC)
+### Vehicle ID (label, last 4 hex digits of the MAC)
 
 The controller's candidate list shows each vehicle as its "MAC last 4 hex digits" (e.g. `A1B2`).
 To avoid mix-ups, put a sticker with these 4 digits on each vehicle. Read the value with the USB
@@ -499,15 +502,18 @@ CLI `mac` command (connect with `sf monitor`):
 MAC: XX:XX:XX:XX:XX:XX
 Label: XXYY
 SoftAP SSID: StampFly-XXYY
+SoftAP BSSID: XX:XX:XX:XX:XX:ZZ (= MAC + 1, ESP32 rule)
 ```
 
 The boot log also prints one `Own MAC: .. Label: XXYY` line every time (visible if the monitor is
 already open when power is applied).
 
-**Note:** the label, the controller's candidate list, the SoftAP SSID `StampFly-XXYY` and the
-Tello-compatible `sn?` serial are all derived from the *station* MAC (the ESP-NOW source address), so
-they share the same 4 hex digits. ESP32 assigns the SoftAP interface the station MAC + 1, but the SSID
-name is deliberately taken from the station MAC so the vehicle has a single identity.
+**Relation (ESP32 rule):**
+
+| Value | Origin / relation |
+|-------|-------------------|
+| Vehicle ID (label, controller candidate list, tail of the SoftAP SSID `StampFly-XXYY`, Tello-compatible `sn?`) | last 4 hex digits of the *station* MAC (the ESP-NOW source address). **This is the vehicle's single identity** |
+| SoftAP BSSID (the access point's MAC a Wi-Fi scanner shows) | station MAC + 1 (last byte). ESP32 cannot give two interfaces the same MAC, so it differs from the SSID tail (= vehicle ID) by one |
 
 **Re-pair / clear**: on-board button long-press 3 s (on the ground), or CLI `unpair`. `pair status`
 shows this vehicle's own MAC/label, the PairingState, the bound MAC, and the rejected-packet count:
