@@ -218,16 +218,13 @@ void Comm::init()
     // Boot-time MAC log: printed once so a user with `sf monitor` open at power-on
     // sees it without a separate command. Label = lower 4 hex digits (bytes[4..5])
     // of the STA MAC — the address ESP-NOW transmits from, i.e. what the
-    // controller lists during pairing — for printing on a physical label
-    // (pairing-methods-plan.md §4.1, §6 item 5). NOTE: the SoftAP SSID
-    // ("StampFly-XXYY", see startSoftAp) is derived from the SoftAP MAC, which
-    // ESP32 defines as STA MAC + 1 in the last byte, so its tail differs by one.
+    // controller lists during pairing, and also the SoftAP SSID tail (see
+    // startSoftAp) — for printing on a physical label (pairing-methods-plan.md
+    // §4.1, §6 item 5).
     // 起動時 MAC ログ: `sf monitor` を開いたまま電源投入したユーザーが別コマンド無しで
     // 見えるよう1行出す。ラベル＝STA 側 MAC の下位4桁（bytes[4..5]）。ESP-NOW の送信元
-    // ＝コントローラの候補一覧に出る値であり、機体ラベルへの印字用
-    // （pairing-methods-plan.md §4.1・§6 の5）。注意: SoftAP SSID（"StampFly-XXYY"、
-    // startSoftAp 参照）は SoftAP 側 MAC から作られ、ESP32 の仕様で末尾 1 バイトが
-    // STA 側 + 1 になるため、末尾がラベルと 1 だけ違う。
+    // ＝コントローラの候補一覧に出る値で、SoftAP SSID の末尾（startSoftAp 参照）とも
+    // 同じ。機体ラベルへの印字用（pairing-methods-plan.md §4.1・§6 の5）。
     ESP_LOGI(TAG, "Own MAC: %02X:%02X:%02X:%02X:%02X:%02X  Label: %02X%02X",
              own_mac_[0], own_mac_[1], own_mac_[2], own_mac_[3], own_mac_[4], own_mac_[5],
              own_mac_[4], own_mac_[5]);
@@ -921,8 +918,19 @@ void Comm::startSoftAp()
 {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
+    // The SSID tail is the STATION MAC tail on purpose: it is the vehicle's one
+    // identity -- the same 4 hex digits the pairing label, the controller's
+    // candidate list and the `mac` command show. (ESP32 gives the SoftAP
+    // interface STA MAC + 1, which would make the SSID differ from the label by
+    // one; the AP interface still uses its own MAC on the air, only the name is
+    // taken from the STA MAC.)
+    // SSID 末尾は意図的に「ステーション側 MAC」の末尾にする。機体の識別子は 1 つ
+    // （ペアリング用ラベル・コントローラの候補一覧・`mac` コマンドと同じ下 4 桁）。
+    // ESP32 は SoftAP インターフェースに STA MAC + 1 を割り当てるため、それを使うと
+    // SSID がラベルと 1 違ってしまう。無線上の AP 側 MAC はそのままで、名前だけ
+    // STA 側から取る。
     uint8_t mac[6] = {};
-    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
     wifi_config_t ap_cfg = {};
     std::snprintf(reinterpret_cast<char*>(ap_cfg.ap.ssid), sizeof(ap_cfg.ap.ssid),

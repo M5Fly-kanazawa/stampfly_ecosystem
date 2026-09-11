@@ -496,10 +496,12 @@ void cmdQuery(const char* what)
         // SDK 2.0 を返す — djitellopy が最大互換で前提にするバージョン。
         std::snprintf(buf, sizeof(buf), "20");
     } else if (std::strcmp(what, "sn?") == 0) {
-        // Serial number from the WiFi MAC tail (stable per board).
-        // WiFi MAC 末尾由来のシリアル（ボード毎に一定）。
+        // Serial number from the STATION MAC tail (stable per board) -- the same
+        // identity as the pairing label and the SoftAP SSID.
+        // ステーション側 MAC 末尾由来のシリアル（ボード毎に一定）。ペアリング用
+        // ラベル・SoftAP SSID と同じ識別子。
         uint8_t mac[6] = {};
-        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
         std::snprintf(buf, sizeof(buf), "STAMPFLY-%02X%02X%02X",
                       mac[3], mac[4], mac[5]);
     } else if (std::strcmp(what, "time?") == 0) {
