@@ -37,7 +37,7 @@
 #include "comm.hpp"
 #include "data_types.hpp"
 #include "espnow_protocol.hpp"  // shared ControlPacket/PairingPacket SSOT (firmware/common/protocol)
-#include "topics.hpp"    // pairing_state / pairing_complete topics
+#include "topics.hpp"    // pairing_state / pairing_complete / pairing_diag topics
 #include "sf_board.hpp"  // borrow the BSP-owned default STA netif (R1)
 
 #include <cstring>
@@ -215,6 +215,18 @@ void Comm::init()
     // と一致しないため、飛ばすにはペアリングが必要）。
     esp_wifi_get_mac(WIFI_IF_STA, own_mac_);
 
+    // Boot-time MAC log: printed once so a user with `sf monitor` open at power-on
+    // sees it without a separate command. Label = lower 4 hex digits (bytes[4..5]),
+    // the same tail already used for the SoftAP SSID ("StampFly-XXYY") — for
+    // printing on a physical label (pairing-methods-plan.md §4.1, §6 item 5).
+    // 起動時 MAC ログ: `sf monitor` を開いたまま電源投入したユーザーが別コマンド無しで
+    // 見えるよう1行出す。ラベル＝下位4桁（bytes[4..5]）、SoftAP SSID（"StampFly-XXYY"）
+    // で既に使っている末尾と同じ（機体ラベルへの印字用、pairing-methods-plan.md §4.1・
+    // §6 の5）。
+    ESP_LOGI(TAG, "Own MAC: %02X:%02X:%02X:%02X:%02X:%02X  Label: %02X%02X",
+             own_mac_[0], own_mac_[1], own_mac_[2], own_mac_[3], own_mac_[4], own_mac_[5],
+             own_mac_[4], own_mac_[5]);
+
     // Restore a previously paired controller MAC from NVS. If present we are
     // immediately Paired (register it as a unicast peer); otherwise we stay
     // NotPaired and the StateManager will auto-enter Pairing on the ground.
@@ -254,6 +266,10 @@ void Comm::update()
     // Drive the pairing handshake from the StateManager's PairingState.
     // StateManager の PairingState に従ってペアリングのハンドシェイクを駆動する。
     servicePairing();
+
+    // Publish own MAC + rejected-packet counter for the CLI (`mac`, `pair status`).
+    // 自 MAC ＋棄却カウンタを CLI（`mac`、`pair status`）向けに発行する。
+    publishPairingDiag();
 }
 
 // -----------------------------------------------------------------------------
@@ -504,6 +520,32 @@ void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
     // 書込は WiFi タスクのウォッチドッグ発火(→リセット)を招く。重い処理は CommTask の
     // finalizePendingBind() が行う。バインド用パケットは転送しない。
     if (pairing && !bound) {
+        // Own-address acceptance: a pending-bind candidate is admitted ONLY when
+        // the packet is addressed to THIS vehicle — drone_mac[0..2] (the wire
+        // field's "lower 3 bytes of the destination MAC") must equal our own
+        // MAC's lower 3 bytes (own_mac_[3..5]). During simultaneous pairing (a
+        // training-room full of controller+vehicle pairs) a neighbour's
+        // controller may pick a DIFFERENT vehicle (on-screen selection, W3) yet
+        // still broadcast on the same channel; without this check we would bind
+        // to whichever transmitter's packet happened to arrive first, regardless
+        // of which vehicle it actually addressed — the cross-pairing bug this
+        // filter fixes. A mismatched packet is counted (pairing_rejected_, a
+        // diagnostic surfaced by `pair status`) and otherwise silently dropped,
+        // matching this function's "stay light in the RX callback" rule.
+        // 自分宛受理: 保留バインド候補として受理してよいのは「この機体宛」の電文だけ —
+        // drone_mac[0..2]（電文仕様の「宛先MAC下位3バイト」）が自MACの下位3バイト
+        // （own_mac_[3..5]）と一致すること。同時ペアリング（講習会場で複数組が同時に
+        // 行う場合）では隣のコントローラが別の機体を選んでいても（画面選択、W3）同じ
+        // チャンネルで送信し続けるため、このチェックが無いと「最初に届いた電文」を
+        // 無条件に相手にしてしまう（本フィルタが直すクロスペアリングの原因そのもの）。
+        // 宛先が違う電文はカウントし（pairing_rejected_、`pair status` で見える診断値）、
+        // それ以外は静かに破棄する — 本関数の「RX コールバックは軽量に保つ」規約どおり。
+        if (pkt.drone_mac[0] != own_mac_[3] ||
+            pkt.drone_mac[1] != own_mac_[4] ||
+            pkt.drone_mac[2] != own_mac_[5]) {
+            pairing_rejected_.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
         if (src_mac != nullptr && !pending_bind_.load(std::memory_order_acquire)) {
             std::memcpy(pending_mac_, src_mac, 6);
             pending_bind_.store(true, std::memory_order_release);
@@ -603,6 +645,25 @@ void Comm::publishBindStatus(bool bound, bool restored)
     const uint32_t ts = static_cast<uint32_t>(esp_timer_get_time());
     pc.timestamp = (ts != 0) ? ts : 1;
     pairing_complete.publish(pc);
+}
+
+// -----------------------------------------------------------------------------
+// publishPairingDiag — publish own MAC + rejected-packet counter (diagnostics).
+// publishPairingDiag — 自 MAC ＋棄却カウンタを発行する（診断用）。
+// -----------------------------------------------------------------------------
+void Comm::publishPairingDiag()
+{
+    PairingDiag diag{};
+    std::memcpy(diag.own_mac, own_mac_, 6);
+    diag.rejected_count = pairing_rejected_.load(std::memory_order_relaxed);
+    // Same non-zero-timestamp convention as publishBindStatus() (see its comment):
+    // 0 is reserved for "never published" and the SILS virtual clock can read 0 at
+    // init.
+    // publishBindStatus() と同じ「非ゼロ timestamp」規約（同関数のコメント参照）:
+    // 0 は「未発行」の予約値で、SILS の仮想クロックは init 時に 0 を返しうる。
+    const uint32_t ts = static_cast<uint32_t>(esp_timer_get_time());
+    diag.timestamp = (ts != 0) ? ts : 1;
+    pairing_diag.publish(diag);
 }
 
 // -----------------------------------------------------------------------------

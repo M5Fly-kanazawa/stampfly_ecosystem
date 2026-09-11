@@ -410,6 +410,26 @@ struct PairingComplete {
     uint32_t timestamp;          // [us]; 0 = never published         / 0=未発行
 };
 
+/// Pairing diagnostics — comm's own MAC (the exact value the own-address
+/// acceptance filter compares against, pairing-methods-plan.md §4.1) and a
+/// running count of ControlPackets rejected during Pairing because their
+/// drone_mac did not address this vehicle (a neighbour's controller aimed at a
+/// DIFFERENT vehicle). comm is the sole writer (internal pairing-logic state,
+/// so it must reach the CLI over Pub-Sub rather than a cross-component getter,
+/// R5); it republishes every update() cycle (50Hz) so the counter stays live
+/// while Pairing is in progress. Read by the CLI (`mac`, `pair status`).
+/// ペアリング診断 — comm の自 MAC（自分宛受理フィルタが照合する値そのもの、
+/// pairing-methods-plan.md §4.1）と、Pairing 中に drone_mac が自分宛でなく棄却
+/// した件数（隣のコントローラが別の機体を狙った混信）の累計。comm が唯一の書き手
+/// （comm 内部のペアリング状態ゆえ、直接呼び出しでなく Pub-Sub 経由で CLI に届ける
+/// — R5）。update() 毎（50Hz）に再発行し、Pairing 進行中もカウンタが生きた値になる。
+/// CLI（`mac`、`pair status`）が読む。
+struct PairingDiag {
+    uint8_t  own_mac[6];       // this vehicle's own MAC (accept-filter value) / 自機 MAC（受理フィルタの値）
+    uint32_t rejected_count;   // ControlPackets rejected for wrong drone_mac  / drone_mac不一致で棄却した件数
+    uint32_t timestamp;        // [us]; 0 = never published                   / 0=未発行
+};
+
 // =============================================================================
 // Transition Command Topics — reset commands issued by StateManager callbacks
 // 遷移コマンドトピック — StateManager コールバックが発行するリセット指令

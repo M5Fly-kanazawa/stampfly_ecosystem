@@ -55,6 +55,7 @@ Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
 Topic<PairingStatus,   Latest, 1>      pairing_state;
 Topic<PairingComplete, Latest, 1>      pairing_complete;
+Topic<PairingDiag,     Latest, 1>      pairing_diag;
 Topic<UiCommand,       Queue, 4>       ui_command;
 Topic<MotorTest,       Latest, 1>      motor_test;
 Topic<MagCalCommand,   Queue,  2>      mag_command;
@@ -92,6 +93,7 @@ void topics_init()
     system_status.init();
     pairing_state.init();
     pairing_complete.init();
+    pairing_diag.init();
     ui_command.init();
     motor_test.init();
     mag_command.init();

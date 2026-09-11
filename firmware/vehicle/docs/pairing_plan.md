@@ -108,6 +108,19 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 - ペア時に機体ごとに channel を割当（PairingPacket は channel を持つ）。同時飛行時の airtime 分散。
 - 運用ポリシー（手動割当 / 自動空きch探索）は教材設計と合わせて決める。
 
+> **採用方式の決定・実装（2026-09-11）**: 下記「同時実行の取り違え」は
+> `docs/plans/pairing-methods-plan.md` で正式検討し、**W3（コントローラの画面に受信した機体
+> 候補を一覧表示し、利用者が選んで確定）＋機体側の自分宛受理（ペアリング中に届く操縦電文の
+> うち `drone_mac[0..2]` が自 MAC 下位3バイトと一致するものだけを保留バインド候補にする）**
+> の組合せを採用した。機体側（Phase 1・本ドキュメントの P4 が挙げていた「bind 時に drone_mac
+> 一致を要求」案そのもの）は `comm.cpp::handleControlPacket` に実装済み・SILS 検証済み
+> （`pairing_two_controllers.scn`）。コントローラ側（Phase 2・W3 の画面一覧選択 UI）は別途
+> `firmware/controller` で実装する。**見送り（変更なし）: ペアコード（W2、電文拡張が必要で
+> 機体側入力が不便）、RSSI 近接自動選択（W1、閾値が環境依存で単独では決定的でない）、Grove
+> ケーブル直結（C1、ハード未確認）、コントローラ CLI + `sf pair`（P1、CDC+HID 同居が未確認）**
+> — 比較は `pairing-methods-plan.md` §3 を参照。per-drone channel 割当（本節の元々の主題）は
+> 今回のスコープ外のまま。
+
 #### ★既知の弱点（2026-06-09 整理・対応は P4 に保留＝ユーザー判断 B）
 
 **ペア成立は両側とも「先着＝採用」**で、識別子は署名 `AA5516 88`（=「StampFly かどうか」のみ、

@@ -45,6 +45,16 @@ extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*))
 
 enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api };
 
+// Which injector an "rc"-family event uses: the paired transmitter (rc), a
+// different non-paired one exercised AFTER bind (rc_foreign — crosstalk test), or
+// one of the two roles in the own-address-filter test (rc_ctrl_a: addresses a
+// DIFFERENT vehicle; rc_ctrl_b: addresses THIS vehicle) — pairing-methods-plan.md
+// §4.4.
+// "rc" 系事象がどの注入元を使うか: ペア送信機(rc)、バインド後に試す別の未ペア送信機
+// (rc_foreign — 混信試験)、または自分宛フィルタ試験の2役(rc_ctrl_a: 別の機体宛、
+// rc_ctrl_b: この機体宛) — pairing-methods-plan.md §4.4。
+enum class RcSource { Paired, Foreign, ControllerA, ControllerB };
+
 struct Event {
     int64_t at_us = 0;        // absolute virtual time (frozen) / 絶対仮想時刻
     Channel ch = Channel::Rc;
@@ -56,8 +66,7 @@ struct Event {
     uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
     uint8_t  acro = 0;        // 1 => CTRL_FLAG_MODE (ACRO/rate) / 1 で ACRO（角速度）
     uint8_t  pos = 0;         // 1 => CTRL_FLAG_POS_MODE (POSITION_HOLD) / 1 で位置保持
-    bool     foreign = false; // rc_foreign: inject from a DIFFERENT transmitter MAC
-                              //   (crosstalk-rejection test) / 別の送信機 MAC から注入
+    RcSource source = RcSource::Paired;  // which injector (see RcSource above) / 注入元
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
 
@@ -260,12 +269,19 @@ int sils_scenario_load(const char* path)
         e.at_us = at_us;
         e.line = lineno;
 
-        if (ch == "rc" || ch == "rc_foreign") {
+        if (ch == "rc" || ch == "rc_foreign" || ch == "rc_ctrl_a" || ch == "rc_ctrl_b") {
             // rc_foreign injects an identical ControlPacket but from a DIFFERENT
             // transmitter MAC — used to verify the pairing crosstalk filter drops
-            // packets from a non-paired transmitter. Same grammar as rc.
+            // packets from a non-paired transmitter. rc_ctrl_a/rc_ctrl_b are the
+            // two-controller own-address-filter test (pairing-methods-plan.md
+            // §4.4): rc_ctrl_a addresses a DIFFERENT vehicle (must be rejected as
+            // a bind candidate), rc_ctrl_b addresses THIS vehicle (must bind).
+            // Same grammar as rc.
             // rc_foreign は同一の ControlPacket を別の送信機 MAC から注入する — ペアリングの
-            // 混信フィルタが未ペア送信機のパケットを破棄することの検証に使う。文法は rc と同じ。
+            // 混信フィルタが未ペア送信機のパケットを破棄することの検証に使う。rc_ctrl_a/
+            // rc_ctrl_b は2台コントローラの自分宛フィルタ試験（pairing-methods-plan.md
+            // §4.4）: rc_ctrl_a は別の機体宛（バインド候補として棄却されるべき）、rc_ctrl_b
+            // はこの機体宛（バインドされるべき）。文法は rc と同じ。
             long v[5];
             for (int k = 0; k < 5; ++k) {
                 if (!(iss >> v[k])) { err(path, lineno, "rc needs <thr> <roll> <pitch> <yaw> <arm>"); return -1; }
@@ -275,7 +291,10 @@ int sils_scenario_load(const char* path)
             }
             if (v[4] != 0 && v[4] != 1) { err(path, lineno, "rc <arm> must be 0 or 1"); return -1; }
             e.ch = Channel::Rc;
-            e.foreign = (ch == "rc_foreign");
+            if (ch == "rc_foreign")      e.source = RcSource::Foreign;
+            else if (ch == "rc_ctrl_a")  e.source = RcSource::ControllerA;
+            else if (ch == "rc_ctrl_b")  e.source = RcSource::ControllerB;
+            else                          e.source = RcSource::Paired;
             e.thr = (uint16_t)v[0]; e.roll = (uint16_t)v[1];
             e.pitch = (uint16_t)v[2]; e.yaw = (uint16_t)v[3];
             e.arm = (uint8_t)v[4];
@@ -465,12 +484,21 @@ void sils_scenario_driver_task(void* /*arg*/)
                                       (e.alt  ? sils::kFlagAltMode : 0) |
                                       (e.acro ? sils::kFlagMode    : 0) |
                                       (e.pos  ? sils::kFlagPosMode : 0);
-                // Pick the injector: the paired transmitter (rc) or a different,
-                // non-paired one (rc_foreign — exercises the crosstalk filter).
-                // 注入元を選ぶ: ペア済み送信機（rc）か別の未ペア送信機（rc_foreign — 混信
-                // フィルタを試す）。
+                // Pick the injector: the paired transmitter (rc), a different
+                // non-paired one (rc_foreign — exercises the crosstalk filter), or
+                // one of the two own-address-filter test roles (rc_ctrl_a/rc_ctrl_b
+                // — pairing-methods-plan.md §4.4).
+                // 注入元を選ぶ: ペア済み送信機（rc）、別の未ペア送信機（rc_foreign — 混信
+                // フィルタを試す）、または自分宛フィルタ試験の2役（rc_ctrl_a/rc_ctrl_b —
+                // pairing-methods-plan.md §4.4）。
                 void (*inject)(uint16_t, uint16_t, uint16_t, uint16_t, uint8_t) =
-                    e.foreign ? &sils::inject_rc_foreign : &sils::inject_rc;
+                    &sils::inject_rc;
+                switch (e.source) {
+                    case RcSource::Foreign:     inject = &sils::inject_rc_foreign;     break;
+                    case RcSource::ControllerA: inject = &sils::inject_rc_controller_a; break;
+                    case RcSource::ControllerB: inject = &sils::inject_rc_controller_b; break;
+                    default:                    break;
+                }
                 if (e.hold_ms <= 0) {
                     inject(e.thr, e.roll, e.pitch, e.yaw, flags);
                 } else {

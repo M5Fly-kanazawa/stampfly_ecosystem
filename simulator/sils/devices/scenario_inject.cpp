@@ -15,6 +15,7 @@
 #include "scenario_inject.hpp"
 
 #include <cstdlib>  // getenv (SILS_EMU_UNPAIRED)
+#include "esp_wifi.h"  // esp_wifi_get_mac (host shim) — same call Comm::init() uses
 #include "nvs.h"    // host NVS shim — seed the firmware's pairing store
 
 // ESP-NOW delivery seam (espnow_hub.cpp); records the frame as it delivers.
@@ -33,14 +34,39 @@ constexpr uint8_t kPilotMac[6] = {0x02, 0x53, 0x49, 0x4C, 0x00, 0x01};  // "SILS
 // kPilotMac と異なる値にする。
 constexpr uint8_t kForeignMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xFF, 0xFE};  // "SILS"+FFFE
 
+// Two-controller own-address-filter test (pairing-methods-plan.md §4.4):
+// "Controller A" picks the WRONG vehicle, "Controller B" picks the right one.
+// Source MACs distinct from kPilotMac/kForeignMac above so all four roles never
+// collide on-air.
+// 2台コントローラの自分宛フィルタ試験（pairing-methods-plan.md §4.4）:
+// 「コントローラA」は誤った機体を選び、「コントローラB」は正しい機体を選ぶ。送信元
+// MAC は上の2つと重複せず、4役が電波上で衝突しない。
+constexpr uint8_t kControllerAMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xAA, 0x01};  // "SILS"+AA01
+constexpr uint8_t kControllerBMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xBB, 0x01};  // "SILS"+BB01
+
+// A drone_mac that is NOT this vehicle's own address — the "different vehicle"
+// Controller A has (deliberately, for this test) selected.
+// この機体自身のアドレスではない drone_mac — コントローラAが（本試験のため意図的に）
+// 選んだ「別の機体」。
+constexpr uint8_t kOtherVehicleMac[3] = {0x00, 0x00, 0x99};
+
 }  // namespace
 
 namespace sils {
 
-void build_control_packet(uint8_t* p, uint16_t throttle, uint16_t roll,
-                          uint16_t pitch, uint16_t yaw, uint8_t flags)
+void own_drone_mac(uint8_t out[3])
 {
-    p[0] = p[1] = p[2] = 0;                       // drone_mac lower 3 (match-any)
+    uint8_t mac[6] = {0};
+    esp_wifi_get_mac(WIFI_IF_STA, mac);  // same host shim Comm::init() reads into own_mac_
+    out[0] = mac[3];
+    out[1] = mac[4];
+    out[2] = mac[5];
+}
+
+void build_control_packet(uint8_t* p, const uint8_t drone_mac[3], uint16_t throttle,
+                          uint16_t roll, uint16_t pitch, uint16_t yaw, uint8_t flags)
+{
+    p[0] = drone_mac[0]; p[1] = drone_mac[1]; p[2] = drone_mac[2];
     p[3] = (uint8_t)(throttle & 0xFF); p[4] = (uint8_t)(throttle >> 8);
     p[5] = (uint8_t)(roll     & 0xFF); p[6] = (uint8_t)(roll     >> 8);
     p[7] = (uint8_t)(pitch    & 0xFF); p[8] = (uint8_t)(pitch    >> 8);
@@ -55,17 +81,39 @@ void build_control_packet(uint8_t* p, uint16_t throttle, uint16_t roll,
 void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                uint8_t flags)
 {
+    uint8_t own3[3];
+    own_drone_mac(own3);
     uint8_t pkt[14];
-    build_control_packet(pkt, throttle, roll, pitch, yaw, flags);
+    build_control_packet(pkt, own3, throttle, roll, pitch, yaw, flags);
     sils_espnow_deliver(kPilotMac, pkt, (int)sizeof(pkt));
 }
 
 void inject_rc_foreign(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                        uint8_t flags)
 {
+    uint8_t own3[3];
+    own_drone_mac(own3);
     uint8_t pkt[14];
-    build_control_packet(pkt, throttle, roll, pitch, yaw, flags);
+    build_control_packet(pkt, own3, throttle, roll, pitch, yaw, flags);
     sils_espnow_deliver(kForeignMac, pkt, (int)sizeof(pkt));
+}
+
+void inject_rc_controller_a(uint16_t throttle, uint16_t roll, uint16_t pitch,
+                            uint16_t yaw, uint8_t flags)
+{
+    uint8_t pkt[14];
+    build_control_packet(pkt, kOtherVehicleMac, throttle, roll, pitch, yaw, flags);
+    sils_espnow_deliver(kControllerAMac, pkt, (int)sizeof(pkt));
+}
+
+void inject_rc_controller_b(uint16_t throttle, uint16_t roll, uint16_t pitch,
+                            uint16_t yaw, uint8_t flags)
+{
+    uint8_t own3[3];
+    own_drone_mac(own3);
+    uint8_t pkt[14];
+    build_control_packet(pkt, own3, throttle, roll, pitch, yaw, flags);
+    sils_espnow_deliver(kControllerBMac, pkt, (int)sizeof(pkt));
 }
 
 void seed_pairing_nvs()

@@ -127,6 +127,8 @@ private:
     //
     // @design requirements.md §2/§7 — Pairing                              [OK]
     // @design detailed_design.md §3 — Pairing state transitions            [OK]
+    // @design pairing-methods-plan.md §4.1 — own-address acceptance while
+    //         Pairing (drone_mac[0..2] must equal own_mac_[3..5])           [OK]
     // -------------------------------------------------------------------------
 
     /// Read the latest PairingState (pairing_state topic) and act on edges:
@@ -141,13 +143,31 @@ private:
     void sendPairingPacket();
 
     /// Handle a checksum-valid ControlPacket (runs in the ESP-NOW RX callback / WiFi
-    /// task). Stays LIGHT: during Pairing it only RECORDS the controller's MAC as a
-    /// pending bind (CommTask finalizes it); when paired it filters by peer MAC (drops
-    /// crosstalk) and forwards. src_mac is the ESP-NOW sender MAC.
+    /// task). Stays LIGHT: during Pairing it accepts a pending-bind candidate ONLY
+    /// when the packet is addressed to THIS vehicle (ControlPacket.drone_mac[0..2] ==
+    /// own_mac_[3..5]) — packets addressing a different vehicle (a neighbour's
+    /// controller, simultaneous pairing) are counted (pairing_rejected_) and dropped
+    /// (CommTask finalizes an accepted candidate); when paired it filters by peer MAC
+    /// (drops crosstalk) and forwards. src_mac is the ESP-NOW sender MAC.
     /// チェックサム検証済み ControlPacket を処理（ESP-NOW 受信コールバック=WiFiタスク文脈で
-    /// 実行）。軽量に保つ: Pairing 中は相手 MAC を「保留バインド」として控えるだけ（確定は
-    /// CommTask）、ペア済みは相手 MAC でフィルタ（混信破棄）して転送。src_mac は送信元 MAC。
+    /// 実行）。軽量に保つ: Pairing 中は「この機体宛」(ControlPacket.drone_mac[0..2] ==
+    /// own_mac_[3..5]) の電文だけを保留バインド候補として受理する — 別の機体宛（隣の
+    /// コントローラ、同時ペアリング）はカウントして(pairing_rejected_)破棄する（受理した
+    /// 候補の確定は CommTask）。ペア済みは相手 MAC でフィルタ（混信破棄）して転送。
+    /// src_mac は送信元 MAC。
+    ///
+    /// @design pairing-methods-plan.md §4.1 — own-address acceptance during Pairing [OK]
     void handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac);
+
+    /// Publish the own MAC + rejected-packet counter as a diagnostic fact
+    /// (pairing_diag topic), so the CLI (`mac`, `pair status`) can show them
+    /// without reaching into this object directly (R5). Called every update()
+    /// cycle (50Hz) — cheap Latest-topic overwrite, keeps the counter live.
+    /// 自 MAC + 棄却件数カウンタを診断用の事実として発行する（pairing_diag
+    /// トピック）。CLI（`mac`、`pair status`）が本オブジェクトへ直接触れずに
+    /// 読めるようにする（R5）。update() 毎（50Hz）に呼ぶ — 安価な Latest
+    /// トピック上書きで、カウンタを生きた値に保つ。
+    void publishPairingDiag();
 
     /// Finalize a bind captured by the RX callback: do the NVS save + unicast peer
     /// registration HERE in CommTask — NOT in the WiFi RX callback (a flash write there
@@ -266,6 +286,16 @@ private:
     std::atomic<bool> pairing_active_{false};// StateMgr has us searching / 探索中
     bool prev_pairing_active_ = false;       // for rising-edge detect  / 立ち上がり検出用
     int64_t last_pairing_bcast_us_ = 0;      // last PairingPacket send / 最終送出時刻
+
+    // Count of ControlPackets seen during Pairing whose drone_mac addressed a
+    // DIFFERENT vehicle (own-address filter rejection) — diagnostic only,
+    // published on pairing_diag (CLI `pair status`). Incremented in the RX
+    // callback (WiFi task), so atomic; never reset (a monotonic session total).
+    // Pairing 中に drone_mac が別の機体宛だった（自分宛フィルタが棄却した）
+    // ControlPacket の件数 — 診断専用、pairing_diag で発行（CLI `pair status`）。
+    // 受信コールバック(WiFiタスク)でインクリメントするため atomic。リセットしない
+    // （セッション累計）。
+    std::atomic<uint32_t> pairing_rejected_{0};
 
     // Pending bind: the RX callback (WiFi task) records the controller MAC + sets the
     // flag; CommTask (finalizePendingBind) does the heavy NVS/peer work. pending_mac_ is

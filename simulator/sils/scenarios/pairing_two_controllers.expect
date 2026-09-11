@@ -1,0 +1,21 @@
+# pairing_two_controllers.expect — assert the own-address acceptance filter
+# (pairing-methods-plan.md §4.1/§4.4). MUST be run with --unpaired (see
+# pairing_two_controllers.scn). Asserts:
+#   - unpaired boot auto-enters Pairing ("Pairing started");
+#   - while ONLY Controller A (wrong drone_mac) is on the air, the vehicle NEVER
+#     binds to it — "Paired with <Controller A's MAC>" never appears, in any
+#     phase of the run;
+#   - once Controller B (correct drone_mac) transmits, the vehicle binds to it
+#     ("Paired with <Controller B's MAC>", then "Pairing complete");
+#   - the bind to B happens strictly after Pairing starts (ordering sanity).
+# pairing_two_controllers.expect — 自分宛受理フィルタを検証（pairing-methods-plan.md
+# §4.1/§4.4）。--unpaired 必須。未ペア起動→自動 Pairing、コントローラA（誤 drone_mac）
+# しか電波に無い間は一度もAにバインドしない（「Paired with <AのMAC>」は全区間で一度も
+# 出ない）、コントローラB（正しい drone_mac）が送信すると B にバインド（「Paired with
+# <BのMAC>」→「Pairing complete」）、その bind は Pairing 開始より後。
+exit 0
+log_contains any "Pairing started"                        # unpaired boot → StateManager auto-enters Pairing
+log_contains any "Paired with 02:53:49:4C:BB:01"           # comm binds to Controller B (correct drone_mac)
+log_contains any "Pairing complete"                        # StateManager → Paired
+log_absent   any "Paired with 02:53:49:4C:AA:01"           # comm NEVER binds to Controller A (wrong drone_mac), in ANY phase
+order "Pairing started" "Paired with 02:53:49:4C:BB:01"    # bind to B happens after Pairing starts, i.e. after A-only phase began

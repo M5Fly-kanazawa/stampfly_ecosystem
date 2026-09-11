@@ -1,0 +1,21 @@
+# pairing_two_controllers.scn — two simultaneous controllers during Pairing;
+# the vehicle must bind to the one that addresses IT, never to the one that
+# addresses a different vehicle (own-address acceptance, pairing-methods-plan.md
+# §4.1/§4.4 — the fix for cross-pairing when many pairs are formed at once).
+#
+# RUN WITH --unpaired so the vehicle boots UNPAIRED (skips the SILS pairing NVS seed):
+#   sf sils scenario simulator/sils/scenarios/pairing_two_controllers.scn --target vehicle --unpaired
+#
+#   1. Unpaired boot -> StateManager auto-enters Pairing (comm broadcasts a PairingPacket).
+#   2. Phase A (Controller A ONLY): a ControlPacket addressed to a DIFFERENT vehicle
+#      (drone_mac != this vehicle's own MAC) arrives repeatedly from Controller A's
+#      MAC. The own-address filter must REJECT every one of them as a pending-bind
+#      candidate -> the vehicle stays in Pairing (never binds to A) for this whole
+#      phase, even though A is the only transmitter on the air.
+#   3. Phase B (Controller B): a DIFFERENT transmitter (Controller B's MAC) now sends
+#      a ControlPacket correctly addressed to THIS vehicle -> comm accepts it as the
+#      pending-bind candidate on its first packet -> Paired.
+#
+#  <t>  ch          <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc_ctrl_a   2048  2048   2048    2048  0     5000      50   # A: WRONG-address Tx only, disarmed 5 s — own-address filter must reject every packet (boot + auto-Pairing settle)
+   +    rc_ctrl_b   2048  2048   2048    2048  0     3000      50   # B: correctly-addressed Tx starts — binds on its first packet, disarmed 3 s hold

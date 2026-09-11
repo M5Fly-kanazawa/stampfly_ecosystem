@@ -214,4 +214,4 @@ multi_vehicle:
 
   addressing:
     description: "3-byte MAC suffix uniquely identifies each drone"
-    collision_handling: "Not currently implemented"
+    collision_handling: "Vehicle-side own-address acceptance (2026-09-11): while Pairing, a vehicle admits a controller as a pending-bind candidate only if the ControlPacket's drone_mac (this same 3-byte suffix) matches its own MAC, so a neighbouring controller that addressed a different vehicle during simultaneous pairing is rejected instead of winning the bind by arriving first (see docs/plans/pairing-methods-plan.md)."

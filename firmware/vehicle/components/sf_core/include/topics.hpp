@@ -94,6 +94,7 @@ extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness
 
 extern Topic<PairingStatus,   Latest, 1>      pairing_state;     // decided PairingState (StateMgr → comm/notify)
 extern Topic<PairingComplete, Latest, 1>      pairing_complete;  // comm bind status fact (comm → StateMgr)
+extern Topic<PairingDiag,     Latest, 1>      pairing_diag;      // comm own-MAC + reject counter (comm → CLI diagnostics)
 
 // =============================================================================
 // Bench / UI command Topics — CLI → owning task (future WiFi/UDP can inject too)

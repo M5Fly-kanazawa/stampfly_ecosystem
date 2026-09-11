@@ -55,27 +55,67 @@ constexpr uint8_t kFlagAltMode = 0x08;
 // と一致。POS_HOLD は ALT_HOLD を含む（モード階層）。
 constexpr uint8_t kFlagPosMode = 0x10;
 
-// Build the 14-byte ControlPacket into `out` (must hold >= 14 bytes).
+// This vehicle's own MAC, lower 3 bytes — the drone_mac value a legitimately
+// addressed ControlPacket must carry to be accepted as a pending-bind candidate
+// while Pairing (pairing-methods-plan.md §4.1). Reads the SAME host shim
+// (esp_wifi_get_mac(WIFI_IF_STA)) that Comm::init() uses for own_mac_, so it can
+// never drift from the value the firmware's own-address filter compares against.
+// この機体自身の MAC 下位3バイト — Pairing 中に保留バインド候補として受理される
+// ために正しく宛先指定された ControlPacket が持つべき drone_mac の値
+// （pairing-methods-plan.md §4.1）。Comm::init() が own_mac_ に使うのと同じホスト
+// シム（esp_wifi_get_mac(WIFI_IF_STA)）を読むため、本体の自分宛フィルタが照合する
+// 値とずれない。
+void own_drone_mac(uint8_t out[3]);
+
+// Build the 14-byte ControlPacket into `out` (must hold >= 14 bytes). drone_mac
+// is the 3-byte destination address (bytes 0..2) — callers normally pass
+// own_drone_mac() so the packet is accepted while Pairing; a scenario testing the
+// own-address filter itself passes a DIFFERENT 3 bytes (a "wrong vehicle").
 // Layout: [0..2]=drone_mac, [3..4]=throttle, [5..6]=roll, [7..8]=pitch,
 // [9..10]=yaw, [11]=flags, [12]=reserved, [13]=checksum (sum of bytes 0..12).
-// 14 バイト ControlPacket を `out` に構築。
-void build_control_packet(uint8_t* out, uint16_t throttle, uint16_t roll,
-                          uint16_t pitch, uint16_t yaw, uint8_t flags);
+// 14 バイト ControlPacket を `out` に構築。drone_mac は宛先3バイト（bytes 0..2）—
+// 通常は own_drone_mac() を渡し Pairing 中に受理されるようにする。自分宛フィルタ
+// 自体を試すシナリオは別の3バイト（「誤った機体」）を渡す。
+void build_control_packet(uint8_t* out, const uint8_t drone_mac[3], uint16_t throttle,
+                          uint16_t roll, uint16_t pitch, uint16_t yaw, uint8_t flags);
 
-// Build one ControlPacket and deliver it into the firmware via the ESP-NOW hub
-// (which records it). Stick values are ADC-scale (0..4095, centre 2048).
-// ControlPacket を1つ組んで ESP-NOW ハブ経由で本体へ配信（ハブが記録）。
+// Build one ControlPacket (addressed to THIS vehicle, own_drone_mac()) and
+// deliver it into the firmware via the ESP-NOW hub (which records it). Stick
+// values are ADC-scale (0..4095, centre 2048).
+// ControlPacket を1つ（この機体宛、own_drone_mac()）組んで ESP-NOW ハブ経由で
+// 本体へ配信（ハブが記録）。
 void inject_rc(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                uint8_t flags);
 
-// Same as inject_rc but delivered from a DIFFERENT (non-paired) transmitter MAC.
-// Used by the pairing scenario to verify the crosstalk filter drops ControlPackets
-// from a transmitter the vehicle is not paired with (it stays disarmed / motionless).
-// inject_rc と同じだが別の（未ペアの）送信機 MAC から配信する。ペアリングシナリオが、
-// 機体がペアしていない送信機の ControlPacket を混信フィルタが破棄すること（disarmed・不動の
-// まま）を検証するために使う。
+// Same as inject_rc (still addressed to THIS vehicle) but delivered from a
+// DIFFERENT (non-paired) transmitter MAC. Used by the pairing scenario to verify
+// the POST-bind crosstalk filter drops ControlPackets from a transmitter the
+// vehicle is not paired with (it stays disarmed / motionless) — that filter
+// checks the ESP-NOW sender MAC, not drone_mac, so addressing is irrelevant here.
+// inject_rc と同じ（宛先はこの機体のまま）だが別の（未ペアの）送信機 MAC から配信
+// する。ペアリングシナリオが、機体がペアしていない送信機の ControlPacket をバインド後の
+// 混信フィルタが破棄すること（disarmed・不動のまま）を検証するために使う — そのフィルタは
+// ESP-NOW 送信元 MAC を見る（drone_mac ではない）ため宛先指定はここでは無関係。
 void inject_rc_foreign(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_t yaw,
                        uint8_t flags);
+
+// Two-controller pairing test (pairing-methods-plan.md §4.4, own-address filter):
+// "Controller A" addresses a DIFFERENT vehicle (drone_mac != own_drone_mac()) from
+// a source MAC of its own. The vehicle's own-address filter must REJECT this as a
+// pending-bind candidate while Pairing — it must never bind to Controller A.
+// 2台コントローラのペアリング試験（pairing-methods-plan.md §4.4、自分宛フィルタ）:
+// 「コントローラA」は別の機体宛（drone_mac != own_drone_mac()）に、専用の送信元 MAC
+// から送る。機体の自分宛フィルタは Pairing 中の保留バインド候補として棄却しなければ
+// ならない — コントローラAにバインドしてはならない。
+void inject_rc_controller_a(uint16_t throttle, uint16_t roll, uint16_t pitch,
+                            uint16_t yaw, uint8_t flags);
+
+// Same test, "Controller B": correctly addresses THIS vehicle (own_drone_mac()),
+// from yet another source MAC. The vehicle must bind to Controller B.
+// 同じ試験の「コントローラB」: この機体宛（own_drone_mac()）を正しく指定し、さらに
+// 別の送信元 MAC から送る。機体はコントローラBにバインドしなければならない。
+void inject_rc_controller_b(uint16_t throttle, uint16_t roll, uint16_t pitch,
+                            uint16_t yaw, uint8_t flags);
 
 // Seed the firmware's pairing NVS so the emulated vehicle boots PAIRED to the
 // injector's transmitter MAC (kPilotMac). Real hardware boots unpaired and auto-
