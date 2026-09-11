@@ -166,12 +166,12 @@ Stream の電文定義も `protocol/spec/` には無く、
 
 | ファイル | 由来パケット | 公称レート | 列（`timestamp_us` の後） |
 |---------|-------------|-----------|--------------------------|
-| `imu.csv` | IMU+ESKF (0x40) | 400 Hz | `gyro_x/y/z`, `accel_x/y/z`, `gyro_raw_x/y/z`, `accel_raw_x/y/z` |
-| `attitude.csv` | IMU+ESKF (0x40) | 400 Hz | `quat_w/x/y/z`, `gyro_bias_x/y/z`, `accel_bias_x/y/z`（`imu.csv` と同一パケットなので時刻は同じ値） |
-| `posvel.csv` | PosVel (0x41) | 400 Hz | `pos_x/y/z`, `vel_x/y/z` |
-| `rate_ref.csv` | 統合パケット固定部 | 400 Hz | `rate_ref_roll/pitch/yaw` |
-| `motor.csv` | Duty400 (0x4A) | 400 Hz | `duty_FR/RR/RL/FL` |
-| `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | `thrust`, `torque_roll/pitch/yaw` |
+| `imu.csv` | IMU+ESKF (0x40) | 400 Hz | `seq`, `gyro_x/y/z`, `accel_x/y/z`, `gyro_raw_x/y/z`, `accel_raw_x/y/z` |
+| `attitude.csv` | IMU+ESKF (0x40) | 400 Hz | `seq`, `quat_w/x/y/z`, `gyro_bias_x/y/z`, `accel_bias_x/y/z`（`imu.csv` と同一パケットなので時刻・`seq` は同じ値） |
+| `posvel.csv` | PosVel (0x41) | 400 Hz | `seq`, `pos_x/y/z`, `vel_x/y/z` |
+| `rate_ref.csv` | 統合パケット固定部 | 400 Hz | `seq`, `rate_ref_roll/pitch/yaw` |
+| `motor.csv` | Duty400 (0x4A) | 400 Hz | `seq`, `duty_FR/RR/RL/FL` |
+| `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | `seq`, `thrust`, `torque_roll/pitch/yaw` |
 | `pilot.csv` | Control (0x42) | 50 Hz | `throttle`, `roll`, `pitch`, `yaw` |
 | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | `flight_mode`, `angle_ref_roll/pitch`, `total_thrust`, `duty_FR/RR/RL/FL`, `alt_setpoint`, `alt_vel_target`, `climb_rate_cmd`, `pos_setpoint_x/y` |
 | `baro.csv` | Baro (0x45) | 50 Hz | `altitude`, `pressure` |
@@ -184,6 +184,19 @@ Stream の電文定義も `protocol/spec/` には無く、
 | `events.csv` | SILS のみ（任意） | 事象ごと | `event`, `value`（シナリオ入力の事象） |
 
 パケットが無いストリームのファイルは作らない（読み込み側は「無い」を許容する）。
+
+**`seq` 列（制御周期の通し番号）:** 400 Hz の 6 ストリームは 1 行 = 機体の制御周期 1 回で、
+`timestamp_us` は「その周期が使った IMU 標本の時刻」である（`LogStreamSample.timestamp`、
+`data_types.hpp:260`）。制御周期が新しい IMU 標本を得られなかった周期では前の標本が
+再利用され、**同じ時刻が連続する**（実機ログで 13% の周期に観測。§7）。時刻だけでは周期を
+一意に識別できないため、統合パケットのヘッダ通し番号 × 8 + パケット内位置を `seq` として
+持つ。`seq` はパケット欠落の検出にも使う。旧 JSONL からの変換では `imu.csv` の行番号を
+`seq` とし、他の 400 Hz ストリームは（時刻, 同一時刻内の出現順）で対応付ける。
+
+**重複と欠落の扱い:** 一次記録は観測を捨てない。同一時刻の行も全て残し、`sf log check` は
+重複時刻の件数と `seq` の飛び（欠落パケット）の件数を warning で報告する。
+
+**単位の例外:** 気圧は配線上 hPa で届くが、記録は SI の Pa に統一する（変換時に ×100）。
 
 ### 2.3 `meta.json` と `schema.json`
 
@@ -328,7 +341,28 @@ Stream の電文定義も `protocol/spec/` には無く、
 | ワークショップ | `firmware/workshop/lessons/lesson_07_sysid/README.md` |
 | コード内文書 | `lib/sfcli/commands/log.py:398` docstring、`udp_capture.py` 冒頭 |
 
-## 7. 未確認事項
+## 7. 実データで判明した機体側の課題（本計画の範囲外、要フォローアップ）
+
+Phase 0 の検証で `logs/stampfly_udp_20260908T121243.jsonl`（30 秒、ホバー）を調べた結果:
+
+| 観測 | 値 |
+|------|-----|
+| 400 Hz ストリームの行数（= 制御周期数） | 11,736（29.96 秒、約 392 Hz） |
+| 同一時刻の重複行（IMU 標本の再利用） | 1,561（13%）。imu/posvel は内容も同一、rate_ref は値が異なる |
+| 一意な IMU 時刻 | 10,175（約 340 Hz）。一意時刻の間隔で 2 周期分の飛びが 1,677 回 |
+
+解釈: ControlTask は制御周期ごとに `LogStreamSample` を 1 件発行し、時刻に IMU 標本の
+時刻を入れる。制御周期と IMU 更新がずれると、(a) 新しい IMU 標本が無い周期は前の標本で
+制御し（13%）、(b) 制御周期に拾われなかった IMU 標本は記録に残らない（15%）。制御の
+観点では 13% の周期が古い IMU 値で動いていることになり、ログの観点では制御周期そのものの
+時刻が記録されていない。
+
+推奨するフォローアップ（別計画）:
+1. `LogStreamSample` と統合パケットに制御周期の時刻（または周期カウンタ）を追加する
+   （電文 v2）。一式の `seq` 列はその受け皿になる。
+2. IMU 更新と制御周期のずれの原因を調べる（IMU の実効レート、バス競合、タスク優先度）。
+
+## 8. 未確認事項
 
 - 一式のファイルサイズ実測（zip 圧縮後）。Phase 1 で既存 JSONL を変換して測る。
 - 実機での `sf log wifi` 一式書き出し（本セッションでは実機なし）。
