@@ -150,7 +150,7 @@ sf log analyze
 
 | スクリプト | sf コマンド | 説明 |
 |-----------|------------|------|
-| `wifi_capture.py` | `sf log wifi` | WiFi 400Hzキャプチャ |
+| `udp_capture.py` | `sf log wifi` | WiFi 400Hzキャプチャ（UDP） |
 | `log_capture.py` | `sf log capture` | USB バイナリキャプチャ |
 
 ### 可視化
@@ -186,8 +186,8 @@ pip install numpy pandas matplotlib scipy websockets
 # 環境診断
 sf doctor
 
-# WiFi接続確認
-ping 192.168.4.1
+# WiFi接続確認（sf log wifi の既定IP）
+ping 192.168.10.1
 ```
 
 ### ログファイルが見つからない

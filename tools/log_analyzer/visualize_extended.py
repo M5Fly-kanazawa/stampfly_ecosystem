@@ -2,7 +2,7 @@
 """
 visualize_extended.py - Extended Telemetry Visualization Tool
 
-Visualizes all state data from 400Hz extended telemetry logs captured by wifi_capture.py.
+Visualizes all state data from 400Hz extended telemetry logs captured by udp_capture.py (sf log wifi).
 Displays IMU, ESKF estimates, sensors, and controller inputs in a comprehensive dashboard.
 
 Usage:
@@ -353,7 +353,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
-    parser.add_argument('csv_file', help='Input CSV file from wifi_capture.py')
+    parser.add_argument('csv_file', help='Input CSV file from udp_capture.py (sf log wifi)')
     parser.add_argument('--save', metavar='PNG', help='Save plot to PNG file')
     parser.add_argument('--time-range', nargs=2, type=float, metavar=('START', 'END'),
                         help='Time range to plot (seconds)')
