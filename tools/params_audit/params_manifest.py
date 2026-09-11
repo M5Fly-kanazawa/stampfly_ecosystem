@@ -264,36 +264,20 @@ EXEMPT_VEHICLE_OLD = Exempt(
            "control/models/stampfly_physical.yaml を参照。"
 )
 
-# tools/log_analyzer's duty-reconstruction / interactive-visualization scripts
-# intentionally mirror the firmware constants THAT WERE ACTIVE WHEN THE
-# REPLAYED LOGS WERE RECORDED (the pre-2026-07-17 motor curve / 9.71e-3 kappa),
-# not today's firmware nor the SILS-adopted measured family, so their
-# reconstructed thrust/duty plots match what the real hardware actually did at
-# the time. Frozen mirrors for log reconstruction -- NOT a stray copy. See
-# reconstruct_duties.py's own NOTE(2026-07-15) comment. Not code-changed by
-# the 2026-08-03 kappa/Ct revision (out of scope -- see params_manifest.py's
-# task instructions); only this EXEMPT reason text was updated to correct a
-# prior inaccuracy ("mirrors CURRENT firmware", which was never quite true --
-# firmware's kappa moved on 2026-07-17 and again 2026-08-03, these files did
-# not).
-# tools/log_analyzer の duty再構成／対話可視化スクリプトは、今日のファームでも
-# SILSの実測ファミリでもなく、「再生対象のログが記録された当時、有効だった」
-# ファーム定数（2026-07-17以前のモータ曲線・kappa=9.71e-3）を意図的に鏡写し
-# している——実機がその当時実際にどう動いていたかにログ再構成の結果を一致
-# させるため。過去ログ再構成用の凍結鏡写しであり、単なるコピー漏れではない
-# （reconstruct_duties.py 自身の NOTE(2026-07-15) コメント参照）。2026-08-03の
-# κ/Ct改定ではコード変更しない（対象外——本パラメータ大改定タスクの指示書
-# 参照）。理由文のみ、従来の不正確な記述（「現行ファームを鏡写し」——実際には
-# ファームのkappaは2026-07-17・2026-08-03と動いたがこれらのファイルは
-# 動いていない）を修正した。
-EXEMPT_LOG_ANALYZER_MIRROR = Exempt(
-    reason="過去ログ再構成用の凍結鏡写し（当時の飛行ファーム定数）。"
-           "時代別対応は将来課題。"
-)
-
 # max_thrust_per_motor: provenance of the 0.15 N vs 0.168 N per-motor limit is
 # NOT confirmed against a measurement (unlike C_T/C_Q/kappa/mass/inertia
 # above, all of which trace to a dated bench measurement in the SSOT YAML).
+# The 0.168 N family now has a single consumer,
+# firmware/vehicle/components/sf_controller_pid/include/pid_controller.hpp
+# (tools/log_analyzer/visualize_interactive.py's mirror of it was removed
+# 2026-09-11 when that script switched to reading ctrl_output.csv's real
+# controller output instead of reconstructing thrust from firmware
+# constants -- see docs/plans/flight-log-format-plan.md section 3.4).
+# 0.168 N 系の消費者は現在 firmware/vehicle の pid_controller.hpp のみ
+# （tools/log_analyzer/visualize_interactive.py 側の鏡写しは 2026-09-11 に
+# 削除済み -- 同スクリプトが実測のコントローラ出力を持つ ctrl_output.csv を
+# 読むように切り替わったため。計画書 docs/plans/flight-log-format-plan.md
+# 3.4節参照）。
 # Modeled as EXEMPT rather than Unresolved (2026-08-03): `sf sils regression` /
 # CI's --strict treats any UNRESOLVED row as a failure, which made this open
 # question block automated checks. EXEMPT keeps the mismatch visible in the
@@ -314,8 +298,7 @@ EXEMPT_MAX_THRUST_PER_MOTOR = Exempt(
            "2026-08-03）。0.168 = 旧Ct(1.0e-8)×(4097 rad/s)² と一致する可能性あり"
            "（未確認）。0.15 N 系（tools/sysid・lib/stampfly_edu・simulator/genesis・"
            "simulator/vpython 等9箇所）と 0.168 N 系（firmware/vehicle "
-           "pid_controller.hpp・tools/log_analyzer/visualize_interactive.py "
-           "の2箇所）の2値が並立している。"
+           "pid_controller.hpp のみ）の2値が並立している。"
 )
 
 
@@ -419,20 +402,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             expected=EXEMPT_VEHICLE_OLD,
             note="DEFAULT_MOTOR_PARAMS.Ct (frozen legacy firmware)",
         ),
-        ParamCheck(
-            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SILS-adopted measured value.
-            file="tools/log_analyzer/reconstruct_duties.py",
-            regex=r'\bCT = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="module constant CT (firmware actuator.cpp mirror)",
-        ),
-        ParamCheck(
-            file="tools/log_analyzer/visualize_interactive.py",
-            regex=r'\bCt = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="thrust_to_duty() local Ct (firmware actuator.cpp mirror)",
-        ),
     ],
 
     # -------------------------------------------------------------------
@@ -485,20 +454,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'constexpr float CQ = ([0-9eE.+-]+)f;',
             expected=EXPECTED_CQ,
             note="sils_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
-        ),
-        ParamCheck(
-            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SILS-adopted measured value.
-            file="tools/log_analyzer/reconstruct_duties.py",
-            regex=r'\bCQ = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="module constant CQ (firmware actuator.cpp mirror)",
-        ),
-        ParamCheck(
-            file="tools/log_analyzer/visualize_interactive.py",
-            regex=r'\bCq = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="thrust_to_duty() local Cq (firmware actuator.cpp mirror)",
         ),
     ],
 
@@ -561,20 +516,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'float kappa = ([0-9eE.+-]+)f;',
             expected=EXEMPT_VEHICLE_OLD,
             note="QuadConfig::kappa member default (frozen legacy firmware)",
-        ),
-        ParamCheck(
-            # See EXEMPT_LOG_ANALYZER_MIRROR above -- intentional firmware
-            # mirror, not a stray copy of the SILS-adopted measured value.
-            file="tools/log_analyzer/reconstruct_duties.py",
-            regex=r'\bKAPPA = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="module constant KAPPA (firmware actuator.cpp mirror)",
-        ),
-        ParamCheck(
-            file="tools/log_analyzer/visualize_interactive.py",
-            regex=r'\bkappa = ([0-9eE.+-]+)',
-            expected=EXEMPT_LOG_ANALYZER_MIRROR,
-            note="B^-1 mixer local kappa (firmware actuator.cpp mirror)",
         ),
     ],
 
@@ -1069,15 +1010,16 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     # max_thrust_per_motor — EXEMPT, not compared numerically (see
     # EXEMPT_MAX_THRUST_PER_MOTOR above for why EXEMPT rather than
     # Unresolved). Two competing values circulate: 0.15 N (most of
-    # tools/simulator) and 0.168 N (firmware/vehicle pid_controller.hpp,
-    # tools/log_analyzer/visualize_interactive.py). Neither traces to a dated
-    # bench measurement in the SSOT YAML -- this section exists to make that
-    # gap visible, not to declare a winner.
+    # tools/simulator) and 0.168 N (firmware/vehicle pid_controller.hpp
+    # only, as of 2026-09-11). Neither traces to a dated bench measurement
+    # in the SSOT YAML -- this section exists to make that gap visible, not
+    # to declare a winner.
     # 最大推力（1モーターあたり）— EXEMPT、数値比較は行わない（Unresolved
     # ではなく EXEMPT を使う理由は上の EXEMPT_MAX_THRUST_PER_MOTOR 参照）。
     # 0.15N系と0.168N系の2値が並立し、どちらもSSOT YAMLの実測日に紐づいて
     # いない——本セクションはその欠落を可視化するためのものであり、正解を
-    # 宣言するものではない。
+    # 宣言するものではない（0.168N系の消費者は2026-09-11時点で firmware/vehicle
+    # の pid_controller.hpp のみ）。
     # -------------------------------------------------------------------
     "max_thrust_per_motor": [
         ParamCheck(
@@ -1088,12 +1030,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             file="tools/sysid/inertia.py",
-            regex=r'MAX_THRUST_PER_MOTOR = ([0-9.eE+-]+)',
-            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
-            note="module constant MAX_THRUST_PER_MOTOR (0.15 N family)",
-        ),
-        ParamCheck(
-            file="tools/log_analyzer/reconstruct_duties.py",
             regex=r'MAX_THRUST_PER_MOTOR = ([0-9.eE+-]+)',
             expected=EXEMPT_MAX_THRUST_PER_MOTOR,
             note="module constant MAX_THRUST_PER_MOTOR (0.15 N family)",
@@ -1141,12 +1077,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'float max_thrust_\s*=\s*([0-9.eE+-]+)f;\s*//\s*\[N\] total',
             expected=EXEMPT_MAX_THRUST_PER_MOTOR,
             note="max_thrust_ = 4 x 0.168 N per motor (0.168 N family)",
-        ),
-        ParamCheck(
-            file="tools/log_analyzer/visualize_interactive.py",
-            regex=r'max_thrust = ([0-9.eE+-]+)\s*#\s*duty',
-            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
-            note="local max_thrust (0.168 N family)",
         ),
         ParamCheck(
             # firmware_old is EXEMPT (frozen legacy) -- see EXEMPT_VEHICLE_OLD

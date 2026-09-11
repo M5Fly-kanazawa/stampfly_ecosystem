@@ -3,17 +3,19 @@
 test_viz_backend_fallback.py - Tests for the matplotlib backend fallback
 matplotlib バックエンドフォールバックのテスト
 
-At a 2026-09-10 tutorial, `sf log viz flight.csv` failed on Windows PCs
-with a matplotlib "drawing error" (reported as a backend problem; the
-exact message was not recorded). Two failure modes of a Python without a
-usable matplotlib GUI backend were then reproduced on macOS by faking the
+At a 2026-09-10 tutorial, `sf log viz` failed on Windows PCs with a
+matplotlib "drawing error" (reported as a backend problem; the exact
+message was not recorded). Two failure modes of a Python without a usable
+matplotlib GUI backend were then reproduced on macOS by faking the
 Windows conditions: a "FigureCanvasAgg is non-interactive" warning with no
 window, and a TclError "Can't find a usable init.tcl". This tests
 lib/sfcli/utils/plotting.py's backend probing and lib/sfcli/commands/
 log.py's run_viz() PNG-fallback path that handles both -- see
 docs/guides/troubleshooting.md, section 6, for the user-facing writeup.
+The input is a StampFly flight-log v1 bundle (`.sflog.zip`, lib/sflog),
+built by tools/log_analyzer/conftest.py.
 
-2026-09-10のチュートリアル講習で、Windows PCで `sf log viz flight.csv` が
+2026-09-10のチュートリアル講習で、Windows PCで `sf log viz` が
 matplotlibの「描画エラー」で失敗した（バックエンドの問題と報告されたが、
 正確なメッセージは記録されていない）。その後、matplotlib の GUI
 バックエンドが使えない Python の2つの故障モードを、Windows の条件を
@@ -22,20 +24,18 @@ matplotlibの「描画エラー」で失敗した（バックエンドの問題�
 本テストは lib/sfcli/utils/plotting.py のバックエンド探索と、両方を扱う
 lib/sfcli/commands/log.py の run_viz() のPNGフォールバック経路を検証する --
 ユーザー向けの説明は docs/guides/troubleshooting.md 第6章を参照。
+入力は tools/log_analyzer/conftest.py が組み立てる StampFly フライトログ
+v1 一式（`.sflog.zip`、lib/sflog）。
 
 Usage:
-    python3 test_viz_backend_fallback.py
     pytest test_viz_backend_fallback.py
 """
 
 import argparse
 import json
-import math
 import subprocess
 import sys
 from pathlib import Path
-
-import pandas as pd
 
 import matplotlib
 matplotlib.use('Agg')  # headless / ヘッドレス実行（テストプロセス自体は実
@@ -46,12 +46,12 @@ import pytest
 _TOOLS_LOG_ANALYZER_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TOOLS_LOG_ANALYZER_DIR.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "lib"))  # for sfcli
+sys.path.insert(0, str(_TOOLS_LOG_ANALYZER_DIR))  # for conftest
 
+import conftest  # noqa: E402
 from sfcli.commands import log  # noqa: E402
 from sfcli.utils import plotting  # noqa: E402
 from sfcli.utils.plotting import BackendInfo  # noqa: E402
-
-import sflog  # noqa: E402
 
 # Minimum PNG size used as a smoke check that matplotlib actually rendered
 # panels (an empty/failed figure saves far smaller than this). Matches
@@ -61,11 +61,13 @@ import sflog  # noqa: E402
 # MIN_PNG_BYTES と同じ値。
 MIN_PNG_BYTES = 10_000
 
-SAMPLE_RATE_HZ = 400
-DURATION_S = 5
-N_SAMPLES = SAMPLE_RATE_HZ * DURATION_S
-DT_US = 1_000_000 // SAMPLE_RATE_HZ
-CTRL_REF_STRIDE = 8  # 50Hz CtrlRef among 400Hz IMU+ESKF samples / 400Hz中50Hz
+# Bundle file name used by the run_viz() tests; the headless fallback must
+# save `<stem>.png` next to it (`.sflog.zip` stripped, not just `.zip`).
+# run_viz() のテストで使う一式のファイル名。ヘッドレスのフォールバックは
+# その隣に `<stem>.png` を保存しなければならない（`.zip` だけでなく
+# `.sflog.zip` を外した名前）。
+BUNDLE_NAME = "flight_synthetic.sflog.zip"
+FALLBACK_PNG_NAME = "flight_synthetic.png"
 
 # Timeout for the real `python -m sfcli.utils.plotting --probe` subprocess
 # spawned by test_probe_cli_prints_json_headless() -- generous enough for
@@ -77,95 +79,25 @@ CTRL_REF_STRIDE = 8  # 50Hz CtrlRef among 400Hz IMU+ESKF samples / 400Hz中50Hz
 PROBE_SUBPROCESS_TIMEOUT_S = 30
 
 
-_DUTY_MOTORS = ('FR', 'RR', 'RL', 'FL')
+def _build_bundle(tmp_path) -> Path:
+    """Write the shared synthetic flight-log bundle (conftest) into
+    `tmp_path` and return its path.
+    共通の合成フライトログ一式（conftest）を `tmp_path` に書き出し、その
+    パスを返す。"""
+    return conftest.write_synthetic_bundle(tmp_path / BUNDLE_NAME)
 
 
-def _build_stream_csv(tmp_path) -> Path:
-    """Same synthetic 5s/400Hz aligned CSV as test_visualize_stream.py's
-    _build_stream_csv() -- built from a synthetic flight-log v1 bundle
-    (lib/sflog) and written via sflog.aligned_to_csv(), since `sf log wifi`
-    no longer writes a merged Data Stream CSV directly (see that file's
-    module docstring for the full rationale and the `motor_duty_*` rename).
-    test_visualize_stream.py の _build_stream_csv() と同じ合成 5秒/400Hz
-    整列CSV -- 合成のフライトログ v1 一式（lib/sflog）から
-    sflog.aligned_to_csv() で書き出す（`sf log wifi` はもはやマージ済み
-    Data Stream CSV を直接書かないため。詳しい理由と `motor_duty_*`
-    リネームは同ファイルの docstring 参照）。"""
-    ts = [1_000_000 + i * DT_US for i in range(N_SAMPLES)]
-    seq = list(range(N_SAMPLES))
-    gyro_x = [0.1 * math.sin(i / 50) for i in range(N_SAMPLES)]
-    rate_ref_roll = [0.1 if i >= N_SAMPLES // 2 else 0.0 for i in range(N_SAMPLES)]
-
-    imu_df = pd.DataFrame({
-        'timestamp_us': ts, 'seq': seq,
-        'gyro_x': gyro_x, 'gyro_y': 0.0, 'gyro_z': 0.0,
-        'accel_x': 0.0, 'accel_y': 0.0, 'accel_z': -9.81,
-        'gyro_raw_x': 0.0, 'gyro_raw_y': 0.0, 'gyro_raw_z': 0.0,
-        'accel_raw_x': 0.0, 'accel_raw_y': 0.0, 'accel_raw_z': -9.81,
-    })
-    attitude_df = pd.DataFrame({
-        'timestamp_us': ts, 'seq': seq,
-        'quat_w': 1.0, 'quat_x': 0.0, 'quat_y': 0.0, 'quat_z': 0.0,
-        'gyro_bias_x': 0.0, 'gyro_bias_y': 0.0, 'gyro_bias_z': 0.0,
-        'accel_bias_x': 0.0, 'accel_bias_y': 0.0, 'accel_bias_z': 0.0,
-    })
-    rate_ref_df = pd.DataFrame({
-        'timestamp_us': ts, 'seq': seq,
-        'rate_ref_roll': rate_ref_roll, 'rate_ref_pitch': 0.0, 'rate_ref_yaw': 0.0,
-    })
-    motor_df = pd.DataFrame({
-        'timestamp_us': ts, 'seq': seq,
-        'duty_FR': 0.5, 'duty_RR': 0.5, 'duty_RL': 0.5, 'duty_FL': 0.5,
-    })
-    ctrl_ref_ts = ts[::CTRL_REF_STRIDE]
-    ctrl_ref_df = pd.DataFrame({
-        'timestamp_us': ctrl_ref_ts,
-        'flight_mode': 1,
-        'angle_ref_roll': 0.0, 'angle_ref_pitch': 0.0,
-        'total_thrust': 0.5,
-        'duty_FR': 0.5, 'duty_RR': 0.5, 'duty_RL': 0.5, 'duty_FL': 0.5,
-        'alt_setpoint': 0.0, 'alt_vel_target': 0.0, 'climb_rate_cmd': 0.0,
-        'pos_setpoint_x': 0.0, 'pos_setpoint_y': 0.0,
-    })
-
-    streams = {
-        'imu': imu_df, 'attitude': attitude_df, 'rate_ref': rate_ref_df,
-        'motor': motor_df, 'ctrl_ref': ctrl_ref_df,
-    }
-    meta = sflog.make_meta(
-        source='sim', tool_name='test_viz_backend_fallback', tool_version='0.0.0',
-        streams=streams,
-    )
-    flight_log = sflog.FlightLog(
-        meta=meta, schema=sflog.schema.schema_for(streams.keys()), streams=streams,
-    )
-
-    csv_path = tmp_path / "stream.csv"
-    sflog.aligned_to_csv(flight_log, csv_path, base='imu')
-
-    df = pd.read_csv(csv_path)
-    df = df.rename(columns={f'duty_{m}': f'motor_duty_{m}' for m in _DUTY_MOTORS})
-    df.to_csv(csv_path, index=False)
-
-    return csv_path
-
-
-def _viz_args(csv_path, save=None) -> argparse.Namespace:
+def _viz_args(bundle_path, save=None) -> argparse.Namespace:
     """Build the argparse.Namespace run_viz() reads -- every attribute the
     `sf log viz` parser registers in lib/sfcli/commands/log.py's register().
     run_viz() が読む argparse.Namespace を組み立てる -- lib/sfcli/commands/
     log.py の register() が登録する `sf log viz` の全属性。"""
     return argparse.Namespace(
-        file=str(csv_path),
+        bundle=str(bundle_path),
         mode="all",
         save=save,
         time_range=None,
-        no_eskf=False,
-        no_sensors=False,
-        show_invalid=False,
         interactive=False,
-        layout=None,
-        groups=None,
     )
 
 
@@ -361,8 +293,8 @@ def test_probe_qtagg_reports_subprocess_failure(monkeypatch):
 # --- log.run_viz() PNG fallback ---
 
 def test_run_viz_saves_png_and_opens_viewer_when_headless(tmp_path, monkeypatch):
-    csv_path = _build_stream_csv(tmp_path)
-    args = _viz_args(csv_path)
+    bundle_path = _build_bundle(tmp_path)
+    args = _viz_args(bundle_path)
 
     monkeypatch.setattr(
         plotting, "select_backend",
@@ -376,15 +308,15 @@ def test_run_viz_saves_png_and_opens_viewer_when_headless(tmp_path, monkeypatch)
 
     assert log.run_viz(args) == 0
 
-    out_png = tmp_path / "stream.png"
+    out_png = tmp_path / FALLBACK_PNG_NAME
     assert out_png.exists()
     assert out_png.stat().st_size > MIN_PNG_BYTES
     assert opened == [out_png]
 
 
 def test_run_viz_retries_headless_when_window_backend_fails(tmp_path, monkeypatch):
-    csv_path = _build_stream_csv(tmp_path)
-    args = _viz_args(csv_path)
+    bundle_path = _build_bundle(tmp_path)
+    args = _viz_args(bundle_path)
 
     monkeypatch.setattr(
         plotting, "select_backend",
@@ -405,16 +337,16 @@ def test_run_viz_retries_headless_when_window_backend_fails(tmp_path, monkeypatc
 
     assert log.run_viz(args) == 0
 
-    out_png = tmp_path / "stream.png"
+    out_png = tmp_path / FALLBACK_PNG_NAME
     assert out_png.exists()
     assert out_png.stat().st_size > MIN_PNG_BYTES
     assert opened == [out_png]
 
 
 def test_run_viz_explicit_save_unaffected(tmp_path, monkeypatch):
-    csv_path = _build_stream_csv(tmp_path)
+    bundle_path = _build_bundle(tmp_path)
     explicit_path = tmp_path / "out.png"
-    args = _viz_args(csv_path, save=str(explicit_path))
+    args = _viz_args(bundle_path, save=str(explicit_path))
 
     # Even a headless backend must not trigger the fallback when the user
     # already gave an explicit --save path -- there is no window to fall
@@ -439,48 +371,31 @@ def test_run_viz_explicit_save_unaffected(tmp_path, monkeypatch):
     assert opened == []
 
 
-def _run_all():
-    """Standalone runner using a throwaway tmp dir and pytest's
-    MonkeyPatch outside of a pytest session (mirrors
-    test_visualize_stream.py's own _run_all()).
-    使い捨ての一時ディレクトリと、pytestセッション外で使う pytest の
-    MonkeyPatch を使ったスタンドアロンランナー
-    （test_visualize_stream.py 自身の _run_all() を模す）。"""
-    import shutil
-    import tempfile
+def test_run_viz_reference_bundle_saves_png(tmp_path, monkeypatch):
+    """The real-vehicle reference bundle renders through the same
+    run_viz() path (`sf log viz <bundle> --save out.png`).
+    実機由来の基準一式も同じ run_viz() 経路で描ける
+    （`sf log viz <bundle> --save out.png`）。"""
+    explicit_path = tmp_path / "reference.png"
+    args = _viz_args(conftest.REFERENCE_BUNDLE, save=str(explicit_path))
+    if not conftest.REFERENCE_BUNDLE.exists():
+        pytest.skip(f"reference bundle missing: {conftest.REFERENCE_BUNDLE}")
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="test_viz_backend_fallback_"))
-    tests = [
-        (test_select_backend_honors_mplbackend, ()),
-        (test_select_backend_falls_back_when_all_probes_fail, ()),
-        (test_select_backend_picks_first_usable, ()),
-        (test_probe_cli_prints_json_headless, ()),
-        (test_ensure_gui_backend_installs_qt_when_headless, ()),
-        (test_ensure_gui_backend_skips_without_display, ()),
-        (test_ensure_gui_backend_reports_pip_failure, ()),
-        (test_ensure_gui_backend_respects_mplbackend, ()),
-        (test_probe_qtagg_reports_subprocess_failure, ()),
-        (test_run_viz_saves_png_and_opens_viewer_when_headless, (tmp_dir,)),
-        (test_run_viz_retries_headless_when_window_backend_fails, (tmp_dir,)),
-        (test_run_viz_explicit_save_unaffected, (tmp_dir,)),
-    ]
-    failures = 0
-    try:
-        for fn, fn_args in tests:
-            with pytest.MonkeyPatch.context() as mp:
-                try:
-                    fn(*fn_args, mp)
-                    print(f"  [TEST] {fn.__name__:<55} PASS")
-                except AssertionError as e:
-                    failures += 1
-                    print(f"  [TEST] {fn.__name__:<55} FAIL: {e}")
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    monkeypatch.setattr(
+        plotting, "select_backend",
+        lambda want_window=True: BackendInfo("agg", False, "simulated"),
+    )
 
-    total = len(tests)
-    print(f"\n=== Results: {total - failures}/{total} passed, {failures} failed ===")
-    return failures
+    assert log.run_viz(args) == 0
+    assert explicit_path.stat().st_size > MIN_PNG_BYTES
 
 
-if __name__ == '__main__':
-    sys.exit(1 if _run_all() > 0 else 0)
+def test_run_viz_rejects_non_bundle(tmp_path):
+    """A stray CSV is refused up front -- there is no format sniffing any
+    more: the bundle is the only input `sf log viz` reads.
+    無関係な CSV は入口で拒否する -- 書式の自動判別はもう無く、`sf log
+    viz` が読むのは一式だけ。"""
+    stray = tmp_path / "flight.csv"
+    stray.write_text("timestamp_us,gyro_x\n0,0\n", encoding="utf-8")
+
+    assert log.run_viz(_viz_args(stray, save=str(tmp_path / "x.png"))) == 1

@@ -1,13 +1,31 @@
 #!/usr/bin/env python3
 """
-3D Pose Animation Viewer
-Displays position and attitude together
-NED convention: X=North, Y=East, Z=Down
+visualize_pose_3d.py - 3D pose (position + attitude) animation from a StampFly flight-log bundle
+visualize_pose_3d.py - StampFly フライトログ一式から位置＋姿勢の3Dアニメーションを描く
 
-Usage:
-  python3 visualize_pose_3d.py data.bin [--mp4]   # From binary log
-  python3 visualize_pose_3d.py data.csv [--mp4]   # From CSV
+Displays position and attitude together: a 3D trajectory + drone pose view
+and a 2D top-down view. Position comes from the `posvel` stream (pos_x/y/z,
+NED, meters) and attitude from the `attitude` stream's unit quaternion
+(quat_w/x/y/z), joined by `seq` since both are lockstep 400 Hz streams of a
+StampFly flight-log v1 bundle (`.sflog.zip` file or an extracted directory;
+see lib/sflog and docs/plans/flight-log-format-plan.md section 2.2 for the
+format). NED convention: X=North, Y=East, Z=Down.
+位置と姿勢を同時に表示する: 3D軌跡＋機体姿勢のビューと、真上から見た2D
+ビュー。位置は `posvel` ストリーム（pos_x/y/z、NED、メートル）、姿勢は
+`attitude` ストリームの単位クォータニオン（quat_w/x/y/z）から取り、どちらも
+StampFly フライトログ v1 一式（`.sflog.zip` または展開済みフォルダ。形式は
+lib/sflog・計画書2.2節を参照）の400Hzロックステップ・ストリームなので
+`seq` で結合する。NED規約: X=北, Y=東, Z=下。
+
+Usage / 使い方:
+    python3 visualize_pose_3d.py logs/flight_<ts>.sflog.zip
+    python3 visualize_pose_3d.py logs/flight_<ts>.sflog.zip --save out.mp4
+    python3 visualize_pose_3d.py logs/flight_<ts>.sflog.zip --no-show --frames 100
 """
+
+import argparse
+import sys
+from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,9 +33,105 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import matplotlib.animation as animation
 import numpy as np
-import subprocess
-import os
-import sys
+
+import sflog
+
+# Unit conversion: attitude.csv's timestamp_us -> seconds since first sample.
+# 単位変換: attitude.csv の timestamp_us -> 先頭サンプルからの経過秒。
+MICROSECONDS_PER_SECOND = 1_000_000.0
+
+# arcsin() domain guard: 2(wy-zx) can drift slightly outside [-1, 1] from
+# float round-off even for a normalized quaternion.
+# arcsin() の定義域保護: 正規化済みクォータニオンでも浮動小数点誤差で
+# 2(wy-zx) が [-1, 1] をわずかに外れることがある。
+QUAT_ASIN_CLAMP = 1.0
+
+# Animation defaults (subsample target for smooth playback, and the
+# matplotlib FuncAnimation frame interval / save fps).
+# アニメーションの既定値（滑らかな再生のための間引き目標、および
+# FuncAnimation のフレーム間隔・保存時 fps）。
+DEFAULT_FRAMES = 200
+ANIMATION_INTERVAL_MS = 50
+ANIMATION_FPS = 20
+ANIMATION_BITRATE = 2000
+
+
+def quat_to_euler_rad(qw, qx, qy, qz):
+    """Convert a unit quaternion (w,x,y,z) to roll/pitch/yaw [rad].
+    単位クォータニオン(w,x,y,z)を roll/pitch/yaw [rad] に変換する。
+
+    Standard body-to-world Euler extraction (protocol/spec/flight_log.yaml
+    `attitude` stream; docs/plans/flight-log-format-plan.md section 2.2):
+      roll  = atan2(2(wx+yz), 1-2(x^2+y^2))
+      pitch = asin(clamp(2(wy-zx), -1, 1))
+      yaw   = atan2(2(wz+xy), 1-2(y^2+z^2))
+    標準の body-to-world オイラー角抽出（上記参照）。
+
+    Args:
+        qw, qx, qy, qz: scalars or numpy arrays (unit quaternion components).
+
+    Returns:
+        (roll, pitch, yaw): same shape as input, radians.
+    """
+    qw = np.asarray(qw, dtype=float)
+    qx = np.asarray(qx, dtype=float)
+    qy = np.asarray(qy, dtype=float)
+    qz = np.asarray(qz, dtype=float)
+
+    roll = np.arctan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx**2 + qy**2))
+    pitch_sin = np.clip(2.0 * (qw * qy - qz * qx), -QUAT_ASIN_CLAMP, QUAT_ASIN_CLAMP)
+    pitch = np.arcsin(pitch_sin)
+    yaw = np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy**2 + qz**2))
+    return roll, pitch, yaw
+
+
+def load_bundle_pose(path):
+    """Load time + position + roll/pitch/yaw from a bundle, joined by `seq`.
+    一式から時刻・位置・roll/pitch/yaw を `seq` で結合して読み込む。
+
+    `attitude` and `posvel` are both lockstep 400 Hz streams sharing the
+    same per-control-cycle `seq` (protocol/spec/flight_log.yaml section
+    2.2), so they are joined on `seq` rather than on timestamp (timestamps
+    can repeat when a control cycle reuses the previous IMU sample).
+    `attitude` と `posvel` はどちらも制御周期ごとの `seq` を共有する400Hz
+    ロックステップ・ストリーム（計画書2.2節）。制御周期が前回のIMU標本を
+    再利用すると時刻が重複しうるため、時刻ではなく `seq` で結合する。
+
+    Args:
+        path: `.sflog.zip` file or extracted bundle directory.
+
+    Returns:
+        (time_s, pos_xyz, roll, pitch, yaw): time_s is a pandas Series of
+        seconds since the first sample; pos_xyz is an (N,3) numpy array of
+        NED position [m]; roll/pitch/yaw are numpy arrays in radians. All
+        four share the same length N (one row per matched `seq`).
+        (time_s, pos_xyz, roll, pitch, yaw): time_s は先頭サンプルからの
+        経過秒の pandas Series。pos_xyz は NED 位置[m]の (N,3) numpy 配列。
+        roll/pitch/yaw はラジアンの numpy 配列。4つとも同じ長さ N
+        （`seq` が一致した行数）を持つ。
+
+    Raises:
+        ValueError: the bundle has no `attitude` or no `posvel` stream.
+    """
+    log = sflog.load(path)
+    if 'attitude' not in log.streams:
+        raise ValueError(f"bundle has no 'attitude' stream: {path}")
+    if 'posvel' not in log.streams:
+        raise ValueError(f"bundle has no 'posvel' stream (position is required for pose): {path}")
+
+    attitude = log.streams['attitude']
+    posvel = log.streams['posvel']
+    merged = attitude.merge(posvel, on='seq', suffixes=('', '_posvel'))
+
+    time_us = merged['timestamp_us']
+    time_s = (time_us - time_us.iloc[0]) / MICROSECONDS_PER_SECOND
+    pos_xyz = merged[['pos_x', 'pos_y', 'pos_z']].to_numpy()
+    roll, pitch, yaw = quat_to_euler_rad(
+        merged['quat_w'].to_numpy(), merged['quat_x'].to_numpy(),
+        merged['quat_y'].to_numpy(), merged['quat_z'].to_numpy(),
+    )
+    return time_s.reset_index(drop=True), pos_xyz, roll, pitch, yaw
+
 
 def euler_to_rotation_matrix(roll, pitch, yaw):
     """Convert Euler angles (rad) to rotation matrix (NED convention)"""
@@ -84,68 +198,41 @@ def draw_drone(ax, pos, R, scale=0.05):
                 [pos_display[2], end[2]],
                 color=color, linewidth=2)
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 visualize_pose_3d.py <data.bin|data.csv> [--mp4]")
-        sys.exit(1)
 
-    input_file = sys.argv[1]
+def build_animation(time_s, pos_xyz, roll, pitch, yaw, frames=DEFAULT_FRAMES):
+    """Build the pose animation figure/axes without showing or saving it.
+    ポーズアニメーションの図を組み立てる（表示・保存はしない）。
 
-    # Determine script directory for finding eskf_replay
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    eskf_debug_dir = os.path.join(script_dir, '..', 'eskf_debug')
-    eskf_replay = os.path.join(eskf_debug_dir, 'build', 'eskf_replay')
+    Kept identical to the original single-file script's drawing/animation
+    logic; only the data source (time_s/pos_xyz/roll/pitch/yaw, now loaded
+    from a flight-log bundle) and the frame-count parameterization changed.
+    描画・アニメーションのロジックは元の単一ファイル版のまま。変わったのは
+    データの出所（time_s/pos_xyz/roll/pitch/yaw。今はフライトログ一式から
+    読み込む）とフレーム数のパラメータ化のみ。
 
-    # Handle .bin files by running eskf_replay first
-    if input_file.endswith('.bin'):
-        csv_file = input_file.replace('.bin', '_pose.csv')
-        print(f"Processing binary log: {input_file}")
-        print(f"Running eskf_replay...")
+    Args:
+        time_s: pandas Series/array-like of seconds since the first sample.
+        pos_xyz: (N,3) numpy array, NED position [m].
+        roll, pitch, yaw: numpy arrays, radians, length N.
+        frames: maximum number of animation frames (subsampled from N).
 
-        if not os.path.exists(eskf_replay):
-            print(f"Error: eskf_replay not found at {eskf_replay}")
-            print("Please build it first: cd tools/eskf_debug && cmake -B build && cmake --build build")
-            sys.exit(1)
+    Returns:
+        (fig, anim): the matplotlib Figure and FuncAnimation.
+    """
+    time_s = pd.Series(time_s).reset_index(drop=True)
+    pos_x = pos_xyz[:, 0]
+    pos_y = pos_xyz[:, 1]
+    pos_z = pos_xyz[:, 2]
 
-        result = subprocess.run([eskf_replay, input_file, csv_file],
-                                capture_output=True, text=True, encoding="utf-8",
-                                errors="replace")
-        if result.returncode != 0:
-            print(f"eskf_replay failed:\n{result.stderr}")
-            sys.exit(1)
-
-        # Print summary from eskf_replay
-        for line in result.stdout.split('\n'):
-            if 'PC ESKF' in line or 'Position:' in line or 'Attitude:' in line:
-                print(line)
-    else:
-        csv_file = input_file
-
-    print(f"Loading {csv_file}...")
-    df = pd.read_csv(csv_file)
-
-    # Time in seconds
-    time_s = (df['timestamp_ms'] - df['timestamp_ms'].iloc[0]) / 1000.0
-
-    # Position (convert to cm for better visualization)
-    pos_x = df['pos_x'].values
-    pos_y = df['pos_y'].values
-    pos_z = df['pos_z'].values
-
-    # Attitude (degrees -> radians)
-    roll = np.radians(df['roll_deg'].values)
-    pitch = np.radians(df['pitch_deg'].values)
-    yaw = np.radians(df['yaw_deg'].values)
-
-    n_frames = len(df)
+    n_samples = len(roll)
 
     # Subsample for animation
-    skip = max(1, n_frames // 200)
-    indices = np.arange(0, n_frames, skip)
+    skip = max(1, n_samples // frames)
+    indices = np.arange(0, n_samples, skip)
 
     # Pre-compute trajectory for display
     traj_display = np.array([transform_ned_to_display(np.array([pos_x[i], pos_y[i], pos_z[i]]))
-                             for i in range(n_frames)])
+                             for i in range(n_samples)])
 
     # Figure setup
     fig = plt.figure(figsize=(14, 6))
@@ -240,26 +327,70 @@ def main():
 
         return []
 
-    print(f"Creating animation with {len(indices)} frames...")
-    ani = animation.FuncAnimation(fig, update, frames=len(indices),
-                                   blit=False, interval=50)
+    anim = animation.FuncAnimation(fig, update, frames=len(indices),
+                                    blit=False, interval=ANIMATION_INTERVAL_MS)
+    return fig, anim
+
+
+def _save_animation(anim, out_path):
+    """Save `anim` to `out_path`; writer picked by extension.
+    `anim` を `out_path` へ保存する（拡張子で書き出し方式を選ぶ）。
+
+    `.gif` -> PillowWriter, `.mp4` -> FFMpegWriter. Exits with a clear
+    message if the requested writer isn't available (e.g. ffmpeg not on
+    PATH) or the extension is neither.
+    `.gif` は PillowWriter、`.mp4` は FFMpegWriter を使う。要求した書き出し
+    方式が使えない場合（例: ffmpeg が PATH に無い）や、対応しない拡張子の
+    場合は分かりやすいメッセージを出して終了する。
+    """
+    suffix = Path(out_path).suffix.lower()
+    if suffix == '.gif':
+        writer = animation.PillowWriter(fps=ANIMATION_FPS)
+    elif suffix == '.mp4':
+        writer = animation.FFMpegWriter(fps=ANIMATION_FPS, bitrate=ANIMATION_BITRATE)
+    else:
+        print(f"Error: unsupported --save extension '{suffix}' (use .mp4 or .gif)")
+        sys.exit(1)
+
+    print(f"Saving animation to {out_path}...")
+    try:
+        anim.save(out_path, writer=writer)
+    except (RuntimeError, FileNotFoundError, OSError) as exc:
+        print(f"Error: animation writer for '{suffix}' is unavailable: {exc}")
+        sys.exit(1)
+    print(f"Saved: {out_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Animate position + attitude (3D trajectory/pose + top view) from a StampFly flight-log bundle',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument('bundle', help='.sflog.zip file or extracted flight-log bundle directory')
+    parser.add_argument('--save', metavar='FILE', help='Save animation to FILE (.mp4 or .gif)')
+    parser.add_argument('--no-show', action='store_true', help="Don't display the animation window")
+    parser.add_argument('--frames', type=int, default=DEFAULT_FRAMES,
+                         help=f'Maximum animation frames (default: {DEFAULT_FRAMES})')
+    args = parser.parse_args()
+
+    print(f"Loading {args.bundle}...")
+    time_s, pos_xyz, roll, pitch, yaw = load_bundle_pose(args.bundle)
+
+    print(f"Creating animation with up to {args.frames} frames...")
+    fig, anim = build_animation(time_s, pos_xyz, roll, pitch, yaw, frames=args.frames)
 
     plt.tight_layout()
 
-    # Output
-    save_mp4 = '--mp4' in sys.argv
+    if args.save:
+        _save_animation(anim, args.save)
 
-    if save_mp4:
-        # Use input file name for output
-        base_name = input_file.replace('.bin', '').replace('.csv', '')
-        output_file = base_name + '_pose.mp4'
-        print(f"Saving to {output_file}...")
-        writer = animation.FFMpegWriter(fps=20, bitrate=2000)
-        ani.save(output_file, writer=writer)
-        print(f"Saved: {output_file}")
+    if args.no_show:
+        plt.close(fig)
     else:
         print("Showing animation...")
         plt.show()
+
 
 if __name__ == "__main__":
     main()

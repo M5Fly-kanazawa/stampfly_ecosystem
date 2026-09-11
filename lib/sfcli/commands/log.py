@@ -17,8 +17,13 @@ Subcommands:
     check    - Validate a bundle's structure/units (lib/sflog.check_bundle)
     convert  - Convert JSONL<->bundle, or a bundle -> aligned/JSONL CSV
     info     - Show a bundle's summary (meta.json + per-stream stats)
-    analyze  - Analyze flight log data (--health: motor-fault report)
-    viz      - Visualize log data
+    analyze  - Analyze a bundle (gyro PSD, hover stats; --health: motor-fault report)
+    viz      - Visualize a bundle (every stream at its native rate; -i: Plotly)
+
+Every reader accepts a `.sflog.zip` or an extracted bundle directory and
+defaults to the newest bundle in logs/ (`paths.latest_bundle()`).
+読み込み側は全て `.sflog.zip` または展開済みフォルダを受け付け、未指定なら
+logs/ 内の最新の一式（`paths.latest_bundle()`）を使う。
 """
 
 import argparse
@@ -194,23 +199,35 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # --- analyze ---
     analyze_parser = log_subparsers.add_parser(
         "analyze",
-        help="Analyze flight log data",
-        description="Analyze flight log for stability, oscillation, and tuning insights.",
+        help="Analyze a flight-log bundle",
+        description="Analyze a flight-log bundle for stability, oscillation "
+                     "(gyro PSD from imu.csv at its true rate), hover statistics "
+                     "and tuning insights; --health gives the motor-health report.",
     )
     analyze_parser.add_argument(
-        "file",
+        "bundle",
         nargs="?",
-        help="Log file path (default: latest CSV)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/). "
+             "With --health --batch: a glob such as 'logs/flight_202609*.sflog.zip'",
+    )
+    analyze_parser.add_argument(
+        "--save",
+        metavar="FILE",
+        help="PNG path for the analysis figure "
+             "(default: <bundle stem>_analysis.png next to the bundle)",
     )
     analyze_parser.add_argument(
         "--health",
         action="store_true",
-        help="Motor health report: detect a degraded rotor from hover trim (JSONL)",
+        help="Motor health report: detect a degraded rotor from the hover trim "
+             "(duties from motor.csv, else ctrl_ref.csv; gyro_z from imu.csv; "
+             "voltage from status.csv)",
     )
     analyze_parser.add_argument(
         "--batch",
         action="store_true",
-        help="With --health: analyze all JSONL logs for the CG-removed corner test",
+        help="With --health: analyze several bundles (the newest in logs/, or "
+             "the glob given as `bundle`) for the CG-removed corner test",
     )
     analyze_parser.add_argument(
         "--json",
@@ -222,61 +239,40 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # --- viz ---
     viz_parser = log_subparsers.add_parser(
         "viz",
-        help="Visualize log data",
-        description="Visualize telemetry log data with comprehensive plots.",
+        help="Visualize a flight-log bundle",
+        description="Plot a flight-log bundle: every stream at its own native "
+                     "rate (gyro + rate_ref, accel, attitude, position/velocity, "
+                     "motor duty, control output, pilot sticks, baro/ToF/flow/mag, "
+                     "battery). -i opens an interactive Plotly dashboard instead.",
     )
     viz_parser.add_argument(
-        "file",
+        "bundle",
         nargs="?",
-        help="Log file path (default: latest CSV)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
     )
     viz_parser.add_argument(
         "--mode",
-        choices=["all", "sensors", "attitude", "position", "eskf"],
+        choices=["all", "attitude", "sensors", "position", "eskf"],
         default="all",
-        help="Visualization mode (default: all)",
+        help="Panel group (default: all)",
     )
     viz_parser.add_argument(
         "--save",
         metavar="FILE",
-        help="Save plot to file instead of displaying",
+        help="Save the figure (PNG) -- or the dashboard HTML with -i -- "
+             "instead of opening a window/browser",
     )
     viz_parser.add_argument(
         "--time-range",
         nargs=2,
         type=float,
         metavar=("START", "END"),
-        help="Time range to plot (seconds)",
-    )
-    viz_parser.add_argument(
-        "--no-eskf",
-        action="store_true",
-        help="Hide ESKF panels",
-    )
-    viz_parser.add_argument(
-        "--no-sensors",
-        action="store_true",
-        help="Hide additional sensor panels (baro, tof, flow)",
-    )
-    viz_parser.add_argument(
-        "--show-invalid",
-        action="store_true",
-        help="Show invalid sensor data (default: hidden as gaps)",
+        help="Time range to plot (seconds from the first sample)",
     )
     viz_parser.add_argument(
         "-i", "--interactive",
         action="store_true",
-        help="Interactive mode (Plotly, opens in browser)",
-    )
-    viz_parser.add_argument(
-        "--layout",
-        metavar="RxC",
-        help="Tile layout as ROWSxCOLS for interactive mode (e.g., 3x2)",
-    )
-    viz_parser.add_argument(
-        "--groups",
-        nargs="+",
-        help="Signal groups for interactive mode (e.g., attitude bias_gyro)",
+        help="Interactive mode (Plotly dashboard, opens in the browser)",
     )
     viz_parser.set_defaults(func=run_viz)
 
@@ -293,8 +289,8 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  check     Validate a flight-log bundle")
     console.print("  convert   Convert JSONL<->bundle, or bundle->aligned/JSONL CSV")
     console.print("  info      Show flight-log bundle information")
-    console.print("  analyze   Analyze flight log data")
-    console.print("  viz       Visualize log data")
+    console.print("  analyze   Analyze a bundle (--health: motor-health report)")
+    console.print("  viz       Visualize a bundle (-i: interactive Plotly)")
     console.print()
     console.print("Run 'sf log <subcommand> --help' for details.")
     return 0
@@ -614,372 +610,200 @@ def _stream_info_row(name: str, stats: dict) -> str:
 
 
 def run_analyze(args: argparse.Namespace) -> int:
-    """Analyze flight log"""
-    # Motor health report path (JSONL-based, detects a degraded rotor).
-    # モータ健全性レポート（JSONL ベース、劣化ロータを検出）。
+    """Analyze a flight-log bundle (tools/log_analyzer/flight_analysis.py):
+    gyro statistics and PSD from imu.csv at its true sample rate, attitude/
+    position/pilot statistics, hover-window statistics, a 5 s segment table
+    and tuning observations, plus a PNG figure. `--health` switches to the
+    motor-health report instead.
+    フライトログ一式を解析する（tools/log_analyzer/flight_analysis.py）:
+    imu.csv の真の標本化レートでのジャイロ統計と PSD、姿勢・位置・操縦入力の
+    統計、ホバー区間の統計、5 秒区切りの表、チューニング所見、PNG 図。
+    `--health` はモータ健全性レポートに切り替える。
+    """
     if getattr(args, "health", False):
         return _run_motor_health(args)
 
-    file_path = args.file
-
-    # Find latest CSV if not specified
-    if not file_path:
-        file_path = _find_latest_log(extension=".csv")
-        if not file_path:
-            console.error("No CSV log files found.")
-            return 1
-        console.info(f"Using latest CSV: {file_path}")
-
-    path = Path(file_path)
-    if not path.exists():
-        console.error(f"File not found: {path}")
+    bundle_path = _resolve_bundle_arg(args.bundle)
+    if bundle_path is None:
         return 1
 
-    if path.suffix != ".csv":
-        console.error("Analysis requires CSV file. Use 'sf log convert' first.")
-        return 1
+    png_path = Path(args.save) if args.save else _derived_path(bundle_path, "_analysis.png")
 
-    console.info(f"Analyzing: {path.name}")
-
+    console.info(f"Analyzing: {bundle_path.name}")
     try:
-        # Import analysis module
         sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
         import flight_analysis
-        sys.path.pop(0)
-
-        # Run analysis
-        flight_analysis.analyze_flight(str(path))
-        return 0
-
     except ImportError as e:
         console.error(f"Failed to import analysis module: {e}")
         console.print("  Required: pandas, matplotlib, scipy")
         return 1
-    except Exception as e:
+    finally:
+        sys.path.pop(0)
+
+    try:
+        log = sflog.load(bundle_path)
+        flight_analysis.analyze_flight(log, bundle_path.name, png_path=str(png_path))
+        return 0
+    except Exception as e:  # noqa: BLE001 - report, never crash sf
         console.error(f"Analysis failed: {e}")
         return 1
 
 
 def _run_motor_health(args: argparse.Namespace) -> int:
-    """Run the motor health report (sf log analyze --health).
-    モータ健全性レポートを実行する。
+    """Run the motor health report (sf log analyze --health) over one or
+    several bundles (tools/log_analyzer/motor_health.py).
+    モータ健全性レポート（sf log analyze --health）を 1 つまたは複数の
+    一式に対して実行する（tools/log_analyzer/motor_health.py）。
 
-    Detects a degraded rotor from the steady hover trim. One log identifies
-    the spin-direction group; --batch adds the CG-removed cross-log corner test.
-    1ログで回転グループを判定、--batch でCG除去のクロスログ隅特定を追加。"""
-    log_dir = get_log_dir()
-
-    # The cross-log corner test assumes ONE airframe (constant CG). Default the
-    # batch to the most-recent logs so an old/other airframe is not mixed in;
-    # pass a glob to scope a specific session/airframe explicitly.
-    # クロスログ隅特定は同一機体（CG一定）が前提。既定は最新ログに限定し、
-    # 別機体の混入を避ける。特定セッションはグロブで明示する。
-    MAX_BATCH = 12
+    Detects a degraded rotor from the steady hover trim. One bundle
+    identifies the spin-direction group; --batch adds the CG-removed
+    cross-log corner test.
+    1 本の一式で回転グループを判定し、--batch で CG 除去のクロスログ隅特定を
+    加える。"""
     if args.batch:
-        if args.file:
-            # Explicit glob (scope to one airframe/session).
-            jsonl_paths = sorted(str(p) for p in log_dir.glob(Path(args.file).name))
-            if not jsonl_paths:
-                from glob import glob as _glob
-                jsonl_paths = sorted(_glob(args.file))
-            if not jsonl_paths:
-                console.error(f"No JSONL logs match: {args.file}")
-                return 1
-            console.info(f"Health report over {len(jsonl_paths)} JSONL logs (glob)")
-        else:
-            # Default: the most-recent JSONL logs (by mtime), capped.
-            all_jsonl = sorted(log_dir.glob("*.jsonl"),
-                               key=lambda f: f.stat().st_mtime, reverse=True)
-            if not all_jsonl:
-                console.error("No JSONL logs found for --batch.")
-                return 1
-            recent = all_jsonl[:MAX_BATCH]
-            jsonl_paths = sorted(str(p) for p in recent)
-            console.info(f"Health report over the {len(jsonl_paths)} most recent "
-                         f"JSONL logs (assumes one airframe; pass a glob to scope)")
+        bundle_paths = _batch_bundle_paths(args.bundle)
+        if not bundle_paths:
+            return 1
     else:
-        file_path = args.file or _find_latest_log(extension=".jsonl")
-        if not file_path:
-            console.error("No JSONL log found. Capture one with 'sf log wifi'.")
+        bundle_path = _resolve_bundle_arg(args.bundle)
+        if bundle_path is None:
             return 1
-        if Path(file_path).suffix != ".jsonl":
-            console.error("Health report requires a .jsonl log (per-motor duty). "
-                          "Use 'sf log wifi' to capture, or --batch over the log dir.")
-            return 1
-        jsonl_paths = [str(file_path)]
-        console.info(f"Health report: {Path(file_path).name}")
+        bundle_paths = [bundle_path]
+        console.info(f"Health report: {bundle_path.name}")
 
     try:
         sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
         import motor_health
         sys.path.pop(0)
-        result = motor_health.analyze_health(jsonl_paths, json_out=args.json)
+        result = motor_health.analyze_health([str(p) for p in bundle_paths], json_out=args.json)
         return 0 if "error" not in result else 1
     except Exception as e:  # noqa: BLE001
         console.error(f"Health report failed: {e}")
         return 1
 
 
+# The cross-log corner test assumes ONE airframe (constant CG). The default
+# batch is capped to the most recent bundles so an old/other airframe is not
+# mixed in; pass a glob to scope a specific session/airframe explicitly.
+# クロスログ隅特定は同一機体（CG 一定）が前提。既定のバッチは最新の一式に
+# 限定して別機体の混入を避ける。特定セッションはグロブで明示する。
+HEALTH_BATCH_MAX_BUNDLES = 12
+
+
+def _batch_bundle_paths(glob_arg: Optional[str]) -> List[Path]:
+    """Bundles for `--health --batch`: those matching `glob_arg` (tried
+    relative to logs/ first, then as given), or the newest
+    HEALTH_BATCH_MAX_BUNDLES `*.sflog.zip` in logs/. Prints its own error
+    and returns [] when nothing matches.
+    `--health --batch` の対象一式: `glob_arg` に一致するもの（まず logs/
+    相対、次に指定そのまま）、または logs/ 内の最新
+    HEALTH_BATCH_MAX_BUNDLES 本の `*.sflog.zip`。該当なしなら自身でエラーを
+    出し [] を返す。
+    """
+    from glob import glob as _glob
+
+    log_dir = get_log_dir()
+    if glob_arg:
+        matched = sorted(log_dir.glob(Path(glob_arg).name))
+        if not matched:
+            matched = sorted(Path(p) for p in _glob(glob_arg))
+        if not matched:
+            console.error(f"No flight-log bundles match: {glob_arg}")
+            return []
+        console.info(f"Health report over {len(matched)} bundles (glob)")
+        return matched
+
+    all_bundles = sorted(log_dir.glob("*.sflog.zip"),
+                         key=lambda f: f.stat().st_mtime, reverse=True)
+    if not all_bundles:
+        console.error("No flight-log bundles found in logs/ for --batch.")
+        return []
+    recent = sorted(all_bundles[:HEALTH_BATCH_MAX_BUNDLES])
+    console.info(f"Health report over the {len(recent)} most recent bundles "
+                 "(assumes one airframe; pass a glob to scope)")
+    return recent
+
+
 def run_viz(args: argparse.Namespace) -> int:
-    """Visualize log data: resolve the file, then dispatch to the
-    interactive (Plotly), JSONL, or CSV renderer.
-    ログデータを可視化する: ファイルを解決し、インタラクティブ (Plotly)・
-    JSONL・CSV いずれかの描画処理へ振り分ける。"""
-    file_path = args.file
-
-    # Find latest log file if not specified
-    # 指定がなければ最新のログファイルを探す
-    if not file_path:
-        # Try JSONL first (new UDP format), then CSV (legacy)
-        file_path = _find_latest_log(extension=".jsonl")
-        if not file_path:
-            file_path = _find_latest_log(extension=".csv")
-        if not file_path:
-            console.error("No log files found (.jsonl or .csv)")
-            return 1
-        console.info(f"Using latest log: {file_path}")
-
-    path = Path(file_path)
-    if not path.exists():
-        console.error(f"File not found: {path}")
+    """Visualize a flight-log bundle: resolve the bundle, then dispatch to
+    the interactive (Plotly) dashboard or the matplotlib renderer
+    (tools/log_analyzer/visualize_stream.py) with the headless PNG fallback.
+    フライトログ一式を可視化する: 一式を解決し、インタラクティブ（Plotly）
+    ダッシュボードか、ヘッドレス PNG フォールバック付きの matplotlib 描画
+    （tools/log_analyzer/visualize_stream.py）へ振り分ける。"""
+    bundle_path = _resolve_bundle_arg(args.bundle)
+    if bundle_path is None:
         return 1
 
-    if path.suffix not in ('.csv', '.jsonl'):
-        console.error("Visualization requires .csv or .jsonl file.")
-        return 1
+    console.info(f"Visualizing: {bundle_path.name}")
 
-    console.info(f"Visualizing: {path.name}")
-
-    # JSONL default: static overview. JSONL + -i: interactive Plotly.
-    # JSONL デフォルト: 静的一覧。JSONL + -i: インタラクティブ Plotly。
-    is_interactive = getattr(args, 'interactive', False)
-
-    # JSONL static overview (default for .jsonl files)
-    # JSONL 静的一覧表示（.jsonl ファイルのデフォルト）
-    if path.suffix == '.jsonl' and not is_interactive:
-        return _viz_jsonl(path, args)
-
-    # Interactive mode (Plotly) -- works for both .csv and .jsonl, and
-    # never touches matplotlib, so it needs no backend handling.
-    # インタラクティブモード (Plotly) -- .csv と .jsonl の両方に対応し、
-    # matplotlib には一切触れないためバックエンド対応は不要。
-    if is_interactive:
-        return _viz_interactive(path, args)
-
-    return _viz_csv(path, args)
+    if getattr(args, "interactive", False):
+        return _viz_interactive(bundle_path, args)
+    return _viz_bundle(bundle_path, args)
 
 
-def _viz_interactive(path: Path, args: argparse.Namespace) -> int:
-    """Interactive Plotly visualization. Unchanged by the matplotlib
-    backend fallback work -- Plotly opens in a browser tab, not a
-    matplotlib window, so there is no headless case to handle here.
-    インタラクティブな Plotly 可視化。matplotlib バックエンドのフォール
-    バック対応による変更なし -- Plotly はブラウザタブで開くため
-    matplotlib のウィンドウではなく、ここで扱うべきヘッドレスの場合はない。
+def _viz_interactive(bundle_path: Path, args: argparse.Namespace) -> int:
+    """Interactive Plotly dashboard (tools/log_analyzer/visualize_interactive.py).
+    Plotly opens in a browser tab, not a matplotlib window, so there is no
+    headless case to handle here; `--save` writes the HTML instead.
+    インタラクティブな Plotly ダッシュボード。ブラウザタブで開くため
+    matplotlib のヘッドレス対応は不要。`--save` は HTML を書き出す。
     """
     try:
         sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
         import visualize_interactive
 
-        layout = None
-        if args.layout:
-            try:
-                parts = args.layout.lower().split('x')
-                layout = (int(parts[0]), int(parts[1]))
-            except (ValueError, IndexError):
-                console.error(f"Invalid layout '{args.layout}'. Use ROWSxCOLS (e.g., 3x2)")
-                return 1
-
-        visualize_interactive.visualize(
-            str(path),
-            groups=args.groups,
-            layout=layout,
-            output=args.save,
-        )
+        visualize_interactive.visualize(str(bundle_path), output=args.save)
         return 0
     except ImportError as e:
         console.error(f"Failed to import interactive visualizer: {e}")
-        console.print("  Required: pip install plotly")
         return 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         console.error(f"Interactive visualization failed: {e}")
         return 1
     finally:
         sys.path.pop(0)
 
 
-def _viz_jsonl(path: Path, args: argparse.Namespace) -> int:
-    """Static JSONL overview (matplotlib), with the headless PNG fallback.
-    静的な JSONL 一覧表示（matplotlib）。GUIバックエンドが無ければPNGへ
-    フォールバックする。"""
+def _viz_bundle(bundle_path: Path, args: argparse.Namespace) -> int:
+    """matplotlib rendering of a bundle (falls back to a saved PNG when no
+    GUI backend is usable).
+    一式の matplotlib 描画（GUI バックエンドが使えなければ保存した PNG へ
+    フォールバックする）。"""
     try:
         sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
 
-        def render(save_path: Optional[str], show: bool) -> None:
-            # visualize_jsonl imports matplotlib.pyplot at module load, so
-            # it must not be imported before _render_with_fallback() has
-            # picked a backend -- this closure only runs after that.
-            # visualize_jsonl はモジュール読み込み時に matplotlib.pyplot を
-            # import するため、_render_with_fallback() がバックエンドを
-            # 選ぶより前に import してはならない -- このクロージャは
-            # それより後にしか呼ばれない。
-            import visualize_jsonl
-
-            show_invalid = getattr(args, 'show_invalid', False)
-            data = visualize_jsonl.load_jsonl(str(path), hide_invalid=not show_invalid)
-            tr = None
-            if hasattr(args, 'time_range') and args.time_range:
-                tr = tuple(args.time_range)
-            # plot_overview has no `show` argument: it shows when save is
-            # None and saves otherwise, so `show` is unused here.
-            # plot_overview に show 引数は無い: save が None なら表示、
-            # そうでなければ保存するため、ここでは show を使わない。
-            visualize_jsonl.plot_overview(
-                data,
-                title=path.name,
-                save=save_path,
-                time_range=tr,
-            )
-
-        return _render_with_fallback(path, args, render)
-    except ImportError as e:
-        console.error(f"Failed to import visualizer: {e}")
-        console.print("  Required: pip install matplotlib numpy")
-        return 1
-    finally:
-        sys.path.pop(0)
-
-
-def _viz_csv(path: Path, args: argparse.Namespace) -> int:
-    """CSV visualization: detect the format, then draw it with the
-    matching visualize_* module (falls back to a saved PNG when no GUI
-    backend is usable).
-    CSV可視化: 書式を判定し、対応する visualize_* モジュールで描画する
-    （GUIバックエンドが使えない場合は保存したPNGへフォールバックする）。"""
-    try:
-        sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
-
-        # Every visualize_* module below imports matplotlib.pyplot at
-        # module load time, which locks in whatever backend is active at
-        # that moment. Format detection itself needs visualize_stream (for
-        # is_stream_csv()), so the backend must be chosen here, before that
-        # first import. The result is handed to _render_with_fallback() so
-        # the (Tk window-creating) probe runs only once.
-        # 以下の visualize_* モジュールはいずれもモジュール読み込み時に
-        # matplotlib.pyplot を import し、その時点で有効なバックエンドを
-        # 固定してしまう。書式判定自体が visualize_stream（is_stream_csv()
-        # 用）を必要とするため、その最初の import より前にここでバックエンドを
-        # 選んでおく。結果は _render_with_fallback() に渡し、（Tk ウィンドウを
-        # 作る）プローブが一度しか走らないようにする。
+        # visualize_stream imports matplotlib.pyplot at module load time,
+        # which locks in whatever backend is active at that moment -- so the
+        # backend is chosen here, before that import, and handed to
+        # _render_with_fallback() so the (Tk window-creating) probe runs once.
+        # visualize_stream はモジュール読み込み時に matplotlib.pyplot を
+        # import し、その時点で有効なバックエンドを固定してしまう。そのため
+        # import より前にここでバックエンドを選び、_render_with_fallback() へ
+        # 渡して（Tk ウィンドウを作る）プローブが一度しか走らないようにする。
         backend = plotting.select_backend(want_window=args.save is None)
 
-        # Detect CSV format to choose appropriate visualizer
-        import csv
-        with open(path, 'r') as f:
-            reader = csv.DictReader(f)
-            columns = reader.fieldnames
-
-        # Data Stream CSV (sf log wifi -o *.csv) - 400Hz IMU+ESKF merged with
-        # rate_ref and the 50Hz CtrlRef. Must be checked before the extended
-        # format because it also carries timestamp_us + quat_w.
-        # Data Stream CSV（sf log wifi -o *.csv）- 400Hz IMU+ESKF に rate_ref と
-        # 50Hz CtrlRef をマージした形式。timestamp_us + quat_w も持つため、
-        # extended 形式より先に判定する。
         import visualize_stream
-        if visualize_stream.is_stream_csv(columns):
-            console.info("Detected: Data Stream CSV (sf log wifi -o *.csv, 400Hz)")
-            df = visualize_stream.load_stream_csv(str(path))
+        log = visualize_stream.load_bundle(bundle_path)
 
-            def render(save_path: Optional[str], show: bool) -> None:
-                visualize_stream.visualize_all(
-                    df, str(path), save_path=save_path, show=show,
-                    time_range=args.time_range, mode=args.mode,
-                )
-        # Extended format (400Hz with ESKF) - has timestamp_us and quat_w
-        elif 'timestamp_us' in columns and 'quat_w' in columns:
-            import visualize_extended
-            console.info("Detected: Extended telemetry (400Hz with ESKF)")
-            data, fmt = visualize_extended.load_csv(str(path))
+        def render(save_path: Optional[str], show: bool) -> None:
+            visualize_stream.render(
+                log, bundle_path.name, save_path=save_path, show=show,
+                time_range=tuple(args.time_range) if args.time_range else None,
+                mode=args.mode,
+            )
 
-            def render(save_path: Optional[str], show: bool) -> None:
-                # plot_extended has no `show` argument: passing a save path
-                # makes it save instead of show -- same behaviour as before
-                # this refactor, so `show` is unused here.
-                # plot_extended に show 引数は無い: 保存パスを渡すと表示の
-                # 代わりに保存する -- この改修前と同じ挙動のため、ここでは
-                # show を使わない。
-                visualize_extended.plot_extended(
-                    data,
-                    output_file=save_path,
-                    time_range=args.time_range,
-                    show_eskf=not args.no_eskf,
-                    show_sensors=not args.no_sensors,
-                )
-        # FFT batch format - has timestamp_ms and gyro_corrected_x
-        elif 'timestamp_ms' in columns and 'gyro_corrected_x' in columns:
-            import visualize_extended
-            console.info("Detected: FFT batch telemetry")
-            data, fmt = visualize_extended.load_csv(str(path))
-
-            def render(save_path: Optional[str], show: bool) -> None:
-                visualize_extended.plot_legacy(data, fmt, output_file=save_path)
-        # Normal WiFi telemetry - has timestamp_ms and roll_deg
-        elif 'timestamp_ms' in columns and 'roll_deg' in columns:
-            import visualize_telemetry
-            console.info("Detected: Normal WiFi telemetry")
-            df = visualize_telemetry.load_telemetry_csv(str(path))
-
-            def render(save_path: Optional[str], show: bool) -> None:
-                if args.mode == "sensors":
-                    visualize_telemetry.visualize_sensors_only(df, str(path), save_path, show)
-                elif args.mode == "attitude":
-                    visualize_telemetry.visualize_attitude_only(df, str(path), save_path, show)
-                elif args.mode == "position":
-                    visualize_telemetry.visualize_position_only(df, str(path), save_path, show)
-                else:
-                    visualize_telemetry.visualize_all(df, str(path), save_path, show)
-        # SILS trajectory.csv (sf sils scenario output) - has t, px, alt, roll,
-        # yawrate, yawcmd, alt_est, m0-m3. Checked as a set (column order is not
-        # guaranteed) against a combination distinctive enough not to collide
-        # with the WiFi/extended/FFT formats above.
-        # SILS trajectory.csv（sf sils scenario の出力）- t, px, alt, roll, yawrate,
-        # yawcmd, alt_est, m0-m3 を持つ。列順は保証されないため集合として判定し、
-        # 上の WiFi/extended/FFT 各書式と衝突しない組み合わせを使う。
-        elif {
-            't', 'px', 'py', 'pz', 'qw', 'alt', 'roll', 'pitch',
-            'yawrate', 'yawcmd', 'alt_est', 'm0', 'm1', 'm2', 'm3',
-        }.issubset(set(columns)):
-            import visualize_sils_trajectory
-            console.info("Detected: SILS trajectory (sf sils scenario)")
-            df = visualize_sils_trajectory.load_trajectory_csv(str(path))
-
-            def render(save_path: Optional[str], show: bool) -> None:
-                visualize_sils_trajectory.visualize_all(
-                    df, str(path), save_path=save_path, show=show,
-                )
-        else:
-            # Unknown format: bail out before _render_with_fallback() so
-            # this case never triggers backend-selection or PNG fallback
-            # logic -- there is nothing renderable to fall back to.
-            # 未知の書式: _render_with_fallback() を呼ぶ前に打ち切ることで、
-            # このケースがバックエンド選択やPNGフォールバックの経路に
-            # 入らないようにする -- フォールバックできる描画対象がそもそもない。
-            console.error("Unknown CSV format. Cannot determine visualizer.")
-            return 1
-
-        return _render_with_fallback(path, args, render, backend)
+        return _render_with_fallback(bundle_path, args, render, backend)
 
     except ImportError as e:
         console.error(f"Failed to import visualization module: {e}")
-        console.print("  Required: matplotlib, numpy")
+        console.print("  Required: matplotlib, numpy, pandas")
         return 1
-    except Exception as e:
-        # Covers format-detection failures (bad/unreadable CSV) -- errors
-        # from render() itself are already handled inside
-        # _render_with_fallback() and never reach this far.
-        # 書式判定自体の失敗（壊れた/読めないCSV）を捕捉する -- render()
-        # 自体のエラーは _render_with_fallback() 内で既に処理済みで、
-        # ここまでは届かない。
+    except Exception as e:  # noqa: BLE001
+        # Covers bundle-loading failures -- errors from render() itself are
+        # handled inside _render_with_fallback() and never reach this far.
+        # 一式の読み込み失敗を捕捉する -- render() 自体のエラーは
+        # _render_with_fallback() 内で処理済みで、ここまでは届かない。
         console.error(f"Visualization failed: {e}")
         return 1
     finally:
@@ -987,18 +811,18 @@ def _viz_csv(path: Path, args: argparse.Namespace) -> int:
 
 
 def _render_with_fallback(
-    path: Path,
+    bundle_path: Path,
     args: argparse.Namespace,
     render: Callable[[Optional[str], bool], None],
     backend: Optional[plotting.BackendInfo] = None,
 ) -> int:
     """Draw one figure set via `render(save_path, show)`, choosing the
-    matplotlib backend first. Falls back to a PNG saved next to the log
+    matplotlib backend first. Falls back to a PNG saved next to the bundle
     (opened with the OS default viewer) when no window can be shown, and
     retries headlessly once if a GUI backend passes its import-time probe
     but still fails while actually drawing/showing.
     `render(save_path, show)` で1つの図を描く。まず matplotlib バックエンドを
-    選ぶ。ウィンドウを表示できない場合はログの隣に PNG を保存して
+    選ぶ。ウィンドウを表示できない場合は一式の隣に PNG を保存して
     （OS標準の画像ビューアで開く）フォールバックし、GUIバックエンドが
     import時のプローブは通過したのに実際の描画/表示で失敗した場合は
     一度だけヘッドレスで再試行する。
@@ -1012,6 +836,7 @@ def _render_with_fallback(
     """
     want_window = args.save is None
     info = backend or plotting.select_backend(want_window=want_window)
+    fallback_png = _derived_path(bundle_path, ".png")
 
     save_path, show = args.save, want_window
     opened_fallback = False
@@ -1022,10 +847,10 @@ def _render_with_fallback(
         # （macosx / tkagg / qtagg）で開くかを 1 行で示す。
         console.info(f"Plot window backend: {info.name}")
     if want_window and not info.interactive:
-        save_path = str(plotting.default_png_path(path))
+        save_path = str(fallback_png)
         show = False
         opened_fallback = True
-        plotting.report_headless(console, info, Path(save_path))
+        plotting.report_headless(console, info, fallback_png)
 
     try:
         render(save_path, show)
@@ -1038,7 +863,7 @@ def _render_with_fallback(
         # GUIバックエンドはプローブを通過したが描画/表示時に失敗した
         # （Tk/Qtの実行時エラー等）: 同じ描画を一度だけヘッドレスで再試行する。
         plotting.force_headless()
-        save_path = str(plotting.default_png_path(path))
+        save_path = str(fallback_png)
         opened_fallback = True
         try:
             render(save_path, False)
@@ -1052,40 +877,21 @@ def _render_with_fallback(
     return 0
 
 
-# --- Helper functions ---
-
-def _find_latest_log(extension: Optional[str] = None) -> Optional[str]:
-    """Find most recent log file"""
-    log_dir = get_log_dir()
-    analyzer_dir = paths.root() / "tools" / "log_analyzer"
-
-    files = []
-
-    if extension:
-        patterns = [f"*{extension}"]
-    else:
-        patterns = ["*.bin", "*.csv"]
-
-    for pattern in patterns:
-        files.extend(log_dir.glob(pattern))
-        if analyzer_dir.exists():
-            files.extend(analyzer_dir.glob(pattern))
-
-    if not files:
-        return None
-
-    # Return newest
-    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-    return str(files[0])
-
-
-# --- Flight-log v1 bundle helpers (list/info/check; not used by the
-# untouched viz/analyze paths above, which still resolve via
-# _find_latest_log() against legacy .jsonl/.csv files -- Phase 2)
-# --- フライトログ v1 一式のヘルパー（list/info/check 用。上の未変更の
-# viz/analyze 経路は引き続き _find_latest_log() でレガシー .jsonl/.csv を
-# 解決する -- Phase 2）
 # =============================================================================
+# --- Flight-log v1 bundle helpers (shared by list/info/check/analyze/viz)
+# --- フライトログ v1 一式のヘルパー（list/info/check/analyze/viz で共有）
+# =============================================================================
+
+
+def _derived_path(bundle_path: Path, suffix: str) -> Path:
+    """Path of a file derived from `bundle_path`, next to it:
+    "logs/flight_x.sflog.zip" + "_analysis.png" -> "logs/flight_x_analysis.png"
+    (see _bundle_stem() for why Path.stem alone is not enough).
+    `bundle_path` から派生するファイルのパス（一式の隣）:
+    "logs/flight_x.sflog.zip" + "_analysis.png" -> "logs/flight_x_analysis.png"
+    （Path.stem だけでは足りない理由は _bundle_stem() 参照）。
+    """
+    return bundle_path.parent / f"{_bundle_stem(bundle_path)}{suffix}"
 
 
 def _iter_bundles(log_dir: Path):
@@ -1196,15 +1002,20 @@ def _bundle_stem(bundle_path: Path) -> str:
 
 
 def _find_latest_bundle() -> Optional[Path]:
-    """Most recently modified flight-log bundle under logs/ -- the
-    default `sf log list/info/check` fall back to when no bundle is named
-    explicitly. Distinct from _find_latest_log() above, which viz/analyze
-    (Phase 2, untouched by this change) still use for legacy .jsonl/.csv.
-    logs/ 配下で最も新しく更新されたフライトログ一式 -- `sf log
-    list/info/check` がバンドル未指定時に使う既定値。上の
-    _find_latest_log()（viz/analyze が引き続きレガシー .jsonl/.csv に
-    使う。Phase 2、本変更では未変更）とは別物。
+    """Most recently modified flight-log bundle under logs/ -- the default
+    every `sf log` subcommand falls back to when no bundle is named.
+    `paths.latest_bundle()` (the project-wide "newest log" lookup shared
+    with `sf trim`/`sf cal`/`sf sysid`) answers for `*.sflog.zip` files;
+    directory bundles, which it does not see, are found via _iter_bundles().
+    logs/ 配下で最も新しく更新されたフライトログ一式 -- 一式を指定しない
+    `sf log` 各サブコマンドの既定値。`paths.latest_bundle()`（`sf trim`/
+    `sf cal`/`sf sysid` と共有するプロジェクト共通の「最新ログ」探索）が
+    `*.sflog.zip` を答え、それが見ないディレクトリ一式は _iter_bundles()
+    で探す。
     """
+    latest_zip = paths.latest_bundle()
+    if latest_zip is not None:
+        return latest_zip
     bundles = list(_iter_bundles(get_log_dir()))
     if not bundles:
         return None
@@ -1213,13 +1024,13 @@ def _find_latest_bundle() -> Optional[Path]:
 
 
 def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
-    """Resolve `sf log info/check`'s optional bundle argument: the given
-    path if valid, else the newest bundle in logs/. Prints its own error
-    (via `console.error`) and returns None on any failure, so callers can
-    just `if bundle_path is None: return 1`.
-    `sf log info/check` の任意のバンドル引数を解決する: 指定があれば
-    そのパス、無ければ logs/ 内の最新の一式。失敗時は自身で
-    `console.error` を出し None を返すため、呼び出し側は
+    """Resolve a subcommand's optional bundle argument (`sf log info/check/
+    analyze/viz`): the given path if valid, else the newest bundle in logs/.
+    Prints its own error (via `console.error`) and returns None on any
+    failure, so callers can just `if bundle_path is None: return 1`.
+    サブコマンド（`sf log info/check/analyze/viz`）の任意のバンドル引数を
+    解決する: 指定があればそのパス、無ければ logs/ 内の最新の一式。失敗時は
+    自身で `console.error` を出し None を返すため、呼び出し側は
     `if bundle_path is None: return 1` するだけでよい。
     """
     if not bundle_arg:

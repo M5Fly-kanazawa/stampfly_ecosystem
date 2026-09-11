@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 """
-visualize_interactive.py - Interactive Telemetry Dashboard
+visualize_interactive.py - Interactive Flight-Log Dashboard
+visualize_interactive.py - 対話型フライトログダッシュボード
 
-Generates a self-contained HTML dashboard with signal selection,
-overlay support, and configurable layout. No server required.
+Generates a self-contained HTML dashboard (signal selection, overlay
+support, configurable layout, no server required) from a StampFly
+flight-log v1 bundle (`.sflog.zip` or an extracted directory -- see
+docs/plans/flight-log-format-plan.md and protocol/spec/flight_log.yaml,
+the format's Single Source of Truth). This is the backend of
+`sf log viz -i`.
 
-ブラウザ上で信号選択・重ね描き・レイアウト変更が可能な
-自己完結型 HTML ダッシュボードを生成。サーバー不要。
+StampFly フライトログ v1 一式（`.sflog.zip` または展開済みフォルダ --
+形式の正本は docs/plans/flight-log-format-plan.md と
+protocol/spec/flight_log.yaml）から、信号選択・重ね描き・レイアウト変更が
+可能な自己完結型 HTML ダッシュボード（サーバー不要）を生成する。
+`sf log viz -i` のバックエンド実装。
 
 Usage:
-    python visualize_interactive.py <csv_file> [options]
-    sf log viz <csv_file> -i [options]
-
-Features:
-    - Select signals from sidebar checkboxes
-    - Overlay multiple signals on the same plot
-    - Add/remove subplots dynamically
-    - Zoom, pan, hover on all axes
-    - Configurable grid layout
+    python visualize_interactive.py <bundle.sflog.zip> [-o out.html]
+    sf log viz <bundle.sflog.zip> -i [options]
 """
 
 import argparse
-import csv
 import json
 import math
-import os
 import sys
 import tempfile
 import urllib.request
@@ -32,6 +31,8 @@ import webbrowser
 from pathlib import Path
 
 import numpy as np
+
+import sflog
 
 
 # =============================================================================
@@ -71,7 +72,114 @@ def get_plotly_js() -> str:
 
 
 # =============================================================================
-# Signal definitions with categories
+# Bundle -> flat signal dict (column name -> display signal key)
+# 一式 -> 平坦な信号辞書（列名 -> 表示用信号キー）
+#
+# Unlisted columns of a listed stream, and every column of a stream with no
+# entry here at all, default to f"{stream}_{column}" (see load_bundle()).
+# 表に無い列（表に載っているストリームの中の未記載列も、表に無いストリーム
+# の全列も）は f"{stream}_{column}" になる（load_bundle() 参照）。
+# =============================================================================
+
+STREAM_SIGNALS = {
+    'imu': {
+        'gyro_x': 'gyro_x', 'gyro_y': 'gyro_y', 'gyro_z': 'gyro_z',
+        'accel_x': 'accel_x', 'accel_y': 'accel_y', 'accel_z': 'accel_z',
+        'gyro_raw_x': 'gyro_raw_x', 'gyro_raw_y': 'gyro_raw_y', 'gyro_raw_z': 'gyro_raw_z',
+        'accel_raw_x': 'accel_raw_x', 'accel_raw_y': 'accel_raw_y', 'accel_raw_z': 'accel_raw_z',
+    },
+    'attitude': {
+        'quat_w': 'quat_w', 'quat_x': 'quat_x', 'quat_y': 'quat_y', 'quat_z': 'quat_z',
+        'gyro_bias_x': 'gyro_bias_x', 'gyro_bias_y': 'gyro_bias_y', 'gyro_bias_z': 'gyro_bias_z',
+        'accel_bias_x': 'accel_bias_x', 'accel_bias_y': 'accel_bias_y', 'accel_bias_z': 'accel_bias_z',
+    },
+    'posvel': {
+        'pos_x': 'pos_x', 'pos_y': 'pos_y', 'pos_z': 'pos_z',
+        'vel_x': 'vel_x', 'vel_y': 'vel_y', 'vel_z': 'vel_z',
+    },
+    'rate_ref': {
+        'rate_ref_roll': 'rate_ref_roll',
+        'rate_ref_pitch': 'rate_ref_pitch',
+        'rate_ref_yaw': 'rate_ref_yaw',
+    },
+    'motor': {
+        'duty_FR': 'duty_FR', 'duty_RR': 'duty_RR', 'duty_RL': 'duty_RL', 'duty_FL': 'duty_FL',
+    },
+    'ctrl_output': {
+        # PRE-MIXER commanded thrust/torque -- the real controller output.
+        # ミキサー手前のコントローラ指令 -- 実測のコントローラ出力そのもの。
+        'thrust': 'ctrl_thrust',
+        'torque_roll': 'torque_roll',
+        'torque_pitch': 'torque_pitch',
+        'torque_yaw': 'torque_yaw',
+    },
+    'pilot': {
+        'throttle': 'pilot_throttle', 'roll': 'pilot_roll',
+        'pitch': 'pilot_pitch', 'yaw': 'pilot_yaw',
+    },
+    'ctrl_ref': {
+        'flight_mode': 'flight_mode',
+        'angle_ref_roll': 'angle_ref_roll', 'angle_ref_pitch': 'angle_ref_pitch',
+        'total_thrust': 'total_thrust',
+        # 50 Hz duty echo from the CtrlRef packet -- prefer motor.csv
+        # (duty_FR etc., 400 Hz measured) when it is present; kept
+        # distinct here (ctrl_ref_ prefix) so the two never collide.
+        # CtrlRef パケット由来の 50Hz duty エコー -- motor.csv（duty_FR 等、
+        # 400Hz 実測）がある場合はそちらを優先する。両者が衝突しないよう
+        # ここでは ctrl_ref_ 接頭辞を付けて区別する。
+        'duty_FR': 'ctrl_ref_duty_FR', 'duty_RR': 'ctrl_ref_duty_RR',
+        'duty_RL': 'ctrl_ref_duty_RL', 'duty_FL': 'ctrl_ref_duty_FL',
+        'alt_setpoint': 'alt_setpoint', 'alt_vel_target': 'alt_vel_target',
+        'climb_rate_cmd': 'climb_rate_cmd',
+        'pos_setpoint_x': 'pos_setpoint_x', 'pos_setpoint_y': 'pos_setpoint_y',
+    },
+    'baro': {
+        'altitude': 'baro_altitude', 'pressure': 'baro_pressure',
+    },
+    'tof_bottom': {
+        'distance': 'tof_bottom', 'status': 'tof_bottom_status',
+    },
+    'tof_front': {
+        'distance': 'tof_front', 'status': 'tof_front_status',
+    },
+    'flow': {
+        'dx': 'flow_x', 'dy': 'flow_y', 'quality': 'flow_quality',
+    },
+    'mag': {
+        'x': 'mag_x', 'y': 'mag_y', 'z': 'mag_z',
+    },
+    'status': {
+        'voltage': 'battery_voltage', 'current_ma': 'battery_current_ma',
+        'flight_state': 'flight_state', 'sensor_health': 'sensor_health',
+        'eskf_status': 'eskf_status', 'reset_reason': 'reset_reason',
+        'pid_roll_kp': 'pid_roll_kp', 'pid_roll_ti': 'pid_roll_ti', 'pid_roll_td': 'pid_roll_td',
+        'pid_pitch_kp': 'pid_pitch_kp', 'pid_pitch_ti': 'pid_pitch_ti', 'pid_pitch_td': 'pid_pitch_td',
+        'pid_yaw_kp': 'pid_yaw_kp', 'pid_yaw_ti': 'pid_yaw_ti', 'pid_yaw_td': 'pid_yaw_td',
+    },
+    'eskf_cov': {
+        # Diagonal of the ESKF covariance matrix P -- already named p_* in
+        # the bundle, kept as-is (no eskf_cov_ prefix).
+        # ESKF 共分散行列 P の対角成分 -- 一式の時点で既に p_* と命名され
+        # ているのでそのまま使う（eskf_cov_ 接頭辞を付けない）。
+        'p_pos_x': 'p_pos_x', 'p_pos_y': 'p_pos_y', 'p_pos_z': 'p_pos_z',
+        'p_vel_x': 'p_vel_x', 'p_vel_y': 'p_vel_y', 'p_vel_z': 'p_vel_z',
+        'p_att_x': 'p_att_x', 'p_att_y': 'p_att_y', 'p_att_z': 'p_att_z',
+        'p_bg_x': 'p_bg_x', 'p_bg_y': 'p_bg_y', 'p_bg_z': 'p_bg_z',
+        'p_ba_x': 'p_ba_x', 'p_ba_y': 'p_ba_y', 'p_ba_z': 'p_ba_z',
+    },
+    'truth': {
+        'pos_x': 'truth_pos_x', 'pos_y': 'truth_pos_y', 'pos_z': 'truth_pos_z',
+        'quat_w': 'truth_quat_w', 'quat_x': 'truth_quat_x',
+        'quat_y': 'truth_quat_y', 'quat_z': 'truth_quat_z',
+        'vel_x': 'truth_vel_x', 'vel_y': 'truth_vel_y', 'vel_z': 'truth_vel_z',
+        'rate_x': 'truth_rate_x', 'rate_y': 'truth_rate_y', 'rate_z': 'truth_rate_z',
+    },
+}
+
+
+# =============================================================================
+# Signal definitions with categories (sidebar grouping)
+# 信号定義とカテゴリ（サイドバーのグルーピング）
 # =============================================================================
 
 SIGNAL_CATEGORIES = {
@@ -95,20 +203,10 @@ SIGNAL_CATEGORIES = {
         ('accel_raw_y', 'Accel Raw Y [m/s²]'),
         ('accel_raw_z', 'Accel Raw Z [m/s²]'),
     ],
-    'IMU - Corrected Gyro': [
-        ('gyro_corrected_x', 'Gyro Corr X [rad/s]'),
-        ('gyro_corrected_y', 'Gyro Corr Y [rad/s]'),
-        ('gyro_corrected_z', 'Gyro Corr Z [rad/s]'),
-    ],
-    'IMU - Corrected Accel': [
-        ('accel_corrected_x', 'Accel Corr X [m/s²]'),
-        ('accel_corrected_y', 'Accel Corr Y [m/s²]'),
-        ('accel_corrected_z', 'Accel Corr Z [m/s²]'),
-    ],
     'ESKF - Attitude': [
-        ('roll_deg', 'Roll [deg]'),
-        ('pitch_deg', 'Pitch [deg]'),
-        ('yaw_deg', 'Yaw [deg]'),
+        ('attitude_roll_deg', 'Roll [deg]'),
+        ('attitude_pitch_deg', 'Pitch [deg]'),
+        ('attitude_yaw_deg', 'Yaw [deg]'),
     ],
     'ESKF - Position': [
         ('pos_x', 'Pos North [m]'),
@@ -130,11 +228,11 @@ SIGNAL_CATEGORIES = {
         ('accel_bias_y', 'Accel Bias Y [m/s²]'),
         ('accel_bias_z', 'Accel Bias Z [m/s²]'),
     ],
-    'Control': [
-        ('ctrl_throttle', 'Throttle'),
-        ('ctrl_roll', 'Roll Cmd'),
-        ('ctrl_pitch', 'Pitch Cmd'),
-        ('ctrl_yaw', 'Yaw Cmd'),
+    'Control Output': [
+        ('ctrl_thrust', 'Ctrl Thrust [N] (pre-mixer)'),
+        ('torque_roll', 'Ctrl Torque Roll [N·m]'),
+        ('torque_pitch', 'Ctrl Torque Pitch [N·m]'),
+        ('torque_yaw', 'Ctrl Torque Yaw [N·m]'),
     ],
     'Control - Angle Reference': [
         ('angle_ref_roll_deg', 'Angle Ref Roll [deg]'),
@@ -146,37 +244,34 @@ SIGNAL_CATEGORIES = {
         ('rate_ref_pitch', 'Rate Ref Pitch [rad/s]'),
         ('rate_ref_yaw', 'Rate Ref Yaw [rad/s]'),
     ],
-    'Computed - PID Output': [
-        ('pid_out_roll', 'PID Roll [Nm]'),
-        ('pid_out_pitch', 'PID Pitch [Nm]'),
-        ('pid_out_yaw', 'PID Yaw [Nm]'),
+    'Motor Duty (400 Hz)': [
+        ('duty_FR', 'FR(M1) Duty'),
+        ('duty_RR', 'RR(M2) Duty'),
+        ('duty_RL', 'RL(M3) Duty'),
+        ('duty_FL', 'FL(M4) Duty'),
     ],
-    'Computed - Motor Thrust': [
-        ('motor_thrust_FR', 'FR(M1) Thrust [N]'),
-        ('motor_thrust_RR', 'RR(M2) Thrust [N]'),
-        ('motor_thrust_RL', 'RL(M3) Thrust [N]'),
-        ('motor_thrust_FL', 'FL(M4) Thrust [N]'),
-    ],
-    'Computed - Motor Duty': [
-        ('motor_duty_FR', 'FR(M1) Duty'),
-        ('motor_duty_RR', 'RR(M2) Duty'),
-        ('motor_duty_RL', 'RL(M3) Duty'),
-        ('motor_duty_FL', 'FL(M4) Duty'),
-        ('motor_saturated', 'Saturated (any)'),
-    ],
-    'Actual Motor Duty': [
-        ('actual_duty_FR', 'FR(M1) Actual Duty'),
-        ('actual_duty_RR', 'RR(M2) Actual Duty'),
-        ('actual_duty_RL', 'RL(M3) Actual Duty'),
-        ('actual_duty_FL', 'FL(M4) Actual Duty'),
-    ],
-    'Thrust Command': [
+    'Control - Reference (50 Hz)': [
+        ('ctrl_ref_duty_FR', 'FR(M1) Duty (ref, 50Hz)'),
+        ('ctrl_ref_duty_RR', 'RR(M2) Duty (ref, 50Hz)'),
+        ('ctrl_ref_duty_RL', 'RL(M3) Duty (ref, 50Hz)'),
+        ('ctrl_ref_duty_FL', 'FL(M4) Duty (ref, 50Hz)'),
         ('total_thrust', 'Total Thrust [N]'),
-        ('total_duty', 'Total Duty (thrust/max)'),
+        ('total_duty', 'Total Duty (mean of 4)'),
+        ('alt_setpoint', 'Alt Setpoint [m]'),
+        ('alt_vel_target', 'Alt Vel Target [m/s]'),
+        ('climb_rate_cmd', 'Climb Rate Cmd [m/s]'),
+        ('pos_setpoint_x', 'Pos Setpoint X [m]'),
+        ('pos_setpoint_y', 'Pos Setpoint Y [m]'),
+    ],
+    'Pilot': [
+        ('pilot_throttle', 'Pilot Throttle'),
+        ('pilot_roll', 'Pilot Roll'),
+        ('pilot_pitch', 'Pilot Pitch'),
+        ('pilot_yaw', 'Pilot Yaw'),
     ],
     'Sensors - Height': [
         ('baro_altitude', 'Baro Alt [m]'),
-        ('baro_pressure', 'Baro Press [hPa]'),
+        ('baro_pressure', 'Baro Press [Pa]'),
         ('tof_bottom', 'ToF Bottom [m]'),
         ('tof_front', 'ToF Front [m]'),
         ('tof_bottom_status', 'ToF Bot Status'),
@@ -194,41 +289,41 @@ SIGNAL_CATEGORIES = {
     ],
     'Battery': [
         ('battery_voltage', 'Voltage [V]'),
+        ('battery_current_ma', 'Current [mA]'),
     ],
-    'Timing - Internal Timestamps': [
-        ('imu_timestamp_us', 'IMU Timestamp [μs]'),
-        ('baro_timestamp_us', 'Baro Timestamp [μs]'),
-        ('tof_timestamp_us', 'ToF Timestamp [μs]'),
-        ('mag_timestamp_us', 'Mag Timestamp [μs]'),
-        ('flow_timestamp_us', 'Flow Timestamp [μs]'),
+    'Status': [
+        ('flight_state', 'Flight State'),
+        ('eskf_status', 'ESKF Status'),
+        ('sensor_health', 'Sensor Health'),
+    ],
+    'PID gains': [
+        ('pid_roll_kp', 'Roll Kp'),
+        ('pid_roll_ti', 'Roll Ti [s]'),
+        ('pid_roll_td', 'Roll Td [s]'),
+        ('pid_pitch_kp', 'Pitch Kp'),
+        ('pid_pitch_ti', 'Pitch Ti [s]'),
+        ('pid_pitch_td', 'Pitch Td [s]'),
+        ('pid_yaw_kp', 'Yaw Kp'),
+        ('pid_yaw_ti', 'Yaw Ti [s]'),
+        ('pid_yaw_td', 'Yaw Td [s]'),
     ],
     'Timing - IMU Interval': [
         ('imu_interval_us', 'IMU Interval [μs] (should be ~2500)'),
-        ('telemetry_interval_us', 'Telemetry Interval [μs]'),
     ],
-    'Timing - Telemetry Delay': [
-        ('telemetry_delay_us', 'Telemetry Delay [μs] (WiFi pipeline)'),
-    ],
-    'Computed - Gyro Int (raw)': [
-        ('gyro_int_roll', 'Gyro Int Roll [deg]'),
-        ('gyro_int_pitch', 'Gyro Int Pitch [deg]'),
-        ('gyro_int_yaw', 'Gyro Int Yaw [deg]'),
-    ],
-    'Computed - Gyro Int (corrected)': [
-        ('gyro_corr_int_roll', 'Gyro Corr Int Roll [deg]'),
-        ('gyro_corr_int_pitch', 'Gyro Corr Int Pitch [deg]'),
-        ('gyro_corr_int_yaw', 'Gyro Corr Int Yaw [deg]'),
-    ],
-    'Computed - Accel Att (raw)': [
-        ('accel_roll', 'Accel Roll [deg]'),
-        ('accel_pitch', 'Accel Pitch [deg]'),
-    ],
-    'Computed - Accel Att (corrected)': [
-        ('accel_corr_roll', 'Accel Corr Roll [deg]'),
-        ('accel_corr_pitch', 'Accel Corr Pitch [deg]'),
-    ],
-    'Computed - Mag Heading': [
-        ('mag_yaw', 'Mag Yaw [deg]'),
+    'Truth (SILS/sim)': [
+        ('truth_pos_x', 'Truth Pos North [m]'),
+        ('truth_pos_y', 'Truth Pos East [m]'),
+        ('truth_pos_z', 'Truth Pos Down [m]'),
+        ('truth_quat_w', 'Truth Quat W'),
+        ('truth_quat_x', 'Truth Quat X'),
+        ('truth_quat_y', 'Truth Quat Y'),
+        ('truth_quat_z', 'Truth Quat Z'),
+        ('truth_vel_x', 'Truth Vel North [m/s]'),
+        ('truth_vel_y', 'Truth Vel East [m/s]'),
+        ('truth_vel_z', 'Truth Vel Down [m/s]'),
+        ('truth_rate_x', 'Truth Rate X [rad/s]'),
+        ('truth_rate_y', 'Truth Rate Y [rad/s]'),
+        ('truth_rate_z', 'Truth Rate Z [rad/s]'),
     ],
 }
 
@@ -240,620 +335,163 @@ COLORS = [
 ]
 
 
-def load_jsonl(filepath: str) -> dict:
-    """Load JSONLines telemetry file and return dict of lists.
-    JSONLines テレメトリファイルを読み込み、信号別リストの辞書を返す。
+def load_bundle(path) -> dict:
+    """Load a StampFly flight-log v1 bundle and flatten it into the
+    dict-of-lists `generate_html()` consumes.
 
-    Each sensor type gets its own time axis (_time_<sensor>) and data arrays.
-    各センサ型は固有の時間軸と数値配列を持つ。
+    Every present stream gets its own time axis `_time_<stream>` (seconds,
+    relative to the earliest first-sample timestamp across all present
+    streams). `time_s` aliases `_time_imu` (falling back to the first
+    available `_time_*` when the imu stream itself is absent -- it is
+    `required: true` in the schema, so this only matters for a hand-built
+    or truncated bundle). Every data column (except `timestamp_us` and
+    `seq`) is exported under the signal key STREAM_SIGNALS declares for it,
+    defaulting to f"{stream}_{column}" for anything not listed there.
+    `_signal_axis` maps every signal key to its owning `_time_<stream>`
+    key, so `generate_html()` never has to guess a signal's time axis from
+    array length -- two streams can share a row count at the same nominal
+    rate (pilot and ctrl_ref are both 50 Hz), which length-matching alone
+    cannot tell apart.
+
+    StampFly フライトログ v1 一式を読み込み、`generate_html()` が消費する
+    信号名→リストの辞書へ平坦化する。
+
+    実在する各ストリームは自分の時間軸 `_time_<stream>`（秒、全ストリーム
+    の最初の標本のうち最も早い時刻を基準）を持つ。`time_s` は `_time_imu`
+    の別名（imu ストリームが無い場合は最初に見つかった `_time_*` -- imu は
+    スキーマ上 `required: true` なので、これは手組みや欠損した一式でしか
+    起こらない）。各データ列（`timestamp_us` と `seq` を除く）は
+    STREAM_SIGNALS が宣言する信号キーでエクスポートし、表に無ければ
+    f"{stream}_{column}" を使う。`_signal_axis` は各信号キーを対応する
+    `_time_<stream>` キーへ写像し、`generate_html()` が配列長から信号の
+    時間軸を推測しなくて済むようにする -- pilot と ctrl_ref はどちらも
+    50Hz で行数が同じになり得るため、長さ一致だけでは区別できない。
     """
-    import json as _json
+    log = sflog.load(path)
+    data: dict = {}
+    signal_axis: dict = {}
 
-    # JSONLines id → (flat field name prefix, field extraction rules)
-    # Each rule: (key_in_json, output_names, is_array)
-    EXTRACT_RULES = {
-        'imu': [
-            ('gyro', ['gyro_x', 'gyro_y', 'gyro_z'], True),
-            ('accel', ['accel_x', 'accel_y', 'accel_z'], True),
-            ('gyro_raw', ['gyro_raw_x', 'gyro_raw_y', 'gyro_raw_z'], True),
-            ('accel_raw', ['accel_raw_x', 'accel_raw_y', 'accel_raw_z'], True),
-            ('quat', ['quat_w', 'quat_x', 'quat_y', 'quat_z'], True),
-            ('gyro_bias', ['gyro_bias_x', 'gyro_bias_y', 'gyro_bias_z'], True),
-            ('accel_bias', ['accel_bias_x', 'accel_bias_y', 'accel_bias_z'], True),
-        ],
-        'posvel': [
-            ('pos', ['pos_x', 'pos_y', 'pos_z'], True),
-            ('vel', ['vel_x', 'vel_y', 'vel_z'], True),
-        ],
-        'ctrl': [
-            ('throttle', ['ctrl_throttle'], False),
-            ('roll', ['ctrl_roll'], False),
-            ('pitch', ['ctrl_pitch'], False),
-            ('yaw', ['ctrl_yaw'], False),
-        ],
-        'flow': [
-            ('dx', ['flow_x'], False),
-            ('dy', ['flow_y'], False),
-            ('quality', ['flow_quality'], False),
-        ],
-        'tof_b': [
-            ('distance', ['tof_bottom'], False),
-            ('status', ['tof_bottom_status'], False),
-        ],
-        'tof_f': [
-            ('distance', ['tof_front'], False),
-            ('status', ['tof_front_status'], False),
-        ],
-        'baro': [
-            ('altitude', ['baro_altitude'], False),
-            ('pressure', ['baro_pressure'], False),
-        ],
-        'mag': [
-            ('x', ['mag_x'], False),
-            ('y', ['mag_y'], False),
-            ('z', ['mag_z'], False),
-        ],
-        'ctrl_ref': [
-            ('angle_ref', ['angle_ref_roll', 'angle_ref_pitch'], True),
-            ('mode', ['flight_mode'], False),
-            ('total_thrust', ['total_thrust'], False),
-            ('motor_duty', ['actual_duty_FR', 'actual_duty_RR', 'actual_duty_RL', 'actual_duty_FL'], True),
-        ],
-        'rate_ref': [
-            ('rate_ref', ['rate_ref_roll', 'rate_ref_pitch', 'rate_ref_yaw'], True),
-        ],
-        'status': [
-            ('voltage', ['battery_voltage'], False),
-            ('pid_roll', ['pid_roll_kp', 'pid_roll_ti', 'pid_roll_td'], True),
-            ('pid_pitch', ['pid_pitch_kp', 'pid_pitch_ti', 'pid_pitch_td'], True),
-            ('pid_yaw', ['pid_yaw_kp', 'pid_yaw_ti', 'pid_yaw_td'], True),
-        ],
-    }
+    # t0 = earliest first-sample timestamp across all present streams.
+    # t0 = 全ストリームの最初の標本のうち最も早い時刻。
+    first_timestamps = [
+        int(df['timestamp_us'].iloc[0])
+        for df in log.streams.values()
+        if len(df) > 0 and 'timestamp_us' in df.columns
+    ]
+    if not first_timestamps:
+        return data
+    t0 = min(first_timestamps)
 
-    # Collect per-sensor time and data arrays
-    # センサ別の時間と数値配列を収集
-    sensor_times = {}   # {sensor_id: [ts, ts, ...]}
-    sensor_data = {}    # {field_name: [val, val, ...]}
+    for stream_name, df in log.streams.items():
+        if len(df) == 0 or 'timestamp_us' not in df.columns:
+            continue
+        time_key = f'_time_{stream_name}'
+        data[time_key] = ((df['timestamp_us'] - t0) / 1e6).tolist()
 
-    with open(filepath, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+        column_map = STREAM_SIGNALS.get(stream_name, {})
+        for column in df.columns:
+            if column in ('timestamp_us', 'seq'):
                 continue
-            obj = _json.loads(line)
-            sid = obj.get('id', '')
-            ts = obj.get('ts', 0)
+            signal_key = column_map.get(column, f'{stream_name}_{column}')
+            data[signal_key] = df[column].tolist()
+            signal_axis[signal_key] = time_key
 
-            if sid not in EXTRACT_RULES:
-                continue
-
-            if sid not in sensor_times:
-                sensor_times[sid] = []
-            sensor_times[sid].append(ts)
-
-            for json_key, out_names, is_array in EXTRACT_RULES[sid]:
-                val = obj.get(json_key)
-                if val is None:
-                    continue
-                if is_array:
-                    for i, name in enumerate(out_names):
-                        if name not in sensor_data:
-                            sensor_data[name] = []
-                        sensor_data[name].append(val[i] if i < len(val) else 0.0)
-                else:
-                    name = out_names[0]
-                    if name not in sensor_data:
-                        sensor_data[name] = []
-                    sensor_data[name].append(float(val))
-
-    # Build output data dict
-    # 出力データ辞書を構築
-    data = {}
-
-    # Use IMU's first timestamp as t0 (highest rate, most reliable)
-    # IMU の最初のタイムスタンプを t0 として使用（最高レート、最も信頼性が高い）
-    if 'imu' in sensor_times and sensor_times['imu']:
-        t0 = sensor_times['imu'][0]
-    else:
-        all_first_ts = [ts[0] for ts in sensor_times.values() if ts]
-        t0 = min(all_first_ts) if all_first_ts else 0
-
-    # Create per-sensor time axes and assign data
-    # センサ別時間軸を作成しデータを割り当て
-    SENSOR_TIME_KEY = {
-        'imu': '_time_imu',
-        'posvel': '_time_posvel',
-        'ctrl': '_time_ctrl',
-        'flow': '_time_flow',
-        'tof_b': '_time_tof_b',
-        'tof_f': '_time_tof_f',
-        'baro': '_time_baro',
-        'mag': '_time_mag',
-        'ctrl_ref': '_time_ctrl_ref',
-        'rate_ref': '_time_rate_ref',
-        'status': '_time_status',
-    }
-
-    for sid, times in sensor_times.items():
-        time_key = SENSOR_TIME_KEY.get(sid, f'_time_{sid}')
-        data[time_key] = [(t - t0) / 1e6 for t in times]
-
-    # Use IMU time as the primary time_s (highest rate)
-    # IMU 時間を主要 time_s として使用（最高レート）
+    # time_s: prefer the IMU time axis (highest rate), fall back to the
+    # first available stream's time axis.
+    # time_s: IMU の時間軸を優先（最高レート）、無ければ最初に見つかった
+    # ストリームの時間軸。
     if '_time_imu' in data:
         data['time_s'] = data['_time_imu']
-    elif '_time_posvel' in data:
-        data['time_s'] = data['_time_posvel']
     else:
-        # Fallback: use first available sensor time
         for key in data:
             if key.startswith('_time_'):
                 data['time_s'] = data[key]
                 break
 
-    # Add all signal data
-    data.update(sensor_data)
+    _add_derived_signals(data, signal_axis, log)
+    data['_signal_axis'] = signal_axis
+    return data
 
-    # NOTE: Invalid sensor data is NOT masked here.
-    # Raw data + quality/status are passed to HTML so JavaScript can
-    # toggle invalid data visibility via checkbox at display time.
-    # 注意: 無効センサデータはここではマスクしない。
-    # 生データ + quality/status を HTML に渡し、JavaScript のチェックボックスで
-    # 表示時に無効データの表示/非表示を切り替える。
 
-    # Compute corrected IMU (gyro - bias, accel - bias)
-    # バイアス補正済み IMU を計算（gyro - bias, accel - bias）
-    if all(k in data for k in ['gyro_x', 'gyro_bias_x']):
-        n = len(data['gyro_x'])
-        for axis in ['x', 'y', 'z']:
-            g = data[f'gyro_{axis}']
-            b = data[f'gyro_bias_{axis}']
-            data[f'gyro_corrected_{axis}'] = [g[i] - b[i] for i in range(n)]
+def _add_derived_signals(data: dict, signal_axis: dict, log: 'sflog.FlightLog') -> None:
+    """Compute signals not directly present in any stream (attitude angles
+    from the quaternion, reference angles in degrees, the 4-motor duty
+    average, IMU sample-interval jitter), registering each one in
+    `signal_axis` under the same time axis as its source stream/signal.
 
-    if all(k in data for k in ['accel_x', 'accel_bias_x']):
-        n = len(data['accel_x'])
-        for axis in ['x', 'y', 'z']:
-            a = data[f'accel_{axis}']
-            b = data[f'accel_bias_{axis}']
-            data[f'accel_corrected_{axis}'] = [a[i] - b[i] for i in range(n)]
-
-    # Average actual motor duty (from telemetry, includes Vbat effect)
-    # 実測モータDuty平均（テレメトリから、電圧補正済み）
-    if all(k in data for k in ['actual_duty_FR', 'actual_duty_RR', 'actual_duty_RL', 'actual_duty_FL']):
-        n = len(data['actual_duty_FR'])
-        data['total_duty'] = [(data['actual_duty_FR'][i] + data['actual_duty_RR'][i] +
-                               data['actual_duty_RL'][i] + data['actual_duty_FL'][i]) / 4.0
-                              for i in range(n)]
-
-    # Compute derived signals from quaternion (same as load_csv)
-    # クォータニオンから派生信号を計算（load_csv と同じ）
-    if all(k in data for k in ['quat_w', 'quat_x', 'quat_y', 'quat_z']):
-        n = len(data['quat_w'])
-        data['roll_deg'] = [0.0] * n
-        data['pitch_deg'] = [0.0] * n
-        data['yaw_deg'] = [0.0] * n
+    どのストリームにも直接無い信号（クォータニオンからの姿勢角、度単位の
+    目標角、モータ4基の duty 平均、IMU サンプル間隔のジッタ）を計算し、
+    それぞれを元ストリーム/信号と同じ時間軸で `signal_axis` に登録する。
+    """
+    # Attitude angles from the quaternion (roll/pitch/yaw), same formulas
+    # the legacy CSV/JSONL loaders used.
+    # クォータニオンからの姿勢角（ロール・ピッチ・ヨー）。旧CSV/JSONL
+    # 読み込み処理と同じ式。
+    if all(k in data for k in ('quat_w', 'quat_x', 'quat_y', 'quat_z')):
+        w, x, y, z = data['quat_w'], data['quat_x'], data['quat_y'], data['quat_z']
+        n = len(w)
+        roll = [0.0] * n
+        pitch = [0.0] * n
+        yaw = [0.0] * n
         for i in range(n):
-            w, x, y, z = data['quat_w'][i], data['quat_x'][i], data['quat_y'][i], data['quat_z'][i]
-            data['roll_deg'][i] = math.degrees(math.atan2(2*(w*x + y*z), 1 - 2*(x*x + y*y)))
-            data['pitch_deg'][i] = math.degrees(math.asin(max(-1, min(1, 2*(w*y - z*x)))))
-            data['yaw_deg'][i] = math.degrees(math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)))
+            roll[i] = math.degrees(math.atan2(
+                2 * (w[i] * x[i] + y[i] * z[i]), 1 - 2 * (x[i] * x[i] + y[i] * y[i])))
+            pitch[i] = math.degrees(math.asin(
+                max(-1.0, min(1.0, 2 * (w[i] * y[i] - z[i] * x[i])))))
+            yaw[i] = math.degrees(math.atan2(
+                2 * (w[i] * z[i] + x[i] * y[i]), 1 - 2 * (y[i] * y[i] + z[i] * z[i])))
+        data['attitude_roll_deg'], data['attitude_pitch_deg'], data['attitude_yaw_deg'] = roll, pitch, yaw
+        for key in ('attitude_roll_deg', 'attitude_pitch_deg', 'attitude_yaw_deg'):
+            signal_axis[key] = signal_axis['quat_w']
 
-    # Convert angle_ref from rad to deg for display
-    # 表示用に angle_ref を rad → deg 変換
+    # Attitude-reference angles in degrees (rad -> deg), for display
+    # alongside attitude_roll_deg/attitude_pitch_deg.
+    # 姿勢目標角を度に変換（rad -> deg）。attitude_roll_deg/attitude_pitch_deg と並べて
+    # 表示するため。
     if 'angle_ref_roll' in data:
         data['angle_ref_roll_deg'] = [math.degrees(v) for v in data['angle_ref_roll']]
         data['angle_ref_pitch_deg'] = [math.degrees(v) for v in data['angle_ref_pitch']]
+        signal_axis['angle_ref_roll_deg'] = signal_axis['angle_ref_roll']
+        signal_axis['angle_ref_pitch_deg'] = signal_axis['angle_ref_pitch']
 
-    # =========================================================================
-    # Computed: PID output + Motor duty reconstruction
-    # PID出力 + モータDuty再構成
-    # Requires: rate_ref (400Hz) + gyro_corrected (400Hz) + ctrl_throttle (50Hz)
-    # =========================================================================
-    if all(k in data for k in ['rate_ref_roll', 'gyro_corrected_x', 'ctrl_throttle']):
-        n_imu = len(data['gyro_corrected_x'])
-        n_rate = len(data['rate_ref_roll'])
-        n = min(n_imu, n_rate)
-        dt = 2.5e-3  # 400Hz
+    # total_duty: mean of the 4 motor duties. Prefer the real 400 Hz
+    # motor.csv values; fall back to the 50 Hz ctrl_ref duty echo when
+    # motor.csv is absent (older captures, or a bundle that never records
+    # it).
+    # total_duty: モータ4基の duty 平均。実測 400Hz の motor.csv を優先し、
+    # 無ければ 50Hz の ctrl_ref 側の duty で代用する（motor.csv が無い旧
+    # 取得や、そもそも記録しない一式向け）。
+    for keys in (
+        ('duty_FR', 'duty_RR', 'duty_RL', 'duty_FL'),
+        ('ctrl_ref_duty_FR', 'ctrl_ref_duty_RR', 'ctrl_ref_duty_RL', 'ctrl_ref_duty_FL'),
+    ):
+        if all(k in data for k in keys):
+            n = len(data[keys[0]])
+            data['total_duty'] = [sum(data[k][i] for k in keys) / 4.0 for i in range(n)]
+            signal_axis['total_duty'] = signal_axis[keys[0]]
+            break
 
-        # Resample throttle (50Hz ctrl) to 400Hz via ZOH
-        # スロットルを50Hz→400Hzにリサンプル
-        t_imu = data.get('_time_imu', list(range(n)))
-        t_ctrl = data.get('_time_ctrl', t_imu)
-        n_ctrl = len(data['ctrl_throttle'])
-        if n_ctrl < n:
-            import numpy as _np
-            thr_400 = _np.interp(
-                t_imu[:n] if len(t_imu) >= n else list(range(n)),
-                t_ctrl[:n_ctrl] if len(t_ctrl) >= n_ctrl else list(range(n_ctrl)),
-                data['ctrl_throttle'][:n_ctrl]
-            ).tolist()
-        else:
-            thr_400 = data['ctrl_throttle'][:n]
-
-        # PID parameters (physical units mode)
-        # PIDパラメータ（物理単位モード）
-        # Use PID gains from log if available (status packet), else fallback to hardcoded
-        # ログにPIDゲインがあれば使用（statusパケット）、なければフォールバック
-        pid_cfg_default = [
-            {'Kp': 1.365e-3, 'Ti': 0.7, 'Td': 0.01, 'eta': 0.125, 'lim': 5.2e-3},  # Roll
-            {'Kp': 1.995e-3, 'Ti': 0.7, 'Td': 0.01, 'eta': 0.125, 'lim': 5.2e-3},  # Pitch
-            {'Kp': 5.31e-3,  'Ti': 1.6, 'Td': 0.01, 'eta': 0.125, 'lim': 2.2e-3},  # Yaw
-        ]
-        pid_cfg = pid_cfg_default
-        if 'pid_roll_kp' in data and data['pid_roll_kp']:
-            # Take first valid PID gains from status packets
-            pid_cfg = [
-                {'Kp': data['pid_roll_kp'][0],  'Ti': data['pid_roll_ti'][0],  'Td': data['pid_roll_td'][0],  'eta': 0.125, 'lim': 5.2e-3},
-                {'Kp': data['pid_pitch_kp'][0], 'Ti': data['pid_pitch_ti'][0], 'Td': data['pid_pitch_td'][0], 'eta': 0.125, 'lim': 5.2e-3},
-                {'Kp': data['pid_yaw_kp'][0],   'Ti': data['pid_yaw_ti'][0],  'Td': data['pid_yaw_td'][0],   'eta': 0.125, 'lim': 2.2e-3},
-            ]
-        rate_ref_keys = ['rate_ref_roll', 'rate_ref_pitch', 'rate_ref_yaw']
-        gyro_keys = ['gyro_corrected_x', 'gyro_corrected_y', 'gyro_corrected_z']
-        pid_names = ['pid_out_roll', 'pid_out_pitch', 'pid_out_yaw']
-
-        # Reconstruct PID outputs (matching firmware pid.cpp exactly)
-        # PID出力を再構成（ファームウェア pid.cpp を忠実に再現）
-        # - Trapezoidal integration (bilinear transform)
-        # - Derivative-on-Measurement (D-on-M)
-        # - Bilinear transform derivative filter
-        # - Back-calculation anti-windup (Tt = sqrt(Ti*Td))
-        pid_out = [[0.0]*n for _ in range(3)]
-        for axis in range(3):
-            p = pid_cfg[axis]
-            Kp, Ti, Td, eta, lim = p['Kp'], p['Ti'], p['Td'], p['eta'], p['lim']
-            Tt = math.sqrt(Ti * Td) if Ti > 0 and Td > 0 else Ti
-            ref = data[rate_ref_keys[axis]]
-            act = data[gyro_keys[axis]]
-
-            integral = 0.0
-            d_filt = 0.0
-            prev_error = 0.0
-            prev_d_input = -act[0]  # D-on-M: derivative of -measurement
-
-            for i in range(1, n):
-                e = ref[i] - act[i]
-
-                # P term
-                P = Kp * e
-
-                # I term: trapezoidal integration
-                integral += (dt / (2.0 * Ti)) * (e + prev_error)
-                I = Kp * integral
-
-                # D term: D-on-Measurement with bilinear transform filter
-                d_input = -act[i]  # D-on-M
-                alpha_d = 2.0 * eta * Td / dt
-                deriv_a = (alpha_d - 1.0) / (alpha_d + 1.0)
-                deriv_b = 2.0 * Td / ((alpha_d + 1.0) * dt)
-                d_filt = deriv_a * d_filt + deriv_b * (d_input - prev_d_input)
-                D = Kp * d_filt
-
-                # Unlimited output
-                out_unlimited = P + I + D
-
-                # Clamp
-                out = max(-lim, min(lim, out_unlimited))
-
-                # Anti-windup: back-calculation
-                saturation = out - out_unlimited
-                if saturation != 0.0:
-                    integral += saturation * (dt / Tt) / Kp
-
-                prev_error = e
-                prev_d_input = d_input
-                pid_out[axis][i] = out
-            data[pid_names[axis]] = pid_out[axis]
-
-        # NOTE(2026-07-15): 実測物理値は Ct=6.7e-9, Cq=4.10e-11, κ=6.12e-3, Jmp=1.375e-8
-        #  （multicopter_introduction qa_log Q4-9..13）。以下はファームウェア実装の
-        #  鏡写しが目的のため、ファーム更新まで旧値を維持する。
-        # Mixer matrix B⁻¹ (from ControlAllocator)
-        # ミキサー行列 B⁻¹（ControlAllocatorと同一）
-        d_arm = 0.023   # arm length [m]
-        kappa = 9.71e-3  # Cq/Ct ratio
-        inv_d = 1.0 / d_arm
-        inv_k = 1.0 / kappa
-        #              Thrust    Roll      Pitch     Yaw
-        B_inv = [
-            [ 0.25, -0.25*inv_d,  0.25*inv_d,  0.25*inv_k],  # FR M1
-            [ 0.25, -0.25*inv_d, -0.25*inv_d, -0.25*inv_k],  # RR M2
-            [ 0.25,  0.25*inv_d, -0.25*inv_d,  0.25*inv_k],  # RL M3
-            [ 0.25,  0.25*inv_d,  0.25*inv_d, -0.25*inv_k],  # FL M4
-        ]
-
-        # Motor model parameters (from motor_model.cpp DEFAULT_MOTOR_PARAMS)
-        # モータモデルパラメータ
-        Ct = 1.0e-8
-        Cq = 9.71e-11
-        Rm = 0.34
-        Km = 6.125e-4
-        Dm = 3.69e-8
-        Qf = 2.76e-5
-        Vbat = 3.7
-        max_thrust = 0.168  # duty≤0.95 (5% margin for control)
-        MAX_TOTAL_THRUST = 4 * max_thrust
-
-        def thrust_to_duty(thrust):
-            if thrust <= 0:
-                return 0.0
-            omega = math.sqrt(thrust / Ct)
-            viscous = (Dm + Km*Km/Rm) * omega
-            aero = Cq * omega * omega
-            voltage = Rm * (viscous + aero + Qf) / Km
-            duty = voltage / Vbat
-            return max(0.0, min(1.0, duty))
-
-        # Resample total_thrust from ctrl_ref (50Hz) to 400Hz if available
-        # total_thrust をテレメトリから取得（50Hz→400Hz リサンプル）
-        # Falls back to throttle × MAX_TOTAL_THRUST for legacy logs
-        import numpy as _np2
-        if 'total_thrust' in data and len(data['total_thrust']) > 0:
-            t_ctrlref = data.get('_time_ctrl_ref', list(range(len(data['total_thrust']))))
-            thrust_400 = _np2.interp(
-                t_imu[:n] if len(t_imu) >= n else list(range(n)),
-                t_ctrlref[:len(data['total_thrust'])],
-                data['total_thrust'][:len(t_ctrlref)]
-            ).tolist()
-        else:
-            thrust_400 = [thr_400[i] * MAX_TOTAL_THRUST for i in range(n)]
-
-        # Compute motor thrusts and duties
-        # モータ推力とDutyを計算
-        motor_names = ['FR', 'RR', 'RL', 'FL']
-        for m in range(4):
-            data[f'motor_thrust_{motor_names[m]}'] = [0.0] * n
-            data[f'motor_duty_{motor_names[m]}'] = [0.0] * n
-        data['motor_saturated'] = [0.0] * n
-
-        for i in range(n):
-            u = [thrust_400[i], pid_out[0][i], pid_out[1][i], pid_out[2][i]]
-
-            saturated = 0
-            for m in range(4):
-                thrust = sum(B_inv[m][j] * u[j] for j in range(4))
-                if thrust < 0:
-                    thrust = 0.0
-                    saturated = 1
-                elif thrust > max_thrust:
-                    thrust = max_thrust
-                    saturated = 1
-                data[f'motor_thrust_{motor_names[m]}'][i] = thrust
-                data[f'motor_duty_{motor_names[m]}'][i] = thrust_to_duty(thrust)
-            data['motor_saturated'][i] = float(saturated)
-
-    return data
-
-
-def load_csv(filepath: str) -> dict:
-    """Load CSV and return dict of lists (JSON-serializable)"""
-    with open(filepath, 'r') as f:
-        reader = csv.DictReader(f)
-        columns = reader.fieldnames
-        rows = list(reader)
-
-    data = {}
-    for col in columns:
-        vals = []
-        valid_count = 0
-        for r in rows:
-            v = r.get(col, '')
-            if v == '' or v is None:
-                vals.append(float('nan'))
-            else:
-                try:
-                    vals.append(float(v))
-                    valid_count += 1
-                except ValueError:
-                    vals.append(float('nan'))
-        # Only include columns that have at least some valid data
-        # 有効なデータが1つ以上ある列のみ含める
-        if valid_count > 0:
-            data[col] = vals
-
-    # Compute time in seconds (telemetry capture time)
-    if 'timestamp_us' in data:
-        t0 = data['timestamp_us'][0]
-        data['time_s'] = [(t - t0) / 1e6 for t in data['timestamp_us']]
-    elif 'timestamp_ms' in data:
-        t0 = data['timestamp_ms'][0]
-        data['time_s'] = [(t - t0) / 1e3 for t in data['timestamp_ms']]
-
-    # Compute sensor-specific time axes (using internal timestamps)
-    # 各センサー固有の時間軸を生成（内部タイムスタンプ使用）
-    # Use the first available timestamp as t0 reference
-    if 'imu_timestamp_us' in data:
-        t0_internal = data['imu_timestamp_us'][0]
-    elif 'timestamp_us' in data:
-        t0_internal = data['timestamp_us'][0]
-    else:
-        t0_internal = 0
-
-    # IMU time axis
-    if 'imu_timestamp_us' in data:
-        data['_time_imu'] = [(t - t0_internal) / 1e6 for t in data['imu_timestamp_us']]
-
-    # Sensor time axes with deduplication
-    # 重複除去付きセンサー時間軸
-    # For sensors that update slower than 400Hz, the same timestamp repeats.
-    # We create deduplicated time+value arrays (suffix _dedup).
-    sensor_ts_map = {
-        'baro': ('baro_timestamp_us', ['baro_altitude', 'baro_pressure']),
-        'tof_b': ('tof_timestamp_us', ['tof_bottom', 'tof_bottom_status']),
-        'tof_f': ('tof_timestamp_us', ['tof_front', 'tof_front_status']),
-        'mag': ('mag_timestamp_us', ['mag_x', 'mag_y', 'mag_z']),
-        'flow': ('flow_timestamp_us', ['flow_x', 'flow_y', 'flow_quality']),
-        'status': ('status_timestamp_us', ['battery_voltage']),
-    }
-
-    for sensor_name, (ts_key, signal_keys) in sensor_ts_map.items():
-        if ts_key not in data:
-            continue
-        timestamps = data[ts_key]
-        n = len(timestamps)
-        if n == 0:
-            continue
-
-        # Find indices where timestamp changes (= new sensor reading)
-        # タイムスタンプが変わったインデックス（= 新しいセンサー読み取り）
-        unique_indices = [0]
-        for i in range(1, n):
-            if timestamps[i] != timestamps[i - 1]:
-                unique_indices.append(i)
-
-        # Create deduplicated time axis
-        time_key = f'_time_{sensor_name}'
-        data[time_key] = [(timestamps[i] - t0_internal) / 1e6 for i in unique_indices]
-
-        # Create deduplicated signal arrays
-        for sig_key in signal_keys:
-            if sig_key in data:
-                dedup_key = f'{sig_key}_dedup'
-                data[dedup_key] = [data[sig_key][i] for i in unique_indices]
-
-    # Compute attitude from quaternion (ESKF output)
-    # クォータニオンから姿勢角を計算（ESKF出力）
-    if all(k in data for k in ['quat_w', 'quat_x', 'quat_y', 'quat_z']):
-        n = len(data['quat_w'])
-        data['roll_deg'] = [0.0] * n
-        data['pitch_deg'] = [0.0] * n
-        data['yaw_deg'] = [0.0] * n
-        for i in range(n):
-            w, x, y, z = data['quat_w'][i], data['quat_x'][i], data['quat_y'][i], data['quat_z'][i]
-            data['roll_deg'][i] = math.degrees(math.atan2(2*(w*x + y*z), 1 - 2*(x*x + y*y)))
-            data['pitch_deg'][i] = math.degrees(math.asin(max(-1, min(1, 2*(w*y - z*x)))))
-            data['yaw_deg'][i] = math.degrees(math.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z)))
-
-    # =====================================================================
-    # Computed sensor-only attitude estimates (for comparison with ESKF)
-    # センサー単独の姿勢推定（ESKF出力との比較用）
-    # =====================================================================
-
-    n = len(data.get('time_s', []))
-
-    # Compute IMU interval (jitter analysis)
-    # IMU インターバル計算（ジッター解析）
-    if 'imu_timestamp_us' in data and n > 1:
-        data['imu_interval_us'] = [0.0] + [
-            data['imu_timestamp_us'][i] - data['imu_timestamp_us'][i - 1]
-            for i in range(1, n)
-        ]
-
-    # Compute telemetry interval
-    if 'timestamp_us' in data and n > 1:
-        data['telemetry_interval_us'] = [0.0] + [
-            data['timestamp_us'][i] - data['timestamp_us'][i - 1]
-            for i in range(1, n)
-        ]
-
-    # Compute telemetry delay (WiFi pipeline latency)
-    # テレメトリ遅延（WiFi パイプラインのレイテンシ）
-    # delay = telemetry capture time - IMU internal time
-    if 'timestamp_us' in data and 'imu_timestamp_us' in data and n > 0:
-        data['telemetry_delay_us'] = [
-            data['timestamp_us'][i] - data['imu_timestamp_us'][i]
-            for i in range(n)
-        ]
-
-    # Choose best time axis for gyro integration
-    # ジャイロ積分に使う時間軸を選択（IMU内部時計が利用可能ならそちらを使用）
-    gyro_time = data.get('_time_imu', data.get('time_s'))
-
-    # 1a. Gyro integration (raw): cumulative integration of raw angular rate
-    #     ジャイロ積分（生値）: 生の角速度を積分して角度を算出
-    if gyro_time and all(k in data for k in ['gyro_x', 'gyro_y', 'gyro_z']) and n > 1:
-        data['gyro_int_roll'] = [0.0] * n
-        data['gyro_int_pitch'] = [0.0] * n
-        data['gyro_int_yaw'] = [0.0] * n
-        roll, pitch, yaw = 0.0, 0.0, 0.0
-        for i in range(1, n):
-            dt = gyro_time[i] - gyro_time[i - 1]
-            if dt <= 0 or dt > 0.1:
-                dt = 0.0025  # fallback to 400Hz
-            roll += data['gyro_x'][i] * dt
-            pitch += data['gyro_y'][i] * dt
-            yaw += data['gyro_z'][i] * dt
-            data['gyro_int_roll'][i] = math.degrees(roll)
-            data['gyro_int_pitch'][i] = math.degrees(pitch)
-            data['gyro_int_yaw'][i] = math.degrees(yaw)
-
-    # 1b. Gyro integration (corrected): cumulative integration of bias-corrected gyro
-    #     ジャイロ積分（補正値）: バイアス補正済み角速度を積分して角度を算出
-    if gyro_time and all(k in data for k in ['gyro_corrected_x', 'gyro_corrected_y', 'gyro_corrected_z']) and n > 1:
-        data['gyro_corr_int_roll'] = [0.0] * n
-        data['gyro_corr_int_pitch'] = [0.0] * n
-        data['gyro_corr_int_yaw'] = [0.0] * n
-        roll, pitch, yaw = 0.0, 0.0, 0.0
-        for i in range(1, n):
-            dt = gyro_time[i] - gyro_time[i - 1]
-            if dt <= 0 or dt > 0.1:
-                dt = 0.0025
-            roll += data['gyro_corrected_x'][i] * dt
-            pitch += data['gyro_corrected_y'][i] * dt
-            yaw += data['gyro_corrected_z'][i] * dt
-            data['gyro_corr_int_roll'][i] = math.degrees(roll)
-            data['gyro_corr_int_pitch'][i] = math.degrees(pitch)
-            data['gyro_corr_int_yaw'][i] = math.degrees(yaw)
-
-    # 2a. Accel-based attitude (raw): roll/pitch from raw accel gravity direction
-    #     加速度ベースの姿勢（生値）: 生の加速度の重力方向からロール・ピッチ
-    #     NED body frame: static accel ≈ [0, 0, -g]
-    #     roll = atan2(-ay, -az), pitch = atan2(ax, sqrt(ay² + az²))
-    if all(k in data for k in ['accel_x', 'accel_y', 'accel_z']) and n > 0:
-        data['accel_roll'] = [0.0] * n
-        data['accel_pitch'] = [0.0] * n
-        for i in range(n):
-            ax = data['accel_x'][i]
-            ay = data['accel_y'][i]
-            az = data['accel_z'][i]
-            data['accel_roll'][i] = math.degrees(math.atan2(-ay, -az))
-            data['accel_pitch'][i] = math.degrees(
-                math.atan2(ax, math.sqrt(ay * ay + az * az)))
-
-    # 2b. Accel-based attitude (corrected): roll/pitch from bias-corrected accel
-    #     加速度ベースの姿勢（補正値）: バイアス補正済み加速度からロール・ピッチ
-    if all(k in data for k in ['accel_corrected_x', 'accel_corrected_y', 'accel_corrected_z']) and n > 0:
-        data['accel_corr_roll'] = [0.0] * n
-        data['accel_corr_pitch'] = [0.0] * n
-        for i in range(n):
-            ax = data['accel_corrected_x'][i]
-            ay = data['accel_corrected_y'][i]
-            az = data['accel_corrected_z'][i]
-            data['accel_corr_roll'][i] = math.degrees(math.atan2(-ay, -az))
-            data['accel_corr_pitch'][i] = math.degrees(
-                math.atan2(ax, math.sqrt(ay * ay + az * az)))
-
-    # 3. Mag-based heading: yaw from magnetometer (tilt-compensated)
-    #    地磁気ベースのヨー角: 傾き補正済み地磁気方位
-    if all(k in data for k in ['mag_x', 'mag_y', 'mag_z']) and n > 0:
-        data['mag_yaw'] = [0.0] * n
-        for i in range(n):
-            mx = data['mag_x'][i]
-            my = data['mag_y'][i]
-            # Tilt compensation using accel-derived roll/pitch if available
-            # 加速度由来のロール・ピッチで傾き補正
-            if 'accel_roll' in data and 'accel_pitch' in data:
-                roll_r = math.radians(data['accel_roll'][i])
-                pitch_r = math.radians(data['accel_pitch'][i])
-                mz = data['mag_z'][i]
-                # Rotate mag into horizontal plane
-                # 地磁気を水平面に回転
-                cos_r, sin_r = math.cos(roll_r), math.sin(roll_r)
-                cos_p, sin_p = math.cos(pitch_r), math.sin(pitch_r)
-                mx_h = mx * cos_p + my * sin_r * sin_p + mz * cos_r * sin_p
-                my_h = my * cos_r - mz * sin_r
-                data['mag_yaw'][i] = math.degrees(math.atan2(-my_h, mx_h))
-            else:
-                # No tilt compensation (2D heading)
-                # 傾き補正なし（2D方位）
-                data['mag_yaw'][i] = math.degrees(math.atan2(-my, mx))
-
-    return data
+    # imu_interval_us: consecutive-sample spacing of the IMU timestamp
+    # (microseconds), first value repeated -- shows the firmware's
+    # reused-IMU-sample cycles (plan section 7).
+    # imu_interval_us: IMU タイムスタンプの連続標本間隔（マイクロ秒）、
+    # 先頭値は複製。ファームが IMU 標本を使い回した周期を可視化する
+    # （計画書7節）。
+    imu_df = log.streams.get('imu')
+    if imu_df is not None and len(imu_df) > 1:
+        ts = imu_df['timestamp_us'].to_numpy()
+        interval = np.diff(ts).astype(float)
+        data['imu_interval_us'] = np.concatenate([interval[:1], interval]).tolist()
+        signal_axis['imu_interval_us'] = '_time_imu'
 
 
 def generate_html(data: dict, title: str, plotly_js: str = '') -> str:
-    """Generate self-contained HTML dashboard"""
+    """Generate self-contained HTML dashboard.
+    自己完結型 HTML ダッシュボードを生成する。
+    """
 
     # Filter categories to only include signals present in data
+    # 実在する信号だけが残るようカテゴリを絞り込む
     categories = {}
     for cat, signals in SIGNAL_CATEGORIES.items():
         available = [(key, label) for key, label in signals if key in data]
@@ -861,32 +499,39 @@ def generate_html(data: dict, title: str, plotly_js: str = '') -> str:
             categories[cat] = available
 
     # Serialize data to JSON (only signals that exist + time axes)
+    # データを JSON 化（実在する信号 + 時間軸のみ）
     all_keys = set()
     for sigs in categories.values():
         for key, _ in sigs:
             all_keys.add(key)
     all_keys.add('time_s')
 
-    # Add internal time axes and dedup signals
-    # 内部時間軸と重複除去済み信号を追加
-    for k in list(data.keys()):
-        if k.startswith('_time_') or k.endswith('_dedup'):
+    # Add internal time axes (never bookkeeping keys like `_signal_axis` --
+    # only keys that ARE a time axis).
+    # 内部時間軸を追加（`_signal_axis` のような管理用キーは含めない --
+    # 時間軸そのものであるキーのみ）。
+    for k in data:
+        if k.startswith('_time_'):
             all_keys.add(k)
 
     export_data = {k: data[k] for k in all_keys if k in data}
 
-    # Build signal-to-time-axis mapping
-    # 信号→時間軸のマッピングを構築
-    # Each signal maps to its sensor-specific time axis.
-    # 各信号はセンサ固有の時間軸にマッピングされる。
+    # Build signal-to-time-axis mapping. Prefer the explicit map
+    # `load_bundle()` computed (`_signal_axis`) -- multiple streams can
+    # share a row count at the same nominal rate (pilot and ctrl_ref are
+    # both 50 Hz), so length-matching alone would put one stream's signals
+    # on another stream's time axis. Fall back to length-matching only for
+    # a signal missing from the explicit map (e.g. a hand-built `data`
+    # dict, as in the unit tests).
+    # 信号→時間軸のマッピングを構築する。`load_bundle()` が計算した明示
+    # マップ（`_signal_axis`）を優先する -- 複数ストリームが同じ公称レート
+    # で同じ行数を持ち得るため（pilot と ctrl_ref はどちらも50Hz）、長さ
+    # 一致だけでは別ストリームの時間軸に誤って対応付いてしまう。明示マップ
+    # に無い信号（単体テストの手組み辞書等）のときだけ長さ一致に
+    # フォールバックする。
+    signal_axis_map = data.get('_signal_axis', {})
     signal_time_map = {}
 
-    # Mapping: signal name → sensor time axis key
-    # 信号名 → センサ時間軸キー のマッピング
-    # Auto-build signal→sensor mapping from data lengths
-    # データ長からシグナル→センサのマッピングを自動構築
-    # Any signal whose length matches a _time_* axis gets mapped to it.
-    # 長さが _time_* 軸と一致する信号は自動的にマッピングされる。
     sensor_time_axes = {}  # {'imu': ('_time_imu', 3928), ...}
     for k, v in data.items():
         if k.startswith('_time_'):
@@ -894,8 +539,18 @@ def generate_html(data: dict, title: str, plotly_js: str = '') -> str:
             sensor_time_axes[sensor_name] = (k, len(v))
 
     for sig, sig_data in data.items():
-        if sig.startswith('_time_') or sig == 'time_s':
+        # Skip time axes, the plain time_s alias, and any other internal
+        # bookkeeping key (starts with '_', e.g. `_signal_axis`) -- never a
+        # plottable signal.
+        # 時間軸・素の time_s・その他の内部管理用キー（'_' で始まる、例:
+        # `_signal_axis`）はスキップする -- プロット対象の信号ではない。
+        if sig == 'time_s' or sig.startswith('_'):
             continue
+
+        if sig in signal_axis_map:
+            signal_time_map[sig] = {'time': signal_axis_map[sig], 'data': sig}
+            continue
+
         sig_len = len(sig_data)
 
         # Find a _time_* axis with matching length
@@ -907,8 +562,10 @@ def generate_html(data: dict, title: str, plotly_js: str = '') -> str:
                 matched = True
                 break
 
-        # Fallback: check for dedup version (old CSV format)
-        # フォールバック: dedup バージョンを確認（旧CSVフォーマット）
+        # Fallback: a hand-built dedup key, kept for callers that still
+        # construct one by hand (the v1 bundle loader never produces one).
+        # フォールバック: dedup キー。手組みで用意する呼び出し元向けに残す
+        # （v1 バンドル読み込みでは生成しない）。
         if not matched:
             dedup_key = f'{sig}_dedup'
             if dedup_key in data:
@@ -928,8 +585,7 @@ def generate_html(data: dict, title: str, plotly_js: str = '') -> str:
 
     # Round up duration to nearest integer for clean X-axis range
     # X軸範囲を整数秒に切り上げ
-    import math as _math
-    duration_ceil = _math.ceil(duration) if duration > 0 else 10
+    duration_ceil = math.ceil(duration) if duration > 0 else 10
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1402,7 +1058,7 @@ function addPreset(name) {{
         ['accel_x', 'accel_y', 'accel_z'].forEach(k => addSignalToPlot(p2, k, k));
     }} else if (name === 'eskf') {{
         const p1 = addPlot();
-        ['roll_deg', 'pitch_deg', 'yaw_deg'].forEach(k => addSignalToPlot(p1, k, k));
+        ['attitude_roll_deg', 'attitude_pitch_deg', 'attitude_yaw_deg'].forEach(k => addSignalToPlot(p1, k, k));
         const p2 = addPlot();
         ['pos_x', 'pos_y', 'pos_z'].forEach(k => addSignalToPlot(p2, k, k));
         const p3 = addPlot();
@@ -1414,15 +1070,15 @@ function addPreset(name) {{
         ['accel_bias_x', 'accel_bias_y', 'accel_bias_z'].forEach(k => addSignalToPlot(p2, k, k));
     }} else if (name === 'flight') {{
         const p1 = addPlot();
-        ['roll_deg', 'pitch_deg'].forEach(k => addSignalToPlot(p1, k, k));
+        ['attitude_roll_deg', 'attitude_pitch_deg'].forEach(k => addSignalToPlot(p1, k, k));
         const p2 = addPlot();
-        ['ctrl_throttle'].forEach(k => addSignalToPlot(p2, k, k));
+        ['pilot_throttle'].forEach(k => addSignalToPlot(p2, k, k));
         const p3 = addPlot();
         ['tof_bottom'].forEach(k => addSignalToPlot(p3, k, k));
         const p4 = addPlot();
-        ['gyro_corrected_x', 'gyro_corrected_y', 'gyro_corrected_z'].forEach(k => addSignalToPlot(p4, k, k));
+        ['gyro_x', 'gyro_y', 'gyro_z'].forEach(k => addSignalToPlot(p4, k, k));
         const p5 = addPlot();
-        ['accel_corrected_x', 'accel_corrected_y', 'accel_corrected_z'].forEach(k => addSignalToPlot(p5, k, k));
+        ['accel_x', 'accel_y', 'accel_z'].forEach(k => addSignalToPlot(p5, k, k));
     }} else if (name === 'sensors') {{
         const p1 = addPlot();
         ['tof_bottom', 'baro_altitude'].forEach(k => addSignalToPlot(p1, k, k));
@@ -1452,20 +1108,12 @@ buildSidebar();
     return html
 
 
-def load_file(filepath: str) -> dict:
-    """Load telemetry data file (CSV or JSONLines).
-    テレメトリデータファイルを読み込み（CSV または JSONLines）。
+def visualize(filepath: str, output=None, title=None):
+    """Load a StampFly flight-log v1 bundle and generate/open the dashboard.
+    StampFly フライトログ v1 一式を読み込み、ダッシュボードを生成・表示する。
     """
-    if filepath.endswith('.jsonl'):
-        return load_jsonl(filepath)
-    else:
-        return load_csv(filepath)
-
-
-def visualize(filepath: str, groups=None, layout=None, output=None, title=None):
-    """Main entry point"""
     print(f"Loading: {filepath}")
-    data = load_file(filepath)
+    data = load_bundle(filepath)
 
     n = len(data.get('time_s', []))
     dur = data['time_s'][-1] if 'time_s' in data and n > 0 else 0
@@ -1491,12 +1139,10 @@ def visualize(filepath: str, groups=None, layout=None, output=None, title=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Interactive telemetry dashboard")
-    parser.add_argument('file', help="CSV telemetry file")
+    parser = argparse.ArgumentParser(
+        description="Interactive flight-log dashboard (StampFly v1 bundle)")
+    parser.add_argument('file', help="Flight-log bundle (.sflog.zip or an extracted directory)")
     parser.add_argument('-o', '--output', help="Save HTML to file")
-    # These args are accepted for CLI compatibility but the browser UI handles selection
-    parser.add_argument('--layout', help="(ignored, use browser UI)")
-    parser.add_argument('--groups', nargs='+', help="(ignored, use browser UI)")
     args = parser.parse_args()
     visualize(args.file, output=args.output)
     return 0

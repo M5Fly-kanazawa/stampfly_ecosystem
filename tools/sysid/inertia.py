@@ -22,7 +22,12 @@ from .loader import sample_rate_hz as _bundle_sample_rate_hz
 
 
 # =============================================================================
-# Motor Model and Mixing Parameters (from reconstruct_duties.py)
+# Motor Model and Mixing Parameters (originally mirrored from the legacy
+# tools/log_analyzer/reconstruct_duties.py, deleted 2026-09-11 with the
+# flight-log bundle migration; this module is now the only holder)
+# モータモデル・ミキシング係数（旧 tools/log_analyzer/reconstruct_duties.py の
+# 写しが起源。同ファイルは 2026-09-11 のフライトログ一式移行で削除済みで、
+# 現在は本モジュールが唯一の保持場所）
 # =============================================================================
 
 # Motor/propeller coefficients. Ct is PROVISIONAL as of 2026-08-03 (the

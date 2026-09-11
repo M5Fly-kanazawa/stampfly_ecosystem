@@ -9,6 +9,16 @@ holds. Backend for `sf log analyze --health`.
 劣化したロータ（同じ duty で推力も反トルクも低下したモータ）を、制御器が保持する
 定常ホバートリムから検出する。`sf log analyze --health` のバックエンド。
 
+Input / 入力:
+  A StampFly flight-log v1 bundle (`.sflog.zip` or an extracted directory) --
+  the output of `sf log wifi` (docs/plans/flight-log-format-plan.md, lib/sflog).
+  Duty is read from `motor.csv` (400 Hz, per-cycle duty) when the bundle has
+  it, otherwise from the duty columns embedded in `ctrl_ref.csv` (50 Hz).
+  StampFly フライトログ v1 一式（`.sflog.zip` または展開済みフォルダ）--
+  `sf log wifi` の出力（計画書・lib/sflog 参照）。duty は一式に `motor.csv`
+  （400Hz、周期ごとの duty）があればそれを使い、無ければ `ctrl_ref.csv`
+  （50Hz）に埋め込まれた duty 列を使う。
+
 Diagnostic principle / 診断原理:
   Mixer (NED X-quad), duty index = [M1/FR(CCW), M2/RR(CW), M3/RL(CCW), M4/FL(CW)].
   Torque trims recoverable from the 4 duties (common thrust removed):
@@ -30,8 +40,15 @@ import json
 import math
 import statistics as st
 
+import pandas as pd
+
+import sflog
+
 # Telemetry duty order = [M1/FR(CCW), M2/RR(CW), M3/RL(CCW), M4/FL(CW)]
 MOTOR_NAMES = ["M1/FR(CCW)", "M2/RR(CW)", "M3/RL(CCW)", "M4/FL(CW)"]
+# protocol/spec/flight_log.yaml column order for motor.csv / ctrl_ref.csv.
+# protocol/spec/flight_log.yaml の motor.csv / ctrl_ref.csv の列順。
+DUTY_COLUMNS = ["duty_FR", "duty_RR", "duty_RL", "duty_FL"]
 CW_GROUP = (1, 3)    # M2/RR, M4/FL
 CCW_GROUP = (0, 2)   # M1/FR, M3/RL
 
@@ -50,39 +67,45 @@ HOVER_DUTY_SUM = 2.0       # sum of 4 duties indicating hover thrust (~4 x 0.5)
 MIN_HOVER_S = 10.0         # reject windows shorter than this (crash/abort)
 UR_SIGNIFICANT = 0.03      # |mean ur| below this => no clear imbalance
 SAT_DUTY = 0.98            # duty at/above this counts as saturated
+MIN_SAMPLES = 50           # need at least this many in-window powered samples
+SPINUP_SKIP_US = 1_500_000   # skip 1.5 s climb transient after spin-up
+LANDING_SKIP_US = 1_000_000  # skip the last 1.0 s before descent
 
 
 # --------------------------------------------------------------------------
 # Loading / 読み込み
 # --------------------------------------------------------------------------
 def _load(path):
-    """Stream-parse the records we need from a JSONL log.
-    必要なレコードだけ JSONL からストリーム解析する。"""
-    streams = {"ctrl_ref": [], "ctrl": [], "imu": [], "status": []}
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                d = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            sid = d.get("id")
-            if sid in streams:
-                streams[sid].append(d)
-    return streams
+    """Load a flight-log v1 bundle (`.sflog.zip` or extracted directory).
+    フライトログ v1 一式（`.sflog.zip` または展開済みフォルダ）を読み込む。"""
+    return sflog.load(path)
 
 
-def _hover_window(ctrl_ref):
-    """Stable powered-flight window from motor_duty sum (skip spin-up & landing).
-    motor_duty 合計から安定飛行区間を抽出（スピンアップ・着陸を除外）。"""
-    sums = [(d["ts"], sum(d.get("motor_duty", [0, 0, 0, 0]))) for d in ctrl_ref]
-    spun = [ts for ts, s in sums if s > HOVER_DUTY_SUM]
-    if len(spun) < 50:
+def _select_duty_stream(log):
+    """Pick the duty source: 400 Hz `motor` when present, else the 50 Hz
+    duty columns embedded in `ctrl_ref`. Returns (DataFrame, source_name)
+    or (None, None) when neither stream is in the bundle.
+    duty の出所を選ぶ: `motor`（400Hz）があればそれを、無ければ `ctrl_ref`
+    （50Hz）埋め込みの duty 列を使う。どちらも無ければ (None, None)。"""
+    motor_df = log.streams.get("motor")
+    if motor_df is not None and len(motor_df) > 0:
+        return motor_df, "motor"
+    ctrl_ref_df = log.streams.get("ctrl_ref")
+    if ctrl_ref_df is not None and len(ctrl_ref_df) > 0:
+        return ctrl_ref_df, "ctrl_ref"
+    return None, None
+
+
+def _hover_window(duty_df):
+    """Stable powered-flight window from the 4-duty sum (skip spin-up &
+    landing). `duty_df` must have `timestamp_us` and DUTY_COLUMNS.
+    4-duty合計から安定飛行区間を抽出（スピンアップ・着陸を除外）。"""
+    duty_sum = duty_df[DUTY_COLUMNS].sum(axis=1)
+    spun_ts = duty_df.loc[duty_sum > HOVER_DUTY_SUM, "timestamp_us"]
+    if len(spun_ts) < MIN_SAMPLES:
         return None
-    t_lo = spun[0] + 1_500_000   # skip 1.5 s climb transient
-    t_hi = spun[-1] - 1_000_000  # skip last 1 s before descent
+    t_lo = spun_ts.iloc[0] + SPINUP_SKIP_US
+    t_hi = spun_ts.iloc[-1] - LANDING_SKIP_US
     return (t_lo, t_hi) if t_hi > t_lo else None
 
 
@@ -93,57 +116,74 @@ def _quat_roll_pitch_deg(q):
     return roll, pitch
 
 
+def _window_series(df, t_lo, t_hi, column):
+    """Values of `column` in `df` within [t_lo, t_hi] (empty Series if the
+    stream is absent from the bundle).
+    `df` の `column` を [t_lo, t_hi] 区間だけ取り出す（ストリームが一式に
+    無ければ空の Series）。"""
+    if df is None:
+        return pd.Series(dtype=float)
+    mask = (df["timestamp_us"] >= t_lo) & (df["timestamp_us"] <= t_hi)
+    return df.loc[mask, column]
+
+
 def per_log_stats(path):
     """Compute hover trim statistics for one log, or None if no clean hover.
     1ログのホバートリム統計を返す（クリーンなホバーが無ければ None）。"""
-    s = _load(path)
-    win = _hover_window(s["ctrl_ref"])
-    if win is None:
-        return None
-    t_lo, t_hi = win
-
-    duties = [[], [], [], []]
-    devs = [[], [], [], []]
-    up_d, uq_d, ur_d = [], [], []
-    sat = [0, 0, 0, 0]
-    n = 0
-    for d in s["ctrl_ref"]:
-        ts = d["ts"]
-        if not (t_lo <= ts <= t_hi):
-            continue
-        m = d.get("motor_duty")
-        if not m or sum(m) < HOVER_DUTY_SUM:
-            continue
-        n += 1
-        mean4 = sum(m) / 4.0
-        for k in range(4):
-            duties[k].append(m[k])
-            devs[k].append(m[k] - mean4)
-            if m[k] >= SAT_DUTY:
-                sat[k] += 1
-        up_d.append((m[2] + m[3]) - (m[0] + m[1]))
-        uq_d.append((m[0] + m[3]) - (m[1] + m[2]))
-        ur_d.append((m[0] + m[2]) - (m[1] + m[3]))
-    if n < 50:
+    log = _load(path)
+    duty_df, duty_source = _select_duty_stream(log)
+    if duty_df is None:
         return None
 
-    gz = [d["gyro"][2] for d in s["imu"] if t_lo <= d["ts"] <= t_hi]
-    volts = [d["voltage"] for d in s["status"] if t_lo <= d["ts"] <= t_hi]
+    window = _hover_window(duty_df)
+    if window is None:
+        return None
+    t_lo, t_hi = window
 
-    def mean(x):
-        return st.mean(x) if x else float("nan")
+    duty_sum = duty_df[DUTY_COLUMNS].sum(axis=1)
+    in_window = (duty_df["timestamp_us"] >= t_lo) & (duty_df["timestamp_us"] <= t_hi)
+    mask = in_window & (duty_sum > HOVER_DUTY_SUM)
+    n = int(mask.sum())
+    if n < MIN_SAMPLES:
+        return None
+
+    duties = duty_df.loc[mask, DUTY_COLUMNS]
+    mean4 = duties.mean(axis=1)
+    devs = duties.sub(mean4, axis=0)
+    sat = duties.ge(SAT_DUTY)
+
+    duty_mean = duties.mean(axis=0).reindex(DUTY_COLUMNS).tolist()
+    dev_mean = devs.mean(axis=0).reindex(DUTY_COLUMNS).tolist()
+    sat_frac = sat.mean(axis=0).reindex(DUTY_COLUMNS).tolist()
+
+    up = float(((duties["duty_RL"] + duties["duty_FL"])
+                - (duties["duty_FR"] + duties["duty_RR"])).mean())
+    uq = float(((duties["duty_FR"] + duties["duty_FL"])
+                - (duties["duty_RR"] + duties["duty_RL"])).mean())
+    ur = float(((duties["duty_FR"] + duties["duty_RL"])
+                - (duties["duty_RR"] + duties["duty_FL"])).mean())
+
+    gz = _window_series(log.streams.get("imu"), t_lo, t_hi, "gyro_z")
+    volts = _window_series(log.streams.get("status"), t_lo, t_hi, "voltage")
 
     return {
-        "path": path,
-        "dur_s": (t_hi - t_lo) / 1e6,
+        "path": str(path),
+        # float(): t_lo/t_hi come from pandas .iloc access (numpy int64),
+        # so plain arithmetic would leave a numpy scalar here -- normalize
+        # to a plain Python float like every other stat in this dict.
+        # float(): t_lo/t_hi は pandas の .iloc 由来（numpy int64）なので、
+        # そのまま演算すると numpy スカラーが残る -- この dict の他の統計量
+        # と同様に素の Python float に揃える。
+        "dur_s": float(t_hi - t_lo) / 1e6,
         "n": n,
-        "duty_mean": [mean(duties[k]) for k in range(4)],
-        "dev_mean": [mean(devs[k]) for k in range(4)],
-        "up": mean(up_d), "uq": mean(uq_d), "ur": mean(ur_d),
-        "sat_frac": [sat[k] / n for k in range(4)],
-        "gz_sd": st.pstdev(gz) if len(gz) > 1 else 0.0,
-        "gz_peak": max((abs(v) for v in gz), default=0.0),
-        "volt": mean(volts) if volts else float("nan"),
+        "duty_source": duty_source,
+        "duty_mean": duty_mean,
+        "dev_mean": dev_mean,
+        "up": up, "uq": uq, "ur": ur,
+        "sat_frac": sat_frac,
+        "gz_sd": float(gz.std(ddof=0)) if len(gz) > 1 else 0.0,
+        "gz_peak": float(gz.abs().max()) if len(gz) > 0 else 0.0,
+        "volt": float(volts.mean()) if len(volts) > 0 else float("nan"),
     }
 
 
@@ -223,13 +263,21 @@ def verdict(rows):
 # Reporting / レポート出力
 # --------------------------------------------------------------------------
 def _fmt_path(p):
-    base = p.split("/")[-1]
-    return base.replace("stampfly_udp_", "").replace(".jsonl", "")
+    """Short display name for a bundle path: basename with `.sflog.zip` and
+    a leading `flight_` stripped (a directory bundle shows its dir name).
+    一式パスの短縮表示名: 拡張子 `.sflog.zip` と先頭の `flight_` を外した
+    ベース名（ディレクトリの一式ならそのディレクトリ名）。"""
+    base = str(p).rstrip("/").split("/")[-1]
+    if base.endswith(".sflog.zip"):
+        base = base[: -len(".sflog.zip")]
+    if base.startswith("flight_"):
+        base = base[len("flight_"):]
+    return base
 
 
 def analyze_health(paths, json_out=False):
-    """Run the motor health report over one or more JSONL logs.
-    1つ以上の JSONL ログでモータ健全性レポートを実行する。
+    """Run the motor health report over one or more flight-log bundles.
+    1つ以上のフライトログ一式でモータ健全性レポートを実行する。
 
     Returns the verdict dict (also printed unless json_out)."""
     rows = []
@@ -259,7 +307,7 @@ def analyze_health(paths, json_out=False):
     v = verdict(rows)
     result = {"verdict": v, "n_logs": len(rows), "skipped": skipped,
               "logs": [{"name": _fmt_path(r["path"]), **{k: r[k] for k in
-                       ("dur_s", "duty_mean", "dev_mean", "up", "uq", "ur",
+                       ("dur_s", "duty_source", "duty_mean", "dev_mean", "up", "uq", "ur",
                         "sat_frac", "gz_sd", "volt")}} for r in rows]}
     if json_out:
         print(json.dumps(result, indent=2))
@@ -278,14 +326,15 @@ def _print_report(rows, v, skipped):
     for p, why in skipped:
         print(f"  (skipped {_fmt_path(p)}: {why})")
 
-    # Per-log table
-    print("\nPer-log hover trim:")
-    print(f"  {'log':<16}{'dur':>5}{'volt':>6} | "
+    # Per-log table. "src" = duty source, motor.csv (400Hz) or ctrl_ref.csv (50Hz).
+    # per-log 表。"src" = duty の出所、motor.csv (400Hz) か ctrl_ref.csv (50Hz)。
+    print("\nPer-log hover trim (src: motor=motor.csv 400Hz, ctrl_ref=ctrl_ref.csv 50Hz):")
+    print(f"  {'log':<16}{'src':>9}{'dur':>5}{'volt':>6} | "
           f"{'M1/FR':>7}{'M2/RR':>7}{'M3/RL':>7}{'M4/FL':>7} | "
           f"{'ur':>7}{'up':>7}{'uq':>7} | {'gz_sd':>6}")
     for r in rows:
         dm = r["duty_mean"]
-        print(f"  {_fmt_path(r['path']):<16}{r['dur_s']:>5.0f}{r['volt']:>6.2f} | "
+        print(f"  {_fmt_path(r['path']):<16}{r['duty_source']:>9}{r['dur_s']:>5.0f}{r['volt']:>6.2f} | "
               f"{dm[0]:>7.3f}{dm[1]:>7.3f}{dm[2]:>7.3f}{dm[3]:>7.3f} | "
               f"{r['ur']:>7.3f}{r['up']:>7.3f}{r['uq']:>7.3f} | {r['gz_sd']:>6.3f}")
 
@@ -347,7 +396,7 @@ def _main():
     json_out = "--json" in args
     args = [a for a in args if a != "--json"]
     if not args:
-        args = sorted(glob.glob("logs/stampfly_udp_*.jsonl"))
+        args = sorted(glob.glob("logs/*.sflog.zip"))
     paths = []
     for a in args:
         paths.extend(sorted(glob.glob(a)) if any(c in a for c in "*?[") else [a])
