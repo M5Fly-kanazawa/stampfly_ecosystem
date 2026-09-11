@@ -2080,6 +2080,385 @@ static void main_loop(void)
     }
 }
 
+// ============================================================================
+// ペアリング候補一覧UI（方式W3: 最初に受信した1通を無条件採用せず、
+// 利用者が候補一覧から選んで確定する。docs/plans/pairing-methods-plan.md §4.2）
+// Pairing candidate list UI (method W3: never adopt the first packet heard
+// unconditionally — the user picks from a candidate list. See
+// docs/plans/pairing-methods-plan.md §4.2)
+// ============================================================================
+
+// ペアリングUIの状態（画面遷移を明示的な列挙にする）
+// Pairing UI states (an explicit enum for the screen's state machine)
+typedef enum {
+    PAIRING_UI_SCANNING_SELECTING = 0,  // 走査しながら候補一覧から選ぶ / scan while selecting from the candidate list
+    PAIRING_UI_WAITING_REPLY,           // 確定後、機体からの応答待ち / waiting for a reply after confirming
+    PAIRING_UI_DONE                     // ペアリング成立 / pairing established
+} pairing_ui_state_t;
+
+// 1回分の描画に必要な情報（毎フレーム組み立てて描画関数へ渡す）
+// Everything one render needs (assembled fresh each frame and handed to the render function)
+typedef struct {
+    pairing_ui_state_t state;
+    uint8_t  candidate_count;                              // 可視ウィンドウ内の候補数(0-6) / candidates in the visible window (0-6)
+    pairing_candidate_t candidates[PAIRING_CANDIDATE_MAX];  // 可視ウィンドウの内容、受信強度順 / visible window contents, RSSI order
+    int      selected_pos;                                  // candidates[]内の選択位置、-1は未選択 / index into candidates[], -1 = none
+    pairing_candidate_t confirmed_candidate;                // WAITING_REPLYで表示する確定候補 / candidate shown while WAITING_REPLY
+    uint32_t waiting_elapsed_ms;                             // WAITING_REPLYの経過時間 / elapsed time in WAITING_REPLY
+    uint32_t waiting_timeout_ms;                             // WAITING_REPLYのタイムアウト値 / WAITING_REPLY timeout
+    bool     show_no_reply_message;                          // タイムアウト直後の案内を出すか / show the "no reply" hint briefly
+} pairing_ui_view_t;
+
+// 受信強度を3段階の目安記号に変換する（常に3桁固定幅、再描画時のちらつき防止）
+// Convert RSSI to a rough 3-level bar symbol (always 3 chars wide to avoid
+// leaving stray pixels behind on redraw)
+static const char* pairing_rssi_bar(int8_t rssi_dbm)
+{
+    static const int16_t RSSI_STRONG_DBM = -55;  // これ以上で強 / at or above this: strong
+    static const int16_t RSSI_MEDIUM_DBM = -75;  // これ以上で中 / at or above this: medium
+    if (rssi_dbm >= RSSI_STRONG_DBM) return "***";
+    if (rssi_dbm >= RSSI_MEDIUM_DBM) return "** ";
+    return "*  ";
+}
+
+// 候補一覧の1行分ラベルを組み立てる（例 "A1B2 CH06 ***"）
+// MAC下4桁 = 下位2バイトを16進4桁で表示（update_display()等の既存表示慣例と同じ）
+// Build one candidate row's label (e.g. "A1B2 CH06 ***").
+// Last 4 hex digits of the MAC = the lower 2 bytes, same convention already
+// used elsewhere on this LCD (e.g. update_display()'s "MAC ADR" row)
+static void pairing_format_candidate_label(char* buf, size_t buf_size, const pairing_candidate_t* c)
+{
+    snprintf(buf, buf_size, "%02X%02X CH%02d %s",
+              c->mac[4], c->mac[5], c->channel, pairing_rssi_bar(c->rssi_dbm));
+}
+
+// ペアリング画面の描画（~10Hzで呼ばれる想定）
+// 表示行数(VISIBLE_ROWS=6)はフォント2・行高17pxで、タイトル+6行が128px画面に収まる数
+// Render the pairing screen (called at ~10Hz).
+// The row count (VISIBLE_ROWS=6) was chosen so title + 6 rows (font 2,
+// 17px/line) fit on the 128px-tall LCD.
+static void render_pairing_screen(const pairing_ui_view_t* view)
+{
+    const int line_height = 17;
+    const int visible_lines = 6;
+    int w = M5.Display.width();
+
+    // タイトル行（常に同一内容。毎フレーム描画してもコストは軽微）
+    // Title row (constant content; redrawing it every frame is cheap)
+    M5.Display.setCursor(4, 2);
+    M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
+    M5.Display.printf("=== PAIRING === ");
+
+    // 表示モードの判定（一覧/検索中/応答なし案内/応答待ち）
+    // Determine the display mode (list / searching / no-reply hint / waiting)
+    enum { MODE_LIST, MODE_SEARCHING, MODE_NO_REPLY, MODE_WAITING };
+    int mode;
+    if (view->state == PAIRING_UI_WAITING_REPLY) {
+        mode = MODE_WAITING;
+    } else if (view->show_no_reply_message) {
+        mode = MODE_NO_REPLY;
+    } else if (view->candidate_count == 0) {
+        mode = MODE_SEARCHING;
+    } else {
+        mode = MODE_LIST;
+    }
+
+    // モードが変わった直後は一覧領域を1回だけ黒でクリアする。
+    // 毎フレームのfillRectはちらつきの原因になるため、変化時のみに限定する
+    // (render_menu_screen()と同じ考え方)
+    // Clear the list area once, right after a mode change. Doing a fillRect
+    // every frame causes visible flicker, so it is limited to transitions
+    // only (same reasoning as render_menu_screen() elsewhere in this file)
+    static int prev_mode = -1;
+    static int prev_selected_pos = -1;
+    if (mode != prev_mode) {
+        M5.Display.fillRect(0, 2 + line_height, w, visible_lines * line_height, SF_BLACK);
+        prev_selected_pos = -1;
+        prev_mode = mode;
+    }
+
+    if (mode == MODE_WAITING) {
+        char label[20];
+        pairing_format_candidate_label(label, sizeof(label), &view->confirmed_candidate);
+        uint32_t remain_ms = (view->waiting_elapsed_ms >= view->waiting_timeout_ms)
+            ? 0 : (view->waiting_timeout_ms - view->waiting_elapsed_ms);
+        // バッファはuint32_t全域を10進表示しても収まる余裕を持たせる
+        // (実際の値はWAITING_REPLY_TIMEOUT_MS=5秒以内で1桁だが、-Wformat-truncation
+        //  を避けるため型の最大表示幅を確保する)
+        // Size the buffer to fit any uint32_t decimal value (the real value
+        // is always a single digit within WAITING_REPLY_TIMEOUT_MS=5s, but
+        // sizing for the type's full range avoids -Wformat-truncation)
+        char timeout_line[32];
+        snprintf(timeout_line, sizeof(timeout_line), "Timeout in %lus ", (unsigned long)(remain_ms / 1000));
+
+        const char* lines[6] = {
+            "Pairing...      ",
+            "                ",
+            label,
+            "waiting for     ",
+            "vehicle reply...",
+            timeout_line
+        };
+        for (int i = 0; i < visible_lines; i++) {
+            int y = 2 + (i + 1) * line_height;
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor((i == 2) ? SF_YELLOW : SF_WHITE, SF_BLACK);
+            M5.Display.printf("%-16s", lines[i]);
+        }
+        return;
+    }
+
+    if (mode == MODE_NO_REPLY) {
+        static const char* lines[6] = {
+            "No reply - is  ",
+            "vehicle in     ",
+            "pairing mode?  ",
+            "                ",
+            "                ",
+            "                "
+        };
+        for (int i = 0; i < visible_lines; i++) {
+            int y = 2 + (i + 1) * line_height;
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor(SF_RED, SF_BLACK);
+            M5.Display.printf("%-16s", lines[i]);
+        }
+        return;
+    }
+
+    if (mode == MODE_SEARCHING) {
+        static const char* lines[6] = {
+            "Searching...    ",
+            "                ",
+            "Hold vehicle's  ",
+            "button to pair  ",
+            "                ",
+            "                "
+        };
+        for (int i = 0; i < visible_lines; i++) {
+            int y = 2 + (i + 1) * line_height;
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+            M5.Display.printf("%-16s", lines[i]);
+        }
+        return;
+    }
+
+    // MODE_LIST: 受信強度順の候補一覧。選択行はfillRectで白背景反転する。
+    // 選択行が変わった場合は旧選択行を黒で明示的にクリアしてから描画し直す
+    // (fillRectの白背景がテキスト再描画だけでは完全に消えないため。
+    //  render_menu_screen()と同じ対策)
+    // MODE_LIST: RSSI-sorted candidate list. The selected row is inverted
+    // with a white fillRect. If the selection changed, the old selected row
+    // is explicitly cleared to black before redrawing (plain text redraw
+    // alone does not fully erase a previous fillRect's white background —
+    // same fix as render_menu_screen() elsewhere in this file)
+    if (view->selected_pos != prev_selected_pos &&
+        prev_selected_pos >= 0 && prev_selected_pos < visible_lines) {
+        int old_y = 2 + (prev_selected_pos + 1) * line_height;
+        M5.Display.fillRect(0, old_y, w, line_height, SF_BLACK);
+    }
+    prev_selected_pos = view->selected_pos;
+
+    for (int i = 0; i < visible_lines; i++) {
+        int y = 2 + (i + 1) * line_height;
+        if (i >= view->candidate_count) {
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+            M5.Display.printf("                ");
+            continue;
+        }
+
+        char label[20];
+        pairing_format_candidate_label(label, sizeof(label), &view->candidates[i]);
+        if (i == view->selected_pos) {
+            M5.Display.fillRect(0, y, w, line_height, SF_WHITE);
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor(SF_BLACK, SF_WHITE);
+            M5.Display.printf("> %s", label);
+        } else {
+            M5.Display.setCursor(4, y);
+            M5.Display.setTextColor(SF_WHITE, SF_BLACK);
+            M5.Display.printf("  %-14s", label);
+        }
+    }
+}
+
+// ペアリングUIのメインループ（force_pairingまたはMAC未設定時のみ呼ばれる）
+// 候補確定・機体応答待ちが終わる(PAIRING_UI_DONE)までブロックする
+// Pairing UI main loop (called only when force_pairing or the MAC is unset).
+// Blocks until candidate confirmation + vehicle reply completes (PAIRING_UI_DONE).
+static void run_pairing_ui(bool force_pairing)
+{
+    static const uint32_t REDRAW_INTERVAL_MS       = 100;   // LCD再描画間隔(10Hz) / LCD redraw interval (10Hz)
+    static const uint32_t NAV_DEBOUNCE_MS          = 200;   // ナビゲーション入力のデバウンス / navigation debounce
+    static const int16_t  STICK_CENTER             = 2048;  // 右スティックYの中央値 / right-stick Y center value
+    static const int16_t  STICK_NAV_THRESHOLD      = 800;   // 上下判定の閾値 / up/down decision threshold
+    static const uint32_t WAITING_REPLY_TIMEOUT_MS = 5000;  // 応答待ちタイムアウト / reply-wait timeout
+    static const uint32_t PROBE_SEND_INTERVAL_MS   = 200;   // プローブ送信間隔 / probe send interval
+    static const uint32_t NO_REPLY_MESSAGE_MS      = 2000;  // "応答なし"案内の表示時間 / "no reply" hint display duration
+    static const int      VISIBLE_ROWS             = 6;     // 一度に見せる候補行数（画面に収まる行数） / rows shown at once (fits the screen)
+
+    // 起動ログ（M5.Display.println()によるスクロール表示）を消し、
+    // 固定座標グリッド描画に切り替える
+    // Clear the boot log (drawn with scrolling M5.Display.println()) before
+    // switching to this screen's fixed-coordinate grid rendering
+    M5.Display.fillScreen(SF_BLACK);
+
+    pairing_candidates_reset();
+    pairing_scan_start();
+
+    pairing_ui_state_t state = PAIRING_UI_SCANNING_SELECTING;
+    bool has_selection = false;
+    uint8_t selected_mac[6] = {0};
+    uint8_t scroll_offset = 0;
+    pairing_candidate_t confirmed_candidate = {};
+    uint32_t waiting_reply_start_ms = 0;
+    uint32_t last_probe_ms = 0;
+    uint32_t no_reply_message_until_ms = 0;
+    uint32_t last_redraw_ms = 0;
+    uint32_t last_nav_ms = 0;
+
+    while (state != PAIRING_UI_DONE) {
+        M5.update();
+        joy_update();
+        uint32_t now = millis_now();
+
+        // 現在の候補（受信強度順）を毎フレーム取得する
+        // Snapshot the current candidates (RSSI order) every frame
+        pairing_candidate_t sorted[PAIRING_CANDIDATE_MAX];
+        uint8_t total_count = pairing_candidate_count();
+        for (uint8_t i = 0; i < total_count; i++) {
+            pairing_candidate_get_by_rank(i, &sorted[i]);
+        }
+
+        // 選択中のMACを一覧内で探す（同一MACは表から消えないので、選択済みなら
+        // 必ず見つかる。未選択なら最有力候補を初期選択する）
+        // Find the selected MAC in the list (candidates are never removed, so
+        // a selection is always found once made; default to the strongest
+        // candidate if nothing is selected yet)
+        int selected_rank = -1;
+        if (has_selection) {
+            for (uint8_t i = 0; i < total_count; i++) {
+                if (memcmp(sorted[i].mac, selected_mac, 6) == 0) {
+                    selected_rank = (int)i;
+                    break;
+                }
+            }
+        }
+        if (selected_rank < 0 && total_count > 0) {
+            selected_rank = 0;
+            memcpy(selected_mac, sorted[0].mac, 6);
+            has_selection = true;
+        }
+
+        if (state == PAIRING_UI_SCANNING_SELECTING) {
+            pairing_scan_service();
+
+            // ナビゲーション: 右スティック上下、または黄ボタン2つ（左=上、右=下）
+            // Navigation: right-stick up/down, or the two yellow buttons (left=up, right=down)
+            if (total_count > 0 && now - last_nav_ms > NAV_DEBOUNCE_MS) {
+                int16_t stick_y = (int16_t)joy_get_stick_right_y() - STICK_CENTER;
+                bool nav_up   = (stick_y < -STICK_NAV_THRESHOLD) || joy_get_button_left();
+                bool nav_down = (stick_y >  STICK_NAV_THRESHOLD) || joy_get_button_right();
+
+                if (nav_up) {
+                    selected_rank = (selected_rank == 0) ? ((int)total_count - 1) : (selected_rank - 1);
+                    memcpy(selected_mac, sorted[selected_rank].mac, 6);
+                    last_nav_ms = now;
+                } else if (nav_down) {
+                    selected_rank = (selected_rank + 1) % (int)total_count;
+                    memcpy(selected_mac, sorted[selected_rank].mac, 6);
+                    last_nav_ms = now;
+                }
+            }
+
+            // スクロール位置を選択行が常に見えるように追随させる
+            // Keep the scroll offset following the selected row
+            if (selected_rank >= 0) {
+                if (selected_rank < scroll_offset) {
+                    scroll_offset = (uint8_t)selected_rank;
+                } else if (selected_rank >= scroll_offset + VISIBLE_ROWS) {
+                    scroll_offset = (uint8_t)(selected_rank - VISIBLE_ROWS + 1);
+                }
+            } else {
+                scroll_offset = 0;
+            }
+
+            // 確定: 画面押し込みボタン。候補が1件でも明示操作を要求する
+            // (隣の機体しか見えていない場合の誤確定を防ぐ。決定事項#4)
+            // Confirm: the screen push button. Require an explicit press even
+            // with a single candidate (avoids mis-confirming a neighbor's
+            // vehicle — decision #4 in the plan)
+            if (M5.BtnA.wasPressed() && selected_rank >= 0) {
+                confirmed_candidate = sorted[selected_rank];
+                pairing_confirm(&confirmed_candidate);
+                drone_peer_init();
+                pairing_link_reset();
+                state = PAIRING_UI_WAITING_REPLY;
+                waiting_reply_start_ms = now;
+                last_probe_ms = 0;
+            }
+        } else if (state == PAIRING_UI_WAITING_REPLY) {
+            if (last_probe_ms == 0 || now - last_probe_ms >= PROBE_SEND_INTERVAL_MS) {
+                pairing_send_probe();
+                last_probe_ms = now;
+            }
+
+            if (pairing_link_confirmed()) {
+                state = PAIRING_UI_DONE;
+            } else if (now - waiting_reply_start_ms >= WAITING_REPLY_TIMEOUT_MS) {
+                // 応答なし: 走査を再開して一覧に戻る（候補表は保持する）
+                // No reply: resume scanning and return to the list (keep the candidate table)
+                pairing_scan_start();
+                state = PAIRING_UI_SCANNING_SELECTING;
+                no_reply_message_until_ms = now + NO_REPLY_MESSAGE_MS;
+            }
+        }
+
+        if (now - last_redraw_ms >= REDRAW_INTERVAL_MS) {
+            pairing_ui_view_t view = {};
+            view.state = state;
+            view.confirmed_candidate = confirmed_candidate;
+            view.waiting_elapsed_ms = now - waiting_reply_start_ms;
+            view.waiting_timeout_ms = WAITING_REPLY_TIMEOUT_MS;
+            view.show_no_reply_message =
+                (state == PAIRING_UI_SCANNING_SELECTING) && (now < no_reply_message_until_ms);
+
+            if (state == PAIRING_UI_SCANNING_SELECTING) {
+                uint8_t visible = (total_count > scroll_offset) ? (total_count - scroll_offset) : 0;
+                if (visible > VISIBLE_ROWS) {
+                    visible = VISIBLE_ROWS;
+                }
+                for (uint8_t i = 0; i < visible; i++) {
+                    view.candidates[i] = sorted[scroll_offset + i];
+                }
+                view.candidate_count = visible;
+                view.selected_pos = (selected_rank >= 0) ? (selected_rank - (int)scroll_offset) : -1;
+            } else {
+                view.selected_pos = -1;
+            }
+
+            render_pairing_screen(&view);
+            last_redraw_ms = now;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    pairing_scan_stop();
+
+    // The user explicitly selected and confirmed a vehicle on screen, so the
+    // result is always persisted -- whether pairing was forced by the button
+    // or triggered by an unset peer. (Previously an unset-peer pairing was not
+    // saved and had to be repeated at every power-on.)
+    // 利用者が画面で機体を選んで確定した結果なので、ボタン起動でも相手未設定
+    // 起動でも常に保存する（以前は相手未設定時の結果を保存せず、電源投入の
+    // たびにペアリングが必要だった）。
+    (void)force_pairing;
+    peer_info_save();
+}
+
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "StampFly Controller 起動中...");
@@ -2300,19 +2679,15 @@ extern "C" void app_main(void)
         M5.Display.println("ESP-NOW: OK");
 
         // ペアリング処理 (ボタン押下時またはMAC未設定時)
-        // Pairing process (on button press or MAC not set)
+        // 最初に受信した1通を無条件採用するのではなく、run_pairing_ui()が
+        // 候補一覧をLCDに表示し、利用者が選んで確定する（方式W3）
+        // Pairing process (on button press or MAC not set).
+        // Instead of adopting the first packet heard, run_pairing_ui() shows
+        // a candidate list on the LCD and lets the user pick one (method W3)
         M5.update();
         bool force_pairing = M5.BtnA.isPressed();
-        if (force_pairing) {
-            M5.Display.setTextColor(SF_YELLOW, SF_BLACK);
-            M5.Display.println("Pairing mode...");
-            M5.Display.println("Hold StampFly Btn");
-            M5.Display.println("until beep!");
-        }
-        peering_process(force_pairing);
-
-        if (force_pairing) {
-            peer_info_save();
+        if (pairing_is_needed(force_pairing)) {
+            run_pairing_ui(force_pairing);
         }
 
         // ピア初期化（ペアリング後にチャンネル確定してから初期化）

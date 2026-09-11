@@ -78,11 +78,59 @@ static volatile int64_t send_start_time_us = 0;
 
 // ペアリングフラグ
 static volatile uint8_t is_peering = 0;
-static volatile uint8_t received_flag = 0;
 
 // millis()相当
 static inline uint32_t millis_now(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+// ============================================================================
+// Pairing candidate table state
+// ペアリング候補表の状態
+// ============================================================================
+
+// 候補表本体（挿入順=先着順を保持したまま更新する。ランク付けは読み出し時に行う）
+// Candidate storage (kept in first-seen/insertion order; ranking happens on read)
+static pairing_candidate_t s_pairing_candidates[PAIRING_CANDIDATE_MAX];
+static uint8_t s_pairing_candidate_count = 0;
+
+// チャンネル走査のタイミング
+// Channel-scan timing
+static const uint32_t PAIRING_CHANNEL_DWELL_MS = 200;  // 1チャンネルあたりの滞留時間 / dwell time per channel
+static const uint32_t PAIRING_BEEP_INTERVAL_MS = 500;  // 走査中ビープの間隔 / beep interval while scanning
+static uint8_t  s_pairing_scan_channel = ESPNOW_CHANNEL_DEFAULT;
+static uint32_t s_pairing_last_hop_ms = 0;
+static uint32_t s_pairing_last_beep_ms = 0;
+
+// 確定済み機体（Drone_mac）からの応答受信フラグ
+// Reply-received flag for the adopted vehicle (Drone_mac)
+static volatile bool s_pairing_link_confirmed = false;
+
+// 候補表へ upsert する（既知MACなら更新、新規なら空きがあれば追加）
+// Upsert into the candidate table (update if the MAC is known, else append if there is room)
+static void pairing_candidate_upsert(const uint8_t* mac, uint8_t channel, int8_t rssi_dbm)
+{
+    uint32_t now = millis_now();
+
+    for (uint8_t i = 0; i < s_pairing_candidate_count; i++) {
+        if (memcmp(s_pairing_candidates[i].mac, mac, 6) == 0) {
+            s_pairing_candidates[i].channel = channel;
+            s_pairing_candidates[i].rssi_dbm = rssi_dbm;
+            s_pairing_candidates[i].last_seen_ms = now;
+            return;
+        }
+    }
+
+    if (s_pairing_candidate_count < PAIRING_CANDIDATE_MAX) {
+        pairing_candidate_t* c = &s_pairing_candidates[s_pairing_candidate_count];
+        memcpy(c->mac, mac, 6);
+        c->channel = channel;
+        c->rssi_dbm = rssi_dbm;
+        c->last_seen_ms = now;
+        s_pairing_candidate_count++;
+    }
+    // 表が満杯の場合、新規の機体は候補表がリセットされるまで無視する
+    // When the table is full, further new vehicles are ignored until the table is reset
 }
 
 // 送信コールバック
@@ -103,6 +151,20 @@ static void on_data_sent(const esp_now_send_info_t *send_info, esp_now_send_stat
                 drone_available = true;
                 ESP_LOGI(TAG, "ドローン再接続");
             }
+
+            // ペアリング応答待ち中の確定機体宛送信がACKされたら、リンク成立の
+            // 証拠として扱う。firmware/vehicle は現状ESP-NOW経由で何も送り返さない
+            // （テレメトリはUDP）ため、電文受信ではなくMAC層ACKで確認する
+            // （on_data_recv側の一致チェックはfirmware/vehicle_old等、ESP-NOW経由で
+            // 何か送り返す相手に対する補助的な確認経路として残す）
+            // Treat an ACKed send to the adopted vehicle during the pairing
+            // reply-wait as link confirmation. firmware/vehicle currently
+            // sends nothing back over ESP-NOW (telemetry is UDP-only), so
+            // this uses the MAC-layer ACK rather than an inbound packet
+            // (the matching check in on_data_recv stays as a secondary path
+            // for peers like firmware/vehicle_old that do send something
+            // back over ESP-NOW)
+            s_pairing_link_confirmed = true;
         }
     } else {
         send_fail_count++;
@@ -124,32 +186,26 @@ static void on_data_sent(const esp_now_send_info_t *send_info, esp_now_send_stat
 // 受信コールバック
 static void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *data, int data_len)
 {
-    (void)recv_info;  // 未使用
-
     if (is_peering) {
         // ペアリングパケット形式:
         // Byte 0: チャンネル
         // Byte 1-6: MACアドレス
         // Byte 7-10: シグネチャ (AA 55 16 88)
+        //
+        // 「最初の1通」を無条件採用せず、候補表へ upsert するだけに留める。
+        // 相手の確定は main.cpp の一覧選択UIで利用者が行う（pairing_confirm()）。
+        // Do not adopt the first packet unconditionally — just upsert it into
+        // the candidate table. The user confirms the actual peer via the
+        // list-selection UI in main.cpp (pairing_confirm()).
         if (data_len >= 11 && data[7] == 0xAA && data[8] == 0x55 &&
             data[9] == 0x16 && data[10] == 0x88) {
-            received_flag = 1;
-            // チャンネルを取得・設定
             uint8_t recv_channel = data[0];
-            if (recv_channel >= ESPNOW_CHANNEL_MIN && recv_channel <= ESPNOW_CHANNEL_MAX) {
-                g_espnow_channel = recv_channel;
-                ESP_LOGI(TAG, "ペアリング受信: チャンネル=%d", recv_channel);
+            if (recv_channel < ESPNOW_CHANNEL_MIN || recv_channel > ESPNOW_CHANNEL_MAX) {
+                ESP_LOGW(TAG, "ペアリング受信: 無効なチャンネル=%d、無視", recv_channel);
+                return;
             }
-            // MACアドレスを取得
-            Drone_mac[0] = data[1];
-            Drone_mac[1] = data[2];
-            Drone_mac[2] = data[3];
-            Drone_mac[3] = data[4];
-            Drone_mac[4] = data[5];
-            Drone_mac[5] = data[6];
-            ESP_LOGI(TAG, "ペアリング受信: MAC=%02X:%02X:%02X:%02X:%02X:%02X",
-                     Drone_mac[0], Drone_mac[1], Drone_mac[2],
-                     Drone_mac[3], Drone_mac[4], Drone_mac[5]);
+            int8_t rssi_dbm = recv_info->rx_ctrl->rssi;
+            pairing_candidate_upsert(&data[1], recv_channel, rssi_dbm);
         }
     } else {
         // ビーコンパケット (2バイト: BE AC)
@@ -165,6 +221,23 @@ static void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *da
                     ESP_LOGI(TAG_BEACON, "初回ビーコン受信");
                 }
             }
+        }
+
+        // 確定済み機体からの電文（テレメトリ等）はペアリング成立の証拠とみなす。
+        // ただし機体はバインド後も（StateManagerがPairing状態を抜けるまでの間）
+        // PairingPacketの広報を続けることがあるため、その形（11バイト+署名）は
+        // 除外する（バインド前から広報しているだけの電文を成立と誤認しないため）
+        // Any packet from the adopted vehicle (telemetry included) counts as
+        // pairing-link confirmation, EXCEPT a still-broadcasting PairingPacket
+        // (the vehicle can keep advertising it for a while after binding, until
+        // its StateManager leaves the Pairing state) — exclude that shape (11
+        // bytes + signature) so a stray advertisement isn't mistaken for proof
+        // of binding
+        bool is_pairing_broadcast_shape =
+            (data_len >= 11 && data[7] == 0xAA && data[8] == 0x55 &&
+             data[9] == 0x16 && data[10] == 0x88);
+        if (!is_pairing_broadcast_shape && memcmp(recv_info->src_addr, Drone_mac, 6) == 0) {
+            s_pairing_link_confirmed = true;
         }
     }
 }
@@ -493,65 +566,150 @@ esp_err_t tdma_start(void)
     return ESP_OK;
 }
 
-esp_err_t peering_process(bool force_pairing)
+bool pairing_is_needed(bool force_pairing)
 {
-    bool need_pairing = force_pairing ||
+    bool mac_unset =
         (Drone_mac[0] == 0xFF && Drone_mac[1] == 0xFF && Drone_mac[2] == 0xFF &&
          Drone_mac[3] == 0xFF && Drone_mac[4] == 0xFF && Drone_mac[5] == 0xFF);
+    return force_pairing || mac_unset;
+}
 
-    if (!need_pairing) {
-        ESP_LOGI(TAG, "既存のペア情報を使用");
-        return ESP_OK;
-    }
+void pairing_candidates_reset(void)
+{
+    s_pairing_candidate_count = 0;
+}
 
-    ESP_LOGI(TAG, "ペアリングモード開始（チャンネルスキャン）...");
-    // Pairing mode start (channel scanning)
+void pairing_scan_start(void)
+{
+    ESP_LOGI(TAG, "ペアリング走査開始（チャンネルスキャン）...");
+    // Pairing scan start (channel scanning)
     is_peering = 1;
-    received_flag = 0;
 
-    uint8_t scan_channel = ESPNOW_CHANNEL_MIN;
-    uint32_t beep_delay = 0;
+    s_pairing_scan_channel = ESPNOW_CHANNEL_MIN;
+    esp_wifi_set_channel(s_pairing_scan_channel, WIFI_SECOND_CHAN_NONE);
 
-    // CH 1-13をスキャンしてVehicleのペアリングパケットを探す
-    // Scan CH 1-13 to find Vehicle's pairing packet
-    while (received_flag == 0) {
-        // チャンネルを切り替えて待機
-        // Switch channel and wait
-        esp_wifi_set_channel(scan_channel, WIFI_SECOND_CHAN_NONE);
-        ESP_LOGI(TAG, "スキャン中: CH %d", scan_channel);
+    uint32_t now = millis_now();
+    s_pairing_last_hop_ms = now;
+    s_pairing_last_beep_ms = now;
+}
 
-        // 200ms待機（10ms × 20回、パケット受信チェック付き）
-        // Wait 200ms (10ms x 20 iterations, checking for packet reception)
-        for (int i = 0; i < 20 && received_flag == 0; i++) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+void pairing_scan_service(void)
+{
+    uint32_t now = millis_now();
+
+    // チャンネルのドウェル時間が経過していれば次チャンネルへホップする
+    // Hop to the next channel once the dwell time has elapsed
+    if (now - s_pairing_last_hop_ms >= PAIRING_CHANNEL_DWELL_MS) {
+        s_pairing_scan_channel++;
+        if (s_pairing_scan_channel > ESPNOW_CHANNEL_MAX) {
+            s_pairing_scan_channel = ESPNOW_CHANNEL_MIN;
         }
-
-        // ビープ音（約500ms間隔）
-        // Beep at ~500ms intervals
-        if (millis_now() - beep_delay >= 500) {
-            beep();
-            beep_delay = millis_now();
-        }
-
-        // 次のチャンネルへ
-        // Move to next channel
-        scan_channel++;
-        if (scan_channel > ESPNOW_CHANNEL_MAX) {
-            scan_channel = ESPNOW_CHANNEL_MIN;
-        }
+        esp_wifi_set_channel(s_pairing_scan_channel, WIFI_SECOND_CHAN_NONE);
+        s_pairing_last_hop_ms = now;
     }
 
-    // ペアリング成功 - 受信したチャンネルに確定
-    // Pairing success - set to received channel
-    esp_wifi_set_channel(g_espnow_channel, WIFI_SECOND_CHAN_NONE);
+    // 走査中であることを示すビープ（約500ms間隔）
+    // Beep at ~500ms intervals to indicate the scan is active
+    if (now - s_pairing_last_beep_ms >= PAIRING_BEEP_INTERVAL_MS) {
+        beep();
+        s_pairing_last_beep_ms = now;
+    }
+}
 
+void pairing_scan_stop(void)
+{
     is_peering = 0;
-    ESP_LOGI(TAG, "ペアリング完了: CH=%d MAC=%02X:%02X:%02X:%02X:%02X:%02X",
+}
+
+uint8_t pairing_candidate_count(void)
+{
+    return s_pairing_candidate_count;
+}
+
+bool pairing_candidate_get_by_rank(uint8_t rank, pairing_candidate_t* out)
+{
+    if (out == NULL || rank >= s_pairing_candidate_count) {
+        return false;
+    }
+
+    // 受信強度降順でランク付け（同値は先着順=挿入順のまま、安定な挿入ソート）
+    // Rank by RSSI descending (ties keep first-seen/insertion order: stable insertion sort)
+    uint8_t order[PAIRING_CANDIDATE_MAX];
+    for (uint8_t i = 0; i < s_pairing_candidate_count; i++) {
+        order[i] = i;
+    }
+    for (uint8_t i = 1; i < s_pairing_candidate_count; i++) {
+        uint8_t key_index = order[i];
+        int8_t key_rssi = s_pairing_candidates[key_index].rssi_dbm;
+        int j = (int)i - 1;
+        while (j >= 0 && s_pairing_candidates[order[j]].rssi_dbm < key_rssi) {
+            order[j + 1] = order[j];
+            j--;
+        }
+        order[j + 1] = key_index;
+    }
+
+    *out = s_pairing_candidates[order[rank]];
+    return true;
+}
+
+void pairing_confirm(const pairing_candidate_t* candidate)
+{
+    memcpy(Drone_mac, candidate->mac, 6);
+    g_espnow_channel = candidate->channel;
+    esp_wifi_set_channel(g_espnow_channel, WIFI_SECOND_CHAN_NONE);
+    pairing_scan_stop();
+
+    ESP_LOGI(TAG, "ペアリング確定: CH=%d MAC=%02X:%02X:%02X:%02X:%02X:%02X",
              g_espnow_channel,
              Drone_mac[0], Drone_mac[1], Drone_mac[2],
              Drone_mac[3], Drone_mac[4], Drone_mac[5]);
+}
 
-    return ESP_OK;
+esp_err_t pairing_send_probe(void)
+{
+    if (!esp_now_is_peer_exist(drone_peer.peer_addr)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // スティック中立・未武装の操縦電文を組み立てる（ControlPacketのレイアウトを
+    // 手詰めする。espnow_tdma.cはCファイルでprotocol/espnow_protocol.hppのC++構造体を
+    // 直接使えないため、tdma_init()の初期送信データ作成と同じ手順を踏む）
+    // Build a neutral (centered stick, unarmed) control packet by hand (this is
+    // a C file and cannot include the C++ ControlPacket struct from
+    // protocol/espnow_protocol.hpp, so pack the bytes the same way
+    // tdma_init() does for the initial send buffer)
+    static const uint16_t STICK_CENTER_VALUE = 2048;  // 12bit ADC中央値=ニュートラル / 12-bit ADC midpoint = neutral
+    uint8_t probe[CONTROL_PACKET_SIZE] = {0};
+    probe[0] = Drone_mac[3];
+    probe[1] = Drone_mac[4];
+    probe[2] = Drone_mac[5];
+    probe[3] = (uint8_t)(STICK_CENTER_VALUE & 0xFF);        // throttle (LSB)
+    probe[4] = (uint8_t)((STICK_CENTER_VALUE >> 8) & 0xFF); // throttle (MSB)
+    probe[5] = (uint8_t)(STICK_CENTER_VALUE & 0xFF);        // roll (LSB)
+    probe[6] = (uint8_t)((STICK_CENTER_VALUE >> 8) & 0xFF); // roll (MSB)
+    probe[7] = (uint8_t)(STICK_CENTER_VALUE & 0xFF);        // pitch (LSB)
+    probe[8] = (uint8_t)((STICK_CENTER_VALUE >> 8) & 0xFF); // pitch (MSB)
+    probe[9] = (uint8_t)(STICK_CENTER_VALUE & 0xFF);        // yaw (LSB)
+    probe[10] = (uint8_t)((STICK_CENTER_VALUE >> 8) & 0xFF); // yaw (MSB)
+    probe[11] = 0;  // flags: 全ビット0=未武装 / all bits 0 = unarmed
+    probe[12] = 0;  // reserved
+    probe[13] = 0;
+    for (int i = 0; i < 13; i++) {
+        probe[13] += probe[i];
+    }
+
+    return esp_now_send(drone_peer.peer_addr, probe, sizeof(probe));
+}
+
+void pairing_link_reset(void)
+{
+    s_pairing_link_confirmed = false;
+}
+
+bool pairing_link_confirmed(void)
+{
+    return s_pairing_link_confirmed;
 }
 
 esp_err_t peer_info_save(void)

@@ -369,11 +369,22 @@ comm udp
 
 ### ペアリング（ESP-NOWモード）
 
+複数組が同じ部屋で同時にペアリングしても取り違えないよう、コントローラは
+「最初に受信した1通」を無条件採用せず、聞こえた機体を一覧表示して利用者が
+選んで確定する（講習会での取り違え対策の詳細は
+`docs/plans/pairing-methods-plan.md` を参照）。
+
 1. コントローラのM5ボタンを押しながら電源を入れる
-2. LCD に "Pairing mode..." と表示される
-3. StampFly のボタンを長押ししてペアリングモードに入る
-4. ペアリングが完了するとビープ音が鳴る
-5. ペアリング情報はSPIFFSに保存され、次回起動時は自動接続
+2. StampFly のボタンを長押ししてペアリングモードに入る（ビープ音が鳴る）
+3. LCD に "PAIRING" 画面が表示され、聞こえた機体が MAC 下 4 桁とチャンネル
+   （例 "A1B2 CH06"）の一覧として受信強度の強い順に並ぶ。機体ラベルの
+   MAC下4桁と照合すること
+4. スティック上下（または黄ボタン2つ）で目的の機体を選び、画面押し込み
+   ボタンで確定する（候補が1件でも必ず確定操作が必要）
+5. 確定後 "Pairing... waiting for vehicle reply..." と表示され、機体からの
+   応答を待つ。応答があれば成立、5秒応答が無ければ "No reply" と表示して
+   一覧に戻る（機体がペアリングモードか確認すること）
+6. ペアリング情報はSPIFFSに保存され、次回起動時は自動接続
 
 ### ボタン操作
 
@@ -856,11 +867,25 @@ The following settings are saved to NVS (non-volatile memory) and persist after 
 
 ### Pairing (ESP-NOW Mode)
 
+So that several pairs in the same room don't cross-pair when pairing at the
+same time, the controller never adopts the first packet it hears
+unconditionally — it lists every vehicle it hears and the user picks one
+(see `docs/plans/pairing-methods-plan.md` for background on this
+classroom mis-pairing fix).
+
 1. Hold M5 button while powering on the controller
-2. LCD shows "Pairing mode..."
-3. Long-press the StampFly button to enter pairing mode
-4. Beep sounds when pairing is complete
-5. Pairing info is saved to SPIFFS and auto-connects on next boot
+2. Long-press the StampFly button to enter pairing mode (it beeps)
+3. The LCD shows a "PAIRING" screen listing every vehicle heard, strongest
+   signal first, as "MAC last 4 hex digits + channel" (e.g. "A1B2 CH06").
+   Match the last 4 hex digits against the vehicle's MAC label
+4. Move the highlight with the stick up/down (or the two yellow buttons)
+   and confirm with the screen push button — an explicit press is always
+   required, even with a single candidate
+5. After confirming, the LCD shows "Pairing... waiting for vehicle
+   reply..." while it waits for the vehicle to respond. Success completes
+   pairing; no reply within 5 seconds shows "No reply" and returns to the
+   list (check that the vehicle is still in pairing mode)
+6. Pairing info is saved to SPIFFS and auto-connects on next boot
 
 ### Button Operations
 
