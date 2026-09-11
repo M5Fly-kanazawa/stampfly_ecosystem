@@ -216,13 +216,18 @@ void Comm::init()
     esp_wifi_get_mac(WIFI_IF_STA, own_mac_);
 
     // Boot-time MAC log: printed once so a user with `sf monitor` open at power-on
-    // sees it without a separate command. Label = lower 4 hex digits (bytes[4..5]),
-    // the same tail already used for the SoftAP SSID ("StampFly-XXYY") — for
-    // printing on a physical label (pairing-methods-plan.md §4.1, §6 item 5).
+    // sees it without a separate command. Label = lower 4 hex digits (bytes[4..5])
+    // of the STA MAC — the address ESP-NOW transmits from, i.e. what the
+    // controller lists during pairing — for printing on a physical label
+    // (pairing-methods-plan.md §4.1, §6 item 5). NOTE: the SoftAP SSID
+    // ("StampFly-XXYY", see startSoftAp) is derived from the SoftAP MAC, which
+    // ESP32 defines as STA MAC + 1 in the last byte, so its tail differs by one.
     // 起動時 MAC ログ: `sf monitor` を開いたまま電源投入したユーザーが別コマンド無しで
-    // 見えるよう1行出す。ラベル＝下位4桁（bytes[4..5]）、SoftAP SSID（"StampFly-XXYY"）
-    // で既に使っている末尾と同じ（機体ラベルへの印字用、pairing-methods-plan.md §4.1・
-    // §6 の5）。
+    // 見えるよう1行出す。ラベル＝STA 側 MAC の下位4桁（bytes[4..5]）。ESP-NOW の送信元
+    // ＝コントローラの候補一覧に出る値であり、機体ラベルへの印字用
+    // （pairing-methods-plan.md §4.1・§6 の5）。注意: SoftAP SSID（"StampFly-XXYY"、
+    // startSoftAp 参照）は SoftAP 側 MAC から作られ、ESP32 の仕様で末尾 1 バイトが
+    // STA 側 + 1 になるため、末尾がラベルと 1 だけ違う。
     ESP_LOGI(TAG, "Own MAC: %02X:%02X:%02X:%02X:%02X:%02X  Label: %02X%02X",
              own_mac_[0], own_mac_[1], own_mac_[2], own_mac_[3], own_mac_[4], own_mac_[5],
              own_mac_[4], own_mac_[5]);

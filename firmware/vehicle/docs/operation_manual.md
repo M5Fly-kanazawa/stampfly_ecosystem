@@ -235,10 +235,16 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 > mac
 MAC: XX:XX:XX:XX:XX:XX
 Label: XXYY
+SoftAP SSID: StampFly-XXZZ (SoftAP MAC = STA MAC + 1)
 ```
 
 起動時のログにも `Own MAC: .. Label: XXYY` の1行が毎回出力される（モニタを開いたまま電源を
 入れれば確認できる）。
+
+**注意（ESP32 の仕様）:** ラベルはステーション側 MAC（ESP-NOW の送信元。コントローラの一覧に出る値）
+の下4桁である。SoftAP の SSID `StampFly-XXZZ` は SoftAP 側 MAC から作られ、ESP32 は SoftAP 側 MAC を
+「ステーション側 MAC の末尾 + 1」と定めているため、SSID の末尾はラベルと 1 だけ違う。ラベルには
+`mac` コマンドの `Label:` の値を使い、SSID の末尾を写さないこと。
 
 ### 再ペアリング / 解除
 
@@ -492,10 +498,16 @@ CLI `mac` command (connect with `sf monitor`):
 > mac
 MAC: XX:XX:XX:XX:XX:XX
 Label: XXYY
+SoftAP SSID: StampFly-XXZZ (SoftAP MAC = STA MAC + 1)
 ```
 
 The boot log also prints one `Own MAC: .. Label: XXYY` line every time (visible if the monitor is
 already open when power is applied).
+
+**Note (ESP32 behaviour):** the label is the last 4 hex digits of the *station* MAC (the ESP-NOW
+source address, i.e. what the controller lists). The SoftAP SSID `StampFly-XXZZ` is derived from the
+SoftAP MAC, which ESP32 defines as the station MAC + 1 in the last byte, so the SSID tail differs
+from the label by one. Use the `Label:` value printed by `mac`, never the SSID tail.
 
 **Re-pair / clear**: on-board button long-press 3 s (on the ground), or CLI `unpair`. `pair status`
 shows this vehicle's own MAC/label, the PairingState, the bound MAC, and the rejected-packet count:
