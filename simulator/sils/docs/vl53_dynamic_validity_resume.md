@@ -1,5 +1,9 @@
 # VL53 動的 valid 性 → 空中ホバー 再開ノート
 
+> **2026-09-11: 本文中の `trajectory.csv` は、標準フライトログ形式「StampFly フライトログ一式」
+> （`.sflog.zip`）に置き換えられた。詳細は `docs/plans/flight-log-format-plan.md` を参照。
+> 以下は当時の調査記録であり、書き換えていない。**
+
 > 自己完結の再開メモ。空コンテキストの新セッションでも、このファイルだけで続行できる。
 > Self-contained resume note.
 

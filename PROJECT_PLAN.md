@@ -224,6 +224,10 @@ protocol/
 - spec/
   - 機械可読なプロトコル仕様（YAML, proto 等）
   - エコシステム全体の中心
+  - `flight_log.yaml`: 標準フライトログ形式「StampFly フライトログ一式」（拡張子
+    `.sflog.zip`。1 回の飛行・実行のセンサ信号をまとめた zip 形式のログファイル）の
+    ストリーム名・列名・単位・レートの正本。実機（`sf log wifi`）と SILS（`sf sils
+    scenario` 等）が同一形式で書き出す
 
 - generated/
   - 仕様から生成されたコード
@@ -232,6 +236,9 @@ protocol/
 - tools/
   - 仕様検証、コード生成
   - CI での整合性チェック
+  - `gen_flight_log.py`: `flight_log.yaml` から `lib/sflog/schema.py`（列定数を持つ
+    Python パッケージ）と `docs/reference/flight-log-format.md`（列表の参照文書）を
+    生成する。`--check` で生成物の鮮度を検査
 
 ---
 

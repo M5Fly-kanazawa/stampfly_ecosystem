@@ -19,18 +19,19 @@ L5 の P 制御で飛行し、WiFi テレメトリでデータを取得した後
 ### アルゴリズム概要
 
 `sf sysid fit` は既定（`--input auto`）で **間接閉ループ方式**
-（`--input indirect`）を使う。400Hz で記録される4モータの
-`motor_duty_FR/RR/RL/FL` 列から短タップの FIR 回帰で瞬時比例ゲイン相当
+（`--input indirect`）を使う。一式の `motor.csv` に 400Hz で記録される4モータの
+`duty_FR/RR/RL/FL` 列から短タップの FIR 回帰で瞬時比例ゲイン相当
 （$K_p$）を自動推定し、その $K_p$ で target→gyro の閉ループ伝達関数
 そのものを直接フィットする。$K_p$ の値を知る必要も `--kp` を指定する
 必要もない（duty 列は「$u(t)$ を直接復元する」旧来の使い方ではなく、
 $K_p$ を自動推定するための材料として使われる）:
 
 ```
-Data Stream に記録されるデータ（sf log wifi -o *.csv）:
-  motor_duty_FR/RR/RL/FL  : 4モータ duty [0,1]（400Hz、Kp自動推定に使用）
-  rate_ref_roll/pitch/yaw : 角速度目標 [rad/s]（target、閉ループの入力）
-  gyro_x                   : ロール角速度実測 [rad/s]（閉ループの出力）
+一式（.sflog.zip: sf log wifi が書く、信号ごとのCSVとmeta.json/schema.jsonをzipにまとめた
+StampFlyフライトログv1一式）に記録されるデータ:
+  motor.csv の duty_FR/RR/RL/FL  : 4モータ duty [0,1]（400Hz、Kp自動推定に使用）
+  rate_ref.csv の rate_ref_roll/pitch/yaw : 角速度目標 [rad/s]（target、閉ループの入力）
+  imu.csv の gyro_x               : ロール角速度実測 [rad/s]（閉ループの出力）
 
 間接閉ループ同定（既定、--kp 不要）:
   1. duty 列から短タップ FIR 回帰で Kp を自動推定
@@ -93,7 +94,7 @@ K ほど頑健には決まらない — 詳細は下の重要事項を参照）�
 
 ### ステップ 2: フライト & データ取得
 
-1. PC でテレメトリ受信を開始（`.csv` を指定するとマージ済み Data Stream CSV を直接保存）: `sf log wifi -o flight.csv`
+1. PC でテレメトリ受信を開始（既定で一式 `.sflog.zip` として保存される）: `sf log wifi -d 30`
 2. ARM → ホバリング → スティック操作でロール・ピッチ・ヨー入力
 3. **フライト全体を通じて、各軸のスティックを大きめの振幅で連続的に、
    ランダムっぽく動かし続けること。** 一定方向に持ち続ける時間を作らない
@@ -102,27 +103,50 @@ K ほど頑健には決まらない — 詳細は下の重要事項を参照）�
    励振不足として区間を除外し、同定に失敗する）
 4. 着陸 → DISARM
 
-`flight.csv` には `timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/yaw, total_thrust` 等が1周期1行で入る（拡張子を `.jsonl` にすると従来通りセンサ種別ごとの JSON Lines で保存され、`sf sysid fit` の入力には使えない）。
+保存先は既定で `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip`。取得直後に `sf log check` が
+自動実行され、電文の解析エラーがあればその場で報告される。中身を1枚の表として見たい場合は
+`sf log convert logs/flight_<日時>.sflog.zip --aligned` で派生の整列 CSV（`timestamp_us`,
+`gyro_x/y/z`, `rate_ref_roll/pitch/yaw`, `duty_FR/RR/RL/FL` 等が1周期1行）を作れるが、
+`sf sysid fit` 自身はこの変換を内部で行うため、通常は一式をそのまま渡せばよい。
 
 ### ステップ 3: 同定
 
+`--mixer` の既定値 `legacy`（`ws_internal.hpp` の線形Xクアッドミキサー）は本レッスンの
+`firmware/workshop` ファームに対応するため、明示指定は不要。
+
+全軸を同定する（既定で間接閉ループ方式が自動選択される。`--kp` も不要）:
+
 ```bash
-# 全軸を同定（既定で間接閉ループ方式が自動選択される。--kp も不要）
-sf sysid fit flight.csv --plot
-
-# 特定軸のみ
-sf sysid fit flight.csv --axis roll --plot
-
-# 結果を YAML に保存
-sf sysid fit flight.csv -o my_plant.yaml
-
-# 既知の Kp を明示指定したい場合（FIR自動推定をスキップしてそのKpを使う）
-sf sysid fit flight.csv --kp 0.5 --plot
-
-# 400Hz duty 列の無い旧ログなど、間接方式が使えない場合の直接fit
-# （比較・デバッグ用。--mixer が正しいログにのみ有効）
-sf sysid fit flight.csv --input kp --kp 0.5 --plot
+sf sysid fit logs/flight_20260911T121243.sflog.zip --plot
 ```
+
+特定軸のみ同定する:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --axis roll --plot
+```
+
+結果を YAML に保存する:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip -o my_plant.yaml
+```
+
+既知の Kp を明示指定したい場合（FIR自動推定をスキップしてそのKpを使う）:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --kp 0.5 --plot
+```
+
+400Hz duty 列の無い旧ログなど、間接方式が使えない場合の直接fit（比較・デバッグ用。`--mixer`
+が正しいログにのみ有効）:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --input kp --kp 0.5 --plot
+```
+
+取得した一式は `sf log viz logs/flight_20260911T121243.sflog.zip` で可視化できる
+（`docs/guides/flight-log-viz.md` 参照）。
 
 ### ステップ 4: L6 理論値と比較
 
@@ -181,18 +205,19 @@ Fly with L5's P controller, capture WiFi telemetry, then run `sf sysid fit` for 
 
 By default (`--input auto`), `sf sysid fit` uses the **indirect
 closed-loop method** (`--input indirect`). It auto-estimates the
-instantaneous proportional gain ($K_p$) from the 400Hz
-`motor_duty_FR/RR/RL/FL` columns via a short-tap FIR regression, then
+instantaneous proportional gain ($K_p$) from the bundle's 400Hz
+`motor.csv` `duty_FR/RR/RL/FL` columns via a short-tap FIR regression, then
 fits the closed-loop target->gyro transfer function directly using that
 $K_p$. There is no need to know $K_p$, or to pass `--kp` (the duty
 columns aren't used the old way, to reconstruct $u(t)$ directly -- they're
 just the material the FIR regression uses to estimate $K_p$):
 
 ```
-Data Stream columns (sf log wifi -o *.csv):
-  motor_duty_FR/RR/RL/FL  : 4 motor duties [0,1] (400Hz, feeds Kp auto-estimate)
-  rate_ref_roll/pitch/yaw : rate target [rad/s] (target, the closed-loop input)
-  gyro_x                   : measured roll rate [rad/s] (the closed-loop output)
+Bundle columns (.sflog.zip -- a StampFly flight-log v1 bundle, one CSV
+per signal plus meta.json/schema.json, written by sf log wifi):
+  motor.csv: duty_FR/RR/RL/FL  : 4 motor duties [0,1] (400Hz, feeds Kp auto-estimate)
+  rate_ref.csv: rate_ref_roll/pitch/yaw : rate target [rad/s] (target, the closed-loop input)
+  imu.csv: gyro_x               : measured roll rate [rad/s] (the closed-loop output)
 
 Indirect closed-loop identification (default, no --kp needed):
   1. Auto-estimate Kp from the duty columns via a short-tap FIR regression
@@ -261,7 +286,7 @@ assumption about the feedback law.
 
 ### Step 2: Flight & Data Capture
 
-1. Start telemetry on PC (a `.csv` extension saves the merged Data Stream CSV directly): `sf log wifi -o flight.csv`
+1. Start telemetry on PC (saved by default as a bundle, `.sflog.zip`): `sf log wifi -d 30`
 2. ARM → hover → apply roll/pitch/yaw stick inputs
 3. **Keep moving each axis's stick continuously, with large amplitude, in a
    quasi-random pattern throughout the whole flight.** Never hold one
@@ -271,29 +296,51 @@ assumption about the feedback law.
    `rate_ref`'s standard deviation is below 10% of `rate_max`)
 4. Land → DISARM
 
-`flight.csv` has one row per control cycle with `timestamp_us, gyro_x/y/z, rate_ref_roll/pitch/yaw, total_thrust`, etc. (a `.jsonl` extension instead saves the legacy per-sample JSON Lines format, which `sf sysid fit` cannot read).
+The default save path is `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip`. Right after capture,
+`sf log check` runs automatically and reports any wire-format parse error immediately. To view
+the contents as one table, `sf log convert logs/flight_<timestamp>.sflog.zip --aligned` builds a
+derived aligned CSV (`timestamp_us`, `gyro_x/y/z`, `rate_ref_roll/pitch/yaw`,
+`duty_FR/RR/RL/FL`, etc., one row per control cycle) -- but `sf sysid fit` itself does this
+alignment internally, so normally the bundle can just be passed as-is.
 
 ### Step 3: Identification
 
+`--mixer`'s default, `legacy` (the linear X-quad mixer in `ws_internal.hpp`), already matches
+this lesson's `firmware/workshop` firmware, so no explicit override is needed.
+
+Identify all axes (indirect closed-loop method is auto-selected by default -- no `--kp` needed):
+
 ```bash
-# Identify all axes (indirect closed-loop method is auto-selected by
-# default -- no --kp needed)
-sf sysid fit flight.csv --plot
-
-# Single axis only
-sf sysid fit flight.csv --axis roll --plot
-
-# Save results to YAML
-sf sysid fit flight.csv -o my_plant.yaml
-
-# Pass a known Kp explicitly to skip the FIR auto-estimate and use that Kp
-sf sysid fit flight.csv --kp 0.5 --plot
-
-# Direct fit for logs without the 400Hz duty columns, or wherever the
-# indirect method isn't usable (comparison/debugging; --mixer must be
-# correct for the log)
-sf sysid fit flight.csv --input kp --kp 0.5 --plot
+sf sysid fit logs/flight_20260911T121243.sflog.zip --plot
 ```
+
+Single axis only:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --axis roll --plot
+```
+
+Save results to YAML:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip -o my_plant.yaml
+```
+
+Pass a known Kp explicitly to skip the FIR auto-estimate and use that Kp:
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --kp 0.5 --plot
+```
+
+Direct fit for logs without the 400Hz duty columns, or wherever the indirect method isn't usable
+(comparison/debugging; `--mixer` must be correct for the log):
+
+```bash
+sf sysid fit logs/flight_20260911T121243.sflog.zip --input kp --kp 0.5 --plot
+```
+
+The captured bundle can be visualized with `sf log viz logs/flight_20260911T121243.sflog.zip`
+(see `docs/guides/flight-log-viz.md`).
 
 ### Step 4: Compare with L6 Theory
 

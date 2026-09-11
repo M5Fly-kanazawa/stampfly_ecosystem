@@ -17,7 +17,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | ファイル | 役割 | 中身 |
 |---------|------|------|
 | `<name>.scn` | 入力の台本 — 「いつ・何を機体に与えるか」 | スティック値・API コマンド・風・故障などのイベントを時刻順に並べた行 |
-| `<name>.expect` | 合否判定 — 「何をもって合格とするか」 | ログ文字列の有無・順序・終了コード・trajectory.csv 由来の数値しきい値 |
+| `<name>.expect` | 合否判定 — 「何をもって合格とするか」 | ログ文字列の有無・順序・終了コード・実行結果のフライトログ一式（`.sflog.zip`。1回の実行の信号をまとめた zip 形式のログファイル。仕様の正本は `protocol/spec/flight_log.yaml`）由来の数値しきい値 |
 
 どちらも UTF-8 のプレーンテキストで、`simulator/sils/scenarios/` に同名（拡張子違い）で並べて置く。`.expect` が無い場合は「入力が実際に注入されたか」と「終了コードが 0 か」だけで合否が決まる（後述）。
 
@@ -102,7 +102,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `log_contains <out\|err\|any> "<text>"` | 例: `log_contains any "ARM accepted"` | 標準出力/標準エラー/両方のいずれかに文字列が含まれるか |
 | `log_absent <out\|err\|any> "<text>"` | | 含まれ**ない**ことを確認（異常ログが出ていないことの確認等） |
 | `order "<a>" "<b>"` | | `a` の最初の出現位置が `b` の最初の出現位置より前にあるか（両方の標準出力+標準エラーの結合テキストで判定） |
-| `metric <name> <op> <value> [in <t0> <t1>]` | 例: `metric tilt_max < 18.0 in 7.0 13.0` | `trajectory.csv` から計算した数値でのしきい値判定。`op` は `< <= > >=` の4種類のみ（`==`/`!=` は無い）。`in <t0> <t1>` を付けると窓（**秒単位**）でフェーズを絞れる。省略すると全区間 |
+| `metric <name> <op> <value> [in <t0> <t1>]` | 例: `metric tilt_max < 0.314 in 7.0 13.0`（≈18°） | 実行結果のフライトログ一式（`truth.csv` 等のストリーム）から計算した数値でのしきい値判定。`op` は `< <= > >=` の4種類のみ（`==`/`!=` は無い）。`in <t0> <t1>` を付けると窓（**秒単位**）でフェーズを絞れる。省略すると全区間 |
 | `skip <理由...>` | | この行を「合格扱いだが評価はしていない」として記録する（ハード依存の機能等で使う） |
 | `# コメント` | | 無視される |
 
@@ -110,7 +110,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 
 ### `metric` の名前一覧
 
-`trajectory.csv` の列（`t, px, py, pz, qw, qx, qy, qz, alt, roll, pitch, yawrate, yawcmd, alt_est, roll_est, pitch_est, m0, m1, m2, m3`）から計算される。**`roll`/`pitch` はここでは度 [deg] で入っている**（ラジアンではない）。
+実行結果のフライトログ一式（zip 形式のログファイル `<...>.sflog.zip`。中身は `sf log check` 等でも読めるパケット種別ごとの CSV）の中の `truth.csv`（シミュレータの物理真値: 位置・姿勢クォータニオン・速度・角速度）、`attitude.csv`／`posvel.csv`（ファーム推定値）、`motor.csv`（モータ duty）の各ストリームから計算される。**角度系の値（`roll_rmse`/`pitch_rmse`/`att_rmse`/`tilt_max`/`yaw_band`）は SI 単位のラジアンで扱う**（`protocol/spec/flight_log.yaml` 準拠。度ではない）。姿勢はクォータニオン列 `quat_w/x/y/z` で記録されており、ロール・ピッチ・ヨー角へは内部でオイラー角変換してから算出する。`sf sils scenario` のコンソール出力には、ラジアン値に加えて読みやすさのための `(x deg)` 換算値も添えられる。
 
 | 名前 | 単位 | 意味 |
 |------|------|------|
@@ -118,20 +118,20 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `alt_min` | m | 窓内の高度最小値 |
 | `alt_max` | m | 窓内の高度最大値 |
 | `alt_band` | m | 窓内の高度の最大−最小（ピークtoピーク、高度保持の変動幅） |
-| `alt_rmse` | m | 推定高度 `alt_est` と真値 `alt` の二乗平均平方根誤差 |
-| `roll_rmse` | deg | 推定ロール `roll_est` と真値 `roll` の RMSE |
-| `pitch_rmse` | deg | 推定ピッチ `pitch_est` と真値 `pitch` の RMSE |
-| `att_rmse` | deg | roll_rmse と pitch_rmse を合成した姿勢誤差の大きさ（`hypot`） |
-| `tilt_max` | deg | 窓内の真値の傾き `hypot(roll, pitch)` の最大値（転倒していないことの確認） |
-| `yaw_band` | deg | 窓内の真値方位（クォータニオンから算出、±180°の継ぎ目でアンラップ済み）のピークtoピーク |
+| `alt_rmse` | m | 推定高度（`posvel.csv`）と真値高度（`truth.csv`）の二乗平均平方根誤差 |
+| `roll_rmse` | rad | 推定ロール（`attitude.csv`）と真値ロール（`truth.csv`）の RMSE |
+| `pitch_rmse` | rad | 推定ピッチ（`attitude.csv`）と真値ピッチ（`truth.csv`）の RMSE |
+| `att_rmse` | rad | roll_rmse と pitch_rmse を合成した姿勢誤差の大きさ（`hypot`） |
+| `tilt_max` | rad | 窓内の真値の傾き `hypot(roll, pitch)` の最大値（転倒していないことの確認） |
+| `yaw_band` | rad | 窓内の真値方位（クォータニオンから算出、±180°の継ぎ目でアンラップ済み）のピークtoピーク |
 | `duty_max` | 比（0〜1） | 窓内の4モータ duty の最大値（飽和していないことの確認） |
 | `horizontal_drift_max` | m | 窓の**開始時点**からの水平面内の最大距離（位置保持の逸脱量） |
 
-未知の名前・`trajectory.csv` が無い・窓内にデータが無い、のいずれかでは判定不能扱いで **FAIL** になる（`None` を返し、しきい値比較をしない）。
+未知の名前・フライトログ一式に対象ストリームが無い・窓内にデータが無い、のいずれかでは判定不能扱いで **FAIL** になる（`None` を返し、しきい値比較をしない）。
 
 ### 決定論性への依拠
 
-`.scn`/`.expect` の判定は「同じ入力なら出力が完全に一致する（バイト同一）」という SILS の決定論性の上に成り立っている。ログ文字列の有無・出現順序も、trajectory.csv の数値も、乱数ノイズを混ぜない限り（`--noise off` が既定）毎回同一になるので、しきい値をゆるく持たせる必要はない（既存シナリオのしきい値は「実測値＋わずかな余裕」で決めてある。後述の手順4で同じやり方をする）。
+`.scn`/`.expect` の判定は「同じ入力なら出力が完全に一致する（バイト同一）」という SILS の決定論性の上に成り立っている。ログ文字列の有無・出現順序も、フライトログ一式の数値も、乱数ノイズを混ぜない限り（`--noise off` が既定）毎回同一になるので、しきい値をゆるく持たせる必要はない（既存シナリオのしきい値は「実測値＋わずかな余裕」で決めてある。後述の手順4で同じやり方をする）。
 
 ## 4. 手順の実例 — ロールステップ応答の行き過ぎと整定を見る
 
@@ -163,7 +163,7 @@ STABILIZE モード（自己水平化。姿勢角に追従するモードで、�
 - F〜G: ARM ボタンを離して再度押す＝トグルで DISARM
 - H: DISARM 後の落下・接地を見送る
 
-`thr` の raw 値（3243=離陸バースト、3176=ほぼホバー）は `stab_flight.scn` から流用した実測値。自分のプロジェクトで別のモータ・機体設定を使う場合は、まず `rc` をスティック中央のまま数秒保持するシナリオを走らせ、`trajectory.csv` の `alt` が概ね一定に留まる `thr` を実測してから合わせ込むこと（「まず走らせて実測してから」は手順(4)でも繰り返す）。
+`thr` の raw 値（3243=離陸バースト、3176=ほぼホバー）は `stab_flight.scn` から流用した実測値。自分のプロジェクトで別のモータ・機体設定を使う場合は、まず `rc` をスティック中央のまま数秒保持するシナリオを走らせ、フライトログ一式の `truth.csv` の高度（NED座標の `pos_z` を反転した値）が概ね一定に留まる `thr` を実測してから合わせ込むこと（「まず走らせて実測してから」は手順(4)でも繰り返す）。
 
 ### (2) 走らせて出力を見る
 
@@ -182,7 +182,7 @@ sf sils scenario simulator/sils/scenarios/my_roll_step.scn --target vehicle
 [OK] bundle: simulator/sils/viz/out_scn_my_roll_step
 ```
 
-結果一式（コンソールログ・`trajectory.csv`・`events.jsonl`）は `simulator/sils/viz/out_scn_my_roll_step/` に書き出される。`trajectory.csv` を見ると、D イベント（scn上の絶対時刻 6500ms=6.5s）の直後から `roll` 列が立ち上がり、指令の+8°を行き過ぎて **約11.1°まで達してから**戻り、E で中央に戻した後は **±4〜5°の残留偏差を残したまま** DISARM（scn上9200〜9400ms=9.2〜9.4s）を迎える、という実測が確認できた（`roll`/`pitch` 列は度単位で入っている）。
+結果一式（コンソールログ・フライトログ一式 `sils_my_roll_step_<YYYYMMDD>T<HHMMSS>.sflog.zip`・`events.jsonl`）は `simulator/sils/viz/out_scn_my_roll_step/` に書き出される。一式内の `truth.csv`（姿勢はクォータニオン `quat_w/x/y/z` で記録、ロール角へはオイラー角変換して求める）を見ると、D イベント（scn上の絶対時刻 6500ms=6.5s）の直後からロール角が立ち上がり、指令の+8°（≈0.140 rad）を行き過ぎて **約0.194 rad（≈11.1°）まで達してから**戻り、E で中央に戻した後は **約0.078 rad（≈4〜5°）の残留偏差を残したまま** DISARM（scn上9200〜9400ms=9.2〜9.4s）を迎える、という実測が確認できた（`tilt_max`/`roll_rmse` 等の角度系メトリクスは SI 単位のラジアンで扱う）。
 
 ### (3) `my_roll_step.expect` を書く
 
@@ -197,13 +197,13 @@ log_contains any "DISARM accepted"
 order "ARM accepted" "Takeoff detected"
 order "Takeoff detected" "Takeoff complete"
 order "Takeoff complete" "DISARM accepted"
-metric tilt_max > 8.0  in 6.5 7.5     # ステップ窓: 指令8度を行き過ぎていること
-metric tilt_max < 20.0 in 6.5 7.5     # ただし有界（転倒していない）
-metric tilt_max < 6.0  in 8.7 9.0     # DISARM直前には数度まで整定していること
-metric duty_max  < 0.90 in 6.5 9.0    # モータ飽和なし
+metric tilt_max > 0.140 in 6.5 7.5     # ステップ窓: 指令8度(≈0.140rad)を行き過ぎていること
+metric tilt_max < 0.349 in 6.5 7.5     # ただし有界（転倒していない、≈20°）
+metric tilt_max < 0.105 in 8.7 9.0     # DISARM直前には数度まで整定していること（≈6°）
+metric duty_max  < 0.90 in 6.5 9.0     # モータ飽和なし
 ```
 
-`in` の窓は**秒単位**であることに注意（`.scn` 側の時刻はミリ秒だが、こちらは秒）。D イベントは scn 上 6500〜7500ms なので `in 6.5 7.5`、E の終盤（DISARM 直前）は 8700〜9000ms 相当なので `in 8.7 9.0` とした。
+`tilt_max` はラジアン単位のしきい値であること（`protocol/spec/flight_log.yaml` 準拠、コンソール出力には `(x deg)` の換算値が添えられる）に注意。`in` の窓は**秒単位**であることに注意（`.scn` 側の時刻はミリ秒だが、こちらは秒）。D イベントは scn 上 6500〜7500ms なので `in 6.5 7.5`、E の終盤（DISARM 直前）は 8700〜9000ms 相当なので `in 8.7 9.0` とした。
 
 ### (4) 再実行して PASS を確認する
 
@@ -224,9 +224,9 @@ sf sils scenario simulator/sils/scenarios/my_roll_step.scn --target vehicle
   [PASS] order 'ARM accepted' before 'Takeoff detected'  (idx_a=10577 idx_b=10860)
   [PASS] order 'Takeoff detected' before 'Takeoff complete'  (idx_a=10860 idx_b=11074)
   [PASS] order 'Takeoff complete' before 'DISARM accepted'  (idx_a=11074 idx_b=11181)
-  [PASS] metric tilt_max > 8.0 in [6.5,7.5]  (tilt_max=11.1378)
-  [PASS] metric tilt_max < 20.0 in [6.5,7.5]  (tilt_max=11.1378)
-  [PASS] metric tilt_max < 6.0 in [8.7,9.0]  (tilt_max=4.4938)
+  [PASS] metric tilt_max > 0.14 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
+  [PASS] metric tilt_max < 0.349 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
+  [PASS] metric tilt_max < 0.105 in [8.7,9.0]  (tilt_max=0.0784 (4.49 deg))
   [PASS] metric duty_max < 0.9 in [6.5,9.0]  (duty_max=0.7098)
 [OK] bundle: simulator/sils/viz/out_scn_my_roll_step
 ```
@@ -235,17 +235,17 @@ sf sils scenario simulator/sils/scenarios/my_roll_step.scn --target vehicle
 
 ### (5) FAIL したときの見方
 
-しきい値をきつくしすぎた例として、`tilt_max < 5.0 in 6.5 7.5`（実測11.1度に対して明らかに厳しすぎる）だけを書いた `.expect` で走らせると:
+しきい値をきつくしすぎた例として、`tilt_max < 0.087 in 6.5 7.5`（≈5°。実測11.1°に対して明らかに厳しすぎる）だけを書いた `.expect` で走らせると:
 
 ```
 [ERROR] scenario FAILED — see .../console.log
 [INFO] scenario my_roll_step.scn: FAIL (exit 0, 3 checks, events=events.jsonl)
   [PASS] input injected (events.jsonl non-empty)  (38441 bytes)
   [PASS] exit == 0  (got 0)
-  [FAIL] metric tilt_max < 5.0 in [6.5,7.5]  (tilt_max=11.1378)
+  [FAIL] metric tilt_max < 0.087 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
 ```
 
-のように `[FAIL]` 行に**実測値**（`tilt_max=11.1378`）が添えられるので、しきい値をどちらへどれだけ動かせばよいかがそのまま読める。終了コードは PASS/FAIL に関わらず 0（ここでは `exit 0` が別途 PASS）だが、`sf sils scenario` コマンド自体の終了コードは **FAIL のとき 2** になる（CI 等でそのまま使える）。
+のように `[FAIL]` 行に**実測値**（`tilt_max=0.1944`、括弧内は deg 換算）が添えられるので、しきい値をどちらへどれだけ動かせばよいかがそのまま読める。終了コードは PASS/FAIL に関わらず 0（ここでは `exit 0` が別途 PASS）だが、`sf sils scenario` コマンド自体の終了コードは **FAIL のとき 2** になる（CI 等でそのまま使える）。
 
 しきい値の決め方の基本は「まず `.expect` 無し、または緩い値で1回走らせて実測値を見てから、実測に余裕（マージン）を持たせて確定する」— 期待値を先に決め打ちしてから帳尻を合わせない。
 
@@ -264,7 +264,7 @@ GUI 上で「保存せずに編集中のイベント列のまま実行」した�
 | 絶対時刻が直前イベントの終了時刻より前 | パースエラーで起動しない（`event starts before the previous one ends`）。基本は `+` を使い、絶対時刻は本当に必要なときだけにする |
 | `rc` の `alt`/`acro`/`pos` を、`hold_ms`/`rate_hz` を省略したまま指定しようとする | 位置引数なので届かない（`alt` は6番目のトークン）。フラグを立てたい行は `hold_ms`・`rate_hz` まで含めて完全な形で書く |
 | `rc`/`rc_ramp`/`fault`/`bias`/`wind` の引数の並びを間違える（例: `roll`と`pitch`を逆に置く） | パーサはトークンの型（数値かどうか）しかチェックしないので、数値として妥当なら黙って通り、意図と違う軸が動く。ヘッダコメントの列見出し（`#  <t>  ch  <thr> <roll> <pitch> <yaw> ...`）と付き合わせて書く |
-| `.expect` の `metric ... in <t0> <t1>` の単位を `.scn` と同じミリ秒だと思い込む | `.scn` の時刻は**ミリ秒**、`.expect` の `in` の窓は**秒**。6500ms のつもりで `in 6500 7500` と書くと、trajectory.csv の `t` 列（秒）と単位が合わず範囲外＝空窓で FAIL になる |
+| `.expect` の `metric ... in <t0> <t1>` の単位を `.scn` と同じミリ秒だと思い込む | `.scn` の時刻は**ミリ秒**、`.expect` の `in` の窓は**秒**。6500ms のつもりで `in 6500 7500` と書くと、フライトログ一式の `timestamp_us` 列（マイクロ秒の絶対仮想クロック。`in` の秒数を ×1e6 して照合）と単位が合わず範囲外＝空窓で FAIL になる |
 | `.expect` の文字列アサーションで引用符を書き忘れる、または閉じ忘れる | `log_contains`/`log_absent`/`order` の引数はクォート付き文字列が前提（`shlex` で分割）。閉じ忘れると `ValueError` になり `bad assertion` として FAIL する |
 | `metric` の名前を綴り間違える（例: `tiltmax`、`Alt_Mean` の大文字化） | 名前は完全一致・大文字小文字を区別。一致しないと「未知のメトリクス」扱いで `None` が返り、常に FAIL する |
 | `xfail:` 行を先頭以外（他のアサーションの後など）に書く | `_read_xfail` はファイル中で最初に現れる非空・非コメント行だけを見るので、そこが `xfail:` でなければ既知失敗マーカーとして認識され**ない**。一方で `_eval_expect` 側は `xfail:` で始まる行を見つけるたびにアサーションとしての評価をスキップするので、「エラーにはならないが `sf sils regression` の KNOWN-FAIL 集計にも乗らない」という気づきにくい状態になる。`xfail:` は必ずファイルの一番上（コメント行より後でもよいが、他のアサーション行より前）に置く |
@@ -283,7 +283,7 @@ In the SILS (Software-in-the-Loop — running the unmodified vehicle firmware in
 | File | Role | Content |
 |------|------|---------|
 | `<name>.scn` | Input script — "what to feed the vehicle, and when" | Timed events (stick values, API commands, wind, faults, …) |
-| `<name>.expect` | Pass/fail assertions — "what counts as passing" | Log-string presence/order, exit code, and numeric thresholds from `trajectory.csv` |
+| `<name>.expect` | Pass/fail assertions — "what counts as passing" | Log-string presence/order, exit code, and numeric thresholds from the run's flight-log bundle (`.sflog.zip` — a zip-format log file bundling one run's signals; authoritative spec `protocol/spec/flight_log.yaml`) |
 
 Both are UTF-8 plain text, kept as a matching pair (same stem, different extension) under `simulator/sils/scenarios/`. Without an `.expect` file, the verdict is only "was input actually injected" plus "did the process exit 0" (see below).
 
@@ -368,7 +368,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 | `log_contains <out\|err\|any> "<text>"` | e.g. `log_contains any "ARM accepted"` | The named stream (stdout / stderr / both) contains the text |
 | `log_absent <out\|err\|any> "<text>"` | | The text is **not** present (e.g. confirming no error was logged) |
 | `order "<a>" "<b>"` | | `a`'s first occurrence precedes `b`'s first occurrence (checked against the merged stdout+stderr text) |
-| `metric <name> <op> <value> [in <t0> <t1>]` | e.g. `metric tilt_max < 18.0 in 7.0 13.0` | Numeric threshold on a value computed from `trajectory.csv`. `op` is one of `< <= > >=` only (no `==`/`!=`). Optional `in <t0> <t1>` restricts to a window in **seconds**; omitted = the whole run |
+| `metric <name> <op> <value> [in <t0> <t1>]` | e.g. `metric tilt_max < 0.314 in 7.0 13.0` (≈18°) | Numeric threshold on a value computed from the run's flight-log bundle (streams such as `truth.csv`). `op` is one of `< <= > >=` only (no `==`/`!=`). Optional `in <t0> <t1>` restricts to a window in **seconds**; omitted = the whole run |
 | `skip <reason...>` | | Records the line as passing but not actually evaluated (for hardware-gated checks) |
 | `# comment` | | Ignored |
 
@@ -376,7 +376,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 
 ### Metric names
 
-Computed from `trajectory.csv`'s columns (`t, px, py, pz, qw, qx, qy, qz, alt, roll, pitch, yawrate, yawcmd, alt_est, roll_est, pitch_est, m0, m1, m2, m3`). **`roll`/`pitch` are already in degrees** here (not radians).
+Computed from the streams inside the run's flight-log bundle (the zip-format log file `<...>.sflog.zip`; the same packet-type CSVs also readable with `sf log check` etc.): `truth.csv` (the simulator's physical ground truth — position, attitude quaternion, velocity, angular rate), `attitude.csv`/`posvel.csv` (firmware estimates), and `motor.csv` (motor duty). **The angular values (`roll_rmse`/`pitch_rmse`/`att_rmse`/`tilt_max`/`yaw_band`) are in SI radians** here (per `protocol/spec/flight_log.yaml`, not degrees). Attitude is stored as the quaternion columns `quat_w/x/y/z` and converted to Euler roll/pitch/yaw internally before these metrics are computed. `sf sils scenario`'s console output appends a `(x deg)` conversion alongside the radian value for readability.
 
 | Name | Unit | Meaning |
 |------|------|---------|
@@ -384,20 +384,20 @@ Computed from `trajectory.csv`'s columns (`t, px, py, pz, qw, qx, qy, qz, alt, r
 | `alt_min` | m | min altitude over the window |
 | `alt_max` | m | max altitude over the window |
 | `alt_band` | m | peak-to-peak altitude (max − min) over the window |
-| `alt_rmse` | m | RMSE between estimated `alt_est` and truth `alt` |
-| `roll_rmse` | deg | RMSE between estimated `roll_est` and truth `roll` |
-| `pitch_rmse` | deg | RMSE between estimated `pitch_est` and truth `pitch` |
-| `att_rmse` | deg | combined attitude error magnitude (`hypot` of the two RMSEs above) |
-| `tilt_max` | deg | max true tilt magnitude `hypot(roll, pitch)` over the window (no-tumble check) |
-| `yaw_band` | deg | peak-to-peak true heading (from the truth quaternion, unwrapped across the ±180° seam) over the window |
+| `alt_rmse` | m | RMSE between the estimate (`posvel.csv`) and the truth altitude (`truth.csv`) |
+| `roll_rmse` | rad | RMSE between the estimate (`attitude.csv`) and the truth roll (`truth.csv`) |
+| `pitch_rmse` | rad | RMSE between the estimate (`attitude.csv`) and the truth pitch (`truth.csv`) |
+| `att_rmse` | rad | combined attitude error magnitude (`hypot` of the two RMSEs above) |
+| `tilt_max` | rad | max true tilt magnitude `hypot(roll, pitch)` over the window (no-tumble check) |
+| `yaw_band` | rad | peak-to-peak true heading (from the truth quaternion, unwrapped across the ±180° seam) over the window |
 | `duty_max` | ratio (0..1) | max of the four motors' duty over the window (saturation check) |
 | `horizontal_drift_max` | m | max planar distance from the window's **start** point |
 
-An unknown name, a missing `trajectory.csv`, or an empty window all resolve to "unjudgeable" and **FAIL** (the underlying function returns `None`, and no comparison is made).
+An unknown name, a bundle missing the needed stream, or an empty window all resolve to "unjudgeable" and **FAIL** (the underlying function returns `None`, and no comparison is made).
 
 ### Relying on determinism
 
-The whole `.scn`/`.expect` scheme rests on SILS's determinism: the same input yields byte-identical output every time. Log text/order and the trajectory.csv numbers are therefore exactly reproducible (as long as noise stays off, the default), so thresholds don't need slack for run-to-run variance — existing thresholds in this repo are set from "the measured value plus a small margin," the same method demonstrated in Step 4 below.
+The whole `.scn`/`.expect` scheme rests on SILS's determinism: the same input yields byte-identical output every time. Log text/order and the flight-log bundle's numbers are therefore exactly reproducible (as long as noise stays off, the default), so thresholds don't need slack for run-to-run variance — existing thresholds in this repo are set from "the measured value plus a small margin," the same method demonstrated in Step 4 below.
 
 ## 4. Worked example — roll step response, overshoot and settling
 
@@ -429,7 +429,7 @@ Based on `stab_flight.scn`'s (`simulator/sils/scenarios/`) ARM→takeoff→step 
 - F–G: release then press the ARM button = toggle DISARM
 - H: let it fall/settle after DISARM
 
-The `thr` raw values (3243 = climb burst, 3176 ≈ hover) are the measured values reused from `stab_flight.scn`. If you're using a different motor/airframe setup, first run a scenario that holds the sticks centred for a few seconds, measure the `thr` at which `trajectory.csv`'s `alt` stays roughly flat, and use that (the same "run it first, then measure" method repeats in step 4).
+The `thr` raw values (3243 = climb burst, 3176 ≈ hover) are the measured values reused from `stab_flight.scn`. If you're using a different motor/airframe setup, first run a scenario that holds the sticks centred for a few seconds, measure the `thr` at which the altitude in the flight-log bundle's `truth.csv` (NED, so altitude is `-pos_z`) stays roughly flat, and use that (the same "run it first, then measure" method repeats in step 4).
 
 ### (2) Run it and look at the output
 
@@ -448,7 +448,7 @@ With no `.expect` yet, the verdict is only injection + exit code (actual output)
 [OK] bundle: simulator/sils/viz/out_scn_my_roll_step
 ```
 
-The full result bundle (console log, `trajectory.csv`, `events.jsonl`) lands in `simulator/sils/viz/out_scn_my_roll_step/`. In `trajectory.csv`, the `roll` column starts rising right after event D (absolute scn time 6500 ms = 6.5 s), overshoots the commanded +8° up to **about 11.1°** before coming back, and after E returns the stick to centre it settles with a **residual offset of about ±4–5°** by the time DISARM fires (scn time 9200–9400 ms = 9.2–9.4 s). (`roll`/`pitch` columns are in degrees.)
+The full result bundle (console log, flight-log bundle `sils_my_roll_step_<YYYYMMDD>T<HHMMSS>.sflog.zip`, `events.jsonl`) lands in `simulator/sils/viz/out_scn_my_roll_step/`. In the bundle's `truth.csv` (attitude stored as the quaternion `quat_w/x/y/z`, converted to Euler roll here), the roll angle starts rising right after event D (absolute scn time 6500 ms = 6.5 s), overshoots the commanded +8° (≈0.140 rad) up to **about 0.194 rad (≈11.1°)** before coming back, and after E returns the stick to centre it settles with a **residual offset of about 0.078 rad (≈4–5°)** by the time DISARM fires (scn time 9200–9400 ms = 9.2–9.4 s). (Angular metrics such as `tilt_max`/`roll_rmse` are SI radians.)
 
 ### (3) Write `my_roll_step.expect`
 
@@ -463,13 +463,13 @@ log_contains any "DISARM accepted"
 order "ARM accepted" "Takeoff detected"
 order "Takeoff detected" "Takeoff complete"
 order "Takeoff complete" "DISARM accepted"
-metric tilt_max > 8.0  in 6.5 7.5     # step window: overshoots the commanded 8 deg
-metric tilt_max < 20.0 in 6.5 7.5     # but stays bounded (no tumble)
-metric tilt_max < 6.0  in 8.7 9.0     # settled to within a few degrees before DISARM
-metric duty_max  < 0.90 in 6.5 9.0    # motors not saturated
+metric tilt_max > 0.140 in 6.5 7.5     # step window: overshoots the commanded 8 deg (≈0.140 rad)
+metric tilt_max < 0.349 in 6.5 7.5     # but stays bounded (no tumble, ≈20 deg)
+metric tilt_max < 0.105 in 8.7 9.0     # settled to within a few degrees before DISARM (≈6 deg)
+metric duty_max  < 0.90 in 6.5 9.0     # motors not saturated
 ```
 
-Note that `in` windows are in **seconds** (the `.scn` timings are in milliseconds). Event D runs 6500–7500 ms on the scn timeline, hence `in 6.5 7.5`; the tail of E (just before DISARM) is around 8700–9000 ms, hence `in 8.7 9.0`.
+Note that `tilt_max` takes a threshold in radians (per `protocol/spec/flight_log.yaml`; the console output appends a `(x deg)` conversion). Also note that `in` windows are in **seconds** (the `.scn` timings are in milliseconds). Event D runs 6500–7500 ms on the scn timeline, hence `in 6.5 7.5`; the tail of E (just before DISARM) is around 8700–9000 ms, hence `in 8.7 9.0`.
 
 ### (4) Re-run and confirm PASS
 
@@ -490,9 +490,9 @@ Actual output obtained:
   [PASS] order 'ARM accepted' before 'Takeoff detected'  (idx_a=10577 idx_b=10860)
   [PASS] order 'Takeoff detected' before 'Takeoff complete'  (idx_a=10860 idx_b=11074)
   [PASS] order 'Takeoff complete' before 'DISARM accepted'  (idx_a=11074 idx_b=11181)
-  [PASS] metric tilt_max > 8.0 in [6.5,7.5]  (tilt_max=11.1378)
-  [PASS] metric tilt_max < 20.0 in [6.5,7.5]  (tilt_max=11.1378)
-  [PASS] metric tilt_max < 6.0 in [8.7,9.0]  (tilt_max=4.4938)
+  [PASS] metric tilt_max > 0.14 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
+  [PASS] metric tilt_max < 0.349 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
+  [PASS] metric tilt_max < 0.105 in [8.7,9.0]  (tilt_max=0.0784 (4.49 deg))
   [PASS] metric duty_max < 0.9 in [6.5,9.0]  (duty_max=0.7098)
 [OK] bundle: simulator/sils/viz/out_scn_my_roll_step
 ```
@@ -501,17 +501,17 @@ Add `--video` to render a review MP4 (MuJoCo 3D + state graphs) on PASS (`sf sil
 
 ### (5) Reading a FAIL
 
-As a demonstration, running with an `.expect` containing only an overly tight `tilt_max < 5.0 in 6.5 7.5` (clearly too strict against the measured 11.1°):
+As a demonstration, running with an `.expect` containing only an overly tight `tilt_max < 0.087 in 6.5 7.5` (≈5°, clearly too strict against the measured 11.1°):
 
 ```
 [ERROR] scenario FAILED — see .../console.log
 [INFO] scenario my_roll_step.scn: FAIL (exit 0, 3 checks, events=events.jsonl)
   [PASS] input injected (events.jsonl non-empty)  (38441 bytes)
   [PASS] exit == 0  (got 0)
-  [FAIL] metric tilt_max < 5.0 in [6.5,7.5]  (tilt_max=11.1378)
+  [FAIL] metric tilt_max < 0.087 in [6.5,7.5]  (tilt_max=0.1944 (11.14 deg))
 ```
 
-The `[FAIL]` line carries the **measured value** (`tilt_max=11.1378`), so you can see directly which way — and by how much — to move the threshold. The exit code of the process itself is 0 either way here (`exit 0` passed separately), but `sf sils scenario`'s own process exit code is **2 on FAIL** (usable directly in CI).
+The `[FAIL]` line carries the **measured value** (`tilt_max=0.1944`, with the deg conversion in parentheses), so you can see directly which way — and by how much — to move the threshold. The exit code of the process itself is 0 either way here (`exit 0` passed separately), but `sf sils scenario`'s own process exit code is **2 on FAIL** (usable directly in CI).
 
 The rule of thumb for setting thresholds: run once first (with no `.expect`, or a loose one) to see the measured value, THEN add margin and fix the threshold — never guess the expected value first and try to make the run match it.
 
@@ -530,7 +530,7 @@ Only mistakes confirmed by reading the code are listed.
 | An absolute time earlier than the previous event's end | Parse error, won't run (`event starts before the previous one ends`). Default to `+`; use absolute times only when you really need to |
 | Setting `rc`'s `alt`/`acro`/`pos` while omitting `hold_ms`/`rate_hz` | Doesn't reach them — they're positional (`alt` is the 6th token). Write the full form (through `hold_ms`/`rate_hz`) whenever you need a trailing flag |
 | Swapping argument order in `rc`/`rc_ramp`/`fault`/`bias`/`wind` (e.g. `roll` and `pitch` reversed) | The parser only checks that a token is numeric, so a swap silently passes and moves the wrong axis. Cross-check against the header comment's column labels (`#  <t>  ch  <thr> <roll> <pitch> <yaw> ...`) |
-| Assuming `.expect`'s `metric ... in <t0> <t1>` uses the same milliseconds as `.scn` | `.scn` times are **milliseconds**; `.expect`'s `in` window is **seconds**. Writing `in 6500 7500` meaning 6500 ms doesn't match `trajectory.csv`'s `t` column (seconds) — the window ends up empty and FAILs |
+| Assuming `.expect`'s `metric ... in <t0> <t1>` uses the same milliseconds as `.scn` | `.scn` times are **milliseconds**; `.expect`'s `in` window is **seconds**. Writing `in 6500 7500` meaning 6500 ms doesn't match the flight-log bundle's `timestamp_us` column (a microsecond absolute virtual clock — the `in` seconds are multiplied by 1e6 to compare) — the window ends up empty and FAILs |
 | Forgetting or mismatching quotes in `.expect` string assertions | `log_contains`/`log_absent`/`order` arguments must be quoted strings (parsed with `shlex`). An unterminated quote raises `ValueError`, recorded as a `bad assertion` FAIL |
 | Misspelling a `metric` name (e.g. `tiltmax`, or capitalizing `Alt_Mean`) | Names are matched exactly, case-sensitive. A mismatch is treated as "unknown metric" → `None` → always FAILs |
 | Placing `xfail:` somewhere other than the first line (e.g. after other assertions) | `_read_xfail` only looks at the file's first non-blank, non-comment line — if that isn't `xfail:`, the marker is **not** recognized as a known-fail marker. Meanwhile `_eval_expect` still skips any line starting with `xfail:` as a non-assertion wherever it appears, so the result is an easy-to-miss state: no error, but also no `[KNOWN-FAIL]` credit in `sf sils regression`. Always put `xfail:` at the very top (comment lines before it are fine; other assertion lines must come after it) |

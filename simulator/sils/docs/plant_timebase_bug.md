@@ -1,5 +1,12 @@
 # SILS Plant 時間基準バグ — 物理が仮想時間の約3倍速で進行
 
+> **2026-09-11: 本文中の `trajectory.csv` は、標準フライトログ形式「StampFly フライトログ一式」
+> （`.sflog.zip`）に置き換えられた。詳細は `docs/plans/flight-log-format-plan.md` を参照。
+> 以下は当時の調査記録であり、書き換えていない。**
+> **2026-09-11: `trajectory.csv`, as referenced below, has been replaced by the standard
+> "StampFly flight-log bundle" format (`.sflog.zip`). See `docs/plans/flight-log-format-plan.md`.
+> The investigation record below is left as originally written.**
+
 > 自己完結の分析ノート。空コンテキストの新セッションでも、このファイルだけで状況を把握できる。
 > Self-contained root-cause note.
 

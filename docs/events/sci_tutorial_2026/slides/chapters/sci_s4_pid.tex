@@ -622,19 +622,20 @@ ws::motor_mixer(ws::rc_throttle(),
     \item \code{sf lesson edit} で $K_p$ を設定し \api{ws::set\_rate\_target} を呼ぶコードにして保存
     \item \code{sf lesson build}
     \item \code{sf lesson flash}
-    \item 飛行しながら \code{sf log wifi -o flight.csv}
-    \item \code{sf sysid fit flight.csv --plot}
+    \item 飛行しながら \code{sf log wifi}
+    \item \code{sf sysid fit logs/flight\_<timestamp>.sflog.zip --plot}
   \end{enumerate}
 
   {\footnotesize 確認: 同定結果 $K,\tau_m$ が実習 6 の理論値と数\%の誤差で一致する。
-  帰宅後に自分のフライトデータで再現する。\code{sf log wifi} は WiFi 接続が前提
+  \code{sf log wifi} はフライトログ一式（\code{.sflog.zip}，信号ごとの CSV をまとめた zip）を
+  \code{logs/} に保存する。帰宅後に自分のフライトデータで再現する。WiFi 接続が前提
   （セッション2「接続手順: 機体を WiFi 網に入れる」）}
 \end{frame}
 
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{同定結果と理論値の比較}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{出力例}
-sf sysid fit flight.csv --plot
+sf sysid fit flight.sflog.zip --plot
   Roll  K= 98.5 (ref:102.0, err:3.4%) tau_m=0.019 R2=0.94
   Pitch K= 72.1 (ref: 70.0, err:3.0%) tau_m=0.021 R2=0.91
   \end{sflisting}
@@ -1154,10 +1155,10 @@ sf sysid fit flight.csv --plot
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{rate-excite → rate-fit → rate-tune の手順\later}
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{手順（vehicle ファーム，WiFi 接続）}
-sf log wifi -d 40 -o sysid01.csv
+sf log wifi -d 40 -o sysid01.sflog.zip
 sf sysid rate-excite --axis roll --takeoff --land
-sf sysid rate-fit sysid01.csv --axis roll -o fit.json   # 机上
-sf sysid rate-tune --fit fit.json --wc 25 --pm 60       # 机上
+sf sysid rate-fit sysid01.sflog.zip --axis roll -o fit.json   # 机上
+sf sysid rate-tune --fit fit.json --wc 25 --pm 60             # 机上
   \end{sflisting}
 
   \begin{block}{rate-excite で機体はどうなるか}\footnotesize
@@ -1201,7 +1202,7 @@ param set autotune.sched.delay 20    #   delay 秒後にブザーが鳴り自動
 \begin{frame}{デモ: 完成コードで飛行}
   \begin{exampleblock}{デモの見方}\footnotesize
     \textbf{見るだけ}: スティック操作に角速度が追従する速さと行き過ぎを波形で見るだけで要点はつかめる。
-    \textbf{一緒に打つ}: 手元の flight.csv で \code{sf sysid fit} を試す。
+    \textbf{一緒に打つ}: 手元のフライトログ一式（\code{.sflog.zip}）で \code{sf sysid fit} を試す。
     \textbf{帰宅後に再現}: 本日は見るだけにして，後日実習 5〜9を通しで動かす
   \end{exampleblock}
 

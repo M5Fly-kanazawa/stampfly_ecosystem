@@ -344,12 +344,12 @@ sf telemetry --web    # ブラウザ表示（UDP:5005 -> SSE）
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{データ取得経路③ ログ取得と可視化\later}
   \begin{block}{WiFi 経由で 400\,Hz Data Stream を記録する}
-    \small \code{sf log wifi} は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400\,Hz の Data Stream を UDP 受信し、\code{-o *.csv} で 1 周期 1 行の CSV に保存する
+    \small \code{sf log wifi} は機体と同じ WiFi（SoftAP モードなら機体が出す AP）で 400\,Hz の Data Stream を UDP 受信し、フライトログ一式（\code{.sflog.zip}：信号ごとの CSV をまとめた zip 1個，埋め値なし）として保存する
   \end{block}
 
   \begin{lstlisting}[style=sfbash, numbers=none]
-sf log wifi -d 30 -o flight.csv   # 30秒キャプチャ -> Data Stream CSV
-sf log viz flight.csv
+sf log wifi -d 30    # 30秒キャプチャ -> logs/flight_<日時>.sflog.zip
+sf log viz           # 既定で logs/ 内の最新の一式を描画
   \end{lstlisting}
 
   \vspace{0.3em}

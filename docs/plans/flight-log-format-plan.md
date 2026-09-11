@@ -323,10 +323,17 @@ Stream の電文定義も `protocol/spec/` には無く、
 ## 5. 段階計画
 
 **進捗（2026-09-11 時点、ブランチ `feature/flight-log-bundle`）:** Phase 0 = d85b7971、Phase 1 = c9f5ac1b、
-Phase 2a（sysid/trim/cal plot/教育パッケージ）= 968a8bbd。基準一式 `analysis/datasets/flightlog/` を追加。
-**残り: Phase 2b**（`sf log viz`/`analyze`/`--health` の一式対応と旧描画コード削除、§3.2・§3.4）、
-**Phase 3**（SILS・`sf sim headless`、§3.3）、**Phase 4**（文書、§6）。再開時はこの節と各コミットの
-Next steps を読むこと。実機での `sf log wifi` 確認は未実施。
+Phase 2a（sysid/trim/cal plot/教育パッケージ）= 968a8bbd、基準一式 `analysis/datasets/flightlog/` = 870c8460、
+Phase 2b（`sf log viz`/`analyze`/`--health`・旧描画コード削除、§3.2・§3.4）= e46817d2、
+Phase 3（SILS・`sf sim headless`・SILS 退行試験 34 本 = 28 PASS + 5 既知の失敗 + 1 SKIP、§3.3）= 60a421b1、
+Phase 4（文書、§6）= 本コミット。Phase 3 で判明した仕様の穴として、必須ストリームを取得元別にした
+（`required_streams`: vehicle = imu、sils = imu + truth、sim = truth。§2.2 の補足）。
+**未了:** (1) 実機での `sf log wifi -d 30` → `sf log check/viz/analyze` の確認（本計画の全セッションで実機なし）、
+(2) SCI 資料の PDF は再ビルド済みだが Docswell への再アップロードは利用者のアカウントが必要、
+(3) `sf sils sysid-gate`（SILS のモデル一致の合否判定）は一式経由で動くが判定は FAIL のまま
+（SILS プラントと実機の差。simulation-policy のバックログ。一式化で motor.csv の duty が使えるように
+なり入力経路が変わったため、以前の数値とは直接比較できない）、(4) Genesis のヘッドレス書き出しは
+Genesis 未導入のため未検証。
 
 | Phase | 内容 | 合格基準 | コミット |
 |-------|------|---------|---------|

@@ -60,21 +60,41 @@ sf sim run --no-joystick   # ジョイスティック無効
 
 ## 5. sf sim headless
 
-可視化なしでシミュレーションを実行します（自動テスト用）。
+可視化なしでシミュレーションを実行します（自動テスト用）。結果は**StampFlyフライトログv1一式**
+（`.sflog.zip`。信号ごとのCSVと`meta.json`/`schema.json`をzipにまとめたもの。以下「一式」）
+として保存され、`truth.csv`（物理モデルの真値：位置・姿勢・速度・角速度）と `pilot.csv`
+（スティック入力のシーケンス、その時刻のまま）を含みます。
 
 ```bash
-sf sim headless              # 10秒実行（デフォルト）
-sf sim headless -d 30        # 30秒実行
-sf sim headless genesis      # Genesisバックエンドで実行
-sf sim headless -o log.csv   # 結果をファイル出力
+sf sim headless
+```
+
+```bash
+sf sim headless -d 30
+```
+
+```bash
+sf sim headless genesis
+```
+
+```bash
+sf sim headless -i sequence.csv
+```
+
+```bash
+sf sim headless -o logs/my_run.sflog.zip
 ```
 
 ### オプション
 
-| オプション | 説明 | デフォルト |
-|-----------|------|-----------|
+| オプション | 説明 | 既定値 |
+|-----------|------|-------|
 | `-d, --duration` | 実行時間（秒） | 10 |
-| `-o, --output` | 出力ログファイル | - |
+| `-i, --input` | 入力CSVファイル（`time,throttle,roll,pitch,yaw`）。省略時はスロットル・ロール・ピッチ・ヨー全てゼロのホバー入力で全区間を実行 | ホバー入力 |
+| `-o, --output` | 出力先の一式パス（`.sflog.zip`） | 自動生成 `logs/sim_<backend>_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
+
+複数バックエンドの結果を重ねて比較する `simulator/tools/compare_simulators/` のツール
+（`visualize_comparison.py`）も、この一式（`truth.csv`+`pilot.csv`）を読み込みます。
 
 ## 6. シミュレータ詳細
 
@@ -150,10 +170,39 @@ sf sim run --no-joystick   # Disable joystick
 
 ## 4. sf sim headless
 
-Run simulation without visualization (for automated testing).
+Run simulation without visualization (for automated testing). The result is saved as a
+**StampFly flight-log v1 bundle** (`.sflog.zip` — a zip holding a CSV per signal plus
+`meta.json`/`schema.json`; called "the bundle" below), containing `truth.csv` (physics-model
+ground truth: position, attitude, velocity, angular rate) and `pilot.csv` (the input sequence at
+its own sample times).
 
 ```bash
-sf sim headless              # 10s (default)
-sf sim headless -d 30        # 30s
-sf sim headless -o log.csv   # Output to file
+sf sim headless
 ```
+
+```bash
+sf sim headless -d 30
+```
+
+```bash
+sf sim headless genesis
+```
+
+```bash
+sf sim headless -i sequence.csv
+```
+
+```bash
+sf sim headless -o logs/my_run.sflog.zip
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-d, --duration` | Simulation duration in seconds | 10 |
+| `-i, --input` | Input CSV file (`time,throttle,roll,pitch,yaw`). Default: hover (all-zero stick) for the whole run | Hover input |
+| `-o, --output` | Output bundle path (`.sflog.zip`) | Auto-generated `logs/sim_<backend>_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
+
+The multi-backend comparison tool in `simulator/tools/compare_simulators/`
+(`visualize_comparison.py`) also reads this bundle (`truth.csv`+`pilot.csv`).

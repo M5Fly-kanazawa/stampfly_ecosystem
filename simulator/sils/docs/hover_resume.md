@@ -139,7 +139,7 @@ PID は back-calculation アンチワインドアップ（`pid.hpp`）、定常 
 # 落ち着く（VEL PID が +0.0435N の 1.12 バイアスを除去）。
 #
 # TUNING: raw3300 と 1.2s は初期推測。C が MAX_ALTITUDE=3.0m を超える/MIN 0.10m 未満なら raw(3180..3600)と
-#   hold_ms を trajectory.csv の alt 列から数値調整。HOVER_THRUST_CORRECTION は触らない（§1）。
+#   hold_ms をフライトログ一式（`.sflog.zip`）の `truth.csv` の高度（`-pos_z`、NED座標なので符号反転）から数値調整。HOVER_THRUST_CORRECTION は触らない（§1）。
 ```
 
 ---
@@ -148,17 +148,16 @@ PID は back-calculation アンチワインドアップ（`pid.hpp`）、定常 
 
 ```bash
 sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --video
-# バンドル: simulator/sils/viz/out_scn_hover_alt/{trajectory.csv, events.jsonl, console.log, results.json, scn_hover_alt.mp4}
+# バンドル: simulator/sils/viz/out_scn_hover_alt/{sils_hover_alt_<YYYYMMDD>T<HHMMSS>.sflog.zip, events.jsonl, console.log, results.json, scn_hover_alt.mp4}
 ```
 
-**主判定（数値・画像読込不要）= `trajectory.csv`**（20列, ヘッダ `emu_trajectory.cpp:76`:
-`t,px,py,pz,qw,qx,qy,qz,alt[8],roll,pitch,yawrate,yawcmd,alt_est[13],roll_est,pitch_est,m0[16],m1,m2,m3[19]`）:
+**主判定（数値・画像読込不要）= フライトログ一式（`.sflog.zip`。仕様は `protocol/spec/flight_log.yaml`）の `truth.csv`／`posvel.csv`／`motor.csv`**（高度は `truth.csv` の `pos_z`（NEDにつき符号反転して `-pos_z`）、モータ duty は `motor.csv` の `duty_FR/RR/RL/FL`）:
 
-1. **離陸**: 位相 C で `alt` 列が ~0.20m 超（接地脱出。cf. hover_espnow は alt~0.013m で接地のまま）。
-2. **capture+保持**: 位相 D で `alt` が一定値に**落ち着き上昇が止まる**。D 末尾10秒の `|d(alt)/dt| < ~0.02 m/s` = ホバー
+1. **離陸**: 位相 C で高度（`-pos_z`）が ~0.20m 超（接地脱出。cf. hover_espnow は高度~0.013m で接地のまま）。
+2. **capture+保持**: 位相 D で高度が一定値に**落ち着き上昇が止まる**。D 末尾10秒の `|d(alt)/dt| < ~0.02 m/s` = ホバー
    （engage 失敗なら +0.5 m/s 上昇が見える）。
-3. **duty 有界**: m0..m3 が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（暴走無し=E3回帰）。
-4. **姿勢安定**: roll/pitch ~0。
+3. **duty 有界**: `duty_FR/RR/RL/FL` が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（暴走無し = E3 の退行確認）。
+4. **姿勢安定**: roll/pitch ~0（`truth.csv` のクォータニオンから算出、ラジアン）。
 
 **コンソール判定（`hover_alt.expect`, hover_espnow.expect と同形式）**:
 - `log_contains any 'scenario] driver online'`
@@ -166,7 +165,7 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
 - `log_contains any 'ALT_HOLD: sp='` ← **mode が engage した証拠**（STABILIZE 降格してない）
 - `log_absent any 'duties[FR=1.00'` ← 飽和無し
 
-**climb vs hover の決定的判別**: 位相 D の `alt` 列が**平坦**であること。D で上昇していたら ALT_HOLD が engage して
+**climb vs hover の決定的判別**: 位相 D の高度（`truth.csv` の `-pos_z`）が**平坦**であること。D で上昇していたら ALT_HOLD が engage して
 いない（開ループ +1.18m/s²）か capture 失敗 → **engagement をデバッグ（gain は触らない）**。
 推力が 0.4065N のままで alt が上昇 = engage 失敗。0.363N 付近に落ちる = 成功。
 
@@ -178,17 +177,17 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
    → 着手前に `simulator/sils/build/vl53_probe 500 6` で ToF が status0 を返すこと、emu の console に ToF init/ESKF
    POS_Z 更新が出ることを確認。M2 完了済みなので通る見込みだが**最初に確認**。
 2. **capture がクランプ外を掴む**: [0.10, 3.0]m にクランプ。C が <0.10m なら setpoint が 0.10m に張り付く（沈む）、
-   >3.0m なら 3.0m。→ C/D 境界の `alt` を trajectory.csv で読み raw3300/1.2s を ~0.3-0.8m に数値調整。
+   >3.0m なら 3.0m。→ C/D 境界の高度をフライトログ一式の `truth.csv` で読み raw3300/1.2s を ~0.3-0.8m に数値調整。
 3. **stick-unlock 不成立**: capture が `stick_unlocked_=false` にリセット。D のスロットルを**正確に raw 2048**に保つ
    （>2253 だと残留上昇レートが命令される）。
 4. **デバウンス**: ALT_MODE は10連続サイクル必要。D の rc hold(20000ms@50Hz)は毎フレーム alt=1 ゆえ自明に満たす。
    単発フレームの alt では engage しない。
 5. **パーサのトークン順**: rc で alt を出すには hold_ms と rate_hz も必須（alt は4番目の optional）。
    `rc ... <arm> 1` は `1` を hold_ms と誤解釈。常に完全形 `... <arm> <hold_ms> <rate_hz> <alt>` で書く（ドラフト準拠）。
-6. **開ループ離陸が伸びる**: +1.18m/s² が 1.2s で ~0.85m まで行く可能性。emu は決定論的ゆえ trajectory.csv で
-   raw/duration を厳密に詰める。`alt` 列を唯一の真実とする。
-7. **--video レンダ失敗**（viz venv + 非空 trajectory.csv 必要、PASS 時のみ）。→ まず `--video` 無しで .expect が
-   PASS し trajectory.csv が埋まることを確認、その後 `--video`。MP4 は提示用、判定は trajectory/.expect。
+6. **開ループ離陸が伸びる**: +1.18m/s² が 1.2s で ~0.85m まで行く可能性。emu は決定論的ゆえフライトログ一式の
+   `truth.csv` で raw/duration を厳密に詰める。高度（`-pos_z`）を唯一の真実とする。
+7. **--video レンダ失敗**（viz venv + 非空のフライトログ一式が必要、PASS 時のみ）。→ まず `--video` 無しで .expect が
+   PASS しフライトログ一式が書き出されることを確認、その後 `--video`。MP4 は提示用、判定はフライトログ一式/.expect。
 
 ---
 
@@ -196,7 +195,7 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
 
 - **VL53 M2**: `simulator/sils/docs/vl53_m2_resume.md`（§0 に M2 完了、§7 は本ノートで2点訂正済み）。
 - ツール: オフライン gen4 probe = `simulator/sils/build/vl53_probe <mm> <frames>`（CMake `SILS_BUILD_VL53_PROBE`）。
-  軌跡 = `emu_trajectory.cpp`（`SILS_EMU_TRAJ`）、`sf sils scenario --video` がバンドルに設定。
+  軌跡 = フライトログ一式内の `truth.csv`（`SILS_EMU_FLIGHTLOG`）、`sf sils scenario --video` がバンドルに設定。
 - メモリ: `project_stampfly_emulator.md`（全体経緯）、`feedback_control_simulation.md`（制御変更は数値裏付け必須）。
 - **CLAUDE.md 厳守**: 制御パラメータ（HOVER_THRUST_CORRECTION 等）は**変更しない**。§1 の数値解析が「閉ループで
   吸収・パラメータ変更不要」を裏付けている。

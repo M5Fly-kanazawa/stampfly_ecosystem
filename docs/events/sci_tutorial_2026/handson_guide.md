@@ -86,9 +86,11 @@ sf lesson build && sf lesson flash
 ```bash
 sf lesson switch sci2026:7
 sf lesson build && sf lesson flash
-sf log wifi -o flight.csv     # 離陸してスティック操作しながら取得
-sf sysid fit flight.csv --plot
+sf log wifi
+sf sysid fit logs/flight_<timestamp>.sflog.zip --plot
 ```
+
+`sf log wifi` は離陸してスティック操作しながら実行する（既定 30 秒）。取得したフライトログ一式（`.sflog.zip`：信号ごとの CSV をまとめた zip 1個、埋め値なし）は `logs/flight_<日時>.sflog.zip` に保存されるので、`<timestamp>` は実際のファイル名に置き換える。
 
 **観察ポイント:** 同定した $K$, $\tau_m$ と実習 6 の理論値を比較する。
 
@@ -124,7 +126,7 @@ Teleplot で `cf_roll`（自作の相補フィルタ）と `eskf_roll`（機体�
 ### 発展: 自動チューニング
 
 ```bash
-sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-fit logs/flight_<timestamp>.sflog.zip --axis roll -o fit.json
 sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 ```
 
@@ -147,9 +149,11 @@ sf sils gui                   # ブラウザで http://127.0.0.1:8765 が開く
 
 **観察ポイント:** シナリオを1本実行し、3D 再生とグラフ、判定結果（PASS/FAIL）を確認する。「パラメータ」タブでゲインを変えて再実行し、挙動の変化を見る。
 
+S4 で取得したフライトログ一式（`logs/` 内の最新のもの）をそのまま使う。
+
 ```bash
-sf log viz flight.csv         # S4 で取得したログを再利用できる
-sf log analyze flight.csv
+sf log viz
+sf log analyze
 ```
 
 **参照:** `docs/architecture/simulation-policy.md`、`simulator/README.md`、`simulator/sils/gui/README.md`、`docs/guides/flight-log-viz.md`
@@ -242,9 +246,11 @@ After `sf lesson switch sci2026:7`, set `Kp` in `user_code.cpp` and call `ws::se
 ```bash
 sf lesson switch sci2026:7
 sf lesson build && sf lesson flash
-sf log wifi -o flight.csv     # take off and move the sticks while capturing
-sf sysid fit flight.csv --plot
+sf log wifi
+sf sysid fit logs/flight_<timestamp>.sflog.zip --plot
 ```
+
+`sf log wifi` captures while you take off and move the sticks (30 s by default). It saves a StampFly flight-log bundle (`.sflog.zip` -- a zip holding one CSV per signal at its native rate, no filled-in values) under `logs/flight_<date>T<time>.sflog.zip`; replace `<timestamp>` with the actual filename.
 
 **Watch for:** compare the identified $K$, $\tau_m$ against the Exercise 6 theoretical values.
 
@@ -280,7 +286,7 @@ Overlay `cf_roll` (your hand-written complementary filter) and `eskf_roll` (the 
 ### Extension: Autotune
 
 ```bash
-sf sysid rate-fit flight.csv --axis roll -o fit.json
+sf sysid rate-fit logs/flight_<timestamp>.sflog.zip --axis roll -o fit.json
 sf sysid rate-tune --fit fit.json --wc 25 --pm 60
 ```
 
@@ -303,9 +309,11 @@ sf sils gui                   # opens http://127.0.0.1:8765 in your browser
 
 **Watch for:** run one scenario and check the 3D playback, graphs, and the pass/fail verdict. Change a gain in the "Parameters" tab and rerun to see the effect.
 
+Reuse the flight-log bundle captured in S4 (the newest one under `logs/`).
+
 ```bash
-sf log viz flight.csv         # reuse the log captured in S4
-sf log analyze flight.csv
+sf log viz
+sf log analyze
 ```
 
 **References:** `docs/architecture/simulation-policy.md`, `simulator/README.md`, `simulator/sils/gui/README.md`, `docs/guides/flight-log-viz.md`

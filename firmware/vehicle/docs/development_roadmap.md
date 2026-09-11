@@ -280,7 +280,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 ### 実機飛行ログ管理
 
-- 飛行ごとに `logs/<date>_<mode>_<seq>.jsonl` 形式で保存
+- 飛行ごとに `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` 形式で保存する（1 回の飛行のセンサ信号一式をまとめた zip 形式のフライトログファイル。パケット種別ごとに 1 CSV を原レートのまま収め、`meta.json`／`schema.json` を同梱する。仕様の正本は `protocol/spec/flight_log.yaml`）
 - 重要な検証飛行（Phase 合格判定に使ったもの）は git にコミット
 - 解析スクリプトは `scripts/` または `sf log analyze` 系コマンド経由
 

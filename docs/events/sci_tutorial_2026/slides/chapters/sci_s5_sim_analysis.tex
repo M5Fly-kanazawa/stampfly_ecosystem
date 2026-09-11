@@ -266,15 +266,15 @@ sf lesson sils
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{解析ツール: sf log analyze / viz}
   \begin{block}{取得したテレメトリをそのまま解析する}\small
-    \code{sf log wifi} で取得した CSV を，
+    \code{sf log wifi} で取得したフライトログ一式（\code{.sflog.zip}：信号ごとの CSV をまとめた zip）を，
     追加スクリプトなしで解析・可視化できる
   \end{block}
 
   \vspace{0.5em}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
-sf log viz flight.csv
-sf log analyze flight.csv
+sf log viz
+sf log analyze
   \end{sflisting}
 
   {\footnotesize 詳しい手順は \code{docs/guides/flight-log-viz.md}。取得 $\to$ 可視化 $\to$
@@ -292,14 +292,14 @@ sf log analyze flight.csv
   \vspace{0.2em}
 
   \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
-sf log wifi -d 60 -o static_noise.csv   # 機体を静止させて60秒取得
-sf sysid noise static_noise.csv --sensor gyro --static-only --plot
+sf log wifi -d 60 -o static_noise.sflog.zip   # 機体を静止させて60秒取得
+sf sysid noise static_noise.sflog.zip --sensor gyro --static-only --plot
   \end{sflisting}
 
   \vspace{-1.5mm}
 
   {\footnotesize \code{--sensor} は \code{gyro/accel/baro/tof/all} を選べるが，
-  \code{sf log wifi -o} の CSV は gyro/accel のみ（baro/tof は現行ファームでは対象外。
+  \code{sf log wifi} が保存する一式の CSV は gyro/accel のみ（baro/tof は現行ファームでは対象外。
   \code{sf log capture} は旧ファーム vehicle\_old 専用）。
   トリム調整には \code{sf trim analyze} がある}
 \end{frame}
