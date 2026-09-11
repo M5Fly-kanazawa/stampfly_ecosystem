@@ -1,6 +1,6 @@
 # pos_pitch.expect — Layer-4 POSITION_HOLD gate (isolated pitch). G1 state-machine (log) + G2 estimate
 # tracking + G3 bounded/tight position + G4 actuator health (numerical, from
-# trajectory.csv). Passes with the adopted acceleration-compensated accel-attitude
+# the run's flight-log bundle — truth.csv/attitude.csv/...). Passes with the adopted acceleration-compensated accel-attitude
 # (eskf.accel_comp.enable=1) + the position velocity loop at position.vel.kp=0.8; the
 # plain accel-attitude flies away (drift ≫ 10 m).
 # Layer-4 位置保持ゲート（isolated pitch）。G1 状態遷移(ログ) + G2 推定追従 + G3 位置をタイトに保持 +
@@ -13,6 +13,6 @@ log_contains any "DISARM accepted"                    # G1: FLYING → IDLE_GROU
 order "ARM accepted" "Mode change: STABILIZE → POS_HOLD"
 order "Mode change: STABILIZE → POS_HOLD" "DISARM accepted"
 metric horizontal_drift_max < 3.0  in 7.6 21.6   # G3: position held tight (no fly-away, converges)
-metric tilt_max            < 18.0  in 7.6 21.6   # G3: attitude bounded (no tumble)
+metric tilt_max < 0.3142  in 7.6 21.6  # 18.0 deg  # G3: attitude bounded (no tumble)
 metric duty_max            < 0.90  in 7.6 21.6   # G4: motors not saturated
-metric att_rmse            < 5.0   in 14.6 21.6   # G2: ESKF roll/pitch tracks truth (steady)
+metric att_rmse < 0.08727   in 14.6 21.6  # 5.0 deg  # G2: ESKF roll/pitch tracks truth (steady)

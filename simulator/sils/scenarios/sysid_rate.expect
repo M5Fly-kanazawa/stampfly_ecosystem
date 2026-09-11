@@ -10,9 +10,9 @@ log_absent  any "Guidance cancelled by pilot stick"
 order "Sysid excitation start: axis=0 chirp" "Sysid excitation done"
 order "Sysid excitation done" "cmd: land"
 # The chirp moves the craft (rate loop tracks)... / チャープは機体を動かす…
-metric tilt_max > 0.8 in 18.5 22.0
+metric tilt_max > 0.01396 in 18.5 22.0  # 0.8 deg
 # ...but the flight stays bounded and the hover survives. / …が飛行は有界。
-metric tilt_max < 10.0 in 18.5 22.0
+metric tilt_max < 0.1745 in 18.5 22.0  # 10.0 deg
 metric alt_band < 0.35 in 18.0 23.0
 metric duty_max < 0.92 in 18.0 23.0
 metric alt_max < 0.10 in 30.0 31.5

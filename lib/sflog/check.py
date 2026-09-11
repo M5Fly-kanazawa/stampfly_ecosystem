@@ -135,9 +135,19 @@ def _check_schema_json(log) -> list:
 
 
 def _check_required_streams(log) -> list:
+    """Streams that can never be missing depend on where the bundle came
+    from (meta.json `source`): the vehicle always has imu.csv, SILS adds
+    truth.csv, a pure-physics simulator has only truth.csv. An unknown or
+    absent source is checked against the vehicle list.
+    絶対に欠けないストリームは取得元（meta.json の `source`）で決まる:
+    実機は常に imu.csv、SILS はそれに truth.csv、純粋な物理シミュレータは
+    truth.csv のみ。取得元が未知/未記載なら実機の一覧で検査する。
+    """
+    source = (log.meta or {}).get("source")
+    required = schema.REQUIRED_STREAMS_BY_SOURCE.get(source, schema.REQUIRED_STREAMS)
     return [
-        Finding("error", name, f"required stream '{name}' is missing")
-        for name in schema.REQUIRED_STREAMS
+        Finding("error", name, f"required stream '{name}' is missing (source={source})")
+        for name in required
         if name not in log.streams
     ]
 

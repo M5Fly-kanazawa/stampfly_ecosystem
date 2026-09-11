@@ -35,8 +35,8 @@ metric alt_mean > 0.40 in 18.5 22.0
 metric alt_mean < 0.65 in 18.5 22.0
 
 # --- G3: bounded attitude (reposition tilt + trim, no tumble) ---
-metric tilt_max < 14.0 in 8.5 22.0
+metric tilt_max < 0.2443 in 8.5 22.0  # 14.0 deg
 # --- G2: ESKF tracks truth in the settled hold ---
-metric att_rmse < 5.0 in 18.5 22.0
+metric att_rmse < 0.08727 in 18.5 22.0  # 5.0 deg
 # --- G4: motors not saturated ---
 metric duty_max < 0.92 in 10.0 22.0

@@ -51,11 +51,11 @@ them into place (no video encoding here).
      python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --run --run-s4 --restore-lesson 0
 
 4) --plots-only: PNG のラベルだけを直したい場合に使う。既存の SILS バンドル・
-   永続化済み trajectory.csv からグラフのみ再生成し、4本の動画ファイルには
+   永続化済み一式（.sflog.zip）からグラフのみ再生成し、4本の動画ファイルには
    一切触れない（バンドルに新しい動画があっても使わない）。--run/--run-s4 と
    同時指定は不可。
    --plots-only: use this when only a label needs fixing. Re-plots from
-   already-persisted bundles/trajectory.csv only — never touches any of the
+   already-persisted bundles (.sflog.zip) only — never touches any of the
    four video files (even if the bundle happens to carry a fresh one).
    Incompatible with --run/--run-s4.
 
@@ -98,6 +98,20 @@ ROOT = next(
 SILS_DIR = ROOT / "simulator" / "sils"
 VIZ_DIR = SILS_DIR / "viz"
 OUT_DIR = Path(__file__).resolve().parent
+
+# lib/sflog reads the flight-log v1 bundle the SILS emulator now writes per run
+# (docs/plans/flight-log-format-plan.md section 3.3, replacing the old per-run CSV).
+# This script runs under the project's own venv (numpy/pandas/matplotlib are already
+# importable above), which normally already has sflog importable too -- this sys.path
+# insertion is a defensive fallback for an interpreter that does not.
+# lib/sflog は SILS エミュレータが実行ごとに書くフライトログ v1 一式を読む
+# （計画書 3.3節、旧・実行ごとの CSV の後継）。本スクリプトはプロジェクト自身の venv
+# （numpy/pandas/matplotlib は上で既に import 可能）で動き、通常は sflog も import
+# 可能だが、そうでない実行環境向けの保険としてパスを追加する。
+LIB_DIR = ROOT / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
+import sflog  # noqa: E402  flight-log v1 bundle reader
 
 # Slide-readable plotting defaults: 150dpi, landscape, >=14pt fonts (project
 # slide rules — docs/events/sci_tutorial_2026/fallback is reviewed at data-projector size;
@@ -180,40 +194,255 @@ def bundle_dir(scn_stem: str) -> Path:
     return VIZ_DIR / f"out_scn_{scn_stem}"
 
 
+def _find_bundle_zip(bundle: Path):
+    """Newest `sils_*.sflog.zip` under a SILS run's bundle dir, or None if the
+    run has not produced one yet.
+    SILS 実行のバンドルディレクトリ直下にある最新の `sils_*.sflog.zip`
+    （まだ無ければ None）。
+    """
+    candidates = sorted(Path(bundle).glob("sils_*.sflog.zip"), key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else None
+
+
 def require_bundle(scn_stem: str, run_hint: str) -> Path:
     b = bundle_dir(scn_stem)
-    traj = b / "trajectory.csv"
-    if not traj.exists():
+    if _find_bundle_zip(b) is None:
         raise SystemExit(
-            f"missing SILS bundle: {traj}\n"
+            f"missing SILS flight-log bundle: {b}/sils_*.sflog.zip\n"
             f"Run first (or pass --run):\n  {run_hint}"
         )
     return b
 
 
+def _copy_bundle_zip(bundle: Path, dest_dir: Path) -> None:
+    """Copy a SILS run's flight-log bundle (`sils_*.sflog.zip`) into
+    `dest_dir`, keeping its original filename (`_find_bundle_zip()`/
+    `load_traj()` look it up by name pattern + mtime, not a fixed name).
+    SILS 実行のフライトログ一式（`sils_*.sflog.zip`）を、元のファイル名の
+    まま `dest_dir` へコピーする（`_find_bundle_zip()`/`load_traj()` は
+    固定名ではなく名前パターン＋mtimeで探すため）。
+    """
+    zip_path = _find_bundle_zip(bundle)
+    if zip_path is None:
+        raise SystemExit(f"missing SILS flight-log bundle to persist: {bundle}/sils_*.sflog.zip")
+    shutil.copyfile(zip_path, dest_dir / zip_path.name)
+
+
+_SQRT_HALF = 0.7071067811865476  # 1/sqrt(2)
+
+
+def _euler_from_quat_ned(qw, qx, qy, qz):
+    """roll/pitch/yaw [rad] from a body(FRD)->NED quaternion (w,x,y,z), vectorized
+    over numpy arrays. Standard aerospace 3-2-1 Euler extraction; pitch is clipped
+    to arcsin's domain to absorb float round-off near +-90 deg (gimbal lock).
+    機体(FRD)→NED のクォータニオンから roll/pitch/yaw [rad]（numpy 配列対応）。
+    標準的な航空 3-2-1 オイラー角抽出。pitch は arcsin の定義域にクランプする
+    （±90度付近の浮動小数点丸め対策）。
+    """
+    roll = np.arctan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    pitch = np.arcsin(np.clip(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
+    yaw = np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    return roll, pitch, yaw
+
+
+def _ned_to_mujoco_pos(pos_x, pos_y, pos_z):
+    """StampFly NED position -> MuJoCo/ENU world position (px, py, pz). The exact
+    inverse of simulator/sils/frames/frames.hpp's `ned_to_enu()` ({n.y, n.x, -n.z}),
+    reimplemented here because this Python reader does not link the C++ frames module.
+    StampFly の NED 位置 -> MuJoCo/ENU 世界座標 (px, py, pz)。frames.hpp の
+    `ned_to_enu()`（{n.y, n.x, -n.z}）そのままの逆変換 -- この Python 読み込み側は
+    C++ の frames モジュールをリンクしないため、ここに再実装する。
+    """
+    return pos_y, pos_x, -pos_z
+
+
+def _quat_mul(w1, x1, y1, z1, w2, x2, y2, z2):
+    """Hamilton product (w1,x1,y1,z1) * (w2,x2,y2,z2), vectorized."""
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+    return w, x, y, z
+
+
+def _qnb_to_mujoco_quat(qw, qx, qy, qz):
+    """StampFly q_nb (body FRD -> world NED) -> MuJoCo framequat (body FLU -> world
+    ENU), vectorized. The exact inverse of frames.hpp's `qnb_to_mujoco_quat()`:
+        q_mj = q_enu_to_ned().conj() * q_nb * q_frd_to_flu().conj()   (normalized)
+    where q_enu_to_ned = (w=0, x=y=1/sqrt(2), z=0) and q_frd_to_flu = (w=0, x=1,
+    y=z=0). Reimplemented in plain numpy since this reader does not link the C++
+    frames module.
+    StampFly の q_nb（機体FRD→世界NED）-> MuJoCo framequat（機体FLU→世界ENU）、
+    配列対応。frames.hpp の `qnb_to_mujoco_quat()` そのままの逆変換（式は英語側参照）
+    -- この読み込み側は C++ frames モジュールをリンクしないため素の numpy で再実装。
+    """
+    ew, ex, ey, ez = 0.0, _SQRT_HALF, _SQRT_HALF, 0.0            # q_enu_to_ned
+    ew_c, ex_c, ey_c, ez_c = ew, -ex, -ey, -ez                    # its conjugate
+    fw, fx, fy, fz = 0.0, 1.0, 0.0, 0.0                           # q_frd_to_flu
+    fw_c, fx_c, fy_c, fz_c = fw, -fx, -fy, -fz                    # its conjugate
+    w1, x1, y1, z1 = _quat_mul(ew_c, ex_c, ey_c, ez_c, qw, qx, qy, qz)
+    w2, x2, y2, z2 = _quat_mul(w1, x1, y1, z1, fw_c, fx_c, fy_c, fz_c)
+    norm = np.sqrt(w2 * w2 + x2 * x2 + y2 * y2 + z2 * z2)
+    return w2 / norm, x2 / norm, y2 / norm, z2 / norm
+
+
+def _asof_nearest(base: pd.DataFrame, other, col: str, n: int):
+    """merge_asof(nearest) `col` from `other` onto `base`'s timestamp_us; an
+    all-NaN array of length `n` if `other` is absent (the stream is missing
+    from the bundle).
+    `other` の `col` 列を `base` の timestamp_us へ merge_asof(nearest) で結合
+    する。`other` が無ければ（バンドルにそのストリームが無ければ）長さ `n`
+    の全 NaN 配列。
+    """
+    if other is None or col not in other.columns:
+        return np.full(n, np.nan)
+    other_sorted = other[["timestamp_us", col]].sort_values("timestamp_us", kind="stable")
+    merged = pd.merge_asof(base[["timestamp_us"]], other_sorted, on="timestamp_us",
+                            direction="nearest")
+    return merged[col].to_numpy()
+
+
 def load_traj(bundle: Path) -> pd.DataFrame:
-    return pd.read_csv(bundle / "trajectory.csv")
+    """Load a SILS run's flight-log v1 bundle (`sils_*.sflog.zip` under
+    `bundle`) and rebuild the legacy trajectory-table columns this script's
+    plotting code expects (t, px/py/pz, qw/qx/qy/qz in the MuJoCo/ENU frame,
+    alt/roll/pitch [deg], yawrate [rad/s], yawcmd (always 0.0 -- retired, plan
+    section 3.3), alt_est/roll_est/pitch_est, m0..m3), derived from the
+    bundle's `truth`/`posvel`/`attitude`/`motor` streams -- see
+    docs/plans/flight-log-format-plan.md section 3.3.
+
+    Also stashes, in the returned DataFrame's `.attrs` (not a visible column,
+    so callers that only know the legacy columns are unaffected):
+      * `gyro_x_deg`/`gyro_y_deg`: the bundle's real gyro measurement
+        (imu.gyro_x/y, matched onto `truth`'s timeline) -- ONLY when the
+        bundle's `rate_ref` stream is present (see roll_rate_deg()'s
+        docstring for why gating on `rate_ref`, not `imu`, matters here).
+      * `rate_ref_roll_deg`: the bundle's real commanded roll-rate
+        (rate_ref.rate_ref_roll) when that stream is present (see
+        s4_rate_ref()'s docstring).
+
+    SILS 実行のフライトログ v1 一式（`bundle` 直下の `sils_*.sflog.zip`）を
+    読み、このスクリプトの描画コードが期待する旧トラジェクトリ表の列
+    （t, MuJoCo/ENU 座標系の px/py/pz・qw/qx/qy/qz, alt/roll/pitch [度],
+    yawrate [rad/s], yawcmd（常に0.0、廃止済み -- 計画書3.3節）,
+    alt_est/roll_est/pitch_est, m0..m3）を、一式の `truth`/`posvel`/
+    `attitude`/`motor` ストリームから再構築する -- 計画書 3.3節参照。
+
+    返す DataFrame の `.attrs`（可視の列ではないため、旧列名しか知らない
+    呼び出し側には影響しない）にも以下を格納する:
+      * `gyro_x_deg`/`gyro_y_deg`: 一式の実測ジャイロ（imu.gyro_x/y を
+        `truth` の時間軸へ対応付け）-- バンドルの `rate_ref` ストリームが
+        ある場合のみ（`imu` ではなく `rate_ref` の有無で条件分けする理由は
+        roll_rate_deg() の docstring 参照）。
+      * `rate_ref_roll_deg`: そのストリームがあれば一式の実際の指令ロール
+        レート（rate_ref.rate_ref_roll）（s4_rate_ref() の docstring 参照）。
+    """
+    zip_path = _find_bundle_zip(bundle)
+    if zip_path is None:
+        raise SystemExit(f"missing SILS flight-log bundle: {bundle}/sils_*.sflog.zip")
+    log = sflog.load(zip_path)
+    truth = log.streams.get("truth")
+    if truth is None or len(truth) == 0:
+        raise SystemExit(f"{zip_path}: bundle has no 'truth' stream (SILS-only stream)")
+    truth = truth.sort_values("timestamp_us", kind="stable").reset_index(drop=True)
+    n = len(truth)
+
+    t_us = truth["timestamp_us"].to_numpy()
+    qw, qx, qy, qz = (truth[c].to_numpy() for c in ("quat_w", "quat_x", "quat_y", "quat_z"))
+    roll, pitch, _yaw = _euler_from_quat_ned(qw, qx, qy, qz)
+    px, py, pz = _ned_to_mujoco_pos(*(truth[c].to_numpy() for c in ("pos_x", "pos_y", "pos_z")))
+    mj_qw, mj_qx, mj_qy, mj_qz = _qnb_to_mujoco_quat(qw, qx, qy, qz)
+
+    posvel, attitude, motor, rate_ref, imu = (
+        log.streams.get(s) for s in ("posvel", "attitude", "motor", "rate_ref", "imu")
+    )
+    alt_est = -_asof_nearest(truth, posvel, "pos_z", n)
+    if attitude is not None:
+        cols = ["timestamp_us", "quat_w", "quat_x", "quat_y", "quat_z"]
+        other_sorted = attitude[cols].sort_values("timestamp_us", kind="stable")
+        merged = pd.merge_asof(truth[["timestamp_us"]], other_sorted, on="timestamp_us",
+                                direction="nearest")
+        roll_est_rad, pitch_est_rad, _ = _euler_from_quat_ned(
+            merged["quat_w"].to_numpy(), merged["quat_x"].to_numpy(),
+            merged["quat_y"].to_numpy(), merged["quat_z"].to_numpy(),
+        )
+    else:
+        roll_est_rad = pitch_est_rad = np.full(n, np.nan)
+
+    df = pd.DataFrame({
+        "t": t_us / 1e6,
+        "px": px, "py": py, "pz": pz,
+        "qw": mj_qw, "qx": mj_qx, "qy": mj_qy, "qz": mj_qz,
+        "alt": -truth["pos_z"].to_numpy(),
+        "roll": roll * RAD2DEG, "pitch": pitch * RAD2DEG,
+        "yawrate": truth["rate_z"].to_numpy(), "yawcmd": np.zeros(n),
+        "alt_est": alt_est,
+        "roll_est": roll_est_rad * RAD2DEG, "pitch_est": pitch_est_rad * RAD2DEG,
+        "m0": _asof_nearest(truth, motor, "duty_FR", n),
+        "m1": _asof_nearest(truth, motor, "duty_RR", n),
+        "m2": _asof_nearest(truth, motor, "duty_RL", n),
+        "m3": _asof_nearest(truth, motor, "duty_FL", n),
+    })
+
+    # rate_ref present -> the run's full control-topic instrumentation was active
+    # (vehicle target): stash the real commanded rate and the real gyro measurement
+    # for s4_rate_ref()/roll_rate_deg()/pitch_rate_deg() to prefer over their
+    # scripted-stick / truth-differentiation fallbacks.
+    # rate_ref がある -> 実行の制御系トピック計装が有効（vehicle ターゲット）:
+    # s4_rate_ref()/roll_rate_deg()/pitch_rate_deg() がそれぞれの台本化スティック／
+    # 真値微分フォールバックより優先して使えるよう、実際の指令レートと実測
+    # ジャイロを格納しておく。
+    if rate_ref is not None:
+        cols = rate_ref[["timestamp_us", "rate_ref_roll"]].sort_values("timestamp_us", kind="stable")
+        merged = pd.merge_asof(truth[["timestamp_us"]], cols, on="timestamp_us", direction="nearest")
+        df.attrs["rate_ref_roll_deg"] = np.degrees(merged["rate_ref_roll"].to_numpy())
+        if imu is not None:
+            gyro_cols = imu[["timestamp_us", "gyro_x", "gyro_y"]].sort_values(
+                "timestamp_us", kind="stable")
+            merged = pd.merge_asof(truth[["timestamp_us"]], gyro_cols, on="timestamp_us",
+                                    direction="nearest")
+            df.attrs["gyro_x_deg"] = np.degrees(merged["gyro_x"].to_numpy())
+            df.attrs["gyro_y_deg"] = np.degrees(merged["gyro_y"].to_numpy())
+
+    return df
 
 
 def roll_rate_deg(df: pd.DataFrame) -> np.ndarray:
-    """Roll angular rate [deg/s], numerically differentiated from the truth
-    roll ANGLE column (trajectory.csv has no direct body rate column except
-    yawrate — see this script's module docstring / README for why: the
-    workshop target never publishes sf::control_output, so the SILS
-    SILS_EMU_RATE_STREAM recorder (which the vehicle sysid-gate path uses)
-    stays at all-zero for it). Noise is off for every fallback run, so the
+    """Roll angular rate [deg/s]. Prefers the bundle's real gyro measurement
+    (imu.gyro_x, body FRD roll axis, stashed in `df.attrs["gyro_x_deg"]` by
+    load_traj()) when the bundle's `rate_ref` stream is present -- meaning the
+    run's full control-topic instrumentation was active (vehicle target).
+    Falls back to numerically differentiating the truth roll ANGLE (this
+    script's "roll" column) ONLY when `rate_ref` is absent -- the workshop
+    target's `WorkshopControlTask` never publishes vehicle's
+    `sf::control_output` topic, so the bundle carries no `rate_ref` (or,
+    consequently, real gyro comparison) for it (see this script's module
+    docstring / README). Noise is off for every fallback run, so the
     truth-derived rate is numerically equivalent to what a noiseless gyro
     would read.
-    ロール角速度[deg/s]（真値ロール角の数値微分）。trajectory.csv には
-    yawrate 以外に機体角速度の列が無い — workshop ターゲットは
-    sf::control_output を発行しないため RATE_STREAM 経路が使えない
-    （詳しくはこのファイルの docstring / README 参照）。全ての保険実行は
-    noise=off なので、真値の微分はノイズ無しジャイロの読み値と数値的に一致する。
+    ロール角速度[deg/s]。バンドルの `rate_ref` ストリームがある（実行の制御系
+    トピック計装が有効 = vehicle ターゲット）場合は実測ジャイロ
+    （imu.gyro_x、機体FRDロール軸。load_traj() が `df.attrs["gyro_x_deg"]` に
+    格納）を優先する。`rate_ref` が無い（workshop ターゲットの
+    `WorkshopControlTask` は vehicle の `sf::control_output` トピックを
+    発行しないためバンドルに `rate_ref`（延いては実測ジャイロとの比較）が
+    無い -- 詳しくはこのファイルの docstring / README 参照）場合のみ、真値
+    ロール角（このスクリプトの "roll" 列）の数値微分にフォールバックする。
+    全ての保険実行は noise=off なので、真値の微分はノイズ無しジャイロの
+    読み値と数値的に一致する。
     """
+    gyro_x_deg = df.attrs.get("gyro_x_deg")
+    if gyro_x_deg is not None:
+        return gyro_x_deg
     return np.gradient(df["roll"].values, df["t"].values)
 
 
 def pitch_rate_deg(df: pd.DataFrame) -> np.ndarray:
+    """Pitch angular rate [deg/s] -- see roll_rate_deg() for the gyro-vs-
+    differentiation selection rule (df.attrs["gyro_y_deg"] here)."""
+    gyro_y_deg = df.attrs.get("gyro_y_deg")
+    if gyro_y_deg is not None:
+        return gyro_y_deg
     return np.gradient(df["pitch"].values, df["t"].values)
 
 
@@ -409,27 +638,39 @@ _S4_L5 = "実習 5" if _CJK_FONT else "Exercise 5"
 _S4_L8 = "実習 8" if _CJK_FONT else "Exercise 8"
 
 
-def s4_rate_ref(t: np.ndarray) -> np.ndarray:
-    """Commanded roll-rate step [deg/s], computed from the scripted stick
-    profile (see module note: workshop never publishes sf::control_output, so
-    SILS_EMU_RATE_STREAM's rate_ref column is unavailable for this target —
-    this is the documented fallback: stick value * rate_max).
-    指令ロールレート・ステップ[deg/s]。台本スティック値から計算
-    （workshop は sf::control_output を発行せず RATE_STREAM の rate_ref 列が
-    使えないため、指示された保険計算＝スティック値×rate_maxを用いる）。
+def s4_rate_ref(df: pd.DataFrame, t: np.ndarray) -> np.ndarray:
+    """Commanded roll-rate step [deg/s]. Prefers the bundle's real `rate_ref`
+    stream (rate_ref_roll, stashed in `df.attrs["rate_ref_roll_deg"]` by
+    load_traj()) when present. Falls back to the scripted stick profile
+    (stick value * rate_max) ONLY when `rate_ref` is absent — the workshop
+    target's `WorkshopControlTask` never publishes vehicle's
+    `sf::control_output` topic, so the bundle carries no `rate_ref` stream
+    for it (see this script's module docstring / README; roll_rate_deg()'s
+    docstring has the same fallback rule for the measured side).
+    指令ロールレート・ステップ[deg/s]。バンドルの実際の `rate_ref` ストリーム
+    （rate_ref_roll。load_traj() が `df.attrs["rate_ref_roll_deg"]` に格納）が
+    あればそれを優先する。`rate_ref` が無い（workshop ターゲットの
+    `WorkshopControlTask` は vehicle の `sf::control_output` トピックを
+    発行しないためバンドルに `rate_ref` ストリームが無い -- 詳しくはこの
+    ファイルの docstring / README 参照。実測側の同じフォールバック規則は
+    roll_rate_deg() の docstring 参照）場合のみ、台本化したスティック値
+    プロファイル（スティック値 × rate_max）にフォールバックする。
     """
+    rate_ref_roll_deg = df.attrs.get("rate_ref_roll_deg")
+    if rate_ref_roll_deg is not None:
+        return rate_ref_roll_deg
     return np.where((t >= S4_T_STEP_START) & (t < S4_T_STEP_END),
                      S4_RATE_TARGET_DEG_S, 0.0)
 
 
 def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
-    """Builds S4_roll_step_p_vs_pid.png from two trajectory.csv-bearing
+    """Builds S4_roll_step_p_vs_pid.png from two flight-log-bundle-bearing
     directories (each either a freshly rendered SILS bundle, or the persisted
     docs/events/sci_tutorial_2026/fallback/_s4_raw/lessonN/ snapshot). Does NOT touch the
     S4 videos — those are copied straight to their final names by run_s4()
     at render time, since only a fresh SILS bundle (not the persisted
-    trajectory-only snapshot) carries the rendered .mp4.
-    S4_roll_step_p_vs_pid.png を trajectory.csv を持つ2ディレクトリから生成
+    bundle-only snapshot) carries the rendered .mp4.
+    S4_roll_step_p_vs_pid.png をフライトログ一式を持つ2ディレクトリから生成
     する（新規レンダリングの SILS バンドル、または永続化済み
     _s4_raw/lessonN/ のいずれか）。動画は扱わない — 動画は SILS バンドルに
     しかない（永続スナップショットには含めない）ため、run_s4() がレンダリング
@@ -471,9 +712,9 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
     ):
         t_full = df["t"].values
         rate_full = roll_rate_deg(df)
+        ref_full = s4_rate_ref(df, t_full)
         wmask = (t_full >= window[0]) & (t_full <= window[1])
-        t, rate = t_full[wmask], rate_full[wmask]
-        ref = s4_rate_ref(t)
+        t, rate, ref = t_full[wmask], rate_full[wmask], ref_full[wmask]
         ax.plot(t, ref, color="black", ls="--", lw=1.6,
                 label=f"rate_ref (target {S4_RATE_TARGET_DEG_S:.1f} deg/s)")
         ax.plot(t, rate, color=color, lw=1.8, label=legend_label)
@@ -508,11 +749,11 @@ def build_s4(bundle_l5: Path, bundle_l8: Path) -> None:
 def run_s4(restore_lesson: str) -> tuple[Path, Path]:
     """Execute the S4 pipeline end to end (mutates the shared workshop lesson
     state; always restores it in a finally: block). Persists each lesson's
-    trajectory.csv under docs/events/sci_tutorial_2026/fallback/_s4_raw/lessonN/ (small,
+    flight-log bundle under docs/events/sci_tutorial_2026/fallback/_s4_raw/lessonN/ (small,
     committed — lets the fast/default path rebuild the PNG without a rebuild)
     and copies the rendered videos straight to their final deliverable names.
     S4 パイプラインをE2E実行する（workshop レッスン状態を変更するため、
-    finally: で必ず復元する）。各レッスンの trajectory.csv を
+    finally: で必ず復元する）。各レッスンのフライトログ一式を
     _s4_raw/lessonN/ に永続化（小さい・コミット対象 — 既定の速い経路が
     リビルド無しで PNG を再生成できるように）し、レンダリング済み動画は
     最終成果物名へ直接コピーする。
@@ -526,13 +767,13 @@ def run_s4(restore_lesson: str) -> tuple[Path, Path]:
         sf("sf sils build --target workshop")
         sf(f"sf sils scenario simulator/sils/scenarios/{S4_SCN}.scn --target workshop --video")
         b = bundle_dir(S4_SCN)
-        shutil.copyfile(b / "trajectory.csv", l5_dir / "trajectory.csv")
+        _copy_bundle_zip(b, l5_dir)
         shutil.copyfile(b / f"scn_{S4_SCN}.mp4", OUT_DIR / "S4_ex5_p_flight.mp4")
 
         sf("sf lesson switch 8 --solution")
         sf("sf sils build --target workshop")
         sf(f"sf sils scenario simulator/sils/scenarios/{S4_SCN}.scn --target workshop --video")
-        shutil.copyfile(b / "trajectory.csv", l8_dir / "trajectory.csv")
+        _copy_bundle_zip(b, l8_dir)
         shutil.copyfile(b / f"scn_{S4_SCN}.mp4", OUT_DIR / "S4_ex8_pid_flight.mp4")
 
         return l5_dir, l8_dir
@@ -714,8 +955,8 @@ def main() -> int:
                      help="lesson id/number to restore after --run-s4 (default: 0, "
                           "= Lesson 0 student — check `sf lesson list` first if unsure)")
     ap.add_argument("--plots-only", action="store_true",
-                     help="rebuild only the PNGs/text from already-persisted bundles/"
-                          "trajectory.csv (e.g. after a label-only edit to this script) "
+                     help="rebuild only the PNGs/text from already-persisted bundles "
+                          "(.sflog.zip; e.g. after a label-only edit to this script) "
                           "without touching any of the four .mp4 videos, even if the "
                           "bundle happens to carry a freshly rendered one. Incompatible "
                           "with --run/--run-s4")
@@ -737,19 +978,19 @@ def main() -> int:
         l5_dir, l8_dir = run_s4(args.restore_lesson)
         build_s4(l5_dir, l8_dir)
     else:
-        # Fast path: reuse the trajectory.csv snapshots already staged by a
+        # Fast path: reuse the flight-log bundle snapshots already staged by a
         # prior --run-s4 (or hand-copied) under
         # docs/events/sci_tutorial_2026/fallback/_s4_raw/{lesson5,lesson8}. The S4 videos
         # themselves are NOT re-derived here — they were copied to their final
         # names the last time --run-s4 ran and are left untouched.
         # 速い経路: 事前の --run-s4（または手動コピー）で
         # docs/events/sci_tutorial_2026/fallback/_s4_raw/{lesson5,lesson8} に置かれた
-        # trajectory.csv スナップショットを再利用する。S4 の動画自体はここでは
+        # フライトログ一式のスナップショットを再利用する。S4 の動画自体はここでは
         # 再生成しない — 前回 --run-s4 実行時に最終ファイル名へコピー済みで、
         # そのまま変更しない。
         raw = OUT_DIR / "_s4_raw"
         l5_dir, l8_dir = raw / "lesson5", raw / "lesson8"
-        if not (l5_dir / "trajectory.csv").exists():
+        if _find_bundle_zip(l5_dir) is None:
             raise SystemExit(
                 f"missing S4 raw data under {raw} — pass --run-s4 to generate it, "
                 f"or see README.md's S4 command sequence."

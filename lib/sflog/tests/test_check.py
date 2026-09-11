@@ -186,6 +186,42 @@ def test_missing_required_stream_is_an_error():
     assert any(f.level == "error" and f.stream == "imu" for f in findings)
 
 
+def _truth_stream(n=10, dt_us=2500) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "timestamp_us": [i * dt_us for i in range(n)],
+            "pos_x": [0.0] * n, "pos_y": [0.0] * n, "pos_z": [-0.5] * n,
+            "quat_w": [1.0] * n, "quat_x": [0.0] * n, "quat_y": [0.0] * n, "quat_z": [0.0] * n,
+            "vel_x": [0.0] * n, "vel_y": [0.0] * n, "vel_z": [0.0] * n,
+            "rate_x": [0.0] * n, "rate_y": [0.0] * n, "rate_z": [0.0] * n,
+        }
+    )
+
+
+def _log_with_source(source: str, **streams) -> FlightLog:
+    from sflog import schema
+
+    meta = make_meta(source=source, tool_name="t", tool_version="0", streams=streams)
+    return FlightLog(meta=meta, schema=schema.schema_for(streams.keys()), streams=streams)
+
+
+def test_required_streams_depend_on_source():
+    """protocol/spec/flight_log.yaml `required_streams`: a pure-physics
+    `sim` bundle needs only truth.csv, SILS needs imu.csv AND truth.csv,
+    and an unknown source is judged by the vehicle rule (imu.csv).
+    protocol/spec/flight_log.yaml の `required_streams`: 純物理の `sim`
+    一式は truth.csv だけ、SILS は imu.csv と truth.csv の両方、未知の
+    取得元は実機の規則（imu.csv）で判定する。"""
+    def missing(log):
+        return {f.stream for f in check_bundle(log) if f.level == "error" and "required stream" in f.message}
+
+    assert missing(_log_with_source("sim", truth=_truth_stream())) == set()
+    assert missing(_log_with_source("sim", imu=_clean_imu())) == {"truth"}
+    assert missing(_log_with_source("sils", imu=_clean_imu())) == {"truth"}
+    assert missing(_log_with_source("sils", imu=_clean_imu(), truth=_truth_stream())) == set()
+    assert missing(_log_with_source("somewhere-else", truth=_truth_stream())) == {"imu"}
+
+
 def test_extra_column_is_a_warning_not_an_error():
     imu = _clean_imu()
     imu["totally_unexpected_column"] = 1.0

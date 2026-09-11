@@ -21,5 +21,5 @@ metric alt_band < 0.20 in 12.0 14.0
 metric alt_max  > 1.10 in 17.5 18.5
 # DOWN: descend back below 0.9 m (symmetric stick — new descend capability).
 metric alt_mean < 0.90 in 20.5 21.0
-metric tilt_max < 10.0 in 9.0 23.0
+metric tilt_max < 0.1745 in 9.0 23.0  # 10.0 deg
 metric duty_max < 0.92 in 12.0 23.0

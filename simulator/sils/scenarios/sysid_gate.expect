@@ -26,7 +26,7 @@ order "cmd: land" "Autonomous landing engaged"
 # not a fit judgment — just "did not tumble".
 # ホバー+チャープ窓(t=6..40s、最終降下前)の緩いG3境界: フィット判定ではなく
 # 「転倒していない」だけを見る。
-metric tilt_max < 35.0  in 6.0 40.0
+metric tilt_max < 0.6109  in 6.0 40.0  # 35.0 deg
 # duty stays healthy through hover + the pre-chirp climb + the roll chirp (no
 # saturating differential yet). / ホバー+登坂(chirp前)+ロールchirpはduty健全。
 metric duty_max < 0.95  in 6.0 24.0

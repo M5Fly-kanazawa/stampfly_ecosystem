@@ -180,6 +180,18 @@ def render_schema_py(spec: dict) -> str:
     parts.append(f"REQUIRED_STREAMS = {_pp(required)}\n\n")
 
     parts.append(
+        "# Required streams per capture source (meta.json `source`): the\n"
+        "# firmware's Data Stream always has imu.csv, the SILS emulator adds\n"
+        "# MuJoCo truth.csv, and a pure-physics simulator has ONLY truth.csv.\n"
+        "# check.py falls back to REQUIRED_STREAMS for an unknown source.\n"
+        "# 取得元（meta.json の `source`）ごとの必須ストリーム: 実機の Data\n"
+        "# Stream は常に imu.csv を持ち、SILS エミュレータはそれに MuJoCo の\n"
+        "# truth.csv を加え、純粋な物理シミュレータは truth.csv しか持たない。\n"
+        "# 未知の取得元は check.py が REQUIRED_STREAMS で検査する。\n"
+    )
+    parts.append(f"REQUIRED_STREAMS_BY_SOURCE = {_pp(spec['required_streams'])}\n\n")
+
+    parts.append(
         "# Streams that publish one row per CONTROL CYCLE, all sharing the\n"
         "# 'seq' column as their true per-observation key -- their timestamp_us\n"
         "# can legitimately repeat (a control cycle that did not get a new IMU\n"
@@ -293,6 +305,35 @@ def _stream_overview_table(spec: dict, lang: str) -> str:
             f"| `{s['name']}` | `{s['file']}` | {_md_cell(s['source'])} | {rate} | {required} |"
         )
     return header + "\n".join(rows) + "\n"
+
+
+def _required_by_source_table(spec: dict, lang: str) -> str:
+    """Table of the streams that can never be missing, per capture source
+    (`required_streams` in the YAML; `schema.REQUIRED_STREAMS_BY_SOURCE`).
+    取得元ごとに絶対に欠けないストリームの表（YAML の `required_streams`、
+    `schema.REQUIRED_STREAMS_BY_SOURCE`）。
+    """
+    if lang == "ja":
+        lines = [
+            "### 取得元ごとの必須ストリーム",
+            "",
+            "`meta.json` の `source` に応じて `sf log check` が存在を要求するストリーム"
+            "（上の表の「必須」列は実機の既定）。",
+            "",
+            "| 取得元 | 必須ストリーム |\n|---|---|",
+        ]
+    else:
+        lines = [
+            "### Required streams per source",
+            "",
+            "Streams `sf log check` requires depending on `meta.json`'s `source` "
+            "(the \"Required\" column above is the vehicle default).",
+            "",
+            "| Source | Required streams |\n|---|---|",
+        ]
+    for source, names in spec["required_streams"].items():
+        lines.append(f"| {source} | " + ", ".join(f"`{n}`" for n in names) + " |")
+    return "\n".join(lines) + "\n"
 
 
 def _stream_column_tables(spec: dict, lang: str) -> str:
@@ -414,6 +455,7 @@ def render_doc_md(spec: dict) -> str:
     lines.append("## 2. ストリーム一覧")
     lines.append("")
     lines.append(_stream_overview_table(spec, "ja"))
+    lines.append(_required_by_source_table(spec, "ja"))
     lines.append("## 3. 各ストリームの列")
     lines.append("")
     lines.append(_stream_column_tables(spec, "ja"))
@@ -474,6 +516,7 @@ def render_doc_md(spec: dict) -> str:
     lines.append("## 2. Stream list")
     lines.append("")
     lines.append(_stream_overview_table(spec, "en"))
+    lines.append(_required_by_source_table(spec, "en"))
     lines.append("## 3. Columns per stream")
     lines.append("")
     lines.append(_stream_column_tables(spec, "en"))

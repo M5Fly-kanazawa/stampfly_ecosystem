@@ -238,6 +238,16 @@ COLUMN_NAMES = {
 # 任意。ファーム/シナリオによって送らないパケット種別があるため）。
 REQUIRED_STREAMS = ['imu']
 
+# Required streams per capture source (meta.json `source`): the
+# firmware's Data Stream always has imu.csv, the SILS emulator adds
+# MuJoCo truth.csv, and a pure-physics simulator has ONLY truth.csv.
+# check.py falls back to REQUIRED_STREAMS for an unknown source.
+# 取得元（meta.json の `source`）ごとの必須ストリーム: 実機の Data
+# Stream は常に imu.csv を持ち、SILS エミュレータはそれに MuJoCo の
+# truth.csv を加え、純粋な物理シミュレータは truth.csv しか持たない。
+# 未知の取得元は check.py が REQUIRED_STREAMS で検査する。
+REQUIRED_STREAMS_BY_SOURCE = {'vehicle': ['imu'], 'sils': ['imu', 'truth'], 'sim': ['truth']}
+
 # Streams that publish one row per CONTROL CYCLE, all sharing the
 # 'seq' column as their true per-observation key -- their timestamp_us
 # can legitimately repeat (a control cycle that did not get a new IMU

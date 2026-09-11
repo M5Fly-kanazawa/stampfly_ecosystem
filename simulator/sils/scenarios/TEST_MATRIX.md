@@ -15,7 +15,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | 系統 | 何を見るか | ゲート |
 |------|-----------|--------|
 | **ログ文字列** | 状態遷移の並び・順序（`ARM accepted` 等） | G1 |
-| **数値メトリクス** | `trajectory.csv` の物理真値＋推定から算出（`metric <name> <op> <value> in <t0> <t1>`） | G2/G3/G4 |
+| **数値メトリクス** | 実行結果のフライトログ一式（`.sflog.zip`。`truth.csv` の物理真値＋`attitude.csv`/`posvel.csv`/`motor.csv` の推定から算出。仕様は `protocol/spec/flight_log.yaml`、角度は SI 単位のラジアン）から算出（`metric <name> <op> <value> in <t0> <t1>`） | G2/G3/G4 |
 
 ゲート定義（`RESET_PLAN.md` §4）：
 
@@ -108,7 +108,9 @@ physical-truth SILS gates before moving to hardware.
 ### Two verdict tracks
 
 Each `*.scn` has a `*.expect` judged two ways: **log strings** (state-transition
-order ⇒ G1) and **numerical metrics** computed from `trajectory.csv`
+order ⇒ G1) and **numerical metrics** computed from the run's flight-log bundle
+(`.sflog.zip` — `truth.csv`'s physical ground truth plus `attitude.csv`/`posvel.csv`/
+`motor.csv` estimates; spec `protocol/spec/flight_log.yaml`; angles in SI radians)
 (`metric <name> <op> <value> in <t0> <t1>` ⇒ G2/G3/G4). Gate definitions are in
 `RESET_PLAN.md` §4 (G1 boot/transitions, G2 estimate tracking, G3 closed-loop
 boundedness, G4 actuator health).

@@ -27,8 +27,8 @@
 # Expectation (LONG hover): over the 90 s hold the firmware ESKF alt (console
 # "ALT_HOLD: alt=..") stays within a few cm of the captured setpoint with vz≈0 and
 # the commanded thrust stays near the hover feedforward 0.407 N — no slow climb,
-# no negative divergence, no monotonic thrust ramp. The truth alt (trajectory.csv
-# `alt`) likewise stays flat. A slow drift would expose a residual accel-bias /
+# no negative divergence, no monotonic thrust ramp. The truth altitude (the run's
+# flight-log bundle's `truth.csv`) likewise stays flat. A slow drift would expose a residual accel-bias /
 # observability issue that the 16 s hover_alt is too short to reveal.
 # 期待（長時間ホバー）: 90 s の保持で ESKF alt は capture 値の数 cm 以内、vz≈0、指令推力
 # は hover 0.407 N 近傍を維持（緩い上昇・負への発散・推力の単調増減が無い）。真値 alt も

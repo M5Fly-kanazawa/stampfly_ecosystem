@@ -7,16 +7,17 @@
 # synchronized state graphs (right), composed into one MP4. The 3D frames replay
 # the recorded MuJoCo qpos and the graphs are the recorded truth/estimate/command
 # time series — so "what was computed" and "what is shown" come from the same run
-# (reproducible: same trajectory.csv -> same video).  RESET_PLAN.md §9.
+# (reproducible: same flight-log bundle -> same video).  RESET_PLAN.md §9.
 #
 # SILS マイルストーンのレビュー動画を描く: MuJoCo の 3D 飛行アニメ（左）と同期した
 # 状態グラフ（右）を 1 本の MP4 に合成する。3D は記録した MuJoCo qpos を再生し、
 # グラフは記録した真値/推定/指令の時系列。計算と映像が同じ実行から来る（再現性あり）。
 
 import argparse
-import csv
 import json
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 import mujoco
@@ -24,25 +25,184 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import imageio.v2 as imageio
+import pandas as pd
+
+# lib/sflog reads the flight-log v1 bundle the SILS emulator now writes per run
+# (docs/plans/flight-log-format-plan.md section 3.3, replacing the old flat per-run
+# CSV file). This script runs under the dedicated SILS viz venv
+# (simulator/sils/viz/venv, created by lib/sfcli/commands/sils.py's `_venv()` with
+# only mujoco/numpy/matplotlib/imageio installed), which does NOT have the project
+# installed -- so `lib/` must be added to sys.path by hand, and the venv needs
+# `pandas` added to its pip install list (numpy is already there; PyYAML is not
+# needed at runtime by lib/sflog, only by its schema generator).
+# lib/sflog は SILS エミュレータが実行ごとに書くフライトログ v1 一式を読む
+# （計画書 3.3節、旧・実行ごとの平坦な CSV ファイルの後継）。本スクリプトは専用の
+# SILS viz venv
+# （simulator/sils/viz/venv。lib/sfcli/commands/sils.py の `_venv()` が
+# mujoco/numpy/matplotlib/imageio だけを入れて作る）で動く -- このプロジェクト自体は
+# 未導入のため `lib/` を手動で sys.path に足す必要があり、venv の pip install 対象に
+# `pandas` の追加が要る（numpy は既にある。PyYAML は lib/sflog の実行時には不要 --
+# 使うのはスキーマ生成スクリプトのみ）。
+_ROOT = Path(__file__).resolve().parents[3]
+_LIB_DIR = _ROOT / "lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+import sflog  # noqa: E402  flight-log v1 bundle reader
+
+RAD_TO_DEG = 180.0 / np.pi
+_SQRT_HALF = 0.7071067811865476  # 1/sqrt(2)
 
 
-def load_trajectory(path):
-    """Read trajectory.csv into a dict of numpy arrays keyed by column name.
-    Fails with a clear diagnostic on an empty/header-only/ragged file (a run that
-    crashed mid-write) instead of an opaque IndexError/inhomogeneous-shape error.
-    空/見出しのみ/不揃いのファイル（書き込み途中で異常終了）は不明瞭な例外でなく明確に失敗。"""
-    with open(path, newline="") as f:
-        reader = csv.reader(f)
-        header = next(reader, None)
-        if header is None:
-            raise ValueError(f"{path}: empty trajectory (no header)")
-        rows = [[float(x) for x in row] for row in reader if row]
-    if not rows:
-        raise ValueError(f"{path}: trajectory has a header but no data rows")
-    if any(len(r) != len(header) for r in rows):
-        raise ValueError(f"{path}: ragged rows (expected {len(header)} columns)")
-    cols = np.array(rows).T
-    return {name: cols[i] for i, name in enumerate(header)}
+def _find_latest_bundle_zip(bundle_dir):
+    """Newest `sils_*.sflog.zip` under a SILS run's bundle dir."""
+    candidates = sorted(Path(bundle_dir).glob("sils_*.sflog.zip"), key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else None
+
+
+def _euler_from_quat_ned(qw, qx, qy, qz):
+    """roll/pitch/yaw [rad] from a body(FRD)->NED quaternion (w,x,y,z), vectorized
+    over numpy arrays. Standard aerospace 3-2-1 Euler extraction; pitch is clipped
+    to arcsin's domain to absorb float round-off near +-90 deg (gimbal lock).
+    機体(FRD)→NED のクォータニオンから roll/pitch/yaw [rad]（numpy 配列対応）。
+    標準的な航空 3-2-1 オイラー角抽出。pitch は arcsin の定義域にクランプする
+    （±90度付近の浮動小数点丸め対策）。
+    """
+    roll = np.arctan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    pitch = np.arcsin(np.clip(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
+    yaw = np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    return roll, pitch, yaw
+
+
+def _ned_to_mujoco_pos(pos_x, pos_y, pos_z):
+    """StampFly NED position -> MuJoCo/ENU world position (px, py, pz). The exact
+    inverse of simulator/sils/frames/frames.hpp's `ned_to_enu()` ({n.y, n.x, -n.z}),
+    reimplemented here because this Python reader does not link the C++ frames module.
+    StampFly の NED 位置 -> MuJoCo/ENU 世界座標 (px, py, pz)。frames.hpp の
+    `ned_to_enu()`（{n.y, n.x, -n.z}）そのままの逆変換 -- この Python 読み込み側は
+    C++ の frames モジュールをリンクしないため、ここに再実装する。
+    """
+    return pos_y, pos_x, -pos_z
+
+
+def _quat_mul(w1, x1, y1, z1, w2, x2, y2, z2):
+    """Hamilton product (w1,x1,y1,z1) * (w2,x2,y2,z2), vectorized."""
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+    return w, x, y, z
+
+
+def _qnb_to_mujoco_quat(qw, qx, qy, qz):
+    """StampFly q_nb (body FRD -> world NED) -> MuJoCo framequat (body FLU -> world
+    ENU), vectorized. The exact inverse of frames.hpp's `qnb_to_mujoco_quat()`:
+        q_mj = q_enu_to_ned().conj() * q_nb * q_frd_to_flu().conj()   (normalized)
+    where q_enu_to_ned = (w=0, x=y=1/sqrt(2), z=0) and q_frd_to_flu = (w=0, x=1,
+    y=z=0). Reimplemented in plain numpy since this reader does not link the C++
+    frames module.
+    StampFly の q_nb（機体FRD→世界NED）-> MuJoCo framequat（機体FLU→世界ENU）、
+    配列対応。frames.hpp の `qnb_to_mujoco_quat()` そのままの逆変換（式は英語側参照）
+    -- この読み込み側は C++ frames モジュールをリンクしないため素の numpy で再実装。
+    """
+    ew, ex, ey, ez = 0.0, _SQRT_HALF, _SQRT_HALF, 0.0            # q_enu_to_ned
+    ew_c, ex_c, ey_c, ez_c = ew, -ex, -ey, -ez                    # its conjugate
+    fw, fx, fy, fz = 0.0, 1.0, 0.0, 0.0                           # q_frd_to_flu
+    fw_c, fx_c, fy_c, fz_c = fw, -fx, -fy, -fz                    # its conjugate
+    w1, x1, y1, z1 = _quat_mul(ew_c, ex_c, ey_c, ez_c, qw, qx, qy, qz)
+    w2, x2, y2, z2 = _quat_mul(w1, x1, y1, z1, fw_c, fx_c, fy_c, fz_c)
+    norm = np.sqrt(w2 * w2 + x2 * x2 + y2 * y2 + z2 * z2)
+    return w2 / norm, x2 / norm, y2 / norm, z2 / norm
+
+
+def _asof_nearest(base, other, col, n):
+    """merge_asof(nearest) `col` from `other` onto `base`'s timestamp_us; an
+    all-NaN array of length `n` if `other` is absent (the stream is missing from
+    the bundle, e.g. `motor` on a workshop-target run) -- matplotlib draws a NaN
+    as a gap in a line plot, so the graphs degrade gracefully instead of raising.
+    `other` の `col` 列を `base` の timestamp_us へ merge_asof(nearest) で結合する。
+    `other` が無い（バンドルにそのストリームが無い。例: workshop ターゲット実行の
+    `motor`）場合は長さ `n` の全 NaN 配列 -- matplotlib は折れ線の NaN を欠落として
+    描くため、例外にせずグラフを穏やかに劣化させる。
+    """
+    if other is None or col not in other.columns:
+        return np.full(n, np.nan)
+    other_sorted = other[["timestamp_us", col]].sort_values("timestamp_us", kind="stable")
+    merged = pd.merge_asof(base[["timestamp_us"]], other_sorted, on="timestamp_us",
+                            direction="nearest")
+    return merged[col].to_numpy()
+
+
+def load_flightlog(bundle_dir):
+    """Load a SILS run's flight-log v1 bundle (`sils_*.sflog.zip` under
+    `bundle_dir`) and return a dict of numpy arrays keyed by the legacy
+    trajectory-table column names this file's drawing code expects: t [s];
+    px/py/pz, qw/qx/qy/qz in the MuJoCo/ENU frame `render_3d()` expects (derived
+    from `truth`'s NED position/attitude via the inverse of frames.hpp's
+    transforms -- see the helpers above); roll/pitch/roll_est/pitch_est in
+    DEGREES (graph_frame()/overlay_graph_frame() label them "[deg]"); yawrate
+    [rad/s] (truth.rate_z); yawcmd (always 0.0 -- retired, plan section 3.3, it
+    was always 0 in emulator runs); alt/alt_est [m]; m0..m3 (motor duty, NaN --
+    a plotted gap -- when the bundle has no `motor` stream, e.g. a workshop-
+    target run). Fails with a clear diagnostic (no bundle / no `truth` stream)
+    instead of an opaque error, matching this file's old CSV-file-based
+    loader's intent.
+
+    `bundle_dir` 下の SILS 実行のフライトログ v1 一式（`sils_*.sflog.zip`）を読み、
+    このファイルの描画コードが期待する旧トラジェクトリ表の列名を持つ numpy 配列の
+    dict を返す: t [秒]；px/py/pz, qw/qx/qy/qz は `render_3d()` が期待する
+    MuJoCo/ENU 座標系（`truth` の NED 位置・姿勢から frames.hpp の変換の逆で導出 --
+    上のヘルパー参照）；roll/pitch/roll_est/pitch_est は度（graph_frame()/
+    overlay_graph_frame() が "[deg]" とラベル）；yawrate [rad/s]（truth.rate_z）；
+    yawcmd は常に0.0（廃止済み -- 計画書3.3節、エミュレータ実行では元々常に0だった）；
+    alt/alt_est [m]；m0..m3（モータ duty、バンドルに `motor` ストリームが無ければ
+    NaN -- グラフ上は欠落として描かれる。例: workshop ターゲット実行）。バンドル
+    無し／`truth` ストリーム無しは不明瞭な例外でなく明確な診断で失敗する（この
+    ファイルの旧・CSV ファイル読み込み処理の意図を踏襲）。
+    """
+    bundle_dir = Path(bundle_dir)
+    zip_path = _find_latest_bundle_zip(bundle_dir)
+    if zip_path is None:
+        raise ValueError(f"{bundle_dir}: no sils_*.sflog.zip flight-log bundle found")
+    log = sflog.load(zip_path)
+    truth = log.streams.get("truth")
+    if truth is None or len(truth) == 0:
+        raise ValueError(f"{zip_path}: bundle has no 'truth' stream (SILS-only stream)")
+    truth = truth.sort_values("timestamp_us", kind="stable").reset_index(drop=True)
+    n = len(truth)
+
+    t_us = truth["timestamp_us"].to_numpy()
+    qw, qx, qy, qz = (truth[c].to_numpy() for c in ("quat_w", "quat_x", "quat_y", "quat_z"))
+    roll, pitch, _yaw = _euler_from_quat_ned(qw, qx, qy, qz)
+    px, py, pz = _ned_to_mujoco_pos(*(truth[c].to_numpy() for c in ("pos_x", "pos_y", "pos_z")))
+    mj_qw, mj_qx, mj_qy, mj_qz = _qnb_to_mujoco_quat(qw, qx, qy, qz)
+
+    posvel, attitude, motor = (log.streams.get(s) for s in ("posvel", "attitude", "motor"))
+    alt_est = -_asof_nearest(truth, posvel, "pos_z", n)
+    if attitude is not None:
+        cols = ["timestamp_us", "quat_w", "quat_x", "quat_y", "quat_z"]
+        other_sorted = attitude[cols].sort_values("timestamp_us", kind="stable")
+        merged = pd.merge_asof(truth[["timestamp_us"]], other_sorted, on="timestamp_us",
+                                direction="nearest")
+        roll_est_rad, pitch_est_rad, _ = _euler_from_quat_ned(
+            merged["quat_w"].to_numpy(), merged["quat_x"].to_numpy(),
+            merged["quat_y"].to_numpy(), merged["quat_z"].to_numpy(),
+        )
+    else:
+        roll_est_rad = pitch_est_rad = np.full(n, np.nan)
+
+    return {
+        "t": t_us / 1e6,
+        "px": px, "py": py, "pz": pz,
+        "qw": mj_qw, "qx": mj_qx, "qy": mj_qy, "qz": mj_qz,
+        "alt": -truth["pos_z"].to_numpy(), "alt_est": alt_est,
+        "roll": roll * RAD_TO_DEG, "pitch": pitch * RAD_TO_DEG,
+        "roll_est": roll_est_rad * RAD_TO_DEG, "pitch_est": pitch_est_rad * RAD_TO_DEG,
+        "yawrate": truth["rate_z"].to_numpy(), "yawcmd": np.zeros(n),
+        "m0": _asof_nearest(truth, motor, "duty_FR", n),
+        "m1": _asof_nearest(truth, motor, "duty_RR", n),
+        "m2": _asof_nearest(truth, motor, "duty_RL", n),
+        "m3": _asof_nearest(truth, motor, "duty_FL", n),
+    }
 
 
 def render_3d(model, data, renderer, qpos, cam):
@@ -254,8 +414,8 @@ def overlay_graph_frame(A, B, i, w_px, h_px, la, lb):
 def render_compare(args):
     """Render the P4 side-by-side video: twin 3D panes (A | B) over full-width
     overlay graphs. Both runs share one flight, so the panes move in lockstep."""
-    A = load_trajectory(os.path.join(args.bundle, "trajectory.csv"))
-    B = load_trajectory(os.path.join(args.compare, "trajectory.csv"))
+    A = load_flightlog(args.bundle)
+    B = load_flightlog(args.compare)
     n = min(len(A["t"]), len(B["t"]))                    # same flight → equal, but be safe
     A = {k: v[:n] for k, v in A.items()}                 # one time base: graphs ↔ 3D agree
     B = {k: v[:n] for k, v in B.items()}                 # （長さが食い違っても自己整合）
@@ -347,7 +507,8 @@ def render_compare(args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--bundle", required=True, help="dir with trajectory.csv + results.json")
+    ap.add_argument("--bundle", required=True,
+                    help="dir with a sils_*.sflog.zip flight-log bundle + results.json")
     ap.add_argument("--out", required=True, help="output MP4 path")
     ap.add_argument("--fps", type=int, default=50)
     ap.add_argument("--height", type=int, default=480)
@@ -372,7 +533,7 @@ def main():
         render_compare(args)
         return
 
-    traj = load_trajectory(os.path.join(args.bundle, "trajectory.csv"))
+    traj = load_flightlog(args.bundle)
     n = len(traj["t"])
     results = {}
     rpath = os.path.join(args.bundle, "results.json")

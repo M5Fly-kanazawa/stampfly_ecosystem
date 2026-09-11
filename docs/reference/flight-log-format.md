@@ -68,6 +68,16 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `truth` | `truth.csv` | sils/sim | (可変/事象駆動) | - |
 | `events` | `events.csv` | sils | (可変/事象駆動) | - |
 
+### 取得元ごとの必須ストリーム
+
+`meta.json` の `source` に応じて `sf log check` が存在を要求するストリーム（上の表の「必須」列は実機の既定）。
+
+| 取得元 | 必須ストリーム |
+|---|---|
+| vehicle | `imu` |
+| sils | `imu`, `truth` |
+| sim | `truth` |
+
 ## 3. 各ストリームの列
 
 #### imu（`imu.csv`）
@@ -408,6 +418,16 @@ Encoding utf-8, header row, no comment rows. Column 1 is always `timestamp_us` (
 | `eskf_cov` | `eskf_cov.csv` | ESKF P-diag (0x49) | (variable / event-driven) | - |
 | `truth` | `truth.csv` | sils/sim | (variable / event-driven) | - |
 | `events` | `events.csv` | sils | (variable / event-driven) | - |
+
+### Required streams per source
+
+Streams `sf log check` requires depending on `meta.json`'s `source` (the "Required" column above is the vehicle default).
+
+| Source | Required streams |
+|---|---|
+| vehicle | `imu` |
+| sils | `imu`, `truth` |
+| sim | `truth` |
 
 ## 3. Columns per stream
 

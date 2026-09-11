@@ -34,5 +34,5 @@ metric alt_max  < 1.10 in 14.7 18.7
 metric alt_band < 0.32 in 14.7 18.7
 # Gate OPEN (after re-centering at G): full-up throttle now climbs well past the hold.
 metric alt_mean > 1.40 in 22.2 23.2
-metric tilt_max < 12.0 in 9.0 23.2
+metric tilt_max < 0.2094 in 9.0 23.2  # 12.0 deg
 metric duty_max < 0.95 in 12.0 23.2

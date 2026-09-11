@@ -45,6 +45,7 @@
 #include "config.hpp"
 #include "plant.hpp"
 #include "plant_bridge.hpp"
+#include "emu_flightlog.hpp"   // StampFly flight-log v1 bundle recorder (out_dir/flightlog/*.csv)
 
 void ImuTask(void*);
 void ControlTask(void*);
@@ -113,9 +114,6 @@ sils::Plant g_plant;
 int64_t g_last_step_us = 0;
 int64_t g_last_baro_us = 0;
 int64_t g_last_tof_us = 0;
-FILE* g_traj = nullptr;
-int g_rec_count = 0;
-constexpr int kRecDiv = 8;
 
 // Metrics for the G3 verdict.
 float g_max_alt = 0.0f;
@@ -383,23 +381,17 @@ void physics(int64_t now_us)
         g_att_err_n += 2;   // two components (roll, pitch)
     }
 
-    if (g_traj != nullptr && (g_rec_count++ % kRecDiv) == 0) {
-        const double* q = g_plant.data()->qpos;
-        // Signed roll/pitch for truth and estimate (deg, 4 decimals — the angles are
-        // ~0.1°, so coarse rounding would itself look like pulses).
-        // 真値・推定の符号付きロール/ピッチ（deg、小数4桁 — 角度が ~0.1° なので粗い丸めは
-        // それ自体がパルスに見える）。
-        float roll, pitch, roll_e, pitch_e;
-        rollPitchDeg(tr.q_nb, roll, pitch);
-        rollPitchDeg(qe, roll_e, pitch_e);
-        std::fprintf(g_traj,
-                "%.4f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.6f,"
-                "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
-                t, q[0], q[1], q[2], q[3], q[4], q[5], q[6],
-                alt, roll, pitch, tr.omega_frd.z, g_yaw_cmd_now,
-                -est.position[2], roll_e, pitch_e,
-                cmd.duty[0], cmd.duty[1], cmd.duty[2], cmd.duty[3]);
-    }
+    // Record one flight-log bundle sample: a truth.csv row at the recorder's own
+    // fixed virtual cadence (it decimates internally, so this call is made every
+    // physics step — same as emu_main.cpp's on_advance), plus (via the linked
+    // vehicle-topic glue) the firmware streams edge-detected on the new IMU
+    // sample. Replaces the standalone trajectory.csv this function used to write.
+    // フライトログ一式を1サンプル記録: truth.csv はレコーダ自身の固定間隔で書かれる
+    // （内部で間引くため毎物理ステップ呼んでよい — emu_main.cpp の on_advance と同じ）。
+    // リンクした vehicle トピック glue 経由で、新しい IMU サンプルでエッジ検出した
+    // ファームストリームも記録される。本関数が従来書いていた単独の trajectory.csv を
+    // 置き換える。
+    sils_emu_flightlog_sample(now_us, &g_plant);
 }
 }  // namespace
 
@@ -415,15 +407,18 @@ int main(int argc, char** argv)
         (argc > 6) ? (unsigned)std::strtoul(argv[6], nullptr, 10) : 12345u;
     const bool noise_on = (std::strcmp(noise_lvl, "off") != 0);
 
+    // Open the flight-log bundle under <out_dir>/flightlog/ (replaces the
+    // standalone trajectory.csv this bench used to write directly). The
+    // recorder creates the "flightlog" leaf directory itself; out_dir must
+    // already exist (the caller creates it for results.json below).
+    // <out_dir>/flightlog/ 配下にフライトログ一式を開く（本ベンチが直接書いていた
+    // 単独の trajectory.csv を置き換える）。"flightlog" リーフディレクトリは
+    // レコーダ自身が作る。out_dir は既に存在していること（呼び出し側が下の
+    // results.json 用に作成済み）。
+    char flightlog_dir[1024] = {0};
     if (out_dir != nullptr) {
-        char path[1024];
-        std::snprintf(path, sizeof(path), "%s/trajectory.csv", out_dir);
-        g_traj = std::fopen(path, "w");
-        if (g_traj != nullptr) {
-            std::fprintf(g_traj,
-                "t,px,py,pz,qw,qx,qy,qz,alt,roll,pitch,yawrate,yawcmd,"
-                "alt_est,roll_est,pitch_est,m0,m1,m2,m3\n");
-        }
+        std::snprintf(flightlog_dir, sizeof(flightlog_dir), "%s/flightlog", out_dir);
+        sils_emu_flightlog_open(flightlog_dir);
     }
 
     sf::params::init();
@@ -550,7 +545,7 @@ int main(int argc, char** argv)
     printf("[flight] %s — G2+G3 takeoff->hover->yaw->stop->landing\n",
            failures == 0 ? "OK" : "FAILED");
 
-    if (g_traj != nullptr) { std::fclose(g_traj); g_traj = nullptr; }
+    sils_emu_flightlog_close();   // flush/close the flight-log bundle (no-op if never opened)
     if (out_dir != nullptr) {
         char path[1024];
         std::snprintf(path, sizeof(path), "%s/results.json", out_dir);

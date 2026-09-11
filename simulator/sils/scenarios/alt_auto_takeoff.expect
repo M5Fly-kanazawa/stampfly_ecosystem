@@ -26,4 +26,4 @@ metric alt_mean < 0.62 in 12.0 16.0
 metric alt_rmse < 0.08 in 12.0 16.0
 metric alt_band < 0.20 in 12.0 16.0
 metric duty_max < 0.92 in 12.0 16.0
-metric tilt_max < 10.0 in 9.0 16.0
+metric tilt_max < 0.1745 in 9.0 16.0  # 10.0 deg

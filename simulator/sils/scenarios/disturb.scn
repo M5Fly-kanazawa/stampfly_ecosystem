@@ -50,7 +50,7 @@
 # 回復ホバーで終える（降下/着地なし）: P7 は外乱回復のデモで、接地は剛体接触の転倒を生み
 # 姿勢軸を支配し飛行中の ~12° 故障応答を隠す。空中で止め姿勢軸を外乱本来の範囲に保つ。
 #
-# Expectation (G3/G4, read from trajectory.csv):
+# Expectation (G3/G4, read from the run's flight-log bundle — truth.csv/attitude.csv/...):
 #   F: a downward+fwd wind makes alt dip briefly, then ALT_HOLD raises thrust and holds
 #      (alt returns to within a few cm of the ~0.62 m setpoint); craft drifts in +x (no
 #      position hold) but altitude & attitude stay bounded.

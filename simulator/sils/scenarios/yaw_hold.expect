@@ -30,8 +30,8 @@ log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARME
 log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING
 log_contains any "Mode change: STABILIZE → ALT_HOLD"  # G1: hover law engaged
 log_contains any "DISARM accepted"                    # G1: clean end of flight
-metric yaw_band  < 1.5   in 11.5 19.0   # G3: heading BOUNDED through the fault (the heading-hold gate)
-metric tilt_max  < 10.0  in 11.0 19.0   # G3: attitude bounded under the asymmetric fault
+metric yaw_band < 0.02618   in 11.5 19.0  # 1.5 deg  # G3: heading BOUNDED through the fault (the heading-hold gate)
+metric tilt_max < 0.1745  in 11.0 19.0  # 10.0 deg  # G3: attitude bounded under the asymmetric fault
 metric alt_min   > 0.10  in 11.0 19.0   # G3: the fault dip stays shallow, no touchdown
 metric alt_max   < 0.85  in  7.0 20.5   # G3: no balloon through fault entry/recovery
 metric duty_max  < 0.96  in 11.0 19.0   # G4: motors keep margin while compensating M1

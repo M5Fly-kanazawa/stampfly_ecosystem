@@ -31,7 +31,9 @@ import argparse
 from motor_model import QuadMotorSystem, compute_hover_conditions
 from control_allocation import ControlAllocator, thrusts_to_duties
 from control.pid import PID
-from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time, CONTROL_DT
+from sim_io import (
+    ControlInput, CONTROL_DT, get_input_at_time, load_input_csv, save_output_bundle, StateLog,
+)
 
 
 # =============================================================================
@@ -129,9 +131,16 @@ def run_headless(input_file, output_file, duration=10.0):
     print("Genesis ヘッドレスシミュレーション")
     print("=" * 60)
 
-    # Load input sequence
-    input_sequence = load_input_csv(input_file)
-    print(f"Input: {input_file} ({len(input_sequence)} samples)")
+    # Load input sequence, or hold hover (all-zero stick) for the whole run
+    # when no --input is given (same default as run_vpython_headless.py).
+    # --input が無ければホバー（全スティック中立）を全区間保持する
+    # （run_vpython_headless.py と同じ既定）。
+    if input_file:
+        input_sequence = load_input_csv(input_file)
+        print(f"Input: {input_file} ({len(input_sequence)} samples)")
+    else:
+        input_sequence = [ControlInput(time=0.0, throttle=0.0, roll=0.0, pitch=0.0, yaw=0.0)]
+        print("Input: hover (no --input given)")
     print(f"Output: {output_file}")
     print(f"Duration: {duration}s")
 
@@ -254,22 +263,41 @@ def run_headless(input_file, output_file, duration=10.0):
         scene.step()
         physics_steps += 1
 
-        # Logging (at LOG_HZ)
+        # Logging (at LOG_HZ). Logged RAW in Genesis's own native frame
+        # (Z-up, X-right, Y-forward world; body-frame rates) -- NOT
+        # converted to NED here. sim_io.save_output_bundle() does that
+        # conversion exactly once, centrally, for every field together
+        # (position/velocity/euler/rate), keyed off metadata['simulator']
+        # == 'genesis' below. Converting here AND there would silently
+        # double-convert attitude/rate while leaving position unconverted
+        # (that mismatch existed in this script before 2026-09-11 -- see
+        # sim_io.py's frame-conversion comment for the single source of
+        # truth this replaces it with).
+        # LOG_HZ での記録。Genesis 自身のネイティブ座標系のまま（生値）で
+        # 記録する（Z-up, X-right, Y-forward のワールド座標系。角速度は
+        # ボディ座標系）-- ここでは NED へ変換しない。
+        # sim_io.save_output_bundle() が metadata['simulator'] == 'genesis'
+        # を見て、位置・速度・オイラー角・角速度をまとめて一度だけ中央で
+        # 変換する。ここと両方で変換すると、姿勢・角速度だけ二重変換され
+        # 位置は未変換のまま、という食い違いが生じる（2026-09-11 以前は
+        # 実際にそうなっていた -- 単一の変換元とする経緯は sim_io.py の
+        # 座標変換コメント参照）。
         if physics_steps % LOG_INTERVAL == 0:
             pos = drone.get_pos()
             quat = drone.get_quat()
             euler_genesis = quat_to_euler(quat)
-            euler_ned = genesis_euler_to_ned(euler_genesis)
 
             dofs_vel = drone.get_dofs_velocity()
-            gyro_genesis = np.array([float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5])])
-            gyro_ned = genesis_gyro_to_ned(gyro_genesis)
+            lin_vel_genesis = (float(dofs_vel[0]), float(dofs_vel[1]), float(dofs_vel[2]))
+            gyro_genesis_body = (float(dofs_vel[3]), float(dofs_vel[4]), float(dofs_vel[5]))
 
             state_logs.append(StateLog(
                 time=sim_time,
                 x=float(pos[0]), y=float(pos[1]), z=float(pos[2]),
-                roll=euler_ned[0], pitch=euler_ned[1], yaw=euler_ned[2],
-                p=gyro_ned[0], q=gyro_ned[1], r=gyro_ned[2],
+                roll=float(euler_genesis[0]), pitch=float(euler_genesis[1]),
+                yaw=float(euler_genesis[2]),
+                p=gyro_genesis_body[0], q=gyro_genesis_body[1], r=gyro_genesis_body[2],
+                vx=lin_vel_genesis[0], vy=lin_vel_genesis[1], vz=lin_vel_genesis[2],
             ))
 
         # Progress report
@@ -278,15 +306,21 @@ def run_headless(input_file, output_file, duration=10.0):
             speed = sim_time / elapsed if elapsed > 0 else 0
             print(f"  t={sim_time:.1f}s ({speed:.1f}x realtime)")
 
-    # Save output
+    # Save output as a StampFly flight-log v1 bundle (truth.csv + pilot.csv).
+    # 'simulator': 'genesis' tells save_output_bundle() to apply the
+    # Genesis-native -> NED conversion documented in sim_io.py.
+    # 出力を StampFly フライトログ v1 一式として保存（truth.csv + pilot.csv）。
+    # 'simulator': 'genesis' により save_output_bundle() が sim_io.py に
+    # 記載の Genesis ネイティブ座標系 -> NED 変換を適用する。
     print(f"\n[4] Saving output to {output_file}...")
     metadata = {
         'simulator': 'genesis',
         'physics_hz': PHYSICS_HZ,
         'control_hz': CONTROL_HZ,
-        'input_file': input_file,
+        'input_file': input_file or 'hover (default, no --input given)',
+        'duration_s': duration,
     }
-    save_output_csv(output_file, state_logs, metadata)
+    save_output_bundle(output_file, state_logs, input_sequence, metadata)
 
     elapsed = time.perf_counter() - start_time
     print(f"\nDone! Simulated {duration}s in {elapsed:.1f}s ({duration/elapsed:.1f}x realtime)")
@@ -295,10 +329,11 @@ def run_headless(input_file, output_file, duration=10.0):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Genesis Headless Simulation')
-    parser.add_argument('--input', '-i', type=str, required=True,
-                       help='Input CSV file')
+    parser.add_argument('--input', '-i', type=str, default=None,
+                       help='Input CSV file (time,throttle,roll,pitch,yaw). '
+                            'Default: hover (all-zero stick) for the whole run.')
     parser.add_argument('--output', '-o', type=str, required=True,
-                       help='Output CSV file')
+                       help='Output StampFly flight-log v1 bundle path (.sflog.zip)')
     parser.add_argument('--duration', '-d', type=float, default=10.0,
                        help='Simulation duration [s]')
     args = parser.parse_args()

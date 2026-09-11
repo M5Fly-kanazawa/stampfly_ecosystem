@@ -6,9 +6,21 @@ visualize_comparison.py - Simulator Comparison Visualization
 Compares output from VPython and Genesis simulators.
 VPythonとGenesisシミュレータの出力を比較
 
+Both inputs are now StampFly flight-log v1 bundles (`.sflog.zip`; lib/sflog;
+docs/plans/flight-log-format-plan.md), each holding a `truth.csv` stream
+already converted to NED at write time by
+`sim_io.save_output_bundle()` -- this script no longer does any per-backend
+coordinate conversion itself (the old `--convert-genesis` flag and
+`genesis_to_ned()` are gone; converting again here would double-convert).
+入力は両方とも StampFly フライトログ v1 一式（`.sflog.zip`）。`truth.csv`
+ストリームは書き出し時に `sim_io.save_output_bundle()` が既に NED へ変換
+済みのため、本スクリプト側でのバックエンド別座標変換は行わない（旧
+`--convert-genesis` フラグと `genesis_to_ned()` は廃止 -- ここで再度変換
+すると二重変換になる）。
+
 Usage:
-  python visualize_comparison.py --vpython vpython_output.csv --genesis genesis_output.csv
-  python visualize_comparison.py --vpython vpython_output.csv --genesis genesis_output.csv --save comparison.png
+  python visualize_comparison.py --vpython vpython_run.sflog.zip --genesis genesis_run.sflog.zip
+  python visualize_comparison.py --vpython vpython_run.sflog.zip --genesis genesis_run.sflog.zip --save comparison.png
 """
 
 import sys
@@ -22,38 +34,7 @@ from pathlib import Path
 _SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
-from sim_io import load_output_csv, StateLog
-
-
-# =============================================================================
-# Coordinate Transforms
-# 座標変換
-# =============================================================================
-
-def genesis_to_ned(data):
-    """
-    Convert Genesis coordinate to NED coordinate.
-    Genesis座標系をNED座標系に変換
-
-    Genesis: Y-forward, X-right, Z-up
-    NED: X-forward (North), Y-right (East), Z-down
-
-    Position: genesis(x,y,z) -> ned(y, x, -z)
-    Attitude: genesis(roll,pitch,yaw) -> ned(pitch, roll, -yaw)
-    Angular rate: genesis(p,q,r) -> ned(q, p, -r)
-    """
-    return {
-        'time': data['time'],
-        'x': data['y'].copy(),      # Genesis Y -> NED X (forward)
-        'y': data['x'].copy(),      # Genesis X -> NED Y (right)
-        'z': -data['z'].copy(),     # Genesis Z -> NED Z (down)
-        'roll': data['pitch'].copy(),   # Genesis pitch -> NED roll
-        'pitch': data['roll'].copy(),   # Genesis roll -> NED pitch
-        'yaw': -data['yaw'].copy(),     # Genesis yaw -> NED yaw (inverted)
-        'p': data['q'].copy(),      # Genesis q -> NED p
-        'q': data['p'].copy(),      # Genesis p -> NED q
-        'r': -data['r'].copy(),     # Genesis r -> NED r (inverted)
-    }
+from sim_io import load_output_bundle, StateLog
 
 
 def extract_arrays(logs):
@@ -341,17 +322,15 @@ def plot_error(vpython_data, genesis_data, title="Error Analysis", save_path=Non
 def main():
     parser = argparse.ArgumentParser(description='Simulator Comparison Visualization')
     parser.add_argument('--vpython', '-v', type=str, required=True,
-                       help='VPython output CSV file')
+                       help='VPython run: a StampFly flight-log v1 bundle (.sflog.zip)')
     parser.add_argument('--genesis', '-g', type=str, required=True,
-                       help='Genesis output CSV file')
+                       help='Genesis run: a StampFly flight-log v1 bundle (.sflog.zip)')
     parser.add_argument('--save', '-s', type=str, default=None,
                        help='Save comparison plot to file')
     parser.add_argument('--save-error', '-e', type=str, default=None,
                        help='Save error analysis plot to file')
     parser.add_argument('--no-show', action='store_true',
                        help='Do not display plots (only save)')
-    parser.add_argument('--convert-genesis', action='store_true',
-                       help='Convert Genesis output from Genesis coords to NED coords')
     args = parser.parse_args()
 
     print("=" * 60)
@@ -359,26 +338,25 @@ def main():
     print("シミュレータ比較可視化")
     print("=" * 60)
 
-    # Load data
+    # Load data -- both bundles' truth.csv are already NED (converted once
+    # at write time by sim_io.save_output_bundle()), so no coordinate
+    # transform is needed here.
+    # データ読み込み -- どちらの一式の truth.csv も書き出し時
+    # （sim_io.save_output_bundle()）に既に NED へ変換済みのため、
+    # ここでの座標変換は不要。
     print(f"\nLoading VPython: {args.vpython}")
-    vpython_logs, vpython_meta = load_output_csv(args.vpython)
+    vpython_logs, vpython_meta = load_output_bundle(args.vpython)
     print(f"  Samples: {len(vpython_logs)}")
-    print(f"  Metadata: {vpython_meta}")
+    print(f"  Notes: {vpython_meta.get('notes')}")
 
     print(f"\nLoading Genesis: {args.genesis}")
-    genesis_logs, genesis_meta = load_output_csv(args.genesis)
+    genesis_logs, genesis_meta = load_output_bundle(args.genesis)
     print(f"  Samples: {len(genesis_logs)}")
-    print(f"  Metadata: {genesis_meta}")
+    print(f"  Notes: {genesis_meta.get('notes')}")
 
     # Extract arrays
     vpython_data = extract_arrays(vpython_logs)
     genesis_data = extract_arrays(genesis_logs)
-
-    # Apply coordinate transform if requested
-    # 座標変換を適用
-    if args.convert_genesis:
-        print("\nConverting Genesis coords to NED...")
-        genesis_data = genesis_to_ned(genesis_data)
 
     # Compute metrics
     print("\n" + "=" * 60)

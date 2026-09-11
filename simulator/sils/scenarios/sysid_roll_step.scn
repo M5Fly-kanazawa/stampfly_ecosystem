@@ -1,0 +1,56 @@
+# sysid_roll_step.scn — ACRO roll-rate step responses for plant identification (vehicle)
+# sysid_roll_step.scn — プラント同定用の ACRO ロール角速度ステップ応答（vehicle）
+#
+# Goal: fly the SAME identification input on the SILS plant that
+# tools/sysid/plant_fit.py fits on a real-vehicle flight log (`sf sysid fit`):
+# after takeoff and a switch to ACRO (rate control), the roll stick is held at
+# +0.26 / -0.26 rad/s for 0.5 s each (two doublets, the second shorter), then centred.
+# The run's flight-log bundle (simulator/sils/viz/out_scn_sysid_roll_step/
+# sils_sysid_roll_step_<ts>.sflog.zip) is the input for
+#   sf sysid fit <bundle> --axis roll --mixer vehicle --plot
+# whose identified plant gain K = 1/Ixx and motor time constant tau_m can be
+# compared with control/models/stampfly_physical.yaml (Ixx) and the SILS motor
+# ODE (simulator/sils/plant/plant.hpp, tau_eff ~ 16 ms at hover) —
+# docs/plans/flight-log-format-plan.md section 3.3's second pass criterion.
+# 目的: 実機のフライトログで tools/sysid/plant_fit.py（`sf sysid fit`）が同定する
+# のと同じ入力を SILS プラントに与える。離陸後 ACRO（角速度制御）へ切り替え、
+# ロールスティックを +0.26 / -0.26 rad/s に各 0.5 秒（ダブレット 2 回、2 回目は短め）保持して
+# 中立へ戻す。実行で得られる一式（上記パス）を `sf sysid fit` に渡し、同定した
+# プラントゲイン K = 1/Ixx とモータ時定数 tau_m を stampfly_physical.yaml の Ixx と
+# SILS モータ ODE（plant.hpp、ホバー時 tau_eff ≈ 16 ms）と照合する — 計画書 3.3 節の
+# 第 2 の合格基準。
+#
+# Invocation / 実行:
+#   sf sils scenario simulator/sils/scenarios/sysid_roll_step.scn --target vehicle --duration 13000000
+#
+# Sticks: raw 12-bit ADC, centre 2048. ACRO rate_sp = norm * max_rate(1.0 rad/s);
+# raw 2662 -> +0.26 rad/s, raw 1434 -> -0.26 rad/s (0.30 of full stick, rescaled past the
+# command processor's stick deadband, sf_command/command.cpp applyDeadband(): 0.263 rad/s
+# as recorded in rate_ref.csv). Throttle 3243 climbs off the
+# ground (TAKEOFF trigger), 3176 is near-hover (both as in acro_flight.scn).
+# スティック raw 12bit ADC（中央 2048）。ACRO レート = norm × 1.0 rad/s。
+# raw 2662 → +0.26 rad/s、raw 1434 → -0.26 rad/s（フルスティックの 0.30 を sf_command の
+# デッドバンド後に再スケールした値 = rate_ref.csv に記録される 0.263 rad/s）。
+# スロットル 3243 で離陸、3176 はほぼホバー（いずれも acro_flight.scn と同じ値）。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro>
+   0    rc   2048  2048   2048    2048  0     4000      50        0    0   # A: disarmed 4 s (boot calibration)
+   +    rc   2048  2048   2048    2048  1     1000      50        0    0   # B: ARM (IDLE_GROUND -> ARMED_GROUND)
+   +    rc   3243  2048   2048    2048  1     2000      50        0    1   # C: throttle up -> TAKEOFF -> FLYING, acro=1 -> ACRO
+   +    rc   3176  2048   2048    2048  1     1000      50        0    1   # D: near-hover, sticks centred (pre-step settle)
+   +    rc   3176  2662   2048    2048  1     500       50        0    1   # E: roll step +0.26 rad/s, 0.5 s
+   +    rc   3176  1434   2048    2048  1     500       50        0    1   # F: roll step -0.26 rad/s, 0.5 s (doublet return)
+   +    rc   3176  2048   2048    2048  1     500       50        0    1   # G: centre 0.5 s
+   +    rc   3176  2662   2048    2048  1     300       50        0    1   # H: roll step +0.26 rad/s, 0.3 s
+   +    rc   3176  1434   2048    2048  1     300       50        0    1   # I: roll step -0.26 rad/s, 0.3 s
+   +    rc   3176  2048   2048    2048  1     1000      50        0    1   # J: centre, settle
+   +    rc   2048  2048   2048    2048  0     200       50        0    0   # K: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50        0    0   # L: press again -> DISARM (toggle)
+   +    rc   2048  2048   2048    2048  0     600       50        0    0   # M: settle disarmed
+#
+# Expectation: "Mode change: STABILIZE -> ACRO" in the log; rate_ref.csv carries the
+# +-0.26 rad/s steps and imu.csv's gyro_x follows them (bounded, no divergence);
+# the fit's K is within the tolerance `sf sysid fit` prints against 1/Ixx.
+# 期待: ログに "Mode change: STABILIZE -> ACRO"、rate_ref.csv に ±0.26 rad/s の
+# ステップ、imu.csv の gyro_x がそれに追従（有界・発散なし）。同定した K が
+# `sf sysid fit` の表示する 1/Ixx との許容差に収まる。

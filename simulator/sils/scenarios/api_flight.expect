@@ -67,7 +67,7 @@ metric alt_mean < 1.30 in 25.8 26.9
 # rotation, no real tumble).
 # 全行程で真の姿勢は有界（cw90中も roll/pitch 真値は数度に留まる — 純粋なヨー回転で
 # 転倒はしていない）。
-metric tilt_max < 15.0 in 8.0 31.0
+metric tilt_max < 0.2618 in 8.0 31.0  # 15.0 deg
 # duty stays healthy through hover + forward + the pre-turn climb (no yaw differential
 # active yet). / ホバー+forward+登坂(旋回前)はduty健全（まだヨー差動なし）。
 metric duty_max < 0.92 in 8.0 26.9

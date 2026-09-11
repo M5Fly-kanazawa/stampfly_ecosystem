@@ -68,7 +68,7 @@ python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --run --run-s4 -
 
 新規シナリオ「ロールステップ試験」（S4 用、離陸試験用シナリオにロール・ステップを挿入した変種、`.expect` なし＝回帰対象外）の詳細は `simulator/sils/scenarios/workshop_acro_step.scn` のヘッダコメント参照。
 
-グラフのラベル文言だけを直したい場合（動画は再生成しない）は `--plots-only` を使う。既存の SILS バンドル・永続化済み `trajectory.csv` から PNG/テキストのみを再構築し、4本の動画ファイルには一切触れない。`--run`/`--run-s4` と同時指定はできない:
+グラフのラベル文言だけを直したい場合（動画は再生成しない）は `--plots-only` を使う。既存の SILS バンドル・永続化済み一式（`.sflog.zip`）から PNG/テキストのみを再構築し、4本の動画ファイルには一切触れない。`--run`/`--run-s4` と同時指定はできない:
 
 ```bash
 python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --plots-only
@@ -76,7 +76,7 @@ python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --plots-only
 
 ## 4. 注意点
 
-- **S4 のロールレート「実測値」は真値姿勢角の数値微分**: workshop ターゲット（`WorkshopControlTask`）は vehicle の `sf::control_output` トピックを発行しないため、モデル一致の合否判定が使う `SILS_EMU_RATE_STREAM`（`rate_ref` + ジャイロ実測を記録する仕組み）は workshop では常に空になる。そのため `rate_ref`（指令）はスクリプト化したスティック値 × `rate_max_rp` から計算し、実測側は `trajectory.csv` の真値ロール角（50Hz）を数値微分して代用している。`SILS_EMU_NOISE=off` の決定論実行なので、この代用はノイズ無しジャイロの読み値と数値的に等価。
+- **S4 のロールレート「実測値」は真値姿勢角の数値微分**: workshop ターゲット（`WorkshopControlTask`）は vehicle の `sf::control_output` トピックを発行しないため、フライトログ一式（`.sflog.zip`）に `rate_ref` ストリーム（指令レート・実測ジャイロ双方の元）が workshop では常に含まれない。そのため `rate_ref`（指令）はスクリプト化したスティック値 × `rate_max_rp` から計算し、実測側は一式の `truth` ストリームが持つ真値ロール角（50Hz）を数値微分して代用している（`rate_ref` ストリームがある一式では、この代用の代わりに一式の実測ジャイロ・実際の指令レートをそのまま使う）。`SILS_EMU_NOISE=off` の決定論実行なので、この代用はノイズ無しジャイロの読み値と数値的に等価。
 - **S1 の「外乱」はロール・スティックのステップ**であり、実際の突風（wind force injection）ではない。`pos_roll.scn` は Layer-4 POS_HOLD 回帰スイートの一本で、STABILIZE でロール右ステップを与えて横方向にドリフトさせた後 POS_HOLD に切り替え、ドリフトを止めて保持できるかを検証するシナリオ。「外乱を受けても位置保持が捕捉・保持する」というストーリーとしては S1 のデモに使える。
 - **S5 の STABILIZE 飛行は高度を保持しない**（仕様通り）。動画中、機体はスロットルを上げたまま上昇し続けるが、これは ALT_HOLD/POS_HOLD ではなく手動スロットルの STABILIZE モードだからで、故障ではない。
 - **`pos_flight.scn`（斜め複合）は使っていない**: ヨートルク権限飽和の既知課題（xfail、`docs/architecture/simulation-policy.md` バックログ#12）により `sf sils scenario` 単体では FAIL 判定になり `--video` が動画を書き出さない。S1 には単軸で PASS する `pos_roll.scn` を採用した。
@@ -151,7 +151,7 @@ python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --run --run-s4 -
 
 See `simulator/sils/scenarios/workshop_acro_step.scn`'s header comment for the new "roll-step test" scenario (S4's roll-step variant of the take-off-test scenario; no `.expect` — not part of the regression gate).
 
-To fix only a graph's label text (no video regeneration), use `--plots-only`. It rebuilds PNGs/text from the existing SILS bundles / persisted `trajectory.csv` only and never touches any of the four video files. Incompatible with `--run`/`--run-s4`:
+To fix only a graph's label text (no video regeneration), use `--plots-only`. It rebuilds PNGs/text from the existing SILS bundles / persisted (`.sflog.zip`) bundles only and never touches any of the four video files. Incompatible with `--run`/`--run-s4`:
 
 ```bash
 python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --plots-only
@@ -159,7 +159,7 @@ python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --plots-only
 
 ## 4. Caveats
 
-- **S4's "measured" roll rate is a numerical derivative of the truth attitude angle.** The workshop target (`WorkshopControlTask`) never publishes vehicle's `sf::control_output` topic, so `SILS_EMU_RATE_STREAM` (the model-match gate's rate_ref + measured-gyro recorder) stays empty for it. `rate_ref` (commanded) is computed from the scripted stick value x `rate_max_rp`; the "measured" side is a numerical derivative of the 50Hz truth roll angle in `trajectory.csv`. Since the run is deterministic with `SILS_EMU_NOISE=off`, this stand-in is numerically equivalent to a noiseless gyro reading.
+- **S4's "measured" roll rate is a numerical derivative of the truth attitude angle.** The workshop target (`WorkshopControlTask`) never publishes vehicle's `sf::control_output` topic, so the flight-log bundle (`.sflog.zip`) carries no `rate_ref` stream (the source of both the commanded rate and the real gyro measurement) for it. `rate_ref` (commanded) is computed from the scripted stick value x `rate_max_rp`; the "measured" side is a numerical derivative of the 50Hz truth roll angle in the bundle's `truth` stream. (A bundle that does carry `rate_ref` uses its real gyro measurement and real commanded rate instead of this stand-in.) Since the run is deterministic with `SILS_EMU_NOISE=off`, this stand-in is numerically equivalent to a noiseless gyro reading.
 - **S1's "disturbance" is a scripted roll-stick step**, not an injected wind force. `pos_roll.scn` is one of the Layer-4 POS_HOLD regression scenarios: a STABILIZE roll-right step induces lateral drift, then POS_HOLD engages and must arrest and hold it. It works fine as the "disturbed then recaptured and held" story for S1.
 - **S5's STABILIZE flight does not hold altitude** (by design). In the video the craft keeps climbing under sustained throttle — that is STABILIZE's manual-throttle behavior, not ALT_HOLD/POS_HOLD, and not a malfunction.
 - **`pos_flight.scn` (combined diagonal) was NOT used**: it carries a known yaw torque-authority saturation issue (xfail, `docs/architecture/simulation-policy.md` backlog #12), so a standalone `sf sils scenario` run reports FAIL and `--video` never renders. S1 uses `pos_roll.scn` instead, which passes on a single axis.

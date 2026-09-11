@@ -12,7 +12,7 @@ Subcommands:
   install-toolchain
              Windows only: install MinGW-w64 (winget, falling back to a direct
              download if winget fails — see lib/sfcli/utils/msys2_install.py)
-  run        Run the closed loop and write the bundle (trajectory + results.json)
+  run        Run the closed loop and write the bundle (flight log + results.json)
   video      Render the review video (MuJoCo 3D + state graphs)
   status     Show the machine verdict (results.json) for a milestone
   gate       Gate check: bundle complete AND verdict passes (output-driven)
@@ -39,6 +39,8 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -821,6 +823,107 @@ def build_app_emulator(app_dir: Path, build_dir: Path, jobs: int = 8) -> Path:
     return exe
 
 
+def _events_jsonl_to_csv(events_jsonl: Path, out_csv: Path) -> None:
+    """Convert the scenario's events.jsonl (simulator/sils/devices/emu_record.cpp
+    — one JSON object per line: {"t_us","ch","n","bytes"} for an injected byte
+    stream, or {"t_us","ch","note"} for a text note) into the flight-log
+    bundle's events.csv stream (`timestamp_us,event,value` —
+    protocol/spec/flight_log.yaml). `event` is the channel name (`ch`); `value`
+    is the rest of the payload rendered as one compact string (a byte-stream
+    line becomes "n=<len> bytes=<hex>", a note line is just its text) —
+    pandas quotes it correctly on write regardless of embedded commas/quotes.
+    シナリオの events.jsonl（emu_record.cpp。1行1JSON: バイト列は
+    {"t_us","ch","n","bytes"}、テキスト注記は {"t_us","ch","note"}）を、フライト
+    ログ一式の events ストリーム（`timestamp_us,event,value`）へ変換する。
+    `event` はチャネル名（`ch`）、`value` は残りのペイロードを1つのコンパクトな
+    文字列にしたもの（バイト列は "n=<長さ> bytes=<16進>"、注記はそのままの文
+    字列）— カンマ・引用符が混ざっても pandas が書き出し時に正しく引用する。
+    """
+    import pandas as pd
+
+    rows = []
+    for line in events_jsonl.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        ts, ch = rec.get("t_us"), rec.get("ch")
+        if ts is None or ch is None:
+            continue
+        if "note" in rec:
+            value = rec["note"]
+        else:
+            value = f"n={rec.get('n', 0)} bytes={rec.get('bytes', '')}"
+        rows.append({"timestamp_us": int(ts), "event": ch, "value": value})
+    pd.DataFrame(rows, columns=["timestamp_us", "event", "value"]).to_csv(out_csv, index=False)
+
+
+def _finalize_flightlog(flightlog_dir: Path, zip_path: Path, *, notes: str,
+                        events_jsonl: Optional[Path] = None) -> Optional[Path]:
+    """Assemble one `*.sflog.zip` StampFly flight-log v1 bundle from the CSV
+    directory an emulator run just wrote via SILS_EMU_FLIGHTLOG=<flightlog_dir>
+    (simulator/sils/devices/emu_flightlog*.cpp — imu/attitude/posvel/rate_ref/
+    motor/ctrl_output/ctrl_ref/pilot/status/truth CSVs + a gains.json sidecar),
+    plus the scenario's own events.jsonl (scripted-input log,
+    simulator/sils/devices/emu_record.cpp), converted here to events.csv.
+
+    Steps: (a) events.jsonl -> events.csv, if given and non-empty; (b) load
+    the directory with sflog.FlightLog.load() (unknown files such as
+    gains.json are ignored by the loader — see lib/sflog/bundle.py), set
+    `.meta`/`.schema`, and save to `zip_path`; (c) append gains.json into the
+    zip as an extra member (bypassing the loader) so `sysid-gate` can read
+    it back — see simulator/sils/devices/emu_flightlog_vehicle.cpp's
+    sils_emu_flightlog_write_gains(); (d) remove `flightlog_dir`. Any stale
+    `*.sflog.zip` already in `zip_path`'s directory is removed first, so
+    exactly one bundle remains per run directory (docs/plans/
+    flight-log-format-plan.md section 2).
+
+    Returns `zip_path`, or None (after a console.error) if `flightlog_dir`
+    holds no stream CSV at all (e.g. the emulator crashed before writing
+    anything, or SILS_EMU_FLIGHTLOG was never wired for this target) — in
+    that case nothing is deleted, so a previous run's bundle is left intact.
+
+    `flightlog_dir`（SILS_EMU_FLIGHTLOG で指定したディレクトリ。エミュレータが
+    直接書いた CSV 一式）と、変換した events.csv から `*.sflog.zip` を1個
+    組み立てる。CSV が1つも無ければ何もせず None を返す（前回の有効な zip は
+    残す）。手順は英語側参照。
+    """
+    if events_jsonl is not None and events_jsonl.exists() and events_jsonl.stat().st_size > 0:
+        _events_jsonl_to_csv(events_jsonl, flightlog_dir / "events.csv")
+
+    if not flightlog_dir.exists() or not any(flightlog_dir.glob("*.csv")):
+        console.error(f"no flight-log CSV written to {flightlog_dir} — nothing to bundle "
+                      "(is this target wired for SILS_EMU_FLIGHTLOG?)")
+        return None
+
+    # Exactly one bundle per run directory: clear any stale zip(s) from a
+    # previous run of this same scenario/milestone before writing the new one.
+    # 実行ディレクトリごとに一式は1個だけ: 新しい zip を書く前に前回実行の
+    # 残骸を消す。
+    for stale in zip_path.parent.glob("*.sflog.zip"):
+        stale.unlink()
+
+    import sflog
+
+    log = sflog.FlightLog.load(flightlog_dir)
+    log.meta = sflog.make_meta(source="sils", tool_name="sf sils",
+                               tool_version=sflog.__version__, notes=notes,
+                               streams=log.streams)
+    log.schema = sflog.schema.schema_for(log.streams.keys())
+    log.save(zip_path)
+
+    gains_path = flightlog_dir / "gains.json"
+    if gains_path.exists():
+        with zipfile.ZipFile(zip_path, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(gains_path, arcname="gains.json")
+
+    shutil.rmtree(flightlog_dir, ignore_errors=True)
+    return zip_path
+
+
 def run_run(args: argparse.Namespace) -> int:
     bd = _build_dir()
     exe = bd / _exe("hover_smoke")
@@ -837,79 +940,207 @@ def run_run(args: argparse.Namespace) -> int:
     # 引数: モデル, バンドル, 推定器種別, マイルストーン, ノイズ準位, シード。
     r = subprocess.run([str(exe), str(_model()), str(bundle), str(et),
                         str(args.milestone), noise, str(seed)], env=win_run_env(bd))
+    # hover_smoke writes its own flight-log v1 CSVs directly under
+    # <bundle>/flightlog/ (argv[2]=bundle — see simulator/sils/smoke/
+    # hover_smoke.cpp); bundle them into one *.sflog.zip here.
+    # hover_smoke は自分で <bundle>/flightlog/ 配下にフライトログ一式 CSV を
+    # 書く（argv[2]=bundle）。ここで1個の *.sflog.zip にまとめる。
+    zip_path = _finalize_flightlog(
+        bundle / "flightlog",
+        bundle / f"sils_hover_{args.milestone.lower()}_{datetime.now():%Y%m%dT%H%M%S}.sflog.zip",
+        notes=f"milestone={args.milestone} estimator={args.estimator} noise={noise} seed={seed}",
+    )
     if r.returncode == 0:
         console.success(f"Bundle written to {bundle}")
+        if zip_path is not None:
+            console.print(f"  flight log: {zip_path}")
     else:
         console.error(f"Closed loop FAILED (exit {r.returncode}) — see output / results.json")
     return 0  # the verdict lives in results.json; gate decides pass/fail
 
 
-def _traj_metric(traj_path: Path, name: str, t0=None, t1=None):
-    """Compute a physical-truth metric from trajectory.csv for the numerical gates
-    (G2 estimate tracking, G3 bounded attitude/position, G4 actuator health). The
-    expect DSL is log-only (≈G1); this turns the bundle's truth+estimate columns into
-    machine-judgeable numbers. Returns None on a missing file / unknown metric / empty
-    window. Optional [t0, t1] seconds restrict the metric to a flight phase (e.g. the
-    POS_HOLD window). trajectory.csv から物理真値メトリクスを算出（G2/G3/G4）。expect の
-    ログ判定(≈G1)に対し、真値＋推定列を機械判定可能な数値にする。
+def _quat_to_euler(qw, qx, qy, qz):
+    """Roll/pitch/yaw [rad] from a body->NED quaternion (aerospace ZYX Euler
+    convention — matches protocol/spec/flight_log.yaml's quat_w/x/y/z columns
+    used by both truth.csv and attitude.csv). Vectorized: qw/qx/qy/qz may be
+    numpy arrays, in which case the return values are arrays of the same
+    shape.
+    body->NED クォータニオンから roll/pitch/yaw [rad] を求める（航空機の
+    ZYX オイラー角規約。truth.csv/attitude.csv 共通の quat_w/x/y/z 列に対応）。
+    ベクトル化対応: qw/qx/qy/qz が numpy 配列なら戻り値も同じ形の配列になる。
     """
-    import csv as _csv
-    try:
-        with open(traj_path, encoding="utf-8") as f:
-            rows = list(_csv.DictReader(f))
-    except OSError:
+    import numpy as np
+    roll = np.arctan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy))
+    pitch = np.arcsin(np.clip(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
+    yaw = np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    return roll, pitch, yaw
+
+
+# Cache of loaded FlightLog bundles, keyed by str(bundle_path) — so a single
+# .expect file with several `metric` lines reads/unzips the bundle only once
+# (see _bundle_metric()). A load failure is cached too (as None) so a broken
+# bundle is not re-attempted for every metric line.
+# 読み込み済み FlightLog のキャッシュ（str(bundle_path) をキーに）— 1つの
+# .expect が複数の `metric` 行を持っていても一式を1回しか読み込まない
+# （_bundle_metric() 参照）。読み込み失敗も None としてキャッシュし、壊れた
+# 一式を metric 行の数だけ再試行しない。
+_BUNDLE_METRIC_CACHE: dict = {}
+
+
+def _load_bundle_for_metric(bundle_path: Path):
+    key = str(bundle_path)
+    if key not in _BUNDLE_METRIC_CACHE:
+        import sflog
+        try:
+            _BUNDLE_METRIC_CACHE[key] = sflog.FlightLog.load(bundle_path)
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile) as e:
+            console.warning(f"could not load flight-log bundle {bundle_path}: {e}")
+            _BUNDLE_METRIC_CACHE[key] = None
+    return _BUNDLE_METRIC_CACHE[key]
+
+
+# Angular metrics: _bundle_metric() returns these in RADIANS (SI, per
+# protocol/spec/flight_log.yaml) — _eval_expect() appends a "(x deg)" hint to
+# the check detail for these names so a human reading `sf sils scenario`'s
+# console output doesn't have to convert in their head.
+# 角度系メトリクス: _bundle_metric() はこれらをラジアン（SI、flight_log.yaml
+# 準拠）で返す — _eval_expect() はこれらの名前に限り検査結果の detail に
+# 「(x deg)」の換算値を添え、コンソール出力を見る人が暗算しなくて済むようにする。
+_ANGULAR_METRICS = {"roll_rmse", "pitch_rmse", "att_rmse", "tilt_max", "yaw_band"}
+
+
+def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
+    """Compute a physical-truth metric from a StampFly flight-log v1 bundle
+    for the numerical gates (G2 estimate tracking, G3 bounded attitude/
+    position, G4 actuator health). The expect DSL is log-only (≈G1); this
+    turns the bundle's truth+estimate streams into machine-judgeable
+    numbers, all in SI units (rad/rad/s/m — protocol/spec/flight_log.yaml;
+    replaces the old degrees-based trajectory.csv this function superseded).
+    Returns None on a missing bundle / missing stream / unknown metric /
+    empty window. Optional [t0, t1] SECONDS (mapped onto the bundle's
+    absolute virtual-clock `timestamp_us` as [t0*1e6, t1*1e6]) restrict the
+    metric to a flight phase (e.g. the POS_HOLD window).
+
+    Estimate-vs-truth metrics (roll_rmse/pitch_rmse/att_rmse/alt_rmse) match
+    each truth row to the nearest estimate row within 5 ms
+    (pandas.merge_asof(..., direction="nearest", tolerance=5000)) — truth
+    rows outside that tolerance of any estimate sample are dropped, not
+    zero-filled, since a held/interpolated value would not be a real
+    observation (docs/plans/flight-log-format-plan.md's "no fill values"
+    rule).
+
+    StampFly フライトログ v1 一式から物理真値メトリクスを算出する（G2/G3/G4）。
+    旧 degrees 単位の trajectory.csv を置き換え、全て SI 単位（rad/rad/s/m）で
+    返す。一式が無い/対象ストリームが無い/未知のメトリクス/窓が空のときは
+    None。[t0, t1] は秒（絶対仮想クロック timestamp_us の [t0*1e6, t1*1e6] に
+    写像）。推定値対真値系メトリクスは真値の各行を5ms以内の最近傍推定値行に
+    照合し（tolerance=5000us）、それより離れた行は0埋めせず捨てる（一次記録に
+    埋め値を持たせない方針に合わせる）。
+    """
+    if bundle_path is None:
         return None
-    def fv(r, k): return float(r[k])
-    if t0 is not None and t1 is not None:
-        rows = [r for r in rows if t0 <= fv(r, "t") <= t1]
-    if not rows:
+    import numpy as np
+    import pandas as pd
+
+    log = _load_bundle_for_metric(bundle_path)
+    if log is None or "truth" not in log.streams:
         return None
-    def col(k): return [fv(r, k) for r in rows]
-    def rms(xs): return math.sqrt(sum(x * x for x in xs) / len(xs))
+
+    def _window(df):
+        if t0 is None or t1 is None:
+            return df
+        return df[(df["timestamp_us"] >= t0 * 1e6) & (df["timestamp_us"] <= t1 * 1e6)]
+
+    truth = _window(log.streams["truth"]).sort_values("timestamp_us")
+    if truth.empty:
+        return None
+    roll, pitch, yaw = _quat_to_euler(truth["quat_w"].to_numpy(), truth["quat_x"].to_numpy(),
+                                       truth["quat_y"].to_numpy(), truth["quat_z"].to_numpy())
+    alt = -truth["pos_z"].to_numpy()
 
     if name == "horizontal_drift_max":   # G3: max planar distance from the window's start
-        cx, cy = fv(rows[0], "px"), fv(rows[0], "py")
-        return max(math.hypot(fv(r, "px") - cx, fv(r, "py") - cy) for r in rows)
-    if name == "roll_rmse":              # G2: est roll vs truth roll
-        return rms([fv(r, "roll_est") - fv(r, "roll") for r in rows])
-    if name == "pitch_rmse":             # G2: est pitch vs truth pitch
-        return rms([fv(r, "pitch_est") - fv(r, "pitch") for r in rows])
-    if name == "att_rmse":               # G2: combined roll+pitch attitude error magnitude
-        return rms([math.hypot(fv(r, "roll_est") - fv(r, "roll"),
-                               fv(r, "pitch_est") - fv(r, "pitch")) for r in rows])
-    if name == "alt_rmse":               # G2: est alt vs truth alt
-        return rms([fv(r, "alt_est") - fv(r, "alt") for r in rows])
-    if name == "tilt_max":               # G3: max true tilt magnitude (no tumble)
-        return max(math.hypot(fv(r, "roll"), fv(r, "pitch")) for r in rows)
-    if name == "alt_band":               # G3: peak-to-peak altitude over the window
-        a = col("alt"); return max(a) - min(a)
+        px, py = truth["pos_x"].to_numpy(), truth["pos_y"].to_numpy()
+        return float(np.max(np.hypot(px - px[0], py - py[0])))
+    if name == "tilt_max":                # G3: max true tilt magnitude (no tumble)
+        return float(np.max(np.hypot(roll, pitch)))
+    if name == "alt_band":                # G3: peak-to-peak altitude over the window
+        return float(np.max(alt) - np.min(alt))
     if name == "alt_mean":
-        a = col("alt"); return sum(a) / len(a)
-    if name == "alt_min":  return min(col("alt"))
-    if name == "alt_max":  return max(col("alt"))
-    if name == "duty_max":               # G4: peak motor duty (saturation guard)
-        return max(max(fv(r, "m0"), fv(r, "m1"), fv(r, "m2"), fv(r, "m3")) for r in rows)
-    if name == "yaw_band":               # G3: peak-to-peak true heading [deg] over the
-        # window (heading-hold gate). Yaw from the truth quaternion, unwrapped so a
-        # continuous rotation is not hidden by the ±180° seam.
-        # 窓内の真値方位 p-p [deg]（ヘディングホールド用ゲート）。真値クォータニオン
-        # から方位を取り、連続回転が ±180° の継ぎ目で隠れないようアンラップする。
-        yaws = []
-        prev = None
-        off = 0.0
-        for r in rows:
-            qw, qx, qy, qz = fv(r, "qw"), fv(r, "qx"), fv(r, "qy"), fv(r, "qz")
-            y = math.degrees(math.atan2(2 * (qw * qz + qx * qy),
-                                        1 - 2 * (qy * qy + qz * qz)))
-            if prev is not None:
-                d = y - prev
-                if d > 180.0:
-                    off -= 360.0
-                elif d < -180.0:
-                    off += 360.0
-            prev = y
-            yaws.append(y + off)
-        return max(yaws) - min(yaws)
+        return float(np.mean(alt))
+    if name == "alt_min":
+        return float(np.min(alt))
+    if name == "alt_max":
+        return float(np.max(alt))
+    if name == "yaw_band":                # G3: peak-to-peak true heading over the window
+        # (heading-hold gate). Unwrapped so a continuous rotation is not
+        # hidden by the +-pi seam.
+        # 窓内の真値方位 p-p（ヘディングホールド用ゲート）。連続回転が ±π の
+        # 継ぎ目で隠れないようアンラップする。
+        yaw_unwrapped = np.unwrap(yaw)
+        return float(np.max(yaw_unwrapped) - np.min(yaw_unwrapped))
+    if name == "duty_max":                # G4: peak motor duty (saturation guard)
+        motor = log.streams.get("motor")
+        if motor is None:
+            return None   # target not wired for motor recording at all -- genuinely unknown
+        motor = _window(motor)
+        cols = [c for c in ("duty_FR", "duty_RR", "duty_RL", "duty_FL") if c in motor.columns]
+        if not cols:
+            return None
+        if motor.empty:
+            # motor.csv holds one row per control cycle that actually RAN (the
+            # armed window; emu_flightlog_vehicle.cpp) -- unlike the old
+            # trajectory.csv, which recorded an explicit 0.0 duty every cycle
+            # even while disarmed. Zero rows in [t0, t1] therefore means "no
+            # control cycle ran here" (never armed / motors never driven in
+            # this window), which is the SAME fact the old format encoded as
+            # duty==0.0 -- e.g. pairing.expect's crosstalk-rejection window
+            # asserts `duty_max < 0.05` while the foreign transmitter's ARM is
+            # dropped and the vehicle is never actually armed.
+            # motor.csv は実際に「走った」制御周期だけ1行を持つ（armed window。
+            # emu_flightlog_vehicle.cpp）—— disarm中も明示的に duty==0.0 を
+            # 毎周期記録していた旧 trajectory.csv とは違う。[t0, t1] に行が
+            # 0件ということは「この窓では制御周期が一度も走らなかった」
+            # （一度も arm されていない/モータを駆動していない）ことを意味し、
+            # 旧形式が duty==0.0 で表していたのと同じ事実 —— 例えば
+            # pairing.expect の混信拒否窓は、誤送信機の ARM が破棄され機体が
+            # 実際には arm されない間 `duty_max < 0.05` をアサートする。
+            return 0.0
+        return float(motor[cols].to_numpy().max())
+    if name in ("roll_rmse", "pitch_rmse", "att_rmse"):   # G2: est attitude vs truth
+        attitude = log.streams.get("attitude")
+        if attitude is None:
+            return None
+        a = attitude.sort_values("timestamp_us")
+        a_roll, a_pitch, _ = _quat_to_euler(a["quat_w"].to_numpy(), a["quat_x"].to_numpy(),
+                                             a["quat_y"].to_numpy(), a["quat_z"].to_numpy())
+        est = pd.DataFrame({"timestamp_us": a["timestamp_us"].to_numpy(),
+                            "roll_est": a_roll, "pitch_est": a_pitch})
+        truth_small = pd.DataFrame({"timestamp_us": truth["timestamp_us"].to_numpy(),
+                                    "roll": roll, "pitch": pitch})
+        merged = pd.merge_asof(truth_small, est, on="timestamp_us",
+                               direction="nearest", tolerance=5000).dropna(
+                                   subset=["roll_est", "pitch_est"])
+        if merged.empty:
+            return None
+        if name == "roll_rmse":
+            return float(np.sqrt(np.mean((merged["roll_est"] - merged["roll"]) ** 2)))
+        if name == "pitch_rmse":
+            return float(np.sqrt(np.mean((merged["pitch_est"] - merged["pitch"]) ** 2)))
+        return float(np.sqrt(np.mean(np.hypot(merged["roll_est"] - merged["roll"],
+                                               merged["pitch_est"] - merged["pitch"]) ** 2)))
+    if name == "alt_rmse":                # G2: est alt vs truth alt
+        posvel = log.streams.get("posvel")
+        if posvel is None:
+            return None
+        p = posvel.sort_values("timestamp_us")
+        est = pd.DataFrame({"timestamp_us": p["timestamp_us"].to_numpy(),
+                            "alt_est": -p["pos_z"].to_numpy()})
+        truth_small = pd.DataFrame({"timestamp_us": truth["timestamp_us"].to_numpy(), "alt": alt})
+        merged = pd.merge_asof(truth_small, est, on="timestamp_us",
+                               direction="nearest", tolerance=5000).dropna(subset=["alt_est"])
+        if merged.empty:
+            return None
+        return float(np.sqrt(np.mean((merged["alt_est"] - merged["alt"]) ** 2)))
     return None  # unknown metric name / 未知のメトリクス名
 
 
@@ -956,7 +1187,7 @@ def _read_xfail(expect_path: Path) -> Optional[str]:
 
 
 def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int,
-                 traj_path: Path = None):
+                 bundle_path: Path = None):
     """Evaluate an assertions file against the captured output. Returns
     (checks, all_pass, xfail_reason). Assertions are anchored to OUTPUT
     TEXT/ORDER, never wall-clock, so a check is deterministic exactly because
@@ -974,10 +1205,12 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               SKIPPED (passes, not evaluated) —
                                               e.g. stable hover gated on E3 INA3221
       metric <name> <op> <value> [in <t0> <t1>]
-                                              numerical physical-truth gate from
-                                              trajectory.csv (G2/G3/G4). op ∈ < <= > >= ;
-                                              optional "in t0 t1" restricts to a phase.
-                                              names: horizontal_drift_max, roll_rmse,
+                                              numerical physical-truth gate from the
+                                              StampFly flight-log v1 bundle (G2/G3/G4),
+                                              in SI units (rad/m — see _bundle_metric()).
+                                              op ∈ < <= > >= ; optional "in t0 t1"
+                                              restricts to a phase. names:
+                                              horizontal_drift_max, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
                                               duty_max, yaw_band
@@ -1033,9 +1266,9 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                            "detail": f"got {exit_code}"})
         elif kind == "metric" and len(toks) >= 4:
             # metric <name> <op> <value> [in <t0> <t1>]
-            # Numerical physical-truth gate from trajectory.csv (G2/G3/G4). The
-            # optional "in <t0> <t1>" window restricts it to a flight phase.
-            # trajectory.csv からの数値ゲート。"in t0 t1" で飛行フェーズに限定。
+            # Numerical physical-truth gate from the flight-log bundle (G2/G3/G4).
+            # The optional "in <t0> <t1>" window restricts it to a flight phase.
+            # フライトログ一式からの数値ゲート。"in t0 t1" で飛行フェーズに限定。
             name, op, valstr = toks[1], toks[2], toks[3]
             t0 = t1 = None
             if len(toks) >= 7 and toks[4] == "in":
@@ -1052,15 +1285,22 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
             except ValueError:
                 checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
                                "detail": "non-numeric threshold"}); continue
-            m = _traj_metric(traj_path, name, t0, t1) if traj_path else None
+            m = _bundle_metric(bundle_path, name, t0, t1) if bundle_path else None
             win = f" in [{t0},{t1}]" if t0 is not None else ""
             if m is None:
                 checks.append({"name": f"metric {name} {op} {want}{win}", "pass": False,
-                               "detail": "no trajectory / unknown metric / empty window"})
+                               "detail": "no flight-log bundle / unknown metric / empty window"})
             else:
                 ok = _METRIC_OPS[op](m, want)
+                # Angular metrics are SI radians (flight_log.yaml) — append a "(x deg)"
+                # hint so a human reading the console output need not convert by hand.
+                # 角度系メトリクスは SI のラジアン — 人間が読む際に暗算しなくて済むよう
+                # 「(x deg)」の換算値を添える。
+                detail = f"{name}={m:.4f}"
+                if name in _ANGULAR_METRICS:
+                    detail += f" ({math.degrees(m):.2f} deg)"
                 checks.append({"name": f"metric {name} {op} {want}{win}", "pass": bool(ok),
-                               "detail": f"{name}={m:.4f}"})
+                               "detail": detail})
         else:
             checks.append({"name": f"bad assertion: {stripped!r}", "pass": False, "detail": "syntax"})
 
@@ -1139,13 +1379,17 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     bundle = _sils_dir() / "viz" / f"out_scn_{scn.stem}"
     bundle.mkdir(parents=True, exist_ok=True)
     events = bundle / "events.jsonl"
-    traj = bundle / "trajectory.csv"
-    # SILS_EMU_TRAJ tells the emulator to record a render_video.py-compatible
-    # trajectory.csv into the bundle (so --video can render the run). Harmless and
-    # deterministic; the recorder is a no-op in any emulator that ignores it.
-    # SILS_EMU_TRAJ は render_video.py 互換の trajectory.csv をバンドルへ記録させる
-    # （--video で描画可能に）。決定論的で無害、未対応エミュレータでは no-op。
-    env = dict(win_run_env(bd), SILS_EMU_EVENTS=str(events), SILS_EMU_TRAJ=str(traj))
+    flightlog_dir = bundle / "flightlog"
+    # SILS_EMU_FLIGHTLOG tells the emulator to record a StampFly flight-log v1
+    # bundle (imu/attitude/posvel/rate_ref/motor/ctrl_output/ctrl_ref/pilot/
+    # status/truth CSVs + gains.json) directly into this directory — the
+    # single artifact --video, `sf sysid`, and `sf log *` all read. Harmless
+    # and deterministic; the recorder is a no-op in any emulator that ignores it.
+    # SILS_EMU_FLIGHTLOG は StampFly フライトログ v1 一式をこのディレクトリへ
+    # 直接記録させる — --video・`sf sysid`・`sf log *` が読む唯一の成果物。
+    # 決定論的で無害、未対応エミュレータでは no-op。
+    env = dict(win_run_env(bd), SILS_EMU_EVENTS=str(events),
+              SILS_EMU_FLIGHTLOG=str(flightlog_dir))
 
     # SILS_EMU_NOISE/SILS_EMU_SEED turn on the seeded N0 sensor-noise model on the
     # emulator Plant (§13 P5). Default "off" → env passed but the emulator keeps the
@@ -1249,10 +1493,16 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
         env["SILS_EMU_UNPAIRED"] = "1"
 
     # extra_env: additional env vars for sils subcommands BUILT ON TOP of run_scenario
-    # (e.g. sysid-gate's SILS_EMU_RATE_STREAM). Not part of the `scenario` CLI surface
-    # itself — plain argparse.Namespace from run_scenario's own parser never sets this.
+    # (e.g. `sf app`'s own Namespace construction, lib/sfcli/commands/app.py). Not part
+    # of the `scenario` CLI surface itself — plain argparse.Namespace from run_scenario's
+    # own parser never sets this. No built-in `sils` subcommand needs it any more now
+    # that every scenario records a flight-log bundle unconditionally (formerly used by
+    # `sysid-gate` to request the now-retired rate-loop CSV recorder).
     # extra_env: run_scenario の上に構築される他の sils サブコマンド用の追加 env
-    # （例: sysid-gate の SILS_EMU_RATE_STREAM）。`scenario` 自体の CLI 引数ではない。
+    # （例: `sf app` 自身の Namespace 構築、app.py）。`scenario` 自体の CLI 引数では
+    # ない。全シナリオが無条件にフライトログ一式を記録するようになった今、組み込みの
+    # `sils` サブコマンドはどれも使わない（かつては `sysid-gate` が今は廃止した
+    # レートループ CSV レコーダを要求するのに使っていた）。
     extra_env = getattr(args, "extra_env", None)
     if extra_env:
         env.update(extra_env)
@@ -1275,6 +1525,7 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     # 自身の stdout/stderr 読み取りスレッドが r.stdout に値が入る前に
     # UnicodeDecodeError でクラッシュする。errors="replace" は迷い込んだ単発の
     # 非 UTF-8 バイトでも同様に落ちないようにする。
+    run_started_at = datetime.now()
     with open(os.devnull) as devnull:
         r = subprocess.run([str(exe), str(_model()), str(args.duration), str(scn)],
                            stdin=devnull, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -1313,10 +1564,24 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
                     "detail": f"{events.stat().st_size if events.exists() else 0} bytes"
                               + ("" if injected else f" — is {exe.name} wired for scripted input?")}
 
+    # Bundle the flight-log CSVs the run just wrote into one *.sflog.zip BEFORE
+    # evaluating .expect's `metric` assertions — they read this same zip (see
+    # _bundle_metric()). zip_path is None if the target wrote no flight-log CSV.
+    # .expect の `metric` アサーション評価より前に、この実行が書いたフライト
+    # ログ CSV を1個の *.sflog.zip にまとめる（_bundle_metric() が同じ zip を
+    # 読む）。ターゲットがフライトログ CSV を書かなければ zip_path は None。
+    zip_path = _finalize_flightlog(
+        flightlog_dir,
+        bundle / f"sils_{scn.stem}_{run_started_at:%Y%m%dT%H%M%S}.sflog.zip",
+        notes=f"scenario={scn.name} target={target} duration_us={args.duration} "
+              f"noise={noise} seed={seed}",
+        events_jsonl=events,
+    )
+
     expect = Path(args.expect) if args.expect else scn.with_suffix(".expect")
     xfail_reason = None
     if expect.exists():
-        checks, verdict, xfail_reason = _eval_expect(expect, r.stdout, r.stderr, r.returncode, traj)
+        checks, verdict, xfail_reason = _eval_expect(expect, r.stdout, r.stderr, r.returncode, zip_path)
     else:
         console.info(f"(no .expect at {expect.name} — verdict = injection + exit code)")
         checks = [{"name": "exit == 0", "pass": r.returncode == 0, "detail": f"got {r.returncode}"}]
@@ -1329,6 +1594,7 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
         "scenario": str(scn), "target": target, "exit_code": r.returncode,
         "noise": noise, "seed": seed,
         "pass": bool(verdict), "checks": checks,
+        "flightlog": str(zip_path) if zip_path else None,
         # Known-fail marker (docs/architecture/simulation-policy.md backlog), if the
         # .expect carries one — informational only here; `sf sils scenario` still
         # reports the RAW verdict above (see xfail_reason annotation below). Only
@@ -1364,17 +1630,19 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     if xfail_reason:
         console.warning(f"[xfail marker] {xfail_reason}")
 
-    # --video: render a review MP4 (MuJoCo 3D + state graphs) from the trajectory the
-    # run just recorded. Only on PASS and only if a trajectory was actually written.
-    # --video: 実行が記録した軌跡からレビュー動画（MuJoCo 3D＋状態グラフ）を描画。
-    # PASS かつ軌跡が書かれた場合のみ。
+    # --video: render a review MP4 (MuJoCo 3D + state graphs) from the flight log the
+    # run just recorded. Only on PASS and only if a flight-log bundle was actually
+    # written. render_video.py finds the newest sils_*.sflog.zip under --bundle itself.
+    # --video: 実行が記録したフライトログからレビュー動画（MuJoCo 3D＋状態グラフ）を
+    # 描画。PASS かつ一式が書かれた場合のみ。render_video.py 自身が --bundle 配下の
+    # 最新 sils_*.sflog.zip を探す。
     if verdict and getattr(args, "video", False):
         py = _venv()
         if py is None:
             console.error("viz venv missing — cannot render (see simulator/sils/viz)")
-        elif not (traj.exists() and traj.stat().st_size > 0):
-            console.error(f"no trajectory.csv in {bundle} — is {exe.name} wired for "
-                          "SILS_EMU_TRAJ recording?")
+        elif zip_path is None:
+            console.error(f"no flight-log bundle in {bundle} — is {exe.name} wired for "
+                          "SILS_EMU_FLIGHTLOG recording?")
         else:
             out = bundle / f"scn_{scn.stem}.mp4"
             console.info("Rendering review video (MuJoCo 3D + state graphs)...")
@@ -1582,8 +1850,9 @@ def run_fly(args: argparse.Namespace) -> int:
 
     bundle = _sils_dir() / "viz" / "out_fly"
     bundle.mkdir(parents=True, exist_ok=True)
+    flightlog_dir = bundle / "flightlog"
     env = dict(win_run_env(bd), SILS_EMU_REALTIME="1", SILS_EMU_RC_STDIN="1",
-               SILS_EMU_TRAJ=str(bundle / "trajectory.csv"))
+               SILS_EMU_FLIGHTLOG=str(flightlog_dir))
 
     # --param NAME=VALUE: same SILS_EMU_PARAMS_FILE mechanism as `sf sils
     # scenario --param` (see its own help text for the full rationale).
@@ -1716,7 +1985,12 @@ def run_fly(args: argparse.Namespace) -> int:
         reader_thread.join(timeout=2)
 
     console.success(f"sf sils fly session ended (emu_vehicle exit {proc.returncode})")
-    console.print(f"  trajectory: {bundle / 'trajectory.csv'}")
+    zip_path = _finalize_flightlog(
+        flightlog_dir, bundle / f"sils_fly_{datetime.now():%Y%m%dT%H%M%S}.sflog.zip",
+        notes="sf sils fly (real-time keyboard-piloted session)",
+    )
+    if zip_path is not None:
+        console.print(f"  flight log: {zip_path}")
     return 0 if proc.returncode == 0 else 1
 
 
@@ -2073,8 +2347,8 @@ def run_video(args: argparse.Namespace) -> int:
     if py is None:
         return 1
     bundle = _bundle_dir(args.milestone)
-    if not (bundle / "trajectory.csv").exists():
-        console.error(f"No trajectory in {bundle} — run 'sf sils run' first"); return 1
+    if not any(bundle.glob("*.sflog.zip")):
+        console.error(f"No flight-log bundle in {bundle} — run 'sf sils run' first"); return 1
     fps = getattr(args, "fps", 50)
     out = bundle / f"{args.milestone.lower()}_flight.mp4"
     console.info("Rendering review video (MuJoCo 3D + state graphs)...")
@@ -2122,11 +2396,20 @@ def run_compare(args: argparse.Namespace) -> int:
         rc = subprocess.run([str(exe), str(_model()), str(sub), str(ESTIMATORS[est]),
                              f"{args.milestone}-{est}", noise, str(seed)],
                             env=win_run_env(bd)).returncode
+        # hover_smoke writes its own flight-log v1 CSVs directly under
+        # <sub>/flightlog/ (argv[2]=sub); bundle them into one *.sflog.zip.
+        # hover_smoke は <sub>/flightlog/ 配下にフライトログ一式 CSV を直接書く
+        # （argv[2]=sub）。1個の *.sflog.zip にまとめる。
+        _finalize_flightlog(
+            sub / "flightlog",
+            sub / f"sils_hover_{args.milestone.lower()}_{est}_{datetime.now():%Y%m%dT%H%M%S}.sflog.zip",
+            notes=f"milestone={args.milestone} estimator={est} noise={noise} seed={seed}",
+        )
         # hover_smoke writes the bundle even on a G3 fail; only a hard early exit
         # (e.g. model load) leaves no files. Require both before render/aggregate so
         # a crash surfaces here, not as an opaque traceback downstream.
         # G3不合格でもバンドルは書かれる。ファイルが無いのは早期異常終了のみ。先に要求する。
-        if not (sub / "trajectory.csv").exists() or not (sub / "results.json").exists():
+        if not any(sub.glob("*.sflog.zip")) or not (sub / "results.json").exists():
             console.error(f"run '{est}' wrote no bundle (exit {rc}) — aborting comparison")
             return 1
         runs[est] = sub
@@ -2272,10 +2555,16 @@ def _reference_path() -> Path:
 
 
 def run_sysid_gate(args: argparse.Namespace) -> int:
-    """Run sysid_gate.scn with the 400Hz rate-loop recorder on (SILS_EMU_RATE_STREAM),
-    fit (b,T,L) per axis with rate_sysid.py, and compare against the real-hardware
-    reference. sysid_gate.scn を SILS_EMU_RATE_STREAM 付きで実行し、rate_sysid.py で
-    軸別 (b,T,L) をフィットして実機基準値と比較する。"""
+    """Run sysid_gate.scn (writing a StampFly flight-log v1 bundle via
+    SILS_EMU_FLIGHTLOG, same as every other scenario), fit (b,T,L) per axis
+    with rate_sysid.py's fit_from_df() on the bundle's aligned DataFrame
+    (tools/sysid/loader.load_aligned() — the SAME entry point real-hardware
+    `sf sysid rate-fit` uses), and compare against the real-hardware
+    reference. sysid_gate.scn を実行し（他の全シナリオと同じ SILS_EMU_FLIGHTLOG
+    でフライトログ一式を書く）、一式の整列済み DataFrame
+    （tools/sysid/loader.load_aligned() — 実機の `sf sysid rate-fit` と同じ
+    入口）に rate_sysid.py の fit_from_df() で軸別 (b,T,L) をフィットし、
+    実機基準値と比較する。"""
     scn = _sils_dir() / "scenarios" / "sysid_gate.scn"
     if not scn.exists():
         console.error(f"scenario not found: {scn}"); return 1
@@ -2285,22 +2574,22 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
                       "analysis/reports/rate_sysid_reference/make_reference.py first")
         return 1
 
-    # Bundle dir matches what run_scenario would derive on its own
-    # (_sils_dir()/viz/out_scn_<stem>) — computed here only to know the rate-stream
-    # CSV path BEFORE the run (run_scenario creates the directory itself).
+    # Bundle dir matches what run_scenario derives on its own
+    # (_sils_dir()/viz/out_scn_<stem>) — computed here only to locate
+    # results.json after the run (run_scenario creates the directory itself).
     # バンドルディレクトリは run_scenario が自前で導出するのと同じ場所
-    # （_sils_dir()/viz/out_scn_<stem>）— run前に CSV パスを知るためだけにここで計算
-    # する（ディレクトリ自体は run_scenario が作る）。
+    # （_sils_dir()/viz/out_scn_<stem>）— run 後に results.json を見つけるため
+    # だけにここで計算する（ディレクトリ自体は run_scenario が作る）。
     bundle = _sils_dir() / "viz" / f"out_scn_{scn.stem}"
-    csv_path = bundle / "rate_stream.csv"
-    gains_path = Path(str(csv_path) + ".gains.json")
 
     # Drive the same run_scenario() path every other scenario uses (bundle layout,
-    # console capture, .expect check, injection guardrail) — only difference is the
-    # extra SILS_EMU_RATE_STREAM env var. Constructing the Namespace by hand (rather
-    # than argparse) keeps this independent of the `scenario` subcommand's own flags.
-    # 他の全シナリオと同じ run_scenario() 経路（バンドル構造・コンソール捕捉・.expect
-    # チェック・注入ガードレール）を通す — 違いは SILS_EMU_RATE_STREAM だけ。
+    # flight-log recording, console capture, .expect check, injection guardrail) —
+    # no extra env needed now that every scenario records a flight-log bundle.
+    # Constructing the Namespace by hand (rather than argparse) keeps this
+    # independent of the `scenario` subcommand's own flags.
+    # 他の全シナリオと同じ run_scenario() 経路（バンドル構造・フライトログ記録・
+    # コンソール捕捉・.expect チェック・注入ガードレール）を通す — 全シナリオが
+    # フライトログ一式を記録するようになったため追加の env は不要。
     scenario_ns = argparse.Namespace(
         scenario=str(scn), target="vehicle", expect=None,
         duration=getattr(args, "duration", 44_000_000),
@@ -2308,17 +2597,16 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
         video=False, ground_effect=None, turbulence=None,
         motor_delay=getattr(args, "motor_delay", None), unpaired=False,
         params=getattr(args, "params", None),
-        extra_env={"SILS_EMU_RATE_STREAM": str(csv_path)},
     )
     run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating
 
-    # Gate the FIT on a real crash (process exit code / no CSV), NOT on
+    # Gate the FIT on a real crash (process exit code / no bundle), NOT on
     # run_scenario's full .expect verdict. At nonzero --motor-delay the duty_max
     # check in sysid_gate.expect is EXPECTED to trip (gains were tuned on the
     # no-delay plant — the whole point of this measurement is to see how far L_total
     # moves before a retune, per simulation-policy.md backlog #1/#2 sequencing) —
     # that must not block the identification fit itself.
-    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／CSV欠落）でゲートし、
+    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／一式欠落）でゲートし、
     # run_scenario の完全な .expect 判定では止めない。--motor-delay>0 では
     # sysid_gate.expect の duty_max チェックが意図的に発火しうる（ゲインは無遅延
     # プラントでチューニング済み — L_total がリチューン前にどれだけ動くかを見るのが
@@ -2326,28 +2614,42 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
     results_path = bundle / "results.json"
     scenario_pass = None
     exit_code = None
+    zip_path = None
     if results_path.exists():
         bundle_results = json.loads(results_path.read_text())
         scenario_pass = bundle_results.get("pass")
         exit_code = bundle_results.get("exit_code")
+        flightlog = bundle_results.get("flightlog")
+        zip_path = Path(flightlog) if flightlog else None
     if exit_code not in (0, None):
         console.error(f"emu_vehicle exited {exit_code} — a real crash, aborting fit "
                       f"(see {bundle / 'console.log'})")
         return 1
-    if not csv_path.exists() or csv_path.stat().st_size == 0:
-        console.error(f"no rate stream at {csv_path} — is emu_vehicle wired for "
-                      "SILS_EMU_RATE_STREAM (simulator/sils/devices/emu_rate_stream.cpp)?")
+    if zip_path is None or not zip_path.exists():
+        console.error(f"no flight-log bundle recorded for {scn.name} — is emu_vehicle wired "
+                      "for SILS_EMU_FLIGHTLOG "
+                      "(simulator/sils/devices/emu_flightlog_vehicle.cpp)?")
         return 1
-    if not gains_path.exists():
-        console.error(f"no gains sidecar at {gains_path}"); return 1
+    with zipfile.ZipFile(zip_path) as zf:
+        if "gains.json" not in zf.namelist():
+            console.error(f"no gains.json inside {zip_path}"); return 1
+        gains_all = json.loads(zf.read("gains.json").decode("utf-8"))
     if scenario_pass is False:
         console.warning(f"sysid_gate.expect did NOT fully pass (see {bundle / 'console.log'}) — "
                         "proceeding with the identification fit anyway; this is expected at "
                         "nonzero --motor-delay (duty saturates on untuned gains)")
 
-    gains_all = json.loads(gains_path.read_text())
     reference = json.loads(reference_path.read_text())
     rs = _rate_backend()
+
+    tools_dir = str(paths.root() / "tools")
+    sys.path.insert(0, tools_dir)
+    try:
+        from sysid.loader import load_aligned
+        df = load_aligned(zip_path)
+    finally:
+        if tools_dir in sys.path:
+            sys.path.remove(tools_dir)
 
     console.info("Model-match gate (simulation-policy.md §4): SILS plant vs real-hardware sysid "
                  f"(motor_delay={getattr(args, 'motor_delay', None)} ms)")
@@ -2358,7 +2660,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
     rows = []
     all_pass = True
     for axis in ("roll", "pitch", "yaw"):
-        fit = rs.fit_from_csv(str(csv_path), axis, gains=gains_all[axis])
+        fit = rs.fit_from_df(df, axis, gains=gains_all[axis])
         l_total_s = fit["T"] + fit["L"]
         ref = reference["axes"][axis]
         b_err = (fit["b"] - ref["b"]) / ref["b"]
@@ -2393,7 +2695,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
             "reference": str(reference_path),
             "motor_delay_ms": getattr(args, "motor_delay", None),
             "noise": getattr(args, "noise", "off"),
-            "csv": str(csv_path),
+            "bundle": str(zip_path),
             "scenario_pass": scenario_pass,   # sysid_gate.expect verdict (informational — see gating note above)
             "axes": rows,
         }
@@ -2407,8 +2709,9 @@ def _venv():
     """Return the SILS venv python, creating it (mujoco + deps) if missing."""
     py = _venv_python()
     if py.exists():
+        _ensure_viz_venv_pandas(py)
         return py
-    console.info("Creating SILS viz venv (mujoco 3.9.0 + matplotlib + imageio)...")
+    console.info("Creating SILS viz venv (mujoco 3.9.0 + matplotlib + imageio + pandas)...")
     venv_dir = _sils_dir() / "viz" / "venv"
     if subprocess.run([sys.executable, "-m", "venv", str(venv_dir)]).returncode != 0:
         console.error("venv creation failed"); return None
@@ -2416,6 +2719,20 @@ def _venv():
     pip_exe = "pip.exe" if platform.is_windows() else "pip"
     pip = venv_dir / pip_bin / pip_exe
     if subprocess.run([str(pip), "install", "-q", "mujoco==3.9.0", "numpy",
-                       "matplotlib", "imageio", "imageio-ffmpeg"]).returncode != 0:
+                       "matplotlib", "imageio", "imageio-ffmpeg", "pandas"]).returncode != 0:
         console.error("pip install failed"); return None
     return py
+
+
+def _ensure_viz_venv_pandas(py: Path) -> None:
+    """render_video.py reads the flight-log bundle through lib/sflog, which
+    needs pandas -- a viz venv created before 2026-09-11 lacks it. Install it
+    once into an existing venv (no-op when already importable).
+    render_video.py は lib/sflog 経由でフライトログ一式を読むため pandas が要る
+    -- 2026-09-11 より前に作られた viz venv には無い。既存 venv へ一度だけ入れる
+    （import できれば何もしない）。"""
+    probe = subprocess.run([str(py), "-c", "import pandas"], capture_output=True)
+    if probe.returncode == 0:
+        return
+    console.info("Adding pandas to the SILS viz venv (flight-log bundle reader)...")
+    subprocess.run([str(py), "-m", "pip", "install", "-q", "pandas"])

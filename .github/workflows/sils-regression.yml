@@ -34,8 +34,16 @@ on:
     paths: &sils_relevant_paths
       - 'firmware/**'
       - 'simulator/sils/**'
+      - 'simulator/tools/**'
       - 'control/**'
-      - 'lib/sfcli/**'
+      # lib/ (sfcli, sflog, stampfly_edu), tools/ and the reference flight-log
+      # bundle are covered by the pytest step below, so changes there must
+      # trigger the run too.
+      # lib/（sfcli・sflog・stampfly_edu）・tools/・実機基準一式は下の pytest
+      # ステップの対象なので、これらの変更でも実行を起動する。
+      - 'lib/**'
+      - 'tools/**'
+      - 'analysis/datasets/**'
       - 'protocol/**'
       - '.github/workflows/sils-regression.yml'
   pull_request:
@@ -150,6 +158,36 @@ jobs:
           sf params check --strict
           sf params generate --check
 
+      - name: Flight-log format and tool unit tests (pytest)
+        # The flight-log bundle format (protocol/spec/flight_log.yaml, plan
+        # docs/plans/flight-log-format-plan.md section 3.5) has its own
+        # checks: (1) lib/sflog unit tests incl. the generated schema.py /
+        # reference doc being up to date with the YAML, (2) every reader
+        # (sf log viz/analyze/--health, sf sysid, sf trim, sf cal plot,
+        # stampfly_edu) on the real-vehicle reference bundle under
+        # analysis/datasets/flightlog/, (3) the SILS bundle assembly/metric
+        # helpers and the sim_io bundle writer. No emulator binary is needed
+        # (the determinism test simulator/tests/test_realtime_fly.py runs
+        # locally after `sf sils build`; its byte-level baseline is not
+        # asserted in CI). MPLBACKEND=Agg keeps matplotlib headless.
+        # フライトログ一式形式（protocol/spec/flight_log.yaml、計画書 3.5節）
+        # 自身の検査: (1) lib/sflog の単体テスト（生成物 schema.py/参照文書が
+        # YAML と一致していることを含む）、(2) 全読み込み側（sf log viz/
+        # analyze/--health・sf sysid・sf trim・sf cal plot・stampfly_edu）が
+        # analysis/datasets/flightlog/ の実機基準一式を読めること、(3) SILS の
+        # 一式組み立て/メトリクスと sim_io の一式書き出し。エミュレータの
+        # バイナリは不要（決定論テスト simulator/tests/test_realtime_fly.py は
+        # `sf sils build` 後にローカルで回す。バイト一致の基準値は CI では
+        # 検査しない）。MPLBACKEND=Agg で matplotlib をヘッドレスにする。
+        env:
+          MPLBACKEND: Agg
+        run: |
+          python -m pytest -q \
+            lib/sflog/tests tools/log_analyzer tools/sysid tools/calibration \
+            lib/stampfly_edu lib/sfcli/commands/test_trim.py \
+            lib/sfcli/commands/test_sils_flightlog.py \
+            simulator/tools/compare_simulators/test_sim_io.py simulator/sils/tests
+
       - name: Cache SILS build directory (MuJoCo FetchContent + object files)
         # Caches the WHOLE build dir, not just _deps: actions/cache preserves file
         # mtimes on restore, so CMake/Ninja's own mtime-based staleness check still
@@ -225,11 +263,15 @@ jobs:
       - name: Upload SILS bundles (debugging aid on failure)
         if: failure()
         # Only meaningful on a genuine scenario FAIL (not a build failure, which
-        # leaves no bundles) — console.out/err + trajectory.csv + results.json per
-        # scenario, the same artifacts `sf sils scenario` always writes locally.
+        # leaves no bundles) — console.out/err + results.json + the run's
+        # flight-log bundle (sils_<scenario>_<ts>.sflog.zip, plan
+        # docs/plans/flight-log-format-plan.md) per scenario, the same
+        # artifacts `sf sils scenario` always writes locally.
         # シナリオが実際に FAIL した場合のみ意味を持つ（ビルド失敗ならバンドル
-        # 自体が無い）— console.out/err・trajectory.csv・results.json は
-        # `sf sils scenario` がローカルでも常に書き出す成果物と同じもの。
+        # 自体が無い）— console.out/err・results.json・その実行のフライトログ
+        # 一式（sils_<scenario>_<ts>.sflog.zip、計画書 docs/plans/
+        # flight-log-format-plan.md）は `sf sils scenario` がローカルでも常に
+        # 書き出す成果物と同じもの。
         uses: actions/upload-artifact@v4
         with:
           name: sils-regression-bundles

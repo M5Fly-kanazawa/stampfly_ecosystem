@@ -43,8 +43,7 @@
 #include "scenario_inject.hpp"   // pairing NVS seed (boot Paired unless SILS_EMU_UNPAIRED)
 #include "console_feeder.hpp"    // P8: scripted console bytes → firmware stdin
 #include "emu_record.hpp"        // P8: virtual-time-stamped input/event log
-#include "emu_trajectory.hpp"    // P8: review-video trajectory recorder (SILS_EMU_TRAJ)
-#include "emu_rate_stream.hpp"   // model-match gate: 400Hz rate_ref+gyro (SILS_EMU_RATE_STREAM)
+#include "emu_flightlog.hpp"     // StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG)
 #include "emu_realtime.hpp"      // P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
 #include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
 #include "flight_state.hpp"      // sf::flightStateName / sf::flightModeName (STATE HUD line)
@@ -117,14 +116,14 @@ void on_advance(int64_t now_us)
         const float dt = (float)(now_us - g_last_step_us) * 1e-6f;
         sils_board_step_plant(dt);
         g_last_step_us = now_us;
-        // Record a review-video trajectory row (no-op unless SILS_EMU_TRAJ was set).
-        // レビュー動画用に軌跡を1行記録（SILS_EMU_TRAJ 未設定なら no-op）。
-        sils_emu_traj_sample((double)now_us * 1e-6, &g_plant);
-        // Model-match gate: record one 400Hz rate_ref+gyro row per NEW control
-        // cycle (edge-detected inside; no-op unless SILS_EMU_RATE_STREAM was set).
-        // モデル一致ゲート: 新しい制御周期ごとに rate_ref+gyro を1行記録
-        // （内部でエッジ検出。SILS_EMU_RATE_STREAM 未設定なら no-op）。
-        sils_emu_rate_sample();
+        // Record one flight-log bundle sample: a truth.csv row at the fixed
+        // virtual cadence, plus (via the vehicle-topic glue) the firmware
+        // streams edge-detected on the new IMU sample. No-op unless
+        // SILS_EMU_FLIGHTLOG was set.
+        // フライトログ一式を1サンプル記録: 固定間隔の truth.csv 行、および
+        // （vehicle トピック glue 経由で）新しい IMU サンプルでエッジ検出した
+        // ファームストリーム。SILS_EMU_FLIGHTLOG 未設定なら no-op。
+        sils_emu_flightlog_sample(now_us, &g_plant);
     }
 
     // P6 stage 1 (keyboard-piloted SILS) — every hook below is a cached env-var
@@ -342,12 +341,11 @@ int main(int argc, char** argv)
         sils_console_set_fd(cli_pipe[1]);
     }
 
-    // P8: open the deterministic event log + review-video trajectory if requested
+    // P8: open the deterministic event log + flight-log bundle if requested
     // (env from the sf CLI). Unset → both stay closed and every call is a no-op.
-    // P8: 要求時に決定論イベントログ＋レビュー動画軌跡を開く。未設定なら no-op。
+    // P8: 要求時に決定論イベントログ＋フライトログ一式を開く。未設定なら no-op。
     sils_emu_record_open(std::getenv("SILS_EMU_EVENTS"));
-    sils_emu_traj_open(std::getenv("SILS_EMU_TRAJ"));
-    sils_emu_rate_open(std::getenv("SILS_EMU_RATE_STREAM"));
+    sils_emu_flightlog_open(std::getenv("SILS_EMU_FLIGHTLOG"));
 
     // P8: load a scripted input scenario (argv[3]) BEFORE the scheduler starts. A
     // parse error aborts before any firmware singleton exists (safe return).
@@ -356,7 +354,7 @@ int main(int argc, char** argv)
     if (sils_scenario_load(scenario_path) < 0) {
         std::fprintf(stderr, "[emu] scenario load failed — aborting before run\n");
         sils_emu_record_close();
-        sils_emu_traj_close();
+        sils_emu_flightlog_close();
         return 2;
     }
 
@@ -480,20 +478,19 @@ int main(int argc, char** argv)
         }
     }
 
-    // Model-match gate: snapshot the LIVE rate-loop gains (SSOT params, after
-    // every override above) into the rate-stream's <path>.gains.json sidecar —
-    // this is the gain set `sf sils sysid-gate` must replay to reconstruct the
-    // rate loop's torque output. No-op unless SILS_EMU_RATE_STREAM was set.
-    // モデル一致ゲート: 上の全上書き適用後の実ゲイン（SSOT params）を rate-stream の
-    // <path>.gains.json sidecar へ書く — sf sils sysid-gate の再生に必須。
-    // SILS_EMU_RATE_STREAM 未設定なら no-op。
-    sils_emu_rate_write_gains();
+    // Flight-log bundle: snapshot the LIVE rate-loop gains (SSOT params, after
+    // every override above) into the bundle's gains.json sidecar — this is the
+    // gain set `sf sils sysid-gate` must replay to reconstruct the rate loop's
+    // torque output. No-op unless SILS_EMU_FLIGHTLOG was set.
+    // フライトログ一式: 上の全上書き適用後の実ゲイン（SSOT params）を一式の
+    // gains.json sidecar へ書く — sf sils sysid-gate の再生に必須。
+    // SILS_EMU_FLIGHTLOG 未設定なら no-op。
+    sils_emu_flightlog_write_gains();
 
     sils::rtos::Scheduler::instance().run(duration_us);
 
-    sils_emu_record_close();   // flush/close the events log
-    sils_emu_traj_close();     // flush/close the review-video trajectory (if open)
-    sils_emu_rate_close();     // flush/close the model-match-gate rate stream (if open)
+    sils_emu_record_close();      // flush/close the events log
+    sils_emu_flightlog_close();   // flush/close the flight-log bundle (if open)
 
     // --- post-run validation: did the real estimator track the Plant? ---------
     // 実行後の検証: 実推定器が Plant を追従したか。

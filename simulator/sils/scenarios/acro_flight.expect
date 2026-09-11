@@ -1,8 +1,8 @@
 # acro_flight.expect — assert ARM → TAKEOFF → FLYING AND the in-flight switch to
 # ACRO (rate) mode, driven by the `acro` scenario token (CTRL_FLAG_MODE). ACRO
-# rate tracking itself is checked numerically from trajectory.csv.
+# rate tracking itself is checked numerically from the run's flight-log bundle (truth.csv/attitude.csv/...).
 # ARM→TAKEOFF→FLYING に加え、acro トークン(CTRL_FLAG_MODE)による飛行中の ACRO（角速度）
-# モード切替を検証する。ACRO レート追従は trajectory.csv で数値確認する。
+# モード切替を検証する。ACRO レート追従は実行結果のフライトログ一式（truth.csv/attitude.csv 等）で数値確認する。
 exit 0
 log_contains any "ARM accepted"                       # IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff detected"                   # ARMED_GROUND → TAKEOFF
@@ -19,8 +19,8 @@ order "ARM accepted" "Mode change: STABILIZE"         # ground mode change after
 order "Mode change: STABILIZE" "Takeoff complete"     # ...and before the takeoff completes
 order "Mode change: STABILIZE" "DISARM accepted"      # flies in ACRO before disarm
 # Numerical gates over the rate-doublet flight window (G2/G3). 飛行窓 [7.0,9.7]s。
-metric att_rmse < 3.0  in 7.0 9.7    # G2: ESKF roll/pitch tracks truth through the doublets
-metric tilt_max < 25.0 in 7.0 9.7    # G3: attitude bounded — no tumble during ACRO
+metric att_rmse < 0.05236  in 7.0 9.7  # 3.0 deg  # G2: ESKF roll/pitch tracks truth through the doublets
+metric tilt_max < 0.4363 in 7.0 9.7  # 25.0 deg  # G3: attitude bounded — no tumble during ACRO
 # G4 (duty): ACRO rate doublets briefly saturate the motors BY DESIGN (broadband
 # excitation, roadmap §3.1.3), so motor duty is intentionally NOT gated for ACRO.
 # G4(duty): ACRO のレートダブレットは設計上モータを瞬間飽和させるため未ゲート。

@@ -25,6 +25,6 @@ log_contains any "Autonomous landing engaged"
 log_contains any "Transition: FLYING → LANDING"
 log_contains any "Transition: LANDING → IDLE_GROUND"
 order "Comm lost → LANDING" "Autonomous landing engaged"
-metric tilt_max > 8.0  in 11.5 13.5    # grace (FLYING, dead link): stale roll-right IS applied (~11°)
-metric tilt_max < 6.0  in 15.0 15.6    # LANDING: level gate zeroed the stale roll → leveled (~3.6°)
+metric tilt_max > 0.1396  in 11.5 13.5  # 8.0 deg  # grace (FLYING, dead link): stale roll-right IS applied (~11°)
+metric tilt_max < 0.1047  in 15.0 15.6  # 6.0 deg  # LANDING: level gate zeroed the stale roll → leveled (~3.6°)
 metric alt_max  < 0.10 in 17.5 18.5    # the craft actually landed (touchdown → IDLE_GROUND)

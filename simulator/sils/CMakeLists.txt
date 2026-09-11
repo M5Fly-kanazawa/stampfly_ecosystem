@@ -190,12 +190,15 @@ if(SILS_BUILD_MUJOCO_SMOKE)
     ${VN}/tasks/state_task.cpp
     ${VN}/components/sf_state/state_manager.cpp
     ${VN}/components/sf_actuator/actuator.cpp
+    devices/emu_flightlog.cpp          # StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG / out_dir/flightlog)
+    devices/emu_flightlog_vehicle.cpp  # vehicle-topic glue (imu/attitude/posvel/rate_ref/motor/ctrl_output/...)
   )
   target_include_directories(hover_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/rtos
     ${CMAKE_CURRENT_SOURCE_DIR}/sim_hal
     ${CMAKE_CURRENT_SOURCE_DIR}/plant
     ${CMAKE_CURRENT_SOURCE_DIR}/frames
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices
     ${VN}/main
     ${VN}/tasks
     ${VN}/components/sf_actuator/include
@@ -341,9 +344,9 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp    # PMW3901 optical-flow chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SILS_EMU_TRAJ)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_rate_stream.cpp   # model-match gate: 400Hz rate_ref+gyro (SILS_EMU_RATE_STREAM)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # estimate overlay (ESKF est → trajectory)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog.cpp          # StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog_vehicle.cpp # vehicle-topic glue (imu/attitude/posvel/rate_ref/motor/ctrl_output/...)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # ApiTask scenario-injection registration
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin
@@ -412,7 +415,7 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp     # E6: scripted console bytes
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp   # E6: dispatching console registry
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp         # E6: events.jsonl recorder
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp     # review-video trajectory recorder
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog.cpp      # StampFly flight-log v1 bundle recorder (truth.csv only — no vehicle-topic glue linked)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_realtime.cpp       # P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/rc_stdin.cpp           # P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
     plant/plant.cpp
@@ -505,9 +508,9 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp    # PMW3901 optical-flow chip model
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp        # shared ESP-NOW hub (comm.cpp uses it)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp        # recorder (passive; hub records frames)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_trajectory.cpp    # P8: review-video trajectory (SILS_EMU_TRAJ)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_rate_stream.cpp   # model-match gate: 400Hz rate_ref+gyro (SILS_EMU_RATE_STREAM)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # estimate overlay (sf::estimate_state → trajectory); reused unchanged, no PID-specific assumption
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog.cpp          # StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog_vehicle.cpp # vehicle-topic glue; reused unchanged (imu/attitude/posvel always publish — WorkshopControlTask's rate_ref/motor/ctrl_output/ctrl_ref stay absent, no PID-specific assumption)
+    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_glue.cpp  # ApiTask scenario-injection registration; reused unchanged
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp          # P8: *.scn scripted-input driver
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp   # P8: 14B ControlPacket builder (SSOT)
     ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp    # P8: scripted console bytes → stdin

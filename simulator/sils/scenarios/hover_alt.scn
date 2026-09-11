@@ -60,7 +60,7 @@
 # hover 指令が実 mg を生む ②物理を仮想時間にロックした 4000Hz 固定刻み(cea0d8c)。以前は物理が
 # 約3倍速で「ESKF鉛直発散」blocker を生んでいたが、これで ToF と ESKF が同レートで進み解消。
 #
-# Expectation (MEASURED with both fixes; tune from trajectory.csv `alt`, NOT control gains):
+# Expectation (MEASURED with both fixes; tune from the run's flight-log bundle's `truth.csv` altitude, NOT control gains):
 #   C: alt rises to ~0.62 m (leaves the ground; cf. hover_espnow at T=0.50 stays grounded).
 #   D: ALT_HOLD captures the current altitude (~0.62 m, clamped [0.10,3.0] m) and HOLDS it;
 #      raw2048 is inside the ±0.1 deadzone → climb_cmd=0 → setpoint frozen. The COMMANDED

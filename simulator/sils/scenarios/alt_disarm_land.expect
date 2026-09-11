@@ -26,5 +26,5 @@ order "DISARM in ALT_HOLD → auto-land" "Autonomous landing engaged" # routing 
 order "Autonomous landing engaged" "Transition: LANDING → IDLE_GROUND"  # descent completes the chain
 metric duty_max > 0.50 in 13.5 14.5     # motors RUN through the descent — controlled, not a cut
 metric alt_min  > 0.20 in 13.5 13.9     # still aloft 0.4 s after DISARM — gradual, not a free-fall drop
-metric tilt_max < 15.0 in 13.3 14.8     # attitude bounded through the auto-land
+metric tilt_max < 0.2618 in 13.3 14.8  # 15.0 deg  # attitude bounded through the auto-land
 metric alt_max  < 0.05 in 16.0 19.0     # landed and settled on the ground

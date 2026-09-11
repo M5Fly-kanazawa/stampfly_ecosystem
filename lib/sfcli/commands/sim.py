@@ -13,6 +13,7 @@ Subcommands:
 import argparse
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -176,8 +177,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Simulation duration in seconds (default: 10)",
     )
     headless_parser.add_argument(
+        "-i", "--input",
+        help="Input CSV file (time,throttle,roll,pitch,yaw). Default: hover "
+             "(all-zero stick) for the whole run.",
+    )
+    headless_parser.add_argument(
         "-o", "--output",
-        help="Output log file path",
+        help="Output StampFly flight-log v1 bundle path (.sflog.zip). "
+             "Default: logs/sim_<backend>_<timestamp>.sflog.zip",
     )
     headless_parser.set_defaults(func=run_headless)
 
@@ -336,6 +343,21 @@ def run_sim(args: argparse.Namespace) -> int:
         return 1
 
 
+def _resolve_headless_output(output_arg: Optional[str], backend_id: str) -> Path:
+    """Resolve `sf sim headless`'s output path: the exact path given via
+    -o/--output, or the plan's default naming
+    (docs/plans/flight-log-format-plan.md section 2.1's `file_naming.sim`)
+    `logs/sim_<backend>_<YYYYMMDD>T<HHMMSS>.sflog.zip`.
+    `sf sim headless` の出力パスを解決する: -o/--output 指定時はそのパスを
+    そのまま使い、無指定なら計画書 2.1節 `file_naming.sim` の既定命名
+    `logs/sim_<backend>_<YYYYMMDD>T<HHMMSS>.sflog.zip` を使う。
+    """
+    if output_arg:
+        return Path(output_arg)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    return paths.logs() / f"sim_{backend_id}_{timestamp}.sflog.zip"
+
+
 def run_headless(args: argparse.Namespace) -> int:
     """Run headless simulation"""
     backend_id = args.backend
@@ -361,11 +383,14 @@ def run_headless(args: argparse.Namespace) -> int:
     if not python_cmd:
         return 1
 
+    output_path = _resolve_headless_output(getattr(args, "output", None), backend_id)
+
     console.info(f"Starting headless {backend['name']} simulation...")
     console.print(f"  Backend: {backend_id}")
     console.print(f"  Duration: {args.duration}s")
-    if args.output:
-        console.print(f"  Output: {args.output}")
+    if getattr(args, "input", None):
+        console.print(f"  Input: {args.input}")
+    console.print(f"  Output: {output_path}")
     console.print()
 
     # Build command
@@ -374,8 +399,17 @@ def run_headless(args: argparse.Namespace) -> int:
     if args.duration:
         cmd.extend(["--duration", str(args.duration)])
 
-    if args.output:
-        cmd.extend(["--output", args.output])
+    if getattr(args, "input", None):
+        cmd.extend(["--input", args.input])
+
+    # Always pass --output: the headless scripts require it (they no
+    # longer default to writing anywhere on their own), and this is where
+    # the plan's default bundle name gets applied when the user didn't
+    # pass -o/--output themselves.
+    # --output は常に渡す: ヘッドレススクリプト側は必須にしている（自身では
+    # 既定の出力先を持たない）。ユーザーが -o/--output を指定しなかった
+    # 場合の既定バンドル名はここで決まる。
+    cmd.extend(["--output", str(output_path)])
 
     try:
         result = subprocess.run(

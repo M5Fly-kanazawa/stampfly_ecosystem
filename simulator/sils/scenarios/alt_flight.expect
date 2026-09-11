@@ -1,7 +1,8 @@
 # alt_flight.expect — assert ARM → TAKEOFF → FLYING, the ToF ground→airborne
 # vertical handoff (imu_task), and the in-flight switch to ALTITUDE_HOLD driven by
 # the `alt` scenario token (CTRL_FLAG_ALT_MODE). The altitude HOLD itself (truth alt
-# bounded, ESKF est tracks truth) is checked numerically from trajectory.csv — the
+# bounded, ESKF est tracks truth) is checked numerically from the run's flight-log
+# bundle (truth.csv/attitude.csv/...) — the
 # expect DSL is log-only. Measured (P8 Phase B, ORIGINAL plant): holds ~0.86 m, ESKF est
 # tracks truth to mean 1.2 cm / max 6.8 cm; no divergence on the ground or after landing.
 # 2026-07-26 ODEプラント(実測Ct)対応再調整 UPDATE: with the new plant + recalibrated raw
@@ -9,7 +10,7 @@
 # metric-gate comment below); it settles to hold ~0.60 m by t≈15, est rmse≈0.02 m.
 # ARM→TAKEOFF→FLYING、ToF 接地→空中の鉛直ハンドオフ（imu_task）、alt トークン
 # (CTRL_FLAG_ALT_MODE) による飛行中の ALTITUDE_HOLD 切替を検証する。高度保持そのもの
-# （真値 alt 有界・ESKF est が真値追従）は trajectory.csv で数値確認する（expect は
+# （真値 alt 有界・ESKF est が真値追従）は実行結果のフライトログ一式（truth.csv/attitude.csv 等）で数値確認する（expect は
 # ログのみ）。実測(P8 Phase B, 旧プラント): ~0.86m 保持、est 追従 平均1.2cm/最大6.8cm、
 # 地上・着地後の発散なし。2026-07-26 更新: 新プラント+再校正raw（alt_flight.scn参照）では
 # ハンドオフ後の過渡が大きくなる（有界・減衰 — 下の数値ゲート注記参照）が t≈15 で ~0.60m

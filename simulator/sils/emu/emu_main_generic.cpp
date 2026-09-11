@@ -37,7 +37,7 @@
 #include "scenario.hpp"          // E6: deterministic scripted-input timeline
 #include "console_feeder.hpp"    // E6: scripted console bytes -> firmware stdin
 #include "emu_record.hpp"        // E6: virtual-time-stamped input/event log
-#include "emu_trajectory.hpp"    // review-video trajectory recorder (SILS_EMU_TRAJ)
+#include "emu_flightlog.hpp"     // StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG)
 #include "emu_realtime.hpp"      // P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
 #include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
 #include "freertos/FreeRTOS.h"
@@ -157,9 +157,13 @@ void on_advance(int64_t now_us)
         // 有界判定できるようにする（一時的に上昇して戻る軌跡を最終値だけでは見逃す）。
         const float alt = -g_plant.truth().pos_ned.z;
         if (alt > g_peak_alt) g_peak_alt = alt;
-        // Record a review-video trajectory row (no-op unless SILS_EMU_TRAJ was set).
-        // レビュー動画用に軌跡を1行記録（SILS_EMU_TRAJ 未設定なら no-op）。
-        sils_emu_traj_sample((double)now_us * 1e-6, &g_plant);
+        // Record a flight-log bundle truth.csv row (no-op unless
+        // SILS_EMU_FLIGHTLOG was set). This firmware-agnostic entry links no
+        // vehicle-topic glue, so only truth.csv is produced.
+        // フライトログ一式の truth.csv 行を記録（SILS_EMU_FLIGHTLOG 未設定なら
+        // no-op）。このファーム非依存エントリは vehicle トピック glue を
+        // リンクしないため truth.csv のみ生成される。
+        sils_emu_flightlog_sample(now_us, &g_plant);
     }
 
     // P6 stage 1 (keyboard-piloted SILS) — same firmware-agnostic hooks as
@@ -254,10 +258,12 @@ int main(int argc, char** argv)
     // 未設定なら閉じたまま＝record は no-op ＝ 既定実行は本機能前と byte-identical。
     sils_emu_record_open(std::getenv("SILS_EMU_EVENTS"));
 
-    // Open the review-video trajectory if requested (SILS_EMU_TRAJ → CSV path). Unset
-    // → recorder stays closed and every sample is a no-op (run unchanged).
-    // レビュー動画の軌跡を要求時に開く（SILS_EMU_TRAJ → CSV パス）。未設定なら閉じたまま。
-    sils_emu_traj_open(std::getenv("SILS_EMU_TRAJ"));
+    // Open the flight-log bundle if requested (SILS_EMU_FLIGHTLOG → directory
+    // path). Unset → recorder stays closed and every sample is a no-op (run
+    // unchanged).
+    // フライトログ一式を要求時に開く（SILS_EMU_FLIGHTLOG → ディレクトリパス）。
+    // 未設定なら閉じたまま（実行は不変）。
+    sils_emu_flightlog_open(std::getenv("SILS_EMU_FLIGHTLOG"));
 
     std::printf("[emu] === StampFly emulator (firmware-agnostic entry) ===\n");
 
@@ -269,7 +275,7 @@ int main(int argc, char** argv)
     if (sils_scenario_load(scenario_path) < 0) {
         std::fprintf(stderr, "[emu] scenario load failed — aborting before run\n");
         sils_emu_record_close();
-        sils_emu_traj_close();
+        sils_emu_flightlog_close();
         return 2;
     }
 
@@ -321,8 +327,8 @@ int main(int argc, char** argv)
     // 実機では静的シングルトンは破棄されない（プログラムは戻らない）。ホスト終了時の
     // 任意順の破棄は mutex 二重操作で abort する（ホスト固有の人工物）。_Exit で
     // 「電源断」を忠実に再現し、破棄を走らせずクリーンに終了する。
-    sils_emu_record_close();   // flush/close the events log (lines were flushed)
-    sils_emu_traj_close();     // flush/close the review-video trajectory (if open)
+    sils_emu_record_close();      // flush/close the events log (lines were flushed)
+    sils_emu_flightlog_close();   // flush/close the flight-log bundle (if open)
     std::fflush(stdout);
     std::fflush(stderr);
     std::_Exit(0);

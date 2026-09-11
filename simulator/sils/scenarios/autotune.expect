@@ -15,7 +15,7 @@ order "Autotune fit: b=" "Autotune applied: roll"
 order "Autotune applied: roll" "cmd: land"
 # Bounded flight through the sweep; stable hover ON THE NEW GAINS before landing.
 # 掃引中の有界性と、「新ゲインでの」着陸前ホバー安定。
-metric tilt_max < 15.0 in 18.0 44.0
+metric tilt_max < 0.2618 in 18.0 44.0  # 15.0 deg
 metric duty_max < 0.92 in 18.0 44.0
 metric alt_band < 0.40 in 18.0 44.0
 metric alt_max < 0.10 in 52.0 54.5

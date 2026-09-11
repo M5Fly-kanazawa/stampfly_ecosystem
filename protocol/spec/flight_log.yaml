@@ -50,6 +50,27 @@ file_naming:
   sim: "sim_<backend>_<YYYYMMDD>T<HHMMSS>.sflog.zip"
 
 # =============================================================================
+# Required streams per capture source (plan section 2.2: a bundle simply
+# omits the streams it has no packets for; which streams can never be
+# missing depends on where the bundle came from)
+# 取得元ごとの必須ストリーム（計画書 2.2節: パケットが無いストリームの
+# ファイルは作らない。「絶対に欠けないストリーム」は取得元で決まる）
+# =============================================================================
+required_streams:
+  # The vehicle's Data Stream always carries the 400 Hz IMU+ESKF packet.
+  # 実機の Data Stream は 400 Hz の IMU+ESKF パケットを必ず送る。
+  vehicle: [imu]
+  # The SILS emulator runs the real IMU task (imu) on top of MuJoCo (truth).
+  # SILS エミュレータは MuJoCo（truth）の上で実ファームの IMU タスク（imu）を回す。
+  sils: [imu, truth]
+  # Pure-physics simulators (vpython/genesis) run no firmware: only truth.
+  # 純粋な物理シミュレータ（vpython/genesis）はファームを持たない: truth のみ。
+  sim: [truth]
+  # A bundle whose meta.json names any other (or no) source is checked
+  # against the `vehicle` list.
+  # meta.json の source がそれ以外（または無い）一式は `vehicle` の一覧で検査する。
+
+# =============================================================================
 # CSV rules (plan section 2.1)
 # CSV の規則（計画書 2.1節）
 # =============================================================================

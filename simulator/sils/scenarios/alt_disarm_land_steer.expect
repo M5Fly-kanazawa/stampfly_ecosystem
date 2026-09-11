@@ -13,6 +13,6 @@ log_contains any "Autonomous landing engaged"
 log_contains any "Transition: FLYING → LANDING"
 log_contains any "Transition: LANDING → IDLE_GROUND"
 order "DISARM in ALT_HOLD → auto-land" "Autonomous landing engaged"
-metric tilt_max > 6.0  in 13.5 14.5    # KEY: roll stick TILTS the craft during the descent (steerable)
+metric tilt_max > 0.1047  in 13.5 14.5  # 6.0 deg  # KEY: roll stick TILTS the craft during the descent (steerable)
 metric duty_max > 0.50 in 13.5 14.3    # motors RUN through the descent (controlled, not a cut)
 metric alt_max  < 0.12 in 17.0 19.0    # landed and settled (small margin for the roll-induced drift)

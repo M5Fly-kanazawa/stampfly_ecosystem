@@ -31,7 +31,7 @@ if _TOOLS_DIR not in sys.path:
 from core import dynamics as mc
 from core import motors as motor_model
 from control.pid import PID
-from sim_io import load_input_csv, save_output_csv, StateLog, get_input_at_time
+from sim_io import ControlInput, get_input_at_time, load_input_csv, save_output_bundle, StateLog
 
 
 # =============================================================================
@@ -160,9 +160,18 @@ def run_headless(input_file, output_file, duration=10.0):
     print("VPython ヘッドレスシミュレーション")
     print("=" * 60)
 
-    # Load input
-    input_sequence = load_input_csv(input_file)
-    print(f"Input: {input_file} ({len(input_sequence)} samples)")
+    # Load input, or hold hover (all-zero stick) for the whole run when no
+    # --input is given -- `sf sim headless` does not require one (a bare
+    # "how does this backend behave at hover" run is a legitimate use).
+    # --input が無ければホバー（全スティック中立）を全区間保持する --
+    # `sf sim headless` は --input を必須としない（「ホバーでの挙動を見る
+    # だけ」も正当な使い方のため）。
+    if input_file:
+        input_sequence = load_input_csv(input_file)
+        print(f"Input: {input_file} ({len(input_sequence)} samples)")
+    else:
+        input_sequence = [ControlInput(time=0.0, throttle=0.0, roll=0.0, pitch=0.0, yaw=0.0)]
+        print("Input: hover (no --input given)")
     print(f"Output: {output_file}")
     print(f"Duration: {duration}s")
 
@@ -271,12 +280,20 @@ def run_headless(input_file, output_file, duration=10.0):
             pos = stampfly.body.position
             euler = stampfly.body.euler
             pqr = stampfly.body.pqr
+            # Inertial-frame (NED, see sim_io.py's frame-conversion
+            # comment) velocity, maintained every step alongside position
+            # -- not derived here by differencing.
+            # 慣性座標系（NED、sim_io.py の座標変換コメント参照）の速度。
+            # 位置と同様に毎ステップ更新される状態そのもので、ここで
+            # 差分から算出してはいない。
+            vel = stampfly.body.velocity
 
             state_logs.append(StateLog(
                 time=sim_time,
                 x=pos[0][0], y=pos[1][0], z=pos[2][0],
                 roll=euler[0][0], pitch=euler[1][0], yaw=euler[2][0],
                 p=pqr[0][0], q=pqr[1][0], r=pqr[2][0],
+                vx=vel[0][0], vy=vel[1][0], vz=vel[2][0],
             ))
 
         # Progress
@@ -285,15 +302,17 @@ def run_headless(input_file, output_file, duration=10.0):
             speed = sim_time / elapsed if elapsed > 0 else 0
             print(f"  t={sim_time:.1f}s ({speed:.1f}x realtime)")
 
-    # Save output
+    # Save output as a StampFly flight-log v1 bundle (truth.csv + pilot.csv)
+    # 出力を StampFly フライトログ v1 一式として保存（truth.csv + pilot.csv）
     print(f"\n[2] Saving output to {output_file}...")
     metadata = {
         'simulator': 'vpython',
         'physics_hz': PHYSICS_HZ,
         'control_hz': CONTROL_HZ,
-        'input_file': input_file,
+        'input_file': input_file or 'hover (default, no --input given)',
+        'duration_s': duration,
     }
-    save_output_csv(output_file, state_logs, metadata)
+    save_output_bundle(output_file, state_logs, input_sequence, metadata)
 
     elapsed = time.perf_counter() - start_time
     print(f"\nDone! Simulated {duration}s in {elapsed:.1f}s ({duration/elapsed:.1f}x realtime)")
@@ -302,10 +321,11 @@ def run_headless(input_file, output_file, duration=10.0):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='VPython Headless Simulation')
-    parser.add_argument('--input', '-i', type=str, required=True,
-                       help='Input CSV file')
+    parser.add_argument('--input', '-i', type=str, default=None,
+                       help='Input CSV file (time,throttle,roll,pitch,yaw). '
+                            'Default: hover (all-zero stick) for the whole run.')
     parser.add_argument('--output', '-o', type=str, required=True,
-                       help='Output CSV file')
+                       help='Output StampFly flight-log v1 bundle path (.sflog.zip)')
     parser.add_argument('--duration', '-d', type=float, default=10.0,
                        help='Simulation duration [s]')
     args = parser.parse_args()

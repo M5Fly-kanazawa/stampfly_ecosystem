@@ -32,13 +32,14 @@
 # Hover-duty derivation (2026-09-04 investigation): alt_flight.scn (vehicle,
 # ALTITUDE_HOLD) settles to a steady per-motor duty of 0.6745-0.6784 (mean 0.6763)
 # while holding altitude flat (alt_band=0.093 m) in [11.0,17.8]s — see
-# simulator/sils/viz/out_scn_alt_flight/trajectory.csv columns m0..m3. That duty
+# the run's flight-log bundle's `motor.csv` columns duty_FR/RR/RL/FL under
+# simulator/sils/viz/out_scn_alt_flight/. That duty
 # IS the SILS Plant's actual hover-equilibrium PWM duty (thrust == weight), so it
 # is the right value to feed directly as workshop's T (unlike vehicle's own
 # throttle-stick convention, which is a THRUST fraction, not a duty).
 # ホバー duty の導出（2026-09-04 調査）: alt_flight.scn（vehicle, ALTITUDE_HOLD）は
 # 高度を平坦に保ちながら（alt_band=0.093m, [11.0,17.8]s）モータ duty 0.6745-0.6784
-# （平均0.6763）に収束する — 上記 trajectory.csv の m0..m3 列参照。この duty こそが
+# （平均0.6763）に収束する — 上記フライトログ一式の `motor.csv` の duty_FR/RR/RL/FL 列参照。この duty こそが
 # SILS Plant の実際のホバー均衡 PWM duty（推力=重量）であり、workshop の T へ
 # 直接渡すべき値（vehicle 自身のスティック規約は「推力比率」であって duty ではない）。
 #

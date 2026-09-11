@@ -106,8 +106,11 @@ sf sils gui        # opens the browser at http://127.0.0.1:8765
 ## 3. How it works
 
 stdlib-only HTTP server (`gui/server.py`) serving a single-page app; runs shell out to
-`sf sils scenario` and the run bundle (trajectory.csv / results.json / events.jsonl) is read
-back for the browser. Graphs use Plotly; the live 3D uses three.js with a worldGroup that
+`sf sils scenario` and the run bundle (the flight-log v1 `sils_*.sflog.zip` bundle, via
+`lib/sflog` — see docs/plans/flight-log-format-plan.md section 3.3 — plus results.json /
+events.jsonl) is read back for the browser. Graphs use Plotly; the live 3D uses three.js
+with a worldGroup that
 maps ENU (z-up) to the three.js Y-up frame and applies the body framequat (FLU→ENU). The
 `.scn` round-trip and parameter metadata are parsed from the firmware SSOT so the GUI never
-drifts from the firmware. Zero Python dependencies; three.js/Plotly via CDN.
+drifts from the firmware. Almost no Python dependencies (stdlib plus `lib/sflog`, which
+needs pandas/numpy); three.js/Plotly via CDN.

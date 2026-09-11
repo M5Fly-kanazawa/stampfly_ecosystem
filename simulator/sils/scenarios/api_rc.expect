@@ -42,7 +42,7 @@ metric alt_mean > 0.65 in 25.0 26.3
 metric alt_mean < 1.80 in 25.0 26.3
 # Bounded attitude + healthy motors across the rc flight (step velocity commands
 # cause only modest tilt). / rc 飛行全体で姿勢有界・モータ健全（ステップ速度指令でも傾きは小）。
-metric tilt_max < 20.0 in 8.0 29.0
+metric tilt_max < 0.3491 in 8.0 29.0  # 20.0 deg
 metric duty_max < 0.95 in 8.0 29.0
 # Landed at the end. / 最後は接地。
 metric alt_max < 0.15 in 36.0 38.0

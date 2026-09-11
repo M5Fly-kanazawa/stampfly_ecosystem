@@ -59,16 +59,32 @@ EMU_VEHICLE = _exe("emu_vehicle")
 MODEL = paths.root() / "simulator" / "sils" / "models" / "stampfly.xml"
 ACRO_SCN = paths.root() / "simulator" / "sils" / "scenarios" / "acro_flight.scn"
 
-# Captured BEFORE this feature existed (repo HEAD 3d1a35ed, "feat(sils):
-# model-match gate", 2026-07-27), via:
+# Re-captured 2026-09-11 for the StampFly flight-log v1 bundle format
+# (docs/plans/flight-log-format-plan.md): the emulator now writes
+# SILS_EMU_FLIGHTLOG=<dir> (imu.csv/attitude.csv/.../truth.csv) instead of the
+# retired SILS_EMU_TRAJ=<path> single trajectory.csv, so the determinism
+# baseline is the sha256 of truth.csv's bytes followed by imu.csv's bytes
+# (concatenated in that order — see the hashing code below), via:
 #   sf sils scenario simulator/sils/scenarios/acro_flight.scn --target vehicle
-#   shasum -a 256 simulator/sils/viz/out_scn_acro_flight/trajectory.csv
+#   (finds the flight-log CSVs under the run's own bundle/flightlog/ dir
+#    before it is zipped away by _finalize_flightlog())
 # This is the number test (c) below must reproduce exactly with NO new env
-# vars set — see the module docstring's item (c).
-# 本機能実装前（HEAD 3d1a35ed, 2026-07-27）に採取した基準値。下記(c)は新規
-# env変数を一切設定せずにこの値を厳密再現しなければならない — docstring (c) 参照。
+# vars set — see the module docstring's item (c). This baseline protects the
+# SAME property the old trajectory.csv hash protected: with SILS_EMU_REALTIME/
+# SILS_EMU_RC_STDIN both unset, the emulator's numerical output must be
+# byte-identical to before the P6 stage 1 feature existed.
+# 2026-09-11、StampFly フライトログ v1 一式形式（flight-log-format-plan.md）
+# 向けに再採取: エミュレータは廃止された SILS_EMU_TRAJ=<path>（単一の
+# trajectory.csv）の代わりに SILS_EMU_FLIGHTLOG=<dir>（imu.csv/attitude.csv/
+# .../truth.csv）を書くようになったため、決定論性の基準値は truth.csv の
+# バイト列に続けて imu.csv のバイト列（この順で連結）の sha256 とする
+# （下のハッシュ計算コード参照）。下記(c)は新規env変数を一切設定せずにこの値を
+# 厳密再現しなければならない — docstring (c) 参照。この基準値は旧
+# trajectory.csv ハッシュが守っていたのと同じ性質（SILS_EMU_REALTIME/
+# SILS_EMU_RC_STDIN が両方未設定なら、P6 stage 1 機能追加前とbyte-identical）
+# を保護する。
 ACRO_FLIGHT_BASELINE_SHA256 = (
-    "5c913abf585b07f6a7a59f027f6407cb84fca01e2dc2b870f015a0a7649a0b87"
+    "0c557610394d79f99359e0bd6463197aee002670f320c29ab7ec271b30a414eb"
 )
 
 
@@ -106,11 +122,11 @@ def _parse_state(line: str) -> Dict[str, object]:
 
 def test_determinism_unchanged_without_env_vars(tmp_path):
     _require_built()
-    traj = tmp_path / "trajectory.csv"
+    flightlog_dir = tmp_path / "flightlog"
     env = dict(os.environ)
     env.pop("SILS_EMU_REALTIME", None)   # explicit: this run must NOT opt in
     env.pop("SILS_EMU_RC_STDIN", None)
-    env["SILS_EMU_TRAJ"] = str(traj)
+    env["SILS_EMU_FLIGHTLOG"] = str(flightlog_dir)
 
     with open(os.devnull) as devnull:
         r = subprocess.run(
@@ -119,11 +135,20 @@ def test_determinism_unchanged_without_env_vars(tmp_path):
             text=True, encoding="utf-8", errors="replace", env=env, timeout=60,
         )
     assert r.returncode == 0, f"emu_vehicle exited {r.returncode}\n{r.stderr}"
-    assert traj.exists(), "trajectory.csv was not written"
+    truth_csv = flightlog_dir / "truth.csv"
+    imu_csv = flightlog_dir / "imu.csv"
+    assert truth_csv.exists(), "truth.csv was not written"
+    assert imu_csv.exists(), "imu.csv was not written"
 
-    digest = hashlib.sha256(traj.read_bytes()).hexdigest()
+    # Hash truth.csv's bytes followed by imu.csv's bytes (that order) — the
+    # two flight-log streams that replace the old single trajectory.csv this
+    # baseline used to hash (see ACRO_FLIGHT_BASELINE_SHA256's comment).
+    # truth.csv のバイト列に続けて imu.csv のバイト列（この順）をハッシュする
+    # — 旧単一 trajectory.csv を置き換えた2つのフライトログストリーム
+    # （ACRO_FLIGHT_BASELINE_SHA256 のコメント参照）。
+    digest = hashlib.sha256(truth_csv.read_bytes() + imu_csv.read_bytes()).hexdigest()
     assert digest == ACRO_FLIGHT_BASELINE_SHA256, (
-        "acro_flight.scn trajectory.csv changed with NO new env vars set — "
+        "acro_flight.scn's truth.csv+imu.csv changed with NO new env vars set — "
         "the P6 stage 1 realtime/RC-stdin feature broke normal-path "
         f"determinism (got {digest}, expected {ACRO_FLIGHT_BASELINE_SHA256})"
     )
