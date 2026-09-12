@@ -83,37 +83,6 @@
   \end{frame}
 }
 
-% Build variants: production (make sci) carries a title-page QR to this
-% deck's own Docswell page (qr_docswell_sci.png, same asset convention as
-% dxh_workshop.tex's \dxhTitleQR); the Docswell-upload build (make
-% sci-docswell) defines \DocswellBuild and omits it (linking to the page the
-% viewer is already on would be redundant there).
-% Placement: unlike dxh, this title page has a two-line date and a licence
-% block near the bottom whose lines reach x~142mm, so the dxh bottom-right
-% spot (yshift=14mm) collides with them. The right-hand strip x>=131mm is
-% free between the date block (top ~36mm) and the title (bottom ~70mm), so
-% the QR sits there instead.
-% ビルド2系統: 本番（make sci）はタイトルページ右側に自分自身のドクセル
-% 公開ページへのQR（qr_docswell_sci.png、dxh_workshop.tex の \dxhTitleQR と
-% 同じアセット方針）を出す。ドクセル公開用ビルド（make sci-docswell、
-% \DocswellBuild 定義）はQRなし（閲覧中のページ自身へのリンクは不要なため）。
-% 配置: 本デッキの表紙は日付が2行・下部にライセンス表記があり、その行が
-% x≈142mm まで届くため、dxh と同じ右下（yshift=14mm）では文字と重なる。
-% 右端の帯 x≥131mm は日付ブロック上端（≈36mm）とタイトル下端（≈70mm）の間が
-% 空いているので、そこに置く。
-\ifdefined\DocswellBuild
-  \newcommand{\sciTitleQR}{}
-\else
-  \newcommand{\sciTitleQR}{%
-    \begin{tikzpicture}[remember picture, overlay]
-      \node[anchor=south east, inner sep=0] (docswellqr)
-        at ([xshift=-7mm, yshift=41mm]current page.south east)
-        {\includegraphics[width=19mm]{qr_docswell_sci.png}};
-      \node[anchor=north, font=\tiny, text=black!60]
-        at (docswellqr.south) {本日のスライド資料};
-    \end{tikzpicture}}
-\fi
-
 \title{制御教育教材 StampFly Ecosystem の紹介}
 \subtitle{コーディングから飛行試験、データ取得まで}
 \author{伊藤 恒平（金沢工業大学）}
@@ -125,7 +94,6 @@
 % === Title page ===
 \begin{frame}
   \titlepage
-  \sciTitleQR
   \vspace{-1.5em}
   \begin{center}
     {\large\sciLicenseIcon}\enspace{\scriptsize\textcolor{sfgray}{\sciLicenseText}}\\[-1pt]
