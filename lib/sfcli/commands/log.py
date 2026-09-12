@@ -96,12 +96,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     wifi_parser.add_argument(
         "-o", "--output",
         help="Output path (auto-generated logs/flight_<timestamp>.sflog.zip "
-             "if not specified). A path ending in .sflog.zip writes that "
-             "zip; an existing directory (or a path ending in a path "
-             "separator) gets a same-named bundle written inside it. "
-             "Other extensions (.csv/.jsonl/.bin) are rejected -- the "
-             "bundle is the only capture format; use `sf log convert "
-             "--aligned` or `--jsonl` afterwards for a derived file.",
+             "if not specified). A bare name gets .sflog.zip appended "
+             "(`-o flight1` -> flight1.sflog.zip); a path ending in "
+             ".sflog.zip writes that zip; an existing directory (or a path "
+             "ending in a path separator) gets a same-named bundle written "
+             "inside it as a directory. Other extensions (.csv/.jsonl/.bin) "
+             "are rejected -- the bundle is the only capture format; use "
+             "`sf log convert --aligned` or `--jsonl` afterwards for a "
+             "derived file.",
     )
     wifi_parser.add_argument(
         "-d", "--duration",
@@ -1064,9 +1066,10 @@ def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
       (d) any other extension (.csv/.jsonl/.bin) -> rejected: the bundle
           is the only capture format now (derive a CSV/JSONL afterwards
           with `sf log convert --aligned`/`--jsonl`).
-      (e) no extension and not an existing directory -> `path` itself
-          becomes the bundle's own directory (sflog.FlightLog.save()'s
-          plain "not a .zip" branch populates the given path directly).
+      (e) no (or an unknown) extension and not an existing directory ->
+          `.sflog.zip` is appended, so `-o flight1` writes
+          `flight1.sflog.zip` (a bare name means "this zip file"; to get a
+          directory bundle end the path with a separator).
 
     Raises:
         ValueError: case (d), with a message meant to be shown as-is via
@@ -1097,4 +1100,9 @@ def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
             f"{path.suffix} file."
         )
 
-    return path
+    # Bare name (or an unrecognised extension): the user means "this zip
+    # file" -- append the standard suffix rather than silently creating a
+    # directory bundle.
+    # 拡張子なし（または未知の拡張子）: 利用者は「この zip ファイル」を意図して
+    # いる -- 黙ってフォルダ一式を作らず標準の拡張子を補う。
+    return path.with_name(path.name + ".sflog.zip")
