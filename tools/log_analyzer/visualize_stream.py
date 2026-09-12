@@ -63,9 +63,30 @@ RAD_TO_DEG = 180.0 / np.pi
 # N*m -> mN*m。ctrl_output のトルクパネルの表示単位にのみ使う。
 NM_TO_MNM = 1000.0
 
-FIGURE_WIDTH_IN = 12
-FIGURE_HEIGHT_PER_PANEL_IN = 1.9
-GRID_HSPACE = 0.5
+# Grid layout: panels are laid out in `cols` columns (default 3) so the
+# whole overview fits one screen without squashing the panels vertically
+# (a single 15-panel column made the y-axis tick labels overlap once the
+# window was maximised).
+# 格子配置: パネルを `cols` 列（既定 3）に並べ、縦に潰さずに一画面へ収める
+# （15 段の 1 列配置は最大化すると縦軸の目盛りラベルが重なっていた）。
+DEFAULT_COLUMNS = 3
+MAX_COLUMNS = 4
+FIGURE_WIDTH_PER_COLUMN_IN = 5.6
+FIGURE_HEIGHT_PER_ROW_IN = 2.3
+FIGURE_MAX_HEIGHT_IN = 12.0
+# When shown in a window, the figure is resized to this fraction of the
+# screen (room for the window title bar and the toolbar) so the overview
+# fits the display as opened, whatever the monitor size.
+# ウィンドウ表示時は図を画面のこの割合に合わせる（タイトルバーとツールバーの
+# 分を残す）。開いた時点でモニタの大きさに関係なく一画面に収まる。
+SCREEN_FIT_FRACTION_W = 0.92
+SCREEN_FIT_FRACTION_H = 0.86
+# Legends sit at the upper right; give every panel head-room above the data
+# so the legend rarely covers a trace, and keep the frame translucent.
+# 凡例は右上固定。凡例がデータに被りにくいよう各パネルの上側に余白を取り、
+# 枠は半透明にする。
+LEGEND_HEADROOM_FRACTION = 0.30
+LEGEND_FRAME_ALPHA = 0.8
 LINE_WIDTH_MEASURED = 1.0
 LINE_WIDTH_REFERENCE = 1.0
 LINE_WIDTH_THRUST = 1.8
@@ -276,7 +297,7 @@ def panel_rate_roll(ax, log, t0_us) -> bool:
                 linewidth=LINE_WIDTH_REFERENCE, label='rate_ref_roll')
     ax.set_ylabel('Roll rate [deg/s]')
     ax.set_title('Roll Rate', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -295,7 +316,7 @@ def panel_rate_pitch(ax, log, t0_us) -> bool:
                 linewidth=LINE_WIDTH_REFERENCE, label='rate_ref_pitch')
     ax.set_ylabel('Pitch rate [deg/s]')
     ax.set_title('Pitch Rate', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -314,7 +335,7 @@ def panel_rate_yaw(ax, log, t0_us) -> bool:
                 linewidth=LINE_WIDTH_REFERENCE, label='rate_ref_yaw')
     ax.set_ylabel('Yaw rate [deg/s]')
     ax.set_title('Yaw Rate', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -347,7 +368,7 @@ def panel_attitude(ax, log, t0_us) -> bool:
 
     ax.set_ylabel('Attitude [deg]')
     ax.set_title('Attitude (from quaternion)', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -364,7 +385,7 @@ def panel_accel(ax, log, t0_us) -> bool:
     ax.plot(t, imu['accel_z'].to_numpy(), 'C2-', linewidth=LINE_WIDTH_MEASURED, label='accel_z')
     ax.set_ylabel('Accel [m/s^2]')
     ax.set_title('Acceleration', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -383,7 +404,7 @@ def panel_gyro_raw(ax, log, t0_us) -> bool:
     ax.plot(t, imu['gyro_raw_z'].to_numpy() * RAD_TO_DEG, 'C2-', linewidth=LINE_WIDTH_MEASURED, label='gyro_raw_z')
     ax.set_ylabel('Gyro (raw) [deg/s]')
     ax.set_title('Raw Gyro', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -400,7 +421,7 @@ def panel_position(ax, log, t0_us) -> bool:
     ax.plot(t, pv['pos_z'].to_numpy(), 'C2-', linewidth=LINE_WIDTH_MEASURED, label='pos_z (down)')
     ax.set_ylabel('Position [m]')
     ax.set_title('Position', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -417,7 +438,7 @@ def panel_velocity(ax, log, t0_us) -> bool:
     ax.plot(t, pv['vel_z'].to_numpy(), 'C2-', linewidth=LINE_WIDTH_MEASURED, label='vel_z')
     ax.set_ylabel('Velocity [m/s]')
     ax.set_title('Velocity', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -454,7 +475,7 @@ def panel_motor_duty(ax, log, t0_us) -> bool:
 
     ax.set_ylabel('duty [0-1] / thrust [N]')
     ax.set_title(title, fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=5)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=5)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -482,7 +503,7 @@ def panel_ctrl_output(ax, log, t0_us) -> bool:
 
     lines_l, labels_l = ax.get_legend_handles_labels()
     lines_r, labels_r = ax_torque.get_legend_handles_labels()
-    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=4)
+    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=4)
     ax.set_title('Control Output (pre-mixer)', fontsize=PANEL_TITLE_FONT_SIZE)
     ax.grid(True, alpha=0.3)
     return True
@@ -503,7 +524,7 @@ def panel_pilot(ax, log, t0_us) -> bool:
         ax.step(t, df[col].to_numpy(), color + '-', where='post', linewidth=LINE_WIDTH_MEASURED, label=col)
     ax.set_ylabel('Pilot input [-1..1]')
     ax.set_title('Pilot Input', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=4)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=4)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -525,7 +546,7 @@ def panel_height(ax, log, t0_us) -> bool:
             drew_any = True
     ax.set_ylabel('Distance [m]')
     ax.set_title('Height / Distance', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return drew_any
 
@@ -548,7 +569,7 @@ def panel_flow(ax, log, t0_us) -> bool:
 
     lines_l, labels_l = ax.get_legend_handles_labels()
     lines_r, labels_r = ax_q.get_legend_handles_labels()
-    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.set_title('Optical Flow', fontsize=PANEL_TITLE_FONT_SIZE)
     ax.grid(True, alpha=0.3)
     return True
@@ -566,7 +587,7 @@ def panel_mag(ax, log, t0_us) -> bool:
     ax.plot(t, df['z'].to_numpy(), 'C2-', linewidth=LINE_WIDTH_MEASURED, label='mag_z')
     ax.set_ylabel('Magnetic field [uT]')
     ax.set_title('Magnetometer', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -598,7 +619,7 @@ def panel_gyro_bias_mode(ax, log, t0_us) -> bool:
         ax_mode.set_ylabel('flight_mode')
         lines_r, labels_r = ax_mode.get_legend_handles_labels()
         lines, labels = lines + lines_r, labels + labels_r
-    ax.legend(lines, labels, loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=4)
+    ax.legend(lines, labels, loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=4)
     return True
 
 
@@ -614,7 +635,7 @@ def panel_accel_bias(ax, log, t0_us) -> bool:
     ax.plot(t, att['accel_bias_z'].to_numpy(), 'C2-', linewidth=LINE_WIDTH_MEASURED, label='bias_z')
     ax.set_ylabel('Accel bias [m/s^2]')
     ax.set_title('Accelerometer Bias', fontsize=PANEL_TITLE_FONT_SIZE)
-    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=3)
+    ax.legend(loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
     ax.grid(True, alpha=0.3)
     return True
 
@@ -638,7 +659,7 @@ def panel_status(ax, log, t0_us) -> bool:
 
     lines_l, labels_l = ax.get_legend_handles_labels()
     lines_r, labels_r = ax_i.get_legend_handles_labels()
-    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, ncol=2)
+    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right', fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=2)
     ax.set_title('Battery Status', fontsize=PANEL_TITLE_FONT_SIZE)
     ax.grid(True, alpha=0.3)
     return True
@@ -687,7 +708,64 @@ def load_bundle(path) -> sflog.FlightLog:
     return log
 
 
-def render(log, title: str, save_path=None, show=True, time_range=None, mode='all') -> int:
+
+def _screen_size_px():
+    """Best-effort logical screen size (width, height) in pixels for the
+    active matplotlib backend; None if it cannot be determined (headless).
+    現在の matplotlib バックエンドでの画面の論理サイズ (幅, 高さ) [px]。
+    判定できなければ None（ヘッドレス等）。
+    """
+    import matplotlib
+    backend = matplotlib.get_backend().lower()
+    if "qt" in backend:
+        try:
+            from matplotlib.backends.qt_compat import QtWidgets
+            app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+            geometry = app.primaryScreen().availableGeometry()
+            return geometry.width(), geometry.height()
+        except Exception:  # noqa: BLE001 -- fall through to Tk / None
+            pass
+    if "agg" == backend:
+        return None
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        size = (root.winfo_screenwidth(), root.winfo_screenheight())
+        root.destroy()
+        return size
+    except Exception:  # noqa: BLE001 -- no Tk (or no display)
+        return None
+
+
+def _fit_figure_to_screen(fig) -> None:
+    """Resize `fig` so its window fits the screen as opened (a fraction of
+    the screen, leaving room for the title bar and toolbar). No-op when the
+    screen size is unknown.
+    開いた時点でウィンドウが画面に収まるよう `fig` の大きさを合わせる
+    （タイトルバー・ツールバー分を残した画面の一定割合）。画面サイズが
+    分からなければ何もしない。
+    """
+    size = _screen_size_px()
+    if not size:
+        return
+    width_px, height_px = size
+    dpi = fig.get_dpi()
+    fig.set_size_inches(width_px * SCREEN_FIT_FRACTION_W / dpi,
+                        height_px * SCREEN_FIT_FRACTION_H / dpi, forward=True)
+    manager = getattr(fig.canvas, "manager", None)
+    window = getattr(manager, "window", None)
+    # Tk: place the window at the top-left so the whole figure is on screen.
+    # Tk: 図全体が画面内に入るようウィンドウを左上に寄せる。
+    if window is not None and hasattr(window, "geometry"):
+        try:
+            window.geometry("+0+0")
+        except Exception:  # noqa: BLE001 -- not a Tk window
+            pass
+
+
+def render(log, title: str, save_path=None, show=True, time_range=None, mode='all',
+           cols: int = DEFAULT_COLUMNS) -> int:
     """Render the panel group `mode` for `log` and return the number of
     panels actually drawn (0 if none of the group's required streams are
     present).
@@ -698,6 +776,9 @@ def render(log, title: str, save_path=None, show=True, time_range=None, mode='al
         and prints "Saved figure to ...".
     show: plt.show() if True, else plt.close(fig).
     time_range: (start, end) in seconds; see `_filter_time_range()`.
+    cols: number of panel columns (1..MAX_COLUMNS); panels fill row by row,
+        all share the time axis.
+    cols: パネルの列数（1..MAX_COLUMNS）。行優先で並べ、時間軸は全パネルで共有。
     """
     if mode not in PANEL_GROUPS:
         print(f"Info: render() has no '{mode}' panel group; showing 'all' instead.")
@@ -712,26 +793,47 @@ def render(log, title: str, save_path=None, show=True, time_range=None, mode='al
         print(f"Warning: no panels to draw for mode '{mode}' -- required streams are all absent.")
         return 0
 
-    fig = plt.figure(figsize=(FIGURE_WIDTH_IN, FIGURE_HEIGHT_PER_PANEL_IN * n_panels))
+    cols = max(1, min(int(cols), MAX_COLUMNS, n_panels))
+    rows = (n_panels + cols - 1) // cols
+    fig_height = min(FIGURE_HEIGHT_PER_ROW_IN * rows, FIGURE_MAX_HEIGHT_IN)
+    fig = plt.figure(figsize=(FIGURE_WIDTH_PER_COLUMN_IN * cols, fig_height),
+                     constrained_layout=True)
     fig.suptitle(
         f"{title} - flight-log bundle (source={log.meta.get('source', '?')})",
         fontsize=FIGURE_TITLE_FONT_SIZE,
     )
-    gs = GridSpec(n_panels, 1, figure=fig, hspace=GRID_HSPACE)
+    gs = GridSpec(rows, cols, figure=fig)
 
-    ax_prev = None
+    # Row-major fill; every axis shares the time axis with the first one so
+    # zooming/panning one panel moves them all.
+    # 行優先で埋める。時間軸は先頭パネルと共有し、1 つを拡大・移動すると
+    # 全パネルが追従する。
+    axes = []
     for i, panel_fn in enumerate(panel_fns):
-        ax = fig.add_subplot(gs[i, 0], sharex=ax_prev)
+        ax = fig.add_subplot(gs[i // cols, i % cols], sharex=axes[0] if axes else None)
         panel_fn(ax, log, t0_us)
-        ax_prev = ax
+        axes.append(ax)
 
-    # Only the bottom panel gets the shared "Time [s]" x-axis label -- which
-    # panel is last depends on `mode` and stream presence, so panels never
-    # set it themselves.
-    # 一番下のパネルにのみ共有の "Time [s]" x軸ラベルを付ける -- どのパネルが
-    # 最後になるかは mode とストリームの有無次第なので、各パネル側では
-    # 設定しない。
-    ax_prev.set_xlabel('Time [s]')
+    # The bottom panel of each column gets the shared "Time [s]" label --
+    # which panels those are depends on `mode`, stream presence and `cols`,
+    # so panels never set it themselves.
+    # 各列の最下段のパネルにだけ共有の "Time [s]" ラベルを付ける -- どれが
+    # 最下段かは mode・ストリームの有無・列数次第なので、各パネル側では設定しない。
+    for i, ax in enumerate(axes):
+        is_bottom = (i + cols >= n_panels)
+        if is_bottom:
+            ax.set_xlabel('Time [s]')
+
+    # Head-room above the data on every axis (twin axes included) so the
+    # upper-right legends do not sit on the traces.
+    # 全軸（右軸も含む）の上側に余白を取り、右上の凡例が線に被らないようにする。
+    for ax in fig.axes:
+        lo, hi = ax.get_ylim()
+        if hi > lo:
+            ax.set_ylim(lo, hi + LEGEND_HEADROOM_FRACTION * (hi - lo))
+
+    if show:
+        _fit_figure_to_screen(fig)
 
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
