@@ -99,6 +99,7 @@
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | 教育普及戦略（階層別展開・3 Horizons） |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | `sf app` 自作プロジェクトの SILS 対応計画（現状のギャップと Phase 0〜4） |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | 「独自コードの入口」見直しの起点 — 過去の検討の復元・現状の棚卸し・矛盾・問い（提案なし） |
+| [plans/project-plan-conformance.md](plans/project-plan-conformance.md) | PROJECT_PLAN.md（原典）とリポジトリの整合計画 — 食い違いの棚卸し（A/B/C/D）・判断事項・進め方 |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 統合計画 |
 | [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | 専用 Python + 専用 ESP-IDF 環境への移行計画 |
 | [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | 標準フライトログ形式（一式 zip）の統一計画 |
@@ -323,6 +324,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | Education outreach strategy (per-tier rollout, 3 horizons) |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | Plan to run `sf app` projects in SILS (current gaps, Phases 0–4) |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | Starting point for rethinking the "write your own code" entry — history, current state, contradictions, open questions (no proposals) |
+| [plans/project-plan-conformance.md](plans/project-plan-conformance.md) | Plan to bring the repository in line with PROJECT_PLAN.md (the canonical plan) — divergence inventory (A/B/C/D), decisions needed, phases |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 integration plan |
 | [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | Plan to migrate to a dedicated Python + ESP-IDF environment |
 | [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | Plan to unify the standard flight-log format (zip bundle) |
