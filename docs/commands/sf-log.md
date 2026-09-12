@@ -15,7 +15,7 @@ JSON レコードを並べたテキスト形式）は、一式から必要なと
 一次記録として書き出されることはありません。
 
 読み込み系の全サブコマンドは `.sflog.zip` ファイルと、展開済みのフォルダ一式のどちらも受け付け（判定は拡張子ではなく中身なので、`.sflog` や `.zip` に改名したファイルも読める）、
-省略時は `logs/` 内の最新の一式を使います。
+省略時は `logs/` 内の最新の一式を使います。バンドル名は拡張子を省略でき（例 `flight_20260912T093015`）、裸の名前は `logs/` 内も検索対象になるため、どのディレクトリからでも `sf log viz flight_20260912T093015` のように呼び出せます。
 
 ## 2. サブコマンド一覧
 
@@ -231,6 +231,7 @@ sf log viz logs/flight_20260911T121243.sflog.zip -i
 | オプション | 説明 | 既定値 |
 |-----------|------|-------|
 | `--mode` | パネル群（`all`/`attitude`/`sensors`/`position`/`eskf`） | `all` |
+| `--cols` | 一覧の列数（1〜4）。パネルを格子に並べ、時間軸は全パネルで共有 | 3 |
 | `--save FILE` | 画面表示せずファイルへ保存（`-i` 併用時は PNG ではなくダッシュボード HTML） | - |
 | `--time-range START END` | プロットする時間範囲（最初のサンプルからの秒数） | 全範囲 |
 | `-i, --interactive` | インタラクティブモード（Plotly、ブラウザで開く） | - |
@@ -347,7 +348,9 @@ text format with one JSON record per line) is a **derived product** built from t
 demand with `sf log convert`; neither is ever written as the primary capture.
 
 Every reader accepts a `.sflog.zip` file or an extracted bundle directory, and defaults to the
-newest bundle in `logs/` when none is given.
+newest bundle in `logs/` when none is given. A bundle name's extension may be omitted (e.g.
+`flight_20260912T093015`), and a bare name is also looked up inside `logs/`, so
+`sf log viz flight_20260912T093015` works from any directory.
 
 ## 2. Subcommands
 
@@ -565,6 +568,7 @@ See `docs/guides/flight-log-viz.md` for the panel list and what each mode shows.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--mode` | Panel group (`all`/`attitude`/`sensors`/`position`/`eskf`) | `all` |
+| `--cols` | Number of panel columns in the overview grid (1-4); all panels share the time axis | 3 |
 | `--save FILE` | Save instead of opening a window (with `-i`: dashboard HTML instead of PNG) | - |
 | `--time-range START END` | Time range to plot (seconds from the first sample) | Full range |
 | `-i, --interactive` | Interactive mode (Plotly dashboard, opens in the browser) | - |

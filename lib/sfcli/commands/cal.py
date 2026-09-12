@@ -21,6 +21,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import sflog
+
 from ..utils import console, paths
 
 COMMAND_NAME = "cal"
@@ -130,7 +132,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     plot_parser.add_argument(
         "file",
         nargs="?",
-        help="StampFly flight-log bundle (.sflog.zip or extracted directory). "
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory; "
+             "extension may be omitted; also searched in logs/). "
              "Default: latest bundle in logs/",
     )
     plot_parser.add_argument(
@@ -282,21 +285,25 @@ def run_status(args: argparse.Namespace) -> int:
 
 def run_plot(args: argparse.Namespace) -> int:
     """Plot magnetometer data"""
-    file_path = args.file
-
-    # Find latest flight-log bundle if not specified
-    # 未指定なら logs/ の最新一式を使う
-    if not file_path:
-        file_path = paths.latest_bundle()
-        if not file_path:
+    # Find latest flight-log bundle if not specified; otherwise resolve the
+    # given name (extension may be omitted, a bare name is also looked up
+    # in logs/ -- sflog.resolve_bundle_path()).
+    # 未指定なら logs/ の最新一式を使う。指定時は名前を解決する
+    # （拡張子省略可、裸の名前は logs/ も探す -- sflog.resolve_bundle_path()）。
+    if not args.file:
+        path = paths.latest_bundle()
+        if not path:
             console.error("No flight-log bundles (*.sflog.zip) found in logs/.")
             return 1
-        console.info(f"Using latest bundle: {file_path}")
-
-    path = Path(file_path)
-    if not path.exists():
-        console.error(f"File not found: {path}")
-        return 1
+        console.info(f"Using latest bundle: {path}")
+    else:
+        try:
+            path = sflog.resolve_bundle_path(
+                args.file, search_dirs=(paths.logs(),), notify=console.info
+            )
+        except FileNotFoundError as e:
+            console.error(str(e))
+            return 1
 
     console.info(f"Plotting magnetometer data from: {path.name}")
 

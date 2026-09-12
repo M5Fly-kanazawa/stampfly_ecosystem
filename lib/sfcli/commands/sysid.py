@@ -26,6 +26,8 @@ from typing import Optional
 
 import yaml
 
+import sflog
+
 from ..utils import console, paths, plotting
 
 COMMAND_NAME = "sysid"
@@ -90,7 +92,7 @@ def _register_noise(subparsers):
     parser.add_argument(
         "input",
         help="Input flight-log bundle (.sflog.zip or extracted directory, "
-             "static sensor data)",
+             "static sensor data; extension may be omitted; also searched in logs/)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -135,7 +137,7 @@ def _register_inertia(subparsers):
     parser.add_argument(
         "input",
         help="Input flight-log bundle (.sflog.zip or extracted directory, "
-             "step response data)",
+             "step response data; extension may be omitted; also searched in logs/)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -171,7 +173,8 @@ def _register_motor(subparsers):
     )
     parser.add_argument(
         "input",
-        help="Input flight-log bundle (.sflog.zip or extracted directory)",
+        help="Input flight-log bundle (.sflog.zip or extracted directory; "
+             "extension may be omitted; also searched in logs/)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -212,7 +215,7 @@ def _register_drag(subparsers):
     parser.add_argument(
         "input",
         help="Input flight-log bundle (.sflog.zip or extracted directory, "
-             "coastdown data)",
+             "coastdown data; extension may be omitted; also searched in logs/)",
     )
     parser.add_argument(
         "-o", "--output",
@@ -429,7 +432,8 @@ def _register_fit(subparsers):
     parser.add_argument(
         "input",
         nargs="?",
-        help="StampFly flight-log bundle (.sflog.zip or extracted directory)",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory; "
+             "extension may be omitted; also searched in logs/)",
     )
     parser.add_argument(
         "--axis",
@@ -600,8 +604,33 @@ def run_help(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_input_bundle(input_arg: str) -> Optional[Path]:
+    """Resolve a sysid subcommand's bundle argument (`fit`/`rate-fit`/
+    `noise`/`motor`/`drag`/`inertia`): the extension may be omitted, and a
+    bare name is also looked up in the project's logs/
+    (`sflog.resolve_bundle_path()`, mirroring `sf log`'s
+    `_resolve_bundle_arg()` in lib/sfcli/commands/log.py). Prints its own
+    error (via `console.error`) and returns None on any failure, so
+    callers can just `if bundle_path is None: return 1`.
+    sysid の各サブコマンド（`fit`/`rate-fit`/`noise`/`motor`/`drag`/
+    `inertia`）のバンドル引数を解決する: 拡張子は省略でき、裸の名前は
+    プロジェクトの logs/ も探す（`sflog.resolve_bundle_path()`。
+    lib/sfcli/commands/log.py の `_resolve_bundle_arg()` と同様）。失敗時は
+    自身で `console.error` を出し None を返すため、呼び出し側は
+    `if bundle_path is None: return 1` するだけでよい。
+    """
+    try:
+        return sflog.resolve_bundle_path(
+            input_arg, search_dirs=(paths.logs(),), notify=console.info
+        )
+    except FileNotFoundError as e:
+        console.error(str(e))
+        return None
+
+
 def _resolve_plot_target(
     args: argparse.Namespace, info: 'plotting.BackendInfo', suffix: str,
+    bundle_path: Optional[Path] = None,
 ) -> tuple:
     """Decide where a sysid plot goes: a live window, the user's explicit
     --plot-output path, or (when no GUI backend works) a PNG saved next to
@@ -615,6 +644,11 @@ def _resolve_plot_target(
         info: backend chosen by plotting.select_backend(), called by the
             caller BEFORE importing sysid.visualizer
         suffix: filename suffix for the headless fallback PNG (e.g. "_fit")
+        bundle_path: the RESOLVED bundle path (`_resolve_input_bundle()`),
+            used to place the headless-fallback PNG next to the actual
+            bundle file even when `args.input` omitted its extension or
+            was found via a search dir. Defaults to `Path(args.input)`
+            when not given.
 
     Returns (plot_output_base, show, headless):
         plot_output_base: None (let the module show without saving) or a
@@ -641,7 +675,7 @@ def _resolve_plot_target(
         console.info(f"Plot window backend: {info.name}")
         return None, True, False
 
-    fallback_base = plotting.default_png_path(Path(args.input), suffix)
+    fallback_base = plotting.default_png_path(bundle_path or Path(args.input), suffix)
     plotting.report_headless(console, info, fallback_base)
     return fallback_base, False, True
 
@@ -681,10 +715,12 @@ def run_fit(args: argparse.Namespace) -> int:
     # 指定/解決されたのに一式に motor ストリーム（本物の400Hz duty）が無い場合は、fit_plant() が
     # 明確な ValueError を出す（下の軸ごとの try/except で捕捉）。
 
-    # Check input bundle
-    # 入力一式の確認
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    # Resolve the input bundle (extension may be omitted; also searched in
+    # logs/ -- see _resolve_input_bundle()).
+    # 入力一式を解決する（拡張子省略可、logs/ も検索対象 --
+    # _resolve_input_bundle() 参照）。
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
 
     # Determine axes to process
@@ -697,9 +733,9 @@ def run_fit(args: argparse.Namespace) -> int:
     # contract.
     # 一式を1回だけ読み、全軸（と下のプロット）が使う整列済み400Hz表を作る
     # -- 列契約は tools/sysid/loader.py 参照。
-    console.info(f"Loading bundle: {args.input}")
+    console.info(f"Loading bundle: {bundle_path}")
     try:
-        df = load_aligned(args.input)
+        df = load_aligned(bundle_path)
     except (ValueError, OSError) as e:
         console.error(f"Failed to load bundle: {e}")
         return 1
@@ -828,7 +864,7 @@ def run_fit(args: argparse.Namespace) -> int:
         output_path = Path(args.output)
         data = {
             'method': 'plant_fit',
-            'source': str(args.input),
+            'source': str(bundle_path),
             'kp': args.kp,
             'mixer': args.mixer,
             'axes': {axis: r.to_dict() for axis, r in results.items()},
@@ -855,7 +891,7 @@ def run_fit(args: argparse.Namespace) -> int:
         except ImportError:
             console.warning("matplotlib not available, skipping plot")
         else:
-            plot_output_base, show, headless = _resolve_plot_target(args, info, "_fit")
+            plot_output_base, show, headless = _resolve_plot_target(args, info, "_fit", bundle_path)
             saved_paths = []
             for axis, r in results.items():
                 try:
@@ -929,16 +965,18 @@ def run_noise(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input bundle
-    # 入力一式の確認
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    # Resolve the input bundle (extension may be omitted; also searched in
+    # logs/ -- see _resolve_input_bundle()).
+    # 入力一式を解決する（拡張子省略可、logs/ も検索対象 --
+    # _resolve_input_bundle() 参照）。
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
 
-    console.info(f"Loading bundle: {args.input}")
+    console.info(f"Loading bundle: {bundle_path}")
 
     try:
-        df = load_aligned(args.input)
+        df = load_aligned(bundle_path)
         result = load_and_estimate(
             df,
             sensor=args.sensor,
@@ -972,7 +1010,7 @@ def run_noise(args: argparse.Namespace) -> int:
         data = result.to_dict()
         data['_metadata'] = {
             'method': 'allan_variance',
-            'source': str(args.input),
+            'source': str(bundle_path),
             'sensor': args.sensor,
         }
 
@@ -997,7 +1035,7 @@ def run_noise(args: argparse.Namespace) -> int:
         except ImportError:
             console.warning("matplotlib not available, skipping plot")
         else:
-            plot_output_base, show, headless = _resolve_plot_target(args, info, "_noise")
+            plot_output_base, show, headless = _resolve_plot_target(args, info, "_noise", bundle_path)
             output_path = str(plot_output_base) if plot_output_base else None
             try:
                 plot_noise_analysis(
@@ -1030,16 +1068,18 @@ def run_inertia(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input bundle
-    # 入力一式の確認
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    # Resolve the input bundle (extension may be omitted; also searched in
+    # logs/ -- see _resolve_input_bundle()).
+    # 入力一式を解決する（拡張子省略可、logs/ も検索対象 --
+    # _resolve_input_bundle() 参照）。
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
 
-    console.info(f"Loading bundle: {args.input}")
+    console.info(f"Loading bundle: {bundle_path}")
 
     try:
-        df = load_aligned(args.input)
+        df = load_aligned(bundle_path)
         result = estimate_inertia(
             df,
             axis=args.axis,
@@ -1082,16 +1122,18 @@ def run_motor(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input bundle
-    # 入力一式の確認
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    # Resolve the input bundle (extension may be omitted; also searched in
+    # logs/ -- see _resolve_input_bundle()).
+    # 入力一式を解決する（拡張子省略可、logs/ も検索対象 --
+    # _resolve_input_bundle() 参照）。
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
 
-    console.info(f"Loading bundle: {args.input}")
+    console.info(f"Loading bundle: {bundle_path}")
 
     try:
-        df = load_aligned(args.input)
+        df = load_aligned(bundle_path)
         result = estimate_motor_params(
             df,
             param=args.param,
@@ -1135,16 +1177,18 @@ def run_drag(args: argparse.Namespace) -> int:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
 
-    # Check input bundle
-    # 入力一式の確認
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    # Resolve the input bundle (extension may be omitted; also searched in
+    # logs/ -- see _resolve_input_bundle()).
+    # 入力一式を解決する（拡張子省略可、logs/ も検索対象 --
+    # _resolve_input_bundle() 参照）。
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
 
-    console.info(f"Loading bundle: {args.input}")
+    console.info(f"Loading bundle: {bundle_path}")
 
     try:
-        df = load_aligned(args.input)
+        df = load_aligned(bundle_path)
         result = estimate_drag(
             df,
             drag_type=args.type,
@@ -1557,7 +1601,8 @@ def _register_rate_fit(subparsers):
     )
     parser.add_argument(
         "input", nargs="?",
-        help="StampFly flight-log bundle (.sflog.zip or extracted directory)",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory; "
+             "extension may be omitted; also searched in logs/)",
     )
     parser.add_argument("--axis", choices=["roll", "pitch", "yaw"], default="roll",
                         help="axis to identify (default: roll)")
@@ -1593,8 +1638,8 @@ def run_rate_fit(args) -> int:
     if not args.input:
         console.error("input bundle required (or --selftest)")
         return 1
-    if not Path(args.input).exists():
-        console.error(f"Input bundle not found: {args.input}")
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
         return 1
     try:
         sys.path.insert(0, str(paths.root() / "tools"))
@@ -1602,8 +1647,8 @@ def run_rate_fit(args) -> int:
     finally:
         if str(paths.root() / "tools") in sys.path:
             sys.path.remove(str(paths.root() / "tools"))
-    console.info(f"Loading bundle: {args.input}")
-    df = load_aligned(args.input)
+    console.info(f"Loading bundle: {bundle_path}")
+    df = load_aligned(bundle_path)
     gains = {k: v for k, v in
              (("kp", args.kp), ("ti", args.ti), ("td", args.td)) if v is not None}
     plot_path = None
@@ -1616,7 +1661,7 @@ def run_rate_fit(args) -> int:
         # "*.sflog.zip" 一式に Path.with_suffix("") を使うと末尾の ".zip" だけ
         # 剥がれる（"*.sflog" が残る）-- ファイル名の元としては問題なく、
         # プロットのファイル名に ".sflog" の断片が残るだけ。
-        plot_path = str(Path(args.input).with_suffix("")) + f"_bode_{args.axis}.png"
+        plot_path = str(Path(bundle_path).with_suffix("")) + f"_bode_{args.axis}.png"
     result = rs.fit_from_df(df, args.axis, gains=gains,
                             f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
                             input_mode=args.input_mode)

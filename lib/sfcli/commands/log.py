@@ -139,7 +139,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     check_parser.add_argument(
         "bundle",
         nargs="?",
-        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/; "
+             "extension may be omitted; also searched in logs/)",
     )
     check_parser.set_defaults(func=run_check)
 
@@ -152,7 +153,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     convert_parser.add_argument(
         "input",
-        help="Input file: a legacy .jsonl log, or a bundle (.sflog.zip/directory)",
+        help="Input file: a legacy .jsonl log, or a bundle (.sflog.zip/directory; "
+             "extension may be omitted; also searched in logs/)",
     )
     convert_parser.add_argument(
         "-o", "--output",
@@ -194,7 +196,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     info_parser.add_argument(
         "bundle",
         nargs="?",
-        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/; "
+             "extension may be omitted; also searched in logs/)",
     )
     info_parser.set_defaults(func=run_info)
 
@@ -209,7 +212,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     analyze_parser.add_argument(
         "bundle",
         nargs="?",
-        help="Bundle path, .sflog.zip or directory (default: newest in logs/). "
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/; "
+             "extension may be omitted; also searched in logs/). "
              "With --health --batch: a glob such as 'logs/flight_202609*.sflog.zip'",
     )
     analyze_parser.add_argument(
@@ -250,13 +254,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     viz_parser.add_argument(
         "bundle",
         nargs="?",
-        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/; "
+             "extension may be omitted; also searched in logs/)",
     )
     viz_parser.add_argument(
         "--mode",
         choices=["all", "attitude", "sensors", "position", "eskf"],
         default="all",
         help="Panel group (default: all)",
+    )
+    viz_parser.add_argument(
+        "--cols",
+        type=int,
+        default=3,
+        choices=[1, 2, 3, 4],
+        help="Panel columns of the overview grid (default: 3)",
     )
     viz_parser.add_argument(
         "--save",
@@ -438,36 +450,43 @@ def run_check(args: argparse.Namespace) -> int:
 def run_convert(args: argparse.Namespace) -> int:
     """Convert between flight-log formats: legacy `.jsonl` -> bundle, or
     bundle -> a derived aligned/JSONL CSV (`--aligned`/`--jsonl`).
+
+    The legacy-JSONL check comes FIRST, before bundle-name resolution --
+    a `.jsonl` name is never extension-omitted (the bundle resolver would
+    never guess to append `.jsonl`), so it must be recognized on its own.
+    Anything else is resolved as a bundle argument (extension may be
+    omitted; also searched in logs/, see `sflog.resolve_bundle_path()`).
     フライトログ形式間を変換する: レガシー `.jsonl` -> 一式、または
     一式 -> 派生の整列/JSONL CSV（`--aligned`/`--jsonl`）。
+
+    レガシーJSONLの判定を、バンドル名解決より先に行う -- `.jsonl` という
+    名前は拡張子省略ではあり得ない（バンドル解決側が `.jsonl` を補うことは
+    ない）ため、単独で認識する必要がある。それ以外はバンドル引数として
+    解決する（拡張子省略可、logs/ も検索対象 --
+    `sflog.resolve_bundle_path()` 参照）。
     """
-    input_path = Path(args.input)
-    if not input_path.exists():
-        console.error(f"Input file not found: {input_path}")
+    if args.input.endswith(".jsonl"):
+        input_path = Path(args.input)
+        if not input_path.exists():
+            console.error(f"Input file not found: {input_path}")
+            return 1
+        return _convert_jsonl_to_bundle(input_path, args)
+
+    try:
+        input_path = sflog.resolve_bundle_path(
+            args.input, search_dirs=(get_log_dir(),), notify=console.info
+        )
+    except FileNotFoundError as e:
+        console.error(str(e))
         return 1
 
     if args.aligned or args.jsonl:
-        if not sflog.is_bundle(input_path):
-            console.error(
-                f"--aligned/--jsonl require a flight-log bundle input, not: {input_path}"
-            )
-            return 1
         return _convert_bundle(input_path, args)
 
-    if input_path.suffix.lower() == ".jsonl":
-        return _convert_jsonl_to_bundle(input_path, args)
-
-    if sflog.is_bundle(input_path):
-        console.error(
-            "A bundle input needs --aligned or --jsonl to say what derived "
-            "file to build from it -- the bundle itself is already the "
-            "primary record."
-        )
-        return 1
-
     console.error(
-        f"Unrecognized input: {input_path}. Expected a legacy .jsonl log "
-        "or a flight-log bundle (.sflog.zip or a directory bundle)."
+        "A bundle input needs --aligned or --jsonl to say what derived "
+        "file to build from it -- the bundle itself is already the "
+        "primary record."
     )
     return 1
 
@@ -797,6 +816,7 @@ def _viz_bundle(bundle_path: Path, args: argparse.Namespace) -> int:
                 log, bundle_path.name, save_path=save_path, show=show,
                 time_range=tuple(args.time_range) if args.time_range else None,
                 mode=args.mode,
+                cols=getattr(args, "cols", visualize_stream.DEFAULT_COLUMNS),
             )
 
         return _render_with_fallback(bundle_path, args, render, backend)
@@ -1023,12 +1043,17 @@ def _find_latest_bundle() -> Optional[Path]:
 
 def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
     """Resolve a subcommand's optional bundle argument (`sf log info/check/
-    analyze/viz`): the given path if valid, else the newest bundle in logs/.
-    Prints its own error (via `console.error`) and returns None on any
-    failure, so callers can just `if bundle_path is None: return 1`.
+    analyze/viz`): the given path if valid, else the newest bundle in
+    logs/. The extension may be omitted, and a bare name is also looked up
+    in logs/ (`sflog.resolve_bundle_path()`), so `sf log viz
+    flight_20260912T093015` works from any directory. Prints its own error
+    (via `console.error`) and returns None on any failure, so callers can
+    just `if bundle_path is None: return 1`.
     サブコマンド（`sf log info/check/analyze/viz`）の任意のバンドル引数を
-    解決する: 指定があればそのパス、無ければ logs/ 内の最新の一式。失敗時は
-    自身で `console.error` を出し None を返すため、呼び出し側は
+    解決する: 指定があればそのパス、無ければ logs/ 内の最新の一式。拡張子は
+    省略でき、裸の名前は logs/ 内も探す（`sflog.resolve_bundle_path()`）ため、
+    `sf log viz flight_20260912T093015` はどのディレクトリからでも動く。
+    失敗時は自身で `console.error` を出し None を返すため、呼び出し側は
     `if bundle_path is None: return 1` するだけでよい。
     """
     if not bundle_arg:
@@ -1039,14 +1064,13 @@ def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
         console.info(f"Using latest bundle: {latest}")
         return latest
 
-    path = Path(bundle_arg)
-    if not path.exists():
-        console.error(f"Bundle not found: {path}")
+    try:
+        return sflog.resolve_bundle_path(
+            bundle_arg, search_dirs=(get_log_dir(),), notify=console.info
+        )
+    except FileNotFoundError as e:
+        console.error(str(e))
         return None
-    if not sflog.is_bundle(path):
-        console.error(f"Not a StampFly flight-log bundle (no valid meta.json): {path}")
-        return None
-    return path
 
 
 def _bundle_output_path(output_arg: Optional[str], default: Path) -> Path:

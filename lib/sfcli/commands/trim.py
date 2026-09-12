@@ -59,8 +59,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     analyze.add_argument(
         "input", nargs="?",
-        help="StampFly flight-log bundle (.sflog.zip or extracted directory). "
-             "Omit to use the latest bundle in logs/",
+        help="StampFly flight-log bundle (.sflog.zip or extracted directory; "
+             "extension may be omitted; also searched in logs/). "
+             "Omit entirely to use the latest bundle in logs/",
     )
     analyze.add_argument("-o", "--output", help="Save the JSON report to this file")
     analyze.add_argument(
@@ -103,12 +104,24 @@ def run_help(args: argparse.Namespace) -> int:
 def run_analyze(args: argparse.Namespace) -> int:
     """Run the trim analysis and print the report / トリム解析を実行し報告"""
     # No file given -> use the most recent bundle in logs/ (like sf cal / sf log).
+    # A given name may omit its extension, and a bare name is also looked
+    # up in logs/ (sflog.resolve_bundle_path()).
     # ファイル無指定なら logs/ の最新一式を使う（sf cal / sf log と同様）。
-    log_path = args.input or paths.latest_bundle()
-    if not log_path:
-        console.error("No log given and no *.sflog.zip found in logs/ - specify a bundle.")
-        return 1
-    if not args.input:
+    # 指定時は拡張子省略可、裸の名前は logs/ も探す
+    # （sflog.resolve_bundle_path()）。
+    if args.input:
+        try:
+            log_path = sflog.resolve_bundle_path(
+                args.input, search_dirs=(paths.logs(),), notify=console.info
+            )
+        except FileNotFoundError as e:
+            console.error(str(e))
+            return 1
+    else:
+        log_path = paths.latest_bundle()
+        if not log_path:
+            console.error("No log given and no *.sflog.zip found in logs/ - specify a bundle.")
+            return 1
         console.info(f"Using latest bundle: {Path(log_path).name}")
     try:
         result = analyze_trim(

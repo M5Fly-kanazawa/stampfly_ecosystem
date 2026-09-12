@@ -18,7 +18,7 @@ docs/plans/flight-log-format-plan.md section 2.5).
 """
 
 from .align import aligned
-from .bundle import FlightLog, is_bundle, make_meta
+from .bundle import FlightLog, is_bundle, make_meta, resolve_bundle_path
 from .check import Finding, check_bundle, is_ok
 from .convert import aligned_to_csv, bundle_to_jsonl, jsonl_to_bundle
 
@@ -36,6 +36,7 @@ __all__ = [
     "FlightLog",
     "load",
     "is_bundle",
+    "resolve_bundle_path",
     "aligned",
     "check_bundle",
     "jsonl_to_bundle",
