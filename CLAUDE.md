@@ -50,9 +50,9 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 - 新コマンド追加時は既存コマンドのパターンに従う
 - 問題発見時は積極的に修正してフレームワークを改善する
 
-**ツール統合方針:**
-- **全てのツールは sf CLI 経由で使用する** - スタンドアロンの Python スクリプトを直接実行しない
-- `tools/` 配下のスクリプトは sf CLI のバックエンド実装として扱う
+**ツール統合方針（PROJECT_PLAN §8 が正）:**
+- **利用者に提供するツールは sf コマンドとして公開する** - スタンドアロンの Python スクリプトを直接実行させない
+- `tools/` 配下のスクリプトは sf CLI のバックエンド実装として扱う。sf を経由しない補助（`tools/slides/`・`tools/udev/`・`tools/terminal_launcher/`・`tools/extract_snippets.py`）は PROJECT_PLAN §8 に列挙されたものに限る
 - 新しいツールを作成する場合は、必ず対応する sf コマンドも追加する
 - ラッパースクリプト（viz_*.py 等）は非推奨、sf コマンドのオプションで対応する
 
@@ -400,28 +400,33 @@ StampFly Ecosystem is an educational/research platform for drone control enginee
 
 ## Architecture
 
-The project uses a **responsibility-based directory structure**:
+The project uses a **responsibility-based directory structure**. `PROJECT_PLAN.md` is the canonical description; the summary below must not diverge from it (PROJECT_PLAN §15):
 
 ```
 stampfly-ecosystem/
-├── docs/              # Human-readable documentation
+├── docs/              # Human-readable documentation + public site (landing/, .mkdocs/)
 ├── firmware/
 │   ├── vehicle/       # Vehicle firmware (primary, promoted from vehicle_new)
 │   ├── vehicle_old/   # Legacy vehicle firmware (frozen, 87 real flights — see below)
 │   ├── controller/    # Transmitter firmware
-│   └── common/        # Shared embedded code (ESP-NOW protocol structs); used by
-│                      # controller + vehicle_old + vehicle (protocol only — see below)
-├── protocol/          # Communication spec - Single Source of Truth (SSOT)
-│   ├── spec/          # Machine-readable protocol definition (YAML/proto)
-│   ├── generated/     # Auto-generated code from spec
-│   └── tools/         # Validation and code generation
-├── control/           # Control systems design (models, PID, MPC, SILS)
-├── analysis/          # Data analysis (notebooks, scripts, datasets)
-├── tools/             # Utilities (flashing, calibration, log capture, CI)
-├── simulator/         # SILS/HILS testing environments
-├── examples/          # Minimal working examples for learning
-└── third_party/       # External dependencies
+│   ├── common/        # Shared ESP-NOW protocol structs (controller + vehicle_old + vehicle)
+│   ├── apps/          # User projects created by `sf app new` (L1 entry; entry design under review)
+│   ├── workshop/      # Workshop skeleton (ws::, L0) — old architecture, slated for disposal/rewrite
+│   └── legacy/        # Factory binaries for `sf flash --legacy`
+├── protocol/          # Communication/log-format spec (SSOT) + conformance checks
+│   ├── spec/          # messages.yaml, flight_log.yaml (+ documentation-only yamls)
+│   └── tools/         # gen_flight_log.py (--check), check_messages.py
+├── control/           # Control design assets (physical-parameter SSOT, loop-shaping tool)
+├── analysis/          # Data analysis (notebooks, scripts, datasets, notes)
+├── tools/             # sf CLI backends + a few non-sf helpers (slides, udev, ...)
+├── lib/               # PC-side Python: sfcli (the sf CLI itself), sflog, stampfly, stampfly_edu
+├── simulator/         # SILS and other simulators
+├── examples/          # education/ (university Python samples)
+├── scripts/           # Installer implementation (install.sh -> scripts/installer.py)
+└── ros/               # ROS2 integration (work in progress)
 ```
+
+Generated code lives next to its consumer (e.g. `lib/sflog/schema.py`), vendored libraries live in a `vendor/` next to their user with a full license file — there is no `protocol/generated/` and no `third_party/`.
 
 ### Key Design Principles
 
@@ -493,5 +498,5 @@ When developing this codebase, follow this order:
 
 ## Reference
 
-All architectural decisions are documented in `PROJECT_PLAN.md`. Consult this document before making structural changes.
+All architectural decisions are documented in `PROJECT_PLAN.md`. It is the canonical description of the repository structure: consult it before making structural changes, and **update it in the same commit** whenever a directory, responsibility, or naming convention changes (PROJECT_PLAN §15). Sub-READMEs (`docs/README.md`, `tools/README.md`, ...) summarize it and must not describe a different structure.
 シミュレーション方針（3層構造・Model Fidelity 期の SILS 忠実度目標・改修バックログ）は `docs/architecture/simulation-policy.md` を正とする。

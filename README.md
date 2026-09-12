@@ -340,21 +340,27 @@ sf flash controller --legacy
 
 ```
 stampfly_ecosystem/
-├── docs/           # ドキュメント
+├── docs/           # ドキュメントと公開サイト
 ├── firmware/       # 組込みファームウェア
 │   ├── vehicle/     # 機体ファームウェア（主力）
 │   ├── vehicle_old/ # レガシー機体ファームウェア（凍結）
 │   ├── controller/  # 送信機ファームウェア
-│   └── common/      # 共有コード（ESP-NOW プロトコル構造体）
-├── protocol/       # 通信プロトコル仕様（構築中）
-├── control/        # 制御設計資産（構築中）
-├── analysis/       # 実験データ解析（構築中）
-├── tools/          # 補助ツール（構築中）
-├── simulator/      # 3Dフライトシミュレータ
-├── ros/            # ROS連携（構築中）
-├── examples/       # 学習用サンプル
-└── third_party/    # 外部依存
+│   ├── common/      # 共有コード（ESP-NOW プロトコル構造体）
+│   ├── apps/        # sf app new で作る自分のプロジェクト
+│   ├── workshop/    # 講習会用の骨格（旧アーキテクチャ、全面書き換え予定）
+│   └── legacy/      # 出荷時バイナリ（sf flash --legacy）
+├── protocol/       # 通信・ログ形式の仕様（正）と整合検査
+├── control/        # 制御設計資産（物理パラメータの正、ループ整形ツール）
+├── analysis/       # 実験データ解析
+├── tools/          # sf CLI のバックエンドと補助ツール
+├── lib/            # PC 側 Python（sf CLI 本体・ログ・SDK・教育用）
+├── simulator/      # SILS と 3D フライトシミュレータ
+├── examples/       # 学習用サンプル（大学講義向け Python）
+├── scripts/        # インストーラの実装
+└── ros/            # ROS 連携（構築中）
 ```
+
+構成の意図と各ディレクトリの責務は [PROJECT_PLAN.md](PROJECT_PLAN.md) が正です。
 
 ---
 
@@ -728,21 +734,27 @@ Confirmed physical parameters and their sources are in the [Physical Parameters 
 
 ```
 stampfly_ecosystem/
-├── docs/           # Documentation
+├── docs/           # Documentation and the public site
 ├── firmware/       # Embedded firmware
 │   ├── vehicle/     # Vehicle firmware (primary)
 │   ├── vehicle_old/ # Legacy vehicle firmware (frozen)
 │   ├── controller/  # Transmitter firmware
-│   └── common/      # Shared code (ESP-NOW protocol structs)
-├── protocol/       # Communication protocol spec (WIP)
-├── control/        # Control design assets (WIP)
-├── analysis/       # Experiment data analysis (WIP)
-├── tools/          # Utility tools (WIP)
-├── simulator/      # 3D flight simulator
-├── ros/            # ROS integration (WIP)
-├── examples/       # Learning examples
-└── third_party/    # External dependencies
+│   ├── common/      # Shared code (ESP-NOW protocol structs)
+│   ├── apps/        # Your own projects created with sf app new
+│   ├── workshop/    # Workshop skeleton (old architecture, to be rewritten)
+│   └── legacy/      # Factory binaries (sf flash --legacy)
+├── protocol/       # Communication/log-format specs (SSOT) and conformance checks
+├── control/        # Control design assets (physical-parameter SSOT, loop-shaping tool)
+├── analysis/       # Experiment data analysis
+├── tools/          # sf CLI backends and helper tools
+├── lib/            # PC-side Python (the sf CLI itself, logs, SDK, education)
+├── simulator/      # SILS and 3D flight simulators
+├── examples/       # Learning samples (university Python)
+├── scripts/        # Installer implementation
+└── ros/            # ROS integration (WIP)
 ```
+
+The intent and responsibility of each directory is defined in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ---
 
