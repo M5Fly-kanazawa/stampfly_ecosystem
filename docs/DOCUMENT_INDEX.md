@@ -99,16 +99,17 @@
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | 教育普及戦略（階層別展開・3 Horizons） |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | `sf app` 自作プロジェクトの SILS 対応計画（現状のギャップと Phase 0〜4） |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | 「独自コードの入口」見直しの起点 — 過去の検討の復元・現状の棚卸し・矛盾・問い（提案なし） |
-| [plans/ecosystem-migration.md](plans/ecosystem-migration.md) | エコシステムマイグレーション計画 |
-| [plans/installer-architecture.md](plans/installer-architecture.md) | インストーラ設計 |
-| [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | コントローラメニュー・USB 計画（完了） |
-| [plans/hardware-test.md](plans/hardware-test.md) | 実機テスト計画 |
-| [plans/archive/hils-firmware.md](plans/archive/hils-firmware.md) | HILS ファームウェア計画（未実施） |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 統合計画 |
-| [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | シリアル CLI 再構築計画（完了） |
-| [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello 互換計画 |
-| [plans/archive/wifi-comm.md](plans/archive/wifi-comm.md) | WiFi 通信計画 |
-| [plans/archive/wifi-command-implementation.md](plans/archive/wifi-command-implementation.md) | WiFi コマンド実装計画 |
+| [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | 専用 Python + 専用 ESP-IDF 環境への移行計画 |
+| [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | 標準フライトログ形式（一式 zip）の統一計画 |
+| [plans/gui-installer-plan.md](plans/gui-installer-plan.md) | GUI インストーラ（StampFly Setup）実装計画 |
+| [plans/pairing-methods-plan.md](plans/pairing-methods-plan.md) | 講習会でのペアリング取り違え対策（方式比較） |
+| [plans/powerhub-beacon-station-plan.md](plans/powerhub-beacon-station-plan.md) | PowerHub を TDMA ビーコン専用局にする計画 |
+| [plans/release-v2026.07.2-notes.md](plans/release-v2026.07.2-notes.md) | v2026.07.2 リリースノート（GUIフラッシャのネイティブ化） |
+| [plans/release-v2026.07.3-notes.md](plans/release-v2026.07.3-notes.md) | v2026.07.3 リリースノート（Setup 修復モード不具合修正） |
+| [plans/release-v2026.07.4-notes.md](plans/release-v2026.07.4-notes.md) | v2026.07.4 リリースノート（Step3/4 失敗バグ修正） |
+| [plans/release-v2026.07.5-notes.md](plans/release-v2026.07.5-notes.md) | v2026.07.5 リリースノート（SILS Windows ネイティブ対応） |
+| [plans/release-v2026.07.6-notes.md](plans/release-v2026.07.6-notes.md) | v2026.07.6 リリースノート（インストーラ・開発環境の互換性修正） |
 
 ## 3. ファームウェアドキュメント
 
@@ -117,9 +118,6 @@
 | ファイル | 説明 |
 |---------|------|
 | [firmware/vehicle/README.md](../firmware/vehicle/README.md) | 機体ファームウェア全体ガイド |
-| [plans/vehicle-firmware.md](plans/vehicle-firmware.md) | 設計方針 |
-| [plans/archive/vehicle-phase3-test.md](plans/archive/vehicle-phase3-test.md) | Phase3 テスト計画 |
-| [plans/archive/vehicle-phase3-test-guide.md](plans/archive/vehicle-phase3-test-guide.md) | Phase3 テストガイド |
 
 ### Vehicle 設計文書 (`firmware/vehicle/docs/`)
 
@@ -176,7 +174,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 |---------|------|
 | [firmware/controller/README.md](../firmware/controller/README.md) | コントローラファームウェア全体ガイド |
 | [architecture/tdma-usage.md](architecture/tdma-usage.md) | TDMA 通信詳細ガイド |
-| [plans/archive/controller-espidf-migration.md](plans/archive/controller-espidf-migration.md) | ESP-IDF マイグレーション計画 |
 
 ### Common（共有コード）
 
@@ -326,16 +323,17 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | Education outreach strategy (per-tier rollout, 3 horizons) |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | Plan to run `sf app` projects in SILS (current gaps, Phases 0–4) |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | Starting point for rethinking the "write your own code" entry — history, current state, contradictions, open questions (no proposals) |
-| [plans/ecosystem-migration.md](plans/ecosystem-migration.md) | Ecosystem migration plan |
-| [plans/installer-architecture.md](plans/installer-architecture.md) | Installer architecture |
-| [plans/archive/controller-menu-usb.md](plans/archive/controller-menu-usb.md) | Controller menu & USB plan (completed) |
-| [plans/hardware-test.md](plans/hardware-test.md) | Hardware test plan |
-| [plans/archive/hils-firmware.md](plans/archive/hils-firmware.md) | HILS firmware plan (not implemented) |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 integration plan |
-| [plans/archive/serial-cli-rebuild.md](plans/archive/serial-cli-rebuild.md) | Serial CLI rebuild plan (completed) |
-| [plans/archive/tello-compat.md](plans/archive/tello-compat.md) | Tello compatibility plan |
-| [plans/archive/wifi-comm.md](plans/archive/wifi-comm.md) | WiFi communication plan |
-| [plans/archive/wifi-command-implementation.md](plans/archive/wifi-command-implementation.md) | WiFi command implementation plan |
+| [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | Plan to migrate to a dedicated Python + ESP-IDF environment |
+| [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | Plan to unify the standard flight-log format (zip bundle) |
+| [plans/gui-installer-plan.md](plans/gui-installer-plan.md) | GUI installer (StampFly Setup) implementation plan |
+| [plans/pairing-methods-plan.md](plans/pairing-methods-plan.md) | Countermeasures for classroom pairing mix-ups (method comparison) |
+| [plans/powerhub-beacon-station-plan.md](plans/powerhub-beacon-station-plan.md) | Plan to turn M5Stack PowerHub into a TDMA beacon station |
+| [plans/release-v2026.07.2-notes.md](plans/release-v2026.07.2-notes.md) | v2026.07.2 release notes (native GUI flasher installer) |
+| [plans/release-v2026.07.3-notes.md](plans/release-v2026.07.3-notes.md) | v2026.07.3 release notes (Setup repair-mode fix) |
+| [plans/release-v2026.07.4-notes.md](plans/release-v2026.07.4-notes.md) | v2026.07.4 release notes (fix for Step 3/4 install failure) |
+| [plans/release-v2026.07.5-notes.md](plans/release-v2026.07.5-notes.md) | v2026.07.5 release notes (SILS native Windows support) |
+| [plans/release-v2026.07.6-notes.md](plans/release-v2026.07.6-notes.md) | v2026.07.6 release notes (installer/dev-env compatibility fixes) |
 
 ## 3. Firmware Documentation
 
@@ -344,9 +342,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | File | Description |
 |------|-------------|
 | [firmware/vehicle/README.md](../firmware/vehicle/README.md) | Vehicle firmware complete guide |
-| [plans/vehicle-firmware.md](plans/vehicle-firmware.md) | Design policy |
-| [plans/archive/vehicle-phase3-test.md](plans/archive/vehicle-phase3-test.md) | Phase3 test plan |
-| [plans/archive/vehicle-phase3-test-guide.md](plans/archive/vehicle-phase3-test-guide.md) | Phase3 test guide |
 
 ### Vehicle Design Documents (`firmware/vehicle/docs/`)
 
@@ -395,7 +390,6 @@ After POS_HOLD position control was validated on real hardware, `firmware/vehicl
 |------|-------------|
 | [firmware/controller/README.md](../firmware/controller/README.md) | Controller firmware complete guide |
 | [architecture/tdma-usage.md](architecture/tdma-usage.md) | TDMA communication detailed guide |
-| [plans/archive/controller-espidf-migration.md](plans/archive/controller-espidf-migration.md) | ESP-IDF migration plan |
 
 ### Common (Shared Code)
 

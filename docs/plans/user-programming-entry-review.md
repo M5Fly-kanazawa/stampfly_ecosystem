@@ -1,6 +1,6 @@
 # 「独自コードの入口」見直しの起点 — 過去の検討の復元と現状の棚卸し
 
-作成: 2026-09-12。**本文書は提案を含まない。**
+作成: 2026-09-12。状態: **見直し中**（設計の答えは未定。**本文書は提案を含まない。**）
 「StampFly Ecosystem はユーザーにどうやって独自の StampFly プログラムを作ってもらうか」という問いを、現状の実装・前提を捨てて 0 から設計し直す前段として、
 
 1. 過去に同じ問いを、いつ・どの文書で・どう検討し、何を決めたか（第 1〜3 章）
@@ -29,7 +29,7 @@
 
 | 日付 | 出典 | 何を決めたか | 書かれていた理由 |
 |------|------|------------|----------------|
-| 2026-02-14 | `docs/plans/archive/tello-compat.md` | Tello 風の Python 入口を計画。「プロトコル互換より API 名互換を優先」 | 「教育的にはメソッド名が同じなら十分」（同 :24-34） |
+| 2026-02-14 | `docs/plans/archive/tello-compat.md`（2026-09-12 に main から削除。タグ `archive/2026-09-12` で参照可） | Tello 風の Python 入口を計画。「プロトコル互換より API 名互換を優先」 | 「教育的にはメソッド名が同じなら十分」（同 :24-34） |
 | 2026-03-05 | `509d014c`, `bda7e8f8` | `sf app new` 初出。独立 ESP-IDF プロジェクトを複製する方式（当時の唯一の vehicle＝後の vehicle_old 基準） | — |
 | 2026-03-05〜07 | `bfc35ba8` 他 | `firmware/my_drone`（`sf app new` の試用成果物）に比例角速度制御を実装。以後放置 | — |
 | 2026-04-11〜12 | `2d1f8072`, `4cc3d736` | vehicle_new 要件定義・`coding_and_education.md` 新設。「ファームを作ろうとする人が参考にできる模範コード」「学習教材」を最重要目標に | `coding_and_education.md:10` |
@@ -40,10 +40,10 @@
 | 2026-09-06〜07 | `f67809f8`, `ee6ee82e` | 例題 09（Topic API 読取）・10（IController 差替）追加。いずれも vehicle 本体を起動しない単独ベンチ | — |
 | 2026-09-07 昼 | `f9af4730`（同日撤回） | 第一次案: `sf app` を L0（Workshop 骨格）に一本化 | 「workshop 骨格がすでに欲しいものそのもの」（コミット本文） |
 | 2026-09-07 夜 | `6d149889`, `7be26a10` | **方針転換: `sf app` = L1 の入口と確定。** 旧 `custom_firmware` 雛形（vehicle_old 構成、ビルド不能）を削除し、例題複製方式に再構築。`custom_program.md` 初版 | 「講習会がうまくいくのは `sf lesson` が『どこを書けばいいか』を教えるから。研究の入口にはそれが無く、サンプルは飾りだった」（`7be26a10` 本文） |
-| 2026-09-08 | `2ebd9bf1`, `440d37b4`, `c6ad829c` | vehicle にアプリフック 3 関数（`controller()/estimator()/start()`）と `SF_APP_DIR` を実装。雛形 `11_app_controller`（PidController 全委譲＋`adjust()` 1 点）・`12_app_task_hello` 新設。`sf app new` の既定＝11 | 「PidController 委譲の方が多くの研究利用者にとって近道」（後年の言及、`sf-app-blank-template-plan.md:505`） |
+| 2026-09-08 | `2ebd9bf1`, `440d37b4`, `c6ad829c` | vehicle にアプリフック 3 関数（`controller()/estimator()/start()`）と `SF_APP_DIR` を実装。雛形 `11_app_controller`（PidController 全委譲＋`adjust()` 1 点）・`12_app_task_hello` 新設。`sf app new` の既定＝11 | 理由を明記した一次資料は未発見。既定＝11 であることは `sf-app-sils-plan.md` Phase 0 の表に記載 |
 | 2026-09-09 | `ae1358a7` | ミキサー差替口 `sf::app::mixer()` を**提案**（未実装）。同時に「`firmware/workshop` のミキサーが vehicle のミキサーを独自複製し R12 に反して乖離」と記録 | `architecture.md:200` |
 | 2026-09-12 | `c8a7ed5e`〜`50b08d5f` | `custom_program.md` を「`PidController` に一切頼らず `IController` を最初の 1 行から書く」13 章記事に全面書き直し | `custom_program.md:9` |
-| 2026-09-12 | 未コミット `docs/plans/sf-app-blank-template-plan.md` | 既定雛形と記事の前提が逆転していることを文書化し「空の雛形」追加案を起草 → **方向違いとして保留**（雛形の選択は末節、との判断） | 本文書の直接の契機 |
+| 2026-09-12 | （破棄した草案） | 既定雛形と記事の前提が逆転していることを受け「空の雛形」追加案を起草したが、**雛形の選択は末節であり方向違い**と判断して破棄（main に残さない） | 本文書の直接の契機 |
 
 ## 2. 過去文書が想定した利用者像
 
@@ -142,7 +142,7 @@
 3. **「独自プログラム」と「ワークショップ」の関係が説明されず、実績は片側のみ。** 設計上 `sf app` は「研究の入口」、`sf lesson` は「講習会の入口」だが、README はこの分担を述べない。使用実績はすべて `sf lesson`。
 4. **L0 が「階層」と「特定教材の実装」の両方を指す。** 2026-05 の「Sketch API」（抽象的な最初級層）が 2026-09-06 に「Workshop API」へ改称され `ws::` と同一視された。L0 を再設計するとき、階層としての役割と Workshop という実装を分けるかどうかは未整理。
 5. **`sf app` という同一名の下で統合方式が別物。** 2026-03: 独立 ESP-IDF プロジェクト複製（vehicle_old 基準）。2026-09: vehicle の main コンポーネントへ直接コンパイル。名前だけが連続している。
-6. **`firmware/my_drone` が 3 回言及されながら未処理。** 2026-03 作成 → 2026-09-07 「削除するか決めよ」 → `sf-app-sils-plan.md:197` → `sf-app-blank-template-plan.md` §8。現行構成でビルド不能の可能性が指摘されたまま。
+6. **`firmware/my_drone` が 3 回言及されながら未処理だった。** 2026-03 作成 → 2026-09-07 「削除するか決めよ」 → `sf-app-sils-plan.md:197` → 本見直しの調査で再確認。現行構成でビルド不能の可能性が指摘されたまま放置されていた。**2026-09-12 に main から削除**（タグ `archive/2026-09-12` で参照可）。
 7. **同名異物・索引欠落。** 最上位 `examples/` と `firmware/vehicle/examples/` の区別説明がない。コマンド索引が 12/44。英語表に `sf app` がない。
 8. **Tello 方針の反転理由が未記録。** 2026-02「API 名互換のみ」→ 2026-06「実プロトコル実装」。結びつけて理由を述べる文書は見つからない。
 9. **R12（HAL 共有）に対する既知の乖離が未解消。** `firmware/workshop` のミキサーが vehicle のミキサーを独自複製（`architecture.md:200`）。解決案は提案止まり。
@@ -180,7 +180,7 @@
 | 分類 | ファイル |
 |------|---------|
 | 設計 | `PROJECT_PLAN.md`、`firmware/vehicle/docs/requirements.md`、`firmware/vehicle/docs/architecture.md` §2.5、`firmware/vehicle/docs/coding_and_education.md` §3〜4、`firmware/vehicle/docs/development_roadmap.md` §6 |
-| 計画 | `docs/plans/sf-app-sils-plan.md`、`docs/plans/education-outreach-strategy.md`、`docs/plans/archive/tello-compat.md`、（未コミット）`docs/plans/sf-app-blank-template-plan.md` |
+| 計画 | `docs/plans/sf-app-sils-plan.md`、`docs/plans/education-outreach-strategy.md`、`docs/plans/archive/tello-compat.md`（2026-09-12 に main から削除。`git show archive/2026-09-12:docs/plans/archive/tello-compat.md`） |
 | 利用者向け | `README.md`、`docs/next_step.md`、`docs/DOCUMENT_INDEX.md`、`docs/guides/*.md`、`docs/commands/*.md`、`firmware/apps/README.md`、`firmware/vehicle/examples/*/README.md`、`tools/stampfly_py/README.md`、`docs/university/syllabus.md`、`landing/index.html` |
 | 道具 | `lib/sfcli/commands/app.py`、`lesson.py`、`blocks.py`、`sils.py`、`sf --help` 実測（2026-09-12、macOS） |
 | 講習会 | `docs/events/sci_tutorial_2026/handson_guide.md`、`cheatsheet.md`、`docs/events/dxh2026/handout.md` |

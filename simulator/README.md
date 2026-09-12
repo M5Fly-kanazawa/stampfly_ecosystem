@@ -398,7 +398,7 @@ motor_outputs = commands.motors
 
 実機ファームウェアとシリアル通信でセンサデータを注入：
 
-> **注（2026-08-20）**: 以下はPython側インターフェースの実装例。`firmware/vehicle`・`firmware/controller` にはHILSの受信処理が実装されておらず、呼び出し元も無いため、実機とは現状接続できない。詳細は [`docs/plans/archive/hils-firmware.md`](../docs/plans/archive/hils-firmware.md) を参照。
+> **注（2026-08-20）**: 以下はPython側インターフェースの実装例。`firmware/vehicle`・`firmware/controller` にはHILSの受信処理が実装されておらず、呼び出し元も無いため、実機とは現状接続できない。詳細は `docs/plans/archive/hils-firmware.md`（2026-09-12 に main から削除。`git show archive/2026-09-12:docs/plans/archive/hils-firmware.md` で参照可）を参照。
 
 ```python
 from simulator.interfaces import HILSInterface, HILSSimulationRunner
@@ -895,7 +895,7 @@ motor_outputs = commands.motors
 
 Inject sensor data to real firmware via serial communication:
 
-> **Note (2026-08-20):** The example below shows the Python-side interface only. Neither `firmware/vehicle` nor `firmware/controller` implements the HILS receiver, and nothing currently calls this interface, so it cannot connect to real hardware yet. See [`docs/plans/archive/hils-firmware.md`](../docs/plans/archive/hils-firmware.md) for details.
+> **Note (2026-08-20):** The example below shows the Python-side interface only. Neither `firmware/vehicle` nor `firmware/controller` implements the HILS receiver, and nothing currently calls this interface, so it cannot connect to real hardware yet. See `docs/plans/archive/hils-firmware.md` (removed from main on 2026-09-12; retrieve with `git show archive/2026-09-12:docs/plans/archive/hils-firmware.md`) for details.
 
 ```python
 from simulator.interfaces import HILSInterface, HILSSimulationRunner

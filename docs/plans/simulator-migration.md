@@ -1,5 +1,7 @@
 # StampFly Simulator 移植計画
 
+状態: **実装済み**（2026-01、Phase 1〜5 完了。VPython 版シミュレータとして `simulator/vpython/` に実在）。ただし本方針は 2026-07-22 時点で `docs/architecture/simulation-policy.md`／`simulator/sils/RESET_PLAN.md` に置き換え済みで、本書は記録として保持。作成 2026-01-05、最終更新 2026-08-20。
+
 > **【2026-07-22 注記】** 本書は 2026-03 時点の旧シミュレータ（VPython/Genesis）移植計画の記録である。現行のシミュレーション方針は `docs/architecture/simulation-policy.md`、SILS の設計は `simulator/sils/RESET_PLAN.md` を正とする。
 
 既存の [stampfly_sim](https://github.com/kouhei1970/stampfly_sim) を本リポジトリに移植し、
@@ -253,7 +255,7 @@ firmware/vehicle/
 
 **目標**: 実機ファームウェアとの接続
 
-> **実装状況（2026-08-20 注記）**: 以下はいずれも Python 側インターフェースの実装状況を指す。ファームウェア側（実機と接続する受信処理）は未実装で、呼び出し元も無いため、実機との接続は現状できない。詳細は `docs/plans/archive/hils-firmware.md` を参照。
+> **実装状況（2026-08-20 注記）**: 以下はいずれも Python 側インターフェースの実装状況を指す。ファームウェア側（実機と接続する受信処理）は未実装で、呼び出し元も無いため、実機との接続は現状できない。詳細は `docs/plans/archive/hils-firmware.md`（2026-09-12 に main から削除。`git show archive/2026-09-12:docs/plans/archive/hils-firmware.md` で参照可）を参照。
 
 1. [x] シリアル通信インターフェース (`interfaces/hils_interface.py`)
    - pyserial ベースの接続管理

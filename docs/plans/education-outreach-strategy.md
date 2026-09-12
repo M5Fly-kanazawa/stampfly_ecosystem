@@ -1,5 +1,7 @@
 # StampFly Ecosystem 教育普及戦略 / Education Outreach Strategy
 
+状態: **実装中**（Horizon 1 実行中: 2026-07-08時点の〜4週前半分〔リリース整備・Webフラッシャ・docsサイト導線〕は完了済み、以降のP1・Horizon 2〜3は未着手）。作成 2026-07-08、最終更新 2026-09-06。
+
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要

@@ -151,11 +151,6 @@ analysis/scripts/verify_hikoki64/
 docs/events/*/slides/*.listing
 
 # ====================
-# Temporary / WIP firmware projects
-# ====================
-firmware/my_drone/
-
-# ====================
 # Local binary backups
 # ローカルバイナリバックアップ
 # ====================

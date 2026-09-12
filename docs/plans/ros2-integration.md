@@ -1,5 +1,7 @@
 # ROS2 Integration Plan
 
+状態: **計画中**（計画策定は完了 2026-01、プロトタイプ・実装は未着手）。作成 2026-01-16、最終更新 2026-03-06。
+
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
 ## 1. 概要

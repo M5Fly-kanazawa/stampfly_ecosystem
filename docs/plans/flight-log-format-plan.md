@@ -2,6 +2,8 @@
 
 作成: 2026-09-11。**状態: 決定（2026-09-11 ユーザー確認）。実装中。**
 
+状態: **実装中**（Phase 0〜4 完了・main 統合済み、SILS のモデル一致合否判定〔`sf sils sysid-gate`〕は FAIL のまま・Docswell 再アップロード・Genesis ヘッドレス検証が残）。作成 2026-09-11、最終更新 2026-09-12。
+
 発端: 2026-09-10 の SCI チュートリアルで `sf log wifi -o flight.csv` の例を示したが、
 `sf log wifi` の既定の保存形式は CSV ではなく JSONL（JSON Lines: 1 行に 1 件の JSON
 レコードを並べたテキスト形式）だった。調べると、問題は「JSONL か CSV か」より広く、

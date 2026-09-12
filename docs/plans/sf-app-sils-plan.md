@@ -1,6 +1,7 @@
 # `sf app` を L1（Topic API）の入口にし、SILS で検証できるようにする計画
 
 作成: 2026-09-07（同日、L0 骨格への一本化案を取り下げて改訂）。
+状態: **実装済み**（Phase 0〜3、2026-09-08）／Phase 4（書き込み系 API）は未着手／「独自コードの入口」全体の設計は見直し中（[`user-programming-entry-review.md`](user-programming-entry-review.md)、2026-09-12）。
 
 発端: README「何ができるのか？」に「独自の飛行プログラムの作成」「飛行プログラムの SILS
 （Software In the Loop Simulation: ファームウェアそのものを PC 上で動かす試験）での検証」を
@@ -194,7 +195,7 @@ sf app sils my_ctrl
 | 推定器差し替えの影響 | 自作推定器が発散した場合の安全装置（現行の ESKF 発散検知は ESKF 専用か） | Phase 0 で `imu_task.cpp` の発散検知の対象を確認し、`IEstimator` 共通の監視に寄せるか判断 |
 | Windows のパス | CMake 変数に空白・バックスラッシュを含む絶対パスを渡す | 実装は `Path.resolve()` で絶対パス化して `-D SF_APP_DIR=...` に渡す（`app.py`/`sils.py`）。**未検証（2026-09-08 時点）**: `windows-e2e.yml` への `sf app` ケース追加はまだ行っていない。Windows 実機・CI での確認が残作業 |
 | 例題の設計原則との整合 | 「単独ビルド可能」原則との例外を文書で明示しないと、後続の例題が再びベンチ路線に戻る | Phase 0 の設計文書更新を先に行う |
-| `firmware/my_drone` の遺物 | 現行構成でビルドできない可能性が高く、読者を混乱させる | 本計画とは別に、削除か `archive/` 移動を判断する |
+| `firmware/my_drone` の遺物 | 現行構成でビルドできない可能性が高く、読者を混乱させる | 2026-09-12 に main から削除済み（タグ `archive/2026-09-12` で参照可） |
 
 ## 6. 関連文書
 
