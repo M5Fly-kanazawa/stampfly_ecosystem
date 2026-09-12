@@ -1,0 +1,74 @@
+# pairing_held.scn — pairing while held in hand (IDLE_HELD), 2026-09-12 decision
+# ペアリングは手持ち（IDLE_HELD）中も可能にする、2026-09-12 決定
+#
+# USER DECISION (2026-09-12): the vehicle must be able to enter pairing mode while
+# HELD IN HAND, not only while resting on the ground. state_manager.cpp's
+# requestPairing() and state_task.cpp's auto-pairing loop now accept IDLE_GROUND
+# OR IDLE_HELD (previously IDLE_GROUND only). This scenario exercises the
+# user-facing outcome: an unpaired vehicle picked up right after boot still
+# auto-enters Pairing (broadcasting) and binds to a correctly addressed
+# transmitter WHILE STILL HELD, and ARM stays rejected the whole time it is held.
+#
+# ユーザー決定(2026-09-12): 機体は地上だけでなく手持ち中もペアリングモードに入れる
+# 必要がある。state_manager.cpp の requestPairing() と state_task.cpp の自動突入
+# ループは、これまでの IDLE_GROUND 限定から IDLE_GROUND / IDLE_HELD 両方を受理する
+# ように変わった。本シナリオはユーザー視点の結果を検証する: 起動直後に持ち上げられた
+# 未ペア機は、それでも自動的に Pairing に入り（広告開始）、持ったままの状態で正しい
+# 宛先の送信機にバインドし、その間ずっと ARM は拒否され続けること。
+#
+# RUN WITH --unpaired so the vehicle boots UNPAIRED (skips the SILS pairing NVS seed):
+#   sf sils scenario simulator/sils/scenarios/pairing_held.scn --target vehicle --unpaired
+#
+# NOTE on scope (see docs/plans/pairing-methods-plan.md and pairing_plan.md 2026-09-12
+# note for the full explanation): this scenario proves the END-TO-END user-facing
+# behaviour (bind while held; ARM stays rejected while held). It does NOT, by itself,
+# differentiate the OLD (IDLE_GROUND-only) gate from the NEW (IDLE_GROUND/IDLE_HELD)
+# gate in requestPairing(), because the auto-pairing loop always reaches "Pairing
+# started" in the first fraction of a millisecond after boot -- strictly BEFORE any
+# handle-driven ToF ramp can register "held" -- so the initial Pairing entry always
+# happens while still (briefly) IDLE_GROUND, under both the old and new gate. A
+# scenario that hits requestPairing() while GENUINELY IDLE_HELD (e.g. a button
+# long-press re-pair while held) would need either the `btn` scenario channel
+# (GPIO gesture injection -- currently unimplemented, see scenario.cpp Channel::Btn
+# "deferred (GPIO future)") or a working CLI/`key` channel for the "vehicle" target
+# (currently inert on the SILS host: firmware/vehicle's console uses
+# esp_console_new_repl_usb_cdc()/esp_console_start_repl(), which
+# simulator/sils/esp_idf_host/esp_console.h stubs out as a no-op REPL that never
+# reads the scripted stdin pipe -- confirmed empirically: a `key "help\n"` event
+# produces zero CLI echo for --target vehicle, which is why console_cli.scn is
+# hardcoded to --target vehicle_old in lib/sfcli/commands/sils.py). Wiring either
+# path is a larger change, out of scope here (task said: skip and say what is
+# missing). The requestPairing()/state_manager.cpp code change itself is reviewed
+# by inspection: the guard textually now reads
+# `state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD`.
+#
+# スコープの注記（詳細は docs/plans/pairing-methods-plan.md と pairing_plan.md の
+# 2026-09-12 追記を参照）: 本シナリオはユーザー視点のエンドツーエンド挙動（手持ち中の
+# バインド・手持ち中の ARM 拒否）を検証するが、requestPairing() の旧ゲート
+# （IDLE_GROUND 限定）と新ゲート（IDLE_GROUND/IDLE_HELD）を単体で判別する試験には
+# ならない — 自動突入ループは起動後ごく僅かな時間で「Pairing started」に到達し、
+# これは handle が駆動する ToF の立上りが "held" を検出するより必ず先に起こるため、
+# 最初の Pairing 突入は旧ゲートでも新ゲートでも常に（一瞬）IDLE_GROUND のうちに起きる。
+# requestPairing() を「本当に IDLE_HELD の間」に呼ばせる試験（例: 手持ち中のボタン
+# 長押し再ペア）には `btn` チャンネル（GPIO ジェスチャ注入、scenario.cpp の
+# Channel::Btn に "deferred (GPIO future)" と明記、未実装）か、"vehicle" ターゲットで
+# 機能する CLI/`key` チャンネル（現状 SILS ホストでは inert:
+# firmware/vehicle のコンソールは esp_console_new_repl_usb_cdc()/
+# esp_console_start_repl() を使うが、simulator/sils/esp_idf_host/esp_console.h は
+# これをスクリプト化した stdin パイプを一切読まない no-op REPL としてスタブ化して
+# いる — 実測確認済み: `key "help\n"` を --target vehicle に送っても CLI エコーが
+# 一切出ない。console_cli.scn が lib/sfcli/commands/sils.py で --target vehicle_old
+# に固定されているのはこのため）のどちらかが要る。どちらの配線も本タスクの範囲を
+# 超える大きめの変更であり、見送る（指示どおり、欠けている点を明記して skip）。
+# requestPairing() 自体のコード変更はコードレビューで確認する: ガード条件は
+# 文面どおり `state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD`
+# になっている。
+#
+#  <t>    ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0      handle  0.60  0.0    0.0     400   3000      400   # A: lift to 0.6 m immediately at boot (400 ms ramp; crosses the 0.15 m held threshold ~100 ms in) -> IDLE_GROUND -> IDLE_HELD, aloft 3.0 s, placed back down over 0.4 s (done by t~3.8 s)
+   1000   rc      2048  2048   2048    2048  0     500       50    # B: WHILE HELD — first correctly-addressed ControlPacket (kPilotMac) -> binds (mutual MAC learning) while still in the air
+   +      rc      3243  2048   2048    2048  1     500       50    # C: WHILE STILL HELD — ARM + high throttle attempt from the now-bound transmitter -> must be REJECTED (state=IDLE_HELD, not IDLE_GROUND) -> motors stay off
+   +      rc      2048  2048   2048    2048  0     8000      50    # D: neutral disarmed hold — lets the handle maneuver finish placing the vehicle back on the ground (IDLE_HELD -> IDLE_GROUND, ~3.8 s in) and gives the post-placement stillness window enough real time to re-complete boot calibration (measured ~3.5 s after a still placement, see boot_motion.scn)
+   +      rc      2048  2048   2048    2048  1     500       50    # E: now grounded and calibrated — ARM is accepted (sanity: the IDLE_HELD pairing fix did not touch the ARM guard)
+   +      rc      2048  2048   2048    2048  0     200       50    # release ARM button / ボタン離し
+   +      rc      2048  2048   2048    2048  1     200       50    # F: press again -> DISARM (toggle) / 再押下=DISARM

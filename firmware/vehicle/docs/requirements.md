@@ -86,10 +86,13 @@ PairingState（FlightState と並行）
 | 起動（NVSに相手なし）→ Pairing | 自動（未ペア起動で自動的にペアリング待機）|
 | 起動（NVSに相手あり）→ Paired | 自動（保存済み相手 MAC を復元）|
 | Pairing → Paired | Pairing 中に相手から ControlPacket を受信し src MAC を学習 |
-| 任意 → Pairing（再ペアリング）| ボタン長押し3秒（IDLE_GROUND のみ）。既存ペアを破棄して再探索 |
+| 任意 → Pairing（再ペアリング）| ボタン長押し3秒（IDLE_GROUND / IDLE_HELD）。既存ペアを破棄して再探索 |
 
 **制約:**
-- PAIRING 突入は地上（IDLE_GROUND）でのみ可能。**Pairing 中は ARM 要求を拒否**する。
+- PAIRING 突入は IDLE_GROUND / IDLE_HELD（地上または手持ち）で可能（2026-09-12: 手に持った
+  ままボタンを押すのが利用者にとって一般的な操作のため IDLE_HELD からの突入も認めた。ARM は
+  従来どおり IDLE_GROUND 限定のままで、**Pairing 中は ARM 要求を拒否**するので、この変更は
+  モータ起動の安全性に影響しない）。
 - ハンドシェイクは**相互 MAC 学習**: 機体が自 MAC を PairingPacket で広告 → コントローラが学習して
   機体 MAC 宛に ControlPacket をユニキャスト送信 → 機体が受信パケットの src MAC を相手として確定。
 - 旧 vehicle のペアリングシーケンスを踏襲する（プロトコル・署名・周期を同一に保ち相互運用）。
@@ -336,10 +339,13 @@ PairingState (parallel to FlightState)
 | Boot (no peer in NVS) → Pairing | Automatic (unpaired boot auto-enters pairing) |
 | Boot (peer in NVS) → Paired | Automatic (restore saved peer MAC) |
 | Pairing → Paired | Receive a ControlPacket from the peer during Pairing, learning its src MAC |
-| Any → Pairing (re-pair) | Button long-press 3s (IDLE_GROUND only); discard existing pair and re-search |
+| Any → Pairing (re-pair) | Button long-press 3s (IDLE_GROUND / IDLE_HELD); discard existing pair and re-search |
 
 **Constraints:**
-- Pairing can be entered only on the ground (IDLE_GROUND). **ARM requests are rejected while Pairing.**
+- Pairing can be entered from IDLE_GROUND / IDLE_HELD (on the ground or held in hand)
+  (2026-09-12: allowed from IDLE_HELD too, since pressing the button while holding the
+  vehicle is the common way users start pairing. ARM is still IDLE_GROUND-only, and
+  **ARM requests are rejected while Pairing**, so this does not affect motor-start safety).
 - The handshake is **mutual MAC learning**: the vehicle advertises its own MAC via PairingPacket →
   the controller learns it and unicasts ControlPackets to the vehicle MAC → the vehicle fixes the
   received packet's src MAC as its peer.

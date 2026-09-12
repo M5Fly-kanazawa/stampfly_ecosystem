@@ -422,19 +422,26 @@ void StateManager::handleAlert(const SystemAlert& alert)
 
 void StateManager::requestPairing()
 {
-    // Pairing is a ground-only activity: a disarmed vehicle advertising itself so a
-    // transmitter can bind. Reject from INIT / armed / airborne (we never re-pair in
-    // flight). Idempotent: if already searching, do nothing (avoids re-publish churn).
-    // IDLE_GROUND only — NOT IDLE_HELD: the normative spec scopes pairing entry to
-    // IDLE_GROUND (requirements §2, detailed_design §3.1), and IDLE_HELD (hand-held)
-    // also forbids ARM, so it should not start advertising either (code_review L-7).
-    // ペアリングは地上限定の活動: disarmed の機体が自分を広告して送信機がバインドできる
-    // ようにする。INIT/武装/空中からは拒否（飛行中に再ペアしない）。冪等: 既に探索中なら
-    // 何もしない。IDLE_GROUND 限定 — IDLE_HELD は不可: 規範（requirements §2 /
-    // detailed_design §3.1）はペアリング突入を IDLE_GROUND に限定しており、IDLE_HELD
-    // （手持ち）は ARM 同様に広告開始もさせない (L-7)。
-    if (state_ != FlightState::IDLE_GROUND) {
-        ESP_LOGD(TAG, "Pairing rejected: not in IDLE_GROUND (state=%s)",
+    // Pairing is a disarmed-vehicle-only activity: it advertises itself so a
+    // transmitter can bind, but never spins the motors. Reject from INIT / armed /
+    // airborne (we never re-pair in flight). Idempotent: if already searching, do
+    // nothing (avoids re-publish churn).
+    // IDLE_GROUND or IDLE_HELD (2026-09-12): pairing must also be reachable while the
+    // vehicle is held in hand — pressing the button in hand is the common way users
+    // start pairing (requirements.md §2 / detailed_design.md §3.1 updated to match).
+    // This does NOT weaken the ARM guard: requestArm() still only accepts IDLE_GROUND,
+    // and ARM is separately rejected while Pairing, so a held vehicle can never spin
+    // its motors just because it can now start advertising.
+    // ペアリングは disarmed の機体限定の活動: 自分を広告して送信機がバインドできるように
+    // するだけで、モータは回さない。INIT/武装/空中からは拒否（飛行中に再ペアしない）。
+    // 冪等: 既に探索中なら何もしない。
+    // IDLE_GROUND または IDLE_HELD（2026-09-12）: 手に持った状態でもペアリングに入れる
+    // 必要がある — ボタンを手持ちのまま押すのは利用者にとって一般的な操作（requirements.md
+    // §2 / detailed_design.md §3.1 を合わせて更新済み）。ARM のガードはそのまま変えない:
+    // requestArm() は引き続き IDLE_GROUND のみ受理し、Pairing 中は ARM を別途拒否するため、
+    // 広告を開始できるようになっても手持ちの機体のモータが回ることはない。
+    if (state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD) {
+        ESP_LOGD(TAG, "Pairing rejected: not in IDLE_GROUND/IDLE_HELD (state=%s)",
                  flightStateName(state_));
         return;
     }

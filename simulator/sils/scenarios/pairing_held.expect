@@ -1,0 +1,23 @@
+# pairing_held.expect — assert pairing entry/bind while IDLE_HELD, and that ARM
+# stays rejected the whole time the vehicle is held. MUST be run with --unpaired
+# (see pairing_held.scn). See that file's header for what this scenario does and
+# does NOT prove (it exercises the user-facing outcome, not a differential test of
+# the old vs. new requestPairing() gate — see the scope note there).
+#
+# pairing_held.expect — 手持ち（IDLE_HELD）中のペアリング突入/バインドと、手持ち中
+# ずっと ARM が拒否され続けることを検証。--unpaired 必須。本シナリオが何を検証し
+# 何を検証しないか（requestPairing() の新旧ゲートの判別試験ではない）は
+# pairing_held.scn 冒頭のスコープ注記を参照。
+exit 0
+log_contains any "Pairing started"                      # unpaired boot -> StateManager auto-enters Pairing
+log_contains any "Transition: IDLE_GROUND → IDLE_HELD"   # lifted -> IDLE_HELD
+log_contains any "Paired with 02:53:49:4C:00:01"         # comm binds to the paired transmitter (kPilotMac)
+log_contains any "Pairing complete"                      # StateManager -> Paired
+log_contains any "Transition: IDLE_HELD → IDLE_GROUND"   # placed back down
+log_contains any "Calibration complete"                  # re-settled on the ground
+log_contains any "ARM accepted"                          # grounded + calibrated + Paired -> ARM works normally
+log_contains any "DISARM accepted"                       # clean end
+order "Transition: IDLE_GROUND → IDLE_HELD" "Paired with 02:53:49:4C:00:01"  # bind happens strictly AFTER becoming held, i.e. while genuinely held
+order "Paired with 02:53:49:4C:00:01" "Transition: IDLE_HELD → IDLE_GROUND"  # ...and strictly before being placed back down
+order "Transition: IDLE_HELD → IDLE_GROUND" "ARM accepted"                  # the later grounded ARM only succeeds after placement
+metric duty_max < 0.05 in 1.4 2.1   # ARM+high-throttle attempt while held (event C) -> motors stay off

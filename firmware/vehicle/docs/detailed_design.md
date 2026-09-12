@@ -241,10 +241,12 @@ FlightState とは別の独立状態機械。StateManager が所有する（[`ar
 |------|---------|-----------|
 | 起動 → Paired / NotPaired | NVS load | 相手 MAC あり→Paired・相手をユニキャスト peer 登録 ／ なし→NotPaired |
 | NotPaired → Pairing | 自動（未ペア起動） | comm: PairingPacket を 500ms 周期で broadcast 開始、notify: LED青速点滅+ブザー |
-| 任意 → Pairing（再ペア） | `button_event`=LongPress3s（IDLE_GROUND のみ） | 既存ペア破棄（NVS clear）→ 上記 Pairing 開始 |
+| 任意 → Pairing（再ペア） | `button_event`=LongPress3s（IDLE_GROUND / IDLE_HELD） | 既存ペア破棄（NVS clear）→ 上記 Pairing 開始 |
 | Pairing → Paired | comm 発行の `pairing_complete`（src MAC 学習） | comm: NVS保存・broadcast peer 削除・相手をユニキャスト peer 登録、notify: 点滅解除 |
 
-**ガード:** Pairing 中は `requestArm` を拒否（StateManager）。突入は地上（IDLE_GROUND）のみ。
+**ガード:** Pairing 中は `requestArm` を拒否（StateManager）。突入は IDLE_GROUND / IDLE_HELD
+（地上または手持ち）で可能（2026-09-12、手持ちでのボタン操作を許容するため拡張。ARM 自体は
+従来どおり IDLE_GROUND 限定なので安全性に影響しない）。
 
 **トピック:**
 - `pairing_state`（Latest, StateManager → comm / notify）: 現在の PairingState を周知。

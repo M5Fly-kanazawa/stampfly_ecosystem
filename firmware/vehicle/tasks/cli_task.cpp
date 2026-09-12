@@ -351,7 +351,8 @@ int cmd_unpair(int argc, char** argv)
     ev.gesture   = static_cast<uint8_t>(sf::ButtonGesture::LongPress3s);
     ev.timestamp = static_cast<uint32_t>(esp_timer_get_time());
     sf::button_event.publish(ev);
-    std::printf("unpair requested — clearing bind, re-entering pairing (on the ground)\n");
+    std::printf("unpair requested — clearing bind, re-entering pairing "
+                "(ground or held in hand)\n");
     return 0;
 }
 
@@ -405,14 +406,17 @@ int cmd_pair(int argc, char** argv)
     }
     if (argc < 2 || std::strcmp(argv[1], "start") == 0) {
         // Inject a LongPress3s gesture fact; the StateManager re-enters Pairing
-        // (it gates this to the ground / disarmed and clears the existing bind).
+        // (it gates this to IDLE_GROUND/IDLE_HELD — ground or held in hand,
+        // disarmed — and clears the existing bind).
         // LongPress3s ジェスチャの事実を注入。StateManager が Pairing に再突入する
-        // （地上/disarmed に限定し既存バインドを破棄する）。
+        // （IDLE_GROUND/IDLE_HELD — 地上または手持ち、disarmed — に限定し既存バインドを
+        // 破棄する）。
         sf::ButtonEvent ev{};
         ev.gesture   = static_cast<uint8_t>(sf::ButtonGesture::LongPress3s);
         ev.timestamp = static_cast<uint32_t>(esp_timer_get_time());
         sf::button_event.publish(ev);
-        std::printf("pairing requested (takes effect on the ground / disarmed)\n");
+        std::printf("pairing requested (takes effect on the ground or held in hand, "
+                    "disarmed)\n");
         return 0;
     }
     std::printf("usage: pair [start | status]\n");

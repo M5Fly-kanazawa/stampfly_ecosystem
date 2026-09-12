@@ -253,7 +253,7 @@ SoftAP BSSID: XX:XX:XX:XX:XX:ZZ (= MAC + 1, ESP32 rule)
 
 | 操作 | 動作 |
 |------|------|
-| 機体ボタン 長押し3秒（地上）| 既存バインドを破棄して再ペアリング |
+| 機体ボタン 長押し3秒（地上でも手持ちでも可）| 既存バインドを破棄して再ペアリング |
 | CLI `unpair` | 同上（バインド破棄＋ペアリング再突入）|
 | CLI `pair status` | 自 MAC/ラベル・PairingState・バインド済み相手 MAC・棄却カウンタを表示（下記例） |
 
@@ -515,7 +515,7 @@ already open when power is applied).
 | Vehicle ID (label, controller candidate list, tail of the SoftAP SSID `StampFly-XXYY`, Tello-compatible `sn?`) | last 4 hex digits of the *station* MAC (the ESP-NOW source address). **This is the vehicle's single identity** |
 | SoftAP BSSID (the access point's MAC a Wi-Fi scanner shows) | station MAC + 1 (last byte). ESP32 cannot give two interfaces the same MAC, so it differs from the SSID tail (= vehicle ID) by one |
 
-**Re-pair / clear**: on-board button long-press 3 s (on the ground), or CLI `unpair`. `pair status`
+**Re-pair / clear**: on-board button long-press 3 s (on the ground or held in hand), or CLI `unpair`. `pair status`
 shows this vehicle's own MAC/label, the PairingState, the bound MAC, and the rejected-packet count:
 
 ```

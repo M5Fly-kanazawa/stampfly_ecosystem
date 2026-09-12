@@ -37,7 +37,7 @@ OFF」という運用ルールで、参加者が同時に操作する講習で�
 | 項目 | 事実 | 出典 |
 |------|------|------|
 | ペアリング電文 | 11 バイト = チャンネル(1) + 機体 MAC(6) + 固定署名(4: AA 55 16 88)。PIN・乱数・機器 ID・受信強度の欄は無い。C++ 側には構造体すら無く定数のみ | `protocol/spec/messages.yaml:428-449`、`firmware/common/protocol/include/espnow_protocol.hpp:45-74` |
-| 機体側 | 未ペア時は地上で自動的に、または本体ボタン 3 秒長押し／CLI `pair` でペアリングモード。500 ms ごとに上記電文を一斉送信。**ペアリング中に最初に届いた操縦電文の送信元 MAC を無条件に相手と確定**し NVS（`sf_pair/ctrl_mac`）に保存。成立後は相手以外の電文を破棄 | `firmware/vehicle/components/sf_comm/comm.cpp:459-497,518-561` |
+| 機体側 | 未ペア時は地上または手持ちで自動的に（2026-09-12: IDLE_HELD からの突入も許容、`pairing_plan.md` 参照）、または本体ボタン 3 秒長押し／CLI `pair` でペアリングモード。500 ms ごとに上記電文を一斉送信。**ペアリング中に最初に届いた操縦電文の送信元 MAC を無条件に相手と確定**し NVS（`sf_pair/ctrl_mac`）に保存。成立後は相手以外の電文を破棄 | `firmware/vehicle/components/sf_comm/comm.cpp:459-497,518-561` |
 | コントローラ側 | 電源投入時にボタン押下でペアリングモード。チャンネル 1〜13 を 200 ms ずつ順に切り替え、**署名が一致する最初のペアリング電文の MAC とチャンネルを無条件に採用**し SPIFFS（`peer_info.txt`）に保存 | `firmware/controller/components/espnow_tdma/espnow_tdma.c:129-152,496-546` |
 | 選別の仕組み | 受信強度の比較、相手の選択画面、ボタン同時押し確認、PIN のいずれも無い | `pairing_plan.md:111-136` |
 | 事後検出 | 自動検出は無い。コントローラ画面の MAC 下位 2 バイトと機体のセット番号ラベルを目視で照合するのみ。誤ペアは「本来の相手が操縦不能」という形で顕在化する | `docs/events/dxh2026/setup-loaner-pc.md:214` |

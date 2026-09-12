@@ -12,6 +12,12 @@
 > **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
 > ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
 
+> **【2026-09-12】Pairing 突入を IDLE_HELD（手持ち）にも拡大。** ユーザー決定により、
+> `requestPairing()`（`state_manager.cpp`）と自動突入ループ（`state_task.cpp`）のガードを
+> IDLE_GROUND 単独から IDLE_GROUND / IDLE_HELD へ変更した（旧 code_review L-7 の判断を
+> 上書き）。Pairing はモータを回さず、ARM は Pairing 中・IDLE_HELD 中とも従来どおり拒否される
+> ため安全性への影響はない。requirements.md §2・detailed_design.md §3.1 を合わせて更新済み。
+
 ---
 
 > **結論（調査）: vehicle のペアリングは「部品のみ存在・未配線（実質未実装）」。**

@@ -523,11 +523,13 @@ void StateTask(void* pvParameters)
             } else if (gesture == sf::ButtonGesture::LongPress3s) {
                 // Long-press 3 s = (re-)pair: discard the existing bind and re-enter
                 // Pairing so a new transmitter can take over. requestPairing() is
-                // internally gated to the ground and is idempotent, so this is safe
-                // to call regardless of the current state.
+                // internally gated to IDLE_GROUND/IDLE_HELD (ground or held in hand,
+                // 2026-09-12) and is idempotent, so this is safe to call regardless of
+                // the current state.
                 // 長押し3秒 = （再）ペア: 既存バインドを破棄し Pairing に再突入して新しい
-                // 送信機が引き継げるようにする。requestPairing() は内部で地上に限定され
-                // 冪等なので、現在状態に関わらず安全に呼べる。
+                // 送信機が引き継げるようにする。requestPairing() は内部で IDLE_GROUND/
+                // IDLE_HELD（地上または手持ち、2026-09-12）に限定され冪等なので、現在状態に
+                // 関わらず安全に呼べる。
                 g_state_manager.requestPairing();
             }
         }
@@ -626,20 +628,23 @@ void StateTask(void* pvParameters)
         // Pairing: reflect sf_comm's bind status and auto-enter pairing when unpaired.
         // sf_comm publishes its bind status on pairing_complete (bound + learned MAC);
         // the StateManager owns the PairingState. A FRESH bound=true report → Paired.
-        // While still NotPaired and on the ground we (auto-)enter Pairing so a
-        // transmitter can discover us (mutual MAC learning). requestPairing() is gated
-        // to ground states and idempotent, so calling it each cycle is safe. We process
-        // the bind report BEFORE the auto-enter so a boot-restored bind wins.
+        // While still NotPaired and on the ground OR held in hand we (auto-)enter
+        // Pairing so a transmitter can discover us (mutual MAC learning) — an unpaired
+        // vehicle powered on while being picked up should start advertising too, not
+        // only once it is set down. requestPairing() is gated to IDLE_GROUND/IDLE_HELD
+        // internally and idempotent, so calling it each cycle is safe. We process the
+        // bind report BEFORE the auto-enter so a boot-restored bind wins.
         // ペアリング: sf_comm のバインド状態を反映し、未ペアなら自動で Pairing に入る。
         // sf_comm は pairing_complete にバインド状態（bound + 学習MAC）を発行し、PairingState は
-        // StateManager が所有する。新しい bound=true 報告 → Paired。まだ NotPaired かつ地上なら
-        // 自動で Pairing に入り、送信機が我々を発見できるようにする（相互 MAC 学習）。
-        // requestPairing() は地上限定で冪等ゆえ毎周期呼んで安全。起動時の復元バインドが勝つよう
-        // バインド報告を自動突入より先に処理する。
+        // StateManager が所有する。新しい bound=true 報告 → Paired。まだ NotPaired かつ地上または
+        // 手持ちなら自動で Pairing に入り、送信機が我々を発見できるようにする（相互 MAC 学習）——
+        // 手に持ったまま電源を入れた未ペア機も、設置を待たず広告を始めるべきである。
+        // requestPairing() は内部で IDLE_GROUND/IDLE_HELD に限定され冪等ゆえ毎周期呼んで安全。
+        // 起動時の復元バインドが勝つようバインド報告を自動突入より先に処理する。
         //
         // @subscriber pairing_complete
-        // @design requirements.md §2 — PairingState (auto-enter on unpaired) [OK]
-        // @design architecture.md §4 — StateManager owns PairingState        [OK]
+        // @design requirements.md §2 — PairingState, auto-enter on IDLE_GROUND/IDLE_HELD [OK]
+        // @design architecture.md §4 — StateManager owns PairingState                    [OK]
         // =====================================================================
         const sf::PairingComplete bind = sf::pairing_complete.latest();
         if (bind.timestamp != 0) {                         // comm has reported its bind status
@@ -651,8 +656,9 @@ void StateTask(void* pvParameters)
             const sf::FlightState fs_now = g_state_manager.getState();
             if (!bound &&
                 g_state_manager.getPairingState() == sf::PairingState::NotPaired &&
-                fs_now == sf::FlightState::IDLE_GROUND) {   // IDLE_GROUND only (L-7)
-                g_state_manager.requestPairing();          // unpaired on the ground → Pairing
+                (fs_now == sf::FlightState::IDLE_GROUND ||
+                 fs_now == sf::FlightState::IDLE_HELD)) {   // ground or held (2026-09-12)
+                g_state_manager.requestPairing();          // unpaired, ground/held → Pairing
             }
         }
 
