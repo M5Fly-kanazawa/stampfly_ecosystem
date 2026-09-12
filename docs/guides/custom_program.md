@@ -104,7 +104,16 @@ source setup_env.sh
 sf app new my_acro
 ```
 
-`firmware/apps/my_acro/` に、次のファイルが作られる。
+`firmware/apps/my_acro/` に、次のファイルが作られる。ディレクトリはこれで全部——サブディレクトリも `CMakeLists.txt` も無い、5ファイルだけの平らな構成である。
+
+```
+firmware/apps/my_acro/
+├── app.yaml               … プロジェクトの種別・設定
+├── app.cpp                … クラスをファームウェアへ登録する“つなぎ目”
+├── app_controller.hpp     … IController実装（宣言）
+├── app_controller.cpp     … IController実装（本体）— この記事でずっと編集する
+└── README.md              … 複製元テンプレートの説明
+```
 
 | ファイル | 役割 |
 |---------|------|
@@ -1072,7 +1081,16 @@ source setup_env.sh
 sf app new my_acro
 ```
 
-This creates the following files under `firmware/apps/my_acro/`:
+This creates the following files under `firmware/apps/my_acro/`. That's the whole directory — no subdirectories, no `CMakeLists.txt`, just these 5 files in a flat layout:
+
+```
+firmware/apps/my_acro/
+├── app.yaml               … project type / metadata
+├── app.cpp                … the "seam" that registers your class with the firmware
+├── app_controller.hpp     … IController implementation (declaration)
+├── app_controller.cpp     … IController implementation (body) — the file you keep editing
+└── README.md              … the source template's own explanation
+```
 
 | File | Role |
 |------|------|
