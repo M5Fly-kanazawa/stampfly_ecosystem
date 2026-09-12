@@ -378,7 +378,7 @@ Phase 0 の検証で `logs/stampfly_udp_20260908T121243.jsonl`（30 秒、ホバ
 ## 8. 未確認事項
 
 - 一式のファイルサイズ実測（zip 圧縮後）。Phase 1 で既存 JSONL を変換して測る。
-- 実機での `sf log wifi` 一式書き出し（本セッションでは実機なし）。
+- ~~実機での `sf log wifi` 一式書き出し~~ → 2026-09-12 実機で 30 秒取得と `sf log viz` の表示を確認済み（ユーザー報告）。
 - `lib/stampfly` SDK が `vehicle_connection.py` のどのクラスを使うか（旧 WebSocket 電文の
   解析コード `packet_parser.py` は生きた操縦経路が使っている可能性があるため、本計画では
   触らない）。
