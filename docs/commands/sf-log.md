@@ -14,7 +14,7 @@
 JSON レコードを並べたテキスト形式）は、一式から必要なときに `sf log convert` で作る**派生物**であり、
 一次記録として書き出されることはありません。
 
-読み込み系の全サブコマンドは `.sflog.zip` ファイルと、展開済みのフォルダ一式のどちらも受け付け、
+読み込み系の全サブコマンドは `.sflog.zip` ファイルと、展開済みのフォルダ一式のどちらも受け付け（判定は拡張子ではなく中身なので、`.sflog` や `.zip` に改名したファイルも読める）、
 省略時は `logs/` 内の最新の一式を使います。
 
 ## 2. サブコマンド一覧
@@ -62,7 +62,7 @@ sf log wifi -i 192.168.10.5 --port 8890
 
 | オプション | 説明 | 既定値 |
 |-----------|------|-------|
-| `-o, --output` | 出力先。拡張子を省いた名前（例 `-o flight1`）には `.sflog.zip` が自動で付く。`.sflog.zip` で終わるパスはその zip に書く。既存のディレクトリ（またはパス区切り文字で終わるパス）を渡すと、その中に同名の一式をフォルダとして書く。`.csv`/`.jsonl`/`.bin` など他の拡張子は拒否される（一式が唯一の取得形式。派生ファイルは取得後に `sf log convert --aligned`/`--jsonl` で作る） | 自動生成 `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
+| `-o, --output` | 出力先。拡張子を省いた名前（例 `-o flight1`）には `.sflog.zip` が自動で付く。`.sflog.zip` で終わるパスはその zip に書く。既存のディレクトリ（またはパス区切り文字で終わるパス）を渡すと、その中に既定名の `.sflog.zip` を書く。`.csv`/`.jsonl`/`.bin` など他の拡張子は拒否される（一式が唯一の取得形式。派生ファイルは取得後に `sf log convert --aligned`/`--jsonl` で作る） | 自動生成 `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
 | `-d, --duration` | キャプチャ時間（秒） | 30 |
 | `-i, --ip` | StampFly の IP アドレス | 192.168.10.1 |
 | `--port` | UDP テレメトリのポート番号 | 8890 |
@@ -394,7 +394,7 @@ sf log wifi -i 192.168.10.5 --port 8890
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-o, --output` | Output path. A bare name gets `.sflog.zip` appended (`-o flight1` -> `flight1.sflog.zip`); a path ending in `.sflog.zip` writes that zip; an existing directory (or a path ending in a path separator) gets a same-named bundle written inside it as a directory. Other extensions (`.csv`/`.jsonl`/`.bin`) are rejected — the bundle is the only capture format; derive a file afterwards with `sf log convert --aligned`/`--jsonl` | Auto-generated `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
+| `-o, --output` | Output path. A bare name gets `.sflog.zip` appended (`-o flight1` -> `flight1.sflog.zip`); a path ending in `.sflog.zip` writes that zip; an existing directory (or a path ending in a path separator) gets the default-named `.sflog.zip` written inside it. Other extensions (`.csv`/`.jsonl`/`.bin`) are rejected — the bundle is the only capture format; derive a file afterwards with `sf log convert --aligned`/`--jsonl` | Auto-generated `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` |
 | `-d, --duration` | Capture duration (seconds) | 30 |
 | `-i, --ip` | StampFly IP address | 192.168.10.1 |
 | `--port` | UDP telemetry port | 8890 |

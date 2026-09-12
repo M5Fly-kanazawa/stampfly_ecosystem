@@ -99,8 +99,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
              "if not specified). A bare name gets .sflog.zip appended "
              "(`-o flight1` -> flight1.sflog.zip); a path ending in "
              ".sflog.zip writes that zip; an existing directory (or a path "
-             "ending in a path separator) gets a same-named bundle written "
-             "inside it as a directory. Other extensions (.csv/.jsonl/.bin) "
+             "ending in a path separator) gets the default-named .sflog.zip "
+             "written inside it. Other extensions (.csv/.jsonl/.bin) "
              "are rejected -- the bundle is the only capture format; use "
              "`sf log convert --aligned` or `--jsonl` afterwards for a "
              "derived file.",
@@ -476,7 +476,11 @@ def _convert_jsonl_to_bundle(input_path: Path, args: argparse.Namespace) -> int:
     """convert mode (a): legacy `.jsonl` -> bundle.
     変換モード(a): レガシー `.jsonl` -> 一式。
     """
-    output = Path(args.output) if args.output else input_path.with_suffix(".sflog.zip")
+    try:
+        output = _bundle_output_path(args.output, input_path.with_suffix(".sflog.zip"))
+    except ValueError as e:
+        console.error(str(e))
+        return 1
     console.info(f"Converting {input_path.name} -> bundle...")
     try:
         sflog.jsonl_to_bundle(input_path, output)
@@ -715,7 +719,7 @@ def _batch_bundle_paths(glob_arg: Optional[str]) -> List[Path]:
         console.info(f"Health report over {len(matched)} bundles (glob)")
         return matched
 
-    all_bundles = sorted(log_dir.glob("*.sflog.zip"),
+    all_bundles = sorted((path for path, _meta in _iter_bundles(log_dir)),
                          key=lambda f: f.stat().st_mtime, reverse=True)
     if not all_bundles:
         console.error("No flight-log bundles found in logs/ for --batch.")
@@ -1006,23 +1010,15 @@ def _bundle_stem(bundle_path: Path) -> str:
 def _find_latest_bundle() -> Optional[Path]:
     """Most recently modified flight-log bundle under logs/ -- the default
     every `sf log` subcommand falls back to when no bundle is named.
-    `paths.latest_bundle()` (the project-wide "newest log" lookup shared
-    with `sf trim`/`sf cal`/`sf sysid`) answers for `*.sflog.zip` files;
-    directory bundles, which it does not see, are found via _iter_bundles().
+    `paths.latest_bundle()` is the project-wide "newest log" lookup shared
+    with `sf trim`/`sf cal`/`sf sysid`; it detects bundles by content (zip
+    or directory with a v1 meta.json), whatever the file name.
     logs/ 配下で最も新しく更新されたフライトログ一式 -- 一式を指定しない
     `sf log` 各サブコマンドの既定値。`paths.latest_bundle()`（`sf trim`/
-    `sf cal`/`sf sysid` と共有するプロジェクト共通の「最新ログ」探索）が
-    `*.sflog.zip` を答え、それが見ないディレクトリ一式は _iter_bundles()
-    で探す。
+    `sf cal`/`sf sysid` と共有するプロジェクト共通の「最新ログ」探索）は
+    ファイル名ではなく中身（v1 の meta.json を持つ zip かフォルダ）で判定する。
     """
-    latest_zip = paths.latest_bundle()
-    if latest_zip is not None:
-        return latest_zip
-    bundles = list(_iter_bundles(get_log_dir()))
-    if not bundles:
-        return None
-    bundles.sort(key=lambda item: item[0].stat().st_mtime, reverse=True)
-    return bundles[0][0]
+    return paths.latest_bundle()
 
 
 def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
@@ -1053,36 +1049,23 @@ def _resolve_bundle_arg(bundle_arg: Optional[str]) -> Optional[Path]:
     return path
 
 
-def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
-    """Resolve `sf log wifi -o`'s output path (see wifi_parser's --help
-    and this module's docstring for the 3 cases):
-      (a) not given -> `logs/flight_<timestamp>.sflog.zip`.
-      (b) ends in `.zip` (covers the `.sflog.zip` convention -- Path.suffix
-          reads only the last extension, same rule sflog.FlightLog.save()
-          itself dispatches on) -> that exact path, a zip bundle.
-      (c) an existing directory, or ends in a path separator -> a
-          same-named (`flight_<timestamp>`, no `.sflog.zip` suffix -- that
-          suffix would force zip mode) DIRECTORY bundle written INSIDE it.
-      (d) any other extension (.csv/.jsonl/.bin) -> rejected: the bundle
-          is the only capture format now (derive a CSV/JSONL afterwards
-          with `sf log convert --aligned`/`--jsonl`).
-      (e) no (or an unknown) extension and not an existing directory ->
-          `.sflog.zip` is appended, so `-o flight1` writes
-          `flight1.sflog.zip` (a bare name means "this zip file"; to get a
-          directory bundle end the path with a separator).
-
-    Raises:
-        ValueError: case (d), with a message meant to be shown as-is via
-            `console.error()`.
-
-    `sf log wifi -o` の出力パスを解決する（3ケースの詳細は英語側 /
-    wifi_parser の --help 参照）。case (d) は ValueError を送出し、
-    メッセージはそのまま `console.error()` で表示する想定。
+def _bundle_output_path(output_arg: Optional[str], default: Path) -> Path:
+    """Resolve a user-given output path for a flight-log bundle:
+      (a) not given -> `default`;
+      (b) ends in `.zip` (the `.sflog.zip` convention) -> that path;
+      (c) an existing directory, or a path ending in a separator -> the
+          default-named `.sflog.zip` written INSIDE that directory;
+      (d) `.csv`/`.jsonl`/`.bin` -> ValueError (derived files come from
+          `sf log convert --aligned`/`--jsonl`, never from a capture);
+      (e) a bare name (or any other extension) -> `.sflog.zip` appended,
+          so `-o flight1` writes `flight1.sflog.zip`.
+    利用者が与えた一式の出力パスを解決する: 未指定なら `default`、`.zip`
+    ならそのまま、既存フォルダ（またはパス区切りで終わる）ならその中に既定名の
+    `.sflog.zip`、`.csv`/`.jsonl`/`.bin` は拒否、拡張子なし（または他の拡張子）
+    なら `.sflog.zip` を補う（`-o flight1` -> `flight1.sflog.zip`）。
     """
-    default_stem = f"flight_{datetime.now().strftime('%Y%m%dT%H%M%S')}"
-
     if not output_arg:
-        return log_dir / f"{default_stem}.sflog.zip"
+        return default
 
     path = Path(output_arg)
     if path.suffix.lower() == ".zip":
@@ -1090,19 +1073,24 @@ def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
 
     looks_like_dir = str(output_arg).endswith(("/", "\\")) or path.is_dir()
     if looks_like_dir:
-        return path / default_stem
+        return path / default.name
 
     if path.suffix.lower() in (".csv", ".jsonl", ".bin"):
         raise ValueError(
             f"'{output_arg}': the flight-log bundle (.sflog.zip) is the only "
-            "capture format now -- pass a .sflog.zip path (or a directory), "
-            "then use `sf log convert --aligned` or `--jsonl` for a derived "
-            f"{path.suffix} file."
+            "capture format -- pass a .sflog.zip path, a bare name, or a "
+            "directory, then use `sf log convert --aligned` or `--jsonl` for "
+            f"a derived {path.suffix} file."
         )
 
-    # Bare name (or an unrecognised extension): the user means "this zip
-    # file" -- append the standard suffix rather than silently creating a
-    # directory bundle.
-    # 拡張子なし（または未知の拡張子）: 利用者は「この zip ファイル」を意図して
-    # いる -- 黙ってフォルダ一式を作らず標準の拡張子を補う。
     return path.with_name(path.name + ".sflog.zip")
+
+
+def _resolve_wifi_output(output_arg: Optional[str], log_dir: Path) -> Path:
+    """`sf log wifi -o` output path: `logs/flight_<timestamp>.sflog.zip`
+    by default, otherwise the rules of _bundle_output_path().
+    `sf log wifi -o` の出力パス: 既定は `logs/flight_<日時>.sflog.zip`、
+    指定時は _bundle_output_path() の規則に従う。
+    """
+    default_name = f"flight_{datetime.now().strftime('%Y%m%dT%H%M%S')}.sflog.zip"
+    return _bundle_output_path(output_arg, log_dir / default_name)

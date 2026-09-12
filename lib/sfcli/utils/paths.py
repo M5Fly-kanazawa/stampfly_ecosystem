@@ -155,7 +155,8 @@ class Paths:
         return log_dir
 
     def latest_bundle(self) -> Optional[Path]:
-        """Most recent StampFly flight-log bundle (`*.sflog.zip`) in logs/,
+        """Most recent StampFly flight-log bundle in logs/ (a `.sflog.zip`,
+        any renamed zip, or an extracted directory -- detected by content),
         or None if the directory does not exist or holds no bundle.
 
         Shared by every command that defaults to "the latest log" when no
@@ -174,11 +175,17 @@ class Paths:
         log_dir = self.root() / "logs"
         if not log_dir.exists():
             return None
-        files = list(log_dir.glob("*.sflog.zip"))
-        if not files:
+        # Detect bundles by CONTENT (meta.json inside a zip or a directory),
+        # not by file name, so a bundle renamed to `.sflog` or `.zip`, or an
+        # extracted directory, is found as well.
+        # 一式は名前ではなく中身（zip 内またはフォルダ内の meta.json）で判定する。
+        # `.sflog` や `.zip` に改名したもの、展開済みフォルダも見つかる。
+        import sflog  # local import: keep paths.py importable without pandas
+        candidates = [f for f in log_dir.iterdir() if sflog.is_bundle(f)]
+        if not candidates:
             return None
-        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-        return files[0]
+        candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        return candidates[0]
 
     def config_dir(self) -> Path:
         """Get .sf/ configuration directory"""
