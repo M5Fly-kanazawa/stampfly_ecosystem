@@ -276,7 +276,13 @@ REM   1 = failed (network, checksum, or extraction failure)
 :sf_bootstrap_private_python
 if exist "%SF_HOME%\python\python.exe" (
     set "SF_PBS_EXISTING="
-    for /f "tokens=*" %%v in ('"%SF_HOME%\python\python.exe" -c "import sys; print(sys.version.split()[0])" 2^>nul') do set "SF_PBS_EXISTING=%%v"
+    rem cmd /c strips the first and last quote of a command string that starts with a
+    rem quote and contains more quotes, so '"...python.exe" -c "..."' breaks. Wrap the
+    rem whole command in one extra pair of quotes and use -V (no inner quotes).
+    rem cmd /c は、先頭が " で引用符が複数あるコマンド文字列の先頭と末尾の " を剥がすため、
+    rem '"...python.exe" -c "..."' は壊れる。コマンド全体をもう一組の " で包み、内側に
+    rem 引用符を含まない -V を使う（出力 "Python 3.12.14" の 2 番目のトークン）。
+    for /f "tokens=2" %%v in ('""%SF_HOME%\python\python.exe" -V 2^>nul"') do set "SF_PBS_EXISTING=%%v"
     if "!SF_PBS_EXISTING!"=="3.12.14" (
         echo [OK] Private Python 3.12.14 already installed at %SF_HOME%\python
         set "PYTHON_CMD=%SF_HOME%\python\python.exe"
@@ -355,7 +361,9 @@ move "%SF_PBS_EXTRACT%\python" "%SF_HOME%\python" >nul
 rmdir /s /q "%SF_PBS_EXTRACT%" >nul 2>&1
 
 set "SF_PBS_NEWVER="
-for /f "tokens=*" %%v in ('"%SF_HOME%\python\python.exe" -c "import sys; print(sys.version.split()[0])" 2^>nul') do set "SF_PBS_NEWVER=%%v"
+rem Same quoting rule as the existing-version probe above: outer quotes + -V.
+rem 上の既存版の確認と同じ引用符の扱い: 外側の " で包み、-V を使う。
+for /f "tokens=2" %%v in ('""%SF_HOME%\python\python.exe" -V 2^>nul"') do set "SF_PBS_NEWVER=%%v"
 if not "%SF_PBS_NEWVER%"=="3.12.14" (
     echo [ERROR] Private Python bootstrap produced unexpected version: %SF_PBS_NEWVER%
     exit /b 1
