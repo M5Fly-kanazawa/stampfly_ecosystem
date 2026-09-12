@@ -1,573 +1,1521 @@
-# 独自プログラム開発入門
+# ACROモードのPID制御をゼロから組み立てる
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-## 1. 概要
+## 1. この記事で作るもの・対象読者・前提
 
-本書は、機体（StampFly）とシミュレータで既に飛ばせるようになった人が、次に **自分の制御則・推定器・判断ロジック** を書くための入口ガイドである。前提として、リポジトリ直下の `README.md` の「実際に飛ばしてみよう」まで済んでいること（ファームウェアの書き込みと送信機での飛行を一度経験していること）を想定する。
+### この記事のゴール
 
-対象は `firmware/vehicle`（vehicle 本体。実機・SILS 双方の主力ファームウェア）の **L1 Topic API**（`sf::api::` 名前空間。トピックの最新値を読む関数群と、`IController`/`IEstimator` という差し替え可能なインターフェース）である。HAL（Hardware Abstraction Layer: センサ・アクチュエータのドライバ層、L2）や BSP（Board Support Package: I2C/SPI 等の共有ハードウェア資源を初期化・所有する層、L3）を自分で書く話は対象外。将来の文書で扱う。
+送信機のスティックを倒すと、その方向・その速さで機体が回転する——ACROモード（角速度制御モード）の制御プログラムを、**既存の `PidController`（このプロジェクトに最初から入っているカスケードPID制御器）に一切頼らず**、自分の手で最初の1行から組み立てる。
 
-### 現状（2026-09-08 時点）
+具体的には、次の状態を自分のコードで作る。
 
-`sf app new` の既定は **組み込み型**（`app.yaml` の `type: embedded`）テンプレート `11_app_controller` である。`firmware/apps/<name>/*.cpp` は `SF_APP_DIR` という仕組み経由で vehicle 本体の main コンポーネントに直接コンパイルされ、`sf app sils <name>`（SILS: Software In the Loop Simulation、ファームウェアそのものを PC 上で動かす試験）→ `sf app build <name>`（実機ビルド）→ `sf app flash <name>`（書き込み）が**同一ソース**を SILS と実機の両方で動かす。以前必要だった、新規コンポーネント化・`main/CMakeLists.txt` の `REQUIRES` 追加・`control_task.cpp` への include 追加といった手作業は不要になった。使い方は本書 §4・§5、設計の詳細は [`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md) を参照。
+- ロールスティックを倒すと、その分だけ機体がロール方向に回転し続ける（倒し切ると最大角速度、離すと回転が止まる）
+- ピッチ・ヨーも同様
+- スロットルで推力（浮く強さ）を直接操作する
+- 送信機との通信が切れたら、暴走せずに自動でゆっくり降りる
 
-例題 09（`09_topic_api_hello`）・10（`10_custom_controller`）は、vehicle 全体をビルドせずに API を学ぶ**単独ベンチ**として引き続き `--from` で選べる（`sf app list` に「no (bench)」と表示される）。ベンチ型のプロジェクトで `sf app sils` を実行すると、組み込めない旨を説明した上で終了コード 2 を返す。
+最終的に3軸（ロール・ピッチ・ヨー）すべてにフィードバック制御がかかり、実際に機体を飛ばせる完成形まで、1章ずつ機能を足しながら進む。
 
-## 2. 4 つの層と、この文書が扱う層
+この記事は、将来的に vehicle ファームウェア全体を自分ひとりの手で書けるようになるための、最初の一歩でもある。ACROモードのPID制御はこのファームが持つ制御則の中でもっとも単純なものであり、ここで Pub/Sub・トピック・`IController` という仕組みに一度手を動かして慣れておくと、この先どんな制御則（姿勢制御、あるいは13章で触れるもっと違う考え方の制御則）を自作するときも同じ土台の上で進められる。
 
-vehicle は、学習者がレベルに応じて入口を選べる4つの階層を提供する（`firmware/vehicle/docs/architecture.md` の「学習者の入口（4 階層アクセス）」節）。
+### 対象読者
 
-| 層 | 名前空間 | 典型ユーザー | できること |
-|----|---------|------------|----------|
-| L0: Workshop API | `ws::*` | 初心者 | `setup()`/`loop_400Hz(dt)` と `ws::motor_set_duty()` 等の関数だけでフライト制御そのものを組み立てる |
-| **L1: Topic API（本書が扱う層）** | `sf::api::*` | 推定・制御・ガイダンス学習者 | トピック（後述）を読み書きし、`IController`（制御則インターフェース）/`IEstimator`（状態推定インターフェース）を自分の実装に差し替える |
-| L2: HAL Direct | `stampfly::*Wrapper` | ハードウェア学習者 | センサドライバを直接呼ぶ |
-| L3: BSP Internal | `sf::internal::board` | ファーム実装者 | 起動順序・共有ハードウェア資源の管理そのものを変更する |
+- C++の基本文法（`if`/`for`/構造体/クラス程度）はわかる
+- 「Pub/Sub」「名前空間（namespace）」「組み込み開発」が何なのかはまだよくわからない
+- 制御工学の入門（比例・積分・微分が何をする項か）は聞いたことがある程度で構わない。各概念は本文中で説明する
 
-L0 は「最下層の飛行制御そのものを自分で書く」層で、`ws::gyro_x()` のような関数を直接組み合わせて姿勢制御まで作る。これに対して L1 は「vehicle 本体が既に持っている推定・制御の仕組み（トピック、`IController`、`IEstimator`）を使って、その一部品を差し替える」層である。すでに動いているカスケード PID 制御器やセンサ融合の仕組みをそのまま使い、自分が変えたい一点（例えばヨー軸のトルク配分や、ある観測の使い方）だけを書き換える。
+### 前提
 
-各層は並列に共存する。L1 学習者が L0 の骨格を経由する必要はない。
+この記事は、リポジトリ直下の `README.md` にある「実際に飛ばしてみよう」まで一度済ませていることを前提にする。つまり、標準ファームウェアを機体に書き込み、送信機で一度は飛ばした経験があるということである。まだの場合は先にそちらを終えてから本記事に進んでほしい。
 
-## 3. vehicle 本体の中で自分のコードが動く場所
+この記事が扱うのは `firmware/vehicle`（vehicle本体。実機・SILS〈SILS: Software In the Loop Simulation、ファームウェアそのものをPC上で動かす検証方法〉の両方で使われる主力ファームウェア）の **L1 Topic API**（`sf::api::` 名前空間と、差し替え可能な `IController` というインターフェース〈interface: 「この関数さえ実装すれば中身は自由」という取り決め〉）である。センサドライバやハードウェア初期化そのものを書く層（HAL/BSP）はこの記事の範囲外である。
 
-### Pub-Sub（発行/購読）の考え方
+## 2. Pub/Subって何か、名前空間って何か
 
-vehicle 本体のコンポーネント間通信は、直接関数を呼び合うのではなく **Topic**（データの入れ物）を介した **Pub-Sub**（Publish=発行 / Subscribe=購読）方式で行う。発行側（Publisher）は「このデータが最新です」と `publish()` するだけで、誰が読むかを知らない。購読側（Subscriber）は `latest()` で「今ある最新値」を取得するだけで、誰が発行したかを知らない。センサタスクがトピックに値を書き込み、推定・制御タスクがそれを読んで計算し、また別のトピックに書き込む——あなたが書くコードは、この流れのどこかの部品（推定器・制御器・トピックを読むだけの監視タスク等）になる。
+### 掲示板に例えると
 
-### 主要トピック
+このファームウェアの中で、部品（コンポーネント）同士は関数を直接呼び合わない。代わりに **Topic**（トピック。決まった型のデータを1つだけ保持する箱）を介して、**Pub/Sub**（Publish＝発行、Subscribe＝購読）という方式でやり取りする。
 
-トピックの正本は `firmware/vehicle/docs/topic_reference.md` §3。以下は L1 学習者が主に触れるものの抜粋。
+これは「掲示板」に例えるとわかりやすい。
 
-| トピック名 | データ型 | 発行元 | 購読者 | レート |
-|-----------|---------|-------|-------|-------|
-| `sensor_imu` | `ImuData` | ImuTask | ImuTask 内の推定器 | 400Hz |
-| `estimate_state` | `StateEstimate` | ImuTask | ControlTask, TelemetryTask | 400Hz |
-| `command_setpoint` | `CommandSetpoint` | CommTask（ESP-NOW 受信） | ControlTask | 50Hz |
-| `control_output` | `ControlOutput` | ControlTask | TelemetryTask | 400Hz |
-| `actuator_motor` | `MotorOutput` | ControlTask | モータドライバ | 400Hz |
-| `system_mode` | `SystemMode` | StateTask | ControlTask, NotifyTask | イベント駆動 |
-| `sensor_power` | `PowerData` | PowerTask | TelemetryTask, FailsafeTask | 10Hz |
+- **`publish()`（発行する）** は、掲示板に新しい紙を貼り直す行為。前に貼ってあった紙をめくって捨て、新しい紙を1枚だけ貼る。貼る人は「誰がこれを読みに来るか」を一切知らない。
+- **`latest()`（最新値を見る）** は、通りがかりに掲示板を覗いて「いま貼ってある紙」を写し取る行為。見に行く人は「誰が貼ったか」を知らない。何回覗いても紙は減らない（同じ紙を何度でも読める）。
+- **`read()`（一件取り出す）** という取り方もある。こちらは郵便受けから手紙を1通取り出すイメージで、取り出すと無くなる（次に見た人には見えない）。トピックによって「掲示板方式」と「郵便受け方式」のどちらで使うかが決まっている。
 
-### 差し替えられる部品: `IController` と `IEstimator`
+センサを読むタスクが「センサ値」という掲示板に値を貼り、推定・制御を行うタスクがそれを覗いて計算し、また別の掲示板（例えば「制御出力」）に結果を貼る。このリレーの中のどこかの一部品（センサ値を覗くだけの監視役、あるいは推定・制御そのもの）が、これから自分で書くコードになる。
 
-vehicle 本体は制御則・状態推定をそれぞれインターフェース（実装の中身を問わず「この関数群さえ実装すればよい」という規約）越しに扱う。
+### 名前空間（namespace）は「建物の階」
 
-`IController`（`firmware/vehicle/components/sf_controller/include/controller.hpp`）は12個のメソッドを持つ。中心は次の1つ。
+`sf::api::estimate_latest()` のような書き方に出てくる `sf::api::` が **名前空間（namespace）**——「同じ名前の関数が別の場所でも衝突しないようにする、住所のようなラベル」である。難しく考えず、「`sf` という建物の `api` という階にある関数」くらいの理解でよい。この記事で使う関数は基本的に `sf::api::` 階（学習者向けに公開されたTopic API）に置かれている。
 
-```cpp
-virtual ControlOutput compute(
-    const StateEstimate& state,
-    const CommandSetpoint& setpoint,
-    float dt
-) = 0;
+### この記事での全体像
+
+この記事で書くコードは、**入力側**（スティック・センサの値を読む部分）は今説明したPub/Subそのもの——`sf::api::何か_latest()` を呼んで掲示板を覗くだけである。一方 **出力側**（推力・トルクを機体に伝える部分）は少し違う仕組みを使う。自分で `publish()` を呼ぶのではなく、`IController` という決まった形の「箱」に計算結果を詰めて返す。その箱を実際に掲示板へ貼りに行くのは、この記事のコードではなく、ファームウェア側の `ControlTask` という別の担当者である。なぜそうなっているかは3章で説明する。
+
+## 3. ACROモードの全体像
+
+ACROモードの制御は、次の一本道でできている。
+
+```
+スティック（throttle / roll / pitch / yaw、送信機からの入力）
+        │
+        ▼
+目標角速度 = スティック値（roll/pitch/yaw） × 最大角速度
+目標推力   = throttleスティック値 × 最大推力
+        │
+        ▼
+誤差 = 目標角速度 − 実際の角速度（ジャイロが測った値）
+        │
+        ▼
+PID演算（比例・積分・微分）→ 軸ごとのトルク（回転させる力）
+        │
+        ▼
+ControlOutput { thrust（推力）, torque[3]（ロール・ピッチ・ヨーのトルク） }
+        │            ← ここまでが、この記事で自分の手で書く部分
+        ▼
+sf_actuator が自動でミキシング（4本のモータへのduty配分に変換）
+        │
+        ▼
+      4つのモータ
 ```
 
-`compute()` は400Hzで、IMU（慣性計測装置）に同期して呼ばれる。現在の推定状態とパイロット指令を受け取り、機体座標系での推力・トルクを返す。このほか `reset()`（内部状態の初期化）と `onModeChange()`（飛行モード変更の通知）は必ず実装する。残り 9 個（`onLanding()`、`onTakeoff()`、`onTakeoffComplete()`、`isTakeoffComplete()`、`setGuidanceTarget()`、`isGuidanceActive()`、`startExcitation()`、`fetchSysidResult()`、`reloadParams()`）は自動離着陸・ガイダンス目標・システム同定・パラメータ再読込みへの対応で、何もしない既定実装を持つため、必要なものだけ上書きすればよい。現行の唯一の実装は `PidController`（カスケードPID: 姿勢→レートの2段構成）。
+**ミキシング**（mixing。全体のトルク・推力の指令を、4つあるモータそれぞれの回転数指令に配分する計算）は `sf_actuator` というコンポーネントが自動でやってくれる。モータが何本あって、どの位置に付いていて、どちら向きに回るか——そういったハードウェア寄りの計算は、この記事では一切考えなくてよい。自分が書くのは「機体全体としてどれだけの推力とトルクが欲しいか」までである。
 
-`IEstimator`（`firmware/vehicle/components/sf_estimator/include/estimator.hpp`）は状態推定側の同じ考え方。中心は次の2つ。
+図の `ControlOutput` から下の部分こそが、2章で説明したPub/Subの実例である。自分の `compute()` が返した `ControlOutput` を、`ControlTask` が `control_output` というトピック（掲示板）に `publish()` する。`sf_actuator` はその `control_output` を購読（subscribe）しており、貼り出されるたびにミキシングして4つのモータのduty（PWMの通電比率）に変換する。自分のコード（`IController`）と `sf_actuator` は、互いの存在を知らないまま `control_output` という1枚の掲示板だけでつながっている。
 
-```cpp
-virtual void predict(const ImuData& imu, float dt) = 0;
-virtual StateEstimate getState() const = 0;
-```
+### なぜ自分で `publish()` しないのか
 
-`predict()` はIMUレート（400Hz）でジャイロ・加速度から状態を前方に伝搬する予測ステップ、`getState()` は現在の推定値を返す。他に `updateTof()`/`updateFlow()`/`updateMag()`/`updateBaro()`（各センサの観測更新）、`reset()`、`resetPositionVelocity()` 等がある。現行の実装は `EskfEstimator`（ESKF: Error-State Kalman Filter、15状態）と `ComplementaryEstimator`（相補フィルタ、姿勢のみ）の2つ。
+2章で触れた通り、この記事のコードは値を読むとき（`sf::api::estimate_latest()` 等）は掲示板を直接覗くのに、値を返すとき（`compute()` の戻り値）は自分で掲示板に貼りに行かない。これには理由がある。
 
-### 読み取り専用の Topic API（8関数）
+- **1枚の掲示板に貼る人は1人に決めてある。** `control_output` という掲示板に実際に紙を貼る役目は、ファームウェア側の `ControlTask` 1つだけに決まっている。もし複数の場所から同じ掲示板に貼りに行けてしまうと、「最後にどちらが貼ったか」で結果が変わってしまう競合が起きうる。`IController` を実装する側（＝この記事の読者）は、あくまで「次に貼る紙の中身」を計算する係であり、実際に貼りに行く係ではない——これが `ControlOutput` を戻り値として返すだけの理由である。
+- **貼りに行く前後にも仕事がある。** `ControlTask` は `compute()` を呼んだ結果を掲示板に貼るだけでなく、同じタイミングでログ用の記録（Data Stream）を組み立てたり、システム同定用の結果を回収したりしている。これらの付随作業を毎回自分のコントローラの中に書かずに済むのも、`ControlTask` 側に「貼る」責務を集約しているためである。
+- **Pub/Subの仕組みを知らなくても動かせる。** `compute()` はただの関数呼び出しであり、戻り値をどう扱うかは呼び出し側の自由である。実際、単独ベンチ型の例題（`10_custom_controller` 等）では、Pub/Subの仕組みが一切無い環境で `compute()` を合成信号に対して直接呼ぶだけの検証ができる——これは、コントローラの中身がPub/Subに依存しない「決まった形の箱」だからこそ可能になっている。
 
-`sf::api::`（`firmware/vehicle/components/sf_api/include/sf_api.hpp`）は、L1 学習者向けの単一公開ヘッダで、以下の8関数を提供する。全てトピックの `latest()`（最新値のコピーを返す）を薄くラップしたものである。
+## 4. 開発環境の準備
 
-| 関数 | 戻り値の型 | 内容 |
-|------|-----------|------|
-| `imu_latest()` | `ImuData` | 最新のIMU値 |
-| `estimate_latest()` | `StateEstimate` | 最新の状態推定値（姿勢・位置・速度） |
-| `command_latest()` | `CommandSetpoint` | 最新のパイロット指令（スロットル/ロール/ピッチ/ヨー） |
-| `control_latest()` | `ControlOutput` | 最新の制御出力（推力・トルク） |
-| `motor_latest()` | `MotorOutput` | 最新のモータ duty 値 |
-| `power_latest()` | `PowerData` | 最新の電源値（電圧・電流） |
-| `current_mode()` | `SystemMode` | 現在のシステムモード（ARM状態・フライトモード） |
-| `is_armed()` | `bool` | 現在ARM状態か |
-
-**書き込み系のAPI（アクチュエータ操作、モード要求、ガイダンス目標の外部設定等）はまだ無い。** `sf_api.hpp` のコメントには、これらが将来のマイルストーンに先送りされていると明記されている。現時点でパイロット指令やモードを外から書き換える経路は L1 には用意されていない。
-
-## 4. 今すぐ試せること（組み込み型テンプレート）
-
-既定のテンプレート `11_app_controller`（`type: embedded`）は、vehicle 本体に組み込まれて SILS と実機の両方で動く。
+自分のプロジェクトを作るところから始める。
 
 ```bash
 source setup_env.sh
-sf app new my_ctrl
-```
-
-これで `firmware/apps/my_ctrl` に、既定の複製元 `11_app_controller` のコピーが作られる。編集は `app_controller.cpp` の `adjust()` 1 関数だけでよい。
-
-```bash
-sf app edit my_ctrl
-```
-
-SILS（実機を使わない PC 上の検証）で確認する。既定のシナリオは `simulator/sils/scenarios/alt_flight.scn`。
-
-```bash
-sf app sils my_ctrl
-```
-
-別のシナリオを試す場合は第 2 引数に渡す。
-
-```bash
-sf app sils my_ctrl simulator/sils/scenarios/acro_flight.scn
-```
-
-実機向けにビルド・書き込みする。
-
-```bash
-sf app build my_ctrl
 ```
 
 ```bash
-sf app flash my_ctrl -m
+sf app new my_acro
 ```
 
-`app_controller.cpp` の `adjust()` の既定は恒等（`kPitchTorqueScale = 1.0f`）で、`PidController`（カスケードPID: 姿勢→レートの2段構成）の出力をそのまま通す。
+`firmware/apps/my_acro/` に、次のファイルが作られる。
+
+| ファイル | 役割 |
+|---------|------|
+| `app.yaml` | プロジェクトの種別（`type: embedded`＝vehicle本体に組み込まれる形式）を記す設定 |
+| `app.cpp` | `sf::app::controller()` 等、この記事の主役になるクラスをファームウェアに登録する“つなぎ目” |
+| `app_controller.hpp` / `app_controller.cpp` | 自分の `IController` 実装を書くファイル。**この記事でずっと編集するのはここ** |
+| `README.md` | 複製元テンプレートの説明（そのままでよい） |
+
+`type: embedded`（組み込み型）というのは、このプロジェクトのソースがvehicle本体のビルドに直接コンパイルされ、実機でもSILSでも同じソースがそのまま動く、という意味である。新しいコンポーネントを作ったり、ビルド設定に何かを追記したりする作業は一切不要——`sf app` コマンドが面倒を見てくれる。
+
+`app_controller.cpp` の中に `compute()` という関数があり、これが **400Hz（1秒間に400回、2.5ミリ秒に1回）** で呼ばれる。この記事のほぼすべての作業は、この `compute()` の中身を書き換えることである。呼び出す側（`ControlTask`）は、こちらがARM（モータ始動許可）されているかどうかに関わらず、機体が動いている間ずっとこの関数を呼び続ける——モータへの安全策は別の場所（ARM状態の管理）が担当するので、`compute()` 自体は常に呼ばれる前提で書く。
+
+2.5ミリ秒という持ち時間は短い。`compute()` の中では次のことを守る。
+
+- `new`/`malloc` のような**動的メモリ確保**（実行中にその都度メモリを確保する処理）をしない——確保にかかる時間が読めず、周期を超過する原因になる
+- `printf` のような重いログ出力をそのまま毎回呼ばない——5章で間引き方を説明する
+- 応答を待って止まる**ブロッキング呼び出し**をしない
+
+この記事のコード例はすべてこれらを守っている（固定サイズの構造体と `float` の四則演算だけで完結し、ヒープ確保は一切登場しない）。
+
+以降の章では説明のたびに一から `app_controller.hpp`/`.cpp` を貼らず、直前の章との**差分**を示す。実際に手を動かす際は `sf app edit my_acro` などで開いて書き換えてほしい。
+
+## 5. まずは角速度を覗いてみるだけのプログラム
+
+### なぜこの一歩が必要か
+
+いきなりモータを回す制御を書く前に、まず「センサの値が自分のコードから見えている」ことを確認したい。ここではモータへの出力は一切せず（`ControlOutput` はすべてゼロを返す）、ジャイロが測った角速度をログに出すだけのプログラムを作る。
+
+### 実装
+
+2章で紹介した `sf::api::estimate_latest()` は、状態推定（センサの値を組み合わせて推定した「今の機体の状態」）の最新値を1つ返す関数——「掲示板を覗く」関数である。戻り値の `StateEstimate` 構造体の `angular_rate[3]` フィールドが、機体座標系（FRD: X軸=前方かつロール軸、Y軸=右方かつピッチ軸、Z軸=下方かつヨー軸）での角速度（単位 rad/s）である。添字は `[0]=ロール` `[1]=ピッチ` `[2]=ヨー` の順に格納されている。
+
+ただし `compute()` の中では、この関数を自分で呼ぶ必要はない。`compute()` の第1引数 `state` そのものが `sf::api::estimate_latest()` と全く同じ値だからである——`ControlTask` が毎周期あなたの代わりに「センサ値」の掲示板を覗き（`estimate_state.latest()`）、その結果をそのまま `compute()` の引数として手渡してくれている。だから `compute()` の中では `state.angular_rate` を直接使えばよい。`sf::api::estimate_latest()` が活躍するのは `compute()` の外——`IController`/`IEstimator` を介さず、Topicの値を自分で覗きに行く追加タスクを書くような場面である（この記事では扱わない）。
 
 ```cpp
-sf::ControlOutput AppController::adjust(
-    sf::ControlOutput output,
+// app_controller.hpp
+#pragma once
+#include "controller.hpp"
+
+namespace sf::app {
+
+class AppController : public sf::IController {
+public:
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+
+private:
+    uint32_t cycle_count_ = 0;   // compute() の呼び出し回数 / call counter
+};
+
+}  // namespace sf::app
+```
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+#include "esp_log.h"
+
+namespace sf::app {
+
+namespace {
+constexpr const char* kLogTag = "MyAcro";
+// compute() is called at 400 Hz; logging every call would overrun the
+// control period (coding_and_education.md §7). Divide down to ~1 Hz.
+// compute()は400Hzで呼ばれる。毎回ログを出すと制御周期を超過するため
+// （coding_and_education.md §7）、約1Hzまで間引く。
+constexpr uint32_t kLogEveryNCycles = 400;
+}  // namespace
+
+sf::ControlOutput AppController::compute(
     const sf::StateEstimate& state,
-    const sf::CommandSetpoint& setpoint)
+    const sf::CommandSetpoint& setpoint,
+    float dt)
 {
-    constexpr float kPitchTorqueScale = 1.0f;
-    output.torque[1] *= kPitchTorqueScale;
+    (void)setpoint;
+    (void)dt;
+
+    ++cycle_count_;
+    if (cycle_count_ % kLogEveryNCycles == 0) {
+        // angular_rate[3] = roll, pitch, yaw [rad/s], body frame (FRD)
+        // angular_rate[3] = ロール・ピッチ・ヨー [rad/s]、機体座標系(FRD)
+        ESP_LOGI(kLogTag, "rate roll=%.3f pitch=%.3f yaw=%.3f",
+                 state.angular_rate[0], state.angular_rate[1], state.angular_rate[2]);
+    }
+
+    // Not yet touching thrust/torque — a zero-initialized output keeps the
+    // motors off no matter what the sticks say.
+    // まだ推力・トルクには触れない——ゼロ初期化した出力を返せば、スティックの
+    // 値に関わらずモータは回らない。
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+    return output;
+}
+
+void AppController::reset()
+{
+    cycle_count_ = 0;
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    (void)new_mode;   // このコントローラはまだ何もしない / not used yet
+}
+
+}  // namespace sf::app
+```
+
+`compute()`・`reset()`・`onModeChange()` の3つは `IController` の中で「純粋仮想関数」（pure virtual function。実装しないとコンパイルが通らない、必ず埋めるべき欄）に指定されている。中身が空でも構わないので、まずは全部書いてしまう。
+
+`ESP_LOGI` を毎回（400Hzで）呼ぶと、ログ出力の待ち時間だけで2.5ミリ秒の持ち時間を圧迫してしまう。`cycle_count_` で間引いて約1Hzに落としているのはそのためである——このカウンタによる間引きは、以降の章でも作法として引き継ぐ。
+
+### 動かしてみる
+
+SILS（実機を使わずPC上で飛行を模擬する検証環境）で動かし、ログに角速度が流れてくることを確認する。
+
+```bash
+sf app sils my_acro
+```
+
+`sf log analyze` や、モニタ画面に流れるログから、機体をSILS上で傾けたときに角速度の値が変化する様子が見えるはずである。
+
+## 6. スティック入力を目標角速度に変換する
+
+### なぜこの一歩が必要か
+
+制御とは「目標」と「現在値」の差（誤差）を無くしにいく仕組みである。前章で「現在値」（測定された角速度）は手に入った。次は「目標」——スティックがどれだけ倒されているかから、目標角速度を作る。
+
+### 実装
+
+パイロットの指令（スティック値）の最新値は `sf::api::command_latest()` で取れる——のだが、これも前章の角速度と同じ理由で `compute()` の中では呼ぶ必要がない。`compute()` の第2引数 `setpoint`（`CommandSetpoint` 構造体）が、`ControlTask` が代わりに覗いてきた `sf::api::command_latest()` と同じ値そのものである。`roll`/`pitch`/`yaw` は `-1..1` の範囲（倒し切った状態が ±1、中央が0）、`throttle` は `0..1` の範囲（中央が0＝推力ゼロ、倒し切ると1＝最大推力）である。
+
+ACROモードでは、スティックの倒し量がそのまま「目標角速度」になる。倒し切ったときに機体がどれだけ速く回るかを決める定数が「最大角速度」である。ロール・ピッチは 1.0 rad/s、ヨーは 5.0 rad/s を目安値として使う（実機で飛行実績のある値）。
+
+```cpp
+// app_controller.cpp（compute()の中身を置き換え）
+namespace {
+constexpr const char* kLogTag = "MyAcro";
+constexpr uint32_t kLogEveryNCycles = 400;
+
+// Named constants (no magic numbers): how fast the craft spins at full
+// stick deflection. Flight-proven values for this frame.
+// 名前付き定数（マジックナンバー禁止）: スティックを倒し切ったときの回転速度。
+// この機体で飛行実績のある値。
+constexpr float kMaxRollPitchRateRadS = 1.0f;   // [rad/s]
+constexpr float kMaxYawRateRadS       = 5.0f;   // [rad/s]
+}  // namespace
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    (void)dt;
+
+    // Stick -> target angular rate. Still not fed into the output below.
+    // スティック → 目標角速度。まだ下の出力には使わない。
+    const float rate_sp_roll  = setpoint.roll  * kMaxRollPitchRateRadS;
+    const float rate_sp_pitch = setpoint.pitch * kMaxRollPitchRateRadS;
+    const float rate_sp_yaw   = setpoint.yaw   * kMaxYawRateRadS;
+
+    ++cycle_count_;
+    if (cycle_count_ % kLogEveryNCycles == 0) {
+        ESP_LOGI(kLogTag,
+                 "target roll=%.3f pitch=%.3f yaw=%.3f | measured roll=%.3f pitch=%.3f yaw=%.3f",
+                 rate_sp_roll, rate_sp_pitch, rate_sp_yaw,
+                 state.angular_rate[0], state.angular_rate[1], state.angular_rate[2]);
+    }
+
+    sf::ControlOutput output{};   // still zero output — no motor spin yet
+    output.timestamp = state.timestamp;
     return output;
 }
 ```
 
-`kPitchTorqueScale` を変える、あるいはこの行を `state`/`setpoint` から計算した独自の制御則（例: 自作のピッチレート P 項）に置き換えて再ビルドすると、挙動が変わる。`ControlOutput::torque` は `float[3]`（R, P, Y の順、`data_types.hpp` 参照）。詳細は [`examples/11_app_controller/README.md`](../../firmware/vehicle/examples/11_app_controller/README.md)。
+SILSまたは送信機のスティックを動かし、ログの「target」列が動くことを確認する。「measured」列（実際の角速度）はまだこの目標を追いかけない——追いかけさせるのが次章の仕事である。
 
-推定・制御には触れず、Topic を読むだけの追加タスクを試したい場合は `12_app_task_hello` を使う。
+## 7. 比例制御(P)だけで動かす
 
-```bash
-sf app new my_hello --from 12_app_task_hello
+### なぜこの一歩が必要か
+
+「目標」と「現在値」がそろったので、いよいよ両者の差（誤差）を無くす方向にモータへ指令を出す。最も単純な方法が **比例制御（P制御）**——誤差の大きさにそのまま比例した力を返す方法である。ここで初めて `compute()` が中身のある `ControlOutput` を返す。
+
+### 安全上の注意（必ず読むこと）
+
+ここから先は実際にモータへ非ゼロの指令が出る。以下を必ず守ること。
+
+- **プロペラを必ず外すか、機体をしっかり固定してから実機で試すこと。** まだピッチ・ヨー軸は制御されておらず（後の章で追加する）、ロール軸も調整前の値であるため、機体が暴れる可能性がある。
+- 確認の順序は必ず **SILS → 実機ベンチ（プロペラを外した状態、または固定した状態）**。いきなり自由飛行させない。
+- `docs/guides/safety.md` の緊急停止手段（`sf emergency` または送信機の緊急停止）をいつでも実行できる態勢で臨む。
+
+### 実装（ロール軸のみ）
+
+まずロール軸1つだけに絞ってPID制御を組み立てる。ピッチ・ヨーはまだ0を返しておく（つまりまだ開ループ——後の章で閉じる）。
+
+誤差の定義は「目標角速度 − 測定角速度」。これに比例ゲイン `kp` を掛けたものをそのままトルク指令にする。
+
+```cpp
+namespace {
+// ... (前章の定数はそのまま) ...
+
+// Roll rate loop, P-only stage. A modest first guess — not yet tuned.
+// ロールレートループ、P制御のみの段階。まだ追い込んでいない控えめな初期値。
+constexpr float kRollKp = 3.0e-4f;   // [Nm / (rad/s)]
+
+// Physical torque limit of this frame's roll/pitch axis — a safety bound,
+// not a tuning knob (see sf_controller_pid's max_roll_pitch_torque_).
+// この機体のロール/ピッチ軸トルクの物理上限——チューニング値でなく安全上限
+// （sf_controller_pidのmax_roll_pitch_torque_と同じ値）。
+constexpr float kMaxRollPitchTorqueNm = 5.2e-3f;   // [Nm]
+constexpr float kMaxThrustN           = 0.672f;    // [N] 4 motors combined
+}  // namespace
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    (void)dt;
+
+    const float rate_sp_roll = setpoint.roll * kMaxRollPitchRateRadS;
+    const float error_roll   = rate_sp_roll - state.angular_rate[0];
+
+    float torque_roll = kRollKp * error_roll;
+    if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+    if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
+
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+    output.torque[0] = torque_roll;   // roll
+    output.torque[1] = 0.0f;          // pitch — still open-loop, closed in §10
+    output.torque[2] = 0.0f;          // yaw   — still open-loop, closed in §10
+    output.thrust     = setpoint.throttle * kMaxThrustN;
+    return output;
+}
 ```
 
-```bash
-sf app sils my_hello
-```
+`kMaxRollPitchTorqueNm`（5.2e-3 Nm）は「これ以上トルクを指令しても現実的でない」というこの機体の物理的な上限であり、チューニングパラメータではない——安全のためのクランプ（出力の頭打ち）として最初から入れておく。
 
-`sf::api::estimate_latest()` と `sf::api::is_armed()` を1秒ごとに読み、姿勢とARM状態をログに出す追加タスクを1つ起動する（コントローラ・推定器は vehicle 標準のまま）。詳細は [`examples/12_app_task_hello/README.md`](../../firmware/vehicle/examples/12_app_task_hello/README.md)。
-
-### 補足: 単独ベンチ（vehicle 全体をビルドしない）
-
-vehicle 全体をビルドせず、`sf::api::` の読み取りや `IController` の挙動だけを手早く確認したい場合は、ベンチ型テンプレート（09/10）も引き続き使える。
+### SILS → 実機ベンチの順に確認する
 
 ```bash
-sf app new my_bench --from 10_custom_controller
+sf app sils my_acro
 ```
+
+問題なければ、プロペラを外した実機（または固定した実機）で確認する。
 
 ```bash
-sf app edit my_bench
+sf app build my_acro
+sf app flash my_acro -m
 ```
 
-```bash
-sf app build my_bench
+ロールスティックを倒すと、ロールのトルク出力（`sf log wifi` 等で確認できる）がスティックに応じて動くはずである。ただし、目標角速度ぴったりまでは到達せず、わずかな **定常偏差**（steady-state error。十分時間が経っても残り続ける誤差）が残ることに気づくはずである。これは、モータの回転反力や配線・個体差による小さな外乱が常に存在し、P制御だけではその外乱をちょうど打ち消すところで釣り合ってしまうためである（外乱トルクを `d`、比例ゲインを `kp` とすると、定常状態では `kp × 誤差 ≈ d` となる関係で釣り合う——`kp` を大きくすれば誤差は小さくなるが、上げすぎると振動する)。この定常偏差を消すのが、次章の積分項の役目である。
+
+## 8. 積分項(I)を足す
+
+### なぜこの一歩が必要か
+
+P制御は「今の誤差」にしか反応しない。誤差が小さくても残り続ける限り、時間とともにじわじわ効いていく項が欲しい——それが **積分制御（I制御）**である。誤差を時間で積み上げていき、その積み上げ値に比例した力を追加で返す。
+
+積分項が想定通りに効いているかを実機で確認する際も、7章の安全上の注意（プロペラを外すか機体を固定する、SILS→実機ベンチの順で確認する）はそのまま引き続き守ること。
+
+### 実装
+
+積分の強さは「積分時間 `Ti`」という時定数で表す（`Ti` が短いほど積分が素早く効く）。誤差を毎周期 `(kp/Ti) × 誤差 × dt` ずつ足し込んでいく。
+
+```cpp
+namespace {
+// ...
+constexpr float kRollTi = 0.5f;   // [s] integral time — smaller = faster catch-up
+}  // namespace
 ```
 
-```bash
-sf app flash my_bench -m
+```cpp
+// app_controller.hpp に追加
+private:
+    float integral_roll_ = 0.0f;   // roll axis integral accumulator
 ```
 
-`10_custom_controller` は `IController` を実装した薄いラッパークラス `LearnerController` を、**合成信号（正弦波）に対して `compute()` を呼ぶだけ**で動かすベンチである。実際のセンサにもモータにも一切触れず、実機を飛ばさない。ベンチ型は `sf app sils` が使えない（`app.yaml` の `sils: false`）。トピックの読み取りだけを学びたい場合は `--from 09_topic_api_hello` から作ると良い。
+```cpp
+// compute() 内、P項の計算に続けて
+integral_roll_ += (kRollKp / kRollTi) * error_roll * dt;
+// Clamp the integral itself to the output limit — a simple anti-windup.
+// 積分値そのものを出力上限でクランプする——素朴なアンチワインドアップ。
+if (integral_roll_ >  kMaxRollPitchTorqueNm) integral_roll_ =  kMaxRollPitchTorqueNm;
+if (integral_roll_ < -kMaxRollPitchTorqueNm) integral_roll_ = -kMaxRollPitchTorqueNm;
 
-```bash
-sf app new my_hello_bench --from 09_topic_api_hello
+float torque_roll = kRollKp * error_roll + integral_roll_;
+if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
 ```
 
-こちらは実際のBMI270（IMUセンサ）をSPIで読み、相補フィルタで `estimate_state` トピックに publish するので、`sf::api::estimate_latest()` が本物のセンサ値を返す様子を確認できる（ただし起動校正・フェイルセーフ・離着陸ロジックは無く、これも飛行はしない）。
+`reset()` では積分値も忘れずにゼロへ戻す。
 
-## 5. 自作コントローラを SILS で確認して実機で飛ばす
-
-§4 で作った組み込み型プロジェクト（`11_app_controller` 由来）を実際の飛行制御パイプラインで動かす手順。新規コンポーネント化や `REQUIRES` の追加といった手作業は不要 — `sf app` コマンドが vehicle 本体への組み込みを行う。
-
-### 5.1 SILS で必ず先に確認する
-
-実機に書き込む前に、SILSで確認する。この順番を必ず守る。
-
-```bash
-sf app sils my_ctrl
+```cpp
+void AppController::reset()
+{
+    cycle_count_ = 0;
+    integral_roll_ = 0.0f;
+}
 ```
 
-終了コード0（PASS）であることを確認する。既定のシナリオ `alt_flight.scn`（高度維持モードでの離陸→ホバー→着陸）に加え、`acro_flight.scn`（ACRO モードでの姿勢制御）も確認するとよい。
+積分値をリセットし忘れると、前回の飛行で溜まった値が次回のARM直後にいきなり出力され、機体が予期せず傾く。`reset()` はARM時に必ず呼ばれるので、積分器を持つ変数は必ずここで初期化する。
 
-```bash
-sf app sils my_ctrl simulator/sils/scenarios/acro_flight.scn
+### ワインドアップという落とし穴
+
+素朴に積分を足し続けるだけだと、出力がすでに上限（クランプ）で頭打ちになっている間も積分値だけはどんどん大きくなり続けてしまう——これを**ワインドアップ**（積分の「巻き上がり」）と呼ぶ。誤差の符号が反転しても、巻き上がった積分値がゆっくりとしか戻らないため、出力が反対側に大きく振れて**オーバーシュート**（行き過ぎ）する。
+
+上のコードでは「積分値そのものを出力上限にクランプする」という素朴な方法で対策している。これは完全な対策ではない（出力が上限に張り付いている間も、積分値の上限までは巻き上がってしまう）が、まず動かして効果を体感するには十分である。
+
+**もっと踏み込みたい人へ**: このプロジェクトの実機用コントローラ（`firmware/vehicle/components/sf_controller_pid/include/pid.hpp`）は「条件付き積分」という、出力が飽和方向に押されている間だけ積分の更新を止める、より正確な方式を使っている。素朴な方法との違いを読み比べてみるとよい。
+
+## 9. 微分項(D)を足す
+
+### なぜこの一歩が必要か
+
+PI制御（比例＋積分）は定常偏差を消せるが、目標値が急に変わった瞬間の「行き過ぎ」を抑える働きが弱い。目標に向かって近づく速度そのものにブレーキをかける項——**微分制御（D制御）**を足す。
+
+ここでも実機確認はプロペラを外すか固定した状態、かつSILSで先に確認してから、という7章の注意事項を守る。微分項はセンサのノイズを増幅しやすく、ゲインの選び方によっては高周波の振動が急に出ることがある。
+
+### 微分キックという落とし穴
+
+素直に「誤差の微分」を使うと、目標値（スティック値）が階段状に変化するたびに、誤差も一瞬で大きく変化し、微分が跳ね上がってしまう——これを**微分キック**と呼ぶ。ACROのレート目標はスティックの12bit値からそのまま作られるため、目標値は常に細かく階段状に変化しており、誤差の微分をそのまま使うと常にノイズだらけの指令になってしまう。
+
+対策は単純で、**「誤差」ではなく「測定値」を微分する**（D-on-Measurement）。目標値がどれだけ変化したかではなく、機体の回転が実際にどれだけの速さで変化しているかだけを見る。目標値のステップはこの経路を素通りしないので、微分キックが起きない。
+
+### 実装
+
+```cpp
+namespace {
+// ...
+constexpr float kRollTd = 0.001f;   // [s] derivative time
+}  // namespace
 ```
 
-合否基準（`.expect` ファイル）を満たさない場合は、実機に進む前に `adjust()`（またはコントローラの実装）を見直す。
-
-### 5.2 実機ビルド・書き込み
-
-SILSで合否判定がPASSしたら、実機用にビルドし直して書き込む。
-
-```bash
-sf app build my_ctrl
+```cpp
+// app_controller.hpp に追加
+private:
+    float prev_measured_roll_ = 0.0f;
+    bool  roll_first_sample_  = true;   // primes the derivative after reset()
 ```
 
-```bash
-sf app flash my_ctrl -m
+```cpp
+// compute() 内
+float d_term_roll = 0.0f;
+if (!roll_first_sample_) {
+    const float measured_rate_of_change = (state.angular_rate[0] - prev_measured_roll_) / dt;
+    d_term_roll = -kRollKp * kRollTd * measured_rate_of_change;
+}
+prev_measured_roll_ = state.angular_rate[0];
+roll_first_sample_  = false;
+
+float torque_roll = kRollKp * error_roll + integral_roll_ + d_term_roll;
+if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
 ```
 
-### 5.3 ログで確認する
+`reset()` では `prev_measured_roll_` と `roll_first_sample_` も初期化する。`roll_first_sample_` のガードが無いと、リセット直後は「前回の測定値」が古い（あるいは無意味な初期値の）ままなので、リセット直後の1回だけ不自然な微分キックが出てしまう。
 
-飛行後、WiFi経由でテレメトリを取得し、解析する。
+これでP・I・Dの3項がそろった。**もっと踏み込みたい人へ**: 微分項は測定ノイズ（ジャイロの細かい揺らぎ）をそのまま増幅してしまう弱点がある。`pid.hpp` の実装は微分にローパスフィルタ（`eta` という係数で高周波を削る「不完全微分」）を追加しており、実機のノイズ環境ではこちらの方が滑らかに効く。
 
-```bash
-sf log wifi -d 30
+## 10. 3軸そろえて本物のACROコントローラにする
+
+### なぜこの一歩が必要か
+
+ここまではロール軸だけで練習してきた。ピッチ・ヨーも仕組みは全く同じであり、3軸分のPID状態をコピー&ペーストで持つのではなく、**「1軸分のPID状態」を1つの部品（構造体）にまとめ、3つ作る**方が読みやすく、間違いにくい。あわせて、`reset()`/`onModeChange()` をきちんと実装し、実際に飛行検証されたゲイン値を入れて、本物のACROコントローラに仕上げる。
+
+### 1軸分のPID状態をまとめる
+
+```cpp
+// app_controller.hpp
+#pragma once
+#include "controller.hpp"
+
+namespace sf::app {
+
+/// One axis' rate-loop PID state (P + simple clamped I + measurement D).
+/// 1軸分のレートループPID状態（P + 素朴なクランプ付きI + 測定値D）。
+struct RateAxisPid {
+    float kp = 0.0f;
+    float ti = 0.0f;
+    float td = 0.0f;
+    float output_limit = 0.0f;
+
+    float integral = 0.0f;
+    float prev_measurement = 0.0f;
+    bool first_sample = true;
+
+    float compute(float setpoint, float measurement, float dt);
+    void reset();
+};
+
+class AppController : public sf::IController {
+public:
+    AppController();
+
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+    void onLanding() override;
+
+private:
+    RateAxisPid roll_pid_;
+    RateAxisPid pitch_pid_;
+    RateAxisPid yaw_pid_;
+
+    bool  landing_active_       = false;
+    float landing_elapsed_s_    = 0.0f;
+    float landing_thrust_start_ = 0.0f;
+    float last_thrust_          = 0.0f;
+};
+
+}  // namespace sf::app
 ```
 
-```bash
-sf log analyze
+`RateAxisPid::compute()` の中身は、7〜9章で組み立てたロール軸のP・I・D計算をそのまま軸に依存しない形にしたものである。
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+
+namespace sf::app {
+
+namespace {
+// Named constants — every value is either a physical limit of this frame
+// (thrust/torque caps) or a flight-proven ACRO rate-loop gain.
+// 名前付き定数——推力・トルクの上限はこの機体の物理限界、それ以外は
+// 飛行実績のあるACROレートループゲイン。
+constexpr float kMaxRollPitchRateRadS = 1.0f;
+constexpr float kMaxYawRateRadS       = 5.0f;
+constexpr float kMaxThrustN           = 0.672f;
+constexpr float kMaxRollPitchTorqueNm = 5.2e-3f;
+constexpr float kMaxYawTorqueNm       = 1.226e-3f;
+
+constexpr float kRollKp = 1.0e-3f,       kRollTi = 0.7f,  kRollTd = 0.002f;
+constexpr float kPitchKp = 1.426432e-3f, kPitchTi = 0.7f, kPitchTd = 0.025f;
+constexpr float kYawKp = 8.029796e-4f,   kYawTi = 0.8f,   kYawTd = 0.01f;
+
+constexpr float kLandingDescentS = 3.0f;   // §11 で使う降下時間
+}  // namespace
+
+float RateAxisPid::compute(float setpoint, float measurement, float dt)
+{
+    const float error = setpoint - measurement;
+
+    const float p_term = kp * error;
+
+    if (ti > 0.0f) {
+        integral += (kp / ti) * error * dt;
+        if (integral >  output_limit) integral =  output_limit;
+        if (integral < -output_limit) integral = -output_limit;
+    }
+
+    float d_term = 0.0f;
+    if (td > 0.0f && !first_sample) {
+        const float measurement_rate = (measurement - prev_measurement) / dt;
+        d_term = -kp * td * measurement_rate;
+    }
+    prev_measurement = measurement;
+    first_sample = false;
+
+    float output = p_term + integral + d_term;
+    if (output >  output_limit) output =  output_limit;
+    if (output < -output_limit) output = -output_limit;
+    return output;
+}
+
+void RateAxisPid::reset()
+{
+    integral = 0.0f;
+    prev_measurement = 0.0f;
+    first_sample = true;
+}
+
+AppController::AppController()
+    : roll_pid_{kRollKp,  kRollTi,  kRollTd,  kMaxRollPitchTorqueNm},
+      pitch_pid_{kPitchKp, kPitchTi, kPitchTd, kMaxRollPitchTorqueNm},
+      yaw_pid_{kYawKp,    kYawTi,   kYawTd,   kMaxYawTorqueNm}
+{
+}
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+
+    float rate_sp_roll  = setpoint.roll  * kMaxRollPitchRateRadS;
+    float rate_sp_pitch = setpoint.pitch * kMaxRollPitchRateRadS;
+    float rate_sp_yaw   = setpoint.yaw   * kMaxYawRateRadS;
+    float thrust        = setpoint.throttle * kMaxThrustN;
+
+    if (landing_active_) {
+        // See §11 — comm-loss / battery-emergency descent.
+        rate_sp_roll = rate_sp_pitch = rate_sp_yaw = 0.0f;
+        landing_elapsed_s_ += dt;
+        float ramp = 1.0f - (landing_elapsed_s_ / kLandingDescentS);
+        if (ramp < 0.0f) ramp = 0.0f;
+        thrust = landing_thrust_start_ * ramp;
+    }
+
+    output.torque[0] = roll_pid_.compute(rate_sp_roll,  state.angular_rate[0], dt);
+    output.torque[1] = pitch_pid_.compute(rate_sp_pitch, state.angular_rate[1], dt);
+    output.torque[2] = yaw_pid_.compute(rate_sp_yaw,    state.angular_rate[2], dt);
+    output.thrust = thrust;
+
+    // Export the rate targets for later analysis (sf log analyze/viz).
+    // ACRO has no angle (attitude) loop, so angle_ref stays at 0.
+    // 解析用にレート目標を出力（sf log analyze/viz）。ACROには角度ループが
+    // ないので angle_ref は0のまま。
+    output.rate_ref[0] = rate_sp_roll;
+    output.rate_ref[1] = rate_sp_pitch;
+    output.rate_ref[2] = rate_sp_yaw;
+    output.angle_ref[0] = 0.0f;
+    output.angle_ref[1] = 0.0f;
+
+    last_thrust_ = thrust;
+    return output;
+}
+
+void AppController::reset()
+{
+    roll_pid_.reset();
+    pitch_pid_.reset();
+    yaw_pid_.reset();
+    landing_active_ = false;
+    landing_elapsed_s_ = 0.0f;
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    // This tutorial controller only implements ACRO. A controller covering
+    // more modes would reconfigure its cascade here (see PidController).
+    // このコントローラはACRO専用。複数モードに対応する制御器は、ここで
+    // カスケード構成を再構成する（本物のPidController参照）。
+    (void)new_mode;
+}
+
+}  // namespace sf::app
 ```
 
-`sf log analyze` はジャイロ統計・入力-応答相関・振動周波数解析・PIDチューニングの推奨事項を表示する。グラフで確認したい場合は `sf log viz` を使う。
+`onLanding()` の実装は次章でまとめて説明する。
 
-### 5.4 安全上の注意
+### ゲイン値について
 
-`docs/guides/safety.md` に記載の飛行前チェックリスト（プロペラガードの損傷確認、飛行エリア2m×2m以上の確保、バッテリー30%以上、緊急停止方法の事前確認）に必ず従う。自作コントローラの初回飛行は、想定外の挙動が起きやすい。安定して飛ぶことを確認できるまでは、緊急停止（`sf emergency` またはPython SDKの `drone.emergency()`）をすぐ実行できる態勢で臨む。
+| 軸 | kp | ti [s] | td [s] | 出力上限 |
+|----|----|--------|--------|---------|
+| ロール | 1.0e-3 | 0.7 | 0.002 | ±5.2e-3 Nm |
+| ピッチ | 1.426432e-3 | 0.7 | 0.025 | ±5.2e-3 Nm |
+| ヨー | 8.029796e-4 | 0.8 | 0.01 | ±1.226e-3 Nm |
 
-## 6. これからの形（実装済み／残るもの）
+これらは、この機体（StampFly）で実際に飛行検証済みの目安値である。ただし、この記事のPID実装（積分の素朴なクランプ、微分にフィルタなし）は、本物の `PidController`（Tustin法による双一次変換・条件付き積分アンチワインドアップ）とは離散化の方式が異なるため、挙動が完全に一致するわけではない。400Hzという十分に速い制御周期のもとでは実用上の差は小さいが、シビアに詰めたい場合は `pid.hpp` の実装を参考にしてほしい。
 
-`sf app` を L1 の入口にする計画（[`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md)）は Phase 0〜3 まで実装済み（2026-09-08）。要旨は次の通り。
+3軸すべてが閉じたことで、このコントローラは本当に自由飛行できるだけの力を持つ。実機で試す際は、7章の安全上の注意（プロペラを外すか機体をしっかり固定する、SILS→実機ベンチの順で確認する、緊急停止をいつでも実行できる態勢にする）を、これまで以上に徹底すること。実際に自由飛行させるのは、次の11章・12章で安全機構と飛行前チェックリストを確認してからにする。
 
-| 項目 | 内容 |
-|------|------|
-| アプリフック | vehicle 本体に `sf::app::controller()`、`sf::app::estimator()`、`sf::app::start()` の3関数を定義済み（`firmware/vehicle/components/sf_app_hooks/include/app_hooks.hpp`）。`control_task.cpp` と `imu_task.cpp` はこのフックを呼ぶ |
-| 取り込み方式 | `firmware/apps/<name>/*.cpp` を vehicle の main コンポーネントに直接コンパイルする。実機ビルド（ESP-IDF、`firmware/vehicle/main/CMakeLists.txt`）と SILS ビルド（`emu_vehicle`、`simulator/sils/CMakeLists.txt`）の両方が同じ変数 `SF_APP_DIR` でそのディレクトリを取り込む |
-| テンプレート | `11_app_controller`（`PidController` に委譲しつつ 1 軸だけ自分の式に置き換える `IController`）と `12_app_task_hello`（`estimate_latest()` を読んで記録するタスク）。`sf app new` の既定の複製元は 11。09 / 10 はベンチとして残り、`sf app list` に「SILS 不可（no (bench)）」と表示される |
-| L0 との関係 | workshop 骨格（L0）は置き換えない。両者は並列に共存する別の入口 |
+## 11. 安全機構と `onLanding()`
 
-実際の使い方は本書 §4・§5 の通り。**残っているのは Phase 4（トピックへの書き込み — ガイダンス目標の設定やモード要求を L1 から行える API）だけで、まだ未着手・別途設計**である。
+### なぜこの一歩が必要か
 
-## 7. 書き方の指針
+送信機との通信が途切れたらどうなるか。ファームウェアには、通信途絶を検知してから**3秒間は最後の指令のままホバーを試み、それでも復帰しなければ自動的に「着陸」状態へ遷移する**フェイルセーフが既に組み込まれている（電池電圧が危険域まで下がった場合も同様に着陸へ移行する）。この着陸状態に入ると、ファームウェアは自作コントローラの `onLanding()` を1回呼び出す。
 
-| # | 指針 | 理由 |
-|---|------|------|
-| 1 | `IController::compute()` は400Hzで呼ばれる。1周期2.5ミリ秒以内に収める | 動的メモリ確保（`new`/`malloc`等、実行中に都度メモリを確保する処理）・`printf`によるログ出力・ブロッキング呼び出し（応答を待って処理が止まる呼び出し）を `compute()` 内に入れると、制御周期を超過し飛行が不安定化する |
-| 2 | ゲイン等のパラメータは既存のparam仕組み（NVS: Non-Volatile Storage、電源を切っても消えない保存領域に値が残るパラメータ管理の仕組み）を使う | マジックナンバーを埋め込まず、飛行中の`param set`によるライブチューニングを可能にするため |
-| 3 | まず既存の `PidController` に委譲する薄いラッパーを作り、1軸だけ自分の式に置き換える | `11_app_controller`（組み込み型）・`10_custom_controller`（単独ベンチ）に共通する設計方針。既存の実績あるカスケードPIDを再利用しつつ、変更点を最小化してデバッグを容易にする |
-| 4 | SILS→実機の順を必ず守る | 制御則やパラメータの変更はシミュレーションで裏付けてから実機に載せる、という本プロジェクトの方針。実機での予期せぬ挙動を減らす |
-| 5 | 飛行のたびに `sf log wifi` でログを取得し比較する | 変更が実際に効いたか、定性的な印象ではなく数値で確認するため |
+**もしこれを実装しないままにすると**、コントローラは「最後に受け取ったスティック値」をいつまでも目標として使い続けてしまう。通信が切れた瞬間のスティックが例えば「前進しながら回転」だった場合、機体はその指令のまま飛び続け、止まる手段がなくなる。`onLanding()` の実装は、この記事のコントローラで省略してはならない安全機構である。
 
-## 8. 困ったとき
+### 実装方針（正直な単純化）
 
-| 症状 | 確認すること |
-|------|-------------|
-| `sf app sils` が終了コード2で失敗する | そのプロジェクトはベンチ型（`--from 10_custom_controller` 等、`app.yaml` に `sils: false`）。`sf app new <name> --from 11_app_controller`（既定）で組み込み型として作り直す |
-| `sf app list` で対象プロジェクトの SILS 列が `no (bench)` | 上と同じ理由。組み込み型にするには `--from 11_app_controller` または `--from 12_app_task_hello` から作り直す |
-| ビルド時に CMake が `SF_APP_DIR=... contains no *.cpp` で止まる | 組み込み型プロジェクト直下（`main/` ではなくプロジェクト直下）に `*.cpp` があるか確認する（`app_controller.cpp`/`app.cpp` 等） |
-| ビルド時に `IController`/`IEstimator` の純粋仮想関数が未実装というエラー | インターフェースの全メソッドを実装したか。`compute()`/`predict()`/`getState()` 等の必須メソッド以外は、既定のno-op実装を持つものもあるため、継承元の宣言（`controller.hpp`/`estimator.hpp`）と照合する |
-| SILSシナリオがPASSしない（離陸しない・姿勢が発散する等） | `.expect` ファイルの合否基準を確認し、`compute()`/`predict()` の符号・ゲイン・単位（度かラジアンか等）を見直す |
-| 実機で振動が出る | ゲイン過大、または `compute()` 内の処理が重く400Hz（2.5ミリ秒）周期を超過していないか（§7の1） |
-| `sf app new` が拒否される | プロジェクト名が予約名（`vehicle`, `vehicle_old`, `controller`, `workshop`, `common`, `apps`）と重複していないか、既に同名ディレクトリが存在していないか |
+このコントローラはACRO専用で角速度しか制御しておらず、**姿勢（傾き）を検出・補正する仕組みを持たない**。したがって「機体を水平に戻す」ことは原理的にできない——できるのは「それ以上回転させない」ことと「推力を落として静かに降ろす」ことだけである。この記事では、次の単純で正直な方針を取る。
 
-## 9. 関連文書
+- 目標角速度をロール・ピッチ・ヨーすべてゼロにする（スティック入力を無視し、それ以上の回転を止める。すでにほぼ水平だった場合は、結果的に水平に近い状態を保ったまま降下できる）
+- `onLanding()` が呼ばれた瞬間の推力を基準に、一定時間（この記事では3秒、`kLandingDescentS`）かけて推力を線形にゼロまで下げる
+
+`onLanding()` は着陸開始の合図をもらうだけの関数で、状態（今の推力）を直接は受け取れない。そこで、`compute()` の最後に「直前に指令した推力」を毎回 `last_thrust_` に保存しておき、`onLanding()` はその値を降下の初期値として使う。
+
+```cpp
+void AppController::onLanding()
+{
+    landing_active_ = true;
+    landing_elapsed_s_ = 0.0f;
+    landing_thrust_start_ = last_thrust_;
+}
+```
+
+`landing_active_` は次の `reset()`（次回ARM）で解除される——`IController::onLanding()` の設計上の約束事であり、上の `reset()` の実装で `landing_active_ = false` としているのはこのためである。
+
+この単純な実装には限界がある。着陸開始時にすでに大きく傾いていた場合、傾いたまま降下することになる。より踏み込んだ実装（例えば加速度センサから簡易的な傾き推定を足す等)は、この記事の範囲を超えるため扱わない——まずは「何もしないよりずっとまし」な、正直で単純な安全策を必ず入れる、ということを覚えてほしい。
+
+この着陸則も、いきなり実機の自由飛行中に送信機の電源を切って試したりしない。まずSILSの通信途絶シナリオで `onLanding()` が呼ばれ、推力が意図通りに下がっていくことをログで確認する。実機で確かめる場合も、プロペラを外すか機体を固定した状態で、`onLanding()` が呼ばれた瞬間の挙動（回転が止まり推力が落ちていくこと）を確認するところから始める。
+
+## 12. SILSで確認してから実機で飛ばす
+
+### 手順
+
+1. **SILSで確認する。**
+
+   ```bash
+   sf app sils my_acro simulator/sils/scenarios/acro_flight.scn
+   ```
+
+   終了コード0（PASS）になることを確認する。
+
+2. **実機向けにビルドし、書き込む。**
+
+   ```bash
+   sf app build my_acro
+   sf app flash my_acro -m
+   ```
+
+3. **飛行前チェックリスト**（詳細は `docs/guides/safety.md`）を必ず確認する。
+
+   | # | 確認項目 |
+   |---|---------|
+   | 1 | プロペラガードに破損・変形がない |
+   | 2 | プロペラに損傷がない |
+   | 3 | バッテリーが十分に充電されている（30%以上） |
+   | 4 | 飛行エリアが確保されている（2m×2m以上、障害物なし） |
+   | 5 | 周囲に人がいない |
+   | 6 | 緊急停止方法（`sf emergency` または送信機の緊急停止）を確認した |
+
+4. 初回飛行は、想定外の挙動が起きやすい。安定して飛ぶと確認できるまでは、緊急停止をすぐに実行できる態勢で臨む。
+
+5. 飛行後はログを取得して確認する。
+
+   ```bash
+   sf log wifi -d 30
+   sf log analyze
+   ```
+
+   `sf log analyze` はジャイロ統計・入力と応答の相関・振動の周波数解析などを表示してくれる。グラフで見たい場合は `sf log viz` を使う。
+
+## 13. ゲインを自分で調整するには・次のステップ
+
+この記事の `kRollKp` 等の定数をソースコードに埋め込んだままでは、ゲインを変えるたびに再ビルド・再書き込みが必要になる。ファームウェアには **NVS**（Non-Volatile Storage。電源を切っても値が消えない保存領域）を使ったパラメータの仕組みがすでにあり、`param set` コマンドで飛行中にゲインを変えながら試すこと（ライブチューニング）ができる。自分のゲインをこの仕組みに乗せる場合は、`firmware/vehicle/components/sf_core/params.cpp` の `rate.roll.*` 等の登録パターンと、`firmware/vehicle/components/sf_controller_pid/pid_controller.cpp` の `loadParams()`/`reloadParams()` を読み、同じパターンで自分の定数をパラメータ化するとよい。
+
+### この先の道筋
+
+ACROモード（角速度制御）は、vehicle ファームが持つ制御則の中でもっとも単純なものである。この先には、機体の傾き（姿勢）を推定する**姿勢推定**、その推定値をもとに傾きそのものを目標へ追従させる**姿勢制御**、そしてPIDのような古典的な手法とは考え方の異なる**LQR/LQI**（線形二次レギュレータ／線形二次積分型制御）のような制御則が続く見通しである。これらはまだ記事になっていないが、いずれ本記事の続編として整備される予定である。全体の学習の道筋は `firmware/vehicle/docs/coding_and_education.md` の教育ロードマップにまとまっている。
+
+さらに深掘りしたい場合は、以下を参照してほしい。
 
 | 文書 | 内容 |
 |------|------|
-| [`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md) | 本書§6の計画の詳細（現状分析・設計判断・実装フェーズ） |
-| [`firmware/vehicle/docs/architecture.md`](../../firmware/vehicle/docs/architecture.md) | 4階層アクセス（L0〜L3）の定義、Pub-Sub全体設計 |
-| [`firmware/vehicle/docs/topic_reference.md`](../../firmware/vehicle/docs/topic_reference.md) | トピック一覧のSSOT、使用パターン |
-| [`firmware/vehicle/examples/11_app_controller/README.md`](../../firmware/vehicle/examples/11_app_controller/README.md) | 組み込み型 `IController` テンプレート、SILS→実機の使い方 |
-| [`firmware/vehicle/examples/12_app_task_hello/README.md`](../../firmware/vehicle/examples/12_app_task_hello/README.md) | Topic を読む追加タスクの最小例（組み込み型） |
-| [`firmware/vehicle/examples/10_custom_controller/README.md`](../../firmware/vehicle/examples/10_custom_controller/README.md) | `IController` 差替え演習（単独ベンチ） |
-| [`firmware/vehicle/examples/09_topic_api_hello/README.md`](../../firmware/vehicle/examples/09_topic_api_hello/README.md) | Topic API 読み取りの最小例（単独ベンチ） |
-| [`firmware/apps/README.md`](../../firmware/apps/README.md) | `firmware/apps/` の使い方 |
-| [`docs/commands/sf-app.md`](../commands/sf-app.md) | `sf app` コマンドリファレンス |
-| [`docs/commands/sf-log.md`](../commands/sf-log.md) | ログ取得・解析コマンド |
+| [`firmware/vehicle/components/sf_controller_pid/include/pid.hpp`](../../firmware/vehicle/components/sf_controller_pid/include/pid.hpp) | 本物のPID実装（条件付き積分・Tustin法による不完全微分） |
+| [`firmware/vehicle/docs/topic_reference.md`](../../firmware/vehicle/docs/topic_reference.md) | トピック一覧のSSOT（Single Source of Truth）、使用パターン |
 | [`docs/guides/safety.md`](safety.md) | 飛行安全ガイド |
 
 ---
 
 <a id="english"></a>
 
-## 1. Overview
+## 1. What You Are Building, Who This Guide Is For, and Prerequisites
 
-This guide is the entry point for readers who can already fly the vehicle (StampFly) both on real hardware and in the simulator, and who now want to write their **own controller, estimator, or decision logic**. It assumes you have completed the "Fly the Real Drone" section of the top-level `README.md` (you have flashed the firmware and flown it once with the transmitter).
+### The Goal of This Guide
 
-This guide covers the **L1 Topic API** of `firmware/vehicle` (the vehicle firmware, the primary firmware for both real hardware and SILS) — the `sf::api::` namespace (functions that read the latest value of a topic) together with the swappable interfaces `IController` and `IEstimator`. Writing your own HAL (Hardware Abstraction Layer — the sensor/actuator driver layer, L2) or BSP (Board Support Package — the layer that initializes and owns shared hardware resources such as I2C/SPI, L3) is out of scope; a future document will cover it.
+Deflect a transmitter stick and the craft rotates in that direction, at that speed — ACRO mode (rate control mode). This guide builds ACRO mode's control program from the very first line, **without relying at all on the existing `PidController`** (the cascade PID controller already built into this project).
 
-### Current Status (as of 2026-09-08)
+Concretely, by the end you will have written code that does the following:
 
-`sf app new`'s default is the **embedded-type** (`type: embedded` in `app.yaml`) template `11_app_controller`. `firmware/apps/<name>/*.cpp` is compiled directly into the vehicle firmware's main component via a mechanism called `SF_APP_DIR`, so `sf app sils <name>` (SILS: Software In the Loop Simulation — running the firmware itself on a PC) -> `sf app build <name>` (real-hardware build) -> `sf app flash <name>` (flash) build and run the **exact same source** on both SILS and real hardware. The manual steps this guide used to require — turning your code into a new component, adding it to `main/CMakeLists.txt`'s `REQUIRES`, and adding an include in `control_task.cpp` — are no longer needed. See sections 4 and 5 below for usage, and [`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md) for the design.
+- Deflecting the roll stick makes the craft keep rotating on the roll axis by a matching amount (full deflection reaches the maximum angular rate; releasing the stick stops the rotation)
+- Pitch and yaw work the same way
+- The throttle stick directly commands thrust (how hard the craft lifts)
+- If the link to the transmitter is lost, the craft lands slowly and safely instead of running away
 
-Examples 09 (`09_topic_api_hello`) and 10 (`10_custom_controller`) remain available via `--from` as **standalone benches** that teach the API without building the whole vehicle firmware (`sf app list` marks them "no (bench)"). Running `sf app sils` on a bench-type project explains why it cannot be embedded and exits with code 2.
+You will build this up one chapter at a time, ending with feedback control closed on all three axes (roll, pitch, yaw) — a controller that can genuinely fly the craft.
 
-## 2. The Four Layers and What This Guide Covers
+This guide is also a first step toward eventually being able to write the entire vehicle firmware yourself. ACRO-mode PID control is the simplest control law this firmware has; getting comfortable here with Pub/Sub, Topics, and `IController` gives you the same foundation for whatever control law you write next — attitude control, or a different family of control law entirely (see the LQR/LQI mentioned in section 13).
 
-The vehicle firmware provides four tiers of access so learners can pick an entry point matching their level (see the "Learner Access — 4-Tier Model" section of `firmware/vehicle/docs/architecture.md`).
+### Who This Guide Is For
 
-| Tier | Namespace | Typical User | What You Can Do |
-|------|-----------|--------------|------------------|
-| L0: Workshop API | `ws::*` | Beginners | Build flight control itself using only `setup()`/`loop_400Hz(dt)` and functions like `ws::motor_set_duty()` |
-| **L1: Topic API (covered here)** | `sf::api::*` | Estimation/control/guidance learners | Read and write Topics (below), and swap in your own implementation of `IController` (the controller interface) / `IEstimator` (the state-estimation interface) |
-| L2: HAL Direct | `stampfly::*Wrapper` | Hardware learners | Call sensor drivers directly |
-| L3: BSP Internal | `sf::internal::board` | Firmware implementers | Change boot ordering and shared hardware resource management itself |
+- You know basic C++ syntax (`if`/`for`/structs/classes)
+- You are not yet familiar with "Pub/Sub," "namespaces," or the conventions of embedded development
+- A passing familiarity with introductory control theory (what the proportional, integral, and derivative terms do) is enough — each concept is explained in the text as it comes up
 
-L0 is the tier where you write flight control from scratch, wiring together functions like `ws::gyro_x()` yourself all the way up to attitude control. L1, by contrast, is the tier where you use the estimation/control machinery the vehicle firmware already has (Topics, `IController`, `IEstimator`) and swap out one part of it. You reuse the already-working cascade PID controller or sensor-fusion pipeline as-is, and rewrite only the one thing you want to change (e.g. yaw-axis torque allocation, or how one observation is used).
+### Prerequisites
 
-The tiers coexist in parallel — an L1 learner never has to go through the L0 skeleton.
+This guide assumes you have already completed the "Fly the Real Drone" section of the top-level `README.md` — that is, you have flashed the stock firmware and flown it once with the transmitter. If you have not done that yet, finish it before continuing here.
 
-## 3. Where Your Code Runs Inside the Vehicle Firmware
+This guide covers the **L1 Topic API** of `firmware/vehicle` (the vehicle firmware — the primary firmware used both on real hardware and in SILS, short for Software In the Loop Simulation, a way to run the firmware itself on a PC): the `sf::api::` namespace, together with the swappable `IController` interface (a contract that says "implement these functions and the internals are up to you"). Writing the sensor-driver / hardware-initialization layer itself (HAL/BSP) is out of scope.
 
-### The Pub-Sub (Publish/Subscribe) Idea
+## 2. What Is Pub/Sub? What Is a Namespace?
 
-Components inside the vehicle firmware never call each other's functions directly; they communicate through **Topics** (typed data containers) using a **Pub-Sub** (Publish/Subscribe) pattern. A publisher just calls `publish()` — "here is the newest value" — without knowing who reads it. A subscriber just calls `latest()` — "give me whatever is newest right now" — without knowing who published it. Sensor tasks write into topics; estimation and control tasks read them, compute, and write into other topics. The code you write becomes one part of this flow — an estimator, a controller, or a task that merely watches topics.
+### Think of It as a Bulletin Board
 
-### Key Topics
+Inside this firmware, components never call each other's functions directly. Instead, they communicate through a **Topic** (a typed container that holds exactly one value) using a **Pub/Sub** pattern (Publish = post, Subscribe = read).
 
-The authoritative topic catalog is `firmware/vehicle/docs/topic_reference.md` §3. Below is the subset an L1 learner mostly touches.
+A bulletin board is a good mental model.
 
-| Topic | Data Type | Publisher | Subscriber | Rate |
-|-------|-----------|-----------|------------|------|
-| `sensor_imu` | `ImuData` | ImuTask | the estimator inside ImuTask | 400 Hz |
-| `estimate_state` | `StateEstimate` | ImuTask | ControlTask, TelemetryTask | 400 Hz |
-| `command_setpoint` | `CommandSetpoint` | CommTask (ESP-NOW receive) | ControlTask | 50 Hz |
-| `control_output` | `ControlOutput` | ControlTask | TelemetryTask | 400 Hz |
-| `actuator_motor` | `MotorOutput` | ControlTask | motor driver | 400 Hz |
-| `system_mode` | `SystemMode` | StateTask | ControlTask, NotifyTask | event-driven |
-| `sensor_power` | `PowerData` | PowerTask | TelemetryTask, FailsafeTask | 10 Hz |
+- **`publish()` (post)** re-pins a fresh sheet of paper to the board. It takes down whatever was pinned before and puts up exactly one new sheet. Whoever posts has no idea who, if anyone, will come read it.
+- **`latest()` (peek at the newest value)** is walking past the board and copying down whatever is currently pinned. Whoever reads has no idea who posted it. Reading never uses up the sheet — you can peek as many times as you like and always get the same answer until the next post.
+- There is also **`read()` (take one item)**, which behaves like pulling a single letter out of a mailbox — once you take it, it is gone, and the next reader will not see it. Each Topic is designed to work one way or the other, "bulletin board" or "mailbox."
 
-### Swappable Parts: `IController` and `IEstimator`
+A sensor task posts a value to a "sensor reading" board; an estimation/control task peeks at it, computes something, and posts the result to a different board (say, "control output"). The code you are about to write becomes one link in that relay — either a task that only watches a board, or the estimation/control step itself.
 
-The vehicle firmware treats the control law and state estimation through interfaces (a contract specifying only which functions must exist, independent of the implementation).
+### A Namespace Is "Which Floor of the Building"
 
-`IController` (`firmware/vehicle/components/sf_controller/include/controller.hpp`) has 12 methods. The central one is:
+The `sf::api::` in something like `sf::api::estimate_latest()` is a **namespace** — a label, like a street address, that keeps two functions with the same name from colliding. You don't need to overthink it: think of it as "the function that lives on the `api` floor of the `sf` building." Every function this guide uses lives on that `sf::api::` floor (the Topic API published for learners).
 
-```cpp
-virtual ControlOutput compute(
-    const StateEstimate& state,
-    const CommandSetpoint& setpoint,
-    float dt
-) = 0;
+### The Big Picture for This Guide
+
+The code you write here reads input (stick and sensor values) exactly the way just described — calling `sf::api::something_latest()` and peeking at a board. Writing output (thrust and torque commanded to the craft) works a bit differently. Instead of calling `publish()` yourself, you fill in a fixed-shape "box" called `IController` and return it. Something else — a part of the firmware called `ControlTask` — is the one that actually walks that box over and pins it to the board. Section 3 explains why.
+
+## 3. The Big Picture of ACRO Mode
+
+ACRO-mode control is one straight pipeline:
+
+```
+Stick (throttle / roll / pitch / yaw, from the transmitter)
+        │
+        ▼
+target angular rate = stick value (roll/pitch/yaw) x max angular rate
+target thrust        = throttle stick value x max thrust
+        │
+        ▼
+error = target angular rate − measured angular rate (from the gyro)
+        │
+        ▼
+PID computation (proportional + integral + derivative) -> torque per axis
+        │
+        ▼
+ControlOutput { thrust, torque[3] (roll/pitch/yaw torque) }
+        │            <- everything up to here is what you write in this guide
+        ▼
+sf_actuator automatically mixes it (converts it into duty for the 4 motors)
+        │
+        ▼
+      the 4 motors
 ```
 
-`compute()` is called at 400 Hz, synchronized with the IMU (Inertial Measurement Unit). It receives the current state estimate and pilot setpoint and returns thrust/torque in the body frame. You must also implement `reset()` (re-initialize internal state) and `onModeChange()` (notification of a flight-mode change). The remaining 9 methods (`onLanding()`, `onTakeoff()`, `onTakeoffComplete()`, `isTakeoffComplete()`, `setGuidanceTarget()`, `isGuidanceActive()`, `startExcitation()`, `fetchSysidResult()`, `reloadParams()`) cover autonomous takeoff/landing, guidance targets, system identification and parameter reload; they have do-nothing default implementations, so override only the ones you need. The only current implementation is `PidController` (a two-stage cascade PID: attitude then rate).
+**Mixing** (the calculation that turns the overall thrust/torque command into per-motor spin commands for the 4 motors) is handled automatically by a component called `sf_actuator`. How many motors there are, where each one sits, which way it spins — none of that hardware-level detail is something you need to think about here. What you write stops at "how much total thrust and torque the craft should produce."
 
-`IEstimator` (`firmware/vehicle/components/sf_estimator/include/estimator.hpp`) follows the same idea on the estimation side. The central methods are:
+Everything below `ControlOutput` in the diagram is the Pub/Sub example from section 2 in action. `ControlTask` takes the `ControlOutput` your `compute()` returns and `publish()`es it to a Topic named `control_output`. `sf_actuator` subscribes to `control_output`; every time a new value is posted, it mixes it into duty (PWM on-time ratio) for the 4 motors. Your code (the `IController`) and `sf_actuator` never know about each other directly — they are connected only through the single `control_output` board.
 
-```cpp
-virtual void predict(const ImuData& imu, float dt) = 0;
-virtual StateEstimate getState() const = 0;
-```
+### Why Not Call `publish()` Yourself?
 
-`predict()` is the prediction step, called at IMU rate (400 Hz), that propagates the state forward from gyro/accelerometer data; `getState()` returns the current estimate. There are also `updateTof()`/`updateFlow()`/`updateMag()`/`updateBaro()` (observation updates for each sensor), `reset()`, `resetPositionVelocity()`, and more. The two current implementations are `EskfEstimator` (ESKF: Error-State Kalman Filter, 15 states) and `ComplementaryEstimator` (a complementary filter, attitude only).
+As noted in section 2, this guide's code reads values (e.g. `sf::api::estimate_latest()`) by peeking at a board directly, but it does not walk up and pin its own result to a board when returning a value from `compute()`. There is a reason for that split.
 
-### The Read-Only Topic API (8 Functions)
+- **Exactly one poster per board.** The job of actually pinning a new sheet to the `control_output` board belongs to exactly one place: `ControlTask`. If several places could post to the same board, "whichever posted last wins" would create a race. Implementing `IController` (as you are doing here) makes you the one who computes "what the next sheet should say" — not the one who walks over and pins it. That is the entire reason `compute()` returns a plain `ControlOutput` value instead of calling `publish()`.
+- **There is bookkeeping before and after the post.** `ControlTask` does more than pin the board: in the same cycle it also assembles a logging record (the Data Stream) and collects system-identification results. Centralizing the "post" responsibility in `ControlTask` means you never have to duplicate that bookkeeping inside every custom controller.
+- **You can use it without knowing anything about Pub/Sub.** `compute()` is just a function call; what the caller does with the return value is entirely up to the caller. In fact, the standalone bench-style examples (such as `10_custom_controller`) call `compute()` directly against a synthetic signal, with no Pub/Sub machinery present at all — possible only because the controller itself is a fixed-shape box that never depends on Pub/Sub.
 
-`sf::api::` (`firmware/vehicle/components/sf_api/include/sf_api.hpp`) is the single public header for L1 learners, providing these 8 functions. Every one is a thin wrapper around a topic's `latest()` (which returns a copy of the newest value).
+## 4. Setting Up Your Development Environment
 
-| Function | Return Type | What It Reads |
-|----------|-------------|---------------|
-| `imu_latest()` | `ImuData` | latest IMU reading |
-| `estimate_latest()` | `StateEstimate` | latest state estimate (attitude/position/velocity) |
-| `command_latest()` | `CommandSetpoint` | latest pilot command (throttle/roll/pitch/yaw) |
-| `control_latest()` | `ControlOutput` | latest control output (thrust/torque) |
-| `motor_latest()` | `MotorOutput` | latest motor duty values |
-| `power_latest()` | `PowerData` | latest power reading (voltage/current) |
-| `current_mode()` | `SystemMode` | current system mode (ARM state / flight mode) |
-| `is_armed()` | `bool` | whether the vehicle is currently armed |
-
-**There is no write API yet** (actuator control, mode requests, or externally setting a guidance target). The comments in `sf_api.hpp` explicitly state these are deferred to a future milestone. As of now, L1 has no path to write pilot commands or the mode from the outside.
-
-## 4. What You Can Try Now (Embedded Template)
-
-The default template, `11_app_controller` (`type: embedded`), is built into the vehicle firmware and runs in both SILS and on real hardware.
+Start by creating your own project.
 
 ```bash
 source setup_env.sh
-sf app new my_ctrl
-```
-
-This creates `firmware/apps/my_ctrl` as a copy of the default source, `11_app_controller`. The only file you need to edit is `app_controller.cpp`'s `adjust()`.
-
-```bash
-sf app edit my_ctrl
-```
-
-Verify it in SILS (PC-side simulation, no hardware needed). The default scenario is `simulator/sils/scenarios/alt_flight.scn`.
-
-```bash
-sf app sils my_ctrl
-```
-
-To try a different scenario, pass it as a second argument.
-
-```bash
-sf app sils my_ctrl simulator/sils/scenarios/acro_flight.scn
-```
-
-Build and flash it for real hardware.
-
-```bash
-sf app build my_ctrl
 ```
 
 ```bash
-sf app flash my_ctrl -m
+sf app new my_acro
 ```
 
-The default `adjust()` in `app_controller.cpp` is the identity (`kPitchTorqueScale = 1.0f`) — `PidController`'s (cascade PID: attitude then rate) output passes through unchanged.
+This creates the following files under `firmware/apps/my_acro/`:
+
+| File | Role |
+|------|------|
+| `app.yaml` | Project metadata, including the type (`type: embedded` — compiled directly into the vehicle firmware) |
+| `app.cpp` | The "seam" that registers the class you'll write (via `sf::app::controller()`, etc.) with the firmware |
+| `app_controller.hpp` / `app_controller.cpp` | Where your `IController` implementation lives. **This is the file you keep editing throughout this guide** |
+| `README.md` | The source template's own explanation (leave as-is) |
+
+`type: embedded` means this project's source is compiled directly into the vehicle firmware's own build, and the exact same source runs on real hardware and in SILS. You never create a new component or edit any build configuration by hand — the `sf app` command handles all of that.
+
+Inside `app_controller.cpp` there is a function called `compute()`, called at **400 Hz (400 times per second, once every 2.5 milliseconds)**. Nearly everything you do in this guide is rewriting the body of `compute()`. The caller (`ControlTask`) keeps calling it every cycle regardless of whether the craft is currently ARMed (permitted to spin motors) — the actual motor safety gate lives elsewhere (ARM-state management) — so write `compute()` assuming it is always being called.
+
+2.5 milliseconds is not much time. Inside `compute()`, follow these rules:
+
+- No **dynamic memory allocation** (`new`/`malloc`, i.e. allocating memory during execution) — allocation time is unpredictable and can blow the period
+- Do not call heavy logging (like `printf`) unconditionally every cycle — section 5 shows how to throttle it
+- No **blocking calls** that stall waiting for a response
+
+Every code example in this guide follows these rules (nothing but fixed-size structs and `float` arithmetic — no heap allocation ever appears).
+
+From here on, later chapters show the **diff** against the previous chapter instead of re-pasting the whole `app_controller.hpp`/`.cpp` from scratch. When you actually follow along, open the files with something like `sf app edit my_acro` and edit them there.
+
+## 5. First, Just Peek at the Angular Rate
+
+### Why This Step Matters
+
+Before writing any control law that spins motors, first confirm that "the sensor value is visible from my own code." This step sends no output at all (`ControlOutput` is always zero) and just logs the angular rate measured by the gyro.
+
+### Implementation
+
+`sf::api::estimate_latest()`, introduced in section 2, returns the latest value of the state estimate (the "current state of the craft," inferred by combining sensor readings) — a "peek at the board" function. Its return type, `StateEstimate`, has an `angular_rate[3]` field: the angular rate (in rad/s) in the body frame (FRD: X axis = forward and the roll axis, Y axis = right and the pitch axis, Z axis = down and the yaw axis). The indices are stored in order `[0] = roll`, `[1] = pitch`, `[2] = yaw`.
+
+Inside `compute()`, though, you never need to call this function yourself. The first parameter, `state`, is already exactly the same value as `sf::api::estimate_latest()` — `ControlTask` peeks at the "sensor value" board on your behalf every cycle (`estimate_state.latest()`) and hands you the result as a function argument. So inside `compute()`, just use `state.angular_rate` directly. `sf::api::estimate_latest()` earns its keep outside `compute()` — for example, in an additional task that peeks at Topics on its own, without going through `IController`/`IEstimator` (not covered in this guide).
 
 ```cpp
-sf::ControlOutput AppController::adjust(
-    sf::ControlOutput output,
+// app_controller.hpp
+#pragma once
+#include "controller.hpp"
+
+namespace sf::app {
+
+class AppController : public sf::IController {
+public:
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+
+private:
+    uint32_t cycle_count_ = 0;   // compute() の呼び出し回数 / call counter
+};
+
+}  // namespace sf::app
+```
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+#include "esp_log.h"
+
+namespace sf::app {
+
+namespace {
+constexpr const char* kLogTag = "MyAcro";
+// compute() is called at 400 Hz; logging every call would overrun the
+// control period (coding_and_education.md §7). Divide down to ~1 Hz.
+// compute()は400Hzで呼ばれる。毎回ログを出すと制御周期を超過するため
+// （coding_and_education.md §7）、約1Hzまで間引く。
+constexpr uint32_t kLogEveryNCycles = 400;
+}  // namespace
+
+sf::ControlOutput AppController::compute(
     const sf::StateEstimate& state,
-    const sf::CommandSetpoint& setpoint)
+    const sf::CommandSetpoint& setpoint,
+    float dt)
 {
-    constexpr float kPitchTorqueScale = 1.0f;
-    output.torque[1] *= kPitchTorqueScale;
+    (void)setpoint;
+    (void)dt;
+
+    ++cycle_count_;
+    if (cycle_count_ % kLogEveryNCycles == 0) {
+        // angular_rate[3] = roll, pitch, yaw [rad/s], body frame (FRD)
+        // angular_rate[3] = ロール・ピッチ・ヨー [rad/s]、機体座標系(FRD)
+        ESP_LOGI(kLogTag, "rate roll=%.3f pitch=%.3f yaw=%.3f",
+                 state.angular_rate[0], state.angular_rate[1], state.angular_rate[2]);
+    }
+
+    // Not yet touching thrust/torque — a zero-initialized output keeps the
+    // motors off no matter what the sticks say.
+    // まだ推力・トルクには触れない——ゼロ初期化した出力を返せば、スティックの
+    // 値に関わらずモータは回らない。
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+    return output;
+}
+
+void AppController::reset()
+{
+    cycle_count_ = 0;
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    (void)new_mode;   // このコントローラはまだ何もしない / not used yet
+}
+
+}  // namespace sf::app
+```
+
+`compute()`, `reset()`, and `onModeChange()` are all declared as "pure virtual functions" inside `IController` (functions with no default body — you must implement them or the code will not compile). It's fine for the bodies to be empty for now; just write all three.
+
+Calling `ESP_LOGI` unconditionally at 400 Hz would eat into the 2.5 ms budget through logging latency alone. That's why `cycle_count_` throttles it down to roughly 1 Hz — this throttling pattern carries forward into every later chapter.
+
+### Try It
+
+Run it in SILS (a PC-side simulation that models flight without real hardware) and confirm the angular rate shows up in the log.
+
+```bash
+sf app sils my_acro
+```
+
+Watch `sf log analyze`, or the log scrolling in the monitor, while you tilt the craft in SILS — the angular-rate numbers should change.
+
+## 6. Turning Stick Input Into a Target Angular Rate
+
+### Why This Step Matters
+
+Control is the business of driving the difference (the error) between a "target" and a "current value" to zero. The previous chapter got you the "current value" (the measured angular rate). Next comes the "target" — building a target angular rate from how far the sticks are deflected.
+
+### Implementation
+
+The pilot's command (stick values) is available via `sf::api::command_latest()` — but for the same reason as the angular rate in the previous chapter, you don't need to call it inside `compute()`. The second parameter, `setpoint` (a `CommandSetpoint`), is exactly the same value that `ControlTask` already fetched via `sf::api::command_latest()` on your behalf. `roll`/`pitch`/`yaw` range over `-1..1` (full deflection is ±1, center is 0), and `throttle` ranges over `0..1` (center is 0 = zero thrust, full deflection is 1 = maximum thrust).
+
+In ACRO mode, how far the stick is deflected directly becomes the "target angular rate." The constant that decides how fast the craft spins at full deflection is the "max angular rate." We use 1.0 rad/s for roll/pitch and 5.0 rad/s for yaw as our targets — values with real flight history on this frame.
+
+```cpp
+// app_controller.cpp（compute()の中身を置き換え）
+namespace {
+constexpr const char* kLogTag = "MyAcro";
+constexpr uint32_t kLogEveryNCycles = 400;
+
+// Named constants (no magic numbers): how fast the craft spins at full
+// stick deflection. Flight-proven values for this frame.
+// 名前付き定数（マジックナンバー禁止）: スティックを倒し切ったときの回転速度。
+// この機体で飛行実績のある値。
+constexpr float kMaxRollPitchRateRadS = 1.0f;   // [rad/s]
+constexpr float kMaxYawRateRadS       = 5.0f;   // [rad/s]
+}  // namespace
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    (void)dt;
+
+    // Stick -> target angular rate. Still not fed into the output below.
+    // スティック → 目標角速度。まだ下の出力には使わない。
+    const float rate_sp_roll  = setpoint.roll  * kMaxRollPitchRateRadS;
+    const float rate_sp_pitch = setpoint.pitch * kMaxRollPitchRateRadS;
+    const float rate_sp_yaw   = setpoint.yaw   * kMaxYawRateRadS;
+
+    ++cycle_count_;
+    if (cycle_count_ % kLogEveryNCycles == 0) {
+        ESP_LOGI(kLogTag,
+                 "target roll=%.3f pitch=%.3f yaw=%.3f | measured roll=%.3f pitch=%.3f yaw=%.3f",
+                 rate_sp_roll, rate_sp_pitch, rate_sp_yaw,
+                 state.angular_rate[0], state.angular_rate[1], state.angular_rate[2]);
+    }
+
+    sf::ControlOutput output{};   // still zero output — no motor spin yet
+    output.timestamp = state.timestamp;
     return output;
 }
 ```
 
-Change `kPitchTorqueScale`, or replace this line with your own control law computed from `state`/`setpoint` (e.g. your own pitch-rate P term), then rebuild to see the behavior change. `ControlOutput::torque` is a `float[3]` (R, P, Y order — see `data_types.hpp`). See [`examples/11_app_controller/README.md`](../../firmware/vehicle/examples/11_app_controller/README.md) for details.
+Move the sticks (in SILS or on the transmitter) and confirm the "target" column in the log moves. The "measured" column (the actual angular rate) does not chase this target yet — making it chase is the next chapter's job.
 
-If you want to try an additional task that only reads topics, without touching the controller or estimator, use `12_app_task_hello`.
+## 7. Driving It With Proportional (P) Control Alone
 
-```bash
-sf app new my_hello --from 12_app_task_hello
+### Why This Step Matters
+
+Now that you have both a "target" and a "current value," it's time to issue a motor command that drives the difference (the error) between them to zero. The simplest way is **proportional control (P control)** — return a force directly proportional to the size of the error. This is the first time `compute()` returns a `ControlOutput` with anything nonzero in it.
+
+### Safety Notice (Read Before Proceeding)
+
+From here on, nonzero commands actually reach the motors. Follow these rules without exception.
+
+- **Always remove the propellers, or firmly restrain the craft, before trying this on real hardware.** Pitch and yaw are not yet under control (they're added in later chapters), and even roll uses an untuned value — the craft can behave erratically.
+- Always confirm in this order: **SILS -> real-hardware bench (props off, or the craft restrained)**. Never go straight to free flight.
+- Be ready to execute the emergency stop (`sf emergency`, or the transmitter's emergency stop — see `docs/guides/safety.md`) at any moment.
+
+### Implementation (Roll Axis Only)
+
+Start by building the PID control for the roll axis alone. Pitch and yaw still return 0 (i.e., they remain open-loop — closed in a later chapter).
+
+Define the error as "target angular rate minus measured angular rate," multiply by a proportional gain `kp`, and use that directly as the torque command.
+
+```cpp
+namespace {
+// ... (constants from the previous chapter, unchanged) ...
+
+// Roll rate loop, P-only stage. A modest first guess — not yet tuned.
+// ロールレートループ、P制御のみの段階。まだ追い込んでいない控えめな初期値。
+constexpr float kRollKp = 3.0e-4f;   // [Nm / (rad/s)]
+
+// Physical torque limit of this frame's roll/pitch axis — a safety bound,
+// not a tuning knob (see sf_controller_pid's max_roll_pitch_torque_).
+// この機体のロール/ピッチ軸トルクの物理上限——チューニング値でなく安全上限
+// （sf_controller_pidのmax_roll_pitch_torque_と同じ値）。
+constexpr float kMaxRollPitchTorqueNm = 5.2e-3f;   // [Nm]
+constexpr float kMaxThrustN           = 0.672f;    // [N] 4 motors combined
+}  // namespace
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    (void)dt;
+
+    const float rate_sp_roll = setpoint.roll * kMaxRollPitchRateRadS;
+    const float error_roll   = rate_sp_roll - state.angular_rate[0];
+
+    float torque_roll = kRollKp * error_roll;
+    if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+    if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
+
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+    output.torque[0] = torque_roll;   // roll
+    output.torque[1] = 0.0f;          // pitch — still open-loop, closed in §10
+    output.torque[2] = 0.0f;          // yaw   — still open-loop, closed in §10
+    output.thrust     = setpoint.throttle * kMaxThrustN;
+    return output;
+}
 ```
 
-```bash
-sf app sils my_hello
-```
+`kMaxRollPitchTorqueNm` (5.2e-3 Nm) is this frame's physical limit on how much torque it makes sense to command — a safety bound, not a tuning parameter. Build it into the clamp from the very start.
 
-It starts one additional task that reads `sf::api::estimate_latest()` and `sf::api::is_armed()` once a second and logs attitude and armed state (the controller and estimator stay the vehicle's standard ones). See [`examples/12_app_task_hello/README.md`](../../firmware/vehicle/examples/12_app_task_hello/README.md) for details.
-
-### Aside: Standalone Benches (No Whole-Vehicle Build)
-
-If you want a quick way to try `sf::api::` reads or `IController` behavior without building the whole vehicle firmware, the bench-type templates (09/10) are still available.
+### Confirm in SILS, Then on a Real-Hardware Bench
 
 ```bash
-sf app new my_bench --from 10_custom_controller
+sf app sils my_acro
 ```
+
+Once that looks right, confirm on real hardware with the props off (or the craft restrained).
 
 ```bash
-sf app edit my_bench
+sf app build my_acro
+sf app flash my_acro -m
 ```
 
-```bash
-sf app build my_bench
+Deflect the roll stick and the roll torque command (visible via `sf log wifi`, for example) should track it. You'll notice, though, that it never quite reaches the target angular rate — a small **steady-state error** (the error that remains no matter how long you wait) persists. This happens because a small disturbance (motor reaction torque, wiring asymmetry, part-to-part variation) is always present, and P control alone settles at whatever point exactly balances that disturbance (call the disturbance torque `d` and the proportional gain `kp`; at steady state, `kp x error ≈ d` — raising `kp` shrinks the error, but push it too far and you get oscillation). Eliminating this steady-state error is the integral term's job, in the next chapter.
+
+## 8. Adding the Integral Term (I)
+
+### Why This Step Matters
+
+P control reacts only to "the error right now." As long as some error remains, even a small one, you want a term that keeps working on it, little by little, over time — that's **integral control (I control)**. It accumulates the error over time and adds a force proportional to that accumulated value.
+
+The safety notice from chapter 7 (props off or the craft restrained, confirm SILS before real hardware) still applies in full when you check the integral term on real hardware.
+
+### Implementation
+
+The strength of the integral action is expressed as a time constant, the "integral time `Ti`" (a shorter `Ti` means the integral catches up faster). Each cycle, accumulate `(kp/Ti) x error x dt`.
+
+```cpp
+namespace {
+// ...
+constexpr float kRollTi = 0.5f;   // [s] integral time — smaller = faster catch-up
+}  // namespace
 ```
 
-```bash
-sf app flash my_bench -m
+```cpp
+// app_controller.hpp に追加
+private:
+    float integral_roll_ = 0.0f;   // roll axis integral accumulator
 ```
 
-`10_custom_controller` runs a thin wrapper class, `LearnerController` (an `IController` implementation), by calling `compute()` **against a synthetic signal (a sine wave)** — it never touches a real sensor or motor and does not fly real hardware. Bench-type projects cannot use `sf app sils` (`app.yaml` has `sils: false`). If you only want to learn to read topics, start from `--from 09_topic_api_hello` instead.
+```cpp
+// compute() 内、P項の計算に続けて
+integral_roll_ += (kRollKp / kRollTi) * error_roll * dt;
+// Clamp the integral itself to the output limit — a simple anti-windup.
+// 積分値そのものを出力上限でクランプする——素朴なアンチワインドアップ。
+if (integral_roll_ >  kMaxRollPitchTorqueNm) integral_roll_ =  kMaxRollPitchTorqueNm;
+if (integral_roll_ < -kMaxRollPitchTorqueNm) integral_roll_ = -kMaxRollPitchTorqueNm;
 
-```bash
-sf app new my_hello_bench --from 09_topic_api_hello
+float torque_roll = kRollKp * error_roll + integral_roll_;
+if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
 ```
 
-This one reads a real BMI270 (the IMU sensor) over SPI and publishes to the `estimate_state` topic using a complementary filter, so you can see `sf::api::estimate_latest()` returning real sensor-derived numbers (though it has no boot calibration, failsafe, or takeoff/landing logic, and also does not fly).
+Don't forget to zero the integral in `reset()` as well.
 
-## 5. Verifying Your Own Controller in SILS and Flying It on Real Hardware
-
-How to run the embedded-type project you made in section 4 (from `11_app_controller`) in the actual flight-control pipeline. No manual component creation or `REQUIRES` editing is needed — the `sf app` command handles embedding into the vehicle firmware.
-
-### 5.1 Always Confirm With SILS First
-
-Before flashing real hardware, confirm with SILS. Never skip this order.
-
-```bash
-sf app sils my_ctrl
+```cpp
+void AppController::reset()
+{
+    cycle_count_ = 0;
+    integral_roll_ = 0.0f;
+}
 ```
 
-Confirm the exit code is 0 (PASS). Besides the default scenario `alt_flight.scn` (takeoff, hover, landing in altitude-hold mode), it is a good idea to also check `acro_flight.scn` (attitude control in ACRO mode).
+If you forget to reset the integral, whatever value built up during the previous flight fires the instant the craft ARMs again, tilting it unexpectedly. `reset()` is always called on ARM, so any variable holding integrator state must be zeroed there.
 
-```bash
-sf app sils my_ctrl simulator/sils/scenarios/acro_flight.scn
+### The Windup Trap
+
+If you naively keep accumulating the integral, it keeps growing even while the output is already pinned at its clamp — this is called **windup** (the integral "winding up"). When the error's sign flips, the wound-up integral only unwinds slowly, so the output swings hard the other way and **overshoots**.
+
+The code above guards against this with a crude method: clamping the integral value itself to the output limit. This is not a complete fix (the integral can still wind up all the way to that limit while the output is pinned), but it is enough to fly and feel the effect for now.
+
+**If you want to go further:** this project's real-hardware controller (`firmware/vehicle/components/sf_controller_pid/include/pid.hpp`) uses a more precise technique called "conditional integration," which stops updating the integral only while the output is being pushed further into saturation. It's worth reading the two implementations side by side.
+
+## 9. Adding the Derivative Term (D)
+
+### Why This Step Matters
+
+PI control (proportional + integral) removes the steady-state error, but it does little to restrain the "overshoot" right after a sudden change in the target. Add a term that brakes the rate of approach toward the target itself — **derivative control (D control)**.
+
+Here too, verify on real hardware only with the props off or the craft restrained, and only after confirming in SILS first, per chapter 7's notice. The derivative term tends to amplify sensor noise, and depending on the gain you pick, high-frequency oscillation can show up abruptly.
+
+### The Derivative-Kick Trap
+
+If you naively differentiate "the error," every time the target (the stick value) steps to a new value, the error also jumps instantaneously, and the derivative spikes — this is called a **derivative kick**. ACRO's rate target is built directly from a 12-bit stick reading, so it is constantly stepping in tiny increments; differentiating the error directly would turn the derivative term into a constant source of noisy commands.
+
+The fix is simple: **differentiate the measurement, not the error** (D-on-Measurement). Instead of looking at how much the target changed, look only at how fast the craft's actual rotation is changing. A step in the target never passes through this path, so no derivative kick occurs.
+
+### Implementation
+
+```cpp
+namespace {
+// ...
+constexpr float kRollTd = 0.001f;   // [s] derivative time
+}  // namespace
 ```
 
-If the pass/fail criteria (the `.expect` file) are not met, revisit `adjust()` (or your controller implementation) before moving on to real hardware.
-
-### 5.2 Build and Flash Real Hardware
-
-Once SILS passes, rebuild for real hardware and flash it.
-
-```bash
-sf app build my_ctrl
+```cpp
+// app_controller.hpp に追加
+private:
+    float prev_measured_roll_ = 0.0f;
+    bool  roll_first_sample_  = true;   // primes the derivative after reset()
 ```
 
-```bash
-sf app flash my_ctrl -m
+```cpp
+// compute() 内
+float d_term_roll = 0.0f;
+if (!roll_first_sample_) {
+    const float measured_rate_of_change = (state.angular_rate[0] - prev_measured_roll_) / dt;
+    d_term_roll = -kRollKp * kRollTd * measured_rate_of_change;
+}
+prev_measured_roll_ = state.angular_rate[0];
+roll_first_sample_  = false;
+
+float torque_roll = kRollKp * error_roll + integral_roll_ + d_term_roll;
+if (torque_roll >  kMaxRollPitchTorqueNm) torque_roll =  kMaxRollPitchTorqueNm;
+if (torque_roll < -kMaxRollPitchTorqueNm) torque_roll = -kMaxRollPitchTorqueNm;
 ```
 
-### 5.3 Check With the Flight Log
+`reset()` should also initialize `prev_measured_roll_` and `roll_first_sample_`. Without the `roll_first_sample_` guard, the "previous measurement" right after a reset would be stale (or a meaningless default), producing one unnatural derivative kick right at the moment of reset.
 
-After flying, capture telemetry over WiFi and analyze it.
+That completes all three PID terms. **If you want to go further:** the derivative term has a weakness — it directly amplifies measurement noise (the gyro's small fluctuations). The `pid.hpp` implementation adds a low-pass filter to the derivative (an "incomplete derivative" that trims high frequencies using a coefficient called `eta`), which behaves more smoothly in a real, noisy environment.
 
-```bash
-sf log wifi -d 30
+## 10. Bringing All Three Axes Together Into a Real ACRO Controller
+
+### Why This Step Matters
+
+Up to now you've practiced on the roll axis alone. Pitch and yaw work in exactly the same way, and rather than copy-pasting three axes' worth of PID state, it's clearer and less error-prone to **consolidate "one axis' PID state" into a single struct, and instantiate three of them**. At the same time, this chapter properly implements `reset()`/`onModeChange()` and plugs in flight-verified gain values, finishing a genuine ACRO controller.
+
+### Consolidating One Axis' PID State
+
+```cpp
+// app_controller.hpp
+#pragma once
+#include "controller.hpp"
+
+namespace sf::app {
+
+/// One axis' rate-loop PID state (P + simple clamped I + measurement D).
+/// 1軸分のレートループPID状態（P + 素朴なクランプ付きI + 測定値D）。
+struct RateAxisPid {
+    float kp = 0.0f;
+    float ti = 0.0f;
+    float td = 0.0f;
+    float output_limit = 0.0f;
+
+    float integral = 0.0f;
+    float prev_measurement = 0.0f;
+    bool first_sample = true;
+
+    float compute(float setpoint, float measurement, float dt);
+    void reset();
+};
+
+class AppController : public sf::IController {
+public:
+    AppController();
+
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+    void onLanding() override;
+
+private:
+    RateAxisPid roll_pid_;
+    RateAxisPid pitch_pid_;
+    RateAxisPid yaw_pid_;
+
+    bool  landing_active_       = false;
+    float landing_elapsed_s_    = 0.0f;
+    float landing_thrust_start_ = 0.0f;
+    float last_thrust_          = 0.0f;
+};
+
+}  // namespace sf::app
 ```
 
-```bash
-sf log analyze
+`RateAxisPid::compute()` is exactly the roll-axis P/I/D calculation you built in chapters 7-9, rewritten so it no longer depends on which axis it's for.
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+
+namespace sf::app {
+
+namespace {
+// Named constants — every value is either a physical limit of this frame
+// (thrust/torque caps) or a flight-proven ACRO rate-loop gain.
+// 名前付き定数——推力・トルクの上限はこの機体の物理限界、それ以外は
+// 飛行実績のあるACROレートループゲイン。
+constexpr float kMaxRollPitchRateRadS = 1.0f;
+constexpr float kMaxYawRateRadS       = 5.0f;
+constexpr float kMaxThrustN           = 0.672f;
+constexpr float kMaxRollPitchTorqueNm = 5.2e-3f;
+constexpr float kMaxYawTorqueNm       = 1.226e-3f;
+
+constexpr float kRollKp = 1.0e-3f,       kRollTi = 0.7f,  kRollTd = 0.002f;
+constexpr float kPitchKp = 1.426432e-3f, kPitchTi = 0.7f, kPitchTd = 0.025f;
+constexpr float kYawKp = 8.029796e-4f,   kYawTi = 0.8f,   kYawTd = 0.01f;
+
+constexpr float kLandingDescentS = 3.0f;   // §11 で使う降下時間
+}  // namespace
+
+float RateAxisPid::compute(float setpoint, float measurement, float dt)
+{
+    const float error = setpoint - measurement;
+
+    const float p_term = kp * error;
+
+    if (ti > 0.0f) {
+        integral += (kp / ti) * error * dt;
+        if (integral >  output_limit) integral =  output_limit;
+        if (integral < -output_limit) integral = -output_limit;
+    }
+
+    float d_term = 0.0f;
+    if (td > 0.0f && !first_sample) {
+        const float measurement_rate = (measurement - prev_measurement) / dt;
+        d_term = -kp * td * measurement_rate;
+    }
+    prev_measurement = measurement;
+    first_sample = false;
+
+    float output = p_term + integral + d_term;
+    if (output >  output_limit) output =  output_limit;
+    if (output < -output_limit) output = -output_limit;
+    return output;
+}
+
+void RateAxisPid::reset()
+{
+    integral = 0.0f;
+    prev_measurement = 0.0f;
+    first_sample = true;
+}
+
+AppController::AppController()
+    : roll_pid_{kRollKp,  kRollTi,  kRollTd,  kMaxRollPitchTorqueNm},
+      pitch_pid_{kPitchKp, kPitchTi, kPitchTd, kMaxRollPitchTorqueNm},
+      yaw_pid_{kYawKp,    kYawTi,   kYawTd,   kMaxYawTorqueNm}
+{
+}
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    sf::ControlOutput output{};
+    output.timestamp = state.timestamp;
+
+    float rate_sp_roll  = setpoint.roll  * kMaxRollPitchRateRadS;
+    float rate_sp_pitch = setpoint.pitch * kMaxRollPitchRateRadS;
+    float rate_sp_yaw   = setpoint.yaw   * kMaxYawRateRadS;
+    float thrust        = setpoint.throttle * kMaxThrustN;
+
+    if (landing_active_) {
+        // See §11 — comm-loss / battery-emergency descent.
+        rate_sp_roll = rate_sp_pitch = rate_sp_yaw = 0.0f;
+        landing_elapsed_s_ += dt;
+        float ramp = 1.0f - (landing_elapsed_s_ / kLandingDescentS);
+        if (ramp < 0.0f) ramp = 0.0f;
+        thrust = landing_thrust_start_ * ramp;
+    }
+
+    output.torque[0] = roll_pid_.compute(rate_sp_roll,  state.angular_rate[0], dt);
+    output.torque[1] = pitch_pid_.compute(rate_sp_pitch, state.angular_rate[1], dt);
+    output.torque[2] = yaw_pid_.compute(rate_sp_yaw,    state.angular_rate[2], dt);
+    output.thrust = thrust;
+
+    // Export the rate targets for later analysis (sf log analyze/viz).
+    // ACRO has no angle (attitude) loop, so angle_ref stays at 0.
+    // 解析用にレート目標を出力（sf log analyze/viz）。ACROには角度ループが
+    // ないので angle_ref は0のまま。
+    output.rate_ref[0] = rate_sp_roll;
+    output.rate_ref[1] = rate_sp_pitch;
+    output.rate_ref[2] = rate_sp_yaw;
+    output.angle_ref[0] = 0.0f;
+    output.angle_ref[1] = 0.0f;
+
+    last_thrust_ = thrust;
+    return output;
+}
+
+void AppController::reset()
+{
+    roll_pid_.reset();
+    pitch_pid_.reset();
+    yaw_pid_.reset();
+    landing_active_ = false;
+    landing_elapsed_s_ = 0.0f;
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    // This tutorial controller only implements ACRO. A controller covering
+    // more modes would reconfigure its cascade here (see PidController).
+    // このコントローラはACRO専用。複数モードに対応する制御器は、ここで
+    // カスケード構成を再構成する（本物のPidController参照）。
+    (void)new_mode;
+}
+
+}  // namespace sf::app
 ```
 
-`sf log analyze` prints gyro statistics, input-response correlation, oscillation-frequency analysis, and PID-tuning recommendations. Use `sf log viz` if you want to see it graphically.
+`onLanding()`'s implementation is covered as a whole in the next chapter.
 
-### 5.4 Safety Notes
+### About the Gain Values
 
-Always follow the pre-flight checklist in `docs/guides/safety.md` (check the propeller guards for damage, secure a flight area of at least 2m x 2m, keep the battery above 30%, and confirm the emergency-stop method beforehand). A first flight with your own controller is more likely to behave unexpectedly than a stock flight. Until you have confirmed stable flight, be ready to execute the emergency stop (`sf emergency`, or `drone.emergency()` from the Python SDK) immediately.
+| Axis | kp | ti [s] | td [s] | Output Limit |
+|------|----|--------|--------|--------------|
+| Roll  | 1.0e-3 | 0.7 | 0.002 | ±5.2e-3 Nm |
+| Pitch | 1.426432e-3 | 0.7 | 0.025 | ±5.2e-3 Nm |
+| Yaw   | 8.029796e-4 | 0.8 | 0.01 | ±1.226e-3 Nm |
 
-## 6. Where This Stands (Implemented / What Remains)
+These are values with real flight history on this craft (StampFly). That said, this guide's PID implementation (a naive clamped integral, an unfiltered derivative) discretizes things differently from the real `PidController` (bilinear/Tustin transform, conditional-integration anti-windup), so behavior will not match exactly. At a control period as fast as 400 Hz the practical difference is small, but if you want to chase it down precisely, look at the `pid.hpp` implementation.
 
-The plan to make `sf app` the L1 entry point ([`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md)) is implemented through Phase 0-3 (2026-09-08). In summary:
+With all three axes closed, this controller now genuinely has enough authority to fly freely. When you try it on real hardware, hold to chapter 7's safety notice (props off or the craft firmly restrained, SILS before real-hardware bench, ready to execute an emergency stop) even more strictly than before. Save actual free flight for after you've gone through the safety mechanism and pre-flight checklist in chapters 11 and 12.
 
-| Item | Content |
-|------|---------|
-| App hooks | The vehicle firmware defines three functions a user program can implement: `sf::app::controller()`, `sf::app::estimator()`, `sf::app::start()` (`firmware/vehicle/components/sf_app_hooks/include/app_hooks.hpp`). `control_task.cpp` and `imu_task.cpp` call these hooks |
-| How the code is pulled in | `firmware/apps/<name>/*.cpp` is compiled directly into the vehicle's main component. Both the hardware build (ESP-IDF, `firmware/vehicle/main/CMakeLists.txt`) and the SILS build (`emu_vehicle`, `simulator/sils/CMakeLists.txt`) take that directory through the same variable `SF_APP_DIR` |
-| Templates | `11_app_controller` (an `IController` that delegates to `PidController` and lets you replace one axis with your own law) and `12_app_task_hello` (a task that reads `estimate_latest()` and logs it). `sf app new` defaults to 11. Examples 09 / 10 remain as benches and `sf app list` marks them "no (bench)" |
-| Relation to L0 | The workshop skeleton (L0) is not replaced. The two remain parallel, separate entry points |
+## 11. The Safety Mechanism and `onLanding()`
 
-Sections 4 and 5 above show actual usage. **The only thing left is Phase 4 (an API that lets L1 code write to topics — set a guidance target, request a mode) — it has not started and is designed separately.**
+### Why This Step Matters
 
-## 7. Writing Guidelines
+What happens if the link to the transmitter drops? The firmware already has a built-in failsafe: after detecting a comm loss, it **tries to keep hovering on the last command for 3 seconds, and if the link has not come back by then, automatically transitions into a "landing" state** (a critically low battery voltage triggers the same transition). The instant it enters that landing state, the firmware calls your controller's `onLanding()` exactly once.
 
-| # | Guideline | Why |
-|---|-----------|-----|
-| 1 | `IController::compute()` is called at 400 Hz. Stay within 2.5 ms per cycle | Dynamic memory allocation (`new`/`malloc`, i.e. allocating memory during execution), `printf`-style logging, or blocking calls (calls that stall while waiting for a response) inside `compute()` will overrun the control period and destabilize flight |
-| 2 | Use the existing param system (NVS: Non-Volatile Storage, a parameter store that survives power-off) for gains and other tunables | Avoids magic numbers and enables live tuning via `param set` while flying |
-| 3 | Start with a thin wrapper that delegates to the existing `PidController`, and replace just one axis with your own formula | The shared design principle of `11_app_controller` (embedded) and `10_custom_controller` (standalone bench) — reuse the proven cascade PID and minimize the change surface to keep debugging tractable |
-| 4 | Always confirm with SILS before real hardware | Project policy: back every control-law or parameter change with simulation before it goes on the real drone. Reduces surprises in flight |
-| 5 | Capture a log with `sf log wifi` after every flight and compare | Confirms whether a change actually worked with numbers, not a qualitative impression |
+**If you leave this unimplemented**, the controller keeps chasing "the last stick value it ever received" forever. If the stick happened to be commanding, say, "move forward while rotating" at the exact moment the link dropped, the craft keeps flying that command with no way to stop it. Implementing `onLanding()` is a safety mechanism this guide's controller must not skip.
 
-## 8. Troubleshooting
+### Implementation Approach (An Honest Simplification)
 
-| Symptom | What to Check |
-|---------|---------------|
-| `sf app sils` fails with exit code 2 | The project is bench-type (e.g. `--from 10_custom_controller`, `sils: false` in `app.yaml`). Recreate it as embedded-type with `sf app new <name> --from 11_app_controller` (the default) |
-| `sf app list` shows `no (bench)` in the SILS column for your project | Same reason as above. Recreate it from `--from 11_app_controller` or `--from 12_app_task_hello` to get an embedded-type project |
-| CMake stops with `SF_APP_DIR=... contains no *.cpp` | Check that `*.cpp` files exist directly under the embedded-type project's directory (not under `main/`) — e.g. `app_controller.cpp`/`app.cpp` |
-| Build error about unimplemented pure virtual methods of `IController`/`IEstimator` | Did you implement every required method? Check your declaration against `controller.hpp`/`estimator.hpp` — some methods beyond the required ones (`compute()`/`predict()`/`getState()`, etc.) have a default no-op |
-| A SILS scenario does not pass (does not take off, attitude diverges, etc.) | Check the `.expect` file's pass criteria, and re-examine the sign, gain, and units (degrees vs. radians, etc.) in `compute()`/`predict()` |
-| Real hardware vibrates | Gain too high, or `compute()` is doing too much work and overrunning the 400 Hz (2.5 ms) period (see guideline 1 in section 7) |
-| `sf app new` is rejected | Check whether the project name collides with a reserved word (`vehicle`, `vehicle_old`, `controller`, `workshop`, `common`, `apps`), or whether a directory with that name already exists |
+This controller only handles ACRO — angular rate — and **has no mechanism to detect or correct attitude (tilt)**. So "returning the craft to level" is simply not possible in principle; all it can do is "stop rotating any further" and "ease off thrust and come down gently." This guide takes the following simple, honest approach:
 
-## 9. Related Documents
+- Set the target angular rate to zero on all three axes (ignore the sticks and stop any further rotation; if the craft was already close to level, it descends while staying roughly level as a side effect)
+- Starting from the thrust that was commanded the instant `onLanding()` is called, linearly ramp thrust down to zero over a fixed duration (3 seconds in this guide, `kLandingDescentS`)
+
+`onLanding()` only receives the signal that landing has begun — it has no direct access to state (the current thrust). So at the end of every `compute()` call, save "the thrust just commanded" into `last_thrust_`, and let `onLanding()` use that saved value as the starting point for the descent.
+
+```cpp
+void AppController::onLanding()
+{
+    landing_active_ = true;
+    landing_elapsed_s_ = 0.0f;
+    landing_thrust_start_ = last_thrust_;
+}
+```
+
+`landing_active_` is cleared by the next `reset()` (the next ARM) — that's part of `IController::onLanding()`'s design contract, which is why `reset()` above sets `landing_active_ = false`.
+
+This simple implementation has a real limitation: if the craft was already tilted significantly when landing began, it comes down still tilted. A more sophisticated implementation (adding, say, a simple tilt estimate from the accelerometer) is beyond this guide's scope — the point to take away is simply that an honest, simple safety measure is always far better than nothing.
+
+Don't test this landing law by cutting the transmitter's power mid-flight during real free flight, either. First confirm in a SILS comm-loss scenario that `onLanding()` fires and thrust ramps down as intended, from the log. When you check on real hardware, start with the props off or the craft restrained, and confirm the behavior right at the moment `onLanding()` fires (rotation stops, thrust falls).
+
+## 12. Verify in SILS, Then Fly on Real Hardware
+
+### Steps
+
+1. **Confirm in SILS.**
+
+   ```bash
+   sf app sils my_acro simulator/sils/scenarios/acro_flight.scn
+   ```
+
+   Confirm the exit code is 0 (PASS).
+
+2. **Build for real hardware and flash it.**
+
+   ```bash
+   sf app build my_acro
+   sf app flash my_acro -m
+   ```
+
+3. **Always run the pre-flight checklist** (see `docs/guides/safety.md` for details).
+
+   | # | Check Item |
+   |---|-----------|
+   | 1 | Propeller guards undamaged |
+   | 2 | No propeller damage |
+   | 3 | Battery sufficiently charged (above 30%) |
+   | 4 | Flight area secured (at least 2m x 2m, no obstacles) |
+   | 5 | No people nearby |
+   | 6 | Emergency-stop method confirmed (`sf emergency`, or the transmitter's emergency stop) |
+
+4. A first flight is more likely to behave unexpectedly than usual. Until you've confirmed stable flight, stay ready to execute the emergency stop immediately.
+
+5. After flying, capture and inspect the log.
+
+   ```bash
+   sf log wifi -d 30
+   sf log analyze
+   ```
+
+   `sf log analyze` prints gyro statistics, input/response correlation, and oscillation-frequency analysis. Use `sf log viz` if you'd rather see it as a graph.
+
+## 13. Tuning Your Own Gains, and Next Steps
+
+Leaving constants like `kRollKp` baked into the source means every gain change requires a rebuild and reflash. The firmware already has a parameter system built on **NVS** (Non-Volatile Storage — a storage area that survives power loss) and lets you change gains in flight with the `param set` command (live tuning). If you want to hook your own gains into that system, read the registration pattern for `rate.roll.*` and friends in `firmware/vehicle/components/sf_core/params.cpp`, along with `loadParams()`/`reloadParams()` in `firmware/vehicle/components/sf_controller_pid/pid_controller.cpp`, and parameterize your own constants the same way.
+
+### Where This Goes From Here
+
+ACRO mode (rate control) is the simplest control law the vehicle firmware has. What comes next is **attitude estimation** (estimating the craft's tilt), **attitude control** (tracking a target tilt using that estimate), and eventually control laws built on a different foundation than classical PID entirely, such as **LQR/LQI** (Linear-Quadratic Regulator / Linear-Quadratic-Integral control). None of that exists as a guide yet, but it is expected to arrive as a sequel to this one. The overall learning roadmap is laid out in the educational roadmap section of `firmware/vehicle/docs/coding_and_education.md`.
+
+For further reading:
 
 | Document | Content |
 |----------|---------|
-| [`docs/plans/sf-app-sils-plan.md`](../plans/sf-app-sils-plan.md) | Details of the plan described in section 6 (current-state analysis, design decisions, implementation phases) |
-| [`firmware/vehicle/docs/architecture.md`](../../firmware/vehicle/docs/architecture.md) | Definition of the 4-tier access model (L0-L3), overall Pub-Sub design |
-| [`firmware/vehicle/docs/topic_reference.md`](../../firmware/vehicle/docs/topic_reference.md) | SSOT for the topic catalog, usage patterns |
-| [`firmware/vehicle/examples/11_app_controller/README.md`](../../firmware/vehicle/examples/11_app_controller/README.md) | Embedded-type `IController` template, SILS-to-hardware usage |
-| [`firmware/vehicle/examples/12_app_task_hello/README.md`](../../firmware/vehicle/examples/12_app_task_hello/README.md) | Minimal additional task that reads topics (embedded-type) |
-| [`firmware/vehicle/examples/10_custom_controller/README.md`](../../firmware/vehicle/examples/10_custom_controller/README.md) | `IController` swap-in exercise (standalone bench) |
-| [`firmware/vehicle/examples/09_topic_api_hello/README.md`](../../firmware/vehicle/examples/09_topic_api_hello/README.md) | Minimal Topic API read example (standalone bench) |
-| [`firmware/apps/README.md`](../../firmware/apps/README.md) | How to use `firmware/apps/` |
-| [`docs/commands/sf-app.md`](../commands/sf-app.md) | `sf app` command reference |
-| [`docs/commands/sf-log.md`](../commands/sf-log.md) | Log capture and analysis commands |
-| [`docs/guides/safety.md`](safety.md) | Flight safety guide |
+| [`firmware/vehicle/components/sf_controller_pid/include/pid.hpp`](../../firmware/vehicle/components/sf_controller_pid/include/pid.hpp) | The real PID implementation (conditional integration, Tustin-transform incomplete derivative) |
+| [`firmware/vehicle/docs/topic_reference.md`](../../firmware/vehicle/docs/topic_reference.md) | The SSOT (Single Source of Truth) topic catalog and usage patterns |
+| [`docs/guides/safety.md`](safety.md) | The flight safety guide |
