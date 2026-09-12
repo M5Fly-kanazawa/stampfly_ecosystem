@@ -709,11 +709,38 @@ def load_bundle(path) -> sflog.FlightLog:
 
 
 
+def _screen_size_macos():
+    """Screen size via the Finder (osascript). Used with the `macosx`
+    backend, where creating a Tk root would crash the process (Tk 9 calls
+    -[NSApplication macOSVersion], which matplotlib's NSApplication does
+    not implement -- an uncatchable native exception).
+    Finder（osascript）から画面サイズを得る。`macosx` バックエンドでは Tk の
+    ルートを作るとプロセスが落ちる（Tk 9 が -[NSApplication macOSVersion] を
+    呼び、matplotlib の NSApplication がそれを持たない。Python で捕捉できない
+    ネイティブ例外）ため、こちらを使う。
+    """
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop'],
+            capture_output=True, text=True, timeout=3.0, check=True,
+        ).stdout.strip()
+        left, top, right, bottom = [int(v) for v in out.split(",")]
+        return right - left, bottom - top
+    except Exception:  # noqa: BLE001 -- Finder not running, timeout, parse error
+        return None
+
+
 def _screen_size_px():
     """Best-effort logical screen size (width, height) in pixels for the
     active matplotlib backend; None if it cannot be determined (headless).
+    Only the toolkit that owns the running GUI is asked: Qt for the qt
+    backends, Tk for tkagg, osascript for macosx. Mixing toolkits in one
+    process is not safe (see _screen_size_macos).
     現在の matplotlib バックエンドでの画面の論理サイズ (幅, 高さ) [px]。
-    判定できなければ None（ヘッドレス等）。
+    判定できなければ None（ヘッドレス等）。問い合わせるのは動いている GUI の
+    ツールキットだけ（qt 系は Qt、tkagg は Tk、macosx は osascript）。
+    1 プロセス内でツールキットを混ぜると安全でない（_screen_size_macos 参照）。
     """
     import matplotlib
     backend = matplotlib.get_backend().lower()
@@ -723,19 +750,21 @@ def _screen_size_px():
             app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
             geometry = app.primaryScreen().availableGeometry()
             return geometry.width(), geometry.height()
-        except Exception:  # noqa: BLE001 -- fall through to Tk / None
-            pass
-    if "agg" == backend:
-        return None
-    try:
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        size = (root.winfo_screenwidth(), root.winfo_screenheight())
-        root.destroy()
-        return size
-    except Exception:  # noqa: BLE001 -- no Tk (or no display)
-        return None
+        except Exception:  # noqa: BLE001
+            return None
+    if "macosx" in backend:
+        return _screen_size_macos()
+    if "tk" in backend:
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()
+            size = (root.winfo_screenwidth(), root.winfo_screenheight())
+            root.destroy()
+            return size
+        except Exception:  # noqa: BLE001 -- no display
+            return None
+    return None
 
 
 def _fit_figure_to_screen(fig) -> None:
