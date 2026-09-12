@@ -71,7 +71,6 @@ commands; standalone scripts meant to be run on their own are not added here.
 Helpers outside sf are limited to these four. Adding another requires an update to
 `PROJECT_PLAN.md` §8.
 
-`test_monitor.py` has no known caller; its purpose is unconfirmed.
 
 ## 4. Adding a New Tool
 

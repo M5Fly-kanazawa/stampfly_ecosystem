@@ -158,6 +158,24 @@ jobs:
           sf params check --strict
           sf params generate --check
 
+      - name: Check ESP-NOW protocol message definitions
+        # protocol/spec/messages.yaml is the SSOT for ESP-NOW wire-format
+        # messages; firmware/common/protocol/include/espnow_protocol.hpp is
+        # its hand-written C++ implementation (the ControlPacket struct and
+        # the PairingPacket constants). check_messages.py cross-checks
+        # message sizes, per-field layout (name/type/offset), and flag-bit
+        # constants between the two, so a hand-edit to one side that
+        # silently drifts from the other is caught here instead of at
+        # flight time.
+        # protocol/spec/messages.yaml は ESP-NOW 電文形式の SSOT（唯一の
+        # 正）であり、firmware/common/protocol/include/espnow_protocol.hpp
+        # はその手書き C++ 実装（ControlPacket struct と PairingPacket
+        # 定数）。check_messages.py は両者のメッセージサイズ・フィールド
+        # レイアウト（名前/型/オフセット）・フラグビット定数を突き合わせ、
+        # 片方だけを手で編集して食い違ったケースを、飛行時ではなくここで
+        # 検出する。
+        run: python3 protocol/tools/check_messages.py
+
       - name: Flight-log format and tool unit tests (pytest)
         # The flight-log bundle format (protocol/spec/flight_log.yaml, plan
         # docs/plans/flight-log-format-plan.md section 3.5) has its own

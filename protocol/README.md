@@ -60,6 +60,7 @@ protocol/
 - bit1: FLIP - フリップトリガー
 - bit2: MODE - フライトモード切替
 - bit3: ALT_MODE - 高度維持モード
+- bit4: POS_MODE - 位置保持モード（POS_HOLD）
 
 ### TelemetryPacket (22 bytes)
 機体からコントローラへの基本テレメトリ（ESP-NOW）。

@@ -1,6 +1,6 @@
 # StampFly Protocol - Message Definitions
 # Version: 1.0.0
-# Last Updated: 2026-01-05
+# Last Updated: 2026-09-12 (documented flags bit 4 POS_MODE, already implemented in espnow_protocol.hpp)
 
 version: "1.0.0"
 
@@ -85,6 +85,9 @@ messages:
           - name: ALT_MODE
             bit: 3
             description: "Altitude hold mode"
+          - name: POS_MODE
+            bit: 4
+            description: "Position hold mode (POS_HOLD)"
 
       - name: reserved
         type: uint8
