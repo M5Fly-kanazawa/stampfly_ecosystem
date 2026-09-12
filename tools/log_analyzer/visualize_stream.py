@@ -779,18 +779,33 @@ def _fit_figure_to_screen(fig) -> None:
     if not size:
         return
     width_px, height_px = size
-    dpi = fig.get_dpi()
-    fig.set_size_inches(width_px * SCREEN_FIT_FRACTION_W / dpi,
-                        height_px * SCREEN_FIT_FRACTION_H / dpi, forward=True)
+    # On HiDPI displays (Retina, Windows scaling) matplotlib multiplies
+    # fig.dpi by the device pixel ratio, while the screen size above is in
+    # LOGICAL pixels -- so size the figure with the logical dpi, otherwise
+    # the window comes out 1/ratio too small.
+    # 高解像度表示（Retina、Windows の拡大率）では matplotlib が fig.dpi に
+    # デバイス画素比を掛ける一方、上の画面サイズは論理ピクセルなので、論理 dpi
+    # で図の大きさを決める（さもないと窓が 1/倍率 に小さくなる）。
+    ratio = float(getattr(fig.canvas, "device_pixel_ratio", 1.0) or 1.0)
+    logical_dpi = fig.get_dpi() / ratio
+    fig.set_size_inches(width_px * SCREEN_FIT_FRACTION_W / logical_dpi,
+                        height_px * SCREEN_FIT_FRACTION_H / logical_dpi, forward=True)
+
+    # Put the window at the top-left so the whole figure is on screen
+    # (Qt and Tk expose the window; the macosx backend does not).
+    # 図全体が画面内に入るようウィンドウを左上へ（Qt と Tk は窓に触れる。
+    # macosx バックエンドは触れない）。
     manager = getattr(fig.canvas, "manager", None)
     window = getattr(manager, "window", None)
-    # Tk: place the window at the top-left so the whole figure is on screen.
-    # Tk: 図全体が画面内に入るようウィンドウを左上に寄せる。
-    if window is not None and hasattr(window, "geometry"):
-        try:
+    if window is None:
+        return
+    try:
+        if hasattr(window, "move"):            # Qt QMainWindow
+            window.move(0, 0)
+        elif hasattr(window, "geometry"):      # Tk toplevel
             window.geometry("+0+0")
-        except Exception:  # noqa: BLE001 -- not a Tk window
-            pass
+    except Exception:  # noqa: BLE001 -- best effort only
+        pass
 
 
 def render(log, title: str, save_path=None, show=True, time_range=None, mode='all',
