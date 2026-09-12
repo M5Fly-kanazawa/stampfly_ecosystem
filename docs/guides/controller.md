@@ -127,7 +127,8 @@ ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順�
 3. 送信機の LCD に `=== PAIRING ===` 画面が表示され、聞こえた機体を受信強度の強い順に
    「MAC下4桁 + チャンネル」（例 `A1B2 CH06`）の一覧として最大6件表示する。まだ何も
    聞こえていなければ「Searching...」と表示される。**一覧の下4桁を機体に貼ったラベルと
-   照合すること**（次節参照）
+   照合すること**（次節参照）。この並び替えはカーソルを動かし始めるまでで、動かし始めた
+   時点で順序は固定され、以後新しく見つかった機体は一覧の末尾に追加される
 4. 右スティックの上下（または黄ボタン2つ）で選びたい行に合わせ、画面の決定ボタン（M5ボタン）
    （スティックは 1 回倒すごとに 1 行動き、中央に戻すまで次へ進まない。倒し続けると約 0.7 秒後に
    0.4 秒ごとのゆっくりした自動送りになる。端では止まり周回しない）
@@ -341,7 +342,9 @@ requires the user to pick one** (see `docs/plans/pairing-methods-plan.md` for th
 3. The controller's LCD shows a `=== PAIRING ===` screen listing every vehicle it hears, strongest
    signal first, as "MAC last 4 hex digits + channel" (e.g. `A1B2 CH06`), up to 6 rows. If nothing
    has been heard yet it shows "Searching...". **Match the last 4 hex digits against the label
-   stuck on the vehicle** (see the next section)
+   stuck on the vehicle** (see the next section). This strongest-first ordering only lasts until
+   you start moving the cursor; from that point on the order is fixed, and any vehicle found later
+   is added at the bottom of the list
 4. Move the highlight with the right stick up/down (or the two yellow buttons) and confirm with
    (one deflection moves one row and nothing more happens until the stick returns to center; holding
    it starts a slow auto-repeat after about 0.7 s, one row every 0.4 s; the highlight stops at the

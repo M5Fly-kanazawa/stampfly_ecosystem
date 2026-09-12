@@ -2323,17 +2323,76 @@ static void run_pairing_ui(bool force_pairing)
     int      nav_dir_prev = 0;        // 前周期のナビ入力方向(-1/0/+1) / previous navigation direction (-1/0/+1)
     uint32_t nav_hold_since_ms = 0;   // 倒し始めた時刻 / when the current deflection started
 
+    // 表示順の凍結用状態（決定事項「option B」: ナビゲーション開始までは受信強度順
+    // で並べ替え続け、最初の一歩を踏んだ瞬間の並びで凍結する。以後は行の並び順を
+    // 維持したまま新規発見機体を末尾に追加する。RSSIバー等の値は凍結後も毎フレーム
+    // 最新化する（凍結するのは「並び」だけ）
+    // Display-order freeze state ("option B"): keep re-sorting by RSSI until
+    // the user starts navigating, then freeze the order at that instant. From
+    // then on, existing rows keep their order and newly discovered vehicles
+    // are appended at the bottom. Per-row values (RSSI bar, etc.) still
+    // refresh every frame after the freeze -- only the *order* is frozen
+    uint8_t  display_order[PAIRING_CANDIDATE_MAX][6];  // 凍結後に維持する表示順（MACの並び） / display order kept after freezing (a list of MACs)
+    uint8_t  display_order_count = 0;                   // display_order[]の有効件数 / valid entries in display_order[]
+    bool     order_frozen = false;                      // 最初のナビ操作でtrueになり、UI終了まで戻らない / becomes true on the first nav step and never reverts until the UI exits
+
     while (state != PAIRING_UI_DONE) {
         M5.update();
         joy_update();
         uint32_t now = millis_now();
 
-        // 現在の候補（受信強度順）を毎フレーム取得する
-        // Snapshot the current candidates (RSSI order) every frame
-        pairing_candidate_t sorted[PAIRING_CANDIDATE_MAX];
+        // 現在の候補をテーブル本来の並び（受信強度順）で毎フレーム取得する
+        // Snapshot the current candidates every frame, in the table's native
+        // RSSI-ranked order
+        pairing_candidate_t rssi_ranked[PAIRING_CANDIDATE_MAX];
         uint8_t total_count = pairing_candidate_count();
         for (uint8_t i = 0; i < total_count; i++) {
-            pairing_candidate_get_by_rank(i, &sorted[i]);
+            pairing_candidate_get_by_rank(i, &rssi_ranked[i]);
+        }
+
+        // 表示順の確定。凍結前は受信強度順をそのまま使い、その並びを
+        // display_order[]へ複写しておく（凍結が起きた瞬間の並びがそのまま
+        // display_order[]に残るようにするため）。凍結後はdisplay_order[]の
+        // 並びを維持したまま、新規に見つかった機体だけを末尾へ追加する
+        // （初出順）。各行の中身(RSSI等)はrssi_ranked[]から都度引き直すので
+        // 値そのものは常に最新のまま
+        // Resolve the display order. Before the freeze, just use the
+        // RSSI-ranked order as-is and mirror it into display_order[] so that
+        // whichever order is on screen at the instant a freeze happens is
+        // exactly what gets frozen. After the freeze, keep display_order[]'s
+        // existing order and append newly discovered vehicles at the bottom
+        // (first-seen order). Each row's contents are still looked up fresh
+        // from rssi_ranked[] every frame, so only the order is frozen
+        pairing_candidate_t sorted[PAIRING_CANDIDATE_MAX] = {};
+        if (!order_frozen) {
+            for (uint8_t i = 0; i < total_count; i++) {
+                memcpy(display_order[i], rssi_ranked[i].mac, 6);
+            }
+            display_order_count = total_count;
+            memcpy(sorted, rssi_ranked, sizeof(pairing_candidate_t) * total_count);
+        } else {
+            for (uint8_t i = 0; i < total_count; i++) {
+                bool already_listed = false;
+                for (uint8_t j = 0; j < display_order_count; j++) {
+                    if (memcmp(display_order[j], rssi_ranked[i].mac, 6) == 0) {
+                        already_listed = true;
+                        break;
+                    }
+                }
+                if (!already_listed && display_order_count < PAIRING_CANDIDATE_MAX) {
+                    memcpy(display_order[display_order_count], rssi_ranked[i].mac, 6);
+                    display_order_count++;
+                }
+            }
+            for (uint8_t i = 0; i < display_order_count; i++) {
+                for (uint8_t j = 0; j < total_count; j++) {
+                    if (memcmp(rssi_ranked[j].mac, display_order[i], 6) == 0) {
+                        sorted[i] = rssi_ranked[j];
+                        break;
+                    }
+                }
+            }
+            total_count = display_order_count;
         }
 
         // 選択中のMACを一覧内で探す（同一MACは表から消えないので、選択済みなら
@@ -2386,6 +2445,15 @@ static void run_pairing_ui(bool force_pairing)
                     step = true;                  // edge: first step / 倒した瞬間の1歩
                     nav_hold_since_ms = now;
                     last_nav_ms = now;
+                    // 最初のナビ操作で表示順を凍結する。このフレームのsorted[]が
+                    // 「その瞬間」の並びであり、以後はdisplay_order[]としてこの
+                    // 並びを維持する（confirm済みなら以降も呼ばれるが、trueを
+                    // 再代入するだけで無害）
+                    // Freeze the display order on the first navigation step.
+                    // This frame's sorted[] is "that instant"'s order, kept
+                    // from here on as display_order[] (re-setting true on a
+                    // later deflection is harmless)
+                    order_frozen = true;
                 } else if (nav_dir != 0 && nav_dir == nav_dir_prev &&
                            now - nav_hold_since_ms >= NAV_REPEAT_DELAY_MS &&
                            now - last_nav_ms >= NAV_REPEAT_INTERVAL_MS) {
