@@ -113,6 +113,11 @@ def test_select_backend_honors_mplbackend(monkeypatch):
 
 def test_select_backend_falls_back_when_all_probes_fail(monkeypatch):
     monkeypatch.delenv("MPLBACKEND", raising=False)
+    # This test is about probe fallback, not headless detection: pretend a
+    # display exists so the probes actually run on a DISPLAY-less CI runner.
+    # このテストの対象はプローブの後退動作であり、ヘッドレス判定ではない:
+    # DISPLAY の無い CI ランナーでもプローブが走るよう、ディスプレイ有りとみなす。
+    monkeypatch.setattr(plotting, "has_display", lambda: True)
     monkeypatch.setattr(plotting, "gui_backend_candidates", lambda: ["tkagg", "qtagg"])
 
     def _boom_tkagg():
@@ -133,6 +138,7 @@ def test_select_backend_falls_back_when_all_probes_fail(monkeypatch):
 
 def test_select_backend_picks_first_usable(monkeypatch):
     monkeypatch.delenv("MPLBACKEND", raising=False)
+    monkeypatch.setattr(plotting, "has_display", lambda: True)
     # "agg" stands in for a GUI backend here -- only used as a candidate
     # name so this test never activates a real window backend.
     # ここでは "agg" を GUI バックエンドの代役として使う -- 候補名として
