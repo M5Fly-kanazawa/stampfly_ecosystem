@@ -113,6 +113,213 @@ sf app new my_acro
 | `app_controller.hpp` / `app_controller.cpp` | 自分の `IController` 実装を書くファイル。**この記事でずっと編集するのはここ** |
 | `README.md` | 複製元テンプレートの説明（そのままでよい） |
 
+### 生成された中身を覗いてみる
+
+上の表は「何のためのファイルか」までしか説明していない。実際に`app_controller.hpp`/`.cpp`を開くと、まだ何も書いていないはずなのに、すでに中身がぎっしり詰まっている。まずはそれを覗いてみる。
+
+`app.cpp`:
+
+```cpp
+// app.cpp
+#include "app_hooks.hpp"
+#include "app_controller.hpp"
+#include "stock_hooks.hpp"
+
+namespace sf::app {
+
+sf::IController& controller()
+{
+    // Function-local static: constructed once (first call). init() is called
+    // exactly once, on that first call, matching the app_hooks.hpp contract.
+    // 関数内 static: 初回呼び出しで構築される。init() も最初の呼び出しで
+    // 一度だけ実行する（app_hooks.hpp の契約どおり）。
+    static AppController app_controller;
+    static bool initialized = false;
+    if (!initialized) {
+        app_controller.init();
+        initialized = true;
+    }
+    return app_controller;
+}
+
+sf::IEstimator& estimator()
+{
+    // This template only replaces the controller — the estimator stays the
+    // vehicle's standard one (ESKF / complementary, by param estimator.type).
+    // 本テンプレートはコントローラのみ差し替える — 推定器は vehicle 標準
+    // （estimator.type で ESKF／相補）のまま。
+    return stock::estimator();
+}
+
+void start()
+{
+    // No additional task in this template — see examples/12_app_task_hello
+    // for an example that starts one.
+    // 本テンプレートに追加タスクは無い — 追加タスクを起動する例は
+    // examples/12_app_task_hello を参照。
+}
+
+}  // namespace sf::app
+```
+
+`app_controller.hpp`:
+
+```cpp
+// app_controller.hpp
+#pragma once
+
+#include "controller.hpp"
+#include "pid_controller.hpp"
+
+namespace sf::app {
+
+/// Thin `IController` wrapper around `PidController`. Forwards every method
+/// unchanged except `compute()`, which routes its output through `adjust()`
+/// — the one exercise hook.
+/// `PidController` を包む薄い `IController` ラッパー。`compute()` を除く
+/// 全メソッドをそのまま転送する。`compute()` の出力だけ `adjust()`
+/// （唯一の演習フック）に通す。
+class AppController : public sf::IController {
+public:
+    void init();
+
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+    void onLanding() override;
+    void onTakeoff() override;
+    void onTakeoffComplete() override;
+    bool isTakeoffComplete() const override;
+    void setGuidanceTarget(const sf::GuidanceTarget& target,
+                           const sf::CommandSetpoint& current_sticks) override;
+    bool isGuidanceActive() const override;
+    void startExcitation(const sf::SysidCommand& cmd) override;
+    bool fetchSysidResult(sf::SysidFreqResult& out) override;
+    void reloadParams() override;
+
+private:
+    /// Your one insertion point: adjust the cascade's ControlOutput before it
+    /// reaches the mixer. Default is the identity (kPitchTorqueScale = 1.0).
+    /// 唯一の挿入点: ミキサーへ渡す前にカスケードの ControlOutput を調整する。
+    /// 既定は恒等（kPitchTorqueScale = 1.0）。
+    sf::ControlOutput adjust(
+        sf::ControlOutput output,
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint);
+
+    /// The controller being wrapped.
+    /// ラップ対象のコントローラ。
+    sf::PidController pid_;
+};
+
+}  // namespace sf::app
+```
+
+`app_controller.cpp`:
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+
+namespace sf::app {
+
+void AppController::init()
+{
+    pid_.init();
+}
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    sf::ControlOutput output = pid_.compute(state, setpoint, dt);
+    return adjust(output, state, setpoint);
+}
+
+sf::ControlOutput AppController::adjust(
+    sf::ControlOutput output,
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint)
+{
+    // Named constant, not a magic number: at the default value (1.0) this is
+    // the identity — PidController's output passes through unchanged.
+    // マジックナンバーではなく名前付き定数: 既定値（1.0）では恒等 —
+    // PidController の出力がそのまま通る。
+    constexpr float kPitchTorqueScale = 1.0f;
+    output.torque[1] *= kPitchTorqueScale;  // torque[3] = R, P, Y (data_types.hpp)
+    return output;
+}
+
+void AppController::reset()
+{
+    pid_.reset();
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    pid_.onModeChange(new_mode);
+}
+
+void AppController::onLanding()
+{
+    pid_.onLanding();
+}
+
+void AppController::onTakeoff()
+{
+    pid_.onTakeoff();
+}
+
+void AppController::onTakeoffComplete()
+{
+    pid_.onTakeoffComplete();
+}
+
+bool AppController::isTakeoffComplete() const
+{
+    return pid_.isTakeoffComplete();
+}
+
+void AppController::setGuidanceTarget(const sf::GuidanceTarget& target,
+                                       const sf::CommandSetpoint& current_sticks)
+{
+    pid_.setGuidanceTarget(target, current_sticks);
+}
+
+bool AppController::isGuidanceActive() const
+{
+    return pid_.isGuidanceActive();
+}
+
+void AppController::startExcitation(const sf::SysidCommand& cmd)
+{
+    pid_.startExcitation(cmd);
+}
+
+bool AppController::fetchSysidResult(sf::SysidFreqResult& out)
+{
+    return pid_.fetchSysidResult(out);
+}
+
+void AppController::reloadParams()
+{
+    pid_.reloadParams();
+}
+
+}  // namespace sf::app
+```
+
+これで全体像がつかめる。`app.cpp`の`controller()`は`AppController`を1つだけ作り（関数内static）、そのまま返す——これがControlTaskが毎周期呼ぶ`compute()`の持ち主になる。`estimator()`は自分では何も実装せず、`stock::estimator()`——vehicle標準の推定器（ESKFまたは相補フィルタ、`estimator.type`パラメータで選択）をそのまま返している。`start()`は空——このテンプレートには追加タスクがない。
+
+`AppController`は内部に`sf::PidController pid_`（本物のカスケードPID制御器）を1つ持ち、`IController`の12メソッドのうち`compute()`以外——`reset()`、`onModeChange()`、`onLanding()`……すべて`pid_.reset()`のように**そのまま`pid_`へ転送するだけ**である。唯一`compute()`だけが特別で、`pid_.compute(...)`の結果をそのまま返さず、いったん`adjust()`という自分専用の関数を経由させている。`adjust()`の中身は既定では`output.torque[1] *= kPitchTorqueScale;`（`kPitchTorqueScale = 1.0f`なので実質何もしない恒等変換）——ここを書き換えれば、PidControllerが計算し終えた出力に**後から**手を加えられる、というのがこのテンプレートの設計である。
+
+**この記事ではこの構造を使わない。** ここまで見てきた「`PidController`へ委譲し、`adjust()`で後から調整する」という仕組みは、既に動いている制御則の一部だけを改造したい人向けの構成であり、今回の「ゼロから組み立てる」という目的とは方向が逆である。次の5章からは、`app_controller.hpp`/`.cpp`の中身を、ここで見た委譲構造ではなく、これから示す最小限の内容へ**丸ごと置き換えていく**。`sf app edit my_acro`で開いたら、まず中身を全部消してよい。
+
 `type: embedded`（組み込み型）というのは、このプロジェクトのソースがvehicle本体のビルドに直接コンパイルされ、実機でもSILSでも同じソースがそのまま動く、という意味である。新しいコンポーネントを作ったり、ビルド設定に何かを追記したりする作業は一切不要——`sf app` コマンドが面倒を見てくれる。
 
 `app_controller.cpp` の中に `compute()` という関数があり、これが **400Hz（1秒間に400回、2.5ミリ秒に1回）** で呼ばれる。この記事のほぼすべての作業は、この `compute()` の中身を書き換えることである。呼び出す側（`ControlTask`）は、こちらがARM（モータ始動許可）されているかどうかに関わらず、機体が動いている間ずっとこの関数を呼び続ける——モータへの安全策は別の場所（ARM状態の管理）が担当するので、`compute()` 自体は常に呼ばれる前提で書く。
@@ -125,7 +332,7 @@ sf app new my_acro
 
 この記事のコード例はすべてこれらを守っている（固定サイズの構造体と `float` の四則演算だけで完結し、ヒープ確保は一切登場しない）。
 
-以降の章では説明のたびに一から `app_controller.hpp`/`.cpp` を貼らず、直前の章との**差分**を示す。実際に手を動かす際は `sf app edit my_acro` などで開いて書き換えてほしい。
+以降の章では説明のたびに一から `app_controller.hpp`/`.cpp` を貼らず、直前の章との**差分**を示す。5章ではまず、上で見たテンプレートの中身を空にするところから始める。実際に手を動かす際は `sf app edit my_acro` などで開いて書き換えてほしい。
 
 ## 5. まずは角速度を覗いてみるだけのプログラム
 
@@ -874,6 +1081,213 @@ This creates the following files under `firmware/apps/my_acro/`:
 | `app_controller.hpp` / `app_controller.cpp` | Where your `IController` implementation lives. **This is the file you keep editing throughout this guide** |
 | `README.md` | The source template's own explanation (leave as-is) |
 
+### Peeking at What Got Generated
+
+The table above only explains "what each file is for." Open `app_controller.hpp`/`.cpp` right now, before you've written a single line, and you'll find them already full of code. Let's look at what's actually there.
+
+`app.cpp`:
+
+```cpp
+// app.cpp
+#include "app_hooks.hpp"
+#include "app_controller.hpp"
+#include "stock_hooks.hpp"
+
+namespace sf::app {
+
+sf::IController& controller()
+{
+    // Function-local static: constructed once (first call). init() is called
+    // exactly once, on that first call, matching the app_hooks.hpp contract.
+    // 関数内 static: 初回呼び出しで構築される。init() も最初の呼び出しで
+    // 一度だけ実行する（app_hooks.hpp の契約どおり）。
+    static AppController app_controller;
+    static bool initialized = false;
+    if (!initialized) {
+        app_controller.init();
+        initialized = true;
+    }
+    return app_controller;
+}
+
+sf::IEstimator& estimator()
+{
+    // This template only replaces the controller — the estimator stays the
+    // vehicle's standard one (ESKF / complementary, by param estimator.type).
+    // 本テンプレートはコントローラのみ差し替える — 推定器は vehicle 標準
+    // （estimator.type で ESKF／相補）のまま。
+    return stock::estimator();
+}
+
+void start()
+{
+    // No additional task in this template — see examples/12_app_task_hello
+    // for an example that starts one.
+    // 本テンプレートに追加タスクは無い — 追加タスクを起動する例は
+    // examples/12_app_task_hello を参照。
+}
+
+}  // namespace sf::app
+```
+
+`app_controller.hpp`:
+
+```cpp
+// app_controller.hpp
+#pragma once
+
+#include "controller.hpp"
+#include "pid_controller.hpp"
+
+namespace sf::app {
+
+/// Thin `IController` wrapper around `PidController`. Forwards every method
+/// unchanged except `compute()`, which routes its output through `adjust()`
+/// — the one exercise hook.
+/// `PidController` を包む薄い `IController` ラッパー。`compute()` を除く
+/// 全メソッドをそのまま転送する。`compute()` の出力だけ `adjust()`
+/// （唯一の演習フック）に通す。
+class AppController : public sf::IController {
+public:
+    void init();
+
+    sf::ControlOutput compute(
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint,
+        float dt) override;
+
+    void reset() override;
+    void onModeChange(sf::FlightMode new_mode) override;
+    void onLanding() override;
+    void onTakeoff() override;
+    void onTakeoffComplete() override;
+    bool isTakeoffComplete() const override;
+    void setGuidanceTarget(const sf::GuidanceTarget& target,
+                           const sf::CommandSetpoint& current_sticks) override;
+    bool isGuidanceActive() const override;
+    void startExcitation(const sf::SysidCommand& cmd) override;
+    bool fetchSysidResult(sf::SysidFreqResult& out) override;
+    void reloadParams() override;
+
+private:
+    /// Your one insertion point: adjust the cascade's ControlOutput before it
+    /// reaches the mixer. Default is the identity (kPitchTorqueScale = 1.0).
+    /// 唯一の挿入点: ミキサーへ渡す前にカスケードの ControlOutput を調整する。
+    /// 既定は恒等（kPitchTorqueScale = 1.0）。
+    sf::ControlOutput adjust(
+        sf::ControlOutput output,
+        const sf::StateEstimate& state,
+        const sf::CommandSetpoint& setpoint);
+
+    /// The controller being wrapped.
+    /// ラップ対象のコントローラ。
+    sf::PidController pid_;
+};
+
+}  // namespace sf::app
+```
+
+`app_controller.cpp`:
+
+```cpp
+// app_controller.cpp
+#include "app_controller.hpp"
+
+namespace sf::app {
+
+void AppController::init()
+{
+    pid_.init();
+}
+
+sf::ControlOutput AppController::compute(
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint,
+    float dt)
+{
+    sf::ControlOutput output = pid_.compute(state, setpoint, dt);
+    return adjust(output, state, setpoint);
+}
+
+sf::ControlOutput AppController::adjust(
+    sf::ControlOutput output,
+    const sf::StateEstimate& state,
+    const sf::CommandSetpoint& setpoint)
+{
+    // Named constant, not a magic number: at the default value (1.0) this is
+    // the identity — PidController's output passes through unchanged.
+    // マジックナンバーではなく名前付き定数: 既定値（1.0）では恒等 —
+    // PidController の出力がそのまま通る。
+    constexpr float kPitchTorqueScale = 1.0f;
+    output.torque[1] *= kPitchTorqueScale;  // torque[3] = R, P, Y (data_types.hpp)
+    return output;
+}
+
+void AppController::reset()
+{
+    pid_.reset();
+}
+
+void AppController::onModeChange(sf::FlightMode new_mode)
+{
+    pid_.onModeChange(new_mode);
+}
+
+void AppController::onLanding()
+{
+    pid_.onLanding();
+}
+
+void AppController::onTakeoff()
+{
+    pid_.onTakeoff();
+}
+
+void AppController::onTakeoffComplete()
+{
+    pid_.onTakeoffComplete();
+}
+
+bool AppController::isTakeoffComplete() const
+{
+    return pid_.isTakeoffComplete();
+}
+
+void AppController::setGuidanceTarget(const sf::GuidanceTarget& target,
+                                       const sf::CommandSetpoint& current_sticks)
+{
+    pid_.setGuidanceTarget(target, current_sticks);
+}
+
+bool AppController::isGuidanceActive() const
+{
+    return pid_.isGuidanceActive();
+}
+
+void AppController::startExcitation(const sf::SysidCommand& cmd)
+{
+    pid_.startExcitation(cmd);
+}
+
+bool AppController::fetchSysidResult(sf::SysidFreqResult& out)
+{
+    return pid_.fetchSysidResult(out);
+}
+
+void AppController::reloadParams()
+{
+    pid_.reloadParams();
+}
+
+}  // namespace sf::app
+```
+
+Now the whole picture comes together. `app.cpp`'s `controller()` constructs exactly one `AppController` (a function-local static) and returns it — this becomes the object whose `compute()` `ControlTask` calls every cycle. `estimator()` implements nothing of its own; it just returns `stock::estimator()`, the vehicle's standard estimator (ESKF or a complementary filter, selected by the `estimator.type` parameter), unchanged. `start()` is empty — this template starts no additional task.
+
+`AppController` holds one `sf::PidController pid_` internally (the real cascade PID controller) and, for every `IController` method except `compute()` — `reset()`, `onModeChange()`, `onLanding()`, and so on — **simply forwards the call straight to `pid_`**, e.g. `pid_.reset()`. `compute()` alone is special: instead of returning `pid_.compute(...)`'s result directly, it routes it through a function of its own, `adjust()`. By default, `adjust()`'s body is just `output.torque[1] *= kPitchTorqueScale;` (an effective no-op identity transform, since `kPitchTorqueScale = 1.0f`) — rewrite that line and you can reach in and modify `PidController`'s output *after the fact*. That is this template's whole design.
+
+**This guide does not use this structure.** What you just saw — delegate to `PidController`, then tweak the result afterward through `adjust()` — is built for someone who wants to modify one small piece of an already-working control law. That is the opposite direction from this guide's goal of building from scratch. Starting in the next chapter (5), you will **completely replace** the contents of `app_controller.hpp`/`.cpp` — not with this delegation structure, but with the minimal code shown from here on. Once you open it with `sf app edit my_acro`, go ahead and delete everything in it.
+
 `type: embedded` means this project's source is compiled directly into the vehicle firmware's own build, and the exact same source runs on real hardware and in SILS. You never create a new component or edit any build configuration by hand — the `sf app` command handles all of that.
 
 Inside `app_controller.cpp` there is a function called `compute()`, called at **400 Hz (400 times per second, once every 2.5 milliseconds)**. Nearly everything you do in this guide is rewriting the body of `compute()`. The caller (`ControlTask`) keeps calling it every cycle regardless of whether the craft is currently ARMed (permitted to spin motors) — the actual motor safety gate lives elsewhere (ARM-state management) — so write `compute()` assuming it is always being called.
@@ -886,7 +1300,7 @@ Inside `app_controller.cpp` there is a function called `compute()`, called at **
 
 Every code example in this guide follows these rules (nothing but fixed-size structs and `float` arithmetic — no heap allocation ever appears).
 
-From here on, later chapters show the **diff** against the previous chapter instead of re-pasting the whole `app_controller.hpp`/`.cpp` from scratch. When you actually follow along, open the files with something like `sf app edit my_acro` and edit them there.
+From here on, later chapters show the **diff** against the previous chapter instead of re-pasting the whole `app_controller.hpp`/`.cpp` from scratch. Chapter 5 starts by emptying out the template you just saw above. When you actually follow along, open the files with something like `sf app edit my_acro` and edit them there.
 
 ## 5. First, Just Peek at the Angular Rate
 
