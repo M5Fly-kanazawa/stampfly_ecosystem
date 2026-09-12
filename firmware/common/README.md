@@ -8,16 +8,12 @@ vehicle / controller で共有される組込み向け共通実装。
 
 ```
 common/
-├── protocol/
-│   └── include/
-│       └── udp_protocol.hpp    # UDP通信プロトコル定義
-├── math/                       # 数値演算ユーティリティ
-└── utils/                      # 汎用ヘルパ
+└── protocol/
+    └── include/
+        └── udp_protocol.hpp    # UDP通信プロトコル定義
 ```
 
 - `protocol/` - 通信プロトコルの組込み側実装（エンコード・デコード、CRC、パケット構造体）
-- `math/` - 組込み向け数値演算ユーティリティ（行列・ベクトル・フィルタ補助）
-- `utils/` - ログ、リングバッファ、汎用ヘルパ
 
 ## UDP プロトコル
 
@@ -72,16 +68,12 @@ Shared embedded code between vehicle and controller.
 
 ```
 common/
-├── protocol/
-│   └── include/
-│       └── udp_protocol.hpp    # UDP communication protocol
-├── math/                       # Math utilities
-└── utils/                      # Generic helpers
+└── protocol/
+    └── include/
+        └── udp_protocol.hpp    # UDP communication protocol
 ```
 
 - `protocol/` - Communication protocol implementation (encode/decode, CRC, packet structures)
-- `math/` - Embedded-safe math utilities (matrix, vector, filter helpers)
-- `utils/` - Logging, ring buffers, generic helpers
 
 ## UDP Protocol
 

@@ -215,7 +215,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [tools/README.md](../tools/README.md) | 補助ツール（構築中） |
 | [tools/calibration/README.md](../tools/calibration/README.md) | キャリブレーションツール |
 | [tools/log_analyzer/README.md](../tools/log_analyzer/README.md) | ログ解析ツール |
-| [tools/log_capture/README.md](../tools/log_capture/README.md) | ログキャプチャツール |
 | [simulator/README.md](../simulator/README.md) | シミュレータ概要 |
 | [simulator/genesis/README.md](../simulator/genesis/README.md) | Genesis シミュレータ |
 | [simulator/genesis/docs/urdf_mesh_normals.md](../simulator/genesis/docs/urdf_mesh_normals.md) | URDF メッシュ法線ガイド |

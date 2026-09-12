@@ -74,7 +74,7 @@
 | 選択肢 | 判断 |
 |--------|------|
 | git submodule で公式リポジトリを参照 | 不採用。公式は mooncake を独自スクリプトで取得する構成で、submodule にしてもビルド前手順が残る。sf CLI の「`firmware/<target>/CMakeLists.txt` があればビルド対象」という規約にも乗らない |
-| **ソース複製（採用）** | `firmware/powerhub/` に公式 `powerhub/` プロジェクトを平坦に複製。mooncake / mooncake_log は `third_party/` に複製し `EXTRA_COMPONENT_DIRS` で参照。`firmware/powerhub/UPSTREAM.md` に取り込み元 URL・コミット・変更ファイル一覧を記録し、上流更新時に差分を当て直せるようにする |
+| **ソース複製（採用）** | `firmware/powerhub/` に公式 `powerhub/` プロジェクトを平坦に複製。mooncake / mooncake_log は使う側の隣 `firmware/powerhub/vendor/` に複製し（原典 §13: 集約ディレクトリ `third_party/` は置かない。ライセンス全文とバージョンを同梱）`EXTRA_COMPONENT_DIRS` で参照。`firmware/powerhub/UPSTREAM.md` に取り込み元 URL・コミット・変更ファイル一覧を記録し、上流更新時に差分を当て直せるようにする |
 
 変更を加える上流ファイルは次の 3 か所に限定し、それ以外は無改変とする。
 
@@ -177,7 +177,7 @@ Wi-Fi の初期化は公式が Arduino の `WiFi.mode()` 経由で行ってい�
 
 | 作業 | 対象 | 内容 |
 |------|------|------|
-| 複製 | `firmware/powerhub/`、`third_party/mooncake*/` | 公式 `powerhub/` を平坦に複製。`UPSTREAM.md` に元コミットを記録。未使用の `arduinoWebSockets` はビルドから除外 |
+| 複製 | `firmware/powerhub/`、`firmware/powerhub/vendor/mooncake*/` | 公式 `powerhub/` を平坦に複製。`UPSTREAM.md` に元コミットを記録。未使用の `arduinoWebSockets` はビルドから除外 |
 | 依存の固定 | `firmware/powerhub/main/idf_component.yml` | asynctcp / espasyncwebserver を `==` で固定し `dependencies.lock` をコミット（m5unified で 2026-07-19 に起きた版ずれ障害の再発防止） |
 | ビーコン部品 | `main/hal/utils/beacon/beacon.{h,cpp}` | Wi-Fi STA 起動 → チャンネル固定 → ESP-NOW 初期化 → ブロードキャスト宛先登録 → 20ms タイマーと送信タスク。送信回数・失敗回数を 1Hz でログ |
 | 差し込み | `hal_esp32.cpp`、`app_ezdata.cpp`、`hal.h` | §2 の 3 か所 |

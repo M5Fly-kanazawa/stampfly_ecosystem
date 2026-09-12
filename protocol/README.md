@@ -34,9 +34,10 @@ protocol/
 │   ├── messages.yaml      # メッセージ定義
 │   ├── espnow_tdma.yaml   # ESP-NOW & TDMAプロトコル
 │   └── websocket.yaml     # WebSocketテレメトリ
-├── generated/             # 仕様から生成されたコード
 └── tools/                 # 仕様検証、コード生成ツール
 ```
+
+生成物（仕様から導出するコード・文書）は消費側に置く方針: `lib/sflog/schema.py`、`docs/reference/flight-log-format.md`。
 
 ## 3. メッセージ一覧
 

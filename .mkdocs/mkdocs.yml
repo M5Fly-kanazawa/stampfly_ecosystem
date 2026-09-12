@@ -108,7 +108,6 @@ exclude_docs: |
   **/node_modules/
   **/venv/
   **/__pycache__/
-  third_party/
   logs/
   landing/
   docs/_private/
@@ -280,7 +279,6 @@ nav:
       - 概要: tools/README.md
       - キャリブレーション: tools/calibration/README.md
       - ログ解析: tools/log_analyzer/README.md
-      - ログキャプチャ: tools/log_capture/README.md
     - シミュレータ:
       - 概要: simulator/README.md
       - Genesis: simulator/genesis/README.md

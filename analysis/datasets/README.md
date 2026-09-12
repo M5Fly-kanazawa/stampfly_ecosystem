@@ -19,7 +19,7 @@
 
 ## ファイル形式
 
-- `.bin` - バイナリログ（`tools/log_capture/log_capture.py`で取得）
+- `.bin` - バイナリログ（`sf log capture` / `sf log wifi` で取得）
 - `.csv` - 変換済みCSV
 - `.json` - メタデータ
 
@@ -51,7 +51,7 @@ Sample logs for analysis.
 
 ## File Formats
 
-- `.bin` - Binary log (captured with `tools/log_capture/log_capture.py`)
+- `.bin` - Binary log (captured with `sf log capture` / `sf log wifi`)
 - `.csv` - Converted CSV
 - `.json` - Metadata
 

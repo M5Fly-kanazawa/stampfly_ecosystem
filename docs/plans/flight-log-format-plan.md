@@ -134,7 +134,7 @@ UDP Data Stream（ポート 8890）で機体から届くパケット種別と、
 Stream の電文定義も `protocol/spec/` には無く、
 `firmware/vehicle/components/sf_telemetry/include/data_stream_wire.hpp` と
 `tools/log_analyzer/udp_capture.py` の 2 実装が互いに一致していることだけが拠り所である。
-`protocol/generated/`・`protocol/tools/` は空。
+`protocol/generated/` は削除済み（生成物は消費側の `lib/sflog/schema.py`・`docs/reference/` に配置する方針）。
 
 ### 1.7 先行例
 
