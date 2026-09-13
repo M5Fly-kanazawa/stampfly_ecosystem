@@ -5,7 +5,7 @@ Time-segments a POS_HOLD UDP JSONL log and correlates horizontal/altitude wobble
 with battery voltage sag and hover duty (thrust->duty compensation). Complements
 poshold_analysis.py (which gives whole-flight metrics + a figure).
 
-POS_HOLD 長尺ログの「位置・高度ふらつき」を時間分割し、電池電圧の低下・ホバーduty と
+POS_HOLD 長尺ログの「位置・高度の揺れ」を時間分割し、電池電圧の低下・ホバーduty と
 の相関を出す。stdlib + numpy のみ。
 
 Usage: python3 analysis/scripts/poshold_battery_wobble.py [log.jsonl]
@@ -51,15 +51,15 @@ print("POS_HOLD 3分ログ解析  stampfly_udp_20260627T020137  (換算ゲイン
 print(f"  飛行窓 {T0}-{T1}s  posvel fs≈{fs_pv:.0f}Hz  保持高度≈{np.median(alt[m]):.3f}m")
 print("="*72)
 # --- 全体 ---
-print("\n[全体ふらつき(飛行窓)]")
+print("\n[全体の揺れ(飛行窓)]")
 am,asd,ap2p=stat(alt[m]); print(f"  高度  : 平均{am:.3f}m  std {asd*1000:.1f}mm  p2p {ap2p*1000:.0f}mm  卓越{domfreq(alt[m],fs_pv):.2f}Hz")
 dm,dsd,_=stat(drift[m]); print(f"  水平drift: 平均{dm*1000:.0f}mm  std {dsd*1000:.1f}mm  最大{drift[m].max()*1000:.0f}mm")
 vxm,vxs,_=stat(vel[m,0]); vym,vys,_=stat(vel[m,1])
 print(f"  水平速度: vx {vxm:+.3f}±{vxs:.3f}  vy {vym:+.3f}±{vys:.3f} m/s  速さmax {np.hypot(vel[m,0],vel[m,1]).max():.3f}")
 print(f"  高度0.2-2Hz帯エネルギー比 {bandfrac(alt[m],fs_pv,0.2,2)*100:.0f}%  水平drift卓越 {domfreq(drift[m],fs_pv):.2f}Hz")
 
-# --- 時間分割 (30s窓) で 電圧 vs ふらつき vs 制御出力 ---
-print("\n[30s窓: 電圧の低下 と ふらつき・ホバーduty の推移]")
+# --- 時間分割 (30s窓) で 電圧 vs 揺れ vs 制御出力 ---
+print("\n[30s窓: 電圧の低下 と 揺れ・ホバーduty の推移]")
 print(f"  {'窓[s]':>10} {'V[V]':>6} {'高度std':>8} {'高度p2p':>8} {'drift_rms':>9} {'vel_std':>8} {'duty平均':>8} {'duty_std':>8} {'thrust':>7}")
 edges=np.arange(T0,T1+1,30)
 rows=[]

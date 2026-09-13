@@ -287,8 +287,8 @@ public:
         // Deterministic band-limited TURBULENCE (horizontal NED force, 1–3 Hz sinusoid sum)
         // to excite the attitude-wobble band for the wobble-minimization study. Repeatable
         // (no RNG), 0 = off. Added on top of wind_force_ned each substep. See plant.cpp.
-        // 決定論的な帯域制限乱流（水平NED力, 1–3Hz正弦和）。姿勢ふらつき帯域を励起して
-        // ふらつき最小化研究の外乱とする。再現可能（RNG不使用）、0=off。
+        // 決定論的な帯域制限乱流（水平NED力, 1–3Hz正弦和）。姿勢の揺れ帯域を励起して
+        // 揺れ最小化研究の外乱とする。再現可能（RNG不使用）、0=off。
         float turbulence_n = 0.0f;  ///< turbulence force amplitude [N] (0 = off)
         /// Deterministic RAW IMU bias (body FRD), modeling the pre-calibration MEMS
         /// offset. Added as a constant to the synthetic IMU output. Default zero. The

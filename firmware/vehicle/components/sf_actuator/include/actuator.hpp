@@ -70,7 +70,7 @@ public:
     /// silently swallows every duty write — so update() does nothing useful
     /// unless arm() has been called first.
     /// モーター出力を有効化（ARM 遷移用の安全判定）。冪等: 立上りエッジでのみ HAL を
-    /// arm する。arm されるまで HAL は全 duty 書き込みを握り潰すため、arm() 後でないと
+    /// arm する。arm されるまで HAL は全 duty 書き込みを破棄するため、arm() 後でないと
     /// update() は実際にはモーターを回さない。
     void arm();
 

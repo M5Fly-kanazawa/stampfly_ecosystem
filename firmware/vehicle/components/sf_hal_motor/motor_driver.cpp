@@ -166,7 +166,7 @@ void MotorDriver::setMotor(int motor, float value)
     // Log (rate-limited by rarity — these calls only fail on bad arguments) so a
     // wiring/config regression is not silently swallowed at 400Hz.
     // 失敗時はログする（これらは引数不正時のみ失敗するため実質まれ）。配線/設定の
-    // 既存動作の破壊が 400Hz で黙って握り潰されないようにする。
+    // 既存動作の破壊が 400Hz で黙って無視されないようにする。
     esp_err_t e1 = ledc_set_duty(LEDC_MODE, MOTOR_CHANNELS[motor], duty);
     esp_err_t e2 = ledc_update_duty(LEDC_MODE, MOTOR_CHANNELS[motor]);
     if (e1 != ESP_OK || e2 != ESP_OK) {

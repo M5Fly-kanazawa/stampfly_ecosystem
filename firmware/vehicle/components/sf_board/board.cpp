@@ -276,7 +276,7 @@ esp_err_t init_i2c_bus()
 // sf_board が SPI bus を所有し (R1)、BMI270Wrapper と PMW3901Wrapper は
 // spi_bus_add_device() のみ自身で行う。両ドライバとも Config の
 // skip_bus_init=true を受け取り、自前の spi_bus_initialize() を省く。
-// (二重初期化の "握り潰し" ではなく、所有権を明示した省略。)
+// (二重初期化の "破棄" ではなく、所有権を明示した省略。)
 //
 // sf_board owns the SPI bus (R1); BMI270Wrapper and PMW3901Wrapper only call
 // spi_bus_add_device(). Both receive skip_bus_init=true in their Config and

@@ -180,7 +180,7 @@ void Failsafe::checkBattery()
         // Critical voltage — emergency. Independent latch: escalates even after the
         // warning already fired (the old shared latch swallowed the escalation).
         // 危険電圧 — 緊急。独立ラッチ: 警告発報済みでもエスカレーションする
-        // （旧共有ラッチはエスカレーションを握り潰していた）。
+        // （旧共有ラッチはエスカレーションを破棄していた）。
         if (!batt_emergency_) {
             batt_emergency_ = true;
             batt_warning_   = true;

@@ -269,7 +269,7 @@ void ControlTask(void* pvParameters)
         // Both calls are idempotent (act only on the arm-state edge).
         // disarm 時はアクチュエータを disarm（モーターを 0 に）して制御をスキップ。
         // arm 時はアクチュエータを arm し HAL が duty 書き込みを受理するようにする
-        // （HAL は arm されるまで全書き込みを握り潰すため、これが無いとミキサーが
+        // （HAL は arm されるまで全書き込みを破棄するため、これが無いとミキサーが
         // 正しい duty を計算してもモーターへ届かない）。両呼び出しは冪等（エッジでのみ作用）。
         // =====================================================================
 

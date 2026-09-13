@@ -27,7 +27,7 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 // Surface a JS error to the 3D message overlay (and console) instead of failing silently.
-// JS エラーを握り潰さず 3D メッセージ欄とコンソールに出す。
+// JS エラーを無視せず 3D メッセージ欄とコンソールに出す。
 window.addEventListener('error', (e) => {
   console.error('PAGEERR', e.message, (e.filename || '') + ':' + (e.lineno || ''));
   const m = $('scene-msg'); if (m) { m.style.display = 'flex'; m.textContent = '3D エラー: ' + e.message; }

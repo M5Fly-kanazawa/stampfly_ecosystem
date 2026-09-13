@@ -7,7 +7,7 @@
 #   (2) the firmware algorithm cores compile and run on host via interfaces
 #       (target: cores_smoke)
 #
-# P1.0 の成果物: 2つの大きな未知を潰す最小動作確認 —
+# P1.0 の成果物: 2つの大きな未知を解消する最小動作確認 —
 #   (1) MuJoCo がこのホストでビルド・ステップする       (target: mujoco_smoke)
 #   (2) ファームのアルゴリズムコアが host 上でインターフェース経由で動く
 #       (target: cores_smoke)

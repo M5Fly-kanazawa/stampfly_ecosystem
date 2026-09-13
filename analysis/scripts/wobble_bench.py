@@ -6,7 +6,7 @@ Window [12,28] s of wobble_bench.scn (POS_HOLD hover under 1-3 Hz turbulence): r
 attitude RMS (the wobble), rate RMS, motor-duty RMS (effort/vibration), and position drift.
 Compare control methods (M0 baseline → M1 …) under the SAME --turbulence/--noise/--seed.
 
-ふらつき最小化研究の測定。wobble_bench の trajectory.csv から窓[12,28]s の姿勢RMS等を出す。
+揺れ最小化研究の測定。wobble_bench の trajectory.csv から窓[12,28]s の姿勢RMS等を出す。
 
 Usage: python3 wobble_bench.py <out_scn_wobble_bench/trajectory.csv> [t0 t1]
 """

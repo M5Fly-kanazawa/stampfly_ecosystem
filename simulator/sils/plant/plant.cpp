@@ -670,7 +670,7 @@ void Plant::substep(float h)
     // (below) is position/attitude-loop territory; the rate-loop wobble (3–6 Hz peaking) needs
     // this torque. Amplitude scales with turbulence_n (× a 0.03 m effective arm). 0 = off.
     // 乱流ボディトルク（3–6Hz）— レートループを直接励起し、レート手法（D項/ノッチ/再整形）を
-    // 評価可能にする。1–3Hz水平力は位置/姿勢ループ域、レートふらつき（3–6Hzピーキング）には本トルク。
+    // 評価可能にする。1–3Hz水平力は位置/姿勢ループ域、レートの揺れ（3–6Hzピーキング）には本トルク。
     Vec3 tau_body = {0.0f, 0.0f, tau_yaw_flu_z};
     if (cfg_.turbulence_n > 0.0f) {
         const float t = turb_t_, k = 2.0f * 3.14159265f, Q = cfg_.turbulence_n * 0.03f;
@@ -683,7 +683,7 @@ void Plant::substep(float h)
     // Wind force NED → world ENU, plus deterministic band-limited turbulence (1–3 Hz
     // horizontal sinusoid sum) to excite the attitude-wobble band for the wobble study.
     // Incommensurate frequencies → non-repeating-ish but fully repeatable; 0 = off.
-    // 風力 NED→世界 ENU ＋ 決定論的帯域制限乱流（1–3Hz水平正弦和）でふらつき帯域を励起。
+    // 風力 NED→世界 ENU ＋ 決定論的帯域制限乱流（1–3Hz水平正弦和）で揺れ帯域を励起。
     Vec3 wind_ned = cfg_.wind_force_ned;
     if (cfg_.turbulence_n > 0.0f) {
         turb_t_ += h;
