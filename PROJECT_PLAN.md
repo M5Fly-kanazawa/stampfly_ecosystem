@@ -38,6 +38,7 @@ StampFly Ecosystem は、StampFly 機体を中心に、ドローン制御を **�
 |------|---------|-------------|
 | `sf app` | **プログラミングツール**。自分のプログラムを作り、SILS と実機で動かす | 全階層が目標（2026-09 時点は L1 のみ） |
 | `sf lesson` | **教育補助ツール**。講師が用意したレッスンを切り替え、ビルド・書き込み・解答表示を行う | 全階層が目標（2026-09 時点は L0 の Workshop のみ） |
+| `sf blocks` | **ブロックプログラミング**。コードを書かない層（小中学生・入門者）向けの、`sf app` に相当する入口。ブラウザの Blockly で組んだブロックを Tello 互換 API（UDP 8889）で機体へ送る | 外側「ブロック」の門（2026-09-13 に位置づけを決定。実機 E2E とレッスン対応が残る） |
 
 整備状況の全体像は §16 の地図で追う。
 
@@ -59,7 +60,6 @@ stampfly-ecosystem/
 ├── lib/               # PC 側の Python 実装。sf CLI 本体はここ（§9）
 ├── simulator/         # 仮想実験環境（§10）
 ├── scripts/           # インストーラの実装（§12）
-├── ros/               # ROS2 連携（構築中。docs/plans/ros2-integration.md）
 ├── landing/           # 公開サイトのランディングページ（§3）
 ├── .mkdocs/           # docs/ を公開サイトにするための設定（§3）
 ├── .github/           # CI（§14）
@@ -331,7 +331,7 @@ tools/
 
 ```
 lib/
-├── sfcli/         # sf CLI 本体（commands/, utils/, assets/vendor/blockly）
+├── sfcli/         # sf CLI 本体（commands/, utils/, assets/vendor/blockly = sf blocks の UI。UI が育てば lib/sfblocks/ へ独立）
 ├── sflog/         # フライトログ一式のスキーマと読み書き（schema.py は生成物、§5）
 └── stampfly/      # Tello 風 Python SDK（`tools/stampfly_py/` との二系統を整理中。`docs/plans/repository-cleanup-candidates.md` C1）
 ```
@@ -429,7 +429,8 @@ simulator/
 
 現在「見直し中」の事項: 利用者に独自コードを書いてもらう入口（`docs/plans/user-programming-entry-review.md`）、
 Workshop（L0）の API・レッスンの現行設計への更新（§4）、`sf app`・`sf lesson` の全階層対応（§1・§9）、
-整理対象の候補（`docs/plans/repository-cleanup-candidates.md`）。
+ROS2 連携の再設計・再実装（旧ブリッジ `ros/` は `vehicle_old` 専用だったため 2026-09-13 に削除。
+`docs/plans/ros2-integration.md`）、整理対象の候補（`docs/plans/repository-cleanup-candidates.md`）。
 
 ---
 
@@ -441,7 +442,8 @@ Workshop（L0）の API・レッスンの現行設計への更新（§4）、`sf
 
 | 階層 | プログラミング（`sf app`） | 雛形 | 仕様・実験・分析の資料 | 講習資料（制御） | 講習資料（組み込み） | 講師支援（`sf lesson`） |
 |------|------------------------|------|--------------------|----------------|-------------------|---------------------|
-| 外側: Python / ブロック | ×（`sf app` の対象外。道具は Tello 互換 SDK・`sf blocks`） | △ `tools/stampfly_py` の例 | △ `docs/architecture/tello-api-reference.md`（現行との整合を調査中） | ×（大学講義用は 2026-09-13 に削除、計画のみ `university-course-plan.md`） | × | △ Blockly ガイド |
+| 外側: ブロック | ○ `sf blocks`（Blockly、Tello 互換 API 経由。実機 E2E 未実施） | △ ブラウザ上の既定ワークスペース | ○ `docs/guides/block_programming.md`、Tello 互換 API 参照 | × | — | ×（ブロックのレッスンを `sf lesson` で扱う仕組みが無い） |
+| 外側: Python | ×（`sf app` の対象外。道具は Tello 互換 SDK `tools/stampfly_py`） | △ `tools/stampfly_py` の例 | △ `docs/architecture/tello-api-reference.md`（2026-09-13 に現行実装へ更新） | ×（大学講義用は 2026-09-13 に削除、計画のみ `university-course-plan.md`） | × | × |
 | L0 Workshop API（`ws::`） | ×（`sf lesson` 側のみ） | ○ `firmware/workshop/`（vehicle 基盤上の `ws::` ラッパー） | △ `docs/events/sci_tutorial_2026/cheatsheet.md`（`ws::` 早見表） | △ Workshop レッスン・SCI 2026（`ws::` 上のレート／姿勢の実習） | △ 同（モータ・センサの読み書き） | ○ `sf lesson`（13 レッスン＋`sci2026` コース）。L0 のレッスンのみ |
 | L1 Topic API（`sf::api`、`IController`/`IEstimator`） | ○ `sf app new/sils/build/flash`（Topic の書き込みは未実装） | ○ `11_app_controller`・`12_app_task_hello`（PidController 委譲前提） | ○ `topic_reference.md`、設計 6 文書、`params.cpp`、`sf sysid`・`sf autotune` | △ `docs/guides/custom_program.md`（ACRO PID を 0 から、1 本） | × | × |
 | L2 HAL 直叩き | × | ○ 例題 01〜08（単独ビルド、SILS 不可） | ○ HAL ドライバ README・データシート要約 | — | △ 例題 README（改造課題なし） | × |

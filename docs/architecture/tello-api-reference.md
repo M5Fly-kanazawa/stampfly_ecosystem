@@ -1,791 +1,295 @@
-# Tello SDK API リファレンス — StampFly 互換レイヤー設計
+# StampFly Tello 互換 API リファレンス
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-## 1. 概要
+**最終更新: 2026-09-13**（現行 `firmware/vehicle` の実装に合わせて全面書き換え。旧版は TCP 23 + WebSocket を前提にした 2026-02-14 時点の設計検討記録で、現行実装と通信方式のレベルで食い違っていたため置き換えた。旧版の原文は `git show archive/2026-09-13:docs/architecture/tello-api-reference.md` で参照できる）。
+
+## 1. 概要と接続
 
 ### このドキュメントについて
 
-DJI Tello SDK は教育用ドローンのデファクトスタンダードであり、djitellopy をはじめとする Python SDK が世界中の教育現場で使われている。本ドキュメントは Tello SDK の仕様を網羅的に整理し、StampFly への移植に必要な差分を明確にする。
+StampFly の主力ファーム `firmware/vehicle` は DJI Tello SDK 互換のテキストコマンドを UDP で話す。本書は実装（`firmware/vehicle/tasks/api_task.cpp`、`firmware/vehicle/components/sf_telemetry/`）から抽出した現行仕様であり、`djitellopy` など Tello 用 Python プログラムを StampFly で動かす際の一次参照とする。実機運用の手順は `firmware/vehicle/docs/operation_manual.md` を参照。
 
-### Tello SDK バージョン
+### 接続
 
-| バージョン | 対象デバイス | 主な追加機能 |
-|-----------|------------|-------------|
-| SDK 1.3 | Tello（通常版） | 基本飛行、移動、回転、フリップ、ビデオ |
-| SDK 2.0 | Tello EDU | `stop`、ミッションパッド、`sdk?`/`sn?`/`wifi?`、`ap` |
-| SDK 3.0 | Tello EDU (v02.05.01.17+) / RoboMaster TT | `motoron`/`motoroff`、`throwfly`、ビデオ設定、ポート再設定 |
+機体は既定で **SoftAP** を張り、IP は Tello 実機と同じ **`192.168.10.1`**（`djitellopy` の既定ホストと一致するため `Tello()` を引数なしで呼べる）。この振り直しは `firmware/vehicle/components/sf_comm/comm.cpp` が SoftAP 起動時に行う。`wifi.mode` パラメータ（既定値 `0` = STA クライアントモード）を `1` にすると SoftAP になる。STA モードで共有ルータに接続する場合は、機体の LAN IP を明示的に渡す（例: `Tello(host="192.168.1.42")`）。
 
-### 本ドキュメントの対象範囲
+### ポート一覧
 
-StampFly 互換レイヤーは **SDK 2.0** を基準とする。SDK 2.0 は最も広く使われており、djitellopy のデフォルト対象バージョンである。SDK 3.0 固有のコマンド（`motoron` 等）は Phase 5 以降で検討する。
+| ポート | 方向 | 内容 | 実装 |
+|---|---|---|---|
+| UDP 8889 | PC→機体（コマンド）、機体→PC（応答） | Tello 互換テキストコマンド | `tasks/api_task.cpp`（`ApiTask`） |
+| UDP 8890（送信専用） | 機体→PC | Tello 互換の状態文字列、10Hz | `tasks/api_task.cpp`（`TelloStateTask`）。書式は `components/sf_telemetry/include/tello_state.hpp` |
+| UDP 8890（機体側 bind の別ソケット、`sf log wifi` 用） | PC↔機体 | 400Hz サンプルをまとめたバイナリ統合パケット（50Hz 送出）。上記の状態文字列とは別プロトコルで、**同時使用不可**（どちらも PC 側で同じポートを使う） | `components/sf_telemetry/{data_stream.hpp,data_stream.cpp}`。詳細は `docs/architecture/udp-telemetry-design.md` |
+| UDP 5005（ブロードキャスト） | 機体→ブロードキャスト | `sf::TelemetryPacket`（104バイト、姿勢・角速度・加速度・位置・速度・推力/トルク・モータduty）、50Hz | `components/sf_telemetry/{telemetry.hpp,telemetry.cpp}` |
+| TCP 23 | PC↔機体（対話式） | telnet 的 CLI（`param`/`status`/`sensor`/`version`/`mac`/`pair`/`unpair`/`sound`/`led`/`motor`/`wifi`/`magcal`/`reboot`）。**飛行コマンドは無い** | `tasks/cli_task.cpp` |
 
-## 2. 通信アーキテクチャ
+Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメラ非搭載）。
 
-### Tello の通信構成
+## 2. コマンド一覧
 
-```
-PC / スマートフォン  <-- WiFi -->  Tello (192.168.10.1)
-      │                                  │
-      │  UDP 8889 (コマンド送受信)         │
-      │  ─────────────────────────────>   │
-      │  <─────────────────────────────   │
-      │                                  │
-      │  UDP 8890 (テレメトリ受信)         │
-      │  <─────────────────────────────   │
-      │                                  │
-      │  UDP 11111 (H.264 ビデオ受信)     │
-      │  <─────────────────────────────   │
-```
+`command` を送って SDK モードに入るまで、他のコマンドは `"error not in command mode"` を返す。以降のコマンドは成功時 `"ok"`、失敗時 `"error ..."` を返す（クエリ行は数値・文字列を返す）。
 
-### StampFly の通信構成（現状）
+### 制御
 
-```
-PC / スマートフォン  <-- WiFi -->  StampFly (192.168.4.1)
-      │                                  │
-      │  TCP 23 (Telnet CLI)              │
-      │  ─────────────────────────────>   │
-      │  <─────────────────────────────   │
-      │                                  │
-      │  WebSocket 80 (バイナリテレメトリ)  │
-      │  <─────────────────────────────   │
-```
+| コマンド | 構文 | 説明 | 前提条件 |
+|---|---|---|---|
+| `command` | `command` | SDK モード開始 | なし |
+| `takeoff` | `takeoff` | 自動離陸（POS_HOLD、手動 RC 離陸と同じ経路）。FLYING 到達まで最大12秒ブロック | 地上（IDLE_GROUND/ARMED_GROUND）かつ静止校正済み |
+| `land` | `land` | 自動着陸。IDLE_GROUND 到達まで最大20秒ブロック | 飛行中 |
+| `emergency` | `emergency` | 全モーター緊急停止。他の全ゲートより優先して処理される | 常時 |
+| `stop` | `stop` | 現在位置を目標に再設定してホバリング | FLYING かつ API 誘導目標が有効 |
 
-### 通信プロトコル比較
+### 移動・回転
 
-| 項目 | Tello | StampFly（現状） | 互換レイヤー（計画） |
-|------|-------|-----------------|-------------------|
-| コマンド送受信 | UDP 8889（テキスト） | TCP 23（Telnet CLI） | UDP 8889（テキスト） |
-| テレメトリ | UDP 8890（テキスト、10Hz） | WebSocket 80（バイナリ、400Hz） | UDP 8890（テキスト、10Hz） |
-| ビデオ | UDP 11111（H.264） | なし | 非対応 |
-| ドローン IP | 192.168.10.1 | 192.168.4.1 | 192.168.10.1 に変更 |
-| 初期化 | `command` 送信で SDK モード開始 | Telnet 接続 | `command` 送信で SDK モード開始 |
-| 自動着陸 | 15秒間コマンドなしで自動着陸 | なし | 15秒タイムアウト実装 |
+| コマンド | 構文 | 範囲 | 説明 |
+|---|---|---|---|
+| `up`/`down`/`left`/`right`/`forward`/`back` | `<verb> x`（cm） | 合成移動距離 10〜300cm（Tello実機は20〜500cm。下限は屋内向けにきめ細かく設定。300cm超は方向を保ったまま300cmにクランプし `ok` を返す） | 現在の誘導目標（推定値でなく目標値）に合成し、到達until ブロック |
+| `cw`/`ccw` | `<verb> x`（度） | 1〜360度 | ヨー目標を加算し、到達until ブロック |
+| `go` | `go x y z speed` | xyz: cm（合成距離は up/down 等と同じ10〜300cmクランプ）, speed: 10〜100 cm/s | 3軸同時移動 |
+| `rc` | `rc a b c d` | 各 -100〜100 | 連続速度指令（撃ちっぱなし、応答なし）。a=ロール（右+）、b=ピッチ（前+）、c=スロットル（上+）、d=ヨーレート（時計回り+）。送信停止で自動的にその場保持へ戻る。パイロットがスティックを動かすと即解除される |
 
-### Tello 初期化シーケンス
+移動・回転・`go`・`rc` は FLYING かつ API 誘導目標が有効（`takeoff` 直後、またはパイロット介入で解除された場合は `takeoff`/`go` 等で再係合）でないと `"error not flying"` を返す（`rc` は応答なしで無視）。
 
-1. WiFi で Tello AP に接続（SSID: `TELLO-XXXXXX`）
-2. UDP ソケットを `0.0.0.0:8889` にバインド
-3. テレメトリ受信用ソケットを `0.0.0.0:8890` にバインド
-4. `"command"` を `192.168.10.1:8889` に送信
-5. `"ok"` レスポンスを受信 → SDK モード有効化完了
+### 独自拡張（StampFly 固有、Tello SDK にない）
 
-## 3. コマンド一覧（Tello → StampFly マッピング）
+| コマンド | 構文 | 説明 |
+|---|---|---|
+| `autotune` | `autotune <roll\|pitch\|yaw> [ωc rad/s] [PM deg]`（既定 roll/pitch: ωc=25・PM=60、yaw: ωc=18・PM=60） | オンボードで①ステップドサイン9点掃引（2〜35Hz）②プラント同定 ③位相余裕仕様を満たすPID設計 ④ライブ適用（NVS 未保存）を行う。FLYING時のみ |
+| `sysid` | `sysid <roll\|pitch\|yaw> <doublet\|chirp> <amp_dps> <dur_s>` | レートループ同定用の励振をホバー中に1軸へ注入。励振完了までブロックしてから `ok` |
 
-### コマンドカテゴリ概要
+### クエリ（`?` を含む行）
 
-| カテゴリ | コマンド数 | StampFly 対応状況 |
-|---------|----------|------------------|
-| 初期化 (`command`) | 1 | 未対応 → Phase 1 |
-| 基本飛行 (`takeoff`/`land`/`emergency`/`stop`) | 4 | 部分対応（`takeoff`/`land` 実装済） |
-| 移動 (`up`/`down`/`left`/`right`/`forward`/`back`) | 6 | 未対応 → Phase 2 |
-| 回転 (`cw`/`ccw`) | 2 | 未対応 → Phase 2 |
-| 複合飛行 (`go`/`curve`) | 2 | 未対応 → Phase 2 |
-| RC 制御 (`rc`) | 1 | 未対応 → Phase 4 |
-| フリップ (`flip`) | 1 | 非対応（ハード制約） |
-| 読み取り (`battery?`/`speed?` 等) | 12 | 未対応 → Phase 3 |
-| 設定 (`speed`/`wifi`/`ap`) | 3 | 未対応 → Phase 3 |
-| ビデオ (`streamon`/`streamoff`) | 2 | 非対応（カメラなし） |
-| ミッションパッド (`mon`/`moff` 等) | 6 | 非対応 |
-| モーター (`motoron`/`motoroff`, SDK 3.0) | 2 | 未対応 → Phase 5 |
-| その他 (SDK 3.0) | 5 | 非対応 |
+| コマンド | 応答例 | 単位 | 備考 |
+|---|---|---|---|
+| `battery?` | `"87"` | % | 電圧から 3.3V=0%/4.2V=100% の線形換算 |
+| `height?` | `"50"` | cm | 推定高度（−Down成分） |
+| `attitude?` | `"pitch:0;roll:0;yaw:0;"` | 度 | 姿勢クォータニオンから算出 |
+| `speed?` | `"30"` | cm/s | **設定済みの巡航速度**（`speed x` で設定した値。実速度は状態ストリームの `vgx/vgy/vgz`） |
+| `sdk?` | `"20"` | - | 固定値。SDK 2.0 を名乗る（`djitellopy` が最大互換で前提にするバージョン） |
+| `sn?` | `"STAMPFLY-XXXXXX"` | - | STA MAC 末尾3バイトの16進。**Tello実機の `"0TQDF6GEBMB5HF"` 形式とは異なる独自形式** |
+| `time?` | `"15"` | 秒 | FLYING 開始からの経過秒 |
+| `wifi?` | `"90"` | - | 固定値（SNR取得源が機体側に無いため強信号の定数を返す） |
+| `tof?` | `"10"` | cm | 下向き ToF 距離 |
+| `temp?` | `"25C"` | - | IMU温度＋`"C"`。**Tello実機の `"62~65"` 形式とは異なる** |
+| `baro?` | `"170.07"` | m（生値） | 気圧高度。**Tello実機は cm** |
+| `acceleration?` | `"agx:-13.00;agy:-5.00;agz:-998.00;"` | 0.001g（ミリg） | IMU加速度 |
 
-### コントロールコマンド
+### 設定
 
-| コマンド | 構文 | 説明 | レスポンス | StampFly 対応 |
-|---------|------|------|-----------|--------------|
-| `command` | `command` | SDK モード開始 | `ok` / `error` | **Phase 1** |
-| `takeoff` | `takeoff` | 自動離陸 | `ok` / `error` | **実装済** ※ |
-| `land` | `land` | 自動着陸 | `ok` / `error` | **実装済** ※ |
-| `emergency` | `emergency` | 全モーター緊急停止 | `ok` / `error` | **Phase 1** |
-| `stop` | `stop` | その場でホバリング | `ok` / `error` | **Phase 1**（`hover` で代用可） |
+| コマンド | 構文 | 説明 |
+|---|---|---|
+| `speed` | `speed x`（10〜100 cm/s にクランプ） | 以後の verb 移動（up/down/left/right/forward/back）の巡航速度を設定 |
 
-※ 現状の StampFly `takeoff`/`land` は TCP CLI 経由。Tello 互換にするには UDP 8889 でのテキストコマンド受付が必要。
+### 応答はするがハードとして非対応
 
-### 移動コマンド
+| コマンド | 応答 | 理由 |
+|---|---|---|
+| `streamon`/`streamoff` | `"ok"` | カメラ非搭載だが、映像を読み取らずに切り替えるだけのプログラムを止めないための措置 |
+| `flip <l/r/f/b>` | `"error flip not supported on StampFly"` | 小型機での宙返りは高リスクという判断（2026-06-23） |
+| `mon`/`moff`/`mdirection` | `"error mission pads not supported"` | ミッションパッドは Tello EDU/RoboMaster TT 専用機能 |
+| 上記以外の未知コマンド | `"error unknown command"` | — |
 
-| コマンド | 構文 | パラメータ範囲 | 単位 | StampFly 対応 |
-|---------|------|--------------|------|--------------|
-| `up` | `up x` | x: 20-500 | cm | **Phase 2** |
-| `down` | `down x` | x: 20-500 | cm | **Phase 2** |
-| `left` | `left x` | x: 20-500 | cm | **Phase 2** |
-| `right` | `right x` | x: 20-500 | cm | **Phase 2** |
-| `forward` | `forward x` | x: 20-500 | cm | **Phase 2** |
-| `back` | `back x` | x: 20-500 | cm | **Phase 2** |
+## 3. 状態ストリーム（UDP 8890、10Hz）
 
-### 回転コマンド
-
-| コマンド | 構文 | パラメータ範囲 | 単位 | StampFly 対応 |
-|---------|------|--------------|------|--------------|
-| `cw` | `cw x` | x: 1-360 | 度 | **Phase 2** |
-| `ccw` | `ccw x` | x: 1-360 | 度 | **Phase 2** |
-
-### 複合移動コマンド
-
-| コマンド | 構文 | パラメータ | StampFly 対応 |
-|---------|------|----------|--------------|
-| `go` | `go x y z speed` | xyz: -500~500 cm, speed: 10-100 cm/s | **Phase 2** |
-| `curve` | `curve x1 y1 z1 x2 y2 z2 speed` | xyz: -500~500 cm, speed: 10-60 cm/s, 弧半径: 0.5-10m | 未定 |
-
-### RC コントロール
-
-| コマンド | 構文 | パラメータ | 説明 | StampFly 対応 |
-|---------|------|----------|------|--------------|
-| `rc` | `rc a b c d` | 各値: -100~100 | a=左右, b=前後, c=上下, d=ヨー | **Phase 4** |
-
-RC パラメータ詳細：
-
-| パラメータ | 範囲 | 説明 |
-|-----------|------|------|
-| `a` (left_right) | -100（左）~ 100（右） | ロール入力 |
-| `b` (forward_backward) | -100（後）~ 100（前） | ピッチ入力 |
-| `c` (up_down) | -100（下）~ 100（上） | スロットル入力 |
-| `d` (yaw) | -100（反時計回り）~ 100（時計回り） | ヨー入力 |
-
-### フリップコマンド
-
-| コマンド | 構文 | パラメータ | StampFly 対応 |
-|---------|------|----------|--------------|
-| `flip` | `flip x` | l（左）/ r（右）/ f（前）/ b（後） | **非対応**（ハード制約：機体重量・推力比の制約でフリップ不可） |
-
-### 読み取りコマンド
-
-| コマンド | 構文 | レスポンス例 | 単位 | StampFly 対応 |
-|---------|------|------------|------|--------------|
-| `speed?` | `speed?` | `"10"` | cm/s | **Phase 3** |
-| `battery?` | `battery?` | `"87"` | % | **Phase 3** |
-| `time?` | `time?` | `"15"` | 秒 | **Phase 3** |
-| `wifi?` | `wifi?` | `"90"` | SNR | 未定 |
-| `sdk?` | `sdk?` | `"20"` | - | **Phase 3** |
-| `sn?` | `sn?` | `"0TQDF6GEBMB5HF"` | - | **Phase 3** |
-| `height?` | `height?` | `"50"` | cm | **Phase 3** |
-| `temp?` | `temp?` | `"62~65"` | °C | 未定 |
-| `attitude?` | `attitude?` | `"pitch:0;roll:0;yaw:0;"` | 度 | **Phase 3** |
-| `baro?` | `baro?` | `"170.07"` | cm | **Phase 3** |
-| `acceleration?` | `acceleration?` | `"agx:-13.00;agy:-5.00;agz:-998.00;"` | cm/s² | **Phase 3** |
-| `tof?` | `tof?` | `"10"` | cm | **Phase 3** |
-
-### 設定コマンド
-
-| コマンド | 構文 | パラメータ | StampFly 対応 |
-|---------|------|----------|--------------|
-| `speed` | `speed x` | x: 10-100 cm/s | **Phase 3** |
-| `wifi` | `wifi ssid pass` | SSID とパスワード | 未定 |
-| `ap` | `ap ssid pass` | ステーションモード接続（EDU のみ） | 未定 |
-
-### ビデオコマンド
-
-| コマンド | 構文 | StampFly 対応 |
-|---------|------|--------------|
-| `streamon` | `streamon` | **非対応**（カメラなし） |
-| `streamoff` | `streamoff` | **非対応**（カメラなし） |
-
-### ミッションパッドコマンド（EDU 専用）
-
-| コマンド | 構文 | 説明 | StampFly 対応 |
-|---------|------|------|--------------|
-| `mon` | `mon` | ミッションパッド検出有効 | **非対応** |
-| `moff` | `moff` | ミッションパッド検出無効 | **非対応** |
-| `mdirection` | `mdirection x` | 検出方向: 0=下方, 1=前方, 2=両方 | **非対応** |
-| `go` (with mid) | `go x y z speed mid` | パッド基準座標移動 | **非対応** |
-| `curve` (with mid) | `curve ... speed mid` | パッド基準カーブ移動 | **非対応** |
-| `jump` | `jump x y z speed yaw mid1 mid2` | パッド間移動 | **非対応** |
-
-### SDK 3.0 追加コマンド
-
-| コマンド | 構文 | 説明 | StampFly 対応 |
-|---------|------|------|--------------|
-| `motoron` | `motoron` | モーター低速回転開始 | **Phase 5** |
-| `motoroff` | `motoroff` | モーター低速回転停止 | **Phase 5** |
-| `throwfly` | `throwfly` | スロー・トゥ・フライ | 非対応 |
-| `reboot` | `reboot` | ドローン再起動 | **Phase 5** |
-| `setbitrate` | `setbitrate x` | ビデオビットレート設定 | 非対応 |
-| `setfps` | `setfps x` | ビデオ FPS 設定 | 非対応 |
-| `setresolution` | `setresolution x` | ビデオ解像度設定 | 非対応 |
-
-## 4. テレメトリ仕様
-
-### Tello テレメトリフォーマット
-
-Tello は UDP 8890 でセミコロン区切りのテキストデータを約 10Hz で送信する。
+UDP:8889 へ何か1回でも送ると、送信元IPへ 8890 から Tello 互換の状態文字列が 10Hz で送られ始める（`djitellopy` の `connect()` はこの受信を必須とする。届かないと例外になる）。
 
 ```
-pitch:0;roll:0;yaw:0;vgx:0;vgy:0;vgz:0;templ:62;temph:65;tof:10;h:0;bat:87;baro:170.07;time:0;agx:-13.00;agy:-5.00;agz:-998.00;\r\n
+mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ:%d;temph:%d;tof:%d;h:%d;bat:%d;baro:%.2f;time:%d;agx:%.2f;agy:%.2f;agz:%.2f;\r\n
 ```
 
-### Tello テレメトリフィールド
+| フィールド | 単位 | 内容 |
+|---|---|---|
+| `mid` | - | 固定 `-2`（ミッションパッド検出無効。EDU専用機能を実装していないことを示す有効値であり、エラーではない） |
+| `x`/`y`/`z`/`mpry` | - | 固定 `0`（ミッションパッド座標。未実装のダミー値） |
+| `pitch`/`roll`/`yaw` | 度 | 姿勢クォータニオンから変換 |
+| `vgx`/`vgy`/`vgz` | cm/s | 対地速度。NED速度を機体系（前後/左右/上下）へ回転して変換 |
+| `templ`/`temph` | °C | IMU温度（1センサのため両方同じ値） |
+| `tof` | cm | 下向き ToF 距離 |
+| `h` | cm | 高度（推定位置の−Down成分） |
+| `bat` | % | バッテリー残量（`battery?`と同じ算出、両者は同じ関数を共有しドリフトしない） |
+| `baro` | m（生値） | 気圧高度。**`djitellopy` の `get_barometer()` は内部で×100してcm扱いするため、電文はm単位のまま送っている（Tello実機と同じ流儀）** |
+| `time` | 秒 | FLYING 開始からの経過秒 |
+| `agx`/`agy`/`agz` | 0.001g | IMU加速度 |
 
-| フィールド | 型 | 単位 | 説明 |
-|-----------|-----|------|------|
-| `pitch` | int | 度 | ピッチ角 |
-| `roll` | int | 度 | ロール角 |
-| `yaw` | int | 度 | ヨー角 |
-| `vgx` | int | dm/s | X 軸速度 |
-| `vgy` | int | dm/s | Y 軸速度 |
-| `vgz` | int | dm/s | Z 軸速度 |
-| `templ` | int | °C | 最低温度 |
-| `temph` | int | °C | 最高温度 |
-| `tof` | int | cm | ToF センサー距離 |
-| `h` | int | cm | 高度（相対） |
-| `bat` | int | % | バッテリー残量 |
-| `baro` | float | cm | 気圧計高度 |
-| `time` | int | 秒 | モーター使用時間 |
-| `agx` | float | cm/s² | X 軸加速度 |
-| `agy` | float | cm/s² | Y 軸加速度 |
-| `agz` | float | cm/s² | Z 軸加速度（静止時 ≈ -998） |
+姿勢・速度の符号や座標系が実機上で `djitellopy` の想定と一致するかは、実装コード内のコメントで「実機で要照合」と明記されており、本書では**未確認**。
 
-### StampFly テレメトリとの対応
+## 4. Python から使う
 
-StampFly は WebSocket でバイナリパケットを 400Hz（4サンプル × 100フレーム/秒）で送信する。1サンプルは 136 バイトの `ExtendedSample` 構造体。
+`tools/stampfly_py/` に2つの入口がある。
 
-| Tello フィールド | StampFly フィールド | 変換 |
-|-----------------|-------------------|------|
-| `pitch` | `quat_w/x/y/z` → オイラー角 | クォータニオンからピッチ角を算出 |
-| `roll` | `quat_w/x/y/z` → オイラー角 | クォータニオンからロール角を算出 |
-| `yaw` | `quat_w/x/y/z` → オイラー角 | クォータニオンからヨー角を算出 |
-| `vgx` | `vel_x` | m/s → dm/s に変換 |
-| `vgy` | `vel_y` | m/s → dm/s に変換 |
-| `vgz` | `vel_z` | m/s → dm/s に変換（NED→Tello座標系変換） |
-| `templ` | なし | ダミー値（ESP32 チップ温度で代用可能） |
-| `temph` | なし | ダミー値（ESP32 チップ温度で代用可能） |
-| `tof` | `tof_bottom` | m → cm に変換 |
-| `h` | `pos_z` | NED の Z（下方正）→ cm に変換（符号反転） |
-| `bat` | なし | バッテリー電圧から % 換算（要実装） |
-| `baro` | `baro_altitude` | m → cm に変換 |
-| `time` | `timestamp_us` | μs → 秒に変換（起動時からの経過時間） |
-| `agx` | `accel_x` | m/s² → cm/s² に変換 |
-| `agy` | `accel_y` | m/s² → cm/s² に変換 |
-| `agz` | `accel_z` | m/s² → cm/s² に変換 |
+- **`djitellopy`（推奨）**: `pip install djitellopy` するだけで、無改変の `Tello()` が SoftAP既定IP（192.168.10.1）にそのまま繋がる。`tools/stampfly_py/example_djitellopy.py`・`example_djitellopy2.py` が使用例
+- **`stampfly.py`**: 依存ゼロの軽量クライアント（`djitellopy`を入れたくない場合）。`example_square.py` が使用例
 
-### StampFly 固有テレメトリ（Tello にないもの）
+| 分類 | コマンド・機能 | 対応 |
+|---|---|---|
+| 制御・移動・回転・絶対移動・巡航速度設定・連続手動操作・読み取り全般 | `command`/`takeoff`/`land`/`emergency`/`stop`/`up`等/`go`/`speed`/`rc`/`battery?`等 | 対応 |
+| カメラ | `streamon`/`streamoff`、フレーム取得 | 非対応（`ok`は返すが映像は出ない。カメラ非搭載） |
+| 宙返り | `flip`系 | 非対応（`error`。小型機での高リスクを理由に拒否） |
+| 円弧移動 | `curve` | 非対応（`error`。未実装） |
+| ミッションパッド | `mon`/`moff`/`mdirection`、パッド基準の`go`/`curve`/`jump` | 非対応（`error`。EDU専用機能） |
 
-| フィールド | 単位 | 説明 |
-|-----------|------|------|
-| `gyro_x/y/z` | rad/s | 生ジャイロデータ（LPF 済） |
-| `gyro_corrected_x/y/z` | rad/s | バイアス補正済ジャイロ |
-| `ctrl_throttle/roll/pitch/yaw` | 0-1 / -1~1 | 制御入力値 |
-| `gyro_bias_x/y/z` | 0.0001 rad/s | ジャイロバイアス推定値 |
-| `accel_bias_x/y/z` | 0.0001 m/s² | 加速度バイアス推定値 |
-| `eskf_status` | - | ESKF 収束フラグ |
-| `tof_front` | m | 前方 ToF 距離 |
-| `flow_x/y` | pixel/frame | オプティカルフロー |
-| `flow_quality` | 0-255 | フロー品質 |
+**注意:** `sf log wifi`（400Hz/50Hzの DataStream キャプチャ）と Tello 状態ストリームは、どちらも PC 側で UDP:8890 を使うため**同時実行不可**。
 
-## 5. レスポンス仕様
+## 5. 経緯
 
-### コマンドレスポンス
+2026-02-14 に「TCP CLI + WebSocket をそのまま活用し、API 名レベルの互換を優先する」という設計検討（当時の `firmware/vehicle`＝現在の `vehicle_old` 世代の CLI/WebSocket を前提）が作成された。その後 2026-06-11 のコミット `caca9cc5`（"Tello-style programmatic flight — guidance + ApiTask + Python SDK"）で、UDP 8889/8890 を使う Tello 実機準拠のプロトコルとして実装された。TCP+WebSocket 前提から UDP ネイティブ実装へと転換した理由を記した設計判断の記録は見当たらなかった（**未確認**）。
 
-| 結果 | レスポンス | 例 |
-|------|-----------|-----|
-| 成功 | `"ok"` | コマンド正常実行 |
-| 失敗 | `"error"` またはエラーメッセージ | `"error Not joystick"`, `"error Motor stop"` |
-| 数値 | 数値文字列 | `"87"` (`battery?` の場合) |
+## 6. 非対応・未実装
 
-### タイムアウト
-
-| 状況 | タイムアウト |
-|------|------------|
-| 通常コマンドのレスポンス待ち | 7 秒 |
-| `takeoff` のレスポンス待ち | 20 秒（離陸完了まで待機） |
-| コマンドなしでの自動着陸 | 15 秒 |
-
-### 通信ルール
-
-| ルール | 説明 |
-|--------|------|
-| 逐次実行 | 前のコマンドのレスポンスを受信してから次を送信 |
-| RC 例外 | `rc` コマンドは連続送信可能（最小間隔 ≈ 1ms） |
-| 最小間隔 | 通常コマンド間は約 100ms |
-
-## 6. Python SDK (djitellopy) API
-
-### 基本的な使用例
-
-```python
-from djitellopy import Tello
-
-tello = Tello()
-tello.connect()              # SDK モード開始
-tello.takeoff()              # 離陸
-
-tello.move_up(100)           # 100cm 上昇
-tello.move_forward(100)      # 100cm 前進
-tello.rotate_clockwise(90)   # 時計回り 90 度
-tello.land()                 # 着陸
-tello.end()                  # 切断
-```
-
-### StampFly 互換 SDK の使用例（目標）
-
-```python
-from stampfly import StampFly   # djitellopy 互換 API
-
-drone = StampFly()              # Tello() と同じインターフェース
-drone.connect()                 # UDP 8889 で "command" 送信
-drone.takeoff()                 # 離陸
-
-drone.move_up(100)              # 100cm 上昇
-drone.move_forward(100)         # 100cm 前進
-drone.rotate_clockwise(90)      # 時計回り 90 度
-drone.land()                    # 着陸
-drone.end()                     # 切断
-```
-
-### djitellopy 主要メソッド — StampFly マッピング
-
-#### 接続
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `Tello(host='192.168.10.1')` | - | Phase 1（IP 変更） |
-| `connect(wait_for_state=True)` | `command` | Phase 1 |
-| `end()` | - | Phase 1 |
-
-#### 飛行制御
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `takeoff()` | `takeoff` | **実装済**（要 UDP 化） |
-| `land()` | `land` | **実装済**（要 UDP 化） |
-| `emergency()` | `emergency` | Phase 1 |
-| `send_rc_control(lr, fb, ud, yaw)` | `rc a b c d` | Phase 4 |
-
-#### 移動（距離: 20-500 cm）
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `move_up(x)` | `up x` | Phase 2 |
-| `move_down(x)` | `down x` | Phase 2 |
-| `move_left(x)` | `left x` | Phase 2 |
-| `move_right(x)` | `right x` | Phase 2 |
-| `move_forward(x)` | `forward x` | Phase 2 |
-| `move_back(x)` | `back x` | Phase 2 |
-
-#### 回転
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `rotate_clockwise(x)` | `cw x` | Phase 2 |
-| `rotate_counter_clockwise(x)` | `ccw x` | Phase 2 |
-
-#### 座標移動
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `go_xyz_speed(x, y, z, speed)` | `go x y z speed` | Phase 2 |
-| `curve_xyz_speed(...)` | `curve ...` | 未定 |
-
-#### フリップ
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `flip_left()` | `flip l` | 非対応 |
-| `flip_right()` | `flip r` | 非対応 |
-| `flip_forward()` | `flip f` | 非対応 |
-| `flip_back()` | `flip b` | 非対応 |
-
-#### ステート取得（テレメトリから取得）
-
-| メソッド | Tello フィールド | StampFly 対応 |
-|---------|-----------------|--------------|
-| `get_battery()` | `bat` | Phase 3 |
-| `get_height()` | `h` | Phase 3（`pos_z` から変換） |
-| `get_distance_tof()` | `tof` | Phase 3（`tof_bottom` から変換） |
-| `get_barometer()` | `baro` | Phase 3（`baro_altitude` から変換） |
-| `get_pitch()` | `pitch` | Phase 3（クォータニオンから変換） |
-| `get_roll()` | `roll` | Phase 3（クォータニオンから変換） |
-| `get_yaw()` | `yaw` | Phase 3（クォータニオンから変換） |
-| `get_speed_x()` | `vgx` | Phase 3（`vel_x` から変換） |
-| `get_speed_y()` | `vgy` | Phase 3（`vel_y` から変換） |
-| `get_speed_z()` | `vgz` | Phase 3（`vel_z` から変換） |
-| `get_acceleration_x()` | `agx` | Phase 3（`accel_x` から変換） |
-| `get_acceleration_y()` | `agy` | Phase 3（`accel_y` から変換） |
-| `get_acceleration_z()` | `agz` | Phase 3（`accel_z` から変換） |
-| `get_flight_time()` | `time` | Phase 3 |
-| `get_temperature()` | `(templ+temph)/2` | 未定 |
-
-#### クエリ（コマンド問い合わせ）
-
-| メソッド | SDK コマンド | StampFly 対応 |
-|---------|-------------|--------------|
-| `query_battery()` | `battery?` | Phase 3 |
-| `query_speed()` | `speed?` | Phase 3 |
-| `query_height()` | `height?` | Phase 3 |
-| `query_attitude()` | `attitude?` | Phase 3 |
-| `query_barometer()` | `baro?` | Phase 3 |
-| `query_distance_tof()` | `tof?` | Phase 3 |
-| `query_sdk_version()` | `sdk?` | Phase 3 |
-| `query_serial_number()` | `sn?` | Phase 3 |
-| `query_flight_time()` | `time?` | Phase 3 |
-| `query_wifi_signal_noise_ratio()` | `wifi?` | 未定 |
-
-#### ビデオ
-
-| メソッド | StampFly 対応 |
-|---------|--------------|
-| `streamon()` | 非対応（カメラなし） |
-| `streamoff()` | 非対応（カメラなし） |
-| `get_frame_read()` | 非対応（カメラなし） |
-
-#### ミッションパッド
-
-| メソッド | StampFly 対応 |
-|---------|--------------|
-| `enable_mission_pads()` | 非対応 |
-| `disable_mission_pads()` | 非対応 |
-| `get_mission_pad_id()` | 非対応 |
-
-## 7. 移植戦略（ロードマップ）
-
-> **詳細な実装プランは [`docs/plans/TELLO_COMPAT_PLAN.md`](plans/TELLO_COMPAT_PLAN.md) を参照。**
-
-### 設計方針
-
-既存の StampFly 通信基盤（TCP CLI + WebSocket）をそのまま活用し、**API レベルの互換性**を優先する。Tello の UDP プロトコル互換は必要になった場合にのみ追加する。
-
-```
-教育用 Python スクリプト
-  │  from stampfly import StampFly
-  │
-  ├─── StampFly Python SDK (lib/stampfly/)
-  │      djitellopy 互換メソッド名
-  │      │
-  │      └─── VehicleConnection (lib/sfcli/utils/)
-  │             ├─ VehicleCLI       TCP 23 (コマンド)
-  │             └─ VehicleTelemetry  WebSocket 80 (テレメトリ)
-  │
-  ├─── sf CLI (lib/sfcli/)
-  │      sf takeoff / sf up 100 / sf battery
-  │      │
-  │      └─── VehicleConnection (共有)
-  │
-  └─── StampFly ファームウェア（変更最小）
-```
-
-### ロードマップ
-
-```
-Phase 0 ✅ 仕様調査・ドキュメント
-  │
-Phase 1 ── ファームウェア移動コマンド ─── up/down/left/right/forward/back/cw/ccw
-  │         ※ POSITION_HOLD モード実装が最大のタスク
-  │
-Phase 2 ── sf CLI 拡張 ─────────────── sf up 100 / sf cw 90 が動く
-  │
-Phase 3 ── テレメトリ・読み取り ───────── sf battery / sf height が動く
-  │
-Phase 4 ── RC 制御 ─────────────────── sf rc でリアルタイム操縦
-  │
-Phase 5 ── Python SDK ─────────────── from stampfly import StampFly
-  │
-Phase 6 ── UDP 互換（任意）─────────── djitellopy 直接利用（必要な場合のみ）
-```
-
-## 8. 参考資料
-
-| リソース | 説明 |
-|---------|------|
-| [Tello SDK 2.0 User Guide](https://dl-cdn.ryzerobotics.com/downloads/Tello/Tello%20SDK%202.0%20User%20Guide.pdf) | SDK 2.0 公式仕様書 |
-| [Tello SDK 3.0 User Guide](https://dl.djicdn.com/downloads/RoboMaster+TT/Tello_SDK_3.0_User_Guide_en.pdf) | SDK 3.0 公式仕様書 |
-| [djitellopy GitHub](https://github.com/damiafuentes/DJITelloPy) | Python SDK ソースコード |
-| [djitellopy API Reference](https://djitellopy.readthedocs.io/en/latest/tello/) | Python SDK ドキュメント |
+- カメラ映像（`streamon`/`streamoff` は `ok` を返すが実際の映像配信はしない）
+- `flip`（宙返り。ハード制約というより安全上の判断）
+- `curve`（円弧移動、および座標移動系のミッションパッド指定 `mid` 引数）
+- ミッションパッド機能一式（`mon`/`moff`/`mdirection`、パッド基準の `go`/`curve`/`jump`）
+- SDK 3.0 系コマンド（`motoron`/`motoroff`/`throwfly`/`setbitrate`/`setfps`/`setresolution` 等）
+- `wifi ssid/pass`・`ap ssid/pass`（UDP:8889 経由の設定コマンドとしては未実装。同等の設定は TCP CLI の `wifi` コマンドで可能）
+- 「無通信N秒での自動着陸」に相当する処理は `api_task.cpp` 内には見当たらない（**未確認** — 他タスクに実装されている可能性は本書の調査範囲外）
 
 ---
 
 <a id="english"></a>
 
-# Tello SDK API Reference — StampFly Compatibility Layer Design
+# StampFly Tello-Compatible API Reference
 
-## 1. Overview
+**Last updated: 2026-09-13** (fully rewritten to match the current `firmware/vehicle` implementation. The previous version was a 2026-02-14 design-study record that assumed TCP 23 + WebSocket, which no longer matches the current implementation even at the level of communication method; the original text can be retrieved via `git show archive/2026-09-13:docs/architecture/tello-api-reference.md`).
+
+## 1. Overview and Connection
 
 ### About This Document
 
-The DJI Tello SDK is the de facto standard for educational drones, with Python SDKs like djitellopy widely used in educational settings worldwide. This document comprehensively documents the Tello SDK specifications and identifies the gaps for porting to StampFly.
+The main `firmware/vehicle` firmware speaks DJI Tello SDK-compatible text commands over UDP. This document is the current specification extracted from the implementation (`firmware/vehicle/tasks/api_task.cpp`, `firmware/vehicle/components/sf_telemetry/`), and is the primary reference for running Tello Python programs such as `djitellopy` against StampFly. See `firmware/vehicle/docs/operation_manual.md` for real-vehicle operating procedures.
 
-### Tello SDK Versions
+### Connection
 
-| Version | Target Device | Key Additions |
-|---------|--------------|---------------|
-| SDK 1.3 | Tello (standard) | Basic flight, movement, rotation, flip, video |
-| SDK 2.0 | Tello EDU | `stop`, Mission Pads, `sdk?`/`sn?`/`wifi?`, `ap` |
-| SDK 3.0 | Tello EDU (v02.05.01.17+) / RoboMaster TT | `motoron`/`motoroff`, `throwfly`, video settings, port config |
+By default the vehicle runs a **SoftAP** addressed at **`192.168.10.1`**, the same IP as the real Tello (matching `djitellopy`'s default host, so `Tello()` connects with no arguments). This re-addressing is done by `firmware/vehicle/components/sf_comm/comm.cpp` when the SoftAP starts. Setting the `wifi.mode` parameter (default `0` = STA client mode) to `1` enables the SoftAP. When using STA mode to join a shared router, pass the vehicle's LAN IP explicitly (e.g. `Tello(host="192.168.1.42")`).
 
-### Scope
+### Port List
 
-The StampFly compatibility layer targets **SDK 2.0** as the baseline. SDK 2.0 is the most widely used version and the default target of djitellopy. SDK 3.0-specific commands (`motoron`, etc.) will be considered in Phase 5+.
+| Port | Direction | Content | Implementation |
+|---|---|---|---|
+| UDP 8889 | PC→vehicle (commands), vehicle→PC (replies) | Tello-compatible text commands | `tasks/api_task.cpp` (`ApiTask`) |
+| UDP 8890 (send-only) | vehicle→PC | Tello-compatible state string, 10Hz | `tasks/api_task.cpp` (`TelloStateTask`); format in `components/sf_telemetry/include/tello_state.hpp` |
+| UDP 8890 (a separate socket bound on the vehicle, for `sf log wifi`) | PC↔vehicle | Binary bundle packets of 400Hz samples (sent at 50Hz). A different protocol from the state string above — **cannot be used at the same time** (both use the same port on the PC side) | `components/sf_telemetry/{data_stream.hpp,data_stream.cpp}`; details in `docs/architecture/udp-telemetry-design.md` |
+| UDP 5005 (broadcast) | vehicle→broadcast | `sf::TelemetryPacket` (104 bytes: attitude, angular rate, acceleration, position, velocity, thrust/torque, motor duty), 50Hz | `components/sf_telemetry/{telemetry.hpp,telemetry.cpp}` |
+| TCP 23 | PC↔vehicle (interactive) | telnet-style CLI (`param`/`status`/`sensor`/`version`/`mac`/`pair`/`unpair`/`sound`/`led`/`motor`/`wifi`/`magcal`/`reboot`). **No flight commands here** | `tasks/cli_task.cpp` |
 
-## 2. Communication Architecture
+There is no video port (UDP 11111, as on the real Tello) on StampFly — there is no camera.
 
-### Tello Communication Setup
+## 2. Command List
 
-```
-PC / Smartphone  <-- WiFi -->  Tello (192.168.10.1)
-      |                               |
-      |  UDP 8889 (Command TX/RX)      |
-      |  ─────────────────────────>    |
-      |  <─────────────────────────    |
-      |                               |
-      |  UDP 8890 (Telemetry RX)       |
-      |  <─────────────────────────    |
-      |                               |
-      |  UDP 11111 (H.264 Video RX)    |
-      |  <─────────────────────────    |
-```
+Until `command` is sent to enter SDK mode, every other command returns `"error not in command mode"`. After that, commands return `"ok"` on success or `"error ..."` on failure (query lines return a numeric or string value).
 
-### StampFly Communication Setup (Current)
+### Control
 
-```
-PC / Smartphone  <-- WiFi -->  StampFly (192.168.4.1)
-      |                               |
-      |  TCP 23 (Telnet CLI)           |
-      |  ─────────────────────────>    |
-      |  <─────────────────────────    |
-      |                               |
-      |  WebSocket 80 (Binary Telem)   |
-      |  <─────────────────────────    |
-```
+| Command | Syntax | Description | Precondition |
+|---|---|---|---|
+| `command` | `command` | Enter SDK mode | None |
+| `takeoff` | `takeoff` | Auto takeoff (POS_HOLD, the same path as manual RC takeoff). Blocks up to 12 s until FLYING | On the ground (IDLE_GROUND/ARMED_GROUND) and stillness-calibrated |
+| `land` | `land` | Auto land. Blocks up to 20 s until IDLE_GROUND | Airborne |
+| `emergency` | `emergency` | Kill all motors immediately; processed ahead of every other gate | Always |
+| `stop` | `stop` | Re-target the current position and hover | FLYING with an active API guidance target |
 
-### Protocol Comparison
+### Movement and Rotation
 
-| Item | Tello | StampFly (Current) | Compatibility Layer (Planned) |
-|------|-------|-------------------|-------------------------------|
-| Commands | UDP 8889 (text) | TCP 23 (Telnet CLI) | UDP 8889 (text) |
-| Telemetry | UDP 8890 (text, 10Hz) | WebSocket 80 (binary, 400Hz) | UDP 8890 (text, 10Hz) |
-| Video | UDP 11111 (H.264) | None | Not supported |
-| Drone IP | 192.168.10.1 | 192.168.4.1 | 192.168.10.1 (configurable) |
-| Init | Send `command` for SDK mode | Telnet connection | Send `command` for SDK mode |
-| Auto-land | 15s timeout without commands | None | 15s timeout |
+| Command | Syntax | Range | Description |
+|---|---|---|---|
+| `up`/`down`/`left`/`right`/`forward`/`back` | `<verb> x` (cm) | Combined travel distance 10–300 cm (the real Tello is 20–500 cm; the lower bound is finer for indoor use; distances over 300 cm are clamped to 300 cm, preserving direction, and still reply `ok`) | Composes onto the current guidance TARGET (not the state estimate); blocks until reached |
+| `cw`/`ccw` | `<verb> x` (degrees) | 1–360 degrees | Adds to the yaw target; blocks until reached |
+| `go` | `go x y z speed` | xyz: cm (same 10–300 cm clamp as above), speed: 10–100 cm/s | Simultaneous 3-axis move |
+| `rc` | `rc a b c d` | each -100..100 | Continuous velocity command (fire-and-forget, no reply). a=roll (right+), b=pitch (forward+), c=throttle (up+), d=yaw rate (clockwise+). Automatically reverts to holding position when the stream stops; instantly overridden if the pilot moves the stick |
 
-## 3. Command List (Tello → StampFly Mapping)
+Movement, rotation, `go`, and `rc` return `"error not flying"` unless FLYING with an active API guidance target (established right after `takeoff`, or re-established with `takeoff`/`go` etc. after a pilot override released it); `rc` is silently ignored instead.
 
-### Category Summary
+### StampFly-Specific Extensions (not in the Tello SDK)
 
-| Category | Commands | StampFly Status |
-|----------|----------|-----------------|
-| Init (`command`) | 1 | Not impl → Phase 1 |
-| Basic flight (`takeoff`/`land`/`emergency`/`stop`) | 4 | Partial (`takeoff`/`land` done) |
-| Movement (`up`/`down`/`left`/`right`/`forward`/`back`) | 6 | Not impl → Phase 2 |
-| Rotation (`cw`/`ccw`) | 2 | Not impl → Phase 2 |
-| Complex (`go`/`curve`) | 2 | Not impl → Phase 2 |
-| RC control (`rc`) | 1 | Not impl → Phase 4 |
-| Flip (`flip`) | 1 | Not supported (HW limitation) |
-| Read (`battery?`/`speed?` etc.) | 12 | Not impl → Phase 3 |
-| Set (`speed`/`wifi`/`ap`) | 3 | Not impl → Phase 3 |
-| Video (`streamon`/`streamoff`) | 2 | Not supported (no camera) |
-| Mission Pads (`mon`/`moff` etc.) | 6 | Not supported |
-| Motor (SDK 3.0) | 2 | Not impl → Phase 5 |
+| Command | Syntax | Description |
+|---|---|---|
+| `autotune` | `autotune <roll\|pitch\|yaw> [wc rad/s] [PM deg]` (default roll/pitch: wc=25, PM=60; yaw: wc=18, PM=60) | Onboard: (1) a 9-point stepped-sine sweep (2–35 Hz), (2) plant identification, (3) PID design meeting the phase-margin spec, (4) live application (not saved to NVS). FLYING only |
+| `sysid` | `sysid <roll\|pitch\|yaw> <doublet\|chirp> <amp_dps> <dur_s>` | Injects a rate-loop identification excitation on one axis while hovering; blocks until the excitation finishes, then replies `ok` |
 
-### Control Commands
+### Queries (lines containing `?`)
 
-| Command | Syntax | Description | Response | StampFly |
-|---------|--------|-------------|----------|----------|
-| `command` | `command` | Enter SDK mode | `ok` / `error` | **Phase 1** |
-| `takeoff` | `takeoff` | Auto takeoff | `ok` / `error` | **Done** ※ |
-| `land` | `land` | Auto land | `ok` / `error` | **Done** ※ |
-| `emergency` | `emergency` | Kill all motors | `ok` / `error` | **Phase 1** |
-| `stop` | `stop` | Hover in place | `ok` / `error` | **Phase 1** |
+| Command | Example reply | Unit | Notes |
+|---|---|---|---|
+| `battery?` | `"87"` | % | Linear mapping from voltage: 3.3V=0%, 4.2V=100% |
+| `height?` | `"50"` | cm | Estimated altitude (the −Down component) |
+| `attitude?` | `"pitch:0;roll:0;yaw:0;"` | degrees | Computed from the attitude quaternion |
+| `speed?` | `"30"` | cm/s | The **configured** cruise speed (set via `speed x`), not the live ground speed (that's `vgx`/`vgy`/`vgz` in the state stream) |
+| `sdk?` | `"20"` | - | Fixed value; reports SDK 2.0 (the version `djitellopy` targets for broadest compatibility) |
+| `sn?` | `"STAMPFLY-XXXXXX"` | - | Hex of the last 3 bytes of the STA MAC. **Differs from the real Tello's `"0TQDF6GEBMB5HF"`-style format** |
+| `time?` | `"15"` | seconds | Elapsed seconds since FLYING began |
+| `wifi?` | `"90"` | - | Fixed value (no SNR source on the vehicle side, so a strong-signal constant is returned) |
+| `tof?` | `"10"` | cm | Downward-facing ToF distance |
+| `temp?` | `"25C"` | - | IMU temperature plus `"C"`. **Differs from the real Tello's `"62~65"`-style format** |
+| `baro?` | `"170.07"` | m (raw) | Barometric altitude. **The real Tello reports cm** |
+| `acceleration?` | `"agx:-13.00;agy:-5.00;agz:-998.00;"` | 0.001g (milli-g) | IMU acceleration |
 
-※ Current StampFly `takeoff`/`land` uses TCP CLI. Tello compatibility requires UDP 8889 text command interface.
+### Settings
 
-### Movement Commands
+| Command | Syntax | Description |
+|---|---|---|
+| `speed` | `speed x` (clamped to 10–100 cm/s) | Sets the cruise speed used by subsequent verb moves (up/down/left/right/forward/back) |
 
-| Command | Syntax | Range | Unit | StampFly |
-|---------|--------|-------|------|----------|
-| `up` | `up x` | x: 20-500 | cm | **Phase 2** |
-| `down` | `down x` | x: 20-500 | cm | **Phase 2** |
-| `left` | `left x` | x: 20-500 | cm | **Phase 2** |
-| `right` | `right x` | x: 20-500 | cm | **Phase 2** |
-| `forward` | `forward x` | x: 20-500 | cm | **Phase 2** |
-| `back` | `back x` | x: 20-500 | cm | **Phase 2** |
+### Acknowledged but Not Supported in Hardware
 
-### Rotation Commands
+| Command | Reply | Reason |
+|---|---|---|
+| `streamon`/`streamoff` | `"ok"` | No camera, but replying `ok` keeps programs that merely toggle the stream (without reading frames) from stalling |
+| `flip <l/r/f/b>` | `"error flip not supported on StampFly"` | A flip is judged too risky an acro maneuver for this small craft (decided 2026-06-23) |
+| `mon`/`moff`/`mdirection` | `"error mission pads not supported"` | Mission pads are a Tello EDU/RoboMaster TT-only feature |
+| Any other unknown command | `"error unknown command"` | — |
 
-| Command | Syntax | Range | Unit | StampFly |
-|---------|--------|-------|------|----------|
-| `cw` | `cw x` | x: 1-360 | degrees | **Phase 2** |
-| `ccw` | `ccw x` | x: 1-360 | degrees | **Phase 2** |
+## 3. State Stream (UDP 8890, 10Hz)
 
-### Complex Movement
-
-| Command | Syntax | Parameters | StampFly |
-|---------|--------|-----------|----------|
-| `go` | `go x y z speed` | xyz: -500~500 cm, speed: 10-100 cm/s | **Phase 2** |
-| `curve` | `curve x1 y1 z1 x2 y2 z2 speed` | xyz: -500~500 cm, speed: 10-60 cm/s | TBD |
-
-### RC Control
-
-| Command | Syntax | Parameters | Description | StampFly |
-|---------|--------|-----------|-------------|----------|
-| `rc` | `rc a b c d` | each: -100~100 | a=LR, b=FB, c=UD, d=yaw | **Phase 4** |
-
-### Flip
-
-| Command | Syntax | StampFly |
-|---------|--------|----------|
-| `flip` | `flip l/r/f/b` | **Not supported** (thrust-to-weight ratio limitation) |
-
-### Read Commands
-
-| Command | Syntax | Response | Unit | StampFly |
-|---------|--------|----------|------|----------|
-| `speed?` | `speed?` | `"10"` | cm/s | **Phase 3** |
-| `battery?` | `battery?` | `"87"` | % | **Phase 3** |
-| `time?` | `time?` | `"15"` | sec | **Phase 3** |
-| `height?` | `height?` | `"50"` | cm | **Phase 3** |
-| `attitude?` | `attitude?` | `"pitch:0;roll:0;yaw:0;"` | degrees | **Phase 3** |
-| `baro?` | `baro?` | `"170.07"` | cm | **Phase 3** |
-| `tof?` | `tof?` | `"10"` | cm | **Phase 3** |
-| `sdk?` | `sdk?` | `"20"` | - | **Phase 3** |
-| `sn?` | `sn?` | `"0TQDF6GEBMB5HF"` | - | **Phase 3** |
-
-## 4. Telemetry Specification
-
-### Tello Telemetry Format
-
-Tello sends semicolon-separated text data at ~10Hz via UDP 8890:
+Once anything at all has been sent to UDP:8889, the vehicle starts pushing a Tello-compatible state string to the sender's IP on port 8890 at 10Hz (`djitellopy`'s `connect()` requires at least one such packet, or it raises).
 
 ```
-pitch:0;roll:0;yaw:0;vgx:0;vgy:0;vgz:0;templ:62;temph:65;tof:10;h:0;bat:87;baro:170.07;time:0;agx:-13.00;agy:-5.00;agz:-998.00;\r\n
+mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ:%d;temph:%d;tof:%d;h:%d;bat:%d;baro:%.2f;time:%d;agx:%.2f;agy:%.2f;agz:%.2f;\r\n
 ```
 
-### Tello Telemetry Fields
+| Field | Unit | Content |
+|---|---|---|
+| `mid` | - | Fixed `-2` (mission-pad detection disabled — a valid value indicating the EDU-only feature is not implemented, not an error) |
+| `x`/`y`/`z`/`mpry` | - | Fixed `0` (mission-pad coordinates; unimplemented placeholders) |
+| `pitch`/`roll`/`yaw` | degrees | Converted from the attitude quaternion |
+| `vgx`/`vgy`/`vgz` | cm/s | Ground speed; NED velocity rotated into the body frame (forward/right/up) |
+| `templ`/`temph` | °C | IMU temperature (one sensor, so both fields are identical) |
+| `tof` | cm | Downward-facing ToF distance |
+| `h` | cm | Height (the −Down component of the estimated position) |
+| `bat` | % | Battery percentage (shares the same computation as `battery?`, so the two never drift apart) |
+| `baro` | m (raw) | Barometric altitude. **`djitellopy`'s `get_barometer()` multiplies internally by 100 to report cm, so the value on the wire stays in meters — matching the real Tello's convention** |
+| `time` | seconds | Elapsed seconds since FLYING began |
+| `agx`/`agy`/`agz` | 0.001g | IMU acceleration |
 
-| Field | Type | Unit | Description |
-|-------|------|------|-------------|
-| `pitch` | int | degrees | Pitch angle |
-| `roll` | int | degrees | Roll angle |
-| `yaw` | int | degrees | Yaw angle |
-| `vgx` | int | dm/s | X velocity |
-| `vgy` | int | dm/s | Y velocity |
-| `vgz` | int | dm/s | Z velocity |
-| `templ` | int | °C | Lowest temperature |
-| `temph` | int | °C | Highest temperature |
-| `tof` | int | cm | ToF sensor distance |
-| `h` | int | cm | Height (relative) |
-| `bat` | int | % | Battery percentage |
-| `baro` | float | cm | Barometric altitude |
-| `time` | int | sec | Motor run time |
-| `agx` | float | cm/s² | X acceleration |
-| `agy` | float | cm/s² | Y acceleration |
-| `agz` | float | cm/s² | Z acceleration (≈ -998 at rest) |
+Whether the sign conventions and frame for attitude/velocity match what `djitellopy` expects on real hardware is explicitly flagged as "needs empirical checking on hardware" in a code comment, and is **unconfirmed** in this document.
 
-### StampFly Telemetry Mapping
+## 4. Using It From Python
 
-| Tello Field | StampFly Field | Conversion |
-|-------------|---------------|------------|
-| `pitch` | `quat_w/x/y/z` → Euler | Quaternion to pitch angle |
-| `roll` | `quat_w/x/y/z` → Euler | Quaternion to roll angle |
-| `yaw` | `quat_w/x/y/z` → Euler | Quaternion to yaw angle |
-| `vgx` | `vel_x` | m/s → dm/s |
-| `vgy` | `vel_y` | m/s → dm/s |
-| `vgz` | `vel_z` | m/s → dm/s (NED→Tello frame) |
-| `tof` | `tof_bottom` | m → cm |
-| `h` | `pos_z` | NED Z (down-positive) → cm (negate) |
-| `bat` | N/A | Voltage → % conversion (to be impl) |
-| `baro` | `baro_altitude` | m → cm |
-| `agx/y/z` | `accel_x/y/z` | m/s² → cm/s² |
+`tools/stampfly_py/` provides two entry points.
 
-## 5. Response Specification
+- **`djitellopy` (recommended)**: just `pip install djitellopy`; the unmodified `Tello()` connects directly to the SoftAP's default IP (192.168.10.1). `tools/stampfly_py/example_djitellopy.py` and `example_djitellopy2.py` are working examples.
+- **`stampfly.py`**: a dependency-free lightweight client (if you'd rather not install `djitellopy`). `example_square.py` is a usage example.
 
-### Command Responses
+| Category | Commands / features | Support |
+|---|---|---|
+| Control, movement, rotation, absolute move, cruise-speed setting, continuous manual control, general reads | `command`/`takeoff`/`land`/`emergency`/`stop`/`up` etc./`go`/`speed`/`rc`/`battery?` etc. | Supported |
+| Camera | `streamon`/`streamoff`, frame capture | Not supported (`ok` is returned but no video is produced — no camera) |
+| Flip | `flip`-family | Not supported (`error` — refused as too risky for this small craft) |
+| Curve | `curve` | Not supported (`error` — not implemented) |
+| Mission pads | `mon`/`moff`/`mdirection`, pad-relative `go`/`curve`/`jump` | Not supported (`error` — EDU-only feature) |
 
-| Result | Response | Example |
-|--------|----------|---------|
-| Success | `"ok"` | Command executed |
-| Failure | `"error"` or message | `"error Not joystick"` |
-| Numeric | Numeric string | `"87"` (for `battery?`) |
+**Note:** `sf log wifi` (the 400Hz/50Hz DataStream capture) and the Tello state stream both use UDP:8890 on the PC side, so **they cannot run at the same time**.
 
-### Timeouts
+## 5. History
 
-| Situation | Timeout |
-|-----------|---------|
-| Normal command response | 7 seconds |
-| `takeoff` response | 20 seconds |
-| Auto-land (no commands) | 15 seconds |
+On 2026-02-14, a design study was written that proposed leveraging the existing TCP CLI + WebSocket infrastructure and prioritizing API-name-level compatibility (assuming the CLI/WebSocket of the `firmware/vehicle` of that era — the codebase now called `vehicle_old`). It was then implemented on 2026-06-11 in commit `caca9cc5` ("Tello-style programmatic flight — guidance + ApiTask + Python SDK") as a real Tello-hardware-compatible protocol over UDP 8889/8890. No record explaining the reasoning for the switch from TCP+WebSocket to a native UDP implementation was found (**unconfirmed**).
 
-## 6. Python SDK (djitellopy) API
+## 6. Not Supported / Not Implemented
 
-### Basic Usage
-
-```python
-from djitellopy import Tello
-
-tello = Tello()
-tello.connect()
-tello.takeoff()
-tello.move_up(100)
-tello.move_forward(100)
-tello.rotate_clockwise(90)
-tello.land()
-tello.end()
-```
-
-### StampFly Compatible SDK (Goal)
-
-```python
-from stampfly import StampFly
-
-drone = StampFly()       # Same interface as Tello()
-drone.connect()
-drone.takeoff()
-drone.move_up(100)
-drone.land()
-drone.end()
-```
-
-See the Japanese section above for the complete method mapping table.
-
-## 7. Migration Roadmap
-
-> **See [`docs/plans/TELLO_COMPAT_PLAN.md`](plans/TELLO_COMPAT_PLAN.md) for the detailed implementation plan.**
-
-### Design Philosophy
-
-Leverage existing StampFly communication infrastructure (TCP CLI + WebSocket) and prioritize **API-level compatibility**. Tello UDP protocol compatibility is deferred and only added if specifically needed.
-
-```
-Educational Python Scripts
-  │  from stampfly import StampFly
-  │
-  ├─── StampFly Python SDK (lib/stampfly/)
-  │      djitellopy-compatible method names
-  │      │
-  │      └─── VehicleConnection (lib/sfcli/utils/)
-  │             ├─ VehicleCLI       TCP 23 (commands)
-  │             └─ VehicleTelemetry  WebSocket 80 (telemetry)
-  │
-  ├─── sf CLI (lib/sfcli/)
-  │      sf takeoff / sf up 100 / sf battery
-  │      │
-  │      └─── VehicleConnection (shared)
-  │
-  └─── StampFly Firmware (minimal changes)
-```
-
-### Roadmap
-
-```
-Phase 0 ✅ Research & Documentation
-  │
-Phase 1 ── Firmware Movement Commands ── up/down/left/right/forward/back/cw/ccw
-  │         ※ POSITION_HOLD mode is the biggest task
-  │
-Phase 2 ── sf CLI Extension ──────────── sf up 100 / sf cw 90
-  │
-Phase 3 ── Telemetry & Read Commands ─── sf battery / sf height
-  │
-Phase 4 ── RC Control ────────────────── sf rc for real-time control
-  │
-Phase 5 ── Python SDK ────────────────── from stampfly import StampFly
-  │
-Phase 6 ── UDP Compatibility (optional) ── direct djitellopy usage (only if needed)
-```
-
-## 8. References
-
-| Resource | Description |
-|---------|-------------|
-| [Tello SDK 2.0 User Guide](https://dl-cdn.ryzerobotics.com/downloads/Tello/Tello%20SDK%202.0%20User%20Guide.pdf) | Official SDK 2.0 spec |
-| [Tello SDK 3.0 User Guide](https://dl.djicdn.com/downloads/RoboMaster+TT/Tello_SDK_3.0_User_Guide_en.pdf) | Official SDK 3.0 spec |
-| [djitellopy GitHub](https://github.com/damiafuentes/DJITelloPy) | Python SDK source |
-| [djitellopy API Reference](https://djitellopy.readthedocs.io/en/latest/tello/) | Python SDK docs |
+- Camera video (`streamon`/`streamoff` reply `ok` but no video is actually streamed)
+- `flip` (a safety decision, not strictly a hardware limitation)
+- `curve` (arc movement, and the pad-relative `mid` argument on movement commands)
+- The full mission-pad feature set (`mon`/`moff`/`mdirection`, pad-relative `go`/`curve`/`jump`)
+- SDK 3.0-era commands (`motoron`/`motoroff`/`throwfly`/`setbitrate`/`setfps`/`setresolution`, etc.)
+- `wifi ssid/pass` and `ap ssid/pass` as UDP:8889 commands (not implemented there; the equivalent setting is available via the TCP CLI's `wifi` command)
+- No processing equivalent to "auto-land after N seconds without a command" was found inside `api_task.cpp` (**unconfirmed** — it may exist in another task, which is outside the scope of this document's investigation)

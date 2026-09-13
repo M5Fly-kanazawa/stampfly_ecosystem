@@ -142,7 +142,6 @@ nav:
       - Genesis 統合: docs/architecture/genesis-integration.md
       - TDMA 通信: docs/architecture/tdma-usage.md
       - Tello API: docs/architecture/tello-api-reference.md
-      - ROS2 UDP: docs/architecture/ros2-udp-debug.md
     - sf CLI:
       - コマンド一覧: docs/commands/README.md
       - sf version: docs/commands/sf-version.md
@@ -156,6 +155,7 @@ nav:
       - sf log: docs/commands/sf-log.md
       - sf sim: docs/commands/sf-sim.md
       - sf cal: docs/commands/sf-cal.md
+      - sf blocks: docs/commands/sf-blocks.md
     - ガイド:
       - アップグレードガイド: docs/guides/upgrading.md
       - GUI インストーラガイド: docs/guides/gui-installer.md
@@ -278,7 +278,6 @@ nav:
       - Genesis: simulator/genesis/README.md
       - URDF メッシュ法線: simulator/genesis/docs/urdf_mesh_normals.md
       - サンドボックス: simulator/sandbox/README.md
-    - ROS: ros/README.md
 
   # ==================== 計画 ====================
   - 計画:

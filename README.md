@@ -24,6 +24,7 @@
 | **センサー値の取得** | IMU・気圧・ToF・オプティカルフローの値をリアルタイムに読み出し、表示・記録できる |
 | **コントローラからの指令の受信** | 送信機のスティック・ボタンの値を機体側で受け取り、自分のプログラムから使える |
 | **独自の飛行プログラムの作成** | `sf app new` で自分のプロジェクトを作り、制御則や推定器を自分で書ける（**→ [独自プログラム開発入門](docs/guides/custom_program.md)**） |
+| **ブロックプログラミング** | コードを書かずに、ブラウザでブロックを並べて飛ばせる（小中学生・入門者向け。`sf blocks`、**→ [ブロックプログラミングガイド](docs/guides/block_programming.md)**） |
 | **飛行プログラムの SILS での検証** | 作成した飛行プログラムを SILS（Software In the Loop Simulation: ファームウェアそのものを PC 上で飛ばす試験）で、実機に書き込む前に確認できる |
 
 ---
@@ -354,8 +355,7 @@ stampfly_ecosystem/
 ├── tools/          # sf CLI のバックエンドと補助ツール
 ├── lib/            # PC 側 Python（sf CLI 本体・ログ・SDK）
 ├── simulator/      # SILS と 3D フライトシミュレータ
-├── scripts/        # インストーラの実装
-└── ros/            # ROS 連携（構築中）
+└── scripts/        # インストーラの実装
 ```
 
 構成の意図と各ディレクトリの責務は [PROJECT_PLAN.md](PROJECT_PLAN.md) が正です。
@@ -369,6 +369,7 @@ stampfly_ecosystem/
 | [📖 次のステップ](docs/next_step.md) | シミュレータの使い方、飛行前の確認、飛行方法、開発者向け機能 |
 | [🎛️ 送信機の使い方](docs/guides/controller.md) | メニュー操作、通信モードの切替、ペアリング、ボタンの役割 |
 | [🧪 独自プログラム開発入門](docs/guides/custom_program.md) | 自分の制御則・推定器を書き、SILS で確認して実機で飛ばすまで |
+| [🧩 ブロックプログラミングガイド](docs/guides/block_programming.md) | ブラウザの Blockly でブロックを並べて飛ばす（`sf blocks`） |
 | [⌨️ sf コマンドリファレンス](docs/commands/README.md) | ビルド・書き込み・ログ取得など全コマンドの説明 |
 | [🛠️ セットアップガイド](docs/setup/README.md) | OS 別の導入手順の詳細とトラブル対応 |
 | [🌐 プロジェクト紹介](https://m5fly-kanazawa.github.io/stampfly_ecosystem/) | 実機3Dモデル付きランディングページ |
@@ -416,6 +417,7 @@ This ecosystem exists for you.
 | **Read sensor values** | Read IMU, barometer, ToF and optical-flow values in real time, display and record them |
 | **Receive transmitter commands** | Receive stick and button values on the vehicle and use them from your own program |
 | **Write your own flight program** | Create your own project with `sf app new` and write your own control law or estimator (**→ [Custom Program Guide](docs/guides/custom_program.md)**) |
+| **Block programming** | Fly without writing code by arranging blocks in the browser (for kids and beginners; `sf blocks`, **→ [Block Programming Guide](docs/guides/block_programming.md)**) |
 | **Verify your flight program in SILS** | Check your flight program in SILS (Software In the Loop Simulation: the firmware itself flying on your PC) before flashing it to the real drone |
 
 ---
@@ -746,8 +748,7 @@ stampfly_ecosystem/
 ├── tools/          # sf CLI backends and helper tools
 ├── lib/            # PC-side Python (the sf CLI itself, logs, SDK)
 ├── simulator/      # SILS and 3D flight simulators
-├── scripts/        # Installer implementation
-└── ros/            # ROS integration (WIP)
+└── scripts/        # Installer implementation
 ```
 
 The intent and responsibility of each directory is defined in [PROJECT_PLAN.md](PROJECT_PLAN.md).
@@ -761,6 +762,7 @@ The intent and responsibility of each directory is defined in [PROJECT_PLAN.md](
 | [📖 Next Steps](docs/next_step.md) | Using the simulator, pre-flight checks, how to fly, developer features |
 | [🎛️ Controller Guide](docs/guides/controller.md) | Menu operation, communication modes, pairing, what each button does |
 | [🧪 Custom Program Guide](docs/guides/custom_program.md) | Write your own controller or estimator, verify it in SILS, fly it on the real drone |
+| [🧩 Block Programming Guide](docs/guides/block_programming.md) | Arrange blocks in the browser with Blockly and fly (`sf blocks`) |
 | [⌨️ sf Command Reference](docs/commands/README.md) | Every command: build, flash, log capture, and more |
 | [🛠️ Setup Guide](docs/setup/README.md) | Detailed per-OS installation and troubleshooting |
 | [🌐 Project Landing Page](https://m5fly-kanazawa.github.io/stampfly_ecosystem/) | Landing page with a 3D model of the real drone |

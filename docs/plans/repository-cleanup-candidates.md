@@ -31,8 +31,8 @@
 | # | 対象 | 事実 | 候補 | 判断 |
 |---|------|------|------|------|
 | U1 | 大学シラバス系: `examples/education/`・`lib/stampfly_edu/`・`analysis/notebooks/education/`・`docs/university/`・`docs/setup/education.md`（Python/Jupyter） | 主導線からリンク無し。実施記録は未確認 | **一度削除し、作る予定だけ `university-course-plan.md` に残す**（オーナー決定）。タグ `archive/2026-09-13` | 中 |
-| U2 | Blockly（`sf blocks`、`lib/sfcli/assets/vendor/blockly/`、`docs/guides/block_programming.md`） | Phase 0 の試作。実機 E2E 未実施。README から辿れない | 外側の門として育てるか、試作のまま止めるか | 要 |
-| U3 | `ros/`（ROS2 連携）と `docs/plans/ros2-integration.md`（計画中） | 照合結果（2026-09-13）: `ros/stampfly_bridge` は WebSocket 80＋バイナリ UDP 8888（`ControlPacket`）前提で **`vehicle_old` 専用**。現行 vehicle にはどちらの口も無い。実装は 2026-01-20 で停止 | **ROS2 は必ず取り込む**（オーナー決定）。現行 API（UDP 8889 テキスト／8890 状態／5005 テレメトリ）で再設計する。旧ブリッジのコードを今削除するか（タグ済み）、再設計着手時に置き換えるかは判断待ち。`ros2-integration.md` を再設計の計画に書き直す | 要 |
+| U2 | Blockly（`sf blocks`、`lib/sfcli/assets/vendor/blockly/`、`docs/guides/block_programming.md`） | Phase 0 の試作。実機 E2E 未実施。README から辿れない。Tello 互換 API（UDP 8889）上に載っており現行 vehicle と整合 | **外側「ブロック」の門のプログラミングツールとして位置づけ**（2026-09-13 決定。原典 §1・§16）。置き場は現状維持（UI が育てば `lib/sfblocks/`）。残作業: README 導線、`docs/commands/sf-blocks.md`、10/4 小中学生向け講習前の実機 E2E、`sf lesson` でのブロックレッスン対応 | 済（位置づけ）／残作業あり |
+| U3 | `ros/`（ROS2 連携）と `docs/plans/ros2-integration.md`（計画中） | 照合結果（2026-09-13）: `ros/stampfly_bridge` は WebSocket 80＋バイナリ UDP 8888（`ControlPacket`）前提で **`vehicle_old` 専用**。現行 vehicle にはどちらの口も無い。実装は 2026-01-20 で停止 | **ROS2 は必ず取り込む**（オーナー決定）。旧ブリッジ `ros/` と `ros2-udp-debug.md` は **今削除**（2026-09-13 決定。ノード構成・メッセージ定義は削除前に `ros2-integration.md` へ記録）。`ros2-integration.md` を現行 API（UDP 8889 テキスト／8890 状態／5005 テレメトリ）前提の再設計・再実装計画に書き直す | 中 |
 | U4 | `docs/guides/motor_spin_quickstart.md` | 自称「臨時手順書」。実体は Workshop Lesson 1 への手動手順 | `docs/commands/sf-lesson.md` §5 に吸収して削除 | 済 |
 | U5 | `docs/bonus/`・`docs/experiments/`（LaTeX の番外資料・実験手順） | 役割の説明が薄い | 講習資料（P4）か実験資料（P3）に振り分け | 要 |
 | U6 | `docs/telemetry/UDP_TELEMETRY_DESIGN.md` | 設計メモが単独ディレクトリ | `docs/architecture/udp-telemetry-design.md` へ移動 | 済 |
@@ -49,7 +49,8 @@
 | S4 | `docs/commands/README.md` の一覧（12/44、英語表に `sf app` 無し）、`sf-flight.md`・`sf-query.md`（実コマンド名と不一致）、`sf blocks`・`sf sils`・`sf trim`・`sf params` の専用ページ無し | 索引の欠落 | 索引を 44 コマンドで再構築（日英）。2 ページを `flight-commands.md`・`query-commands.md` に改名。専用ページ無しは `--help` を案内 | 済 |
 | S5 | `landing/index.html` の「制御を自作できる」訴求 | 入口へのリンク無し | 入口の設計が決まったら導線を付ける | 入口の設計に従属 |
 | S6 | `.mkdocs/mkdocs.yml` の目次「計画 > 現行」 | 2 本のみ | 生きている計画 10 本を掲載 | 済 |
-| S7 | `docs/assets/presentation.md`・`firmware/workshop/lessons/lesson_12_python_sdk/README.md` に `sf flight takeoff` 等の記述 | `takeoff`/`land`/`hover` はトップレベルの sf コマンドで、`sf flight` というグループは無い（S4 の作業で判明） | 実コマンド名に直す（Lesson 12 は Workshop アップグレード時） | 要 |
+| S7 | `docs/assets/presentation.md`・`firmware/workshop/lessons/lesson_12_python_sdk/README.md` に `sf flight takeoff` 等の記述 | `takeoff`/`land`/`hover` はトップレベルの sf コマンドで、`sf flight` というグループは無い（S4 の作業で判明） | 実コマンド名に直す（Lesson 12 は Workshop の L0 更新時） | 要 |
+| S8 | スライド `docs/events/sci_tutorial_2026/slides/chapters/sci_s5_sim_analysis.tex`（`lib/stampfly` のパス誤記 1 か所）、`docs/events/stampfly_workshop/slides/chapters/python_sdk.tex`（章全体が TCP 23／WebSocket の旧 SDK 前提） | `lib/stampfly` は 2026-09-13 に削除。`.tex` の変更は PDF リビルドと目視レビューが必須（`CLAUDE.md` Slide Rules）のため今回は未修正 | スライドレビューの工程として別途実施。`python_sdk.tex` は `tools/stampfly_py`（UDP 8889/8890）前提に書き直す | 要 |
 
 ## 4. 記録の扱い（アーカイブ禁止規則との整合）
 
@@ -64,7 +65,7 @@
 
 | # | 対象 | 決定 | 削除の前提 |
 |---|------|------|-----------|
-| D1 | `firmware/vehicle_old/`（凍結、実飛行 87 回） | **タグを打って今削除**（オーナー 2026-09-13） | 依存の棚卸し中。SILS 退行試験の `--target vehicle_old`（CI・`sf sils`）、`sf build vehicle_old`、`sf log capture`（vehicle_old 専用のバイナリログ）、`udp_protocol.hpp`（controller が使うなら残す）、文書の記述を同じコミットで外す。タグ `archive/2026-09-13` は付与済み |
+| D1 | `firmware/vehicle_old/`（凍結、実飛行 87 回） | **削除済み**（2026-09-13、コミット `3d9e3cde`、タグ `archive/2026-09-13`） | 同時に外したもの: SILS の `emu_vehicle_old` と接着コード 3 本、専用シナリオ 4 本（退行試験 36→34）、`sf sils/build/doctor/app` の `vehicle_old` ターゲット、`params_manifest.py` の参照 5 件と `EXEMPT_VEHICLE_OLD`、`lib/stampfly`（C1）。`udp_protocol.hpp`・`espnow_protocol.hpp` は controller が使うので残した。検証: `sf params check` ERROR=0、pytest 67、SILS フルビルド＋退行試験 28 PASS/5 既知 FAIL/1 SKIP |
 
 維持するもの: `firmware/legacy/`（`sf flash --legacy` が工場出荷状態への復旧に使う）。
 
@@ -79,8 +80,7 @@
 
 | 段階 | 内容 |
 |------|------|
-| 済（2026-09-13） | C3、U4、U6、S1、S4、S6 |
-| 実行中（2026-09-13） | U1（大学講義用の削除）、R1、R2、R3、D1（`vehicle_old`） |
-| 調査中 | C1・S2（Tello 互換）、U3（ROS2）、C2（`TelemetryPacket`）、S3（`vehicle/docs` の仕分け） |
-| 判断待ち | U2（Blockly）、U5、U7、R4、S7 |
-| 従属 | C4（Workshop アップグレード）、U8・S5（入口の設計） |
+| 済（2026-09-13、コミット `3d9e3cde`） | C1、C3、U1、U4、U6、S1、S4、S6、R1、R3、D1 |
+| 実行中（2026-09-13、第 2 弾） | S3（害悪 3 文書の削除）、R2（`RESET_PLAN`・`simulator-migration` の統合と削除）、S2（`tello-api-reference.md` の全面更新）、U3（`ros/` の状態注記と `ros2-integration.md` の再設計計画化） |
+| 判断待ち | U2（Blockly）、U3 の旧ブリッジコードの削除時期、U5、U7、R4、S7、S8、C2（`TelemetryPacket` を現行定義に置き換え） |
+| 従属 | C4（Workshop の L0 更新）、U8・S5（入口の設計） |

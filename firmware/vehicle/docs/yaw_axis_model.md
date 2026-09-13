@@ -41,7 +41,7 @@
 ### 関連
 
 - 実装: `firmware/vehicle/components/sf_autotune/`（`fitPlantYaw`, `plantResponse`）, `firmware/vehicle/tasks/api_task.cpp`（`cmdAutotune`）
-- 研究: `wobble_minimization_study.md`
+- 研究: `wobble_minimization_study.md`（2026-09-13 に削除、タグ `archive/2026-09-13`。中心教訓は `control_theory_overview.md` §5.4 に統合済み）
 - 同定の3原則: `development_roadmap.md`（Model Identity）
 
 ## 2. ヨートルクの物理（2つの機構）
@@ -250,7 +250,7 @@ This document defines the **plant model of the StampFly yaw axis**. Where roll/p
 ### Related
 
 - Code: `sf_autotune/` (`fitPlantYaw`, `plantResponse`), `api_task.cpp` (`cmdAutotune`)
-- Study: `wobble_minimization_study.md`
+- Study: `wobble_minimization_study.md` (deleted 2026-09-13, tag `archive/2026-09-13`; the key lesson is folded into `control_theory_overview.md` §5.4)
 
 ## 2. Yaw-Torque Physics (two mechanisms)
 

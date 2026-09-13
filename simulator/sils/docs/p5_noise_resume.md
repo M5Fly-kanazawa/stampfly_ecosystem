@@ -4,7 +4,9 @@
 > P5 (sensor noise N0) is DONE; this note now hands off to P6.
 
 最終更新: 2026-06-03（P5 達成）。**前提**: 全参照は実コード裏取り済み。ロードマップは
-`simulator/sils/RESET_PLAN.md` §10/§13。
+`simulator/sils/RESET_PLAN.md` §10/§13（2026-09-13 削除、タグ `archive/2026-09-13`。現行の要約は
+`docs/architecture/simulation-policy.md` §10、原文は `git show archive/2026-09-13:simulator/sils/RESET_PLAN.md`）。
+以下の RESET_PLAN 節番号への言及は当時の記録としてそのまま残す。
 
 ---
 

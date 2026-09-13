@@ -420,9 +420,10 @@ stampfly-ecosystem/
 ├── tools/             # sf CLI backends + a few non-sf helpers (slides, udev, ...)
 ├── lib/               # PC-side Python: sfcli (the sf CLI itself), sflog, stampfly, stampfly_edu
 ├── simulator/         # SILS and other simulators
-├── scripts/           # Installer implementation (install.sh -> scripts/installer.py)
-└── ros/               # ROS2 integration (work in progress)
+└── scripts/           # Installer implementation (install.sh -> scripts/installer.py)
 ```
+
+ROS2 integration is planned as a redesign on the current API (docs/plans/ros2-integration.md); the old vehicle_old-only bridge was removed on 2026-09-13.
 
 Generated code lives next to its consumer (e.g. `lib/sflog/schema.py`), vendored libraries live in a `vendor/` next to their user with a full license file — there is no `protocol/generated/` and no `third_party/`.
 

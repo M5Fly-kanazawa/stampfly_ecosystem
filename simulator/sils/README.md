@@ -2,7 +2,7 @@
 
 > **Note:** [English follows the Japanese section.](#english) / 日本語の後に英語版があります。
 >
-> **設計の正は [`RESET_PLAN.md`](RESET_PLAN.md)。** ここはその実装。
+> **設計の正は [`../../docs/architecture/simulation-policy.md`](../../docs/architecture/simulation-policy.md)。** ここはその実装。旧 `RESET_PLAN.md` は 2026-09-13 に削除（タグ `archive/2026-09-13`）、立ち上げ期の経緯は同書 §10 に要約。
 
 ## 1. 概要
 
@@ -158,7 +158,7 @@ pytest simulator/tests/test_pid_lockstep.py -v
 
 ## 2. ロードマップ
 
-P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証）→ P3（CLI＋ダッシュボード）→ P4（共有用レビュー動画）。各段の詳細とゲートは [`RESET_PLAN.md`](RESET_PLAN.md)。
+P0（更地化）✅ → P1（骨格）✅ → P2（差し替え実証）✅ → P3（CLI＋ダッシュボード）✅ → P4（共有用レビュー動画）✅。いずれも完了済み。各段の詳細は 2026-09-13 に削除した旧 `RESET_PLAN.md`（タグ `archive/2026-09-13`）にあり、要約は [`../../docs/architecture/simulation-policy.md`](../../docs/architecture/simulation-policy.md) §10。
 
 ---
 
@@ -166,7 +166,7 @@ P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証
 
 ## 1. Overview
 
-A physics-based, MuJoCo, algorithm-independent SILS (Software-in-the-Loop) bench. It verifies the vehicle firmware on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`RESET_PLAN.md`](RESET_PLAN.md).
+A physics-based, MuJoCo, algorithm-independent SILS (Software-in-the-Loop) bench. It verifies the vehicle firmware on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`../../docs/architecture/simulation-policy.md`](../../docs/architecture/simulation-policy.md). The former `RESET_PLAN.md` was deleted 2026-09-13 (tag `archive/2026-09-13`); its startup history is summarized in simulation-policy.md §10.
 
 ### Emulator targets (vehicle / workshop)
 

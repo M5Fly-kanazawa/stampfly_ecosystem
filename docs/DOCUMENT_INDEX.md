@@ -37,6 +37,7 @@
 | [commands/sf-log.md](commands/sf-log.md) | `sf log` - ログキャプチャ・解析 |
 | [commands/sf-sim.md](commands/sf-sim.md) | `sf sim` - シミュレータ |
 | [commands/sf-cal.md](commands/sf-cal.md) | `sf cal` - センサキャリブレーション |
+| [commands/sf-blocks.md](commands/sf-blocks.md) | `sf blocks` - ブロックプログラミング（Blockly、外側「ブロック」の門） |
 
 ### アーキテクチャ・設計
 
@@ -63,7 +64,6 @@
 | [guides/custom_program.md](guides/custom_program.md) | 独自プログラム開発入門（`sf app`、L1 Topic API） |
 | [setup/wifi-sta.md](setup/wifi-sta.md) | WiFi STA モードセットアップ |
 | [architecture/tello-api-reference.md](architecture/tello-api-reference.md) | Tello 互換 API リファレンス |
-| [architecture/ros2-udp-debug.md](architecture/ros2-udp-debug.md) | ROS2 UDP 制御デバッグガイド |
 
 ### 開発ガイドライン
 
@@ -206,8 +206,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [simulator/genesis/README.md](../simulator/genesis/README.md) | Genesis シミュレータ |
 | [simulator/genesis/docs/urdf_mesh_normals.md](../simulator/genesis/docs/urdf_mesh_normals.md) | URDF メッシュ法線ガイド |
 | [simulator/sandbox/README.md](../simulator/sandbox/README.md) | サンドボックス |
-| [plans/simulator-migration.md](plans/simulator-migration.md) | シミュレータマイグレーション計画 |
-| [ros/README.md](../ros/README.md) | ROS 連携（構築中） |
 
 ---
 
@@ -250,6 +248,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [commands/sf-log.md](commands/sf-log.md) | `sf log` - Log capture and analysis |
 | [commands/sf-sim.md](commands/sf-sim.md) | `sf sim` - Simulator |
 | [commands/sf-cal.md](commands/sf-cal.md) | `sf cal` - Sensor calibration |
+| [commands/sf-blocks.md](commands/sf-blocks.md) | `sf blocks` - Block programming (Blockly, the outermost "blocks" entry) |
 
 ### Architecture & Design
 
@@ -276,7 +275,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [guides/custom_program.md](guides/custom_program.md) | Custom program development guide (`sf app`, L1 Topic API) |
 | [setup/wifi-sta.md](setup/wifi-sta.md) | WiFi STA mode setup |
 | [architecture/tello-api-reference.md](architecture/tello-api-reference.md) | Tello-compatible API reference |
-| [architecture/ros2-udp-debug.md](architecture/ros2-udp-debug.md) | ROS2 UDP control debug guide |
 
 ### Development Guidelines
 
@@ -389,4 +387,3 @@ After POS_HOLD position control was validated on real hardware, `firmware/vehicl
 | [tools/README.md](../tools/README.md) | Utility tools (WIP) |
 | [simulator/README.md](../simulator/README.md) | Simulator overview |
 | [simulator/genesis/README.md](../simulator/genesis/README.md) | Genesis simulator |
-| [ros/README.md](../ros/README.md) | ROS integration (WIP) |
