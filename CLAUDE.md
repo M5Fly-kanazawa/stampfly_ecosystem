@@ -62,7 +62,8 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf doctor` | 環境診断 |
 | `sf build [target]` | ファームウェアビルド |
 | `sf flash [target]` | 書き込み（-m でモニタ付き、--gui でGUI書き込みアプリ起動）|
-| `sf app new/edit/build/flash <name>` | 自分のプロジェクトを作成・編集・ビルド・書き込み（`firmware/vehicle/examples/` を複製、既定=11_app_controller）|
+| `sf app new/edit/build/flash <name>` | 自分のプロジェクトを作成・編集・ビルド・書き込み（プログラミングツール。全階層対応が目標、現状 L1。`firmware/vehicle/examples/` を複製、既定=11_app_controller）|
+| `sf lesson list/switch/edit/build/flash/sils` | 講習用レッスンの切替・ビルド・書き込み・解答表示（教育補助ツール。全階層対応が目標、現状 L0 Workshop）|
 | `sf monitor` | シリアルモニタ |
 | `sf telemetry` | 50Hzテレメトリのライブ表示。既定=ターミナル、`--web` でブラウザ表示（UDP:5005→SSE）|
 | `sf log list` | ログファイル一覧 |
@@ -407,11 +408,11 @@ stampfly-ecosystem/
 ├── docs/              # Human-readable documentation + public site (landing/, .mkdocs/)
 ├── firmware/
 │   ├── vehicle/       # Vehicle firmware (primary, promoted from vehicle_new)
-│   ├── vehicle_old/   # Legacy vehicle firmware (frozen, 87 real flights — see below)
+│   ├── vehicle_old/   # Legacy vehicle firmware (frozen, 87 real flights; to be deleted eventually — see below)
 │   ├── controller/    # Transmitter firmware
 │   ├── common/        # Shared ESP-NOW protocol structs (controller + vehicle_old + vehicle)
-│   ├── apps/          # User projects created by `sf app new` (L1 entry; entry design under review)
-│   ├── workshop/      # Workshop skeleton (ws::, L0) — old architecture, slated for disposal/rewrite
+│   ├── apps/          # User projects created by `sf app new` (all layers is the goal; L1 today)
+│   ├── workshop/      # Workshop skeleton (ws::, L0) on the old vehicle base — to be upgraded onto vehicle, not discarded
 │   └── legacy/        # Factory binaries for `sf flash --legacy`
 ├── protocol/          # Communication/log-format spec (SSOT) + conformance checks
 │   ├── spec/          # messages.yaml, flight_log.yaml (+ documentation-only yamls)
@@ -456,7 +457,7 @@ Generated code lives next to its consumer (e.g. `lib/sflog/schema.py`), vendored
 - **アーキテクチャ不変条件（INV）への照合を必須とする（場当たりパッチ再発防止, 2026-06-14）** — 制御則・状態機械・離着陸/飛行フェーズに関わる変更は、コミット前に `architecture.md` の「アーキテクチャ不変条件（INV）」節に照合すること。**新機能の追加・要件変更で、ある機能の前提が変わるときは、その前提を埋め込んでいる既存コンポーネントを必ず列挙し（リップル確認）、古い前提のまま並列経路・独自実装が残っていないか確認する。** 「最小変更で動かし SILS を通す」だけで満足しない（SILS が通っても INV 違反は退行）。機能追加時は常に**あるべき姿（INV準拠の統一構造）**で実装し、既存の局所形に引きずられて並列パッチを足さない。
 - Exampleは**単独ビルド可能**、**コメントは本体より多くてもいい**
 
-`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SILS回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sils scenario --target vehicle_old`）。
+`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SILS回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sils scenario --target vehicle_old`）。**いずれ削除する**（オーナー方針 2026-09-13。削除前に SILS 退行試験の `--target vehicle_old` と `udp_protocol.hpp` の依存を外す。PROJECT_PLAN §4）。
 
 ## Build System
 

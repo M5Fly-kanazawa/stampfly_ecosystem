@@ -19,6 +19,28 @@ StampFly Ecosystem は、StampFly 機体を中心に、ドローン制御を **�
 
 そのため、本リポジトリは **責務（role）ベースのディレクトリ構造**を採用する。
 
+### 目指す姿（2026-09-13 整理）
+
+本リポジトリは **マルチコプタのプログラムを学ぶための総合環境** である。次の 6 点を満たすことを目指し、構築の途上にある。
+
+| # | 目指す姿 |
+|---|---------|
+| P1 | **どの階層からでもプログラムが組める**（L0 Workshop API / L1 Topic API / L2 HAL / L3 BSP・ファーム全体。外側に Python・ブロック） |
+| P2 | StampFly の **仕様・パラメータの資料がほぼ全て揃う** |
+| P3 | パラメータの **求め方（実験方法）と分析方法が全て分かる** |
+| P4 | **各階層用の講習資料が一通り揃う** |
+| P5 | StampFly で講習やワークショップを行う **講師のために、準備と講習を簡単にする道具** を提供する |
+| P6 | **制御教育と組み込み教育** に特に力を入れる（2026-09 時点でほぼ未着手） |
+
+利用者向けの道具は二本柱で、併存させる。
+
+| 道具 | 位置づけ | 対応する階層 |
+|------|---------|-------------|
+| `sf app` | **プログラミングツール**。自分のプログラムを作り、SILS と実機で動かす | 全階層が目標（2026-09 時点は L1 のみ） |
+| `sf lesson` | **教育補助ツール**。講師が用意したレッスンを切り替え、ビルド・書き込み・解答表示を行う | 全階層が目標（2026-09 時点は L0 の Workshop のみ） |
+
+整備状況の全体像は §16 の地図で追う。
+
 ---
 
 ## 2. トップレベル構成の意図
@@ -89,8 +111,8 @@ docs/
   シミュレーション方針は `architecture/simulation-policy.md` を正とする
 - `reference/`: 手で書かない。`protocol/tools/` が仕様から生成する（§5）
 - `plans/`: 機能ごとの計画・見直し文書。状態（計画中／実装中／実装済み／見直し中）を冒頭に書く
-- `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対、廃棄・全面書き換え予定）、
-  `dxh2026/`、`sci_tutorial_2026/`
+- `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対。現行 vehicle 基盤へのアップグレード対象）、
+  `dxh2026/`、`sci_tutorial_2026/`（いずれも L0 の旧基盤上の実習。基盤のアップグレード後に再検証が要る）
 - プロトコルの文章仕様は `protocol/README.md`（メッセージ一覧・オフセット表）と
   `docs/reference/flight-log-format.md` にある。`docs/protocol/` は置かない
 
@@ -105,11 +127,11 @@ docs/
 ```
 firmware/
 ├── vehicle/       # 主力ファームウェア（旧 vehicle_new を昇格）
-├── vehicle_old/   # レガシーファームウェア（凍結、実飛行87回）
+├── vehicle_old/   # レガシーファームウェア（凍結、実飛行87回。いずれ削除）
 ├── controller/    # 送信機ファームウェア
 ├── common/        # 3 ファームが共有する ESP-NOW プロトコル実装
-├── apps/          # sf app new が生成する利用者のプロジェクト（L1 の入口）
-├── workshop/      # Workshop 骨格（ws::、L0）。旧アーキテクチャ、廃棄・全面書き換え予定
+├── apps/          # sf app new が生成する利用者のプロジェクト（全階層対応が目標。現状は L1）
+├── workshop/      # Workshop 骨格（ws::、L0）。旧基盤のまま。現行 vehicle 基盤へアップグレードする対象
 └── legacy/        # 出荷時バイナリ（sf flash --legacy による工場出荷状態への復旧）
 ```
 
@@ -179,6 +201,9 @@ Tello 互換の外部 API（UDP:8889 のテキストコマンド）はコンポ�
 旧世代の機体ファームウェア（実飛行 87 回、**凍結・新規開発なし**）。
 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名。sf CLI・SILS 退行試験から `--target vehicle_old` として
 引き続きビルド・テスト可能。`firmware/common/` を controller と共有する。
+**いずれ削除する**（2026-09-13 決定、時期未定）。削除の前に、SILS 退行試験の `--target vehicle_old`、
+`firmware/common/protocol/udp_protocol.hpp`（vehicle_old の `sf_svc_udp` のみが使う）、`sf build vehicle_old`
+の依存を外し、削除直前のコミットにタグを付ける（§15 規則 4）。
 
 ### firmware/controller/
 操縦用コントローラ（送信機）側のファームウェア。人間の意思を信号に変換する HMI。
@@ -207,15 +232,19 @@ common/
 （vehicle は自前の `sf_math` を持つ。以前の `math/`・`utils/` は空のまま 2026-09-12 に削除）。
 
 ### firmware/apps/
-`sf app new <name>` が `firmware/vehicle/examples/` の雛形を複製して作る、利用者自身のプロジェクトの置き場。
-`sf app sils / build / flash` で SILS と実機の両方に同じソースを組み込む（設計は `docs/plans/sf-app-sils-plan.md`）。
-利用者に独自コードを書いてもらう入口の設計そのものは見直し中（`docs/plans/user-programming-entry-review.md`）。
+`sf app new <name>` が雛形を複製して作る、利用者自身のプロジェクトの置き場。`sf app sils / build / flash` で
+SILS と実機の両方に同じソースを組み込む（現行の仕組みは `docs/plans/sf-app-sils-plan.md`、雛形は
+`firmware/vehicle/examples/`）。`sf app` は **全階層に対応するプログラミングツール** を目指すが、2026-09 時点で
+組み込めるのは L1（`IController`/`IEstimator` の差し替えと追加タスク）だけであり、L0・L2・L3 の雛形と
+組み込み方は未整備。入口の設計は見直し中（`docs/plans/user-programming-entry-review.md`）。
 
 ### firmware/workshop/
 講習会向けの Workshop 骨格。`ws::` 名前空間の簡易 API と `setup()`/`loop_400Hz()` の 2 関数で書く
-（4 階層アクセスの L0）。`sf lesson` と CI が参照する稼働中の実体だが、**旧アーキテクチャで作られており、
-内容的には廃棄して全面的に書き直す予定**。vehicle との HAL 二重管理（横断ルール R12 との乖離）は
-`firmware/vehicle/docs/workshop_migration.md` が記録している。新規開発は行わない。
+（4 階層アクセスの L0）。`sf lesson` と CI が参照する稼働中の実体。**旧 vehicle 基盤のまま残っており、
+HAL を vehicle から複製して二重管理になっている**（横断ルール R12 との乖離、`firmware/vehicle/docs/workshop_migration.md`）。
+方針は **廃棄ではなくアップグレード**——「2 関数で書ける」というやりたいことは変えず、`ws::` を現行 vehicle の
+上のラッパーとして再構成し、レッスン内容を引き継いだうえで L1 以上の階層にも広げる。アップグレード完了までは
+L0 の機能追加を行わない。
 
 ### firmware/legacy/
 本エコシステム以前の出荷時（PlatformIO 版）Vehicle/Controller のバイナリ。`sf flash --legacy` で
@@ -315,8 +344,11 @@ lib/
 ```
 
 - `pyproject.toml` の `package-dir = {"" = "lib"}` により `pip install -e .` で導入される
-- sf CLI は開発・書き込み・診断・ログ・シミュレーション・自作プロジェクトの一貫した入口。
+- sf CLI は開発・書き込み・診断・ログ・シミュレーション・自作プロジェクト・講習の一貫した入口。
   コマンド実装は `lib/sfcli/commands/`、新コマンドの追加手順は `docs/contributing/adding-sf-commands.md`
+- 利用者向けの二本柱（§1）: `sf app`（プログラミングツール）と `sf lesson`（教育補助ツール）。
+  `sf lesson` は現在 `firmware/workshop/lessons/`（`lesson_manifest.yaml`）の L0 レッスンに結び付いているが、
+  レッスンの置き場と階層に依存しない道具にし、全階層のレッスンを扱えるようにする。`sf competition` は講習会の競技運営を担う
 
 ---
 
@@ -405,11 +437,35 @@ examples/
 8. **CLAUDE.md は本文書に従う。** AI 向け規約が構造に触れるときは本文書を参照し、独自の構造を定めない
 
 現在「見直し中」の事項: 利用者に独自コードを書いてもらう入口（`docs/plans/user-programming-entry-review.md`）、
-Workshop の全面書き換え（§4）。
+Workshop の現行基盤へのアップグレード（§4）、`sf app`・`sf lesson` の全階層対応（§1・§9）、
+整理対象の候補（`docs/plans/repository-cleanup-candidates.md`）。
 
 ---
 
-## 16. まとめ
+## 16. 整備状況の地図（階層 × 道具・雛形・資料・講習）
+
+§1 の「目指す姿」を、階層ごとに何が揃っていて何が無いかで追う表。`coding_and_education.md` §4 の
+一本道の章立て表（Ch.1〜10）の後継であり、整備が進むごとにここを更新する。2026-09-13 時点の実態。
+凡例: ○ あり／△ 部分的／× なし／— 対象外。
+
+| 階層 | プログラミング（`sf app`） | 雛形 | 仕様・実験・分析の資料 | 講習資料（制御） | 講習資料（組み込み） | 講師支援（`sf lesson`） |
+|------|------------------------|------|--------------------|----------------|-------------------|---------------------|
+| 外側: Python / ブロック | ×（`sf app` の対象外。道具は `tools/stampfly_py`・`sf blocks`） | △ `examples/education/`、`tools/stampfly_py` の例 | △ `docs/architecture/tello-api-reference.md`（冒頭に旧記述） | △ `examples/education/`（`pid_1d`・`cascade_sim`）、`analysis/notebooks/education/` 15 本 | × | △ 大学シラバス（`docs/university/`）、Blockly ガイド |
+| L0 Workshop API（`ws::`） | ×（`sf lesson` 側のみ） | ○ `firmware/workshop/`（旧基盤） | △ `docs/events/sci_tutorial_2026/cheatsheet.md`（`ws::` 早見表） | △ Workshop レッスン・SCI 2026（旧基盤上のレート／姿勢の実習） | △ 同（モータ・センサの読み書き） | ○ `sf lesson`（13 レッスン＋`sci2026` コース）。旧基盤に依存 |
+| L1 Topic API（`sf::api`、`IController`/`IEstimator`） | ○ `sf app new/sils/build/flash`（Topic の書き込みは未実装） | ○ `11_app_controller`・`12_app_task_hello`（PidController 委譲前提） | ○ `topic_reference.md`、設計 6 文書、`params.cpp`、`sf sysid`・`sf autotune` | △ `docs/guides/custom_program.md`（ACRO PID を 0 から、1 本） | × | × |
+| L2 HAL 直叩き | × | ○ 例題 01〜08（単独ビルド、SILS 不可） | ○ HAL ドライバ README・データシート要約 | — | △ 例題 README（改造課題なし） | × |
+| L3 BSP・ファーム全体 | × | × | ○ `hardware_init.md`・`architecture.md`・`coding_and_education.md` | — | × | × |
+
+欠けの要点（優先順）:
+1. 講習資料が L0（旧基盤）と外側の Python に偏り、**制御教育・組み込み教育の段階的な教材が L1〜L3 に無い**（P4・P6）
+2. **`sf app` は L1 のみ、L3 には入口が無い**。L1 の Topic API は読み取りのみ（P1）
+3. **`sf lesson` が L0 の旧基盤に依存**。基盤のアップグレードと、レッスンの置き場・階層に依存しない道具への再設計が先（P5）
+4. **実験→パラメータ→分析を一通り追える手順書が無い**。道具（`sf sysid`・`sf cal`・`sf log`）は揃っている（P3）
+5. 資料が 3 か所（`firmware/vehicle/docs`・`docs/architecture`・`control/models`）に散在し、入口からの導線が無い（P2）
+
+---
+
+## 17. まとめ
 
 StampFly Ecosystem は完成品ではなく、**制御工学教育と研究を育て続けるための基盤**である。
 

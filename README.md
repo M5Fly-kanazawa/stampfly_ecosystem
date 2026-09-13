@@ -343,7 +343,7 @@ stampfly_ecosystem/
 ├── docs/           # ドキュメントと公開サイト
 ├── firmware/       # 組込みファームウェア
 │   ├── vehicle/     # 機体ファームウェア（主力）
-│   ├── vehicle_old/ # レガシー機体ファームウェア（凍結）
+│   ├── vehicle_old/ # レガシー機体ファームウェア（凍結、いずれ削除）
 │   ├── controller/  # 送信機ファームウェア
 │   ├── common/      # 共有コード（ESP-NOW プロトコル構造体）
 │   ├── apps/        # sf app new で作る自分のプロジェクト
@@ -737,7 +737,7 @@ stampfly_ecosystem/
 ├── docs/           # Documentation and the public site
 ├── firmware/       # Embedded firmware
 │   ├── vehicle/     # Vehicle firmware (primary)
-│   ├── vehicle_old/ # Legacy vehicle firmware (frozen)
+│   ├── vehicle_old/ # Legacy vehicle firmware (frozen, to be removed)
 │   ├── controller/  # Transmitter firmware
 │   ├── common/      # Shared code (ESP-NOW protocol structs)
 │   ├── apps/        # Your own projects created with sf app new

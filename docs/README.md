@@ -48,7 +48,7 @@ docs/
 | `setup/` | OS 別のセットアップ手順 |
 | `contributing/` | 文書スタイル・コミット規約・コマンド追加手順などの開発規約 |
 | `plans/` | 機能ごとの計画・見直し文書。冒頭に状態（計画中／実装中／実装済み／見直し中）を書く |
-| `events/` | イベント単位のディレクトリ + 共有素材 `_shared/`。Workshop は `events/stampfly_workshop/` にあるが、旧アーキテクチャで作られており廃棄・全面書き換え予定 |
+| `events/` | イベント単位のディレクトリ + 共有素材 `_shared/`。Workshop は `events/stampfly_workshop/` にあり、L0 の旧基盤上の実習。基盤を現行 vehicle へアップグレードする対象（廃棄ではない） |
 | `university/` | シラバス・評価ルーブリックなど大学講義向けの資料 |
 
 プロトコルの文章仕様（メッセージ一覧・オフセット表）は `protocol/README.md` と
