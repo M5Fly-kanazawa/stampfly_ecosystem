@@ -192,7 +192,7 @@ static_assert(sizeof(WireRateRef) == 6, "wire drift");
 /// duty を記録すれば、`sf sysid fit` は Kp*(rate_ref−gyro) という「仮定した
 /// Kp からの再構成」に頼らずに済む — Kp の入力ミス・飛行中のゲイン変更
 /// （自動チューニング・ゲインスケジューリング）・duty の飽和があっても
-/// 正しい。0x4A を知らないパーサは [id][size] 枠組みで単純にスキップし
+/// 正しい。0x4A を判別できないパーサは [id][size] 枠組みで単純にスキップし
 /// （udp_capture.py の parse_packet() 参照）、Kp再構成にフォールバックする。
 struct WireDuty400 {
     uint16_t duty[4];   // FR, RR, RL, FL — value × kDutyScale (duty 0..1)
@@ -221,7 +221,7 @@ static_assert(sizeof(WireDuty400) == 8, "wire drift");
 /// kPktCtrlOutput400 の1エントリに kSamplesPerPacket（8）個分（payload計
 /// 128B）を積み、上の ImuEskf/RateRef/Duty400 と同じ index で対応させる
 /// （WireDuty400 と同じ考え方）。これを直接読めば `sf sysid fit`/`rate-fit`
-/// はどのミキサーで飛んだか知らずに（--mixer選択も非線形duty->thrust逆算も
+/// はどのミキサーで飛んだかを判別せずに（--mixer選択も非線形duty->thrust逆算も
 /// 不要に）G_p(s) を同定できる — 2026-09-09 のレート同定設計メモ参照。
 /// duty から逆算した実トルク（WireDuty400 ＋ 実モータ曲線）と突き合わせれば、
 /// ログだけからミキサーの静的ゲイン誤差 `c` を診断値として求められる。duty の
@@ -338,7 +338,7 @@ inline int16_t quantize(float value, float scale)
 /// would carry a low-clamp branch this caller can never hit.
 /// duty(0..1) を uint16 へ量子化: 四捨五入、[0, kDutyScale] にクランプ。
 /// duty は負にならないため quantize()（バイアス/レート用の符号付き対称
-/// 飽和）とは別関数にした — 共用すると絶対に発火しない下側クランプ分岐を
+/// 飽和）とは別関数にした — 共用すると絶対に作動しない下側クランプ分岐を
 /// 抱えることになる。
 inline uint16_t quantizeDuty(float duty)
 {

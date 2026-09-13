@@ -9,7 +9,7 @@
 /**
  * @file esp_log.h
  * @brief Host stub for ESP-IDF logging — redirects ESP_LOGx to stderr
- *        ESP-IDF ロギングのホスト用スタブ — ESP_LOGx を stderr に流す
+ *        ESP-IDF ロギングのホスト用の代替実装 — ESP_LOGx を stderr に流す
  *
  * The SILS compiles the unmodified firmware on a PC. ESP-IDF logging is
  * redirected to stderr so it never pollutes stdout (which carries the

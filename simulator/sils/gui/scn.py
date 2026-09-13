@@ -10,7 +10,7 @@ firmware actually runs). This module mirrors it on the Python side so the builde
 LOAD an existing scenario into editable events and GENERATE a .scn back. The server is
 the single owner of the format; the JS builder only edits the structured event list.
 
-.scn 文法の実体は scenario.cpp（ファームが実際に走らせるパーサ）。本モジュールはそれを
+.scn 文法の実体は scenario.cpp（ファームが実際に動かすパーサ）。本モジュールはそれを
 Python 側で鏡写しにし、ビルダーが既存シナリオを編集可能イベントに読み込み・.scn に書き戻す。
 
 Event dict shape (one per timeline row):

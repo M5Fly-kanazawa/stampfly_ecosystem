@@ -38,7 +38,7 @@
  * headers need to be pulled in or stubbed to compile it on the host.
  * `sf::PID` のみ（pid.hpp）。このヘッダは本当に自己完結（#include が一つも
  * 無いことを確認済み）なので、host でコンパイルするのに他の firmware ヘッダの
- * 取り込み・スタブ化は一切不要。
+ * 取り込みや簡易実装への置き換えは一切不要。
  */
 
 #include <pybind11/pybind11.h>
@@ -47,7 +47,7 @@
 // zero #includes of its own — pure arithmetic, trivial to bind, no ESP-IDF/
 // FreeRTOS surface to stub out.
 // 本物のファームヘッダを無改変でコンパイルする。ヘッダオンリーで #include が
-// 一切無い（純粋な算術のみ）ため、ESP-IDF/FreeRTOS 依存のスタブ化が不要。
+// 一切無い（純粋な算術のみ）ため、ESP-IDF/FreeRTOS 依存の簡易実装への置き換えが不要。
 #include "pid.hpp"
 
 namespace py = pybind11;

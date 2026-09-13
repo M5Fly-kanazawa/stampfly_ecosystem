@@ -10,7 +10,7 @@
  * @file cores_smoke.cpp
  * @brief P1.0 smoke test — the real firmware estimator and controller run on
  *        the host through their interfaces (IEstimator / IController).
- *        P1.0 スモークテスト — 本体ファームの推定器・制御器を、ホスト上で
+ *        P1.0 最小動作確認 — 本体ファームの推定器・制御器を、ホスト上で
  *        インターフェース（IEstimator / IController）経由で動かす。
  *
  * This proves the algorithm cores (ESKF, cascade PID) and the parameter
@@ -19,9 +19,9 @@
  * THROUGH the interfaces (the SILS reset's requirement), not by reaching into
  * the concrete math cores directly.
  *
- * これは算法コア（ESKF・カスケード PID）とパラメータシステムが PC 上で
+ * これはアルゴリズムコア（ESKF・カスケード PID）とパラメータシステムが PC 上で
  * コンパイル・実行でき、しかも実機のタスクが使うのと同じ抽象インターフェース
- * 経由で呼べることを示す。具象な数値コアを直に叩くのではなく、必ず
+ * 経由で呼べることを示す。具象な数値コアを直接操作するのではなく、必ず
  * インターフェースを通す（SILS 仕切り直しの要件）。
  */
 
@@ -75,7 +75,7 @@ static sf::ControlOutput run_controller_once(const sf::StateEstimate& state)
 int main()
 {
     // Load parameters (NVS stub is empty → compiled-in defaults are used).
-    // パラメータを読み込む（NVS スタブは空 → コンパイル時デフォルトを使う）。
+    // パラメータを読み込む（NVS の代替実装は空 → コンパイル時デフォルトを使う）。
     sf::params::init();
     printf("[cores_smoke] params loaded: %d entries\n", sf::params::count());
 

@@ -154,7 +154,7 @@ GAIN_SETS = {
     # Required edge case: ti EXACTLY at the anti-windup boundary (inclusive
     # `>=` in pid.hpp -- a previous bug used `>`, which silently disabled the
     # integrator at exactly this value).
-    # 必須エッジケース: アンチワインドアップ境界ちょうど（pid.hpp は `>=` で
+    # 必須の極端な条件: アンチワインドアップ境界ちょうど（pid.hpp は `>=` で
     # 含む -- 以前は `>` のバグで、ちょうどこの値で積分が黙って無効化されていた）。
     "ti_boundary_incl": dict(kp=1e-3, ti=0.01,  td=0.005, limit=5e-3),
     "ti_boundary_excl": dict(kp=1e-3, ti=0.005, td=0.005, limit=5e-3),  # just below -> integrator OFF

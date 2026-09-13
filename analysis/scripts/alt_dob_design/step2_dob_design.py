@@ -291,7 +291,7 @@ def vz_noise_for_segment(vzg_seg, fs=FS):
 # input series before the loop starts.
 # DOBフィルタ状態の区間頭初期化（2026-07-18レビュー対応の反証テスト対象）:
 # 旧"sample0"は生のd_ext単一サンプルを定常残差とみなすため、そのサンプルが
-# bandlimit_2hzのfiltfiltエッジアーティファクトだった場合に誤ったDCでウォッシュ
+# bandlimit_2hzのfiltfilt処理によるエッジの見かけの変動だった場合に誤ったDCでウォッシュ
 # アウトを初期化してしまう。区間が短いC/D(最短2.8s)ではウォッシュアウトの時定数
 # (~5.3s)がその誤りを消化しきるのに区間のほとんど/全部を使ってしまい、実機には
 # 存在しないリプレイ専用の過渡を作る。新"avg025s"は最初0.25秒(50サンプル)の
@@ -445,7 +445,7 @@ def replay_all(L, dext_per_seg, cfg):
 
 # =============================================================================
 # Falsification test 1: direct artifact detection (2026-07-18 coordinator review)
-# 反証テスト1: 区間頭アーティファクトの直接検出
+# 反証テスト1: 区間頭に生じる見かけの現象の直接検出
 # =============================================================================
 def artifact_split_metrics(traces, sp, split_s=5.0):
     """Split EACH segment's trace at split_s seconds from ITS OWN start, and
@@ -1020,7 +1020,7 @@ def main():
     # true, |d_hat| and alt error should be concentrated in the first 5s of
     # each segment under the OLD "sample0" init, and this concentration
     # should shrink substantially under the NEW "avg025s" init.
-    # 反証テスト1: 区間頭アーティファクトの直接検出。仮説が正しければ旧初期化で
+    # 反証テスト1: 区間頭に生じる見かけの現象の直接検出。仮説が正しければ旧初期化で
     # 区間頭5秒に|d_hat|・alt誤差が集中し、新初期化でその集中が縮小するはず。
     # ========================================================================
     print()

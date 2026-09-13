@@ -143,7 +143,7 @@ def test_unknown_file_in_bundle_is_ignored(tmp_path):
     """A bundle directory may contain files this schema version does not
     know about (e.g. SILS's results.json) -- loading must ignore them, not
     fail.
-    一式のフォルダには本スキーマ版が知らないファイル（SILS の
+    一式のフォルダには本スキーマ版が判別できないファイル（SILS の
     results.json 等）が同居してよい -- 読み込みはそれらを無視するべきで
     あり、失敗してはならない。
     """

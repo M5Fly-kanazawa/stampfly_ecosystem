@@ -39,7 +39,7 @@ sf sils milestone -m P1 -e eskf
 各マイルストーンは「やることリスト」でなく成果物で定義する（RESET_PLAN §10）。
 バンドルが揃って機械判定が pass して初めて「達成」:
 
-1. `results.json` — 機械による合否判定（唯一の正）
+1. `results.json` — 機械による合否判定（基準となる記録）
 2. レビュー動画 `*.mp4` — 飛行3Dアニメ＋状態グラフ（人間の確認＋アピール素材、§9）
 3. `trajectory.csv` — 再現可能な時系列（同じ実行→同じ動画）
 4. 合否判定の承認（`sf sils gate` が exit 0）
@@ -66,7 +66,7 @@ sf sils milestone -m P2 -e complementary
 
 P4 は単一飛行でなく **ESKF ↔ 相補フィルタの side-by-side 比較動画**（アルゴリズム
 非依存をSNS品質で見せる、RESET_PLAN §9）。`milestone -m P4` は自動で比較フローに
-委譲する（2推定器を同じ飛行で走らせ、ツイン3D＋重ね描きグラフを1本に合成）:
+委譲する（2推定器を同じ飛行で動かし、ツイン3D＋重ね描きグラフを1本に合成）:
 
 ```bash
 sf sils milestone -m P4           # = sf sils compare（build → 2 run → compare → gate）
@@ -79,7 +79,7 @@ P4 バンドルは `out_p4/{p4_compare.mp4, results.json, eskf/, complementary/}
 
 ### 2. 段を個別に回したいとき（任意）
 
-`milestone` は4段を束ねた糖衣。デバッグや再生成で段を分けたいときは個別に叩く:
+`milestone` は4段を束ねた糖衣。デバッグや再生成で段を分けたいときは個別に直接実行する:
 
 ```bash
 sf sils build                       # ホスト SILS をビルド
@@ -129,7 +129,7 @@ ffmpeg -y -ss <t> -i simulator/sils/viz/out_<ms>/*.mp4 -frames:v 1 /tmp/sils_fra
   要求する。バンドル（`results.json` ＋ レビュー動画 ＋ `trajectory.csv`）が揃い、
   機械判定が pass でなければ承認を拒否する。
 - **git タグ・フック**（任意・推奨）: マイルストーンタグ（例 `sils-p1`）を打つ前に
-  `simulator/sils/tools/sils_gate.py <bundle>` を走らせ、exit 1 ならタグを拒否する
+  `simulator/sils/tools/sils_gate.py <bundle>` を実行し、exit 1 ならタグを拒否する
   （`.githooks/pre-push`、opt-in: `git config core.hooksPath .githooks`）。
 - **注意**: Claude Code の settings.json フックはツールイベント（PreToolUse 等）に
   反応するもので「マイルストーン」イベントは無い。マイルストーンの強制は上記の

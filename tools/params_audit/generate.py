@@ -19,7 +19,7 @@ against what is currently on disk WITHOUT writing anything — used to catch
 "edited the YAML but forgot to regenerate" (wired into CI, see
 .github/workflows/sils-regression.yml).
 
-control/models/stampfly_physical.yaml（StampFly 物理パラメータの唯一の正）を
+control/models/stampfly_physical.yaml（StampFly 物理パラメータの基準となる文書）を
 読み込み、以下の3種類の生成物を機械生成する:
 
   1. tools/sysid/_generated_params.py         -- フラットな、標準ライブラリ

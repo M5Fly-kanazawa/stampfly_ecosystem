@@ -5,7 +5,7 @@
 ## 1. 概要
 
 `sf dev new-command` は、新しいコマンドを追加するためのスキャフォールディング（雛形生成）ツールです。
-ボイラープレートコードを自動生成し、開発者が本質的なロジック実装に集中できるようにします。
+定型コードを自動生成し、開発者が本質的なロジック実装に集中できるようにします。
 
 ## 2. 使用方法
 
@@ -223,7 +223,7 @@ def run_new_command(args) -> int:
         test_template = env.get_template("test.py.j2")
         files_to_create.append((test_path, test_template.render(context)))
 
-    # ドライラン
+    # 試し実行
     if args.dry_run:
         console.info("Dry run - files that would be created:")
         for path, content in files_to_create:
@@ -406,7 +406,7 @@ def run_{{ sub }}(args: argparse.Namespace) -> int:
 | メリット | 説明 |
 |---------|------|
 | **一貫性** | 全コマンドが同じ構造を持つ |
-| **時間短縮** | ボイラープレートを手書きしない |
+| **時間短縮** | 定型コードを手書きしない |
 | **ミス防止** | 必要なファイルの作成漏れを防ぐ |
 | **学習コスト低減** | 新規開発者がすぐに貢献できる |
 | **保守性** | テンプレート更新で全体を改善可能 |

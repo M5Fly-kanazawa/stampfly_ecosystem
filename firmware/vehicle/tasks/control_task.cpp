@@ -173,8 +173,8 @@ void ControlTask(void* pvParameters)
 
     // Register our own handle so ImuTask can wake us (sf::tasks::control_handle()).
     // Done before any blocking call; ImuTask guards on null until this runs.
-    // ImuTask が起こせるよう自分のハンドルを登録（sf::tasks::control_handle()）。
-    // ブロッキング前に実行。これが走るまで ImuTask は null ガードで待つ。
+    // ImuTask が起こせるよう自分自身のハンドルを登録（sf::tasks::control_handle()）。
+    // ブロッキング前に実行。これが実行されるまで ImuTask は null ガードで待つ。
     s_control_handle = xTaskGetCurrentTaskHandle();
 
     // Fetch the active controller from the app hook (L1 entry point,
@@ -204,7 +204,7 @@ void ControlTask(void* pvParameters)
     // runs (harmless while disarmed); only the ERROR log is gated, so a real
     // mid-flight IMU stall is still reported loudly.
     // 「最初の」IMU 通知が来たら true。起動時は BMI270 init に約200msかかり、
-    // 400Hz パイプラインが存在する前に下のウォッチドッグが発火する — これは想定で
+    // 400Hz パイプラインが存在する前に下のウォッチドッグが作動する — これは想定で
     // エラーではない。モータ強制ゼロは実行したまま（disarmed 中は無害）、ERROR
     // ログだけを判定する。飛行中の本物の IMU 停止は従来どおり大きく報告される。
     bool imu_pipeline_seen = false;
@@ -221,7 +221,7 @@ void ControlTask(void* pvParameters)
         // successful IMU cycle re-arms the actuator below (idempotent arm()).
         // IMUタスクからの通知を待つ（400Hz同期）— タイムアウト付き。
         // モータをゼロにできる唯一の主体は ControlTask だが、起床は ImuTask の通知
-        // 頼み。飛行中に IMU が死ぬ（SPI 故障・コネクタ）と ImuTask は通知をスキップし、
+        // 頼み。飛行中に IMU が停止する（SPI 故障・コネクタ）と ImuTask は通知をスキップし、
         // ControlTask は永久ブロック、LEDC は最後の duty を保持 → フライアウェイ。
         // タイムアウトが安全網: CONTROL_NOTIFY_TIMEOUT_MS 内に通知が無ければモータを
         // 強制ゼロにして待ち続ける。復帰は自動 — 次の正常 IMU 周期で下の arm()（冪等）
@@ -296,7 +296,7 @@ void ControlTask(void* pvParameters)
                 // microsecond clock wrap (~71.6 min) cannot make the stale expiry
                 // compare "in the future" again and silently respin the motors.
                 // 失効時のワンショット消化: ラッチされた事実をクリアし、uint32 マイクロ秒
-                // 時計のラップ（約71.6分）で古い失効時刻が再び「未来」と判定されて
+                // 時計の桁あふれ（約71.6分）で古い失効時刻が再び「未来」と判定されて
                 // モータが勝手に回り出すのを防ぐ。
                 if (mt.active) {
                     sf::MotorTest off = {};

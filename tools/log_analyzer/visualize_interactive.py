@@ -356,7 +356,7 @@ def load_bundle(path) -> dict:
     StampFly フライトログ v1 一式を読み込み、`generate_html()` が消費する
     信号名→リストの辞書へ平坦化する。
 
-    実在する各ストリームは自分の時間軸 `_time_<stream>`（秒、全ストリーム
+    実在する各ストリームは自分自身の時間軸 `_time_<stream>`（秒、全ストリーム
     の最初の標本のうち最も早い時刻を基準）を持つ。`time_s` は `_time_imu`
     の別名（imu ストリームが無い場合は最初に見つかった `_time_*` -- imu は
     スキーマ上 `required: true` なので、これは手組みや欠損した一式でしか

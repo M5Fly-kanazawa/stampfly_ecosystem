@@ -754,7 +754,7 @@ Plant::Truth Plant::truth() const
 //
 // imu — 機体 FRD の合成 IMU（ドライバ正規化: 静止で重力 −9.8）。
 // 主経路は MuJoCo 内蔵 <accelerometer>（FLU site での加速度計測定値 a−g）を frames::flu_to_frd で
-// FRD に写す → 静止で [0,0,−9.81]。ファーム ESKF が期待するドライバ正規化規約と一致。
+// FRD に写す → 静止で [0,0,−9.81]。ファーム ESKF が想定するドライバ正規化規約と一致。
 // -----------------------------------------------------------------------------
 sf::ImuData Plant::imu() const
 {

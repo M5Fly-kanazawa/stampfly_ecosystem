@@ -34,7 +34,7 @@
 # material, not a regression gate. Same workshop-target build/lesson-switch
 # prerequisites as workshop_acro.scn apply — see that file's header for the full
 # `sf lesson switch` / `touch` / `sf sils build --target workshop` sequence.
-# `sf sils regression` には追加しない（.expect なし）: 本ファイルは回帰判定では
+# `sf sils regression` には追加しない（.expect なし）: 本ファイルは再確認試験の判定では
 # なく保険用デモ素材。workshop ターゲットのビルド/レッスン切替の前提は
 # workshop_acro.scn と同一（同ファイルのヘッダの手順参照）。
 #

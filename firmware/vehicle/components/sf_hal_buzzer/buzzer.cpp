@@ -102,7 +102,7 @@ void Buzzer::playTone(uint16_t frequency, uint32_t duration_ms)
         // Set frequency. Capture the return so an LEDC failure (e.g. suspected clock
         // contention while motors drive LEDC at 400Hz armed) is OBSERVABLE instead of
         // silent — historically discarded, which would hide any in-flight buzzer fault.
-        // 周波数設定。戻り値を捕捉し、LEDC 失敗（armed 中にモータが 400Hz で LEDC を叩くクロック
+        // 周波数設定。戻り値を捕捉し、LEDC 失敗（armed 中にモータが 400Hz で LEDC を直接操作するクロック
         // 競合疑い等）を無音でなくログ化する — 従来は破棄され飛行中の不具合を隠していた。
         const esp_err_t fe = ledc_set_freq(BUZZER_LEDC_MODE,
                                            static_cast<ledc_timer_t>(config_.ledc_timer), frequency);

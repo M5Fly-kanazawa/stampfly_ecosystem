@@ -65,7 +65,7 @@ OUT_PNG = SCRIPT_DIR.parent / "stampfly_frd_iso.png"
 # 一時的な位置合わせ確認専用の出力（講師修正指示・第3弾・項目1）。
 # imu_axes.tex から参照されることはない。--debug 実行時のみ生成し、
 # 確認のため手動で OUT_PNG に差し替える。確認後は通常実行（フラグ無し）で
-# クリーンな OUT_PNG に戻す。
+# 重ね書きのない OUT_PNG に戻す。
 DEBUG_OUT_PNG = SCRIPT_DIR.parent / "stampfly_frd_iso_DEBUG.png"
 
 # Each STL part paired with a flat RGB color (0-1 range) and a human label.
@@ -871,7 +871,7 @@ def main() -> None:
             "origin crosshair and thin, unscaled X/Y/Z axis lines overlaid, "
             "instead of the normal clean OUT_PNG. Never referenced by "
             "imu_axes.tex; for a one-off visual overlay check only. / "
-            "通常のクリーンなOUT_PNGの代わりに、原点の十字と細い（縮小なし "
+            "通常の重ね書きのないOUT_PNGの代わりに、原点の十字と細い（縮小なし "
             "の）X/Y/Z軸線を重ねた一時的な位置合わせ確認用PNG(DEBUG_OUT_PNG) "
             "を出力する。imu_axes.texからは参照されない。1回限りの目視重ね "
             "合わせ確認専用。"

@@ -59,7 +59,7 @@
 | R1 | `docs/plans/release-v2026.07.*-notes.md`（5 本、発行済み） | 「タグ作成前のドラフト時点の記述のまま」。v2026.07.2〜.6 はすべて GitHub Releases に発行済み（`gh release list` で確認） | 害悪になり得る記録として削除。GitHub Releases が正 | 中 |
 | R2 | `docs/plans/simulator-migration.md`（実装済み、方針は置き換え済み）、`simulator/sils/RESET_PLAN.md`（立ち上げ期の記録。「大学資産は必ず残す」等、現在の決定と矛盾する規則を含む） | 生きた方針は `docs/architecture/simulation-policy.md` | 結論を `simulation-policy.md` に畳んで削除（タグ `archive/2026-09-13`） | 中 |
 | R3 | `docs/plans/project-plan-conformance.md`（実装済み） | 原典 §15 規則 7 | 削除 | 中 |
-| R4 | `analysis/reports/rate_sysid_reference/`（追跡されている唯一の `reports/`） | 参照値 | 資料（P3）として `control/models/` か `docs/` へ移す | 要 |
+| R4 | `analysis/reports/rate_sysid_reference/`（追跡されている唯一の `reports/`） | 基準値 | 資料（P3）として `control/models/` か `docs/` へ移す | 要 |
 
 ## 5. 削除が決まっているもの（時期未定）
 

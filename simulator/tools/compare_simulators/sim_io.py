@@ -410,7 +410,7 @@ def load_output_bundle(filepath) -> Tuple[List[StateLog], dict]:
     save_output_bundle() が書いた一式を読み込む。`truth` ストリームを
     StateLog のリストとして返す（roll/pitch/yaw は保存済みクォータニオンから
     quat_to_euler() で復元。位置・速度・角速度は NED 変換が書き込み時に
-    既に済んでいるためそのまま読む -- どのバックエンド由来かを知る必要は
+    既に済んでいるためそのまま読む -- どのバックエンド由来かを判別する必要は
     無い）。加えて一式の meta.json を返す。
     """
     log = sflog.FlightLog.load(filepath)

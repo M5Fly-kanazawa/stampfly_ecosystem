@@ -67,7 +67,7 @@ sf::IEstimator& estimator()
     // concrete estimator types; everything else uses IEstimator.
     // 推定器ファクトリ: estimator.type（0=ESKF, 1=相補）で選び、静的生成・
     // 初期化して IEstimator で返す。imu_task.cpp の createEstimator() から
-    // 挙動を変えず移設（RESET_PLAN P2: アルゴリズム非依存）— 具象型を知るのは
+    // 挙動を変えず移設（RESET_PLAN P2: アルゴリズム非依存）— 具象型の情報を持つのは
     // 今もここだけで、他は全て IEstimator を使う。
     static sf::EskfEstimator eskf;
     static sf::ComplementaryEstimator comp;

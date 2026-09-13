@@ -38,7 +38,7 @@ constexpr uint8_t kForeignMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xFF, 0xFE};  // "SI
 // "Controller A" picks the WRONG vehicle, "Controller B" picks the right one.
 // Source MACs distinct from kPilotMac/kForeignMac above so all four roles never
 // collide on-air.
-// 2台コントローラの自分宛フィルタ試験（pairing-methods-plan.md §4.4）:
+// 2台コントローラの自機宛フィルタ試験（pairing-methods-plan.md §4.4）:
 // 「コントローラA」は誤った機体を選び、「コントローラB」は正しい機体を選ぶ。送信元
 // MAC は上の2つと重複せず、4役が電波上で衝突しない。
 constexpr uint8_t kControllerAMac[6] = {0x02, 0x53, 0x49, 0x4C, 0xAA, 0x01};  // "SILS"+AA01

@@ -73,7 +73,7 @@ namespace sf {
 
 /// Thin `IController` wrapper around `PidController`. Forwards every method
 /// unchanged except `compute()`, which is the one exercise hook.
-/// `PidController` を包む薄い `IController` ラッパー。演習用フックである
+/// `PidController` を包む薄い `IController` ラッパー。演習用の差し込み口である
 /// `compute()` を除き、全メソッドをそのまま転送する。
 class LearnerController : public IController {
 public:
@@ -82,7 +82,7 @@ public:
     void init();
 
     /// The one exercise hook — see the .cpp file for the insertion point.
-    /// 唯一の演習フック — 挿入箇所は .cpp ファイルを参照。
+    /// 唯一の演習用差し込み口 — 挿入箇所は .cpp ファイルを参照。
     ControlOutput compute(const StateEstimate& state, const CommandSetpoint& setpoint,
                            float dt) override;
 

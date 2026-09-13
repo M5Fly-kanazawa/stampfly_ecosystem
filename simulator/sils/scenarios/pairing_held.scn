@@ -56,7 +56,7 @@
 # 機能する CLI/`key` チャンネル（現状 SILS ホストでは inert:
 # firmware/vehicle のコンソールは esp_console_new_repl_usb_cdc()/
 # esp_console_start_repl() を使うが、simulator/sils/esp_idf_host/esp_console.h は
-# これをスクリプト化した stdin パイプを一切読まない no-op REPL としてスタブ化して
+# これをスクリプト化した stdin パイプを一切読まない no-op REPL という簡易な代替実装にして
 # いる — 実測確認済み: `key "help\n"` を --target vehicle に送っても CLI エコーが
 # 一切出ない（これを --target vehicle_old で検証していた console_cli.scn は
 # firmware/vehicle_old と共に2026-09-13に削除済み、タグ archive/2026-09-13）

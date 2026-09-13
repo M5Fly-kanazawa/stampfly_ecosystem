@@ -341,7 +341,7 @@ struct SystemStatus {
 /// edge — "the pilot always wins" stays observable to the API source (M-3).
 /// 制御器状態の事実を API/誘導ソースへ（ControlTask → ApiTask）。guidance_active は
 /// API/Navigator の位置+yaw 目標が制御器で係合中か。制御器がスティック動作やモード変更で
-/// 誘導を自発解除すると false になり、API は立下りで自分の目標を解放する —「パイロット
+/// 誘導を自発解除すると false になり、API は立下りで自分自身の目標を解放する —「パイロット
 /// 優先」が API ソースから観測可能になる (M-3)。
 struct ControllerStatus {
     bool     guidance_active;  // an API/Navigator guidance target is engaged / 誘導目標係合中
@@ -371,7 +371,7 @@ struct ControllerStatus {
 //   - pairing_complete (comm → StateManager): comm の現在のバインド状態という事実。
 // ハンドシェイクは旧 vehicle 踏襲: 機体が自 MAC を広告する PairingPacket を broadcast し、
 // コントローラがそれを学習して機体 MAC へ ControlPacket をユニキャスト送信、機体は受信した
-// src MAC を相手として確定する（相互 MAC 学習）。
+// src MAC を相手局として確定する（相互 MAC 学習）。
 //
 // @design requirements.md §2 — PairingState                            [OK]
 // @design architecture.md §4 — Pairing positioning (parallel to FSM)   [OK]
@@ -399,13 +399,13 @@ struct PairingStatus {
 /// to which MAC. Published at boot (NVS restore: restored=true) and on live pairing
 /// completion (restored=false), and again with bound=false when the bind is cleared
 /// (re-pair). StateManager reads it to decide Paired vs (Pairing/NotPaired).
-/// ペアリングのバインド状態 — comm が「相手にバインド済みか・どの MAC か」を報告する事実。
+/// ペアリングのバインド状態 — comm が「相手局にバインド済みか・どの MAC か」を報告する事実。
 /// 起動時（NVS 復元: restored=true）と Pairing 成立時（restored=false）に発行し、バインド解除
 /// （再ペア）時は bound=false で再発行する。StateManager は Paired か（Pairing/NotPaired）かの
 /// 判断に読む。
 struct PairingComplete {
     uint8_t  controller_mac[6];  // learned/restored transmitter MAC / 学習・復元した送信機MAC
-    bool     bound;              // true: bound to a controller       / 相手にバインド済み
+    bool     bound;              // true: bound to a controller       / 相手局にバインド済み
     bool     restored;           // true: restored from NVS at boot   / 起動時のNVS復元
     uint32_t timestamp;          // [us]; 0 = never published         / 0=未発行
 };
@@ -418,8 +418,8 @@ struct PairingComplete {
 /// so it must reach the CLI over Pub-Sub rather than a cross-component getter,
 /// R5); it republishes every update() cycle (50Hz) so the counter stays live
 /// while Pairing is in progress. Read by the CLI (`mac`, `pair status`).
-/// ペアリング診断 — comm の自 MAC（自分宛受理フィルタが照合する値そのもの、
-/// pairing-methods-plan.md §4.1）と、Pairing 中に drone_mac が自分宛でなく棄却
+/// ペアリング診断 — comm の自 MAC（自局宛受理フィルタが照合する値そのもの、
+/// pairing-methods-plan.md §4.1）と、Pairing 中に drone_mac が自局宛でなく棄却
 /// した件数（隣のコントローラが別の機体を狙った混信）の累計。comm が唯一の書き手
 /// （comm 内部のペアリング状態ゆえ、直接呼び出しでなく Pub-Sub 経由で CLI に届ける
 /// — R5）。update() 毎（50Hz）に再発行し、Pairing 進行中もカウンタが生きた値になる。
@@ -443,7 +443,7 @@ struct PairingDiag {
 //
 // architecture.md §4 は「リセット処理を状態機械の onExit/onEnter コールバックに集約」、
 // R5 は「コンポーネント間通信は Pub-Sub トピックのみ」を要求する。よって遷移コールバックは
-// 推定器/制御器を直接叩かず、コマンドを publish し、所有タスク（ImuTask=推定器、
+// 推定器/制御器を直接操作せず、コマンドを publish し、所有タスク（ImuTask=推定器、
 // ControlTask=制御器）が消費して実行する。これが旧来のタスク内エッジ検出を置き換える。
 // =============================================================================
 
@@ -703,7 +703,7 @@ struct SysidFreqResult {
     float    w;           // [rad/s]
     float    ur, ui;      // U(jw) I/Q sums / U の I/Q 和
     float    yr, yi;      // Y(jw) I/Q sums / Y の I/Q 和
-    float    off_power;   // off-tone gyro power (disturbance/noise floor) / オフ音雑音床
+    float    off_power;   // off-tone gyro power (disturbance/noise floor) / オフ周波数点雑音床
     uint32_t samples;     // accumulated samples / 蓄積サンプル数
     uint32_t seq;         // increments per completed point / 完了毎に増加
     uint32_t timestamp;   // [us]

@@ -387,7 +387,7 @@ namespace param_vars {
     // 姿勢トリム（STABILIZE 以上）: 角度ループの「目標」に加算する平衡 roll/pitch 傾き [rad]
     // （レートでなく）。CG オフセットやセンサ水平バイアス由来の定常水平ドリフトを打ち消す
     // 小さな傾きを保つ。角度ループが機体をこの傾きへ駆動し、内側レートループは推力を余分に
-    // 食わない。真の平衡傾きは地上で知り得ない（CG と推力非対称に依存）ため飛行で同定する
+    // 食わない。真の平衡傾きは地上では判別できない（CG と推力非対称に依存）ため飛行で同定する
     // （sf trim analyze）。姿勢合流点で全モードに効く（STABILIZE / ALT_HOLD / POS_HOLD）ので、
     // POS_HOLD の位置ループは平衡傾きを担う負担から解放される。既定 0.0、範囲 ±0.1 rad（±5.7°）。
     float trim_roll  = 0.0f;
@@ -680,7 +680,7 @@ using namespace param_vars;
 // parameters in its own context (thread-safe immediate application; the
 // callback itself never touches another task's objects).
 // ライブ再読込コールバック — 下のテーブル行に設定。param set が所有タスクの
-// コマンドトピックへ ReloadParams verb を発行し、「所有者」が自分の文脈で
+// コマンドトピックへ ReloadParams verb を発行し、「所有者」が自分自身の文脈で
 // パラメータを読み直す（スレッド安全な即時反映。コールバック自身は他タスクの
 // オブジェクトに決して触らない）。
 //
@@ -1229,8 +1229,8 @@ void reset_all()
     // Fire each DISTINCT change callback once so the owning tasks re-read the
     // restored defaults live (same path as `param set`). Firing per-row would
     // flood the small command queues with dozens of identical ReloadParams verbs.
-    // 「異なる」変更コールバックを1回ずつ発火し、所有タスクに復元後の既定値を
-    // ライブで読み直させる（`param set` と同じ経路）。行ごとに発火すると小さな
+    // 「異なる」変更コールバックを1回ずつ呼び出し、所有タスクに復元後の既定値を
+    // ライブで読み直させる（`param set` と同じ経路）。行ごとに呼び出すと小さな
     // コマンドキューが同一の ReloadParams で溢れる。
     for (int i = 0; i < TABLE_SIZE; i++) {
         if (table[i].callback == nullptr) continue;

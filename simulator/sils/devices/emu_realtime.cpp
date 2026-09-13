@@ -62,8 +62,8 @@ void sils_realtime_pace(int64_t now_us)
     // let the loop run flat out (no catch-up beyond "as fast as possible");
     // this matches real hardware, which never runs faster than real time but
     // also never owes itself time back.
-    // 壁時計より進みすぎ→余剰分だけ眠る。遅れ→何もせず全速（それ以上の
-    // 「追いつき」はしない）— 実機は実時間より速くは進まないが、自分に
+    // 壁時計より進みすぎ→余剰分だけスリープする。遅れ→何もせず全速（それ以上の
+    // 「追いつき」はしない）— 実機は実時間より速くは進まないが、自身に
     // 時間を貸し借りもしない、というのと同じ。
     if (virt_elapsed > wall_elapsed) {
         const auto surplus_us =

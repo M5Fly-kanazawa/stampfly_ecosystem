@@ -1,5 +1,5 @@
 // Stub esp_log.h for PC unit testing
-// PC単体テスト用のesp_log.hスタブ
+// PC単体テスト用のesp_log.h代替実装
 #pragma once
 #include <cstdio>
 #define ESP_LOGI(tag, fmt, ...) printf("[INFO] %s: " fmt "\n", tag, ##__VA_ARGS__)

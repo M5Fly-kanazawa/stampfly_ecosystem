@@ -39,7 +39,7 @@ def idf_command(args: List[str]) -> List[str]:
     解決するため、setup_env.sh 実行**後**に PATH 先頭へ割り込んだもの
     — 例: StampFly Terminal ランチャーの対話シェル引き継ぎで .zshrc が
     追加する pyenv shims — が venv python を覆い隠し、idf.py が
-    「No module named 'click'」という分かりにくいエラーで死ぬ
+    「No module named 'click'」という分かりにくいエラーでクラッシュする
     （2026-07-22, macOS で観測）。sys.executable の絶対パスで起動すれば
     この PATH 順序依存を構造的に排除できる。
 

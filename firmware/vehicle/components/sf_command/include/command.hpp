@@ -19,7 +19,7 @@
  * normalization rule lives in exactly one location.
  *
  * 責務#8（Service）: 全入力ソースを吸収し、生スティックを正規化、中央デッドバンドを
- * 適用、離散スイッチビットをデコードして、クリーンな CommandSetpoint と PilotRequest
+ * 適用、離散スイッチビットをデコードして、混入のない CommandSetpoint と PilotRequest
  * トピックを発行する。sf_comm（HAL・#9）は生の電波パケットを RawControlInput という
  * 「事実」として渡すだけ。本コンポーネントが「生 ADC 値→物理指令」変換の唯一の場所
  * なので、正規化規則は一箇所だけに存在する。

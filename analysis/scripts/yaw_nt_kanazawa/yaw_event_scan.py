@@ -149,7 +149,7 @@ def main():
             imu = data["imu"]
             ctrl_ref = data["ctrl_ref"]
 
-            # ts 単調性・ラップ検査 (uint32境界 ~4294.967296秒 相当のマイクロ秒ラップ)
+            # ts 単調性・折り返し検査 (uint32境界 ~4294.967296秒 相当のマイクロ秒の折り返し)
             ts_us_raw = imu["ts_us_raw"]
             dt_raw = np.diff(ts_us_raw)
             n_reversal = int(np.sum(dt_raw < 0))
@@ -159,12 +159,12 @@ def main():
                 if n_reversal > 0:
                     notes_lines.append(
                         f"{fname}: imu.ts が逆行する箇所 {n_reversal} 件"
-                        f"（uint32ラップ等の疑い、要個別確認）"
+                        f"（uint32での折り返し等の疑い、要個別確認）"
                     )
                 if n_duplicate > 0:
                     notes_lines.append(
                         f"{fname}: imu.ts が重複（dt=0）する箇所 {n_duplicate} 件"
-                        f"（逆行ではなく同一tsの重複レコード。ラップは未検出）"
+                        f"（逆行ではなく同一tsの重複レコード。折り返しは未検出）"
                     )
                 if n_large_jump > 0:
                     notes_lines.append(

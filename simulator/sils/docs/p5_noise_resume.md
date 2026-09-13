@@ -17,7 +17,7 @@
 - **配線**: ノイズモデルは実装済みだったが emu が既定 off で `Plant::init` を呼んでいた。両 emu 入口
   （`emu/emu_main_generic.cpp`=emu_vehicle_old, `emu/emu_main.cpp`=emu_vehicle）に
   `SILS_EMU_NOISE=n0`/`SILS_EMU_SEED` env を配線し、`sf sils scenario --noise n0 --seed N` から制御可能に。
-  既定 off は従来と **byte-identical**（クリーン経路不変・回帰確認済み）。
+  既定 off は従来と **byte-identical**（クリーン経路不変・再確認試験で確認済み）。
 - **白色σの substep 非依存化**: 時間基準修正で物理が 4kHz substep ＝ `advance()` が 4kHz 呼びになり、
   白色を substep（0.25ms）で離散化すると σ が √10 倍に膨張する欠陥を是正。`SensorNoise::Config::white_dt`
   （=ファーム 400Hz 読み取り周期）で白色を離散化するよう分離。`smoke/noise_test.cpp` に
@@ -68,7 +68,7 @@
 
 ---
 
-## 3. 検証レシピ（P5 達成の再現手順・回帰確認用）
+## 3. 検証レシピ（P5 達成の再現手順・再確認試験用）
 
 ```bash
 # (1) ビルド
@@ -155,10 +155,10 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   ~100–177Hz をどれだけ落とすか ②K の duty 整合 ③段階3 比較。
 
 ### 段階3/3 ✅ ESKF vs 相補の比較・P6 判定（2026-06-04 達成）
-- **ハーネス裏取り結果**: emu_vehicle は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
+- **試験プログラムの裏取り結果**: emu_vehicle は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
   estimator 切替 env 無し**＝arm/離陸できず、忠実比較には数日（データ駆動フェーズと重複）。一方 hover_smoke は
   **実 vehicle の推定器を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp:72` createEstimator）
-  で走らせる**＝推定器比較には忠実（フル firmware 非実行の欠陥は推定器比較自体に無関係）。→ **hover_smoke 採用**。
+  で動かす**＝推定器比較には忠実（フル firmware 非実行の欠陥は推定器比較自体に無関係）。→ **hover_smoke 採用**。
 - hover_smoke に N1/N2 を配線（`smoke/hover_smoke.cpp` の noise_lvl→vib_enable/vib_bandlimit/obs_enable、
   emu と同じ対応）。hover_smoke は baro 融合（use_baro=true/use_tof=false）ゆえ n2 の baro 観測ノイズが効く。
 - **定量結果（5シード平均、hover_smoke 自身の g2_att_rmse_deg 厳密指標）**:

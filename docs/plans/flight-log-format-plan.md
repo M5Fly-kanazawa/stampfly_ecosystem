@@ -32,7 +32,7 @@
 | 決定 | **標準 = 「StampFly フライトログ一式」**: 1 個の zip ファイル `flight_<日時>.sflog.zip` に、`meta.json`（取得条件）、`schema.json`（列の定義・単位）、パケット種別ごとの CSV（`imu.csv` `attitude.csv` `posvel.csv` … `status.csv`）を入れる。各 CSV は「そのセンサが出した値だけ」を原レートで時刻付きに持ち、埋め値を持たない。展開すれば普通の CSV で、Excel・MATLAB・pandas で直接開ける |
 | 整列表 | 400 Hz に揃えた 1 枚の表が要る解析（同定など）は、共通の読み込み処理がメモリ上で作る。ファイルとして欲しいときは `sf log convert --aligned` で明示的に作り、名前と `meta.json` に派生物と記す。既定では書かない |
 | 全ツール対応 | `sf log wifi/list/info/check/convert/viz/analyze`・`sf trim analyze`・`sf sysid *`・`sf cal plot`・SILS（書き出し・合否判定・GUI・動画）・`sf sim headless`・教育パッケージを一式形式に統一。JSONL 書き出しと旧ファーム系の入出力は削除 |
-| 仕様の置き場 | `protocol/spec/flight_log.yaml` を基準（Single Source of Truth: 定義を 1 か所にだけ置き他は全てそこを参照する考え方）とし、Python の列定数・`schema.json`・文書の列表を生成。`sf log check` で適合検査。CI（変更のたびに自動で検査を走らせる仕組み）で「書き出し側の出力が適合」「全読み込み側が基準ファイルを読める」を検査 |
+| 仕様の置き場 | `protocol/spec/flight_log.yaml` を基準（Single Source of Truth: 定義を 1 か所にだけ置き他は全てそこを参照する考え方）とし、Python の列定数・`schema.json`・文書の列表を生成。`sf log check` で適合検査。CI（変更のたびに自動で検査を実行する仕組み）で「書き出し側の出力が適合」「全読み込み側が基準ファイルを読める」を検査 |
 | 段階 | Phase 0 仕様と共通処理 → 1 書き出し側 → 2 読み込み側と旧コード整理 → 3 SILS・シミュレータ → 4 文書（§5） |
 
 ## 1. 現状の事実（調査 2026-09-11）
@@ -100,7 +100,7 @@ UDP Data Stream（ポート 8890）で機体から届くパケット種別と、
 | 11 | FFT batch CSV（`timestamp_ms`+`gyro_corrected_x`） | 旧 | 無し（機体側 FFT 配信は 0c8dd6e1 で「不要」と判断済み） | `sf log viz`、**`sf log analyze`（無印）はこの列を無条件要求**、`reconstruct_duties.py` | 描画コード削除、`sf log analyze` は一式前提に作り直し |
 | 12 | Normal WiFi telemetry CSV（`timestamp_ms`+`roll_deg`） | 旧 | 無し（`TelemetryWSPacket` 由来） | `sf log viz`、`sf sysid fit`（"legacy" 判定） | 描画コード・判定分岐を削除 |
 | 13 | モータベンチ CSV（`voltage, omega`） | 対象外 | 手計測 | `tools/sysid/steady_state.py` | フライトログではないため対象外 |
-| 14 | 解析結果 JSON（`metrics.json` 等） | 対象外 | `sf sysid` 系 | `sf sysid rate-tune`、参照値生成 | 解析結果であり対象外 |
+| 14 | 解析結果 JSON（`metrics.json` 等） | 対象外 | `sf sysid` 系 | `sf sysid rate-tune`、基準値生成 | 解析結果であり対象外 |
 
 ### 1.4 現行ツールが読める形式（抜粋）
 

@@ -235,8 +235,8 @@ def _direct_install_msys2() -> bool:
     # First launch performs MSYS2's own post-extract setup (rebasing the
     # bundled DLLs); one no-op shell command triggers it, same as the
     # official setup-msys2 action does before ever calling pacman.
-    # 初回起動で MSYS2 自身の展開後セットアップ（同梱DLLのリベース）が走る。
-    # pacman を呼ぶ前に無害なシェルコマンドを1回実行して発火させる —
+    # 初回起動で MSYS2 自身の展開後セットアップ（同梱DLLのリベース）が動く。
+    # pacman を呼ぶ前に無害なシェルコマンドを1回実行して作動させる —
     # 公式の setup-msys2 action と同じ手順。
     try:
         subprocess.run([str(_BASH_EXE), "-lc", "exit 0"], timeout=120)

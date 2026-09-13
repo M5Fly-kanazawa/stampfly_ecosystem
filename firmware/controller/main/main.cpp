@@ -2555,8 +2555,8 @@ static void run_pairing_ui(bool force_pairing)
     // result is always persisted -- whether pairing was forced by the button
     // or triggered by an unset peer. (Previously an unset-peer pairing was not
     // saved and had to be repeated at every power-on.)
-    // 利用者が画面で機体を選んで確定した結果なので、ボタン起動でも相手未設定
-    // 起動でも常に保存する（以前は相手未設定時の結果を保存せず、電源投入の
+    // 利用者が画面で機体を選んで確定した結果なので、ボタン起動でも相手局未設定
+    // 起動でも常に保存する（以前は相手局未設定時の結果を保存せず、電源投入の
     // たびにペアリングが必要だった）。
     (void)force_pairing;
     peer_info_save();

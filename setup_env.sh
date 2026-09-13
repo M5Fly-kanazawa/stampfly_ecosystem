@@ -93,7 +93,7 @@ fi
 # .zprofile -- e.g. the StampFly Terminal app's .command launcher, whose
 # stock PATH has /usr/local/bin (Intel Homebrew) but not /opt/homebrew/bin.
 # Appended (not prepended) so ESP-IDF-managed tools keep priority.
-# Homebrew（Apple Silicon）: ESP-IDFがシステム側に期待するビルドツール
+# Homebrew（Apple Silicon）: ESP-IDFがシステム側に想定するビルドツール
 # （cmake, ninja）が、.zprofile を読まないシェル（StampFly Terminalアプリの
 # .commandランチャー等）でも解決できるよう bin を追加する。素のPATHには
 # /usr/local/bin（Intel Homebrew）はあるが /opt/homebrew/bin は無い。

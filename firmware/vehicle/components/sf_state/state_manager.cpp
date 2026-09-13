@@ -298,7 +298,7 @@ bool StateManager::requestModeChange(FlightMode new_mode)
     mode_ = new_mode;
 
     // Fire mode change callbacks
-    // モード変更コールバックを発火
+    // モード変更コールバックを呼び出す
     for (int i = 0; i < mode_callback_count_; i++) {
         if (mode_callbacks_[i]) {
             mode_callbacks_[i](old_mode, new_mode);
@@ -432,7 +432,7 @@ void StateManager::requestPairing()
     // This does NOT weaken the ARM guard: requestArm() still only accepts IDLE_GROUND,
     // and ARM is separately rejected while Pairing, so a held vehicle can never spin
     // its motors just because it can now start advertising.
-    // ペアリングは disarmed の機体限定の活動: 自分を広告して送信機がバインドできるように
+    // ペアリングは disarmed の機体限定の活動: 自分自身を広告して送信機がバインドできるように
     // するだけで、モータは回さない。INIT/武装/空中からは拒否（飛行中に再ペアしない）。
     // 冪等: 既に探索中なら何もしない。
     // IDLE_GROUND または IDLE_HELD（2026-09-12）: 手に持った状態でもペアリングに入れる
@@ -464,7 +464,7 @@ void StateManager::notifyPairingComplete()
 {
     // sf_comm reports it has bound to a controller (live pairing or NVS restore at
     // boot). Reflect Paired. Idempotent — repeated bind-status reports are common.
-    // sf_comm が相手にバインドした事実を報告（生のペアリング or 起動時の NVS 復元）。
+    // sf_comm が相手局にバインドした事実を報告（生のペアリング or 起動時の NVS 復元）。
     // Paired を反映する。冪等 — バインド状態の繰り返し報告は普通に起こる。
     if (pairing_state_ == PairingState::Paired) {
         return;
@@ -565,7 +565,7 @@ void StateManager::transition(FlightState new_state)
              flightStateName(old_state), flightStateName(new_state));
 
     // Fire onExit callbacks for old state
-    // 旧状態のonExitコールバックを発火
+    // 旧状態のonExitコールバックを呼び出す
     for (int i = 0; i < exit_callback_count_; i++) {
         if (exit_callbacks_[i]) {
             exit_callbacks_[i](old_state, new_state);
@@ -590,10 +590,10 @@ void StateManager::transition(FlightState new_state)
     // スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
     // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
     // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器はモードを ControllerCmd::
-    // ModeChange 経由でのみ知る（ControlTask は system_mode.sub_mode を読まない）ため、ここで
-    // onModeChange コールバックを発火する必要がある（mode_ を変えるだけでは不十分）。発火で
+    // ModeChange 経由でのみ把握する（ControlTask は system_mode.sub_mode を読まない）ため、ここで
+    // onModeChange コールバックを呼び出す必要がある（mode_ を変えるだけでは不十分）。呼び出しで
     // モード変更が発行され、制御器が STABILIZE へ再構成され古い ALT/POS カスケード＋ホバー推力
-    // 状態がクリアされる。発火しないと制御器は再離陸でホバーを保持し続け上昇しない。
+    // 状態がクリアされる。呼び出さないと制御器は再離陸でホバーを保持し続け上昇しない。
     if (new_state == FlightState::IDLE_GROUND && mode_ != FlightMode::STABILIZE) {
         ESP_LOGI(TAG, "Flight mode reset to STABILIZE (on ground)");
         FlightMode old_mode = mode_;
@@ -606,7 +606,7 @@ void StateManager::transition(FlightState new_state)
     }
 
     // Fire onEnter callbacks for new state
-    // 新状態のonEnterコールバックを発火
+    // 新状態のonEnterコールバックを呼び出す
     for (int i = 0; i < enter_callback_count_; i++) {
         if (enter_callbacks_[i]) {
             enter_callbacks_[i](old_state, new_state);

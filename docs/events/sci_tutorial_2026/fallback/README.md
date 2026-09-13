@@ -66,7 +66,7 @@ S4（実習 5 vs 実習 8）も再実行する場合。**`sf lesson switch` で�
 python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --run --run-s4 --restore-lesson 0
 ```
 
-新規シナリオ「ロールステップ試験」（S4 用、離陸試験用シナリオにロール・ステップを挿入した変種、`.expect` なし＝回帰対象外）の詳細は `simulator/sils/scenarios/workshop_acro_step.scn` のヘッダコメント参照。
+新規シナリオ「ロールステップ試験」（S4 用、離陸試験用シナリオにロール・ステップを挿入した変種、`.expect` なし＝再確認試験の対象外）の詳細は `simulator/sils/scenarios/workshop_acro_step.scn` のヘッダコメント参照。
 
 グラフのラベル文言だけを直したい場合（動画は再生成しない）は `--plots-only` を使う。既存の SILS バンドル・永続化済み一式（`.sflog.zip`）から PNG/テキストのみを再構築し、4本の動画ファイルには一切触れない。`--run`/`--run-s4` と同時指定はできない:
 
@@ -77,7 +77,7 @@ python3 docs/events/sci_tutorial_2026/fallback/make_fallback.py --plots-only
 ## 4. 注意点
 
 - **S4 のロールレート「実測値」は真値姿勢角の数値微分**: workshop ターゲット（`WorkshopControlTask`）は vehicle の `sf::control_output` トピックを発行しないため、フライトログ一式（`.sflog.zip`）に `rate_ref` ストリーム（指令レート・実測ジャイロ双方の元）が workshop では常に含まれない。そのため `rate_ref`（指令）はスクリプト化したスティック値 × `rate_max_rp` から計算し、実測側は一式の `truth` ストリームが持つ真値ロール角（50Hz）を数値微分して代用している（`rate_ref` ストリームがある一式では、この代用の代わりに一式の実測ジャイロ・実際の指令レートをそのまま使う）。`SILS_EMU_NOISE=off` の決定論実行なので、この代用はノイズ無しジャイロの読み値と数値的に等価。
-- **S1 の「外乱」はロール・スティックのステップ**であり、実際の突風（wind force injection）ではない。`pos_roll.scn` は Layer-4 POS_HOLD 回帰スイートの一本で、STABILIZE でロール右ステップを与えて横方向にドリフトさせた後 POS_HOLD に切り替え、ドリフトを止めて保持できるかを検証するシナリオ。「外乱を受けても位置保持が捕捉・保持する」というストーリーとしては S1 のデモに使える。
+- **S1 の「外乱」はロール・スティックのステップ**であり、実際の突風（wind force injection）ではない。`pos_roll.scn` は Layer-4 POS_HOLD 再確認試験一式の一本で、STABILIZE でロール右ステップを与えて横方向にドリフトさせた後 POS_HOLD に切り替え、ドリフトを止めて保持できるかを検証するシナリオ。「外乱を受けても位置保持が捕捉・保持する」というストーリーとしては S1 のデモに使える。
 - **S5 の STABILIZE 飛行は高度を保持しない**（仕様通り）。動画中、機体はスロットルを上げたまま上昇し続けるが、これは ALT_HOLD/POS_HOLD ではなく手動スロットルの STABILIZE モードだからで、故障ではない。
 - **`pos_flight.scn`（斜め複合）は使っていない**: ヨートルク権限飽和の既知課題（xfail、`docs/architecture/simulation-policy.md` バックログ#12）により `sf sils scenario` 単体では FAIL 判定になり `--video` が動画を書き出さない。S1 には単軸で PASS する `pos_roll.scn` を採用した。
 

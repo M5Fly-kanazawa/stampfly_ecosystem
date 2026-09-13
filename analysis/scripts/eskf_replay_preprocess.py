@@ -3,7 +3,7 @@
 eskf_replay_preprocess.py — flatten a flight log into a time-sorted event file for the
 offline ESKF replay harness (eskf_replay.cpp).
 
-飛行ログを時刻順のイベントファイルに平坦化（オフライン ESKF 再生ハーネス用）。
+飛行ログを時刻順のイベントファイルに平坦化（オフライン ESKF 再生試験プログラム用）。
 
 Output (whitespace-separated, sorted by timestamp):
   INIT gbx gby gbz abx aby abz      # initial gyro/accel bias (boot calibration)

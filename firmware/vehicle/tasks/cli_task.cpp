@@ -124,7 +124,7 @@ int cmd_param(int argc, char** argv)
         // ground afterwards.
         // NVS commit のフラッシュセクタ消去中はキャッシュが止まり 400Hz IMU ループが
         // 10ms 超ストールする（実機検証: ベンチ save 中に ControlTask ウォッチドッグ
-        // 発火）。disarmed では無害だが飛行中はストール分モータがゼロになる — armed 中は
+        // 作動）。disarmed では無害だが飛行中はストール分モータがゼロになる — armed 中は
         // 拒否する。ライブチューニング（param set → ReloadParams）は飛行中も使え、
         // 永続化は着陸後に行えばよい。
         const sf::SystemMode mode = sf::system_mode.latest();
@@ -365,7 +365,7 @@ int cmd_unpair(int argc, char** argv)
 /// for the physical button (no cross-task coupling).
 /// `pair` — ペアリング操作。`pair`/`pair start` は Pairing に再突入（現在のバインドを破棄し
 /// 送信機を探索、ボタン長押し3秒と同じ）、`pair status` は自 MAC/ラベル・PairingState・
-/// バインド済み送信機 MAC（あれば）・自分宛フィルタの棄却カウンタ（pairing-methods-
+/// バインド済み送信機 MAC（あれば）・自局宛フィルタの棄却カウンタ（pairing-methods-
 /// plan.md §4.1）を表示。start は button_event の事実（LongPress3s）を発行し、唯一の
 /// 権限者である StateManager が判断する（物理ボタンと同一経路、タスク間結合なし）。
 int cmd_pair(int argc, char** argv)
@@ -397,7 +397,7 @@ int cmd_pair(int argc, char** argv)
         // Own-address filter diagnostic (pairing-methods-plan.md §4.1): how many
         // ControlPackets were rejected during Pairing because they addressed a
         // different vehicle (a neighbour's controller in a crowded room).
-        // 自分宛フィルタの診断値（pairing-methods-plan.md §4.1）: Pairing 中に
+        // 自局宛フィルタの診断値（pairing-methods-plan.md §4.1）: Pairing 中に
         // 別の機体宛だったため棄却した ControlPacket の件数（混雑した会場の隣の
         // コントローラ等）。
         std::printf("rejected: %lu (packets addressed to a different vehicle)\n",
@@ -1127,7 +1127,7 @@ void serveTcpClient(const int client_fd)
 }
 
 /// Accept loop — runs forever in CLITask after the USB REPL has started.
-/// accept ループ — USB REPL 起動後、CLITask 内で永続的に走る。
+/// accept ループ — USB REPL 起動後、CLITask 内で永続的に動く。
 void runTcpCliServer()
 {
     const int listen_fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);

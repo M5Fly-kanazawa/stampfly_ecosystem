@@ -18,7 +18,7 @@
  *
  * StateManagerはモード遷移の唯一の権限者。
  * 他のコンポーネントがフライト状態を直接変更してはならない。
- * 遷移時にonExit/onEnterコールバックが発火し、
+ * 遷移時にonExit/onEnterコールバックが呼び出され、
  * 全リセット処理を1箇所に集約する。
  *
  * @design requirements.md §4 — Component #3: State Management         [OK]
@@ -207,7 +207,7 @@ public:
     void requestPairing();
 
     /// Reflect that sf_comm has bound to a controller → Paired. Idempotent.
-    /// sf_comm が相手にバインドした事実を反映する → Paired。冪等。
+    /// sf_comm が相手局にバインドした事実を反映する → Paired。冪等。
     ///
     /// @design requirements.md §2 — Pairing → Paired on bind            [OK]
     void notifyPairingComplete();

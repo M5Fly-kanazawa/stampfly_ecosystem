@@ -218,7 +218,7 @@ public:
         // 倍する（z=床上の機体高さ[m]）。数 ge_height 以上で無視でき（飛行高度で≈0）、最後の
         // 数 cm で強く効く。これがパイロット報告の着陸「フロート」の物理 — 接地近傍で機体は
         // 低推力で高度を保つため、一定速度降下が停滞し、ToF のみ（<5cm 必須）の着陸検出器が
-        // 発火しない。armed 接地検出器はまさにこれ（接地近傍＋降下停滞＋推力ホバー以下）を
+        // 作動しない。armed 接地検出器はまさにこれ（接地近傍＋降下停滞＋推力ホバー以下）を
         // 起点にする。0 で無効（GE 導入前とバイト一致）。
         // DEFAULT OFF (0) so the clean path stays byte-identical and the existing scenarios
         // (tuned without GE) are unaffected — enable per-scenario via SILS_EMU_GROUND_EFFECT

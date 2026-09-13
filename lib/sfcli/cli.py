@@ -20,7 +20,7 @@ C2/C3 contract).
 docstring参照）。同パッケージは各モジュールを個別のtry/exceptで
 importするため、サードパーティ依存の欠落は本当にそれを必要とする
 1コマンドだけを無効化し、`sf` 自体や他の全コマンドは動き続ける
-（V3の実測: 以前は1パッケージの欠落が `sf` 全体を殺していた）。
+（V3の実測: 以前は1パッケージの欠落が `sf` 全体を停止させていた）。
 下記の assert_all_commands_loadable() は同じ情報を
 scripts/installer.py のインストール後プローブ向けにハード失敗として
 公開する。プローブは「インストール済みだが壊れている」と「実際に
@@ -143,7 +143,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # errors="replace" renders such characters as '?' instead of crashing —
     # the same remedy the v2026.07.1 flasher adopted for its CLI paths.
     # コンソールエンコーディングの防御: エンコードできない文字でコマンドを
-    # 死なせない。Windows のコンソールはコードページ（日本語 Windows は
+    # 異常終了させない。Windows のコンソールはコードページ（日本語 Windows は
     # cp932、英語は cp1252）で入出力し、UTF-8 コンテンツの全文字は表現でき
     # ない -- 全角ダッシュ/日本語を含む git コミット題名の表示が
     # UnicodeEncodeError を起こし `sf upgrade` を中断させた（2026-07-19 に

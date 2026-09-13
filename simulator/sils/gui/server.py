@@ -14,7 +14,7 @@ for the browser. Parameter overrides go through the new ``SILS_EMU_PARAMS_FILE``
 panel feeds a run without a rebuild.
 
 依存はほぼゼロ（ThreadingHTTPServer は標準ライブラリのみ）。静的 SPA と小さな JSON API を配信。
-API は既存パイプライン（`sf sils scenario`）をそのまま叩き、走行バンドル（フライトログ v1 一式
+API は既存パイプライン（`sf sils scenario`）をそのまま呼び出し、走行バンドル（フライトログ v1 一式
 `sils_*.sflog.zip`。`lib/sflog` 経由 — 計画書 3.3節参照 — に加え results.json / events.jsonl）を
 読み戻してブラウザへ返す。パラメータ上書きは `SILS_EMU_PARAMS_FILE` 経由（再ビルド不要）。
 
@@ -276,7 +276,7 @@ def read_flightlog(bundle_dir: Path):
     一式に `truth` ストリーム（SILS 専用。無ければ表の時間軸が組めない）が無ければ
     空の dict。
 
-    `t` は秒（timestamp_us / 1e6）。`px/py/pz`/`qw..qz` は 3D 表示が期待する
+    `t` は秒（timestamp_us / 1e6）。`px/py/pz`/`qw..qz` は 3D 表示が想定する
     MuJoCo/ENU 座標系（`truth` の NED 位置・姿勢から frames.hpp の変換の逆で導出。
     上のヘルパー参照）。`roll`/`pitch`/`roll_est`/`pitch_est` は度 -- 一式自体は
     ラジアンで持つが、app.js が "[deg]" とラベルしている（app.js:228）ための

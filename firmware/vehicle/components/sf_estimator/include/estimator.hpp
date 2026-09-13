@@ -48,7 +48,7 @@ namespace sf {
 ///
 /// 全推定器実装（ESKF、EKF等）はこのクラスを継承し、
 /// 仮想メソッドを実装する。推定タスクがこれらのメソッドを呼ぶ。
-/// 推定器はFreeRTOSタスクを知らない。
+/// 推定器はFreeRTOSタスクの情報を持たない。
 ///
 /// @design detailed_design.md §5 — predict/update*/getState/reset     [OK]
 class IEstimator {
@@ -131,7 +131,7 @@ public:
     /// Called at the ground→airborne edge to start position tracking from origin
     /// with a fresh covariance (clean ToF lock at takeoff).
     /// 接地→空中エッジで呼ばれ、新しい共分散で原点から位置追跡を開始する
-    /// （離陸時のクリーンな ToF ロック）。
+    /// （離陸時の混入のない ToF ロック）。
     virtual void resetPositionVelocity() = 0;
 
     /// Hold position and velocity at zero (called every cycle while on the ground)
@@ -199,7 +199,7 @@ public:
     // it; bias estimation stays active in flight. Do NOT re-wire into a transition without a
     // covariance-preserving "soft freeze". Kept as a capability for that future redesign.
     // 注意（現在未配線）: ESKF の凍結機構（active_mask＋enforceCovarianceConstraints）は
-    // 「センサ恒久不在」の隔離用で、凍結状態の共分散を毎周期 init 値へ戻す。地上↔飛行で
+    // 「センサ恒久不在」の切り分け用で、凍結状態の共分散を毎周期 init 値へ戻す。地上↔飛行で
     // トグルすると解除時に巨大な共分散が復活し離陸過渡を不安定化する（SILS 実証）。
     // detailed_design §3 注3 で見送り。バイアス推定は飛行中もアクティブのまま。共分散保持の
     // 「ソフト凍結」なしに遷移へ再配線しないこと。将来の再設計用に capability として残置。

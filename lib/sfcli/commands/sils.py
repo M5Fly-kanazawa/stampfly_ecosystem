@@ -1,7 +1,7 @@
 """
 sf sils - Software-in-the-Loop bench (physics-based, MuJoCo, algorithm-independent)
 
-物理ベースの SILS ベンチを操作する。ファームの本物ループをホストで走らせ、MuJoCo で
+物理ベースの SILS ベンチを操作する。ファームの本物ループをホストで動かし、MuJoCo で
 ループを閉じ、機械可読な合否(results.json)＋レビュー動画を成果物として出す。
 アウトプット主導のマイルストーン(RESET_PLAN §8〜§10)を CLI から回す。
 
@@ -122,12 +122,12 @@ NOISE_LEVELS = ["off", "n0", "n1", "n2"]
 # 親しみやすいファーム名 -> エミュレータ exe / CMake ターゲット名（CMakeLists.txt は
 # 全エミュレータを "emu_<target>" と命名）。"workshop" は学習者自身の
 # setup()/loop_400Hz()（`sf lesson switch` がコピーする main/user_code.cpp）を、
-# "vehicle" と同じ再利用センサ/状態タスク経由で走らせる — CMakeLists.txt の
+# "vehicle" と同じ再利用センサ/状態タスク経由で動かす — CMakeLists.txt の
 # emu_workshop コメント参照。
 SILS_TARGETS = ("vehicle", "workshop")
 _TARGET_EXE_NAME = {name: f"emu_{name}" for name in SILS_TARGETS}
 # Default sensor-noise level per milestone (RESET_PLAN §13): noise milestones run N0.
-# マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で走る。
+# マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で動く。
 MILESTONE_NOISE = {"P5": "n0", "P6": "n0", "P7": "n0"}
 
 # CMake target/exe name for an embedded `sf app` project's SILS emulator: always
@@ -462,7 +462,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.set_defaults(func=run_gate)
 
     # E6: run a deterministic *.scn input scenario and assert the firmware output.
-    # E6: 決定論的な *.scn 入力シナリオを走らせ、ファーム出力をアサートする。
+    # E6: 決定論的な *.scn 入力シナリオを動かし、ファーム出力をアサートする。
     p = sub.add_parser("scenario", help="Run a *.scn input scenario and assert outputs (E6)")
     p.add_argument("scenario", help="path to the .scn scenario file")
     p.add_argument("--target", type=_resolve_sils_target, default="vehicle",
@@ -943,7 +943,7 @@ def run_run(args: argparse.Namespace) -> int:
     # hover_smoke writes its own flight-log v1 CSVs directly under
     # <bundle>/flightlog/ (argv[2]=bundle — see simulator/sils/smoke/
     # hover_smoke.cpp); bundle them into one *.sflog.zip here.
-    # hover_smoke は自分で <bundle>/flightlog/ 配下にフライトログ一式 CSV を
+    # hover_smoke は自分自身で <bundle>/flightlog/ 配下にフライトログ一式 CSV を
     # 書く（argv[2]=bundle）。ここで1個の *.sflog.zip にまとめる。
     zip_path = _finalize_flightlog(
         bundle / "flightlog",
@@ -1096,10 +1096,10 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
             # duty==0.0 -- e.g. pairing.expect's crosstalk-rejection window
             # asserts `duty_max < 0.05` while the foreign transmitter's ARM is
             # dropped and the vehicle is never actually armed.
-            # motor.csv は実際に「走った」制御周期だけ1行を持つ（armed window。
+            # motor.csv は実際に「動いた」制御周期だけ1行を持つ（armed window。
             # emu_flightlog_vehicle.cpp）—— disarm中も明示的に duty==0.0 を
             # 毎周期記録していた旧 trajectory.csv とは違う。[t0, t1] に行が
-            # 0件ということは「この窓では制御周期が一度も走らなかった」
+            # 0件ということは「この窓では制御周期が一度も動かなかった」
             # （一度も arm されていない/モータを駆動していない）ことを意味し、
             # 旧形式が duty==0.0 で表していたのと同じ事実 —— 例えば
             # pairing.expect の混信拒否窓は、誤送信機の ARM が破棄され機体が
@@ -1487,7 +1487,7 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     # real pairing handshake (auto-enter Pairing → bind via injected RC). Default keeps
     # the vehicle pre-paired so flight scenarios are not gated on pairing timing.
     # --unpaired: ペアリング NVS seed をスキップし機体を未ペア起動させ、実ハンドシェイク
-    # （自動 Pairing 突入→注入 RC で bind）を走らせる。既定はペア済み起動で飛行シナリオを
+    # （自動 Pairing 突入→注入 RC で bind）を動かす。既定はペア済み起動で飛行シナリオを
     # ペアリングのタイミングに依存させない。
     if getattr(args, "unpaired", False):
         env["SILS_EMU_UNPAIRED"] = "1"
@@ -2001,9 +2001,9 @@ def run_fly(args: argparse.Namespace) -> int:
 # the .scn file is the single source of truth for how it must be run, so this parses
 # that line instead of hand-maintaining a duplicate table that would drift.
 # 各シナリオは自身のヘッダコメント内の "sf sils scenario .../<name>.scn ..." 行で
-# 自分の必要な呼び出し(target/duration/unpaired等)を宣言する（例:
+# 自分自身の必要な呼び出し(target/duration/unpaired等)を宣言する（例:
 # api_flight.scn の "# Run: ... --target vehicle --duration 40000000"）。.scn 自身が
-# 自分の呼び出し方法の唯一の正なので、重複管理で陳腐化するテーブルを持たず、この行を
+# 自分自身の呼び出し方法を基準とするので、重複管理で陳腐化するテーブルを持たず、この行を
 # 解析する。
 _RUN_LINE_RE = re.compile(r"sf sils scenario\s+\S*?scenarios/(?P<name>[\w.]+)\.scn(?P<rest>.*)")
 
@@ -2040,7 +2040,7 @@ def _check_param_consistency() -> tuple:
     subprocess ではなくプロセス内 import。sfcli 全体で tools/ 配下モジュールに
     使われる sys.path 差し込みの流儀に従う（lib/sfcli/commands/params.py の
     run_check()、sf sysid の run_fit() も同様の例）。params_audit は標準
-    ライブラリのみに依存するため、SILS 回帰の経路に重い依存を持ち込まない。
+    ライブラリのみに依存するため、SILS 再確認試験の経路に重い依存を持ち込まない。
     """
     tools_dir = str(paths.root() / "tools")
     sys.path.insert(0, tools_dir)
@@ -2091,7 +2091,7 @@ def _check_pid_lockstep() -> tuple:
     意味を持つ。どちらか（pid.hpp か replay_pid()）が編集されて乖離した瞬間、
     `sf sysid` は黙って「もうファームが実行していないプラント」に対する
     ゲインを算出し続けてしまう。上の _check_param_consistency() と同様、
-    *.scn シナリオを1本も走らせる前に回帰全体を判定する。
+    *.scn シナリオを1本も動かす前に再確認試験全体を判定する。
 
     Run as its own subprocess (not in-process pytest.main()) so a hard crash
     inside the pybind11 extension cannot take down `sf sils regression`
@@ -2133,7 +2133,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # 手書きコピー。コード生成パイプライン未整備、Phase 1、simulation-policy.md
     # 参照）を判定する。ここでの食い違いを見逃すと、以下の全シナリオが
     # 「間違った機体モデル」に対して PASS してしまう。よって最初に検査し、
-    # 不合格なら回帰全体を即座に失敗させる — 物理基準が既に誤りと分かっている
+    # 不合格なら再確認試験全体を即座に失敗させる — 物理基準が既に誤りと分かっている
     # のに数分かけてシナリオを回す意味が無い。
     params_ok, n_param_checks = _check_param_consistency()
     if not params_ok:
@@ -2153,7 +2153,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # ビルド鮮度の参考警告: ここで冒頭に1回だけ判定する（上の _check_param_consistency
     # と同じ「ループ開始前に判定」パターン）。以下のループは各シナリオを別
     # プロセスとして起動するため、これが無いと run_scenario 内の判定がシナリオ数
-    # ぶん重複表示されてしまう。回帰は vehicle と workshop 両方を実行し
+    # ぶん重複表示されてしまう。再確認試験は vehicle と workshop 両方を実行し
     # うるため両方の exe を、ソース走査は共有した1回分でチェックする。この
     # プロセスで環境変数を立てるだけでよい — 以下の subprocess.run(cmd) は env=
     # を指定していないため親プロセスの os.environ（この変数を含む）をそのまま
@@ -2217,7 +2217,7 @@ def run_regression(args: argparse.Namespace) -> int:
         # 状態ではない。新規チェックアウトの CMake ブートストラップ
         # （simulator/sils/CMakeLists.txt）は Lesson 0 テンプレートから種付けし、
         # これはモータを動かさないため、workshop_acro.expect の
-        # `metric alt_max > 0.1` のような離陸判定は実回帰ではなく構造的に失敗する
+        # `metric alt_max > 0.1` のような離陸判定は既存動作の破壊ではなく構造的に失敗する
         # — これを放置すると内容に関わらず全 PR で CI が赤くなる。既定でスキップし
         # （FAIL 扱いしない — 下の SKIP ステータス、xfail の KNOWN-FAIL と同じ
         # 判定対象外の扱い）、--include-workshop は呼び出し側が既知のレッスンへ切り替えた
@@ -2252,7 +2252,7 @@ def run_regression(args: argparse.Namespace) -> int:
         # xfail: .expect 先頭の "xfail: <理由>" 指令は、このシナリオの現在の失敗が
         # 追跡中の既知課題（simulation-policy.md バックログ）であり壊れたアサー
         # ションではないことを示す。分類は上記コメント参照。SILS は決定論的なので
-        # XPASS（直ったのにマーカーが残っている）は必ず回帰全体を失敗させる。
+        # XPASS（直ったのにマーカーが残っている）は必ず再確認試験全体を失敗させる。
         xfail_reason = _read_xfail(scn.with_suffix(".expect"))
         if xfail_reason is None:
             status = "PASS" if verdict else "FAIL"
@@ -2278,7 +2278,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # n_fail (real, un-marked FAILs) and n_xpass (fixed-but-still-marked) are the
     # only two statuses that gate the regression — KNOWN-FAIL and SKIP (workshop
     # scenarios skipped by default — see the loop above) are informational only.
-    # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが回帰を判定
+    # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが再確認試験の合否を判定
     # する — KNOWN-FAIL と SKIP（既定でスキップされる workshop シナリオ。上のループ
     # 参照）は情報表示のみ。
     n_unexpected = n_fail + n_xpass
@@ -2348,7 +2348,7 @@ def run_compare(args: argparse.Namespace) -> int:
     # review video (twin 3D + overlay graphs), then write the aggregate verdict.
     # The bundle is unchanged between runs — that is the algorithm-independence
     # proof (RESET_PLAN P2/§9) turned into one shareable artifact.
-    # P4: 同じ飛行で両推定器を走らせ並置レビュー動画を描く → 集約判定を書く。
+    # P4: 同じ飛行で両推定器を動かし並置レビュー動画を描く → 集約判定を書く。
     # ベンチは実行間で無改変 ＝ アルゴリズム非依存の実証を1本の共有素材に。
     if args.ea == args.eb:
         # Comparing an estimator to itself would falsely "prove" independence.
@@ -2411,7 +2411,7 @@ def run_compare(args: argparse.Namespace) -> int:
 
     # Aggregate verdict: P4 passes iff BOTH runs pass G3 with the bench unchanged.
     # results.json stays the single source of truth (status/gate read only this).
-    # 集約判定: 両実行がベンチ無改変で G3 合格のとき P4 合格。results.json が唯一の正。
+    # 集約判定: 両実行がベンチ無改変で G3 合格のとき P4 合格。results.json を基準とする。
     a = json.loads((runs[args.ea] / "results.json").read_text(encoding="utf-8"))
     b = json.loads((runs[args.eb] / "results.json").read_text(encoding="utf-8"))
     both = bool(a.get("pass") and b.get("pass"))
@@ -2489,7 +2489,7 @@ def run_milestone(args: argparse.Namespace) -> int:
         args.noise = MILESTONE_NOISE.get(str(args.milestone).upper(), "off")
     # P4 is the side-by-side comparison milestone: build once, then run BOTH
     # estimators and render one compare video (run_compare gates at the end).
-    # P4 は並置比較マイルストーン: 1回ビルドし両推定器を走らせ1本の比較動画を描く。
+    # P4 は並置比較マイルストーン: 1回ビルドし両推定器を動かし1本の比較動画を描く。
     if str(args.milestone).upper() == "P4":
         if run_build(args) != 0:
             console.error("Milestone P4 stopped at build"); return 1
@@ -2591,7 +2591,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
     # that must not block the identification fit itself.
     # フィットの可否は「本当のクラッシュ」（プロセス終了コード／一式欠落）で判定し、
     # run_scenario の完全な .expect 判定では止めない。--motor-delay>0 では
-    # sysid_gate.expect の duty_max チェックが意図的に発火しうる（ゲインは無遅延
+    # sysid_gate.expect の duty_max チェックが意図的に作動しうる（ゲインは無遅延
     # プラントでチューニング済み — L_total がリチューン前にどれだけ動くかを見るのが
     # 本計測の目的そのもの）— これで同定フィット自体を止めてはならない。
     results_path = bundle / "results.json"

@@ -16,7 +16,7 @@
  * knows the other. Data is exchanged via typed shared buffers.
  *
  * コンポーネント間通信のための型安全なコンパイル時トピックシステム。
- * 発行者と購読者は疎結合 — 互いを知らない。
+ * 発行者と購読者は疎結合 — 互いの情報を持たない。
  * 型付き共有バッファ経由でデータを交換する。
  *
  * @design architecture.md §3 — Lightweight Pub-Sub                    [OK]
@@ -178,7 +178,7 @@ public:
                 // first (it consumed that slot), so nothing was lost and we must
                 // NOT count it, or overflow_count over-reports on healthy runs
                 // with a competing consumer (code_review L-20).
-                // 自分が勝った: 最古の未読を実際にドロップ＝真の R14 喪失。CAS が失敗した
+                // この CAS が成功した: 最古の未読を実際にドロップ＝真の R14 喪失。CAS が失敗した
                 // 場合は consumer が先に tail を進めた（そのスロットを消費した）ので喪失ゼロ。
                 // ここでカウントすると、consumer と競合する健全運用でも overflow_count が
                 // 過大計上される (L-20)。

@@ -150,7 +150,7 @@ def test_repeated_imu_timestamp_all_rows_kept_with_distinct_seq(tmp_path):
     `seq`, never by the shared timestamp_us.
     制御周期が古い IMU 標本を再利用すると imu の timestamp_us を繰り返す
     -- 計画書 2.2/7節により両方の行が生き残らねばならない（重複除去禁止:
-    一次記録は観測を捨てない）。それぞれが自分の `seq`（0始まりの捕捉順
+    一次記録は観測を捨てない）。それぞれが自分自身の `seq`（0始まりの捕捉順
     行番号）を得て、同時刻の rate_ref 行（timestamp_us が重複していても
     制御則がその周期ごとに新しく計算する）は、共有された timestamp_us
     ではなく `seq` で正しい imu 行に対応付けられる。

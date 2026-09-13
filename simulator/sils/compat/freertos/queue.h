@@ -9,7 +9,7 @@
 /**
  * @file queue.h
  * @brief Host stub for FreeRTOS queues (passive, byte-copy ring)
- *        FreeRTOS キューのホスト用スタブ（受動・バイトコピーのリング）
+ *        FreeRTOS キューのホスト用の代替実装（受動・バイトコピーのリング）
  *
  * A fixed-capacity FIFO of fixed-size items. Send drops when full (the same
  * lossy behaviour the firmware relies on for low-rate sensor topics). The

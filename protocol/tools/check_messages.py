@@ -5,7 +5,7 @@ wire-format SSOT) against its hand-written C++ implementation in
 firmware/common/protocol/include/espnow_protocol.hpp.
 
 check_messages.py - protocol/spec/messages.yaml（ESP-NOW 電文形式の
-唯一の正 = SSOT）と、その手書き C++ 実装
+基準となる文書 = SSOT）と、その手書き C++ 実装
 firmware/common/protocol/include/espnow_protocol.hpp を突き合わせて検査する。
 
 WHAT IS COMPARED / 何を比較するか
@@ -495,7 +495,7 @@ def compare_flag_bits(
     constant's value to equal `1 << bit`.
     yaml の `bits:` リスト（ビットフィールドのフラグ名）と、ヘッダの
     `constexpr uint8_t <prefix><NAME> = ...;` 定数を比較する。各定数の値は
-    `1 << bit` であることを期待する。
+    `1 << bit` であることを前提とする。
     """
     yaml_bits = {b["name"]: b["bit"] for b in bits}
     header_flags = {

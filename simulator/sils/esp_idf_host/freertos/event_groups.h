@@ -7,7 +7,7 @@
 /**
  * @file freertos/event_groups.h
  * @brief Host shim for FreeRTOS event groups (bitmask-backed cooperative stub).
- *        FreeRTOS イベントグループのホスト用シム（ビットマスク方式の協調スタブ）.
+ *        FreeRTOS イベントグループのホスト用シム（ビットマスク方式の協調的な代替実装）.
  *
  * An event group is a set of bits that tasks can set, clear and wait on. On the
  * SILS host (single cooperative token, no preemption) a plain integer bitmask is
@@ -51,7 +51,7 @@ typedef TickType_t EventBits_t;
 typedef struct EventGroupDef_t* EventGroupHandle_t;
 
 // Internal storage for the host stub: just the current bit mask.
-// ホストスタブの内部記憶: 現在のビットマスクだけ。
+// ホスト用の代替実装の内部記憶: 現在のビットマスクだけ。
 struct EventGroupDef_t {
     EventBits_t bits;
 };

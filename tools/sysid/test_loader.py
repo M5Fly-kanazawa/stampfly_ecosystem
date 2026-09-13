@@ -231,7 +231,7 @@ def test_load_aligned_motor_absent_uses_ctrl_ref_duty_bare_name(tmp_path):
     is how a caller (plant_fit.py, rate_sysid.py) tells the difference
     without guessing from the data.
     `motor` が一式に無いとき、ctrl_ref の duty_FR/RR/RL/FL は素の名前を
-    保つ（衝突相手が先に結合されないため）-- これは50Hz保持値であり本物の
+    保つ（衝突する列が先に結合されないため）-- これは50Hz保持値であり本物の
     400Hz dutyではない。呼び出し側（plant_fit.py・rate_sysid.py）は
     データから推測せず df.attrs["bundle_streams"] でこれを判別する。
     """

@@ -124,7 +124,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
                     // それを直す補正自体を棄却し（残差が判定しきい値を超え続ける）自己復帰しない。機体は
                     // 今 level・静止と既知ゆえ、ESKF 全リセットで姿勢を level（identity）へ再シード・
                     // 共分散を再膨張し latch を解除する ― 再飛行 readiness の欠けていた半分
-                    // （SILS crash_refly が炙り出した）。INIT は構築時 reset のクリーンな推定器
+                    // （SILS crash_refly が炙り出した）。INIT は構築時 reset の素性のよい推定器
                     // から起動するため不要。
                     sf::estimator_command.publish(
                         {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
@@ -242,7 +242,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
         // TAKEOFF→FLYING はここでのクラスA reset 不要。detailed_design §3 の「ESKF 位置/速度
         // リセット」はタイミング命の ToF 同期鉛直ハンドオフ（クラスB, ImuTask）— 本コールバック
         // 経由の ~20ms 遅れ reset は POS_HOLD 姿勢を劣化させる（architecture §4）。bias 解除は
-        // 見送り: ESKF 凍結機構（active_mask）は恒久センサ不在隔離用で地上↔飛行トグル用でない
+        // 見送り: ESKF 凍結機構（active_mask）は恒久センサ不在の切り分け用で地上↔飛行トグル用でない
         // ため、バイアス推定は飛行中も単にアクティブのまま。
         default:
             break;

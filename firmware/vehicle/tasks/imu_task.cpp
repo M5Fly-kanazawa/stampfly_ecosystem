@@ -328,8 +328,8 @@ static void processAsyncSensors()
 /// （鉛直は ToF のみ、baro なし）。接地中は唯一の鉛直観測 ToF が最小レンジ未満で無効
 /// ゆえ、錨が無いと予測のみの鉛直状態がドリフトし（残差 vel_z が pos_z ランプに積分）、
 /// 離陸時には ToF innovation 判定を超えて最初の空中 ToF が棄却され回復不能になる
-/// （ALT_HOLD が発散した高度を追う）。接地中 pos/vel をゼロ保持でドリフトを殺し、
-/// 接地→空中エッジで reset すれば ToF がクリーンにロックする。実証済みの
+/// （ALT_HOLD が発散した高度を追う）。接地中 pos/vel をゼロ保持でドリフトを止め、
+/// 接地→空中エッジで reset すれば ToF が混入なくロックする。実証済みの
 /// firmware/vehicle と同じ。predict + ToF 更新の後に実行（hold がドリフトを上書き）。
 ///
 /// @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff  [OK]
@@ -361,14 +361,14 @@ static void applyVerticalGroundHandoff()
     static bool was_on_ground = true;   // boot state: on the ground / 起動時は接地
 
     // Ground→airborne edge: reset pos/vel (and covariance) for a clean ToF lock.
-    // 接地→空中エッジ: クリーンな ToF ロックのため pos/vel（と共分散）をリセット。
+    // 接地→空中エッジ: 混入のない ToF ロックのため pos/vel（と共分散）をリセット。
     if (was_on_ground && !on_ground) {
         g_estimator->resetPositionVelocity();
         ESP_LOGI(TAG, "Vertical handoff: takeoff — position tracking enabled");
     }
 
     // While on the ground: clamp pos/vel to zero each cycle to kill predict-only drift.
-    // 接地中: 毎サイクル pos/vel をゼロ固定して予測のみのドリフトを殺す。
+    // 接地中: 毎サイクル pos/vel をゼロ固定して予測のみのドリフトを止める。
     if (on_ground) {
         g_estimator->holdPositionVelocity();
     }
@@ -529,7 +529,7 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // near-zero "calibration" mid-run would overwrite the filter's own converged bias
     // estimate and perturb the marginal POSITION_HOLD entry, so leave the estimator
     // untouched (a true no-op) when there is nothing meaningful to correct.
-    // デッドバンド: 無視可能な測定バイアス（クリーンな IMU）は種付けしない。ほぼゼロの
+    // デッドバンド: 無視可能な測定バイアス（素性のよい IMU）は種付けしない。ほぼゼロの
     // 「校正」を実行中に種付けするとフィルタの収束済みバイアス推定を上書きし、脆弱な
     // POSITION_HOLD 入口を撹乱する — 補正すべきものが無ければ推定器に触れない（真の no-op）。
     if (gyro_mag < config::CALIB_GYRO_DEADBAND && accel_mag < config::CALIB_ACCEL_DEADBAND) {
@@ -729,7 +729,7 @@ void ImuTask(void* pvParameters)
     // 起動バイアス校正は onEnter(IDLE_GROUND) 遷移コールバックが開始する（architecture §6 /
     // detailed_design §3 — 校正はコールバック駆動）。コールバックが estimator_command(Recalibrate)
     // を publish し、本タスクが processEstimatorCommands() で消費して startBootCalibration() を
-    // 起動する。以降ループ内 feed（feedBootCalibration）が地上静止中に走り、IMU バイアスを測って
+    // 起動する。以降ループ内 feed（feedBootCalibration）が地上静止中に動き、IMU バイアスを測って
     // 離陸前に推定器へ種付けする。（以前はここ setup で直接呼んでいた — onEnter 経路の場当たり迂回。）
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The

@@ -9,7 +9,7 @@
 /**
  * @file nvs.h
  * @brief Host stub for ESP-IDF NVS — an in-memory key-value store
- *        ESP-IDF NVS のホスト用スタブ — インメモリのキー・バリュー保存
+ *        ESP-IDF NVS のホスト用の代替実装 — インメモリのキー・バリュー保存
  *
  * The firmware persists parameters / calibration in NVS. On the SILS there
  * is no flash, so NVS is backed by an in-memory map that lives for the run.

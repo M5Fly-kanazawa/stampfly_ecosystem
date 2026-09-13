@@ -77,15 +77,15 @@ FlightState とは**独立した並行状態機械**。送信機（コントロ�
 ```
 PairingState（FlightState と並行）
   NotPaired — 相手コントローラ未確定（NVSに保存なし）
-  Pairing   — 相手探索中。PairingPacket を 500ms 周期で broadcast 送出
-  Paired    — 相手 MAC 確定（NVS保存済み）。相手以外の ControlPacket は破棄
+  Pairing   — 相手側探索中。PairingPacket を 500ms 周期で broadcast 送出
+  Paired    — 相手側の MAC 確定（NVS保存済み）。相手側以外の ControlPacket は破棄
 ```
 
 | 遷移 | トリガー |
 |------|---------|
-| 起動（NVSに相手なし）→ Pairing | 自動（未ペア起動で自動的にペアリング待機）|
-| 起動（NVSに相手あり）→ Paired | 自動（保存済み相手 MAC を復元）|
-| Pairing → Paired | Pairing 中に相手から ControlPacket を受信し src MAC を学習 |
+| 起動（NVSに相手側なし）→ Pairing | 自動（未ペア起動で自動的にペアリング待機）|
+| 起動（NVSに相手側あり）→ Paired | 自動（保存済み相手側の MAC を復元）|
+| Pairing → Paired | Pairing 中に相手側から ControlPacket を受信し src MAC を学習 |
 | 任意 → Pairing（再ペアリング）| ボタン長押し3秒（IDLE_GROUND / IDLE_HELD）。既存ペアを破棄して再探索 |
 
 **制約:**
@@ -94,7 +94,7 @@ PairingState（FlightState と並行）
   従来どおり IDLE_GROUND 限定のままで、**Pairing 中は ARM 要求を拒否**するので、この変更は
   モータ起動の安全性に影響しない）。
 - ハンドシェイクは**相互 MAC 学習**: 機体が自 MAC を PairingPacket で広告 → コントローラが学習して
-  機体 MAC 宛に ControlPacket をユニキャスト送信 → 機体が受信パケットの src MAC を相手として確定。
+  機体 MAC 宛に ControlPacket をユニキャスト送信 → 機体が受信パケットの src MAC を相手側として確定。
 - 旧 vehicle のペアリングシーケンスを踏襲する（プロトコル・署名・周期を同一に保ち相互運用）。
 
 ## 3. パラメータ管理
@@ -114,11 +114,11 @@ PairingState（FlightState と並行）
 | # | コンポーネント | 責務 |
 |---|---|---|
 | 1 | センシング | センサからデータを読む |
-| 2 | 状態推定 | 姿勢/位置/速度を推定（差替可能） |
+| 2 | 状態推定 | 姿勢/位置/速度を推定（差し替え可能） |
 | 3 | 状態管理 | モード遷移、ARM許可判定 |
 | 4 | フェイルセーフ | 異常検出と対応アクション（状態管理より上位） |
 | 5 | 離着陸マネージャー | 地上/空中判定、TAKEOFF/LANDINGモード統括、ESKF切替・リセット |
-| 6 | 制御 | セットポイント追従演算（差替可能） |
+| 6 | 制御 | セットポイント追従演算（差し替え可能） |
 | 7 | アクチュエーション | ミキサー+安全チェック+モーター出力 |
 | 8 | コマンド処理 | 全入力ソース吸収・正規化・調停→セットポイント |
 | 9 | 通信 | ESP-NOW/UDP/WiFiの送受信（物理レイヤー） |
@@ -186,7 +186,7 @@ PairingState を参照。
 | 送出 | Pairing 中、機体が 500ms 周期で broadcast。コントローラが CH1-13 スキャンで発見 |
 | アドレッシング | ControlPacket 先頭3バイト `drone_mac` ＝ 機体 MAC 下位3バイト（SSOT既存フィールド）|
 | 永続化 | 相手コントローラ MAC を NVS 保存し起動時に復元 |
-| フィルタ | 通常運用時、受信 ControlPacket の src MAC が相手と不一致なら破棄 |
+| フィルタ | 通常運用時、受信 ControlPacket の src MAC が相手側と不一致なら破棄 |
 | UI | Pairing 中: LED 青速点滅 ＋ ブザー通知。成立で解除 |
 
 ### 対応プロトコル
@@ -237,8 +237,8 @@ PairingState を参照。
 
 | 項目 | 方針 | 初期実装 |
 |------|------|---------|
-| 状態推定 | 差替可能 | Yes |
-| 制御 | 差替可能 | Yes |
+| 状態推定 | 差し替え可能 | Yes |
+| 制御 | 差し替え可能 | Yes |
 | 入力ソース | ドライバ追加で拡張 | Yes |
 | パラメータ | WiFi変更、NVS永続化 | Yes |
 | ナビゲーション | 将来追加可能な構造 | 構造のみ |

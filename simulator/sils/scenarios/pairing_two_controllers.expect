@@ -8,7 +8,7 @@
 #   - once Controller B (correct drone_mac) transmits, the vehicle binds to it
 #     ("Paired with <Controller B's MAC>", then "Pairing complete");
 #   - the bind to B happens strictly after Pairing starts (ordering sanity).
-# pairing_two_controllers.expect — 自分宛受理フィルタを検証（pairing-methods-plan.md
+# pairing_two_controllers.expect — 自局宛受理フィルタを検証（pairing-methods-plan.md
 # §4.1/§4.4）。--unpaired 必須。未ペア起動→自動 Pairing、コントローラA（誤 drone_mac）
 # しか電波に無い間は一度もAにバインドしない（「Paired with <AのMAC>」は全区間で一度も
 # 出ない）、コントローラB（正しい drone_mac）が送信すると B にバインド（「Paired with

@@ -81,7 +81,7 @@ public:
     /// Stop all motors immediately (safety hook for DISARM transitions).
     /// Idempotent: zeroes the LEDC outputs and clears the HAL arm gate on the
     /// armed→disarmed edge.
-    /// 全モーターを直ちに停止（DISARM 遷移用の安全フック）。冪等: 立下りエッジで LEDC を
+    /// 全モーターを直ちに停止（DISARM 遷移時に呼ばれる安全処理）。冪等: 立下りエッジで LEDC を
     /// 0 にし HAL の arm 判定を下げる。
     void disarm();
 

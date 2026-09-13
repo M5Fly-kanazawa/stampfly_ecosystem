@@ -299,7 +299,7 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     // system identification and should be the last entries ever dropped.
     // 400Hz control_output — ミキサー手前の指令推力＋トルク（バッチ8サンプル
     // 全て、上の duty400 と同じ index 対応）。`sf sysid fit`/`rate-fit` が
-    // どのミキサーで飛んだか知らずに同定できるようになり、duty400 と突き
+    // どのミキサーで飛んだかを判別せずに同定できるようになり、duty400 と突き
     // 合わせればミキサーゲインの診断も得られる。duty400 の直後に追加する
     // 理由も同じ（下の countDrop() 参照） — どちらも同定にとって欠かせず、
     // 最後まで落とされないようにする。

@@ -42,9 +42,9 @@ vehicle の SILS → 実機ワークフローは次の3原則に基づく。RESE
 
 ### 原則1: Code Identity（コード一致 — ループ全体で）
 
-**SILS は vehicle の本体ソースを書き換えず、そのままコンパイルして走らせる。**
+**SILS は vehicle の本体ソースを書き換えず、そのままコンパイルして動かす。**
 
-旧 SILS の失敗は、制御ループを自前で組み直し、推定器に物理の真値姿勢を渡していたことだった。新しい SILS は、**実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を丸ごとホストで走らせる**。一致するのは ESKF の数式だけではなく、**ループ全体**である。
+旧 SILS の失敗は、制御ループを自前で組み直し、推定器に物理の真値姿勢を渡していたことだった。新しい SILS は、**実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を丸ごとホストで動かす**。一致するのは ESKF の数式だけではなく、**ループ全体**である。
 
 | 共有するもの | 方法 |
 |------------|------|
@@ -128,7 +128,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 ### Phase 0: クリーンスレート（達成済みの確認）
 
 - 設計6文書完成（requirements / architecture / detailed_design / coding_and_education / hardware_init / 本書）
-- vehicle スケルトン + 全14タスク + 全コンポーネントスタブ + ESKF/PID 新規実装
+- vehicle スケルトン + 全14タスク + 全コンポーネントの代替実装 + ESKF/PID 新規実装
 - **旧 SILS を完全削除（RESET_PLAN §12 / P0）。** M1〜M11 で肥大化した旧 SILS（`quad_physics`／`sils_main.cpp`／`flight_scenario_test.cpp` 等）と、それに紐づく旧実績（L1〜L4 検証、姿勢2.27°／高度44mm など）は、削除した旧 SILS のものなので**現在の実績からは外す**。経緯は git 履歴と `implementation_log.md` に保存。
 
 **合格基準:** 達成済み（更地・workshop 無傷・sf CLI 健全・ビルド可）。
@@ -144,7 +144,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 | ID | 作業 | 対応（RESET_PLAN） |
 |----|------|------------------|
 | 1.1 | MuJoCo を依存として統合（FetchContent、`THIRD_PARTY_LICENSES` 同梱） | §6 |
-| 1.2 | ESP-IDF 互換シムを作り直し、本体の Pub-Sub ループをホストで走らせる | §7 |
+| 1.2 | ESP-IDF 互換シムを作り直し、本体の Pub-Sub ループをホストで動かす | §7 |
 | 1.3 | 合成センサ（IMU/ToF/フロー/気圧）・モータ・風モデルを自前実装（`noise_and_vibration_model.md`） | §6 |
 | 1.4 | ファーム last-mile: `applyMixer` 実装（`control_task.cpp:52-66`）、モータ出力→物理（`:124`）、推定器/制御器のファクトリ化、`@design` を `[--]`→`[OK]` に | §7 |
 | 1.5 | `params.cpp`（`table[]`）を SILS からも参照（Parameter Identity の実装） | 原則2 |
@@ -152,7 +152,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 **合格基準（RESET_PLAN P1〜P2 の判定）:**
 - **P1:** 現行 ESKF + PID ファームが **SILS 上でホバーする**（物理の真値で位置が有界）。その様子のレビュー動画を添える。
-- **P2:** 第2の推定器（相補フィルタ、約80行）を `IEstimator` で投入し、**ベンチを一切変えずに**ホバーする＝**アルゴリズム非依存の実証（北極星）**。
+- **P2:** 第2の推定器（相補フィルタ、約80行）を `IEstimator` で投入し、**ベンチを一切変えずに**ホバーする＝**アルゴリズム非依存の実証（最重要の目標）**。
 
 ---
 

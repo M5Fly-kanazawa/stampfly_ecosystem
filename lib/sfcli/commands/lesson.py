@@ -1198,7 +1198,7 @@ def _resolve_sils_scenario(raw: str) -> Optional[Path]:
     about it by name.
     'acro'/'step' はsci2026スライド全体で使う2本のシナリオ
     （workshop_acro.scn / workshop_acro_step.scn）の短縮形。それ以外は
-    パスとして扱うため、講師は lesson.py がその名前を知らなくても
+    パスとして扱うため、講師は lesson.py がその名前の情報を持っていなくても
     simulator/sils/scenarios/ 配下の他のシナリオを指定できる。
     """
     shortcuts = {
@@ -1218,7 +1218,7 @@ def _resolve_sils_scenario(raw: str) -> Optional[Path]:
 def run_sils(args: argparse.Namespace) -> int:
     """Build the lesson code and run it against a SILS scenario, without
     the caller needing to know the underlying Workshop firmware/target name.
-    実体のWorkshopファームウェア/ターゲット名を呼び出し側が知らなくても、
+    実体のWorkshopファームウェア/ターゲット名の情報を呼び出し側が持っていなくても、
     実習コードをビルドしSILSシナリオで実行する。
     """
     from . import sils as sils_cmd

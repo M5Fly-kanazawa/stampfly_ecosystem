@@ -20,7 +20,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 ### 判定基準と更新
 
 - 「計画当初」= 6設計文書（requirements / architecture / detailed_design / coding_and_education / development_roadmap / hardware_init）に記載があるもの
-- 「完了」= 実装済みかつ SILS 回帰または実機ベンチで検証済み
+- 「完了」= 実装済みかつ SILS 再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）または実機ベンチで検証済み
 - 最終更新: 2026-07-05。機能の出入りがあったら本書を更新すること
 
 ## 2. 計画当初にあって完了したもの
@@ -73,7 +73,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 機能 | 内容 | 検証 |
 |------|------|------|
-| StampFly エミュレータ | 実 app_main・全タスク・実ドライバを**無改変**でホスト実行（Code Identity） | 16シナリオ回帰 |
+| StampFly エミュレータ | 実 app_main・全タスク・実ドライバを**無改変**でホスト実行（Code Identity） | 16 シナリオの再確認試験 |
 | シナリオ DSL＋expect 判定 | rc/wind/fault/bias/handle 注入、G1〜G4 機械判定 | TEST_MATRIX.md |
 | 3原則 | Code / Param / Model Identity（ロードマップ §2） | params.cpp 共有、ミキサー/モータ曲線が SILS プラントと厳密逆 |
 

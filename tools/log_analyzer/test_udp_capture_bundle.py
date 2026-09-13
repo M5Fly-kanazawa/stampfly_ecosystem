@@ -20,7 +20,7 @@ asserts:
 
 合成 UDP データグラム -> UDPTelemetryCapture -> save_bundle() -> StampFly
 フライトログ v1 一式、という経路をエンドツーエンドで検証する。
-lib/sflog で読み戻し、その check_bundle() を走らせて確認する（計画書参照）。
+lib/sflog で読み戻し、その check_bundle() を動かして確認する（計画書参照）。
 
 test_udp_capture_duty400.py 自身の電文エンコードヘルパーと、本ファイルに
 定義した単独 baro パケット用の小さなヘルパーを再利用し、少数の合成
@@ -29,7 +29,7 @@ test_udp_capture_duty400.py 自身の電文エンコードヘルパーと、本�
 1回のキャプチャセッションで得られる全ストリーム（3個の統合パケットからの
 imu/attitude/posvel/rate_ref/motor/ctrl_output、および単独の baro パケット）
 を網羅し、以下を確認する:
-  - 読み込んだ一式に期待する v1 ストリーム/列が全て存在すること
+  - 読み込んだ一式に想定される v1 ストリーム/列が全て存在すること
   - `seq` 列の値が統合パケットの値（展開済みヘッダ sequence × 8 +
     パケット内インデックス）と一致すること
   - baro.csv の pressure が電文の hPa から v1 の SI Pa へ変換されていること

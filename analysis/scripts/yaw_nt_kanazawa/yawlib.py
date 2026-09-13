@@ -59,7 +59,7 @@ def load_jsonl(path):
 
     戻り値: { id: { field_name: np.ndarray, ... , 'ts': np.ndarray(秒) }, ... }
     'ts' は元の ts (マイクロ秒, 整数) を 1e6 で割った秒単位の float。
-    元の生 ts (マイクロ秒, ラップ検査用) は 'ts_us_raw' に整数のまま保持する。
+    元の生 ts (マイクロ秒, 折り返し検査用) は 'ts_us_raw' に整数のまま保持する。
     """
     records_by_id = {}
 

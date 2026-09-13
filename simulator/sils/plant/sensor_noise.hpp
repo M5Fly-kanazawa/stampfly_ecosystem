@@ -17,7 +17,7 @@
  * estimators on the same seed for a fair contrast). RESET_PLAN §13 (P5),
  * spec: firmware/vehicle/docs/noise_and_vibration_model.md §2-3.
  *
- * クリーンな合成IMU（Plant）に載せる N0 ノイズ。物理から切り離して MuJoCo 無しで
+ * 混入のない合成IMU（Plant）に載せる N0 ノイズ。物理から切り離して MuJoCo 無しで
  * 単体テスト可能にし、シード付きで決定論を保つ（同じシード→同じノイズ→同じ飛行→同じ動画）。
  *
  * @design simulator/sils/RESET_PLAN.md §13 P5 — sensor noise N0   [OK]

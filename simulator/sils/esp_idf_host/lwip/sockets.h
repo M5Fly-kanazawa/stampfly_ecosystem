@@ -18,7 +18,7 @@
  * Self-contained on purpose: we do NOT pull the host <sys/socket.h>, so there is
  * no clash between our inert functions and the real libc ones.
  *
- * SILS に網は無い（§11）。UDP/TCP/telemetry/CLI タスクは inert ソケットで走る: 送信は破棄、
+ * SILS に網は無い（§11）。UDP/TCP/telemetry/CLI タスクは inert ソケットで動く: 送信は破棄、
  * ブロッキング受信は ~1tick yield して「データなし」を返す（協調スケジューラを止めない）。
  * ホストの <sys/socket.h> を取り込まない自己完結ゆえ libc と衝突しない。
  */
@@ -105,7 +105,7 @@ extern "C" {
 // Linux/macOS — see the fcntl() stub's comment below. Prefer relying on this
 // header alone (as telemetry.cpp / api_task.cpp already do) over also
 // including <fcntl.h>.
-// F_GETFL/F_SETFL/O_NONBLOCK と下の fcntl() スタブは、firmware の非ブロッキング
+// F_GETFL/F_SETFL/O_NONBLOCK と下の fcntl() の代替実装は、firmware の非ブロッキング
 // ソケットパターン（fcntl(sock, F_GETFL, 0); fcntl(sock, F_SETFL,
 // flags|O_NONBLOCK);）をコンパイル・no-op させるため（下の fcntl() のコメント
 // 参照 — 偽 fd を実 libc の fcntl() へ渡さない）。注意: 本ヘッダと本物の
@@ -206,7 +206,7 @@ static inline int lwip_close(int s) { (void)s; return 0; }
 // parks for the rest of the run — no busy-loop, and no spurious EAGAIN error
 // spam from server loops that treat a non-blocking -1 as a failure to log.
 // 接続もデータも来ないので「ブロック」を忠実に再現（長時間 yield）。各タスクは
-// セットアップ＋初回受信まで走って以後パークする（ビジーループも EAGAIN 連発もなし）。
+// セットアップ＋初回受信まで動いて以後パークする（ビジーループも EAGAIN 連発もなし）。
 #define SILS_SOCK_BLOCK_TICKS ((uint32_t)0x40000000)   // ~12 virtual days (1 tick = 1 ms)
 // MSG_DONTWAIT callers poll (their loop has other work — e.g. the ApiTask
 // drains scenario injections); report "no data" after a 1-tick yield instead

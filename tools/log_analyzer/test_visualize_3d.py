@@ -38,7 +38,7 @@ import visualize_pose_3d  # noqa: E402
 
 # Frame count for headless build_animation smoke tests -- small enough to
 # build fast, large enough to exercise the subsampling path.
-# ヘッドレス build_animation スモークテスト用フレーム数 -- 高速に組み立て
+# ヘッドレス build_animation の最小動作確認用フレーム数 -- 高速に組み立て
 # つつ、間引き処理を通す程度の大きさ。
 SMOKE_TEST_FRAMES = 5
 

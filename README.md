@@ -379,7 +379,7 @@ stampfly_ecosystem/
 | [🖥️ StampFly Flasher](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases/latest) | デスクトップ書き込みアプリ（Windows/macOS・Python不要） |
 | [📦 ビルド済みファームウェア](https://github.com/M5Fly-kanazawa/stampfly_ecosystem/releases) | GitHub Releases（vehicle / controller） |
 | [📐 物理パラメータリファレンス](docs/architecture/stampfly-parameters.md) | 機体の物理パラメータ（質量・慣性・モータ特性等）の確定値 |
-| [stampfly_physical.yaml](control/models/stampfly_physical.yaml) | 物理パラメータの機械可読 SSOT（Single Source of Truth: 唯一の正となる定義） |
+| [stampfly_physical.yaml](control/models/stampfly_physical.yaml) | 物理パラメータの機械可読 SSOT（Single Source of Truth: 基準となる定義） |
 
 ---
 

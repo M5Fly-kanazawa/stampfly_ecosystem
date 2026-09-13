@@ -69,7 +69,7 @@ docstring、一式形式そのものは docs/plans/flight-log-format-plan.md
     ある。data_stream_wire.hpp 参照）から復元した「実際のプラント入力」。
     4モータduty を
     逆算し、レートループ PID が実際に出力した軸別の差動指令を復元する —
-    Kp を知る必要も、Kp が飛行中に不変（自動チューニング・ゲイン
+    Kp を把握している必要も、Kp が飛行中に不変（自動チューニング・ゲイン
     スケジューリング無し）だったことも、アクチュエータが飽和しなかった
     ことも仮定しない。**どちらの逆算を使うかは --mixer {legacy,vehicle}
     で選ぶ（既定 "legacy"）**:
@@ -88,7 +88,7 @@ docstring、一式形式そのものは docs/plans/flight-log-format-plan.md
         _duty_differential_vehicle() 参照。
     CSV の列構成はどちらの由来でも同一（同じ LogStreamSample 電文構造体）
     なので、ファイル単体からは自動判別できない — 呼び出し側がどちらの
-    ファームで記録したログかを知っている必要がある。
+    ファームで記録したログかを判別できる必要がある。
   "kp" -- 従来の再構成方式: Kp が既知・一定と仮定し、
     u_plant を Kp × (target − gyro) で近似する:
       target(t) = rate_ref_<axis>(t)            <- 既に rad/s
@@ -154,7 +154,7 @@ from ._generated_params import EXPECTED_ARM, EXPECTED_KAPPA, EXPECTED_CT, \
 # READMEに対して行ったのと同じ導出だが、あのコミットはこのファイルには
 # 触れなかったため、REFERENCE_PLANT_GAINS['yaw'] は3日間、古い値
 # （2026-07-17以前のkappa=9.71e-3由来の19.0）のまま黙って残り、学習者に
-# 誤った理論参照値を見せていた（2026-09-10、実際のlesson_07フライトで
+# 誤った理論基準値を見せていた（2026-09-10、実際のlesson_07フライトで
 # テスト中に発見 -- 'ref' 列が19.0のままで、他の全ての最新文書は8.0と
 # 言っていた）。EXPECTED_KAPPA/EXPECTED_ARM/EXPECTED_IZZ（物理モデルが
 # 変わるたび `sf params generate` で再生成される）から導出すれば、それらと
@@ -184,7 +184,7 @@ REFERENCE_PLANT_GAINS: Dict[str, float] = {
 # [Nm]（_duty_differential_vehicle() 参照）なので、定常（モータ遅れ無視）
 # ゲインは単純に 1/I_axis（回転のニュートンの第2法則:
 # domega/dt = torque / I）—— 上の duty単位版 REFERENCE_PLANT_GAINS とは別物。
-# 最適化の初期値（fit_plant() の K_init）にも使う: duty単位の参照値は
+# 最適化の初期値（fit_plant() の K_init）にも使う: duty単位の基準値は
 # Nm換算で桁が何桁も違い、L-BFGS-B に無意味な初期点を与えてしまう。
 # I_axis は `sf params check`（tools/params_audit/params_manifest.py の
 # "Ixx"/"Iyy"/"Izz" グループ）が追跡しているのと同じ EXPECTED_IXX/IYY/IZZ
@@ -731,7 +731,7 @@ class PlantFitResult:
         # K's reference/units depend on which mixer produced it (duty-diff
         # gain for 'legacy', torque gain 1/I_axis for 'vehicle') -- see
         # REFERENCE_PLANT_GAINS vs REFERENCE_PLANT_GAINS_VEHICLE above.
-        # K の参照値・単位は、どちらのミキサーが生成したかで異なる
+        # K の基準値・単位は、どちらのミキサーが生成したかで異なる
         # （'legacy' は duty差動ゲイン、'vehicle' はトルクゲイン 1/I_axis）
         # -- 上の REFERENCE_PLANT_GAINS / REFERENCE_PLANT_GAINS_VEHICLE 参照。
         ref_gains = REFERENCE_PLANT_GAINS_VEHICLE if self.mixer == 'vehicle' else REFERENCE_PLANT_GAINS
@@ -776,7 +776,7 @@ class PlantFitResult:
         }
 
         # Comparison with reference values
-        # 参照値との比較
+        # 基準値との比較
         if ref_K > 0:
             K_err = abs(self.K - ref_K) / ref_K * 100
             result['comparison']['K'] = {
@@ -1136,7 +1136,7 @@ def _fit_segment_indirect(
 # _estimate_kp_fir() の結果を、手入力の --kp の代わりとして信頼してよい
 # 最低フィット品質。実際の実習7フライト（2026-09-10）で較正: 十分に励振
 # されたログは R^2 0.84〜0.99。e と u の間に本物の比例関係が無いログ
-# （軸違い、duty列が死んでいる、励振ほぼ無し）はこれを大きく下回る。
+# （軸違い、duty列が動いていない、励振ほぼ無し）はこれを大きく下回る。
 _KP_AUTO_R2_FLOOR = 0.5
 
 
@@ -1189,7 +1189,7 @@ def _estimate_kp_fir(
     現実的な合成チャープ励振の）フライトの e(t) はサンプル間で強く自己相関
     するため、taps>1 にすると e(t-1), e(t-2), ... のラグ列が e(t) とほぼ
     共線になる。最小二乗（リッジ込みでも）は真の関係が瞬時のみ
-    （h(0)=Kp、h(k>0)=0）だと知る術が無く、真の h(0) の重みを複数の相関
+    （h(0)=Kp、h(k>0)=0）だと判別する術が無く、真の h(0) の重みを複数の相関
     ラグへ分散させてしまう -- 例えばこのセルフテストが使う厳密な合成閉ループ
     （真のKp=0.5、構成上ラグ0）で、taps=8 は h(0)=0.434（13%低）を復元した
     のに対し taps=1 は h(0)=0.4999...（0.03%低）だった。今日先に行った
@@ -1591,7 +1591,7 @@ def _load_axis_data(
     # 「実習7 同定ログ比較」アーティファクト参照）。それを自動化する: 最初に
     # あり得ない値が出たサンプル以降を全て切り捨てる。_GYRO_CRASH_MAX_RAD_S
     # =10 は意図的に余裕を持たせてある（ここでのBMI270ノイズ床は
-    # 約0.003rad/sなので、これは3000シグマ超 -- センサノイズで誤発火する
+    # 約0.003rad/sなので、これは3000シグマ超 -- センサノイズで誤作動する
     # 心配は皆無）上、実証的にも頑健（この較正に使った実際のクラッシュでは、
     # 3〜12 rad/s のどの閾値でも最初の超過は全3軸とも同じ瞬間 t=22.69s に
     # 発生し、この範囲内なら閾値の正確な値に結果は左右されない）。
@@ -1819,7 +1819,7 @@ def fit_plant(
     # 自動推定結果が実習資料の期待値と全く違って見えてしまう。したがって
     # --mixer は、duty逆算方式**と**自動Kp推定が使うトルク信号の**両方**を
     # 決める単一の明示的なスイッチである -- 呼び出し側がどのファームで
-    # 録ったログかを知っている必要があるのは、'duty'/'control_output' の
+    # 録ったログかを判別できる必要があるのは、'duty'/'control_output' の
     # ときと変わらない。
     if input_mode not in ('auto', 'control_output', 'duty', 'indirect', 'kp'):
         raise ValueError(
@@ -2727,7 +2727,7 @@ def selftest(verbose: bool = True) -> bool:
         # FIR自動Kp経由の 'indirect' は mixer=='vehicle' と報告される
         # （fit_plant() の use_vehicle_scale/mixer= 構築参照）。その K は
         # actual_torque_diag[Nm] 由来で legacy の duty差動スケールではない
-        # ため、対応する参照値と比較する。
+        # ため、対応する基準値と比較する。
         ref_K = K_true_vehicle if result.mixer == 'vehicle' else K_true
         K_err = abs(result.K / ref_K - 1.0)
         tau_err = abs(result.tau_m / tau_m_true - 1.0)
@@ -2777,7 +2777,7 @@ def selftest(verbose: bool = True) -> bool:
     # silently used the nominal fallback instead of the bundle's `voltage`
     # column would show up as a scale error here) -- the same sanity the
     # "duty" case above gets from the ws_internal forward mixer.
-    # --mixer vehicle 回帰: 同じ閉ループ合成だが、ロール軸PID出力 `u_v` は
+    # --mixer vehicle 再確認試験: 同じ閉ループ合成だが、ロール軸PID出力 `u_v` は
     # duty差動指令ではなく物理的な差動トルク[Nm]で、線形の ws_internal
     # ミキサーではなく順方向の物理チェーン（B^-1配分 -> thrustToDuty()。
     # _duty_differential_vehicle()/_thrust_from_duty() が逆算するのと同じ
@@ -3059,10 +3059,10 @@ def selftest(verbose: bool = True) -> bool:
     # legacy-scale flight, just with a dead-but-present `ctrl_output`
     # stream.
     # 2026-09-10: 'auto' が（FIR自動Kp経由で）直接法より 'indirect' を優先
-    # するようになったため、この再確認試験の基準はより厳しくなった -- 死んだ
-    # 全ゼロ control_output を避けるだけでなく、'indirect' まで解決する
+    # するようになったため、この再確認試験の基準はより厳しくなった -- 全ゼロで
+    # 動いていない control_output を避けるだけでなく、'indirect' まで解決する
     # こと。上の ok_auto と同じ精度チェックを、`ctrl_output` ストリームは
-    # 存在するが死んでいる同じ legacy スケールのフライトに対して行う。
+    # 存在するが動いていない同じ legacy スケールのフライトに対して行う。
     K_err_ws = abs(result_ws_zero.K / K_true - 1.0)
     ok_ws_zero = (result_ws_zero.input_mode == 'indirect'
                   and result_ws_zero.kp_source == 'fir_auto'

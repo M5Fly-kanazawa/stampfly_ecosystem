@@ -134,7 +134,7 @@ sf app sils my_ctrl
 | 基準 | 内容 |
 |------|------|
 | 同一ソース | `sf app build` と `sf app sils` が `firmware/apps/my_ctrl/*.cpp` を vehicle 本体の main コンポーネントに組み込む |
-| 既定挙動の維持 | app 無しの vehicle（既定実装）は現行と同じバイナリ挙動。SILS 回帰（vehicle / vehicle_old / workshop）に既存動作の破壊が無い |
+| 既定挙動の維持 | app 無しの vehicle（既定実装）は現行と同じバイナリ挙動。SILS 再確認試験（vehicle / vehicle_old / workshop）に既存動作の破壊が無い |
 | 合格基準 | 既定テンプレート（PID と同等の `IController`）で既存シナリオ `alt_flight`・`acro_flight` が PASS する |
 | 分離 | app ごとに実機・SILS のビルド成果物が分かれ、app の切替でキャッシュ汚染が起きない |
 | 3 OS | Windows（CMD）/ macOS / Ubuntu で同じコマンドが通る（パスに空白を含む場合を含む） |
@@ -157,7 +157,7 @@ sf app sils my_ctrl
 | 呼び出し側 | `tasks/control_task.cpp`、`tasks/imu_task.cpp`、`main/main.cpp` | 63 行目と `createEstimator()` をフック呼び出しに置き換え、起動フェーズ末尾で `sf::app::start()` |
 | 実機ビルド | `firmware/vehicle/main/CMakeLists.txt` | `SF_APP_DIR` が与えられたら `${SF_APP_DIR}/*.cpp` を `SRCS` に、ディレクトリを `INCLUDE_DIRS` に加え、`app_default.cpp` を外す |
 | SILS ビルド | `simulator/sils/CMakeLists.txt` | `emu_vehicle` に同じ変数で同じ差し替え（`app_default.cpp` を `EXCLUDE REGEX`、`${SF_APP_DIR}/*.cpp` を追加）。`emu_workshop` は影響を受けないことを確認 |
-| 再確認試験 | SILS 回帰全件 | app 無しで A/B 比較し既存動作の破壊ゼロ。`sf params check` も通す |
+| 再確認試験 | SILS 再確認試験全件 | app 無しで A/B 比較し既存動作の破壊ゼロ。`sf params check` も通す |
 
 ### Phase 2: テンプレートと sf CLI（1.5〜2 日）（完了）
 

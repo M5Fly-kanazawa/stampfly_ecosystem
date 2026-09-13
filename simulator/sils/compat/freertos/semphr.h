@@ -9,7 +9,7 @@
 /**
  * @file semphr.h
  * @brief Host stub for FreeRTOS semaphores — counter model, cooperative-safe.
- *        FreeRTOS セマフォのホスト用スタブ — カウンタモデル・協調安全。
+ *        FreeRTOS セマフォのホスト用の代替実装 — カウンタモデル・協調安全。
  *
  * A semaphore is a bounded counter (mutex = {1,1}, binary = {0,1}, counting =
  * {init,max}). Take decrements (blocks if 0); Give increments. On the SINGLE-token

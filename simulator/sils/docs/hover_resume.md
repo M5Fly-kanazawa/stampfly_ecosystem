@@ -52,14 +52,14 @@ M2 ノート §7 の「too high → climb」予測は**正しい**（+0.12g と�
    目標高度へ上げるには「スティックを一定時間**上げ続ける**」（位置に動かして戻すのでは到達しない）。
 2. **1.12 の climb 懸念は「emu Vbat 一定」結合ではない**。既定の `hoverThrustConstant` は vbat を**完全に無視**
    （`altitude_controller.hpp:43` `(void)vbat`）。固定フィードフォワードバイアスで、内側 VEL PID が積分で吸収する。
-   （vbat 依存は未使用の `hoverThrustVoltageCorrected` スタブにのみ存在。）
+   （vbat 依存は未使用の `hoverThrustVoltageCorrected`（代替実装のまま）にのみ存在。）
 
 ### 対策 = HOVER_THRUST_CORRECTION は変更しない（Code/Param Identity 厳守）
 
 閉ループ ALT_HOLD が自己補正する。内側 VEL PID が必要とする補正は **−0.0435 N**、対して
 `VEL_OUTPUT_MAX=±0.15 N`（`config.hpp:537`）＝**71% 余裕**（減速権限 4.05 m/s² vs 上昇 1.18 m/s²）。
 PID は back-calculation アンチワインドアップ（`pid.hpp`）、定常 −0.0435 N はクランプ内で飽和しない。
-推力クランプ（0.4065≪MAX_TOTAL_THRUST 0.672N）も duty クランプ（0.698<0.95）も発火しない。
+推力クランプ（0.4065≪MAX_TOTAL_THRUST 0.672N）も duty クランプ（0.698<0.95）も作動しない。
 
 **→ 唯一やるべきは「ALT_HOLD を確実に engage させ captureAltitude させる」こと。** 制御パラメータは触らない。
 
@@ -110,7 +110,7 @@ PID は back-calculation アンチワインドアップ（`pid.hpp`）、定常 
 編集(f) scenario.cpp:316 — RcRamp 分岐の flags に同じ OR
 ```
 
-ビルド: `sf sils build`（emu_vehicle が `--target vehicle` 既定）。回帰確認:
+ビルド: `sf sils build`（emu_vehicle が `--target vehicle` 既定）。再確認試験:
 `sf sils scenario simulator/sils/scenarios/hover_espnow.scn` が依然 PASS（alt 省略→0）。
 
 ---

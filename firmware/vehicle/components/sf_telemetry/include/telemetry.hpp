@@ -127,7 +127,7 @@ private:
     uint16_t dest_port_   = 0;      // Destination port (host order)
     uint32_t err_count_   = 0;      // sendto failure counter / 送信失敗カウンタ
     bool     ready_       = false;  // True after socket bound / ソケット準備完了
-    bool     network_up_  = false;  // WiFi ready (sends gated on this) / WiFi準備完了（送信判定）
+    bool     network_up_  = false;  // WiFi ready (sends gated on this) / WiFi準備完了（送信の条件）
 };
 
 }  // namespace sf

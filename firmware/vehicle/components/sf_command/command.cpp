@@ -119,7 +119,7 @@ void CommandProcessor::publishSetpoint(const RawControlInput& raw)
     // up=climb, down=descend. No deadband here — the controller owns the centre
     // deadzone and the re-center gate (so it can see the raw centre crossing).
     // ALT_HOLD/POS_HOLD 鉛直用の対称スロットル軸: 中央(2048)=0=ホールド、上=上昇、
-    // 下=降下。ここではデッドバンドを掛けない — 中央デッドゾーンと再センター判定は
+    // 下=降下。ここではデッドバンドを掛けない — 中央デッドゾーンとスロットル再センターロックは
     // 制御器が所有する（中央通過を生で見られるように）。
     sp.throttle_axis = normalizeAxis(raw.throttle);                  // [-1..1] ALT_HOLD vertical
     sp.roll      = applyDeadband(normalizeAxis(raw.roll));

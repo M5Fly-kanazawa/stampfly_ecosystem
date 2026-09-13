@@ -32,7 +32,7 @@
  *
  * emu_main*.cpp は pipe を作り、読み出し端を stdin へ dup2 して、空パイプへの
  * read が協調スケジューラの単一トークンを止めない（ブロックしない）ことを
- * 期待する（EOF にもならない）。Windows の匿名パイプ（_pipe()/CreatePipe が
+ * 前提とする（EOF にもならない）。Windows の匿名パイプ（_pipe()/CreatePipe が
  * 作るもの）はどの Win32 API でも非ブロッキングに切替不可
  * （SetNamedPipeHandleState はネームドパイプにしか効かない）。そこで pipe() は
  * 実際にはネームドパイプ（両端ともこのプロセス内だけ、名前は PID で一意化）を
@@ -40,7 +40,7 @@
  * への read はブロックせず -1 を返し、書き込まれれば実バイトを返し、EOF には
  * ならない（mingw-w64 の CRT は ERROR_NO_DATA を errno=EAGAIN でなく EINVAL に
  * 変換する — POSIX との見た目の違いだが、本ベンチの現状のコードはこの errno
- * 値で分岐していない。エミュレータの REPL は host では no-op スタブのため —
+ * 値で分岐していない。エミュレータの REPL は host では no-op の代替実装のため —
  * esp_idf_host/esp_console.h 参照）。
  */
 

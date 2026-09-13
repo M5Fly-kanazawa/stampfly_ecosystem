@@ -116,7 +116,7 @@ def test_select_backend_falls_back_when_all_probes_fail(monkeypatch):
     # This test is about probe fallback, not headless detection: pretend a
     # display exists so the probes actually run on a DISPLAY-less CI runner.
     # このテストの対象はプローブの後退動作であり、ヘッドレス判定ではない:
-    # DISPLAY の無い CI ランナーでもプローブが走るよう、ディスプレイ有りとみなす。
+    # DISPLAY の無い CI ランナーでもプローブが動くよう、ディスプレイ有りとみなす。
     monkeypatch.setattr(plotting, "has_display", lambda: True)
     monkeypatch.setattr(plotting, "gui_backend_candidates", lambda: ["tkagg", "qtagg"])
 

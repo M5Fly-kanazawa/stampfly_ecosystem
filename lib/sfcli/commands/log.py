@@ -805,7 +805,7 @@ def _viz_bundle(bundle_path: Path, args: argparse.Namespace) -> int:
         # visualize_stream はモジュール読み込み時に matplotlib.pyplot を
         # import し、その時点で有効なバックエンドを固定してしまう。そのため
         # import より前にここでバックエンドを選び、_render_with_fallback() へ
-        # 渡して（Tk ウィンドウを作る）プローブが一度しか走らないようにする。
+        # 渡して（Tk ウィンドウを作る）プローブが一度しか動かないようにする。
         backend = plotting.select_backend(want_window=args.save is None)
 
         import visualize_stream

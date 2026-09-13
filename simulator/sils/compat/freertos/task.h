@@ -9,7 +9,7 @@
 /**
  * @file task.h
  * @brief Host stub for FreeRTOS tasks — the ACTIVE surface of the RTOS shim.
- *        FreeRTOS タスクのホスト用スタブ — RTOS シムの能動面。
+ *        FreeRTOS タスクのホスト用の代替実装 — RTOS シムの能動面。
  *
  * Declares the task/notification/delay functions the firmware tasks call.
  * Their definitions live in the deterministic cooperative scheduler
@@ -65,7 +65,7 @@ void vTaskDelayUntil(TickType_t* last_wake, TickType_t period);
 TickType_t xTaskGetTickCount(void);
 
 // Handle of the task currently running (used to register esp_timer notifications).
-// 現在走っているタスクのハンドル（esp_timer 通知の登録に使う）。
+// 現在動いているタスクのハンドル（esp_timer 通知の登録に使う）。
 TaskHandle_t xTaskGetCurrentTaskHandle(void);
 
 // Give a notification to `handle` (increments its notification value).

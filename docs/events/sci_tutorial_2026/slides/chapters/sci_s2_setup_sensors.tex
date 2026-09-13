@@ -115,7 +115,7 @@ reboot
       \begin{exampleblock}{続けてコントローラとペアリング}
         \footnotesize コントローラの LCD パネルボタンを押しながら電源を入れ、機体のボタンを \warn{3 秒以上}押し続ける。双方がビープしたら離す（\warn{5 秒以上}押し続けるとシステムリセット）。以降は電源投入だけで自動再接続
       \end{exampleblock}
-      {\footnotesize \code{wifi.mode 1}: 機体が自分の WiFi を出す（後半で使う）。\code{wifi.channel}: 混信を避ける機体ごとのチャンネル。コントローラはペアリング時に自動で合わせる}
+      {\footnotesize \code{wifi.mode 1}: 機体が自分自身の WiFi を出す（後半で使う）。\code{wifi.channel}: 混信を避ける機体ごとのチャンネル。コントローラはペアリング時に自動で合わせる}
     \end{column}
   \end{columns}
 \end{frame}
@@ -123,7 +123,7 @@ reboot
 % ------------------------------------------------------------------
 \begin{frame}{ツールチェーン}
   \begin{block}{ESP-IDF の上に sf CLI を重ねる}
-    \small \code{idf.py} を直接叩く代わりに、ビルド・書き込み・診断・ログ取得を統一したコマンド体系で提供する
+    \small \code{idf.py} を直接呼び出す代わりに、ビルド・書き込み・診断・ログ取得を統一したコマンド体系で提供する
   \end{block}
 
   \vspace{0.5em}
@@ -308,7 +308,7 @@ void loop_400Hz(float dt) {
 % ------------------------------------------------------------------
 \begin{frame}[fragile]{接続手順: 機体を WiFi 網に入れる}
   \begin{block}{機体側: 実習 1 (2/2) の初期設定で済んでいる}
-    \footnotesize \code{wifi.mode 1}（機体が自分の WiFi を出す設定）は初期設定で保存済み。未設定の機体だけ、USB 接続のまま \code{sf monitor} の CLI で \code{param set wifi.mode 1} $\to$ \code{param save} $\to$ \code{reboot}
+    \footnotesize \code{wifi.mode 1}（機体が自分自身の WiFi を出す設定）は初期設定で保存済み。未設定の機体だけ、USB 接続のまま \code{sf monitor} の CLI で \code{param set wifi.mode 1} $\to$ \code{param save} $\to$ \code{reboot}
   \end{block}
 
   \vspace{0.15em}

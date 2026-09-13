@@ -222,7 +222,7 @@
 
   \vspace{0.3em}
 
-  {\small IMU 割込みを起点に、状態推定 $\to$ 制御 $\to$ アクチュエーションが 2.5\,ms 周期で走る。全コンポーネントが同じ周期を共有する}
+  {\small IMU 割込みを起点に、状態推定 $\to$ 制御 $\to$ アクチュエーションが 2.5\,ms 周期で動く。全コンポーネントが同じ周期を共有する}
 \end{frame}
 
 % ------------------------------------------------------------------
@@ -248,12 +248,12 @@
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{提供: SILS の仕組み --- 実機のファームを PC で走らせる}
+\begin{frame}{提供: SILS の仕組み --- 実機のファームを PC で動かす}
   \begin{columns}[T]
     \begin{column}{0.52\textwidth}
       \begin{itemize}\scriptsize\setlength{\itemsep}{1pt}
         \item \textbf{ファームは無改変}: 実機に書き込む vehicle のソースをそのまま PC 向けにコンパイル（状態機械・フェイルセーフも含む）
-        \item \textbf{OS の代わり}: 仮想時計で動く決定論的な疑似 RTOS と ESP-IDF 互換スタブ。同じ入力なら毎回同じ結果
+        \item \textbf{OS の代わり}: 仮想時計で動く決定論的な疑似 RTOS と ESP-IDF 互換の代替実装。同じ入力なら毎回同じ結果
         \item \textbf{制御対象}: MuJoCo（6 自由度）＋自作のモータ・センサ・風モデル。400\,Hz でファームと歩調を合わせる
         \item \textbf{試験の与え方}: シナリオ \code{.scn} に操縦・外乱・故障を時系列で書き、\code{.expect} で PASS / FAIL を自動判定。CI で既存動作の破壊を検出
         \item \textbf{実習コードも同じ土俵}: 参加者の \code{user\_code.cpp} も同じ仕組みで飛ぶ（実習 8 (2/2)）
@@ -267,7 +267,7 @@
         arr/.style={-{Latex[length=1.5mm,width=1.2mm]}, line width=0.5pt},
         node distance=3.5mm and 0mm]
         \node[box, fill=sfblue!8] (scn) {シナリオ \code{.scn}\\操縦入力・外乱・故障の時系列};
-        \node[box, fill=sfblue!15, below=of scn, minimum height=10mm] (fw) {実機と同じファームウェア C++\\（疑似 RTOS ＋ 互換スタブの上）};
+        \node[box, fill=sfblue!15, below=of scn, minimum height=10mm] (fw) {実機と同じファームウェア C++\\（疑似 RTOS ＋ 互換の代替実装の上）};
         \node[box, fill=sfblue!8, below=of fw, minimum height=10mm] (plant) {制御対象: MuJoCo 6 自由度\\＋ モータ・センサ・風モデル};
         \node[box, fill=sfblue!8, below=of plant] (chk) {ログ ＋ \code{.expect} で合否判定};
         \draw[arr] (scn.south) -- (fw.north);

@@ -45,7 +45,7 @@ esp_err_t sils_espnow_set_send_cb(esp_now_send_cb_t cb) { g_send_cb = cb; return
 // would on real hardware. Called by the virtual pilot (holding the run-token),
 // so the callback runs cooperatively like a normal task step.
 // 本体の受信コールバックへ1フレーム配信（実機の Wi-Fi スタック相当）。仮想パイロット
-// が run-token を保持して呼ぶので、通常のタスクステップと同様に協調的に走る。
+// が run-token を保持して呼ぶので、通常のタスクステップと同様に協調的に動く。
 void sils_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int len)
 {
     if (g_recv_cb == nullptr) return;

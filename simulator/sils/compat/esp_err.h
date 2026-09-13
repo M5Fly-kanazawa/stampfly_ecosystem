@@ -9,7 +9,7 @@
 /**
  * @file esp_err.h
  * @brief Host stub for ESP-IDF error codes
- *        ESP-IDF エラーコードのホスト用スタブ
+ *        ESP-IDF エラーコードのホスト用の代替実装
  *
  * Provides the esp_err_t surface the firmware references so it compiles
  * unmodified on a PC. Values mirror ESP-IDF where it matters for logic.

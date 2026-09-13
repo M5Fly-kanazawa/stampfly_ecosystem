@@ -200,7 +200,7 @@ inline constexpr float CALIB_STILL_EMA_ALPHA      = 0.05f;  // EMA factor (~3Hz 
 // converged estimate and perturbs the (marginal) POSITION_HOLD entry.
 // バイアスのデッドバンド: 測定した起動バイアスがこの大きさ未満なら無視可能として推定器に
 // 種付けしない — 校正をフィルタ自身の（既にほぼゼロの）オンライン推定の上書きでなく真の
-// no-op に保つ。クリーンな IMU を byte 中立に保ち（SILS プラントの残差は重力定数の丸め
+// no-op に保つ。素性のよい IMU を byte 中立に保ち（SILS プラントの残差は重力定数の丸め
 // ~0.002 m/s² のみ）、実機の MEMS オフセット（~0.1–0.4 m/s²）は十分上回り適用される。
 // ほぼゼロの「校正」を実行中に種付けすると、フィルタの収束済み推定を捨て、（脆弱な）
 // POSITION_HOLD 入口を撹乱してしまう。
@@ -290,7 +290,7 @@ inline constexpr uint32_t ARMED_GROUND_SPOOL_US = 300000;  // 0.3 s
 // Published at 1 Hz by PowerTask (sensor_health topic).
 // センサが「健全」とみなされるのは、直近のトピックサンプルがこの窓より新しい場合のみ。
 // 最も遅いセンサは電源モニタの 10Hz（周期 100ms）ゆえ、500ms なら数サンプルの欠落を
-// 許容してからセンサ死亡と判定する — 単発の瞬間的欠落で誤発火せず、停止/不在センサを
+// 許容してからセンサ故障と判定する — 単発の瞬間的欠落で誤って作動せず、停止/不在センサを
 // 検出する。PowerTask が 1Hz で publish（sensor_health トピック）。
 inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 
@@ -321,7 +321,7 @@ inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 // `motor sweep` republishes a fresh FACT before this window elapses (see
 // MOTOR_SWEEP_KEEPALIVE_US) to hold a duty for longer than 2s.
 // MotorTest FACT 1件の自動停止窓（control_task.cpp）: esp_timer_get_time() <
-// expiry_us の間だけ duty が適用されるため、CLI クライアントが死んでも
+// expiry_us の間だけ duty が適用されるため、CLI クライアントが停止しても
 // （USB切断・TCP切断）モータが回り続けない。`motor sweep` はこの窓が尽きる前に
 // 新しい FACT を再発行し（MOTOR_SWEEP_KEEPALIVE_US 参照）2秒を超えて duty を保持する。
 inline constexpr uint32_t MOTOR_TEST_DURATION_US = 2000000;  // 2 s

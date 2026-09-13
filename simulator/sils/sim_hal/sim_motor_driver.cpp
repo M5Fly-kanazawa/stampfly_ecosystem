@@ -9,7 +9,7 @@
 /**
  * @file sim_motor_driver.cpp
  * @brief SILS host stub for the LEDC MotorDriver (no ESP-IDF driver/ledc.h).
- *        LEDC MotorDriver の SILS ホストスタブ（driver/ledc.h 不要）。
+ *        LEDC MotorDriver の SILS ホスト代替実装（driver/ledc.h 不要）。
  *
  * The firmware MotorDriver (sf_hal_motor/motor_driver.cpp) drives LEDC PWM and
  * cannot compile on the host (it includes driver/ledc.h). The SILS replaces only
@@ -67,7 +67,7 @@ void MotorDriver::setMotorDuties(const float duties[4])
 // arm — host stub: track the armed flag (no LEDC). Unlike the real driver it does
 // not require initialized_ (the host leaves it false on purpose), so the Actuator
 // arm gate still engages on the host.
-// arm — host スタブ: armed フラグを追従（LEDC なし）。実ドライバと違い initialized_ を
+// arm — host 代替実装: armed フラグを追従（LEDC なし）。実ドライバと違い initialized_ を
 // 要求しない（host は意図的に false）ので、Actuator の arm 判定が host でも働く。
 esp_err_t MotorDriver::arm()
 {
@@ -76,7 +76,7 @@ esp_err_t MotorDriver::arm()
 }
 
 // disarm — host stub: clear the armed flag and zero the duties (no LEDC).
-// disarm — host スタブ: armed フラグを下げ duty をゼロにする（LEDC なし）。
+// disarm — host 代替実装: armed フラグを下げ duty をゼロにする（LEDC なし）。
 esp_err_t MotorDriver::disarm()
 {
     armed_ = false;

@@ -37,7 +37,7 @@ Pipeline / 手順:
     本物の400Hz duty が無い（旧ファーム/旧キャプチャの）ログのときだけ、
     ファームの離散 PID（D-on-M・Tustin・条件付き AW — pid.hpp の逐語移植）を
     飛行時ゲインで (r,y) に再生する経路にフォールバックする——こちらはゲイン
-    を知っている必要があり、ファーム PID の数式をそのまま仮定するため、
+    の情報を持っている必要があり、ファーム PID の数式をそのまま仮定するため、
     duty 経路が使えるときは常にそちらを優先する。
  3. ETFE: Welch クロススペクトルで G_hat = S_uy/S_uu（励振帯域のみ）。
  4. G(s) = b·e^{-Ls}/(s(Ts+1)) のパラメトリックフィット（b=有効慣性逆数、
@@ -696,8 +696,8 @@ def selftest(verbose=True):
     # firmware/vehicle の実順方向ミキサー（B^-1配分、pitch=yaw=0、その後
     # thrustToDuty()）で4モータduty に変換し、_duty_differential_vehicle()
     # （fit_from_df(input_mode='duty'/'auto') が使う関数）で逆算してuと
-    # 既知プラントの両方を復元できることを確認する。duty経路がPIDゲインを
-    # 知らなくても上のPID再生経路と同じ結果に到達することの証明。vbat_true は
+    # 既知プラントの両方を復元できることを確認する。duty経路がPIDゲインの
+    # 情報を持っていなくても上のPID再生経路と同じ結果に到達することの証明。vbat_true は
     # 意図的に V_BATT_NOMINAL からずらしてあり、実電圧を使わず黙ってノミナル
     # にフォールバックするバグがあればスケール誤差として現れる。
     vbat_true = 3.85    # [V] != V_BATT_NOMINAL (3.7)
@@ -732,7 +732,7 @@ def selftest(verbose=True):
     # above) and confirm the DataFrame front-end (used by `sf sysid rate-fit`
     # on a real vehicle flight-log bundle, AND by the SILS `sysid-gate` on a
     # SILS-recorded bundle) reaches the same fit via input_mode='duty'.
-    # fit_from_df() の回帰確認: 同じ合成フライト（上で作った r/y/duty_fr../
+    # fit_from_df() の再確認試験: 同じ合成フライト（上で作った r/y/duty_fr../
     # vbat_arr を再利用）を最小限の一式 DataFrame に詰め、DataFrame 側の入口
     # （実機フライトログ一式に `sf sysid rate-fit` が使い、かつ SILS
     # `sysid-gate` が SILS 記録の一式に使う）が input_mode='duty' で同じ

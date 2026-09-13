@@ -7,7 +7,7 @@
 /**
  * @file driver/i2c.h
  * @brief Host stub for the legacy ESP-IDF I2C driver
- *        レガシー ESP-IDF I2C ドライバのホスト用スタブ
+ *        レガシー ESP-IDF I2C ドライバのホスト用の代替実装
  *
  * The StampFly firmware uses the new bus/device driver (driver/i2c_master.h)
  * everywhere, but a few legacy/vendor files still pull in this header for the
@@ -17,7 +17,7 @@
  *
  * 本体ファームは新バス/デバイスドライバ（driver/i2c_master.h）を使うが、
  * 一部のレガシー/ベンダファイルがポート型・ポート定数のために本ヘッダを
- * 取り込む。本スタブは最小限のレガシー面（i2c_port_t, I2C_NUM_*,
+ * 取り込む。本代替実装は最小限のレガシー面（i2c_port_t, I2C_NUM_*,
  * マスタ読書きモード）を提供し、再定義を避けるため I2C_NUM_* /
  * i2c_master_* の共有定義を i2c_master.h から再利用する。
  */

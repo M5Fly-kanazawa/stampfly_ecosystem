@@ -9,7 +9,7 @@
 /**
  * @file nvs_shim.cpp
  * @brief In-memory implementation of the NVS host stub
- *        NVS ホストスタブのインメモリ実装
+ *        NVS ホスト用の代替実装のインメモリ実装
  *
  * Keys are global for the run (param/calibration names are unique, so we
  * do not need per-namespace isolation for the SILS). A get on a missing key

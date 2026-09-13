@@ -73,7 +73,7 @@ def _clear_dedicated_context_between_tests(installer: ModuleType):
     """Guard against _DEDICATED state leaking between tests (e.g. a test
     that fails before its own cleanup runs).
     テスト間で _DEDICATED の状態が漏れないようにする(独自の後片付けが
-    走る前に失敗したテスト等への保険)。"""
+    動く前に失敗したテスト等への保険)。"""
     installer.clear_dedicated_context()
     yield
     installer.clear_dedicated_context()
@@ -423,7 +423,7 @@ def test_clean_env_for_cmd_without_dedicated_context_is_unaffected(installer, mo
     falls back to its pre-existing legacy behavior (system Python
     discovery may run; IDF_TOOLS_PATH is not force-set by this function).
     健全性チェック: 専用コンテキストが未設定なら、_clean_env_for_cmd() は
-    既存の旧来動作にフォールバックする(システムPython発見が走りうる。
+    既存の旧来動作にフォールバックする(システムPython発見が動きうる。
     IDF_TOOLS_PATH はこの関数によって強制設定されない)。
     """
     installer.clear_dedicated_context()

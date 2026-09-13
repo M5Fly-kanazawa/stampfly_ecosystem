@@ -45,7 +45,7 @@
  * but the numbers it publishes come from a real, moving sensor, not a canned
  * value.
  *
- * そこで本ファイルは、設計が許す「最小の正直な部分集合」を実装する: 実際の
+ * そこで本ファイルは、設計が許す「最小の実態に合った部分集合」を実装する: 実際の
  * BMI270 を SPI で読み、1つの `IEstimator` 実装の predict() を1ステップ実行し、
  * `sensor_imu` と `estimate_state` の2つの Topic — main.cpp の L1 コードが依存する
  * まさにその2つ — に publish する。校正・フェイルセーフ・離着陸ロジックは無く、

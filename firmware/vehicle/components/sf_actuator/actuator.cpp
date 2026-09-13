@@ -204,7 +204,7 @@ void Actuator::init()
     // Motor HAL is Critical (R4, hardware_init.md §5): no PWM means no thrust.
     // Do not return and let control_task run a dead motor path — halt loudly
     // (no esp_restart, so the cause stays observable; LED pattern is Phase 6).
-    // モータ HAL は Critical (R4, §5): PWM 不能＝推力ゼロ。control_task に死んだ
+    // モータ HAL は Critical (R4, §5): PWM 不能＝推力ゼロ。control_task に機能しない
     // モータ経路を回させず大きく停止する (esp_restart せず原因を保つ。LED は Phase 6)。
     ESP_LOGE(TAG, "CRITICAL: Motor HAL init failed: %s — vehicle cannot fly. Halting.",
              esp_err_to_name(err));
@@ -371,7 +371,7 @@ void Actuator::update()
 
 // -----------------------------------------------------------------------------
 // disarm — drive all motors to zero (safety hook for DISARM transitions)
-// disarm — 全モーターを 0 にする（DISARM 遷移用の安全フック）
+// disarm — 全モーターを 0 にする（DISARM 遷移時に呼ばれる安全処理）
 // -----------------------------------------------------------------------------
 void Actuator::disarm()
 {

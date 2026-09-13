@@ -132,7 +132,7 @@ void EskfEstimator::updateFlow(const FlowData& flow)
 {
     // Wrap-safe dt: unsigned subtraction yields the true elapsed µs even across
     // the uint32 wrap (~71.6 min). Absurd gaps (>1 s) re-seed with the nominal dt.
-    // ラップ安全な dt: 符号なし減算は uint32 ラップ（約71.6分）を跨いでも正しい経過 µs を
+    // 折り返しに安全な dt: 符号なし減算は uint32 の折り返し（約71.6分）を跨いでも正しい経過 µs を
     // 返す。異常な間隔（>1秒）は公称 dt で再シード。
     float dt = 0.01f;
     if (last_flow_time_ != 0) {
@@ -235,8 +235,8 @@ void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel
     // （accel−ba_, gyro−bg_）ので、正しい種は1サイクル目から生オフセットを除去する
     // （未校正の加速度バイアスが姿勢を不安定化する離陸過渡を、ゼロから収束しない）。
     // バイアス共分散は意図的に縮小しない: 通常の共分散を保てば飛行中の緩いバイアス
-    // ドリフト（ランダムウォーク）を追え、ゼロバイアス校正（クリーンな IMU）が厳密
-    // no-op になり、既定 SILS 経路が回帰中立に保たれる。
+    // ドリフト（ランダムウォーク）を追え、ゼロバイアス校正（混入のない IMU）が厳密
+    // no-op になり、既定 SILS 経路が既存動作に影響しない。
     core_.setGyroBias(math::Vec3(gyro_bias[0], gyro_bias[1], gyro_bias[2]));
     core_.setAccelBias(math::Vec3(accel_bias[0], accel_bias[1], accel_bias[2]));
 

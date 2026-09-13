@@ -61,7 +61,7 @@ bool sils_scenario_active(void);
 
 // Driver task: dispatches every event at its virtual time. Spawn only when
 // sils_scenario_load() returned 1. Deletes itself when the timeline is exhausted.
-// ドライバタスク: 各事象を仮想時刻で発火。load が 1 のときだけ起動。完了で自タスク削除。
+// ドライバタスク: 各事象を仮想時刻で作動。load が 1 のときだけ起動。完了で自タスク削除。
 void sils_scenario_driver_task(void* arg);
 
 }  // extern "C"

@@ -7,7 +7,7 @@
 /**
  * @file esp_spiffs.h
  * @brief Host stub for ESP-IDF's SPIFFS VFS integration
- *        ESP-IDF の SPIFFS VFS 連携のホスト用スタブ
+ *        ESP-IDF の SPIFFS VFS 連携のホスト用の代替実装
  *
  * Inert host stubs so the logger/blackbox compile and "mount" harmlessly.
  * Registering returns ESP_OK; esp_spiffs_info() reports zero usage. The
@@ -15,7 +15,7 @@
  * host filesystem is real, so the logger runs without touching real flash.
  *
  * ロガー/ブラックボックスが無害に「マウント」してコンパイルできるよう、
- * ホスト用の不活性スタブを提供する。register は ESP_OK を返し、
+ * ホスト用の不活性な代替実装を提供する。register は ESP_OK を返し、
  * esp_spiffs_info() は使用量ゼロを報告する。base_path 配下の fopen/fwrite は
  * ホストの実ファイルシステムで動作するため、実フラッシュに触れずロガーが動く。
  */
@@ -46,7 +46,7 @@ typedef struct {
 
 /*
  * Register (mount) a SPIFFS partition. Host stub: always succeeds.
- * SPIFFS パーティションを登録（マウント）する。ホストスタブ：常に成功。
+ * SPIFFS パーティションを登録（マウント）する。代替実装：常に成功。
  */
 static inline esp_err_t esp_vfs_spiffs_register(const esp_vfs_spiffs_conf_t* conf)
 {
@@ -56,7 +56,7 @@ static inline esp_err_t esp_vfs_spiffs_register(const esp_vfs_spiffs_conf_t* con
 
 /*
  * Unregister (unmount) a SPIFFS partition. Host stub: always succeeds.
- * SPIFFS パーティションを登録解除（アンマウント）する。ホストスタブ：常に成功。
+ * SPIFFS パーティションを登録解除（アンマウント）する。代替実装：常に成功。
  */
 static inline esp_err_t esp_vfs_spiffs_unregister(const char* partition_label)
 {
@@ -66,7 +66,7 @@ static inline esp_err_t esp_vfs_spiffs_unregister(const char* partition_label)
 
 /*
  * Report total/used bytes of a SPIFFS partition. Host stub: reports zeros.
- * SPIFFS パーティションの総容量/使用量を報告する。ホストスタブ：ゼロを報告。
+ * SPIFFS パーティションの総容量/使用量を報告する。代替実装：ゼロを報告。
  */
 static inline esp_err_t esp_spiffs_info(const char* partition_label,
                                         size_t* total_bytes,
@@ -84,7 +84,7 @@ static inline esp_err_t esp_spiffs_info(const char* partition_label,
 
 /*
  * Whether a SPIFFS partition is mounted. Host stub: reports not mounted.
- * SPIFFS パーティションがマウント済みか。ホストスタブ：未マウントを報告。
+ * SPIFFS パーティションがマウント済みか。代替実装：未マウントを報告。
  */
 static inline bool esp_spiffs_mounted(const char* partition_label)
 {
@@ -94,7 +94,7 @@ static inline bool esp_spiffs_mounted(const char* partition_label)
 
 /*
  * Format a SPIFFS partition. Host stub: always succeeds (no-op).
- * SPIFFS パーティションをフォーマットする。ホストスタブ：常に成功（何もしない）。
+ * SPIFFS パーティションをフォーマットする。代替実装：常に成功（何もしない）。
  */
 static inline esp_err_t esp_spiffs_format(const char* partition_label)
 {
@@ -104,7 +104,7 @@ static inline esp_err_t esp_spiffs_format(const char* partition_label)
 
 /*
  * GC pass over a SPIFFS partition. Host stub: always succeeds (no-op).
- * SPIFFS パーティションの GC を実行する。ホストスタブ：常に成功（何もしない）。
+ * SPIFFS パーティションの GC を実行する。代替実装：常に成功（何もしない）。
  */
 static inline esp_err_t esp_spiffs_gc(const char* partition_label, size_t size_to_gc)
 {

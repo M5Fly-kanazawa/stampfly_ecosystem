@@ -27,7 +27,7 @@
  * 「事実」として保持する（正規化なし）。CommTask が takeLatestInput() で
  * 取り出して sf_command に渡し、sf_command が command_setpoint と pilot_request
  * を発行する。フェイルセーフは msSinceLastPacket() をポーリングしてリンク喪失を
- * 検出する（本モジュールはフェイルセーフを発火しない）。
+ * 検出する（本モジュールはフェイルセーフを作動させない）。
  *
  * @design architecture.md §6 — Communication subsystem                  [OK]
  * @design detailed_design.md §7 — sf_comm component                     [OK]
@@ -140,7 +140,7 @@ void onIpEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
 // WIFI_EVENT handler: SoftAP start = network ready (the AP owns its address
 // immediately, no DHCP wait); STA disconnect = auto-reconnect (router reboot,
 // range drop — telemetry resumes by itself; ESP-NOW is unaffected either way).
-// WIFI_EVENT ハンドラ: SoftAP 開始 = ネットワーク準備完了（AP は即時に自分の
+// WIFI_EVENT ハンドラ: SoftAP 開始 = ネットワーク準備完了（AP は即時に自分自身の
 // アドレスを持ち DHCP 待ちなし）。STA 切断 = 自動再接続（ルータ再起動・距離切れ —
 // テレメトリは自力で復帰。ESP-NOW はいずれでも無影響）。
 void onWifiEvent(void* /*arg*/, esp_event_base_t /*event_base*/,
@@ -232,7 +232,7 @@ void Comm::init()
     // Restore a previously paired controller MAC from NVS. If present we are
     // immediately Paired (register it as a unicast peer); otherwise we stay
     // NotPaired and the StateManager will auto-enter Pairing on the ground.
-    // 以前ペアした相手 MAC を NVS から復元する。あれば即 Paired（ユニキャスト peer 登録）、
+    // 以前ペアした相手局の MAC を NVS から復元する。あれば即 Paired（ユニキャスト peer 登録）、
     // 無ければ NotPaired のままで、StateManager が地上で自動的に Pairing へ入る。
     loadPairingFromNvs();
     if (paired_.load(std::memory_order_acquire)) {
@@ -404,7 +404,7 @@ void Comm::forwardRawInput(const ControlPacket& pkt)
 // layer only EXECUTES (broadcast while Pairing, learn/save the peer MAC, filter
 // crosstalk) and reports the bind status fact on pairing_complete.
 // 旧 vehicle の相互 MAC 学習を踏襲（controller_comm.cpp）。PairingState は StateManager が
-// 所有し pairing_state で発行する。本無線層は実行のみ（Pairing 中の送出、相手 MAC の学習/保存、
+// 所有し pairing_state で発行する。本無線層は実行のみ（Pairing 中の送出、相手局 MAC の学習/保存、
 // 混信フィルタ）を行い、バインド状態の事実を pairing_complete で報告する。
 // =============================================================================
 
@@ -416,7 +416,7 @@ void Comm::forwardRawInput(const ControlPacket& pkt)
 // request: clear any existing bind so a new controller can take over), then while
 // Pairing broadcasts a PairingPacket every kPairingBroadcastMs.
 // update() ごと（50Hz）に呼ばれる。Pairing への立ち上がりエッジ（再ペア要求: 既存バインドを
-// 破棄し新しい相手を受け入れる）を検出し、Pairing 中は kPairingBroadcastMs ごとに送出する。
+// 破棄し新しい相手局を受け入れる）を検出し、Pairing 中は kPairingBroadcastMs ごとに送出する。
 // -----------------------------------------------------------------------------
 void Comm::servicePairing()
 {
@@ -434,7 +434,7 @@ void Comm::servicePairing()
 
     // Rising edge into Pairing = (re-)pair request. Discard any existing bind so
     // a different controller can take over, and force an immediate broadcast.
-    // Pairing への立ち上がり = （再）ペア要求。既存バインドを破棄して別の相手を受け入れ可能に
+    // Pairing への立ち上がり = （再）ペア要求。既存バインドを破棄して別の相手局を受け入れ可能に
     // し、即時送出させる。
     if (now_active && !prev_pairing_active_) {
         if (paired_.load(std::memory_order_acquire)) {
@@ -518,8 +518,8 @@ void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
     // flash write here can trip the WiFi task watchdog (→ reset). CommTask's
     // finalizePendingBind() does the heavy work. The binding packet is not forwarded.
     // ペアリング中かつ未バインド: 最初のコントローラの MAC を「保留バインド」として控える。
-    // ここでは NVS 保存も peer 登録もしない — 本処理は WiFi 受信コールバックで走り、フラッシュ
-    // 書込は WiFi タスクのウォッチドッグ発火(→リセット)を招く。重い処理は CommTask の
+    // ここでは NVS 保存も peer 登録もしない — 本処理は WiFi 受信コールバックで実行され、フラッシュ
+    // 書込は WiFi タスクのウォッチドッグの作動(→リセット)を招く。重い処理は CommTask の
     // finalizePendingBind() が行う。バインド用パケットは転送しない。
     if (pairing && !bound) {
         // Own-address acceptance: a pending-bind candidate is admitted ONLY when
@@ -534,12 +534,12 @@ void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
         // filter fixes. A mismatched packet is counted (pairing_rejected_, a
         // diagnostic surfaced by `pair status`) and otherwise silently dropped,
         // matching this function's "stay light in the RX callback" rule.
-        // 自分宛受理: 保留バインド候補として受理してよいのは「この機体宛」の電文だけ —
+        // 自局宛受理: 保留バインド候補として受理してよいのは「この機体宛」の電文だけ —
         // drone_mac[0..2]（電文仕様の「宛先MAC下位3バイト」）が自MACの下位3バイト
         // （own_mac_[3..5]）と一致すること。同時ペアリング（講習会場で複数組が同時に
         // 行う場合）では隣のコントローラが別の機体を選んでいても（画面選択、W3）同じ
         // チャンネルで送信し続けるため、このチェックが無いと「最初に届いた電文」を
-        // 無条件に相手にしてしまう（本フィルタが直すクロスペアリングの原因そのもの）。
+        // 無条件に相手局にしてしまう（本フィルタが直すクロスペアリングの原因そのもの）。
         // 宛先が違う電文はカウントし（pairing_rejected_、`pair status` で見える診断値）、
         // それ以外は静かに破棄する — 本関数の「RX コールバックは軽量に保つ」規約どおり。
         if (pkt.drone_mac[0] != own_mac_[3] ||
@@ -570,7 +570,7 @@ void Comm::handleControlPacket(const ControlPacket& pkt, const uint8_t* src_mac)
 
     // Bound: drop ControlPackets from any controller other than our peer. A null
     // src_mac (defensive: ESP-IDF always supplies one) must NOT bypass the filter.
-    // バインド済み: 相手以外のコントローラからの ControlPacket は破棄する。src_mac が
+    // バインド済み: 相手局以外のコントローラからの ControlPacket は破棄する。src_mac が
     // null の場合（防御的: ESP-IDF は常に供給する）もフィルタを素通りさせない。
     if (src_mac == nullptr ||
         std::memcmp(src_mac, controller_mac_, 6) != 0) {

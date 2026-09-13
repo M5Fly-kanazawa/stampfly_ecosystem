@@ -12,11 +12,11 @@
 
 ### 設計を貫く3つの同一性（Identity）原則
 
-開発ロードマップ（`development_roadmap.md`）が掲げる、SILS（Software-in-the-Loop, 実機ファームをそのままPC上の物理シミュレータで走らせる試験）と実機を貫く3原則：
+開発ロードマップ（`development_roadmap.md`）が掲げる、SILS（Software-in-the-Loop, 実機ファームをそのままPC上の物理シミュレータで動かす試験）と実機を貫く3原則：
 
 | 原則 | 意味 |
 |------|------|
-| **Code Identity** | SILS も実機も**同一のC++ソース**を走らせる。テスト用の書き直しをしない |
+| **Code Identity** | SILS も実機も**同一のC++ソース**を動かす。テスト用の書き直しをしない |
 | **Param Identity** | ゲイン・フィルタ定数は単一の出所（params SSOT）から両者へ供給する |
 | **Model Identity** | プラントモデルは推測でなく**実機データの同定**で決める。モデルの妥当性が SILS→実機の転送可能性を保証する |
 

@@ -11,7 +11,7 @@
  * @brief L1 application entry point (Topic API) — the seam where the user's own
  *        controller / estimator / tasks are wired into the vehicle body
  *        L1（Topic API）アプリの入口 — ユーザー自身のコントローラ／推定器／
- *        タスクを vehicle 本体に組み込む継ぎ目
+ *        タスクを vehicle 本体に組み込む境界
  *
  * This is the ONE extension point vehicle offers at Tier L1 (architecture.md
  * §2.5): a user who has implemented their own IController / IEstimator, or who
@@ -31,7 +31,7 @@
  *
  * vehicle が Tier L1（architecture.md §2.5）で提供する唯一の拡張点。自作の
  * IController / IEstimator を実装した、あるいは Topic（sf::api::*）を読む
- * 追加タスクを走らせたいユーザーは、既定の代わりにこの 3 関数を提供する。
+ * 追加タスクを実行したいユーザーは、既定の代わりにこの 3 関数を提供する。
  * ControlTask と ImuTask はタスク開始時に controller()/estimator() を 1 回ずつ
  * 呼び、main.cpp は全標準タスク起動後（hardware_init.md §4 Phase 4）に
  * start() を 1 回呼ぶ。

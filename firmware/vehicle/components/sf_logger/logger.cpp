@@ -44,7 +44,7 @@ static constexpr size_t      kMaxFiles         = 5;
 // we use a wraparound counter; once a session ends, the next boot
 // starts at 0 (the application can use NVS to persist this if desired).
 //
-// ESP32 は起動時に RTC を持たないため、ファイル名にはラップアラウンド
+// ESP32 は起動時に RTC を持たないため、ファイル名には折り返し
 // カウンタを使う。NVS への持続化は将来の課題。
 static constexpr const char* kSessionFmt = "/spiffs/log_%03u.bin";
 

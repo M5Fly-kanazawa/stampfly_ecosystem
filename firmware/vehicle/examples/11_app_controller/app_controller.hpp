@@ -44,7 +44,7 @@ namespace sf::app {
 /// — the one exercise hook.
 /// `PidController` を包む薄い `IController` ラッパー。`compute()` を除く
 /// 全メソッドをそのまま転送する。`compute()` の出力だけ `adjust()`
-/// （唯一の演習フック）に通す。
+/// （唯一の挿入点）に通す。
 class AppController : public sf::IController {
 public:
     /// Initialize the wrapped PidController (loads gains, resets state).

@@ -264,7 +264,7 @@ def _write_uninstall_cmd(install_dir: Path) -> Path:
     (release.yml install smoke test, this session) and on a real Windows
     machine in a later session — the author has no Windows hardware.
     このスクリプトの Windows 実機検証は先送りする: CI（release.yml の
-    インストールスモークテスト、本セッション）と、後日の実 Windows 環境
+    インストールの最小動作確認、本セッション）と、後日の実 Windows 環境
     セッションで検証する（担当者は Windows 実機を保有しない）。
     """
     script_path = install_dir / UNINSTALL_SCRIPT_NAME

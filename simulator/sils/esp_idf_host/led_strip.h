@@ -13,7 +13,7 @@
  * RMT. LEDs are not flight-critical, so on the host this is an inert stub (no RMT
  * dependency). A faithful capture of pixel state can be added in E4 if needed.
  * StampFly の LED HAL は RMT 経由で led_strip を使う。LED は飛行クリティカルでない
- * ので、ホストでは inert スタブ（RMT 非依存）。E4 で画素状態の記録を足してもよい。
+ * ので、ホストでは不活性な代替実装（RMT 非依存）。E4 で画素状態の記録を足してもよい。
  */
 
 #pragma once
@@ -41,7 +41,7 @@ typedef enum {
 } led_color_component_format_t;
 
 // RMT clock source (driver/rmt). Default suffices on the inert host stub.
-// RMT クロック源。inert なホストスタブでは default で十分。
+// RMT クロック源。inert なホスト用の代替実装では default で十分。
 #ifndef RMT_CLK_SRC_DEFAULT
 #define RMT_CLK_SRC_DEFAULT 0
 #endif

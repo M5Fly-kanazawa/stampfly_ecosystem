@@ -221,7 +221,7 @@ class ParamCheck:
 #
 # Phase 1（spec YAML→コード生成、docs/architecture/simulation-policy.md
 # 参照）: これらの EXPECTED_* は、もうこのファイルへ手書きされたリテラルでは
-# ない。（ファイル冒頭で）唯一の正である YAML
+# ない。（ファイル冒頭で）基準となる YAML
 # （control/models/stampfly_physical.yaml）から `sf params generate` が
 # 機械生成する tools/sysid/_generated_params.py から import する。値を
 # 変更する場合はその YAML を編集し `sf params generate` を実行、両方を

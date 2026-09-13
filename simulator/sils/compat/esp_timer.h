@@ -9,7 +9,7 @@
 /**
  * @file esp_timer.h
  * @brief Host stub for esp_timer — exposes the SILS virtual clock
- *        esp_timer のホスト用スタブ — SILS の仮想時計を公開する
+ *        esp_timer のホスト用の代替実装 — SILS の仮想時計を公開する
  *
  * The firmware uses esp_timer_get_time() as a microsecond monotonic clock.
  * On the SILS this MUST be the simulation's virtual time (driven by the
@@ -48,7 +48,7 @@ int64_t esp_timer_get_time(void);
 // scheduler's advance phase and typically does xTaskNotifyGive.
 // 周期タイマ API（400Hz IMU ループの駆動に本体が使う部分集合）。SILS では RTOS
 // エミュレータのスケジューラに決定論的な仮想時計起床源を登録する（rtos/
-// esp_timer_shim.cpp 参照）。コールバックは advance フェーズで走り、通常
+// esp_timer_shim.cpp 参照）。コールバックは advance フェーズで動き、通常
 // xTaskNotifyGive を行う。
 // -----------------------------------------------------------------------------
 

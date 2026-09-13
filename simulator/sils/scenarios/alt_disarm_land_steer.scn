@@ -10,9 +10,9 @@
 # craft (tilt_max > 6°) — the centered-stick twin alt_disarm_land holds tilt ≈ 0.
 # A failsafe (comm-loss) landing instead stays LEVEL — see commloss_land_level.scn.
 #
-# 着陸則の統一（INV-1/INV-2, リファクタA）の回帰ガード: パイロット指令の自動着陸（ALT_HOLD
+# 着陸則の統一（INV-1/INV-2, リファクタA）の既存動作の破壊を防ぐ試験: パイロット指令の自動着陸（ALT_HOLD
 # での DISARM）は操縦可 — リンク生存中はパイロットが roll/pitch/yaw を保ち、鉛直チャネルだけ
-# 自動降下。旧 computeLanding() は水平強制（roll_sp=pitch_sp=0）で着陸中スティックが死んだ
+# 自動降下。旧 computeLanding() は水平強制（roll_sp=pitch_sp=0）で着陸中スティックが応答しなくなった
 # （実機バグ）。Landing を単一パイプラインの VerticalPhase にしたので、降下中にロールを保持
 # すると機体が傾く（tilt_max>6°）。中立版 alt_disarm_land は tilt≈0。フェイルセーフ着陸は水平
 # （commloss_land_level.scn）。

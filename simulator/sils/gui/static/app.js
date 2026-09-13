@@ -163,7 +163,7 @@ function fmt(v) { return Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : St
 async function run() {
   const btn = $('runBtn'); btn.disabled = true;
   setVerdict('run', '実行中…');
-  $('scene-msg').textContent = '実行中… 物理シミュレーションを走らせています';
+  $('scene-msg').textContent = '実行中… 物理シミュレーションを動かしています';
   $('scene-msg').style.display = 'flex';
   const sel = $('scnSelect').value;
   // If the events were edited (or it's a new scenario), run as custom; else run the saved file.

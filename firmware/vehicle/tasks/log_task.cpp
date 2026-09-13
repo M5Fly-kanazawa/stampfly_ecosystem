@@ -36,7 +36,7 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "logger.hpp"
-#include "params.hpp"   // log.blackbox.enable gate / Blackbox 有効化判定
+#include "params.hpp"   // log.blackbox.enable gate / Blackbox 有効化の条件
 
 static const char* TAG = "LogTask";
 

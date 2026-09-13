@@ -133,7 +133,7 @@ spi_host_device_t imu_spi();
  *
  * StampFly ではフローセンサは IMU と物理的に同一 SPI バスを共有する (CS は別)
  * ため imu_spi() と同じ値を返す。2 つの論理的借用者を明示する目的で別 getter に
- * している (R1): IMU とフローはそれぞれ自分の getter で board 所有バスを借りる。
+ * している (R1): IMU とフローはそれぞれ自分自身の getter で board 所有バスを借りる。
  *
  * @return SPI host enum value (currently SPI2_HOST, shared with the IMU).
  */

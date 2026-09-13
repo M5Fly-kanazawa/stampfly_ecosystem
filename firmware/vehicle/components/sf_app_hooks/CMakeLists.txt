@@ -18,7 +18,7 @@
 # 与えられたら、そのディレクトリの *.cpp が app_default.cpp の代わりに
 # sf::app::* を実装する。それらアプリソースは本コンポーネントではなく main
 # コンポーネントへ直接コンパイルする（../../main/CMakeLists.txt 参照）—
-# main の REQUIRES をそのまま共有でき、コンポーネントが自分の利用者へ逆向きの
+# main の REQUIRES をそのまま共有でき、コンポーネントが自分自身の利用者へ逆向きの
 # 依存辺を持たずに済む。この場合 app_default.cpp は除外する（アプリ自身の
 # *.cpp が controller()/estimator()/start() を提供するため）が、
 # stock_hooks.cpp は常にここでコンパイルする — app_default.cpp とアプリ自身の

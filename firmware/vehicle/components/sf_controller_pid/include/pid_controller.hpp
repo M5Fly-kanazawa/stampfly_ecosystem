@@ -211,13 +211,13 @@ private:
     // in-flight switch) and reset(). RC-only: guidance/API drives altitude via the
     // walking setpoint, not the throttle path, so the gate never blocks an API flight.
     // No timeout — re-centering the throttle is the pilot's natural next action.
-    // スロットル再センター判定（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
+    // スロットル再センターロック（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
     // 進入直後はスロットルが中央から外れていることがあり、それを即座に上昇/下降指令と
-    // みなすと高度がジャンプする。判定はスティックが初めて中央デッドゾーン内に入るまで
-    // 「閉」（高度に対しスロットル無視）で、その後「開」いて通常どおり上昇/下降を指令する。
+    // みなすと高度がジャンプする。ロックはスティックが初めて中央デッドゾーン内に入るまで
+    // 「掛かった」状態（高度に対しスロットル無視）で、中央に戻ると「解除」されて通常どおり上昇/下降を指令する。
     // onTakeoff（Case A: 地上 ARM）・ALT/POS への onModeChange（Case B: 飛行中切替）・
-    // reset() で閉じる。RC 限定: 誘導/API は歩く設定点で高度を動かしスロットル経路を使わない
-    // ため、API 飛行を判定が妨げることはない。タイムアウトなし — スロットルを中央へ戻すのは
+    // reset() でロックを掛ける。RC 限定: 誘導/API は歩く設定点で高度を動かしスロットル経路を使わない
+    // ため、API 飛行をロックが妨げることはない。タイムアウトなし — スロットルを中央へ戻すのは
     // パイロットの自然な次動作。
     bool  throttle_recentered_ = false;
     float gravity_        = math::kGravity;  // [m/s²] accel→tilt mapping in POS_HOLD (SSOT: sf::math)
@@ -357,7 +357,7 @@ private:
     // （STABILIZE / ALT_HOLD / POS_HOLD / Landing）で1点、POS_HOLD 上書きと Landing
     // 水平判定の後。角度ループが機体をこの傾きへ駆動し、CG オフセットやセンサ水平
     // バイアス由来の定常水平ドリフトを推力を余分に食わず打ち消す。飛行で同定（sf trim
-    // analyze）— 真の平衡傾きは地上で知り得ない。
+    // analyze）— 真の平衡傾きは地上では判別できない。
     float roll_trim_  = 0.0f;  // [rad] roll equilibrium tilt (param attitude.roll.trim)
     float pitch_trim_ = 0.0f;  // [rad] pitch equilibrium tilt (param attitude.pitch.trim)
 
@@ -517,7 +517,7 @@ private:
     //     平均を取り（その間 d_hat=0）、その定常状態へ Q+ウォッシュアウトを
     //     プリセット。
     //  2) 高速整定: プライム後 kDobEngageRampCycles の間、ウォッシュアウトを
-    //     短時定数 kDobWashoutFastTauS で走らせ、プライム誤差（過渡汚染）を
+    //     短時定数 kDobWashoutFastTauS で動かし、プライム誤差（過渡汚染）を
     //     通常の約5秒でなく約0.5秒で忘れる。
     //  3) ランプ: 適用する d_hat を同じ窓で 0→1 に線形で立ち上げ、整定中の
     //     フィルタ挙動が推力にステップを入れないようにする。
@@ -674,9 +674,9 @@ private:
     // ロバストな「片側到達」＋タイムアウト・バックストップ:
     //   到達 = 高度が目標の kTakeoffCaptureBandM 以内まで上昇（片側, altitude>=target-band）を
     //          kTakeoffSettleCycles 持続。backstop = TakeoffClimb で kTakeoffMaxCycles 経過で無条件完了。
-    // 旧来の両側バンド+低速整定は実機で発火しなかった: 定常偏差（実保持高度≠setpoint）や鉛直速度
+    // 旧来の両側バンド+低速整定は実機で成立しなかった: 定常偏差（実保持高度≠setpoint）や鉛直速度
     // ノイズで窓に入らず、機体が TakeoffClimb に留まりロール/ピッチが0固定された（compute 行~190）。
-    // 片側到達は偏差非依存（上昇途中で発火）、タイムアウトは必ず TakeoffClimb を抜けることを保証し
+    // 片側到達は偏差非依存（上昇途中で成立）、タイムアウトは必ず TakeoffClimb を抜けることを保証し
     // パイロットが姿勢制御を取り戻す。Airborne ALT_HOLD は alt_setpoint_=target を保持（決定②）し
     // 行き過ぎを吸収する。
     static constexpr float    kTakeoffCaptureBandM = 0.05f;  // [m] reach within 5 cm below target

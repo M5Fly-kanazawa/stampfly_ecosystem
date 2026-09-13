@@ -445,7 +445,7 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate',
     _anim_time_ref = Render  # Access anim_time via Render.anim_time
 
     # Full loop timing diagnostics (measure total iteration overhead)
-    # フルループタイミング診断（イテレーション全体のオーバーヘッドを計測）
+    # フルループタイミング診断（反復全体のオーバーヘッドを計測）
     full_loop_times = []
 
     try:

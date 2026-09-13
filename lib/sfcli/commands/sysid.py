@@ -781,7 +781,7 @@ def run_fit(args: argparse.Namespace) -> int:
     for axis, r in results.items():
         # K's reference/units depend on which mixer produced it -- see
         # PlantFitResult.to_dict() in plant_fit.py for the same logic.
-        # K の参照値・単位は、どちらのミキサーが生成したかで異なる --
+        # K の基準値・単位は、どちらのミキサーが生成したかで異なる --
         # plant_fit.py の PlantFitResult.to_dict() と同じロジック。
         ref_gains = REFERENCE_PLANT_GAINS_VEHICLE if r.mixer == 'vehicle' else REFERENCE_PLANT_GAINS
         K_unit = "rad/s^2 per Nm" if r.mixer == 'vehicle' else "rad/s^2 per differential duty"

@@ -63,7 +63,7 @@ constexpr uint8_t kFlagPosMode = 0x10;
 // この機体自身の MAC 下位3バイト — Pairing 中に保留バインド候補として受理される
 // ために正しく宛先指定された ControlPacket が持つべき drone_mac の値
 // （pairing-methods-plan.md §4.1）。Comm::init() が own_mac_ に使うのと同じホスト
-// シム（esp_wifi_get_mac(WIFI_IF_STA)）を読むため、本体の自分宛フィルタが照合する
+// シム（esp_wifi_get_mac(WIFI_IF_STA)）を読むため、本体の自機宛フィルタが照合する
 // 値とずれない。
 void own_drone_mac(uint8_t out[3]);
 
@@ -74,7 +74,7 @@ void own_drone_mac(uint8_t out[3]);
 // Layout: [0..2]=drone_mac, [3..4]=throttle, [5..6]=roll, [7..8]=pitch,
 // [9..10]=yaw, [11]=flags, [12]=reserved, [13]=checksum (sum of bytes 0..12).
 // 14 バイト ControlPacket を `out` に構築。drone_mac は宛先3バイト（bytes 0..2）—
-// 通常は own_drone_mac() を渡し Pairing 中に受理されるようにする。自分宛フィルタ
+// 通常は own_drone_mac() を渡し Pairing 中に受理されるようにする。自機宛フィルタ
 // 自体を試すシナリオは別の3バイト（「誤った機体」）を渡す。
 void build_control_packet(uint8_t* out, const uint8_t drone_mac[3], uint16_t throttle,
                           uint16_t roll, uint16_t pitch, uint16_t yaw, uint8_t flags);
@@ -103,9 +103,9 @@ void inject_rc_foreign(uint16_t throttle, uint16_t roll, uint16_t pitch, uint16_
 // "Controller A" addresses a DIFFERENT vehicle (drone_mac != own_drone_mac()) from
 // a source MAC of its own. The vehicle's own-address filter must REJECT this as a
 // pending-bind candidate while Pairing — it must never bind to Controller A.
-// 2台コントローラのペアリング試験（pairing-methods-plan.md §4.4、自分宛フィルタ）:
+// 2台コントローラのペアリング試験（pairing-methods-plan.md §4.4、自機宛フィルタ）:
 // 「コントローラA」は別の機体宛（drone_mac != own_drone_mac()）に、専用の送信元 MAC
-// から送る。機体の自分宛フィルタは Pairing 中の保留バインド候補として棄却しなければ
+// から送る。機体の自機宛フィルタは Pairing 中の保留バインド候補として棄却しなければ
 // ならない — コントローラAにバインドしてはならない。
 void inject_rc_controller_a(uint16_t throttle, uint16_t roll, uint16_t pitch,
                             uint16_t yaw, uint8_t flags);

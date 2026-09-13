@@ -150,7 +150,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 
 | ファイル:行 | 参照 | 判定 | 根拠（要約） |
 |---|---|---|---|
-| estimator.hpp:29–85（7件） | requirements §4/§10, architecture §2, detailed_design §5, coding §2 | OK | `IEstimator` 純粋仮想IF＝差替可能性、predict/update*/getState/reset 一致、観測スイッチ規約、バイリンガル準拠 |
+| estimator.hpp:29–85（7件） | requirements §4/§10, architecture §2, detailed_design §5, coding §2 | OK | `IEstimator` 純粋仮想IF＝差し替え可能性、predict/update*/getState/reset 一致、観測スイッチ規約、バイリンガル準拠 |
 | estimator.hpp:203 | detailed_design §3 onEnter(LANDING→IDLE) bias freeze | **NG** | §3 注3 で bias freeze は見送り確定。`freezeBias()` は capability 残置・未配線。タグ説明が実態と乖離 → 文言修正で OK 化 |
 | estimator.hpp:210 | detailed_design §3 onEnter(TAKEOFF→FLYING) bias unfreeze | **NG** | 同上（`unfreezeBias()`） |
 | estimator.hpp:223 | architecture §4 ground→flight covariance handoff | OK | `inflateCovariance(mask)` が状態 x を保持し姿勢共分散のみ膨張（SILS掃引確定） |
@@ -158,7 +158,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 | eskf_core.hpp:20 | requirements §4 #2 | OK | 15状態 [pos,vel,att_err,bg,ba] の状態推定 |
 | eskf_core.hpp:21 | architecture §3 — Sensor observation switch | **STALE** | 「観測スイッチ」は detailed_design §5。architecture §3（インターフェース設計）に該当記述なし |
 | eskf_core.cpp:28 | detailed_design §5 IEstimator | OK | χ² 判定（カイ二乗判定）・Adaptive R・線形化バイアスも §5「ESKF実装の特性」と整合 |
-| complementary_estimator.hpp:29 | requirements §10 | OK | ESKF と差替可能な2つ目の IEstimator |
+| complementary_estimator.hpp:29 | requirements §10 | OK | ESKF と差し替え可能な2つ目の IEstimator |
 | complementary_estimator.hpp:30 | coding_and_education §… 22_custom_estimator | OK | 題材は §3 Examples Plan に実在（節番号 `§…` は §3 へ確定が望ましい） |
 
 ### 5-3. sf_core（12 OK / 0 NG / 1 STALE）
@@ -175,7 +175,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 
 | ファイル:行 | 参照 | 判定 | 根拠（要約） |
 |---|---|---|---|
-| controller.hpp:30–55（6件） | requirements §4/§10, architecture §2, detailed_design §4, coding §2 | OK | `IController::compute/reset/onModeChange`＝差替可能な統一IF。型安全な `onModeChange(FlightMode)` は設計より厳格 |
+| controller.hpp:30–55（6件） | requirements §4/§10, architecture §2, detailed_design §4, coding §2 | OK | `IController::compute/reset/onModeChange`＝差し替え可能な統一IF。型安全な `onModeChange(FlightMode)` は設計より厳格 |
 | pid_controller.cpp:22,23 / pid_controller.hpp:14,15 | requirements §4, detailed_design §4 | OK | `PidController : IController` カスケード実装 |
 | pid.hpp:23 | detailed_design §4 — 離散化方式 | OK | 積分=台形・微分=bilinear（α=2ηTd/dt 等）・Kp は filter 外、η=0.125 まで式が完全一致 |
 | failsafe.cpp:15 | requirements §9 | **NG** | impact 4.0G(≠3.0G)・gyro 1000dps(≠800)・low 3.3V(≠3.4V)・連続2回判定なし |

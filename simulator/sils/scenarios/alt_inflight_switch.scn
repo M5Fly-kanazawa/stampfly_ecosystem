@@ -1,5 +1,5 @@
 # alt_inflight_switch.scn — in-flight switch INTO ALT_HOLD + re-center gate (Case B)
-#                          飛行中の ALT_HOLD 進入＋再センター判定（Case B）  (new 2026-06-14)
+#                          飛行中の ALT_HOLD 進入＋スロットル再センターロック（Case B）  (new 2026-06-14)
 #
 # Spec under test (2026-06-14 redesign — Case B of the re-center gate):
 #   The craft auto-takes-off in ALT_HOLD to 0.5 m (deterministic start), drops to
@@ -18,11 +18,11 @@
 # from the original design (15.0/17.0/20.5/21.5) because E's dwell was trimmed 1500ms→
 # 1200ms (see row E below) — all downstream absolute times move with it.
 #
-# 検証する仕様（2026-06-14 再設計 — 再センター判定の Case B）:
+# 検証する仕様（2026-06-14 再設計 — スロットル再センターロックの Case B）:
 #   ALT_HOLD で 0.5 m へ自動離陸（決定論的な起点）→ 一瞬 STABILIZE（手動スロットル≈ホバーで
 #   ~0.5 m 保持）→ スロットルを中央から外したまま ALT_HOLD へ戻す。その STABILIZE→ALT_HOLD
-#   切替で制御器が現在高度を捕捉し再センター判定を閉じるため、中央外スロットルは高度を
-#   ジャンプさせず保持する。中央復帰(2048)で判定が開き、上げ(4095)で上昇する。
+#   切替で制御器が現在高度を捕捉しスロットル再センターロックを掛けるため、中央外スロットルは高度を
+#   ジャンプさせず保持する。中央復帰(2048)でロックが解除され、上げ(4095)で上昇する。
 #
 # ALT_HOLD throttle is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]: 2048=0=HOLD,
 # up(>2048)=climb, down(<2048)=descend. STABILIZE throttle is [0,1] (2048=0=off).

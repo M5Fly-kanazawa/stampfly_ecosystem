@@ -7,7 +7,7 @@
 /**
  * @file driver/ledc.h
  * @brief Host stub for the ESP-IDF LEDC (PWM) driver
- *        ESP-IDF LEDC（PWM）ドライバのホスト用スタブ
+ *        ESP-IDF LEDC（PWM）ドライバのホスト用の代替実装
  *
  * Provides the ledc_* API surface (types, enums, configs, functions) so the
  * real StampFly firmware (motor + buzzer drivers) compiles and links on a PC.
@@ -160,7 +160,7 @@ typedef struct {
 } ledc_channel_config_t;
 
 /* -------------------------------------------------------------------------
- * Stub function bodies (inert) / スタブ関数本体（無動作）
+ * Stub function bodies (inert) / 代替実装の関数本体（無動作）
  * ---------------------------------------------------------------------- */
 
 // Configure a LEDC timer (no-op on host)

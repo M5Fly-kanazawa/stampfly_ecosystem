@@ -246,7 +246,7 @@ def check_windows_scripts_are_ascii() -> None:
     This guard stops the exception from being reintroduced.
     cp932 コンソール(日本語 Windows)の cmd.exe は .bat の UTF-8 日本語
     バイトを生バイトとして読み、一部がコマンド区切り(& | < >)にデコード
-    されるため、日本語入りの REM 行が自分の一部を実行してしまう
+    されるため、日本語入りの REM 行が自分自身の一部を実行してしまう
     (2026-07-20 に setup_env.bat が "'<文字化け>' は認識されていません" を
     出したのを観測)。よってこれらのスクリプトはリポジトリのバイリンガル
     コメント規則の ASCII 限定例外(生成される uninstall.cmd が既に明記する

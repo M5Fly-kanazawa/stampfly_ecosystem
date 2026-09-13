@@ -53,7 +53,7 @@ enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api };
 // DIFFERENT vehicle; rc_ctrl_b: addresses THIS vehicle) — pairing-methods-plan.md
 // §4.4.
 // "rc" 系事象がどの注入元を使うか: ペア送信機(rc)、バインド後に試す別の未ペア送信機
-// (rc_foreign — 混信試験)、または自分宛フィルタ試験の2役(rc_ctrl_a: 別の機体宛、
+// (rc_foreign — 混信試験)、または自機宛フィルタ試験の2役(rc_ctrl_a: 別の機体宛、
 // rc_ctrl_b: この機体宛) — pairing-methods-plan.md §4.4。
 enum class RcSource { Paired, Foreign, ControllerA, ControllerB };
 
@@ -254,7 +254,7 @@ int sils_scenario_load(const char* path)
         // single-threaded driver runs events sequentially, so an absolute time
         // landing inside a prior rc hold/ramp would fire late and silently. '+'
         // resolves to exactly prev_end_us, so relative events always pass.
-        // 直前事象の終了より前に始まる事象は拒否（逐次ドライバで遅延発火＝見えない不具合に）。
+        // 直前事象の終了より前に始まる事象は拒否（逐次ドライバで遅延作動＝見えない不具合に）。
         if (!g_events.empty() && at_us < prev_end_us) {
             char m[96];
             std::snprintf(m, sizeof(m),
@@ -281,7 +281,7 @@ int sils_scenario_load(const char* path)
             // Same grammar as rc.
             // rc_foreign は同一の ControlPacket を別の送信機 MAC から注入する — ペアリングの
             // 混信フィルタが未ペア送信機のパケットを破棄することの検証に使う。rc_ctrl_a/
-            // rc_ctrl_b は2台コントローラの自分宛フィルタ試験（pairing-methods-plan.md
+            // rc_ctrl_b は2台コントローラの自機宛フィルタ試験（pairing-methods-plan.md
             // §4.4）: rc_ctrl_a は別の機体宛（バインド候補として棄却されるべき）、rc_ctrl_b
             // はこの機体宛（バインドされるべき）。文法は rc と同じ。
             long v[5];
@@ -491,7 +491,7 @@ void sils_scenario_driver_task(void* /*arg*/)
                 // one of the two own-address-filter test roles (rc_ctrl_a/rc_ctrl_b
                 // — pairing-methods-plan.md §4.4).
                 // 注入元を選ぶ: ペア済み送信機（rc）、別の未ペア送信機（rc_foreign — 混信
-                // フィルタを試す）、または自分宛フィルタ試験の2役（rc_ctrl_a/rc_ctrl_b —
+                // フィルタを試す）、または自機宛フィルタ試験の2役（rc_ctrl_a/rc_ctrl_b —
                 // pairing-methods-plan.md §4.4）。
                 void (*inject)(uint16_t, uint16_t, uint16_t, uint16_t, uint8_t) =
                     &sils::inject_rc;

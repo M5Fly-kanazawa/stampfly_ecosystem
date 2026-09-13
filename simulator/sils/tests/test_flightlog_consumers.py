@@ -204,7 +204,7 @@ def _import_server():
 def test_server_read_flightlog_legacy_shape(full_bundle_dir):
     """The 20 legacy columns come back, all the same length, with alt/roll in the
     units app.js expects (metres / degrees).
-    旧20列が全て同じ長さで返り、alt/roll は app.js が期待する単位（メートル／度）。
+    旧20列が全て同じ長さで返り、alt/roll は app.js が想定する単位（メートル／度）。
     """
     server = _import_server()
     traj = server.read_flightlog(full_bundle_dir)

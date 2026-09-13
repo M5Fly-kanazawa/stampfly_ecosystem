@@ -7,10 +7,10 @@
 # After the calibration finishes it re-attempts ARM (a fresh rising edge) and expects it
 # ACCEPTED. Proves the pre-arm calibration gate actually gates.
 #
-# 起動校正は地上で約 3.5 秒走る（整定 1 秒 + 平均 2.5 秒）。本シナリオは ~1.5 秒で
+# 起動校正は地上で約 3.5 秒動く（整定 1 秒 + 平均 2.5 秒）。本シナリオは ~1.5 秒で
 # ARM を試み（校正がまだ収集中）、requestArm() が拒否すること（"boot calibration not
-# complete"）を期待する。校正完了後に再度 ARM（新しい立ち上がりエッジ）し、受理される
-# ことを期待する。ARM 前キャリブ判定が実際に判定することを実証。
+# complete"）を想定する。校正完了後に再度 ARM（新しい立ち上がりエッジ）し、受理される
+# ことを想定する。ARM 前キャリブ判定が実際に判定することを実証。
 #
 # Run: sf sils scenario simulator/sils/scenarios/prearm.scn --target vehicle
 #

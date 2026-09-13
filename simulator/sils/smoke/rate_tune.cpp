@@ -20,7 +20,7 @@
  *
  * 閉ループホバーで 1 rad/s のヨー指令が 0.05 rad/s しか追従しないと判明。ミキサーが
  * ヨーを kappa(0.00971) で縮小するため、ヨーゲインはロール/ピッチの ~1/kappa 倍要る。
- * 本ハーネスはヨーレートのステップを与えて追従を報告し、ゲインを掃引できる
+ * 本試験プログラムはヨーレートのステップを与えて追従を報告し、ゲインを掃引できる
  * （CLAUDE.md: 制御パラメータは SILS の数値裏付けが必須）。ゲインはコントローラが
  * 読む前にパラメータ系へ実行時注入するので、掃引は実行の繰り返しだけ。
  *
@@ -44,7 +44,7 @@ void ImuTask(void*);
 void ControlTask(void*);
 void StateTask(void*);
 // ControlTask self-registers its handle (sf::tasks::control_handle(), R3).
-// ControlTask が自分のハンドルを登録する（sf::tasks::control_handle(), R3）。
+// ControlTask が自分自身のハンドルを登録する（sf::tasks::control_handle(), R3）。
 
 using sils::rtos::Scheduler;
 
@@ -158,7 +158,7 @@ int main(int argc, char** argv)
     xTaskCreatePinnedToCore(ControlTask, "ControlTask", config::STACK_CONTROL,
                             nullptr, config::PRIORITY_CONTROL, &hc, 1);
     // ControlTask registers its own handle in setup (sf::tasks::control_handle()).
-    // ControlTask は setup で自分のハンドルを登録する。
+    // ControlTask は setup で自分自身のハンドルを登録する。
     xTaskCreatePinnedToCore(ImuTask,     "ImuTask",     config::STACK_IMU,
                             nullptr, config::PRIORITY_IMU,     &hi, 1);
 

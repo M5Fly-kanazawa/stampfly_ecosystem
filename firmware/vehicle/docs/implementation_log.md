@@ -37,15 +37,15 @@
 | 2026-04-12 | 08:49 | 08:51 | 2min | sf_state（状態管理：enum定義、StateManager、遷移テーブル、アラート処理） | flight_state.hpp, state_manager.hpp, state_manager.cpp | 216145d |
 | 2026-04-12 | 08:54 | 08:56 | 2min | sf_estimator + sf_controller（インターフェース定義、ヘッダーのみ） | estimator.hpp, controller.hpp | 355e453 |
 | 2026-04-12 | 08:58 | 09:09 | 11min | HAL 10コンポーネントコピー + led_strip依存解決 + ビルド確認 | sf_hal_* (371ファイル), idf_component.yml | fdf7821 |
-| 2026-04-12 | 09:15 | 09:19 | 4min | メインパイプライン: スタブ推定器/制御器 + 3タスク(IMU/Control/State) + main.cpp結合 | eskf_estimator, pid_controller, imu_task, control_task, state_task, tasks.hpp, main.cpp更新 | 92444be |
+| 2026-04-12 | 09:15 | 09:19 | 4min | メインパイプライン: 簡易実装の推定器/制御器 + 3タスク(IMU/Control/State) + main.cpp結合 | eskf_estimator, pid_controller, imu_task, control_task, state_task, tasks.hpp, main.cpp更新 | 92444be |
 | 2026-04-12 | 09:20 | 09:24 | 4min | 残り11タスク全実装 + main.cpp全タスク起動 | flow/mag/baro/tof/power/comm/telemetry/button/notify/cli/log_task.cpp | dcbec3d |
 | 2026-04-12 | 09:40 | 09:43 | 3min | パラメータシステム完全実装（45パラメータ、NVS永続化、API） | params.hpp, params.def, params.cpp更新 | 0e55cf9 |
-| 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。スタブに戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | 4f21b89 |
+| 2026-04-12 | 09:46 | 10:05 | 19min | ESKF移植試行→旧コードコピーアプローチを撤回。簡易実装に戻し、数学的基礎からの新規実装方針に変更 | eskf_estimator戻し、旧eskf_core/algo_*削除 | 4f21b89 |
 | 2026-04-12 | 10:01 | 10:08 | 7min | ESKF新規実装（数学的基礎から）+ sf_math数学ライブラリ新規作成 | eskf_core.hpp/cpp(832行), sf_math.hpp(154行), eskf_estimator更新(143行) 合計1129行 | c40717c |
 | 2026-04-12 | 10:09 | 10:11 | 2min | PIDカスケード制御新規実装 | pid.hpp(79行), pid_controller.hpp(60行), pid_controller.cpp(198行) 合計337行 | 6c0ef53 |
 | 2026-04-12 | 10:12 | 10:32 | 20min | 残り9サービスコンポーネント一括実装 | sf_actuator, sf_comm, sf_command, sf_telemetry, sf_logger, sf_notify, sf_failsafe, sf_takeoff_landing, sf_calibration (27ファイル) | 63e4bc3 |
 | 2026-04-12 | 10:36 | 10:40 | 4min | HAL結合試行→API不一致のためTODO化、全コンポーネント依存追加 | 全タスクファイル更新、CMakeLists.txt全HAL依存追加 | c855700 |
-| 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hスタブ | c033ad7 |
+| 2026-04-12 | 10:50 | 10:51 | 1min | PC単体テスト作成・全18テスト合格 | test_main.cpp(18テスト: sf_math 9, ESKF 5, PID 4), Makefile, esp_log.hの代替実装 | c033ad7 |
 | 2026-04-12 | 10:54 | 11:01 | 7min | Examples Level 1（8個）作成 | 01_blink_led〜08_battery_monitor、各4ファイル(32ファイル) | e0db046 |
 | 2026-04-12 | 11:02 | 11:15 | 13min | SILSシミュレータ初版作成（物理モデル+パイプライン結合）→ モデル精度問題発覚 | quad_model.hpp, sils_main.cpp, Makefile | — |
 | 2026-04-12 | 11:15 | 11:45 | 30min | SILSモデル精査: 座標系整合性調査、ノイズモデル設計レポート | 座標系不整合4箇所発見、加速度計の計算の致命的誤り特定 | — |
@@ -91,11 +91,11 @@
 | sf_controller_pid（PID実装） | 2026-04-12 | 2026-04-12 | 2min | 337 | カスケードPID完了（Rate/Attitude/Altitude/Position） |
 | sf_actuator（ミキサー+モーター） | 2026-04-12 | 2026-04-12 | 20min | — | ミキサー完全実装 |
 | sf_command（コマンド処理） | 2026-04-12 | 2026-04-12 | ↑ | — | 正規化+デッドバンド実装 |
-| sf_comm（通信） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（ESP-NOW/UDP TODO） |
+| sf_comm（通信） | 2026-04-12 | 2026-04-12 | ↑ | — | 代替実装（ESP-NOW/UDP TODO） |
 | sf_failsafe（フェイルセーフ） | 2026-04-12 | 2026-04-12 | ↑ | — | チェック関数実装 |
 | sf_takeoff_landing（離着陸MGR） | 2026-04-12 | 2026-04-12 | ↑ | — | ToF検出ロジック実装 |
-| sf_logger（データロガー+Blackbox） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（SPIFFS TODO） |
-| sf_telemetry（テレメトリ） | 2026-04-12 | 2026-04-12 | ↑ | — | スタブ（UDP TODO） |
+| sf_logger（データロガー+Blackbox） | 2026-04-12 | 2026-04-12 | ↑ | — | 代替実装（SPIFFS TODO） |
+| sf_telemetry（テレメトリ） | 2026-04-12 | 2026-04-12 | ↑ | — | 代替実装（UDP TODO） |
 | sf_notify（通知） | 2026-04-12 | 2026-04-12 | ↑ | — | LEDパターンテーブル実装 |
 | sf_calibration（キャリブレーション） | 2026-04-12 | 2026-04-12 | ↑ | — | 平均計算+レベル補正実装 |
 | HALドライバ群（コピー+適応） | 2026-04-12 | 2026-04-12 | 11min | 371 | ビルド成功（コピー完了、適応はTODO） |

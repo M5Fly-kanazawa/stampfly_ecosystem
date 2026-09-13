@@ -26,7 +26,7 @@ Linux）版を用意する。
 | GUI ツールキット | tkinter（フラッシャと同じ。追加依存なし） |
 | リポジトリ取得 | GUI 自身が `git clone`（既定 `~/stampfly_ecosystem`、変更可）。既存 checkout 検出時は「そのまま使う（修復）/ アンインストール」を提示 |
 | installer.py 実行 | クローン先の `scripts/installer.py` を `importlib` でプロセス内 import し、`Installer().run(...)` をワーカースレッドで実行。stdout/stderr をキュー経由でログ画面へ |
-| 非対話化の契約 | 環境変数 `SF_INSTALLER_NONINTERACTIVE=1` を installer.py の `prompt()`/`prompt_choice()` が見て既定値を即返す。加えて全 prompt を EOF 安全化（stdin が無い環境では既定値）— **古い installer.py と新しい GUI が混ざっても劣化許容**（環境変数を知らない旧版でも EOF 既定値で進む） |
+| 非対話化の契約 | 環境変数 `SF_INSTALLER_NONINTERACTIVE=1` を installer.py の `prompt()`/`prompt_choice()` が見て既定値を即返す。加えて全 prompt を EOF 安全化（stdin が無い環境では既定値）— **古い installer.py と新しい GUI が混ざっても劣化許容**（環境変数についての情報を持たない旧版でも EOF 既定値で進む） |
 | 進捗表示の契約 | installer.py の `Step N/4:` ヘッダ行を GUI がパースしてステップインジケータを進める（この書式を契約としてコメントに明記） |
 | 文字コード | GUI 内部は UTF-8、subprocess 捕捉は `encoding="utf-8", errors="replace"`（cp932 教訓） |
 
@@ -61,7 +61,7 @@ Linux）版を用意する。
 
 | 層 | 内容 |
 |----|------|
-| selftest（CI・凍結バイナリで実行） | Tk を開かずに: installer.py のプロセス内 import 契約（`Installer` クラスと `run/uninstall/clean` の署名）、`SF_INSTALLER_NONINTERACTIVE` の応答、引数組み立て、前提条件プローブを検証。**凍結バイナリで走らせることで stdlib 同梱漏れも検出** |
+| selftest（CI・凍結バイナリで実行） | Tk を開かずに: installer.py のプロセス内 import 契約（`Installer` クラスと `run/uninstall/clean` の署名）、`SF_INSTALLER_NONINTERACTIVE` の応答、引数組み立て、前提条件プローブを検証。**凍結バイナリで実行することで stdlib 同梱漏れも検出** |
 | check スクリプト | `tools/ci/check_installer_gui.py`（依存ゼロ、4OS レッグで常時実行） |
 | 手元 E2E | macOS でビルド→起動→環境チェック/オプション画面の動作確認（フル install E2E は ESP-IDF ダウンロード数GBを伴うため実機・ユーザー確認と併せて実施） |
 | 実機 E2E | まっさらな Windows / macOS で配布バイナリから完走（リリース前のユーザー確認項目） |

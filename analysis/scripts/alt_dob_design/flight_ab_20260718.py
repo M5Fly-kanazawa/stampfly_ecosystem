@@ -31,7 +31,7 @@ Five questions this script answers (see module-level SECTION comments):
   3. 「カクカク」の周波数同定: DOBなしベースラインとのPSD重ね合わせ、
      d_hat/推力コヒーレンス（DOBが駆動源か）、クランプイベントと推力の
      カクカクの時間一致（リミットサイクル的挙動の確認）
-  4. ベースライン（メモリ参照値164-171mm）比の性能定量、エアコンON/OFF別
+  4. ベースライン（メモリ基準値164-171mm）比の性能定量、エアコンON/OFF別
   5. 改善candidateの再生シム（step2_dob_design.py の閉ループシミュレータを
      再利用、本フライトから再構成した d_ext_acc を注入）— fc/クランプの
      組み合わせで alt std とカクカク度のトレードオフ表

@@ -78,7 +78,7 @@ void ButtonTask(void* pvParameters)
     // On each detected gesture, publish it as a fact. The callback runs inside tick()
     // on this task's stack, so publishing here is single-threaded and safe.
     // 検出したジェスチャを「事実」として publish する。コールバックは tick() 内・本タスクの
-    // スタックで走るため、ここでの publish は単一スレッドで安全。
+    // スタックで動くため、ここでの publish は単一スレッドで安全。
     button.setCallback([](stampfly::Button::Event event) {
         const sf::ButtonGesture gesture = toGesture(event);
         if (gesture == sf::ButtonGesture::None) {

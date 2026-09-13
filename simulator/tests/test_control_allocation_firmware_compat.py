@@ -40,7 +40,7 @@ import os
 # so fall back to a no-op xfail decorator stub.
 # pytest が要るのは test_* ラッパー（xfailマーカー）だけ。直接実行
 # （`python3 <本ファイル>`）は pytest 未導入でも動く必要があるため、
-# 無い場合は何もしない xfail デコレータのスタブに差し替える。
+# 無い場合は何もしない xfail デコレータの代替実装に差し替える。
 try:
     import pytest
 except ImportError:

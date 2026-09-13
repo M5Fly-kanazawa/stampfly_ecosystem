@@ -46,7 +46,7 @@
 
 **検証**: probe 速度掃引 0〜1.5 m/s 全 VALID / 400フレーム長走行 wrap 跨ぎ 398/400 / 静止
 100-1300mm ±20mm / 範囲外 no-target / フル emu `bottom≈target status=0` /
-回帰 hover_espnow 14・console_cli 8 PASS。
+再確認試験 hover_espnow 14・console_cli 8 PASS。
 
 **診断ツール**: `vl53_probe <mm> <frames> [step_mm] [hold]`（step_mm で動的距離、print_internal で
 gen4 内部 zdp/位相窓/p_011/status をダンプ）。`cmake -S simulator/sils -B simulator/sils/build
@@ -67,7 +67,7 @@ gen4 内部 zdp/位相窓/p_011/status をダンプ）。`cmake -S simulator/sil
 - **修正**: `Plant::Config::thrust_efficiency = 1/1.12 ≈ 0.893` を dutyToThrust に乗ずる
   （hoverDuty も反映）。plant_smoke で Plant の net-0 hover_duty が 0.652→0.698 に上がり
   ファーム指令 duty(~0.70)と一致 → ファームの hover 指令が実 mg を生む（Model Identity）。
-- 回帰: hover_espnow 14/14, console_cli 8/8 PASS, plant_smoke 全 PASS。
+- 再確認試験: hover_espnow 14/14, console_cli 8/8 PASS, plant_smoke 全 PASS。
 
 ## 2. 空中ホバーの残ブロッカー：ESKF 離陸ハンドオフ（次の作業対象）
 
@@ -93,7 +93,7 @@ NG）。現 hover_alt.scn はこの構造だが phase C の過推力で 1.4m を
 
 ## 2bis. 旧ノートの「真のブロッカー」記述（参考・上記 §2 に統合）
 
-**hover_alt.scn を走らせると機体が runaway上昇（数百〜数千m）し crash-disarm する。** VDBG
+**hover_alt.scn を実行すると機体が runaway上昇（数百〜数千m）し crash-disarm する。** VDBG
 （imu_task.cpp に一時挿入し検証後 revert 済み）で確定した故障連鎖:
 
 1. **Plant 過推力**: firmware が hover と思う duty（~0.70, hover FF=0.407N=0.363×1.12

@@ -43,7 +43,7 @@ public:
         // A plain bool (no driver/ledc.h here) keeps this header host-buildable
         // for the SILS motor stub. / sf_board が共有 LEDC タイマを構成済み(R1)の
         // とき ledc_timer_config() を省く。本ドライバは channel 設定のみ行う。
-        // ここを bool にして driver/ledc.h を持ち込まず SILS スタブのビルドを保つ。
+        // ここを bool にして driver/ledc.h を持ち込まず SILS 向け代替実装のビルドを保つ。
         bool skip_timer_init = false;
     };
 

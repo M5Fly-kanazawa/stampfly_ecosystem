@@ -129,7 +129,7 @@ def _window_series(df, t_lo, t_hi, column):
 
 def per_log_stats(path):
     """Compute hover trim statistics for one log, or None if no clean hover.
-    1ログのホバートリム統計を返す（クリーンなホバーが無ければ None）。"""
+    1ログのホバートリム統計を返す（混入のないホバーが無ければ None）。"""
     log = _load(path)
     duty_df, duty_source = _select_duty_stream(log)
     if duty_df is None:

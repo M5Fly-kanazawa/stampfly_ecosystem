@@ -37,7 +37,7 @@ namespace rtos {
 
 namespace {
 // The task running on the current OS thread (set in run_task_thread).
-// 現在の OS スレッドで走っているタスク（run_task_thread で設定）。
+// 現在の OS スレッドで動いているタスク（run_task_thread で設定）。
 thread_local Task* tls_self = nullptr;
 
 // Wall-clock budget for one task step before we declare a hang. This is the
@@ -95,7 +95,7 @@ void Scheduler::run_task_thread(Task* self)
     // Run the unmodified firmware task function. Infinite-loop tasks never
     // return on their own; at shutdown a StopTask is thrown into the blocking
     // primitive to unwind the body so this thread can exit and be joined.
-    // 無改変の本体タスク関数を走らせる。無限ループのタスクは自分では戻らない;
+    // 無改変の本体タスク関数を動かす。無限ループのタスクは自身では戻らない;
     // シャットダウン時にブロッキングプリミティブへ StopTask を投げて本体を
     // 巻き戻し、このスレッドが終了して join できるようにする。
     try {
@@ -163,8 +163,8 @@ void Scheduler::notify_give(Task* target)
     // The giver keeps running (cooperative, no preempt); the target becomes
     // Ready and runs at the next scheduling point. Firmware must use the
     // publish-then-notify convention (RESET_PLAN §11), never act-on-give.
-    // 与える側は走り続ける（協調・横取りなし）; 対象は Ready になり次の
-    // スケジューリング点で走る。本体は publish→notify 規約（RESET_PLAN §11）
+    // 与える側は動き続ける（協調・横取りなし）; 対象は Ready になり次の
+    // スケジューリング点で動く。本体は publish→notify 規約（RESET_PLAN §11）
     // を使い、give を即座に当てにしない。
     std::lock_guard<std::mutex> lk(m_);
     target->notify_count++;
@@ -177,7 +177,7 @@ void Scheduler::delete_self()
 {
     // The task removed itself (vTaskDelete(NULL)). Yield the token and park
     // until shutdown, then unwind so the thread exits and can be joined.
-    // タスクが自分を削除した（vTaskDelete(NULL)）。トークンを返し、シャット
+    // タスクが自身を削除した（vTaskDelete(NULL)）。トークンを返し、シャット
     // ダウンまで待機し、巻き戻してスレッドを終了・join 可能にする。
     std::unique_lock<std::mutex> lk(m_);
     Task* self = tls_self;
@@ -257,7 +257,7 @@ int Scheduler::add_periodic(TimerCallback cb, void* arg, int64_t period_us)
 {
     // Called from a running task (it holds the token; no other thread runs), so
     // touching timers_ here needs no extra lock.
-    // 走行中のタスクから呼ばれる（トークン保持・他スレッドは走らない）ので、ここで
+    // 走行中のタスクから呼ばれる（トークン保持・他スレッドは動かない）ので、ここで
     // timers_ を触るのに追加ロックは不要。
     PeriodicTimer t;
     t.cb = cb;
@@ -299,9 +299,9 @@ void Scheduler::fire_due_timers(std::unique_lock<std::mutex>& lk)
     // mutex UNLOCKED: the firmware callback calls xTaskNotifyGive → notify_give,
     // which locks m_ (non-recursive). No task runs during the advance phase, so
     // unlocking here is safe and deterministic.
-    // now_us_ に期限の来た全タイマを登録順で発火。スケジューラ mutex は解放して
+    // now_us_ に期限の来た全タイマを登録順で作動。スケジューラ mutex は解放して
     // 行う: 本体コールバックは xTaskNotifyGive → notify_give を呼び m_（非再帰）を
-    // ロックするため。advance 中はどのタスクも走らないので安全かつ決定論的。
+    // ロックするため。advance 中はどのタスクも動かないので安全かつ決定論的。
     for (size_t i = 0; i < timers_.size(); ++i) {
         if (!timers_[i].active) continue;
         if (timers_[i].next_fire_us <= now_us_) {
@@ -333,7 +333,7 @@ void Scheduler::run(int64_t max_sim_us)
         // No ready task → advance the virtual clock to the next wake-up: the
         // earliest of a BlockedDelay wake or a periodic-timer fire.
         // Ready が無い → 仮想時計を次の起床へ進める。BlockedDelay 起床か周期タイマ
-        // 発火のうち最も早いもの。
+        // 作動のうち最も早いもの。
         int64_t next_wake  = earliest_wake();
         int64_t next_timer = earliest_timer_fire();
         if (next_wake < 0 && next_timer < 0) break;  // nothing pending → done
@@ -356,7 +356,7 @@ void Scheduler::run(int64_t max_sim_us)
 
         // Fire any periodic timers due now, before pick_ready, in registration
         // order. Their callbacks (xTaskNotifyGive) mark tasks Ready.
-        // 期限の来た周期タイマを pick_ready 前に登録順で発火。コールバック
+        // 期限の来た周期タイマを pick_ready 前に登録順で作動。コールバック
         // （xTaskNotifyGive）がタスクを Ready にする。
         fire_due_timers(lk);
 
@@ -386,7 +386,7 @@ void Scheduler::stop_all()
     // Unwind every still-parked task (throw StopTask via its blocking primitive)
     // and join its thread, leaving a clean process state — no _Exit needed.
     // 待機中の各タスクを巻き戻し（ブロッキングプリミティブ経由で StopTask を
-    // 投げ）スレッドを join する。クリーンなプロセス状態に — _Exit 不要。
+    // 投げ）スレッドを join する。後始末済みのプロセス状態に — _Exit 不要。
     {
         std::unique_lock<std::mutex> lk(m_);
         shutdown_ = true;
@@ -444,7 +444,7 @@ void vTaskDelayUntil(TickType_t* last_wake, TickType_t period)
     // Absolute periodic wake (no drift), matching FreeRTOS: advance *last_wake
     // by period and sleep until that tick. 1 tick = 1 ms = 1000 us.
     // 絶対周期起床（ドリフトなし）、FreeRTOS と同じ: *last_wake を period 分
-    // 進め、その tick まで眠る。1 tick = 1 ms = 1000 us。
+    // 進め、その tick までスリープする。1 tick = 1 ms = 1000 us。
     *last_wake += period;
     Scheduler::instance().delay_until_us(static_cast<int64_t>(*last_wake) * 1000);
 }

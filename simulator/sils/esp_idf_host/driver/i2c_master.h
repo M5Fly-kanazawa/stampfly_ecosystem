@@ -7,7 +7,7 @@
 /**
  * @file driver/i2c_master.h
  * @brief Host stub for the ESP-IDF I2C master (new "bus + device") driver
- *        ESP-IDF I2C マスタ（新「バス＋デバイス」）ドライバのホスト用スタブ
+ *        ESP-IDF I2C マスタ（新「バス＋デバイス」）ドライバのホスト用の代替実装
  *
  * Provides the i2c_master_* API surface (handles, configs, transfer functions)
  * so the real StampFly firmware (board bring-up + BMP280/BMM150/VL53L3CX/power
@@ -154,7 +154,7 @@ typedef struct {
 
 /* -------------------------------------------------------------------------
  * Stub function bodies (inert)
- * スタブ関数本体（無動作）
+ * 代替実装の関数本体（無動作）
  * ---------------------------------------------------------------------- */
 
 // Create a new master bus; hand back a non-null sentinel handle.

@@ -109,7 +109,7 @@ main() の --non-interactive も参照。GUIはTTYなしで本スクリプトを
 # ジェネリクス注釈(PEP 585、クォート無しで使えるのは Python 3.9+のみ)が
 # Python 3.8 の def 時点で `TypeError: 'type' object is not subscriptable`
 # を送出しなくなる。これが無いと、このTypeErrorはモジュール読み込み中 --
-# 下の明示的な sys.version_info チェックが走るより前 -- に発生するため、
+# 下の明示的な sys.version_info チェックが実行されるより前 -- に発生するため、
 # Python 3.8/3.9 ユーザーは本来表示されるべき親切な「Python 3.10+ required」
 # メッセージではなく、不可解なトレースバックを見ることになっていた。
 from __future__ import annotations
@@ -1122,7 +1122,7 @@ def _py_launcher_python_dir() -> Optional[Path]:
     WindowsApps Store stub (same exclusion as the PATH lookup below).
     いかなる失敗でも None を返す(例外は送出しない): `py` が無い、
     subprocess がタイムアウト/エラーになる、解決先が機能しない
-    WindowsApps ストアスタブである(下の PATH 探索と同じ除外)、のいずれも。
+    WindowsApps のプレースホルダ実行ファイルである(下の PATH 探索と同じ除外)、のいずれも。
     """
     py_launcher = shutil.which("py")
     if not py_launcher:
@@ -1443,7 +1443,7 @@ def _all_python_candidates() -> list[Tuple[Path, int]]:
         # 2. Already resolvable on PATH? Skip the WindowsApps stub, which
         # is a non-functional placeholder that only opens the Store.
         # 2. 既に PATH で解決できるか? Store を開くだけの機能しない
-        # プレースホルダである WindowsApps スタブは除外する。
+        # プレースホルダである WindowsApps の実行ファイルは除外する。
         for name in ("python", "python3"):
             found = shutil.which(name)
             if found and "windowsapps" not in found.lower():
@@ -1546,7 +1546,7 @@ def _resolve_venv_seed(python_exe: Path) -> Optional[Path]:
     インタプリタに解決する。入れ子を構造的に排除する: `home` の連鎖は
     ちょうど1回だけ追跡する。解決したベースインタプリタ自体がさらに別の
     venv 内にある場合は、無限に追跡するのではなく候補を破棄する(None を
-    返す) -- venv の入れ子は病的なケースであり、無限ループのリスクを
+    返す) -- venv の入れ子は極端なケースであり、無限ループのリスクを
     冒してまで対応する価値はない。
 
     そもそも venv 内になければ python_exe をそのまま返す(None ではない)。
@@ -2125,10 +2125,10 @@ def _clean_env_for_cmd() -> dict:
         # left the stub winning when the real directory sat AFTER it; a
         # duplicated entry further down PATH is harmless.
         # 無条件で先頭に付ける(末尾ではなく、既存チェックによる省略も
-        # しない): PATH 上でより前にある WindowsApps の python スタブや
+        # しない): PATH 上でより前にある WindowsApps の python プレースホルダや
         # pyenv の shims ディレクトリが、発見した本物のインタプリタに
         # 勝ってはならない。従来の「PATH のどこかに既にあれば省略」では、
-        # 実体ディレクトリがスタブより後ろにある場合にスタブが勝って
+        # 実体ディレクトリがプレースホルダより後ろにある場合にプレースホルダが勝って
         # いた。PATH 後方の重複エントリは無害。
         env["PATH"] = python_dir_str + os.pathsep + current_path
     return env
@@ -2328,7 +2328,7 @@ class _OutputRelay:
     ending. A `\\r` at the very end of a chunk is held back until the
     next chunk shows what follows it.
 
-    子プロセスのデコード済み出力を自分の標準出力へ転送する。`\\r` の扱いを
+    子プロセスのデコード済み出力を自分自身の標準出力へ転送する。`\\r` の扱いを
     標準出力の種類ごとに分ける。
 
     端末（isatty）: そのまま書き出す。`\\r` で行を書き直す進捗表示は、
@@ -3462,7 +3462,7 @@ class ESPIDFInstaller:
         # 観測。「installスクリプトがpythonを名前で呼ぶ」という同じ理屈は
         # macOS/Linux にも当てはまるため、このチェック(および下の
         # 自動インストール提案)は Windows 単独ではなく3プラットフォーム
-        # 全てで走る。
+        # 全てで動く。
         #
         # Dedicated-environment mode (see set_dedicated_context()) skips
         # this gate entirely: the dedicated Python IS the interpreter that
@@ -3765,7 +3765,7 @@ class Installer:
         no network, intermediate scripts misbehaving), the user has a
         concrete shell command they can paste to recover.
         ./install.sh --clean が何らかの理由で先に進めないケースに備えて、
-        必ず手動の脱出経路(venv python を絶対パスで叩く pip コマンド)も
+        必ず手動の脱出経路(venv python を絶対パスで呼び出す pip コマンド)も
         併記する。
         """
         venv_python = _find_idf_python(idf_path)
@@ -4727,7 +4727,7 @@ class Installer:
         ワーカー内で setup_env.sh を source してから `$SHELL -i` に exec
         していたため、.zshrc の pyenv init が ESP-IDF venv より前に shims
         を PATH へ積んでしまい、idf.py の `#!/usr/bin/env python` shebang
-        が素のインタプリタに解決されて「No module named 'click'」で死んだ
+        が素のインタプリタに解決されて「No module named 'click'」で停止した
         (2026-07-22, macOS で観測)。ユーザー rc の後に setup_env.sh を
         source することで venv が先頭を維持する。
         """
@@ -5403,7 +5403,7 @@ def _guard_console_encoding() -> None:
     Japanese in several info()/warn() paths, which would raise
     UnicodeEncodeError and abort the install. errors="replace" prints '?'
     instead -- the same guard lib/sfcli/cli.py applies to `sf`.
-    エンコードできない文字でインストーラを死なせない。Windows のコンソールは
+    エンコードできない文字でインストーラを停止させない。Windows のコンソールは
     コードページ（日本語 Windows は cp932、英語は cp1252）で動き、UTF-8 の
     全文字は表現できない。本スクリプトは info()/warn() で日本語を出力する
     箇所があり、そこで UnicodeEncodeError が起きると導入が中断する。

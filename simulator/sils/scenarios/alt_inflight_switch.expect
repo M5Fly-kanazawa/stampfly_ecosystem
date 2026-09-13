@@ -1,5 +1,5 @@
 # alt_inflight_switch.expect — in-flight STABILIZE → ALT_HOLD switch, re-center gate (Case B)
-# 飛行中 STABILIZE→ALT_HOLD 切替、再センター判定（Case B）
+# 飛行中 STABILIZE→ALT_HOLD 切替、スロットル再センターロック（Case B）
 #
 # The craft auto-takes-off in ALT_HOLD (0.5 m), drops to STABILIZE and climbs a little,
 # then flips BACK to ALT_HOLD while still CLIMBING with the throttle OFF-CENTER (3330,
@@ -8,9 +8,9 @@
 # and the altitude settles into a bounded, decaying transient. Re-centering at G opens
 # the gate; full-up (4095) at H then climbs.
 # 機体は ALT_HOLD で 0.5 m へ自動離陸 → STABILIZE で少し上昇 → スロットルを中央外(3330,
-# norm 0.63)に上げたまま ALT_HOLD へ戻す。STABILIZE→ALT_HOLD 切替で高度を捕捉し再センター
-# 判定を閉じる（Case B）ため中央外スロットルは無視され、上昇が有界・減衰過渡に収束する。
-# G で再センターし判定が開き、H の全上げ(4095)で上昇する。
+# norm 0.63)に上げたまま ALT_HOLD へ戻す。STABILIZE→ALT_HOLD 切替で高度を捕捉しスロットル再センター
+# ロックを掛ける（Case B）ため中央外スロットルは無視され、上昇が有界・減衰過渡に収束する。
+# G で再センターしロックが解除され、H の全上げ(4095)で上昇する。
 #
 # 2026-07-26 ODEプラント(実測Ct)対応再調整: windows shifted -0.3s (E's dwell trimmed
 # 1500ms->1200ms in alt_inflight_switch.scn, see that file's row E comment). alt_band

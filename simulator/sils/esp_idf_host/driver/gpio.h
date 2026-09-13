@@ -7,7 +7,7 @@
 /**
  * @file driver/gpio.h
  * @brief Host stub for the ESP-IDF GPIO driver
- *        ESP-IDF GPIO ドライバのホスト用スタブ
+ *        ESP-IDF GPIO ドライバのホスト用の代替実装
  *
  * Provides the GPIO API surface (pin enums, config struct, set/get level,
  * ISR service) the firmware references so it compiles and links on a PC.
@@ -178,7 +178,7 @@ typedef void* gpio_isr_handle_t;
 
 /* ------------------------------------------------------------------------- */
 /* API (inert host stubs)                                                    */
-/* API（無動作のホストスタブ）                                              */
+/* API（無動作のホスト用の代替実装）                                        */
 /* ------------------------------------------------------------------------- */
 
 /* Configure GPIO pins from a config struct / 設定構造体から GPIO を構成 */

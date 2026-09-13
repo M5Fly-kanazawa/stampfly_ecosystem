@@ -191,7 +191,7 @@ void pairing_confirm(const pairing_candidate_t* candidate);
 
 /**
  * @brief 確定した機体（drone_peer）宛にスティック中立・未武装の操縦電文を
- *        1通送信する。機体側の受理条件（自分宛の電文を発見）を満たすための
+ *        1通送信する。機体側の受理条件（自局宛の電文を発見）を満たすための
  *        呼びかけであり、機体を飛行させるものではない
  * @note 呼び出し前に drone_peer_init() でピア登録が済んでいること
  * @return ESP_OK: 送信要求成功
@@ -212,7 +212,7 @@ void pairing_link_reset(void);
  * firmware/vehicleは現状ESP-NOW経由で何も送り返さない（テレメトリはUDP）ため、
  * これが主経路になる。(2) 確定した機体（Drone_mac）から、まだペアリング
  * 広報中の形（PairingPacket形式）ではない電文を受信した。firmware/vehicle_old等、
- * ESP-NOW経由で何か送り返す相手向けの補助経路
+ * ESP-NOW経由で何か送り返す相手局向けの補助経路
  *
  * @return true: ペアリング成立が確認できた（上記いずれかの経路で確認）
  */

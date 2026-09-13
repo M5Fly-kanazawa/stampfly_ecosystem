@@ -39,7 +39,7 @@
  * Identity); only the byte transport is bypassed. Replies are always logged so
  * the expect gates (and hardware debugging) can read them.
  * SILS: ソケットシムは UDP を受信しないため、シナリオエンジンが sf_api_inject_line()
- * でコマンド行を注入する — パーサ/実行系は「同一コード」が走り（Code Identity）、
+ * でコマンド行を注入する — パーサ/実行系は「同一コード」が動き（Code Identity）、
  * バイト輸送だけを迂回する。応答は常にログにも出す（expect 判定と実機デバッグ用）。
  *
  * @publisher  api_command (flight verbs), command_target (guidance)
@@ -651,7 +651,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);
     constexpr float kAmpRadps = 0.35f;   // ~20 dps per point / 点あたり約20dps
     // A lock-in response below this amplitude [rad/s] is a dead/untrusted tone (coh=0).
-    // この振幅未満のロックイン応答は死んだ音とみなす（coh=0）。約0.57 dps。
+    // この振幅未満のロックイン応答は無応答の周波数点とみなす（coh=0）。約0.57 dps。
     constexpr float kMinOnAmp = 0.01f;
 
     sf::autotune::FreqPoint points[kNumFreqs];
@@ -699,7 +699,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         // A DEAD tone (excitation never reached the loop / saturation / disarm-edge) is the
         // LEAST trustworthy case ⇒ coh=0 (NOT 1, else it would inflate the fit's sufficiency
         // guard). Floor on the absolute lock-in AMPLITUDE (N-independent), clamp, NaN→0.
-        // コヒーレンス/SNR代理: オン音電力/(オン音+オフ音雑音床)。死んだ音は最も信用できない→coh=0。
+        // コヒーレンス/SNR代理: オン周波数点電力/(オン周波数点+オフ周波数点雑音床)。無応答の周波数点は最も信頼度を低く扱う→coh=0。
         const float on_pow = res.yr * res.yr + res.yi * res.yi;
         const float on_amp = (res.samples > 0)
                            ? 2.0f * sqrtf(on_pow) / static_cast<float>(res.samples) : 0.0f;
@@ -821,7 +821,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // gains I am still flying, really?" — exactly what a rejected axis needs).
     // 現（実効）ゲインの余裕を新同定プラントで採点して保存 — 保存 wc/pm/gm は常に「実際に
     // 飛んでいる」ゲインを反映。下の設計が適用されれば新ゲインの余裕で上書き、棄却されれば
-    // 据置ゲインの余裕が残る（棄却軸が知りたい「今飛んでいるゲインの本当の安全余裕」）。
+    // 据置ゲインの余裕が残る（棄却軸で知りたいのは「今飛んでいるゲインの本当の安全余裕」）。
     {
         float cur_kp = 0, cur_ti = 0, cur_td = 0;
         char rk[32];
@@ -897,7 +897,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     std::snprintf(key_td, sizeof(key_td), "rate.%s.td", kAxisName[axis]);
 
     // Apply LIVE (set_float validates the table ranges and fires ReloadParams).
-    // ライブ適用（set_float がテーブル範囲を検証し ReloadParams を発火）。
+    // ライブ適用（set_float がテーブル範囲を検証し ReloadParams を作動させる）。
     if (!sf::params::set_float(key_kp, tune.kp) ||
         !sf::params::set_float(key_ti, tune.ti) ||
         !sf::params::set_float(key_td, tune.td)) {

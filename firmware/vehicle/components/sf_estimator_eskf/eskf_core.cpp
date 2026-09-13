@@ -20,7 +20,7 @@
  * - Joseph form for numerical stability
  *
  * 旧ファームからの教訓（コピーではなく設計知識として適用）:
- * - active_maskによるP行列隔離で状態破壊を防止
+ * - active_maskによるP行列の切り分けで状態破壊を防止
  * - 姿勢センサにはχ² 判定が必須
  * - 位置センサには絶対値イノベーション判定（P崩壊対策）
  * - 数値安定性のためJoseph形式
@@ -388,7 +388,7 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     // is the difference between ~14 000 and ~2 000 multiply-adds per call.
     // H の「列疎性」を利用する。ここで使う 3×N 観測ヤコビアンの非ゼロ列はごく少数
     // （accel-attitude: att+ba の 6/15、mag: att の 3/15）。以降の縮約は全 N 列で
-    // なくこのサポート上だけを走る — 400Hz（accel-attitude は predict 毎）では
+    // なくこのサポート上だけを対象に実行する — 400Hz（accel-attitude は predict 毎）では
     // 1 回あたり ~14,000 積和と ~2,000 積和の分かれ目。
     // =========================================================================
 
@@ -455,7 +455,7 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     // Chi-squared gate. The threshold is passed in by the caller so each vector
     // observation uses its own gate (accel → accel_chi2_gate, mag → mag_chi2_gate)
     // rather than sharing one constant.
-    // χ² 判定。閾値は呼び出し側が渡す。各ベクトル観測が自分の判定を使う
+    // χ² 判定。閾値は呼び出し側が渡す。各ベクトル観測が自分自身の判定を使う
     // (accel→accel_chi2_gate, mag→mag_chi2_gate)。1 定数を共有しない。
     if (d2 > chi2_gate) {
         return;
@@ -650,7 +650,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // as the offline harness did — predict()'s velocity integration is left UNfiltered.
     // 重力比較の前に accel へ任意の1次 LPF（cfg_.accel_att_lpf_hz）。重力基準から機体振動を
     // 除き、バイアスの引きずりと χ² 棄却を減らす（実機ログ掃引）。accel_raw（バイアス前）を
-    // 濾波＝オフラインハーネスと同一。predict() の速度積分は濾波しない。
+    // 濾波＝オフライン試験プログラムと同一。predict() の速度積分は濾波しない。
     Vec3 accel_src = accel_raw;
     if (cfg_.accel_att_lpf_hz > 0.0f && accel_lpf_dt_ > 0.0f) {
         if (!accel_lpf_init_) { accel_att_lpf_ = accel_raw; accel_lpf_init_ = true; }
@@ -671,7 +671,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // blind → it estimates "level" during a coordinated tilt+accelerate. The proven
     // firmware/vehicle has NO norm gate; it relies on the adaptive R plus the χ²
     // outlier gate inside vectorUpdate3. We do the same here.
-    // 適応Rスケーリング — |a|がgから逸脱したら補正を弱める(ハード判定しない)。推力/
+    // 適応Rスケーリング — |a|がgから逸脱したら補正を弱める(しきい値で一律に打ち切らない)。推力/
     // マニューバ過渡で加速度計の測定値が重力を汚染するが、ハードな norm gate(早期return)は傾斜中の
     // corrective な更新ごと捨て姿勢を盲目化し、協調傾斜+加速で「水平」と誤推定する。実証済み
     // firmware/vehicle に norm gate は無く、適応R＋vectorUpdate3 内の χ² 外れ値判定で捌く。
@@ -833,7 +833,7 @@ void EskfCore::setConfig(const EskfConfig& cfg)
     // switches may have changed (P isolation follows the mask).
     // 状態 x と共分散 P には触れない — これは再初期化でなくライブチューニング。
     // use_* スイッチが変わった可能性があるため active mask を再計算する
-    // （P の隔離はマスクに従う）。
+    // （P の切り分けはマスクに従う）。
     cfg_ = cfg;
     recomputeActiveMask();
 }
@@ -881,7 +881,7 @@ void EskfCore::recomputeActiveMask()
     // BG_Z — same condition as updateMag, so the yaw states are isolated whenever
     // mag is not actually fused (L-5).
     // MAG 補正なし（param 無効 or 未校正判定降下）: ATT_Z, BG_Z をフリーズ。
-    // updateMag と同条件にし、mag が実際に融合されない間はヨー状態を隔離する (L-5)。
+    // updateMag と同条件にし、mag が実際に融合されない間はヨー状態を切り分ける (L-5)。
     if (!cfg_.use_mag || !mag_calib_gate_) {
         active_mask_ &= ~((1 << ATT_Z) | (1 << BG_Z));
     }

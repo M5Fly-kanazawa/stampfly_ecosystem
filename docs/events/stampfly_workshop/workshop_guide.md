@@ -190,9 +190,9 @@ sf log analyze <logfile>
 
 ### 学習者コードを SILS で試す（Lesson 5 / 8 / 11 補足）
 
-Lesson 5・8・11 で書く `setup()`/`loop_400Hz()`（`main/user_code.cpp`）は、実機フラッシュ前に SILS（`simulator/sils/`、`--target workshop`）上でも走らせられる。実機に書き込まれるのと同じソースがそのまま動く（Code Identity）ので、ARM・状態遷移（ARMED_GROUND→TAKEOFF→FLYING）・モータ応答の配線ミスは実機を壊さずに気付ける。
+Lesson 5・8・11 で書く `setup()`/`loop_400Hz()`（`main/user_code.cpp`）は、実機フラッシュ前に SILS（`simulator/sils/`、`--target workshop`）上でも動かせる。実機に書き込まれるのと同じソースがそのまま動く（Code Identity）ので、ARM・状態遷移（ARMED_GROUND→TAKEOFF→FLYING）・モータ応答の配線ミスは実機を壊さずに気付ける。
 
-一発で行うなら `sf lesson sils`（切替 → SILS ビルド → シナリオ実行を順に行う近道）:
+一度で行うなら `sf lesson sils`（切替 → SILS ビルド → シナリオ実行を順に行う近道）:
 
 ```bash
 sf lesson sils --solution 8

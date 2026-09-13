@@ -310,9 +310,9 @@ def test_bundle_metric_duty_max_zero_when_motor_stream_has_no_rows_in_window(tmp
     assertion) means "no control cycle ran here", i.e. duty_max == 0.0, NOT
     "unknown" (None). Regression for a real `sf sils regression` failure
     found on pairing.expect's `metric duty_max < 0.05 in 5.8 7.8` window.
-    motor.csv は実際に走った制御周期だけ1行を持つ（armed window）-- truth の
+    motor.csv は実際に動いた制御周期だけ1行を持つ（armed window）-- truth の
     行はあるがモータ行が0件の窓（pairing.expect の混信拒否窓のように、機体が
-    一度も arm されていない場合等）は「制御周期が一度も走らなかった」
+    一度も arm されていない場合等）は「制御周期が一度も動かなかった」
     =duty_max==0.0 を意味し、"unknown"（None）ではない。`sf sils regression`
     の実失敗（pairing.expect の `metric duty_max < 0.05 in 5.8 7.8`）の
     再発防止テスト。

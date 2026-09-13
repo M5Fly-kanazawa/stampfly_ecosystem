@@ -492,7 +492,7 @@
   // レースにする — ネットワーク不通（Google Fontsが解決できない環境）や
   // 他の理由でPromiseが止まっても待ち時間の上限を保証する。また
   // requestAnimationFrame は virtual-time-budget 付きheadless実行では
-  // 確実に発火するとは限らないため使わない。
+  // 確実に作動するとは限らないため使わない。
   var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
   var afterFonts = new Promise(function (resolve) {
     var done = false;

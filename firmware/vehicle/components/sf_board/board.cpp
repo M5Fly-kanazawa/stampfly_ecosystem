@@ -337,7 +337,7 @@ esp_err_t init_motor_timer()
 // 共有 HW の Critical 失敗 (バス/タイマ/インフラ) は飛行不能を意味する。続行禁止:
 // 原因をログして停止する (esp_restart しない＝原因と将来の LED 表示を保つ, §5)。
 // 停止ループは vTaskDelay を使い idle タスクが WDT を食わせ続ける (リブート無し)。
-// board::init は飛行タスク開始前の app_main で走るため、ここで停止すれば
+// board::init は飛行タスク開始前の app_main で実行されるため、ここで停止すれば
 // ブリングアップ全体を綺麗に止められる。
 enum class FatalReason {
     EventLoop,   ///< default event loop / イベントループ

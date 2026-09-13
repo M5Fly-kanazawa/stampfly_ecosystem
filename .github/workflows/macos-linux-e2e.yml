@@ -65,7 +65,7 @@ jobs:
       # matrix: let both OSes finish so one flaky leg doesn't hide the
       # other's result.
       # release.yml の installer_gui マトリクスと同じ理由: 片方が失敗しても
-      # もう片方の結果を隠さないよう最後まで走らせる。
+      # もう片方の結果を隠さないよう最後まで動かす。
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
@@ -110,7 +110,7 @@ jobs:
         # *確認するだけ*で（docs/setup/linux.md も同じ一覧を持つ -- インストーラ
         # 監査参照）、不足時は案内を出して exit 1 する（パッケージのインストール
         # には sudo が要り、install.sh は無人実行では意図的に行わない）ため、
-        # 本CIジョブが docs/setup/linux.md の手順どおり事前に自分で導入する
+        # 本CIジョブが docs/setup/linux.md の手順どおり事前に自分自身で導入する
         # 必要がある。
         run: |
           sudo apt-get update

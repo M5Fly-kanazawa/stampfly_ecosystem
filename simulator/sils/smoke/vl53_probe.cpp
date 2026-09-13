@@ -26,7 +26,7 @@
  *        reads/writes straight to the chip model. The firmware's vl53lx_platform.c
  *        (FreeRTOS/esp) is deliberately NOT linked.
  *        ドライバコアは無改変リンク（Code Identity）。プラットフォーム port（I2C/timer の
- *        継ぎ目）だけハーネスローカルでモデルへ直結。ファームの vl53lx_platform.c は不使用。
+ *        境界）だけ試験プログラムローカルでモデルへ直結。ファームの vl53lx_platform.c は不使用。
  *
  * Usage:  vl53_probe [target_mm] [frames] [step_mm]   (default 1000 mm, 6 frames, 0)
  *         step_mm adds a per-frame distance increment so the probe can reproduce a
@@ -55,7 +55,7 @@ extern "C" {
 // =====================================================================================
 // Harness platform port — the ONE integrator seam. Routes the ST driver's byte-level
 // I2C straight to the chip model; timers are a deterministic virtual ms counter.
-// ハーネスのプラットフォーム port。ST ドライバの I2C をモデルへ直結。タイマは決定論的な
+// 試験プログラムのプラットフォーム port。ST ドライバの I2C をモデルへ直結。タイマは決定論的な
 // 仮想 ms カウンタ。
 // =====================================================================================
 extern "C" {
@@ -147,7 +147,7 @@ VL53LX_Error VL53LX_WaitValueMaskEx(VL53LX_Dev_t* d, uint32_t timeout_ms, uint16
 }
 
 // GPIO seams are unused by the host histogram path — inert stubs.
-// GPIO 継ぎ目は histogram 経路では未使用 — 無動作スタブ。
+// GPIO 境界は histogram 経路では未使用 — 無動作の代替実装。
 VL53LX_Error VL53LX_GpioSetMode(uint8_t a, uint8_t b) { (void)a; (void)b; return VL53LX_ERROR_NONE; }
 VL53LX_Error VL53LX_GpioSetValue(uint8_t a, uint8_t b) { (void)a; (void)b; return VL53LX_ERROR_NONE; }
 VL53LX_Error VL53LX_GpioGetValue(uint8_t a, uint8_t* b) { (void)a; if (b) *b = 0; return VL53LX_ERROR_NONE; }

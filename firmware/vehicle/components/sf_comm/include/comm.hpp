@@ -41,7 +41,7 @@
  * CommTask が CommandProcessor を所有し setRawInputSink() で RawInputSink として
  * 注入する。受信経路は各検証済みパケットをパケット到着時にそのまま渡す（追加レイテンシ
  * なし）。sf_comm は sf_command を名指ししない — sf_core の RawControlInput 型に対する
- * 関数ポインタ sink を知るだけなので、物理層がコマンド層に依存しない（依存は両方を所有する
+ * 関数ポインタ sink を持つだけなので、物理層がコマンド層に依存しない（依存は両方を所有する
  * CommTask が注入する）。
  *
  * @design architecture.md §6 — Communication subsystem                  [OK]
@@ -65,7 +65,7 @@ namespace sf {
 /// CommandProcessor; sf_comm calls it without knowing what it is (dependency
 /// injection — keeps the HAL free of any command-layer dependency).
 /// 検証済みの生入力（事実）を消費する sink。CommTask が CommandProcessor を指す。
-/// sf_comm は中身を知らずに呼ぶ（依存性注入 — HAL をコマンド層依存から切り離す）。
+/// sf_comm は中身が何かを判別せずに呼ぶ（依存性注入 — HAL をコマンド層依存から切り離す）。
 using RawInputSink = void (*)(const RawControlInput&);
 
 // The ESP-NOW packet type — alias of the shared protocol SSOT (definition in
@@ -104,7 +104,7 @@ public:
     /// init() (i.e. before the radio can deliver a packet). CommTask points this
     /// at its CommandProcessor.
     /// 各検証済み生入力を消費する sink を注入する。init() の前（＝無線がパケットを
-    /// 配達し得る前）に一度呼ぶこと。CommTask が自分の CommandProcessor を指す。
+    /// 配達し得る前）に一度呼ぶこと。CommTask が自分自身の CommandProcessor を指す。
     void setRawInputSink(RawInputSink sink) { raw_sink_ = sink; }
 
 private:
@@ -122,7 +122,7 @@ private:
     // 相互 MAC 学習ハンドシェイク（旧 vehicle 踏襲）。StateManager が PairingState::Pairing
     // にしている間（pairing_state トピックを update() ごとに読む）、自 MAC を広告する
     // PairingPacket を kPairingBroadcastMs ごとに broadcast する。コントローラがそれを学習し
-    // ControlPacket をユニキャストで返す。最初の1通の src MAC を相手として確定（NVS保存）。
+    // ControlPacket をユニキャストで返す。最初の1通の src MAC を相手局として確定（NVS保存）。
     // ペア後は他 MAC の ControlPacket を破棄する。
     //
     // @design requirements.md §2/§7 — Pairing                              [OK]
@@ -153,7 +153,7 @@ private:
     /// 実行）。軽量に保つ: Pairing 中は「この機体宛」(ControlPacket.drone_mac[0..2] ==
     /// own_mac_[3..5]) の電文だけを保留バインド候補として受理する — 別の機体宛（隣の
     /// コントローラ、同時ペアリング）はカウントして(pairing_rejected_)破棄する（受理した
-    /// 候補の確定は CommTask）。ペア済みは相手 MAC でフィルタ（混信破棄）して転送。
+    /// 候補の確定は CommTask）。ペア済みは相手局 MAC でフィルタ（混信破棄）して転送。
     /// src_mac は送信元 MAC。
     ///
     /// @design pairing-methods-plan.md §4.1 — own-address acceptance during Pairing [OK]
@@ -174,7 +174,7 @@ private:
     /// can trip the WiFi task watchdog → reset). Called from servicePairing().
     /// 受信コールバックが控えたバインドを確定する: NVS保存＋ユニキャスト peer 登録をここ
     /// CommTask で行う — WiFi 受信コールバック内ではしない（コールバック内のフラッシュ書込は
-    /// WiFi タスクのウォッチドッグ発火→リセットを招く）。servicePairing() から呼ぶ。
+    /// WiFi タスクのウォッチドッグの作動→リセットを招く）。servicePairing() から呼ぶ。
     void finalizePendingBind();
 
     /// Register the controller as a unicast peer (so we can also send to it).
@@ -282,7 +282,7 @@ private:
     // （再）バインド時のみ書く。
     uint8_t own_mac_[6] = {0};               // this vehicle's STA MAC / 自機 STA MAC
     uint8_t controller_mac_[6] = {0};        // bound transmitter MAC  / バインド済み送信機MAC
-    std::atomic<bool> paired_{false};        // bound to a controller  / 相手にバインド済み
+    std::atomic<bool> paired_{false};        // bound to a controller  / 相手局にバインド済み
     std::atomic<bool> pairing_active_{false};// StateMgr has us searching / 探索中
     bool prev_pairing_active_ = false;       // for rising-edge detect  / 立ち上がり検出用
     int64_t last_pairing_bcast_us_ = 0;      // last PairingPacket send / 最終送出時刻
@@ -291,7 +291,7 @@ private:
     // DIFFERENT vehicle (own-address filter rejection) — diagnostic only,
     // published on pairing_diag (CLI `pair status`). Incremented in the RX
     // callback (WiFi task), so atomic; never reset (a monotonic session total).
-    // Pairing 中に drone_mac が別の機体宛だった（自分宛フィルタが棄却した）
+    // Pairing 中に drone_mac が別の機体宛だった（自局宛フィルタが棄却した）
     // ControlPacket の件数 — 診断専用、pairing_diag で発行（CLI `pair status`）。
     // 受信コールバック(WiFiタスク)でインクリメントするため atomic。リセットしない
     // （セッション累計）。
@@ -301,7 +301,7 @@ private:
     // flag; CommTask (finalizePendingBind) does the heavy NVS/peer work. pending_mac_ is
     // written BEFORE the flag (release) and read AFTER it (acquire) — the flag is the
     // synchronization barrier.
-    // 保留バインド: 受信コールバック(WiFiタスク)が相手 MAC を控えフラグを立て、CommTask
+    // 保留バインド: 受信コールバック(WiFiタスク)が相手局 MAC を控えフラグを立て、CommTask
     // (finalizePendingBind)が重い NVS/peer 処理を行う。pending_mac_ はフラグより前に書き
     // (release)・後に読む(acquire)。フラグが同期バリア。
     std::atomic<bool> pending_bind_{false};  // a captured MAC awaits finalize / 確定待ち

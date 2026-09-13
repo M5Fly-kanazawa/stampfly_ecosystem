@@ -50,7 +50,7 @@ D = 0.023              # Moment arm [m]
 # reconstruct_torques() (torque is reconstructed from the firmware PID gains
 # directly, not the motor electrical model) — kept for a possible future
 # duty->torque reconstruction path; updated here for correctness/consistency.
-# Rm/Km は tools/sysid/defaults.py（唯一の正）から取得し、ここでの数値の二重管理を
+# Rm/Km は tools/sysid/defaults.py（基準となる文書）から取得し、ここでの数値の二重管理を
 # 避ける。なお RM/KM/DM/QF/VBAT/B_INV は reconstruct_torques() では現在未使用
 # （トルクはファームPIDゲインから再構成しており、モータ電気モデル経由ではない）—
 # 将来 duty→トルク再構成が必要になった場合のために残し、整合のため値のみ更新する。

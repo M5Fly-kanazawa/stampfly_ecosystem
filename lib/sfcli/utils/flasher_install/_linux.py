@@ -87,7 +87,7 @@ def _repo_icon_source(size: int) -> Path | None:
     ここからリポジトリのチェックアウトに到達できない場合（例: リポジトリ外
     から `--from-file` で導入した場合、隣接する tools/ ツリーを持たない
     パッケージ化された sfcli 等）は None を返す（例外は投げない）。
-    呼び出し側は None を「アイコンを諦めて続行」として扱うこと。
+    呼び出し側は None を「アイコンを断念して続行」として扱うこと。
     アイコン欠落だけでインストール全体を失敗させてはならない（仕様4-2）。
     """
     candidate = paths.tools() / "flasher_gui" / "assets" / f"icon_{size}.png"

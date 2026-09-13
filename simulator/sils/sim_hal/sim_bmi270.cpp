@@ -39,7 +39,7 @@ esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
     // IMU is already body-FRD m/s², so just rescale accel to [g] — no remap (the old
     // chip-frame round-trip is gone now that the remap lives in the driver).
     // AccelData/GyroData は機体(FRD) [g]/[rad/s]: 実 BMI270 ドライバ(bmi270_wrapper)が
-    // 搭載向きを吸収し機体軸を返すようになったので、それを host で置換する本スタブも同様に
+    // 搭載向きを吸収し機体軸を返すようになったので、それを host で置換する本代替実装も同様に
     // する。Plant の合成 IMU は既に機体 FRD m/s² ゆえ加速度を [g] に直すだけ（remap は
     // ドライバへ移ったので旧チップ系往復は不要）。
     if (sils::bridge::has_plant) {
@@ -57,7 +57,7 @@ esp_err_t BMI270Wrapper::readSensorData(AccelData& accel, GyroData& gyro)
     // At level rest, body-frame accel is [0, 0, -1 g] (FRD Z is down; the sensor
     // measures -9.8 m/s² on body Z, the NED-consistent convention the ESKF expects —
     // gravity -9.8 down, so predict R·accel + g_ned balances to 0 at rest).
-    // 水平静止で機体加速度は [0,0,-1g]（FRD Z は下、機体 Z に -9.8 m/s²＝ESKF が期待する
+    // 水平静止で機体加速度は [0,0,-1g]（FRD Z は下、機体 Z に -9.8 m/s²＝ESKF が想定する
     // NED 整合の規約。重力 -9.8 が下、予測 R·accel + g_ned が静止で 0 に均衡）。
     accel.x = 0.0f;
     accel.y = 0.0f;

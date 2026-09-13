@@ -19,8 +19,8 @@
 StampFly vehicle のコンポーネント間通信は、直接関数を呼び合うのではなく **Topic**
 （データの入れ物）を介した **Pub-Sub**（Publish=発行 / Subscribe=購読）方式で行う
 （`docs/architecture.md` §3）。発行側（Publisher）は「このデータが最新です」と
-`publish()` するだけで、誰が読むかを知らない。購読側（Subscriber）は `latest()` で
-「今ある最新値」を取得するだけで、誰が発行したかを知らない。両者は疎結合。
+`publish()` するだけで、誰が読むかという情報を持たない。購読側（Subscriber）は `latest()` で
+「今ある最新値」を取得するだけで、誰が発行したかという情報を持たない。両者は疎結合。
 
 本サンプルが読む Topic は `estimate_state`（姿勢・位置・速度の融合推定値、400Hz、
 最新値のみ保持）。`sf::api::estimate_latest()` はこの Topic の `latest()` を呼ぶだけの
@@ -86,7 +86,7 @@ roll= +14.37 deg  pitch=  -1.66 deg  yaw=  +0.01 deg   ← 機体を傾けると
 差し替え不可能なコードで、単体サンプルからそのまま再利用することはできない。
 
 そこで本サンプルは `internal_sensor_feed.cpp`（**L2 相当の下ごしらえ**）で、設計が許す
-最小の正直な代替を実装した:
+最小の、実態に合った代替を実装した:
 
 | 行っていること | 行っていないこと |
 |---|---|
@@ -111,7 +111,7 @@ roll= +14.37 deg  pitch=  -1.66 deg  yaw=  +0.01 deg   ← 機体を傾けると
 - **`IEstimator` を差し替える**: `internal_sensor_feed.cpp` の
   `sf::ComplementaryEstimator attitude_estimator;` を別の `IEstimator` 実装に変えると、
   `main.cpp` の L1 コード（`printRollPitchYaw()`）は一切変更不要で動く —
-  これが `architecture.md` §2.5 の「差替可能設計」の実体。詳しくは
+  これが `architecture.md` §2.5 の「差し替え可能設計」の実体。詳しくは
   `docs/coding_and_education.md` §3 の `22_custom_estimator` 計画を参照。
 - **`IController` を差し替える**: 制御側の同じ考え方は `examples/10_custom_controller`
   を参照。

@@ -327,7 +327,7 @@ sf lesson switch 5   # レッスン切替
 ```
 stampfly_ecosystem/
 ├── firmware/          # 機体 + コントローラ + 共通コード
-│   ├── vehicle/       #   27コンポーネント（HAL/算法/サービス）
+│   ├── vehicle/       #   27コンポーネント（HAL/アルゴリズム/サービス）
 │   ├── controller/    #   ESP-NOW TDMA 送信機
 │   └── common/        #   共有プロトコル・数学
 ├── simulator/         # VPython + Genesis シミュレータ

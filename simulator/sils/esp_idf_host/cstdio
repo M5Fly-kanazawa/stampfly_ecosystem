@@ -42,7 +42,7 @@
  * ため、TCP CLI の「再代入によるリダイレクト」はこのプラットフォームでは見た目
  * だけになる（代入自体は無害 — stdout の読み戻し値が変わるだけ）。本 SILS
  * ベンチが実際に検証する範囲では既存動作の破壊ではない: リダイレクト先のソケット層
- * （esp_idf_host/lwip/sockets.h）は inert スタブなので、実 TCP クライアントが
+ * （esp_idf_host/lwip/sockets.h）は inert な代替実装なので、実 TCP クライアントが
  * serveTcpClient() に到達することはそもそも無い — 本シムは無改変ファームを
  * コンパイル通過させるためだけに存在する。他所の fprintf(stdout, ...)/
  * fflush(stdout) は影響を受けず完全に正しい: FILE* 引数を値で受け取るため、

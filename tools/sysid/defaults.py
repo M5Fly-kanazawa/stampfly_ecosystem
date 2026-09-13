@@ -25,7 +25,7 @@ from typing import Any, Dict, Tuple
 #
 # Phase 1（spec YAML→コード生成、docs/architecture/simulation-policy.md
 # 参照）: この6つのモジュール定数は、もうこのファイルへ手書きされた
-# リテラルではない。`sf params generate` が唯一の正である YAML
+# リテラルではない。`sf params generate` が基準となる YAML
 # （control/models/stampfly_physical.yaml）から機械生成する
 # tools/sysid/_generated_params.py から import する。DEFAULT_PARAMS
 # （後述）と get_flat_defaults() の両方がこの import から kappa/Ct/Cq/
@@ -80,7 +80,7 @@ except ImportError:
 # This nested, metadata-carrying dict (value/unit/description) is the
 # single source of truth. get_flat_defaults() below derives its flat view
 # from this dict via _FLAT_KEY_PATHS instead of re-declaring the numbers.
-# この入れ子構造(value/unit/description付き)が唯一の正。下の
+# この入れ子構造(value/unit/description付き)が基準となる。下の
 # get_flat_defaults() は _FLAT_KEY_PATHS を介してこの辞書からフラット表現を
 # 導出する（数値を再宣言しない）。
 DEFAULT_PARAMS: Dict[str, Any] = {

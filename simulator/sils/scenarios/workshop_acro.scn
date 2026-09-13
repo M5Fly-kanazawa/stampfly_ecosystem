@@ -93,10 +93,10 @@
 # firmware/workshop/main/user_code.cpp が実際にレート制御の解答（Lesson 5/8）で
 # あることが前提 — このファイルは gitignore 対象で `sf lesson switch` が所有する
 # ため、新規チェックアウトの CMake ブートストラップは Lesson 0 テンプレート
-# （モータを動かさない）で種付けし、下の alt_max 離陸判定は実回帰ではなく
+# （モータを動かさない）で種付けし、下の alt_max 離陸判定は既存動作の破壊ではなく
 # 構造的に失敗する。そのため `sf sils regression` はヘッダで --target workshop を
 # 宣言するシナリオを、`--include-workshop` を渡さない限りスキップする
-# （lib/sfcli/commands/sils.py の run_regression 参照）。実際に走らせるには
+# （lib/sfcli/commands/sils.py の run_regression 参照）。実際に実行するには
 # 上記コマンド（sf lesson switch 8 --solution → touch → sf sils build --target
 # workshop → sf sils scenario ... --target workshop、または
 # sf sils regression --include-workshop）を使うこと。

@@ -160,15 +160,15 @@ void WorkshopControlTask(void* pvParameters)
 
     // Register our own handle so ImuTask can wake us (sf::tasks::control_handle()).
     // Done before any blocking call — ImuTask guards on null until this runs.
-    // ImuTask が起こせるよう自分のハンドルを登録（sf::tasks::control_handle()）。
-    // ブロッキング前に実行。これが走るまで ImuTask は null ガードで待つ。
+    // ImuTask が起こせるよう自分自身のハンドルを登録（sf::tasks::control_handle()）。
+    // ブロッキング前に実行。これが実行されるまで ImuTask は null ガードで待つ。
     s_control_handle = xTaskGetCurrentTaskHandle();
 
     // Initialize the actuator (mixer + motor HAL) before the learner's setup()
     // runs, so ws:: motor calls made from setup() itself are safe (though the
     // motors stay disarmed until the ARM gate below opens).
-    // 学習者の setup() が走る前にアクチュエータ（ミキサー＋モーター HAL）を初期化
-    // する。setup() 自身から ws:: モータ関数を呼んでも安全（下の ARM 判定が開く
+    // 学習者の setup() が実行される前にアクチュエータ（ミキサー＋モーター HAL）を初期化
+    // する。setup() 自身から ws:: モータ関数を呼んでも安全（下の ARM 判定が有効になる
     // まではモータは disarmed のまま）。
     actuator.init();
 

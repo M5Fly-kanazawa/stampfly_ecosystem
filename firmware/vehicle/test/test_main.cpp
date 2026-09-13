@@ -25,7 +25,7 @@
 #include <cassert>
 
 // Stub ESP logging for PC build
-// PC用のESPロギングスタブ
+// PC用のESPロギング代替実装
 #define ESP_LOGI(tag, fmt, ...) printf("[INFO] %s: " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGW(tag, fmt, ...) printf("[WARN] %s: " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGE(tag, fmt, ...) printf("[ERR]  %s: " fmt "\n", tag, ##__VA_ARGS__)
@@ -450,7 +450,7 @@ TEST(autotune_fit_coherence_weighting)
     }
     // Corrupt the 3 lowest-freq points (the band a real yaw trim disturbance hits) with
     // gross errors, and flag them with LOW coherence (γ²≈0.05) — the off-tone SNR gate output.
-    // 低周波3点をひどく汚し、低コヒーレンス(γ²≈0.05)を付与（オフ音SNR判定の出力相当）。
+    // 低周波3点をひどく汚し、低コヒーレンス(γ²≈0.05)を付与（オフ周波数点SNR判定の出力相当）。
     for (int i = 0; i < 3; i++) {
         pts[i].yr *= 4.0f; pts[i].yi += 8.0f;
         pts[i].coh = 0.05f;
@@ -925,7 +925,7 @@ TEST(land_firm_ground)
 // firm-ground path can NOT fire), in a commanded landing descent, vz stalled → detected
 // via the stalled-descent branch within stall_hold_ms.
 // 降下停滞による接地（地面効果フロート）: ToF が ~8cm で停滞（<5cm に届かず firm-ground は
-// 発火不可）、着陸降下の指令中、vz 停滞 → stall_hold_ms 以内に降下停滞経路で検出。
+// 作動不可）、着陸降下の指令中、vz 停滞 → stall_hold_ms 以内に降下停滞経路で検出。
 TEST(land_stalled_descent_ground_effect)
 {
     sf::TakeoffLandingMgr mgr;

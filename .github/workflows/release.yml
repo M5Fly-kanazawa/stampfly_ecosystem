@@ -101,7 +101,7 @@ jobs:
     strategy:
       # Let every platform finish even if one fails, so a single flaky leg
       # doesn't cancel the others and each run reports full per-OS signal.
-      # 1つのOSが失敗しても他のOSを最後まで走らせ、実行ごとに全OS分の
+      # 1つのOSが失敗しても他のOSを最後まで動かし、実行ごとに全OS分の
       # 結果が得られるようにする（巻き添えキャンセルを防ぐ）
       fail-fast: false
       matrix:
@@ -339,7 +339,7 @@ jobs:
       # the artifact just built above, on every OS that ships one — not
       # a separate job, so it reuses this job's already-built `dist/`
       # artifact and Python environment instead of re-downloading/rebuilding.
-      # --- GUIフラッシャ ネイティブインストールのスモークテスト
+      # --- GUIフラッシャ ネイティブインストールの最小動作確認
       #     (Windows/macOS/Linux) ---
       # 上でビルドしたばかりの成果物に対し、それを配布する全OS上で
       # lib/sfcli/utils/flasher_install/ をエンドツーエンドで検証する。
@@ -378,7 +378,7 @@ jobs:
         # backup, --discard-local. Runs on every leg so the git-invoking
         # code is exercised on Windows shells too.
         # `sf upgrade` のオフライン6ケーステスト（bareリモート+クローンの
-        # fixture、pipはスタブ）: クリーンff・stash保全・stash pop衝突案内・
+        # fixture、pipは置き換え用の簡易実装）: クリーンff・stash保全・stash pop衝突案内・
         # 依存同期到達・sdkconfig陳腐化退避・--discard-local。git呼び出しを
         # Windowsシェルでも検証するため全レッグで実行する
         timeout-minutes: 10
@@ -515,7 +515,7 @@ jobs:
       # comment): let every platform finish so one flaky leg doesn't hide
       # the other three OSes' results.
       # 上の flasher_gui と同じ理由(そのコメント参照): 1つのOSが失敗しても
-      # 他の3OSの結果を隠さないよう、全て最後まで走らせる
+      # 他の3OSの結果を隠さないよう、全て最後まで動かす
       fail-fast: false
       matrix:
         # Identical OS/suffix pairing to flasher_gui -- StampFly Setup ships
@@ -850,9 +850,9 @@ jobs:
         # v2026.07.1: the web flasher kept serving v2026.07.0 firmware
         # until a manual redeploy.
         # deploy-pages.yml には `release: published` トリガがあるが、
-        # GITHUB_TOKEN 起因のイベントは他のワークフローを発火させない
+        # GITHUB_TOKEN 起因のイベントは他のワークフローを作動させない
         # （GitHub の再帰防止仕様）。上のリリースはまさに GITHUB_TOKEN で
-        # 作成されるため、このジョブではそのトリガは決して発火しない。
+        # 作成されるため、このジョブではそのトリガは決して作動しない。
         # workflow_dispatch API の直接呼び出しはこの抑止の例外として
         # GITHUB_TOKEN でも機能する（上のジョブレベル `actions: write`
         # 権限が必要）。v2026.07.1 で実際に観測: 手動で再デプロイする

@@ -51,7 +51,7 @@ make dxh              # DXH講座デッキ（本番投影用・QR入り）
 make dxh-docswell     # DXH講座デッキ（Docswell公開用・QRなし）
 make sci              # SCI/SICEチュートリアル講座デッキ
 make sci-docswell     # SCI/SICEチュートリアル講座デッキ（Docswell公開用・QRなし）
-make chapter NAME=led_control   # 単一チャプターの高速イテレーション用ビルド
+make chapter NAME=led_control   # 単一チャプターの高速反復用ビルド
                                  # （全イベントの chapters/ から NAME.tex を探す）
 make all              # 上記すべて
 make clean            # 中間ファイル削除

@@ -30,7 +30,7 @@
 |------|---------|
 | `plant.cpp` `Plant::step(dt)` | `mj_step(m_, d_)` を呼ぶ。**MuJoCo の `mj_step` は引数 `dt` を無視し、モデル固定 timestep `m_->opt.timestep`（= `stampfly.xml` の `option timestep="0.0025"` = 2.5 ms）を1回だけ進める。** `dt` はモータ一次遅れ `alpha` とノイズ前進にしか使われない。 |
 | `emu_main_generic.cpp` `on_advance(now_us)` / `emu_main.cpp` | スケジューラの**クロック前進イベント毎**に `sils_board_step_plant(now_us-last)` を1回呼ぶ＝ Plant を 0.0025s 1回進める。 |
-| `scheduler.cpp` `Scheduler::run` | 決定論的協調スケジューラ。Ready タスクが無いとき仮想時計 `now_us_` を「次の起床/タイマ発火」へ**不規則にジャンプ**させ、その都度 `on_advance_` を呼ぶ。 |
+| `scheduler.cpp` `Scheduler::run` | 決定論的協調スケジューラ。Ready タスクが無いとき仮想時計 `now_us_` を「次の起床/タイマ作動」へ**不規則にジャンプ**させ、その都度 `on_advance_` を呼ぶ。 |
 
 **不整合の核心**: 物理は「`on_advance` 呼び出し回数 × 0.0025s」しか進まない。一方スケジューラ
 仮想時間は実際の起床間隔で進む。**14個のタスクが各々の周期（1ms, 2.5ms, …）で起床するため、
@@ -82,7 +82,7 @@
 | 対象 | 影響 |
 |------|------|
 | **フル emu の飛行ダイナミクス全般** | emu_vehicle / emu_vehicle_old とも物理が3倍速。climb 率・速度・ToF 変化率・ESKF 挙動の**定量結論はすべて要再評価**。 |
-| **ESKF 鉛直発散 / 離陸ハンドオフ lock-out**（memory `project_eskf_vertical_divergence` §2） | **二次症状の可能性大**。物理3倍速 → firmware は dt=2.5ms で予測するが ToF は3倍動く位置を返す → イノベーション過大 → accel-bias が辻褄合わせで発散。jump filter（5 m/s）も真 1.7 m/s 上昇が見かけ 5 m/s 超で誤発火。**firmware の構造的欠陥ではなく、時間歪みが firmware に不可能なセンサ整合性を強いている**疑い。 |
+| **ESKF 鉛直発散 / 離陸ハンドオフ lock-out**（memory `project_eskf_vertical_divergence` §2） | **二次症状の可能性大**。物理3倍速 → firmware は dt=2.5ms で予測するが ToF は3倍動く位置を返す → イノベーション過大 → accel-bias が辻褄合わせで発散。jump filter（5 m/s）も真 1.7 m/s 上昇が見かけ 5 m/s 超で誤作動。**firmware の構造的欠陥ではなく、時間歪みが firmware に不可能なセンサ整合性を強いている**疑い。 |
 | **Plant 推力効率 1/1.12（commit 66752df）** | **修正自体は独立に正当**（plant_smoke は固定 dt 直接駆動でバグ無し、hover_duty 0.698 が firmware ALT_HOLD hover duty と一致＝Model Identity）。ただし当時の動機「過推力 climb」は時間基準バグの誤帰属だった。 |
 | **固定 dt で直接 step する smoke 群** | plant_smoke / hover_smoke / rate_tune / physics_smoke / noise_test / frames_test は `step(0.0025)` をループで呼ぶ＝物理時間=ループ時間。**影響なし**。 |
 | **決定性** | バグは決定論的（スケジューラが決定論）＝再現可能。だが物理レートが誤り。過去に「非決定」と見えたのは d_->time と now_us の混同＋サンプル時刻違いの錯覚。 |
@@ -110,7 +110,7 @@
 - **ALT_HOLD 保持**: sp=0.62m, alt が 0.62m に整定, vz≈0, thrust 0.406N≈hover 0.407N。
 - **時間 1:1**: trajectory が t=38s で終了（修正前は物理 t=100s まで発散）。
 - **決定論的**: 2回連続実行で peak alt=0.677m 一致。
-- **回帰なし**: plant_smoke 全PASS / hover_espnow 14/14 / console_cli 8/8（**sf 既定 25s で**。
+- **既存動作は維持**: plant_smoke 全PASS / hover_espnow 14/14 / console_cli 8/8（**sf 既定 25s で**。
   注意: 仮想 pilot の arm は ~20s 以降ゆえ duration 20s だと arm 前に終わる＝偽 FAIL になる）。
 - **ESKF 鉛直発散 blocker = 連鎖解消**を確認（§4 の予測どおり、物理が実レートに戻り ToF/ESKF が
   整合した）。`project_eskf_vertical_divergence` の「離陸ハンドオフ」blocker はこの時間基準バグの
@@ -124,7 +124,7 @@
 sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 38000000
 # console.out: peak alt ~0.68 m（runaway しない）
 # console.log: "ALT capture: alt=0.62m"、ALT_HOLD で alt が 0.62m 平坦、vz≈0
-# 回帰: sf sils scenario .../hover_espnow.scn （既定25s）= 14/14、console_cli.scn = 8/8
+# 再確認試験: sf sils scenario .../hover_espnow.scn （既定25s）= 14/14、console_cli.scn = 8/8
 ./simulator/sils/build/plant_smoke   # 全PASS（hover 維持）
 ```
 

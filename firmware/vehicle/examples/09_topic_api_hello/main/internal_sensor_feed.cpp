@@ -65,7 +65,7 @@ sf::ComplementaryEstimator attitude_estimator;
 /// why no axis remap is needed (the BMI270 driver already outputs body FRD
 /// axes).
 /// ドライバの機体座標読み（加速度は g、角速度は既に rad/s）を、推定器と Topic が
-/// 期待する SI 単位の ImuData へ変換する。tasks/imu_task.cpp::applyImuTransform()
+/// 前提とする SI 単位の ImuData へ変換する。tasks/imu_task.cpp::applyImuTransform()
 /// を踏襲（軸 remap が不要な理由は同関数のコメント参照 — BMI270 ドライバは既に
 /// 機体 FRD 軸で出力する）。
 sf::ImuData buildImuSample(const stampfly::AccelData& accel_g,
@@ -91,7 +91,7 @@ esp_err_t init()
     // this driver owns its own SPI bus (no sf_board dependency) — the same
     // standalone pattern as examples/04_read_imu.
     // BMI270Wrapper::Config::defaultStampFly() は skip_bus_init = false のため、
-    // このドライバは自分の SPI バスを所有する（sf_board 不要）—
+    // このドライバは自分自身の SPI バスを所有する（sf_board 不要）—
     // examples/04_read_imu と同じ単体パターン。
     auto imu_config = stampfly::BMI270Wrapper::Config::defaultStampFly();
     esp_err_t result = imu_driver.init(imu_config);

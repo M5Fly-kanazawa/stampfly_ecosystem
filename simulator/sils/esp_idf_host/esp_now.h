@@ -146,7 +146,7 @@ void      sils_espnow_deliver(const uint8_t* src_mac, const uint8_t* data, int l
 void      sils_espnow_report_send(const uint8_t* des_mac);
 
 /* ===========================================================================
- * Functions (stubs) / 関数（スタブ）
+ * Functions (stubs) / 関数（代替実装）
  * ===========================================================================*/
 
 /* Initialize ESP-NOW / ESP-NOW を初期化する */

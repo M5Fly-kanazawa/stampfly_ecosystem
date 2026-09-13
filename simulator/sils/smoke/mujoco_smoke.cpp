@@ -9,7 +9,7 @@
 /**
  * @file mujoco_smoke.cpp
  * @brief P1.0 smoke test — load a model into MuJoCo and step it.
- *        P1.0 スモークテスト — MuJoCo にモデルを読み込んでステップする。
+ *        P1.0 最小動作確認 — MuJoCo にモデルを読み込んでステップする。
  *
  * Proves the MuJoCo dependency builds, links, loads an MJCF, and integrates
  * deterministically on this host. A StampFly-sized box is dropped onto a

@@ -51,7 +51,7 @@ void ImuTask(void*);
 void ControlTask(void*);
 void StateTask(void*);
 // ControlTask self-registers its handle (sf::tasks::control_handle(), R3).
-// ControlTask が自分のハンドルを登録する（sf::tasks::control_handle(), R3）。
+// ControlTask が自分自身のハンドルを登録する（sf::tasks::control_handle(), R3）。
 
 using sils::rtos::Scheduler;
 using sf::math::Vec3;
@@ -83,7 +83,7 @@ constexpr float kG2AttRmseMaxDeg = 6.0f;      // G2: estimate-vs-truth attitude 
 // onTakeoff()/onTakeoffComplete() fix above; the old T_CLIMB=1.6s assumed the
 // pre-fix bypass instantly obeyed the throttle stick, which the real
 // controller never does during TakeoffClimb).
-// T_GROUND〜T_CLIMB は制御器「自身」の自動離陸上昇（下で ALT_HOLD 進入時に発火する
+// T_GROUND〜T_CLIMB は制御器「自身」の自動離陸上昇（下で ALT_HOLD 進入時に作動する
 // onTakeoff()）: スロットルスティックに無関係な固定 0.3m/s 上昇・固定 0.5m 目標
 // （pid_controller.cpp の takeoff_climb_rate_/takeoff_target_alt_ 既定値）— 以下の
 // THR_CLIMB は名目のみ（グラフ/テレメトリに「上昇意図」を残すためで、この局面の
@@ -139,7 +139,7 @@ float tiltDeg(const sf::math::Quat& q_nb)
     // estimate_state holds the zero-initialized [0,0,0,0] — treat that as level (0°)
     // instead of the arccos(0)=90° artifact it would otherwise produce.
     // 退化クォータニオンのガード: t=0 は推定器が未発行で estimate_state が [0,0,0,0]。
-    // arccos(0)=90° のアーティファクトを避け、水平(0°)として扱う。
+    // arccos(0)=90° という計算上の見かけの結果を避け、水平(0°)として扱う。
     const float n2 = q_nb.w * q_nb.w + q_nb.x * q_nb.x +
                      q_nb.y * q_nb.y + q_nb.z * q_nb.z;
     if (n2 < 1e-6f) return 0.0f;
@@ -252,13 +252,13 @@ void physics(int64_t now_us)
     // 独自 phase_ 状態機械があり（pid_controller.cpp）、Grounded で始まり（推力は 0 に
     // ハードクランプ、「地上 ARM 中: プロペラ停止」）onTakeoff() でしか抜けない —
     // 通常は state_task.cpp の ARM+スプールドウェル→StateManager::notifyTakeoff() が
-    // 発火する。本ベンチは（上の system_mode/controller_command と同様）StateManager を
-    // バイパスするためこの経路が一切走らず、onModeChange(ALT_HOLD) だけでは phase_ が
+    // 作動する。本ベンチは（上の system_mode/controller_command と同様）StateManager を
+    // バイパスするためこの経路が一切動かず、onModeChange(ALT_HOLD) だけでは phase_ が
     // 永久に Grounded のまま — スロットルスティックに関係なく climb/hover 窓全体で
     // 推力が ~0 のままだった（P1判定が壊れた原因を追う中で発見: max_alt 実測 0.013m、期待
     // 0.5m。gdb で特定 — controller_command.publish() は全て ModeChange か無関係な
     // StateManager リセットに遡り、Takeoff/TakeoffComplete 指令は一度も無かった）。
-    // 修正: state_task.cpp が出すのと同じ2指令を発火する（ALT_HOLD 進入で Takeoff を
+    // 修正: state_task.cpp が出すのと同じ2指令を発行する（ALT_HOLD 進入で Takeoff を
     // 一度、controller_status 経由で takeoff_reached を確認したら TakeoffComplete を
     // 一度）— StateManager の ARM/モード管理（本ベンチは元々使わない）を介さず直接
     // 駆動するだけで、実際のハンドシェイクそのもの。.scn シナリオ群（emu_vehicle）は
@@ -434,7 +434,7 @@ int main(int argc, char** argv)
     // SILS gain-sweep hook: override ALT_HOLD gains from the environment so we can
     // tune without recompiling, then bake the winners into params.cpp. No env set →
     // params.cpp defaults are used. (Temporary scaffolding for the P1 ALT_HOLD tune.)
-    // SILS ゲインスイープ用フック: 環境変数で ALT_HOLD ゲインを上書きし、再コンパイルなしで
+    // SILS ゲインスイープ用の環境変数オーバーライド: 環境変数で ALT_HOLD ゲインを上書きし、再コンパイルなしで
     // 調整 → 勝者を params.cpp に焼き込む。未設定なら params.cpp の既定値。（一時的）
     auto env_set = [](const char* env, const char* param) {
         const char* s = std::getenv(env);
@@ -453,7 +453,7 @@ int main(int argc, char** argv)
     // filter uses. ToF/flow are not injected here, so disable them (otherwise the
     // unobservable horizontal states drift on accel-only). This is a per-run SILS
     // config via params (like estimator.type); the firmware defaults are unchanged.
-    // 本ベンチのセンサ構成: ハーネスが気圧を注入するので、ESKF の高度/速度も baro+IMU から
+    // 本ベンチのセンサ構成: 試験プログラムが気圧を注入するので、ESKF の高度/速度も baro+IMU から
     // 得る（相補フィルタと同じ系統）。ToF/flow は注入しないので無効化（さもないと観測不能な
     // 水平状態が加速度のみでドリフト）。estimator.type と同様の実行時 SILS 設定で、ファームの
     // 既定値は変えない。
@@ -514,7 +514,7 @@ int main(int argc, char** argv)
     xTaskCreatePinnedToCore(ControlTask, "ControlTask", config::STACK_CONTROL,
                             nullptr, config::PRIORITY_CONTROL, &h_control, 1);
     // ControlTask registers its own handle in setup (sf::tasks::control_handle()).
-    // ControlTask は setup で自分のハンドルを登録する。
+    // ControlTask は setup で自分自身のハンドルを登録する。
     xTaskCreatePinnedToCore(ImuTask,     "ImuTask",     config::STACK_IMU,
                             nullptr, config::PRIORITY_IMU,     &h_imu,     1);
 

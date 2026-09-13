@@ -350,7 +350,7 @@ class FollowCamera:
     def _smooth_angle(self, current, target, alpha):
         """
         Smooth angle with proper wrapping.
-        角度を正しくラップしながらスムージング
+        角度を正しく折り返しながらスムージング
         """
         # Calculate shortest angular difference
         diff = self._wrap_angle(target - current)

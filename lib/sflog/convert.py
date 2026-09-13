@@ -328,7 +328,7 @@ def _reorder_columns_to_schema(df: pd.DataFrame, stream_name: str) -> pd.DataFra
     written CSVs matching the documented column order.
     `df` の列順を、protocol/spec/flight_log.yaml が宣言する
     `stream_name` の列順（例: `timestamp_us` の直後に `seq`）に合わせる。
-    スキーマが知らない列は末尾に残す。見た目だけの整形（読み込み側は
+    スキーマが判別できない列は末尾に残す。見た目だけの整形（読み込み側は
     列名で引き、位置には依らない）だが、書き出す CSV をドキュメント上の
     列順と一致させておく。
     """

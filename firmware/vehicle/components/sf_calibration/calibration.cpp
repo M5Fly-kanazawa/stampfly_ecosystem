@@ -191,7 +191,7 @@ bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
     // The EMA keeps updating through motion so the gate re-opens only after the
     // craft has genuinely settled.
     // 静止判定（StillnessConfig 参照）: 動きは部分蓄積を破棄する。EMA は動いている間も
-    // 更新し続けるため、本当に静定してから判定が再び開く。
+    // 更新し続けるため、本当に静定してから再び静止と判定されるようになる。
     if (!updateStillness(gyro, accel)) {
         restartAccumulation();
         return false;

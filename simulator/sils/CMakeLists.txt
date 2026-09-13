@@ -7,9 +7,9 @@
 #   (2) the firmware algorithm cores compile and run on host via interfaces
 #       (target: cores_smoke)
 #
-# P1.0 の成果物: 2つの大きな未知を潰すスモークテスト —
+# P1.0 の成果物: 2つの大きな未知を潰す最小動作確認 —
 #   (1) MuJoCo がこのホストでビルド・ステップする       (target: mujoco_smoke)
-#   (2) ファームの算法コアが host 上でインターフェース経由で動く
+#   (2) ファームのアルゴリズムコアが host 上でインターフェース経由で動く
 #       (target: cores_smoke)
 #
 # Source of truth for the SILS design: simulator/sils/RESET_PLAN.md
@@ -43,7 +43,7 @@ set(SILS_COMPAT ${CMAKE_CURRENT_SOURCE_DIR}/compat)
 # -----------------------------------------------------------------------------
 # Firmware algorithm cores as a host library (compiled unmodified, via the
 # compat stubs). Code Identity: same sources the firmware ships.
-# ファームの算法コアを host ライブラリ化（compat スタブ経由で無改変
+# ファームのアルゴリズムコアを host ライブラリ化（compat 代替実装経由で無改変
 # コンパイル）。Code Identity: ファームが出荷するのと同じソース。
 # -----------------------------------------------------------------------------
 if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
@@ -104,7 +104,7 @@ endif()
 # RTOS-emulator smoke: run the real ImuTask/ControlTask/StateTask on the host
 # cooperative scheduler. Sensor HALs are replaced at the wrapper seam (sim_hal).
 # RTOS エミュレータのスモーク: 実 ImuTask/ControlTask/StateTask をホストの
-# 協調スケジューラで走らせる。センサ HAL はラッパー境界で差し替え（sim_hal）。
+# 協調スケジューラで動かす。センサ HAL はラッパー境界で差し替え（sim_hal）。
 # -----------------------------------------------------------------------------
 if(SILS_BUILD_RTOS_SMOKE)
   find_package(Threads REQUIRED)
@@ -210,7 +210,7 @@ if(SILS_BUILD_MUJOCO_SMOKE)
 
   # Rate-loop tuning harness: yaw-rate step with runtime-injected gains, for the
   # SILS-backed recalibration sweep. Same wiring as hover_smoke.
-  # レートループ調整ハーネス: 実行時注入ゲインでヨーレートステップ。掃引用。
+  # レートループ調整試験プログラム: 実行時注入ゲインでヨーレートステップ。掃引用。
   add_executable(rate_tune
     smoke/rate_tune.cpp
     plant/plant.cpp
@@ -274,7 +274,7 @@ endif()
 # chain is C++-only (esp_err.h uses <cstdint>), so the .c HAL/driver sources
 # are compiled as C++.
 #
-# StampFly エミュレータ — 実ファームの app_main() をホストで走らせる。esp_idf_host/＋
+# StampFly エミュレータ — 実ファームの app_main() をホストで動かす。esp_idf_host/＋
 # compat/ が SoC を肩代わりし、チップ/ボードは仮想デバイス（E1+）。ファームは無改変・
 # ファーム非依存（E5 で firmware/vehicle_old も同様にビルドして実証したが、
 # 同ファームは2026-09-13に削除済み。以後の2本目ターゲットは下記 firmware/workshop）。
@@ -415,7 +415,7 @@ if(SILS_BUILD_EMU)
   # lesson switch` owns overwriting it thereafter).
   # main/user_code.cpp が無ければ Lesson 0 テンプレートから生成する — 実ファーム
   # ビルド（firmware/workshop/main/CMakeLists.txt）と同じ初回配慮。`sf lesson
-  # switch` が一度も走っていないチェックアウトでも `sf sils build --target
+  # switch` が一度も動いていないチェックアウトでも `sf sils build --target
   # workshop` が動く。gitignore 対象（firmware/workshop/.gitignore 参照）で
   # 既存ファイルは上書きしない（以後の上書きは `sf lesson switch` の役目）。
   set(WS_USER_CODE "${WS}/main/user_code.cpp")
@@ -525,7 +525,7 @@ endif()
 # the motion-burst framing, and the translational flow round-trip deterministically.
 # ON by default: it is fast, self-contained, and part of the regression set.
 # PMW3901 オフラインフロー probe — チップモデルを host で直接駆動し、SPI レジスタ規約・
-# motion burst・並進フロー round-trip を決定論的に検証。既定 ON（高速・自己完結・回帰）。
+# motion burst・並進フロー round-trip を決定論的に検証。既定 ON（高速・自己完結・再確認試験向き）。
 # -----------------------------------------------------------------------------
 option(SILS_BUILD_PMW3901_PROBE "Build the offline PMW3901 optical-flow probe" ON)
 if(SILS_BUILD_PMW3901_PROBE)

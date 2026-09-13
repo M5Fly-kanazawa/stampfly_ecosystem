@@ -186,7 +186,7 @@ def main():
             continue
         # Reject too-short windows (e.g. crash-aborts like 185501 that only powered ~2s):
         # they are not clean hovers and corrupt the trim statistics.
-        # 短すぎる窓（墜落アボート等）はクリーンなホバーでなく統計を汚すため除外。
+        # 短すぎる窓（墜落アボート等）は混入のないホバーでなく統計を汚すため除外。
         if r["dur_s"] < 10.0:
             print(f".. {p}: hover window too short ({r['dur_s']:.1f}s) -> excluded (crash/abort)")
             continue

@@ -271,7 +271,7 @@ ControlOutput PidController::compute(
     // Run the attitude cascade for STABILIZE and above, AND during Landing in any
     // mode — an autonomous landing must be attitude-stabilized even if it started
     // from ACRO (a comm-loss landing). INV-1: one attitude path for every phase.
-    // 姿勢カスケードは STABILIZE 以上、加えて任意モードの Landing 中も走らせる — 自動着陸は
+    // 姿勢カスケードは STABILIZE 以上、加えて任意モードの Landing 中も動かす — 自動着陸は
     // ACRO から始まっても（通信途絶着陸）姿勢安定化が必要。INV-1: 全フェーズ単一姿勢経路。
     if (current_mode_ >= FlightMode::STABILIZE ||
         phase_ == VerticalPhase::Landing) {
@@ -295,7 +295,7 @@ ControlOutput PidController::compute(
         // 所有）が、パイロットは終始「完全な姿勢制御」を保つ — roll/pitch で傾け yaw で回頭、
         // 通常飛行と全く同じ（中立→水平→真上に上昇／倒せば上昇中も操縦／傾きは ~cosθ の揚力損
         // のみで高度ループが補償）。旧来は TakeoffClimb で水平強制（roll_sp=pitch_sp=yaw=0）し、
-        // そのフェーズに留まるとロール/ピッチが死んだ（実機バグ 2026-06-14）。どの状態でも姿勢を
+        // そのフェーズに留まるとロール/ピッチが応答しなくなった（実機バグ 2026-06-14）。どの状態でも姿勢を
         // 奪わない（ユーザー判断）。POS_HOLD は下の位置カスケードで発進点を保持する（設計どおり。
         // POS_HOLD のパイロット意図は「保持」であって「傾ける」ではない）。
 
@@ -397,11 +397,11 @@ ControlOutput PidController::compute(
         // (auto-)takeoff.
         // POS_HOLD: 位置カスケードがスティック傾き指令を上書きする — 中立は捕捉位置を保持し、
         // roll/pitch を倒すと「再配置」する（水平速度を指令、離すと新位置を再捕捉）。
-        // computePositionHold 参照。Grounded 中は走らせない — 保持目標は（自動）離陸時に捕捉。
+        // computePositionHold 参照。Grounded 中は動かさない — 保持目標は（自動）離陸時に捕捉。
         // Not during Landing: the autonomous descent uses direct stick tilt (or the
         // level gate below), not the position cascade — keep the landing law uniform
         // across modes (a POS_HOLD landing steers like STABILIZE).
-        // Landing 中は走らせない: 自動降下は位置カスケードでなく直接スティック傾き（下の
+        // Landing 中は動かさない: 自動降下は位置カスケードでなく直接スティック傾き（下の
         // 水平判定）を使い、着陸則をモード間で統一する（POS_HOLD 着陸も STABILIZE 同様に操縦）。
         if (current_mode_ >= FlightMode::POS_HOLD &&
             phase_ != VerticalPhase::Grounded &&
@@ -551,8 +551,8 @@ ControlOutput PidController::compute(
             // TakeoffClimb so the pilot regains attitude control even if "reached" never trips.
             // 離陸完了検出 — ロバストな片側到達＋タイムアウト・バックストップ。到達: 機体が目標の
             // kTakeoffCaptureBandM 以内まで上昇（altitude>=target-band）を短時間持続 → 上昇途中で
-            // 発火し、定常ホバー偏差・鉛直速度ノイズに非依存（旧両側バンド+低速整定は実機で発火せず
-            // ロール/ピッチを0固定した。pid_controller.hpp 参照）。タイムアウトは、到達が発火しなく
+            // 成立し、定常ホバー偏差・鉛直速度ノイズに非依存（旧両側バンド+低速整定は実機で成立せず
+            // ロール/ピッチを0固定した。pid_controller.hpp 参照）。タイムアウトは、到達が成立しなく
             // ても必ず TakeoffClimb を抜けてパイロットが姿勢制御を取り戻すことを保証する。
             ++takeoff_elapsed_cycles_;
             if (altitude >= takeoff_target_alt_ - kTakeoffCaptureBandM) {
@@ -591,10 +591,10 @@ ControlOutput PidController::compute(
             // first returns to the center deadzone (= the spring rest), then opens — the
             // legacy "release the spring stick to unlock" behavior. Guidance/API own the
             // target via the walking setpoint and never reach this stick path.
-            // 再センター判定: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央
+            // スロットル再センターロック: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央
             // から外れていることがあり（例: STABILIZE のホバースロットルは上）、高度がジャンプ
-            // する。判定はスティックが初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、
-            // その後開く — 旧来の「バネ式は離せば解除」。誘導/API は歩く設定点で目標を所有し、
+            // する。ロックはスティックが初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、
+            // 戻ると解除する — 旧来の「バネ式は離せば解除」。誘導/API は歩く設定点で目標を所有し、
             // このスティック経路に達しない。
             if (!throttle_recentered_ && fabsf(ta) < stick_deadzone_) {
                 throttle_recentered_ = true;
@@ -742,7 +742,7 @@ ControlOutput PidController::compute(
                     sysid_pending_.ur = iq_ur_; sysid_pending_.ui = iq_ui_;
                     sysid_pending_.yr = iq_yr_; sysid_pending_.yi = iq_yi_;
                     // off-tone gyro power = the disturbance/noise floor at this frequency
-                    // オフ音ジャイロ電力 = この周波数の外乱/雑音床
+                    // オフ周波数点ジャイロ電力 = この周波数の外乱/雑音床
                     sysid_pending_.off_power = iq_yr_off_ * iq_yr_off_
                                              + iq_yi_off_ * iq_yi_off_;
                     sysid_pending_.samples = iq_n_;
@@ -791,7 +791,7 @@ ControlOutput PidController::compute(
         // so it starts converged — otherwise y_dc_ carries a STALE DC from the previous
         // tone/axis/run and biases this point's low-freq lock-in for ~0.3 s.
         // 除トレンド: 近DC外乱の低周波漏れを防ぐ。各点の最初の蓄積サンプルで現在のDCに再シードし収束済で
-        // 開始（前の音/軸/実行の古いDCの持ち越しで低周波が偏るのを防ぐ）。
+        // 開始（前の周波数点/軸/実行の古いDCの持ち越しで低周波が偏るのを防ぐ）。
         constexpr float kDetrendAlpha = 0.008f;   // ~0.5 Hz cutoff at 400 Hz
         if (iq_n_ == 0) y_dc_ = y_ax;             // re-seed per point (no cross-tone/axis carry)
         y_dc_ += kDetrendAlpha * (y_ax - y_dc_);
@@ -807,8 +807,8 @@ ControlOutput PidController::compute(
         // otherwise on-tone energy leaks into off_power and wrongly DEPRESSES coh on clean
         // low-freq points (which would needlessly reject good roll/pitch data). Top tone
         // 35→44.5 Hz stays well below the 200 Hz Nyquist (no aliasing).
-        // オフ音は f+max(27%,2Hz)で最低音でも十分離す（2Hz→4Hz）。漏れで clean 点の coh を誤って
-        // 下げ、良好な roll/pitch を不要に棄却するのを防ぐ。最高音 44.5Hz は Nyquist 200Hz 未満。
+        // オフ周波数点は f+max(27%,2Hz)で最低周波数点でも十分離す（2Hz→4Hz）。漏れで clean 点の coh を誤って
+        // 下げ、良好な roll/pitch を不要に棄却するのを防ぐ。最高周波数点 44.5Hz は Nyquist 200Hz 未満。
         const float f_off = excite_freq_ + fmaxf(0.27f * excite_freq_, 2.0f);
         excite_phase_off_ += 2.0f * 3.14159265f * f_off * dt;
         const float co = cosf(excite_phase_off_);
@@ -863,7 +863,7 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // 学習トリムを着陸エッジ（Airborne または Landing -> Grounded。自動降下は Landing
     // フェーズを通るので両方受理。さもないと Airborne->Landing->Grounded の着陸が永続
     // しない）で NVS 保存。接地（Grounded）は安全な瞬間: 推力は判定済みゆえ単発フラッシュ
-    // 書込が飛行を乱さない。注: この set_float+save は ControlTask で走るが接地時の単発
+    // 書込が飛行を乱さない。注: この set_float+save は ControlTask で実行されるが接地時の単発
     // （毎サイクルでない）ゆえ ~37ms フラッシュ停止は接地後で無害。厳密な R5/R7 準拠は
     // DISARM トピック経由で専用永続化タスクに回す（将来 TODO）。
     if ((trim_prev_phase_ == VerticalPhase::Airborne ||
@@ -1142,8 +1142,8 @@ float PidController::computeDobCorrection(const StateEstimate& state, float dt)
     // the un-primed startup value 0 this makes the DOB a clean no-op.
     // 加速度計の測定値の妥当性ガード: specific_force を埋めない推定器（例: 相補フィルタは
     // ゼロ初期化のまま）では f_up=0 になる。実飛行の f_up は +g（≈9.8）近傍。
-    // ガード未満は非妥当な計測（データなし or 自由落下級の過渡）なので、ゴミで
-    // フィルタを叩かず前回 d_hat を保持 — 未プライム時の初期値0なら DOB は
+    // ガード未満は非妥当な計測（データなし or 自由落下級の過渡）なので、ゴミを
+    // フィルタへ送らず前回 d_hat を保持 — 未プライム時の初期値0なら DOB は
     // 完全な no-op になる。
     if (f_up < kDobMinFupMs2) {
         return dob_d_hat_;
@@ -1535,7 +1535,7 @@ void PidController::startExcitation(const SysidCommand& cmd)
     // Reset the off-tone accumulator/phase per point. (y_dc_ for the detrend is re-seeded
     // to the current rate on the first accumulated sample — see the I/Q block — so it
     // never carries a stale DC across tones/axes/runs.)
-    // オフ音蓄積/位相は点ごとにリセット。（除トレンドの y_dc_ は最初の蓄積サンプルで現DCに再シード。）
+    // オフ周波数点蓄積/位相は点ごとにリセット。（除トレンドの y_dc_ は最初の蓄積サンプルで現DCに再シード。）
     excite_phase_off_ = 0.0f;
     iq_yr_off_ = iq_yi_off_ = 0.0f;
     excite_amp_ = cmd.amplitude;
@@ -1578,7 +1578,7 @@ void PidController::reset()
     reposition_active_ = false;          // stick repositioning state clears / スティック再配置状態クリア
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
-    throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用に判定再武装
+    throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用にロックを再び掛ける
     takeoff_reached_        = false;      // takeoff-complete signal clears / 離陸完了信号クリア
     takeoff_settle_cycles_  = 0;
     takeoff_elapsed_cycles_ = 0;
@@ -1614,7 +1614,7 @@ void PidController::onModeChange(FlightMode new_mode)
         // pass through center before it commands climb/descent — the stick is at an
         // arbitrary position at the switch and must not jump the altitude (decision ②).
         // 飛行中の ALT_HOLD/POS_HOLD 進入（Case B）: 現在高度を保持目標として捕捉し、
-        // スロットル再センター判定を閉じる — スティックは切替時に任意位置にあり、
+        // スロットル再センターロックを掛ける — スティックは切替時に任意位置にあり、
         // 高度をジャンプさせないため中央を通すまで上昇/下降を指令させない（確定②）。
         if (new_mode >= FlightMode::ALT_HOLD && current_mode_ < FlightMode::ALT_HOLD) {
             capture_alt_         = true;

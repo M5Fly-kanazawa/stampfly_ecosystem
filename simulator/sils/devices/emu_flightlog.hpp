@@ -28,7 +28,7 @@
  * firmware with no glue (none yet) still links and produces truth.csv only.
  * アーキテクチャ: 本体は容器（open/close、ストリーム毎の遅延オープン CSV）を持ち、
  * 不透明な sils::Plant* からファーム非依存の物理真値（truth.csv）を採取する。どの
- * ファームの Pub-Sub トピックも知らない — それは弱フック
+ * ファームの Pub-Sub トピックの情報も持たない — それは弱フック
  * `sils_emu_flightlog_firmware_sample` を上書きするファーム固有 glue
  * （例: devices/emu_flightlog_vehicle.cpp）の仕事（emu_trajectory.cpp が
  * `sils_emu_estimate` に使ったのと同じ弱フック方式）。glue の無いファームでも

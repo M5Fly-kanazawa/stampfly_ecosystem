@@ -18,7 +18,7 @@ __file__) resolves to the fixture clone, never the real repository.
 すべてローカルの使い捨てbareリモート+クローン一式を一時ディレクトリ配下に
 構築して検証する。メインリポジトリには一切触れない -- 各チェックは
 {seed, bare "origin", clone} の3つ組をゼロから構築し、このリポジトリの
-現在のlib/sfcliソースツリーをseedへコピーする（テスト対象がスタブでは
+現在のlib/sfcliソースツリーをseedへコピーする（テスト対象が代替実装では
 なく実装そのものになるように）。`sf upgrade` は
 `PYTHONPATH=<clone>/lib python -m sfcli.cli upgrade [args...]` の形で
 cwd=<clone> のサブプロセスとして呼び出す -- これにより
@@ -37,7 +37,7 @@ Covers / 対象（仕様C1テスト項目 (a)〜(g)）:
         successful upgrade; SF_UPGRADE_SKIP_PIP=1 stubs the real pip
         call so this is verifiable without network access.
         依存同期(pip install -e .)に必ず到達する。
-        SF_UPGRADE_SKIP_PIP=1で実pip呼び出しをスタブ化し検証する。
+        SF_UPGRADE_SKIP_PIP=1で実pip呼び出しを簡易な代替実装に置き換えて検証する。
     (e) An upstream sdkconfig.defaults change backs up the existing
         firmware/<target>/sdkconfig.
         sdkconfig.defaults変更でsdkconfigが退避される。
@@ -257,7 +257,7 @@ def _run_upgrade(
         PYTHONPATH=<clone_dir>/lib python -m sfcli.cli upgrade [args...]
     with cwd=<clone_dir> (spec C1 test harness requirement).
     `clone_dir` に対して `sf upgrade` を実サブプロセスとして呼び出す
-    （仕様C1テストハーネス要件）。
+    （仕様C1試験プログラム要件）。
     """
     env = dict(os.environ)
     env["PYTHONPATH"] = str(clone_dir / "lib")
@@ -272,11 +272,11 @@ def _run_upgrade(
     # exit code — a sandboxed/offline run would fail unrelated cases).
     # Case (d) passes the same value explicitly because verifying the stub
     # marker is its entire point.
-    # 全ケースで pip をスタブ化する（(d)だけではない）: 本ハーネスは
+    # 全ケースで pip を簡易な代替実装に置き換える（(d)だけではない）: 本試験プログラムは
     # fixture クローンに対して本物の pip を絶対に実行しない（ネットワーク
     # アクセス・環境汚染に加え、依存同期の失敗は終了コードに反映される
     # ため、サンドボックス/オフライン実行では無関係なケースまで失敗して
-    # しまう）。ケース(d)はスタブマーカーの検証自体が目的なので、同じ値を
+    # しまう）。ケース(d)は代替実装マーカーの検証自体が目的なので、同じ値を
     # 明示的に渡している。
     env.setdefault(SKIP_PIP_ENV_VAR, "1")
     if extra_env:
@@ -337,8 +337,8 @@ def check_clean_fast_forward(tmp_root: Path) -> None:
     # so the case (h) self-bootstrap hop must NOT fire -- confirms the
     # hop's trigger check has no false positives.
     # このケースのupstreamコミットはlib/sfcliに触れない（READMEのみ）ため、
-    # ケース(h)の自己ブートストラップ・ホップは発火してはならない --
-    # ホップの発火判定に誤検出が無いことを確認する。
+    # ケース(h)の自己ブートストラップ・ホップは作動してはならない --
+    # ホップの作動判定に誤検出が無いことを確認する。
     assert "handing over" not in (result.stdout + result.stderr), (
         f"a README-only upstream change should not trigger the self-bootstrap hop; "
         f"full output:\n{result.stdout}{result.stderr}"
@@ -669,7 +669,7 @@ def check_bootstrap_hop(tmp_root: Path) -> None:
     検証する。
 
     lib/sfcli/commands/upgrade.py（無害な末尾コメントを追記 -- ホップの
-    発火条件である`git diff -- lib/sfcli`を非空にするのに十分）と
+    作動条件である`git diff -- lib/sfcli`を非空にするのに十分）と
     README.md（ホップが意図的に変更するsfcli自身のソース差分を見ずとも、
     最終的なff-onlyマージの完了を外部から観測できるように）の両方を
     変更する。引き継ぎの案内文言が表示されること、マージが実際に完了した

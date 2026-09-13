@@ -56,12 +56,12 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle |
 | `alt_recenter_gate` | **スロットル再センターロック Case A**（離陸後）: 上げスティックを保持しても捕捉 0.5m を保持（ロック）、中央 3072 を通すとロック解除→上昇 | vehicle |
 | `alt_inflight_switch` | **スロットル再センターロック Case B**（飛行中切替）: STABILIZE→ALT_HOLD 切替で高度ジャンプなし（捕捉＋ロック）、中央通過でロック解除 | vehicle |
-| `alt_arm_rollpitch` | **ARM トリガ ALT_HOLD 離陸「後」にロール/ピッチが効く回帰ガード**（実機バグ 2026-06-14）: TakeoffClimb で止まると roll_sp=0 でスティック死。離陸完了の片側到達＋タイムアウトで Airborne へ抜け、ロール指令で機体が傾く（tilt_max>6°）ことを assert | vehicle |
+| `alt_arm_rollpitch` | **ARM トリガ ALT_HOLD 離陸「後」にロール/ピッチが効く、既存動作の破壊を防ぐ試験**（実機バグ 2026-06-14）: TakeoffClimb で止まると roll_sp=0 でスティック死。離陸完了の片側到達＋タイムアウトで Airborne へ抜け、ロール指令で機体が傾く（tilt_max>6°）ことを assert | vehicle |
 | `alt_takeoff_steer` | **自動離陸の「上昇中」にロール/ピッチが効く**（鉛直のみ自動・姿勢は常にパイロット, ユーザー判断 2026-06-14）: ARM時からロール右を保持 → TakeoffClimb 窓 [8.4,9.2] で機体が傾く（tilt_max>6°）かつ鉛直は自動で 0.5m 到達。旧水平保持なら tilt≈0 で FAIL | vehicle |
 | `alt_disarm_land` | **ALT_HOLD でのパイロット DISARM が自動着陸を起動**（ユーザー要望 2026-06-14, 注5）: ARM→自動離陸→ホバー中に DISARM → 即カットせず緩降下（0.3m/s, モータ稼働）→接地→本当の DISARM。降下中 duty>0.5・DISARM 0.4s 後も alt>0.2（自由落下でない）・終端 alt<0.05 を assert | vehicle |
 | `alt_disarm_land_steer` | **パイロット着陸は降下中も操縦可**（着陸則統一 INV-1/INV-2, リファクタA 注6）: DISARM 後の降下中にロール保持 → `tilt_max=11°`＝機体が傾く。旧 `computeLanding` 水平強制なら≈0 で FAIL。中立版 `alt_disarm_land` は tilt≈0 | vehicle |
 | `commloss_land_level` | **フェイルセーフ着陸は水平**（INV-2 敵対ガード）: リンク途絶直前にロール右保持 → 猶予中(FLYING)は古いロールで `tilt 11.6°` だが、LANDING 突入後は水平判定で `tilt 3.6°` に水平化。リンク生存判定=設定点の新鮮さ(500ms) | vehicle |
-| `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤発火させない）。離陸高度は **0.5m に統一**（手動 RC と同一ルーチン、2026-06-14）。`--duration 40000000` 必須 | vehicle |
+| `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤作動させない）。離陸高度は **0.5m に統一**（手動 RC と同一ルーチン、2026-06-14）。`--duration 40000000` 必須 | vehicle |
 | `sysid_rate` | 飛行中レートループ同定励振（API `sysid roll chirp 25 4`: POS_HOLD ホバーで ±25dps 対数チャープ、有界・定点維持・正常終了）。`--duration 32000000` 必須 | vehicle |
 | `acro_crash_relevel` | 墜落復帰リセット後、保持されたモードスイッチが IDLE_GROUND で再適用される（実機 LED バグの固定） | vehicle |
 | `autotune` | オンボード自動チューン全鎖（API `autotune roll 60 50`: 9点ステップドサイン掃引→同定→PID設計→ライブ適用→新ゲインでホバー・着陸）。`--duration 55000000` 必須 | vehicle |
@@ -70,7 +70,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
 1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² 判定（カイ二乗判定）が補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。
-2. **モード未伝播**: 接地時の飛行モード STABILIZE リセットが `StateManager::mode_` を変えるだけで制御器に伝わらず（制御器は `ControllerCmd::ModeChange` 経由でのみモードを知る）、ALT/POS 飛行後の再離陸が古いホバー推力モードのまま上昇しない。リセット時に onModeChange を発火させて解決。
+2. **モード未伝播**: 接地時の飛行モード STABILIZE リセットが `StateManager::mode_` を変えるだけで制御器に伝わらず（制御器は `ControllerCmd::ModeChange` 経由でのみモードを知る）、ALT/POS 飛行後の再離陸が古いホバー推力モードのまま上昇しない。リセット時に onModeChange を作動させて解決。
 
 ## 3. 実行方法
 

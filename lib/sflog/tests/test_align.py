@@ -158,7 +158,7 @@ def test_lockstep_stream_without_seq_falls_back_to_row_index_join_with_warning()
     warn so a caller can notice the degraded, position-only join.
     `seq` 列を欠くロックステップ系ストリーム（v1 バンドルでは起こらない
     はず）でも行番号ベースのフォールバックで結合はできるが、`aligned()`
-    は劣化した位置のみの結合であることに気づけるよう警告しなければ
+    は劣化した位置のみの結合であることが分かるよう警告しなければ
     ならない。
     """
     imu = pd.DataFrame({"timestamp_us": [0, 100, 200], "gyro_x": [0.0, 0.0, 0.0]})  # no seq

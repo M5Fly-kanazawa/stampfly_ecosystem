@@ -23,7 +23,7 @@
 # UDP 輸送は inert）。プログラム飛行の全鎖: SDK モード → ARM トリガ自動離陸（0.5m 目標）→
 # その高度を誘導が保持 → 目標合成の移動（到達後に "ok"）→ 自動着陸。全行程 RC は中立のまま
 # （安全要員が中立送信機を保持する実運用構成）— 「置いたままのスティック」（下端の
-# スロットル含む）が解除則を誤発火させないことの証明。
+# スロットル含む）が解除則を誤作動させないことの証明。
 #
 # Run: sf sils scenario simulator/sils/scenarios/api_flight.scn --target vehicle --duration 40000000
 #

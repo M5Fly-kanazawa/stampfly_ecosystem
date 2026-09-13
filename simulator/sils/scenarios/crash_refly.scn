@@ -15,7 +15,7 @@
 # Phase-8 ★ロバスト再飛行キャップストーン。再飛行 readiness の全鎖を1走行で:
 #   1. 離陸し ALT_HOLD でホバー。
 #   2. 墜落: 1モータ劣化（非対称トルクで機体が傾く）＋強い下向き風で地面に叩きつけ → 衝撃
-#      フェイルセーフ発火（>3G×2）で自動DISARM（FLYING→IDLE_GROUND、ESKF全リセット、
+#      フェイルセーフ作動（>3G×2）で自動DISARM（FLYING→IDLE_GROUND、ESKF全リセット、
 #      モード→STABILIZE）。
 #   3. 手で物理ハンドリング: 持上げ→正立（傾いた機体を水平へ）→運搬→地面に設置（Plant
 #      キネマティック軌道、ToF 上昇→IDLE_HELD、設置→IDLE_GROUND→再校正開始）。

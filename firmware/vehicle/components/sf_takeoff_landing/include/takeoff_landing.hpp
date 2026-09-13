@@ -50,7 +50,7 @@ struct TakeoffLandingConfig {
     // needed; the stalled descent IS the weight-on-ground evidence.
     // 降下停滞による接地（「地面効果フロート」）。着陸降下の指令中、接地近傍ではローター揚力が
     // 増す（地面効果）ため機体は低推力で高度を保ち、一定速度降下が 5cm 地上閾値の上で停滞する
-    // — ToF のみの検出器は発火せず機体は浮く（パイロット報告 2026-06-14）。そこで接地を
+    // — ToF のみの検出器は作動せず機体は浮く（パイロット報告 2026-06-14）。そこで接地を
     // キネマティクスから宣言: 着陸降下が指令されており ∧ ToF が near_ground_tof_m 以内 ∧
     // 鉛直速度が停滞（< landing_vel_mps）＝降下しようとしているのに地面に止められている。脆い
     // （ホバー感度の高い）推力閾値は不要で、降下停滞そのものが地面支持の証拠。
@@ -98,7 +98,7 @@ public:
     /// 所有タスクが sensor_tof を1回だけ読んで注入するため推定器とキューを奪い合わない。
     /// `armed` で接地判定を制御: disarmed 中は確実に接地（接地中 ToF は最小レンジ未満で
     /// 無効を返し単独で接地を確認できない）。実証済みの firmware/vehicle（disarmed なら
-    /// landed）と同じで、着地後の再錨付けと次飛行のクリーンな開始を可能にする。
+    /// landed）と同じで、着地後の再錨付けと次飛行の混入のない開始を可能にする。
     /// `vertical_velocity` [m/s, NED down] is injected (not read from a topic) so the
     /// landing detector stays a pure function of its inputs — detection here, the
     /// transition decision in StateTask (architecture §2: separate detection from decision).

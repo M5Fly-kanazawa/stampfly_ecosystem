@@ -32,9 +32,9 @@ on:
     # dispatches this workflow explicitly as its final step.
     # Webフラッシャページは最新リリースのファームウェアバイナリを同梱するため、
     # mainへのpushがなくてもリリースを公開したらサイトを再デプロイする必要がある。
-    # 注: このトリガが発火するのは手動（UI/PAT）で公開されたリリースのみ。
+    # 注: このトリガが作動するのは手動（UI/PAT）で公開されたリリースのみ。
     # release.yml が作るリリースは GITHUB_TOKEN 起因でありイベントが他の
-    # ワークフローを発火させない（GitHub の再帰防止仕様）ため、release.yml が
+    # ワークフローを作動させない（GitHub の再帰防止仕様）ため、release.yml が
     # 最終ステップで本ワークフローを明示的に起動する。
 
 permissions:

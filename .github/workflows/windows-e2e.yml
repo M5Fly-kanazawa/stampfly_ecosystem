@@ -17,7 +17,7 @@
 # against it.
 # 既存のどちらのワークフローもこの経路を検証していない。release.yml の
 # Windows マトリクス（flasher_gui / installer_gui）は PyInstaller で固めた
-# GUI アプリのビルド・スモークテストのみ行い、install.bat は実行せず
+# GUI アプリのビルド・最小動作確認のみ行い、install.bat は実行せず
 # ESP-IDF にも触れない。sils-regression.yml は ubuntu-latest 専用で、
 # 意図的に ESP-IDF を一切使わない（SILS ホストベンチはシステム GCC で
 # 直接コンパイルする）。install.sh（macOS/Linux）も同様に、現状どの

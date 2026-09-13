@@ -17,7 +17,7 @@
  * NULL. Any code that proceeds to send() simply drops on the inert socket.
  *
  * 自己完結ゆえホストの <netdb.h>（実 <sys/socket.h> を引き sockaddr/sa_family_t が
- * シムと衝突する）を取り込まない。リゾルバ呼び出しは走るが何も解決しない（§11: 網無し）。
+ * シムと衝突する）を取り込まない。リゾルバ呼び出しは動くが何も解決しない（§11: 網無し）。
  */
 
 #pragma once

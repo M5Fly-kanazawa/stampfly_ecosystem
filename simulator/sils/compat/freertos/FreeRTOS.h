@@ -9,7 +9,7 @@
 /**
  * @file FreeRTOS.h
  * @brief Host stub for FreeRTOS base types and macros (passive layer)
- *        FreeRTOS の基本型・マクロのホスト用スタブ（受動レイヤ）
+ *        FreeRTOS の基本型・マクロのホスト用の代替実装（受動レイヤ）
  *
  * This is the PASSIVE part of the RTOS shim: base types, tick conversion,
  * and the data-structure primitives (semaphore/queue). The ACTIVE part —

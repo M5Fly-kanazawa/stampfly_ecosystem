@@ -10,7 +10,7 @@
  * @file emu_main.cpp
  * @brief StampFly emulator host entry — runs the REAL firmware app_main on host,
  *        with the MuJoCo Plant wired to the virtual board (E1).
- *        StampFly エミュレータのホスト入口 — 実 app_main をホストで走らせ、MuJoCo
+ *        StampFly エミュレータのホスト入口 — 実 app_main をホストで動かし、MuJoCo
  *        Plant を仮想ボードに接続（E1）。
  *
  * E0: app_main + 14 tasks link and run against inert virtual devices.
@@ -148,7 +148,7 @@ void on_advance(int64_t now_us)
         // static destruction here too (see the long comment at the bottom of
         // main() for the full argument).
         // 通常終了時の_Exit(0)と同じ理由: 実機ではファームの静的シングルトンは
-        // 破棄されないため、ここでも静的破棄を走らせない（詳しい根拠はmain()末尾の
+        // 破棄されないため、ここでも静的破棄を動かさない（詳しい根拠はmain()末尾の
         // 長いコメント参照）。
         std::_Exit(0);
     }
@@ -402,7 +402,7 @@ int main(int argc, char** argv)
     // which leaves the table defaults) and BEFORE the scheduler runs (ImuTask setup
     // reads calibration.enable). Unset → calibration stays on (default), path unchanged.
     // P2-3 対照: SILS_EMU_NO_CALIB でファーム起動校正を無効化し、推定器を生バイアスのまま
-    // 走らせる（対照試験の「校正なし」側）。app_main 後（params は空 SILS NVS から読まれ table
+    // 動かす（対照試験の「校正なし」側）。app_main 後（params は空 SILS NVS から読まれ table
     // 既定が残る）かつ scheduler 実行前（ImuTask setup が calibration.enable を読む）に設定。
     // 未設定なら校正は ON のまま（既定）で経路不変。
     if (std::getenv("SILS_EMU_NO_CALIB")) {
@@ -414,7 +414,7 @@ int main(int argc, char** argv)
     // params before the estimator reads them (same timing window as NO_CALIB above).
     // SILS_EMU_CHI2_GATE = accel χ² gate, SILS_EMU_KADAPT = adaptive-R k, SILS_EMU_ACCEL_ATT
     // = accel-attitude noise. Unset → table defaults, path unchanged (byte-identical).
-    // χ²ラッチアップ調査の掃引フック: 推定器が読む前に accel 姿勢ロバスト性 param を上書き。
+    // χ²ラッチアップ調査の掃引用オーバーライド: 推定器が読む前に accel 姿勢ロバスト性 param を上書き。
     if (const char* v = std::getenv("SILS_EMU_CHI2_GATE")) {
         sf::params::set_float("eskf.att.chi2_gate", std::atof(v));
         std::printf("[emu] SILS_EMU_CHI2_GATE=%s — accel χ² gate overridden\n", v);
@@ -528,7 +528,7 @@ int main(int argc, char** argv)
     // pub-sub topic singletons) even though the run itself completes correctly and
     // every gate/log assertion already passed by this point. _Exit models "the MCU
     // was powered off": clean, faithful, and matches emu_main_generic.cpp exactly.
-    // 静的破棄を走らせずに終了する — emu_main_generic.cpp と同じ理由・同じパターン。
+    // 静的破棄を動かさずに終了する — emu_main_generic.cpp と同じ理由・同じパターン。
     // ファームの静的シングルトンは MCU の電源投入中ずっと生き続ける設計で、実機では
     // 破棄されない（プログラムは戻らない）。ホスト終了時の任意リンク順での破棄は
     // mutex/semaphore の二重操作でクラッシュする（ホスト固有の人工物、ファームの

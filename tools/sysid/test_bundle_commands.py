@@ -14,7 +14,7 @@ future change to the bundle schema or to `lib/sflog/align.py` that breaks
 either command is caught here rather than on a real flight.
 両コマンドはもう存在しない形式（JSONL と vehicle_old の USB `.bin`
 ブラックボックス）を読んでいた。この試験は `lib/sflog` で小さな合成一式を
-作り、CLI が呼ぶのと同じ関数を直接叩く -- 一式のスキーマや
+作り、CLI が呼ぶのと同じ関数を直接呼び出す -- 一式のスキーマや
 `lib/sflog/align.py` の変更でどちらかが壊れたとき、実飛行ではなくここで
 見つかるようにする。
 """

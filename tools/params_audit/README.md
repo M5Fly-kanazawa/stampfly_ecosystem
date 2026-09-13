@@ -8,7 +8,7 @@
 
 `tools/params_audit` は、StampFly の機体物理パラメータ（推力係数 C_T、トルク係数
 C_Q、トルク/推力比 kappa、慣性モーメント 等）に関する2つのツールをまとめた
-ディレクトリである: (1) `sf params generate` — 唯一の正である
+ディレクトリである: (1) `sf params generate` — 基準となる
 `control/models/stampfly_physical.yaml` からコードを機械生成する（Phase 1）、
 (2) `sf params check` — 生成の対象になっていない残りの手動コピー箇所を決定論的に
 検査する（Phase 0）。
@@ -16,7 +16,7 @@ C_Q、トルク/推力比 kappa、慣性モーメント 等）に関する2つ�
 ### なぜ必要か
 
 **Phase 1（コード生成、2026-07-26 一部着手）:** `control/models/
-stampfly_physical.yaml` を唯一の正とし、`sf params generate` が
+stampfly_physical.yaml` を基準とし、`sf params generate` が
 `tools/sysid/_generated_params.py`・`simulator/sils/plant/generated_params.hpp`・
 `docs/architecture/stampfly-parameters.md` のマーカー表を機械生成する。この3箇所は
 もう手書きの数値リテラルを持たない — YAML を編集して `sf params generate` を
@@ -86,7 +86,7 @@ python3 tools/params_audit/check_params.py --json
 
 本検査は `sf sils regression`（`lib/sfcli/commands/sils.py` の `run_regression()`）
 の最初のステップとして自動実行され、シナリオ実行前に `--strict` 相当で判定
-する。不合格なら回帰全体が即座に失敗する。CI（`.github/workflows/
+する。不合格なら再確認試験全体が即座に失敗する。CI（`.github/workflows/
 sils-regression.yml`）にも同じ検査を早期化する専用ステップがある。
 
 ## 3. マニフェストの拡張方法

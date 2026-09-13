@@ -9,7 +9,7 @@
 /**
  * @file nvs_flash.h
  * @brief Host stub for ESP-IDF NVS flash init
- *        ESP-IDF NVS フラッシュ初期化のホスト用スタブ
+ *        ESP-IDF NVS フラッシュ初期化のホスト用の代替実装
  *
  * On the SILS there is no flash partition; init/erase are no-ops that
  * always succeed. See nvs.h for the in-memory store.

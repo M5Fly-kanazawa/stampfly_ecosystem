@@ -255,7 +255,7 @@ def test_save_output_bundle_genesis_backend_does_not_crash(tmp_path):
     _state_log_to_ned()'s genesis branch (not covered by the vpython-
     backend round trip above), without asserting frame-mapped values
     (those are covered unit-level above).
-    'genesis' バックエンド経路の最小限のスモークテスト --
+    'genesis' バックエンド経路の最小限の動作確認 --
     save_output_bundle()/load_output_bundle() 経由で _state_log_to_ned() の
     genesis 分岐を通す（上の vpython 往復テストではカバーされない）。
     座標変換後の値そのものは上の単体テストで検証済みのためここでは

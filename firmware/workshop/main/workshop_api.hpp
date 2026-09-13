@@ -318,7 +318,7 @@ float estimated_altitude();
  * `roll_target = ws::rc_roll() * rate_max` の直後）。WorkshopControlTask が
  * 周期に一度、その値を Data Stream の rate_ref[] へコピーする。これにより
  * `sf sysid fit`（レッスン7）が u = Kp * (rate_ref - gyro) でプラント入力を
- * 復元できる。これは「ロギング専用フック」であり、モータ出力には影響しない
+ * 復元できる。これは「ロギング専用の呼び出し」であり、モータ出力には影響しない
  * — 呼ばなくても飛行自体は動く。
  *
  * @param roll  Roll rate target [rad/s], Body FRD (positive = right wing down)

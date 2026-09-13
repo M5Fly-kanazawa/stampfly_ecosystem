@@ -31,7 +31,7 @@
  *
  * 設計: スケジューラの on_advance フック（仮想時刻が飛ぶたび1回呼ばれる）だけを
  * usleep() でペーシングする。仮想時計が壁時計より「進みすぎ」のときだけ待ち、
- * 「遅れ」のときは一切待たず全速で回して自然に追いつかせる（実機が自分から
+ * 「遅れ」のときは一切待たず全速で回して自然に追いつかせる（実機自体が
  * 急いだり待ったりしないのと同じ）。これは純粋な追加の副作用（sleep のみ）
  * であり、決定論ハッシュが実際に保護している協調スケジュール（タスク順序・
  * 通知）には一切触れない。変わるのは壁時計上の所要時間だけで、
@@ -55,7 +55,7 @@ bool sils_realtime_enabled(void);
 
 // Call once per on_advance(now_us) — sleeps just enough so the virtual clock
 // never outruns the wall clock. No-op unless sils_realtime_enabled().
-// on_advance(now_us) 毎に呼ぶ — 仮想時計が壁時計を追い越さない分だけ眠る。
+// on_advance(now_us) 毎に呼ぶ — 仮想時計が壁時計を追い越さない分だけスリープする。
 // sils_realtime_enabled() が false なら no-op。
 void sils_realtime_pace(int64_t now_us);
 

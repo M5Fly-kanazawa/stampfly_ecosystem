@@ -40,7 +40,7 @@ yaw_cm_sim.py
         firmware/vehicle/components/sf_core/params.cpp:608, torque_budget.py 参照
     I_z, KAPPA, モータ曲線, ミキサー配分 — torque_budget.py の出典コメントをそのまま流用
     （このスクリプトは torque_budget.analyze_event() を直接呼び出して τ_d / τ_nominal /
-     物理包絡（duty飽和）を再利用する — 数値の二重実装を避けるため）
+     物理的な限界（duty飽和）を再利用する — 数値の二重実装を避けるため）
 """
 import sys
 import json
@@ -449,7 +449,7 @@ def run_event(ev, ol):
 def _seed_state_from_replay(ol, t_query):
     """openloop_validate() の t_grid 上を再走査し、t_query 直前までの状態を厳密に再現する
     （t_query が ol['t0'] と異なる場合 — E0 のように eff_t0 != t0 — に対応するため、
-    毎回 PID を先頭から t_query まで走らせ直す。preroll が短い場合でも安全）。"""
+    毎回 PID を先頭から t_query まで動かし直す。preroll が短い場合でも安全）。"""
     pid = PID(RATE_YAW_KP, RATE_YAW_TI, RATE_YAW_TD, PID_ETA,
               output_limit=MAX_YAW_TORQUE_NOMINAL_S0)
     t_grid = ol["t_grid"]

@@ -27,7 +27,7 @@
  * — アプリ自身の app.cpp が標準挙動の一部だけ上書きしたいときに呼ぶのと
  * 「同じ」関数（examples/11_app_controller, examples/12_app_task_hello）。
  * start() はここでは単なる no-op のまま — 委譲すべき「標準の開始タスク」は
- * 存在せず、必要なアプリは自分の app.cpp で用意する。
+ * 存在せず、必要なアプリは自分自身の app.cpp で用意する。
  *
  * @design app_hooks.hpp — sf::app::controller/estimator/start contract   [OK]
  * @design stock_hooks.hpp — sf::app::stock::controller/estimator         [OK]

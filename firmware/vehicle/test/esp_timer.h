@@ -1,5 +1,5 @@
 // Stub esp_timer.h for PC unit testing — a controllable mock clock.
-// PC単体テスト用の esp_timer.h スタブ — 制御可能なモッククロック。
+// PC単体テスト用の esp_timer.h 代替実装 — 制御可能なモッククロック。
 //
 // Tests drive g_mock_esp_time_us to advance virtual time between update() calls, so a
 // time-based detector (TakeoffLandingMgr's landing_hold/stall_hold) can be exercised

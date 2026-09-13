@@ -67,7 +67,7 @@ def test_render_other_modes_synthetic_bundle(synthetic_bundle, tmp_path):
     """Every non-'all' panel group also draws its full panel list on the
     synthetic bundle, since every stream those groups need is present.
     'all' 以外の各パネル群も、必要とするストリームが全て存在するため、
-    合成一式では自分の全パネルを描く。"""
+    合成一式では自分自身の全パネルを描く。"""
     log = visualize_stream.load_bundle(synthetic_bundle)
 
     for mode in ('attitude', 'sensors', 'position', 'eskf'):

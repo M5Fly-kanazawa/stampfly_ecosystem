@@ -348,7 +348,7 @@ uint32_t ws::millis()
     // Divide in 64-bit FIRST, then truncate: wraps at ~49.7 days. Routing
     // through the uint32 microsecond clock (nowUs()/1000) would wrap every
     // ~71.6 minutes — inside a single workshop session.
-    // 64bit のまま除算してから丸める: ラップは約49.7日。uint32 のマイクロ秒時計
+    // 64bit のまま除算してから丸める: 桁あふれは約49.7日。uint32 のマイクロ秒時計
     // 経由（nowUs()/1000）だと約71.6分で巻き戻り、講座1回の中で起きてしまう。
     return static_cast<uint32_t>(esp_timer_get_time() / 1000);
 }

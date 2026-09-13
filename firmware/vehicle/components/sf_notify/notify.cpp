@@ -292,10 +292,10 @@ void Notify::update()
     // それを再生する — 選択の設定方法は notify.hpp 参照。フラッシュ目的の再起動は窓内に
     // ダウンロードモードへ入るため、esptool リセット時に鳴っている LEDC 音は無い。
     //
-    // 順序についての注記: 本ブロックは後方の ui_command drain（下記）より先に走るため、
+    // 順序についての注記: 本ブロックは後方の ui_command drain（下記）より先に実行されるため、
     // 「同じ周期に届いた」UiCmd::BootMelody は1周期遅れて反映され、同一周期のカウント
-    // ダウン0発火には間に合わない。ここでは無害: workshop ファームは topics_init() 直後・
-    // タスク起動前に一度だけ publish するため、本タスクの最初の update() が走る時点で
+    // ダウン0成立には間に合わない。ここでは無害: workshop ファームは topics_init() 直後・
+    // タスク起動前に一度だけ publish するため、本タスクの最初の update() が実行される時点で
     // 既にキュー投入済み — boot_melody_ は cycle 1 で設定され、本カウントダウンが 0 に
     // なり得る（≈cycle 90）約89周期前に間に合う。vehicle は UiCmd::BootMelody を publish
     // しないため boot_melody_ は 0 のままで、この分岐は vehicle の既存動作とバイト単位で
@@ -377,7 +377,7 @@ void Notify::update()
                 // argument (selection lands well before the countdown fires).
                 // workshop 専用の起動音選択（0=標準、1=授業チャイム）。上の起動
                 // ミュートカウントダウンが次周期で参照する。順序の根拠は
-                // notify.hpp 参照（カウントダウン発火より十分前に反映される）。
+                // notify.hpp 参照（カウントダウン成立より十分前に反映される）。
                 boot_melody_ = uic.value;
                 break;
             case UiCmd::None:

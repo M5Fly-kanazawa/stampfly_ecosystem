@@ -17,8 +17,8 @@
  * task is blocked, so the schedule is a deterministic discrete-event sequence:
  * same inputs → same trace, every run (reproducibility).
  *
- * 本体タスク関数を無改変で PC 上で走らせる。各タスクは自分の std::thread を
- * 持つが、単一の実行トークンで常に1個だけ走る（協調）。単一の仮想マイクロ秒
+ * 本体タスク関数を無改変で PC 上で動かす。各タスクは自分自身の std::thread を
+ * 持つが、単一の実行トークンで常に1個だけ動く（協調）。単一の仮想マイクロ秒
  * 時計は、全タスクがブロックしたときだけ進む。よってスケジュールは決定論的な
  * 離散事象列になる: 同じ入力 → 毎回同じトレース（再現性）。
  *
@@ -107,7 +107,7 @@ public:
     static Scheduler& instance();
 
     // Register a task (does not run it yet). Returns its handle.
-    // タスクを登録する（まだ走らせない）。ハンドルを返す。
+    // タスクを登録する（まだ動かさない）。ハンドルを返す。
     TaskHandle_t create(TaskFunction_t fn, void* param,
                         UBaseType_t priority, const char* name);
 
@@ -151,7 +151,7 @@ public:
     // 周期タイマは決定論的な仮想時計の起床源: 時計が next_fire_us に達すると
     // スケジューラが本体コールバック（通常 xTaskNotifyGive）を実行する。これで真の
     // 400Hz esp_timer ループを host 上で再現する。全ブロックの advance 中に登録順で
-    // 発火し、トレースを安定させる。
+    // 作動し、トレースを安定させる。
     using TimerCallback = void (*)(void*);
     int  add_periodic(TimerCallback cb, void* arg, int64_t period_us);  // returns id
     void remove_periodic(int id);

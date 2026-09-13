@@ -195,7 +195,7 @@ void PowerTask(void* pvParameters)
         // Run all failsafe checks AFTER publishing power, so checkBattery() sees
         // this cycle's reading. Battery thresholds and the 0 = unknown guard now
         // live in the Failsafe component (failsafe.cpp checkBattery).
-        // 電源 publish の後に全 failsafe チェックを走らせる（checkBattery が今周期の
+        // 電源 publish の後に全 failsafe チェックを動かす（checkBattery が今周期の
         // 読み値を見るため）。電池閾値と 0=不明ガードは Failsafe コンポーネント
         // （failsafe.cpp checkBattery）に集約済み。
         g_failsafe.update();

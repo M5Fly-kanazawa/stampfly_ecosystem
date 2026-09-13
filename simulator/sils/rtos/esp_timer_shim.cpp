@@ -21,7 +21,7 @@
  *
  * 本体ファームは 400Hz IMU ループを esp_timer periodic で刻む。SILS では周期タイマは
  * 決定論的な仮想時計の起床源: 仮想時計が周期の各倍数に達したときスケジューラが
- * コールバックを発火する（Scheduler::fire_due_timers 参照）。これでループは再現
+ * コールバックを起動する（Scheduler::fire_due_timers 参照）。これでループは再現
  * 可能になる（同じ実行・同じトレース）。esp_timer_get_time() は clock_shim.cpp
  * （cores_smoke と共有）にある。これら periodic 関数はスケジューラを必要とするため
  * ここに置き、RTOS エミュレータのターゲットにのみリンクする。

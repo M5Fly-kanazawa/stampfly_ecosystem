@@ -1,5 +1,5 @@
 # StampFly Physical Parameters — Single Source of Truth (SSOT)
-# StampFly 物理パラメータ — 唯一の正（Single Source of Truth）
+# StampFly 物理パラメータ — 基準となる文書（Single Source of Truth）
 #
 # This file is read by `sf params generate` (tools/params_audit/generate.py),
 # which machine-generates:

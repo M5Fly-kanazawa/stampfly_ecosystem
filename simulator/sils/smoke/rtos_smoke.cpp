@@ -10,8 +10,8 @@
  * @file rtos_smoke.cpp
  * @brief P1.1 smoke test — run the real firmware tasks on the host RTOS
  *        emulator and show a deterministic schedule.
- *        P1.1 スモークテスト — 本体タスクをホスト RTOS エミュレータ上で
- *        走らせ、決定論的なスケジュールを示す。
+ *        P1.1 最小動作確認 — 本体タスクをホスト RTOS エミュレータ上で
+ *        動かし、決定論的なスケジュールを示す。
  *
  * Creates the unmodified ImuTask / ControlTask / StateTask and runs them under
  * the cooperative scheduler. ImuTask (400Hz) drives ControlTask via a task
@@ -19,7 +19,7 @@
  * a FLYING mode + hover setpoint at 100 ms so ControlTask starts computing.
  *
  * 無改変の ImuTask / ControlTask / StateTask を生成し、協調スケジューラ上で
- * 走らせる。ImuTask（400Hz）がタスク通知で ControlTask を駆動; StateTask は
+ * 動かす。ImuTask（400Hz）がタスク通知で ControlTask を駆動; StateTask は
  * イベント駆動（待機）。台本シナリオが 100 ms で FLYING モード＋ホバー
  * セットポイントを注入し、ControlTask が計算を始める。
  *
@@ -42,7 +42,7 @@
 
 // Firmware task functions (unmodified). ControlTask self-registers its handle
 // via sf::tasks::control_handle() now (R3), so no extern wiring here.
-// 本体タスク関数（無改変）。ControlTask が sf::tasks::control_handle() で自分の
+// 本体タスク関数（無改変）。ControlTask が sf::tasks::control_handle() で自分自身の
 // ハンドルを登録する（R3）ため、ここでの extern 配線は不要。
 void ImuTask(void*);
 void ControlTask(void*);
@@ -114,7 +114,7 @@ int main()
     xTaskCreatePinnedToCore(ControlTask, "ControlTask", config::STACK_CONTROL,
                             nullptr, config::PRIORITY_CONTROL, &h_control, 1);
     // ControlTask registers its own handle in setup (sf::tasks::control_handle()).
-    // ControlTask は setup で自分のハンドルを登録する（sf::tasks::control_handle()）。
+    // ControlTask は setup で自分自身のハンドルを登録する（sf::tasks::control_handle()）。
     xTaskCreatePinnedToCore(ImuTask,     "ImuTask",     config::STACK_IMU,
                             nullptr, config::PRIORITY_IMU,     &h_imu,     1);
 
@@ -167,7 +167,7 @@ int main()
 
     // Clean teardown: scheduler.run() already unwound and joined every task
     // thread (stop_all), so a normal return runs static destructors safely.
-    // クリーンな teardown: scheduler.run() が全タスクスレッドを巻き戻して join 済み
-    // （stop_all）なので、通常 return で静的デストラクタが安全に走る。
+    // 後始末: scheduler.run() が全タスクスレッドを巻き戻して join 済み
+    // （stop_all）なので、通常 return で静的デストラクタが安全に動く。
     return ok ? 0 : 2;
 }

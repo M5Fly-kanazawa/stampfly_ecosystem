@@ -28,7 +28,7 @@ namespace {
 int g_cli_fd = -1;
 
 // Bound a single write so a pathological scenario cannot spin forever.
-// 1回の書き込みの上限（病的なシナリオで永久ループしないため）。
+// 1回の書き込みの上限（極端なシナリオで永久ループしないため）。
 constexpr int kMaxYieldRetries = 4096;
 
 }  // namespace

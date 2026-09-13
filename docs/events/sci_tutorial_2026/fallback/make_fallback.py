@@ -322,13 +322,13 @@ def load_traj(bundle: Path) -> pd.DataFrame:
         s4_rate_ref()'s docstring).
 
     SILS 実行のフライトログ v1 一式（`bundle` 直下の `sils_*.sflog.zip`）を
-    読み、このスクリプトの描画コードが期待する旧トラジェクトリ表の列
+    読み、このスクリプトの描画コードが前提とする旧トラジェクトリ表の列
     （t, MuJoCo/ENU 座標系の px/py/pz・qw/qx/qy/qz, alt/roll/pitch [度],
     yawrate [rad/s], yawcmd（常に0.0、廃止済み -- 計画書3.3節）,
     alt_est/roll_est/pitch_est, m0..m3）を、一式の `truth`/`posvel`/
     `attitude`/`motor` ストリームから再構築する -- 計画書 3.3節参照。
 
-    返す DataFrame の `.attrs`（可視の列ではないため、旧列名しか知らない
+    返す DataFrame の `.attrs`（可視の列ではないため、旧列名の情報しか持たない
     呼び出し側には影響しない）にも以下を格納する:
       * `gyro_x_deg`/`gyro_y_deg`: 一式の実測ジャイロ（imu.gyro_x/y を
         `truth` の時間軸へ対応付け）-- バンドルの `rate_ref` ストリームが
@@ -912,7 +912,7 @@ def build_s5_regression_text() -> None:
     reruns `sf sils regression` themselves and pastes the new summary line in
     here — this function does not invoke it (34 scenarios, ~1-2 minutes; not
     worth paying on every `make_fallback.py` invocation).
-    固定済みの回帰サマリを書く。`sf sils regression` はここでは実行しない
+    固定済みの再確認試験の要約を書く。`sf sils regression` はここでは実行しない
     （34本・約1-2分、毎回のスクリプト実行で払うほどではない）。呼び出し側が
     別途再実行して新しいサマリ行に更新した場合はこの関数を編集すること。
     """

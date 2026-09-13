@@ -25,7 +25,7 @@
  *
  * コントローラは状態推定値とコマンドセットポイントを受け取り、
  * 機体座標系での推力/トルクを出力する。モーター、ミキサー、
- * FreeRTOSタスクを知らない。
+ * FreeRTOSタスクの情報を持たない。
  *
  * @design requirements.md §4 — Component #6: replaceable control      [OK]
  * @design requirements.md §10 — Replaceable control                   [OK]
@@ -171,7 +171,7 @@ public:
     /// release its target on the falling edge — keeping "the pilot always wins"
     /// observable to the API (M-3). Default false (controllers without guidance).
     /// 誘導目標が現在係合中か。制御器がスティック動作やモード変更で誘導を自発解除すると
-    /// false。タスク層がこれを controller_status で publish し、API ソースが立下りで自分の
+    /// false。タスク層がこれを controller_status で publish し、API ソースが立下りで自分自身の
     /// 目標を解放できる — 「パイロット優先」を API から観測可能にする (M-3)。既定 false。
     virtual bool isGuidanceActive() const { return false; }
 

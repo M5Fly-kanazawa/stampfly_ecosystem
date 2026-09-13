@@ -156,7 +156,7 @@ static void on_data_sent(const esp_now_send_info_t *send_info, esp_now_send_stat
             // 証拠として扱う。firmware/vehicle は現状ESP-NOW経由で何も送り返さない
             // （テレメトリはUDP）ため、電文受信ではなくMAC層ACKで確認する
             // （on_data_recv側の一致チェックはfirmware/vehicle_old等、ESP-NOW経由で
-            // 何か送り返す相手に対する補助的な確認経路として残す）
+            // 何か送り返す相手局に対する補助的な確認経路として残す）
             // Treat an ACKed send to the adopted vehicle during the pairing
             // reply-wait as link confirmation. firmware/vehicle currently
             // sends nothing back over ESP-NOW (telemetry is UDP-only), so
@@ -193,7 +193,7 @@ static void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *da
         // Byte 7-10: シグネチャ (AA 55 16 88)
         //
         // 「最初の1通」を無条件採用せず、候補表へ upsert するだけに留める。
-        // 相手の確定は main.cpp の一覧選択UIで利用者が行う（pairing_confirm()）。
+        // 相手局の確定は main.cpp の一覧選択UIで利用者が行う（pairing_confirm()）。
         // Do not adopt the first packet unconditionally — just upsert it into
         // the candidate table. The user confirms the actual peer via the
         // list-selection UI in main.cpp (pairing_confirm()).

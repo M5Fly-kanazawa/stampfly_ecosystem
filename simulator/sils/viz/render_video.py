@@ -148,8 +148,8 @@ def load_flightlog(bundle_dir):
     loader's intent.
 
     `bundle_dir` 下の SILS 実行のフライトログ v1 一式（`sils_*.sflog.zip`）を読み、
-    このファイルの描画コードが期待する旧トラジェクトリ表の列名を持つ numpy 配列の
-    dict を返す: t [秒]；px/py/pz, qw/qx/qy/qz は `render_3d()` が期待する
+    このファイルの描画コードが想定する旧トラジェクトリ表の列名を持つ numpy 配列の
+    dict を返す: t [秒]；px/py/pz, qw/qx/qy/qz は `render_3d()` が想定する
     MuJoCo/ENU 座標系（`truth` の NED 位置・姿勢から frames.hpp の変換の逆で導出 --
     上のヘルパー参照）；roll/pitch/roll_est/pitch_est は度（graph_frame()/
     overlay_graph_frame() が "[deg]" とラベル）；yawrate [rad/s]（truth.rate_z）；
@@ -347,7 +347,7 @@ def graph_frame(traj, i, w_px, h_px):
 # panes (top) show the two runs in lockstep; the overlay graphs (bottom) put both
 # estimators' estimates on the SAME truth axes — so "different algorithm, same
 # flight, both fly" reads at a glance (RESET_PLAN §9, P4 algorithm-independence).
-# 2つの推定器(A,B)を同じベンチ・同じ飛行で走らせる。上のツイン3Dは2機がロックステップで
+# 2つの推定器(A,B)を同じベンチ・同じ飛行で動かす。上のツイン3Dは2機がロックステップで
 # 飛ぶ様子、下の重ね描きグラフは両推定値を同一の真値軸へ重ねる ＝「中身が違っても同じ
 # 飛行で両方飛ぶ」を一目で（RESET_PLAN §9, P4 アルゴリズム非依存）。
 def overlay_graph_frame(A, B, i, w_px, h_px, la, lb):
@@ -460,7 +460,7 @@ def render_compare(args):
     # loop) to keep it centered. Vertical stays fixed (covers the taller flight's
     # peak) so the climb/descent still reads.
     # 水平チェイス＋鉛直固定。ノイズ下で水平位置は観測不能(ToF/flow off)で数m流れるため、
-    # 各ペインが自分の px/py を追従（ループ内で毎フレーム設定）。鉛直は固定で上昇/下降を見せる。
+    # 各ペインが自分自身の px/py を追従（ループ内で毎フレーム設定）。鉛直は固定で上昇/下降を見せる。
     pz_peak = max(float(A["pz"].max()), float(B["pz"].max()))
     z_hi, z_lo = pz_peak + 0.05, -0.02
     z_center = 0.5 * (z_lo + z_hi)

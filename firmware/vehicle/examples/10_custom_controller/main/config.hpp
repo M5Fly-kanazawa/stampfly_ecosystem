@@ -22,7 +22,7 @@ namespace config {
 
 // =============================================================================
 // The exercise hook (see learner_controller.cpp compute())
-// 演習フック（learner_controller.cpp の compute() 参照）
+// 演習用の差し込み口（learner_controller.cpp の compute() 参照）
 //
 // 1.0 = no change from plain PidController. Change this, rebuild, and watch
 // the printed torque[2] (yaw) scale — this is the one number the exercise

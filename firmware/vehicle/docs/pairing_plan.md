@@ -2,7 +2,7 @@
 
 最終更新: 2026-06-09（**P1〜P3 実装完了・SILS 検証済み。残=実機検証・P4(per-drone ch)**）
 
-> **【実装完了 2026-06-09】P1（自分宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
+> **【実装完了 2026-06-09】P1（自機宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
 > P3（状態機械統合＋NVS 永続化）を実装し SILS で検証済み。** 旧 vehicle のシーケンスを踏襲し
 > vehicle アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
 > architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
@@ -43,7 +43,7 @@ ESP-NOW を使うと、**混信**（他人の送信機のパケットで自分�
 | 送信元フィルタ | **なし**（src MAC は未使用） | comm.cpp `(void)info; // src MAC unused (Phase 2a)` |
 | チャンネル | 固定 ch1 | comm.cpp `kWifiChannel = 1` |
 | ペア状態 | 無し（FlightState に PAIRING 無し） | `sf_state/include/flight_state.hpp` |
-| 相手 MAC の永続化 | 無し | — |
+| 相手側の MAC の永続化 | 無し | — |
 
 ### ★ 重要な発見：SSOT パケットは既に宛先 MAC を持っている
 
@@ -57,7 +57,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
                      ↑ ここで宛先を判別できるのに、今は無視している
 ```
 
-→ **「受信時に bytes0-2 が自分の MAC 下位3Bと一致するか」を見るだけで、混信の核を断てる**
+→ **「受信時に bytes0-2 が自 MAC 下位3Bと一致するか」を見るだけで、混信の核を断てる**
 （フィールドは既に在るので、追加は1チェックぶん）。
 
 ---
@@ -78,9 +78,9 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 
 1. **アドレッシング＝ドローン MAC 下位3バイト**（ControlPacket 0-2）。SSOT を尊重し、新パケットを
    増やさない。
-2. **最小の混信対策＝「自分宛フィルタ」**（受信時に 0-2 が自 MAC[3:5] と不一致なら破棄）。
+2. **最小の混信対策＝「自機宛フィルタ」**（受信時に 0-2 が自 MAC[3:5] と不一致なら破棄）。
    ブロードキャスト宛（FF FF FF）は後方互換で受理（SILS/ベンチ・未ペア時のため）。
-3. **ペアリング UX ＝ コントローラのスキャンに応答**：機体が PAIRING モードで自分の MAC と
+3. **ペアリング UX ＝ コントローラのスキャンに応答**：機体が PAIRING モードで自 MAC と
    channel を `PairingPacket` で広告 → コントローラが発見して bind（コントローラ側は実装済み）。
 4. **R5（Pub-Sub 疎結合）/ StateManager 単一所有**を守る：PAIRING も状態遷移なら StateManager が
    所有。comm は「事実（受信パケット・ペア状態）」を publish、判断は state。
@@ -89,10 +89,10 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 
 ## 5. 実装フェーズ（提案）
 
-### P1: 自分宛フィルタ（即・低コスト・最高価値）
+### P1: 自機宛フィルタ（即・低コスト・最高価値）
 - comm 受信で `ControlPacket.drone_mac`(0-2) を取り出し、**自 MAC 下位3B**（`esp_wifi_get_mac` /
   efuse、SILS は固定値）と照合。不一致は破棄。`FF FF FF`（broadcast 宛）は受理。
-- これだけで「他人の送信機で自分が動く」が止まる（コントローラは既にペア相手 MAC を入れて送る）。
+- これだけで「他人の送信機で自分が動く」が止まる（コントローラは既にペア相手側の MAC を入れて送る）。
 - **SILS 検証**: scenario で「誤 drone_mac の ControlPacket」を注入→ motor 不動、「正 MAC / FF」→
   通常飛行。scenario DSL に MAC 付き rc 注入を足す（既存 `inject_rc` を MAC 引数で拡張）。
 - 影響: comm.cpp の受信ハンドラに数行。R5・SSOT 遵守。**まず P1 だけでも価値が大きい。**
@@ -100,7 +100,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 ### P2: ペアリングモード（送信機からの発見に応答）
 - ボタン長押し3s → `pilot_request`（または新トピック）で PAIRING 要求 → StateManager が PAIRING へ。
 - PAIRING 中: `PairingPacket`（自 channel + 自 MAC + signature）を broadcast で周期送信。
-  `LED.showPairing()`（青速点滅）・`Buzzer.pairingTone()` を notify 経由で発火（R5）。
+  `LED.showPairing()`（青速点滅）・`Buzzer.pairingTone()` を notify 経由で作動（R5）。
 - コントローラが scan で発見・bind（`peering_process` 実装済み）。一定時間で通常へ復帰。
 
 ### P3: 状態機械統合＋永続化
@@ -116,7 +116,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 
 > **採用方式の決定・実装（2026-09-11）**: 下記「同時実行の取り違え」は
 > `docs/plans/pairing-methods-plan.md` で正式検討し、**W3（コントローラの画面に受信した機体
-> 候補を一覧表示し、利用者が選んで確定）＋機体側の自分宛受理（ペアリング中に届く操縦電文の
+> 候補を一覧表示し、利用者が選んで確定）＋機体側の自機宛受理（ペアリング中に届く操縦電文の
 > うち `drone_mac[0..2]` が自 MAC 下位3バイトと一致するものだけを保留バインド候補にする）**
 > の組合せを採用した。機体側（Phase 1・本ドキュメントの P4 が挙げていた「bind 時に drone_mac
 > 一致を要求」案そのもの）は `comm.cpp::handleControlPacket` に実装済み・SILS 検証済み
@@ -132,7 +132,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 **ペア成立は両側とも「先着＝採用」**で、識別子は署名 `AA5516 88`（=「StampFly かどうか」のみ、
 「“あなたの”機体か」の区別なし）:
 - コントローラ: CH スキャンで**最初に来た署名付き PairingPacket** の MAC を採用（`espnow_tdma.c:134-152`）。
-- 機体: Pairing 中に**最初に受信した ControlPacket の src MAC** を相手に確定（`comm.cpp handleControlPacket`）。
+- 機体: Pairing 中に**最初に受信した ControlPacket の src MAC** を相手側と確定（`comm.cpp handleControlPacket`）。
 
 → **複数の未ペア機を同時にペアリングモードにすると取り違え（クロスペアリング）が起こり得る**
 （自コントローラが隣の機体を拾う／自機が隣のコントローラにバインド）。近接(RSSI)選択もボタン同時
@@ -160,7 +160,7 @@ WiFi ハード層が弾く）。
 
 - **P1**: scenario で `drone_mac` 付き ControlPacket を注入できるよう `scenario_inject` を拡張。
   「誤 MAC → 無視（ARM もしない）」「正 MAC / broadcast → 飛行」を合否判定に組み込む（log/metric）。
-- **P2-P3**: emu で PAIRING 遷移・PairingPacket 送出・NVS 保存/復元を発火確認。エミュレータの
+- **P2-P3**: emu で PAIRING 遷移・PairingPacket 送出・NVS 保存/復元を作動確認。エミュレータの
   ESP-NOW shim に「機体が送出したパケット」を観測する経路が要る（送信側 capture の追加）。
 - 既存の決定論・byte-identical 原則を維持（未ペア既定はブロードキャスト受理で従来と一致）。
 
@@ -168,7 +168,7 @@ WiFi ハード層が弾く）。
 
 ## 7. 着手順の推奨
 
-1. **P1（自分宛フィルタ）を最初に**。低コスト・即効・SSOT 準拠で、混信対策の本質。実機 Phase 2/3
+1. **P1（自機宛フィルタ）を最初に**。低コスト・即効・SSOT 準拠で、混信対策の本質。実機 Phase 2/3
    （ブリングアップ・初飛行）の前に入れておくと、複数機環境でも安全に飛ばせる。
 2. P2-P3 はペアリング UX。実機で複数機を運用する段になったら。
 3. P4 は 30機ワークショップ運用の直前。

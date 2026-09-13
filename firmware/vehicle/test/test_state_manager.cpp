@@ -493,7 +493,7 @@ TEST(f01_impact_latched) {
     ASSERT_TRUE(a.type == static_cast<uint8_t>(AlertType::IMPACT));
     ASSERT_TRUE(a.severity == static_cast<uint8_t>(AlertSeverity::EMERGENCY));
     // Latch: a second high-G update must NOT re-fire
-    // ラッチ: 2回目の高Gでは再発火しない
+    // ラッチ: 2回目の高Gでは再作動しない
     publishImu(0, 0, 5.0f * G, 0, 0, 0);
     fs.update();
     SystemAlert b;

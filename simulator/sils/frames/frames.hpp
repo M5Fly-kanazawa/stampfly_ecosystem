@@ -45,14 +45,14 @@ inline Vec3 gravity_ned() { return {0.0f, 0.0f, 9.81f}; }
 
 // =============================================================================
 // World: ENU (MuJoCo) ↔ NED (StampFly). Swap X/Y, negate Z. Self-inverse.
-// 世界: ENU(MuJoCo) ↔ NED(StampFly)。X/Y 入替・Z 反転。自分が逆。
+// 世界: ENU(MuJoCo) ↔ NED(StampFly)。X/Y 入替・Z 反転。自身が逆。
 // =============================================================================
 inline Vec3 enu_to_ned(const Vec3& e) { return {e.y, e.x, -e.z}; }
 inline Vec3 ned_to_enu(const Vec3& n) { return {n.y, n.x, -n.z}; }
 
 // =============================================================================
 // Body: FLU (MuJoCo) ↔ FRD (StampFly). Negate Y/Z (180° about body X). Self-inverse.
-// 機体: FLU(MuJoCo) ↔ FRD(StampFly)。Y/Z 反転（body X 周り 180°）。自分が逆。
+// 機体: FLU(MuJoCo) ↔ FRD(StampFly)。Y/Z 反転（body X 周り 180°）。自身が逆。
 // =============================================================================
 inline Vec3 flu_to_frd(const Vec3& v) { return {v.x, -v.y, -v.z}; }
 inline Vec3 frd_to_flu(const Vec3& v) { return {v.x, -v.y, -v.z}; }

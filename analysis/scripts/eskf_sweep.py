@@ -3,7 +3,7 @@
 eskf_sweep.py — sweep ESKF parameters on the offline replay harness and plot the
 consistency scores, to pick the best params from the DYNAMIC real flight.
 
-オフライン再生ハーネスで ESKF パラメータを掃引し整合性スコアを描画、動的実飛行から最良値を選ぶ。
+オフライン再生試験プログラムで ESKF パラメータを掃引し整合性スコアを描画、動的実飛行から最良値を選ぶ。
 
 Build the harness first (g++), then sweep. Usage:
   python3 eskf_sweep.py <events.txt> <out_dir>

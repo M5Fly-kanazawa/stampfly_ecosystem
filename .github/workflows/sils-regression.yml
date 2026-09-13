@@ -144,7 +144,7 @@ jobs:
         # 失敗させる — 本ステップはそれを早期化する重複ステップ: 手動複製
         # パラメータの食い違い（tools/params_audit — C_T/C_Q/kappa/慣性等を
         # ファーム/SILS/シミュレータへ手書きコピー）を、下の MuJoCo FetchContent
-        # ビルド（キャッシュミス時は数分かかる）を走らせる前に数秒で検出する。
+        # ビルド（キャッシュミス時は数分かかる）を動かす前に数秒で検出する。
         #
         # `sf params generate --check`（Phase 1: spec YAML→コード生成、
         # docs/architecture/simulation-policy.md 参照）は同種のバグのもう半分を

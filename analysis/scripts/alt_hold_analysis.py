@@ -225,7 +225,7 @@ class FlightData:
         mask_cr = self._mask_windows(t_cr)
         self.t = t_cr[mask_cr]
 
-        self.alt_sp = cr["alt_sp"][mask_cr]  # 参照値は既にctrl_ref格子上なのでそのままスライス
+        self.alt_sp = cr["alt_sp"][mask_cr]  # 目標値は既にctrl_ref格子上なのでそのままスライス
         self.alt_vel_target = cr["alt_vel_target"][mask_cr]
         self.climb_cmd = cr["climb_cmd"][mask_cr]
         self.total_thrust = cr["total_thrust"][mask_cr]

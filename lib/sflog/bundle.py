@@ -381,7 +381,7 @@ class FlightLog:
         (kept permissive rather than raising, per the container rule that
         unknown files are simply ignored by readers).
         ストリームの CSV ファイル名: schema.py 記載の名前、もしくは本
-        スキーマ版が知らないストリームなら "<name>.csv"（未知ファイルは
+        スキーマ版が判別できないストリームなら "<name>.csv"（未知ファイルは
         読み込み側が単に無視するという容器の規約に合わせ、例外にはしない）。
         """
         info = schema.STREAMS.get(stream_name)
@@ -442,7 +442,7 @@ def make_meta(
     meta.json 相当の dict を作る（protocol/spec/flight_log.yaml の
     `meta_fields` 参照）。引数の意味は英語側を参照。
 
-    `derived` は常に False（整列表などの派生物を作る側は自分で立てる --
+    `derived` は常に False（整列表などの派生物を作る側は自分自身で立てる --
     convert.aligned_to_csv 参照）。
     """
     streams = streams or {}

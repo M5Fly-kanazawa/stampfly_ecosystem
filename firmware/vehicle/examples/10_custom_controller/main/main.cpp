@@ -103,7 +103,7 @@ extern "C" void app_main(void)
     // The class under test: an IController that forwards everything to a
     // real PidController except one exercise hook — see
     // learner_controller.hpp for why this is the shape of the exercise.
-    // 検証対象のクラス: 1つの演習フックを除き全てを実際の PidController へ転送する
+    // 検証対象のクラス: 1つの演習用差し込み口を除き全てを実際の PidController へ転送する
     // IController — この形にした理由は learner_controller.hpp を参照。
     sf::LearnerController controller;
     controller.init();
@@ -141,7 +141,7 @@ extern "C" void app_main(void)
 //    learner_controller.cpp の compute() の中身を丸ごと置き換えてみよう — 例えば
 //    inner_controller_.compute() の呼び出しを消し、ピッチ用のP制御器を自分で
 //    書いてみる。main.cpp は一切変更不要 — `IController` インターフェースしか
-//    知らないため。
+//    参照しないため。
 //
 // 3. Change config::kSyntheticPitchAmplitudeRadians to 0.0f — the tilt
 //    disappears and torque(RPY)'s pitch column settles near zero (STABILIZE

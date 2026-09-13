@@ -61,7 +61,7 @@ dir, checkboxes, etc.) survives the rebuild untouched.
 tr(key, *format_args) が現在言語に対応する STRINGS[key] を取り出して
 .format() する。現在言語そのものはTkアプリのインスタンスではなく、
 プロセス全体のモジュールレベル状態(get_language() / set_language())
-として持つ -- そのため、Tk ウィジェットが1つも存在する前に走りうる
+として持つ -- そのため、Tk ウィジェットが1つも存在する前に実行されうる
 tkinter 不在時の CLI 案内文からも使える。detect_default_language() が
 インポート時に LC_ALL/LC_MESSAGES/LANG または locale.getlocale() から
 その状態の初期値を決め、判定できない場合は日本語を既定とする。ようこそ
@@ -295,7 +295,7 @@ INSTALLER_NONINTERACTIVE_ENV_VAR = "SF_INSTALLER_NONINTERACTIVE"
 # warning, but real-world failures were observed with it).
 # エコシステムが実際に検証済みのPython範囲(scripts/installer.py の
 # PYTHON_PREFERRED_MIN/MAX と同じ値。_windows_python_exe_candidates() と
-# 同じ「このチェックはリポジトリのcloneより前に走る」理由で複製し、
+# 同じ「このチェックはリポジトリのcloneより前に動く」理由で複製し、
 # importしない)。この範囲内のPythonを優先し、範囲外のもの -- 古い
 # バージョンと3.13以降の両方 -- はチェック失敗とする(2026-07-22の
 # 方針変更: 以前は3.13+を警告付きで受理していたが、実際に動作しない
@@ -348,7 +348,7 @@ PYTHON_INSTALL_COMMANDS = {
 # 現在言語は StampFlySetupApp の属性ではなく、プロセス全体のモジュール
 # レベル状態(get_language()/set_language())として持つ。そのため、
 # Tk ウィジェット(ひいては StampFlySetupApp)が1つも存在するより前に
-# 走りうる launch_gui() の tkinter 不在時 CLI 案内文からも同様に使える。
+# 実行されうる launch_gui() の tkinter 不在時 CLI 案内文からも同様に使える。
 # scripts/installer.py 自身のコンソール出力(_QueueWriter 経由でログへ
 # 捕捉されるもの)は明示的に対象外: そのテキストの著者・所有者は
 # scripts/installer.py であり、このGUIではない。
@@ -886,7 +886,7 @@ def tkinter_missing_cli_hint() -> str:
     定数のようにインポート時にキャッシュせず)呼び出しごとに算出する
     ことで、detect_default_language()(または事前の set_language() 呼び
     出し)が選んだ言語を常に反映する -- この経路は Tk ウィジェット、
-    ひいては言語スイッチャーが1つも存在するより前に走りうるため。
+    ひいては言語スイッチャーが1つも存在するより前に実行されうるため。
     """
     return tr("tkinter_missing_hint", REPO_URL, DEFAULT_INSTALL_DIR)
 
@@ -939,7 +939,7 @@ def _windows_python_exe_candidates() -> List[Path]:
     case, when "Add to PATH" was left unchecked) would show a misleading
     "NG" even though the install would actually succeed.
     installer.py の発見(さらに install.bat を反映)と同期を保つ。環境チェック
-    画面はリポジトリの clone より前に走るため installer.py の複製を呼べず、
+    画面はリポジトリの clone より前に動くため installer.py の複製を呼べず、
     ここに必要 -- これが無いと、PATH 外に入った Python("Add to PATH" 未
     チェックの一般的な Windows ケース)が、実際には導入成功するのに
     誤って「NG」表示されてしまう。
@@ -1102,11 +1102,11 @@ def _py_launcher_python_exe() -> Optional[str]:
     でも見つけられるようにする。scripts/installer.py の
     _py_launcher_python_dir() と同じ処理だが、上の
     _windows_python_exe_candidates() と同じ理由(このチェックはリポジトリ
-    -- ひいては installer.py -- が clone される前に走る)で import はせず
+    -- ひいては installer.py -- が clone される前に動く)で import はせず
     複製する。
 
-    いかなる失敗でも(解決先が機能しない WindowsApps ストアスタブである
-    場合を含め)None を返す。例外は送出しない。
+    いかなる失敗でも(解決先が機能しない WindowsApps ストアのプレースホルダ
+    実行ファイルである場合を含め)None を返す。例外は送出しない。
     """
     py_launcher = shutil.which("py")
     if not py_launcher:
@@ -1140,7 +1140,7 @@ def _macos_python_exe_candidates() -> List[Path]:
     macOS: python3 実行ファイルの候補(優先順)。scripts/installer.py の
     _macos_python_exe_candidates() と同じ処理。_windows_python_exe_candidates()
     と同じ理由(このチェックはリポジトリ -- ひいては installer.py -- が
-    clone される前に走る)で複製する。
+    clone される前に動く)で複製する。
     """
     candidates: List[Path] = []
     on_path = shutil.which("python3")
@@ -1704,7 +1704,7 @@ class _QueueWriter(io.TextIOBase):
     素朴な duck-typing オブジェクト(tools/flasher_gui/stampfly_flasher.py
     の QueueLineWriter はそう)ではなく io.TextIOBase を継承するのは、
     このツールでの意図的な選択: redirect_stdout/redirect_stderr が
-    期待するテキストモードのファイルオブジェクトの契約を満たし、
+    前提とするテキストモードのファイルオブジェクトの契約を満たし、
     オーバーライドしない全メソッドに標準準拠の安全な既定動作を持たせる
     (例: isatty() -> False, readable() -> False)。
 
@@ -1903,7 +1903,7 @@ def run_installer_in_process(module, output_queue: "queue.Queue", action_fn) -> 
          残さない。
       2. os.environ[INSTALLER_NONINTERACTIVE_ENV_VAR] = "1" --
          installer.py 自身の prompt()/prompt_choice() がこれを見て
-         即座に既定値を返す(古い、環境変数を知らない版が clone された
+         即座に既定値を返す(古い、環境変数を認識しない版が clone された
          場合でも installer.py 自身が EOF セーフに振る舞う -- モジュール
          docstring の「Non-interactive contract」注記と
          run_selftest() のチェック(3)を参照)。
@@ -2043,7 +2043,7 @@ def run_installer_setup(module, options: SetupOptions, output_queue: "queue.Queu
     docs/plans/gui-installer-plan.md §2 が定める固定・非対話の引数形で
     module.Installer().run(...) を呼ぶ: idf_path は常に None
     (ESP-IDF の検出/確認は、非対話化契約の下で installer.py 自身が
-    完結して処理する)。古い installer.py が知らない引数は落とす --
+    完結して処理する)。古い installer.py が認識しない引数は落とす --
     build_supported_run_kwargs() 参照。
     """
     run_kwargs = build_supported_run_kwargs(module, options, output_queue)
@@ -2365,7 +2365,7 @@ def run_selftest() -> int:
     # こと、かつこのチェックがモジュール全体の言語状態
     # (get_language()/set_language() 参照)を、入った時点のまま確実に
     # 復元すること -- このセルフテストが、同一プロセス内でその後に
-    # 走る何かへ副作用を残してはならない。
+    # 動く何かへ副作用を残してはならない。
     original_language = get_language()
     try:
         set_language(LANG_EN)
@@ -2801,7 +2801,7 @@ class StampFlySetupApp:
                 # ボタンも提示しない: それをすると、installer.py がどのみち
                 # 無関係にしてしまうものをユーザーに直させることになる。
                 # check_python_available()/get_system_python_version_string()
-                # は引き続き上のワーカーから呼ぶことで、死んだ検出コードに
+                # は引き続き上のワーカーから呼ぶことで、使われない検出コードに
                 # せず、実際に動くコード(本GUIに現状UIが無い旧来の
                 # システムPython経路や、parity テスト
                 # scripts/test_gui_installer_parity.py)であり続けさせる。
@@ -2841,7 +2841,7 @@ class StampFlySetupApp:
         auto_install_python()(winget/brew)をワーカースレッドで実行し
         UIの応答性を保ち、完了後に環境チェックを再実行してPython行
         (および、Pythonが必須になった場合のNextボタン)へ結果を反映する。
-        二重クリックで同時に2つのインストールが走らないよう、ボタンは
+        二重クリックで同時に2つのインストールが動かないよう、ボタンは
         即座に無効化する。
         """
         _status_label, _copy_button, install_button = self._env_rows[name]

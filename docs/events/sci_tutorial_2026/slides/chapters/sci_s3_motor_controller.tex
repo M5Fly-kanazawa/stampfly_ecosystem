@@ -154,7 +154,7 @@ void loop_400Hz(float dt) {
     \end{column}
     \begin{column}{0.5\textwidth}
       \begin{exampleblock}{スロットの割当}
-        \scriptsize タッチメニューで \textbf{Device ID}（0--9）を手動設定し NVS（不揮発性メモリ）に保存（再起動後に反映）。ID=0 が20\,msごとにビーコンを送る「親機」、他はその受信時刻を基準に自分のスロットのみで送信する。ペアリングでは自動割当されない
+        \scriptsize タッチメニューで \textbf{Device ID}（0--9）を手動設定し NVS（不揮発性メモリ）に保存（再起動後に反映）。ID=0 が20\,msごとにビーコンを送る「親機」、他はその受信時刻を基準に自分自身のスロットのみで送信する。ペアリングでは自動割当されない
       \end{exampleblock}
     \end{column}
   \end{columns}

@@ -36,7 +36,7 @@
 % ------------------------------------------------------------------
 \begin{frame}{飛ばさずに検証し、1 機から先へ広げる}
   \begin{enumerate}
-    \item SILS は実機のファームを無改変で PC 上で走らせ，ファームの開発と
+    \item SILS は実機のファームを無改変で PC 上で動かし，ファームの開発と
           制御系の実装を机上である程度完了させるための仕組みである
     \item 参加者が実装した推定器・制御器は，L1 Topic API 経由で
           既存の実装と差し替えられる
@@ -56,12 +56,12 @@
 
 
 % ------------------------------------------------------------------
-\begin{frame}{SILS: 実機のファームをそのまま PC で走らせる}
+\begin{frame}{SILS: 実機のファームをそのまま PC で動かす}
   \begin{block}{Code Identity と Parameter Identity}\small
     SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で
     物理シミュレーションと閉ループ実行する検証手法）は，
     MuJoCo（非線形6自由度の物理エンジン）と\textbf{実ファーム C++ そのもの}を，
-    実機と同じソース・同じパラメータで走らせる
+    実機と同じソース・同じパラメータで動かす
   \end{block}
 
   \vspace{0.5em}
@@ -201,7 +201,7 @@ metric duty_max < 0.9 in 6.5 9.0
 
   \vspace{-0.3em}
   {\scriptsize \code{sf sils scenario simulator/sils/scenarios/my\_roll\_step.scn --target vehicle} で
-  PASS/FAIL と実測値（\code{tilt\_max=11.1}）が出る。しきい値は先に .expect 無しで走らせ，実測に余裕を持たせて決める。
+  PASS/FAIL と実測値（\code{tilt\_max=11.1}）が出る。しきい値は先に .expect 無しで動かし，実測に余裕を持たせて決める。
   \code{+} は直前イベントの終了直後，rc の列は 12 bit 生値（中立 2048）。
   全文法と手順: \code{simulator/sils/docs/scenario\_tutorial.md}}
 \end{frame}
@@ -445,8 +445,8 @@ printf("roll=%.1f pitch=%.1f yaw=%.1f\n",
       \hline
       \textbf{原則} & \textbf{内容} \\
       \hline
-      Code Identity & SILS は実ファームと同じソースをそのままコンパイルして走る \\
-      Parameter Identity & 同じパラメータで走らせる \\
+      Code Identity & SILS は実ファームと同じソースをそのままコンパイルして動く \\
+      Parameter Identity & 同じパラメータで動かす \\
       Model Fidelity & 実機飛行後にモデルをログで較正する（後追いの精度向上） \\
       \hline
     \end{tabular}
