@@ -22,6 +22,15 @@ on:
     # firmware/・protocol/・control/ 等リポジトリ全域に散在するため、main への
     # push は常にサイトへ反映しうる。よって条件を絞らず常時デプロイする。
   workflow_dispatch:   # 手動実行も可 / allow manual run
+    # Retry a failed deploy with a NEW run (`gh workflow run deploy-pages.yml --ref main`),
+    # never with "Re-run failed jobs": build and deploy share one job, so a re-run
+    # uploads a second `github-pages` artifact and actions/deploy-pages refuses
+    # ("Multiple artifacts named github-pages"). Seen 2026-09-13 during a GitHub
+    # Pages incident (deployment API returned HTTP 500).
+    # 配信の再試行は「失敗ジョブの再実行」ではなく新規実行で行う
+    # （`gh workflow run deploy-pages.yml --ref main`）。ビルドと配信が 1 ジョブのため、
+    # 再実行すると成果物 `github-pages` が 2 個になり配信が拒否される（2026-09-13 に
+    # GitHub Pages 障害＝deployment API の HTTP 500 の際に確認）。
   release:
     types: [published]
     # The web flasher page bundles the latest release's firmware binaries, so
