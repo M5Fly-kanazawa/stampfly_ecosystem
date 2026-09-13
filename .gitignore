@@ -163,8 +163,5 @@ simulator/sils/viz/out_scn_*/
 # regenerated every session — see simulator/sils/README.md's `sf sils fly` section)
 simulator/sils/viz/out_fly/
 
-# Generated analysis artifacts (figures, metrics)
-analysis/out/
-
 # Claude Code worktrees (作業用チェックアウト実体 / working checkouts)
 .claude/worktrees/

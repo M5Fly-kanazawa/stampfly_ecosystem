@@ -134,7 +134,7 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 
 | # | 作業 | コマンド／確認内容 |
 |---|------|-------------------|
-| 1 | リリースノート原稿を作成・更新 | バージョン番号を決めた時点で `docs/plans/release-vYYYY.MM.P-notes.md` を新規作成する（前回リリースの原稿、例: `release-v2026.07.2-notes.md` をコピーして書き換えると早い）。既定値変更は §2 の2点を含める |
+| 1 | リリースノート原稿を作成・更新 | バージョン番号を決めた時点で `docs/plans/release-vYYYY.MM.P-notes.md` を新規作成する（前回リリースの原稿をコピーして書き換えると早い）。既定値変更は §2 の2点を含める |
 | 2 | SILS 退行テストを main の最終状態で一括実行 | `simulator/sils/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
 | 3 | ローカルビルド確認 | `sf build vehicle` / `sf build controller` |
 | 4 | CI の事前検証 | GitHub リポジトリの **Actions タブ → `Release firmware binaries` を選択 → Run workflow → ブランチ `main` を指定して実行**。全ジョブ（ファームビルド2 = vehicle/controller + フラッシャ 4OS）が緑であることを確認。タグ無し実行では Release 発行ジョブだけがスキップされる |
@@ -294,7 +294,7 @@ Once all changes are on main, proceed in this order. Choose the tag name per
 
 | # | Step | Command / check |
 |---|------|-----------------|
-| 1 | Create/update the release-notes draft | When the version number is decided, create `docs/plans/release-vYYYY.MM.P-notes.md` (copying the previous release's draft, e.g. `release-v2026.07.2-notes.md`, is the fast path). Default changes must include both points from §2 |
+| 1 | Create/update the release-notes draft | When the version number is decided, create `docs/plans/release-vYYYY.MM.P-notes.md` (copying the previous release's draft is the fast path). Default changes must include both points from §2 |
 | 2 | One consolidated SILS run on final main | Every scenario in `simulator/sils/scenarios/*.scn`, once, right before tagging — even if each commit passed individually |
 | 3 | Local builds | `sf build vehicle` / `sf build controller` |
 | 4 | CI pre-verification | On GitHub: **Actions tab → select `Release firmware binaries` → Run workflow → choose branch `main`**. All jobs must be green (2 firmware builds = vehicle/controller + 4-OS flasher). Without a tag, only the Release-publish job is skipped |

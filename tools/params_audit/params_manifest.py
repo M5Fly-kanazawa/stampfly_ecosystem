@@ -247,23 +247,6 @@ class ParamCheck:
 # 保持していた旧リテラルと数値上一致するため、下記 C_T チェックはこの行を
 # EXEMPT から通常の EXPECTED_CT（OK）比較へ昇格する。
 
-# firmware/vehicle_old is FROZEN legacy (87 real flights, no new development,
-# see firmware/vehicle_old/README.md banner). Its physical-parameter literals
-# are intentionally left at their old-generation values -- this manifest exists
-# to document that fact (and catch accidental edits), not to demand they be
-# updated to the adopted family.
-# firmware/vehicle_old は凍結されたレガシー（実飛行87回、新規開発なし、
-# firmware/vehicle_old/README.md 冒頭バナー参照）。物理パラメータのリテラルは
-# 意図的に旧世代の値のまま据え置く -- 本マニフェストはその事実を記録し
-# （誤編集を検知するため）登録するのであり、採用ファミリへの更新を求める
-# ものではない。
-EXEMPT_VEHICLE_OLD = Exempt(
-    reason="firmware/vehicle_old は凍結されたレガシーファーム（実飛行87回、"
-           "新規開発なし）。現行ファームは firmware/vehicle/。現在の確定値は "
-           "docs/architecture/stampfly-parameters.md / "
-           "control/models/stampfly_physical.yaml を参照。"
-)
-
 # max_thrust_per_motor: provenance of the 0.15 N vs 0.168 N per-motor limit is
 # NOT confirmed against a measurement (unlike C_T/C_Q/kappa/mass/inertia
 # above, all of which trace to a dated bench measurement in the SSOT YAML).
@@ -296,8 +279,8 @@ EXEMPT_MAX_THRUST_PER_MOTOR = Exempt(
            "ない）。ベンチ実測 duty0.9 で 0.108 N/枚と乖離（2026-07-15調査時点の"
            "実測記録。詳細レポートは日付付き分析記録の整理に伴い削除済み、"
            "2026-08-03）。0.168 = 旧Ct(1.0e-8)×(4097 rad/s)² と一致する可能性あり"
-           "（未確認）。0.15 N 系（tools/sysid・lib/stampfly_edu・simulator/genesis・"
-           "simulator/vpython 等9箇所）と 0.168 N 系（firmware/vehicle "
+           "（未確認）。0.15 N 系（tools/sysid・simulator/genesis・"
+           "simulator/vpython 等7箇所）と 0.168 N 系（firmware/vehicle "
            "pid_controller.hpp のみ）の2値が並立している。"
 )
 
@@ -319,12 +302,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'_CT_VALUE\s*=\s*([0-9eE.+-]+)',
             expected=EXPECTED_CT,
             note="module constant _CT_VALUE (generated)",
-        ),
-        ParamCheck(
-            file="lib/stampfly_edu/sim/plants.py",
-            regex=r'"Ct":\s*([0-9eE.+-]+),',
-            expected=EXPECTED_CT,
-            note="ImportError fallback dict",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
@@ -391,16 +368,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'id="calc-ct" value="([0-9eE.+-]+)"',
             expected=EXPECTED_CT_SCALED_1EM8,
             note="Calculation tab calc-ct input (×10⁻⁸ display scale)",
-        ),
-        ParamCheck(
-            # firmware_old is EXEMPT (frozen legacy), not MISMATCH -- see
-            # EXEMPT_VEHICLE_OLD above and firmware/vehicle_old/README.md banner.
-            # firmware_old はEXEMPT（凍結レガシー）——MISMATCHではない。上記
-            # EXEMPT_VEHICLE_OLD と firmware/vehicle_old/README.md 冒頭バナー参照。
-            file="firmware/vehicle_old/components/sf_algo_control/motor_model.cpp",
-            regex=r'\.Ct = ([0-9eE.+-]+)f,',
-            expected=EXEMPT_VEHICLE_OLD,
-            note="DEFAULT_MOTOR_PARAMS.Ct (frozen legacy firmware)",
         ),
     ],
 
@@ -507,16 +474,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         # (_KAPPA_VALUE = _CQ_VALUE / _CT_VALUE) になったため、正規表現で
         # 値を捕捉する対象が無い — 上の C_T/C_Q エントリが OK であれば
         # 構造的に正しいことが保証される（この箇所は間接的にカバー済み）。
-        ParamCheck(
-            # firmware_old is EXEMPT (frozen legacy) -- see EXEMPT_VEHICLE_OLD
-            # above and firmware/vehicle_old/README.md banner.
-            # firmware_old はEXEMPT（凍結レガシー）——上記 EXEMPT_VEHICLE_OLD と
-            # firmware/vehicle_old/README.md 冒頭バナー参照。
-            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
-            regex=r'float kappa = ([0-9eE.+-]+)f;',
-            expected=EXEMPT_VEHICLE_OLD,
-            note="QuadConfig::kappa member default (frozen legacy firmware)",
-        ),
     ],
 
     # -------------------------------------------------------------------
@@ -1061,42 +1018,10 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             note="Drone Setup max_thrust (0.15 N family)",
         ),
         ParamCheck(
-            file="lib/stampfly_edu/dynamics/equations.py",
-            regex=r'"max_thrust":\s*([0-9.eE+-]+),\s*"g":\s*9\.80665,\s*"Vbat"',
-            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
-            note="_DEFAULTS.max_thrust (0.15 N family)",
-        ),
-        ParamCheck(
-            file="lib/stampfly_edu/sim/plants.py",
-            regex=r'"max_thrust":\s*([0-9.eE+-]+),\s*"g":\s*9\.80665,',
-            expected=EXEMPT_MAX_THRUST_PER_MOTOR,
-            note="_DEFAULTS.max_thrust (0.15 N family)",
-        ),
-        ParamCheck(
             file="firmware/vehicle/components/sf_controller_pid/include/pid_controller.hpp",
             regex=r'float max_thrust_\s*=\s*([0-9.eE+-]+)f;\s*//\s*\[N\] total',
             expected=EXEMPT_MAX_THRUST_PER_MOTOR,
             note="max_thrust_ = 4 x 0.168 N per motor (0.168 N family)",
-        ),
-        ParamCheck(
-            # firmware_old is EXEMPT (frozen legacy) -- see EXEMPT_VEHICLE_OLD
-            # above and firmware/vehicle_old/README.md banner.
-            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
-            regex=r'float max_thrust_per_motor = ([0-9.eE+-]+)f;\s*//\s*duty',
-            expected=EXEMPT_VEHICLE_OLD,
-            note="QuadConfig::max_thrust_per_motor (frozen legacy firmware)",
-        ),
-        ParamCheck(
-            file="firmware/vehicle_old/components/sf_algo_control/include/control_allocation.hpp",
-            regex=r'float max_thrust_\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXEMPT_VEHICLE_OLD,
-            note="ControlAllocator::max_thrust_ member default (frozen legacy firmware)",
-        ),
-        ParamCheck(
-            file="firmware/vehicle_old/main/tasks/control_task.cpp",
-            regex=r'MAX_TOTAL_THRUST = 4\.0f \* ([0-9.eE+-]+)f;',
-            expected=EXEMPT_VEHICLE_OLD,
-            note="MAX_TOTAL_THRUST = 4 x max_thrust_per_motor (frozen legacy firmware)",
         ),
     ],
 }

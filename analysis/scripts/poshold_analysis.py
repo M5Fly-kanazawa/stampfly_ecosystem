@@ -368,10 +368,10 @@ def print_metrics(M):
 def main(argv):
     if len(argv) >= 2 and argv[0] == "--compare":
         paths = argv[1:3]
-        out = argv[3] if len(argv) > 3 else "analysis/out/poshold"
+        out = argv[3] if len(argv) > 3 else "analysis/reports/poshold"
     else:
         paths = argv[0:1]
-        out = argv[1] if len(argv) > 1 else "analysis/out/poshold"
+        out = argv[1] if len(argv) > 1 else "analysis/reports/poshold"
     os.makedirs(out, exist_ok=True)
     allM = {}
     for p in paths:

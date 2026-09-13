@@ -20,14 +20,13 @@
 | `smoke/` | スモークテスト（`mujoco_smoke`・`cores_smoke` ＝ P1.0、`rtos_smoke` ＝ P1.1） |
 | `scenarios/` | `*.scn`（入力シナリオ）／`*.expect`（合否判定）のペア。書き方は [`docs/scenario_tutorial.md`](docs/scenario_tutorial.md) 参照 |
 
-### エミュレータターゲット（vehicle / vehicle_old / workshop）
+### エミュレータターゲット（vehicle / workshop）
 
-`sf sils build --target <name>` と `sf sils scenario <scn> --target <name>` は3つのファームを選べる（いずれも同じ MuJoCo Plant／仮想ボード基盤に、無改変のファーム本体をリンクする）。
+`sf sils build --target <name>` と `sf sils scenario <scn> --target <name>` は2つのファームを選べる（いずれも同じ MuJoCo Plant／仮想ボード基盤に、無改変のファーム本体をリンクする）。レガシー `firmware/vehicle_old`（`emu_vehicle_old` ターゲット）は2026-09-13に削除した（タグ `archive/2026-09-13`）。
 
 | target | 実行ファイル | 内容 |
 |--------|------------|------|
 | `vehicle`（既定） | `emu_vehicle` | 現行 `firmware/vehicle`。`sf::PidController`（ControlTask）が全軸を制御 |
-| `vehicle_old` | `emu_vehicle_old` | レガシー `firmware/vehicle_old`（凍結・実飛行87回） |
 | `workshop` | `emu_workshop` | `firmware/workshop`。タスク表は vehicle と同一で、ControlTask だけが `WorkshopControlTask` に置き換わり、学習者の `setup()`/`loop_400Hz()`（`sf lesson switch` がコピーする `firmware/workshop/main/user_code.cpp`）を毎周期呼ぶ |
 
 ```bash
@@ -48,7 +47,7 @@ sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 
 **`workshop_acro.scn`（離陸+ホバー相当デモ, `simulator/sils/scenarios/`）:** ARM → 上昇バースト → 実測ホバー duty（~0.676）で巡航（スティック中立）→ 空中で DISARM して安全に沈降・着地、という構成。合格基準は緩め（`metric alt_max > 0.1`＝離陸検知、`metric tilt_max < 15.0`＝転倒なし）。開ループのスクリプト制御では真の高度保持ができない（37g級の機体はわずかな duty 過不足が1秒未満で m/s 級の昇降速度に積み上がる）ため、着陸はスロットルを絞る台本ではなく空中 DISARM 直行（`acro_flight.scn` で実証済みの安全パターン）を採用している。詳細な調査記録・スロットル値の導出はファイル冒頭のコメント参照。
 
-`sf sils regression`（CI）は `vehicle`/`vehicle_old` に加え、ヘッダで `--target workshop` を宣言するシナリオ（`workshop_acro.scn`）も `*.scn`/`*.expect` の対象に含むが、**既定ではスキップする**（`[SKIP] workshop_acro (target=workshop; ...)`、結果集計は PASS/FAIL に数えない）。理由: `main/user_code.cpp` は `sf lesson switch` が所有する gitignore 対象ファイルで、新規チェックアウトでは CMake ブートストラップが Lesson 0（モータを動かさない）で種付けするため、離陸ゲートが実回帰と無関係に構造的失敗する。`sf lesson switch N --solution` でレッスンを切り替えた上で `sf sils regression --include-workshop` を渡すと実行される。
+`sf sils regression`（CI）は `vehicle` に加え、ヘッダで `--target workshop` を宣言するシナリオ（`workshop_acro.scn`）も `*.scn`/`*.expect` の対象に含むが、**既定ではスキップする**（`[SKIP] workshop_acro (target=workshop; ...)`、結果集計は PASS/FAIL に数えない）。理由: `main/user_code.cpp` は `sf lesson switch` が所有する gitignore 対象ファイルで、新規チェックアウトでは CMake ブートストラップが Lesson 0（モータを動かさない）で種付けするため、離陸ゲートが実回帰と無関係に構造的失敗する。`sf lesson switch N --solution` でレッスンを切り替えた上で `sf sils regression --include-workshop` を渡すと実行される。
 
 ### ビルド（スモークテスト）
 
@@ -169,14 +168,13 @@ P0（更地化）✅ → **P1（骨格・本書）** → P2（差し替え実証
 
 A physics-based, MuJoCo, algorithm-independent SILS (Software-in-the-Loop) bench. It verifies the vehicle firmware on a PC without risking hardware: it compiles the unmodified firmware and runs it on a deterministic emulated RTOS (the "faithful" approach). Design source of truth: [`RESET_PLAN.md`](RESET_PLAN.md).
 
-### Emulator targets (vehicle / vehicle_old / workshop)
+### Emulator targets (vehicle / workshop)
 
-`sf sils build --target <name>` and `sf sils scenario <scn> --target <name>` pick one of three firmwares (all link the same, unmodified firmware sources onto the same MuJoCo Plant / virtual board infrastructure). Scenario (`*.scn`) and assertion (`*.expect`) pairs live in `scenarios/` — see [`docs/scenario_tutorial.md`](docs/scenario_tutorial.md) for how to write your own.
+`sf sils build --target <name>` and `sf sils scenario <scn> --target <name>` pick one of two firmwares (both link the same, unmodified firmware sources onto the same MuJoCo Plant / virtual board infrastructure). The legacy `firmware/vehicle_old` (`emu_vehicle_old` target) was removed on 2026-09-13 (tag `archive/2026-09-13`). Scenario (`*.scn`) and assertion (`*.expect`) pairs live in `scenarios/` — see [`docs/scenario_tutorial.md`](docs/scenario_tutorial.md) for how to write your own.
 
 | target | executable | what it is |
 |--------|-----------|------------|
 | `vehicle` (default) | `emu_vehicle` | Current `firmware/vehicle`. `sf::PidController` (ControlTask) drives every axis |
-| `vehicle_old` | `emu_vehicle_old` | Legacy `firmware/vehicle_old` (frozen, 87 real flights) |
 | `workshop` | `emu_workshop` | `firmware/workshop`. Same task table as vehicle, except ControlTask is replaced by `WorkshopControlTask`, which calls the learner's `setup()`/`loop_400Hz()` (`firmware/workshop/main/user_code.cpp`, copied there by `sf lesson switch`) every cycle |
 
 ```bash
@@ -195,7 +193,7 @@ If `main/user_code.cpp` is missing (gitignored; `sf lesson switch` never run yet
 
 **`workshop_acro.scn` (liftoff/hover-equivalent demo, `simulator/sils/scenarios/`):** ARM -> climb burst -> cruise at the measured hover duty (~0.676) with sticks centered -> DISARM directly while airborne, settling safely. Gates are loose (`metric alt_max > 0.1` = liftoff detected, `metric tilt_max < 15.0` = no tumble). An open-loop scripted throttle-down landing was tried and rejected — at ~37 g, even a small sustained duty deficit compounds into m/s-scale descent rates in under a second — so landing here is a direct in-air DISARM instead (the same pattern already proven safe by `acro_flight.scn`). See the file's header comments for the full derivation and investigation notes.
 
-`sf sils regression` (CI) covers `vehicle`/`vehicle_old` plus any scenario whose header declares `--target workshop` (`workshop_acro.scn`), but **skips workshop scenarios by default** (`[SKIP] workshop_acro (target=workshop; ...)`, not counted as PASS/FAIL). Reason: `main/user_code.cpp` is a gitignored file owned by `sf lesson switch`; a fresh checkout's CMake bootstrap seeds it with Lesson 0 (drives no motors), so the liftoff gate would fail there regardless of any real regression. Switch to a lesson first (`sf lesson switch N --solution`) and pass `sf sils regression --include-workshop` to run it.
+`sf sils regression` (CI) covers `vehicle` plus any scenario whose header declares `--target workshop` (`workshop_acro.scn`), but **skips workshop scenarios by default** (`[SKIP] workshop_acro (target=workshop; ...)`, not counted as PASS/FAIL). Reason: `main/user_code.cpp` is a gitignored file owned by `sf lesson switch`; a fresh checkout's CMake bootstrap seeds it with Lesson 0 (drives no motors), so the liftoff gate would fail there regardless of any real regression. Switch to a lesson first (`sf lesson switch N --solution`) and pass `sf sils regression --include-workshop` to run it.
 
 ### Build (P1.0 smoke tests)
 

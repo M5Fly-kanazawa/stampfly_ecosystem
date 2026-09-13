@@ -20,13 +20,15 @@
  * Linked into emu_vehicle and emu_workshop (both run firmware/vehicle's
  * ImuTask/estimator/comm/telemetry topics — emu_workshop only swaps
  * ControlTask, see CMakeLists.txt), and into hover_smoke (which links the
- * same sf_core topics via sf_cores). NOT linked into emu_vehicle_old (the
- * frozen legacy firmware has none of these sf:: topics).
+ * same sf_core topics via sf_cores). (The frozen legacy firmware/vehicle_old,
+ * which had none of these sf:: topics and so did not link this file, was
+ * removed 2026-09-13 — see tag archive/2026-09-13.)
  * emu_vehicle と emu_workshop（どちらも firmware/vehicle の ImuTask/推定器/
  * comm/telemetry トピックを実行 -- emu_workshop は ControlTask のみ差し替え、
  * CMakeLists.txt 参照）、および hover_smoke（sf_cores 経由で同じ sf_core
- * トピックをリンク）にリンクする。emu_vehicle_old（凍結レガシーファーム）には
- * これらの sf:: トピックが無いためリンクしない。
+ * トピックをリンク）にリンクする。（これらの sf:: トピックを持たずリンク
+ * 対象外だった凍結レガシーファーム firmware/vehicle_old は2026-09-13に
+ * 削除済み — タグ archive/2026-09-13 参照。）
  *
  * Every topic is read via `.latest()` (a non-destructive peek), NEVER
  * `.read()` (which would pop the shared single-consumer ring and race with

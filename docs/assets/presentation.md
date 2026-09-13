@@ -272,7 +272,7 @@ sf lesson switch 5   # レッスン切替
 
 ---
 
-## Python SDK: stampfly_edu
+## Python SDK: stampfly_edu（2026-09-13 に削除）
 
 - **リアルタイム接続**: WiFi 経由でセンサ・制御データ取得
 - **動力学モデル**: ドローンの運動方程式シミュレーション
@@ -331,13 +331,13 @@ stampfly_ecosystem/
 │   ├── controller/    #   ESP-NOW TDMA 送信機
 │   └── common/        #   共有プロトコル・数学
 ├── simulator/         # VPython + Genesis シミュレータ
-├── lib/               # sf CLI (20cmd) + stampfly_edu SDK
+├── lib/               # sf CLI (20cmd)（stampfly_edu SDK は2026-09-13に削除）
 ├── control/           # 制御設計（ループ整形ツール）
 ├── analysis/          # Jupyter Notebook + データセット
 ├── tools/             # チューニング・システム同定・校正
 ├── docs/              # ワークショップ・セットアップガイド
 ├── protocol/          # 通信プロトコル仕様 (SSOT)
-└── examples/          # 教育用サンプルプロジェクト
+└── (examples/ は2026-09-13に削除)
 ```
 
 ---

@@ -49,7 +49,7 @@ sf app <subcommand> [args]
 
 `name` はC識別子であること（英数字とアンダースコアのみ、数字始まり不可）。
 既に `firmware/apps/<name>` が存在する場合、および予約名
-（`vehicle`, `vehicle_old`, `controller`, `workshop`, `common`, `apps`）は拒否される。
+（`vehicle`, `controller`, `workshop`, `common`, `apps`）は拒否される。
 `--from` に存在しない例題を指定するとエラーになり、利用可能な例題一覧が表示される。
 
 ### `build` / `flash` の挙動
@@ -238,7 +238,7 @@ sf app <subcommand> [args]
 
 `name` must be a valid C identifier (letters, digits, underscore; cannot
 start with a digit). Rejected if `firmware/apps/<name>` already exists, or
-if `name` is a reserved word (`vehicle`, `vehicle_old`, `controller`,
+if `name` is a reserved word (`vehicle`, `controller`,
 `workshop`, `common`, `apps`). An unknown `--from` example fails with an
 error listing the available examples.
 

@@ -298,7 +298,7 @@ def main(argv):
     if not argv:
         print(__doc__); return
     path = argv[0]
-    out = argv[1] if len(argv) > 1 else "analysis/out/acro"
+    out = argv[1] if len(argv) > 1 else "analysis/reports/acro"
     analyze(path, out)
 
 

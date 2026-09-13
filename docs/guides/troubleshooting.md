@@ -6,9 +6,6 @@
 
 | 問題 | 原因 | 解決策 |
 |------|------|--------|
-| `ModuleNotFoundError: stampfly_edu` | パッケージ未インストール | `pip install -e ".[edu]"` を実行 |
-| `ImportError: ipywidgets` | 教育用依存関係なし | `pip install -e ".[edu]"` を実行 |
-| `FileNotFoundError: sample data` | サンプルデータ未生成 | `python -m stampfly_edu.generate_samples` を実行 |
 | Jupyter が起動しない | jupyter 未インストール | `pip install jupyter` を実行 |
 | ウィジェットが表示されない | ipywidgets の設定 | `jupyter nbextension enable --py widgetsnbextension` |
 
@@ -94,9 +91,8 @@ Windows は `C:\StampFly`、macOS/Linux は `~/.stampfly`）を既定で使い�
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| `ModuleNotFoundError: stampfly_edu` | Package not installed | Run `pip install -e ".[edu]"` |
-| `ImportError: ipywidgets` | Missing edu dependencies | Run `pip install -e ".[edu]"` |
-| `FileNotFoundError: sample data` | Sample data not generated | Run `python -m stampfly_edu.generate_samples` |
+| Jupyter won't start | jupyter not installed | Run `pip install jupyter` |
+| Widgets not displayed | ipywidgets setup | Run `jupyter nbextension enable --py widgetsnbextension` |
 
 ## 2. WiFi Connection
 

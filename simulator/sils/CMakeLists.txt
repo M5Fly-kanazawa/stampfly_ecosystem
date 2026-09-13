@@ -65,15 +65,15 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     # sf_cores's PUBLIC include path just below — so it reaches every consumer
     # (cores_smoke, rtos_smoke, hover_smoke, rate_tune) whenever any firmware
     # source they compile reads/writes stdout/stderr (e.g. fprintf(stderr, ...)
-    # in error paths), not just emu_vehicle/emu_vehicle_old (which carry their
-    # own copy since they don't link sf_cores). See esp_idf_host/cstdio for why
-    # this shadow exists.
+    # in error paths), not just emu_vehicle (which carries its own copy since
+    # it doesn't link sf_cores). See esp_idf_host/cstdio for why this shadow
+    # exists.
     # Windows/MinGW 限定の互換 TU（他では空翻訳単位）: esp_idf_host/cstdio が宣言する
     # stdout/stderr シャドウ変数を実体化する。同ヘッダは直下の sf_cores の PUBLIC
     # include パスにあるため、cores_smoke/rtos_smoke/hover_smoke/rate_tune が
     # コンパイルするどの firmware ソースが stdout/stderr を読み書きしても
     # （エラー経路の fprintf(stderr, ...) 等）届く — sf_cores をリンクしない
-    # （自前でコピーを持つ）emu_vehicle/emu_vehicle_old だけではない。このシムが
+    # （自前でコピーを持つ）emu_vehicle だけではない。このシムが
     # 存在する理由は esp_idf_host/cstdio 参照。
     ${CMAKE_CURRENT_SOURCE_DIR}/esp_idf_host/win_stdio_shim.cpp
   )
@@ -267,14 +267,18 @@ endif()
 #
 # The ESP-IDF host platform (esp_idf_host/ + compat/) replaces the SoC; the
 # StampFly chips/board are emulated as virtual devices (E1+). The firmware is
-# compiled UNMODIFIED and firmware-agnostic (E5 builds firmware/vehicle_old the
-# same way). E0 goal: app_main() links and all 14 tasks run on the cooperative
-# scheduler. The shim chain is C++-only (esp_err.h uses <cstdint>), so the .c
-# HAL/driver sources are compiled as C++.
+# compiled UNMODIFIED and firmware-agnostic (E5 proved this by building the
+# frozen legacy firmware/vehicle_old the same way before it was removed
+# 2026-09-13; firmware/workshop below is the current second target). E0 goal:
+# app_main() links and all 14 tasks run on the cooperative scheduler. The shim
+# chain is C++-only (esp_err.h uses <cstdint>), so the .c HAL/driver sources
+# are compiled as C++.
 #
 # StampFly エミュレータ — 実ファームの app_main() をホストで走らせる。esp_idf_host/＋
 # compat/ が SoC を肩代わりし、チップ/ボードは仮想デバイス（E1+）。ファームは無改変・
-# ファーム非依存（E5 で firmware/vehicle_old も同様）。.c も C++ としてコンパイル。
+# ファーム非依存（E5 で firmware/vehicle_old も同様にビルドして実証したが、
+# 同ファームは2026-09-13に削除済み。以後の2本目ターゲットは下記 firmware/workshop）。
+# .c も C++ としてコンパイル。
 # -----------------------------------------------------------------------------
 option(SILS_BUILD_EMU "Build the StampFly emulator (real firmware app_main on host)" ON)
 if(SILS_BUILD_EMU)
@@ -371,67 +375,7 @@ if(SILS_BUILD_EMU)
   endif()
 
   # ---------------------------------------------------------------------------
-  # Second firmware: firmware/vehicle_old (LEGACY, 87 real flights, complete).
-  # Proves the emulator is firmware-agnostic — a DIFFERENT codebase (own
-  # drivers, own services, own state machine) runs on the SAME libsf_emu (host
-  # platform + virtual board + Plant). The SILS infra (plant/virtual_board)
-  # keeps using the promoted vehicle's sf_core/sf_math types; the firmware
-  # boundary is raw chip bytes, so there is no firmware coupling (no
-  # header-name collisions — verified).
-  # 2本目: レガシーファーム firmware/vehicle_old（完成・87飛行）。別実装が同じ
-  # 基盤で走る＝ファーム非依存の実証。SILS基盤は昇格後vehicleの
-  # sf_core/sf_math を使い続け、ファーム境界は raw チップバイトなので結合なし。
-  # ---------------------------------------------------------------------------
-  set(VV ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/vehicle_old)
-  file(GLOB_RECURSE EMU_VV_SRCS CONFIGURE_DEPENDS
-       ${VV}/main/*.cpp ${VV}/main/*.c
-       ${VV}/components/*.cpp ${VV}/components/*.c)
-  list(FILTER EMU_VV_SRCS EXCLUDE REGEX "/(docs|examples|test|build)/|_test\\.|/CubeIDE")
-
-  file(GLOB EMU_VV_INCS LIST_DIRECTORIES true ${VV}/components/*/include)
-  list(APPEND EMU_VV_INCS
-       ${VV}/components/sf_hal_vl53l3cx/include/vl53lx
-       ${VV}/components/sf_hal_vl53l3cx/src
-       ${VV}/components/sf_hal_vl53l3cx/src/vl53lx
-       ${VV}/components/sf_hal_bmi270/src
-       ${VV}/components/sf_hal_pmw3901/src
-       ${VV}/main
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/common/protocol/include  # shared protocol
-       # SILS infra (Plant/virtual_board) types — no collision with old firmware:
-       ${VN}/components/sf_core/include ${VN}/components/sf_math/include)
-
-  add_executable(emu_vehicle_old
-    ${CMAKE_CURRENT_SOURCE_DIR}/emu/emu_main_generic.cpp
-    ${EMU_VV_SRCS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_platform_glue.c   # missing fw platform fn
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_vehicle_old_glue.cpp  # workshop-only weak symbol
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_board.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/vl53_device.cpp        # E2: VL53L3CX ToF chip model
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/pmw3901_device.cpp     # PMW3901 optical-flow chip model
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/espnow_hub.cpp          # shared ESP-NOW recv/send hub
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario_inject.cpp     # E6: shared ControlPacket builder
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/virtual_pilot_vehicle.cpp  # ESP-NOW virtual pilot (E3)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/scenario.cpp           # E6: *.scn parser + driver task
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/console_feeder.cpp     # E6: scripted console bytes
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/esp_console_shim.cpp   # E6: dispatching console registry
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_record.cpp         # E6: events.jsonl recorder
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_flightlog.cpp      # StampFly flight-log v1 bundle recorder (truth.csv only — no vehicle-topic glue linked)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/emu_realtime.cpp       # P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices/rc_stdin.cpp           # P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
-    plant/plant.cpp
-    rtos/scheduler.cpp
-    rtos/esp_timer_shim.cpp
-    compat/clock_shim.cpp
-    compat/nvs_shim.cpp
-    ${EMU_WIN_COMPAT_SRCS})
-  target_include_directories(emu_vehicle_old BEFORE PRIVATE
-    ${EMU_HOST} ${SILS_COMPAT} ${CMAKE_CURRENT_SOURCE_DIR}/rtos
-    ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
-    ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_VV_INCS})
-  target_link_libraries(emu_vehicle_old PRIVATE Threads::Threads mujoco)
-
-  # ---------------------------------------------------------------------------
-  # Third firmware: firmware/workshop (rebuilt 2026-07-18 on the vehicle
+  # Second firmware: firmware/workshop (rebuilt 2026-07-18 on the vehicle
   # component base — R12, workshop_migration.md §8). Task table is IDENTICAL to
   # emu_vehicle EXCEPT ControlTask: firmware/workshop/main/workshop_control_task.cpp
   # (WorkshopControlTask) replaces vehicle/tasks/control_task.cpp and calls the
@@ -549,7 +493,7 @@ endif()
 # -----------------------------------------------------------------------------
 option(SILS_BUILD_VL53_PROBE "Build the offline VL53L3CX gen4 probe (Milestone 2)" OFF)
 if(SILS_BUILD_VL53_PROBE)
-  set(VL53_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/vehicle_old/components/sf_hal_vl53l3cx)
+  set(VL53_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/vehicle/components/sf_hal_vl53l3cx)
 
   # ST driver core (compiled UNMODIFIED). The firmware's vl53lx_platform.c
   # (FreeRTOS/esp) is deliberately NOT in this list — the probe links its own host

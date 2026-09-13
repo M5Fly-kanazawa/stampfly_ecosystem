@@ -67,13 +67,13 @@ namespace sf {
 //
 // ControlPacket (14 bytes) and the PairingPacket constants are defined once in
 // firmware/common/protocol/include/espnow_protocol.hpp (shared with
-// firmware/vehicle_old and firmware/controller) and documented in
+// firmware/controller) and documented in
 // protocol/spec/messages.yaml. The transmitter (firmware/controller) sends the
 // ControlPacket layout below; on-air stick values are 12-bit ADC (2048-centred),
 // NOT 0..1000. Listening on the broadcast peer (FF:FF:FF:FF:FF:FF) is used.
 // ControlPacket(14バイト)とPairingPacket定数は
 // firmware/common/protocol/include/espnow_protocol.hpp で1箇所だけ定義され
-// (firmware/vehicle_old・firmware/controllerと共有)、protocol/spec/messages.yaml
+// (firmware/controllerと共有)、protocol/spec/messages.yaml
 // に記載。送信機(firmware/controller)は下記のControlPacketレイアウトを送る。
 // on-air は 12bit ADC(中央2048)、0..1000 ではない。ブロードキャストピア
 // (FF:FF:FF:FF:FF:FF) でリスンする。

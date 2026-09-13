@@ -81,9 +81,6 @@
 
 | ファイル | 説明 |
 |---------|------|
-| [setup/education.md](setup/education.md) | 教育向けセットアップガイド |
-| [university/syllabus.md](university/syllabus.md) | 大学講義シラバス |
-| [university/assessment_rubric.md](university/assessment_rubric.md) | 評価ルーブリック |
 | [events/stampfly_workshop/workshop_guide.md](events/stampfly_workshop/workshop_guide.md) | ワークショップガイド |
 | [events/stampfly_workshop/workshop_schedule.md](events/stampfly_workshop/workshop_schedule.md) | ワークショップスケジュール |
 | [events/stampfly_workshop/competition_rules.md](events/stampfly_workshop/competition_rules.md) | 競技ルール |
@@ -99,19 +96,14 @@
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | 教育普及戦略（階層別展開・3 Horizons） |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | `sf app` 自作プロジェクトの SILS 対応計画（現状のギャップと Phase 0〜4） |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | 「独自コードの入口」見直しの起点 — 過去の検討の復元・現状の棚卸し・矛盾・問い（提案なし） |
-| [plans/project-plan-conformance.md](plans/project-plan-conformance.md) | PROJECT_PLAN.md（原典）とリポジトリの整合計画 — 食い違いの棚卸し（A/B/C/D）・判断事項・進め方 |
-| [plans/repository-cleanup-candidates.md](plans/repository-cleanup-candidates.md) | 整理対象の候補 — 重複・位置づけ未定・陳腐化・記録の扱い・削除予定（vehicle_old） |
+| [plans/university-course-plan.md](plans/university-course-plan.md) | 大学講義用教材の作る予定（教材本体は 2026-09-13 に削除） |
+| [plans/repository-cleanup-candidates.md](plans/repository-cleanup-candidates.md) | 整理対象の候補 — 重複・位置づけ未定・陳腐化・記録の扱い・実施状況（2026-09-13 に vehicle_old 等を削除） |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 統合計画 |
 | [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | 専用 Python + 専用 ESP-IDF 環境への移行計画 |
 | [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | 標準フライトログ形式（一式 zip）の統一計画 |
 | [plans/gui-installer-plan.md](plans/gui-installer-plan.md) | GUI インストーラ（StampFly Setup）実装計画 |
 | [plans/pairing-methods-plan.md](plans/pairing-methods-plan.md) | 講習会でのペアリング取り違え対策（方式比較） |
 | [plans/powerhub-beacon-station-plan.md](plans/powerhub-beacon-station-plan.md) | PowerHub を TDMA ビーコン専用局にする計画 |
-| [plans/release-v2026.07.2-notes.md](plans/release-v2026.07.2-notes.md) | v2026.07.2 リリースノート（GUIフラッシャのネイティブ化） |
-| [plans/release-v2026.07.3-notes.md](plans/release-v2026.07.3-notes.md) | v2026.07.3 リリースノート（Setup 修復モード不具合修正） |
-| [plans/release-v2026.07.4-notes.md](plans/release-v2026.07.4-notes.md) | v2026.07.4 リリースノート（Step3/4 失敗バグ修正） |
-| [plans/release-v2026.07.5-notes.md](plans/release-v2026.07.5-notes.md) | v2026.07.5 リリースノート（SILS Windows ネイティブ対応） |
-| [plans/release-v2026.07.6-notes.md](plans/release-v2026.07.6-notes.md) | v2026.07.6 リリースノート（インストーラ・開発環境の互換性修正） |
 
 ## 3. ファームウェアドキュメント
 
@@ -161,14 +153,9 @@
 | [firmware/vehicle/components/sf_hal_bmi270/examples/](../firmware/vehicle/components/sf_hal_bmi270/examples/) | BMI270 使用例（polling, interrupt, FIFO, 開発ステージ） |
 | [firmware/vehicle/components/sf_hal_vl53l3cx/examples/](../firmware/vehicle/components/sf_hal_vl53l3cx/examples/) | VL53L3CX 使用例（polling, interrupt, 開発ステージ） |
 
-### Vehicle Old（レガシー機体ファームウェア）
+### Vehicle Old（レガシー機体ファームウェア、削除済み）
 
-POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmware/vehicle` へ昇格し、旧世代ファームウェアは `firmware/vehicle_old` として凍結された（旧 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` 階層命名構成）。実機87フライトの実績があるが新規開発は行わない。
-
-| ファイル | 説明 |
-|---------|------|
-| [firmware/vehicle_old/README.md](../firmware/vehicle_old/README.md) | レガシー機体ファームウェア全体ガイド |
-| [firmware/vehicle_old/components/sf_algo_fusion/README.md](../firmware/vehicle_old/components/sf_algo_fusion/README.md) | センサーフュージョンアルゴリズム |
+POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmware/vehicle` へ昇格し、旧世代ファームウェア（旧 `sf_hal_*`/`sf_algo_*`/`sf_svc_*` 階層命名構成、実機87フライトの実績）は `firmware/vehicle_old` として凍結されていたが、2026-09-13 に削除した（タグ `archive/2026-09-13`）。詳細は `PROJECT_PLAN.md` §4 を参照。
 
 ### Controller（コントローラ）
 
@@ -181,7 +168,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 
 | ファイル | 説明 |
 |---------|------|
-| [firmware/common/README.md](../firmware/common/README.md) | 共有コード（`protocol/` は ESP-NOW 通信プロトコル実装済み・vehicle/vehicle_old/controller が使用、`math/`・`utils/` は未実装のプレースホルダ） |
+| [firmware/common/README.md](../firmware/common/README.md) | 共有コード（`protocol/` は ESP-NOW 通信プロトコル実装済み・vehicle/controller が使用、`math/`・`utils/` は未実装のプレースホルダ） |
 
 ### Workshop（ワークショップ教材）
 
@@ -211,7 +198,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [control/design/loop_shaping_tool/README.md](../control/design/loop_shaping_tool/README.md) | ループシェイピングツール |
 | [analysis/README.md](../analysis/README.md) | 実験データ解析（構築中） |
 | [analysis/datasets/README.md](../analysis/datasets/README.md) | データセット |
-| [analysis/notebooks/README.md](../analysis/notebooks/README.md) | Jupyter ノートブック |
 | [analysis/scripts/README.md](../analysis/scripts/README.md) | 解析スクリプト |
 | [tools/README.md](../tools/README.md) | 補助ツール（構築中） |
 | [tools/calibration/README.md](../tools/calibration/README.md) | キャリブレーションツール |
@@ -222,7 +208,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [simulator/sandbox/README.md](../simulator/sandbox/README.md) | サンドボックス |
 | [plans/simulator-migration.md](plans/simulator-migration.md) | シミュレータマイグレーション計画 |
 | [ros/README.md](../ros/README.md) | ROS 連携（構築中） |
-| [examples/README.md](../examples/README.md) | 学習用サンプル |
 
 ---
 
@@ -309,9 +294,6 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 
 | File | Description |
 |------|-------------|
-| [setup/education.md](setup/education.md) | Education-oriented setup guide |
-| [university/syllabus.md](university/syllabus.md) | University course syllabus |
-| [university/assessment_rubric.md](university/assessment_rubric.md) | Assessment rubric |
 | [events/stampfly_workshop/workshop_guide.md](events/stampfly_workshop/workshop_guide.md) | Workshop guide |
 | [events/stampfly_workshop/workshop_schedule.md](events/stampfly_workshop/workshop_schedule.md) | Workshop schedule |
 | [events/stampfly_workshop/competition_rules.md](events/stampfly_workshop/competition_rules.md) | Competition rules |
@@ -324,19 +306,14 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [plans/education-outreach-strategy.md](plans/education-outreach-strategy.md) | Education outreach strategy (per-tier rollout, 3 horizons) |
 | [plans/sf-app-sils-plan.md](plans/sf-app-sils-plan.md) | Plan to run `sf app` projects in SILS (current gaps, Phases 0–4) |
 | [plans/user-programming-entry-review.md](plans/user-programming-entry-review.md) | Starting point for rethinking the "write your own code" entry — history, current state, contradictions, open questions (no proposals) |
-| [plans/project-plan-conformance.md](plans/project-plan-conformance.md) | Plan to bring the repository in line with PROJECT_PLAN.md (the canonical plan) — divergence inventory (A/B/C/D), decisions needed, phases |
-| [plans/repository-cleanup-candidates.md](plans/repository-cleanup-candidates.md) | Cleanup candidates — duplicates, unplaced items, stale docs, records, planned deletions (vehicle_old) |
+| [plans/university-course-plan.md](plans/university-course-plan.md) | University course plan (materials removed 2026-09-13; plan kept) |
+| [plans/repository-cleanup-candidates.md](plans/repository-cleanup-candidates.md) | Cleanup candidates — duplicates, unplaced items, stale docs, records, and their status (vehicle_old etc. removed 2026-09-13) |
 | [plans/ros2-integration.md](plans/ros2-integration.md) | ROS2 integration plan |
 | [plans/dedicated-environment-plan.md](plans/dedicated-environment-plan.md) | Plan to migrate to a dedicated Python + ESP-IDF environment |
 | [plans/flight-log-format-plan.md](plans/flight-log-format-plan.md) | Plan to unify the standard flight-log format (zip bundle) |
 | [plans/gui-installer-plan.md](plans/gui-installer-plan.md) | GUI installer (StampFly Setup) implementation plan |
 | [plans/pairing-methods-plan.md](plans/pairing-methods-plan.md) | Countermeasures for classroom pairing mix-ups (method comparison) |
 | [plans/powerhub-beacon-station-plan.md](plans/powerhub-beacon-station-plan.md) | Plan to turn M5Stack PowerHub into a TDMA beacon station |
-| [plans/release-v2026.07.2-notes.md](plans/release-v2026.07.2-notes.md) | v2026.07.2 release notes (native GUI flasher installer) |
-| [plans/release-v2026.07.3-notes.md](plans/release-v2026.07.3-notes.md) | v2026.07.3 release notes (Setup repair-mode fix) |
-| [plans/release-v2026.07.4-notes.md](plans/release-v2026.07.4-notes.md) | v2026.07.4 release notes (fix for Step 3/4 install failure) |
-| [plans/release-v2026.07.5-notes.md](plans/release-v2026.07.5-notes.md) | v2026.07.5 release notes (SILS native Windows support) |
-| [plans/release-v2026.07.6-notes.md](plans/release-v2026.07.6-notes.md) | v2026.07.6 release notes (installer/dev-env compatibility fixes) |
 
 ## 3. Firmware Documentation
 
@@ -378,14 +355,9 @@ Beyond these six, `firmware/vehicle/docs/` also holds flight-investigation and d
 | [firmware/vehicle/components/sf_hal_bmi270/examples/](../firmware/vehicle/components/sf_hal_bmi270/examples/) | BMI270 examples (polling, interrupt, FIFO, dev stages) |
 | [firmware/vehicle/components/sf_hal_vl53l3cx/examples/](../firmware/vehicle/components/sf_hal_vl53l3cx/examples/) | VL53L3CX examples (polling, interrupt, dev stages) |
 
-### Vehicle Old (Legacy Vehicle Firmware)
+### Vehicle Old (Legacy Vehicle Firmware, removed)
 
-After POS_HOLD position control was validated on real hardware, `firmware/vehicle_new` was promoted to `firmware/vehicle`, and the previous-generation firmware was frozen as `firmware/vehicle_old` (the old `sf_hal_*`/`sf_algo_*`/`sf_svc_*` layered naming convention). It has flown 87 real flights but receives no new development.
-
-| File | Description |
-|------|-------------|
-| [firmware/vehicle_old/README.md](../firmware/vehicle_old/README.md) | Legacy vehicle firmware complete guide |
-| [firmware/vehicle_old/components/sf_algo_fusion/README.md](../firmware/vehicle_old/components/sf_algo_fusion/README.md) | Sensor fusion algorithm |
+After POS_HOLD position control was validated on real hardware, `firmware/vehicle_new` was promoted to `firmware/vehicle`, and the previous-generation firmware (the old `sf_hal_*`/`sf_algo_*`/`sf_svc_*` layered naming convention, 87 real flights) was frozen as `firmware/vehicle_old` -- it was removed on 2026-09-13 (tag `archive/2026-09-13`). See `PROJECT_PLAN.md` section 4 for details.
 
 ### Controller
 
@@ -398,7 +370,7 @@ After POS_HOLD position control was validated on real hardware, `firmware/vehicl
 
 | File | Description |
 |------|-------------|
-| [firmware/common/README.md](../firmware/common/README.md) | Shared code (`protocol/` has a working ESP-NOW protocol implementation used by vehicle/vehicle_old/controller; `math/` and `utils/` remain empty placeholders) |
+| [firmware/common/README.md](../firmware/common/README.md) | Shared code (`protocol/` has a working ESP-NOW protocol implementation used by vehicle/controller; `math/` and `utils/` remain empty placeholders) |
 
 ### Workshop (Educational Firmware)
 
@@ -418,4 +390,3 @@ After POS_HOLD position control was validated on real hardware, `firmware/vehicl
 | [simulator/README.md](../simulator/README.md) | Simulator overview |
 | [simulator/genesis/README.md](../simulator/genesis/README.md) | Genesis simulator |
 | [ros/README.md](../ros/README.md) | ROS integration (WIP) |
-| [examples/README.md](../examples/README.md) | Learning examples |

@@ -105,6 +105,20 @@ sf lesson info sci2026:3
 存在しないコースやステップ番号を指定するとエラーになり、利用可能な
 コース／ステップの一覧が表示される。
 
+## 5. 初回の動作確認（Lesson 1: モータ制御）
+
+環境構築済みの状態から、モータを 1 個回すまでの最短手順:
+
+```bash
+sf lesson switch 1
+sf lesson build
+sf lesson flash -m
+```
+
+**必ずプロペラを外した状態で行う**こと。ARM すると `user_code.cpp`
+（`sf lesson edit` で編集）で設定した Duty でモータが回転する。環境構築
+自体（ESP-IDF・sf CLI 導入）は `docs/setup/` 配下の OS 別ガイドを参照。
+
 ---
 
 <a id="english"></a>
@@ -214,3 +228,18 @@ sf lesson info sci2026:3
 
 An unknown course id or step number fails with an error listing the
 available courses/steps.
+
+## 5. First Motor Check (Lesson 1: Motor Control)
+
+From an already set-up environment, the shortest path to spinning one motor:
+
+```bash
+sf lesson switch 1
+sf lesson build
+sf lesson flash -m
+```
+
+**Always remove the propellers first.** Arming spins the motors at the duty
+cycle you set in `user_code.cpp` (edit it with `sf lesson edit`). For setting
+up the environment itself (ESP-IDF, sf CLI), see the OS-specific guide under
+`docs/setup/`.

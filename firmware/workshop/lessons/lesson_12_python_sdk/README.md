@@ -1,5 +1,8 @@
 # Lesson 12: Python SDK Flight
 
+> **Note:** The `stampfly_edu` package this lesson imports below was removed on 2026-09-13 (tag `archive/2026-09-13`). This procedure will be rewritten when the Workshop is upgraded to the current architecture.
+> **注記:** このレッスンが下記でインポートしている `stampfly_edu` は 2026-09-13（タグ `archive/2026-09-13`）に削除された。Workshop の現行基盤へのアップグレード時に手順を作り直す。
+
 ## Goal / 目標
 Control StampFly from Python using the SDK. Send flight commands from a Jupyter notebook.
 

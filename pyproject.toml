@@ -67,13 +67,6 @@ full = [
     "pygame>=2.5.0",
     "numpy-stl>=3.0.0",
 ]
-edu = [
-    "jupyter>=1.0.0",
-    "ipywidgets>=8.0.0",
-    "sympy>=1.12",
-    "python-control>=0.9.0",
-]
-
 [project.scripts]
 sf = "sfcli.cli:main"
 

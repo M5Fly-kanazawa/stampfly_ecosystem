@@ -173,7 +173,7 @@ W1 近接自動選択、W2 ペアコード、W4 同時押し、C1 Grove ケー�
 | `docs/guides/controller.md` | §7 ペアリング手順を新方式（一覧選択・確定操作必須）に全面改稿（JA/EN）。「取り違え防止」節を新設。トラブルシューティング表を更新 |
 | `README.md` | クイックスタートのペアリング手順（③）を新方式に更新（JA/EN）。`mac` コマンドとラベルに言及 |
 | `firmware/vehicle/docs/operation_manual.md` | §5 ペアリング手順を新方式に全面改稿（JA/EN）。CLI コマンド表に `mac` を追加。`pair status` の出力例を追加。「1ペアずつ順番に」の注意書きを新しい注意（複数組同時可・ラベル照合必須・LED 緑が最終確認）に置換 |
-| `docs/guides/motor_spin_quickstart.md` | §7 ペアリング手順に一覧選択・確定操作のステップを追加 |
+| `docs/commands/sf-lesson.md`（旧 `docs/guides/motor_spin_quickstart.md` は 2026-09-13 に同文書 §5 へ吸収） | ペアリング手順に一覧選択・確定操作のステップを追加 |
 | `docs/events/sci_tutorial_2026/instructor_runsheet.md` | 事前チェックリスト・実習1(2/2)・実習4の各行を新方式に更新（JA/EN）。ラベル準備の注記を追加 |
 | `docs/events/sci_tutorial_2026/cheatsheet.md` | ペアリング手順の1文を新方式に更新（JA/EN） |
 | `docs/events/sci_tutorial_2026/verification_checklist.md` | ベンチ確認のペアリング項目を新方式に更新（JA/EN） |

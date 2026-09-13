@@ -67,7 +67,6 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf monitor` | シリアルモニタ |
 | `sf telemetry` | 50Hzテレメトリのライブ表示。既定=ターミナル、`--web` でブラウザ表示（UDP:5005→SSE）|
 | `sf log list` | ログファイル一覧 |
-| `sf log capture` | USB経由バイナリログ取得 |
 | `sf log wifi` | WiFi経由400Hzテレメトリ取得 |
 | `sf log convert` | バイナリ→CSV変換 |
 | `sf log info` | ログファイル情報表示 |
@@ -408,11 +407,10 @@ stampfly-ecosystem/
 ├── docs/              # Human-readable documentation + public site (landing/, .mkdocs/)
 ├── firmware/
 │   ├── vehicle/       # Vehicle firmware (primary, promoted from vehicle_new)
-│   ├── vehicle_old/   # Legacy vehicle firmware (frozen, 87 real flights; to be deleted eventually — see below)
 │   ├── controller/    # Transmitter firmware
-│   ├── common/        # Shared ESP-NOW protocol structs (controller + vehicle_old + vehicle)
+│   ├── common/        # Shared ESP-NOW/UDP protocol structs (vehicle + controller)
 │   ├── apps/          # User projects created by `sf app new` (all layers is the goal; L1 today)
-│   ├── workshop/      # Workshop skeleton (ws::, L0) on the old vehicle base — to be upgraded onto vehicle, not discarded
+│   ├── workshop/      # Workshop skeleton (ws::, L0) on vehicle's components since 2026-07-18; API/lessons to be updated to the current design, not discarded
 │   └── legacy/        # Factory binaries for `sf flash --legacy`
 ├── protocol/          # Communication/log-format spec (SSOT) + conformance checks
 │   ├── spec/          # messages.yaml, flight_log.yaml (+ documentation-only yamls)
@@ -422,7 +420,6 @@ stampfly-ecosystem/
 ├── tools/             # sf CLI backends + a few non-sf helpers (slides, udev, ...)
 ├── lib/               # PC-side Python: sfcli (the sf CLI itself), sflog, stampfly, stampfly_edu
 ├── simulator/         # SILS and other simulators
-├── examples/          # education/ (university Python samples)
 ├── scripts/           # Installer implementation (install.sh -> scripts/installer.py)
 └── ros/               # ROS2 integration (work in progress)
 ```
@@ -431,7 +428,7 @@ Generated code lives next to its consumer (e.g. `lib/sflog/schema.py`), vendored
 
 ### Key Design Principles
 
-1. **Protocol as Foundation**: All communication implementations derive from `protocol/spec/`. This is the Single Source of Truth. The core ESP-NOW `ControlPacket`/`PairingPacket` structs are implemented once in `firmware/common/protocol/include/espnow_protocol.hpp` and shared by `firmware/vehicle`, `firmware/vehicle_old`, and `firmware/controller`.
+1. **Protocol as Foundation**: All communication implementations derive from `protocol/spec/`. This is the Single Source of Truth. The core ESP-NOW `ControlPacket`/`PairingPacket` structs are implemented once in `firmware/common/protocol/include/espnow_protocol.hpp` and shared by `firmware/vehicle` and `firmware/controller`.
 2. **Responsibility Separation**: Each directory has a clear role. Don't mix concerns across boundaries.
 3. **Educational Focus**: Code quality and documentation matter as much as functionality. This is built for students and researchers.
 
@@ -457,7 +454,7 @@ Generated code lives next to its consumer (e.g. `lib/sflog/schema.py`), vendored
 - **アーキテクチャ不変条件（INV）への照合を必須とする（場当たりパッチ再発防止, 2026-06-14）** — 制御則・状態機械・離着陸/飛行フェーズに関わる変更は、コミット前に `architecture.md` の「アーキテクチャ不変条件（INV）」節に照合すること。**新機能の追加・要件変更で、ある機能の前提が変わるときは、その前提を埋め込んでいる既存コンポーネントを必ず列挙し（リップル確認）、古い前提のまま並列経路・独自実装が残っていないか確認する。** 「最小変更で動かし SILS を通す」だけで満足しない（SILS が通っても INV 違反は退行）。機能追加時は常に**あるべき姿（INV準拠の統一構造）**で実装し、既存の局所形に引きずられて並列パッチを足さない。
 - Exampleは**単独ビルド可能**、**コメントは本体より多くてもいい**
 
-`firmware/vehicle_old/` は旧世代の実装（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行87回）で、**凍結されたレガシー**。新規開発は行わず、`firmware/common/` を controller と共有する。sf CLI・SILS回帰から `vehicle_old` として引き続きビルド・テスト可能（`sf build vehicle_old`、`sf sils scenario --target vehicle_old`）。**いずれ削除する**（オーナー方針 2026-09-13。削除前に SILS 退行試験の `--target vehicle_old` と `udp_protocol.hpp` の依存を外す。PROJECT_PLAN §4）。
+`firmware/vehicle_old/`（旧世代の実装、実飛行87回、2026-07-05 凍結）は **2026-09-13 に削除済み**（タグ `archive/2026-09-13`、PROJECT_PLAN §4）。`firmware/common/protocol/` は vehicle と controller が共有する。
 
 ## Build System
 
@@ -467,9 +464,6 @@ ESP-IDF for embedded firmware (ESP32 target)。**sf CLI を優先して使用す
 source setup_env.sh
 sf build vehicle
 sf flash vehicle -m
-
-# レガシーファームのビルド
-sf build vehicle_old
 
 # 代替: idf.py を直接使用（sf で問題がある場合のみ）
 cd firmware/vehicle

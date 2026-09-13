@@ -35,8 +35,9 @@
 # esp_console_new_repl_usb_cdc()/esp_console_start_repl(), which
 # simulator/sils/esp_idf_host/esp_console.h stubs out as a no-op REPL that never
 # reads the scripted stdin pipe -- confirmed empirically: a `key "help\n"` event
-# produces zero CLI echo for --target vehicle, which is why console_cli.scn is
-# hardcoded to --target vehicle_old in lib/sfcli/commands/sils.py). Wiring either
+# produces zero CLI echo for --target vehicle (the console_cli.scn scenario that
+# used to exercise this via the legacy --target vehicle_old was removed with
+# firmware/vehicle_old on 2026-09-13, tag archive/2026-09-13). Wiring either
 # path is a larger change, out of scope here (task said: skip and say what is
 # missing). The requestPairing()/state_manager.cpp code change itself is reviewed
 # by inspection: the guard textually now reads
@@ -57,8 +58,9 @@
 # esp_console_start_repl() を使うが、simulator/sils/esp_idf_host/esp_console.h は
 # これをスクリプト化した stdin パイプを一切読まない no-op REPL としてスタブ化して
 # いる — 実測確認済み: `key "help\n"` を --target vehicle に送っても CLI エコーが
-# 一切出ない。console_cli.scn が lib/sfcli/commands/sils.py で --target vehicle_old
-# に固定されているのはこのため）のどちらかが要る。どちらの配線も本タスクの範囲を
+# 一切出ない（これを --target vehicle_old で検証していた console_cli.scn は
+# firmware/vehicle_old と共に2026-09-13に削除済み、タグ archive/2026-09-13）
+# のどちらかが要る。どちらの配線も本タスクの範囲を
 # 超える大きめの変更であり、見送る（指示どおり、欠けている点を明記して skip）。
 # requestPairing() 自体のコード変更はコードレビューで確認する: ガード条件は
 # 文面どおり `state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD`

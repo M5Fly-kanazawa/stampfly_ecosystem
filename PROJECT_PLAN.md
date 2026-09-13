@@ -58,7 +58,6 @@ stampfly-ecosystem/
 ├── tools/             # sf CLI のバックエンドと補助ツール（§8）
 ├── lib/               # PC 側の Python 実装。sf CLI 本体はここ（§9）
 ├── simulator/         # 仮想実験環境（§10）
-├── examples/          # 学習用サンプル（§11）
 ├── scripts/           # インストーラの実装（§12）
 ├── ros/               # ROS2 連携（構築中。docs/plans/ros2-integration.md）
 ├── landing/           # 公開サイトのランディングページ（§3）
@@ -100,9 +99,7 @@ docs/
 ├── contributing/      # 開発規約（文書スタイル・コミット規約・コマンド追加手順）
 ├── plans/             # 計画文書。冒頭に状態を明記し、アーカイブは作らない（§15）
 ├── events/            # 勉強会・講座（イベント単位のディレクトリ + 共有素材 _shared/）
-├── university/        # 大学講義（シラバス・評価ルーブリック）
 ├── assets/, stylesheets/  # 画像・生成図・サイトのスタイル
-├── telemetry/         # UDP テレメトリ設計メモ
 └── bonus/, experiments/   # 番外資料・実験手順（LaTeX）
 ```
 
@@ -111,8 +108,8 @@ docs/
   シミュレーション方針は `architecture/simulation-policy.md` を正とする
 - `reference/`: 手で書かない。`protocol/tools/` が仕様から生成する（§5）
 - `plans/`: 機能ごとの計画・見直し文書。状態（計画中／実装中／実装済み／見直し中）を冒頭に書く
-- `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対。現行 vehicle 基盤へのアップグレード対象）、
-  `dxh2026/`、`sci_tutorial_2026/`（いずれも L0 の旧基盤上の実習。基盤のアップグレード後に再検証が要る）
+- `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対）、`dxh2026/`、`sci_tutorial_2026/`
+  （いずれも L0 `ws::` API 上の実習。L0 の API・レッスン更新後に再検証が要る）
 - プロトコルの文章仕様は `protocol/README.md`（メッセージ一覧・オフセット表）と
   `docs/reference/flight-log-format.md` にある。`docs/protocol/` は置かない
 
@@ -127,11 +124,10 @@ docs/
 ```
 firmware/
 ├── vehicle/       # 主力ファームウェア（旧 vehicle_new を昇格）
-├── vehicle_old/   # レガシーファームウェア（凍結、実飛行87回。いずれ削除）
 ├── controller/    # 送信機ファームウェア
-├── common/        # 3 ファームが共有する ESP-NOW プロトコル実装
+├── common/        # vehicle と controller が共有する ESP-NOW / UDP プロトコル実装
 ├── apps/          # sf app new が生成する利用者のプロジェクト（全階層対応が目標。現状は L1）
-├── workshop/      # Workshop 骨格（ws::、L0）。旧基盤のまま。現行 vehicle 基盤へアップグレードする対象
+├── workshop/      # Workshop 骨格（ws::、L0）。vehicle のコンポーネント基盤上で動く。API・レッスンを現行設計へ更新する対象
 └── legacy/        # 出荷時バイナリ（sf flash --legacy による工場出荷状態への復旧）
 ```
 
@@ -190,20 +186,18 @@ Tello 互換の外部 API（UDP:8889 のテキストコマンド）はコンポ�
 
 #### 通信プロトコル
 - ESP-NOW `ControlPacket`(14B)/`PairingPacket`(11B) は `firmware/common/protocol/` に共有実装
-  （`vehicle`・`vehicle_old`・`controller` の 3 ファームで共通）。正は `protocol/spec/messages.yaml`（§5）
+  （`vehicle`・`controller` で共通）。正は `protocol/spec/messages.yaml`（§5）
 - vehicle は `firmware/common/` のプロトコル以外には依存しない自己完結設計
 
 #### 推定・制御
 - `IEstimator`/`IController` 抽象インターフェース経由（ESKF・相補フィルタ・PID はその一実装）。
   詳細は `firmware/vehicle/docs/architecture.md`
 
-### firmware/vehicle_old/
-旧世代の機体ファームウェア（実飛行 87 回、**凍結・新規開発なし**）。
-`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名。sf CLI・SILS 退行試験から `--target vehicle_old` として
-引き続きビルド・テスト可能。`firmware/common/` を controller と共有する。
-**いずれ削除する**（2026-09-13 決定、時期未定）。削除の前に、SILS 退行試験の `--target vehicle_old`、
-`firmware/common/protocol/udp_protocol.hpp`（vehicle_old の `sf_svc_udp` のみが使う）、`sf build vehicle_old`
-の依存を外し、削除直前のコミットにタグを付ける（§15 規則 4）。
+### firmware/vehicle_old/（削除済み）
+旧世代の機体ファームウェア（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行 87 回、2026-07-05 に凍結）は
+**2026-09-13 に削除した**（タグ `archive/2026-09-13`）。同時に、SILS の `emu_vehicle_old` と `vehicle_old` 専用の
+シナリオ（`console_cli`・`hover_espnow`・`hover_alt`・`hover_long`）、`sf build/sils` の `vehicle_old` ターゲット、
+`sf params check` の参照、`vehicle_old` 専用だった Python SDK `lib/stampfly/`（TCP 23＋WebSocket 80 前提）も削除した。
 
 ### firmware/controller/
 操縦用コントローラ（送信機）側のファームウェア。人間の意思を信号に変換する HMI。
@@ -218,13 +212,13 @@ controller/
 ```
 
 ### firmware/common/
-vehicle / vehicle_old / controller が共有する **組込み向けプロトコル実装**。
+vehicle / controller が共有する **組込み向けプロトコル実装**。
 
 ```
 common/
 └── protocol/
-    ├── include/espnow_protocol.hpp   # ESP-NOW ControlPacket/PairingPacket（主系統、3 ファーム共有）
-    └── include/udp_protocol.hpp      # WiFi 代替 UDP モード（vehicle_old の sf_svc_udp と controller の sf_udp_client のみ）
+    ├── include/espnow_protocol.hpp   # ESP-NOW ControlPacket/PairingPacket（主系統、両ファーム共有）
+    └── include/udp_protocol.hpp      # WiFi 代替 UDP モードのパケット定義（controller の sf_udp_client が使う）
 ```
 
 `espnow_protocol.hpp` は `protocol/spec/messages.yaml` の C++ 実装であり手書きである。両者の整合は
@@ -240,11 +234,12 @@ SILS と実機の両方に同じソースを組み込む（現行の仕組みは
 
 ### firmware/workshop/
 講習会向けの Workshop 骨格。`ws::` 名前空間の簡易 API と `setup()`/`loop_400Hz()` の 2 関数で書く
-（4 階層アクセスの L0）。`sf lesson` と CI が参照する稼働中の実体。**旧 vehicle 基盤のまま残っており、
-HAL を vehicle から複製して二重管理になっている**（横断ルール R12 との乖離、`firmware/vehicle/docs/workshop_migration.md`）。
-方針は **廃棄ではなくアップグレード**——「2 関数で書ける」というやりたいことは変えず、`ws::` を現行 vehicle の
-上のラッパーとして再構成し、レッスン内容を引き継いだうえで L1 以上の階層にも広げる。アップグレード完了までは
-L0 の機能追加を行わない。
+（4 階層アクセスの L0）。`sf lesson` と CI が参照する稼働中の実体。ビルドは vehicle のコンポーネント
+（`EXTRA_COMPONENT_DIRS ../vehicle/components`）を使い、**2026-07-18（`39d02c1b`）に vehicle 基盤へ移行済み**。
+ただし L0 の API 層・ミキサ等に vehicle と重複する実装が残り（横断ルール R12 との乖離、`architecture.md` §2.5 末尾、
+`workshop_migration.md`）、レッスン内容も移行前の設計を引き継いでいる。方針は **廃棄ではなくアップグレード**——
+「2 関数で書ける」というやりたいことは変えず、重複を vehicle 側に寄せて `ws::` を薄いラッパーに戻し、レッスンを
+現行設計（Pub-Sub・不変条件）に合わせて更新し、L1 以上の階層にも広げる。完了までは L0 の機能追加を行わない。
 
 ### firmware/legacy/
 本エコシステム以前の出荷時（PlatformIO 版）Vehicle/Controller のバイナリ。`sf flash --legacy` で
@@ -296,12 +291,11 @@ control/
 ```
 analysis/
 ├── README.md
-├── notebooks/   # 探索的解析。education/ に講義用ノートブック
+├── notebooks/   # 探索的解析（大学講義用の 15 本は 2026-09-13 に削除。§11）
 ├── scripts/     # 再現性重視の解析処理・指標算出（案件別のサブディレクトリを持つ）
-├── datasets/    # 小規模なサンプルログ（education/, flightlog/, sysid/, motor_sweep_*/）
+├── datasets/    # 小規模なサンプルログ（flightlog/, sysid/, motor_sweep_*/）
 ├── notes/       # 調査ノート
-├── reports/     # 生成された図・結果。原則 git 管理しない（例外: rate_sysid_reference/）
-└── out/         # 同上（案件別の出力）
+└── reports/     # 生成された図・結果。原則 git 管理しない（例外: rate_sysid_reference/）。以前の out/ は統合
 ```
 
 ---
@@ -315,7 +309,7 @@ analysis/
 tools/
 ├── README.md
 ├── calibration/       # sf cal
-├── log_analyzer/      # sf log（capture / wifi / convert / analyze / viz）。UDP 取得 udp_capture.py を含む
+├── log_analyzer/      # sf log（wifi / convert / analyze / viz / list / info）。UDP 取得 udp_capture.py を含む
 ├── params_audit/      # sf params check / generate
 ├── sysid/             # sf sysid（同定・自動調整）
 ├── flasher_gui/       # sf flasher（GUI 書き込み）。書き込み処理の本体は lib/sfcli/commands/flash.py
@@ -339,9 +333,10 @@ tools/
 lib/
 ├── sfcli/         # sf CLI 本体（commands/, utils/, assets/vendor/blockly）
 ├── sflog/         # フライトログ一式のスキーマと読み書き（schema.py は生成物、§5）
-├── stampfly/      # Tello 風 Python SDK
-└── stampfly_edu/  # 教育用ヘルパ（実機が無ければシミュレータへ切り替える connect_or_simulate 等）
+└── stampfly/      # Tello 風 Python SDK（`tools/stampfly_py/` との二系統を整理中。`docs/plans/repository-cleanup-candidates.md` C1）
 ```
+
+（`stampfly_edu/`（大学講義用ヘルパ）は 2026-09-13 に削除。§11）
 
 - `pyproject.toml` の `package-dir = {"" = "lib"}` により `pip install -e .` で導入される
 - sf CLI は開発・書き込み・診断・ログ・シミュレーション・自作プロジェクト・講習の一貫した入口。
@@ -366,23 +361,19 @@ simulator/
 ```
 
 - シミュレーション全体の方針（3 層構造・忠実度目標）は `docs/architecture/simulation-policy.md` を正とする。
-  `simulator/sils/RESET_PLAN.md` は立ち上げ期の記録
+  SILS 立ち上げ期（2026-06 の再構築 E0〜E8・P1〜P10）の経緯は同文書に要約し、原文 `simulator/sils/RESET_PLAN.md`
+  と `docs/plans/simulator-migration.md` は 2026-09-13 に削除（タグ `archive/2026-09-13`）
 - protocol を介した I/O により、実機との一貫性を保つ
 
 ---
 
-## 11. examples/ : 学習用サンプル
+## 11. 大学講義用の教材（計画）
 
-```
-examples/
-├── README.md
-└── education/   # 大学講義向けの Python サンプル（lib/stampfly_edu を使用）
-```
-
-- ファームウェア側の例題は `firmware/vehicle/examples/`（01〜12）にあり、本ディレクトリとは別系統
-- 二つの例題群と `sf app`・Workshop の関係（利用者に独自コードを書いてもらう入口）は
-  `docs/plans/user-programming-entry-review.md` で見直し中。決まるまで構成は変えない
-- 以前の `protocol_roundtrip/`・`pid_tuning/` は空のまま 2026-09-12 に削除
+大学講義（半期 15 回、Python/Jupyter）向けの教材一式（`docs/university/`、`examples/education/`、`lib/stampfly_edu/`、
+`analysis/notebooks/education/`）は **2026-09-13 に一度削除**した（タグ `archive/2026-09-13`）。作る予定だけを
+`docs/plans/university-course-plan.md` に残す。次に作るときは §1 の P4・P6 に合わせ、どの階層に位置づけるかを
+決めてから着手する。トップレベルの `examples/` はこれに伴い無くなった。ファームウェア側の例題は
+`firmware/vehicle/examples/`（01〜12、§4）にある。
 
 ---
 
@@ -437,7 +428,7 @@ examples/
 8. **CLAUDE.md は本文書に従う。** AI 向け規約が構造に触れるときは本文書を参照し、独自の構造を定めない
 
 現在「見直し中」の事項: 利用者に独自コードを書いてもらう入口（`docs/plans/user-programming-entry-review.md`）、
-Workshop の現行基盤へのアップグレード（§4）、`sf app`・`sf lesson` の全階層対応（§1・§9）、
+Workshop（L0）の API・レッスンの現行設計への更新（§4）、`sf app`・`sf lesson` の全階層対応（§1・§9）、
 整理対象の候補（`docs/plans/repository-cleanup-candidates.md`）。
 
 ---
@@ -450,8 +441,8 @@ Workshop の現行基盤へのアップグレード（§4）、`sf app`・`sf le
 
 | 階層 | プログラミング（`sf app`） | 雛形 | 仕様・実験・分析の資料 | 講習資料（制御） | 講習資料（組み込み） | 講師支援（`sf lesson`） |
 |------|------------------------|------|--------------------|----------------|-------------------|---------------------|
-| 外側: Python / ブロック | ×（`sf app` の対象外。道具は `tools/stampfly_py`・`sf blocks`） | △ `examples/education/`、`tools/stampfly_py` の例 | △ `docs/architecture/tello-api-reference.md`（冒頭に旧記述） | △ `examples/education/`（`pid_1d`・`cascade_sim`）、`analysis/notebooks/education/` 15 本 | × | △ 大学シラバス（`docs/university/`）、Blockly ガイド |
-| L0 Workshop API（`ws::`） | ×（`sf lesson` 側のみ） | ○ `firmware/workshop/`（旧基盤） | △ `docs/events/sci_tutorial_2026/cheatsheet.md`（`ws::` 早見表） | △ Workshop レッスン・SCI 2026（旧基盤上のレート／姿勢の実習） | △ 同（モータ・センサの読み書き） | ○ `sf lesson`（13 レッスン＋`sci2026` コース）。旧基盤に依存 |
+| 外側: Python / ブロック | ×（`sf app` の対象外。道具は Tello 互換 SDK・`sf blocks`） | △ `tools/stampfly_py` の例 | △ `docs/architecture/tello-api-reference.md`（現行との整合を調査中） | ×（大学講義用は 2026-09-13 に削除、計画のみ `university-course-plan.md`） | × | △ Blockly ガイド |
+| L0 Workshop API（`ws::`） | ×（`sf lesson` 側のみ） | ○ `firmware/workshop/`（vehicle 基盤上の `ws::` ラッパー） | △ `docs/events/sci_tutorial_2026/cheatsheet.md`（`ws::` 早見表） | △ Workshop レッスン・SCI 2026（`ws::` 上のレート／姿勢の実習） | △ 同（モータ・センサの読み書き） | ○ `sf lesson`（13 レッスン＋`sci2026` コース）。L0 のレッスンのみ |
 | L1 Topic API（`sf::api`、`IController`/`IEstimator`） | ○ `sf app new/sils/build/flash`（Topic の書き込みは未実装） | ○ `11_app_controller`・`12_app_task_hello`（PidController 委譲前提） | ○ `topic_reference.md`、設計 6 文書、`params.cpp`、`sf sysid`・`sf autotune` | △ `docs/guides/custom_program.md`（ACRO PID を 0 から、1 本） | × | × |
 | L2 HAL 直叩き | × | ○ 例題 01〜08（単独ビルド、SILS 不可） | ○ HAL ドライバ README・データシート要約 | — | △ 例題 README（改造課題なし） | × |
 | L3 BSP・ファーム全体 | × | × | ○ `hardware_init.md`・`architecture.md`・`coding_and_education.md` | — | × | × |
@@ -459,7 +450,7 @@ Workshop の現行基盤へのアップグレード（§4）、`sf app`・`sf le
 欠けの要点（優先順）:
 1. 講習資料が L0（旧基盤）と外側の Python に偏り、**制御教育・組み込み教育の段階的な教材が L1〜L3 に無い**（P4・P6）
 2. **`sf app` は L1 のみ、L3 には入口が無い**。L1 の Topic API は読み取りのみ（P1）
-3. **`sf lesson` が L0 の旧基盤に依存**。基盤のアップグレードと、レッスンの置き場・階層に依存しない道具への再設計が先（P5）
+3. **`sf lesson` が L0 のレッスンにしか対応していない**。L0 の API・レッスンの更新と、レッスンの置き場・階層に依存しない道具への再設計が先（P5）
 4. **実験→パラメータ→分析を一通り追える手順書が無い**。道具（`sf sysid`・`sf cal`・`sf log`）は揃っている（P3）
 5. 資料が 3 か所（`firmware/vehicle/docs`・`docs/architecture`・`control/models`）に散在し、入口からの導線が無い（P2）
 

@@ -38,7 +38,7 @@
 
 ### SILS の実現方法
 
-- **ファームウェアは無改変**: `firmware/vehicle`（および `vehicle_old`・`workshop`）のソースをそのまま PC 向けにコンパイルする。推定・制御だけでなく状態機械やフェイルセーフも含めて実機と同一（Code Identity）。パラメータも同じ表から読む（Parameter Identity）。
+- **ファームウェアは無改変**: `firmware/vehicle`（および `workshop`）のソースをそのまま PC 向けにコンパイルする。推定・制御だけでなく状態機械やフェイルセーフも含めて実機と同一（Code Identity）。パラメータも同じ表から読む（Parameter Identity）。
 - **OS の代わり**: ESP-IDF / FreeRTOS の代わりに、ホスト用の互換スタブ（`compat/`）と、単一トークン＋仮想時計の離散事象スケジューラである決定論的な疑似 RTOS（`rtos/`）の上で走らせる。同じ入力なら毎回同じ結果になる。
 - **制御対象**: MuJoCo の 6 自由度剛体モデルに、自作のモータ（電気機械 ODE）・センサ・風のモデルを載せ（`physics/`, `plant/`）、400 Hz でファームと歩調を合わせる。**MuJoCo は物理計算にのみ使い、実行中の描画には使わない**。MuJoCo の対話ビューアはモデルファイルを目視確認するための任意ビルドオプション（`-DSILS_MUJOCO_VIEWER=ON`）で、シナリオ実行には関与しない。
 - **試験の与え方**: シナリオ `.scn` に操縦入力・外乱・故障を時系列で書き、`.expect` の合格基準で PASS / FAIL を自動判定する。`sf sils regression` が CI で退行を検出する。
@@ -195,7 +195,7 @@ With three simulators, the questions "why are there several?", "which one is use
 
 ### How SILS Is Realised
 
-- **Firmware is unmodified**: The source of `firmware/vehicle` (and `vehicle_old`, `workshop`) is compiled for the PC as-is. Not only estimation and control but also the state machine and failsafe logic are identical to the real vehicle (Code Identity). Parameters are also read from the same table (Parameter Identity).
+- **Firmware is unmodified**: The source of `firmware/vehicle` (and `workshop`) is compiled for the PC as-is. Not only estimation and control but also the state machine and failsafe logic are identical to the real vehicle (Code Identity). Parameters are also read from the same table (Parameter Identity).
 - **In place of the OS**: Instead of ESP-IDF / FreeRTOS, the firmware runs on host-side compatibility stubs (`compat/`) and a deterministic pseudo-RTOS (`rtos/`) — a discrete-event scheduler with a single token and a virtual clock. The same input always produces the same result.
 - **Controlled object (plant)**: On top of MuJoCo's 6-DOF rigid-body model, in-house motor (electromechanical ODE), sensor, and wind models are layered (`physics/`, `plant/`), running in step with the firmware at 400 Hz. **MuJoCo is used only for physics computation, not for rendering during execution.** MuJoCo's interactive viewer is an optional build flag (`-DSILS_MUJOCO_VIEWER=ON`) for visually inspecting the model file, and plays no part in scenario execution.
 - **How tests are given**: Stick input, disturbances, and faults are written as a time series in a scenario `.scn` file, and PASS/FAIL is judged automatically against the pass criteria in an `.expect` file. `sf sils regression` detects regressions in CI.

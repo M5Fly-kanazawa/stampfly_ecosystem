@@ -9,7 +9,7 @@
 
 を事実として並べ、最後に 0 から問い直すための「問い」を列挙する（第 6 章）。
 
-**前提:** Workshop（`firmware/workshop/`、`ws::` 名前空間、`docs/events/stampfly_workshop/`）は旧 vehicle 基盤のまま残っている。作成時点（2026-09-12）の方針は「廃棄・全面書き換え」だったが、2026-09-13 に **「やりたいことは変えず、現行 vehicle 基盤へアップグレードする」** に改められた（原典 §4）。本文書は Workshop の中身を読まず、存在・位置づけ・使用実績という外形だけを扱っている（この事実は変わらない）。
+**前提:** Workshop（`firmware/workshop/`、`ws::` 名前空間、`docs/events/stampfly_workshop/`）は vehicle のコンポーネント基盤上で動く（2026-07-18 移行済み）が、L0 の API 層とレッスン内容は移行前の設計を引き継いでいる。作成時点（2026-09-12）の方針は「廃棄・全面書き換え」だったが、2026-09-13 に **「やりたいことは変えず、API・レッスンを現行設計へ更新する（アップグレード）」** に改められた（原典 §4）。本文書は Workshop の中身を読まず、存在・位置づけ・使用実績という外形だけを扱っている（この事実は変わらない）。
 
 **用語:** 本文書で「入口」とは、ユーザーが自分のコードを書き始めるための「雛形（テンプレート: 複製して書き始める出発点のソース一式）＋道具（`sf` コマンド）＋説明（記事・README）」の一組を指す。
 
@@ -110,7 +110,7 @@
 | 7 | Python SDK | Python | PC 上 | 実機のみ | `tools/stampfly_py/README.md` | `docs/next_step.md` §8 経由でのみ到達 |
 | 8 | `sf lesson`（Workshop、`ws::`） | `user_code.cpp` の `setup()`/`loop_400Hz()` | `sf lesson switch/edit/build/flash/sils` | 両対応 | `docs/commands/sf-lesson.md`、各イベント配布資料 | **講習会 3 件の実使用入口**。README 本文に `sf lesson` の語は出ない。廃棄予定 |
 | 9 | 大学シラバス系 | Python（Jupyter） | PC 上、実機なければシミュレータへ | 記載どおりなら両対応 | `docs/university/syllabus.md` 等 | README・next_step から**リンクなし**（DOCUMENT_INDEX 経由のみ） |
-| 10 | `docs/guides/motor_spin_quickstart.md` | 実体は Workshop Lesson 1 | 手動手順 | 実機 | 同 | 自称「臨時手順書」。`guides/` に置かれているが系統は #8 |
+| 10 | `docs/guides/motor_spin_quickstart.md` | 実体は Workshop Lesson 1 | 手動手順 | 実機 | 同 | 自称「臨時手順書」。**2026-09-13 に `docs/commands/sf-lesson.md` §5 へ吸収して削除** |
 | 11 | 最上位 `examples/`（`pid_tuning/`, `protocol_roundtrip/`） | — | — | — | `examples/README.md` | `.gitkeep` のみの空。`firmware/vehicle/examples/` と同名異物 |
 
 ### README から辿ったときの導線
@@ -133,7 +133,7 @@
 ### 道具（`sf` コマンド）の索引の状態
 
 - `sf --help` 実測ではトップレベル 44 コマンド。`docs/commands/README.md` の一覧表は日本語 12 行、英語 11 行で、**英語表には `sf app` の行がない**（同 :25-38, :130-142）。
-- `sf blocks`・`sf sils`・`sf trim`・`sf params` には `docs/commands/` の専用ページがない。`sf-flight.md`・`sf-query.md` というページ名に対応する実コマンドはない。
+- `sf blocks`・`sf sils`・`sf trim`・`sf params` には `docs/commands/` の専用ページがない。`sf-flight.md`・`sf-query.md` というページ名に対応する実コマンドはなかった（2026-09-13 に `flight-commands.md`・`query-commands.md` へ改名、索引も 44 コマンドに再構築）。
 
 ## 5. 文書間・実装間の矛盾（事実の指摘のみ）
 

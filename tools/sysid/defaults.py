@@ -37,25 +37,21 @@ from typing import Any, Dict, Tuple
 #
 # No silent fallback on import failure: a missing/broken
 # _generated_params.py must surface as a loud ImportError here, not degrade
-# tools/sysid's physical constants to some other default (that fallback
-# pattern is reserved for lib/stampfly_edu's ImportError-fallback dicts,
-# which are a distinct, intentionally-forgiving educational-code path).
+# tools/sysid's physical constants to some other default.
 # import 失敗時に黙ってフォールバックしない: _generated_params.py が
 # 欠落・破損していれば、ここで大きな ImportError として表面化させる
-# （tools/sysid の物理定数を別の既定値へ黙って劣化させない）——その
-# フォールバック方式は lib/stampfly_edu の ImportError フォールバック
-# 辞書専用（意図的に寛容な教育用コード経路であり、別物）。
+# （tools/sysid の物理定数を別の既定値へ黙って劣化させない）。
 # ==============================================================================
 # Dual import context, same pattern as tools/params_audit/check_params.py:
 # (a) package import (`from sysid import defaults` / `sysid.defaults`) uses
 # the relative form; (b) bare import (`import defaults` with tools/sysid on
-# sys.path — lib/stampfly_edu and sf CLI helpers do this) has no parent
-# package, so the plain absolute import resolves from the same directory.
-# A missing _generated_params.py still fails loudly in BOTH contexts.
+# sys.path — sf CLI helpers do this) has no parent package, so the plain
+# absolute import resolves from the same directory. A missing
+# _generated_params.py still fails loudly in BOTH contexts.
 # 2つの import 文脈に対応（tools/params_audit/check_params.py と同じ流儀）:
 # (a) パッケージ経由（`from sysid import defaults`）は相対 import、
 # (b) 裸 import（tools/sysid を sys.path に載せて `import defaults` —
-# lib/stampfly_edu や sf CLI 補助がこの形）は親パッケージが無いため、
+# sf CLI 補助がこの形）は親パッケージが無いため、
 # 同一ディレクトリから絶対 import で解決する。_generated_params.py が
 # 欠落していればどちらの文脈でも大きく失敗する（黙って劣化しない）。
 try:
@@ -303,9 +299,9 @@ def get_default_params() -> Dict[str, Any]:
 
 
 # Mapping from historical flat key (as returned by get_flat_defaults(), and
-# depended on by tools/sysid/{motor,plant_fit,inertia,drag,validation}.py,
-# lib/sfcli/commands/sysid.py, and lib/stampfly_edu/{dynamics,sim}/*.py) to
-# the path inside DEFAULT_PARAMS that holds the authoritative value.
+# depended on by tools/sysid/{motor,plant_fit,inertia,drag,validation}.py
+# and lib/sfcli/commands/sysid.py) to the path inside DEFAULT_PARAMS that
+# holds the authoritative value.
 #
 # This table intentionally does NOT cover every DEFAULT_PARAMS entry (e.g.
 # Dm, Qf, motor_height, rho are omitted) — it only reproduces the flat-key
@@ -313,7 +309,7 @@ def get_default_params() -> Dict[str, Any]:
 # working unchanged.
 #
 # get_flat_defaults() が返す従来のフラットキーから、DEFAULT_PARAMS 内で値を
-# 保持しているパスへの対応表。tools/sysid/* や lib/sfcli、lib/stampfly_edu の
+# 保持しているパスへの対応表。tools/sysid/* や lib/sfcli の
 # 既存呼び出し元はこのキー集合に依存している。
 #
 # 注: DEFAULT_PARAMS の全項目を網羅するわけではない(Dm, Qf, motor_height, rho

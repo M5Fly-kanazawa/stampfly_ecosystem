@@ -107,17 +107,18 @@ void sils_emu_flightlog_close(void);
 void sils_emu_flightlog_firmware_sample(int64_t now_us);
 
 // Per-firmware hook: dump the LIVE rate-loop PID gains to "<dir>/gains.json"
-// (the former sils_emu_rate_write_gains()). WEAK no-op default here so
-// emu_main_generic.cpp (vehicle_old, which has no rate-loop gains to dump)
-// links without a strong override. Call AFTER app_main() has loaded params
-// AND after any SILS_EMU_PARAMS_FILE override, so the sidecar reflects the
-// gains the run actually flew.
+// (the former sils_emu_rate_write_gains()). WEAK no-op default here so any
+// firmware target with no rate-loop gains to dump (formerly
+// emu_main_generic.cpp / vehicle_old, removed 2026-09-13) links without a
+// strong override. Call AFTER app_main() has loaded params AND after any
+// SILS_EMU_PARAMS_FILE override, so the sidecar reflects the gains the run
+// actually flew.
 // ファーム固有フック: 実行時の実ゲイン（rate-loop PID）を "<dir>/gains.json" へ
 // 書く（旧 sils_emu_rate_write_gains() 相当）。ここでは弱い no-op 既定とし、
-// emu_main_generic.cpp（ダンプすべきレートループゲインを持たない vehicle_old）は
-// 強い上書き無しでリンクできる。app_main() の param ロード後、かつ
-// SILS_EMU_PARAMS_FILE 上書き適用後に呼ぶこと — sidecar は実際に飛んだゲインを
-// 反映する必要がある。
+// ダンプすべきレートループゲインを持たないファーム（旧 emu_main_generic.cpp /
+// vehicle_old、2026-09-13削除）は強い上書き無しでリンクできる。app_main() の
+// param ロード後、かつ SILS_EMU_PARAMS_FILE 上書き適用後に呼ぶこと — sidecar は
+// 実際に飛んだゲインを反映する必要がある。
 void sils_emu_flightlog_write_gains(void);
 
 #ifdef __cplusplus

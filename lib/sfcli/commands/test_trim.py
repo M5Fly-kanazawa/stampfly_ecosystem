@@ -35,11 +35,10 @@ from sflog.bundle import FlightLog, make_meta  # noqa: E402
 
 
 def _euler_to_quat(roll, pitch, yaw):
-    """Same ZYX convention as lib/stampfly_edu/generate_samples.py's
-    _euler_deg_to_quat(), but taking radians (trim.py's own _q2eul() is the
-    inverse of this).
-    lib/stampfly_edu/generate_samples.py の _euler_deg_to_quat() と同じ
-    ZYX規約（ラジアン入力。trim.py 自身の _q2eul() がこの逆変換）。
+    """Same ZYX convention as trim.py's own _q2eul(), but taking radians
+    (this function is the inverse of _q2eul()).
+    trim.py 自身の _q2eul() と同じ ZYX 規約（ラジアン入力。
+    本関数は _q2eul() の逆変換）。
     """
     cr, sr = math.cos(roll / 2), math.sin(roll / 2)
     cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)

@@ -83,7 +83,7 @@ def gain_no_intercept(u, y):
     return k, r2
 
 
-def main(path, out="analysis/out/poshold"):
+def main(path, out="analysis/reports/poshold"):
     os.makedirs(out, exist_ok=True)
     S = load(path)
     t0 = S["imu"][0]["ts"]
@@ -217,4 +217,4 @@ def main(path, out="analysis/out/poshold"):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__); sys.exit(1)
-    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "analysis/out/poshold")
+    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "analysis/reports/poshold")

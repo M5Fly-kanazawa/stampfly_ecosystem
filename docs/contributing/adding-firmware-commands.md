@@ -8,7 +8,7 @@ StampFly の CLI システムは ESP-IDF Console (`esp_console`) を基盤とし
 
 実装は `firmware/vehicle/tasks/cli_task.cpp` の**単一ファイル**に集約されています。`cli_task.cpp` はコンポーネント（`components/sf_*`）ではなく `firmware/vehicle/tasks/` 配下のタスクソースで、`main/CMakeLists.txt` の `idf_component_register` に直接 SRCS として列挙され、`main` の一部としてビルドされます。
 
-> 旧ファーム（`firmware/vehicle_old/`）では `sf_svc_console` コンポーネント配下にカテゴリ別 `commands/cmd_system.cpp` / `cmd_sensor.cpp` / `cmd_motor.cpp` … というファイル分割と、`Console::getInstance()` シングルトンによる出力がありました。この構成は**現行の `firmware/vehicle/` には存在しません**。以降の説明は現行 `firmware/vehicle/` の構成に基づきます。旧ファームのコマンドを触る場合は `firmware/vehicle_old/components/sf_svc_console/` を参照してください（新規開発の対象外）。
+> 旧ファーム（`firmware/vehicle_old/`。2026-09-13 に削除、タグ `archive/2026-09-13` で参照可能）では `sf_svc_console` コンポーネント配下にカテゴリ別 `commands/cmd_system.cpp` / `cmd_sensor.cpp` / `cmd_motor.cpp` … というファイル分割と、`Console::getInstance()` シングルトンによる出力がありました。この構成は**現行の `firmware/vehicle/` には存在しません**。以降の説明は現行 `firmware/vehicle/` の構成に基づきます。
 
 ### アーキテクチャ
 
@@ -148,7 +148,7 @@ StampFly's CLI system is built on ESP-IDF Console (`esp_console`). The same comm
 
 The implementation lives in a **single file**, `firmware/vehicle/tasks/cli_task.cpp`. It is not a component (`components/sf_*`) but a task source under `firmware/vehicle/tasks/`, listed directly as a SRCS entry in `main/CMakeLists.txt`'s `idf_component_register` and built as part of `main`.
 
-> The legacy firmware (`firmware/vehicle_old/`) had a `sf_svc_console` component with category-split files (`commands/cmd_system.cpp`, `cmd_sensor.cpp`, `cmd_motor.cpp`, …) and output through a `Console::getInstance()` singleton. **That structure no longer exists in current `firmware/vehicle/`.** Everything below describes the current `firmware/vehicle/` layout. To touch legacy commands, see `firmware/vehicle_old/components/sf_svc_console/` (not a target for new development).
+> The legacy firmware (`firmware/vehicle_old/`, removed 2026-09-13; see tag `archive/2026-09-13`) had a `sf_svc_console` component with category-split files (`commands/cmd_system.cpp`, `cmd_sensor.cpp`, `cmd_motor.cpp`, …) and output through a `Console::getInstance()` singleton. **That structure no longer exists in current `firmware/vehicle/`.** Everything below describes the current `firmware/vehicle/` layout.
 
 ### Architecture
 

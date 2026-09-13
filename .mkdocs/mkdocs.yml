@@ -133,7 +133,6 @@ nav:
       - macOS: docs/setup/macos.md
       - Linux: docs/setup/linux.md
       - Windows (WSL2): docs/setup/windows.md
-      - 教育向け: docs/setup/education.md
       - WiFi STA: docs/setup/wifi-sta.md
     - アーキテクチャ:
       - 制御系設計: docs/architecture/control-system.md
@@ -175,8 +174,6 @@ nav:
         - 概要と事前準備: docs/events/sci_tutorial_2026/README.md
         - 復習手順ガイド: docs/events/sci_tutorial_2026/handson_guide.md
         - コマンド・API 早見表: docs/events/sci_tutorial_2026/cheatsheet.md
-      - シラバス: docs/university/syllabus.md
-      - 評価ルーブリック: docs/university/assessment_rubric.md
     - 開発ガイドライン:
       - スタイルガイド: docs/contributing/style-guide.md
       - コミット規約: docs/contributing/commit-guidelines.md
@@ -239,9 +236,6 @@ nav:
               - Stage 6 Dual: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage6_dual_sensor/README.md
               - Stage 7 Teleplot: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage7_teleplot_streaming/README.md
               - Stage 8 Filter: firmware/vehicle/components/sf_hal_vl53l3cx/examples/development/stage8_filtered_streaming/README.md
-    - Vehicle（レガシー）:
-      - 概要: firmware/vehicle_old/README.md
-      - センサーフュージョン: firmware/vehicle_old/components/sf_algo_fusion/README.md
     - Controller:
       - 概要: firmware/controller/README.md
     - Common:
@@ -285,10 +279,17 @@ nav:
       - URDF メッシュ法線: simulator/genesis/docs/urdf_mesh_normals.md
       - サンドボックス: simulator/sandbox/README.md
     - ROS: ros/README.md
-    - サンプル: examples/README.md
 
   # ==================== 計画 ====================
   - 計画:
     - 現行:
+      - 専用環境移行: docs/plans/dedicated-environment-plan.md
+      - 教育普及戦略: docs/plans/education-outreach-strategy.md
+      - フライトログ形式統一: docs/plans/flight-log-format-plan.md
+      - GUI インストーラ: docs/plans/gui-installer-plan.md
+      - ペアリング方式: docs/plans/pairing-methods-plan.md
+      - PowerHub ビーコン局: docs/plans/powerhub-beacon-station-plan.md
+      - リポジトリ棚卸し: docs/plans/repository-cleanup-candidates.md
       - ROS2 統合: docs/plans/ros2-integration.md
-      - シミュレータ移行: docs/plans/simulator-migration.md
+      - 大学講義教材再建: docs/plans/university-course-plan.md
+      - 独自コードの入口見直し: docs/plans/user-programming-entry-review.md

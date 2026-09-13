@@ -32,9 +32,10 @@
 // --- Scenario "api" channel registration -----------------------------------
 // vehicle is the only target with an ApiTask; register its injection entry
 // with the scenario engine at process start (a direct symbol reference inside
-// scenario.cpp would break the vehicle_old emu link).
+// scenario.cpp would break the link for any emu target that has no ApiTask).
 // vehicle だけが ApiTask を持つ。プロセス開始時に注入入口をシナリオエンジンへ
-// 登録する（scenario.cpp からの直接参照は vehicle_old emu のリンクを壊す）。
+// 登録する（scenario.cpp からの直接参照は ApiTask を持たない emu ターゲットの
+// リンクを壊す）。
 
 extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*));
 extern "C" void sf_api_inject_line(const char* line);

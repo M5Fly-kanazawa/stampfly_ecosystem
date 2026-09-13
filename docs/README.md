@@ -31,9 +31,7 @@ docs/
 ├── contributing/                 # 開発規約
 ├── plans/                          # 計画文書（状態を明記、アーカイブは作らない）
 ├── events/                          # 勉強会・講座
-├── university/                       # 大学講義
 ├── assets/, stylesheets/              # 画像・生成図・サイトのスタイル
-├── telemetry/                          # UDP テレメトリ設計メモ
 └── bonus/, experiments/                 # 番外資料・実験手順
 ```
 
@@ -48,8 +46,7 @@ docs/
 | `setup/` | OS 別のセットアップ手順 |
 | `contributing/` | 文書スタイル・コミット規約・コマンド追加手順などの開発規約 |
 | `plans/` | 機能ごとの計画・見直し文書。冒頭に状態（計画中／実装中／実装済み／見直し中）を書く |
-| `events/` | イベント単位のディレクトリ + 共有素材 `_shared/`。Workshop は `events/stampfly_workshop/` にあり、L0 の旧基盤上の実習。基盤を現行 vehicle へアップグレードする対象（廃棄ではない） |
-| `university/` | シラバス・評価ルーブリックなど大学講義向けの資料 |
+| `events/` | イベント単位のディレクトリ + 共有素材 `_shared/`。Workshop は `events/stampfly_workshop/` にあり、L0 `ws::` API 上の実習。API・レッスンを現行設計へ更新する対象（廃棄ではない） |
 
 プロトコルの文章仕様（メッセージ一覧・オフセット表）は `protocol/README.md` と
 `docs/reference/flight-log-format.md` にある。`docs/protocol/` は置かない。
@@ -93,9 +90,7 @@ docs/
 ├── contributing/                 # Development conventions
 ├── plans/                          # Plan documents (state noted, no archive dir)
 ├── events/                          # Workshops and courses
-├── university/                       # University course material
 ├── assets/, stylesheets/              # Images, generated figures, site styling
-├── telemetry/                          # UDP telemetry design notes
 └── bonus/, experiments/                 # Extra material and experiment procedures
 ```
 
@@ -110,8 +105,7 @@ docs/
 | `setup/` | Per-OS setup instructions |
 | `contributing/` | Development conventions: writing style, commit guidelines, how to add a command |
 | `plans/` | Per-feature plan and review documents. State it up front (planned / in progress / done / under review) |
-| `events/` | One directory per event plus shared material in `_shared/`. The Workshop lives in `events/stampfly_workshop/`, but it was built on the old architecture and is slated to be discarded and rewritten |
-| `university/` | Syllabus and assessment rubrics for university courses |
+| `events/` | One directory per event plus shared material in `_shared/`. The Workshop lives in `events/stampfly_workshop/`; its exercises run on the L0 `ws::` API, whose API and lessons are to be brought up to the current design (not discarded) |
 
 The prose spec for the protocol (message list, offset tables) lives in `protocol/README.md` and
 `docs/reference/flight-log-format.md`. There is no `docs/protocol/`.

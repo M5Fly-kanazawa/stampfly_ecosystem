@@ -13,7 +13,7 @@
 | `docs/events/dxh2026/setup-loaner-pc.md` | 貸出PC・機材のセットアップ手順、リハーサル計画、講座終了後の復元手順 |
 | `docs/events/dxh2026/equipment-checklist.md` | 機材数量一覧・前日/当日朝/終了後チェックリスト |
 | `firmware/vehicle/docs/operation_manual.md` | リリース vehicle ファームの操作仕様（正） |
-| `docs/guides/motor_spin_quickstart.md` §6-3 | ③④で使うモータ Duty ハードコードの実習コード（本書に転記） |
+| `docs/commands/sf-lesson.md` §5 | ③④で使う Lesson 1（モータ制御）の最短手順・モータ Duty ハードコードの実習コード（本書に転記） |
 | `docs/guides/safety.md` | 飛行安全ガイド |
 
 **表記ルール:** 未実測・未確認の項目には【リハーサル実測】【リハーサル確認】と明記している。断定できない数値・挙動をこの文書内で創作しないこと。リハーサルで判明した実測値は本文書の該当箇所を直接置き換える。
@@ -141,7 +141,7 @@
 - プロペラは装着したままで実施する。回転させる際は必ず機体上部の M5StampS3 基板を上から指で押さえた状態にしてから ARM する
 - 動作確認は USB を外したバッテリー駆動で行う（USB接続中はARM自体が拒否される仕様のため、書き込み確認とモータ回転確認は工程が分かれる）
 
-**実習コード（`docs/guides/motor_spin_quickstart.md` §6-3 準拠・正本）:**
+**実習コード（`docs/commands/sf-lesson.md` §5 準拠・正本）:**
 
 `sf lesson edit` で開くと以下のコードが入っている（貸出PCに導入済み）。各モータごとに1行ずつ並んでおり、回したいモータの数値（Duty）を 0.0〜0.15 の間で設定すればそのモータが回り、0.0 のままならそのモータは止まったままである。
 

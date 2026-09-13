@@ -22,20 +22,55 @@ sf <command> [subcommand] [options]
 
 ## 2. コマンド一覧
 
-| コマンド | 説明 | ドキュメント |
+`source setup_env.sh && sf --help` の実測（44 コマンド、2026-09-13 時点）。専用ページが無いコマンドは
+`sf <command> --help` で詳細を確認してください。
+
+| コマンド | 説明 | リファレンス |
 |---------|------|-------------|
 | `sf version` | バージョン情報表示 | [sf-version.md](sf-version.md) |
 | `sf doctor` | 環境診断 | [sf-doctor.md](sf-doctor.md) |
-| `sf setup` | 依存パッケージインストール | [sf-setup.md](sf-setup.md) |
-| `sf upgrade` | 最新版への更新（依存同期・sdkconfig退避を含む） | [sf-upgrade.md](sf-upgrade.md) |
+| `sf setup` | 追加の依存パッケージをインストール | [sf-setup.md](sf-setup.md) |
 | `sf build` | ファームウェアビルド | [sf-build.md](sf-build.md) |
 | `sf flash` | ファームウェア書き込み | [sf-flash.md](sf-flash.md) |
-| `sf app` | 自分のプロジェクトを作成・編集・ビルド・書き込み | [sf-app.md](sf-app.md) |
-| `sf flasher` | GUIフラッシャのネイティブアプリ導入 | [sf-flasher.md](sf-flasher.md) |
-| `sf monitor` | シリアルモニタ | [sf-monitor.md](sf-monitor.md) |
-| `sf log` | ログキャプチャ・解析 | [sf-log.md](sf-log.md) |
-| `sf sim` | シミュレータ | [sf-sim.md](sf-sim.md) |
+| `sf flasher` | ネイティブ GUI フラッシャアプリの管理 | [sf-flasher.md](sf-flasher.md) |
+| `sf monitor` | シリアルモニタを開く | [sf-monitor.md](sf-monitor.md) |
+| `sf telemetry` | 50Hz テレメトリのライブ表示（既定=ターミナル、`--web` でブラウザ） | `sf telemetry --help` |
+| `sf blocks` | Blockly ブロックプログラミング連携（ブラウザ UI ↔ 機体 UDP API） | `sf blocks --help` |
+| `sf log` | ログ取得・解析 | [sf-log.md](sf-log.md) |
+| `sf sim` | フライトシミュレータ実行 | [sf-sim.md](sf-sim.md) |
+| `sf sils`（`sf sil`） | SILS 試験環境（閉ループホバー・レビュー動画・合否判定） | `sf sils --help` |
 | `sf cal` | センサキャリブレーション | [sf-cal.md](sf-cal.md) |
+| `sf sysid` | フライトログからのシステム同定 | [sf-sysid.md](sf-sysid.md) |
+| `sf params` | 物理パラメータ整合検査（C_T・C_Q・κ・慣性 等） | `sf params --help` |
+| `sf trim` | ホバリングログから平衡姿勢トリムを同定 | `sf trim --help` |
+| `sf takeoff` | 指定高度まで離陸 | [flight-commands.md](flight-commands.md) |
+| `sf land` | 着陸 | [flight-commands.md](flight-commands.md) |
+| `sf hover` | 指定高度で指定時間ホバリング | [flight-commands.md](flight-commands.md) |
+| `sf jump` | クイックジャンプ（上昇後下降） | [flight-commands.md](flight-commands.md) |
+| `sf up` | 指定距離 (cm) だけ上昇 | [flight-commands.md](flight-commands.md) |
+| `sf down` | 指定距離 (cm) だけ下降 | [flight-commands.md](flight-commands.md) |
+| `sf cw` | 時計回りに回転（度） | [flight-commands.md](flight-commands.md) |
+| `sf ccw` | 反時計回りに回転（度） | [flight-commands.md](flight-commands.md) |
+| `sf emergency` | 緊急モーター停止 | [flight-commands.md](flight-commands.md) |
+| `sf forward` | 前方へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
+| `sf back` | 後方へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
+| `sf left` | 左へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
+| `sf right` | 右へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
+| `sf stop` | 停止して現在位置でホバリング | [flight-commands.md](flight-commands.md) |
+| `sf motor` | ベンチモータ試験／CW-CCW 電流スイープ（DISARM 時のみ） | `sf motor --help` |
+| `sf battery` | バッテリー残量 (%) を取得 | [query-commands.md](query-commands.md) |
+| `sf height` | ESKF 推定高度 (cm) を取得 | [query-commands.md](query-commands.md) |
+| `sf tof` | ToF 底面距離 (cm) を取得 | [query-commands.md](query-commands.md) |
+| `sf baro` | 気圧高度 (cm) を取得 | [query-commands.md](query-commands.md) |
+| `sf attitude` | 姿勢角 (deg) を取得 | [query-commands.md](query-commands.md) |
+| `sf acceleration` | 加速度 (cm/s²) を取得 | [query-commands.md](query-commands.md) |
+| `sf speed` | 設定速度 (cm/s) を取得 | [query-commands.md](query-commands.md) |
+| `sf rc` | RC 操作（単発またはキーボード対話） | [sf-rc.md](sf-rc.md) |
+| `sf lesson` | 実習管理 | [sf-lesson.md](sf-lesson.md) |
+| `sf competition` | ワークショップ競技会用ツール | [sf-competition.md](sf-competition.md) |
+| `sf app` | 自分のドローンファームプロジェクトを管理 | [sf-app.md](sf-app.md) |
+| `sf docs` | ドキュメントサイトの配信・ビルド | [sf-docs.md](sf-docs.md) |
+| `sf upgrade` | 最新版を取得し環境を再同期 | [sf-upgrade.md](sf-upgrade.md) |
 
 ## 3. クイックリファレンス
 
@@ -127,19 +162,55 @@ sf <command> [subcommand] [options]
 
 ## 2. Command List
 
-| Command | Description | Documentation |
-|---------|-------------|---------------|
-| `sf version` | Show version info | [sf-version.md](sf-version.md) |
-| `sf doctor` | Environment diagnostics | [sf-doctor.md](sf-doctor.md) |
-| `sf setup` | Install dependencies | [sf-setup.md](sf-setup.md) |
-| `sf upgrade` | Update to the latest version (incl. dependency resync, sdkconfig backup) | [sf-upgrade.md](sf-upgrade.md) |
+Measured from `source setup_env.sh && sf --help` (44 commands, as of 2026-09-13). For a
+command with no dedicated page, run `sf <command> --help` for details.
+
+| Command | Description | Reference |
+|---------|-------------|-----------|
+| `sf version` | Show version information | [sf-version.md](sf-version.md) |
+| `sf doctor` | Diagnose environment issues | [sf-doctor.md](sf-doctor.md) |
+| `sf setup` | Install optional dependencies | [sf-setup.md](sf-setup.md) |
 | `sf build` | Build firmware | [sf-build.md](sf-build.md) |
-| `sf flash` | Flash firmware | [sf-flash.md](sf-flash.md) |
-| `sf flasher` | Install the GUI flasher as a native app | [sf-flasher.md](sf-flasher.md) |
-| `sf monitor` | Serial monitor | [sf-monitor.md](sf-monitor.md) |
-| `sf log` | Log capture & analysis | [sf-log.md](sf-log.md) |
-| `sf sim` | Simulator | [sf-sim.md](sf-sim.md) |
+| `sf flash` | Flash firmware to device | [sf-flash.md](sf-flash.md) |
+| `sf flasher` | Manage the native StampFly Flasher GUI app | [sf-flasher.md](sf-flasher.md) |
+| `sf monitor` | Open serial monitor | [sf-monitor.md](sf-monitor.md) |
+| `sf telemetry` | Live 50Hz telemetry — terminal dashboard, or browser with `--web` | `sf telemetry --help` |
+| `sf blocks` | Blockly block-programming bridge (browser UI <-> drone UDP API) | `sf blocks --help` |
+| `sf log` | Log capture and analysis | [sf-log.md](sf-log.md) |
+| `sf sim` | Run flight simulator | [sf-sim.md](sf-sim.md) |
+| `sf sils` (`sf sil`) | Software-in-the-Loop bench (closed-loop hover, review video, gate) | `sf sils --help` |
 | `sf cal` | Sensor calibration | [sf-cal.md](sf-cal.md) |
+| `sf sysid` | System identification from flight logs | [sf-sysid.md](sf-sysid.md) |
+| `sf params` | Physical parameter consistency audit (C_T, C_Q, kappa, inertia, ...) | `sf params --help` |
+| `sf trim` | Identify equilibrium attitude trim from hover logs | `sf trim --help` |
+| `sf takeoff` | Take off to specified altitude | [flight-commands.md](flight-commands.md) |
+| `sf land` | Land the vehicle | [flight-commands.md](flight-commands.md) |
+| `sf hover` | Hover at altitude for duration | [flight-commands.md](flight-commands.md) |
+| `sf jump` | Quick jump: climb then descend | [flight-commands.md](flight-commands.md) |
+| `sf up` | Move up by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf down` | Move down by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf cw` | Rotate clockwise (degrees) | [flight-commands.md](flight-commands.md) |
+| `sf ccw` | Rotate counter-clockwise (degrees) | [flight-commands.md](flight-commands.md) |
+| `sf emergency` | Emergency motor stop | [flight-commands.md](flight-commands.md) |
+| `sf forward` | Move forward by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf back` | Move backward by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf left` | Move left by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf right` | Move right by distance (cm) | [flight-commands.md](flight-commands.md) |
+| `sf stop` | Stop and hover at current position | [flight-commands.md](flight-commands.md) |
+| `sf motor` | Bench motor test / CW-CCW current sweep (disarmed only) | `sf motor --help` |
+| `sf battery` | Query battery level (%) | [query-commands.md](query-commands.md) |
+| `sf height` | Query ESKF estimated height (cm) | [query-commands.md](query-commands.md) |
+| `sf tof` | Query ToF bottom distance (cm) | [query-commands.md](query-commands.md) |
+| `sf baro` | Query barometric altitude (cm) | [query-commands.md](query-commands.md) |
+| `sf attitude` | Query attitude angles (deg) | [query-commands.md](query-commands.md) |
+| `sf acceleration` | Query acceleration (cm/s2) | [query-commands.md](query-commands.md) |
+| `sf speed` | Query configured speed (cm/s) | [query-commands.md](query-commands.md) |
+| `sf rc` | RC control (one-shot or interactive keyboard) | [sf-rc.md](sf-rc.md) |
+| `sf lesson` | Lesson management | [sf-lesson.md](sf-lesson.md) |
+| `sf competition` | Workshop competition tools | [sf-competition.md](sf-competition.md) |
+| `sf app` | Manage your own drone-firmware projects | [sf-app.md](sf-app.md) |
+| `sf docs` | Serve and build documentation site | [sf-docs.md](sf-docs.md) |
+| `sf upgrade` | Pull the latest changes and resync the environment | [sf-upgrade.md](sf-upgrade.md) |
 
 ## 3. Quick Reference
 

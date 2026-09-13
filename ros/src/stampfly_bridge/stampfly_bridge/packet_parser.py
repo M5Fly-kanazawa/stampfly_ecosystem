@@ -15,7 +15,7 @@ firmware/vehicle_old/components/sf_svc_telemetry/include/telemetry.hpp.
 The current primary firmware (firmware/vehicle/) deliberately dropped
 WebSocket telemetry in favor of a UDP-only unified packet (0x50, variable
 length, see firmware/vehicle/components/sf_telemetry/include/data_stream_wire.hpp
-and docs/telemetry/UDP_TELEMETRY_DESIGN.md) — this parser (and the
+and docs/architecture/udp-telemetry-design.md) — this parser (and the
 WebSocket client that uses it) is therefore only compatible with
 firmware/vehicle_old, not the promoted firmware/vehicle.
 注記(vehicle_new→vehicle昇格後): このWebSocketベースのExtendedBatchPacket

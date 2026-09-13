@@ -48,12 +48,9 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 
 | シナリオ | 目的 | ターゲット |
 |----------|------|-----------|
-| `disturb` | P7 外乱回復（横風＋モータ故障） | vehicle / vehicle_old |
+| `disturb` | P7 外乱回復（横風＋モータ故障） | vehicle |
 | `modeswitch` | P8 飛行中モード切替（ALT↔POS）で姿勢/高度有界 | vehicle |
 | `crash_refly` | P8 ★ロバスト再飛行（墜落→自動DISARM→物理ハンドリング→再校正→再飛行）。`--duration 33000000` 必須 | vehicle |
-| `hover_alt` / `hover_long` | 高度保持ホバー（短/長時間） | vehicle_old |
-| `hover_espnow` | ESP-NOW ホバー（仮想 pilot） | vehicle_old |
-| `console_cli` | シリアル CLI 決定論検証（非飛行）。expect は旧 vehicle の CLI 出力（`StampFly RTOS` 等）にアンカーしており、emu の key 入力チャネルも vehicle の esp_console シムに未配線（2026-06-10 確認）。vehicle 対応は CLI フィーダ配線＋expect 更新が必要 | vehicle_old |
 | `boot_motion` | 静止ゲート付き起動校正（運搬中は校正完了せず ARM 拒否、設置後に完了→飛行） | vehicle |
 | `alt_auto_takeoff` | **ARM トリガ** ALT_HOLD 自動離陸（再設計 2026-06-14）: スプール中 duty=0、固定 0.3 m/s 上昇、**目標 0.5m を捕捉**（行き過ぎでなく目標値） | vehicle |
 | `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle |

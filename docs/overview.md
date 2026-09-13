@@ -13,7 +13,7 @@ StampFly Ecosystem は、StampFly 機体を中心に、ドローン制御を **�
 POS_HOLD（位置保持）の4つの飛行モードに対応しており、POS_HOLD は実機飛行での位置保持動作まで確認済みです。
 コントローラからの通常のスティック操作に加えて、Tello SDK 互換の Python API（`tools/stampfly_py/`）を使い、
 WiFi経由でPCから離陸・着陸・移動・回転などをプログラムで指示することもできます。
-なお、旧アーキテクチャのファームウェア（`firmware/vehicle_old/`）は開発を終了し、参照用として残されています。
+なお、旧アーキテクチャのファームウェア（`firmware/vehicle_old/`）は 2026-09-13 に削除しました（実機87フライトの実績を持つ凍結版として運用していましたが、新規開発の対象ではなかったため）。
 
 ### 主要コンポーネント
 
@@ -89,15 +89,13 @@ stampfly_ecosystem/
 ├── docs/                # ドキュメント
 ├── firmware/
 │   ├── vehicle/         # 機体ファームウェア（主力）
-│   ├── vehicle_old/     # レガシー機体ファームウェア（凍結、参照用）
 │   ├── controller/      # コントローラファームウェア
 │   └── common/          # 共通コード（プロトコル等）
 ├── protocol/            # 通信プロトコル仕様 (SSOT)
 ├── control/             # 制御設計資産
 ├── analysis/            # データ解析
 ├── tools/               # ユーティリティ
-├── simulator/           # シミュレータ
-└── examples/            # サンプルコード
+└── simulator/           # シミュレータ
 ```
 
 ## 4. 推奨ワークフロー
@@ -145,8 +143,8 @@ STABILIZE (attitude control), ALT_HOLD (altitude hold), and POS_HOLD (position h
 POS_HOLD validated on real hardware. In addition to normal stick control from the controller,
 a Tello-SDK-compatible Python API (`tools/stampfly_py/`) lets you command takeoff, landing,
 moves, and rotation programmatically from a PC over WiFi.
-A legacy firmware (`firmware/vehicle_old/`) is retained for reference only; active development
-continues in `firmware/vehicle/`.
+A legacy firmware (`firmware/vehicle_old/`) was removed on 2026-09-13 (it had been kept frozen
+with 87 real flights, but was not a target for new development).
 
 ### Main Components
 
@@ -208,15 +206,13 @@ stampfly_ecosystem/
 ├── docs/                # Documentation
 ├── firmware/
 │   ├── vehicle/         # Vehicle firmware (primary)
-│   ├── vehicle_old/     # Legacy vehicle firmware (frozen, reference only)
 │   ├── controller/      # Controller firmware
 │   └── common/          # Shared code (protocol, etc.)
 ├── protocol/            # Protocol specification (SSOT)
 ├── control/             # Control design assets
 ├── analysis/            # Data analysis
 ├── tools/               # Utilities
-├── simulator/           # Simulator
-└── examples/            # Sample code
+└── simulator/           # Simulator
 ```
 
 ## 4. Recommended Workflow

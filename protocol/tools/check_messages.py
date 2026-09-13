@@ -80,8 +80,7 @@ WHAT IS NOT COMPARED, AND WHY / 比較しない項目とその理由
     `espnow_protocol.hpp` at all (confirmed: no struct, no matching
     constants). Per the header's own docstring this is out of scope for
     this file -- TelemetryPacket has independent, non-shared definitions
-    in firmware/vehicle/.../telemetry.hpp, firmware/vehicle_old/...
-    (controller_comm.hpp / telemetry.hpp) and
+    in firmware/vehicle/.../telemetry.hpp and
     firmware/common/protocol/include/udp_protocol.hpp, and TDMABeacon has
     no C++ byte-layout definition anywhere in the tree. These messages are
     reported as "skipped" (not a mismatch) rather than silently ignored.
@@ -89,7 +88,6 @@ WHAT IS NOT COMPARED, AND WHY / 比較しない項目とその理由
     に一切実装が無い（struct も対応する定数も無いことを確認済み）。ヘッダ
     自身の docstring からもこのファイルの対象外である --
     TelemetryPacket は firmware/vehicle/.../telemetry.hpp や
-    firmware/vehicle_old/...（controller_comm.hpp / telemetry.hpp）、
     firmware/common/protocol/include/udp_protocol.hpp に、共有されない
     個別の定義を持つ。TDMABeacon はツリー中どこにも C++ のバイトレイアウト
     定義が無い。これらは（無言で無視するのではなく）「スキップ」として

@@ -42,7 +42,7 @@ COMMAND_HELP = "Manage your own drone-firmware projects"
 # アプリのプロジェクト名として使えない予約名。実際には1階層下の
 # firmware/apps/<name> に置かれるためディスク上で衝突はしないが、
 # firmware/ 直下の既存ディレクトリ名を流用すると紛らわしいため禁止する。
-RESERVED_NAMES = {"vehicle", "vehicle_old", "controller", "workshop", "common", "apps"}
+RESERVED_NAMES = {"vehicle", "controller", "workshop", "common", "apps"}
 
 # Default --from example: the L1 (Topic API) embedded-type template. It builds
 # INTO vehicle's own main component (see app.yaml's `type: embedded`) so the

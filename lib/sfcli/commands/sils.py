@@ -124,7 +124,7 @@ NOISE_LEVELS = ["off", "n0", "n1", "n2"]
 # setup()/loop_400Hz()（`sf lesson switch` がコピーする main/user_code.cpp）を、
 # "vehicle" と同じ再利用センサ/状態タスク経由で走らせる — CMakeLists.txt の
 # emu_workshop コメント参照。
-SILS_TARGETS = ("vehicle", "vehicle_old", "workshop")
+SILS_TARGETS = ("vehicle", "workshop")
 _TARGET_EXE_NAME = {name: f"emu_{name}" for name in SILS_TARGETS}
 # Default sensor-noise level per milestone (RESET_PLAN §13): noise milestones run N0.
 # マイルストーン別の既定ノイズ（§13）: ノイズ系マイルストーンは N0 で走る。
@@ -379,13 +379,13 @@ def _check_build_freshness(exe: Path, src_mtime: Optional[float] = None) -> bool
     """Warn (never blocks — this is advisory, not a build gate) if `exe` predates
     the newest tracked SILS/firmware source file: a likely sign the sources were
     edited after the last `sf sils build`. Returns True iff a warning was printed,
-    so callers with more than one exe (run_regression: vehicle + vehicle_old) can
+    so callers with more than one exe (run_regression: vehicle + workshop) can
     share a single source scan (pass a precomputed src_mtime) instead of walking
     the tree once per exe.
     `exe` が最新の SILS/ファームソースより古ければ警告する（ブロックはしない —
     あくまで参考情報。ビルドゲートではない）。最後の `sf sils build` の後にソースが
     編集された可能性のサイン。警告を出したら True を返す — 複数 exe を持つ呼び出し
-    元（run_regression: vehicle と vehicle_old）が exe ごとに再走査せず、1回の
+    元（run_regression: vehicle と workshop）が exe ごとに再走査せず、1回の
     ソース走査結果（src_mtime を渡す）を使い回せるようにする。
     """
     try:
@@ -467,10 +467,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("scenario", help="path to the .scn scenario file")
     p.add_argument("--target", type=_resolve_sils_target, default="vehicle",
                    help="emulator binary (default: vehicle = current firmware; "
-                        "vehicle_old = legacy firmware; workshop = learner "
-                        "setup()/loop_400Hz() from `sf lesson switch`, on the "
-                        "same reused vehicle sensor/state tasks; apps/<name> = an "
-                        "embedded-type `sf app` project, built on demand)")
+                        "workshop = learner setup()/loop_400Hz() from "
+                        "`sf lesson switch`, on the same reused vehicle "
+                        "sensor/state tasks; apps/<name> = an embedded-type "
+                        "`sf app` project, built on demand)")
     p.add_argument("--expect", default=None,
                    help="assertions file (default: <scenario>.expect if it exists)")
     p.add_argument("--duration", type=int, default=25_000_000,
@@ -718,7 +718,7 @@ def run_build(args: argparse.Namespace) -> int:
         exe = build_app_emulator(paths.apps() / name, app_build_dir(name), jobs)
         return 0 if exe.exists() else 1
 
-    # Map a friendly firmware name (vehicle/vehicle_old/workshop) onto its
+    # Map a friendly firmware name (vehicle/workshop) onto its
     # actual CMake target (emu_<name>); any other value (cores_smoke,
     # hover_smoke, an explicit emu_vehicle, ...) passes through unchanged.
     # 親しみやすいファーム名を実際の CMake ターゲット（emu_<name>）へ写像する。
@@ -2007,30 +2007,13 @@ def run_fly(args: argparse.Namespace) -> int:
 # 解析する。
 _RUN_LINE_RE = re.compile(r"sf sils scenario\s+\S*?scenarios/(?P<name>[\w.]+)\.scn(?P<rest>.*)")
 
-# Two scenarios whose header comment does NOT document the target they actually need
-# (unlike api_flight/pairing/etc. above) — verified empirically (2026-07) and matching
-# TEST_MATRIX.md's "その他のシナリオ" table: the CLI feeder and ESP-NOW virtual-pilot
-# input channels are wired for vehicle_old only, so these two FAIL under the default
-# vehicle target. Keep this table tiny and named so it stays an obvious exception, not
-# a growing parallel manifest.
-# ヘッダコメントに実際必要な target が書かれていない2本（上記 api_flight/pairing 等とは
-# 違う）。2026-07 に実測で確認済み、TEST_MATRIX.md の「その他のシナリオ」表とも一致:
-# CLI フィーダと ESP-NOW 仮想パイロット入力チャネルは vehicle_old 専用配線のため、既定の
-# vehicle ターゲットでは FAIL する。肥大化する並行マニフェストにならないよう、この表は
-# 小さく・例外だと分かる名前に留める。
-_TARGET_OVERRIDE = {
-    "console_cli": "vehicle_old",
-    "hover_espnow": "vehicle_old",
-}
-
-
 def _scenario_invocation(scn: Path) -> list:
     """Return the extra `sf sils scenario` CLI args this .scn documents for itself
     (parsed from its own header comment), always including an explicit --target
-    (falling back to _TARGET_OVERRIDE, then "vehicle"). Returns e.g.
+    (falling back to "vehicle"). Returns e.g.
     ['--target', 'vehicle', '--duration', '40000000'].
     この .scn が自身のヘッダコメントで宣言する追加CLI引数を返す。--target は
-    常に明示する（宣言が無ければ _TARGET_OVERRIDE、それも無ければ "vehicle"）。
+    常に明示する（宣言が無ければ "vehicle"）。
     """
     extra = []
     for line in scn.read_text(encoding="utf-8").splitlines():
@@ -2039,7 +2022,7 @@ def _scenario_invocation(scn: Path) -> list:
             extra = shlex.split(m.group("rest"))
             break
     if "--target" not in extra:
-        extra = ["--target", _TARGET_OVERRIDE.get(scn.stem, "vehicle")] + extra
+        extra = ["--target", "vehicle"] + extra
     return extra
 
 
@@ -2162,22 +2145,22 @@ def run_regression(args: argparse.Namespace) -> int:
     # before it starts" pattern as _check_param_consistency() above), rather than
     # once per scenario — the loop below spawns each scenario as its OWN subprocess
     # (see _RUN_LINE_RE comment), so without this the freshness check inside
-    # run_scenario() would print once per scenario (32 times). Both target binaries
-    # are checked (regression can exercise vehicle AND vehicle_old — see
-    # _TARGET_OVERRIDE) against a single shared source scan. Setting the env var on
-    # THIS process is enough: subprocess.run(cmd) below has no env= kwarg, so it
-    # inherits the parent's os.environ (incl. this var) into every child scenario run.
+    # run_scenario() would print once per scenario. Both target binaries are
+    # checked (regression can exercise vehicle AND workshop) against a single
+    # shared source scan. Setting the env var on THIS process is enough:
+    # subprocess.run(cmd) below has no env= kwarg, so it inherits the parent's
+    # os.environ (incl. this var) into every child scenario run.
     # ビルド鮮度の参考警告: ここで冒頭に1回だけ判定する（上の _check_param_consistency
     # と同じ「ループ開始前にゲート」パターン）。以下のループは各シナリオを別
     # プロセスとして起動するため、これが無いと run_scenario 内の判定がシナリオ数
-    # (32回)ぶん重複表示されてしまう。回帰は vehicle と vehicle_old 両方を実行し
+    # ぶん重複表示されてしまう。回帰は vehicle と workshop 両方を実行し
     # うるため両方の exe を、ソース走査は共有した1回分でチェックする。この
     # プロセスで環境変数を立てるだけでよい — 以下の subprocess.run(cmd) は env=
     # を指定していないため親プロセスの os.environ（この変数を含む）をそのまま
     # 継承し、全ての子シナリオ実行に伝播する。
     src_mtime = _sils_source_mtime()
     bd = _build_dir()
-    for exe_name in ("emu_vehicle", "emu_vehicle_old"):
+    for exe_name in ("emu_vehicle", "emu_workshop"):
         exe = bd / _exe(exe_name)
         if exe.exists():
             _check_build_freshness(exe, src_mtime=src_mtime)

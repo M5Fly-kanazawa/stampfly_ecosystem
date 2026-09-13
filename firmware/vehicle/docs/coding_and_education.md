@@ -329,20 +329,12 @@ Workshop 向けの **Lesson 形式 Example** は別系統で、L0 Tier の `ws::
 
 ## 4. チュートリアル計画
 
-### チュートリアル構成（docs/tutorial/）
+### チュートリアル構成
 
-| Chapter | タイトル | 対応Example | 所要時間 |
-|---------|---------|------------|---------|
-| Ch.1 | StampFlyを光らせよう | 01-03 | 30分 |
-| Ch.2 | センサを読んでみよう | 04-06, 08 | 45分 |
-| Ch.3 | モーターを回そう | 07 | 20分 |
-| Ch.4 | コントローラと通信しよう | 09-10 | 30分 |
-| Ch.5 | PID制御を理解しよう | XX_pid_single_axis | 45分 |
-| Ch.6 | 姿勢を推定しよう | XX_complementary_filter, 14 | 60分 |
-| Ch.7 | 初めてのフライト | 15-16 | 60分 |
-| Ch.8 | 高度を維持しよう | 17 | 45分 |
-| Ch.9 | 位置を保持しよう | 18 | 45分 |
-| Ch.10 | 自分だけのコントローラを作ろう | 21-22 | 60分 |
+各階層（L0 Workshop 〜 L3 BSP）の道具・雛形・資料・講習の整備状況は
+`PROJECT_PLAN.md` §16「整備状況の地図」で追う。かつてここにあった一本道の
+章立て（Ch.1〜10）は、`sf app`・`sf lesson` の全階層対応という方針に
+合わないため廃した。新しいチュートリアルを追加する際は §16 の表を更新する。
 
 ### ワークショップ向けの配慮
 
@@ -425,7 +417,9 @@ Each Example must be:
 
 ## 4. Tutorial Plan
 
-10 chapters from "Make StampFly Light Up" to "Build Your Own Controller", corresponding to Examples, with estimated 30-60 minutes per chapter.
+The tool/template/reference/lesson coverage for each layer (L0 Workshop through L3 BSP) is
+tracked in `PROJECT_PLAN.md` §16 ("Coverage Map"). The single-track chapter list (Ch.1-10)
+once here was dropped because it does not match the all-layer `sf app`/`sf lesson` policy.
 
 ## 5. Implementation Priority
 
