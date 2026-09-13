@@ -81,7 +81,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 
 | # | 項目 | コマンド／確認内容 |
 |---|------|-------------------|
-| 1 | SILS退行テスト（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sils regression`（`sf sils scenario` を対象シナリオ一式に一括適用）でPASSを確認。main へのpush・PRで GitHub Actions（`sils-regression.yml`）が自動実行するため、ローカル実行は事前確認・デバッグ用の補助 |
+| 1 | SILS再確認試験（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sils regression`（`sf sils scenario` を対象シナリオ一式に一括適用）でPASSを確認。main へのpush・PRで GitHub Actions（`sils-regression.yml`）が自動実行するため、ローカル実行は事前確認・デバッグ用の補助 |
 | 2 | vehicle・controller 両ターゲットのローカルビルドが通ること | `sf build vehicle` / `sf build controller` |
 | 3 | 前回リリースからの変更点を整理すること | CHANGELOG的に、主要な `feat`/`fix` コミットを箇条書きで洗い出す |
 | 4 | バージョンタグを作成すること | `git tag vYYYY.MM.P`（例: `git tag v2026.07.0`） |

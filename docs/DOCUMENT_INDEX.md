@@ -48,7 +48,7 @@
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | 座標系の定義 |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | 物理パラメータリファレンス |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis シミュレータ統合 |
-| [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致ゲート・SILSプラント改修バックログ |
+| [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致の合否判定・SILSプラント改修の残作業 |
 
 ### ガイド・リファレンス (`guides/`)
 
@@ -71,6 +71,7 @@
 |---------|------|
 | [README.md](README.md) | docs/ ディレクトリガイド |
 | [contributing/style-guide.md](contributing/style-guide.md) | ドキュメント記述スタイル規約 |
+| [contributing/terminology.md](contributing/terminology.md) | 用語・言い換え辞書（言葉遣いのローカル正本） |
 | [contributing/commit-guidelines.md](contributing/commit-guidelines.md) | コミットメッセージ規約 |
 | [contributing/adding-sf-commands.md](contributing/adding-sf-commands.md) | コマンド追加ガイド |
 | [contributing/adding-firmware-commands.md](contributing/adding-firmware-commands.md) | CLI コマンド追加ガイド |
@@ -282,6 +283,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 |------|-------------|
 | [README.md](README.md) | docs/ directory guide |
 | [contributing/style-guide.md](contributing/style-guide.md) | Document writing style guide |
+| [contributing/terminology.md](contributing/terminology.md) | Terminology and phrasing dictionary (local source of truth for word choice) |
 | [contributing/commit-guidelines.md](contributing/commit-guidelines.md) | Commit message guidelines |
 | [contributing/adding-sf-commands.md](contributing/adding-sf-commands.md) | Adding commands guide |
 | [contributing/adding-firmware-commands.md](contributing/adding-firmware-commands.md) | Adding CLI commands guide |

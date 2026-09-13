@@ -29,7 +29,7 @@
 | S4 | 実習 5（P制御）飛行動画 | `S4_ex5_p_flight.mp4` | 「P だけでも離陸・ホバーはできるが、ステップ応答に振動が残る」 | 同上 |
 | S4 | 実習 8（PID制御）飛行動画 | `S4_ex8_pid_flight.mp4` | 「同じシナリオを PID にすると応答が滑らかになる」 | 同上 |
 | S5 | 合否判定結果（テキスト） | `S5_gate_result.txt` | 「STABILIZE 飛行の12項目チェックが全て PASS」 | `sf sils scenario simulator/sils/scenarios/stab_flight.scn --target vehicle --video` |
-| S5 | 回帰テスト最終サマリ | `S5_regression_summary.txt` | 「34本のシナリオ中 28 PASS、5件は既知の追跡中課題（KNOWN-FAIL、xfail マーカー付き）、1件は実習コード対象のスキップ — 新規の退行はゼロ」 | `sf sils regression` |
+| S5 | 再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）の最終サマリ | `S5_regression_summary.txt` | 「34本のシナリオ中 28 PASS、5件は既知の追跡中課題（KNOWN-FAIL、xfail マーカー付き）、1件は実習コード対象のスキップ — 新しく壊れた箇所はゼロ」 | `sf sils regression` |
 | S5 | 姿勢・角速度の時系列 | `S5_attitude_rate.png` | 「ロール+8°→-8°→ピッチ+8°→中立、の3連ステップに追従し、中立に戻すたび自己水平化する」 | `sf sils scenario simulator/sils/scenarios/stab_flight.scn --target vehicle --video` |
 | S5 | STABILIZE 飛行動画（MuJoCo 3D + 状態グラフ） | `S5_stab_flight.mp4` | 「STABILIZE はスロットルを自動制御しないので、そのまま上昇し続ける（仕様通り、故障ではない）」 | 同上 |
 

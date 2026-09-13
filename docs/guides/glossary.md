@@ -2,6 +2,9 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+言い方の規則（言い換え・禁止語・訳語）は [`../contributing/terminology.md`](../contributing/terminology.md) を参照。本用語集は語の**意味**の定義のみを扱う。
+/ For word-choice rules (phrasing, banned terms, translation conventions), see [`../contributing/terminology.md`](../contributing/terminology.md). This glossary covers term **meaning** only.
+
 ## 1. 制御一般 / General Control
 
 | 日本語 | English | 説明 |

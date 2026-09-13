@@ -65,7 +65,7 @@
 
 | # | 対象 | 決定 | 削除の前提 |
 |---|------|------|-----------|
-| D1 | `firmware/vehicle_old/`（凍結、実飛行 87 回） | **削除済み**（2026-09-13、コミット `3d9e3cde`、タグ `archive/2026-09-13`） | 同時に外したもの: SILS の `emu_vehicle_old` と接着コード 3 本、専用シナリオ 4 本（退行試験 36→34）、`sf sils/build/doctor/app` の `vehicle_old` ターゲット、`params_manifest.py` の参照 5 件と `EXEMPT_VEHICLE_OLD`、`lib/stampfly`（C1）。`udp_protocol.hpp`・`espnow_protocol.hpp` は controller が使うので残した。検証: `sf params check` ERROR=0、pytest 67、SILS フルビルド＋退行試験 28 PASS/5 既知 FAIL/1 SKIP |
+| D1 | `firmware/vehicle_old/`（凍結、実飛行 87 回） | **削除済み**（2026-09-13、コミット `3d9e3cde`、タグ `archive/2026-09-13`） | 同時に外したもの: SILS の `emu_vehicle_old` と接着コード 3 本、専用シナリオ 4 本（再確認試験〈変更で既存の動作が壊れていないかを自動で確かめる試験〉36→34）、`sf sils/build/doctor/app` の `vehicle_old` ターゲット、`params_manifest.py` の参照 5 件と `EXEMPT_VEHICLE_OLD`、`lib/stampfly`（C1）。`udp_protocol.hpp`・`espnow_protocol.hpp` は controller が使うので残した。検証: `sf params check` ERROR=0、pytest 67、SILS フルビルド＋再確認試験 28 PASS/5 既知 FAIL/1 SKIP |
 
 維持するもの: `firmware/legacy/`（`sf flash --legacy` が工場出荷状態への復旧に使う）。
 

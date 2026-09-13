@@ -53,9 +53,9 @@
 | 変更の出どころ | 必要な裏付け |
 |--------------|-------------|
 | 解析・チューニング研究からの提案 | 実フライトログを使ったシミュレーションで効果を定量確認する。ログ取得は `sf log wifi` / `sf log convert`、解析・再生シミュレーションは `analysis/` 配下のスタディスクリプト（例: `analysis/scripts/roll_tuning_20260717/`）が先行例。変更前後の定量指標（帯域RMS・追従誤差の改善率等）を、コミットメッセージまたはリリースノート原稿に残す |
-| パイロットの実飛行ハンドチューニング指示 | 指示値をそのまま採用してよいが、**SILS 退行テストの A/B**（下記）は必須 |
+| パイロットの実飛行ハンドチューニング指示 | 指示値をそのまま採用してよいが、**SILS 再確認試験**（変更で既存の動作が壊れていないかを自動で確かめる試験）の A/B（下記）は必須 |
 
-SILS（Software-In-the-Loop。ファームウェアを PC 上のエミュレータで飛ばす退行テスト）は
+SILS（Software-In-the-Loop。ファームウェアを PC 上のエミュレータで飛ばす再確認試験）は
 **コンパイル時既定値をそのまま使って飛行する**（Param Identity —
 [development_roadmap.md](../../firmware/vehicle/docs/development_roadmap.md) 参照）ため、
 既定値の変更は SILS の挙動に直接反映される。A/B 一致の確認は「挙動が変わっても、
@@ -77,12 +77,12 @@ done | tee /tmp/sils_before.txt
 #    /tmp/sils_after.txt に保存
 
 # ④ 差分ゼロ（pass/fail 集合の一致）を確認
-diff /tmp/sils_before.txt /tmp/sils_after.txt && echo "退行なし"
+diff /tmp/sils_before.txt /tmp/sils_after.txt && echo "既存動作の破壊なし"
 ```
 
 対象は `simulator/sils/scenarios/*.scn` の全シナリオ（2026-07 時点で39本。正は
 グロブであり、本数は増えてよい）。「既知の FAIL」とは①の変更前実行で既に FAIL
-だったものを指す — 変更後に新たに FAIL へ転じたものだけが退行である。
+だったものを指す — 変更後に新たに FAIL へ転じたものだけが既存動作の破壊である。
 
 ### 既存機体への反映 — NVS の優先関係を理解する
 
@@ -122,7 +122,7 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 |------|------|
 | 1. 設計照合 | 制御則・状態機械・飛行フェーズに関わる変更は `architecture.md` の INV（アーキテクチャ不変条件）に照合。前提が変わる場合は既存コンポーネントへのリップル確認 |
 | 2. 実装 | バイリンガルコメント・`@design` タグ・マジックナンバー禁止などのコーディング規約に従う |
-| 3. SILS 退行テスト | `simulator/sils/scenarios/*.scn` の全シナリオを実行し、変更前後で pass/fail 集合が一致することを確認（§2 の A/B 手順と同じ。既知 FAIL の判定も同様に変更前の実行結果を基準とする） |
+| 3. SILS 再確認試験 | `simulator/sils/scenarios/*.scn` の全シナリオを実行し、変更前後で pass/fail 集合が一致することを確認（§2 の A/B 手順と同じ。既知 FAIL の判定も同様に変更前の実行結果を基準とする） |
 | 4. ビルド | `sf build vehicle`（controller に触れた場合は `sf build controller` も） |
 | 5. 実機検証 | 制御則の変更は実飛行での確認まで行う（SILS PASS は実機安全の保証ではない） |
 | 6. コミット | `/commit` スキルで Next steps 付きコミット |
@@ -135,7 +135,7 @@ development_roadmap / hardware_init）を読んだ上で、以下を守る。
 | # | 作業 | コマンド／確認内容 |
 |---|------|-------------------|
 | 1 | リリースノート原稿を作成・更新 | バージョン番号を決めた時点で `docs/plans/release-vYYYY.MM.P-notes.md` を新規作成する（前回リリースの原稿をコピーして書き換えると早い）。既定値変更は §2 の2点を含める |
-| 2 | SILS 退行テストを main の最終状態で一括実行 | `simulator/sils/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
+| 2 | SILS 再確認試験を main の最終状態で一括実行 | `simulator/sils/scenarios/*.scn` 全シナリオ。個々のコミット時に通していても、タグ直前に1回まとめて実行する |
 | 3 | ローカルビルド確認 | `sf build vehicle` / `sf build controller` |
 | 4 | CI の事前検証 | GitHub リポジトリの **Actions タブ → `Release firmware binaries` を選択 → Run workflow → ブランチ `main` を指定して実行**。全ジョブ（ファームビルド2 = vehicle/controller + フラッシャ 4OS）が緑であることを確認。タグ無し実行では Release 発行ジョブだけがスキップされる |
 | 5 | タグ作成〜リリース発行 | [versioning.md §5](versioning.md#5-リリース手順) のチェックリストに従う: `git tag vYYYY.MM.P` → `git push origin vYYYY.MM.P` → Release workflow 完走 → アセット13点（ファーム4 = vehicle/controller × full/app、フラッシャ4 = Windows/macOS ARM/macOS Intel/Linux、セットアップ4 = Windows/macOS ARM/macOS Intel/Linux、`SHA256SUMS.txt`）の添付を確認 |

@@ -561,7 +561,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # Regression: run every *.scn that has a matching *.expect (README/TEST_MATRIX
     # "32 scenarios"; the .expect glob is authoritative) and gate on the aggregate.
     # This is the CI/pre-release entry point (sils-regression.yml, versioning.md §5).
-    # 退行: .expect を伴う全 *.scn を実行し集約判定でゲートする(README/TEST_MATRIX
+    # 再確認試験: .expect を伴う全 *.scn を実行し集約判定でゲートする(README/TEST_MATRIX
     # の「32本」。.expect グロブが正)。CI・リリース前のエントリポイント。
     p = sub.add_parser("regression", help="Run all *.scn/*.expect scenarios and gate (CI)")
     p.add_argument("--json-out", default=None,
@@ -2058,7 +2058,7 @@ def _check_param_consistency() -> tuple:
     # strict=True: mirrors `sf params check --strict`, so an UNRESOLVED
     # parameter also gates the regression, not just MISMATCH/ERROR.
     # strict=True: `sf params check --strict` と同じ判定。UNRESOLVED も
-    # MISMATCH/ERROR と同様に退行の合否対象にする。
+    # MISMATCH/ERROR と同様に再確認試験の合否対象にする。
     passed = check_params.compute_exit_code(summary, strict=True) == 0
     return passed, summary["total"]
 

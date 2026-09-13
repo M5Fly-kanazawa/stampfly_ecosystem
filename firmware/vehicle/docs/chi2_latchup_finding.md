@@ -97,7 +97,7 @@ SILS に 1S LiPo 電池サグモデルを実装し、actuator が実電圧（sen
 - **臨界の消失を直接確認**: actuator を fixed 3.7→3.696（推力+0.1%）にしても pos_yaw が
   発散しないこと（`SILS_EMU_BATTERY=off` で電池サグを切り、量子化バイアスを再現できる）。
   または electric デッドバンド 0.05 を有効化して全 POS_HOLD/STABILIZE が PASS すること。
-- **退行なし**: vehicle 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
+- **既存動作の破壊なし**: vehicle 11 シナリオ + disturb + N1/N2 + hover_smoke G2/G3 が全 PASS、
   かつ att_rmse が悪化しないこと。
 - **掃引で数値選定**: ゲート値（7.8/11.3/16/…）× シナリオの表を作り、最良を選ぶ。
 
@@ -158,7 +158,7 @@ STABILIZE を崩す。**χ² を根治すればデッドバンド 0.05 もその
 param 範囲超で旧来拒否されていた。
 
 - 棄却率 66%→**~0%**、臨界消失：電池OFF の POS 全 PASS（att_rmse **0.52〜1.13°**＝健全値より良い）。
-- **退行なし**: 11シナリオ（電池ON）全PASS、hover_smoke G2+G3（物理真値）PASS、N1 現実ノイズ
+- **既存動作の破壊なし**: 11シナリオ（電池ON）全PASS、hover_smoke G2+G3（物理真値）PASS、N1 現実ノイズ
   PASS、legacy hover_espnow PASS、ESP-IDF 実機ビルド OK。
 
 ### 試したが捨てた案（記録）

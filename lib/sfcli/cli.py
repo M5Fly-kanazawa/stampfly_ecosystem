@@ -147,7 +147,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # cp932、英語は cp1252）で入出力し、UTF-8 コンテンツの全文字は表現でき
     # ない -- 全角ダッシュ/日本語を含む git コミット題名の表示が
     # UnicodeEncodeError を起こし `sf upgrade` を中断させた（2026-07-19 に
-    # 実測: DXH 貸出PCの cp932、続いて退行フィクスチャ経由で windows-latest
+    # 実測: DXH 貸出PCの cp932、続いて再確認試験フィクスチャ経由で windows-latest
     # CI レッグの cp1252）。errors="replace" はそうした文字を '?' として
     # 表示し、クラッシュさせない — v2026.07.1 のフラッシャが CLI 経路に
     # 採用したのと同じ対処。

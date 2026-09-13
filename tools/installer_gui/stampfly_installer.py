@@ -2316,7 +2316,7 @@ def run_selftest() -> int:
     # (5b) シグネチャ耐性のある run() 引数: 新しい引数の追加より古い
     # installer.py の Installer.run() が、修復モードを TypeError で
     # 落とさないこと -- 2026-07-20 の Windows での失敗(講習前クローンでの
-    # "unexpected keyword argument 'no_flasher'")の退行チェック。git 履歴に
+    # "unexpected keyword argument 'no_flasher'")の再確認試験。git 履歴に
     # 依存しないよう(CI のチェックアウトは shallow)、合成の旧式クラスを使う。
     class _OldStyleInstaller:
         def run(self, idf_path=None, skip_deps=False, minimal=False, force=False):

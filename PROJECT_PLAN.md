@@ -1,6 +1,6 @@
 # StampFly Ecosystem PROJECT_PLAN
 
-最終更新: 2026-09-12（`docs/plans/project-plan-conformance.md` の棚卸しに基づく全面改訂）。
+最終更新: 2026-09-13（2026-09-12 の棚卸しに基づく全面改訂の後、目指す姿・整理結果・用語辞書を反映）。
 
 本文書は **リポジトリ構造の原典** である。各ディレクトリの責務と設計判断を書く。
 構造（ディレクトリ・責務・命名）を変えるときは、本文書を同じコミットで更新する（§15）。
@@ -96,7 +96,7 @@ docs/
 ├── guides/            # 利用者向けガイド（安全・送信機・独自プログラム・ログ可視化・環境更新 等）
 ├── commands/          # sf CLI コマンドリファレンス
 ├── setup/             # OS 別セットアップ
-├── contributing/      # 開発規約（文書スタイル・コミット規約・コマンド追加手順）
+├── contributing/      # 開発規約（文書スタイル・用語辞書 terminology.md・コミット規約・コマンド追加手順）
 ├── plans/             # 計画文書。冒頭に状態を明記し、アーカイブは作らない（§15）
 ├── events/            # 勉強会・講座（イベント単位のディレクトリ + 共有素材 _shared/）
 ├── assets/, stylesheets/  # 画像・生成図・サイトのスタイル
@@ -402,12 +402,12 @@ simulator/
 
 | ワークフロー | 役割 |
 |-------------|------|
-| `sils-regression.yml` | SILS シナリオの退行試験、`sf params check/generate --check`、フライトログ形式と `messages.yaml` の整合検査、`lib/sflog` のテスト |
+| `sils-regression.yml` | SILS シナリオの再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）、`sf params check/generate --check`、フライトログ形式と `messages.yaml` の整合検査、`lib/sflog` のテスト |
 | `macos-linux-e2e.yml` / `windows-e2e.yml` | インストーラの端末間 E2E |
 | `release.yml` | ファームウェア・フラッシャ・インストーラのリリースビルド |
 | `deploy-pages.yml` | ランディングと docs サイトの配信 |
 
-静的解析（lint・型検査）は導入していない。整合性の担保は上記の生成物鮮度検査と退行試験で行う。
+静的解析（lint・型検査）は導入していない。整合性の担保は上記の生成物鮮度検査と再確認試験で行う。
 
 ---
 

@@ -1550,7 +1550,7 @@ def _load_axis_data(
     # した一式の ctrl_output.csv は `torque_<axis>` 列が存在しつつ定数ゼロ
     # ということがあり得る。存在チェックだけだと、'auto' が全ての workshop
     # ログで意味の無い全ゼロトルクを、動作する duty 逆算より優先してしまう
-    # -- 改善ではなく退行になる。そこで値が非退化（定数ゼロでない）ことも
+    # -- 改善ではなく既存動作の破壊になる。そこで値が非退化（定数ゼロでない）ことも
     # 合わせて要求する。
     torque_col = f'torque_{axis}'
     ctrl_output_torque: Optional[np.ndarray] = None
@@ -3020,7 +3020,7 @@ def selftest(verbose: bool = True) -> bool:
     # regression for every real workshop/lesson_07 log, not an improvement.
     # Reuses the legacy-scale synthetic flight (u, gyro_meas,
     # duty_fr/rr/rl/fl) from the 'kp'/'duty'/'auto' block above.
-    # --- 退行防止（2026-09-10、緊急）: 本物の firmware/workshop 一式は
+    # --- 既存動作の破壊防止（2026-09-10、緊急）: 本物の firmware/workshop 一式は
     # `ctrl_output` ストリームが存在し得る（ファームが毎周期 0x4B
     # エントリを送るため）が、torque[] は実際には一切書かれない --
     # WorkshopControlTask が埋めるのは .thrust だけで、しかも物理量Nでは
@@ -3029,7 +3029,7 @@ def selftest(verbose: bool = True) -> bool:
     # 定数ゼロのまま読める。この修正（2026-09-10）が無ければ 'auto' は
     # この全ゼロで無意味な control_output を、動作する legacy duty
     # 逆算より優先してしまう -- 本物の workshop/実習7 ログすべてにとって
-    # 改善ではなく退行になる。上の 'kp'/'duty'/'auto' ブロックの
+    # 改善ではなく既存動作の破壊になる。上の 'kp'/'duty'/'auto' ブロックの
     # legacy スケール合成飛行（u, gyro_meas, duty_fr/rr/rl/fl）を再利用する。
     ctrl_output_ws = pd.DataFrame({
         'timestamp_us': ts_us, 'seq': seq,
@@ -3059,7 +3059,7 @@ def selftest(verbose: bool = True) -> bool:
     # legacy-scale flight, just with a dead-but-present `ctrl_output`
     # stream.
     # 2026-09-10: 'auto' が（FIR自動Kp経由で）直接法より 'indirect' を優先
-    # するようになったため、この回帰テストの基準はより厳しくなった -- 死んだ
+    # するようになったため、この再確認試験の基準はより厳しくなった -- 死んだ
     # 全ゼロ control_output を避けるだけでなく、'indirect' まで解決する
     # こと。上の ok_auto と同じ精度チェックを、`ctrl_output` ストリームは
     # 存在するが死んでいる同じ legacy スケールのフライトに対して行う。

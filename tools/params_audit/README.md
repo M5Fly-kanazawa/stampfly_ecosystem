@@ -82,7 +82,7 @@ python3 tools/params_audit/check_params.py --json
 終了コード: `MISMATCH` または `ERROR` が1件でもあれば 1、それ以外は 0
 （`--strict` 指定時は `UNRESOLVED` も 1 扱いに追加される）。
 
-### 退行検出への組み込み
+### 既存動作の破壊検出への組み込み
 
 本検査は `sf sils regression`（`lib/sfcli/commands/sils.py` の `run_regression()`）
 の最初のステップとして自動実行され、シナリオ実行前に `--strict` 相当で判定

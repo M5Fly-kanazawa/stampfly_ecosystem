@@ -156,7 +156,7 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
 1. **離陸**: 位相 C で高度（`-pos_z`）が ~0.20m 超（接地脱出。cf. hover_espnow は高度~0.013m で接地のまま）。
 2. **capture+保持**: 位相 D で高度が一定値に**落ち着き上昇が止まる**。D 末尾10秒の `|d(alt)/dt| < ~0.02 m/s` = ホバー
    （engage 失敗なら +0.5 m/s 上昇が見える）。
-3. **duty 有界**: `duty_FR/RR/RL/FL` が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（暴走無し = E3 の退行確認）。
+3. **duty 有界**: `duty_FR/RR/RL/FL` が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（暴走無し = E3 の再確認試験〈変更で既存の動作が壊れていないかを自動で確かめる試験〉）。
 4. **姿勢安定**: roll/pitch ~0（`truth.csv` のクォータニオンから算出、ラジアン）。
 
 **コンソール判定（`hover_alt.expect`, hover_espnow.expect と同形式）**:

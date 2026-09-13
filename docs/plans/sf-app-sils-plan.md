@@ -50,7 +50,7 @@
 |------|------|------|
 | `sf app` の実体 | `firmware/vehicle/examples/<N>` を `firmware/apps/<name>` に複製し、`EXTRA_COMPONENT_DIRS` を `../../vehicle/components` に向け直すだけ。`build` / `flash` は `sf build apps/<name>` / `sf flash apps/<name>` への委譲。SILS には触れない | `lib/sfcli/commands/app.py:238-268, 397-425` |
 | 09_topic_api_hello | vehicle のタスクを起動せず、`internal_sensor_feed.cpp` が自前で BMI270 を読み相補フィルタで `estimate_state` を publish する独立プロジェクト（README で「L2 の下ごしらえ」と明記） | `firmware/vehicle/examples/09_topic_api_hello/main/main.cpp:75-131` |
-| 10_custom_controller | `LearnerController` は `IController` を実装しているが、`main.cpp` は合成サイン波に対して単体で回すベンチ。README §8 が「実機で飛ばすレシピ」として、新コンポーネント化 → `main/CMakeLists.txt` の `REQUIRES` 追加 → `control_task.cpp` に include 追加 → 63 行目を `static sf::LearnerController controller;` に書き換え → `sf build vehicle` と SILS 退行確認、を**手作業**で示す | `firmware/vehicle/examples/10_custom_controller/README.md`（§2、§8） |
+| 10_custom_controller | `LearnerController` は `IController` を実装しているが、`main.cpp` は合成サイン波に対して単体で回すベンチ。README §8 が「実機で飛ばすレシピ」として、新コンポーネント化 → `main/CMakeLists.txt` の `REQUIRES` 追加 → `control_task.cpp` に include 追加 → 63 行目を `static sf::LearnerController controller;` に書き換え → `sf build vehicle` と SILS 再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）、を**手作業**で示す | `firmware/vehicle/examples/10_custom_controller/README.md`（§2、§8） |
 | 設計原則との関係 | 例題集は「単独でビルド・実行可能（vehicle 全体のビルド不要）」を設計原則としており、計画中の L1 例題（`11_pid_single_axis` 〜 `20_pubsub_basics`）も同じ単独ベンチ路線の見積りになっている。vehicle 組み込みを前提とした例題計画は無い | `firmware/vehicle/docs/coding_and_education.md:218-227, 254-284` |
 | 廃止された先行例 | `firmware/my_drone`（2026-03 最終更新）は vehicle のタスクを共有するユーザーファームを試みた形跡があるが、参照するコンポーネント名が現行と異なり、現状はビルドできない可能性が高い（推測） | `firmware/my_drone/main/CMakeLists.txt` |
 
@@ -134,7 +134,7 @@ sf app sils my_ctrl
 | 基準 | 内容 |
 |------|------|
 | 同一ソース | `sf app build` と `sf app sils` が `firmware/apps/my_ctrl/*.cpp` を vehicle 本体の main コンポーネントに組み込む |
-| 既定挙動の維持 | app 無しの vehicle（既定実装）は現行と同じバイナリ挙動。SILS 回帰（vehicle / vehicle_old / workshop）に退行が無い |
+| 既定挙動の維持 | app 無しの vehicle（既定実装）は現行と同じバイナリ挙動。SILS 回帰（vehicle / vehicle_old / workshop）に既存動作の破壊が無い |
 | 合格基準 | 既定テンプレート（PID と同等の `IController`）で既存シナリオ `alt_flight`・`acro_flight` が PASS する |
 | 分離 | app ごとに実機・SILS のビルド成果物が分かれ、app の切替でキャッシュ汚染が起きない |
 | 3 OS | Windows（CMD）/ macOS / Ubuntu で同じコマンドが通る（パスに空白を含む場合を含む） |
@@ -157,7 +157,7 @@ sf app sils my_ctrl
 | 呼び出し側 | `tasks/control_task.cpp`、`tasks/imu_task.cpp`、`main/main.cpp` | 63 行目と `createEstimator()` をフック呼び出しに置き換え、起動フェーズ末尾で `sf::app::start()` |
 | 実機ビルド | `firmware/vehicle/main/CMakeLists.txt` | `SF_APP_DIR` が与えられたら `${SF_APP_DIR}/*.cpp` を `SRCS` に、ディレクトリを `INCLUDE_DIRS` に加え、`app_default.cpp` を外す |
 | SILS ビルド | `simulator/sils/CMakeLists.txt` | `emu_vehicle` に同じ変数で同じ差し替え（`app_default.cpp` を `EXCLUDE REGEX`、`${SF_APP_DIR}/*.cpp` を追加）。`emu_workshop` は影響を受けないことを確認 |
-| 退行確認 | SILS 回帰全件 | app 無しで A/B 比較し退行ゼロ。`sf params check` も通す |
+| 再確認試験 | SILS 回帰全件 | app 無しで A/B 比較し既存動作の破壊ゼロ。`sf params check` も通す |
 
 ### Phase 2: テンプレートと sf CLI（1.5〜2 日）（完了）
 

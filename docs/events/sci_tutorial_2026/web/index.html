@@ -124,7 +124,7 @@ install.bat
 <section class="slide content" id="s-023" data-title="提供: SILS の仕組み — 実機のファームを PC で走らせる" data-session="S1"><header class="slide-header"><h2>提供: SILS の仕組み — 実機のファームを PC で走らせる</h2></header><div class="slide-body"><div class="columns"><div class="column" style="flex:0.52 1 0"><ul class="fs-scriptsize"><li> <strong>ファームは無改変</strong>: 実機に書き込む vehicle のソースをそのまま PC 向けにコンパイル（状態機械・フェイルセーフも含む）
         </li><li> <strong>OS の代わり</strong>: 仮想時計で動く決定論的な疑似 RTOS と ESP-IDF 互換スタブ。同じ入力なら毎回同じ結果
         </li><li> <strong>制御対象</strong>: MuJoCo（6 自由度）＋自作のモータ・センサ・風モデル。400 Hz でファームと歩調を合わせる
-        </li><li> <strong>試験の与え方</strong>: シナリオ <code class="tex-code">.scn</code> に操縦・外乱・故障を時系列で書き、<code class="tex-code">.expect</code> で PASS / FAIL を自動判定。CI で退行を検出
+        </li><li> <strong>試験の与え方</strong>: シナリオ <code class="tex-code">.scn</code> に操縦・外乱・故障を時系列で書き、<code class="tex-code">.expect</code> で PASS / FAIL を自動判定。CI で既存動作の破壊を検出
         </li><li> <strong>実習コードも同じ土俵</strong>: 参加者の <code class="tex-code">user_code.cpp</code> も同じ仕組みで飛ぶ（実習 8 (2/2)）
         </li><li> できないこと: 複数タスクの競合、実際の WiFi / ESP-NOW の電波
       </li></ul></div><div class="column" style="flex:0.46 1 0"><div class="align-center"><div class="figure"><img src="assets/tikz/sci_s1_overview_inline_tikz_1.svg" alt=""></div></div></div></div></div><footer class="slide-footer"><span class="footer-session">Session 1: 全体像と設計思想</span><span class="footer-title">StampFly Ecosystem</span><span class="footer-page">23 / 160</span></footer></section>

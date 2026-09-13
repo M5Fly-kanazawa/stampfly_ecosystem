@@ -70,7 +70,7 @@ constexpr float kGroundZ = 0.013f;   // body rest height on the ground (ENU up)
 // P6 stage 1（キーボード操縦SILS）: ~30Hzで状態行を1行出力（realtimeモード限定 —
 // バッチ実行だと誰も読まない行でstdoutが埋まる。*.scn の `.expect` はログ内容で
 // 判定するがこのprefixは探さないのでどちらでも無害。realtime限定にすることで
-// 通常/退行テストのコンソール出力を本機能追加前と完全に同じに保つ）。
+// 通常/再確認試験のコンソール出力を本機能追加前と完全に同じに保つ）。
 // 実ファーム自身が発行する推定/モード/電源トピックを読む — `sf sils fly` の HUD や
 // 実テレメトリクライアントが見るのと同じ数値。
 void print_state_line_if_due(int64_t now_us)

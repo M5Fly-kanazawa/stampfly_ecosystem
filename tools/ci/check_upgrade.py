@@ -318,8 +318,8 @@ def check_clean_fast_forward(tmp_root: Path) -> None:
     # `git log` の出力を捕捉するが、UTF-8 でなくコンソールロケールでデコード
     # すると日本語 Windows（cp932、2026-07-19）でまさにこのバイト列で落ちた。
     # これにより修正（_run_git の encoding="utf-8" 明示）が Windows CI レッグを
-    # 含む全プラットフォームで退行テストされ続ける。
-    _push_upstream_change(seed_dir, mutate, "v2: upstream readme update — 日本語コミット題名の退行テスト")
+    # 含む全プラットフォームで再確認試験され続ける。
+    _push_upstream_change(seed_dir, mutate, "v2: upstream readme update — 日本語コミット題名の再確認試験")
 
     result = _run_upgrade(clone_dir, ["--yes"])
     assert result.returncode == 0, (

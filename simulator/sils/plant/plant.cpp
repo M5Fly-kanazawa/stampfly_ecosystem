@@ -642,7 +642,7 @@ void Plant::substep(float h)
     // 既定値(1.0)での厳密バイパス: mean_thrust+/-(thrust[i]-mean_thrust) は「数学的には」
     // thrust[i] と等しいだけ — float では加減乗算の連鎖による新たな丸めが入るため最下位
     // ビットで thrust[i] と異なりうる。そのULPノイズは長時間の閉ループ実行で軌跡の巨視的な
-    // 差に増幅する（2026-08-02 のバイト一致退行チェックで発見 — ロール/ピッチ差動が非ゼロな
+    // 差に増幅する（2026-08-02 のバイト一致再確認試験で発見 — ロール/ピッチ差動が非ゼロな
     // pos_roll/pos_pitch/pos_reposition で発生、対称な hover_alt は無影響）。よって上の
     // delay_n_==0 と同様、既定値では算術を一切行わず thrust[i] をそのまま書く明示分岐にする。
     if (cfg_.torque_authority == 1.0f) {

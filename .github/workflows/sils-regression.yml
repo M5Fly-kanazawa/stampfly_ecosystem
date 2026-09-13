@@ -2,7 +2,7 @@
 # change that could affect vehicle behavior, so the PASS documented in
 # docs/contributing/release-workflow.md / TEST_MATRIX.md is verified by CI
 # instead of relying on a developer's local machine.
-# vehicle の挙動に影響しうる変更のたびに SILS の *.scn シナリオ退行スイートを
+# vehicle の挙動に影響しうる変更のたびに SILS の *.scn シナリオ再確認試験一式を
 # 実行する。docs/contributing/release-workflow.md / TEST_MATRIX.md が記す PASS を
 # 開発者のローカル環境任せにせず CI で検証する。
 #
@@ -140,7 +140,7 @@ jobs:
         # from the same stale generated module), just not with the YAML.
         #
         # `sf sils regression`（lib/sfcli/commands/sils.py の run_regression）は
-        # 同じ検査を自身の最初のステップとして既に実行し、不合格なら退行全体を
+        # 同じ検査を自身の最初のステップとして既に実行し、不合格なら再確認試験全体を
         # 失敗させる — 本ステップはそれを早期化する重複ステップ: 手動複製
         # パラメータの食い違い（tools/params_audit — C_T/C_Q/kappa/慣性等を
         # ファーム/SILS/シミュレータへ手書きコピー）を、下の MuJoCo FetchContent
@@ -240,7 +240,7 @@ jobs:
         # (if: always()) so a FAILing run still shows which scenario(s) broke.
         # `sf sils regression` は .expect を伴う全 *.scn（2026-07時点で32本）を
         # 各自のヘッダ宣言どおりに実行し、1つでも FAIL すれば非0で終了する —
-        # 実際の退行があればジョブは赤くなる。--json-out は下のジョブサマリ
+        # 実際に既存動作の破壊があればジョブは赤くなる。--json-out は下のジョブサマリ
         # ステップへ渡す。サマリステップは常時実行（if: always()）のため、
         # FAIL 時もどのシナリオが壊れたか表示される。
         run: sf sils regression --json-out simulator/sils/viz/sils_regression_results.json
@@ -273,7 +273,7 @@ jobs:
         # still shows which scenario(s) broke (see the script's own docstring for
         # why this is a standalone tools/ci/ script rather than a `sf` subcommand).
         # simulator/sils/viz/sils_regression_results.json をジョブサマリの表として
-        # 描画する。常時実行のため退行ステップが FAIL してもどのシナリオが
+        # 描画する。常時実行のため再確認試験ステップが FAIL してもどのシナリオが
         # 壊れたか表示される（`sf` サブコマンドでなく単体スクリプトにした理由は
         # スクリプト自身の docstring 参照）。
         run: python tools/ci/render_sils_summary.py simulator/sils/viz/sils_regression_results.json

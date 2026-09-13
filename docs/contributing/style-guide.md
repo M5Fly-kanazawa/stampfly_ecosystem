@@ -7,6 +7,8 @@
 このドキュメントは、StampFly Ecosystem プロジェクトにおけるドキュメント作成のスタイルガイドです。
 プロジェクト参加者は、このガイドに従ってドキュメントを作成してください。
 
+**言葉遣い（言い換え・禁止語・訳語）については [`terminology.md`](terminology.md) が正本です。** 本ガイドは見出し・表・コードブロック等の様式（フォーマット）を扱い、どの語を使う・使わないかは扱いません。
+
 ### 見本ドキュメント
 
 以下のドキュメントがスタイルの見本です：
@@ -235,6 +237,8 @@ pwm_set_frequency(20000);
 
 This document is the style guide for documentation in the StampFly Ecosystem project.
 All project participants should follow this guide when creating documentation.
+
+**For word choice (phrasing, banned terms, translation conventions), [`terminology.md`](terminology.md) is the source of truth.** This guide covers formatting (headings, tables, code blocks, etc.), not which words to use.
 
 ### Reference Documents
 

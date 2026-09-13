@@ -287,7 +287,7 @@ Stream の電文定義も `protocol/spec/` には無く、
 `ctrl_output.csv` `ctrl_ref.csv` `status.csv`（発行トピックから）、`truth.csv`（MuJoCo）、
 `events.csv`（シナリオ入力）。現行の `trajectory.csv`（20 列、`sf sils` の `.expect` 合否
 判定・GUI・動画化が使う）と `emu_rate_stream.cpp` の CSV は、消費側を一式へ移した時点で
-廃止する。合格基準は「SILS 退行試験 34 本が全て通る」「ロールステップシナリオの一式で
+廃止する。合格基準は「SILS 再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）34 本が全て通る」「ロールステップシナリオの一式で
 `sf sysid fit` が動き、同定値が設定した物理パラメータと一致する」こと。
 
 ### 3.4 削除する旧ファーム系コード
@@ -327,7 +327,7 @@ Stream の電文定義も `protocol/spec/` には無く、
 **進捗（2026-09-11 時点、ブランチ `feature/flight-log-bundle`）:** Phase 0 = d85b7971、Phase 1 = c9f5ac1b、
 Phase 2a（sysid/trim/cal plot/教育パッケージ）= 968a8bbd、基準一式 `analysis/datasets/flightlog/` = 870c8460、
 Phase 2b（`sf log viz`/`analyze`/`--health`・旧描画コード削除、§3.2・§3.4）= e46817d2、
-Phase 3（SILS・`sf sim headless`・SILS 退行試験 34 本 = 28 PASS + 5 既知の失敗 + 1 SKIP、§3.3）= 60a421b1、
+Phase 3（SILS・`sf sim headless`・SILS 再確認試験 34 本 = 28 PASS + 5 既知の失敗 + 1 SKIP、§3.3）= 60a421b1、
 Phase 4（文書、§6）= 本コミット。Phase 3 で判明した仕様の穴として、必須ストリームを取得元別にした
 （`required_streams`: vehicle = imu、sils = imu + truth、sim = truth。§2.2 の補足）。
 **未了:** (1) ~~実機での `sf log wifi -d 30` → `sf log viz` の確認~~ 2026-09-12 実機で確認済み（`check`/`analyze` の結果は未報告）、
@@ -342,7 +342,7 @@ Genesis 未導入のため未検証。
 | 0 仕様と共通処理 | `flight_log.yaml`、生成スクリプト、`lib/sflog`（読み書き・整列・検査・変換）、単体テスト | 単体テストが通る。`logs/` の既存 JSONL を変換した一式が `check` を通り、整列表が現行 35 列の整列 CSV と数値一致する | 1 |
 | 1 書き出し側 | `udp_capture.py`、`sf log wifi/list/info/check/convert` | 変換した一式で `list/info/check` が動く。**実機 30 秒取得は次回の実機セッションで確認（本セッションでは未検証）** | 1 |
 | 2 読み込み側と整理 | §3.2 の全ツール、§3.4 の削除 | 基準一式を全コマンドが読める。`sf sysid fit --selftest` と参照同定値に変化なし（既存動作維持） | 2（対応、削除） |
-| 3 SILS・シミュレータ | §3.3、`sf sim headless`、SILS 合否判定・GUI・動画 | SILS 退行試験が全て通る。ロールステップの一式で `sf sysid fit` が動く | 1〜2 |
+| 3 SILS・シミュレータ | §3.3、`sf sim headless`、SILS 合否判定・GUI・動画 | SILS 再確認試験が全て通る。ロールステップの一式で `sf sysid fit` が動く | 1〜2 |
 | 4 文書 | §6 の全文書、SCI 資料と Docswell 再アップロード、メモリ更新 | 文書内の `sf log wifi` 例が全て一式前提で一貫 | 1 |
 
 ## 6. 影響を受ける文書

@@ -63,7 +63,7 @@ jobs:
           # omitting the flasher page entirely if the tag predates it).
           # サイトは常に main の最新から組み立てる。ref 指定がないと release
           # 発行イベント時はリリースタグのコミットが checkout され、landing/ と
-          # ドキュメントが古い内容へ退行する（タグがフラッシャページ追加より
+          # ドキュメントが古い内容に戻ってしまう（タグがフラッシャページ追加より
           # 古い場合はページ自体が欠落する）。
           ref: main
 

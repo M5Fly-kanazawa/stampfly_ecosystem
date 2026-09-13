@@ -18,8 +18,6 @@ watch:
   - ../analysis
   - ../tools
   - ../simulator
-  - ../ros
-  - ../examples
   - ../README.md
   - ../PROJECT_PLAN.md
 
@@ -176,6 +174,7 @@ nav:
         - コマンド・API 早見表: docs/events/sci_tutorial_2026/cheatsheet.md
     - 開発ガイドライン:
       - スタイルガイド: docs/contributing/style-guide.md
+      - 用語・言い換え辞書: docs/contributing/terminology.md
       - コミット規約: docs/contributing/commit-guidelines.md
       - バージョニングとリリース: docs/contributing/versioning.md
       - 更新からリリースまでの手順: docs/contributing/release-workflow.md

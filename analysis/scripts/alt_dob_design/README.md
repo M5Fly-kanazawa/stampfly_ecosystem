@@ -6,7 +6,7 @@
 > 同ログでのfc/クランプ再調整掃引に現行超えなし。カクカク感の実体は設計どおりの推力変調
 > （2.27倍、飛行経路自体は基準より滑らか）。パイロット判断により **fc=1.5Hz を
 > `altitude.dob.fc` のコンパイル既定に昇格**（ロール再調整・ヨーκ修正の前例に倣う。
-> フルSILSスイートはDOB既定有効で31/39=既知8failと同一・退行ゼロ）。`param set
+> フルSILSスイートはDOB既定有効で31/39=既知8failと同一・既存動作の破壊なし）。`param set
 > altitude.dob.fc 0` で機体別・飛行中とも無効化可能。会場級環境は実飛行未検証（異常時は
 > 0へ）。時刻基準の訂正込みの詳細は `ab20260718_results.json` と flight_ab_20260718.py。
 
@@ -249,7 +249,7 @@ $-\hat d$（PI出力クリップの後段=シムと同構造）。
 specific_force`（ESKFが `accel_raw − ba` で公開。相補フィルタ推定器は非対応=ゼロのため
 f_up妥当性ガード＜2 m/s² でDOBは自動no-op）。**エンゲージ整形3段**（§4-6: 0.25s平均
 プライム→高速整定ウォッシュアウト→2s適用ランプ）を含む。検証: sf build vehicle OK、
-SILS既定OFF=31/39（既知8failと同一・無退行）、**DOB有効(fc=1.5)でも高度・位置全ゲート
+SILS既定OFF=31/39（既知8failと同一・既存動作の破壊なし）、**DOB有効(fc=1.5)でも高度・位置全ゲート
 PASS**（alt_flight/alt_auto_takeoff/pos_flight/alt_inflight_switch/alt_double_takeoff/
 alt_disarm_land/pos_auto_takeoff/disturb/hover_alt）、ホストテスト32/32。
 
