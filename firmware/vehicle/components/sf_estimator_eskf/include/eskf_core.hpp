@@ -76,7 +76,7 @@ struct EskfConfig {
     float gravity          = math::kGravity;  // [m/s²] (SSOT: sf::math)
     Vec3 mag_ref           = {20.0f, 0.0f, 40.0f};  // NED [uT]
 
-    // Gates / ゲート閾値
+    // Gates / 判定しきい値
     float tof_innov_gate   = 0.5f;        // [m] absolute
     float baro_innov_gate  = 0.5f;        // [m] absolute
     float mag_chi2_gate    = 7.81f;       // χ²(3, 0.95)
@@ -132,7 +132,7 @@ struct EskfConfig {
     // estimate a_kin from the OPTICAL-FLOW velocity (independent of attitude-from-accel) with
     // an α-β tracker, and updateAccelAttitude predicts f = g_expected + R^T·a_kin so the
     // residual is the TRUE attitude error. SILS Layer-4: all of roll/pitch/diagonal/yaw hold
-    // (clean + N0). 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は比力 f=a_kin−g を
+    // (clean + N0). 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は f=a_kin−g（加速度計の測定値）を
     // 測り、素の更新は a_kin=0 を仮定するので水平マニューバ中に a_kin を傾きと誤認し推定が
     // 「見かけの重力」角 atan(a/g) に張付き POS_HOLD が飛び去る。a_kin を（姿勢-加速度と独立な）
     // オプティカルフロー速度から α-β トラッカで推定し、updateAccelAttitude が
@@ -287,7 +287,7 @@ private:
     // It is NOT touched by setConfig()/reloadParams(), so live tuning or
     // re-calibration cannot silently re-admit an uncalibrated mag (code_review
     // L-5). updateMag fuses only when (cfg_.use_mag && mag_calib_gate_).
-    // 磁気校正ゲート。param 由来の cfg_.use_mag とは独立。起動磁気ポリシー(ImuTask)が
+    // 磁気校正判定。param 由来の cfg_.use_mag とは独立。起動磁気ポリシー(ImuTask)が
     // 未校正時にこれを下ろし、eskf.use_mag に関わらずハードアイアンがヨーを汚染しない
     // ようにする。setConfig()/reloadParams() では触らないので、ライブチューニングや再校正で
     // 未校正磁気が黙って復帰しない (L-5)。updateMag は (cfg_.use_mag && mag_calib_gate_)
@@ -298,7 +298,7 @@ private:
     // flow_vel_lpf_ = filtered velocity state, a_kin_ned_ = the horizontal NED kinematic
     // acceleration that updateAccelAttitude subtracts from the specific force.
     // 運動加速度補償の状態（フロー速度の α-β トラッカ）。flow_vel_lpf_=濾波速度状態、
-    // a_kin_ned_=updateAccelAttitude が比力から差し引く水平 NED 運動加速度。
+    // a_kin_ned_=updateAccelAttitude が加速度計の測定値から差し引く水平 NED 運動加速度。
     Vec3  flow_vel_lpf_  = {0, 0, 0};   // α-β velocity state / α-β 速度状態
     Vec3  a_kin_ned_     = {0, 0, 0};   // α-β acceleration state (a_kin, NED) / α-β 加速度状態
     bool  have_flow_vel_ = false;

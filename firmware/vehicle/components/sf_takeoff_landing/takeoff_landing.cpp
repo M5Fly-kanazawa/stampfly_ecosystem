@@ -158,8 +158,8 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
     // 2つの独立した接地経路。各々が持続レベル条件。landing_detected_ はレベルフラグ。
     //   (1) 確実な接地: ToF が <5cm を確認（on_ground_）＋静止を landing_hold_ms 持続。
     //   (2) 降下停滞: 着陸降下が指令＋ToF が near_ground_tof_m 以内＋静止を stall_hold_ms 持続。
-    //       地面効果フロート（低推力で高度保持、5cm に届かず (1) が発火しない）を捕捉。
-    //       in_landing_descent でゲートし、意図的な低ホバーは着陸でない（停滞降下のみ着陸）。
+    //       地面効果フロート（低推力で高度保持、5cm に届かず (1) が成立しない）を捕捉。
+    //       in_landing_descent で判定し、意図的な低ホバーは着陸でない（停滞降下のみ着陸）。
     bool firm = false;
     if (on_ground_ && at_rest) {
         if (landing_start_ms_ == 0) landing_start_ms_ = now_ms;

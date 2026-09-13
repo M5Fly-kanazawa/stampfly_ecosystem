@@ -6,7 +6,7 @@
 #
 # pairing_held.expect — 手持ち（IDLE_HELD）中のペアリング突入/バインドと、手持ち中
 # ずっと ARM が拒否され続けることを検証。--unpaired 必須。本シナリオが何を検証し
-# 何を検証しないか（requestPairing() の新旧ゲートの判別試験ではない）は
+# 何を検証しないか（requestPairing() の新旧判定の判別試験ではない）は
 # pairing_held.scn 冒頭のスコープ注記を参照。
 exit 0
 log_contains any "Pairing started"                      # unpaired boot -> StateManager auto-enters Pairing

@@ -204,7 +204,7 @@ static void applyMagBootPolicy(const sf::MagData& mag)
         // Drop the calibration gate (group 2). It is independent of eskf.use_mag
         // and survives reloadParams, so live tuning/recalibration cannot silently
         // re-admit an uncalibrated mag (L-5).
-        // 校正ゲート(group 2)を下ろす。eskf.use_mag と独立で reloadParams を生き延びる
+        // 校正判定(group 2)を下ろす。eskf.use_mag と独立で reloadParams を生き延びる
         // ため、ライブチューニング/再校正で未校正磁気が黙って復帰しない (L-5)。
         g_estimator->setSensorEnabled(2 /*MAG calib gate*/, false);
         ESP_LOGW(TAG, "Mag uncalibrated — yaw aiding disabled (run 'magcal')");
@@ -213,7 +213,7 @@ static void applyMagBootPolicy(const sf::MagData& mag)
 
     // Calibrated: raise the calibration gate (it may have been dropped on a prior
     // boot/recal when the mag was still uncalibrated). Mag still fuses only when
-    // eskf.use_mag is also set. / 校正済み: 校正ゲートを上げる（以前の起動/再校正で
+    // eskf.use_mag is also set. / 校正済み: 校正判定を上げる（以前の起動/再校正で
     // 未校正だったとき下りている可能性）。融合は eskf.use_mag も成立時のみ。
     g_estimator->setSensorEnabled(2 /*MAG calib gate*/, true);
 
@@ -327,7 +327,7 @@ static void processAsyncSensors()
 /// 鉛直の接地→空中ハンドオフ — 接地中は鉛直推定を錨で固定し、離陸で ToF に渡す
 /// （鉛直は ToF のみ、baro なし）。接地中は唯一の鉛直観測 ToF が最小レンジ未満で無効
 /// ゆえ、錨が無いと予測のみの鉛直状態がドリフトし（残差 vel_z が pos_z ランプに積分）、
-/// 離陸時には ToF innovation ゲートを超えて最初の空中 ToF が棄却され回復不能になる
+/// 離陸時には ToF innovation 判定を超えて最初の空中 ToF が棄却され回復不能になる
 /// （ALT_HOLD が発散した高度を追う）。接地中 pos/vel をゼロ保持でドリフトを殺し、
 /// 接地→空中エッジで reset すれば ToF がクリーンにロックする。実証済みの
 /// firmware/vehicle と同じ。predict + ToF 更新の後に実行（hold がドリフトを上書き）。
@@ -346,8 +346,8 @@ static void applyVerticalGroundHandoff()
     // vertical handoff (a one-shot reset at the airborne edge + the on-ground hold) stays
     // here in estimation where the ToF event is observed directly.
     // 鉛直の接地→空中ハンドオフ — ToF センサと密結合で、ToF が空中を検知した瞬間（1サイクル
-    // 精度のイベント）に発火する必要がある estimation 内部の関心事ゆえ ImuTask が所有する。
-    // onEnter(FLYING) 遷移コールバックに移さない: それは ~20ms 遅れて発火し（system_status.
+    // 精度のイベント）に作動する必要がある estimation 内部の関心事ゆえ ImuTask が所有する。
+    // onEnter(FLYING) 遷移コールバックに移さない: それは ~20ms 遅れて作動し（system_status.
     // airborne 後の StateTask の RC ポーリングティック）、α-β 運動加速度補償トラッカは 20ms
     // 遅れの pos/vel reset で POS_HOLD 姿勢が測定可能なほど劣化するほど敏感（pos_flight/
     // pos_yaw の att_rmse）。よって状態機械は CONTROLLER リセットと ESKF full-state reset を
@@ -404,7 +404,7 @@ static float    g_applied_accel_bias[3] = {0, 0, 0};
 /// controller capturing its target altitude (controller_status.takeoff_reached), so the
 /// ToF airborne edge there serves the ESKF vertical handoff alone (applyVerticalGroundHandoff,
 /// above). Called every cycle from the loop so `airborne` tracks continuously.
-/// 起動/システム準備状態をトピックで発行し、他タスクがゲートできるようにする（R16 流、
+/// 起動/システム準備状態をトピックで発行し、他タスクが判定できるようにする（R16 流、
 /// クロスタスクのオブジェクトでなく）: requestArm() は calibrated を読む。StateTask は
 /// airborne（ToF 離陸検出）を読み「手動」離陸（ACRO/STABILIZE）の TAKEOFF→FLYING を駆動する
 /// — ALT/POS 自動離陸は制御器の目標高度捕捉（controller_status.takeoff_reached）で完了するため、
@@ -446,7 +446,7 @@ static void startBootCalibration()
 
     // Stillness gate (config.hpp is the SSOT; sf_calibration is a leaf component
     // that cannot include it, so the thresholds are passed in here).
-    // 静止ゲート（SSOT は config.hpp。sf_calibration は leaf コンポーネントで include
+    // 静止判定（SSOT は config.hpp。sf_calibration は leaf コンポーネントで include
     // できないため、ここで閾値を渡す）。
     sf::StillnessConfig still{};
     still.gyro_max       = config::CALIB_STILL_GYRO_MAX;
@@ -879,7 +879,7 @@ void ImuTask(void* pvParameters)
         // ready to arm), fire NotifyEvent::Ready once. NotifyTask plays the 3-beep
         // readyTone (legacy vehicle's Phase-3 chime). One-shot via the edge latch.
         // 起動完了音: 校正の false→true エッジ（起動バイアス完了→ARM 可能）で NotifyEvent::Ready
-        // を1回発火。NotifyTask が 3連ビープ readyTone（旧 vehicle の Phase3 音）を鳴らす。
+        // を1回作動。NotifyTask が 3連ビープ readyTone（旧 vehicle の Phase3 音）を鳴らす。
         static bool s_prev_calibrated = false;
         if (g_calibrated && !s_prev_calibrated) {
             sf::notify_command.publish(

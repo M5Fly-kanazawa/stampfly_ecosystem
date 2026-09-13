@@ -74,7 +74,7 @@ struct TuneResult {
     // so a GM lower-bound gate must PASS this case rather than reject it (L-15).
     // −180° 位相交差が見つかり gm_db が有限で意味のあるゲイン余裕のとき true。
     // false は掃引中に開ループが −180° に達しないこと（gm_db は 0dB ではなく余裕は
-    // 実質無限大＝安全）を意味し、GM 下限ゲートはこのケースを棄却でなく PASS させる (L-15)。
+    // 実質無限大＝安全）を意味し、GM 下限判定はこのケースを棄却でなく PASS させる (L-15)。
     bool  gm_valid;
 };
 

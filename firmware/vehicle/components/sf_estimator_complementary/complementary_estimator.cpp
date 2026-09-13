@@ -142,7 +142,7 @@ void ComplementaryEstimator::predict(const ImuData& imu, float dt)
     // inertial acceleration, integrate up-positive into velocity then altitude. The
     // baro corrects the inevitable drift in updateBaro (complementary blend).
     // At rest accel ≈ [0,0,−g] (FRD), so a_world ≈ 0 and the integrator stays put.
-    // 鉛直チャネル: 機体比力を NED に回し重力を足して慣性加速度を得て、上正で速度→高度へ
+    // 鉛直チャネル: 機体の加速度計測定値を NED に回し重力を足して慣性加速度を得て、上正で速度→高度へ
     // 積分する。ドリフトは updateBaro が気圧で補正（相補ブレンド）。静止時 accel≈[0,0,−g]
     // なので a_world≈0 で積分器は動かない。
     Vec3 a_world = q_.rotate(accel);

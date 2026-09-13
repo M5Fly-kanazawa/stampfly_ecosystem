@@ -13,7 +13,7 @@
 # （真値 alt 有界・ESKF est が真値追従）は実行結果のフライトログ一式（truth.csv/attitude.csv 等）で数値確認する（expect は
 # ログのみ）。実測(P8 Phase B, 旧プラント): ~0.86m 保持、est 追従 平均1.2cm/最大6.8cm、
 # 地上・着地後の発散なし。2026-07-26 更新: 新プラント+再校正raw（alt_flight.scn参照）では
-# ハンドオフ後の過渡が大きくなる（有界・減衰 — 下の数値ゲート注記参照）が t≈15 で ~0.60m
+# ハンドオフ後の過渡が大きくなる（有界・減衰 — 下の数値判定の注記参照）が t≈15 で ~0.60m
 # 保持に収束、est rmse≈0.02m。
 exit 0
 log_contains any "ARM accepted"                          # IDLE_GROUND → ARMED_GROUND
@@ -44,7 +44,7 @@ order "Mode change: STABILIZE → ALT_HOLD" "DISARM accepted"            # holds
 # 1150-1700msの掃引全域で一貫しており、特定のドウェル選択のアーティファクトではない。閾値
 # 0.35 を緩めるのでなく、過渡収束後（開始=ハンドオフ+4.7s、終了オフセットは変更前と同一=+11.5s）
 # へ窓をシフト。この窓で alt_band=0.21（40%マージン）— 元の数値の厳しさを保ったままの
-# 定常保持ゲート。
+# 定常保持の判定。
 metric alt_rmse < 0.08 in 11.0 17.8   # G2: ESKF altitude tracks truth
 metric alt_band < 0.35 in 11.0 17.8   # G3: altitude held (peak-to-peak bounded), post-transient
 metric duty_max < 0.92 in 11.0 17.8   # G4: motors not saturated

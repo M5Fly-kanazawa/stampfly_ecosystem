@@ -53,7 +53,7 @@ static EskfConfig loadConfigFromParams()
     params::get_float("eskf.gate.flow_clamp", cfg.flow_innov_clamp);
     {
         // Flow surface-quality gate (uint8 SQUAL stored as INT param). Clamp into
-        // the byte range before narrowing (L-1). / フロー表面品質ゲート（uint8 SQUAL を
+        // the byte range before narrowing (L-1). / フロー表面品質判定（uint8 SQUAL を
         // INT param で保持）。バイト範囲にクランプしてから縮小 (L-1)。
         int32_t squal = cfg.flow_min_squal;
         params::get_int("eskf.gate.flow_squal", squal);
@@ -303,7 +303,7 @@ StateEstimate EskfEstimator::convertState(uint32_t timestamp, const math::Vec3& 
     // per analysis/scripts/alt_dob_design/README.md §1 "重要な訂正" — the
     // altitude DOB consumer needs the corrected value, so publish it here as
     // an estimation artifact rather than re-deriving it downstream).
-    // 比力 = 生加速度 - バイアス（テレメトリの imu.accel は未補正。
+    // 加速度計の測定値 = 生加速度 - バイアス（テレメトリの imu.accel は未補正。
     // README §1「重要な訂正」参照。高度DOB側で再導出させず、ここで推定
     // 成果物として公開する）。
     const math::Vec3 sf_body = accel_raw - ab;

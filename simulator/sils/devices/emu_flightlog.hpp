@@ -13,8 +13,8 @@
  *        reads.
  *        エミュレータ実行を「StampFly フライトログ v1 一式」の CSV 群として書き出す、
  *        ファーム非依存のレコーダ。emu_trajectory.cpp（レビュー動画）と
- *        emu_rate_stream.cpp（モデル一致ゲート）を置き換える — どちらも、全ての
- *        消費側（可視化・同定・ゲート・動画）が今後読む汎用一式に統合される。
+ *        emu_rate_stream.cpp（モデル一致の合否判定）を置き換える — どちらも、全ての
+ *        消費側（可視化・同定・判定・動画）が今後読む汎用一式に統合される。
  *
  * Format: protocol/spec/flight_log.yaml (SSOT) / 決定文書:
  * docs/plans/flight-log-format-plan.md §3.3.

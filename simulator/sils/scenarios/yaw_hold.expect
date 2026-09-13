@@ -10,7 +10,7 @@
 # disabled (attitude.yawhold.kp=0 control run, 2026-06-11) — the 1.5° bound
 # separates the two by ~2.5× in both directions.
 #
-# yaw_hold.expect — 定在ヨー外乱下のヘディングホールドゲート。本命は故障窓の
+# yaw_hold.expect — 定在ヨー外乱下のヘディングホールド判定。本命は故障窓の
 # yaw_band: ホールド有り実測 0.60°（目標へ戻る）に対し、無効化対照実験
 # （attitude.yawhold.kp=0）では 3.06° かつ単調に流れ続ける。1.5° の境界は両側に
 # 約 2.5 倍の判別幅を持つ。
@@ -22,7 +22,7 @@
 # 4-parameter fit) / #12 (firmware yaw torque-authority headroom).
 # XFAIL（既知課題・追跡中 2026-07-26）: ODEモータプラント下での yaw_band 劣化 —
 # pos_flight/pos_yaw と同根（ヨー軸忠実度のギャップ。ODE化で反トルク零点を再現した
-# ことが旧・静的曲線には無かった）。simulation-policy.md バックログ#11（ヨーゲート
+# ことが旧・静的曲線には無かった）。simulation-policy.md バックログ#11（ヨー判定の
 # 4パラフィット化）/#12（ファームヨートルク権限余裕）参照。
 xfail: yaw-band degradation under the ODE motor plant, same root cause as pos_flight/pos_yaw (yaw-axis fidelity gap, simulation-policy backlog #11/#12)
 exit 0

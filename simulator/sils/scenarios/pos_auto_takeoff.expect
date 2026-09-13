@@ -1,5 +1,5 @@
 # pos_auto_takeoff.expect — POS_HOLD ARM-triggered auto-takeoff gates (redesign 2026-06-14)
-# POS_HOLD の ARM トリガ自動離陸ゲート
+# POS_HOLD の ARM トリガ自動離陸判定
 #
 # Same chain as alt_auto_takeoff plus the horizontal contract: ARM triggers the auto-
 # takeoff (props stopped through the spool dwell), the climb captures the 0.5 m TARGET,

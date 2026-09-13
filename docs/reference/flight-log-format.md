@@ -4,7 +4,7 @@
 
 <!-- GENERATED FILE - do not edit; run protocol/tools/gen_flight_log.py
 生成ファイル - 手で編集しないこと。protocol/tools/gen_flight_log.py を実行して再生成する。 -->
-<!-- Source of truth / 正本: protocol/spec/flight_log.yaml -->
+<!-- Source of truth / 基準: protocol/spec/flight_log.yaml -->
 
 ## 1. 概要
 

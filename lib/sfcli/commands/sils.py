@@ -383,7 +383,7 @@ def _check_build_freshness(exe: Path, src_mtime: Optional[float] = None) -> bool
     share a single source scan (pass a precomputed src_mtime) instead of walking
     the tree once per exe.
     `exe` が最新の SILS/ファームソースより古ければ警告する（ブロックはしない —
-    あくまで参考情報。ビルドゲートではない）。最後の `sf sils build` の後にソースが
+    あくまで参考情報。ビルド判定ではない）。最後の `sf sils build` の後にソースが
     編集された可能性のサイン。警告を出したら True を返す — 複数 exe を持つ呼び出し
     元（run_regression: vehicle と workshop）が exe ごとに再走査せず、1回の
     ソース走査結果（src_mtime を渡す）を使い回せるようにする。
@@ -561,7 +561,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # Regression: run every *.scn that has a matching *.expect (README/TEST_MATRIX
     # "32 scenarios"; the .expect glob is authoritative) and gate on the aggregate.
     # This is the CI/pre-release entry point (sils-regression.yml, versioning.md §5).
-    # 再確認試験: .expect を伴う全 *.scn を実行し集約判定でゲートする(README/TEST_MATRIX
+    # 再確認試験: .expect を伴う全 *.scn を実行し集約判定で合否を決める(README/TEST_MATRIX
     # の「32本」。.expect グロブが正)。CI・リリース前のエントリポイント。
     p = sub.add_parser("regression", help="Run all *.scn/*.expect scenarios and gate (CI)")
     p.add_argument("--json-out", default=None,
@@ -609,7 +609,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # reference (analysis/reports/rate_sysid_reference/reference.json). Named
     # "sysid-gate", NOT "gate" — that name is already the milestone bundle
     # verdict check (run_gate above); the two are unrelated concepts.
-    # モデル一致ゲート（simulation-policy.md §4、backlog #0）: sysid_gate.scn を
+    # モデル一致の合否判定（simulation-policy.md §4、backlog #0）: sysid_gate.scn を
     # 400Hzレートループ記録付きで実行し、実機ログに使ったのと同一コード（rate_sysid.py）
     # で軸別 (b,T,L) をフィットして実機基準値と比較する。"gate" ではなく "sysid-gate" と
     # 命名 — "gate" は既にマイルストーン束バンドル判定（上の run_gate）で使用済みの
@@ -1074,7 +1074,7 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
     if name == "yaw_band":                # G3: peak-to-peak true heading over the window
         # (heading-hold gate). Unwrapped so a continuous rotation is not
         # hidden by the +-pi seam.
-        # 窓内の真値方位 p-p（ヘディングホールド用ゲート）。連続回転が ±π の
+        # 窓内の真値方位 p-p（ヘディングホールド用判定）。連続回転が ±π の
         # 継ぎ目で隠れないようアンラップする。
         yaw_unwrapped = np.unwrap(yaw)
         return float(np.max(yaw_unwrapped) - np.min(yaw_unwrapped))
@@ -1169,8 +1169,8 @@ def _read_xfail(expect_path: Path) -> Optional[str]:
     None）。既知失敗マーカーは「このシナリオの現在の失敗はファーム/プラント忠実度の
     既知の追跡課題であり、壊れたアサーションではない」ことを明示する
     （docs/architecture/simulation-policy.md のバックログ参照）。`sf sils regression`
-    はこれをゲート対象外の [KNOWN-FAIL] として報告し、マーカーが残ったまま合格に
-    転じたら [XPASS]（ゲート失敗）にして直った課題の見逃しを防ぐ。
+    はこれを判定対象外の [KNOWN-FAIL] として報告し、マーカーが残ったまま合格に
+    転じたら [XPASS]（判定失敗）にして直った課題の見逃しを防ぐ。
 
     配置規則: ファイル内で最初の非空行・非 '#' コメント行でなければならない
     （"exit 0" 等のアサーションより前）。走査を単純にし（最初の該当行で確定）、
@@ -1268,7 +1268,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
             # metric <name> <op> <value> [in <t0> <t1>]
             # Numerical physical-truth gate from the flight-log bundle (G2/G3/G4).
             # The optional "in <t0> <t1>" window restricts it to a flight phase.
-            # フライトログ一式からの数値ゲート。"in t0 t1" で飛行フェーズに限定。
+            # フライトログ一式からの数値判定。"in t0 t1" で飛行フェーズに限定。
             name, op, valstr = toks[1], toks[2], toks[3]
             t0 = t1 = None
             if len(toks) >= 7 and toks[4] == "in":
@@ -1600,7 +1600,7 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
         # reports the RAW verdict above (see xfail_reason annotation below). Only
         # `sf sils regression` changes gating behavior on this field.
         # 既知失敗マーカー（simulation-policy.md バックログ）。ここでは情報表示のみ
-        # — `sf sils scenario` 単体では素の合否を報告する。ゲート挙動を変えるのは
+        # — `sf sils scenario` 単体では素の合否を報告する。判定挙動を変えるのは
         # `sf sils regression` のみ。
         "xfail_reason": xfail_reason,
         # Accurate flight label for the review-video title (no takeoff/landing claim).
@@ -1626,7 +1626,7 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     # behavior (KNOWN-FAIL / XPASS) on this field.
     # xfail 注記: 単体の `sf sils scenario` は常に上の素の合否を表示する（xfail が
     # あっても FAIL は FAIL と見せる）。これは .expect に既知失敗マーカーがある
-    # ことを示す1行注記のみ。ゲート挙動を変えるのは `sf sils regression` のみ。
+    # ことを示す1行注記のみ。判定挙動を変えるのは `sf sils regression` のみ。
     if xfail_reason:
         console.warning(f"[xfail marker] {xfail_reason}")
 
@@ -2091,7 +2091,7 @@ def _check_pid_lockstep() -> tuple:
     意味を持つ。どちらか（pid.hpp か replay_pid()）が編集されて乖離した瞬間、
     `sf sysid` は黙って「もうファームが実行していないプラント」に対する
     ゲインを算出し続けてしまう。上の _check_param_consistency() と同様、
-    *.scn シナリオを1本も走らせる前に回帰全体をゲートする。
+    *.scn シナリオを1本も走らせる前に回帰全体を判定する。
 
     Run as its own subprocess (not in-process pytest.main()) so a hard crash
     inside the pybind11 extension cannot take down `sf sils regression`
@@ -2099,7 +2099,7 @@ def _check_pid_lockstep() -> tuple:
     the module's actionable "run `sf sils build`" ImportError message when
     stampfly_control isn't built) captured for the caller to print.
     プロセス内 pytest.main() ではなくサブプロセスとして実行する: pybind11
-    拡張内のクラッシュが `sf sils regression` 自体を道連れにせず、このゲート
+    拡張内のクラッシュが `sf sils regression` 自体を道連れにせず、この判定
     1つだけを失敗させるため。pytest 自身の出力（stampfly_control 未ビルド時の
     「sf sils build を実行せよ」という実用的な ImportError メッセージを含む）
     を呼び出し元が表示できるよう捕捉する。
@@ -2116,7 +2116,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # 2026-07; scenarios without an .expect are exploratory/manual benches not
     # gated here — see TEST_MATRIX.md "その他のシナリオ").
     # .expect グロブが正（2026-07時点で「32本」。.expect の無いものは探索的・手動用の
-    # ベンチでありここではゲートしない — TEST_MATRIX.md「その他のシナリオ」参照）。
+    # ベンチでありここでは判定しない — TEST_MATRIX.md「その他のシナリオ」参照）。
     scenarios = sorted(p for p in scn_dir.glob("*.scn") if p.with_suffix(".expect").exists())
     if not scenarios:
         console.error(f"no *.scn/*.expect pairs found under {scn_dir}"); return 1
@@ -2131,7 +2131,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # シナリオ実行前に、手動複製された物理パラメータの整合性
     # （tools/params_audit — C_T/C_Q/kappa/慣性等をファーム/SILS/シミュレータへ
     # 手書きコピー。コード生成パイプライン未整備、Phase 1、simulation-policy.md
-    # 参照）をゲートする。ここでの食い違いを見逃すと、以下の全シナリオが
+    # 参照）を判定する。ここでの食い違いを見逃すと、以下の全シナリオが
     # 「間違った機体モデル」に対して PASS してしまう。よって最初に検査し、
     # 不合格なら回帰全体を即座に失敗させる — 物理基準が既に誤りと分かっている
     # のに数分かけてシナリオを回す意味が無い。
@@ -2151,7 +2151,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # subprocess.run(cmd) below has no env= kwarg, so it inherits the parent's
     # os.environ (incl. this var) into every child scenario run.
     # ビルド鮮度の参考警告: ここで冒頭に1回だけ判定する（上の _check_param_consistency
-    # と同じ「ループ開始前にゲート」パターン）。以下のループは各シナリオを別
+    # と同じ「ループ開始前に判定」パターン）。以下のループは各シナリオを別
     # プロセスとして起動するため、これが無いと run_scenario 内の判定がシナリオ数
     # ぶん重複表示されてしまう。回帰は vehicle と workshop 両方を実行し
     # うるため両方の exe を、ソース走査は共有した1回分でチェックする。この
@@ -2172,8 +2172,8 @@ def run_regression(args: argparse.Namespace) -> int:
     # and the firmware PID is a Code Identity precondition: the moment either
     # side is edited and the two diverge, this must be caught here — see
     # _check_pid_lockstep()'s docstring for the full rationale.
-    # シナリオ実行前に PID ロックステップ等価性をゲートする（上の
-    # _check_param_consistency() と同じ「ループ開始前にゲート」パターン）。
+    # シナリオ実行前に PID ロックステップ等価性を判定する（上の
+    # _check_param_consistency() と同じ「ループ開始前に判定」パターン）。
     # 同定パイプライン(replay_pid)とファームPIDの等価性は Code Identity の
     # 前提 — どちらかが編集されて乖離した瞬間にここで検出する。詳細な理由は
     # _check_pid_lockstep() の docstring 参照。
@@ -2217,10 +2217,10 @@ def run_regression(args: argparse.Namespace) -> int:
         # 状態ではない。新規チェックアウトの CMake ブートストラップ
         # （simulator/sils/CMakeLists.txt）は Lesson 0 テンプレートから種付けし、
         # これはモータを動かさないため、workshop_acro.expect の
-        # `metric alt_max > 0.1` のような離陸ゲートは実回帰ではなく構造的に失敗する
+        # `metric alt_max > 0.1` のような離陸判定は実回帰ではなく構造的に失敗する
         # — これを放置すると内容に関わらず全 PR で CI が赤くなる。既定でスキップし
         # （FAIL 扱いしない — 下の SKIP ステータス、xfail の KNOWN-FAIL と同じ
-        # 非ゲート扱い）、--include-workshop は呼び出し側が既知のレッスンへ切り替えた
+        # 判定対象外の扱い）、--include-workshop は呼び出し側が既知のレッスンへ切り替えた
         # 後にのみ opt-in する（workshop_acro.scn のヘッダ参照）。
         if target == "workshop" and not include_workshop:
             status = "SKIP"
@@ -2278,7 +2278,7 @@ def run_regression(args: argparse.Namespace) -> int:
     # n_fail (real, un-marked FAILs) and n_xpass (fixed-but-still-marked) are the
     # only two statuses that gate the regression — KNOWN-FAIL and SKIP (workshop
     # scenarios skipped by default — see the loop above) are informational only.
-    # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが回帰をゲート
+    # n_fail（無印の実失敗）と n_xpass（直ったのにマーカー残存）だけが回帰を判定
     # する — KNOWN-FAIL と SKIP（既定でスキップされる workshop シナリオ。上のループ
     # 参照）は情報表示のみ。
     n_unexpected = n_fail + n_xpass
@@ -2507,7 +2507,7 @@ def run_milestone(args: argparse.Namespace) -> int:
 
 # =============================================================================
 # Model-match gate (docs/architecture/simulation-policy.md §4, backlog #0)
-# モデル一致ゲート
+# モデル一致の合否判定
 # =============================================================================
 
 # Pass criteria (simulation-policy.md §4): b within ±50%, L_total=T+L within ±20%.
@@ -2524,7 +2524,7 @@ def _rate_backend():
     real-hardware `sf sysid rate-fit` command uses (Code Identity: the gate's
     verdict comes from running identical code, not a reimplementation).
     実機の `sf sysid rate-fit` と同一の同定コードをインポートする（Code Identity:
-    ゲートの判定は再実装ではなく同一コードの実行に由来する）。"""
+    この判定は再実装ではなく同一コードの実行に由来する）。"""
     import sys as _sys
     backend = paths.root() / "tools" / "log_analyzer"
     if str(backend) not in _sys.path:
@@ -2589,7 +2589,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
     # no-delay plant — the whole point of this measurement is to see how far L_total
     # moves before a retune, per simulation-policy.md backlog #1/#2 sequencing) —
     # that must not block the identification fit itself.
-    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／一式欠落）でゲートし、
+    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／一式欠落）で判定し、
     # run_scenario の完全な .expect 判定では止めない。--motor-delay>0 では
     # sysid_gate.expect の duty_max チェックが意図的に発火しうる（ゲインは無遅延
     # プラントでチューニング済み — L_total がリチューン前にどれだけ動くかを見るのが

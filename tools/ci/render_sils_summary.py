@@ -34,7 +34,7 @@ that produced the JSON already set the job's pass/fail via its own exit
 code; this step runs unconditionally via `if: always()` so a FAILing run
 still shows which scenario(s) broke).
 終了コード: 整形済み(または不在)の結果ファイルに対しては常に0 — 本スクリプトは
-レポート描画のみ行いCI自体はゲートしない（ジョブの合否は結果を生成した
+レポート描画のみ行いCI自体は判定しない（ジョブの合否は結果を生成した
 `sf sils regression` 側の終了コードが既に決めている。本ステップは
 `if: always()` で常時実行し、FAIL時もどのシナリオが壊れたか表示する）。
 """

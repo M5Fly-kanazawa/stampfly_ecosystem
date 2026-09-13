@@ -175,7 +175,7 @@ if(SILS_BUILD_MUJOCO_SMOKE)
   # Closed-loop hover (P1.2c / gate G3): the real firmware loop on the RTOS
   # emulator + the MuJoCo Plant closing the loop. Needs both the RTOS infra
   # (sf_cores + threads + esp_timer shim) and MuJoCo.
-  # 閉ループホバー（P1.2c / ゲート G3）: RTOS エミュレータ上の実ファームループ＋
+  # 閉ループホバー（P1.2c / 判定 G3）: RTOS エミュレータ上の実ファームループ＋
   # MuJoCo Plant でループを閉じる。RTOS インフラと MuJoCo の両方が必要。
   find_package(Threads REQUIRED)
   add_executable(hover_smoke

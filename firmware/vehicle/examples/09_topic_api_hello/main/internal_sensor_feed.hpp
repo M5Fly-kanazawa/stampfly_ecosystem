@@ -30,7 +30,7 @@
  * `sf::api::estimate_latest()`（main.cpp 参照）が返す値は、`estimate_state`
  * Topic（sf_core/include/topics.hpp）に最後に publish された値でしかない。
  * 実ファームでの publisher は `ImuTask`（tasks/imu_task.cpp、約950行: 起動校正
- * ゲート・フェイルセーフ・モード遷移処理・ESKF/相補フィルタ切替 …）。"Hello World"
+ * 判定・フェイルセーフ・モード遷移処理・ESKF/相補フィルタ切替 …）。"Hello World"
  * のためにこの全体を再利用するのは現実的でなく、そのままリンクすることも不可能 —
  * 実ファームの main/CMakeLists.txt は ../tasks 配下の全ファイル（imu_task.cpp、
  * control_task.cpp、…）を差し替え不可能な `main` コンポーネントへ直接コンパイル

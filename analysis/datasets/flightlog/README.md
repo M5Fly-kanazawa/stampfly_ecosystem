@@ -6,7 +6,7 @@
 
 `sf log` 系ツール・`sf sysid` 系ツール・CI が読み込み確認に使う、実機由来の
 「StampFly フライトログ一式」（`.sflog.zip`）を置く。形式は
-`protocol/spec/flight_log.yaml`（正本）と `docs/reference/flight-log-format.md` を参照。
+`protocol/spec/flight_log.yaml`（基準ファイル）と `docs/reference/flight-log-format.md` を参照。
 
 ## 2. ファイル一覧
 

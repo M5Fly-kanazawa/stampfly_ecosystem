@@ -20,7 +20,7 @@
  *
  * vehicle の ControlTask（sf::PidController）を、学習者の setup()/loop_400Hz()
  * （workshop_api.hpp / user_code.cpp）を呼ぶ薄いシェルに置き換える。制御周期の
- * 「それ以外」— IMU 通知待ち＋ウォッチドッグ、ARM 安全ゲート、400Hz Data Stream —
+ * 「それ以外」— IMU 通知待ち＋ウォッチドッグ、ARM 安全判定、400Hz Data Stream —
  * は vehicle/tasks/control_task.cpp をできる限り忠実に踏襲する。再利用している
  * 他の vehicle タスク（ImuTask、TelemetryTask、…）はこのパイプライン形状を前提に
  * 動いているため。
@@ -91,7 +91,7 @@ static bool s_failsafe_latch = false;
 /// safety gate below.
 /// controller_command の事実を消費する（StateManager 遷移コールバック,
 /// architecture.md §4）。WorkshopControlTask にはリセット/再構成すべき制御器
-/// オブジェクトが無い — 下のモータ安全ゲートに関わる 2 つの verb だけを見る。
+/// オブジェクトが無い — 下のモータ安全判定に関わる 2 つの verb だけを見る。
 static void processControllerCommands()
 {
     sf::ControllerCommand cmd;
@@ -168,7 +168,7 @@ void WorkshopControlTask(void* pvParameters)
     // runs, so ws:: motor calls made from setup() itself are safe (though the
     // motors stay disarmed until the ARM gate below opens).
     // 学習者の setup() が走る前にアクチュエータ（ミキサー＋モーター HAL）を初期化
-    // する。setup() 自身から ws:: モータ関数を呼んでも安全（下の ARM ゲートが開く
+    // する。setup() 自身から ws:: モータ関数を呼んでも安全（下の ARM 判定が開く
     // まではモータは disarmed のまま）。
     actuator.init();
 
@@ -201,7 +201,7 @@ void WorkshopControlTask(void* pvParameters)
         stall_count = 0;
 
         // Consume Landing/Reset facts before this cycle's motor gate decision.
-        // このサイクルのモータゲート判定より前に Landing/Reset の事実を消費する。
+        // このサイクルのモータ判定より前に Landing/Reset の事実を消費する。
         processControllerCommands();
 
         const sf::SystemMode mode = sf::system_mode.latest();
@@ -212,7 +212,7 @@ void WorkshopControlTask(void* pvParameters)
         // only latch a request; the actual motor write happens below, gated.
         // 学習者ループ — armed/disarmed を問わず毎周期実行（センサ/LED レッスンは
         // disarmed でも動く）。loop_400Hz() は ws::motor_* を呼びうるが、それは
-        // 要求のラッチのみ — 実際のモータ書き込みは下の安全ゲート後に行う。
+        // 要求のラッチのみ — 実際のモータ書き込みは下の安全判定後に行う。
         // =====================================================================
         loop_400Hz(config::IMU_DT);
 
@@ -220,7 +220,7 @@ void WorkshopControlTask(void* pvParameters)
         // Motor apply — ARMED gate. applyTestDuties() arms the motor HAL, so it
         // must ONLY be reached on this branch (never while disarmed), or a
         // button-less spin-up becomes possible.
-        // モータ適用 — ARM ゲート。applyTestDuties() はモータ HAL を arm するため、
+        // モータ適用 — ARM 判定。applyTestDuties() はモータ HAL を arm するため、
         // 必ずこの分岐内でのみ呼ぶこと（disarmed 中は絶対に呼ばない）— さもないと
         // ボタン ARM なしでモータが回りうる。
         // =====================================================================

@@ -1,5 +1,5 @@
 # alt_disarm_land.expect — pilot DISARM in ALT_HOLD ⇒ AUTO-LANDING gate (new 2026-06-14)
-# ALT_HOLD でのパイロット DISARM ⇒ 自動着陸ゲート
+# ALT_HOLD でのパイロット DISARM ⇒ 自動着陸判定
 #
 # Asserts the full chain requested by the user (2026-06-14): a DISARM pressed while
 # FLYING in ALT_HOLD does NOT cut the motors (drop) — it starts an AUTO-LANDING that

@@ -11,7 +11,7 @@ the format's Single Source of Truth). This is the backend of
 `sf log viz -i`.
 
 StampFly フライトログ v1 一式（`.sflog.zip` または展開済みフォルダ --
-形式の正本は docs/plans/flight-log-format-plan.md と
+形式の基準は docs/plans/flight-log-format-plan.md と
 protocol/spec/flight_log.yaml）から、信号選択・重ね描き・レイアウト変更が
 可能な自己完結型 HTML ダッシュボード（サーバー不要）を生成する。
 `sf log viz -i` のバックエンド実装。

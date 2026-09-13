@@ -278,7 +278,7 @@ javascriptGenerator.forBlock["drone_speed"] = (block) => {
 // also emits a check that throws once the user hits 停止/緊急停止.
 // 実行中のブロックをハイライト表示: 各文の前に `highlightBlock('<id>')` を挿入
 // （STATEMENT_PREFIX の %1 は実行中ブロックの id に置き換わる）。
-// 「くり返し」の暴走ループも中断できるよう、毎周回で 停止/緊急停止 後に例外を
+// 「くり返し」の無限ループも中断できるよう、毎周回で 停止/緊急停止 後に例外を
 // 投げるチェックを挿入する。
 javascriptGenerator.STATEMENT_PREFIX = "highlightBlock(%1);\n";
 javascriptGenerator.addReservedWords("highlightBlock,sf");

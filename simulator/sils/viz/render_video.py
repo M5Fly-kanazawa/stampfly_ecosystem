@@ -565,7 +565,7 @@ def main():
     # limit: at distance d the visible height ≈ 2·d·tan(fovy/2) ≈ 0.83·d. Cover
     # z∈[-0.06, peak+0.10] with a 10% margin, centered on that range.
     # 鉛直飛行を、この実行のピーク高度から自動で画角に収める（上昇が上で切れない）。
-    # 3Dペインは4:3横長で鉛直視野が律速: 距離 d で可視高さ ≈ 0.83·d。z∈[-0.06, peak+0.10]
+    # 3Dペインは4:3横長で鉛直視野がボトルネック: 距離 d で可視高さ ≈ 0.83·d。z∈[-0.06, peak+0.10]
     # を10%余裕付きで、その範囲の中心を見て覆う。
     z_peak = float(np.max(traj["pz"]))
     z_lo, z_hi = -0.06, max(0.60, z_peak) + 0.10

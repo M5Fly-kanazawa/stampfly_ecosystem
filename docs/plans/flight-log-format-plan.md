@@ -32,7 +32,7 @@
 | 決定 | **標準 = 「StampFly フライトログ一式」**: 1 個の zip ファイル `flight_<日時>.sflog.zip` に、`meta.json`（取得条件）、`schema.json`（列の定義・単位）、パケット種別ごとの CSV（`imu.csv` `attitude.csv` `posvel.csv` … `status.csv`）を入れる。各 CSV は「そのセンサが出した値だけ」を原レートで時刻付きに持ち、埋め値を持たない。展開すれば普通の CSV で、Excel・MATLAB・pandas で直接開ける |
 | 整列表 | 400 Hz に揃えた 1 枚の表が要る解析（同定など）は、共通の読み込み処理がメモリ上で作る。ファイルとして欲しいときは `sf log convert --aligned` で明示的に作り、名前と `meta.json` に派生物と記す。既定では書かない |
 | 全ツール対応 | `sf log wifi/list/info/check/convert/viz/analyze`・`sf trim analyze`・`sf sysid *`・`sf cal plot`・SILS（書き出し・合否判定・GUI・動画）・`sf sim headless`・教育パッケージを一式形式に統一。JSONL 書き出しと旧ファーム系の入出力は削除 |
-| 仕様の置き場 | `protocol/spec/flight_log.yaml` を正本（Single Source of Truth: 定義を 1 か所にだけ置き他は全てそこを参照する考え方）とし、Python の列定数・`schema.json`・文書の列表を生成。`sf log check` で適合検査。CI（変更のたびに自動で検査を走らせる仕組み）で「書き出し側の出力が適合」「全読み込み側が基準ファイルを読める」を検査 |
+| 仕様の置き場 | `protocol/spec/flight_log.yaml` を基準（Single Source of Truth: 定義を 1 か所にだけ置き他は全てそこを参照する考え方）とし、Python の列定数・`schema.json`・文書の列表を生成。`sf log check` で適合検査。CI（変更のたびに自動で検査を走らせる仕組み）で「書き出し側の出力が適合」「全読み込み側が基準ファイルを読める」を検査 |
 | 段階 | Phase 0 仕様と共通処理 → 1 書き出し側 → 2 読み込み側と旧コード整理 → 3 SILS・シミュレータ → 4 文書（§5） |
 
 ## 1. 現状の事実（調査 2026-09-11）
@@ -303,7 +303,7 @@ Stream の電文定義も `protocol/spec/` には無く、
 
 | 成果物 | 内容 |
 |-------|------|
-| `protocol/spec/flight_log.yaml` | v1 のストリーム・列名・型・単位・レート・由来パケット・各ツールの必須列。**正本** |
+| `protocol/spec/flight_log.yaml` | v1 のストリーム・列名・型・単位・レート・由来パケット・各ツールの必須列。**基準ファイル** |
 | 生成物 | `lib/sflog/schema.py`（列定数）、`docs/reference/flight-log-format.md`（列表）。生成スクリプト `protocol/tools/gen_flight_log.py`、`--check` で生成物の鮮度を CI で検査 |
 | `protocol/spec/data_stream.yaml` | 現行 UDP Data Stream 電文（`data_stream_wire.hpp` の内容）を仕様に収録。`websocket.yaml` と `TelemetryWSPacket` は「撤去済み」と注記して凍結（別作業でもよい） |
 | CI | 現状の CI（`.github/workflows/sils-regression.yml`）は `tools/` や `lib/` の pytest を回していない。同ワークフローに pytest の工程を足し、(1) `lib/sflog` の単体テスト、(2) 基準一式（実機 1 本・SILS 1 本、`analysis/datasets/flightlog/` に置く）が `sf log check` を通る、(3) 全読み込み側コマンドが基準一式を読める、(4) `sf sysid fit --selftest` と参照同定値（`analysis/reports/rate_sysid_reference/`）が変わらない、を検査する |
@@ -350,7 +350,7 @@ Genesis 未導入のため未検証。
 | 種別 | 対象 |
 |------|------|
 | ガイド | `docs/guides/tools.md`、`docs/guides/flight-log-viz.md`、`docs/commands/sf-log.md`、`tools/log_analyzer/README.md`、`tools/sysid/README.md`（`tools/log_capture/README.md` は削除） |
-| 設計文書 | `firmware/vehicle/docs/development_roadmap.md:283`（命名規則）、`docs/architecture/simulation-policy.md`（形式の同一を明記）、`PROJECT_PLAN.md`（protocol/ の正本にログ形式を含める）、`firmware/vehicle/docs/coding_and_education.md`（Blackbox 例の記述） |
+| 設計文書 | `firmware/vehicle/docs/development_roadmap.md:283`（命名規則）、`docs/architecture/simulation-policy.md`（形式の同一を明記）、`PROJECT_PLAN.md`（protocol/ の基準文書にログ形式を含める）、`firmware/vehicle/docs/coding_and_education.md`（Blackbox 例の記述） |
 | 仕様 | 新設 `flight_log.yaml`・`data_stream.yaml`、`websocket.yaml`・`messages.yaml` の撤去済み注記 |
 | 講習資料 | `docs/events/sci_tutorial_2026/slides/chapters/sci_s2_setup_sensors.tex`、`sci_s4_pid.tex`、`sci_s5_sim_analysis.tex`、`handson_guide.md`、`cheatsheet.md`、Docswell の PDF |
 | ワークショップ | `firmware/workshop/lessons/lesson_07_sysid/README.md` |

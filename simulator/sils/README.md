@@ -47,7 +47,7 @@ sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 
 **`workshop_acro.scn`（離陸+ホバー相当デモ, `simulator/sils/scenarios/`）:** ARM → 上昇バースト → 実測ホバー duty（~0.676）で巡航（スティック中立）→ 空中で DISARM して安全に沈降・着地、という構成。合格基準は緩め（`metric alt_max > 0.1`＝離陸検知、`metric tilt_max < 15.0`＝転倒なし）。開ループのスクリプト制御では真の高度保持ができない（37g級の機体はわずかな duty 過不足が1秒未満で m/s 級の昇降速度に積み上がる）ため、着陸はスロットルを絞る台本ではなく空中 DISARM 直行（`acro_flight.scn` で実証済みの安全パターン）を採用している。詳細な調査記録・スロットル値の導出はファイル冒頭のコメント参照。
 
-`sf sils regression`（CI）は `vehicle` に加え、ヘッダで `--target workshop` を宣言するシナリオ（`workshop_acro.scn`）も `*.scn`/`*.expect` の対象に含むが、**既定ではスキップする**（`[SKIP] workshop_acro (target=workshop; ...)`、結果集計は PASS/FAIL に数えない）。理由: `main/user_code.cpp` は `sf lesson switch` が所有する gitignore 対象ファイルで、新規チェックアウトでは CMake ブートストラップが Lesson 0（モータを動かさない）で種付けするため、離陸ゲートが実回帰と無関係に構造的失敗する。`sf lesson switch N --solution` でレッスンを切り替えた上で `sf sils regression --include-workshop` を渡すと実行される。
+`sf sils regression`（CI）は `vehicle` に加え、ヘッダで `--target workshop` を宣言するシナリオ（`workshop_acro.scn`）も `*.scn`/`*.expect` の対象に含むが、**既定ではスキップする**（`[SKIP] workshop_acro (target=workshop; ...)`、結果集計は PASS/FAIL に数えない）。理由: `main/user_code.cpp` は `sf lesson switch` が所有する gitignore 対象ファイルで、新規チェックアウトでは CMake ブートストラップが Lesson 0（モータを動かさない）で種付けするため、離陸判定が実回帰と無関係に構造的失敗する。`sf lesson switch N --solution` でレッスンを切り替えた上で `sf sils regression --include-workshop` を渡すと実行される。
 
 ### ビルド（スモークテスト）
 
@@ -102,7 +102,7 @@ sf sils scenario simulator/sils/scenarios/acro_flight.scn --param rate.roll.kp=0
 - MuJoCo 自身の `mju_error`/`mju_warning`（`%zu` 書式）と `mjz_encoder.cc`（Windows パスの `%s`/`wchar_t*` 不一致）は `-Wno-format` で抑制している（vendored コードにパッチを当てない方針）。どちらも本ベンチの実行経路（`.xml` モデル・`.mjb` 非使用）では到達しない。
 
 **過去に発見・修正済みの Windows 固有バグ（記録として残す）:**
-- `hover_smoke`/`rate_tune` は当初、離陸後の高度応答が期待値と異なった（`max_alt` 実測 0.013m、期待 0.5m）。gdb で追跡した結果、原因は Windows/MinGW 固有ではなく、`hover_smoke.cpp` が `system_mode`/`controller_command` を直接注入して StateManager をバイパスする一方、`onTakeoff()`/`onTakeoffComplete()`（PID コントローラ自身の Grounded→TakeoffClimb→Airborne フェーズ機械。通常は state_task.cpp の ARM+スプールドウェル経由で発火）を一度も呼んでいなかったこと ── フェーズが永久に Grounded のまま推力が 0 にクランプされていた。`hover_smoke.cpp` から実際の firmware ハンドシェイク（ALT_HOLD 進入で `ControllerCmd::Takeoff`、`controller_status.takeoff_reached` 確認後に `ControllerCmd::TakeoffComplete`）を発火するよう修正し、実際の自動離陸クライム時間（~3.8秒、旧スケジュールの前提 1.6秒より長い）に合わせてスケジュール定数を再調整。現在は ESKF/相補フィルタ双方・N0ノイズ下で全ゲート PASS。`.scn` シナリオ群（実 ARM/pilot_request 経路を使用）はこの問題の影響を最初から受けていなかった。
+- `hover_smoke`/`rate_tune` は当初、離陸後の高度応答が期待値と異なった（`max_alt` 実測 0.013m、期待 0.5m）。gdb で追跡した結果、原因は Windows/MinGW 固有ではなく、`hover_smoke.cpp` が `system_mode`/`controller_command` を直接注入して StateManager をバイパスする一方、`onTakeoff()`/`onTakeoffComplete()`（PID コントローラ自身の Grounded→TakeoffClimb→Airborne フェーズ機械。通常は state_task.cpp の ARM+スプールドウェル経由で発火）を一度も呼んでいなかったこと ── フェーズが永久に Grounded のまま推力が 0 にクランプされていた。`hover_smoke.cpp` から実際の firmware ハンドシェイク（ALT_HOLD 進入で `ControllerCmd::Takeoff`、`controller_status.takeoff_reached` 確認後に `ControllerCmd::TakeoffComplete`）を発火するよう修正し、実際の自動離陸クライム時間（~3.8秒、旧スケジュールの前提 1.6秒より長い）に合わせてスケジュール定数を再調整。現在は ESKF/相補フィルタ双方・N0ノイズ下で全判定 PASS。`.scn` シナリオ群（実 ARM/pilot_request 経路を使用）はこの問題の影響を最初から受けていなかった。
 
 ### `sf sils fly` — リアルタイム・キーボード操縦（P6 stage 1）
 

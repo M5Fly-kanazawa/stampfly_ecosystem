@@ -239,14 +239,14 @@ def main(path, out):
 
     # =====================================================================
     # 4. Specific-acceleration / accel-attitude innovation (grounds accel_att_noise)
-    #    比力 / accel 姿勢イノベーション（accel_att_noise の接地）
+    #    加速度計の測定値 / accel 姿勢イノベーション（accel_att_noise の接地）
     #
     # The accel-attitude update assumes accel = gravity. The deviation (specific
     # acceleration = measured accel − predicted gravity reaction) is what R must cover.
     # Measured FROM the dynamic flight (a still flight is impossible AND would under-
     # estimate this). For near-1g samples the adaptive R term ~1, so their spread is the
     # BASELINE that accel_att_noise should match.
-    # accel 姿勢更新は accel=重力を仮定。そのズレ（比力＝accel−予測重力反力）こそ R が覆う量。
+    # accel 姿勢更新は accel=重力を仮定。そのズレ（加速度計の測定値＝accel−予測重力反力）こそ R が覆う量。
     # 動的飛行から実測する（静止飛行は不可能でかつ過小評価になる）。near-1g サンプルは適応R≈1 ゆえ
     # その広がりが accel_att_noise を合わせるべきベースライン。
     g = 9.80665

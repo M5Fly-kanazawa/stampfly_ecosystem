@@ -3,7 +3,7 @@
 # the run's flight-log bundle — truth.csv/attitude.csv/...). Passes with the adopted acceleration-compensated accel-attitude
 # (eskf.accel_comp.enable=1) + the position velocity loop at position.vel.kp=0.8; the
 # plain accel-attitude flies away (drift ≫ 10 m).
-# Layer-4 位置保持ゲート（combined diagonal capstone）。G1 状態遷移(ログ) + G2 推定追従 + G3 位置をタイトに保持 +
+# Layer-4 位置保持判定（combined diagonal capstone）。G1 状態遷移(ログ) + G2 推定追従 + G3 位置をタイトに保持 +
 # G4 アクチュエータ健全。採用した運動加速度補償 + position.vel.kp=0.8 で合格。
 #
 # XFAIL (known issue, tracked 2026-07-26): the ODE-fitted motor plant exposes a yaw

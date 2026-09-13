@@ -5,7 +5,7 @@ GENERATED FILE - do not edit; run protocol/tools/gen_flight_log.py
 StampFly flight-log v1 schema constants.
 StampFly フライトログ v1 形式のスキーマ定数。
 
-Source of truth / 正本: protocol/spec/flight_log.yaml
+Source of truth / 基準: protocol/spec/flight_log.yaml
 """
 
 FORMAT = 'stampfly-flight-log'

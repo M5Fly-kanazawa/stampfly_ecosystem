@@ -108,12 +108,12 @@ jobs:
         #
         # pytest は別途インストールする（pyproject.toml では base ではなく
         # [dev] extra 専用の依存）: `sf sils regression`（run_regression の
-        # _check_pid_lockstep() ゲート、lib/sfcli/commands/sils.py）はシナリオ
-        # 実行前の第3ゲートとして `python3 -m pytest simulator/tests/
+        # _check_pid_lockstep() 判定、lib/sfcli/commands/sils.py）はシナリオ
+        # 実行前の第3判定として `python3 -m pytest simulator/tests/
         # test_pid_lockstep.py`（PID ロックステップ — ファーム pid.hpp と
         # rate_sysid replay_pid の Code Identity）を子プロセスで呼ぶため、
         # ここで pytest を import 可能にしておかないと全シナリオの前でこの
-        # ゲートが失敗してしまう。
+        # 判定が失敗してしまう。
         run: |
           pip install -e .
           pip install "pytest>=7.0.0"

@@ -9,7 +9,7 @@ by `protocol/tools/gen_flight_log.py` (never hand-edited).
 Dependencies: standard library, numpy, pandas, PyYAML only (see
 docs/plans/flight-log-format-plan.md section 2.5).
 
-ディスク上形式の正本は `protocol/spec/flight_log.yaml`。
+ディスク上形式の基準ファイルは `protocol/spec/flight_log.yaml`。
 `lib/sflog/schema.py` はそこから `protocol/tools/gen_flight_log.py` が
 生成する（手編集しない）。
 

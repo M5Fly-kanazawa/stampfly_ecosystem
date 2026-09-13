@@ -1,5 +1,5 @@
 # alt_auto_takeoff.expect — ALT_HOLD ARM-triggered auto-takeoff gates (redesign 2026-06-14)
-# ALT_HOLD の ARM トリガ自動離陸ゲート
+# ALT_HOLD の ARM トリガ自動離陸判定
 #
 # Chain: mode change accepted while DISARMED on the ground (BEFORE "ARM accepted")
 # → ARM in ALT_HOLD: props STOPPED through the spool dwell (duty ≈ 0 in [7.55,7.78])

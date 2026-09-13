@@ -206,7 +206,7 @@ void ControlTask(void* pvParameters)
     // 「最初の」IMU 通知が来たら true。起動時は BMI270 init に約200msかかり、
     // 400Hz パイプラインが存在する前に下のウォッチドッグが発火する — これは想定で
     // エラーではない。モータ強制ゼロは実行したまま（disarmed 中は無害）、ERROR
-    // ログだけをゲートする。飛行中の本物の IMU 停止は従来どおり大きく報告される。
+    // ログだけを判定する。飛行中の本物の IMU 停止は従来どおり大きく報告される。
     bool imu_pipeline_seen = false;
 
     while (true) {

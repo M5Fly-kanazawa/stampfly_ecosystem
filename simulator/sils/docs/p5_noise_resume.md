@@ -154,7 +154,7 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   duty(~0.7)が同定点より高く K·duty² が過大気味な点も。**→ フォロー**: ①ファーム IMU フィルタ設定が
   ~100–177Hz をどれだけ落とすか ②K の duty 整合 ③段階3 比較。
 
-### 段階3/3 ✅ ESKF vs 相補の比較・P6 ゲート（2026-06-04 達成）
+### 段階3/3 ✅ ESKF vs 相補の比較・P6 判定（2026-06-04 達成）
 - **ハーネス裏取り結果**: emu_vehicle は IEstimator(ESKF/相補)を持つが **airborne シナリオ無し・
   estimator 切替 env 無し**＝arm/離陸できず、忠実比較には数日（データ駆動フェーズと重複）。一方 hover_smoke は
   **実 vehicle の推定器を実 IEstimator ファクトリ経由（`estimator.type` param→`imu_task.cpp:72` createEstimator）
@@ -165,7 +165,7 @@ RESET_PLAN §10/§13 P6。**ゴール**: スロットル依存・帯域制限ノ
   姿勢 comp/ESKF＝N0 0.33x／N1 **2.20x**／N2 0.93x、高度 comp/ESKF＝N0 0.41x／N1 1.60x／N2 1.32x（>1=ESKF優位）。
   **＝低ノイズ(N0)は単純な相補が優位、現実ノイズ(N1振動)では ESKF が明確優位（相補姿勢が 4.26°±3.05 で不安定化）、
   N2 は高度で ESKF 優位**。「中身が違うと結果も違う」＋「ノイズ下で ESKF 優位」を定量実証。
-- 比較動画 `viz/out_p6/p6_compare.mp4`（`sf sils compare -m P6 --noise n2`、ゲート承認 pass=true）。
+- 比較動画 `viz/out_p6/p6_compare.mp4`（`sf sils compare -m P6 --noise n2`、合否判定 pass=true）。
 - **将来課題**: emu_vehicle 上の完全忠実比較（airborne シナリオ＋estimator 切替 env）はデータ駆動フェーズと統合。
 
 - **P5 が炙り出した宿題（P6 で追う）**: N0 残留 accel バイアスで ESKF 姿勢が~4°チルト→水平ドリフト。

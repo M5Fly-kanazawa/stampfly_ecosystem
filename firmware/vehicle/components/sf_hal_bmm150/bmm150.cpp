@@ -146,7 +146,7 @@ esp_err_t BMM150::read(MagData& data)
     // always consistent. A SEPARATE status pre-read proved unreliable on
     // hardware (mag died entirely); the in-burst bit cannot disagree with the
     // data it arrived with.
-    // バースト内 DRDY（0x48 bit0、データと同一トランザクションで読む）でゲート:
+    // バースト内 DRDY（0x48 bit0、データと同一トランザクションで読む）で判定:
     // 変換完了時のみ立つので、受理サンプルは常に一貫している。「別読み」の
     // ステータス事前確認は実機で不安定（mag が全滅）だった。バースト内ビットは
     // 一緒に届いたデータと矛盾し得ない。

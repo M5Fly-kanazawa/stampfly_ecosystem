@@ -55,7 +55,7 @@
 | 2026-04-12 | 12:53 | 13:24 | 31min | フライトログノイズ解析 v2（segment-based）+ 実ノイズパラメータ反映 + 接地動力学整備 | ノイズプロファイル算出、SILS 接地モデル、ノイズあり離陸成功 | df10751, ae7de37, be77cc3, a393d3b, 781d2bb |
 | 2026-04-12 | 13:44 | 15:51 | 2h7min | 接触動力学エンジン本実装（PGS solver、SDIRK2、3Dアニメーション、デモ動画）+ ESKF 加速度モデル（接触力除外） | 落下→バウンド→静止が物理的に再現、ESKF closed-loop hover が constraint contact 環境下で成功 | 794df40, 5661480, d522496, 6681a7c, 46481c2, 2592a6c, 1d1367a, b94a471, 2f7f6c5, c63010b |
 | 2026-04-12 | 20:47 | 22:34 | 1h47min | PGS sign convention 修正、加速度計モデル正規化、3シナリオでの高度表示修正 | 接触動力学が安定動作 | 4652469, 66e27e3, 10ede12, 1ea3cfc, f0fa58e |
-| 2026-04-12 | 23:07 | — | — | ファームウェア起動シーケンス + chi2 ゲート + ESKF API 拡張 | startup sequence, chi2 outlier rejection, ESKF accessor methods | d9172c4 |
+| 2026-04-12 | 23:07 | — | — | ファームウェア起動シーケンス + χ² 判定（カイ二乗判定） + ESKF API 拡張 | startup sequence, chi2 outlier rejection, ESKF accessor methods | d9172c4 |
 | 2026-04-13 | 04:56 | 05:50 | 54min | ESKF 振動ノイズロバスト性向上 + SILS フィルタパイプライン整備、用語修正（observer → open-loop estimation） | 振動下での ESKF 安定性確認 | 00a7a7b, 1c9cecf |
 | 2026-04-13 | 17:22 | 17:37 | 15min | per-axis 振動ノイズモデル校正（hover02 フライトログ） | `vib_accel_k = {3.96, 2.35, 5.64}`, `vib_gyro_k = {1.08, 0.83, 0.15}`、全軸で実データ σ の 1.1〜1.2倍以内に収束（旧 isotropic は最大 16倍誤差） | 92f4a65 |
 | 2026-04-13 | 17:37 | 17:58 | 21min | PID 微分フィルタバグ修正（α=2.67で不安定）+ control_test 4階層検証 | α = η·Td/(η·Td+dt) = 0.333 に修正。L1〜L4 で姿勢安定確認、ESKF closed-loop で初の安定動作 | 06b4cd6 |

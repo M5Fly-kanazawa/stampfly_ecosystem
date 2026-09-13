@@ -7,7 +7,7 @@
 # Timeline (absolute s): hover D 8.5–11.5, crash 11.5, on-ground 13.5–16, handle K 16–19.6
 # (carry alt 0.40), re-calib dwell to ~24, re-takeoff N 25–27.5, recovered hover O 27.5–32.5.
 #
-# crash_refly.expect — Phase-8 ★ロバスト再飛行キャップストーンゲート。G1 状態機械の連鎖
+# crash_refly.expect — Phase-8 ★ロバスト再飛行キャップストーン判定。G1 状態機械の連鎖
 # （ログ＋順序）＋ G3 物理真値マイルストーン（実行結果のフライトログ一式 truth.csv/attitude.csv 等の数値）。再飛行 readiness の
 # 全鎖を実証: ホバー→墜落＋自動DISARM→物理ハンドリング（持上げ/正立/運搬/設置）→再校正→
 # 再ARM→再離陸→水平回復ホバー。

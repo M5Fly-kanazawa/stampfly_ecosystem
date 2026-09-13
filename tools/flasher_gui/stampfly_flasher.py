@@ -881,7 +881,7 @@ def run_selftest():
     行わない。
 
     PASS なら 0、FAIL なら 1 を返す。プロセス終了コードの標準的な慣習に
-    合わせているため、CI が直接ゲート条件として使える。
+    合わせているため、CI が直接判定条件として使える。
     """
     print("=== StampFly Flasher self-test / セルフテスト ===")
 

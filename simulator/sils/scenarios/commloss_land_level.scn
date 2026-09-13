@@ -11,7 +11,7 @@
 # INV-2 の敵対的ガード（姿勢はパイロットのもの — 水平化はリンク途絶時のみ）: リンク途絶の瞬間に
 # パイロットがロール右を保持＝最後の設定点が非ゼロ傾き。通信途絶ホバー猶予中（FLYING）は機体は
 # その古いロールに従うが、LANDING に入ると制御器は設定点が stale（リンク途絶）と判定し、単一の
-# 水平ゲートで roll/pitch/yaw を 0 に強制 — 降下は水平で、古いスティックの傾きにならない。
+# 水平判定で roll/pitch/yaw を 0 に強制 — 降下は水平で、古いスティックの傾きにならない。
 # 対照: alt_disarm_land_steer.scn（リンク生存→パイロットが降下を操縦）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/commloss_land_level.scn --target vehicle
@@ -34,14 +34,14 @@
 # against the new plant). 2026-07-26 既知の未解決（保留、本タスクでは未修正 — ファーム/
 # ゲイン変更なし）: 上記raw置換適用後、離陸とフェイルセーフ連鎖(Comm lost→LANDING→
 # Autonomous landing→着地)は正常動作し、猶予期間チェック(古いロール右のまま tilt_max>8°)
-# もPASSする。しかし commloss_land_level.expect の LANDING水平化ゲートチェック
-# (tilt_max<6° in [15.0,15.6]) は依然FAIL(実測~11.9°): LANDING/水平ゲート起動後、
+# もPASSする。しかし commloss_land_level.expect の LANDING水平化判定チェック
+# (tilt_max<6° in [15.0,15.6]) は依然FAIL(実測~11.9°): LANDING/水平判定起動後、
 # ロールは保持していた+14°からゼロを通過して-11°付近までオーバーシュートし、その後
 # （通常の減衰と異なり）着地直前には~-22°まで成長し続ける（0へ収束しない）。タイミングの
 # 問題ではない — 着地時点で発散がまだ成長中のため、どの窓を選んでも小さいtiltは得られない。
-# 他所（alt_flight/alt_inflight_switchの遅い高度振動、calib.scnのピッチ暴走）と同様、新
-# プラント(ODE・実測モータ曲線)＋モータ伝達遅延に起因する系統的な減衰不足がロール/水平ゲート
-# 制御経路にも現れている可能性が高い。scn/expectのみの再校正では解決不可（姿勢PID/水平ゲート
+# 他所（alt_flight/alt_inflight_switchの遅い高度振動、calib.scnのピッチ発散）と同様、新
+# プラント(ODE・実測モータ曲線)＋モータ伝達遅延に起因する系統的な減衰不足がロール/水平判定
+# 制御経路にも現れている可能性が高い。scn/expectのみの再校正では解決不可（姿勢PID/水平判定
 # ゲインの新プラントに対する再調査が必要）。
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>

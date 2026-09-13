@@ -529,7 +529,7 @@ printf("roll=%.1f pitch=%.1f yaw=%.1f\n",
       SILS（実ファーム＋MuJoCo）  & \code{simulator/\allowbreak sils/}                         & \code{sf sils scenario} \\
       VPython シミュレータ        & \code{simulator/\allowbreak vpython/}                      & \code{sf sim run vpython} \\
       Genesis シミュレータ        & \code{simulator/\allowbreak genesis/}                      & \code{sf sim run genesis} \\
-      物理パラメータの正本         & \code{control/\allowbreak models/\allowbreak stampfly\_physical.yaml} & \code{sf params check} \\
+      物理パラメータの基準ファイル  & \code{control/\allowbreak models/\allowbreak stampfly\_physical.yaml} & \code{sf params check} \\
       同定とモデル一致の合否判定   & \code{tools/\allowbreak sysid/}, \code{tools/\allowbreak log\_analyzer/} & \code{sf sysid fit} / \code{sf sils sysid-gate} \\
       推定インターフェース         & \code{sf\_estimator} / \code{sf\_estimator\_\allowbreak eskf} & --- \\
       制御インターフェース         & \code{sf\_controller} / \code{sf\_controller\_\allowbreak pid} & --- \\
@@ -537,7 +537,7 @@ printf("roll=%.1f pitch=%.1f yaw=%.1f\n",
     \end{tabular}
   \end{table}
 
-  {\footnotesize 3 つのシミュレータは同じ物理パラメータの正本（\code{stampfly\_physical.yaml}）を参照し、\code{sf params check} で手動コピーの食い違いを検出する}
+  {\footnotesize 3 つのシミュレータは同じ物理パラメータの基準ファイル（\code{stampfly\_physical.yaml}）を参照し、\code{sf params check} で手動コピーの食い違いを検出する}
 \end{frame}
 
 % ------------------------------------------------------------------

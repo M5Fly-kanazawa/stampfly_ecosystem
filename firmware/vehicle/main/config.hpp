@@ -177,7 +177,7 @@ inline constexpr uint32_t CALIB_SETTLE_MS = 1000;
 // restarts it, so ARM stays blocked until a verified-still average exists.
 // Thresholds follow the legacy vehicle/ StationaryDetector (proven in flight);
 // the accel-norm window is widened for RAW (bias-uncorrected) boot readings.
-// 校正サンプル蓄積の静止ゲート（sf_calibration StillnessConfig — 根拠はヘッダ参照）。
+// 校正サンプル蓄積の静止判定（sf_calibration StillnessConfig — 根拠はヘッダ参照）。
 // 起動/再校正の平均は静止時のみ有効: 動き（電池接続後の運搬・墜落後の拾い上げ）は
 // 部分蓄積を破棄してやり直すため、静止確認済みの平均ができるまで ARM は拒否され続ける。
 // 閾値は旧 vehicle/ StationaryDetector（飛行実績あり）に従う。加速度ノルム窓は起動時の
@@ -306,7 +306,7 @@ inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 // legacy vehicle/'s flight-proven POWER_BATTERY_CHANNEL.
 // StampFly 基板は 1S LiPo を INA3221 のチャネル index 1（=チップのチャネル 2）に
 // 配線している。ドライバ既定値（index 0）は未接続レールで 0.00 V を読む — この
-// 移植漏れにより 2026-06-11 まで全フライトで電池フェイルセーフとサグ補償が無効
+// 移植漏れにより 2026-06-11 まで全フライトで電池フェイルセーフと電圧低下の補償が無効
 // だった。値は旧 vehicle/ の飛行実績 POWER_BATTERY_CHANNEL。
 inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 

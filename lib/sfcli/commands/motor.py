@@ -163,7 +163,7 @@ def run_stop(args: argparse.Namespace) -> int:
 
 # =============================================================================
 # WiFi CLI plumbing — connect, send one command, print the raw reply, disconnect.
-# WiFi CLI 疎通 — 接続・コマンド送信・応答をそのまま表示・切断。
+# WiFi CLI 接続処理 — 接続・コマンド送信・応答をそのまま表示・切断。
 # =============================================================================
 
 def _run_command(cli_cmd: str, ip: str, timeout: float) -> int:

@@ -1,5 +1,5 @@
 # boot_motion.scn — boot calibration must survive being carried (stillness gate)
-#                   起動校正は運搬に耐えること（静止ゲート検証）
+#                   起動校正は運搬に耐えること（静止判定検証）
 #
 # Real-hardware failure this locks in: plug the battery, then CARRY the craft to
 # the bench. The boot gyro/accel calibration used to average straight through the
@@ -11,7 +11,7 @@
 #
 # 実機で起きた故障の固定化: 電池を挿してから機体を机へ「運ぶ」。起動ジャイロ/加速度
 # 校正は運搬の動きをそのまま平均していた — ゴミバイアスと誤った水平基準で離陸直後に
-# 反転（「飛べたり反転したり」= 最初の4秒間に人間が何をしていたか次第）。静止ゲートは
+# 反転（「飛べたり反転したり」= 最初の4秒間に人間が何をしていたか次第）。静止判定は
 # 動き検出で部分蓄積を破棄し、静止確認済みの平均ができるまで ARM を拒否し続けるため、
 # いつ置いても結果は決定的になる。
 #
@@ -20,7 +20,7 @@
 # in the hand (must be rejected) → placed at 6.0 s → re-calibration completes on
 # the ground → ARM accepted → takeoff → ALT_HOLD hover → DISARM.
 # 時系列: 起動 → 0.5 s で持ち上げ 5.5 s ハンドリング（持上げ 0.6 m・運搬 1.0 m —
-# ゲートを大きく超える加速度）、手中で ARM 試行（拒否されること）→ 6.0 s 設置 →
+# 判定しきい値を大きく超える加速度）、手中で ARM 試行（拒否されること）→ 6.0 s 設置 →
 # 地上で再校正完了 → ARM 受理 → 離陸 → ALT_HOLD ホバー → DISARM。
 #
 # Run: sf sils scenario simulator/sils/scenarios/boot_motion.scn --target vehicle

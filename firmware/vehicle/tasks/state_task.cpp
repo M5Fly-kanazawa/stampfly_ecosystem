@@ -120,8 +120,8 @@ static void registerStateCallbacks(sf::StateManager& manager)
                     // missing half of re-fly readiness (SILS crash_refly surfaced this). INIT
                     // boots from a clean estimator (constructor reset), so it skips this.
                     // 墜落機を扱って置き直した直後: 推定器が墜落由来の大姿勢誤差を latch しうる ―
-                    // タンブル/反転で姿勢推定が真値から大きく外れ、accel-attitude の χ² ゲートが
-                    // それを直す補正自体を棄却し（残差がゲートを超え続ける）自己復帰しない。機体は
+                    // タンブル/反転で姿勢推定が真値から大きく外れ、accel-attitude の χ² 判定が
+                    // それを直す補正自体を棄却し（残差が判定しきい値を超え続ける）自己復帰しない。機体は
                     // 今 level・静止と既知ゆえ、ESKF 全リセットで姿勢を level（identity）へ再シード・
                     // 共分散を再膨張し latch を解除する ― 再飛行 readiness の欠けていた半分
                     // （SILS crash_refly が炙り出した）。INIT は構築時 reset のクリーンな推定器
@@ -143,7 +143,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 // FLYING→IDLE_GROUND と LANDING→IDLE_GROUND は ESKF を全リセット（飛行中・
                 // 発散状態を一掃 — 再飛行 readiness 要件①）、ARMED_GROUND→IDLE_GROUND
                 // （飛ばずに DISARM）はしない（推定器は乱れていない）。よって reset は
-                // isAirborne(from) でゲートする。reset 後に imu_task が起動校正を再注入
+                // isAirborne(from) で判定する。reset 後に imu_task が起動校正を再注入
                 // （reseedCalibration）し、reset() は加速度バイアスの凍結を解除する。
                 if (sf::isAirborne(from)) {
                     sf::estimator_command.publish(
@@ -448,7 +448,7 @@ void StateTask(void* pvParameters)
         // トグルを IDLE_GROUND↔ARMED_GROUND に意図的に限定する: 誤った単発の短押しが飛行中に
         // モータを切ってはならない — 飛行中のキルは意図的な failsafe/コントローラ DISARM で
         // あってボタンのタップではない。requestArm()/requestDisarm() は内部で検証する
-        // （ARM前ゲート・armed 判定）ため、これは強制遷移でなく「要求」。ボタンはジェスチャを
+        // （ARM前判定・armed 判定）ため、これは強制遷移でなく「要求」。ボタンはジェスチャを
         // 事実として報告し、唯一の遷移実行者である本タスクが判断する。長押しは予約
         // （ペアリング/システムリセット）でここでは無視する。
         //
@@ -469,7 +469,7 @@ void StateTask(void* pvParameters)
         // ネットワーク API の飛行 verb（ApiTask → api_command, requirements §7）。
         // ボタン/パイロット入力と同じ権限分担: API は事実を報告し、本タスクが
         // StateManager を通して判断する。Takeoff は「実績のある既存の鎖」の合成:
-        // 地上モード変更 → requestArm（静止校正含む事前ゲート有効）→ 自動離陸
+        // 地上モード変更 → requestArm（静止校正含む事前判定有効）→ 自動離陸
         // トリガ（mode≥ALT_HOLD の TAKEOFF 突入で ControllerCmd::Takeoff 発行）。
         // Emergency は無条件 DISARM — パイロット DISARM と同じモータ停止。
         sf::ApiCommand api_cmd;

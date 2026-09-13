@@ -72,7 +72,7 @@ StampFly Ecosystem を「広い教育階層」——小中高・高専・大学�
 | ワークショップ（`docs/events/stampfly_workshop/`） | 4+1日間・12〜13レッスン（環境構築→モータ制御→P制御→システム同定→PID→姿勢推定→Python SDK）+ Day5競技会。Beamerスライド+TikZ図25点+講師ガイド+競技ルール+アンケート設計（21問） | ◎（アンケートは未実施） | 高専・大学 |
 | 大学15回カリキュラム（`docs/university/` + `analysis/notebooks/education/`） | 半期15回（90分）シラバス+評価ルーブリック+**Jupyterノートブック01〜15は実装済み**（理論→シミュレーション予習→同梱サンプルデータ解析→実機実験（任意）の4段構成。実機なしでも各回の大半が完結） | ◎（ただしシラバスからノートブックへのリンクがなく「在るのに見えない」）※2026-09-13に教材本体を削除し、作る予定を `docs/plans/university-course-plan.md` に残した | 学部3〜4年 |
 | Examples（`examples/education/`） | Python実装例8本（hello_flight〜waypoint_mission・Allan分散）。全例が `connect_or_simulate()` 経由のため**実機なしでもそのまま動く**（接続失敗時は純Pythonシミュレータへ自動フォールバック） | ◎ ※2026-09-13に教材本体を削除し、作る予定を `docs/plans/university-course-plan.md` に残した | 入門〜中級 |
-| 無機体学習環境 | `sf sils gui`（ブラウザでシナリオ作成・パラメータ54個編集・3Dリプレイ・合否ゲート表示、依存ゼロ）+ SILSシナリオ39本 + VPythonシミュレータ + 同梱サンプルデータ5本（`analysis/datasets/education/`）+ 実機ログ150本以上（`logs/`） | ◎（購入前に体験できる導線として未宣伝） | 全層 |
+| 無機体学習環境 | `sf sils gui`（ブラウザでシナリオ作成・パラメータ54個編集・3Dリプレイ・合否判定表示、依存ゼロ）+ SILSシナリオ39本 + VPythonシミュレータ + 同梱サンプルデータ5本（`analysis/datasets/education/`）+ 実機ログ150本以上（`logs/`） | ◎（購入前に体験できる導線として未宣伝） | 全層 |
 | ガイド（`docs/guides/`） | 安全・用語集・トラブルシューティング等6本、日英併記 | ◎ | 全層 |
 | 4階層API | L0 `ws::*`（2関数で完結）→ L1 `sf::api`（制御則・推定器の差し替え）→ L2 HALラッパー（組込み学習）→ L3 `sf::internal`（ファーム実装） | ◎（設計思想として文書化済み） | 小中高〜実装者 |
 | SILS + Code Identity | 実機と同一ソースを参照コンパイルするシミュレータ。SILSでPIDチューニング→実機書き込みが同一パラメータで通る | ◎ | 学部〜研究者 |

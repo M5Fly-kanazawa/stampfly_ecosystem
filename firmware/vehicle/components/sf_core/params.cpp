@@ -302,7 +302,7 @@ namespace param_vars {
     //   wc = achieved crossover [rad/s], pm = phase margin [deg], gm = gain margin [dB]
     //   (gm = 99 means no −180° crossing in the sweep, i.e. effectively infinite/safe).
     //   0 = not yet designed.
-    // autotune 設計余裕結果（軸ごと）。ループ整形設計(tunePid)成功直後＝GM下限/ゲイン範囲ゲートの
+    // autotune 設計余裕結果（軸ごと）。ループ整形設計(tunePid)成功直後＝GM下限/ゲイン範囲判定の
     // 前に記録するため、設計が棄却される軸(余裕の薄い yaw 等)でも余裕が残り「なぜ棄却されたか」が
     // 読める。読み出し専用・`param save` で永続。wc=交差[rad/s]、pm=位相余裕[deg]、gm=ゲイン余裕[dB]
     // （gm=99 は掃引中に −180°交差なし＝実質無限大/安全）。0=未設計。
@@ -461,7 +461,7 @@ namespace param_vars {
     // `param reset` lands on the flight-validated combo.
     // See PidController::applyAltVelTiForPhase() (architecture.md INV-1).
     // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。
-    // 既定1.5（2026-07-18 昇格。旧2.5=no-op）。根拠: 実ホバーの低周波電池サグ
+    // 既定1.5（2026-07-18 昇格。旧2.5=no-op）。根拠: 実ホバーの低周波電池電圧低下
     // 外乱は短いTiで除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバー
     // シュートを悪化させる（積分巻き上がり、シム/実機+60%）。フェーズ分離
     // （climb=alt_vel_ti, hover=alt_vel_ti_hover）で TakeoffClimb は不変
@@ -518,7 +518,7 @@ namespace param_vars {
     // 外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝予測超え）、d̂クランプ
     // 飽和0%、fc/クランプ掃引に現行超えなし。同日コンパイル既定へ昇格（パイロット
     // 判断。前例: ロール再調整・ヨーκ修正も単機A/B後に既定値化）: SILSはDOB有効で
-    // 全飛行ゲートPASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
+    // 全飛行判定PASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
     // 個体差をカバー。会場級環境は実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
     // が出たら0にすること。
     float alt_dob_fc = 0.0f;
@@ -539,7 +539,7 @@ namespace param_vars {
     // altitude hold robust to thrust degradation (motor wear, battery sag) without per-flight
     // corr tuning. See pid_controller learnHoverThrust().
     // オンボード・ホバー推力学習の有効化（1 = 飛行中に真のホバー推力を学習し着地時 hover.thrust_corr
-    // へ永続, 0 = 手動 corr のみ）。推力劣化（モータ劣化・電圧サグ）に高度保持をロバスト化し、corr の
+    // へ永続, 0 = 手動 corr のみ）。推力劣化（モータ劣化・電圧低下）に高度保持をロバスト化し、corr の
     // フライト毎手調整を不要にする。learnHoverThrust() 参照。
     int32_t hover_thrust_learn = 1;
 
@@ -563,7 +563,7 @@ namespace param_vars {
     // 遅く → カスケード分離を回復。K∈[2.8,7]/τ∈[50,300]ms でロバスト、SILS pos_* 全 PASS。
     // 実機2飛行で調整: 0.3/2.0 でまず発散を止め（~13cm 保持）、0.4/3.0 で締めた（定常保持の
     // ドリフト RMS 31→16mm・最大 126→83mm、傾きのビビり増なし）。残る揺らぎは ~0.4 g の
-    // 実効ゲインが律速（根治は別タスク: 姿勢ループの傾き達成度／フロー速度スケール）。
+    // 実効ゲインがボトルネック（根治は別タスク: 姿勢ループの傾き達成度／フロー速度スケール）。
     float pos_pos_kp      = 0.4f;
     float pos_pos_ti      = 5.0f;
     float pos_vel_kp      = 3.0f;
@@ -646,7 +646,7 @@ namespace param_vars {
     // a_kin (state = velocity + acceleration; β small so the SUSTAINED drift acceleration
     // is captured, not washed out like a naive derivative), and the accel-attitude update
     // subtracts R^T·a_kin → the residual is the TRUE attitude error.
-    // ESKF 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は比力 f=a_kin−g を測り、水平
+    // ESKF 運動加速度補償の accel-attitude（POS_HOLD）。加速度計は f=a_kin−g（加速度計の測定値）を測り、水平
     // マニューバ中は運動加速度 a_kin を傾きと誤認し姿勢が「見かけの重力」角 atan(a/g) に張付き
     // POS_HOLD が飛び去る。フロー速度の α-β トラッカで a_kin を推定（状態=速度+加速度、β 小で
     // 持続ドリフト加速度を単純微分のように washout せず捕捉）、accel-attitude が R^T·a_kin を

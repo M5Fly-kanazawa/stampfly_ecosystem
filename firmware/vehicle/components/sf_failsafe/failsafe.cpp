@@ -173,7 +173,7 @@ void Failsafe::checkBattery()
     // Recovery hysteresis: clear both latches only when the voltage rises clearly
     // above the warning threshold, so load-transient sag does not chatter alerts.
     // 回復ヒステリシス: 警告閾値を明確に上回ったときだけ両ラッチをクリアし、負荷過渡の
-    // サグでアラートがばたつかないようにする。
+    // 電圧降下でアラートがばたつかないようにする。
     constexpr float kRecoveryHysteresisV = 0.1f;
 
     if (power.voltage < config_.critical_battery_v) {

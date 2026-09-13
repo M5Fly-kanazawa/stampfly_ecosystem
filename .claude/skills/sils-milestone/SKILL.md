@@ -1,6 +1,6 @@
 ---
 name: sils-milestone
-description: SILS マイルストーンの成果物バンドル（results.json＋レビュー動画＋図＋ゲート承認）を1コマンドで生成・検証する。閉ループ run → 動画 → 機械判定ゲートを順に実行し、アウトプット主導でマイルストーンの達成を確定する。RESET_PLAN.md §8〜§10 の実現形。
+description: SILS マイルストーンの成果物バンドル（results.json＋レビュー動画＋図＋合否判定）を1コマンドで生成・検証する。閉ループ run → 動画 → 機械による合否判定を順に実行し、アウトプット主導でマイルストーンの達成を確定する。RESET_PLAN.md §8〜§10 の実現形。
 disable-model-invocation: true
 ---
 
@@ -10,12 +10,12 @@ SILS の各マイルストーン（P1〜P4）で**必ず**作る成果物バン�
 `/lecture-video` と同じ「決定論ツール＋オーケストレーション」型。**スキル＝作る手順、
 フック＝抜けを防ぐ仕組み**（`sf sils gate` / `simulator/sils/tools/sils_gate.py`）。
 
-> 設計の正本: `simulator/sils/RESET_PLAN.md`（§8 CLI/フック、§9 動画、§10 アウトプット主導）
+> 設計の基準文書: `simulator/sils/RESET_PLAN.md`（§8 CLI/フック、§9 動画、§10 アウトプット主導）
 
 ## 単一入口 = `sf sils milestone`
 
 このスキルの手順は**すべて `sf sils` サブコマンドに集約済み**。生のビルド／実行コマンドを
-手で並べない（CLI が正本＝ Single Source of Truth）。マイルストーン1本は次の1コマンド:
+手で並べない（CLI を基準とする＝ Single Source of Truth）。マイルストーン1本は次の1コマンド:
 
 ```bash
 source setup_env.sh          # sf CLI を有効化（SILS は host 専用・ESP-IDF 不要）
@@ -39,14 +39,14 @@ sf sils milestone -m P1 -e eskf
 各マイルストーンは「やることリスト」でなく成果物で定義する（RESET_PLAN §10）。
 バンドルが揃って機械判定が pass して初めて「達成」:
 
-1. `results.json` — 機械によるゲート合否（唯一の正）
+1. `results.json` — 機械による合否判定（唯一の正）
 2. レビュー動画 `*.mp4` — 飛行3Dアニメ＋状態グラフ（人間の確認＋アピール素材、§9）
 3. `trajectory.csv` — 再現可能な時系列（同じ実行→同じ動画）
-4. ゲート承認（`sf sils gate` が exit 0）
+4. 合否判定の承認（`sf sils gate` が exit 0）
 
 ## 実行手順
 
-### 1. マイルストーン1本を生成・ゲート
+### 1. マイルストーン1本を生成・判定
 
 引数: マイルストーン名（既定 `P1`）と推定器（`eskf` / `complementary`、既定 `eskf`）。
 
@@ -115,17 +115,17 @@ ffmpeg -y -ss <t> -i simulator/sils/viz/out_<ms>/*.mp4 -frames:v 1 /tmp/sils_fra
 ### 5. 報告
 
 人間が確認できる形でまとめる:
-- ゲート結果（APPROVED/REJECTED）と `results.json` の主要 metrics（`sf sils status`）
+- 判定結果（APPROVED/REJECTED）と `results.json` の主要 metrics（`sf sils status`）
 - 動画パス（`simulator/sils/viz/out_<ms>/<ms>_flight.mp4`）と長さ・解像度
 - 目視所見（サブエージェント）
 - 不合格なら不足項目と次アクション
 
 ## フック連携（抜けを防ぐ仕組み）
 
-このスキルは**作る手順**。**抜けを防ぐ**のはゲート（`sf sils gate` →
+このスキルは**作る手順**。**抜けを防ぐ**のは合否判定（`sf sils gate` →
 `simulator/sils/tools/sils_gate.py`）と git フック:
 
-- **ゲート**: マイルストーンを「達成」と宣言する前に必ず `sf sils gate` の exit 0 を
+- **合否判定**: マイルストーンを「達成」と宣言する前に必ず `sf sils gate` の exit 0 を
   要求する。バンドル（`results.json` ＋ レビュー動画 ＋ `trajectory.csv`）が揃い、
   機械判定が pass でなければ承認を拒否する。
 - **git タグ・フック**（任意・推奨）: マイルストーンタグ（例 `sils-p1`）を打つ前に
@@ -133,4 +133,4 @@ ffmpeg -y -ss <t> -i simulator/sils/viz/out_<ms>/*.mp4 -frames:v 1 /tmp/sils_fra
   （`.githooks/pre-push`、opt-in: `git config core.hooksPath .githooks`）。
 - **注意**: Claude Code の settings.json フックはツールイベント（PreToolUse 等）に
   反応するもので「マイルストーン」イベントは無い。マイルストーンの強制は上記の
-  ゲートスクリプト＋git フックで行う（settings.json フックは用途が別）。
+  合否判定スクリプト＋git フックで行う（settings.json フックは用途が別）。

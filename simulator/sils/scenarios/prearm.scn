@@ -1,5 +1,5 @@
 # prearm.scn — P2-4 pre-arm calibration gate (ARM rejected until calibration done)
-# P2-4 ARM 前キャリブゲート（校正完了まで ARM 拒否）
+# P2-4 ARM 前キャリブ判定（校正完了まで ARM 拒否）
 #
 # The boot calibration runs for ~3.5 s on the ground (1 s settle + 2.5 s average). This
 # scenario attempts ARM at ~1.5 s — WHILE the calibration is still collecting — and
@@ -10,7 +10,7 @@
 # 起動校正は地上で約 3.5 秒走る（整定 1 秒 + 平均 2.5 秒）。本シナリオは ~1.5 秒で
 # ARM を試み（校正がまだ収集中）、requestArm() が拒否すること（"boot calibration not
 # complete"）を期待する。校正完了後に再度 ARM（新しい立ち上がりエッジ）し、受理される
-# ことを期待する。ARM 前キャリブゲートが実際にゲートすることを実証。
+# ことを期待する。ARM 前キャリブ判定が実際に判定することを実証。
 #
 # Run: sf sils scenario simulator/sils/scenarios/prearm.scn --target vehicle
 #

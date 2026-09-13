@@ -16,7 +16,7 @@
 
 | 項目 | 状態 |
 |------|------|
-| **VL53 動的 valid 性** | **✅ 解決**（commit `59bf02b`）。ToF が ~1.5 m/s の鉛直運動まで status=0 を維持（旧: 0.30 m/s で崖状に全滅）。probe + フル emu で検証済み。 |
+| **VL53 動的 valid 性** | **✅ 解決**（commit `59bf02b`）。ToF が ~1.5 m/s の鉛直運動まで status=0 を維持（旧: 0.30 m/s でしきい値を超えると一斉に無効になっていた）。probe + フル emu で検証済み。 |
 | ToF-only ALT_HOLD 空中ホバー | **✅ 成立**（commit `cea0d8c`, 2026-06-03）。§2 の「残ブロッカー」の真因は **SILS Plant 時間基準バグ＝物理が仮想時間の約3倍速**だった（推力でもESKFでもない）。修正（timestep 0.0025→0.00025=4000Hz ＋ Plant::step の固定timestep累積器）で hover_alt peak 900m→0.677m, ESKF ALT capture 0.62m（修正前 -0.00m 発散）, ALT_HOLD 0.62m 保持。**§2 以降の記述は二次症状の観察であり真因ではない — 詳細は `simulator/sils/docs/plant_timebase_bug.md`**。 |
 
 ---
@@ -60,7 +60,7 @@ gen4 内部 zdp/位相窓/p_011/status をダンプ）。`cmake -S simulator/sil
 バグかパラメータ誤り。→ 過推力は **Plant 側の不備**だった。
 
 - ファームの hover FF は `mass·g·HOVER_THRUST_CORRECTION(1.12)`（config.hpp:533, 実飛行
-  ログのスロットル実測）を指令。1.12 は実機モータ/プロップが理想曲線より弱い分＋電池サグの補償。
+  ログのスロットル実測）を指令。1.12 は実機モータ/プロップが理想曲線より弱い分＋電池電圧低下の補償。
 - だが Plant は損失ゼロの理想曲線をそのまま使い、この 1.12 の実機欠損を再現していなかった
   → ファームの hover 指令(duty~0.70)で Plant が 0.40N(hover 0.363N の 1.12倍)を出し、
   net 0.037N の定常過推力（DUTYDBG で直接計測, 一時計装→revert）。
@@ -105,7 +105,7 @@ NG）。現 hover_alt.scn はこの構造だが phase C の過推力で 1.4m を
 4. ToF 喪失 → **ESKF 加速度バイアス z が上昇加速度を吸収**（VDBG: baz 0.07→-0.87）→ 鉛直推定が
    真値と乖離（pz≈0 のまま）→ vz の符号も反転 → vel PID が誤って増推 → **正帰還 runaway**。
 
-**核心**: VL53 修正で 0-1.4m 帯の ToF は valid になったが、**firmware 自身のゲート（離陸後スキップ
+**核心**: VL53 修正で 0-1.4m 帯の ToF は valid になったが、**firmware 自身の制限（離陸後スキップ
 ＋jump filter）＋ Plant 過推力**が、離陸過渡の決定的な ~0.5s で ToF を活かせない。機体は ToF が
 再融合される前に 1.4m（ToF レンジ上限）を突破し、以後は鉛直センサ皆無（baro off）で盲目になる。
 

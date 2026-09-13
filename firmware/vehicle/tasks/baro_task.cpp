@@ -49,11 +49,11 @@ static const char* TAG = "BaroTask";
 /// vertical estimate (ToF-only policy) — it only means the streamed/telemetry
 /// pressure is task-rate, not sensor-rate. A data_ready gate (cf. MagTask) or a
 /// shorter standby would make it true 50Hz (code_review L-21).
-/// 周期 [tick]: 20ms = タスク 50Hz。注: 本タスクは data-ready ゲートなしで毎周期 publish
+/// 周期 [tick]: 20ms = タスク 50Hz。注: 本タスクは data-ready 判定なしで毎周期 publish
 /// するが、BMP280 の実効変換レート（standby MS_62_5 + オーバーサンプル）は約13-16Hz の
 /// ため、同一変換値が約3回再発行される。現状無害 — baro は鉛直推定に融合されない
 /// （ToF-only 方針）— 配信/テレメトリの気圧がセンサレートでなくタスクレートになるだけ。
-/// data_ready ゲート（MagTask 参照）または standby 短縮で実 50Hz にできる (L-21)。
+/// data_ready 判定（MagTask 参照）または standby 短縮で実 50Hz にできる (L-21)。
 static constexpr TickType_t kPeriodTicks = pdMS_TO_TICKS(20);
 
 /// Read-failure log throttle: at 50Hz, ~5s between warnings during persistent fail

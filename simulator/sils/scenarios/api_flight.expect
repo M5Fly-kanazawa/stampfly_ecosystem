@@ -1,5 +1,5 @@
 # api_flight.expect — Tello-style programmatic flight gates
-# Tello 風プログラム飛行のゲート
+# Tello 風プログラム飛行の判定
 #
 # Chain: SDK mode → API takeoff (ground POS_HOLD mode change BEFORE arm → ARM-triggered
 # auto-takeoff to the 0.5 m target, unified with manual RC) → composed moves (forward →
@@ -54,7 +54,7 @@ metric alt_mean < 0.70 in 14.0 17.5
 # against runaway.
 # forward 50 は前方へ変位し「有界」に留まる。真値ピークは 0.5 m 目標を約 0.8 m まで
 # 行き過ぎてから整定する — ループが閉じている推定は許容内に到達しており、真値の
-# オーバーシュートは実機飛行テストでの誘導/POS ゲイン調整項目。ここでは暴走のみゲート。
+# オーバーシュートは実機飛行テストでの誘導/POS ゲイン調整項目。ここでは発散のみ判定。
 metric horizontal_drift_max > 0.35 in 17.5 23.0
 metric horizontal_drift_max < 1.00 in 17.5 23.0
 # 2026-07-26 ODEプラント(実測Ct)対応再調整: "up 70" は cw90 の前に繰り上げ・増量した
@@ -75,12 +75,12 @@ metric duty_max < 0.92 in 8.0 26.9
 # モータ対の一方が duty 上限(1.0)に数秒間張り付く(実測)。新ホバーduty=0.7245(旧0.6976)
 # により、従来から存在していた約±0.30の差動要求(旧プラントでは0.6976+0.30≈0.998で
 # 辛うじて非飽和)が新プラントでは 0.7245+0.30>1.0 となり恒常的にクリップする。旋回中も
-# true tilt(roll/pitch)は3°未満のまま(上の tilt_max 参照) — 暴走ではなく新プラントでの
+# true tilt(roll/pitch)は3°未満のまま(上の tilt_max 参照) — 発散ではなく新プラントでの
 # ヨー保持時の定常挙動。地面までの余裕は上の "up 70" climb で確保済みなので、この区間の
-# duty 上限ゲートは外し、代わりに「墜落していないこと」を高度下限で直接ゲートする。
+# duty 上限判定は外し、代わりに「墜落していないこと」を高度下限で直接判定する。
 # cw90中は差動ヨートルクのため一時的に平均推力がホバー未満になり沈下するが(実測最小
 # 高度0.375m)、"up 70" の余裕により着地せず回復する。duty の代わりに高度下限で
-# 「墜落していないこと」を直接ゲートする。
+# 「墜落していないこと」を直接判定する。
 metric alt_min > 0.30 in 27.2 31.0
 # Landed at the end. / 最後は接地。
 metric alt_max < 0.10 in 38.0 39.5

@@ -1,5 +1,5 @@
 # api_rc.expect — Tello `rc a b c d` continuous manual control gates (Phase 2)
-# Tello `rc a b c d` 連続マニュアル操作のゲート（Phase 2）
+# Tello `rc a b c d` 連続マニュアル操作の判定（Phase 2）
 #
 # Chain: command + takeoff → POS_HOLD hover at 0.5 m → FORWARD via repeated
 # "rc 0 60 0 0" (transmitter neutral throughout) → CLIMB via "rc 0 0 50 0" →
@@ -9,7 +9,7 @@
 # stays bounded (no runaway when rc stops).
 # 連鎖: command+takeoff → 0.5m ホバー → rc で前進（送信機中立のまま）→ rc で上昇 →
 # rc 停止で R16 保持復帰 → 送信機ピッチ操作で即解除 → 着陸。送信機入力なしに北へ移動・
-# ホバー上へ上昇・rc 停止後も有界（暴走なし）であることをメトリクスで固定。
+# ホバー上へ上昇・rc 停止後も有界（発散なし）であることをメトリクスで固定。
 exit 0
 log_contains any "cmd: command"
 log_contains any "cmd: takeoff"

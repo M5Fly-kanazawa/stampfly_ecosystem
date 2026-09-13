@@ -36,7 +36,7 @@ namespace {
 // trajectory (and therefore the analytic IMU specific force) has no jump.
 // 五次 smootherstep S(u)=6u⁵−15u⁴+10u³（u∈[0,1]）と一階・二階微分（u について）。C²:
 // u=0 で S=S'=S''=0、u=1 で S=1,S'=S''=0 ゆえ、この端点で相を連結すると位置・速度・加速度が
-// 連続 ― ハンドリング軌道（と解析 IMU 比力）に飛びが無い。
+// 連続 ― ハンドリング軌道（と解析 IMU の加速度計測定値）に飛びが無い。
 inline float smoothstep(float u)   { return ((6.0f * u - 15.0f) * u + 10.0f) * u * u * u; }
 inline float smoothstep_d1(float u){ return 30.0f * u * u * (u - 1.0f) * (u - 1.0f); }
 inline float smoothstep_d2(float u){ return 60.0f * u * (2.0f * u - 3.0f) * u + 60.0f * u; }
@@ -110,12 +110,12 @@ bool Plant::init(const char* model_path, const Config& cfg)
 
     // Initialize the battery supply voltage. With the sag model OFF this stays the
     // fixed nominal (cfg_.v_batt) forever; with it ON, start from the initial SoC.
-    // 電池電源電圧を初期化。サグモデル OFF なら固定公称（cfg_.v_batt）のまま、ON なら
+    // 電池電源電圧を初期化。電圧低下モデル OFF なら固定公称（cfg_.v_batt）のまま、ON なら
     // 初期 SoC から開始する。
     if (cfg_.batt_model_enable) {
         batt_charge_mah_ = cfg_.batt_initial_frac * cfg_.batt_capacity_mah;
         // At rest only the avionics draw flows, so the initial sag is tiny.
-        // 静止時はアビオ電流のみ流れるため初期サグは僅か。
+        // 静止時はアビオ電流のみ流れるため初期の電圧低下は僅か。
         v_batt_ = ocvFromCharge(batt_charge_mah_) - cfg_.avionics_current_a * cfg_.batt_r_int;
     } else {
         v_batt_ = cfg_.v_batt;
@@ -224,7 +224,7 @@ void Plant::startHandling(float carry_alt_m, float place_x_ned, float place_y_ne
 // not the dynamics.
 // handlingSubstep — 規定ハンドリング軌道を h[s] 進める。3つの smootherstep 相（lift/carry/
 // place）の位置と水平への SLERP 姿勢を評価し、qpos/qvel を MuJoCo に書込み（mj_forward が位置
-// センサを更新）、解析 IMU 比力＋ジャイロを保存。mj_step なし ― 機体は動力学でなく手に従う。
+// センサを更新）、解析 IMU の加速度計測定値＋ジャイロを保存。mj_step なし ― 機体は動力学でなく手に従う。
 // -----------------------------------------------------------------------------
 void Plant::handlingSubstep(float h)
 {
@@ -297,7 +297,7 @@ void Plant::handlingSubstep(float h)
 
     // --- Analytic IMU: specific force from the trajectory's acceleration + gyro ----------
     // accel_body_frd(a,q) = q.inv_rotate(a − g_ned): at rest (a=0, level) → [0,0,−9.81].
-    // --- 解析 IMU: 軌道の加速度から比力＋ジャイロ ---
+    // --- 解析 IMU: 軌道の加速度から加速度計測定値＋ジャイロ ---
     handle_accel_frd_ = frames::accel_body_frd(acc, q_nb);
     handle_gyro_frd_  = omega_frd;
 
@@ -516,7 +516,7 @@ void Plant::substep(float h)
     // 電源）。ODE（simulator/genesis/motor_model.py 移植）を下で長さ h の古典 RK4 で
     // 1ステップ積分する。これが「モータ遅れ」そのもの — 別建ての一次遅れ段
     // （撤去済みの Config::motor_tau）は無い。電気電流 I=(V−Km·ω)/Rm を積算し
-    // 電池サグを駆動（本 substep の v_batt_ で計算、その後 v_batt_ を更新＝4kHz で
+    // 電池電圧低下を駆動（本 substep の v_batt_ で計算、その後 v_batt_ を更新＝4kHz で
     // 陽的に1 substep 遅れ）。
     const float v_supply = v_batt_;          // this substep's supply voltage
 
@@ -656,7 +656,7 @@ void Plant::substep(float h)
     }
 
     // Update the battery supply (Coulomb count + IR sag) for the next substep.
-    // 次 substep に向けて電池電源を更新（クーロンカウント＋IR サグ）。
+    // 次 substep に向けて電池電源を更新（クーロンカウント＋IRによる電圧降下）。
     updateBattery(i_total, h);
 
     // Express the body-Z(FLU) torque in the world (ENU) using the truth quaternion
@@ -753,7 +753,7 @@ Plant::Truth Plant::truth() const
 // This matches the driver-normalized convention the firmware ESKF expects.
 //
 // imu — 機体 FRD の合成 IMU（ドライバ正規化: 静止で重力 −9.8）。
-// 主経路は MuJoCo 内蔵 <accelerometer>（FLU site での比力 a−g）を frames::flu_to_frd で
+// 主経路は MuJoCo 内蔵 <accelerometer>（FLU site での加速度計測定値 a−g）を frames::flu_to_frd で
 // FRD に写す → 静止で [0,0,−9.81]。ファーム ESKF が期待するドライバ正規化規約と一致。
 // -----------------------------------------------------------------------------
 sf::ImuData Plant::imu() const
@@ -764,7 +764,7 @@ sf::ImuData Plant::imu() const
         // accelerometer would read the free-dynamics acceleration, not the hand's. Use the
         // specific force / gyro computed analytically from the prescribed trajectory.
         // ハンドリング中: 機体はキネマティックに規定（積分でない）ゆえ MuJoCo 加速度計は
-        // 手でなく自由動力学の加速度を読む。規定軌道から解析した比力/ジャイロを使う。
+        // 手でなく自由動力学の加速度を読む。規定軌道から解析した加速度計測定値/ジャイロを使う。
         accel_frd = handle_accel_frd_;
         gyro_frd  = handle_gyro_frd_;
     } else {

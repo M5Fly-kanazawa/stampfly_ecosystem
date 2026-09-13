@@ -37,7 +37,7 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 | `command` | `command` | SDK モード開始 | なし |
 | `takeoff` | `takeoff` | 自動離陸（POS_HOLD、手動 RC 離陸と同じ経路）。FLYING 到達まで最大12秒ブロック | 地上（IDLE_GROUND/ARMED_GROUND）かつ静止校正済み |
 | `land` | `land` | 自動着陸。IDLE_GROUND 到達まで最大20秒ブロック | 飛行中 |
-| `emergency` | `emergency` | 全モーター緊急停止。他の全ゲートより優先して処理される | 常時 |
+| `emergency` | `emergency` | 全モーター緊急停止。他の全ての判定より優先して処理される | 常時 |
 | `stop` | `stop` | 現在位置を目標に再設定してホバリング | FLYING かつ API 誘導目標が有効 |
 
 ### 移動・回転

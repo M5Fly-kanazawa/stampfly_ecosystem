@@ -69,7 +69,7 @@ public:
     /// motor HAL is armed only on the disarmed→armed edge. Until armed, the HAL
     /// silently swallows every duty write — so update() does nothing useful
     /// unless arm() has been called first.
-    /// モーター出力を有効化（ARM 遷移用の安全ゲート）。冪等: 立上りエッジでのみ HAL を
+    /// モーター出力を有効化（ARM 遷移用の安全判定）。冪等: 立上りエッジでのみ HAL を
     /// arm する。arm されるまで HAL は全 duty 書き込みを握り潰すため、arm() 後でないと
     /// update() は実際にはモーターを回さない。
     void arm();
@@ -82,7 +82,7 @@ public:
     /// Idempotent: zeroes the LEDC outputs and clears the HAL arm gate on the
     /// armed→disarmed edge.
     /// 全モーターを直ちに停止（DISARM 遷移用の安全フック）。冪等: 立下りエッジで LEDC を
-    /// 0 にし HAL の arm ゲートを下げる。
+    /// 0 にし HAL の arm 判定を下げる。
     void disarm();
 
     /// BENCH MOTOR TEST: drive the 4 motors to the given raw duties [0,1], bypassing the
@@ -97,7 +97,7 @@ public:
 private:
     /// Actuator-level arm state, mirrors the motor HAL gate so arm()/disarm()
     /// can be called every control cycle without re-arming or log spam.
-    /// アクチュエータ層の arm 状態。HAL ゲートを写し、毎制御周期に arm()/disarm() を
+    /// アクチュエータ層の arm 状態。HAL 判定を写し、毎制御周期に arm()/disarm() を
     /// 呼んでも再 arm やログ氾濫が起きないようにする。
     bool armed_ = false;
 };

@@ -21,8 +21,8 @@
  *
  * 旧ファームからの教訓（コピーではなく設計知識として適用）:
  * - active_maskによるP行列隔離で状態破壊を防止
- * - 姿勢センサにはχ²ゲートが必須
- * - 位置センサには絶対値イノベーションゲート（P崩壊対策）
+ * - 姿勢センサにはχ² 判定が必須
+ * - 位置センサには絶対値イノベーション判定（P崩壊対策）
  * - 数値安定性のためJoseph形式
  *
  * @design detailed_design.md §5 — IEstimator                         [OK]
@@ -77,7 +77,7 @@ void EskfCore::reset()
 
     // Drop the accel-compensation flow history so the first post-reset flow sample
     // re-seeds the α-β tracker without a spurious large difference.
-    // 運動加速度補償のフロー履歴を破棄し、リセット後最初のフローが α-β を暴れずに再シード。
+    // 運動加速度補償のフロー履歴を破棄し、リセット後最初のフローが α-β を大きく変動させずに再シード。
     have_flow_vel_ = false;
     flow_vel_lpf_  = {0, 0, 0};
     a_kin_ned_     = {0, 0, 0};
@@ -90,7 +90,7 @@ void EskfCore::reset()
     // current sensor/mag-gate state. init() does this after reset(), but the
     // standalone EskfEstimator::reset() path would otherwise leave the mask stale
     // (e.g. accel-bias bits frozen after a future freeze→reset) (code_review L-16).
-    // freeze フラグのクリアと現在のセンサ/mag ゲート状態を反映するよう active_mask を
+    // freeze フラグのクリアと現在のセンサ/mag 判定状態を反映するよう active_mask を
     // 再計算する。init() は reset() 後にこれを行うが、単独の EskfEstimator::reset()
     // 経路ではマスクが古いまま残りうる（将来 freeze→reset 後に加速度バイアスビットが
     // 凍結のまま等）(L-16)。
@@ -455,7 +455,7 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     // Chi-squared gate. The threshold is passed in by the caller so each vector
     // observation uses its own gate (accel → accel_chi2_gate, mag → mag_chi2_gate)
     // rather than sharing one constant.
-    // χ²ゲート。閾値は呼び出し側が渡す。各ベクトル観測が自分のゲートを使う
+    // χ² 判定。閾値は呼び出し側が渡す。各ベクトル観測が自分の判定を使う
     // (accel→accel_chi2_gate, mag→mag_chi2_gate)。1 定数を共有しない。
     if (d2 > chi2_gate) {
         return;
@@ -548,7 +548,7 @@ void EskfCore::updateToF(float distance)
     // イノベーション: y = -height - pos_z（NED: z下向き）
     float innovation = -height - pos_.z;
 
-    // Absolute innovation gate / 絶対値イノベーションゲート
+    // Absolute innovation gate / 絶対値イノベーション判定
     if (fabsf(innovation) > cfg_.tof_innov_gate) return;
 
     scalarUpdate(H, innovation, cfg_.tof_noise * cfg_.tof_noise);
@@ -613,7 +613,7 @@ void EskfCore::updateMag(const Vec3& mag)
 {
     // Two independent gates: the param enable (cfg_.use_mag) AND the calibration
     // gate (mag_calib_gate_, survives reloadParams) — see eskf_core.hpp (L-5).
-    // 2つの独立ゲート: param 有効化 (cfg_.use_mag) と校正ゲート (mag_calib_gate_,
+    // 2つの独立判定: param 有効化 (cfg_.use_mag) と校正判定 (mag_calib_gate_,
     // reloadParams を生き延びる) — eskf_core.hpp 参照 (L-5)。
     if (!cfg_.use_mag || !mag_calib_gate_) return;
 
@@ -637,7 +637,7 @@ void EskfCore::updateMag(const Vec3& mag)
 
     // Chi-squared outlier rejection happens inside vectorUpdate3 using the
     // mag-specific gate (a magnetic disturbance shows up as a large innovation).
-    // χ² 外れ値棄却は vectorUpdate3 内で mag 専用ゲートを使って行う
+    // χ² 外れ値棄却は vectorUpdate3 内で mag 専用の判定を使って行う
     // (磁気外乱は大きなイノベーションとして現れる)。
     vectorUpdate3(H, innov, cfg_.mag_noise * cfg_.mag_noise, cfg_.mag_chi2_gate);
 }
@@ -671,10 +671,10 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // blind → it estimates "level" during a coordinated tilt+accelerate. The proven
     // firmware/vehicle has NO norm gate; it relies on the adaptive R plus the χ²
     // outlier gate inside vectorUpdate3. We do the same here.
-    // 適応Rスケーリング — |a|がgから逸脱したら補正を弱める(ハードゲートしない)。推力/
-    // マニューバ過渡で比力が重力を汚染するが、ハードな norm gate(早期return)は傾斜中の
+    // 適応Rスケーリング — |a|がgから逸脱したら補正を弱める(ハード判定しない)。推力/
+    // マニューバ過渡で加速度計の測定値が重力を汚染するが、ハードな norm gate(早期return)は傾斜中の
     // corrective な更新ごと捨て姿勢を盲目化し、協調傾斜+加速で「水平」と誤推定する。実証済み
-    // firmware/vehicle に norm gate は無く、適応R＋vectorUpdate3 内の χ² 外れ値ゲートで捌く。
+    // firmware/vehicle に norm gate は無く、適応R＋vectorUpdate3 内の χ² 外れ値判定で捌く。
     float gravity_diff = accel.norm() - cfg_.gravity;
 
     // Expected gravity in body: g_body = R^T * [0, 0, -g]
@@ -689,7 +689,7 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     // compensation: add the flow-derived kinematic acceleration in body, so f_pred =
     // g_expected + R^T·a_kin and the residual is the TRUE attitude error instead of the
     // kinematic term. At hover (a_kin≈0) h_vec == g_expected, so it reduces to the plain
-    // update there. 予測比力。素では重力のみ(g_expected)。運動加速度補償ありではフロー由来の
+    // update there. 予測した加速度計の測定値。素では重力のみ(g_expected)。運動加速度補償ありではフロー由来の
     // 運動加速度を body で加算 f_pred = g_expected + R^T·a_kin → 残差が運動加速度項でなく真の
     // 姿勢誤差に。ホバー(a_kin≈0)では h_vec==g_expected ゆえ素の更新に一致。
     Vec3 h_vec = g_expected;
@@ -735,7 +735,7 @@ void EskfCore::updateFlowRaw(int16_t dx, int16_t dy, float height,
     // POS_HOLD (code_review L-1). Gate FIRST so neither the Kalman update nor the
     // accel-comp α-β tracker downstream ever sees a bad sample.
     // 低品質フローはフィルタ前に棄却: 品質の悪い面はノイズ変位を出し POS_HOLD へ偽の
-    // 水平速度を注入する (L-1)。先にゲートし、Kalman 更新も下流の accel-comp α-β
+    // 水平速度を注入する (L-1)。先に判定し、Kalman 更新も下流の accel-comp α-β
     // トラッカも不良サンプルを見ないようにする。
     if (squal < cfg_.flow_min_squal) return;
     if (height < cfg_.flow_min_height) return;
@@ -846,11 +846,11 @@ void EskfCore::setSensorEnabled(int group, bool enabled)
     // cfg_.use_mag here would be undone by the next reload — exactly the bug L-5
     // fixes. The mag's param enable and calibration gate are separate; mag fuses
     // only when both hold. (TOF/BARO/FLOW have a single gate, so they map to cfg_.)
-    // group: 0=TOF, 1=BARO, 2=MAG 校正ゲート, 3=FLOW。group 2 は校正ゲート
+    // group: 0=TOF, 1=BARO, 2=MAG 校正判定, 3=FLOW。group 2 は校正判定
     // (mag_calib_gate_) を駆動し cfg_.use_mag は触らない: param 有効化は
     // setConfig()/reloadParams() 由来で、ここで cfg_.use_mag を書くと次の reload で
-    // 取り消される（L-5 が直すバグそのもの）。mag の param 有効化と校正ゲートは別物で、
-    // 両方成立時のみ融合する。（TOF/BARO/FLOW は単一ゲートゆえ cfg_ に対応。）
+    // 取り消される（L-5 が直すバグそのもの）。mag の param 有効化と校正判定は別物で、
+    // 両方成立時のみ融合する。（TOF/BARO/FLOW は単一判定ゆえ cfg_ に対応。）
     switch (group) {
         case 0: cfg_.use_tof   = enabled; break;
         case 1: cfg_.use_baro  = enabled; break;
@@ -880,7 +880,7 @@ void EskfCore::recomputeActiveMask()
     // If no MAG aiding (param disabled OR uncalibrated gate down): freeze ATT_Z,
     // BG_Z — same condition as updateMag, so the yaw states are isolated whenever
     // mag is not actually fused (L-5).
-    // MAG 補正なし（param 無効 or 未校正ゲート降下）: ATT_Z, BG_Z をフリーズ。
+    // MAG 補正なし（param 無効 or 未校正判定降下）: ATT_Z, BG_Z をフリーズ。
     // updateMag と同条件にし、mag が実際に融合されない間はヨー状態を隔離する (L-5)。
     if (!cfg_.use_mag || !mag_calib_gate_) {
         active_mask_ &= ~((1 << ATT_Z) | (1 << BG_Z));
@@ -915,11 +915,11 @@ void EskfCore::setAttitudeFromGravity(const Vec3& accel_avg)
     //   pitch = atan2(+ax, sqrt(ay² + az²))   (= θ)
     // (The previous atan2(ay, −az) / atan2(−ax, …) returned −φ/−θ — the sign
     // confusion between specific force f and gravity g.)
-    // 「比力」の方向から roll/pitch を計算（静止時 f = −重力(機体)）。水平静止で
+    // 「加速度計の測定値」の方向から roll/pitch を計算（静止時 f = −重力(機体)）。水平静止で
     // accel_avg ≈ [0,0,−g]。真のロール +φ では f = [0, −g·sinφ, −g·cosφ]、
     // 真のピッチ +θ では f = [+g·sinθ, 0, −g·cosθ]。よって:
     //   roll  = atan2(−ay, −az)（= φ）、pitch = atan2(+ax, √(ay²+az²))（= θ）。
-    // （従来の atan2(ay,−az)/atan2(−ax,…) は −φ/−θ を返していた — 比力 f と重力 g の
+    // （従来の atan2(ay,−az)/atan2(−ax,…) は −φ/−θ を返していた — 加速度計の測定値 f と重力 g の
     // 符号取り違え。）
     float roll  = atan2f(-accel_avg.y, -accel_avg.z);
     float pitch = atan2f(accel_avg.x,

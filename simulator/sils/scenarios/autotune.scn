@@ -11,10 +11,10 @@
 # kp ≈ 7.2e-4 (0.53x legacy), which sits inside every gate.
 # API 飛行: 離陸 → "autotune roll 60 50": ファームがロールのレート目標で 9 点の
 # ステップドサイン（2–35 Hz, ±0.35 rad/s）を掃引し、オンボードで G(s) をフィット、
-# wc=60 rad/s / PM=50° の PID を設計・余裕検証・ゲート（残差・余裕誤差・param 範囲・
+# wc=60 rad/s / PM=50° の PID を設計・余裕検証・判定（残差・余裕誤差・param 範囲・
 # ゲイン4倍以内）してライブ適用 — その後「新ゲインで」ホバーを継続し着陸する。
 # Model Identity により真値は既知: b=1/Ixx≈109170, T=motor_tau=20ms。期待設計は
-# kp≈7.2e-4（実績比 0.53 倍）で全ゲート内。
+# kp≈7.2e-4（実績比 0.53 倍）で全判定内。
 #
 # Run: sf sils scenario simulator/sils/scenarios/autotune.scn --target vehicle --duration 55000000
 #

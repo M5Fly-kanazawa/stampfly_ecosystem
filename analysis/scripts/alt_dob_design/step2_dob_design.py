@@ -946,7 +946,7 @@ def main():
     # （検証済み: flightA[0]はstep1の離陸イベント時刻とms単位で一致）。この瞬間を
     # そのまま再生すると、離陸過渡の強い非線形性によるモデル誤差(d_ext_accが
     # t=0でHOVER相当の+380mN)を定常外乱として注入してしまい、DOB設計とは無関係な
-    # 数m級の暴走を生む。step1自身が使うのと同じ3sマージンでトリムする。
+    # 数m級の発散を生む。step1自身が使うのと同じ3sマージンでトリムする。
     # C/Dはタスク指定の固定窓（離着陸端から十分離れていることを確認済み）で変更しない。
     EDGE_TRIM_S = 3.0
     flightA = (flightA_raw[0] + EDGE_TRIM_S, flightA_raw[1] - EDGE_TRIM_S)
@@ -1097,7 +1097,7 @@ def main():
     # two different metrics; this revision uses one metric consistently.
     # 指標の統一（2026-07-18レビュー項目7）: 以下すべてでalt_std（自身の平均まわりの
     # 標準偏差）を主指標とし、Gate1/2と同じ定義に統一する。alt_rms（sp基準、平均の
-    # オフセットも含む）は副次列として併記する。前回はメイン表にalt_rms・ゲートに
+    # オフセットも含む）は副次列として併記する。前回はメイン表にalt_rms・判定に
     # alt_stdを使っており、C/Dで620対820mmのような食い違いに見えたが、バグでは
     # なく指標の違いだった。今回は一貫してalt_stdを基準に統一する。
     perf_table = {}

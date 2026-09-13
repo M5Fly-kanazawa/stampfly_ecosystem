@@ -30,7 +30,7 @@ from pathlib import Path
 # Brand colors (Single Source of Truth: docs/events/_shared/beamer/
 # stampfly_slides.sty). Kept in sync manually — this script only READS the
 # .sty file's colors as documented in the task brief, it does not parse it.
-# ブランドカラー（正本は stampfly_slides.sty）。このスクリプトは .sty を
+# ブランドカラー（基準は stampfly_slides.sty）。このスクリプトは .sty を
 # パースせず、ブリーフに明記された値を手動で転記して同期させる。
 # ---------------------------------------------------------------------------
 BRAND_COLORS = {

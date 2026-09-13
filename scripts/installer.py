@@ -3914,7 +3914,7 @@ class Installer:
         runs unattended).
         `auto_install_python`: 非対話モード(SF_INSTALLER_NONINTERACTIVE=1)
         でのみ効果を持つ -- _offer_python_auto_install() 参照。対話モードは
-        この値に関わらず常にプロンプトで y/n を尋ねる。Linuxのsudoゲート
+        この値に関わらず常にプロンプトで y/n を尋ねる。Linuxのsudo判定
         付きインストール経路はこの値を一切無視する(無人実行は絶対にしない)。
 
         `dedicated`/`sf_home` (see docs/plans/dedicated-environment-plan.md):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 gen_flight_log.py - Generate flight-log v1 code/docs from the SSOT YAML.
-gen_flight_log.py - 正本 YAML からフライトログ v1 のコード/文書を生成する。
+gen_flight_log.py - 基準 YAML からフライトログ v1 のコード/文書を生成する。
 
 Reads `protocol/spec/flight_log.yaml` (the Single Source of Truth for the
 StampFly flight-log bundle format) and writes two generated artifacts:
@@ -12,7 +12,7 @@ StampFly flight-log bundle format) and writes two generated artifacts:
 Neither generated file should ever be hand-edited -- re-run this script
 after changing the YAML instead.
 
-`protocol/spec/flight_log.yaml`（StampFly フライトログ一式形式の正本）を
+`protocol/spec/flight_log.yaml`（StampFly フライトログ一式形式の基準ファイル）を
 読み込み、生成物を2つ書き出す:
 
     lib/sflog/schema.py                    Python の列定数
@@ -142,7 +142,7 @@ def render_schema_py(spec: dict) -> str:
     parts.append(f'"""\n{GENERATED_NOTICE}\n\n')
     parts.append("StampFly flight-log v1 schema constants.\n")
     parts.append("StampFly フライトログ v1 形式のスキーマ定数。\n\n")
-    parts.append(f"Source of truth / 正本: {SPEC_PATH.relative_to(REPO_ROOT).as_posix()}\n")
+    parts.append(f"Source of truth / 基準: {SPEC_PATH.relative_to(REPO_ROOT).as_posix()}\n")
     parts.append('"""\n\n')
 
     parts.append(f"FORMAT = {spec['format']!r}\n")
@@ -409,7 +409,7 @@ def render_doc_md(spec: dict) -> str:
     lines.append("")
     lines.append(f"<!-- {GENERATED_NOTICE} -->")
     lines.append(
-        f"<!-- Source of truth / 正本: "
+        f"<!-- Source of truth / 基準: "
         f"{SPEC_PATH.relative_to(REPO_ROOT).as_posix()} -->"
     )
     lines.append("")

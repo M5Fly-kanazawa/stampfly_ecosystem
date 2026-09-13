@@ -1,6 +1,6 @@
-# rate_sysid_reference — SILモデル一致ゲートの実機基準値
+# rate_sysid_reference — SILモデル一致の合否判定の実機基準値
 
-`docs/architecture/simulation-policy.md` §4「モデル一致ゲート」が使う、実機同定の基準値。
+`docs/architecture/simulation-policy.md` §4「モデル一致の合否判定」が使う、実機同定の基準値。
 
 ## 出所
 
@@ -19,7 +19,7 @@
 Nelder-Mead でフィットするが、`T` と `L` の分離は退化しやすい（例: roll/yaw では
 `T` が `~1e-10 s` に潰れ、遅れが全て `L` 側に寄る）。一方で **合計遅れ `L_total`
 は2 run 間で安定**（roll ≈14.1〜14.7ms、pitch ≈16.2〜18.3ms、yaw ≈10.6〜11.0ms）。
-そのため、ゲートの合否判定には `L_total` を使い、`T`・`L` 個別の値は参考情報として
+そのため、合否判定には `L_total` を使い、`T`・`L` 個別の値は参考情報として
 `runs` 配下に残すのみとする。
 
 ## 注意: ヨー基準値の信頼度
@@ -39,7 +39,7 @@ Nelder-Mead でフィットするが、`T` と `L` の分離は退化しやす�
 python3 analysis/reports/rate_sysid_reference/make_reference.py
 ```
 
-`reference.json` がその場で再生成される。これにより **ゲート基準は実機飛行の蓄積と
+`reference.json` がその場で再生成される。これにより **判定基準は実機飛行の蓄積と
 ともに更新される**（本書は起動時の一点物ではない）。
 
 ## 使用箇所

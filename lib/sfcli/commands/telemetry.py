@@ -230,7 +230,7 @@ def run(args: argparse.Namespace) -> int:
                 return 0
 
             # Redraw at ~10Hz, not per packet (terminal I/O is the bottleneck).
-            # 再描画は約10Hz（端末 I/O が律速のためパケット毎にしない）。
+            # 再描画は約10Hz（端末 I/O がボトルネックのためパケット毎にしない）。
             if now - last_draw >= 0.1:
                 last_draw = now
                 sys.stdout.write("\x1b[H\x1b[2J" + _dashboard(pkt, rate_hz, n_packets) + "\n")

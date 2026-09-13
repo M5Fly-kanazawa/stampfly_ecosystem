@@ -4,7 +4,7 @@ make_reference.py — build the model-match gate's real-hardware reference
 (analysis/reports/rate_sysid_reference/reference.json) from two real-flight
 system-ID runs' metrics.json (sysid.<axis>.fit).
 
-reference.json（モデル一致ゲートの実機基準値）を、2本の実飛行同定 run の metrics.json
+reference.json（モデル一致の合否判定の実機基準値）を、2本の実飛行同定 run の metrics.json
 （sysid.<axis>.fit）から機械的に生成する。手打ちしない — 値は全て metrics.json から
 読む（simulation-policy.md §4）。
 
@@ -20,7 +20,7 @@ compares L_total, not T and L individually (docs/architecture/simulation-policy.
 T/L分離はフィットによって退化する（Tが~1e-10sに潰れ、遅れが全てLに寄る例がある —
 下のダンプで roll/yaw の T がほぼ0）。合計遅れ L_total=T+L は2run間で安定
 （実際の物理むだ時間＋モータ遅れの合計は、フィットの内訳配分に依らず安定）ため、
-ゲートは T・L 個別ではなく L_total を比較する。
+合否判定は T・L 個別ではなく L_total を比較する。
 
 Usage: python3 analysis/reports/rate_sysid_reference/make_reference.py
        (regenerates reference.json in place, from the runs listed in RUNS below)

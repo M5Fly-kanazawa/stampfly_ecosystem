@@ -8,7 +8,7 @@
 # milestones to the output-driven bundle (RESET_PLAN.md §8/§10) — you cannot
 # publish a milestone tag without the proof.
 #
-# SILS マイルストーンタグ `sils-p<N>` は、その成果物バンドルがゲート（results.json＋
+# SILS マイルストーンタグ `sils-p<N>` は、その成果物バンドルが合否判定（results.json＋
 # レビュー動画＋trajectory.csv 揃い＋機械判定 pass）を通らない限り push を拒否する。
 # git のマイルストーンをアウトプット主導のバンドルに結びつける。
 #

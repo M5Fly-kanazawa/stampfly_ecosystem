@@ -71,7 +71,7 @@
 |---------|------|
 | [README.md](README.md) | docs/ ディレクトリガイド |
 | [contributing/style-guide.md](contributing/style-guide.md) | ドキュメント記述スタイル規約 |
-| [contributing/terminology.md](contributing/terminology.md) | 用語・言い換え辞書（言葉遣いのローカル正本） |
+| [contributing/terminology.md](contributing/terminology.md) | 用語・言い換え辞書（言葉遣いのローカルの基準文書） |
 | [contributing/commit-guidelines.md](contributing/commit-guidelines.md) | コミットメッセージ規約 |
 | [contributing/adding-sf-commands.md](contributing/adding-sf-commands.md) | コマンド追加ガイド |
 | [contributing/adding-firmware-commands.md](contributing/adding-firmware-commands.md) | CLI コマンド追加ガイド |

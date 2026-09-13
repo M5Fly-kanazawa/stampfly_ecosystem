@@ -26,7 +26,7 @@
  * Pass/criteria (P1.1 gate): the schedule is the expected multi-rate cadence
  * and is identical across runs (a trace hash printed for comparison).
  *
- * 合格基準（P1.1 ゲート）: スケジュールが期待の多レートのリズムで、実行間で
+ * 合格基準（P1.1 判定）: スケジュールが期待の多レートのリズムで、実行間で
  * 同一（比較用にトレースのハッシュを表示）。
  */
 
@@ -160,7 +160,7 @@ int main()
     // 期待のリズム: ImuTask は 0.5 s で 2.5 ms ごと（esp_timer による真の 400Hz）⇒
     // 約200回。Control は ImuTask と厳密に一致（ロックステップ）すること: 各 IMU
     // サイクルが Control を1回通知し Control が受ける。≥-1 でなく等号を要求することで、
-    // 静かに落ちた/まとめられた通知をゲートで弾く。
+    // 静かに落ちた/まとめられた通知を判定で弾く。
     const bool ok = (count[2] >= 190 && count[2] <= 210) && (count[1] == count[2]);
     printf("[rtos_smoke] %s — real tasks ran on the host RTOS emulator\n",
            ok ? "OK" : "UNEXPECTED cadence");

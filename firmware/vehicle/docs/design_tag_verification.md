@@ -138,7 +138,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 | sf_state/state_manager.cpp:16 | detailed_design §3 | OK | 遷移テーブル全行が request/notify メソッドに対応 |
 | sf_state/state_manager.cpp:70 | requirements §2 | OK | `notifyInitComplete()` が INIT のみ IDLE_GROUND へ |
 | sf_state/state_manager.cpp:132 | requirements §2 | OK | `requestDisarm()` ARMED_GROUND→IDLE_GROUND |
-| sf_state/state_manager.cpp:133 | requirements §2 | OK | `requestDisarm()` は isArmed ゲートで空中 DISARM も IDLE へ |
+| sf_state/state_manager.cpp:133 | requirements §2 | OK | `requestDisarm()` は isArmed 判定で空中 DISARM も IDLE へ |
 | sf_state/state_manager.cpp:195 | requirements §2 | OK | `notifySoftLanding()` FLYING→ARMED_GROUND |
 | sf_state/state_manager.cpp:205 | requirements §2 | OK | `notifyIdleGroundHeld(bool)` が IDLE_GROUND↔HELD 双方向 |
 | sf_state/state_manager.cpp:250 | architecture §4 | OK | `handleAlert()` が alert→判断→遷移（FAILSAFE=イベント） |
@@ -157,7 +157,7 @@ detailed_design.md は §8 まで・architecture.md は §7 までしか存在�
 | eskf_estimator.hpp:14–16 / eskf_estimator.cpp:14–15（5件） | requirements §4, detailed_design §5 | OK | IEstimator 実装・観測スイッチを core へ委譲 |
 | eskf_core.hpp:20 | requirements §4 #2 | OK | 15状態 [pos,vel,att_err,bg,ba] の状態推定 |
 | eskf_core.hpp:21 | architecture §3 — Sensor observation switch | **STALE** | 「観測スイッチ」は detailed_design §5。architecture §3（インターフェース設計）に該当記述なし |
-| eskf_core.cpp:28 | detailed_design §5 IEstimator | OK | χ²ゲート・Adaptive R・線形化バイアスも §5「ESKF実装の特性」と整合 |
+| eskf_core.cpp:28 | detailed_design §5 IEstimator | OK | χ² 判定（カイ二乗判定）・Adaptive R・線形化バイアスも §5「ESKF実装の特性」と整合 |
 | complementary_estimator.hpp:29 | requirements §10 | OK | ESKF と差替可能な2つ目の IEstimator |
 | complementary_estimator.hpp:30 | coding_and_education §… 22_custom_estimator | OK | 題材は §3 Examples Plan に実在（節番号 `§…` は §3 へ確定が望ましい） |
 

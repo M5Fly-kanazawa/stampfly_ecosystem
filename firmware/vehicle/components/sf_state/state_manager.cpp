@@ -29,7 +29,7 @@ namespace sf {
 /// failed read publishes 0). A 0/unknown reading must NOT block ARM — power monitoring is
 /// Optional (hardware_init.md §5) — so the pre-arm voltage gate ignores readings below it.
 /// この電圧未満は sensor_power の読みが「不明」（電源モニタ不在 or 読み失敗で 0 が発行）。
-/// 電源監視は Optional（hardware_init.md §5）ゆえ 0/不明は ARM を阻まない — ARM 前電圧ゲートは
+/// 電源監視は Optional（hardware_init.md §5）ゆえ 0/不明は ARM を阻まない — ARM 前電圧判定は
 /// これ未満の読みを無視する。
 static constexpr float kVoltageValidMin = 0.1f;
 
@@ -100,7 +100,7 @@ bool StateManager::requestArm()
     // bound, so ARM is refused. A vehicle that boots unpaired auto-enters Pairing; it
     // must complete pairing (→ Paired) before it can be armed. Paired and (the transient)
     // NotPaired do not block — only the active search does.
-    // ARM 前ゲート0: 探索中でないこと。送信機を探索中（PairingState::Pairing）はリンクが
+    // ARM 前判定0: 探索中でないこと。送信機を探索中（PairingState::Pairing）はリンクが
     // 未バインドゆえ ARM を拒否する。未ペア起動は自動で Pairing に入り、ペア成立（→Paired）
     // するまで ARM できない。Paired と（過渡的な）NotPaired は阻まない — 探索中のみ阻む。
     if (pairing_state_ == PairingState::Pairing) {
@@ -113,7 +113,7 @@ bool StateManager::requestArm()
     // running on the USB rail (no pack) or a critically low battery. A 0/unknown reading
     // (power monitor absent → Optional, hardware_init.md §5) does NOT block. Threshold
     // from the safety.battery.usb_v param.
-    // ARM 前ゲート1: 電池/USB 電源（要件§9）。有効な電圧読みが危険閾値以下なら ARM を拒否
+    // ARM 前判定1: 電池/USB 電源（要件§9）。有効な電圧読みが危険閾値以下なら ARM を拒否
     // （USB レール=電池なし or 危険な低電圧）。0/不明（電源モニタ不在→Optional）は阻まない。
     // 閾値は safety.battery.usb_v param から。
     float usb_v = 3.3f;
@@ -129,7 +129,7 @@ bool StateManager::requestArm()
     // The boot gyro/accel bias calibration must no longer be pending (ImuTask publishes
     // system_status.calibrated). Don't fly on a half-measured bias. Status via topic
     // (R16-style), not a cross-task object.
-    // ARM 前ゲート2: 起動校正完了（要件§9 / 設計§3）。起動バイアス校正が保留中でないこと
+    // ARM 前判定2: 起動校正完了（要件§9 / 設計§3）。起動バイアス校正が保留中でないこと
     // （ImuTask が system_status.calibrated を発行）。半端なバイアスで飛ばさない。状態は
     // トピック経由（R16 流）。
     if (!system_status.latest().calibrated) {
@@ -141,7 +141,7 @@ bool StateManager::requestArm()
     // A meaningful health gate needs sf_board::sensor_present() (the M2b per-sensor
     // presence infrastructure, which still returns false today), so it is wired with
     // that work, not here.
-    // ARM 前ゲート3: センサ健全性 — 繰延。意味あるゲートには sf_board::sensor_present()
+    // ARM 前判定3: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
     // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
 
     ESP_LOGI(TAG, "ARM accepted");
@@ -163,7 +163,7 @@ bool StateManager::requestDisarm()
     // DISARM はパイロットのキル操作。ARMED_GROUND ではアイドルのモータを止め、空中状態
     // (TAKEOFF/FLYING/LANDING)からは IDLE_GROUND への緊急カット。要件§2 は
     // 「ARMED_GROUND→IDLE_GROUND」と「FLYING→IDLE_GROUND(パイロット DISARM)」の両方を
-    // 挙げるため、ゲートは「ARMED_GROUND 限定」でなく「armed」。モータは isArmed() が
+    // 挙げるため、判定条件は「ARMED_GROUND 限定」でなく「armed」。モータは isArmed() が
     // false になり次第 ControlTask が 0 にする。
     if (!sf::isArmed(state_)) {
         ESP_LOGD(TAG, "DISARM rejected: not armed (state=%s)",
@@ -275,7 +275,7 @@ bool StateManager::requestModeChange(FlightMode new_mode)
     // is applied on reaching FLYING/IDLE by the state task's per-cycle check)
     // and while held in the hand (IDLE_HELD).
     // モード変更は「地上」（DISARM/ARM とも）と FLYING で受理する。設置時の変更が
-    // 最も安全（ユーザー仕様, 2026-06-11）— 制御器はゲートされ（ALT/POS は自動離陸
+    // 最も安全（ユーザー仕様, 2026-06-11）— 制御器は判定され（ALT/POS は自動離陸
     // verb まで推力ゼロ）、本体 LED が選択モードを表示する。拒否は遷移中のみ
     // （INIT/TAKEOFF/LANDING — シーケンス途中のスイッチは FLYING/IDLE 到達時に
     // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。
@@ -334,7 +334,7 @@ void StateManager::handleAlert(const SystemAlert& alert)
             // transition(IDLE_GROUND) from ARMED_GROUND zeroes the motors via the
             // same DISARM path as from the air.
             // 衝突 / 異常角速度 → 状態に依らず即時DISARM（要件§9: 空中限定の例外なし）。
-            // ゲートは isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
+            // 判定条件は isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
             // しており、検出層（failsafe.cpp / imu_task.cpp）も isArmed の間は常にサンプル
             // を供給するため、ARM 直後に地上で倒した機体も DISARM する必要がある。
             // ARMED_GROUND からの transition(IDLE_GROUND) は空中と同じ DISARM 経路で
@@ -358,7 +358,7 @@ void StateManager::handleAlert(const SystemAlert& alert)
             // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
             // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
             // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
-            // ゲートは FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING）: 従来は
+            // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING）: 従来は
             // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
             // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
             // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷

@@ -14,7 +14,7 @@ primary-record CSV never holds a held/interpolated value (an aligned table
 is a read-time derived product built by `lib/sflog/align.py`, not something
 this module produces).
 「StampFly フライトログ v1」一式（`.sflog.zip` ファイル、または同じ平坦
-レイアウトの展開済みフォルダ -- 形式の正本は計画書 2 節と
+レイアウトの展開済みフォルダ -- 形式の基準は計画書 2 節と
 protocol/spec/flight_log.yaml を参照）を描画する。この形式の描画処理は
 本モジュール1つに統合されている: 各パネルはそのストリーム自身の原時刻で
 描く -- ストリーム間の整列・前方補完・再標本化は一切行わない。v1 形式の

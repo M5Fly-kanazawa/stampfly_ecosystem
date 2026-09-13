@@ -459,7 +459,7 @@ S1_RUN_CMD = (
 # G3 numeric gate window is [7.6,21.6]s (0.7s settle margin after engage),
 # scripted DISARM edge ~21.3s.
 # pos_roll.scn 自身のイベントタイムラインから算出: ARM は行B開始、ロール外乱
-# ステップC2は[6.3,6.9]s、POS_HOLD係合は行D開始(6.9s)、G3数値ゲート窓は
+# ステップC2は[6.3,6.9]s、POS_HOLD係合は行D開始(6.9s)、G3数値判定窓は
 # [7.6,21.6]s（係合後0.7sの整定余裕）、台本DISARMエッジは約21.3s。
 S1_T_ARM = 4.0
 S1_T_DISTURB_START = 6.3
@@ -823,7 +823,7 @@ def build_s5_graph(bundle: Path, copy_video: bool = True) -> None:
     # short canvas (~2.5:1) keeps >=14pt fonts legible after the appendix
     # slide's height-constrained scale-down. Scenario name / gate result live
     # in the slide caption, so the in-figure titles are one short word each.
-    # 縦積みではなく左右並び: build_s4 と同じ理由。シナリオ名・ゲート結果は
+    # 縦積みではなく左右並び: build_s4 と同じ理由。シナリオ名・合否判定結果は
     # スライドのキャプションにあるため、図内タイトルは短い1語ずつでよい。
     fig, (ax_att, ax_rate) = plt.subplots(1, 2, figsize=(14, 5.5))
 

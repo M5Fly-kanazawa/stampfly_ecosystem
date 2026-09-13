@@ -102,7 +102,7 @@ cmake --build simulator/sils/build --target vl53_probe -j
 - **対称ピーク**（左右肩が等しい）→ 重心位相 = `b0×2048 + 1024`（bin 中心）。任意位相は肩を skew:
   `phase ≈ b0×2048 + 1024 + 1024×(右肩−左肩)/(peak−ambient)`。skew は上流フィルタ `f_022`（半幅2窓+ambient減算）
   を通るので**近似**→ harness で実測較正（1-2回）。
-- **init を通すゲートは 3 つだけ**（他は ACK or ゼロ返しで driver 自己修復）:
+- **init を通す条件は 3 つだけ**（他は ACK or ゼロ返しで driver 自己修復）:
   - `0x00E5` FIRMWARE__SYSTEM_STATUS → bit0=1（boot 完了）
   - `0x0031` GPIO__TIO_HV_STATUS → **ACTIVE_LOW**（bit0=0 が ready）。preset が
     `gpio_hv_mux__ctrl=ACTIVE_LOW(0x10)`（api_preset_modes.c:752 で確認）。
@@ -168,7 +168,7 @@ ToF が距離を返せたら:
 3. throttle を一旦 deadzone(中央 ~2048)に戻して stick-unlock → 上げて目標高度へ → 中央で保持
    （`altitude_controller.hpp` captureAltitude/update）。
 4. `sf sils scenario hover_espnow.scn --video` で**空中安定ホバー動画**。
-5. 注意: `HOVER_THRUST_CORRECTION=1.12` は実機の電池サグ前提。emu は INA3221 で Vbat 一定ゆえ
+5. 注意: `HOVER_THRUST_CORRECTION=1.12` は実機の電池電圧低下前提。emu は INA3221 で Vbat 一定ゆえ
    緩い climb/sink の可能性 → 数値裏付けの上で要調整（CLAUDE.md 制御パラメータ規約）。
 
 **config 判断 = 解決**: M2 が通ったので出荷 config（USE_TOF=true）を維持する（baro flip 不要、Code Identity 維持）。

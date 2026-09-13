@@ -5,8 +5,8 @@
 # confirms (1) the craft actually leaves the ground under the learner's own control
 # law and (2) it does not tumble while doing so.
 # workshop_acro.expect — workshop SILS ターゲットで学習者の Lesson 5/8 レート制御
-# 解答に対する、離陸検知＋発散なしの緩いゲート。意図的に緩い（9/10 チュートリアル
-# 調査に基づく）: ホバー品質・高度保持のゲートではない（workshop に高度ループは
+# 解答に対する、離陸検知＋発散なしの緩い判定。意図的に緩い（9/10 チュートリアル
+# 調査に基づく）: ホバー品質・高度保持の判定ではない（workshop に高度ループは
 # 無い — workshop_acro.scn の着陸に関する注記参照）— (1) 学習者自身の制御則で
 # 実際に地面を離れること、(2) その間に転倒しないこと、の2点のみ確認する。
 exit 0
@@ -28,5 +28,5 @@ metric alt_max > 0.1 in 4.5 7.4
 # threshold: this gate is about "no tumble", not tracking precision.
 # G3相当（発散なし）: 巡航〜disarm後の沈降まで roll+pitch 合成傾きが有界
 # （実測 ~0.00deg — スティックは終始中立で追従すべき傾き指令が無い）。閾値15度は
-# 緩め — 本ゲートは「転倒しない」ことの確認であり追従精度ではない。
+# 緩め — 本判定は「転倒しない」ことの確認であり追従精度ではない。
 metric tilt_max < 0.2618 in 4.5 8.4  # 15.0 deg

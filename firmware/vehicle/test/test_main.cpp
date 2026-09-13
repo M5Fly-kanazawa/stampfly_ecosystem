@@ -354,7 +354,7 @@ TEST(pid_derivative_on_measurement)
 {
     // D-on-M: a setpoint step must NOT kick the derivative; a measurement step
     // must produce a negative (opposing) derivative response.
-    // 測定値微分: 目標値ステップは微分を蹴らない。測定値ステップには負（抑制方向）の
+    // 測定値微分: 目標値ステップは微分に急変を与えない。測定値ステップには負（抑制方向）の
     // 微分応答が出る。
     sf::PID pid;
     pid.kp = 1.0f;
@@ -450,7 +450,7 @@ TEST(autotune_fit_coherence_weighting)
     }
     // Corrupt the 3 lowest-freq points (the band a real yaw trim disturbance hits) with
     // gross errors, and flag them with LOW coherence (γ²≈0.05) — the off-tone SNR gate output.
-    // 低周波3点をひどく汚し、低コヒーレンス(γ²≈0.05)を付与（オフ音SNRゲートの出力相当）。
+    // 低周波3点をひどく汚し、低コヒーレンス(γ²≈0.05)を付与（オフ音SNR判定の出力相当）。
     for (int i = 0; i < 3; i++) {
         pts[i].yr *= 4.0f; pts[i].yi += 8.0f;
         pts[i].coh = 0.05f;
@@ -478,7 +478,7 @@ TEST(autotune_fit_coherence_weighting)
 // Safety gate: an all-noise / failed-excitation sweep (every point low-coherence) must be
 // REJECTED (fitPlant returns false), so the hands-free scheduled autotune never applies a
 // garbage gain. The coh²-weighted residual alone would be misleadingly tiny here.
-// 安全ゲート: 全点低コヒーレンス（励振失敗）の掃引は棄却（fitPlant=false）。ハンズフリー予約で
+// 安全判定: 全点低コヒーレンス（励振失敗）の掃引は棄却（fitPlant=false）。ハンズフリー予約で
 // ゴミゲインを適用しないため。coh²重み残差だけでは偽の小ささになる。
 TEST(autotune_fit_rejects_all_noise)
 {
@@ -522,7 +522,7 @@ TEST(eskf_gyro_bias_deviation_clamp)
     // A persistent yaw-rotated mag (a magnetic disturbance below the chi2 gate)
     // drags bg_z through the ATT-BG cross-covariance. The clamp must stop it at
     // nominal + bg_deviation_max — the bounded-damage contract for the rate loop.
-    // 持続的にヨー回転した磁気（χ²ゲート以下の磁気外乱）はATT-BGクロス共分散経由で
+    // 持続的にヨー回転した磁気（χ² 判定以下の磁気外乱）はATT-BGクロス共分散経由で
     // bg_z を引きずる。クランプは nominal + bg_deviation_max で止めること —
     // レートループへの被害有界化の契約。
     sf::EskfConfig cfg;
@@ -941,7 +941,7 @@ TEST(land_stalled_descent_ground_effect)
 // descent (in_landing_descent=false) → the stalled-descent branch is gated off, and the
 // firm-ground branch needs <5cm (here 8cm) → no false touchdown.
 // 意図的な低ホバーは着陸でない: 同じ接地近傍＋停滞でも着陸降下でない（in_landing_descent=false）
-// → 降下停滞経路はゲート遮断、firm-ground は <5cm 必須（ここは 8cm）→ 誤接地なし。
+// → 降下停滞経路は判定で遮断、firm-ground は <5cm 必須（ここは 8cm）→ 誤接地なし。
 TEST(land_low_hover_not_landing)
 {
     sf::TakeoffLandingMgr mgr;

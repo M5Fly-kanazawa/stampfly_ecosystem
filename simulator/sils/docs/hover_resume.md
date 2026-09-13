@@ -40,9 +40,9 @@
 | ファーム hover duty（Vbat=3.7, thrustToDuty） | **0.6976 (69.8%)** | `motor_model.hpp:127` |
 | 開ループ純推力 NET | 0.4065 − 0.3630 = **+0.0435 N → +1.18 m/s²（≈+0.12g）上昇** | — |
 
-**根本**: `HOVER_THRUST_CORRECTION=1.12`（`config.hpp:533`）は**実機の電池サグ**（負荷で電圧降下→duty 増し）
+**根本**: `HOVER_THRUST_CORRECTION=1.12`（`config.hpp:533`）は**実機の電池電圧低下**（負荷で電圧降下→duty 増し）
 向けに較正された factor。emu の INA3221 は**一定 3.7V**（`virtual_board.cpp:214`→`plant.hpp:143`
-`batteryVoltage()=cfg_.v_batt=3.7`、サグ無し）ゆえ 12% のサグ余裕が**純粋な過剰推力 → 上昇**になる。
+`batteryVoltage()=cfg_.v_batt=3.7`、電圧低下無し）ゆえ 12% の電圧低下マージンが**純粋な過剰推力 → 上昇**になる。
 M2 ノート §7 の「too high → climb」予測は**正しい**（+0.12g と定量化）。
 
 ### ★ M2 ノート §7 の誤りを2点訂正
@@ -70,7 +70,7 @@ PID は back-calculation アンチワインドアップ（`pid.hpp`）、定常 
 | 項目 | 仕様 | 出典 |
 |------|------|----|
 | モード選択 | `ctrl_flags & CTRL_FLAG_ALT_MODE(0x08)` かつ POS 無し → ALTITUDE_HOLD | `control_task.cpp:387` |
-| 高度センサ無効時 | ALT_HOLD は **STABILIZE に降格**（ToF/Baro 必須）→ ToF が生きていることが**ハードゲート** | `control_task.cpp:407` |
+| 高度センサ無効時 | ALT_HOLD は **STABILIZE に降格**（ToF/Baro 必須）→ ToF が生きていることが**必須条件** | `control_task.cpp:407` |
 | 高度キャプチャ | モード遷移時に現在の ESKF 高度（`-position.z`）を setpoint に。`captureAltitude` が [0.10, 3.0]m にクランプし `stick_unlocked_=false` にリセット | `control_task.cpp:432`, `altitude_controller.hpp:135` |
 | スティックロック解除 | キャプチャ後、スロットルが中央 deadzone（`\|(raw-2048)/2048\|<STICK_DEADZONE=0.1` ⇒ raw≈1843..2253）に**一度入る**まで `stickToClimbRate` は 0（保持）を返す | `altitude_controller.hpp:223` |
 | スロットル=レート | 中央=保持、上=上昇（最大 0.5 m/s）、下=下降（最大 0.3 m/s）。レートは setpoint を積分 | `altitude_controller.hpp:178`, `config.hpp:551` |
@@ -156,7 +156,7 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
 1. **離陸**: 位相 C で高度（`-pos_z`）が ~0.20m 超（接地脱出。cf. hover_espnow は高度~0.013m で接地のまま）。
 2. **capture+保持**: 位相 D で高度が一定値に**落ち着き上昇が止まる**。D 末尾10秒の `|d(alt)/dt| < ~0.02 m/s` = ホバー
    （engage 失敗なら +0.5 m/s 上昇が見える）。
-3. **duty 有界**: `duty_FR/RR/RL/FL` が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（暴走無し = E3 の再確認試験〈変更で既存の動作が壊れていないかを自動で確かめる試験〉）。
+3. **duty 有界**: `duty_FR/RR/RL/FL` が hover 域（~0.60-0.70）、0.95+/1.00 に張り付かない（発散無し = E3 の再確認試験〈変更で既存の動作が壊れていないかを自動で確かめる試験〉）。
 4. **姿勢安定**: roll/pitch ~0（`truth.csv` のクォータニオンから算出、ラジアン）。
 
 **コンソール判定（`hover_alt.expect`, hover_espnow.expect と同形式）**:
@@ -173,7 +173,7 @@ sf sils scenario simulator/sils/scenarios/hover_alt.scn --duration 30000000 --vi
 
 ## 6. リスクと即時 de-risk（優先順）
 
-1. **【最優先】ToF が valid を返さないと ALT_HOLD は STABILIZE に降格**（`control_task.cpp:407`、has_altitude ゲート）。
+1. **【最優先】ToF が valid を返さないと ALT_HOLD は STABILIZE に降格**（`control_task.cpp:407`、has_altitude 条件）。
    → 着手前に `simulator/sils/build/vl53_probe 500 6` で ToF が status0 を返すこと、emu の console に ToF init/ESKF
    POS_Z 更新が出ることを確認。M2 完了済みなので通る見込みだが**最初に確認**。
 2. **capture がクランプ外を掴む**: [0.10, 3.0]m にクランプ。C が <0.10m なら setpoint が 0.10m に張り付く（沈む）、

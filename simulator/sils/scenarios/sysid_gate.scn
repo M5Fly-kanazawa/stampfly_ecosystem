@@ -1,5 +1,5 @@
 # sysid_gate.scn — model-match gate excitation: roll/pitch/yaw rate-loop chirps
-#                  モデル一致ゲート励振: roll/pitch/yaw のレートループチャープ
+#                  モデル一致の合否判定の励振: roll/pitch/yaw のレートループチャープ
 #
 # Chain: API takeoff (POS_HOLD hover) → three sequential rate-loop identification
 # chirps (roll, then pitch, then yaw — same "sysid <axis> chirp 25 4" verb as
@@ -17,7 +17,7 @@
 # 実行と同時に400Hz rate_ref+gyro CSV（+ gains.json sidecar）を記録する。これを
 # tools/log_analyzer/rate_sysid.py（実機ログに使ったのと同じコード）で軸別に (b,T,L)
 # フィットし、analysis/reports/rate_sysid_reference/reference.json の実機同定値と比較
-# する（simulation-policy.md §4 モデル一致ゲート）。
+# する（simulation-policy.md §4 モデル一致の合否判定）。
 #
 # This .expect only checks NORMAL COMPLETION (arm/takeoff/disarm log lines +
 # loose G3 attitude/actuator bounds) — the (b,T,L) fit judgment itself is made by
@@ -25,7 +25,7 @@
 # analysis/reports/rate_sysid_reference/ + the gate command, not in a .expect).
 # この .expect は「正常完走」（arm/takeoff/disarm ログ＋緩い G3 姿勢・アクチュエータ境界）
 # のみを見る — (b,T,L) フィットの合否判定は `sf sils sysid-gate` が行う（許容差は
-# reference.json とゲートコマンド側にあり、この .expect には入れない）。
+# reference.json と判定コマンド側にあり、この .expect には入れない）。
 #
 # Run: sf sils sysid-gate                              (recommended — see lib/sfcli/commands/sils.py)
 #  or: sf sils scenario simulator/sils/scenarios/sysid_gate.scn --target vehicle --duration 44000000

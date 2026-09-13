@@ -1,5 +1,5 @@
 # StampFly Flight Log Format - Single Source of Truth
-# StampFly フライトログ形式 - 正本（Single Source of Truth）
+# StampFly フライトログ形式 - 基準ファイル（Single Source of Truth）
 #
 # This file is the ONLY place where the "StampFly flight log bundle" (v1)
 # format is defined. `protocol/tools/gen_flight_log.py` generates

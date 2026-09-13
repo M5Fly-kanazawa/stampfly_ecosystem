@@ -2,7 +2,7 @@
 # G1 state machine (log) + G3 moved-then-held (true position) + G4 actuator health.
 # The craft auto-takes-off in POS_HOLD (holds launch), a roll-right stick drives it EAST,
 # then centering re-captures and HOLDS the new position.
-# POS_HOLD スティック再配置ゲート。自動離陸（発進点保持）→ ロール右で東へ移動 → 中立で
+# POS_HOLD スティック再配置判定。自動離陸（発進点保持）→ ロール右で東へ移動 → 中立で
 # 新位置を再捕捉して保持。G1 状態遷移 + G3 移動して保持 + G4 アクチュエータ健全。
 exit 0
 
@@ -21,7 +21,7 @@ metric horizontal_drift_max < 0.40 in 10.5 12.5
 
 # --- G3b: ROLL-RIGHT stick MOVES the craft (reposition window 12.5-16.5 s) ---
 # true planar displacement from the window start must exceed 0.30 m (it moved) and
-# stay bounded below 1.2 m (no runaway). 真値変位 >0.30 m（移動）かつ <1.2 m（暴走なし）。
+# stay bounded below 1.2 m (no runaway). 真値変位 >0.30 m（移動）かつ <1.2 m（発散なし）。
 metric horizontal_drift_max > 0.30 in 12.5 16.5
 metric horizontal_drift_max < 1.20 in 12.5 16.5
 

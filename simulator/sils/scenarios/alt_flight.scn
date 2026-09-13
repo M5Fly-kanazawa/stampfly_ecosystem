@@ -9,12 +9,12 @@
 # reset at the ground→airborne edge for a clean ToF lock. Without the handoff the
 # ground-phase vertical drift exceeds the ToF innovation gate at takeoff and the
 # estimate diverges (ALT_HOLD then chases a bad altitude). See the P8 Phase B fix.
-# 目的（Layer 3 ゲート）: vehicle を ARMED_GROUND→TAKEOFF→FLYING と進め、STABILIZE で
+# 目的（Layer 3 判定）: vehicle を ARMED_GROUND→TAKEOFF→FLYING と進め、STABILIZE で
 # 少し上昇後、空中で ALTITUDE_HOLD に渡し、閉ループが高度を保持することを検証する。
 # ALT_HOLD は ESKF 鉛直推定（altitude=-pos_z, vel_up=-vel_z）を追う。ToF のみの鉛直
 # ハンドオフ（imu_task）を検証: 接地中は pos/vel をゼロ保持（最小レンジ未満で ToF 無効）、
 # 接地→空中エッジで reset しクリーンに ToF ロック。ハンドオフが無いと地上の鉛直ドリフトが
-# 離陸時に ToF innovation ゲートを超え推定が発散する（P8 Phase B 修正参照）。
+# 離陸時に ToF innovation 判定を超え推定が発散する（P8 Phase B 修正参照）。
 #
 # Sticks are raw 12-bit ADC, centre 2048. STABILIZE thrust = clamp((raw-2048)/2048,0,1)
 # * max_thrust; as of 2026-08-22 (Plant thrust_efficiency=0.7133, firmware static
@@ -52,10 +52,10 @@
 # 2026-07-26 ODEプラント(実測Ct)対応再調整: 上記のとおり新プラント下での離陸マージン増加により
 # ハンドオフ時の残留上昇速度が大きくなり、ALT_HOLD 突入直後に振幅の大きい（が発散しない）減衰
 # 振動が生じる。これは真の発散ではない（ESKF は終始追従、rmse≈0.02m）ため、alt_flight.expect
-# の数値ゲート窓を後方（過渡収束後）へシフトして対応し、閾値自体は変更していない。
+# の数値判定の窓を後方（過渡収束後）へシフトして対応し、閾値自体は変更していない。
 # 期待（実測, P8 Phase B 修正 — フライトログ一式の truth.csv/posvel.csv の高度で調整）:
 #   地上(t<5.3): ESKF est_alt が ~0 保持（ドリフト無）、真値 ~0.01m。
 #   ハンドオフ(t≈6.3, ToF>0.15m): resetPositionVelocity → ToF ロック、est が真値追従。
 #   ALT_HOLD(t≈6.3–18.3): 有界な減衰振動（peak≈0.62m, trough≈0.19m）を経て t≈15 で ~0.60m に
-#     収束・保持、est は終始追従(rmse≈0.02m)、モータは新ホバー duty ~0.73 付近。有界・暴走無。
+#     収束・保持、est は終始追従(rmse≈0.02m)、モータは新ホバー duty ~0.73 付近。有界・発散無。
 #   DISARM(t≈18.5): モータ停止・着地、est は ~0 に再錨付け（着地後ドリフト無）。

@@ -29,10 +29,10 @@ vehicle の **開発の進め方**（=どの順番で何を作り、何を持っ
 |------|------|------|
 | **Phase 0〜6** | 開発工程の段階。本書 §4 の計画 | 本書 §4 |
 | **Layer 1〜4** | 段階的プラント同定の層（ACRO → STAB → ALT → POS） | 本書 §3 |
-| **ゲート G1〜G4** | SILS の合格基準（起動・状態遷移／推定の追従／閉ループ安定／アクチュエータ健全） | RESET_PLAN §4 |
+| **判定 G1〜G4** | SILS の合格基準（起動・状態遷移／推定の追従／閉ループ安定／アクチュエータ健全） | RESET_PLAN §4 |
 | **Noise Model Stage N0〜N4** | センサノイズモデルの複雑度段階（教材） | `noise_and_vibration_model.md` §4 |
 
-> **旧「SILS Control Level L1〜L4」は廃止した。** これは旧 SILS（`sim/flight_scenario_test.cpp` 等）の制御テストレベルを指す概念だったが、旧 SILS の完全削除（RESET_PLAN §12）に伴い消滅した。新 SILS は合否を**物理真値のゲート G1〜G4**（RESET_PLAN §4）で判定する。
+> **旧「SILS Control Level L1〜L4」は廃止した。** これは旧 SILS（`sim/flight_scenario_test.cpp` 等）の制御テストレベルを指す概念だったが、旧 SILS の完全削除（RESET_PLAN §12）に伴い消滅した。新 SILS は合否を**物理真値の判定 G1〜G4**（RESET_PLAN §4）で判定する。
 
 ---
 
@@ -72,7 +72,7 @@ vehicle の SILS → 実機ワークフローは次の3原則に基づく。RESE
 
 Model Fidelity（物理モデルが現実とどれだけ合っているか）を上げる作業は、**実機で初めて飛ばした後**に始まる、後追いの精度向上である（RESET_PLAN §3 の流れ [5]→[2]）。実機ログを使うのはこの場面**だけ**で、SILS の前提ではない。SILS モデルの信頼できる範囲が広がるほど「SILS で詰めた → 実機で飛ぶ」確実性が上がる。
 
-> **【2026-07-22 更新】** vehicle は実機飛行済みで実ログが蓄積したため、本原則の「後追い」フェーズ（Phase 5）が**現在進行中**である。SILS プラントの忠実度目標・モデル一致ゲート・改修バックログは `docs/architecture/simulation-policy.md`（シミュレーション方針の正）に定める。
+> **【2026-07-22 更新】** vehicle は実機飛行済みで実ログが蓄積したため、本原則の「後追い」フェーズ（Phase 5）が**現在進行中**である。SILS プラントの忠実度目標・モデル一致の合否判定・改修バックログは `docs/architecture/simulation-policy.md`（シミュレーション方針の正）に定める。
 
 ---
 
@@ -106,7 +106,7 @@ Layer 3: ALTITUDE_HOLD                 ← + ToF/Baro + 高度PID + ホバース
 Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 ```
 
-### 各層を SILS のゲートで検証する
+### 各層を SILS の判定で検証する
 
 各層は、まず**物理真値の SILS**（RESET_PLAN）で検証し、合格基準（G1〜G4、RESET_PLAN §4）を満たしてから実機に進む。L1〜L4 のような旧 SILS の制御テストレベルの番号体系には依存しない。
 
@@ -150,7 +150,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 | 1.5 | `params.cpp`（`table[]`）を SILS からも参照（Parameter Identity の実装） | 原則2 |
 | 1.6 | 基本のレビュー動画書き出し（`sf sils video` 最小版） | §9 |
 
-**合格基準（RESET_PLAN P1〜P2 のゲート）:**
+**合格基準（RESET_PLAN P1〜P2 の判定）:**
 - **P1:** 現行 ESKF + PID ファームが **SILS 上でホバーする**（物理の真値で位置が有界）。その様子のレビュー動画を添える。
 - **P2:** 第2の推定器（相補フィルタ、約80行）を `IEstimator` で投入し、**ベンチを一切変えずに**ホバーする＝**アルゴリズム非依存の実証（北極星）**。
 
@@ -218,9 +218,9 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 ### Phase 4: 上位層の段階追加
 
-Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をまず SILS のゲートで検証してから実機検証する:
+Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をまず SILS の判定で検証してから実機検証する:
 
-| Phase | モード | 追加要素 | SILS ゲート |
+| Phase | モード | 追加要素 | SILS 判定 |
 |-------|--------|---------|-----------|
 | 4.1 | STABILIZE | ESKF 姿勢 + 加速度計 + 姿勢 PID | G2（姿勢追従）+ G3 |
 | 4.2 | ALTITUDE_HOLD | ToF/Baro + 高度カスケード PID + ホバースラスト | G2/G3（高度） |
@@ -245,7 +245,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 **合格基準（継続的）:** Phase 4.1〜4.3 の許容差規定が複数機体・複数ログにわたって維持される。
 
-具体的な改修バックログ（むだ時間・モータ ODE 化・係数再較正・フロー品質・入力リプレイ等）と合否判定（モデル一致ゲート）は `docs/architecture/simulation-policy.md` §6 を正とする。
+具体的な改修バックログ（むだ時間・モータ ODE 化・係数再較正・フロー品質・入力リプレイ等）とモデル一致の合否判定は `docs/architecture/simulation-policy.md` §6 を正とする。
 
 ---
 
@@ -267,7 +267,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 ### 各 Phase の進行ルール
 
 - 1つの Phase の **合格基準を満たすまで次の Phase に進まない**
-- 各節目（Phase の達成・SILS ゲート G1〜G4 の通過）では、**レビュー動画を必ず作る**（RESET_PLAN §9・§11 の必須ルール）。人間が一目で確認できる成果物とする
+- 各節目（Phase の達成・SILS 判定 G1〜G4 の通過）では、**レビュー動画を必ず作る**（RESET_PLAN §9・§11 の必須ルール）。人間が一目で確認できる成果物とする
 - 合格基準を満たした時点で `implementation_log.md` に記録
 - 実機 vs SILS の許容差を超えた場合、**先に SILS モデル校正（Phase 5）に戻る**
 - 設計文書との矛盾を発見したら実装を止めて報告（coding_and_education.md §1 のルール）
@@ -280,7 +280,7 @@ Phase 3 で土台が確定したら、Layer 2→3→4 の順に、各層をま�
 
 ### 実機飛行ログ管理
 
-- 飛行ごとに `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` 形式で保存する（1 回の飛行のセンサ信号一式をまとめた zip 形式のフライトログファイル。パケット種別ごとに 1 CSV を原レートのまま収め、`meta.json`／`schema.json` を同梱する。仕様の正本は `protocol/spec/flight_log.yaml`）
+- 飛行ごとに `logs/flight_<YYYYMMDD>T<HHMMSS>.sflog.zip` 形式で保存する（1 回の飛行のセンサ信号一式をまとめた zip 形式のフライトログファイル。パケット種別ごとに 1 CSV を原レートのまま収め、`meta.json`／`schema.json` を同梱する。仕様の基準ファイルは `protocol/spec/flight_log.yaml`）
 - 重要な検証飛行（Phase 合格判定に使ったもの）は git にコミット
 - 解析スクリプトは `scripts/` または `sf log analyze` 系コマンド経由
 

@@ -30,7 +30,7 @@
  * wired in Actuator works on the host.
  * Actuator が参照するメソッド（init, setMotorDuties, arm, disarm）を定義する。
  * isInitialized() はヘッダのインライン（常に false の initialized_ を返す）。
- * arm/disarm は armed_ フラグを追従（HW なし）し、Actuator の arm ゲートが host でも働く。
+ * arm/disarm は armed_ フラグを追従（HW なし）し、Actuator の arm 判定が host でも働く。
  */
 
 #include "motor_driver.hpp"
@@ -68,7 +68,7 @@ void MotorDriver::setMotorDuties(const float duties[4])
 // not require initialized_ (the host leaves it false on purpose), so the Actuator
 // arm gate still engages on the host.
 // arm — host スタブ: armed フラグを追従（LEDC なし）。実ドライバと違い initialized_ を
-// 要求しない（host は意図的に false）ので、Actuator の arm ゲートが host でも働く。
+// 要求しない（host は意図的に false）ので、Actuator の arm 判定が host でも働く。
 esp_err_t MotorDriver::arm()
 {
     armed_ = true;

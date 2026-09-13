@@ -169,7 +169,7 @@ sils::Plant::Config plant_config_from_env()
     // runs power_task and reads the live INA3221 voltage to compensate thrust→duty,
     // so the dynamic supply is consistent end-to-end (Model Identity). Override with
     // SILS_EMU_BATTERY=off for an ideal constant supply (debugging / A-B contrast).
-    // 閉ループ emu では電池サグモデル ON（full firmware が power_task 稼働＋実 INA3221 電圧で
+    // 閉ループ emu では電池電圧低下モデル ON（full firmware が power_task 稼働＋実 INA3221 電圧で
     // thrust→duty 補償）。動的電源が端から端まで整合（Model Identity）。SILS_EMU_BATTERY=off で
     // 理想定電圧（デバッグ/A-B 対照）に切替。
     cfg.batt_model_enable = true;
@@ -534,7 +534,7 @@ int main(int argc, char** argv)
     // mutex/semaphore の二重操作でクラッシュする（ホスト固有の人工物、ファームの
     // 欠陥ではない）。MinGW/Windows で確認済み: 素の `return 0` は大域破棄中
     // （MuJoCo の Plant ＋ ファームの多数の Pub-Sub トピック単体）で確実にセグフォルト
-    // する（実行自体は正しく完了し、この時点で全ゲート/ログアサーションは既に合格
+    // する（実行自体は正しく完了し、この時点で全判定/ログアサーションは既に合格
     // 済み）。_Exit は「MCU の電源断」を模し、emu_main_generic.cpp と同じくクリーン
     // かつ忠実。
     std::fflush(stdout);

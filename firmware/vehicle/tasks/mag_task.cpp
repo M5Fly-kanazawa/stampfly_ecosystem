@@ -208,7 +208,7 @@ void MagTask(void* /*pvParameters*/)
     // found two real hardware bugs (ODR mismatch, missing DRDY gate).
     // 結果カウンタ（毎分1回の恒久健全性ログ。ImuTask の負荷ログと同じ思想）:
     // 「新サンプル未着」（DRDY low）と NaN（オーバーフロー）破棄・I2C エラーを
-    // 区別する。このカウンタが実機バグを2件（ODR不整合・DRDYゲート欠落）発見した。
+    // 区別する。このカウンタが実機バグを2件（ODR不整合・DRDY判定欠落）発見した。
     uint32_t diag_ok = 0, diag_nodata = 0, diag_nan = 0, diag_err = 0;
 
     while (true) {

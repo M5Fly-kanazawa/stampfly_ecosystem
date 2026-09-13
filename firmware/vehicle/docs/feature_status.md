@@ -40,13 +40,13 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | センサ HAL 一式 | BMI270（SPI 1600Hz・OSR4）/ PMW3901 / BMM150（25Hz・DRDYゲート）/ BMP280 / VL53L3CX（底面）/ INA3221 | 実機（全センサ設計レート達成を Data Stream で確認） |
-| 15状態 ESKF | χ²ゲート・active_mask による P 行列隔離・疎構造化（predict 720積和） | SILS G2 ゲート＋実機 |
+| 15状態 ESKF | χ² 判定（カイ二乗判定）・active_mask による P 行列隔離・疎構造化（predict 720積和） | SILS G2 判定＋実機 |
 | 推定器差し替え | IEstimator、`estimator_type` パラメータで ESKF / 相補フィルタ切替 | SILS 比較検証（P6） |
 | 鉛直系 | ToF-only 鉛直＋接地アンカー＋離陸エッジの鉛直ハンドオフ | SILS alt_rmse 1.6cm＋実機 |
 | 制御器差し替え | IController、カスケード PID（ACRO/STABILIZE/ALT_HOLD/POS_HOLD） | SILS 16シナリオ |
 | POS_HOLD 実機検証 | roadmap Phase 4 | **実機検証済み**（保持精度 ±6-7cm, RMS 16mm） |
 | ミキサー | B⁻¹ 制御配分（物理単位 Nm/N）＋モータ曲線＋ライブ電池電圧補償 | SILS＋実機 |
-| 起動校正 | ジャイロ/加速度バイアス測定→推定器種付け、完了まで ARM ゲート | 実機（§4 の静止ゲートで強化） |
+| 起動校正 | ジャイロ/加速度バイアス測定→推定器種付け、完了まで ARM 判定 | 実機（§4 の静止判定で強化） |
 
 ### 状態機械・安全
 
@@ -74,7 +74,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | StampFly エミュレータ | 実 app_main・全タスク・実ドライバを**無改変**でホスト実行（Code Identity） | 16シナリオ回帰 |
-| シナリオ DSL＋expect ゲート | rc/wind/fault/bias/handle 注入、G1〜G4 機械判定 | TEST_MATRIX.md |
+| シナリオ DSL＋expect 判定 | rc/wind/fault/bias/handle 注入、G1〜G4 機械判定 | TEST_MATRIX.md |
 | 3原則 | Code / Param / Model Identity（ロードマップ §2） | params.cpp 共有、ミキサー/モータ曲線が SILS プラントと厳密逆 |
 
 ## 3. 計画当初にあって未完了のもの
@@ -93,7 +93,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 追加 | きっかけ | commit（2026-06） |
 |------|---------|------------------|
-| **静止ゲート付き起動校正**（動き検出で蓄積破棄・やり直し＋窓内分散チェック） | 実機で「起動直後/墜落後に突然反転」— 運搬中の動きが校正を汚染していた（旧 vehicle の Phase 2 安定ゲートの移植漏れ） | 8cc1932 |
+| **静止判定付き起動校正**（動き検出で蓄積破棄・やり直し＋窓内分散チェック） | 実機で「起動直後/墜落後に突然反転」— 運搬中の動きが校正を汚染していた（旧 vehicle の Phase 2 安定判定の移植漏れ） | 8cc1932 |
 | **旧実績 PID ゲイン移植＋D-on-M 化** | 制御則の新旧比較で微分対象の差（誤差微分→測定値微分）と出力リミット差を発見・整合。実績ゲイン 1:1 移植 | 3985cf0 |
 | **ジャイロバイアス偏差クランプ**（ノミナル±0.03 rad/s） | 設計議論:「無関係なセンサの異常がクロス共分散経由でレートループ用バイアスを汚す」→ PX4 流の被害有界化 | 942a1c9 |
 | **地上モード変更＋ALT/POS 自動離陸**（仕様変更） | 「設置時のモード変更が最も安全なのにできないのは不自然」。制御器に鉛直フェーズ（Grounded=推力ゼロ/TakeoffClimb/Airborne）導入 | 4220de1 |
@@ -131,7 +131,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 旧 | 新 | 備考 |
 |----|----|------|
 | sf_svc_wifi_cli | TCP CLI（ポート23、esp_console 共有） | 同一コマンドが USB/TCP 両方で動く |
-| StationaryDetector | StillnessConfig（校正の静止ゲート） | 閾値は旧実績値を踏襲（生バイアス向けに拡幅） |
+| StationaryDetector | StillnessConfig（校正の静止判定） | 閾値は旧実績値を踏襲（生バイアス向けに拡幅） |
 | mag_calibration（旧 magcal） | `magcal` CLI＋MagTask 所有（R5 準拠） | アルゴリズムは旧コードをそのまま移植 |
 | HOVER_THRUST_CORRECTION | hover_thrust = mg×1.12 | 旧の飛行実測補正を継承 |
 | altitude/position_controller | PidController 内カスケード | 実績ゲイン（PI-v1）移植済み |

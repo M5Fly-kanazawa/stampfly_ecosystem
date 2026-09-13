@@ -2002,7 +2002,7 @@ def build_supported_run_kwargs(module, options: SetupOptions,
         # Pythonが無い場合(ユーザーが参考表示のNGを無視して進んだ場合等)、
         # 非対話実行で手詰まりにするより installer.py 自身にも試させる --
         # 実際に何を制御するかは scripts/installer.py の
-        # _offer_python_auto_install() 参照(Linuxのsudoゲート経路はこれを
+        # _offer_python_auto_install() 参照(Linuxのsudo判定経路はこれを
         # 無視し無人実行は絶対にしない)。
         "auto_install_python": True,
         # Advisory-only until a matching Options-page checkbox exists on
@@ -2229,7 +2229,7 @@ def run_selftest() -> int:
           言語状態が呼び出し時点の状態へ復元されていること。
 
     PASS なら 0、FAIL なら 1 を返す。プロセス終了コードの標準的な慣習に
-    合わせているため、CI が直接ゲート条件として使える。
+    合わせているため、CI が直接判定条件として使える。
     """
     print("=== {0} self-test / セルフテスト ===".format(APP_NAME))
 

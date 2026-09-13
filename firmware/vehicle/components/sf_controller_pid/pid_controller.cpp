@@ -57,7 +57,7 @@ void PidController::reloadParams()
     // kick the loops the way a full reset would.
     // ライブチューニング（ControllerCmd::ReloadParams）: ゲインと出力リミットを
     // 読み直し、積分器状態は「維持」する — 飛行中のゲイン変更が full reset の
-    // ようにループを蹴ってはならない。
+    // ようにループの出力に急変を与えてはならない。
     loadParams();
     ESP_LOGI(TAG, "PID parameters reloaded (live)");
 }
@@ -315,7 +315,7 @@ ControlOutput PidController::compute(
                 // the stick-reposition path) and the climb rate in the vertical block;
                 // here we only drive yaw RATE directly (cw+).
                 // 速度誘導（Tello `rc`）。R16 鮮度オートリリース: クライアントが送信を止めたら
-                // 速度を 0 に減衰し再捕捉・保持（止まった rc が暴走してはならない）。水平速度は
+                // 速度を 0 に減衰し再捕捉・保持（止まった rc で速度指令が増大し続けてはならない）。水平速度は
                 // computePositionHold（スティック再配置経路の再利用）、上昇率は鉛直ブロックで注入。
                 // ここでは yaw レート（cw+）のみ直接駆動する。
                 if (state.timestamp - guide_stamp_ > kLandingLinkStaleUs) {
@@ -402,7 +402,7 @@ ControlOutput PidController::compute(
         // level gate below), not the position cascade — keep the landing law uniform
         // across modes (a POS_HOLD landing steers like STABILIZE).
         // Landing 中は走らせない: 自動降下は位置カスケードでなく直接スティック傾き（下の
-        // 水平ゲート）を使い、着陸則をモード間で統一する（POS_HOLD 着陸も STABILIZE 同様に操縦）。
+        // 水平判定）を使い、着陸則をモード間で統一する（POS_HOLD 着陸も STABILIZE 同様に操縦）。
         if (current_mode_ >= FlightMode::POS_HOLD &&
             phase_ != VerticalPhase::Grounded &&
             phase_ != VerticalPhase::Landing) {
@@ -415,7 +415,7 @@ ControlOutput PidController::compute(
         // pilot), force LEVEL: stale sticks must not steer. Link-liveness = setpoint
         // freshness, so no failsafe flag is threaded and it self-levels if the link drops
         // mid-descent. roll_sp/pitch_sp already hold the stick tilt; zero them when stale.
-        // Landing — 単一の水平ゲート（INV-2）。リンク生存中はパイロットが roll/pitch/yaw を保つ
+        // Landing — 単一の水平判定（INV-2）。リンク生存中はパイロットが roll/pitch/yaw を保つ
         // （パイロット指令の着陸は操縦可、離陸と同じ鉛直のみ自動の思想）。リンク途絶（通信途絶
         // フェイルセーフ＝パイロット不在）なら水平に強制: stale なスティックで操縦させない。生存
         // 判定は設定点の新鮮さゆえフラグ配線不要、降下中にリンクが切れても自動で水平化する。
@@ -439,10 +439,10 @@ ControlOutput PidController::compute(
         //        so the descent holds the equilibrium-level (stable) not a false
         //        geometric zero (which would drift by the trim amount). Flight-identified. [OK]
         // @design architecture.md INV-1 — 単一合流点での姿勢トリム: 平衡傾きを全モードの
-        //        角度「目標」に加算（POS_HOLD 上書きと Landing 水平ゲートの後、角度→レート
+        //        角度「目標」に加算（POS_HOLD 上書きと Landing 水平判定の後、角度→レート
         //        ループの前）。角度ループがこの傾きを保ち、定常水平ドリフトを推力を余分に
         //        食わず打ち消す。POS_HOLD の位置ループは平衡傾きを担わずに済む。リンク途絶
-        //        着陸では水平ゲートがパイロット傾きを 0 にするがトリムは残るため、降下は
+        //        着陸では水平判定がパイロット傾きを 0 にするがトリムは残るため、降下は
         //        平衡水平（安定）を保ち見かけの幾何ゼロ（トリム分ドリフトする）にしない。飛行で同定。
         // Always-on learning: nudge roll_trim_/pitch_trim_ toward the equilibrium from
         // the hover drift (hover-gated) BEFORE applying them, so the craft self-trims
@@ -467,7 +467,7 @@ ControlOutput PidController::compute(
         // ground. Attitude was handled by the one pipeline above (pilot or level gate).
         // 自動着陸の降下 — モード非依存（ACRO/STABILIZE からの通信途絶着陸は高度ループを持た
         // ない）。一定の下向き速度を追従し、接地は TakeoffLandingMgr が検出（INV-3）して LANDING
-        // を終える。姿勢は上の単一パイプライン（パイロット or 水平ゲート）で処理済み。
+        // を終える。姿勢は上の単一パイプライン（パイロット or 水平判定）で処理済み。
         const float altitude = -state.position[2];   // NED z-down → altitude up
         const float vel_up   = -state.velocity[2];   // up-positive / 上正
         const float thrust_correction =
@@ -508,7 +508,7 @@ ControlOutput PidController::compute(
             // Armed on the ground: props stopped. Without this gate the vertical
             // loop would command hover thrust the instant the craft ARMs in
             // ALT/POS mode. Flight starts via the auto-takeoff verb (onTakeoff).
-            // 地上 ARM 中: プロペラ停止。このゲートがないと ALT/POS で ARM した瞬間に
+            // 地上 ARM 中: プロペラ停止。この判定がないと ALT/POS で ARM した瞬間に
             // 鉛直ループがホバー推力を指令してしまう。飛行開始は自動離陸 verb から。
             thrust = 0.0f;
         } else if (phase_ == VerticalPhase::TakeoffClimb) {
@@ -591,9 +591,9 @@ ControlOutput PidController::compute(
             // first returns to the center deadzone (= the spring rest), then opens — the
             // legacy "release the spring stick to unlock" behavior. Guidance/API own the
             // target via the walking setpoint and never reach this stick path.
-            // 再センターゲート: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央
+            // 再センター判定: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央
             // から外れていることがあり（例: STABILIZE のホバースロットルは上）、高度がジャンプ
-            // する。ゲートはスティックが初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、
+            // する。判定はスティックが初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、
             // その後開く — 旧来の「バネ式は離せば解除」。誘導/API は歩く設定点で目標を所有し、
             // このスティック経路に達しない。
             if (!throttle_recentered_ && fabsf(ta) < stick_deadzone_) {
@@ -649,7 +649,7 @@ ControlOutput PidController::compute(
             // so it never competes with the hover-thrust learner or the vel-loop
             // integrator for DC ownership (band separation, README §3).
             // 加速度ベース外乱オブザーバ（DOB, opt-in。このブランチは既にAirborne
-            // 限定 — INV-1: フェーズが変えるのは鉛直チャネルのみ）。実測比力から
+            // 限定 — INV-1: フェーズが変えるのは鉛直チャネルのみ）。実測した加速度計の測定値から
             // 外乱力の推定を差し引き、速度ループ積分器単体より速く反応する（ESKF
             // 速度の遅れを回避）。computeDobCorrection() 参照、設計根拠 README §5。
             // 上のPI出力の後・下の物理クランプの前に適用 — クランプ後の
@@ -680,7 +680,7 @@ ControlOutput PidController::compute(
             // motor wear / battery sag). Runs AFTER the thrust output above, so it has zero
             // same-cycle effect — purely a slow background adapter. INV-1: vertical only.
             // 常時ホバー推力学習: 速度ループ定常出力をゆっくり hover_thrust_ に畳み込み FF を
-            // 真のホバー推力へ追従（モータ劣化/電圧サグにロバスト）。上の推力出力の後に呼ぶので
+            // 真のホバー推力へ追従（モータ劣化/電圧低下にロバスト）。上の推力出力の後に呼ぶので
             // 同サイクル影響ゼロ（純粋な低速バックグラウンド適応）。INV-1: 鉛直のみ。
             learnHoverThrust(thrust_correction, vel_up, climb_rate_sp, dt);
         }
@@ -862,7 +862,7 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // DISARM topic to a dedicated persister (future TODO).
     // 学習トリムを着陸エッジ（Airborne または Landing -> Grounded。自動降下は Landing
     // フェーズを通るので両方受理。さもないと Airborne->Landing->Grounded の着陸が永続
-    // しない）で NVS 保存。接地（Grounded）は安全な瞬間: 推力はゲート済みゆえ単発フラッシュ
+    // しない）で NVS 保存。接地（Grounded）は安全な瞬間: 推力は判定済みゆえ単発フラッシュ
     // 書込が飛行を乱さない。注: この set_float+save は ControlTask で走るが接地時の単発
     // （毎サイクルでない）ゆえ ~37ms フラッシュ停止は接地後で無害。厳密な R5/R7 準拠は
     // DISARM トピック経由で専用永続化タスクに回す（将来 TODO）。
@@ -879,7 +879,7 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // POS_HOLD — its position loop already cancels drift) while airborne and not under
     // guidance. Deliberate translation/turn (a stick out of the deadband) pauses
     // learning so a commanded move is not mistaken for trim error.
-    // ゲート: STABILIZE/ALT_HOLD のスティックほぼ中立ホバーでのみ学習（POS_HOLD 除外＝
+    // 判定: STABILIZE/ALT_HOLD のスティックほぼ中立ホバーでのみ学習（POS_HOLD 除外＝
     // 位置ループが既にドリフトを打ち消す）、空中かつ誘導なし。意図的な移動/旋回
     // （スティックが不感帯外）は学習を止め、指令移動をトリム誤差と誤認しない。
     // ALT_HOLD also requires a NEUTRAL vertical stick: an active climb/descent
@@ -888,7 +888,7 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // which does not couple into the horizontal axes the same way — left ungated.)
     // ALT_HOLD は鉛直スティックも中立を要求: 上昇/下降中（throttle_axis が中央外）は風に
     // 抗してレート追従するため機体が傾き、水平ドリフト観測を汚す。（STABILIZE は直接
-    // スロットルで水平軸へのカップリングが異なるためゲートしない。）
+    // スロットルで水平軸へのカップリングが異なるため判定しない。）
     const bool hovering =
         (current_mode_ == FlightMode::STABILIZE || current_mode_ == FlightMode::ALT_HOLD) &&
         phase_ == VerticalPhase::Airborne &&
@@ -957,7 +957,7 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
 // at the moment of transfer (no altitude bump): hover_thrust_ rises by δ while the loop drops
 // the correction by δ. The vertical analogue of learnTrim().
 //
-// 高度保持を推力劣化（飛行時間によるモータ劣化・電圧サグ）にロバスト化し、hover.thrust_corr の
+// 高度保持を推力劣化（飛行時間によるモータ劣化・電圧低下）にロバスト化し、hover.thrust_corr の
 // フライト毎手調整を不要にする: 真の定常ホバーでは速度ループ出力が残差（真のホバー推力 −
 // hover_thrust_ FF）。これをゆっくり hover_thrust_ に畳み込むと FF が真のホバー推力へ追従し、
 // 速度積分が解け補正が0付近へ戻り、±max_thrust_correction_ の全権限が離陸・外乱に復活する。
@@ -980,8 +980,8 @@ void PidController::learnHoverThrust(float thrust_correction, float vz_up,
     // ALT_HOLD/POS_HOLD, throttle neutral (no commanded climb/descent), and the craft
     // actually still (|vz| small). The |vz| gate pauses learning through the altitude bob so
     // a transient correction is not mistaken for a hover-thrust error.
-    // ゲート: 高度ループが動く真の定常ホバーでのみ学習 — Airborne・ALT/POS・スロットル中立
-    // （上昇/下降指令なし）・実際に静止（|vz| 小）。|vz| ゲートが上下動中の学習を止め、過渡の
+    // 判定: 高度ループが動く真の定常ホバーでのみ学習 — Airborne・ALT/POS・スロットル中立
+    // （上昇/下降指令なし）・実際に静止（|vz| 小）。|vz| 判定が上下動中の学習を止め、過渡の
     // 補正をホバー推力誤差と誤認しない。
     const bool steady_hover =
         phase_ == VerticalPhase::Airborne &&
@@ -993,7 +993,7 @@ void PidController::learnHoverThrust(float thrust_correction, float vz_up,
     // First-order transfer of the steady velocity-loop output into the feed-forward with
     // time constant kHoverLearnTau. Clamp to the hover.thrust_corr range so a bad observation
     // cannot run the feed-forward away.
-    // 速度ループ定常出力を時定数 kHoverLearnTau で1次系的に FF へ移す。誤観測で FF が暴走
+    // 速度ループ定常出力を時定数 kHoverLearnTau で1次系的に FF へ移す。誤観測で FF が発散
     // しないよう hover.thrust_corr 範囲にクランプ。
     hover_thrust_ += (dt / kHoverLearnTau) * thrust_correction;
     hover_thrust_ = fminf(fmaxf(hover_thrust_, kHoverCorrMin * kMassG), kHoverCorrMax * kMassG);
@@ -1007,7 +1007,7 @@ void PidController::learnHoverThrust(float thrust_correction, float vz_up,
 // flash stall lands after touchdown and cannot disturb flight.
 // persistHoverThrust — 学習したホバー推力を着陸エッジで NVS 保存。毎サイクル呼ぶ
 // （learnHoverThrust は Airborne のみゆえ）。接地は Grounded フェーズで起きる。learnTrim の
-// 着陸エッジ保存と同じ安全な接地時単発窓（推力ゲート済み）。
+// 着陸エッジ保存と同じ安全な接地時単発窓（推力判定済み）。
 // -----------------------------------------------------------------------------
 void PidController::persistHoverThrust()
 {
@@ -1093,11 +1093,11 @@ float PidController::dobWashout(float x, float alpha)
 //
 // computeDobCorrection — 高度鉛直速度ループ用の加速度ベース外乱オブザーバ
 // （DOB、opt-in、param altitude.dob.fc）。呼び出し側（compute()）が
-// dob_enabled_ && Airborne でゲートする。
+// dob_enabled_ && Airborne で判定する。
 //
 // ノミナルなアクチュエーションモデル（純遅れ+1次遅れ、モデル自身の遅れ分
-// 過去の指令推力で駆動し内部で遅れを閉じる）と実測の鉛直比力を比較する。
-// モデルで説明できない残差（外乱：電池サグ推力低下・突風）を2次バター
+// 過去の指令推力で駆動し内部で遅れを閉じる）と実測の鉛直の加速度計測定値を比較する。
+// モデルで説明できない残差（外乱：電池電圧低下による推力低下・突風）を2次バター
 // ワースLPF（Q, paramのfc）→1次HP（ウォッシュアウト, 固定0.03Hz）に通し、
 // DOBは中域のみを担当、DC所有権は速度ループ積分器＋ホバー推力学習に残す
 // （帯域分離、README §3/§5）。
@@ -1123,7 +1123,7 @@ float PidController::computeDobCorrection(const StateEstimate& state, float dt)
 
     // Measured upward specific force (body→NED rotation, third row — same
     // convention as math::Quat::to_dcm; NED z is down, so negate).
-    // 実測の上向き比力（機体→NED回転第3行、math::Quat::to_dcm と同一規約。
+    // 実測の上向きの加速度計測定値（機体→NED回転第3行、math::Quat::to_dcm と同一規約。
     // NED z は下向きなので負にする）。
     const float qw = state.attitude[0], qx = state.attitude[1];
     const float qy = state.attitude[2], qz = state.attitude[3];
@@ -1140,7 +1140,7 @@ float PidController::computeDobCorrection(const StateEstimate& state, float dt)
     // measurement is implausible (no data, or a free-fall-like transient), so
     // HOLD the last d_hat instead of slamming the filters with garbage — with
     // the un-primed startup value 0 this makes the DOB a clean no-op.
-    // 比力の妥当性ガード: specific_force を埋めない推定器（例: 相補フィルタは
+    // 加速度計の測定値の妥当性ガード: specific_force を埋めない推定器（例: 相補フィルタは
     // ゼロ初期化のまま）では f_up=0 になる。実飛行の f_up は +g（≈9.8）近傍。
     // ガード未満は非妥当な計測（データなし or 自由落下級の過渡）なので、ゴミで
     // フィルタを叩かず前回 d_hat を保持 — 未プライム時の初期値0なら DOB は
@@ -1241,7 +1241,7 @@ void PidController::resetDobStates(float current_thrust)
     // computeDobCorrection() re-run PRIME (0.25 s residual average) →
     // FAST-SETTLE → RAMP (see the "engage conditioning" doc in
     // pid_controller.hpp).
-    // Qフィルタ/ウォッシュアウト: どのリセット呼び出し箇所も比力実測
+    // Qフィルタ/ウォッシュアウト: どのリセット呼び出し箇所も加速度計の実測値
     // （StateEstimate）を渡さないため、計測側の状態は「ここでは」平衡シード
     // できない。プレースホルダとして0にし、エンゲージ整形カウンタを再スタート —
     // 次の Airborne サンプル列で computeDobCorrection() がプライム（0.25s残差
@@ -1396,7 +1396,7 @@ void PidController::onTakeoff()
     // The takeoff-complete signal starts fresh.
     // 鉛直ループを仕切り直し（Grounded フェーズのゼロ出力履歴を持ちうる）、上昇目標を設定し、
     // POS_HOLD 用に発進点を捕捉（カスケードは次の compute から動く）。スロットル再センター
-    // ゲートは閉: パイロットがスティックを中央に通すまで高度を指令しない（Case A — ジャンプ
+    // 判定は閉: パイロットがスティックを中央に通すまで高度を指令しない（Case A — ジャンプ
     // 防止）。離陸完了信号は初期化する。
     alt_pos_.reset();
     alt_vel_.reset();
@@ -1578,7 +1578,7 @@ void PidController::reset()
     reposition_active_ = false;          // stick repositioning state clears / スティック再配置状態クリア
     excite_active_   = false;            // so does the excitation / 励振も同様
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
-    throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用にゲート再武装
+    throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用に判定再武装
     takeoff_reached_        = false;      // takeoff-complete signal clears / 離陸完了信号クリア
     takeoff_settle_cycles_  = 0;
     takeoff_elapsed_cycles_ = 0;
@@ -1614,7 +1614,7 @@ void PidController::onModeChange(FlightMode new_mode)
         // pass through center before it commands climb/descent — the stick is at an
         // arbitrary position at the switch and must not jump the altitude (decision ②).
         // 飛行中の ALT_HOLD/POS_HOLD 進入（Case B）: 現在高度を保持目標として捕捉し、
-        // スロットル再センターゲートを閉じる — スティックは切替時に任意位置にあり、
+        // スロットル再センター判定を閉じる — スティックは切替時に任意位置にあり、
         // 高度をジャンプさせないため中央を通すまで上昇/下降を指令させない（確定②）。
         if (new_mode >= FlightMode::ALT_HOLD && current_mode_ < FlightMode::ALT_HOLD) {
             capture_alt_         = true;

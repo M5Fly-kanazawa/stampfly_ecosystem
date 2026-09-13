@@ -130,7 +130,7 @@ struct StateEstimate {
     float gyro_bias[3];   // Gyro bias [rad/s]     / ジャイロバイアス
     float accel_bias[3];  // Accel bias [m/s²]     / 加速度バイアス
     float angular_rate[3];// Body rate [rad/s] FRD / 機体角速度（バイアス補正済み, gyro−bias）
-    float specific_force[3]; // Bias-corrected specific force [m/s²] body FRD / バイアス補正済み比力（機体FRD）
+    float specific_force[3]; // Bias-corrected specific force [m/s²] body FRD / バイアス補正済みの加速度計測定値（機体FRD）
     uint8_t sensor_mask;  // Active sensor bitmask / 有効センサマスク
     uint32_t timestamp;   // [us]
 };
@@ -315,7 +315,7 @@ struct SystemAlert {
 /// without reaching into a task-local object across tasks (R16-style: status via topic).
 /// 起動/システム準備状態 — ImuTask が発行し、StateManager::requestArm() の ARM 前チェックが
 /// 読む。遷移実行者がタスクをまたいで task-local オブジェクトに触れずに ARM を準備状態で
-/// ゲートできるようにする（R16 流: 状態はトピック経由）。
+/// 判定できるようにする（R16 流: 状態はトピック経由）。
 struct SystemStatus {
     bool calibrated;      // boot gyro/accel bias calibration is no longer pending
                           // 起動バイアス校正が保留中でない（完了/スキップ/無効/中止）
@@ -389,7 +389,7 @@ enum class PairingState : uint8_t {
 /// Pairing status — StateManager publishes the decided PairingState; comm reads it
 /// to gate PairingPacket broadcast, notify reads it to drive the pairing LED/buzzer.
 /// ペアリング状態 — StateManager が決定した PairingState を発行。comm は PairingPacket 送出の
-/// ゲートに、notify は LED/ブザー駆動に読む。
+/// 判定に、notify は LED/ブザー駆動に読む。
 struct PairingStatus {
     uint8_t  state;       // PairingState value            / PairingState の値
     uint32_t timestamp;   // [us]; 0 = never published     / 0=未発行
@@ -657,7 +657,7 @@ struct SensorHealth {
 /// パイロット/ボタン入力と同一の構図（architecture §2）。
 enum class ApiCmd : uint8_t {
     None      = 0,
-    Arm       = 1,   // arm motors (pre-arm gates still apply) / ARM（事前ゲートは有効）
+    Arm       = 1,   // arm motors (pre-arm gates still apply) / ARM（事前判定は有効）
     Disarm    = 2,   // disarm (ground)                        / DISARM（地上）
     Takeoff   = 3,   // mode→POS_HOLD + arm + auto-takeoff      / モード設定+ARM+自動離陸
     Land      = 4,   // autonomous landing                      / 自動着陸

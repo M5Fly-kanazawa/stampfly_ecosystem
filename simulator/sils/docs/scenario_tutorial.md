@@ -3,7 +3,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 >
-> 文法の正本（Single Source of Truth）はコードである。`.scn` は
+> 文法の基準（Single Source of Truth）はコードである。`.scn` は
 > `simulator/sils/devices/scenario.cpp` のパーサ、`.expect` は
 > `lib/sfcli/commands/sils.py` の `_eval_expect`/`_traj_metric` が唯一の正。
 > 本書はそれを読んで書いたもので、齟齬があればコードを信じること。
@@ -17,7 +17,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | ファイル | 役割 | 中身 |
 |---------|------|------|
 | `<name>.scn` | 入力の台本 — 「いつ・何を機体に与えるか」 | スティック値・API コマンド・風・故障などのイベントを時刻順に並べた行 |
-| `<name>.expect` | 合否判定 — 「何をもって合格とするか」 | ログ文字列の有無・順序・終了コード・実行結果のフライトログ一式（`.sflog.zip`。1回の実行の信号をまとめた zip 形式のログファイル。仕様の正本は `protocol/spec/flight_log.yaml`）由来の数値しきい値 |
+| `<name>.expect` | 合否判定 — 「何をもって合格とするか」 | ログ文字列の有無・順序・終了コード・実行結果のフライトログ一式（`.sflog.zip`。1回の実行の信号をまとめた zip 形式のログファイル。仕様の基準ファイルは `protocol/spec/flight_log.yaml`）由来の数値しきい値 |
 
 どちらも UTF-8 のプレーンテキストで、`simulator/sils/scenarios/` に同名（拡張子違い）で並べて置く。`.expect` が無い場合は「入力が実際に注入されたか」と「終了コードが 0 か」だけで合否が決まる（後述）。
 

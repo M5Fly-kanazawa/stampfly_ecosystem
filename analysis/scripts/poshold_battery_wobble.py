@@ -5,7 +5,7 @@ Time-segments a POS_HOLD UDP JSONL log and correlates horizontal/altitude wobble
 with battery voltage sag and hover duty (thrust->duty compensation). Complements
 poshold_analysis.py (which gives whole-flight metrics + a figure).
 
-POS_HOLD 長尺ログの「位置・高度ふらつき」を時間分割し、電池電圧サグ・ホバーduty と
+POS_HOLD 長尺ログの「位置・高度ふらつき」を時間分割し、電池電圧の低下・ホバーduty と
 の相関を出す。stdlib + numpy のみ。
 
 Usage: python3 analysis/scripts/poshold_battery_wobble.py [log.jsonl]
@@ -59,7 +59,7 @@ print(f"  水平速度: vx {vxm:+.3f}±{vxs:.3f}  vy {vym:+.3f}±{vys:.3f} m/s  
 print(f"  高度0.2-2Hz帯エネルギー比 {bandfrac(alt[m],fs_pv,0.2,2)*100:.0f}%  水平drift卓越 {domfreq(drift[m],fs_pv):.2f}Hz")
 
 # --- 時間分割 (30s窓) で 電圧 vs ふらつき vs 制御出力 ---
-print("\n[30s窓: 電圧サグ と ふらつき・ホバーduty の推移]")
+print("\n[30s窓: 電圧の低下 と ふらつき・ホバーduty の推移]")
 print(f"  {'窓[s]':>10} {'V[V]':>6} {'高度std':>8} {'高度p2p':>8} {'drift_rms':>9} {'vel_std':>8} {'duty平均':>8} {'duty_std':>8} {'thrust':>7}")
 edges=np.arange(T0,T1+1,30)
 rows=[]
@@ -81,4 +81,4 @@ print("\n[電圧 vs 各量の相関(窓平均)]")
 print(f"  corr(V, 高度std)   = {corr(R[:,0],R[:,1]):+.2f}")
 print(f"  corr(V, drift_rms) = {corr(R[:,0],R[:,3]):+.2f}")
 print(f"  corr(V, vel_std)   = {corr(R[:,0],R[:,4]):+.2f}")
-print(f"  corr(V, ホバーduty)= {corr(R[:,0],R[:,5]):+.2f}   (Vサグでduty上昇=thrust→duty補償)")
+print(f"  corr(V, ホバーduty)= {corr(R[:,0],R[:,5]):+.2f}   (V低下でduty上昇=thrust→duty補償)")

@@ -50,7 +50,7 @@ struct CalibrationData {
 /// legacy vehicle/ StationaryDetector thresholds; the accel-norm window is
 /// widened because the boot path sees RAW (bias-uncorrected) accelerometer
 /// readings (BMI270 offset spec is up to ~±0.5 m/s²).
-/// サンプル蓄積の静止ゲート。校正は静止時のみ有効: 運搬中・墜落後の拾い上げ中の
+/// サンプル蓄積の静止判定。校正は静止時のみ有効: 運搬中・墜落後の拾い上げ中の
 /// 動きを平均するとバイアスも水平基準もゴミになる。動きを検出したら蓄積を破棄して
 /// やり直すため、人間がいつ機体を置いても結果は「静止確認済み N サンプルの平均」で
 /// 決定的になる。既定値は旧 vehicle/ StationaryDetector の実績閾値。加速度ノルム窓は
@@ -62,7 +62,7 @@ struct StillnessConfig {
     // up to ~±1 dps/axis ≈ 0.03 rad/s magnitude). 0.05 still catches any real
     // handling motion (≳0.1 rad/s); the bias-INSENSITIVE gyro window variance
     // below is the precise judge.
-    // EMA |gyro| ゲートは「生」のジャイロを見る（起動時はバイアス未知 — それを校正
+    // EMA |gyro| 判定は「生」のジャイロを見る（起動時はバイアス未知 — それを校正
     // する最中）ため、センサのオフセット仕様（BMI270: 軸あたり最大約±1 dps ≈ 合計
     // 0.03 rad/s）を許容する必要がある。0.05 でも実際の取り扱い動作（≳0.1 rad/s）は
     // 捉える。精密判定はバイアス不感な下のジャイロ窓内分散が担う。
@@ -145,7 +145,7 @@ private:
     double   gyro_sq_sum_[3]  = {};   // Gyro sum-of-squares (variance) / ジャイロ二乗和（分散用）
     double   accel_sq_sum_[3] = {};   // Accel sum-of-squares (variance) / 加速度二乗和（分散用）
 
-    // Stillness gate state / 静止ゲートの状態
+    // Stillness gate state / 静止判定の状態
     StillnessConfig still_ = {};
     bool     ema_primed_     = false; // First sample primes the EMAs / 初サンプルでEMA初期化
     float    gyro_mag_ema_   = 0;     // EMA of |gyro| [rad/s]  / |gyro| のEMA

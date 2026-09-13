@@ -162,7 +162,7 @@ class IMU:
             true_angular_velocity: True angular velocity [p, q, r] (rad/s)
                                   真の角速度 [p, q, r] (rad/s)
             true_acceleration: True specific force [ax, ay, az] (m/s²)
-                              真の比力 [ax, ay, az] (m/s²)
+                              真の加速度計測定値 [ax, ay, az] (m/s²)
                               Note: Should include gravity in body frame
                               注意：機体座標系での重力を含むこと
             motor_speeds: Motor angular speeds [ω1, ω2, ω3, ω4] (rad/s)

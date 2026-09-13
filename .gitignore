@@ -68,7 +68,7 @@ build/
 analysis/reports/*
 !analysis/reports/.gitignore
 # Model-match gate reference (SSOT for sf sils sysid-gate) — keep in the repo
-# モデル一致ゲートの実機基準値（sf sils sysid-gate の SSOT）— リポジトリに含める
+# モデル一致の合否判定の実機基準値（sf sils sysid-gate の SSOT）— リポジトリに含める
 !analysis/reports/rate_sysid_reference/
 
 # ====================

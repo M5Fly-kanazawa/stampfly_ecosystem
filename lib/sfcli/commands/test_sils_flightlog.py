@@ -8,7 +8,7 @@ StampFly flight-log v1 bundle instead of the retired trajectory.csv).
 test_sils_flightlog.py - lib/sfcli/commands/sils.py のフライトログ一式
 ヘルパーの試験: `_finalize_flightlog()`（SILS 実行が書く `*.sflog.zip` を
 組み立てる -- 計画書 3.3節 Phase 3）と `_bundle_metric()`（`.expect` の
-`metric` DSL の数値ゲート。廃止した trajectory.csv の代わりに StampFly
+`metric` DSL の数値判定。廃止した trajectory.csv の代わりに StampFly
 フライトログ v1 一式を読む）。
 
 Usage:

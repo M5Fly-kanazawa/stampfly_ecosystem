@@ -108,7 +108,7 @@
 - **離陸ハンドオフ修正**: ESKF の `ALT capture: alt=0.62m`（修正前は **-0.00m** で発散）。
 - **climb 真値化**: phase C(t=14→16) の加速度 ≈ **0.22 m/s²**（予測 0.196 と一致, 修正前 1.75）。
 - **ALT_HOLD 保持**: sp=0.62m, alt が 0.62m に整定, vz≈0, thrust 0.406N≈hover 0.407N。
-- **時間 1:1**: trajectory が t=38s で終了（修正前は物理 t=100s まで暴走）。
+- **時間 1:1**: trajectory が t=38s で終了（修正前は物理 t=100s まで発散）。
 - **決定論的**: 2回連続実行で peak alt=0.677m 一致。
 - **回帰なし**: plant_smoke 全PASS / hover_espnow 14/14 / console_cli 8/8（**sf 既定 25s で**。
   注意: 仮想 pilot の arm は ~20s 以降ゆえ duration 20s だと arm 前に終わる＝偽 FAIL になる）。

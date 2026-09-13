@@ -7,7 +7,7 @@ layout: `meta.json`, `schema.json`, and one CSV per stream (see
 protocol/spec/flight_log.yaml, the format's Single Source of Truth).
 「一式（バンドル）」は `.sflog.zip` ファイルか、同じ平坦レイアウトの
 フォルダ（`meta.json`・`schema.json`・ストリームごとの CSV）のどちらか
-（形式の正本 protocol/spec/flight_log.yaml を参照）。
+（形式の基準ファイル protocol/spec/flight_log.yaml を参照）。
 
 @design docs/plans/flight-log-format-plan.md section 2 (Phase 0)
 """

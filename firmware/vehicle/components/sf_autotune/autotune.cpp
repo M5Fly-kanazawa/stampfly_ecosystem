@@ -210,7 +210,7 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
     // — even though that mismatch is the SAFE lead that only ADDS phase margin (designing
     // as integrator+delay is conservative). The residual<0.3 + GM-floor + physical-bounds
     // gates carry the real safety. See the gate audit / yaw_axis_model.md.)
-    // 残差非依存のデータ充足ゲート。「最悪信頼音」ゲートは削除: ヨーの意図的な簡略化(積分器+遅れ)の
+    // 残差非依存のデータ充足判定。「最悪信頼周波数点」判定は削除: ヨーの意図的な簡略化(積分器+遅れ)の
     // 安全な LHP リード不一致(低域で大きな位相リード)を棄却していたため。残差<0.3＋GM下限＋物理境界が安全を担保。
     float wsum = 0.0f;
     int   n_eff = 0;          // points with coh>0.5 (TRUSTED) / 信頼できる点数
@@ -329,7 +329,7 @@ bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& o
                 // m180 ≈ 0 → |L| vanishes at −180°, GM effectively infinite:
                 // leave gm_valid=false so a GM gate treats it as safe, not 0 dB.
                 // m180≈0 → −180° で |L| が消失しGM実質無限大: gm_valid=false のままにし
-                // GM ゲートが 0dB でなく安全側として扱えるようにする。
+                // GM 判定が 0dB でなく安全側として扱えるようにする。
                 got_gm = true;
             }
         }

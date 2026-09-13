@@ -30,7 +30,7 @@
  * Python プログラム（や任意の UDP 送信者）が Tello SDK のテキストプロトコルで
  * StampFly を飛ばせるようにする（requirements §7: コマンド受信 / TelloAPI）。
  * 権限分担（architecture §2）: 本タスクは解析して事実を報告するだけ。飛行 verb は
- * StateManager が（事前ゲート込みで）実行し、誘導目標は制御器が（スティック解除則
+ * StateManager が（事前判定込みで）実行し、誘導目標は制御器が（スティック解除則
  * 込みで）追従する。移動は推定値でなく「目標」に対して合成（Tello 流）するため、
  * 連続移動で推定ドリフトが蓄積しない。
  *
@@ -40,7 +40,7 @@
  * the expect gates (and hardware debugging) can read them.
  * SILS: ソケットシムは UDP を受信しないため、シナリオエンジンが sf_api_inject_line()
  * でコマンド行を注入する — パーサ/実行系は「同一コード」が走り（Code Identity）、
- * バイト輸送だけを迂回する。応答は常にログにも出す（expect ゲートと実機デバッグ用）。
+ * バイト輸送だけを迂回する。応答は常にログにも出す（expect 判定と実機デバッグ用）。
  *
  * @publisher  api_command (flight verbs), command_target (guidance)
  * @subscriber system_mode, system_status, estimate_state, sensor_power, controller_status
@@ -190,7 +190,7 @@ int batteryPercent()
 
 // -----------------------------------------------------------------------------
 // reply — send the answer to the UDP client AND log it (SILS gates / debugging).
-// reply — UDP クライアントへ返信し、ログにも出す（SILS ゲート・デバッグ用）。
+// reply — UDP クライアントへ返信し、ログにも出す（SILS 判定・デバッグ用）。
 // -----------------------------------------------------------------------------
 void reply(const char* text)
 {
@@ -597,7 +597,7 @@ sf::tello::TelloStateInputs gatherTelloState()
 // cmdAutotune — オンボード自動チューン: ステップドサイン掃引 → プラントフィット →
 // 位相余裕 PID 設計 → ライブ適用（params。NVS には保存しない）。
 //
-// Safety gates / 安全ゲート:
+// Safety gates / 安全判定:
 //  - FLYING hover only; each frequency point is a bounded, clamped excitation.
 //  - The result is applied ONLY if: enough effective-coherent points, the fit
 //    residual is small, the plant lands in PHYSICAL bounds (b vs the spec inertia;
@@ -606,7 +606,7 @@ sf::tello::TelloStateInputs gatherTelloState()
 //    the reply says why. (A Kp-vs-CURRENT-gain "no wild jumps" gate was REMOVED — its
 //    reference was circular for an untuned axis; kp≈wc/b is already physically bounded
 //    by the b-range gate. All gates are axis-uniform except yaw's T→0 allowance.)
-//    適用条件は物理/絶対基準のみ（残差・b 物理境界・余裕仕様・param範囲）。現ゲイン比ゲートは削除。
+//    適用条件は物理/絶対基準のみ（残差・b 物理境界・余裕仕様・param範囲）。現ゲイン比判定は削除。
 //  - Nothing is written to NVS — land and `param save` after a check flight.
 // -----------------------------------------------------------------------------
 // autotuneCue — publish a buzzer tone (audible over WiFi-only/solo use; the pilot
@@ -763,7 +763,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // RETURN before saving, leaving stale params — so a rejected yaw looked unchanged.
     // Only the DESIGN below is gated on the residual.
     // 同定プラントを常に保存（粗い/棄却フィットも）— 棄却経路が保存前に return して古い値が
-    // 残り、yaw が変化なしに見えていた。設計のみ残差でゲートする。
+    // 残り、yaw が変化なしに見えていた。設計のみ残差で判定する。
     if (plant.b > 0.0f) {
         char pk[40];
         std::snprintf(pk, sizeof(pk), "autotune.%s.b",     kAxisName[axis]); sf::params::set_float(pk, plant.b);
@@ -847,7 +847,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // SAFER). Reject only an UNDER-margin design (PM below target). This was an equality gate
     // |PM-target|>5, which wrongly rejected an over-damped design — yaw at wc=18 lands at
     // PM~80 (PI-only already exceeds 60, so td clips to 0), which is safe, not a failure.
-    // 達成PMが目標以上なら採用（高PM=より減衰=安全）。目標未満だけ棄却。等値ゲートは過減衰設計を
+    // 達成PMが目標以上なら採用（高PM=より減衰=安全）。目標未満だけ棄却。等値判定は過減衰設計を
     // 誤棄却していた（yaw wc=18 は PM~80 で安全）。
     if (tune.pm_deg < pm_deg - 5.0f) {
         sf::params::set_float(rk_rej, 6.0f);
@@ -858,7 +858,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // (Design margins are saved as the CURRENT gains' margins above, and overwritten
     // with these NEW gains' margins ONLY if the design passes the gates and is applied
     // below — so a rejected axis keeps the margins of the gains it is still flying.)
-    // （設計余裕は上で現ゲインの余裕として保存済み。下のゲートを通過し適用された場合のみ
+    // （設計余裕は上で現ゲインの余裕として保存済み。下の判定を通過し適用された場合のみ
     // この新ゲインの余裕で上書き — 棄却軸は据置ゲインの余裕を保持する。）
 
     // Gain-margin floor: a design that meets the phase margin can still be too
@@ -889,7 +889,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // physically bounded by the b-range gate above (b ∈ [0.25,4]× 1/Ispec ⇒ kp ∈
     // [0.25,4]× wc/Ispec), and the GM-floor + residual + coherence gates validate the
     // design — those are the real, physically-grounded safety. See the gate audit.
-    // （削除）「現飛行ゲイン比4倍以内」ゲート: 基準が現ゲインで循環・未調整軸(yaw)で正当な補正を阻害。
+    // （削除）「現飛行ゲイン比4倍以内」判定: 基準が現ゲインで循環・未調整軸(yaw)で正当な補正を阻害。
     // 設計 kp≈wc/b は上の b 物理境界＋GM下限＋残差で既に物理的に束縛済み。
     char key_kp[32], key_ti[32], key_td[32];
     std::snprintf(key_kp, sizeof(key_kp), "rate.%s.kp", kAxisName[axis]);
@@ -967,7 +967,7 @@ void processLine(char* line)
     }
 
     // Emergency first — never behind any other gate.
-    // emergency は最優先 — 他のゲートの後ろに置かない。
+    // emergency は最優先 — 他の判定の後ろに置かない。
     if (std::strcmp(line, "emergency") == 0) {
         g_target_valid = false;
         publishApiVerb(sf::ApiCmd::Emergency);

@@ -52,7 +52,7 @@
 # trajectory roll/pitch track the commanded ±8° steps and return to ~0° on centre,
 # bounded (no divergence, no motor saturation runaway). DISARM cuts motors.
 # 期待: ログに ARMED_GROUND→TAKEOFF→FLYING、trajectory の roll/pitch が指令±8°に追従し
-# 中央復帰で~0°、有界（発散・モータ飽和暴走なし）。DISARM でモータ停止。
+# 中央復帰で~0°、有界（発散・モータ飽和による増大なし）。DISARM でモータ停止。
 #
 # 2026-07-26 known residual (analysis only, NOT fixed here — throttle-calibration task,
 # firmware untouched): the F step (fresh pitch+8° while roll is still settling from E)
@@ -72,6 +72,6 @@
 # mixerCompute() の ±ik·ur 配分が2モータの duty を 1.0 まで/超えて押し上げる（解析的に
 # 確認済み、かつホバー未満〜+16%マージンまで raw スロットルを掃引しても duty_max は
 # 常に 1.0 に張り付く＝スロットル非依存＝較正の産物ではないことを確認済み）。結果としての
-# duty_max ゲート変更は stab_flight.expect 参照。次点候補（本タスク範囲外）: 新しい
+# duty_max 判定の変更は stab_flight.expect 参照。次点候補（本タスク範囲外）: 新しい
 # （必然的に高い）基準 duty のもとでのヨー・レートループの挙動、または
 # config::rate_yaw_max_torque の余裕の再検討。

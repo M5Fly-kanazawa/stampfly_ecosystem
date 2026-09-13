@@ -71,7 +71,7 @@ void CalibrationMgr::init()
         // 現状は毎起動で正常: saveToNvs() は意図的に未配線（NVS commit のフラッシュ
         // 消去が 400Hz ループを 10ms 超ストールさせるため、永続化は flash auto-suspend
         // の調査とセットで保留）。直後に起動校正がフレッシュに測定し、完了まで ARM を
-        // ゲートするので、ゼロが使われるのは disarmed の最初の約4秒だけ。
+        // 判定するので、ゼロが使われるのは disarmed の最初の約4秒だけ。
         ESP_LOGI(TAG, "No saved calibration (normal: persistence not wired) — "
                       "boot calibration measures fresh");
         memset(&data_, 0, sizeof(data_));
@@ -190,8 +190,8 @@ bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
     // Stillness gate (see StillnessConfig): motion discards the partial window.
     // The EMA keeps updating through motion so the gate re-opens only after the
     // craft has genuinely settled.
-    // 静止ゲート（StillnessConfig 参照）: 動きは部分蓄積を破棄する。EMA は動いている間も
-    // 更新し続けるため、本当に静定してからゲートが再び開く。
+    // 静止判定（StillnessConfig 参照）: 動きは部分蓄積を破棄する。EMA は動いている間も
+    // 更新し続けるため、本当に静定してから判定が再び開く。
     if (!updateStillness(gyro, accel)) {
         restartAccumulation();
         return false;
@@ -217,7 +217,7 @@ bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
     // variance fingerprint over the whole window. Variance is bias-insensitive
     // (computed around the window's own mean), so it judges precisely even
     // though the sensor offsets are not yet known. Reject and start over.
-    // 窓完了 — 最終妥当性チェック: EMA ゲートはゆっくり滑らかな動き（手のゆったり
+    // 窓完了 — 最終妥当性チェック: EMA 判定はゆっくり滑らかな動き（手のゆったり
     // した揺れ等）を見逃しうるが、その動きは窓全体の分散に痕跡を残す。分散は窓自身の
     // 平均まわりで計算されバイアス不感のため、センサオフセット未知でも精密に判定
     // できる。検出したら破棄してやり直す。
@@ -278,7 +278,7 @@ void CalibrationMgr::computeLevelOffset()
     // with the G that computeAverages added removed again (az ≈ −G·cosφ·cosθ).
     // The old "+ G" double-added gravity and produced az ≈ +G — the gravity
     // vector upside down, flipping both offset signs.
-    // 静止時の「比力」ベクトル [ax, ay, az]: 生の静止平均、すなわち computeAverages が
+    // 静止時の「加速度計の測定値」ベクトル [ax, ay, az]: 生の静止平均、すなわち computeAverages が
     // 足した G を再び引いたもの（az ≈ −G·cosφ·cosθ）。旧 "+ G" は重力を二重加算して
     // az ≈ +G（重力ベクトルが上下逆）となり、両オフセットの符号が反転していた。
     float ax = data_.accel_bias[0];
@@ -288,7 +288,7 @@ void CalibrationMgr::computeLevelOffset()
     // Same convention as EskfCore::setAttitudeFromGravity: for true roll +φ the
     // rest specific force is [0, −g·sinφ, −g·cosφ], for true pitch +θ it is
     // [+g·sinθ, 0, −g·cosθ].
-    // EskfCore::setAttitudeFromGravity と同一規約: 真のロール +φ で比力は
+    // EskfCore::setAttitudeFromGravity と同一規約: 真のロール +φ で加速度計の測定値は
     // [0, −g·sinφ, −g·cosφ]、真のピッチ +θ で [+g·sinθ, 0, −g·cosθ]。
     data_.level_offset[0] = std::atan2(-ay, -az);                              // roll  = φ
     data_.level_offset[1] = std::atan2(ax, std::sqrt(ay * ay + az * az));      // pitch = θ

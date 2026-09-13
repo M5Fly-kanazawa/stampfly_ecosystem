@@ -4,7 +4,7 @@ pass, i.e. lib/sflog/schema.py and docs/reference/flight-log-format.md are
 not stale relative to protocol/spec/flight_log.yaml (the SSOT).
 test_schema_generated.py - protocol/tools/gen_flight_log.py --check が
 通ること。つまり lib/sflog/schema.py と
-docs/reference/flight-log-format.md が正本
+docs/reference/flight-log-format.md が基準ファイルである
 protocol/spec/flight_log.yaml に対して古くなっていないこと。
 """
 

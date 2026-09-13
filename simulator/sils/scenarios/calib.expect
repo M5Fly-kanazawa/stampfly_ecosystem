@@ -2,9 +2,9 @@
 # Asserts the boot calibration MEASURED and APPLIED the injected raw bias, then flew an
 # ALTITUDE_HOLD hover with the ESKF attitude bounded. The "without calibration" half is
 # demonstrated by re-running with SILS_EMU_NO_CALIB=1 (see calib.scn) — not gated here.
-# 校正 ON（既定）の対照ゲート。起動校正が注入した生バイアスを測定・適用し、ALT_HOLD
+# 校正 ON（既定）の対照判定。起動校正が注入した生バイアスを測定・適用し、ALT_HOLD
 # ホバーを ESKF 姿勢有界で飛んだことを検証する。「校正なし」側は SILS_EMU_NO_CALIB=1 の
-# 再実行で実証（ここではゲートしない）。
+# 再実行で実証（ここでは判定しない）。
 #
 # XFAIL (known issue, tracked 2026-07-26): the injected IMU bias combined with the new
 # ODE plant's takeoff dynamics produces a 0.6-0.7 Hz self-oscillation, close to the

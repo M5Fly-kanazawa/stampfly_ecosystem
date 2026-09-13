@@ -107,7 +107,7 @@ EXPECTED_ASSET_NAME_SUBSTRINGS = [
 # convention (a guard rail, not an expected duration).
 # --selftest subprocessの制限時間。installer.py自身の前提条件プローブ
 # (docs/plans/gui-installer-plan.md §4)はネットワークに触れる場合がある
-# (git疎通確認等)ため、ローカルループ向けの厳しいタイムアウトではなく
+# (gitの接続確認等)ため、ローカルループ向けの厳しいタイムアウトではなく
 # CI向けに余裕を持たせている -- check_upgrade.py の timeout-minutes と
 # 同じ「想定所要時間ではなくガードレール」という考え方に倣う。
 SELFTEST_TIMEOUT_SECONDS = 600

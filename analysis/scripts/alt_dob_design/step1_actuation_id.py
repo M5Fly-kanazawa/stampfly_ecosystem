@@ -34,7 +34,7 @@ source). The physically-correct bias-corrected specific force is accel - accel_b
 重要な発見（詳細は報告書§5）: タスク指示書はJSONLの"accel"を「バイアス補正済み」と
 説明しているが、ファームウェアのソース（control_task.cpp:86, eskf_core.cpp:174）を見ると
 "accel"はバイアス未補正の生値（m/s²にスケール変換のみ）で、"accel_raw"は電文上
-"accel"と完全に同一（data_stream_wire.hpp）。物理的に正しい比力は accel - accel_bias
+"accel"と完全に同一（data_stream_wire.hpp）。物理的に正しい加速度計の測定値は accel - accel_bias
 （両方とも毎サンプル記録されている）。本スクリプトは常にこの補正を適用する。
 
 Usage / 使い方
@@ -100,7 +100,7 @@ WIN_D = (56.3, 196.5)   # raw ts, given by task brief
 
 # =============================================================================
 # Core physics: body(FRD) accel -> NED -> upward specific force f_up
-# 物理コア: body(FRD)加速度 -> NED -> 上向き比力 f_up
+# 物理コア: body(FRD)加速度 -> NED -> 上向きの加速度計測定値 f_up
 # =============================================================================
 def quat_to_dcm_row3(quat):
     """Third row of the body->NED DCM (q=[w,x,y,z], q_nb convention), i.e. the

@@ -142,7 +142,7 @@ static constexpr float MOTOR_CT = 1.00e-8f;
 // never divides by ~0 and blows up the duty.
 // モータ曲線の電圧 → PWM duty 変換（duty = V/Vbat）に使う電源電圧。sensor_power の実電圧を
 // 使い、負荷で垂下する 1S LiPo に thrust→duty 段を追従させる。実機で必須（固定だとパックが
-// 公称からずれると過/不足駆動）。SILS ではプラントの電池サグモデルで一致（Model Identity）。
+// 公称からずれると過/不足駆動）。SILS ではプラントの電池電圧低下モデルで一致（Model Identity）。
 // 下限ガードは起動窓（PowerData 未発行→電圧0）と異常値を弾き、~0 除算で duty を暴発させない。
 static constexpr float V_BATT_NOMINAL = 3.7f;   // 1S LiPo nominal fallback [V]
 static constexpr float V_BATT_MIN     = 2.5f;   // below this → treat as invalid [V]
@@ -324,7 +324,7 @@ static void publishMotorOutput(const float duties[4], uint32_t timestamp)
 
 // -----------------------------------------------------------------------------
 // arm — enable motor output (safety gate for ARM transitions).
-// arm — モーター出力を有効化（ARM 遷移用の安全ゲート）。
+// arm — モーター出力を有効化（ARM 遷移用の安全判定）。
 //
 // The motor HAL gates every duty write behind its own armed_ flag, so update()
 // is a no-op until the HAL is armed here. Idempotent: only the disarmed→armed

@@ -255,7 +255,7 @@
         \item \textbf{ファームは無改変}: 実機に書き込む vehicle のソースをそのまま PC 向けにコンパイル（状態機械・フェイルセーフも含む）
         \item \textbf{OS の代わり}: 仮想時計で動く決定論的な疑似 RTOS と ESP-IDF 互換スタブ。同じ入力なら毎回同じ結果
         \item \textbf{制御対象}: MuJoCo（6 自由度）＋自作のモータ・センサ・風モデル。400\,Hz でファームと歩調を合わせる
-        \item \textbf{試験の与え方}: シナリオ \code{.scn} に操縦・外乱・故障を時系列で書き、\code{.expect} で PASS / FAIL を自動判定。CI で退行を検出
+        \item \textbf{試験の与え方}: シナリオ \code{.scn} に操縦・外乱・故障を時系列で書き、\code{.expect} で PASS / FAIL を自動判定。CI で既存動作の破壊を検出
         \item \textbf{実習コードも同じ土俵}: 参加者の \code{user\_code.cpp} も同じ仕組みで飛ぶ（実習 8 (2/2)）
         \item できないこと: 複数タスクの競合、実際の WiFi / ESP-NOW の電波
       \end{itemize}

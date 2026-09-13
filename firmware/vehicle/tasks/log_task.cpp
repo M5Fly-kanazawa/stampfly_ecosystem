@@ -18,7 +18,7 @@
  * exists, Logger::init() leaves it disabled and writes become no-ops (graceful).
  *
  * sf::Logger を駆動する。Logger は IMU/推定/制御/モータの各トピックを SPIFFS 上の
- * バイナリ Blackbox レコードに記録する。Blackbox セッションは armed フラグでゲート
+ * バイナリ Blackbox レコードに記録する。Blackbox セッションは armed フラグで判定
  * する: 1 セッション = 1 飛行（ARM→DISARM）。これにより小さな SPIFFS には地上待機で
  * なく飛行全体が残る。SPIFFS パーティションが無ければ init() が無効のままにし書き込みは
  * no-op になる（グレースフル）。
@@ -36,7 +36,7 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "logger.hpp"
-#include "params.hpp"   // log.blackbox.enable gate / Blackbox 有効化ゲート
+#include "params.hpp"   // log.blackbox.enable gate / Blackbox 有効化判定
 
 static const char* TAG = "LogTask";
 
@@ -67,7 +67,7 @@ void LogTask(void* pvParameters)
         // write erases flash, which disables the flash cache and STALLS BOTH CORES for
         // ~37ms — the 400Hz control loop freezes ~every 0.5s and the craft kicks (yaw).
         // Off by default so flight is stall-free; analysis uses WiFi telemetry instead.
-        // Blackbox は log.blackbox.enable でゲート（既定 OFF）: 飛行中の SPIFFS 書込は
+        // Blackbox は log.blackbox.enable で判定（既定 OFF）: 飛行中の SPIFFS 書込は
         // フラッシュ消去でキャッシュ無効化し両コアを ~37ms 停止 → 400Hz 制御が約0.5秒毎に
         // 凍結し機体がキック（ヨー）。既定 OFF で飛行をストールなしに。解析は WiFi で行う。
         int32_t blackbox_enable = 0;

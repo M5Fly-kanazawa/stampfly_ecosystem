@@ -45,11 +45,11 @@
 #
 # スコープの注記（詳細は docs/plans/pairing-methods-plan.md と pairing_plan.md の
 # 2026-09-12 追記を参照）: 本シナリオはユーザー視点のエンドツーエンド挙動（手持ち中の
-# バインド・手持ち中の ARM 拒否）を検証するが、requestPairing() の旧ゲート
-# （IDLE_GROUND 限定）と新ゲート（IDLE_GROUND/IDLE_HELD）を単体で判別する試験には
+# バインド・手持ち中の ARM 拒否）を検証するが、requestPairing() の旧判定
+# （IDLE_GROUND 限定）と新判定（IDLE_GROUND/IDLE_HELD）を単体で判別する試験には
 # ならない — 自動突入ループは起動後ごく僅かな時間で「Pairing started」に到達し、
 # これは handle が駆動する ToF の立上りが "held" を検出するより必ず先に起こるため、
-# 最初の Pairing 突入は旧ゲートでも新ゲートでも常に（一瞬）IDLE_GROUND のうちに起きる。
+# 最初の Pairing 突入は旧判定でも新判定でも常に（一瞬）IDLE_GROUND のうちに起きる。
 # requestPairing() を「本当に IDLE_HELD の間」に呼ばせる試験（例: 手持ち中のボタン
 # 長押し再ペア）には `btn` チャンネル（GPIO ジェスチャ注入、scenario.cpp の
 # Channel::Btn に "deferred (GPIO future)" と明記、未実装）か、"vehicle" ターゲットで

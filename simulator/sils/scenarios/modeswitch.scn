@@ -17,7 +17,7 @@
 #
 # Phase-8 ロバスト試験: 空中で飛行モードを切り替え、各切替で機体が有界に保たれることを
 # 検証する（要件: 飛行中の ALT↔POS モード切替で姿勢・高度が有界）。状態機械はモード変更を
-# FLYING からのみ受理する（StateManager::requestModeChange が FLYING でゲート）ため、
+# FLYING からのみ受理する（StateManager::requestModeChange が FLYING で判定）ため、
 # STABILIZE への素直な離陸を切替の前に置く。
 #
 # 切替を「意味あるもの」にするため（外乱ゼロで中央スティックの飛行は動かず、カスケードは

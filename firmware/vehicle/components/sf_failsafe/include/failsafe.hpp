@@ -87,7 +87,7 @@ private:
     // on voltage recovery (with hysteresis) so a later sag re-raises.
     // 電池の警告/危険ラッチを分離: 共有ラッチだと 3.4V 警告発報後に 3.0V 危険へ
     // エスカレーションできなかった。電圧回復（ヒステリシス付き）で両方クリアし、
-    // 後のサグで再発報できるようにする。
+    // 後の電圧低下で再発報できるようにする。
     bool batt_warning_     = false;   // 3.4V warning latched / 低電圧警告ラッチ
     bool batt_emergency_   = false;   // 3.0V emergency latched / 危険電圧ラッチ
     uint8_t comm_reraise_count_ = 0;  // re-raise divider while comm stays lost / 喪失継続中の再発報分周

@@ -10,7 +10,7 @@
  * @file hover_smoke.cpp
  * @brief P1.2(c)+ closed loop — a full flight in the SILS: takeoff → hover → yaw
  *        spin → yaw stop → landing. Gate G3 + the review-video bundle.
- *        SILS でのフル飛行: 離陸 → ホバ → ヨー旋回 → ヨー停止 → 着陸。ゲート G3 ＋
+ *        SILS でのフル飛行: 離陸 → ホバ → ヨー旋回 → ヨー停止 → 着陸。G3 判定 ＋
  *        レビュー動画バンドル。
  *
  * The real firmware loop (ImuTask → estimate_state → ControlTask → B^-1 mixer →
@@ -255,7 +255,7 @@ void physics(int64_t now_us)
     // 発火する。本ベンチは（上の system_mode/controller_command と同様）StateManager を
     // バイパスするためこの経路が一切走らず、onModeChange(ALT_HOLD) だけでは phase_ が
     // 永久に Grounded のまま — スロットルスティックに関係なく climb/hover 窓全体で
-    // 推力が ~0 のままだった（P1ゲートが壊れた原因を追う中で発見: max_alt 実測 0.013m、期待
+    // 推力が ~0 のままだった（P1判定が壊れた原因を追う中で発見: max_alt 実測 0.013m、期待
     // 0.5m。gdb で特定 — controller_command.publish() は全て ModeChange か無関係な
     // StateManager リセットに遡り、Takeoff/TakeoffComplete 指令は一度も無かった）。
     // 修正: state_task.cpp が出すのと同じ2指令を発火する（ALT_HOLD 進入で Takeoff を
@@ -326,7 +326,7 @@ void physics(int64_t now_us)
     // on_ground_ は構築時に true が既定で、ToF が無ければ再評価されない
     // （takeoff_landing.cpp: 無効/不在サンプルは on_ground_ を直前値のまま保つ）。
     // この注入が無いと on_ground_ が飛行全体で true のままとなり、機体は恒久的に
-    // 接地扱いされ、ALT_HOLD の空中推力則が一切係合せず機体が上昇しない（P1ゲート
+    // 接地扱いされ、ALT_HOLD の空中推力則が一切係合せず機体が上昇しない（P1判定
     // が壊れた原因を追う過程で発見: max_alt 実測 0.013m、期待 0.5m。.scn シナリオ群は
     // 影響を受けない — エミュレータの実 ToF チップモデル（devices/vl53_device.cpp）が
     // 常に ImuTask へ供給しているため）。eskf.use_tof は false のまま（上で設定）

@@ -1,5 +1,5 @@
 # boot_motion.expect — stillness-gated boot calibration under handling
-# 静止ゲート付き起動校正のハンドリング耐性検証
+# 静止判定付き起動校正のハンドリング耐性検証
 #
 # The chain that must hold: ARM is rejected while the craft is in the hand
 # (calibration cannot complete in motion) → after placement the calibration

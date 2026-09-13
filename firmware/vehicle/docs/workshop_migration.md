@@ -200,7 +200,7 @@ bool is_armed() {
 **解決策**:
 - `sf_state::StateManager` に **ARM guard** を組み込む（`if (state != ARMED) state = ARMED`）
 - `sf::api::state::request_arm()` は冪等（idempotent）にする — 既に ARM 状態なら何もしない
-- Lesson 中の `while (true) ws::arm()` のような誤用パターンでもモータが暴走しない
+- Lesson 中の `while (true) ws::arm()` のような誤用パターンでもモータの出力が発散しない
 
 ### 論点 3: 400Hz タイミング同期の信頼性
 
@@ -350,7 +350,7 @@ M5 完了後、`firmware/workshop/` は vehicle と同じファームウェア�
 | 論点 | 計画時 | 実施時の確定 |
 |------|--------|------------|
 | §4 論点1（ESKF API 凍結） | ADR 要求 | 変更なし（同一コンポーネント共有で自然に一致。凍結ルールは引き続き有効） |
-| §4 論点2（ARM guard） | StateManager に guard 追加 | **既存実装で充足**。`StateManager::requestArm()` は状態ゲート（IDLE_GROUND のみ受理）で冪等。`ws::arm()` は `api_command` トピックに ApiCmd::Arm を発行するだけ |
+| §4 論点2（ARM guard） | StateManager に guard 追加 | **既存実装で充足**。`StateManager::requestArm()` は状態判定（IDLE_GROUND のみ受理）で冪等。`ws::arm()` は `api_command` トピックに ApiCmd::Arm を発行するだけ |
 | §4 論点3（400Hz 同期） | xTaskNotify 化 | **既存実装で充足**。vehicle の ImuTask→ControlTask 通知（タイムアウト安全網付き）をそのまま流用。WorkshopControlTask が `sf::tasks::control_handle()` を提供 |
 | §4 論点4（ControlPacket バージョニング） | v1/v2 共存 | **不要になり廃止**。workshop が vehicle と同じ sf_comm/sf_command を共有するため乖離が構造的に発生しない |
 | §4 論点5（NVS namespace） | vehicle 専用 namespace | `sf_params`/`wifi.channel`（param 系）に一本化。旧キー `stampfly`/`wifi_ch` は**初回起動時に一度だけ取り込み**（workshop_main.cpp の importLegacyWifiChannel、param 系未保存の場合のみ） |
@@ -361,7 +361,7 @@ M5 完了後、`firmware/workshop/` は vehicle と同じファームウェア�
 
 - **ControlTask 置換のみ**: タスク表は vehicle と同一で、`WorkshopControlTask`
   （workshop_control_task.cpp）だけが差し替わる。学習者の `setup()`/`loop_400Hz(dt)` を
-  呼び、モータ要求（ws_internal::MotorRequest）を ARM ゲート内で `Actuator::applyTestDuties()`
+  呼び、モータ要求（ws_internal::MotorRequest）を ARM 判定内で `Actuator::applyTestDuties()`
   に解決する。**INV-1 との関係**: workshop ビルドでは学習者ループが唯一の制御パイプライン
   （置換であって並列ではない）。
 - **旧ミキサー式の完全再現**: `ws::motor_mixer()` は vehicle_old `setMixerOutput` の

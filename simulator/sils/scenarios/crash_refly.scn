@@ -19,7 +19,7 @@
 #      モード→STABILIZE）。
 #   3. 手で物理ハンドリング: 持上げ→正立（傾いた機体を水平へ）→運搬→地面に設置（Plant
 #      キネマティック軌道、ToF 上昇→IDLE_HELD、設置→IDLE_GROUND→再校正開始）。
-#   4. 地上で再校正（gyro/accel バイアス）。完了まで ARM はゲートで拒否。
+#   4. 地上で再校正（gyro/accel バイアス）。完了まで ARM は判定で拒否。
 #   5. 再ARM→再離陸→ALT_HOLD でホバー回復→着陸/DISARM。
 #
 # Longer than the 25 s default — run with --duration 33000000 (33 s).

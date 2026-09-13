@@ -109,7 +109,7 @@ public:
         /// future flight-log recalibration (Model Identity); override per-run with
         /// SILS_EMU_THRUST_EFF (emu_main.cpp) for A/B testing.
         /// 実機の推力効率（ODE理想曲線 T=Ct·ω² 比、モータ/プロップ損失＋ファームが測れない
-        /// 電池サグ）。2026-07-26（バックログ#2）既定 1.0 に変更: 旧 1/1.12（「摩耗モータ」
+        /// 電池電圧低下）。2026-07-26（バックログ#2）既定 1.0 に変更: 旧 1/1.12（「摩耗モータ」
         /// ファッジ係数）は2026-07-14以前のCt(1.00e-8)が、当時直接配線した2026-07-15の
         /// thrust stand実測(6.7e-9)より約1.49倍過大だったことを打ち消すためのものだった
         /// — その（当時は正確と信じられていた）小さいCtを配線した状態では、補正は物理的に
@@ -240,11 +240,11 @@ public:
         // default → constant v_batt (the physics/smoke tests probe the motor curve at a
         // fixed nominal voltage). The closed-loop emulator (emu_vehicle) enables it
         // so the firmware's live-voltage thrust→duty compensation has a real sag to track.
-        // 電池(1S LiPo)サグ/放電モデル。有効時は電源電圧が動的: v_batt=OCV(SoC)−I·R_int。
+        // 電池(1S LiPo)の電圧低下/放電モデル。有効時は電源電圧が動的: v_batt=OCV(SoC)−I·R_int。
         // 電池電流 I は各モータ電気電流 I_i=(V_motor,i−Km·ω_i)/Rm（params文書§3）＋アビオ静止
         // 電流の総和。SoC はクーロンカウントで減少。既定 OFF（物理/smoke テストは固定公称で
         // モータ曲線を検証）。閉ループ emu が有効化し、ファームの実電圧 thrust→duty 補償に
-        // 追従すべき実サグを与える。
+        // 追従すべき実際の電圧低下を与える。
         bool  batt_model_enable  = false;
         float batt_capacity_mah  = 300.0f;   ///< 1S LiPo capacity [mAh] (juida2026 EVIDENCE)
         float batt_r_int         = 0.1f;     ///< battery internal resistance [Ω] (vpython model)
@@ -408,7 +408,7 @@ public:
     /// 滑らかなキネマティック軌道を規定する（動力学なし・teleport なし）: 機体姿勢が3つの
     /// smootherstep 相を連続に動く ― lift（墜落姿勢から carry_alt まで真上に上げ、起こし開始）、
     /// carry（carry_alt で place_x/place_y へ並進、水平へ起こし完了）、place（place_x/place_y で
-    /// 真下に地面へ降ろし、水平維持）。合成 IMU 比力は軌道の加速度から解析的に（frames::
+    /// 真下に地面へ降ろし、水平維持）。合成 IMU の加速度計測定値は軌道の加速度から解析的に（frames::
     /// accel_body_frd）、ジャイロは角速度から計算するので、ファームは物理的に整合した
     /// 持上げ/正立/運搬/設置を見る ― ToF が空中閾値を超え（→IDLE_HELD）、設置で戻る（→IDLE_GROUND
     /// →再校正）。smootherstep は各相境界で速度と加速度が共にゼロ（C²）ゆえ軌道（と IMU）に
@@ -498,7 +498,7 @@ private:
     /// the analytic IMU specific force + gyro. Replaces substep() while handling is active
     /// (no dynamics integration). 規定ハンドリング軌道の固定刻み 1 ステップ（長さ h[s]）:
     /// ハンドリング時計を進め、smootherstep の姿勢/速度/加速度を評価し、qpos/qvel を MuJoCo に
-    /// 書込み、mj_forward で位置センサを更新、解析 IMU 比力＋ジャイロを保存。ハンドリング中は
+    /// 書込み、mj_forward で位置センサを更新、解析 IMU の加速度計測定値＋ジャイロを保存。ハンドリング中は
     /// substep() を置き換える（動力学積分なし）。
     void handlingSubstep(float h);
 

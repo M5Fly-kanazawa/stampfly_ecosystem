@@ -114,7 +114,7 @@ private:
     //                  (INV-3), which drives LANDING → IDLE_GROUND → disarm.
     // 鉛直飛行フェーズ。INV-1: 全フェーズが compute() の単一姿勢+レートパイプラインを共有
     // し、フェーズが変えてよいのは鉛直チャネル（推力/上昇/降下）と自身の脱出条件のみ。姿勢則は
-    // 変えない。フェーズ別の制御関数は意図的に持たない。フェーズは鉛直ループをゲートする:
+    // 変えない。フェーズ別の制御関数は意図的に持たない。フェーズは鉛直ループを判定する:
     //   Grounded     — 地上 ARM 中: 推力を強制ゼロ（プロペラ停止）
     //   TakeoffClimb — 自動離陸: 高度カスケードが目標(0.5m)へ速度制限上昇。姿勢はパイロット
     //                  （INV-2, 鉛直のみ自動）。目標近傍で減速し捕捉、isTakeoffComplete() が報告。
@@ -122,7 +122,7 @@ private:
     //   Landing      — 自動着陸: 鉛直チャネルが landing_descent_rate_ で降下（モード非依存=
     //                  ACRO/STABILIZE からの通信途絶着陸にも対応）。リンク生存中は姿勢は
     //                  パイロット（操縦可, INV-2）、リンク途絶（パイロット不在）時のみ単一の
-    //                  水平ゲートで roll/pitch/yaw を 0 にする。接地は TakeoffLandingMgr が検出
+    //                  水平判定で roll/pitch/yaw を 0 にする。接地は TakeoffLandingMgr が検出
     //                  （INV-3）し LANDING→IDLE_GROUND→disarm へ。
     enum class VerticalPhase : uint8_t { Grounded, TakeoffClimb, Airborne, Landing };
     VerticalPhase phase_ = VerticalPhase::Grounded;
@@ -144,7 +144,7 @@ private:
     // @design architecture.md INV-1 — phase changes the vertical channel only [OK]
     // フェーズ別 alt_vel_ 積分時間キャッシュ（param altitude.vel.ti / .ti_hover）。
     // climb は TakeoffClimb/Landing/Grounded に適用（巻き上がり・捕捉オーバーシュート
-    // 抑制）、hover は Airborne のみ（低周波の電池サグ外乱を除去する強い積分）。
+    // 抑制）、hover は Airborne のみ（低周波の電池電圧低下外乱を除去する強い積分）。
     // alt_vel_.ti の唯一の書き手は applyAltVelTiForPhase()（定義は pid_controller.cpp）。
     float alt_vel_ti_climb_ = 2.5f;
     float alt_vel_ti_hover_ = 2.5f;
@@ -211,13 +211,13 @@ private:
     // in-flight switch) and reset(). RC-only: guidance/API drives altitude via the
     // walking setpoint, not the throttle path, so the gate never blocks an API flight.
     // No timeout — re-centering the throttle is the pilot's natural next action.
-    // スロットル再センターゲート（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
+    // スロットル再センター判定（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
     // 進入直後はスロットルが中央から外れていることがあり、それを即座に上昇/下降指令と
-    // みなすと高度がジャンプする。ゲートはスティックが初めて中央デッドゾーン内に入るまで
+    // みなすと高度がジャンプする。判定はスティックが初めて中央デッドゾーン内に入るまで
     // 「閉」（高度に対しスロットル無視）で、その後「開」いて通常どおり上昇/下降を指令する。
     // onTakeoff（Case A: 地上 ARM）・ALT/POS への onModeChange（Case B: 飛行中切替）・
     // reset() で閉じる。RC 限定: 誘導/API は歩く設定点で高度を動かしスロットル経路を使わない
-    // ため、API 飛行をゲートが妨げることはない。タイムアウトなし — スロットルを中央へ戻すのは
+    // ため、API 飛行を判定が妨げることはない。タイムアウトなし — スロットルを中央へ戻すのは
     // パイロットの自然な次動作。
     bool  throttle_recentered_ = false;
     float gravity_        = math::kGravity;  // [m/s²] accel→tilt mapping in POS_HOLD (SSOT: sf::math)
@@ -270,7 +270,7 @@ private:
     float   excite_t_        = 0;      // [s] elapsed / 経過
     // Stepped-sine (waveform=2, autotune) state: excitation phase, settle gate
     // and the I/Q correlation sums of (u = actual axis torque, y = gyro).
-    // ステップドサイン（waveform=2, 自動チューン）状態: 励振位相・整定ゲート・
+    // ステップドサイン（waveform=2, 自動チューン）状態: 励振位相・整定判定・
     // （u=実トルク, y=ジャイロ）の I/Q 相関和。
     float   excite_freq_     = 0;      // [Hz]
     float   excite_phase_    = 0;      // [rad] accumulated / 積算位相
@@ -281,9 +281,9 @@ private:
     // frequency) to measure the disturbance/noise FLOOR, and a slow running mean of the
     // rate to DETREND the near-DC disturbance (CW/CCW trim) before the lock-in. The
     // per-point coh = on/(on+off) then down-weights disturbed frequencies in the fit.
-    // コヒーレンス/SNRゲート: オフ音(非励振の近傍周波数)でジャイロI/Qを積算し雑音床を測る＋レートの
+    // コヒーレンス/SNR判定: オフ周波数点(非励振の近傍周波数)でジャイロI/Qを積算し雑音床を測る＋レートの
     // 遅い走査平均で近DC外乱(CW/CCWトリム)を除トレンドしてからロックインする。
-    float   excite_phase_off_ = 0;     // [rad] off-tone phase / オフ音位相
+    float   excite_phase_off_ = 0;     // [rad] off-tone phase / オフ周波数点位相
     float   iq_yr_off_ = 0, iq_yi_off_ = 0;   // off-tone gyro I/Q (noise floor)
     float   y_dc_ = 0;                  // slow running mean of the rate (detrend) / レートの遅い平均
     uint32_t sysid_seq_ = 0;           // result sequence / 結果シーケンス
@@ -307,7 +307,7 @@ private:
     // the velocities decay to 0 so a stopped client cannot run away (R16).
     // 速度指令（mode 2 — Tello `rc`）。機体系 x前/y右/z上, yaw cw+。パイロットスティックと
     // 同じ再配置経路（computePositionHold）＋ALT_HOLD 上昇率経路に注入 — 並列制御則なし（INV-1）。
-    // guide_stamp_ は最終 rc 時刻。古く（>kLandingLinkStaleUs）なれば速度を 0 に減衰し暴走防止（R16）。
+    // guide_stamp_ は最終 rc 時刻。古く（>kLandingLinkStaleUs）なれば速度を 0 に減衰し意図しない加速を防止（R16）。
     float guide_vx_          = 0;          // [m/s] body forward (mode 2) / 機体前後
     float guide_vy_          = 0;          // [m/s] body right   (mode 2) / 機体左右
     float guide_vz_          = 0;          // [m/s] climb rate up+ (mode 2) / 上昇率
@@ -341,8 +341,8 @@ private:
     // and the throttle floor keeps the hold OFF on the ground in STABILIZE
     // (ALT_HOLD+ gates on phase_ == Airborne instead — throttle is a climb
     // command there, not thrust).
-    // 係合ゲート: スティック不感帯と、STABILIZE で地上では保持しないためのスロットル
-    // 床値（ALT_HOLD 以上は phase_ == Airborne でゲート — そこではスロットルは上昇
+    // 係合判定: スティック不感帯と、STABILIZE で地上では保持しないためのスロットル
+    // 床値（ALT_HOLD 以上は phase_ == Airborne で判定 — そこではスロットルは上昇
     // 指令であり推力ではない）。
     static constexpr float kYawHoldStickDeadband = 0.03f;
     static constexpr float kYawHoldThrottleFloor = 0.25f;
@@ -355,7 +355,7 @@ private:
     // (sf trim analyze); the true equilibrium tilt is unknowable on the ground.
     // 姿勢トリム（平衡傾き）。姿勢合流点で角度ループの「目標」に加算 — 全モード
     // （STABILIZE / ALT_HOLD / POS_HOLD / Landing）で1点、POS_HOLD 上書きと Landing
-    // 水平ゲートの後。角度ループが機体をこの傾きへ駆動し、CG オフセットやセンサ水平
+    // 水平判定の後。角度ループが機体をこの傾きへ駆動し、CG オフセットやセンサ水平
     // バイアス由来の定常水平ドリフトを推力を余分に食わず打ち消す。飛行で同定（sf trim
     // analyze）— 真の平衡傾きは地上で知り得ない。
     float roll_trim_  = 0.0f;  // [rad] roll equilibrium tilt (param attitude.roll.trim)
@@ -397,7 +397,7 @@ private:
     // Persisted to hover.thrust_corr on the landing edge, so degradation self-compensates
     // across flights WITHOUT per-flight tuning. See learnHoverThrust().
     // 常時オンボード・ホバー推力学習（定常ホバー限定）。推力変動（飛行時間によるモータ劣化・
-    // 電圧サグ）へのロバスト化: ホバー推力は固定FF（mg·corr）で適応するのは制限付き補正
+    // 電圧低下）へのロバスト化: ホバー推力は固定FF（mg·corr）で適応するのは制限付き補正
     // （±max_thrust_correction_）のみゆえ、補正の届く範囲を超えてモータが弱ると機体が沈む／
     // 上昇不足（→ hover.thrust_corr のフライト毎手調整＝場当たり）。本学習は定常ホバーの速度
     // ループ定常出力をゆっくり hover_thrust_ に移し、FF を真のホバー推力へ追従させ補正を
@@ -430,7 +430,7 @@ private:
     // altitude.dob.fc=0 で無効=既定OFF）。---
     // 設計: analysis/scripts/alt_dob_design/README.md §5（2026-07-18、フライト
     // ログ駆動閉ループ再生）。過去の推力指令で駆動したノミナルアクチュエーション
-    // モデル（純遅れ+1次遅れ）と実測鉛直比力を比較し、残差（モデルで説明できない
+    // モデル（純遅れ+1次遅れ）と実測鉛直の加速度計測定値を比較し、残差（モデルで説明できない
     // 外乱）を2次バターワースLPF（Q, 調整可fc）→固定0.03Hz HP（ウォッシュアウト、
     // DC所有権を速度ループ積分器＋ホバー推力学習へ残す＝帯域分離。README §3）に
     // 通す。Airborne限定（INV-1: フェーズが変えてよいのは鉛直チャネルのみ）。
@@ -459,7 +459,7 @@ private:
     // below this the measurement is missing (estimator without specific_force
     // support publishes zeros) or a free-fall-class transient — either way, do
     // not feed it to the filters (see the guard in computeDobCorrection()).
-    // 比力の妥当性下限: 飛行中の f_up は +g（≈9.8 m/s²）近傍。これ未満は計測
+    // 加速度計の測定値の妥当性下限: 飛行中の f_up は +g（≈9.8 m/s²）近傍。これ未満は計測
     // 欠如（specific_force 非対応の推定器はゼロを出す）か自由落下級の過渡 —
     // いずれもフィルタへ入れない（computeDobCorrection() のガード参照）。
     static constexpr float kDobMinFupMs2 = 2.0f;   // [m/s²]
@@ -539,7 +539,7 @@ private:
     /// Compute this cycle's DOB thrust correction d_hat [N] (Airborne only,
     /// caller-gated by dob_enabled_). See pid_controller.cpp for the algorithm.
     /// 今サイクルのDOB推力補正 d_hat [N] を計算（Airborne限定、呼び出し側が
-    /// dob_enabled_ でゲート）。アルゴリズムは pid_controller.cpp 参照。
+    /// dob_enabled_ で判定）。アルゴリズムは pid_controller.cpp 参照。
     float computeDobCorrection(const StateEstimate& state, float dt);
 
     /// Q-filter single-sample update (Direct Form II biquad).
@@ -583,7 +583,7 @@ private:
     // cap unchanged); provenance and the flight-proven-equivalent fallback
     // are in params.cpp.
     // レートループ出力上限（PID アンチワインドアップ用、loadParams 参照）。各 PID は
-    // 出力と積分器を ±output_limit でゲートするため、上限はプラントが出せる量の
+    // 出力と積分器を ±output_limit で判定するため、上限はプラントが出せる量の
     // オーダーと一致させる必要がある — 既定 1.0 のままだと積分器は実トルクの約130倍
     // まで巻き上がる。ロール/ピッチは旧 vehicle/ の「飛行実績」上限（*_OUTPUT_LIMIT）で、
     // 幾何最大値（2·0.168N·0.023m≈7.7e-3 Nm）より低く総推力の余裕を残す。ヨー（幾何最大
@@ -629,7 +629,7 @@ private:
     // Matches the Failsafe comm-loss timeout so the two agree. No separate flag is
     // threaded from the StateManager — freshness alone tells us if the pilot is there,
     // and it also self-levels if the link drops mid-descent.
-    // 着陸の操縦ゲート: リンク生存中のみパイロットが roll/pitch/yaw を保つ。生存判定は設定点
+    // 着陸の操縦判定: リンク生存中のみパイロットが roll/pitch/yaw を保つ。生存判定は設定点
     // の新鮮さ（R16）: (state.timestamp − setpoint.timestamp) がこれを超えたらリンク途絶
     // （通信途絶フェイルセーフ＝パイロット不在）とみなし水平降下に強制。Failsafe の通信途絶
     // タイムアウトと一致させ両者を整合。StateManager からフラグを配線しない — 新鮮さだけで

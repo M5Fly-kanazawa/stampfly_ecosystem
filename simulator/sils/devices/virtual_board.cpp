@@ -173,7 +173,7 @@ int bmi270_xfer(const uint8_t* tx, uint8_t* rx, int n)
 // INA3221 電源モニタ（I2C 0x40）。ファームの電源 HAL は「レジスタポインタ1バイト書込→
 // 2バイト big-endian 読出」でレジスタを読む。電池電圧は設定チャンネルのバス電圧
 // レジスタにある。Plant の端子電圧を返し、ファームの thrust→duty 電圧補償
-// （duty = V/Vbat）の閉ループを整合させる。これが無いと Vbat=0→duty 飽和→暴走上昇。
+// （duty = V/Vbat）の閉ループを整合させる。これが無いと Vbat=0→duty 飽和→制御が効かず上昇し続ける。
 constexpr uint16_t INA3221_ADDR       = 0x40;
 constexpr uint16_t INA3221_MANUF_ID   = 0x5449;   // "TI"
 constexpr uint16_t INA3221_DIE_ID     = 0x3220;
