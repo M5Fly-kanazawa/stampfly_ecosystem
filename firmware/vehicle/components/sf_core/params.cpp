@@ -598,7 +598,7 @@ namespace param_vars {
     float flip_spin_yaw_torque_limit_nm = 0.3e-3f; // [Nm] yaw torque cap while spinning / 回転中のヨートルク上限
     float flip_spin_torque_limit_nm = 7.0e-3f;   // [Nm] flip-axis torque limit while spinning / 回転中の回転軸トルク上限
     float flip_brake_ramp_rps2  = 500.0f;   // [rad/s^2] brake ramp-down of the rate command / 減速ランプ
-    float flip_settle_ms        = 1000.0f;  // [ms] post-flip settle window / 宙返り後の整定窓
+    float flip_settle_ms        = 1500.0f;  // [ms] post-flip settle window / 宙返り後の整定窓
     float flip_settle_tilt_deg  = 5.0f;     // [deg] position-loop tilt cap in the settle window / 整定窓の傾き上限
     float flip_handoff_min_deg  = 290.0f;   // [deg] Brake->Recover angle gate / Brake→Recover角度判定
     float flip_handoff_rate_dps = 300.0f;   // [deg/s] Brake->Recover rate gate / Brake→Recoverレート判定
@@ -877,7 +877,7 @@ static const ParamEntry table[] = {
     {"flip.spin_yaw_torque_limit_nm", ParamType::FLOAT, &flip_spin_yaw_torque_limit_nm, 0.3e-3f, 0.0f, 2.0e-3f, &notifyControllerReload},
     {"flip.spin_torque_limit_nm", ParamType::FLOAT, &flip_spin_torque_limit_nm, 7.0e-3f, 2.0e-3f, 10.0e-3f, &notifyControllerReload},
     {"flip.brake_ramp_rps2",   ParamType::FLOAT, &flip_brake_ramp_rps2,   500.0f, 100.0f, 1500.0f, &notifyControllerReload},
-    {"flip.settle_ms",         ParamType::FLOAT, &flip_settle_ms,        1000.0f,   0.0f, 5000.0f, &notifyControllerReload},
+    {"flip.settle_ms",         ParamType::FLOAT, &flip_settle_ms,        1500.0f,   0.0f, 5000.0f, &notifyControllerReload},
     {"flip.settle_tilt_deg",   ParamType::FLOAT, &flip_settle_tilt_deg,     5.0f,   1.0f,   30.0f, &notifyControllerReload},
     {"flip.handoff_min_deg",   ParamType::FLOAT, &flip_handoff_min_deg,   290.0f, 200.0f,  350.0f, &notifyControllerReload},
     {"flip.handoff_rate_dps",  ParamType::FLOAT, &flip_handoff_rate_dps,  300.0f,  50.0f,  600.0f, &notifyControllerReload},

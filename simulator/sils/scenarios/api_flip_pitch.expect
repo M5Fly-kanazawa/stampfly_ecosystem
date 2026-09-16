@@ -17,7 +17,6 @@
 # Thresholds are first values from the planar model (plan §5.3) and are to be
 # re-tuned against the SILS result and then hardware logs (Phase 4).
 # しきい値は平面モデル（計画 §5.3）からの初期値。SILS の結果、次に実機ログで見直す（Phase 4）。
-xfail: SILS plant defect after a pitch flip (2026-09-17): the per-substep yaw reaction torque alternates sign and the motor thrusts stop following the commanded duties, so yaw authority vanishes and the craft sinks — firmware-side the flip itself completes (see the flip_pitch_deg / alt_drop_max gates below). Remove this line once simulator/sils/plant motor/yaw path is fixed.
 exit 0
 log_contains any "cmd: command"
 log_contains any "cmd: takeoff"
@@ -55,15 +54,15 @@ metric flip_pitch_deg > -400 in 22.9 25.5
 metric alt_drop_max   < 0.40 in 22.9 25.5
 metric alt_rise_max   < 0.60 in 22.9 25.5
 metric settle_time_s  < 1.50 in 22.9 25.5
-# flip b (t=26): one full backward (nose-up) pitch. / 後方（機首上げ）1 回転。
-metric flip_pitch_deg >  330 in 25.9 28.5
-metric flip_pitch_deg <  400 in 25.9 28.5
-metric alt_drop_max   < 0.40 in 25.9 28.5
-metric alt_rise_max   < 0.60 in 25.9 28.5
-metric settle_time_s  < 1.50 in 25.9 28.5
+# flip b (t=28, 5 s after flip f so the horizontal velocity has decayed below C4's 0.3 m/s): one full backward (nose-up) pitch. / 後方（機首上げ）1 回転。
+metric flip_pitch_deg >  330 in 27.9 30.5
+metric flip_pitch_deg <  400 in 27.9 30.5
+metric alt_drop_max   < 0.40 in 27.9 30.5
+metric alt_rise_max   < 0.60 in 27.9 30.5
+metric settle_time_s  < 1.50 in 27.9 30.5
 # Never near the ground across all four flips; level again before landing.
 # 4 回を通して地面に近づかない。着陸前に水平に戻っている。
-metric alt_min  > 0.60 in 22.9 29.0
-metric tilt_max < 0.2618 in 28.5 29.0  # 15.0 deg
+metric alt_min  > 0.60 in 22.9 31.0
+metric tilt_max < 0.2618 in 30.5 31.0  # 15.0 deg
 # Landed at the end. / 最後は接地。
-metric alt_max < 0.10 in 36.0 37.5
+metric alt_max < 0.10 in 38.0 39.5

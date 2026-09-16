@@ -1,5 +1,5 @@
-# api_flip_pitch.scn — Tello-style API flips: command → takeoff → up → flip r/l/f/b → land
-#                Tello 風 API 宙返り: command → takeoff → up → flip r/l/f/b → land
+# api_flip_pitch.scn — Tello-style API flips: command → takeoff → up → flip f/b → land
+#                 Tello 風 API 宙返り: command → takeoff → up → flip f/b → land
 #
 # Drives the REAL ApiTask parser (scenario `api` channel → sf_api_inject_line).
 # The chain under test (docs/plans/flip-maneuver-plan.md §3, §4.3, §5.2):
@@ -21,7 +21,7 @@
 # 約 3 m）→ 4 方向の宙返り（各 FLYING → FLIP → FLYING、
 # 間隔 3 s = マニューバ約 0.6 s + クールダウン 2 s）→ 自動着陸。全行程 RC は中立のまま。
 #
-# Run: sf sils scenario simulator/sils/scenarios/api_flip_pitch.scn --target vehicle --duration 39000000
+# Run: sf sils scenario simulator/sils/scenarios/api_flip_pitch.scn --target vehicle --duration 41000000
 #      (add --video to render the maneuver / --video で動画を出力)
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
@@ -32,8 +32,13 @@
    +    api  "up 60"                                                             # E: climb +60 cm to ~1.1 m (t=18)
    +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC while climbing+settling (t=18-23)
    +    api  "flip f"                                                            # G: pitch forward 360 deg (t=23)
-   +    rc   2048  2048   2048    2048  0     3000      50                       # H: maneuver + cooldown (t=23-26)
-   +    api  "flip b"                                                            # I: pitch back 360 deg (t=26)
-   +    rc   2048  2048   2048    2048  0     3000      50                       # J: (t=26-29)
-   +    api  "land"                                                              # O: autonomous landing (t=29)
-   +    rc   2048  2048   2048    2048  0     8000      50                       # P: neutral RC through touchdown (t=29-37)
+   # H: 5 s (not 3 s as on the roll axis): the forward flip leaves up to ~1.4 m/s of
+   # horizontal velocity (thrust while tilted during Brake/Recover) and the next flip
+   # is only accepted once |v_h| <= flip.max_hvel_mps (0.3 m/s, condition C4).
+   # ロール軸の 3 s でなく 5 s: 前方宙返りで最大約 1.4 m/s の水平速度が付き（減速・回復中の
+   # 傾いた推力）、次の宙返りは |v_h| ≤ 0.3 m/s（実行条件 C4）になってから受理される。
+   +    rc   2048  2048   2048    2048  0     5000      50                       # H: maneuver + velocity decay (t=23-28)
+   +    api  "flip b"                                                            # I: pitch back 360 deg (t=28)
+   +    rc   2048  2048   2048    2048  0     3000      50                       # J: (t=28-31)
+   +    api  "land"                                                              # O: autonomous landing (t=31)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # P: neutral RC through touchdown (t=31-39)

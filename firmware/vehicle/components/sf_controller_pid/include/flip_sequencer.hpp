@@ -225,7 +225,7 @@ public:
         // 残る間に外側ループがミキサー（と高度ループ）の余裕を食い尽くさない
         // ようにする。SILS 2026-09-16: これが無いとピッチ宙返り直後に位置ループが
         // 10° 一杯、ヨーループが上限一杯を要求してモータが飽和し 0.7 m/s で降下した。
-        float settle_ms       = 1000.0f;
+        float settle_ms       = 1500.0f;
         float settle_tilt_deg = 5.0f;
 
         // Attitude-loop handoff conditions (plan §3.2/§3.3): the craft leaves

@@ -1493,7 +1493,18 @@ void PidController::computePositionHold(const StateEstimate& state,
             capture_pos_ = true;
             reposition_active_ = false;
         }
-        if (capture_pos_) {
+        // During the post-flip settle window the target TRACKS the craft: the
+        // flip leaves up to ~1.4 m/s of horizontal velocity, and capturing the
+        // position at FlipComplete made the craft overshoot 1 m and fly back at
+        // the position loop's pace (SILS 2026-09-17). Tracking lets the velocity
+        // loop bleed the speed off and the hold point becomes wherever the craft
+        // stops — the same behaviour as the factory Tello.
+        // 宙返り後の整定窓では目標が機体に追従する: 宙返りで最大約 1.4 m/s の水平速度が
+        // 残り、FlipComplete の位置を取り込むと 1 m 行き過ぎてから位置ループの速さで
+        // 戻っていた（SILS 2026-09-17）。追従させると速度ループが速度を抜き、止まった
+        // 場所が保持点になる — 工場出荷の Tello と同じ振る舞い。
+        const bool flip_settling = flip_settle_remaining_s_ > 0.0f && !flip_.active();
+        if (capture_pos_ || flip_settling) {
             pos_setpoint_x_ = state.position[0];
             pos_setpoint_y_ = state.position[1];
             capture_pos_ = false;
