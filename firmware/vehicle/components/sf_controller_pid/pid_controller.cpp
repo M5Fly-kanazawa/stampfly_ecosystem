@@ -1981,12 +1981,20 @@ void PidController::onFlipComplete()
     alt_setpoint_ = flip_.startHeightM();
     capture_alt_ = false;
     capture_pos_ = true;
-    alt_pos_.reset();
-    alt_vel_.reset();
+    // Keep the altitude and horizontal-velocity integrators: they hold the
+    // hover-thrust and tilt trim learned BEFORE the flip (the cascade was
+    // paused, not disturbed, during it). Resetting them made the hover sag
+    // 0.1-0.15 m for several seconds after each flip and, with a 1.0 m
+    // minimum height, refused the next flip as "too low" (SILS 2026-09-17
+    // perturbation runs). Only the outer position P loops start afresh
+    // from the re-captured position.
+    // 高度と水平速度の積分項は保持する: 宙返り前に学習したホバー推力と傾きの
+    // 補正を持っており、宙返り中は休止していただけで乱れていない。リセットすると
+    // 宙返りのたびにホバーが 0.1〜0.15 m 沈んで数秒続き、最低高度 1.0 m のもとで
+    // 次の宙返りが「too low」で拒否された（SILS 2026-09-17 摂動族）。取り直した
+    // 位置から始め直すのは外側の位置 P ループだけ。
     pos_x_.reset();
     pos_y_.reset();
-    vel_x_.reset();
-    vel_y_.reset();
     rate_yaw_.reset();
     flip_settle_remaining_s_ = flip_.config.settle_ms * 0.001f;
     flip_.reset();

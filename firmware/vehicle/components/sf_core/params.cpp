@@ -592,7 +592,7 @@ namespace param_vars {
     float flip_thrust_spin_hi_ratio = 0.5f;   // [-] Spin accel/decel windows + Brake / Spin加減速窓+Brake
     float flip_thrust_lo_n      = 0.03f;    // [N] inverted coast window / 反転惰性区間
     float flip_angle_a_deg      = 60.0f;    // [deg] accel window end / 加速窓終了角
-    float flip_motor_lag_ms     = 16.0f;    // [ms] brake-angle lookahead model / 減速角先読みモデル
+    float flip_motor_lag_ms     = 24.0f;    // [ms] brake-angle lookahead model / 減速角先読みモデル
     float flip_brake_margin     = 1.0f;     // [-] achievable decel / commanded ramp / 達成減速度÷指令ランプ
     float flip_recover_boost_tilt_deg = 20.0f; // [deg] boost only below this tilt in Recover / Recover で増強する傾き上限
     float flip_spin_yaw_torque_limit_nm = 0.3e-3f; // [Nm] yaw torque cap while spinning / 回転中のヨートルク上限
@@ -871,7 +871,7 @@ static const ParamEntry table[] = {
     {"flip.thrust_spin_hi_ratio", ParamType::FLOAT, &flip_thrust_spin_hi_ratio, 0.5f, 0.2f, 1.0f, &notifyControllerReload},
     {"flip.thrust_lo_n",       ParamType::FLOAT, &flip_thrust_lo_n,        0.03f,   0.0f,   0.2f, &notifyControllerReload},
     {"flip.angle_a_deg",       ParamType::FLOAT, &flip_angle_a_deg,        60.0f,  10.0f,  120.0f, &notifyControllerReload},
-    {"flip.motor_lag_ms",      ParamType::FLOAT, &flip_motor_lag_ms,       16.0f,   1.0f,   50.0f, &notifyControllerReload},
+    {"flip.motor_lag_ms",      ParamType::FLOAT, &flip_motor_lag_ms,       24.0f,   1.0f,   50.0f, &notifyControllerReload},
     {"flip.brake_margin",      ParamType::FLOAT, &flip_brake_margin,        1.0f,   0.3f,    1.0f, &notifyControllerReload},
     {"flip.recover_boost_tilt_deg", ParamType::FLOAT, &flip_recover_boost_tilt_deg, 20.0f, 5.0f, 60.0f, &notifyControllerReload},
     {"flip.spin_yaw_torque_limit_nm", ParamType::FLOAT, &flip_spin_yaw_torque_limit_nm, 0.3e-3f, 0.0f, 2.0e-3f, &notifyControllerReload},

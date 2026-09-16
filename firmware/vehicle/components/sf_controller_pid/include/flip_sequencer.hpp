@@ -148,7 +148,7 @@ public:
         // used elsewhere in this firmware.
         // 減速角の先読み計算に使うモータ応答遅れ [ms]（param flip.motor_lag_ms）
         // — ファーム他所のミキサー/モータ時定数と一致。
-        float motor_lag_ms = 16.0f;
+        float motor_lag_ms = 24.0f;   // 16 ms motor ODE lag + ~8-15 ms measured transport delay (SILS --motor-delay 10 study) / モータ ODE 16 ms + 実機同定の伝送遅れ 8〜15 ms
 
         // Brake-angle safety factor (param flip.brake_margin): the stopping
         // angle is computed with brake_margin * rate_ramp_rps2 as the achievable

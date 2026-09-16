@@ -8,11 +8,11 @@
 # the true body rate integrates to one full turn with the expected sign
 # (FRD: right roll = +p, nose-down pitch = -q), the craft never goes far below the
 # hover, the rise stays within the ceiling margin (plan §5.3: 20-30 cm expected),
-# and the true tilt settles below 10 deg within 1.5 s.
+# and the true tilt settles below 10 deg within 2.0 s of the window start (F3: within 1 s of completion; the window starts 0.1 s before the command and the maneuver takes ~0.7 s).
 # 連鎖: SDK モード → API 離陸 → up 60 で約 1.1 m（SILS の ToF 模擬上限 1.4 m より下。実センサは
 # 応答 "ok"）→ 自動着陸。宙返りごとの窓（指令の 0.1 s 前から）で物理を固定: 真値の機体角速度の
 # 積分が符号どおり 1 回転（FRD: 右ロール = +p、機首下げ = −q）、ホバーから大きく落ちない、
-# 上昇は天井余裕の範囲（計画 §5.3: 20〜30 cm 見込み）、真の傾きが 1.5 s 以内に 10° 未満に整定。
+# 上昇は天井余裕の範囲（計画 §5.3: 20〜30 cm 見込み）、真の傾きが窓開始から 2.0 s 以内に 10° 未満に整定（F3 の「完了後 1 s」を窓基準に換算）。
 #
 # Thresholds are first values from the planar model (plan §5.3) and are to be
 # re-tuned against the SILS result and then hardware logs (Phase 4).
@@ -53,13 +53,13 @@ metric flip_pitch_deg < -330 in 22.9 25.5
 metric flip_pitch_deg > -400 in 22.9 25.5
 metric alt_drop_max   < 0.40 in 22.9 25.5
 metric alt_rise_max   < 0.60 in 22.9 25.5
-metric settle_time_s  < 1.50 in 22.9 25.5
+metric settle_time_s  < 2.00 in 22.9 25.5
 # flip b (t=28, 5 s after flip f so the horizontal velocity has decayed below C4's 0.3 m/s): one full backward (nose-up) pitch. / 後方（機首上げ）1 回転。
 metric flip_pitch_deg >  330 in 27.9 30.5
 metric flip_pitch_deg <  400 in 27.9 30.5
 metric alt_drop_max   < 0.40 in 27.9 30.5
 metric alt_rise_max   < 0.60 in 27.9 30.5
-metric settle_time_s  < 1.50 in 27.9 30.5
+metric settle_time_s  < 2.00 in 27.9 30.5
 # Never near the ground across all four flips; level again before landing.
 # 4 回を通して地面に近づかない。着陸前に水平に戻っている。
 metric alt_min  > 0.60 in 22.9 31.0

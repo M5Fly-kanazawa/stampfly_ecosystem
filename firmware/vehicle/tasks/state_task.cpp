@@ -574,21 +574,21 @@ void StateTask(void* pvParameters)
                 g_state_manager.notifyLandingRequest();
                 break;
             case sf::ApiCmd::Flip:
-                // Gate on controller_status.flip_ready — the controller's live
-                // judgment of execution conditions C2-C8 (plan §3.1/§4.4). If not
-                // ready, do nothing: cmdFlip() (api_task.cpp, a later task) reads
-                // flip_block_reason itself and replies `error flip: <reason>`
-                // without ever seeing a state transition. If ready, requestFlip()
-                // still re-checks C1 (FLYING) as the transition guard.
-                // controller_status.flip_ready を見て判定 — 実行条件 C2-C8 の生きた
-                // 判断は制御器が行う（plan §3.1/§4.4）。不成立なら何もしない:
-                // cmdFlip()（api_task.cpp、後続タスク）が flip_block_reason を直接
-                // 読み `error flip: <reason>` を返す（遷移は一切起きない）。成立なら
-                // requestFlip() が遷移の判定として C1（FLYING）をなお再確認する。
-                if (sf::controller_status.latest().flip_ready) {
-                    g_state_manager.requestFlip(
-                        static_cast<sf::FlipDirection>(api_cmd.arg));
-                }
+                // The requester (ApiTask cmdFlip) has already read
+                // controller_status.flip_ready (execution conditions C2-C8, plan
+                // §3.1/§4.4) and replied `error flip: <reason>` if it was false.
+                // Re-checking it here ~20 ms later raced against conditions
+                // sitting on their threshold (SILS 2026-09-17, --motor-delay 10:
+                // ready at the API, not ready here, API replied "rejected").
+                // StateManager judges C1 (FLYING) in requestFlip(); the controller
+                // re-evaluates C2-C8 in onFlip() without blocking.
+                // 要求元（ApiTask の cmdFlip）が既に controller_status.flip_ready
+                // （実行条件 C2〜C8、plan §3.1/§4.4）を読み、偽なら `error flip: <理由>`
+                // を返している。ここで約 20 ms 後に再判定すると、しきい値上の条件と
+                // 競合した（SILS 2026-09-17、--motor-delay 10: API では成立、ここでは
+                // 不成立で API が「rejected」を返した）。StateManager は requestFlip()
+                // で C1（FLYING）を判断し、制御器が onFlip() で C2〜C8 を非停止で再評価する。
+                g_state_manager.requestFlip(static_cast<sf::FlipDirection>(api_cmd.arg));
                 break;
             case sf::ApiCmd::None:
             default:

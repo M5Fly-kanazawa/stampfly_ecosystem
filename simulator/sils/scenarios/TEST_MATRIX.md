@@ -62,7 +62,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `alt_disarm_land_steer` | **パイロット着陸は降下中も操縦可**（着陸則統一 INV-1/INV-2, リファクタA 注6）: DISARM 後の降下中にロール保持 → `tilt_max=11°`＝機体が傾く。旧 `computeLanding` 水平強制なら≈0 で FAIL。中立版 `alt_disarm_land` は tilt≈0 | vehicle |
 | `commloss_land_level` | **フェイルセーフ着陸は水平**（INV-2 敵対ガード）: リンク途絶直前にロール右保持 → 猶予中(FLYING)は古いロールで `tilt 11.6°` だが、LANDING 突入後は水平判定で `tilt 3.6°` に水平化。リンク生存判定=設定点の新鮮さ(500ms) | vehicle |
 | `api_flight` | Tello 風 API 飛行の全鎖（command→takeoff→forward/cw/up→land、移動は到達後 ok、中立 RC が解除則を誤作動させない）。離陸高度は **0.5m に統一**（手動 RC と同一ルーチン、2026-06-14）。`--duration 40000000` 必須 | vehicle |
-| `api_flip_roll` | Tello 風 API 宙返り（ロール軸: command→takeoff→up 60→`flip r`→`flip l`→land）。各宙返りは FLYING→FLIP→FLYING で `ok`、真値の回転角 ±330〜400°、宙返り前の高度を下回らない（`alt_drop_max`）、上昇 < 0.6 m、1.5 s 以内に整定、FLIP 中の GYRO_ANOMALY は無視、ToF 再取り込み。1.1 m から実施するのは SILS の ToF 模擬上限 1.4 m のため（実センサは約 3 m）。`--duration 39000000` 必須（2026-09-17） | vehicle |
+| `api_flip_roll` | Tello 風 API 宙返り（ロール軸: command→takeoff→up 60→`flip r`→`flip l`→land）。各宙返りは FLYING→FLIP→FLYING で `ok`、真値の回転角 ±330〜400°、宙返り前の高度を下回らない（`alt_drop_max`）、上昇 < 0.6 m、窓基準 2.0 s 以内に整定（F3 の完了後 1 s）、FLIP 中の GYRO_ANOMALY は無視、ToF 再取り込み。1.1 m から実施するのは SILS の ToF 模擬上限 1.4 m のため（実センサは約 3 m）。`--duration 39000000` 必須（2026-09-17） | vehicle |
 | `api_flip_pitch` | 同、ピッチ軸（`flip f`→`flip b`）。宙返りの間隔は 5 s（前方宙返りで付く最大約 1.4 m/s の水平速度が実行条件 C4 の 0.3 m/s 未満に減衰するのを待つ）。`--duration 41000000` 必須（2026-09-17） | vehicle |
 | `sysid_rate` | 飛行中レートループ同定励振（API `sysid roll chirp 25 4`: POS_HOLD ホバーで ±25dps 対数チャープ、有界・定点維持・正常終了）。`--duration 32000000` 必須 | vehicle |
 | `acro_crash_relevel` | 墜落復帰リセット後、保持されたモードスイッチが IDLE_GROUND で再適用される（実機 LED バグの固定） | vehicle |
