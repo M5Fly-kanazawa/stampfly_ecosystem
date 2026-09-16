@@ -221,6 +221,17 @@ void EskfEstimator::holdPositionVelocity()
     }
 }
 
+void EskfEstimator::holdAttitudeCorrection(bool hold)
+{
+    // Thin pass-through — all the flip-window logic (gating updateAccelAttitude/
+    // updateMag, vertical covariance re-inflation, ToF gate suspension on resume)
+    // lives in EskfCore, which owns the covariance and the observation updates.
+    // 素通し — 宙返り窓のロジック（updateAccelAttitude/updateMag のゲート、再開時の
+    // 鉛直共分散再膨張、ToF 判定の一時停止）は全て共分散と観測更新を所有する
+    // EskfCore 側にある。
+    core_.holdAttitudeCorrection(hold);
+}
+
 void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel_bias[3])
 {
     // Seed the filter's bias states with the rest-measured biases. The ESKF predict

@@ -86,6 +86,19 @@ void EskfCore::reset()
     tof_have_prev_height_ = false;
     tof_prev_height_ = 0;
 
+    // A full reset discards the flip-window state too — a stray Hold surviving a
+    // crash/DISARM reset would silently block attitude correction on the next flight.
+    // ResumeAttitudeCorrection is always issued alongside Reset on a FLIP abort
+    // (detailed_design.md §3, FLIP -> IDLE_GROUND row), but this is the defensive
+    // backstop for that invariant.
+    // 全状態リセットは宙返り窓の状態も破棄する — 墜落/DISARM リセットを生き延びた
+    // Hold が次のフライトで姿勢補正を黙って止めてしまうのを防ぐ。FLIP の打ち切りでは
+    // Reset と ResumeAttitudeCorrection が必ず対で発行される（detailed_design.md §3、
+    // FLIP → IDLE_GROUND 行）が、これはその不変条件の保険。
+    attitude_correction_held_ = false;
+    tof_gate_suspended_ = false;
+    tof_gate_suspended_elapsed_s_ = 0.0f;
+
     // Recompute the active mask so it reflects the just-cleared freeze flag and the
     // current sensor/mag-gate state. init() does this after reset(), but the
     // standalone EskfEstimator::reset() path would otherwise leave the mask stale
@@ -160,6 +173,45 @@ void EskfCore::inflateCovariance(uint16_t state_mask)
 }
 
 // =============================================================================
+// Flip maneuver window / 宙返りマニューバ窓
+// =============================================================================
+
+/// @design docs/plans/flip-maneuver-plan.md §3.6 — estimator handling during flip [OK]
+/// @design detailed_design.md §3 — FLIP row: HoldAttitudeCorrection/ResumeAttitudeCorrection [OK]
+void EskfCore::holdAttitudeCorrection(bool hold)
+{
+    if (hold) {
+        attitude_correction_held_ = true;
+        ESP_LOGI(TAG, "Attitude correction held (flip window)");
+        return;
+    }
+
+    // Resume: three things happen together, matching the single
+    // ResumeAttitudeCorrection verb in detailed_design.md §3 (FLIP -> FLYING row).
+    // 再開: detailed_design.md §3（FLIP → FLYING 行）の単一 verb
+    // ResumeAttitudeCorrection に対応する3つの処理をまとめて行う。
+    attitude_correction_held_ = false;
+
+    // (b) Inflate the vertical (POS_Z/VEL_Z) covariance — the estimate is kept, but its
+    // confidence is reset to "uncertain" because the accel-attitude/ToF corrections
+    // that normally bound the vertical channel were off for the maneuver's duration.
+    // (b) 鉛直（POS_Z/VEL_Z）共分散を膨張 — 推定値は保持するが、マニューバ継続中は
+    // 鉛直チャネルを抑える加速度姿勢/ToF 補正が止まっていたため、自信は「不確か」に戻す。
+    const uint16_t vertical_mask = (1u << POS_Z) | (1u << VEL_Z);
+    inflateCovariance(vertical_mask);
+
+    // (c) Give the ToF absolute-innovation gate a fresh chance to re-acquire (see
+    // updateToF()); the tilt gate there is untouched and still guards the sample.
+    // (c) ToF の絶対値イノベーション判定に再取り込みの猶予を与える（updateToF() 参照）。
+    // そちらの傾き判定は変えず、引き続きサンプルを守る。
+    tof_gate_suspended_ = true;
+    tof_gate_suspended_elapsed_s_ = 0.0f;
+
+    ESP_LOGI(TAG, "Attitude correction resumed, vertical covariance inflated, "
+                  "ToF gate suspended for re-acquisition");
+}
+
+// =============================================================================
 // Prediction / 予測ステップ
 //
 // Nominal state integration + error-state covariance propagation
@@ -169,6 +221,22 @@ void EskfCore::inflateCovariance(uint16_t state_mask)
 void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
 {
     accel_lpf_dt_ = dt;   // for the accel-attitude LPF (same IMU cycle) / accel 姿勢 LPF 用
+
+    // Flip re-acquisition timeout (flip-maneuver-plan.md §3.6): predict() runs every
+    // IMU cycle regardless of the hold state, so it is the natural clock for the
+    // ToF-gate-suspension timeout — no separate timer/task is needed.
+    // 宙返り再取り込みタイムアウト（plan §3.6）: predict() はホールド状態に関わらず
+    // 毎 IMU サイクル走るので、ToF 判定停止のタイムアウトの時計として自然に使える —
+    // 別のタイマ/タスクは不要。
+    if (tof_gate_suspended_) {
+        tof_gate_suspended_elapsed_s_ += dt;
+        if (tof_gate_suspended_elapsed_s_ >= cfg_.tof_reacquire_timeout_s) {
+            tof_gate_suspended_ = false;
+            tof_gate_suspended_elapsed_s_ = 0.0f;
+            ESP_LOGI(TAG, "ToF re-acquisition window timed out (%.2fs), gate restored",
+                     static_cast<double>(cfg_.tof_reacquire_timeout_s));
+        }
+    }
 
     // Bias-corrected IMU / バイアス補正済みIMU
     Vec3 accel = accel_raw - ba_;
@@ -548,8 +616,24 @@ void EskfCore::updateToF(float distance)
     // イノベーション: y = -height - pos_z（NED: z下向き）
     float innovation = -height - pos_.z;
 
-    // Absolute innovation gate / 絶対値イノベーション判定
-    if (fabsf(innovation) > cfg_.tof_innov_gate) return;
+    // Absolute innovation gate — normally always on, EXCEPT for one sample right
+    // after ResumeAttitudeCorrection (flip-maneuver-plan.md §3.6): the held window
+    // can let the predicted altitude drift past the gate while ToF itself was still
+    // being rejected by the tilt check above, which would otherwise make ToF reject
+    // its own re-acquisition forever. The tilt gate above stays in force either way.
+    // 絶対値イノベーション判定 — 通常は常時有効。ResumeAttitudeCorrection 直後の
+    // 1サンプルだけ例外（plan §3.6）: ホールド窓の間に推定高度が判定範囲外へドリフト
+    // しうる一方、その間 ToF 自体は上の傾き判定で棄却され続けているため、免除しないと
+    // 復帰後の ToF が自分自身の再取り込みを永久に棄却してしまう。上の傾き判定は
+    // どちらの場合も有効のまま。
+    if (!tof_gate_suspended_ && fabsf(innovation) > cfg_.tof_innov_gate) return;
+
+    if (tof_gate_suspended_) {
+        ESP_LOGI(TAG, "ToF re-acquired after flip window (innovation=%.3fm)",
+                 static_cast<double>(innovation));
+        tof_gate_suspended_ = false;
+        tof_gate_suspended_elapsed_s_ = 0.0f;
+    }
 
     scalarUpdate(H, innovation, cfg_.tof_noise * cfg_.tof_noise);
 }
@@ -611,6 +695,12 @@ void EskfCore::updateBaro(float altitude)
 
 void EskfCore::updateMag(const Vec3& mag)
 {
+    // Flip window (flip-maneuver-plan.md §3.6): the yaw correction is held along
+    // with the accel-attitude correction while HoldAttitudeCorrection is active.
+    // 宙返り窓（plan §3.6）: HoldAttitudeCorrection の間は加速度姿勢補正と一緒に
+    // ヨー補正もホールドする。
+    if (attitude_correction_held_) return;
+
     // Two independent gates: the param enable (cfg_.use_mag) AND the calibration
     // gate (mag_calib_gate_, survives reloadParams) — see eskf_core.hpp (L-5).
     // 2つの独立判定: param 有効化 (cfg_.use_mag) と校正判定 (mag_calib_gate_,
@@ -644,6 +734,18 @@ void EskfCore::updateMag(const Vec3& mag)
 
 void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
 {
+    // Flip window (flip-maneuver-plan.md §3.6, §7): during a flip the accelerometer
+    // measures the maneuver's own thrust/centripetal signature, not gravity — the
+    // adaptive-R/chi2 machinery below downweights that, but the final proposal
+    // stops the correction outright for the maneuver's duration (<=0.6s, gyro-only
+    // integration is accurate enough over that window). predict() (called every
+    // cycle regardless) is NOT gated — only this observation update is.
+    // 宙返り窓（plan §3.6, §7）: 宙返り中は加速度計がマニューバ自身の推力/遠心力の
+    // 比力を測り重力ではない — 下の適応R/χ²でも弱められるが、最終提案ではマニューバ
+    // 継続時間（≤0.6s、その間はジャイロ積分だけで十分な精度）だけ補正を完全に止める。
+    // predict()（毎サイクル呼ばれる）はゲートしない — この観測更新だけを止める。
+    if (attitude_correction_held_) return;
+
     // Optional 1-pole LPF on the accel BEFORE the gravity comparison (cfg_.accel_att_lpf_hz).
     // Cleans airframe vibration from the gravity reference so the bias is pulled less and
     // fewer updates are χ²-rejected (flight-log sweep). Filters accel_raw (pre-bias), exactly

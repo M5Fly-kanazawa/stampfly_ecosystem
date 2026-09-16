@@ -24,6 +24,17 @@ SRCS = test_main.cpp \
 
 TARGET = test_vehicle
 
+# Flip maneuver: ESKF attitude-correction hold + ToF re-acquisition
+# (flip-maneuver-plan.md §3.6). A separate binary (own main()/TEST() framework,
+# same pattern as test_main.cpp) so it does not need to join test_main.cpp's
+# runner list; it links the SAME eskf_core.cpp translation unit as test_vehicle.
+# 宙返りマニューバ: ESKF 姿勢補正ホールド + ToF 再取り込み（plan §3.6）。
+# 独自バイナリ（test_main.cpp と同型の own main()/TEST() フレームワーク）とし、
+# test_main.cpp のランナー一覧に参加する必要をなくす。test_vehicle と同じ
+# eskf_core.cpp 翻訳単位をリンクする。
+SRCS_ESKF_FLIP = test_eskf_flip_hold.cpp ../components/sf_estimator_eskf/eskf_core.cpp
+TARGET_ESKF_FLIP = test_eskf_flip_hold
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -34,13 +45,17 @@ TARGET = test_vehicle
 
 .PHONY: all clean test
 
-all: $(TARGET)
+all: $(TARGET) $(TARGET_ESKF_FLIP)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_ESKF_FLIP): $(SRCS_ESKF_FLIP)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
+	./$(TARGET_ESKF_FLIP)
 
 clean:
-	rm -f $(TARGET) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) test_state_manager

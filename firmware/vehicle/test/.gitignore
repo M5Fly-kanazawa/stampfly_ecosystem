@@ -1,5 +1,6 @@
 # Build artifacts / ビルド成果物
 test_vehicle
+test_eskf_flip_hold
 test_state_manager
 *.o
 *.out

@@ -83,6 +83,17 @@ struct EskfConfig {
     float accel_chi2_gate  = 7.81f;       // χ²(3, 0.95)
     float tof_tilt_threshold = 0.70f;     // [rad]
 
+    // Flip re-acquisition window (flip-maneuver-plan.md §3.6): upper bound on how long
+    // the ToF absolute-innovation gate stays suspended after ResumeAttitudeCorrection
+    // before it self-restores even if no ToF sample was accepted (e.g. ToF still
+    // tilt-gated, or the sensor dropped out) — a stuck suspension must not disable the
+    // gate forever. 1s matches the plan's worst-case recovery-time budget.
+    // 宙返り再取り込み窓（plan §3.6）: ResumeAttitudeCorrection 後、ToF の絶対値
+    // イノベーション判定を一時停止したままにできる上限時間。ToF が採用されないまま
+    // （傾き判定で棄却され続ける・センサ欠測等）でも自動的に判定を復帰させる —
+    // 判定停止が永久化してはならない。1s は計画の最悪復帰時間の見積りに合わせた。
+    float tof_reacquire_timeout_s = 1.0f; // [s]
+
     // Flow / フロー
     float flow_rad_per_pixel = 0.00222f;
     float flow_gyro_scale    = 1.0f;
@@ -256,6 +267,19 @@ public:
     /// Freeze accel bias estimation / 加速度バイアス推定をフリーズ
     void setFreezeAccelBias(bool freeze);
 
+    /// Hold (true) / resume (false) the accel/mag attitude correction — see
+    /// IEstimator::holdAttitudeCorrection for the full rationale. Resuming also
+    /// inflates the vertical (POS_Z/VEL_Z) covariance and suspends the ToF
+    /// absolute-innovation gate for the next accepted ToF sample (or
+    /// cfg_.tof_reacquire_timeout_s, whichever comes first).
+    /// 加速度/磁気姿勢補正をホールド(true)/再開(false)する — 詳細は
+    /// IEstimator::holdAttitudeCorrection 参照。再開時は鉛直（POS_Z/VEL_Z）共分散も
+    /// 膨張し、次に採用される ToF（または cfg_.tof_reacquire_timeout_s、いずれか早い
+    /// 方）まで ToF の絶対値イノベーション判定を一時停止する。
+    ///
+    /// @design docs/plans/flip-maneuver-plan.md §3.6 — estimator handling during flip [OK]
+    void holdAttitudeCorrection(bool hold);
+
 private:
     // Nominal state / 名目状態
     Vec3 pos_;         // Position NED [m] / 位置
@@ -317,6 +341,20 @@ private:
     // reset() で破棄する（再離陸時のスパイク防止）。
     float tof_prev_height_      = 0;
     bool  tof_have_prev_height_ = false;
+
+    // Flip maneuver window state (flip-maneuver-plan.md §3.6). attitude_correction_held_
+    // gates updateAccelAttitude()/updateMag() (predict() is never gated — gyro
+    // integration continues). tof_gate_suspended_ gives the ToF absolute-innovation
+    // gate a one-sample pass right after Resume (cleared on the first accepted ToF, or
+    // after cfg_.tof_reacquire_timeout_s of predict() time, whichever first).
+    // 宙返りマニューバ窓の状態（plan §3.6）。attitude_correction_held_ は
+    // updateAccelAttitude()/updateMag() をゲートする（predict() はゲートしない —
+    // ジャイロ積分は継続）。tof_gate_suspended_ は Resume 直後の ToF 絶対値
+    // イノベーション判定を1回だけ免除する（最初に採用された ToF、または
+    // cfg_.tof_reacquire_timeout_s 経過のいずれか早い方でクリア）。
+    bool  attitude_correction_held_        = false;
+    bool  tof_gate_suspended_              = false;
+    float tof_gate_suspended_elapsed_s_    = 0.0f;
 
     // Internal / 内部
     void recomputeActiveMask();

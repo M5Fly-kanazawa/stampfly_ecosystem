@@ -628,6 +628,20 @@ static void processEstimatorCommands()
             // コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
             g_estimator->reloadParams();
             break;
+        case sf::EstimatorCmd::HoldAttitudeCorrection:
+        case sf::EstimatorCmd::ResumeAttitudeCorrection:
+            // Flip maneuver window (flip-maneuver-plan.md §3.6, detailed_design.md
+            // §3 FLIP row). Both verbs map to the single IEstimator hook; the
+            // estimator implementation (ESKF: eskf_core.cpp) owns the detailed
+            // logging (Hold / Resume+cov-inflate+ToF-gate-suspend are each one
+            // ESP_LOGI line there) since it knows what it actually did.
+            // 宙返りマニューバ窓（plan §3.6、detailed_design.md §3 FLIP 行）。
+            // 両 verb とも単一の IEstimator フックに対応する。詳細ログ（Hold と
+            // Resume+共分散膨張+ToF判定停止、それぞれ1行の ESP_LOGI）は実際に何を
+            // したか知っている推定器実装（ESKF: eskf_core.cpp）側が持つ。
+            g_estimator->holdAttitudeCorrection(
+                static_cast<sf::EstimatorCmd>(cmd.command) == sf::EstimatorCmd::HoldAttitudeCorrection);
+            break;
         default:
             break;
         }

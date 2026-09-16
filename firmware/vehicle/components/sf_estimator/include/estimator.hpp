@@ -148,6 +148,47 @@ public:
     virtual void holdPositionVelocity() {}
 
     // =========================================================================
+    // Flip maneuver window (attitude-correction hold)
+    // 宙返りマニューバ窓（姿勢補正ホールド）
+    // =========================================================================
+
+    /// Hold (true) or resume (false) the accelerometer/magnetometer attitude
+    /// correction. Called from EstimatorCmd::HoldAttitudeCorrection /
+    /// ResumeAttitudeCorrection (FlightState::FLIP onEnter/onExit — StateManager
+    /// side, dispatched by ImuTask). Gyro-only prediction stays accurate enough
+    /// over the <=0.6s flip window (flip-maneuver-plan.md §3.6), so holding just
+    /// stops the accel/mag observation updates from fighting the maneuver's own
+    /// specific-force signature; predict() is UNAFFECTED and keeps running.
+    /// Resuming is more than a flag flip: an estimator with an explicit
+    /// covariance (ESKF) should also re-inflate the vertical position/velocity
+    /// confidence and give the ToF gate a fresh chance to re-acquire, because
+    /// altitude can have drifted out of gate range while corrections were held
+    /// (flip-maneuver-plan.md §3.6, "ToFの絶対イノベーション判定"). Default no-op
+    /// for estimators without an accel/mag attitude correction to hold (e.g. the
+    /// complementary filter, which has no separate hold state).
+    ///
+    /// 加速度計/磁気による姿勢補正をホールド(true)/再開(false)する。
+    /// EstimatorCmd::HoldAttitudeCorrection / ResumeAttitudeCorrection
+    /// （FlightState::FLIP の onEnter/onExit — StateManager 側、ImuTask が配送）から
+    /// 呼ばれる。0.6s 以内の宙返り窓ではジャイロ積分だけで十分な精度が出る
+    /// （flip-maneuver-plan.md §3.6）ため、ホールドは加速度/磁気の観測更新が
+    /// マニューバ自身の比力（specific force）と衝突するのを止めるだけ。predict()
+    /// は影響を受けず動き続ける。再開は単なるフラグ反転ではない: 明示的な共分散を
+    /// 持つ推定器（ESKF）は、ホールド中に鉛直位置・速度の自信が実際のずれより
+    /// 高いまま残る（＝共分散を再膨張すべき）ことと、高度が ToF 判定の範囲外へ
+    /// ドリフトしている可能性（＝ToF 判定に再取り込みの猶予を与えるべきこと）にも
+    /// 対応する（flip-maneuver-plan.md §3.6「ToFの絶対イノベーション判定」）。
+    /// 保持する加速度/磁気姿勢補正を持たない推定器（相補フィルタ等、別建てのホールド
+    /// 状態を持たない）は既定 no-op。
+    ///
+    /// @param hold true = stop correction (flip entry) / false = resume (flip exit)
+    ///             true=補正停止（宙返り突入）/ false=再開（宙返り終了）
+    ///
+    /// @design docs/plans/flip-maneuver-plan.md §3.6 — estimator handling during flip [OK]
+    /// @design detailed_design.md §3 — FLIP row: HoldAttitudeCorrection/ResumeAttitudeCorrection [OK]
+    virtual void holdAttitudeCorrection(bool hold) { (void)hold; }
+
+    // =========================================================================
     // Calibration
     // キャリブレーション
     // =========================================================================
