@@ -1,0 +1,44 @@
+Total cases: 22
+Failed cases: 1 / 22
+
+Failed case labels:
+  policy=A: max_omega=1673dps max_phi=771deg sat=81%
+
+All cases (axis=value): time[s] drop[cm] end_resid[deg] sat[%] track_err[dps] max_accel[G] t>3G[ms] trigger[deg] failed
+  baseline                     time= 0.628 drop= 17.93 resid=  -2.7 sat= 44.6 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+  wf1000_Ixx                   time= 0.790 drop= 51.59 resid=  -0.2 sat= 51.3 track_err=  1000 max_accel= 1.79 t>3G=   0.0 trigger= 320.6 failed=False
+  wf1000_Iyy                   time= 0.790 drop= 48.31 resid=   2.0 sat= 50.0 track_err=  1000 max_accel= 1.79 t>3G=   0.0 trigger= 308.6 failed=False
+  wf1200_Ixx                   time= 0.675 drop= 27.94 resid=   1.5 sat= 52.2 track_err=  1200 max_accel= 1.79 t>3G=   0.0 trigger= 304.1 failed=False
+  wf1200_Iyy                   time= 0.688 drop= 26.77 resid=   2.6 sat= 48.7 track_err=  1200 max_accel= 1.79 t>3G=   0.0 trigger= 288.7 failed=False
+  wf1500_Ixx                   time= 0.628 drop= 17.93 resid=  -2.7 sat= 44.6 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+  wf1500_Iyy                   time= 0.660 drop= 20.00 resid=  -2.9 sat= 41.3 track_err=  1500 max_accel= 1.79 t>3G=   0.0 trigger= 255.6 failed=False
+  wf1800_Ixx                   time= 0.568 drop=  8.86 resid=  -3.2 sat= 43.2 track_err=  1803 max_accel= 1.79 t>3G=   0.0 trigger= 250.3 failed=False
+  wf1800_Iyy                   time= 0.652 drop= 19.77 resid=  -3.6 sat= 42.9 track_err=  1800 max_accel= 1.79 t>3G=   0.0 trigger= 213.7 failed=False
+  alpha_cmd=150.0              time= 0.710 drop= 22.40 resid=   1.9 sat= 43.7 track_err=   176 max_accel= 1.79 t>3G=   0.0 trigger= 200.2 failed=False
+  alpha_cmd=300.0              time= 0.585 drop=  8.50 resid=  -0.9 sat= 44.4 track_err=   377 max_accel= 1.79 t>3G=   0.0 trigger= 270.7 failed=False
+  alpha_cmd=450.0              time= 0.583 drop= 10.27 resid=   1.7 sat= 49.8 track_err=   724 max_accel= 1.79 t>3G=   0.0 trigger= 295.5 failed=False
+  T_spin_hi=0.25               time= 0.642 drop= 26.81 resid=  -3.4 sat= 55.6 track_err=  1506 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+  T_spin_hi=0.5                time= 0.517 drop= -0.00 resid=   1.2 sat= 66.2 track_err=  1501 max_accel= 1.79 t>3G=   0.0 trigger= 279.2 failed=False
+  T_lo=0.0                     time= 0.552 drop=  7.13 resid=   5.1 sat= 72.9 track_err=  1510 max_accel= 1.79 t>3G=   0.0 trigger= 279.0 failed=False
+  T_lo=0.12                    time= 0.640 drop= 22.12 resid=  -2.2 sat= 43.8 track_err=  1504 max_accel= 1.79 t>3G=   0.0 trigger= 278.2 failed=False
+  t_boost=0.05                 time= 0.628 drop= 41.63 resid=  -2.0 sat= 44.6 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 280.9 failed=False
+  t_boost=0.15                 time= 0.628 drop= -0.00 resid=  -2.7 sat= 44.6 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+  t_boost=0.2                  time= 0.625 drop= -0.00 resid=  -0.8 sat= 44.4 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+  v_supply=3.5                 time= 0.682 drop= 28.50 resid=  -3.2 sat= 49.1 track_err=  1502 max_accel= 1.64 t>3G=   0.0 trigger= 280.6 failed=False
+  policy=A                     time=  FAIL drop=601.84 resid=   nan sat= 80.7 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.2 failed=True
+  policy=B                     time= 0.635 drop= 18.52 resid=  -0.2 sat= 45.3 track_err=  1502 max_accel= 1.79 t>3G=   0.0 trigger= 281.0 failed=False
+
+omega_flip x inertia grid (Ixx vs Iyy):
+  wf=1000dps I=Ixx: time=0.790s drop=51.59cm max_accel=1.79G trigger=320.6deg failed=False
+  wf=1000dps I=Iyy: time=0.790s drop=48.31cm max_accel=1.79G trigger=308.6deg failed=False
+  wf=1200dps I=Ixx: time=0.675s drop=27.94cm max_accel=1.79G trigger=304.1deg failed=False
+  wf=1200dps I=Iyy: time=0.688s drop=26.77cm max_accel=1.79G trigger=288.7deg failed=False
+  wf=1500dps I=Ixx: time=0.628s drop=17.93cm max_accel=1.79G trigger=281.0deg failed=False
+  wf=1500dps I=Iyy: time=0.660s drop=20.00cm max_accel=1.79G trigger=255.6deg failed=False
+  wf=1800dps I=Ixx: time=0.568s drop=8.86cm max_accel=1.79G trigger=250.3deg failed=False
+  wf=1800dps I=Iyy: time=0.652s drop=19.77cm max_accel=1.79G trigger=213.7deg failed=False
+
+policy A/B/C comparison (all other params at baseline):
+  policy=C: time=0.628s drop=17.93cm sat=45% failed=False
+  policy=A: time=FAIL drop=601.84cm sat=81% failed=True
+  policy=B: time=0.635s drop=18.52cm sat=45% failed=False

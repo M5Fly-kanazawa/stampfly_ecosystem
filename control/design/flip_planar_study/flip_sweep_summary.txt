@@ -1,0 +1,65 @@
+Total cases: 53
+Failed cases: 9 / 53
+
+Failed case labels:
+  [OFAT] policy=A: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmfirmware_tclfirmware_polA_bmrate: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmfirmware_tclfirmware_polA_bmangle: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmfirmware_tclunlimited_polA_bmrate: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmfirmware_tclunlimited_polA_bmangle: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmphysical_tclfirmware_polA_bmrate: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmphysical_tclfirmware_polA_bmangle: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmphysical_tclunlimited_polA_bmrate: max_omega=0dps max_phi=0deg sat=100%
+  [risk_grid] risk_tlmphysical_tclunlimited_polA_bmangle: max_omega=0dps max_phi=0deg sat=100%
+
+Worst altitude drop (top 10):
+  [pitch_axis_check] pitchcheck_wf1000_Ixx: drop=29.40cm done_z=-29.40cm sat=67% failed=False
+  [OFAT] omega_flip_dps=1000.0: drop=29.40cm done_z=-29.40cm sat=67% failed=False
+  [pitch_axis_check] pitchcheck_wf1000_Iyy: drop=28.03cm done_z=-28.03cm sat=67% failed=False
+  [OFAT] t_boost=0.05: drop=25.30cm done_z=-25.30cm sat=74% failed=False
+  [risk_grid] risk_tlmfirmware_tclunlimited_polB_bmrate: drop=22.88cm done_z=-22.88cm sat=80% failed=False
+  [risk_grid] risk_tlmfirmware_tclunlimited_polB_bmangle: drop=22.88cm done_z=-22.88cm sat=80% failed=False
+  [risk_grid] risk_tlmphysical_tclfirmware_polB_bmrate: drop=19.95cm done_z=-19.95cm sat=82% failed=False
+  [risk_grid] risk_tlmphysical_tclfirmware_polB_bmangle: drop=19.95cm done_z=-19.95cm sat=82% failed=False
+  [risk_grid] risk_tlmphysical_tclunlimited_polB_bmrate: drop=19.60cm done_z=-19.60cm sat=78% failed=False
+  [risk_grid] risk_tlmphysical_tclunlimited_polB_bmangle: drop=19.60cm done_z=-19.60cm sat=78% failed=False
+
+Highest motor saturation fraction (top 10):
+  [OFAT] policy=A: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmfirmware_tclunlimited_polA_bmrate: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmfirmware_tclunlimited_polA_bmangle: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmphysical_tclfirmware_polA_bmrate: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmfirmware_tclfirmware_polA_bmrate: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmphysical_tclfirmware_polA_bmangle: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmphysical_tclunlimited_polA_bmrate: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmfirmware_tclfirmware_polA_bmangle: sat=100% drop=-0.00cm failed=True
+  [risk_grid] risk_tlmphysical_tclunlimited_polA_bmangle: sat=100% drop=-0.00cm failed=True
+  [OFAT] T_idle=0.0: sat=100% drop=2.99cm failed=False
+
+pitch_axis_check group (omega_flip x inertia):
+  wf=1000dps I=Ixx: time=0.728s drop=29.40cm sat=67% trigger=318.4deg failed=False
+  wf=1000dps I=Iyy: time=0.738s drop=28.03cm sat=67% trigger=306.8deg failed=False
+  wf=1200dps I=Ixx: time=0.640s drop=16.04cm sat=70% trigger=305.0deg failed=False
+  wf=1200dps I=Iyy: time=0.642s drop=13.62cm sat=69% trigger=305.0deg failed=False
+  wf=1500dps I=Ixx: time=0.552s drop=4.49cm sat=74% trigger=305.0deg failed=False
+  wf=1500dps I=Iyy: time=0.613s drop=7.10cm sat=74% trigger=305.0deg failed=False
+  wf=1800dps I=Ixx: time=0.530s drop=0.50cm sat=75% trigger=305.0deg failed=False
+  wf=1800dps I=Iyy: time=0.620s drop=5.89cm sat=79% trigger=305.0deg failed=False
+
+spin_cmd_mode: step (baseline) vs ramp (alpha_cmd sweep):
+  step (baseline): tracking_err_max=1500dps sat=74% time=0.552s drop=4.49cm failed=False
+  ramp alpha_cmd=150rad/s^2: tracking_err_max=1404dps sat=74% time=0.603s drop=-0.00cm trigger=305.0deg failed=False
+  ramp alpha_cmd=300rad/s^2: tracking_err_max=1190dps sat=73% time=0.583s drop=-0.00cm trigger=305.0deg failed=False
+  ramp alpha_cmd=450rad/s^2: tracking_err_max=1049dps sat=75% time=0.570s drop=1.10cm trigger=305.0deg failed=False
+
+Case O (factory-firmware-equivalent, open-loop, no attitude control):
+  profile end t=1.075s (segment durations sum to 1.075s; coordinator text said 0.875s -- see docstring note, flagged not silently fixed)
+  actual total rotation = 324.0 deg (commanded profile's own integral = 324 deg -- NOT the same thing; actual rotation lags the open-loop command)
+  altitude drop = 53.28 cm, final z = -53.28 cm, final vz = -1.486 m/s
+  attitude residual (from nearest 360deg multiple, nearest=360deg) = -36.0 deg
+  plot saved: /private/tmp/claude-501/-Users-kouhei-tmp-github-stampfly-ecosystem/bb2428bd-ef70-4758-8217-4395755bbe1d/scratchpad/flip_sim/flip_caseO_timeseries.png
+
+Case O vs baseline (flip-design, rate-brake, firmware limits) side by side:
+  case                            time[s]  alt_drop[cm]  end_z[cm]  end_vz[m/s]  att_resid[deg]
+  baseline (my design)              0.552          4.49      -4.49 0.000 (vz>=0 trigger)            1.23
+  case O (factory-equiv)            1.075         53.28     -53.28       -1.486          -36.02

@@ -1,0 +1,40 @@
+Total cases: 28
+Failed: 0 / 28   omega>1700dps constraint violated: 0 / 28
+
+=== main24 (omega_flip x T_lo x inertia x v_supply, full factorial) ===
+  wf=1400 Tlo=0.00 I=Ixx Vs=3.7V | max_omega= 1474.6dps[ok] climb= 29.21cm drop= -0.00cm t_min->recover= 0.520s time= 0.520s resid= -2.10deg sat=  74% failed=False
+  wf=1400 Tlo=0.00 I=Ixx Vs=3.5V | max_omega= 1466.8dps[ok] climb= 22.56cm drop= -0.00cm t_min->recover= 0.585s time= 0.585s resid= -4.43deg sat=  91% failed=False
+  wf=1400 Tlo=0.00 I=Iyy Vs=3.7V | max_omega= 1445.9dps[ok] climb= 30.34cm drop= -0.00cm t_min->recover= 0.552s time= 0.552s resid= 10.01deg sat=  86% failed=False
+  wf=1400 Tlo=0.00 I=Iyy Vs=3.5V | max_omega= 1437.0dps[ok] climb= 23.56cm drop= -0.00cm t_min->recover= 0.675s time= 0.675s resid= -5.42deg sat=  89% failed=False
+  wf=1400 Tlo=0.03 I=Ixx Vs=3.7V | max_omega= 1473.3dps[ok] climb= 28.88cm drop= -0.00cm t_min->recover= 0.527s time= 0.527s resid= -1.90deg sat=  49% failed=False
+  wf=1400 Tlo=0.03 I=Ixx Vs=3.5V | max_omega= 1468.9dps[ok] climb= 22.39cm drop= -0.00cm t_min->recover= 0.590s time= 0.590s resid= -5.08deg sat=  67% failed=False
+  wf=1400 Tlo=0.03 I=Iyy Vs=3.7V | max_omega= 1450.2dps[ok] climb= 30.02cm drop= -0.00cm t_min->recover= 0.557s time= 0.557s resid=  7.91deg sat=  61% failed=False
+  wf=1400 Tlo=0.03 I=Iyy Vs=3.5V | max_omega= 1445.7dps[ok] climb= 23.41cm drop= -0.00cm t_min->recover= 0.677s time= 0.677s resid= -5.78deg sat=  68% failed=False
+  wf=1500 Tlo=0.00 I=Ixx Vs=3.7V | max_omega= 1560.3dps[ok] climb= 29.16cm drop= -0.00cm t_min->recover= 0.487s time= 0.487s resid= -1.16deg sat=  72% failed=False
+  wf=1500 Tlo=0.00 I=Ixx Vs=3.5V | max_omega= 1563.4dps[ok] climb= 22.49cm drop= -0.00cm t_min->recover= 0.555s time= 0.555s resid= -1.53deg sat=  92% failed=False
+  wf=1500 Tlo=0.00 I=Iyy Vs=3.7V | max_omega= 1545.7dps[ok] climb= 30.24cm drop= -0.00cm t_min->recover= 0.517s time= 0.517s resid= 13.62deg sat=  86% failed=False
+  wf=1500 Tlo=0.00 I=Iyy Vs=3.5V | max_omega= 1534.0dps[ok] climb= 23.49cm drop= -0.00cm t_min->recover= 0.642s time= 0.642s resid= -4.84deg sat=  89% failed=False
+  wf=1500 Tlo=0.03 I=Ixx Vs=3.7V | max_omega= 1562.7dps[ok] climb= 28.83cm drop= -0.00cm t_min->recover= 0.495s time= 0.495s resid=  0.39deg sat=  47% failed=False
+  wf=1500 Tlo=0.03 I=Ixx Vs=3.5V | max_omega= 1565.9dps[ok] climb= 22.33cm drop= -0.00cm t_min->recover= 0.560s time= 0.560s resid= -3.90deg sat=  69% failed=False
+  wf=1500 Tlo=0.03 I=Iyy Vs=3.7V | max_omega= 1553.5dps[ok] climb= 29.93cm drop= -0.00cm t_min->recover= 0.525s time= 0.525s resid= 12.39deg sat=  63% failed=False
+  wf=1500 Tlo=0.03 I=Iyy Vs=3.5V | max_omega= 1550.7dps[ok] climb= 23.32cm drop= -0.00cm t_min->recover= 0.652s time= 0.652s resid= -5.15deg sat=  72% failed=False
+  wf=1600 Tlo=0.00 I=Ixx Vs=3.7V | max_omega= 1659.9dps[ok] climb= 29.12cm drop= -0.00cm t_min->recover= 0.465s time= 0.465s resid= -2.12deg sat=  70% failed=False
+  wf=1600 Tlo=0.00 I=Ixx Vs=3.5V | max_omega= 1661.2dps[ok] climb= 22.46cm drop= -0.00cm t_min->recover= 0.527s time= 0.527s resid=  1.49deg sat=  92% failed=False
+  wf=1600 Tlo=0.00 I=Iyy Vs=3.7V | max_omega= 1641.6dps[ok] climb= 30.18cm drop= -0.00cm t_min->recover= 0.492s time= 0.492s resid= 16.35deg sat=  86% failed=False
+  wf=1600 Tlo=0.00 I=Iyy Vs=3.5V | max_omega= 1628.9dps[ok] climb= 23.44cm drop= -0.00cm t_min->recover= 0.618s time= 0.618s resid= -3.88deg sat=  89% failed=False
+  wf=1600 Tlo=0.03 I=Ixx Vs=3.7V | max_omega= 1667.8dps[ok] climb= 28.80cm drop= -0.00cm t_min->recover= 0.468s time= 0.468s resid= -2.74deg sat=  46% failed=False
+  wf=1600 Tlo=0.03 I=Ixx Vs=3.5V | max_omega= 1673.1dps[ok] climb= 22.30cm drop= -0.00cm t_min->recover= 0.535s time= 0.535s resid= -1.46deg sat=  74% failed=False
+  wf=1600 Tlo=0.03 I=Iyy Vs=3.7V | max_omega= 1656.9dps[ok] climb= 29.88cm drop= -0.00cm t_min->recover= 0.492s time= 0.492s resid= 17.45deg sat=  65% failed=False
+  wf=1600 Tlo=0.03 I=Iyy Vs=3.5V | max_omega= 1650.6dps[ok] climb= 23.27cm drop= -0.00cm t_min->recover= 0.630s time= 0.630s resid= -4.67deg sat=  74% failed=False
+
+=== elec90_compare (T_boost=firmware-cap vs 0.9x electrical ceiling, wf=1500 Tlo=0.03 3.7V Ixx/Iyy) ===
+  I=Ixx boost_mode=firmware  T_boost_used=0.6720N | max_omega= 1562.7dps climb= 28.83cm drop= -0.00cm time= 0.495s resid=  0.39deg sat=  47% failed=False
+  I=Ixx boost_mode=elec90    T_boost_used=0.5858N | max_omega= 1562.8dps climb= 21.53cm drop= -0.00cm time= 0.542s resid= -2.64deg sat=  14% failed=False
+  I=Iyy boost_mode=firmware  T_boost_used=0.6720N | max_omega= 1553.5dps climb= 29.93cm drop= -0.00cm time= 0.525s resid= 12.39deg sat=  63% failed=False
+  I=Iyy boost_mode=elec90    T_boost_used=0.5858N | max_omega= 1553.6dps climb= 22.41cm drop= -0.00cm time= 0.575s resid= -0.71deg sat=  36% failed=False
+
+=== best (min altitude_drop) among constraint-satisfying (omega<=1700dps) main24 cases, split by roll/pitch x voltage ===
+  Ixx(roll) @ 3.7V: wf=1400dps T_lo=0.00N -> drop=-0.00cm climb=29.21cm max_omega=1474.6dps time=0.520s resid=-2.10deg sat=74%
+  Ixx(roll) @ 3.5V: wf=1400dps T_lo=0.00N -> drop=-0.00cm climb=22.56cm max_omega=1466.8dps time=0.585s resid=-4.43deg sat=91%
+  Iyy(pitch) @ 3.7V: wf=1400dps T_lo=0.00N -> drop=-0.00cm climb=30.34cm max_omega=1445.9dps time=0.552s resid=10.01deg sat=86%
+  Iyy(pitch) @ 3.5V: wf=1400dps T_lo=0.00N -> drop=-0.00cm climb=23.56cm max_omega=1437.0dps time=0.675s resid=-5.42deg sat=89%
