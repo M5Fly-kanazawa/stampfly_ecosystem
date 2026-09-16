@@ -518,6 +518,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "counts). Used by the hikoki64 §3.3 SILS gain-deficit injection study "
                         "to model the in-flight-identified ~0.66x flow velocity under-read. "
                         "Default OFF (Config default 1.0, byte-identical).")
+    p.add_argument("--imu-gyro-range", type=float, default=None, metavar="DPS",
+                   help="override the plant's IMU gyro measurement-range saturation "
+                        "(Plant::Config::imu_gyro_range_dps; ADC full-scale clamp applied "
+                        "after noise+bias, modeling the real BMI270 -- flip-maneuver-plan.md "
+                        "§5.2). ALWAYS ON at the firmware default (2000 dps, "
+                        "bmi270_wrapper.hpp:119) even without this flag -- pass a smaller "
+                        "value to prove the clamp is effective, or <=0 to disable it.")
+    p.add_argument("--imu-accel-range", type=float, default=None, metavar="G",
+                   help="override the plant's IMU accelerometer measurement-range saturation "
+                        "(Plant::Config::imu_accel_range_g; ADC full-scale clamp applied "
+                        "after noise+bias, modeling the real BMI270 -- flip-maneuver-plan.md "
+                        "§5.2). ALWAYS ON at the firmware default (8 g, "
+                        "bmi270_wrapper.hpp:118) even without this flag -- pass a smaller "
+                        "value to prove the clamp is effective, or <=0 to disable it.")
     p.add_argument("--unpaired", action="store_true",
                    help="boot the vehicle UNPAIRED (skip the SILS pairing NVS seed) so it "
                         "auto-enters Pairing and binds via the injected RC — exercises the "
@@ -1141,6 +1155,47 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
         if merged.empty:
             return None
         return float(np.sqrt(np.mean((merged["alt_est"] - merged["alt"]) ** 2)))
+    if name in ("flip_roll_deg", "flip_pitch_deg"):
+        # FLIP maneuver (docs/plans/flip-maneuver-plan.md §5.2): the signed rotation
+        # angle [deg] that the truth body angular rate (rate_x=p/roll,
+        # rate_y=q/pitch, FRD, flight_log.yaml) integrates to over the window --
+        # trapezoidal in virtual time, NOT the change in Euler angle (a wrapped
+        # Euler roll/pitch cannot represent a 360-degree turn; the rate integral
+        # can). Unlike the other angular metrics above this one is ALREADY in
+        # degrees (per the "_deg" name) -- NOT added to _ANGULAR_METRICS.
+        # FLIP動作: 真値の機体角速度（rate_x=ロールp, rate_y=ピッチq, FRD）を窓内で
+        # 台形積分した符号付き回転角[deg]。オイラー角の差分ではない（360°回転は
+        # ラップしたオイラー角で表せないが角速度積分なら表せる）。他の角度系メトリクスと
+        # 異なりこれは既に度単位（"_deg" の名の通り）— _ANGULAR_METRICS には加えない。
+        rate = truth["rate_x" if name == "flip_roll_deg" else "rate_y"].to_numpy()
+        t_s = truth["timestamp_us"].to_numpy() * 1e-6
+        # np.trapz was renamed np.trapezoid in numpy 2.0; integrate by hand so
+        # both generations work. / np.trapz は numpy 2.0 で改名されたため手計算
+        area = np.sum(0.5 * (rate[1:] + rate[:-1]) * np.diff(t_s)) if len(rate) > 1 else 0.0
+        return float(np.degrees(area))
+    if name == "alt_drop_max":   # max altitude LOSS from the window's start [m], >=0
+        return float(max(0.0, alt[0] - np.min(alt)))
+    if name == "alt_rise_max":   # max altitude GAIN from the window's start [m], >=0
+        return float(max(0.0, np.max(alt) - alt[0]))
+    if name == "settle_time_s":
+        # Time [s] from the window's start until true tilt (hypot(roll, pitch),
+        # same quantity as tilt_max) stays BELOW the threshold for the REST of the
+        # window (never exceeding it again) -- used to judge FLIP recovery. A
+        # suffix-max (max looking forward from each sample) below threshold marks
+        # "settled from here on"; the sentinel means it never settles within the
+        # window.
+        # 窓開始から、真値の傾き（hypot(roll,pitch)、tilt_max と同じ量）が閾値未満に
+        # 「それ以降ずっと」留まる最初の時刻[s]（FLIP後の整定判定に使う）。各サンプルから
+        # 先の最大値（suffix max）が閾値未満になった点＝そこから先ずっと収まっている。
+        # センチネルは窓内で収まらなかったことを表す。
+        SETTLE_TILT_THRESHOLD_DEG = 10.0   # settled = tilt stays below this [deg]
+        SETTLE_TIME_SENTINEL_S = 999.0     # returned when it never settles in-window
+        tilt_deg = np.degrees(np.hypot(roll, pitch))
+        t_rel_s = (truth["timestamp_us"].to_numpy() - truth["timestamp_us"].to_numpy()[0]) * 1e-6
+        below_from_here = np.maximum.accumulate(tilt_deg[::-1])[::-1] < SETTLE_TILT_THRESHOLD_DEG
+        if not below_from_here.any():
+            return float(SETTLE_TIME_SENTINEL_S)
+        return float(t_rel_s[int(np.argmax(below_from_here))])
     return None  # unknown metric name / 未知のメトリクス名
 
 
@@ -1213,7 +1268,9 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               horizontal_drift_max, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
-                                              duty_max, yaw_band
+                                              duty_max, yaw_band, flip_roll_deg,
+                                              flip_pitch_deg, alt_drop_max,
+                                              alt_rise_max, settle_time_s
     """
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
@@ -1439,6 +1496,21 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     fsc = getattr(args, "flow_scale", None)
     if fsc is not None:
         env["SILS_EMU_FLOW_SCALE"] = str(fsc)
+
+    # --imu-gyro-range / --imu-accel-range override the plant's IMU measurement-range
+    # saturation (Plant::Config::imu_gyro_range_dps/imu_accel_range_g). Unlike the
+    # knobs above, this clamp is ALWAYS ON at the firmware's BMI270 defaults
+    # (2000 dps / 8 g) even when neither flag is passed -- these only let a run pick
+    # a non-default range or disable it (<=0) for A/B comparison.
+    # --imu-gyro-range / --imu-accel-range はプラントの IMU レンジ飽和を上書きする。
+    # 上のノブと異なりこのクランプはファーム既定（2000dps/8g）で常時有効 -- これらは
+    # A/B 比較用に既定と異なるレンジを選ぶか無効化（0以下）するためだけに使う。
+    igr = getattr(args, "imu_gyro_range", None)
+    if igr is not None:
+        env["SILS_EMU_IMU_GYRO_RANGE_DPS"] = str(igr)
+    iar = getattr(args, "imu_accel_range", None)
+    if iar is not None:
+        env["SILS_EMU_IMU_ACCEL_RANGE_G"] = str(iar)
 
     # --param NAME=VALUE (repeatable): temporary, single-run firmware param overrides,
     # routed through the EXISTING SILS_EMU_PARAMS_FILE mechanism (emu_main.cpp reads

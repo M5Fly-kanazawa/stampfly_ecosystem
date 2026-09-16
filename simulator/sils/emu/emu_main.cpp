@@ -286,6 +286,29 @@ sils::Plant::Config plant_config_from_env()
             std::printf("[emu] motor transport delay ON (%.2f ms, model-match retrofit #1)\n",
                         cfg.motor_delay_ms); }
     }
+    // SILS_EMU_IMU_GYRO_RANGE_DPS / SILS_EMU_IMU_ACCEL_RANGE_G override the plant's
+    // IMU measurement-range saturation (Config::imu_gyro_range_dps/imu_accel_range_g,
+    // plant.hpp; flip-maneuver-plan.md §5.2). Unlike the OFF-by-default knobs above,
+    // this clamp is ALWAYS ON at the firmware's BMI270 defaults (2000 dps / 8 g) --
+    // these env vars only let a scenario pick a NON-default range (e.g. an
+    // artificially small one, to prove the clamp is effective) or disable it (<=0).
+    // Unset -> the Config default (2000/8) is used unmodified.
+    // SILS_EMU_IMU_GYRO_RANGE_DPS / SILS_EMU_IMU_ACCEL_RANGE_G はプラントの IMU
+    // レンジ飽和（Config::imu_gyro_range_dps/imu_accel_range_g、plant.hpp;
+    // flip-maneuver-plan.md §5.2）を上書きする。上のノブ群と違いこのクランプは
+    // ファーム既定（2000dps/8g）で常時有効 -- これらの環境変数は既定と異なるレンジ
+    // （例: 効果を確認するための極端に小さい値）を選ぶか、無効化（0以下）するためだけに
+    // 使う。未設定なら Config 既定（2000/8）のまま。
+    if (const char* gr = std::getenv("SILS_EMU_IMU_GYRO_RANGE_DPS")) {
+        cfg.imu_gyro_range_dps = (float)std::atof(gr);
+        std::printf("[emu] IMU gyro range override = %.1f dps (default 2000, <=0 disables)\n",
+                    cfg.imu_gyro_range_dps);
+    }
+    if (const char* ar = std::getenv("SILS_EMU_IMU_ACCEL_RANGE_G")) {
+        cfg.imu_accel_range_g = (float)std::atof(ar);
+        std::printf("[emu] IMU accel range override = %.2f g (default 8, <=0 disables)\n",
+                    cfg.imu_accel_range_g);
+    }
 
     const char* noise = std::getenv("SILS_EMU_NOISE");
     if (!noise) return cfg;

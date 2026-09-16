@@ -126,6 +126,11 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `yaw_band` | rad | 窓内の真値方位（クォータニオンから算出、±180°の継ぎ目でアンラップ済み）のピークtoピーク |
 | `duty_max` | 比（0〜1） | 窓内の4モータ duty の最大値（飽和していないことの確認） |
 | `horizontal_drift_max` | m | 窓の**開始時点**からの水平面内の最大距離（位置保持の逸脱量） |
+| `flip_roll_deg` | deg（**度**、上記の角度系とは異なりラジアンではない） | 窓内で真値の機体角速度 `rate_x`（ロール p、FRD）を時間積分した符号付き回転角。FLIP（宙返り）の実回転量の確認用（`docs/plans/flip-maneuver-plan.md` §5.2） |
+| `flip_pitch_deg` | deg（度） | 同上、`rate_y`（ピッチ q）を積分 |
+| `alt_drop_max` | m | 窓の**開始時点の高度**から窓内の最低高度までの落ち込み（正の値。下回らなければ 0） |
+| `alt_rise_max` | m | 窓の**開始時点の高度**から窓内の最高高度までの上昇（正の値。上回らなければ 0） |
+| `settle_time_s` | s | 窓の開始時刻から、真値の傾き `hypot(roll, pitch)` が 10° 未満に**それ以降ずっと**留まる最初の時刻までの経過時間。窓内で収まらなければ大きな値（999）を返す |
 
 未知の名前・フライトログ一式に対象ストリームが無い・窓内にデータが無い、のいずれかでは判定不能扱いで **FAIL** になる（`None` を返し、しきい値比較をしない）。
 
@@ -392,6 +397,11 @@ Computed from the streams inside the run's flight-log bundle (the zip-format log
 | `yaw_band` | rad | peak-to-peak true heading (from the truth quaternion, unwrapped across the ±180° seam) over the window |
 | `duty_max` | ratio (0..1) | max of the four motors' duty over the window (saturation check) |
 | `horizontal_drift_max` | m | max planar distance from the window's **start** point |
+| `flip_roll_deg` | deg (**degrees**, unlike the radian-valued angular metrics above) | signed rotation angle from integrating the truth body angular rate `rate_x` (roll p, FRD) over the window in time. For checking the actual rotation of a FLIP maneuver (`docs/plans/flip-maneuver-plan.md` §5.2) |
+| `flip_pitch_deg` | deg | same, integrating `rate_y` (pitch q) |
+| `alt_drop_max` | m | drop from the window's **start** altitude to the window's lowest altitude (positive; 0 if it never drops below) |
+| `alt_rise_max` | m | rise from the window's **start** altitude to the window's highest altitude (positive; 0 if it never rises above) |
+| `settle_time_s` | s | elapsed time from the window's start until true tilt `hypot(roll, pitch)` stays below 10° for the **rest** of the window; a large value (999) if it never settles within the window |
 
 An unknown name, a bundle missing the needed stream, or an empty window all resolve to "unjudgeable" and **FAIL** (the underlying function returns `None`, and no comparison is made).
 

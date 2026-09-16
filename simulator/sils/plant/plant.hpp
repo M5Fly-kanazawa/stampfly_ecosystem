@@ -297,6 +297,31 @@ public:
         /// 出力に定数として加算。既定ゼロ。ファームの起動校正が測定・除去する（P2-3 対照試験）。
         sf::math::Vec3 imu_bias_accel = {0.0f, 0.0f, 0.0f}; ///< accel raw bias [m/s²]
         sf::math::Vec3 imu_bias_gyro  = {0.0f, 0.0f, 0.0f}; ///< gyro  raw bias [rad/s]
+
+        // IMU measurement-range saturation (ADC full-scale clamp) — models the real
+        // BMI270's ADC clipping, which the synthetic IMU previously lacked entirely
+        // (flip-maneuver-plan.md §5.2: needed to reproduce the FLIP maneuver's
+        // 1000-1700 deg/s gyro rates hitting the sensor's actual ceiling). Applied in
+        // imu() AFTER noise+bias are added (clamps the FINAL analog-equivalent
+        // signal, not a clean pre-noise value) — see plant.cpp's imu(). Defaults
+        // match the firmware's BMI270 config (bmi270_wrapper.hpp:118-119,
+        // BMI270_ACC_RANGE_8G / BMI270_GYR_RANGE_2000DPS), so ordinary hover/
+        // translation flight (far below these limits) is unaffected — existing
+        // scenarios stay byte-identical in effect, even though the clamp itself is
+        // always on. <=0 disables the clamp on that axis (kept for A/B comparison,
+        // e.g. `sf sils scenario --imu-gyro-range`/`--imu-accel-range`).
+        // IMU 計測レンジ飽和（ADC フルスケールクランプ）― 実 BMI270 の ADC クリップを模擬
+        // する。合成 IMU にはこれまで一切無かった（flip-maneuver-plan.md §5.2: FLIP動作の
+        // 1000〜1700 deg/s ジャイロレートがセンサの実上限に達することを再現する必要があった）。
+        // imu() でノイズ＋バイアス加算の**後**に適用（クリーンな加算前の値でなく、最終的な
+        // アナログ相当信号をクランプ ― plant.cpp の imu() 参照）。既定値はファームの BMI270
+        // 設定（bmi270_wrapper.hpp:118-119、BMI270_ACC_RANGE_8G/BMI270_GYR_RANGE_2000DPS）に
+        // 合わせる ― 通常のホバー・並進飛行はこの上限に遠く及ばないため、クランプ自体は常時
+        // 有効でも既存シナリオは実質バイト一致のまま。0 以下でその軸のクランプを無効化
+        // （A/B 比較用に残す。例: `sf sils scenario --imu-gyro-range`/`--imu-accel-range`）。
+        float imu_gyro_range_dps = 2000.0f;  ///< gyro full-scale [deg/s] (<=0 = OFF/no clamp)
+        float imu_accel_range_g  = 8.0f;     ///< accel full-scale [g] (<=0 = OFF/no clamp)
+
         float flow_rad_per_pixel = 0.00222f; ///< PMW3901 rad per count (matches ESKF)
 
         // Optical-flow VELOCITY under-read — Model fidelity (hikoki64 §3.3 SILS

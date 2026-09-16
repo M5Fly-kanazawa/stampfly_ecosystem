@@ -793,6 +793,26 @@ sf::ImuData Plant::imu() const
     out.gyro[0]  += cfg_.imu_bias_gyro.x;
     out.gyro[1]  += cfg_.imu_bias_gyro.y;
     out.gyro[2]  += cfg_.imu_bias_gyro.z;
+    // IMU range saturation (ADC full-scale clamp) — applied LAST, after noise and
+    // bias, so it models the real BMI270 ADC clipping the final analog-equivalent
+    // signal (not a clean pre-noise value). <=0 disables the clamp on that axis.
+    // See Config::imu_gyro_range_dps / imu_accel_range_g (plant.hpp) for defaults
+    // and rationale (flip-maneuver-plan.md §5.2).
+    // IMU レンジ飽和（ADC フルスケールクランプ）― ノイズ・バイアスの**後**に適用し、
+    // 実 BMI270 の ADC が最終的なアナログ相当信号をクリップすることを模擬する（加算前の
+    // クリーンな値ではない）。0 以下でその軸は無効。既定値・根拠は plant.hpp の
+    // Config::imu_gyro_range_dps / imu_accel_range_g 参照（flip-maneuver-plan.md §5.2）。
+    if (cfg_.imu_gyro_range_dps > 0.0f) {
+        constexpr float kDegToRad = 3.14159265358979f / 180.0f;
+        const float gyro_limit = cfg_.imu_gyro_range_dps * kDegToRad;
+        for (int i = 0; i < 3; ++i)
+            out.gyro[i] = std::fmax(-gyro_limit, std::fmin(gyro_limit, out.gyro[i]));
+    }
+    if (cfg_.imu_accel_range_g > 0.0f) {
+        const float accel_limit = cfg_.imu_accel_range_g * cfg_.g;
+        for (int i = 0; i < 3; ++i)
+            out.accel[i] = std::fmax(-accel_limit, std::fmin(accel_limit, out.accel[i]));
+    }
     out.temperature = 25.0f;
     out.timestamp = (uint32_t)(d_->time * 1e6);
     return out;
