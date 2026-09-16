@@ -18,7 +18,7 @@ Tello 互換を完成させる第一歩として **vehicle ファームに Flip 
 |------|------|
 | 目的 | (1) Tello SDK `flip x`（x = l/r/f/b）を vehicle ファームで実行できるようにする。(2) コントローラの FLIP ボタン（ESP-NOW `CTRL_FLAG_FLIP`、`firmware/common/protocol/include/espnow_protocol.hpp:61`。機体側は未使用）を有効にする |
 | 前提の変更 | 2026-06-23 の「flip は拒否」判断を撤回（オーナー指示 2026-09-16）。`requirements.md:52`「シーケンス（FLIP, AUTO_LAND 等）は将来拡張可能」の当初構想に戻る |
-| 方針（案 A） | **角度スケジュール型**: 1 軸のレート制御だけで 360° 回し、集合推力を回転角に応じて「高→低→高」と切り替え、回転角が約 290° を過ぎてから姿勢制御に戻す。既存の「単一の姿勢＋レートパイプライン」の中で **有限時間（0.6 s 以内）だけ設定点の出所を切り替える** 実装（レートループ同定励振 `excite_active_` と同じ型） |
+| 方針（案 A） | **角度スケジュール型**: 1 軸のレート制御だけで 360° 回し、集合推力を回転角に応じて「高→低→高」と切り替え、回転角が約 290° を過ぎてから姿勢制御に戻す。既存の「単一の姿勢＋レートパイプライン」の中で **有限時間（0.6 s 以内）だけ設定点の出所を切り替える**。状態機械上は TAKEOFF/LANDING と同型の専用シーケンス状態 `FlightState::FLIP` として扱う（§4、2026-09-16 改訂） |
 | 主要な障壁 | (a) 角速度異常フェイルセーフ（800 °/s で即 DISARM）、(b) 姿勢ループの ZYX オイラー角依存（大角度で破綻）、(c) 反転中の ToF・光学フロー観測の扱い、(d) SILS のジャイロレンジ飽和が未実装 |
 | 検証 | 平面 2 自由度モデルでパラメータを決める → SILS シナリオ `api_flip`（4 方向＋摂動族）→ 実機（ネット・高天井・段階的） |
 | 見積り | Phase 0〜5（§8）。実装本体（Phase 2）は 3〜4 日、実機検証込みで 1〜2 週間 |
@@ -185,9 +185,9 @@ Flip の設計に効く現行実装の事実。行番号は調査時点。
 
 角速度異常判定（800 °/s）は「墜落・衝突の検出」が目的であり、宙返りの回転はこれに該当しない。
 INV-3（検出と判断の分離）に従い、**検出器（`ImuAnomalyDetector`）は変えず、判断側（`StateManager`）が
-「マニューバ窓の中の GYRO_ANOMALY は墜落ではない」と扱う**。窓の開始・終了は制御器が
-`controller_status.maneuver_active` で publish し、StateManager が購読する。衝撃判定（3 G）は窓の中でも
-有効のまま残す（ぶつかったときの停止手段）。代案（検出器のしきい値を窓内だけ 1900 dps に上げる）は
+「状態 FLIP の間の GYRO_ANOMALY は墜落ではない」と扱う**（`handleAlert()` の状態分岐に FLIP を足すだけで、
+側道の信号は要らない。§4 の改訂で `maneuver_active` は廃止）。衝撃判定（3 G）は FLIP 中も
+有効のまま残す（ぶつかったときの停止手段）。代案（検出器のしきい値を FLIP 中だけ 1900 dps に上げる）は
 検出器に「マニューバ」の概念を持ち込むので採らない。
 
 Boost 中の加速度計のノルムは推力 1.85 G ＋ 回転中心からのずれによる遠心加速度（IMU が中心から 1 cm なら 0.7 G）で
@@ -197,19 +197,35 @@ Boost 中の加速度計のノルムは推力 1.85 G ＋ 回転中心からの�
 
 ### 4.1 配置
 
+**2026-09-16 改訂**: 当初案は「制御器内の時限オーバーライド（同定励振 `excite_active_` と同型）」で、StateManager には
+`maneuver_active` という側道の信号でモードエッジの保留や GYRO_ANOMALY の無視をさせる構造だった。オーナーの問い
+「突然モードが遷移するのは vehicle の方針と整合するか」を受けて見直した結果、これは (1) 規範表に状態として現れない、
+(2) 制御器が事実上の状態を持つ（遷移の実行者は state_task のみ、`architecture.md:464`）、という 2 点で vehicle の方針と
+半分しか整合しない。vehicle で遷移が「突然」でも整合する条件は、規範表にあること・onExit/onEnter で整えること・
+制御器が単一パイプラインのままであること・state_task が遷移を実行することの 4 つであり、`requirements.md:52` の設計原則も
+「TAKEOFF/LANDING は専用モード」「シーケンス（FLIP, AUTO_LAND 等）は将来拡張可能」と FLIP を専用シーケンス状態として想定している。
+そこで **TAKEOFF/LANDING と同型の `FlightState::FLIP` を追加する**設計に改める。
+
 | 要素 | 置き場所 | 役割 |
 |------|---------|------|
-| `FlipSequencer` クラス | `firmware/vehicle/components/sf_controller_pid/flip_sequencer.{hpp,cpp}` | 実行条件の判定、フェーズ進行、回転角の積算、レート設定点・集合推力・姿勢ループの要否を毎周期返す。`start(direction)`, `update(gyro, quat, height, v_z, dt)`, `abort()`, `status()` |
-| `PidController::compute()` | 既存 | 列生成器が有効なら、その出力を設定点として既存のレート PID／姿勢 PID／ミキサーに流す。既存の同定励振（`excite_active_`）と同じ差し込み位置 |
-| `ControllerCmd::Flip{dir}` | `sf_types` | StateManager → 制御器への指示（Takeoff/TakeoffComplete と同じ経路） |
-| `controller_status` 拡張 | `sf_types` | `maneuver_active`、`flip_seq`（完了ごとに +1）、`flip_result`（Ok/Rejected(reason)/Aborted(reason)） |
+| `FlightState::FLIP` | `sf_state/include/flight_state.hpp` | 専用シーケンス状態。`FLYING → FLIP`（要求 + 実行条件）→ `FLYING`（完了／打ち切り）。FLIP 中も `FlightMode`（ALT/POS 等）は保持（TAKEOFF と同じ） |
+| `FlipSequencer` クラス | `firmware/vehicle/components/sf_controller_pid/flip_sequencer.{hpp,cpp}` | フェーズ進行、回転角の積算、レート設定点・集合推力・姿勢ループの要否を毎周期返す。`start(direction)`, `update(gyro, quat, height, v_z, dt)`, `abort()`, `status()`。実行条件 C2〜C8 の判定もここ（検出層） |
+| `PidController::compute()` | 既存 | `ControllerCmd::Flip` を受けている間、列生成器の出力を設定点として既存のレート PID／姿勢 PID／ミキサーに流す。姿勢則は替えない（INV-1） |
+| `ControllerCmd::Flip{dir}` / `FlipAbort` | `sf_types` | StateManager → 制御器への指示（`Takeoff` / `TakeoffComplete` と同じ経路） |
+| `controller_status` 拡張 | `sf_types` | `flip_phase`、`flip_done`、`flip_result`（Ok / Rejected(reason) / Aborted(reason)）。`takeoff_reached` と同型。**遷移は制御器が行わず、state_task がこれを読んで `FLIP → FLYING` を実行する** |
 | `ApiCmd::Flip{dir}` | `sf_types` | API → StateManager |
-| `cmdFlip()` | `api_task.cpp` | 事前判定（command モード・FLYING）→ `ApiCmd::Flip` 発行 → `flip_seq` の変化を `waitUntil` で待つ → `ok` / `error flip: <理由>` |
-| StateManager | `sf_state` | 規範表のセル（§4.3）に従って `ControllerCmd::Flip` を発行。窓内の GYRO_ANOMALY を無視。窓内のモード切替・誘導目標を保留 |
-| state_task | `tasks/state_task.cpp` | `CTRL_FLAG_FLIP` の立ち上がりで `ApiCmd::Flip` 相当の要求（Phase 3） |
+| `cmdFlip()` | `api_task.cpp` | 事前判定（command モード・FLYING）→ `ApiCmd::Flip` 発行 → **状態が FLIP を経て FLYING に戻るのを `waitUntil` で待つ**（`cmdTakeoff` が FLYING を待つのと同型。専用の完了カウンタは不要）→ `ok` / `error flip: <理由>`（理由は `flip_result`） |
+| StateManager | `sf_state` | 規範表（§4.3）に従い `FLYING → FLIP` を判断し `ControllerCmd::Flip` を発行。FLIP 中の事象は表のとおり処理。onEnter / onExit で取り込みとリセット |
+| state_task | `tasks/state_task.cpp` | `flip_done` の立ち上がりで `FLIP → FLYING` を実行。`CTRL_FLAG_FLIP` の立ち上がりで `ApiCmd::Flip` 相当の要求（Phase 3） |
+| 通知・テレメトリ | `sf_notify`, `sf_telemetry` | FLIP 状態の LED 色（オリジナルの橙 `0xFF9933` を踏襲）、テレメトリの状態値 |
+
+onEnter（FLYING → FLIP）: 開始高度・ヨーの取り込み、レート PID 積分項リセット、推定器の加速度姿勢補正の停止（§7）、LED。
+onExit（FLIP → FLYING）: 位置目標の取り直し、高度目標 = 取り込み値、高度・位置カスケードの積分項リセット、推定器の観測復帰と ToF 再取り込み、
+`FlightMode` の初期化は通常のサブモード進入と同じ（スロットル再センターロックは ACRO/STABILIZE のときのみ）。
 
 列生成器を制御器コンポーネントの中に置く理由: 400 Hz のジャイロ積算と、レート PID の積分項リセット・飽和挙動に密に結びつくため。
-別コンポーネント化してトピック経由にすると 1 周期（2.5 ms）の遅れと状態の二重管理が生じる。
+別コンポーネント化してトピック経由にすると 1 周期（2.5 ms）の遅れと状態の二重管理が生じる。状態そのものは StateManager が持ち、
+列生成器は「FLIP 状態の中で何をするか」だけを持つ（TAKEOFF 状態と `VerticalPhase::TakeoffClimb` の関係と同じ）。
 L1 アプリフック（`sf::app::controller()`）で制御器全体を差し替えた場合、Flip はその制御器の責務になる（文書に明記）。
 
 ### 4.2 不変条件（INV）との照合
@@ -218,30 +234,37 @@ L1 アプリフック（`sf::app::controller()`）で制御器全体を差し替
 |-----|---------|
 | INV-1 単一パイプライン | 姿勢 PID・レート PID・ミキサーは変更しない。列生成器は **設定点の出所** を有限時間だけ切り替えるだけで、並列の姿勢則は作らない（ACRO が姿勢ループを通らないのと同じ経路）。鉛直チャネルの上書き（T_hi/T_lo）は「フェーズが変えてよいのは鉛直チャネル」の範囲内。`VerticalPhase` は増やさず、`Airborne` 内の一時上書きとする |
 | INV-2 パイロットの姿勢操縦 | **例外条項の追加が必要。** 宙返りは操縦者（API またはボタン）が明示的に起動する有限時間（≤ 0.6 s）のマニューバであり、その間の姿勢設定点は列生成器が担う。終了は単一の判定（P4 完了または打ち切り）で通常則に戻る。リンク途絶の例外と同様に `architecture.md` の INV-2 に「操縦者が起動した時限マニューバ」を明記する（§9 の未決事項 1） |
-| INV-3 検出と判断 | 回転角到達・打ち切り条件の「検出」は列生成器、GYRO_ANOMALY の扱い・モード切替の保留の「判断」は StateManager。検出器（failsafe）は変更しない |
-| INV-4 規範表 | 事象「Flip 要求」「マニューバ中の各事象」の列を規範表に追加してから実装する（§4.3） |
+| INV-3 検出と判断 | 実行条件・回転角到達・打ち切り条件の「検出」は列生成器（`flip_done` / `flip_result` を publish）、遷移と GYRO_ANOMALY の扱いの「判断」は StateManager、遷移の実行は state_task。検出器（failsafe）は変更しない |
+| INV-4 規範表 | 状態 `FLIP` の行と事象「Flip 要求」の列を規範表に追加してから実装する（§4.3）。制御器内に隠れた状態を持たない |
 | INV-5 ミキサー入力 | 列生成器の出力は推力[N]・トルク[N·m]（レート PID 経由）。ミキサーは無変更 |
 
 ### 4.3 状態機械の規範表への追加（案）
 
-`detailed_design.md` §3.1 に事象「Flip 要求（API/ボタン）」を追加する:
+`detailed_design.md` §3 の遷移表に状態 `FLIP` を追加する:
 
-| 状態 | Flip 要求 |
-|------|----------|
-| INIT / IDLE_GROUND / IDLE_HELD / ARMED_GROUND / TAKEOFF / LANDING | 拒否（`error flip: not flying`） |
-| FLYING（マニューバ中でない） | 制御器へ `ControllerCmd::Flip`。制御器が実行条件 C2〜C8 を判定し、不成立なら `flip_result = Rejected` |
-| FLYING（マニューバ中） | 拒否（`error flip: busy`） |
+| 遷移 | トリガ | onExit / onEnter |
+|------|--------|-----------------|
+| FLYING → FLIP | API `flip x` またはコントローラ FLIP ボタンの立ち上がり。StateManager が「FLYING かつ既に FLIP でない」を判断し `ControllerCmd::Flip` を発行。制御器が実行条件 C2〜C8 を判定し、不成立なら `flip_result = Rejected(reason)` を publish して **遷移しない**（`error flip: <理由>`） | 入: 開始高度・ヨー取り込み、レート積分項リセット、推定器の加速度姿勢補正停止、LED 橙 |
+| FLIP → FLYING | 制御器が `flip_done`（完了 or 打ち切り後の回復完了）を publish → state_task が実行（`TakeoffComplete` と同型） | 出: 位置目標取り直し、高度目標 = 取り込み値、高度・位置積分項リセット、推定器観測復帰・ToF 再取り込み |
+| FLIP → IDLE_GROUND | DISARM 操作、`emergency`、IMPACT（既存の無条件停止と同じ） | モータ停止、ESKF リセット、ブザー |
+| FLIP → LANDING | 直接は遷移しない。LOW_BATTERY（緊急）・リンク途絶は FLIP → FLYING の後に既存則で LANDING へ | — |
 
-マニューバ中（`maneuver_active`）の既存事象:
+モード調停表（§3.1）の FLIP 行:
+
+| 状態 \ 事象 | エッジ | 不一致（レベル） | API 設定 | 接地リセット | Flip 要求 |
+|------------|--------|----------------|---------|------------|----------|
+| FLIP | 拒否（持続 → FLYING で適用。TAKEOFF と同じ） | 無視 | 拒否 | — | 拒否（`error flip: busy`） |
+| FLYING | （既存） | （既存） | （既存） | — | **受理**（実行条件は制御器が判定） |
+| その他の状態 | （既存） | （既存） | （既存） | （既存） | 拒否（`error flip: not flying`） |
+
+FLIP 中のその他の事象:
 
 | 事象 | 処置 |
 |------|------|
-| モードスイッチのエッジ | 保留（エッジ持続、完了後に適用。TAKEOFF 中の扱いと同じ） |
-| API 誘導目標（move/rotate/rc） | 保留（完了後に適用） |
-| DISARM 操作・`emergency`・IMPACT | 即時適用（既存どおり） |
-| GYRO_ANOMALY | 無視（記録のみ） |
-| LOW_BATTERY（緊急） | 完了後に LANDING |
-| リンク途絶 | 完了後に通常則 |
+| API 誘導目標（move/rotate/rc）、`stop`、`land` | 拒否または保留（`land` は FLYING 復帰後に受理） |
+| GYRO_ANOMALY | 無視（記録のみ。StateManager が状態 FLIP を見て判断） |
+| IMPACT | 即 IDLE_GROUND（既存どおり） |
+| 制御器の打ち切り（`spin_timeout` / `gyro_abort` / `recover_timeout`） | 制御器が Recover へ進み `flip_done` + `flip_result = Aborted(reason)`。遷移は FLIP → FLYING（`error flip: aborted`） |
 
 ### 4.4 API
 
@@ -376,6 +399,7 @@ L1 アプリフック（`sf::app::controller()`）で制御器全体を差し替
 | 4 | 反転中の推力は T_lo（ホバーの 15 %）で据え置き | 副の 0.15× と一致 |
 | 5 | 実行条件・4 方向・ヨー保持・完了優先の打ち切り・鉛直チャネル単一化・規範表の列追加は案 A のまま | Tello 互換と INV の要請 |
 | 6 | ボタン起動の既定方向は、スティック中立時にオリジナルと同じ向きにする（既存ユーザの慣れ）。オリジナルの正方向が右ロールか左ロールかは実機で確認する（コードの軸定義「左肩上がりが正」と BMI270 の搭載向きの組合せで決まる） | オリジナルとの互換 |
+| 7 | **状態機械上は `FlightState::FLIP` を追加**し、制御器内の隠れた状態機械にしない（§4.1、2026-09-16 オーナーの問い「突然の遷移は方針と整合するか」を受けて改訂）。API は状態が FLYING に戻るのを待つ | vehicle の方針（規範表・state_task が遷移実行・`requirements.md:52` のシーケンス構想） |
 
 採らないもの: `ahrs_reset()`（推定器の情報を捨てる）、時間駆動のフェーズ切り替え（電圧・質量への感度が高い）、
 ラダー入力の通過、スロットル低下による途中終了。
@@ -404,4 +428,5 @@ L1 アプリフック（`sf::app::controller()`）で制御器全体を差し替
 | 4 | h_min と天井余裕 | h_min はシミュレーションの高度損失 + 0.5 m。天井は操縦者の責任として手引きに明記 |
 | 5 | 電池電圧下限 | 3.6 V（負荷時）。実機ログで見直す |
 | 6 | ボタン押下時の方向 | スティックが中立なら後方（`b`）、傾いていればその方向（オリジナル実装を確認してから決める） |
-| 7 | 衝撃しきい値（3 G）の窓内緩和 | まず緩和せず実機ログで確認 |
+| 7 | 衝撃しきい値（3 G）の FLIP 中の緩和 | まず緩和せず実機ログで確認 |
+| 8 | FLIP を `FlightState` にする（§4.1 改訂案）か、制御器内オーバーライド（当初案）か | `FlightState::FLIP`。規範表・onEnter/onExit・遷移実行者の方針に沿う |
