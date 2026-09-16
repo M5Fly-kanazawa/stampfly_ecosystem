@@ -204,6 +204,8 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 
 **安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
 
+**宙返り（Flip）:** `flip <l/r/f/b>` は ALT_HOLD/POS_HOLD・対地高度 **1.0m 以上**・ほぼ水平で定常・電池電圧 **3.6V 以上**（負荷時）・前回の flip から 2 秒以上のときだけ実行される（不成立時は `error flip: <理由>`）。機体に上向きセンサが無いため天井までの距離は判定できない — **開始高度 + 0.6m 以上の天井余裕は操縦者の責任**。屋内では最初はネットのある場所・高天井（目安 2m 以上）で1方向ずつ試し、電池残量に余裕がある状態で行うこと。実行条件・応答語彙の詳細は [`docs/architecture/tello-api-reference.md`](../../../docs/architecture/tello-api-reference.md) を参照。
+
 ## 5. ペアリング手順
 
 機体とコントローラを1対1に束ね、複数機・複数送信機の混信を防ぐ。詳細は
@@ -469,6 +471,15 @@ identical to the legacy vehicle.**
   down / DISARM.
 
 ARM is refused while calibrating, on low/USB power, or while pairing (check `status`).
+
+**Flip:** sent via the Tello-style network API (`flip <l/r/f/b>`, UDP :8889 — see
+`tools/stampfly_py/` and `docs/architecture/tello-api-reference.md`). Requires
+ALT_HOLD/POS_HOLD, altitude above ground **>= 1.0 m**, near-level and steady flight,
+battery **>= 3.6 V** under load, and >= 2 s since the previous flip; otherwise it
+replies `error flip: <reason>`. The vehicle has no upward-facing sensor, so **a
+ceiling clearance of start altitude + 0.6 m or more is the pilot's responsibility**.
+Indoors, try one direction at a time with a net and a high ceiling (roughly 2 m or
+more) first, with battery margin to spare.
 
 ## 5. Pairing Procedure
 

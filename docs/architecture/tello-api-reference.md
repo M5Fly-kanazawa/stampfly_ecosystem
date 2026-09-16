@@ -81,12 +81,51 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 |---|---|---|
 | `speed` | `speed x`（10〜100 cm/s にクランプ） | 以後の verb 移動（up/down/left/right/forward/back）の巡航速度を設定 |
 
+### 宙返り（flip）
+
+`flip <l/r/f/b>`（l=左ロール、r=右ロール、f=前方＝機首下げ、b=後方＝機首上げ）は
+2026-09-16 に対応した（2026-06-23 の拒否判断を撤回。設計は
+[`docs/plans/flip-maneuver-plan.md`](../plans/flip-maneuver-plan.md) §4.4）。応答は
+`ok`（完了）または `error flip: <理由>`（不成立・打ち切り）。完了・打ち切りの回復まで
+ブロックする（最大 約3.5秒）。
+
+**実行条件**（不成立ならその理由で拒否、機体は何もしない）:
+
+| 条件 | 値 |
+|---|---|
+| 対象モード | ALT_HOLD / POS_HOLD のみ（ACRO/STABILIZE はコントローラの FLIP ボタン専用、Phase 3 未実装） |
+| 対地高度 | 1.0 m 以上 |
+| 姿勢・角速度・水平速度 | ほぼ水平・定常（大きく傾いている／回転中／移動中は不可） |
+| 電池電圧 | 3.6 V 以上（負荷時） |
+| 前回の flip からの間隔 | 2 秒以上 |
+| 他の励振・誘導移動 | 実行中でないこと（`sysid`/`autotune`/`move`/`go` 等と排他） |
+
+**天井余裕**: 機体に上向きセンサが無いため天井までの距離は判定できない。**開始高度 + 0.6 m
+以上の天井余裕は操縦者の責任**。
+
+**応答語彙**:
+
+| 応答 | 意味 |
+|---|---|
+| `ok` | 正常完了 |
+| `error flip: bad direction` | `l`/`r`/`f`/`b` 以外 |
+| `error flip: not flying` | FLYING でない（TAKEOFF/LANDING 等） |
+| `error flip: busy` | 既に flip 実行中、または実行条件表の「他の励振・誘導移動」に抵触 |
+| `error flip: mode` | ACRO/STABILIZE（API からは ALT_HOLD/POS_HOLD のみ） |
+| `error flip: too low` | 対地高度不足 |
+| `error flip: not steady` | 姿勢・角速度・速度が不安定 |
+| `error flip: battery low` | 電池電圧不足 |
+| `error flip: estimator` | 推定器が不健全（ToF 無効を含む） |
+| `error flip: cooldown` | 前回の flip から間隔不足 |
+| `error flip: rejected` | 発行後 0.5 秒以内に状態 FLIP へ入らなかった |
+| `error flip: timeout` | 状態 FLIP から 3 秒以内に復帰しなかった |
+| `error flip: aborted <理由>` | 回転が進まず打ち切り（`spin_timeout`）／角速度異常で打ち切り（`gyro_limit`）／回復整定タイムアウト（`recover_timeout`）／窓内に DISARM・emergency・衝撃で地上へ落ちた（`disarmed`） |
+
 ### 応答はするがハードとして非対応
 
 | コマンド | 応答 | 理由 |
 |---|---|---|
 | `streamon`/`streamoff` | `"ok"` | カメラ非搭載だが、映像を読み取らずに切り替えるだけのプログラムを止めないための措置 |
-| `flip <l/r/f/b>` | `"error flip not supported on StampFly"` | 小型機での宙返りは高リスクという判断（2026-06-23） |
 | `mon`/`moff`/`mdirection` | `"error mission pads not supported"` | ミッションパッドは Tello EDU/RoboMaster TT 専用機能 |
 | 上記以外の未知コマンド | `"error unknown command"` | — |
 
@@ -125,7 +164,7 @@ mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ
 |---|---|---|
 | 制御・移動・回転・絶対移動・巡航速度設定・連続手動操作・読み取り全般 | `command`/`takeoff`/`land`/`emergency`/`stop`/`up`等/`go`/`speed`/`rc`/`battery?`等 | 対応 |
 | カメラ | `streamon`/`streamoff`、フレーム取得 | 非対応（`ok`は返すが映像は出ない。カメラ非搭載） |
-| 宙返り | `flip`系 | 非対応（`error`。小型機での高リスクを理由に拒否） |
+| 宙返り | `flip`系 | 対応（`flip <l/r/f/b>`。実行条件・応答語彙は上記「宙返り（flip）」節） |
 | 円弧移動 | `curve` | 非対応（`error`。未実装） |
 | ミッションパッド | `mon`/`moff`/`mdirection`、パッド基準の`go`/`curve`/`jump` | 非対応（`error`。EDU専用機能） |
 
@@ -138,7 +177,6 @@ mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ
 ## 6. 非対応・未実装
 
 - カメラ映像（`streamon`/`streamoff` は `ok` を返すが実際の映像配信はしない）
-- `flip`（宙返り。ハード制約というより安全上の判断）
 - `curve`（円弧移動、および座標移動系のミッションパッド指定 `mid` 引数）
 - ミッションパッド機能一式（`mon`/`moff`/`mdirection`、パッド基準の `go`/`curve`/`jump`）
 - SDK 3.0 系コマンド（`motoron`/`motoroff`/`throwfly`/`setbitrate`/`setfps`/`setresolution` 等）
@@ -230,12 +268,53 @@ Movement, rotation, `go`, and `rc` return `"error not flying"` unless FLYING wit
 |---|---|---|
 | `speed` | `speed x` (clamped to 10–100 cm/s) | Sets the cruise speed used by subsequent verb moves (up/down/left/right/forward/back) |
 
+### Flip
+
+`flip <l/r/f/b>` (l=roll left, r=roll right, f=forward/nose-down, b=back/nose-up) has
+been supported since 2026-09-16 (reversing the 2026-06-23 refusal; design in
+[`docs/plans/flip-maneuver-plan.md`](../plans/flip-maneuver-plan.md) §4.4). The reply
+is `ok` (completed) or `error flip: <reason>` (blocked/aborted). It blocks until the
+maneuver completes or an abort recovers (up to ~3.5 s).
+
+**Execution conditions** (any unmet condition refuses the flip with that reason and
+the vehicle does nothing):
+
+| Condition | Value |
+|---|---|
+| Target mode | ALT_HOLD / POS_HOLD only (ACRO/STABILIZE are controller-FLIP-button-only, Phase 3, not yet implemented) |
+| Altitude above ground | >= 1.0 m |
+| Attitude / angular rate / horizontal speed | Near level and steady (refused while sharply tilted, rotating, or translating) |
+| Battery voltage | >= 3.6 V under load |
+| Time since the previous flip | >= 2 s |
+| Other excitation / guidance move | None in progress (mutually exclusive with `sysid`/`autotune`/`move`/`go`, etc.) |
+
+**Ceiling clearance**: the vehicle has no upward-facing sensor, so distance to the
+ceiling cannot be judged. **A ceiling clearance of at least start altitude + 0.6 m is
+the pilot's responsibility.**
+
+**Reply vocabulary**:
+
+| Reply | Meaning |
+|---|---|
+| `ok` | Completed normally |
+| `error flip: bad direction` | Not one of `l`/`r`/`f`/`b` |
+| `error flip: not flying` | Not FLYING (TAKEOFF/LANDING, etc.) |
+| `error flip: busy` | A flip is already running, or the "other excitation/guidance move" condition above is violated |
+| `error flip: mode` | ACRO/STABILIZE (the API only allows ALT_HOLD/POS_HOLD) |
+| `error flip: too low` | Insufficient altitude above ground |
+| `error flip: not steady` | Attitude/angular rate/speed out of bounds |
+| `error flip: battery low` | Insufficient battery voltage |
+| `error flip: estimator` | Estimator unhealthy (includes ToF invalid) |
+| `error flip: cooldown` | Not enough time since the previous flip |
+| `error flip: rejected` | State did not enter FLIP within 0.5 s of the request |
+| `error flip: timeout` | State did not return from FLIP within 3 s |
+| `error flip: aborted <reason>` | Rotation stalled (`spin_timeout`) / angular-rate anomaly (`gyro_limit`) / recovery settling timeout (`recover_timeout`) / DISARM, emergency, or an impact during the window dropped the vehicle to the ground (`disarmed`) |
+
 ### Acknowledged but Not Supported in Hardware
 
 | Command | Reply | Reason |
 |---|---|---|
 | `streamon`/`streamoff` | `"ok"` | No camera, but replying `ok` keeps programs that merely toggle the stream (without reading frames) from stalling |
-| `flip <l/r/f/b>` | `"error flip not supported on StampFly"` | A flip is judged too risky an acro maneuver for this small craft (decided 2026-06-23) |
 | `mon`/`moff`/`mdirection` | `"error mission pads not supported"` | Mission pads are a Tello EDU/RoboMaster TT-only feature |
 | Any other unknown command | `"error unknown command"` | — |
 
@@ -274,7 +353,7 @@ Whether the sign conventions and frame for attitude/velocity match what `djitell
 |---|---|---|
 | Control, movement, rotation, absolute move, cruise-speed setting, continuous manual control, general reads | `command`/`takeoff`/`land`/`emergency`/`stop`/`up` etc./`go`/`speed`/`rc`/`battery?` etc. | Supported |
 | Camera | `streamon`/`streamoff`, frame capture | Not supported (`ok` is returned but no video is produced — no camera) |
-| Flip | `flip`-family | Not supported (`error` — refused as too risky for this small craft) |
+| Flip | `flip`-family | Supported (`flip <l/r/f/b>`; execution conditions and reply vocabulary in the "Flip" section above) |
 | Curve | `curve` | Not supported (`error` — not implemented) |
 | Mission pads | `mon`/`moff`/`mdirection`, pad-relative `go`/`curve`/`jump` | Not supported (`error` — EDU-only feature) |
 
@@ -287,7 +366,6 @@ On 2026-02-14, a design study was written that proposed leveraging the existing 
 ## 6. Not Supported / Not Implemented
 
 - Camera video (`streamon`/`streamoff` reply `ok` but no video is actually streamed)
-- `flip` (a safety decision, not strictly a hardware limitation)
 - `curve` (arc movement, and the pad-relative `mid` argument on movement commands)
 - The full mission-pad feature set (`mon`/`moff`/`mdirection`, pad-relative `go`/`curve`/`jump`)
 - SDK 3.0-era commands (`motoron`/`motoroff`/`throwfly`/`setbitrate`/`setfps`/`setresolution`, etc.)

@@ -81,7 +81,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 機能 | 計画箇所 | 状態 | 備考 |
 |------|---------|------|------|
-| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SILS api_flight で全鎖検証 | 残: Tello 互換の拡張コマンド（flip/curve 等）、実機飛行検証 |
+| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SILS api_flight で全鎖検証。**flip 実装**（2026-09-16、`FlightState::FLIP`、docs/plans/flip-maneuver-plan.md）: `flip <l/r/f/b>` + Python SDK `flip()`/`flip_left()` 等 | 残: `flip` の実機飛行検証、コントローラ FLIP ボタン（Phase 3）、Tello 互換の拡張コマンド（curve 等）|
 | Data Stream の USB 経路 | requirements §7（UDP/USB 選択） | UDP のみ | WiFi 不要環境向けの変種 |
 | 校正の NVS 永続化 | calibration.cpp に保存系あり | **意図的保留** | NVS commit のフラッシュ消去が 400Hz ループを >10ms 停止させる。CONFIG_SPI_FLASH_AUTO_SUSPEND 調査とセットで再開 |
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |

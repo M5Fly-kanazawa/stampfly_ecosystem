@@ -118,6 +118,32 @@ class StampFly:
         self.send(f"go {int(x_cm)} {int(y_cm)} {int(z_cm)} {int(speed_cms)}",
                   timeout=dist / max(10, speed_cms) + 10.0)
 
+    # -- flip (single-axis 360-degree, blocks until recovered) --------------
+    # -- 宙返り（単軸360度、回復までブロック） --------------------------------
+    #
+    # Requires ALT_HOLD/POS_HOLD, altitude >= 1.0 m, level/steady flight,
+    # battery >= 3.6 V, and >= 2 s since the previous flip (see
+    # docs/architecture/tello-api-reference.md). Ceiling clearance
+    # (start altitude + 0.6 m or more) is the pilot's responsibility.
+    # ALT_HOLD/POS_HOLD、高度1.0m以上、水平・定常飛行、電池3.6V以上、前回から
+    # 2秒以上の間隔が必要（docs/architecture/tello-api-reference.md 参照）。
+    # 天井余裕（開始高度+0.6m以上）は操縦者の責任。
+
+    def flip(self, direction: str) -> None:
+        """Single-axis 360-degree flip. direction in {"l","r","f","b"}
+        (left/right/forward/back). Blocks until the maneuver completes or
+        is aborted-and-recovered.
+        単軸360度宙返り。direction は "l"/"r"/"f"/"b"（左/右/前/後）。完了
+        または打ち切り後の回復までブロック。"""
+        if direction not in ("l", "r", "f", "b"):
+            raise StampFlyError(f"flip: bad direction '{direction}' (want l/r/f/b)")
+        self.send(f"flip {direction}", timeout=5.0)
+
+    def flip_left(self) -> None:    self.flip("l")
+    def flip_right(self) -> None:   self.flip("r")
+    def flip_forward(self) -> None: self.flip("f")
+    def flip_back(self) -> None:    self.flip("b")
+
     # -- queries / クエリ ------------------------------------------------------
 
     def battery(self) -> int:

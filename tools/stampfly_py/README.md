@@ -66,7 +66,7 @@ tello = Tello(host="192.168.1.42")   # 機体の LAN IP を渡す
 | 読み取り | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | 状態ストリーム | UDP:8890（`get_battery`/`get_height`/`get_distance_tof` 等が読む）| ✅ ~10Hz |
 | カメラ | `streamon` `streamoff` | ⚠️ ok を返すが映像は出ない（カメラ無し）|
-| 宙返り | `flip` | ❌ `error`（小型機で高リスクのため非対応）|
+| 宙返り | `flip <l/r/f/b>` | ✅ ブロック（完了・回復まで）。ALT_HOLD/POS_HOLD・高度1.0m以上・水平定常・電池3.6V以上が必要（詳細は `docs/architecture/tello-api-reference.md`）|
 | 円弧 | `curve` | ❌ `error`（未実装）|
 | ミッションパッド | `mon` `moff` `mdirection` | ❌ `error`（EDU 専用機能）|
 
@@ -131,7 +131,7 @@ For STA mode: `Tello(host="<vehicle-LAN-ip>")`.
 | Read | `battery?` `height?` `attitude?` `speed?` `time?` `tof?` `temp?` `baro?` `acceleration?` `sdk?` `sn?` `wifi?` | ✅ |
 | State stream | UDP:8890 (read by `get_battery`/`get_height`/`get_distance_tof`...) | ✅ ~10 Hz |
 | Camera | `streamon` `streamoff` | ⚠️ returns ok, no video (no camera) |
-| Flip | `flip` | ❌ `error` (unsafe on this small craft) |
+| Flip | `flip <l/r/f/b>` | ✅ blocks until complete/recovered. Requires ALT_HOLD/POS_HOLD, altitude >= 1.0 m, level/steady flight, battery >= 3.6 V (see `docs/architecture/tello-api-reference.md`) |
 | Curve | `curve` | ❌ `error` (not implemented) |
 | Mission pads | `mon` `moff` `mdirection` | ❌ `error` (EDU-only feature) |
 

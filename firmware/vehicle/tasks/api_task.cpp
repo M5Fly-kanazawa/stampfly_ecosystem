@@ -47,6 +47,7 @@
  * @design requirements.md §7 — コマンド受信 (RC入力、API) / TelloAPI      [OK]
  * @design architecture.md §5 — コマンドフロー UDP/API                    [OK]
  * @design architecture.md §3 — R11 Guidance topic 契約 (command_target)  [OK]
+ * @design docs/plans/flip-maneuver-plan.md §4.4 — API `flip l/r/f/b`     [OK]
  */
 
 #include <atomic>
@@ -423,6 +424,150 @@ void cmdStop()
     g_target_valid  = true;
     publishGuidance(g_default_speed);
     reply("ok");
+}
+
+// -----------------------------------------------------------------------------
+// cmdFlip — Tello `flip l/r/f/b`: single-axis 360-degree flip
+// (flip-maneuver-plan.md §4.4). Pre-gates mirror cmdTakeoff/cmdLand (state +
+// mode); the controller's own execution-condition judgment (flip_ready /
+// flip_block_reason, INV-3: detection is the controller's) is then surfaced
+// as a specific error. Blocks through the whole maneuver like cmdTakeoff.
+// cmdFlip — Tello `flip l/r/f/b`: 単軸360度宙返り（plan §4.4）。事前判定は
+// cmdTakeoff/cmdLand と同型（状態＋モード）。その先の実行条件判定
+// （flip_ready/flip_block_reason、INV-3: 検出は制御器の役割）を具体的な
+// エラーとして表す。cmdTakeoff 同様マニューバ全体をブロックする。
+// -----------------------------------------------------------------------------
+
+bool parseFlipDirection(const char* token, sf::FlipDirection& dir)
+{
+    if (std::strcmp(token, "l") == 0) { dir = sf::FlipDirection::Left;    return true; }
+    if (std::strcmp(token, "r") == 0) { dir = sf::FlipDirection::Right;   return true; }
+    if (std::strcmp(token, "f") == 0) { dir = sf::FlipDirection::Forward; return true; }
+    if (std::strcmp(token, "b") == 0) { dir = sf::FlipDirection::Back;    return true; }
+    return false;
+}
+
+// Text for ControllerStatus.flip_block_reason (plan §3.1 C2-C8). C1 (FLYING)
+// and "already FLIP" are judged by this task itself, so they never reach here.
+// ControllerStatus.flip_block_reason（plan §3.1 C2-C8）の文字列。C1(FLYING)と
+// 「既にFLIP中」は本タスク自身が判定するため、ここには来ない。
+const char* flipBlockErrorText(sf::FlipBlockReason reason)
+{
+    switch (reason) {
+        case sf::FlipBlockReason::TooLow:             return "too low";
+        case sf::FlipBlockReason::NotSteady:          return "not steady";
+        case sf::FlipBlockReason::BatteryLow:         return "battery low";
+        case sf::FlipBlockReason::EstimatorUnhealthy: return "estimator";
+        case sf::FlipBlockReason::Cooldown:           return "cooldown";
+        case sf::FlipBlockReason::Busy:               return "busy";
+        case sf::FlipBlockReason::SourceConflict:     return "busy";
+        default:                                       return "not ready";
+    }
+}
+
+// Text for ControllerStatus.flip_result when it is not Ok (plan §3.5 abort
+// paths). / flip_result が Ok でないときの文字列（plan §3.5 の打ち切り経路）。
+const char* flipAbortErrorText(sf::FlipResult result)
+{
+    switch (result) {
+        case sf::FlipResult::AbortedSpinTimeout:    return "spin_timeout";
+        case sf::FlipResult::AbortedGyroLimit:      return "gyro_limit";
+        case sf::FlipResult::AbortedRecoverTimeout: return "recover_timeout";
+        default:                                     return "unknown";
+    }
+}
+
+// flipPreflight — direction parse + state/mode/execution-condition gates
+// (plan §3.1 C1/C3-C8). Sends the error reply itself and returns false on
+// any gate failure; on success fills dir/mode and sends nothing yet (the
+// caller still has to publish and wait). Split out of cmdFlip to keep each
+// function under coding_and_education.md's 50-line guideline.
+// flipPreflight — 方向解析＋状態・モード・実行条件判定（plan §3.1
+// C1/C3-C8）。不成立ならエラー応答を自分で送り false を返す。成立時は
+// dir/mode を埋めて true を返す（応答はまだ送らない — 発行と待機は
+// 呼び出し元の役割）。coding_and_education.md の50行目安を守るため
+// cmdFlip から分離した。
+bool flipPreflight(const char* direction_token, sf::FlipDirection& dir, sf::FlightMode& mode)
+{
+    if (!parseFlipDirection(direction_token, dir)) { reply("error flip: bad direction"); return false; }
+
+    const sf::FlightState st = currentState();
+    if (st == sf::FlightState::FLIP)   { reply("error flip: busy");       return false; }
+    if (st != sf::FlightState::FLYING) { reply("error flip: not flying"); return false; }
+
+    // API targets ALT_HOLD/POS_HOLD only (hovering assumed, plan §9
+    // decision 3); ACRO/STABILIZE stay button-only (Phase 3, recovery
+    // height is stick-driven there).
+    // API の対象は ALT_HOLD/POS_HOLD のみ（ホバリング前提、plan §9 決定3）。
+    // ACRO/STABILIZE はボタン専用のまま（Phase 3、回復高度はスティック）。
+    mode = static_cast<sf::FlightMode>(sf::system_mode.latest().sub_mode);
+    if (mode != sf::FlightMode::ALT_HOLD && mode != sf::FlightMode::POS_HOLD) {
+        reply("error flip: mode");
+        return false;
+    }
+
+    const sf::ControllerStatus cs = sf::controller_status.latest();
+    if (!cs.flip_ready) {
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "error flip: %s",
+                      flipBlockErrorText(static_cast<sf::FlipBlockReason>(cs.flip_block_reason)));
+        reply(buf);
+        return false;
+    }
+    return true;
+}
+
+// waitFlipOutcome — block through FLYING->FLIP->FLYING (or an abort path)
+// and send the reply. The FLYING<->FLIP edges are executed by state_task,
+// not this task (INV-3: detection vs. judgment/execution split) — this
+// task only observes system_mode. A quick DISARM/emergency/IMPACT during
+// the window lands in IDLE_GROUND instead of back in FLYING.
+// waitFlipOutcome — FLYING→FLIP→FLYING（または打ち切り経路）をブロックして
+// 応答を送る。FLYING<->FLIP の遷移実行は state_task の役割（本タスクでは
+// ない、INV-3: 検出と判断・実行の分離）— system_mode を観測するのみ。窓内の
+// DISARM/emergency/IMPACT は FLYING でなく IDLE_GROUND へ落ちる。
+void waitFlipOutcome()
+{
+    if (!waitUntil(500, [] { return currentState() == sf::FlightState::FLIP; })) {
+        reply("error flip: rejected");
+        return;
+    }
+    if (!waitUntil(3000, [] { return currentState() != sf::FlightState::FLIP; })) {
+        reply("error flip: timeout");
+        return;
+    }
+    if (currentState() != sf::FlightState::FLYING) {
+        reply("error flip: aborted disarmed");
+        return;
+    }
+    const auto result = static_cast<sf::FlipResult>(sf::controller_status.latest().flip_result);
+    if (result == sf::FlipResult::Ok) {
+        reply("ok");
+        return;
+    }
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "error flip: aborted %s", flipAbortErrorText(result));
+    reply(buf);
+}
+
+void cmdFlip(const char* direction_token)
+{
+    sf::FlipDirection dir;
+    sf::FlightMode mode;
+    if (!flipPreflight(direction_token, dir, mode)) return;
+
+    // arg carries FlipDirection — same convention as EstimatorCommand.arg's
+    // CovScope (data_types.hpp "Flip Maneuver Types"). Published directly,
+    // not via publishApiVerb (that helper is for directionless verbs only,
+    // see its own comment).
+    // arg は FlipDirection を運ぶ（data_types.hpp「Flip Maneuver Types」節、
+    // EstimatorCommand.arg の CovScope と同じ流儀）。publishApiVerb は方向を
+    // 持たない verb 専用（同ヘルパーのコメント参照）なので直接発行する。
+    sf::api_command.publish({static_cast<uint8_t>(sf::ApiCmd::Flip),
+                             static_cast<uint8_t>(mode),
+                             static_cast<uint32_t>(esp_timer_get_time()),
+                             static_cast<uint8_t>(dir)});
+    waitFlipOutcome();
 }
 
 // -----------------------------------------------------------------------------
@@ -996,10 +1141,19 @@ void processLine(char* line)
         reply("ok");
         return;
     }
-    // flip — refused honestly: a flip is an aggressive acro maneuver, unsafe for this
-    // small indoor craft. (User decision 2026-06-23.) / 宙返りは正直に拒否（小型機で高リスク）。
+    // flip <l/r/f/b> — Tello-compatible single-axis 360-degree flip
+    // (flip-maneuver-plan.md §4.4, decision reversed 2026-09-16 from the
+    // 2026-06-23 refusal). Any malformed "flip ..." line still lands here
+    // (same prefix match as the old refusal block) so it reports "bad
+    // direction" rather than falling through to "unknown command".
+    // flip <l/r/f/b> — Tello 互換の単軸360度宙返り（plan §4.4、2026-06-23の
+    // 拒否判断を2026-09-16に撤回）。不正な "flip ..." 行も（旧・拒否ブロックと
+    // 同じ前方一致で）ここに来るため "unknown command" でなく "bad direction"
+    // を返す。
     if (std::strncmp(line, "flip", 4) == 0) {
-        reply("error flip not supported on StampFly");
+        char dir_tok[8] = {};
+        std::sscanf(line, "flip %7s", dir_tok);
+        cmdFlip(dir_tok);
         return;
     }
     // Mission pads — a Tello EDU/RoboMaster-TT-only feature we do not implement.
